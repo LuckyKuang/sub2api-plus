@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -20,6 +21,7 @@ const insertOpsErrorLogSQL = `
 INSERT INTO ops_error_logs (
   request_id,
   client_request_id,
+  async_task_id,
   user_id,
   api_key_id,
   account_id,
@@ -57,8 +59,9 @@ INSERT INTO ops_error_logs (
   created_at,
   api_key_prefix
 ) VALUES (
-  $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38
-)`
+  $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39
+)
+ON CONFLICT (async_task_id) WHERE async_task_id IS NOT NULL DO NOTHING`
 
 func NewOpsRepository(db *sql.DB) service.OpsRepository {
 	return &opsRepository{db: db}
@@ -78,6 +81,11 @@ func (r *opsRepository) InsertErrorLog(ctx context.Context, input *service.OpsIn
 		insertOpsErrorLogSQL+" RETURNING id",
 		opsInsertErrorLogArgs(input)...,
 	).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		// A repeated terminal-task handler raced with an already recorded async
+		// failure. The partial unique index deliberately turns that into a no-op.
+		return 0, nil
+	}
 	if err != nil {
 		return 0, err
 	}
@@ -115,10 +123,16 @@ func (r *opsRepository) BatchInsertErrorLogs(ctx context.Context, inputs []*serv
 		if input == nil {
 			continue
 		}
-		if _, err = stmt.ExecContext(ctx, opsInsertErrorLogArgs(input)...); err != nil {
+		result, execErr := stmt.ExecContext(ctx, opsInsertErrorLogArgs(input)...)
+		if execErr != nil {
+			err = execErr
 			return inserted, err
 		}
-		inserted++
+		rowsAffected, rowsErr := result.RowsAffected()
+		if rowsErr != nil {
+			return inserted, rowsErr
+		}
+		inserted += rowsAffected
 	}
 
 	if err = tx.Commit(); err != nil {
@@ -131,6 +145,7 @@ func opsInsertErrorLogArgs(input *service.OpsInsertErrorLogInput) []any {
 	return []any{
 		opsNullString(input.RequestID),
 		opsNullString(input.ClientRequestID),
+		opsNullString(input.AsyncTaskID),
 		opsNullInt64(input.UserID),
 		opsNullInt64(input.APIKeyID),
 		opsNullInt64(input.AccountID),
@@ -249,6 +264,7 @@ SELECT
   COALESCE(u2.email, ''),
   COALESCE(e.client_request_id, ''),
   COALESCE(e.request_id, ''),
+  COALESCE(e.async_task_id, ''),
   COALESCE(e.error_message, ''),
   e.user_id,
   COALESCE(u.email, ''),
@@ -319,6 +335,7 @@ LIMIT $` + itoa(len(args)+1) + ` OFFSET $` + itoa(len(args)+2)
 			&resolvedByName,
 			&item.ClientRequestID,
 			&item.RequestID,
+			&item.AsyncTaskID,
 			&item.Message,
 			&userID,
 			&userEmail,
@@ -419,6 +436,7 @@ SELECT
   e.resolved_by_user_id,
   COALESCE(e.client_request_id, ''),
   COALESCE(e.request_id, ''),
+  COALESCE(e.async_task_id, ''),
   COALESCE(e.error_message, ''),
   COALESCE(e.error_body, ''),
   e.upstream_status_code,
@@ -493,6 +511,7 @@ LIMIT 1`
 		&resolvedBy,
 		&out.ClientRequestID,
 		&out.RequestID,
+		&out.AsyncTaskID,
 		&out.Message,
 		&out.ErrorBody,
 		&upstreamStatusCode,
@@ -999,7 +1018,7 @@ func buildOpsErrorLogsWhere(filter *service.OpsErrorLogFilter) (string, []any) {
 		like := "%" + q + "%"
 		args = append(args, like)
 		n := itoa(len(args))
-		clauses = append(clauses, "(e.request_id ILIKE $"+n+" OR e.client_request_id ILIKE $"+n+" OR e.error_message ILIKE $"+n+")")
+		clauses = append(clauses, "(e.request_id ILIKE $"+n+" OR e.client_request_id ILIKE $"+n+" OR e.async_task_id ILIKE $"+n+" OR e.error_message ILIKE $"+n+")")
 	}
 
 	if userQuery := strings.TrimSpace(filter.UserQuery); userQuery != "" {

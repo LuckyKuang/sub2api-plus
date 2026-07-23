@@ -1,0 +1,41 @@
+export default {
+  asyncImage: {
+    title: '异步图像',
+    description: '提交生成或编辑任务后在后台处理，完成后自动显示结果',
+    actions: { create: '新建任务', refresh: '刷新列表', view: '查看结果', submit: '提交任务', downloadAll: '一键下载图片' },
+    filters: { apiKey: 'API Key', allStatuses: '全部状态', selectKey: '请选择可用 API Key' },
+    columns: { prompt: '提示词', model: '模型', type: '类型', status: '状态', result: '结果', createdAt: '创建时间', actions: '操作' },
+    requestTypes: { generation: '生成', edit: '编辑' },
+    status: { processing: '生成中', completed: '已完成', failed: '失败' },
+    list: {
+      empty: '暂无异步图像任务',
+      emptyHint: '点击右上角新建任务，提交生成或编辑请求后可在此查看状态和结果。',
+      previous: '上一页', next: '下一页', page: '第 {page} 页',
+      keyHint: '任务按 API Key 隔离，切换 Key 可查看其对应记录。',
+    },
+    create: {
+      title: '新建异步图像任务', apiKey: 'API Key', mode: '任务类型', generation: '生成图片', edit: '编辑图片',
+      noKeys: '当前没有可用于异步图像任务的 API Key。请创建并绑定已开启生图权限的 OpenAI 或 Grok 分组。',
+      model: '模型', modelsLoading: '正在加载模型...', noModels: '该 API Key 没有可用模型', prompt: '提示词', promptPlaceholder: '描述你希望生成的画面',
+      size: '图片尺寸', quality: '质量', count: '生成数量', width: '宽度', height: '高度',
+      referenceImages: '参考图片', referenceImagesHint: '至少上传 1 张，最多 4 张；上传图片不会被保存到任务历史。', addReferenceImages: '添加参考图', removeReferenceImage: '移除参考图', referenceImageRequired: '编辑任务至少需要上传 1 张参考图', referenceImageLimit: '编辑任务最多可上传 {count} 张参考图',
+      maskImage: '蒙版图片（可选）', maskImageHint: '蒙版作用于第一张参考图。请使用带透明通道、且尺寸一致的 PNG 或 WebP。', addMaskImage: '添加蒙版', removeMaskImage: '移除蒙版',
+      invalidUploadType: '请选择 PNG、JPEG 或 WebP 图片；蒙版仅支持 PNG 或 WebP。', uploadFileTooLarge: '单张上传图片不能超过 20 MiB。', uploadTotalTooLarge: '参考图和蒙版合计不能超过 40 MiB。',
+      sizeAuto: '自动', size1K: '1024 × 1024（1K）', sizeLandscape15K: '1536 × 1024（约 1.5K）', sizePortrait15K: '1024 × 1536（约 1.5K）',
+      size2KSquare: '2048 × 2048（2K）', size2KWide: '2048 × 1152（2K）', sizeQHD: '2560 × 1440（2K / QHD）',
+      size4KWide: '3840 × 2160（4K / UHD，实验性）', size4KPortrait: '2160 × 3840（4K 竖图，实验性）', sizeCustom: '自定义分辨率',
+      qualityAuto: '自动', qualityLow: '低', qualityMedium: '中', qualityHigh: '高',
+      experimentalSizeHint: '超过 2560 × 1440 的分辨率属于实验性范围，生成稳定性可能较低。',
+      customSizeErrors: {
+        positive: '宽度和高度必须是正整数。', multipleOf16: '宽度和高度必须都是 16 的倍数。', maxEdge: '最长边不能超过 3840 像素。',
+        aspectRatio: '长边与短边比例不能超过 3:1。', pixelRange: '总像素必须在 655,360 到 8,294,400 之间。',
+      },
+      promptRequired: '请填写提示词', modelRequired: '请填写模型', submitted: '异步图像任务已提交',
+    },
+    detail: {
+      title: '异步图像任务详情', taskId: '任务 ID', prompt: '提示词', error: '错误信息',
+      pending: '任务仍在生成中', noImage: '任务已完成，但没有可展示的图片地址',
+    },
+    errors: { loadKeys: '加载 API Key 失败', loadModels: '加载可用模型失败', loadTasks: '加载异步图像任务失败', submit: '提交异步图像任务失败', refresh: '刷新任务状态失败', download: '下载生成图片失败', invalidArchive: '下载包无效，请稍后重试' },
+  },
+}

@@ -1938,6 +1938,7 @@ export interface UserErrorRequest {
   category: string
   platform: string
   message: string
+  async_task_id?: string
   key_name: string
   key_deleted: boolean
   client_ip?: string

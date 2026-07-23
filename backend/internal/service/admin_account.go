@@ -1516,6 +1516,18 @@ func (s *adminServiceImpl) ResetAccountQuota(ctx context.Context, id int64) erro
 
 // EnsureOpenAIPrivacy 检查 OpenAI OAuth 账号是否已设置 privacy_mode，
 // 未设置则调用 disableOpenAITraining 并持久化到 Extra，返回设置的 mode 值。
+func (s *adminServiceImpl) resolveOpenAIOutboundIdentity(ctx context.Context, account *Account) openAIOutboundIdentity {
+	accountUA := ""
+	if account != nil {
+		accountUA = account.GetOpenAIUserAgent()
+	}
+	systemUA := ""
+	if s != nil && s.settingService != nil {
+		systemUA = s.settingService.GetOpenAICodexUserAgent(ctx)
+	}
+	return resolveOpenAIOutboundIdentityCandidates(accountUA, systemUA)
+}
+
 func (s *adminServiceImpl) EnsureOpenAIPrivacy(ctx context.Context, account *Account) string {
 	// 影子账号不持凭据，隐私设置由母账号管理，直接跳过。
 	if account.IsCredentialShadow() {
@@ -1543,7 +1555,7 @@ func (s *adminServiceImpl) EnsureOpenAIPrivacy(ctx context.Context, account *Acc
 		}
 	}
 
-	mode := disableOpenAITraining(ctx, s.privacyClientFactory, token, proxyURL)
+	mode := disableOpenAITraining(ctx, s.privacyClientFactory, token, proxyURL, s.resolveOpenAIOutboundIdentity(ctx, account))
 	if mode == "" {
 		return ""
 	}
@@ -1577,7 +1589,7 @@ func (s *adminServiceImpl) ForceOpenAIPrivacy(ctx context.Context, account *Acco
 		}
 	}
 
-	mode := disableOpenAITraining(ctx, s.privacyClientFactory, token, proxyURL)
+	mode := disableOpenAITraining(ctx, s.privacyClientFactory, token, proxyURL, s.resolveOpenAIOutboundIdentity(ctx, account))
 	if mode == "" {
 		return ""
 	}

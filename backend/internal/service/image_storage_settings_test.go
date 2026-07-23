@@ -61,11 +61,20 @@ func (reversibleEncryptor) Decrypt(ciphertext string) (string, error) {
 	return rest, nil
 }
 
-type recordingStorage struct{ saved []string }
+type recordingStorage struct {
+	saved      []string
+	checkCalls int
+	checkErr   error
+}
 
 func (s *recordingStorage) Save(_ context.Context, key, _ string, _ []byte) (string, error) {
 	s.saved = append(s.saved, key)
 	return "https://cdn.example.com/" + key, nil
+}
+
+func (s *recordingStorage) Check(context.Context) error {
+	s.checkCalls++
+	return s.checkErr
 }
 
 func newImageStorageFixture(t *testing.T, fallback config.ImageStorageConfig) (*ImageStorageSettingService, *stubSettingRepo, *[]config.ImageStorageConfig) {
@@ -251,4 +260,53 @@ func TestImageStorageSettingsFallBackToConfigFile(t *testing.T) {
 	require.True(t, fetched.Enabled)
 	require.Equal(t, "yaml-bucket", fetched.Bucket)
 	require.Empty(t, fetched.SecretAccessKey)
+}
+
+func TestImageStorageSettingsTestConnectionPerformsHealthCheck(t *testing.T) {
+	repo := newStubSettingRepo()
+	storage := &recordingStorage{checkErr: errors.New("bucket policy denies writes")}
+	svc := NewImageStorageSettingService(repo, reversibleEncryptor{}, nil, func(context.Context, *config.ImageStorageConfig) (ImageStorage, error) {
+		return storage, nil
+	}, config.ImageStorageConfig{})
+
+	err := svc.TestConnection(context.Background(), ImageStorageSettings{
+		Enabled: true, Bucket: "images", Endpoint: "http://minio.test:9000",
+		AccessKeyID: "minio", SecretAccessKey: "minio-secret", ForcePathStyle: true,
+	})
+	require.EqualError(t, err, "bucket policy denies writes")
+	require.Equal(t, 1, storage.checkCalls)
+}
+
+func TestImageStorageSettingsTestConnectionUsesMatchingEnvironmentFallback(t *testing.T) {
+	fallback := config.ImageStorageConfig{
+		Enabled: true, Endpoint: "http://minio.test:9000", Region: "us-east-1",
+		Bucket: "sub2api-images", AccessKeyID: "minio", SecretAccessKey: "minio-secret",
+		Prefix: "images/", ForcePathStyle: true,
+	}
+	svc, _, built := newImageStorageFixture(t, fallback)
+
+	request := *settingsFromConfig(fallback)
+	request.SecretAccessKey = "" // The Get endpoint masks environment secrets.
+
+	err := svc.TestConnection(context.Background(), request)
+	require.NoError(t, err)
+	require.Len(t, *built, 1)
+	require.Equal(t, "minio-secret", (*built)[0].SecretAccessKey)
+}
+
+func TestImageStorageSettingsTestConnectionDoesNotReuseFallbackForChangedTarget(t *testing.T) {
+	fallback := config.ImageStorageConfig{
+		Enabled: true, Endpoint: "http://minio.test:9000", Region: "us-east-1",
+		Bucket: "sub2api-images", AccessKeyID: "minio", SecretAccessKey: "minio-secret",
+		Prefix: "images/", ForcePathStyle: true,
+	}
+	svc, _, built := newImageStorageFixture(t, fallback)
+
+	request := *settingsFromConfig(fallback)
+	request.Endpoint = "http://untrusted.test:9000"
+	request.SecretAccessKey = ""
+
+	err := svc.TestConnection(context.Background(), request)
+	require.ErrorIs(t, err, ErrImageStorageIncomplete)
+	require.Empty(t, *built)
 }

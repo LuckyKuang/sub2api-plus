@@ -144,6 +144,15 @@ func ProvideBatchImageHandler(
 	return h
 }
 
+// ProvideAsyncImageHandler wires the limiter separately so unit tests can keep
+// constructing the handler without Redis and therefore exercise unlimited mode.
+func ProvideAsyncImageHandler(tasks *service.ImageTaskService, openAI *OpenAIGatewayHandler, limiter *service.AsyncImageRateLimiter, opsService *service.OpsService) *AsyncImageHandler {
+	h := NewAsyncImageHandler(tasks, openAI)
+	h.rateLimiter = limiter
+	h.ops = opsService
+	return h
+}
+
 // ProvideSystemHandler creates admin.SystemHandler with UpdateService
 func ProvideSystemHandler(updateService *service.UpdateService, lockService *service.SystemOperationLockService) *admin.SystemHandler {
 	return admin.NewSystemHandler(updateService, lockService)
@@ -227,7 +236,7 @@ var ProviderSet = wire.NewSet(
 	NewPaymentHandler,
 	NewPaymentWebhookHandler,
 	NewAvailableChannelHandler,
-	NewAsyncImageHandler,
+	ProvideAsyncImageHandler,
 	ProvideBatchImageHandler,
 
 	// Admin handlers

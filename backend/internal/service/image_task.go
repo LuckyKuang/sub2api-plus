@@ -1,9 +1,12 @@
 package service
 
 import (
+	"archive/zip"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -19,44 +22,56 @@ const (
 	ImageTaskStatusCompleted  = "completed"
 	ImageTaskStatusFailed     = "failed"
 
-	defaultImageTaskTTL              = 24 * time.Hour
-	defaultImageTaskExecutionTimeout = 30 * time.Minute
+	defaultImageTaskTTL                    = 24 * time.Hour
+	defaultImageTaskExecutionTimeout       = 30 * time.Minute
+	maxImageTaskZipImages                  = 16
+	maxImageTaskZipBytes             int64 = 128 << 20 // 128 MiB
+	maxImageTaskZipDuration                = 2 * time.Minute
 )
 
 var (
 	ErrImageTaskNotFound    = infraerrors.New(http.StatusNotFound, "IMAGE_TASK_NOT_FOUND", "image task not found")
 	ErrImageTaskForbidden   = infraerrors.New(http.StatusForbidden, "IMAGE_TASK_FORBIDDEN", "image task does not belong to this API key")
 	ErrImageTaskUnavailable = infraerrors.New(http.StatusServiceUnavailable, "IMAGE_TASK_UNAVAILABLE", "image task storage is unavailable")
+	ErrImageTaskNoImages    = infraerrors.New(http.StatusConflict, "IMAGE_TASK_NO_IMAGES", "image task has no generated images to download")
+	ErrImageTaskDownload    = infraerrors.New(http.StatusServiceUnavailable, "IMAGE_TASK_DOWNLOAD_UNAVAILABLE", "generated image download is unavailable")
+	ErrImageTaskZipTooLarge = infraerrors.New(http.StatusRequestEntityTooLarge, "IMAGE_TASK_DOWNLOAD_TOO_LARGE", "generated images exceed the download size limit")
 )
 
 // ImageTaskRecord is the private Redis representation of an asynchronous image
 // request. Ownership fields are intentionally omitted from the public view.
 type ImageTaskRecord struct {
-	ID          string          `json:"id"`
-	UserID      int64           `json:"user_id"`
-	APIKeyID    int64           `json:"api_key_id"`
-	Status      string          `json:"status"`
-	HTTPStatus  int             `json:"http_status,omitempty"`
-	Result      json.RawMessage `json:"result,omitempty"`
-	Error       json.RawMessage `json:"error,omitempty"`
-	CreatedAt   int64           `json:"created_at"`
-	CompletedAt *int64          `json:"completed_at,omitempty"`
-	ExpiresAt   int64           `json:"expires_at"`
+	ID            string          `json:"id"`
+	UserID        int64           `json:"user_id"`
+	APIKeyID      int64           `json:"api_key_id"`
+	RequestType   string          `json:"request_type,omitempty"`
+	Model         string          `json:"model,omitempty"`
+	PromptPreview string          `json:"prompt_preview,omitempty"`
+	Status        string          `json:"status"`
+	HTTPStatus    int             `json:"http_status,omitempty"`
+	Result        json.RawMessage `json:"result,omitempty"`
+	Error         json.RawMessage `json:"error,omitempty"`
+	CreatedAt     int64           `json:"created_at"`
+	CompletedAt   *int64          `json:"completed_at,omitempty"`
+	ExpiresAt     int64           `json:"expires_at"`
 }
 
 // ImageTask is the API-safe task representation returned to callers.
 type ImageTask struct {
-	ID          string          `json:"id"`
-	TaskID      string          `json:"task_id"`
-	Object      string          `json:"object"`
-	Status      string          `json:"status"`
-	HTTPStatus  int             `json:"http_status,omitempty"`
-	ImageURL    string          `json:"image_url,omitempty"`
-	Result      json.RawMessage `json:"result,omitempty"`
-	Error       json.RawMessage `json:"error,omitempty"`
-	CreatedAt   int64           `json:"created_at"`
-	CompletedAt *int64          `json:"completed_at,omitempty"`
-	ExpiresAt   int64           `json:"expires_at"`
+	ID            string          `json:"id"`
+	TaskID        string          `json:"task_id"`
+	Object        string          `json:"object"`
+	RequestType   string          `json:"request_type,omitempty"`
+	Model         string          `json:"model,omitempty"`
+	PromptPreview string          `json:"prompt_preview,omitempty"`
+	Status        string          `json:"status"`
+	HTTPStatus    int             `json:"http_status,omitempty"`
+	ImageURL      string          `json:"image_url,omitempty"`
+	Result        json.RawMessage `json:"result,omitempty"`
+	Error         json.RawMessage `json:"error,omitempty"`
+	CreatedAt     int64           `json:"created_at"`
+	CompletedAt   *int64          `json:"completed_at,omitempty"`
+	ExpiresAt     int64           `json:"expires_at"`
 }
 
 type ImageTaskOwner struct {
@@ -80,8 +95,18 @@ type ImageTaskService struct {
 	uploader         *ImageResultUploader
 	enabled          bool
 	resolve          ImageStorageResolver
+	history          ImageTaskHistoryRepository
 	ttl              time.Duration
 	executionTimeout time.Duration
+}
+
+// SetHistoryRepository enables durable list records. It is set once during
+// application wiring; the Redis task store remains the execution-state source.
+func (s *ImageTaskService) SetHistoryRepository(history ImageTaskHistoryRepository) {
+	if s == nil {
+		return
+	}
+	s.history = history
 }
 
 func NewImageTaskService(store ImageTaskStore) *ImageTaskService {
@@ -151,22 +176,64 @@ func (s *ImageTaskService) ExecutionTimeout() time.Duration {
 }
 
 func (s *ImageTaskService) Create(ctx context.Context, owner ImageTaskOwner) (*ImageTask, error) {
+	return s.CreateWithMetadata(ctx, owner, ImageTaskMetadata{})
+}
+
+// CreateWithMetadata persists a compact, user-visible task index before the
+// caller starts upstream work. The raw request body is intentionally excluded.
+func (s *ImageTaskService) CreateWithMetadata(ctx context.Context, owner ImageTaskOwner, metadata ImageTaskMetadata) (*ImageTask, error) {
 	if s == nil || s.store == nil {
 		return nil, ErrImageTaskUnavailable
 	}
+	metadata = normalizeImageTaskMetadata(metadata)
 	now := time.Now().UTC()
 	task := &ImageTaskRecord{
-		ID:        "imgtask_" + strings.ReplaceAll(uuid.NewString(), "-", ""),
-		UserID:    owner.UserID,
-		APIKeyID:  owner.APIKeyID,
-		Status:    ImageTaskStatusProcessing,
-		CreatedAt: now.Unix(),
-		ExpiresAt: now.Add(s.ttl).Unix(),
+		ID:            "imgtask_" + strings.ReplaceAll(uuid.NewString(), "-", ""),
+		UserID:        owner.UserID,
+		APIKeyID:      owner.APIKeyID,
+		RequestType:   metadata.RequestType,
+		Model:         metadata.Model,
+		PromptPreview: metadata.PromptPreview,
+		Status:        ImageTaskStatusProcessing,
+		CreatedAt:     now.Unix(),
+		ExpiresAt:     now.Add(s.ttl).Unix(),
+	}
+	if s.history != nil {
+		if err := s.history.Save(ctx, task); err != nil {
+			logger.L().Error("image_task.history_create_failed", zap.String("task_id", task.ID), zap.Error(err))
+			return nil, ErrImageTaskUnavailable.WithCause(err)
+		}
 	}
 	if err := s.store.Save(ctx, task, s.ttl); err != nil {
+		if s.history != nil {
+			task.Status = ImageTaskStatusFailed
+			task.HTTPStatus = http.StatusServiceUnavailable
+			task.Error = imageTaskErrorJSON("api_error", "image task storage is unavailable")
+			completedAt := time.Now().UTC().Unix()
+			task.CompletedAt = &completedAt
+			if historyErr := s.history.Save(context.Background(), task); historyErr != nil {
+				logger.L().Error("image_task.history_mark_storage_failure_failed", zap.String("task_id", task.ID), zap.Error(historyErr))
+			}
+		}
 		return nil, ErrImageTaskUnavailable.WithCause(err)
 	}
 	return imageTaskToPublic(task), nil
+}
+
+func (s *ImageTaskService) List(ctx context.Context, owner ImageTaskOwner, filter ImageTaskHistoryFilter) (*ImageTaskListResponse, error) {
+	if s == nil || s.history == nil {
+		return nil, ErrImageTaskUnavailable
+	}
+	filter = normalizeImageTaskHistoryFilter(filter)
+	records, hasMore, err := s.history.List(ctx, owner, filter)
+	if err != nil {
+		return nil, ErrImageTaskUnavailable.WithCause(err)
+	}
+	data := make([]*ImageTask, 0, len(records))
+	for _, record := range records {
+		data = append(data, imageTaskToPublic(record))
+	}
+	return &ImageTaskListResponse{Object: "list", Data: data, HasMore: hasMore}, nil
 }
 
 func (s *ImageTaskService) Get(ctx context.Context, owner ImageTaskOwner, id string) (*ImageTask, error) {
@@ -185,6 +252,114 @@ func (s *ImageTaskService) Get(ctx context.Context, owner ImageTaskOwner, id str
 		return nil, ErrImageTaskNotFound
 	}
 	return imageTaskToPublic(task), nil
+}
+
+// StreamDownloadZip creates one ZIP archive for every image associated with a
+// completed task. Files are opened through the configured object storage using
+// deterministic keys, never by fetching the URLs stored in the task response.
+func (s *ImageTaskService) StreamDownloadZip(ctx context.Context, owner ImageTaskOwner, id string, writer io.Writer) (int, error) {
+	if writer == nil {
+		return 0, ErrImageTaskDownload
+	}
+	if s == nil || s.store == nil {
+		return 0, ErrImageTaskUnavailable
+	}
+	task, err := s.store.Get(ctx, strings.TrimSpace(id))
+	if err != nil {
+		if errors.Is(err, ErrImageTaskNotFound) {
+			return 0, ErrImageTaskNotFound
+		}
+		return 0, ErrImageTaskUnavailable.WithCause(err)
+	}
+	if task.UserID != owner.UserID || task.APIKeyID != owner.APIKeyID {
+		return 0, ErrImageTaskNotFound
+	}
+	urls := imageTaskURLs(task.Result)
+	if len(urls) == 0 {
+		return 0, ErrImageTaskNoImages
+	}
+	if len(urls) > maxImageTaskZipImages {
+		return 0, ErrImageTaskZipTooLarge
+	}
+	uploader, enabled := s.current()
+	if !enabled || uploader == nil {
+		return 0, ErrImageTaskDownload
+	}
+
+	streamCtx, cancel := context.WithTimeout(ctx, maxImageTaskZipDuration)
+	defer cancel()
+	limited := &imageTaskZipLimitWriter{writer: writer, limit: maxImageTaskZipBytes}
+	archive := zip.NewWriter(limited)
+	var sourceBytes int64
+	for index, storedURL := range urls {
+		object, extension, openErr := uploader.OpenStoredTaskImage(streamCtx, task.ID, index, storedURL)
+		if openErr != nil {
+			_ = archive.Close()
+			return index, ErrImageTaskDownload.WithCause(openErr)
+		}
+		entry, createErr := archive.Create(fmt.Sprintf("image-%d%s", index+1, extension))
+		if createErr != nil {
+			_ = object.Body.Close()
+			_ = archive.Close()
+			return index, imageTaskZipError(createErr)
+		}
+		remaining := maxImageTaskZipBytes - sourceBytes
+		if object.Size > remaining || remaining <= 0 {
+			_ = object.Body.Close()
+			_ = archive.Close()
+			return index, ErrImageTaskZipTooLarge
+		}
+		copied, copyErr := io.Copy(entry, io.LimitReader(object.Body, remaining+1))
+		closeErr := object.Body.Close()
+		if copyErr != nil {
+			_ = archive.Close()
+			return index, imageTaskZipError(copyErr)
+		}
+		sourceBytes += copied
+		if copied > remaining {
+			_ = archive.Close()
+			return index, ErrImageTaskZipTooLarge
+		}
+		if closeErr != nil {
+			_ = archive.Close()
+			return index, ErrImageTaskDownload.WithCause(closeErr)
+		}
+		if limited.exceeded {
+			_ = archive.Close()
+			return index, ErrImageTaskZipTooLarge
+		}
+	}
+	if err := archive.Close(); err != nil {
+		return len(urls), imageTaskZipError(err)
+	}
+	return len(urls), nil
+}
+
+type imageTaskZipLimitWriter struct {
+	writer   io.Writer
+	limit    int64
+	written  int64
+	exceeded bool
+}
+
+func (w *imageTaskZipLimitWriter) Write(data []byte) (int, error) {
+	if w == nil || w.writer == nil {
+		return 0, io.ErrClosedPipe
+	}
+	if w.limit > 0 && w.written+int64(len(data)) > w.limit {
+		w.exceeded = true
+		return 0, ErrImageTaskZipTooLarge
+	}
+	n, err := w.writer.Write(data)
+	w.written += int64(n)
+	return n, err
+}
+
+func imageTaskZipError(err error) error {
+	if errors.Is(err, ErrImageTaskZipTooLarge) {
+		return ErrImageTaskZipTooLarge.WithCause(err)
+	}
+	return ErrImageTaskDownload.WithCause(err)
 }
 
 func (s *ImageTaskService) Complete(ctx context.Context, id string, statusCode int, result json.RawMessage) error {
@@ -232,6 +407,11 @@ func (s *ImageTaskService) finish(ctx context.Context, id, status string, status
 	if err := s.store.Save(ctx, task, s.ttl); err != nil {
 		return ErrImageTaskUnavailable.WithCause(err)
 	}
+	if s.history != nil {
+		if historyErr := s.history.Save(ctx, task); historyErr != nil {
+			logger.L().Error("image_task.history_update_failed", zap.String("task_id", id), zap.Error(historyErr))
+		}
+	}
 	return nil
 }
 
@@ -240,23 +420,34 @@ func imageTaskToPublic(task *ImageTaskRecord) *ImageTask {
 		return nil
 	}
 	return &ImageTask{
-		ID:          task.ID,
-		TaskID:      task.ID,
-		Object:      "image.generation.task",
-		Status:      task.Status,
-		HTTPStatus:  task.HTTPStatus,
-		ImageURL:    firstImageTaskURL(task.Result),
-		Result:      task.Result,
-		Error:       task.Error,
-		CreatedAt:   task.CreatedAt,
-		CompletedAt: task.CompletedAt,
-		ExpiresAt:   task.ExpiresAt,
+		ID:            task.ID,
+		TaskID:        task.ID,
+		Object:        "image.generation.task",
+		RequestType:   task.RequestType,
+		Model:         task.Model,
+		PromptPreview: task.PromptPreview,
+		Status:        task.Status,
+		HTTPStatus:    task.HTTPStatus,
+		ImageURL:      firstImageTaskURL(task.Result),
+		Result:        task.Result,
+		Error:         task.Error,
+		CreatedAt:     task.CreatedAt,
+		CompletedAt:   task.CompletedAt,
+		ExpiresAt:     task.ExpiresAt,
 	}
 }
 
 func firstImageTaskURL(result json.RawMessage) string {
-	if len(result) == 0 || !json.Valid(result) {
+	urls := imageTaskURLs(result)
+	if len(urls) == 0 {
 		return ""
+	}
+	return urls[0]
+}
+
+func imageTaskURLs(result json.RawMessage) []string {
+	if len(result) == 0 || !json.Valid(result) {
+		return nil
 	}
 	var response struct {
 		Data []struct {
@@ -264,9 +455,15 @@ func firstImageTaskURL(result json.RawMessage) string {
 		} `json:"data"`
 	}
 	if json.Unmarshal(result, &response) != nil || len(response.Data) == 0 {
-		return ""
+		return nil
 	}
-	return strings.TrimSpace(response.Data[0].URL)
+	urls := make([]string, 0, len(response.Data))
+	for _, data := range response.Data {
+		if url := strings.TrimSpace(data.URL); url != "" {
+			urls = append(urls, url)
+		}
+	}
+	return urls
 }
 
 func imageTaskErrorJSON(errorType, message string) json.RawMessage {

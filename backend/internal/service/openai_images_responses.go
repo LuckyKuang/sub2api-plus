@@ -1705,6 +1705,9 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesOAuth(
 	}
 	upstreamReq.Header.Set("Content-Type", "application/json")
 	upstreamReq.Header.Set("Accept", "text/event-stream")
+	// buildUpstreamRequest may retain a caller or account UA. Image traffic has
+	// a dedicated final policy, including OAuth identity-header pairing.
+	s.applyOpenAIImageUserAgent(upstreamCtx, account, upstreamReq.Header)
 
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {

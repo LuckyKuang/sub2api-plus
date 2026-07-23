@@ -64,6 +64,9 @@ type OpsRepository interface {
 type OpsInsertErrorLogInput struct {
 	RequestID       string
 	ClientRequestID string
+	// AsyncTaskID links a terminal asynchronous image task to its single
+	// client-visible error log. Empty for regular synchronous requests.
+	AsyncTaskID string
 
 	UserID    *int64
 	APIKeyID  *int64

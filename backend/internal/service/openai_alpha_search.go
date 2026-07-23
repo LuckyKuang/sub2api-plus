@@ -238,35 +238,17 @@ func (s *OpenAIGatewayService) buildOpenAIAlphaSearchResponsesWebSearchRequest(c
 	if turnMetadata := openAIAlphaSearchInboundHeader(c, "X-Codex-Turn-Metadata"); turnMetadata != "" {
 		req.Header.Set("X-Codex-Turn-Metadata", turnMetadata)
 	}
-	if version := openAIAlphaSearchInboundHeader(c, "Version"); version != "" {
-		req.Header.Set("Version", version)
-	} else {
-		req.Header.Set("Version", codexCLIVersion)
-	}
-	if originator := openAIAlphaSearchInboundHeader(c, "Originator"); originator != "" {
-		req.Header.Set("Originator", originator)
-	} else {
-		req.Header.Set("Originator", "codex_cli_rs")
-	}
-	if customUA := account.GetOpenAIUserAgent(); customUA != "" {
-		req.Header.Set("User-Agent", customUA)
-	} else if userAgent := openAIAlphaSearchInboundHeader(c, "User-Agent"); userAgent != "" {
-		req.Header.Set("User-Agent", userAgent)
-	} else {
-		req.Header.Set("User-Agent", codexCLIUserAgent)
-	}
-	if s.cfg != nil && s.cfg.Gateway.ForceCodexCLI {
-		req.Header.Set("User-Agent", codexCLIUserAgent)
-	}
+	req.Header.Set("Version", codexCLIVersion)
 	apiKeyID := getAPIKeyIDFromContext(c)
 	if sessionID := strings.TrimSpace(gjson.GetBytes(alphaBody, "id").String()); sessionID != "" {
 		isolated := isolateOpenAISessionID(apiKeyID, sessionID)
 		req.Header.Set("Session_ID", isolated)
 		req.Header.Set("Conversation_ID", isolated)
 	}
-	s.overrideBrowserUserAgent(ctx, account, req)
-	enforceCodexIdentityHeaders(req.Header)
-	account.ApplyHeaderOverrides(req.Header)
+	account.applyOpenAIHeaderOverrides(req.Header)
+	// This fallback always targets the ChatGPT Codex /responses endpoint, even
+	// for a PAT account stored as an API-key account type.
+	s.applyOpenAIOutboundIdentity(ctx, account, req.Header, true)
 	return req, nil
 }
 
@@ -382,32 +364,12 @@ func (s *OpenAIGatewayService) buildOpenAIAlphaSearchRequest(ctx context.Context
 		if turnMetadata := openAIAlphaSearchInboundHeader(c, "X-Codex-Turn-Metadata"); turnMetadata != "" {
 			req.Header.Set("X-Codex-Turn-Metadata", turnMetadata)
 		}
-		if version := openAIAlphaSearchInboundHeader(c, "Version"); version != "" {
-			req.Header.Set("Version", version)
-		} else {
-			req.Header.Set("Version", codexCLIVersion)
-		}
-		if originator := openAIAlphaSearchInboundHeader(c, "Originator"); originator != "" {
-			req.Header.Set("Originator", originator)
-		} else {
-			req.Header.Set("Originator", "codex_cli_rs")
-		}
-		if customUA := account.GetOpenAIUserAgent(); customUA != "" {
-			req.Header.Set("User-Agent", customUA)
-		} else if userAgent := openAIAlphaSearchInboundHeader(c, "User-Agent"); userAgent != "" {
-			req.Header.Set("User-Agent", userAgent)
-		} else {
-			req.Header.Set("User-Agent", codexCLIUserAgent)
-		}
-		if s.cfg != nil && s.cfg.Gateway.ForceCodexCLI {
-			req.Header.Set("User-Agent", codexCLIUserAgent)
-		}
-		s.overrideBrowserUserAgent(ctx, account, req)
-		enforceCodexIdentityHeaders(req.Header)
+		req.Header.Set("Version", codexCLIVersion)
 	}
 
-	account.ApplyHeaderOverrides(req.Header)
+	account.applyOpenAIHeaderOverrides(req.Header)
 	stripOpenAIAlphaSearchResponsesHeaders(req.Header)
+	s.applyOpenAIOutboundIdentity(ctx, account, req.Header, account.Type == AccountTypeOAuth)
 	return req, nil
 }
 

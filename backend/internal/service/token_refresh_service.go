@@ -67,8 +67,9 @@ type TokenRefreshService struct {
 	runtimeBlocker   AccountRuntimeBlocker
 
 	// OpenAI privacy: 刷新成功后检查并设置 training opt-out
-	privacyClientFactory PrivacyClientFactory
-	proxyRepo            ProxyRepository
+	privacyClientFactory   PrivacyClientFactory
+	proxyRepo              ProxyRepository
+	openAIIdentityResolver *OpenAIGatewayService
 
 	stopCh        chan struct{}
 	stopOnce      sync.Once
@@ -168,6 +169,21 @@ func (s *TokenRefreshService) setCandidateAfterID(afterID int64) {
 func (s *TokenRefreshService) SetPrivacyDeps(factory PrivacyClientFactory, proxyRepo ProxyRepository) {
 	s.privacyClientFactory = factory
 	s.proxyRepo = proxyRepo
+}
+
+func (s *TokenRefreshService) SetOpenAIIdentityResolver(resolver *OpenAIGatewayService) {
+	s.openAIIdentityResolver = resolver
+}
+
+func (s *TokenRefreshService) resolveOpenAIOutboundIdentity(ctx context.Context, account *Account) openAIOutboundIdentity {
+	if s != nil && s.openAIIdentityResolver != nil {
+		return s.openAIIdentityResolver.resolveOpenAIOutboundIdentity(ctx, account)
+	}
+	accountUA := ""
+	if account != nil {
+		accountUA = account.GetOpenAIUserAgent()
+	}
+	return resolveOpenAIOutboundIdentityCandidates(accountUA, "")
 }
 
 // SetRefreshAPI 注入统一的 OAuth 刷新 API
@@ -1459,7 +1475,7 @@ func (s *TokenRefreshService) ensureOpenAIPrivacy(ctx context.Context, account *
 		}
 	}
 
-	mode := disableOpenAITraining(ctx, s.privacyClientFactory, token, proxyURL)
+	mode := disableOpenAITraining(ctx, s.privacyClientFactory, token, proxyURL, s.resolveOpenAIOutboundIdentity(ctx, account))
 	if mode == "" {
 		return
 	}

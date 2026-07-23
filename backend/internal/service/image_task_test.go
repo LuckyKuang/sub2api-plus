@@ -18,6 +18,49 @@ type imageTaskMemoryStore struct {
 	getErr  error
 }
 
+type imageTaskMemoryHistory struct {
+	tasks map[string]*ImageTaskRecord
+	order []string
+}
+
+func (h *imageTaskMemoryHistory) Save(_ context.Context, task *ImageTaskRecord) error {
+	if h.tasks == nil {
+		h.tasks = make(map[string]*ImageTaskRecord)
+	}
+	if _, exists := h.tasks[task.ID]; !exists {
+		h.order = append(h.order, task.ID)
+	}
+	copy := *task
+	copy.Result = append(json.RawMessage(nil), task.Result...)
+	copy.Error = append(json.RawMessage(nil), task.Error...)
+	h.tasks[task.ID] = &copy
+	return nil
+}
+
+func (h *imageTaskMemoryHistory) List(_ context.Context, owner ImageTaskOwner, filter ImageTaskHistoryFilter) ([]*ImageTaskRecord, bool, error) {
+	filter = normalizeImageTaskHistoryFilter(filter)
+	matched := make([]*ImageTaskRecord, 0, len(h.order))
+	for i := len(h.order) - 1; i >= 0; i-- {
+		task := h.tasks[h.order[i]]
+		if task.UserID != owner.UserID || task.APIKeyID != owner.APIKeyID || (filter.Status != "" && task.Status != filter.Status) {
+			continue
+		}
+		copy := *task
+		copy.Result = append(json.RawMessage(nil), task.Result...)
+		copy.Error = append(json.RawMessage(nil), task.Error...)
+		matched = append(matched, &copy)
+	}
+	if filter.Offset >= len(matched) {
+		return nil, false, nil
+	}
+	matched = matched[filter.Offset:]
+	hasMore := len(matched) > filter.Limit
+	if hasMore {
+		matched = matched[:filter.Limit]
+	}
+	return matched, hasMore, nil
+}
+
 func (s *imageTaskMemoryStore) Save(_ context.Context, task *ImageTaskRecord, ttl time.Duration) error {
 	if s.saveErr != nil {
 		return s.saveErr
@@ -88,4 +131,43 @@ func TestImageTaskServiceMapsStoreFailures(t *testing.T) {
 
 	_, err := svc.Create(context.Background(), ImageTaskOwner{UserID: 1, APIKeyID: 2})
 	require.ErrorIs(t, err, ErrImageTaskUnavailable)
+}
+
+func TestImageTaskServiceHistoryListKeepsMetadataAndScopesByAPIKey(t *testing.T) {
+	store := &imageTaskMemoryStore{}
+	history := &imageTaskMemoryHistory{}
+	svc := NewImageTaskServiceWithOptions(store, time.Hour, time.Minute)
+	svc.SetHistoryRepository(history)
+	owner := ImageTaskOwner{UserID: 7, APIKeyID: 9}
+
+	created, err := svc.CreateWithMetadata(context.Background(), owner, ImageTaskMetadata{
+		RequestType:   "generation",
+		Model:         "gpt-image-1",
+		PromptPreview: "Draw a glass greenhouse under a bright sky.",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "generation", created.RequestType)
+	require.Equal(t, "gpt-image-1", created.Model)
+	require.Equal(t, "Draw a glass greenhouse under a bright sky.", created.PromptPreview)
+
+	processing, err := svc.List(context.Background(), owner, ImageTaskHistoryFilter{})
+	require.NoError(t, err)
+	require.Len(t, processing.Data, 1)
+	require.Equal(t, created.TaskID, processing.Data[0].TaskID)
+	require.Equal(t, ImageTaskStatusProcessing, processing.Data[0].Status)
+	require.Equal(t, created.PromptPreview, processing.Data[0].PromptPreview)
+
+	result := json.RawMessage(`{"created":123,"data":[{"url":"https://storage.example.test/images/task.png"}]}`)
+	require.NoError(t, svc.Complete(context.Background(), created.TaskID, http.StatusOK, result))
+
+	completed, err := svc.List(context.Background(), owner, ImageTaskHistoryFilter{Status: ImageTaskStatusCompleted})
+	require.NoError(t, err)
+	require.Len(t, completed.Data, 1)
+	require.Equal(t, ImageTaskStatusCompleted, completed.Data[0].Status)
+	require.Equal(t, "https://storage.example.test/images/task.png", completed.Data[0].ImageURL)
+	require.NotNil(t, completed.Data[0].CompletedAt)
+
+	otherKey, err := svc.List(context.Background(), ImageTaskOwner{UserID: owner.UserID, APIKeyID: owner.APIKeyID + 1}, ImageTaskHistoryFilter{})
+	require.NoError(t, err)
+	require.Empty(t, otherKey.Data)
 }

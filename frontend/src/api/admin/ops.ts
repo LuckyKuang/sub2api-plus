@@ -910,6 +910,7 @@ export interface OpsErrorLog {
 
   client_request_id: string
   request_id: string
+  async_task_id?: string
   message: string
 
   user_id?: number | null

@@ -1,0 +1,40 @@
+export default {
+  asyncImage: {
+    title: 'Async Images',
+    description: 'Submit a generation or edit task and view its result when processing completes',
+    actions: { create: 'New Task', refresh: 'Refresh', view: 'View Result', submit: 'Submit Task', downloadAll: 'Download all images' },
+    filters: { apiKey: 'API Key', allStatuses: 'All statuses', selectKey: 'Select an API key' },
+    columns: { prompt: 'Prompt', model: 'Model', type: 'Type', status: 'Status', result: 'Result', createdAt: 'Created', actions: 'Actions' },
+    requestTypes: { generation: 'Generation', edit: 'Edit' },
+    status: { processing: 'Processing', completed: 'Completed', failed: 'Failed' },
+    list: {
+      empty: 'No async image tasks', emptyHint: 'Create a generation or edit task to view its status and result here.',
+      previous: 'Previous', next: 'Next', page: 'Page {page}',
+      keyHint: 'Tasks are isolated by API key. Switch keys to view their history.',
+    },
+    create: {
+      title: 'New Async Image Task', apiKey: 'API Key', mode: 'Task type', generation: 'Generate image', edit: 'Edit image',
+      noKeys: 'No OpenAI or Grok API key with image-generation access is available.',
+      model: 'Model', modelsLoading: 'Loading models...', noModels: 'This API key has no available models', prompt: 'Prompt', promptPlaceholder: 'Describe the image you want to generate',
+      size: 'Image size', quality: 'Quality', count: 'Image count', width: 'Width', height: 'Height',
+      referenceImages: 'Reference images', referenceImagesHint: 'Upload at least 1 and up to 4 images. Uploaded files are not stored in task history.', addReferenceImages: 'Add reference images', removeReferenceImage: 'Remove reference image', referenceImageRequired: 'An edit task requires at least one reference image', referenceImageLimit: 'An edit task can include up to {count} reference images',
+      maskImage: 'Mask image (optional)', maskImageHint: 'The mask applies to the first reference image. Use a PNG or WebP with alpha at the same dimensions.', addMaskImage: 'Add mask', removeMaskImage: 'Remove mask',
+      invalidUploadType: 'Choose a PNG, JPEG, or WebP image. Masks support PNG or WebP only.', uploadFileTooLarge: 'Each uploaded image must be 20 MiB or smaller.', uploadTotalTooLarge: 'Reference images and the mask together must be 40 MiB or smaller.',
+      sizeAuto: 'Auto', size1K: '1024 × 1024 (1K)', sizeLandscape15K: '1536 × 1024 (about 1.5K)', sizePortrait15K: '1024 × 1536 (about 1.5K)',
+      size2KSquare: '2048 × 2048 (2K)', size2KWide: '2048 × 1152 (2K)', sizeQHD: '2560 × 1440 (2K / QHD)',
+      size4KWide: '3840 × 2160 (4K / UHD, experimental)', size4KPortrait: '2160 × 3840 (4K portrait, experimental)', sizeCustom: 'Custom resolution',
+      qualityAuto: 'Auto', qualityLow: 'Low', qualityMedium: 'Medium', qualityHigh: 'High',
+      experimentalSizeHint: 'Resolutions above 2560 × 1440 are experimental and may be less stable.',
+      customSizeErrors: {
+        positive: 'Width and height must be positive integers.', multipleOf16: 'Width and height must both be multiples of 16.', maxEdge: 'The longest edge must not exceed 3840 pixels.',
+        aspectRatio: 'The long-to-short edge ratio must not exceed 3:1.', pixelRange: 'Total pixels must be between 655,360 and 8,294,400.',
+      },
+      promptRequired: 'A prompt is required', modelRequired: 'A model is required', submitted: 'Async image task submitted',
+    },
+    detail: {
+      title: 'Async Image Task Details', taskId: 'Task ID', prompt: 'Prompt', error: 'Error',
+      pending: 'This task is still processing', noImage: 'The task completed without an image URL',
+    },
+    errors: { loadKeys: 'Failed to load API keys', loadModels: 'Failed to load available models', loadTasks: 'Failed to load async image tasks', submit: 'Failed to submit async image task', refresh: 'Failed to refresh task status', download: 'Failed to download generated images', invalidArchive: 'The downloaded archive is invalid. Please try again.' },
+  },
+}

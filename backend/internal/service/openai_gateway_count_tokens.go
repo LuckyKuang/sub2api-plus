@@ -263,7 +263,7 @@ func (s *OpenAIGatewayService) buildInputTokensUpstreamRequest(
 	if c != nil && c.Request != nil {
 		for key, values := range c.Request.Header {
 			lower := strings.ToLower(strings.TrimSpace(key))
-			if lower != "user-agent" && lower != "accept-language" {
+			if lower != "accept-language" {
 				continue
 			}
 			for _, v := range values {
@@ -272,8 +272,8 @@ func (s *OpenAIGatewayService) buildInputTokensUpstreamRequest(
 		}
 	}
 
-	// 账号级请求头覆写（仅 openai api_key 账号启用时生效；OAuth 路径 no-op）
-	account.ApplyHeaderOverrides(req.Header)
+	account.applyOpenAIHeaderOverrides(req.Header)
+	s.applyOpenAIOutboundIdentity(ctx, account, req.Header, account.Type == AccountTypeOAuth)
 
 	return req, nil
 }

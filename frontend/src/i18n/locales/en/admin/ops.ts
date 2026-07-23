@@ -336,6 +336,7 @@ export default {
         },
         loading: 'Loading…',
         requestId: 'Request ID',
+        asyncTaskId: 'Async Task ID',
         time: 'Time',
         phase: 'Phase',
         status: 'Status',

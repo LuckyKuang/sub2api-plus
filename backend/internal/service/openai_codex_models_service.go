@@ -291,7 +291,7 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 	headers := make(http.Header)
 	if useAPIKeyUpstream {
 		headers.Set("Authorization", "Bearer "+authToken)
-		credAccount.ApplyHeaderOverrides(headers)
+		credAccount.applyOpenAIHeaderOverrides(headers)
 	} else {
 		authHeaders, authErr := s.buildOpenAIAuthenticationHeaders(ctx, credAccount, authToken)
 		if authErr != nil {
@@ -305,9 +305,10 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 		setOpenAIChatGPTAccountHeaders(headers, credAccount)
 	}
 	headers.Set("Accept", "application/json")
-	headers.Set("Originator", "codex_cli_rs")
-	headers.Set("Version", clientVersion)
-	headers.Set("User-Agent", codexCLIUserAgent)
+	if !useAPIKeyUpstream {
+		headers.Set("Version", clientVersion)
+	}
+	s.applyOpenAIOutboundIdentity(ctx, credAccount, headers, !useAPIKeyUpstream)
 
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {

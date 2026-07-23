@@ -398,6 +398,7 @@ export default {
         title: 'Error Request Detail',
         responseBody: 'Response Body',
         upstreamStatus: 'Upstream Status',
+        asyncTaskId: 'Async Task ID',
         loadFailed: 'Failed to load detail, please try again',
       },
     },

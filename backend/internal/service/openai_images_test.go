@@ -26,6 +26,56 @@ type failingOpenAIImageWriter struct {
 	writes    int
 }
 
+// openAIImageSettingRepoStub keeps these image-only tests independent from
+// auth_service_register_test.go, which is compiled only with the unit tag.
+type openAIImageSettingRepoStub struct {
+	values map[string]string
+}
+
+func (s *openAIImageSettingRepoStub) Get(context.Context, string) (*Setting, error) {
+	return nil, ErrSettingNotFound
+}
+
+func (s *openAIImageSettingRepoStub) GetValue(_ context.Context, key string) (string, error) {
+	if value, ok := s.values[key]; ok {
+		return value, nil
+	}
+	return "", ErrSettingNotFound
+}
+
+func (s *openAIImageSettingRepoStub) Set(context.Context, string, string) error {
+	return nil
+}
+
+func (s *openAIImageSettingRepoStub) GetMultiple(_ context.Context, keys []string) (map[string]string, error) {
+	values := make(map[string]string, len(keys))
+	for _, key := range keys {
+		if value, ok := s.values[key]; ok {
+			values[key] = value
+		}
+	}
+	return values, nil
+}
+
+func (s *openAIImageSettingRepoStub) SetMultiple(_ context.Context, values map[string]string) error {
+	if s.values == nil {
+		s.values = make(map[string]string)
+	}
+	for key, value := range values {
+		s.values[key] = value
+	}
+	return nil
+}
+
+func (s *openAIImageSettingRepoStub) GetAll(context.Context) (map[string]string, error) {
+	return s.values, nil
+}
+
+func (s *openAIImageSettingRepoStub) Delete(_ context.Context, key string) error {
+	delete(s.values, key)
+	return nil
+}
+
 func (w *failingOpenAIImageWriter) Write(p []byte) (int, error) {
 	if w.writes >= w.failAfter {
 		return 0, errors.New("write failed: client disconnected")
@@ -196,7 +246,7 @@ func TestOpenAIGatewayServiceParseOpenAIImagesRequest_UnknownSizesDoNotBlockPass
 	svc := &OpenAIGatewayService{}
 	for _, tt := range tests {
 		t.Run(tt.size, func(t *testing.T) {
-			body := []byte(`{"model":"gpt-image-2","prompt":"draw a cat","size":"` + tt.size + `"}`)
+			body := []byte(`{"model":"gpt-image-1","prompt":"draw a cat","size":"` + tt.size + `"}`)
 
 			req := httptest.NewRequest(http.MethodPost, "/v1/images/generations", bytes.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
@@ -768,6 +818,8 @@ func TestOpenAIGatewayServiceForwardImages_OAuthPassesNAndReturnsAllImages(t *te
 	require.Equal(t, "text/event-stream", upstream.lastReq.Header.Get("Accept"))
 	require.Equal(t, "acct-123", upstream.lastReq.Header.Get("chatgpt-account-id"))
 	require.Equal(t, "responses=experimental", upstream.lastReq.Header.Get("OpenAI-Beta"))
+	require.Equal(t, DefaultOpenAICodexUserAgent, upstream.lastReq.Header.Get("User-Agent"))
+	require.Equal(t, "codex-tui", upstream.lastReq.Header.Get("originator"))
 
 	require.Equal(t, openAIImagesResponsesMainModel, gjson.GetBytes(upstream.lastBody, "model").String())
 	require.True(t, gjson.GetBytes(upstream.lastBody, "stream").Bool())
@@ -1174,9 +1226,78 @@ func TestOpenAIGatewayServiceForwardImages_APIKeyGenerationUsesConfiguredV1BaseU
 	require.Equal(t, "https://image-upstream.example/v1/images/generations", upstream.lastReq.URL.String())
 	require.Equal(t, "Bearer test-api-key", upstream.lastReq.Header.Get("Authorization"))
 	require.Equal(t, "application/json", upstream.lastReq.Header.Get("Content-Type"))
+	require.Equal(t, DefaultOpenAICodexUserAgent, upstream.lastReq.Header.Get("User-Agent"))
 	require.Equal(t, "gpt-image-2", gjson.GetBytes(upstream.lastBody, "model").String())
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, "aGVsbG8=", gjson.Get(rec.Body.String(), "data.0.b64_json").String())
+}
+
+func TestOpenAIGatewayServiceBuildOpenAIImagesRequest_UsesConfiguredCodexUserAgent(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	const configuredUA = "codex-tui/9.9.9 (Mac OS X 14.0; arm64) iTerm (codex-tui; 9.9.9)"
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/images/generations", strings.NewReader(`{"model":"gpt-image-2"}`))
+	req.Header.Set("User-Agent", "Mozilla/5.0 private-browser")
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = req
+
+	svc := &OpenAIGatewayService{
+		cfg: &config.Config{},
+		settingService: NewSettingService(&openAIImageSettingRepoStub{values: map[string]string{
+			SettingKeyOpenAICodexUserAgent: configuredUA,
+		}}, &config.Config{}),
+	}
+	account := &Account{
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeAPIKey,
+		Credentials: map[string]any{
+			"api_key":                    "test-api-key",
+			"user_agent":                 "account-specific-agent/1.0",
+			credKeyHeaderOverrideEnabled: true,
+			credKeyHeaderOverrides:       map[string]any{"user-agent": "override-agent/1.0"},
+		},
+	}
+
+	upstreamReq, err := svc.buildOpenAIImagesRequest(context.Background(), c, account, []byte(`{"model":"gpt-image-2"}`), "application/json", "test-api-key", openAIImagesGenerationsEndpoint)
+	require.NoError(t, err)
+	require.Equal(t, configuredUA, upstreamReq.Header.Get("User-Agent"))
+}
+
+func TestOpenAIGatewayServiceApplyOpenAIImageUserAgent_OAuthPairsConfiguredIdentity(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	const configuredUA = "codex-tui/9.9.9 (Mac OS X 14.0; arm64) iTerm (codex-tui; 9.9.9)"
+
+	svc := &OpenAIGatewayService{
+		settingService: NewSettingService(&openAIImageSettingRepoStub{values: map[string]string{
+			SettingKeyOpenAICodexUserAgent: configuredUA,
+		}}, &config.Config{}),
+	}
+	headers := http.Header{
+		"User-Agent": {"Mozilla/5.0 private-browser"},
+		"Originator": {"not-codex"},
+	}
+
+	svc.applyOpenAIImageUserAgent(context.Background(), &Account{Type: AccountTypeOAuth}, headers)
+
+	require.Equal(t, configuredUA, headers.Get("User-Agent"))
+	require.Equal(t, "codex-tui", headers.Get("originator"))
+	require.Equal(t, "9.9.9", headers.Get("version"))
+}
+
+func TestDownloadOpenAIImageBytes_UsesCodexUserAgentFallback(t *testing.T) {
+	var gotUserAgent string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotUserAgent = r.UserAgent()
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("image-bytes"))
+	}))
+	defer upstream.Close()
+
+	data, err := downloadOpenAIImageBytes(context.Background(), req.C(), nil, upstream.URL+"/image.png", openAIUpstreamErrorBodyReadLimit)
+	require.NoError(t, err)
+	require.Equal(t, []byte("image-bytes"), data)
+	require.Equal(t, DefaultOpenAICodexUserAgent, gotUserAgent)
 }
 
 func TestOpenAIGatewayServiceForwardImages_APIKeyStreamJSONResponseBillsImage(t *testing.T) {

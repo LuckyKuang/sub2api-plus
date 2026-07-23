@@ -29,7 +29,6 @@ const (
 	chatGPTRateLimitResetURL    = "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits/consume"
 	openaiQuotaUpstreamTimeout  = 20 * time.Second
 	openaiQuotaCodexBeta        = "codex-1"
-	openaiQuotaCodexOriginator  = "Codex Desktop"
 	openaiQuotaCodexLanguageTag = "zh-CN"
 	openaiQuotaSecFetchSite     = "none"
 	openaiQuotaSecFetchMode     = "no-cors"
@@ -113,12 +112,50 @@ type OpenAIQuotaResetResult struct {
 // for OpenAI OAuth accounts. It reuses the privacy client factory so all calls
 // flow through the impersonated HTTP client (Cloudflare-friendly TLS fingerprint).
 type OpenAIQuotaService struct {
-	accountRepo          AccountRepository
-	proxyRepo            ProxyRepository
-	tokenProvider        *OpenAITokenProvider
-	privacyClientFactory PrivacyClientFactory
-	agentIdentityTaskMu  sync.Mutex
-	agentIdentityWS      agentIdentityWSConnectionInvalidator
+	accountRepo            AccountRepository
+	proxyRepo              ProxyRepository
+	tokenProvider          *OpenAITokenProvider
+	privacyClientFactory   PrivacyClientFactory
+	agentIdentityTaskMu    sync.Mutex
+	agentIdentityWS        agentIdentityWSConnectionInvalidator
+	openAIIdentityResolver *OpenAIGatewayService
+}
+
+func (s *OpenAIQuotaService) applyOpenAIOutboundIdentity(ctx context.Context, account *Account, headers map[string]string) {
+	if len(headers) == 0 {
+		return
+	}
+	h := make(http.Header, len(headers))
+	for key, value := range headers {
+		h.Set(key, value)
+	}
+	if s != nil && s.openAIIdentityResolver != nil {
+		s.openAIIdentityResolver.applyOpenAIOutboundIdentity(ctx, account, h, true)
+	} else {
+		accountUA := ""
+		if account != nil {
+			accountUA = account.GetOpenAIUserAgent()
+		}
+		applyResolvedOpenAIOutboundIdentity(h, resolveOpenAIOutboundIdentityCandidates(accountUA, ""), true)
+	}
+	for key := range headers {
+		delete(headers, key)
+	}
+	for key, values := range h {
+		if len(values) > 0 {
+			headers[key] = values[0]
+		}
+	}
+}
+
+func (s *OpenAIQuotaService) ensureOpenAIAgentIdentityTask(ctx context.Context, account *Account, expectedTaskID string) error {
+	identity := resolveOpenAIOutboundIdentityCandidates("", "")
+	if s != nil && s.openAIIdentityResolver != nil {
+		identity = s.openAIIdentityResolver.resolveOpenAIOutboundIdentity(ctx, account)
+	} else if account != nil {
+		identity = resolveOpenAIOutboundIdentityCandidates(account.GetOpenAIUserAgent(), "")
+	}
+	return ensureAgentIdentityTaskForAccountWithIdentity(ctx, s.accountRepo, s.agentIdentityWS, &s.agentIdentityTaskMu, account, expectedTaskID, identity)
 }
 
 // NewOpenAIQuotaService constructs a quota service. token provider is required —
@@ -411,7 +448,7 @@ func (s *OpenAIQuotaService) recoverAgentIdentityTask(ctx context.Context, accou
 	if !account.IsOpenAIAgentIdentity() {
 		return nil
 	}
-	return ensureAgentIdentityTaskForAccount(ctx, s.accountRepo, s.agentIdentityWS, &s.agentIdentityTaskMu, account, expectedTaskID)
+	return s.ensureOpenAIAgentIdentityTask(ctx, account, expectedTaskID)
 }
 
 func (s *OpenAIQuotaService) isAgentIdentityAccount(ctx context.Context, accountID int64) bool {
@@ -434,6 +471,7 @@ func (s *OpenAIQuotaService) isAgentIdentityAccount(ctx context.Context, account
 func (s *OpenAIQuotaService) buildCodexQuotaHeaders(ctx context.Context, accountID int64, accessToken, chatGPTAccountID string, fedRAMP bool) (map[string]string, string, error) {
 	headers := buildCodexCommonHeaders(accessToken, chatGPTAccountID, fedRAMP)
 	if s == nil || s.accountRepo == nil {
+		s.applyOpenAIOutboundIdentity(ctx, nil, headers)
 		return headers, "", nil
 	}
 	account, err := s.accountRepo.GetByID(ctx, accountID)
@@ -441,6 +479,7 @@ func (s *OpenAIQuotaService) buildCodexQuotaHeaders(ctx context.Context, account
 		if strings.TrimSpace(accessToken) == "" {
 			return nil, "", fmt.Errorf("agent identity account credentials are unavailable")
 		}
+		s.applyOpenAIOutboundIdentity(ctx, nil, headers)
 		return headers, "", nil
 	}
 	if account.IsShadow() {
@@ -451,9 +490,10 @@ func (s *OpenAIQuotaService) buildCodexQuotaHeaders(ctx context.Context, account
 		}
 	}
 	if !account.IsOpenAIAgentIdentity() {
+		s.applyOpenAIOutboundIdentity(ctx, account, headers)
 		return headers, "", nil
 	}
-	if err := ensureAgentIdentityTaskForAccount(ctx, s.accountRepo, s.agentIdentityWS, &s.agentIdentityTaskMu, account, ""); err != nil {
+	if err := s.ensureOpenAIAgentIdentityTask(ctx, account, ""); err != nil {
 		return nil, "", err
 	}
 	key, err := agentIdentityKeyFromAccount(account)
@@ -465,6 +505,7 @@ func (s *OpenAIQuotaService) buildCodexQuotaHeaders(ctx context.Context, account
 		return nil, "", err
 	}
 	headers["authorization"] = assertion
+	s.applyOpenAIOutboundIdentity(ctx, account, headers)
 	return headers, key.taskID, nil
 }
 
@@ -487,7 +528,6 @@ func buildCodexCommonHeaders(accessToken, chatGPTAccountID string, fedRAMP bool)
 		"chatgpt-account-id": chatGPTAccountID,
 		"openai-beta":        openaiQuotaCodexBeta,
 		"oai-language":       openaiQuotaCodexLanguageTag,
-		"originator":         openaiQuotaCodexOriginator,
 		"accept":             "application/json",
 		"sec-fetch-site":     openaiQuotaSecFetchSite,
 		"sec-fetch-mode":     openaiQuotaSecFetchMode,

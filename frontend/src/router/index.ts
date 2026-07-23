@@ -10,6 +10,7 @@ import { useAdminSettingsStore } from '@/stores/adminSettings'
 import { useAdminComplianceStore } from '@/stores/adminCompliance'
 import { useNavigationLoadingState } from '@/composables/useNavigationLoading'
 import { useRoutePrefetch } from '@/composables/useRoutePrefetch'
+import { useAsyncImageAccess } from '@/composables/useAsyncImageAccess'
 import { getSetupStatus } from '@/api/setup'
 import { resolveCompletedSetupRedirectPath } from './setupRedirect'
 import { resolveRouteDocumentTitle } from './title'
@@ -216,6 +217,19 @@ const routes: RouteRecordRaw[] = [
       title: 'Batch Image Guide',
       titleKey: 'batchImageGuide.title',
       descriptionKey: 'batchImageGuide.description'
+    }
+  },
+  {
+    path: '/async-image',
+    name: 'AsyncImage',
+    component: () => import('@/views/user/AsyncImageView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: false,
+      requiresAsyncImageAccess: true,
+      title: 'Async Images',
+      titleKey: 'asyncImage.title',
+      descriptionKey: 'asyncImage.description'
     }
   },
   {
@@ -847,6 +861,15 @@ router.beforeEach(async (to, _from, next) => {
           adminComplianceStore.requireAcknowledgement(err.metadata)
         }
       }
+    }
+  }
+
+  if (to.meta.requiresAsyncImageAccess && !authStore.isAdmin) {
+    const { canUseAsyncImage, refreshAsyncImageAccess } = useAsyncImageAccess()
+    await refreshAsyncImageAccess()
+    if (!canUseAsyncImage.value) {
+      next('/keys')
+      return
     }
   }
 

@@ -37,7 +37,7 @@ func shouldSkipOpenAIPrivacyEnsure(extra map[string]any) bool {
 
 // disableOpenAITraining calls ChatGPT settings API to turn off "Improve the model for everyone".
 // Returns privacy_mode value: "training_off" on success, "cf_blocked" / "failed" on failure.
-func disableOpenAITraining(ctx context.Context, clientFactory PrivacyClientFactory, accessToken, proxyURL string) string {
+func disableOpenAITraining(ctx context.Context, clientFactory PrivacyClientFactory, accessToken, proxyURL string, identity openAIOutboundIdentity) string {
 	if accessToken == "" || clientFactory == nil {
 		return ""
 	}
@@ -51,9 +51,12 @@ func disableOpenAITraining(ctx context.Context, clientFactory PrivacyClientFacto
 		return PrivacyModeFailed
 	}
 
+	identity = normalizeOpenAIPrivacyIdentity(identity)
 	resp, err := client.R().
 		SetContext(ctx).
 		SetHeader("Authorization", "Bearer "+accessToken).
+		SetHeader("User-Agent", identity.UserAgent).
+		SetHeader("Originator", identity.Originator).
 		SetHeader("Origin", "https://chatgpt.com").
 		SetHeader("Referer", "https://chatgpt.com/").
 		SetHeader("Accept", "application/json").
@@ -102,7 +105,7 @@ var (
 // Used as fallback when id_token doesn't contain these fields (e.g., Mobile RT).
 // orgID is used to match the correct account when multiple accounts exist (e.g., personal + team).
 // Returns nil on any failure (best-effort, non-blocking).
-func fetchChatGPTAccountInfo(ctx context.Context, clientFactory PrivacyClientFactory, accessToken, proxyURL, orgID string) *ChatGPTAccountInfo {
+func fetchChatGPTAccountInfo(ctx context.Context, clientFactory PrivacyClientFactory, accessToken, proxyURL, orgID string, identity openAIOutboundIdentity) *ChatGPTAccountInfo {
 	if accessToken == "" || clientFactory == nil {
 		return nil
 	}
@@ -116,10 +119,13 @@ func fetchChatGPTAccountInfo(ctx context.Context, clientFactory PrivacyClientFac
 		return nil
 	}
 
+	identity = normalizeOpenAIPrivacyIdentity(identity)
 	var result map[string]any
 	resp, err := client.R().
 		SetContext(ctx).
 		SetHeader("Authorization", "Bearer "+accessToken).
+		SetHeader("User-Agent", identity.UserAgent).
+		SetHeader("Originator", identity.Originator).
 		SetHeader("Origin", "https://chatgpt.com").
 		SetHeader("Referer", "https://chatgpt.com/").
 		SetHeader("Accept", "application/json").
@@ -210,7 +216,7 @@ func fetchChatGPTAccountInfo(ctx context.Context, clientFactory PrivacyClientFac
 // fetchChatGPTSubscriptionExpiresAt reads the lightweight subscription endpoint used by
 // ChatGPT/Codex clients. Some Plus accounts no longer expose entitlement.expires_at in
 // accounts/check, but this endpoint still returns active_until.
-func fetchChatGPTSubscriptionExpiresAt(ctx context.Context, clientFactory PrivacyClientFactory, accessToken, proxyURL, accountID string) string {
+func fetchChatGPTSubscriptionExpiresAt(ctx context.Context, clientFactory PrivacyClientFactory, accessToken, proxyURL, accountID string, identity openAIOutboundIdentity) string {
 	accountID = strings.TrimSpace(accountID)
 	if accessToken == "" || accountID == "" || clientFactory == nil {
 		return ""
@@ -225,6 +231,7 @@ func fetchChatGPTSubscriptionExpiresAt(ctx context.Context, clientFactory Privac
 		return ""
 	}
 
+	identity = normalizeOpenAIPrivacyIdentity(identity)
 	var result struct {
 		PlanType    string `json:"plan_type"`
 		ActiveUntil string `json:"active_until"`
@@ -234,6 +241,8 @@ func fetchChatGPTSubscriptionExpiresAt(ctx context.Context, clientFactory Privac
 	resp, err := client.R().
 		SetContext(ctx).
 		SetHeader("Authorization", "Bearer "+accessToken).
+		SetHeader("User-Agent", identity.UserAgent).
+		SetHeader("Originator", identity.Originator).
 		SetHeader("Origin", "https://chatgpt.com").
 		SetHeader("Referer", "https://chatgpt.com/").
 		SetHeader("Accept", "application/json").
@@ -261,6 +270,13 @@ func fetchChatGPTSubscriptionExpiresAt(ctx context.Context, clientFactory Privac
 
 	slog.Info("chatgpt_subscription_success", "plan_type", result.PlanType, "subscription_expires_at", activeUntil, "account_id", accountID)
 	return activeUntil
+}
+
+func normalizeOpenAIPrivacyIdentity(identity openAIOutboundIdentity) openAIOutboundIdentity {
+	if resolved, ok := validOpenAIOutboundIdentity(identity.UserAgent); ok {
+		return resolved
+	}
+	return resolveOpenAIOutboundIdentityCandidates("", "")
 }
 
 // fillAccountInfo 从单个 account 对象中提取 plan_type 和 subscription_expires_at

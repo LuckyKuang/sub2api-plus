@@ -403,6 +403,7 @@ export default {
         title: '错误请求详情',
         responseBody: '上游响应内容',
         upstreamStatus: '上游状态码',
+        asyncTaskId: '异步任务 ID',
         loadFailed: '加载详情失败，请稍后重试',
       },
     },

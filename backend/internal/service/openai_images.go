@@ -34,13 +34,29 @@ const (
 	openAIImagesGenerationsURL = "https://api.openai.com/v1/images/generations"
 	openAIImagesEditsURL       = "https://api.openai.com/v1/images/edits"
 
-	openAIChatGPTStartURL          = "https://chatgpt.com/"
-	openAIChatGPTFilesURL          = "https://chatgpt.com/backend-api/files"
-	openAIImageBackendUserAgent    = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-	openAIImageMaxDownloadBytes    = 20 << 20 // 20MB per image download
-	openAIImageMaxUploadPartSize   = 20 << 20 // 20MB per multipart upload part
-	openAIImagesResponsesMainModel = "gpt-5.4-mini"
+	openAIChatGPTStartURL       = "https://chatgpt.com/"
+	openAIChatGPTFilesURL       = "https://chatgpt.com/backend-api/files"
+	openAIImageBackendUserAgent = DefaultOpenAICodexUserAgent
+	openAIImageMaxDownloadBytes = 20 << 20 // 20MB per image download
+	// OpenAIImageMaxUploadPartBytes is also used by the asynchronous image
+	// handler before it detaches a multipart request into a background task.
+	OpenAIImageMaxUploadPartBytes  int64 = 20 << 20 // 20 MiB per multipart upload part
+	openAIImagesResponsesMainModel       = "gpt-5.4-mini"
 )
+
+// OpenAIImageUploadTooLargeError marks a multipart input image that exceeded
+// the local gateway limit. Handlers use it to return 413 instead of a generic
+// malformed-request response.
+type OpenAIImageUploadTooLargeError struct {
+	Limit int64
+}
+
+func (e *OpenAIImageUploadTooLargeError) Error() string {
+	if e == nil || e.Limit <= 0 {
+		return "image upload exceeds the allowed size"
+	}
+	return fmt.Sprintf("image upload exceeds the allowed size of %d bytes", e.Limit)
+}
 
 type OpenAIImagesCapability string
 
@@ -218,6 +234,9 @@ func (s *OpenAIGatewayService) ParseOpenAIImagesRequest(c *gin.Context, body []b
 	if err := validateOpenAIImagesModel(req.Model); err != nil {
 		return nil, err
 	}
+	if err := ValidateGPTImage2Request(req); err != nil {
+		return nil, err
+	}
 	req.SizeTier = normalizeOpenAIImageSizeTier(req.Size)
 	req.RequiredCapability = classifyOpenAIImagesCapability(req)
 	return req, nil
@@ -331,13 +350,18 @@ func parseOpenAIImagesMultipartRequest(body []byte, contentType string, req *Ope
 			continue
 		}
 
-		data, err := io.ReadAll(io.LimitReader(part, openAIImageMaxUploadPartSize))
+		fileName := strings.TrimSpace(part.FileName())
+		var data []byte
+		if fileName != "" {
+			data, err = readOpenAIImageUploadPart(part)
+		} else {
+			data, err = io.ReadAll(io.LimitReader(part, OpenAIImageMaxUploadPartBytes))
+		}
 		_ = part.Close()
 		if err != nil {
 			return fmt.Errorf("read multipart field %s: %w", name, err)
 		}
 
-		fileName := strings.TrimSpace(part.FileName())
 		if fileName != "" {
 			partContentType := strings.TrimSpace(part.Header.Get("Content-Type"))
 			if name == "mask" && len(data) > 0 {
@@ -434,6 +458,20 @@ func parseOpenAIImagesMultipartRequest(body []byte, contentType string, req *Ope
 		return fmt.Errorf("image file is required")
 	}
 	return nil
+}
+
+func readOpenAIImageUploadPart(part *multipart.Part) ([]byte, error) {
+	if part == nil {
+		return nil, fmt.Errorf("missing multipart image part")
+	}
+	data, err := io.ReadAll(io.LimitReader(part, OpenAIImageMaxUploadPartBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > OpenAIImageMaxUploadPartBytes {
+		return nil, &OpenAIImageUploadTooLargeError{Limit: OpenAIImageMaxUploadPartBytes}
+	}
+	return data, nil
 }
 
 func parseOpenAIImageDimensions(_ textproto.MIMEHeader) (int, int) {
@@ -775,16 +813,19 @@ func (s *OpenAIGatewayService) buildOpenAIImagesRequest(
 			req.Header.Add(key, value)
 		}
 	}
-	customUA := account.GetOpenAIUserAgent()
-	if customUA != "" {
-		req.Header.Set("User-Agent", customUA)
-	}
 	if strings.TrimSpace(contentType) != "" {
 		req.Header.Set("Content-Type", contentType)
 	}
-	// 账号级请求头覆写（仅 openai api_key 账号启用时生效；OAuth 路径 no-op）
-	account.ApplyHeaderOverrides(req.Header)
+	account.applyOpenAIHeaderOverrides(req.Header)
+	s.applyOpenAIImageUserAgent(ctx, account, req.Header)
 	return req, nil
+}
+
+// applyOpenAIImageUserAgent installs the final OpenAI identity for image
+// traffic. A valid account Codex UA wins, followed by the system UA and the
+// compiled-in default; inbound headers and generic overrides never participate.
+func (s *OpenAIGatewayService) applyOpenAIImageUserAgent(ctx context.Context, account *Account, headers http.Header) {
+	s.applyOpenAIOutboundIdentity(ctx, account, headers, account != nil && account.Type == AccountTypeOAuth)
 }
 
 func buildOpenAIImagesURL(base string, endpoint string) string {

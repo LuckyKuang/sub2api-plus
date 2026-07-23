@@ -363,8 +363,9 @@ func (s *AccountTestService) buildOpenAIUpstreamModelsRequest(ctx context.Contex
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
-	// 账号级请求头覆写：模型列表探测与真实转发保持一致的最终头
-	account.ApplyHeaderOverrides(req.Header)
+	// 模型同步使用与实际 OpenAI API Key 转发相同的最终身份。
+	account.applyOpenAIHeaderOverrides(req.Header)
+	s.applyOpenAIOutboundIdentity(ctx, account, req.Header, false)
 	return req, nil
 }
 

@@ -302,6 +302,29 @@ type AccountUsageService struct {
 	tlsFPProfileService     *TLSFingerprintProfileService
 	agentIdentityTaskMu     sync.Mutex
 	agentIdentityWS         agentIdentityWSConnectionInvalidator
+	openAIIdentityResolver  *OpenAIGatewayService
+}
+
+func (s *AccountUsageService) applyOpenAIOutboundIdentity(ctx context.Context, account *Account, headers http.Header, useCodexIdentity bool) {
+	if s != nil && s.openAIIdentityResolver != nil {
+		s.openAIIdentityResolver.applyOpenAIOutboundIdentity(ctx, account, headers, useCodexIdentity)
+		return
+	}
+	accountUA := ""
+	if account != nil {
+		accountUA = account.GetOpenAIUserAgent()
+	}
+	applyResolvedOpenAIOutboundIdentity(headers, resolveOpenAIOutboundIdentityCandidates(accountUA, ""), useCodexIdentity)
+}
+
+func (s *AccountUsageService) buildOpenAIAgentIdentityAuthenticationHeaders(ctx context.Context, account *Account) (http.Header, error) {
+	identity := resolveOpenAIOutboundIdentityCandidates("", "")
+	if s != nil && s.openAIIdentityResolver != nil {
+		identity = s.openAIIdentityResolver.resolveOpenAIOutboundIdentity(ctx, account)
+	} else if account != nil {
+		identity = resolveOpenAIOutboundIdentityCandidates(account.GetOpenAIUserAgent(), "")
+	}
+	return buildAgentIdentityAuthenticationHeadersWithIdentity(ctx, s.accountRepo, s.agentIdentityWS, &s.agentIdentityTaskMu, account, identity)
 }
 
 // NewAccountUsageService 创建AccountUsageService实例
@@ -718,7 +741,7 @@ func (s *AccountUsageService) probeOpenAICodexSnapshot(ctx context.Context, acco
 	req.Host = "chatgpt.com"
 	req.Header.Set("Content-Type", "application/json")
 	if account.IsOpenAIAgentIdentity() {
-		authHeaders, authErr := buildAgentIdentityAuthenticationHeaders(ctx, s.accountRepo, s.agentIdentityWS, &s.agentIdentityTaskMu, account)
+		authHeaders, authErr := s.buildOpenAIAgentIdentityAuthenticationHeaders(ctx, account)
 		if authErr != nil {
 			return nil, fmt.Errorf("build Agent Identity authentication: %w", authErr)
 		}
@@ -732,18 +755,9 @@ func (s *AccountUsageService) probeOpenAICodexSnapshot(ctx context.Context, acco
 	}
 	req.Header.Set("Accept", "text/event-stream")
 	req.Header.Set("OpenAI-Beta", "responses=experimental")
-	req.Header.Set("Originator", "codex_cli_rs")
 	req.Header.Set("Version", openAICodexProbeVersion)
-	req.Header.Set("User-Agent", codexCLIUserAgent)
-	if s.identityCache != nil {
-		if fp, fpErr := s.identityCache.GetFingerprint(reqCtx, account.ID); fpErr == nil && fp != nil && strings.TrimSpace(fp.UserAgent) != "" {
-			req.Header.Set("User-Agent", strings.TrimSpace(fp.UserAgent))
-		}
-	}
-	// 与真实转发一致：originator 与最终 User-Agent（可能来自指纹缓存，如 codex-tui）首段配套，
-	// 否则探针被上游 404（issue #3901）。
-	enforceCodexIdentityHeaders(req.Header)
 	setOpenAIChatGPTAccountHeaders(req.Header, account)
+	s.applyOpenAIOutboundIdentity(reqCtx, account, req.Header, true)
 
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {

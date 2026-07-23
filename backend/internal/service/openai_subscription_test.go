@@ -19,6 +19,8 @@ func TestFetchChatGPTSubscriptionExpiresAt(t *testing.T) {
 		require.Equal(t, "/backend-api/subscriptions", r.URL.Path)
 		require.Equal(t, "acc_123", r.URL.Query().Get("account_id"))
 		require.Equal(t, "Bearer access-token", r.Header.Get("Authorization"))
+		require.Equal(t, DefaultOpenAICodexUserAgent, r.Header.Get("User-Agent"))
+		require.Equal(t, "codex-tui", r.Header.Get("Originator"))
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -36,7 +38,7 @@ func TestFetchChatGPTSubscriptionExpiresAt(t *testing.T) {
 
 	got := fetchChatGPTSubscriptionExpiresAt(context.Background(), func(proxyURL string) (*req.Client, error) {
 		return req.C().SetTimeout(5 * time.Second), nil
-	}, "access-token", "", "acc_123")
+	}, "access-token", "", "acc_123", resolveOpenAIOutboundIdentityCandidates("", ""))
 
 	require.Equal(t, wantExpiresAt, got)
 }
@@ -47,6 +49,8 @@ func TestFetchChatGPTAccountInfo_SkipsExpiredWorkspaceCandidate(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, "/backend-api/accounts/check/v4-2023-04-27", r.URL.Path)
 		require.Equal(t, "Bearer access-token", r.Header.Get("Authorization"))
+		require.Equal(t, DefaultOpenAICodexUserAgent, r.Header.Get("User-Agent"))
+		require.Equal(t, "codex-tui", r.Header.Get("Originator"))
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -76,7 +80,7 @@ func TestFetchChatGPTAccountInfo_SkipsExpiredWorkspaceCandidate(t *testing.T) {
 
 	got := fetchChatGPTAccountInfo(context.Background(), func(proxyURL string) (*req.Client, error) {
 		return req.C().SetTimeout(5 * time.Second), nil
-	}, "access-token", "", "org-expired-workspace")
+	}, "access-token", "", "org-expired-workspace", resolveOpenAIOutboundIdentityCandidates("", ""))
 
 	require.NotNil(t, got)
 	require.Equal(t, "free", got.PlanType)
@@ -113,7 +117,7 @@ func TestFetchChatGPTAccountInfo_SkipsDeactivatedWorkspaceCandidate(t *testing.T
 
 	got := fetchChatGPTAccountInfo(context.Background(), func(proxyURL string) (*req.Client, error) {
 		return req.C().SetTimeout(5 * time.Second), nil
-	}, "access-token", "", "org-deactivated-workspace")
+	}, "access-token", "", "org-deactivated-workspace", resolveOpenAIOutboundIdentityCandidates("", ""))
 
 	require.NotNil(t, got)
 	require.Equal(t, "pro", got.PlanType)

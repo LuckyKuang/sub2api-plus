@@ -1,0 +1,188 @@
+package repository
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"strconv"
+	"time"
+
+	"github.com/Wei-Shaw/sub2api/internal/service"
+)
+
+type imageTaskHistoryRepository struct {
+	db *sql.DB
+}
+
+func NewImageTaskHistoryRepository(db *sql.DB) service.ImageTaskHistoryRepository {
+	return &imageTaskHistoryRepository{db: db}
+}
+
+func (r *imageTaskHistoryRepository) Save(ctx context.Context, task *service.ImageTaskRecord) error {
+	if r == nil || r.db == nil {
+		return fmt.Errorf("async image task history database is unavailable")
+	}
+	if task == nil || task.ID == "" || task.UserID <= 0 || task.APIKeyID <= 0 {
+		return fmt.Errorf("invalid async image task history record")
+	}
+
+	_, err := r.db.ExecContext(ctx, `
+INSERT INTO async_image_tasks (
+    task_id, user_id, api_key_id, request_type, model, prompt_preview,
+    status, http_status, image_url, result, error,
+    created_at, completed_at, expires_at, updated_at
+) VALUES (
+    $1, $2, $3, $4, $5, NULLIF($6, ''),
+    $7, NULLIF($8, 0), NULLIF($9, ''), $10::jsonb, $11::jsonb,
+    $12, $13, $14, NOW()
+)
+ON CONFLICT (task_id) DO UPDATE SET
+    request_type = EXCLUDED.request_type,
+    model = EXCLUDED.model,
+    prompt_preview = EXCLUDED.prompt_preview,
+    status = EXCLUDED.status,
+    http_status = EXCLUDED.http_status,
+    image_url = EXCLUDED.image_url,
+    result = EXCLUDED.result,
+    error = EXCLUDED.error,
+    completed_at = EXCLUDED.completed_at,
+    expires_at = EXCLUDED.expires_at,
+    updated_at = NOW()`,
+		task.ID,
+		task.UserID,
+		task.APIKeyID,
+		task.RequestType,
+		task.Model,
+		task.PromptPreview,
+		task.Status,
+		task.HTTPStatus,
+		imageTaskFirstURL(task.Result),
+		serviceImageTaskJSONText(task.Result),
+		serviceImageTaskJSONText(task.Error),
+		time.Unix(task.CreatedAt, 0).UTC(),
+		imageTaskHistoryCompletedAt(task.CompletedAt),
+		time.Unix(task.ExpiresAt, 0).UTC(),
+	)
+	return err
+}
+
+func (r *imageTaskHistoryRepository) List(ctx context.Context, owner service.ImageTaskOwner, filter service.ImageTaskHistoryFilter) ([]*service.ImageTaskRecord, bool, error) {
+	if r == nil || r.db == nil {
+		return nil, false, fmt.Errorf("async image task history database is unavailable")
+	}
+	filter = normalizeRepositoryImageTaskFilter(filter)
+	query := asyncImageTaskSelectSQL + ` WHERE user_id = $1 AND api_key_id = $2`
+	args := []any{owner.UserID, owner.APIKeyID}
+	if filter.Status != "" {
+		query += " AND status = $" + strconv.Itoa(len(args)+1)
+		args = append(args, filter.Status)
+	}
+	query += " ORDER BY created_at DESC, id DESC LIMIT $" + strconv.Itoa(len(args)+1) + " OFFSET $" + strconv.Itoa(len(args)+2)
+	args = append(args, filter.Limit+1, filter.Offset)
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, false, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	tasks := make([]*service.ImageTaskRecord, 0, filter.Limit)
+	for rows.Next() {
+		task, scanErr := scanImageTaskHistory(rows)
+		if scanErr != nil {
+			return nil, false, scanErr
+		}
+		tasks = append(tasks, task)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, false, err
+	}
+	hasMore := len(tasks) > filter.Limit
+	if hasMore {
+		tasks = tasks[:filter.Limit]
+	}
+	return tasks, hasMore, nil
+}
+
+const asyncImageTaskColumns = `
+task_id, user_id, api_key_id, request_type, model, prompt_preview,
+status, http_status, image_url, result::text, error::text,
+created_at, completed_at, expires_at`
+
+const asyncImageTaskSelectSQL = `SELECT ` + asyncImageTaskColumns + ` FROM async_image_tasks`
+
+func scanImageTaskHistory(row interface{ Scan(...any) error }) (*service.ImageTaskRecord, error) {
+	var task service.ImageTaskRecord
+	var promptPreview, imageURL, result, taskError sql.NullString
+	var httpStatus sql.NullInt64
+	var completedAt sql.NullTime
+	var createdAt, expiresAt time.Time
+	if err := row.Scan(
+		&task.ID, &task.UserID, &task.APIKeyID, &task.RequestType, &task.Model, &promptPreview,
+		&task.Status, &httpStatus, &imageURL, &result, &taskError,
+		&createdAt, &completedAt, &expiresAt,
+	); err != nil {
+		return nil, err
+	}
+	if promptPreview.Valid {
+		task.PromptPreview = promptPreview.String
+	}
+	if httpStatus.Valid {
+		task.HTTPStatus = int(httpStatus.Int64)
+	}
+	if result.Valid {
+		task.Result = json.RawMessage(result.String)
+	}
+	if taskError.Valid {
+		task.Error = json.RawMessage(taskError.String)
+	}
+	task.CreatedAt = createdAt.Unix()
+	if completedAt.Valid {
+		unix := completedAt.Time.Unix()
+		task.CompletedAt = &unix
+	}
+	task.ExpiresAt = expiresAt.Unix()
+	return &task, nil
+}
+
+func normalizeRepositoryImageTaskFilter(filter service.ImageTaskHistoryFilter) service.ImageTaskHistoryFilter {
+	if filter.Limit <= 0 {
+		filter.Limit = 20
+	}
+	if filter.Limit > 100 {
+		filter.Limit = 100
+	}
+	if filter.Offset < 0 {
+		filter.Offset = 0
+	}
+	return filter
+}
+
+func imageTaskHistoryCompletedAt(value *int64) any {
+	if value == nil {
+		return nil
+	}
+	return time.Unix(*value, 0).UTC()
+}
+
+func serviceImageTaskJSONText(value json.RawMessage) any {
+	if len(value) == 0 || !json.Valid(value) {
+		return nil
+	}
+	return string(value)
+}
+
+func imageTaskFirstURL(result json.RawMessage) string {
+	var payload struct {
+		Data []struct {
+			URL string `json:"url"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(result, &payload); err != nil || len(payload.Data) == 0 {
+		return ""
+	}
+	return payload.Data[0].URL
+}
+
+var _ service.ImageTaskHistoryRepository = (*imageTaskHistoryRepository)(nil)

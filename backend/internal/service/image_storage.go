@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -24,6 +25,28 @@ type ImageStorage interface {
 	// Save 把 data 以 key 存入对象存储，返回可下载的 URL（公开直链或 presigned 临时链接）。
 	// contentType 为图片 MIME 类型，如 "image/png"。
 	Save(ctx context.Context, key, contentType string, data []byte) (url string, err error)
+}
+
+// ImageStorageReader is an optional companion to ImageStorage. It is used by
+// the async-task ZIP endpoint to open only deterministic objects previously
+// written for that task. Keeping it optional preserves compatibility with
+// third-party storage adapters that only support result uploads.
+type ImageStorageReader interface {
+	Open(ctx context.Context, key string) (*ImageStorageObject, error)
+}
+
+type ImageStorageObject struct {
+	Body        io.ReadCloser
+	ContentType string
+	Size        int64
+}
+
+// ImageStorageHealthChecker is implemented by storage adapters that can verify
+// the configured bucket with real object operations before async tasks are enabled.
+// It intentionally remains optional so third-party ImageStorage adapters do not
+// need to change their Save contract.
+type ImageStorageHealthChecker interface {
+	Check(ctx context.Context) error
 }
 
 // ImageResultUploader 是 ImageStorage 的上层编排器（与具体厂商无关）：
@@ -166,6 +189,65 @@ func (u *ImageResultUploader) download(ctx context.Context, rawURL string) ([]by
 
 func (u *ImageResultUploader) buildKey(taskID string, index int, contentType string) string {
 	return u.prefix + taskID + "-" + strconv.Itoa(index) + extensionForContentType(contentType)
+}
+
+// OpenStoredTaskImage opens an exact object written by Rewrite. The extension
+// is derived only from the task's stored image URL and must be one of the image
+// formats this uploader can create; neither host nor path from that URL is ever
+// fetched or otherwise trusted.
+func (u *ImageResultUploader) OpenStoredTaskImage(ctx context.Context, taskID string, index int, storedURL string) (*ImageStorageObject, string, error) {
+	if u == nil || u.storage == nil {
+		return nil, "", errors.New("image storage is unavailable")
+	}
+	reader, ok := u.storage.(ImageStorageReader)
+	if !ok {
+		return nil, "", errors.New("image storage does not support reading stored images")
+	}
+	extension := imageExtensionFromStoredURL(storedURL)
+	if extension == "" {
+		return nil, "", errors.New("stored image URL has an unsupported extension")
+	}
+	object, err := reader.Open(ctx, u.prefix+taskID+"-"+strconv.Itoa(index)+extension)
+	if err != nil {
+		return nil, "", err
+	}
+	if object == nil || object.Body == nil {
+		return nil, "", errors.New("stored image object is empty")
+	}
+	if strings.TrimSpace(object.ContentType) == "" {
+		object.ContentType = imageContentTypeFromExtension(extension)
+	}
+	return object, extension, nil
+}
+
+func imageExtensionFromStoredURL(rawURL string) string {
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return ""
+	}
+	path := strings.ToLower(parsed.Path)
+	for _, extension := range []string{".png", ".jpg", ".jpeg", ".webp", ".gif"} {
+		if strings.HasSuffix(path, extension) {
+			if extension == ".jpeg" {
+				return ".jpg"
+			}
+			return extension
+		}
+	}
+	return ""
+}
+
+func imageContentTypeFromExtension(extension string) string {
+	switch strings.ToLower(extension) {
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".webp":
+		return "image/webp"
+	case ".gif":
+		return "image/gif"
+	default:
+		return "image/png"
+	}
 }
 
 func detectImageContentType(data []byte) string {

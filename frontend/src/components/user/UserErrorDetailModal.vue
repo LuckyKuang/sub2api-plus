@@ -48,6 +48,11 @@
           <span class="font-medium text-gray-500 dark:text-dark-400">{{ t('usage.errors.platform') }}</span>
           <p class="mt-0.5 text-gray-900 dark:text-dark-100">{{ detail.platform || '-' }}</p>
         </div>
+        <!-- Async task correlation is safe because this detail is already owner-scoped. -->
+        <div v-if="detail.async_task_id">
+          <span class="font-medium text-gray-500 dark:text-dark-400">{{ t('usage.errors.detail.asyncTaskId') }}</span>
+          <p class="mt-0.5 break-all font-mono text-gray-900 dark:text-dark-100">{{ detail.async_task_id }}</p>
+        </div>
         <!-- Upstream status code -->
         <div v-if="detail.upstream_status_code != null">
           <span class="font-medium text-gray-500 dark:text-dark-400">{{ t('usage.errors.detail.upstreamStatus') }}</span>

@@ -30,6 +30,11 @@ const appStore = vi.hoisted(() => ({
   fetchPublicSettings: vi.fn(),
 }))
 
+const asyncImageAccess = vi.hoisted(() => ({
+  canUseAsyncImage: { value: false },
+  refreshAsyncImageAccess: vi.fn(),
+}))
+
 vi.mock('vue-router', () => ({
   createWebHistory: vi.fn(() => ({})),
   createRouter: vi.fn(() => ({
@@ -77,6 +82,10 @@ vi.mock('@/composables/useRoutePrefetch', () => ({
   }),
 }))
 
+vi.mock('@/composables/useAsyncImageAccess', () => ({
+  useAsyncImageAccess: () => asyncImageAccess,
+}))
+
 function createDeferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void
   const promise = new Promise<T>((resolvePromise) => {
@@ -117,6 +126,9 @@ describe('feature route guard', () => {
     appStore.publicSettingsLoaded = false
     appStore.cachedPublicSettings = null
     appStore.fetchPublicSettings.mockReset()
+    asyncImageAccess.canUseAsyncImage.value = false
+    asyncImageAccess.refreshAsyncImageAccess.mockReset()
+    asyncImageAccess.refreshAsyncImageAccess.mockResolvedValue(false)
   })
 
   it('waits for the first public-settings request before deciding payment access', async () => {
@@ -173,5 +185,22 @@ describe('feature route guard', () => {
     expect(appStore.fetchPublicSettings).not.toHaveBeenCalled()
     expect(next).toHaveBeenCalledOnce()
     expect(next).toHaveBeenCalledWith(target)
+  })
+
+  it('redirects a user without an eligible image API key to their keys', async () => {
+    const { navigation, next } = runGuard({ requiresAsyncImageAccess: true }, '/async-image')
+    await navigation
+
+    expect(asyncImageAccess.refreshAsyncImageAccess).toHaveBeenCalledOnce()
+    expect(next).toHaveBeenCalledWith('/keys')
+  })
+
+  it('lets an administrator open async images without a personal API key', async () => {
+    authStore.isAdmin = true
+    const { navigation, next } = runGuard({ requiresAsyncImageAccess: true }, '/async-image')
+    await navigation
+
+    expect(asyncImageAccess.refreshAsyncImageAccess).not.toHaveBeenCalled()
+    expect(next).toHaveBeenCalledWith()
   })
 })

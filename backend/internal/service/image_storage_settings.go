@@ -10,10 +10,12 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
 const settingKeyImageStorageConfig = "image_storage_config"
+const imageStorageConfigInvalidationChannel = "sub2api:image_storage_config:invalidate"
 
 // ErrImageStorageIncomplete 表示开关已打开但凭证不全，无法启用异步生图。
 var ErrImageStorageIncomplete = errors.New("image storage is enabled but bucket/access_key_id/secret_access_key are incomplete")
@@ -53,6 +55,7 @@ type ImageStorageSettingService struct {
 	encryptor   SecretEncryptor
 	backup      *BackupService
 	factory     ImageStorageFactory
+	redis       *redis.Client
 
 	// fallback 是 config.yaml 里的配置。后台从未保存过设置时沿用它，
 	// 保证升级前已用配置文件开启该功能的部署不被打断。
@@ -62,6 +65,45 @@ type ImageStorageSettingService struct {
 	resolved bool
 	uploader *ImageResultUploader
 	enabled  bool
+
+	invalidationOnce sync.Once
+}
+
+// SetInvalidationClient enables configuration fan-out for multi-instance
+// deployments. It is optional so standalone/test deployments keep the same
+// construction contract.
+func (s *ImageStorageSettingService) SetInvalidationClient(client *redis.Client) {
+	if s == nil {
+		return
+	}
+	s.redis = client
+}
+
+// StartInvalidationSubscriber makes every API instance rebuild its local S3
+// client after one administrator saves a new configuration.
+func (s *ImageStorageSettingService) StartInvalidationSubscriber(ctx context.Context) {
+	if s == nil || s.redis == nil {
+		return
+	}
+	s.invalidationOnce.Do(func() {
+		go func() {
+			subscription := s.redis.Subscribe(ctx, imageStorageConfigInvalidationChannel)
+			defer func() { _ = subscription.Close() }()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case message, ok := <-subscription.Channel():
+					if !ok {
+						return
+					}
+					if message != nil {
+						s.Invalidate()
+					}
+				}
+			}
+		}()
+	})
 }
 
 func NewImageStorageSettingService(
@@ -196,6 +238,11 @@ func (s *ImageStorageSettingService) Update(ctx context.Context, in ImageStorage
 		return nil, fmt.Errorf("save image storage settings: %w", err)
 	}
 	s.Invalidate()
+	if s.redis != nil {
+		if err := s.redis.Publish(ctx, imageStorageConfigInvalidationChannel, "refresh").Err(); err != nil {
+			logger.L().Warn("image_storage.settings_invalidation_publish_failed", zap.Error(err))
+		}
+	}
 
 	in.SecretAccessKey = ""
 	return &in, nil
@@ -205,23 +252,57 @@ func (s *ImageStorageSettingService) Update(ctx context.Context, in ImageStorage
 // 与 Update 一样支持留空 SecretAccessKey 表示沿用已保存的值。
 func (s *ImageStorageSettingService) TestConnection(ctx context.Context, in ImageStorageSettings) error {
 	normalizeImageStorageSettings(&in)
+	var fallback *config.ImageStorageConfig
 	if !in.ReuseBackupS3 && in.SecretAccessKey == "" {
 		old, err := s.load(ctx)
 		if err == nil && old != nil {
 			in.SecretAccessKey = old.SecretAccessKey
+		} else if imageStorageConnectionMatchesFallback(in, s.fallback) {
+			// Get deliberately masks the environment-provided secret. When no
+			// admin override exists, accept the unchanged public configuration as
+			// proof that this test targets the same storage and reuse that secret.
+			// Do not apply it after endpoint, bucket, access key, or path-style
+			// changes, which would otherwise disclose an environment credential to
+			// an arbitrary S3-compatible service.
+			fallbackConfig := s.fallback
+			fallbackConfig.Enabled = in.Enabled
+			fallbackConfig.Prefix = in.Prefix
+			fallbackConfig.PublicBaseURL = in.PublicBaseURL
+			fallbackConfig.PresignExpiry = in.PresignExpiry
+			fallbackConfig.MaxDownloadByte = in.MaxDownloadBytes
+			fallback = &fallbackConfig
 		}
 	}
-	cfg, err := s.toImageStorageConfig(ctx, &in)
-	if err != nil {
-		return err
+
+	cfg := fallback
+	if cfg == nil {
+		var err error
+		cfg, err = s.toImageStorageConfig(ctx, &in)
+		if err != nil {
+			return err
+		}
 	}
 	if !cfg.IsConfigured() {
 		return ErrImageStorageIncomplete
 	}
-	if _, err := s.factory(ctx, cfg); err != nil {
+	storage, err := s.factory(ctx, cfg)
+	if err != nil {
 		return err
 	}
-	return nil
+	checker, ok := storage.(ImageStorageHealthChecker)
+	if !ok {
+		return errors.New("image storage adapter does not support connection health checks")
+	}
+	return checker.Check(ctx)
+}
+
+func imageStorageConnectionMatchesFallback(in ImageStorageSettings, fallback config.ImageStorageConfig) bool {
+	return fallback.SecretAccessKey != "" &&
+		in.Endpoint == strings.TrimSpace(fallback.Endpoint) &&
+		in.Region == strings.TrimSpace(fallback.Region) &&
+		in.Bucket == strings.TrimSpace(fallback.Bucket) &&
+		in.AccessKeyID == strings.TrimSpace(fallback.AccessKeyID) &&
+		in.ForcePathStyle == fallback.ForcePathStyle
 }
 
 // effectiveConfig 把后台设置（或 config.yaml 回落）解析成运行时配置。

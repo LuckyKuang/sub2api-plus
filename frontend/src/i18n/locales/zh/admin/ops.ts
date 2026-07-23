@@ -336,6 +336,7 @@ export default {
         },
         loading: '加载中…',
         requestId: '请求 ID',
+        asyncTaskId: '异步任务 ID',
         time: '时间',
         phase: '阶段',
         status: '状态码',

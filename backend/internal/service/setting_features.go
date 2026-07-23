@@ -233,7 +233,7 @@ func parseAuditLogRetentionDays(value string) int {
 func (s *SettingService) GetSiteName(ctx context.Context) string {
 	value, err := s.settingRepo.GetValue(ctx, SettingKeySiteName)
 	if err != nil || value == "" {
-		return "Sub2API"
+		return "Sub2API Plus"
 	}
 	return value
 }
@@ -270,6 +270,23 @@ func (s *SettingService) GetDefaultUserRPMLimit(ctx context.Context) int {
 	}
 	if v, err := strconv.Atoi(value); err == nil && v >= 0 {
 		return v
+	}
+	return 0
+}
+
+// GetAsyncImageUserImagesPerMinute returns the global per-user async image
+// unit limit. Zero means unlimited; malformed or negative settings fail safe to
+// unlimited so a bad admin value never blocks all image generation.
+func (s *SettingService) GetAsyncImageUserImagesPerMinute(ctx context.Context) int {
+	if s == nil || s.settingRepo == nil {
+		return 0
+	}
+	value, err := s.settingRepo.GetValue(ctx, SettingKeyAsyncImageUserImagesPerMinute)
+	if err != nil || value == "" {
+		return 0
+	}
+	if limit, err := strconv.Atoi(strings.TrimSpace(value)); err == nil && limit >= 0 {
+		return limit
 	}
 	return 0
 }

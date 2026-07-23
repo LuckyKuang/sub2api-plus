@@ -399,7 +399,7 @@ func estimateOpsErrorLogJobBytes(entry *service.OpsInsertErrorLogInput) int64 {
 		return 1
 	}
 	const fixedOverhead = 512
-	size := fixedOverhead + len(entry.RequestID) + len(entry.ClientRequestID) +
+	size := fixedOverhead + len(entry.RequestID) + len(entry.ClientRequestID) + len(entry.AsyncTaskID) +
 		len(entry.Platform) + len(entry.Model) + len(entry.RequestPath) +
 		len(entry.InboundEndpoint) + len(entry.UpstreamEndpoint) +
 		len(entry.RequestedModel) + len(entry.UpstreamModel) + len(entry.UserAgent) +

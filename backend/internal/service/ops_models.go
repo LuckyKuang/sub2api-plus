@@ -50,6 +50,7 @@ type OpsErrorLog struct {
 
 	ClientRequestID string `json:"client_request_id"`
 	RequestID       string `json:"request_id"`
+	AsyncTaskID     string `json:"async_task_id,omitempty"`
 	Message         string `json:"message"`
 
 	UserID      *int64 `json:"user_id"`

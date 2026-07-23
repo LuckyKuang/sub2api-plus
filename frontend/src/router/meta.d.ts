@@ -56,6 +56,13 @@ declare module 'vue-router' {
     requiresRiskControl?: boolean
 
     /**
+     * Whether this route requires async image access. Administrators always
+     * have access; users need an eligible image-generation API key.
+     * @default false
+     */
+    requiresAsyncImageAccess?: boolean
+
+    /**
      * i18n key for the page title
      */
     titleKey?: string

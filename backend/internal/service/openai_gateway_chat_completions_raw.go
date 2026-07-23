@@ -32,7 +32,6 @@ import (
 // pensieve/short-term/maxims/dont-reuse-shared-headers-whitelist-across-different-upstream-trust-domains
 var openaiCCRawAllowedHeaders = map[string]bool{
 	"accept-language": true,
-	"user-agent":      true,
 }
 
 // forwardAsRawChatCompletions 直转客户端的 Chat Completions 请求到上游

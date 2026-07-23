@@ -18,6 +18,7 @@ type OpenAIOAuthService struct {
 	proxyRepo            ProxyRepository
 	oauthClient          OpenAIOAuthClient
 	privacyClientFactory PrivacyClientFactory // 用于调用 chatgpt.com/backend-api（ImpersonateChrome）
+	settingService       *SettingService
 }
 
 // NewOpenAIOAuthService creates a new OpenAI OAuth service
@@ -33,6 +34,32 @@ func NewOpenAIOAuthService(proxyRepo ProxyRepository, oauthClient OpenAIOAuthCli
 // 用于调用 chatgpt.com/backend-api 获取账号信息（plan_type 等）。
 func (s *OpenAIOAuthService) SetPrivacyClientFactory(factory PrivacyClientFactory) {
 	s.privacyClientFactory = factory
+}
+
+func (s *OpenAIOAuthService) SetSettingService(settingService *SettingService) {
+	s.settingService = settingService
+}
+
+func (s *OpenAIOAuthService) resolveOpenAIOutboundIdentity(ctx context.Context, account *Account) openAIOutboundIdentity {
+	accountUA := ""
+	if account != nil {
+		accountUA = account.GetOpenAIUserAgent()
+	}
+	systemUA := ""
+	if s != nil && s.settingService != nil {
+		systemUA = s.settingService.GetOpenAICodexUserAgent(ctx)
+	}
+	return resolveOpenAIOutboundIdentityCandidates(accountUA, systemUA)
+}
+
+type openAIOAuthClientWithUserAgent interface {
+	ExchangeCodeWithUserAgent(ctx context.Context, code, codeVerifier, redirectURI, proxyURL, clientID, userAgent string) (*openai.TokenResponse, error)
+	RefreshTokenWithClientIDAndUserAgent(ctx context.Context, refreshToken, proxyURL, clientID, userAgent string) (*openai.TokenResponse, error)
+}
+
+type openAIOAuthClientWithIdentity interface {
+	ExchangeCodeWithIdentity(ctx context.Context, code, codeVerifier, redirectURI, proxyURL, clientID, userAgent, originator string) (*openai.TokenResponse, error)
+	RefreshTokenWithClientIDAndIdentity(ctx context.Context, refreshToken, proxyURL, clientID, userAgent, originator string) (*openai.TokenResponse, error)
 }
 
 // OpenAIAuthURLResult contains the authorization URL and session info
@@ -166,7 +193,16 @@ func (s *OpenAIOAuthService) ExchangeCode(ctx context.Context, input *OpenAIExch
 	}
 
 	// Exchange code for token
-	tokenResp, err := s.oauthClient.ExchangeCode(ctx, input.Code, session.CodeVerifier, redirectURI, proxyURL, clientID)
+	identity := s.resolveOpenAIOutboundIdentity(ctx, nil)
+	var tokenResp *openai.TokenResponse
+	var err error
+	if client, ok := s.oauthClient.(openAIOAuthClientWithIdentity); ok {
+		tokenResp, err = client.ExchangeCodeWithIdentity(ctx, input.Code, session.CodeVerifier, redirectURI, proxyURL, clientID, identity.UserAgent, identity.Originator)
+	} else if client, ok := s.oauthClient.(openAIOAuthClientWithUserAgent); ok {
+		tokenResp, err = client.ExchangeCodeWithUserAgent(ctx, input.Code, session.CodeVerifier, redirectURI, proxyURL, clientID, identity.UserAgent)
+	} else {
+		tokenResp, err = s.oauthClient.ExchangeCode(ctx, input.Code, session.CodeVerifier, redirectURI, proxyURL, clientID)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -214,7 +250,20 @@ func (s *OpenAIOAuthService) RefreshToken(ctx context.Context, refreshToken stri
 
 // RefreshTokenWithClientID refreshes an OpenAI OAuth token with optional client_id.
 func (s *OpenAIOAuthService) RefreshTokenWithClientID(ctx context.Context, refreshToken string, proxyURL string, clientID string) (*OpenAITokenInfo, error) {
-	tokenResp, err := s.oauthClient.RefreshTokenWithClientID(ctx, refreshToken, proxyURL, clientID)
+	return s.refreshTokenWithClientIDAndIdentity(ctx, refreshToken, proxyURL, clientID, nil)
+}
+
+func (s *OpenAIOAuthService) refreshTokenWithClientIDAndIdentity(ctx context.Context, refreshToken string, proxyURL string, clientID string, account *Account) (*OpenAITokenInfo, error) {
+	identity := s.resolveOpenAIOutboundIdentity(ctx, account)
+	var tokenResp *openai.TokenResponse
+	var err error
+	if client, ok := s.oauthClient.(openAIOAuthClientWithIdentity); ok {
+		tokenResp, err = client.RefreshTokenWithClientIDAndIdentity(ctx, refreshToken, proxyURL, clientID, identity.UserAgent, identity.Originator)
+	} else if client, ok := s.oauthClient.(openAIOAuthClientWithUserAgent); ok {
+		tokenResp, err = client.RefreshTokenWithClientIDAndUserAgent(ctx, refreshToken, proxyURL, clientID, identity.UserAgent)
+	} else {
+		tokenResp, err = s.oauthClient.RefreshTokenWithClientID(ctx, refreshToken, proxyURL, clientID)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -269,7 +318,8 @@ func (s *OpenAIOAuthService) enrichTokenInfo(ctx context.Context, tokenInfo *Ope
 			orgID = atClaims.OpenAIAuth.POID
 		}
 	}
-	if info := fetchChatGPTAccountInfo(ctx, s.privacyClientFactory, tokenInfo.AccessToken, proxyURL, orgID); info != nil {
+	identity := s.resolveOpenAIOutboundIdentity(ctx, nil)
+	if info := fetchChatGPTAccountInfo(ctx, s.privacyClientFactory, tokenInfo.AccessToken, proxyURL, orgID, identity); info != nil {
 		// chatgpt_plan_type from the ID token is the canonical personal-plan value.
 		// accounts/check is a multi-account/workspace endpoint; inactive team or
 		// business workspaces can otherwise overwrite Pro/Free with internal
@@ -285,13 +335,13 @@ func (s *OpenAIOAuthService) enrichTokenInfo(ctx context.Context, tokenInfo *Ope
 		}
 	}
 	if strings.TrimSpace(tokenInfo.SubscriptionExpiresAt) == "" {
-		if expiresAt := fetchChatGPTSubscriptionExpiresAt(ctx, s.privacyClientFactory, tokenInfo.AccessToken, proxyURL, resolveChatGPTSubscriptionAccountID(tokenInfo, orgID)); expiresAt != "" {
+		if expiresAt := fetchChatGPTSubscriptionExpiresAt(ctx, s.privacyClientFactory, tokenInfo.AccessToken, proxyURL, resolveChatGPTSubscriptionAccountID(tokenInfo, orgID), identity); expiresAt != "" {
 			tokenInfo.SubscriptionExpiresAt = expiresAt
 		}
 	}
 
 	// 尝试设置隐私（关闭训练数据共享），best-effort
-	tokenInfo.PrivacyMode = disableOpenAITraining(ctx, s.privacyClientFactory, tokenInfo.AccessToken, proxyURL)
+	tokenInfo.PrivacyMode = disableOpenAITraining(ctx, s.privacyClientFactory, tokenInfo.AccessToken, proxyURL, identity)
 }
 
 func shouldApplyChatGPTAccountInfoPlanType(current, candidate string) bool {
@@ -362,7 +412,7 @@ func (s *OpenAIOAuthService) RefreshAccountToken(ctx context.Context, account *A
 	}
 
 	clientID := account.GetCredential("client_id")
-	return s.RefreshTokenWithClientID(ctx, refreshToken, proxyURL, clientID)
+	return s.refreshTokenWithClientIDAndIdentity(ctx, refreshToken, proxyURL, clientID, account)
 }
 
 // BuildAccountCredentials builds credentials map from token info

@@ -148,10 +148,8 @@ func (s *AccountTestService) ProbeOpenAIAPIKeyResponsesSupport(ctx context.Conte
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("Accept", "application/json")
-	applyOpenAICodexProbeHeaders(req.Header)
-
-	// 账号级请求头覆写：能力探测与真实转发保持一致的最终头
-	account.ApplyHeaderOverrides(req.Header)
+	account.applyOpenAIHeaderOverrides(req.Header)
+	s.applyOpenAIOutboundIdentity(probeCtx, account, req.Header, false)
 
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {

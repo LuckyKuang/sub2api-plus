@@ -75,6 +75,39 @@ type AccountTestService struct {
 	tlsFPProfileService       *TLSFingerprintProfileService
 	agentIdentityTaskMu       sync.Mutex
 	agentIdentityWS           agentIdentityWSConnectionInvalidator
+	openAIIdentityResolver    *OpenAIGatewayService
+}
+
+func (s *AccountTestService) applyOpenAIOutboundIdentity(ctx context.Context, account *Account, headers http.Header, useCodexIdentity bool) {
+	if s != nil && s.openAIIdentityResolver != nil {
+		s.openAIIdentityResolver.applyOpenAIOutboundIdentity(ctx, account, headers, useCodexIdentity)
+		return
+	}
+	accountUA := ""
+	if account != nil {
+		accountUA = account.GetOpenAIUserAgent()
+	}
+	applyResolvedOpenAIOutboundIdentity(headers, resolveOpenAIOutboundIdentityCandidates(accountUA, ""), useCodexIdentity)
+}
+
+func (s *AccountTestService) ensureOpenAIAgentIdentityTask(ctx context.Context, account *Account, expectedTaskID string) error {
+	identity := resolveOpenAIOutboundIdentityCandidates("", "")
+	if s != nil && s.openAIIdentityResolver != nil {
+		identity = s.openAIIdentityResolver.resolveOpenAIOutboundIdentity(ctx, account)
+	} else if account != nil {
+		identity = resolveOpenAIOutboundIdentityCandidates(account.GetOpenAIUserAgent(), "")
+	}
+	return ensureAgentIdentityTaskForAccountWithIdentity(ctx, s.accountRepo, s.agentIdentityWS, &s.agentIdentityTaskMu, account, expectedTaskID, identity)
+}
+
+func (s *AccountTestService) buildOpenAIAgentIdentityAuthenticationHeaders(ctx context.Context, account *Account) (http.Header, error) {
+	identity := resolveOpenAIOutboundIdentityCandidates("", "")
+	if s != nil && s.openAIIdentityResolver != nil {
+		identity = s.openAIIdentityResolver.resolveOpenAIOutboundIdentity(ctx, account)
+	} else if account != nil {
+		identity = resolveOpenAIOutboundIdentityCandidates(account.GetOpenAIUserAgent(), "")
+	}
+	return buildAgentIdentityAuthenticationHeadersWithIdentity(ctx, s.accountRepo, s.agentIdentityWS, &s.agentIdentityTaskMu, account, identity)
 }
 
 // NewAccountTestService creates a new AccountTestService
@@ -610,11 +643,8 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 
 	// Set common headers
 	req.Header.Set("Content-Type", "application/json")
-	if !isOAuth {
-		applyOpenAICodexProbeHeaders(req.Header)
-	}
 	if credentialAccount.IsOpenAIAgentIdentity() {
-		authHeaders, authErr := buildAgentIdentityAuthenticationHeaders(ctx, s.accountRepo, s.agentIdentityWS, &s.agentIdentityTaskMu, credentialAccount)
+		authHeaders, authErr := s.buildOpenAIAgentIdentityAuthenticationHeaders(ctx, credentialAccount)
 		if authErr != nil {
 			return s.sendErrorAndEnd(c, "Failed to build Agent Identity authentication")
 		}
@@ -632,19 +662,11 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 		req.Host = "chatgpt.com"
 		req.Header.Set("accept", "text/event-stream")
 		req.Header.Set("OpenAI-Beta", "responses=experimental")
-		req.Header.Set("Originator", "codex_cli_rs")
-		if customUA := strings.TrimSpace(credentialAccount.GetOpenAIUserAgent()); customUA != "" {
-			req.Header.Set("User-Agent", customUA)
-		} else {
-			req.Header.Set("User-Agent", codexCLIUserAgent)
-		}
 		setOpenAIChatGPTAccountHeaders(req.Header, credentialAccount)
-		// 与真实转发一致：originator 与最终 User-Agent 首段配套，否则上游 404（issue #3901）。
-		enforceCodexIdentityHeaders(req.Header)
 	}
 
-	// 账号级请求头覆写：测试请求与真实转发保持一致的最终头
-	credentialAccount.ApplyHeaderOverrides(req.Header)
+	credentialAccount.applyOpenAIHeaderOverrides(req.Header)
+	s.applyOpenAIOutboundIdentity(ctx, credentialAccount, req.Header, isOAuth)
 
 	// Get proxy URL
 	proxyURL := ""
@@ -670,7 +692,7 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 		body = redactAgentIdentitySensitiveBodyForAccount(ctx, s.accountRepo, credentialAccount, body)
 		if !agentIdentityTaskRecoveryWasTried(ctx) && credentialAccount.IsOpenAIAgentIdentity() && isAgentIdentityTaskInvalidHTTPResponse(resp.StatusCode, body) {
 			expectedTaskID := credentialAccount.GetCredential("task_id")
-			if err := ensureAgentIdentityTaskForAccount(ctx, s.accountRepo, s.agentIdentityWS, &s.agentIdentityTaskMu, credentialAccount, expectedTaskID); err != nil {
+			if err := s.ensureOpenAIAgentIdentityTask(ctx, credentialAccount, expectedTaskID); err != nil {
 				return s.sendErrorAndEnd(c, fmt.Sprintf("Agent Identity task recovery failed: %s", err.Error()))
 			}
 			c.Request = c.Request.WithContext(markAgentIdentityTaskRecoveryTried(ctx))
@@ -834,8 +856,9 @@ func (s *AccountTestService) testOpenAIChatCompletionsConnection(
 	req.Header.Set("Accept", "text/event-stream")
 	req.Header.Set("Authorization", "Bearer "+authToken)
 
-	// 账号级请求头覆写：测试请求与真实转发保持一致的最终头
-	account.ApplyHeaderOverrides(req.Header)
+	// OpenAI 的身份头由最终收口阶段写入，通用覆写不得影响它们。
+	account.applyOpenAIHeaderOverrides(req.Header)
+	s.applyOpenAIOutboundIdentity(ctx, account, req.Header, false)
 
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {
@@ -928,7 +951,7 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	if credentialAccount.IsOpenAIAgentIdentity() {
-		authHeaders, authErr := buildAgentIdentityAuthenticationHeaders(ctx, s.accountRepo, s.agentIdentityWS, &s.agentIdentityTaskMu, credentialAccount)
+		authHeaders, authErr := s.buildOpenAIAgentIdentityAuthenticationHeaders(ctx, credentialAccount)
 		if authErr != nil {
 			return s.sendErrorAndEnd(c, "Failed to build Agent Identity authentication")
 		}
@@ -940,18 +963,19 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
 	} else {
 		req.Header.Set("Authorization", "Bearer "+authToken)
 	}
-	applyOpenAICodexProbeHeaders(req.Header)
 	probeSessionID := compactProbeSessionID(account.ID)
 	req.Header.Set("Session_ID", probeSessionID)
 	req.Header.Set("Conversation_ID", probeSessionID)
 
 	if isOAuth {
 		req.Host = "chatgpt.com"
+		req.Header.Set("OpenAI-Beta", "responses=experimental")
+		req.Header.Set("Version", codexCLIVersion)
 		setOpenAIChatGPTAccountHeaders(req.Header, credentialAccount)
 	}
 
-	// 账号级请求头覆写：测试请求与真实转发保持一致的最终头
-	account.ApplyHeaderOverrides(req.Header)
+	credentialAccount.applyOpenAIHeaderOverrides(req.Header)
+	s.applyOpenAIOutboundIdentity(ctx, credentialAccount, req.Header, isOAuth)
 
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {
@@ -973,7 +997,7 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
 	body = redactAgentIdentitySensitiveBodyForAccount(ctx, s.accountRepo, credentialAccount, body)
 	if !agentIdentityTaskRecoveryWasTried(ctx) && credentialAccount.IsOpenAIAgentIdentity() && isAgentIdentityTaskInvalidHTTPResponse(resp.StatusCode, body) {
 		expectedTaskID := credentialAccount.GetCredential("task_id")
-		if err := ensureAgentIdentityTaskForAccount(ctx, s.accountRepo, s.agentIdentityWS, &s.agentIdentityTaskMu, credentialAccount, expectedTaskID); err != nil {
+		if err := s.ensureOpenAIAgentIdentityTask(ctx, credentialAccount, expectedTaskID); err != nil {
 			return s.sendErrorAndEnd(c, fmt.Sprintf("Agent Identity task recovery failed: %s", err.Error()))
 		}
 		c.Request = c.Request.WithContext(markAgentIdentityTaskRecoveryTried(ctx))
@@ -1713,8 +1737,9 @@ func (s *AccountTestService) testOpenAIImageAPIKey(c *gin.Context, ctx context.C
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+authToken)
 
-	// 账号级请求头覆写：测试请求与真实转发保持一致的最终头
-	account.ApplyHeaderOverrides(req.Header)
+	// OpenAI 的身份头由最终收口阶段写入，通用覆写不得影响它们。
+	account.applyOpenAIHeaderOverrides(req.Header)
+	s.applyOpenAIOutboundIdentity(ctx, account, req.Header, false)
 
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {
@@ -1815,7 +1840,7 @@ func (s *AccountTestService) testOpenAIImageOAuth(c *gin.Context, ctx context.Co
 	req = req.WithContext(WithHTTPUpstreamProfile(req.Context(), HTTPUpstreamProfileOpenAI))
 	req.Host = "chatgpt.com"
 	if credentialAccount.IsOpenAIAgentIdentity() {
-		authHeaders, authErr := buildAgentIdentityAuthenticationHeaders(ctx, s.accountRepo, s.agentIdentityWS, &s.agentIdentityTaskMu, credentialAccount)
+		authHeaders, authErr := s.buildOpenAIAgentIdentityAuthenticationHeaders(ctx, credentialAccount)
 		if authErr != nil {
 			return s.sendErrorAndEnd(c, "Failed to build Agent Identity authentication")
 		}
@@ -1830,15 +1855,9 @@ func (s *AccountTestService) testOpenAIImageOAuth(c *gin.Context, ctx context.Co
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "text/event-stream")
 	req.Header.Set("OpenAI-Beta", "responses=experimental")
-	req.Header.Set("originator", "codex_cli_rs")
-	if customUA := strings.TrimSpace(credentialAccount.GetOpenAIUserAgent()); customUA != "" {
-		req.Header.Set("User-Agent", customUA)
-	} else {
-		req.Header.Set("User-Agent", codexCLIUserAgent)
-	}
 	setOpenAIChatGPTAccountHeaders(req.Header, credentialAccount)
-	// 与真实转发一致：originator 与最终 User-Agent 首段配套（原 opencode 与 Codex UA 错配会 404，issue #3901）。
-	enforceCodexIdentityHeaders(req.Header)
+	credentialAccount.applyOpenAIHeaderOverrides(req.Header)
+	s.applyOpenAIOutboundIdentity(ctx, credentialAccount, req.Header, true)
 
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {
