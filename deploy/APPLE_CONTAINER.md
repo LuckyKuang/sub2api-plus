@@ -1,6 +1,6 @@
 # Apple container Deployment
 
-Sub2API can run as a native three-service stack with Apple's `container` CLI. This workflow runs the published Sub2API, PostgreSQL, and Redis OCI images without Docker Desktop or a Docker-compatible daemon.
+Sub2API can run as a native stack with Apple's `container` CLI. This workflow runs the published Sub2API, PostgreSQL, Redis, and optional MinIO OCI images without Docker Desktop or a Docker-compatible daemon.
 
 ## Support Level
 
@@ -25,7 +25,7 @@ container --version
 ## Quick Start
 
 ```bash
-git clone https://github.com/Wei-Shaw/sub2api.git
+git clone https://github.com/luckykuang/sub2api-plus.git
 cd sub2api/deploy
 
 # Creates .env with random PostgreSQL, JWT, and TOTP secrets.
@@ -37,7 +37,7 @@ nano .env
 # Creates volumes/network/containers, waits for dependencies, and starts Sub2API.
 ./apple-container.sh up
 
-# Verifies PostgreSQL, Redis, and the application endpoint.
+# Verifies PostgreSQL, Redis, optional MinIO, and the application endpoint.
 ./apple-container.sh status
 ```
 
@@ -55,7 +55,7 @@ The env file uses literal `KEY=value` syntax. Do not use Compose expressions suc
 # Start dependencies and recreate the lightweight app container with current IPs.
 ./apple-container.sh up
 
-# Also recreate PostgreSQL and Redis containers, preserving their volumes.
+# Also recreate PostgreSQL, Redis, and enabled MinIO containers, preserving volumes.
 ./apple-container.sh up --recreate
 
 # Stop containers while preserving all resources and data.
@@ -71,6 +71,7 @@ The env file uses literal `KEY=value` syntax. Do not use Compose expressions suc
 ./apple-container.sh logs app -f
 ./apple-container.sh logs postgres -f
 ./apple-container.sh logs redis -f
+./apple-container.sh logs minio -f
 
 # Pull all configured images for linux/arm64, then recreate containers.
 ./apple-container.sh pull
@@ -100,12 +101,34 @@ export SUB2API_ENV_FILE=/absolute/path/to/sub2api.env
 Apple-specific image overrides are available:
 
 ```dotenv
-APPLE_CONTAINER_SUB2API_IMAGE=weishaw/sub2api:latest
+APPLE_CONTAINER_SUB2API_IMAGE=ghcr.io/luckykuang/sub2api-plus:latest
+APPLE_CONTAINER_SUB2API_BINARY=
 APPLE_CONTAINER_POSTGRES_IMAGE=postgres:18-alpine
 APPLE_CONTAINER_REDIS_IMAGE=redis:8-alpine
+APPLE_CONTAINER_MINIO_IMAGE=pgsty/minio:RELEASE.2026-06-18T00-00-00Z
 ```
 
-The normal `up` command recreates the application container, so application environment changes are applied immediately. Use `up --recreate` when changing PostgreSQL or Redis container images or Redis runtime configuration. Persistent data remains in named volumes.
+For local secondary development when the Apple Builder is unavailable, build a Linux/arm64 binary on the host and set `APPLE_CONTAINER_SUB2API_BINARY` to its absolute path. During each `up`, the script temporarily compresses and copies that binary into the newly created application container while retaining the configured OCI image as its runtime base. The binary must contain any required embedded frontend assets. Leave the setting empty for normal published-image deployments.
+
+### Custom Image Version
+
+The application version for this custom branch is `v0.1.164+custom.003`.
+Use Docker's tag-safe equivalent, `ghcr.io/luckykuang/sub2api-plus:0.1.164-custom.003`, when building
+or publishing an OCI image:
+
+```bash
+docker build \
+  --build-arg VERSION=0.1.164+custom.003 \
+  --tag ghcr.io/luckykuang/sub2api-plus:0.1.164-custom.003 \
+  .
+```
+
+After that image is available to the Apple `container` runtime, set
+`APPLE_CONTAINER_SUB2API_IMAGE=ghcr.io/luckykuang/sub2api-plus:0.1.164-custom.003`. Until then, keep
+the published image as the runtime base and use `APPLE_CONTAINER_SUB2API_BINARY`
+for the custom binary.
+
+The normal `up` command recreates the application container, so application environment changes are applied immediately. Use `up --recreate` when changing PostgreSQL, Redis, or MinIO container images or runtime configuration. Persistent data remains in named volumes.
 
 `POSTGRES_USER`, `POSTGRES_PASSWORD`, and `POSTGRES_DB` are applied only when PostgreSQL initializes an empty data volume. Changing them in `.env` and recreating the container does not change an existing database. Rotate a password with `ALTER ROLE`, and plan explicit migrations for user or database changes. To intentionally initialize a new empty database, first back up the old one and use `destroy --volumes`.
 
@@ -120,15 +143,35 @@ Apple-specific handling of shared settings:
 | `DATABASE_PORT`, `REDIS_PORT` | Internal ports are fixed to 5432 and 6379 |
 | `POSTGRES_MAX_*`, `REDIS_MAXCLIENTS` | Not currently applied to the database/cache server |
 
+### Local MinIO for Async Images
+
+Set `MINIO_ENABLED=true` in `deploy/.env` to run MinIO as part of this stack. On the first `up`, the script writes a default `MINIO_ROOT_USER` when needed and generates a random `MINIO_ROOT_PASSWORD` if it is empty. The env file must remain mode `0600`.
+
+```dotenv
+MINIO_ENABLED=true
+APPLE_CONTAINER_MINIO_IMAGE=pgsty/minio:RELEASE.2026-06-18T00-00-00Z
+MINIO_BIND_HOST=127.0.0.1
+MINIO_API_PORT=9000
+MINIO_CONSOLE_PORT=9001
+MINIO_ROOT_USER=sub2api-minio
+MINIO_ROOT_PASSWORD=
+MINIO_BUCKET=sub2api-images
+MINIO_REGION=us-east-1
+```
+
+The script publishes the MinIO S3 API at `http://127.0.0.1:9000` and the console at `http://127.0.0.1:9001` by default. It creates `MINIO_BUCKET`, grants anonymous download access to that bucket only, then injects `IMAGE_STORAGE_*` settings into the Sub2API container. This lets asynchronous image-result URLs render directly in a local browser while preserving authenticated writes. Keep `MINIO_BIND_HOST=127.0.0.1` for a local-only deployment. If it is changed to a LAN address, that address is used in generated public image URLs.
+
+The published image API URL is intended for generated image objects only. Do not use this bucket for database backups, credentials, or other private data.
+
 ## Managed Resources
 
 The script creates only resources carrying the `org.sub2api.stack=apple-container` label:
 
 | Type | Names |
 |---|---|
-| Containers | `sub2api-apple`, `sub2api-apple-postgres`, `sub2api-apple-redis` |
+| Containers | `sub2api-apple`, `sub2api-apple-postgres`, `sub2api-apple-redis`, `sub2api-apple-minio` |
 | Network | `sub2api-apple` |
-| Volumes | `sub2api-apple-data`, `sub2api-apple-postgres-data`, `sub2api-apple-redis-data` |
+| Volumes | `sub2api-apple-data`, `sub2api-apple-postgres-data`, `sub2api-apple-redis-data`, `sub2api-apple-minio-data` |
 
 The PostgreSQL volume is mounted at `/var/lib/postgresql`, retaining PostgreSQL 18's default child data directory. Sub2API and Redis also store data in child directories below their Apple volume mount points. This is required because Apple named volumes do not have Docker's copy-up and mount-point ownership behavior.
 
@@ -136,7 +179,7 @@ The PostgreSQL volume is mounted at `/var/lib/postgresql`, retaining PostgreSQL 
 
 Apple `container` 1.1 does not provide Compose-style network-scoped service aliases. After PostgreSQL and Redis start, the script reads their current private-network IPv4 addresses from `container inspect`, injects those addresses into a newly created application container, and then starts Sub2API. The script does not modify `~/.config/container/config.toml` or the macOS host resolver.
 
-All three services attach only to the private `sub2api-apple` network. Only the application publishes a host port; database and Redis ports remain unpublished.
+Sub2API, PostgreSQL, Redis, and enabled MinIO attach to the private `sub2api-apple` network. PostgreSQL and Redis ports remain unpublished. When enabled, MinIO explicitly publishes its local S3 API and console ports; both default to loopback-only bindings.
 
 The application container is intentionally recreated by every `up` and `restart` operation because dependency VM addresses can change after they stop. Application data remains in `sub2api-apple-data`.
 
@@ -175,7 +218,7 @@ To restore these backups into an existing stack, first ensure the image versions
 
 # Remove only the app container so a helper can mount its named volume.
 container delete sub2api-apple
-SUB2API_IMAGE=weishaw/sub2api:latest # Match APPLE_CONTAINER_SUB2API_IMAGE in .env.
+SUB2API_IMAGE=ghcr.io/luckykuang/sub2api-plus:latest # Match APPLE_CONTAINER_SUB2API_IMAGE in .env.
 container run --rm --name sub2api-apple-data-restore \
   --entrypoint /bin/sh \
   --volume sub2api-apple-data:/restore \

@@ -2,7 +2,7 @@
 #
 # Sub2API Installation Script
 # Sub2API 安装脚本
-# Usage: curl -sSL https://raw.githubusercontent.com/Wei-Shaw/sub2api/main/deploy/install.sh | bash
+# Usage: curl -sSL https://raw.githubusercontent.com/luckykuang/sub2api-plus/main/deploy/install.sh | bash
 #
 
 set -e
@@ -31,7 +31,7 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # Configuration
-GITHUB_REPO="Wei-Shaw/sub2api"
+GITHUB_REPO="luckykuang/sub2api-plus"
 INSTALL_DIR="/opt/sub2api"
 SERVICE_NAME="sub2api"
 SERVICE_USER="sub2api"
@@ -529,6 +529,10 @@ github_api_curl() {
 }
 
 # Get latest release version
+is_custom_release_tag() {
+    [[ "$1" =~ ^v[0-9]+\.[0-9]+\.[0-9]+\+custom\.[0-9]+$ ]]
+}
+
 get_latest_version() {
     print_info "$(msg 'fetching_version')"
     LATEST_VERSION=$(github_api_curl -s --connect-timeout 10 --max-time 30 "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" 2>/dev/null | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
@@ -536,6 +540,10 @@ get_latest_version() {
     if [ -z "$LATEST_VERSION" ]; then
         print_error "$(msg 'failed_get_version')"
         print_info "Please check your network connection or try again later."
+        exit 1
+    fi
+    if ! is_custom_release_tag "$LATEST_VERSION"; then
+        print_error "Latest release must use vX.Y.Z+custom.NNN: $LATEST_VERSION"
         exit 1
     fi
 
@@ -579,6 +587,10 @@ validate_version() {
     if [[ ! "$version" =~ ^v ]]; then
         version="v$version"
     fi
+    if ! is_custom_release_tag "$version"; then
+        print_error "$(msg 'version_not_found'): $version (expected vX.Y.Z+custom.NNN)" >&2
+        exit 1
+    fi
 
     print_info "$(msg 'validating_version') $version" >&2
 
@@ -607,7 +619,7 @@ validate_version() {
 get_current_version() {
     if [ -f "$INSTALL_DIR/sub2api" ]; then
         # Use grep -E for better compatibility (works on macOS and Linux)
-        "$INSTALL_DIR/sub2api" --version 2>/dev/null | grep -oE 'v?[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "unknown"
+        "$INSTALL_DIR/sub2api" --version 2>/dev/null | grep -oE 'v?[0-9]+\.[0-9]+\.[0-9]+(\+custom\.[0-9]+)?' | head -1 || echo "unknown"
     else
         echo "not_installed"
     fi
@@ -718,7 +730,7 @@ install_service() {
     cat > /etc/systemd/system/sub2api.service << EOF
 [Unit]
 Description=Sub2API - AI API Gateway Platform
-Documentation=https://github.com/Wei-Shaw/sub2api
+Documentation=https://github.com/luckykuang/sub2api-plus
 After=network.target postgresql.service redis.service
 Wants=postgresql.service redis.service
 
@@ -863,7 +875,7 @@ upgrade() {
     print_info "$(msg 'upgrading')"
 
     # Get current version
-    CURRENT_VERSION=$("$INSTALL_DIR/sub2api" --version 2>/dev/null | grep -oE 'v?[0-9]+\.[0-9]+\.[0-9]+' || echo "unknown")
+    CURRENT_VERSION=$(get_current_version)
     print_info "$(msg 'current_version'): $CURRENT_VERSION"
 
     # Stop service
