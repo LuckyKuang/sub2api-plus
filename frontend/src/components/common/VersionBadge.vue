@@ -650,10 +650,11 @@ import {
 } from '@/api/admin/system'
 import { useClipboard } from '@/composables/useClipboard'
 import Icon from '@/components/icons/Icon.vue'
+import { normalizeDisplayVersion, toDockerImageTag } from '@/utils/version'
 
-const GITHUB_REPO = 'Wei-Shaw/sub2api'
-// Docker Hub image published by CI (tags carry no "v" prefix, e.g. weishaw/sub2api:0.1.146)
-const DOCKER_IMAGE = 'weishaw/sub2api'
+const GITHUB_REPO = 'luckykuang/sub2api-plus'
+// GHCR tags carry no "v" prefix and replace SemVer build metadata's + with -.
+const DOCKER_IMAGE = 'ghcr.io/luckykuang/sub2api-plus'
 
 const { t } = useI18n()
 
@@ -671,8 +672,8 @@ const dropdownRef = ref<HTMLElement | null>(null)
 
 // Use store's cached version state
 const loading = computed(() => appStore.versionLoading)
-const currentVersion = computed(() => appStore.currentVersion || props.version || '')
-const latestVersion = computed(() => appStore.latestVersion)
+const currentVersion = computed(() => normalizeDisplayVersion(appStore.currentVersion || props.version))
+const latestVersion = computed(() => normalizeDisplayVersion(appStore.latestVersion))
 const hasUpdate = computed(() => appStore.hasUpdate)
 const releaseInfo = computed(() => appStore.releaseInfo)
 const buildType = computed(() => appStore.buildType)
@@ -717,7 +718,7 @@ const dockerRollbackCommand = computed(() => {
   if (!selectedRollbackVersion.value) return ''
   return [
     `# ${t('version.dockerEditCompose')}`,
-    `image: ${DOCKER_IMAGE}:${selectedRollbackVersion.value}`,
+    `image: ${DOCKER_IMAGE}:${toDockerImageTag(selectedRollbackVersion.value)}`,
     '',
     `# ${t('version.dockerRecreate')}`,
     'docker compose up -d'

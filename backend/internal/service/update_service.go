@@ -28,9 +28,8 @@ var (
 )
 
 const (
-	updateCacheKey = "update_check_cache"
 	updateCacheTTL = 1200 // 20 minutes
-	githubRepo     = "Wei-Shaw/sub2api"
+	githubRepo     = "luckykuang/sub2api-plus"
 
 	// Security: allowed download domains for updates
 	allowedDownloadHost = "github.com"
@@ -171,21 +170,24 @@ func (s *UpdateService) PerformUpdate(ctx context.Context) error {
 	if !info.HasUpdate {
 		return ErrNoUpdateAvailable
 	}
+	if info.ReleaseInfo == nil {
+		return fmt.Errorf("update release metadata is missing")
+	}
 
-	return s.applyReleaseAssets(ctx, info.ReleaseInfo.Assets)
+	return s.applyReleaseAssets(ctx, info.LatestVersion, info.ReleaseInfo.Assets)
 }
 
 // applyReleaseAssets downloads the platform archive from the given release assets,
 // verifies its checksum, and atomically swaps the running binary.
 // Shared by PerformUpdate (latest) and RollbackToVersion (specific older version).
-func (s *UpdateService) applyReleaseAssets(ctx context.Context, releaseAssets []Asset) error {
+func (s *UpdateService) applyReleaseAssets(ctx context.Context, version string, releaseAssets []Asset) error {
 	// Find matching archive and checksum for current platform
-	archiveName := s.getArchiveName()
+	archiveName := s.getArchiveName(version)
 	var downloadURL string
 	var checksumURL string
 
 	for _, asset := range releaseAssets {
-		if strings.Contains(asset.Name, archiveName) && !strings.HasSuffix(asset.Name, ".txt") {
+		if asset.Name == archiveName {
 			downloadURL = asset.DownloadURL
 		}
 		if asset.Name == "checksums.txt" {
@@ -357,7 +359,7 @@ func (s *UpdateService) RollbackToVersion(ctx context.Context, version string) e
 		}
 	}
 
-	return s.applyReleaseAssets(ctx, assets)
+	return s.applyReleaseAssets(ctx, match.TagName, assets)
 }
 
 // fetchRollbackCandidates fetches recent releases and keeps the newest
@@ -376,6 +378,9 @@ func (s *UpdateService) fetchRollbackCandidates(ctx context.Context) ([]*GitHubR
 		}
 		v := strings.TrimPrefix(r.TagName, "v")
 		if v == "" || seen[v] {
+			continue
+		}
+		if _, ok := parseForkReleaseVersion(v); !ok {
 			continue
 		}
 		// Only versions strictly older than current (also excludes current itself)
@@ -404,8 +409,14 @@ func (s *UpdateService) fetchLatestRelease(ctx context.Context) (*UpdateInfo, er
 	if err != nil {
 		return nil, err
 	}
+	if release == nil {
+		return nil, fmt.Errorf("GitHub returned an empty latest release")
+	}
 
 	latestVersion := strings.TrimPrefix(release.TagName, "v")
+	if _, ok := parseForkReleaseVersion(latestVersion); !ok {
+		return nil, fmt.Errorf("latest release tag %q is not a valid fork version (expected vX.Y.Z+custom.NNN)", release.TagName)
+	}
 
 	assets := make([]Asset, len(release.Assets))
 	for i, a := range release.Assets {
@@ -436,10 +447,10 @@ func (s *UpdateService) downloadFile(ctx context.Context, downloadURL, dest stri
 	return s.githubClient.DownloadFile(ctx, downloadURL, dest, maxDownloadSize)
 }
 
-func (s *UpdateService) getArchiveName() string {
+func (s *UpdateService) getArchiveName(version string) string {
 	osName := runtime.GOOS
 	arch := runtime.GOARCH
-	return fmt.Sprintf("%s_%s", osName, arch)
+	return fmt.Sprintf("sub2api_%s_%s_%s.tar.gz", strings.TrimPrefix(version, "v"), osName, arch)
 }
 
 // validateDownloadURL checks if the URL is from an allowed domain
@@ -637,30 +648,91 @@ func (s *UpdateService) saveToCache(ctx context.Context, info *UpdateInfo) {
 	_ = s.cache.SetUpdateInfo(ctx, string(data), time.Duration(updateCacheTTL)*time.Second)
 }
 
-// compareVersions compares two semantic versions
+// updateVersion is the release format used by this fork. The custom iteration
+// is build metadata under SemVer, but it must affect update ordering here.
+type updateVersion struct {
+	base            [3]int
+	customIteration int
+}
+
+// compareVersions compares base SemVer first, then the fork custom iteration.
 func compareVersions(current, latest string) int {
-	currentParts := parseVersion(current)
-	latestParts := parseVersion(latest)
+	currentVersion, currentOK := parseVersion(current)
+	latestVersion, latestOK := parseVersion(latest)
+
+	if !currentOK || !latestOK {
+		switch {
+		case currentOK:
+			return 1
+		case latestOK:
+			return -1
+		default:
+			return 0
+		}
+	}
 
 	for i := 0; i < 3; i++ {
-		if currentParts[i] < latestParts[i] {
+		if currentVersion.base[i] < latestVersion.base[i] {
 			return -1
 		}
-		if currentParts[i] > latestParts[i] {
+		if currentVersion.base[i] > latestVersion.base[i] {
 			return 1
 		}
+	}
+	if currentVersion.customIteration < latestVersion.customIteration {
+		return -1
+	}
+	if currentVersion.customIteration > latestVersion.customIteration {
+		return 1
 	}
 	return 0
 }
 
-func parseVersion(v string) [3]int {
-	v = strings.TrimPrefix(v, "v")
-	parts := strings.Split(v, ".")
-	result := [3]int{0, 0, 0}
-	for i := 0; i < len(parts) && i < 3; i++ {
-		if parsed, err := strconv.Atoi(parts[i]); err == nil {
-			result[i] = parsed
-		}
+func parseVersion(v string) (updateVersion, bool) {
+	v = strings.TrimPrefix(strings.TrimSpace(v), "v")
+	parts := strings.Split(v, "+")
+	if len(parts) > 2 || parts[0] == "" {
+		return updateVersion{}, false
 	}
-	return result
+
+	baseParts := strings.Split(parts[0], ".")
+	if len(baseParts) != 3 {
+		return updateVersion{}, false
+	}
+
+	result := updateVersion{}
+	for i, part := range baseParts {
+		if part == "" {
+			return updateVersion{}, false
+		}
+		parsed, err := strconv.Atoi(part)
+		if err != nil || parsed < 0 {
+			return updateVersion{}, false
+		}
+		result.base[i] = parsed
+	}
+
+	if len(parts) == 1 {
+		return result, true
+	}
+
+	const customPrefix = "custom."
+	if !strings.HasPrefix(parts[1], customPrefix) {
+		return updateVersion{}, false
+	}
+	iterationText := strings.TrimPrefix(parts[1], customPrefix)
+	if iterationText == "" {
+		return updateVersion{}, false
+	}
+	iteration, err := strconv.Atoi(iterationText)
+	if err != nil || iteration <= 0 {
+		return updateVersion{}, false
+	}
+	result.customIteration = iteration
+	return result, true
+}
+
+func parseForkReleaseVersion(v string) (updateVersion, bool) {
+	parsed, ok := parseVersion(v)
+	return parsed, ok && parsed.customIteration > 0
 }

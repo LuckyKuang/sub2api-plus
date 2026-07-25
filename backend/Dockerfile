@@ -1,5 +1,7 @@
 FROM golang:1.26.5-alpine
 
+ARG VERSION=0.1.164+custom.003
+
 WORKDIR /app
 
 # 安装必要的工具
@@ -15,7 +17,8 @@ RUN go mod download
 COPY . .
 
 # 构建应用
-RUN VERSION_VALUE="$(./scripts/resolve-version.sh)" && \
+RUN VERSION_VALUE="${VERSION}" && \
+    if [ -z "${VERSION_VALUE}" ]; then VERSION_VALUE="$(./scripts/resolve-version.sh)"; fi && \
     go build -ldflags="-s -w -X main.Version=${VERSION_VALUE}" -o main ./cmd/server/
 
 # 暴露端口

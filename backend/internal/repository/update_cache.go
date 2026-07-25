@@ -8,7 +8,9 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-const updateCacheKey = "update:latest"
+// Bump the key when the release source changes so an official-release response
+// cached before this fork switch can never be shown or installed.
+const updateCacheKey = "update:latest:fork"
 
 type updateCache struct {
 	rdb *redis.Client

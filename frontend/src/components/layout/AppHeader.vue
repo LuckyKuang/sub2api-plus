@@ -155,7 +155,7 @@
 
                 <a
                   v-if="authStore.isAdmin"
-                  href="https://github.com/Wei-Shaw/sub2api"
+                  href="https://github.com/luckykuang/sub2api-plus"
                   target="_blank"
                   rel="noopener noreferrer"
                   @click="closeDropdown"
