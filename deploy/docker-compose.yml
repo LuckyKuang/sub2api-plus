@@ -1,5 +1,5 @@
 # =============================================================================
-# Sub2API Docker Compose Configuration
+# Sub2API Plus Docker Compose Configuration
 # =============================================================================
 # Quick Start:
 #   1. Copy .env.example to .env and configure
@@ -13,7 +13,7 @@
 
 services:
   # ===========================================================================
-  # Sub2API Application
+  # Sub2API Plus Application
   # ===========================================================================
   sub2api:
     image: ghcr.io/luckykuang/sub2api-plus:latest

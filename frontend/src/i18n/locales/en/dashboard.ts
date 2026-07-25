@@ -169,9 +169,9 @@ export default {
         note: 'These environment variables will be active in the current terminal session. For permanent configuration, add them to ~/.bashrc, ~/.zshrc, or the appropriate configuration file.',
       },
       grok: {
-        description: 'Configure Grok Build, Claude Code, Codex, or OpenCode to send requests through your Sub2API Grok group.',
-        claudeDescription: 'Configure Claude Code to send Messages API traffic through your Sub2API Grok group.',
-        codexDescription: 'Configure Codex to send Responses API traffic through your Sub2API Grok group.',
+        description: 'Configure Grok Build, Claude Code, Codex, or OpenCode to send requests through your Sub2API Plus Grok group.',
+        claudeDescription: 'Configure Claude Code to send Messages API traffic through your Sub2API Plus Grok group.',
+        codexDescription: 'Configure Codex to send Responses API traffic through your Sub2API Plus Grok group.',
         configTomlHint: 'Back up an existing config.toml before merging this model entry. Run grok inspect after saving to verify the effective configuration.',
         codexConfigTomlHint: 'Back up an existing config.toml before merging this provider configuration.',
         note: 'Save the file as ~/.grok/config.toml, then run grok inspect and select grok from /model.',

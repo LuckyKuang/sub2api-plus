@@ -31,7 +31,7 @@
               {{ t('adminCompliance.version') }}
             </p>
             <p class="mt-1 break-all font-mono text-gray-900 dark:text-white">
-              {{ complianceStore.status?.version || 'v2026.06.10' }}
+              {{ complianceStore.status?.version || 'v2026.07.25-plus.1' }}
             </p>
           </div>
           <a

@@ -69,6 +69,9 @@ deploy/sub2api-sudoers
 deploy/data/
 deploy/postgres_data/
 deploy/redis_data/
+# Local release binaries and build diagnostics are not part of the runtime
+# image. Excluding them keeps Apple container context synchronization bounded.
+deploy/.local/
 
 # GoReleaser
 .goreleaser.yaml

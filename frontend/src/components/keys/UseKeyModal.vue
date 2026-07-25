@@ -789,7 +789,7 @@ model_reasoning_effort = "xhigh"
 model_context_window = 1000000
 
 [model_providers.sub2api_grok]
-name = "Sub2API Grok"
+name = "Sub2API Plus Grok"
 base_url = "${baseUrl}"
 env_key = "SUB2API_API_KEY"
 wire_api = "responses"

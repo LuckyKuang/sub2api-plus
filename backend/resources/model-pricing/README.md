@@ -1,11 +1,12 @@
 # Model Pricing Data
 
-This directory contains a local copy of the mirrored model pricing data as a fallback mechanism.
+This directory contains the Sub2API Plus model-pricing mirror and its local fallback copy.
 
 ## Source
-The original file is maintained by the LiteLLM project and mirrored into the `price-mirror` branch of this repository via GitHub Actions:
-- Mirror branch (configurable via `PRICE_MIRROR_REPO`): https://raw.githubusercontent.com/<your-repo>/price-mirror/model_prices_and_context_window.json
-- Upstream source: https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json
+The default runtime source is this repository's `main` branch:
+- Data: https://raw.githubusercontent.com/luckykuang/sub2api-plus/main/backend/resources/model-pricing/model_prices_and_context_window.json
+- SHA-256: https://raw.githubusercontent.com/luckykuang/sub2api-plus/main/backend/resources/model-pricing/model_prices_and_context_window.sha256
+- Upstream data source: https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json
 
 ## Purpose
 This local copy serves as a fallback when the remote file cannot be downloaded due to:
@@ -24,7 +25,8 @@ The pricingService will:
 ## Manual Update
 To manually update this file with the latest pricing data (if automation is unavailable):
 ```bash
-curl -s https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json -o model_prices_and_context_window.json
+curl -fsS https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json -o model_prices_and_context_window.json
+shasum -a 256 model_prices_and_context_window.json | awk '{print $1}' > model_prices_and_context_window.sha256
 ```
 
 ## File Format

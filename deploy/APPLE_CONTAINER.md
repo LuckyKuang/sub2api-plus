@@ -1,6 +1,6 @@
 # Apple container Deployment
 
-Sub2API can run as a native stack with Apple's `container` CLI. This workflow runs the published Sub2API, PostgreSQL, Redis, and optional MinIO OCI images without Docker Desktop or a Docker-compatible daemon.
+Sub2API Plus can run as a native stack with Apple's `container` CLI. This workflow runs the published Sub2API Plus, PostgreSQL, Redis, and optional MinIO OCI images without Docker Desktop or a Docker-compatible daemon.
 
 ## Support Level
 
@@ -34,7 +34,7 @@ cd sub2api/deploy
 # Review optional settings before startup.
 nano .env
 
-# Creates volumes/network/containers, waits for dependencies, and starts Sub2API.
+# Creates volumes/network/containers, waits for dependencies, and starts Sub2API Plus.
 ./apple-container.sh up
 
 # Verifies PostgreSQL, Redis, optional MinIO, and the application endpoint.
@@ -61,7 +61,7 @@ The env file uses literal `KEY=value` syntax. Do not use Compose expressions suc
 # Stop containers while preserving all resources and data.
 ./apple-container.sh down
 
-# Restart PostgreSQL, Redis, and Sub2API in dependency order.
+# Restart PostgreSQL, Redis, and Sub2API Plus in dependency order.
 ./apple-container.sh restart
 
 # Show resource state and run live health probes.
@@ -112,19 +112,19 @@ For local secondary development when the Apple Builder is unavailable, build a L
 
 ### Custom Image Version
 
-The application version for this custom branch is `v0.1.164+custom.003`.
-Use Docker's tag-safe equivalent, `ghcr.io/luckykuang/sub2api-plus:0.1.164-custom.003`, when building
+The application version for this custom branch is `v0.1.164+custom.004`.
+Use Docker's tag-safe equivalent, `ghcr.io/luckykuang/sub2api-plus:0.1.164-custom.004`, when building
 or publishing an OCI image:
 
 ```bash
 docker build \
-  --build-arg VERSION=0.1.164+custom.003 \
-  --tag ghcr.io/luckykuang/sub2api-plus:0.1.164-custom.003 \
+  --build-arg VERSION=0.1.164+custom.004 \
+  --tag ghcr.io/luckykuang/sub2api-plus:0.1.164-custom.004 \
   .
 ```
 
 After that image is available to the Apple `container` runtime, set
-`APPLE_CONTAINER_SUB2API_IMAGE=ghcr.io/luckykuang/sub2api-plus:0.1.164-custom.003`. Until then, keep
+`APPLE_CONTAINER_SUB2API_IMAGE=ghcr.io/luckykuang/sub2api-plus:0.1.164-custom.004`. Until then, keep
 the published image as the runtime base and use `APPLE_CONTAINER_SUB2API_BINARY`
 for the custom binary.
 
@@ -136,10 +136,10 @@ Apple-specific handling of shared settings:
 
 | Setting | Apple workflow behavior |
 |---|---|
-| Application and gateway variables | Passed to Sub2API from `.env` |
+| Application and gateway variables | Passed to Sub2API Plus from `.env` |
 | `BIND_HOST`, `SERVER_PORT` | Used for the macOS published port |
 | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | PostgreSQL first initialization only |
-| `REDIS_PASSWORD` | Applied to Redis and Sub2API |
+| `REDIS_PASSWORD` | Applied to Redis and Sub2API Plus |
 | `DATABASE_PORT`, `REDIS_PORT` | Internal ports are fixed to 5432 and 6379 |
 | `POSTGRES_MAX_*`, `REDIS_MAXCLIENTS` | Not currently applied to the database/cache server |
 
@@ -159,7 +159,7 @@ MINIO_BUCKET=sub2api-images
 MINIO_REGION=us-east-1
 ```
 
-The script publishes the MinIO S3 API at `http://127.0.0.1:9000` and the console at `http://127.0.0.1:9001` by default. It creates `MINIO_BUCKET`, grants anonymous download access to that bucket only, then injects `IMAGE_STORAGE_*` settings into the Sub2API container. This lets asynchronous image-result URLs render directly in a local browser while preserving authenticated writes. Keep `MINIO_BIND_HOST=127.0.0.1` for a local-only deployment. If it is changed to a LAN address, that address is used in generated public image URLs.
+The script publishes the MinIO S3 API at `http://127.0.0.1:9000` and the console at `http://127.0.0.1:9001` by default. It creates `MINIO_BUCKET`, grants anonymous download access to that bucket only, then injects `IMAGE_STORAGE_*` settings into the Sub2API Plus container. This lets asynchronous image-result URLs render directly in a local browser while preserving authenticated writes. Keep `MINIO_BIND_HOST=127.0.0.1` for a local-only deployment. If it is changed to a LAN address, that address is used in generated public image URLs.
 
 The published image API URL is intended for generated image objects only. Do not use this bucket for database backups, credentials, or other private data.
 
@@ -173,13 +173,13 @@ The script creates only resources carrying the `org.sub2api.stack=apple-containe
 | Network | `sub2api-apple` |
 | Volumes | `sub2api-apple-data`, `sub2api-apple-postgres-data`, `sub2api-apple-redis-data`, `sub2api-apple-minio-data` |
 
-The PostgreSQL volume is mounted at `/var/lib/postgresql`, retaining PostgreSQL 18's default child data directory. Sub2API and Redis also store data in child directories below their Apple volume mount points. This is required because Apple named volumes do not have Docker's copy-up and mount-point ownership behavior.
+The PostgreSQL volume is mounted at `/var/lib/postgresql`, retaining PostgreSQL 18's default child data directory. Sub2API Plus and Redis also store data in child directories below their Apple volume mount points. This is required because Apple named volumes do not have Docker's copy-up and mount-point ownership behavior.
 
 ## Networking
 
-Apple `container` 1.1 does not provide Compose-style network-scoped service aliases. After PostgreSQL and Redis start, the script reads their current private-network IPv4 addresses from `container inspect`, injects those addresses into a newly created application container, and then starts Sub2API. The script does not modify `~/.config/container/config.toml` or the macOS host resolver.
+Apple `container` 1.1 does not provide Compose-style network-scoped service aliases. After PostgreSQL and Redis start, the script reads their current private-network IPv4 addresses from `container inspect`, injects those addresses into a newly created application container, and then starts Sub2API Plus. The script does not modify `~/.config/container/config.toml` or the macOS host resolver.
 
-Sub2API, PostgreSQL, Redis, and enabled MinIO attach to the private `sub2api-apple` network. PostgreSQL and Redis ports remain unpublished. When enabled, MinIO explicitly publishes its local S3 API and console ports; both default to loopback-only bindings.
+Sub2API Plus, PostgreSQL, Redis, and enabled MinIO attach to the private `sub2api-apple` network. PostgreSQL and Redis ports remain unpublished. When enabled, MinIO explicitly publishes its local S3 API and console ports; both default to loopback-only bindings.
 
 The application container is intentionally recreated by every `up` and `restart` operation because dependency VM addresses can change after they stop. Application data remains in `sub2api-apple-data`.
 
@@ -260,5 +260,5 @@ container system start
 - Health probes run during `up`, `restart`, and `status`; Apple `container` does not continuously schedule them.
 - Docker Compose, Testcontainers, Buildx, and tools requiring `/var/run/docker.sock` cannot use this runtime directly.
 - Named volume backup and restore must be tested before using this workflow for important data.
-- The script targets native `linux/arm64` images. The normal Sub2API release publishes an arm64 variant.
+- The script targets native `linux/arm64` images. The normal Sub2API Plus release publishes an arm64 variant.
 - Runtime environment values, including credentials, are retained in Apple container configuration and are visible to users who can inspect the local runtime.

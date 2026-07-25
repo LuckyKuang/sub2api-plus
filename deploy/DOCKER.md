@@ -1,6 +1,6 @@
-# Sub2API Docker Image
+# Sub2API Plus Docker Image
 
-Sub2API is an AI API Gateway Platform for distributing and managing AI product subscription API quotas.
+Sub2API Plus is an AI API Gateway Platform for distributing and managing AI product subscription API quotas.
 
 ## Quick Start
 

@@ -1,5 +1,5 @@
 # =============================================================================
-# Sub2API Multi-Stage Dockerfile
+# Sub2API Plus Multi-Stage Dockerfile
 # =============================================================================
 # Stage 1: Build frontend
 # Stage 2: Build Go backend with embedded frontend
@@ -84,9 +84,10 @@ RUN VERSION_VALUE="${VERSION}" && \
 FROM ${ALPINE_IMAGE}
 
 # Labels
-LABEL maintainer="Wei-Shaw <github.com/Wei-Shaw>"
-LABEL description="Sub2API - AI API Gateway Platform"
+LABEL maintainer="LuckyKuang <https://github.com/luckykuang>"
+LABEL description="Sub2API Plus - AI API Gateway Platform"
 LABEL org.opencontainers.image.source="https://github.com/luckykuang/sub2api-plus"
+LABEL org.opencontainers.image.licenses="LGPL-3.0-or-later"
 
 # Install runtime dependencies
 RUN apk add --no-cache \

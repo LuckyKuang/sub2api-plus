@@ -1,5 +1,5 @@
 # =============================================================================
-# Sub2API Docker Compose - Local Directory Version
+# Sub2API Plus Docker Compose - Local Directory Version
 # =============================================================================
 # This configuration uses local directories for data storage instead of named
 # volumes, making it easy to migrate the entire deployment by simply copying
@@ -21,7 +21,7 @@
 
 services:
   # ===========================================================================
-  # Sub2API Application
+  # Sub2API Plus Application
   # ===========================================================================
   sub2api:
     image: ghcr.io/luckykuang/sub2api-plus:latest

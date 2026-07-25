@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 # =============================================================================
-# Sub2API Multi-Stage Dockerfile
+# Sub2API Plus Multi-Stage Dockerfile
 # =============================================================================
 # Stage 1: Build frontend
 # Stage 2: Build Go backend with embedded frontend
@@ -24,6 +24,7 @@ FROM --platform=${BUILDPLATFORM} ${NODE_IMAGE} AS frontend-builder
 ARG NPM_CONFIG_REGISTRY
 
 WORKDIR /app/frontend
+ENV NODE_OPTIONS=--max-old-space-size=1536
 
 # Install pnpm (pinned to v9 to match CI and keep builds reproducible)
 RUN corepack enable && corepack prepare pnpm@9 --activate
@@ -53,7 +54,7 @@ RUN pnpm run build
 FROM --platform=${BUILDPLATFORM} ${GOLANG_IMAGE} AS backend-builder
 
 # Build arguments for version info (set by CI)
-ARG VERSION=0.1.164+custom.003
+ARG VERSION=0.1.164+custom.004
 ARG COMMIT=docker
 ARG DATE
 ARG GOPROXY
@@ -107,12 +108,13 @@ FROM ${POSTGRES_IMAGE} AS pg-client
 # -----------------------------------------------------------------------------
 FROM ${ALPINE_IMAGE}
 
-ARG VERSION=0.1.164+custom.003
+ARG VERSION=0.1.164+custom.004
 
 # Labels
-LABEL maintainer="Wei-Shaw <github.com/Wei-Shaw>"
-LABEL description="Sub2API - AI API Gateway Platform"
+LABEL maintainer="LuckyKuang <https://github.com/luckykuang>"
+LABEL description="Sub2API Plus - AI API Gateway Platform"
 LABEL org.opencontainers.image.source="https://github.com/luckykuang/sub2api-plus"
+LABEL org.opencontainers.image.licenses="LGPL-3.0-or-later"
 LABEL org.opencontainers.image.version="${VERSION}"
 
 # Install runtime dependencies
