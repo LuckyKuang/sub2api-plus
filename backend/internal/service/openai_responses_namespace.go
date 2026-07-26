@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/apicompat"
 	"github.com/gin-gonic/gin"
@@ -28,11 +29,12 @@ func shouldFlattenOpenAIResponsesNamespaces(account *Account, transport OpenAIUp
 	return true
 }
 
-// shouldStripOpenAIResponsesInputNamespaces removes residual input item
-// namespaces for OpenAI OAuth and API Key HTTP forwarding. Native WSv2 keeps
-// namespaces because that protocol supports them and does not restore payloads.
-func shouldStripOpenAIResponsesInputNamespaces(account *Account, transport OpenAIUpstreamTransport, passthroughEnabled bool) bool {
-	if account == nil || (!account.IsOpenAIOAuth() && !account.IsOpenAIApiKey()) {
+// shouldStripOpenAIResponsesInputMessageNamespaces removes the residual
+// namespace field from message input items only after OAuth HTTP forwarding.
+// Namespace is part of the identity of a native Codex tool call and must be
+// round-tripped unchanged unless flattenOpenAIResponsesNamespaces rewrote it.
+func shouldStripOpenAIResponsesInputMessageNamespaces(account *Account, transport OpenAIUpstreamTransport, passthroughEnabled bool) bool {
+	if account == nil || !account.IsOpenAIOAuth() {
 		return false
 	}
 	if transport == OpenAIUpstreamTransportResponsesWebsocketV2 && !passthroughEnabled {
@@ -64,11 +66,11 @@ func flattenOpenAIResponsesNamespaces(c *gin.Context, body []byte) ([]byte, erro
 	return rebuilt, nil
 }
 
-// stripOpenAIResponsesInputNamespaces removes namespace only from direct input
-// array items. Namespace declarations and nested namespace fields are left
-// untouched. Rebuilding the input array once keeps this linear for long
-// histories and avoids decoding JSON numbers through float64.
-func stripOpenAIResponsesInputNamespaces(body []byte) ([]byte, error) {
+// stripOpenAIResponsesInputMessageNamespaces removes namespace only from
+// direct message input items. Tool calls retain their namespace because it is
+// required to resolve calls such as collaboration.list_agents. Namespace
+// declarations and nested namespace fields are left untouched.
+func stripOpenAIResponsesInputMessageNamespaces(body []byte) ([]byte, error) {
 	if !bytes.Contains(body, []byte(`"namespace"`)) {
 		return body, nil
 	}
@@ -89,7 +91,7 @@ func stripOpenAIResponsesInputNamespaces(body []byte) ([]byte, error) {
 		}
 		first = false
 		itemBody := []byte(item.Raw)
-		if item.IsObject() && item.Get("namespace").Exists() {
+		if item.IsObject() && strings.EqualFold(strings.TrimSpace(item.Get("type").String()), "message") && item.Get("namespace").Exists() {
 			itemBody, stripErr = sjson.DeleteBytes(itemBody, "namespace")
 			if stripErr != nil {
 				return false

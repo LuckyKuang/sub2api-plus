@@ -1,7 +1,6 @@
 package service
 
 import (
-	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -37,7 +36,7 @@ func TestShouldFlattenOpenAIResponsesNamespaces(t *testing.T) {
 	}
 }
 
-func TestShouldStripOpenAIResponsesInputNamespaces(t *testing.T) {
+func TestShouldStripOpenAIResponsesInputMessageNamespaces(t *testing.T) {
 	oauth := &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth}
 	apiKey := &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}
 	setupToken := &Account{Platform: PlatformOpenAI, Type: AccountTypeSetupToken}
@@ -51,23 +50,23 @@ func TestShouldStripOpenAIResponsesInputNamespaces(t *testing.T) {
 		want               bool
 	}{
 		{name: "oauth_http", account: oauth, transport: OpenAIUpstreamTransportHTTPSSE, want: true},
-		{name: "apikey_http", account: apiKey, transport: OpenAIUpstreamTransportHTTPSSE, want: true},
+		{name: "apikey_http", account: apiKey, transport: OpenAIUpstreamTransportHTTPSSE, want: false},
 		{name: "oauth_wsv2", account: oauth, transport: OpenAIUpstreamTransportResponsesWebsocketV2, want: false},
 		{name: "apikey_wsv2", account: apiKey, transport: OpenAIUpstreamTransportResponsesWebsocketV2, want: false},
 		{name: "oauth_wsv2_passthrough", account: oauth, transport: OpenAIUpstreamTransportResponsesWebsocketV2, passthroughEnabled: true, want: true},
-		{name: "apikey_wsv2_passthrough", account: apiKey, transport: OpenAIUpstreamTransportResponsesWebsocketV2, passthroughEnabled: true, want: true},
+		{name: "apikey_wsv2_passthrough", account: apiKey, transport: OpenAIUpstreamTransportResponsesWebsocketV2, passthroughEnabled: true, want: false},
 		{name: "setup_token_http", account: setupToken, transport: OpenAIUpstreamTransportHTTPSSE, want: false},
 		{name: "grok_oauth_http", account: grokOAuth, transport: OpenAIUpstreamTransportHTTPSSE, want: false},
 		{name: "nil_account", account: nil, transport: OpenAIUpstreamTransportHTTPSSE, want: false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			require.Equal(t, tt.want, shouldStripOpenAIResponsesInputNamespaces(tt.account, tt.transport, tt.passthroughEnabled))
+			require.Equal(t, tt.want, shouldStripOpenAIResponsesInputMessageNamespaces(tt.account, tt.transport, tt.passthroughEnabled))
 		})
 	}
 }
 
-func TestStripOpenAIResponsesInputNamespaces(t *testing.T) {
+func TestStripOpenAIResponsesInputMessageNamespaces(t *testing.T) {
 	body := []byte(`{
 		"meta":9007199254740993,
 		"scientific":1.25e+42,
@@ -85,11 +84,16 @@ func TestStripOpenAIResponsesInputNamespaces(t *testing.T) {
 		]
 	}`)
 
-	stripped, err := stripOpenAIResponsesInputNamespaces(body)
+	stripped, err := stripOpenAIResponsesInputMessageNamespaces(body)
 	require.NoError(t, err)
-	for index := 0; index < 8; index++ {
-		require.False(t, gjson.GetBytes(stripped, "input."+strconv.Itoa(index)+".namespace").Exists())
-	}
+	require.Equal(t, "n0", gjson.GetBytes(stripped, "input.0.namespace").String())
+	require.False(t, gjson.GetBytes(stripped, "input.1.namespace").Exists())
+	require.Equal(t, "n2", gjson.GetBytes(stripped, "input.2.namespace").String())
+	require.Equal(t, "n3", gjson.GetBytes(stripped, "input.3.namespace").String())
+	require.Equal(t, "n4", gjson.GetBytes(stripped, "input.4.namespace").String())
+	require.Equal(t, "n5", gjson.GetBytes(stripped, "input.5.namespace").String())
+	require.Equal(t, "n6", gjson.GetBytes(stripped, "input.6.namespace").String())
+	require.Equal(t, "n7", gjson.GetBytes(stripped, "input.7.namespace").String())
 	require.Equal(t, "nested", gjson.GetBytes(stripped, "input.0.content.namespace").String())
 	require.Equal(t, "nested-content", gjson.GetBytes(stripped, "input.1.content.0.namespace").String())
 	require.Equal(t, "tool-namespace", gjson.GetBytes(stripped, "tools.0.namespace").String())
@@ -99,14 +103,14 @@ func TestStripOpenAIResponsesInputNamespaces(t *testing.T) {
 	require.Equal(t, gjson.GetBytes(body, "input.0.large").Raw, gjson.GetBytes(stripped, "input.0.large").Raw)
 }
 
-func TestStripOpenAIResponsesInputNamespacesLeavesOtherShapesByteExact(t *testing.T) {
+func TestStripOpenAIResponsesInputMessageNamespacesLeavesOtherShapesByteExact(t *testing.T) {
 	tests := [][]byte{
 		[]byte(`{"input":"text","namespace":"top-level"}`),
 		[]byte(`{"input":{"namespace":"single-object"}}`),
 		[]byte(`{"input":[{"content":{"namespace":"nested-only"}}],"tools":[{"namespace":"keep"}]}`),
 	}
 	for _, body := range tests {
-		stripped, err := stripOpenAIResponsesInputNamespaces(body)
+		stripped, err := stripOpenAIResponsesInputMessageNamespaces(body)
 		require.NoError(t, err)
 		require.Equal(t, body, stripped)
 	}

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/tidwall/gjson"
@@ -15,8 +14,7 @@ import (
 const maxOpenAIResponsesRejectedFieldRetries = 6
 
 var (
-	openAIResponsesRejectedNamespaceParamPattern = regexp.MustCompile(`(?i)^input\[(\d+)\]\.namespace$`)
-	openAIResponsesRejectedMessageParamPattern   = regexp.MustCompile(`(?i)(?:unknown|unsupported)[ _-]+parameter\s*(?::|=|is)?\s*["']?(max_output_tokens|input\[\d+\]\.namespace)(?:["']|\b)`)
+	openAIResponsesRejectedMessageParamPattern = regexp.MustCompile(`(?i)(?:unknown|unsupported)[ _-]+parameter\s*(?::|=|is)?\s*["']?(max_output_tokens)(?:["']|\b)`)
 )
 
 type openAIResponsesRejectedFieldRetryState struct {
@@ -70,9 +68,6 @@ func normalizeOpenAIResponsesRejectedFieldRetryBody(statusCode int, body, respon
 	if param == "" {
 		param = openAIResponsesRejectedParamFromMessage(message)
 	}
-	if index, ok := openAIResponsesRejectedNamespaceIndex(param); ok {
-		return removeOpenAIResponsesRejectedNamespaceAtIndex(body, index)
-	}
 	if param == "max_output_tokens" && gjson.GetBytes(body, "max_output_tokens").Exists() {
 		retryBody, err := sjson.DeleteBytes(body, "max_output_tokens")
 		if err != nil {
@@ -98,36 +93,4 @@ func openAIResponsesRejectedParamFromMessage(message string) string {
 		return ""
 	}
 	return strings.ToLower(strings.TrimSpace(match[1]))
-}
-
-func openAIResponsesRejectedNamespaceIndex(param string) (int, bool) {
-	match := openAIResponsesRejectedNamespaceParamPattern.FindStringSubmatch(strings.TrimSpace(param))
-	if len(match) != 2 {
-		return 0, false
-	}
-	index, err := strconv.Atoi(match[1])
-	if err == nil && index >= 0 {
-		return index, true
-	}
-	return 0, false
-}
-
-func removeOpenAIResponsesRejectedNamespaceAtIndex(body []byte, index int) ([]byte, string, bool, error) {
-	itemPath := fmt.Sprintf("input.%d", index)
-	itemType := strings.ToLower(strings.TrimSpace(gjson.GetBytes(body, itemPath+".type").String()))
-	switch itemType {
-	case "function_call", "tool_call", "custom_tool_call", "mcp_tool_call":
-	default:
-		return nil, "", false, nil
-	}
-
-	namespacePath := itemPath + ".namespace"
-	if !gjson.GetBytes(body, namespacePath).Exists() {
-		return nil, "", false, nil
-	}
-	retryBody, err := sjson.DeleteBytes(body, namespacePath)
-	if err != nil {
-		return nil, "", false, fmt.Errorf("delete rejected namespace at input[%d]: %w", index, err)
-	}
-	return retryBody, "indexed namespace parameter rejection", true, nil
 }
