@@ -48,6 +48,7 @@ vi.mock('@/api/admin', () => ({
     groups: {
       list: listGroups,
       getAll: getAllGroups,
+      getLiveCapability: async () => ({ supported: false }),
       getModelsListCandidates,
       getUsageSummary,
       getCapacitySummary,
