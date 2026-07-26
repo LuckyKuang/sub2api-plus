@@ -62,6 +62,19 @@
           {{ t('admin.accounts.dataImportResultSummary', result) }}
         </div>
 
+        <div v-if="warningItems.length" class="mt-2">
+          <div class="text-sm font-medium text-amber-600 dark:text-amber-400">
+            {{ t('admin.accounts.dataImportWarnings') }}
+          </div>
+          <div
+            class="mt-2 max-h-48 overflow-auto rounded-lg bg-amber-50 p-3 font-mono text-xs text-amber-700 dark:bg-amber-900/20 dark:text-amber-300"
+          >
+            <div v-for="(item, idx) in warningItems" :key="idx" class="whitespace-pre-wrap">
+              {{ item.kind }} {{ item.name || item.proxy_key || '-' }} — {{ item.message }}
+            </div>
+          </div>
+        </div>
+
         <div v-if="errorItems.length" class="mt-2">
           <div class="text-sm font-medium text-red-600 dark:text-red-400">
             {{ t('admin.accounts.dataImportErrors') }}
@@ -133,6 +146,7 @@ const selectedFilesLabel = computed(() => {
 })
 const fileListTitle = computed(() => files.value.map((item) => item.name).join(', '))
 
+const warningItems = computed(() => result.value?.warnings || [])
 const errorItems = computed(() => result.value?.errors || [])
 
 watch(

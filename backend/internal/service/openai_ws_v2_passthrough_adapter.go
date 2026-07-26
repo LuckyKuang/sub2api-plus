@@ -834,6 +834,8 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 
 	completedTurns := atomic.Int32{}
 	turnLifecycle := newOpenAIWSPassthroughTurnLifecycle(true)
+	stateStore := s.getOpenAIWSStateStore()
+	groupID := getOpenAIGroupIDFromContext(c)
 	clientFrameConn := &openAIWSClientFrameConn{
 		conn:                 clientConn,
 		controlCtx:           ctx,
@@ -1017,6 +1019,15 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 					ResponseHeaders:       cloneHeader(handshakeHeaders),
 					Duration:              turn.Duration,
 					FirstTokenMs:          turn.FirstTokenMs,
+				}
+				if responseID := strings.TrimSpace(turnResult.RequestID); responseID != "" && stateStore != nil {
+					ttl := s.openAIWSResponseStickyTTL()
+					logOpenAIWSBindResponseAccountWarn(
+						groupID,
+						account.ID,
+						responseID,
+						s.bindOpenAIResponseAccount(ctx, stateStore, groupID, account, responseID, ttl),
+					)
 				}
 				logOpenAIWSV2Passthrough(
 					"relay_turn_completed account_id=%d turn=%d request_id=%s terminal_event=%s duration_ms=%d first_token_ms=%d input_tokens=%d output_tokens=%d cache_read_tokens=%d",

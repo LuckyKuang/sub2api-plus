@@ -475,3 +475,55 @@ func TestImportDataReusesProxyAndSkipsDefaultGroup(t *testing.T) {
 	require.Len(t, adminSvc.createdAccounts, 1)
 	require.True(t, adminSvc.createdAccounts[0].SkipDefaultGroupBind)
 }
+
+func TestImportDataRemovesInstanceLocalOpenAIOAuthSessionPolicy(t *testing.T) {
+	router, adminSvc, _ := setupAccountDataRouter(t)
+
+	dataPayload := map[string]any{
+		"data": map[string]any{
+			"type":    dataType,
+			"version": dataVersion,
+			"proxies": []map[string]any{},
+			"accounts": []map[string]any{
+				{
+					"name":        "oauth-backup",
+					"platform":    service.PlatformOpenAI,
+					"type":        service.AccountTypeOAuth,
+					"credentials": map[string]any{"access_token": "secret"},
+					"extra": map[string]any{
+						"preserved": true,
+						service.OpenAIOAuthSessionPolicyExtraKey: map[string]any{
+							"enabled":           true,
+							"allowed_group_ids": []int64{11, 12},
+							"scope_version":     "source-instance-scope",
+						},
+					},
+					"concurrency": 1,
+					"priority":    1,
+				},
+			},
+		},
+		"skip_default_group_bind": true,
+	}
+
+	body, err := json.Marshal(dataPayload)
+	require.NoError(t, err)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/accounts/data", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	require.Len(t, adminSvc.createdAccounts, 1)
+	require.NotContains(t, adminSvc.createdAccounts[0].Extra, service.OpenAIOAuthSessionPolicyExtraKey)
+	require.Equal(t, true, adminSvc.createdAccounts[0].Extra["preserved"])
+
+	var response struct {
+		Data DataImportResult `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+	require.Equal(t, 1, response.Data.AccountCreated)
+	require.Zero(t, response.Data.AccountFailed)
+	require.Len(t, response.Data.Warnings, 1)
+	require.Contains(t, response.Data.Warnings[0].Message, "session-sharing policy was removed")
+}

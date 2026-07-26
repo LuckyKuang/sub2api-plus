@@ -166,6 +166,8 @@ func liveCallIdentity(
 
 func (h *OpenAIGatewayHandler) writeLiveCreateError(c *gin.Context, err error) {
 	switch {
+	case errors.Is(err, service.ErrOpenAIOAuthSessionAccessDenied):
+		h.errorResponse(c, http.StatusForbidden, "permission_error", "This OpenAI OAuth account is restricted to authorized API key groups.")
 	case errors.Is(err, service.ErrLiveConcurrencyFull):
 		h.errorResponse(c, http.StatusTooManyRequests, "rate_limit_error", "Live concurrency limit reached")
 	case errors.Is(err, service.ErrLiveUnavailable):

@@ -1450,6 +1450,7 @@ export interface AdminDataImportResult {
   account_created: number
   account_failed: number
   errors?: AdminDataImportError[]
+  warnings?: AdminDataImportError[]
 }
 
 export interface CodexSessionImportRequest {

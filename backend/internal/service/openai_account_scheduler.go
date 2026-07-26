@@ -3,6 +3,7 @@ package service
 import (
 	"container/heap"
 	"context"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"log/slog"
@@ -1675,6 +1676,12 @@ func (s *defaultOpenAIAccountScheduler) isAccountRequestCompatibleReason(ctx con
 	if account == nil {
 		return false, "account_nil"
 	}
+	// The scheduler's candidate pool is already group-scoped and may contain
+	// lightweight accounts without hydrated GroupIDs. Only the OAuth session
+	// policy is an additional access-control veto at this initial filter stage.
+	if !openAIOAuthSessionPolicyAllowsSchedulingGroup(account, req.GroupID) {
+		return false, "oauth_session_group_denied"
+	}
 	if s != nil && s.service != nil && s.service.isOpenAIAccountRequestRuntimeBlocked(account, req.RequestedModel) {
 		return false, "runtime_blocked"
 	}
@@ -2050,6 +2057,11 @@ func (s *OpenAIGatewayService) selectAccountWithScheduler(
 	previousResponseCanMove bool,
 	useUpstreamTokenCost bool,
 ) (*AccountSelectionResult, OpenAIAccountScheduleDecision, error) {
+	if normalizeOpenAICompatiblePlatform(platform) == PlatformOpenAI && strings.TrimSpace(previousResponseID) != "" {
+		if err := s.validateOpenAIOAuthSharedPreviousResponseAccess(ctx, groupID, previousResponseID); err != nil {
+			return nil, OpenAIAccountScheduleDecision{}, err
+		}
+	}
 	ctx = s.withOpenAIQuotaAutoPauseContext(ctx)
 	platform = normalizeOpenAICompatiblePlatform(platform)
 	decision := OpenAIAccountScheduleDecision{}
@@ -2061,10 +2073,10 @@ func (s *OpenAIGatewayService) selectAccountWithScheduler(
 			for {
 				selection, err := s.selectAccountWithLoadAwareness(ctx, groupID, platform, sessionHash, requestedModel, effectiveExcludedIDs, requireCompact, requiredCapability, useUpstreamTokenCost)
 				if err != nil {
-					return nil, decision, err
+					return nil, decision, s.mapOpenAIOAuthSessionPolicySelectionError(ctx, groupID, platform, requestedModel, effectiveExcludedIDs, requiredTransport, requiredCapability, requiredImageCapability, requireCompact, err)
 				}
 				if selection == nil || selection.Account == nil {
-					return selection, decision, nil
+					return selection, decision, s.mapOpenAIOAuthSessionPolicySelectionError(ctx, groupID, platform, requestedModel, effectiveExcludedIDs, requiredTransport, requiredCapability, requiredImageCapability, requireCompact, nil)
 				}
 				if accountSupportsOpenAICapabilities(selection.Account, requiredCapability, requiredImageCapability) {
 					return selection, decision, nil
@@ -2076,7 +2088,7 @@ func (s *OpenAIGatewayService) selectAccountWithScheduler(
 					effectiveExcludedIDs = make(map[int64]struct{})
 				}
 				if _, exists := effectiveExcludedIDs[selection.Account.ID]; exists {
-					return nil, decision, ErrNoAvailableAccounts
+					return nil, decision, s.mapOpenAIOAuthSessionPolicySelectionError(ctx, groupID, platform, requestedModel, effectiveExcludedIDs, requiredTransport, requiredCapability, requiredImageCapability, requireCompact, ErrNoAvailableAccounts)
 				}
 				effectiveExcludedIDs[selection.Account.ID] = struct{}{}
 			}
@@ -2086,10 +2098,10 @@ func (s *OpenAIGatewayService) selectAccountWithScheduler(
 		for {
 			selection, err := s.selectAccountWithLoadAwareness(ctx, groupID, platform, sessionHash, requestedModel, effectiveExcludedIDs, requireCompact, requiredCapability, useUpstreamTokenCost)
 			if err != nil {
-				return nil, decision, err
+				return nil, decision, s.mapOpenAIOAuthSessionPolicySelectionError(ctx, groupID, platform, requestedModel, effectiveExcludedIDs, requiredTransport, requiredCapability, requiredImageCapability, requireCompact, err)
 			}
 			if selection == nil || selection.Account == nil {
-				return selection, decision, nil
+				return selection, decision, s.mapOpenAIOAuthSessionPolicySelectionError(ctx, groupID, platform, requestedModel, effectiveExcludedIDs, requiredTransport, requiredCapability, requiredImageCapability, requireCompact, nil)
 			}
 			if s.isOpenAIAccountTransportCompatible(selection.Account, requiredTransport) &&
 				accountSupportsOpenAICapabilities(selection.Account, requiredCapability, requiredImageCapability) {
@@ -2102,7 +2114,7 @@ func (s *OpenAIGatewayService) selectAccountWithScheduler(
 				effectiveExcludedIDs = make(map[int64]struct{})
 			}
 			if _, exists := effectiveExcludedIDs[selection.Account.ID]; exists {
-				return nil, decision, ErrNoAvailableAccounts
+				return nil, decision, s.mapOpenAIOAuthSessionPolicySelectionError(ctx, groupID, platform, requestedModel, effectiveExcludedIDs, requiredTransport, requiredCapability, requiredImageCapability, requireCompact, ErrNoAvailableAccounts)
 			}
 			effectiveExcludedIDs[selection.Account.ID] = struct{}{}
 		}
@@ -2128,7 +2140,7 @@ func (s *OpenAIGatewayService) selectAccountWithScheduler(
 		stickyPreviousAccountID = s.ResolveAccountIDByPreviousResponseIDForScheduler(ctx, groupID, previousResponseID, requestedModel, excludedIDs, requiredCapability, requireCompact)
 	}
 
-	return scheduler.Select(ctx, OpenAIAccountScheduleRequest{
+	selection, decision, err := scheduler.Select(ctx, OpenAIAccountScheduleRequest{
 		GroupID:                 groupID,
 		Platform:                platform,
 		SessionHash:             sessionHash,
@@ -2146,6 +2158,118 @@ func (s *OpenAIGatewayService) selectAccountWithScheduler(
 		RequireCompact:          requireCompact,
 		ExcludedIDs:             excludedIDs,
 	})
+	if err != nil || selection == nil || selection.Account == nil {
+		return selection, decision, s.mapOpenAIOAuthSessionPolicySelectionError(ctx, groupID, platform, requestedModel, excludedIDs, requiredTransport, requiredCapability, requiredImageCapability, requireCompact, err)
+	}
+	return selection, decision, err
+}
+
+func (s *OpenAIGatewayService) mapOpenAIOAuthSessionPolicySelectionError(
+	ctx context.Context,
+	groupID *int64,
+	platform string,
+	requestedModel string,
+	excludedIDs map[int64]struct{},
+	requiredTransport OpenAIUpstreamTransport,
+	requiredCapability OpenAIEndpointCapability,
+	requiredImageCapability OpenAIImagesCapability,
+	requireCompact bool,
+	err error,
+) error {
+	if !isOpenAIAccountSelectionUnavailable(err) {
+		return err
+	}
+	if normalizeOpenAICompatiblePlatform(platform) == PlatformOpenAI &&
+		s.hasOpenAIOAuthSessionPolicyAccessDenial(ctx, groupID, requestedModel, excludedIDs, requiredTransport, requiredCapability, requiredImageCapability, requireCompact) {
+		return ErrOpenAIOAuthSessionAccessDenied
+	}
+	return err
+}
+
+func isOpenAIAccountSelectionUnavailable(err error) bool {
+	return err == nil || errors.Is(err, ErrNoAvailableAccounts) || errors.Is(err, ErrNoAvailableCompactAccounts)
+}
+
+// hasOpenAIOAuthSessionPolicyAccessDenial is used only after ordinary
+// scheduling cannot find an account. It turns an otherwise opaque
+// no-available-account outcome into a clear local authorization failure when
+// a matching OpenAI OAuth account explicitly excludes the caller's group.
+// A successful API-key or other-account selection always wins and never reaches
+// this diagnostic path.
+func (s *OpenAIGatewayService) hasOpenAIOAuthSessionPolicyAccessDenial(
+	ctx context.Context,
+	groupID *int64,
+	requestedModel string,
+	excludedIDs map[int64]struct{},
+	requiredTransport OpenAIUpstreamTransport,
+	requiredCapability OpenAIEndpointCapability,
+	requiredImageCapability OpenAIImagesCapability,
+	requireCompact bool,
+) bool {
+	if s == nil || s.accountRepo == nil {
+		return false
+	}
+	accounts, err := s.accountRepo.ListByPlatform(ctx, PlatformOpenAI)
+	if err != nil {
+		return false
+	}
+	hasDeniedMatchingAccount := false
+	hasAuthorizedMatchingAccount := false
+	for index := range accounts {
+		account := &accounts[index]
+		if !account.IsOpenAIOAuthSessionSharingEnabled() ||
+			!openAIOAuthPolicyAccountMatchesRequestConfiguration(account, requestedModel, requiredCapability, requiredImageCapability, requireCompact) ||
+			!s.isOpenAIAccountTransportCompatible(account, requiredTransport) {
+			continue
+		}
+		if groupID != nil && s.needsUpstreamChannelRestrictionCheck(ctx, groupID) &&
+			s.isUpstreamModelRestrictedByChannel(ctx, *groupID, account, requestedModel, requireCompact) {
+			continue
+		}
+		if account.IsOpenAIOAuthSessionGroupAllowed(groupID) {
+			// An authorized account means policy is not the sole reason selection
+			// failed. Count it even when it was excluded after an upstream error or
+			// is currently unhealthy/full, so failover preserves the real failure.
+			hasAuthorizedMatchingAccount = true
+			continue
+		}
+		if _, excluded := excludedIDs[account.ID]; excluded {
+			continue
+		}
+		// Only report an authorization denial when this account would otherwise
+		// be eligible for the request. Runtime capacity or health failures must
+		// preserve their original error classification for Codex clients.
+		if !isOpenAICompatibleAccountEligibleForRequest(ctx, account, PlatformOpenAI, requestedModel, requireCompact, requiredCapability) ||
+			!accountSupportsOpenAICapabilities(account, requiredCapability, requiredImageCapability) {
+			continue
+		}
+		if !parentHealthyForShadow(account, s.parentAccountLookup(ctx)) ||
+			s.isOpenAIAccountRequestRuntimeBlocked(account, requestedModel) ||
+			s.isOpenAIProxyStreamQuarantined(account) {
+			continue
+		}
+		hasDeniedMatchingAccount = true
+	}
+	return hasDeniedMatchingAccount && !hasAuthorizedMatchingAccount
+}
+
+func openAIOAuthPolicyAccountMatchesRequestConfiguration(
+	account *Account,
+	requestedModel string,
+	requiredCapability OpenAIEndpointCapability,
+	requiredImageCapability OpenAIImagesCapability,
+	requireCompact bool,
+) bool {
+	if account == nil || account.Platform != PlatformOpenAI || !account.IsOpenAICompatible() {
+		return false
+	}
+	if requestedModel != "" && !account.IsModelSupported(requestedModel) {
+		return false
+	}
+	if !accountSupportsOpenAICapabilities(account, requiredCapability, requiredImageCapability) {
+		return false
+	}
+	return !requireCompact || openAICompactSupportTier(account) > 0
 }
 
 func accountSupportsOpenAICapabilities(account *Account, requiredCapability OpenAIEndpointCapability, requiredImageCapability OpenAIImagesCapability) bool {

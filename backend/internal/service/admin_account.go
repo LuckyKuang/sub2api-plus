@@ -545,6 +545,10 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 			return nil, err
 		}
 	}
+	accountExtra, err = normalizeOpenAIOAuthSessionPolicyExtra(nil, input.Platform, input.Type, accountExtra, groupIDs)
+	if err != nil {
+		return nil, err
+	}
 
 	// 校验并规范化请求头覆写配置（header 名小写化、格式检查）
 	if err := NormalizeHeaderOverrideCredentials(input.Credentials); err != nil {
@@ -555,14 +559,32 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 	if err != nil {
 		return nil, err
 	}
-	if err := s.accountRepo.Create(ctx, account); err != nil {
-		return nil, err
-	}
-
-	// 绑定分组
-	if len(groupIDs) > 0 {
-		if err := s.accountRepo.BindGroups(ctx, account.ID, groupIDs); err != nil {
+	_, policyConfigured, _ := account.OpenAIOAuthSessionPolicy()
+	if policyConfigured {
+		atomicCreator := s.accountDuplicateRepo
+		if atomicCreator == nil {
+			atomicCreator, _ = s.accountRepo.(AccountDuplicateRepository)
+		}
+		if atomicCreator == nil {
+			return nil, errors.New("OpenAI OAuth session policy requires atomic account and group persistence")
+		}
+		groups := make([]AccountGroup, 0, len(groupIDs))
+		for index, groupID := range groupIDs {
+			groups = append(groups, AccountGroup{GroupID: groupID, Priority: index + 1})
+		}
+		if err := atomicCreator.CreateWithAccountGroups(ctx, account, groups); err != nil {
 			return nil, err
+		}
+	} else {
+		if err := s.accountRepo.Create(ctx, account); err != nil {
+			return nil, err
+		}
+
+		// 绑定分组
+		if len(groupIDs) > 0 {
+			if err := s.accountRepo.BindGroups(ctx, account.ID, groupIDs); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -603,6 +625,15 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 	if err != nil {
 		return nil, err
 	}
+	var credentialParent *Account
+	// Keep the pre-update policy so a group-list change can rotate the session
+	// scope version even though account.Extra is replaced later in this method.
+	previousPolicyAccount := &Account{
+		Platform: account.Platform,
+		Type:     account.Type,
+		Extra:    maps.Clone(account.Extra),
+	}
+	_, hadOpenAIOAuthSessionPolicy, _ := previousPolicyAccount.OpenAIOAuthSessionPolicy()
 	var normalizedExtra map[string]any
 	if input.Extra != nil {
 		normalizedExtra, err = normalizeOpenAILongContextBillingUpdateExtra(account, input)
@@ -619,6 +650,18 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 	// 安全/身份不变量(影子账号):通用更新路径被 edit/re-auth/refresh/batch 共用,
 	// 必须在此守住,否则仅在创建时的保证可被这些路径绕过。
 	if account.IsCredentialShadow() {
+		if account.ParentAccountID == nil || *account.ParentAccountID <= 0 {
+			return nil, infraerrors.New(http.StatusBadRequest, "SPARK_SHADOW_INVALID_PARENT",
+				"spark shadow account has no valid credential-owning parent")
+		}
+		credentialParent, err = s.accountRepo.GetByID(ctx, *account.ParentAccountID)
+		if err != nil {
+			return nil, fmt.Errorf("get spark shadow parent: %w", err)
+		}
+		if !credentialParent.IsOpenAIOAuth() || credentialParent.IsCredentialShadow() {
+			return nil, infraerrors.New(http.StatusBadRequest, "SPARK_SHADOW_INVALID_PARENT",
+				"spark shadow credential-owning parent must be a real OpenAI OAuth account")
+		}
 		// 影子绝不持有凭据(凭据只在母账号)——外审 F5。
 		if !isAllowedSparkShadowCredentialsUpdate(input.Credentials) {
 			return nil, infraerrors.Newf(http.StatusBadRequest, "SPARK_SHADOW_NO_CREDENTIALS",
@@ -792,55 +835,104 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 		account.AutoPauseOnExpired = *input.AutoPauseOnExpired
 	}
 
+	groupIDsToBind := input.GroupIDs
+	policyPreviousAccount := previousPolicyAccount
+	if credentialParent != nil {
+		parentPolicy, parentPolicyConfigured, parentPolicyValid := credentialParent.OpenAIOAuthSessionPolicy()
+		if parentPolicyConfigured && !parentPolicyValid {
+			return nil, errors.New("spark shadow parent OpenAI OAuth session-sharing policy is invalid")
+		}
+
+		// A shadow cannot own a policy independently from the OAuth credential it
+		// borrows. Canonicalize the submitted full extra object back to the parent
+		// policy, including the server-managed scope version.
+		if account.Extra != nil {
+			delete(account.Extra, OpenAIOAuthSessionPolicyExtraKey)
+		}
+		if parentPolicyConfigured {
+			cloned, cloneErr := cloneAccountJSONMap(map[string]any{
+				OpenAIOAuthSessionPolicyExtraKey: credentialParent.Extra[OpenAIOAuthSessionPolicyExtraKey],
+			})
+			if cloneErr != nil {
+				return nil, fmt.Errorf("clone spark shadow parent OpenAI OAuth session-sharing policy: %w", cloneErr)
+			}
+			if account.Extra == nil {
+				account.Extra = make(map[string]any)
+			}
+			account.Extra[OpenAIOAuthSessionPolicyExtraKey] = cloned[OpenAIOAuthSessionPolicyExtraKey]
+		}
+		policyPreviousAccount = credentialParent
+
+		if parentPolicy.Enabled {
+			enforcedGroupIDs := normalizedGroupIDs(parentPolicy.AllowedGroupIDs)
+			if input.GroupIDs != nil && !sameGroupIDs(normalizedGroupIDs(*input.GroupIDs), enforcedGroupIDs) {
+				return nil, errors.New("spark shadow groups must exactly match the parent OpenAI OAuth session-sharing whitelist")
+			}
+			groupIDsToBind = &enforcedGroupIDs
+		}
+	}
+
 	// 先验证分组是否存在（在任何写操作之前）
-	if input.GroupIDs != nil {
-		if err := s.validateGroupIDsExist(ctx, *input.GroupIDs); err != nil {
+	if groupIDsToBind != nil {
+		if err := s.validateGroupIDsExist(ctx, *groupIDsToBind); err != nil {
 			return nil, err
 		}
 
 		// 检查混合渠道风险（除非用户已确认）
 		if !input.SkipMixedChannelCheck {
-			if err := s.checkMixedChannelRisk(ctx, account.ID, account.Platform, *input.GroupIDs); err != nil {
+			if err := s.checkMixedChannelRisk(ctx, account.ID, account.Platform, *groupIDsToBind); err != nil {
 				return nil, err
 			}
 		}
 	}
+	boundGroupIDs := accountBoundGroupIDs(account)
+	if groupIDsToBind != nil {
+		boundGroupIDs = append([]int64(nil), (*groupIDsToBind)...)
+	}
+	account.Extra, err = normalizeOpenAIOAuthSessionPolicyExtra(policyPreviousAccount, account.Platform, account.Type, account.Extra, boundGroupIDs)
+	if err != nil {
+		return nil, err
+	}
 
-	probeEnabledAppliedAtomically := false
-	if requestedProbeEnabledUpdate != nil && isUpstreamBillingProbeAccount(account) {
-		if updater, ok := s.accountRepo.(accountProbeEnabledAtomicUpdater); ok {
-			if err := updater.UpdateWithUpstreamBillingProbeEnabled(ctx, account, *requestedProbeEnabledUpdate); err != nil {
-				return nil, err
+	// Spark shadow uses the parent's OAuth credentials. Keep an opt-in session
+	// policy and its exact routing groups in lockstep with every existing shadow:
+	// otherwise an old shadow can either retain a removed allowlist group or use
+	// a stale scope version and split one Codex conversation into two sessions.
+	_, hasOpenAIOAuthSessionPolicy, _ := account.OpenAIOAuthSessionPolicy()
+	policyMutation := account.IsOpenAIOAuth() && (hadOpenAIOAuthSessionPolicy || hasOpenAIOAuthSessionPolicy)
+	persist := func(writeCtx context.Context, repo AccountRepository) error {
+		if err := persistAdminAccountUpdate(writeCtx, repo, account, requestedProbeEnabledUpdate); err != nil {
+			return err
+		}
+		// Proxy and policy changes affect the same credential-owning shadow set;
+		// keep them in the same transaction whenever the policy boundary changes.
+		if input.ProxyID != nil && !account.IsCredentialShadow() {
+			if err := propagateAccountProxyToShadows(writeCtx, repo, id, account.ProxyID); err != nil {
+				return err
 			}
-			probeEnabledAppliedAtomically = true
 		}
-	}
-	if !probeEnabledAppliedAtomically {
-		if err := s.accountRepo.Update(ctx, account); err != nil {
-			return nil, err
-		}
-		if requestedProbeEnabledUpdate != nil && isUpstreamBillingProbeAccount(account) {
-			if err := s.accountRepo.UpdateExtra(ctx, account.ID, map[string]any{
-				UpstreamBillingProbeEnabledExtraKey: *requestedProbeEnabledUpdate,
-			}); err != nil {
-				return nil, err
+		if groupIDsToBind != nil {
+			if err := repo.BindGroups(writeCtx, account.ID, *groupIDsToBind); err != nil {
+				return err
 			}
 		}
+		if !account.IsCredentialShadow() && policyMutation {
+			if err := propagateOpenAIOAuthSessionPolicyToShadowsWithRepo(writeCtx, repo, account, boundGroupIDs); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
-
-	// 将 proxy 变更传播到 spark 影子账号（同步；Update 内部已触发调度快照）。
-	// 影子自身 proxy 不可独立编辑(见上),故对影子的更新不触发传播。
-	if input.ProxyID != nil && !account.IsCredentialShadow() {
-		if err := s.propagateProxyToShadows(ctx, id, account.ProxyID); err != nil {
+	if policyMutation {
+		transactionRepo, ok := s.accountRepo.(OpenAIOAuthPolicyTransactionRepository)
+		if !ok {
+			return nil, errors.New("OpenAI OAuth session policy update requires atomic repository support")
+		}
+		if err := transactionRepo.RunOpenAIOAuthPolicyTransaction(ctx, persist); err != nil {
 			return nil, err
 		}
-	}
-
-	// 绑定分组
-	if input.GroupIDs != nil {
-		if err := s.accountRepo.BindGroups(ctx, account.ID, *input.GroupIDs); err != nil {
-			return nil, err
-		}
+	} else if err := persist(ctx, s.accountRepo); err != nil {
+		return nil, err
 	}
 
 	// 重新查询以确保返回完整数据（包括正确的 Proxy 关联对象）
@@ -854,6 +946,9 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 // UpdateAccountExtra 仅对 Extra JSONB 做 key 级合并，避免覆盖其它运行态键
 // （如 model_rate_limits / passive_usage_* 等）。
 func (s *adminServiceImpl) UpdateAccountExtra(ctx context.Context, id int64, updates map[string]any) error {
+	if _, policyUpdateRequested := updates[OpenAIOAuthSessionPolicyExtraKey]; policyUpdateRequested {
+		return errors.New("openai_oauth_session_policy must be updated through the account editor")
+	}
 	delete(updates, OllamaCloudUsageSessionExtraKey)
 	delete(updates, OllamaCloudUsageAutoRefreshExtraKey)
 	delete(updates, OllamaCloudUsageSnapshotExtraKey)
@@ -875,6 +970,9 @@ func (s *adminServiceImpl) UpdateAccountExtra(ctx context.Context, id int64, upd
 // BulkUpdateAccounts updates multiple accounts in one request.
 // It merges credentials/extra keys instead of overwriting the whole object.
 func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUpdateAccountsInput) (*BulkUpdateAccountsResult, error) {
+	if _, policyUpdateRequested := input.Extra[OpenAIOAuthSessionPolicyExtraKey]; policyUpdateRequested {
+		return nil, errors.New("openai_oauth_session_policy cannot be changed by bulk update")
+	}
 	// Managed probe/session state may only enter through dedicated typed endpoints.
 	delete(input.Extra, UpstreamBillingProbeEnabledExtraKey)
 	delete(input.Extra, UpstreamBillingProbeExtraKey)
@@ -909,8 +1007,10 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 	_, hasLongContextBillingUpdate := input.Extra[openAILongContextBillingEnabledKey]
 
 	// 预取所有目标账号，供凭据守卫/代理守卫/混合渠道检查共用，避免多次 DB 查询。
+	// An enabled OAuth session policy makes a bulk group change security-sensitive.
+	needOAuthSessionPolicyValidation := input.GroupIDs != nil
 	var cachedTargets []*Account
-	if len(input.Credentials) > 0 || input.ProxyID != nil || needMixedChannelCheck || hasLongContextBillingUpdate || input.ProbeEnabled != nil {
+	if len(input.Credentials) > 0 || input.ProxyID != nil || needMixedChannelCheck || hasLongContextBillingUpdate || input.ProbeEnabled != nil || needOAuthSessionPolicyValidation {
 		loaded, err := s.accountRepo.GetByIDs(ctx, input.AccountIDs)
 		if err != nil {
 			return nil, err
@@ -943,6 +1043,18 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 				return nil, err
 			}
 			break
+		}
+	}
+	if input.GroupIDs != nil {
+		updatedGroupIDs := normalizedGroupIDs(*input.GroupIDs)
+		for _, account := range cachedTargets {
+			if account == nil {
+				continue
+			}
+			policy, configured, valid := account.OpenAIOAuthSessionPolicy()
+			if configured && policy.Enabled && (!valid || !sameGroupIDs(policy.AllowedGroupIDs, updatedGroupIDs)) {
+				return nil, errors.New("bulk group update would violate an OpenAI OAuth session-sharing whitelist")
+			}
 		}
 	}
 
@@ -1298,6 +1410,15 @@ func (s *adminServiceImpl) CreateShadow(ctx context.Context, parentID int64, opt
 			}
 		}
 	}
+	policy, policyConfigured, policyValid := parent.OpenAIOAuthSessionPolicy()
+	if policyConfigured && !policyValid {
+		return nil, errors.New("parent OpenAI OAuth session-sharing policy is invalid")
+	}
+	if policyConfigured && policy.Enabled {
+		if !sameGroupIDs(policy.AllowedGroupIDs, normalizedGroupIDs(groupIDs)) {
+			return nil, errors.New("spark shadow groups must exactly match the parent OpenAI OAuth session-sharing whitelist")
+		}
+	}
 
 	// 4. 构造影子账号（安全不变量：Credentials 恒不含 auth token，仅含 model_mapping）。
 	// name 为空时默认 "<母账号名> (Spark)"——否则空 name 会在 ent(name NotEmpty)处变成裸 500
@@ -1322,6 +1443,19 @@ func (s *adminServiceImpl) CreateShadow(ctx context.Context, parentID int64, opt
 	if priority <= 0 {
 		priority = parent.Priority
 	}
+	shadowExtra := map[string]any{
+		openAILongContextBillingEnabledKey: parent.IsOpenAILongContextBillingEnabled(),
+	}
+	if rawPolicy, configured := parent.Extra[OpenAIOAuthSessionPolicyExtraKey]; configured {
+		// The shadow uses the same OAuth credential and must retain the same
+		// whitelist/domain policy as its parent. Clone through JSON to avoid
+		// sharing a mutable map with the parent account object.
+		cloned, cloneErr := cloneAccountJSONMap(map[string]any{OpenAIOAuthSessionPolicyExtraKey: rawPolicy})
+		if cloneErr != nil {
+			return nil, fmt.Errorf("clone parent OpenAI OAuth session-sharing policy: %w", cloneErr)
+		}
+		shadowExtra[OpenAIOAuthSessionPolicyExtraKey] = cloned[OpenAIOAuthSessionPolicyExtraKey]
+	}
 	shadow := &Account{
 		Name:            name,
 		Platform:        PlatformOpenAI,
@@ -1334,13 +1468,36 @@ func (s *adminServiceImpl) CreateShadow(ctx context.Context, parentID int64, opt
 		Priority:        priority,
 		Concurrency:     concurrency,
 		Schedulable:     true,
-		Extra: map[string]any{
-			openAILongContextBillingEnabledKey: parent.IsOpenAILongContextBillingEnabled(),
-		},
+		Extra:           shadowExtra,
 	}
 
-	// 5. 持久化（Create 填充 shadow.ID）。并发竞态:预查(步骤2)放行后另一请求抢先建成,本次会撞
-	// 一母一影唯一索引。复查确认确为"已存在"竞态时返回结构化 409 而非裸 500——外审 A/P1。
+	// 5. Persist the shadow and its routes atomically whenever the repository
+	// supports it. A policy-enabled parent requires that capability: compensating
+	// deletion is not strong enough for an authorization boundary.
+	atomicCreator := s.accountDuplicateRepo
+	if atomicCreator == nil && policyConfigured {
+		atomicCreator, _ = s.accountRepo.(AccountDuplicateRepository)
+	}
+	if policyConfigured && atomicCreator == nil {
+		return nil, errors.New("OpenAI OAuth session policy requires atomic Spark shadow and group persistence")
+	}
+	if atomicCreator != nil {
+		groups := make([]AccountGroup, 0, len(groupIDs))
+		for index, groupID := range groupIDs {
+			groups = append(groups, AccountGroup{GroupID: groupID, Priority: index + 1})
+		}
+		if err := atomicCreator.CreateWithAccountGroups(ctx, shadow, groups); err != nil {
+			if existing, qerr := s.accountRepo.ListShadowsByParent(ctx, parentID); qerr == nil && len(existing) > 0 {
+				return nil, infraerrors.New(http.StatusConflict, "SPARK_SHADOW_ALREADY_EXISTS",
+					"parent account already has a spark shadow account")
+			}
+			return nil, fmt.Errorf("create spark shadow: %w", err)
+		}
+		return shadow, nil
+	}
+
+	// Legacy repositories without policy support retain the existing best-effort
+	// compensation path. Production admin repositories always use the atomic path.
 	if err := s.accountRepo.Create(ctx, shadow); err != nil {
 		if existing, qerr := s.accountRepo.ListShadowsByParent(ctx, parentID); qerr == nil && len(existing) > 0 {
 			return nil, infraerrors.New(http.StatusConflict, "SPARK_SHADOW_ALREADY_EXISTS",
@@ -1348,11 +1505,6 @@ func (s *adminServiceImpl) CreateShadow(ctx context.Context, parentID int64, opt
 		}
 		return nil, fmt.Errorf("create spark shadow: %w", err)
 	}
-
-	// 6. 绑定分组。注意:create+bind 非单一 DB 事务(通用 Create 走 r.client、outbox 走 r.sql,
-	// 无现成共享事务路径),故绑组失败时做 best-effort 补偿删除刚建的影子,避免半成品影子(否则
-	// 一母一影唯一索引会挡住重试)——外审 C/P1。补偿删除用 detached ctx,即便请求 ctx 已取消/超时
-	// 仍能完成清理(外审第4轮);进程崩溃这种极端仍可能残留,属已知权衡。
 	if len(groupIDs) > 0 {
 		if err := s.accountRepo.BindGroups(ctx, shadow.ID, groupIDs); err != nil {
 			if delErr := s.accountRepo.Delete(context.WithoutCancel(ctx), shadow.ID); delErr != nil {
@@ -1373,6 +1525,98 @@ func (s *adminServiceImpl) CreateShadow(ctx context.Context, parentID int64, opt
 // Calling this for a non-parent account is a harmless no-op.
 func (s *adminServiceImpl) propagateProxyToShadows(ctx context.Context, parentID int64, proxyID *int64) error {
 	return propagateAccountProxyToShadows(ctx, s.accountRepo, parentID, proxyID)
+}
+
+// propagateOpenAIOAuthSessionPolicyToShadows keeps Spark shadows in the same
+// OAuth session domain as their credential-owning parent. Policy updates and
+// group bindings are intentionally synchronous so a group removed from the
+// parent cannot keep using a shadow with the same OAuth credential.
+func (s *adminServiceImpl) propagateOpenAIOAuthSessionPolicyToShadows(ctx context.Context, parent *Account, groupIDs []int64) error {
+	return propagateOpenAIOAuthSessionPolicyToShadowsWithRepo(ctx, s.accountRepo, parent, groupIDs)
+}
+
+func propagateOpenAIOAuthSessionPolicyToShadowsWithRepo(ctx context.Context, repo AccountRepository, parent *Account, groupIDs []int64) error {
+	if parent == nil || parent.IsCredentialShadow() || !parent.IsOpenAIOAuth() {
+		return nil
+	}
+
+	policy, configured, valid := parent.OpenAIOAuthSessionPolicy()
+	if configured && !valid {
+		return errors.New("parent OpenAI OAuth session-sharing policy is invalid")
+	}
+
+	shadows, err := repo.ListShadowsByParent(ctx, parent.ID)
+	if err != nil {
+		return fmt.Errorf("list spark shadows for OpenAI OAuth session policy propagation: %w", err)
+	}
+	groupIDs = normalizedGroupIDs(groupIDs)
+
+	for _, shadow := range shadows {
+		if shadow == nil {
+			continue
+		}
+
+		// When sharing is enabled, persist the restrictive policy before adding
+		// any new route. When disabling sharing, remove obsolete routes first so
+		// a stale shadow cannot remain reachable after its policy is removed.
+		if policy.Enabled {
+			if err := syncOpenAIOAuthSessionPolicyToSparkShadow(ctx, repo, parent, shadow, configured); err != nil {
+				return err
+			}
+			if err := repo.BindGroups(ctx, shadow.ID, groupIDs); err != nil {
+				return fmt.Errorf("bind groups for spark shadow %d while propagating OpenAI OAuth session policy: %w", shadow.ID, err)
+			}
+			continue
+		}
+
+		if err := repo.BindGroups(ctx, shadow.ID, groupIDs); err != nil {
+			return fmt.Errorf("bind groups for spark shadow %d while propagating OpenAI OAuth session policy: %w", shadow.ID, err)
+		}
+		if err := syncOpenAIOAuthSessionPolicyToSparkShadow(ctx, repo, parent, shadow, configured); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func persistAdminAccountUpdate(ctx context.Context, repo AccountRepository, account *Account, requestedProbeEnabledUpdate *bool) error {
+	if requestedProbeEnabledUpdate != nil && isUpstreamBillingProbeAccount(account) {
+		if updater, ok := repo.(accountProbeEnabledAtomicUpdater); ok {
+			return updater.UpdateWithUpstreamBillingProbeEnabled(ctx, account, *requestedProbeEnabledUpdate)
+		}
+	}
+	if err := repo.Update(ctx, account); err != nil {
+		return err
+	}
+	if requestedProbeEnabledUpdate != nil && isUpstreamBillingProbeAccount(account) {
+		return repo.UpdateExtra(ctx, account.ID, map[string]any{
+			UpstreamBillingProbeEnabledExtraKey: *requestedProbeEnabledUpdate,
+		})
+	}
+	return nil
+}
+
+func syncOpenAIOAuthSessionPolicyToSparkShadow(ctx context.Context, repo AccountRepository, parent, shadow *Account, configured bool) error {
+	if shadow == nil {
+		return nil
+	}
+	if shadow.Extra == nil {
+		shadow.Extra = make(map[string]any)
+	}
+	if configured {
+		rawPolicy := parent.Extra[OpenAIOAuthSessionPolicyExtraKey]
+		cloned, err := cloneAccountJSONMap(map[string]any{OpenAIOAuthSessionPolicyExtraKey: rawPolicy})
+		if err != nil {
+			return fmt.Errorf("clone OpenAI OAuth session policy for spark shadow %d: %w", shadow.ID, err)
+		}
+		shadow.Extra[OpenAIOAuthSessionPolicyExtraKey] = cloned[OpenAIOAuthSessionPolicyExtraKey]
+	} else {
+		delete(shadow.Extra, OpenAIOAuthSessionPolicyExtraKey)
+	}
+	if err := repo.Update(ctx, shadow); err != nil {
+		return fmt.Errorf("update spark shadow %d OpenAI OAuth session policy: %w", shadow.ID, err)
+	}
+	return nil
 }
 
 // propagateAccountProxyToShadows 把母账号的 proxy 同步到其所有 spark 影子(影子 proxy 恒继承母账号)。

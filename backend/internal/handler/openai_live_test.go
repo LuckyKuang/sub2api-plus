@@ -102,6 +102,18 @@ func TestLiveAttestationErrorIsExplicit(t *testing.T) {
 	require.Contains(t, recorder.Body.String(), "Sub2API runs on macOS")
 }
 
+func TestLiveOAuthSessionPolicyDenialIsForbidden(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	context, _ := gin.CreateTestContext(recorder)
+
+	(&OpenAIGatewayHandler{}).writeLiveCreateError(context, service.ErrOpenAIOAuthSessionAccessDenied)
+
+	require.Equal(t, http.StatusForbidden, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "permission_error")
+	require.Contains(t, recorder.Body.String(), "authorized API key groups")
+}
+
 func jsonPathString(t *testing.T, raw json.RawMessage, keys ...string) string {
 	t.Helper()
 	var value any

@@ -146,6 +146,20 @@ func openAICompatSessionResponseKey(c *gin.Context, account *Account, promptCach
 	if account == nil || key == "" {
 		return ""
 	}
+	if account.IsOpenAIOAuthSessionSharingEnabled() {
+		policy, _, valid := account.OpenAIOAuthSessionPolicy()
+		userID := getAPIKeyUserIDFromContext(c)
+		if !valid || !policy.Enabled || account.OpenAIOAuthSessionScopeAccountID() <= 0 || userID <= 0 {
+			return ""
+		}
+		return strings.Join([]string{
+			"oauth-user-v2",
+			strconv.FormatInt(account.OpenAIOAuthSessionScopeAccountID(), 10),
+			policy.ScopeVersion,
+			strconv.FormatInt(userID, 10),
+			key,
+		}, "\x00")
+	}
 	apiKeyID := int64(0)
 	if c != nil {
 		apiKeyID = getAPIKeyIDFromContext(c)

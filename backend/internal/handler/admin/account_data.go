@@ -142,6 +142,7 @@ type DataImportResult struct {
 	AccountCreated int               `json:"account_created"`
 	AccountFailed  int               `json:"account_failed"`
 	Errors         []DataImportError `json:"errors,omitempty"`
+	Warnings       []DataImportError `json:"warnings,omitempty"`
 }
 
 type DataImportError struct {
@@ -642,6 +643,13 @@ func (h *AccountHandler) importData(ctx context.Context, req DataImportRequest) 
 		}
 
 		enrichCredentialsFromIDToken(&item)
+		if stripImportedOpenAIOAuthSessionPolicy(&item) {
+			result.Warnings = append(result.Warnings, DataImportError{
+				Kind:    "account",
+				Name:    item.Name,
+				Message: "local OpenAI OAuth session-sharing policy was removed; bind groups and enable it again after import",
+			})
+		}
 
 		accountInput := &service.CreateAccountInput{
 			Name:                 item.Name,
@@ -696,6 +704,27 @@ func (h *AccountHandler) importData(ctx context.Context, req DataImportRequest) 
 	}
 
 	return result, nil
+}
+
+// OpenAI OAuth session policies contain instance-local numeric group IDs and a
+// scope nonce. Carrying either into another installation is unsafe and also
+// makes a credential-only account import fail because data backups do not
+// recreate group bindings.
+func stripImportedOpenAIOAuthSessionPolicy(item *DataAccount) bool {
+	if item == nil || item.Extra == nil {
+		return false
+	}
+	if _, ok := item.Extra[service.OpenAIOAuthSessionPolicyExtraKey]; !ok {
+		return false
+	}
+	extra := make(map[string]any, len(item.Extra)-1)
+	for key, value := range item.Extra {
+		if key != service.OpenAIOAuthSessionPolicyExtraKey {
+			extra[key] = value
+		}
+	}
+	item.Extra = extra
+	return true
 }
 
 func (h *AccountHandler) listAllProxies(ctx context.Context) ([]service.Proxy, error) {

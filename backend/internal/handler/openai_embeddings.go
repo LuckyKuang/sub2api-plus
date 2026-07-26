@@ -131,6 +131,10 @@ func (h *OpenAIGatewayHandler) Embeddings(c *gin.Context) {
 			true,
 		)
 		if err != nil {
+			if errors.Is(err, service.ErrOpenAIOAuthSessionAccessDenied) {
+				h.errorResponse(c, http.StatusForbidden, "permission_error", "This OpenAI OAuth account is restricted to authorized API key groups.")
+				return
+			}
 			if failoverClientGone(c) {
 				reqLog.Info("openai_embeddings.account_select_aborted_client_disconnected", zap.Error(err))
 				return

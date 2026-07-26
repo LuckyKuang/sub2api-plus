@@ -20,16 +20,18 @@ import (
 // 并覆盖测试所需的核心方法。
 type sparkShadowRepoStub struct {
 	mockAccountRepoForGemini
-	nextID   int64
-	accounts map[int64]*Account
-	groupsOf map[int64][]int64 // accountID → []groupIDs
+	nextID        int64
+	accounts      map[int64]*Account
+	groupsOf      map[int64][]int64 // accountID → []groupIDs
+	bindGroupsErr map[int64]error
 }
 
 func newSparkShadowRepoStub() *sparkShadowRepoStub {
 	return &sparkShadowRepoStub{
-		nextID:   0,
-		accounts: make(map[int64]*Account),
-		groupsOf: make(map[int64][]int64),
+		nextID:        0,
+		accounts:      make(map[int64]*Account),
+		groupsOf:      make(map[int64][]int64),
+		bindGroupsErr: make(map[int64]error),
 		mockAccountRepoForGemini: mockAccountRepoForGemini{
 			accountsByID: make(map[int64]*Account),
 		},
@@ -50,7 +52,12 @@ func (s *sparkShadowRepoStub) GetByID(_ context.Context, id int64) (*Account, er
 	if !ok {
 		return nil, ErrAccountNotFound
 	}
-	return acc, nil
+	cp := *acc
+	cp.GroupIDs = append([]int64(nil), acc.GroupIDs...)
+	cp.AccountGroups = append([]AccountGroup(nil), acc.AccountGroups...)
+	cp.Extra, _ = cloneAccountJSONMap(acc.Extra)
+	cp.Credentials, _ = cloneAccountJSONMap(acc.Credentials)
+	return &cp, nil
 }
 
 func (s *sparkShadowRepoStub) ListShadowsByParent(_ context.Context, parentID int64) ([]*Account, error) {
@@ -65,7 +72,58 @@ func (s *sparkShadowRepoStub) ListShadowsByParent(_ context.Context, parentID in
 }
 
 func (s *sparkShadowRepoStub) BindGroups(_ context.Context, accountID int64, groupIDs []int64) error {
-	s.groupsOf[accountID] = append(s.groupsOf[accountID], groupIDs...)
+	if err := s.bindGroupsErr[accountID]; err != nil {
+		return err
+	}
+	s.groupsOf[accountID] = append([]int64(nil), groupIDs...)
+	if account, ok := s.accounts[accountID]; ok {
+		account.GroupIDs = append([]int64(nil), groupIDs...)
+	}
+	return nil
+}
+
+func (s *sparkShadowRepoStub) CreateWithAccountGroups(ctx context.Context, account *Account, groups []AccountGroup) error {
+	return s.RunOpenAIOAuthPolicyTransaction(ctx, func(writeCtx context.Context, _ AccountRepository) error {
+		if err := s.Create(writeCtx, account); err != nil {
+			return err
+		}
+		groupIDs := make([]int64, 0, len(groups))
+		for _, group := range groups {
+			groupIDs = append(groupIDs, group.GroupID)
+		}
+		if err := s.BindGroups(writeCtx, account.ID, groupIDs); err != nil {
+			return err
+		}
+		account.GroupIDs = append([]int64(nil), groupIDs...)
+		account.AccountGroups = append([]AccountGroup(nil), groups...)
+		return s.Update(writeCtx, account)
+	})
+}
+
+func (s *sparkShadowRepoStub) RunOpenAIOAuthPolicyTransaction(ctx context.Context, fn func(context.Context, AccountRepository) error) error {
+	accountsSnapshot := make(map[int64]*Account, len(s.accounts))
+	for id, account := range s.accounts {
+		cloned := *account
+		cloned.GroupIDs = append([]int64(nil), account.GroupIDs...)
+		cloned.AccountGroups = append([]AccountGroup(nil), account.AccountGroups...)
+		cloned.Extra, _ = cloneAccountJSONMap(account.Extra)
+		accountsSnapshot[id] = &cloned
+	}
+	groupsSnapshot := make(map[int64][]int64, len(s.groupsOf))
+	for id, groupIDs := range s.groupsOf {
+		groupsSnapshot[id] = append([]int64(nil), groupIDs...)
+	}
+	nextIDSnapshot := s.nextID
+	if err := fn(ctx, s); err != nil {
+		s.accounts = accountsSnapshot
+		s.mockAccountRepoForGemini.accountsByID = make(map[int64]*Account, len(accountsSnapshot))
+		for id, account := range accountsSnapshot {
+			s.mockAccountRepoForGemini.accountsByID[id] = account
+		}
+		s.groupsOf = groupsSnapshot
+		s.nextID = nextIDSnapshot
+		return err
+	}
 	return nil
 }
 
@@ -479,6 +537,229 @@ func TestCreateShadow_InheritsParentGroups(t *testing.T) {
 	shadow, err := svc.CreateShadow(ctx, parent.ID, ShadowOptions{Name: "grp-shadow"})
 	require.NoError(t, err)
 	require.Equal(t, []int64{11, 22}, repo.groupsOf[shadow.ID], "未指定分组应继承母账号分组,而非 openai-default")
+}
+
+func TestCreateShadowRejectsInvalidParentOpenAIOAuthSessionPolicy(t *testing.T) {
+	ctx := context.Background()
+	repo := newSparkShadowRepoStub()
+	svc := &adminServiceImpl{accountRepo: repo}
+	parent := &Account{
+		Name:     "invalid-policy-parent",
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+		Status:   StatusActive,
+		GroupIDs: []int64{11},
+		Credentials: map[string]any{
+			"access_token": "token",
+		},
+		Extra: map[string]any{
+			OpenAIOAuthSessionPolicyExtraKey: map[string]any{
+				"enabled":           true,
+				"allowed_group_ids": []int64{11},
+				// Missing scope_version makes the stored policy malformed.
+			},
+		},
+	}
+	require.NoError(t, repo.Create(ctx, parent))
+
+	_, err := svc.CreateShadow(ctx, parent.ID, ShadowOptions{Name: "shadow"})
+	require.Error(t, err)
+	require.Empty(t, repo.groupsOf, "an invalid parent policy must not create an unprotected shadow")
+}
+
+func TestUpdateAccountSynchronizesOpenAIOAuthSessionPolicyToSparkShadows(t *testing.T) {
+	ctx := context.Background()
+	repo := newSparkShadowRepoStub()
+	groupRepo := &sparkShadowValidatingGroupRepoStub{existing: map[int64]bool{11: true, 22: true}}
+	svc := &adminServiceImpl{accountRepo: repo, groupRepo: groupRepo}
+	parent := &Account{
+		Name:     "policy-parent",
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+		Status:   StatusActive,
+		GroupIDs: []int64{11},
+		Credentials: map[string]any{
+			"access_token": "token",
+		},
+		Extra: map[string]any{
+			OpenAIOAuthSessionPolicyExtraKey: map[string]any{
+				"enabled":           true,
+				"allowed_group_ids": []int64{11},
+				"scope_version":     "old-scope",
+			},
+		},
+	}
+	require.NoError(t, repo.Create(ctx, parent))
+	require.NoError(t, repo.BindGroups(ctx, parent.ID, []int64{11}))
+	shadow, err := svc.CreateShadow(ctx, parent.ID, ShadowOptions{Name: "policy-shadow"})
+	require.NoError(t, err)
+
+	newGroupIDs := []int64{22}
+	updated, err := svc.UpdateAccount(ctx, parent.ID, &UpdateAccountInput{
+		GroupIDs:              &newGroupIDs,
+		SkipMixedChannelCheck: true,
+		Extra: map[string]any{
+			OpenAIOAuthSessionPolicyExtraKey: map[string]any{
+				"enabled":           true,
+				"allowed_group_ids": []int64{22},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	parentPolicy, parentConfigured, parentValid := updated.OpenAIOAuthSessionPolicy()
+	require.True(t, parentConfigured)
+	require.True(t, parentValid)
+	require.Equal(t, []int64{22}, parentPolicy.AllowedGroupIDs)
+	require.NotEqual(t, "old-scope", parentPolicy.ScopeVersion)
+	require.Equal(t, []int64{22}, repo.groupsOf[parent.ID])
+
+	updatedShadow, err := repo.GetByID(ctx, shadow.ID)
+	require.NoError(t, err)
+	shadowPolicy, shadowConfigured, shadowValid := updatedShadow.OpenAIOAuthSessionPolicy()
+	require.True(t, shadowConfigured)
+	require.True(t, shadowValid)
+	require.Equal(t, parentPolicy, shadowPolicy)
+	require.Equal(t, []int64{22}, repo.groupsOf[shadow.ID])
+	removedGroupID := int64(11)
+	allowedGroupID := int64(22)
+	require.False(t, updatedShadow.IsOpenAIOAuthSessionGroupAllowed(&removedGroupID))
+	require.True(t, updatedShadow.IsOpenAIOAuthSessionGroupAllowed(&allowedGroupID))
+}
+
+func TestUpdateAccountRollsBackOAuthPolicyGroupAndShadowTogether(t *testing.T) {
+	ctx := context.Background()
+	repo := newSparkShadowRepoStub()
+	groupRepo := &sparkShadowValidatingGroupRepoStub{existing: map[int64]bool{11: true, 22: true}}
+	svc := &adminServiceImpl{accountRepo: repo, groupRepo: groupRepo}
+	parent := &Account{
+		Name: "atomic-policy-parent", Platform: PlatformOpenAI, Type: AccountTypeOAuth,
+		Status: StatusActive, GroupIDs: []int64{11}, Credentials: map[string]any{"access_token": "token"},
+		Extra: map[string]any{OpenAIOAuthSessionPolicyExtraKey: map[string]any{
+			"enabled": true, "allowed_group_ids": []int64{11}, "scope_version": "scope-old",
+		}},
+	}
+	require.NoError(t, repo.Create(ctx, parent))
+	require.NoError(t, repo.BindGroups(ctx, parent.ID, []int64{11}))
+	shadow, err := svc.CreateShadow(ctx, parent.ID, ShadowOptions{Name: "atomic-policy-shadow"})
+	require.NoError(t, err)
+	repo.bindGroupsErr[shadow.ID] = errors.New("shadow group write failed")
+
+	newGroupIDs := []int64{22}
+	_, err = svc.UpdateAccount(ctx, parent.ID, &UpdateAccountInput{
+		GroupIDs:              &newGroupIDs,
+		SkipMixedChannelCheck: true,
+		Extra: map[string]any{OpenAIOAuthSessionPolicyExtraKey: map[string]any{
+			"enabled": true, "allowed_group_ids": []int64{22},
+		}},
+	})
+	require.ErrorContains(t, err, "shadow group write failed")
+
+	storedParent, err := repo.GetByID(ctx, parent.ID)
+	require.NoError(t, err)
+	storedShadow, err := repo.GetByID(ctx, shadow.ID)
+	require.NoError(t, err)
+	parentPolicy, _, _ := storedParent.OpenAIOAuthSessionPolicy()
+	shadowPolicy, _, _ := storedShadow.OpenAIOAuthSessionPolicy()
+	require.Equal(t, "scope-old", parentPolicy.ScopeVersion)
+	require.Equal(t, "scope-old", shadowPolicy.ScopeVersion)
+	require.Equal(t, []int64{11}, repo.groupsOf[parent.ID])
+	require.Equal(t, []int64{11}, repo.groupsOf[shadow.ID])
+}
+
+func TestUpdateAccountDisablingOpenAIOAuthSessionPolicyRemovesItFromSparkShadows(t *testing.T) {
+	ctx := context.Background()
+	repo := newSparkShadowRepoStub()
+	svc := &adminServiceImpl{accountRepo: repo}
+	parent := &Account{
+		Name:     "disable-policy-parent",
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+		Status:   StatusActive,
+		GroupIDs: []int64{11},
+		Credentials: map[string]any{
+			"access_token": "token",
+		},
+		Extra: map[string]any{
+			OpenAIOAuthSessionPolicyExtraKey: map[string]any{
+				"enabled":           true,
+				"allowed_group_ids": []int64{11},
+				"scope_version":     "scope-a",
+			},
+		},
+	}
+	require.NoError(t, repo.Create(ctx, parent))
+	require.NoError(t, repo.BindGroups(ctx, parent.ID, []int64{11}))
+	shadow, err := svc.CreateShadow(ctx, parent.ID, ShadowOptions{Name: "disable-policy-shadow"})
+	require.NoError(t, err)
+
+	updated, err := svc.UpdateAccount(ctx, parent.ID, &UpdateAccountInput{Extra: map[string]any{}})
+	require.NoError(t, err)
+	require.NotContains(t, updated.Extra, OpenAIOAuthSessionPolicyExtraKey)
+
+	updatedShadow, err := repo.GetByID(ctx, shadow.ID)
+	require.NoError(t, err)
+	require.NotContains(t, updatedShadow.Extra, OpenAIOAuthSessionPolicyExtraKey)
+	require.Equal(t, []int64{11}, repo.groupsOf[shadow.ID])
+}
+
+func TestUpdateSparkShadowCannotBypassParentOpenAIOAuthSessionPolicy(t *testing.T) {
+	ctx := context.Background()
+	repo := newSparkShadowRepoStub()
+	groupRepo := &sparkShadowValidatingGroupRepoStub{existing: map[int64]bool{11: true, 22: true}}
+	svc := &adminServiceImpl{accountRepo: repo, groupRepo: groupRepo}
+	parent := &Account{
+		Name:     "protected-parent",
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+		Status:   StatusActive,
+		GroupIDs: []int64{11},
+		Credentials: map[string]any{
+			"access_token": "token",
+		},
+		Extra: map[string]any{
+			OpenAIOAuthSessionPolicyExtraKey: map[string]any{
+				"enabled":           true,
+				"allowed_group_ids": []int64{11},
+				"scope_version":     "parent-scope",
+			},
+		},
+	}
+	require.NoError(t, repo.Create(ctx, parent))
+	require.NoError(t, repo.BindGroups(ctx, parent.ID, []int64{11}))
+	shadow, err := svc.CreateShadow(ctx, parent.ID, ShadowOptions{Name: "protected-shadow"})
+	require.NoError(t, err)
+
+	t.Run("different groups are rejected", func(t *testing.T) {
+		otherGroups := []int64{22}
+		_, updateErr := svc.UpdateAccount(ctx, shadow.ID, &UpdateAccountInput{
+			Extra:                 map[string]any{},
+			GroupIDs:              &otherGroups,
+			SkipMixedChannelCheck: true,
+		})
+		require.Error(t, updateErr)
+		require.Contains(t, updateErr.Error(), "must exactly match")
+		require.Equal(t, []int64{11}, repo.groupsOf[shadow.ID])
+	})
+
+	t.Run("removing or forging the shadow policy is canonicalized to the parent", func(t *testing.T) {
+		shadowAccount, getErr := repo.GetByID(ctx, shadow.ID)
+		require.NoError(t, getErr)
+		shadowAccount.Extra[OpenAIOAuthSessionPolicyExtraKey] = map[string]any{
+			"enabled":           true,
+			"allowed_group_ids": []int64{11},
+			"scope_version":     "forged-shadow-scope",
+		}
+
+		updated, updateErr := svc.UpdateAccount(ctx, shadow.ID, &UpdateAccountInput{Extra: map[string]any{}})
+		require.NoError(t, updateErr)
+		policy, configured, valid := updated.OpenAIOAuthSessionPolicy()
+		require.True(t, configured)
+		require.True(t, valid)
+		require.Equal(t, []int64{11}, policy.AllowedGroupIDs)
+		require.Equal(t, "parent-scope", policy.ScopeVersion)
+		require.Equal(t, []int64{11}, repo.groupsOf[shadow.ID])
+	})
 }
 
 // TestCreateShadow_RejectsShadowAsParent 验证外审 G6:不允许把影子当母创建二级影子。
@@ -947,6 +1228,15 @@ func TestUpdateAccount_ShadowEmptyCredentialsClearsModelMapping(t *testing.T) {
 	repo := newSparkShadowRepoStub()
 	svc := &adminServiceImpl{accountRepo: repo}
 	parentID := int64(1)
+	parent := &Account{
+		ID:          parentID,
+		Name:        "p",
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeOAuth,
+		Status:      StatusActive,
+		Credentials: map[string]any{"access_token": "parent-token"},
+	}
+	require.NoError(t, repo.Create(ctx, parent))
 	shadow := &Account{
 		Name:            "s",
 		Platform:        PlatformOpenAI,

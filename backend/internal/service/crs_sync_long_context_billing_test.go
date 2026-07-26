@@ -128,6 +128,85 @@ func TestCRSSyncOpenAILongContextBilling(t *testing.T) {
 	}
 }
 
+func TestCRSSyncOpenAIOAuthSessionPolicyRemainsLocal(t *testing.T) {
+	const crsID = "crs-openai-1"
+	localPolicy := map[string]any{
+		"enabled":           true,
+		"allowed_group_ids": []int64{11},
+		"scope_version":     "local-scope",
+	}
+
+	t.Run("update preserves the local policy over a remote value", func(t *testing.T) {
+		existing := &Account{
+			ID:       41,
+			Platform: PlatformOpenAI,
+			Type:     AccountTypeOAuth,
+			Extra: map[string]any{
+				"crs_account_id":                 crsID,
+				OpenAIOAuthSessionPolicyExtraKey: localPolicy,
+			},
+		}
+		repo := newCRSLongContextAccountRepo(existing)
+		result := runCRSOpenAILongContextSync(t, repo, crsOpenAILongContextSource{
+			collection:  "openaiOAuthAccounts",
+			credentials: map[string]any{"access_token": "oauth-token"},
+			extra: map[string]any{
+				OpenAIOAuthSessionPolicyExtraKey: map[string]any{
+					"enabled":           true,
+					"allowed_group_ids": []int64{99},
+					"scope_version":     "remote-scope",
+				},
+			},
+		})
+
+		require.Equal(t, "updated", result.Items[0].Action)
+		policy, configured, valid := repo.accounts[crsID].OpenAIOAuthSessionPolicy()
+		require.True(t, configured)
+		require.True(t, valid)
+		require.Equal(t, []int64{11}, policy.AllowedGroupIDs)
+		require.Equal(t, "local-scope", policy.ScopeVersion)
+	})
+
+	t.Run("create ignores a remote policy", func(t *testing.T) {
+		repo := newCRSLongContextAccountRepo()
+		result := runCRSOpenAILongContextSync(t, repo, crsOpenAILongContextSource{
+			collection:  "openaiOAuthAccounts",
+			credentials: map[string]any{"access_token": "oauth-token"},
+			extra: map[string]any{
+				OpenAIOAuthSessionPolicyExtraKey: map[string]any{
+					"enabled":           true,
+					"allowed_group_ids": []int64{99},
+					"scope_version":     "remote-scope",
+				},
+			},
+		})
+
+		require.Equal(t, "created", result.Items[0].Action)
+		require.NotContains(t, repo.accounts[crsID].Extra, OpenAIOAuthSessionPolicyExtraKey)
+	})
+
+	t.Run("cross-type update removes the no-longer-applicable local policy", func(t *testing.T) {
+		existing := &Account{
+			ID:       41,
+			Platform: PlatformOpenAI,
+			Type:     AccountTypeOAuth,
+			Extra: map[string]any{
+				"crs_account_id":                 crsID,
+				OpenAIOAuthSessionPolicyExtraKey: localPolicy,
+			},
+		}
+		repo := newCRSLongContextAccountRepo(existing)
+		result := runCRSOpenAILongContextSync(t, repo, crsOpenAILongContextSource{
+			collection:  "openaiResponsesAccounts",
+			credentials: map[string]any{"api_key": "sk-test"},
+		})
+
+		require.Equal(t, "updated", result.Items[0].Action)
+		require.Equal(t, AccountTypeAPIKey, repo.accounts[crsID].Type)
+		require.NotContains(t, repo.accounts[crsID].Extra, OpenAIOAuthSessionPolicyExtraKey)
+	})
+}
+
 func runCRSOpenAILongContextSync(t *testing.T, repo AccountRepository, source crsOpenAILongContextSource) *SyncFromCRSResult {
 	t.Helper()
 	account := map[string]any{

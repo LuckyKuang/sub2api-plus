@@ -368,6 +368,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 			extra = mergeMap(existing.Extra, extra)
 			credentials = mergeMap(existing.Credentials, credentials)
 		}
+		removeOpenAIOAuthSessionPolicyExtra(extra)
 		reconcileCRSUpstreamBillingProbeExtra(existing, PlatformAnthropic, targetType, credentials, extra)
 
 		if existing == nil {
@@ -504,6 +505,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 			extra = mergeMap(existing.Extra, extra)
 			credentials = mergeMap(existing.Credentials, credentials)
 		}
+		removeOpenAIOAuthSessionPolicyExtra(extra)
 		reconcileCRSUpstreamBillingProbeExtra(existing, PlatformAnthropic, AccountTypeAPIKey, credentials, extra)
 
 		if existing == nil {
@@ -649,6 +651,14 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 			existingExtra = existing.Extra
 		}
 		extra, err = mergeCRSOpenAILongContextBillingExtra(existingExtra, extra)
+		if err != nil {
+			item.Action = "failed"
+			item.Error = err.Error()
+			result.Failed++
+			result.Items = append(result.Items, item)
+			continue
+		}
+		extra, err = preserveLocalOpenAIOAuthSessionPolicyExtra(existingExtra, extra)
 		if err != nil {
 			item.Action = "failed"
 			item.Error = err.Error()
@@ -810,6 +820,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 		if existing != nil {
 			credentials = mergeMap(existing.Credentials, credentials)
 		}
+		removeOpenAIOAuthSessionPolicyExtra(extra)
 		reconcileCRSUpstreamBillingProbeExtra(existing, PlatformOpenAI, AccountTypeAPIKey, credentials, extra)
 
 		if existing == nil {
@@ -940,6 +951,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 			extra = mergeMap(existing.Extra, extra)
 			credentials = mergeMap(existing.Credentials, credentials)
 		}
+		removeOpenAIOAuthSessionPolicyExtra(extra)
 		reconcileCRSUpstreamBillingProbeExtra(existing, PlatformGemini, AccountTypeOAuth, credentials, extra)
 
 		if existing == nil {
@@ -1070,6 +1082,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 			extra = mergeMap(existing.Extra, extra)
 			credentials = mergeMap(existing.Credentials, credentials)
 		}
+		removeOpenAIOAuthSessionPolicyExtra(extra)
 		reconcileCRSUpstreamBillingProbeExtra(existing, PlatformGemini, AccountTypeAPIKey, credentials, extra)
 
 		if existing == nil {
@@ -1199,6 +1212,35 @@ func reconcileCRSUpstreamBillingProbeExtra(
 
 func mergeCRSOpenAILongContextBillingExtra(existing, updates map[string]any) (map[string]any, error) {
 	return normalizeOpenAILongContextBillingExtra(PlatformOpenAI, mergeMap(existing, updates))
+}
+
+// preserveLocalOpenAIOAuthSessionPolicyExtra keeps session-sharing access
+// control local to this deployment. CRS is allowed to refresh OAuth
+// credentials and provider metadata, but it must neither grant, replace, nor
+// remove the API-key group allowlist managed by the account editor.
+func preserveLocalOpenAIOAuthSessionPolicyExtra(existing, updates map[string]any) (map[string]any, error) {
+	delete(updates, OpenAIOAuthSessionPolicyExtraKey)
+	if existing == nil {
+		return updates, nil
+	}
+	rawPolicy, configured := existing[OpenAIOAuthSessionPolicyExtraKey]
+	if !configured || rawPolicy == nil {
+		return updates, nil
+	}
+	cloned, err := cloneAccountJSONMap(map[string]any{OpenAIOAuthSessionPolicyExtraKey: rawPolicy})
+	if err != nil {
+		return nil, fmt.Errorf("clone local OpenAI OAuth session-sharing policy: %w", err)
+	}
+	updates[OpenAIOAuthSessionPolicyExtraKey] = cloned[OpenAIOAuthSessionPolicyExtraKey]
+	return updates, nil
+}
+
+// A CRS ID can move between provider collections. The session-sharing policy
+// is meaningful only while the local target remains an OpenAI OAuth account;
+// retaining it after a cross-type sync leaves an inapplicable access policy in
+// account extra and makes later account edits fail validation.
+func removeOpenAIOAuthSessionPolicyExtra(extra map[string]any) {
+	delete(extra, OpenAIOAuthSessionPolicyExtraKey)
 }
 
 func (s *CRSSyncService) mapOrCreateProxy(ctx context.Context, enabled bool, cached *[]Proxy, src *crsProxy, defaultName string) (*int64, error) {

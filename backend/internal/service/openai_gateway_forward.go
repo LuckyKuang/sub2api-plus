@@ -1056,19 +1056,25 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 		} else {
 			req.Header.Set("OpenAI-Beta", "responses=experimental")
 		}
-		apiKeyID := getAPIKeyIDFromContext(c)
 		if isOpenAIResponsesCompactPath(c) {
 			req.Header.Set("accept", "application/json")
 			if req.Header.Get("version") == "" {
 				req.Header.Set("version", codexCLIVersion)
 			}
 			compactSession := resolveOpenAICompactSessionID(c)
-			req.Header.Set("session_id", isolateOpenAISessionID(apiKeyID, compactSession))
+			upstreamSessionID, err := s.resolveOpenAIUpstreamSessionID(c, account, compactSession)
+			if err != nil {
+				return nil, err
+			}
+			req.Header.Set("session_id", upstreamSessionID)
 		} else {
 			req.Header.Set("accept", "text/event-stream")
 		}
 		if promptCacheKey != "" {
-			isolated := isolateOpenAISessionID(apiKeyID, promptCacheKey)
+			isolated, err := s.resolveOpenAIUpstreamSessionID(c, account, promptCacheKey)
+			if err != nil {
+				return nil, err
+			}
 			req.Header.Set("session_id", isolated)
 			if !compatMessagesBridge || clientConversationID != "" {
 				req.Header.Set("conversation_id", isolated)

@@ -44,6 +44,7 @@ export default {
       dataImportFailed: 'Data import failed',
       dataImportResult: 'Import Result',
       dataImportResultSummary: 'Proxies created {proxy_created}, reused {proxy_reused}, failed {proxy_failed}; Accounts created {account_created}, failed {account_failed}',
+      dataImportWarnings: 'Import Warnings',
       dataImportErrors: 'Error Details',
       dataImportSuccess: 'Import completed: accounts {account_created}, failed {account_failed}',
       dataImportCompletedWithErrors: 'Import completed with errors: account failed {account_failed}, proxy failed {proxy_failed}',
@@ -492,6 +493,9 @@ export default {
         oauthPassthrough: 'Auto passthrough (auth only)',
         oauthPassthroughDesc:
           'When enabled, this OpenAI account uses automatic passthrough: the gateway forwards request/response as-is and only swaps auth, while keeping billing/concurrency/audit and necessary safety filtering.',
+        oauthSessionSharing: 'OAuth session-sharing allowlist',
+        oauthSessionSharingDesc: 'Only API keys in this account\'s assigned groups may use the OAuth account and continue its upstream sessions across those groups.',
+        oauthSessionSharingGroupsHint: 'The account\'s assigned groups are the allowlist. Select at least one before saving; other requests are stopped before reaching upstream.',
         longContextBilling: 'API long-context pricing',
         longContextBillingDesc:
           'Disabled by default. Enable only when this account\'s upstream charges OpenAI API long-context rates above the model threshold.',

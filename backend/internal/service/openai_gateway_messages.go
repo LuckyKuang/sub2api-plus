@@ -300,10 +300,15 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 		return nil, fmt.Errorf("build upstream request: %w", err)
 	}
 
-	// Override session_id with a deterministic UUID derived from the isolated
-	// session key, ensuring different API keys produce different upstream sessions.
+	// Use a deterministic UUID derived from the resolved upstream session key.
+	// OAuth accounts with session sharing enabled resolve to their account-scoped
+	// shared namespace; all other accounts retain API-key isolation.
 	if account.Platform != PlatformGrok && promptCacheKey != "" {
-		isolatedSessionID := generateSessionUUID(isolateOpenAISessionID(apiKeyID, promptCacheKey))
+		upstreamSessionID, resolveErr := s.resolveOpenAIUpstreamSessionID(c, account, promptCacheKey)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
+		isolatedSessionID := generateSessionUUID(upstreamSessionID)
 		upstreamReq.Header.Set("session_id", isolatedSessionID)
 		if upstreamReq.Header.Get("conversation_id") != "" {
 			upstreamReq.Header.Set("conversation_id", isolatedSessionID)

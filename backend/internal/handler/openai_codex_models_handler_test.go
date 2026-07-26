@@ -43,6 +43,16 @@ func (r codexModelsFailoverAccountRepo) ListSchedulableByPlatform(_ context.Cont
 	return accounts, nil
 }
 
+func (r codexModelsFailoverAccountRepo) ListByPlatform(_ context.Context, platform string) ([]service.Account, error) {
+	accounts := make([]service.Account, 0, len(r.accounts))
+	for _, account := range r.accounts {
+		if account.Platform == platform {
+			accounts = append(accounts, account)
+		}
+	}
+	return accounts, nil
+}
+
 type codexModelsFailoverHTTPUpstream struct {
 	service.HTTPUpstream
 	mu          sync.Mutex
@@ -113,6 +123,44 @@ func TestCodexModelsCanceledRequestDoesNotWriteResponse(t *testing.T) {
 
 	if c.Writer.Written() {
 		t.Fatalf("canceled request wrote an HTTP response: status=%d body=%q", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestCodexModelsRejectsGroupOutsideOAuthSessionWhitelist(t *testing.T) {
+	blockedGroupID := int64(43)
+	allowedGroupID := int64(42)
+	account := service.Account{
+		ID:          1,
+		Name:        "protected-oauth",
+		Platform:    service.PlatformOpenAI,
+		Type:        service.AccountTypeOAuth,
+		Status:      service.StatusActive,
+		Schedulable: true,
+		Concurrency: 1,
+		GroupIDs:    []int64{allowedGroupID},
+		Extra: map[string]any{
+			service.OpenAIOAuthSessionPolicyExtraKey: map[string]any{
+				"enabled":           true,
+				"allowed_group_ids": []int64{allowedGroupID},
+				"scope_version":     "scope-models",
+			},
+		},
+	}
+	cfg := &config.Config{RunMode: config.RunModeSimple}
+	gatewayService := service.NewOpenAIGatewayService(
+		codexModelsFailoverAccountRepo{accounts: []service.Account{account}},
+		nil, nil, nil, nil, nil, nil, cfg, nil, nil, nil, nil, nil,
+		&codexModelsFailoverHTTPUpstream{},
+		nil, nil, nil, nil, nil, nil, nil, nil,
+	)
+	handler := &OpenAIGatewayHandler{gatewayService: gatewayService}
+	recorder := performCodexModelsRequest(t, handler, blockedGroupID)
+
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusForbidden, recorder.Body.String())
+	}
+	if !strings.Contains(recorder.Body.String(), "permission_error") {
+		t.Fatalf("body does not contain permission_error: %s", recorder.Body.String())
 	}
 }
 

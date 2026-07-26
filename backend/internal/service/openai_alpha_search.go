@@ -239,9 +239,11 @@ func (s *OpenAIGatewayService) buildOpenAIAlphaSearchResponsesWebSearchRequest(c
 		req.Header.Set("X-Codex-Turn-Metadata", turnMetadata)
 	}
 	req.Header.Set("Version", codexCLIVersion)
-	apiKeyID := getAPIKeyIDFromContext(c)
 	if sessionID := strings.TrimSpace(gjson.GetBytes(alphaBody, "id").String()); sessionID != "" {
-		isolated := isolateOpenAISessionID(apiKeyID, sessionID)
+		isolated, resolveErr := s.resolveOpenAIUpstreamSessionID(c, account, sessionID)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
 		req.Header.Set("Session_ID", isolated)
 		req.Header.Set("Conversation_ID", isolated)
 	}

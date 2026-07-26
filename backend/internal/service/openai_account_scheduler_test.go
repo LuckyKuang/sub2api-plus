@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 )
 
@@ -58,6 +59,16 @@ func (r schedulerTestOpenAIAccountRepo) ListSchedulableUngroupedByPlatform(ctx c
 	return r.ListSchedulableByPlatform(ctx, platform)
 }
 
+func (r schedulerTestOpenAIAccountRepo) ListByPlatform(_ context.Context, platform string) ([]Account, error) {
+	var result []Account
+	for _, acc := range r.accounts {
+		if acc.Platform == platform {
+			result = append(result, acc)
+		}
+	}
+	return result, nil
+}
+
 type schedulerGroupAwareOpenAIAccountRepo struct {
 	schedulerTestOpenAIAccountRepo
 }
@@ -80,6 +91,265 @@ func (r schedulerGroupAwareOpenAIAccountRepo) ListSchedulableUngroupedByPlatform
 		}
 	}
 	return result, nil
+}
+
+func TestOpenAIGatewayService_SelectAccountWithScheduler_OAuthSessionPolicyDenialUsesExplicitErrorInDefaultMode(t *testing.T) {
+	resetOpenAIAdvancedSchedulerSettingCacheForTest()
+
+	ctx := context.Background()
+	allowedGroupID := int64(51001)
+	blockedGroupID := int64(51002)
+	protectedOAuth := Account{
+		ID:          51001,
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeOAuth,
+		Status:      StatusActive,
+		Schedulable: true,
+		Concurrency: 1,
+		GroupIDs:    []int64{allowedGroupID},
+		Extra: map[string]any{
+			OpenAIOAuthSessionPolicyExtraKey: map[string]any{
+				"enabled":           true,
+				"allowed_group_ids": []int64{allowedGroupID},
+				"scope_version":     "test-scope",
+			},
+		},
+	}
+	newService := func(accounts []Account) *OpenAIGatewayService {
+		cfg := &config.Config{}
+		cfg.Gateway.Scheduling.LoadBatchEnabled = false
+		return &OpenAIGatewayService{
+			accountRepo:        schedulerGroupAwareOpenAIAccountRepo{schedulerTestOpenAIAccountRepo{accounts: accounts}},
+			cache:              &schedulerTestGatewayCache{},
+			cfg:                cfg,
+			concurrencyService: NewConcurrencyService(schedulerTestConcurrencyCache{}),
+		}
+	}
+
+	t.Run("blocked group is denied before forwarding", func(t *testing.T) {
+		selection, _, err := newService([]Account{protectedOAuth}).SelectAccountWithSchedulerForCapability(
+			ctx,
+			&blockedGroupID,
+			"",
+			"",
+			"gpt-5.6",
+			nil,
+			OpenAIUpstreamTransportAny,
+			OpenAIEndpointCapabilityChatCompletions,
+			false,
+			false,
+			true,
+		)
+		require.Nil(t, selection)
+		require.ErrorIs(t, err, ErrOpenAIOAuthSessionAccessDenied)
+	})
+
+	t.Run("legacy selector used by Codex models returns the same denial", func(t *testing.T) {
+		account, err := newService([]Account{protectedOAuth}).SelectAccountForCodexModelsWithExclusions(
+			ctx,
+			&blockedGroupID,
+			nil,
+		)
+		require.Nil(t, account)
+		require.ErrorIs(t, err, ErrOpenAIOAuthSessionAccessDenied)
+	})
+
+	t.Run("simple mode also denies the protected OAuth account", func(t *testing.T) {
+		svc := newService([]Account{protectedOAuth})
+		svc.cfg.RunMode = config.RunModeSimple
+		selection, _, err := svc.SelectAccountWithSchedulerForCapability(
+			ctx,
+			&blockedGroupID,
+			"",
+			"",
+			"gpt-5.6",
+			nil,
+			OpenAIUpstreamTransportAny,
+			OpenAIEndpointCapabilityChatCompletions,
+			false,
+			false,
+			true,
+		)
+		require.Nil(t, selection)
+		require.ErrorIs(t, err, ErrOpenAIOAuthSessionAccessDenied)
+	})
+
+	t.Run("advanced scheduler candidate gate also rejects the protected OAuth account", func(t *testing.T) {
+		svc := newService([]Account{protectedOAuth})
+		svc.cfg.RunMode = config.RunModeSimple
+		scheduler := &defaultOpenAIAccountScheduler{service: svc}
+		compatible, reason := scheduler.isAccountRequestCompatibleReason(ctx, &protectedOAuth, OpenAIAccountScheduleRequest{
+			GroupID:            &blockedGroupID,
+			Platform:           PlatformOpenAI,
+			RequestedModel:     "gpt-5.6",
+			RequiredCapability: OpenAIEndpointCapabilityChatCompletions,
+		})
+		require.False(t, compatible)
+		require.Equal(t, "oauth_session_group_denied", reason)
+	})
+
+	t.Run("eligible non-protected account still wins", func(t *testing.T) {
+		eligibleAPIKey := Account{
+			ID:          51002,
+			Platform:    PlatformOpenAI,
+			Type:        AccountTypeAPIKey,
+			Status:      StatusActive,
+			Schedulable: true,
+			Concurrency: 1,
+			GroupIDs:    []int64{blockedGroupID},
+		}
+		selection, _, err := newService([]Account{protectedOAuth, eligibleAPIKey}).SelectAccountWithSchedulerForCapability(
+			ctx,
+			&blockedGroupID,
+			"",
+			"",
+			"gpt-5.6",
+			nil,
+			OpenAIUpstreamTransportAny,
+			OpenAIEndpointCapabilityChatCompletions,
+			false,
+			false,
+			true,
+		)
+		require.NoError(t, err)
+		require.NotNil(t, selection)
+		require.NotNil(t, selection.Account)
+		require.Equal(t, eligibleAPIKey.ID, selection.Account.ID)
+		if selection.ReleaseFunc != nil {
+			selection.ReleaseFunc()
+		}
+	})
+
+	t.Run("already failed protected account is not reclassified as an authorization error", func(t *testing.T) {
+		selection, _, err := newService([]Account{protectedOAuth}).SelectAccountWithSchedulerForCapability(
+			ctx,
+			&blockedGroupID,
+			"",
+			"",
+			"gpt-5.6",
+			map[int64]struct{}{protectedOAuth.ID: {}},
+			OpenAIUpstreamTransportAny,
+			OpenAIEndpointCapabilityChatCompletions,
+			false,
+			false,
+			true,
+		)
+		require.Nil(t, selection)
+		require.ErrorIs(t, err, ErrNoAvailableAccounts)
+		require.False(t, errors.Is(err, ErrOpenAIOAuthSessionAccessDenied))
+	})
+
+	t.Run("failed authorized account is not masked by another denied account", func(t *testing.T) {
+		authorizedOAuth := protectedOAuth
+		authorizedOAuth.ID = 51003
+		authorizedOAuth.GroupIDs = []int64{blockedGroupID}
+		authorizedOAuth.Extra = map[string]any{
+			OpenAIOAuthSessionPolicyExtraKey: map[string]any{
+				"enabled":           true,
+				"allowed_group_ids": []int64{blockedGroupID},
+				"scope_version":     "authorized-scope",
+			},
+		}
+		err := newService([]Account{authorizedOAuth, protectedOAuth}).mapOpenAIOAuthSessionPolicySelectionError(
+			ctx,
+			&blockedGroupID,
+			PlatformOpenAI,
+			"gpt-5.6",
+			map[int64]struct{}{authorizedOAuth.ID: {}},
+			OpenAIUpstreamTransportAny,
+			OpenAIEndpointCapabilityChatCompletions,
+			"",
+			false,
+			ErrNoAvailableAccounts,
+		)
+		require.ErrorIs(t, err, ErrNoAvailableAccounts)
+		require.False(t, errors.Is(err, ErrOpenAIOAuthSessionAccessDenied))
+	})
+
+	t.Run("temporarily unavailable authorized account preserves capacity error", func(t *testing.T) {
+		authorizedOAuth := protectedOAuth
+		authorizedOAuth.ID = 51004
+		authorizedOAuth.GroupIDs = []int64{blockedGroupID}
+		authorizedOAuth.Extra = map[string]any{
+			OpenAIOAuthSessionPolicyExtraKey: map[string]any{
+				"enabled":           true,
+				"allowed_group_ids": []int64{blockedGroupID},
+				"scope_version":     "capacity-scope",
+			},
+		}
+		authorizedOAuth.Status = StatusDisabled
+		err := newService([]Account{authorizedOAuth, protectedOAuth}).mapOpenAIOAuthSessionPolicySelectionError(
+			ctx,
+			&blockedGroupID,
+			PlatformOpenAI,
+			"gpt-5.6",
+			nil,
+			OpenAIUpstreamTransportAny,
+			OpenAIEndpointCapabilityChatCompletions,
+			"",
+			false,
+			ErrNoAvailableAccounts,
+		)
+		require.ErrorIs(t, err, ErrNoAvailableAccounts)
+		require.False(t, errors.Is(err, ErrOpenAIOAuthSessionAccessDenied))
+	})
+
+	t.Run("codex models failover preserves the authorized account failure", func(t *testing.T) {
+		authorizedOAuth := protectedOAuth
+		authorizedOAuth.ID = 51005
+		authorizedOAuth.GroupIDs = []int64{blockedGroupID}
+		authorizedOAuth.Extra = map[string]any{
+			OpenAIOAuthSessionPolicyExtraKey: map[string]any{
+				"enabled":           true,
+				"allowed_group_ids": []int64{blockedGroupID},
+				"scope_version":     "models-scope",
+			},
+		}
+		account, err := newService([]Account{authorizedOAuth, protectedOAuth}).SelectAccountForCodexModelsWithExclusions(
+			ctx,
+			&blockedGroupID,
+			map[int64]struct{}{authorizedOAuth.ID: {}},
+		)
+		require.Nil(t, account)
+		require.ErrorIs(t, err, ErrNoAvailableAccounts)
+		require.False(t, errors.Is(err, ErrOpenAIOAuthSessionAccessDenied))
+	})
+
+	t.Run("non-availability errors remain unchanged", func(t *testing.T) {
+		originalErr := context.Canceled
+		err := newService([]Account{protectedOAuth}).mapOpenAIOAuthSessionPolicySelectionError(
+			ctx,
+			&blockedGroupID,
+			PlatformOpenAI,
+			"gpt-5.6",
+			nil,
+			OpenAIUpstreamTransportAny,
+			OpenAIEndpointCapabilityChatCompletions,
+			"",
+			false,
+			originalErr,
+		)
+		require.ErrorIs(t, err, originalErr)
+	})
+
+	t.Run("unavailable protected account does not hide a capacity error", func(t *testing.T) {
+		unavailableOAuth := protectedOAuth
+		unavailableOAuth.Status = StatusDisabled
+		err := newService([]Account{unavailableOAuth}).mapOpenAIOAuthSessionPolicySelectionError(
+			ctx,
+			&blockedGroupID,
+			PlatformOpenAI,
+			"gpt-5.6",
+			nil,
+			OpenAIUpstreamTransportAny,
+			OpenAIEndpointCapabilityChatCompletions,
+			"",
+			false,
+			ErrNoAvailableAccounts,
+		)
+		require.ErrorIs(t, err, ErrNoAvailableAccounts)
+		require.False(t, errors.Is(err, ErrOpenAIOAuthSessionAccessDenied))
+	})
 }
 
 type schedulerTestConcurrencyCache struct {
@@ -155,7 +425,7 @@ func (c *schedulerTestGatewayCache) GetSessionAccountID(ctx context.Context, gro
 	if id, ok := c.sessionBindings[sessionHash]; ok {
 		return id, nil
 	}
-	return 0, errors.New("not found")
+	return 0, redis.Nil
 }
 
 func (c *schedulerTestGatewayCache) SetSessionAccountID(ctx context.Context, groupID int64, sessionHash string, accountID int64, ttl time.Duration) error {

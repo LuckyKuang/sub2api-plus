@@ -133,6 +133,12 @@ func (s *OpenAIGatewayService) getStickySessionAccountID(ctx context.Context, gr
 	if err == nil && accountID > 0 {
 		return accountID, nil
 	}
+	// OAuth session-sharing bindings deliberately live outside the API-key
+	// group namespace. Candidate validation still re-checks the account's
+	// whitelist before the binding can be used.
+	if sharedAccountID, sharedErr := s.getOpenAIOAuthSharedSessionAccountID(ctx, sessionHash); sharedErr == nil && sharedAccountID > 0 {
+		return sharedAccountID, nil
+	}
 	if !s.openAISessionHashReadOldFallbackEnabled() {
 		return accountID, err
 	}
@@ -188,6 +194,9 @@ func (s *OpenAIGatewayService) refreshStickySessionTTL(ctx context.Context, grou
 	}
 
 	err := s.cache.RefreshSessionTTL(ctx, derefGroupID(groupID), primaryKey, ttl)
+	// The shared binding is best effort. Keeping it alive preserves a cache hit
+	// when a user switches to another API key in the authorized group set.
+	_ = s.refreshOpenAIOAuthSharedSession(ctx, sessionHash, ttl)
 	if !s.openAISessionHashReadOldFallbackEnabled() && !s.openAISessionHashDualWriteOldEnabled() {
 		return err
 	}
@@ -209,6 +218,9 @@ func (s *OpenAIGatewayService) deleteStickySessionAccountID(ctx context.Context,
 	}
 
 	err := s.cache.DeleteSessionAccountID(ctx, derefGroupID(groupID), primaryKey)
+	if s.shouldDeleteOpenAIOAuthSharedSession(ctx, groupID, sessionHash) {
+		_ = s.deleteOpenAIOAuthSharedSession(ctx, sessionHash)
+	}
 	if !s.openAISessionHashReadOldFallbackEnabled() && !s.openAISessionHashDualWriteOldEnabled() {
 		return err
 	}
@@ -218,4 +230,20 @@ func (s *OpenAIGatewayService) deleteStickySessionAccountID(ctx context.Context,
 		_ = s.cache.DeleteSessionAccountID(ctx, derefGroupID(groupID), legacyKey)
 	}
 	return err
+}
+
+// shouldDeleteOpenAIOAuthSharedSession prevents an API key outside an OAuth
+// account's allowlist from evicting a shared sticky binding that belongs to
+// authorized groups. The caller's own group-scoped cache entry is still
+// removed above, while stale or authorized shared bindings remain removable.
+func (s *OpenAIGatewayService) shouldDeleteOpenAIOAuthSharedSession(ctx context.Context, groupID *int64, sessionHash string) bool {
+	accountID, err := s.getOpenAIOAuthSharedSessionAccountID(ctx, sessionHash)
+	if err != nil || accountID <= 0 {
+		return true
+	}
+	account, err := s.getSchedulableAccount(ctx, accountID)
+	if err != nil || account == nil {
+		return true
+	}
+	return !account.IsOpenAIOAuthSessionSharingEnabled() || account.IsOpenAIOAuthSessionGroupAllowed(groupID)
 }

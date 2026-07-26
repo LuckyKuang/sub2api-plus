@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -41,9 +42,13 @@ func (h *OpenAIGatewayHandler) CodexModels(c *gin.Context) {
 	var lastUpstreamErr error
 
 	for {
-		account, err := h.gatewayService.SelectAccountForModelWithExclusions(c.Request.Context(), apiKey.GroupID, "", "", failedAccountIDs)
+		account, err := h.gatewayService.SelectAccountForCodexModelsWithExclusions(c.Request.Context(), apiKey.GroupID, failedAccountIDs)
 		if err != nil {
 			if c.Request.Context().Err() != nil {
+				return
+			}
+			if errors.Is(err, service.ErrOpenAIOAuthSessionAccessDenied) {
+				h.errorResponse(c, http.StatusForbidden, "permission_error", err.Error())
 				return
 			}
 			if lastUpstreamErr != nil {

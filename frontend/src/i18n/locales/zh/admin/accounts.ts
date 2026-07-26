@@ -44,6 +44,7 @@ export default {
       dataImportFailed: '数据导入失败',
       dataImportResult: '导入结果',
       dataImportResultSummary: '代理创建 {proxy_created}，复用 {proxy_reused}，失败 {proxy_failed}；账号创建 {account_created}，失败 {account_failed}',
+      dataImportWarnings: '导入提示',
       dataImportErrors: '失败详情',
       dataImportSuccess: '导入完成：账号 {account_created}，失败 {account_failed}',
       dataImportCompletedWithErrors: '导入完成但有错误：账号失败 {account_failed}，代理失败 {proxy_failed}',
@@ -559,6 +560,9 @@ export default {
         oauthPassthrough: '自动透传（仅替换认证）',
         oauthPassthroughDesc:
           '开启后，该 OpenAI 账号将自动透传请求与响应，仅替换认证并保留计费/并发/审计及必要安全过滤；如遇兼容性问题可随时关闭回滚。',
+        oauthSessionSharing: 'OAuth 会话共享白名单',
+        oauthSessionSharingDesc: '仅允许关联分组中的 API Key 使用此 OAuth 账号，并在这些分组间续接同一上游会话。',
+        oauthSessionSharingGroupsHint: '当前账号的关联分组即白名单；保存时必须至少选择一个分组。白名单外的请求不会发送到上游。',
         longContextBilling: 'API 长上下文计费',
         longContextBillingDesc: '默认关闭。仅当该账号的上游会按模型阈值收取 OpenAI API 长上下文费率时开启。',
         responsesWebsocketsV2: 'Responses WebSocket v2',

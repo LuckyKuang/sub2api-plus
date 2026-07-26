@@ -159,7 +159,33 @@ func (s *OpenAIGatewayService) BindStickySession(ctx context.Context, groupID *i
 	if s != nil && s.cfg != nil && s.cfg.Gateway.OpenAIWS.StickySessionTTLSeconds > 0 {
 		ttl = time.Duration(s.cfg.Gateway.OpenAIWS.StickySessionTTLSeconds) * time.Second
 	}
-	return s.setStickySessionAccountID(ctx, groupID, sessionHash, accountID, ttl)
+	// Read through the scheduler snapshot when available. This is a hot in-memory
+	// lookup in production and lets only opt-in OAuth accounts create the shared
+	// cross-group binding.
+	account, err := s.getSchedulableAccount(ctx, accountID)
+	if err != nil || account == nil {
+		return s.setStickySessionAccountID(ctx, groupID, sessionHash, accountID, ttl)
+	}
+	return s.bindOpenAIStickySessionAccount(ctx, groupID, sessionHash, account, ttl)
+}
+
+// bindOpenAIStickySessionAccount keeps the established group-local binding as
+// the source of truth. The OAuth cross-group binding is additive, so a Redis
+// failure on that second write must not make an otherwise usable account fail.
+func (s *OpenAIGatewayService) bindOpenAIStickySessionAccount(ctx context.Context, groupID *int64, sessionHash string, account *Account, ttl time.Duration) error {
+	if account == nil || sessionHash == "" || account.ID <= 0 {
+		return nil
+	}
+	if err := s.setStickySessionAccountID(ctx, groupID, sessionHash, account.ID, ttl); err != nil {
+		return err
+	}
+	if err := s.bindOpenAIOAuthSharedSession(ctx, groupID, sessionHash, account, ttl); err != nil {
+		slog.WarnContext(ctx, "failed to bind optional OpenAI OAuth shared session",
+			"account_id", account.ID,
+			"group_id", derefGroupID(groupID),
+			"error", err)
+	}
+	return nil
 }
 
 // SelectAccount selects an OpenAI account with sticky session support
@@ -176,6 +202,29 @@ func (s *OpenAIGatewayService) SelectAccountForModel(ctx context.Context, groupI
 // SelectAccountForModelWithExclusions 选择支持指定模型的账号，同时排除指定的账号。
 func (s *OpenAIGatewayService) SelectAccountForModelWithExclusions(ctx context.Context, groupID *int64, sessionHash string, requestedModel string, excludedIDs map[int64]struct{}) (*Account, error) {
 	return s.selectAccountForModelWithExclusions(s.withOpenAIQuotaAutoPauseContext(ctx), groupID, PlatformOpenAI, sessionHash, requestedModel, excludedIDs, false, 0, "", false)
+}
+
+// SelectAccountForCodexModelsWithExclusions preserves the lightweight legacy
+// selector used by the models manifest while adding the same explicit OAuth
+// allowlist denial returned by the request-forwarding schedulers.
+func (s *OpenAIGatewayService) SelectAccountForCodexModelsWithExclusions(ctx context.Context, groupID *int64, excludedIDs map[int64]struct{}) (*Account, error) {
+	ctx = s.withOpenAIQuotaAutoPauseContext(ctx)
+	account, err := s.selectAccountForModelWithExclusions(ctx, groupID, PlatformOpenAI, "", "", excludedIDs, false, 0, "", false)
+	if err != nil || account == nil {
+		return account, s.mapOpenAIOAuthSessionPolicySelectionError(
+			ctx,
+			groupID,
+			PlatformOpenAI,
+			"",
+			excludedIDs,
+			OpenAIUpstreamTransportAny,
+			"",
+			"",
+			false,
+			err,
+		)
+	}
+	return account, nil
 }
 
 // noAvailableOpenAISelectionError builds the standard "no account available" error
@@ -656,7 +705,7 @@ func (s *OpenAIGatewayService) selectAccountForModelWithExclusions(ctx context.C
 	// 4. 设置粘性会话绑定
 	// Set sticky session binding
 	if sessionHash != "" {
-		_ = s.setStickySessionAccountID(ctx, groupID, sessionHash, selected.ID, openaiStickySessionTTL)
+		_ = s.bindOpenAIStickySessionAccount(ctx, groupID, sessionHash, hydrated, openaiStickySessionTTL)
 	}
 
 	return hydrated, nil
@@ -748,6 +797,12 @@ func (s *OpenAIGatewayService) selectBestAccount(ctx context.Context, groupID *i
 		// 跳过被排除的账号
 		// Skip excluded accounts
 		if _, excluded := excludedIDs[acc.ID]; excluded {
+			continue
+		}
+		// listSchedulableAccounts already applies ordinary group membership, and
+		// lightweight rows do not always hydrate GroupIDs. Only the new OAuth
+		// policy can add another denial at this pre-filter stage.
+		if !openAIOAuthSessionPolicyAllowsSchedulingGroup(acc, groupID) {
 			continue
 		}
 
@@ -965,6 +1020,9 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 		if isExcluded(acc.ID) {
 			continue
 		}
+		if !openAIOAuthSessionPolicyAllowsSchedulingGroup(acc, groupID) {
+			continue
+		}
 		// Scheduler snapshots can be temporarily stale (bucket rebuild is throttled);
 		// re-check schedulability here so recently rate-limited/overloaded accounts
 		// are not selected again before the bucket is rebuilt.
@@ -1083,7 +1141,7 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 					return nil, true, selectErr
 				}
 				if sessionHash != "" {
-					_ = s.setStickySessionAccountID(ctx, groupID, sessionHash, fresh.ID, openaiStickySessionTTL)
+					_ = s.bindOpenAIStickySessionAccount(ctx, groupID, sessionHash, fresh, openaiStickySessionTTL)
 				}
 				return selection, true, nil
 			}
@@ -1122,7 +1180,7 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 					return nil, selectErr
 				}
 				if sessionHash != "" {
-					_ = s.setStickySessionAccountID(ctx, groupID, sessionHash, fresh.ID, openaiStickySessionTTL)
+					_ = s.bindOpenAIStickySessionAccount(ctx, groupID, sessionHash, fresh, openaiStickySessionTTL)
 				}
 				return selection, nil
 			}
@@ -1292,10 +1350,24 @@ func (s *OpenAIGatewayService) recheckSelectedOpenAIAccountFromDB(ctx context.Co
 }
 
 func (s *OpenAIGatewayService) openAIAccountMatchesSchedulingGroup(account *Account, groupID *int64) bool {
+	if account == nil {
+		return false
+	}
+	// Once enabled, the validated policy is the authoritative routing domain and
+	// exactly mirrors the account's persisted group bindings. Do not make Codex
+	// availability depend on whether a lightweight scheduler row hydrated those
+	// bindings again.
+	if account.IsOpenAIOAuthSessionSharingEnabled() {
+		return account.IsOpenAIOAuthSessionGroupAllowed(groupID)
+	}
 	if s != nil && s.cfg != nil && s.cfg.RunMode == config.RunModeSimple {
-		return account != nil
+		return true
 	}
 	return openAIStickyAccountMatchesGroup(account, groupID)
+}
+
+func openAIOAuthSessionPolicyAllowsSchedulingGroup(account *Account, groupID *int64) bool {
+	return account != nil && (!account.IsOpenAIOAuthSessionSharingEnabled() || account.IsOpenAIOAuthSessionGroupAllowed(groupID))
 }
 
 func (s *OpenAIGatewayService) getSchedulableAccount(ctx context.Context, accountID int64) (*Account, error) {

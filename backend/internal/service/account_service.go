@@ -131,6 +131,18 @@ type AccountDuplicateRepository interface {
 	CreateWithAccountGroups(ctx context.Context, account *Account, groups []AccountGroup) error
 }
 
+// OpenAIOAuthPolicyTransactionRepository runs all writes that define one OAuth
+// credential's session-sharing boundary in a single database transaction.
+// Implementations must not fall back to independent writes when the callback
+// fails: the parent account, its group bindings, and every Spark shadow are one
+// authorization unit.
+type OpenAIOAuthPolicyTransactionRepository interface {
+	RunOpenAIOAuthPolicyTransaction(
+		ctx context.Context,
+		fn func(context.Context, AccountRepository) error,
+	) error
+}
+
 // AdminAccountRepository makes the account-duplication write capability an explicit
 // construction dependency without forcing read-only gateway test doubles to implement it.
 type AdminAccountRepository interface {

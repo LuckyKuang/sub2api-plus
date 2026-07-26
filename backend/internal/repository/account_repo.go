@@ -49,6 +49,10 @@ type accountRepository struct {
 	// Used to proactively sync account snapshot to cache when status changes,
 	// ensuring sticky sessions can promptly detect unavailable accounts.
 	schedulerCache service.SchedulerCache
+	// transactionAccountIDs is non-nil only on a short-lived repository bound
+	// to a caller-owned transaction. It records snapshots that must be refreshed
+	// after commit, never before the authorization transaction is durable.
+	transactionAccountIDs map[int64]struct{}
 }
 
 var schedulerNeutralExtraKeyPrefixes = []string{
@@ -87,6 +91,66 @@ func newAccountRepositoryWithSQL(client *dbent.Client, sqlq sqlExecutor, schedul
 	return &accountRepository{client: client, sql: sqlq, schedulerCache: schedulerCache}
 }
 
+// RunOpenAIOAuthPolicyTransaction makes an OAuth session policy, the account's
+// exact group bindings, and all credential-sharing Spark shadows atomic. The
+// callback receives a repository whose Ent and raw-SQL paths both use the same
+// transaction, including scheduler outbox writes.
+func (r *accountRepository) RunOpenAIOAuthPolicyTransaction(
+	ctx context.Context,
+	fn func(context.Context, service.AccountRepository) error,
+) error {
+	if fn == nil {
+		return nil
+	}
+	if existingTx := dbent.TxFromContext(ctx); existingTx != nil {
+		txClient := existingTx.Client()
+		txRepo := &accountRepository{
+			client:                txClient,
+			sql:                   txClient,
+			schedulerCache:        r.schedulerCache,
+			transactionAccountIDs: make(map[int64]struct{}),
+		}
+		if err := fn(ctx, txRepo); err != nil {
+			return err
+		}
+		for accountID := range txRepo.transactionAccountIDs {
+			r.markTransactionAccountChanged(accountID)
+		}
+		return nil
+	}
+
+	tx, err := r.client.Tx(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	txClient := tx.Client()
+	txRepo := &accountRepository{
+		client:                txClient,
+		sql:                   txClient,
+		schedulerCache:        r.schedulerCache,
+		transactionAccountIDs: make(map[int64]struct{}),
+	}
+	txCtx := dbent.NewTxContext(ctx, tx)
+	if err := fn(txCtx, txRepo); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	for accountID := range txRepo.transactionAccountIDs {
+		r.syncSchedulerAccountSnapshot(ctx, accountID)
+	}
+	return nil
+}
+
+func (r *accountRepository) markTransactionAccountChanged(accountID int64) {
+	if r != nil && r.transactionAccountIDs != nil && accountID > 0 {
+		r.transactionAccountIDs[accountID] = struct{}{}
+	}
+}
+
 func (r *accountRepository) Create(ctx context.Context, account *service.Account) error {
 	if err := createAccountRecord(ctx, r.client, account); err != nil {
 		return err
@@ -94,6 +158,7 @@ func (r *accountRepository) Create(ctx context.Context, account *service.Account
 	if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventAccountChanged, &account.ID, nil, buildSchedulerGroupPayload(account.GroupIDs)); err != nil {
 		logger.LegacyPrintf("repository.account", "[SchedulerOutbox] enqueue account create failed: account=%d err=%v", account.ID, err)
 	}
+	r.markTransactionAccountChanged(account.ID)
 	return nil
 }
 
@@ -211,6 +276,7 @@ func (r *accountRepository) CreateWithAccountGroups(ctx context.Context, account
 	if err := enqueueSchedulerOutbox(ctx, txClient, service.SchedulerOutboxEventAccountChanged, &account.ID, nil, buildSchedulerGroupPayload(groupIDs)); err != nil {
 		return err
 	}
+	r.markTransactionAccountChanged(account.ID)
 
 	if tx != nil {
 		if err := tx.Commit(); err != nil {
@@ -437,6 +503,7 @@ func (r *accountRepository) updateAccount(ctx context.Context, account *service.
 	if err := enqueueSchedulerOutbox(ctx, client, service.SchedulerOutboxEventAccountChanged, &account.ID, nil, buildSchedulerGroupPayload(account.GroupIDs)); err != nil {
 		return err
 	}
+	r.markTransactionAccountChanged(account.ID)
 	if tx != nil {
 		if err := tx.Commit(); err != nil {
 			return err
@@ -1728,24 +1795,19 @@ func (r *accountRepository) BindGroups(ctx context.Context, accountID int64, gro
 		return err
 	}
 
-	if len(groupIDs) == 0 {
-		if tx != nil {
-			return tx.Commit()
+	if len(groupIDs) > 0 {
+		builders := make([]*dbent.AccountGroupCreate, 0, len(groupIDs))
+		for i, groupID := range groupIDs {
+			builders = append(builders, txClient.AccountGroup.Create().
+				SetAccountID(accountID).
+				SetGroupID(groupID).
+				SetPriority(i+1),
+			)
 		}
-		return nil
-	}
 
-	builders := make([]*dbent.AccountGroupCreate, 0, len(groupIDs))
-	for i, groupID := range groupIDs {
-		builders = append(builders, txClient.AccountGroup.Create().
-			SetAccountID(accountID).
-			SetGroupID(groupID).
-			SetPriority(i+1),
-		)
-	}
-
-	if _, err := txClient.AccountGroup.CreateBulk(builders...).Save(ctx); err != nil {
-		return err
+		if _, err := txClient.AccountGroup.CreateBulk(builders...).Save(ctx); err != nil {
+			return err
+		}
 	}
 
 	if tx != nil {
@@ -1755,8 +1817,15 @@ func (r *accountRepository) BindGroups(ctx context.Context, accountID int64, gro
 	}
 	payload := buildSchedulerGroupPayload(mergeGroupIDs(existingGroupIDs, groupIDs))
 	if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventAccountGroupsChanged, &accountID, nil, payload); err != nil {
+		// An OAuth session-policy transaction treats routing metadata as part of
+		// the authorization boundary. Let the outer transaction roll back rather
+		// than committing group changes that other scheduler instances cannot see.
+		if r.transactionAccountIDs != nil {
+			return err
+		}
 		logger.LegacyPrintf("repository.account", "[SchedulerOutbox] enqueue bind groups failed: account=%d err=%v", accountID, err)
 	}
+	r.markTransactionAccountChanged(accountID)
 	return nil
 }
 
