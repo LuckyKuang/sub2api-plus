@@ -112,19 +112,19 @@ For local secondary development when the Apple Builder is unavailable, build a L
 
 ### Custom Image Version
 
-The application version for this custom branch is `v0.1.164+custom.004`.
-Use Docker's tag-safe equivalent, `ghcr.io/luckykuang/sub2api-plus:0.1.164-custom.004`, when building
+The application version for this custom branch is `v0.1.164+custom.005`.
+Use Docker's tag-safe equivalent, `ghcr.io/luckykuang/sub2api-plus:0.1.164-custom.005`, when building
 or publishing an OCI image:
 
 ```bash
 docker build \
-  --build-arg VERSION=0.1.164+custom.004 \
-  --tag ghcr.io/luckykuang/sub2api-plus:0.1.164-custom.004 \
+  --build-arg VERSION=0.1.164+custom.005 \
+  --tag ghcr.io/luckykuang/sub2api-plus:0.1.164-custom.005 \
   .
 ```
 
 After that image is available to the Apple `container` runtime, set
-`APPLE_CONTAINER_SUB2API_IMAGE=ghcr.io/luckykuang/sub2api-plus:0.1.164-custom.004`. Until then, keep
+`APPLE_CONTAINER_SUB2API_IMAGE=ghcr.io/luckykuang/sub2api-plus:0.1.164-custom.005`. Until then, keep
 the published image as the runtime base and use `APPLE_CONTAINER_SUB2API_BINARY`
 for the custom binary.
 

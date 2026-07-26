@@ -17,7 +17,7 @@ English | [中文](README_CN.md) | [日本語](README_JA.md)
 </div>
 
 > Sub2API Plus is an independently maintained community fork and derivative
-> work based on [Wei-Shaw/sub2api](https://github.com/Wei-Shaw/sub2api).
+> work based on the original Sub2API project.
 > It is not an official upstream release and is not affiliated with, endorsed
 > by, or supported by the upstream project.
 
@@ -45,15 +45,6 @@ Sub2API Plus is an AI API gateway platform designed to distribute and manage API
 - **Admin Dashboard** - Web interface for monitoring and management
 - **Composite Groups** - Admin routing layer that resolves requested models to concrete providers for multi-provider groups ([Operator Guide](docs/COMPOSITE_GROUPS.md))
 - **External System Integration** - Embed external systems (e.g. ticketing) via iframe to extend the admin dashboard
-
-## Ecosystem
-
-Community projects that extend or integrate with Sub2API Plus:
-
-| Project | Description | Features |
-|---------|-------------|----------|
-| ~~[Sub2ApiPay](https://github.com/touwaeriol/sub2apipay)~~ | ~~Self-service payment system~~ | **Now Built-in** — Payment is now integrated into Sub2API Plus, no separate deployment needed. See [Payment Configuration Guide](docs/PAYMENT.md) |
-| [sub2api-mobile](https://github.com/ckken/sub2api-mobile) | Mobile admin console | Cross-platform app (iOS/Android/Web) for user management, account management, monitoring dashboard, and multi-backend switching; built with Expo + React Native |
 
 ## Tech Stack
 

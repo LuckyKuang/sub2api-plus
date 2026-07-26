@@ -13,7 +13,7 @@ Sub2API Plus has a built-in payment system that enables user self-service top-up
 - [Provider Instance Management](#provider-instance-management)
 - [Webhook Configuration](#webhook-configuration)
 - [Payment Flow](#payment-flow)
-- [Migrating from Sub2ApiPay](#migrating-from-sub2apipay)
+- [Migrating from a Legacy External Payment Service](#migrating-from-a-legacy-external-payment-service)
 
 ---
 
@@ -260,13 +260,13 @@ User selects amount and payment method
 
 ---
 
-## Migrating from Sub2ApiPay
+## Migrating from a Legacy External Payment Service
 
-If you previously used [Sub2ApiPay](https://github.com/touwaeriol/sub2apipay) as an external payment system, you can migrate to the built-in payment system:
+If you previously used a legacy external payment service, you can migrate to the built-in payment system:
 
 ### Key Differences
 
-| Aspect | Sub2ApiPay | Built-in Payment |
+| Aspect | Legacy external service | Built-in Payment |
 |--------|-----------|-----------------|
 | Deployment | Separate service (Next.js + PostgreSQL) | Built into Sub2API Plus, no extra deployment |
 | Payment Methods | EasyPay, Alipay, WeChat, Stripe | Same |
@@ -280,6 +280,6 @@ If you previously used [Sub2ApiPay](https://github.com/touwaeriol/sub2apipay) as
 1. Enable payment in Sub2API Plus admin dashboard and configure providers (use the same payment credentials)
 2. Update webhook callback URLs to Sub2API Plus's callback endpoints
 3. Verify that new orders are processed correctly via built-in payment
-4. Decommission the Sub2ApiPay service
+4. Decommission the legacy external payment service
 
-> **Note**: Historical order data from Sub2ApiPay will not be automatically migrated. Keep Sub2ApiPay running for a while to access historical records.
+> **Note**: Historical order data from a legacy external payment service will not be automatically migrated. Keep that service available for a while to access historical records.

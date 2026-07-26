@@ -1289,7 +1289,6 @@ export default {
         pasteYaml: 'Paste YAML Configuration',
         pasteYamlPlaceholder: 'Paste YAML output from TLS Fingerprint Collector here...',
         pasteYamlHint: 'Paste the YAML copied from TLS Fingerprint Collector to auto-fill all fields.',
-        openCollector: 'Open Collector',
         parseYaml: 'Parse YAML',
         yamlParsed: 'YAML parsed successfully, fields auto-filled',
         yamlParseFailed: 'Failed to parse YAML: name field not found',

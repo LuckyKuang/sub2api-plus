@@ -177,7 +177,7 @@ func (h *RedeemHandler) CreateAndRedeem(c *gin.Context) {
 		return
 	}
 	req.Code = strings.TrimSpace(req.Code)
-	// 向后兼容：旧版调用方（如 Sub2ApiPay）不传 type 字段，默认当作 balance 充值处理。
+	// 向后兼容：旧版外部支付调用方不传 type 字段，默认当作 balance 充值处理。
 	// 请勿删除此默认值逻辑，否则会导致旧版调用方 400 报错。
 	if req.Type == "" {
 		req.Type = "balance"

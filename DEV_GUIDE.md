@@ -1,4 +1,4 @@
-# sub2api 项目开发指南
+# Sub2API Plus 项目开发指南
 
 > 本文档记录项目环境配置、常见坑点和注意事项，供 Claude Code 和团队成员参考。
 
@@ -6,8 +6,8 @@
 
 | 项目 | 说明 |
 |------|------|
-| **上游仓库** | Wei-Shaw/sub2api |
-| **Fork 仓库** | luckykuang/sub2api-plus |
+| **当前仓库** | luckykuang/sub2api-plus |
+| **上游同步说明** | 见 [UPSTREAM.md](UPSTREAM.md) |
 | **技术栈** | Go 后端 (Ent ORM + Gin) + Vue3 前端 (pnpm) |
 | **数据库** | PostgreSQL 16 + Redis |
 | **包管理** | 后端: go modules, 前端: **pnpm**（不是 npm） |
@@ -340,7 +340,8 @@ sub2api-bmai/
 
 ## 七、参考资源
 
-- [上游仓库](https://github.com/Wei-Shaw/sub2api)
+- [当前仓库](https://github.com/luckykuang/sub2api-plus)
+- [上游同步记录](UPSTREAM.md)
 - [Ent 文档](https://entgo.io/docs/getting-started)
 - [Vue3 文档](https://vuejs.org/)
 - [pnpm 文档](https://pnpm.io/)

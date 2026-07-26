@@ -16,8 +16,8 @@
 
 </div>
 
-> Sub2API Plus 是基于 [Wei-Shaw/sub2api](https://github.com/Wei-Shaw/sub2api)
-> 的独立社区维护分支（二次开发版本）。本项目不是上游官方发布版本，
+> Sub2API Plus 是基于原始 Sub2API 项目的独立社区维护分支（二次开发版本）。
+> 本项目不是上游官方发布版本，
 > 不代表上游立场，也不获得上游的品牌、商标、合作或背书授权。
 
 
@@ -44,15 +44,6 @@ Sub2API Plus 是一个 AI API 网关平台，用于分发和管理 AI 产品订�
 - **内置支付系统** - 支持 EasyPay 易支付、支付宝官方、微信官方、Stripe，用户自助充值，无需独立部署支付服务（[配置指南](docs/PAYMENT_CN.md)）
 - **管理后台** - Web 界面进行监控和管理
 - **外部系统集成** - 支持通过 iframe 嵌入外部系统（如工单等），扩展管理后台功能
-
-## 生态项目
-
-围绕 Sub2API Plus 的社区扩展与集成项目：
-
-| 项目 | 说明 | 功能 |
-|------|------|------|
-| ~~[Sub2ApiPay](https://github.com/touwaeriol/sub2apipay)~~ | ~~自助支付系统~~ | **已内置** — 支付功能已集成到 Sub2API Plus 中，无需独立部署。详见 [支付配置指南](docs/PAYMENT_CN.md) |
-| [sub2api-mobile](https://github.com/ckken/sub2api-mobile) | 移动端管理控制台 | 跨平台应用（iOS/Android/Web），支持用户管理、账号管理、监控看板、多后端切换；基于 Expo + React Native 构建 |
 
 ## 技术栈
 

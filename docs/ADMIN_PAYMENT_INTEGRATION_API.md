@@ -7,7 +7,7 @@
 ## 中文
 
 ### 目标
-本文档用于对接外部支付系统（如 `sub2apipay`）与 Sub2API Plus 的 Admin API，覆盖：
+本文档用于对接外部支付系统（例如旧版外部支付服务）与 Sub2API Plus 的 Admin API，覆盖：
 - 支付成功后充值
 - 用户查询
 - 人工余额修正
@@ -41,7 +41,7 @@
   "type": "balance",
   "value": 100.0,
   "user_id": 123,
-  "notes": "sub2apipay order: cm1234567890"
+  "notes": "external-payment order: cm1234567890"
 }
 ```
 
@@ -61,7 +61,7 @@ curl -X POST "${BASE}/api/v1/admin/redeem-codes/create-and-redeem" \
     "type":"balance",
     "value":100.00,
     "user_id":123,
-    "notes":"sub2apipay order: cm1234567890"
+    "notes":"external-payment order: cm1234567890"
   }'
 ```
 
@@ -127,7 +127,7 @@ https://pay.example.com/pay?user_id=123&token=<jwt>&theme=light&lang=zh&ui_mode=
 ## English
 
 ### Purpose
-This document describes the minimal Sub2API Plus Admin API surface for external payment integrations (for example, `sub2apipay`), including:
+This document describes the minimal Sub2API Plus Admin API surface for external payment integrations (for example, a legacy external payment service), including:
 - Recharge after payment success
 - User lookup
 - Manual balance correction
@@ -161,7 +161,7 @@ Request body:
   "type": "balance",
   "value": 100.0,
   "user_id": 123,
-  "notes": "sub2apipay order: cm1234567890"
+  "notes": "external-payment order: cm1234567890"
 }
 ```
 
@@ -181,7 +181,7 @@ curl -X POST "${BASE}/api/v1/admin/redeem-codes/create-and-redeem" \
     "type":"balance",
     "value":100.00,
     "user_id":123,
-    "notes":"sub2apipay order: cm1234567890"
+    "notes":"external-payment order: cm1234567890"
   }'
 ```
 

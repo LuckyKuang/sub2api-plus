@@ -1283,7 +1283,6 @@ export default {
         pasteYaml: '粘贴 YAML 配置',
         pasteYamlPlaceholder: '将 TLS 指纹采集器复制的 YAML 粘贴到这里...',
         pasteYamlHint: '粘贴从 TLS 指纹采集器复制的 YAML 配置，自动填充所有字段。',
-        openCollector: '打开采集器',
         parseYaml: '解析 YAML',
         yamlParsed: 'YAML 解析成功，字段已自动填充',
         yamlParseFailed: 'YAML 解析失败：未找到 name 字段',
