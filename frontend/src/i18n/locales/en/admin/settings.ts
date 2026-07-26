@@ -389,7 +389,7 @@ export default {
         antigravityUserAgentVersionPlaceholder: '1.23.2',
         antigravityUserAgentVersionHint: 'Leave empty to use ANTIGRAVITY_USER_AGENT_VERSION or the built-in default 1.23.2; when set, the admin setting takes precedence.',
         openaiCodexUserAgent: 'OpenAI Codex UA',
-        openaiCodexUserAgentPlaceholder: 'codex-tui/0.144.1 (Ubuntu 22.4.0; x86_64) xterm-256color (codex-tui; 0.144.1)',
+        openaiCodexUserAgentPlaceholder: 'codex-tui/0.145.0 (Ubuntu 22.4.0; x86_64) xterm-256color (codex-tui; 0.145.0)',
         openaiCodexUserAgentHint: 'Global Codex User-Agent for OpenAI upstream requests. A valid account-specific Codex UA takes precedence; missing or invalid account values fall back to this setting, then the built-in default. Browser UAs and generic Header Overrides are never forwarded.',
         codexHardeningTitle: "Codex Settings",
         codexClientRestrictionTitle: "Codex client restriction",

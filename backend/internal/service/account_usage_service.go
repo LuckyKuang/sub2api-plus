@@ -113,7 +113,7 @@ const (
 	openAIProbeCacheTTL     = 10 * time.Minute
 	grokProbeRetryTTL       = 1 * time.Minute
 	grokFreeQuotaWindow     = 24 * time.Hour
-	openAICodexProbeVersion = "0.144.1"
+	openAICodexProbeVersion = codexCLIVersion
 )
 
 // UsageCache 封装账户使用量相关的缓存

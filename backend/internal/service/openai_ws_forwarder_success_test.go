@@ -754,27 +754,22 @@ func TestOpenAIGatewayService_Forward_WSv2_OAuthStoreFalseByDefault(t *testing.T
 	require.Equal(t, isolateOpenAISessionID(0, "conv-oauth-1"), captureDialer.lastHeaders.Get("conversation_id"))
 }
 
-func TestOpenAIGatewayService_Forward_WSv2_OAuthOriginatorCompatibility(t *testing.T) {
+func TestOpenAIGatewayService_Forward_WSv2_OAuthUsesControlledOutboundIdentity(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	// 上游要求 originator 与最终 user-agent 首段配套（issue #3901）：
-	// originator 一律由最终 UA 推导；推导不出官方身份时整体回退默认 Codex CLI 身份。
+	// WSv2 与 HTTP 一样，入站 UA 不能覆盖账号/系统确定的上游身份。
 	tests := []struct {
-		name           string
-		userAgent      string
-		originator     string
-		wantOriginator string
-		wantUA         string
+		name       string
+		userAgent  string
+		originator string
 	}{
-		{name: "official ua pairs originator", userAgent: "Codex Desktop/1.2.3", wantOriginator: "Codex Desktop", wantUA: "Codex Desktop/1.2.3"},
+		{name: "official inbound ua", userAgent: "Codex Desktop/1.2.3"},
 		{
-			name:           "mismatched originator repaired from ua",
-			userAgent:      "codex-tui/0.140.2 (Mac OS X 14.0; arm64) iTerm (codex-tui; 0.140.2)",
-			originator:     "codex_cli_rs",
-			wantOriginator: "codex-tui",
-			wantUA:         "codex-tui/0.140.2 (Mac OS X 14.0; arm64) iTerm (codex-tui; 0.140.2)",
+			name:       "mismatched inbound originator",
+			userAgent:  "codex-tui/0.140.2 (Mac OS X 14.0; arm64) iTerm (codex-tui; 0.140.2)",
+			originator: "codex_cli_rs",
 		},
-		{name: "official originator without ua falls back to default identity", originator: "codex_vscode", wantOriginator: "codex_cli_rs", wantUA: codexCLIUserAgent},
+		{name: "originator without ua", originator: "codex_vscode"},
 	}
 
 	for _, tt := range tests {
@@ -838,8 +833,9 @@ func TestOpenAIGatewayService_Forward_WSv2_OAuthOriginatorCompatibility(t *testi
 			result, err := svc.Forward(context.Background(), c, account, body)
 			require.NoError(t, err)
 			require.NotNil(t, result)
-			require.Equal(t, tt.wantOriginator, captureDialer.lastHeaders.Get("originator"))
-			require.Equal(t, tt.wantUA, captureDialer.lastHeaders.Get("user-agent"))
+			require.Equal(t, "codex-tui", captureDialer.lastHeaders.Get("originator"))
+			require.Equal(t, DefaultOpenAICodexUserAgent, captureDialer.lastHeaders.Get("user-agent"))
+			require.Equal(t, codexCLIVersion, captureDialer.lastHeaders.Get("version"))
 		})
 	}
 }

@@ -10,6 +10,8 @@ import (
 )
 
 func TestCodexVersionConstants_Consistency(t *testing.T) {
+	require.Equal(t, "0.145.0", codexDefaultVersion,
+		"the compiled-in Codex identity version must track the current default")
 	require.Equal(t, codexCLIVersion, openAICodexProbeVersion,
 		"codexCLIVersion and openAICodexProbeVersion must stay in sync")
 

@@ -382,7 +382,7 @@ export default {
         antigravityUserAgentVersionPlaceholder: '1.23.2',
         antigravityUserAgentVersionHint: '留空时使用 ANTIGRAVITY_USER_AGENT_VERSION 或内置默认值 1.23.2；填写后后台设置优先。',
         openaiCodexUserAgent: 'OpenAI Codex UA',
-        openaiCodexUserAgentPlaceholder: 'codex-tui/0.144.1 (Ubuntu 22.4.0; x86_64) xterm-256color (codex-tui; 0.144.1)',
+        openaiCodexUserAgentPlaceholder: 'codex-tui/0.145.0 (Ubuntu 22.4.0; x86_64) xterm-256color (codex-tui; 0.145.0)',
         openaiCodexUserAgentHint: 'OpenAI 上游的全局 Codex User-Agent。账号设置了合法 Codex UA 时优先使用账号值；账号未设置或格式无效时使用此值，留空使用内置默认值。浏览器 UA 与通用 Header Override 不会透传。',
         codexHardeningTitle: 'Codex 设置',
         codexClientRestrictionTitle: 'Codex 客户端限制',
