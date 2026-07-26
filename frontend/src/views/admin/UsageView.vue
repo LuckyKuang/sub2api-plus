@@ -157,6 +157,7 @@
             :end-date="endDate"
             :filters="breakdownFilters"
             :model="filters.model"
+            :total-tokens="usageStats?.total_tokens ?? 0"
             @select-user="handleRankingSelectUser"
           />
         </div>

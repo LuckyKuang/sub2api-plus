@@ -65,6 +65,7 @@ const sampleResponse = {
     },
   ],
   total: 40,
+  total_output_tokens: 12340,
   page: 1,
   page_size: 20,
   top_n: null,

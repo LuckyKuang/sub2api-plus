@@ -140,7 +140,7 @@
                   {{ formatNumber(model.requests) }}
                 </td>
                 <td class="py-1.5 text-right text-gray-600 dark:text-gray-400">
-                  {{ formatTokens(model.total_tokens) }}
+                  {{ formatTokens(model.total_tokens) }} <span v-if="modelTokenShare(model.total_tokens)" class="text-gray-400">({{ modelTokenShare(model.total_tokens) }})</span>
                 </td>
                 <td class="py-1.5 text-right text-green-600 dark:text-green-400">
                   ${{ formatCost(model.actual_cost) }}
@@ -158,6 +158,7 @@
                     :items="breakdownItems"
                     :loading="breakdownLoading"
                     :show-account-cost="showAccountCost"
+                    :total-tokens="model.total_tokens"
                   />
                 </td>
               </tr>
@@ -223,7 +224,7 @@
                 {{ formatNumber(item.requests) }}
               </td>
               <td class="py-1.5 text-right text-gray-600 dark:text-gray-400">
-                {{ formatTokens(item.tokens) }}
+                {{ formatTokens(item.tokens) }} <span v-if="rankingTokenShare(item.tokens)" class="text-gray-400">({{ rankingTokenShare(item.tokens) }})</span>
               </td>
               <td class="py-1.5 text-right text-green-600 dark:text-green-400">
                 ${{ formatCost(item.actual_cost) }}
@@ -251,6 +252,7 @@ import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import UserBreakdownSubTable from './UserBreakdownSubTable.vue'
 import type { ModelStat, UserSpendingRankingItem, UserBreakdownItem } from '@/types'
 import { getUserBreakdown } from '@/api/admin/dashboard'
+import { formatTokenShare } from '@/utils/tokenShare'
 
 ChartJS.register(ArcElement, Tooltip, Legend)
 
@@ -365,6 +367,16 @@ const displayModelStats = computed(() => {
   const metricKey = props.metric === 'actual_cost' ? 'actual_cost' : 'total_tokens'
   return [...sourceStats].sort((a, b) => toFiniteNumber(b[metricKey]) - toFiniteNumber(a[metricKey]))
 })
+
+const distributionTotalTokens = computed(() =>
+  displayModelStats.value.reduce((sum, model) => sum + toFiniteNumber(model.total_tokens), 0)
+)
+
+const modelTokenShare = (tokens: number | null | undefined): string | null =>
+  formatTokenShare(tokens, distributionTotalTokens.value)
+
+const rankingTokenShare = (tokens: number | null | undefined): string | null =>
+  formatTokenShare(tokens, props.rankingTotalTokens)
 
 const chartData = computed(() => {
   if (!displayModelStats.value.length) return null

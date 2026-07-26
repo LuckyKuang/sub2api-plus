@@ -35,6 +35,7 @@ import {
 import { Line } from 'vue-chartjs'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import type { TrendDataPoint } from '@/types'
+import { formatTokenShare, sumTokenBuckets } from '@/utils/tokenShare'
 
 ChartJS.register(
   CategoryScale,
@@ -149,7 +150,11 @@ const lineOptions = computed(() => ({
           if (context.dataset.yAxisID === 'yPercent') {
             return `${context.dataset.label}: ${context.raw.toFixed(1)}%`
           }
-          return `${context.dataset.label}: ${formatTokens(context.raw)}`
+          const point = props.trendData[context.dataIndex]
+          const totalTokens = point
+            ? sumTokenBuckets(point.input_tokens, point.output_tokens, point.cache_creation_tokens, point.cache_read_tokens)
+            : 0
+          return `${context.dataset.label}: ${formatTokens(context.raw)} (${formatTokenShare(context.raw, totalTokens) ?? '0.0%'})`
         },
         footer: (tooltipItems: any) => {
           const dataIndex = tooltipItems[0]?.dataIndex

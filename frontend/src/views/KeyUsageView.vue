@@ -284,7 +284,9 @@
                 class="bg-white px-6 py-4 dark:bg-dark-900"
               >
                 <div class="text-xs text-gray-500 dark:text-dark-400 mb-1">{{ cell.label }}</div>
-                <div class="text-sm font-semibold tabular-nums text-gray-900 dark:text-white">{{ cell.value }}</div>
+                <div class="text-sm font-semibold tabular-nums text-gray-900 dark:text-white">
+                  {{ cell.value }} <span v-if="cell.share" class="text-xs font-normal text-gray-400">({{ cell.share }})</span>
+                </div>
               </div>
             </div>
           </div>
@@ -331,10 +333,10 @@
                   >
                     <td class="px-4 py-3 text-sm font-medium whitespace-nowrap text-gray-900 dark:text-white">{{ row.date }}</td>
                     <td class="px-4 py-3 text-sm tabular-nums text-right text-gray-700 dark:text-dark-200">{{ fmtNum(row.requests) }}</td>
-                    <td class="px-4 py-3 text-sm tabular-nums text-right text-gray-700 dark:text-dark-200">{{ fmtNum(row.input_tokens) }}</td>
-                    <td class="px-4 py-3 text-sm tabular-nums text-right text-gray-700 dark:text-dark-200">{{ fmtNum(row.output_tokens) }}</td>
-                    <td class="px-4 py-3 text-sm tabular-nums text-right text-gray-700 dark:text-dark-200">{{ fmtNum(row.cache_read_tokens) }}</td>
-                    <td class="px-4 py-3 text-sm tabular-nums text-right text-gray-700 dark:text-dark-200">{{ fmtNum(row.cache_write_tokens) }}</td>
+                    <td class="px-4 py-3 text-sm tabular-nums text-right text-gray-700 dark:text-dark-200">{{ fmtNum(row.input_tokens) }} <span v-if="dailyTokenShare(row, row.input_tokens)" class="text-xs text-gray-400">({{ dailyTokenShare(row, row.input_tokens) }})</span></td>
+                    <td class="px-4 py-3 text-sm tabular-nums text-right text-gray-700 dark:text-dark-200">{{ fmtNum(row.output_tokens) }} <span v-if="dailyTokenShare(row, row.output_tokens)" class="text-xs text-gray-400">({{ dailyTokenShare(row, row.output_tokens) }})</span></td>
+                    <td class="px-4 py-3 text-sm tabular-nums text-right text-gray-700 dark:text-dark-200">{{ fmtNum(row.cache_read_tokens) }} <span v-if="dailyTokenShare(row, row.cache_read_tokens)" class="text-xs text-gray-400">({{ dailyTokenShare(row, row.cache_read_tokens) }})</span></td>
+                    <td class="px-4 py-3 text-sm tabular-nums text-right text-gray-700 dark:text-dark-200">{{ fmtNum(row.cache_write_tokens) }} <span v-if="dailyTokenShare(row, row.cache_write_tokens)" class="text-xs text-gray-400">({{ dailyTokenShare(row, row.cache_write_tokens) }})</span></td>
                     <td class="px-4 py-3 text-sm tabular-nums text-right font-medium text-gray-900 dark:text-white">{{ usd(row.actual_cost != null ? row.actual_cost : row.cost) }}</td>
                   </tr>
                 </tbody>
@@ -375,11 +377,11 @@
                   >
                     <td class="px-4 py-3 text-sm font-medium whitespace-nowrap text-gray-900 dark:text-white">{{ m.model || '-' }}</td>
                     <td class="px-4 py-3 text-sm tabular-nums text-right text-gray-700 dark:text-dark-200">{{ fmtNum(m.requests) }}</td>
-                    <td class="px-4 py-3 text-sm tabular-nums text-right text-gray-700 dark:text-dark-200">{{ fmtNum(m.input_tokens) }}</td>
-                    <td class="px-4 py-3 text-sm tabular-nums text-right text-gray-700 dark:text-dark-200">{{ fmtNum(m.output_tokens) }}</td>
-                    <td class="px-4 py-3 text-sm tabular-nums text-right text-gray-700 dark:text-dark-200">{{ fmtNum(m.cache_creation_tokens) }}</td>
-                    <td class="px-4 py-3 text-sm tabular-nums text-right text-gray-700 dark:text-dark-200">{{ fmtNum(m.cache_read_tokens) }}</td>
-                    <td class="px-4 py-3 text-sm tabular-nums text-right text-gray-700 dark:text-dark-200">{{ fmtNum(m.total_tokens) }}</td>
+                    <td class="px-4 py-3 text-sm tabular-nums text-right text-gray-700 dark:text-dark-200">{{ fmtNum(m.input_tokens) }} <span v-if="modelTokenShare(m.input_tokens, m.total_tokens)" class="text-xs text-gray-400">({{ modelTokenShare(m.input_tokens, m.total_tokens) }})</span></td>
+                    <td class="px-4 py-3 text-sm tabular-nums text-right text-gray-700 dark:text-dark-200">{{ fmtNum(m.output_tokens) }} <span v-if="modelTokenShare(m.output_tokens, m.total_tokens)" class="text-xs text-gray-400">({{ modelTokenShare(m.output_tokens, m.total_tokens) }})</span></td>
+                    <td class="px-4 py-3 text-sm tabular-nums text-right text-gray-700 dark:text-dark-200">{{ fmtNum(m.cache_creation_tokens) }} <span v-if="modelTokenShare(m.cache_creation_tokens, m.total_tokens)" class="text-xs text-gray-400">({{ modelTokenShare(m.cache_creation_tokens, m.total_tokens) }})</span></td>
+                    <td class="px-4 py-3 text-sm tabular-nums text-right text-gray-700 dark:text-dark-200">{{ fmtNum(m.cache_read_tokens) }} <span v-if="modelTokenShare(m.cache_read_tokens, m.total_tokens)" class="text-xs text-gray-400">({{ modelTokenShare(m.cache_read_tokens, m.total_tokens) }})</span></td>
+                    <td class="px-4 py-3 text-sm tabular-nums text-right text-gray-700 dark:text-dark-200">{{ fmtNum(m.total_tokens) }} <span v-if="totalTokenShare(m.total_tokens)" class="text-xs text-gray-400">({{ totalTokenShare(m.total_tokens) }})</span></td>
                     <td class="px-4 py-3 text-sm tabular-nums text-right font-medium text-gray-900 dark:text-white">{{ usd(m.actual_cost != null ? m.actual_cost : m.cost) }}</td>
                   </tr>
                 </tbody>
@@ -425,6 +427,7 @@ import Icon from '@/components/icons/Icon.vue'
 import { buildGatewayUrl } from '@/api/client'
 import { formatDateLocalInput } from '@/utils/format'
 import { sanitizeUrl } from '@/utils/url'
+import { formatTokenShare, sumTokenBuckets } from '@/utils/tokenShare'
 
 const { t, locale } = useI18n()
 const appStore = useAppStore()
@@ -777,6 +780,7 @@ const detailRows = computed<DetailRow[]>(() => {
 interface StatCell {
   label: string
   value: string
+  share?: string | null
 }
 
 const usageStatCells = computed<StatCell[]>(() => {
@@ -788,19 +792,19 @@ const usageStatCells = computed<StatCell[]>(() => {
 
   return [
     { label: t('keyUsage.todayRequests'), value: fmtNum(today.requests) },
-    { label: t('keyUsage.todayInputTokens'), value: fmtNum(today.input_tokens) },
-    { label: t('keyUsage.todayOutputTokens'), value: fmtNum(today.output_tokens) },
+    { label: t('keyUsage.todayInputTokens'), value: fmtNum(today.input_tokens), share: formatTokenShare(today.input_tokens, today.total_tokens) },
+    { label: t('keyUsage.todayOutputTokens'), value: fmtNum(today.output_tokens), share: formatTokenShare(today.output_tokens, today.total_tokens) },
     { label: t('keyUsage.todayTokens'), value: fmtNum(today.total_tokens) },
-    { label: t('keyUsage.todayCacheCreation'), value: fmtNum(today.cache_creation_tokens) },
-    { label: t('keyUsage.todayCacheRead'), value: fmtNum(today.cache_read_tokens) },
+    { label: t('keyUsage.todayCacheCreation'), value: fmtNum(today.cache_creation_tokens), share: formatTokenShare(today.cache_creation_tokens, today.total_tokens) },
+    { label: t('keyUsage.todayCacheRead'), value: fmtNum(today.cache_read_tokens), share: formatTokenShare(today.cache_read_tokens, today.total_tokens) },
     { label: t('keyUsage.todayCost'), value: usd(today.actual_cost) },
     { label: t('keyUsage.rpmTpm'), value: `${usage.rpm || 0} / ${usage.tpm || 0}` },
     { label: t('keyUsage.totalRequests'), value: fmtNum(total.requests) },
-    { label: t('keyUsage.totalInputTokens'), value: fmtNum(total.input_tokens) },
-    { label: t('keyUsage.totalOutputTokens'), value: fmtNum(total.output_tokens) },
+    { label: t('keyUsage.totalInputTokens'), value: fmtNum(total.input_tokens), share: formatTokenShare(total.input_tokens, total.total_tokens) },
+    { label: t('keyUsage.totalOutputTokens'), value: fmtNum(total.output_tokens), share: formatTokenShare(total.output_tokens, total.total_tokens) },
     { label: t('keyUsage.totalTokensLabel'), value: fmtNum(total.total_tokens) },
-    { label: t('keyUsage.totalCacheCreation'), value: fmtNum(total.cache_creation_tokens) },
-    { label: t('keyUsage.totalCacheRead'), value: fmtNum(total.cache_read_tokens) },
+    { label: t('keyUsage.totalCacheCreation'), value: fmtNum(total.cache_creation_tokens), share: formatTokenShare(total.cache_creation_tokens, total.total_tokens) },
+    { label: t('keyUsage.totalCacheRead'), value: fmtNum(total.cache_read_tokens), share: formatTokenShare(total.cache_read_tokens, total.total_tokens) },
     { label: t('keyUsage.totalCost'), value: usd(total.actual_cost) },
     { label: t('keyUsage.avgDuration'), value: usage.average_duration_ms ? `${Math.round(usage.average_duration_ms)} ms` : '-' },
   ]
@@ -826,6 +830,22 @@ const dailyUsageRows = computed<DailyUsageRow[]>(() => {
 })
 
 const showDailyUsage = computed(() => Boolean(resultData.value && Array.isArray(resultData.value.daily_usage)))
+
+function dailyTokenTotal(row: DailyUsageRow): number {
+  return sumTokenBuckets(row.input_tokens, row.output_tokens, row.cache_read_tokens, row.cache_write_tokens)
+}
+
+function dailyTokenShare(row: DailyUsageRow, tokens: number | null | undefined): string | null {
+  return formatTokenShare(tokens, dailyTokenTotal(row))
+}
+
+function modelTokenShare(tokens: number | null | undefined, totalTokens: number | null | undefined): string | null {
+  return formatTokenShare(tokens, totalTokens)
+}
+
+function totalTokenShare(tokens: number | null | undefined): string | null {
+  return formatTokenShare(tokens, resultData.value?.usage?.total?.total_tokens)
+}
 
 // ==================== Utility Functions ====================
 

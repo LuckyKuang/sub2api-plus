@@ -45,6 +45,10 @@ type OpsOpenAITokenStatsResponse struct {
 	// Total model rows before pagination/topN trimming.
 	Total int64 `json:"total"`
 
+	// Total output tokens across every model in the current filter, before
+	// pagination/topN trimming. Clients use this as the stable share denominator.
+	TotalOutputTokens int64 `json:"total_output_tokens"`
+
 	// Pagination mode metadata.
 	Page     int `json:"page,omitempty"`
 	PageSize int `json:"page_size,omitempty"`

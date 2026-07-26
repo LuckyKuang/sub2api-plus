@@ -20,7 +20,7 @@
             {{ user.requests.toLocaleString() }}
           </td>
           <td class="py-1 text-right text-gray-500 dark:text-gray-400">
-            {{ formatTokens(user.total_tokens) }}
+            {{ formatTokens(user.total_tokens) }} <span v-if="tokenShare(user.total_tokens)" class="text-gray-400">({{ tokenShare(user.total_tokens) }})</span>
           </td>
           <td class="py-1 text-right text-green-600 dark:text-green-400">
             ${{ formatCost(user.actual_cost) }}
@@ -42,6 +42,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import type { UserBreakdownItem } from '@/types'
+import { formatTokenShare } from '@/utils/tokenShare'
 
 const { t } = useI18n()
 
@@ -49,12 +50,16 @@ const props = withDefaults(defineProps<{
   items: UserBreakdownItem[]
   loading?: boolean
   showAccountCost?: boolean
+  totalTokens?: number
 }>(), {
   loading: false,
   showAccountCost: true,
+  totalTokens: 0,
 })
 
 const showAccountCost = computed(() => props.showAccountCost)
+const tokenShare = (tokens: number | null | undefined): string | null =>
+  formatTokenShare(tokens, props.totalTokens)
 
 const formatTokens = (value: number): string => {
   if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)}B`

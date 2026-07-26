@@ -104,7 +104,7 @@
                   {{ formatNumber(item.requests) }}
                 </td>
                 <td class="py-1.5 text-right text-gray-600 dark:text-gray-400">
-                  {{ formatTokens(item.total_tokens) }}
+                  {{ formatTokens(item.total_tokens) }} <span v-if="endpointTokenShare(item.total_tokens)" class="text-gray-400">({{ endpointTokenShare(item.total_tokens) }})</span>
                 </td>
                 <td class="py-1.5 text-right text-green-600 dark:text-green-400">
                   ${{ formatCost(item.actual_cost) }}
@@ -118,6 +118,7 @@
                   <UserBreakdownSubTable
                     :items="breakdownItems"
                     :loading="breakdownLoading"
+                    :total-tokens="item.total_tokens"
                   />
                 </td>
               </tr>
@@ -141,6 +142,7 @@ import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import UserBreakdownSubTable from './UserBreakdownSubTable.vue'
 import type { EndpointStat, UserBreakdownItem } from '@/types'
 import { getUserBreakdown } from '@/api/admin/dashboard'
+import { formatTokenShare } from '@/utils/tokenShare'
 
 ChartJS.register(ArcElement, Tooltip, Legend)
 
@@ -237,6 +239,13 @@ const displayEndpointStats = computed(() => {
   const metricKey = props.metric === 'actual_cost' ? 'actual_cost' : 'total_tokens'
   return [...sourceStats].sort((a, b) => b[metricKey] - a[metricKey])
 })
+
+const distributionTotalTokens = computed(() =>
+  displayEndpointStats.value.reduce((sum, endpoint) => sum + Number(endpoint.total_tokens || 0), 0)
+)
+
+const endpointTokenShare = (tokens: number | null | undefined): string | null =>
+  formatTokenShare(tokens, distributionTotalTokens.value)
 
 const chartData = computed(() => {
   if (!displayEndpointStats.value?.length) return null

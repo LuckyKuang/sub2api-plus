@@ -27,7 +27,12 @@
               <span class="text-green-600 dark:text-green-400" :title="t('dashboard.actual')">${{ formatCost(log.actual_cost) }}</span>
               <span class="font-normal text-gray-400 dark:text-gray-500" :title="t('dashboard.standard')"> / ${{ formatCost(log.total_cost) }}</span>
             </p>
-            <p class="text-xs text-gray-500 dark:text-dark-400">{{ (log.input_tokens + log.output_tokens).toLocaleString() }} tokens</p>
+            <p class="text-xs text-gray-500 dark:text-dark-400">
+              {{ requestTokenTotal(log).toLocaleString() }} Token
+              <span v-if="requestTokenShare(log, log.input_tokens)">&middot; {{ t('dashboard.input') }} {{ requestTokenShare(log, log.input_tokens) }}</span>
+              <span v-if="requestTokenShare(log, log.output_tokens)">&middot; {{ t('dashboard.output') }} {{ requestTokenShare(log, log.output_tokens) }}</span>
+              <span v-if="requestTokenShare(log, requestCacheTokens(log))">&middot; {{ t('dashboard.cache') }} {{ requestTokenShare(log, requestCacheTokens(log)) }}</span>
+            </p>
           </div>
         </div>
 
@@ -47,6 +52,7 @@ import EmptyState from '@/components/common/EmptyState.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { formatDateTime } from '@/utils/format'
 import type { UsageLog } from '@/types'
+import { formatTokenShare, sumTokenBuckets } from '@/utils/tokenShare'
 
 defineProps<{
   data: UsageLog[]
@@ -54,4 +60,16 @@ defineProps<{
 }>()
 const { t } = useI18n()
 const formatCost = (c: number) => c.toFixed(4)
+
+function requestCacheTokens(log: UsageLog): number {
+  return sumTokenBuckets(log.cache_creation_tokens, log.cache_read_tokens)
+}
+
+function requestTokenTotal(log: UsageLog): number {
+  return sumTokenBuckets(log.input_tokens, log.output_tokens, log.cache_creation_tokens, log.cache_read_tokens)
+}
+
+function requestTokenShare(log: UsageLog, tokens: number | null | undefined): string | null {
+  return formatTokenShare(tokens, requestTokenTotal(log))
+}
 </script>

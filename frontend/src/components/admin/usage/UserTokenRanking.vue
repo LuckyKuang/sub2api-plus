@@ -70,7 +70,7 @@
             <td class="whitespace-nowrap px-4 py-3 text-right text-sm tabular-nums text-gray-500 dark:text-gray-400">{{ fmtTokens(item.input_tokens) }}</td>
             <td class="whitespace-nowrap px-4 py-3 text-right text-sm tabular-nums text-gray-500 dark:text-gray-400">{{ fmtTokens(item.output_tokens) }}</td>
             <td class="whitespace-nowrap px-4 py-3 text-right text-sm tabular-nums text-gray-500 dark:text-gray-400">{{ fmtTokens(item.cache_tokens) }}</td>
-            <td class="whitespace-nowrap px-4 py-3 text-right text-sm font-medium tabular-nums text-gray-900 dark:text-gray-100">{{ fmtTokens(item.total_tokens) }}</td>
+            <td class="whitespace-nowrap px-4 py-3 text-right text-sm font-medium tabular-nums text-gray-900 dark:text-gray-100">{{ fmtTokens(item.total_tokens) }} <span v-if="tokenShare(item.total_tokens)" class="text-xs font-normal text-gray-400">({{ tokenShare(item.total_tokens) }})</span></td>
             <td class="whitespace-nowrap px-4 py-3 text-right text-sm font-medium tabular-nums text-green-600 dark:text-green-400">${{ fmtCost(item.actual_cost) }}</td>
           </tr>
         </tbody>
@@ -87,12 +87,14 @@ import { formatCompactNumber, formatCostFixed } from '@/utils/format'
 import type { UserBreakdownItem } from '@/types'
 import Select from '@/components/common/Select.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
+import { formatTokenShare } from '@/utils/tokenShare'
 
 const props = defineProps<{
   startDate: string
   endDate: string
   filters: Record<string, unknown>
   model?: string
+  totalTokens?: number
 }>()
 
 defineEmits<{ (e: 'select-user', userId: number, email: string): void }>()
@@ -131,6 +133,8 @@ let reqSeq = 0
 
 const fmtTokens = (v: number) => formatCompactNumber(v)
 const fmtCost = (v: number) => formatCostFixed(v, 4)
+const tokenShare = (tokens: number | null | undefined): string | null =>
+  formatTokenShare(tokens, props.totalTokens)
 
 const setSort = (key: SortKey) => {
   if (sortBy.value === key) return

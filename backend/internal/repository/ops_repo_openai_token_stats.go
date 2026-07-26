@@ -59,9 +59,9 @@ WITH stats AS (
 )
 `
 
-	countSQL := baseCTE + `SELECT COUNT(*) FROM stats`
-	var total int64
-	if err := r.db.QueryRowContext(ctx, countSQL, baseArgs...).Scan(&total); err != nil {
+	countSQL := baseCTE + `SELECT COUNT(*), COALESCE(SUM(total_output_tokens), 0) FROM stats`
+	var total, totalOutputTokens int64
+	if err := r.db.QueryRowContext(ctx, countSQL, baseArgs...).Scan(&total, &totalOutputTokens); err != nil {
 		return nil, err
 	}
 
@@ -126,13 +126,14 @@ ORDER BY request_count DESC, model ASC`
 	}
 
 	resp := &service.OpsOpenAITokenStatsResponse{
-		TimeRange: strings.TrimSpace(filter.TimeRange),
-		StartTime: dashboardFilter.StartTime,
-		EndTime:   dashboardFilter.EndTime,
-		Platform:  dashboardFilter.Platform,
-		GroupID:   dashboardFilter.GroupID,
-		Items:     items,
-		Total:     total,
+		TimeRange:         strings.TrimSpace(filter.TimeRange),
+		StartTime:         dashboardFilter.StartTime,
+		EndTime:           dashboardFilter.EndTime,
+		Platform:          dashboardFilter.Platform,
+		GroupID:           dashboardFilter.GroupID,
+		Items:             items,
+		Total:             total,
+		TotalOutputTokens: totalOutputTokens,
 	}
 	if filter.IsTopNMode() {
 		topN := filter.TopN

@@ -47,7 +47,7 @@
                 <tr v-for="model in models" :key="model.model" class="border-t border-gray-100 dark:border-dark-700">
                   <td class="max-w-[100px] truncate py-1.5 font-medium text-gray-900 dark:text-white" :title="model.model">{{ model.model }}</td>
                   <td class="py-1.5 text-right text-gray-600 dark:text-gray-400">{{ formatNumber(model.requests) }}</td>
-                  <td class="py-1.5 text-right text-gray-600 dark:text-gray-400">{{ formatTokens(model.total_tokens) }}</td>
+                  <td class="py-1.5 text-right text-gray-600 dark:text-gray-400">{{ formatTokens(model.total_tokens) }} <span v-if="modelTokenShare(model.total_tokens)" class="text-gray-400">({{ modelTokenShare(model.total_tokens) }})</span></td>
                   <td class="py-1.5 text-right text-green-600 dark:text-green-400">${{ formatCost(model.actual_cost) }}</td>
                   <td class="py-1.5 text-right text-gray-400 dark:text-gray-500">${{ formatCost(model.cost) }}</td>
                 </tr>
@@ -73,6 +73,7 @@ import { Doughnut } from 'vue-chartjs'
 import TokenUsageTrend from '@/components/charts/TokenUsageTrend.vue'
 import type { TrendDataPoint, ModelStat } from '@/types'
 import { formatCostFixed as formatCost, formatNumberLocaleString as formatNumber, formatTokensK as formatTokens } from '@/utils/format'
+import { formatTokenShare } from '@/utils/tokenShare'
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, ArcElement, Title, Tooltip, Legend, Filler } from 'chart.js'
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, ArcElement, Title, Tooltip, Legend, Filler)
 
@@ -88,6 +89,13 @@ const modelData = computed(() => !props.models?.length ? null : {
   }]
 })
 
+const modelTokenTotal = computed(() =>
+  props.models.reduce((sum, model) => sum + Number(model.total_tokens || 0), 0)
+)
+
+const modelTokenShare = (tokens: number | null | undefined): string | null =>
+  formatTokenShare(tokens, modelTokenTotal.value)
+
 const doughnutOptions = {
   responsive: true,
   maintainAspectRatio: false,
@@ -95,7 +103,10 @@ const doughnutOptions = {
     legend: { display: false },
     tooltip: {
       callbacks: {
-        label: (context: any) => `${context.label}: ${formatTokens(context.parsed)} tokens`
+        label: (context: any) => {
+          const total = context.dataset.data.reduce((sum: number, value: number) => sum + value, 0)
+          return `${context.label}: ${formatTokens(context.parsed)} tokens (${formatTokenShare(context.parsed, total) ?? '0.0%'})`
+        }
       }
     }
   }

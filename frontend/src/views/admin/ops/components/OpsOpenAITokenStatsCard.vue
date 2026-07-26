@@ -6,6 +6,7 @@ import Select from '@/components/common/Select.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import { opsAPI, type OpsOpenAITokenStatsResponse, type OpsOpenAITokenStatsTimeRange } from '@/api/admin/ops'
 import { formatNumber } from '@/utils/format'
+import { formatTokenShare } from '@/utils/tokenShare'
 
 interface Props {
   platformFilter?: string
@@ -37,6 +38,7 @@ const pageSize = ref<number>(20)
 
 const items = computed(() => response.value?.items ?? [])
 const total = computed(() => response.value?.total ?? 0)
+const totalOutputTokens = computed(() => response.value?.total_output_tokens ?? 0)
 const totalPages = computed(() => {
   if (viewMode.value !== 'pagination') return 1
   const size = pageSize.value > 0 ? pageSize.value : 20
@@ -78,6 +80,10 @@ function formatRate(v?: number | null): string {
 function formatInt(v?: number | null): string {
   if (typeof v !== 'number' || !Number.isFinite(v)) return '-'
   return formatNumber(Math.round(v))
+}
+
+function outputTokenShare(v?: number | null): string | null {
+  return formatTokenShare(v, totalOutputTokens.value)
 }
 
 function buildParams() {
@@ -233,7 +239,7 @@ function onNextPage() {
                 </div>
                 <div class="flex items-baseline justify-between gap-2">
                   <span class="text-gray-500 dark:text-gray-400">{{ t('admin.ops.openaiTokenStats.table.totalOutputTokens') }}</span>
-                  <span class="text-gray-700 dark:text-gray-200">{{ formatInt(row.total_output_tokens) }}</span>
+                  <span class="text-gray-700 dark:text-gray-200">{{ formatInt(row.total_output_tokens) }} <span v-if="outputTokenShare(row.total_output_tokens)" class="text-gray-400">({{ outputTokenShare(row.total_output_tokens) }})</span></span>
                 </div>
                 <div class="flex items-baseline justify-between gap-2">
                   <span class="text-gray-500 dark:text-gray-400">{{ t('admin.ops.openaiTokenStats.table.avgDurationMs') }}</span>
@@ -268,7 +274,7 @@ function onNextPage() {
                 <td class="px-2 py-2">{{ formatInt(row.request_count) }}</td>
                 <td class="px-2 py-2">{{ formatRate(row.avg_tokens_per_sec) }}</td>
                 <td class="px-2 py-2">{{ formatRate(row.avg_first_token_ms) }}</td>
-                <td class="px-2 py-2">{{ formatInt(row.total_output_tokens) }}</td>
+                <td class="px-2 py-2">{{ formatInt(row.total_output_tokens) }} <span v-if="outputTokenShare(row.total_output_tokens)" class="text-xs text-gray-400">({{ outputTokenShare(row.total_output_tokens) }})</span></td>
                 <td class="px-2 py-2">{{ formatInt(row.avg_duration_ms) }}</td>
                 <td class="px-2 py-2">{{ formatInt(row.requests_with_first_token) }}</td>
               </tr>

@@ -230,6 +230,7 @@ export interface OpsOpenAITokenStatsResponse {
   group_id?: number | null
   items: OpsOpenAITokenStatsItem[]
   total: number
+  total_output_tokens: number
   page?: number
   page_size?: number
   top_n?: number | null

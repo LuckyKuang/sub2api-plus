@@ -78,7 +78,12 @@
         <div>
           <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('dashboard.todayTokens') }}</p>
           <p class="text-xl font-bold text-gray-900 dark:text-white">{{ formatTokens(stats?.today_tokens || 0) }}</p>
-          <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('dashboard.input') }}: {{ formatTokens(stats?.today_input_tokens || 0) }} / {{ t('dashboard.output') }}: {{ formatTokens(stats?.today_output_tokens || 0) }}</p>
+          <p class="flex flex-wrap gap-x-1 text-xs text-gray-500 dark:text-gray-400">
+            <span>{{ t('dashboard.input') }}: {{ formatTokens(stats?.today_input_tokens || 0) }} <span v-if="todayTokenShare(stats?.today_input_tokens)" class="text-gray-400">({{ todayTokenShare(stats?.today_input_tokens) }})</span></span>
+            <span>/</span>
+            <span>{{ t('dashboard.output') }}: {{ formatTokens(stats?.today_output_tokens || 0) }} <span v-if="todayTokenShare(stats?.today_output_tokens)" class="text-gray-400">({{ todayTokenShare(stats?.today_output_tokens) }})</span></span>
+            <span v-if="todayCacheTokens > 0">/ {{ t('dashboard.cache') }}: {{ formatTokens(todayCacheTokens) }} <span v-if="todayTokenShare(todayCacheTokens)" class="text-gray-400">({{ todayTokenShare(todayCacheTokens) }})</span></span>
+          </p>
         </div>
       </div>
     </div>
@@ -92,7 +97,12 @@
         <div>
           <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('dashboard.totalTokens') }}</p>
           <p class="text-xl font-bold text-gray-900 dark:text-white">{{ formatTokens(stats?.total_tokens || 0) }}</p>
-          <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('dashboard.input') }}: {{ formatTokens(stats?.total_input_tokens || 0) }} / {{ t('dashboard.output') }}: {{ formatTokens(stats?.total_output_tokens || 0) }}</p>
+          <p class="flex flex-wrap gap-x-1 text-xs text-gray-500 dark:text-gray-400">
+            <span>{{ t('dashboard.input') }}: {{ formatTokens(stats?.total_input_tokens || 0) }} <span v-if="totalTokenShare(stats?.total_input_tokens)" class="text-gray-400">({{ totalTokenShare(stats?.total_input_tokens) }})</span></span>
+            <span>/</span>
+            <span>{{ t('dashboard.output') }}: {{ formatTokens(stats?.total_output_tokens || 0) }} <span v-if="totalTokenShare(stats?.total_output_tokens)" class="text-gray-400">({{ totalTokenShare(stats?.total_output_tokens) }})</span></span>
+            <span v-if="totalCacheTokens > 0">/ {{ t('dashboard.cache') }}: {{ formatTokens(totalCacheTokens) }} <span v-if="totalTokenShare(totalCacheTokens)" class="text-gray-400">({{ totalTokenShare(totalCacheTokens) }})</span></span>
+          </p>
         </div>
       </div>
     </div>
@@ -173,7 +183,10 @@
           <div class="flex items-center justify-between">
             <span class="text-gray-500 dark:text-gray-400">{{ t('dashboard.tokens') }}</span>
             <span class="font-mono text-gray-700 dark:text-gray-300">
-              {{ item.total_tokens > 0 ? formatTokens(item.total_tokens) : '-' }}
+              <template v-if="item.total_tokens > 0">
+                {{ formatTokens(item.total_tokens) }} <span v-if="platformTokenShare(item.total_tokens)" class="text-gray-400">({{ platformTokenShare(item.total_tokens) }})</span>
+              </template>
+              <template v-else>-</template>
             </span>
           </div>
         </div>
@@ -228,6 +241,7 @@ import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
 import type { UserDashboardStats as UserStatsType } from '@/api/usage'
 import type { PlatformQuotaItem } from '@/types'
+import { formatTokenShare, sumTokenBuckets } from '@/utils/tokenShare'
 
 interface FusedPlatformCard {
   platform: string
@@ -310,20 +324,41 @@ const platformCards = computed<FusedPlatformCard[]>(() => {
   const sumToday = cards.reduce((s, c) => s + c.today_actual_cost, 0)
   const diffTotal = Math.max(0, total - sumTotal)
   const diffToday = Math.max(0, today - sumToday)
+  const summedTokens = cards.reduce((sum, card) => sum + card.total_tokens, 0)
+  const diffTotalTokens = Math.max(0, (props.stats?.total_tokens ?? 0) - summedTokens)
 
-  if (diffTotal > OTHER_THRESHOLD || diffToday > OTHER_THRESHOLD) {
+  if (diffTotal > OTHER_THRESHOLD || diffToday > OTHER_THRESHOLD || diffTotalTokens > 0) {
     cards.push({
       platform: '__other__',
       total_actual_cost: diffTotal,
       today_actual_cost: diffToday,
       total_requests: 0,
-      total_tokens: 0,
+      total_tokens: diffTotalTokens,
       isOther: true,
     })
   }
 
   return cards
 })
+
+const todayCacheTokens = computed(() => sumTokenBuckets(
+  props.stats?.today_cache_creation_tokens,
+  props.stats?.today_cache_read_tokens,
+))
+
+const totalCacheTokens = computed(() => sumTokenBuckets(
+  props.stats?.total_cache_creation_tokens,
+  props.stats?.total_cache_read_tokens,
+))
+
+const todayTokenShare = (tokens: number | null | undefined): string | null =>
+  formatTokenShare(tokens, props.stats?.today_tokens)
+
+const totalTokenShare = (tokens: number | null | undefined): string | null =>
+  formatTokenShare(tokens, props.stats?.total_tokens)
+
+const platformTokenShare = (tokens: number | null | undefined): string | null =>
+  formatTokenShare(tokens, props.stats?.total_tokens)
 
 // Quota helpers
 

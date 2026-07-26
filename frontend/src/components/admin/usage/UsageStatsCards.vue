@@ -16,12 +16,12 @@
         <p class="text-xs font-medium text-gray-500">{{ t('usage.totalTokens') }}</p>
         <p class="text-xl font-bold">{{ formatTokens(stats?.total_tokens || 0) }}</p>
         <p class="flex flex-wrap items-center gap-x-1 text-xs text-gray-500">
-          <span>{{ t('usage.in') }}: {{ formatTokens(stats?.total_input_tokens || 0) }}</span>
+          <span>{{ t('usage.in') }}: {{ formatTokens(stats?.total_input_tokens || 0) }} <span v-if="tokenShare(stats?.total_input_tokens)" class="text-gray-400">({{ tokenShare(stats?.total_input_tokens) }})</span></span>
           <span>/</span>
-          <span>{{ t('usage.out') }}: {{ formatTokens(stats?.total_output_tokens || 0) }}</span>
+          <span>{{ t('usage.out') }}: {{ formatTokens(stats?.total_output_tokens || 0) }} <span v-if="tokenShare(stats?.total_output_tokens)" class="text-gray-400">({{ tokenShare(stats?.total_output_tokens) }})</span></span>
           <span>/</span>
           <span class="group relative inline-flex cursor-help items-center gap-0.5" tabindex="0">
-            <span>{{ cacheLabel() }}: {{ formatTokens(stats?.total_cache_tokens || 0) }}</span>
+            <span>{{ cacheLabel() }}: {{ formatTokens(totalCacheTokens) }} <span v-if="tokenShare(totalCacheTokens)" class="text-gray-400">({{ tokenShare(totalCacheTokens) }})</span></span>
             <svg
               class="h-3.5 w-3.5 text-gray-400"
               fill="none"
@@ -44,13 +44,13 @@
               <span class="flex items-center justify-between gap-3">
                 <span>{{ t('usage.cacheCreationTokensLabel') }}</span>
                 <span class="tabular-nums">
-                  {{ formatTokens(stats?.total_cache_creation_tokens || 0) }}
+                  {{ formatTokens(stats?.total_cache_creation_tokens || 0) }} <span v-if="tokenShare(stats?.total_cache_creation_tokens)" class="text-gray-400">({{ tokenShare(stats?.total_cache_creation_tokens) }})</span>
                 </span>
               </span>
               <span class="mt-1 flex items-center justify-between gap-3">
                 <span>{{ t('usage.cacheReadTokensLabel') }}</span>
                 <span class="tabular-nums">
-                  {{ formatTokens(stats?.total_cache_read_tokens || 0) }}
+                  {{ formatTokens(stats?.total_cache_read_tokens || 0) }} <span v-if="tokenShare(stats?.total_cache_read_tokens)" class="text-gray-400">({{ tokenShare(stats?.total_cache_read_tokens) }})</span>
                 </span>
               </span>
             </span>
@@ -94,6 +94,7 @@ import { useI18n } from 'vue-i18n'
 import type { AdminUsageStatsResponse } from '@/api/admin/usage'
 import type { UsageStatsResponse } from '@/types'
 import Icon from '@/components/icons/Icon.vue'
+import { formatTokenShare, sumTokenBuckets } from '@/utils/tokenShare'
 
 const props = withDefaults(defineProps<{
   stats: (AdminUsageStatsResponse | UsageStatsResponse) | null
@@ -112,6 +113,14 @@ const totalAccountCost = computed(() => {
 })
 const showAccountCost = computed(() => props.showAccountCost)
 const strikeStandardCost = computed(() => props.strikeStandardCost)
+
+const totalCacheTokens = computed(() => sumTokenBuckets(
+  props.stats?.total_cache_creation_tokens,
+  props.stats?.total_cache_read_tokens,
+))
+
+const tokenShare = (tokens: number | null | undefined): string | null =>
+  formatTokenShare(tokens, props.stats?.total_tokens)
 
 const formatDuration = (ms: number) =>
   ms < 1000 ? `${ms.toFixed(0)}ms` : `${(ms / 1000).toFixed(2)}s`

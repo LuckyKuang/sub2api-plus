@@ -28,9 +28,9 @@ func TestOpsRepositoryGetOpenAITokenStats_PaginationMode(t *testing.T) {
 		PageSize:  10,
 	}
 
-	mock.ExpectQuery(`SELECT COUNT\(\*\) FROM stats`).
+	mock.ExpectQuery(`SELECT COUNT\(\*\), COALESCE\(SUM\(total_output_tokens\), 0\) FROM stats`).
 		WithArgs(start, end, groupID, "openai").
-		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(int64(3)))
+		WillReturnRows(sqlmock.NewRows([]string{"count", "total_output_tokens"}).AddRow(int64(3), int64(5500)))
 
 	rows := sqlmock.NewRows([]string{
 		"model",
@@ -52,6 +52,7 @@ func TestOpsRepositoryGetOpenAITokenStats_PaginationMode(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, resp)
 	require.Equal(t, int64(3), resp.Total)
+	require.Equal(t, int64(5500), resp.TotalOutputTokens)
 	require.Equal(t, 2, resp.Page)
 	require.Equal(t, 10, resp.PageSize)
 	require.Nil(t, resp.TopN)
@@ -81,9 +82,9 @@ func TestOpsRepositoryGetOpenAITokenStats_TopNMode(t *testing.T) {
 		TopN:      5,
 	}
 
-	mock.ExpectQuery(`SELECT COUNT\(\*\) FROM stats`).
+	mock.ExpectQuery(`SELECT COUNT\(\*\), COALESCE\(SUM\(total_output_tokens\), 0\) FROM stats`).
 		WithArgs(start, end).
-		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(int64(1)))
+		WillReturnRows(sqlmock.NewRows([]string{"count", "total_output_tokens"}).AddRow(int64(1), int64(0)))
 
 	rows := sqlmock.NewRows([]string{
 		"model",
@@ -107,6 +108,7 @@ func TestOpsRepositoryGetOpenAITokenStats_TopNMode(t *testing.T) {
 	require.Equal(t, 5, *resp.TopN)
 	require.Equal(t, 0, resp.Page)
 	require.Equal(t, 0, resp.PageSize)
+	require.Equal(t, int64(0), resp.TotalOutputTokens)
 	require.Len(t, resp.Items, 1)
 	require.Nil(t, resp.Items[0].AvgTokensPerSec)
 	require.Nil(t, resp.Items[0].AvgFirstTokenMs)
@@ -128,9 +130,9 @@ func TestOpsRepositoryGetOpenAITokenStats_EmptyResult(t *testing.T) {
 		PageSize:  20,
 	}
 
-	mock.ExpectQuery(`SELECT COUNT\(\*\) FROM stats`).
+	mock.ExpectQuery(`SELECT COUNT\(\*\), COALESCE\(SUM\(total_output_tokens\), 0\) FROM stats`).
 		WithArgs(start, end).
-		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(int64(0)))
+		WillReturnRows(sqlmock.NewRows([]string{"count", "total_output_tokens"}).AddRow(int64(0), int64(0)))
 
 	mock.ExpectQuery(`ORDER BY request_count DESC, model ASC\s+LIMIT \$3 OFFSET \$4`).
 		WithArgs(start, end, 20, 0).
@@ -148,6 +150,7 @@ func TestOpsRepositoryGetOpenAITokenStats_EmptyResult(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, resp)
 	require.Equal(t, int64(0), resp.Total)
+	require.Equal(t, int64(0), resp.TotalOutputTokens)
 	require.Len(t, resp.Items, 0)
 	require.Equal(t, 1, resp.Page)
 	require.Equal(t, 20, resp.PageSize)

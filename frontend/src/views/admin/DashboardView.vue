@@ -110,6 +110,12 @@
                 <p class="text-xl font-bold text-gray-900 dark:text-white">
                   {{ formatTokens(stats.today_tokens) }}
                 </p>
+                <p class="flex flex-wrap gap-x-1 text-xs text-gray-500 dark:text-gray-400">
+                  <span>{{ t('dashboard.input') }} {{ todayTokenShare(stats.today_input_tokens) }}</span>
+                  <span>&middot;</span>
+                  <span>{{ t('dashboard.output') }} {{ todayTokenShare(stats.today_output_tokens) }}</span>
+                  <span v-if="todayCacheTokens > 0">&middot; {{ t('dashboard.cache') }} {{ todayTokenShare(todayCacheTokens) }}</span>
+                </p>
                 <p class="text-xs">
                   <span
                     class="text-green-600 dark:text-green-400"
@@ -145,6 +151,12 @@
                 </p>
                 <p class="text-xl font-bold text-gray-900 dark:text-white">
                   {{ formatTokens(stats.total_tokens) }}
+                </p>
+                <p class="flex flex-wrap gap-x-1 text-xs text-gray-500 dark:text-gray-400">
+                  <span>{{ t('dashboard.input') }} {{ totalTokenShare(stats.total_input_tokens) }}</span>
+                  <span>&middot;</span>
+                  <span>{{ t('dashboard.output') }} {{ totalTokenShare(stats.total_output_tokens) }}</span>
+                  <span v-if="totalCacheTokens > 0">&middot; {{ t('dashboard.cache') }} {{ totalTokenShare(totalCacheTokens) }}</span>
                 </p>
                 <p class="text-xs">
                   <span
@@ -363,6 +375,7 @@ import Select from '@/components/common/Select.vue'
 import ModelDistributionChart from '@/components/charts/ModelDistributionChart.vue'
 import TokenUsageTrend from '@/components/charts/TokenUsageTrend.vue'
 import { useBatchImageAccess } from '@/composables/useBatchImageAccess'
+import { formatTokenShare, sumTokenBuckets } from '@/utils/tokenShare'
 
 import {
   Chart as ChartJS,
@@ -409,6 +422,22 @@ let chartLoadSeq = 0
 let usersTrendLoadSeq = 0
 let rankingLoadSeq = 0
 const rankingLimit = 12
+
+const todayCacheTokens = computed(() => sumTokenBuckets(
+  stats.value?.today_cache_creation_tokens,
+  stats.value?.today_cache_read_tokens,
+))
+
+const totalCacheTokens = computed(() => sumTokenBuckets(
+  stats.value?.total_cache_creation_tokens,
+  stats.value?.total_cache_read_tokens,
+))
+
+const todayTokenShare = (tokens: number | null | undefined): string =>
+  formatTokenShare(tokens, stats.value?.today_tokens) ?? '0.0%'
+
+const totalTokenShare = (tokens: number | null | undefined): string =>
+  formatTokenShare(tokens, stats.value?.total_tokens) ?? '0.0%'
 
 // Helper function to format date in local timezone
 const formatLocalDate = (date: Date): string => {
