@@ -201,6 +201,23 @@ func (s *SettingService) IsStepUpEnabled(ctx context.Context) bool {
 	return value == "true"
 }
 
+// GetStepUpEnabledStrict returns the current sensitive-operation setting
+// without silently treating a storage outage as disabled. Callers protecting
+// credentials must fail closed on a non-not-found error.
+func (s *SettingService) GetStepUpEnabledStrict(ctx context.Context) (bool, error) {
+	if s == nil || s.settingRepo == nil {
+		return false, fmt.Errorf("step-up setting service unavailable")
+	}
+	value, err := s.settingRepo.GetValue(ctx, SettingKeyStepUpEnabled)
+	if err != nil {
+		if errors.Is(err, ErrSettingNotFound) {
+			return false, nil
+		}
+		return false, fmt.Errorf("get step-up setting: %w", err)
+	}
+	return value == "true", nil
+}
+
 // defaultAuditLogRetentionDays 审计日志默认保留天数。
 const defaultAuditLogRetentionDays = 180
 

@@ -614,7 +614,9 @@ export async function syncFromCrs(params: {
   return data
 }
 
-export async function exportData(options?: {
+export interface AccountExportOptions {
+  password: string
+  totpCode?: string
   ids?: number[]
   filters?: {
     platform?: string
@@ -627,25 +629,21 @@ export async function exportData(options?: {
     sort_order?: 'asc' | 'desc'
   }
   includeProxies?: boolean
-}): Promise<AdminDataPayload> {
-  const params: Record<string, string> = {}
-  if (options?.ids && options.ids.length > 0) {
-    params.ids = options.ids.join(',')
-  } else if (options?.filters) {
-    const { platform, type, status, group, privacy_mode, search, sort_by, sort_order } = options.filters
-    if (platform) params.platform = platform
-    if (type) params.type = type
-    if (status) params.status = status
-    if (group) params.group = group
-    if (privacy_mode) params.privacy_mode = privacy_mode
-    if (search) params.search = search
-    if (sort_by) params.sort_by = sort_by
-    if (sort_order) params.sort_order = sort_order
-  }
-  if (options?.includeProxies === false) {
-    params.include_proxies = 'false'
-  }
-  const { data } = await apiClient.get<AdminDataPayload>('/admin/accounts/data', { params })
+}
+
+export async function getExportRequirements(): Promise<{ step_up_required: boolean }> {
+  const { data } = await apiClient.get<{ step_up_required: boolean }>('/admin/accounts/export/requirements')
+  return data
+}
+
+export async function exportData(options: AccountExportOptions): Promise<AdminDataPayload> {
+  const { data } = await apiClient.post<AdminDataPayload>('/admin/accounts/export', {
+    password: options.password,
+    totp_code: options.totpCode,
+    ids: options.ids,
+    filters: options.filters,
+    include_proxies: options.includeProxies
+  })
   return data
 }
 
@@ -963,6 +961,7 @@ export const accountsAPI = {
   bulkUpdate,
   previewFromCrs,
   syncFromCrs,
+  getExportRequirements,
   exportData,
   importData,
   importCodexSession,

@@ -328,74 +328,64 @@ func (s *TotpService) Disable(ctx context.Context, userID int64, emailCode, pass
 	return nil
 }
 
-// VerifyCode verifies a TOTP code for a user
+// VerifyCode verifies a TOTP code for a user. Existing flows retain their
+// historical cache-error behavior; credential export uses VerifyCodeStrict.
 func (s *TotpService) VerifyCode(ctx context.Context, userID int64, code string) error {
-	slog.Debug("totp_verify_code_called",
-		"user_id", userID,
-		"code_len", len(code))
+	return s.verifyCode(ctx, userID, code, false)
+}
 
-	// Check rate limiting
+// VerifyCodeStrict verifies a TOTP code and fails closed when the Redis-backed
+// attempt tracker is unavailable. It is intended for one-shot secret export.
+func (s *TotpService) VerifyCodeStrict(ctx context.Context, userID int64, code string) error {
+	return s.verifyCode(ctx, userID, code, true)
+}
+
+func (s *TotpService) verifyCode(ctx context.Context, userID int64, code string, failClosed bool) error {
+	if s == nil || s.cache == nil {
+		return infraerrors.InternalServer("TOTP_VERIFY_UNAVAILABLE", "totp verification service unavailable")
+	}
+
+	// Check rate limiting.
 	attempts, err := s.cache.GetVerifyAttempts(ctx, userID)
-	if err == nil && attempts >= maxTotpAttempts {
+	if err != nil {
+		if failClosed {
+			return infraerrors.InternalServer("TOTP_VERIFY_UNAVAILABLE", "totp verification service unavailable")
+		}
+	} else if attempts >= maxTotpAttempts {
 		return ErrTotpTooManyAttempts
 	}
 
 	// Get user
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
-		slog.Debug("totp_verify_get_user_failed",
-			"user_id", userID,
-			"error", err)
 		return infraerrors.InternalServer("TOTP_VERIFY_ERROR", "failed to verify totp code")
 	}
 
 	if !user.TotpEnabled || user.TotpSecretEncrypted == nil {
-		slog.Debug("totp_verify_not_setup",
-			"user_id", userID,
-			"enabled", user.TotpEnabled,
-			"has_secret", user.TotpSecretEncrypted != nil)
 		return ErrTotpNotSetup
 	}
-
-	slog.Debug("totp_verify_encrypted_secret",
-		"user_id", userID,
-		"encrypted_len", len(*user.TotpSecretEncrypted))
 
 	// Decrypt the secret
 	secret, err := s.encryptor.Decrypt(*user.TotpSecretEncrypted)
 	if err != nil {
-		slog.Debug("totp_verify_decrypt_failed",
-			"user_id", userID,
-			"error", err)
 		return infraerrors.InternalServer("TOTP_VERIFY_ERROR", "failed to verify totp code")
 	}
 
-	secretPrefix := "N/A"
-	if len(secret) >= 4 {
-		secretPrefix = secret[:4]
-	}
-	slog.Debug("totp_verify_decrypted",
-		"user_id", userID,
-		"secret_len", len(secret),
-		"secret_prefix", secretPrefix)
-
 	// Verify the code
 	valid := totp.Validate(code, secret)
-	slog.Debug("totp_verify_result",
-		"user_id", userID,
-		"valid", valid,
-		"secret_len", len(secret),
-		"secret_prefix", secretPrefix,
-		"server_time", time.Now().UTC().Format(time.RFC3339))
 
 	if !valid {
 		// Increment failed attempts
-		_, _ = s.cache.IncrementVerifyAttempts(ctx, userID)
+		if _, incrementErr := s.cache.IncrementVerifyAttempts(ctx, userID); incrementErr != nil && failClosed {
+			return infraerrors.InternalServer("TOTP_VERIFY_UNAVAILABLE", "totp verification service unavailable")
+		}
 		return ErrTotpInvalidCode
 	}
 
 	// Clear attempt counter on success
-	_ = s.cache.ClearVerifyAttempts(ctx, userID)
+	if clearErr := s.cache.ClearVerifyAttempts(ctx, userID); clearErr != nil && failClosed {
+		return infraerrors.InternalServer("TOTP_VERIFY_UNAVAILABLE", "totp verification service unavailable")
+	}
 
 	return nil
 }

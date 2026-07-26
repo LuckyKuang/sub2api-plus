@@ -454,15 +454,31 @@
     <TempUnschedStatusModal :show="showTempUnsched" :account="tempUnschedAcc" @close="showTempUnsched = false" @reset="handleTempUnschedReset" />
     <ConfirmDialog :show="showDeleteDialog" :title="t('admin.accounts.deleteAccount')" :message="t('admin.accounts.deleteConfirm', { name: deletingAcc?.name })" :confirm-text="t('common.delete')" :cancel-text="t('common.cancel')" :danger="true" @confirm="confirmDelete" @cancel="showDeleteDialog = false" />
     <ConfirmDialog :show="showCreateShadowDialog" :title="t('admin.accounts.createSparkShadow')" :message="t('admin.accounts.createSparkShadowConfirm', { name: creatingShadowAcc?.name })" @confirm="confirmCreateSparkShadow" @cancel="showCreateShadowDialog = false" />
-    <ConfirmDialog :show="showExportDataDialog" :title="t('admin.accounts.dataExport')" :message="t('admin.accounts.dataExportConfirmMessage')" :confirm-text="t('admin.accounts.dataExportConfirm')" :cancel-text="t('common.cancel')" @confirm="handleExportData" @cancel="showExportDataDialog = false">
-      <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-        <input type="checkbox" class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" v-model="includeProxyOnExport" />
-        <span>{{ t('admin.accounts.dataExportIncludeProxies') }}</span>
-      </label>
-    </ConfirmDialog>
+    <BaseDialog :show="showExportDataDialog" :title="t('admin.accounts.dataExport')" width="narrow" @close="closeExportDataDialog">
+      <form id="account-export-form" class="space-y-4" @submit.prevent="handleExportData">
+        <p class="text-sm text-gray-600 dark:text-gray-300">{{ t('admin.accounts.dataExportConfirmMessage') }}</p>
+        <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+          <input v-model="includeProxyOnExport" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+          <span>{{ t('admin.accounts.dataExportIncludeProxies') }}</span>
+        </label>
+        <div>
+          <label for="account-export-password" class="input-label">{{ t('admin.accounts.dataExportPassword') }}</label>
+          <input id="account-export-password" v-model="exportPassword" type="password" autocomplete="current-password" class="input w-full" :disabled="exportingData" required />
+        </div>
+        <div v-if="exportStepUpRequired">
+          <label for="account-export-totp" class="input-label">{{ t('admin.accounts.dataExportTotpCode') }}</label>
+          <input id="account-export-totp" v-model="exportTotpCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" class="input w-full" :disabled="exportingData" required />
+        </div>
+      </form>
+      <template #footer>
+        <button type="button" class="btn btn-secondary" :disabled="exportingData" @click="closeExportDataDialog">{{ t('common.cancel') }}</button>
+        <button type="submit" form="account-export-form" class="btn btn-primary" :disabled="exportingData || !exportPassword || (exportStepUpRequired && !exportTotpCode)">
+          {{ exportingData ? t('admin.accounts.dataExporting') : t('admin.accounts.dataExportConfirm') }}
+        </button>
+      </template>
+    </BaseDialog>
     <ErrorPassthroughRulesModal :show="showErrorPassthrough" @close="showErrorPassthrough = false" />
     <TLSFingerprintProfilesModal :show="showTLSFingerprintProfiles" @close="showTLSFingerprintProfiles = false" />
-    <TotpStepUpDialog :controller="accountExportStepUp" />
   </AppLayout>
 </template>
 
@@ -476,14 +492,13 @@ import { adminAPI } from '@/api/admin'
 import { useTableLoader } from '@/composables/useTableLoader'
 import { useSwipeSelect, type SwipeSelectVirtualContext } from '@/composables/useSwipeSelect'
 import { useTableSelection } from '@/composables/useTableSelection'
-import { useStepUp, isStepUpBlocked, isStepUpCancelled, stepUpBlockReason } from '@/composables/useStepUp'
-import TotpStepUpDialog from '@/components/auth/TotpStepUpDialog.vue'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 import DataTable from '@/components/common/DataTable.vue'
 import HelpTooltip from '@/components/common/HelpTooltip.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import BaseDialog from '@/components/common/BaseDialog.vue'
 import { CreateAccountModal, EditAccountModal, BulkEditAccountModal, SyncFromCrsModal, TempUnschedStatusModal } from '@/components/account'
 import AccountTableActions from '@/components/admin/account/AccountTableActions.vue'
 import AccountTableFilters from '@/components/admin/account/AccountTableFilters.vue'
@@ -566,6 +581,10 @@ const showSync = ref(false)
 const showImportData = ref(false)
 const showExportDataDialog = ref(false)
 const includeProxyOnExport = ref(true)
+const exportPassword = ref('')
+const exportTotpCode = ref('')
+const exportStepUpRequired = ref(false)
+const exportRequirementsLoading = ref(false)
 const showBulkEdit = ref(false)
 const bulkEditTarget = ref<AccountBulkEditTarget | null>(null)
 const showTempUnsched = ref(false)
@@ -1842,22 +1861,43 @@ const formatExportTimestamp = () => {
   const pad2 = (value: number) => String(value).padStart(2, '0')
   return `${now.getFullYear()}${pad2(now.getMonth() + 1)}${pad2(now.getDate())}${pad2(now.getHours())}${pad2(now.getMinutes())}${pad2(now.getSeconds())}`
 }
-const openExportDataDialog = () => {
-  includeProxyOnExport.value = true
-  showExportDataDialog.value = true
+const closeExportDataDialog = () => {
+  showExportDataDialog.value = false
+  exportPassword.value = ''
+  exportTotpCode.value = ''
+  exportStepUpRequired.value = false
+}
+const openExportDataDialog = async () => {
+  if (exportRequirementsLoading.value) return
+  exportRequirementsLoading.value = true
+  try {
+    const requirements = await adminAPI.accounts.getExportRequirements()
+    includeProxyOnExport.value = true
+    exportPassword.value = ''
+    exportTotpCode.value = ''
+    exportStepUpRequired.value = requirements.step_up_required === true
+    showExportDataDialog.value = true
+  } catch (error) {
+    appStore.showError(extractApiErrorMessage(error, t('admin.accounts.dataExportFailed')))
+  } finally {
+    exportRequirementsLoading.value = false
+  }
 }
 const handleExportData = async () => {
-  if (exportingData.value) return
+  if (exportingData.value || !exportPassword.value) return
   exportingData.value = true
   try {
-    const dataPayload = await accountExportStepUp.run(() => adminAPI.accounts.exportData(
-      selIds.value.length > 0
-        ? { ids: selIds.value, includeProxies: includeProxyOnExport.value }
-        : {
-            includeProxies: includeProxyOnExport.value,
-            filters: buildAccountQueryFilters()
-          }
-    ))
+    const scope = selIds.value.length > 0
+      ? { ids: selIds.value, includeProxies: includeProxyOnExport.value }
+      : {
+          includeProxies: includeProxyOnExport.value,
+          filters: buildAccountQueryFilters()
+        }
+    const dataPayload = await adminAPI.accounts.exportData({
+      password: exportPassword.value,
+      totpCode: exportTotpCode.value,
+      ...scope
+    })
     const timestamp = formatExportTimestamp()
     const filename = `sub2api-account-${timestamp}.json`
     const blob = new Blob([JSON.stringify(dataPayload, null, 2)], { type: 'application/json' })
@@ -1874,24 +1914,13 @@ const handleExportData = async () => {
     } else {
       appStore.showSuccess(t('admin.accounts.dataExported'))
     }
-  } catch (error: any) {
-    if (isStepUpCancelled(error)) {
-      // 用户主动取消 step-up 验证，静默返回，不弹错误提示。
-    } else if (isStepUpBlocked(error)) {
-      appStore.showError(
-        stepUpBlockReason(error) === 'STEP_UP_ADMIN_API_KEY_FORBIDDEN'
-          ? t('stepUp.adminApiKeyForbidden')
-          : t('stepUp.notEnabled')
-      )
-    } else {
-      appStore.showError(error?.message || t('admin.accounts.dataExportFailed'))
-    }
+  } catch (error) {
+    appStore.showError(extractApiErrorMessage(error, t('admin.accounts.dataExportFailed')))
   } finally {
     exportingData.value = false
-    showExportDataDialog.value = false
+    closeExportDataDialog()
   }
 }
-const accountExportStepUp = useStepUp()
 const closeTestModal = () => { showTest.value = false; testingAcc.value = null }
 const closeStatsModal = () => { showStats.value = false; statsAcc.value = null }
 const closeReAuthModal = () => { showReAuth.value = false; reAuthAcc.value = null }

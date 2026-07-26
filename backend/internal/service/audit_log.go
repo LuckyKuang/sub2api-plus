@@ -36,6 +36,7 @@ const (
 	AuditActionSessionBindingMismatch = "auth.session_binding.mismatch"
 	AuditActionStepUpVerify           = "auth.step_up.verify"
 	AuditActionAuditLogClear          = "admin.audit_log.clear"
+	AuditActionAccountsExport         = "admin.accounts.export"
 )
 
 // AuditLog 一条管理面操作审计记录。

@@ -87,6 +87,21 @@ func (s *AuditLogService) Record(entry *AuditLog) {
 	}
 }
 
+// RecordCritical synchronously persists an audit event for a security action
+// that must not proceed without a durable audit trail.
+func (s *AuditLogService) RecordCritical(ctx context.Context, entry *AuditLog) error {
+	if s == nil || s.repo == nil || entry == nil {
+		return fmt.Errorf("critical audit service unavailable")
+	}
+	if entry.CreatedAt.IsZero() {
+		entry.CreatedAt = time.Now().UTC()
+	}
+	if err := s.repo.Insert(ctx, entry); err != nil {
+		return fmt.Errorf("persist critical audit log: %w", err)
+	}
+	return nil
+}
+
 // List 分页查询审计日志。
 func (s *AuditLogService) List(ctx context.Context, filter *AuditLogFilter) (*AuditLogList, error) {
 	return s.repo.List(ctx, filter)

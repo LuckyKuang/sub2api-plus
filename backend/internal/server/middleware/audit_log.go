@@ -58,6 +58,7 @@ var auditExtraAllowedKeys = map[string]struct{}{
 	"http_status": {}, "latency_ms": {}, "token_applied": {}, "retryable": {},
 	"event_id": {}, "requested_count": {}, "deleted_events": {}, "deleted_jobs": {},
 	"matched_count": {}, "snapshot_max_id": {}, "filter_hash": {}, "confirm": {},
+	"account_count": {}, "proxy_count": {}, "include_proxies": {},
 }
 
 // SetAuditExtra adds allowlisted, scalar details to the current audit entry.
@@ -109,7 +110,6 @@ func truncateAuditExtraString(value string, limit int) string {
 
 // auditSensitiveReads 需要审计的敏感 GET 读取（method+FullPath → 动作名）。
 var auditSensitiveReads = map[string]string{
-	"GET /api/v1/admin/accounts/data":             "admin.accounts.export",
 	"GET /api/v1/admin/proxies/data":              "admin.proxies.export",
 	"GET /api/v1/admin/redeem-codes/export":       "admin.redeem_codes.export",
 	"GET /api/v1/admin/backups/:id/download-url":  "admin.backups.download",
@@ -129,6 +129,7 @@ var auditActionOverrides = map[string]string{
 	"POST /api/v1/user/totp/step-up":                          service.AuditActionStepUpVerify,
 	"POST /api/v1/admin/audit-logs/clear":                     service.AuditActionAuditLogClear,
 	"POST /api/v1/admin/accounts/data":                        "admin.accounts.import",
+	"POST /api/v1/admin/accounts/export":                      service.AuditActionAccountsExport,
 	"POST /api/v1/admin/backups":                              "admin.backups.create",
 	"POST /api/v1/admin/backups/:id/restore":                  "admin.backups.restore",
 	"DELETE /api/v1/admin/backups/:id":                        "admin.backups.delete",
@@ -146,6 +147,7 @@ var auditActionOverrides = map[string]string{
 // auditBodyOmittedRoutes 请求体几乎整体由凭证构成的路由（如整块粘贴 auth JSON 的导入接口）。
 // 这类 body 的凭证内嵌在普通字符串值里，键级脱敏无法覆盖，整体不入库。
 var auditBodyOmittedRoutes = map[string]struct{}{
+	"POST /api/v1/admin/accounts/export":                        {},
 	"POST /api/v1/admin/accounts/import/codex-session":          {},
 	"PUT /api/v1/admin/accounts/:id/ollama-cloud-usage/session": {},
 	"PUT /api/v1/admin/prompt-audit/config":                     {},

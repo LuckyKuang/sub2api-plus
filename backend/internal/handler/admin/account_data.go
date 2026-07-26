@@ -4,15 +4,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"log/slog"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
+	servermiddleware "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
 )
@@ -77,6 +80,61 @@ type DataImportRequest struct {
 	SkipDefaultGroupBind *bool       `json:"skip_default_group_bind"`
 }
 
+// AccountExportRequest is deliberately separate from the import payload. It
+// combines scope and one-time human confirmation in a POST body, so neither
+// the requested account range nor credentials travel in a cacheable URL.
+type AccountExportRequest struct {
+	Password       string                `json:"password"`
+	TotpCode       string                `json:"totp_code"`
+	IDs            []int64               `json:"ids"`
+	Filters        *AccountExportFilters `json:"filters"`
+	IncludeProxies *bool                 `json:"include_proxies"`
+}
+
+type AccountExportFilters struct {
+	Platform    string `json:"platform"`
+	Type        string `json:"type"`
+	Status      string `json:"status"`
+	Group       string `json:"group"`
+	PrivacyMode string `json:"privacy_mode"`
+	Search      string `json:"search"`
+	SortBy      string `json:"sort_by"`
+	SortOrder   string `json:"sort_order"`
+}
+
+type exportStepUpSettings interface {
+	GetStepUpEnabledStrict(ctx context.Context) (bool, error)
+}
+
+type exportTotpVerifier interface {
+	VerifyCodeStrict(ctx context.Context, userID int64, code string) error
+}
+
+type exportAuditRecorder interface {
+	RecordCritical(ctx context.Context, entry *service.AuditLog) error
+}
+
+type accountExportSecurity struct {
+	totp     exportTotpVerifier
+	settings exportStepUpSettings
+	audit    exportAuditRecorder
+	limiter  service.AccountExportConfirmationLimiter
+}
+
+func (h *AccountHandler) configureExportSecurity(
+	totp exportTotpVerifier,
+	settings exportStepUpSettings,
+	audit exportAuditRecorder,
+	limiter service.AccountExportConfirmationLimiter,
+) {
+	h.exportSecurity = &accountExportSecurity{
+		totp:     totp,
+		settings: settings,
+		audit:    audit,
+		limiter:  limiter,
+	}
+}
+
 type DataImportResult struct {
 	ProxyCreated   int               `json:"proxy_created"`
 	ProxyReused    int               `json:"proxy_reused"`
@@ -97,18 +155,93 @@ func buildProxyKey(protocol, host string, port int, username, password string) s
 	return fmt.Sprintf("%s|%s|%d|%s|%s", strings.TrimSpace(protocol), strings.TrimSpace(host), port, strings.TrimSpace(username), strings.TrimSpace(password))
 }
 
-func (h *AccountHandler) ExportData(c *gin.Context) {
-	ctx := c.Request.Context()
-
-	selectedIDs, err := parseAccountIDs(c)
+// GetExportRequirements tells the account-management UI whether the current
+// export requires an additional TOTP code. The export endpoint always reads
+// this setting again; this endpoint is only a UI convenience.
+func (h *AccountHandler) GetExportRequirements(c *gin.Context) {
+	setExportNoStoreHeaders(c)
+	if h.exportSecurity == nil || h.exportSecurity.settings == nil {
+		response.ErrorWithDetails(c, http.StatusServiceUnavailable, "Export confirmation is temporarily unavailable", "EXPORT_CONFIRMATION_UNAVAILABLE", nil)
+		return
+	}
+	required, err := h.exportSecurity.settings.GetStepUpEnabledStrict(c.Request.Context())
 	if err != nil {
-		response.BadRequest(c, err.Error())
+		response.ErrorWithDetails(c, http.StatusServiceUnavailable, "Export confirmation is temporarily unavailable", "EXPORT_CONFIRMATION_UNAVAILABLE", nil)
+		return
+	}
+	response.Success(c, gin.H{"step_up_required": required})
+}
+
+func (h *AccountHandler) ExportData(c *gin.Context) {
+	setExportNoStoreHeaders(c)
+	servermiddleware.SkipAudit(c) // this action is recorded synchronously below
+
+	var req AccountExportRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.denyAccountExport(c, "request_invalid", http.StatusBadRequest, false)
+		return
+	}
+	includeProxies := req.IncludeProxies == nil || *req.IncludeProxies
+
+	ctx := c.Request.Context()
+	subject, ok := servermiddleware.GetAuthSubjectFromContext(c)
+	if !ok || subject.UserID <= 0 || c.GetString("auth_method") != service.AuditAuthMethodJWT {
+		h.denyAccountExport(c, "jwt_session_required", http.StatusForbidden, includeProxies)
+		return
+	}
+	if h.exportSecurity == nil || h.exportSecurity.limiter == nil || h.exportSecurity.settings == nil || h.exportSecurity.totp == nil || h.exportSecurity.audit == nil {
+		h.denyAccountExport(c, "export_security_unavailable", http.StatusServiceUnavailable, includeProxies)
 		return
 	}
 
-	accounts, err := h.resolveExportAccounts(ctx, selectedIDs, c)
+	clientIP := servermiddleware.SecurityClientIP(c)
+	allowed, err := h.exportSecurity.limiter.Allowed(ctx, subject.UserID, clientIP)
 	if err != nil {
-		response.ErrorFrom(c, err)
+		h.denyAccountExport(c, "limiter_unavailable", http.StatusServiceUnavailable, includeProxies)
+		return
+	}
+	if !allowed {
+		h.denyAccountExport(c, "confirmation_rate_limited", http.StatusTooManyRequests, includeProxies)
+		return
+	}
+
+	user, err := h.adminService.GetUser(ctx, subject.UserID)
+	if err != nil || user == nil || !user.IsAdmin() || !user.IsActive() {
+		h.denyAccountExport(c, "admin_state_invalid", http.StatusForbidden, includeProxies)
+		return
+	}
+	if strings.TrimSpace(req.Password) == "" || !user.CheckPassword(req.Password) {
+		if err := h.exportSecurity.limiter.RecordFailure(ctx, subject.UserID, clientIP); err != nil {
+			h.denyAccountExport(c, "limiter_unavailable", http.StatusServiceUnavailable, includeProxies)
+			return
+		}
+		h.denyAccountExport(c, "password_invalid", http.StatusForbidden, includeProxies)
+		return
+	}
+
+	stepUpEnabled, err := h.exportSecurity.settings.GetStepUpEnabledStrict(ctx)
+	if err != nil {
+		h.denyAccountExport(c, "step_up_setting_unavailable", http.StatusServiceUnavailable, includeProxies)
+		return
+	}
+	if stepUpEnabled {
+		if strings.TrimSpace(req.TotpCode) == "" || h.exportSecurity.totp.VerifyCodeStrict(ctx, subject.UserID, req.TotpCode) != nil {
+			if err := h.exportSecurity.limiter.RecordFailure(ctx, subject.UserID, clientIP); err != nil {
+				h.denyAccountExport(c, "limiter_unavailable", http.StatusServiceUnavailable, includeProxies)
+				return
+			}
+			h.denyAccountExport(c, "step_up_invalid", http.StatusForbidden, includeProxies)
+			return
+		}
+	}
+	if err := validateAccountExportRequest(req); err != nil {
+		h.denyAccountExport(c, "scope_invalid", http.StatusBadRequest, includeProxies)
+		return
+	}
+
+	accounts, err := h.resolveExportAccounts(ctx, req.IDs, req.Filters)
+	if err != nil {
+		h.denyAccountExport(c, "account_query_failed", http.StatusInternalServerError, includeProxies)
 		return
 	}
 
@@ -130,17 +263,11 @@ func (h *AccountHandler) ExportData(c *gin.Context) {
 		slog.Info("export_skipped_spark_shadows", "count", skippedShadows)
 	}
 
-	includeProxies, err := parseIncludeProxies(c)
-	if err != nil {
-		response.BadRequest(c, err.Error())
-		return
-	}
-
 	var proxies []service.Proxy
 	if includeProxies {
 		proxies, err = h.resolveExportProxies(ctx, accounts)
 		if err != nil {
-			response.ErrorFrom(c, err)
+			h.denyAccountExport(c, "proxy_query_failed", http.StatusInternalServerError, includeProxies)
 			return
 		}
 	} else {
@@ -216,13 +343,100 @@ func (h *AccountHandler) ExportData(c *gin.Context) {
 	}
 
 	payload := DataPayload{
+		Type:           dataType,
+		Version:        dataVersion,
 		ExportedAt:     time.Now().UTC().Format(time.RFC3339),
 		Proxies:        dataProxies,
 		Accounts:       dataAccounts,
 		SkippedShadows: skippedShadows,
 	}
 
+	if err := h.exportSecurity.limiter.Reset(ctx, subject.UserID, clientIP); err != nil {
+		h.denyAccountExport(c, "limiter_unavailable", http.StatusServiceUnavailable, includeProxies)
+		return
+	}
+	if err := h.recordAccountExportAudit(c, "success", "", http.StatusOK, len(dataAccounts), len(dataProxies), includeProxies); err != nil {
+		slog.Error("account_export_audit_failed", "error", err)
+		response.ErrorWithDetails(c, http.StatusServiceUnavailable, "Export confirmation is temporarily unavailable", "EXPORT_AUDIT_UNAVAILABLE", nil)
+		return
+	}
+
 	response.Success(c, payload)
+}
+
+func validateAccountExportRequest(req AccountExportRequest) error {
+	if len(req.IDs) > 0 && req.Filters != nil {
+		return fmt.Errorf("ids and filters cannot be used together")
+	}
+	for _, id := range req.IDs {
+		if id <= 0 {
+			return fmt.Errorf("invalid account id")
+		}
+	}
+	if req.Filters != nil && len(strings.TrimSpace(req.Filters.Search)) > 100 {
+		return fmt.Errorf("search is too long")
+	}
+	return nil
+}
+
+func setExportNoStoreHeaders(c *gin.Context) {
+	c.Header("Cache-Control", "no-store, private, max-age=0")
+	c.Header("Pragma", "no-cache")
+	c.Header("Expires", "0")
+}
+
+func (h *AccountHandler) denyAccountExport(c *gin.Context, stage string, status int, includeProxies bool) {
+	if err := h.recordAccountExportAudit(c, "denied", stage, status, 0, 0, includeProxies); err != nil {
+		slog.Error("account_export_denial_audit_failed", "stage", stage, "error", err)
+		response.ErrorWithDetails(c, http.StatusServiceUnavailable, "Export confirmation is temporarily unavailable", "EXPORT_AUDIT_UNAVAILABLE", nil)
+		return
+	}
+	if status == http.StatusTooManyRequests {
+		response.ErrorWithDetails(c, status, "Too many export confirmation attempts. Please try again later.", "EXPORT_CONFIRMATION_RATE_LIMITED", nil)
+		return
+	}
+	if status >= http.StatusInternalServerError {
+		response.ErrorWithDetails(c, status, "Export confirmation is temporarily unavailable", "EXPORT_CONFIRMATION_UNAVAILABLE", nil)
+		return
+	}
+	response.ErrorWithDetails(c, status, "Export confirmation failed. Verify your administrator password and two-factor code, then try again.", "EXPORT_CONFIRMATION_FAILED", nil)
+}
+
+func (h *AccountHandler) recordAccountExportAudit(c *gin.Context, result, stage string, statusCode, accountCount, proxyCount int, includeProxies bool) error {
+	if h.exportSecurity == nil || h.exportSecurity.audit == nil {
+		return fmt.Errorf("critical export audit unavailable")
+	}
+	entry := &service.AuditLog{
+		CreatedAt:        time.Now().UTC(),
+		Action:           service.AuditActionAccountsExport,
+		Method:           c.Request.Method,
+		Path:             c.FullPath(),
+		ClientIP:         servermiddleware.SecurityClientIP(c),
+		UserAgent:        c.Request.UserAgent(),
+		StatusCode:       statusCode,
+		AuthMethod:       c.GetString("auth_method"),
+		ActorEmail:       c.GetString(servermiddleware.ContextKeyAuthEmail),
+		ActorRole:        c.GetString(string(servermiddleware.ContextKeyUserRole)),
+		CredentialMasked: servermiddleware.MaskedRequestCredential(c),
+		Extra: map[string]any{
+			"result":          result,
+			"error_code":      stage,
+			"account_count":   accountCount,
+			"proxy_count":     proxyCount,
+			"include_proxies": includeProxies,
+		},
+	}
+	if entry.Path == "" {
+		entry.Path = c.Request.URL.Path
+	}
+	if requestID, ok := c.Request.Context().Value(ctxkey.RequestID).(string); ok {
+		entry.RequestID = requestID
+	}
+	if subject, ok := servermiddleware.GetAuthSubjectFromContext(c); ok && subject.UserID > 0 {
+		userID := subject.UserID
+		entry.ActorUserID = &userID
+	}
+	return h.exportSecurity.audit.RecordCritical(c.Request.Context(), entry)
 }
 
 func (h *AccountHandler) ImportData(c *gin.Context) {
@@ -520,7 +734,7 @@ func (h *AccountHandler) listAccountsFiltered(ctx context.Context, platform, acc
 	return out, nil
 }
 
-func (h *AccountHandler) resolveExportAccounts(ctx context.Context, ids []int64, c *gin.Context) ([]service.Account, error) {
+func (h *AccountHandler) resolveExportAccounts(ctx context.Context, ids []int64, filters *AccountExportFilters) ([]service.Account, error) {
 	if len(ids) > 0 {
 		accounts, err := h.adminService.GetAccountsByIDs(ctx, ids)
 		if err != nil {
@@ -536,19 +750,28 @@ func (h *AccountHandler) resolveExportAccounts(ctx context.Context, ids []int64,
 		return out, nil
 	}
 
-	platform := c.Query("platform")
-	accountType := c.Query("type")
-	status := c.Query("status")
-	privacyMode := strings.TrimSpace(c.Query("privacy_mode"))
-	search := strings.TrimSpace(c.Query("search"))
-	sortBy := c.DefaultQuery("sort_by", "name")
-	sortOrder := c.DefaultQuery("sort_order", "asc")
+	if filters == nil {
+		filters = &AccountExportFilters{}
+	}
+	platform := filters.Platform
+	accountType := filters.Type
+	status := filters.Status
+	privacyMode := strings.TrimSpace(filters.PrivacyMode)
+	search := strings.TrimSpace(filters.Search)
+	sortBy := strings.TrimSpace(filters.SortBy)
+	sortOrder := strings.TrimSpace(filters.SortOrder)
+	if sortBy == "" {
+		sortBy = "name"
+	}
+	if sortOrder == "" {
+		sortOrder = "asc"
+	}
 	if len(search) > 100 {
 		search = search[:100]
 	}
 
 	groupID := int64(0)
-	if groupIDStr := c.Query("group"); groupIDStr != "" {
+	if groupIDStr := strings.TrimSpace(filters.Group); groupIDStr != "" {
 		if groupIDStr == accountListGroupUngroupedQueryValue {
 			groupID = service.AccountListGroupUngrouped
 		} else {
