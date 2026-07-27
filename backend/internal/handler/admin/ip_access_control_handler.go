@@ -65,6 +65,13 @@ func (h *IPAccessControlHandler) GetTrustedProxyStatus(c *gin.Context) {
 	policy := h.trustedProxyPolicy()
 	identity := h.identityResolver().Resolve(c)
 	blockingReady := h.automaticBlockingCanBeEnabled(c)
+	trustedProxies := policy.Values
+	if trustedProxies == nil {
+		// Keep the API contract stable for an unconfigured proxy policy. A nil
+		// slice is encoded as JSON null, while the UI consumes this field as a
+		// collection.
+		trustedProxies = []string{}
+	}
 
 	forwardedHeaders := make([]string, 0, 3)
 	for _, header := range []string{"CF-Connecting-IP", "X-Forwarded-For", "X-Real-IP"} {
@@ -79,7 +86,7 @@ func (h *IPAccessControlHandler) GetTrustedProxyStatus(c *gin.Context) {
 	}
 	response.Success(c, trustedProxyStatusResponse{
 		ConfigurationState:           string(policy.State),
-		TrustedProxies:               policy.Values,
+		TrustedProxies:               trustedProxies,
 		ClientIP:                     identity.EffectiveIP,
 		DirectPeerIP:                 identity.DirectPeerIP,
 		DirectPeerTrusted:            policy.DirectPeerTrusted(identity.DirectPeerIP),

@@ -76,13 +76,13 @@
             </div>
             <div class="min-w-0 px-5 py-4">
               <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('admin.ipAccessControl.trustedProxy.forwardedHeaders') }}</p>
-              <p class="mt-1 break-words font-mono text-sm font-medium text-gray-900 dark:text-white">{{ proxyStatus.forwarded_headers.length ? proxyStatus.forwarded_headers.join(', ') : t('admin.ipAccessControl.trustedProxy.none') }}</p>
+              <p class="mt-1 break-words font-mono text-sm font-medium text-gray-900 dark:text-white">{{ forwardedHeaders.length ? forwardedHeaders.join(', ') : t('admin.ipAccessControl.trustedProxy.none') }}</p>
             </div>
           </div>
           <div class="border-t border-gray-100 px-5 py-4 dark:border-dark-700">
             <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('admin.ipAccessControl.trustedProxy.loadedCidrs') }}</p>
-            <div v-if="proxyStatus.trusted_proxies.length" class="mt-2 flex flex-wrap gap-2">
-              <span v-for="proxy in proxyStatus.trusted_proxies" :key="proxy" class="rounded bg-gray-100 px-2 py-1 font-mono text-xs text-gray-700 dark:bg-dark-700 dark:text-gray-200">{{ proxy }}</span>
+            <div v-if="trustedProxies.length" class="mt-2 flex flex-wrap gap-2">
+              <span v-for="proxy in trustedProxies" :key="proxy" class="rounded bg-gray-100 px-2 py-1 font-mono text-xs text-gray-700 dark:bg-dark-700 dark:text-gray-200">{{ proxy }}</span>
             </div>
             <p v-else class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.ipAccessControl.trustedProxy.noneConfigured') }}</p>
             <p :class="proxyStatusMessageClass" class="mt-4 rounded-md border px-3 py-2 text-xs leading-5">{{ proxyStatusMessage }}</p>
@@ -220,6 +220,10 @@ const releaseDialogConfirmText = computed(() => t(releaseIsAllow.value ? 'admin.
 const createForm = reactive<{ ip_or_cidr: string; rule_kind: Extract<IPAccessRuleKind, 'manual_block' | 'allow'>; reason: string; expires_at: string }>({ ip_or_cidr: '', rule_kind: 'manual_block', reason: '', expires_at: '' })
 
 const statusOptions = computed(() => [{ value: 'active', label: t('admin.ipAccessControl.rules.statusActive') }, { value: 'released', label: t('admin.ipAccessControl.rules.statusReleased') }, { value: 'expired', label: t('admin.ipAccessControl.rules.statusExpired') }])
+// The backend returns arrays, but normalize them here as well so a stale
+// deployment or malformed response cannot take down the complete admin view.
+const trustedProxies = computed(() => Array.isArray(proxyStatus.value?.trusted_proxies) ? proxyStatus.value.trusted_proxies : [])
+const forwardedHeaders = computed(() => Array.isArray(proxyStatus.value?.forwarded_headers) ? proxyStatus.value.forwarded_headers : [])
 const automaticBlockingReady = computed(() => proxyStatus.value?.automatic_blocking_ready === true)
 const manualBlockingReady = computed(() => proxyStatus.value?.manual_blocking_ready === true)
 const createKindOptions = computed(() => [

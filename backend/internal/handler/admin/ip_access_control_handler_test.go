@@ -62,6 +62,7 @@ func TestIPAccessControlTrustedProxyStatus(t *testing.T) {
 		require.Equal(t, http.StatusOK, recorder.Code)
 		status := decodeTrustedProxyStatus(t, recorder)
 		require.Equal(t, string(ip.TrustedProxyStateNotConfigured), status.ConfigurationState)
+		require.NotNil(t, status.TrustedProxies)
 		require.Empty(t, status.TrustedProxies)
 		require.Equal(t, "198.51.100.20", status.ClientIP)
 		require.Equal(t, "198.51.100.20", status.DirectPeerIP)

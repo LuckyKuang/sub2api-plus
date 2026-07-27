@@ -221,6 +221,20 @@ describe('IPAccessControlView', () => {
     wrapper.unmount()
   })
 
+  it('renders safely when an older server returns null collection fields', async () => {
+    getTrustedProxyStatus.mockResolvedValue({
+      ...defaultProxyStatus,
+      trusted_proxies: null,
+      forwarded_headers: null,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('admin.ipAccessControl.trustedProxy.noneConfigured')
+    wrapper.unmount()
+  })
+
   it('returns to the last valid page when rule data shrinks', async () => {
     const wrapper = mountView()
     await flushPromises()
