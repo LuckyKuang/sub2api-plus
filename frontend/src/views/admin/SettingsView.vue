@@ -1630,6 +1630,27 @@
             </div>
           </div>
 
+          <!-- Global IP Access Control -->
+          <div class="card">
+            <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+              <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+                {{ t("admin.settings.ipAccessControl.title") }}
+              </h2>
+              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                {{ t("admin.settings.ipAccessControl.description") }}
+              </p>
+            </div>
+            <div class="flex flex-wrap items-center justify-between gap-4 p-6">
+              <p class="max-w-3xl text-sm leading-6 text-gray-500 dark:text-gray-400">
+                {{ t("admin.settings.ipAccessControl.hint") }}
+              </p>
+              <RouterLink to="/admin/ip-access-control" class="btn btn-secondary">
+                <Icon name="shield" size="sm" class="mr-1.5" />
+                {{ t("admin.settings.ipAccessControl.manage") }}
+              </RouterLink>
+            </div>
+          </div>
+
           <!-- API Key IP ACL Settings -->
           <div class="card">
             <div

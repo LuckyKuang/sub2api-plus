@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"math"
 	"net"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	servermiddleware "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -54,9 +56,10 @@ var upgrader = websocket.Upgrader{
 }
 
 const (
-	qpsWSPushInterval       = 2 * time.Second
-	qpsWSRefreshInterval    = 5 * time.Second
-	qpsWSRequestCountWindow = 1 * time.Minute
+	qpsWSPushInterval        = 2 * time.Second
+	qpsWSRefreshInterval     = 5 * time.Second
+	qpsWSRequestCountWindow  = 1 * time.Minute
+	qpsWSPolicyCheckInterval = 5 * time.Second
 
 	defaultMaxWSConns      = 100
 	defaultMaxWSConnsPerIP = 20
@@ -314,10 +317,20 @@ func closeWS(conn *websocket.Conn, code int, reason string) {
 // QPSWSHandler handles realtime QPS push via WebSocket.
 // GET /api/v1/admin/ops/ws/qps
 func (h *OpsHandler) QPSWSHandler(c *gin.Context) {
-	clientIP := requestClientIP(c.Request)
+	// The global policy and per-IP connection limiter must identify the same
+	// source. Gin's trusted-proxy chain is the only accepted security source.
+	clientIdentity := servermiddleware.TrustedClientIdentity(c)
+	clientIP := clientIdentity.EffectiveIP
 
 	if h == nil || h.opsService == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "ops service not initialized"})
+		return
+	}
+	if blocked, err := h.isIPBlockedForIdentity(c.Request.Context(), clientIdentity); err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "IP access control is temporarily unavailable"})
+		return
+	} else if blocked {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access from this IP address has been prohibited."})
 		return
 	}
 
@@ -369,7 +382,21 @@ func (h *OpsHandler) QPSWSHandler(c *gin.Context) {
 		_ = conn.Close()
 	}()
 
-	handleQPSWebSocket(c.Request.Context(), conn)
+	handleQPSWebSocketWithIPAccess(c.Request.Context(), conn, func(ctx context.Context) (bool, error) {
+		return h.isIPBlockedForIdentity(ctx, clientIdentity)
+	})
+}
+
+func (h *OpsHandler) isIPBlocked(ctx context.Context, clientIP string) (bool, error) {
+	return h.isIPBlockedForIdentity(ctx, ip.ClientIdentity{EffectiveIP: clientIP, SafeForEnforcement: strings.TrimSpace(clientIP) != ""})
+}
+
+func (h *OpsHandler) isIPBlockedForIdentity(ctx context.Context, identity ip.ClientIdentity) (bool, error) {
+	if h == nil || h.ipAccessControl == nil {
+		return false, errors.New("IP access control dependency unavailable")
+	}
+	decision, err := h.ipAccessControl.Evaluate(ctx, identity)
+	return decision.Blocked, err
 }
 
 func tryAcquireOpsWSTotalSlot(limit int32) bool {
@@ -419,8 +446,28 @@ func releaseOpsWSIPSlot(clientIP string) {
 }
 
 func handleQPSWebSocket(parentCtx context.Context, conn *websocket.Conn) {
+	handleQPSWebSocketWithIPAccess(parentCtx, conn, nil)
+}
+
+func handleQPSWebSocketWithIPAccess(
+	parentCtx context.Context,
+	conn *websocket.Conn,
+	checkIPAccess func(context.Context) (bool, error),
+) {
+	handleQPSWebSocketWithIPAccessInterval(parentCtx, conn, checkIPAccess, qpsWSPolicyCheckInterval)
+}
+
+func handleQPSWebSocketWithIPAccessInterval(
+	parentCtx context.Context,
+	conn *websocket.Conn,
+	checkIPAccess func(context.Context) (bool, error),
+	policyCheckInterval time.Duration,
+) {
 	if conn == nil {
 		return
+	}
+	if policyCheckInterval <= 0 {
+		policyCheckInterval = qpsWSPolicyCheckInterval
 	}
 
 	ctx, cancel := context.WithCancel(parentCtx)
@@ -477,6 +524,9 @@ func handleQPSWebSocket(parentCtx context.Context, conn *websocket.Conn) {
 	pingTicker := time.NewTicker(qpsWSPingInterval)
 	defer pingTicker.Stop()
 
+	policyTicker := time.NewTicker(policyCheckInterval)
+	defer policyTicker.Stop()
+
 	writeWithTimeout := func(messageType int, data []byte) error {
 		if err := conn.SetWriteDeadline(time.Now().Add(qpsWSWriteTimeout)); err != nil {
 			return err
@@ -509,6 +559,26 @@ func handleQPSWebSocket(parentCtx context.Context, conn *websocket.Conn) {
 		case <-pingTicker.C:
 			if err := writeWithTimeout(websocket.PingMessage, nil); err != nil {
 				logger.LegacyPrintf("handler.admin.ops_ws", "[OpsWS] ping failed: %v", err)
+				cancel()
+				closeConn()
+				wg.Wait()
+				return
+			}
+
+		case <-policyTicker.C:
+			if checkIPAccess == nil {
+				continue
+			}
+			blocked, err := checkIPAccess(ctx)
+			if err != nil {
+				sendClose(websocket.FormatCloseMessage(websocket.CloseTryAgainLater, "IP access control is temporarily unavailable."))
+				cancel()
+				closeConn()
+				wg.Wait()
+				return
+			}
+			if blocked {
+				sendClose(websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "Access from this IP address has been prohibited."))
 				cancel()
 				closeConn()
 				wg.Wait()

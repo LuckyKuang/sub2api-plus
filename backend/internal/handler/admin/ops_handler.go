@@ -14,7 +14,8 @@ import (
 )
 
 type OpsHandler struct {
-	opsService *service.OpsService
+	opsService      *service.OpsService
+	ipAccessControl *service.IPAccessControlService
 }
 
 // GetErrorLogByID returns ops error log detail.
@@ -70,6 +71,14 @@ func parseOpsViewParam(c *gin.Context) string {
 
 func NewOpsHandler(opsService *service.OpsService) *OpsHandler {
 	return &OpsHandler{opsService: opsService}
+}
+
+// SetIPAccessControlService injects the global policy without changing the
+// compact constructor used by the existing Ops handler tests.
+func (h *OpsHandler) SetIPAccessControlService(access *service.IPAccessControlService) {
+	if h != nil {
+		h.ipAccessControl = access
+	}
 }
 
 // GetErrorLogs lists ops error logs.

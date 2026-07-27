@@ -221,6 +221,23 @@ func TestLoadExplicitEmptyTrustedProxiesFromEnvironment(t *testing.T) {
 	require.True(t, cfg.Server.TrustedProxiesConfigured)
 }
 
+func TestLoadIPAccessEmergencyAllowlistFromEnvironment(t *testing.T) {
+	resetViperWithJWTSecret(t)
+	t.Setenv("SERVER_IP_ACCESS_EMERGENCY_ALLOWLIST", "203.0.113.9, 2001:db8::99/128, 203.0.113.9")
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.Equal(t, []string{"203.0.113.9", "2001:db8::99/128"}, cfg.Server.IPAccessEmergencyAllowlist)
+}
+
+func TestLoadRejectsGlobalIPAccessEmergencyAllowlist(t *testing.T) {
+	resetViperWithJWTSecret(t)
+	t.Setenv("SERVER_IP_ACCESS_EMERGENCY_ALLOWLIST", "0.0.0.0/0")
+
+	_, err := Load()
+	require.ErrorContains(t, err, "server.ip_access_emergency_allowlist")
+}
+
 func TestLoadTrustedProxiesPresenceFromYAML(t *testing.T) {
 	tests := []struct {
 		name       string

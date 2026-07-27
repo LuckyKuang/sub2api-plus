@@ -442,6 +442,18 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/admin/ip-access-control',
+    name: 'AdminIPAccessControl',
+    component: () => import('@/views/admin/IPAccessControlView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'IP Access Control',
+      titleKey: 'admin.ipAccessControl.title',
+      descriptionKey: 'admin.ipAccessControl.description'
+    }
+  },
+  {
     path: '/admin/users',
     name: 'AdminUsers',
     component: () => import('@/views/admin/UsersView.vue'),

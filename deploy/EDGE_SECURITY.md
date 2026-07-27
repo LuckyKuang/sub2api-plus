@@ -31,7 +31,7 @@ the application's responsibility.
 
 `security.trust_forwarded_ip_for_api_key_acl` is enabled by default for upgrade
 compatibility. While enabled, raw forwarding headers take over client-IP
-resolution for logs and security-sensitive paths. Custom headers from
+resolution for legacy logs, session binding, and API-key ACL compatibility. Custom headers from
 `security.forwarded_client_ip_headers` are checked in configured order before
 the built-in `CF-Connecting-IP`, `X-Real-IP`, and `X-Forwarded-For` fallback.
 Header names are case-insensitive, normalized when loaded, de-duplicated, and
@@ -65,6 +65,56 @@ peer, including any configured custom header. Protect the origin from direct
 access while it is enabled. A CDN deployment must firewall the origin so only
 the CDN or load balancer can reach it, and that proxy must overwrite every
 trusted client-IP header rather than append an untrusted client value.
+
+### Global IP access control
+
+The administrator-managed IP access policy intentionally does **not** use the
+legacy raw-header takeover. It always resolves one request identity from
+`server.trusted_proxies` and uses that same identity for HTTP routes, login
+failure counting, and long-lived WebSocket rechecks. This prevents a direct
+client from spoofing `CF-Connecting-IP`, `X-Real-IP`, or `X-Forwarded-For` to
+evade or poison a block.
+
+- Configure only the direct Nginx, Caddy, load-balancer, or container-network
+  CIDRs that connect to this application. Do not add `0.0.0.0/0`, `::/0`, or a
+  broad CDN egress range directly to the application.
+- Global enforcement and administrator-created block rules require an explicit
+  `server.trusted_proxies` declaration. For a deliberately direct deployment,
+  set `trusted_proxies: []`; an omitted setting is not eligible to enable those
+  actions because the application cannot distinguish a direct client from an
+  accidentally unconfigured shared proxy peer.
+- The trusted reverse proxy must overwrite the client-IP headers it sends to
+  the application. Behind Cloudflare, parse Cloudflare's source at the edge,
+  then forward the resulting client IP in a fresh `X-Forwarded-For` or
+  `X-Real-IP` header. Global enforcement accepts exactly one address in that
+  header; a comma-separated or repeated forwarding chain is treated as unsafe
+  and returns `503` until the edge proxy is corrected.
+- When a proxy is configured but no distinct downstream client address can be
+  resolved, global enforcement fails closed with `503`; the administrator UI
+  also prevents enabling enforcement or adding a manual block from that state.
+- `/health` remains a liveness-only exemption for the container orchestrator.
+  `/ready` is subject to the global policy and therefore returns `403` for a
+  blocked source.
+
+For a deployment-level recovery path, configure a fixed administrator egress
+address before enabling enforcement:
+
+```yaml
+server:
+  ip_access_emergency_allowlist:
+    - 203.0.113.10/32
+```
+
+or:
+
+```bash
+SERVER_IP_ACCESS_EMERGENCY_ALLOWLIST=203.0.113.10/32,2001:db8::10/128
+```
+
+The allowlist is not stored in the database and its values are not exposed by
+the admin API. It can match the verified client IP, or the direct TCP peer only
+while repairing a broken proxy chain. A change requires recreating the app
+container. Global `/0` entries and IPv4-mapped IPv6 networks are rejected.
 
 Example for a proxy on the same host:
 

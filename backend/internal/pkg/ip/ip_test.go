@@ -52,6 +52,25 @@ func TestGetClientIPPreservesLegacyDockerForwardedHeaders(t *testing.T) {
 	require.Equal(t, "203.0.113.42", w.Body.String())
 }
 
+func TestGetClientIPSkipsInvalidLegacyXFFCandidates(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	r := gin.New()
+	require.NoError(t, r.SetTrustedProxies(nil))
+	r.GET("/t", func(c *gin.Context) {
+		c.String(200, GetClientIP(c))
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/t", nil)
+	req.RemoteAddr = "192.168.32.1:12345"
+	req.Header.Set("X-Forwarded-For", "invalid-ip, 203.0.113.42")
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, 200, w.Code)
+	require.Equal(t, "203.0.113.42", w.Body.String())
+}
+
 func TestCheckIPRestrictionWithCompiledRules(t *testing.T) {
 	whitelist := CompileIPRules([]string{"10.0.0.0/8", "192.168.1.2"})
 	blacklist := CompileIPRules([]string{"10.1.1.1"})
@@ -71,6 +90,107 @@ func TestCheckIPRestrictionWithCompiledRules_InvalidWhitelistStillDenies(t *test
 	allowed, reason := CheckIPRestrictionWithCompiledRules("8.8.8.8", invalidWhitelist, nil)
 	require.False(t, allowed)
 	require.Equal(t, "access denied", reason)
+}
+
+func TestNormalizeIPOrCIDRCanonicalizesNetworks(t *testing.T) {
+	require.Equal(t, "192.0.2.0/24", NormalizeIPOrCIDR("192.0.2.99/24"))
+	require.Equal(t, "2001:db8::/64", NormalizeIPOrCIDR("2001:db8::1234/64"))
+	require.Equal(t, "192.0.2.1", NormalizeIPOrCIDR("::ffff:192.0.2.1"))
+	require.Equal(t, "", NormalizeIPOrCIDR("not-an-ip"))
+}
+
+func TestNormalizeNonGlobalIPOrCIDRRejectsBroadRecoveryRanges(t *testing.T) {
+	require.Equal(t, "203.0.113.0/24", NormalizeNonGlobalIPOrCIDR("203.0.113.9/24"))
+	require.Equal(t, "2001:db8::99", NormalizeNonGlobalIPOrCIDR("2001:db8::99"))
+	require.Empty(t, NormalizeNonGlobalIPOrCIDR("0.0.0.0/0"))
+	require.Empty(t, NormalizeNonGlobalIPOrCIDR("::/0"))
+	require.Empty(t, NormalizeNonGlobalIPOrCIDR("::ffff:192.0.2.0/120"))
+}
+
+func TestInspectTrustedProxyConfiguration(t *testing.T) {
+	tests := []struct {
+		name       string
+		configured bool
+		values     []string
+		state      TrustedProxyConfigurationState
+		trusted    bool
+	}{
+		{name: "not configured", state: TrustedProxyStateNotConfigured},
+		{name: "explicit empty", configured: true, state: TrustedProxyStateEmpty},
+		{name: "ipv4 cidr", configured: true, values: []string{"10.0.0.0/8"}, state: TrustedProxyStateConfigured, trusted: true},
+		{name: "ipv6 address", configured: true, values: []string{"2001:db8::1"}, state: TrustedProxyStateConfigured},
+		{name: "invalid", configured: true, values: []string{"not-an-ip"}, state: TrustedProxyStateInvalid},
+		{name: "wildcard is unsafe", configured: true, values: []string{"*"}, state: TrustedProxyStateInvalid},
+		{name: "ipv4 global cidr is unsafe", configured: true, values: []string{"0.0.0.0/0"}, state: TrustedProxyStateInvalid},
+		{name: "ipv6 global cidr is unsafe", configured: true, values: []string{"::/0"}, state: TrustedProxyStateInvalid},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			configuration := InspectTrustedProxyConfiguration(tc.configured, tc.values)
+			require.Equal(t, tc.state, configuration.State)
+			require.Equal(t, tc.trusted, configuration.DirectPeerTrusted("10.1.2.3"))
+		})
+	}
+}
+
+func TestClientIdentityResolverRequiresCompleteTrustedProxyChain(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	policy := InspectTrustedProxyConfiguration(true, []string{"10.0.0.0/8"})
+	resolver := NewClientIdentityResolver(policy)
+
+	t.Run("trusted peer with downstream source", func(t *testing.T) {
+		router := gin.New()
+		require.NoError(t, router.SetTrustedProxies(policy.Values))
+		var identity ClientIdentity
+		router.GET("/t", func(c *gin.Context) { identity = resolver.Resolve(c) })
+		request := httptest.NewRequest("GET", "/t", nil)
+		request.RemoteAddr = "10.1.2.3:12345"
+		request.Header.Set("X-Forwarded-For", "203.0.113.8")
+		router.ServeHTTP(httptest.NewRecorder(), request)
+		require.True(t, identity.SafeForEnforcement)
+		require.Equal(t, "203.0.113.8", identity.EffectiveIP)
+		require.Equal(t, ClientIdentitySourceTrustedForwarded, identity.Source)
+	})
+
+	t.Run("trusted peer without forwarded source is unsafe", func(t *testing.T) {
+		router := gin.New()
+		require.NoError(t, router.SetTrustedProxies(policy.Values))
+		var identity ClientIdentity
+		router.GET("/t", func(c *gin.Context) { identity = resolver.Resolve(c) })
+		request := httptest.NewRequest("GET", "/t", nil)
+		request.RemoteAddr = "10.1.2.3:12345"
+		router.ServeHTTP(httptest.NewRecorder(), request)
+		require.False(t, identity.SafeForEnforcement)
+		require.Equal(t, "unsafe_proxy_chain", identity.FailureReason)
+	})
+
+	t.Run("multi-hop forwarding is unsafe until the final proxy rewrites it", func(t *testing.T) {
+		router := gin.New()
+		require.NoError(t, router.SetTrustedProxies(policy.Values))
+		var identity ClientIdentity
+		router.GET("/t", func(c *gin.Context) { identity = resolver.Resolve(c) })
+		request := httptest.NewRequest("GET", "/t", nil)
+		request.RemoteAddr = "10.1.2.3:12345"
+		// Gin would return the right-most untrusted address (the CDN hop), not
+		// the original client. The global policy must refuse this ambiguity.
+		request.Header.Set("X-Forwarded-For", "198.51.100.8, 203.0.113.8")
+		router.ServeHTTP(httptest.NewRecorder(), request)
+		require.False(t, identity.SafeForEnforcement)
+		require.Equal(t, "forwarded_chain_not_sanitized", identity.FailureReason)
+	})
+
+	t.Run("a single rewritten X-Real-IP is accepted when XFF is absent", func(t *testing.T) {
+		router := gin.New()
+		require.NoError(t, router.SetTrustedProxies(policy.Values))
+		var identity ClientIdentity
+		router.GET("/t", func(c *gin.Context) { identity = resolver.Resolve(c) })
+		request := httptest.NewRequest("GET", "/t", nil)
+		request.RemoteAddr = "10.1.2.3:12345"
+		request.Header.Set("X-Real-IP", "203.0.113.8")
+		router.ServeHTTP(httptest.NewRecorder(), request)
+		require.True(t, identity.SafeForEnforcement)
+		require.Equal(t, "203.0.113.8", identity.EffectiveIP)
+	})
 }
 
 func TestGetSecurityClientIPSwitchEnabledUsesLegacyHeaders(t *testing.T) {

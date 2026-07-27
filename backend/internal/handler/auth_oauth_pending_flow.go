@@ -1633,6 +1633,9 @@ func (h *AuthHandler) bindPendingOAuthLogin(c *gin.Context, provider string) {
 
 	user, err := h.authService.ValidatePasswordCredentials(c.Request.Context(), strings.TrimSpace(req.Email), req.Password)
 	if err != nil {
+		if h.handleLocalAuthenticationFailure(c, err) {
+			return
+		}
 		response.ErrorFrom(c, err)
 		return
 	}
@@ -1674,7 +1677,6 @@ func (h *AuthHandler) bindPendingOAuthLogin(c *gin.Context, provider string) {
 		return
 	}
 
-	h.authService.RecordSuccessfulLogin(c.Request.Context(), user.ID)
 	// bindPendingOAuthLogin = 绑定已有账户登录，不动 users.username（用户已有自己的名字）
 	h.maybeSyncDingTalkAfterLogin(c.Request.Context(), session, user.ID)
 	tokenPair, err := h.authService.GenerateTokenPair(c.Request.Context(), user, "")
@@ -1685,6 +1687,9 @@ func (h *AuthHandler) bindPendingOAuthLogin(c *gin.Context, provider string) {
 	if _, err := pendingSvc.ConsumeBrowserSession(c.Request.Context(), session.SessionToken, session.BrowserSessionKey); err != nil {
 		clearCookies()
 		response.ErrorFrom(c, err)
+		return
+	}
+	if !h.recordSuccessfulAuthentication(c, user.ID) {
 		return
 	}
 
@@ -1875,7 +1880,9 @@ func (h *AuthHandler) createPendingOAuthAccount(c *gin.Context, provider string)
 	}
 
 	h.authService.ApplyOAuthSignupPromoCode(c.Request.Context(), user.ID, pendingOAuthPromoCode(session))
-	h.authService.RecordSuccessfulLogin(c.Request.Context(), user.ID)
+	if !h.recordSuccessfulAuthentication(c, user.ID) {
+		return
+	}
 	// createPendingOAuthAccount = 注册新账户，需要把钉钉昵称同步到 users.username 作为初始值
 	h.maybeSyncDingTalkAfterRegistration(c.Request.Context(), session, user.ID)
 	clearCookies()
@@ -2028,7 +2035,9 @@ func (h *AuthHandler) ExchangePendingOAuthCompletion(c *gin.Context) {
 			response.InternalError(c, "Failed to generate token pair")
 			return
 		}
-		h.authService.RecordSuccessfulLogin(c.Request.Context(), loginUser.ID)
+		if !h.recordSuccessfulAuthentication(c, loginUser.ID) {
+			return
+		}
 		payload["access_token"] = tokenPair.AccessToken
 		payload["refresh_token"] = tokenPair.RefreshToken
 		payload["expires_in"] = tokenPair.ExpiresIn

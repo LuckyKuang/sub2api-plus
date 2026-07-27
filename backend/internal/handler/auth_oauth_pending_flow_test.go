@@ -1840,6 +1840,8 @@ func TestBindOIDCOAuthLoginBlocksBackendModeBeforeTokenIssue(t *testing.T) {
 func TestBindOIDCOAuthLoginRejectsInvalidPasswordWithoutConsumingSession(t *testing.T) {
 	handler, client := newOAuthPendingFlowTestHandler(t, false)
 	ctx := context.Background()
+	ipAccess, failureSpy := newAuthIPAccessControlForTest(2)
+	handler.SetIPAccessControlService(ipAccess)
 
 	passwordHash, err := handler.authService.HashPassword("secret-123")
 	require.NoError(t, err)
@@ -1875,6 +1877,7 @@ func TestBindOIDCOAuthLoginRejectsInvalidPasswordWithoutConsumingSession(t *test
 	recorder := httptest.NewRecorder()
 	ginCtx, _ := gin.CreateTestContext(recorder)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/oauth/oidc/bind-login", body)
+	req.RemoteAddr = "203.0.113.24:43123"
 	req.Header.Set("Content-Type", "application/json")
 	req.AddCookie(&http.Cookie{Name: oauthPendingSessionCookieName, Value: encodeCookieValue(session.SessionToken)})
 	req.AddCookie(&http.Cookie{Name: oauthPendingBrowserCookieName, Value: encodeCookieValue("bind-login-invalid-password-browser-session-key")})
@@ -1885,6 +1888,8 @@ func TestBindOIDCOAuthLoginRejectsInvalidPasswordWithoutConsumingSession(t *test
 	require.Equal(t, http.StatusUnauthorized, recorder.Code)
 	payload := decodeJSONBody(t, recorder)
 	require.Equal(t, "INVALID_CREDENTIALS", payload["reason"])
+	require.Equal(t, []string{"203.0.113.24"}, failureSpy.recordedIPs)
+	require.Equal(t, []int{2}, failureSpy.thresholds)
 
 	identityCount, err := client.AuthIdentity.Query().
 		Where(
@@ -1897,6 +1902,27 @@ func TestBindOIDCOAuthLoginRejectsInvalidPasswordWithoutConsumingSession(t *test
 	require.Zero(t, identityCount)
 
 	storedSession, err := client.PendingAuthSession.Get(ctx, session.ID)
+	require.NoError(t, err)
+	require.Nil(t, storedSession.ConsumedAt)
+
+	secondBody := bytes.NewBufferString(`{"email":"owner@example.com","password":"wrong-password"}`)
+	secondRecorder := httptest.NewRecorder()
+	secondCtx, _ := gin.CreateTestContext(secondRecorder)
+	secondReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/oauth/oidc/bind-login", secondBody)
+	secondReq.RemoteAddr = "203.0.113.24:43124"
+	secondReq.Header.Set("Content-Type", "application/json")
+	secondReq.AddCookie(&http.Cookie{Name: oauthPendingSessionCookieName, Value: encodeCookieValue(session.SessionToken)})
+	secondReq.AddCookie(&http.Cookie{Name: oauthPendingBrowserCookieName, Value: encodeCookieValue("bind-login-invalid-password-browser-session-key")})
+	secondCtx.Request = secondReq
+
+	handler.BindOIDCOAuthLogin(secondCtx)
+
+	require.Equal(t, http.StatusForbidden, secondRecorder.Code)
+	secondPayload := decodeJSONBody(t, secondRecorder)
+	require.Equal(t, "IP_BANNED", secondPayload["code"])
+	require.Equal(t, []string{"203.0.113.24", "203.0.113.24"}, failureSpy.recordedIPs)
+
+	storedSession, err = client.PendingAuthSession.Get(ctx, session.ID)
 	require.NoError(t, err)
 	require.Nil(t, storedSession.ConsumedAt)
 }

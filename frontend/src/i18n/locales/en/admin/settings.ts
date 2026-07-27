@@ -135,6 +135,12 @@ export default {
         auditRetention: 'Audit Log Retention (days)',
         auditRetentionHint: 'Audit logs older than this are cleaned up automatically. Set to 0 to keep them forever (manual clear only).'
       },
+      ipAccessControl: {
+        title: 'Global IP Access Control',
+        description: 'Manage global IP block rules and automatic blocks after consecutive local login failures. Disabled by default.',
+        hint: 'Rules apply consistently to login, the console, user pages, gateway APIs, and async image endpoints. Configure trusted proxy ranges on the server when using Cloudflare or another reverse proxy.',
+        manage: 'Configure IP Access Control'
+      },
       turnstile: {
         title: 'Cloudflare Turnstile',
         description: 'Bot protection for login and registration',

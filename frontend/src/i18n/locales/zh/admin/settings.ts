@@ -135,6 +135,12 @@ export default {
         auditRetention: '操作日志保留天数',
         auditRetentionHint: '超过该天数的操作日志将被自动清理；填 0 表示永久保留（仅支持手动清空）。'
       },
+      ipAccessControl: {
+        title: '全局 IP 访问控制',
+        description: '管理全局 IP 黑名单，以及本地登录连续失败后的自动封禁。默认关闭。',
+        hint: '规则会在登录、管理端、用户端、网关 API 和异步生图入口统一生效。Cloudflare 或反向代理部署时，请在服务端配置可信代理网段。',
+        manage: '配置 IP 访问控制'
+      },
       turnstile: {
         title: 'Cloudflare Turnstile',
         description: '登录和注册的机器人防护',

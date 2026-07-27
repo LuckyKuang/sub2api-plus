@@ -488,8 +488,33 @@ func (s *OpenAIGatewayService) ProxyLiveSideband(
 	record *LiveCallRecord,
 	downstream *coderws.Conn,
 ) error {
+	return s.ProxyLiveSidebandWithHooks(ctx, record, downstream, nil)
+}
+
+// LiveSidebandHooks supplies request-owner policy checks to a sideband
+// connection. The service deliberately owns the periodic and per-frame call
+// sites; handlers only provide the policy decision so long-lived websocket
+// sessions cannot outlive an access-control change.
+type LiveSidebandHooks struct {
+	BeforeFrame  func(context.Context) error
+	RecheckEvery time.Duration
+}
+
+// ProxyLiveSidebandWithHooks lets an authenticated client take over a live
+// control connection while periodically rechecking caller-owned policy.
+func (s *OpenAIGatewayService) ProxyLiveSidebandWithHooks(
+	ctx context.Context,
+	record *LiveCallRecord,
+	downstream *coderws.Conn,
+	hooks *LiveSidebandHooks,
+) error {
 	if record == nil || downstream == nil {
 		return ErrLiveCallNotFound
+	}
+	if hooks != nil && hooks.BeforeFrame != nil {
+		if err := hooks.BeforeFrame(ctx); err != nil {
+			return err
+		}
 	}
 	store, err := s.liveStore()
 	if err != nil {
@@ -517,16 +542,35 @@ func (s *OpenAIGatewayService) ProxyLiveSideband(
 
 	proxyCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	errCh := make(chan error, 2)
+	errCh := make(chan error, 3)
+	reportError := func(err error) {
+		if err == nil {
+			return
+		}
+		select {
+		case errCh <- err:
+		case <-proxyCtx.Done():
+		}
+	}
+	checkPolicy := func() error {
+		if hooks == nil || hooks.BeforeFrame == nil {
+			return nil
+		}
+		return hooks.BeforeFrame(proxyCtx)
+	}
 	go func() {
 		for {
 			messageType, payload, readErr := downstream.Read(proxyCtx)
 			if readErr != nil {
-				errCh <- readErr
+				reportError(readErr)
+				return
+			}
+			if policyErr := checkPolicy(); policyErr != nil {
+				reportError(policyErr)
 				return
 			}
 			if writeErr := upstream.WriteFrame(proxyCtx, messageType, payload); writeErr != nil {
-				errCh <- writeErr
+				reportError(writeErr)
 				return
 			}
 		}
@@ -535,26 +579,58 @@ func (s *OpenAIGatewayService) ProxyLiveSideband(
 		for {
 			messageType, payload, readErr := upstream.ReadFrame(proxyCtx)
 			if readErr != nil {
-				errCh <- liveSidebandReadError(readErr)
+				reportError(liveSidebandReadError(readErr))
+				return
+			}
+			if policyErr := checkPolicy(); policyErr != nil {
+				reportError(policyErr)
 				return
 			}
 			if writeErr := downstream.Write(proxyCtx, messageType, payload); writeErr != nil {
-				errCh <- writeErr
+				reportError(writeErr)
 				return
 			}
 			if messageType == coderws.MessageText {
 				eventType := strings.TrimSpace(gjson.GetBytes(payload, "type").String())
 				if eventType == "session.closed" || eventType == "session.ended" {
-					errCh <- ErrLiveCallNotFound
+					reportError(ErrLiveCallNotFound)
 					return
 				}
 			}
 		}
 	}()
+	if hooks != nil && hooks.BeforeFrame != nil {
+		interval := hooks.RecheckEvery
+		if interval <= 0 {
+			interval = 5 * time.Second
+		}
+		go func() {
+			ticker := time.NewTicker(interval)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-proxyCtx.Done():
+					return
+				case <-ticker.C:
+					if policyErr := checkPolicy(); policyErr != nil {
+						reportError(policyErr)
+						return
+					}
+				}
+			}
+		}()
+	}
 
 	runErr := s.runLiveController(proxyCtx, record, upstream, errCh)
 	cancel()
 	_, _ = store.ReleaseLiveController(context.Background(), record.CallHash, owner)
+	var policyClose *OpenAIWSClientCloseError
+	if errors.As(runErr, &policyClose) {
+		// A revoked client must not leave an observer connection forwarding the
+		// same live session in the background after its sideband is closed.
+		s.finalizeLiveCall(record)
+		return runErr
+	}
 	if liveSessionEnded(runErr) || !time.Now().Before(record.ExpiresAt) {
 		s.finalizeLiveCall(record)
 		return runErr

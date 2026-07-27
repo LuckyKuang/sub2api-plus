@@ -412,6 +412,8 @@ Additional security-related options are available in `config.yaml`:
 - `billing.circuit_breaker` to fail closed on billing errors
 - `security.trust_forwarded_ip_for_api_key_acl` enables legacy raw forwarded-header takeover (enabled by default for upgrade compatibility); disable it to enforce `server.trusted_proxies`, which should contain only the exact proxy CIDRs that connect directly to Sub2API Plus
 - `security.forwarded_client_ip_headers` configures up to 16 third-party CDN client-IP header names; they are checked in order before the built-in headers only while legacy takeover is enabled
+- `server.trusted_proxies` is always authoritative for the global IP access-control policy and must be explicitly declared before global enforcement or a manual block can be enabled. Use `trusted_proxies: []` only for a deliberately direct deployment; otherwise configure only the direct reverse-proxy/container CIDRs, never `0.0.0.0/0` or `::/0`. The final proxy must overwrite `X-Forwarded-For` or `X-Real-IP` with exactly one client address; global enforcement rejects multi-hop/repeated forwarding chains.
+- `server.ip_access_emergency_allowlist` / `SERVER_IP_ACCESS_EMERGENCY_ALLOWLIST` is an optional deployment-only break-glass list for fixed administrator egress IPs; changing it requires recreating the app container
 - `turnstile.required` to require Turnstile in release mode
 
 Custom client-IP headers can be set in YAML or as a comma-separated environment variable:

@@ -85,6 +85,14 @@ func TestConfigureTrustedProxies(t *testing.T) {
 			},
 			want: "9.9.9.9",
 		},
+		{
+			name: "wildcard proxy list fails closed",
+			cfg: config.ServerConfig{
+				TrustedProxies:           []string{"*"},
+				TrustedProxiesConfigured: true,
+			},
+			want: "9.9.9.9",
+		},
 	}
 
 	for _, tc := range tests {

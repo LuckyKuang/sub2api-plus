@@ -206,6 +206,9 @@ func (h *AuthHandler) emailOAuthCallbackWithProfile(
 		redirectOAuthError(c, frontendCallback, "login_blocked", infraerrors.Reason(err), infraerrors.Message(err))
 		return
 	}
+	if !h.recordSuccessfulAuthentication(c, user.ID) {
+		return
+	}
 
 	fragment := url.Values{}
 	fragment.Set("access_token", tokenPair.AccessToken)
@@ -436,7 +439,9 @@ func (h *AuthHandler) completeEmailOAuthRegistration(c *gin.Context, provider st
 		return
 	}
 	h.authService.ApplyOAuthSignupPromoCode(c.Request.Context(), user.ID, pendingOAuthPromoCode(session))
-	h.authService.RecordSuccessfulLogin(c.Request.Context(), user.ID)
+	if !h.recordSuccessfulAuthentication(c, user.ID) {
+		return
+	}
 	clearCookies()
 	writeOAuthTokenPairResponse(c, tokenPair)
 }

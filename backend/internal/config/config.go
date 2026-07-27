@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
 	"github.com/spf13/viper"
 	"golang.org/x/net/http/httpguts"
 )
@@ -657,18 +658,19 @@ type PricingConfig struct {
 }
 
 type ServerConfig struct {
-	Host                     string    `mapstructure:"host"`
-	Port                     int       `mapstructure:"port"`
-	Mode                     string    `mapstructure:"mode"`                  // debug/release
-	EnableServerTiming       bool      `mapstructure:"enable_server_timing"`  // Admin UI Server-Timing response header
-	FrontendURL              string    `mapstructure:"frontend_url"`          // 前端基础 URL，用于生成邮件中的外部链接
-	ReadHeaderTimeout        int       `mapstructure:"read_header_timeout"`   // 读取请求头超时（秒）
-	MaxHeaderBytes           int       `mapstructure:"max_header_bytes"`      // 请求头最大字节数（HTTP/2 映射为 header-list 上限）
-	IdleTimeout              int       `mapstructure:"idle_timeout"`          // 空闲连接超时（秒）
-	TrustedProxies           []string  `mapstructure:"trusted_proxies"`       // 可信代理列表（CIDR/IP）
-	TrustedProxiesConfigured bool      `mapstructure:"-" json:"-" yaml:"-"`   // 是否显式配置了可信代理列表
-	MaxRequestBodySize       int64     `mapstructure:"max_request_body_size"` // 全局最大请求体限制
-	H2C                      H2CConfig `mapstructure:"h2c"`                   // HTTP/2 Cleartext 配置
+	Host                       string    `mapstructure:"host"`
+	Port                       int       `mapstructure:"port"`
+	Mode                       string    `mapstructure:"mode"`                          // debug/release
+	EnableServerTiming         bool      `mapstructure:"enable_server_timing"`          // Admin UI Server-Timing response header
+	FrontendURL                string    `mapstructure:"frontend_url"`                  // 前端基础 URL，用于生成邮件中的外部链接
+	ReadHeaderTimeout          int       `mapstructure:"read_header_timeout"`           // 读取请求头超时（秒）
+	MaxHeaderBytes             int       `mapstructure:"max_header_bytes"`              // 请求头最大字节数（HTTP/2 映射为 header-list 上限）
+	IdleTimeout                int       `mapstructure:"idle_timeout"`                  // 空闲连接超时（秒）
+	TrustedProxies             []string  `mapstructure:"trusted_proxies"`               // 可信代理列表（CIDR/IP）
+	TrustedProxiesConfigured   bool      `mapstructure:"-" json:"-" yaml:"-"`           // 是否显式配置了可信代理列表
+	IPAccessEmergencyAllowlist []string  `mapstructure:"ip_access_emergency_allowlist"` // 仅部署配置可写的紧急恢复 allowlist
+	MaxRequestBodySize         int64     `mapstructure:"max_request_body_size"`         // 全局最大请求体限制
+	H2C                        H2CConfig `mapstructure:"h2c"`                           // HTTP/2 Cleartext 配置
 }
 
 // H2CConfig HTTP/2 Cleartext 配置
@@ -699,8 +701,9 @@ type SecurityConfig struct {
 	CSP             CSPConfig            `mapstructure:"csp"`
 	ProxyFallback   ProxyFallbackConfig  `mapstructure:"proxy_fallback"`
 	ProxyProbe      ProxyProbeConfig     `mapstructure:"proxy_probe"`
-	// TrustForwardedIPForAPIKeyACL enables legacy raw forwarded-header takeover.
-	// When disabled, server.trusted_proxies is authoritative for all client-IP consumers.
+	// TrustForwardedIPForAPIKeyACL enables legacy raw forwarded-header takeover
+	// for compatibility consumers such as API-key ACL and session binding. The
+	// global IP access policy always uses server.trusted_proxies independently.
 	TrustForwardedIPForAPIKeyACL  bool                                       `mapstructure:"trust_forwarded_ip_for_api_key_acl"`
 	ForwardedClientIPHeaders      []string                                   `mapstructure:"forwarded_client_ip_headers" json:"forwarded_client_ip_headers" yaml:"forwarded_client_ip_headers"`
 	forwardedClientIPSettingsLive *atomic.Pointer[ForwardedClientIPSettings] `mapstructure:"-" json:"-" yaml:"-"`
@@ -1672,6 +1675,7 @@ func load(allowMissingJWTSecret bool) (*Config, error) {
 		// 配置文件不存在时使用默认值
 	}
 	trustedProxiesEnv, trustedProxiesEnvConfigured := os.LookupEnv("SERVER_TRUSTED_PROXIES")
+	ipAccessEmergencyAllowlistEnv, ipAccessEmergencyAllowlistEnvConfigured := os.LookupEnv("SERVER_IP_ACCESS_EMERGENCY_ALLOWLIST")
 	forwardedClientIPHeadersEnv, forwardedClientIPHeadersEnvConfigured := os.LookupEnv("SECURITY_FORWARDED_CLIENT_IP_HEADERS")
 	trustedProxiesConfigured := viper.InConfig("server.trusted_proxies") ||
 		viper.IsSet("server.trusted_proxies") || trustedProxiesEnvConfigured
@@ -1683,10 +1687,14 @@ func load(allowMissingJWTSecret bool) (*Config, error) {
 	if trustedProxiesEnvConfigured {
 		cfg.Server.TrustedProxies = normalizeStringSlice(strings.Split(trustedProxiesEnv, ","))
 	}
+	if ipAccessEmergencyAllowlistEnvConfigured {
+		cfg.Server.IPAccessEmergencyAllowlist = normalizeStringSlice(strings.Split(ipAccessEmergencyAllowlistEnv, ","))
+	}
 	if forwardedClientIPHeadersEnvConfigured {
 		cfg.Security.ForwardedClientIPHeaders = normalizeStringSlice(strings.Split(forwardedClientIPHeadersEnv, ","))
 	}
 	cfg.Server.TrustedProxiesConfigured = trustedProxiesConfigured
+	cfg.Server.IPAccessEmergencyAllowlist = normalizeStringSlice(cfg.Server.IPAccessEmergencyAllowlist)
 	if cfg.Gateway.OpenAIScheduler.StickyEscapeTTFTMs == 0 {
 		cfg.Gateway.OpenAIScheduler.StickyEscapeTTFTMs = 15000
 	}
@@ -2410,6 +2418,7 @@ func setEnvReachableDefaults() {
 	// affecting IsSet while the variables are absent. BindEnv only errors when
 	// called without arguments.
 	_ = viper.BindEnv("server.trusted_proxies", "SERVER_TRUSTED_PROXIES")
+	_ = viper.BindEnv("server.ip_access_emergency_allowlist", "SERVER_IP_ACCESS_EMERGENCY_ALLOWLIST")
 	_ = viper.BindEnv("security.forwarded_client_ip_headers", "SECURITY_FORWARDED_CLIENT_IP_HEADERS")
 
 	// Third-party login providers. These carry client secrets and are exactly
@@ -2456,6 +2465,11 @@ func (c *Config) Validate() error {
 	}
 	c.Security.ForwardedClientIPHeaders = forwardedClientIPHeaders
 	c.SetForwardedClientIPSettings(c.Security.TrustForwardedIPForAPIKeyACL, forwardedClientIPHeaders)
+	emergencyAllowlist, err := normalizeIPAccessEmergencyAllowlist(c.Server.IPAccessEmergencyAllowlist)
+	if err != nil {
+		return fmt.Errorf("server.ip_access_emergency_allowlist: %w", err)
+	}
+	c.Server.IPAccessEmergencyAllowlist = emergencyAllowlist
 	if c.Server.ReadHeaderTimeout < 1 || c.Server.ReadHeaderTimeout > 60 {
 		return fmt.Errorf("server.read_header_timeout must be between 1 and 60 seconds")
 	}
@@ -3453,6 +3467,26 @@ func normalizeStringSlice(values []string) []string {
 		normalized = append(normalized, trimmed)
 	}
 	return normalized
+}
+
+func normalizeIPAccessEmergencyAllowlist(values []string) ([]string, error) {
+	if len(values) == 0 {
+		return values, nil
+	}
+	normalized := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		value = ip.NormalizeNonGlobalIPOrCIDR(value)
+		if value == "" {
+			return nil, fmt.Errorf("each entry must be a non-global IP address or CIDR")
+		}
+		if _, exists := seen[value]; exists {
+			continue
+		}
+		seen[value] = struct{}{}
+		normalized = append(normalized, value)
+	}
+	return normalized, nil
 }
 
 func isWeakJWTSecret(secret string) bool {

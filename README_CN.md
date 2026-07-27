@@ -443,6 +443,8 @@ gateway:
 - `billing.circuit_breaker` 计费异常时 fail-closed
 - `security.trust_forwarded_ip_for_api_key_acl` 控制旧版原始转发头接管（为升级兼容默认开启）；关闭后严格使用 `server.trusted_proxies`，其中只应填写直接连接 Sub2API Plus 的精确代理 CIDR
 - `security.forwarded_client_ip_headers` 最多配置 16 个第三方 CDN 客户端 IP 请求头；仅在旧版接管开启时按顺序优先于内置请求头解析
+- `server.trusted_proxies` 始终是全局 IP 访问控制的权威来源；启用全局拦截或创建手动封禁前必须显式声明。仅明确的直连部署可设置 `trusted_proxies: []`；其他场景只能填写直接反向代理或容器 CIDR，不能填写 `0.0.0.0/0` 或 `::/0`。最后一跳代理必须将 `X-Forwarded-For` 或 `X-Real-IP` 覆写为唯一的客户端地址；全局策略会拒绝多跳或重复的转发链。
+- `server.ip_access_emergency_allowlist` / `SERVER_IP_ACCESS_EMERGENCY_ALLOWLIST` 是可选的部署级紧急恢复名单，只用于管理员固定出口 IP；修改后需要重新创建应用容器
 - `turnstile.required` 在 release 模式强制启用 Turnstile
 
 自定义客户端 IP 请求头可通过 YAML 配置，也可使用逗号分隔的环境变量：

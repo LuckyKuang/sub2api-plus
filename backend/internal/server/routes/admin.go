@@ -66,6 +66,9 @@ func RegisterAdminRoutes(
 		// 系统设置
 		registerSettingsRoutes(admin, h)
 
+		// 全局 IP 访问控制与本地登录失败自动封禁
+		registerIPAccessControlRoutes(admin, h, stepUpAuth)
+
 		// 数据管理
 		registerDataManagementRoutes(admin, h, stepUpAuth)
 
@@ -116,6 +119,22 @@ func RegisterAdminRoutes(
 
 		// 操作审计日志
 		registerAuditLogRoutes(admin, h, stepUpAuth)
+	}
+}
+
+func registerIPAccessControlRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpAuth middleware.StepUpAuthMiddleware) {
+	access := admin.Group("/ip-access-control")
+	{
+		access.GET("/trusted-proxy-status", h.Admin.IPAccessControl.GetTrustedProxyStatus)
+		access.GET("/settings", h.Admin.IPAccessControl.GetSettings)
+		access.PUT("/settings", gin.HandlerFunc(stepUpAuth), h.Admin.IPAccessControl.UpdateSettings)
+		access.GET("/rules", h.Admin.IPAccessControl.ListRules)
+		access.GET("/failure-states", h.Admin.IPAccessControl.ListFailureStates)
+		access.POST("/rules", gin.HandlerFunc(stepUpAuth), h.Admin.IPAccessControl.CreateRule)
+		// Every mutation changes the security boundary. When global step-up 2FA
+		// is enabled, require the existing sudo grant for all of them.
+		access.POST("/rules/:id/release-reset", gin.HandlerFunc(stepUpAuth), h.Admin.IPAccessControl.ReleaseRuleAndReset)
+		access.POST("/failure-state/reset", gin.HandlerFunc(stepUpAuth), h.Admin.IPAccessControl.ResetFailureState)
 	}
 }
 

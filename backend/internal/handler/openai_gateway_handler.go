@@ -37,6 +37,7 @@ type OpenAIGatewayHandler struct {
 	securityAuditCoordinator   *securityaudit.Coordinator
 	grokMediaEligibilityProber grokMediaEligibilityProber
 	opsService                 *service.OpsService
+	ipAccessControl            *service.IPAccessControlService
 	concurrencyHelper          *ConcurrencyHelper
 	imageLimiter               *imageConcurrencyLimiter
 	maxAccountSwitches         int
@@ -48,6 +49,9 @@ type grokMediaEligibilityProber interface {
 }
 
 const maxOpenAIFirstOutputTimeoutSwitches = 1
+
+const openAIWSIPBannedMessage = "Access from this IP address has been prohibited."
+const openAIWSIPAccessUnavailableMessage = "IP access control is temporarily unavailable."
 
 func openAIForwardSucceededForScheduling(result *service.OpenAIForwardResult) bool {
 	return result.SucceededForScheduling()
@@ -184,6 +188,100 @@ func NewOpenAIGatewayHandler(
 		maxAccountSwitches:       maxAccountSwitches,
 		cfg:                      cfg,
 	}
+}
+
+// SetIPAccessControlService injects the global IP policy without widening the
+// stable constructor used by focused handler tests.
+func (h *OpenAIGatewayHandler) SetIPAccessControlService(access *service.IPAccessControlService) {
+	if h == nil {
+		return
+	}
+	h.ipAccessControl = access
+}
+
+// enforceOpenAIWSIPAccess runs before every WebSocket turn. Gin middleware
+// protects only the upgrade handshake, while a live Responses connection can
+// carry later turns after the source has been blocked.
+func (h *OpenAIGatewayHandler) enforceOpenAIWSIPAccess(ctx context.Context, identity ip.ClientIdentity) error {
+	if h == nil || h.ipAccessControl == nil {
+		return service.NewOpenAIWSClientCloseError(
+			coderws.StatusTryAgainLater,
+			openAIWSIPAccessUnavailableMessage,
+			errors.New("IP access control dependency unavailable"),
+		)
+	}
+	decision, err := h.ipAccessControl.Evaluate(ctx, identity)
+	if err != nil {
+		return service.NewOpenAIWSClientCloseError(
+			coderws.StatusTryAgainLater,
+			openAIWSIPAccessUnavailableMessage,
+			err,
+		)
+	}
+	if decision.Blocked {
+		return service.NewOpenAIWSClientCloseError(
+			coderws.StatusPolicyViolation,
+			openAIWSIPBannedMessage,
+			nil,
+		)
+	}
+	return nil
+}
+
+const openAIWSIPPolicyCheckInterval = 5 * time.Second
+
+// watchOpenAIWSIPAccess never writes to the WebSocket itself. It cancels the
+// session context with a typed close error; the sole ingress goroutine then
+// sends the close frame after its read/forward operation returns.
+func (h *OpenAIGatewayHandler) watchOpenAIWSIPAccess(parent context.Context, identity ip.ClientIdentity) (context.Context, func()) {
+	return h.watchOpenAIWSIPAccessWithInterval(parent, identity, openAIWSIPPolicyCheckInterval)
+}
+
+func (h *OpenAIGatewayHandler) watchOpenAIWSIPAccessWithInterval(parent context.Context, identity ip.ClientIdentity, interval time.Duration) (context.Context, func()) {
+	if interval <= 0 {
+		interval = openAIWSIPPolicyCheckInterval
+	}
+	ctx, cancel := context.WithCancelCause(parent)
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if err := h.enforceOpenAIWSIPAccess(ctx, identity); err != nil {
+					cancel(err)
+					return
+				}
+			}
+		}
+	}()
+	return ctx, func() { cancel(nil) }
+}
+
+func closeOpenAIWSForIPPolicyCause(conn *coderws.Conn, ctx context.Context) bool {
+	if conn == nil || ctx == nil {
+		return false
+	}
+	cause := context.Cause(ctx)
+	closeErr, ok := openAIWSClientPolicyClose(cause)
+	if !ok {
+		return false
+	}
+	closeOpenAIClientWS(conn, closeErr.StatusCode(), closeErr.Reason())
+	return true
+}
+
+// openAIWSClientPolicyClose identifies errors deliberately returned to the
+// downstream client. These must not affect upstream account health or
+// scheduling decisions.
+func openAIWSClientPolicyClose(err error) (*service.OpenAIWSClientCloseError, bool) {
+	var closeErr *service.OpenAIWSClientCloseError
+	if !errors.As(err, &closeErr) {
+		return nil, false
+	}
+	return closeErr, true
 }
 
 // Responses handles OpenAI Responses API endpoint
@@ -1426,6 +1524,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 	}
 	reqLog.Info("openai.websocket_ingress_started")
 	clientIP := ip.GetClientIP(c)
+	trustedClientIdentity := middleware2.TrustedClientIdentity(c)
 	userAgent := strings.TrimSpace(c.GetHeader("User-Agent"))
 	ctx := c.Request.Context()
 	maxIngressConnections := 0
@@ -1466,9 +1565,26 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		return
 	}
 	defer func() {
+		// Policy checks run in a background watcher. Every return path, including
+		// account selection and credential acquisition, funnels through here so a
+		// newly blocked idle connection receives a protocol close frame instead of
+		// only a transport reset.
+		_ = closeOpenAIWSForIPPolicyCause(wsConn, ctx)
 		_ = wsConn.CloseNow()
 	}()
 	wsConn.SetReadLimit(service.ResolveOpenAIWSClientReadLimitBytes(h.cfg))
+	if policyErr := h.enforceOpenAIWSIPAccess(ctx, trustedClientIdentity); policyErr != nil {
+		if closeErr, ok := openAIWSClientPolicyClose(policyErr); ok {
+			closeOpenAIClientWS(wsConn, closeErr.StatusCode(), closeErr.Reason())
+		} else {
+			closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, openAIWSIPAccessUnavailableMessage)
+		}
+		return
+	}
+	policyCtx, stopIPPolicyWatcher := h.watchOpenAIWSIPAccess(ctx, trustedClientIdentity)
+	defer stopIPPolicyWatcher()
+	ctx = policyCtx
+	c.Request = c.Request.WithContext(ctx)
 
 	firstMessageTimeout := service.ResolveOpenAIWSClientFirstMessageTimeout(h.cfg)
 	msgType, firstMessage, err := service.ReadOpenAIWSClientMessage(
@@ -1479,6 +1595,9 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		"missing first response.create message",
 	)
 	if err != nil {
+		if _, policyClosed := openAIWSClientPolicyClose(context.Cause(ctx)); policyClosed {
+			return
+		}
 		if errors.Is(context.Cause(ctx), service.ErrOpenAIWSIngressLeaseLost) {
 			reqLog.Warn("openai.websocket_ingress_lease_lost_before_first_message", zap.Error(err))
 			closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, "websocket ingress capacity lease lost; please reconnect")
@@ -1808,6 +1927,9 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				return nil
 			},
 			BeforeTurn: func(turn int) error {
+				if err := h.enforceOpenAIWSIPAccess(ctx, trustedClientIdentity); err != nil {
+					return err
+				}
 				// turn==1 的会话屏蔽已由握手层检查覆盖；连接内 flag 只拦截后续 turn。
 				if cyberBlockedThisConn {
 					return service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, cyberSessionBlockedClientMsg, nil)
@@ -1929,6 +2051,9 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		requestPayloadHash = service.HashUsageRequestPayload(wsFirstMessage)
 
 		if err := h.gatewayService.ProxyResponsesWebSocketFromClient(ctx, c, wsConn, account, token, wsFirstMessage, hooks); err != nil {
+			if _, policyClosed := openAIWSClientPolicyClose(context.Cause(ctx)); policyClosed {
+				return
+			}
 			var failoverErr *service.UpstreamFailoverError
 			if errors.As(err, &failoverErr) {
 				if handleWSFailover(account, failoverErr) {
@@ -1946,12 +2071,22 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				return
 			}
 
-			var closeErr *service.OpenAIWSClientCloseError
-			if errors.As(err, &closeErr) && closeErr.StatusCode() == coderws.StatusNormalClosure {
-				reqLog.Info("openai.websocket_ingress_closed_normally",
-					zap.Int64("account_id", account.ID),
-					zap.String("reason", closeErr.Reason()),
-				)
+			if closeErr, isClientPolicyClose := openAIWSClientPolicyClose(err); isClientPolicyClose {
+				if closeErr.StatusCode() == coderws.StatusNormalClosure {
+					reqLog.Info("openai.websocket_ingress_closed_normally",
+						zap.Int64("account_id", account.ID),
+						zap.String("reason", closeErr.Reason()),
+					)
+				} else {
+					// Client-policy closures (such as an IP ban, invalid follow-up
+					// payload, or a security policy decision) have not failed the
+					// upstream account. Keep them out of account scheduling health.
+					reqLog.Info("openai.websocket_client_policy_closed",
+						zap.Int64("account_id", account.ID),
+						zap.Int("status", int(closeErr.StatusCode())),
+						zap.String("reason", closeErr.Reason()),
+					)
+				}
 				closeOpenAIClientWS(wsConn, closeErr.StatusCode(), closeErr.Reason())
 				return
 			}
@@ -1975,10 +2110,6 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				proxyFailedFields = append(proxyFailedFields, zap.Int64p("proxy_id", account.ProxyID))
 			}
 			reqLog.Warn("openai.websocket_proxy_failed", proxyFailedFields...)
-			if errors.As(err, &closeErr) {
-				closeOpenAIClientWS(wsConn, closeErr.StatusCode(), closeErr.Reason())
-				return
-			}
 			closeOpenAIClientWS(wsConn, coderws.StatusInternalError, "upstream websocket proxy failed")
 			return
 		}

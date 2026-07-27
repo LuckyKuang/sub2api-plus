@@ -362,7 +362,9 @@ func (h *AuthHandler) LinuxDoOAuthCallback(c *gin.Context) {
 				redirectOAuthError(c, frontendCallback, "session_error", "failed to bind oauth identity", "")
 				return
 			}
-			h.authService.RecordSuccessfulLogin(c.Request.Context(), user.ID)
+			if !h.recordSuccessfulAuthentication(c, user.ID) {
+				return
+			}
 			clearOAuthPendingSessionCookie(c, secureCookie)
 			clearOAuthPendingBrowserCookie(c, secureCookie)
 			redirectOAuthTokenPair(c, frontendCallback, tokenPair, redirectTo)
@@ -601,7 +603,9 @@ func (h *AuthHandler) CompleteLinuxDoOAuthRegistration(c *gin.Context) {
 		respondPendingOAuthBindingApplyError(c, err)
 		return
 	}
-	h.authService.RecordSuccessfulLogin(c.Request.Context(), user.ID)
+	if !h.recordSuccessfulAuthentication(c, user.ID) {
+		return
+	}
 	clearOAuthPendingSessionCookie(c, secureCookie)
 	clearOAuthPendingBrowserCookie(c, secureCookie)
 

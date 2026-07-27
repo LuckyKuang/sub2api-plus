@@ -32,6 +32,7 @@ func SetupRouter(
 	subscriptionService *service.SubscriptionService,
 	opsService *service.OpsService,
 	settingService *service.SettingService,
+	ipAccessControl middleware2.IPAccessControlMiddleware,
 	compositeResolver *service.CompositeRouteResolver,
 	cfg *config.Config,
 	redisClient *redis.Client,
@@ -61,6 +62,10 @@ func SetupRouter(
 	r.Use(middleware2.SessionBindingContext(cfg))
 	r.Use(middleware2.Logger())
 	r.Use(middleware2.CORS(cfg.CORS))
+	// Global IP blocks must run after CORS (so browsers can inspect a 403) and
+	// before every authentication/business route. The middleware itself exempts
+	// /health for container orchestration.
+	r.Use(gin.HandlerFunc(ipAccessControl))
 	r.Use(middleware2.SecurityHeaders(cfg.Security.CSP, func() []string {
 		if p := cachedFrameOrigins.Load(); p != nil {
 			return *p

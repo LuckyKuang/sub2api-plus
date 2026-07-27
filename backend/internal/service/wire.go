@@ -553,6 +553,20 @@ func ProvideImageStorageSettingService(
 	return svc
 }
 
+// ProvideIPAccessControlService wires Redis fan-out into the global IP policy
+// while preserving NewIPAccessControlService for direct unit-test construction.
+func ProvideIPAccessControlService(
+	settings SettingRepository,
+	repo IPAccessControlRepository,
+	redisClient *redis.Client,
+) *IPAccessControlService {
+	svc := NewIPAccessControlService(settings, repo)
+	svc.SetInvalidationClient(redisClient)
+	svc.StartInvalidationSubscriber(context.Background())
+	svc.StartFailureStateCleanup(context.Background())
+	return svc
+}
+
 // ProvideImageTaskService 构造异步图片任务服务。
 //
 // 对象存储是异步图片任务的启用前提：仅当开关打开且凭证齐全时功能才可用，否则整体禁用
@@ -741,6 +755,8 @@ var ProviderSet = wire.NewSet(
 	ProvideUpstreamBillingProbeService,
 	ProvideOllamaCloudUsageService,
 	ProvideSettingService,
+	ProvideIPAccessControlService,
+	NewAsyncImageRateLimiter,
 	NewDataManagementService,
 	ProvideBackupService,
 	ProvideOpsSystemLogSink,

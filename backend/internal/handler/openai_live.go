@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -8,6 +9,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
 	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
@@ -202,6 +204,15 @@ func (h *OpenAIGatewayHandler) LiveSideband(c *gin.Context) {
 		h.errorResponse(c, http.StatusForbidden, "permission_error", "Live is not enabled for this group")
 		return
 	}
+	trustedClientIdentity := middleware2.TrustedClientIdentity(c)
+	if policyErr := h.enforceOpenAIWSIPAccess(c.Request.Context(), trustedClientIdentity); policyErr != nil {
+		if closeErr, ok := openAIWSClientPolicyClose(policyErr); ok && closeErr.StatusCode() == coderws.StatusPolicyViolation {
+			h.errorResponse(c, http.StatusForbidden, "access_denied", closeErr.Reason())
+			return
+		}
+		h.errorResponse(c, http.StatusServiceUnavailable, "server_error", openAIWSIPAccessUnavailableMessage)
+		return
+	}
 	identity := service.LiveCallIdentity{
 		APIKeyID: apiKey.ID,
 		UserID:   subject.UserID,
@@ -223,7 +234,16 @@ func (h *OpenAIGatewayHandler) LiveSideband(c *gin.Context) {
 		return
 	}
 	defer func() { _ = downstream.CloseNow() }()
-	if err := h.gatewayService.ProxyLiveSideband(c.Request.Context(), record, downstream); err != nil {
+	if err := h.gatewayService.ProxyLiveSidebandWithHooks(c.Request.Context(), record, downstream, &service.LiveSidebandHooks{
+		BeforeFrame: func(ctx context.Context) error {
+			return h.enforceOpenAIWSIPAccess(ctx, trustedClientIdentity)
+		},
+		RecheckEvery: 5 * time.Second,
+	}); err != nil {
+		if closeErr, ok := openAIWSClientPolicyClose(err); ok {
+			_ = downstream.Close(closeErr.StatusCode(), closeErr.Reason())
+			return
+		}
 		_ = downstream.Close(coderws.StatusInternalError, "live sideband closed")
 		return
 	}
