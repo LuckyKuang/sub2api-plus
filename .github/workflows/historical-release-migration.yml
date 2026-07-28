@@ -1,0 +1,297 @@
+name: Historical Release Migration
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: "Migration operation"
+        required: true
+        type: choice
+        options:
+          - rebuild_release
+          - retag_image
+          - cleanup_legacy_image
+      release_tag:
+        description: "Canonical Git tag, for example v0.1.166+custom.003"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: historical-release-migration-${{ inputs.operation }}-${{ inputs.release_tag }}
+  cancel-in-progress: false
+
+jobs:
+  metadata:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      docker_tag: ${{ steps.resolve.outputs.docker_tag }}
+      legacy_docker_tag: ${{ steps.resolve.outputs.legacy_docker_tag }}
+      owner_lower: ${{ steps.resolve.outputs.owner_lower }}
+    steps:
+      - id: resolve
+        env:
+          OPERATION: ${{ inputs.operation }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+
+          if ! [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+\+custom\.[0-9]{3}$ ]]; then
+            echo "release_tag must use vX.Y.Z+custom.NNN; got: $RELEASE_TAG" >&2
+            exit 1
+          fi
+
+          VERSION="${RELEASE_TAG#v}"
+          DOCKER_TAG="${RELEASE_TAG/+/-}"
+          case "$RELEASE_TAG" in
+            v0.1.165+custom.001)
+              LEGACY_DOCKER_TAG="0.1.165-custom.001"
+              ALLOWED_OPERATION=retag_image
+              ;;
+            v0.1.165+custom.002)
+              LEGACY_DOCKER_TAG="0.1.165-custom.002"
+              ALLOWED_OPERATION=retag_image
+              ;;
+            v0.1.165+custom.003)
+              LEGACY_DOCKER_TAG="0.1.165-custom.003"
+              ALLOWED_OPERATION=rebuild_release
+              ;;
+            v0.1.165+custom.004)
+              LEGACY_DOCKER_TAG="0.1.165-custom.004"
+              ALLOWED_OPERATION=rebuild_release
+              ;;
+            v0.1.166+custom.001)
+              LEGACY_DOCKER_TAG="0.1.166-custom.001"
+              ALLOWED_OPERATION=rebuild_release
+              ;;
+            v0.1.166+custom.002)
+              LEGACY_DOCKER_TAG="0.1.166-custom.002"
+              ALLOWED_OPERATION=rebuild_release
+              ;;
+            v0.1.166+custom.003)
+              LEGACY_DOCKER_TAG="0.1.166-custom.003"
+              ALLOWED_OPERATION=rebuild_release
+              ;;
+            *)
+              echo "release_tag is outside the approved historical migration set: $RELEASE_TAG" >&2
+              exit 1
+              ;;
+          esac
+
+          if [ "$OPERATION" = cleanup_legacy_image ]; then
+            :
+          elif [ "$OPERATION" != "$ALLOWED_OPERATION" ]; then
+            echo "$RELEASE_TAG only permits $ALLOWED_OPERATION, not $OPERATION" >&2
+            exit 1
+          fi
+
+          {
+            echo "version=$VERSION"
+            echo "docker_tag=$DOCKER_TAG"
+            echo "legacy_docker_tag=$LEGACY_DOCKER_TAG"
+            echo "owner_lower=$(echo "$REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')"
+          } >> "$GITHUB_OUTPUT"
+
+  rebuild-release:
+    needs: metadata
+    if: inputs.operation == 'rebuild_release'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out migration tooling
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          path: tooling
+
+      - name: Check out canonical historical tag
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.release_tag }}
+          fetch-depth: 0
+          path: source
+
+      - name: Verify canonical source version
+        id: source
+        working-directory: source
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          EXPECTED_VERSION: ${{ needs.metadata.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          ACTUAL_VERSION=$(tr -d '\r\n' < backend/cmd/server/VERSION)
+          if [ "$ACTUAL_VERSION" != "$EXPECTED_VERSION" ]; then
+            echo "backend/cmd/server/VERSION is $ACTUAL_VERSION, expected $EXPECTED_VERSION" >&2
+            exit 1
+          fi
+
+          while IFS= read -r existing_tag; do
+            if [ "$existing_tag" != "$RELEASE_TAG" ]; then
+              git tag -d "$existing_tag"
+            fi
+          done < <(git tag --points-at HEAD)
+
+          if [ "$(git describe --tags --exact-match)" != "$RELEASE_TAG" ]; then
+            echo "checked out commit is not identified by the canonical tag" >&2
+            exit 1
+          fi
+
+          {
+            echo "tag_message<<EOF"
+            echo "Historical release migration. This release replaces the legacy naming scheme while preserving the corresponding source revision."
+            echo
+            echo "Canonical tag: $RELEASE_TAG"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Use immutable historical release configuration
+        run: cp tooling/.goreleaser-history.yaml source/.goreleaser-history.yaml
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 9
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: pnpm
+          cache-dependency-path: source/frontend/pnpm-lock.yaml
+
+      - name: Build frontend
+        working-directory: source/frontend
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run build
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: source/backend/go.mod
+          check-latest: false
+          cache-dependency-path: source/backend/go.sum
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish immutable Release and images
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          version: "~> v2"
+          workdir: source
+          args: release --config .goreleaser-history.yaml --clean --skip=validate
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPO_OWNER: ${{ github.repository_owner }}
+          GITHUB_REPO_OWNER_LOWER: ${{ needs.metadata.outputs.owner_lower }}
+          GITHUB_REPO_NAME: ${{ github.event.repository.name }}
+          DOCKER_TAG_VERSION: ${{ needs.metadata.outputs.docker_tag }}
+          TAG_MESSAGE: ${{ steps.source.outputs.tag_message }}
+
+      - name: Verify published multi-architecture image
+        env:
+          IMAGE: ghcr.io/${{ needs.metadata.outputs.owner_lower }}/sub2api-plus:${{ needs.metadata.outputs.docker_tag }}
+        run: |
+          set -euo pipefail
+          docker buildx imagetools inspect "$IMAGE"
+
+  retag-image:
+    needs: metadata
+    if: inputs.operation == 'retag_image'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish a distinct canonical multi-architecture manifest
+        env:
+          REPOSITORY: ghcr.io/${{ needs.metadata.outputs.owner_lower }}/sub2api-plus
+          SOURCE_TAG: ${{ needs.metadata.outputs.legacy_docker_tag }}
+          TARGET_TAG: ${{ needs.metadata.outputs.docker_tag }}
+        run: |
+          set -euo pipefail
+          docker buildx imagetools inspect "$REPOSITORY:$SOURCE_TAG"
+          docker buildx imagetools create \
+            --annotation "index:org.opencontainers.image.ref.name=$TARGET_TAG" \
+            --tag "$REPOSITORY:$TARGET_TAG" \
+            "$REPOSITORY:$SOURCE_TAG"
+          docker buildx imagetools inspect "$REPOSITORY:$TARGET_TAG"
+
+  cleanup-legacy-image:
+    needs: metadata
+    if: inputs.operation == 'cleanup_legacy_image'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete only isolated legacy package versions
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          LEGACY_TAG: ${{ needs.metadata.outputs.legacy_docker_tag }}
+          CANONICAL_TAG: ${{ needs.metadata.outputs.docker_tag }}
+        run: |
+          set -euo pipefail
+
+          gh api "/users/$OWNER/packages/container/sub2api-plus/versions?per_page=100" > versions.json
+
+          mapfile -t MATCHING_IDS < <(
+            jq -r --arg legacy "$LEGACY_TAG" '
+              .[]
+              | select(any(.metadata.container.tags[]?; . == $legacy or . == ($legacy + "-amd64") or . == ($legacy + "-arm64")))
+              | .id
+            ' versions.json
+          )
+
+          if [ "${#MATCHING_IDS[@]}" -eq 0 ]; then
+            echo "No legacy package versions found for $LEGACY_TAG" >&2
+            exit 1
+          fi
+
+          for version_id in "${MATCHING_IDS[@]}"; do
+            tags=$(jq -c --argjson id "$version_id" '.[] | select(.id == $id) | .metadata.container.tags' versions.json)
+            echo "Inspecting package version $version_id with tags $tags"
+
+            if jq -e --arg canonical "$CANONICAL_TAG" 'index($canonical) != null' <<<"$tags" >/dev/null; then
+              echo "Refusing to delete package version $version_id because it also owns canonical tag $CANONICAL_TAG" >&2
+              exit 1
+            fi
+
+            if ! jq -e --arg legacy "$LEGACY_TAG" '
+              all(.[]; . == $legacy or . == ($legacy + "-amd64") or . == ($legacy + "-arm64"))
+            ' <<<"$tags" >/dev/null; then
+              echo "Refusing to delete package version $version_id because it has non-legacy tags" >&2
+              exit 1
+            fi
+          done
+
+          for version_id in "${MATCHING_IDS[@]}"; do
+            gh api --method DELETE "/users/$OWNER/packages/container/sub2api-plus/versions/$version_id"
+          done
+
+          gh api "/users/$OWNER/packages/container/sub2api-plus/versions?per_page=100" > remaining.json
+          if jq -e --arg legacy "$LEGACY_TAG" '
+            any(.[]; any(.metadata.container.tags[]?; . == $legacy or . == ($legacy + "-amd64") or . == ($legacy + "-arm64")))
+          ' remaining.json >/dev/null; then
+            echo "Legacy GHCR tags remain after deletion: $LEGACY_TAG" >&2
+            exit 1
+          fi
