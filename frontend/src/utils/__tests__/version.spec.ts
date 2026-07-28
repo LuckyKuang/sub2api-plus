@@ -13,7 +13,12 @@ describe('normalizeDisplayVersion', () => {
 })
 
 describe('toDockerImageTag', () => {
-  it('converts custom build metadata into an OCI-compatible tag', () => {
-    expect(toDockerImageTag('v0.1.164+custom.001')).toBe('0.1.164-custom.001')
+  it.each([
+    ['v0.1.166+custom.004', 'v0.1.166-custom.004'],
+    ['0.1.166+custom.004', 'v0.1.166-custom.004'],
+    ['', ''],
+    [undefined, '']
+  ])('converts %p into an OCI-compatible release tag', (input, expected) => {
+    expect(toDockerImageTag(input)).toBe(expected)
   })
 })

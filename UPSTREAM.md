@@ -13,21 +13,43 @@
 | `v0.1.166-custom.001` | `v0.1.166` | `dc893dd0b8eab41df5be595ae9fcd1aa74a062b8` |
 | `v0.1.166-custom.002` | `v0.1.166` | `dc893dd0b8eab41df5be595ae9fcd1aa74a062b8` |
 | `v0.1.166-custom.003` | `v0.1.166` | `dc893dd0b8eab41df5be595ae9fcd1aa74a062b8` |
+| `v0.1.166+custom.004` | `v0.1.166` | `dc893dd0b8eab41df5be595ae9fcd1aa74a062b8` |
 
-The current application version uses a valid SemVer prerelease suffix to
-identify the custom build. The matching Docker image tag is
-`ghcr.io/luckykuang/sub2api-plus:0.1.166-custom.003`.
+The current application version uses SemVer build metadata to identify the
+custom build: `v0.1.166+custom.004`. The matching OCI image tag is
+`ghcr.io/luckykuang/sub2api-plus:v0.1.166-custom.004`.
+
+## Release Versioning
+
+All new custom releases use one canonical Git and GitHub Release tag:
+`vX.Y.Z+custom.NNN`. The application embeds the same version without the
+leading `v`. OCI registries do not permit `+` in image tags, so the release
+workflow preserves the leading `v` and replaces only `+` with `-`.
+
+| Surface | Canonical format | Current example |
+| --- | --- | --- |
+| Git tag and GitHub Release | `vX.Y.Z+custom.NNN` | `v0.1.166+custom.004` |
+| Embedded application version | `X.Y.Z+custom.NNN` | `0.1.166+custom.004` |
+| GHCR image tag | `vX.Y.Z-custom.NNN` | `v0.1.166-custom.004` |
+
+For another release on the same official baseline, increment `NNN` by one.
+When the official baseline changes, reset the custom iteration to `001`.
+Examples: `v0.1.166+custom.005`, then `v0.1.167+custom.001` after merging
+official `v0.1.167`. `NNN` is always a three-digit number from `001` to `999`.
+
+Historical tags remain available for compatibility, including older tags that
+used `-custom.NNN`. They are not the format for new releases.
 
 ## Distribution Source
 
 All operator-facing installation, update, rollback, and release links use the
 fork repository: `https://github.com/luckykuang/sub2api-plus`.
 
-- GitHub Release tags use `vX.Y.Z-custom.NNN`.
+- GitHub Release tags use `vX.Y.Z+custom.NNN`.
 - Release archives use the matching suffix, for example
-  `sub2api_0.1.166-custom.003_linux_amd64.tar.gz`.
-- GHCR image tags use the same suffix, for example
-  `ghcr.io/luckykuang/sub2api-plus:0.1.166-custom.003`.
+  `sub2api_0.1.166+custom.004_linux_amd64.tar.gz`.
+- GHCR image tags use the OCI-safe derived suffix, for example
+  `ghcr.io/luckykuang/sub2api-plus:v0.1.166-custom.004`.
 - The official repository is an upstream source for maintainers only; it is
   never used by installation or automatic update paths.
 
@@ -36,8 +58,8 @@ fork repository: `https://github.com/luckykuang/sub2api-plus`.
 - `main`: custom development branch
 - `origin`: `https://github.com/luckykuang/sub2api-plus.git`
 - `upstream`: `https://github.com/Wei-Shaw/sub2api.git`
-- `upstream/v0.1.164`: imported official baseline tag
-- `custom/v0.1.164-r001`: custom release tag, created after the release commit
+- `upstream/v0.1.166`: imported official baseline tag
+- `v0.1.166+custom.004`: custom release tag, created after the release commit
 
 ## Upgrade Workflow
 
@@ -48,4 +70,4 @@ fork repository: `https://github.com/luckykuang/sub2api-plus`.
    to `custom.001` after an upstream version increase.
 5. Update this mapping and version metadata.
 6. Run backend and frontend checks, then publish the matching GitHub Release
-   tag, for example `v0.1.166-custom.003`.
+   tag, for example `v0.1.166+custom.004`.

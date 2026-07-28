@@ -66,9 +66,21 @@ volumes:
 ## Tags
 
 - `latest` - Latest stable release
-- `x.y.z-custom.NNN` - Specific fork version, for example `0.1.164-custom.001`
+- `vX.Y.Z-custom.NNN` - Immutable fork release, for example `v0.1.166-custom.004`
 - `x.y` - Latest patch of minor version
 - `x` - Latest minor of major version
+
+Git and GitHub Releases use `vX.Y.Z+custom.NNN`. The release workflow
+preserves the leading `v` and replaces only `+` with `-` to produce the
+OCI-compatible image tag. For example:
+
+```text
+Git/GitHub: v0.1.166+custom.004
+GHCR:       ghcr.io/luckykuang/sub2api-plus:v0.1.166-custom.004
+```
+
+Pin the immutable release tag in production. Use `latest` only when automatic
+movement to the newest custom release is intentional.
 
 ## Links
 

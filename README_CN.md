@@ -33,6 +33,20 @@
 
 Sub2API Plus 是一个 AI API 网关平台，用于分发和管理 AI 产品订阅的 API 配额。用户通过平台生成的 API Key 调用上游 AI 服务，平台负责鉴权、计费、负载均衡和请求转发。
 
+## 版本发布规范
+
+后续 Git Tag 和 GitHub Release 统一使用 `vX.Y.Z+custom.NNN`。OCI
+镜像标签保留开头的 `v`，仅将不受 Docker Tag 支持的 `+` 转换为 `-`：
+
+```text
+Git/GitHub: v0.1.166+custom.004
+GHCR:       ghcr.io/luckykuang/sub2api-plus:v0.1.166-custom.004
+```
+
+同一官方基础版本继续迭代时递增 `NNN`；合并新的官方版本后，从 `001`
+重新开始。生产部署建议固定到不可变的 GHCR 版本标签，`latest` 只作为
+始终跟随最新二开版本的滚动标签。完整规则见 [UPSTREAM.md](UPSTREAM.md)。
+
 ## 核心功能
 
 - **多账号管理** - 支持多种上游账号类型（OAuth、API Key）

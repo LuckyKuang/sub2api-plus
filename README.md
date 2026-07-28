@@ -33,6 +33,21 @@ Please read the following carefully before using this project:
 
 Sub2API Plus is an AI API gateway platform designed to distribute and manage API quotas from AI product subscriptions. Users can access upstream AI services through platform-generated API Keys, while the platform handles authentication, billing, load balancing, and request forwarding.
 
+## Release Versioning
+
+New Git tags and GitHub Releases use `vX.Y.Z+custom.NNN`, while the matching
+OCI image replaces only `+` with `-` and preserves the leading `v`.
+
+```text
+Git/GitHub: v0.1.166+custom.004
+GHCR:       ghcr.io/luckykuang/sub2api-plus:v0.1.166-custom.004
+```
+
+Increment `NNN` for another custom release on the same official baseline.
+After merging a newer official version, reset it to `001`. Pin the immutable
+GHCR version tag for reproducible production deployments; `latest` is a
+moving convenience tag. See [UPSTREAM.md](UPSTREAM.md) for the full policy.
+
 ## Features
 
 - **Multi-Account Management** - Support multiple upstream account types (OAuth, API Key)

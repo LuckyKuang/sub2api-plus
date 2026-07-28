@@ -39,14 +39,20 @@ jobs:
           fi
 
           VERSION="${TAG_NAME#v}"
-          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-]custom\.[0-9]+)$ ]]; then
-            echo "Custom releases must use vX.Y.Z-custom.NNN or vX.Y.Z+custom.NNN; got: $TAG_NAME" >&2
+          if ! [[ "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+\+custom\.[0-9]{3}$ ]]; then
+            echo "Custom releases must use vX.Y.Z+custom.NNN; got: $TAG_NAME" >&2
             exit 1
           fi
+          CUSTOM_ITERATION="${VERSION##*.}"
+          if (( 10#${CUSTOM_ITERATION} == 0 )); then
+            echo "Custom release iteration must be between 001 and 999; got: $TAG_NAME" >&2
+            exit 1
+          fi
+          DOCKER_TAG="${TAG_NAME/+/-}"
 
           echo "tag=$TAG_NAME" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "docker_tag=${VERSION/+/-}" >> "$GITHUB_OUTPUT"
+          echo "docker_tag=$DOCKER_TAG" >> "$GITHUB_OUTPUT"
           echo "owner_lower=$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
           if gh release view "$TAG_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "goreleaser_args=release --clean --skip=validate,announce" >> "$GITHUB_OUTPUT"
