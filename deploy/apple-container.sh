@@ -420,7 +420,7 @@ ensure_minio_credentials() {
     minio_enabled="$(read_env_value MINIO_ENABLED false)"
     [[ "${minio_enabled}" == "true" || "${minio_enabled}" == "false" ]] || \
         die "MINIO_ENABLED must be true or false."
-    [[ "${minio_enabled}" == "true" ]] || return
+    [[ "${minio_enabled}" == "true" ]] || return 0
 
     require_command openssl
     root_user="$(read_env_value MINIO_ROOT_USER)"
