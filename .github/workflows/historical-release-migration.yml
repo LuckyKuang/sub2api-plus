@@ -267,6 +267,14 @@ jobs:
             exit 1
           fi
 
+          # The original 0.1.166-custom.003 publish also created the obsolete
+          # 0.0 floating tag. It has no canonical replacement and must be
+          # removed with that legacy manifest, not moved to a newer release.
+          EXTRA_LEGACY_TAG=""
+          if [ "$LEGACY_TAG" = "0.1.166-custom.003" ]; then
+            EXTRA_LEGACY_TAG="0.0"
+          fi
+
           for version_id in "${MATCHING_IDS[@]}"; do
             tags=$(jq -c --argjson id "$version_id" '.[] | select(.id == $id) | .metadata.container.tags' versions.json)
             echo "Inspecting package version $version_id with tags $tags"
@@ -276,8 +284,8 @@ jobs:
               exit 1
             fi
 
-            if ! jq -e --arg legacy "$LEGACY_TAG" '
-              all(.[]; . == $legacy or . == ($legacy + "-amd64") or . == ($legacy + "-arm64"))
+            if ! jq -e --arg legacy "$LEGACY_TAG" --arg extra "$EXTRA_LEGACY_TAG" '
+              all(.[]; . == $legacy or . == ($legacy + "-amd64") or . == ($legacy + "-arm64") or ($extra != "" and . == $extra))
             ' <<<"$tags" >/dev/null; then
               echo "Refusing to delete package version $version_id because it has non-legacy tags" >&2
               exit 1
@@ -293,5 +301,12 @@ jobs:
             any(.[]; any(.metadata.container.tags[]?; . == $legacy or . == ($legacy + "-amd64") or . == ($legacy + "-arm64")))
           ' remaining.json >/dev/null; then
             echo "Legacy GHCR tags remain after deletion: $LEGACY_TAG" >&2
+            exit 1
+          fi
+
+          if [ -n "$EXTRA_LEGACY_TAG" ] && jq -e --arg extra "$EXTRA_LEGACY_TAG" '
+            any(.[]; any(.metadata.container.tags[]?; . == $extra))
+          ' remaining.json >/dev/null; then
+            echo "Obsolete GHCR tag remains after deletion: $EXTRA_LEGACY_TAG" >&2
             exit 1
           fi
