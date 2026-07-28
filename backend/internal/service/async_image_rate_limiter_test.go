@@ -2,13 +2,12 @@ package service
 
 import (
 	"context"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
-	"github.com/alicebob/miniredis/v2"
-	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 )
 
@@ -38,15 +37,78 @@ func (r *asyncImageRateLimitSettingRepo) GetAll(context.Context) (map[string]str
 }
 func (r *asyncImageRateLimitSettingRepo) Delete(context.Context, string) error { return nil }
 
-func newAsyncImageRateLimiterForTest(t *testing.T, limit string) (*AsyncImageRateLimiter, *miniredis.Miniredis) {
+type asyncImageRateLimitStoreStub struct {
+	mu           sync.Mutex
+	now          time.Time
+	reservations map[int64]map[string]time.Time
+}
+
+func newAsyncImageRateLimitStoreStub() *asyncImageRateLimitStoreStub {
+	return &asyncImageRateLimitStoreStub{
+		now:          time.Now().UTC(),
+		reservations: make(map[int64]map[string]time.Time),
+	}
+}
+
+func (s *asyncImageRateLimitStoreStub) Reserve(_ context.Context, userID int64, requested, limit int, reservationID string) (AsyncImageRateLimitStoreResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	entries := s.reservations[userID]
+	if entries == nil {
+		entries = make(map[string]time.Time)
+		s.reservations[userID] = entries
+	}
+	cutoff := s.now.Add(-asyncImageRateLimitWindow)
+	oldest := time.Time{}
+	for member, createdAt := range entries {
+		if !createdAt.After(cutoff) {
+			delete(entries, member)
+			continue
+		}
+		if oldest.IsZero() || createdAt.Before(oldest) {
+			oldest = createdAt
+		}
+	}
+	if len(entries)+requested > limit {
+		retryAfter := time.Second
+		if !oldest.IsZero() {
+			retryAfter = oldest.Add(asyncImageRateLimitWindow).Sub(s.now)
+			if retryAfter < time.Second {
+				retryAfter = time.Second
+			}
+		}
+		return AsyncImageRateLimitStoreResult{RetryAfter: retryAfter}, nil
+	}
+	for index := 0; index < requested; index++ {
+		entries[reservationID+":"+strconv.Itoa(index)] = s.now
+	}
+	return AsyncImageRateLimitStoreResult{Allowed: true}, nil
+}
+
+func (s *asyncImageRateLimitStoreStub) Release(_ context.Context, userID int64, reservationID string, requested int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	entries := s.reservations[userID]
+	for index := 0; index < requested; index++ {
+		delete(entries, reservationID+":"+strconv.Itoa(index))
+	}
+	return nil
+}
+
+func (s *asyncImageRateLimitStoreStub) Advance(duration time.Duration) {
+	s.mu.Lock()
+	s.now = s.now.Add(duration)
+	s.mu.Unlock()
+}
+
+func newAsyncImageRateLimiterForTest(t *testing.T, limit string) (*AsyncImageRateLimiter, *asyncImageRateLimitStoreStub) {
 	t.Helper()
-	redisServer := miniredis.RunT(t)
-	client := redis.NewClient(&redis.Options{Addr: redisServer.Addr()})
-	t.Cleanup(func() { _ = client.Close() })
+	store := newAsyncImageRateLimitStoreStub()
 	settings := NewSettingService(&asyncImageRateLimitSettingRepo{values: map[string]string{
 		SettingKeyAsyncImageUserImagesPerMinute: limit,
 	}}, &config.Config{})
-	return NewAsyncImageRateLimiter(client, settings), redisServer
+	return NewAsyncImageRateLimiter(store, settings), store
 }
 
 func TestAsyncImageRateLimiterCountsGenerationAndEditOutputUnitsAcrossAPIKeys(t *testing.T) {
@@ -75,7 +137,7 @@ func TestAsyncImageRateLimiterCountsGenerationAndEditOutputUnitsAcrossAPIKeys(t 
 }
 
 func TestAsyncImageRateLimiterAllowsFourSinglesThenRejectsAndExpires(t *testing.T) {
-	limiter, redisServer := newAsyncImageRateLimiterForTest(t, "4")
+	limiter, store := newAsyncImageRateLimiterForTest(t, "4")
 	ctx := context.Background()
 	for i := 0; i < 4; i++ {
 		reservation, err := limiter.Reserve(ctx, 7, 1)
@@ -85,7 +147,7 @@ func TestAsyncImageRateLimiterAllowsFourSinglesThenRejectsAndExpires(t *testing.
 	_, err := limiter.Reserve(ctx, 7, 1)
 	require.ErrorAs(t, err, new(*AsyncImageRateLimitExceeded))
 
-	redisServer.FastForward(asyncImageRateLimitWindow)
+	store.Advance(asyncImageRateLimitWindow)
 	reservation, err := limiter.Reserve(ctx, 7, 1)
 	require.NoError(t, err)
 	require.NotNil(t, reservation)

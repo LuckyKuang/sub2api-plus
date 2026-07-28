@@ -12,7 +12,6 @@ import (
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
-	"github.com/redis/go-redis/v9"
 )
 
 var ErrIPAccessRuleNotFound = infraerrors.NotFound("IP_ACCESS_RULE_NOT_FOUND", "IP access rule not found")
@@ -218,7 +217,7 @@ type IPAccessControlService struct {
 	blockHitLastRecorded map[string]time.Time
 	blockHitWriteSlots   chan struct{}
 
-	redis            *redis.Client
+	invalidationBus  InvalidationBus
 	invalidationOnce sync.Once
 	cleanupOnce      sync.Once
 }
@@ -268,39 +267,27 @@ func (s *IPAccessControlService) EmergencyAllowlistStatus() (configured bool, co
 	return s.emergencyCount > 0, s.emergencyCount
 }
 
-// SetInvalidationClient enables immediate cache invalidation across API
+// SetInvalidationBus enables immediate cache invalidation across API
 // instances. It is intentionally optional so compact standalone and unit-test
 // deployments retain the same construction contract.
-func (s *IPAccessControlService) SetInvalidationClient(client *redis.Client) {
+func (s *IPAccessControlService) SetInvalidationBus(bus InvalidationBus) {
 	if s == nil {
 		return
 	}
-	s.redis = client
+	s.invalidationBus = bus
 }
 
 // StartInvalidationSubscriber keeps the local security snapshot coherent when
 // another instance changes a rule or the global settings. Redis failure never
 // weakens the local policy: the normal short TTL remains the fallback.
 func (s *IPAccessControlService) StartInvalidationSubscriber(ctx context.Context) {
-	if s == nil || s.redis == nil {
+	if s == nil || s.invalidationBus == nil {
 		return
 	}
 	s.invalidationOnce.Do(func() {
 		go func() {
-			subscription := s.redis.Subscribe(ctx, ipAccessInvalidationChannel)
-			defer func() { _ = subscription.Close() }()
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case message, ok := <-subscription.Channel():
-					if !ok {
-						return
-					}
-					if message != nil {
-						s.invalidateAll()
-					}
-				}
+			if err := s.invalidationBus.Subscribe(ctx, ipAccessInvalidationChannel, s.invalidateAll); err != nil {
+				slog.Warn("IP access control invalidation subscription ended", "error", err)
 			}
 		}()
 	})
@@ -735,13 +722,13 @@ func (s *IPAccessControlService) invalidateAll() {
 }
 
 func (s *IPAccessControlService) publishInvalidation(ctx context.Context) {
-	if s == nil || s.redis == nil {
+	if s == nil || s.invalidationBus == nil {
 		return
 	}
 	// The durable database change has already committed. A transient fan-out
 	// error must not turn that successful operation into an ambiguous failure;
 	// local invalidation is immediate and the normal cache TTL is the fallback.
-	if err := s.redis.Publish(ctx, ipAccessInvalidationChannel, "refresh").Err(); err != nil {
+	if err := s.invalidationBus.Publish(ctx, ipAccessInvalidationChannel); err != nil {
 		slog.Warn("IP access control invalidation publish failed", "error", err)
 	}
 }

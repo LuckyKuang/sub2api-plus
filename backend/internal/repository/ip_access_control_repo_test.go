@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"regexp"
 	"testing"
 	"time"
@@ -10,12 +11,19 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/service"
 )
 
+func closeIPAccessControlTestDB(t *testing.T, db *sql.DB) {
+	t.Helper()
+	t.Cleanup(func() {
+		_ = db.Close()
+	})
+}
+
 func TestCreateManualIPAccessRuleUsesIndependentTypedArguments(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatalf("new sqlmock: %v", err)
 	}
-	defer db.Close()
+	closeIPAccessControlTestDB(t, db)
 
 	now := time.Now().UTC()
 	actorID := int64(7)
@@ -60,7 +68,7 @@ func TestListActiveIPAccessRulesDoesNotWriteOnRequestPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new sqlmock: %v", err)
 	}
-	defer db.Close()
+	closeIPAccessControlTestDB(t, db)
 
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT " + ipAccessRuleColumns + " FROM ip_access_rules")).
 		WillReturnRows(sqlmock.NewRows([]string{
@@ -87,7 +95,7 @@ func TestListIPLoginFailureStatesReturnsCurrentWindowWithBlockStatus(t *testing.
 	if err != nil {
 		t.Fatalf("new sqlmock: %v", err)
 	}
-	defer db.Close()
+	closeIPAccessControlTestDB(t, db)
 
 	now := time.Now().UTC()
 	window := 15 * time.Minute
@@ -130,7 +138,7 @@ func TestRecordFailedLoginDoesNotCreateAutoBlockForMatchingAllowRule(t *testing.
 	if err != nil {
 		t.Fatalf("new sqlmock: %v", err)
 	}
-	defer db.Close()
+	closeIPAccessControlTestDB(t, db)
 
 	const normalizedIP = "203.0.113.8"
 	window := 15 * time.Minute
@@ -176,7 +184,7 @@ func TestRecordFailedLoginCreatesAutoBlockWithoutAllowRule(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new sqlmock: %v", err)
 	}
-	defer db.Close()
+	closeIPAccessControlTestDB(t, db)
 
 	const normalizedIP = "203.0.113.8"
 	window := 15 * time.Minute
@@ -224,7 +232,7 @@ func TestRecordIPAccessRuleHitUpdatesMatchingActiveBlockRules(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new sqlmock: %v", err)
 	}
-	defer db.Close()
+	closeIPAccessControlTestDB(t, db)
 
 	mock.ExpectExec(regexp.QuoteMeta("UPDATE ip_access_rules\nSET last_seen_at = NOW(), hit_count = hit_count + 1")).
 		WithArgs("203.0.113.8").
@@ -271,7 +279,7 @@ func TestReleaseIPAccessRuleResetsFailureStateOnlyForBlockRules(t *testing.T) {
 			if err != nil {
 				t.Fatalf("new sqlmock: %v", err)
 			}
-			defer db.Close()
+			closeIPAccessControlTestDB(t, db)
 
 			now := time.Now().UTC()
 			ruleID := int64(12)
@@ -315,7 +323,7 @@ func TestCleanupExpiredIPLoginFailureStatesUsesBoundedBatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new sqlmock: %v", err)
 	}
-	defer db.Close()
+	closeIPAccessControlTestDB(t, db)
 
 	mock.ExpectExec(regexp.QuoteMeta("DELETE FROM ip_login_failure_states\nWHERE normalized_ip IN (")).
 		WithArgs(sqlmock.AnyArg(), 1000).

@@ -62,7 +62,7 @@ func nullableTime(value sql.NullTime) *time.Time {
 	return &result
 }
 
-func (r *ipAccessControlRepository) ListIPAccessRules(ctx context.Context, filter service.IPAccessRuleFilter) (*service.IPAccessRuleList, error) {
+func (r *ipAccessControlRepository) ListIPAccessRules(ctx context.Context, filter service.IPAccessRuleFilter) (result *service.IPAccessRuleList, err error) {
 	if r == nil || r.db == nil {
 		return nil, fmt.Errorf("nil IP access control repository")
 	}
@@ -103,7 +103,12 @@ WHERE status = 'active' AND expires_at IS NOT NULL AND expires_at <= NOW()`); er
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil && err == nil {
+			result = nil
+			err = closeErr
+		}
+	}()
 	items := make([]*service.IPAccessRule, 0)
 	for rows.Next() {
 		rule, scanErr := scanIPAccessRule(rows.Scan)
@@ -118,7 +123,7 @@ WHERE status = 'active' AND expires_at IS NOT NULL AND expires_at <= NOW()`); er
 	return &service.IPAccessRuleList{Items: items, Total: total, Page: page, PageSize: pageSize}, nil
 }
 
-func (r *ipAccessControlRepository) ListActiveIPAccessRules(ctx context.Context) ([]*service.IPAccessRule, error) {
+func (r *ipAccessControlRepository) ListActiveIPAccessRules(ctx context.Context) (rules []*service.IPAccessRule, err error) {
 	if r == nil || r.db == nil {
 		return nil, fmt.Errorf("nil IP access control repository")
 	}
@@ -126,8 +131,13 @@ func (r *ipAccessControlRepository) ListActiveIPAccessRules(ctx context.Context)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	rules := make([]*service.IPAccessRule, 0)
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil && err == nil {
+			rules = nil
+			err = closeErr
+		}
+	}()
+	rules = make([]*service.IPAccessRule, 0)
 	for rows.Next() {
 		rule, scanErr := scanIPAccessRule(rows.Scan)
 		if scanErr != nil {
@@ -135,7 +145,10 @@ func (r *ipAccessControlRepository) ListActiveIPAccessRules(ctx context.Context)
 		}
 		rules = append(rules, rule)
 	}
-	return rules, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return rules, nil
 }
 
 func (r *ipAccessControlRepository) CreateManualIPAccessRule(ctx context.Context, rule *service.IPAccessRule) (*service.IPAccessRule, error) {
@@ -221,7 +234,7 @@ func (r *ipAccessControlRepository) ListIPLoginFailureStates(
 	ctx context.Context,
 	filter service.IPLoginFailureStateFilter,
 	window time.Duration,
-) (*service.IPLoginFailureStateList, error) {
+) (result *service.IPLoginFailureStateList, err error) {
 	if r == nil || r.db == nil {
 		return nil, fmt.Errorf("nil IP access control repository")
 	}
@@ -299,7 +312,12 @@ WHERE ` + where + fmt.Sprintf(
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil && err == nil {
+			result = nil
+			err = closeErr
+		}
+	}()
 
 	items := make([]*service.IPLoginFailureState, 0)
 	for rows.Next() {

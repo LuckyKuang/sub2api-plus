@@ -121,6 +121,21 @@ func newAuthIPAccessControlForTest(threshold int) (*service.IPAccessControlServi
 	return service.NewIPAccessControlService(settings, repo), repo
 }
 
+// attachDisabledIPAccessControlForWebSocketTest keeps WebSocket tests focused
+// on their target behavior. Production wiring always injects the global policy
+// and remains fail-closed when that dependency is unexpectedly unavailable.
+func attachDisabledIPAccessControlForWebSocketTest(handler *OpenAIGatewayHandler) {
+	if handler == nil || handler.ipAccessControl != nil {
+		return
+	}
+	handler.SetIPAccessControlService(service.NewIPAccessControlService(
+		&authIPAccessSettingStub{values: map[string]string{
+			service.SettingKeyIPAccessControlEnabled: "false",
+		}},
+		&authIPAccessRepositorySpy{},
+	))
+}
+
 func TestRecordFailedLocalLoginFailsClosedWhenCounterPersistenceFails(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	access, repo := newAuthIPAccessControlForTest(2)

@@ -538,7 +538,7 @@ func ProvideImageStorageSettingService(
 	encryptor SecretEncryptor,
 	backup *BackupService,
 	factory ImageStorageFactory,
-	redisClient *redis.Client,
+	invalidationBus InvalidationBus,
 	cfg *config.Config,
 ) *ImageStorageSettingService {
 	if cfg.ImageStorage.Enabled && !cfg.ImageStorage.Active() {
@@ -548,7 +548,7 @@ func ProvideImageStorageSettingService(
 			zap.Strings("missing_keys", cfg.ImageStorage.MissingCredentialKeys()))
 	}
 	svc := NewImageStorageSettingService(settingRepo, encryptor, backup, factory, cfg.ImageStorage)
-	svc.SetInvalidationClient(redisClient)
+	svc.SetInvalidationBus(invalidationBus)
 	svc.StartInvalidationSubscriber(context.Background())
 	return svc
 }
@@ -558,10 +558,10 @@ func ProvideImageStorageSettingService(
 func ProvideIPAccessControlService(
 	settings SettingRepository,
 	repo IPAccessControlRepository,
-	redisClient *redis.Client,
+	invalidationBus InvalidationBus,
 ) *IPAccessControlService {
 	svc := NewIPAccessControlService(settings, repo)
-	svc.SetInvalidationClient(redisClient)
+	svc.SetInvalidationBus(invalidationBus)
 	svc.StartInvalidationSubscriber(context.Background())
 	svc.StartFailureStateCleanup(context.Background())
 	return svc

@@ -1723,6 +1723,7 @@ func newOpenAIHandlerForPreviousResponseIDValidation(t *testing.T, cache *concur
 
 func newOpenAIWSHandlerTestServer(t *testing.T, h *OpenAIGatewayHandler, subject middleware.AuthSubject) *httptest.Server {
 	t.Helper()
+	attachDisabledIPAccessControlForWebSocketTest(h)
 	groupID := int64(2)
 	apiKey := &service.APIKey{
 		ID:      101,
@@ -2155,6 +2156,7 @@ func TestOpenAIResponsesWebSocket_FailoverOnUpstreamUsageLimitEvent(t *testing.T
 		concurrencyHelper:   NewConcurrencyHelper(service.NewConcurrencyService(cache), SSEPingFormatNone, time.Second),
 		maxAccountSwitches:  3,
 	}
+	attachDisabledIPAccessControlForWebSocketTest(h)
 
 	apiKey := &service.APIKey{
 		ID:      1802,
@@ -2341,6 +2343,7 @@ func TestOpenAIResponsesWebSocket_FirstOutputTimeoutWithoutDownstreamReusesClien
 		concurrencyHelper:   NewConcurrencyHelper(service.NewConcurrencyService(cache), SSEPingFormatNone, time.Second),
 		maxAccountSwitches:  3,
 	}
+	attachDisabledIPAccessControlForWebSocketTest(h)
 
 	apiKey := &service.APIKey{
 		ID:      1812,
@@ -2566,6 +2569,7 @@ func runOpenAIResponsesWebSocketUsageLogCase(t *testing.T, tc openAIResponsesWSU
 		apiKeyService:       &service.APIKeyService{},
 		concurrencyHelper:   NewConcurrencyHelper(service.NewConcurrencyService(cache), SSEPingFormatNone, time.Second),
 	}
+	attachDisabledIPAccessControlForWebSocketTest(h)
 
 	apiKey := &service.APIKey{
 		ID:      1801,

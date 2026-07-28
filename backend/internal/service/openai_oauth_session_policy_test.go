@@ -366,7 +366,9 @@ func TestOpenAIOAuthSharedPreviousResponseRequiresCurrentPolicyScope(t *testing.
 	require.NoError(t, err)
 	require.Equal(t, account.ID, accountID)
 
-	account.Extra[OpenAIOAuthSessionPolicyExtraKey].(map[string]any)["scope_version"] = "scope-b"
+	policy, ok := account.Extra[OpenAIOAuthSessionPolicyExtraKey].(map[string]any)
+	require.True(t, ok)
+	policy["scope_version"] = "scope-b"
 	_, err = service.getOpenAIOAuthSharedResponseAccount(ctx, &groupID, "resp_scope")
 	require.ErrorIs(t, err, ErrOpenAIOAuthSessionAccessDenied)
 }

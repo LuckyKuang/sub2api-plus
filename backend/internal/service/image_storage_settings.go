@@ -10,7 +10,6 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
-	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
@@ -51,11 +50,11 @@ type ImageStorageSettings struct {
 // 解析结果带缓存：网关每次请求都要判断功能是否开启，不能每次都查库。保存设置时调用
 // Invalidate 清缓存，下一次请求即重建客户端——这是"后台开关立即生效、无需重启"的实现。
 type ImageStorageSettingService struct {
-	settingRepo SettingRepository
-	encryptor   SecretEncryptor
-	backup      *BackupService
-	factory     ImageStorageFactory
-	redis       *redis.Client
+	settingRepo     SettingRepository
+	encryptor       SecretEncryptor
+	backup          *BackupService
+	factory         ImageStorageFactory
+	invalidationBus InvalidationBus
 
 	// fallback 是 config.yaml 里的配置。后台从未保存过设置时沿用它，
 	// 保证升级前已用配置文件开启该功能的部署不被打断。
@@ -69,38 +68,26 @@ type ImageStorageSettingService struct {
 	invalidationOnce sync.Once
 }
 
-// SetInvalidationClient enables configuration fan-out for multi-instance
+// SetInvalidationBus enables configuration fan-out for multi-instance
 // deployments. It is optional so standalone/test deployments keep the same
 // construction contract.
-func (s *ImageStorageSettingService) SetInvalidationClient(client *redis.Client) {
+func (s *ImageStorageSettingService) SetInvalidationBus(bus InvalidationBus) {
 	if s == nil {
 		return
 	}
-	s.redis = client
+	s.invalidationBus = bus
 }
 
 // StartInvalidationSubscriber makes every API instance rebuild its local S3
 // client after one administrator saves a new configuration.
 func (s *ImageStorageSettingService) StartInvalidationSubscriber(ctx context.Context) {
-	if s == nil || s.redis == nil {
+	if s == nil || s.invalidationBus == nil {
 		return
 	}
 	s.invalidationOnce.Do(func() {
 		go func() {
-			subscription := s.redis.Subscribe(ctx, imageStorageConfigInvalidationChannel)
-			defer func() { _ = subscription.Close() }()
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case message, ok := <-subscription.Channel():
-					if !ok {
-						return
-					}
-					if message != nil {
-						s.Invalidate()
-					}
-				}
+			if err := s.invalidationBus.Subscribe(ctx, imageStorageConfigInvalidationChannel, s.Invalidate); err != nil {
+				logger.L().Warn("image_storage.settings_invalidation_subscription_ended", zap.Error(err))
 			}
 		}()
 	})
@@ -238,8 +225,8 @@ func (s *ImageStorageSettingService) Update(ctx context.Context, in ImageStorage
 		return nil, fmt.Errorf("save image storage settings: %w", err)
 	}
 	s.Invalidate()
-	if s.redis != nil {
-		if err := s.redis.Publish(ctx, imageStorageConfigInvalidationChannel, "refresh").Err(); err != nil {
+	if s.invalidationBus != nil {
+		if err := s.invalidationBus.Publish(ctx, imageStorageConfigInvalidationChannel); err != nil {
 			logger.L().Warn("image_storage.settings_invalidation_publish_failed", zap.Error(err))
 		}
 	}
