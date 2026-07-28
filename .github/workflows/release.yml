@@ -29,6 +29,7 @@ jobs:
       - name: Resolve release metadata
         id: metadata
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           INPUT_TAG: ${{ inputs.tag }}
         run: |
           if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
@@ -47,6 +48,11 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "docker_tag=${VERSION/+/-}" >> "$GITHUB_OUTPUT"
           echo "owner_lower=$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+          if gh release view "$TAG_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "goreleaser_args=release --clean --skip=validate,announce" >> "$GITHUB_OUTPUT"
+          else
+            echo "goreleaser_args=release --clean --skip=validate" >> "$GITHUB_OUTPUT"
+          fi
           {
             echo "tag_message<<EOF"
             git tag -l --format='%(contents:body)' "$TAG_NAME"
@@ -100,9 +106,10 @@ jobs:
         uses: goreleaser/goreleaser-action@v7
         with:
           version: "~> v2"
-          args: release --clean --skip=validate
+          args: ${{ steps.metadata.outputs.goreleaser_args }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPO_OWNER: ${{ github.repository_owner }}
           GITHUB_REPO_OWNER_LOWER: ${{ steps.metadata.outputs.owner_lower }}
           GITHUB_REPO_NAME: ${{ github.event.repository.name }}
