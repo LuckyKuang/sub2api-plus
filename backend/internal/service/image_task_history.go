@@ -2,9 +2,7 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
-	"time"
 )
 
 const (
@@ -77,23 +75,4 @@ func normalizeImageTaskHistoryFilter(filter ImageTaskHistoryFilter) ImageTaskHis
 		filter.Offset = 0
 	}
 	return filter
-}
-
-func imageTaskUnixTime(value int64) time.Time {
-	return time.Unix(value, 0).UTC()
-}
-
-func imageTaskCompletedAt(value *int64) *time.Time {
-	if value == nil {
-		return nil
-	}
-	completedAt := imageTaskUnixTime(*value)
-	return &completedAt
-}
-
-func imageTaskJSONText(value json.RawMessage) any {
-	if len(value) == 0 || !json.Valid(value) {
-		return nil
-	}
-	return string(value)
 }

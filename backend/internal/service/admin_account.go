@@ -1527,14 +1527,6 @@ func (s *adminServiceImpl) propagateProxyToShadows(ctx context.Context, parentID
 	return propagateAccountProxyToShadows(ctx, s.accountRepo, parentID, proxyID)
 }
 
-// propagateOpenAIOAuthSessionPolicyToShadows keeps Spark shadows in the same
-// OAuth session domain as their credential-owning parent. Policy updates and
-// group bindings are intentionally synchronous so a group removed from the
-// parent cannot keep using a shadow with the same OAuth credential.
-func (s *adminServiceImpl) propagateOpenAIOAuthSessionPolicyToShadows(ctx context.Context, parent *Account, groupIDs []int64) error {
-	return propagateOpenAIOAuthSessionPolicyToShadowsWithRepo(ctx, s.accountRepo, parent, groupIDs)
-}
-
 func propagateOpenAIOAuthSessionPolicyToShadowsWithRepo(ctx context.Context, repo AccountRepository, parent *Account, groupIDs []int64) error {
 	if parent == nil || parent.IsCredentialShadow() || !parent.IsOpenAIOAuth() {
 		return nil
