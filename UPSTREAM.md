@@ -8,11 +8,11 @@
 | `v0.1.164+custom.005` | `v0.1.164` | `cd8bb98c44303b2c8f04c0da340447c992f0cb7d` |
 | `v0.1.165+custom.001` | `v0.1.165` | `e9a58c1cb8b5ef626a75c93b4d953fde5e67aa29` |
 | `v0.1.165+custom.002` | `v0.1.165` | `e9a58c1cb8b5ef626a75c93b4d953fde5e67aa29` |
-| `v0.1.165-custom.003` | `v0.1.165` | `e9a58c1cb8b5ef626a75c93b4d953fde5e67aa29` |
-| `v0.1.165-custom.004` | `v0.1.165` | `e9a58c1cb8b5ef626a75c93b4d953fde5e67aa29` |
-| `v0.1.166-custom.001` | `v0.1.166` | `dc893dd0b8eab41df5be595ae9fcd1aa74a062b8` |
-| `v0.1.166-custom.002` | `v0.1.166` | `dc893dd0b8eab41df5be595ae9fcd1aa74a062b8` |
-| `v0.1.166-custom.003` | `v0.1.166` | `dc893dd0b8eab41df5be595ae9fcd1aa74a062b8` |
+| `v0.1.165+custom.003` | `v0.1.165` | `e9a58c1cb8b5ef626a75c93b4d953fde5e67aa29` |
+| `v0.1.165+custom.004` | `v0.1.165` | `e9a58c1cb8b5ef626a75c93b4d953fde5e67aa29` |
+| `v0.1.166+custom.001` | `v0.1.166` | `dc893dd0b8eab41df5be595ae9fcd1aa74a062b8` |
+| `v0.1.166+custom.002` | `v0.1.166` | `dc893dd0b8eab41df5be595ae9fcd1aa74a062b8` |
+| `v0.1.166+custom.003` | `v0.1.166` | `dc893dd0b8eab41df5be595ae9fcd1aa74a062b8` |
 | `v0.1.166+custom.004` | `v0.1.166` | `dc893dd0b8eab41df5be595ae9fcd1aa74a062b8` |
 
 The current application version uses SemVer build metadata to identify the
@@ -37,8 +37,24 @@ When the official baseline changes, reset the custom iteration to `001`.
 Examples: `v0.1.166+custom.005`, then `v0.1.167+custom.001` after merging
 official `v0.1.167`. `NNN` is always a three-digit number from `001` to `999`.
 
-Historical tags remain available for compatibility, including older tags that
-used `-custom.NNN`. They are not the format for new releases.
+Historical releases were migrated to this canonical form on 2026-07-29. The
+legacy Git tags, GitHub Releases, and OCI image tags that used
+`-custom.NNN` were removed after their canonical replacements were verified.
+
+## Historical Naming Migration Audit
+
+| Removed legacy tag | Canonical replacement | Result |
+| --- | --- | --- |
+| `v0.1.165-custom.003` | `v0.1.165+custom.003` | Release rebuilt; legacy GHCR tag removed |
+| `v0.1.165-custom.004` | `v0.1.165+custom.004` | Release rebuilt; legacy GHCR tag removed |
+| `v0.1.166-custom.001` | `v0.1.166+custom.001` | Release rebuilt; legacy GHCR tag removed |
+| `v0.1.166-custom.002` | `v0.1.166+custom.002` | Release rebuilt; legacy GHCR tag removed |
+| `v0.1.166-custom.003` | `v0.1.166+custom.003` | Release rebuilt; legacy GHCR tag removed |
+
+The previous release artifacts and Git objects were retained in a local
+audit backup at `/private/tmp/sub2api-release-migration-20260729/` before
+the legacy remote references were deleted. This backup is not a distribution
+source and must not be used for installation or upgrades.
 
 ## Distribution Source
 
