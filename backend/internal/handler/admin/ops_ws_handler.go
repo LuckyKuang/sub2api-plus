@@ -387,10 +387,6 @@ func (h *OpsHandler) QPSWSHandler(c *gin.Context) {
 	})
 }
 
-func (h *OpsHandler) isIPBlocked(ctx context.Context, clientIP string) (bool, error) {
-	return h.isIPBlockedForIdentity(ctx, ip.ClientIdentity{EffectiveIP: clientIP, SafeForEnforcement: strings.TrimSpace(clientIP) != ""})
-}
-
 func (h *OpsHandler) isIPBlockedForIdentity(ctx context.Context, identity ip.ClientIdentity) (bool, error) {
 	if h == nil || h.ipAccessControl == nil {
 		return false, errors.New("IP access control dependency unavailable")
@@ -443,10 +439,6 @@ func releaseOpsWSIPSlot(clientIP string) {
 		return
 	}
 	wsConnCountByIP[clientIP] = current - 1
-}
-
-func handleQPSWebSocket(parentCtx context.Context, conn *websocket.Conn) {
-	handleQPSWebSocketWithIPAccess(parentCtx, conn, nil)
 }
 
 func handleQPSWebSocketWithIPAccess(
@@ -677,31 +669,6 @@ func requestPeerIP(r *http.Request) (netip.Addr, bool) {
 		return netip.Addr{}, false
 	}
 	return addr.Unmap(), true
-}
-
-func requestClientIP(r *http.Request) string {
-	if r == nil {
-		return ""
-	}
-
-	trustProxyHeaders := shouldTrustOpsWSProxyHeaders(r)
-	if trustProxyHeaders {
-		xff := strings.TrimSpace(r.Header.Get("X-Forwarded-For"))
-		if xff != "" {
-			// Use the left-most entry (original client). If multiple proxies add values, they are comma-separated.
-			xff = strings.TrimSpace(strings.Split(xff, ",")[0])
-			xff = strings.TrimPrefix(xff, "[")
-			xff = strings.TrimSuffix(xff, "]")
-			if addr, err := netip.ParseAddr(xff); err == nil && addr.IsValid() {
-				return addr.Unmap().String()
-			}
-		}
-	}
-
-	if peer, ok := requestPeerIP(r); ok && peer.IsValid() {
-		return peer.String()
-	}
-	return ""
 }
 
 func isAddrInTrustedProxies(addr netip.Addr, trusted []netip.Prefix) bool {

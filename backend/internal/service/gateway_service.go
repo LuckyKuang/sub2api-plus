@@ -444,6 +444,11 @@ var allowedHeaders = map[string]bool{
 	"x-client-request-id":                       true,
 }
 
+// ErrGatewayCacheMiss is returned by GatewayCache when no sticky-session
+// binding exists. Cache implementations must not expose transport-specific
+// errors such as redis.Nil to service consumers.
+var ErrGatewayCacheMiss = errors.New("gateway cache entry not found")
+
 // GatewayCache 定义网关服务的缓存操作接口。
 // 提供粘性会话（Sticky Session）的存储、查询、刷新和删除功能。
 //

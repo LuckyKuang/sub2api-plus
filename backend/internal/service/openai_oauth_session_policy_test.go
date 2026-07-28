@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
@@ -45,7 +44,7 @@ func (c *oauthSessionPolicyCache) GetSessionAccountID(_ context.Context, groupID
 	}
 	accountID, ok := c.values[c.key(groupID, sessionHash)]
 	if !ok {
-		return 0, redis.Nil
+		return 0, ErrGatewayCacheMiss
 	}
 	return accountID, nil
 }
@@ -493,7 +492,8 @@ func TestNormalizeOpenAIOAuthSessionPolicyRequiresExactAccountGroups(t *testing.
 		},
 	}, []int64{11, 12})
 	require.NoError(t, err)
-	policy := normalized[OpenAIOAuthSessionPolicyExtraKey].(map[string]any)
+	policy, ok := normalized[OpenAIOAuthSessionPolicyExtraKey].(map[string]any)
+	require.True(t, ok)
 	require.Equal(t, []int64{11, 12}, policy["allowed_group_ids"])
 	require.NotEmpty(t, policy["scope_version"])
 }

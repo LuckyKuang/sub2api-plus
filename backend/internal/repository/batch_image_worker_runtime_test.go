@@ -1,6 +1,6 @@
 //go:build unit
 
-package service_test
+package repository_test
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestBatchImageWorkerRuntime_StartupDoesNotCreateRedisBatchImageKeys(t *testing.T) {
+func TestBatchImageWorkerRuntimeStartupDoesNotCreateRedisBatchImageKeys(t *testing.T) {
 	mr := miniredis.RunT(t)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() {

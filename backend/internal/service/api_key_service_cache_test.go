@@ -13,7 +13,6 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
-	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 )
 
@@ -152,7 +151,7 @@ func (s *authCacheStub) SetDailyUsageExpiry(ctx context.Context, apiKey string, 
 
 func (s *authCacheStub) GetAuthCache(ctx context.Context, key string) (*APIKeyAuthCacheEntry, error) {
 	if s.getAuthCache == nil {
-		return nil, redis.Nil
+		return nil, errors.New("cache miss")
 	}
 	return s.getAuthCache(ctx, key)
 }
@@ -444,7 +443,7 @@ func TestAPIKeyService_GetByKey_CacheMissStoresL2(t *testing.T) {
 	}
 	svc := NewAPIKeyService(repo, nil, nil, nil, nil, cache, cfg)
 	cache.getAuthCache = func(ctx context.Context, key string) (*APIKeyAuthCacheEntry, error) {
-		return nil, redis.Nil
+		return nil, errors.New("cache miss")
 	}
 
 	apiKey, err := svc.GetByKey(context.Background(), "k2")
@@ -567,7 +566,7 @@ func TestAPIKeyService_GetByKey_CachesNegativeOnRepoMiss(t *testing.T) {
 	}
 	svc := NewAPIKeyService(repo, nil, nil, nil, nil, cache, cfg)
 	cache.getAuthCache = func(ctx context.Context, key string) (*APIKeyAuthCacheEntry, error) {
-		return nil, redis.Nil
+		return nil, errors.New("cache miss")
 	}
 
 	_, err := svc.GetByKey(context.Background(), "missing")
@@ -583,7 +582,7 @@ func TestAPIKeyService_GetByKeyRejectsInvalidLengthBeforeCaches(t *testing.T) {
 	var cacheCalls atomic.Int32
 	cache := &authCacheStub{getAuthCache: func(context.Context, string) (*APIKeyAuthCacheEntry, error) {
 		cacheCalls.Add(1)
-		return nil, redis.Nil
+		return nil, errors.New("cache miss")
 	}}
 	repo := &authRepoStub{getByKeyForAuth: func(context.Context, string) (*APIKey, error) {
 		t.Fatal("invalid credential reached repository")

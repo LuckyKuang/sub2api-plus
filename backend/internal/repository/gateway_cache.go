@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -31,7 +32,11 @@ func buildSessionKey(groupID int64, sessionHash string) string {
 
 func (c *gatewayCache) GetSessionAccountID(ctx context.Context, groupID int64, sessionHash string) (int64, error) {
 	key := buildSessionKey(groupID, sessionHash)
-	return c.rdb.Get(ctx, key).Int64()
+	accountID, err := c.rdb.Get(ctx, key).Int64()
+	if errors.Is(err, redis.Nil) {
+		return 0, service.ErrGatewayCacheMiss
+	}
+	return accountID, err
 }
 
 func (c *gatewayCache) SetSessionAccountID(ctx context.Context, groupID int64, sessionHash string, accountID int64, ttl time.Duration) error {

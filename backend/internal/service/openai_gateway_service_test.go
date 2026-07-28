@@ -18,7 +18,6 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/cespare/xxhash/v2"
 	"github.com/gin-gonic/gin"
-	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
 )
@@ -496,7 +495,7 @@ func (c *stubGatewayCache) GetSessionAccountID(ctx context.Context, groupID int6
 	if id, ok := c.sessionBindings[sessionHash]; ok {
 		return id, nil
 	}
-	return 0, redis.Nil
+	return 0, ErrGatewayCacheMiss
 }
 
 func (c *stubGatewayCache) SetSessionAccountID(ctx context.Context, groupID int64, sessionHash string, accountID int64, ttl time.Duration) error {

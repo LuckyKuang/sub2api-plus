@@ -843,50 +843,6 @@ func (h *AccountHandler) resolveExportProxies(ctx context.Context, accounts []se
 	return h.adminService.GetProxiesByIDs(ctx, ids)
 }
 
-func parseAccountIDs(c *gin.Context) ([]int64, error) {
-	values := c.QueryArray("ids")
-	if len(values) == 0 {
-		raw := strings.TrimSpace(c.Query("ids"))
-		if raw != "" {
-			values = []string{raw}
-		}
-	}
-	if len(values) == 0 {
-		return nil, nil
-	}
-
-	ids := make([]int64, 0, len(values))
-	for _, item := range values {
-		for _, part := range strings.Split(item, ",") {
-			part = strings.TrimSpace(part)
-			if part == "" {
-				continue
-			}
-			id, err := strconv.ParseInt(part, 10, 64)
-			if err != nil || id <= 0 {
-				return nil, fmt.Errorf("invalid account id: %s", part)
-			}
-			ids = append(ids, id)
-		}
-	}
-	return ids, nil
-}
-
-func parseIncludeProxies(c *gin.Context) (bool, error) {
-	raw := strings.TrimSpace(strings.ToLower(c.Query("include_proxies")))
-	if raw == "" {
-		return true, nil
-	}
-	switch raw {
-	case "1", "true", "yes", "on":
-		return true, nil
-	case "0", "false", "no", "off":
-		return false, nil
-	default:
-		return true, fmt.Errorf("invalid include_proxies value: %s", raw)
-	}
-}
-
 func validateDataHeader(payload DataPayload) error {
 	if payload.Type != "" && payload.Type != dataType && payload.Type != legacyDataType {
 		return fmt.Errorf("unsupported data type: %s", payload.Type)

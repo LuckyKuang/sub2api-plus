@@ -10,7 +10,6 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/cespare/xxhash/v2"
 	"github.com/gin-gonic/gin"
-	"github.com/redis/go-redis/v9"
 )
 
 // A negative cache group is reserved for OAuth session bindings that are
@@ -247,7 +246,7 @@ func (s *OpenAIGatewayService) getOpenAIOAuthSharedResponseAccount(ctx context.C
 	}
 	ownerUserID, ownerErr := s.cache.GetSessionAccountID(ctx, openAIOAuthSharedSessionCacheGroupID, ownerKey)
 	if ownerErr != nil {
-		if errors.Is(ownerErr, redis.Nil) {
+		if errors.Is(ownerErr, ErrGatewayCacheMiss) {
 			// A v2 shared marker proves this response came from the old policy
 			// domain, which had no user ownership. Reject it instead of allowing a
 			// same-group caller to revive the chain through the local fallback.
@@ -256,7 +255,7 @@ func (s *OpenAIGatewayService) getOpenAIOAuthSharedResponseAccount(ctx context.C
 			if legacyErr == nil && legacyAccountID > 0 {
 				return 0, ErrOpenAIOAuthSessionAccessDenied
 			}
-			if errors.Is(legacyErr, redis.Nil) {
+			if errors.Is(legacyErr, ErrGatewayCacheMiss) {
 				// No shared marker in either format: preserve genuinely group-local,
 				// non-policy continuations created before this feature existed.
 				return 0, nil

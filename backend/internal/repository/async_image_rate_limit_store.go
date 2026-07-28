@@ -76,7 +76,7 @@ func (s *asyncImageRateLimitStore) Release(ctx context.Context, userID int64, re
 	if s == nil || s.rdb == nil {
 		return errors.New("async image rate-limit store is unavailable")
 	}
-	members := make([]interface{}, requested)
+	members := make([]any, requested)
 	for index := range members {
 		members[index] = reservationID + ":" + strconv.Itoa(index)
 	}
