@@ -37,6 +37,10 @@ func (r openAIImagesFailoverAccountRepo) GetByID(_ context.Context, id int64) (*
 	return nil, service.ErrNoAvailableAccounts
 }
 
+func (r openAIImagesFailoverAccountRepo) ListByPlatform(_ context.Context, platform string) ([]service.Account, error) {
+	return r.accountsForPlatform(platform), nil
+}
+
 func (r openAIImagesFailoverAccountRepo) ListSchedulableByGroupIDAndPlatform(_ context.Context, _ int64, platform string) ([]service.Account, error) {
 	return r.accountsForPlatform(platform), nil
 }
@@ -192,6 +196,7 @@ func TestOpenAIGatewayHandlerImages_ServerErrorFailsOverAndReturnsClearErrorWhen
 	require.Equal(t, http.StatusBadGateway, rec.Code)
 	require.Equal(t, "upstream_error", gjson.GetBytes(rec.Body.Bytes(), "error.type").String())
 	require.Equal(t, "Upstream service temporarily unavailable", gjson.GetBytes(rec.Body.Bytes(), "error.message").String())
+	require.Empty(t, observedLogs.FilterMessage("openai.responses_panic_recovered").All())
 
 	rawEvents, ok := c.Get(service.OpsUpstreamErrorsKey)
 	require.True(t, ok)
