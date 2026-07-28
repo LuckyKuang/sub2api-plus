@@ -8,22 +8,22 @@
 | `v0.1.164+custom.005` | `v0.1.164` | `cd8bb98c44303b2c8f04c0da340447c992f0cb7d` |
 | `v0.1.165+custom.001` | `v0.1.165` | `e9a58c1cb8b5ef626a75c93b4d953fde5e67aa29` |
 | `v0.1.165+custom.002` | `v0.1.165` | `e9a58c1cb8b5ef626a75c93b4d953fde5e67aa29` |
-| `v0.1.165-custom.003` | `v0.1.165` | `e9a58c1cb8b5ef626a75c93b4d953fde5e67aa29` |
+| `v0.1.165+custom.003` | `v0.1.165` | `e9a58c1cb8b5ef626a75c93b4d953fde5e67aa29` |
 
 The current application version uses a valid SemVer prerelease suffix to
 identify the custom build. The matching Docker image tag is
-`ghcr.io/luckykuang/sub2api-plus:0.1.165-custom.003`.
+`ghcr.io/luckykuang/sub2api-plus:v0.1.165-custom.003`.
 
 ## Distribution Source
 
 All operator-facing installation, update, rollback, and release links use the
 fork repository: `https://github.com/luckykuang/sub2api-plus`.
 
-- GitHub Release tags use `vX.Y.Z-custom.NNN`.
+- GitHub Release tags use `vX.Y.Z+custom.NNN`.
 - Release archives use the matching suffix, for example
-  `sub2api_0.1.165-custom.003_linux_amd64.tar.gz`.
+  `sub2api_0.1.165+custom.003_linux_amd64.tar.gz`.
 - GHCR image tags use the same suffix, for example
-  `ghcr.io/luckykuang/sub2api-plus:0.1.165-custom.003`.
+  `ghcr.io/luckykuang/sub2api-plus:v0.1.165-custom.003`.
 - The official repository is an upstream source for maintainers only; it is
   never used by installation or automatic update paths.
 
@@ -44,4 +44,4 @@ fork repository: `https://github.com/luckykuang/sub2api-plus`.
    to `custom.001` after an upstream version increase.
 5. Update this mapping and version metadata.
 6. Run backend and frontend checks, then publish the matching GitHub Release
-   tag, for example `v0.1.165-custom.003`.
+   tag, for example `v0.1.165+custom.003`.
