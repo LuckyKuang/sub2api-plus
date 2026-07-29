@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -266,8 +267,81 @@ func TestSimpleModeBypassesQuotaCheck(t *testing.T) {
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusTooManyRequests, w.Code)
-		require.Contains(t, w.Body.String(), "USAGE_LIMIT_EXCEEDED")
+		require.Contains(t, w.Body.String(), "DAILY_LIMIT_EXCEEDED")
 	})
+}
+
+func TestAPIKeyAuthSubscriptionFiveHourLimitReturnsResetHeaders(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	limit := 1.0
+	now := time.Now().UTC()
+	fiveHourWindowStart := now.Add(-time.Hour)
+	group := &service.Group{
+		ID:               42,
+		Name:             "openai-subscription",
+		Status:           service.StatusActive,
+		Platform:         service.PlatformOpenAI,
+		Hydrated:         true,
+		SubscriptionType: service.SubscriptionTypeSubscription,
+		FiveHourLimitUSD: &limit,
+	}
+	user := &service.User{ID: 7, Role: service.RoleUser, Status: service.StatusActive, Balance: 10, Concurrency: 3}
+	apiKey := &service.APIKey{
+		ID:      100,
+		UserID:  user.ID,
+		Key:     "five-hour-limit-key",
+		Status:  service.StatusActive,
+		GroupID: &group.ID,
+		User:    user,
+		Group:   group,
+	}
+	apiKeyRepo := &stubApiKeyRepo{getByKey: func(_ context.Context, key string) (*service.APIKey, error) {
+		if key != apiKey.Key {
+			return nil, service.ErrAPIKeyNotFound
+		}
+		keyCopy := *apiKey
+		userCopy := *user
+		keyCopy.User = &userCopy
+		return &keyCopy, nil
+	}}
+	subscription := &service.UserSubscription{
+		ID:                  55,
+		UserID:              user.ID,
+		GroupID:             group.ID,
+		Status:              service.SubscriptionStatusActive,
+		ExpiresAt:           now.Add(24 * time.Hour),
+		DailyWindowStart:    &now,
+		WeeklyWindowStart:   &now,
+		MonthlyWindowStart:  &now,
+		FiveHourWindowStart: &fiveHourWindowStart,
+		FiveHourUsageUSD:    limit,
+	}
+	subscriptionRepo := &stubUserSubscriptionRepo{
+		getActive: func(_ context.Context, userID, groupID int64) (*service.UserSubscription, error) {
+			if userID != subscription.UserID || groupID != subscription.GroupID {
+				return nil, service.ErrSubscriptionNotFound
+			}
+			copy := *subscription
+			return &copy, nil
+		},
+		updateStatus: func(context.Context, int64, string) error { return nil },
+	}
+	cfg := &config.Config{RunMode: config.RunModeStandard}
+	apiKeyService := service.NewAPIKeyService(apiKeyRepo, nil, nil, nil, nil, nil, cfg)
+	subscriptionService := service.NewSubscriptionService(nil, subscriptionRepo, nil, nil, cfg)
+	router := newAuthTestRouter(apiKeyService, subscriptionService, cfg)
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/t", nil)
+	request.Header.Set("x-api-key", apiKey.Key)
+	router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusTooManyRequests, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "GROUP_FIVE_HOUR_LIMIT_EXCEEDED")
+	require.NotEmpty(t, recorder.Header().Get("Retry-After"))
+	require.Equal(t, strconv.FormatInt(subscription.FiveHourWindowStart.Add(5*time.Hour).Unix(), 10), recorder.Header().Get("X-RateLimit-Reset"))
+	require.Equal(t, subscription.FiveHourWindowStart.Add(5*time.Hour).Format(time.RFC3339), recorder.Header().Get("X-Sub2API-RateLimit-Reset-At"))
 }
 
 func TestAPIKeyAuthSetsGroupContext(t *testing.T) {

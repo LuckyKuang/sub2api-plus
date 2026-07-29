@@ -15,6 +15,12 @@ permissions:
   contents: write
   packages: write
 
+# GoReleaser also updates the shared latest, major, and minor GHCR tags.
+# Serialize releases so simultaneous tag pushes cannot race on those manifests.
+concurrency:
+  group: release-publish
+  cancel-in-progress: false
+
 jobs:
   release:
     name: Build and publish

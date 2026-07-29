@@ -360,6 +360,7 @@ func TestAPIContracts(t *testing.T) {
 						"daily_limit_usd": null,
 						"weekly_limit_usd": null,
 						"monthly_limit_usd": null,
+						"five_hour_limit_usd": null,
 						"image_price_1k": null,
 						"image_price_2k": null,
 						"image_price_4k": null,
@@ -432,9 +433,11 @@ func TestAPIContracts(t *testing.T) {
 						"daily_window_start": null,
 						"weekly_window_start": null,
 						"monthly_window_start": null,
+						"five_hour_window_start": null,
 						"daily_usage_usd": 1.23,
 						"weekly_usage_usd": 2.34,
 						"monthly_usage_usd": 3.45,
+						"five_hour_usage_usd": 0,
 						"created_at": "2025-01-02T03:04:05Z",
 						"updated_at": "2025-01-02T03:04:05Z"
 					}
@@ -917,7 +920,8 @@ func TestAPIContracts(t *testing.T) {
 					"openai_advanced_scheduler_effective_weight_upstream_cost": "0",
 					"openai_advanced_scheduler_effective_weight_previous_response": "5",
 					"openai_advanced_scheduler_effective_weight_session_sticky": "3",
-					"openai_codex_user_agent":           "",
+					"openai_codex_user_agent":                 "",
+					"openai_codex_local_group_quota_enabled": false,
 					"openai_fast_policy_settings": {
 						"rules": []
 					},
@@ -1200,7 +1204,8 @@ func TestAPIContracts(t *testing.T) {
 					"openai_advanced_scheduler_effective_weight_upstream_cost": "0",
 					"openai_advanced_scheduler_effective_weight_previous_response": "5",
 					"openai_advanced_scheduler_effective_weight_session_sticky": "3",
-					"openai_codex_user_agent":           "",
+					"openai_codex_user_agent":                 "",
+					"openai_codex_local_group_quota_enabled": false,
 					"openai_fast_policy_settings": {
 						"rules": []
 					},

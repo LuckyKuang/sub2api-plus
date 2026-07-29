@@ -108,8 +108,8 @@ func subscriptionUsageLimitError(group *Group, snapshot subscriptionUsageSnapsho
 	}
 
 	dailyDuration := subscriptionDayDuration
-	dailyResetAt := time.Time{}
-	dailyActive := false
+	var dailyResetAt time.Time
+	var dailyActive bool
 	if snapshot.OneTimeDailyQuota && snapshot.DailyWindowStart != nil {
 		dailyResetAt = snapshot.ExpiresAt
 		dailyActive = now.Before(dailyResetAt)

@@ -104,6 +104,7 @@ func TestUsageBillingRepositoryApply_DeduplicatesSubscriptionBilling(t *testing.
 		UserID:  user.ID,
 		GroupID: group.ID,
 	})
+	cleanupUsageBillingSubscriptionFixture(t, ctx, user.ID, group.ID, apiKey.ID, subscription.ID)
 
 	requestID := uuid.NewString()
 	cmd := &service.UsageBillingCommand{
@@ -115,6 +116,7 @@ func TestUsageBillingRepositoryApply_DeduplicatesSubscriptionBilling(t *testing.
 		SubscriptionCost: 2.5,
 	}
 
+	beforeCharge := time.Now().UTC()
 	result1, err := repo.Apply(ctx, cmd)
 	require.NoError(t, err)
 	require.True(t, result1.Applied)
@@ -126,6 +128,79 @@ func TestUsageBillingRepositoryApply_DeduplicatesSubscriptionBilling(t *testing.
 	var dailyUsage float64
 	require.NoError(t, integrationDB.QueryRowContext(ctx, "SELECT daily_usage_usd FROM user_subscriptions WHERE id = $1", subscription.ID).Scan(&dailyUsage))
 	require.InDelta(t, 2.5, dailyUsage, 0.000001)
+
+	var fiveHourUsage float64
+	var fiveHourWindowStart time.Time
+	require.NoError(t, integrationDB.QueryRowContext(ctx, "SELECT five_hour_usage_usd, five_hour_window_start FROM user_subscriptions WHERE id = $1", subscription.ID).Scan(&fiveHourUsage, &fiveHourWindowStart))
+	require.InDelta(t, 2.5, fiveHourUsage, 0.000001)
+	require.WithinDuration(t, beforeCharge, fiveHourWindowStart, 5*time.Second)
+}
+
+func TestUsageBillingRepositoryApply_ResetsExpiredFiveHourSubscriptionWindow(t *testing.T) {
+	ctx := context.Background()
+	client := testEntClient(t)
+	repo := NewUsageBillingRepository(client, integrationDB)
+
+	user := mustCreateUser(t, client, &service.User{
+		Email:        fmt.Sprintf("usage-billing-five-hour-user-%d@example.com", time.Now().UnixNano()),
+		PasswordHash: "hash",
+	})
+	group := mustCreateGroup(t, client, &service.Group{
+		Name:             "usage-billing-five-hour-group-" + uuid.NewString(),
+		Platform:         service.PlatformOpenAI,
+		SubscriptionType: service.SubscriptionTypeSubscription,
+	})
+	apiKey := mustCreateApiKey(t, client, &service.APIKey{
+		UserID:  user.ID,
+		GroupID: &group.ID,
+		Key:     "sk-usage-billing-five-hour-" + uuid.NewString(),
+		Name:    "billing-five-hour",
+	})
+	expiredStart := time.Now().UTC().Add(-6 * time.Hour)
+	subscription := mustCreateSubscription(t, client, &service.UserSubscription{
+		UserID:              user.ID,
+		GroupID:             group.ID,
+		FiveHourUsageUSD:    9.5,
+		FiveHourWindowStart: &expiredStart,
+	})
+	cleanupUsageBillingSubscriptionFixture(t, ctx, user.ID, group.ID, apiKey.ID, subscription.ID)
+
+	beforeCharge := time.Now().UTC()
+	result, err := repo.Apply(ctx, &service.UsageBillingCommand{
+		RequestID:        uuid.NewString(),
+		APIKeyID:         apiKey.ID,
+		UserID:           user.ID,
+		SubscriptionID:   &subscription.ID,
+		SubscriptionCost: 2.5,
+	})
+	require.NoError(t, err)
+	require.True(t, result.Applied)
+
+	var fiveHourUsage float64
+	var fiveHourWindowStart time.Time
+	require.NoError(t, integrationDB.QueryRowContext(ctx, "SELECT five_hour_usage_usd, five_hour_window_start FROM user_subscriptions WHERE id = $1", subscription.ID).Scan(&fiveHourUsage, &fiveHourWindowStart))
+	require.InDelta(t, 2.5, fiveHourUsage, 0.000001)
+	require.WithinDuration(t, beforeCharge, fiveHourWindowStart, 5*time.Second)
+}
+
+func cleanupUsageBillingSubscriptionFixture(t *testing.T, ctx context.Context, userID, groupID, apiKeyID, subscriptionID int64) {
+	t.Helper()
+	t.Cleanup(func() {
+		for _, statement := range []struct {
+			query string
+			id    int64
+		}{
+			{"DELETE FROM usage_billing_dedup_archive WHERE api_key_id = $1", apiKeyID},
+			{"DELETE FROM usage_billing_dedup WHERE api_key_id = $1", apiKeyID},
+			{"DELETE FROM user_subscriptions WHERE id = $1", subscriptionID},
+			{"DELETE FROM api_keys WHERE id = $1", apiKeyID},
+			{"DELETE FROM users WHERE id = $1", userID},
+			{"DELETE FROM groups WHERE id = $1", groupID},
+		} {
+			_, err := integrationDB.ExecContext(ctx, statement.query, statement.id)
+			require.NoError(t, err, "cleanup usage billing subscription fixture")
+		}
+	})
 }
 
 func TestUsageBillingRepositoryApply_RequestFingerprintConflict(t *testing.T) {

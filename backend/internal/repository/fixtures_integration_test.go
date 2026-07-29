@@ -400,7 +400,21 @@ func mustCreateSubscription(t *testing.T, client *dbent.Client, s *service.UserS
 		SetNotes(s.Notes).
 		SetDailyUsageUsd(s.DailyUsageUSD).
 		SetWeeklyUsageUsd(s.WeeklyUsageUSD).
-		SetMonthlyUsageUsd(s.MonthlyUsageUSD)
+		SetMonthlyUsageUsd(s.MonthlyUsageUSD).
+		SetFiveHourUsageUsd(s.FiveHourUsageUSD)
+
+	if s.DailyWindowStart != nil {
+		create.SetDailyWindowStart(*s.DailyWindowStart)
+	}
+	if s.WeeklyWindowStart != nil {
+		create.SetWeeklyWindowStart(*s.WeeklyWindowStart)
+	}
+	if s.MonthlyWindowStart != nil {
+		create.SetMonthlyWindowStart(*s.MonthlyWindowStart)
+	}
+	if s.FiveHourWindowStart != nil {
+		create.SetFiveHourWindowStart(*s.FiveHourWindowStart)
+	}
 
 	if s.AssignedBy != nil {
 		create.SetAssignedBy(*s.AssignedBy)

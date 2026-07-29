@@ -49,6 +49,14 @@ func TestMain(m *testing.M) {
 		log.Printf("failed to init timezone: %v", err)
 		os.Exit(1)
 	}
+	if postgresDSN := strings.TrimSpace(os.Getenv("SUB2API_TEST_POSTGRES_DSN")); postgresDSN != "" {
+		redisAddr := strings.TrimSpace(os.Getenv("SUB2API_TEST_REDIS_ADDR"))
+		if redisAddr == "" {
+			log.Printf("SUB2API_TEST_REDIS_ADDR is required when SUB2API_TEST_POSTGRES_DSN is set")
+			os.Exit(1)
+		}
+		os.Exit(runIntegrationTestsWithExternalServices(ctx, m, postgresDSN, redisAddr, os.Getenv("SUB2API_TEST_REDIS_PASSWORD")))
+	}
 
 	if !dockerIsAvailable(ctx) {
 		// In CI we expect Docker to be available so integration tests should fail loudly.
@@ -132,6 +140,42 @@ func TestMain(m *testing.M) {
 	_ = integrationDB.Close()
 
 	os.Exit(code)
+}
+
+// runIntegrationTestsWithExternalServices is an explicit opt-in for runtimes
+// such as Apple Containers that do not expose a Docker-compatible API to
+// testcontainers. Callers must supply an isolated PostgreSQL database because
+// integration tests apply migrations and create persistent fixture rows.
+func runIntegrationTestsWithExternalServices(ctx context.Context, m *testing.M, postgresDSN, redisAddr, redisPassword string) int {
+	var err error
+	integrationDB, err = openSQLWithRetry(ctx, postgresDSN, 30*time.Second)
+	if err != nil {
+		log.Printf("failed to open external integration postgres: %v", err)
+		return 1
+	}
+	defer func() { _ = integrationDB.Close() }()
+
+	if err := ApplyMigrations(ctx, integrationDB); err != nil {
+		log.Printf("failed to apply migrations to external integration postgres: %v", err)
+		return 1
+	}
+
+	drv := entsql.OpenDB(dialect.Postgres, integrationDB)
+	integrationEntClient = dbent.NewClient(dbent.Driver(drv))
+	defer func() { _ = integrationEntClient.Close() }()
+
+	integrationRedis = redisclient.NewClient(&redisclient.Options{
+		Addr:     redisAddr,
+		Password: redisPassword,
+		DB:       0,
+	})
+	defer func() { _ = integrationRedis.Close() }()
+	if err := integrationRedis.Ping(ctx).Err(); err != nil {
+		log.Printf("failed to ping external integration redis: %v", err)
+		return 1
+	}
+
+	return m.Run()
 }
 
 func dockerIsAvailable(ctx context.Context) bool {
