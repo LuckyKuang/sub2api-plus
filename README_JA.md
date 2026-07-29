@@ -39,8 +39,8 @@ OCI イメージタグでは先頭の `v` を維持し、Docker Tag で使用で
 `+` のみを `-` に変換します。
 
 ```text
-Git/GitHub: v0.1.166+custom.006
-GHCR:       ghcr.io/luckykuang/sub2api-plus:v0.1.166-custom.006
+Git/GitHub: v0.1.166+custom.008
+GHCR:       ghcr.io/luckykuang/sub2api-plus:v0.1.166-custom.008
 ```
 
 同じ公式ベースで更新する場合は `NNN` を増やし、新しい公式バージョンを

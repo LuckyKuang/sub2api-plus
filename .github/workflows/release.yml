@@ -71,13 +71,25 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Verify embedded version
+      - name: Verify release versions
         run: |
           EMBEDDED_VERSION=$(tr -d '\r\n' < backend/cmd/server/VERSION)
           if [ "$EMBEDDED_VERSION" != "${{ steps.metadata.outputs.version }}" ]; then
             echo "backend/cmd/server/VERSION is $EMBEDDED_VERSION, expected ${{ steps.metadata.outputs.version }}" >&2
             exit 1
           fi
+
+          EXPECTED_DOCKER_ARG="ARG VERSION=${{ steps.metadata.outputs.version }}"
+          for dockerfile in Dockerfile backend/Dockerfile; do
+            if ! grep -Fqx "$EXPECTED_DOCKER_ARG" "$dockerfile"; then
+              echo "$dockerfile does not contain $EXPECTED_DOCKER_ARG" >&2
+              exit 1
+            fi
+            if grep -E '^ARG VERSION=' "$dockerfile" | grep -Fvx "$EXPECTED_DOCKER_ARG" >/dev/null; then
+              echo "$dockerfile contains an ARG VERSION that does not match ${{ steps.metadata.outputs.version }}" >&2
+              exit 1
+            fi
+          done
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v6

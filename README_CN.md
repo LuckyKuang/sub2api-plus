@@ -39,8 +39,8 @@ Sub2API Plus 是一个 AI API 网关平台，用于分发和管理 AI 产品订�
 镜像标签保留开头的 `v`，仅将不受 Docker Tag 支持的 `+` 转换为 `-`：
 
 ```text
-Git/GitHub: v0.1.166+custom.006
-GHCR:       ghcr.io/luckykuang/sub2api-plus:v0.1.166-custom.006
+Git/GitHub: v0.1.166+custom.008
+GHCR:       ghcr.io/luckykuang/sub2api-plus:v0.1.166-custom.008
 ```
 
 同一官方基础版本继续迭代时递增 `NNN`；合并新的官方版本后，从 `001`
