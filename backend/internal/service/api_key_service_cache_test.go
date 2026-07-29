@@ -231,6 +231,64 @@ func TestAPIKeyService_GetByKey_UsesL2Cache(t *testing.T) {
 	require.Equal(t, map[string][]int64{"claude-opus-*": {1, 2}}, apiKey.Group.ModelRouting)
 }
 
+func TestAPIKeyService_GetByKey_L2CachePreservesFiveHourGroupQuotaForCodex(t *testing.T) {
+	cache := &authCacheStub{}
+	repo := &authRepoStub{
+		getByKeyForAuth: func(context.Context, string) (*APIKey, error) {
+			return nil, errors.New("unexpected repo call")
+		},
+	}
+	cfg := &config.Config{APIKeyAuth: config.APIKeyAuthCacheConfig{L2TTLSeconds: 60}}
+	svc := NewAPIKeyService(repo, nil, nil, nil, nil, cache, cfg)
+
+	groupID := int64(9)
+	weeklyLimit := 5.0
+	fiveHourLimit := 1.0
+	cache.getAuthCache = func(context.Context, string) (*APIKeyAuthCacheEntry, error) {
+		return &APIKeyAuthCacheEntry{Snapshot: &APIKeyAuthSnapshot{
+			Version:  apiKeyAuthSnapshotVersion,
+			APIKeyID: 1,
+			UserID:   2,
+			GroupID:  &groupID,
+			Status:   StatusActive,
+			User: APIKeyAuthUserSnapshot{
+				ID:          2,
+				Status:      StatusActive,
+				Role:        RoleUser,
+				Balance:     10,
+				Concurrency: 3,
+			},
+			Group: &APIKeyAuthGroupSnapshot{
+				ID:               groupID,
+				Name:             "openai-subscription",
+				Platform:         PlatformOpenAI,
+				Status:           StatusActive,
+				SubscriptionType: SubscriptionTypeSubscription,
+				RateMultiplier:   1,
+				WeeklyLimitUSD:   &weeklyLimit,
+				FiveHourLimitUSD: &fiveHourLimit,
+			},
+		}}, nil
+	}
+
+	apiKey, err := svc.GetByKey(context.Background(), "k-codex-five-hour")
+	require.NoError(t, err)
+	require.NotNil(t, apiKey.Group)
+	require.Equal(t, &fiveHourLimit, apiKey.Group.FiveHourLimitUSD)
+
+	now := time.Date(2026, 7, 29, 12, 0, 0, 0, time.UTC)
+	weeklyStart := now.Add(-time.Hour)
+	fiveHourStart := now.Add(-time.Hour)
+	quota := BuildCodexLocalGroupQuotaUsage(apiKey.Group, &UserSubscription{
+		WeeklyWindowStart:   &weeklyStart,
+		FiveHourWindowStart: &fiveHourStart,
+	}, now)
+	require.NotNil(t, quota)
+	require.NotNil(t, quota.RateLimit.PrimaryWindow)
+	require.NotNil(t, quota.RateLimit.SecondaryWindow)
+	require.Equal(t, int64(5*time.Hour/time.Second), quota.RateLimit.SecondaryWindow.LimitWindowSeconds)
+}
+
 func TestAPIKeyService_SnapshotRoundTrip_PreservesMessagesDispatchModelConfig(t *testing.T) {
 	svc := NewAPIKeyService(nil, nil, nil, nil, nil, nil, &config.Config{})
 	groupID := int64(9)
