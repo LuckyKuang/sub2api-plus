@@ -219,7 +219,22 @@ func incrementUsageBillingSubscription(ctx context.Context, tx *sql.Tx, subscrip
 			daily_usage_usd = us.daily_usage_usd + $1,
 			weekly_usage_usd = us.weekly_usage_usd + $1,
 			monthly_usage_usd = us.monthly_usage_usd + $1,
-			updated_at = NOW()
+			five_hour_usage_usd = CASE
+				WHEN $1 <= 0 THEN us.five_hour_usage_usd
+				WHEN us.five_hour_window_start IS NULL
+					OR us.five_hour_window_start + INTERVAL '5 hours' <= NOW() THEN $1
+				ELSE us.five_hour_usage_usd + $1
+			END,
+			five_hour_window_start = CASE
+				WHEN $1 <= 0 THEN us.five_hour_window_start
+				WHEN us.five_hour_window_start IS NULL
+					OR us.five_hour_window_start + INTERVAL '5 hours' <= NOW() THEN NOW()
+				ELSE us.five_hour_window_start
+			END,
+			-- The row lock serializes concurrent charges. Advancing by at least one
+			-- microsecond gives cache snapshots a strict monotonic version even when
+			-- several transactions land in the same wall-clock tick.
+			updated_at = GREATEST(clock_timestamp(), us.updated_at + INTERVAL '1 microsecond')
 		FROM groups g
 		WHERE us.id = $2
 			AND us.deleted_at IS NULL

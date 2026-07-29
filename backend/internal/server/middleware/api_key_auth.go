@@ -169,7 +169,8 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 		// Async image task polling only reads data that already belongs to the
 		// authenticated key and must remain available after the completed
 		// generation consumes the key's remaining balance.
-		skipBilling := c.Request.URL.Path == "/v1/usage" || billingInfoRequest || isAsyncImageTaskRead(c.Request.Method, c.Request.URL.Path)
+		whamUsageRequest := c.Request.Method == http.MethodGet && c.Request.URL.Path == "/backend-api/wham/usage"
+		skipBilling := c.Request.URL.Path == "/v1/usage" || billingInfoRequest || whamUsageRequest || isAsyncImageTaskRead(c.Request.Method, c.Request.URL.Path)
 
 		// ── 4. SimpleMode → early return ─────────────────────────────
 
@@ -249,11 +250,10 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 				if validateErr != nil {
 					code := "SUBSCRIPTION_INVALID"
 					status := 403
-					if errors.Is(validateErr, service.ErrDailyLimitExceeded) ||
-						errors.Is(validateErr, service.ErrWeeklyLimitExceeded) ||
-						errors.Is(validateErr, service.ErrMonthlyLimitExceeded) {
-						code = "USAGE_LIMIT_EXCEEDED"
+					if isSubscriptionUsageLimitError(validateErr) {
+						code = subscriptionQuotaResponseCode(validateErr)
 						status = 429
+						applySubscriptionQuotaResetHeaders(c, validateErr)
 					}
 					AbortWithError(c, status, code, validateErr.Error())
 					return

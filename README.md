@@ -39,8 +39,8 @@ New Git tags and GitHub Releases use `vX.Y.Z+custom.NNN`, while the matching
 OCI image replaces only `+` with `-` and preserves the leading `v`.
 
 ```text
-Git/GitHub: v0.1.166+custom.004
-GHCR:       ghcr.io/luckykuang/sub2api-plus:v0.1.166-custom.004
+Git/GitHub: v0.1.166+custom.005
+GHCR:       ghcr.io/luckykuang/sub2api-plus:v0.1.166-custom.005
 ```
 
 Increment `NNN` for another custom release on the same official baseline.

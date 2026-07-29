@@ -5148,6 +5148,18 @@
                 </p>
               </div>
 
+              <div class="flex items-center justify-between gap-4 border-t border-gray-100 pt-4 dark:border-dark-700">
+                <div>
+                  <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {{ t('admin.settings.gatewayForwarding.openaiCodexLocalGroupQuota') }}
+                  </label>
+                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    {{ t('admin.settings.gatewayForwarding.openaiCodexLocalGroupQuotaHint') }}
+                  </p>
+                </div>
+                <Toggle v-model="form.openai_codex_local_group_quota_enabled" />
+              </div>
+
             </div>
           </div>
 
@@ -8951,6 +8963,7 @@ const form = reactive<SettingsForm>({
   enable_client_dateline_normalization: true,
   antigravity_user_agent_version: "",
   openai_codex_user_agent: "",
+  openai_codex_local_group_quota_enabled: false,
   // codex_cli_only 加固
   min_codex_version: "",
   max_codex_version: "",
@@ -10418,6 +10431,8 @@ async function saveSettings() {
         form.antigravity_user_agent_version?.trim() || "",
       openai_codex_user_agent:
         form.openai_codex_user_agent?.trim() || "",
+      openai_codex_local_group_quota_enabled:
+        form.openai_codex_local_group_quota_enabled,
       min_codex_version: form.min_codex_version?.trim() || "",
       max_codex_version: form.max_codex_version?.trim() || "",
       codex_cli_only_allow_app_server_clients:

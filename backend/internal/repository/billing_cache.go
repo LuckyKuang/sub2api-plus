@@ -50,12 +50,17 @@ func billingSubKey(userID, groupID int64) string {
 }
 
 const (
-	subFieldStatus       = "status"
-	subFieldExpiresAt    = "expires_at"
-	subFieldDailyUsage   = "daily_usage"
-	subFieldWeeklyUsage  = "weekly_usage"
-	subFieldMonthlyUsage = "monthly_usage"
-	subFieldVersion      = "version"
+	subFieldStatus              = "status"
+	subFieldExpiresAt           = "expires_at"
+	subFieldDailyUsage          = "daily_usage"
+	subFieldWeeklyUsage         = "weekly_usage"
+	subFieldMonthlyUsage        = "monthly_usage"
+	subFieldFiveHourUsage       = "five_hour_usage"
+	subFieldDailyWindowStart    = "daily_window_start"
+	subFieldWeeklyWindowStart   = "weekly_window_start"
+	subFieldMonthlyWindowStart  = "monthly_window_start"
+	subFieldFiveHourWindowStart = "five_hour_window_start"
+	subFieldVersion             = "version"
 )
 
 // billingRateLimitKey generates the Redis key for API key rate limit cache.
@@ -90,10 +95,44 @@ var (
 			return 0
 		end
 		local cost = tonumber(ARGV[1])
+		local now = tonumber(redis.call('TIME')[1])
+		local five_hour_window = tonumber(redis.call('HGET', KEYS[1], 'five_hour_window_start') or 0)
 		redis.call('HINCRBYFLOAT', KEYS[1], 'daily_usage', cost)
 		redis.call('HINCRBYFLOAT', KEYS[1], 'weekly_usage', cost)
 		redis.call('HINCRBYFLOAT', KEYS[1], 'monthly_usage', cost)
+		if five_hour_window == 0 or five_hour_window + 18000 <= now then
+			redis.call('HSET', KEYS[1], 'five_hour_usage', cost)
+			redis.call('HSET', KEYS[1], 'five_hour_window_start', now)
+		else
+			redis.call('HINCRBYFLOAT', KEYS[1], 'five_hour_usage', cost)
+		end
 		redis.call('EXPIRE', KEYS[1], ARGV[2])
+		return 1
+	`)
+
+	// setSubscriptionCacheIfNewerScript rejects stale snapshots. Subscription
+	// usage is committed in PostgreSQL before the cache is refreshed, so the
+	// row's monotonically increasing updated_at value is a safe cache version.
+	// A late reader must never replace a newer post-billing snapshot.
+	setSubscriptionCacheIfNewerScript = redis.NewScript(`
+		local existing = tonumber(redis.call('HGET', KEYS[1], 'version') or '-1')
+		local incoming = tonumber(ARGV[11]) or 0
+		if existing >= incoming then
+			return 0
+		end
+		redis.call('HSET', KEYS[1],
+			'status', ARGV[1],
+			'expires_at', ARGV[2],
+			'daily_usage', ARGV[3],
+			'weekly_usage', ARGV[4],
+			'monthly_usage', ARGV[5],
+			'five_hour_usage', ARGV[6],
+			'daily_window_start', ARGV[7],
+			'weekly_window_start', ARGV[8],
+			'monthly_window_start', ARGV[9],
+			'five_hour_window_start', ARGV[10],
+			'version', ARGV[11])
+		redis.call('EXPIRE', KEYS[1], ARGV[12])
 		return 1
 	`)
 
@@ -211,12 +250,36 @@ func (c *billingCache) parseSubscriptionCache(data map[string]string) (*service.
 	if monthlyStr, ok := data[subFieldMonthlyUsage]; ok {
 		result.MonthlyUsage, _ = strconv.ParseFloat(monthlyStr, 64)
 	}
+	if fiveHourStr, ok := data[subFieldFiveHourUsage]; ok {
+		result.FiveHourUsage, _ = strconv.ParseFloat(fiveHourStr, 64)
+		result.FiveHourStatePresent = true
+	}
+	result.DailyWindowStart = parseUnixTimePtr(data[subFieldDailyWindowStart])
+	result.WeeklyWindowStart = parseUnixTimePtr(data[subFieldWeeklyWindowStart])
+	result.MonthlyWindowStart = parseUnixTimePtr(data[subFieldMonthlyWindowStart])
+	result.FiveHourWindowStart = parseUnixTimePtr(data[subFieldFiveHourWindowStart])
 
 	if versionStr, ok := data[subFieldVersion]; ok {
 		result.Version, _ = strconv.ParseInt(versionStr, 10, 64)
 	}
 
 	return result, nil
+}
+
+func parseUnixTimePtr(raw string) *time.Time {
+	unix, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || unix <= 0 {
+		return nil
+	}
+	value := time.Unix(unix, 0)
+	return &value
+}
+
+func unixTimeValue(value *time.Time) int64 {
+	if value == nil || value.IsZero() {
+		return 0
+	}
+	return value.Unix()
 }
 
 func (c *billingCache) SetSubscriptionCache(ctx context.Context, userID, groupID int64, data *service.SubscriptionCacheData) error {
@@ -226,19 +289,20 @@ func (c *billingCache) SetSubscriptionCache(ctx context.Context, userID, groupID
 
 	key := billingSubKey(userID, groupID)
 
-	fields := map[string]any{
-		subFieldStatus:       data.Status,
-		subFieldExpiresAt:    data.ExpiresAt.Unix(),
-		subFieldDailyUsage:   data.DailyUsage,
-		subFieldWeeklyUsage:  data.WeeklyUsage,
-		subFieldMonthlyUsage: data.MonthlyUsage,
-		subFieldVersion:      data.Version,
-	}
-
-	pipe := c.rdb.Pipeline()
-	pipe.HSet(ctx, key, fields)
-	pipe.Expire(ctx, key, jitteredTTL())
-	_, err := pipe.Exec(ctx)
+	_, err := setSubscriptionCacheIfNewerScript.Run(ctx, c.rdb, []string{key},
+		data.Status,
+		data.ExpiresAt.Unix(),
+		data.DailyUsage,
+		data.WeeklyUsage,
+		data.MonthlyUsage,
+		data.FiveHourUsage,
+		unixTimeValue(data.DailyWindowStart),
+		unixTimeValue(data.WeeklyWindowStart),
+		unixTimeValue(data.MonthlyWindowStart),
+		unixTimeValue(data.FiveHourWindowStart),
+		data.Version,
+		int(jitteredTTL().Seconds()),
+	).Result()
 	return err
 }
 

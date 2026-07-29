@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/util/responseheaders"
 	"github.com/gin-gonic/gin"
@@ -952,7 +953,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 	originalModel string,
 	mappedModel string,
 ) (*openaiStreamingResultPassthrough, error) {
-	writeOpenAIPassthroughResponseHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
+	s.writeOpenAIPassthroughResponseHeaders(c, resp.Header)
 
 	// SSE headers
 	c.Header("Content-Type", "text/event-stream")
@@ -1240,7 +1241,7 @@ func (s *OpenAIGatewayService) handleNonStreamingResponsePassthrough(
 		usage = s.parseSSEUsageFromBody(string(body))
 	}
 
-	writeOpenAIPassthroughResponseHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
+	s.writeOpenAIPassthroughResponseHeaders(c, resp.Header)
 
 	contentType := resp.Header.Get("Content-Type")
 	if contentType == "" {
@@ -1315,7 +1316,7 @@ func (s *OpenAIGatewayService) handlePassthroughSSEToJSON(resp *http.Response, c
 		body = []byte(bodyText)
 	}
 
-	writeOpenAIPassthroughResponseHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
+	s.writeOpenAIPassthroughResponseHeaders(c, resp.Header)
 
 	contentType := "application/json; charset=utf-8"
 	if !ok {
@@ -1382,5 +1383,83 @@ func writeOpenAIPassthroughResponseHeaders(dst http.Header, src http.Header, fil
 		for _, v := range vals {
 			dst.Add(key, v)
 		}
+	}
+}
+
+// writeOpenAIPassthroughResponseHeaders preserves the raw upstream headers
+// for scheduling/account-state processing, then optionally replaces only the
+// headers written to this client with local subscription quota data.
+func (s *OpenAIGatewayService) writeOpenAIPassthroughResponseHeaders(c *gin.Context, src http.Header) {
+	if c == nil {
+		return
+	}
+	writeOpenAIPassthroughResponseHeaders(c.Writer.Header(), src, s.responseHeaderFilter)
+	s.applyCodexLocalGroupQuotaHeaders(c)
+}
+
+// applyCodexLocalGroupQuotaHeaders changes only the client-facing writer. It
+// deliberately leaves the upstream response headers untouched for account
+// scheduling and quota-snapshot processing elsewhere in the request.
+func (s *OpenAIGatewayService) applyCodexLocalGroupQuotaHeaders(c *gin.Context) {
+	if c == nil || c.Request == nil || !s.IsCodexLocalGroupQuotaEnabledForGroup(c.Request.Context(), groupFromRequestContext(c)) {
+		return
+	}
+	applyCodexLocalQuotaHeaders(c.Writer.Header(), groupFromRequestContext(c), codexLocalSubscriptionFromGin(c))
+}
+
+// ApplyCodexLocalGroupQuotaHeadersForRequest prepares local Codex quota
+// headers before a WebSocket upgrade commits the handshake response.
+func (s *OpenAIGatewayService) ApplyCodexLocalGroupQuotaHeadersForRequest(c *gin.Context) {
+	s.applyCodexLocalGroupQuotaHeaders(c)
+}
+
+func groupFromRequestContext(c *gin.Context) *Group {
+	if c == nil || c.Request == nil {
+		return nil
+	}
+	group, _ := c.Request.Context().Value(ctxkey.Group).(*Group)
+	return group
+}
+
+func codexLocalSubscriptionFromGin(c *gin.Context) *UserSubscription {
+	if c == nil {
+		return nil
+	}
+	value, ok := c.Get("subscription")
+	if !ok {
+		return nil
+	}
+	sub, _ := value.(*UserSubscription)
+	return sub
+}
+
+func applyCodexLocalQuotaHeaders(dst http.Header, group *Group, sub *UserSubscription) {
+	if dst == nil {
+		return
+	}
+	for _, key := range []string{
+		"X-Codex-Primary-Used-Percent",
+		"X-Codex-Primary-Reset-After-Seconds",
+		"X-Codex-Primary-Window-Minutes",
+		"X-Codex-Secondary-Used-Percent",
+		"X-Codex-Secondary-Reset-After-Seconds",
+		"X-Codex-Secondary-Window-Minutes",
+		"X-Codex-Primary-Over-Secondary-Limit-Percent",
+	} {
+		dst.Del(key)
+	}
+	quota := BuildCodexLocalGroupQuotaUsage(group, sub, time.Now())
+	if quota == nil {
+		return
+	}
+	if primary := quota.RateLimit.PrimaryWindow; primary != nil {
+		dst.Set("X-Codex-Primary-Used-Percent", strconv.FormatFloat(primary.UsedPercent, 'f', -1, 64))
+		dst.Set("X-Codex-Primary-Reset-After-Seconds", strconv.FormatInt(primary.ResetAfterSeconds, 10))
+		dst.Set("X-Codex-Primary-Window-Minutes", strconv.FormatInt(primary.LimitWindowSeconds/60, 10))
+	}
+	if secondary := quota.RateLimit.SecondaryWindow; secondary != nil {
+		dst.Set("X-Codex-Secondary-Used-Percent", strconv.FormatFloat(secondary.UsedPercent, 'f', -1, 64))
+		dst.Set("X-Codex-Secondary-Reset-After-Seconds", strconv.FormatInt(secondary.ResetAfterSeconds, 10))
+		dst.Set("X-Codex-Secondary-Window-Minutes", strconv.FormatInt(secondary.LimitWindowSeconds/60, 10))
 	}
 }

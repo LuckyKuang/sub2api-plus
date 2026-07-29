@@ -37,3 +37,21 @@ type UserSubscriptionRepository interface {
 
 	BatchUpdateExpiredStatus(ctx context.Context) (int64, error)
 }
+
+// FiveHourSubscriptionQuotaRepository is deliberately an optional extension
+// of the long-lived subscription repository port. It keeps existing test and
+// integration fakes compatible while allowing the concrete persistence layer
+// to reset the rolling window independently from calendar-aligned windows.
+type FiveHourSubscriptionQuotaRepository interface {
+	ResetFiveHourUsage(ctx context.Context, id int64, newWindowStart time.Time) error
+}
+
+// AtomicSubscriptionUsageWindowsResetRepository is implemented by the primary
+// persistence repository. It resets all selected windows in one UPDATE so an
+// administrator never observes a partially reset quota after a process crash
+// or a transient database failure between calendar and rolling-window writes.
+// The legacy split interfaces remain as a compatibility fallback for external
+// repository implementations and focused test doubles.
+type AtomicSubscriptionUsageWindowsResetRepository interface {
+	ResetUsageWindowsAtomically(ctx context.Context, id int64, resetDaily, resetWeekly, resetMonthly, resetFiveHour bool, calendarWindowStart, fiveHourWindowStart time.Time) error
+}

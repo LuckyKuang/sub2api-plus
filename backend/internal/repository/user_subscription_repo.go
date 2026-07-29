@@ -35,9 +35,11 @@ func (r *userSubscriptionRepository) Create(ctx context.Context, sub *service.Us
 		SetNillableDailyWindowStart(sub.DailyWindowStart).
 		SetNillableWeeklyWindowStart(sub.WeeklyWindowStart).
 		SetNillableMonthlyWindowStart(sub.MonthlyWindowStart).
+		SetNillableFiveHourWindowStart(sub.FiveHourWindowStart).
 		SetDailyUsageUsd(sub.DailyUsageUSD).
 		SetWeeklyUsageUsd(sub.WeeklyUsageUSD).
 		SetMonthlyUsageUsd(sub.MonthlyUsageUSD).
+		SetFiveHourUsageUsd(sub.FiveHourUsageUSD).
 		SetNillableAssignedBy(sub.AssignedBy)
 
 	if sub.StartsAt.IsZero() {
@@ -134,9 +136,11 @@ func (r *userSubscriptionRepository) Update(ctx context.Context, sub *service.Us
 		SetNillableDailyWindowStart(sub.DailyWindowStart).
 		SetNillableWeeklyWindowStart(sub.WeeklyWindowStart).
 		SetNillableMonthlyWindowStart(sub.MonthlyWindowStart).
+		SetNillableFiveHourWindowStart(sub.FiveHourWindowStart).
 		SetDailyUsageUsd(sub.DailyUsageUSD).
 		SetWeeklyUsageUsd(sub.WeeklyUsageUSD).
 		SetMonthlyUsageUsd(sub.MonthlyUsageUSD).
+		SetFiveHourUsageUsd(sub.FiveHourUsageUSD).
 		SetNillableAssignedBy(sub.AssignedBy).
 		SetAssignedAt(sub.AssignedAt).
 		SetNotes(sub.Notes)
@@ -382,6 +386,28 @@ func (r *userSubscriptionRepository) ResetUsageWindows(ctx context.Context, id i
 	return translatePersistenceError(err, service.ErrSubscriptionNotFound, nil)
 }
 
+// ResetUsageWindowsAtomically resets all selected quota windows with one row
+// update. Calendar windows retain their midnight-aligned boundary while the
+// rolling five-hour window begins at the administrator action time.
+func (r *userSubscriptionRepository) ResetUsageWindowsAtomically(ctx context.Context, id int64, resetDaily, resetWeekly, resetMonthly, resetFiveHour bool, calendarWindowStart, fiveHourWindowStart time.Time) error {
+	client := clientFromContext(ctx, r.client)
+	update := client.UserSubscription.UpdateOneID(id)
+	if resetDaily {
+		update.SetDailyUsageUsd(0).SetDailyWindowStart(calendarWindowStart)
+	}
+	if resetWeekly {
+		update.SetWeeklyUsageUsd(0).SetWeeklyWindowStart(calendarWindowStart)
+	}
+	if resetMonthly {
+		update.SetMonthlyUsageUsd(0).SetMonthlyWindowStart(calendarWindowStart)
+	}
+	if resetFiveHour {
+		update.SetFiveHourUsageUsd(0).SetFiveHourWindowStart(fiveHourWindowStart)
+	}
+	_, err := update.Save(ctx)
+	return translatePersistenceError(err, service.ErrSubscriptionNotFound, nil)
+}
+
 func (r *userSubscriptionRepository) ResetDailyUsage(ctx context.Context, id int64, expectedWindowStart *time.Time, newWindowStart time.Time) error {
 	client := clientFromContext(ctx, r.client)
 	query := client.UserSubscription.Update().Where(usersubscription.IDEQ(id))
@@ -427,6 +453,15 @@ func (r *userSubscriptionRepository) ResetMonthlyUsage(ctx context.Context, id i
 	return r.translateConditionalWindowReset(ctx, client, id, n, err)
 }
 
+func (r *userSubscriptionRepository) ResetFiveHourUsage(ctx context.Context, id int64, newWindowStart time.Time) error {
+	client := clientFromContext(ctx, r.client)
+	_, err := client.UserSubscription.UpdateOneID(id).
+		SetFiveHourUsageUsd(0).
+		SetFiveHourWindowStart(newWindowStart).
+		Save(ctx)
+	return translatePersistenceError(err, service.ErrSubscriptionNotFound, nil)
+}
+
 func (r *userSubscriptionRepository) translateConditionalWindowReset(ctx context.Context, client *dbent.Client, id int64, affected int, err error) error {
 	if err != nil {
 		return translatePersistenceError(err, service.ErrSubscriptionNotFound, nil)
@@ -457,7 +492,21 @@ func (r *userSubscriptionRepository) IncrementUsage(ctx context.Context, id int6
 			daily_usage_usd = us.daily_usage_usd + $1,
 			weekly_usage_usd = us.weekly_usage_usd + $1,
 			monthly_usage_usd = us.monthly_usage_usd + $1,
-			updated_at = NOW()
+			five_hour_usage_usd = CASE
+				WHEN $1 <= 0 THEN us.five_hour_usage_usd
+				WHEN us.five_hour_window_start IS NULL
+					OR us.five_hour_window_start + INTERVAL '5 hours' <= NOW() THEN $1
+				ELSE us.five_hour_usage_usd + $1
+			END,
+			five_hour_window_start = CASE
+				WHEN $1 <= 0 THEN us.five_hour_window_start
+				WHEN us.five_hour_window_start IS NULL
+					OR us.five_hour_window_start + INTERVAL '5 hours' <= NOW() THEN NOW()
+				ELSE us.five_hour_window_start
+			END,
+			-- Keep the cache version strictly monotonic for concurrent legacy-path
+			-- charges as well as the unified billing transaction.
+			updated_at = GREATEST(clock_timestamp(), us.updated_at + INTERVAL '1 microsecond')
 		FROM groups g
 		WHERE us.id = $2
 			AND us.deleted_at IS NULL
@@ -623,24 +672,26 @@ func userSubscriptionEntityToServiceWithStatusMapping(m *dbent.UserSubscription,
 		status = service.SubscriptionStatusRevoked
 	}
 	out := &service.UserSubscription{
-		ID:                 m.ID,
-		UserID:             m.UserID,
-		GroupID:            m.GroupID,
-		StartsAt:           m.StartsAt,
-		ExpiresAt:          m.ExpiresAt,
-		Status:             status,
-		DailyWindowStart:   m.DailyWindowStart,
-		WeeklyWindowStart:  m.WeeklyWindowStart,
-		MonthlyWindowStart: m.MonthlyWindowStart,
-		DailyUsageUSD:      m.DailyUsageUsd,
-		WeeklyUsageUSD:     m.WeeklyUsageUsd,
-		MonthlyUsageUSD:    m.MonthlyUsageUsd,
-		AssignedBy:         m.AssignedBy,
-		AssignedAt:         m.AssignedAt,
-		Notes:              derefString(m.Notes),
-		CreatedAt:          m.CreatedAt,
-		UpdatedAt:          m.UpdatedAt,
-		DeletedAt:          m.DeletedAt,
+		ID:                  m.ID,
+		UserID:              m.UserID,
+		GroupID:             m.GroupID,
+		StartsAt:            m.StartsAt,
+		ExpiresAt:           m.ExpiresAt,
+		Status:              status,
+		DailyWindowStart:    m.DailyWindowStart,
+		WeeklyWindowStart:   m.WeeklyWindowStart,
+		MonthlyWindowStart:  m.MonthlyWindowStart,
+		FiveHourWindowStart: m.FiveHourWindowStart,
+		DailyUsageUSD:       m.DailyUsageUsd,
+		WeeklyUsageUSD:      m.WeeklyUsageUsd,
+		MonthlyUsageUSD:     m.MonthlyUsageUsd,
+		FiveHourUsageUSD:    m.FiveHourUsageUsd,
+		AssignedBy:          m.AssignedBy,
+		AssignedAt:          m.AssignedAt,
+		Notes:               derefString(m.Notes),
+		CreatedAt:           m.CreatedAt,
+		UpdatedAt:           m.UpdatedAt,
+		DeletedAt:           m.DeletedAt,
 	}
 	if m.Edges.User != nil {
 		out.User = userEntityToService(m.Edges.User)

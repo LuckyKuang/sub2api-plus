@@ -9,7 +9,6 @@ import (
 	"errors"
 	"net/http"
 	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/domain"
@@ -232,9 +231,7 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 	if err := h.billingCacheService.CheckBillingEligibility(c.Request.Context(), apiKey.User, apiKey, apiKey.Group, subscription, service.QuotaPlatform(c.Request.Context(), apiKey)); err != nil {
 		reqLog.Info("gemini.billing_eligibility_check_failed", zap.Error(err))
 		status, _, message, retryAfter := billingErrorDetails(err)
-		if retryAfter > 0 {
-			c.Header("Retry-After", strconv.Itoa(retryAfter))
-		}
+		applyBillingQuotaHeaders(c, err, retryAfter)
 		googleError(c, status, message)
 		return
 	}

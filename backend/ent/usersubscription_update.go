@@ -187,6 +187,26 @@ func (_u *UserSubscriptionUpdate) ClearMonthlyWindowStart() *UserSubscriptionUpd
 	return _u
 }
 
+// SetFiveHourWindowStart sets the "five_hour_window_start" field.
+func (_u *UserSubscriptionUpdate) SetFiveHourWindowStart(v time.Time) *UserSubscriptionUpdate {
+	_u.mutation.SetFiveHourWindowStart(v)
+	return _u
+}
+
+// SetNillableFiveHourWindowStart sets the "five_hour_window_start" field if the given value is not nil.
+func (_u *UserSubscriptionUpdate) SetNillableFiveHourWindowStart(v *time.Time) *UserSubscriptionUpdate {
+	if v != nil {
+		_u.SetFiveHourWindowStart(*v)
+	}
+	return _u
+}
+
+// ClearFiveHourWindowStart clears the value of the "five_hour_window_start" field.
+func (_u *UserSubscriptionUpdate) ClearFiveHourWindowStart() *UserSubscriptionUpdate {
+	_u.mutation.ClearFiveHourWindowStart()
+	return _u
+}
+
 // SetDailyUsageUsd sets the "daily_usage_usd" field.
 func (_u *UserSubscriptionUpdate) SetDailyUsageUsd(v float64) *UserSubscriptionUpdate {
 	_u.mutation.ResetDailyUsageUsd()
@@ -247,6 +267,27 @@ func (_u *UserSubscriptionUpdate) SetNillableMonthlyUsageUsd(v *float64) *UserSu
 // AddMonthlyUsageUsd adds value to the "monthly_usage_usd" field.
 func (_u *UserSubscriptionUpdate) AddMonthlyUsageUsd(v float64) *UserSubscriptionUpdate {
 	_u.mutation.AddMonthlyUsageUsd(v)
+	return _u
+}
+
+// SetFiveHourUsageUsd sets the "five_hour_usage_usd" field.
+func (_u *UserSubscriptionUpdate) SetFiveHourUsageUsd(v float64) *UserSubscriptionUpdate {
+	_u.mutation.ResetFiveHourUsageUsd()
+	_u.mutation.SetFiveHourUsageUsd(v)
+	return _u
+}
+
+// SetNillableFiveHourUsageUsd sets the "five_hour_usage_usd" field if the given value is not nil.
+func (_u *UserSubscriptionUpdate) SetNillableFiveHourUsageUsd(v *float64) *UserSubscriptionUpdate {
+	if v != nil {
+		_u.SetFiveHourUsageUsd(*v)
+	}
+	return _u
+}
+
+// AddFiveHourUsageUsd adds value to the "five_hour_usage_usd" field.
+func (_u *UserSubscriptionUpdate) AddFiveHourUsageUsd(v float64) *UserSubscriptionUpdate {
+	_u.mutation.AddFiveHourUsageUsd(v)
 	return _u
 }
 
@@ -498,6 +539,12 @@ func (_u *UserSubscriptionUpdate) sqlSave(ctx context.Context) (_node int, err e
 	if _u.mutation.MonthlyWindowStartCleared() {
 		_spec.ClearField(usersubscription.FieldMonthlyWindowStart, field.TypeTime)
 	}
+	if value, ok := _u.mutation.FiveHourWindowStart(); ok {
+		_spec.SetField(usersubscription.FieldFiveHourWindowStart, field.TypeTime, value)
+	}
+	if _u.mutation.FiveHourWindowStartCleared() {
+		_spec.ClearField(usersubscription.FieldFiveHourWindowStart, field.TypeTime)
+	}
 	if value, ok := _u.mutation.DailyUsageUsd(); ok {
 		_spec.SetField(usersubscription.FieldDailyUsageUsd, field.TypeFloat64, value)
 	}
@@ -515,6 +562,12 @@ func (_u *UserSubscriptionUpdate) sqlSave(ctx context.Context) (_node int, err e
 	}
 	if value, ok := _u.mutation.AddedMonthlyUsageUsd(); ok {
 		_spec.AddField(usersubscription.FieldMonthlyUsageUsd, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.FiveHourUsageUsd(); ok {
+		_spec.SetField(usersubscription.FieldFiveHourUsageUsd, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedFiveHourUsageUsd(); ok {
+		_spec.AddField(usersubscription.FieldFiveHourUsageUsd, field.TypeFloat64, value)
 	}
 	if value, ok := _u.mutation.AssignedAt(); ok {
 		_spec.SetField(usersubscription.FieldAssignedAt, field.TypeTime, value)
@@ -833,6 +886,26 @@ func (_u *UserSubscriptionUpdateOne) ClearMonthlyWindowStart() *UserSubscription
 	return _u
 }
 
+// SetFiveHourWindowStart sets the "five_hour_window_start" field.
+func (_u *UserSubscriptionUpdateOne) SetFiveHourWindowStart(v time.Time) *UserSubscriptionUpdateOne {
+	_u.mutation.SetFiveHourWindowStart(v)
+	return _u
+}
+
+// SetNillableFiveHourWindowStart sets the "five_hour_window_start" field if the given value is not nil.
+func (_u *UserSubscriptionUpdateOne) SetNillableFiveHourWindowStart(v *time.Time) *UserSubscriptionUpdateOne {
+	if v != nil {
+		_u.SetFiveHourWindowStart(*v)
+	}
+	return _u
+}
+
+// ClearFiveHourWindowStart clears the value of the "five_hour_window_start" field.
+func (_u *UserSubscriptionUpdateOne) ClearFiveHourWindowStart() *UserSubscriptionUpdateOne {
+	_u.mutation.ClearFiveHourWindowStart()
+	return _u
+}
+
 // SetDailyUsageUsd sets the "daily_usage_usd" field.
 func (_u *UserSubscriptionUpdateOne) SetDailyUsageUsd(v float64) *UserSubscriptionUpdateOne {
 	_u.mutation.ResetDailyUsageUsd()
@@ -893,6 +966,27 @@ func (_u *UserSubscriptionUpdateOne) SetNillableMonthlyUsageUsd(v *float64) *Use
 // AddMonthlyUsageUsd adds value to the "monthly_usage_usd" field.
 func (_u *UserSubscriptionUpdateOne) AddMonthlyUsageUsd(v float64) *UserSubscriptionUpdateOne {
 	_u.mutation.AddMonthlyUsageUsd(v)
+	return _u
+}
+
+// SetFiveHourUsageUsd sets the "five_hour_usage_usd" field.
+func (_u *UserSubscriptionUpdateOne) SetFiveHourUsageUsd(v float64) *UserSubscriptionUpdateOne {
+	_u.mutation.ResetFiveHourUsageUsd()
+	_u.mutation.SetFiveHourUsageUsd(v)
+	return _u
+}
+
+// SetNillableFiveHourUsageUsd sets the "five_hour_usage_usd" field if the given value is not nil.
+func (_u *UserSubscriptionUpdateOne) SetNillableFiveHourUsageUsd(v *float64) *UserSubscriptionUpdateOne {
+	if v != nil {
+		_u.SetFiveHourUsageUsd(*v)
+	}
+	return _u
+}
+
+// AddFiveHourUsageUsd adds value to the "five_hour_usage_usd" field.
+func (_u *UserSubscriptionUpdateOne) AddFiveHourUsageUsd(v float64) *UserSubscriptionUpdateOne {
+	_u.mutation.AddFiveHourUsageUsd(v)
 	return _u
 }
 
@@ -1174,6 +1268,12 @@ func (_u *UserSubscriptionUpdateOne) sqlSave(ctx context.Context) (_node *UserSu
 	if _u.mutation.MonthlyWindowStartCleared() {
 		_spec.ClearField(usersubscription.FieldMonthlyWindowStart, field.TypeTime)
 	}
+	if value, ok := _u.mutation.FiveHourWindowStart(); ok {
+		_spec.SetField(usersubscription.FieldFiveHourWindowStart, field.TypeTime, value)
+	}
+	if _u.mutation.FiveHourWindowStartCleared() {
+		_spec.ClearField(usersubscription.FieldFiveHourWindowStart, field.TypeTime)
+	}
 	if value, ok := _u.mutation.DailyUsageUsd(); ok {
 		_spec.SetField(usersubscription.FieldDailyUsageUsd, field.TypeFloat64, value)
 	}
@@ -1191,6 +1291,12 @@ func (_u *UserSubscriptionUpdateOne) sqlSave(ctx context.Context) (_node *UserSu
 	}
 	if value, ok := _u.mutation.AddedMonthlyUsageUsd(); ok {
 		_spec.AddField(usersubscription.FieldMonthlyUsageUsd, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.FiveHourUsageUsd(); ok {
+		_spec.SetField(usersubscription.FieldFiveHourUsageUsd, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedFiveHourUsageUsd(); ok {
+		_spec.AddField(usersubscription.FieldFiveHourUsageUsd, field.TypeFloat64, value)
 	}
 	if value, ok := _u.mutation.AssignedAt(); ok {
 		_spec.SetField(usersubscription.FieldAssignedAt, field.TypeTime, value)

@@ -240,9 +240,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 	if err := h.billingCacheService.CheckBillingEligibility(c.Request.Context(), apiKey.User, apiKey, apiKey.Group, subscription, service.QuotaPlatform(c.Request.Context(), apiKey)); err != nil {
 		reqLog.Info("gateway.billing_eligibility_check_failed", zap.Error(err))
 		status, code, message, retryAfter := billingErrorDetails(err)
-		if retryAfter > 0 {
-			c.Header("Retry-After", strconv.Itoa(retryAfter))
-		}
+		applyBillingQuotaHeaders(c, err, retryAfter)
 		h.handleStreamingAwareError(c, status, code, message, streamStarted)
 		return
 	}
@@ -864,9 +862,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 						fallbackAPIKey := cloneAPIKeyWithGroup(apiKey, fallbackGroup)
 						if err := h.billingCacheService.CheckBillingEligibility(c.Request.Context(), fallbackAPIKey.User, fallbackAPIKey, fallbackGroup, nil, service.PlatformFromAPIKey(fallbackAPIKey)); err != nil {
 							status, code, message, retryAfter := billingErrorDetails(err)
-							if retryAfter > 0 {
-								c.Header("Retry-After", strconv.Itoa(retryAfter))
-							}
+							applyBillingQuotaHeaders(c, err, retryAfter)
 							h.handleStreamingAwareError(c, status, code, message, streamStarted)
 							return
 						}
@@ -1602,14 +1598,17 @@ func (h *GatewayHandler) usageUnrestricted(c *gin.Context, ctx context.Context, 
 			remaining := h.calculateSubscriptionRemaining(apiKey.Group, subscription)
 			resp["remaining"] = remaining
 			resp["subscription"] = gin.H{
-				"daily_usage_usd":     subscription.DailyUsageUSD,
-				"weekly_usage_usd":    subscription.WeeklyUsageUSD,
-				"monthly_usage_usd":   subscription.MonthlyUsageUSD,
-				"daily_limit_usd":     apiKey.Group.DailyLimitUSD,
-				"weekly_limit_usd":    apiKey.Group.WeeklyLimitUSD,
-				"monthly_limit_usd":   apiKey.Group.MonthlyLimitUSD,
-				"weekly_window_start": subscription.WeeklyWindowStart,
-				"expires_at":          subscription.ExpiresAt,
+				"daily_usage_usd":        subscription.DailyUsageUSD,
+				"weekly_usage_usd":       subscription.WeeklyUsageUSD,
+				"monthly_usage_usd":      subscription.MonthlyUsageUSD,
+				"five_hour_usage_usd":    subscription.FiveHourUsageUSD,
+				"daily_limit_usd":        apiKey.Group.DailyLimitUSD,
+				"weekly_limit_usd":       apiKey.Group.WeeklyLimitUSD,
+				"monthly_limit_usd":      apiKey.Group.MonthlyLimitUSD,
+				"five_hour_limit_usd":    apiKey.Group.FiveHourLimitUSD,
+				"weekly_window_start":    subscription.WeeklyWindowStart,
+				"five_hour_window_start": subscription.FiveHourWindowStart,
+				"expires_at":             subscription.ExpiresAt,
 			}
 		}
 
@@ -1982,9 +1981,7 @@ func (h *GatewayHandler) CountTokens(c *gin.Context) {
 	// 【注意】不计算并发，但需要校验订阅/余额
 	if err := h.billingCacheService.CheckBillingEligibility(c.Request.Context(), apiKey.User, apiKey, apiKey.Group, subscription, service.QuotaPlatform(c.Request.Context(), apiKey)); err != nil {
 		status, code, message, retryAfter := billingErrorDetails(err)
-		if retryAfter > 0 {
-			c.Header("Retry-After", strconv.Itoa(retryAfter))
-		}
+		applyBillingQuotaHeaders(c, err, retryAfter)
 		h.errorResponse(c, status, code, message)
 		return
 	}
@@ -2260,6 +2257,26 @@ func extractQuotaResetSeconds(err error) int {
 	return int(math.Ceil(secs))
 }
 
+// applyBillingQuotaHeaders keeps every protocol handler consistent when a
+// quota check occurs after the request has waited for user concurrency. The
+// standard reset header is Unix seconds; the RFC3339 header is an explicit
+// project extension for human-readable diagnostics.
+func applyBillingQuotaHeaders(c *gin.Context, err error, retryAfter int) {
+	if retryAfter > 0 {
+		c.Header("Retry-After", strconv.Itoa(retryAfter))
+	}
+	appErr := pkgerrors.FromError(err)
+	if appErr == nil || appErr.Metadata == nil {
+		return
+	}
+	resetAt, parseErr := time.Parse(time.RFC3339, appErr.Metadata["window_resets_at"])
+	if parseErr != nil || resetAt.IsZero() {
+		return
+	}
+	c.Header("X-RateLimit-Reset", strconv.FormatInt(resetAt.Unix(), 10))
+	c.Header("X-Sub2API-RateLimit-Reset-At", resetAt.UTC().Format(time.RFC3339))
+}
+
 func billingErrorDetails(err error) (status int, code, message string, retryAfter int) {
 	if errors.Is(err, service.ErrBillingServiceUnavailable) {
 		msg := pkgerrors.Message(err)
@@ -2289,7 +2306,12 @@ func billingErrorDetails(err error) (status int, code, message string, retryAfte
 	}
 	if errors.Is(err, service.ErrUserPlatformDailyQuotaExhausted) ||
 		errors.Is(err, service.ErrUserPlatformWeeklyQuotaExhausted) ||
-		errors.Is(err, service.ErrUserPlatformMonthlyQuotaExhausted) {
+		errors.Is(err, service.ErrUserPlatformMonthlyQuotaExhausted) ||
+		errors.Is(err, service.ErrDailyLimitExceeded) ||
+		errors.Is(err, service.ErrWeeklyLimitExceeded) ||
+		errors.Is(err, service.ErrMonthlyLimitExceeded) ||
+		errors.Is(err, service.ErrFiveHourLimitExceeded) ||
+		errors.Is(err, service.ErrGroupSubscriptionLimitExceeded) {
 		// 与 RPM 超限一致映射 429 + Retry-After，让 SDK 自动退避（而非 403 直接失败）。
 		// 错误码用 rate_limit_exceeded 与 OpenAI 兼容客户端一致；细分类型由 ErrCode + window_resets_at metadata 区分。
 		msg := pkgerrors.Message(err)

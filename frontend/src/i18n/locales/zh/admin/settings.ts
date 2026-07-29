@@ -408,6 +408,8 @@ export default {
         openaiCodexUserAgent: 'OpenAI Codex UA',
         openaiCodexUserAgentPlaceholder: 'codex-tui/0.145.0 (Ubuntu 22.4.0; x86_64) xterm-256color (codex-tui; 0.145.0)',
         openaiCodexUserAgentHint: 'OpenAI 上游的全局 Codex User-Agent。账号设置了合法 Codex UA 时优先使用账号值；账号未设置或格式无效时使用此值，留空使用内置默认值。浏览器 UA 与通用 Header Override 不会透传。',
+        openaiCodexLocalGroupQuota: 'Codex 本地分组额度',
+        openaiCodexLocalGroupQuotaHint: '向 Codex 展示当前 API Key 所属订阅的 5 小时和 7 天额度，而不是所选上游账号的额度。关闭时保持现有上游额度透传行为。',
         codexHardeningTitle: 'Codex 设置',
         codexClientRestrictionTitle: 'Codex 客户端限制',
         codexHardeningDesc:

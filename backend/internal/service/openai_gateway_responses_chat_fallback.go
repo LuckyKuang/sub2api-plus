@@ -140,6 +140,7 @@ func (s *OpenAIGatewayService) bufferChatCompletionsAsResponses(
 	if s.responseHeaderFilter != nil {
 		responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
 	}
+	s.applyCodexLocalGroupQuotaHeaders(c)
 	c.JSON(http.StatusOK, responsesResp)
 
 	return &OpenAIForwardResult{

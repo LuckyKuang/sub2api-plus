@@ -987,7 +987,7 @@ func (s *BatchImagePublicService) ensureGroupAllowsBatchImage(ctx context.Contex
 	if err != nil || group == nil {
 		return ErrBatchImageSettlementPricingMissing
 	}
-	if !group.AllowBatchImageGeneration {
+	if group.IsSubscriptionType() || !group.AllowBatchImageGeneration {
 		return ErrBatchImageGroupDisabled
 	}
 	if group.Platform != PlatformGemini {
@@ -1009,7 +1009,7 @@ func (s *BatchImagePublicService) resolvePricingSnapshot(ctx context.Context, ow
 		if err != nil || group == nil {
 			return nil, ErrBatchImageSettlementPricingMissing
 		}
-		if !group.AllowBatchImageGeneration {
+		if group.IsSubscriptionType() || !group.AllowBatchImageGeneration {
 			return nil, ErrBatchImageGroupDisabled
 		}
 		groupDefaultMultiplier := group.RateMultiplier

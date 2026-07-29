@@ -2,7 +2,10 @@ package service
 
 import "time"
 
-const subscriptionDayDuration = 24 * time.Hour
+const (
+	subscriptionDayDuration      = 24 * time.Hour
+	subscriptionFiveHourDuration = 5 * time.Hour
+)
 
 type UserSubscription struct {
 	ID      int64
@@ -13,13 +16,15 @@ type UserSubscription struct {
 	ExpiresAt time.Time
 	Status    string
 
-	DailyWindowStart   *time.Time
-	WeeklyWindowStart  *time.Time
-	MonthlyWindowStart *time.Time
+	DailyWindowStart    *time.Time
+	WeeklyWindowStart   *time.Time
+	MonthlyWindowStart  *time.Time
+	FiveHourWindowStart *time.Time
 
-	DailyUsageUSD   float64
-	WeeklyUsageUSD  float64
-	MonthlyUsageUSD float64
+	DailyUsageUSD    float64
+	WeeklyUsageUSD   float64
+	MonthlyUsageUSD  float64
+	FiveHourUsageUSD float64
 
 	AssignedBy *int64
 	AssignedAt time.Time
@@ -98,6 +103,17 @@ func (s *UserSubscription) NeedsMonthlyReset() bool {
 	return time.Since(*s.MonthlyWindowStart) >= 30*24*time.Hour
 }
 
+// NeedsFiveHourReset reports whether the rolling five-hour window has elapsed.
+// Unlike daily/weekly/monthly windows, this window begins at the first charged
+// request and is never aligned to a calendar boundary.
+func (s *UserSubscription) NeedsFiveHourResetAt(now time.Time) bool {
+	return s != nil && s.FiveHourWindowStart != nil && !now.Before(s.FiveHourWindowStart.Add(subscriptionFiveHourDuration))
+}
+
+func (s *UserSubscription) NeedsFiveHourReset() bool {
+	return s.NeedsFiveHourResetAt(time.Now())
+}
+
 func (s *UserSubscription) DailyResetTime() *time.Time {
 	if s.DailyWindowStart == nil {
 		return nil
@@ -126,6 +142,14 @@ func (s *UserSubscription) MonthlyResetTime() *time.Time {
 	return &t
 }
 
+func (s *UserSubscription) FiveHourResetTime() *time.Time {
+	if s == nil || s.FiveHourWindowStart == nil {
+		return nil
+	}
+	t := s.FiveHourWindowStart.Add(subscriptionFiveHourDuration)
+	return &t
+}
+
 func (s *UserSubscription) CheckDailyLimit(group *Group, additionalCost float64) bool {
 	if !group.HasDailyLimit() {
 		return true
@@ -145,6 +169,13 @@ func (s *UserSubscription) CheckMonthlyLimit(group *Group, additionalCost float6
 		return true
 	}
 	return s.MonthlyUsageUSD+additionalCost <= *group.MonthlyLimitUSD
+}
+
+func (s *UserSubscription) CheckFiveHourLimit(group *Group, additionalCost float64) bool {
+	if !group.HasFiveHourLimit() || s.NeedsFiveHourReset() {
+		return true
+	}
+	return s.FiveHourUsageUSD+additionalCost <= *group.FiveHourLimitUSD
 }
 
 func (s *UserSubscription) CheckAllLimits(group *Group, additionalCost float64) (daily, weekly, monthly bool) {

@@ -322,6 +322,7 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 	dailyLimit := normalizeLimit(input.DailyLimitUSD)
 	weeklyLimit := normalizeLimit(input.WeeklyLimitUSD)
 	monthlyLimit := normalizeLimit(input.MonthlyLimitUSD)
+	fiveHourLimit := normalizeLimit(input.FiveHourLimitUSD)
 
 	// 图片价格：负数表示清除（使用默认价格），0 保留（表示免费）
 	imagePrice1K := normalizePrice(input.ImagePrice1K)
@@ -399,7 +400,10 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 	}
 
 	allowImageGeneration := input.AllowImageGeneration || defaultAllowImageGenerationForPlatform(platform)
-	allowBatchImageGeneration := input.AllowBatchImageGeneration && allowImageGeneration && platform == PlatformGemini
+	// Batch image generation currently freezes and settles balance only. Do not
+	// allow it on subscription groups until it has a native subscription hold /
+	// capture flow; otherwise it could bypass every subscription quota window.
+	allowBatchImageGeneration := input.AllowBatchImageGeneration && allowImageGeneration && platform == PlatformGemini && subscriptionType != SubscriptionTypeSubscription
 
 	// 如果指定了复制账号的源分组，先获取账号 ID 列表
 	var accountIDsToCopy []int64
@@ -444,6 +448,7 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 		DailyLimitUSD:                   dailyLimit,
 		WeeklyLimitUSD:                  weeklyLimit,
 		MonthlyLimitUSD:                 monthlyLimit,
+		FiveHourLimitUSD:                fiveHourLimit,
 		AllowImageGeneration:            allowImageGeneration,
 		AllowBatchImageGeneration:       allowBatchImageGeneration,
 		ImageRateIndependent:            input.ImageRateIndependent,
@@ -523,7 +528,7 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 
 // normalizeLimit 将负数转换为 nil（表示无限制），0 保留（表示限额为零）
 func normalizeLimit(limit *float64) *float64 {
-	if limit == nil || *limit < 0 {
+	if limit == nil || *limit <= 0 {
 		return nil
 	}
 	return limit
@@ -643,6 +648,7 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 	group.DailyLimitUSD = normalizeLimit(input.DailyLimitUSD)
 	group.WeeklyLimitUSD = normalizeLimit(input.WeeklyLimitUSD)
 	group.MonthlyLimitUSD = normalizeLimit(input.MonthlyLimitUSD)
+	group.FiveHourLimitUSD = normalizeLimit(input.FiveHourLimitUSD)
 	// 图片生成计费配置：负数表示清除（使用默认价格）
 	if input.AllowImageGeneration != nil {
 		group.AllowImageGeneration = *input.AllowImageGeneration
@@ -650,7 +656,7 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 	if input.AllowBatchImageGeneration != nil {
 		group.AllowBatchImageGeneration = *input.AllowBatchImageGeneration
 	}
-	if !group.AllowImageGeneration || group.Platform != PlatformGemini {
+	if !group.AllowImageGeneration || group.Platform != PlatformGemini || group.IsSubscriptionType() {
 		group.AllowBatchImageGeneration = false
 	}
 	if input.ImageRateIndependent != nil {

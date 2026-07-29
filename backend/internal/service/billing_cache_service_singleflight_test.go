@@ -15,7 +15,8 @@ import (
 )
 
 type billingCacheMissStub struct {
-	setBalanceCalls atomic.Int64
+	setBalanceCalls      atomic.Int64
+	setSubscriptionCalls atomic.Int64
 }
 
 func (s *billingCacheMissStub) GetUserBalance(ctx context.Context, userID int64) (float64, error) {
@@ -40,6 +41,7 @@ func (s *billingCacheMissStub) GetSubscriptionCache(ctx context.Context, userID,
 }
 
 func (s *billingCacheMissStub) SetSubscriptionCache(ctx context.Context, userID, groupID int64, data *SubscriptionCacheData) error {
+	s.setSubscriptionCalls.Add(1)
 	return nil
 }
 
@@ -122,6 +124,21 @@ func (s *balanceLoadUserRepoStub) UnbindUserAuthProvider(context.Context, int64,
 	return nil
 }
 
+type subscriptionLoadRepoStub struct {
+	userSubRepoNoop
+	sub   *UserSubscription
+	calls atomic.Int64
+}
+
+func (s *subscriptionLoadRepoStub) GetActiveByUserIDAndGroupID(_ context.Context, userID, groupID int64) (*UserSubscription, error) {
+	s.calls.Add(1)
+	if s.sub == nil || s.sub.UserID != userID || s.sub.GroupID != groupID {
+		return nil, ErrSubscriptionNotFound
+	}
+	cp := *s.sub
+	return &cp, nil
+}
+
 func TestBillingCacheServiceGetUserBalance_Singleflight(t *testing.T) {
 	cache := &billingCacheMissStub{}
 	userRepo := &balanceLoadUserRepoStub{
@@ -164,4 +181,25 @@ func TestBillingCacheServiceGetUserBalance_Singleflight(t *testing.T) {
 	require.Eventually(t, func() bool {
 		return cache.setBalanceCalls.Load() >= 1
 	}, time.Second, 10*time.Millisecond)
+}
+
+func TestBillingCacheServiceGetSubscriptionStatus_CacheMissDoesNotWriteBackSnapshot(t *testing.T) {
+	cache := &billingCacheMissStub{}
+	now := time.Now().UTC()
+	repo := &subscriptionLoadRepoStub{sub: &UserSubscription{
+		ID:        1,
+		UserID:    7,
+		GroupID:   9,
+		Status:    SubscriptionStatusActive,
+		ExpiresAt: now.Add(time.Hour),
+		UpdatedAt: now,
+	}}
+	svc := NewBillingCacheService(cache, nil, repo, nil, nil, nil, &config.Config{}, nil)
+	t.Cleanup(svc.Stop)
+
+	got, err := svc.GetSubscriptionStatus(context.Background(), 7, 9)
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	require.Equal(t, int64(1), repo.calls.Load())
+	require.Zero(t, cache.setSubscriptionCalls.Load(), "a cache miss must not asynchronously resurrect a stale snapshot")
 }

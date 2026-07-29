@@ -415,6 +415,8 @@ export default {
         openaiCodexUserAgent: 'OpenAI Codex UA',
         openaiCodexUserAgentPlaceholder: 'codex-tui/0.145.0 (Ubuntu 22.4.0; x86_64) xterm-256color (codex-tui; 0.145.0)',
         openaiCodexUserAgentHint: 'Global Codex User-Agent for OpenAI upstream requests. A valid account-specific Codex UA takes precedence; missing or invalid account values fall back to this setting, then the built-in default. Browser UAs and generic Header Overrides are never forwarded.',
+        openaiCodexLocalGroupQuota: 'Codex Local Group Quota',
+        openaiCodexLocalGroupQuotaHint: 'Show the authenticated API key\'s subscription 5-hour and 7-day quotas to Codex instead of the selected upstream account quota. Disabled keeps existing upstream quota passthrough.',
         codexHardeningTitle: "Codex Settings",
         codexClientRestrictionTitle: "Codex client restriction",
         codexHardeningDesc:

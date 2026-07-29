@@ -273,6 +273,20 @@ func (_c *GroupCreate) SetNillableMonthlyLimitUsd(v *float64) *GroupCreate {
 	return _c
 }
 
+// SetFiveHourLimitUsd sets the "five_hour_limit_usd" field.
+func (_c *GroupCreate) SetFiveHourLimitUsd(v float64) *GroupCreate {
+	_c.mutation.SetFiveHourLimitUsd(v)
+	return _c
+}
+
+// SetNillableFiveHourLimitUsd sets the "five_hour_limit_usd" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableFiveHourLimitUsd(v *float64) *GroupCreate {
+	if v != nil {
+		_c.SetFiveHourLimitUsd(*v)
+	}
+	return _c
+}
+
 // SetDefaultValidityDays sets the "default_validity_days" field.
 func (_c *GroupCreate) SetDefaultValidityDays(v int) *GroupCreate {
 	_c.mutation.SetDefaultValidityDays(v)
@@ -1255,6 +1269,10 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 		_spec.SetField(group.FieldMonthlyLimitUsd, field.TypeFloat64, value)
 		_node.MonthlyLimitUsd = &value
 	}
+	if value, ok := _c.mutation.FiveHourLimitUsd(); ok {
+		_spec.SetField(group.FieldFiveHourLimitUsd, field.TypeFloat64, value)
+		_node.FiveHourLimitUsd = &value
+	}
 	if value, ok := _c.mutation.DefaultValidityDays(); ok {
 		_spec.SetField(group.FieldDefaultValidityDays, field.TypeInt, value)
 		_node.DefaultValidityDays = value
@@ -1796,6 +1814,30 @@ func (u *GroupUpsert) AddMonthlyLimitUsd(v float64) *GroupUpsert {
 // ClearMonthlyLimitUsd clears the value of the "monthly_limit_usd" field.
 func (u *GroupUpsert) ClearMonthlyLimitUsd() *GroupUpsert {
 	u.SetNull(group.FieldMonthlyLimitUsd)
+	return u
+}
+
+// SetFiveHourLimitUsd sets the "five_hour_limit_usd" field.
+func (u *GroupUpsert) SetFiveHourLimitUsd(v float64) *GroupUpsert {
+	u.Set(group.FieldFiveHourLimitUsd, v)
+	return u
+}
+
+// UpdateFiveHourLimitUsd sets the "five_hour_limit_usd" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateFiveHourLimitUsd() *GroupUpsert {
+	u.SetExcluded(group.FieldFiveHourLimitUsd)
+	return u
+}
+
+// AddFiveHourLimitUsd adds v to the "five_hour_limit_usd" field.
+func (u *GroupUpsert) AddFiveHourLimitUsd(v float64) *GroupUpsert {
+	u.Add(group.FieldFiveHourLimitUsd, v)
+	return u
+}
+
+// ClearFiveHourLimitUsd clears the value of the "five_hour_limit_usd" field.
+func (u *GroupUpsert) ClearFiveHourLimitUsd() *GroupUpsert {
+	u.SetNull(group.FieldFiveHourLimitUsd)
 	return u
 }
 
@@ -2702,6 +2744,34 @@ func (u *GroupUpsertOne) UpdateMonthlyLimitUsd() *GroupUpsertOne {
 func (u *GroupUpsertOne) ClearMonthlyLimitUsd() *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
 		s.ClearMonthlyLimitUsd()
+	})
+}
+
+// SetFiveHourLimitUsd sets the "five_hour_limit_usd" field.
+func (u *GroupUpsertOne) SetFiveHourLimitUsd(v float64) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetFiveHourLimitUsd(v)
+	})
+}
+
+// AddFiveHourLimitUsd adds v to the "five_hour_limit_usd" field.
+func (u *GroupUpsertOne) AddFiveHourLimitUsd(v float64) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.AddFiveHourLimitUsd(v)
+	})
+}
+
+// UpdateFiveHourLimitUsd sets the "five_hour_limit_usd" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateFiveHourLimitUsd() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateFiveHourLimitUsd()
+	})
+}
+
+// ClearFiveHourLimitUsd clears the value of the "five_hour_limit_usd" field.
+func (u *GroupUpsertOne) ClearFiveHourLimitUsd() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.ClearFiveHourLimitUsd()
 	})
 }
 
@@ -3868,6 +3938,34 @@ func (u *GroupUpsertBulk) UpdateMonthlyLimitUsd() *GroupUpsertBulk {
 func (u *GroupUpsertBulk) ClearMonthlyLimitUsd() *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
 		s.ClearMonthlyLimitUsd()
+	})
+}
+
+// SetFiveHourLimitUsd sets the "five_hour_limit_usd" field.
+func (u *GroupUpsertBulk) SetFiveHourLimitUsd(v float64) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetFiveHourLimitUsd(v)
+	})
+}
+
+// AddFiveHourLimitUsd adds v to the "five_hour_limit_usd" field.
+func (u *GroupUpsertBulk) AddFiveHourLimitUsd(v float64) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.AddFiveHourLimitUsd(v)
+	})
+}
+
+// UpdateFiveHourLimitUsd sets the "five_hour_limit_usd" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateFiveHourLimitUsd() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateFiveHourLimitUsd()
+	})
+}
+
+// ClearFiveHourLimitUsd clears the value of the "five_hour_limit_usd" field.
+func (u *GroupUpsertBulk) ClearFiveHourLimitUsd() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.ClearFiveHourLimitUsd()
 	})
 }
 

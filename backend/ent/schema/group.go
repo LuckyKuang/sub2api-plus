@@ -92,6 +92,11 @@ func (Group) Fields() []ent.Field {
 			Optional().
 			Nillable().
 			SchemaType(map[string]string{dialect.Postgres: "decimal(20,8)"}),
+		field.Float("five_hour_limit_usd").
+			Optional().
+			Nillable().
+			SchemaType(map[string]string{dialect.Postgres: "decimal(20,8)"}).
+			Comment("订阅分组 5 小时 USD 限额；NULL 或非正数表示不限制"),
 		field.Int("default_validity_days").
 			Default(30),
 

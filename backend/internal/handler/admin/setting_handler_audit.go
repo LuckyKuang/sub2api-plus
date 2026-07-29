@@ -437,6 +437,9 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	if before.OpenAICodexUserAgent != after.OpenAICodexUserAgent {
 		changed = append(changed, "openai_codex_user_agent")
 	}
+	if before.OpenAICodexLocalGroupQuotaEnabled != after.OpenAICodexLocalGroupQuotaEnabled {
+		changed = append(changed, "openai_codex_local_group_quota_enabled")
+	}
 	if before.PaymentVisibleMethodAlipaySource != after.PaymentVisibleMethodAlipaySource {
 		changed = append(changed, "payment_visible_method_alipay_source")
 	}

@@ -40,12 +40,18 @@ var (
 
 // subscriptionCacheData 订阅缓存数据结构（内部使用）
 type subscriptionCacheData struct {
-	Status       string
-	ExpiresAt    time.Time
-	DailyUsage   float64
-	WeeklyUsage  float64
-	MonthlyUsage float64
-	Version      int64
+	Status               string
+	ExpiresAt            time.Time
+	DailyUsage           float64
+	WeeklyUsage          float64
+	MonthlyUsage         float64
+	FiveHourUsage        float64
+	DailyWindowStart     *time.Time
+	WeeklyWindowStart    *time.Time
+	MonthlyWindowStart   *time.Time
+	FiveHourWindowStart  *time.Time
+	FiveHourStatePresent bool
+	Version              int64
 }
 
 // 缓存写入任务类型
@@ -53,7 +59,6 @@ type cacheWriteKind int
 
 const (
 	cacheWriteSetBalance cacheWriteKind = iota
-	cacheWriteSetSubscription
 	cacheWriteUpdateSubscriptionUsage
 	cacheWriteDeductBalance
 	cacheWriteUpdateRateLimitUsage
@@ -82,13 +87,12 @@ const (
 
 // cacheWriteTask 缓存写入任务
 type cacheWriteTask struct {
-	kind             cacheWriteKind
-	userID           int64
-	groupID          int64
-	apiKeyID         int64
-	balance          float64
-	amount           float64
-	subscriptionData *subscriptionCacheData
+	kind     cacheWriteKind
+	userID   int64
+	groupID  int64
+	apiKeyID int64
+	balance  float64
+	amount   float64
 }
 
 // apiKeyRateLimitLoader defines the interface for loading rate limit data from DB.
@@ -126,6 +130,9 @@ type BillingCacheService struct {
 	cacheWriteDropFullLastLog   int64
 	cacheWriteDropClosedCount   uint64
 	cacheWriteDropClosedLastLog int64
+
+	subscriptionInvalidationMu       sync.RWMutex
+	subscriptionInvalidationHandlers []func(userID, groupID int64)
 }
 
 // NewBillingCacheService 创建计费缓存服务
@@ -220,8 +227,6 @@ func (s *BillingCacheService) cacheWriteWorker(ch <-chan cacheWriteTask) {
 		switch task.kind {
 		case cacheWriteSetBalance:
 			s.setBalanceCache(ctx, task.userID, task.balance)
-		case cacheWriteSetSubscription:
-			s.setSubscriptionCache(ctx, task.userID, task.groupID, task.subscriptionData)
 		case cacheWriteUpdateSubscriptionUsage:
 			if s.cache != nil {
 				if err := s.cache.UpdateSubscriptionUsage(ctx, task.userID, task.groupID, task.amount); err != nil {
@@ -250,8 +255,6 @@ func cacheWriteKindName(kind cacheWriteKind) string {
 	switch kind {
 	case cacheWriteSetBalance:
 		return "set_balance"
-	case cacheWriteSetSubscription:
-		return "set_subscription"
 	case cacheWriteUpdateSubscriptionUsage:
 		return "update_subscription_usage"
 	case cacheWriteDeductBalance:
@@ -423,42 +426,47 @@ func (s *BillingCacheService) GetSubscriptionStatus(ctx context.Context, userID,
 		return s.convertFromPortsData(cacheData), nil
 	}
 
-	// 缓存未命中，从数据库读取
+	// 缓存未命中，从数据库读取。不要在这里回填 Redis：一个与计费并发
+	// 的旧 DB 快照若晚到，会将刚完成计费后的用量重新覆盖。提交后的
+	// 计费链路会显式回填最新快照。
 	data, err := s.getSubscriptionFromDB(ctx, userID, groupID)
 	if err != nil {
 		return nil, err
 	}
-
-	// 异步建立缓存
-	_ = s.enqueueCacheWrite(cacheWriteTask{
-		kind:             cacheWriteSetSubscription,
-		userID:           userID,
-		groupID:          groupID,
-		subscriptionData: data,
-	})
-
 	return data, nil
 }
 
 func (s *BillingCacheService) convertFromPortsData(data *SubscriptionCacheData) *subscriptionCacheData {
 	return &subscriptionCacheData{
-		Status:       data.Status,
-		ExpiresAt:    data.ExpiresAt,
-		DailyUsage:   data.DailyUsage,
-		WeeklyUsage:  data.WeeklyUsage,
-		MonthlyUsage: data.MonthlyUsage,
-		Version:      data.Version,
+		Status:               data.Status,
+		ExpiresAt:            data.ExpiresAt,
+		DailyUsage:           data.DailyUsage,
+		WeeklyUsage:          data.WeeklyUsage,
+		MonthlyUsage:         data.MonthlyUsage,
+		FiveHourUsage:        data.FiveHourUsage,
+		DailyWindowStart:     data.DailyWindowStart,
+		WeeklyWindowStart:    data.WeeklyWindowStart,
+		MonthlyWindowStart:   data.MonthlyWindowStart,
+		FiveHourWindowStart:  data.FiveHourWindowStart,
+		FiveHourStatePresent: data.FiveHourStatePresent,
+		Version:              data.Version,
 	}
 }
 
 func (s *BillingCacheService) convertToPortsData(data *subscriptionCacheData) *SubscriptionCacheData {
 	return &SubscriptionCacheData{
-		Status:       data.Status,
-		ExpiresAt:    data.ExpiresAt,
-		DailyUsage:   data.DailyUsage,
-		WeeklyUsage:  data.WeeklyUsage,
-		MonthlyUsage: data.MonthlyUsage,
-		Version:      data.Version,
+		Status:               data.Status,
+		ExpiresAt:            data.ExpiresAt,
+		DailyUsage:           data.DailyUsage,
+		WeeklyUsage:          data.WeeklyUsage,
+		MonthlyUsage:         data.MonthlyUsage,
+		FiveHourUsage:        data.FiveHourUsage,
+		DailyWindowStart:     data.DailyWindowStart,
+		WeeklyWindowStart:    data.WeeklyWindowStart,
+		MonthlyWindowStart:   data.MonthlyWindowStart,
+		FiveHourWindowStart:  data.FiveHourWindowStart,
+		FiveHourStatePresent: data.FiveHourStatePresent,
+		Version:              data.Version,
 	}
 }
 
@@ -470,23 +478,46 @@ func (s *BillingCacheService) getSubscriptionFromDB(ctx context.Context, userID,
 	}
 
 	return &subscriptionCacheData{
-		Status:       sub.Status,
-		ExpiresAt:    sub.ExpiresAt,
-		DailyUsage:   sub.DailyUsageUSD,
-		WeeklyUsage:  sub.WeeklyUsageUSD,
-		MonthlyUsage: sub.MonthlyUsageUSD,
-		Version:      sub.UpdatedAt.Unix(),
+		Status:               sub.Status,
+		ExpiresAt:            sub.ExpiresAt,
+		DailyUsage:           sub.DailyUsageUSD,
+		WeeklyUsage:          sub.WeeklyUsageUSD,
+		MonthlyUsage:         sub.MonthlyUsageUSD,
+		FiveHourUsage:        sub.FiveHourUsageUSD,
+		DailyWindowStart:     sub.DailyWindowStart,
+		WeeklyWindowStart:    sub.WeeklyWindowStart,
+		MonthlyWindowStart:   sub.MonthlyWindowStart,
+		FiveHourWindowStart:  sub.FiveHourWindowStart,
+		FiveHourStatePresent: true,
+		Version:              sub.UpdatedAt.UnixNano(),
 	}, nil
 }
 
 // setSubscriptionCache 设置订阅缓存
-func (s *BillingCacheService) setSubscriptionCache(ctx context.Context, userID, groupID int64, data *subscriptionCacheData) {
+func (s *BillingCacheService) setSubscriptionCache(ctx context.Context, userID, groupID int64, data *subscriptionCacheData) error {
 	if s.cache == nil || data == nil {
-		return
+		return nil
 	}
 	if err := s.cache.SetSubscriptionCache(ctx, userID, groupID, s.convertToPortsData(data)); err != nil {
 		logger.LegacyPrintf("service.billing_cache", "Warning: set subscription cache failed for user %d group %d: %v", userID, groupID, err)
+		return err
 	}
+	return nil
+}
+
+// RefreshSubscription writes the exact committed database state to the shared
+// cache. This is intentionally only used after a subscription mutation. Cache
+// misses read through to PostgreSQL without creating a potentially stale
+// asynchronous write-back task.
+func (s *BillingCacheService) RefreshSubscription(ctx context.Context, userID, groupID int64) error {
+	if s.cache == nil {
+		return nil
+	}
+	data, err := s.getSubscriptionFromDB(ctx, userID, groupID)
+	if err != nil {
+		return err
+	}
+	return s.setSubscriptionCache(ctx, userID, groupID, data)
 }
 
 // UpdateSubscriptionUsage 更新订阅用量缓存（同步调用）
@@ -528,6 +559,49 @@ func (s *BillingCacheService) InvalidateSubscription(ctx context.Context, userID
 		return err
 	}
 	return nil
+}
+
+// RegisterSubscriptionInvalidationHandler registers a process-local L1 cache
+// invalidator. It deliberately accepts only identifiers, so BillingCacheService
+// does not depend on SubscriptionService and the dependency graph stays acyclic.
+func (s *BillingCacheService) RegisterSubscriptionInvalidationHandler(handler func(userID, groupID int64)) {
+	if s == nil || handler == nil {
+		return
+	}
+	s.subscriptionInvalidationMu.Lock()
+	s.subscriptionInvalidationHandlers = append(s.subscriptionInvalidationHandlers, handler)
+	s.subscriptionInvalidationMu.Unlock()
+}
+
+func (s *BillingCacheService) notifyLocalSubscriptionInvalidation(userID, groupID int64) {
+	if s == nil {
+		return
+	}
+	s.subscriptionInvalidationMu.RLock()
+	handlers := append([]func(int64, int64){}, s.subscriptionInvalidationHandlers...)
+	s.subscriptionInvalidationMu.RUnlock()
+	for _, handler := range handlers {
+		handler(userID, groupID)
+	}
+}
+
+// NotifySubscriptionCacheInvalidation evicts process-local subscription L1
+// caches synchronously and broadcasts the same event to other instances. Use
+// this after a successful RefreshSubscription so the authoritative Redis value
+// remains available while stale L1 views disappear immediately.
+func (s *BillingCacheService) NotifySubscriptionCacheInvalidation(ctx context.Context, userID, groupID int64) error {
+	s.notifyLocalSubscriptionInvalidation(userID, groupID)
+	return s.PublishSubscriptionCacheInvalidation(ctx, subCacheKey(userID, groupID))
+}
+
+// InvalidateSubscriptionAndNotify removes the Redis snapshot, synchronously
+// evicts this process's L1 snapshot, then broadcasts to other instances.
+func (s *BillingCacheService) InvalidateSubscriptionAndNotify(ctx context.Context, userID, groupID int64) error {
+	s.notifyLocalSubscriptionInvalidation(userID, groupID)
+	if err := s.InvalidateSubscription(ctx, userID, groupID); err != nil {
+		return err
+	}
+	return s.PublishSubscriptionCacheInvalidation(ctx, subCacheKey(userID, groupID))
 }
 
 func (s *BillingCacheService) PublishSubscriptionCacheInvalidation(ctx context.Context, cacheKey string) error {
@@ -921,20 +995,45 @@ func (s *BillingCacheService) checkSubscriptionEligibility(ctx context.Context, 
 		return ErrSubscriptionInvalid
 	}
 
-	// 检查限额（使用传入的Group限额配置）
-	if group.HasDailyLimit() && subData.DailyUsage >= *group.DailyLimitUSD {
-		return ErrDailyLimitExceeded
+	// Rolling five-hour quota cannot trust a cache entry written before this
+	// feature existed: it did not contain its usage/window state and could
+	// otherwise permit a short enforcement bypass after a rolling deployment.
+	if group.HasFiveHourLimit() && !subData.FiveHourStatePresent {
+		fresh, dbErr := s.getSubscriptionFromDB(ctx, userID, group.ID)
+		if dbErr != nil {
+			return ErrBillingServiceUnavailable.WithCause(dbErr)
+		}
+		subData = fresh
+		_ = s.setSubscriptionCache(ctx, userID, group.ID, fresh)
 	}
 
-	if group.HasWeeklyLimit() && subData.WeeklyUsage >= *group.WeeklyLimitUSD {
-		return ErrWeeklyLimitExceeded
+	snapshot := subscriptionUsageSnapshot{
+		DailyUsage:          subData.DailyUsage,
+		WeeklyUsage:         subData.WeeklyUsage,
+		MonthlyUsage:        subData.MonthlyUsage,
+		FiveHourUsage:       subData.FiveHourUsage,
+		DailyWindowStart:    subData.DailyWindowStart,
+		WeeklyWindowStart:   subData.WeeklyWindowStart,
+		MonthlyWindowStart:  subData.MonthlyWindowStart,
+		FiveHourWindowStart: subData.FiveHourWindowStart,
+		ExpiresAt:           subData.ExpiresAt,
 	}
-
-	if group.HasMonthlyLimit() && subData.MonthlyUsage >= *group.MonthlyLimitUSD {
-		return ErrMonthlyLimitExceeded
+	if subscription != nil {
+		snapshot.OneTimeDailyQuota = subscription.HasOneTimeDailyQuota()
+		// Pre-feature Redis cache entries do not have calendar window starts.
+		// The authenticated subscription snapshot supplies those starts without
+		// replacing the Redis usage counters used for the authoritative check.
+		if snapshot.DailyWindowStart == nil {
+			snapshot.DailyWindowStart = subscription.DailyWindowStart
+		}
+		if snapshot.WeeklyWindowStart == nil {
+			snapshot.WeeklyWindowStart = subscription.WeeklyWindowStart
+		}
+		if snapshot.MonthlyWindowStart == nil {
+			snapshot.MonthlyWindowStart = subscription.MonthlyWindowStart
+		}
 	}
-
-	return nil
+	return subscriptionUsageLimitError(group, snapshot, time.Now())
 }
 
 type billingCircuitBreakerState int

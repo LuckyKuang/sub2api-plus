@@ -433,6 +433,7 @@ func (s *OpenAIGatewayService) bufferRawChatCompletions(
 	if s.responseHeaderFilter != nil {
 		responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
 	}
+	s.applyCodexLocalGroupQuotaHeaders(c)
 	if ct := resp.Header.Get("Content-Type"); ct != "" {
 		c.Writer.Header().Set("Content-Type", ct)
 	} else {

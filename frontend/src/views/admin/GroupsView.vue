@@ -180,7 +180,8 @@
                   v-if="
                     row.daily_limit_usd ||
                     row.weekly_limit_usd ||
-                    row.monthly_limit_usd
+                    row.monthly_limit_usd ||
+                    row.five_hour_limit_usd
                   "
                   class="flex flex-wrap items-center gap-x-1 gap-y-0.5"
                 >
@@ -211,7 +212,7 @@
                   <span
                     v-if="
                       row.daily_limit_usd &&
-                      (row.weekly_limit_usd || row.monthly_limit_usd)
+                      (row.weekly_limit_usd || row.monthly_limit_usd || row.five_hour_limit_usd)
                     "
                     class="mx-1 text-gray-300 dark:text-gray-600"
                     >·</span
@@ -222,13 +223,23 @@
                     }}</span
                   >
                   <span
-                    v-if="row.weekly_limit_usd && row.monthly_limit_usd"
+                    v-if="row.weekly_limit_usd && (row.monthly_limit_usd || row.five_hour_limit_usd)"
                     class="mx-1 text-gray-300 dark:text-gray-600"
                     >·</span
                   >
                   <span v-if="row.monthly_limit_usd" class="whitespace-nowrap"
                     >{{ formatUsd(row.monthly_limit_usd) }}/{{
                       t("admin.groups.limitMonth")
+                    }}</span
+                  >
+                  <span
+                    v-if="row.monthly_limit_usd && row.five_hour_limit_usd"
+                    class="mx-1 text-gray-300 dark:text-gray-600"
+                    >·</span
+                  >
+                  <span v-if="row.five_hour_limit_usd" class="whitespace-nowrap"
+                    >{{ formatUsd(row.five_hour_limit_usd) }}/{{
+                      t("admin.groups.limitFiveHours")
                     }}</span
                   >
                 </div>
@@ -751,6 +762,19 @@
                 :placeholder="t('admin.groups.subscription.noLimit')"
               />
             </div>
+            <div>
+              <label class="input-label">{{
+                t("admin.groups.subscription.fiveHourLimit")
+              }}</label>
+              <input
+                v-model.number="createForm.five_hour_limit_usd"
+                type="number"
+                step="0.01"
+                min="0"
+                class="input"
+                :placeholder="t('admin.groups.subscription.noLimit')"
+              />
+            </div>
           </div>
         </div>
 
@@ -959,7 +983,7 @@
               </div>
             </div>
           </div>
-          <div v-if="createForm.platform === 'gemini' && createForm.allow_image_generation" class="mt-4 border-t border-dashed border-gray-200 pt-4 dark:border-dark-700">
+          <div v-if="createForm.platform === 'gemini' && createForm.allow_image_generation && createForm.subscription_type !== 'subscription'" class="mt-4 border-t border-dashed border-gray-200 pt-4 dark:border-dark-700">
             <label
               class="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300"
             >
@@ -2306,6 +2330,19 @@
                 :placeholder="t('admin.groups.subscription.noLimit')"
               />
             </div>
+            <div>
+              <label class="input-label">{{
+                t("admin.groups.subscription.fiveHourLimit")
+              }}</label>
+              <input
+                v-model.number="editForm.five_hour_limit_usd"
+                type="number"
+                step="0.01"
+                min="0"
+                class="input"
+                :placeholder="t('admin.groups.subscription.noLimit')"
+              />
+            </div>
           </div>
         </div>
 
@@ -2514,7 +2551,7 @@
               </div>
             </div>
           </div>
-          <div v-if="editForm.platform === 'gemini' && editForm.allow_image_generation" class="mt-4 border-t border-dashed border-gray-200 pt-4 dark:border-dark-700">
+          <div v-if="editForm.platform === 'gemini' && editForm.allow_image_generation && editForm.subscription_type !== 'subscription'" class="mt-4 border-t border-dashed border-gray-200 pt-4 dark:border-dark-700">
             <label
               class="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300"
             >
@@ -4595,6 +4632,7 @@ const createForm = reactive({
   daily_limit_usd: null as number | null,
   weekly_limit_usd: null as number | null,
   monthly_limit_usd: null as number | null,
+  five_hour_limit_usd: null as number | null,
   // 图片生成计费配置
   allow_image_generation: false,
   allow_batch_image_generation: false,
@@ -4945,6 +4983,7 @@ const editForm = reactive({
   daily_limit_usd: null as number | null,
   weekly_limit_usd: null as number | null,
   monthly_limit_usd: null as number | null,
+  five_hour_limit_usd: null as number | null,
   // 图片生成计费配置
   allow_image_generation: false,
   allow_batch_image_generation: false,
@@ -4999,6 +5038,7 @@ const editForm = reactive({
 
 type ImagePricingFormState = {
   platform: GroupPlatform;
+  subscription_type: SubscriptionType;
   allow_image_generation: boolean;
   allow_batch_image_generation: boolean;
   rate_multiplier: number;
@@ -5147,10 +5187,10 @@ const editWebSearchFinalPricePreview = computed(() =>
 const resetDisabledBatchImagePricing = (
   form: Pick<
     ImagePricingFormState,
-    "platform" | "allow_image_generation" | "allow_batch_image_generation" | "batch_image_discount_multiplier" | "batch_image_hold_multiplier"
+    "platform" | "subscription_type" | "allow_image_generation" | "allow_batch_image_generation" | "batch_image_discount_multiplier" | "batch_image_hold_multiplier"
   >,
 ) => {
-  if (form.platform !== "gemini" || !form.allow_image_generation) {
+  if (form.platform !== "gemini" || form.subscription_type === "subscription" || !form.allow_image_generation) {
     form.allow_batch_image_generation = false;
   }
   if (!form.allow_batch_image_generation) {
@@ -5393,6 +5433,7 @@ const closeCreateModal = () => {
   createForm.daily_limit_usd = null;
   createForm.weekly_limit_usd = null;
   createForm.monthly_limit_usd = null;
+  createForm.five_hour_limit_usd = null;
   createForm.allow_image_generation = false;
   createForm.allow_batch_image_generation = false;
   createForm.image_rate_independent = false;
@@ -5485,6 +5526,9 @@ const handleCreateGroup = async () => {
       monthly_limit_usd: normalizeOptionalLimit(
         createForm.monthly_limit_usd as number | string | null,
       ),
+      five_hour_limit_usd: normalizeOptionalLimit(
+        createForm.five_hour_limit_usd as number | string | null,
+      ),
       model_routing: convertRoutingRulesToApiFormat(
         createModelRoutingRules.value,
       ),
@@ -5512,6 +5556,7 @@ const handleCreateGroup = async () => {
     requestData.daily_limit_usd = emptyToNull(requestData.daily_limit_usd);
     requestData.weekly_limit_usd = emptyToNull(requestData.weekly_limit_usd);
     requestData.monthly_limit_usd = emptyToNull(requestData.monthly_limit_usd);
+    requestData.five_hour_limit_usd = emptyToNull(requestData.five_hour_limit_usd);
     requestData.image_rate_multiplier = normalizeRateMultiplier(
       requestData.image_rate_multiplier,
     );
@@ -5573,6 +5618,7 @@ const handleEdit = async (group: AdminGroup) => {
   editForm.daily_limit_usd = group.daily_limit_usd;
   editForm.weekly_limit_usd = group.weekly_limit_usd;
   editForm.monthly_limit_usd = group.monthly_limit_usd;
+  editForm.five_hour_limit_usd = group.five_hour_limit_usd;
   editForm.allow_image_generation = group.allow_image_generation ?? false;
   editForm.allow_batch_image_generation =
     group.allow_batch_image_generation ?? false;
@@ -5693,6 +5739,9 @@ const handleUpdateGroup = async () => {
       monthly_limit_usd: normalizeOptionalLimit(
         editForm.monthly_limit_usd as number | string | null,
       ),
+      five_hour_limit_usd: normalizeOptionalLimit(
+        editForm.five_hour_limit_usd as number | string | null,
+      ),
       fallback_group_id:
         editForm.fallback_group_id === null ? 0 : editForm.fallback_group_id,
       fallback_group_id_on_invalid_request:
@@ -5726,6 +5775,7 @@ const handleUpdateGroup = async () => {
     payload.daily_limit_usd = emptyToNull(payload.daily_limit_usd);
     payload.weekly_limit_usd = emptyToNull(payload.weekly_limit_usd);
     payload.monthly_limit_usd = emptyToNull(payload.monthly_limit_usd);
+    payload.five_hour_limit_usd = emptyToNull(payload.five_hour_limit_usd);
     payload.image_rate_multiplier = normalizeRateMultiplier(
       payload.image_rate_multiplier,
     );
@@ -6036,6 +6086,7 @@ watch(
     if (newVal === "subscription") {
       createForm.is_exclusive = true;
       createForm.fallback_group_id_on_invalid_request = null;
+      resetDisabledBatchImagePricing(createForm);
     } else {
       createForm.peak_rate_enabled = false;
       createForm.peak_start = "";
@@ -6049,6 +6100,9 @@ watch(
 watch(
   () => editForm.subscription_type,
   (newVal) => {
+    if (newVal === "subscription") {
+      resetDisabledBatchImagePricing(editForm);
+    }
     if (newVal !== "subscription") {
       editForm.peak_rate_enabled = false;
       editForm.peak_start = "";

@@ -41,12 +41,16 @@ type UserSubscription struct {
 	WeeklyWindowStart *time.Time `json:"weekly_window_start,omitempty"`
 	// MonthlyWindowStart holds the value of the "monthly_window_start" field.
 	MonthlyWindowStart *time.Time `json:"monthly_window_start,omitempty"`
+	// FiveHourWindowStart holds the value of the "five_hour_window_start" field.
+	FiveHourWindowStart *time.Time `json:"five_hour_window_start,omitempty"`
 	// DailyUsageUsd holds the value of the "daily_usage_usd" field.
 	DailyUsageUsd float64 `json:"daily_usage_usd,omitempty"`
 	// WeeklyUsageUsd holds the value of the "weekly_usage_usd" field.
 	WeeklyUsageUsd float64 `json:"weekly_usage_usd,omitempty"`
 	// MonthlyUsageUsd holds the value of the "monthly_usage_usd" field.
 	MonthlyUsageUsd float64 `json:"monthly_usage_usd,omitempty"`
+	// FiveHourUsageUsd holds the value of the "five_hour_usage_usd" field.
+	FiveHourUsageUsd float64 `json:"five_hour_usage_usd,omitempty"`
 	// AssignedBy holds the value of the "assigned_by" field.
 	AssignedBy *int64 `json:"assigned_by,omitempty"`
 	// AssignedAt holds the value of the "assigned_at" field.
@@ -121,13 +125,13 @@ func (*UserSubscription) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case usersubscription.FieldDailyUsageUsd, usersubscription.FieldWeeklyUsageUsd, usersubscription.FieldMonthlyUsageUsd:
+		case usersubscription.FieldDailyUsageUsd, usersubscription.FieldWeeklyUsageUsd, usersubscription.FieldMonthlyUsageUsd, usersubscription.FieldFiveHourUsageUsd:
 			values[i] = new(sql.NullFloat64)
 		case usersubscription.FieldID, usersubscription.FieldUserID, usersubscription.FieldGroupID, usersubscription.FieldAssignedBy:
 			values[i] = new(sql.NullInt64)
 		case usersubscription.FieldStatus, usersubscription.FieldNotes:
 			values[i] = new(sql.NullString)
-		case usersubscription.FieldCreatedAt, usersubscription.FieldUpdatedAt, usersubscription.FieldDeletedAt, usersubscription.FieldStartsAt, usersubscription.FieldExpiresAt, usersubscription.FieldDailyWindowStart, usersubscription.FieldWeeklyWindowStart, usersubscription.FieldMonthlyWindowStart, usersubscription.FieldAssignedAt:
+		case usersubscription.FieldCreatedAt, usersubscription.FieldUpdatedAt, usersubscription.FieldDeletedAt, usersubscription.FieldStartsAt, usersubscription.FieldExpiresAt, usersubscription.FieldDailyWindowStart, usersubscription.FieldWeeklyWindowStart, usersubscription.FieldMonthlyWindowStart, usersubscription.FieldFiveHourWindowStart, usersubscription.FieldAssignedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -220,6 +224,13 @@ func (_m *UserSubscription) assignValues(columns []string, values []any) error {
 				_m.MonthlyWindowStart = new(time.Time)
 				*_m.MonthlyWindowStart = value.Time
 			}
+		case usersubscription.FieldFiveHourWindowStart:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field five_hour_window_start", values[i])
+			} else if value.Valid {
+				_m.FiveHourWindowStart = new(time.Time)
+				*_m.FiveHourWindowStart = value.Time
+			}
 		case usersubscription.FieldDailyUsageUsd:
 			if value, ok := values[i].(*sql.NullFloat64); !ok {
 				return fmt.Errorf("unexpected type %T for field daily_usage_usd", values[i])
@@ -237,6 +248,12 @@ func (_m *UserSubscription) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field monthly_usage_usd", values[i])
 			} else if value.Valid {
 				_m.MonthlyUsageUsd = value.Float64
+			}
+		case usersubscription.FieldFiveHourUsageUsd:
+			if value, ok := values[i].(*sql.NullFloat64); !ok {
+				return fmt.Errorf("unexpected type %T for field five_hour_usage_usd", values[i])
+			} else if value.Valid {
+				_m.FiveHourUsageUsd = value.Float64
 			}
 		case usersubscription.FieldAssignedBy:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -355,6 +372,11 @@ func (_m *UserSubscription) String() string {
 		builder.WriteString(v.Format(time.ANSIC))
 	}
 	builder.WriteString(", ")
+	if v := _m.FiveHourWindowStart; v != nil {
+		builder.WriteString("five_hour_window_start=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
 	builder.WriteString("daily_usage_usd=")
 	builder.WriteString(fmt.Sprintf("%v", _m.DailyUsageUsd))
 	builder.WriteString(", ")
@@ -363,6 +385,9 @@ func (_m *UserSubscription) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("monthly_usage_usd=")
 	builder.WriteString(fmt.Sprintf("%v", _m.MonthlyUsageUsd))
+	builder.WriteString(", ")
+	builder.WriteString("five_hour_usage_usd=")
+	builder.WriteString(fmt.Sprintf("%v", _m.FiveHourUsageUsd))
 	builder.WriteString(", ")
 	if v := _m.AssignedBy; v != nil {
 		builder.WriteString("assigned_by=")

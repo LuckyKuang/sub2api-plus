@@ -143,6 +143,8 @@ func postUsageBilling(ctx context.Context, p *postUsageBillingParams, deps *bill
 		if cost.ActualCost > 0 {
 			if err := deps.userSubRepo.IncrementUsage(billingCtx, p.Subscription.ID, cost.ActualCost); err != nil {
 				slog.Error("increment subscription usage failed", "subscription_id", p.Subscription.ID, "error", err)
+			} else {
+				refreshSubscriptionCacheAfterBilling(billingCtx, p, deps, "legacy")
 			}
 		}
 	} else {
@@ -330,7 +332,7 @@ func finalizePostUsageBilling(ctx context.Context, p *postUsageBillingParams, de
 
 	if p.IsSubscriptionBill {
 		if p.Cost.ActualCost > 0 && p.User != nil && p.APIKey != nil && p.APIKey.GroupID != nil {
-			deps.billingCacheService.QueueUpdateSubscriptionUsage(p.User.ID, *p.APIKey.GroupID, p.Cost.ActualCost)
+			refreshSubscriptionCacheAfterBilling(ctx, p, deps, "unified")
 		}
 	} else if p.Cost.ActualCost > 0 && p.User != nil {
 		syncBalanceCacheAfterDeduction(ctx, p, deps, result)
@@ -380,6 +382,27 @@ func finalizePostUsageBilling(ctx context.Context, p *postUsageBillingParams, de
 	// no dependency on the request context or upstream connection.
 	go notifyBalanceLow(p, deps, result)
 	go notifyAccountQuota(p, deps, result)
+}
+
+// refreshSubscriptionCacheAfterBilling publishes the freshly committed quota
+// snapshot before evicting SubscriptionService's local L1 caches. Falling back
+// to DEL is safe because cache misses deliberately do not write stale snapshots
+// back into Redis.
+func refreshSubscriptionCacheAfterBilling(ctx context.Context, p *postUsageBillingParams, deps *billingDeps, path string) {
+	if deps == nil || deps.billingCacheService == nil || p == nil || p.User == nil || p.APIKey == nil || p.APIKey.GroupID == nil {
+		return
+	}
+	userID, groupID := p.User.ID, *p.APIKey.GroupID
+	if err := deps.billingCacheService.RefreshSubscription(ctx, userID, groupID); err != nil {
+		logger.LegacyPrintf("service.gateway", "Warning: refresh subscription cache after %s billing failed user=%d group=%d: %v", path, userID, groupID, err)
+		if invalidateErr := deps.billingCacheService.InvalidateSubscriptionAndNotify(ctx, userID, groupID); invalidateErr != nil {
+			logger.LegacyPrintf("service.gateway", "Warning: invalidate subscription cache after failed refresh user=%d group=%d: %v", userID, groupID, invalidateErr)
+		}
+		return
+	}
+	if err := deps.billingCacheService.NotifySubscriptionCacheInvalidation(ctx, userID, groupID); err != nil {
+		logger.LegacyPrintf("service.gateway", "Warning: publish subscription L1 invalidation after %s billing failed user=%d group=%d: %v", path, userID, groupID, err)
+	}
 }
 
 func syncBalanceCacheAfterDeduction(ctx context.Context, p *postUsageBillingParams, deps *billingDeps, result *UsageBillingApplyResult) {

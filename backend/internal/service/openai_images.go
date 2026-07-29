@@ -924,6 +924,7 @@ func (s *OpenAIGatewayService) handleOpenAIImagesNonStreamingResponse(resp *http
 		return OpenAIUsage{}, 0, nil, err
 	}
 	responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
+	s.applyCodexLocalGroupQuotaHeaders(c)
 	contentType := "application/json"
 	if s.cfg != nil && !s.cfg.Security.ResponseHeaders.Enabled {
 		if upstreamType := resp.Header.Get("Content-Type"); upstreamType != "" {
@@ -942,6 +943,7 @@ func (s *OpenAIGatewayService) handleOpenAIImagesStreamingResponse(
 	startTime time.Time,
 ) (OpenAIUsage, int, []string, *int, error) {
 	responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
+	s.applyCodexLocalGroupQuotaHeaders(c)
 	contentType := strings.TrimSpace(resp.Header.Get("Content-Type"))
 	if contentType == "" {
 		contentType = "text/event-stream"

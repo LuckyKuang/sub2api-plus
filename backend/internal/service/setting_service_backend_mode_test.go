@@ -174,6 +174,33 @@ func TestIsBackendModeEnabled_CachesResult(t *testing.T) {
 	require.Equal(t, 1, repo.calls)
 }
 
+func TestIsOpenAICodexLocalGroupQuotaEnabled_PreservesLastKnownGoodValueOnDBError(t *testing.T) {
+	repo := &bmRepoStub{}
+	call := 0
+	repo.getValueFn = func(_ context.Context, key string) (string, error) {
+		require.Equal(t, SettingKeyOpenAICodexLocalGroupQuotaEnabled, key)
+		call++
+		if call == 1 {
+			return "true", nil
+		}
+		return "", errors.New("settings database unavailable")
+	}
+	svc := NewSettingService(repo, &config.Config{})
+	t.Cleanup(func() {
+		svc.openAICodexLocalQuotaCache.Store((*cachedOpenAICodexLocalGroupQuota)(nil))
+	})
+
+	require.True(t, svc.IsOpenAICodexLocalGroupQuotaEnabled(context.Background()))
+	svc.openAICodexLocalQuotaCache.Store(&cachedOpenAICodexLocalGroupQuota{
+		enabled:       true,
+		hasKnownValue: true,
+		expiresAt:     time.Now().Add(-time.Second).UnixNano(),
+	})
+
+	require.True(t, svc.IsOpenAICodexLocalGroupQuotaEnabled(context.Background()))
+	require.Equal(t, 2, repo.calls)
+}
+
 func TestUpdateSettings_InvalidatesBackendModeCache(t *testing.T) {
 	resetBackendModeTestCache(t)
 

@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
@@ -79,9 +78,7 @@ func (h *OpenAIGatewayHandler) Live(c *gin.Context) {
 		service.QuotaPlatform(c.Request.Context(), apiKey),
 	); err != nil {
 		status, code, message, retryAfter := billingErrorDetails(err)
-		if retryAfter > 0 {
-			c.Header("Retry-After", strconv.Itoa(retryAfter))
-		}
+		applyBillingQuotaHeaders(c, err, retryAfter)
 		h.errorResponse(c, status, code, message)
 		return
 	}

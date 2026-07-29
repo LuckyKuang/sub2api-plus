@@ -130,3 +130,22 @@ func TestBillingCacheServiceEnqueueAfterStopReturnsFalse(t *testing.T) {
 	})
 	require.False(t, enqueued)
 }
+
+func TestBillingCacheServiceSubscriptionInvalidationNotifiesLocalHandlers(t *testing.T) {
+	cache := &billingCacheWorkerStub{}
+	svc := NewBillingCacheService(cache, nil, nil, nil, nil, nil, &config.Config{}, nil)
+	t.Cleanup(svc.Stop)
+
+	var invalidations atomic.Int64
+	svc.RegisterSubscriptionInvalidationHandler(func(userID, groupID int64) {
+		require.Equal(t, int64(7), userID)
+		require.Equal(t, int64(9), groupID)
+		invalidations.Add(1)
+	})
+
+	require.NoError(t, svc.NotifySubscriptionCacheInvalidation(context.Background(), 7, 9))
+	require.Equal(t, int64(1), invalidations.Load())
+
+	require.NoError(t, svc.InvalidateSubscriptionAndNotify(context.Background(), 7, 9))
+	require.Equal(t, int64(2), invalidations.Load())
+}

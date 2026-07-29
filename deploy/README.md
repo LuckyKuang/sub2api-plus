@@ -9,8 +9,8 @@ derives the OCI image tag by preserving the leading `v` and replacing only
 `+` with `-`.
 
 ```text
-Git/GitHub: v0.1.166+custom.004
-GHCR:       ghcr.io/luckykuang/sub2api-plus:v0.1.166-custom.004
+Git/GitHub: v0.1.166+custom.005
+GHCR:       ghcr.io/luckykuang/sub2api-plus:v0.1.166-custom.005
 ```
 
 Pin the GHCR version tag for reproducible deployments. See

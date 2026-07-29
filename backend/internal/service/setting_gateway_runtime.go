@@ -91,6 +91,14 @@ type cachedOpenAICodexUserAgent struct {
 	expiresAt int64 // unix nano
 }
 
+// cachedOpenAICodexLocalGroupQuota keeps the local Codex quota switch on the
+// request hot path without a database lookup per request.
+type cachedOpenAICodexLocalGroupQuota struct {
+	enabled       bool
+	hasKnownValue bool
+	expiresAt     int64 // unix nano
+}
+
 type cachedOpenAIQuotaAutoPauseSettings struct {
 	settings  OpsOpenAIAccountQuotaAutoPauseSettings
 	expiresAt int64
@@ -99,6 +107,9 @@ type cachedOpenAIQuotaAutoPauseSettings struct {
 const openAICodexUserAgentCacheTTL = 60 * time.Second
 const openAICodexUserAgentErrorTTL = 5 * time.Second
 const openAICodexUserAgentDBTimeout = 5 * time.Second
+const openAICodexLocalGroupQuotaCacheTTL = 60 * time.Second
+const openAICodexLocalGroupQuotaErrorTTL = 5 * time.Second
+const openAICodexLocalGroupQuotaDBTimeout = 5 * time.Second
 
 const codexRestrictionPolicyCacheTTL = 60 * time.Second
 const codexRestrictionPolicyDBTimeout = 5 * time.Second
@@ -280,6 +291,61 @@ func (s *SettingService) GetOpenAICodexUserAgent(ctx context.Context) string {
 		return ua
 	}
 	return fallback
+}
+
+// IsOpenAICodexLocalGroupQuotaEnabled reports whether Codex clients should
+// observe local subscription 5-hour/7-day quotas. A missing, malformed, or
+// unavailable setting fails closed to preserve existing upstream passthrough.
+func (s *SettingService) IsOpenAICodexLocalGroupQuotaEnabled(ctx context.Context) bool {
+	if s == nil || s.settingRepo == nil {
+		return false
+	}
+	if cached, ok := s.openAICodexLocalQuotaCache.Load().(*cachedOpenAICodexLocalGroupQuota); ok && cached != nil {
+		if time.Now().UnixNano() < cached.expiresAt {
+			return cached.enabled
+		}
+	}
+
+	result, _, _ := s.openAICodexLocalQuotaSF.Do("openai_codex_local_group_quota", func() (any, error) {
+		if cached, ok := s.openAICodexLocalQuotaCache.Load().(*cachedOpenAICodexLocalGroupQuota); ok && cached != nil {
+			if time.Now().UnixNano() < cached.expiresAt {
+				return cached, nil
+			}
+		}
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		dbCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), openAICodexLocalGroupQuotaDBTimeout)
+		defer cancel()
+		value, err := s.settingRepo.GetValue(dbCtx, SettingKeyOpenAICodexLocalGroupQuotaEnabled)
+		if err != nil && !errors.Is(err, ErrSettingNotFound) {
+			slog.Warn("failed to get openai codex local group quota setting", "error", err)
+			// A transient settings-store failure must not silently turn an already
+			// enabled local quota view back into upstream passthrough. Keep the last
+			// successfully read value, but retry soon instead of extending its normal
+			// cache lifetime.
+			entry := &cachedOpenAICodexLocalGroupQuota{
+				expiresAt: time.Now().Add(openAICodexLocalGroupQuotaErrorTTL).UnixNano(),
+			}
+			if cached, ok := s.openAICodexLocalQuotaCache.Load().(*cachedOpenAICodexLocalGroupQuota); ok && cached != nil && cached.hasKnownValue {
+				entry.enabled = cached.enabled
+				entry.hasKnownValue = true
+			}
+			s.openAICodexLocalQuotaCache.Store(entry)
+			return entry, nil
+		}
+		entry := &cachedOpenAICodexLocalGroupQuota{
+			enabled:       err == nil && strings.TrimSpace(value) == "true",
+			hasKnownValue: true,
+			expiresAt:     time.Now().Add(openAICodexLocalGroupQuotaCacheTTL).UnixNano(),
+		}
+		s.openAICodexLocalQuotaCache.Store(entry)
+		return entry, nil
+	})
+	if entry, ok := result.(*cachedOpenAICodexLocalGroupQuota); ok && entry != nil {
+		return entry.enabled
+	}
+	return false
 }
 
 var legacyClaudeCodeCodexWhitelistEntry = openai.AllowedClientEntry{
