@@ -66,7 +66,7 @@ volumes:
 ## Tags
 
 - `latest` - Latest stable release
-- `vX.Y.Z-custom.NNN` - Immutable fork release, for example `v0.1.166-custom.008`
+- `vX.Y.Z-custom.NNN` - Immutable fork release, for example `v0.1.166-custom.009`
 - `x.y` - Latest patch of minor version
 - `x` - Latest minor of major version
 
@@ -75,8 +75,8 @@ preserves the leading `v` and replaces only `+` with `-` to produce the
 OCI-compatible image tag. For example:
 
 ```text
-Git/GitHub: v0.1.166+custom.008
-GHCR:       ghcr.io/luckykuang/sub2api-plus:v0.1.166-custom.008
+Git/GitHub: v0.1.166+custom.009
+GHCR:       ghcr.io/luckykuang/sub2api-plus:v0.1.166-custom.009
 ```
 
 Pin the immutable release tag in production. Use `latest` only when automatic
