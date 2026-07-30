@@ -106,7 +106,7 @@ jobs:
           fetch-depth: 0
           ref: ${{ inputs.ref || github.ref }}
       - name: Lint GitHub Actions workflows
-        run: docker run --rm -v "$PWD/.github:/repo/.github:ro" -w /repo rhysd/actionlint:1.7.12 -color
+        run: docker run --rm -v "$PWD:/repo:ro" -w /repo rhysd/actionlint:1.7.12 -color
       - name: Test release policy
         run: python tools/test_release_policy.py
       - name: Check README synchronization

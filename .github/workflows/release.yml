@@ -96,16 +96,19 @@ jobs:
 
           VERSION="${TAG_NAME#v}"
           DOCKER_TAG="${TAG_NAME/+/-}"
-          echo "tag=$TAG_NAME" >> "$GITHUB_OUTPUT"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "docker_tag=$DOCKER_TAG" >> "$GITHUB_OUTPUT"
-          echo "notes_file=$NOTES_FILE" >> "$GITHUB_OUTPUT"
-          echo "owner_lower=$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
-          if gh release view "$TAG_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "goreleaser_args=release --clean --skip=validate,announce" >> "$GITHUB_OUTPUT"
-          else
-            echo "goreleaser_args=release --clean --skip=validate" >> "$GITHUB_OUTPUT"
-          fi
+          OWNER_LOWER="$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')"
+          {
+            echo "tag=$TAG_NAME"
+            echo "version=$VERSION"
+            echo "docker_tag=$DOCKER_TAG"
+            echo "notes_file=$NOTES_FILE"
+            echo "owner_lower=$OWNER_LOWER"
+            if gh release view "$TAG_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              echo "goreleaser_args=release --clean --skip=validate,announce"
+            else
+              echo "goreleaser_args=release --clean --skip=validate"
+            fi
+          } >> "$GITHUB_OUTPUT"
 
       - name: Verify release metadata and notes
         run: |
