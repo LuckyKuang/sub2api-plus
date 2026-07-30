@@ -51,16 +51,81 @@ Simple mode uses `RUN_MODE=simple`. Production also requires
 <!-- readme-section:quick-start -->
 ## Quick Start
 
-For a Linux binary installation:
+### Linux binary lifecycle
+
+The installer supports fresh installation, version pinning or rollback, and
+uninstallation. Published binary tags use the immutable
+`vX.Y.Z+custom.NNN` format.
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash
 ```
 
+List published versions:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | bash -s -- list-versions
+```
+
+Install or switch to an exact published version. The command below is directly
+usable; replace its immutable tag with another value returned by
+`list-versions` when needed:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- install --version 'v0.1.166+custom.008'
+```
+
+Roll back an existing binary installation to an earlier published version:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- rollback 'v0.1.166+custom.006'
+```
+
+Remove the service and binary while preserving `/etc/sub2api`:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- uninstall --yes
+```
+
+Also remove `/etc/sub2api`. Review backups first; this cannot be undone:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- uninstall --yes --purge
+```
+
 Then open `http://YOUR_SERVER_IP:8080` and complete the setup wizard.
 
-For production, review the deployment and edge-security documents before
-exposing the service publicly.
+### Nginx reverse-proxy notes
+
+When Nginx runs on the same host, bind Sub2API to `127.0.0.1` and configure
+only the Nginx peer under `server.trusted_proxies`. Nginx must overwrite, not
+append, client-IP headers. Preserve streaming and WebSocket traffic with HTTP/1.1
+upgrade headers, disabled proxy buffering, long read/send timeouts, and no gzip
+for `text/event-stream`.
+
+For Codex CLI or CRS-compatible clients, add this directive to the Nginx
+`http` block:
+
+```nginx
+underscores_in_headers on;
+```
+
+Nginx drops headers containing underscores by default, including `session_id`.
+Without this directive, sticky session routing can break in multi-account
+setups. Validate the complete configuration before reloading:
+
+```bash
+sudo nginx -t
+```
+
+After the configuration test succeeds, reload Nginx:
+
+```bash
+sudo systemctl reload nginx
+```
+
+Use the complete [Nginx baseline and trusted-proxy guidance](deploy/EDGE_SECURITY.md)
+before exposing the service publicly.
 
 <!-- readme-section:deployment -->
 ## Deployment Options

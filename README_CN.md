@@ -47,15 +47,76 @@ Sub2API Plus 通过平台签发的 API Key 分发和管理多个 AI 服务商账
 <!-- readme-section:quick-start -->
 ## 快速开始
 
-Linux 二进制安装：
+### Linux 二进制安装、指定版本与卸载
+
+安装脚本支持全新安装、固定版本或回退，以及卸载。已发布的二进制版本使用不可变的
+`vX.Y.Z+custom.NNN` 标签格式。
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash
 ```
 
+列出已发布版本：
+
+```bash
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | bash -s -- list-versions
+```
+
+全新安装或切换到指定版本。下面的命令可以直接执行；需要其他版本时，将其中的不可变
+标签替换为 `list-versions` 返回的标签：
+
+```bash
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- install --version 'v0.1.166+custom.008'
+```
+
+将现有二进制安装回退到较早的已发布版本：
+
+```bash
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- rollback 'v0.1.166+custom.006'
+```
+
+卸载服务和二进制，保留 `/etc/sub2api`：
+
+```bash
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- uninstall --yes
+```
+
+同时删除 `/etc/sub2api`；请先确认备份，此操作不可恢复：
+
+```bash
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- uninstall --yes --purge
+```
+
 安装后访问 `http://你的服务器IP:8080`，完成初始化向导。
 
-生产环境对外开放前，请先阅读部署和边缘安全文档。
+### Nginx 反向代理注意事项
+
+Nginx 与 Sub2API 同机部署时，应让 Sub2API 只监听 `127.0.0.1`，并在
+`server.trusted_proxies` 中只配置 Nginx 的直连地址。Nginx 必须覆盖客户端 IP
+请求头，不能追加不可信的传入值。SSE 与 WebSocket 还需要 HTTP/1.1 升级请求头、
+关闭代理缓冲、足够长的读写超时，并确保 `text/event-stream` 不启用 gzip。
+
+使用 Codex CLI 或 CRS 兼容客户端时，必须在 Nginx 的 `http` 块中加入：
+
+```nginx
+underscores_in_headers on;
+```
+
+Nginx 默认会丢弃名称中包含下划线的请求头，包括 `session_id`。缺少该配置时，
+多账号场景的粘性会话路由可能失效。重载前先检查完整配置：
+
+```bash
+sudo nginx -t
+```
+
+检查通过后再重载 Nginx：
+
+```bash
+sudo systemctl reload nginx
+```
+
+生产环境对外开放前，请使用完整的
+[Nginx 基线与可信代理指南](deploy/EDGE_SECURITY.md)。
 
 <!-- readme-section:deployment -->
 ## 部署方式

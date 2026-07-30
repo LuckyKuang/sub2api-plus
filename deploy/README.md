@@ -406,17 +406,103 @@ curl -sSL https://raw.githubusercontent.com/luckykuang/sub2api-plus/main/deploy/
    ```
 5. Open the Setup Wizard in your browser to complete configuration
 
-### Commands
+### Installer Commands
+
+The streamed form works without keeping a local copy of the script. Use a tag
+reported by `list-versions`; the installer accepts only the canonical
+`vX.Y.Z+custom.NNN` release format.
 
 ```bash
-# Install
-sudo ./install.sh
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash
+```
 
-# Upgrade
-sudo ./install.sh upgrade
+List available published versions:
 
-# Uninstall
+```bash
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | bash -s -- list-versions
+```
+
+Fresh-install or switch an existing installation to the shown exact version.
+Replace the immutable tag with another value reported by `list-versions` when
+needed:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- install --version 'v0.1.166+custom.008'
+```
+
+Roll back an existing binary installation to an earlier published version:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- rollback 'v0.1.166+custom.006'
+```
+
+Upgrade to the latest release:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- upgrade
+```
+
+Remove the service and binary while preserving `/etc/sub2api`:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- uninstall --yes
+```
+
+Also remove `/etc/sub2api`. Back up required configuration first:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- uninstall --yes --purge
+```
+
+For a downloaded `install.sh`, invoke one operation at a time. For example:
+
+```bash
+sudo ./install.sh install --version 'v0.1.166+custom.008'
+```
+
+Roll back a downloaded-script installation one operation at a time:
+
+```bash
+sudo ./install.sh rollback 'v0.1.166+custom.006'
+```
+
+Or uninstall while preserving `/etc/sub2api`:
+
+```bash
 sudo ./install.sh uninstall
+```
+
+Without `--purge`, uninstall removes the systemd unit, `/opt/sub2api`, and the
+service user but preserves `/etc/sub2api`. With `--purge`, it also removes that
+configuration directory and any data stored there; this is not reversible.
+
+### Nginx Reverse Proxy
+
+For Nginx on the same host, select `127.0.0.1` as the server listen address
+during binary installation. Configure only the Nginx peer in
+`server.trusted_proxies`, overwrite forwarded client-IP headers, and preserve
+SSE/WebSocket behavior by disabling proxy buffering and excluding
+`text/event-stream` from gzip. Start from the complete
+[Nginx baseline](EDGE_SECURITY.md#nginx-baseline).
+
+Codex CLI and CRS-compatible clients send `session_id`. Nginx drops headers
+containing underscores by default, which breaks sticky session routing in
+multi-account setups. Add this directive to the Nginx `http` block:
+
+```nginx
+underscores_in_headers on;
+```
+
+Then validate the complete configuration:
+
+```bash
+sudo nginx -t
+```
+
+Reload only after validation succeeds:
+
+```bash
+sudo systemctl reload nginx
 ```
 
 ### Service Management

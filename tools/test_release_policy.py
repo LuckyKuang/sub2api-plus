@@ -3,9 +3,12 @@
 
 from __future__ import annotations
 
+import tempfile
 import unittest
+from pathlib import Path
 
 import check_release
+import release_docs
 import release_preflight
 
 
@@ -110,6 +113,234 @@ class ReleaseBaselineTests(unittest.TestCase):
         check_release.validate_required_status(TAG, "published", "planned", errors)
         self.assertEqual(len(errors), 1)
         self.assertIn("expected 'planned'", errors[0])
+
+
+class ReleaseDocumentTests(unittest.TestCase):
+    CURRENT = "v0.1.166+custom.008"
+    ROLLBACK = "v0.1.166+custom.006"
+    OLD = "v0.1.165+custom.004"
+
+    @staticmethod
+    def document_text(rule: release_docs.DocumentRule) -> str:
+        lines = [
+            *(
+                f"install --version '{ReleaseDocumentTests.OLD}'"
+                for _ in range(rule.install_commands)
+            ),
+            *(
+                f"rollback '{ReleaseDocumentTests.OLD}'"
+                for _ in range(rule.rollback_commands)
+            ),
+        ]
+        old = ReleaseDocumentTests.OLD
+        old_application = old.removeprefix("v")
+        old_oci = old.replace("+", "-")
+        current_value_fixtures = {
+            "deploy/README.md": (
+                f"Git/GitHub: {old}",
+                f"GHCR: ghcr.io/luckykuang/sub2api-plus:{old_oci}",
+            ),
+            "deploy/DOCKER.md": (
+                f"Immutable release, for example `{old_oci}`",
+                f"Git/GitHub: {old}",
+                f"GHCR: ghcr.io/luckykuang/sub2api-plus:{old_oci}",
+            ),
+            "deploy/APPLE_CONTAINER.md": (
+                f"Git/GitHub: {old}",
+                f"Application: {old_application}",
+                f"Apple/OCI image: ghcr.io/luckykuang/sub2api-plus:{old_oci}",
+                f"--build-arg VERSION={old_application} \\",
+                f"--tag ghcr.io/luckykuang/sub2api-plus:{old_oci} \\",
+                f"APPLE_CONTAINER_SUB2API_IMAGE=ghcr.io/luckykuang/sub2api-plus:{old_oci}",
+            ),
+            "UPSTREAM.md": (
+                f"Git/GitHub: {old}",
+                f"Application: {old_application}",
+                f"GHCR: ghcr.io/luckykuang/sub2api-plus:{old_oci}",
+            ),
+        }
+        lines.extend(current_value_fixtures.get(rule.path, ()))
+        return "\n".join(lines) + "\n"
+
+    @classmethod
+    def upstream_rows(cls) -> str:
+        return (
+            "| Custom Release | Official Release | Official Commit | Status |\n"
+            "| --- | --- | --- | --- |\n"
+            f"| `{cls.ROLLBACK}` | `v0.1.166` | `{'a' * 40}` | published |\n"
+            f"| `{cls.CURRENT}` | `v0.1.166` | `{'a' * 40}` | planned |\n"
+        )
+
+    def test_document_rollback_skips_invalid_iteration(self) -> None:
+        tags = [
+            "v0.1.166+custom.005",
+            self.ROLLBACK,
+            "v0.1.166+custom.007",
+            self.CURRENT,
+        ]
+        statuses = {
+            "v0.1.166+custom.005": "published",
+            self.ROLLBACK: "published",
+            "v0.1.166+custom.007": "invalid",
+            self.CURRENT: "published",
+        }
+        self.assertEqual(
+            release_docs.select_previous_release_tag(
+                tags,
+                statuses,
+                self.CURRENT,
+                eligible_statuses=release_docs.DOCUMENT_ROLLBACK_STATUSES,
+            ),
+            self.ROLLBACK,
+        )
+
+    def test_document_rollback_uses_only_published_releases(self) -> None:
+        published = "v0.1.166+custom.003"
+        tags = [
+            published,
+            "v0.1.166+custom.004",
+            "v0.1.166+custom.005",
+            self.ROLLBACK,
+            "v0.1.166+custom.007",
+        ]
+        statuses = {
+            published: "published",
+            "v0.1.166+custom.004": "planned",
+            "v0.1.166+custom.005": "withdrawn",
+            self.ROLLBACK: "historical",
+            "v0.1.166+custom.007": "invalid",
+        }
+        self.assertEqual(
+            release_docs.select_previous_release_tag(
+                tags,
+                statuses,
+                self.CURRENT,
+                eligible_statuses=release_docs.DOCUMENT_ROLLBACK_STATUSES,
+            ),
+            published,
+        )
+
+    def test_rewrite_updates_every_expected_command_and_mapping(self) -> None:
+        for rule in release_docs.DOCUMENT_RULES:
+            with self.subTest(path=rule.path):
+                updated = release_docs.rewrite_document(
+                    rule,
+                    self.document_text(rule),
+                    self.CURRENT,
+                    self.ROLLBACK,
+                )
+                self.assertEqual(
+                    release_docs.INSTALL_COMMAND_RE.findall(updated),
+                    [
+                        ("install --version '", self.CURRENT, "'")
+                        for _ in range(rule.install_commands)
+                    ],
+                )
+                self.assertEqual(
+                    release_docs.ROLLBACK_COMMAND_RE.findall(updated),
+                    [
+                        ("rollback '", self.ROLLBACK, "'")
+                        for _ in range(rule.rollback_commands)
+                    ],
+                )
+                for current_value in rule.current_values:
+                    expected = release_docs._current_value(
+                        self.CURRENT,
+                        current_value.value_type,
+                    )
+                    self.assertEqual(
+                        [
+                            match[1]
+                            for match in current_value.pattern.findall(updated)
+                        ],
+                        [expected] * current_value.expected_count,
+                    )
+
+    def test_rewrite_rejects_missing_and_duplicate_commands(self) -> None:
+        rule = release_docs.DOCUMENT_RULES[0]
+        valid = self.document_text(rule)
+        missing = valid.replace(f"install --version '{self.OLD}'\n", "")
+        duplicate = valid + f"rollback '{self.OLD}'\n"
+
+        with self.assertRaisesRegex(
+            release_docs.ReleaseDocsError,
+            "has 0 install command",
+        ):
+            release_docs.rewrite_document(
+                rule,
+                missing,
+                self.CURRENT,
+                self.ROLLBACK,
+            )
+        with self.assertRaisesRegex(
+            release_docs.ReleaseDocsError,
+            "has 2 rollback command",
+        ):
+            release_docs.rewrite_document(
+                rule,
+                duplicate,
+                self.CURRENT,
+                self.ROLLBACK,
+            )
+
+    def test_generation_failure_leaves_all_documents_unchanged(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            version_path = root / "backend/cmd/server/VERSION"
+            version_path.parent.mkdir(parents=True)
+            version_path.write_text(
+                self.CURRENT.removeprefix("v") + "\n",
+                encoding="utf-8",
+            )
+            originals: dict[Path, str] = {}
+            for rule in release_docs.DOCUMENT_RULES:
+                path = root / rule.path
+                path.parent.mkdir(parents=True, exist_ok=True)
+                text = self.document_text(rule)
+                if rule.path == "UPSTREAM.md":
+                    text = self.upstream_rows() + text
+                if rule.path == "deploy/README.md":
+                    text += f"install --version '{self.OLD}'\n"
+                path.write_text(text, encoding="utf-8")
+                originals[path] = text
+
+            with self.assertRaisesRegex(
+                release_docs.ReleaseDocsError,
+                "deploy/README.md has 3 install command",
+            ):
+                release_docs.generate_release_doc_updates(root)
+
+            for path, original in originals.items():
+                self.assertEqual(path.read_text(encoding="utf-8"), original)
+
+    def test_release_check_reports_stale_files_and_update_command(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            version_path = root / "backend/cmd/server/VERSION"
+            version_path.parent.mkdir(parents=True)
+            version_path.write_text(
+                self.CURRENT.removeprefix("v") + "\n",
+                encoding="utf-8",
+            )
+            for rule in release_docs.DOCUMENT_RULES:
+                path = root / rule.path
+                path.parent.mkdir(parents=True, exist_ok=True)
+                text = self.document_text(rule)
+                if rule.path == "UPSTREAM.md":
+                    text = self.upstream_rows() + text
+                path.write_text(text, encoding="utf-8")
+
+            errors: list[str] = []
+            check_release.validate_release_documentation(root, errors)
+
+            self.assertEqual(
+                [error for error in errors if "stale release-version" in error],
+                [
+                    f"{rule.path} has stale release-version examples"
+                    for rule in release_docs.DOCUMENT_RULES
+                ],
+            )
+            self.assertEqual(errors[-1], "Run: python tools/update_release_docs.py")
 
 
 if __name__ == "__main__":

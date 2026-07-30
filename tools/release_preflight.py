@@ -14,14 +14,11 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+import release_docs
+
 
 ROOT = Path(__file__).resolve().parents[1]
-TAG_RE = re.compile(r"^v(\d+)\.(\d+)\.(\d+)\+custom\.(\d{3})$")
-UPSTREAM_ROW_RE = re.compile(
-    r"^\|\s*`(v\d+\.\d+\.\d+\+custom\.\d{3})`\s*\|.*\|\s*([a-z]+)\s*\|$",
-    re.MULTILINE,
-)
-BASELINE_STATUSES = {"published", "historical"}
+TAG_RE = release_docs.TAG_RE
 MINIMUM_PYTHON = (3, 10)
 MINIMUM_BASH_MAJOR = 4
 REQUIRED_SUBJECT_PREFIX = "Sub2API Plus "
@@ -154,8 +151,7 @@ def ensure_tag_absent(tag: str, remote: str) -> None:
 
 
 def version_key(tag: str) -> tuple[int, int, int, int] | None:
-    match = TAG_RE.fullmatch(tag)
-    return tuple(map(int, match.groups())) if match else None
+    return release_docs.version_key(tag)
 
 
 def select_previous_release_tag(
@@ -163,26 +159,12 @@ def select_previous_release_tag(
     statuses: dict[str, str],
     target: str,
 ) -> str | None:
-    target_key = version_key(target)
-    if target_key is None:
-        return None
-    candidates: list[tuple[tuple[int, int, int, int], str]] = []
-    for tag in tags:
-        key = version_key(tag)
-        if (
-            key is not None
-            and key < target_key
-            and statuses.get(tag) in BASELINE_STATUSES
-        ):
-            candidates.append((key, tag))
-    return max(candidates, default=None)[1] if candidates else None
+    return release_docs.select_previous_release_tag(tags, statuses, target)
 
 
 def previous_release_tag(target: str) -> str | None:
-    statuses = dict(
-        UPSTREAM_ROW_RE.findall(
-            ROOT.joinpath("UPSTREAM.md").read_text(encoding="utf-8")
-        )
+    statuses = release_docs.parse_upstream_statuses(
+        ROOT.joinpath("UPSTREAM.md").read_text(encoding="utf-8")
     )
     tags = git_output("tag", "--merged", "HEAD", "--list").splitlines()
     return select_previous_release_tag(tags, statuses, target)

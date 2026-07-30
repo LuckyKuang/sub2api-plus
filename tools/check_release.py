@@ -9,6 +9,8 @@ import re
 import sys
 from pathlib import Path
 
+import release_docs
+
 
 ROOT = Path(__file__).resolve().parents[1]
 TAG_RE = re.compile(r"^v(\d+\.\d+\.\d+\+custom\.(\d{3}))$")
@@ -40,6 +42,22 @@ def validate_required_status(
             f"{tag} is marked {actual!r} in UPSTREAM.md; expected {required!r}",
             errors,
         )
+
+
+def validate_release_documentation(root: Path, errors: list[str]) -> None:
+    try:
+        _, _, stale_release_docs = release_docs.pending_release_doc_updates(root)
+    except (OSError, release_docs.ReleaseDocsError) as error:
+        fail(f"cannot validate release documentation: {error}", errors)
+        return
+
+    for path in stale_release_docs:
+        fail(
+            f"{path.relative_to(root)} has stale release-version examples",
+            errors,
+        )
+    if stale_release_docs:
+        fail("Run: python tools/update_release_docs.py", errors)
 
 
 def parse_upstream(tag: str, errors: list[str]) -> tuple[str, str, str] | None:
@@ -197,6 +215,8 @@ def main() -> int:
     mapping = parse_upstream(tag, errors)
     if mapping is not None:
         validate_required_status(tag, mapping[2], args.require_status, errors)
+
+    validate_release_documentation(ROOT, errors)
 
     notes: str | None = None
     require_subject = False

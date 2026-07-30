@@ -21,10 +21,22 @@ merging a newer official baseline. `NNN` is always three digits.
 2. Update `backend/cmd/server/VERSION`.
 3. Update every `ARG VERSION=` in `Dockerfile` and `backend/Dockerfile`.
 4. Add the version to `UPSTREAM.md` with status `planned`.
-5. Write `release-notes.md` from the template below.
-6. Commit all repository changes; the notes file may remain untracked.
-7. Get the release commit reviewed and ensure its branch CI is green.
-8. Refresh local tags with `git fetch origin --tags`.
+5. Synchronize the install, rollback, and image examples:
+   `python tools/update_release_docs.py`.
+6. Write `release-notes.md` from the template below.
+7. Commit all repository changes; the notes file may remain untracked.
+8. Get the release commit reviewed and ensure its branch CI is green.
+9. Refresh local tags with `git fetch origin --tags`.
+
+The documentation updater reads the current version from
+`backend/cmd/server/VERSION`. Its rollback example uses the nearest lower
+`published` entry in `UPSTREAM.md`; it deliberately skips `planned`,
+`historical`, `withdrawn`, and `invalid` entries. Check synchronization without
+writing files with:
+
+```bash
+python tools/update_release_docs.py --check
+```
 
 Do not create the release tag manually at this stage.
 

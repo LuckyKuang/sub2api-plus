@@ -129,9 +129,13 @@ server:
 
 Define shared zones in the `http` block. Tune rates to measured legitimate
 traffic; the values below are conservative starting points, not universal
-capacity targets.
+capacity targets. Keep `underscores_in_headers on;` in this `http` block for
+Codex CLI and CRS-compatible clients: Nginx otherwise drops underscore headers
+such as `session_id`, breaking sticky session routing in multi-account setups.
 
 ```nginx
+underscores_in_headers on;
+
 limit_conn_zone $binary_remote_addr zone=sub2api_conn:20m;
 limit_req_zone  $binary_remote_addr zone=sub2api_auth:20m rate=5r/s;
 limit_req_zone  $binary_remote_addr zone=sub2api_api:40m rate=30r/s;

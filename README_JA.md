@@ -49,16 +49,84 @@ Sub2API Plus は、プラットフォーム発行の API キーを通じて対�
 <!-- readme-section:quick-start -->
 ## クイックスタート
 
-Linux バイナリインストール：
+### Linux バイナリのインストール、バージョン指定、アンインストール
+
+インストーラーは新規インストール、バージョン固定またはロールバック、
+アンインストールに対応します。公開済みバイナリは不変の
+`vX.Y.Z+custom.NNN` タグ形式を使用します。
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash
 ```
 
+公開済みバージョンを一覧表示します：
+
+```bash
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | bash -s -- list-versions
+```
+
+指定した公開済みバージョンを新規インストール、またはそのバージョンへ切り替えます。
+次のコマンドはそのまま実行できます。必要に応じて、不変タグを `list-versions`
+が返す別のタグへ置き換えてください：
+
+```bash
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- install --version 'v0.1.166+custom.008'
+```
+
+既存のバイナリインストールを以前の公開済みバージョンへロールバックします：
+
+```bash
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- rollback 'v0.1.166+custom.006'
+```
+
+サービスとバイナリを削除し、`/etc/sub2api` は保持します：
+
+```bash
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- uninstall --yes
+```
+
+`/etc/sub2api` も削除します。事前にバックアップを確認してください。元に戻せません：
+
+```bash
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- uninstall --yes --purge
+```
+
 インストール後、`http://YOUR_SERVER_IP:8080` を開いてセットアップウィザードを
 完了してください。
 
-本番公開前にデプロイおよびエッジセキュリティ文書を確認してください。
+### Nginx リバースプロキシの注意事項
+
+Nginx を同一ホストで実行する場合、Sub2API は `127.0.0.1` のみにバインドし、
+`server.trusted_proxies` には Nginx の直接接続アドレスだけを設定します。Nginx
+はクライアント IP ヘッダーを追記せず、必ず上書きしてください。SSE と WebSocket
+には HTTP/1.1 のアップグレードヘッダー、プロキシバッファリングの無効化、長い
+読み書きタイムアウトが必要です。また、`text/event-stream` を gzip 対象から
+除外してください。
+
+Codex CLI または CRS 互換クライアントを使用する場合、Nginx の `http` ブロックに
+次のディレクティブを追加する必要があります：
+
+```nginx
+underscores_in_headers on;
+```
+
+Nginx はデフォルトで、`session_id` を含むアンダースコア付きのリクエストヘッダーを
+破棄します。この設定がない場合、複数アカウント構成のスティッキーセッション
+ルーティングが機能しない可能性があります。リロード前に完全な設定を検証します：
+
+```bash
+sudo nginx -t
+```
+
+設定テストに成功した後、Nginx をリロードします：
+
+```bash
+sudo systemctl reload nginx
+```
+
+本番公開前に完全な
+[Nginx ベースラインと信頼済みプロキシガイド](deploy/EDGE_SECURITY.md)を
+確認してください。
 
 <!-- readme-section:deployment -->
 ## デプロイ方法
