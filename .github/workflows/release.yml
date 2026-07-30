@@ -22,8 +22,17 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  verify:
+    name: Verify release ref
+    uses: ./.github/workflows/backend-ci.yml
+    with:
+      ref: ${{ inputs.tag || github.ref }}
+    permissions:
+      contents: read
+
   release:
     name: Build and publish
+    needs: verify
     runs-on: ubuntu-latest
     steps:
       - name: Check out the release tag
@@ -32,7 +41,7 @@ jobs:
           fetch-depth: 0
           ref: ${{ inputs.tag || github.ref }}
 
-      - name: Resolve release metadata
+      - name: Resolve and verify release metadata
         id: metadata
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -44,57 +53,70 @@ jobs:
             TAG_NAME="${GITHUB_REF#refs/tags/}"
           fi
 
-          VERSION="${TAG_NAME#v}"
           if ! [[ "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+\+custom\.[0-9]{3}$ ]]; then
-            echo "Custom releases must use vX.Y.Z+custom.NNN; got: $TAG_NAME" >&2
+            echo "Invalid release tag: $TAG_NAME" >&2
             exit 1
           fi
-          CUSTOM_ITERATION="${VERSION##*.}"
-          if (( 10#${CUSTOM_ITERATION} == 0 )); then
-            echo "Custom release iteration must be between 001 and 999; got: $TAG_NAME" >&2
-            exit 1
-          fi
-          DOCKER_TAG="${TAG_NAME/+/-}"
 
+          TAG_REF="refs/tags/$TAG_NAME"
+          git show-ref --verify --quiet "$TAG_REF" || {
+            echo "Tag does not exist: $TAG_NAME" >&2
+            exit 1
+          }
+          if [ "$(git cat-file -t "$TAG_REF")" != "tag" ]; then
+            echo "Release tag must be annotated: $TAG_NAME" >&2
+            exit 1
+          fi
+          if [ "$(git rev-parse "$TAG_REF^{}")" != "$(git rev-parse HEAD)" ]; then
+            echo "Checked-out commit does not match $TAG_NAME" >&2
+            exit 1
+          fi
+
+          EXPECTED_SUBJECT="Sub2API Plus $TAG_NAME"
+          TAG_SUBJECT="$(git for-each-ref --format='%(contents:subject)' "$TAG_REF")"
+          if [ "$TAG_SUBJECT" != "$EXPECTED_SUBJECT" ]; then
+            echo "Tag subject must be: $EXPECTED_SUBJECT" >&2
+            exit 1
+          fi
+
+          NOTES_FILE="$RUNNER_TEMP/release-notes.md"
+          BODY_FILE="$RUNNER_TEMP/release-notes-body.md"
+          git for-each-ref --format='%(contents)' "$TAG_REF" > "$NOTES_FILE"
+          git for-each-ref --format='%(contents:body)' "$TAG_REF" > "$BODY_FILE"
+
+          DELIMITER="TAG_MESSAGE_$(python -c 'import uuid; print(uuid.uuid4().hex)')"
+          while grep -Fqx "$DELIMITER" "$BODY_FILE"; do
+            DELIMITER="TAG_MESSAGE_$(python -c 'import uuid; print(uuid.uuid4().hex)')"
+          done
+          {
+            echo "TAG_MESSAGE<<$DELIMITER"
+            cat "$BODY_FILE"
+            echo "$DELIMITER"
+          } >> "$GITHUB_ENV"
+
+          VERSION="${TAG_NAME#v}"
+          DOCKER_TAG="${TAG_NAME/+/-}"
           echo "tag=$TAG_NAME" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "docker_tag=$DOCKER_TAG" >> "$GITHUB_OUTPUT"
+          echo "notes_file=$NOTES_FILE" >> "$GITHUB_OUTPUT"
           echo "owner_lower=$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
           if gh release view "$TAG_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "goreleaser_args=release --clean --skip=validate,announce" >> "$GITHUB_OUTPUT"
           else
             echo "goreleaser_args=release --clean --skip=validate" >> "$GITHUB_OUTPUT"
           fi
-          {
-            echo "tag_message<<EOF"
-            git tag -l --format='%(contents:body)' "$TAG_NAME"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
 
-      - name: Verify release versions
+      - name: Verify release metadata and notes
         run: |
-          EMBEDDED_VERSION=$(tr -d '\r\n' < backend/cmd/server/VERSION)
-          if [ "$EMBEDDED_VERSION" != "${{ steps.metadata.outputs.version }}" ]; then
-            echo "backend/cmd/server/VERSION is $EMBEDDED_VERSION, expected ${{ steps.metadata.outputs.version }}" >&2
-            exit 1
-          fi
-
-          EXPECTED_DOCKER_ARG="ARG VERSION=${{ steps.metadata.outputs.version }}"
-          for dockerfile in Dockerfile backend/Dockerfile; do
-            if ! grep -Fqx "$EXPECTED_DOCKER_ARG" "$dockerfile"; then
-              echo "$dockerfile does not contain $EXPECTED_DOCKER_ARG" >&2
-              exit 1
-            fi
-            if grep -E '^ARG VERSION=' "$dockerfile" | grep -Fvx "$EXPECTED_DOCKER_ARG" >/dev/null; then
-              echo "$dockerfile contains an ARG VERSION that does not match ${{ steps.metadata.outputs.version }}" >&2
-              exit 1
-            fi
-          done
+          python tools/check_release.py \
+            --tag "${{ steps.metadata.outputs.tag }}" \
+            --notes-file "${{ steps.metadata.outputs.notes_file }}"
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v6
         with:
-          version: 9
+          package_json_file: frontend/package.json
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -129,7 +151,7 @@ jobs:
       - name: Publish release, artifacts, and images
         uses: goreleaser/goreleaser-action@v7
         with:
-          version: "~> v2"
+          version-file: .tool-versions
           args: ${{ steps.metadata.outputs.goreleaser_args }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -139,4 +161,3 @@ jobs:
           GITHUB_REPO_NAME: ${{ github.event.repository.name }}
           DOCKER_TAG_VERSION: ${{ steps.metadata.outputs.docker_tag }}
           DOCKERHUB_USERNAME: skip
-          TAG_MESSAGE: ${{ steps.metadata.outputs.tag_message }}

@@ -1,7 +1,15 @@
 name: CI
 
 on:
+  workflow_call:
+    inputs:
+      ref:
+        description: "Git ref to verify"
+        required: false
+        type: string
   push:
+    branches:
+      - "**"
   pull_request:
 
 permissions:
@@ -12,6 +20,8 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref || github.ref }}
       - name: Check deployment scripts
         run: |
           /bin/bash -n deploy/apple-container.sh
@@ -22,6 +32,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref || github.ref }}
       - uses: actions/setup-go@v6
         with:
           go-version-file: backend/go.mod
@@ -29,8 +41,9 @@ jobs:
           cache: true
           cache-dependency-path: backend/go.sum
       - name: Verify Go version
+        working-directory: backend
         run: |
-          go version | grep -q 'go1.26.5'
+          test "$(go env GOVERSION)" = "go$(awk '/^go / { print $2 }' go.mod)"
       - name: Unit tests
         working-directory: backend
         run: make test-unit
@@ -42,38 +55,65 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref || github.ref }}
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
         with:
-          version: 9
+          package_json_file: frontend/package.json
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
-          cache: 'pnpm'
+          node-version: "20"
+          cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
       - name: Install frontend dependencies
         working-directory: frontend
         run: pnpm install --frozen-lockfile
-      - name: Frontend typecheck and critical vitest
+      - name: Frontend lint, typecheck, and critical tests
         run: make test-frontend
 
   golangci-lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref || github.ref }}
       - uses: actions/setup-go@v6
         with:
           go-version-file: backend/go.mod
           check-latest: false
           cache: true
           cache-dependency-path: backend/go.sum
-      - name: Verify Go version
+      - name: Resolve lint version
+        id: tool-versions
         run: |
-          go version | grep -q 'go1.26.5'
+          VERSION="$(awk '$1 == "golangci-lint" { print $2 }' .tool-versions)"
+          test -n "$VERSION"
+          echo "golangci_lint=v$VERSION" >> "$GITHUB_OUTPUT"
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.9
+          version: ${{ steps.tool-versions.outputs.golangci_lint }}
           args: --timeout=30m
           working-directory: backend
+
+  repository-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.ref || github.ref }}
+      - name: Lint GitHub Actions workflows
+        run: docker run --rm -v "$PWD/.github:/repo/.github:ro" -w /repo rhysd/actionlint:1.7.12 -color
+      - name: Test release policy
+        run: python tools/test_release_policy.py
+      - name: Check README synchronization
+        run: python tools/check_readme_sync.py
+      - name: Check release metadata sources
+        run: python tools/check_release.py
+      - name: Check migration changes
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: python tools/check_new_migrations.py --base "$BASE_SHA"

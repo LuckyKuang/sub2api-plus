@@ -4,660 +4,126 @@
 
 # Sub2API Plus
 
-[![Go](https://img.shields.io/badge/Go-1.25.7-00ADD8.svg)](https://golang.org/)
-[![Vue](https://img.shields.io/badge/Vue-3.4+-4FC08D.svg)](https://vuejs.org/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15+-336791.svg)](https://www.postgresql.org/)
-[![Redis](https://img.shields.io/badge/Redis-7+-DC382D.svg)](https://redis.io/)
-[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg)](https://www.docker.com/)
+[![CI](https://github.com/LuckyKuang/sub2api-plus/actions/workflows/backend-ci.yml/badge.svg)](https://github.com/LuckyKuang/sub2api-plus/actions/workflows/backend-ci.yml)
+[![License](https://img.shields.io/badge/license-LGPL--3.0--or--later-blue.svg)](LICENSE)
 
-**AI API 网关平台 - 订阅配额分发管理**
+**用于订阅配额分发的 AI API 网关**
 
 [English](README.md) | 中文 | [日本語](README_JA.md)
 
 </div>
 
-> Sub2API Plus 是基于原始 Sub2API 项目的独立社区维护分支（二次开发版本）。
-> 本项目不是上游官方发布版本，
-> 不代表上游立场，也不获得上游的品牌、商标、合作或背书授权。
+<!-- readme-section:notice -->
+## 重要提醒
 
+Sub2API Plus 是基于 Sub2API 的独立社区维护分支，不是上游官方版本，也不表示
+获得上游的合作、背书、支持或商标授权。
 
-## ⚠️ 重要提醒
+- 通过网关使用订阅账户可能与服务商条款冲突，部署前请自行核对相关协议。
+- 部署者应自行承担法律、隐私、安全和运营合规责任。
+- 本项目依据 LGPL-3.0-or-later 提供，不作任何担保。
 
-使用本项目前，请务必仔细阅读以下内容：
-
-- **🚨 服务条款风险**：使用本项目可能违反 Anthropic 等上游服务商的服务条款。请在使用前仔细阅读相关服务商的用户协议，由此产生的一切风险由用户自行承担。
-- **⚖️ 合规使用**：请在符合您所在国家或地区法律法规的前提下使用本项目，严禁将其用于任何违法违规用途。
-- **📖 许可证与责任**：本项目按 LGPL-3.0-or-later 提供。部署者和运营者应自行评估并承担适用法律、上游服务条款、数据保护及运营风险；本项目及上游名称不表示任何部署或服务获得商业授权、商标许可、关联关系或背书。
-
+<!-- readme-section:overview -->
 ## 项目概述
 
-Sub2API Plus 是一个 AI API 网关平台，用于分发和管理 AI 产品订阅的 API 配额。用户通过平台生成的 API Key 调用上游 AI 服务，平台负责鉴权、计费、负载均衡和请求转发。
+Sub2API Plus 通过平台签发的 API Key 分发和管理多个 AI 服务商账户，提供鉴权、
+计费、账号调度、额度控制、审计和请求转发能力。
 
-## 版本发布规范
-
-后续 Git Tag 和 GitHub Release 统一使用 `vX.Y.Z+custom.NNN`。OCI
-镜像标签保留开头的 `v`，仅将不受 Docker Tag 支持的 `+` 转换为 `-`：
-
-```text
-Git/GitHub: v0.1.166+custom.008
-GHCR:       ghcr.io/luckykuang/sub2api-plus:v0.1.166-custom.008
-```
-
-同一官方基础版本继续迭代时递增 `NNN`；合并新的官方版本后，从 `001`
-重新开始。生产部署建议固定到不可变的 GHCR 版本标签，`latest` 只作为
-始终跟随最新二开版本的滚动标签。完整规则见 [UPSTREAM.md](UPSTREAM.md)。
-
+<!-- readme-section:features -->
 ## 核心功能
 
-- **多账号管理** - 支持多种上游账号类型（OAuth、API Key）
-- **API Key 分发** - 为用户生成和管理 API Key
-- **精确计费** - Token 级别的用量追踪和成本计算
-- **智能调度** - 智能账号选择，支持粘性会话
-- **并发控制** - 用户级和账号级并发限制
-- **速率限制** - 可配置的请求和 Token 速率限制
-- **内置支付系统** - 支持 EasyPay 易支付、支付宝官方、微信官方、Stripe，用户自助充值，无需独立部署支付服务（[配置指南](docs/PAYMENT_CN.md)）
-- **管理后台** - Web 界面进行监控和管理
-- **外部系统集成** - 支持通过 iframe 嵌入外部系统（如工单等），扩展管理后台功能
+- 支持多种 OAuth 和 API Key 账户
+- 用户 API Key 与分组管理
+- Token 级用量统计和计费
+- 账号调度、故障转移和会话粘性
+- 额度、订阅、兑换码与支付集成
+- OpenAI、Claude 和 Gemini 兼容网关
+- 运维监控、审计和安全控制
+- 面向个人或内部部署的可选简易模式
 
-## 技术栈
+简易模式设置 `RUN_MODE=simple`；生产环境还必须设置
+`SIMPLE_MODE_CONFIRM=true`。
 
-| 组件 | 技术 |
-|------|------|
-| 后端 | Go 1.25.7, Gin, Ent |
-| 前端 | Vue 3.4+, Vite 5+, TailwindCSS |
-| 数据库 | PostgreSQL 15+ |
-| 缓存/队列 | Redis 7+ |
+<!-- readme-section:quick-start -->
+## 快速开始
 
----
+Linux 二进制安装：
 
-## Nginx 反向代理注意事项
-
-通过 Nginx 反向代理 Sub2API Plus（或 CRS 服务）并搭配 Codex CLI 使用时，需要在 Nginx 配置的 `http` 块中添加：
-
-```nginx
-underscores_in_headers on;
+```bash
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash
 ```
 
-Nginx 默认会丢弃名称中含下划线的请求头（如 `session_id`），这会导致多账号环境下的粘性会话功能失效。
+安装后访问 `http://你的服务器IP:8080`，完成初始化向导。
 
----
+生产环境对外开放前，请先阅读部署和边缘安全文档。
 
+<!-- readme-section:deployment -->
 ## 部署方式
 
-### 方式一：脚本安装（推荐）
+| 方式 | 文档 |
+| --- | --- |
+| Linux 安装脚本或二进制 | [部署指南](deploy/README.md) |
+| Docker Compose | [Docker 指南](deploy/DOCKER.md) |
+| macOS Apple container | [Apple container 指南](deploy/APPLE_CONTAINER.md) |
+| 边缘代理与可信客户端 IP | [边缘安全](deploy/EDGE_SECURITY.md) |
+| 可选 datamanagementd 服务 | [datamanagementd 指南](deploy/DATAMANAGEMENTD_CN.md) |
 
-一键安装脚本，自动从 GitHub Releases 下载预编译的二进制文件。
+完整配置示例见
+[`deploy/config.example.yaml`](deploy/config.example.yaml)。
 
-#### 前置条件
+<!-- readme-section:providers -->
+<!-- readme-capabilities:openai,anthropic,gemini,antigravity,grok,async-images,sora-unavailable -->
+## 服务商与能力支持
 
-- Linux 服务器（amd64 或 arm64）
-- PostgreSQL 15+（已安装并运行）
-- Redis 7+（已安装并运行）
-- Root 权限
+| 服务商或能力 | 说明 |
+| --- | --- |
+| OpenAI / Codex | OpenAI 兼容请求、Responses 和可选客户端 WebSocket 入口 |
+| Anthropic / Claude | Claude Messages 兼容网关 |
+| Google Gemini | Gemini 兼容请求及支持的 OAuth/API Key 账户 |
+| Antigravity | Claude/Gemini 专用路由和可选混合调度 |
+| Grok / xAI | OAuth 订阅账户和 API Key 账户 |
+| 异步图片任务 | 提交和轮询长时间运行的图片生成/编辑任务 |
+| Sora | 暂不可用，请勿在生产环境依赖 |
 
-#### 安装步骤
+详细文档：
 
-```bash
-curl -sSL https://raw.githubusercontent.com/luckykuang/sub2api-plus/main/deploy/install.sh | sudo bash
+- [Grok / xAI](docs/providers/GROK.md)
+- [Antigravity](docs/providers/ANTIGRAVITY.md)
+- [Sora 状态](docs/providers/SORA.md)
+- [OpenAI Responses 与 WebSocket 入口](docs/protocols/OPENAI_RESPONSES.md)
+- [异步图片任务](docs/ASYNC_IMAGE_TASKS.md)
+
+<!-- readme-section:release-tags -->
+<!-- readme-release-format:vX.Y.Z+custom.NNN|vX.Y.Z-custom.NNN -->
+## 版本与镜像标签
+
+自定义版本使用以下格式：
+
+```text
+Git/GitHub: vX.Y.Z+custom.NNN
+应用版本:    X.Y.Z+custom.NNN
+GHCR:       ghcr.io/luckykuang/sub2api-plus:vX.Y.Z-custom.NNN
 ```
 
-脚本会自动：
-1. 检测系统架构
-2. 下载最新版本
-3. 安装二进制文件到 `/opt/sub2api`
-4. 创建 systemd 服务
-5. 配置系统用户和权限
-
-#### 安装后配置
-
-```bash
-# 1. 启动服务
-sudo systemctl start sub2api
-
-# 2. 设置开机自启
-sudo systemctl enable sub2api
-
-# 3. 在浏览器中打开设置向导
-# http://你的服务器IP:8080
-```
-
-设置向导将引导你完成：
-- 数据库配置
-- Redis 配置
-- 管理员账号创建
-
-#### 升级
-
-可以直接在 **管理后台** 左上角点击 **检测更新** 按钮进行在线升级。
-
-网页升级功能支持：
-- 自动检测新版本
-- 一键下载并应用更新
-- 支持回滚
-
-#### 常用命令
-
-```bash
-# 查看状态
-sudo systemctl status sub2api
-
-# 查看日志
-sudo journalctl -u sub2api -f
-
-# 重启服务
-sudo systemctl restart sub2api
-
-# 卸载
-curl -sSL https://raw.githubusercontent.com/luckykuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- uninstall -y
-```
-
----
-
-### 方式二：Docker Compose（推荐）
-
-使用 Docker Compose 部署，包含 PostgreSQL 和 Redis 容器。
-
-#### 前置条件
-
-- Docker 20.10+
-- Docker Compose v2+
-
-#### 快速开始（一键部署）
-
-使用自动化部署脚本快速搭建：
-
-```bash
-# 创建部署目录
-mkdir -p sub2api-deploy && cd sub2api-deploy
-
-# 下载并运行部署准备脚本
-curl -sSL https://raw.githubusercontent.com/luckykuang/sub2api-plus/main/deploy/docker-deploy.sh | bash
-
-# 启动服务
-docker compose up -d
-
-# 查看日志
-docker compose logs -f sub2api
-```
-
-**脚本功能：**
-- 下载 `docker-compose.local.yml`（本地保存为 `docker-compose.yml`）和 `.env.example`
-- 自动生成安全凭证（JWT_SECRET、TOTP_ENCRYPTION_KEY、POSTGRES_PASSWORD）
-- 创建 `.env` 文件并填充自动生成的密钥
-- 创建数据目录（使用本地目录，便于备份和迁移）
-- 显示生成的凭证供你记录
-
-#### 手动部署
-
-如果你希望手动配置：
-
-```bash
-# 1. 克隆仓库
-git clone https://github.com/luckykuang/sub2api-plus.git
-cd sub2api/deploy
-
-# 2. 复制环境配置文件
-cp .env.example .env
-chmod 600 .env
-
-# 3. 编辑配置（生成安全密码）
-nano .env
-```
-
-**`.env` 必须配置项：**
-
-```bash
-# PostgreSQL 密码（必需）
-POSTGRES_PASSWORD=your_secure_password_here
-
-# JWT 密钥（推荐 - 重启后保持用户登录状态）
-JWT_SECRET=your_jwt_secret_here
-
-# TOTP 加密密钥（推荐 - 重启后保留双因素认证）
-TOTP_ENCRYPTION_KEY=your_totp_key_here
-
-# 可选：管理员账号
-ADMIN_EMAIL=admin@example.com
-ADMIN_PASSWORD=your_admin_password
-
-# 可选：自定义端口
-SERVER_PORT=8080
-```
-
-**生成安全密钥：**
-```bash
-# 生成 JWT_SECRET
-openssl rand -hex 32
-
-# 生成 TOTP_ENCRYPTION_KEY
-openssl rand -hex 32
-
-# 生成 POSTGRES_PASSWORD
-openssl rand -hex 32
-```
-
-```bash
-# 4. 创建数据目录（本地版）
-mkdir -p data postgres_data redis_data
-
-# 5. 启动所有服务
-# 选项 A：本地目录版（推荐 - 易于迁移）
-docker compose -f docker-compose.local.yml up -d
-
-# 选项 B：命名卷版（简单设置）
-docker compose up -d
-
-# 6. 查看状态
-docker compose -f docker-compose.local.yml ps
-
-# 7. 查看日志
-docker compose -f docker-compose.local.yml logs -f sub2api
-```
-
-#### 部署版本对比
-
-| 版本 | 数据存储 | 迁移便利性 | 适用场景 |
-|------|---------|-----------|---------|
-| **docker-compose.local.yml** | 本地目录 | ✅ 简单（打包整个目录） | 生产环境、频繁备份 |
-| **docker-compose.yml** | 命名卷 | ⚠️ 需要 docker 命令 | 简单设置 |
-
-**推荐：** 使用 `docker-compose.local.yml`（脚本部署）以便更轻松地管理数据。
-
-#### 启用“数据管理”功能（datamanagementd）
-
-如需启用管理后台“数据管理”，需要额外部署宿主机数据管理进程 `datamanagementd`。
-
-关键点：
-
-- 主进程固定探测：`/tmp/sub2api-datamanagement.sock`
-- 只有该 Socket 可连通时，数据管理功能才会开启
-- Docker 场景需将宿主机 Socket 挂载到容器同路径
-
-详细部署步骤见：`deploy/DATAMANAGEMENTD_CN.md`
-
-#### 访问
-
-在浏览器中打开 `http://你的服务器IP:8080`
-
-如果管理员密码是自动生成的，在日志中查找：
-```bash
-docker compose -f docker-compose.local.yml logs sub2api | grep "admin password"
-```
-
-#### 升级
-
-```bash
-# 拉取最新镜像并重建容器
-docker compose -f docker-compose.local.yml pull
-docker compose -f docker-compose.local.yml up -d
-```
-
-#### 轻松迁移（本地目录版）
-
-使用 `docker-compose.local.yml` 时，可以轻松迁移到新服务器：
-
-```bash
-# 源服务器
-docker compose -f docker-compose.local.yml down
-cd ..
-tar czf sub2api-complete.tar.gz sub2api-deploy/
-
-# 传输到新服务器
-scp sub2api-complete.tar.gz user@new-server:/path/
-
-# 新服务器
-tar xzf sub2api-complete.tar.gz
-cd sub2api-deploy/
-docker compose -f docker-compose.local.yml up -d
-```
-
-#### 常用命令
-
-```bash
-# 停止所有服务
-docker compose -f docker-compose.local.yml down
-
-# 重启
-docker compose -f docker-compose.local.yml restart
-
-# 查看所有日志
-docker compose -f docker-compose.local.yml logs -f
-
-# 删除所有数据（谨慎！）
-docker compose -f docker-compose.local.yml down
-rm -rf data/ postgres_data/ redis_data/
-```
-
----
-
-### 方式三：Apple container（macOS）
-
-Apple 芯片 Mac 在 macOS 26 上可使用 Apple `container` 1.1.0 或更高版本运行完整的 Sub2API Plus、PostgreSQL 和 Redis：
-
-```bash
-git clone https://github.com/luckykuang/sub2api-plus.git
-cd sub2api/deploy
-./apple-container.sh init
-./apple-container.sh up
-./apple-container.sh status
-```
-
-该方式面向本地开发和人工运维，不提供持续重启监管；生产部署仍推荐 Docker Compose。生命周期命令、持久化、升级和运行时限制见 [deploy/APPLE_CONTAINER.md](deploy/APPLE_CONTAINER.md)。
-
----
-
-### 方式四：源码编译
-
-从源码编译安装，适合开发或定制需求。
-
-#### 前置条件
-
-- Go 1.21+
-- Node.js 18+
-- PostgreSQL 15+
-- Redis 7+
-
-#### 编译步骤
-
-```bash
-# 1. 克隆仓库
-git clone https://github.com/luckykuang/sub2api-plus.git
-cd sub2api
-
-# 2. 安装 pnpm（如果还没有安装）
-npm install -g pnpm
-
-# 3. 编译前端
-cd frontend
-pnpm install
-pnpm run build
-# 构建产物输出到 ../backend/internal/web/dist/
-
-# 4. 编译后端（嵌入前端）
-cd ../backend
-VERSION="$(./scripts/resolve-version.sh)"
-go build -tags embed -ldflags="-X main.Version=${VERSION}" -o sub2api ./cmd/server
-
-# 5. 创建配置文件
-cp ../deploy/config.example.yaml ./config.yaml
-
-# 6. 编辑配置
-nano config.yaml
-```
-
-> **注意：** `-tags embed` 参数会将前端嵌入到二进制文件中。不使用此参数编译的程序将不包含前端界面。
-
-**`config.yaml` 关键配置：**
-
-```yaml
-server:
-  host: "0.0.0.0"
-  port: 8080
-  mode: "release"
-
-database:
-  host: "localhost"
-  port: 5432
-  user: "postgres"
-  password: "your_password"
-  dbname: "sub2api"
-
-redis:
-  host: "localhost"
-  port: 6379
-  password: ""
-
-jwt:
-  secret: "change-this-to-a-secure-random-string"
-  expire_hour: 24
-
-default:
-  user_concurrency: 5
-  user_balance: 0
-  api_key_prefix: "sk-"
-  rate_multiplier: 1.0
-```
-
-### Sora 功能状态（暂不可用）
-
-> ⚠️ 当前 Sora 相关功能因上游接入与媒体链路存在技术问题，暂时不可用。
-> 现阶段请勿在生产环境依赖 Sora 能力。
-> 文档中的 `gateway.sora_*` 配置仅作预留，待技术问题修复后再恢复可用。
-
-### Sora 媒体签名 URL（功能恢复后可选）
-
-当配置 `gateway.sora_media_signing_key` 且 `gateway.sora_media_signed_url_ttl_seconds > 0` 时，网关会将 Sora 输出的媒体地址改写为临时签名 URL（`/sora/media-signed/...`）。这样无需 API Key 即可在浏览器中直接访问，且具备过期控制与防篡改能力（签名包含 path + query）。
-
-```yaml
-gateway:
-  # /sora/media 是否强制要求 API Key（默认 false）
-  sora_media_require_api_key: false
-  # 媒体临时签名密钥（为空则禁用签名）
-  sora_media_signing_key: "your-signing-key"
-  # 临时签名 URL 有效期（秒）
-  sora_media_signed_url_ttl_seconds: 900
-```
-
-> 若未配置签名密钥，`/sora/media-signed` 将返回 503。  
-> 如需更严格的访问控制，可将 `sora_media_require_api_key` 设为 true，仅允许携带 API Key 的 `/sora/media` 访问。
-
-访问策略说明：
-- `/sora/media`：内部调用或客户端携带 API Key 才能下载
-- `/sora/media-signed`：外部可访问，但有签名 + 过期控制
-
-`config.yaml` 还支持以下安全相关配置：
-
-- `cors.allowed_origins` 配置 CORS 白名单
-- `security.url_allowlist` 配置上游/价格数据/CRS 主机白名单
-- `security.url_allowlist.enabled` 可关闭 URL 校验（慎用）
-- `security.url_allowlist.allow_insecure_http` 关闭校验时允许 HTTP URL
-- `security.url_allowlist.allow_private_hosts` 允许私有/本地 IP 地址
-- `security.response_headers.enabled` 可启用可配置响应头过滤（关闭时使用默认白名单）
-- `security.csp` 配置 Content-Security-Policy
-- `billing.circuit_breaker` 计费异常时 fail-closed
-- `security.trust_forwarded_ip_for_api_key_acl` 控制旧版原始转发头接管（为升级兼容默认开启）；关闭后严格使用 `server.trusted_proxies`，其中只应填写直接连接 Sub2API Plus 的精确代理 CIDR
-- `security.forwarded_client_ip_headers` 最多配置 16 个第三方 CDN 客户端 IP 请求头；仅在旧版接管开启时按顺序优先于内置请求头解析
-- `server.trusted_proxies` 始终是全局 IP 访问控制的权威来源；启用全局拦截或创建手动封禁前必须显式声明。仅明确的直连部署可设置 `trusted_proxies: []`；其他场景只能填写直接反向代理或容器 CIDR，不能填写 `0.0.0.0/0` 或 `::/0`。最后一跳代理必须将 `X-Forwarded-For` 或 `X-Real-IP` 覆写为唯一的客户端地址；全局策略会拒绝多跳或重复的转发链。
-- `server.ip_access_emergency_allowlist` / `SERVER_IP_ACCESS_EMERGENCY_ALLOWLIST` 是可选的部署级紧急恢复名单，只用于管理员固定出口 IP；修改后需要重新创建应用容器
-- `turnstile.required` 在 release 模式强制启用 Turnstile
-
-自定义客户端 IP 请求头可通过 YAML 配置，也可使用逗号分隔的环境变量：
-
-```bash
-SECURITY_FORWARDED_CLIENT_IP_HEADERS=True-Client-IP,X-CDN-Client-IP
-```
-
-请求头名称会经过合法性校验、规范化和大小写无关去重。管理员可在安全设置中动态更新列表，无需重启；新安装会持久化 YAML/环境变量默认值，旧安装缺少数据库字段时会自动回填。关闭旧版接管后，自定义头和内置原始转发头均被忽略，只使用 `server.trusted_proxies`。开启接管时必须限制源站仅允许 CDN/代理访问，并确保边缘代理覆盖所有受信客户端 IP 请求头。完整迁移规则和信任边界见 [`deploy/EDGE_SECURITY.md`](deploy/EDGE_SECURITY.md)。
-
-**网关防御纵深建议（重点）**
-
-- `gateway.upstream_response_read_max_bytes`：限制非流式上游响应读取大小（默认 `8MB`），用于防止异常响应导致内存放大。
-- `gateway.proxy_probe_response_read_max_bytes`：限制代理探测响应读取大小（默认 `1MB`）。
-- `gateway.gemini_debug_response_headers`：默认 `false`，仅在排障时短时开启，避免高频请求日志开销。
-- `/auth/register`、`/auth/login`、`/auth/login/2fa`、`/auth/send-verify-code` 已提供服务端兜底限流（Redis 故障时 fail-close）。
-- 推荐将 WAF/CDN 作为第一层防护，服务端限流与响应读取上限作为第二层兜底；两层同时保留，避免旁路流量与误配置风险。
-
-**⚠️ 安全警告：HTTP URL 配置**
-
-当 `security.url_allowlist.enabled=false` 时，系统仅执行最小 URL 校验，且**默认允许 HTTP URL**（开发友好模式，Docker Compose 部署的默认值一致）。生产环境建议显式收紧为仅允许 HTTPS：
-
-```yaml
-security:
-  url_allowlist:
-    enabled: false                # 禁用白名单检查
-    allow_insecure_http: false    # 仅允许 HTTPS（生产环境推荐）
-```
-
-**或通过环境变量：**
-
-```bash
-SECURITY_URL_ALLOWLIST_ENABLED=false
-SECURITY_URL_ALLOWLIST_ALLOW_INSECURE_HTTP=false
-```
-
-**允许 HTTP 的风险：**
-- API 密钥和数据以**明文传输**（可被截获）
-- 易受**中间人攻击 (MITM)**
-- **不适合生产环境**
-
-**适用场景：**
-- ✅ 开发/测试环境的本地服务器（http://localhost）
-- ✅ 内网可信端点
-- ✅ 获取 HTTPS 前测试账号连通性
-- ❌ 生产环境（仅使用 HTTPS）
-
-**设置 `allow_insecure_http: false` 后，HTTP URL 会返回如下错误：**
-```
-Invalid base URL: invalid url scheme: http
-```
-
-如关闭 URL 校验或响应头过滤，请加强网络层防护：
-- 出站访问白名单限制上游域名/IP
-- 阻断私网/回环/链路本地地址
-- 强制仅允许 TLS 出站
-- 在反向代理层移除敏感响应头
-
-#### ⚠️ 重要：创建管理员账号
-
-初始管理员账号**只能通过 setup 向导创建**（首次启动时访问 `http://<host>:8080`）。`config.yaml` 中的 `default.admin_email` / `default.admin_password` 字段**不会被用来创建管理员**——它们只是出于历史原因保留在模板里。
-
-由于上面第 5 步预先创建了 `config.yaml`，**setup 向导在首次启动时会被跳过**：服务检测到 config 已存在，会直接进入正常模式，此时 `users` 表为空，首次登录会返回 `invalid email or password`。
-
-**创建管理员的两种方式：**
-
-1. **推荐——让向导自动生成 `config.yaml`：** 跳过上面的第 5 步（不要执行 `cp`）。直接运行 `./sub2api`，访问 `http://localhost:8080`，向导会引导你完成数据库、Redis 和管理员账号配置，并自动写出 `config.yaml`。
-
-2. **如果你已经创建了 `config.yaml`：** 首次启动前先把它临时移走以触发向导，完成后再恢复：
-   ```bash
-   mv config.yaml config.yaml.bak
-   ./sub2api        # 向导在 http://localhost:8080 启动，并生成新的 config.yaml
-   # 向导完成后 Ctrl+C 停服，再恢复你的配置：
-   mv config.yaml.bak config.yaml
-   ./sub2api        # 重启进入正常模式，用刚创建的管理员登录
-   ```
-
-```bash
-# 6. 运行应用
-./sub2api
-```
-
-#### HTTP/2 (h2c) 与 HTTP/1.1 回退
-
-后端明文端口默认支持 h2c，并保留 HTTP/1.1 回退用于 WebSocket 与旧客户端。浏览器通常不支持 h2c，性能收益主要在反向代理或内网链路。
-
-**反向代理示例（Caddy）：**
-
-```caddyfile
-transport http {
-	versions h2c h1
-}
-```
-
-**验证：**
-
-```bash
-# h2c prior knowledge
-curl --http2-prior-knowledge -I http://localhost:8080/health
-# HTTP/1.1 回退
-curl --http1.1 -I http://localhost:8080/health
-# WebSocket 回退验证（需管理员 token）
-websocat -H="Sec-WebSocket-Protocol: sub2api-admin, jwt.<ADMIN_TOKEN>" ws://localhost:8080/api/v1/admin/ops/ws/qps
-```
-
-#### 开发模式
-
-```bash
-# 后端（支持热重载）
-cd backend
-go run ./cmd/server
-
-# 前端（支持热重载）
-cd frontend
-pnpm run dev
-```
-
-#### 代码生成
-
-修改 `backend/ent/schema` 后，需要重新生成 Ent + Wire：
-
-```bash
-cd backend
-go generate ./ent
-go generate ./cmd/server
-```
-
----
-
-## 简易模式
-
-简易模式适合个人开发者或内部团队快速使用，不依赖完整 SaaS 功能。
-
-- 启用方式：设置环境变量 `RUN_MODE=simple`
-- 功能差异：隐藏 SaaS 相关功能，跳过计费流程
-- 安全注意事项：生产环境需同时设置 `SIMPLE_MODE_CONFIRM=true` 才允许启动
-
----
-
-## Antigravity 使用说明
-
-Sub2API Plus 支持 [Antigravity](https://antigravity.so/) 账户，授权后可通过专用端点访问 Claude 和 Gemini 模型。
-
-### 专用端点
-
-| 端点 | 模型 |
-|------|------|
-| `/antigravity/v1/messages` | Claude 模型 |
-| `/antigravity/v1beta/` | Gemini 模型 |
-
-### Claude Code 配置示例
-
-```bash
-export ANTHROPIC_BASE_URL="http://localhost:8080/antigravity"
-export ANTHROPIC_AUTH_TOKEN="sk-xxx"
-```
-
-### 混合调度模式
-
-Antigravity 账户支持可选的**混合调度**功能。开启后，通用端点 `/v1/messages` 和 `/v1beta/` 也会调度该账户。
-
-> **⚠️ 注意**：Anthropic Claude 和 Antigravity Claude **不能在同一上下文中混合使用**，请通过分组功能做好隔离。
-
----
-
-## 项目结构
-
-```
-sub2api/
-├── backend/                  # Go 后端服务
-│   ├── cmd/server/           # 应用入口
-│   ├── internal/             # 内部模块
-│   │   ├── config/           # 配置管理
-│   │   ├── model/            # 数据模型
-│   │   ├── service/          # 业务逻辑
-│   │   ├── handler/          # HTTP 处理器
-│   │   └── gateway/          # API 网关核心
-│   └── resources/            # 静态资源
-│
-├── frontend/                 # Vue 3 前端
-│   └── src/
-│       ├── api/              # API 调用
-│       ├── stores/           # 状态管理
-│       ├── views/            # 页面组件
-│       └── components/       # 通用组件
-│
-└── deploy/                   # 部署文件
-    ├── docker-compose.yml    # Docker Compose 配置
-    ├── .env.example          # Docker Compose 环境变量
-    ├── config.example.yaml   # 二进制部署完整配置文件
-    └── install.sh            # 一键安装脚本
-```
-
+生产环境建议固定不可变的 GHCR 版本标签；`latest` 只是滚动标签。上游映射见
+[UPSTREAM.md](UPSTREAM.md)，维护者发布规则见
+[发布流程](docs/RELEASING.md)。
+
+<!-- readme-section:documentation -->
+## 文档
+
+- [文档索引](docs/README.md)
+- [部署指南](deploy/README.md)
+- [开发与贡献](CONTRIBUTING.md)
+- [发布流程](docs/RELEASING.md)
+- [上游映射](UPSTREAM.md)
+- [安全策略](SECURITY.md)
+
+<!-- readme-section:license -->
 ## 许可证
 
-本项目基于 [GNU 宽通用公共许可证 v3.0](LICENSE)（或更高版本）授权。
-
-保留原始上游的版权与许可证声明。
+本项目依据 [GNU 宽通用公共许可证 v3.0](LICENSE) 或更高版本授权，并保留上游
+版权和许可证声明。
 
 原始上游作品：Copyright (c) 2026 Wesley Liddick
-
 Sub2API Plus 修改：Copyright (c) 2026 LuckyKuang

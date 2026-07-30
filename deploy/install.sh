@@ -530,7 +530,7 @@ github_api_curl() {
 
 # Get latest release version
 is_custom_release_tag() {
-    [[ "$1" =~ ^v[0-9]+\.[0-9]+\.[0-9]+\+custom\.[0-9]+$ ]]
+    [[ "$1" =~ ^v[0-9]+\.[0-9]+\.[0-9]+\+custom\.[0-9]{3}$ ]]
 }
 
 get_latest_version() {
@@ -619,7 +619,7 @@ validate_version() {
 get_current_version() {
     if [ -f "$INSTALL_DIR/sub2api" ]; then
         # Use grep -E for better compatibility (works on macOS and Linux)
-        "$INSTALL_DIR/sub2api" --version 2>/dev/null | grep -oE 'v?[0-9]+\.[0-9]+\.[0-9]+(\+custom\.[0-9]+)?' | head -1 || echo "unknown"
+        "$INSTALL_DIR/sub2api" --version 2>/dev/null | grep -oE 'v?[0-9]+\.[0-9]+\.[0-9]+(\+custom\.[0-9]{3})?' | head -1 || echo "unknown"
     else
         echo "not_installed"
     fi

@@ -1,4 +1,4 @@
-.PHONY: build build-backend build-frontend test test-backend test-frontend test-frontend-critical
+.PHONY: build build-backend build-frontend test test-backend test-frontend test-frontend-critical test-docs
 
 FRONTEND_CRITICAL_VITEST := \
 	src/views/auth/__tests__/LinuxDoCallbackView.spec.ts \
@@ -6,7 +6,8 @@ FRONTEND_CRITICAL_VITEST := \
 	src/views/user/__tests__/PaymentView.spec.ts \
 	src/views/user/__tests__/PaymentResultView.spec.ts \
 	src/components/user/profile/__tests__/ProfileInfoCard.spec.ts \
-	src/views/admin/__tests__/SettingsView.spec.ts
+	src/views/admin/__tests__/SettingsView.spec.ts \
+	src/i18n/__tests__
 
 # 一键编译前后端
 build: build-backend build-frontend
@@ -20,7 +21,7 @@ build-frontend:
 	@pnpm --dir frontend run build
 
 # 运行测试（后端 + 前端）
-test: test-backend test-frontend
+test: test-backend test-frontend test-docs
 
 test-backend:
 	@$(MAKE) -C backend test
@@ -32,3 +33,9 @@ test-frontend:
 
 test-frontend-critical:
 	@pnpm --dir frontend exec vitest run $(FRONTEND_CRITICAL_VITEST)
+
+test-docs:
+	@python tools/test_release_policy.py
+	@python tools/check_readme_sync.py
+	@python tools/check_release.py
+	@python tools/check_new_migrations.py

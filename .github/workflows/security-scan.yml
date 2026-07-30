@@ -4,7 +4,7 @@ on:
   push:
   pull_request:
   schedule:
-    - cron: '0 3 * * 1'
+    - cron: "0 3 * * 1"
 
 permissions:
   contents: read
@@ -22,8 +22,9 @@ jobs:
           check-latest: false
           cache-dependency-path: backend/go.sum
       - name: Verify Go version
+        working-directory: backend
         run: |
-          go version | grep -q 'go1.26.5'
+          test "$(go env GOVERSION)" = "go$(awk '/^go / { print $2 }' go.mod)"
       - name: Run govulncheck
         working-directory: backend
         run: |
@@ -37,12 +38,12 @@ jobs:
       - name: Set up pnpm
         uses: pnpm/action-setup@v6
         with:
-          version: 9
+          package_json_file: frontend/package.json
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
-          cache: 'pnpm'
+          node-version: "20"
+          cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
       - name: Install dependencies
         working-directory: frontend
