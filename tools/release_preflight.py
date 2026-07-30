@@ -295,7 +295,25 @@ def notes_digest(notes_file: Path) -> str:
     return hashlib.sha256(notes_file.read_bytes()).hexdigest()
 
 
-def verify_created_tag(tag: str, commit: str, expected_subject: str) -> None:
+def tag_creation_command(tag: str, commit: str, notes_file: Path) -> tuple[str, ...]:
+    return (
+        "git",
+        "tag",
+        "-a",
+        tag,
+        commit,
+        "--cleanup=verbatim",
+        "-F",
+        str(notes_file),
+    )
+
+
+def verify_created_tag(
+    tag: str,
+    commit: str,
+    expected_subject: str,
+    expected_message: str,
+) -> None:
     object_type = git_output("cat-file", "-t", f"refs/tags/{tag}")
     if object_type != "tag":
         raise RuntimeError(f"{tag} is not an annotated tag")
@@ -307,6 +325,15 @@ def verify_created_tag(tag: str, commit: str, expected_subject: str) -> None:
     if subject != expected_subject:
         raise RuntimeError(
             f"{tag} subject is {subject!r}; expected {expected_subject!r}"
+        )
+    message = git_output(
+        "for-each-ref",
+        "--format=%(contents)",
+        f"refs/tags/{tag}",
+    )
+    if message != expected_message.strip():
+        raise RuntimeError(
+            f"{tag} message differs from the validated release notes"
         )
     target = git_output("rev-list", "-n", "1", tag)
     if target != commit:
@@ -489,7 +516,7 @@ def main() -> int:
         print(f"Preflight stopped after checks: {error}", file=sys.stderr)
         return 1
 
-    tag_command = ("git", "tag", "-a", args.tag, commit, "-F", str(notes_file))
+    tag_command = tag_creation_command(args.tag, commit, notes_file)
     push_command = ("git", "push", args.remote, args.tag)
     if not args.create_tag:
         print("\nRelease preflight passed. No tag was created or pushed.")
@@ -518,7 +545,12 @@ def main() -> int:
         print(f"Preflight stopped: local tag creation failed: {detail}", file=sys.stderr)
         return result.returncode or 1
     try:
-        verify_created_tag(args.tag, commit, expected_subject)
+        verify_created_tag(
+            args.tag,
+            commit,
+            expected_subject,
+            notes_file.read_text(encoding="utf-8"),
+        )
     except RuntimeError as error:
         print(
             "Local tag was created but post-creation verification failed: "

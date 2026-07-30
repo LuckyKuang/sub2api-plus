@@ -115,6 +115,45 @@ class ReleaseBaselineTests(unittest.TestCase):
         self.assertIn("expected 'planned'", errors[0])
 
 
+class ReleaseTagTests(unittest.TestCase):
+    def test_tag_creation_preserves_markdown_headings(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            notes_file = root / "release-notes.md"
+            notes = valid_notes()
+            notes_file.write_text(notes, encoding="utf-8")
+
+            commands = (
+                ("git", "init", "--quiet"),
+                ("git", "config", "user.name", "Release Policy Test"),
+                ("git", "config", "user.email", "release-policy@example.invalid"),
+                ("git", "commit", "--allow-empty", "--quiet", "-m", "initial"),
+                release_preflight.tag_creation_command(TAG, "HEAD", notes_file),
+            )
+            for command in commands:
+                result = release_preflight.run(command, cwd=root, capture=True)
+                self.assertEqual(
+                    result.returncode,
+                    0,
+                    result.stderr or result.stdout,
+                )
+
+            result = release_preflight.run(
+                (
+                    "git",
+                    "for-each-ref",
+                    "--format=%(contents)",
+                    f"refs/tags/{TAG}",
+                ),
+                cwd=root,
+                capture=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout.strip(), notes.strip())
+            self.assertIn("## Highlights", result.stdout)
+            self.assertIn("## Upstream baseline", result.stdout)
+
+
 class ReleaseDocumentTests(unittest.TestCase):
     CURRENT = "v0.1.166+custom.008"
     ROLLBACK = "v0.1.166+custom.006"
