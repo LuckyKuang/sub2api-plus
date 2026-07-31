@@ -68,6 +68,10 @@ trusted client-IP header rather than append an untrusted client value.
 
 ### Global IP access control
 
+For a complete Cloudflare orange-cloud, same-host Nginx, systemd binary, and
+global IP blocking deployment, see the
+[Chinese step-by-step tutorial](CLOUDFLARE_IP_ACCESS_CONTROL_CN.md).
+
 The administrator-managed IP access policy intentionally does **not** use the
 legacy raw-header takeover. It always resolves one request identity from
 `server.trusted_proxies` and uses that same identity for HTTP routes, login
@@ -153,6 +157,20 @@ server {
     large_client_header_buffers 4 16k;
     limit_conn sub2api_conn 40;
 
+    # Keep the identity and streaming policy identical in every proxy route.
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header CF-Connecting-IP "";
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $connection_upgrade;
+    proxy_buffering off;
+    proxy_request_buffering off;
+    proxy_read_timeout 1800s;
+    proxy_send_timeout 1800s;
+
     location ~ ^/(auth|api/auth)/ {
         limit_req zone=sub2api_auth burst=10 nodelay;
         proxy_pass http://127.0.0.1:8080;
@@ -166,17 +184,6 @@ server {
 
     location / {
         limit_req zone=sub2api_api burst=60 nodelay;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $remote_addr;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection $connection_upgrade;
-        proxy_buffering off;
-        proxy_request_buffering off;
-        proxy_read_timeout 1800s;
-        proxy_send_timeout 1800s;
         proxy_pass http://127.0.0.1:8080;
     }
 }

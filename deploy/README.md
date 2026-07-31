@@ -42,6 +42,7 @@ Pin the GHCR version tag for reproducible deployments. See
 | `DATAMANAGEMENTD_CN.md` | datamanagementd 部署与联动说明（中文） |
 | `config.example.yaml` | Example configuration file |
 | `EDGE_SECURITY.md` | Reverse proxy, CDN/WAF, trusted proxy, and ingress hardening guide |
+| `CLOUDFLARE_IP_ACCESS_CONTROL_CN.md` | Cloudflare + Nginx binary deployment and global IP blocking tutorial (Chinese) |
 
 ---
 
@@ -484,6 +485,10 @@ during binary installation. Configure only the Nginx peer in
 SSE/WebSocket behavior by disabling proxy buffering and excluding
 `text/event-stream` from gzip. Start from the complete
 [Nginx baseline](EDGE_SECURITY.md#nginx-baseline).
+
+For a complete Cloudflare orange-cloud, same-host Nginx, systemd binary, and
+global IP access-control walkthrough, see the
+[Chinese Cloudflare IP blocking tutorial](CLOUDFLARE_IP_ACCESS_CONTROL_CN.md).
 
 Codex CLI and CRS-compatible clients send `session_id`. Nginx drops headers
 containing underscores by default, which breaks sticky session routing in
