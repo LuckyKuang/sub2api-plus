@@ -98,6 +98,19 @@ func ProvideAuthHandler(cfg *config.Config, authService *service.AuthService, us
 	return h
 }
 
+// ProvidePasskeyHandler attaches the global successful-login policy without
+// expanding the compact constructor used by focused handler tests.
+func ProvidePasskeyHandler(
+	passkeys *service.PasskeyService,
+	authService *service.AuthService,
+	settingService *service.SettingService,
+	ipAccessControl *service.IPAccessControlService,
+) *PasskeyHandler {
+	h := NewPasskeyHandler(passkeys, authService, settingService)
+	h.SetIPAccessControlService(ipAccessControl)
+	return h
+}
+
 func ProvideOpsHandler(opsService *service.OpsService, ipAccessControl *service.IPAccessControlService) *admin.OpsHandler {
 	h := admin.NewOpsHandler(opsService)
 	h.SetIPAccessControlService(ipAccessControl)
@@ -206,9 +219,11 @@ func ProvideHandlers(
 	openaiGatewayHandler *OpenAIGatewayHandler,
 	settingHandler *SettingHandler,
 	totpHandler *TotpHandler,
+	passkeyHandler *PasskeyHandler,
 	paymentHandler *PaymentHandler,
 	paymentWebhookHandler *PaymentWebhookHandler,
 	availableChannelHandler *AvailableChannelHandler,
+	modelPlazaHandler *ModelPlazaHandler,
 	asyncImageHandler *AsyncImageHandler,
 	batchImageHandler *BatchImageHandler,
 	_ *service.IdempotencyCoordinator,
@@ -228,9 +243,11 @@ func ProvideHandlers(
 		OpenAIGateway:    openaiGatewayHandler,
 		Setting:          settingHandler,
 		Totp:             totpHandler,
+		Passkey:          passkeyHandler,
 		Payment:          paymentHandler,
 		PaymentWebhook:   paymentWebhookHandler,
 		AvailableChannel: availableChannelHandler,
+		ModelPlaza:       modelPlazaHandler,
 		AsyncImage:       asyncImageHandler,
 		BatchImage:       batchImageHandler,
 	}
@@ -250,10 +267,12 @@ var ProviderSet = wire.NewSet(
 	ProvideGatewayHandler,
 	ProvideOpenAIGatewayHandler,
 	NewTotpHandler,
+	ProvidePasskeyHandler,
 	ProvideSettingHandler,
 	NewPaymentHandler,
 	NewPaymentWebhookHandler,
 	NewAvailableChannelHandler,
+	NewModelPlazaHandler,
 	ProvideAsyncImageHandler,
 	ProvideBatchImageHandler,
 

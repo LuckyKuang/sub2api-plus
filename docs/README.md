@@ -8,6 +8,7 @@ below for detailed configuration and maintenance instructions.
 - [Grok / xAI](providers/GROK.md)
 - [Sora status and reserved configuration](providers/SORA.md)
 - [Antigravity](providers/ANTIGRAVITY.md)
+- [Kimi / Moonshot](providers/KIMI.md)
 
 ## Protocols and Tasks
 
@@ -28,6 +29,8 @@ below for detailed configuration and maintenance instructions.
 - [Release process](RELEASING.md)
 - [Upstream mapping](../UPSTREAM.md)
 - [Database migrations](../backend/migrations/README.md)
+- [Authentication and Passkeys](AUTHENTICATION.md)
+- [Model Plaza visibility](MODEL_PLAZA.md)
 
 ## Additional References
 

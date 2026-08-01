@@ -9,8 +9,8 @@ derives the OCI image tag by preserving the leading `v` and replacing only
 `+` with `-`.
 
 ```text
-Git/GitHub: v0.1.166+custom.010
-GHCR:       ghcr.io/luckykuang/sub2api-plus:v0.1.166-custom.010
+Git/GitHub: v0.1.168+custom.001
+GHCR:       ghcr.io/luckykuang/sub2api-plus:v0.1.168-custom.001
 ```
 
 Pin the GHCR version tag for reproducible deployments. See
@@ -115,7 +115,7 @@ cp .env.example .env
 chmod 600 .env
 nano .env  # Set POSTGRES_PASSWORD and other required variables
 
-# Generate secure secrets (recommended)
+# Generate persistent secrets (required for durable TOTP, backup secrets, and Prompt Audit endpoint tokens)
 JWT_SECRET=$(openssl rand -hex 32)
 TOTP_ENCRYPTION_KEY=$(openssl rand -hex 32)
 echo "JWT_SECRET=${JWT_SECRET}" >> .env
@@ -248,7 +248,8 @@ docker compose down -v
 |----------|----------|---------|-------------|
 | `POSTGRES_PASSWORD` | **Yes** | - | PostgreSQL password |
 | `JWT_SECRET` | **Recommended** | *(auto-generated)* | JWT secret (fixed for persistent sessions) |
-| `TOTP_ENCRYPTION_KEY` | **Recommended** | *(auto-generated)* | TOTP encryption key (fixed for persistent 2FA) |
+| `TOTP_ENCRYPTION_KEY` | **Required when using encrypted secrets** | *(auto-generated)* | Fixed encryption key for persistent 2FA, backup secrets, and Prompt Audit endpoint tokens. |
+| `SKIP_SETUP` | No | `false` | Recovery-only bypass for first-run admin setup. Do not enable for a new or normal deployment. |
 | `SERVER_PORT` | No | `8080` | Server port |
 | `ADMIN_EMAIL` | No | `admin@sub2api.local` | Admin email |
 | `ADMIN_PASSWORD` | No | *(auto-generated)* | Admin password |
@@ -261,7 +262,7 @@ docker compose down -v
 
 See `.env.example` for all available options.
 
-> **Note:** The `docker-deploy.sh` script automatically generates `JWT_SECRET`, `TOTP_ENCRYPTION_KEY`, and `POSTGRES_PASSWORD` for you.
+> **Note:** The `docker-deploy.sh` script automatically generates `JWT_SECRET`, `TOTP_ENCRYPTION_KEY`, and `POSTGRES_PASSWORD` for you. Keep the generated `TOTP_ENCRYPTION_KEY` stable: saving a Prompt Audit endpoint token without a fixed key is rejected, because it would be unreadable after restart.
 
 ### Easy Migration (Local Directory Version)
 
@@ -428,13 +429,13 @@ Replace the immutable tag with another value reported by `list-versions` when
 needed:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- install --version 'v0.1.166+custom.010'
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- install --version 'v0.1.168+custom.001'
 ```
 
 Roll back an existing binary installation to an earlier published version:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- rollback 'v0.1.166+custom.009'
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- rollback 'v0.1.166+custom.010'
 ```
 
 Upgrade to the latest release:
@@ -458,13 +459,13 @@ curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/
 For a downloaded `install.sh`, invoke one operation at a time. For example:
 
 ```bash
-sudo ./install.sh install --version 'v0.1.166+custom.010'
+sudo ./install.sh install --version 'v0.1.168+custom.001'
 ```
 
 Roll back a downloaded-script installation one operation at a time:
 
 ```bash
-sudo ./install.sh rollback 'v0.1.166+custom.009'
+sudo ./install.sh rollback 'v0.1.166+custom.010'
 ```
 
 Or uninstall while preserving `/etc/sub2api`:

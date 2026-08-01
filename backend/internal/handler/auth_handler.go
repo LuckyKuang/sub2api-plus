@@ -71,16 +71,7 @@ func (h *AuthHandler) recordFailedLocalLogin(c *gin.Context) bool {
 // completed authentication method proves identity. A streak is a property of
 // the source IP, not of the credential type used for the final success.
 func (h *AuthHandler) clearSuccessfulAuthentication(c *gin.Context) bool {
-	if h.ipAccessControl == nil {
-		return false
-	}
-	identity := middleware2.TrustedClientIdentity(c)
-	if err := h.ipAccessControl.ClearSuccessfulLogin(c.Request.Context(), identity.EffectiveIP); err != nil {
-		slog.Error("IP access control failed to clear successful login state", "error", err, "client_ip", identity.EffectiveIP)
-		h.abortIPAccessControlUnavailable(c)
-		return true
-	}
-	return false
+	return !clearSuccessfulAuthenticationState(c, h.ipAccessControl)
 }
 
 // clearSuccessfulLocalLogin is kept for focused tests and callers that still
@@ -99,6 +90,26 @@ func (h *AuthHandler) recordSuccessfulAuthentication(c *gin.Context, userID int6
 }
 
 func (h *AuthHandler) abortIPAccessControlUnavailable(c *gin.Context) {
+	abortIPAccessControlUnavailable(c)
+}
+
+// clearSuccessfulAuthenticationState is shared by every login method. This
+// prevents a successful credential from leaving a source IP locked out just
+// because it used a different authentication endpoint.
+func clearSuccessfulAuthenticationState(c *gin.Context, ipAccessControl *service.IPAccessControlService) bool {
+	if ipAccessControl == nil {
+		return true
+	}
+	identity := middleware2.TrustedClientIdentity(c)
+	if err := ipAccessControl.ClearSuccessfulLogin(c.Request.Context(), identity.EffectiveIP); err != nil {
+		slog.Error("IP access control failed to clear successful login state", "error", err, "client_ip", identity.EffectiveIP)
+		abortIPAccessControlUnavailable(c)
+		return false
+	}
+	return true
+}
+
+func abortIPAccessControlUnavailable(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	c.Header("Retry-After", "5")
 	middleware2.AbortWithError(c, 503, "IP_ACCESS_CONTROL_UNAVAILABLE", "IP access control is temporarily unavailable.")
@@ -183,16 +194,20 @@ func ensureLoginUserActive(user *service.User) error {
 // respondWithTokenPair 生成 Token 对并返回认证响应
 // 如果 Token 对生成失败，回退到只返回 Access Token（向后兼容）
 func (h *AuthHandler) respondWithTokenPair(c *gin.Context, user *service.User) {
+	respondWithTokenPair(c, h.authService, user)
+}
+
+func respondWithTokenPair(c *gin.Context, authService *service.AuthService, user *service.User) {
 	if err := ensureLoginUserActive(user); err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
 
-	tokenPair, err := h.authService.GenerateTokenPair(c.Request.Context(), user, "")
+	tokenPair, err := authService.GenerateTokenPair(c.Request.Context(), user, "")
 	if err != nil {
 		slog.Error("failed to generate token pair", "error", err, "user_id", user.ID)
 		// 回退到只返回Access Token
-		token, tokenErr := h.authService.GenerateToken(c.Request.Context(), user)
+		token, tokenErr := authService.GenerateToken(c.Request.Context(), user)
 		if tokenErr != nil {
 			response.InternalError(c, "Failed to generate token")
 			return

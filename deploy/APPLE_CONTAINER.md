@@ -49,6 +49,8 @@ Open `http://localhost:8080`. If `ADMIN_PASSWORD` is empty, retrieve the generat
 
 The env file uses literal `KEY=value` syntax. Do not use Compose expressions such as `${VALUE:-default}`, and do not quote values unless the quote characters are part of the intended value. `BIND_HOST` must be an IPv4 address, and `SERVER_PORT` must be between 1025 and 65535.
 
+Keep the generated `TOTP_ENCRYPTION_KEY` unchanged after the first start. It is required not only for persistent TOTP and encrypted backup secrets, but also before an administrator can save a Prompt Audit endpoint token. `SKIP_SETUP` remains `false` by default; set it to `true` only during a controlled recovery when the first-run administrator bootstrap must be bypassed.
+
 ## Commands
 
 ```bash
@@ -118,22 +120,22 @@ the release workflow preserves the leading `v` and replaces only `+` with
 `-`. The current mapping is:
 
 ```text
-Git/GitHub:         v0.1.166+custom.010
-Application:        0.1.166+custom.010
-Apple/OCI image:    ghcr.io/luckykuang/sub2api-plus:v0.1.166-custom.010
+Git/GitHub:         v0.1.168+custom.001
+Application:        0.1.168+custom.001
+Apple/OCI image:    ghcr.io/luckykuang/sub2api-plus:v0.1.168-custom.001
 ```
 
 Use the following values when building or publishing this OCI image:
 
 ```bash
 docker build \
-  --build-arg VERSION=0.1.166+custom.010 \
-  --tag ghcr.io/luckykuang/sub2api-plus:v0.1.166-custom.010 \
+  --build-arg VERSION=0.1.168+custom.001 \
+  --tag ghcr.io/luckykuang/sub2api-plus:v0.1.168-custom.001 \
   .
 ```
 
 After that image is available to the Apple `container` runtime, set
-`APPLE_CONTAINER_SUB2API_IMAGE=ghcr.io/luckykuang/sub2api-plus:v0.1.166-custom.010`. Until then, keep
+`APPLE_CONTAINER_SUB2API_IMAGE=ghcr.io/luckykuang/sub2api-plus:v0.1.168-custom.001`. Until then, keep
 the published image as the runtime base and use `APPLE_CONTAINER_SUB2API_BINARY`
 for the custom binary.
 

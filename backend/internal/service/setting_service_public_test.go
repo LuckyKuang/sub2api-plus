@@ -104,6 +104,40 @@ func TestSettingService_GetPublicSettings_ExposesAllowUserViewErrorRequests(t *t
 	require.True(t, settings.AllowUserViewErrorRequests)
 }
 
+func TestSettingService_GetPublicSettings_ModelPlazaRequiresAuthenticationUnlessExplicitlyPublic(t *testing.T) {
+	tests := []struct {
+		name        string
+		values      map[string]string
+		requireAuth bool
+	}{
+		{
+			name: "missing setting defaults to authentication",
+			values: map[string]string{
+				SettingKeyModelPlazaEnabled: "true",
+			},
+			requireAuth: true,
+		},
+		{
+			name: "explicit false enables anonymous showcase",
+			values: map[string]string{
+				SettingKeyModelPlazaEnabled:     "true",
+				SettingKeyModelPlazaRequireAuth: "false",
+			},
+			requireAuth: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := NewSettingService(&settingPublicRepoStub{values: tt.values}, &config.Config{})
+
+			settings, err := svc.GetPublicSettings(context.Background())
+			require.NoError(t, err)
+			require.Equal(t, tt.requireAuth, settings.ModelPlazaRequireAuth)
+		})
+	}
+}
+
 func TestSettingService_GetPublicSettings_ExposesWeChatOAuthModeCapabilities(t *testing.T) {
 	svc := NewSettingService(&settingPublicRepoStub{
 		values: map[string]string{

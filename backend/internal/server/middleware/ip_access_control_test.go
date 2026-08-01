@@ -184,6 +184,19 @@ func TestIPAccessControlMiddlewareResponseContracts(t *testing.T) {
 		}
 	})
 
+	t.Run("passkey authentication endpoints", func(t *testing.T) {
+		for _, path := range []string{
+			"/api/v1/auth/passkey/login/begin",
+			"/api/v1/auth/passkey/login/finish",
+		} {
+			recorder := serveBlockedIPRequest(t, router, http.MethodPost, path, "application/json")
+			if recorder.Code != http.StatusForbidden ||
+				!strings.Contains(recorder.Body.String(), `"code":"IP_BANNED"`) {
+				t.Fatalf("passkey endpoint %s must be globally blocked: code=%d body=%q", path, recorder.Code, recorder.Body.String())
+			}
+		}
+	})
+
 	t.Run("regular api ignores html accept header", func(t *testing.T) {
 		recorder := serveBlockedIPRequest(t, router, http.MethodGet, "/api/v1/auth/me", "text/html")
 		if recorder.Code != http.StatusForbidden ||
