@@ -28,7 +28,7 @@ func TestOpsRepositoryGetOpenAITokenStats_PaginationMode(t *testing.T) {
 		PageSize:  10,
 	}
 
-	mock.ExpectQuery(`SELECT COUNT\(\*\), COALESCE\(SUM\(total_output_tokens\), 0\) FROM stats`).
+	mock.ExpectQuery(`(?s)first_output_kind IS NOT NULL.*SELECT COUNT\(\*\), COALESCE\(SUM\(total_output_tokens\), 0\) FROM stats`).
 		WithArgs(start, end, groupID, "openai").
 		WillReturnRows(sqlmock.NewRows([]string{"count", "total_output_tokens"}).AddRow(int64(3), int64(5500)))
 
@@ -44,7 +44,7 @@ func TestOpsRepositoryGetOpenAITokenStats_PaginationMode(t *testing.T) {
 		AddRow("gpt-4o-mini", int64(20), 21.56, 120.34, int64(3000), int64(850), int64(18)).
 		AddRow("gpt-4.1", int64(20), 10.2, 240.0, int64(2500), int64(900), int64(20))
 
-	mock.ExpectQuery(`ORDER BY request_count DESC, model ASC\s+LIMIT \$5 OFFSET \$6`).
+	mock.ExpectQuery(`(?s)first_output_kind IS NOT NULL.*ORDER BY request_count DESC, model ASC\s+LIMIT \$5 OFFSET \$6`).
 		WithArgs(start, end, groupID, "openai", 10, 10).
 		WillReturnRows(rows)
 
@@ -82,7 +82,7 @@ func TestOpsRepositoryGetOpenAITokenStats_TopNMode(t *testing.T) {
 		TopN:      5,
 	}
 
-	mock.ExpectQuery(`SELECT COUNT\(\*\), COALESCE\(SUM\(total_output_tokens\), 0\) FROM stats`).
+	mock.ExpectQuery(`(?s)first_output_kind IS NOT NULL.*SELECT COUNT\(\*\), COALESCE\(SUM\(total_output_tokens\), 0\) FROM stats`).
 		WithArgs(start, end).
 		WillReturnRows(sqlmock.NewRows([]string{"count", "total_output_tokens"}).AddRow(int64(1), int64(0)))
 
@@ -97,7 +97,7 @@ func TestOpsRepositoryGetOpenAITokenStats_TopNMode(t *testing.T) {
 	}).
 		AddRow("gpt-4o", int64(5), nil, nil, int64(0), int64(0), int64(0))
 
-	mock.ExpectQuery(`ORDER BY request_count DESC, model ASC\s+LIMIT \$3`).
+	mock.ExpectQuery(`(?s)first_output_kind IS NOT NULL.*ORDER BY request_count DESC, model ASC\s+LIMIT \$3`).
 		WithArgs(start, end, 5).
 		WillReturnRows(rows)
 
@@ -130,11 +130,11 @@ func TestOpsRepositoryGetOpenAITokenStats_EmptyResult(t *testing.T) {
 		PageSize:  20,
 	}
 
-	mock.ExpectQuery(`SELECT COUNT\(\*\), COALESCE\(SUM\(total_output_tokens\), 0\) FROM stats`).
+	mock.ExpectQuery(`(?s)first_output_kind IS NOT NULL.*SELECT COUNT\(\*\), COALESCE\(SUM\(total_output_tokens\), 0\) FROM stats`).
 		WithArgs(start, end).
 		WillReturnRows(sqlmock.NewRows([]string{"count", "total_output_tokens"}).AddRow(int64(0), int64(0)))
 
-	mock.ExpectQuery(`ORDER BY request_count DESC, model ASC\s+LIMIT \$3 OFFSET \$4`).
+	mock.ExpectQuery(`(?s)first_output_kind IS NOT NULL.*ORDER BY request_count DESC, model ASC\s+LIMIT \$3 OFFSET \$4`).
 		WithArgs(start, end, 20, 0).
 		WillReturnRows(sqlmock.NewRows([]string{
 			"model",

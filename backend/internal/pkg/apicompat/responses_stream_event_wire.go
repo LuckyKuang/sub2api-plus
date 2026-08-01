@@ -1,6 +1,9 @@
 package apicompat
 
-import "encoding/json"
+import (
+	"bytes"
+	"encoding/json"
+)
 
 // MarshalJSON renders a ResponsesStreamEvent into its wire form.
 //
@@ -86,6 +89,24 @@ func (e ResponsesStreamEvent) MarshalJSON() ([]byte, error) {
 		}
 		return json.Marshal(m)
 
+	case "response.tool_search_call_arguments.delta", "response.tool_search_call_arguments.done":
+		m := e.wireBase()
+		e.putItemID(m)
+		m["output_index"] = e.OutputIndex
+		if e.CallID != "" {
+			m["call_id"] = e.CallID
+		}
+		if e.Name != "" {
+			m["name"] = e.Name
+		}
+		if e.Delta != "" {
+			m["delta"] = e.Delta
+		}
+		if e.Arguments != "" {
+			m["arguments"] = toolSearchCallArgumentsJSON(e.Arguments)
+		}
+		return json.Marshal(m)
+
 	case "response.custom_tool_call_input.delta", "response.custom_tool_call_input.done":
 		m := e.wireBase()
 		e.putItemID(m)
@@ -109,6 +130,46 @@ func (e ResponsesStreamEvent) MarshalJSON() ([]byte, error) {
 		type alias ResponsesStreamEvent
 		return json.Marshal(alias(e))
 	}
+}
+
+// UnmarshalJSON accepts the string arguments used by function calls and the
+// JSON-object arguments used by tool_search_call argument events. Arguments
+// stay as compact JSON text internally so existing converters can share the
+// same accumulation and suffix logic.
+func (e *ResponsesStreamEvent) UnmarshalJSON(data []byte) error {
+	type alias ResponsesStreamEvent
+
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	arguments, hasArguments := fields["arguments"]
+	delete(fields, "arguments")
+	normalized, err := json.Marshal(fields)
+	if err != nil {
+		return err
+	}
+
+	var decoded alias
+	if err := json.Unmarshal(normalized, &decoded); err != nil {
+		return err
+	}
+	*e = ResponsesStreamEvent(decoded)
+	if !hasArguments || bytes.Equal(bytes.TrimSpace(arguments), []byte("null")) {
+		return nil
+	}
+
+	var argumentString string
+	if err := json.Unmarshal(arguments, &argumentString); err == nil {
+		e.Arguments = argumentString
+		return nil
+	}
+	var compact bytes.Buffer
+	if err := json.Compact(&compact, arguments); err != nil {
+		return err
+	}
+	e.Arguments = compact.String()
+	return nil
 }
 
 func (e ResponsesStreamEvent) wireBase() map[string]any {

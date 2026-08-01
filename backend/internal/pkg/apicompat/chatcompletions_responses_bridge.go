@@ -39,6 +39,9 @@ func ResponsesToChatCompletionsRequest(req *ResponsesRequest) (*ChatCompletionsR
 	if err != nil {
 		return nil, err
 	}
+	if ResponsesToolsContainImageGeneration(effectiveTools) {
+		return nil, fmt.Errorf("image_generation tools cannot be represented by a Chat Completions upstream; use a Responses or Images capable route")
+	}
 	if len(effectiveTools) > 0 {
 		tools, err := responsesToolsToChatTools(effectiveTools)
 		if err != nil {
@@ -65,6 +68,18 @@ func ResponsesToChatCompletionsRequest(req *ResponsesRequest) (*ChatCompletionsR
 	}
 
 	return out, nil
+}
+
+// ResponsesToolsContainImageGeneration reports whether a Responses request
+// requires server-side image generation that Chat Completions cannot express.
+func ResponsesToolsContainImageGeneration(tools []ResponsesTool) bool {
+	for _, tool := range tools {
+		typ := strings.ToLower(strings.TrimSpace(tool.Type))
+		if typ == "image_generation" || typ == "image_generation_call" || typ == "image_gen" {
+			return true
+		}
+	}
+	return false
 }
 
 // EffectiveResponsesTools returns every client-executable tool declared by a
@@ -1164,21 +1179,25 @@ func ChatCompletionsChunkToResponsesEvents(
 				ItemID:       state.ReasoningItemID,
 			}))
 		}
-		if choice.Delta.Content != nil && *choice.Delta.Content != "" {
+		visibleTextDeltas := []*string{choice.Delta.Content, choice.Delta.Refusal}
+		for _, visibleText := range visibleTextDeltas {
+			if visibleText == nil || *visibleText == "" {
+				continue
+			}
 			// First real content closes the reasoning item, then opens the
 			// message item and its output_text content part.
 			events = append(events, closeChatReasoningItem(state)...)
 			events = append(events, ensureChatToResponsesMessageItem(state)...)
 			events = append(events, ensureChatToResponsesTextPart(state)...)
-			_, _ = state.Text.WriteString(*choice.Delta.Content)
+			_, _ = state.Text.WriteString(*visibleText)
 			events = append(events, chatToResponsesEvent(state, "response.output_text.delta", &ResponsesStreamEvent{
 				OutputIndex:  state.MessageIndex,
 				ContentIndex: 0,
-				Delta:        *choice.Delta.Content,
+				Delta:        *visibleText,
 				ItemID:       state.MessageItemID,
 			}))
 		}
-		for _, toolCall := range choice.Delta.ToolCalls {
+		for _, toolCall := range chatDeltaToolCalls(choice.Delta) {
 			idx := 0
 			if toolCall.Index != nil {
 				idx = *toolCall.Index
@@ -1235,6 +1254,16 @@ func ChatCompletionsChunkToResponsesEvents(
 	}
 
 	return events
+}
+
+func chatDeltaToolCalls(delta ChatDelta) []ChatToolCall {
+	if len(delta.ToolCalls) > 0 || delta.FunctionCall == nil {
+		return delta.ToolCalls
+	}
+	return []ChatToolCall{{
+		Type:     "function",
+		Function: *delta.FunctionCall,
+	}}
 }
 
 // FinalizeChatCompletionsResponsesStream emits terminal Responses events.

@@ -2,6 +2,41 @@ package apicompat
 
 import "testing"
 
+func TestAnthropicEventToResponses_ContentBlockStartPreservesInlinePayload(t *testing.T) {
+	tests := []struct {
+		name      string
+		block     AnthropicContentBlock
+		wantType  string
+		wantDelta string
+	}{
+		{name: "text", block: AnthropicContentBlock{Type: "text", Text: "hello"}, wantType: "response.output_text.delta", wantDelta: "hello"},
+		{name: "thinking", block: AnthropicContentBlock{Type: "thinking", Thinking: "plan"}, wantType: "response.reasoning_summary_text.delta", wantDelta: "plan"},
+		{name: "tool input", block: AnthropicContentBlock{Type: "tool_use", ID: "toolu_1", Name: "lookup", Input: []byte(`{"q":1}`)}, wantType: "response.function_call_arguments.delta", wantDelta: `{"q":1}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			state := NewAnthropicEventToResponsesState()
+			idx := 0
+			events := AnthropicEventToResponsesEvents(&AnthropicStreamEvent{
+				Type:         "content_block_start",
+				Index:        &idx,
+				ContentBlock: &tt.block,
+			}, state)
+
+			for _, event := range events {
+				if event.Type == tt.wantType {
+					if event.Delta != tt.wantDelta {
+						t.Fatalf("%s delta = %q, want %q", tt.wantType, event.Delta, tt.wantDelta)
+					}
+					return
+				}
+			}
+			t.Fatalf("%s was not emitted: %+v", tt.wantType, events)
+		})
+	}
+}
+
 // TestAnthropicEventToResponses_TextEmitsContentPart pins that a message text
 // stream emits response.content_part.added, and that it precedes the first
 // output_text.delta for that part.

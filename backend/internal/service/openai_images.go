@@ -19,6 +19,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/apicompat"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/util/responseheaders"
 	"github.com/gin-gonic/gin"
@@ -703,12 +704,12 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 
 	var usage OpenAIUsage
 	imageCount := parsed.N
-	var firstTokenMs *int
+	var firstOutputMs *int
 	if parsed.Stream && isEventStreamResponse(resp.Header) {
-		streamUsage, streamCount, streamSizes, ttft, err := s.handleOpenAIImagesStreamingResponse(resp, c, startTime)
+		streamUsage, streamCount, streamSizes, firstOutput, err := s.handleOpenAIImagesStreamingResponse(resp, c, startTime)
 		if err != nil {
 			if streamCount > 0 {
-				return &OpenAIForwardResult{
+				result := &OpenAIForwardResult{
 					RequestID:        resp.Header.Get("x-request-id"),
 					Usage:            streamUsage,
 					Model:            requestModel,
@@ -716,20 +717,24 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 					Stream:           parsed.Stream,
 					ResponseHeaders:  resp.Header.Clone(),
 					Duration:         time.Since(startTime),
-					FirstTokenMs:     ttft,
+					FirstOutputMs:    firstOutput,
 					ImageCount:       streamCount,
 					ImageSize:        parsed.SizeTier,
 					ImageInputSize:   parsed.Size,
 					ImageOutputSizes: streamSizes,
-				}, err
+				}
+				if firstOutput != nil {
+					result.FirstOutputKind = string(apicompat.StreamOutputImage)
+				}
+				return result, err
 			}
 			return nil, err
 		}
 		usage = streamUsage
 		imageCount = streamCount
 		imageOutputSizes := streamSizes
-		firstTokenMs = ttft
-		return &OpenAIForwardResult{
+		firstOutputMs = firstOutput
+		result := &OpenAIForwardResult{
 			RequestID:        resp.Header.Get("x-request-id"),
 			Usage:            usage,
 			Model:            requestModel,
@@ -737,20 +742,29 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 			Stream:           parsed.Stream,
 			ResponseHeaders:  resp.Header.Clone(),
 			Duration:         time.Since(startTime),
-			FirstTokenMs:     firstTokenMs,
+			FirstOutputMs:    firstOutputMs,
 			ImageCount:       imageCount,
 			ImageSize:        parsed.SizeTier,
 			ImageInputSize:   parsed.Size,
 			ImageOutputSizes: imageOutputSizes,
-		}, nil
+		}
+		if firstOutputMs != nil {
+			result.FirstOutputKind = string(apicompat.StreamOutputImage)
+		}
+		return result, nil
 	} else {
 		nonStreamUsage, nonStreamCount, nonStreamSizes, err := s.handleOpenAIImagesNonStreamingResponse(resp, c)
 		if err != nil {
 			return nil, err
 		}
 		usage = nonStreamUsage
+		var firstOutputMs *int
+		firstOutputKind := ""
 		if nonStreamCount > 0 {
 			imageCount = nonStreamCount
+			elapsed := int(time.Since(startTime).Milliseconds())
+			firstOutputMs = &elapsed
+			firstOutputKind = string(apicompat.StreamOutputImage)
 		}
 		return &OpenAIForwardResult{
 			RequestID:        resp.Header.Get("x-request-id"),
@@ -760,7 +774,8 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 			Stream:           parsed.Stream,
 			ResponseHeaders:  resp.Header.Clone(),
 			Duration:         time.Since(startTime),
-			FirstTokenMs:     firstTokenMs,
+			FirstOutputMs:    firstOutputMs,
+			FirstOutputKind:  firstOutputKind,
 			ImageCount:       imageCount,
 			ImageSize:        parsed.SizeTier,
 			ImageInputSize:   parsed.Size,
@@ -958,7 +973,7 @@ func (s *OpenAIGatewayService) handleOpenAIImagesStreamingResponse(
 
 	usage := OpenAIUsage{}
 	imageCounter := newOpenAIImageOutputCounter()
-	var firstTokenMs *int
+	var timing streamOutputTiming
 	clientDisconnected := false
 	lastDownstreamWriteAt := time.Now()
 	var fallbackBody bytes.Buffer
@@ -974,6 +989,7 @@ func (s *OpenAIGatewayService) handleOpenAIImagesStreamingResponse(
 		fallbackBytes = 0
 		mergeOpenAIUsage(&usage, dataBytes)
 		imageCounter.AddSSEData(dataBytes)
+		timing.Observe(startTime, apicompat.ObserveImageOutput(dataBytes))
 	}
 
 	flushSSEEvent := func() {
@@ -983,10 +999,6 @@ func (s *OpenAIGatewayService) handleOpenAIImagesStreamingResponse(
 	processLine := func(line []byte) {
 		if len(line) == 0 {
 			return
-		}
-		if firstTokenMs == nil {
-			ms := int(time.Since(startTime).Milliseconds())
-			firstTokenMs = &ms
 		}
 		if !clientDisconnected {
 			if _, writeErr := c.Writer.Write(line); writeErr != nil {
@@ -1024,6 +1036,7 @@ func (s *OpenAIGatewayService) handleOpenAIImagesStreamingResponse(
 		}
 		mergeOpenAIUsage(&usage, body)
 		imageCounter.AddJSONResponse(body)
+		timing.Observe(startTime, apicompat.ObserveImageOutput(body))
 	}
 
 	streamInterval := s.openAIImageStreamDataInterval()
@@ -1038,12 +1051,12 @@ func (s *OpenAIGatewayService) handleOpenAIImagesStreamingResponse(
 			}
 			if err != nil {
 				flushSSEEvent()
-				return usage, imageCounter.Count(), imageCounter.Sizes(), firstTokenMs, err
+				return usage, imageCounter.Count(), imageCounter.Sizes(), timing.firstOutputMs, err
 			}
 		}
 		flushSSEEvent()
 		finalizeFallbackBody()
-		return usage, imageCounter.Count(), imageCounter.Sizes(), firstTokenMs, nil
+		return usage, imageCounter.Count(), imageCounter.Sizes(), timing.firstOutputMs, nil
 	}
 
 	type readEvent struct {
@@ -1110,11 +1123,11 @@ func (s *OpenAIGatewayService) handleOpenAIImagesStreamingResponse(
 			if !ok {
 				flushSSEEvent()
 				finalizeFallbackBody()
-				return usage, imageCounter.Count(), imageCounter.Sizes(), firstTokenMs, nil
+				return usage, imageCounter.Count(), imageCounter.Sizes(), timing.firstOutputMs, nil
 			}
 			if ev.err != nil {
 				flushSSEEvent()
-				return usage, imageCounter.Count(), imageCounter.Sizes(), firstTokenMs, ev.err
+				return usage, imageCounter.Count(), imageCounter.Sizes(), timing.firstOutputMs, ev.err
 			}
 			processLine(ev.line)
 		case <-intervalCh:
@@ -1123,11 +1136,11 @@ func (s *OpenAIGatewayService) handleOpenAIImagesStreamingResponse(
 				continue
 			}
 			if clientDisconnected {
-				return usage, imageCounter.Count(), imageCounter.Sizes(), firstTokenMs, fmt.Errorf("image stream incomplete after timeout")
+				return usage, imageCounter.Count(), imageCounter.Sizes(), timing.firstOutputMs, fmt.Errorf("image stream incomplete after timeout")
 			}
 			logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Images stream data interval timeout: interval=%s", streamInterval)
 			_ = s.writeOpenAIImagesStreamEvent(c, flusher, "error", buildOpenAIImagesStreamErrorBody(fmt.Sprintf("upstream image stream idle for %s", streamInterval)))
-			return usage, imageCounter.Count(), imageCounter.Sizes(), firstTokenMs, fmt.Errorf("image stream data interval timeout")
+			return usage, imageCounter.Count(), imageCounter.Sizes(), timing.firstOutputMs, fmt.Errorf("image stream data interval timeout")
 		case <-keepaliveCh:
 			if clientDisconnected || time.Since(lastDownstreamWriteAt) < keepaliveInterval {
 				continue

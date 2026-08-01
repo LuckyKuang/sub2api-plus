@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/apicompat"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/geminicli"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/googleapi"
@@ -1058,6 +1059,8 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 
 	var usage *ClaudeUsage
 	var firstTokenMs *int
+	var firstOutputMs *int
+	var firstOutputKind string
 	if req.Stream {
 		streamRes, err := s.handleStreamingResponse(c, resp, startTime, originalModel)
 		if err != nil {
@@ -1065,6 +1068,8 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 		}
 		usage = streamRes.usage
 		firstTokenMs = streamRes.firstTokenMs
+		firstOutputMs = streamRes.firstOutputMs
+		firstOutputKind = streamRes.firstOutputKind
 	} else {
 		if useUpstreamStream {
 			collected, usageObj, err := collectGeminiSSE(resp.Body, true)
@@ -1072,7 +1077,7 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 				return nil, s.writeClaudeError(c, http.StatusBadGateway, "upstream_error", "Failed to read upstream stream")
 			}
 			collectedBytes, _ := json.Marshal(collected)
-			claudeResp, usageObj2 := convertGeminiToClaudeMessage(collected, originalModel, collectedBytes, false)
+			claudeResp, usageObj2 := convertGeminiToClaudeMessage(collected, originalModel, collectedBytes, true)
 			c.JSON(http.StatusOK, claudeResp)
 			usage = usageObj2
 			if usageObj != nil && (usageObj.InputTokens > 0 || usageObj.OutputTokens > 0) {
@@ -1095,16 +1100,18 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 	}
 
 	return &ForwardResult{
-		RequestID:      requestID,
-		Usage:          *usage,
-		Model:          originalModel,
-		UpstreamModel:  mappedModel,
-		Stream:         req.Stream,
-		Duration:       time.Since(startTime),
-		FirstTokenMs:   firstTokenMs,
-		ImageCount:     imageCount,
-		ImageSize:      imageSize,
-		ImageInputSize: imageInputSize,
+		RequestID:       requestID,
+		Usage:           *usage,
+		Model:           originalModel,
+		UpstreamModel:   mappedModel,
+		Stream:          req.Stream,
+		Duration:        time.Since(startTime),
+		FirstTokenMs:    firstTokenMs,
+		FirstOutputMs:   firstOutputMs,
+		FirstOutputKind: firstOutputKind,
+		ImageCount:      imageCount,
+		ImageSize:       imageSize,
+		ImageInputSize:  imageInputSize,
 	}, nil
 }
 
@@ -1588,6 +1595,8 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 
 	var usage *ClaudeUsage
 	var firstTokenMs *int
+	var firstOutputMs *int
+	var firstOutputKind string
 
 	if stream {
 		streamRes, err := s.handleNativeStreamingResponse(c, resp, startTime, isOAuth)
@@ -1596,6 +1605,8 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 		}
 		usage = streamRes.usage
 		firstTokenMs = streamRes.firstTokenMs
+		firstOutputMs = streamRes.firstOutputMs
+		firstOutputKind = streamRes.firstOutputKind
 	} else {
 		if useUpstreamStream {
 			collected, usageObj, err := collectGeminiSSE(resp.Body, isOAuth)
@@ -1627,16 +1638,18 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 	}
 
 	return &ForwardResult{
-		RequestID:      requestID,
-		Usage:          *usage,
-		Model:          originalModel,
-		UpstreamModel:  mappedModel,
-		Stream:         stream,
-		Duration:       time.Since(startTime),
-		FirstTokenMs:   firstTokenMs,
-		ImageCount:     imageCount,
-		ImageSize:      imageSize,
-		ImageInputSize: imageInputSize,
+		RequestID:       requestID,
+		Usage:           *usage,
+		Model:           originalModel,
+		UpstreamModel:   mappedModel,
+		Stream:          stream,
+		Duration:        time.Since(startTime),
+		FirstTokenMs:    firstTokenMs,
+		FirstOutputMs:   firstOutputMs,
+		FirstOutputKind: firstOutputKind,
+		ImageCount:      imageCount,
+		ImageSize:       imageSize,
+		ImageInputSize:  imageInputSize,
 	}, nil
 }
 
@@ -1985,8 +1998,10 @@ func mapGeminiStatusToClaudeErrorType(status string) string {
 }
 
 type geminiStreamResult struct {
-	usage        *ClaudeUsage
-	firstTokenMs *int
+	usage           *ClaudeUsage
+	firstTokenMs    *int
+	firstOutputMs   *int
+	firstOutputKind string
 }
 
 func (s *GeminiMessagesCompatService) handleNonStreamingResponse(c *gin.Context, resp *http.Response, originalModel string) (*ClaudeUsage, error) {
@@ -2005,7 +2020,7 @@ func (s *GeminiMessagesCompatService) handleNonStreamingResponse(c *gin.Context,
 		return nil, s.writeClaudeError(c, http.StatusBadGateway, "upstream_error", "Failed to parse upstream response")
 	}
 
-	claudeResp, usage := convertGeminiToClaudeMessage(geminiResp, originalModel, unwrappedBody, false)
+	claudeResp, usage := convertGeminiToClaudeMessage(geminiResp, originalModel, unwrappedBody, true)
 	c.JSON(http.StatusOK, claudeResp)
 
 	return usage, nil
@@ -2043,7 +2058,7 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 	writeSSE(c.Writer, "message_start", messageStart)
 	flusher.Flush()
 
-	var firstTokenMs *int
+	var timing streamOutputTiming
 	var usage ClaudeUsage
 	finishReason := ""
 	sawToolUse := false
@@ -2137,10 +2152,11 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 					})
 				}
 
-				if firstTokenMs == nil {
-					ms := int(time.Since(startTime).Milliseconds())
-					firstTokenMs = &ms
-				}
+				timing.Observe(startTime, apicompat.StreamOutputObservation{
+					MeaningfulOutput: true,
+					TokenLikeDelta:   true,
+					Kind:             apicompat.StreamOutputText,
+				})
 				writeSSE(c.Writer, "content_block_delta", map[string]any{
 					"type":  "content_block_delta",
 					"index": openBlockIndex,
@@ -2198,6 +2214,11 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 							"input": map[string]any{},
 						},
 					})
+					timing.Observe(startTime, apicompat.StreamOutputObservation{
+						MeaningfulOutput: true,
+						TokenLikeDelta:   true,
+						Kind:             apicompat.StreamOutputTool,
+					})
 				}
 
 				argsJSONText := "{}"
@@ -2227,6 +2248,46 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 					})
 				}
 				flusher.Flush()
+				continue
+			}
+
+			if markdown, outputKind, ok := geminiInlineMediaMarkdown(part); ok {
+				timing.Observe(startTime, apicompat.StreamOutputObservation{
+					MeaningfulOutput: true,
+					Kind:             outputKind,
+				})
+				if openBlockIndex >= 0 {
+					writeSSE(c.Writer, "content_block_stop", map[string]any{"type": "content_block_stop", "index": openBlockIndex})
+					openBlockIndex = -1
+					openBlockType = ""
+				}
+				if openToolIndex >= 0 {
+					writeSSE(c.Writer, "content_block_stop", map[string]any{"type": "content_block_stop", "index": openToolIndex})
+					openToolIndex = -1
+					openToolName = ""
+					seenToolJSON = ""
+				}
+				mediaIndex := nextBlockIndex
+				nextBlockIndex++
+				writeSSE(c.Writer, "content_block_start", map[string]any{
+					"type":  "content_block_start",
+					"index": mediaIndex,
+					"content_block": map[string]any{
+						"type": "text",
+						"text": "",
+					},
+				})
+				writeSSE(c.Writer, "content_block_delta", map[string]any{
+					"type":  "content_block_delta",
+					"index": mediaIndex,
+					"delta": map[string]any{
+						"type": "text_delta",
+						"text": markdown,
+					},
+				})
+				writeSSE(c.Writer, "content_block_stop", map[string]any{"type": "content_block_stop", "index": mediaIndex})
+				flusher.Flush()
+				continue
 			}
 		}
 
@@ -2277,7 +2338,12 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 	})
 	flusher.Flush()
 
-	return &geminiStreamResult{usage: &usage, firstTokenMs: firstTokenMs}, nil
+	return &geminiStreamResult{
+		usage:           &usage,
+		firstTokenMs:    timing.firstTokenMs,
+		firstOutputMs:   timing.firstOutputMs,
+		firstOutputKind: timing.firstOutputKind,
+	}, nil
 }
 
 func writeSSE(w io.Writer, event string, data any) {
@@ -2476,8 +2542,10 @@ func mergeCollectedTextParts(response map[string]any, textParts []string) map[st
 }
 
 type geminiNativeStreamResult struct {
-	usage        *ClaudeUsage
-	firstTokenMs *int
+	usage           *ClaudeUsage
+	firstTokenMs    *int
+	firstOutputMs   *int
+	firstOutputKind string
 }
 
 func isGeminiInsufficientScope(headers http.Header, body []byte) bool {
@@ -2616,7 +2684,7 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
 
 	reader := bufio.NewReader(resp.Body)
 	usage := &ClaudeUsage{}
-	var firstTokenMs *int
+	var timing streamOutputTiming
 
 	for {
 		line, err := reader.ReadString('\n')
@@ -2647,10 +2715,7 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
 						usage = u
 					}
 
-					if firstTokenMs == nil {
-						ms := int(time.Since(startTime).Milliseconds())
-						firstTokenMs = &ms
-					}
+					timing.Observe(startTime, apicompat.ObserveGeminiOutput(rawBytes))
 
 					if isOAuth {
 						// SSE format requires double newline (\n\n) to separate events
@@ -2675,7 +2740,12 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
 		}
 	}
 
-	return &geminiNativeStreamResult{usage: usage, firstTokenMs: firstTokenMs}, nil
+	return &geminiNativeStreamResult{
+		usage:           usage,
+		firstTokenMs:    timing.firstTokenMs,
+		firstOutputMs:   timing.firstOutputMs,
+		firstOutputKind: timing.firstOutputKind,
+	}, nil
 }
 
 // ForwardAIStudioGET forwards a GET request to AI Studio (generativelanguage.googleapis.com) for
@@ -2757,7 +2827,7 @@ func unwrapGeminiResponse(raw []byte) ([]byte, error) {
 	return raw, nil
 }
 
-func convertGeminiToClaudeMessage(geminiResp map[string]any, originalModel string, rawData []byte, includeInlineData bool) (map[string]any, *ClaudeUsage) {
+func convertGeminiToClaudeMessage(geminiResp map[string]any, originalModel string, rawData []byte, includeInlineMedia bool) (map[string]any, *ClaudeUsage) {
 	usage := extractGeminiUsage(rawData)
 	if usage == nil {
 		usage = &ClaudeUsage{}
@@ -2780,15 +2850,11 @@ func convertGeminiToClaudeMessage(geminiResp map[string]any, originalModel strin
 								"text": text,
 							})
 						}
-						if inlineData, ok := pm["inlineData"].(map[string]any); includeInlineData && ok {
-							mimeType, _ := inlineData["mimeType"].(string)
-							data, _ := inlineData["data"].(string)
-							if isGeminiInlineImageMIMEType(mimeType) && isValidBase64(data) {
-								contentBlocks = append(contentBlocks, map[string]any{
-									"type": "text",
-									"text": fmt.Sprintf("![image](data:%s;base64,%s)", mimeType, data),
-								})
-							}
+						if markdown, _, ok := geminiInlineMediaMarkdown(pm); includeInlineMedia && ok {
+							contentBlocks = append(contentBlocks, map[string]any{
+								"type": "text",
+								"text": markdown,
+							})
 						}
 						if fc, ok := pm["functionCall"].(map[string]any); ok {
 							name, _ := fc["name"].(string)
@@ -2839,6 +2905,40 @@ func isGeminiInlineImageMIMEType(mimeType string) bool {
 	default:
 		return false
 	}
+}
+
+func geminiInlineMediaMarkdown(part map[string]any) (string, apicompat.StreamOutputKind, bool) {
+	if part == nil {
+		return "", apicompat.StreamOutputNone, false
+	}
+	var inlineData map[string]any
+	for _, key := range []string{"inlineData", "inline_data"} {
+		if value, ok := part[key].(map[string]any); ok {
+			inlineData = value
+			break
+		}
+	}
+	if inlineData == nil {
+		return "", apicompat.StreamOutputNone, false
+	}
+
+	mimeType, _ := inlineData["mimeType"].(string)
+	if mimeType == "" {
+		mimeType, _ = inlineData["mime_type"].(string)
+	}
+	mimeType = strings.ToLower(strings.TrimSpace(mimeType))
+	data, _ := inlineData["data"].(string)
+	if !isValidBase64(data) {
+		return "", apicompat.StreamOutputNone, false
+	}
+
+	if isGeminiInlineImageMIMEType(mimeType) {
+		return fmt.Sprintf("![image](data:%s;base64,%s)", mimeType, data), apicompat.StreamOutputImage, true
+	}
+	if strings.HasPrefix(mimeType, "audio/") && !strings.ContainsAny(mimeType, ";,\t\r\n ") {
+		return fmt.Sprintf("[audio](data:%s;base64,%s)", mimeType, data), apicompat.StreamOutputAudio, true
+	}
+	return "", apicompat.StreamOutputNone, false
 }
 
 func isValidBase64(data string) bool {

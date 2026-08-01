@@ -43276,6 +43276,9 @@ type UsageLogMutation struct {
 	addduration_ms               *int
 	first_token_ms               *int
 	addfirst_token_ms            *int
+	first_output_ms              *int
+	addfirst_output_ms           *int
+	first_output_kind            *string
 	user_agent                   *string
 	ip_address                   *string
 	image_count                  *int
@@ -45065,6 +45068,125 @@ func (m *UsageLogMutation) ResetFirstTokenMs() {
 	delete(m.clearedFields, usagelog.FieldFirstTokenMs)
 }
 
+// SetFirstOutputMs sets the "first_output_ms" field.
+func (m *UsageLogMutation) SetFirstOutputMs(i int) {
+	m.first_output_ms = &i
+	m.addfirst_output_ms = nil
+}
+
+// FirstOutputMs returns the value of the "first_output_ms" field in the mutation.
+func (m *UsageLogMutation) FirstOutputMs() (r int, exists bool) {
+	v := m.first_output_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFirstOutputMs returns the old "first_output_ms" field's value of the UsageLog entity.
+// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageLogMutation) OldFirstOutputMs(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFirstOutputMs is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFirstOutputMs requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFirstOutputMs: %w", err)
+	}
+	return oldValue.FirstOutputMs, nil
+}
+
+// AddFirstOutputMs adds i to the "first_output_ms" field.
+func (m *UsageLogMutation) AddFirstOutputMs(i int) {
+	if m.addfirst_output_ms != nil {
+		*m.addfirst_output_ms += i
+	} else {
+		m.addfirst_output_ms = &i
+	}
+}
+
+// AddedFirstOutputMs returns the value that was added to the "first_output_ms" field in this mutation.
+func (m *UsageLogMutation) AddedFirstOutputMs() (r int, exists bool) {
+	v := m.addfirst_output_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearFirstOutputMs clears the value of the "first_output_ms" field.
+func (m *UsageLogMutation) ClearFirstOutputMs() {
+	m.first_output_ms = nil
+	m.addfirst_output_ms = nil
+	m.clearedFields[usagelog.FieldFirstOutputMs] = struct{}{}
+}
+
+// FirstOutputMsCleared returns if the "first_output_ms" field was cleared in this mutation.
+func (m *UsageLogMutation) FirstOutputMsCleared() bool {
+	_, ok := m.clearedFields[usagelog.FieldFirstOutputMs]
+	return ok
+}
+
+// ResetFirstOutputMs resets all changes to the "first_output_ms" field.
+func (m *UsageLogMutation) ResetFirstOutputMs() {
+	m.first_output_ms = nil
+	m.addfirst_output_ms = nil
+	delete(m.clearedFields, usagelog.FieldFirstOutputMs)
+}
+
+// SetFirstOutputKind sets the "first_output_kind" field.
+func (m *UsageLogMutation) SetFirstOutputKind(s string) {
+	m.first_output_kind = &s
+}
+
+// FirstOutputKind returns the value of the "first_output_kind" field in the mutation.
+func (m *UsageLogMutation) FirstOutputKind() (r string, exists bool) {
+	v := m.first_output_kind
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFirstOutputKind returns the old "first_output_kind" field's value of the UsageLog entity.
+// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageLogMutation) OldFirstOutputKind(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFirstOutputKind is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFirstOutputKind requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFirstOutputKind: %w", err)
+	}
+	return oldValue.FirstOutputKind, nil
+}
+
+// ClearFirstOutputKind clears the value of the "first_output_kind" field.
+func (m *UsageLogMutation) ClearFirstOutputKind() {
+	m.first_output_kind = nil
+	m.clearedFields[usagelog.FieldFirstOutputKind] = struct{}{}
+}
+
+// FirstOutputKindCleared returns if the "first_output_kind" field was cleared in this mutation.
+func (m *UsageLogMutation) FirstOutputKindCleared() bool {
+	_, ok := m.clearedFields[usagelog.FieldFirstOutputKind]
+	return ok
+}
+
+// ResetFirstOutputKind resets all changes to the "first_output_kind" field.
+func (m *UsageLogMutation) ResetFirstOutputKind() {
+	m.first_output_kind = nil
+	delete(m.clearedFields, usagelog.FieldFirstOutputKind)
+}
+
 // SetUserAgent sets the "user_agent" field.
 func (m *UsageLogMutation) SetUserAgent(s string) {
 	m.user_agent = &s
@@ -45880,7 +46002,7 @@ func (m *UsageLogMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UsageLogMutation) Fields() []string {
-	fields := make([]string, 0, 45)
+	fields := make([]string, 0, 47)
 	if m.user != nil {
 		fields = append(fields, usagelog.FieldUserID)
 	}
@@ -45976,6 +46098,12 @@ func (m *UsageLogMutation) Fields() []string {
 	}
 	if m.first_token_ms != nil {
 		fields = append(fields, usagelog.FieldFirstTokenMs)
+	}
+	if m.first_output_ms != nil {
+		fields = append(fields, usagelog.FieldFirstOutputMs)
+	}
+	if m.first_output_kind != nil {
+		fields = append(fields, usagelog.FieldFirstOutputKind)
 	}
 	if m.user_agent != nil {
 		fields = append(fields, usagelog.FieldUserAgent)
@@ -46088,6 +46216,10 @@ func (m *UsageLogMutation) Field(name string) (ent.Value, bool) {
 		return m.DurationMs()
 	case usagelog.FieldFirstTokenMs:
 		return m.FirstTokenMs()
+	case usagelog.FieldFirstOutputMs:
+		return m.FirstOutputMs()
+	case usagelog.FieldFirstOutputKind:
+		return m.FirstOutputKind()
 	case usagelog.FieldUserAgent:
 		return m.UserAgent()
 	case usagelog.FieldIPAddress:
@@ -46187,6 +46319,10 @@ func (m *UsageLogMutation) OldField(ctx context.Context, name string) (ent.Value
 		return m.OldDurationMs(ctx)
 	case usagelog.FieldFirstTokenMs:
 		return m.OldFirstTokenMs(ctx)
+	case usagelog.FieldFirstOutputMs:
+		return m.OldFirstOutputMs(ctx)
+	case usagelog.FieldFirstOutputKind:
+		return m.OldFirstOutputKind(ctx)
 	case usagelog.FieldUserAgent:
 		return m.OldUserAgent(ctx)
 	case usagelog.FieldIPAddress:
@@ -46446,6 +46582,20 @@ func (m *UsageLogMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetFirstTokenMs(v)
 		return nil
+	case usagelog.FieldFirstOutputMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFirstOutputMs(v)
+		return nil
+	case usagelog.FieldFirstOutputKind:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFirstOutputKind(v)
+		return nil
 	case usagelog.FieldUserAgent:
 		v, ok := value.(string)
 		if !ok {
@@ -46599,6 +46749,9 @@ func (m *UsageLogMutation) AddedFields() []string {
 	if m.addfirst_token_ms != nil {
 		fields = append(fields, usagelog.FieldFirstTokenMs)
 	}
+	if m.addfirst_output_ms != nil {
+		fields = append(fields, usagelog.FieldFirstOutputMs)
+	}
 	if m.addimage_count != nil {
 		fields = append(fields, usagelog.FieldImageCount)
 	}
@@ -46652,6 +46805,8 @@ func (m *UsageLogMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedDurationMs()
 	case usagelog.FieldFirstTokenMs:
 		return m.AddedFirstTokenMs()
+	case usagelog.FieldFirstOutputMs:
+		return m.AddedFirstOutputMs()
 	case usagelog.FieldImageCount:
 		return m.AddedImageCount()
 	case usagelog.FieldVideoCount:
@@ -46793,6 +46948,13 @@ func (m *UsageLogMutation) AddField(name string, value ent.Value) error {
 		}
 		m.AddFirstTokenMs(v)
 		return nil
+	case usagelog.FieldFirstOutputMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddFirstOutputMs(v)
+		return nil
 	case usagelog.FieldImageCount:
 		v, ok := value.(int)
 		if !ok {
@@ -46854,6 +47016,12 @@ func (m *UsageLogMutation) ClearedFields() []string {
 	}
 	if m.FieldCleared(usagelog.FieldFirstTokenMs) {
 		fields = append(fields, usagelog.FieldFirstTokenMs)
+	}
+	if m.FieldCleared(usagelog.FieldFirstOutputMs) {
+		fields = append(fields, usagelog.FieldFirstOutputMs)
+	}
+	if m.FieldCleared(usagelog.FieldFirstOutputKind) {
+		fields = append(fields, usagelog.FieldFirstOutputKind)
 	}
 	if m.FieldCleared(usagelog.FieldUserAgent) {
 		fields = append(fields, usagelog.FieldUserAgent)
@@ -46928,6 +47096,12 @@ func (m *UsageLogMutation) ClearField(name string) error {
 		return nil
 	case usagelog.FieldFirstTokenMs:
 		m.ClearFirstTokenMs()
+		return nil
+	case usagelog.FieldFirstOutputMs:
+		m.ClearFirstOutputMs()
+		return nil
+	case usagelog.FieldFirstOutputKind:
+		m.ClearFirstOutputKind()
 		return nil
 	case usagelog.FieldUserAgent:
 		m.ClearUserAgent()
@@ -47059,6 +47233,12 @@ func (m *UsageLogMutation) ResetField(name string) error {
 		return nil
 	case usagelog.FieldFirstTokenMs:
 		m.ResetFirstTokenMs()
+		return nil
+	case usagelog.FieldFirstOutputMs:
+		m.ResetFirstOutputMs()
+		return nil
+	case usagelog.FieldFirstOutputKind:
+		m.ResetFirstOutputKind()
 		return nil
 	case usagelog.FieldUserAgent:
 		m.ResetUserAgent()

@@ -2,12 +2,14 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/apicompat"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/util/responseheaders"
 	"github.com/gin-gonic/gin"
@@ -257,7 +259,7 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
 	scanner := s.newUpstreamSSEScanner(resp.Body)
 
 	var usage OpenAIUsage
-	var firstTokenMs *int
+	var timing streamOutputTiming
 	clientDisconnected := false
 	clientOutputStarted := false
 	pendingLines := make([]string, 0, 8)
@@ -301,13 +303,12 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
 		if payload, ok := extractOpenAISSEDataLine(line); ok {
 			trimmedPayload := strings.TrimSpace(payload)
 			if trimmedPayload != "[DONE]" {
-				usageOnlyChunk := isOpenAIChatUsageOnlyStreamChunk(payload)
 				if u := extractCCStreamUsage(payload); u != nil {
 					usage = *u
 				}
-				if firstTokenMs == nil && !usageOnlyChunk {
-					elapsed := int(time.Since(startTime).Milliseconds())
-					firstTokenMs = &elapsed
+				var chunk apicompat.ChatCompletionsChunk
+				if json.Unmarshal([]byte(payload), &chunk) == nil {
+					timing.Observe(startTime, apicompat.ObserveChatChunkOutput(&chunk))
 				}
 			}
 		}
@@ -354,7 +355,7 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
 		}
 	}
 
-	return &OpenAIForwardResult{
+	result := &OpenAIForwardResult{
 		RequestID:       requestID,
 		Usage:           usage,
 		Model:           originalModel,
@@ -364,8 +365,9 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
 		ServiceTier:     serviceTier,
 		Stream:          true,
 		Duration:        time.Since(startTime),
-		FirstTokenMs:    firstTokenMs,
-	}, nil
+	}
+	timing.ApplyOpenAIResult(result)
+	return result, nil
 }
 
 // ensureOpenAIChatStreamUsage 确保 raw Chat Completions 流式请求会让上游返回 usage。
@@ -376,17 +378,6 @@ func ensureOpenAIChatStreamUsage(body []byte) ([]byte, error) {
 		return body, err
 	}
 	return updated, nil
-}
-
-func isOpenAIChatUsageOnlyStreamChunk(payload string) bool {
-	if strings.TrimSpace(payload) == "" {
-		return false
-	}
-	if !gjson.Get(payload, "usage").Exists() {
-		return false
-	}
-	choices := gjson.Get(payload, "choices")
-	return choices.Exists() && choices.IsArray() && len(choices.Array()) == 0
 }
 
 // extractCCStreamUsage 从单个 CC 流式 chunk 的 payload 中提取 usage 字段。

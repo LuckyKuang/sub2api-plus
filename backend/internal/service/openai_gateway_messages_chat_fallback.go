@@ -169,12 +169,16 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsAnthropic(
 
 	anthropicState := apicompat.NewChatCompletionsToAnthropicStreamState(originalModel)
 	clientDisconnected := false
+	var timing streamOutputTiming
 
 	// 与 responses 兄弟不同：客户端断开后仍继续做事件转换（喂 anthropicState），
 	// 仅跳过写出，保证 finalize 阶段的 usage 汇总不受断开影响。
 	emitChunk := func(chunk *apicompat.ChatCompletionsChunk) {
 		// CC chunk → Anthropic events (direct, single state machine)
 		anthropicEvents := apicompat.ChatCompletionsChunkToAnthropicEvents(chunk, anthropicState)
+		for i := range anthropicEvents {
+			timing.Observe(startTime, apicompat.ObserveAnthropicOutput(&anthropicEvents[i]))
+		}
 		if clientDisconnected {
 			return
 		}
@@ -201,7 +205,7 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsAnthropic(
 		// Broken upstream read: skip finalization so no synthetic message_stop
 		// masks the truncation, and surface the error to flag usage incomplete
 		// (mirrors forwardResponsesViaRawChatCompletions).
-		return &OpenAIForwardResult{
+		result := &OpenAIForwardResult{
 			RequestID:        requestID,
 			Usage:            usage,
 			Model:            originalModel,
@@ -211,13 +215,17 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsAnthropic(
 			ServiceTier:      serviceTier,
 			Stream:           true,
 			Duration:         time.Since(startTime),
-			FirstTokenMs:     scan.FirstTokenMs,
 			ClientDisconnect: clientDisconnected,
-		}, fmt.Errorf("stream usage incomplete: %w", scan.Err)
+		}
+		timing.ApplyOpenAIResult(result)
+		return result, fmt.Errorf("stream usage incomplete: %w", scan.Err)
 	}
 
 	// Finalize: close open blocks + emit message_delta/message_stop.
 	finalEvents := apicompat.FinalizeChatCompletionsAnthropicStream(anthropicState)
+	for i := range finalEvents {
+		timing.Observe(startTime, apicompat.ObserveAnthropicOutput(&finalEvents[i]))
+	}
 	if !clientDisconnected {
 		for _, aEvt := range finalEvents {
 			sse, err := apicompat.ResponsesAnthropicEventToSSE(aEvt)
@@ -236,7 +244,7 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsAnthropic(
 		logCCStreamMissingDoneSentinel("openai messages chat fallback", requestID)
 	}
 
-	return &OpenAIForwardResult{
+	result := &OpenAIForwardResult{
 		RequestID:        requestID,
 		Usage:            usage,
 		Model:            originalModel,
@@ -246,7 +254,8 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsAnthropic(
 		ServiceTier:      serviceTier,
 		Stream:           true,
 		Duration:         time.Since(startTime),
-		FirstTokenMs:     scan.FirstTokenMs,
 		ClientDisconnect: clientDisconnected,
-	}, nil
+	}
+	timing.ApplyOpenAIResult(result)
+	return result, nil
 }

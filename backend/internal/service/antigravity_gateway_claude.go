@@ -425,6 +425,8 @@ func (s *AntigravityGatewayService) Forward(ctx context.Context, c *gin.Context,
 
 	var usage *ClaudeUsage
 	var firstTokenMs *int
+	var firstOutputMs *int
+	var firstOutputKind string
 	var clientDisconnect bool
 	if claudeReq.Stream {
 		// 客户端要求流式，直接透传转换
@@ -435,6 +437,8 @@ func (s *AntigravityGatewayService) Forward(ctx context.Context, c *gin.Context,
 		}
 		usage = streamRes.usage
 		firstTokenMs = streamRes.firstTokenMs
+		firstOutputMs = streamRes.firstOutputMs
+		firstOutputKind = streamRes.firstOutputKind
 		clientDisconnect = streamRes.clientDisconnect
 	} else {
 		// 客户端要求非流式，收集流式响应后转换返回
@@ -445,6 +449,8 @@ func (s *AntigravityGatewayService) Forward(ctx context.Context, c *gin.Context,
 		}
 		usage = streamRes.usage
 		firstTokenMs = streamRes.firstTokenMs
+		firstOutputMs = streamRes.firstOutputMs
+		firstOutputKind = streamRes.firstOutputKind
 	}
 
 	return &ForwardResult{
@@ -455,6 +461,8 @@ func (s *AntigravityGatewayService) Forward(ctx context.Context, c *gin.Context,
 		Stream:           claudeReq.Stream,
 		Duration:         time.Since(startTime),
 		FirstTokenMs:     firstTokenMs,
+		FirstOutputMs:    firstOutputMs,
+		FirstOutputKind:  firstOutputKind,
 		ClientDisconnect: clientDisconnect,
 	}, nil
 }

@@ -616,18 +616,22 @@ func ChatCompletionsChunkToAnthropicEvents(
 			})...)
 		}
 
-		// Text content → text block (closes any open thinking block first).
-		if choice.Delta.Content != nil && *choice.Delta.Content != "" {
+		// Visible content/refusal → text block (closes any open thinking block first).
+		visibleTextDeltas := []*string{choice.Delta.Content, choice.Delta.Refusal}
+		for _, visibleText := range visibleTextDeltas {
+			if visibleText == nil || *visibleText == "" {
+				continue
+			}
 			events = append(events, closeCCAnthropicBlockIfOpen(state, "thinking")...)
 			events = append(events, ensureCCAnthropicTextBlock(state)...)
 			events = append(events, ccAnthropicDelta(state, &AnthropicDelta{
 				Type: "text_delta",
-				Text: *choice.Delta.Content,
+				Text: *visibleText,
 			})...)
 		}
 
 		// Tool calls → tool_use blocks.
-		for _, toolCall := range choice.Delta.ToolCalls {
+		for _, toolCall := range chatDeltaToolCalls(choice.Delta) {
 			events = append(events, closeCCAnthropicBlockIfOpen(state, "thinking")...)
 			events = append(events, handleCCAnthropicToolCall(state, &toolCall)...)
 		}

@@ -498,6 +498,23 @@ func TestReconstructResponseOutputFromSSE_NonCompactionAddedStillUsesDeltas(t *t
 	require.Equal(t, "hi", items[0].Get("content.0.text").String())
 }
 
+func TestReconstructResponseOutputFromSSE_DoneOnlyAndToolSearchObjectArguments(t *testing.T) {
+	bodyText := strings.Join([]string{
+		`data: {"type":"response.output_text.done","output_index":0,"content_index":0,"text":"answer"}`,
+		`data: {"type":"response.tool_search_call_arguments.done","output_index":1,"call_id":"call_search","name":"tool_search","arguments":{"query":"docs"}}`,
+		`data: {"type":"response.completed","response":{"id":"resp_1","output":[]}}`,
+	}, "\n")
+
+	outputJSON, ok := reconstructResponseOutputFromSSE(bodyText)
+	require.True(t, ok)
+	items := gjson.ParseBytes(outputJSON).Array()
+	require.Len(t, items, 2)
+	require.Equal(t, "message", items[0].Get("type").String())
+	require.Equal(t, "answer", items[0].Get("content.0.text").String())
+	require.Equal(t, "tool_search_call", items[1].Get("type").String())
+	require.Equal(t, "docs", items[1].Get("arguments.query").String())
+}
+
 // 透传分支（OAuth passthrough）同样命中桥接。
 func TestHandleNonStreamingResponsePassthrough_CompactClientStreamBridgesToSSE(t *testing.T) {
 	svc := newCompactBridgeTestService()

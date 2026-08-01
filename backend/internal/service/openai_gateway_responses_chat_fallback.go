@@ -177,6 +177,7 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsResponses(
 	state.ToolSearchDeclared = toolSearch
 	state.NamespaceTools = namespaceTools
 	clientDisconnected := false
+	var timing streamOutputTiming
 
 	writeEvents := func(events []apicompat.ResponsesStreamEvent) {
 		if clientDisconnected || len(events) == 0 {
@@ -184,6 +185,9 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsResponses(
 		}
 		writeStreamHeaders()
 		for _, event := range events {
+			if payload, err := json.Marshal(event); err == nil {
+				timing.Observe(startTime, apicompat.ObserveResponsesOutput(payload))
+			}
 			sse, err := apicompat.ResponsesEventToSSE(event)
 			if err != nil {
 				logger.L().Warn("openai responses chat fallback: failed to marshal stream event",
@@ -209,7 +213,7 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsResponses(
 	})
 
 	if scan.Err != nil {
-		return &OpenAIForwardResult{
+		result := &OpenAIForwardResult{
 			RequestID:       requestID,
 			Usage:           scan.Usage,
 			Model:           originalModel,
@@ -219,8 +223,9 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsResponses(
 			ServiceTier:     serviceTier,
 			Stream:          true,
 			Duration:        time.Since(startTime),
-			FirstTokenMs:    scan.FirstTokenMs,
-		}, fmt.Errorf("stream usage incomplete: %w", scan.Err)
+		}
+		timing.ApplyOpenAIResult(result)
+		return result, fmt.Errorf("stream usage incomplete: %w", scan.Err)
 	}
 
 	writeEvents(apicompat.FinalizeChatCompletionsResponsesStream(state))
@@ -237,7 +242,7 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsResponses(
 		logCCStreamMissingDoneSentinel("openai responses chat fallback", requestID)
 	}
 
-	return &OpenAIForwardResult{
+	result := &OpenAIForwardResult{
 		RequestID:       requestID,
 		Usage:           scan.Usage,
 		Model:           originalModel,
@@ -247,18 +252,7 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsResponses(
 		ServiceTier:     serviceTier,
 		Stream:          true,
 		Duration:        time.Since(startTime),
-		FirstTokenMs:    scan.FirstTokenMs,
-	}, nil
-}
-
-func chatChunkStartsResponsesOutput(chunk *apicompat.ChatCompletionsChunk) bool {
-	if chunk == nil {
-		return false
 	}
-	for _, choice := range chunk.Choices {
-		if choice.Delta.Content != nil || choice.Delta.ReasoningContent != nil || len(choice.Delta.ToolCalls) > 0 {
-			return true
-		}
-	}
-	return false
+	timing.ApplyOpenAIResult(result)
+	return result, nil
 }

@@ -672,6 +672,53 @@ func (_u *UsageLogUpdate) ClearFirstTokenMs() *UsageLogUpdate {
 	return _u
 }
 
+// SetFirstOutputMs sets the "first_output_ms" field.
+func (_u *UsageLogUpdate) SetFirstOutputMs(v int) *UsageLogUpdate {
+	_u.mutation.ResetFirstOutputMs()
+	_u.mutation.SetFirstOutputMs(v)
+	return _u
+}
+
+// SetNillableFirstOutputMs sets the "first_output_ms" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableFirstOutputMs(v *int) *UsageLogUpdate {
+	if v != nil {
+		_u.SetFirstOutputMs(*v)
+	}
+	return _u
+}
+
+// AddFirstOutputMs adds value to the "first_output_ms" field.
+func (_u *UsageLogUpdate) AddFirstOutputMs(v int) *UsageLogUpdate {
+	_u.mutation.AddFirstOutputMs(v)
+	return _u
+}
+
+// ClearFirstOutputMs clears the value of the "first_output_ms" field.
+func (_u *UsageLogUpdate) ClearFirstOutputMs() *UsageLogUpdate {
+	_u.mutation.ClearFirstOutputMs()
+	return _u
+}
+
+// SetFirstOutputKind sets the "first_output_kind" field.
+func (_u *UsageLogUpdate) SetFirstOutputKind(v string) *UsageLogUpdate {
+	_u.mutation.SetFirstOutputKind(v)
+	return _u
+}
+
+// SetNillableFirstOutputKind sets the "first_output_kind" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableFirstOutputKind(v *string) *UsageLogUpdate {
+	if v != nil {
+		_u.SetFirstOutputKind(*v)
+	}
+	return _u
+}
+
+// ClearFirstOutputKind clears the value of the "first_output_kind" field.
+func (_u *UsageLogUpdate) ClearFirstOutputKind() *UsageLogUpdate {
+	_u.mutation.ClearFirstOutputKind()
+	return _u
+}
+
 // SetUserAgent sets the "user_agent" field.
 func (_u *UsageLogUpdate) SetUserAgent(v string) *UsageLogUpdate {
 	_u.mutation.SetUserAgent(v)
@@ -1031,6 +1078,11 @@ func (_u *UsageLogUpdate) check() error {
 			return &ValidationError{Name: "billing_mode", err: fmt.Errorf(`ent: validator failed for field "UsageLog.billing_mode": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.FirstOutputKind(); ok {
+		if err := usagelog.FirstOutputKindValidator(v); err != nil {
+			return &ValidationError{Name: "first_output_kind", err: fmt.Errorf(`ent: validator failed for field "UsageLog.first_output_kind": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.UserAgent(); ok {
 		if err := usagelog.UserAgentValidator(v); err != nil {
 			return &ValidationError{Name: "user_agent", err: fmt.Errorf(`ent: validator failed for field "UsageLog.user_agent": %w`, err)}
@@ -1251,6 +1303,21 @@ func (_u *UsageLogUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.FirstTokenMsCleared() {
 		_spec.ClearField(usagelog.FieldFirstTokenMs, field.TypeInt)
+	}
+	if value, ok := _u.mutation.FirstOutputMs(); ok {
+		_spec.SetField(usagelog.FieldFirstOutputMs, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedFirstOutputMs(); ok {
+		_spec.AddField(usagelog.FieldFirstOutputMs, field.TypeInt, value)
+	}
+	if _u.mutation.FirstOutputMsCleared() {
+		_spec.ClearField(usagelog.FieldFirstOutputMs, field.TypeInt)
+	}
+	if value, ok := _u.mutation.FirstOutputKind(); ok {
+		_spec.SetField(usagelog.FieldFirstOutputKind, field.TypeString, value)
+	}
+	if _u.mutation.FirstOutputKindCleared() {
+		_spec.ClearField(usagelog.FieldFirstOutputKind, field.TypeString)
 	}
 	if value, ok := _u.mutation.UserAgent(); ok {
 		_spec.SetField(usagelog.FieldUserAgent, field.TypeString, value)
@@ -2129,6 +2196,53 @@ func (_u *UsageLogUpdateOne) ClearFirstTokenMs() *UsageLogUpdateOne {
 	return _u
 }
 
+// SetFirstOutputMs sets the "first_output_ms" field.
+func (_u *UsageLogUpdateOne) SetFirstOutputMs(v int) *UsageLogUpdateOne {
+	_u.mutation.ResetFirstOutputMs()
+	_u.mutation.SetFirstOutputMs(v)
+	return _u
+}
+
+// SetNillableFirstOutputMs sets the "first_output_ms" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableFirstOutputMs(v *int) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetFirstOutputMs(*v)
+	}
+	return _u
+}
+
+// AddFirstOutputMs adds value to the "first_output_ms" field.
+func (_u *UsageLogUpdateOne) AddFirstOutputMs(v int) *UsageLogUpdateOne {
+	_u.mutation.AddFirstOutputMs(v)
+	return _u
+}
+
+// ClearFirstOutputMs clears the value of the "first_output_ms" field.
+func (_u *UsageLogUpdateOne) ClearFirstOutputMs() *UsageLogUpdateOne {
+	_u.mutation.ClearFirstOutputMs()
+	return _u
+}
+
+// SetFirstOutputKind sets the "first_output_kind" field.
+func (_u *UsageLogUpdateOne) SetFirstOutputKind(v string) *UsageLogUpdateOne {
+	_u.mutation.SetFirstOutputKind(v)
+	return _u
+}
+
+// SetNillableFirstOutputKind sets the "first_output_kind" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableFirstOutputKind(v *string) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetFirstOutputKind(*v)
+	}
+	return _u
+}
+
+// ClearFirstOutputKind clears the value of the "first_output_kind" field.
+func (_u *UsageLogUpdateOne) ClearFirstOutputKind() *UsageLogUpdateOne {
+	_u.mutation.ClearFirstOutputKind()
+	return _u
+}
+
 // SetUserAgent sets the "user_agent" field.
 func (_u *UsageLogUpdateOne) SetUserAgent(v string) *UsageLogUpdateOne {
 	_u.mutation.SetUserAgent(v)
@@ -2501,6 +2615,11 @@ func (_u *UsageLogUpdateOne) check() error {
 			return &ValidationError{Name: "billing_mode", err: fmt.Errorf(`ent: validator failed for field "UsageLog.billing_mode": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.FirstOutputKind(); ok {
+		if err := usagelog.FirstOutputKindValidator(v); err != nil {
+			return &ValidationError{Name: "first_output_kind", err: fmt.Errorf(`ent: validator failed for field "UsageLog.first_output_kind": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.UserAgent(); ok {
 		if err := usagelog.UserAgentValidator(v); err != nil {
 			return &ValidationError{Name: "user_agent", err: fmt.Errorf(`ent: validator failed for field "UsageLog.user_agent": %w`, err)}
@@ -2738,6 +2857,21 @@ func (_u *UsageLogUpdateOne) sqlSave(ctx context.Context) (_node *UsageLog, err 
 	}
 	if _u.mutation.FirstTokenMsCleared() {
 		_spec.ClearField(usagelog.FieldFirstTokenMs, field.TypeInt)
+	}
+	if value, ok := _u.mutation.FirstOutputMs(); ok {
+		_spec.SetField(usagelog.FieldFirstOutputMs, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedFirstOutputMs(); ok {
+		_spec.AddField(usagelog.FieldFirstOutputMs, field.TypeInt, value)
+	}
+	if _u.mutation.FirstOutputMsCleared() {
+		_spec.ClearField(usagelog.FieldFirstOutputMs, field.TypeInt)
+	}
+	if value, ok := _u.mutation.FirstOutputKind(); ok {
+		_spec.SetField(usagelog.FieldFirstOutputKind, field.TypeString, value)
+	}
+	if _u.mutation.FirstOutputKindCleared() {
+		_spec.ClearField(usagelog.FieldFirstOutputKind, field.TypeString)
 	}
 	if value, ok := _u.mutation.UserAgent(); ok {
 		_spec.SetField(usagelog.FieldUserAgent, field.TypeString, value)

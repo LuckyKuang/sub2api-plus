@@ -42,6 +42,38 @@ func TestOpenAIStreamEventIsTerminalWithTypeMatchesExistingSemantics(t *testing.
 	}
 }
 
+func TestResponsesStreamEventMayContributeToOutputMatchesAccumulatorEvents(t *testing.T) {
+	contributing := []string{
+		"response.output_text.delta",
+		"response.output_text.done",
+		"response.refusal.delta",
+		"response.refusal.done",
+		"response.content_part.added",
+		"response.content_part.done",
+		"response.reasoning_summary_part.added",
+		"response.reasoning_summary_part.done",
+		"response.output_item.added",
+		"response.output_item.done",
+		"response.function_call_arguments.delta",
+		"response.function_call_arguments.done",
+		"response.custom_tool_call_input.delta",
+		"response.custom_tool_call_input.done",
+		"response.tool_search_call_arguments.delta",
+		"response.tool_search_call_arguments.done",
+		"response.reasoning_summary_text.delta",
+		"response.reasoning_summary_text.done",
+		"response.reasoning_text.delta",
+		"response.reasoning_text.done",
+	}
+	for _, eventType := range contributing {
+		require.Truef(t, responsesStreamEventMayContributeToOutput(eventType), "%s must reach the output accumulator", eventType)
+	}
+
+	for _, eventType := range []string{"", "response.created", "response.completed", "response.failed", "response.image_generation_call.partial_image"} {
+		require.Falsef(t, responsesStreamEventMayContributeToOutput(eventType), "%s is handled outside the text/tool accumulator", eventType)
+	}
+}
+
 var (
 	benchmarkOpenAIResponseSSEEventTypeSink string
 	benchmarkOpenAIResponseSSETerminalSink  bool

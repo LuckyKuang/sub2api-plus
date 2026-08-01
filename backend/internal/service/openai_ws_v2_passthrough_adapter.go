@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/apicompat"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	openaiwsv2 "github.com/Wei-Shaw/sub2api/internal/service/openai_ws_v2"
@@ -564,16 +565,7 @@ func (c *openAIWSPassthroughFirstOutputFrameConn) notifyDeadlineChanged() {
 }
 
 func openAIWSPassthroughStartsSemanticOutput(payload []byte) bool {
-	eventType := strings.TrimSpace(gjson.GetBytes(payload, "type").String())
-	switch eventType {
-	case "response.completed", "response.done", "response.failed", "response.incomplete", "response.cancelled", "response.canceled":
-		return true
-	case "", "response.created", "response.in_progress", "response.output_item.added", "response.output_item.done":
-		return false
-	}
-	return strings.Contains(eventType, ".delta") ||
-		strings.HasPrefix(eventType, "response.output_text") ||
-		strings.HasPrefix(eventType, "response.output")
+	return apicompat.ObserveResponsesOutput(payload).MeaningfulOutput
 }
 
 func openAIWSPassthroughIsTerminalOutput(payload []byte) bool {
@@ -1044,6 +1036,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 		},
 	}
 	upstreamFirstMessageSent := false
+	firstResponseCreateStartedAt := time.Now()
 	firstWriteCtx, cancelFirstWrite := context.WithTimeout(ctx, s.openAIWSWriteTimeout())
 	firstWriteErr := relayUpstreamFrameConn.WriteFrame(firstWriteCtx, coderws.MessageText, firstClientMessage)
 	cancelFirstWrite()
@@ -1084,6 +1077,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 			IdleTimeout:                     0,
 			FirstMessageType:                coderws.MessageText,
 			FirstMessageSent:                upstreamFirstMessageSent,
+			FirstResponseCreateStartedAt:    firstResponseCreateStartedAt,
 			StartClientAfterFirstDownstream: true,
 			ReadClientFrame:                 readNextClientFrame,
 			OnUsageParseFailure: func(eventType string, usageRaw string) {
@@ -1115,6 +1109,8 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 					ResponseHeaders:       cloneHeader(handshakeHeaders),
 					Duration:              turn.Duration,
 					FirstTokenMs:          turn.FirstTokenMs,
+					FirstOutputMs:         turn.FirstOutputMs,
+					FirstOutputKind:       turn.FirstOutputKind,
 				}
 				if responseID := strings.TrimSpace(turnResult.RequestID); responseID != "" && stateStore != nil {
 					ttl := s.openAIWSResponseStickyTTL()
@@ -1243,6 +1239,8 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 		ResponseHeaders:       cloneHeader(handshakeHeaders),
 		Duration:              relayResult.Duration,
 		FirstTokenMs:          relayResult.FirstTokenMs,
+		FirstOutputMs:         relayResult.FirstOutputMs,
+		FirstOutputKind:       relayResult.FirstOutputKind,
 	}
 
 	turnCount := int(completedTurns.Load())

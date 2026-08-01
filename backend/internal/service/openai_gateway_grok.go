@@ -177,6 +177,8 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
 
 	var usage *OpenAIUsage
 	var firstTokenMs *int
+	var firstOutputMs *int
+	var firstOutputKind string
 	responseID := ""
 	if reqStream {
 		if hasGrokResponsesClientToolMapping(clientToolMapping) {
@@ -192,6 +194,8 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
 		}
 		usage = streamResult.usage
 		firstTokenMs = streamResult.firstTokenMs
+		firstOutputMs = streamResult.firstOutputMs
+		firstOutputKind = streamResult.firstOutputKind
 		responseID = strings.TrimSpace(streamResult.responseID)
 	} else {
 		nonStreamResult, err := s.handleNonStreamingResponse(ctx, resp, c, account, originalModel, upstreamModel)
@@ -218,6 +222,8 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
 		ResponseHeaders: resp.Header.Clone(),
 		Duration:        time.Since(startTime),
 		FirstTokenMs:    firstTokenMs,
+		FirstOutputMs:   firstOutputMs,
+		FirstOutputKind: firstOutputKind,
 	}, nil
 }
 

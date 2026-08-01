@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/apicompat"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	coderws "github.com/coder/websocket"
 	"github.com/gin-gonic/gin"
@@ -790,7 +791,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		responseID := ""
 		usage := OpenAIUsage{}
 		imageCounter := newOpenAIImageOutputCounter()
-		var firstTokenMs *int
+		var timing streamOutputTiming
 		reqStream := openAIWSPayloadBoolFromRaw(payload, "stream", true)
 		turnPreviousResponseID := openAIWSPayloadStringFromRaw(payload, "previous_response_id")
 		turnPreviousResponseIDKind := ClassifyOpenAIPreviousResponseIDKind(turnPreviousResponseID)
@@ -913,17 +914,15 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 					}
 				}
 			}
-			isTokenEvent := isOpenAIWSTokenEvent(eventType)
+			outputObservation := apicompat.ObserveResponsesOutput(upstreamMessage)
+			timing.Observe(turnStart, outputObservation)
+			isTokenEvent := outputObservation.TokenLikeDelta
 			if isTokenEvent {
 				tokenEventCount++
 			}
 			isTerminalEvent := isOpenAIWSTerminalEvent(eventType)
 			if isTerminalEvent {
 				terminalEventCount++
-			}
-			if firstTokenMs == nil && isTokenEvent {
-				ms := int(time.Since(turnStart).Milliseconds())
-				firstTokenMs = &ms
 			}
 			if openAIWSEventShouldParseUsage(eventType) {
 				parseOpenAIWSResponseUsageFromCompletedEvent(upstreamMessage, &usage)
@@ -984,8 +983,8 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 					lease.MarkBroken()
 				}
 				firstTokenMsValue := -1
-				if firstTokenMs != nil {
-					firstTokenMsValue = *firstTokenMs
+				if timing.firstTokenMs != nil {
+					firstTokenMsValue = *timing.firstTokenMs
 				}
 				if debugEnabled {
 					logOpenAIWSModeDebug(
@@ -1017,8 +1016,8 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 					UpstreamTerminalEvent: terminalEvent,
 					ResponseHeaders:       lease.HandshakeHeaders(),
 					Duration:              time.Since(turnStart),
-					FirstTokenMs:          firstTokenMs,
 				}
+				timing.ApplyOpenAIResult(result)
 				if replayInput := replayCollector.Items(); len(replayInput) > 0 {
 					result.wsReplayInput = replayInput
 					result.wsReplayInputExists = true

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/apicompat"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
@@ -414,6 +415,79 @@ func TestAntigravityCompatUsageOnlyStreamTriggersFailover(t *testing.T) {
 			require.True(t, failoverErr.RetryableOnSameAccount)
 			require.Empty(t, recorder.Body.String())
 			require.Empty(t, recorder.Header().Get("Content-Type"))
+		})
+	}
+}
+
+func TestAntigravityCompatDroppedAnthropicMetadataDoesNotSetOutputTiming(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tests := []struct {
+		name    string
+		adapter antigravityCompatStreamAdapter
+	}{
+		{
+			name:    "chat completions",
+			adapter: newAntigravityChatStreamAdapter("gemini-test", false),
+		},
+		{
+			name:    "responses",
+			adapter: newAntigravityResponsesStreamAdapter("gemini-test"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			writer := newAntigravityClientWriter(c.Writer, c.Writer, "metadata-test")
+			session := newAntigravityCompatStreamSession("gemini-test", time.Now(), tt.adapter, writer)
+			idx := 0
+
+			session.emitOrBuffer(apicompat.AnthropicStreamEvent{Type: "message_start"})
+			session.emitOrBuffer(apicompat.AnthropicStreamEvent{
+				Type:         "content_block_start",
+				Index:        &idx,
+				ContentBlock: &apicompat.AnthropicContentBlock{Type: "thinking", Signature: "signature-only"},
+			})
+			session.emitOrBuffer(apicompat.AnthropicStreamEvent{
+				Type:  "content_block_delta",
+				Index: &idx,
+				Delta: &apicompat.AnthropicDelta{Type: "signature_delta", Signature: "encrypted-signature"},
+			})
+			session.emitOrBuffer(apicompat.AnthropicStreamEvent{
+				Type:  "content_block_delta",
+				Index: &idx,
+				Delta: &apicompat.AnthropicDelta{
+					Type:     "citations_delta",
+					Citation: []byte(`{"type":"url","url":"https://example.test"}`),
+				},
+			})
+			session.emitOrBuffer(apicompat.AnthropicStreamEvent{
+				Type:         "content_block_start",
+				Index:        &idx,
+				ContentBlock: &apicompat.AnthropicContentBlock{Type: "redacted_thinking", Data: "encrypted-thinking"},
+			})
+			session.emitOrBuffer(apicompat.AnthropicStreamEvent{
+				Type:  "content_block_start",
+				Index: &idx,
+				ContentBlock: &apicompat.AnthropicContentBlock{
+					Type:    "web_search_tool_result",
+					Content: []byte(`[{"title":"Docs"}]`),
+				},
+			})
+
+			require.False(t, session.responseCommitted)
+			session.emitOrBuffer(apicompat.AnthropicStreamEvent{Type: "message_stop"})
+			result := session.result(false)
+
+			require.Nil(t, result.firstTokenMs)
+			require.Nil(t, result.firstOutputMs)
+			require.Empty(t, result.firstOutputKind)
+			require.NotContains(t, recorder.Body.String(), "encrypted-signature")
+			require.NotContains(t, recorder.Body.String(), "example.test")
+			require.NotContains(t, recorder.Body.String(), "encrypted-thinking")
+			require.NotContains(t, recorder.Body.String(), "Docs")
 		})
 	}
 }

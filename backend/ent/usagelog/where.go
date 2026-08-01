@@ -215,6 +215,16 @@ func FirstTokenMs(v int) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldFirstTokenMs, v))
 }
 
+// FirstOutputMs applies equality check predicate on the "first_output_ms" field. It's identical to FirstOutputMsEQ.
+func FirstOutputMs(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldFirstOutputMs, v))
+}
+
+// FirstOutputKind applies equality check predicate on the "first_output_kind" field. It's identical to FirstOutputKindEQ.
+func FirstOutputKind(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldFirstOutputKind, v))
+}
+
 // UserAgent applies equality check predicate on the "user_agent" field. It's identical to UserAgentEQ.
 func UserAgent(v string) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldUserAgent, v))
@@ -1678,6 +1688,131 @@ func FirstTokenMsIsNil() predicate.UsageLog {
 // FirstTokenMsNotNil applies the NotNil predicate on the "first_token_ms" field.
 func FirstTokenMsNotNil() predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldNotNull(FieldFirstTokenMs))
+}
+
+// FirstOutputMsEQ applies the EQ predicate on the "first_output_ms" field.
+func FirstOutputMsEQ(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldFirstOutputMs, v))
+}
+
+// FirstOutputMsNEQ applies the NEQ predicate on the "first_output_ms" field.
+func FirstOutputMsNEQ(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNEQ(FieldFirstOutputMs, v))
+}
+
+// FirstOutputMsIn applies the In predicate on the "first_output_ms" field.
+func FirstOutputMsIn(vs ...int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIn(FieldFirstOutputMs, vs...))
+}
+
+// FirstOutputMsNotIn applies the NotIn predicate on the "first_output_ms" field.
+func FirstOutputMsNotIn(vs ...int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotIn(FieldFirstOutputMs, vs...))
+}
+
+// FirstOutputMsGT applies the GT predicate on the "first_output_ms" field.
+func FirstOutputMsGT(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGT(FieldFirstOutputMs, v))
+}
+
+// FirstOutputMsGTE applies the GTE predicate on the "first_output_ms" field.
+func FirstOutputMsGTE(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGTE(FieldFirstOutputMs, v))
+}
+
+// FirstOutputMsLT applies the LT predicate on the "first_output_ms" field.
+func FirstOutputMsLT(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLT(FieldFirstOutputMs, v))
+}
+
+// FirstOutputMsLTE applies the LTE predicate on the "first_output_ms" field.
+func FirstOutputMsLTE(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLTE(FieldFirstOutputMs, v))
+}
+
+// FirstOutputMsIsNil applies the IsNil predicate on the "first_output_ms" field.
+func FirstOutputMsIsNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIsNull(FieldFirstOutputMs))
+}
+
+// FirstOutputMsNotNil applies the NotNil predicate on the "first_output_ms" field.
+func FirstOutputMsNotNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotNull(FieldFirstOutputMs))
+}
+
+// FirstOutputKindEQ applies the EQ predicate on the "first_output_kind" field.
+func FirstOutputKindEQ(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldFirstOutputKind, v))
+}
+
+// FirstOutputKindNEQ applies the NEQ predicate on the "first_output_kind" field.
+func FirstOutputKindNEQ(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNEQ(FieldFirstOutputKind, v))
+}
+
+// FirstOutputKindIn applies the In predicate on the "first_output_kind" field.
+func FirstOutputKindIn(vs ...string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIn(FieldFirstOutputKind, vs...))
+}
+
+// FirstOutputKindNotIn applies the NotIn predicate on the "first_output_kind" field.
+func FirstOutputKindNotIn(vs ...string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotIn(FieldFirstOutputKind, vs...))
+}
+
+// FirstOutputKindGT applies the GT predicate on the "first_output_kind" field.
+func FirstOutputKindGT(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGT(FieldFirstOutputKind, v))
+}
+
+// FirstOutputKindGTE applies the GTE predicate on the "first_output_kind" field.
+func FirstOutputKindGTE(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGTE(FieldFirstOutputKind, v))
+}
+
+// FirstOutputKindLT applies the LT predicate on the "first_output_kind" field.
+func FirstOutputKindLT(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLT(FieldFirstOutputKind, v))
+}
+
+// FirstOutputKindLTE applies the LTE predicate on the "first_output_kind" field.
+func FirstOutputKindLTE(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLTE(FieldFirstOutputKind, v))
+}
+
+// FirstOutputKindContains applies the Contains predicate on the "first_output_kind" field.
+func FirstOutputKindContains(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldContains(FieldFirstOutputKind, v))
+}
+
+// FirstOutputKindHasPrefix applies the HasPrefix predicate on the "first_output_kind" field.
+func FirstOutputKindHasPrefix(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldHasPrefix(FieldFirstOutputKind, v))
+}
+
+// FirstOutputKindHasSuffix applies the HasSuffix predicate on the "first_output_kind" field.
+func FirstOutputKindHasSuffix(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldHasSuffix(FieldFirstOutputKind, v))
+}
+
+// FirstOutputKindIsNil applies the IsNil predicate on the "first_output_kind" field.
+func FirstOutputKindIsNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIsNull(FieldFirstOutputKind))
+}
+
+// FirstOutputKindNotNil applies the NotNil predicate on the "first_output_kind" field.
+func FirstOutputKindNotNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotNull(FieldFirstOutputKind))
+}
+
+// FirstOutputKindEqualFold applies the EqualFold predicate on the "first_output_kind" field.
+func FirstOutputKindEqualFold(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEqualFold(FieldFirstOutputKind, v))
+}
+
+// FirstOutputKindContainsFold applies the ContainsFold predicate on the "first_output_kind" field.
+func FirstOutputKindContainsFold(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldContainsFold(FieldFirstOutputKind, v))
 }
 
 // UserAgentEQ applies the EQ predicate on the "user_agent" field.

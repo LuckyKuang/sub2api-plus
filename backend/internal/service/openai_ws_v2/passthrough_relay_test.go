@@ -202,7 +202,8 @@ func TestRelay_BasicRelayAndUsage(t *testing.T) {
 	require.Equal(t, 7, result.Usage.InputTokens)
 	require.Equal(t, 3, result.Usage.OutputTokens)
 	require.Equal(t, 2, result.Usage.CacheReadInputTokens)
-	require.NotNil(t, result.FirstTokenMs)
+	require.Nil(t, result.FirstTokenMs)
+	require.Nil(t, result.FirstOutputMs)
 	require.Equal(t, int64(1), result.ClientToUpstreamFrames)
 	require.Equal(t, int64(1), result.UpstreamToClientFrames)
 	require.Equal(t, int64(0), result.DroppedDownstreamFrames)
@@ -559,10 +560,50 @@ func TestRelay_OnTurnComplete_ProvidesTurnMetrics(t *testing.T) {
 	require.Equal(t, "resp_metric", turn.RequestID)
 	require.Equal(t, "response.completed", turn.TerminalEventType)
 	require.NotNil(t, turn.FirstTokenMs)
-	require.GreaterOrEqual(t, *turn.FirstTokenMs, 0)
+	require.NotNil(t, turn.FirstOutputMs)
+	require.Equal(t, "text", turn.FirstOutputKind)
 	require.Greater(t, turn.Duration.Milliseconds(), int64(0))
 	require.NotNil(t, result.FirstTokenMs)
+	require.NotNil(t, result.FirstOutputMs)
+	require.Equal(t, "text", result.FirstOutputKind)
 	require.Greater(t, result.Duration.Milliseconds(), int64(0))
+}
+
+func TestRelay_OnTurnComplete_ImagePartialSetsFirstOutputOnly(t *testing.T) {
+	t.Parallel()
+
+	clientConn := newPassthroughTestFrameConn(nil, false)
+	upstreamConn := newPassthroughTestFrameConn([]passthroughTestFrame{
+		{
+			msgType: coderws.MessageText,
+			payload: []byte(`{"type":"response.created","response":{"id":"resp_image"}}`),
+		},
+		{
+			msgType: coderws.MessageText,
+			payload: []byte(`{"type":"response.image_generation_call.partial_image","response_id":"resp_image","partial_image_b64":"aW1hZ2U="}`),
+		},
+		{
+			msgType: coderws.MessageText,
+			payload: []byte(`{"type":"response.completed","response":{"id":"resp_image","usage":{"input_tokens":2,"output_tokens":3}}}`),
+		},
+	}, true)
+
+	firstPayload := []byte(`{"type":"response.create","model":"gpt-5.4","input":"draw"}`)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	var turn RelayTurnResult
+	result, relayExit := Relay(ctx, clientConn, upstreamConn, firstPayload, RelayOptions{
+		OnTurnComplete: func(current RelayTurnResult) { turn = current },
+	})
+	require.Nil(t, relayExit)
+	require.Nil(t, turn.FirstTokenMs)
+	require.NotNil(t, turn.FirstOutputMs)
+	require.Equal(t, "image", turn.FirstOutputKind)
+	require.Nil(t, result.FirstTokenMs)
+	require.NotNil(t, result.FirstOutputMs)
+	require.Equal(t, "image", result.FirstOutputKind)
+	require.Len(t, clientConn.Writes(), 3, "image partial must be forwarded immediately")
 }
 
 func TestRelay_BinaryFramePassthrough(t *testing.T) {

@@ -971,6 +971,9 @@ func TestGeminiMessagesHandleStreamingResponse_ClosesToolBlockBeforeText(t *test
 	result, err := svc.handleStreamingResponse(c, resp, time.Now(), "claude-3-5-sonnet")
 	require.NoError(t, err)
 	require.NotNil(t, result)
+	require.NotNil(t, result.firstTokenMs)
+	require.NotNil(t, result.firstOutputMs)
+	require.Equal(t, "tool", result.firstOutputKind)
 
 	events := parseAnthropicContentBlockEvents(t, rec.Body.String())
 
@@ -1008,6 +1011,127 @@ func TestGeminiMessagesHandleStreamingResponse_ClosesToolBlockBeforeText(t *test
 	require.True(t, textStarted, "expected a text content block to be emitted after the tool call")
 	require.True(t, toolClosedBeforeText, "tool_use block must be closed before the text block starts")
 	require.Equal(t, -1, open, "stream ended with a content block still open")
+}
+
+func TestGeminiMessagesHandleStreamingResponse_MediaOnlySetsFirstOutput(t *testing.T) {
+	tests := []struct {
+		name       string
+		part       string
+		wantKind   string
+		wantOutput string
+	}{
+		{
+			name:       "camel case image",
+			part:       `{"inlineData":{"mimeType":"image/png","data":"aW1hZ2U="}}`,
+			wantKind:   "image",
+			wantOutput: `![image](data:image/png;base64,aW1hZ2U=)`,
+		},
+		{
+			name:       "snake case audio",
+			part:       `{"inline_data":{"mime_type":"audio/wav","data":"YXVkaW8="}}`,
+			wantKind:   "audio",
+			wantOutput: `[audio](data:audio/wav;base64,YXVkaW8=)`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gin.SetMode(gin.TestMode)
+			upstreamBody := `data: {"candidates":[{"content":{"parts":[` + tt.part + `]},"finishReason":"STOP"}],"usageMetadata":{"candidatesTokenCount":1}}` + "\n\n" +
+				"data: [DONE]\n\n"
+			resp := &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(upstreamBody))}
+			rec := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(rec)
+
+			result, err := (&GeminiMessagesCompatService{}).handleStreamingResponse(c, resp, time.Now(), "claude")
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			require.Nil(t, result.firstTokenMs)
+			require.NotNil(t, result.firstOutputMs)
+			require.Equal(t, tt.wantKind, result.firstOutputKind)
+			require.Contains(t, rec.Body.String(), tt.wantOutput)
+		})
+	}
+}
+
+func TestGeminiMessagesHandleStreamingResponse_MetadataOnlyDoesNotSetOutputTiming(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	upstreamBody := `data: {"candidates":[{"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":2,"candidatesTokenCount":0}}` + "\n\n" +
+		"data: [DONE]\n\n"
+	resp := &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(upstreamBody))}
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+
+	result, err := (&GeminiMessagesCompatService{}).handleStreamingResponse(c, resp, time.Now(), "claude")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Nil(t, result.firstTokenMs)
+	require.Nil(t, result.firstOutputMs)
+	require.Empty(t, result.firstOutputKind)
+}
+
+func TestGeminiChatStreaming_MediaBeforeTextKeepsTTFTTokenOnly(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	upstreamBody := `data: {"candidates":[{"content":{"parts":[{"inline_data":{"mime_type":"image/webp","data":"aW1hZ2U="}}]}}]}` + "\n\n" +
+		`data: {"candidates":[{"content":{"parts":[{"text":"done"}]},"finishReason":"STOP"}]}` + "\n\n" +
+		"data: [DONE]\n\n"
+	resp := &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(upstreamBody))}
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+
+	result, err := (&GeminiMessagesCompatService{}).handleChatCompletionsStreamingResponseFromGemini(
+		c, resp, time.Now(), "gpt-test", false, false,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.firstOutputMs)
+	require.Equal(t, "image", result.firstOutputKind)
+	require.NotNil(t, result.firstTokenMs, "the later real text delta should set TTFT")
+	require.Contains(t, rec.Body.String(), `![image](data:image/webp;base64,aW1hZ2U=)`)
+	require.Contains(t, rec.Body.String(), `done`)
+}
+
+func TestGeminiNativeStreaming_MediaAndMetadataTiming(t *testing.T) {
+	tests := []struct {
+		name       string
+		payload    string
+		wantKind   string
+		wantOutput bool
+	}{
+		{
+			name:       "finish and usage only",
+			payload:    `{"candidates":[{"finishReason":"STOP"}],"usageMetadata":{"candidatesTokenCount":0}}`,
+			wantOutput: false,
+		},
+		{
+			name:       "inline image",
+			payload:    `{"candidates":[{"content":{"parts":[{"inlineData":{"mimeType":"image/png","data":"aW1hZ2U="}}]}}]}`,
+			wantKind:   "image",
+			wantOutput: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gin.SetMode(gin.TestMode)
+			resp := &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("data: " + tt.payload + "\n\n"))}
+			rec := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(rec)
+
+			result, err := (&GeminiMessagesCompatService{}).handleNativeStreamingResponse(c, resp, time.Now(), false)
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			if tt.wantOutput {
+				require.Nil(t, result.firstTokenMs)
+				require.NotNil(t, result.firstOutputMs)
+				require.Equal(t, tt.wantKind, result.firstOutputKind)
+			} else {
+				require.Nil(t, result.firstTokenMs)
+				require.Nil(t, result.firstOutputMs)
+				require.Empty(t, result.firstOutputKind)
+			}
+		})
+	}
 }
 
 type anthropicContentBlockEvent struct {

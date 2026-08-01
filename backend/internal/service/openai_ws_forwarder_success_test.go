@@ -22,6 +22,34 @@ import (
 	"github.com/tidwall/gjson"
 )
 
+type openAIWSFlushCaptureWriter struct {
+	gin.ResponseWriter
+	recorder *httptest.ResponseRecorder
+	mu       sync.Mutex
+	flushed  chan string
+}
+
+func (w *openAIWSFlushCaptureWriter) Write(data []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.ResponseWriter.Write(data)
+}
+
+func (w *openAIWSFlushCaptureWriter) WriteString(data string) (int, error) {
+	return w.Write([]byte(data))
+}
+
+func (w *openAIWSFlushCaptureWriter) Flush() {
+	w.mu.Lock()
+	w.ResponseWriter.Flush()
+	snapshot := w.recorder.Body.String()
+	w.mu.Unlock()
+	select {
+	case w.flushed <- snapshot:
+	default:
+	}
+}
+
 func TestOpenAIGatewayService_Forward_WSv2_SuccessAndBindSticky(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -376,8 +404,150 @@ func TestOpenAIGatewayService_Forward_WSv2_ImageGenerationCountsOutputs(t *testi
 	require.Equal(t, 9, result.Usage.InputTokens)
 	require.Equal(t, 4, result.Usage.OutputTokens)
 	require.True(t, result.OpenAIWSMode)
+	require.Nil(t, result.FirstTokenMs)
+	require.NotNil(t, result.FirstOutputMs)
+	require.Equal(t, "image", result.FirstOutputKind)
 	require.Equal(t, "resp_ws_image_1", gjson.GetBytes(rec.Body.Bytes(), "id").String())
 	require.Equal(t, "completed", gjson.GetBytes(rec.Body.Bytes(), "output.0.status").String())
+}
+
+func TestOpenAIGatewayService_Forward_WSv2_ImagePartialFlushesBeforeTerminal(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	allowTerminal := make(chan struct{})
+	serverErrCh := make(chan error, 1)
+
+	upgrader := websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
+	wsServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			serverErrCh <- err
+			return
+		}
+		defer func() { _ = conn.Close() }()
+
+		var request map[string]any
+		if err := conn.ReadJSON(&request); err != nil {
+			serverErrCh <- err
+			return
+		}
+		if err := conn.WriteJSON(map[string]any{
+			"type":     "response.created",
+			"response": map[string]any{"id": "resp_ws_partial", "model": "gpt-5.4"},
+		}); err != nil {
+			serverErrCh <- err
+			return
+		}
+		if err := conn.WriteJSON(map[string]any{
+			"type":              "response.image_generation_call.partial_image",
+			"item_id":           "ig_ws_partial",
+			"partial_image_b64": "cGFydGlhbA==",
+		}); err != nil {
+			serverErrCh <- err
+			return
+		}
+
+		select {
+		case <-allowTerminal:
+		case <-time.After(3 * time.Second):
+			serverErrCh <- errors.New("terminal was not released after partial flush")
+			return
+		}
+
+		if err := conn.WriteJSON(map[string]any{
+			"type": "response.completed",
+			"response": map[string]any{
+				"id":    "resp_ws_partial",
+				"model": "gpt-5.4",
+				"output": []any{map[string]any{
+					"id": "ig_ws_partial", "type": "image_generation_call", "status": "completed", "result": "ZmluYWw=",
+				}},
+				"usage": map[string]any{"input_tokens": 2, "output_tokens": 1},
+			},
+		}); err != nil {
+			serverErrCh <- err
+			return
+		}
+		serverErrCh <- nil
+	}))
+	defer wsServer.Close()
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/openai/v1/responses", nil)
+	writer := &openAIWSFlushCaptureWriter{
+		ResponseWriter: c.Writer,
+		recorder:       recorder,
+		flushed:        make(chan string, 32),
+	}
+	c.Writer = writer
+	groupID := int64(1011)
+	c.Set("api_key", &APIKey{GroupID: &groupID, Group: &Group{ID: groupID, AllowImageGeneration: true}})
+
+	cfg := &config.Config{}
+	cfg.Security.URLAllowlist.Enabled = false
+	cfg.Security.URLAllowlist.AllowInsecureHTTP = true
+	cfg.Gateway.OpenAIWS.Enabled = true
+	cfg.Gateway.OpenAIWS.APIKeyEnabled = true
+	cfg.Gateway.OpenAIWS.ResponsesWebsocketsV2 = true
+	cfg.Gateway.OpenAIWS.MaxConnsPerAccount = 1
+	cfg.Gateway.OpenAIWS.QueueLimitPerConn = 8
+	cfg.Gateway.OpenAIWS.DialTimeoutSeconds = 3
+	cfg.Gateway.OpenAIWS.ReadTimeoutSeconds = 5
+	cfg.Gateway.OpenAIWS.WriteTimeoutSeconds = 3
+
+	svc := &OpenAIGatewayService{
+		cfg:              cfg,
+		httpUpstream:     &httpUpstreamRecorder{},
+		cache:            &stubGatewayCache{},
+		openaiWSResolver: NewOpenAIWSProtocolResolver(cfg),
+		toolCorrector:    NewCodexToolCorrector(),
+	}
+	account := &Account{
+		ID: 11, Name: "openai-ws-partial", Platform: PlatformOpenAI, Type: AccountTypeAPIKey,
+		Status: StatusActive, Schedulable: true, Concurrency: 1,
+		Credentials: map[string]any{"api_key": "sk-test", "base_url": wsServer.URL},
+		Extra:       map[string]any{"responses_websockets_v2_enabled": true},
+	}
+	body := []byte(`{"model":"gpt-5.4","stream":true,"input":"draw","tools":[{"type":"image_generation"}]}`)
+
+	type forwardResult struct {
+		result *OpenAIForwardResult
+		err    error
+	}
+	forwardCh := make(chan forwardResult, 1)
+	go func() {
+		result, err := svc.Forward(context.Background(), c, account, body)
+		forwardCh <- forwardResult{result: result, err: err}
+	}()
+
+	var partialSnapshot string
+	deadline := time.After(3 * time.Second)
+waitForPartial:
+	for {
+		select {
+		case snapshot := <-writer.flushed:
+			if strings.Contains(snapshot, `"partial_image_b64":"cGFydGlhbA=="`) {
+				partialSnapshot = snapshot
+				break waitForPartial
+			}
+		case <-deadline:
+			t.Fatal("image partial was not flushed before the upstream terminal event")
+		}
+	}
+	require.NotContains(t, partialSnapshot, "response.completed")
+	close(allowTerminal)
+
+	select {
+	case forwarded := <-forwardCh:
+		require.NoError(t, forwarded.err)
+		require.NotNil(t, forwarded.result)
+		require.Nil(t, forwarded.result.FirstTokenMs)
+		require.NotNil(t, forwarded.result.FirstOutputMs)
+		require.Equal(t, "image", forwarded.result.FirstOutputKind)
+	case <-time.After(5 * time.Second):
+		t.Fatal("Forward did not finish after releasing the terminal event")
+	}
+	require.NoError(t, <-serverErrCh)
 }
 
 func requestToJSONString(payload map[string]any) string {

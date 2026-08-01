@@ -58,3 +58,33 @@ func TestOpsMetricsCollectorQueryErrorCountsExcludesCountTokens(t *testing.T) {
 	require.NoError(t, db.Close())
 	require.NoError(t, mock.ExpectationsWereMet())
 }
+
+func TestOpsMetricsCollectorQueryUsageLatencyExcludesLegacyFirstTokens(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+
+	collector := &OpsMetricsCollector{db: db}
+	start := time.Date(2026, 5, 26, 10, 0, 0, 0, time.UTC)
+	end := start.Add(time.Hour)
+
+	mock.ExpectQuery(`(?s)ORDER BY duration_ms.*FROM usage_logs.*duration_ms IS NOT NULL`).
+		WithArgs(start, end).
+		WillReturnRows(sqlmock.NewRows([]string{"p50", "p90", "p95", "p99", "avg_ms", "max_ms"}).
+			AddRow(100.0, 200.0, 250.0, 300.0, 175.0, 320))
+	mock.ExpectQuery(`(?s)ORDER BY first_token_ms.*FROM usage_logs.*first_output_kind IS NOT NULL`).
+		WithArgs(start, end).
+		WillReturnRows(sqlmock.NewRows([]string{"p50", "p90", "p95", "p99", "avg_ms", "max_ms"}).
+			AddRow(40.0, 60.0, 70.0, 80.0, 55.0, 90))
+
+	duration, ttft, err := collector.queryUsageLatency(context.Background(), start, end)
+	require.NoError(t, err)
+	require.NotNil(t, duration.p50)
+	require.Equal(t, 100, *duration.p50)
+	require.NotNil(t, ttft.p50)
+	require.Equal(t, 40, *ttft.p50)
+	require.NotNil(t, ttft.avg)
+	require.Equal(t, 55.0, *ttft.avg)
+	mock.ExpectClose()
+	require.NoError(t, db.Close())
+	require.NoError(t, mock.ExpectationsWereMet())
+}

@@ -48,6 +48,12 @@ const messages: Record<string, string> = {
   'usage.imageSizeUnknown': 'unknown',
   'usage.imageUnitPrice': 'Per-image price',
   'usage.imageTotalPrice': 'Image total price',
+	'usage.latencyFirstToken': 'First Token',
+	'usage.latencyLegacyFirstEvent': 'First Event (Legacy)',
+	'usage.latencyFirstOutput': 'First Output',
+	'usage.latencyFirstImage': 'First Image',
+	'usage.latencyFirstAudio': 'First Audio',
+	'usage.latencyDuration': 'Total',
   'admin.usage.billingModeToken': 'Token',
   'admin.usage.billingModePerRequest': 'Per request',
   'admin.usage.billingModeImage': 'Image',
@@ -72,6 +78,7 @@ const DataTableStub = {
         <slot name="cell-billing_mode" :row="row" />
         <slot name="cell-tokens" :row="row" />
         <slot name="cell-cost" :row="row" />
+		<slot name="cell-latency" :row="row" />
       </div>
     </div>
   `,
@@ -119,6 +126,70 @@ describe('admin UsageTable tooltip', () => {
       toJSON: () => ({}),
     } as DOMRect)
   })
+
+	it('renders modality-aware first latency labels without replacing text TTFT', () => {
+		const rows = [
+			{
+				...baseImageRow,
+				request_id: 'req-latency-token',
+				first_token_ms: 120,
+				first_output_ms: 40,
+				first_output_kind: 'image',
+				duration_ms: 500,
+			},
+			{
+				...baseImageRow,
+				request_id: 'req-latency-image',
+				first_token_ms: null,
+				first_output_ms: 75,
+				first_output_kind: 'image',
+				duration_ms: 600,
+			},
+			{
+				...baseImageRow,
+				request_id: 'req-latency-audio',
+				first_token_ms: null,
+				first_output_ms: 80,
+				first_output_kind: 'audio',
+				duration_ms: 700,
+			},
+			{
+				...baseImageRow,
+				request_id: 'req-latency-aggregate',
+				first_token_ms: null,
+				first_output_ms: 90,
+				first_output_kind: 'text',
+				duration_ms: 800,
+			},
+			{
+				...baseImageRow,
+				request_id: 'req-latency-legacy',
+				first_token_ms: 55,
+				first_output_ms: null,
+				first_output_kind: null,
+				duration_ms: 900,
+			},
+		]
+
+		const wrapper = mount(UsageTable, {
+			props: { data: rows, loading: false, columns: [] },
+			global: {
+				stubs: {
+					DataTable: DataTableStub,
+					EmptyState: true,
+					Icon: true,
+					Teleport: true,
+				},
+			},
+		})
+
+		const text = wrapper.text()
+		expect(text).toContain('First Image40ms')
+		expect(text).toContain('First Image75ms')
+		expect(text).toContain('First Audio80ms')
+		expect(text).toContain('First Output90ms')
+		expect(text).toContain('First Event (Legacy)55ms')
+	})
 
   it('marks only usage rows that actually applied long-context billing', () => {
     const wrapper = mount(UsageTable, {

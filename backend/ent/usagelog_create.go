@@ -435,6 +435,34 @@ func (_c *UsageLogCreate) SetNillableFirstTokenMs(v *int) *UsageLogCreate {
 	return _c
 }
 
+// SetFirstOutputMs sets the "first_output_ms" field.
+func (_c *UsageLogCreate) SetFirstOutputMs(v int) *UsageLogCreate {
+	_c.mutation.SetFirstOutputMs(v)
+	return _c
+}
+
+// SetNillableFirstOutputMs sets the "first_output_ms" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableFirstOutputMs(v *int) *UsageLogCreate {
+	if v != nil {
+		_c.SetFirstOutputMs(*v)
+	}
+	return _c
+}
+
+// SetFirstOutputKind sets the "first_output_kind" field.
+func (_c *UsageLogCreate) SetFirstOutputKind(v string) *UsageLogCreate {
+	_c.mutation.SetFirstOutputKind(v)
+	return _c
+}
+
+// SetNillableFirstOutputKind sets the "first_output_kind" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableFirstOutputKind(v *string) *UsageLogCreate {
+	if v != nil {
+		_c.SetFirstOutputKind(*v)
+	}
+	return _c
+}
+
 // SetUserAgent sets the "user_agent" field.
 func (_c *UsageLogCreate) SetUserAgent(v string) *UsageLogCreate {
 	_c.mutation.SetUserAgent(v)
@@ -851,6 +879,11 @@ func (_c *UsageLogCreate) check() error {
 	if _, ok := _c.mutation.Stream(); !ok {
 		return &ValidationError{Name: "stream", err: errors.New(`ent: missing required field "UsageLog.stream"`)}
 	}
+	if v, ok := _c.mutation.FirstOutputKind(); ok {
+		if err := usagelog.FirstOutputKindValidator(v); err != nil {
+			return &ValidationError{Name: "first_output_kind", err: fmt.Errorf(`ent: validator failed for field "UsageLog.first_output_kind": %w`, err)}
+		}
+	}
 	if v, ok := _c.mutation.UserAgent(); ok {
 		if err := usagelog.UserAgentValidator(v); err != nil {
 			return &ValidationError{Name: "user_agent", err: fmt.Errorf(`ent: validator failed for field "UsageLog.user_agent": %w`, err)}
@@ -1041,6 +1074,14 @@ func (_c *UsageLogCreate) createSpec() (*UsageLog, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.FirstTokenMs(); ok {
 		_spec.SetField(usagelog.FieldFirstTokenMs, field.TypeInt, value)
 		_node.FirstTokenMs = &value
+	}
+	if value, ok := _c.mutation.FirstOutputMs(); ok {
+		_spec.SetField(usagelog.FieldFirstOutputMs, field.TypeInt, value)
+		_node.FirstOutputMs = &value
+	}
+	if value, ok := _c.mutation.FirstOutputKind(); ok {
+		_spec.SetField(usagelog.FieldFirstOutputKind, field.TypeString, value)
+		_node.FirstOutputKind = &value
 	}
 	if value, ok := _c.mutation.UserAgent(); ok {
 		_spec.SetField(usagelog.FieldUserAgent, field.TypeString, value)
@@ -1786,6 +1827,48 @@ func (u *UsageLogUpsert) AddFirstTokenMs(v int) *UsageLogUpsert {
 // ClearFirstTokenMs clears the value of the "first_token_ms" field.
 func (u *UsageLogUpsert) ClearFirstTokenMs() *UsageLogUpsert {
 	u.SetNull(usagelog.FieldFirstTokenMs)
+	return u
+}
+
+// SetFirstOutputMs sets the "first_output_ms" field.
+func (u *UsageLogUpsert) SetFirstOutputMs(v int) *UsageLogUpsert {
+	u.Set(usagelog.FieldFirstOutputMs, v)
+	return u
+}
+
+// UpdateFirstOutputMs sets the "first_output_ms" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateFirstOutputMs() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldFirstOutputMs)
+	return u
+}
+
+// AddFirstOutputMs adds v to the "first_output_ms" field.
+func (u *UsageLogUpsert) AddFirstOutputMs(v int) *UsageLogUpsert {
+	u.Add(usagelog.FieldFirstOutputMs, v)
+	return u
+}
+
+// ClearFirstOutputMs clears the value of the "first_output_ms" field.
+func (u *UsageLogUpsert) ClearFirstOutputMs() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldFirstOutputMs)
+	return u
+}
+
+// SetFirstOutputKind sets the "first_output_kind" field.
+func (u *UsageLogUpsert) SetFirstOutputKind(v string) *UsageLogUpsert {
+	u.Set(usagelog.FieldFirstOutputKind, v)
+	return u
+}
+
+// UpdateFirstOutputKind sets the "first_output_kind" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateFirstOutputKind() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldFirstOutputKind)
+	return u
+}
+
+// ClearFirstOutputKind clears the value of the "first_output_kind" field.
+func (u *UsageLogUpsert) ClearFirstOutputKind() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldFirstOutputKind)
 	return u
 }
 
@@ -2698,6 +2781,55 @@ func (u *UsageLogUpsertOne) UpdateFirstTokenMs() *UsageLogUpsertOne {
 func (u *UsageLogUpsertOne) ClearFirstTokenMs() *UsageLogUpsertOne {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.ClearFirstTokenMs()
+	})
+}
+
+// SetFirstOutputMs sets the "first_output_ms" field.
+func (u *UsageLogUpsertOne) SetFirstOutputMs(v int) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetFirstOutputMs(v)
+	})
+}
+
+// AddFirstOutputMs adds v to the "first_output_ms" field.
+func (u *UsageLogUpsertOne) AddFirstOutputMs(v int) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddFirstOutputMs(v)
+	})
+}
+
+// UpdateFirstOutputMs sets the "first_output_ms" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateFirstOutputMs() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateFirstOutputMs()
+	})
+}
+
+// ClearFirstOutputMs clears the value of the "first_output_ms" field.
+func (u *UsageLogUpsertOne) ClearFirstOutputMs() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearFirstOutputMs()
+	})
+}
+
+// SetFirstOutputKind sets the "first_output_kind" field.
+func (u *UsageLogUpsertOne) SetFirstOutputKind(v string) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetFirstOutputKind(v)
+	})
+}
+
+// UpdateFirstOutputKind sets the "first_output_kind" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateFirstOutputKind() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateFirstOutputKind()
+	})
+}
+
+// ClearFirstOutputKind clears the value of the "first_output_kind" field.
+func (u *UsageLogUpsertOne) ClearFirstOutputKind() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearFirstOutputKind()
 	})
 }
 
@@ -3812,6 +3944,55 @@ func (u *UsageLogUpsertBulk) UpdateFirstTokenMs() *UsageLogUpsertBulk {
 func (u *UsageLogUpsertBulk) ClearFirstTokenMs() *UsageLogUpsertBulk {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.ClearFirstTokenMs()
+	})
+}
+
+// SetFirstOutputMs sets the "first_output_ms" field.
+func (u *UsageLogUpsertBulk) SetFirstOutputMs(v int) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetFirstOutputMs(v)
+	})
+}
+
+// AddFirstOutputMs adds v to the "first_output_ms" field.
+func (u *UsageLogUpsertBulk) AddFirstOutputMs(v int) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddFirstOutputMs(v)
+	})
+}
+
+// UpdateFirstOutputMs sets the "first_output_ms" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateFirstOutputMs() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateFirstOutputMs()
+	})
+}
+
+// ClearFirstOutputMs clears the value of the "first_output_ms" field.
+func (u *UsageLogUpsertBulk) ClearFirstOutputMs() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearFirstOutputMs()
+	})
+}
+
+// SetFirstOutputKind sets the "first_output_kind" field.
+func (u *UsageLogUpsertBulk) SetFirstOutputKind(v string) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetFirstOutputKind(v)
+	})
+}
+
+// UpdateFirstOutputKind sets the "first_output_kind" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateFirstOutputKind() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateFirstOutputKind()
+	})
+}
+
+// ClearFirstOutputKind clears the value of the "first_output_kind" field.
+func (u *UsageLogUpsertBulk) ClearFirstOutputKind() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearFirstOutputKind()
 	})
 }
 

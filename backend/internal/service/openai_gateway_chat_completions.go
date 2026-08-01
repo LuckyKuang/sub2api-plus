@@ -71,6 +71,21 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 		return nil, errors.New("codex_cli_only restriction: only codex official clients are allowed")
 	}
 
+	// Some clients send a Responses-shaped payload to /v1/chat/completions.
+	// Reject image generation before any account-specific raw/compat routing:
+	// Chat Completions has no lossless representation for image output.
+	isResponsesShape := !gjson.GetBytes(body, "messages").Exists() && gjson.GetBytes(body, "input").Exists()
+	if isResponsesShape {
+		var shapedRequest apicompat.ResponsesRequest
+		if json.Unmarshal(body, &shapedRequest) == nil {
+			if tools, toolErr := apicompat.EffectiveResponsesTools(&shapedRequest); toolErr == nil && apicompat.ResponsesToolsContainImageGeneration(tools) {
+				message := "image_generation output cannot be represented by /v1/chat/completions; use /v1/responses or /v1/images"
+				writeChatCompletionsError(c, http.StatusBadRequest, "invalid_request_error", message)
+				return nil, errors.New(message)
+			}
+		}
+	}
+
 	if account.Platform == PlatformGrok {
 		if account.IsGrokOAuth() {
 			if eligible, reason := grokChatResponsesBridgeEligibility(body); eligible {
@@ -125,8 +140,6 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 	// Detect that shape and forward the raw body as-is, only rewriting `model`
 	// to the resolved upstream model. The downstream codex OAuth transform will
 	// still normalize store/stream/instructions/etc.
-	isResponsesShape := !gjson.GetBytes(body, "messages").Exists() && gjson.GetBytes(body, "input").Exists()
-
 	var (
 		responsesReq  *apicompat.ResponsesRequest
 		responsesBody []byte
@@ -466,6 +479,11 @@ func (s *OpenAIGatewayService) handleChatBufferedStreamingResponse(
 	// When the terminal event has an empty output array, reconstruct from
 	// accumulated delta events so the client receives the full content.
 	acc.SupplementResponseOutput(finalResponse)
+	if responsesResponseContainsImageOutput(finalResponse) {
+		message := "image generation output cannot be represented by /v1/chat/completions; use /v1/responses or /v1/images"
+		writeChatCompletionsError(c, http.StatusBadGateway, "unsupported_output", message)
+		return nil, errors.New(message)
+	}
 
 	chatResp := apicompat.ResponsesToChatCompletions(finalResponse, originalModel)
 
@@ -513,8 +531,7 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 	state.IncludeUsage = true
 
 	var usage OpenAIUsage
-	var firstTokenMs *int
-	firstChunk := true
+	var timing streamOutputTiming
 	clientDisconnected := false
 	clientOutputStarted := false
 	pendingSSE := make([]string, 0, 4)
@@ -539,7 +556,7 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 	}
 
 	resultWithUsage := func() *OpenAIForwardResult {
-		return &OpenAIForwardResult{
+		result := &OpenAIForwardResult{
 			RequestID:     requestID,
 			Usage:         usage,
 			Model:         originalModel,
@@ -547,17 +564,12 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 			UpstreamModel: upstreamModel,
 			Stream:        true,
 			Duration:      time.Since(startTime),
-			FirstTokenMs:  firstTokenMs,
 		}
+		timing.ApplyOpenAIResult(result)
+		return result
 	}
 
 	processDataLine := func(payload string) bool {
-		if firstChunk {
-			firstChunk = false
-			ms := int(time.Since(startTime).Milliseconds())
-			firstTokenMs = &ms
-		}
-
 		var event apicompat.ResponsesStreamEvent
 		if err := json.Unmarshal([]byte(payload), &event); err != nil {
 			logger.L().Warn("openai chat_completions stream: failed to parse event",
@@ -567,6 +579,22 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 			return false
 		}
 		refusalDetector.ObservePayload([]byte(payload))
+		if responsesEventContainsImageOutput(&event) {
+			message := "image generation output cannot be represented by /v1/chat/completions; use /v1/responses or /v1/images"
+			pendingSSE = pendingSSE[:0]
+			if c != nil && c.Writer != nil && !c.Writer.Written() {
+				writeChatCompletionsError(c, http.StatusBadGateway, "unsupported_output", message)
+				clientOutputStarted = true
+			} else if !clientDisconnected {
+				if _, err := fmt.Fprint(c.Writer, buildChatStreamErrorSSE("unsupported_output", message)); err != nil {
+					clientDisconnected = true
+				} else {
+					c.Writer.Flush()
+				}
+			}
+			streamNonFailoverErr = errors.New(message)
+			return true
+		}
 
 		isTerminalEvent := isOpenAICompatResponsesTerminalEvent(event.Type)
 		if isTerminalEvent {
@@ -653,6 +681,9 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 		}
 
 		chunks := apicompat.ResponsesEventToChatChunks(&event, state)
+		for i := range chunks {
+			timing.Observe(startTime, apicompat.ObserveChatChunkOutput(&chunks[i]))
+		}
 		if !clientDisconnected {
 			for _, chunk := range chunks {
 				refusalDetector.ObserveChatChunk(chunk)
@@ -712,6 +743,7 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 		}
 		if finalChunks := apicompat.FinalizeResponsesChatStream(state); len(finalChunks) > 0 && !clientDisconnected {
 			for _, chunk := range finalChunks {
+				timing.Observe(startTime, apicompat.ObserveChatChunkOutput(&chunk))
 				refusalDetector.ObserveChatChunk(chunk)
 				sse, err := apicompat.ChatChunkToSSE(chunk)
 				if err != nil {
@@ -956,6 +988,31 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 			c.Writer.Flush()
 		}
 	}
+}
+
+func responsesEventContainsImageOutput(event *apicompat.ResponsesStreamEvent) bool {
+	if event == nil {
+		return false
+	}
+	if strings.Contains(strings.ToLower(strings.TrimSpace(event.Type)), "image") {
+		return true
+	}
+	if event.Item != nil && strings.Contains(strings.ToLower(strings.TrimSpace(event.Item.Type)), "image") {
+		return true
+	}
+	return event.Response != nil && responsesResponseContainsImageOutput(event.Response)
+}
+
+func responsesResponseContainsImageOutput(response *apicompat.ResponsesResponse) bool {
+	if response == nil {
+		return false
+	}
+	for _, output := range response.Output {
+		if strings.Contains(strings.ToLower(strings.TrimSpace(output.Type)), "image") {
+			return true
+		}
+	}
+	return false
 }
 
 // writeChatCompletionsError writes an error response in OpenAI Chat Completions format.

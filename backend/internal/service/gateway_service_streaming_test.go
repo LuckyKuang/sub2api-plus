@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -53,6 +54,29 @@ func TestGatewayService_StreamingReusesScannerBufferAndStillParsesUsage(t *testi
 	require.NotNil(t, result.usage)
 	require.Equal(t, 3, result.usage.InputTokens)
 	require.Equal(t, 7, result.usage.OutputTokens)
+	require.Nil(t, result.firstTokenMs)
+	require.Nil(t, result.firstOutputMs)
+	require.Empty(t, result.firstOutputKind)
+}
+
+func TestGatewayService_StreamingTextDeltaSetsOutputTiming(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	svc := newStreamingResponseTestGatewayService()
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+	resp := &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(
+		"event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":1}}}\n\n" +
+			"event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"hello\"}}\n\n" +
+			"event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n",
+	))}
+
+	result, err := svc.handleStreamingResponse(context.Background(), resp, c, &Account{ID: 1}, time.Now(), "model", "model", false)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.firstTokenMs)
+	require.NotNil(t, result.firstOutputMs)
+	require.Equal(t, "text", result.firstOutputKind)
 }
 
 func TestGatewayService_StreamingKeepaliveUsesIdleTimer(t *testing.T) {
@@ -110,6 +134,8 @@ func TestGatewayService_StreamingKeepaliveUsesNoopDeltaForAffectedClaudeCodeVers
 	body := rec.Body.String()
 	require.Contains(t, body, "event: content_block_delta")
 	require.Contains(t, body, `"delta":{"type":"text_delta","text":""}`)
+	require.Nil(t, result.firstTokenMs)
+	require.Nil(t, result.firstOutputMs)
 }
 
 func TestGatewayService_StreamingKeepaliveUsesNoopDeltaDuringToolUseForAffectedClaudeCodeVersion(t *testing.T) {
@@ -142,6 +168,9 @@ func TestGatewayService_StreamingKeepaliveUsesNoopDeltaDuringToolUseForAffectedC
 	require.Contains(t, body, "event: content_block_delta")
 	require.Contains(t, body, `"index":1`)
 	require.Contains(t, body, `"delta":{"type":"input_json_delta","partial_json":""}`)
+	require.NotNil(t, result.firstTokenMs)
+	require.NotNil(t, result.firstOutputMs)
+	require.Equal(t, "tool", result.firstOutputKind)
 }
 
 func TestGatewayService_StreamingKeepaliveKeepsPingForOlderClaudeCodeVersion(t *testing.T) {

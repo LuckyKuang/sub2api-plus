@@ -468,8 +468,7 @@ func (s *GatewayService) handleResponsesStreamingResponse(
 	state.Model = originalModel
 	clientToolRestorer := apicompat.NewResponsesClientToolStreamRestorer(clientToolMapping)
 	var usage ClaudeUsage
-	var firstTokenMs *int
-	firstChunk := true
+	var timing streamOutputTiming
 
 	scanner := bufio.NewScanner(resp.Body)
 	maxLineSize := defaultMaxLineSize
@@ -479,7 +478,7 @@ func (s *GatewayService) handleResponsesStreamingResponse(
 	scanner.Buffer(make([]byte, 0, 64*1024), maxLineSize)
 
 	resultWithUsage := func() *ForwardResult {
-		return &ForwardResult{
+		result := &ForwardResult{
 			RequestID:       requestID,
 			Usage:           usage,
 			Model:           originalModel,
@@ -487,18 +486,13 @@ func (s *GatewayService) handleResponsesStreamingResponse(
 			ReasoningEffort: reasoningEffort,
 			Stream:          true,
 			Duration:        time.Since(startTime),
-			FirstTokenMs:    firstTokenMs,
 		}
+		timing.ApplyForwardResult(result)
+		return result
 	}
 
 	// processEvent handles a single parsed Anthropic SSE event.
 	processEvent := func(event *apicompat.AnthropicStreamEvent) bool {
-		if firstChunk {
-			firstChunk = false
-			ms := int(time.Since(startTime).Milliseconds())
-			firstTokenMs = &ms
-		}
-
 		// Extract usage from message_delta
 		if event.Type == "message_delta" && event.Usage != nil {
 			mergeAnthropicUsage(&usage, *event.Usage)
@@ -529,6 +523,7 @@ func (s *GatewayService) handleResponsesStreamingResponse(
 				continue
 			}
 			for _, restored := range payloads {
+				timing.Observe(startTime, apicompat.ObserveResponsesOutput(restored))
 				eventType := gjson.GetBytes(restored, "type").String()
 				if _, err := fmt.Fprintf(c.Writer, "event: %s\ndata: %s\n\n", eventType, restored); err != nil {
 					logger.L().Info("forward_as_responses stream: client disconnected",
@@ -547,6 +542,10 @@ func (s *GatewayService) handleResponsesStreamingResponse(
 	finalizeStream := func() (*ForwardResult, error) {
 		if finalEvents := apicompat.FinalizeAnthropicResponsesStream(state); len(finalEvents) > 0 {
 			for _, evt := range finalEvents {
+				payload, marshalErr := json.Marshal(evt)
+				if marshalErr == nil {
+					timing.Observe(startTime, apicompat.ObserveResponsesOutput(payload))
+				}
 				sse, err := apicompat.ResponsesEventToSSE(evt)
 				if err != nil {
 					continue

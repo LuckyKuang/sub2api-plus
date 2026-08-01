@@ -207,14 +207,14 @@
           <div class="flex items-stretch gap-2">
             <span
               class="w-1 shrink-0 rounded-full"
-              :class="row.first_token_ms != null
-                ? ['bg-gradient-to-b from-40% to-60%', LATENCY_BAR_FROM_CLASSES[firstTokenSeverity(row.first_token_ms)], LATENCY_BAR_TO_CLASSES[durationSeverity(row.duration_ms ?? 0)]]
+              :class="firstLatencyMs(row) != null
+                ? ['bg-gradient-to-b from-40% to-60%', LATENCY_BAR_FROM_CLASSES[firstLatencySeverity(row)], LATENCY_BAR_TO_CLASSES[durationSeverity(row.duration_ms ?? 0)]]
                 : LATENCY_BAR_CLASSES[durationSeverity(row.duration_ms ?? 0)]"
               aria-hidden="true"
             ></span>
             <div class="grid grid-cols-[max-content_max-content] items-baseline gap-x-2 gap-y-0.5 text-xs">
-              <span class="text-gray-400 dark:text-gray-500">{{ t('usage.latencyFirstToken') }}</span>
-              <span v-if="row.first_token_ms != null" class="font-medium tabular-nums" :class="LATENCY_TEXT_CLASSES[firstTokenSeverity(row.first_token_ms)]">{{ formatDuration(row.first_token_ms) }}</span>
+              <span class="text-gray-400 dark:text-gray-500">{{ firstLatencyLabel(row) }}</span>
+              <span v-if="firstLatencyMs(row) != null" class="font-medium tabular-nums" :class="LATENCY_TEXT_CLASSES[firstLatencySeverity(row)]">{{ formatDuration(firstLatencyMs(row)) }}</span>
               <span v-else class="text-gray-400 dark:text-gray-500">-</span>
               <span class="text-gray-400 dark:text-gray-500">{{ t('usage.latencyDuration') }}</span>
               <span class="font-medium tabular-nums" :class="LATENCY_TEXT_CLASSES[durationSeverity(row.duration_ms ?? 0)]">{{ formatDuration(row.duration_ms) }}</span>
@@ -629,6 +629,28 @@ const formatDuration = (ms: number | null | undefined): string => {
   const totalSec = Math.round(ms / 1000)
   if (totalSec < 3600) return `${Math.floor(totalSec / 60)}m ${totalSec % 60}s`
   return `${Math.floor(totalSec / 3600)}h ${Math.floor((totalSec % 3600) / 60)}m`
+}
+
+const firstLatencyMs = (row: AdminUsageLog): number | null => {
+  if (row.first_output_kind != null) {
+    return row.first_output_ms ?? row.first_token_ms ?? null
+  }
+  return row.first_token_ms ?? row.first_output_ms ?? null
+}
+
+const firstLatencySeverity = (row: AdminUsageLog) =>
+  firstTokenSeverity(firstLatencyMs(row) ?? 0)
+
+const firstLatencyLabel = (row: AdminUsageLog): string => {
+  if (row.first_output_kind == null) {
+    return row.first_token_ms != null
+      ? t('usage.latencyLegacyFirstEvent')
+      : t('usage.latencyFirstOutput')
+  }
+  if (row.first_output_kind === 'image') return t('usage.latencyFirstImage')
+  if (row.first_output_kind === 'audio') return t('usage.latencyFirstAudio')
+  if (row.first_token_ms != null) return t('usage.latencyFirstToken')
+  return t('usage.latencyFirstOutput')
 }
 
 // Cost tooltip functions

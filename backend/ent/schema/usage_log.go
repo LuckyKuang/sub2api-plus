@@ -121,6 +121,13 @@ func (UsageLog) Fields() []ent.Field {
 		field.Int("first_token_ms").
 			Optional().
 			Nillable(),
+		field.Int("first_output_ms").
+			Optional().
+			Nillable(),
+		field.String("first_output_kind").
+			MaxLen(16).
+			Optional().
+			Nillable(),
 		field.String("user_agent").
 			MaxLen(512).
 			Optional().

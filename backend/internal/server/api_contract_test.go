@@ -564,6 +564,8 @@ func TestAPIContracts(t *testing.T) {
 						Stream:                true,
 						DurationMs:            ptr(100),
 						FirstTokenMs:          ptr(50),
+						FirstOutputMs:         ptr(25),
+						FirstOutputKind:       ptr("image"),
 						CreatedAt:             deps.now,
 					},
 				})
@@ -605,6 +607,8 @@ func TestAPIContracts(t *testing.T) {
 							"stream": true,
 							"duration_ms": 100,
 							"first_token_ms": 50,
+							"first_output_ms": 25,
+							"first_output_kind": "image",
 							"image_count": 0,
 							"image_size": null,
 							"image_input_size": null,

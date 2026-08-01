@@ -396,6 +396,8 @@ handleSuccess:
 
 	var usage *ClaudeUsage
 	var firstTokenMs *int
+	var firstOutputMs *int
+	var firstOutputKind string
 	var clientDisconnect bool
 
 	if stream {
@@ -407,6 +409,8 @@ handleSuccess:
 		}
 		usage = streamRes.usage
 		firstTokenMs = streamRes.firstTokenMs
+		firstOutputMs = streamRes.firstOutputMs
+		firstOutputKind = streamRes.firstOutputKind
 		clientDisconnect = streamRes.clientDisconnect
 	} else {
 		// 客户端要求非流式，收集流式响应后返回
@@ -417,6 +421,8 @@ handleSuccess:
 		}
 		usage = streamRes.usage
 		firstTokenMs = streamRes.firstTokenMs
+		firstOutputMs = streamRes.firstOutputMs
+		firstOutputKind = streamRes.firstOutputKind
 	}
 
 	if usage == nil {
@@ -438,6 +444,8 @@ handleSuccess:
 		Stream:           stream,
 		Duration:         time.Since(startTime),
 		FirstTokenMs:     firstTokenMs,
+		FirstOutputMs:    firstOutputMs,
+		FirstOutputKind:  firstOutputKind,
 		ClientDisconnect: clientDisconnect,
 		ImageCount:       imageCount,
 		ImageSize:        imageSize,

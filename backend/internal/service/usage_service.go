@@ -38,6 +38,9 @@ type CreateUsageLogRequest struct {
 	RateMultiplier        float64 `json:"rate_multiplier"`
 	Stream                bool    `json:"stream"`
 	DurationMs            *int    `json:"duration_ms"`
+	FirstTokenMs          *int    `json:"first_token_ms"`
+	FirstOutputMs         *int    `json:"first_output_ms"`
+	FirstOutputKind       *string `json:"first_output_kind"`
 }
 
 // UsageStats 使用统计
@@ -114,6 +117,9 @@ func (s *UsageService) Create(ctx context.Context, req CreateUsageLogRequest) (*
 		RateMultiplier:        req.RateMultiplier,
 		Stream:                req.Stream,
 		DurationMs:            req.DurationMs,
+		FirstTokenMs:          req.FirstTokenMs,
+		FirstOutputMs:         req.FirstOutputMs,
+		FirstOutputKind:       req.FirstOutputKind,
 	}
 
 	inserted, err := s.usageRepo.Create(txCtx, usageLog)

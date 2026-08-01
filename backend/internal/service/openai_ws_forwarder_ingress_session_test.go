@@ -888,6 +888,9 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_PassthroughModeR
 		require.Equal(t, "priority", *result.ServiceTier)
 		require.NotNil(t, result.ReasoningEffort)
 		require.Equal(t, "high", *result.ReasoningEffort)
+		require.Nil(t, result.FirstTokenMs)
+		require.NotNil(t, result.FirstOutputMs)
+		require.Equal(t, "image", result.FirstOutputKind)
 	case <-time.After(2 * time.Second):
 		t.Fatal("未收到 passthrough turn 结果回调")
 	}
@@ -1052,7 +1055,8 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_HTTPBridgeModeRe
 			StatusCode: http.StatusOK,
 			Header:     http.Header{"Content-Type": []string{"text/event-stream"}, "x-request-id": []string{"rid_bridge_1"}},
 			Body: io.NopCloser(strings.NewReader(
-				"data: {\"type\":\"response.output_text.delta\",\"delta\":\"hello\"}\n\n" +
+				"data: {\"type\":\"response.image_generation_call.partial_image\",\"item_id\":\"ig_bridge_1\",\"partial_image_b64\":\"cGFydGlhbA==\"}\n\n" +
+					"data: {\"type\":\"response.output_text.delta\",\"delta\":\"hello\"}\n\n" +
 					"data: {\"type\":\"response.done\",\"response\":{\"id\":\"resp_http_bridge_1\",\"output\":[{\"id\":\"ig_bridge_1\",\"type\":\"image_generation_call\",\"status\":\"in_progress\",\"result\":\"final-image\"}],\"usage\":{\"input_tokens\":2,\"output_tokens\":1,\"input_tokens_details\":{\"cached_tokens\":1}}}}\n\n" +
 					"data: [DONE]\n\n",
 			)),
@@ -1144,16 +1148,23 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_HTTPBridgeModeRe
 	_, event1, readErr1 := clientConn.Read(readCtx)
 	cancelRead()
 	require.NoError(t, readErr1)
-	require.Equal(t, "response.output_text.delta", gjson.GetBytes(event1, "type").String())
-	require.Equal(t, "hello", gjson.GetBytes(event1, "delta").String())
+	require.Equal(t, "response.image_generation_call.partial_image", gjson.GetBytes(event1, "type").String())
+	require.Equal(t, "cGFydGlhbA==", gjson.GetBytes(event1, "partial_image_b64").String())
 
 	readCtx2, cancelRead2 := context.WithTimeout(context.Background(), 3*time.Second)
 	_, event2, readErr2 := clientConn.Read(readCtx2)
 	cancelRead2()
 	require.NoError(t, readErr2)
-	require.Equal(t, "response.done", gjson.GetBytes(event2, "type").String())
-	require.Equal(t, "resp_http_bridge_1", gjson.GetBytes(event2, "response.id").String())
-	require.Equal(t, "completed", gjson.GetBytes(event2, "response.output.0.status").String())
+	require.Equal(t, "response.output_text.delta", gjson.GetBytes(event2, "type").String())
+	require.Equal(t, "hello", gjson.GetBytes(event2, "delta").String())
+
+	readCtx3, cancelRead3 := context.WithTimeout(context.Background(), 3*time.Second)
+	_, event3, readErr3 := clientConn.Read(readCtx3)
+	cancelRead3()
+	require.NoError(t, readErr3)
+	require.Equal(t, "response.done", gjson.GetBytes(event3, "type").String())
+	require.Equal(t, "resp_http_bridge_1", gjson.GetBytes(event3, "response.id").String())
+	require.Equal(t, "completed", gjson.GetBytes(event3, "response.output.0.status").String())
 
 	_ = clientConn.Close(coderws.StatusNormalClosure, "done")
 
@@ -1172,6 +1183,8 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_HTTPBridgeModeRe
 		require.Equal(t, 1, result.Usage.OutputTokens)
 		require.Equal(t, 1, result.Usage.CacheReadInputTokens)
 		require.NotNil(t, result.FirstTokenMs)
+		require.NotNil(t, result.FirstOutputMs)
+		require.Equal(t, "image", result.FirstOutputKind)
 	case <-time.After(2 * time.Second):
 		t.Fatal("未收到 http_bridge turn 结果回调")
 	}

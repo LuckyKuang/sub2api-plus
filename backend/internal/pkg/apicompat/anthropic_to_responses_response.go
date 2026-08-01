@@ -288,6 +288,15 @@ func anthToResHandleContentBlockStart(evt *AnthropicStreamEvent, state *Anthropi
 				ID:   state.CurrentItemID,
 			},
 		}))
+		if evt.ContentBlock.Thinking != "" {
+			state.CurrentSummary = evt.ContentBlock.Thinking
+			events = append(events, makeResponsesEvent(state, "response.reasoning_summary_text.delta", &ResponsesStreamEvent{
+				OutputIndex:  state.OutputIndex,
+				SummaryIndex: 0,
+				Delta:        evt.ContentBlock.Thinking,
+				ItemID:       state.CurrentItemID,
+			}))
+		}
 
 	case "text":
 		// If we don't have an open message item, open one
@@ -321,7 +330,15 @@ func anthToResHandleContentBlockStart(evt *AnthropicStreamEvent, state *Anthropi
 			ItemID:       state.CurrentItemID,
 			Part:         &ResponsesContentPart{Type: "output_text", Text: ""},
 		}))
-		state.TextAccum = ""
+		state.TextAccum = evt.ContentBlock.Text
+		if evt.ContentBlock.Text != "" {
+			events = append(events, makeResponsesEvent(state, "response.output_text.delta", &ResponsesStreamEvent{
+				OutputIndex:  state.OutputIndex,
+				ContentIndex: state.ContentIndex,
+				Delta:        evt.ContentBlock.Text,
+				ItemID:       state.CurrentItemID,
+			}))
+		}
 
 	case "tool_use":
 		// Close previous item if any
@@ -342,6 +359,16 @@ func anthToResHandleContentBlockStart(evt *AnthropicStreamEvent, state *Anthropi
 				Status: "in_progress",
 			},
 		}))
+		if hasNonEmptyJSON(evt.ContentBlock.Input) && string(evt.ContentBlock.Input) != "{}" {
+			state.CurrentArgs = string(evt.ContentBlock.Input)
+			events = append(events, makeResponsesEvent(state, "response.function_call_arguments.delta", &ResponsesStreamEvent{
+				OutputIndex: state.OutputIndex,
+				Delta:       state.CurrentArgs,
+				ItemID:      state.CurrentItemID,
+				CallID:      state.CurrentCallID,
+				Name:        state.CurrentName,
+			}))
+		}
 	}
 
 	return events

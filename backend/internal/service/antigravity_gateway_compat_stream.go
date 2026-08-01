@@ -107,14 +107,14 @@ type antigravityCompatScanEvent struct {
 }
 
 type antigravityCompatStreamSession struct {
-	processor      *antigravity.StreamingProcessor
-	adapter        antigravityCompatStreamAdapter
-	writer         *antigravityClientWriter
-	usage          *ClaudeUsage
-	pendingEvents  []apicompat.AnthropicStreamEvent
-	firstTokenMs   *int
-	startTime      time.Time
-	meaningfulData bool
+	processor         *antigravity.StreamingProcessor
+	adapter           antigravityCompatStreamAdapter
+	writer            *antigravityClientWriter
+	usage             *ClaudeUsage
+	pendingEvents     []apicompat.AnthropicStreamEvent
+	timing            streamOutputTiming
+	startTime         time.Time
+	responseCommitted bool
 }
 
 func newAntigravityCompatStreamSession(
@@ -141,7 +141,7 @@ func (s *antigravityCompatStreamSession) consume(line string) {
 }
 
 func (s *antigravityCompatStreamSession) hasMeaningfulData() bool {
-	return s.meaningfulData
+	return s.responseCommitted
 }
 
 func (s *antigravityCompatStreamSession) finish() *antigravityStreamResult {
@@ -161,7 +161,9 @@ func (s *antigravityCompatStreamSession) collectResult(clientDisconnect bool) *a
 func (s *antigravityCompatStreamSession) result(clientDisconnect bool) *antigravityStreamResult {
 	return &antigravityStreamResult{
 		usage:            s.usage,
-		firstTokenMs:     s.firstTokenMs,
+		firstTokenMs:     s.timing.firstTokenMs,
+		firstOutputMs:    s.timing.firstOutputMs,
+		firstOutputKind:  s.timing.firstOutputKind,
 		clientDisconnect: clientDisconnect,
 	}
 }
@@ -197,49 +199,60 @@ func (s *antigravityCompatStreamSession) consumeClaudeData(eventType, payload st
 }
 
 func (s *antigravityCompatStreamSession) emitOrBuffer(event apicompat.AnthropicStreamEvent) {
-	if s.meaningfulData {
+	if s.responseCommitted {
+		s.timing.Observe(s.startTime, observeAntigravityCompatOutput(&event))
 		s.adapter.Emit(&event, s.writer)
 		return
 	}
 
 	s.pendingEvents = append(s.pendingEvents, event)
-	if !isMeaningfulAntigravityCompatEvent(&event) {
+	observation := observeAntigravityCompatOutput(&event)
+	isTerminal := event.Type == "message_stop"
+	if !observation.MeaningfulOutput && !isTerminal {
 		return
 	}
 
-	s.meaningfulData = true
-	ms := int(time.Since(s.startTime).Milliseconds())
-	s.firstTokenMs = &ms
+	s.responseCommitted = true
+	s.timing.Observe(s.startTime, observation)
 	for i := range s.pendingEvents {
 		s.adapter.Emit(&s.pendingEvents[i], s.writer)
 	}
 	s.pendingEvents = nil
 }
 
-func isMeaningfulAntigravityCompatEvent(event *apicompat.AnthropicStreamEvent) bool {
+// Antigravity compatibility streams pass through Anthropic -> Responses and
+// optionally Responses -> Chat conversion. Observe only event forms that the
+// first conversion can actually represent downstream. Anthropic-only metadata
+// such as signatures, citations, redacted thinking and tool results is dropped
+// by that converter and must not create a synthetic first-output sample.
+func observeAntigravityCompatOutput(event *apicompat.AnthropicStreamEvent) apicompat.StreamOutputObservation {
 	if event == nil {
-		return false
+		return apicompat.StreamOutputObservation{}
 	}
-	if event.Type == "message_stop" {
-		return true
+	switch event.Type {
+	case "content_block_start":
+		if event.ContentBlock == nil {
+			return apicompat.StreamOutputObservation{}
+		}
+		switch event.ContentBlock.Type {
+		case "text", "tool_use":
+			return apicompat.ObserveAnthropicOutput(event)
+		case "thinking":
+			observation := apicompat.ObserveAnthropicOutput(event)
+			if observation.TokenLikeDelta {
+				return observation
+			}
+		}
+	case "content_block_delta":
+		if event.Delta == nil {
+			return apicompat.StreamOutputObservation{}
+		}
+		switch event.Delta.Type {
+		case "text_delta", "thinking_delta", "input_json_delta":
+			return apicompat.ObserveAnthropicOutput(event)
+		}
 	}
-	if event.ContentBlock != nil {
-		block := event.ContentBlock
-		return block.Type == "tool_use" ||
-			block.Text != "" ||
-			block.Thinking != "" ||
-			block.Signature != "" ||
-			block.Source != nil
-	}
-	if event.Delta != nil {
-		delta := event.Delta
-		return delta.Text != "" ||
-			delta.PartialJSON != "" ||
-			delta.Thinking != "" ||
-			delta.Signature != "" ||
-			delta.StopReason != ""
-	}
-	return false
+	return apicompat.StreamOutputObservation{}
 }
 
 func mergeAntigravityCompatUsage(dst *ClaudeUsage, src *antigravity.ClaudeUsage) {

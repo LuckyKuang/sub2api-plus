@@ -104,7 +104,7 @@ func TestEffectiveResponsesTools_RejectsMalformedAdditionalTools(t *testing.T) {
 	assert.Empty(t, tools)
 }
 
-func TestResponsesToChatCompletionsRequest_DropsToolChoiceWhenNoConvertibleTools(t *testing.T) {
+func TestResponsesToChatCompletionsRequest_RejectsImageGenerationTool(t *testing.T) {
 	req := &ResponsesRequest{
 		Model: "glm-5.2",
 		Input: json.RawMessage(`"hi"`),
@@ -116,10 +116,8 @@ func TestResponsesToChatCompletionsRequest_DropsToolChoiceWhenNoConvertibleTools
 	}
 
 	out, err := ResponsesToChatCompletionsRequest(req)
-	require.NoError(t, err)
-
-	assert.Empty(t, out.Tools)
-	assert.Empty(t, out.ToolChoice, "tools 为空时转发 tool_choice 会被上游 400 拒绝")
+	require.ErrorContains(t, err, "image_generation tools cannot be represented")
+	assert.Nil(t, out)
 }
 
 func TestResponsesToChatCompletionsRequest_CustomToolChoiceMapsToFunctionChoice(t *testing.T) {

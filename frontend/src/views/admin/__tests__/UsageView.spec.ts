@@ -4,7 +4,22 @@ import { defineComponent, ref } from 'vue'
 
 import UsageView from '../UsageView.vue'
 
-const { list, getStats, getSnapshotV2, getById, getModelStats, listErrorLogs, routeQuery } = vi.hoisted(() => {
+const {
+  list,
+  getStats,
+  getSnapshotV2,
+  getById,
+  getModelStats,
+  listErrorLogs,
+  adminUsageList,
+  aoaToSheet,
+  sheetAddAoa,
+  bookNew,
+  bookAppendSheet,
+  writeWorkbook,
+  saveAs,
+  routeQuery,
+} = vi.hoisted(() => {
   vi.stubGlobal('localStorage', {
     getItem: vi.fn(() => null),
     setItem: vi.fn(),
@@ -18,6 +33,13 @@ const { list, getStats, getSnapshotV2, getById, getModelStats, listErrorLogs, ro
     getById: vi.fn(),
     getModelStats: vi.fn(),
     listErrorLogs: vi.fn(),
+    adminUsageList: vi.fn(),
+    aoaToSheet: vi.fn(() => ({})),
+    sheetAddAoa: vi.fn(),
+    bookNew: vi.fn(() => ({})),
+    bookAppendSheet: vi.fn(),
+    writeWorkbook: vi.fn(() => new Uint8Array()),
+    saveAs: vi.fn(),
     routeQuery: {} as Record<string, string>,
   }
 })
@@ -54,9 +76,21 @@ vi.mock('@/api/admin', () => ({
 
 vi.mock('@/api/admin/usage', () => ({
   adminUsageAPI: {
-    list: vi.fn(),
+    list: adminUsageList,
   },
 }))
+
+vi.mock('xlsx', () => ({
+  utils: {
+    aoa_to_sheet: aoaToSheet,
+    sheet_add_aoa: sheetAddAoa,
+    book_new: bookNew,
+    book_append_sheet: bookAppendSheet,
+  },
+  write: writeWorkbook,
+}))
+
+vi.mock('file-saver', () => ({ saveAs }))
 
 vi.mock('@/api/admin/ops', () => ({
   listErrorLogs,
@@ -537,5 +571,136 @@ describe('admin UsageView ranking tab', () => {
     expect((wrapper.vm as any).activeTab).toBe('usage')
     expect((wrapper.vm as any).filters.user_id).toBe(5)
     expect(list).toHaveBeenCalledWith(expect.objectContaining({ user_id: 5 }), expect.anything())
+  })
+})
+
+describe('admin UsageView Excel export latency fields', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    list.mockReset().mockResolvedValue({ items: [], total: 0, pages: 0 })
+    getStats.mockReset().mockResolvedValue({
+      total_requests: 0,
+      total_input_tokens: 0,
+      total_output_tokens: 0,
+      total_cache_tokens: 0,
+      total_tokens: 0,
+      total_cost: 0,
+      total_actual_cost: 0,
+      average_duration_ms: 0,
+    })
+    getSnapshotV2.mockReset().mockResolvedValue({ trend: [], models: [], groups: [] })
+    getModelStats.mockReset().mockResolvedValue({ models: [] })
+    getById.mockReset()
+    adminUsageList.mockReset()
+    aoaToSheet.mockReset().mockReturnValue({})
+    sheetAddAoa.mockReset()
+    bookNew.mockReset().mockReturnValue({})
+    bookAppendSheet.mockReset()
+    writeWorkbook.mockReset().mockReturnValue(new Uint8Array())
+    saveAs.mockReset()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('exports first token, first output, output kind, and duration for text and image records', async () => {
+    adminUsageList.mockResolvedValueOnce({
+      total: 2,
+      items: [
+        {
+          created_at: '2026-08-01T00:00:00Z',
+          model: 'gpt-text',
+          input_tokens: 1,
+          output_tokens: 2,
+          cache_read_tokens: 0,
+          cache_creation_tokens: 0,
+          input_cost: 0,
+          output_cost: 0,
+          cache_read_cost: 0,
+          cache_creation_cost: 0,
+          rate_multiplier: 1,
+          account_rate_multiplier: 1,
+          total_cost: 0.1,
+          actual_cost: 0.1,
+          first_token_ms: 120,
+          first_output_ms: 100,
+          first_output_kind: 'text',
+          duration_ms: 345,
+          request_id: 'text-request',
+          user_agent: '',
+          ip_address: '',
+        },
+        {
+          created_at: '2026-08-01T00:01:00Z',
+          model: 'gpt-image',
+          input_tokens: 1,
+          output_tokens: 0,
+          cache_read_tokens: 0,
+          cache_creation_tokens: 0,
+          input_cost: 0,
+          output_cost: 0,
+          cache_read_cost: 0,
+          cache_creation_cost: 0,
+          rate_multiplier: 1,
+          account_rate_multiplier: 1,
+          total_cost: 0.2,
+          actual_cost: 0.2,
+          first_token_ms: null,
+          first_output_ms: 220,
+          first_output_kind: 'image',
+          duration_ms: 500,
+          request_id: 'image-request',
+          user_agent: '',
+          ip_address: '',
+        },
+      ],
+    })
+
+    const wrapper = mount(UsageView, {
+      global: {
+        stubs: {
+          AppLayout: AppLayoutStub,
+          UsageStatsCards: true,
+          UsageFilters: UsageFiltersStub,
+          UsageTable: true,
+          UsageExportProgress: true,
+          UsageCleanupDialog: true,
+          UserBalanceHistoryModal: true,
+          AuditLogModal: true,
+          Pagination: true,
+          Select: true,
+          DateRangePicker: true,
+          Icon: true,
+          TokenUsageTrend: true,
+          ModelDistributionChart: true,
+          GroupDistributionChart: true,
+          EndpointDistributionChart: true,
+          UserTokenRanking: true,
+          OpsErrorLogTable: true,
+          OpsErrorDetailModal: true,
+        },
+      },
+    })
+
+    await (wrapper.vm as any).exportToExcel()
+
+    const headers = aoaToSheet.mock.calls[0][0][0] as string[]
+    const rows = sheetAddAoa.mock.calls[0][1] as unknown[][]
+		const firstTokenIndex = headers.indexOf('usage.firstTokenOrLegacyEvent')
+    const firstOutputIndex = headers.indexOf('usage.latencyFirstOutput')
+    const firstOutputKindIndex = headers.indexOf('usage.latencyFirstOutputKind')
+    const durationIndex = headers.indexOf('usage.duration')
+
+    expect(firstTokenIndex).toBeGreaterThan(-1)
+    expect(firstOutputIndex).toBe(firstTokenIndex + 1)
+    expect(firstOutputKindIndex).toBe(firstOutputIndex + 1)
+    expect(durationIndex).toBe(firstOutputKindIndex + 1)
+    expect(rows).toHaveLength(2)
+    expect(rows[0].slice(firstTokenIndex, durationIndex + 1)).toEqual([120, 100, 'text', 345])
+    expect(rows[1].slice(firstTokenIndex, durationIndex + 1)).toEqual(['', 220, 'image', 500])
+    expect(saveAs).toHaveBeenCalledOnce()
+
+    wrapper.unmount()
   })
 })

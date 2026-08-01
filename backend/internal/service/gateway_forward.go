@@ -797,6 +797,8 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 
 	var usage *ClaudeUsage
 	var firstTokenMs *int
+	var firstOutputMs *int
+	var firstOutputKind string
 	var clientDisconnect bool
 	if reqStream {
 		streamResult, err := s.handleStreamingResponse(ctx, resp, c, account, startTime, originalModel, reqModel, shouldMimicClaudeCode)
@@ -847,6 +849,8 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 		}
 		usage = streamResult.usage
 		firstTokenMs = streamResult.firstTokenMs
+		firstOutputMs = streamResult.firstOutputMs
+		firstOutputKind = streamResult.firstOutputKind
 		clientDisconnect = streamResult.clientDisconnect
 	} else {
 		usage, err = s.handleNonStreamingResponse(ctx, resp, c, account, originalModel, reqModel)
@@ -863,6 +867,8 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 		Stream:           reqStream,
 		Duration:         time.Since(startTime),
 		FirstTokenMs:     firstTokenMs,
+		FirstOutputMs:    firstOutputMs,
+		FirstOutputKind:  firstOutputKind,
 		ClientDisconnect: clientDisconnect,
 	}, nil
 }

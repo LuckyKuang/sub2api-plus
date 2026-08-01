@@ -1036,9 +1036,9 @@ func TestAntigravityGatewayService_ForwardGemini_SignatureRetryPropagatesFailove
 	require.Equal(t, "failover", events[1].Kind)
 }
 
-// TestStreamUpstreamResponse_UsageAndFirstToken
-// 验证：usage 字段可被累积/覆盖更新，并且能记录首 token 时间
-func TestStreamUpstreamResponse_UsageAndFirstToken(t *testing.T) {
+// TestStreamUpstreamResponse_UsageOnlyDoesNotSetOutputTiming
+// 验证：usage 字段可被累积/覆盖更新，但纯 usage 事件不属于下游可消费输出。
+func TestStreamUpstreamResponse_UsageOnlyDoesNotSetOutputTiming(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	svc := newAntigravityTestService(&config.Config{
 		Gateway: config.GatewayConfig{MaxLineSize: defaultMaxLineSize},
@@ -1068,10 +1068,42 @@ func TestStreamUpstreamResponse_UsageAndFirstToken(t *testing.T) {
 	require.Equal(t, 5, result.usage.OutputTokens)
 	require.Equal(t, 3, result.usage.CacheReadInputTokens)
 	require.Equal(t, 4, result.usage.CacheCreationInputTokens)
-	require.NotNil(t, result.firstTokenMs)
+	require.Nil(t, result.firstTokenMs)
+	require.Nil(t, result.firstOutputMs)
+	require.Empty(t, result.firstOutputKind)
 
 	// 确保有透传输出
 	require.Contains(t, rec.Body.String(), "data:")
+}
+
+func TestStreamUpstreamResponse_TextDeltaSetsTokenAndOutputTiming(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	svc := newAntigravityTestService(&config.Config{
+		Gateway: config.GatewayConfig{MaxLineSize: defaultMaxLineSize},
+	})
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+
+	pr, pw := io.Pipe()
+	resp := &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: pr}
+
+	go func() {
+		defer func() { _ = pw.Close() }()
+		fmt.Fprintln(pw, `data: {"type":"message_start","message":{"usage":{"input_tokens":1}}}`)
+		fmt.Fprintln(pw, `data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"hello"}}`)
+		fmt.Fprintln(pw, `data: {"type":"message_stop"}`)
+	}()
+
+	result := svc.streamUpstreamResponse(c, resp, time.Now().Add(-10*time.Millisecond))
+	_ = pr.Close()
+
+	require.NotNil(t, result)
+	require.NotNil(t, result.firstTokenMs)
+	require.NotNil(t, result.firstOutputMs)
+	require.Equal(t, "text", result.firstOutputKind)
+	require.Contains(t, rec.Body.String(), `"text":"hello"`)
 }
 
 // --- 流式 happy path 测试 ---

@@ -184,3 +184,25 @@ func TestResponsesStreamEventUnmarshal_ToolSearchObjectArguments(t *testing.T) {
 	require.NotNil(t, event.Item)
 	require.Equal(t, `{"query":"gmail"}`, event.Item.Arguments)
 }
+
+func TestResponsesStreamEventUnmarshal_ToolSearchTopLevelObjectArguments(t *testing.T) {
+	var event ResponsesStreamEvent
+	require.NoError(t, json.Unmarshal([]byte(`{
+		"type":"response.tool_search_call_arguments.done",
+		"output_index":2,
+		"call_id":"call_1",
+		"name":"tool_search",
+		"arguments": { "query": "gmail", "limit": 2 }
+	}`), &event))
+	require.Equal(t, "response.tool_search_call_arguments.done", event.Type)
+	require.Equal(t, 2, event.OutputIndex)
+	require.Equal(t, `{"query":"gmail","limit":2}`, event.Arguments)
+
+	wire, err := json.Marshal(event)
+	require.NoError(t, err)
+	var decoded map[string]any
+	require.NoError(t, json.Unmarshal(wire, &decoded))
+	arguments, ok := decoded["arguments"].(map[string]any)
+	require.True(t, ok, "tool search event arguments must remain an object")
+	require.Equal(t, "gmail", arguments["query"])
+}

@@ -506,7 +506,8 @@ SELECT
   MAX(first_token_ms) AS max_ms
 FROM usage_logs
 WHERE created_at >= $1 AND created_at < $2
-  AND first_token_ms IS NOT NULL`
+  AND first_token_ms IS NOT NULL
+  AND first_output_kind IS NOT NULL`
 
 		var p50, p90, p95, p99 sql.NullFloat64
 		var avg sql.NullFloat64

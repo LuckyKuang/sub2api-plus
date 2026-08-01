@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/apicompat"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/util/responseheaders"
 	"github.com/gin-gonic/gin"
@@ -336,10 +337,11 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 
 	usage := &OpenAIUsage{}
 	imageCounter := newOpenAIImageOutputCounter()
-	var firstTokenMs *int
+	var timing streamOutputTiming
 	responseID := ""
 	var finalResponse []byte
 	wroteDownstream := false
+	responseCommitted := false
 	needModelReplace := originalModel != mappedModel
 	var mappedModelBytes []byte
 	if needModelReplace && mappedModel != "" {
@@ -526,17 +528,15 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 			responseID = eventResponseID
 		}
 
-		isTokenEvent := isOpenAIWSTokenEvent(eventType)
+		outputObservation := apicompat.ObserveResponsesOutput(message)
+		timing.Observe(startTime, outputObservation)
+		isTokenEvent := outputObservation.TokenLikeDelta
 		if isTokenEvent {
 			tokenEventCount++
 		}
 		isTerminalEvent := isOpenAIWSTerminalEvent(eventType)
 		if isTerminalEvent {
 			terminalEventCount++
-		}
-		if firstTokenMs == nil && isTokenEvent {
-			ms := int(time.Since(startTime).Milliseconds())
-			firstTokenMs = &ms
 		}
 		if debugEnabled && shouldLogOpenAIWSEvent(eventCount, eventType) {
 			logOpenAIWSModeDebug(
@@ -651,9 +651,9 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		}
 
 		if reqStream {
-			// 在首个 token 前先缓冲事件（如 response.created），
+			// 在首个可消费输出前先缓冲生命周期事件（如 response.created），
 			// 以便上游早期断连时仍可安全回退到 HTTP，不给下游发送半截流。
-			shouldBuffer := firstTokenMs == nil && !isTokenEvent && !isTerminalEvent
+			shouldBuffer := !responseCommitted && !outputObservation.MeaningfulOutput && !isTerminalEvent
 			if shouldBuffer {
 				buffered := make([]byte, len(message))
 				copy(buffered, message)
@@ -671,8 +671,11 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 					)
 				}
 			} else {
+				if outputObservation.MeaningfulOutput || isTerminalEvent {
+					responseCommitted = true
+				}
 				flushBufferedStreamEvents(eventType)
-				emitStreamMessage(message, isTerminalEvent)
+				emitStreamMessage(message, outputObservation.MeaningfulOutput || isTerminalEvent)
 			}
 		} else {
 			if responseField.Exists() && responseField.Type == gjson.JSON {
@@ -731,8 +734,8 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		stateStore.BindSessionConn(groupID, sessionHash, lease.ConnID(), s.openAIWSSessionStickyTTL())
 	}
 	firstTokenMsValue := -1
-	if firstTokenMs != nil {
-		firstTokenMsValue = *firstTokenMs
+	if timing.firstTokenMs != nil {
+		firstTokenMsValue = *timing.firstTokenMs
 	}
 	logOpenAIWSModeDebug(
 		"completed account_id=%d conn_id=%s response_id=%s stream=%v duration_ms=%d events=%d token_events=%d terminal_events=%d buffered_events=%d buffered_flushed=%d first_event=%s last_event=%s first_token_ms=%d wrote_downstream=%v client_disconnected=%v",
@@ -753,7 +756,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		clientDisconnected,
 	)
 
-	return &OpenAIForwardResult{
+	result := &OpenAIForwardResult{
 		RequestID:             responseID,
 		Usage:                 *usage,
 		Model:                 originalModel,
@@ -767,8 +770,9 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		UpstreamTerminalEvent: upstreamTerminalEvent,
 		ResponseHeaders:       lease.HandshakeHeaders(),
 		Duration:              time.Since(startTime),
-		FirstTokenMs:          firstTokenMs,
-	}, nil
+	}
+	timing.ApplyOpenAIResult(result)
+	return result, nil
 }
 
 // ProxyResponsesWebSocketFromClient 处理客户端入站 WebSocket（OpenAI Responses WS Mode）并转发到上游。

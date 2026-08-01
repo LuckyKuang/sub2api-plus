@@ -1057,6 +1057,34 @@ func TestResponsesToChatCompletions_WebSearch(t *testing.T) {
 	assert.Equal(t, "search results", content)
 }
 
+func TestResponsesToChatCompletions_RefusalAndCustomTool(t *testing.T) {
+	resp := &ResponsesResponse{
+		Status: "completed",
+		Output: []ResponsesOutput{
+			{
+				Type:    "message",
+				Content: []ResponsesContentPart{{Type: "refusal", Refusal: "cannot comply"}},
+			},
+			{
+				Type:   "custom_tool_call",
+				CallID: "call_patch",
+				Name:   "apply_patch",
+				Input:  "patch body",
+			},
+		},
+	}
+
+	chat := ResponsesToChatCompletions(resp, "gpt-5-codex")
+	require.Len(t, chat.Choices, 1)
+	var content string
+	require.NoError(t, json.Unmarshal(chat.Choices[0].Message.Content, &content))
+	assert.Equal(t, "cannot comply", content)
+	require.Len(t, chat.Choices[0].Message.ToolCalls, 1)
+	assert.Equal(t, "apply_patch", chat.Choices[0].Message.ToolCalls[0].Function.Name)
+	assert.Equal(t, "patch body", chat.Choices[0].Message.ToolCalls[0].Function.Arguments)
+	assert.Equal(t, "tool_calls", chat.Choices[0].FinishReason)
+}
+
 // ---------------------------------------------------------------------------
 // Streaming: ResponsesEventToChatChunks tests
 // ---------------------------------------------------------------------------
@@ -1306,6 +1334,240 @@ func TestResponsesEventToChatChunks_CompletedWithToolCalls(t *testing.T) {
 	assert.Equal(t, "tool_calls", *chunks[0].Choices[0].FinishReason)
 }
 
+func TestResponsesEventToChatChunks_TerminalAggregateFallback(t *testing.T) {
+	state := NewResponsesEventToChatState()
+	state.Model = "gpt-5.5"
+
+	chunks := ResponsesEventToChatChunks(&ResponsesStreamEvent{
+		Type: "response.completed",
+		Response: &ResponsesResponse{
+			Status: "completed",
+			Output: []ResponsesOutput{
+				{
+					Type:    "reasoning",
+					Summary: []ResponsesSummary{{Type: "summary_text", Text: "plan"}},
+				},
+				{
+					Type: "message",
+					Content: []ResponsesContentPart{
+						{Type: "output_text", Text: "answer"},
+						{Type: "refusal", Refusal: " refused"},
+					},
+				},
+				{
+					Type:      "function_call",
+					CallID:    "call_1",
+					Name:      "lookup",
+					Arguments: `{"q":"x"}`,
+				},
+			},
+		},
+	}, state)
+
+	require.Len(t, chunks, 4)
+	require.True(t, chunks[0].AggregateOutput)
+	require.NotNil(t, chunks[0].Choices[0].Delta.ReasoningContent)
+	assert.Equal(t, "plan", *chunks[0].Choices[0].Delta.ReasoningContent)
+	require.True(t, chunks[1].AggregateOutput)
+	require.NotNil(t, chunks[1].Choices[0].Delta.Content)
+	assert.Equal(t, "answer refused", *chunks[1].Choices[0].Delta.Content)
+	require.True(t, chunks[2].AggregateOutput)
+	require.Len(t, chunks[2].Choices[0].Delta.ToolCalls, 1)
+	assert.Equal(t, "lookup", chunks[2].Choices[0].Delta.ToolCalls[0].Function.Name)
+	assert.Equal(t, `{"q":"x"}`, chunks[2].Choices[0].Delta.ToolCalls[0].Function.Arguments)
+	require.NotNil(t, chunks[3].Choices[0].FinishReason)
+	assert.Equal(t, "tool_calls", *chunks[3].Choices[0].FinishReason)
+
+	for i := 0; i < 3; i++ {
+		observation := ObserveChatChunkOutput(&chunks[i])
+		assert.True(t, observation.MeaningfulOutput)
+		assert.False(t, observation.TokenLikeDelta)
+	}
+}
+
+func TestResponsesEventToChatChunks_TerminalAggregateDoesNotDuplicateDeltas(t *testing.T) {
+	state := NewResponsesEventToChatState()
+	state.Model = "gpt-5.5"
+
+	require.Len(t, ResponsesEventToChatChunks(&ResponsesStreamEvent{
+		Type: "response.output_text.delta", Delta: "answer",
+	}, state), 1)
+	require.Len(t, ResponsesEventToChatChunks(&ResponsesStreamEvent{
+		Type: "response.reasoning_text.delta", Delta: "plan",
+	}, state), 1)
+	require.Len(t, ResponsesEventToChatChunks(&ResponsesStreamEvent{
+		Type:        "response.output_item.added",
+		OutputIndex: 2,
+		Item:        &ResponsesOutput{Type: "function_call", CallID: "call_1", Name: "lookup"},
+	}, state), 1)
+	require.Len(t, ResponsesEventToChatChunks(&ResponsesStreamEvent{
+		Type:        "response.function_call_arguments.delta",
+		OutputIndex: 2,
+		Delta:       `{"q":"x"}`,
+	}, state), 1)
+
+	chunks := ResponsesEventToChatChunks(&ResponsesStreamEvent{
+		Type: "response.completed",
+		Response: &ResponsesResponse{
+			Status: "completed",
+			Output: []ResponsesOutput{
+				{Type: "reasoning", Summary: []ResponsesSummary{{Type: "summary_text", Text: "plan"}}},
+				{Type: "message", Content: []ResponsesContentPart{{Type: "output_text", Text: "answer"}}},
+				{Type: "function_call", CallID: "call_1", Name: "lookup", Arguments: `{"q":"x"}`},
+			},
+		},
+	}, state)
+
+	require.Len(t, chunks, 1)
+	require.NotNil(t, chunks[0].Choices[0].FinishReason)
+	assert.Equal(t, "tool_calls", *chunks[0].Choices[0].FinishReason)
+}
+
+func TestResponsesEventToChatChunks_TerminalAggregateCompletesPartialDeltas(t *testing.T) {
+	state := NewResponsesEventToChatState()
+	state.Model = "gpt-5.5"
+
+	require.Len(t, ResponsesEventToChatChunks(&ResponsesStreamEvent{
+		Type: "response.output_text.delta", Delta: "ans",
+	}, state), 1)
+	require.Len(t, ResponsesEventToChatChunks(&ResponsesStreamEvent{
+		Type: "response.reasoning_text.delta", Delta: "pl",
+	}, state), 1)
+	require.Len(t, ResponsesEventToChatChunks(&ResponsesStreamEvent{
+		Type:        "response.output_item.added",
+		OutputIndex: 2,
+		Item:        &ResponsesOutput{Type: "function_call", CallID: "call_1", Name: "lookup"},
+	}, state), 1)
+	require.Len(t, ResponsesEventToChatChunks(&ResponsesStreamEvent{
+		Type:        "response.function_call_arguments.delta",
+		OutputIndex: 2,
+		Delta:       `{"q":`,
+	}, state), 1)
+
+	chunks := ResponsesEventToChatChunks(&ResponsesStreamEvent{
+		Type: "response.completed",
+		Response: &ResponsesResponse{
+			Status: "completed",
+			Output: []ResponsesOutput{
+				{Type: "reasoning", Summary: []ResponsesSummary{{Type: "summary_text", Text: "plan"}}},
+				{Type: "message", Content: []ResponsesContentPart{{Type: "output_text", Text: "answer"}}},
+				{Type: "function_call", CallID: "call_1", Name: "lookup", Arguments: `{"q":"x"}`},
+			},
+		},
+	}, state)
+
+	require.Len(t, chunks, 4)
+	assert.Equal(t, "an", *chunks[0].Choices[0].Delta.ReasoningContent)
+	assert.Equal(t, "wer", *chunks[1].Choices[0].Delta.Content)
+	assert.Equal(t, `"x"}`, chunks[2].Choices[0].Delta.ToolCalls[0].Function.Arguments)
+	for i := 0; i < 3; i++ {
+		assert.True(t, chunks[i].AggregateOutput)
+	}
+}
+
+func TestResponsesEventToChatChunks_DoneAggregateFallbacks(t *testing.T) {
+	t.Run("text", func(t *testing.T) {
+		state := NewResponsesEventToChatState()
+		chunks := ResponsesEventToChatChunks(&ResponsesStreamEvent{
+			Type: "response.output_text.done",
+			Text: "answer",
+		}, state)
+		require.Len(t, chunks, 1)
+		require.True(t, chunks[0].AggregateOutput)
+		require.NotNil(t, chunks[0].Choices[0].Delta.Content)
+		assert.Equal(t, "answer", *chunks[0].Choices[0].Delta.Content)
+	})
+
+	t.Run("reasoning", func(t *testing.T) {
+		state := NewResponsesEventToChatState()
+		chunks := ResponsesEventToChatChunks(&ResponsesStreamEvent{
+			Type: "response.reasoning_summary_text.done",
+			Text: "plan",
+		}, state)
+		require.Len(t, chunks, 1)
+		require.True(t, chunks[0].AggregateOutput)
+		require.NotNil(t, chunks[0].Choices[0].Delta.ReasoningContent)
+		assert.Equal(t, "plan", *chunks[0].Choices[0].Delta.ReasoningContent)
+	})
+
+	t.Run("tool arguments", func(t *testing.T) {
+		state := NewResponsesEventToChatState()
+		require.Len(t, ResponsesEventToChatChunks(&ResponsesStreamEvent{
+			Type:        "response.output_item.added",
+			OutputIndex: 0,
+			Item:        &ResponsesOutput{Type: "function_call", CallID: "call_1", Name: "lookup"},
+		}, state), 1)
+		chunks := ResponsesEventToChatChunks(&ResponsesStreamEvent{
+			Type:        "response.function_call_arguments.done",
+			OutputIndex: 0,
+			Arguments:   `{"q":"x"}`,
+		}, state)
+		require.Len(t, chunks, 1)
+		require.True(t, chunks[0].AggregateOutput)
+		assert.Equal(t, `{"q":"x"}`, chunks[0].Choices[0].Delta.ToolCalls[0].Function.Arguments)
+	})
+}
+
+func TestResponsesEventToChatChunks_OutputItemDonePreservesMultipleItems(t *testing.T) {
+	state := NewResponsesEventToChatState()
+
+	firstText := ResponsesEventToChatChunks(&ResponsesStreamEvent{
+		Type:        "response.output_item.done",
+		OutputIndex: 0,
+		Item: &ResponsesOutput{
+			Type:    "message",
+			Content: []ResponsesContentPart{{Type: "output_text", Text: "first"}},
+		},
+	}, state)
+	require.Len(t, firstText, 1)
+	require.NotNil(t, firstText[0].Choices[0].Delta.Content)
+	assert.Equal(t, "first", *firstText[0].Choices[0].Delta.Content)
+
+	secondText := ResponsesEventToChatChunks(&ResponsesStreamEvent{
+		Type:        "response.output_item.done",
+		OutputIndex: 1,
+		Item: &ResponsesOutput{
+			Type:    "message",
+			Content: []ResponsesContentPart{{Type: "output_text", Text: "second"}},
+		},
+	}, state)
+	require.Len(t, secondText, 1)
+	require.NotNil(t, secondText[0].Choices[0].Delta.Content)
+	assert.Equal(t, "second", *secondText[0].Choices[0].Delta.Content)
+
+	firstReasoning := ResponsesEventToChatChunks(&ResponsesStreamEvent{
+		Type:        "response.output_item.done",
+		OutputIndex: 2,
+		Item: &ResponsesOutput{
+			Type:    "reasoning",
+			Summary: []ResponsesSummary{{Type: "summary_text", Text: "plan one"}},
+		},
+	}, state)
+	require.Len(t, firstReasoning, 1)
+	require.NotNil(t, firstReasoning[0].Choices[0].Delta.ReasoningContent)
+	assert.Equal(t, "plan one", *firstReasoning[0].Choices[0].Delta.ReasoningContent)
+
+	secondReasoning := ResponsesEventToChatChunks(&ResponsesStreamEvent{
+		Type:        "response.output_item.done",
+		OutputIndex: 3,
+		Item: &ResponsesOutput{
+			Type:    "reasoning",
+			Summary: []ResponsesSummary{{Type: "summary_text", Text: "plan two"}},
+		},
+	}, state)
+	require.Len(t, secondReasoning, 1)
+	require.NotNil(t, secondReasoning[0].Choices[0].Delta.ReasoningContent)
+	assert.Equal(t, "plan two", *secondReasoning[0].Choices[0].Delta.ReasoningContent)
+
+	completed := ResponsesEventToChatChunks(&ResponsesStreamEvent{
+		Type:     "response.completed",
+		Response: &ResponsesResponse{Status: "completed"},
+	}, state)
+	require.Len(t, completed, 1)
+	require.NotNil(t, completed[0].Choices[0].FinishReason)
+	assert.Equal(t, "stop", *completed[0].Choices[0].FinishReason)
+}
+
 func TestResponsesEventToChatChunks_ReasoningDelta(t *testing.T) {
 	state := NewResponsesEventToChatState()
 	state.Model = "gpt-4o"
@@ -1417,6 +1679,8 @@ func TestChatChunkToSSE(t *testing.T) {
 	assert.Contains(t, sse, "data: ")
 	assert.Contains(t, sse, "chatcmpl-test")
 	assert.Contains(t, sse, "assistant")
+	assert.NotContains(t, sse, "AggregateOutput")
+	assert.NotContains(t, sse, "aggregate_output")
 	assert.True(t, len(sse) > 10)
 }
 
@@ -1562,6 +1826,123 @@ func TestBufferedResponseAccumulator_Reasoning(t *testing.T) {
 	require.Len(t, output[0].Summary, 1)
 	assert.Equal(t, "summary_text", output[0].Summary[0].Type)
 	assert.Equal(t, "Step 1: think about it", output[0].Summary[0].Text)
+}
+
+func TestBufferedResponseAccumulator_DoneOnlyAggregates(t *testing.T) {
+	acc := NewBufferedResponseAccumulator()
+	acc.ProcessEvent(&ResponsesStreamEvent{Type: "response.reasoning_summary_text.done", Text: "plan"})
+	acc.ProcessEvent(&ResponsesStreamEvent{Type: "response.output_text.done", Text: "answer"})
+	acc.ProcessEvent(&ResponsesStreamEvent{
+		Type:        "response.function_call_arguments.done",
+		OutputIndex: 2,
+		CallID:      "call_1",
+		Name:        "lookup",
+		Arguments:   `{"q":"x"}`,
+	})
+
+	resp := &ResponsesResponse{Status: "completed"}
+	acc.SupplementResponseOutput(resp)
+
+	require.Len(t, resp.Output, 3)
+	assert.Equal(t, "reasoning", resp.Output[0].Type)
+	assert.Equal(t, "plan", resp.Output[0].Summary[0].Text)
+	assert.Equal(t, "message", resp.Output[1].Type)
+	assert.Equal(t, "answer", resp.Output[1].Content[0].Text)
+	assert.Equal(t, "function_call", resp.Output[2].Type)
+	assert.Equal(t, "lookup", resp.Output[2].Name)
+	assert.Equal(t, `{"q":"x"}`, resp.Output[2].Arguments)
+}
+
+func TestBufferedResponseAccumulator_DoneAggregatesDoNotDuplicateDeltas(t *testing.T) {
+	acc := NewBufferedResponseAccumulator()
+	acc.ProcessEvent(&ResponsesStreamEvent{Type: "response.reasoning_text.delta", Delta: "plan"})
+	acc.ProcessEvent(&ResponsesStreamEvent{Type: "response.reasoning_text.done", Text: "plan"})
+	acc.ProcessEvent(&ResponsesStreamEvent{Type: "response.output_text.delta", Delta: "answer"})
+	acc.ProcessEvent(&ResponsesStreamEvent{Type: "response.output_text.done", Text: "answer"})
+
+	output := acc.BuildOutput()
+	require.Len(t, output, 2)
+	assert.Equal(t, "plan", output[0].Summary[0].Text)
+	assert.Equal(t, "answer", output[1].Content[0].Text)
+}
+
+func TestBufferedResponseAccumulator_ContentAndOutputAggregatesDoNotDuplicateDeltas(t *testing.T) {
+	acc := NewBufferedResponseAccumulator()
+	acc.ProcessEvent(&ResponsesStreamEvent{
+		Type:         "response.output_text.delta",
+		OutputIndex:  1,
+		ContentIndex: 0,
+		Delta:        "answer",
+	})
+	acc.ProcessEvent(&ResponsesStreamEvent{
+		Type:         "response.content_part.done",
+		OutputIndex:  1,
+		ContentIndex: 0,
+		Part:         &ResponsesContentPart{Type: "output_text", Text: "answer"},
+	})
+	acc.ProcessEvent(&ResponsesStreamEvent{
+		Type:        "response.output_item.done",
+		OutputIndex: 1,
+		Item: &ResponsesOutput{
+			Type:    "message",
+			Content: []ResponsesContentPart{{Type: "output_text", Text: "answer"}},
+		},
+	})
+
+	output := acc.BuildOutput()
+	require.Len(t, output, 1)
+	require.Len(t, output[0].Content, 1)
+	assert.Equal(t, "answer", output[0].Content[0].Text)
+}
+
+func TestBufferedResponseAccumulator_ToolVariantsCompletePartialInput(t *testing.T) {
+	acc := NewBufferedResponseAccumulator()
+	acc.ProcessEvent(&ResponsesStreamEvent{
+		Type:        "response.output_item.added",
+		OutputIndex: 0,
+		Item:        &ResponsesOutput{Type: "custom_tool_call", CallID: "call_custom", Name: "shell"},
+	})
+	acc.ProcessEvent(&ResponsesStreamEvent{
+		Type:        "response.custom_tool_call_input.delta",
+		OutputIndex: 0,
+		Delta:       "ec",
+	})
+	acc.ProcessEvent(&ResponsesStreamEvent{
+		Type:        "response.custom_tool_call_input.done",
+		OutputIndex: 0,
+		Input:       "echo hi",
+	})
+	acc.ProcessEvent(&ResponsesStreamEvent{
+		Type:        "response.output_item.added",
+		OutputIndex: 1,
+		Item:        &ResponsesOutput{Type: "tool_search_call", CallID: "call_search", Name: "tool_search"},
+	})
+	acc.ProcessEvent(&ResponsesStreamEvent{
+		Type:        "response.tool_search_call_arguments.done",
+		OutputIndex: 1,
+		Arguments:   `{"query":"docs"}`,
+	})
+
+	output := acc.BuildOutput()
+	require.Len(t, output, 2)
+	assert.Equal(t, "custom_tool_call", output[0].Type)
+	assert.Equal(t, "echo hi", output[0].Input)
+	assert.Empty(t, output[0].Arguments)
+	assert.Equal(t, "tool_search_call", output[1].Type)
+	assert.JSONEq(t, `{"query":"docs"}`, output[1].Arguments)
+	assert.Empty(t, output[1].Input)
+}
+
+func TestBufferedResponseAccumulator_PreservesMultipleTextParts(t *testing.T) {
+	acc := NewBufferedResponseAccumulator()
+	acc.ProcessEvent(&ResponsesStreamEvent{Type: "response.output_text.delta", OutputIndex: 0, ContentIndex: 0, Delta: "first"})
+	acc.ProcessEvent(&ResponsesStreamEvent{Type: "response.output_text.done", OutputIndex: 0, ContentIndex: 0, Text: "first"})
+	acc.ProcessEvent(&ResponsesStreamEvent{Type: "response.refusal.done", OutputIndex: 0, ContentIndex: 1, Refusal: " second"})
+	acc.ProcessEvent(&ResponsesStreamEvent{Type: "response.output_text.done", OutputIndex: 1, ContentIndex: 0, Text: " third"})
+
+	output := acc.BuildOutput()
+	require.Len(t, output, 1)
+	assert.Equal(t, "first second third", output[0].Content[0].Text)
 }
 
 func TestBufferedResponseAccumulator_Mixed(t *testing.T) {

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/apicompat"
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
 )
@@ -270,7 +271,7 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 	responseID := ""
 	usage := OpenAIUsage{}
 	imageCounter := newOpenAIImageOutputCounter()
-	var firstTokenMs *int
+	var timing streamOutputTiming
 	reqStream := openAIWSPayloadBoolFromRaw(body, "stream", true)
 	eventCount := 0
 	tokenEventCount := 0
@@ -310,8 +311,8 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 			UpstreamTerminalEvent: upstreamTerminalEvent,
 			ResponseHeaders:       cloneHeader(resp.Header),
 			Duration:              time.Since(turnStart),
-			FirstTokenMs:          firstTokenMs,
 		}
+		timing.ApplyOpenAIResult(result)
 		if replayInput := replayCollector.Items(); len(replayInput) > 0 {
 			result.wsReplayInput = replayInput
 			result.wsReplayInputExists = true
@@ -365,12 +366,10 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 			}
 			lastEventType = eventType
 		}
-		if isOpenAIWSTokenEvent(eventType) {
+		outputObservation := apicompat.ObserveResponsesOutput(upstreamMessage)
+		timing.Observe(turnStart, outputObservation)
+		if outputObservation.TokenLikeDelta {
 			tokenEventCount++
-			if firstTokenMs == nil {
-				ms := int(time.Since(turnStart).Milliseconds())
-				firstTokenMs = &ms
-			}
 		}
 		if openAIWSEventShouldParseUsage(eventType) {
 			parseOpenAIWSResponseUsageFromCompletedEvent(upstreamMessage, &usage)
@@ -452,8 +451,8 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 			upstreamTerminalEvent = s.handleOpenAIWSTerminalTransientFailure(ctx, account, canonicalOpenAIAccountSchedulingModel(account, originalModel), resp.Header, upstreamMessage)
 			terminalEventCount++
 			firstTokenMsValue := -1
-			if firstTokenMs != nil {
-				firstTokenMsValue = *firstTokenMs
+			if timing.firstTokenMs != nil {
+				firstTokenMsValue = *timing.firstTokenMs
 			}
 			logOpenAIWSModeInfo(
 				"ingress_ws_http_bridge_turn_completed account_id=%d turn=%d response_id=%s payload_bytes=%d duration_ms=%d events=%d token_events=%d terminal_events=%d first_event=%s last_event=%s first_token_ms=%d client_disconnected=%v",

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	dbmigrations "github.com/Wei-Shaw/sub2api/migrations"
 	"github.com/stretchr/testify/require"
 )
 
@@ -69,6 +70,8 @@ func TestMigrationsRunner_IsIdempotent_AndSchemaIsUpToDate(t *testing.T) {
 	requireColumn(t, tx, "usage_logs", "billing_type", "smallint", 0, false)
 	requireColumn(t, tx, "usage_logs", "request_type", "smallint", 0, false)
 	requireColumn(t, tx, "usage_logs", "openai_ws_mode", "boolean", 0, false)
+	requireColumn(t, tx, "usage_logs", "first_output_ms", "integer", 0, true)
+	requireColumn(t, tx, "usage_logs", "first_output_kind", "character varying", 16, true)
 	requireColumn(t, tx, "usage_logs", "image_input_size", "character varying", 32, true)
 	requireColumn(t, tx, "usage_logs", "image_output_size", "character varying", 32, true)
 	requireColumn(t, tx, "usage_logs", "image_size_source", "character varying", 16, true)
@@ -76,6 +79,18 @@ func TestMigrationsRunner_IsIdempotent_AndSchemaIsUpToDate(t *testing.T) {
 	requireColumn(t, tx, "usage_logs", "video_count", "integer", 0, false)
 	requireColumn(t, tx, "usage_logs", "video_resolution", "character varying", 10, true)
 	requireColumn(t, tx, "usage_logs", "video_duration_seconds", "integer", 0, true)
+	requireConstraintDefinitionContains(
+		t,
+		tx,
+		"usage_logs",
+		"usage_logs_first_output_kind_check",
+		"first_output_kind",
+		"'text'",
+		"'reasoning'",
+		"'tool'",
+		"'image'",
+		"'audio'",
+	)
 	requireConstraintDefinitionContains(
 		t,
 		tx,
@@ -160,6 +175,82 @@ func TestMigrationsRunner_IsIdempotent_AndSchemaIsUpToDate(t *testing.T) {
 
 	// user_allowed_groups: created_at should be timestamptz
 	requireColumn(t, tx, "user_allowed_groups", "created_at", "timestamp with time zone", 0, false)
+}
+
+func TestMigration195_InvalidatesLegacyPreaggregatedTTFT(t *testing.T) {
+	tx := testTx(t)
+	ctx := context.Background()
+	migrationSQL, err := dbmigrations.FS.ReadFile("195_add_usage_log_first_output.sql")
+	require.NoError(t, err)
+
+	_, err = tx.ExecContext(ctx, `
+INSERT INTO ops_metrics_hourly (
+  bucket_start, platform, ttft_sample_count,
+  ttft_p50_ms, ttft_p90_ms, ttft_p95_ms, ttft_p99_ms, ttft_avg_ms, ttft_max_ms
+) VALUES ('2099-01-01T00:00:00Z', 'migration-195-test', 4, 10, 20, 30, 40, 25, 50)`)
+	require.NoError(t, err)
+
+	_, err = tx.ExecContext(ctx, `
+INSERT INTO ops_metrics_daily (
+  bucket_date, platform, ttft_sample_count,
+  ttft_p50_ms, ttft_p90_ms, ttft_p95_ms, ttft_p99_ms, ttft_avg_ms, ttft_max_ms
+) VALUES ('2099-01-01', 'migration-195-test', 4, 10, 20, 30, 40, 25, 50)`)
+	require.NoError(t, err)
+
+	_, err = tx.ExecContext(ctx, `
+INSERT INTO ops_system_metrics (
+  created_at, platform,
+  ttft_p50_ms, ttft_p90_ms, ttft_p95_ms, ttft_p99_ms, ttft_avg_ms, ttft_max_ms
+) VALUES ('2099-01-01T00:00:00Z', 'migration-195-test', 10, 20, 30, 40, 25, 50)`)
+	require.NoError(t, err)
+
+	_, err = tx.ExecContext(ctx, string(migrationSQL))
+	require.NoError(t, err)
+
+	for _, table := range []string{"ops_metrics_hourly", "ops_metrics_daily"} {
+		var sampleCount int64
+		var p50, p90, p95, p99, avg, max sql.NullFloat64
+		err = tx.QueryRowContext(ctx, `
+SELECT
+  ttft_sample_count,
+  ttft_p50_ms,
+  ttft_p90_ms,
+  ttft_p95_ms,
+  ttft_p99_ms,
+  ttft_avg_ms,
+  ttft_max_ms
+FROM `+table+`
+WHERE platform = 'migration-195-test'`).Scan(
+			&sampleCount,
+			&p50,
+			&p90,
+			&p95,
+			&p99,
+			&avg,
+			&max,
+		)
+		require.NoError(t, err)
+		require.Zero(t, sampleCount)
+		for _, value := range []sql.NullFloat64{p50, p90, p95, p99, avg, max} {
+			require.False(t, value.Valid)
+		}
+	}
+
+	var p50, p90, p95, p99, avg, max sql.NullFloat64
+	err = tx.QueryRowContext(ctx, `
+SELECT
+  ttft_p50_ms,
+  ttft_p90_ms,
+  ttft_p95_ms,
+  ttft_p99_ms,
+  ttft_avg_ms,
+  ttft_max_ms
+FROM ops_system_metrics
+WHERE platform = 'migration-195-test'`).Scan(&p50, &p90, &p95, &p99, &avg, &max)
+	require.NoError(t, err)
+	for _, value := range []sql.NullFloat64{p50, p90, p95, p99, avg, max} {
+		require.False(t, value.Valid)
+	}
 }
 
 func TestMigrationsRunner_AuthIdentityAndPaymentSchemaStayAligned(t *testing.T) {

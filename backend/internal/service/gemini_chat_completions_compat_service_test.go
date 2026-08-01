@@ -93,7 +93,7 @@ func TestGeminiResponseToChatCompletionsOmitsInvalidInlineData(t *testing.T) {
 	}
 }
 
-func TestConvertGeminiToClaudeMessageOmitsInlineDataForAnthropicMessages(t *testing.T) {
+func TestConvertGeminiToClaudeMessageHonorsInlineMediaFlag(t *testing.T) {
 	geminiResp := map[string]any{
 		"candidates": []any{map[string]any{
 			"content": map[string]any{"parts": []any{
@@ -130,6 +130,27 @@ func TestConvertGeminiToClaudeMessageOmitsInlineDataForAnthropicMessages(t *test
 	require.Equal(t, "tool_use", toolUseWithoutInlineData["type"])
 	require.Equal(t, "get_weather", toolUseWithoutInlineData["name"])
 	require.Equal(t, map[string]any{"type": "text", "text": "after"}, contentWithoutInlineData[2])
+}
+
+func TestConvertGeminiToClaudeMessagePreservesSupportedInlineMediaWhenEnabled(t *testing.T) {
+	geminiResp := map[string]any{
+		"candidates": []any{map[string]any{
+			"content": map[string]any{"parts": []any{
+				map[string]any{"inline_data": map[string]any{"mime_type": "image/webp", "data": "aW1hZ2U="}},
+				map[string]any{"inlineData": map[string]any{"mimeType": "audio/wav", "data": "YXVkaW8="}},
+			}},
+		}},
+	}
+	rawData, err := json.Marshal(geminiResp)
+	require.NoError(t, err)
+
+	converted, _ := convertGeminiToClaudeMessage(geminiResp, "gemini-test", rawData, true)
+	content, ok := converted["content"].([]any)
+	require.True(t, ok)
+	require.Equal(t, []any{
+		map[string]any{"type": "text", "text": "![image](data:image/webp;base64,aW1hZ2U=)"},
+		map[string]any{"type": "text", "text": "[audio](data:audio/wav;base64,YXVkaW8=)"},
+	}, content)
 }
 
 func TestGeminiResponseToChatCompletionsRetainsTextAndToolBehavior(t *testing.T) {

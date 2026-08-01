@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/apicompat"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/util/responseheaders"
@@ -234,6 +235,8 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 
 	var usage *OpenAIUsage
 	var firstTokenMs *int
+	var firstOutputMs *int
+	firstOutputKind := ""
 	responseID := ""
 	imageCount := 0
 	var imageOutputSizes []string
@@ -244,6 +247,8 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		}
 		usage = result.usage
 		firstTokenMs = result.firstTokenMs
+		firstOutputMs = result.firstOutputMs
+		firstOutputKind = result.firstOutputKind
 		responseID = strings.TrimSpace(result.responseID)
 		imageCount = result.imageCount
 		imageOutputSizes = result.imageOutputSizes
@@ -282,6 +287,8 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		OpenAIWSMode:    false,
 		Duration:        time.Since(startTime),
 		FirstTokenMs:    firstTokenMs,
+		FirstOutputMs:   firstOutputMs,
+		FirstOutputKind: firstOutputKind,
 	}
 	if imageCount > 0 {
 		forwardResult.ImageCount = imageCount
@@ -699,6 +706,8 @@ func collectOpenAIPassthroughTimeoutHeaders(h http.Header) []string {
 type openaiStreamingResultPassthrough struct {
 	usage            *OpenAIUsage
 	firstTokenMs     *int
+	firstOutputMs    *int
+	firstOutputKind  string
 	responseID       string
 	imageCount       int
 	imageOutputSizes []string
@@ -717,26 +726,6 @@ func openAIStreamClientOutputStarted(c *gin.Context, localStarted bool) bool {
 		return true
 	}
 	return c != nil && c.Writer != nil && c.Writer.Written()
-}
-
-func openAIStreamEventIsPreamble(eventType string) bool {
-	switch strings.TrimSpace(eventType) {
-	case "response.created", "response.in_progress":
-		return true
-	default:
-		return false
-	}
-}
-
-func openAIStreamDataStartsClientOutput(data, eventType string) bool {
-	trimmed := strings.TrimSpace(data)
-	if trimmed == "" {
-		return false
-	}
-	if strings.TrimSpace(eventType) == "response.failed" {
-		return false
-	}
-	return !openAIStreamEventIsPreamble(eventType)
 }
 
 func openAIStreamFailedEventSemanticStatus(payload []byte, message string) int {
@@ -972,7 +961,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 
 	usage := &OpenAIUsage{}
 	imageCounter := newOpenAIImageOutputCounter()
-	var firstTokenMs *int
+	var timing streamOutputTiming
 	responseID := ""
 	clientDisconnected := false
 	sawDone := false
@@ -1019,7 +1008,9 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 	resultWithUsage := func() *openaiStreamingResultPassthrough {
 		return &openaiStreamingResultPassthrough{
 			usage:            usage,
-			firstTokenMs:     firstTokenMs,
+			firstTokenMs:     timing.firstTokenMs,
+			firstOutputMs:    timing.firstOutputMs,
+			firstOutputKind:  timing.firstOutputKind,
 			responseID:       responseID,
 			imageCount:       imageCounter.Count(),
 			imageOutputSizes: imageCounter.Sizes(),
@@ -1120,11 +1111,9 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 				trimmedData = strings.TrimSpace(string(sanitizedData))
 				line = "data: " + string(sanitizedData)
 			}
-			lineStartsClientOutput = forceFlushFailedEvent || openAIStreamDataStartsClientOutput(trimmedData, eventType)
-			if firstTokenMs == nil && lineStartsClientOutput && trimmedData != "[DONE]" {
-				ms := int(time.Since(startTime).Milliseconds())
-				firstTokenMs = &ms
-			}
+			observation := apicompat.ObserveResponsesOutput(dataBytes)
+			timing.Observe(startTime, observation)
+			lineStartsClientOutput = forceFlushFailedEvent || observation.MeaningfulOutput || openAIStreamEventIsTerminal(trimmedData)
 			s.parseSSEUsageBytes(dataBytes, usage)
 		}
 

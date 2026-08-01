@@ -66,6 +66,8 @@ type AnthropicContentBlock struct {
 	// Signature carries provider encrypted reasoning (e.g. xAI encrypted_content)
 	// so multi-turn Claude clients can round-trip it back on subsequent turns.
 	Signature string `json:"signature,omitempty"`
+	// type=redacted_thinking
+	Data string `json:"data,omitempty"`
 
 	// type=image
 	Source *AnthropicImageSource `json:"source,omitempty"`
@@ -187,7 +189,7 @@ type AnthropicStreamEvent struct {
 
 // AnthropicDelta carries incremental content in streaming events.
 type AnthropicDelta struct {
-	Type string `json:"type,omitempty"` // "text_delta" | "input_json_delta" | "thinking_delta" | "signature_delta"
+	Type string `json:"type,omitempty"` // "text_delta" | "input_json_delta" | "thinking_delta" | "signature_delta" | "citations_delta"
 
 	// text_delta
 	Text string `json:"text,omitempty"`
@@ -200,6 +202,9 @@ type AnthropicDelta struct {
 
 	// signature_delta
 	Signature string `json:"signature,omitempty"`
+
+	// citations_delta
+	Citation json.RawMessage `json:"citation,omitempty"`
 
 	// message_delta fields
 	StopReason   string  `json:"stop_reason,omitempty"`
@@ -297,6 +302,7 @@ func (i *ResponsesInputItem) UnmarshalJSON(data []byte) error {
 type ResponsesContentPart struct {
 	Type     string `json:"type"` // "input_text" | "output_text" | "input_image"
 	Text     string `json:"text,omitempty"`
+	Refusal  string `json:"refusal,omitempty"`
 	ImageURL string `json:"image_url,omitempty"` // data URI for input_image
 }
 
@@ -587,6 +593,7 @@ type ResponsesStreamEvent struct {
 	ContentIndex int    `json:"content_index,omitempty"`
 	Delta        string `json:"delta,omitempty"`
 	Text         string `json:"text,omitempty"`
+	Refusal      string `json:"refusal,omitempty"`
 	ItemID       string `json:"item_id,omitempty"`
 
 	// response.function_call_arguments.delta / done
@@ -757,6 +764,9 @@ type ChatCompletionsChunk struct {
 	Usage             *ChatUsage        `json:"usage,omitempty"`
 	SystemFingerprint string            `json:"system_fingerprint,omitempty"`
 	ServiceTier       string            `json:"service_tier,omitempty"`
+	// AggregateOutput marks compatibility fallback content recovered from a
+	// done/terminal aggregate. It is not serialized to downstream clients.
+	AggregateOutput bool `json:"-"`
 }
 
 // ChatChunkChoice is a single choice in a streaming chunk.
@@ -768,10 +778,12 @@ type ChatChunkChoice struct {
 
 // ChatDelta carries incremental content in a streaming chunk.
 type ChatDelta struct {
-	Role             string         `json:"role,omitempty"`
-	Content          *string        `json:"content,omitempty"` // pointer: omit when not present, null vs "" matters
-	ReasoningContent *string        `json:"reasoning_content,omitempty"`
-	ToolCalls        []ChatToolCall `json:"tool_calls,omitempty"`
+	Role             string            `json:"role,omitempty"`
+	Content          *string           `json:"content,omitempty"` // pointer: omit when not present, null vs "" matters
+	Refusal          *string           `json:"refusal,omitempty"`
+	ReasoningContent *string           `json:"reasoning_content,omitempty"`
+	FunctionCall     *ChatFunctionCall `json:"function_call,omitempty"`
+	ToolCalls        []ChatToolCall    `json:"tool_calls,omitempty"`
 }
 
 // ---------------------------------------------------------------------------

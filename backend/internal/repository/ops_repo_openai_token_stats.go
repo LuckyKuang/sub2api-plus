@@ -48,10 +48,10 @@ WITH stats AS (
       )::numeric,
       2
     )::float8 AS avg_tokens_per_sec,
-    ROUND(AVG(ul.first_token_ms)::numeric, 2)::float8 AS avg_first_token_ms,
+    ROUND((AVG(ul.first_token_ms) FILTER (WHERE ul.first_output_kind IS NOT NULL))::numeric, 2)::float8 AS avg_first_token_ms,
     COALESCE(SUM(ul.output_tokens), 0)::bigint AS total_output_tokens,
     COALESCE(ROUND(AVG(ul.duration_ms)::numeric, 0), 0)::bigint AS avg_duration_ms,
-    COUNT(CASE WHEN ul.first_token_ms IS NOT NULL THEN 1 END)::bigint AS requests_with_first_token
+    COUNT(*) FILTER (WHERE ul.first_token_ms IS NOT NULL AND ul.first_output_kind IS NOT NULL)::bigint AS requests_with_first_token
   FROM usage_logs ul
   ` + join + `
   ` + where + `

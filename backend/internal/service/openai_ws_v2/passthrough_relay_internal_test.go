@@ -245,8 +245,8 @@ func TestHelperFunctionsCoverage(t *testing.T) {
 	require.False(t, isDisconnectError(errors.New("unrelated")))
 
 	require.True(t, isTokenEvent("response.output_text.delta"))
-	require.True(t, isTokenEvent("response.output_audio.delta"))
-	require.True(t, isTokenEvent("response.completed"))
+	require.False(t, isTokenEvent("response.output_audio.delta"))
+	require.False(t, isTokenEvent("response.completed"))
 	require.False(t, isTokenEvent(""))
 	require.False(t, isTokenEvent("response.created"))
 
@@ -406,9 +406,9 @@ func TestIsTokenEventCoverageBranches(t *testing.T) {
 
 	require.False(t, isTokenEvent("response.in_progress"))
 	require.False(t, isTokenEvent("response.output_item.added"))
-	require.True(t, isTokenEvent("response.output_audio.delta"))
-	require.True(t, isTokenEvent("response.output"))
-	require.True(t, isTokenEvent("response.done"))
+	require.False(t, isTokenEvent("response.output_audio.delta"))
+	require.False(t, isTokenEvent("response.output"))
+	require.False(t, isTokenEvent("response.done"))
 }
 
 func TestShouldParseUsageTerminalEvents(t *testing.T) {
@@ -489,4 +489,49 @@ func TestObserveUpstreamMessage_ResponseIDFallbackPolicy(t *testing.T) {
 	)
 	require.True(t, observed.terminal)
 	require.Equal(t, "resp_fallback", observed.responseID)
+}
+
+func TestObserveUpstreamMessage_TurnTimingStartsAtResponseCreateWrite(t *testing.T) {
+	t.Parallel()
+
+	startAt := time.Unix(100, 0)
+	state := &relayState{requestModel: "gpt-5.4"}
+	state.beginResponseCreate(startAt)
+	now := startAt.Add(125 * time.Millisecond)
+	nowFn := func() time.Time { return now }
+
+	created := observeUpstreamMessage(
+		state,
+		[]byte(`{"type":"response.created","response":{"id":"resp_timing"}}`),
+		startAt,
+		nowFn,
+		nil,
+	)
+	require.False(t, created.terminal)
+
+	now = startAt.Add(275 * time.Millisecond)
+	delta := observeUpstreamMessage(
+		state,
+		[]byte(`{"type":"response.output_text.delta","response_id":"resp_timing","delta":"hello"}`),
+		startAt,
+		nowFn,
+		nil,
+	)
+	require.False(t, delta.terminal)
+
+	now = startAt.Add(640 * time.Millisecond)
+	completed := observeUpstreamMessage(
+		state,
+		[]byte(`{"type":"response.completed","response":{"id":"resp_timing","usage":{"input_tokens":1,"output_tokens":1}}}`),
+		startAt,
+		nowFn,
+		nil,
+	)
+	require.True(t, completed.terminal)
+	require.Equal(t, 640*time.Millisecond, completed.duration)
+	require.NotNil(t, completed.firstToken)
+	require.Equal(t, 275, *completed.firstToken)
+	require.NotNil(t, completed.firstOutput)
+	require.Equal(t, 275, *completed.firstOutput)
+	require.Equal(t, "text", completed.outputKind)
 }

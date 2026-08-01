@@ -603,15 +603,6 @@ func TestForwardAsChatCompletions_UnknownResponsesSupportFallbackUsesVersionedCh
 	require.Contains(t, rec.Body.String(), `"content":"ok"`)
 }
 
-func TestIsOpenAIChatUsageOnlyStreamChunk(t *testing.T) {
-	t.Parallel()
-
-	require.True(t, isOpenAIChatUsageOnlyStreamChunk(`{"choices":[],"usage":{"prompt_tokens":1,"completion_tokens":2}}`))
-	require.False(t, isOpenAIChatUsageOnlyStreamChunk(`{"choices":[{"index":0}],"usage":{"prompt_tokens":1,"completion_tokens":2}}`))
-	require.False(t, isOpenAIChatUsageOnlyStreamChunk(`{"choices":[]}`))
-	require.False(t, isOpenAIChatUsageOnlyStreamChunk(``))
-}
-
 func TestEnsureOpenAIChatStreamUsage(t *testing.T) {
 	t.Parallel()
 

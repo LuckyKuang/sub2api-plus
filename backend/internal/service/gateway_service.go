@@ -565,7 +565,9 @@ type ForwardResult struct {
 	UpstreamModel    string
 	Stream           bool
 	Duration         time.Duration
-	FirstTokenMs     *int // 首字时间（流式请求）
+	FirstTokenMs     *int // 首个文本/推理/工具 token-like 增量（流式请求）
+	FirstOutputMs    *int // 首个下游可消费输出（流式请求）
+	FirstOutputKind  string
 	ClientDisconnect bool // 客户端是否在流式传输过程中断开
 	ReasoningEffort  *string
 

@@ -2,16 +2,105 @@ package service
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/binary"
 	"hash/crc32"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
 )
+
+func TestHandleBedrockStreamingResponse_OutputTimingUsesClaudePayload(t *testing.T) {
+	tests := []struct {
+		name           string
+		events         []string
+		wantToken      bool
+		wantOutput     bool
+		wantOutputKind string
+	}{
+		{
+			name: "lifecycle and metadata only",
+			events: []string{
+				`{"type":"message_start","message":{"usage":{"input_tokens":1}}}`,
+				`{"type":"message_delta","delta":{"stop_reason":"end_turn"},"amazon-bedrock-invocationMetrics":{"inputTokenCount":1,"outputTokenCount":0}}`,
+				`{"type":"message_stop"}`,
+			},
+		},
+		{
+			name: "text delta",
+			events: []string{
+				`{"type":"message_start","message":{"usage":{"input_tokens":1}}}`,
+				`{"type":"content_block_delta","delta":{"type":"text_delta","text":"hello"}}`,
+				`{"type":"message_stop"}`,
+			},
+			wantToken:      true,
+			wantOutput:     true,
+			wantOutputKind: "text",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gin.SetMode(gin.TestMode)
+			var stream bytes.Buffer
+			for _, event := range tt.events {
+				_, _ = stream.Write(buildBedrockTimingTestFrame(event))
+			}
+
+			rec := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(rec)
+			resp := &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewReader(stream.Bytes())), Header: http.Header{}}
+			svc := &GatewayService{cfg: &config.Config{}}
+
+			result, err := svc.handleBedrockStreamingResponse(context.Background(), resp, c, &Account{ID: 1}, time.Now(), "claude")
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			if tt.wantToken {
+				require.NotNil(t, result.firstTokenMs)
+			} else {
+				require.Nil(t, result.firstTokenMs)
+			}
+			if tt.wantOutput {
+				require.NotNil(t, result.firstOutputMs)
+				require.Equal(t, tt.wantOutputKind, result.firstOutputKind)
+			} else {
+				require.Nil(t, result.firstOutputMs)
+				require.Empty(t, result.firstOutputKind)
+			}
+		})
+	}
+}
+
+func buildBedrockTimingTestFrame(event string) []byte {
+	payload := []byte(`{"bytes":"` + base64.StdEncoding.EncodeToString([]byte(event)) + `"}`)
+	var headers bytes.Buffer
+	_ = headers.WriteByte(byte(len(":event-type")))
+	_, _ = headers.WriteString(":event-type")
+	_ = headers.WriteByte(7)
+	_ = binary.Write(&headers, binary.BigEndian, uint16(len("chunk")))
+	_, _ = headers.WriteString("chunk")
+
+	headerBytes := headers.Bytes()
+	totalLen := uint32(12 + len(headerBytes) + len(payload) + 4)
+	var frame bytes.Buffer
+	_ = binary.Write(&frame, binary.BigEndian, totalLen)
+	_ = binary.Write(&frame, binary.BigEndian, uint32(len(headerBytes)))
+	prelude := append([]byte(nil), frame.Bytes()...)
+	_ = binary.Write(&frame, binary.BigEndian, crc32.ChecksumIEEE(prelude))
+	_, _ = frame.Write(headerBytes)
+	_, _ = frame.Write(payload)
+	_ = binary.Write(&frame, binary.BigEndian, crc32.ChecksumIEEE(frame.Bytes()))
+	return frame.Bytes()
+}
 
 func TestExtractBedrockChunkData(t *testing.T) {
 	t.Run("valid base64 payload", func(t *testing.T) {

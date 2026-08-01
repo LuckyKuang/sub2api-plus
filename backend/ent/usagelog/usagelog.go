@@ -78,6 +78,10 @@ const (
 	FieldDurationMs = "duration_ms"
 	// FieldFirstTokenMs holds the string denoting the first_token_ms field in the database.
 	FieldFirstTokenMs = "first_token_ms"
+	// FieldFirstOutputMs holds the string denoting the first_output_ms field in the database.
+	FieldFirstOutputMs = "first_output_ms"
+	// FieldFirstOutputKind holds the string denoting the first_output_kind field in the database.
+	FieldFirstOutputKind = "first_output_kind"
 	// FieldUserAgent holds the string denoting the user_agent field in the database.
 	FieldUserAgent = "user_agent"
 	// FieldIPAddress holds the string denoting the ip_address field in the database.
@@ -188,6 +192,8 @@ var Columns = []string{
 	FieldStream,
 	FieldDurationMs,
 	FieldFirstTokenMs,
+	FieldFirstOutputMs,
+	FieldFirstOutputKind,
 	FieldUserAgent,
 	FieldIPAddress,
 	FieldImageCount,
@@ -260,6 +266,8 @@ var (
 	DefaultBillingType int8
 	// DefaultStream holds the default value on creation for the "stream" field.
 	DefaultStream bool
+	// FirstOutputKindValidator is a validator for the "first_output_kind" field. It is called by the builders before save.
+	FirstOutputKindValidator func(string) error
 	// UserAgentValidator is a validator for the "user_agent" field. It is called by the builders before save.
 	UserAgentValidator func(string) error
 	// IPAddressValidator is a validator for the "ip_address" field. It is called by the builders before save.
@@ -450,6 +458,16 @@ func ByDurationMs(opts ...sql.OrderTermOption) OrderOption {
 // ByFirstTokenMs orders the results by the first_token_ms field.
 func ByFirstTokenMs(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldFirstTokenMs, opts...).ToFunc()
+}
+
+// ByFirstOutputMs orders the results by the first_output_ms field.
+func ByFirstOutputMs(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldFirstOutputMs, opts...).ToFunc()
+}
+
+// ByFirstOutputKind orders the results by the first_output_kind field.
+func ByFirstOutputKind(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldFirstOutputKind, opts...).ToFunc()
 }
 
 // ByUserAgent orders the results by the user_agent field.
