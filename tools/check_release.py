@@ -57,7 +57,7 @@ def validate_release_documentation(root: Path, errors: list[str]) -> None:
             errors,
         )
     if stale_release_docs:
-        fail("Run: python tools/update_release_docs.py", errors)
+        fail("Run: python3 tools/update_release_docs.py", errors)
 
 
 def parse_upstream(tag: str, errors: list[str]) -> tuple[str, str, str] | None:

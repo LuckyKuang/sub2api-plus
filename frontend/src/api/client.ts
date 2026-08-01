@@ -48,6 +48,18 @@ function onTokenRefreshed(token: string): void {
   refreshSubscribers = []
 }
 
+function redirectToLogin(): void {
+  if (window.location.pathname === '/login') {
+    return
+  }
+
+  const pathname = window.location.pathname
+  const returnPath = pathname.startsWith('/') && !pathname.startsWith('//')
+    ? `${pathname}${window.location.search}${window.location.hash}`
+    : '/'
+  window.location.href = `/login?redirect=${encodeURIComponent(returnPath)}`
+}
+
 // ==================== Request Interceptor ====================
 
 // Get user's timezone
@@ -266,9 +278,7 @@ apiClient.interceptors.response.use(
             localStorage.removeItem('token_expires_at')
             sessionStorage.setItem('auth_expired', '1')
 
-            if (!window.location.pathname.includes('/login')) {
-              window.location.href = '/login'
-            }
+            redirectToLogin()
 
             return Promise.reject({
               status: 401,
@@ -296,10 +306,7 @@ apiClient.interceptors.response.use(
         if ((hasToken || sentAuth) && !isAuthEndpoint) {
           sessionStorage.setItem('auth_expired', '1')
         }
-        // Only redirect if not already on login page
-        if (!window.location.pathname.includes('/login')) {
-          window.location.href = '/login'
-        }
+        redirectToLogin()
       }
 
       // Return structured error

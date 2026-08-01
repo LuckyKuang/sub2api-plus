@@ -55,6 +55,13 @@ services:
       - RUN_MODE=${RUN_MODE:-standard}
       - UPDATE_GITHUB_TOKEN=${UPDATE_GITHUB_TOKEN:-}
 
+      # WebAuthn deployment boundary. The administrator must still enable
+      # Passkey in system settings after these values pass validation.
+      - WEBAUTHN_ENABLED=${WEBAUTHN_ENABLED:-false}
+      - WEBAUTHN_RP_DISPLAY_NAME=${WEBAUTHN_RP_DISPLAY_NAME:-Sub2API}
+      - WEBAUTHN_RP_ID=${WEBAUTHN_RP_ID:-}
+      - WEBAUTHN_RP_ORIGINS=${WEBAUTHN_RP_ORIGINS:-}
+
       # =======================================================================
       # Database Configuration (PostgreSQL)
       # =======================================================================

@@ -182,7 +182,7 @@ func (s *SettingService) PasskeyEnabled(ctx context.Context) (bool, error) {
 	}
 	value, err := s.settingRepo.GetValue(ctx, SettingKeyPasskeyEnabled)
 	if errors.Is(err, ErrSettingNotFound) {
-		return true, nil // configured deployments default to enabled until the admin persists the switch
+		return false, nil // Passkey requires an explicit administrator opt-in
 	}
 	if err != nil {
 		return false, fmt.Errorf("read passkey setting: %w", err)
@@ -215,7 +215,7 @@ func (s *SettingService) passkeySettingEnabled(settings map[string]string) bool 
 	}
 	value, ok := settings[SettingKeyPasskeyEnabled]
 	if !ok {
-		return true
+		return false
 	}
 	return value == "true"
 }

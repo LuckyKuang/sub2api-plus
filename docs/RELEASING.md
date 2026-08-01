@@ -22,7 +22,7 @@ merging a newer official baseline. `NNN` is always three digits.
 3. Update every `ARG VERSION=` in `Dockerfile` and `backend/Dockerfile`.
 4. Add the version to `UPSTREAM.md` with status `planned`.
 5. Synchronize the install, rollback, and image examples:
-   `python tools/update_release_docs.py`.
+   `python3 tools/update_release_docs.py`.
 6. Write `release-notes.md` from the template below.
 7. Commit all repository changes; the notes file may remain untracked.
 8. Get the release commit reviewed and ensure its branch CI is green.
@@ -35,7 +35,7 @@ The documentation updater reads the current version from
 writing files with:
 
 ```bash
-python tools/update_release_docs.py --check
+python3 tools/update_release_docs.py --check
 ```
 
 Do not create the release tag manually at this stage.
@@ -83,7 +83,7 @@ be available when required by integration tests.
 Run from the repository root:
 
 ```bash
-python tools/release_preflight.py \
+python3 tools/release_preflight.py \
   --tag vX.Y.Z+custom.NNN \
   --notes-file release-notes.md \
   --create-tag
@@ -91,10 +91,11 @@ python tools/release_preflight.py \
 
 The command first checks all toolchains together, then verifies the clean
 worktree, absent local/remote tag, `planned` upstream status, version sources,
-release notes, README contracts, migrations, deployment scripts, backend
-tests/lint, and frontend install/lint/typecheck/tests/build. It also verifies
-that `HEAD` and the notes did not change during the run. Only after every gate
-passes does it create and verify the local annotated tag; it never pushes.
+release notes, README contracts, migrations, deployment scripts, Go module
+tidiness, backend tests/lint, and frontend install/lint/typecheck/tests/build.
+It also verifies that `HEAD` and the notes did not change during the run. Only
+after every gate passes does it create and verify the local annotated tag; it
+never pushes.
 
 On macOS, preflight also runs the Apple container lifecycle test. On other
 platforms that test remains a required macOS branch-CI gate, so do not release

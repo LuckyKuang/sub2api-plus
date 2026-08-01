@@ -12,6 +12,7 @@ describe('API Client', () => {
 
   beforeEach(async () => {
     localStorage.clear()
+    sessionStorage.clear()
     window.history.replaceState({}, '', '/')
     // 每次测试重新导入以获取干净的模块状态
     vi.resetModules()
@@ -310,14 +311,20 @@ describe('API Client', () => {
   // --- 401 Token 刷新 ---
 
   describe('401 Token 刷新', () => {
-    it('无 refresh_token 时 401 清除 localStorage', async () => {
+    it('无 refresh_token 时 401 清除 localStorage 并保留站内回跳路径', async () => {
       localStorage.setItem('auth_token', 'expired-token')
       // 不设置 refresh_token
 
       // Mock window.location
       const originalLocation = window.location
       Object.defineProperty(window, 'location', {
-        value: { ...originalLocation, pathname: '/dashboard', href: '/dashboard' },
+        value: {
+          ...originalLocation,
+          pathname: '/model-plaza',
+          search: '?group=pro',
+          hash: '#models',
+          href: '/model-plaza?group=pro#models',
+        },
         writable: true,
       })
 
@@ -337,8 +344,94 @@ describe('API Client', () => {
       await expect(apiClient.get('/test')).rejects.toBeDefined()
 
       expect(localStorage.getItem('auth_token')).toBeNull()
+      expect(window.location.href).toBe(
+        '/login?redirect=%2Fmodel-plaza%3Fgroup%3Dpro%23models'
+      )
 
       // 恢复 location
+      Object.defineProperty(window, 'location', {
+        value: originalLocation,
+        writable: true,
+      })
+    })
+
+    it('refresh_token 刷新失败时清除认证并保留站内回跳路径', async () => {
+      localStorage.setItem('auth_token', 'expired-token')
+      localStorage.setItem('refresh_token', 'expired-refresh-token')
+
+      const originalLocation = window.location
+      Object.defineProperty(window, 'location', {
+        value: {
+          ...originalLocation,
+          pathname: '/admin/users',
+          search: '?page=2',
+          hash: '',
+          href: '/admin/users?page=2',
+        },
+        writable: true,
+      })
+      vi.spyOn(axios, 'post').mockRejectedValue(new Error('refresh failed'))
+
+      const adapter = vi.fn().mockRejectedValue({
+        response: {
+          status: 401,
+          data: { code: 'TOKEN_EXPIRED', message: 'Token expired' },
+        },
+        config: {
+          url: '/admin/users',
+          headers: { Authorization: 'Bearer expired-token' },
+        },
+        code: 'ERR_BAD_REQUEST',
+      })
+      apiClient.defaults.adapter = adapter
+
+      await expect(apiClient.get('/admin/users')).rejects.toEqual(
+        expect.objectContaining({ code: 'TOKEN_REFRESH_FAILED' })
+      )
+
+      expect(localStorage.getItem('auth_token')).toBeNull()
+      expect(localStorage.getItem('refresh_token')).toBeNull()
+      expect(sessionStorage.getItem('auth_expired')).toBe('1')
+      expect(window.location.href).toBe('/login?redirect=%2Fadmin%2Fusers%3Fpage%3D2')
+
+      Object.defineProperty(window, 'location', {
+        value: originalLocation,
+        writable: true,
+      })
+    })
+
+    it('401 回跳拒绝协议相对路径', async () => {
+      localStorage.setItem('auth_token', 'expired-token')
+
+      const originalLocation = window.location
+      Object.defineProperty(window, 'location', {
+        value: {
+          ...originalLocation,
+          pathname: '//example.invalid/steal',
+          search: '?token=secret',
+          hash: '',
+          href: 'http://127.0.0.1:8080//example.invalid/steal?token=secret',
+        },
+        writable: true,
+      })
+
+      const adapter = vi.fn().mockRejectedValue({
+        response: {
+          status: 401,
+          data: { code: 'TOKEN_EXPIRED', message: 'Token expired' },
+        },
+        config: {
+          url: '/test',
+          headers: { Authorization: 'Bearer expired-token' },
+        },
+        code: 'ERR_BAD_REQUEST',
+      })
+      apiClient.defaults.adapter = adapter
+
+      await expect(apiClient.get('/test')).rejects.toBeDefined()
+
+      expect(window.location.href).toBe('/login?redirect=%2F')
+
       Object.defineProperty(window, 'location', {
         value: originalLocation,
         writable: true,

@@ -9,6 +9,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import release_docs
+
 
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATIONS = ROOT / "backend/migrations"
@@ -83,9 +85,40 @@ def diff_changes(base: str) -> list[tuple[str, str]]:
     return changes
 
 
+def resolve_release_base(
+    target: str,
+    *,
+    tags: list[str] | None = None,
+    statuses: dict[str, str] | None = None,
+) -> str:
+    if release_docs.version_key(target) is None:
+        raise ValueError(
+            f"invalid target release {target!r}; expected vX.Y.Z+custom.NNN"
+        )
+    if statuses is None:
+        statuses = release_docs.parse_upstream_statuses(
+            ROOT.joinpath("UPSTREAM.md").read_text(encoding="utf-8")
+        )
+    if target not in statuses:
+        raise ValueError(f"UPSTREAM.md has no mapping row for {target}")
+    if tags is None:
+        tags = git("tag", "--merged", "HEAD", "--list").splitlines()
+    base = release_docs.select_previous_release_tag(tags, statuses, target)
+    if base is None:
+        raise ValueError(
+            f"no earlier published or historical release tag is available for {target}"
+        )
+    return base
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base", help="Git base SHA/ref for new-file validation")
+    comparison = parser.add_mutually_exclusive_group()
+    comparison.add_argument("--base", help="Git base SHA/ref for new-file validation")
+    comparison.add_argument(
+        "--target-release",
+        help="release tag whose previous published/historical tag is the Git base",
+    )
     args = parser.parse_args()
     errors: list[str] = []
 
@@ -94,6 +127,13 @@ def main() -> int:
             errors.append(f"{path.relative_to(ROOT).as_posix()}: invalid filename")
 
     base = (args.base or "").strip()
+    if args.target_release:
+        try:
+            base = resolve_release_base(args.target_release)
+        except (OSError, subprocess.CalledProcessError, ValueError) as error:
+            print(f"Cannot resolve migration comparison base: {error}", file=sys.stderr)
+            return 1
+        print(f"Migration comparison base for {args.target_release}: {base}")
     if not base or ZERO_SHA_RE.fullmatch(base):
         if errors:
             for error in errors:

@@ -5,7 +5,7 @@ project_name: sub2api
 
 before:
   hooks:
-    - go mod tidy -C backend
+    - go -C backend mod tidy -diff
 
 builds:
   - id: sub2api

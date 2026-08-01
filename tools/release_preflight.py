@@ -432,6 +432,11 @@ def main() -> int:
             "Caddy cache deployment test",
             ("bash", "deploy/test-caddyfile-cache.sh"),
         ),
+        Step(
+            "Go module tidiness",
+            ("go", "mod", "tidy", "-diff"),
+            ROOT / "backend",
+        ),
     ]
     if sys.platform == "darwin":
         steps.append(

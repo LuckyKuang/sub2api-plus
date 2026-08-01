@@ -3,15 +3,18 @@
 
 from __future__ import annotations
 
+import re
 import tempfile
 import unittest
 from pathlib import Path
 
 import check_release
+import check_new_migrations
 import release_docs
 import release_preflight
 
 
+ROOT = Path(__file__).resolve().parents[1]
 TAG = "v1.2.3+custom.009"
 OFFICIAL_TAG = "v1.2.3"
 OFFICIAL_COMMIT = "a" * 40
@@ -113,6 +116,68 @@ class ReleaseBaselineTests(unittest.TestCase):
         check_release.validate_required_status(TAG, "published", "planned", errors)
         self.assertEqual(len(errors), 1)
         self.assertIn("expected 'planned'", errors[0])
+
+
+class MigrationBaselineTests(unittest.TestCase):
+    def test_release_base_uses_previous_eligible_tag(self) -> None:
+        tags = [
+            "v1.2.3+custom.004",
+            "v1.2.3+custom.005",
+            "v1.2.3+custom.006",
+        ]
+        statuses = {
+            "v1.2.3+custom.004": "published",
+            "v1.2.3+custom.005": "historical",
+            "v1.2.3+custom.006": "planned",
+            TAG: "planned",
+        }
+        self.assertEqual(
+            check_new_migrations.resolve_release_base(
+                TAG,
+                tags=tags,
+                statuses=statuses,
+            ),
+            "v1.2.3+custom.005",
+        )
+
+    def test_release_base_is_required(self) -> None:
+        with self.assertRaisesRegex(ValueError, "no earlier published or historical"):
+            check_new_migrations.resolve_release_base(
+                TAG,
+                tags=[TAG],
+                statuses={TAG: "planned"},
+            )
+
+
+class WorkflowPolicyTests(unittest.TestCase):
+    def test_external_actions_are_pinned_to_commits(self) -> None:
+        action_re = re.compile(r"^\s*uses:\s*([^@\s]+)@([^\s#]+)", re.MULTILINE)
+        for path in sorted(ROOT.joinpath(".github/workflows").glob("*.yml")):
+            with self.subTest(path=path.name):
+                text = path.read_text(encoding="utf-8")
+                floating = [
+                    f"{action}@{revision}"
+                    for action, revision in action_re.findall(text)
+                    if not action.startswith("./")
+                    and re.fullmatch(r"[0-9a-f]{40}", revision) is None
+                ]
+                self.assertEqual(floating, [])
+                self.assertNotIn("@latest", text)
+
+    def test_release_checkout_does_not_persist_credentials(self) -> None:
+        workflow = ROOT.joinpath(".github/workflows/release.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("persist-credentials: false", workflow)
+
+    def test_actionlint_container_is_pinned_to_a_digest(self) -> None:
+        workflow = ROOT.joinpath(".github/workflows/backend-ci.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertRegex(
+            workflow,
+            r"rhysd/actionlint:1\.7\.12@sha256:[0-9a-f]{64}",
+        )
 
 
 class ReleaseTagTests(unittest.TestCase):
@@ -379,7 +444,7 @@ class ReleaseDocumentTests(unittest.TestCase):
                     for rule in release_docs.DOCUMENT_RULES
                 ],
             )
-            self.assertEqual(errors[-1], "Run: python tools/update_release_docs.py")
+            self.assertEqual(errors[-1], "Run: python3 tools/update_release_docs.py")
 
 
 if __name__ == "__main__":

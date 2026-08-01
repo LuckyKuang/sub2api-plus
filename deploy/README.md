@@ -255,12 +255,20 @@ docker compose down -v
 | `ADMIN_PASSWORD` | No | *(auto-generated)* | Admin password |
 | `TZ` | No | `Asia/Shanghai` | Timezone |
 | `UPDATE_GITHUB_TOKEN` | No | *(empty)* | Token for `api.github.com` release checks only; asset downloads remain anonymous. |
+| `WEBAUTHN_ENABLED` | No | `false` | Enables the WebAuthn deployment boundary; Passkey remains off until an administrator enables it in System Settings. |
+| `WEBAUTHN_RP_DISPLAY_NAME` | No | `Sub2API` | Relying-party name shown by the authenticator. |
+| `WEBAUTHN_RP_ID` | When WebAuthn is enabled | *(empty)* | Exact relying-party domain without scheme or port. |
+| `WEBAUTHN_RP_ORIGINS` | When WebAuthn is enabled | *(empty)* | Comma-separated allowed HTTPS origins; localhost HTTP is supported for local testing. |
 | `GEMINI_OAUTH_CLIENT_ID` | No | *(builtin)* | Google OAuth client ID (Gemini OAuth). Leave empty to use the built-in Gemini CLI client. |
 | `GEMINI_OAUTH_CLIENT_SECRET` | No | *(builtin)* | Google OAuth client secret (Gemini OAuth). Leave empty to use the built-in Gemini CLI client. |
 | `GEMINI_OAUTH_SCOPES` | No | *(default)* | OAuth scopes (Gemini OAuth) |
 | `GEMINI_QUOTA_POLICY` | No | *(empty)* | JSON overrides for Gemini local quota simulation (Code Assist only). |
 
 See `.env.example` for all available options.
+
+After changing a WebAuthn variable, recreate the application container. Once
+the configuration is valid, explicitly enable Passkey in administrator System
+Settings; deployment configuration alone never exposes Passkey login.
 
 > **Note:** The `docker-deploy.sh` script automatically generates `JWT_SECRET`, `TOTP_ENCRYPTION_KEY`, and `POSTGRES_PASSWORD` for you. Keep the generated `TOTP_ENCRYPTION_KEY` stable: saving a Prompt Audit endpoint token without a fixed key is rejected, because it would be unreadable after restart.
 

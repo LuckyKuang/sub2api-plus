@@ -7,6 +7,10 @@ on:
         description: "Git ref to verify"
         required: false
         type: string
+      release-tag:
+        description: "Release tag used to resolve the migration comparison base"
+        required: false
+        type: string
   push:
     branches:
       - "**"
@@ -19,8 +23,9 @@ jobs:
   shell:
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
+          persist-credentials: false
           ref: ${{ inputs.ref || github.ref }}
       - name: Check deployment scripts
         run: |
@@ -31,10 +36,11 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
+          persist-credentials: false
           ref: ${{ inputs.ref || github.ref }}
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: backend/go.mod
           check-latest: false
@@ -44,6 +50,9 @@ jobs:
         working-directory: backend
         run: |
           test "$(go env GOVERSION)" = "go$(awk '/^go / { print $2 }' go.mod)"
+      - name: Check Go module tidiness
+        working-directory: backend
+        run: go mod tidy -diff
       - name: Unit tests
         working-directory: backend
         run: make test-unit
@@ -54,15 +63,16 @@ jobs:
   frontend:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
+          persist-credentials: false
           ref: ${{ inputs.ref || github.ref }}
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
         with:
           package_json_file: frontend/package.json
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: "20"
           cache: pnpm
@@ -76,10 +86,11 @@ jobs:
   golangci-lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
+          persist-credentials: false
           ref: ${{ inputs.ref || github.ref }}
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: backend/go.mod
           check-latest: false
@@ -92,7 +103,7 @@ jobs:
           test -n "$VERSION"
           echo "golangci_lint=v$VERSION" >> "$GITHUB_OUTPUT"
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v9
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
         with:
           version: ${{ steps.tool-versions.outputs.golangci_lint }}
           args: --timeout=30m
@@ -101,12 +112,16 @@ jobs:
   repository-policy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
+          persist-credentials: false
           ref: ${{ inputs.ref || github.ref }}
       - name: Lint GitHub Actions workflows
-        run: docker run --rm -v "$PWD:/repo:ro" -w /repo rhysd/actionlint:1.7.12 -color
+        run: >-
+          docker run --rm -v "$PWD:/repo:ro" -w /repo
+          rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
+          -color
       - name: Test release policy
         run: python tools/test_release_policy.py
       - name: Check README synchronization
@@ -116,4 +131,10 @@ jobs:
       - name: Check migration changes
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: python tools/check_new_migrations.py --base "$BASE_SHA"
+          RELEASE_TAG: ${{ inputs.release-tag }}
+        run: |
+          if [ -n "$RELEASE_TAG" ]; then
+            python tools/check_new_migrations.py --target-release "$RELEASE_TAG"
+          else
+            python tools/check_new_migrations.py --base "$BASE_SHA"
+          fi

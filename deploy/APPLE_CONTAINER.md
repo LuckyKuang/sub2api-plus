@@ -51,6 +51,13 @@ The env file uses literal `KEY=value` syntax. Do not use Compose expressions suc
 
 Keep the generated `TOTP_ENCRYPTION_KEY` unchanged after the first start. It is required not only for persistent TOTP and encrypted backup secrets, but also before an administrator can save a Prompt Audit endpoint token. `SKIP_SETUP` remains `false` by default; set it to `true` only during a controlled recovery when the first-run administrator bootstrap must be bypassed.
 
+Passkey is also opt-in. Set `WEBAUTHN_ENABLED=true`, an exact domain in
+`WEBAUTHN_RP_ID`, and a comma-separated origin list in `WEBAUTHN_RP_ORIGINS`,
+then run `./apple-container.sh up` to recreate the application container. The
+administrator must still enable Passkey in System Settings after the relying
+party configuration passes validation. For local HTTP testing, use a localhost
+RP ID and origin; non-local deployments require HTTPS origins.
+
 ## Commands
 
 ```bash

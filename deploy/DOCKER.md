@@ -57,6 +57,14 @@ volumes:
 | `REDIS_URL` | Redis connection string | Yes | - |
 | `PORT` | Server port | No | `8080` |
 | `GIN_MODE` | Gin framework mode (`debug`/`release`) | No | `release` |
+| `WEBAUTHN_ENABLED` | Enable the WebAuthn deployment boundary | No | `false` |
+| `WEBAUTHN_RP_DISPLAY_NAME` | Relying-party display name | No | `Sub2API` |
+| `WEBAUTHN_RP_ID` | Relying-party domain without scheme or port | When enabled | - |
+| `WEBAUTHN_RP_ORIGINS` | Comma-separated allowed origins | When enabled | - |
+
+Passkey remains disabled until the WebAuthn values are valid and an
+administrator explicitly enables it in System Settings. Recreate the
+application container after changing these values.
 
 ## Supported Architectures
 

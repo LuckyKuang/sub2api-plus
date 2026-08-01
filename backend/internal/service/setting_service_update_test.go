@@ -553,7 +553,7 @@ func TestSettingService_UpdateSettings_AntigravityUserAgentVersion(t *testing.T)
 	require.Equal(t, "1.23.2", repo.updates[SettingKeyAntigravityUserAgentVersion])
 }
 
-func TestSettingService_InitializeDefaultSettingsPersistsConfiguredForwardedClientIPHeaders(t *testing.T) {
+func TestSettingService_InitializeDefaultSettingsPersistsConfiguredForwardedClientIPHeadersAndDisablesPasskey(t *testing.T) {
 	repo := &forwardedIPMigrationRepoStub{values: map[string]string{}}
 	cfg := &config.Config{}
 	cfg.SetForwardedClientIPSettings(true, []string{"X-Cdn-Ip", "True-Client-Ip"})
@@ -561,6 +561,7 @@ func TestSettingService_InitializeDefaultSettingsPersistsConfiguredForwardedClie
 
 	require.NoError(t, svc.InitializeDefaultSettings(context.Background()))
 	require.JSONEq(t, `["X-Cdn-Ip","True-Client-Ip"]`, repo.values[SettingKeyForwardedClientIPHeaders])
+	require.Equal(t, "false", repo.values[SettingKeyPasskeyEnabled])
 }
 
 func TestSettingService_UpdateSettings_APIKeyACLTrustForwardedIPRefreshesConfig(t *testing.T) {
@@ -851,7 +852,7 @@ func TestSettingService_UpdateSettings_RejectsInvalidPaymentVisibleMethodSource(
 	require.Nil(t, repo.updates)
 }
 
-func TestSettingService_PasskeySwitchPersistsAndDefaultsToConfigured(t *testing.T) {
+func TestSettingService_PasskeySwitchRequiresExplicitOptIn(t *testing.T) {
 	cfg := &config.Config{WebAuthn: config.WebAuthnConfig{
 		Enabled:   true,
 		RPID:      "sub3.nebula-spaces.com",
@@ -862,22 +863,22 @@ func TestSettingService_PasskeySwitchPersistsAndDefaultsToConfigured(t *testing.
 
 	enabled, err := runtimeService.PasskeyEnabled(context.Background())
 	require.NoError(t, err)
-	require.True(t, enabled)
+	require.False(t, enabled)
 
 	updateRepo := &settingUpdateRepoStub{}
 	updateService := NewSettingService(updateRepo, cfg)
 	require.NoError(t, updateService.UpdateSettings(context.Background(), &SystemSettings{
-		PasskeyEnabled: false,
+		PasskeyEnabled: true,
 	}))
-	require.Equal(t, "false", updateRepo.updates[SettingKeyPasskeyEnabled])
+	require.Equal(t, "true", updateRepo.updates[SettingKeyPasskeyEnabled])
 
-	runtimeRepo.values[SettingKeyPasskeyEnabled] = "false"
+	runtimeRepo.values[SettingKeyPasskeyEnabled] = "true"
 	enabled, err = runtimeService.PasskeyEnabled(context.Background())
 	require.NoError(t, err)
-	require.False(t, enabled)
+	require.True(t, enabled)
 	publicSettings, err := runtimeService.GetPublicSettings(context.Background())
 	require.NoError(t, err)
-	require.False(t, publicSettings.PasskeyEnabled)
+	require.True(t, publicSettings.PasskeyEnabled)
 }
 
 // 移除 WebAuthn 配置后，残留的 passkey_enabled="true" 不得再让 GetAllSettings

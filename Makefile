@@ -1,5 +1,7 @@
 .PHONY: build build-backend build-frontend test test-backend test-frontend test-frontend-critical test-docs
 
+PYTHON ?= python3
+
 FRONTEND_CRITICAL_VITEST := \
 	src/views/auth/__tests__/LinuxDoCallbackView.spec.ts \
 	src/views/auth/__tests__/WechatCallbackView.spec.ts \
@@ -35,7 +37,7 @@ test-frontend-critical:
 	@pnpm --dir frontend exec vitest run $(FRONTEND_CRITICAL_VITEST)
 
 test-docs:
-	@python tools/test_release_policy.py
-	@python tools/check_readme_sync.py
-	@python tools/check_release.py
-	@python tools/check_new_migrations.py
+	@$(PYTHON) tools/test_release_policy.py
+	@$(PYTHON) tools/check_readme_sync.py
+	@$(PYTHON) tools/check_release.py
+	@$(PYTHON) tools/check_new_migrations.py

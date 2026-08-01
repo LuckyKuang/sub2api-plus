@@ -41,7 +41,7 @@ def main() -> int:
             for path in changed:
                 print(f"- {path.relative_to(ROOT)}", file=sys.stderr)
             print(
-                "Run: python tools/update_release_docs.py",
+                "Run: python3 tools/update_release_docs.py",
                 file=sys.stderr,
             )
             return 1
