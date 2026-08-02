@@ -50,6 +50,20 @@ func TestGeminiV1BetaHandler_PlatformRoutingInvariant(t *testing.T) {
 	}
 }
 
+func TestParseGeminiModelActionPreservesWhitespaceForEntryGuard(t *testing.T) {
+	model, action, err := parseGeminiModelAction(" gemini-2.5-pro:generateContent")
+	require.NoError(t, err)
+	require.Equal(t, " gemini-2.5-pro", model)
+	require.Equal(t, "generateContent", action)
+	require.False(t, service.IsSafeGeminiModelPathSegment(model))
+
+	model, action, err = parseGeminiModelAction("gemini-2.5-pro:generateContent ")
+	require.NoError(t, err)
+	require.Equal(t, "gemini-2.5-pro", model)
+	require.Equal(t, "generateContent ", action)
+	require.False(t, service.IsSupportedGeminiAIStudioAction(action))
+}
+
 // TestGeminiV1BetaHandler_ListModelsAntigravityFallback 验证 ListModels 的 antigravity 降级逻辑
 // 当没有 gemini 账户但有 antigravity 账户时，应返回静态模型列表
 func TestGeminiV1BetaHandler_ListModelsAntigravityFallback(t *testing.T) {

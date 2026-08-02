@@ -13,7 +13,7 @@ func TestBuildGeminiAIStudioModelActionURL(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, base+"/v1beta/models/gemini-2.5-pro:generateContent", got)
 
-	got, err = buildGeminiAIStudioModelActionURL(base+"/", " gemini-2.5-flash ", "streamGenerateContent", true)
+	got, err = buildGeminiAIStudioModelActionURL(base+"/", "gemini-2.5-flash", "streamGenerateContent", true)
 	require.NoError(t, err)
 	require.Equal(t, base+"/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse", got)
 
@@ -38,6 +38,10 @@ func TestBuildGeminiAIStudioModelActionURLRejectsNonConformingModel(t *testing.T
 		"gemini-2.5-pro#frag",
 		"gemini-2.5-pro%2f..",
 		"gemini 2.5 pro",
+		" gemini-2.5-pro",
+		"gemini-2.5-pro ",
+		"gemini-2.5-pro\t",
+		"gemini-2.5-pro\n",
 		"gemini\x00pro",
 		"gemini-2.5-pro@001",
 		"gemini~pro",
@@ -55,6 +59,8 @@ func TestBuildGeminiAIStudioModelActionURLRejectsNonConformingModel(t *testing.T
 
 	// action 只允许已知取值，避免未来把可变字符串拼进 path。
 	_, err := buildGeminiAIStudioModelActionURL(base, "gemini-2.5-pro", "deleteModel", false)
+	require.Error(t, err)
+	_, err = buildGeminiAIStudioModelActionURL(base, "gemini-2.5-pro", "generateContent ", false)
 	require.Error(t, err)
 
 	_, err = buildGeminiAIStudioModelActionURL("", "gemini-2.5-pro", "generateContent", false)

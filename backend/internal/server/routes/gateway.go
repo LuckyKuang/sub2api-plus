@@ -515,15 +515,15 @@ func compositeGeminiModelFromParams(c *gin.Context) string {
 	if c == nil {
 		return ""
 	}
-	if model := strings.TrimSpace(c.Param("model")); model != "" {
+	if model := c.Param("model"); model != "" {
 		return model
 	}
-	modelAction := strings.TrimPrefix(strings.TrimSpace(c.Param("modelAction")), "/")
+	modelAction := strings.TrimPrefix(c.Param("modelAction"), "/")
 	if modelAction == "" {
 		return ""
 	}
 	if idx := strings.LastIndex(modelAction, ":"); idx >= 0 {
-		return strings.TrimSpace(modelAction[:idx])
+		return modelAction[:idx]
 	}
 	return modelAction
 }

@@ -1,12 +1,18 @@
 # Model Pricing Data
 
-This directory contains the Sub2API Plus model-pricing mirror and its local fallback copy.
+This directory contains the Sub2API Plus bundled model-pricing fallback copy.
 
 ## Source
-The default runtime source is this repository's `main` branch:
-- Data: https://raw.githubusercontent.com/luckykuang/sub2api-plus/main/backend/resources/model-pricing/model_prices_and_context_window.json
-- SHA-256: https://raw.githubusercontent.com/luckykuang/sub2api-plus/main/backend/resources/model-pricing/model_prices_and_context_window.sha256
-- Upstream data source: https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json
+Remote refresh discovers the latest GitHub Release through a manifest:
+
+- Manifest: `https://github.com/luckykuang/sub2api-plus/releases/latest/download/model-pricing-manifest.json`
+- Immutable release asset: declared by the manifest
+- Upstream data source for maintainers: https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json
+
+The sole-maintainer GitHub Release publication boundary is the source of trust.
+The application accepts Release pricing only after validating the manifest
+version, immutable asset URL, dedicated HTTPS host policy, response limits,
+manifest-bound SHA-256 digest, and pricing JSON. No deployment key is required.
 
 ## Purpose
 This local copy serves as a fallback when the remote file cannot be downloaded due to:
@@ -17,16 +23,52 @@ This local copy serves as a fallback when the remote file cannot be downloaded d
 - Docker container network limitations
 
 ## Update Process
-The pricingService will:
-1. First attempt to download the latest version from GitHub
-2. If download fails, use this local copy as fallback
-3. Log a warning when using the fallback file
 
-## Manual Update
-To manually update this file with the latest pricing data (if automation is unavailable):
+The pricing service will:
+
+1. Load a validated local cache when one exists
+2. Otherwise make the bundled repository pricing immediately available
+3. Automatically check the latest Release manifest before downloading data
+4. Keep the current cache when a manifest, hash, URL policy, JSON, or version check fails
+
+Remote responses are bounded before parsing:
+
+- Manifest: 64 KiB
+- Pricing data: 32 MiB
+
+## Runtime Cache
+
+`model_pricing.verified-cache.json` is the authoritative runtime cache. It
+retains its historical filename for upgrade compatibility. It contains the
+exact manifest and pricing bytes in one atomically replaced bundle. The
+application validates the immutable pricing URL, digest, and JSON data again
+on every startup before using it.
+
+The following files are compatibility mirrors for operators and upgrades from
+older versions:
+
+- `model_pricing.json`
+- `model_pricing.manifest.json`
+
+A new runtime writes the authoritative bundle first, then refreshes these
+mirrors. A mirror write failure does not invalidate an already committed
+bundle. When no bundle exists, a valid legacy data-and-manifest cache is
+validated and migrated automatically. Schema-v1 bundles containing the former
+signature field remain readable and are rewritten as schema v2; obsolete
+standalone `.sig` files are ignored.
+
+## Release Update
+
+Pricing data changes must be reviewed and published as immutable Release
+assets. Do not point runtime configuration at a mutable branch. The release
+workflow publishes `model-pricing.json` and `model-pricing-manifest.json` after
+GoReleaser completes.
+
+To refresh this bundled fallback before a release, update it from the upstream
+source, review the diff, and let the release workflow calculate its digest:
+
 ```bash
 curl -fsS https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json -o model_prices_and_context_window.json
-shasum -a 256 model_prices_and_context_window.json | awk '{print $1}' > model_prices_and_context_window.sha256
 ```
 
 ## File Format
@@ -35,5 +77,3 @@ The file contains JSON data with model pricing information including:
 - Input/output token costs
 - Context window sizes
 - Model capabilities
-
-Last updated: 2025-08-10

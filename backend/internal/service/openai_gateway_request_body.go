@@ -388,22 +388,29 @@ func rawOpenAIResponsesRequestPathSuffix(c *gin.Context) string {
 	if c == nil || c.Request == nil || c.Request.URL == nil {
 		return ""
 	}
-	normalizedPath := strings.TrimRight(strings.TrimSpace(c.Request.URL.Path), "/")
+	// Only a route-compatible trailing slash is removed. Client-controlled
+	// whitespace must reach the closed-set guard unchanged and be rejected.
+	normalizedPath := strings.TrimSuffix(c.Request.URL.Path, "/")
 	if normalizedPath == "" {
 		return ""
 	}
-	idx := strings.LastIndex(normalizedPath, "/responses")
-	if idx < 0 {
-		return ""
+	// Match one of the registered Responses route prefixes exactly. Do not find
+	// the last "/responses" occurrence: a valid wildcard subpath can itself
+	// contain a segment named "responses", which must be preserved verbatim.
+	for _, prefix := range []string{
+		"/backend-api/codex/responses",
+		"/openai/v1/responses",
+		"/v1/responses",
+		"/responses",
+	} {
+		if normalizedPath == prefix {
+			return ""
+		}
+		if strings.HasPrefix(normalizedPath, prefix+"/") {
+			return strings.TrimPrefix(normalizedPath, prefix)
+		}
 	}
-	suffix := normalizedPath[idx+len("/responses"):]
-	if suffix == "" || suffix == "/" {
-		return ""
-	}
-	if !strings.HasPrefix(suffix, "/") {
-		return ""
-	}
-	return suffix
+	return ""
 }
 
 func appendOpenAIResponsesRequestPathSuffix(baseURL, suffix string) string {

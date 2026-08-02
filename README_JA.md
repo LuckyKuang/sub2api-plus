@@ -70,13 +70,13 @@ curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/
 が返す別のタグへ置き換えてください：
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- install --version 'v0.1.168+custom.001'
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- install --version 'v0.1.169+custom.001'
 ```
 
 既存のバイナリインストールを以前の公開済みバージョンへロールバックします：
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- rollback 'v0.1.166+custom.010'
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- rollback 'v0.1.168+custom.001'
 ```
 
 サービスとバイナリを削除し、`/etc/sub2api` は保持します：
@@ -198,4 +198,5 @@ GHCR:       ghcr.io/luckykuang/sub2api-plus:vX.Y.Z-custom.NNN
 バージョンで提供され、上流の著作権およびライセンス表示を保持します。
 
 元の上流作品：Copyright (c) 2026 Wesley Liddick
+
 Sub2API Plus の変更：Copyright (c) 2026 LuckyKuang

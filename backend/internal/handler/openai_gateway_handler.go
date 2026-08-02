@@ -820,7 +820,7 @@ func isOpenAIRemoteCompactPath(c *gin.Context) bool {
 	if c == nil || c.Request == nil || c.Request.URL == nil {
 		return false
 	}
-	normalizedPath := strings.TrimRight(strings.TrimSpace(c.Request.URL.Path), "/")
+	normalizedPath := strings.TrimRight(c.Request.URL.Path, "/")
 	return strings.HasSuffix(normalizedPath, "/responses/compact")
 }
 
@@ -830,7 +830,7 @@ func isBareOpenAIResponsesPath(c *gin.Context) bool {
 	if c == nil || c.Request == nil || c.Request.URL == nil {
 		return false
 	}
-	normalizedPath := strings.TrimRight(strings.TrimSpace(c.Request.URL.Path), "/")
+	normalizedPath := strings.TrimRight(c.Request.URL.Path, "/")
 	return strings.HasSuffix(normalizedPath, "/responses")
 }
 

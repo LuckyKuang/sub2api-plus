@@ -14,6 +14,14 @@ var geminiAIStudioActions = map[string]struct{}{
 	"countTokens":           {},
 }
 
+// IsSupportedGeminiAIStudioAction is used by native routes before account
+// selection so invalid or whitespace-normalized actions cannot reach billing
+// or upstream dispatch.
+func IsSupportedGeminiAIStudioAction(action string) bool {
+	_, ok := geminiAIStudioActions[action]
+	return ok
+}
+
 // buildGeminiAIStudioModelActionURL 组装 AI Studio 的
 // /v1beta/models/{model}:{action} 上游 URL。
 //
@@ -25,19 +33,17 @@ func buildGeminiAIStudioModelActionURL(baseURL, model, action string, stream boo
 	if trimmedBase == "" {
 		return "", errors.New("gemini base url is required")
 	}
-	trimmedModel := strings.TrimSpace(model)
-	if trimmedModel == "" {
+	if model == "" {
 		return "", errors.New("gemini model is required")
 	}
-	if err := validateUpstreamPathSegment("gemini model", trimmedModel); err != nil {
+	if err := validateUpstreamPathSegment("gemini model", model); err != nil {
 		return "", err
 	}
-	trimmedAction := strings.TrimSpace(action)
-	if _, ok := geminiAIStudioActions[trimmedAction]; !ok {
-		return "", fmt.Errorf("unsupported gemini action: %s", trimmedAction)
+	if !IsSupportedGeminiAIStudioAction(action) {
+		return "", fmt.Errorf("unsupported gemini action: %s", action)
 	}
 
-	fullURL := fmt.Sprintf("%s/v1beta/models/%s:%s", trimmedBase, trimmedModel, trimmedAction)
+	fullURL := fmt.Sprintf("%s/v1beta/models/%s:%s", trimmedBase, model, action)
 	if stream {
 		fullURL += "?alt=sse"
 	}
@@ -47,5 +53,5 @@ func buildGeminiAIStudioModelActionURL(baseURL, model, action string, stream boo
 // IsSafeGeminiModelPathSegment 供 handler 层在解析出 URL 里的模型名后立刻校验，
 // 让客户端拿到明确的 400，而不是等到构造上游请求时才报错。
 func IsSafeGeminiModelPathSegment(model string) bool {
-	return isSafeUpstreamPathSegment(strings.TrimSpace(model))
+	return isSafeUpstreamPathSegment(model)
 }

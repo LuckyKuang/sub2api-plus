@@ -1,18 +1,26 @@
 package service
 
 import (
+	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/pricingmanifest"
 	"github.com/stretchr/testify/require"
 )
 
-func TestPricingSchedulerBlankRemoteURLDoesNotStart(t *testing.T) {
-	svc := NewPricingService(&config.Config{Pricing: config.PricingConfig{RemoteURL: "  \t  "}}, nil)
+func TestPricingSchedulerWithoutManifestURLDoesNotStart(t *testing.T) {
+	svc := NewPricingService(&config.Config{}, nil)
 	defer svc.Stop()
 
 	svc.startUpdateScheduler()
@@ -25,20 +33,291 @@ func TestPricingSchedulerBlankRemoteURLDoesNotStart(t *testing.T) {
 	select {
 	case <-done:
 	case <-time.After(100 * time.Millisecond):
-		t.Fatal("blank remote URL must not start scheduler")
+		t.Fatal("blank manifest URL must not start scheduler")
 	}
 }
 
-func TestPricingNonEmptyInvalidRemoteURLStillReturnsValidationError(t *testing.T) {
+func TestPricingInvalidManifestURLReturnsValidationError(t *testing.T) {
 	svc := NewPricingService(&config.Config{Pricing: config.PricingConfig{
-		RemoteURL: "://invalid",
-		DataDir:   t.TempDir(),
-	}}, nil)
+		ManifestURL: "://invalid",
+		DataDir:     t.TempDir(),
+	}, Security: config.SecurityConfig{URLAllowlist: config.URLAllowlistConfig{
+		PricingHosts: []string{"pricing.example.test"},
+	}}}, nil)
 
 	err := svc.ForceUpdate()
 
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "invalid pricing url")
+	require.Contains(t, err.Error(), "invalid pricing URL")
+}
+
+type staticPricingRemoteClient struct {
+	responses map[string][]byte
+	requests  []string
+}
+
+func (c *staticPricingRemoteClient) FetchPricingJSON(_ context.Context, url string, maxBytes int64) ([]byte, error) {
+	c.requests = append(c.requests, url)
+	data, ok := c.responses[url]
+	if !ok {
+		return nil, fmt.Errorf("unexpected pricing URL: %s", url)
+	}
+	if int64(len(data)) > maxBytes {
+		return nil, fmt.Errorf("pricing response exceeds %d bytes", maxBytes)
+	}
+	return append([]byte(nil), data...), nil
+}
+
+func newReleasePricingService(t *testing.T, version string, remoteData []byte) (*PricingService, *staticPricingRemoteClient, *config.Config) {
+	t.Helper()
+	digest := sha256.Sum256(remoteData)
+	manifestURL := "https://pricing.example.test/latest/model-pricing-manifest.json"
+	dataURL := "https://pricing.example.test/releases/download/" + version + "/model-pricing.json"
+	manifest := pricingmanifest.Manifest{
+		Version:    version,
+		PricingURL: dataURL,
+		SHA256:     hex.EncodeToString(digest[:]),
+	}
+	manifestRaw, err := json.Marshal(manifest)
+	require.NoError(t, err)
+
+	dir := t.TempDir()
+	fallbackFile := filepath.Join(dir, "fallback.json")
+	require.NoError(t, os.WriteFile(fallbackFile, []byte(`{"fallback-model":{"input_cost_per_token":0.000001,"litellm_provider":"test","mode":"chat"}}`), 0644))
+	cfg := &config.Config{
+		Pricing: config.PricingConfig{
+			ManifestURL:  manifestURL,
+			DataDir:      filepath.Join(dir, "data"),
+			FallbackFile: fallbackFile,
+		},
+		Security: config.SecurityConfig{URLAllowlist: config.URLAllowlistConfig{
+			PricingHosts: []string{"pricing.example.test"},
+		}},
+	}
+	client := &staticPricingRemoteClient{responses: map[string][]byte{
+		manifestURL: manifestRaw,
+		dataURL:     remoteData,
+	}}
+	return NewPricingService(cfg, client), client, cfg
+}
+
+func TestPricingService_UpdatesOnlyFromValidatedReleaseManifest(t *testing.T) {
+	remoteData := []byte(`{"remote-model":{"input_cost_per_token":0.000002,"litellm_provider":"test","mode":"chat"}}`)
+	svc, _, _ := newReleasePricingService(t, "v0.1.169+custom.001", remoteData)
+	defer svc.Stop()
+
+	require.NoError(t, svc.Initialize())
+	require.NotNil(t, svc.GetModelPricing("remote-model"))
+	require.Equal(t, "v0.1.169+custom.001", svc.localVersion)
+	stored, err := os.ReadFile(svc.getPricingFilePath())
+	require.NoError(t, err)
+	require.Equal(t, remoteData, stored)
+	_, err = os.Stat(svc.getManifestFilePath())
+	require.NoError(t, err)
+	_, err = os.Stat(svc.getValidatedPricingCacheFilePath())
+	require.NoError(t, err)
+
+	bundle, err := os.ReadFile(svc.getValidatedPricingCacheFilePath())
+	require.NoError(t, err)
+	require.NotContains(t, string(bundle), `"signature"`)
+	var cache validatedPricingCache
+	require.NoError(t, json.Unmarshal(bundle, &cache))
+	require.Equal(t, pricingCacheSchemaV2, cache.SchemaVersion)
+}
+
+func TestPricingService_ValidatedCacheBundleSurvivesTornMirrors(t *testing.T) {
+	remoteData := []byte(`{"remote-model":{"input_cost_per_token":0.000002,"litellm_provider":"test","mode":"chat"}}`)
+	svc, client, cfg := newReleasePricingService(t, "v0.1.169+custom.001", remoteData)
+	require.NoError(t, svc.Initialize())
+	svc.Stop()
+
+	require.NoError(t, os.WriteFile(svc.getPricingFilePath(), []byte(`{"torn":`), 0644))
+	require.NoError(t, os.WriteFile(svc.getManifestFilePath(), []byte(`{}`), 0644))
+	client.responses[cfg.Pricing.ManifestURL] = []byte(`{"version":`)
+
+	reloaded := NewPricingService(cfg, client)
+	defer reloaded.Stop()
+	require.NoError(t, reloaded.Initialize())
+	require.NotNil(t, reloaded.GetModelPricing("remote-model"))
+	require.Nil(t, reloaded.GetModelPricing("torn"))
+	require.Equal(t, "v0.1.169+custom.001", reloaded.localVersion)
+}
+
+func TestPricingService_MigratesValidatedLegacyMirrorsToBundle(t *testing.T) {
+	remoteData := []byte(`{"remote-model":{"input_cost_per_token":0.000002,"litellm_provider":"test","mode":"chat"}}`)
+	svc, client, cfg := newReleasePricingService(t, "v0.1.169+custom.001", remoteData)
+	defer svc.Stop()
+	require.NoError(t, os.MkdirAll(cfg.Pricing.DataDir, 0755))
+	require.NoError(t, os.WriteFile(svc.getPricingFilePath(), remoteData, 0644))
+	require.NoError(t, os.WriteFile(svc.getManifestFilePath(), client.responses[cfg.Pricing.ManifestURL], 0644))
+
+	require.NoError(t, svc.Initialize())
+	require.NotNil(t, svc.GetModelPricing("remote-model"))
+	require.Equal(t, "v0.1.169+custom.001", svc.localVersion)
+
+	bundle, err := os.ReadFile(svc.getValidatedPricingCacheFilePath())
+	require.NoError(t, err)
+	var cache validatedPricingCache
+	require.NoError(t, json.Unmarshal(bundle, &cache))
+	require.Equal(t, pricingCacheSchemaV2, cache.SchemaVersion)
+	require.Equal(t, base64.StdEncoding.EncodeToString(remoteData), cache.PricingDataB64)
+	require.NotContains(t, string(bundle), `"signature"`)
+}
+
+func TestPricingService_MigratesSchemaV1CacheWithoutRequiringSignature(t *testing.T) {
+	remoteData := []byte(`{"remote-model":{"input_cost_per_token":0.000002,"litellm_provider":"test","mode":"chat"}}`)
+	svc, client, cfg := newReleasePricingService(t, "v0.1.169+custom.001", remoteData)
+	defer svc.Stop()
+	require.NoError(t, os.MkdirAll(cfg.Pricing.DataDir, 0755))
+
+	legacyBundle := validatedPricingCache{
+		SchemaVersion:   pricingCacheSchemaV1,
+		PricingDataB64:  base64.StdEncoding.EncodeToString(remoteData),
+		ManifestB64:     base64.StdEncoding.EncodeToString(client.responses[cfg.Pricing.ManifestURL]),
+		LegacySignature: "obsolete-signature",
+	}
+	raw, err := json.Marshal(legacyBundle)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(svc.getValidatedPricingCacheFilePath(), raw, 0644))
+	client.responses[cfg.Pricing.ManifestURL] = []byte(`{"version":`)
+
+	require.NoError(t, svc.Initialize())
+	require.NotNil(t, svc.GetModelPricing("remote-model"))
+	require.Equal(t, "v0.1.169+custom.001", svc.localVersion)
+
+	migrated, err := os.ReadFile(svc.getValidatedPricingCacheFilePath())
+	require.NoError(t, err)
+	require.NotContains(t, string(migrated), `"signature"`)
+	var cache validatedPricingCache
+	require.NoError(t, json.Unmarshal(migrated, &cache))
+	require.Equal(t, pricingCacheSchemaV2, cache.SchemaVersion)
+}
+
+func TestPricingService_HashMismatchDoesNotReplaceExistingPricing(t *testing.T) {
+	remoteData := []byte(`{"remote-model":{"input_cost_per_token":0.000002,"litellm_provider":"test","mode":"chat"}}`)
+	svc, client, cfg := newReleasePricingService(t, "v0.1.169+custom.001", remoteData)
+	defer svc.Stop()
+	require.NoError(t, svc.Initialize())
+
+	manifest := client.responses[cfg.Pricing.ManifestURL]
+	var decoded pricingmanifest.Manifest
+	require.NoError(t, json.Unmarshal(manifest, &decoded))
+	decoded.Version = "v0.1.170+custom.001"
+	decoded.PricingURL = "https://pricing.example.test/releases/download/" + decoded.Version + "/model-pricing.json"
+	decoded.SHA256 = strings.Repeat("0", 64)
+	client.responses[decoded.PricingURL] = remoteData
+	updatedManifest, err := json.Marshal(decoded)
+	require.NoError(t, err)
+	client.responses[cfg.Pricing.ManifestURL] = updatedManifest
+
+	err = svc.ForceUpdate()
+	require.ErrorContains(t, err, "SHA-256 mismatch")
+	require.NotNil(t, svc.GetModelPricing("remote-model"))
+	stored, err := os.ReadFile(svc.getPricingFilePath())
+	require.NoError(t, err)
+	require.Equal(t, remoteData, stored)
+}
+
+func TestPricingService_InvalidReleaseManifestFallsBackOnInitialLoad(t *testing.T) {
+	remoteData := []byte(`{"remote-model":{"input_cost_per_token":0.000002,"litellm_provider":"test","mode":"chat"}}`)
+	svc, client, cfg := newReleasePricingService(t, "v0.1.169+custom.001", remoteData)
+	defer svc.Stop()
+	client.responses[cfg.Pricing.ManifestURL] = []byte(`{"version":`)
+
+	require.NoError(t, svc.Initialize())
+	require.NotNil(t, svc.GetModelPricing("fallback-model"))
+	require.Nil(t, svc.GetModelPricing("remote-model"))
+}
+
+func TestPricingService_UnvalidatedLegacyCacheFallsBackWhenRefreshFails(t *testing.T) {
+	remoteData := []byte(`{"remote-model":{"input_cost_per_token":0.000002,"litellm_provider":"test","mode":"chat"}}`)
+	svc, client, cfg := newReleasePricingService(t, "v0.1.169+custom.001", remoteData)
+	defer svc.Stop()
+	legacyData := []byte(`{"legacy-model":{"input_cost_per_token":0.000001,"litellm_provider":"test","mode":"chat"}}`)
+	require.NoError(t, os.MkdirAll(cfg.Pricing.DataDir, 0755))
+	require.NoError(t, os.WriteFile(svc.getPricingFilePath(), legacyData, 0644))
+	client.responses[cfg.Pricing.ManifestURL] = []byte(`{"version":`)
+
+	require.NoError(t, svc.Initialize())
+	require.NotNil(t, svc.GetModelPricing("fallback-model"))
+	require.Nil(t, svc.GetModelPricing("legacy-model"))
+}
+
+func TestPricingService_RefusesReleaseVersionRollback(t *testing.T) {
+	remoteData := []byte(`{"remote-model":{"input_cost_per_token":0.000002,"litellm_provider":"test","mode":"chat"}}`)
+	svc, _, _ := newReleasePricingService(t, "v0.1.169+custom.001", remoteData)
+	defer svc.Stop()
+	svc.localVersion = "v0.1.170+custom.001"
+
+	err := svc.ForceUpdate()
+	require.ErrorContains(t, err, "version rollback refused")
+}
+
+type blockingPricingRemoteClient struct {
+	delegate       PricingRemoteClient
+	manifestURL    string
+	started        chan struct{}
+	release        chan struct{}
+	concurrent     chan struct{}
+	blockOnce      sync.Once
+	concurrentOnce sync.Once
+	mu             sync.Mutex
+	active         int
+}
+
+func (c *blockingPricingRemoteClient) FetchPricingJSON(ctx context.Context, url string, maxBytes int64) ([]byte, error) {
+	c.mu.Lock()
+	c.active++
+	if c.active > 1 {
+		c.concurrentOnce.Do(func() { close(c.concurrent) })
+	}
+	c.mu.Unlock()
+	defer func() {
+		c.mu.Lock()
+		c.active--
+		c.mu.Unlock()
+	}()
+
+	if url == c.manifestURL {
+		c.blockOnce.Do(func() {
+			close(c.started)
+			<-c.release
+		})
+	}
+	return c.delegate.FetchPricingJSON(ctx, url, maxBytes)
+}
+
+func TestPricingService_RemoteUpdatesAreSerialized(t *testing.T) {
+	remoteData := []byte(`{"remote-model":{"input_cost_per_token":0.000002,"litellm_provider":"test","mode":"chat"}}`)
+	svc, client, cfg := newReleasePricingService(t, "v0.1.169+custom.001", remoteData)
+	defer svc.Stop()
+	blockingClient := &blockingPricingRemoteClient{
+		delegate:    client,
+		manifestURL: cfg.Pricing.ManifestURL,
+		started:     make(chan struct{}),
+		release:     make(chan struct{}),
+		concurrent:  make(chan struct{}),
+	}
+	svc.remoteClient = blockingClient
+
+	firstResult := make(chan error, 1)
+	secondResult := make(chan error, 1)
+	go func() { firstResult <- svc.ForceUpdate() }()
+	<-blockingClient.started
+	go func() { secondResult <- svc.ForceUpdate() }()
+
+	concurrent := false
+	select {
+	case <-blockingClient.concurrent:
+		concurrent = true
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(blockingClient.release)
+
+	require.NoError(t, <-firstResult)
+	require.NoError(t, <-secondResult)
+	require.False(t, concurrent, "remote pricing updates must not overlap")
+	require.Equal(t, "v0.1.169+custom.001", svc.localVersion)
 }
 
 func TestParsePricingData_ParsesPriorityAndServiceTierFields(t *testing.T) {

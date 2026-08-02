@@ -111,6 +111,35 @@ jobs:
           args: --timeout=30m
           working-directory: backend
 
+  goreleaser-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.ref || github.ref }}
+      - name: Resolve GoReleaser version
+        id: tool-versions
+        run: |
+          VERSION="$(awk '$1 == "goreleaser" { print $2 }' .tool-versions)"
+          test -n "$VERSION"
+          echo "goreleaser=v${VERSION#v}" >> "$GITHUB_OUTPUT"
+          APP_VERSION="$(tr -d '[:space:]' < backend/cmd/server/VERSION)"
+          [[ "$APP_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+\+custom\.[0-9]{3}$ ]]
+          echo "docker_tag_version=v${APP_VERSION/+custom./-custom.}" >> "$GITHUB_OUTPUT"
+      - name: Validate GoReleaser configuration
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7
+        with:
+          version: ${{ steps.tool-versions.outputs.goreleaser }}
+          args: check
+        env:
+          GITHUB_REPO_OWNER: validation
+          GITHUB_REPO_OWNER_LOWER: validation
+          GITHUB_REPO_NAME: sub2api-plus
+          DOCKER_TAG_VERSION: ${{ steps.tool-versions.outputs.docker_tag_version }}
+          DOCKERHUB_USERNAME: skip
+          TAG_MESSAGE: GoReleaser configuration validation only.
+
   repository-policy:
     runs-on: ubuntu-latest
     steps:

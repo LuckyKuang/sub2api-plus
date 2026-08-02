@@ -40,6 +40,37 @@ python3 tools/update_release_docs.py --check
 
 Do not create the release tag manually at this stage.
 
+## Pricing Assets
+
+Remote model pricing is published as immutable Release assets. Before the
+first release using this flow, a repository administrator must create and
+protect the GitHub Actions environment named `release`: require maintainer
+review and restrict deployment to the reviewed release-tag policy. Release
+publication authority is the runtime pricing trust boundary, so access to that
+environment and permission to create Releases must remain limited to the sole
+maintainer.
+
+After GoReleaser publishes the normal release, the workflow copies the bundled
+catalog and uploads exactly these immutable assets for the release tag:
+
+- `model-pricing.json`
+- `model-pricing-manifest.json`
+
+The manifest binds the tag, the fixed asset URL, and the data SHA-256. The
+runtime also validates dedicated HTTPS hosts, response sizes, JSON, and version
+rollback before accepting it. On a retry the workflow only accepts an already
+uploaded pricing asset when its bytes are identical; it never replaces an
+asset. Correct a bad asset through a new custom version, never by retagging or
+overwriting the existing Release.
+
+The GitHub environment is necessary but not sufficient repository governance.
+Before enabling publication, administrators must also require pull requests
+and status checks for `main`, restrict tag creation to release maintainers,
+keep Actions restricted to reviewed actions, and require review for changes to
+`.github/workflows/`, release configuration, and deployment security files.
+Those GitHub organization/repository settings cannot be safely created by a
+source-code change and remain a maintainer-controlled prerequisite.
+
 ## Release Notes
 
 The first non-empty line is the annotated-tag subject. Keep every required

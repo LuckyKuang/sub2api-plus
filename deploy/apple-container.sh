@@ -16,6 +16,7 @@ APP_VOLUME="sub2api-apple-data"
 POSTGRES_VOLUME="sub2api-apple-postgres-data"
 REDIS_VOLUME="sub2api-apple-redis-data"
 MINIO_VOLUME="sub2api-apple-minio-data"
+APP_ROLLBACK_IMAGE="localhost/sub2api-apple-rollback:previous"
 PLATFORM="linux/arm64"
 
 TEMP_DIR=""
@@ -25,9 +26,15 @@ LOCK_ACQUIRED=false
 APP_IMAGE=""
 APP_LOCAL_BINARY=""
 APP_LOCAL_BINARY_ARCHIVE=""
+APP_LOCAL_RESOURCES=""
+APP_LOCAL_RESOURCES_ARCHIVE=""
+APP_DATA_DIR=""
 POSTGRES_IMAGE=""
+POSTGRES_DATA_DIR=""
 REDIS_IMAGE=""
+REDIS_DATA_DIR=""
 MINIO_IMAGE=""
+MINIO_DATA_DIR=""
 BIND_HOST=""
 HOST_PORT=""
 ACCESS_HOST=""
@@ -53,6 +60,7 @@ POSTGRES_ENV_FILE=""
 POSTGRES_PROBE_ENV_FILE=""
 REDIS_ENV_FILE=""
 MINIO_ENV_FILE=""
+LEGACY_VOLUMES_TO_DELETE=()
 
 info() {
     printf '[INFO] %s\n' "$*"
@@ -77,9 +85,21 @@ Commands:
   down                  Stop the stack and preserve all data
   restart               Restart the stack in dependency order
   status                Show container and workload health
+  disk-usage            Show Apple container disk usage
   logs <service> [-f]   Show logs for app, postgres, redis, or minio
   pull                  Pull all stack images for linux/arm64
+  upgrade [options]     Pull and redeploy only the Sub2API application image
+  cleanup [options]     Explicitly remove selected unused resources
   destroy [options]     Delete stack containers and network
+
+Upgrade options:
+  --prune-previous-image
+                        Delete the previous Sub2API image after health checks
+
+Cleanup options:
+  --dangling-images     Globally remove unused dangling Apple container images
+  --legacy-volumes     Delete owned named volumes replaced by verified bind mounts
+  --yes                 Skip the confirmation prompt
 
 Destroy options:
   --volumes             Also delete all persistent data volumes
@@ -254,11 +274,65 @@ ensure_volume() {
 ensure_image_available() {
     local image=$1
 
-    if container image inspect "${image}" >/dev/null 2>&1; then
+    if image_exists "${image}"; then
         return
     fi
     info "Pulling ${image}..."
     container image pull --platform "${PLATFORM}" "${image}"
+}
+
+image_exists() {
+    container image inspect "$1" >/dev/null 2>&1
+}
+
+image_digest() {
+    local image=$1
+    local digest
+
+    digest="$(container image inspect "${image}" | \
+        plutil -extract 0.configuration.descriptor.digest raw -o - -)" || \
+        die "Unable to read image digest for ${image}."
+    [[ "${digest}" == sha256:* ]] || die "Apple container returned an invalid image digest for ${image}."
+    printf '%s\n' "${digest}"
+}
+
+container_image_reference() {
+    local container_name=$1
+    local image
+
+    image="$(container inspect "${container_name}" | \
+        plutil -extract 0.configuration.image.reference raw -o - -)" || \
+        die "Unable to read the image reference for ${container_name}."
+    [[ -n "${image}" ]] || die "Apple container returned an empty image reference for ${container_name}."
+    printf '%s\n' "${image}"
+}
+
+image_reference_in_use() {
+    local image=$1
+    local container_names container_name container_image
+
+    container_names="$(container list --all --quiet)" || \
+        die "Failed to list Apple containers before deleting image '${image}'."
+    while IFS= read -r container_name; do
+        [[ -n "${container_name}" ]] || continue
+        container_image="$(container_image_reference "${container_name}")"
+        if [[ "${container_image}" == "${image}" ]]; then
+            return 0
+        fi
+    done <<<"${container_names}"
+
+    return 1
+}
+
+delete_unused_image_reference() {
+    local image=$1
+
+    image_exists "${image}" || return 0
+    if image_reference_in_use "${image}"; then
+        die "Refusing to delete image '${image}' because a container still uses it."
+    fi
+    info "Deleting unused image ${image}..."
+    container image delete "${image}" >/dev/null
 }
 
 container_is_running() {
@@ -414,6 +488,51 @@ validate_env_file_security() {
         die "Environment file must not be readable by group or others. Run: chmod 600 '${ENV_FILE}'"
 }
 
+validate_data_dir() {
+    local setting_name=$1
+    local data_dir=$2
+
+    [[ -z "${data_dir}" ]] && return 0
+    [[ "${data_dir}" == /* ]] || die "${setting_name} must be an absolute path: ${data_dir}"
+    [[ "${data_dir}" != "/" ]] || die "${setting_name} must not point to '/'."
+    [[ "${data_dir}" != *","* ]] || die "${setting_name} must not contain commas: ${data_dir}"
+}
+
+load_data_directories() {
+    APP_DATA_DIR="$(read_env_value APPLE_CONTAINER_SUB2API_DATA_DIR)"
+    POSTGRES_DATA_DIR="$(read_env_value APPLE_CONTAINER_POSTGRES_DATA_DIR)"
+    REDIS_DATA_DIR="$(read_env_value APPLE_CONTAINER_REDIS_DATA_DIR)"
+    MINIO_DATA_DIR="$(read_env_value APPLE_CONTAINER_MINIO_DATA_DIR)"
+
+    validate_data_dir APPLE_CONTAINER_SUB2API_DATA_DIR "${APP_DATA_DIR}"
+    validate_data_dir APPLE_CONTAINER_POSTGRES_DATA_DIR "${POSTGRES_DATA_DIR}"
+    validate_data_dir APPLE_CONTAINER_REDIS_DATA_DIR "${REDIS_DATA_DIR}"
+    validate_data_dir APPLE_CONTAINER_MINIO_DATA_DIR "${MINIO_DATA_DIR}"
+}
+
+ensure_data_dir() {
+    local setting_name=$1
+    local data_dir=$2
+
+    [[ -z "${data_dir}" ]] && return 0
+    if [[ -e "${data_dir}" && ! -d "${data_dir}" ]]; then
+        die "${setting_name} is not a directory: ${data_dir}"
+    fi
+    if [[ ! -e "${data_dir}" ]]; then
+        mkdir -p "${data_dir}" || die "Failed to create ${setting_name}: ${data_dir}"
+        chmod 700 "${data_dir}" || die "Failed to secure ${setting_name}: ${data_dir}"
+    fi
+}
+
+ensure_configured_data_dirs() {
+    ensure_data_dir APPLE_CONTAINER_SUB2API_DATA_DIR "${APP_DATA_DIR}"
+    ensure_data_dir APPLE_CONTAINER_POSTGRES_DATA_DIR "${POSTGRES_DATA_DIR}"
+    ensure_data_dir APPLE_CONTAINER_REDIS_DATA_DIR "${REDIS_DATA_DIR}"
+    if [[ "${MINIO_ENABLED}" == "true" ]]; then
+        ensure_data_dir APPLE_CONTAINER_MINIO_DATA_DIR "${MINIO_DATA_DIR}"
+    fi
+}
+
 ensure_minio_credentials() {
     local minio_enabled root_user root_password
 
@@ -444,9 +563,11 @@ prepare_environment() {
 
     APP_IMAGE="$(read_env_value APPLE_CONTAINER_SUB2API_IMAGE ghcr.io/luckykuang/sub2api-plus:latest)"
     APP_LOCAL_BINARY="$(read_env_value APPLE_CONTAINER_SUB2API_BINARY)"
+    APP_LOCAL_RESOURCES="$(read_env_value APPLE_CONTAINER_SUB2API_RESOURCES_DIR)"
     POSTGRES_IMAGE="$(read_env_value APPLE_CONTAINER_POSTGRES_IMAGE postgres:18-alpine)"
     REDIS_IMAGE="$(read_env_value APPLE_CONTAINER_REDIS_IMAGE redis:8-alpine)"
     MINIO_IMAGE="$(read_env_value APPLE_CONTAINER_MINIO_IMAGE pgsty/minio:RELEASE.2026-06-18T00-00-00Z)"
+    load_data_directories
     BIND_HOST="$(read_env_value BIND_HOST 0.0.0.0)"
     HOST_PORT="$(read_env_value SERVER_PORT 8080)"
     POSTGRES_USER="$(read_env_value POSTGRES_USER sub2api)"
@@ -482,8 +603,19 @@ prepare_environment() {
         [[ -f "${APP_LOCAL_BINARY}" && -x "${APP_LOCAL_BINARY}" ]] || \
             die "APPLE_CONTAINER_SUB2API_BINARY must point to an executable file: ${APP_LOCAL_BINARY}"
         require_command gzip
+        if [[ -z "${APP_LOCAL_RESOURCES}" && -d "${SCRIPT_DIR}/../backend/resources" ]]; then
+            APP_LOCAL_RESOURCES="${SCRIPT_DIR}/../backend/resources"
+        fi
     fi
-
+    if [[ -n "${APP_LOCAL_RESOURCES}" ]]; then
+        [[ "${APP_LOCAL_RESOURCES}" == /* ]] || \
+            die "APPLE_CONTAINER_SUB2API_RESOURCES_DIR must be an absolute path: ${APP_LOCAL_RESOURCES}"
+        [[ -d "${APP_LOCAL_RESOURCES}" ]] || \
+            die "APPLE_CONTAINER_SUB2API_RESOURCES_DIR must point to a directory: ${APP_LOCAL_RESOURCES}"
+        [[ "${APP_LOCAL_RESOURCES}" != *","* ]] || \
+            die "APPLE_CONTAINER_SUB2API_RESOURCES_DIR must not contain commas: ${APP_LOCAL_RESOURCES}"
+        require_command tar
+    fi
     [[ "${MINIO_ENABLED}" == "true" || "${MINIO_ENABLED}" == "false" ]] || \
         die "MINIO_ENABLED must be true or false."
     if [[ "${MINIO_ENABLED}" == "true" ]]; then
@@ -519,6 +651,12 @@ prepare_environment() {
             die "Failed to compress APPLE_CONTAINER_SUB2API_BINARY."
         chmod 600 "${APP_LOCAL_BINARY_ARCHIVE}"
     fi
+    if [[ -n "${APP_LOCAL_RESOURCES}" ]]; then
+        APP_LOCAL_RESOURCES_ARCHIVE="${TEMP_DIR}/sub2api-resources.tar.gz"
+        tar -C "${APP_LOCAL_RESOURCES}" -czf "${APP_LOCAL_RESOURCES_ARCHIVE}" . || \
+            die "Failed to archive APPLE_CONTAINER_SUB2API_RESOURCES_DIR."
+        chmod 600 "${APP_LOCAL_RESOURCES_ARCHIVE}"
+    fi
 
     cat >"${POSTGRES_ENV_FILE}" <<EOF
 POSTGRES_USER=${POSTGRES_USER}
@@ -529,6 +667,7 @@ EOF
 
     cat >"${POSTGRES_PROBE_ENV_FILE}" <<EOF
 PGPASSWORD=${POSTGRES_PASSWORD}
+PGCONNECT_TIMEOUT=5
 EOF
 
     cat >"${REDIS_ENV_FILE}" <<EOF
@@ -596,6 +735,14 @@ EOF
 }
 
 create_postgres_container() {
+    local -a data_mount
+
+    if [[ -n "${POSTGRES_DATA_DIR}" ]]; then
+        data_mount=(--mount "type=bind,source=${POSTGRES_DATA_DIR},target=/var/lib/postgresql")
+    else
+        data_mount=(--volume "${POSTGRES_VOLUME}:/var/lib/postgresql")
+    fi
+
     info "Creating PostgreSQL container..."
     container create \
         --name "${POSTGRES_CONTAINER}" \
@@ -604,11 +751,19 @@ create_postgres_container() {
         --platform "${PLATFORM}" \
         --ulimit nofile=100000:100000 \
         --env-file "${POSTGRES_ENV_FILE}" \
-        --volume "${POSTGRES_VOLUME}:/var/lib/postgresql" \
+        "${data_mount[@]}" \
         "${POSTGRES_IMAGE}" >/dev/null
 }
 
 create_redis_container() {
+    local -a data_mount
+
+    if [[ -n "${REDIS_DATA_DIR}" ]]; then
+        data_mount=(--mount "type=bind,source=${REDIS_DATA_DIR},target=/var/lib/redis")
+    else
+        data_mount=(--volume "${REDIS_VOLUME}:/var/lib/redis")
+    fi
+
     info "Creating Redis container..."
     container create \
         --name "${REDIS_CONTAINER}" \
@@ -617,13 +772,21 @@ create_redis_container() {
         --platform "${PLATFORM}" \
         --ulimit nofile=100000:100000 \
         --env-file "${REDIS_ENV_FILE}" \
-        --volume "${REDIS_VOLUME}:/var/lib/redis" \
+        "${data_mount[@]}" \
         "${REDIS_IMAGE}" \
         sh -c 'set -e; mkdir -p /var/lib/redis/data; chown redis:redis /var/lib/redis/data; exec /usr/local/bin/docker-entrypoint.sh redis-server --dir /var/lib/redis/data --save 60 1 --appendonly yes --appendfsync everysec ${REDIS_PASSWORD:+--requirepass "$REDIS_PASSWORD"}' \
         >/dev/null
 }
 
 create_minio_container() {
+    local -a data_mount
+
+    if [[ -n "${MINIO_DATA_DIR}" ]]; then
+        data_mount=(--mount "type=bind,source=${MINIO_DATA_DIR},target=/data")
+    else
+        data_mount=(--volume "${MINIO_VOLUME}:/data")
+    fi
+
     info "Creating MinIO container..."
     container create \
         --name "${MINIO_CONTAINER}" \
@@ -634,13 +797,21 @@ create_minio_container() {
         --publish "${MINIO_BIND_HOST}:${MINIO_API_PORT}:9000/tcp" \
         --publish "${MINIO_BIND_HOST}:${MINIO_CONSOLE_PORT}:9001/tcp" \
         --env-file "${MINIO_ENV_FILE}" \
-        --volume "${MINIO_VOLUME}:/data" \
+        "${data_mount[@]}" \
         "${MINIO_IMAGE}" \
         server /data --address :9000 --console-address :9001 \
         >/dev/null
 }
 
 create_app_container() {
+    local -a data_mount
+
+    if [[ -n "${APP_DATA_DIR}" ]]; then
+        data_mount=(--mount "type=bind,source=${APP_DATA_DIR},target=/app/storage")
+    else
+        data_mount=(--volume "${APP_VOLUME}:/app/storage")
+    fi
+
     info "Creating Sub2API container..."
     container create \
         --name "${APP_CONTAINER}" \
@@ -650,22 +821,31 @@ create_app_container() {
         --ulimit nofile=100000:100000 \
         --publish "${BIND_HOST}:${HOST_PORT}:8080/tcp" \
         --env-file "${APP_ENV_FILE}" \
-        --volume "${APP_VOLUME}:/app/storage" \
+        "${data_mount[@]}" \
         --entrypoint /bin/sh \
         "${APP_IMAGE}" \
         -c 'set -e; mkdir -p "$DATA_DIR"; chown -R sub2api:sub2api "$DATA_DIR"; exec su-exec sub2api /app/sub2api' \
         >/dev/null
 
-    if [[ -n "${APP_LOCAL_BINARY}" ]]; then
+    if [[ -n "${APP_LOCAL_BINARY}" || -n "${APP_LOCAL_RESOURCES}" ]]; then
         # Apple Container only permits copy operations on a running container.
-        # Start the image's binary briefly, replace it, then let start_app run
-        # the local build through the normal readiness-checking path.
+        # Start the image's binary briefly, replace the local build/resources,
+        # then let start_app run the local build through the normal readiness
+        # checking path.
         info "Starting ${APP_CONTAINER} to install the local Sub2API binary..."
         container start "${APP_CONTAINER}" >/dev/null
-        info "Copying local Sub2API binary into ${APP_CONTAINER}..."
-        container copy "${APP_LOCAL_BINARY_ARCHIVE}" "${APP_CONTAINER}:/tmp/sub2api-local.gz"
-        container exec "${APP_CONTAINER}" \
-            sh -c 'set -e; gzip -dc /tmp/sub2api-local.gz > /app/sub2api.next; chmod 755 /app/sub2api.next; mv /app/sub2api.next /app/sub2api; rm -f /tmp/sub2api-local.gz'
+        if [[ -n "${APP_LOCAL_BINARY}" ]]; then
+            info "Copying local Sub2API binary into ${APP_CONTAINER}..."
+            container copy "${APP_LOCAL_BINARY_ARCHIVE}" "${APP_CONTAINER}:/tmp/sub2api-local.gz"
+            run_with_timeout 30 container exec "${APP_CONTAINER}" \
+                sh -c 'set -e; gzip -dc /tmp/sub2api-local.gz > /app/sub2api.next; chmod 755 /app/sub2api.next; mv /app/sub2api.next /app/sub2api; rm -f /tmp/sub2api-local.gz'
+        fi
+        if [[ -n "${APP_LOCAL_RESOURCES}" ]]; then
+            info "Copying local Sub2API resources into ${APP_CONTAINER}..."
+            container copy "${APP_LOCAL_RESOURCES_ARCHIVE}" "${APP_CONTAINER}:/tmp/sub2api-resources.tar.gz"
+            run_with_timeout 30 container exec "${APP_CONTAINER}" \
+                sh -c 'set -e; rm -rf /app/resources.next; mkdir -p /app/resources.next; tar -xzf /tmp/sub2api-resources.tar.gz -C /app/resources.next; rm -rf /app/resources; mv /app/resources.next /app/resources; chown -R sub2api:sub2api /app/resources; rm -f /tmp/sub2api-resources.tar.gz'
+        fi
         container stop --time 30 "${APP_CONTAINER}" >/dev/null
     fi
 }
@@ -720,6 +900,26 @@ delete_container_if_present() {
     container delete "${container_name}" >/dev/null
 }
 
+container_uses_bind_mount() {
+    local container_name=$1
+    local expected_source=$2
+    local expected_destination=$3
+    local inspection index source destination
+
+    inspection="$(container inspect "${container_name}")" || return 1
+    for ((index = 0; index < 32; index++)); do
+        source="$(printf '%s' "${inspection}" | \
+            plutil -extract "0.configuration.mounts.${index}.source" raw -o - - 2>/dev/null)" || break
+        destination="$(printf '%s' "${inspection}" | \
+            plutil -extract "0.configuration.mounts.${index}.destination" raw -o - - 2>/dev/null)" || return 1
+        if [[ "${source}" == "${expected_source}" && "${destination}" == "${expected_destination}" ]]; then
+            return 0
+        fi
+    done
+
+    return 1
+}
+
 wait_for_probe() {
     local description=$1
     local attempts=$2
@@ -737,21 +937,47 @@ wait_for_probe() {
     return 1
 }
 
+# Apple Container's exec client has no timeout option. Keep a stalled client
+# from blocking a deployment indefinitely; this only terminates the local CLI
+# process and never stops the target container.
+run_with_timeout() {
+    local timeout_seconds=$1
+    shift
+
+    "$@" &
+    local command_pid=$!
+    local elapsed=0
+    while kill -0 "${command_pid}" 2>/dev/null; do
+        if (( elapsed >= timeout_seconds )); then
+            kill -TERM "${command_pid}" 2>/dev/null || true
+            sleep 1
+            if kill -0 "${command_pid}" 2>/dev/null; then
+                kill -KILL "${command_pid}" 2>/dev/null || true
+            fi
+            wait "${command_pid}" 2>/dev/null || true
+            return 124
+        fi
+        sleep 1
+        ((elapsed += 1))
+    done
+    wait "${command_pid}"
+}
+
 probe_postgres() {
-    container exec --env-file "${POSTGRES_PROBE_ENV_FILE}" \
+    run_with_timeout 30 container exec --env-file "${POSTGRES_PROBE_ENV_FILE}" \
         "${POSTGRES_CONTAINER}" \
         psql -h 127.0.0.1 -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" \
-        -v ON_ERROR_STOP=1 -tAc 'SELECT 1'
+        -w -v ON_ERROR_STOP=1 -tAc 'SELECT 1'
 }
 
 probe_redis() {
-    container exec --env-file "${REDIS_ENV_FILE}" \
+    run_with_timeout 30 container exec --env-file "${REDIS_ENV_FILE}" \
         "${REDIS_CONTAINER}" \
         redis-cli ping
 }
 
 probe_minio() {
-    container exec "${MINIO_CONTAINER}" \
+    run_with_timeout 30 container exec "${MINIO_CONTAINER}" \
         curl --fail --silent --show-error --max-time 5 http://127.0.0.1:9000/minio/health/live
 }
 
@@ -766,17 +992,17 @@ probe_host_minio_console() {
 }
 
 configure_minio_bucket() {
-    container exec "${MINIO_CONTAINER}" \
+    run_with_timeout 30 container exec "${MINIO_CONTAINER}" \
         mc alias set local http://127.0.0.1:9000 "${MINIO_ROOT_USER}" "${MINIO_ROOT_PASSWORD}" >/dev/null
-    container exec "${MINIO_CONTAINER}" \
+    run_with_timeout 30 container exec "${MINIO_CONTAINER}" \
         mc mb --ignore-existing "local/${MINIO_BUCKET}" >/dev/null
-    container exec "${MINIO_CONTAINER}" \
+    run_with_timeout 30 container exec "${MINIO_CONTAINER}" \
         mc anonymous set download "local/${MINIO_BUCKET}" >/dev/null
     info "MinIO bucket ${MINIO_BUCKET} is ready for public image downloads."
 }
 
 probe_app() {
-    container exec "${APP_CONTAINER}" \
+    run_with_timeout 30 container exec "${APP_CONTAINER}" \
         wget -q -T 5 -O /dev/null http://localhost:8080/health
 }
 
@@ -847,12 +1073,19 @@ cmd_up() {
     validate_env_file_security
     ensure_minio_credentials
     prepare_environment
+    ensure_configured_data_dirs
     preflight_stack_ownership
     ensure_network
-    ensure_volume "${APP_VOLUME}"
-    ensure_volume "${POSTGRES_VOLUME}"
-    ensure_volume "${REDIS_VOLUME}"
-    if [[ "${MINIO_ENABLED}" == "true" ]]; then
+    if [[ -z "${APP_DATA_DIR}" ]]; then
+        ensure_volume "${APP_VOLUME}"
+    fi
+    if [[ -z "${POSTGRES_DATA_DIR}" ]]; then
+        ensure_volume "${POSTGRES_VOLUME}"
+    fi
+    if [[ -z "${REDIS_DATA_DIR}" ]]; then
+        ensure_volume "${REDIS_VOLUME}"
+    fi
+    if [[ "${MINIO_ENABLED}" == "true" && -z "${MINIO_DATA_DIR}" ]]; then
         ensure_volume "${MINIO_VOLUME}"
     fi
     ensure_image_available "${APP_IMAGE}"
@@ -986,6 +1219,12 @@ cmd_status() {
     return "${failed}"
 }
 
+cmd_disk_usage() {
+    require_container_version
+    system_is_running || die "Apple container services are stopped. Run 'container system start' first."
+    container system df
+}
+
 cmd_logs() {
     local service=${1-}
     local follow=${2-}
@@ -1031,6 +1270,204 @@ cmd_pull() {
         info "Pulling ${MINIO_IMAGE}..."
         container image pull --platform "${PLATFORM}" "${MINIO_IMAGE}"
     fi
+}
+
+cmd_upgrade() {
+    local prune_previous=false
+    local current_image=""
+    local previous_digest=""
+    local target_digest=""
+    local rollback_available=false
+    local argument
+
+    for argument in "$@"; do
+        case "${argument}" in
+            --prune-previous-image) prune_previous=true ;;
+            *) usage; exit 2 ;;
+        esac
+    done
+
+    ensure_system
+    validate_env_file_security
+    APP_IMAGE="$(read_env_value APPLE_CONTAINER_SUB2API_IMAGE ghcr.io/luckykuang/sub2api-plus:latest)"
+    [[ -n "${APP_IMAGE}" ]] || die "APPLE_CONTAINER_SUB2API_IMAGE must not be empty."
+    [[ "${APP_IMAGE}" != "${APP_ROLLBACK_IMAGE}" ]] || \
+        die "APPLE_CONTAINER_SUB2API_IMAGE must not use the reserved rollback reference ${APP_ROLLBACK_IMAGE}."
+    if [[ -n "$(read_env_value APPLE_CONTAINER_SUB2API_BINARY)" ]]; then
+        warn "A local Sub2API binary is configured; upgrade refreshes its runtime image, then up reinstalls the local binary."
+    fi
+    preflight_stack_ownership
+
+    if resource_exists container "${APP_CONTAINER}"; then
+        current_image="$(container_image_reference "${APP_CONTAINER}")"
+    elif image_exists "${APP_IMAGE}"; then
+        current_image="${APP_IMAGE}"
+    fi
+
+    if [[ -n "${current_image}" ]]; then
+        previous_digest="$(image_digest "${current_image}")"
+        if [[ "${current_image}" == "${APP_ROLLBACK_IMAGE}" ]]; then
+            rollback_available=true
+        else
+            delete_unused_image_reference "${APP_ROLLBACK_IMAGE}"
+            info "Retaining the current application image as ${APP_ROLLBACK_IMAGE}..."
+            container image tag "${current_image}" "${APP_ROLLBACK_IMAGE}"
+            rollback_available=true
+        fi
+    else
+        warn "No current application image is available for rollback."
+    fi
+
+    info "Pulling ${APP_IMAGE}..."
+    container image pull --platform "${PLATFORM}" "${APP_IMAGE}"
+    target_digest="$(image_digest "${APP_IMAGE}")"
+
+    if [[ "${rollback_available}" == true ]]; then
+        info "Rollback image is available as ${APP_ROLLBACK_IMAGE} until the deployment succeeds."
+    fi
+    cmd_up
+
+    if [[ "${rollback_available}" == true && "${previous_digest}" == "${target_digest}" ]]; then
+        info "The application image digest did not change; removing the duplicate rollback reference."
+        delete_unused_image_reference "${APP_ROLLBACK_IMAGE}"
+        rollback_available=false
+    elif [[ "${rollback_available}" == true && "${prune_previous}" == true ]]; then
+        delete_unused_image_reference "${APP_ROLLBACK_IMAGE}"
+        rollback_available=false
+        if [[ -n "${current_image}" && "${current_image}" != "${APP_IMAGE}" ]] && image_exists "${current_image}"; then
+            if image_reference_in_use "${current_image}"; then
+                warn "Previous image ${current_image} is still used by another container and was retained."
+            else
+                delete_unused_image_reference "${current_image}"
+            fi
+        fi
+    fi
+
+    if [[ "${rollback_available}" == true ]]; then
+        info "Previous application image retained as ${APP_ROLLBACK_IMAGE}."
+    else
+        info "No previous Sub2API application image was retained."
+    fi
+    container system df
+}
+
+consider_legacy_volume() {
+    local volume_name=$1
+    local data_dir=$2
+    local container_name=$3
+    local destination=$4
+
+    [[ -n "${data_dir}" ]] || return 0
+    resource_exists volume "${volume_name}" || return 0
+    assert_resource_owned volume "${volume_name}"
+    resource_exists container "${container_name}" || \
+        die "Refusing to delete ${volume_name}: ${container_name} is missing, so the bind-mount migration cannot be verified."
+    assert_resource_owned container "${container_name}"
+    container_uses_bind_mount "${container_name}" "${data_dir}" "${destination}" || \
+        die "Refusing to delete ${volume_name}: ${container_name} is not using ${data_dir} at ${destination}."
+    LEGACY_VOLUMES_TO_DELETE+=("${volume_name}")
+}
+
+assert_legacy_volumes_unreferenced() {
+    local container_names container_name inspection index source volume_name
+
+    [[ ${#LEGACY_VOLUMES_TO_DELETE[@]} -gt 0 ]] || return 0
+    container_names="$(container list --all --quiet)" || \
+        die "Failed to list Apple containers before deleting legacy volumes."
+    while IFS= read -r container_name; do
+        [[ -n "${container_name}" ]] || continue
+        inspection="$(container inspect "${container_name}")" || \
+            die "Failed to inspect ${container_name} before deleting legacy volumes."
+        for ((index = 0; index < 32; index++)); do
+            source="$(printf '%s' "${inspection}" | \
+                plutil -extract "0.configuration.mounts.${index}.source" raw -o - - 2>/dev/null)" || break
+            for volume_name in "${LEGACY_VOLUMES_TO_DELETE[@]}"; do
+                if [[ "${source}" == "${volume_name}" ]]; then
+                    die "Refusing to delete ${volume_name}: ${container_name} still references it."
+                fi
+            done
+        done
+    done <<<"${container_names}"
+}
+
+collect_legacy_volumes() {
+    LEGACY_VOLUMES_TO_DELETE=()
+    consider_legacy_volume "${APP_VOLUME}" "${APP_DATA_DIR}" "${APP_CONTAINER}" "/app/storage"
+    consider_legacy_volume "${POSTGRES_VOLUME}" "${POSTGRES_DATA_DIR}" "${POSTGRES_CONTAINER}" "/var/lib/postgresql"
+    consider_legacy_volume "${REDIS_VOLUME}" "${REDIS_DATA_DIR}" "${REDIS_CONTAINER}" "/var/lib/redis"
+    consider_legacy_volume "${MINIO_VOLUME}" "${MINIO_DATA_DIR}" "${MINIO_CONTAINER}" "/data"
+    assert_legacy_volumes_unreferenced
+}
+
+confirm_cleanup() {
+    local dangling_images=$1
+    local legacy_volumes=$2
+    local answer
+
+    printf 'Remove selected unused Apple container resources'
+    if [[ "${dangling_images}" == true ]]; then
+        printf ' (including global dangling images)'
+    fi
+    if [[ "${legacy_volumes}" == true ]]; then
+        printf ' (including verified legacy Sub2API volumes)'
+    fi
+    printf '? [y/N] '
+    read -r answer
+    [[ "${answer}" == "y" || "${answer}" == "Y" ]]
+}
+
+cmd_cleanup() {
+    local dangling_images=false
+    local legacy_volumes=false
+    local assume_yes=false
+    local argument volume_name
+
+    for argument in "$@"; do
+        case "${argument}" in
+            --dangling-images) dangling_images=true ;;
+            --legacy-volumes) legacy_volumes=true ;;
+            --yes) assume_yes=true ;;
+            *) usage; exit 2 ;;
+        esac
+    done
+    if [[ "${dangling_images}" != true && "${legacy_volumes}" != true ]]; then
+        usage
+        exit 2
+    fi
+
+    require_container_version
+    start_system
+    if [[ "${legacy_volumes}" == true ]]; then
+        validate_env_file_security
+        load_data_directories
+        collect_legacy_volumes
+        if [[ ${#LEGACY_VOLUMES_TO_DELETE[@]} -eq 0 ]]; then
+            info "No owned legacy volumes were found behind verified bind mounts."
+            legacy_volumes=false
+        fi
+    fi
+
+    if [[ "${dangling_images}" != true && "${legacy_volumes}" != true ]]; then
+        container system df
+        return
+    fi
+    if [[ "${dangling_images}" == true ]]; then
+        warn "Pruning dangling images is global to Apple Containers and may affect other projects."
+    fi
+    if [[ "${assume_yes}" != true ]] && ! confirm_cleanup "${dangling_images}" "${legacy_volumes}"; then
+        info "Cancelled."
+        return
+    fi
+
+    if [[ "${dangling_images}" == true ]]; then
+        container image prune
+    fi
+    if [[ "${legacy_volumes}" == true ]]; then
+        for volume_name in "${LEGACY_VOLUMES_TO_DELETE[@]}"; do
+            delete_volume_if_present "${volume_name}"
+        done
+    fi
+    container system df
 }
 
 confirm_destroy() {
@@ -1130,6 +1567,11 @@ main() {
             trap cleanup EXIT
             cmd_status
             ;;
+        disk-usage)
+            [[ $# -eq 0 ]] || { usage; exit 2; }
+            trap cleanup EXIT
+            cmd_disk_usage
+            ;;
         logs)
             cmd_logs "$@"
             ;;
@@ -1137,6 +1579,14 @@ main() {
             [[ $# -eq 0 ]] || { usage; exit 2; }
             acquire_lock
             cmd_pull
+            ;;
+        upgrade)
+            acquire_lock
+            cmd_upgrade "$@"
+            ;;
+        cleanup)
+            acquire_lock
+            cmd_cleanup "$@"
             ;;
         destroy)
             acquire_lock

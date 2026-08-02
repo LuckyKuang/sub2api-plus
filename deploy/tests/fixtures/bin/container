@@ -5,6 +5,10 @@ set -eu
 STATE_DIR="${FAKE_CONTAINER_STATE:?FAKE_CONTAINER_STATE is required}"
 mkdir -p \
     "${STATE_DIR}/containers" \
+    "${STATE_DIR}/container-images" \
+    "${STATE_DIR}/mount-destinations" \
+    "${STATE_DIR}/mount-sources" \
+    "${STATE_DIR}/images" \
     "${STATE_DIR}/running" \
     "${STATE_DIR}/networks" \
     "${STATE_DIR}/volumes" \
@@ -34,6 +38,8 @@ inspect_resource() {
     local resource_name=$2
     local label_value="apple-container"
     local address="192.168.65.4/24"
+    local image="ghcr.io/luckykuang/sub2api-plus:latest"
+    local mounts="[]"
 
     if [[ -e "${STATE_DIR}/unowned/${resource_type}/${resource_name}" ]]; then
         label_value="other"
@@ -42,13 +48,35 @@ inspect_resource() {
         sub2api-apple-postgres) address="192.168.65.2/24" ;;
         sub2api-apple-redis) address="192.168.65.3/24" ;;
     esac
+    if [[ -f "${STATE_DIR}/container-images/${resource_name}" ]]; then
+        image="$(<"${STATE_DIR}/container-images/${resource_name}")"
+    fi
+    if [[ -f "${STATE_DIR}/mount-sources/${resource_name}" ]]; then
+        mounts="$(printf '[{"source":"%s","destination":"%s"}]' \
+            "$(<"${STATE_DIR}/mount-sources/${resource_name}")" \
+            "$(<"${STATE_DIR}/mount-destinations/${resource_name}")")"
+    fi
 
-    printf '[{"configuration":{"labels":{"org.sub2api.stack":"%s"}},"status":{"networks":[{"ipv4Address":"%s"}]}}]\n' \
-        "${label_value}" "${address}"
+    printf '[{"configuration":{"labels":{"org.sub2api.stack":"%s"},"image":{"reference":"%s"},"mounts":%s},"status":{"networks":[{"ipv4Address":"%s"}]}}]\n' \
+        "${label_value}" "${image}" "${mounts}" "${address}"
+}
+
+image_digest() {
+    local image=$1
+
+    if [[ "${image}" == "localhost/sub2api-apple-rollback:previous" ]]; then
+        [[ -f "${STATE_DIR}/images/rollback-digest" ]] || return 1
+        cat "${STATE_DIR}/images/rollback-digest"
+    elif [[ -f "${STATE_DIR}/images/current-digest" ]]; then
+        cat "${STATE_DIR}/images/current-digest"
+    else
+        printf '%s\n' "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+    fi
 }
 
 command=${1-}
 if [[ $# -gt 0 ]]; then shift; fi
+printf '%s %s\n' "${command}" "$*" >>"${STATE_DIR}/commands.log"
 
 case "${command}" in
     --version)
@@ -60,6 +88,10 @@ case "${command}" in
             status) [[ -e "${STATE_DIR}/system-running" ]] ;;
             start) touch "${STATE_DIR}/system-running" ;;
             stop) rm -f "${STATE_DIR}/system-running" "${STATE_DIR}/running"/* ;;
+            df)
+                printf '%s\n' "TYPE TOTAL ACTIVE SIZE RECLAIMABLE"
+                printf '%s\n' "Images 4 4 1GB 0B"
+                ;;
             *) exit 1 ;;
         esac
         ;;
@@ -101,29 +133,85 @@ case "${command}" in
         ;;
     image)
         subcommand=${1-}
+        shift || true
         case "${subcommand}" in
-            inspect|pull) exit 0 ;;
+            inspect)
+                digest="$(image_digest "${1}")" || exit 1
+                printf '[{"configuration":{"descriptor":{"digest":"%s"}}}]\n' "${digest}"
+                ;;
+            pull)
+                image="$(last_argument "$@")"
+                if [[ "${image}" == *"sub2api-plus"* && -f "${STATE_DIR}/images/fail-next-pull" ]]; then
+                    exit 1
+                fi
+                if [[ "${image}" == *"sub2api-plus"* && -f "${STATE_DIR}/images/next-digest" ]]; then
+                    mv "${STATE_DIR}/images/next-digest" "${STATE_DIR}/images/current-digest"
+                fi
+                ;;
+            tag)
+                digest="$(image_digest "${1}")" || exit 1
+                [[ "${2-}" == "localhost/sub2api-apple-rollback:previous" ]] || exit 1
+                printf '%s\n' "${digest}" >"${STATE_DIR}/images/rollback-digest"
+                ;;
+            delete)
+                image=${1-}
+                if [[ "${image}" == "localhost/sub2api-apple-rollback:previous" ]]; then
+                    rm -f "${STATE_DIR}/images/rollback-digest"
+                fi
+                printf '%s\n' "${image}" >>"${STATE_DIR}/deleted-images.log"
+                ;;
+            prune)
+                touch "${STATE_DIR}/images-pruned"
+                ;;
             *) exit 1 ;;
         esac
         ;;
     create)
         name=""
+        image=""
+        mount_source=""
+        mount_destination=""
+        printf '%s\n' "$*" >>"${STATE_DIR}/create-args.log"
         while [[ $# -gt 0 ]]; do
             case "$1" in
                 --name)
                     name=$2
                     shift 2
                     ;;
-                --label|--network|--platform|--ulimit|--env-file|--volume|--entrypoint|--publish)
+                --mount)
+                    mount_source=${2#*source=}
+                    mount_source=${mount_source%%,target=*}
+                    mount_destination=${2##*target=}
+                    mount_destination=${mount_destination%%,*}
                     shift 2
                     ;;
+                --volume)
+                    mount_source=${2%%:*}
+                    mount_destination=${2#*:}
+                    mount_destination=${mount_destination%%:*}
+                    shift 2
+                    ;;
+                --label|--network|--platform|--ulimit|--env-file|--entrypoint|--publish)
+                    shift 2
+                    ;;
+                --*)
+                    shift
+                    ;;
                 *)
+                    if [[ -z "${image}" ]]; then
+                        image=$1
+                    fi
                     shift
                     ;;
             esac
         done
         [[ -n "${name}" ]]
         touch "${STATE_DIR}/containers/${name}"
+        printf '%s\n' "${image}" >"${STATE_DIR}/container-images/${name}"
+        if [[ -n "${mount_source}" ]]; then
+            printf '%s\n' "${mount_source}" >"${STATE_DIR}/mount-sources/${name}"
+            printf '%s\n' "${mount_destination}" >"${STATE_DIR}/mount-destinations/${name}"
+        fi
         ;;
     inspect)
         inspect_resource container "${1}"
@@ -147,6 +235,9 @@ case "${command}" in
                 *)
                     rm -f "${STATE_DIR}/running/${argument}"
                     rm -f "${STATE_DIR}/containers/${argument}"
+                    rm -f "${STATE_DIR}/container-images/${argument}"
+                    rm -f "${STATE_DIR}/mount-sources/${argument}"
+                    rm -f "${STATE_DIR}/mount-destinations/${argument}"
                     ;;
             esac
         done

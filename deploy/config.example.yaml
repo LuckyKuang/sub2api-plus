@@ -161,15 +161,22 @@ security:
       - "generativelanguage.googleapis.com"
       - "cloudcode-pa.googleapis.com"
       - "*.openai.azure.com"
-    # Allowed hosts for pricing data download
-    # 允许下载定价数据的主机列表
+    # Allowed hosts for pricing-release downloads, including every expected
+    # GitHub Release redirect target. Pricing always enforces this
+    # list, even when the general URL allowlist is disabled.
+    # 定价 Release 下载允许的主机（包括预期的 GitHub Release 重定向目标）。
+    # 即使通用 URL 白名单关闭，定价下载仍强制使用本列表。
     pricing_hosts:
-      - "raw.githubusercontent.com"
+      - "github.com"
+      - "release-assets.githubusercontent.com"
+      - "objects.githubusercontent.com"
     # Allowed hosts for CRS sync (required when using CRS sync)
     # 允许 CRS 同步的主机列表（使用 CRS 同步功能时必须配置）
     crs_hosts: []
-    # Allow localhost/private IPs for upstream/pricing/CRS (use only in trusted networks)
-    # 允许本地/私有 IP 地址用于上游/定价/CRS（仅在可信网络中使用）
+    # Allow localhost/private IPs for upstream/CRS (use only in trusted networks).
+    # Pricing Release downloads always reject private hosts.
+    # 允许本地/私有 IP 地址用于上游/CRS（仅在可信网络中使用）；
+    # 定价 Release 下载始终拒绝私有主机。
     allow_private_hosts: true
     # Allow http:// URLs when allowlist is disabled (default: true; set to false to require https)
     # 白名单禁用时是否允许 http:// URL（默认: true，设为 false 则仅允许 https）
@@ -188,11 +195,13 @@ security:
     # Enable Content-Security-Policy header
     # 启用内容安全策略 (CSP) 响应头
     enabled: true
-    # Default CSP policy (override if you host assets on other domains)
-    # 默认 CSP 策略（如果静态资源托管在其他域名，请自行覆盖）
+    # Default CSP policy. To restrict image origins further, replace the generic
+    # https: source with explicit HTTPS origins in this deployment file.
+    # 默认 CSP 策略。如需进一步限制图片来源，请在部署配置中用明确的 HTTPS 域名
+    # 替换通用 https: 来源；不要通过后台系统设置放宽此安全边界。
     # Note: __CSP_NONCE__ will be replaced with 'nonce-xxx' at request time for inline script security
     # 注意：__CSP_NONCE__ 会在请求时被替换为 'nonce-xxx'，用于内联脚本安全
-    policy: "default-src 'self'; script-src 'self' __CSP_NONCE__ https://challenges.cloudflare.com https://static.cloudflareinsights.com https://*.stripe.com https://static.airwallex.com https://checkout.airwallex.com https://static-demo.airwallex.com https://checkout-demo.airwallex.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://static.airwallex.com https://checkout.airwallex.com https://static-demo.airwallex.com https://checkout-demo.airwallex.com; img-src 'self' data: blob: https: http:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https:; frame-src https://challenges.cloudflare.com https://*.stripe.com https://checkout.airwallex.com https://checkout-demo.airwallex.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+    policy: "default-src 'self'; script-src 'self' __CSP_NONCE__ https://challenges.cloudflare.com https://static.cloudflareinsights.com https://*.stripe.com https://static.airwallex.com https://checkout.airwallex.com https://static-demo.airwallex.com https://checkout-demo.airwallex.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://static.airwallex.com https://checkout.airwallex.com https://static-demo.airwallex.com https://checkout-demo.airwallex.com; img-src 'self' data: blob: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https:; frame-src https://challenges.cloudflare.com https://*.stripe.com https://checkout.airwallex.com https://checkout-demo.airwallex.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
   proxy_probe:
     # Allow skipping TLS verification for proxy probe (debug only)
     # 允许代理探测时跳过 TLS 证书验证（仅用于调试）
@@ -1133,12 +1142,12 @@ rate_limit:
 # 定价数据源（可选）
 # =============================================================================
 pricing:
-  # URL to fetch model pricing data (default: the maintained Sub2API Plus mirror)
-  # 获取模型定价数据的 URL（默认：Sub2API Plus 维护的镜像）
-  remote_url: "https://raw.githubusercontent.com/luckykuang/sub2api-plus/main/backend/resources/model-pricing/model_prices_and_context_window.json"
-  # Hash verification URL (optional)
-  # 哈希校验 URL（可选）
-  hash_url: "https://raw.githubusercontent.com/luckykuang/sub2api-plus/main/backend/resources/model-pricing/model_prices_and_context_window.sha256"
+  # Latest Release discovery URL. Remote refresh is enabled by default. The
+  # manifest binds a versioned immutable asset URL and SHA-256; a failed
+  # refresh keeps the last validated cache or bundled fallback.
+  # 最新 Release 发现地址。默认启用远程刷新；manifest 绑定固定版本资源 URL 和
+  # SHA-256。刷新失败时保留上次校验通过的缓存或使用内置数据。
+  manifest_url: "https://github.com/luckykuang/sub2api-plus/releases/latest/download/model-pricing-manifest.json"
   # Local data directory for caching
   # 本地数据缓存目录
   data_dir: "./data"
@@ -1148,8 +1157,8 @@ pricing:
   # Update interval in hours
   # 更新间隔（小时）
   update_interval_hours: 24
-  # Hash check interval in minutes
-  # 哈希检查间隔（分钟）
+  # Release manifest check interval in minutes
+  # Release manifest 检查间隔（分钟）
   hash_check_interval_minutes: 10
 
 # =============================================================================

@@ -9,8 +9,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/httpclient"
 	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/Wei-Shaw/sub2api/internal/util/urlvalidator"
 )
 
 type pricingRemoteClient struct {
@@ -23,20 +25,26 @@ type pricingRemoteClientError struct {
 	err error
 }
 
-func (c *pricingRemoteClientError) FetchPricingJSON(_ context.Context, _ string) ([]byte, error) {
+func (c *pricingRemoteClientError) FetchPricingJSON(_ context.Context, _ string, _ int64) ([]byte, error) {
 	return nil, c.err
 }
 
-func (c *pricingRemoteClientError) FetchHashText(_ context.Context, _ string) (string, error) {
-	return "", c.err
-}
-
-// NewPricingRemoteClient 创建定价数据远程客户端
-// proxyURL 为空时直连，支持 http/https/socks5/socks5h 协议
+// NewPricingRemoteClient 创建定价数据远程客户端。
+//
+// Pricing is financial input, so redirects use the dedicated pricing allowlist
+// even when the broader upstream allowlist remains in compatibility mode.
+// proxyURL 为空时直连，支持 http/https/socks5/socks5h 协议。
 // 代理配置失败时行为由 allowDirectOnProxyError 控制：
 //   - false（默认）：返回错误占位客户端，禁止回退到直连
 //   - true：回退到直连（仅限管理员显式开启）
-func NewPricingRemoteClient(proxyURL string, allowDirectOnProxyError bool) service.PricingRemoteClient {
+func NewPricingRemoteClient(cfg *config.Config) service.PricingRemoteClient {
+	proxyURL := ""
+	allowDirectOnProxyError := false
+	if cfg != nil {
+		proxyURL = cfg.Update.ProxyURL
+		allowDirectOnProxyError = cfg.Security.ProxyFallback.AllowDirectOnError
+	}
+
 	// 安全说明：httpclient.GetClient 的错误链（url.Parse / proxyutil）不含明文代理凭据，
 	// 但仍通过 slog 仅在服务端日志记录，不会暴露给 HTTP 响应。
 	sharedClient, err := httpclient.GetClient(httpclient.Options{
@@ -50,12 +58,34 @@ func NewPricingRemoteClient(proxyURL string, allowDirectOnProxyError bool) servi
 		}
 		sharedClient = &http.Client{Timeout: 30 * time.Second}
 	}
+	clientCopy := *sharedClient
+	clientCopy.CheckRedirect = pricingRedirectChecker(cfg)
 	return &pricingRemoteClient{
-		httpClient: sharedClient,
+		httpClient: &clientCopy,
 	}
 }
 
-func (c *pricingRemoteClient) FetchPricingJSON(ctx context.Context, url string) ([]byte, error) {
+func pricingRedirectChecker(cfg *config.Config) func(*http.Request, []*http.Request) error {
+	return func(request *http.Request, _ []*http.Request) error {
+		if cfg == nil {
+			return fmt.Errorf("pricing redirect blocked: configuration is unavailable")
+		}
+		_, err := urlvalidator.ValidateHTTPSURL(request.URL.String(), urlvalidator.ValidationOptions{
+			AllowedHosts:     cfg.Security.URLAllowlist.PricingHosts,
+			RequireAllowlist: true,
+			AllowPrivate:     false,
+		})
+		if err != nil {
+			return fmt.Errorf("pricing redirect blocked: %w", err)
+		}
+		return nil
+	}
+}
+
+func (c *pricingRemoteClient) FetchPricingJSON(ctx context.Context, url string, maxBytes int64) ([]byte, error) {
+	if maxBytes <= 0 {
+		return nil, fmt.Errorf("pricing response size limit must be positive")
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
@@ -70,36 +100,16 @@ func (c *pricingRemoteClient) FetchPricingJSON(ctx context.Context, url string) 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
+	if resp.ContentLength > maxBytes {
+		return nil, fmt.Errorf("pricing response exceeds %d bytes", maxBytes)
+	}
 
-	return io.ReadAll(resp.Body)
-}
-
-func (c *pricingRemoteClient) FetchHashText(ctx context.Context, url string) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBytes+1))
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return "", err
+	if int64(len(body)) > maxBytes {
+		return nil, fmt.Errorf("pricing response exceeds %d bytes", maxBytes)
 	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("HTTP %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	// 哈希文件格式：hash  filename 或者纯 hash
-	hash := strings.TrimSpace(string(body))
-	parts := strings.Fields(hash)
-	if len(parts) > 0 {
-		return parts[0], nil
-	}
-	return hash, nil
+	return body, nil
 }

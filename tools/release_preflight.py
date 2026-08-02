@@ -154,6 +154,11 @@ def version_key(tag: str) -> tuple[int, int, int, int] | None:
     return release_docs.version_key(tag)
 
 
+def docker_tag_version(tag: str) -> str:
+    """Convert the validated Git release tag to its OCI-safe form."""
+    return tag.replace("+", "-")
+
+
 def select_previous_release_tag(
     tags: list[str],
     statuses: dict[str, str],
@@ -267,6 +272,27 @@ def check_toolchains() -> tuple[list[str], list[str]]:
             )
         else:
             detected.append(f"golangci-lint {actual_lint}")
+
+    expected_goreleaser = declared_tool_version("goreleaser")
+    if expected_goreleaser is None:
+        errors.append(".tool-versions must declare goreleaser")
+    goreleaser_output, goreleaser_error = command_output(("goreleaser", "--version"))
+    if goreleaser_error:
+        errors.append(goreleaser_error)
+    elif expected_goreleaser is not None:
+        goreleaser_match = re.search(
+            r"(?:version|v)\s*v?(\d+\.\d+(?:\.\d+)?)",
+            goreleaser_output or "",
+            re.IGNORECASE,
+        )
+        actual_goreleaser = goreleaser_match.group(1) if goreleaser_match else None
+        if actual_goreleaser != expected_goreleaser.removeprefix("v"):
+            errors.append(
+                f"goreleaser {expected_goreleaser} is required; found "
+                f"{goreleaser_output!r}"
+            )
+        else:
+            detected.append(f"goreleaser {actual_goreleaser}")
 
     bash_output, bash_error = command_output(("bash", "--version"))
     if bash_error:
@@ -429,8 +455,30 @@ def main() -> int:
             ("bash", "-n", "deploy/apple-container.sh"),
         ),
         Step(
+            "Docker Compose deployment security",
+            ("sh", "deploy/tests/docker-compose-security-test.sh"),
+        ),
+        Step(
+            "Runtime fallback resources",
+            ("sh", "deploy/tests/docker-runtime-resources-test.sh"),
+        ),
+        Step(
             "Caddy cache deployment test",
             ("bash", "deploy/test-caddyfile-cache.sh"),
+        ),
+        Step(
+            "GoReleaser configuration",
+            (
+                "env",
+                "GITHUB_REPO_OWNER=validation",
+                "GITHUB_REPO_OWNER_LOWER=validation",
+                "GITHUB_REPO_NAME=sub2api-plus",
+                f"DOCKER_TAG_VERSION={docker_tag_version(args.tag)}",
+                "DOCKERHUB_USERNAME=skip",
+                "TAG_MESSAGE=GoReleaser configuration validation only.",
+                "goreleaser",
+                "check",
+            ),
         ),
         Step(
             "Go module tidiness",

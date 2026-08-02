@@ -9,8 +9,8 @@ derives the OCI image tag by preserving the leading `v` and replacing only
 `+` with `-`.
 
 ```text
-Git/GitHub: v0.1.168+custom.001
-GHCR:       ghcr.io/luckykuang/sub2api-plus:v0.1.168-custom.001
+Git/GitHub: v0.1.169+custom.001
+GHCR:       ghcr.io/luckykuang/sub2api-plus:v0.1.169-custom.001
 ```
 
 Pin the GHCR version tag for reproducible deployments. See
@@ -52,12 +52,32 @@ Apple-silicon Macs running macOS 26 can run the complete Sub2API Plus, PostgreSQ
 
 ```bash
 ./apple-container.sh init
+```
+
+```bash
 ./apple-container.sh up
+```
+
+```bash
 ./apple-container.sh status
+```
+
+```bash
 ./apple-container.sh logs app -f
 ```
 
-The script uses Apple named volumes, starts dependencies in order, and performs live readiness checks. It does not provide a continuous restart supervisor; run `./apple-container.sh up` after a host reboot. Docker Compose remains the recommended production deployment path.
+The script uses Apple named volumes by default, starts dependencies in order,
+replaces the application container on every `up` so its writable layer does
+not accumulate, and performs live readiness checks. Use
+`./apple-container.sh upgrade` to update only the application image while
+retaining one rollback image, and `./apple-container.sh disk-usage` to inspect
+Apple Containers disk use. Set the optional `APPLE_CONTAINER_*_DATA_DIR`
+variables in `.env` to replace an individual named volume with a host bind
+mount; leaving them empty preserves the original named-volume behavior.
+Persistent mounts are never cleared by application redeployment. The script
+does not provide a continuous restart supervisor; run
+`./apple-container.sh up` after a host reboot. Docker Compose remains the
+recommended production deployment path.
 
 See [APPLE_CONTAINER.md](./APPLE_CONTAINER.md) for configuration, upgrades, persistence, networking behavior, and limitations.
 
@@ -259,6 +279,10 @@ docker compose down -v
 | `WEBAUTHN_RP_DISPLAY_NAME` | No | `Sub2API` | Relying-party name shown by the authenticator. |
 | `WEBAUTHN_RP_ID` | When WebAuthn is enabled | *(empty)* | Exact relying-party domain without scheme or port. |
 | `WEBAUTHN_RP_ORIGINS` | When WebAuthn is enabled | *(empty)* | Comma-separated allowed HTTPS origins; localhost HTTP is supported for local testing. |
+| `SERVER_TRUSTED_PROXIES` | No | *(empty)* | Comma-separated direct reverse-proxy/container CIDRs trusted for client IP recovery. Never use a public CDN range or `/0`. |
+| `SERVER_IP_ACCESS_EMERGENCY_ALLOWLIST` | No | *(empty)* | Fixed administrator egress CIDRs that can bypass global IP blocks during proxy recovery. |
+| `SECURITY_TRUST_FORWARDED_IP_FOR_API_KEY_ACL` | No | `false` | Legacy raw forwarded-header compatibility. Keep disabled with `SERVER_TRUSTED_PROXIES`; an existing database setting can override the initial environment value. |
+| `GATEWAY_OPENAI_PROXY_STREAM_CIRCUIT_DISABLED` | No | `false` | Disables the bounded OpenAI proxy stream-disconnect circuit only for incident diagnosis. |
 | `GEMINI_OAUTH_CLIENT_ID` | No | *(builtin)* | Google OAuth client ID (Gemini OAuth). Leave empty to use the built-in Gemini CLI client. |
 | `GEMINI_OAUTH_CLIENT_SECRET` | No | *(builtin)* | Google OAuth client secret (Gemini OAuth). Leave empty to use the built-in Gemini CLI client. |
 | `GEMINI_OAUTH_SCOPES` | No | *(default)* | OAuth scopes (Gemini OAuth) |
@@ -271,6 +295,55 @@ the configuration is valid, explicitly enable Passkey in administrator System
 Settings; deployment configuration alone never exposes Passkey login.
 
 > **Note:** The `docker-deploy.sh` script automatically generates `JWT_SECRET`, `TOTP_ENCRYPTION_KEY`, and `POSTGRES_PASSWORD` for you. Keep the generated `TOTP_ENCRYPTION_KEY` stable: saving a Prompt Audit endpoint token without a fixed key is rejected, because it would be unreadable after restart.
+
+### Reverse Proxy and Upstream Egress Hardening
+
+For a reverse-proxy deployment, list only the IP/CIDR of the proxy that connects
+directly to Sub2API Plus in `SERVER_TRUSTED_PROXIES`, then keep
+`SECURITY_TRUST_FORWARDED_IP_FOR_API_KEY_ACL=false`. This makes API-key ACL and
+session client-IP handling use the explicit trusted-proxy chain instead of raw
+client headers. A direct deployment should leave `SERVER_TRUSTED_PROXIES` empty.
+Use `SERVER_IP_ACCESS_EMERGENCY_ALLOWLIST` only for fixed administrator egress
+addresses while repairing a proxy chain; it is not a general bypass list.
+
+URL allowlist is an additional egress control, not a replacement for the
+Responses/Gemini upstream path validation in the application. Before enabling
+it in production, inventory every upstream hostname and configure the complete
+`SECURITY_URL_ALLOWLIST_UPSTREAM_HOSTS` list. A configured list replaces the
+built-in defaults. Then set `SECURITY_URL_ALLOWLIST_ENABLED=true`,
+`SECURITY_URL_ALLOWLIST_ALLOW_INSECURE_HTTP=false`, and
+`SECURITY_URL_ALLOWLIST_ALLOW_PRIVATE_HOSTS=false` unless the deployment has an
+intentional, separately reviewed private relay.
+
+### Pricing Release
+
+Model pricing affects billing. It is not refreshed from a mutable repository
+branch. With the default configuration, the application first loads a
+validated local cache or the bundled repository pricing, then automatically
+checks the latest GitHub Release manifest. The manifest binds the Release
+version, immutable pricing asset URL, and SHA-256. No pricing key or additional
+deployment variable is required.
+
+The sole-maintainer GitHub Release publication boundary is the source of trust;
+SHA-256 provides manifest-to-data integrity, not an independent authenticity
+guarantee. Keep `github.com`, `release-assets.githubusercontent.com`, and
+`objects.githubusercontent.com` in `security.url_allowlist.pricing_hosts`.
+Pricing always checks this dedicated list and rejects HTTP, private hosts,
+oversized responses, invalid JSON, version rollback, and redirects outside the
+list even when the general URL allowlist is disabled. A failed refresh keeps
+the last validated cache, or the bundled pricing when no cache exists.
+
+### Content Security Policy
+
+The default CSP permits local, `data:`, `blob:`, and HTTPS images. It does not
+permit arbitrary HTTP images. Deployments that know their image CDN origins may
+replace the broad `https:` item in `security.csp.policy` with explicit HTTPS
+origins. CSP is a deployment boundary and intentionally has no administrator
+system-setting control.
+
+Compose enables `no-new-privileges:true` for the application service. Apple
+Containers still relies on its entrypoint to drop to the `sub2api` user; it is
+not assumed to provide the same runtime hardening flag.
 
 ### Easy Migration (Local Directory Version)
 
@@ -437,13 +510,13 @@ Replace the immutable tag with another value reported by `list-versions` when
 needed:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- install --version 'v0.1.168+custom.001'
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- install --version 'v0.1.169+custom.001'
 ```
 
 Roll back an existing binary installation to an earlier published version:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- rollback 'v0.1.166+custom.010'
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- rollback 'v0.1.168+custom.001'
 ```
 
 Upgrade to the latest release:
@@ -467,13 +540,13 @@ curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/
 For a downloaded `install.sh`, invoke one operation at a time. For example:
 
 ```bash
-sudo ./install.sh install --version 'v0.1.168+custom.001'
+sudo ./install.sh install --version 'v0.1.169+custom.001'
 ```
 
 Roll back a downloaded-script installation one operation at a time:
 
 ```bash
-sudo ./install.sh rollback 'v0.1.166+custom.010'
+sudo ./install.sh rollback 'v0.1.168+custom.001'
 ```
 
 Or uninstall while preserving `/etc/sub2api`:

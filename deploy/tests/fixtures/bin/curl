@@ -1,4 +1,9 @@
 #!/bin/bash
 
 set -eu
+
+if [[ -f "${FAKE_CONTAINER_STATE:?FAKE_CONTAINER_STATE is required}/fail-host-probe" ]]; then
+    exit 1
+fi
+
 printf '{"status":"ok"}\n'

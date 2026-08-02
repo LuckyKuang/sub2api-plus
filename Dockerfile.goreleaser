@@ -12,6 +12,10 @@ FROM ${POSTGRES_IMAGE} AS pg-client
 
 FROM ${ALPINE_IMAGE}
 
+# GoReleaser dockers_v2 places each pre-built binary under its Buildx target
+# platform (for example linux/arm64/sub2api).
+ARG TARGETPLATFORM
+
 LABEL maintainer="LuckyKuang <https://github.com/luckykuang>"
 LABEL description="Sub2API Plus - AI API Gateway Platform"
 LABEL org.opencontainers.image.source="https://github.com/luckykuang/sub2api-plus"
@@ -43,8 +47,8 @@ RUN addgroup -g 1000 sub2api && \
 
 WORKDIR /app
 
-# Copy the pre-built binary and runtime fallback resources from GoReleaser
-COPY sub2api /app/sub2api
+# Copy the matching pre-built binary and runtime fallback resources from GoReleaser
+COPY ${TARGETPLATFORM}/sub2api /app/sub2api
 COPY --chown=sub2api:sub2api backend/resources /app/resources
 
 # Create data directory

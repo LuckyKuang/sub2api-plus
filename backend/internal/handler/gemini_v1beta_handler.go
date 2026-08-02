@@ -92,7 +92,7 @@ func (h *GatewayHandler) GeminiV1BetaGetModel(c *gin.Context) {
 		return
 	}
 
-	modelName := strings.TrimSpace(c.Param("model"))
+	modelName := c.Param("model")
 	if modelName == "" {
 		googleError(c, http.StatusBadRequest, "Missing model in URL")
 		return
@@ -178,6 +178,10 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 	// 先在入口校验片段合规性，见 service/upstream_path_guard.go。
 	if !service.IsSafeGeminiModelPathSegment(modelName) {
 		googleError(c, http.StatusBadRequest, "Invalid model in URL")
+		return
+	}
+	if !service.IsSupportedGeminiAIStudioAction(action) {
+		googleError(c, http.StatusBadRequest, "Invalid action in URL")
 		return
 	}
 	if resolvedModel, ok := service.ResolvedUpstreamModelFromContext(c.Request.Context()); ok && strings.TrimSpace(resolvedModel) != "" {
@@ -581,7 +585,6 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 }
 
 func parseGeminiModelAction(rest string) (model string, action string, err error) {
-	rest = strings.TrimSpace(rest)
 	if rest == "" {
 		return "", "", &pathParseError{"missing path"}
 	}

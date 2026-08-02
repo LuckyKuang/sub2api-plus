@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -17,8 +18,16 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
+	"github.com/Wei-Shaw/sub2api/internal/pricingmanifest"
 	"github.com/Wei-Shaw/sub2api/internal/util/urlvalidator"
 	"go.uber.org/zap"
+)
+
+const (
+	maxPricingManifestBytes int64 = 64 << 10
+	maxPricingDataBytes     int64 = 32 << 20
+	pricingCacheSchemaV1          = 1
+	pricingCacheSchemaV2          = 2
 )
 
 var (
@@ -135,8 +144,7 @@ type LiteLLMModelPricing struct {
 
 // PricingRemoteClient 远程价格数据获取接口
 type PricingRemoteClient interface {
-	FetchPricingJSON(ctx context.Context, url string) ([]byte, error)
-	FetchHashText(ctx context.Context, url string) (string, error)
+	FetchPricingJSON(ctx context.Context, url string, maxBytes int64) ([]byte, error)
 }
 
 // LiteLLMRawEntry 用于解析原始JSON数据
@@ -167,9 +175,11 @@ type PricingService struct {
 	cfg          *config.Config
 	remoteClient PricingRemoteClient
 	mu           sync.RWMutex
+	updateMu     sync.Mutex
 	pricingData  map[string]*LiteLLMModelPricing
 	lastUpdated  time.Time
 	localHash    string
+	localVersion string
 
 	// 停止信号
 	stopCh chan struct{}
@@ -218,12 +228,12 @@ func (s *PricingService) Stop() {
 
 // startUpdateScheduler 启动定时更新调度器
 func (s *PricingService) startUpdateScheduler() {
-	if s == nil || s.cfg == nil || strings.TrimSpace(s.cfg.Pricing.RemoteURL) == "" {
-		logger.LegacyPrintf("service.pricing", "%s", "[Pricing] Remote sync disabled: pricing remote URL is empty")
+	if !s.remoteSyncEnabled() {
+		logger.LegacyPrintf("service.pricing", "%s", "[Pricing] Release sync disabled: manifest URL is empty")
 		return
 	}
 
-	// 定期检查哈希更新
+	// 定期检查最新 release manifest。
 	hashInterval := time.Duration(s.cfg.Pricing.HashCheckIntervalMinutes) * time.Minute
 	if hashInterval < time.Minute {
 		hashInterval = 10 * time.Minute
@@ -250,170 +260,157 @@ func (s *PricingService) startUpdateScheduler() {
 	logger.LegacyPrintf("service.pricing", "[Pricing] Update scheduler started (check every %v)", hashInterval)
 }
 
-// checkAndUpdatePricing 检查并更新价格数据
+type releasePricingManifest struct {
+	manifest pricingmanifest.Manifest
+	raw      []byte
+}
+
+type validatedPricingCache struct {
+	SchemaVersion   int    `json:"schema_version"`
+	PricingDataB64  string `json:"pricing_data_base64"`
+	ManifestB64     string `json:"manifest_base64"`
+	LegacySignature string `json:"signature,omitempty"`
+}
+
+// checkAndUpdatePricing loads the local cache first. A cache is always usable
+// before a remote release is checked so a transient network or validation
+// failure cannot interrupt billing with last-known-good data.
 func (s *PricingService) checkAndUpdatePricing() error {
-	pricingFile := s.getPricingFilePath()
+	validatedLocalCache := false
+	if s.remoteSyncEnabled() {
+		validatedLocalCache = s.loadValidatedPricingCache()
+	}
 
-	// 检查本地文件是否存在
+	if validatedLocalCache {
+		if err := s.syncWithRemote(); err != nil {
+			logger.LegacyPrintf("service.pricing", "[Pricing] Release refresh failed; keeping validated local cache: %v", err)
+		}
+		return nil
+	}
+
+	pricingFile := s.getPricingFilePath()
 	if _, err := os.Stat(pricingFile); os.IsNotExist(err) {
-		logger.LegacyPrintf("service.pricing", "%s", "[Pricing] Local pricing file not found, downloading...")
-		return s.downloadPricingData()
+		if err := s.useFallbackPricing(); err != nil {
+			return err
+		}
+		if !s.remoteSyncEnabled() {
+			return nil
+		}
+		if err := s.syncWithRemote(); err != nil {
+			logger.LegacyPrintf("service.pricing", "[Pricing] Initial Release refresh failed; keeping bundled fallback: %v", err)
+		}
+		return nil
 	}
-
-	// 先加载本地文件（确保服务可用），再检查是否需要更新
 	if err := s.loadPricingData(pricingFile); err != nil {
-		logger.LegacyPrintf("service.pricing", "[Pricing] Failed to load local file, downloading: %v", err)
-		return s.downloadPricingData()
+		if !s.remoteSyncEnabled() {
+			return fmt.Errorf("load local pricing cache: %w", err)
+		}
+		return s.syncWithRemote()
 	}
 
-	// 如果配置了哈希URL，通过远程哈希检查是否有更新
-	if s.cfg.Pricing.HashURL != "" {
-		remoteHash, err := s.fetchRemoteHash()
-		if err != nil {
-			logger.LegacyPrintf("service.pricing", "[Pricing] Failed to fetch remote hash on startup: %v", err)
-			return nil // 已加载本地文件，哈希获取失败不影响启动
-		}
-
-		s.mu.RLock()
-		localHash := s.localHash
-		s.mu.RUnlock()
-
-		if localHash == "" || remoteHash != localHash {
-			logger.LegacyPrintf("service.pricing", "[Pricing] Remote hash differs on startup (local=%s remote=%s), downloading...",
-				localHash[:min(8, len(localHash))], remoteHash[:min(8, len(remoteHash))])
-			if err := s.downloadPricingData(); err != nil {
-				logger.LegacyPrintf("service.pricing", "[Pricing] Download failed, using existing file: %v", err)
-			}
-		}
+	validatedLocalCache = s.loadValidatedManifestCache()
+	if !s.remoteSyncEnabled() {
 		return nil
 	}
-
-	// 没有哈希URL时，基于文件年龄检查
-	info, err := os.Stat(pricingFile)
-	if err != nil {
-		return nil // 已加载本地文件
-	}
-
-	fileAge := time.Since(info.ModTime())
-	maxAge := time.Duration(s.cfg.Pricing.UpdateIntervalHours) * time.Hour
-
-	if fileAge > maxAge {
-		logger.LegacyPrintf("service.pricing", "[Pricing] Local file is %v old, updating...", fileAge.Round(time.Hour))
-		if err := s.downloadPricingData(); err != nil {
-			logger.LegacyPrintf("service.pricing", "[Pricing] Download failed, using existing file: %v", err)
+	if err := s.syncWithRemote(); err != nil {
+		if !validatedLocalCache {
+			return fmt.Errorf("refresh release pricing for unvalidated local cache: %w", err)
 		}
+		logger.LegacyPrintf("service.pricing", "[Pricing] Release refresh failed; keeping validated local cache: %v", err)
 	}
-
 	return nil
 }
 
-// syncWithRemote 与远程同步（基于哈希校验）
+// syncWithRemote accepts only a strictly newer Release manifest whose pricing
+// asset passes URL, digest, size, and JSON validation.
 func (s *PricingService) syncWithRemote() error {
-	// 如果配置了哈希URL，从远程获取哈希进行比对
-	if s.cfg.Pricing.HashURL != "" {
-		remoteHash, err := s.fetchRemoteHash()
-		if err != nil {
-			logger.LegacyPrintf("service.pricing", "[Pricing] Failed to fetch remote hash: %v", err)
-			return nil // 哈希获取失败不影响正常使用
-		}
+	s.updateMu.Lock()
+	defer s.updateMu.Unlock()
 
-		s.mu.RLock()
-		localHash := s.localHash
-		s.mu.RUnlock()
-
-		if localHash == "" || remoteHash != localHash {
-			logger.LegacyPrintf("service.pricing", "[Pricing] Remote hash differs (local=%s remote=%s), downloading new version...",
-				localHash[:min(8, len(localHash))], remoteHash[:min(8, len(remoteHash))])
-			return s.downloadPricingData()
-		}
-		logger.LegacyPrintf("service.pricing", "%s", "[Pricing] Hash check passed, no update needed")
-		return nil
+	if !s.remoteSyncEnabled() {
+		return fmt.Errorf("remote pricing release sync is disabled")
 	}
-
-	// 没有哈希URL时，基于时间检查
-	pricingFile := s.getPricingFilePath()
-	info, err := os.Stat(pricingFile)
-	if err != nil {
-		return s.downloadPricingData()
-	}
-
-	fileAge := time.Since(info.ModTime())
-	maxAge := time.Duration(s.cfg.Pricing.UpdateIntervalHours) * time.Hour
-
-	if fileAge > maxAge {
-		logger.LegacyPrintf("service.pricing", "[Pricing] File is %v old, downloading...", fileAge.Round(time.Hour))
-		return s.downloadPricingData()
-	}
-
-	return nil
-}
-
-// downloadPricingData 从远程下载价格数据
-func (s *PricingService) downloadPricingData() error {
-	remoteURL, err := s.validatePricingURL(s.cfg.Pricing.RemoteURL)
+	release, err := s.fetchReleaseManifest()
 	if err != nil {
 		return err
 	}
-	logger.LegacyPrintf("service.pricing", "[Pricing] Downloading from %s", remoteURL)
+
+	s.mu.RLock()
+	localVersion := s.localVersion
+	s.mu.RUnlock()
+	if localVersion != "" {
+		comparison, err := pricingmanifest.CompareVersion(release.manifest.Version, localVersion)
+		if err != nil {
+			return fmt.Errorf("compare pricing release versions: %w", err)
+		}
+		if comparison < 0 {
+			return fmt.Errorf("pricing release version rollback refused: local=%s remote=%s", localVersion, release.manifest.Version)
+		}
+		if comparison == 0 {
+			return nil
+		}
+	}
+	return s.downloadReleasePricingData(release)
+}
+
+func (s *PricingService) fetchReleaseManifest() (releasePricingManifest, error) {
+	manifestURL, err := s.validatePricingURL(s.cfg.Pricing.ManifestURL)
+	if err != nil {
+		return releasePricingManifest{}, fmt.Errorf("validate pricing manifest URL: %w", err)
+	}
+	if s.remoteClient == nil {
+		return releasePricingManifest{}, fmt.Errorf("pricing remote client is unavailable")
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-
-	// 获取远程哈希（用于同步锚点，不作为完整性校验）
-	var remoteHash string
-	if strings.TrimSpace(s.cfg.Pricing.HashURL) != "" {
-		remoteHash, err = s.fetchRemoteHash()
-		if err != nil {
-			logger.LegacyPrintf("service.pricing", "[Pricing] Failed to fetch remote hash (continuing): %v", err)
-		}
-	}
-
-	body, err := s.remoteClient.FetchPricingJSON(ctx, remoteURL)
+	raw, err := s.remoteClient.FetchPricingJSON(ctx, manifestURL, maxPricingManifestBytes)
 	if err != nil {
-		return fmt.Errorf("download failed: %w", err)
+		return releasePricingManifest{}, fmt.Errorf("download pricing manifest: %w", err)
 	}
+	manifest, err := pricingmanifest.Parse(raw)
+	if err != nil {
+		return releasePricingManifest{}, err
+	}
+	if _, err := s.validatePricingURL(manifest.PricingURL); err != nil {
+		return releasePricingManifest{}, fmt.Errorf("validate pricing data URL: %w", err)
+	}
+	return releasePricingManifest{manifest: manifest, raw: raw}, nil
+}
 
-	// 哈希校验：不匹配时仅告警，不阻止更新
-	// 远程哈希文件可能与数据文件不同步（如维护者更新了数据但未更新哈希文件）
+func (s *PricingService) downloadReleasePricingData(release releasePricingManifest) error {
+	pricingURL, err := s.validatePricingURL(release.manifest.PricingURL)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	body, err := s.remoteClient.FetchPricingJSON(ctx, pricingURL, maxPricingDataBytes)
+	if err != nil {
+		return fmt.Errorf("download pricing data: %w", err)
+	}
 	dataHash := sha256.Sum256(body)
-	dataHashStr := hex.EncodeToString(dataHash[:])
-	if remoteHash != "" && !strings.EqualFold(remoteHash, dataHashStr) {
-		logger.LegacyPrintf("service.pricing", "[Pricing] Hash mismatch warning: remote=%s data=%s (hash file may be out of sync)",
-			remoteHash[:min(8, len(remoteHash))], dataHashStr[:8])
+	dataHashString := hex.EncodeToString(dataHash[:])
+	if !strings.EqualFold(release.manifest.SHA256, dataHashString) {
+		return fmt.Errorf("pricing data SHA-256 mismatch")
 	}
 
-	// 解析JSON数据（使用灵活的解析方式）
 	data, err := s.parsePricingData(body)
 	if err != nil {
 		return fmt.Errorf("parse pricing data: %w", err)
 	}
 	data = s.mergeFallbackPricingData(data)
-
-	// 保存到本地文件
-	pricingFile := s.getPricingFilePath()
-	if err := os.WriteFile(pricingFile, body, 0644); err != nil {
-		logger.LegacyPrintf("service.pricing", "[Pricing] Failed to save file: %v", err)
+	if err := s.persistValidatedPricing(body, release); err != nil {
+		return err
 	}
 
-	// 使用远程哈希作为同步锚点，防止重复下载
-	// 当远程哈希不可用时，回退到数据本身的哈希
-	syncHash := dataHashStr
-	if remoteHash != "" {
-		syncHash = remoteHash
-	}
-	hashFile := s.getHashFilePath()
-	if err := os.WriteFile(hashFile, []byte(syncHash+"\n"), 0644); err != nil {
-		logger.LegacyPrintf("service.pricing", "[Pricing] Failed to save hash: %v", err)
-	}
-
-	// 更新内存数据
 	s.mu.Lock()
 	s.pricingData = data
 	s.lastUpdated = time.Now()
-	s.localHash = syncHash
+	s.localHash = dataHashString
+	s.localVersion = release.manifest.Version
 	s.mu.Unlock()
-
-	logger.LegacyPrintf("service.pricing", "[Pricing] Downloaded %d models successfully", len(data))
+	logger.LegacyPrintf("service.pricing", "[Pricing] Loaded %d models from validated release %s", len(data), release.manifest.Version)
 	return nil
 }
 
@@ -579,64 +576,226 @@ func (s *PricingService) mergeFallbackPricingData(data map[string]*LiteLLMModelP
 	return data
 }
 
-// useFallbackPricing 使用回退价格文件
+// useFallbackPricing loads bundled data when no validated cache is available.
 func (s *PricingService) useFallbackPricing() error {
 	fallbackFile := s.cfg.Pricing.FallbackFile
-
-	if _, err := os.Stat(fallbackFile); os.IsNotExist(err) {
-		return fmt.Errorf("fallback file not found: %s", fallbackFile)
-	}
-
-	logger.LegacyPrintf("service.pricing", "[Pricing] Using fallback file: %s", fallbackFile)
-
-	// 复制到数据目录
 	data, err := os.ReadFile(fallbackFile)
 	if err != nil {
-		return fmt.Errorf("read fallback failed: %w", err)
+		return fmt.Errorf("read fallback pricing file: %w", err)
 	}
-
-	pricingFile := s.getPricingFilePath()
-	if err := os.WriteFile(pricingFile, data, 0644); err != nil {
-		logger.LegacyPrintf("service.pricing", "[Pricing] Failed to copy fallback: %v", err)
+	if _, err := s.parsePricingData(data); err != nil {
+		return fmt.Errorf("parse fallback pricing file: %w", err)
 	}
-
-	return s.loadPricingData(fallbackFile)
+	if err := writeFileAtomic(s.getPricingFilePath(), data); err != nil {
+		return fmt.Errorf("persist fallback pricing file: %w", err)
+	}
+	logger.LegacyPrintf("service.pricing", "[Pricing] Using bundled fallback file: %s", fallbackFile)
+	return s.loadPricingData(s.getPricingFilePath())
 }
 
-// fetchRemoteHash 从远程获取哈希值
-func (s *PricingService) fetchRemoteHash() (string, error) {
-	hashURL, err := s.validatePricingURL(s.cfg.Pricing.HashURL)
-	if err != nil {
-		return "", err
+func (s *PricingService) remoteSyncEnabled() bool {
+	if s == nil || s.cfg == nil {
+		return false
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	hash, err := s.remoteClient.FetchHashText(ctx, hashURL)
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(hash), nil
+	pricing := s.cfg.Pricing
+	return strings.TrimSpace(pricing.ManifestURL) != ""
 }
 
 func (s *PricingService) validatePricingURL(raw string) (string, error) {
-	if s.cfg != nil && !s.cfg.Security.URLAllowlist.Enabled {
-		normalized, err := urlvalidator.ValidateURLFormat(raw, s.cfg.Security.URLAllowlist.AllowInsecureHTTP)
-		if err != nil {
-			return "", fmt.Errorf("invalid pricing url: %w", err)
-		}
-		return normalized, nil
+	if s == nil || s.cfg == nil {
+		return "", fmt.Errorf("pricing configuration is unavailable")
 	}
 	normalized, err := urlvalidator.ValidateHTTPSURL(raw, urlvalidator.ValidationOptions{
 		AllowedHosts:     s.cfg.Security.URLAllowlist.PricingHosts,
 		RequireAllowlist: true,
-		AllowPrivate:     s.cfg.Security.URLAllowlist.AllowPrivateHosts,
+		// Pricing releases are public GitHub assets. This channel must never be
+		// redirected to localhost or a private address, even in compatibility mode.
+		AllowPrivate: false,
 	})
 	if err != nil {
-		return "", fmt.Errorf("invalid pricing url: %w", err)
+		return "", fmt.Errorf("invalid pricing URL: %w", err)
 	}
 	return normalized, nil
+}
+
+func (s *PricingService) persistValidatedPricing(data []byte, release releasePricingManifest) error {
+	if err := s.writeValidatedPricingCache(data, release); err != nil {
+		return fmt.Errorf("persist validated pricing cache: %w", err)
+	}
+
+	// The bundle above is the authoritative atomic commit. These files remain
+	// compatibility mirrors for operators and older installations; failure to
+	// refresh a mirror must not invalidate the committed validated state.
+	if err := writeFileAtomic(s.getPricingFilePath(), data); err != nil {
+		logger.LegacyPrintf("service.pricing", "[Pricing] Failed to refresh pricing data mirror: %v", err)
+	}
+	if err := writeFileAtomic(s.getManifestFilePath(), release.raw); err != nil {
+		logger.LegacyPrintf("service.pricing", "[Pricing] Failed to refresh pricing manifest mirror: %v", err)
+	}
+	return nil
+}
+
+func (s *PricingService) writeValidatedPricingCache(data []byte, release releasePricingManifest) error {
+	cache := validatedPricingCache{
+		SchemaVersion:  pricingCacheSchemaV2,
+		PricingDataB64: base64.StdEncoding.EncodeToString(data),
+		ManifestB64:    base64.StdEncoding.EncodeToString(release.raw),
+	}
+	raw, err := json.Marshal(cache)
+	if err != nil {
+		return fmt.Errorf("encode validated pricing cache: %w", err)
+	}
+	raw = append(raw, '\n')
+	if err := writeFileAtomic(s.getValidatedPricingCacheFilePath(), raw); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *PricingService) loadValidatedPricingCache() bool {
+	raw, err := os.ReadFile(s.getValidatedPricingCacheFilePath())
+	if err != nil {
+		if !os.IsNotExist(err) {
+			logger.LegacyPrintf("service.pricing", "[Pricing] Ignoring unreadable validated cache: %v", err)
+		}
+		return false
+	}
+
+	var cache validatedPricingCache
+	if err := json.Unmarshal(raw, &cache); err != nil {
+		logger.LegacyPrintf("service.pricing", "[Pricing] Ignoring malformed validated cache: %v", err)
+		return false
+	}
+	if cache.SchemaVersion != pricingCacheSchemaV1 && cache.SchemaVersion != pricingCacheSchemaV2 {
+		logger.LegacyPrintf("service.pricing", "[Pricing] Ignoring unsupported validated cache schema: %d", cache.SchemaVersion)
+		return false
+	}
+	data, err := base64.StdEncoding.DecodeString(cache.PricingDataB64)
+	if err != nil {
+		logger.LegacyPrintf("service.pricing", "[Pricing] Ignoring validated cache with invalid pricing encoding: %v", err)
+		return false
+	}
+	manifestRaw, err := base64.StdEncoding.DecodeString(cache.ManifestB64)
+	if err != nil {
+		logger.LegacyPrintf("service.pricing", "[Pricing] Ignoring validated cache with invalid manifest encoding: %v", err)
+		return false
+	}
+	manifest, err := pricingmanifest.Parse(manifestRaw)
+	if err != nil {
+		logger.LegacyPrintf("service.pricing", "[Pricing] Ignoring validated cache with invalid manifest: %v", err)
+		return false
+	}
+	if _, err := s.validatePricingURL(manifest.PricingURL); err != nil {
+		logger.LegacyPrintf("service.pricing", "[Pricing] Ignoring validated cache with invalid data URL: %v", err)
+		return false
+	}
+	hash := sha256.Sum256(data)
+	hashString := hex.EncodeToString(hash[:])
+	if !strings.EqualFold(hashString, manifest.SHA256) {
+		logger.LegacyPrintf("service.pricing", "%s", "[Pricing] Ignoring validated cache whose digest does not match pricing data")
+		return false
+	}
+	pricingData, err := s.parsePricingData(data)
+	if err != nil {
+		logger.LegacyPrintf("service.pricing", "[Pricing] Ignoring validated cache with invalid pricing data: %v", err)
+		return false
+	}
+	pricingData = s.mergeFallbackPricingData(pricingData)
+
+	lastUpdated := time.Now()
+	if info, err := os.Stat(s.getValidatedPricingCacheFilePath()); err == nil {
+		lastUpdated = info.ModTime()
+	}
+	s.mu.Lock()
+	s.pricingData = pricingData
+	s.lastUpdated = lastUpdated
+	s.localHash = hashString
+	s.localVersion = manifest.Version
+	s.mu.Unlock()
+	if cache.SchemaVersion == pricingCacheSchemaV1 {
+		release := releasePricingManifest{manifest: manifest, raw: manifestRaw}
+		if err := s.writeValidatedPricingCache(data, release); err != nil {
+			logger.LegacyPrintf("service.pricing", "[Pricing] Failed to migrate validated cache to schema v2: %v", err)
+		}
+	}
+	logger.LegacyPrintf("service.pricing", "[Pricing] Loaded %d models from validated cache release %s", len(pricingData), manifest.Version)
+	return true
+}
+
+// loadValidatedManifestCache restores the version only when the cached
+// manifest is valid and its digest matches the cached pricing data.
+func (s *PricingService) loadValidatedManifestCache() bool {
+	if !s.remoteSyncEnabled() {
+		return false
+	}
+	raw, err := os.ReadFile(s.getManifestFilePath())
+	if err != nil {
+		return false
+	}
+	manifest, err := pricingmanifest.Parse(raw)
+	if err != nil {
+		logger.LegacyPrintf("service.pricing", "[Pricing] Ignoring invalid cached manifest: %v", err)
+		return false
+	}
+	if _, err := s.validatePricingURL(manifest.PricingURL); err != nil {
+		logger.LegacyPrintf("service.pricing", "[Pricing] Ignoring cached manifest with invalid data URL: %v", err)
+		return false
+	}
+	s.mu.RLock()
+	localHash := s.localHash
+	s.mu.RUnlock()
+	if !strings.EqualFold(localHash, manifest.SHA256) {
+		logger.LegacyPrintf("service.pricing", "%s", "[Pricing] Ignoring cached manifest whose digest does not match local pricing data")
+		return false
+	}
+	data, err := os.ReadFile(s.getPricingFilePath())
+	if err != nil {
+		logger.LegacyPrintf("service.pricing", "[Pricing] Ignoring cached manifest whose pricing data cannot be read: %v", err)
+		return false
+	}
+	release := releasePricingManifest{
+		manifest: manifest,
+		raw:      raw,
+	}
+	if err := s.writeValidatedPricingCache(data, release); err != nil {
+		logger.LegacyPrintf("service.pricing", "[Pricing] Failed to migrate validated cache bundle: %v", err)
+	}
+	s.mu.Lock()
+	s.localVersion = manifest.Version
+	s.mu.Unlock()
+	return true
+}
+
+func writeFileAtomic(path string, data []byte) (err error) {
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return err
+	}
+	temporary, err := os.CreateTemp(filepath.Dir(path), ".pricing-*")
+	if err != nil {
+		return err
+	}
+	temporaryPath := temporary.Name()
+	defer func() {
+		if err != nil {
+			_ = os.Remove(temporaryPath)
+		}
+	}()
+	if err = temporary.Chmod(0644); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if _, err = temporary.Write(data); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if err = temporary.Sync(); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if err = temporary.Close(); err != nil {
+		return err
+	}
+	return os.Rename(temporaryPath, path)
 }
 
 // GetModelPricing 获取模型价格（带模糊匹配）
@@ -1061,7 +1220,7 @@ func (s *PricingService) GetStatus() map[string]any {
 
 // ForceUpdate 强制更新
 func (s *PricingService) ForceUpdate() error {
-	return s.downloadPricingData()
+	return s.syncWithRemote()
 }
 
 // getPricingFilePath 获取价格文件路径
@@ -1069,9 +1228,12 @@ func (s *PricingService) getPricingFilePath() string {
 	return filepath.Join(s.cfg.Pricing.DataDir, "model_pricing.json")
 }
 
-// getHashFilePath 获取哈希文件路径
-func (s *PricingService) getHashFilePath() string {
-	return filepath.Join(s.cfg.Pricing.DataDir, "model_pricing.sha256")
+func (s *PricingService) getManifestFilePath() string {
+	return filepath.Join(s.cfg.Pricing.DataDir, "model_pricing.manifest.json")
+}
+
+func (s *PricingService) getValidatedPricingCacheFilePath() string {
+	return filepath.Join(s.cfg.Pricing.DataDir, "model_pricing.verified-cache.json")
 }
 
 // ListModelNamesByProvider returns all model names in the catalog whose

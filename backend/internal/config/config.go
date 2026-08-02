@@ -33,7 +33,7 @@ const (
 
 // DefaultCSPPolicy is the default Content-Security-Policy with nonce support
 // __CSP_NONCE__ will be replaced with actual nonce at request time by the SecurityHeaders middleware
-const DefaultCSPPolicy = "default-src 'self'; script-src 'self' __CSP_NONCE__ https://challenges.cloudflare.com https://static.cloudflareinsights.com https://*.stripe.com https://static.airwallex.com https://checkout.airwallex.com https://static-demo.airwallex.com https://checkout-demo.airwallex.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://static.airwallex.com https://checkout.airwallex.com https://static-demo.airwallex.com https://checkout-demo.airwallex.com; img-src 'self' data: blob: https: http:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https:; frame-src https://challenges.cloudflare.com https://*.stripe.com https://checkout.airwallex.com https://checkout-demo.airwallex.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+const DefaultCSPPolicy = "default-src 'self'; script-src 'self' __CSP_NONCE__ https://challenges.cloudflare.com https://static.cloudflareinsights.com https://*.stripe.com https://static.airwallex.com https://checkout.airwallex.com https://static-demo.airwallex.com https://checkout-demo.airwallex.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://static.airwallex.com https://checkout.airwallex.com https://static-demo.airwallex.com https://checkout-demo.airwallex.com; img-src 'self' data: blob: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https:; frame-src https://challenges.cloudflare.com https://*.stripe.com https://checkout.airwallex.com https://checkout-demo.airwallex.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
 
 // UMQ（用户消息队列）模式常量
 const (
@@ -644,10 +644,14 @@ type TokenRefreshConfig struct {
 }
 
 type PricingConfig struct {
-	// 价格数据远程URL（默认使用LiteLLM镜像）
+	// ManifestURL points to the latest pricing-release manifest. It is only a
+	// discovery endpoint; the manifest binds an immutable data URL and SHA-256.
+	ManifestURL string `mapstructure:"manifest_url"`
+	// RemoteURL and HashURL are retained only so old config files decode. They
+	// are no longer used: a mutable URL plus same-origin hash is not an integrity
+	// boundary for financial pricing data.
 	RemoteURL string `mapstructure:"remote_url"`
-	// 哈希校验文件URL
-	HashURL string `mapstructure:"hash_url"`
+	HashURL   string `mapstructure:"hash_url"`
 	// 本地数据目录
 	DataDir string `mapstructure:"data_dir"`
 	// 回退文件路径
@@ -1918,7 +1922,9 @@ func setDefaults() {
 		"*.openai.azure.com",
 	})
 	viper.SetDefault("security.url_allowlist.pricing_hosts", []string{
-		"raw.githubusercontent.com",
+		"github.com",
+		"release-assets.githubusercontent.com",
+		"objects.githubusercontent.com",
 	})
 	viper.SetDefault("security.url_allowlist.crs_hosts", []string{})
 	viper.SetDefault("security.url_allowlist.allow_private_hosts", true)
@@ -2147,9 +2153,11 @@ func setDefaults() {
 	viper.SetDefault("rate_limit.overload_cooldown_minutes", 10)
 	viper.SetDefault("rate_limit.oauth_401_cooldown_minutes", 10)
 
-	// Pricing - 从本分支维护的定价镜像同步模型定价和上下文窗口数据。
-	viper.SetDefault("pricing.remote_url", "https://raw.githubusercontent.com/luckykuang/sub2api-plus/main/backend/resources/model-pricing/model_prices_and_context_window.json")
-	viper.SetDefault("pricing.hash_url", "https://raw.githubusercontent.com/luckykuang/sub2api-plus/main/backend/resources/model-pricing/model_prices_and_context_window.sha256")
+	// Pricing - Release manifest is a discovery pointer. The application
+	// validates its immutable asset URL, version, SHA-256, size, and JSON data.
+	viper.SetDefault("pricing.manifest_url", "https://github.com/luckykuang/sub2api-plus/releases/latest/download/model-pricing-manifest.json")
+	viper.SetDefault("pricing.remote_url", "")
+	viper.SetDefault("pricing.hash_url", "")
 	viper.SetDefault("pricing.data_dir", "./data")
 	viper.SetDefault("pricing.fallback_file", "./resources/model-pricing/model_prices_and_context_window.json")
 	viper.SetDefault("pricing.update_interval_hours", 24)

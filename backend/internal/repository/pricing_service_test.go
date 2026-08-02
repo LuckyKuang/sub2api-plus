@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
@@ -19,9 +20,15 @@ type PricingServiceSuite struct {
 
 func (s *PricingServiceSuite) SetupTest() {
 	s.ctx = context.Background()
-	client, ok := NewPricingRemoteClient("", false).(*pricingRemoteClient)
+	client, ok := NewPricingRemoteClient(testPricingRemoteConfig()).(*pricingRemoteClient)
 	require.True(s.T(), ok, "type assertion failed")
 	s.client = client
+}
+
+func testPricingRemoteConfig() *config.Config {
+	return &config.Config{Security: config.SecurityConfig{URLAllowlist: config.URLAllowlistConfig{
+		PricingHosts: []string{"127.0.0.1", "localhost", "pricing.example.test"},
+	}}}
 }
 
 func (s *PricingServiceSuite) TearDownTest() {
@@ -45,7 +52,7 @@ func (s *PricingServiceSuite) TestFetchPricingJSON_Success() {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 
-	body, err := s.client.FetchPricingJSON(s.ctx, s.srv.URL+"/ok")
+	body, err := s.client.FetchPricingJSON(s.ctx, s.srv.URL+"/ok", 1024)
 	require.NoError(s.T(), err, "FetchPricingJSON")
 	require.Equal(s.T(), `{"ok":true}`, string(body), "body mismatch")
 }
@@ -55,67 +62,35 @@ func (s *PricingServiceSuite) TestFetchPricingJSON_NonOKStatus() {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 
-	_, err := s.client.FetchPricingJSON(s.ctx, s.srv.URL+"/err")
+	_, err := s.client.FetchPricingJSON(s.ctx, s.srv.URL+"/err", 1024)
 	require.Error(s.T(), err, "expected error for non-200 status")
 }
 
-func (s *PricingServiceSuite) TestFetchHashText_ParsesFields() {
+func (s *PricingServiceSuite) TestFetchPricingJSON_RejectsOversizedBody() {
 	s.setupServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/hashfile":
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte("abc123  model_prices.json\n"))
-		case "/hashonly":
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte("def456\n"))
-		default:
-			w.WriteHeader(http.StatusNotFound)
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+			return
 		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("123"))
+		flusher.Flush()
+		_, _ = w.Write([]byte("45"))
 	}))
 
-	hash, err := s.client.FetchHashText(s.ctx, s.srv.URL+"/hashfile")
-	require.NoError(s.T(), err, "FetchHashText")
-	require.Equal(s.T(), "abc123", hash, "hash mismatch")
-
-	hash2, err := s.client.FetchHashText(s.ctx, s.srv.URL+"/hashonly")
-	require.NoError(s.T(), err, "FetchHashText")
-	require.Equal(s.T(), "def456", hash2, "hash mismatch")
+	_, err := s.client.FetchPricingJSON(s.ctx, s.srv.URL+"/large", 4)
+	require.ErrorContains(s.T(), err, "exceeds 4 bytes")
 }
 
-func (s *PricingServiceSuite) TestFetchHashText_NonOKStatus() {
-	s.setupServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
-	}))
-
-	_, err := s.client.FetchHashText(s.ctx, s.srv.URL+"/nope")
-	require.Error(s.T(), err, "expected error for non-200 status")
+func (s *PricingServiceSuite) TestFetchPricingJSON_RejectsInvalidSizeLimit() {
+	_, err := s.client.FetchPricingJSON(s.ctx, "https://pricing.example.test/data", 0)
+	require.ErrorContains(s.T(), err, "size limit must be positive")
 }
 
 func (s *PricingServiceSuite) TestFetchPricingJSON_InvalidURL() {
-	_, err := s.client.FetchPricingJSON(s.ctx, "://invalid-url")
+	_, err := s.client.FetchPricingJSON(s.ctx, "://invalid-url", 1024)
 	require.Error(s.T(), err, "expected error for invalid URL")
-}
-
-func (s *PricingServiceSuite) TestFetchHashText_EmptyBody() {
-	s.setupServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		// empty body
-	}))
-
-	hash, err := s.client.FetchHashText(s.ctx, s.srv.URL+"/empty")
-	require.NoError(s.T(), err, "FetchHashText empty body should not error")
-	require.Equal(s.T(), "", hash, "expected empty hash")
-}
-
-func (s *PricingServiceSuite) TestFetchHashText_WhitespaceOnly() {
-	s.setupServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("   \n"))
-	}))
-
-	hash, err := s.client.FetchHashText(s.ctx, s.srv.URL+"/ws")
-	require.NoError(s.T(), err, "FetchHashText whitespace body should not error")
-	require.Equal(s.T(), "", hash, "expected empty hash after trimming")
 }
 
 func (s *PricingServiceSuite) TestFetchPricingJSON_ContextCancel() {
@@ -129,7 +104,7 @@ func (s *PricingServiceSuite) TestFetchPricingJSON_ContextCancel() {
 
 	done := make(chan error, 1)
 	go func() {
-		_, err := s.client.FetchPricingJSON(ctx, s.srv.URL+"/block")
+		_, err := s.client.FetchPricingJSON(ctx, s.srv.URL+"/block", 1024)
 		done <- err
 	}()
 
@@ -140,18 +115,32 @@ func (s *PricingServiceSuite) TestFetchPricingJSON_ContextCancel() {
 	require.Error(s.T(), err)
 }
 
+func (s *PricingServiceSuite) TestFetchPricingJSON_BlocksInsecureRedirectEvenWhenGlobalAllowlistIsDisabled() {
+	s.setupServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "http://pricing.example.test/model-pricing.json", http.StatusFound)
+	}))
+
+	_, err := s.client.FetchPricingJSON(s.ctx, s.srv.URL+"/redirect", 1024)
+	require.ErrorContains(s.T(), err, "pricing redirect blocked")
+}
+
 func TestNewPricingRemoteClient_InvalidProxy_NoFallback(t *testing.T) {
-	client := NewPricingRemoteClient("://bad", false)
+	cfg := testPricingRemoteConfig()
+	cfg.Update.ProxyURL = "://bad"
+	client := NewPricingRemoteClient(cfg)
 	_, ok := client.(*pricingRemoteClientError)
 	require.True(t, ok, "should return error client when proxy is invalid and fallback disabled")
 
-	_, err := client.FetchPricingJSON(context.Background(), "http://example.com")
+	_, err := client.FetchPricingJSON(context.Background(), "http://example.com", 1024)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "proxy client init failed")
 }
 
 func TestNewPricingRemoteClient_InvalidProxy_WithFallback(t *testing.T) {
-	client := NewPricingRemoteClient("://bad", true)
+	cfg := testPricingRemoteConfig()
+	cfg.Update.ProxyURL = "://bad"
+	cfg.Security.ProxyFallback.AllowDirectOnError = true
+	client := NewPricingRemoteClient(cfg)
 	_, ok := client.(*pricingRemoteClient)
 	require.True(t, ok, "should fallback to direct client when allowed")
 }

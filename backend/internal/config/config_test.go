@@ -792,6 +792,24 @@ func TestLoadDefaultSecurityToggles(t *testing.T) {
 	}
 }
 
+func TestLoadDefaultPricingReleaseConfig(t *testing.T) {
+	resetViperWithJWTSecret(t)
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.Equal(t,
+		"https://github.com/luckykuang/sub2api-plus/releases/latest/download/model-pricing-manifest.json",
+		cfg.Pricing.ManifestURL,
+	)
+	require.Empty(t, cfg.Pricing.RemoteURL)
+	require.Empty(t, cfg.Pricing.HashURL)
+	require.ElementsMatch(t, []string{
+		"github.com",
+		"release-assets.githubusercontent.com",
+		"objects.githubusercontent.com",
+	}, cfg.Security.URLAllowlist.PricingHosts)
+}
+
 func TestLoadDefaultServerMode(t *testing.T) {
 	resetViperWithJWTSecret(t)
 

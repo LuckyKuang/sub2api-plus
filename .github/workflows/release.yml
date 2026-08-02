@@ -34,6 +34,10 @@ jobs:
     name: Build and publish
     needs: verify
     runs-on: ubuntu-latest
+    # Repository administrators must protect this environment with required
+    # reviewers and a tag-only deployment policy before the first publication.
+    environment:
+      name: release
     permissions:
       contents: write
       packages: write
@@ -146,10 +150,10 @@ jobs:
           cache-dependency-path: backend/go.sum
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -175,3 +179,42 @@ jobs:
           GITHUB_REPO_NAME: ${{ github.event.repository.name }}
           DOCKER_TAG_VERSION: ${{ steps.metadata.outputs.docker_tag }}
           DOCKERHUB_USERNAME: skip
+
+      - name: Publish pricing release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.metadata.outputs.tag }}
+        run: |
+          set -euo pipefail
+          PRICING_RELEASE_DIR="$RUNNER_TEMP/pricing-release"
+          EXISTING_ASSET_DIR="$RUNNER_TEMP/existing-pricing-assets"
+          mkdir -p "$PRICING_RELEASE_DIR" "$EXISTING_ASSET_DIR"
+          cp backend/resources/model-pricing/model_prices_and_context_window.json \
+            "$PRICING_RELEASE_DIR/model-pricing.json"
+          go -C backend run ./cmd/pricing-manifest-build \
+            --data "$PRICING_RELEASE_DIR/model-pricing.json" \
+            --repository "$GITHUB_REPOSITORY" \
+            --tag "$RELEASE_TAG" \
+            --manifest "$PRICING_RELEASE_DIR/model-pricing-manifest.json"
+
+          assets=(
+            model-pricing.json
+            model-pricing-manifest.json
+          )
+          uploads=()
+          for asset in "${assets[@]}"; do
+            if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+              --json assets --jq '.assets[].name' | grep -Fqx "$asset"; then
+              gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+                --pattern "$asset" --dir "$EXISTING_ASSET_DIR"
+              cmp -- "$PRICING_RELEASE_DIR/$asset" "$EXISTING_ASSET_DIR/$asset" || {
+                echo "Refusing to replace immutable pricing asset: $asset" >&2
+                exit 1
+              }
+            else
+              uploads+=("$PRICING_RELEASE_DIR/$asset#$asset")
+            fi
+          done
+          if [ "${#uploads[@]}" -gt 0 ]; then
+            gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" "${uploads[@]}"
+          fi

@@ -28,6 +28,9 @@ func TestSanitizedUpstreamPathSuffixRejectsNonConformingSegments(t *testing.T) {
 		"/compact//detail",
 		"/compact/",
 		"/ compact",
+		"/compact ",
+		"/compact\t",
+		"/compact\n",
 		"/compact\x00",
 		"/compact\nX-Injected: 1",
 		"/模型",
@@ -107,6 +110,7 @@ func TestOpenAIResponsesRequestPathSuffixRejectsNonConformingSubpaths(t *testing
 
 	nonConformingPaths := []string{
 		"/v1/responses/../../x/y",
+		"/openai/v1/responses/../../x/y",
 		"/v1/responses/..%2f..%2fx/y",
 		"/v1/responses/%2e%2e/%2e%2e/x",
 		"/responses/%2e%2e%2fx",
@@ -115,6 +119,10 @@ func TestOpenAIResponsesRequestPathSuffixRejectsNonConformingSubpaths(t *testing
 		"/v1/responses/%3fa=b",
 		"/v1/responses/x%23frag",
 		"/v1/responses//double",
+		"/v1/responses//",
+		"/v1/responses/compact%20",
+		"/v1/responses/compact%09",
+		"/v1/responses/compact%0A",
 	}
 	for _, path := range nonConformingPaths {
 		t.Run(path, func(t *testing.T) {
@@ -132,10 +140,15 @@ func TestOpenAIResponsesRequestPathSuffixRejectsNonConformingSubpaths(t *testing
 
 	// 合法子路径必须保持原样转发。
 	for path, want := range map[string]string{
-		"/v1/responses":                        "",
-		"/v1/responses/compact":                "/compact",
-		"/responses/compact/":                  "/compact",
-		"/backend-api/codex/responses/compact": "/compact",
+		"/v1/responses":                                  "",
+		"/v1/responses/compact":                          "/compact",
+		"/openai/v1/responses/compact":                   "/compact",
+		"/openai/v1/responses/compact/detail":            "/compact/detail",
+		"/responses/compact/":                            "/compact",
+		"/backend-api/codex/responses/compact":           "/compact",
+		"/v1/responses/compact/responses":                "/compact/responses",
+		"/responses/first/responses/second":              "/first/responses/second",
+		"/backend-api/codex/responses/compact/responses": "/compact/responses",
 	} {
 		t.Run("forwardable_"+path, func(t *testing.T) {
 			c := newResponsesSuffixTestContext(t, path)

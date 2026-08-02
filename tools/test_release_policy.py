@@ -92,6 +92,12 @@ class ReleaseNotesTests(unittest.TestCase):
 
 
 class ReleaseBaselineTests(unittest.TestCase):
+    def test_docker_tag_version_uses_oci_safe_separator(self) -> None:
+        self.assertEqual(
+            release_preflight.docker_tag_version("v0.1.170+custom.002"),
+            "v0.1.170-custom.002",
+        )
+
     def test_previous_release_uses_only_eligible_lower_versions(self) -> None:
         tags = [
             "v1.2.3+custom.004",
@@ -170,6 +176,24 @@ class WorkflowPolicyTests(unittest.TestCase):
         )
         self.assertIn("persist-credentials: false", workflow)
 
+    def test_release_pricing_assets_are_integrity_bound_and_not_replaced(self) -> None:
+        workflow = ROOT.joinpath(".github/workflows/release.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("Publish pricing release assets", workflow)
+        self.assertIn("model-pricing.json", workflow)
+        self.assertIn("model-pricing-manifest.json", workflow)
+        self.assertIn("./cmd/pricing-manifest-build", workflow)
+        self.assertIn("Refusing to replace immutable pricing asset", workflow)
+        self.assertIn("name: release", workflow)
+        self.assertIsNone(
+            re.search(r"PRICING_MANIFEST_(?:SIGNING|PUBLIC)_KEY", workflow)
+        )
+        self.assertIsNone(
+            re.search(r"model-pricing-manifest\.json\.sig", workflow)
+        )
+        self.assertNotIn("--clobber", workflow)
+
     def test_actionlint_container_is_pinned_to_a_digest(self) -> None:
         workflow = ROOT.joinpath(".github/workflows/backend-ci.yml").read_text(
             encoding="utf-8"
@@ -177,6 +201,22 @@ class WorkflowPolicyTests(unittest.TestCase):
         self.assertRegex(
             workflow,
             r"rhysd/actionlint:1\.7\.12@sha256:[0-9a-f]{64}",
+        )
+
+    def test_goreleaser_validation_uses_embedded_release_version(self) -> None:
+        workflow = ROOT.joinpath(".github/workflows/backend-ci.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("backend/cmd/server/VERSION", workflow)
+        self.assertIn(
+            "DOCKER_TAG_VERSION: ${{ steps.tool-versions.outputs.docker_tag_version }}",
+            workflow,
+        )
+        self.assertIsNone(
+            re.search(
+                r"DOCKER_TAG_VERSION:\s+v\d+\.\d+\.\d+-custom\.\d{3}",
+                workflow,
+            )
         )
 
 

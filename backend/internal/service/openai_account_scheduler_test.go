@@ -1782,6 +1782,93 @@ func TestOpenAIGatewayService_SelectAccountWithScheduler_FailsOpenWhenAllProxies
 		"fail-open must not clear the quarantine; only a completed stream or TTL expiry does")
 }
 
+func TestOpenAIGatewayService_SelectAccountWithScheduler_FailOpenDoesNotBypassOAuthSessionGroupPolicy(t *testing.T) {
+	resetOpenAIAdvancedSchedulerSettingCacheForTest()
+
+	allowedGroupID := int64(5057)
+	blockedGroupID := int64(5058)
+	proxyID := int64(5057)
+	protectedOAuth := newOpenAIOAuthSessionPolicyAccount(505701, allowedGroupID)
+	protectedOAuth.ProxyID = &proxyID
+	cfg := &config.Config{}
+	cfg.Gateway.Scheduling.LoadBatchEnabled = false
+	svc := &OpenAIGatewayService{
+		accountRepo: schedulerGroupAwareOpenAIAccountRepo{schedulerTestOpenAIAccountRepo{
+			accounts: []Account{protectedOAuth},
+		}},
+		cache:              &schedulerTestGatewayCache{},
+		cfg:                cfg,
+		concurrencyService: NewConcurrencyService(schedulerTestConcurrencyCache{}),
+		openaiProxyStreamCircuit: newOpenAIProxyStreamCircuit(openAIProxyStreamCircuitSettings{
+			failureThreshold: 1,
+			failureWindow:    time.Minute,
+			quarantineTTL:    10 * time.Minute,
+			maxEntries:       16,
+		}),
+	}
+	tripped, _ := svc.openaiProxyStreamCircuit.recordFailure(proxyID, time.Now())
+	require.True(t, tripped)
+
+	selection, _, err := svc.SelectAccountWithSchedulerForCapability(
+		context.Background(),
+		&blockedGroupID,
+		"",
+		"",
+		"gpt-5.6-sol",
+		nil,
+		OpenAIUpstreamTransportAny,
+		OpenAIEndpointCapabilityChatCompletions,
+		false,
+		false,
+		true,
+	)
+	require.Nil(t, selection)
+	require.ErrorIs(t, err, ErrOpenAIOAuthSessionAccessDenied)
+	require.True(t, svc.openaiProxyStreamCircuit.isBlocked(proxyID, time.Now()))
+}
+
+func TestOpenAIGatewayService_SelectAccountWithScheduler_FailOpenRejectsCrossGroupSharedPreviousResponse(t *testing.T) {
+	resetOpenAIAdvancedSchedulerSettingCacheForTest()
+
+	allowedGroupID := int64(5059)
+	blockedGroupID := int64(5060)
+	proxyID := int64(5059)
+	account := newOpenAIOAuthSessionPolicyAccount(505901, allowedGroupID)
+	account.ProxyID = &proxyID
+	cache := &oauthSessionPolicyCache{}
+	svc := &OpenAIGatewayService{
+		accountRepo: &oauthSessionPolicyAccountRepo{
+			accounts: map[int64]*Account{account.ID: &account},
+		},
+		cache: cache,
+		cfg:   &config.Config{},
+		openaiProxyStreamCircuit: newOpenAIProxyStreamCircuit(openAIProxyStreamCircuitSettings{
+			failureThreshold: 1,
+			failureWindow:    time.Minute,
+			quarantineTTL:    10 * time.Minute,
+			maxEntries:       16,
+		}),
+	}
+	ctx := oauthSessionPolicyContext(9001)
+	require.NoError(t, svc.bindOpenAIOAuthSharedResponseAccount(ctx, &account, "resp_cross_group_proxy", time.Hour))
+	tripped, _ := svc.openaiProxyStreamCircuit.recordFailure(proxyID, time.Now())
+	require.True(t, tripped)
+
+	selection, _, err := svc.SelectAccountWithScheduler(
+		ctx,
+		&blockedGroupID,
+		"resp_cross_group_proxy",
+		"",
+		"gpt-5.6-sol",
+		nil,
+		OpenAIUpstreamTransportAny,
+		false,
+	)
+	require.Nil(t, selection)
+	require.ErrorIs(t, err, ErrOpenAIOAuthSessionAccessDenied)
+	require.True(t, svc.openaiProxyStreamCircuit.isBlocked(proxyID, time.Now()))
+}
+
 func TestOpenAIGatewayService_SelectAccountWithScheduler_SessionStickyRateLimitedAccountFallsBackToFreshCandidate(t *testing.T) {
 	ctx := context.Background()
 	groupID := int64(10101)

@@ -72,13 +72,13 @@ usable; replace its immutable tag with another value returned by
 `list-versions` when needed:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- install --version 'v0.1.168+custom.001'
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- install --version 'v0.1.169+custom.001'
 ```
 
 Roll back an existing binary installation to an earlier published version:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- rollback 'v0.1.166+custom.010'
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- rollback 'v0.1.168+custom.001'
 ```
 
 Remove the service and binary while preserving `/etc/sub2api`:
@@ -197,4 +197,5 @@ Licensed under the [GNU Lesser General Public License v3.0](LICENSE) or later.
 Original upstream copyright and license notices are retained.
 
 Original upstream work: Copyright (c) 2026 Wesley Liddick
+
 Sub2API Plus modifications: Copyright (c) 2026 LuckyKuang

@@ -65,14 +65,13 @@ func isSafeUpstreamPathSegment(segment string) bool {
 // ok=false 表示后缀不可转发，调用方必须拒绝请求，而不是降级成空后缀——否则
 // /responses/compact 之类的请求语义会被静默改写。空后缀合法，表示"没有子路径"。
 func sanitizedUpstreamPathSuffix(raw string) (string, bool) {
-	suffix := strings.TrimSpace(raw)
-	if suffix == "" {
+	if raw == "" {
 		return "", true
 	}
-	if !strings.HasPrefix(suffix, "/") {
+	if !strings.HasPrefix(raw, "/") {
 		return "", false
 	}
-	segments := strings.Split(strings.TrimPrefix(suffix, "/"), "/")
+	segments := strings.Split(strings.TrimPrefix(raw, "/"), "/")
 	if len(segments) > maxUpstreamPathSegments {
 		return "", false
 	}
@@ -81,13 +80,13 @@ func sanitizedUpstreamPathSuffix(raw string) (string, bool) {
 			return "", false
 		}
 	}
-	return suffix, true
+	return raw, true
 }
 
 // validateUpstreamPathSegment 供 URL 构造点使用：不合规的片段直接变成显式错误，
 // 不再继续构造与发出上游请求。
 func validateUpstreamPathSegment(kind, segment string) error {
-	if isSafeUpstreamPathSegment(strings.TrimSpace(segment)) {
+	if isSafeUpstreamPathSegment(segment) {
 		return nil
 	}
 	// 不回显原始输入，避免把它写进日志与错误响应。
