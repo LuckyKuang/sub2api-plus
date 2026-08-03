@@ -41,6 +41,7 @@ func NewOpenAIOAuthHandler(
 type OpenAIGenerateAuthURLRequest struct {
 	ProxyID     *int64 `json:"proxy_id"`
 	RedirectURI string `json:"redirect_uri"`
+	AccountID   *int64 `json:"account_id"`
 }
 
 // GenerateAuthURL generates OpenAI OAuth authorization URL
@@ -52,12 +53,22 @@ func (h *OpenAIOAuthHandler) GenerateAuthURL(c *gin.Context) {
 		req = OpenAIGenerateAuthURLRequest{}
 	}
 
-	result, err := h.openaiOAuthService.GenerateAuthURL(
-		c.Request.Context(),
-		req.ProxyID,
-		req.RedirectURI,
-		oauthPlatformFromPath(c),
-	)
+	var result *service.OpenAIAuthURLResult
+	var err error
+	if req.AccountID != nil {
+		account, getErr := h.adminService.GetAccount(c.Request.Context(), *req.AccountID)
+		if getErr != nil || !account.IsOpenAIOAuth() || account.IsCredentialShadow() {
+			response.BadRequest(c, "OpenAI re-authorization requires an existing non-shadow OAuth account")
+			return
+		}
+		result, err = h.openaiOAuthService.GenerateAuthURLForAccount(
+			c.Request.Context(), account, req.ProxyID, req.RedirectURI, oauthPlatformFromPath(c),
+		)
+	} else {
+		result, err = h.openaiOAuthService.GenerateAuthURL(
+			c.Request.Context(), req.ProxyID, req.RedirectURI, oauthPlatformFromPath(c),
+		)
+	}
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return

@@ -35,6 +35,13 @@ type openAICodexPATWhoamiResponse struct {
 // ValidateCodexPersonalAccessToken validates a Codex at-* token using the same
 // first-class PAT endpoint used by the Codex client.
 func (s *OpenAIOAuthService) ValidateCodexPersonalAccessToken(ctx context.Context, accessToken, proxyURL string) (*OpenAITokenInfo, error) {
+	return s.validateCodexPersonalAccessTokenWithAccount(ctx, accessToken, proxyURL, nil)
+}
+
+// validateCodexPersonalAccessTokenWithAccount verifies a newly supplied PAT.
+// Existing accounts pass themselves here so a configured account-level Codex
+// identity is retained for manual refreshes and metadata completion.
+func (s *OpenAIOAuthService) validateCodexPersonalAccessTokenWithAccount(ctx context.Context, accessToken, proxyURL string, account *Account) (*OpenAITokenInfo, error) {
 	accessToken = strings.TrimSpace(accessToken)
 	if accessToken == "" {
 		return nil, infraerrors.New(http.StatusBadRequest, "OPENAI_CODEX_PAT_REQUIRED", "access token is required")
@@ -58,7 +65,7 @@ func (s *OpenAIOAuthService) ValidateCodexPersonalAccessToken(ctx context.Contex
 	}
 	req.Header.Set("authorization", "Bearer "+accessToken)
 	req.Header.Set("accept", "application/json")
-	identity := s.resolveOpenAIOutboundIdentity(ctx, nil)
+	identity := s.resolveOpenAIOutboundIdentity(ctx, account)
 	req.Header.Set("originator", identity.Originator)
 	req.Header.Set("user-agent", identity.UserAgent)
 

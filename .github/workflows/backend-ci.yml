@@ -155,6 +155,8 @@ jobs:
           -color
       - name: Test release policy
         run: python tools/test_release_policy.py
+      - name: Check OpenAI Codex outbound identity
+        run: python tools/check_openai_codex_identity.py
       - name: Check README synchronization
         run: python tools/check_readme_sync.py
       - name: Check release metadata sources

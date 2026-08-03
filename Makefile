@@ -38,6 +38,7 @@ test-frontend-critical:
 
 test-docs:
 	@$(PYTHON) tools/test_release_policy.py
+	@$(PYTHON) tools/check_openai_codex_identity.py
 	@$(PYTHON) tools/check_readme_sync.py
 	@$(PYTHON) tools/check_release.py
 	@$(PYTHON) tools/check_new_migrations.py

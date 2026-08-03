@@ -51,7 +51,8 @@ export function useOpenAIOAuth() {
   // Generate auth URL for OpenAI OAuth
   const generateAuthUrl = async (
     proxyId?: number | null,
-    redirectUri?: string
+    redirectUri?: string,
+    accountId?: number
   ): Promise<boolean> => {
     loading.value = true
     authUrl.value = ''
@@ -66,6 +67,9 @@ export function useOpenAIOAuth() {
       }
       if (redirectUri) {
         payload.redirect_uri = redirectUri
+      }
+      if (accountId) {
+        payload.account_id = accountId
       }
 
       const response = await adminAPI.accounts.generateAuthUrl(

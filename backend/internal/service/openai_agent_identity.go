@@ -453,6 +453,10 @@ func (s *OpenAIGatewayService) refreshOpenAIAgentIdentityHeaders(ctx context.Con
 		return nil, err
 	}
 	refreshed.Set("Authorization", authHeaders.Get("Authorization"))
+	// A task recovery must rebuild the complete Codex identity, not merely the
+	// assertion. This prevents a prior mutable header set from leaving a stale
+	// User-Agent, Originator, or Version on the retry.
+	applyResolvedOpenAIOutboundIdentity(refreshed, s.resolveOpenAIOutboundIdentity(ctx, credAccount), true)
 	return refreshed, nil
 }
 

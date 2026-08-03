@@ -41,12 +41,16 @@ const (
 
 // OAuthSession stores OAuth flow state for OpenAI
 type OAuthSession struct {
-	State        string    `json:"state"`
-	CodeVerifier string    `json:"code_verifier"`
-	ClientID     string    `json:"client_id,omitempty"`
-	ProxyURL     string    `json:"proxy_url,omitempty"`
-	RedirectURI  string    `json:"redirect_uri"`
-	CreatedAt    time.Time `json:"created_at"`
+	State        string `json:"state"`
+	CodeVerifier string `json:"code_verifier"`
+	ClientID     string `json:"client_id,omitempty"`
+	// AccountID is set only for a re-authorization flow. It is intentionally
+	// server-side session state so the code exchange cannot be redirected to a
+	// different account by a browser request.
+	AccountID   *int64    `json:"account_id,omitempty"`
+	ProxyURL    string    `json:"proxy_url,omitempty"`
+	RedirectURI string    `json:"redirect_uri"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 // SessionStore manages OAuth sessions in memory

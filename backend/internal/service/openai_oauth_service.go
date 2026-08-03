@@ -16,6 +16,7 @@ import (
 type OpenAIOAuthService struct {
 	sessionStore         *openai.SessionStore
 	proxyRepo            ProxyRepository
+	accountRepo          AccountRepository
 	oauthClient          OpenAIOAuthClient
 	privacyClientFactory PrivacyClientFactory // 用于调用 chatgpt.com/backend-api（ImpersonateChrome）
 	settingService       *SettingService
@@ -38,6 +39,13 @@ func (s *OpenAIOAuthService) SetPrivacyClientFactory(factory PrivacyClientFactor
 
 func (s *OpenAIOAuthService) SetSettingService(settingService *SettingService) {
 	s.settingService = settingService
+}
+
+// SetAccountRepository supplies the server-side lookup used by re-authorization
+// sessions. Keeping it as a setter preserves the small constructor used by
+// focused tests and callers that only exchange a newly-created account.
+func (s *OpenAIOAuthService) SetAccountRepository(accountRepo AccountRepository) {
+	s.accountRepo = accountRepo
 }
 
 func (s *OpenAIOAuthService) resolveOpenAIOutboundIdentity(ctx context.Context, account *Account) openAIOutboundIdentity {
@@ -70,6 +78,20 @@ type OpenAIAuthURLResult struct {
 
 // GenerateAuthURL generates an OpenAI OAuth authorization URL
 func (s *OpenAIOAuthService) GenerateAuthURL(ctx context.Context, proxyID *int64, redirectURI, platform string) (*OpenAIAuthURLResult, error) {
+	return s.generateAuthURL(ctx, nil, proxyID, redirectURI, platform)
+}
+
+// GenerateAuthURLForAccount starts a re-authorization flow for an existing
+// credential-owning OpenAI OAuth account. The account association remains in
+// the in-memory session; ExchangeCode never accepts it from the client.
+func (s *OpenAIOAuthService) GenerateAuthURLForAccount(ctx context.Context, account *Account, proxyID *int64, redirectURI, platform string) (*OpenAIAuthURLResult, error) {
+	if !isOpenAIOAuthCredentialOwner(account) {
+		return nil, infraerrors.New(http.StatusBadRequest, "OPENAI_OAUTH_REAUTH_ACCOUNT_INVALID", "re-authorization requires a non-shadow OpenAI OAuth account")
+	}
+	return s.generateAuthURL(ctx, &account.ID, proxyID, redirectURI, platform)
+}
+
+func (s *OpenAIOAuthService) generateAuthURL(ctx context.Context, accountID *int64, proxyID *int64, redirectURI, platform string) (*OpenAIAuthURLResult, error) {
 	// Generate PKCE values
 	state, err := openai.GenerateState()
 	if err != nil {
@@ -113,6 +135,7 @@ func (s *OpenAIOAuthService) GenerateAuthURL(ctx context.Context, proxyID *int64
 		State:        state,
 		CodeVerifier: codeVerifier,
 		ClientID:     clientID,
+		AccountID:    accountID,
 		RedirectURI:  redirectURI,
 		ProxyURL:     proxyURL,
 		CreatedAt:    time.Now(),
@@ -169,6 +192,10 @@ func (s *OpenAIOAuthService) ExchangeCode(ctx context.Context, input *OpenAIExch
 	if subtle.ConstantTimeCompare([]byte(input.State), []byte(session.State)) != 1 {
 		return nil, infraerrors.New(http.StatusBadRequest, "OPENAI_OAUTH_INVALID_STATE", "invalid oauth state")
 	}
+	account, err := s.resolveOAuthSessionAccount(ctx, session)
+	if err != nil {
+		return nil, err
+	}
 
 	// Get proxy URL: prefer input.ProxyID, fallback to session.ProxyURL
 	proxyURL := session.ProxyURL
@@ -193,9 +220,8 @@ func (s *OpenAIOAuthService) ExchangeCode(ctx context.Context, input *OpenAIExch
 	}
 
 	// Exchange code for token
-	identity := s.resolveOpenAIOutboundIdentity(ctx, nil)
+	identity := s.resolveOpenAIOutboundIdentity(ctx, account)
 	var tokenResp *openai.TokenResponse
-	var err error
 	if client, ok := s.oauthClient.(openAIOAuthClientWithIdentity); ok {
 		tokenResp, err = client.ExchangeCodeWithIdentity(ctx, input.Code, session.CodeVerifier, redirectURI, proxyURL, clientID, identity.UserAgent, identity.Originator)
 	} else if client, ok := s.oauthClient.(openAIOAuthClientWithUserAgent); ok {
@@ -238,7 +264,7 @@ func (s *OpenAIOAuthService) ExchangeCode(ctx context.Context, input *OpenAIExch
 		tokenInfo.PlanType = userInfo.PlanType
 	}
 
-	s.enrichTokenInfo(ctx, tokenInfo, proxyURL)
+	s.enrichTokenInfoWithAccount(ctx, tokenInfo, proxyURL, account)
 
 	return tokenInfo, nil
 }
@@ -298,7 +324,7 @@ func (s *OpenAIOAuthService) refreshTokenWithClientIDAndIdentity(ctx context.Con
 		tokenInfo.PlanType = userInfo.PlanType
 	}
 
-	s.enrichTokenInfo(ctx, tokenInfo, proxyURL)
+	s.enrichTokenInfoWithAccount(ctx, tokenInfo, proxyURL, account)
 
 	return tokenInfo, nil
 }
@@ -307,6 +333,10 @@ func (s *OpenAIOAuthService) refreshTokenWithClientIDAndIdentity(ctx context.Con
 // 从 accounts/check 获取最新 plan_type、subscription_expires_at、email，
 // 然后尝试关闭训练数据共享。适用于所有获取/刷新 token 的路径。
 func (s *OpenAIOAuthService) enrichTokenInfo(ctx context.Context, tokenInfo *OpenAITokenInfo, proxyURL string) {
+	s.enrichTokenInfoWithAccount(ctx, tokenInfo, proxyURL, nil)
+}
+
+func (s *OpenAIOAuthService) enrichTokenInfoWithAccount(ctx context.Context, tokenInfo *OpenAITokenInfo, proxyURL string, account *Account) {
 	if tokenInfo.AccessToken == "" || s.privacyClientFactory == nil {
 		return
 	}
@@ -318,7 +348,7 @@ func (s *OpenAIOAuthService) enrichTokenInfo(ctx context.Context, tokenInfo *Ope
 			orgID = atClaims.OpenAIAuth.POID
 		}
 	}
-	identity := s.resolveOpenAIOutboundIdentity(ctx, nil)
+	identity := s.resolveOpenAIOutboundIdentity(ctx, account)
 	if info := fetchChatGPTAccountInfo(ctx, s.privacyClientFactory, tokenInfo.AccessToken, proxyURL, orgID, identity); info != nil {
 		// chatgpt_plan_type from the ID token is the canonical personal-plan value.
 		// accounts/check is a multi-account/workspace endpoint; inactive team or
@@ -383,7 +413,7 @@ func (s *OpenAIOAuthService) RefreshAccountToken(ctx context.Context, account *A
 		if accessToken == "" {
 			return nil, infraerrors.New(http.StatusBadRequest, "OPENAI_CODEX_PAT_REQUIRED", "access token is required")
 		}
-		return s.ValidateCodexPersonalAccessToken(ctx, accessToken, proxyURL)
+		return s.validateCodexPersonalAccessTokenWithAccount(ctx, accessToken, proxyURL, account)
 	}
 
 	refreshToken := account.GetCredential("refresh_token")
@@ -405,7 +435,7 @@ func (s *OpenAIOAuthService) RefreshAccountToken(ctx context.Context, account *A
 				tokenInfo.ExpiresAt = expiresAt.Unix()
 				tokenInfo.ExpiresIn = int64(time.Until(*expiresAt).Seconds())
 			}
-			s.enrichTokenInfo(ctx, tokenInfo, proxyURL)
+			s.enrichTokenInfoWithAccount(ctx, tokenInfo, proxyURL, account)
 			return tokenInfo, nil
 		}
 		return nil, infraerrors.New(http.StatusBadRequest, "OPENAI_OAUTH_NO_REFRESH_TOKEN", "no refresh token available")
@@ -413,6 +443,27 @@ func (s *OpenAIOAuthService) RefreshAccountToken(ctx context.Context, account *A
 
 	clientID := account.GetCredential("client_id")
 	return s.refreshTokenWithClientIDAndIdentity(ctx, refreshToken, proxyURL, clientID, account)
+}
+
+func (s *OpenAIOAuthService) resolveOAuthSessionAccount(ctx context.Context, session *openai.OAuthSession) (*Account, error) {
+	if session == nil || session.AccountID == nil {
+		return nil, nil
+	}
+	if *session.AccountID <= 0 || s.accountRepo == nil {
+		return nil, infraerrors.New(http.StatusBadRequest, "OPENAI_OAUTH_REAUTH_ACCOUNT_NOT_FOUND", "re-authorization account is no longer available")
+	}
+	account, err := s.accountRepo.GetByID(ctx, *session.AccountID)
+	if err != nil {
+		return nil, infraerrors.Newf(http.StatusBadRequest, "OPENAI_OAUTH_REAUTH_ACCOUNT_NOT_FOUND", "re-authorization account is no longer available: %v", err)
+	}
+	if !isOpenAIOAuthCredentialOwner(account) {
+		return nil, infraerrors.New(http.StatusBadRequest, "OPENAI_OAUTH_REAUTH_ACCOUNT_INVALID", "re-authorization account is no longer an OpenAI OAuth credential owner")
+	}
+	return account, nil
+}
+
+func isOpenAIOAuthCredentialOwner(account *Account) bool {
+	return account != nil && account.IsOpenAIOAuth() && !account.IsCredentialShadow()
 }
 
 // BuildAccountCredentials builds credentials map from token info

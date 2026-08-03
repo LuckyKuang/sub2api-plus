@@ -5,8 +5,11 @@ import (
 	"net/http"
 	"strings"
 
+	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
 )
+
+const maxOpenAIAccountUserAgentLength = 512
 
 // openAIOutboundIdentity is the trusted client identity used for an upstream
 // OpenAI request. It is deliberately resolved from account and system settings
@@ -21,6 +24,15 @@ type openAIOutboundIdentity struct {
 // valid, then the system setting, and finally the compiled-in default. A value
 // is only valid when it can be paired with an official Codex originator.
 func (s *OpenAIGatewayService) resolveOpenAIOutboundIdentity(ctx context.Context, account *Account) openAIOutboundIdentity {
+	// Spark shadows never own credentials or an outbound identity. All normal
+	// forwarding paths build authentication first and therefore fail closed when
+	// this lookup fails; resolving here makes the final header stage agree with
+	// the credential owner instead of accidentally falling back to a global UA.
+	if account != nil && account.IsCredentialShadow() && s != nil && s.accountRepo != nil {
+		if credentialAccount, err := resolveCredentialAccount(ctx, s.accountRepo, account); err == nil && credentialAccount != nil {
+			account = credentialAccount
+		}
+	}
 	systemUA := ""
 	if s != nil && s.settingService != nil {
 		systemUA = s.settingService.GetOpenAICodexUserAgent(ctx)
@@ -30,6 +42,39 @@ func (s *OpenAIGatewayService) resolveOpenAIOutboundIdentity(ctx context.Context
 		accountUA = account.GetOpenAIUserAgent()
 	}
 	return resolveOpenAIOutboundIdentityCandidates(accountUA, systemUA)
+}
+
+// NormalizeOpenAIAccountUserAgent validates and canonicalizes the optional
+// account-level Codex client identity. An empty value explicitly means inherit
+// the global/default identity. The paired UA is stored so User-Agent,
+// Originator, and Version always come from one source of truth.
+func NormalizeOpenAIAccountUserAgent(platform string, credentials map[string]any) error {
+	if platform != PlatformOpenAI || credentials == nil {
+		return nil
+	}
+	raw, configured := credentials["user_agent"]
+	if !configured || raw == nil {
+		delete(credentials, "user_agent")
+		return nil
+	}
+	userAgent, ok := raw.(string)
+	if !ok {
+		return infraerrors.New(http.StatusBadRequest, "OPENAI_CODEX_USER_AGENT_INVALID", "OpenAI account user_agent must be a string")
+	}
+	userAgent = strings.TrimSpace(userAgent)
+	if userAgent == "" {
+		delete(credentials, "user_agent")
+		return nil
+	}
+	if len(userAgent) > maxOpenAIAccountUserAgentLength {
+		return infraerrors.Newf(http.StatusBadRequest, "OPENAI_CODEX_USER_AGENT_INVALID", "OpenAI account user_agent must be at most %d characters", maxOpenAIAccountUserAgentLength)
+	}
+	_, pairedUserAgent, ok := openai.PairCodexClientIdentity(userAgent)
+	if !ok {
+		return infraerrors.New(http.StatusBadRequest, "OPENAI_CODEX_USER_AGENT_INVALID", "OpenAI account user_agent must be a supported Codex User-Agent")
+	}
+	credentials["user_agent"] = pairedUserAgent
+	return nil
 }
 
 func resolveOpenAIOutboundIdentityCandidates(accountUA, systemUA string) openAIOutboundIdentity {

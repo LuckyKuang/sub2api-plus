@@ -279,6 +279,14 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_CODEX_MODELS_ACCOUNT_TYPE_UNSUPPORTED", "account type %q cannot fetch the Codex models manifest", credAccount.Type)
 	}
 
+	identity := s.resolveOpenAIOutboundIdentity(ctx, credAccount)
+	// OAuth manifest requests are part of the Codex protocol. Its URL query,
+	// Version header, Originator and User-Agent must describe the same client.
+	// Custom API-key upstreams intentionally retain the inbound client_version
+	// compatibility behavior below.
+	if !useAPIKeyUpstream {
+		clientVersion = identity.Version
+	}
 	requestURL, err := buildCodexModelsManifestURL(requestEndpoint, appendModelsPath, clientVersion)
 	if err != nil {
 		if useAPIKeyUpstream {
@@ -307,7 +315,7 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 	if !useAPIKeyUpstream {
 		headers.Set("Version", clientVersion)
 	}
-	s.applyOpenAIOutboundIdentity(ctx, credAccount, headers, !useAPIKeyUpstream)
+	applyResolvedOpenAIOutboundIdentity(headers, identity, !useAPIKeyUpstream)
 
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {
@@ -348,6 +356,7 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 		}
 	}
 	setOpenAIChatGPTAccountHeaders(request.headers, credAccount)
+	applyResolvedOpenAIOutboundIdentity(request.headers, identity, true)
 	return s.fetchCodexModelsManifestUpstream(ctx, request, ifNoneMatch)
 }
 

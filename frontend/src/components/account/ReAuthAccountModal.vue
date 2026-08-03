@@ -327,7 +327,7 @@ const handleGenerateUrl = async () => {
   if (!props.account) return
 
   if (isOpenAILike.value) {
-    await openaiOAuth.generateAuthUrl(props.account.proxy_id)
+    await openaiOAuth.generateAuthUrl(props.account.proxy_id, undefined, props.account.id)
   } else if (isGemini.value) {
     const creds = (props.account.credentials || {}) as Record<string, unknown>
     const tierId = typeof creds.tier_id === 'string' ? creds.tier_id : undefined
@@ -372,7 +372,7 @@ const handleExchangeCode = async () => {
 
     try {
       // Update account with new credentials
-      await adminAPI.accounts.update(props.account.id, {
+      await adminAPI.accounts.applyOAuthCredentials(props.account.id, {
         type: 'oauth', // OpenAI OAuth is always 'oauth' type
         credentials,
         extra
