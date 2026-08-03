@@ -8,16 +8,16 @@ package main
 
 import (
 	"context"
-	"github.com/Wei-Shaw/sub2api/ent"
-	"github.com/Wei-Shaw/sub2api/internal/config"
-	"github.com/Wei-Shaw/sub2api/internal/handler"
-	"github.com/Wei-Shaw/sub2api/internal/handler/admin"
-	"github.com/Wei-Shaw/sub2api/internal/payment"
-	"github.com/Wei-Shaw/sub2api/internal/repository"
-	"github.com/Wei-Shaw/sub2api/internal/securityaudit"
-	"github.com/Wei-Shaw/sub2api/internal/server"
-	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
-	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/LuckyKuang/sub2api-plus/ent"
+	"github.com/LuckyKuang/sub2api-plus/internal/config"
+	"github.com/LuckyKuang/sub2api-plus/internal/handler"
+	"github.com/LuckyKuang/sub2api-plus/internal/handler/admin"
+	"github.com/LuckyKuang/sub2api-plus/internal/payment"
+	"github.com/LuckyKuang/sub2api-plus/internal/repository"
+	"github.com/LuckyKuang/sub2api-plus/internal/securityaudit"
+	"github.com/LuckyKuang/sub2api-plus/internal/server"
+	"github.com/LuckyKuang/sub2api-plus/internal/server/middleware"
+	"github.com/LuckyKuang/sub2api-plus/internal/service"
 	"github.com/redis/go-redis/v9"
 	"log"
 	"net/http"
@@ -27,7 +27,7 @@ import (
 
 import (
 	_ "embed"
-	_ "github.com/Wei-Shaw/sub2api/ent/runtime"
+	_ "github.com/LuckyKuang/sub2api-plus/ent/runtime"
 )
 
 // Injectors from wire.go:

@@ -6,13 +6,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/handler/dto"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/timezone"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/usagestats"
-	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
-	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/LuckyKuang/sub2api-plus/internal/handler/dto"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/pagination"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/response"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/timezone"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/usagestats"
+	middleware2 "github.com/LuckyKuang/sub2api-plus/internal/server/middleware"
+	"github.com/LuckyKuang/sub2api-plus/internal/service"
 
 	"github.com/gin-gonic/gin"
 )

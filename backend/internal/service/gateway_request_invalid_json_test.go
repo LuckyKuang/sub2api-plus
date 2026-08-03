@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Wei-Shaw/sub2api/internal/domain"
+	"github.com/LuckyKuang/sub2api-plus/internal/domain"
 	"github.com/stretchr/testify/require"
 )
 

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	pkgerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
+	pkgerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 

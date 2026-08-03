@@ -3,10 +3,10 @@ package admin
 import (
 	"strings"
 
-	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
-	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
-	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/ip"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/response"
+	"github.com/LuckyKuang/sub2api-plus/internal/server/middleware"
+	"github.com/LuckyKuang/sub2api-plus/internal/service"
 
 	"github.com/gin-gonic/gin"
 )

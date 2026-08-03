@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/timezone"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/usagestats"
-	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/logger"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/timezone"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/usagestats"
+	"github.com/LuckyKuang/sub2api-plus/internal/service"
 	"github.com/lib/pq"
 	"golang.org/x/sync/errgroup"
 )

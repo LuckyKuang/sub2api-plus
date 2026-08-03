@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
 )
 
 // openAIOutboundIdentity is the trusted client identity used for an upstream

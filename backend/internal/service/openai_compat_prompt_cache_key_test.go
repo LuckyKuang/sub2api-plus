@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Wei-Shaw/sub2api/internal/pkg/apicompat"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/apicompat"
 	"github.com/stretchr/testify/require"
 )
 

@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Wei-Shaw/sub2api/internal/pricingmanifest"
+	"github.com/LuckyKuang/sub2api-plus/internal/pricingmanifest"
 )
 
 func main() {

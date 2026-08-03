@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/LuckyKuang/sub2api-plus/internal/config"
 )
 
 type BatchImageWorkerRuntime struct {

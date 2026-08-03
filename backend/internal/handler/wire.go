@@ -1,10 +1,10 @@
 package handler
 
 import (
-	"github.com/Wei-Shaw/sub2api/internal/config"
-	"github.com/Wei-Shaw/sub2api/internal/handler/admin"
-	"github.com/Wei-Shaw/sub2api/internal/securityaudit"
-	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/LuckyKuang/sub2api-plus/internal/config"
+	"github.com/LuckyKuang/sub2api-plus/internal/handler/admin"
+	"github.com/LuckyKuang/sub2api-plus/internal/securityaudit"
+	"github.com/LuckyKuang/sub2api-plus/internal/service"
 
 	"github.com/google/wire"
 )

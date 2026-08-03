@@ -8,8 +8,8 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/Wei-Shaw/sub2api/ent/idempotencyrecord"
-	"github.com/Wei-Shaw/sub2api/ent/predicate"
+	"github.com/LuckyKuang/sub2api-plus/ent/idempotencyrecord"
+	"github.com/LuckyKuang/sub2api-plus/ent/predicate"
 )
 
 // IdempotencyRecordDelete is the builder for deleting a IdempotencyRecord entity.

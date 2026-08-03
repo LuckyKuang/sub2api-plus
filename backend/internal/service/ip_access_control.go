@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
+	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/ip"
 )
 
 var ErrIPAccessRuleNotFound = infraerrors.NotFound("IP_ACCESS_RULE_NOT_FOUND", "IP access rule not found")

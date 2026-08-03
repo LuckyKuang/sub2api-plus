@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/antigravity"
 	"github.com/cespare/xxhash/v2"
 )
 

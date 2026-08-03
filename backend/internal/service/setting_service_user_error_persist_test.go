@@ -6,7 +6,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/LuckyKuang/sub2api-plus/internal/config"
 	"github.com/stretchr/testify/require"
 )
 

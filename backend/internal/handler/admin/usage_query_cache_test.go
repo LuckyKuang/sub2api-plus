@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/pkg/usagestats"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/usagestats"
 	"github.com/stretchr/testify/require"
 )
 

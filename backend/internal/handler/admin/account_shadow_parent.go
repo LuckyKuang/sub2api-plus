@@ -3,7 +3,7 @@ package admin
 import (
 	"context"
 
-	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/LuckyKuang/sub2api-plus/internal/service"
 )
 
 // enrichShadowParentInfo 把母账号的展示信息回填到影子行的 parent_* 字段。

@@ -5,9 +5,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/Wei-Shaw/sub2api/internal/handler"
-	adminhandler "github.com/Wei-Shaw/sub2api/internal/handler/admin"
-	servermiddleware "github.com/Wei-Shaw/sub2api/internal/server/middleware"
+	"github.com/LuckyKuang/sub2api-plus/internal/handler"
+	adminhandler "github.com/LuckyKuang/sub2api-plus/internal/handler/admin"
+	servermiddleware "github.com/LuckyKuang/sub2api-plus/internal/server/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
