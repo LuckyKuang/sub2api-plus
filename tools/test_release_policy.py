@@ -92,6 +92,25 @@ class ReleaseNotesTests(unittest.TestCase):
 
 
 class ReleaseBaselineTests(unittest.TestCase):
+    def test_goreleaser_version_parser_supports_current_and_legacy_output(self) -> None:
+        self.assertEqual(
+            release_preflight.parse_goreleaser_version(
+                "GitVersion:    2.17.1\nGoVersion:     go1.26.5"
+            ),
+            "2.17.1",
+        )
+        self.assertEqual(
+            release_preflight.parse_goreleaser_version(
+                "goreleaser version 2.17.1"
+            ),
+            "2.17.1",
+        )
+
+    def test_goreleaser_version_parser_rejects_go_toolchain_version(self) -> None:
+        self.assertIsNone(
+            release_preflight.parse_goreleaser_version("GoVersion: go1.26.5")
+        )
+
     def test_docker_tag_version_uses_oci_safe_separator(self) -> None:
         self.assertEqual(
             release_preflight.docker_tag_version("v0.1.170+custom.002"),

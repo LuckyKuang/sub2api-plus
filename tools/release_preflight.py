@@ -22,6 +22,10 @@ TAG_RE = release_docs.TAG_RE
 MINIMUM_PYTHON = (3, 10)
 MINIMUM_BASH_MAJOR = 4
 REQUIRED_SUBJECT_PREFIX = "Sub2API Plus "
+GORELEASER_VERSION_RE = re.compile(
+    r"(?:\b(?:git)?version\s*:\s*|\bversion\s+)v?(\d+\.\d+\.\d+)",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -182,6 +186,12 @@ def parse_version(value: str) -> tuple[int, ...] | None:
     return tuple(int(part) for part in match.groups(default="0"))
 
 
+def parse_goreleaser_version(output: str) -> str | None:
+    """Extract GoReleaser's release version, excluding its Go toolchain version."""
+    match = GORELEASER_VERSION_RE.search(output)
+    return match.group(1) if match else None
+
+
 def declared_tool_version(name: str) -> str | None:
     text = ROOT.joinpath(".tool-versions").read_text(encoding="utf-8")
     for raw_line in text.splitlines():
@@ -280,12 +290,7 @@ def check_toolchains() -> tuple[list[str], list[str]]:
     if goreleaser_error:
         errors.append(goreleaser_error)
     elif expected_goreleaser is not None:
-        goreleaser_match = re.search(
-            r"(?:version|v)\s*v?(\d+\.\d+(?:\.\d+)?)",
-            goreleaser_output or "",
-            re.IGNORECASE,
-        )
-        actual_goreleaser = goreleaser_match.group(1) if goreleaser_match else None
+        actual_goreleaser = parse_goreleaser_version(goreleaser_output or "")
         if actual_goreleaser != expected_goreleaser.removeprefix("v"):
             errors.append(
                 f"goreleaser {expected_goreleaser} is required; found "
