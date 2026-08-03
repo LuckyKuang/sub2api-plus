@@ -31,6 +31,9 @@ APPLICATION_MAPPING_RE = re.compile(
 GHCR_IMAGE_RE = re.compile(
     rf"(ghcr\.io/luckykuang/sub2api-plus:)({OCI_TAG_TEXT})()"
 )
+APPLE_CONTAINER_SOURCE_IMAGE_RE = re.compile(
+    rf"(this source revision is tagged sub2api-plus:)({OCI_TAG_TEXT})(; use that value)"
+)
 OCI_EXAMPLE_RE = re.compile(
     rf"(for example `)({OCI_TAG_TEXT})(`)"
 )
@@ -107,6 +110,19 @@ DOCUMENT_RULES = (
                 1,
                 APPLICATION_VERSION_VALUE,
                 "Docker build version",
+            ),
+        ),
+    ),
+    DocumentRule(
+        "deploy/.env.example",
+        0,
+        0,
+        (
+            CurrentValueRule(
+                APPLE_CONTAINER_SOURCE_IMAGE_RE,
+                1,
+                OCI_TAG_VALUE,
+                "Apple Container image example",
             ),
         ),
     ),
