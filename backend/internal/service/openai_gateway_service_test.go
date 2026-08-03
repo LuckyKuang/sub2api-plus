@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -2579,6 +2580,34 @@ func TestOpenAIUpdateCodexUsageSnapshotFromHeaders(t *testing.T) {
 		require.Equal(t, 34.0, updates["codex_7d_used_percent"])
 		require.Equal(t, 600, updates["codex_5h_reset_after_seconds"])
 		require.Equal(t, 86400, updates["codex_7d_reset_after_seconds"])
+	case <-time.After(2 * time.Second):
+		t.Fatal("expected UpdateExtra to be called")
+	}
+}
+
+func TestOpenAIUpdateCodexUsageSnapshotFromResetAtOnlyHeaders(t *testing.T) {
+	repo := &snapshotUpdateAccountRepo{updateExtraCalls: make(chan map[string]any, 1)}
+	svc := &OpenAIGatewayService{
+		accountRepo:           repo,
+		codexSnapshotThrottle: newAccountWriteThrottle(0),
+	}
+	now := time.Now().UTC().Truncate(time.Second)
+	primaryResetAt := now.Add(48 * time.Hour)
+	secondaryResetAt := now.Add(2 * time.Hour)
+	headers := http.Header{}
+	headers.Set("x-codex-primary-window-minutes", "10080")
+	headers.Set("x-codex-primary-reset-at", strconv.FormatInt(primaryResetAt.Unix(), 10))
+	headers.Set("x-codex-secondary-window-minutes", "300")
+	headers.Set("x-codex-secondary-reset-at", strconv.FormatInt(secondaryResetAt.Unix(), 10))
+
+	svc.UpdateCodexUsageSnapshotFromHeaders(context.Background(), 124, headers)
+
+	select {
+	case updates := <-repo.updateExtraCalls:
+		require.InDelta(t, int((2*time.Hour)/time.Second), updates["codex_5h_reset_after_seconds"], 2)
+		require.InDelta(t, int((48*time.Hour)/time.Second), updates["codex_7d_reset_after_seconds"], 2)
+		require.Equal(t, secondaryResetAt.Format(time.RFC3339), updates["codex_5h_reset_at"])
+		require.Equal(t, primaryResetAt.Format(time.RFC3339), updates["codex_7d_reset_at"])
 	case <-time.After(2 * time.Second):
 		t.Fatal("expected UpdateExtra to be called")
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strconv"
 	"testing"
 	"time"
 
@@ -83,28 +84,47 @@ func TestBuildCodexLocalGroupQuotaUsage(t *testing.T) {
 	require.NotNil(t, quota.RateLimit.PrimaryWindow)
 	require.InDelta(t, 25, quota.RateLimit.PrimaryWindow.UsedPercent, 0.001)
 	require.Equal(t, int64(7*24*60*60), quota.RateLimit.PrimaryWindow.LimitWindowSeconds)
+	require.Equal(t, weeklyStart.Add(7*24*time.Hour).Unix(), quota.RateLimit.PrimaryWindow.ResetAt)
 	require.NotNil(t, quota.RateLimit.SecondaryWindow)
 	require.InDelta(t, 100, quota.RateLimit.SecondaryWindow.UsedPercent, 0.001)
 	require.Equal(t, int64(5*60*60), quota.RateLimit.SecondaryWindow.LimitWindowSeconds)
+	require.Equal(t, fiveHourStart.Add(5*time.Hour).Unix(), quota.RateLimit.SecondaryWindow.ResetAt)
 }
 
 func TestApplyCodexLocalQuotaHeadersDoesNotExposeUpstreamValues(t *testing.T) {
+	weeklyLimit := 100.0
 	fiveHourLimit := 20.0
 	now := time.Now()
-	start := now.Add(-time.Hour)
+	weeklyStart := now.Add(-24 * time.Hour)
+	fiveHourStart := now.Add(-time.Hour)
 	dst := http.Header{
 		"X-Codex-Primary-Used-Percent":                 []string{"77"},
+		"X-Codex-Primary-Reset-After-Seconds":          []string{"999"},
+		"X-Codex-Primary-Reset-At":                     []string{"111"},
 		"X-Codex-Secondary-Used-Percent":               []string{"88"},
+		"X-Codex-Secondary-Reset-After-Seconds":        []string{"888"},
+		"X-Codex-Secondary-Reset-At":                   []string{"222"},
 		"X-Codex-Primary-Over-Secondary-Limit-Percent": []string{"66"},
 	}
-	group := &Group{WeeklyLimitUSD: nil, FiveHourLimitUSD: &fiveHourLimit}
-	sub := &UserSubscription{FiveHourUsageUSD: 5, FiveHourWindowStart: &start}
+	group := &Group{WeeklyLimitUSD: &weeklyLimit, FiveHourLimitUSD: &fiveHourLimit}
+	sub := &UserSubscription{
+		WeeklyUsageUSD:      25,
+		WeeklyWindowStart:   &weeklyStart,
+		FiveHourUsageUSD:    5,
+		FiveHourWindowStart: &fiveHourStart,
+	}
 
 	applyCodexLocalQuotaHeaders(dst, group, sub)
 
-	require.Empty(t, dst.Get("X-Codex-Primary-Used-Percent"))
+	require.Equal(t, "25", dst.Get("X-Codex-Primary-Used-Percent"))
+	require.Equal(t, strconv.FormatInt(weeklyStart.Add(7*24*time.Hour).Unix(), 10), dst.Get("X-Codex-Primary-Reset-At"))
+	require.NotEmpty(t, dst.Get("X-Codex-Primary-Reset-After-Seconds"))
+	require.NotEqual(t, "999", dst.Get("X-Codex-Primary-Reset-After-Seconds"))
 	require.Equal(t, "25", dst.Get("X-Codex-Secondary-Used-Percent"))
 	require.Equal(t, "300", dst.Get("X-Codex-Secondary-Window-Minutes"))
+	require.Equal(t, strconv.FormatInt(fiveHourStart.Add(5*time.Hour).Unix(), 10), dst.Get("X-Codex-Secondary-Reset-At"))
+	require.NotEmpty(t, dst.Get("X-Codex-Secondary-Reset-After-Seconds"))
+	require.NotEqual(t, "888", dst.Get("X-Codex-Secondary-Reset-After-Seconds"))
 	require.Empty(t, dst.Get("X-Codex-Primary-Over-Secondary-Limit-Percent"))
 }
 

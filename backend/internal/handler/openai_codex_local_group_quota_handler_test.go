@@ -5,12 +5,16 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
+	coderws "github.com/coder/websocket"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
@@ -58,6 +62,99 @@ func performCodexLocalQuotaRequest(t *testing.T, handler *OpenAIGatewayHandler, 
 	}
 	handler.CodexLocalGroupQuotaUsage(ctx)
 	return recorder
+}
+
+func TestResponsesWebSocketCodexLocalQuotaHeadersInSwitchingProtocolsResponse(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	weeklyLimit := 100.0
+	fiveHourLimit := 20.0
+	now := time.Now().UTC()
+	weeklyStart := now.Add(-time.Hour)
+	fiveHourStart := now.Add(-time.Hour)
+	group := &service.Group{
+		ID:               8,
+		Platform:         service.PlatformOpenAI,
+		SubscriptionType: service.SubscriptionTypeSubscription,
+		WeeklyLimitUSD:   &weeklyLimit,
+		FiveHourLimitUSD: &fiveHourLimit,
+	}
+	apiKey := &service.APIKey{
+		ID:      7,
+		GroupID: &group.ID,
+		Group:   group,
+		User:    &service.User{ID: 1},
+	}
+	subscription := &service.UserSubscription{
+		ID:                  9,
+		UserID:              1,
+		GroupID:             group.ID,
+		WeeklyUsageUSD:      25,
+		WeeklyWindowStart:   &weeklyStart,
+		FiveHourUsageUSD:    5,
+		FiveHourWindowStart: &fiveHourStart,
+	}
+
+	for _, tc := range []struct {
+		name    string
+		enabled bool
+	}{
+		{name: "local view enabled", enabled: true},
+		{name: "local view disabled", enabled: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			handler := newCodexLocalQuotaHandler(tc.enabled)
+			handler.billingCacheService = &service.BillingCacheService{}
+			handler.apiKeyService = &service.APIKeyService{}
+			handler.concurrencyHelper = NewConcurrencyHelper(
+				service.NewConcurrencyService(&concurrencyCacheMock{}),
+				SSEPingFormatNone,
+				time.Second,
+			)
+			attachDisabledIPAccessControlForWebSocketTest(handler)
+
+			router := gin.New()
+			router.Use(func(c *gin.Context) {
+				c.Set(string(middleware2.ContextKeyAPIKey), apiKey)
+				c.Set(string(middleware2.ContextKeyUser), middleware2.AuthSubject{UserID: 1, Concurrency: 1})
+				c.Set(string(middleware2.ContextKeySubscription), subscription)
+				c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), ctxkey.Group, group))
+				c.Next()
+			})
+			router.GET("/openai/v1/responses", handler.ResponsesWebSocket)
+
+			server := httptest.NewServer(router)
+			defer server.Close()
+			dialCtx, cancelDial := context.WithTimeout(context.Background(), 3*time.Second)
+			conn, response, err := coderws.Dial(
+				dialCtx,
+				"ws"+strings.TrimPrefix(server.URL, "http")+"/openai/v1/responses",
+				nil,
+			)
+			cancelDial()
+			require.NoError(t, err)
+			require.NotNil(t, conn)
+			defer func() { _ = conn.CloseNow() }()
+			require.NotNil(t, response)
+			require.Equal(t, http.StatusSwitchingProtocols, response.StatusCode)
+
+			if !tc.enabled {
+				require.Empty(t, response.Header.Get("X-Codex-Primary-Reset-At"))
+				require.Empty(t, response.Header.Get("X-Codex-Primary-Reset-After-Seconds"))
+				require.Empty(t, response.Header.Get("X-Codex-Secondary-Reset-At"))
+				require.Empty(t, response.Header.Get("X-Codex-Secondary-Reset-After-Seconds"))
+				return
+			}
+
+			require.Equal(t, strconv.FormatInt(weeklyStart.Add(7*24*time.Hour).Unix(), 10), response.Header.Get("X-Codex-Primary-Reset-At"))
+			require.Equal(t, strconv.FormatInt(fiveHourStart.Add(5*time.Hour).Unix(), 10), response.Header.Get("X-Codex-Secondary-Reset-At"))
+			primaryResetAfter, err := strconv.ParseInt(response.Header.Get("X-Codex-Primary-Reset-After-Seconds"), 10, 64)
+			require.NoError(t, err)
+			require.InDelta(t, weeklyStart.Add(7*24*time.Hour).Unix()-now.Unix(), primaryResetAfter, 2)
+			secondaryResetAfter, err := strconv.ParseInt(response.Header.Get("X-Codex-Secondary-Reset-After-Seconds"), 10, 64)
+			require.NoError(t, err)
+			require.InDelta(t, fiveHourStart.Add(5*time.Hour).Unix()-now.Unix(), secondaryResetAfter, 2)
+		})
+	}
 }
 
 func TestCodexLocalGroupQuotaUsageReturnsOnlyLocalQuota(t *testing.T) {

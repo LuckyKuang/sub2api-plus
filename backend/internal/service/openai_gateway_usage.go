@@ -657,6 +657,14 @@ func (s *OpenAIGatewayService) resolveOpenAIChannelPricing(ctx context.Context, 
 // ParseCodexRateLimitHeaders extracts Codex usage limits from response headers.
 // Exported for use in ratelimit_service when handling OpenAI 429 responses.
 func ParseCodexRateLimitHeaders(headers http.Header) *OpenAICodexUsageSnapshot {
+	return parseCodexRateLimitHeadersAt(headers, time.Now())
+}
+
+const maxCodexResetDurationSeconds = int64((1<<63 - 1) / int64(time.Second))
+
+// parseCodexRateLimitHeadersAt keeps Reset-At conversion deterministic for tests
+// and ensures every parsed window uses the same request-time reference.
+func parseCodexRateLimitHeadersAt(headers http.Header, now time.Time) *OpenAICodexUsageSnapshot {
 	snapshot := &OpenAICodexUsageSnapshot{}
 	hasData := false
 
@@ -680,12 +688,21 @@ func ParseCodexRateLimitHeaders(headers http.Header) *OpenAICodexUsageSnapshot {
 		return nil
 	}
 
+	// Reset-At is the current Codex protocol. Retain Reset-After-Seconds as a
+	// fallback for older upstreams and malformed absolute timestamps.
+	parseResetAfterSeconds := func(resetAtKey, resetAfterKey string) *int {
+		if resetAfter := codexResetAfterSecondsFromUnixHeader(headers.Get(resetAtKey), now); resetAfter != nil {
+			return resetAfter
+		}
+		return codexResetAfterSecondsFromLegacyHeader(headers.Get(resetAfterKey))
+	}
+
 	// Primary (weekly) limits
 	if v := parseFloat("x-codex-primary-used-percent"); v != nil {
 		snapshot.PrimaryUsedPercent = v
 		hasData = true
 	}
-	if v := parseInt("x-codex-primary-reset-after-seconds"); v != nil {
+	if v := parseResetAfterSeconds("x-codex-primary-reset-at", "x-codex-primary-reset-after-seconds"); v != nil {
 		snapshot.PrimaryResetAfterSeconds = v
 		hasData = true
 	}
@@ -699,7 +716,7 @@ func ParseCodexRateLimitHeaders(headers http.Header) *OpenAICodexUsageSnapshot {
 		snapshot.SecondaryUsedPercent = v
 		hasData = true
 	}
-	if v := parseInt("x-codex-secondary-reset-after-seconds"); v != nil {
+	if v := parseResetAfterSeconds("x-codex-secondary-reset-at", "x-codex-secondary-reset-after-seconds"); v != nil {
 		snapshot.SecondaryResetAfterSeconds = v
 		hasData = true
 	}
@@ -718,8 +735,58 @@ func ParseCodexRateLimitHeaders(headers http.Header) *OpenAICodexUsageSnapshot {
 		return nil
 	}
 
-	snapshot.UpdatedAt = time.Now().Format(time.RFC3339)
+	snapshot.UpdatedAt = now.Format(time.RFC3339)
 	return snapshot
+}
+
+// codexResetAfterSecondsFromUnixHeader converts a Reset-At Unix timestamp to
+// the existing relative snapshot representation. A nil result signals that a
+// legacy Reset-After-Seconds value may be used instead.
+func codexResetAfterSecondsFromUnixHeader(value string, now time.Time) *int {
+	resetAtUnix, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
+	if err != nil {
+		return nil
+	}
+
+	nowUnix := now.Unix()
+	if resetAtUnix <= nowUnix {
+		return codexResetAfterSecondsFromInt64(0)
+	}
+
+	maxInt64 := int64(^uint64(0) >> 1)
+	if nowUnix < 0 && resetAtUnix > maxInt64+nowUnix {
+		return nil
+	}
+	return codexResetAfterSecondsFromInt64(resetAtUnix - nowUnix)
+}
+
+// codexResetAfterSecondsFromLegacyHeader parses the deprecated relative reset
+// header with the same duration and platform-int bounds as Reset-At.
+func codexResetAfterSecondsFromLegacyHeader(value string) *int {
+	resetAfterSeconds, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
+	if err != nil {
+		return nil
+	}
+	return codexResetAfterSecondsFromInt64(resetAfterSeconds)
+}
+
+func codexResetAfterSecondsFromInt64(resetAfterSeconds int64) *int {
+	if resetAfterSeconds < 0 || resetAfterSeconds > maxCodexResetDurationSeconds {
+		return nil
+	}
+	maxInt := int64(^uint(0) >> 1)
+	if resetAfterSeconds > maxInt {
+		return nil
+	}
+	result := int(resetAfterSeconds)
+	return &result
+}
+
+func codexResetDuration(resetAfterSeconds int) (time.Duration, bool) {
+	if resetAfterSeconds < 0 || int64(resetAfterSeconds) > maxCodexResetDurationSeconds {
+		return 0, false
+	}
+	return time.Duration(resetAfterSeconds) * time.Second, true
 }
 
 func codexSnapshotBaseTime(snapshot *OpenAICodexUsageSnapshot, fallback time.Time) time.Time {
@@ -744,7 +811,11 @@ func codexResetAtRFC3339(base time.Time, resetAfterSeconds *int) *string {
 	if sec < 0 {
 		sec = 0
 	}
-	resetAt := base.Add(time.Duration(sec) * time.Second).Format(time.RFC3339)
+	resetDuration, ok := codexResetDuration(sec)
+	if !ok {
+		return nil
+	}
+	resetAt := base.Add(resetDuration).Format(time.RFC3339)
 	return &resetAt
 }
 

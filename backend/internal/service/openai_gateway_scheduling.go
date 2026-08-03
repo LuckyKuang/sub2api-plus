@@ -588,7 +588,11 @@ func openAIQuotaWindowReset(extra map[string]any, window string, now time.Time) 
 			base = updatedAt
 		}
 	}
-	resetAt := base.Add(time.Duration(resetAfter) * time.Second)
+	resetDuration, ok := codexResetDuration(resetAfter)
+	if !ok {
+		return false
+	}
+	resetAt := base.Add(resetDuration)
 	return !now.Before(resetAt)
 }
 

@@ -4,6 +4,37 @@ Sub2API Plus accepts OpenAI-compatible Responses requests over HTTP and
 client-facing WebSocket ingress. Account routing can use an upstream WebSocket
 or bridge the client WebSocket to an HTTP/SSE upstream.
 
+## Codex Rate-Limit Response Headers
+
+For Codex Responses requests, successful HTTP and SSE responses can include
+the following rate-limit fields for both `Primary` and `Secondary` windows.
+WebSocket upgrade responses include the same fields when the local Codex
+subscription quota view is enabled:
+
+- `X-Codex-*-Used-Percent` is the consumed percentage.
+- `X-Codex-*-Window-Minutes` is the window length in minutes.
+- `X-Codex-*-Reset-At` is the next reset time as Unix seconds.
+- `X-Codex-*-Reset-After-Seconds` remains alongside `Reset-At` for older
+  clients that only understand a relative countdown.
+
+When local Codex subscription quota is enabled, `Primary` represents the local
+7-day window and `Secondary` represents the local rolling 5-hour window. The
+gateway clears all upstream rate-limit fields before writing the local values,
+so one response never mixes upstream reset times with local percentages or
+window sizes. With the local view disabled, eligible upstream headers are
+passed through unchanged for HTTP and SSE responses.
+
+A client WebSocket `101` response is committed before the gateway connects to
+the selected upstream. The gateway therefore writes only the local quota view
+known before the upgrade. When that view is disabled, it does not inject Codex
+quota headers into the `101` response and cannot pass through headers from a
+later upstream handshake. HTTP and SSE headers are finalized before their
+response bodies are written.
+
+This response-header compatibility does not make Codex App API-key calls to
+`account/rateLimits/read` available; that App Server authentication behavior is
+outside this gateway's request path.
+
 ## WebSocket Ingress Limits
 
 `gateway.openai_ws` bounds the lifetime and aggregate count of client-facing

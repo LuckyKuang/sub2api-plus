@@ -5,6 +5,7 @@ package service
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"testing"
 	"time"
 
@@ -70,6 +71,54 @@ func TestCalculateOpenAI429ResetTime_5hExhausted(t *testing.T) {
 
 	if resetAt.Before(minExpected) || resetAt.After(maxExpected) {
 		t.Errorf("resetAt %v not in expected range [%v, %v]", resetAt, minExpected, maxExpected)
+	}
+}
+
+func TestCalculateOpenAI429ResetTime_ResetAtOnly(t *testing.T) {
+	svc := &RateLimitService{}
+	now := time.Now()
+	headers := http.Header{}
+	headers.Set("x-codex-primary-used-percent", "100")
+	headers.Set("x-codex-primary-window-minutes", "10080")
+	headers.Set("x-codex-primary-reset-at", strconv.FormatInt(now.Add(2*time.Hour).Unix(), 10))
+	headers.Set("x-codex-secondary-used-percent", "20")
+	headers.Set("x-codex-secondary-window-minutes", "300")
+	headers.Set("x-codex-secondary-reset-at", strconv.FormatInt(now.Add(time.Hour).Unix(), 10))
+
+	resetAt := svc.calculateOpenAI429ResetTime(headers)
+	if resetAt == nil {
+		t.Fatal("expected a reset time from Reset-At headers")
+	}
+	if delta := resetAt.Sub(now.Add(2 * time.Hour)); delta < -2*time.Second || delta > 2*time.Second {
+		t.Fatalf("resetAt = %v, want approximately %v", resetAt, now.Add(2*time.Hour))
+	}
+}
+
+func TestCalculateOpenAI429ResetTime_DurationOverflowingResetAtFallsBack(t *testing.T) {
+	svc := &RateLimitService{}
+	headers := http.Header{}
+	headers.Set("x-codex-primary-used-percent", "100")
+	headers.Set("x-codex-primary-window-minutes", "10080")
+	headers.Set("x-codex-primary-reset-at", "9223372036854775807")
+	headers.Set("x-codex-primary-reset-after-seconds", "3600")
+
+	before := time.Now()
+	resetAt := svc.calculateOpenAI429ResetTime(headers)
+	after := time.Now()
+	require.NotNil(t, resetAt)
+	require.False(t, resetAt.Before(before.Add(time.Hour)))
+	require.False(t, resetAt.After(after.Add(time.Hour)))
+}
+
+func TestCalculateOpenAI429ResetTime_DurationOverflowingLegacyResetIgnored(t *testing.T) {
+	svc := &RateLimitService{}
+	headers := http.Header{}
+	headers.Set("x-codex-primary-used-percent", "100")
+	headers.Set("x-codex-primary-window-minutes", "10080")
+	headers.Set("x-codex-primary-reset-after-seconds", "9223372037")
+
+	if resetAt := svc.calculateOpenAI429ResetTime(headers); resetAt != nil {
+		t.Fatalf("expected no retry timestamp from overflowing legacy reset, got %v", *resetAt)
 	}
 }
 

@@ -1113,26 +1113,38 @@ func calculateOpenAI429ResetTime(headers http.Header) *time.Time {
 
 	// 优先使用被触发限制的重置时间
 	if is7dExhausted && normalized.Reset7dSeconds != nil {
-		resetAt := now.Add(time.Duration(*normalized.Reset7dSeconds) * time.Second)
-		slog.Info("openai_429_7d_limit_exhausted", "reset_after_seconds", *normalized.Reset7dSeconds, "reset_at", resetAt)
-		return &resetAt
+		if resetDuration, ok := codexResetDuration(*normalized.Reset7dSeconds); ok {
+			resetAt := now.Add(resetDuration)
+			slog.Info("openai_429_7d_limit_exhausted", "reset_after_seconds", *normalized.Reset7dSeconds, "reset_at", resetAt)
+			return &resetAt
+		}
 	}
 	if is5hExhausted && normalized.Reset5hSeconds != nil {
-		resetAt := now.Add(time.Duration(*normalized.Reset5hSeconds) * time.Second)
-		slog.Info("openai_429_5h_limit_exhausted", "reset_after_seconds", *normalized.Reset5hSeconds, "reset_at", resetAt)
-		return &resetAt
+		if resetDuration, ok := codexResetDuration(*normalized.Reset5hSeconds); ok {
+			resetAt := now.Add(resetDuration)
+			slog.Info("openai_429_5h_limit_exhausted", "reset_after_seconds", *normalized.Reset5hSeconds, "reset_at", resetAt)
+			return &resetAt
+		}
 	}
 
 	// 都未达到100%但收到429，使用较长的重置时间
 	var maxResetSecs int
 	if normalized.Reset7dSeconds != nil && *normalized.Reset7dSeconds > maxResetSecs {
-		maxResetSecs = *normalized.Reset7dSeconds
+		if _, ok := codexResetDuration(*normalized.Reset7dSeconds); ok {
+			maxResetSecs = *normalized.Reset7dSeconds
+		}
 	}
 	if normalized.Reset5hSeconds != nil && *normalized.Reset5hSeconds > maxResetSecs {
-		maxResetSecs = *normalized.Reset5hSeconds
+		if _, ok := codexResetDuration(*normalized.Reset5hSeconds); ok {
+			maxResetSecs = *normalized.Reset5hSeconds
+		}
 	}
 	if maxResetSecs > 0 {
-		resetAt := now.Add(time.Duration(maxResetSecs) * time.Second)
+		resetDuration, ok := codexResetDuration(maxResetSecs)
+		if !ok {
+			return nil
+		}
+		resetAt := now.Add(resetDuration)
 		slog.Info("openai_429_using_max_reset", "max_reset_seconds", maxResetSecs, "reset_at", resetAt)
 		return &resetAt
 	}

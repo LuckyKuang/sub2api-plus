@@ -1,6 +1,8 @@
 package service
 
 import (
+	"net/http"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -68,6 +70,118 @@ func TestCodexResetAtRFC3339(t *testing.T) {
 			t.Fatalf("got %s, want %s", *got, "2026-02-16T10:00:00Z")
 		}
 	})
+
+	t.Run("duration overflow returns nil", func(t *testing.T) {
+		if strconv.IntSize < 64 {
+			t.Skip("test requires a 64-bit int")
+		}
+		sec := int(maxCodexResetDurationSeconds + 1)
+		if got := codexResetAtRFC3339(base, &sec); got != nil {
+			t.Fatalf("expected nil, got %v", *got)
+		}
+	})
+}
+
+func TestParseCodexRateLimitHeadersResetAtCompatibility(t *testing.T) {
+	now := time.Date(2026, 7, 31, 8, 0, 0, 0, time.UTC)
+	resetIn90Seconds := strconv.FormatInt(now.Add(90*time.Second).Unix(), 10)
+	pastReset := strconv.FormatInt(now.Add(-10*time.Second).Unix(), 10)
+
+	tests := []struct {
+		name    string
+		resetAt string
+		legacy  string
+		want    int
+	}{
+		{name: "absolute timestamp only", resetAt: resetIn90Seconds, want: 90},
+		{name: "legacy relative seconds only", legacy: "45", want: 45},
+		{name: "absolute timestamp wins conflicts", resetAt: resetIn90Seconds, legacy: "45", want: 90},
+		{name: "malformed absolute falls back", resetAt: "not-a-timestamp", legacy: "45", want: 45},
+		{name: "past absolute timestamp becomes zero", resetAt: pastReset, legacy: "45", want: 0},
+		{name: "overflowing absolute falls back", resetAt: "9223372036854775808", legacy: "45", want: 45},
+		{name: "duration-overflowing absolute falls back", resetAt: "9223372036854775807", legacy: "45", want: 45},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			headers := http.Header{}
+			headers.Set("x-codex-primary-used-percent", "12")
+			if tt.resetAt != "" {
+				headers.Set("x-codex-primary-reset-at", tt.resetAt)
+			}
+			if tt.legacy != "" {
+				headers.Set("x-codex-primary-reset-after-seconds", tt.legacy)
+			}
+
+			snapshot := parseCodexRateLimitHeadersAt(headers, now)
+			if snapshot == nil || snapshot.PrimaryResetAfterSeconds == nil {
+				t.Fatal("expected primary reset data")
+			}
+			if got := *snapshot.PrimaryResetAfterSeconds; got != tt.want {
+				t.Fatalf("reset seconds = %d, want %d", got, tt.want)
+			}
+			if snapshot.UpdatedAt != now.Format(time.RFC3339) {
+				t.Fatalf("updated_at = %s, want %s", snapshot.UpdatedAt, now.Format(time.RFC3339))
+			}
+		})
+	}
+}
+
+func TestParseCodexRateLimitHeadersRejectsDurationOverflowingLegacyReset(t *testing.T) {
+	now := time.Date(2026, 7, 31, 8, 0, 0, 0, time.UTC)
+
+	for _, tt := range []struct {
+		name    string
+		resetAt string
+		legacy  string
+	}{
+		{name: "legacy only", legacy: "9223372037"},
+		{name: "malformed absolute and legacy", resetAt: "not-a-timestamp", legacy: "9223372037"},
+		{name: "duration-overflowing absolute and legacy", resetAt: "9223372036854775807", legacy: "9223372037"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			headers := http.Header{}
+			headers.Set("x-codex-primary-used-percent", "12")
+			if tt.resetAt != "" {
+				headers.Set("x-codex-primary-reset-at", tt.resetAt)
+			}
+			headers.Set("x-codex-primary-reset-after-seconds", tt.legacy)
+
+			snapshot := parseCodexRateLimitHeadersAt(headers, now)
+			if snapshot == nil {
+				t.Fatal("expected usage data from the used-percent header")
+			}
+			if snapshot.PrimaryResetAfterSeconds != nil {
+				t.Fatalf("expected overflowing legacy reset to be ignored, got %d", *snapshot.PrimaryResetAfterSeconds)
+			}
+		})
+	}
+}
+
+func TestParseCodexRateLimitHeadersResetAtNormalizesReversedWindows(t *testing.T) {
+	now := time.Date(2026, 7, 31, 8, 0, 0, 0, time.UTC)
+	headers := http.Header{}
+	headers.Set("x-codex-primary-used-percent", "100")
+	headers.Set("x-codex-primary-window-minutes", "300")
+	headers.Set("x-codex-primary-reset-at", strconv.FormatInt(now.Add(time.Hour).Unix(), 10))
+	headers.Set("x-codex-secondary-used-percent", "50")
+	headers.Set("x-codex-secondary-window-minutes", "10080")
+	headers.Set("x-codex-secondary-reset-at", strconv.FormatInt(now.Add(24*time.Hour).Unix(), 10))
+
+	snapshot := parseCodexRateLimitHeadersAt(headers, now)
+	if snapshot == nil {
+		t.Fatal("expected snapshot")
+	}
+	normalized := snapshot.Normalize()
+	if normalized == nil || normalized.Reset5hSeconds == nil || normalized.Reset7dSeconds == nil {
+		t.Fatal("expected normalized reset windows")
+	}
+	if got := *normalized.Reset5hSeconds; got != 3600 {
+		t.Fatalf("5h reset seconds = %d, want 3600", got)
+	}
+	if got := *normalized.Reset7dSeconds; got != 86400 {
+		t.Fatalf("7d reset seconds = %d, want 86400", got)
+	}
 }
 
 func TestBuildCodexUsageExtraUpdates_UsesSnapshotUpdatedAt(t *testing.T) {

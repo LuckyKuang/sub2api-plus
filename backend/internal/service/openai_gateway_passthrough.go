@@ -1357,9 +1357,11 @@ func writeOpenAIPassthroughResponseHeaders(dst http.Header, src http.Header, fil
 	for _, rawKey := range []string{
 		"x-codex-primary-used-percent",
 		"x-codex-primary-reset-after-seconds",
+		"x-codex-primary-reset-at",
 		"x-codex-primary-window-minutes",
 		"x-codex-secondary-used-percent",
 		"x-codex-secondary-reset-after-seconds",
+		"x-codex-secondary-reset-at",
 		"x-codex-secondary-window-minutes",
 		"x-codex-primary-over-secondary-limit-percent",
 	} {
@@ -1429,9 +1431,11 @@ func applyCodexLocalQuotaHeaders(dst http.Header, group *Group, sub *UserSubscri
 	for _, key := range []string{
 		"X-Codex-Primary-Used-Percent",
 		"X-Codex-Primary-Reset-After-Seconds",
+		"X-Codex-Primary-Reset-At",
 		"X-Codex-Primary-Window-Minutes",
 		"X-Codex-Secondary-Used-Percent",
 		"X-Codex-Secondary-Reset-After-Seconds",
+		"X-Codex-Secondary-Reset-At",
 		"X-Codex-Secondary-Window-Minutes",
 		"X-Codex-Primary-Over-Secondary-Limit-Percent",
 	} {
@@ -1444,11 +1448,13 @@ func applyCodexLocalQuotaHeaders(dst http.Header, group *Group, sub *UserSubscri
 	if primary := quota.RateLimit.PrimaryWindow; primary != nil {
 		dst.Set("X-Codex-Primary-Used-Percent", strconv.FormatFloat(primary.UsedPercent, 'f', -1, 64))
 		dst.Set("X-Codex-Primary-Reset-After-Seconds", strconv.FormatInt(primary.ResetAfterSeconds, 10))
+		dst.Set("X-Codex-Primary-Reset-At", strconv.FormatInt(primary.ResetAt, 10))
 		dst.Set("X-Codex-Primary-Window-Minutes", strconv.FormatInt(primary.LimitWindowSeconds/60, 10))
 	}
 	if secondary := quota.RateLimit.SecondaryWindow; secondary != nil {
 		dst.Set("X-Codex-Secondary-Used-Percent", strconv.FormatFloat(secondary.UsedPercent, 'f', -1, 64))
 		dst.Set("X-Codex-Secondary-Reset-After-Seconds", strconv.FormatInt(secondary.ResetAfterSeconds, 10))
+		dst.Set("X-Codex-Secondary-Reset-At", strconv.FormatInt(secondary.ResetAt, 10))
 		dst.Set("X-Codex-Secondary-Window-Minutes", strconv.FormatInt(secondary.LimitWindowSeconds/60, 10))
 	}
 }

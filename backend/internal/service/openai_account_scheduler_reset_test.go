@@ -123,6 +123,18 @@ func TestOpenAIQuotaHeadroomFactor_PrimaryResetExpiredIsNeutral(t *testing.T) {
 	require.Equal(t, openAIQuotaHeadroomNeutralFactor, openAIQuotaHeadroomFactor(account, now))
 }
 
+func TestOpenAIQuotaWindowReset_IgnoresDurationOverflowingLegacyReset(t *testing.T) {
+	now := time.Date(2026, 3, 11, 10, 0, 0, 0, time.UTC)
+	extra := map[string]any{
+		"codex_5h_reset_after_seconds": "9223372037",
+		"codex_usage_updated_at":       now.Add(-time.Hour).Format(time.RFC3339),
+	}
+
+	if openAIQuotaWindowReset(extra, "5h", now) {
+		t.Fatal("overflowing legacy reset must not be treated as an expired quota window")
+	}
+}
+
 func TestOpenAIQuotaHeadroomFactor_SecondaryLowHeadroomDiscountsPrimary(t *testing.T) {
 	now := time.Date(2026, 3, 11, 10, 0, 0, 0, time.UTC)
 	account := &Account{

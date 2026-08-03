@@ -938,6 +938,8 @@ func TestOpenAIGatewayService_OAuthPassthrough_ResponseHeadersAllowXCodex(t *tes
 	headers.Set("x-codex-primary-window-minutes", "300")
 	headers.Set("x-codex-secondary-window-minutes", "10080")
 	headers.Set("x-codex-primary-reset-after-seconds", "1")
+	headers["X-CODEX-PRIMARY-RESET-AT"] = []string{"1780000001"}
+	headers["x-Codex-Secondary-Reset-At"] = []string{"1780003601"}
 
 	resp := &http.Response{
 		StatusCode: http.StatusOK,
@@ -976,6 +978,8 @@ func TestOpenAIGatewayService_OAuthPassthrough_ResponseHeadersAllowXCodex(t *tes
 
 	require.Equal(t, "12", rec.Header().Get("x-codex-primary-used-percent"))
 	require.Equal(t, "34", rec.Header().Get("x-codex-secondary-used-percent"))
+	require.Equal(t, "1780000001", rec.Header().Get("x-codex-primary-reset-at"))
+	require.Equal(t, "1780003601", rec.Header().Get("x-codex-secondary-reset-at"))
 }
 
 func TestOpenAIGatewayService_OAuthPassthrough_UpstreamErrorIncludesPassthroughFlag(t *testing.T) {

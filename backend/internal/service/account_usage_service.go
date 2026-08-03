@@ -1420,11 +1420,13 @@ func buildCodexUsageProgressFromExtra(extra map[string]any, window string, now t
 					base = updatedAt
 				}
 			}
-			resetAt := base.Add(time.Duration(resetAfterSeconds) * time.Second)
-			progress.ResetsAt = &resetAt
-			progress.RemainingSeconds = int(time.Until(resetAt).Seconds())
-			if progress.RemainingSeconds < 0 {
-				progress.RemainingSeconds = 0
+			if resetDuration, ok := codexResetDuration(resetAfterSeconds); ok {
+				resetAt := base.Add(resetDuration)
+				progress.ResetsAt = &resetAt
+				progress.RemainingSeconds = int(time.Until(resetAt).Seconds())
+				if progress.RemainingSeconds < 0 {
+					progress.RemainingSeconds = 0
+				}
 			}
 		}
 	}

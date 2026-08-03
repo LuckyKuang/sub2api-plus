@@ -256,3 +256,23 @@ func TestBuildCodexUsageProgressFromExtra_ZerosExpiredWindow(t *testing.T) {
 		}
 	})
 }
+
+func TestBuildCodexUsageProgressFromExtra_IgnoresDurationOverflowingLegacyReset(t *testing.T) {
+	now := time.Date(2026, 3, 16, 12, 0, 0, 0, time.UTC)
+	extra := map[string]any{
+		"codex_5h_used_percent":        42.0,
+		"codex_5h_reset_after_seconds": "9223372037",
+		"codex_usage_updated_at":       now.Add(-time.Hour).Format(time.RFC3339),
+	}
+
+	progress := buildCodexUsageProgressFromExtra(extra, "5h", now)
+	if progress == nil {
+		t.Fatal("expected non-nil progress")
+	}
+	if progress.ResetsAt != nil {
+		t.Fatalf("expected no reset timestamp from overflowing legacy value, got %v", *progress.ResetsAt)
+	}
+	if progress.Utilization != 42.0 {
+		t.Fatalf("expected utilization to remain visible, got %v", progress.Utilization)
+	}
+}
