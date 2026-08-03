@@ -162,9 +162,11 @@ func (s *UpdateService) CheckUpdate(ctx context.Context, force bool) (*UpdateInf
 // PerformUpdate downloads and applies the update
 // Uses atomic file replacement pattern for safe in-place updates
 func (s *UpdateService) PerformUpdate(ctx context.Context) error {
-	info, err := s.CheckUpdate(ctx, true)
+	// An update must use fresh release metadata. Unlike the version display,
+	// do not turn a GitHub or proxy failure into an "already up to date" result.
+	info, err := s.fetchLatestRelease(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to check latest release: %w", err)
 	}
 
 	if !info.HasUpdate {
@@ -229,17 +231,9 @@ func (s *UpdateService) applyReleaseAssets(ctx context.Context, version string, 
 	}
 	defer func() { _ = os.RemoveAll(tempDir) }()
 
-	// Download archive
-	archivePath := filepath.Join(tempDir, filepath.Base(downloadURL))
-	if err := s.downloadFile(ctx, downloadURL, archivePath); err != nil {
-		return fmt.Errorf("download failed: %w", err)
-	}
-
-	// Verify checksum if available
-	if checksumURL != "" {
-		if err := s.verifyChecksum(ctx, archivePath, checksumURL); err != nil {
-			return fmt.Errorf("checksum verification failed: %w", err)
-		}
+	archivePath, err := s.downloadAndVerifyArchive(ctx, tempDir, archiveName, downloadURL, checksumURL)
+	if err != nil {
+		return err
 	}
 
 	// Extract binary from archive
@@ -445,6 +439,23 @@ func (s *UpdateService) fetchLatestRelease(ctx context.Context) (*UpdateInfo, er
 
 func (s *UpdateService) downloadFile(ctx context.Context, downloadURL, dest string) error {
 	return s.githubClient.DownloadFile(ctx, downloadURL, dest, maxDownloadSize)
+}
+
+func (s *UpdateService) downloadAndVerifyArchive(ctx context.Context, tempDir, archiveName, downloadURL, checksumURL string) (string, error) {
+	// GitHub encodes '+' in browser download URLs as '%2B'. Checksums use the
+	// release asset name, so the local filename must come from archiveName.
+	archivePath := filepath.Join(tempDir, archiveName)
+	if err := s.downloadFile(ctx, downloadURL, archivePath); err != nil {
+		return "", fmt.Errorf("download failed: %w", err)
+	}
+
+	if checksumURL != "" {
+		if err := s.verifyChecksum(ctx, archivePath, checksumURL); err != nil {
+			return "", fmt.Errorf("checksum verification failed: %w", err)
+		}
+	}
+
+	return archivePath, nil
 }
 
 func (s *UpdateService) getArchiveName(version string) string {
