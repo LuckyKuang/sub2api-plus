@@ -318,6 +318,8 @@ func TestOpenAIGatewayServiceRecordUsage_ZeroUsageStillWritesUsageLog(t *testing
 	require.Zero(t, usageRepo.lastLog.CacheCreationTokens)
 	require.Zero(t, usageRepo.lastLog.CacheReadTokens)
 	require.Zero(t, usageRepo.lastLog.ImageOutputTokens)
+	require.NotNil(t, usageRepo.lastLog.IsComplete)
+	require.True(t, *usageRepo.lastLog.IsComplete)
 	require.Zero(t, usageRepo.lastLog.ImageCount)
 	require.Zero(t, usageRepo.lastLog.InputCost)
 	require.Zero(t, usageRepo.lastLog.OutputCost)
@@ -340,12 +342,14 @@ func TestOpenAIGatewayServiceRecordUsage_MissingPricingRecordsZeroCostUsageLog(t
 	quotaSvc := &openAIRecordUsageAPIKeyQuotaStub{}
 	svc := newOpenAIRecordUsageServiceWithBillingRepoForTest(usageRepo, billingRepo, userRepo, subRepo, nil)
 
+	incomplete := false
 	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
 		Result: &OpenAIForwardResult{
 			RequestID: "resp_missing_pricing",
 			Usage: OpenAIUsage{
-				InputTokens:  1200,
-				OutputTokens: 300,
+				InputTokens:       1200,
+				OutputTokens:      300,
+				AudioOutputTokens: 42,
 			},
 			Model:    "pricing-missing-test-model",
 			Duration: time.Second,
@@ -354,6 +358,7 @@ func TestOpenAIGatewayServiceRecordUsage_MissingPricingRecordsZeroCostUsageLog(t
 		User:          &User{ID: 2002},
 		Account:       &Account{ID: 3002, Type: AccountTypeAPIKey},
 		APIKeyService: quotaSvc,
+		IsComplete:    &incomplete,
 	})
 
 	require.NoError(t, err)
@@ -370,6 +375,9 @@ func TestOpenAIGatewayServiceRecordUsage_MissingPricingRecordsZeroCostUsageLog(t
 	require.Equal(t, "pricing-missing-test-model", usageRepo.lastLog.RequestedModel)
 	require.Equal(t, 1200, usageRepo.lastLog.InputTokens)
 	require.Equal(t, 300, usageRepo.lastLog.OutputTokens)
+	require.Equal(t, 42, usageRepo.lastLog.AudioOutputTokens)
+	require.NotNil(t, usageRepo.lastLog.IsComplete)
+	require.False(t, *usageRepo.lastLog.IsComplete)
 	require.Zero(t, usageRepo.lastLog.TotalCost)
 	require.Zero(t, usageRepo.lastLog.ActualCost)
 	require.NotNil(t, usageRepo.lastLog.BillingMode)

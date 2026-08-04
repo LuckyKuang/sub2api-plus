@@ -51,9 +51,13 @@ const messages: Record<string, string> = {
 	'usage.latencyFirstToken': 'First Token',
 	'usage.latencyLegacyFirstEvent': 'First Event (Legacy)',
 	'usage.latencyFirstOutput': 'First Output',
-	'usage.latencyFirstImage': 'First Image',
-	'usage.latencyFirstAudio': 'First Audio',
+	'usage.latencyFirstImage': 'First Image Data',
+	'usage.latencyFirstAudio': 'First Audio Data',
+	'usage.latencyFirstReasoning': 'First Reasoning',
+	'usage.latencyFirstTool': 'First Tool Output',
 	'usage.latencyDuration': 'Total',
+	'usage.latencyTps': 'TPS',
+	'usage.latencyTpsHint': 'Estimated average output rate',
   'admin.usage.billingModeToken': 'Token',
   'admin.usage.billingModePerRequest': 'Per request',
   'admin.usage.billingModeImage': 'Image',
@@ -98,6 +102,9 @@ const baseImageRow = {
   cache_read_cost: 0,
   input_tokens: 0,
   output_tokens: 0,
+  image_output_tokens: 0,
+  audio_output_tokens: 0,
+  is_complete: true,
   cache_creation_tokens: 0,
   cache_read_tokens: 0,
   cache_creation_5m_tokens: 0,
@@ -127,69 +134,285 @@ describe('admin UsageTable tooltip', () => {
     } as DOMRect)
   })
 
-	it('renders modality-aware first latency labels without replacing text TTFT', () => {
-		const rows = [
-			{
-				...baseImageRow,
-				request_id: 'req-latency-token',
-				first_token_ms: 120,
-				first_output_ms: 40,
-				first_output_kind: 'image',
-				duration_ms: 500,
-			},
-			{
-				...baseImageRow,
-				request_id: 'req-latency-image',
-				first_token_ms: null,
-				first_output_ms: 75,
-				first_output_kind: 'image',
-				duration_ms: 600,
-			},
-			{
-				...baseImageRow,
-				request_id: 'req-latency-audio',
-				first_token_ms: null,
-				first_output_ms: 80,
-				first_output_kind: 'audio',
-				duration_ms: 700,
-			},
-			{
-				...baseImageRow,
-				request_id: 'req-latency-aggregate',
-				first_token_ms: null,
-				first_output_ms: 90,
-				first_output_kind: 'text',
-				duration_ms: 800,
-			},
-			{
-				...baseImageRow,
-				request_id: 'req-latency-legacy',
-				first_token_ms: 55,
-				first_output_ms: null,
-				first_output_kind: null,
-				duration_ms: 900,
-			},
-		]
+  it('renders modality-aware first latency labels and exposes a later token timestamp', () => {
+    const rows = [
+      {
+        ...baseImageRow,
+        request_id: 'req-latency-token',
+        first_token_ms: 120,
+        first_output_ms: 40,
+        first_output_kind: 'image',
+        duration_ms: 500,
+      },
+      {
+        ...baseImageRow,
+        request_id: 'req-latency-image',
+        first_token_ms: null,
+        first_output_ms: 75,
+        first_output_kind: 'image',
+        duration_ms: 600,
+      },
+      {
+        ...baseImageRow,
+        request_id: 'req-latency-audio',
+        first_token_ms: null,
+        first_output_ms: 80,
+        first_output_kind: 'audio',
+        duration_ms: 700,
+      },
+      {
+        ...baseImageRow,
+        request_id: 'req-latency-reasoning',
+        first_token_ms: 85,
+        first_output_ms: 85,
+        first_output_kind: 'reasoning',
+        duration_ms: 750,
+      },
+      {
+        ...baseImageRow,
+        request_id: 'req-latency-tool',
+        first_token_ms: 88,
+        first_output_ms: 88,
+        first_output_kind: 'tool',
+        duration_ms: 760,
+      },
+      {
+        ...baseImageRow,
+        request_id: 'req-latency-text-metadata',
+        first_token_ms: 120,
+        first_output_ms: 40,
+        first_output_kind: 'text',
+        duration_ms: 780,
+      },
+      {
+        ...baseImageRow,
+        request_id: 'req-latency-aggregate',
+        first_token_ms: null,
+        first_output_ms: 90,
+        first_output_kind: 'text',
+        duration_ms: 800,
+      },
+      {
+        ...baseImageRow,
+        request_id: 'req-latency-legacy',
+        first_token_ms: 55,
+        first_output_ms: null,
+        first_output_kind: null,
+        duration_ms: 900,
+      },
+    ]
 
-		const wrapper = mount(UsageTable, {
-			props: { data: rows, loading: false, columns: [] },
-			global: {
-				stubs: {
-					DataTable: DataTableStub,
-					EmptyState: true,
-					Icon: true,
-					Teleport: true,
-				},
-			},
-		})
+    const wrapper = mount(UsageTable, {
+      props: { data: rows, loading: false, columns: [] },
+      global: {
+        stubs: {
+          DataTable: DataTableStub,
+          EmptyState: true,
+          Icon: true,
+          Teleport: true,
+        },
+      },
+    })
 
-		const text = wrapper.text()
-		expect(text).toContain('First Image40ms')
-		expect(text).toContain('First Image75ms')
-		expect(text).toContain('First Audio80ms')
-		expect(text).toContain('First Output90ms')
-		expect(text).toContain('First Event (Legacy)55ms')
-	})
+    const text = wrapper.text()
+    expect(text).toContain('First Image Data40msFirst Token120ms')
+    expect(text).toContain('First Image Data75ms')
+    expect(text).toContain('First Audio Data80ms')
+    expect(text).toContain('First Reasoning85ms')
+    expect(text).toContain('First Tool Output88ms')
+    expect(text).toContain('First Output40msFirst Token120ms')
+    expect(text).toContain('First Output90ms')
+    expect(text).toContain('First Event (Legacy)55ms')
+    expect(wrapper.findAll('[data-testid="first-latency-value"]')[0].classes()).toContain('text-gray-600')
+  })
+
+  it('shows estimated TPS only for new-semantics stream and websocket rows', () => {
+    const rows = [
+      {
+        ...baseImageRow,
+        request_id: 'req-tps-stream',
+        request_type: 'stream',
+        stream: true,
+        billing_mode: 'token',
+        image_count: 0,
+        output_tokens: 375,
+        image_output_tokens: 0,
+        first_token_ms: 721,
+        first_output_ms: 721,
+        first_output_kind: 'text',
+        duration_ms: 10_860,
+      },
+      {
+        ...baseImageRow,
+        request_id: 'req-tps-websocket',
+        request_type: 'ws_v2',
+        stream: true,
+        billing_mode: 'token',
+        image_count: 0,
+        output_tokens: 50,
+        image_output_tokens: 0,
+        first_token_ms: 1_000,
+        first_output_ms: 1_000,
+        first_output_kind: 'text',
+        duration_ms: 2_000,
+      },
+      {
+        ...baseImageRow,
+        request_id: 'req-tps-mixed-image',
+        request_type: 'stream',
+        stream: true,
+        billing_mode: 'token',
+        image_count: 1,
+        output_tokens: 105,
+        image_output_tokens: 5,
+        first_token_ms: 100,
+        first_output_ms: 40,
+        first_output_kind: 'image',
+        duration_ms: 1_100,
+      },
+      {
+        ...baseImageRow,
+        request_id: 'req-tps-mixed-audio',
+        request_type: 'stream',
+        stream: true,
+        billing_mode: 'token',
+        image_count: 0,
+        output_tokens: 150,
+        audio_output_tokens: 50,
+        first_token_ms: 100,
+        first_output_ms: 20,
+        first_output_kind: 'audio',
+        duration_ms: 1_100,
+      },
+      {
+        ...baseImageRow,
+        request_id: 'req-tps-incomplete',
+        request_type: 'stream',
+        stream: true,
+        output_tokens: 100,
+        first_token_ms: 100,
+        first_output_ms: 100,
+        first_output_kind: 'text',
+        is_complete: false,
+        duration_ms: 1_100,
+      },
+      {
+        ...baseImageRow,
+        request_id: 'req-tps-unknown-completion',
+        request_type: 'stream',
+        stream: true,
+        output_tokens: 100,
+        first_token_ms: 100,
+        first_output_ms: 100,
+        first_output_kind: 'text',
+        is_complete: null,
+        duration_ms: 1_100,
+      },
+      {
+        ...baseImageRow,
+        request_id: 'req-tps-sync',
+        request_type: 'sync',
+        stream: false,
+        output_tokens: 100,
+        first_token_ms: 100,
+        first_output_ms: 100,
+        first_output_kind: 'text',
+        duration_ms: 1_000,
+      },
+      {
+        ...baseImageRow,
+        request_id: 'req-tps-legacy',
+        request_type: 'stream',
+        stream: true,
+        output_tokens: 100,
+        first_token_ms: 100,
+        first_output_ms: null,
+        first_output_kind: null,
+        duration_ms: 1_000,
+      },
+      {
+        ...baseImageRow,
+        request_id: 'req-tps-invalid-duration',
+        request_type: 'stream',
+        stream: true,
+        output_tokens: 100,
+        first_token_ms: 100,
+        first_output_ms: 100,
+        first_output_kind: 'text',
+        duration_ms: 100,
+      },
+      {
+        ...baseImageRow,
+        request_id: 'req-tps-image-only',
+        request_type: 'stream',
+        stream: true,
+        output_tokens: 5,
+        image_output_tokens: 5,
+        first_token_ms: 100,
+        first_output_ms: 40,
+        first_output_kind: 'image',
+        duration_ms: 1_000,
+      },
+      {
+        ...baseImageRow,
+        request_id: 'req-tps-missing-duration',
+        request_type: 'stream',
+        stream: true,
+        output_tokens: 100,
+        first_token_ms: 100,
+        first_output_ms: 100,
+        first_output_kind: 'text',
+        duration_ms: null,
+      },
+    ]
+
+    const wrapper = mount(UsageTable, {
+      props: { data: rows, loading: false, columns: [] },
+      global: {
+        stubs: {
+          DataTable: DataTableStub,
+          EmptyState: true,
+          Icon: true,
+          Teleport: true,
+        },
+      },
+    })
+
+    expect(wrapper.findAll('[data-testid="latency-tps"]').map((node) => node.text())).toEqual(['37', '50', '100', '100'])
+    expect(wrapper.text()).toContain('First Token721msTotal10.86sTPS37')
+    expect(wrapper.text()).toContain('First Image Data40msFirst Token100msTotal1.10sTPS100')
+    expect(wrapper.text()).toContain('First Audio Data20msFirst Token100msTotal1.10sTPS100')
+  })
+
+  it('renders missing duration and media first output with neutral latency styles', () => {
+    const wrapper = mount(UsageTable, {
+      props: {
+        data: [{
+          ...baseImageRow,
+          request_id: 'req-latency-null-duration',
+          first_token_ms: null,
+          first_output_ms: 75,
+          first_output_kind: 'image',
+          duration_ms: null,
+        }],
+        loading: false,
+        columns: [],
+      },
+      global: {
+        stubs: {
+          DataTable: DataTableStub,
+          EmptyState: true,
+          Icon: true,
+          Teleport: true,
+        },
+      },
+    })
+
+    expect(wrapper.get('[data-testid="first-latency-value"]').classes()).toContain('text-gray-600')
+    expect(wrapper.get('[data-testid="latency-bar"]').classes()).toContain('bg-gray-300')
+    expect(wrapper.get('[data-testid="latency-duration"]').classes()).toContain('text-gray-400')
+    expect(wrapper.get('[data-testid="latency-duration"]').text()).toBe('-')
+  })
 
   it('marks only usage rows that actually applied long-context billing', () => {
     const wrapper = mount(UsageTable, {

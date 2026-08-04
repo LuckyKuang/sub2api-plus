@@ -148,6 +148,7 @@ type UsageLog struct {
 	ImageInputCost    float64
 	ImageOutputTokens int
 	ImageOutputCost   float64
+	AudioOutputTokens int
 
 	InputCost                 float64
 	OutputCost                float64
@@ -170,6 +171,7 @@ type UsageLog struct {
 	FirstTokenMs    *int
 	FirstOutputMs   *int
 	FirstOutputKind *string
+	IsComplete      *bool
 	UserAgent       *string
 	IPAddress       *string
 	// SessionID is the explicit client-provided request correlation identifier

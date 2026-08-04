@@ -150,6 +150,11 @@ func CacheCreation1hTokens(v int) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldCacheCreation1hTokens, v))
 }
 
+// AudioOutputTokens applies equality check predicate on the "audio_output_tokens" field. It's identical to AudioOutputTokensEQ.
+func AudioOutputTokens(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldAudioOutputTokens, v))
+}
+
 // InputCost applies equality check predicate on the "input_cost" field. It's identical to InputCostEQ.
 func InputCost(v float64) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldInputCost, v))
@@ -223,6 +228,11 @@ func FirstOutputMs(v int) predicate.UsageLog {
 // FirstOutputKind applies equality check predicate on the "first_output_kind" field. It's identical to FirstOutputKindEQ.
 func FirstOutputKind(v string) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldFirstOutputKind, v))
+}
+
+// IsComplete applies equality check predicate on the "is_complete" field. It's identical to IsCompleteEQ.
+func IsComplete(v bool) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldIsComplete, v))
 }
 
 // UserAgent applies equality check predicate on the "user_agent" field. It's identical to UserAgentEQ.
@@ -1200,6 +1210,46 @@ func CacheCreation1hTokensLTE(v int) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldLTE(FieldCacheCreation1hTokens, v))
 }
 
+// AudioOutputTokensEQ applies the EQ predicate on the "audio_output_tokens" field.
+func AudioOutputTokensEQ(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldAudioOutputTokens, v))
+}
+
+// AudioOutputTokensNEQ applies the NEQ predicate on the "audio_output_tokens" field.
+func AudioOutputTokensNEQ(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNEQ(FieldAudioOutputTokens, v))
+}
+
+// AudioOutputTokensIn applies the In predicate on the "audio_output_tokens" field.
+func AudioOutputTokensIn(vs ...int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIn(FieldAudioOutputTokens, vs...))
+}
+
+// AudioOutputTokensNotIn applies the NotIn predicate on the "audio_output_tokens" field.
+func AudioOutputTokensNotIn(vs ...int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotIn(FieldAudioOutputTokens, vs...))
+}
+
+// AudioOutputTokensGT applies the GT predicate on the "audio_output_tokens" field.
+func AudioOutputTokensGT(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGT(FieldAudioOutputTokens, v))
+}
+
+// AudioOutputTokensGTE applies the GTE predicate on the "audio_output_tokens" field.
+func AudioOutputTokensGTE(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGTE(FieldAudioOutputTokens, v))
+}
+
+// AudioOutputTokensLT applies the LT predicate on the "audio_output_tokens" field.
+func AudioOutputTokensLT(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLT(FieldAudioOutputTokens, v))
+}
+
+// AudioOutputTokensLTE applies the LTE predicate on the "audio_output_tokens" field.
+func AudioOutputTokensLTE(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLTE(FieldAudioOutputTokens, v))
+}
+
 // InputCostEQ applies the EQ predicate on the "input_cost" field.
 func InputCostEQ(v float64) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldInputCost, v))
@@ -1813,6 +1863,26 @@ func FirstOutputKindEqualFold(v string) predicate.UsageLog {
 // FirstOutputKindContainsFold applies the ContainsFold predicate on the "first_output_kind" field.
 func FirstOutputKindContainsFold(v string) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldContainsFold(FieldFirstOutputKind, v))
+}
+
+// IsCompleteEQ applies the EQ predicate on the "is_complete" field.
+func IsCompleteEQ(v bool) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldIsComplete, v))
+}
+
+// IsCompleteNEQ applies the NEQ predicate on the "is_complete" field.
+func IsCompleteNEQ(v bool) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNEQ(FieldIsComplete, v))
+}
+
+// IsCompleteIsNil applies the IsNil predicate on the "is_complete" field.
+func IsCompleteIsNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIsNull(FieldIsComplete))
+}
+
+// IsCompleteNotNil applies the NotNil predicate on the "is_complete" field.
+func IsCompleteNotNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotNull(FieldIsComplete))
 }
 
 // UserAgentEQ applies the EQ predicate on the "user_agent" field.

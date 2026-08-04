@@ -4,7 +4,7 @@ type Translate = (key: string) => string
 
 // --- Image output token / cost helpers ---
 
-type ImageOutputTokenRow = Pick<UsageLog, 'output_tokens' | 'image_output_tokens'>
+type ImageOutputTokenRow = Pick<UsageLog, 'output_tokens' | 'image_output_tokens' | 'audio_output_tokens'>
 type ImageOutputCostRow = Pick<UsageLog, 'image_output_cost'>
 
 /** Whether the row contains any image-output tokens. */
@@ -12,11 +12,11 @@ export const hasImageOutputTokens = (row: ImageOutputTokenRow | null | undefined
   (row?.image_output_tokens ?? 0) > 0
 
 /**
- * Text-only output tokens (total output minus image-output).
+ * Text-only output tokens (total output minus image/audio output).
  * Returns 0 when no text tokens exist.
  */
 export const textOutputTokens = (row: ImageOutputTokenRow | null | undefined): number =>
-  Math.max(0, (row?.output_tokens ?? 0) - (row?.image_output_tokens ?? 0))
+  Math.max(0, (row?.output_tokens ?? 0) - (row?.image_output_tokens ?? 0) - (row?.audio_output_tokens ?? 0))
 
 /** Whether the row has a non-zero image-output cost. */
 export const hasImageOutputCost = (row: ImageOutputCostRow | null | undefined): boolean =>

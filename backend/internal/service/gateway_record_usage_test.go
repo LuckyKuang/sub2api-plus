@@ -90,12 +90,14 @@ func TestGatewayServiceRecordUsage_BillingUsesDetachedContext(t *testing.T) {
 	reqCtx, cancel := context.WithCancel(context.Background())
 	cancel()
 
+	incomplete := false
 	err := svc.RecordUsage(reqCtx, &RecordUsageInput{
 		Result: &ForwardResult{
 			RequestID: "gateway_detached_ctx",
 			Usage: ClaudeUsage{
-				InputTokens:  10,
-				OutputTokens: 6,
+				InputTokens:       10,
+				OutputTokens:      6,
+				AudioOutputTokens: 2,
 			},
 			Model:    "claude-sonnet-4",
 			Duration: time.Second,
@@ -107,6 +109,7 @@ func TestGatewayServiceRecordUsage_BillingUsesDetachedContext(t *testing.T) {
 		User:          &User{ID: 601},
 		Account:       &Account{ID: 701},
 		APIKeyService: quotaSvc,
+		IsComplete:    &incomplete,
 	})
 
 	require.NoError(t, err)
@@ -115,6 +118,10 @@ func TestGatewayServiceRecordUsage_BillingUsesDetachedContext(t *testing.T) {
 	require.NoError(t, userRepo.lastCtxErr)
 	require.Equal(t, 1, quotaSvc.quotaCalls)
 	require.NoError(t, quotaSvc.lastQuotaCtxErr)
+	require.NotNil(t, usageRepo.lastLog)
+	require.Equal(t, 2, usageRepo.lastLog.AudioOutputTokens)
+	require.NotNil(t, usageRepo.lastLog.IsComplete)
+	require.False(t, *usageRepo.lastLog.IsComplete)
 }
 
 func TestGatewayServiceRecordUsage_BillingFingerprintIncludesRequestPayloadHash(t *testing.T) {

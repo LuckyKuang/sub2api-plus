@@ -77,6 +77,8 @@ func (UsageLog) Fields() []ent.Field {
 			Default(0),
 		field.Int("cache_creation_1h_tokens").
 			Default(0),
+		field.Int("audio_output_tokens").
+			Default(0),
 
 		// 成本字段
 		field.Float("input_cost").
@@ -128,6 +130,10 @@ func (UsageLog) Fields() []ent.Field {
 			MaxLen(16).
 			Optional().
 			Nillable(),
+		field.Bool("is_complete").
+			Optional().
+			Nillable().
+			Comment("Whether the upstream output completed normally; NULL means historical or unknown"),
 		field.String("user_agent").
 			MaxLen(512).
 			Optional().

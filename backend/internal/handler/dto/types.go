@@ -490,6 +490,7 @@ type UsageLog struct {
 
 	CacheCreation5mTokens int `json:"cache_creation_5m_tokens"`
 	CacheCreation1hTokens int `json:"cache_creation_1h_tokens"`
+	AudioOutputTokens     int `json:"audio_output_tokens"`
 
 	InputCost                 float64 `json:"input_cost"`
 	OutputCost                float64 `json:"output_cost"`
@@ -508,6 +509,7 @@ type UsageLog struct {
 	FirstTokenMs    *int    `json:"first_token_ms"`
 	FirstOutputMs   *int    `json:"first_output_ms"`
 	FirstOutputKind *string `json:"first_output_kind"`
+	IsComplete      *bool   `json:"is_complete"`
 
 	// 图片生成字段
 	ImageCount         int            `json:"image_count"`

@@ -500,6 +500,40 @@ func TestHandleStreamingResponse_SSEErrorEvent_AfterPartialStreamOutput(t *testi
 	require.Contains(t, rec.Body.String(), "message_start")
 }
 
+func TestPartialStreamUsageResult_PreservesOutputTiming(t *testing.T) {
+	firstTokenMs := 125
+	firstOutputMs := 40
+	resp := &http.Response{
+		Header: http.Header{"X-Request-Id": []string{"req-partial-output"}},
+	}
+	streamResult := &streamingResult{
+		usage: &ClaudeUsage{
+			InputTokens:  12,
+			OutputTokens: 3,
+		},
+		firstTokenMs:     &firstTokenMs,
+		firstOutputMs:    &firstOutputMs,
+		firstOutputKind:  "image",
+		clientDisconnect: true,
+	}
+
+	result := partialStreamUsageResult(
+		resp,
+		streamResult,
+		"requested-model",
+		"upstream-model",
+		time.Now().Add(-time.Second),
+		errors.New("stream interrupted"),
+	)
+
+	require.NotNil(t, result)
+	require.Equal(t, "req-partial-output", result.RequestID)
+	require.Equal(t, &firstTokenMs, result.FirstTokenMs)
+	require.Equal(t, &firstOutputMs, result.FirstOutputMs)
+	require.Equal(t, "image", result.FirstOutputKind)
+	require.True(t, result.ClientDisconnect)
+}
+
 // 对抗用例：上游发 event:error 但 data 行不是合法 JSON。
 // RawData 必须保留原始字节，ExtractUpstreamErrorMessage 不得 panic，
 // upstreamMsg 回退为空字符串（不再丢失原始诊断线索 — Detail 字段仍保留原始 body）。

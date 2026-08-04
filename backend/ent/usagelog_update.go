@@ -395,6 +395,27 @@ func (_u *UsageLogUpdate) AddCacheCreation1hTokens(v int) *UsageLogUpdate {
 	return _u
 }
 
+// SetAudioOutputTokens sets the "audio_output_tokens" field.
+func (_u *UsageLogUpdate) SetAudioOutputTokens(v int) *UsageLogUpdate {
+	_u.mutation.ResetAudioOutputTokens()
+	_u.mutation.SetAudioOutputTokens(v)
+	return _u
+}
+
+// SetNillableAudioOutputTokens sets the "audio_output_tokens" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableAudioOutputTokens(v *int) *UsageLogUpdate {
+	if v != nil {
+		_u.SetAudioOutputTokens(*v)
+	}
+	return _u
+}
+
+// AddAudioOutputTokens adds value to the "audio_output_tokens" field.
+func (_u *UsageLogUpdate) AddAudioOutputTokens(v int) *UsageLogUpdate {
+	_u.mutation.AddAudioOutputTokens(v)
+	return _u
+}
+
 // SetInputCost sets the "input_cost" field.
 func (_u *UsageLogUpdate) SetInputCost(v float64) *UsageLogUpdate {
 	_u.mutation.ResetInputCost()
@@ -716,6 +737,26 @@ func (_u *UsageLogUpdate) SetNillableFirstOutputKind(v *string) *UsageLogUpdate 
 // ClearFirstOutputKind clears the value of the "first_output_kind" field.
 func (_u *UsageLogUpdate) ClearFirstOutputKind() *UsageLogUpdate {
 	_u.mutation.ClearFirstOutputKind()
+	return _u
+}
+
+// SetIsComplete sets the "is_complete" field.
+func (_u *UsageLogUpdate) SetIsComplete(v bool) *UsageLogUpdate {
+	_u.mutation.SetIsComplete(v)
+	return _u
+}
+
+// SetNillableIsComplete sets the "is_complete" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableIsComplete(v *bool) *UsageLogUpdate {
+	if v != nil {
+		_u.SetIsComplete(*v)
+	}
+	return _u
+}
+
+// ClearIsComplete clears the value of the "is_complete" field.
+func (_u *UsageLogUpdate) ClearIsComplete() *UsageLogUpdate {
+	_u.mutation.ClearIsComplete()
 	return _u
 }
 
@@ -1223,6 +1264,12 @@ func (_u *UsageLogUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.AddedCacheCreation1hTokens(); ok {
 		_spec.AddField(usagelog.FieldCacheCreation1hTokens, field.TypeInt, value)
 	}
+	if value, ok := _u.mutation.AudioOutputTokens(); ok {
+		_spec.SetField(usagelog.FieldAudioOutputTokens, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedAudioOutputTokens(); ok {
+		_spec.AddField(usagelog.FieldAudioOutputTokens, field.TypeInt, value)
+	}
 	if value, ok := _u.mutation.InputCost(); ok {
 		_spec.SetField(usagelog.FieldInputCost, field.TypeFloat64, value)
 	}
@@ -1318,6 +1365,12 @@ func (_u *UsageLogUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.FirstOutputKindCleared() {
 		_spec.ClearField(usagelog.FieldFirstOutputKind, field.TypeString)
+	}
+	if value, ok := _u.mutation.IsComplete(); ok {
+		_spec.SetField(usagelog.FieldIsComplete, field.TypeBool, value)
+	}
+	if _u.mutation.IsCompleteCleared() {
+		_spec.ClearField(usagelog.FieldIsComplete, field.TypeBool)
 	}
 	if value, ok := _u.mutation.UserAgent(); ok {
 		_spec.SetField(usagelog.FieldUserAgent, field.TypeString, value)
@@ -1919,6 +1972,27 @@ func (_u *UsageLogUpdateOne) AddCacheCreation1hTokens(v int) *UsageLogUpdateOne 
 	return _u
 }
 
+// SetAudioOutputTokens sets the "audio_output_tokens" field.
+func (_u *UsageLogUpdateOne) SetAudioOutputTokens(v int) *UsageLogUpdateOne {
+	_u.mutation.ResetAudioOutputTokens()
+	_u.mutation.SetAudioOutputTokens(v)
+	return _u
+}
+
+// SetNillableAudioOutputTokens sets the "audio_output_tokens" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableAudioOutputTokens(v *int) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetAudioOutputTokens(*v)
+	}
+	return _u
+}
+
+// AddAudioOutputTokens adds value to the "audio_output_tokens" field.
+func (_u *UsageLogUpdateOne) AddAudioOutputTokens(v int) *UsageLogUpdateOne {
+	_u.mutation.AddAudioOutputTokens(v)
+	return _u
+}
+
 // SetInputCost sets the "input_cost" field.
 func (_u *UsageLogUpdateOne) SetInputCost(v float64) *UsageLogUpdateOne {
 	_u.mutation.ResetInputCost()
@@ -2240,6 +2314,26 @@ func (_u *UsageLogUpdateOne) SetNillableFirstOutputKind(v *string) *UsageLogUpda
 // ClearFirstOutputKind clears the value of the "first_output_kind" field.
 func (_u *UsageLogUpdateOne) ClearFirstOutputKind() *UsageLogUpdateOne {
 	_u.mutation.ClearFirstOutputKind()
+	return _u
+}
+
+// SetIsComplete sets the "is_complete" field.
+func (_u *UsageLogUpdateOne) SetIsComplete(v bool) *UsageLogUpdateOne {
+	_u.mutation.SetIsComplete(v)
+	return _u
+}
+
+// SetNillableIsComplete sets the "is_complete" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableIsComplete(v *bool) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetIsComplete(*v)
+	}
+	return _u
+}
+
+// ClearIsComplete clears the value of the "is_complete" field.
+func (_u *UsageLogUpdateOne) ClearIsComplete() *UsageLogUpdateOne {
+	_u.mutation.ClearIsComplete()
 	return _u
 }
 
@@ -2777,6 +2871,12 @@ func (_u *UsageLogUpdateOne) sqlSave(ctx context.Context) (_node *UsageLog, err 
 	if value, ok := _u.mutation.AddedCacheCreation1hTokens(); ok {
 		_spec.AddField(usagelog.FieldCacheCreation1hTokens, field.TypeInt, value)
 	}
+	if value, ok := _u.mutation.AudioOutputTokens(); ok {
+		_spec.SetField(usagelog.FieldAudioOutputTokens, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedAudioOutputTokens(); ok {
+		_spec.AddField(usagelog.FieldAudioOutputTokens, field.TypeInt, value)
+	}
 	if value, ok := _u.mutation.InputCost(); ok {
 		_spec.SetField(usagelog.FieldInputCost, field.TypeFloat64, value)
 	}
@@ -2872,6 +2972,12 @@ func (_u *UsageLogUpdateOne) sqlSave(ctx context.Context) (_node *UsageLog, err 
 	}
 	if _u.mutation.FirstOutputKindCleared() {
 		_spec.ClearField(usagelog.FieldFirstOutputKind, field.TypeString)
+	}
+	if value, ok := _u.mutation.IsComplete(); ok {
+		_spec.SetField(usagelog.FieldIsComplete, field.TypeBool, value)
+	}
+	if _u.mutation.IsCompleteCleared() {
+		_spec.ClearField(usagelog.FieldIsComplete, field.TypeBool)
 	}
 	if value, ok := _u.mutation.UserAgent(); ok {
 		_spec.SetField(usagelog.FieldUserAgent, field.TypeString, value)

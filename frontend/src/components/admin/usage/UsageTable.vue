@@ -206,18 +206,30 @@
         <template #cell-latency="{ row }">
           <div class="flex items-stretch gap-2">
             <span
+              data-testid="latency-bar"
               class="w-1 shrink-0 rounded-full"
-              :class="firstLatencyMs(row) != null
-                ? ['bg-gradient-to-b from-40% to-60%', LATENCY_BAR_FROM_CLASSES[firstLatencySeverity(row)], LATENCY_BAR_TO_CLASSES[durationSeverity(row.duration_ms ?? 0)]]
-                : LATENCY_BAR_CLASSES[durationSeverity(row.duration_ms ?? 0)]"
+              :class="latencyBarClasses(row)"
               aria-hidden="true"
             ></span>
             <div class="grid grid-cols-[max-content_max-content] items-baseline gap-x-2 gap-y-0.5 text-xs">
               <span class="text-gray-400 dark:text-gray-500">{{ firstLatencyLabel(row) }}</span>
-              <span v-if="firstLatencyMs(row) != null" class="font-medium tabular-nums" :class="LATENCY_TEXT_CLASSES[firstLatencySeverity(row)]">{{ formatDuration(firstLatencyMs(row)) }}</span>
+              <span
+                v-if="firstLatencyMs(row) != null"
+                data-testid="first-latency-value"
+                class="font-medium tabular-nums"
+                :class="firstLatencyTextClass(row)"
+              >{{ formatDuration(firstLatencyMs(row)) }}</span>
               <span v-else class="text-gray-400 dark:text-gray-500">-</span>
+              <template v-if="showSeparateFirstToken(row)">
+                <span class="text-gray-400 dark:text-gray-500">{{ t('usage.latencyFirstToken') }}</span>
+                <span class="font-medium tabular-nums" :class="LATENCY_TEXT_CLASSES[firstTokenSeverity(row.first_token_ms!)]">{{ formatDuration(row.first_token_ms) }}</span>
+              </template>
               <span class="text-gray-400 dark:text-gray-500">{{ t('usage.latencyDuration') }}</span>
-              <span class="font-medium tabular-nums" :class="LATENCY_TEXT_CLASSES[durationSeverity(row.duration_ms ?? 0)]">{{ formatDuration(row.duration_ms) }}</span>
+              <span data-testid="latency-duration" class="font-medium tabular-nums" :class="durationTextClass(row)">{{ formatDuration(row.duration_ms) }}</span>
+              <template v-if="estimatedTps(row) != null">
+                <span class="cursor-help text-gray-400 dark:text-gray-500" :title="t('usage.latencyTpsHint')">{{ t('usage.latencyTps') }}</span>
+                <span data-testid="latency-tps" class="cursor-help font-medium tabular-nums text-cyan-600 dark:text-cyan-400" :title="t('usage.latencyTpsHint')">{{ formatTps(estimatedTps(row)!) }}</span>
+              </template>
             </div>
           </div>
         </template>
@@ -638,9 +650,6 @@ const firstLatencyMs = (row: AdminUsageLog): number | null => {
   return row.first_token_ms ?? row.first_output_ms ?? null
 }
 
-const firstLatencySeverity = (row: AdminUsageLog) =>
-  firstTokenSeverity(firstLatencyMs(row) ?? 0)
-
 const firstLatencyLabel = (row: AdminUsageLog): string => {
   if (row.first_output_kind == null) {
     return row.first_token_ms != null
@@ -649,9 +658,74 @@ const firstLatencyLabel = (row: AdminUsageLog): string => {
   }
   if (row.first_output_kind === 'image') return t('usage.latencyFirstImage')
   if (row.first_output_kind === 'audio') return t('usage.latencyFirstAudio')
-  if (row.first_token_ms != null) return t('usage.latencyFirstToken')
+  if (row.first_output_kind === 'reasoning') return t('usage.latencyFirstReasoning')
+  if (row.first_output_kind === 'tool') return t('usage.latencyFirstTool')
+  if (row.first_output_kind === 'text') {
+    return firstLatencyMs(row) === row.first_token_ms
+      ? t('usage.latencyFirstToken')
+      : t('usage.latencyFirstOutput')
+  }
   return t('usage.latencyFirstOutput')
 }
+
+const hasStrictFirstToken = (row: AdminUsageLog): boolean =>
+  row.first_output_kind != null && row.first_token_ms != null
+
+const showSeparateFirstToken = (row: AdminUsageLog): boolean =>
+  hasStrictFirstToken(row) &&
+  row.first_output_ms != null &&
+  row.first_token_ms !== row.first_output_ms
+
+const firstLatencyUsesTokenSeverity = (row: AdminUsageLog): boolean =>
+  hasStrictFirstToken(row) &&
+  row.first_output_kind !== 'image' &&
+  row.first_output_kind !== 'audio' &&
+  firstLatencyMs(row) === row.first_token_ms
+
+const firstLatencyTextClass = (row: AdminUsageLog): string => {
+  if (!firstLatencyUsesTokenSeverity(row)) {
+    return 'text-gray-600 dark:text-gray-300'
+  }
+  return LATENCY_TEXT_CLASSES[firstTokenSeverity(row.first_token_ms!)]
+}
+
+const durationTextClass = (row: AdminUsageLog): string => {
+  if (row.duration_ms == null) {
+    return 'text-gray-400 dark:text-gray-500'
+  }
+  return LATENCY_TEXT_CLASSES[durationSeverity(row.duration_ms)]
+}
+
+const latencyBarClasses = (row: AdminUsageLog): string | string[] => {
+  if (row.duration_ms == null) {
+    return 'bg-gray-300 dark:bg-gray-600'
+  }
+  if (hasStrictFirstToken(row)) {
+    return [
+      'bg-gradient-to-b from-40% to-60%',
+      LATENCY_BAR_FROM_CLASSES[firstTokenSeverity(row.first_token_ms!)],
+      LATENCY_BAR_TO_CLASSES[durationSeverity(row.duration_ms)],
+    ]
+  }
+  return LATENCY_BAR_CLASSES[durationSeverity(row.duration_ms)]
+}
+
+const estimatedTps = (row: AdminUsageLog): number | null => {
+  const requestType = resolveUsageRequestType(row)
+  if (requestType !== 'stream' && requestType !== 'ws_v2') return null
+  if (row.is_complete !== true) return null
+  if (!hasStrictFirstToken(row) || row.duration_ms == null) return null
+
+  const outputTokens = textOutputTokens(row)
+  const generationMs = row.duration_ms - row.first_token_ms!
+  if (!Number.isFinite(outputTokens) || outputTokens <= 0 || generationMs <= 0) return null
+
+  const value = outputTokens * 1000 / generationMs
+  return Number.isFinite(value) && value > 0 ? value : null
+}
+
+const formatTps = (value: number): string =>
+  (Math.round(value * 10) / 10).toFixed(1).replace(/\.0$/, '')
 
 // Cost tooltip functions
 const showTooltip = (event: MouseEvent, row: AdminUsageLog) => {

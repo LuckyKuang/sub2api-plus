@@ -553,6 +553,7 @@ type ClaudeUsage struct {
 	CacheCreation5mTokens    int // 5分钟缓存创建token（来自嵌套 cache_creation 对象）
 	CacheCreation1hTokens    int // 1小时缓存创建token（来自嵌套 cache_creation 对象）
 	ImageOutputTokens        int `json:"image_output_tokens,omitempty"`
+	AudioOutputTokens        int `json:"audio_output_tokens,omitempty"`
 }
 
 // ForwardResult 转发结果

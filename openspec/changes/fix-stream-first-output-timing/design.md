@@ -41,6 +41,24 @@ Chat Completions 没有通用的图片生成输出格式。Responses→Chat 或 
 
 ## Persistence and rollout
 
-新增字段可空，不回填历史数据。新流式记录在识别到输出时写 `first_output_ms/kind`；严格 token-like 输出另写 `first_token_ms`。Ops 新语义查询只纳入带 `first_output_kind` 的新记录，避免与 legacy 首事件数据混合；过滤条件不能限定首输出模态，因为混合模态流可能先出图片/音频、随后才产生有效首 Token。升级迁移同时将现有小时/日派生聚合及系统指标快照中的旧 TTFT 列置空，将存在样本数字段的聚合样本数归零，其他指标保持不变；后续采集与定时聚合按新语义写入或重建仍可由原始用量日志判定的数据。
+首输出字段与 `is_complete` 可空，不回填历史数据；`audio_output_tokens` 非空且默认零。新流式记录在识别到输出时写 `first_output_ms/kind`；严格 token-like 输出另写 `first_token_ms`。正常完成写 `is_complete=true`，中断、失败、取消或不完整终态写 `false`，历史行保持 `NULL`。Ops 新语义查询只纳入带 `first_output_kind` 的新记录，避免与 legacy 首事件数据混合；过滤条件不能限定首输出模态，因为混合模态流可能先出图片/音频、随后才产生有效首 Token。升级迁移同时将现有小时/日派生聚合及系统指标快照中的旧 TTFT 列置空，将存在样本数字段的聚合样本数归零，其他指标保持不变；后续采集与定时聚合按新语义写入或重建仍可由原始用量日志判定的数据。
 
 使用记录保留历史 `first_token_ms` 原值，但当 `first_output_kind` 为空时必须标示为旧版首事件，不能把它展示成新口径的严格首 Token。CSV/Excel 表头也必须说明该列可能承载旧版首事件。
+
+## Partial and aggregate results
+
+流中途失败但已观测到 usage 时，部分结果必须复制 `first_token_ms`、`first_output_ms` 与 `first_output_kind`，避免图片、音频或混合模态记录退化成 legacy 语义，并写入 `is_complete=false`，防止将部分 Token 误报为完整请求 TPS。
+
+Antigravity 的非流式 Claude/Gemini 路径虽然读取上游 SSE，但只在完整聚合响应形成时观察一次终态输出，并把该观察标记为非 token-like。因此这类记录可有终态 `first_output_ms/kind`，但 `first_token_ms` 必须为空；不得把内部上游分片当成用户首 Token。
+
+## Usage-list TPS
+
+TPS 只在使用记录列表中由现有字段派生，不持久化：
+
+`TPS = text_output_tokens * 1000 / (duration_ms - first_token_ms)`
+
+其中 `text_output_tokens` 为 `output_tokens - image_output_tokens - audio_output_tokens`，下限为零。只有 `request_type` 为 `stream` 或 `ws_v2`、`is_complete=true`、`first_output_kind` 非空、首 Token 与总耗时均存在、文本输出 Token 大于零且 `duration_ms > first_token_ms` 时才显示。legacy、同步、Live、失败/中断/取消、完成状态未知、纯媒体、零/负分母及非有限结果不得显示 `0`、`NaN` 或 `Infinity`。
+
+显示值四舍五入到最多一位小数并移除末尾 `.0`。说明文案必须把它称为估算平均输出速率，避免与模型侧原始解码吞吐混淆。
+
+混合模态先出图片或音频、随后才出 token 时，延迟列必须同时显示首输出与首 Token；TPS 始终使用 `first_token_ms`，不得使用优先展示的 `first_output_ms`。图片、音频首分片与 legacy 首事件使用中性首输出样式，不套用文本 TTFT 健康阈值；总耗时为空时也必须使用中性样式。

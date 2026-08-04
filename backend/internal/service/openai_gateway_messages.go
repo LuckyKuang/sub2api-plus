@@ -1232,5 +1232,8 @@ func copyOpenAIUsageFromResponsesUsage(usage *apicompat.ResponsesUsage) OpenAIUs
 	if usage.InputTokensDetails != nil {
 		result.CacheReadInputTokens = usage.InputTokensDetails.CachedTokens
 	}
+	if usage.OutputTokensDetails != nil {
+		result.AudioOutputTokens = usage.OutputTokensDetails.AudioTokens
+	}
 	return result
 }

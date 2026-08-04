@@ -35,3 +35,13 @@
 - [x] 6.2 Run migration/repository checks and generated-code checks.
 - [x] 6.3 Run backend unit checks and frontend lint/typecheck/Vitest coverage for changed components.
 - [x] 6.4 Validate this OpenSpec change strictly and record any environment limitations.
+
+## 7. Post-review fixes and usage-list TPS
+
+- [x] 7.1 Preserve first-output timing fields in partial stream usage results and add regression coverage.
+- [x] 7.2 Lock Antigravity non-streaming aggregate semantics: no first Token, final aggregate first output only.
+- [x] 7.3 Add modality-specific labels, mixed-modality dual timing, neutral missing/media styles and estimated TPS to the shared usage table.
+- [x] 7.4 Synchronize English and Chinese locale keys and add focused Vitest coverage for TPS eligibility and invalid inputs.
+- [x] 7.5 Run full frontend Vitest, lint, typecheck and strict OpenSpec validation.
+- [x] 7.6 Run focused Go tests for timing, usage parsing, persistence and migration paths with Go 1.26.5.
+- [x] 7.7 Persist `audio_output_tokens` and nullable `is_complete`; hide TPS for historical and incomplete records and cover mixed audio output.

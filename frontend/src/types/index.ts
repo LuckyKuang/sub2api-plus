@@ -1551,6 +1551,7 @@ export interface UsageLog {
   cache_read_tokens: number
   cache_creation_5m_tokens: number
   cache_creation_1h_tokens: number
+  audio_output_tokens: number
 
   input_cost: number
   output_cost: number
@@ -1569,6 +1570,7 @@ export interface UsageLog {
   first_token_ms: number | null
   first_output_ms: number | null
   first_output_kind: 'text' | 'reasoning' | 'tool' | 'image' | 'audio' | null
+  is_complete: boolean | null
 
   // 图片生成字段
   image_count: number

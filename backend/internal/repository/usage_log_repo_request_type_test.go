@@ -57,6 +57,7 @@ func TestUsageLogRepositoryCreateSyncRequestTypeAndLegacyFields(t *testing.T) {
 			log.CacheCreation5mTokens,
 			log.CacheCreation1hTokens,
 			log.ImageOutputTokens,
+			log.AudioOutputTokens,
 			log.ImageOutputCost,
 			log.ImageInputTokens,
 			log.ImageInputCost,
@@ -76,6 +77,7 @@ func TestUsageLogRepositoryCreateSyncRequestTypeAndLegacyFields(t *testing.T) {
 			sqlmock.AnyArg(), // first_token_ms
 			sqlmock.AnyArg(), // first_output_ms
 			sqlmock.AnyArg(), // first_output_kind
+			true,             // is_complete defaults to true for new rows
 			sqlmock.AnyArg(), // user_agent
 			sqlmock.AnyArg(), // ip_address
 			log.ImageCount,
@@ -149,6 +151,7 @@ func TestUsageLogRepositoryCreate_PersistsServiceTier(t *testing.T) {
 			log.CacheCreation5mTokens,
 			log.CacheCreation1hTokens,
 			log.ImageOutputTokens,
+			log.AudioOutputTokens,
 			log.ImageOutputCost,
 			log.ImageInputTokens,
 			log.ImageInputCost,
@@ -168,6 +171,7 @@ func TestUsageLogRepositoryCreate_PersistsServiceTier(t *testing.T) {
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
+			true, // is_complete defaults to true for new rows
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
 			log.ImageCount,
@@ -255,6 +259,39 @@ func TestPrepareUsageLogInsert_ArgCountMatchesTypes(t *testing.T) {
 
 	require.Len(t, prepared.args, len(usageLogInsertArgTypes))
 }
+func TestPrepareUsageLogInsert_PersistsTPSMetadata(t *testing.T) {
+	incomplete := false
+	log := &service.UsageLog{
+		UserID:            1,
+		APIKeyID:          2,
+		AccountID:         3,
+		RequestID:         "req-tps-metadata",
+		Model:             "gpt-5",
+		AudioOutputTokens: 17,
+		IsComplete:        &incomplete,
+		CreatedAt:         time.Date(2025, 1, 5, 12, 0, 0, 0, time.UTC),
+	}
+
+	prepared := prepareUsageLogInsert(log)
+
+	require.Equal(t, 17, prepared.args[16])
+	require.Equal(t, false, prepared.args[36])
+	require.NotNil(t, log.IsComplete)
+	require.False(t, *log.IsComplete)
+
+	defaultLog := &service.UsageLog{
+		UserID:    1,
+		APIKeyID:  2,
+		AccountID: 3,
+		RequestID: "req-tps-metadata-default",
+		Model:     "gpt-5",
+		CreatedAt: time.Date(2025, 1, 5, 12, 0, 1, 0, time.UTC),
+	}
+	defaultPrepared := prepareUsageLogInsert(defaultLog)
+	require.Equal(t, true, defaultPrepared.args[36])
+	require.NotNil(t, defaultLog.IsComplete)
+	require.True(t, *defaultLog.IsComplete)
+}
 
 func TestPrepareUsageLogInsert_PersistsImageSizeMetadata(t *testing.T) {
 	imageSize := "4K"
@@ -277,11 +314,11 @@ func TestPrepareUsageLogInsert_PersistsImageSizeMetadata(t *testing.T) {
 		CreatedAt:          time.Date(2025, 1, 6, 12, 0, 0, 0, time.UTC),
 	})
 
-	require.Equal(t, sql.NullString{String: imageSize, Valid: true}, prepared.args[38])
-	require.Equal(t, sql.NullString{String: inputSize, Valid: true}, prepared.args[39])
-	require.Equal(t, sql.NullString{String: outputSize, Valid: true}, prepared.args[40])
-	require.Equal(t, sql.NullString{String: source, Valid: true}, prepared.args[41])
-	breakdownJSON, ok := prepared.args[42].(string)
+	require.Equal(t, sql.NullString{String: imageSize, Valid: true}, prepared.args[40])
+	require.Equal(t, sql.NullString{String: inputSize, Valid: true}, prepared.args[41])
+	require.Equal(t, sql.NullString{String: outputSize, Valid: true}, prepared.args[42])
+	require.Equal(t, sql.NullString{String: source, Valid: true}, prepared.args[43])
+	breakdownJSON, ok := prepared.args[44].(string)
 	require.True(t, ok)
 	require.JSONEq(t, `{"1K":1,"4K":1}`, breakdownJSON)
 }
@@ -816,7 +853,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullInt64{},
 			sql.NullInt64{},
 			0, 0, 0, 0, 0, 0,
-			0, 0.0, // image_output_tokens, image_output_cost
+			0, 0, 0.0, // image_output_tokens, audio_output_tokens, image_output_cost
 			0, 0.0, // image_input_tokens, image_input_cost
 			0.0, 0.0, 0.0, 0.0, 0.8, 0.8,
 			1.0,
@@ -829,6 +866,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullInt64{},
 			sql.NullInt64{Valid: true, Int64: 125},
 			sql.NullString{Valid: true, String: "image"},
+			sql.NullBool{Valid: true, Bool: true},
 			sql.NullString{},
 			sql.NullString{},
 			2,
@@ -869,6 +907,9 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 		require.Equal(t, 125, *log.FirstOutputMs)
 		require.NotNil(t, log.FirstOutputKind)
 		require.Equal(t, "image", *log.FirstOutputKind)
+		require.NotNil(t, log.IsComplete)
+		require.True(t, *log.IsComplete)
+		require.Zero(t, log.AudioOutputTokens)
 	})
 
 	t.Run("request_type_ws_v2_overrides_legacy", func(t *testing.T) {
@@ -891,6 +932,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			5,                 // cache_creation_5m_tokens
 			6,                 // cache_creation_1h_tokens
 			0,                 // image_output_tokens
+			0,                 // audio_output_tokens
 			0.0,               // image_output_cost
 			0,                 // image_input_tokens
 			0.0,               // image_input_cost
@@ -910,6 +952,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullInt64{},
 			sql.NullInt64{},
 			sql.NullString{},
+			sql.NullBool{},
 			sql.NullString{},
 			sql.NullString{},
 			0,
@@ -957,7 +1000,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullInt64{},
 			sql.NullInt64{},
 			1, 2, 3, 4, 5, 6,
-			0, 0.0, // image_output_tokens, image_output_cost
+			0, 0, 0.0, // image_output_tokens, audio_output_tokens, image_output_cost
 			0, 0.0, // image_input_tokens, image_input_cost
 			0.1, 0.2, 0.3, 0.4, 1.0, 0.9,
 			1.0,
@@ -970,6 +1013,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullInt64{},
 			sql.NullInt64{},
 			sql.NullString{},
+			sql.NullBool{},
 			sql.NullString{},
 			sql.NullString{},
 			0,
@@ -1017,7 +1061,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullInt64{},
 			sql.NullInt64{},
 			1, 2, 3, 4, 5, 6,
-			0, 0.0, // image_output_tokens, image_output_cost
+			0, 0, 0.0, // image_output_tokens, audio_output_tokens, image_output_cost
 			0, 0.0, // image_input_tokens, image_input_cost
 			0.1, 0.2, 0.3, 0.4, 1.0, 0.9,
 			1.0,
@@ -1030,6 +1074,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullInt64{},
 			sql.NullInt64{},
 			sql.NullString{},
+			sql.NullBool{},
 			sql.NullString{},
 			sql.NullString{},
 			0,

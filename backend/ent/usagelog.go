@@ -61,6 +61,8 @@ type UsageLog struct {
 	CacheCreation5mTokens int `json:"cache_creation_5m_tokens,omitempty"`
 	// CacheCreation1hTokens holds the value of the "cache_creation_1h_tokens" field.
 	CacheCreation1hTokens int `json:"cache_creation_1h_tokens,omitempty"`
+	// AudioOutputTokens holds the value of the "audio_output_tokens" field.
+	AudioOutputTokens int `json:"audio_output_tokens,omitempty"`
 	// InputCost holds the value of the "input_cost" field.
 	InputCost float64 `json:"input_cost,omitempty"`
 	// OutputCost holds the value of the "output_cost" field.
@@ -91,6 +93,8 @@ type UsageLog struct {
 	FirstOutputMs *int `json:"first_output_ms,omitempty"`
 	// FirstOutputKind holds the value of the "first_output_kind" field.
 	FirstOutputKind *string `json:"first_output_kind,omitempty"`
+	// Whether the upstream output completed normally; NULL means historical or unknown
+	IsComplete *bool `json:"is_complete,omitempty"`
 	// UserAgent holds the value of the "user_agent" field.
 	UserAgent *string `json:"user_agent,omitempty"`
 	// IPAddress holds the value of the "ip_address" field.
@@ -202,11 +206,11 @@ func (*UsageLog) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case usagelog.FieldImageSizeBreakdown:
 			values[i] = new([]byte)
-		case usagelog.FieldLongContextBillingApplied, usagelog.FieldStream, usagelog.FieldCacheTTLOverridden:
+		case usagelog.FieldLongContextBillingApplied, usagelog.FieldStream, usagelog.FieldIsComplete, usagelog.FieldCacheTTLOverridden:
 			values[i] = new(sql.NullBool)
 		case usagelog.FieldInputCost, usagelog.FieldOutputCost, usagelog.FieldCacheCreationCost, usagelog.FieldCacheReadCost, usagelog.FieldTotalCost, usagelog.FieldActualCost, usagelog.FieldRateMultiplier, usagelog.FieldAccountRateMultiplier:
 			values[i] = new(sql.NullFloat64)
-		case usagelog.FieldID, usagelog.FieldUserID, usagelog.FieldAPIKeyID, usagelog.FieldAccountID, usagelog.FieldChannelID, usagelog.FieldGroupID, usagelog.FieldSubscriptionID, usagelog.FieldInputTokens, usagelog.FieldOutputTokens, usagelog.FieldCacheCreationTokens, usagelog.FieldCacheReadTokens, usagelog.FieldCacheCreation5mTokens, usagelog.FieldCacheCreation1hTokens, usagelog.FieldBillingType, usagelog.FieldDurationMs, usagelog.FieldFirstTokenMs, usagelog.FieldFirstOutputMs, usagelog.FieldImageCount, usagelog.FieldVideoCount, usagelog.FieldVideoDurationSeconds:
+		case usagelog.FieldID, usagelog.FieldUserID, usagelog.FieldAPIKeyID, usagelog.FieldAccountID, usagelog.FieldChannelID, usagelog.FieldGroupID, usagelog.FieldSubscriptionID, usagelog.FieldInputTokens, usagelog.FieldOutputTokens, usagelog.FieldCacheCreationTokens, usagelog.FieldCacheReadTokens, usagelog.FieldCacheCreation5mTokens, usagelog.FieldCacheCreation1hTokens, usagelog.FieldAudioOutputTokens, usagelog.FieldBillingType, usagelog.FieldDurationMs, usagelog.FieldFirstTokenMs, usagelog.FieldFirstOutputMs, usagelog.FieldImageCount, usagelog.FieldVideoCount, usagelog.FieldVideoDurationSeconds:
 			values[i] = new(sql.NullInt64)
 		case usagelog.FieldRequestID, usagelog.FieldModel, usagelog.FieldRequestedModel, usagelog.FieldUpstreamModel, usagelog.FieldModelMappingChain, usagelog.FieldBillingTier, usagelog.FieldBillingMode, usagelog.FieldFirstOutputKind, usagelog.FieldUserAgent, usagelog.FieldIPAddress, usagelog.FieldImageSize, usagelog.FieldImageInputSize, usagelog.FieldImageOutputSize, usagelog.FieldImageSizeSource, usagelog.FieldVideoResolution:
 			values[i] = new(sql.NullString)
@@ -355,6 +359,12 @@ func (_m *UsageLog) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.CacheCreation1hTokens = int(value.Int64)
 			}
+		case usagelog.FieldAudioOutputTokens:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field audio_output_tokens", values[i])
+			} else if value.Valid {
+				_m.AudioOutputTokens = int(value.Int64)
+			}
 		case usagelog.FieldInputCost:
 			if value, ok := values[i].(*sql.NullFloat64); !ok {
 				return fmt.Errorf("unexpected type %T for field input_cost", values[i])
@@ -449,6 +459,13 @@ func (_m *UsageLog) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.FirstOutputKind = new(string)
 				*_m.FirstOutputKind = value.String
+			}
+		case usagelog.FieldIsComplete:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field is_complete", values[i])
+			} else if value.Valid {
+				_m.IsComplete = new(bool)
+				*_m.IsComplete = value.Bool
 			}
 		case usagelog.FieldUserAgent:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -672,6 +689,9 @@ func (_m *UsageLog) String() string {
 	builder.WriteString("cache_creation_1h_tokens=")
 	builder.WriteString(fmt.Sprintf("%v", _m.CacheCreation1hTokens))
 	builder.WriteString(", ")
+	builder.WriteString("audio_output_tokens=")
+	builder.WriteString(fmt.Sprintf("%v", _m.AudioOutputTokens))
+	builder.WriteString(", ")
 	builder.WriteString("input_cost=")
 	builder.WriteString(fmt.Sprintf("%v", _m.InputCost))
 	builder.WriteString(", ")
@@ -725,6 +745,11 @@ func (_m *UsageLog) String() string {
 	if v := _m.FirstOutputKind; v != nil {
 		builder.WriteString("first_output_kind=")
 		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.IsComplete; v != nil {
+		builder.WriteString("is_complete=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
 	builder.WriteString(", ")
 	if v := _m.UserAgent; v != nil {

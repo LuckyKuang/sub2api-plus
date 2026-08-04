@@ -107,3 +107,56 @@
 - **THEN** 升级迁移 MUST 将这些派生 TTFT 值置空并将对应样本数归零
 - **THEN** 请求数、总耗时、Token 及错误指标 MUST 保持不变
 - **THEN** 后续聚合 MUST 仅使用存在 `first_output_kind` 且 `first_token_ms` 非空的原始记录重建 TTFT
+
+### Requirement: 部分流结果必须保留完整首输出语义
+
+系统在流中途失败但仍记录已观测 usage 时，SHALL 将已观测到的首 Token、首输出时间和首输出模态一起传入用量记录，MUST NOT 只保留 `first_token_ms`。
+
+#### Scenario: 图片先于文本后流中断
+
+- **WHEN** 流先产生图片输出、随后产生文本 token，并在终态前中断但已有 usage
+- **THEN** 部分结果 MUST 保留较早的 `first_output_ms` 与 `first_output_kind=image`
+- **THEN** 部分结果 MUST 同时保留稍后的 `first_token_ms`
+
+### Requirement: 内部流式收集不得伪造非流式首 Token
+
+系统将上游流收集为非流式下游响应时，SHALL 只把完整聚合输出视为下游首输出，MUST NOT 把内部上游分片记录为下游首 Token。
+
+#### Scenario: Antigravity 收集文本流后返回 JSON
+
+- **WHEN** Claude 或 Gemini 非流式请求由内部上游 SSE 收集并形成最终 JSON
+- **THEN** `first_token_ms` MUST 为空
+- **THEN** 非空最终响应 MUST 设置 `first_output_ms` 和对应输出模态
+
+### Requirement: 使用记录 TPS 必须使用严格首 Token 口径
+
+使用记录列表 SHALL 按 `text_output_tokens * 1000 / (duration_ms - first_token_ms)` 派生估算 TPS，其中 `text_output_tokens` SHALL 为输出 Token 减去图片与音频输出 Token 后的非负值。系统 MUST 直接使用严格 `first_token_ms`，MUST NOT 使用首输出或格式化后的时间字符串作为分母起点，并且 MUST 只对 `is_complete=true` 的记录显示 TPS。
+
+#### Scenario: 正常文本流
+
+- **WHEN** 明确完整的新语义流式记录的输出 Token 为 375、首 Token 为 721ms、总耗时为 10860ms
+- **THEN** 页面 MUST 显示 `TPS 37`
+
+#### Scenario: TPS 输入无效
+
+- **WHEN** 记录为同步、legacy、Live、失败/中断/取消、完成状态未知、纯媒体、文本输出 Token 不为正、缺少首 Token/总耗时，或总耗时不大于首 Token
+- **THEN** 页面 MUST 不显示 TPS
+- **THEN** 页面 MUST NOT 显示 `0`、`NaN` 或 `Infinity`
+
+
+#### Scenario: 混合音频输出排除音频 Token
+
+- **WHEN** 完整流式记录的总输出 Token 为 150、音频输出 Token 为 50，且首 Token 后耗时为 1 秒
+- **THEN** TPS 分子 MUST 使用 100 个文本输出 Token
+- **THEN** 页面 MUST 显示 `TPS 100`
+#### Scenario: 混合模态先出图片再出文本
+
+- **WHEN** 新语义流式记录先有图片首输出，随后才有文本首 Token
+- **THEN** 延迟列 MUST 同时显示首图数据时间与首 Token 时间
+- **THEN** TPS MUST 使用后者计算
+
+#### Scenario: 媒体或空耗时健康样式
+
+- **WHEN** 首输出为图片/音频，或总耗时为空
+- **THEN** 页面 MUST 使用中性样式表示不可比较指标
+- **THEN** 页面 MUST NOT 把空总耗时当作 `0ms` 的健康值

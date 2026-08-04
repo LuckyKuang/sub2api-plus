@@ -29,6 +29,7 @@ type CreateUsageLogRequest struct {
 	CacheReadTokens       int     `json:"cache_read_tokens"`
 	CacheCreation5mTokens int     `json:"cache_creation_5m_tokens"`
 	CacheCreation1hTokens int     `json:"cache_creation_1h_tokens"`
+	AudioOutputTokens     int     `json:"audio_output_tokens"`
 	InputCost             float64 `json:"input_cost"`
 	OutputCost            float64 `json:"output_cost"`
 	CacheCreationCost     float64 `json:"cache_creation_cost"`
@@ -41,6 +42,7 @@ type CreateUsageLogRequest struct {
 	FirstTokenMs          *int    `json:"first_token_ms"`
 	FirstOutputMs         *int    `json:"first_output_ms"`
 	FirstOutputKind       *string `json:"first_output_kind"`
+	IsComplete            *bool   `json:"is_complete"`
 }
 
 // UsageStats 使用统计
@@ -108,6 +110,7 @@ func (s *UsageService) Create(ctx context.Context, req CreateUsageLogRequest) (*
 		CacheReadTokens:       req.CacheReadTokens,
 		CacheCreation5mTokens: req.CacheCreation5mTokens,
 		CacheCreation1hTokens: req.CacheCreation1hTokens,
+		AudioOutputTokens:     req.AudioOutputTokens,
 		InputCost:             req.InputCost,
 		OutputCost:            req.OutputCost,
 		CacheCreationCost:     req.CacheCreationCost,
@@ -120,6 +123,7 @@ func (s *UsageService) Create(ctx context.Context, req CreateUsageLogRequest) (*
 		FirstTokenMs:          req.FirstTokenMs,
 		FirstOutputMs:         req.FirstOutputMs,
 		FirstOutputKind:       req.FirstOutputKind,
+		IsComplete:            req.IsComplete,
 	}
 
 	inserted, err := s.usageRepo.Create(txCtx, usageLog)

@@ -2082,6 +2082,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				if result == nil {
 					return
 				}
+				isComplete := turnErr == nil && result.SucceededForScheduling()
 				result.BillingModel = openAIWSTurnBillingModel(result, turnMapping, turnRequestedModel, turnUpstreamModel)
 				reqLog.Debug("openai.websocket_turn_billing",
 					zap.Int("turn", turn),
@@ -2115,6 +2116,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 						UserAgent:          userAgent,
 						IPAddress:          clientIP,
 						RequestPayloadHash: requestPayloadHash,
+						IsComplete:         &isComplete,
 						APIKeyService:      h.apiKeyService,
 						QuotaPlatform:      quotaPlatform,
 						SessionID:          sessionID,

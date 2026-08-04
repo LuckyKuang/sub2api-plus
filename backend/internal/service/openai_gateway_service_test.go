@@ -347,6 +347,13 @@ func TestExtractOpenAIUsage_CapturesImageInputTokens(t *testing.T) {
 	require.Equal(t, 100, pu.InputTokens)
 	require.Equal(t, 80, pu.ImageInputTokens)
 
+	// 音频输出 token 必须从输出明细中独立保留，供文本 TPS 排除音频 token。
+	audioStyle := []byte(`{"usage":{"input_tokens":20,"output_tokens":18,"output_tokens_details":{"audio_tokens":12}}}`)
+	au, ok := extractOpenAIUsageFromJSONBytes(audioStyle)
+	require.True(t, ok)
+	require.Equal(t, 18, au.OutputTokens)
+	require.Equal(t, 12, au.AudioOutputTokens)
+
 	// 纯文本请求：无 image_tokens 时 ImageInputTokens 为 0，行为不变。
 	textOnly := []byte(`{"usage":{"input_tokens":50,"output_tokens":10}}`)
 	tu, ok := extractOpenAIUsageFromJSONBytes(textOnly)

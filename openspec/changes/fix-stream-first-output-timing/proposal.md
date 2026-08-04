@@ -13,6 +13,8 @@
 - 修复 WS v2 passthrough 每轮计时起点，使单轮首输出和总耗时从对应 `response.create` 写上游前开始。
 - 前端延迟列按输出模态显示“首字/首图/首音频/首输出”，CSV 保留首 Token 并新增首输出字段。
 - 账号调度器继续只消费 `first_token_ms`；图片和音频首输出不得进入 TTFT EWMA。
+- 流中途失败但保留部分 usage 时，同步保留已观测到的首 Token、首输出和输出模态。
+- 使用记录延迟列显示基于严格首 Token 的估算 TPS；只对明确完整的请求显示，并从输出 Token 中排除图片和音频 Token；混合模态同时展示较早的首输出和稍后的首 Token。
 
 ## Capabilities
 
@@ -26,10 +28,10 @@
 
 ## Impact
 
-- **数据库**：`usage_logs` 新增可空的 `first_output_ms`、`first_output_kind`；历史行不回填。
+- **数据库**：`usage_logs` 新增可空的 `first_output_ms`、`first_output_kind`、`is_complete`，以及默认值为零的 `audio_output_tokens`；历史行不回填完成状态。
 - **后端**：网关流处理、协议转换、图片流、WebSocket relay、用量持久化、调度和 Ops 聚合。
-- **公共 API**：UsageLog DTO 新增两个可空字段；保留 `first_token_ms`。
-- **前端**：使用记录延迟展示和 CSV 导出新增首输出语义，中英文 locale 同步。
-- **兼容性**：非流式文本请求保持首 Token 为空；返回实际媒体或终态聚合输出的路径可记录首输出，但不得反推首 Token。旧行保持原值且以缺少 `first_output_kind` 识别为 legacy。Chat 不可表达的生图请求改为明确错误，而不是成功但丢失图片。
+- **公共 API**：UsageLog DTO 新增首输出、音频输出 Token 与可空完成状态字段；保留 `first_token_ms`。
+- **前端**：使用记录延迟展示和 CSV 导出新增首输出语义，列表从现有字段派生 TPS，中英文 locale 同步。
+- **兼容性**：非流式文本请求保持首 Token 为空；返回实际媒体或终态聚合输出的路径可记录首输出，但不得反推首 Token。旧行保持原值且以缺少 `first_output_kind` 识别为 legacy，`is_complete=NULL`，因此不显示 TPS。Chat 不可表达的生图请求改为明确错误，而不是成功但丢失图片。
 - **总耗时**：除 WS v2 passthrough 单轮计时起点外，不改变 `duration_ms` 计算。
-- **非目标**：本变更不新增 TPS，不回写历史用量，不改变计费 token/图片数量。
+- **非目标**：本变更不持久化 TPS，不回写历史用量，不改变计费 token/图片/音频数量，也不新增 TPS 排序或筛选。

@@ -253,6 +253,20 @@ func (_c *UsageLogCreate) SetNillableCacheCreation1hTokens(v *int) *UsageLogCrea
 	return _c
 }
 
+// SetAudioOutputTokens sets the "audio_output_tokens" field.
+func (_c *UsageLogCreate) SetAudioOutputTokens(v int) *UsageLogCreate {
+	_c.mutation.SetAudioOutputTokens(v)
+	return _c
+}
+
+// SetNillableAudioOutputTokens sets the "audio_output_tokens" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableAudioOutputTokens(v *int) *UsageLogCreate {
+	if v != nil {
+		_c.SetAudioOutputTokens(*v)
+	}
+	return _c
+}
+
 // SetInputCost sets the "input_cost" field.
 func (_c *UsageLogCreate) SetInputCost(v float64) *UsageLogCreate {
 	_c.mutation.SetInputCost(v)
@@ -459,6 +473,20 @@ func (_c *UsageLogCreate) SetFirstOutputKind(v string) *UsageLogCreate {
 func (_c *UsageLogCreate) SetNillableFirstOutputKind(v *string) *UsageLogCreate {
 	if v != nil {
 		_c.SetFirstOutputKind(*v)
+	}
+	return _c
+}
+
+// SetIsComplete sets the "is_complete" field.
+func (_c *UsageLogCreate) SetIsComplete(v bool) *UsageLogCreate {
+	_c.mutation.SetIsComplete(v)
+	return _c
+}
+
+// SetNillableIsComplete sets the "is_complete" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableIsComplete(v *bool) *UsageLogCreate {
+	if v != nil {
+		_c.SetIsComplete(*v)
 	}
 	return _c
 }
@@ -721,6 +749,10 @@ func (_c *UsageLogCreate) defaults() {
 		v := usagelog.DefaultCacheCreation1hTokens
 		_c.mutation.SetCacheCreation1hTokens(v)
 	}
+	if _, ok := _c.mutation.AudioOutputTokens(); !ok {
+		v := usagelog.DefaultAudioOutputTokens
+		_c.mutation.SetAudioOutputTokens(v)
+	}
 	if _, ok := _c.mutation.InputCost(); !ok {
 		v := usagelog.DefaultInputCost
 		_c.mutation.SetInputCost(v)
@@ -848,6 +880,9 @@ func (_c *UsageLogCreate) check() error {
 	}
 	if _, ok := _c.mutation.CacheCreation1hTokens(); !ok {
 		return &ValidationError{Name: "cache_creation_1h_tokens", err: errors.New(`ent: missing required field "UsageLog.cache_creation_1h_tokens"`)}
+	}
+	if _, ok := _c.mutation.AudioOutputTokens(); !ok {
+		return &ValidationError{Name: "audio_output_tokens", err: errors.New(`ent: missing required field "UsageLog.audio_output_tokens"`)}
 	}
 	if _, ok := _c.mutation.InputCost(); !ok {
 		return &ValidationError{Name: "input_cost", err: errors.New(`ent: missing required field "UsageLog.input_cost"`)}
@@ -1023,6 +1058,10 @@ func (_c *UsageLogCreate) createSpec() (*UsageLog, *sqlgraph.CreateSpec) {
 		_spec.SetField(usagelog.FieldCacheCreation1hTokens, field.TypeInt, value)
 		_node.CacheCreation1hTokens = value
 	}
+	if value, ok := _c.mutation.AudioOutputTokens(); ok {
+		_spec.SetField(usagelog.FieldAudioOutputTokens, field.TypeInt, value)
+		_node.AudioOutputTokens = value
+	}
 	if value, ok := _c.mutation.InputCost(); ok {
 		_spec.SetField(usagelog.FieldInputCost, field.TypeFloat64, value)
 		_node.InputCost = value
@@ -1082,6 +1121,10 @@ func (_c *UsageLogCreate) createSpec() (*UsageLog, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.FirstOutputKind(); ok {
 		_spec.SetField(usagelog.FieldFirstOutputKind, field.TypeString, value)
 		_node.FirstOutputKind = &value
+	}
+	if value, ok := _c.mutation.IsComplete(); ok {
+		_spec.SetField(usagelog.FieldIsComplete, field.TypeBool, value)
+		_node.IsComplete = &value
 	}
 	if value, ok := _c.mutation.UserAgent(); ok {
 		_spec.SetField(usagelog.FieldUserAgent, field.TypeString, value)
@@ -1590,6 +1633,24 @@ func (u *UsageLogUpsert) AddCacheCreation1hTokens(v int) *UsageLogUpsert {
 	return u
 }
 
+// SetAudioOutputTokens sets the "audio_output_tokens" field.
+func (u *UsageLogUpsert) SetAudioOutputTokens(v int) *UsageLogUpsert {
+	u.Set(usagelog.FieldAudioOutputTokens, v)
+	return u
+}
+
+// UpdateAudioOutputTokens sets the "audio_output_tokens" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateAudioOutputTokens() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldAudioOutputTokens)
+	return u
+}
+
+// AddAudioOutputTokens adds v to the "audio_output_tokens" field.
+func (u *UsageLogUpsert) AddAudioOutputTokens(v int) *UsageLogUpsert {
+	u.Add(usagelog.FieldAudioOutputTokens, v)
+	return u
+}
+
 // SetInputCost sets the "input_cost" field.
 func (u *UsageLogUpsert) SetInputCost(v float64) *UsageLogUpsert {
 	u.Set(usagelog.FieldInputCost, v)
@@ -1869,6 +1930,24 @@ func (u *UsageLogUpsert) UpdateFirstOutputKind() *UsageLogUpsert {
 // ClearFirstOutputKind clears the value of the "first_output_kind" field.
 func (u *UsageLogUpsert) ClearFirstOutputKind() *UsageLogUpsert {
 	u.SetNull(usagelog.FieldFirstOutputKind)
+	return u
+}
+
+// SetIsComplete sets the "is_complete" field.
+func (u *UsageLogUpsert) SetIsComplete(v bool) *UsageLogUpsert {
+	u.Set(usagelog.FieldIsComplete, v)
+	return u
+}
+
+// UpdateIsComplete sets the "is_complete" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateIsComplete() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldIsComplete)
+	return u
+}
+
+// ClearIsComplete clears the value of the "is_complete" field.
+func (u *UsageLogUpsert) ClearIsComplete() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldIsComplete)
 	return u
 }
 
@@ -2504,6 +2583,27 @@ func (u *UsageLogUpsertOne) UpdateCacheCreation1hTokens() *UsageLogUpsertOne {
 	})
 }
 
+// SetAudioOutputTokens sets the "audio_output_tokens" field.
+func (u *UsageLogUpsertOne) SetAudioOutputTokens(v int) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetAudioOutputTokens(v)
+	})
+}
+
+// AddAudioOutputTokens adds v to the "audio_output_tokens" field.
+func (u *UsageLogUpsertOne) AddAudioOutputTokens(v int) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddAudioOutputTokens(v)
+	})
+}
+
+// UpdateAudioOutputTokens sets the "audio_output_tokens" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateAudioOutputTokens() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateAudioOutputTokens()
+	})
+}
+
 // SetInputCost sets the "input_cost" field.
 func (u *UsageLogUpsertOne) SetInputCost(v float64) *UsageLogUpsertOne {
 	return u.Update(func(s *UsageLogUpsert) {
@@ -2830,6 +2930,27 @@ func (u *UsageLogUpsertOne) UpdateFirstOutputKind() *UsageLogUpsertOne {
 func (u *UsageLogUpsertOne) ClearFirstOutputKind() *UsageLogUpsertOne {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.ClearFirstOutputKind()
+	})
+}
+
+// SetIsComplete sets the "is_complete" field.
+func (u *UsageLogUpsertOne) SetIsComplete(v bool) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetIsComplete(v)
+	})
+}
+
+// UpdateIsComplete sets the "is_complete" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateIsComplete() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateIsComplete()
+	})
+}
+
+// ClearIsComplete clears the value of the "is_complete" field.
+func (u *UsageLogUpsertOne) ClearIsComplete() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearIsComplete()
 	})
 }
 
@@ -3667,6 +3788,27 @@ func (u *UsageLogUpsertBulk) UpdateCacheCreation1hTokens() *UsageLogUpsertBulk {
 	})
 }
 
+// SetAudioOutputTokens sets the "audio_output_tokens" field.
+func (u *UsageLogUpsertBulk) SetAudioOutputTokens(v int) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetAudioOutputTokens(v)
+	})
+}
+
+// AddAudioOutputTokens adds v to the "audio_output_tokens" field.
+func (u *UsageLogUpsertBulk) AddAudioOutputTokens(v int) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddAudioOutputTokens(v)
+	})
+}
+
+// UpdateAudioOutputTokens sets the "audio_output_tokens" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateAudioOutputTokens() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateAudioOutputTokens()
+	})
+}
+
 // SetInputCost sets the "input_cost" field.
 func (u *UsageLogUpsertBulk) SetInputCost(v float64) *UsageLogUpsertBulk {
 	return u.Update(func(s *UsageLogUpsert) {
@@ -3993,6 +4135,27 @@ func (u *UsageLogUpsertBulk) UpdateFirstOutputKind() *UsageLogUpsertBulk {
 func (u *UsageLogUpsertBulk) ClearFirstOutputKind() *UsageLogUpsertBulk {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.ClearFirstOutputKind()
+	})
+}
+
+// SetIsComplete sets the "is_complete" field.
+func (u *UsageLogUpsertBulk) SetIsComplete(v bool) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetIsComplete(v)
+	})
+}
+
+// UpdateIsComplete sets the "is_complete" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateIsComplete() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateIsComplete()
+	})
+}
+
+// ClearIsComplete clears the value of the "is_complete" field.
+func (u *UsageLogUpsertBulk) ClearIsComplete() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearIsComplete()
 	})
 }
 

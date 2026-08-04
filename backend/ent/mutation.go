@@ -43252,6 +43252,8 @@ type UsageLogMutation struct {
 	addcache_creation_5m_tokens  *int
 	cache_creation_1h_tokens     *int
 	addcache_creation_1h_tokens  *int
+	audio_output_tokens          *int
+	addaudio_output_tokens       *int
 	input_cost                   *float64
 	addinput_cost                *float64
 	output_cost                  *float64
@@ -43279,6 +43281,7 @@ type UsageLogMutation struct {
 	first_output_ms              *int
 	addfirst_output_ms           *int
 	first_output_kind            *string
+	is_complete                  *bool
 	user_agent                   *string
 	ip_address                   *string
 	image_count                  *int
@@ -44338,6 +44341,62 @@ func (m *UsageLogMutation) ResetCacheCreation1hTokens() {
 	m.addcache_creation_1h_tokens = nil
 }
 
+// SetAudioOutputTokens sets the "audio_output_tokens" field.
+func (m *UsageLogMutation) SetAudioOutputTokens(i int) {
+	m.audio_output_tokens = &i
+	m.addaudio_output_tokens = nil
+}
+
+// AudioOutputTokens returns the value of the "audio_output_tokens" field in the mutation.
+func (m *UsageLogMutation) AudioOutputTokens() (r int, exists bool) {
+	v := m.audio_output_tokens
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAudioOutputTokens returns the old "audio_output_tokens" field's value of the UsageLog entity.
+// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageLogMutation) OldAudioOutputTokens(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAudioOutputTokens is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAudioOutputTokens requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAudioOutputTokens: %w", err)
+	}
+	return oldValue.AudioOutputTokens, nil
+}
+
+// AddAudioOutputTokens adds i to the "audio_output_tokens" field.
+func (m *UsageLogMutation) AddAudioOutputTokens(i int) {
+	if m.addaudio_output_tokens != nil {
+		*m.addaudio_output_tokens += i
+	} else {
+		m.addaudio_output_tokens = &i
+	}
+}
+
+// AddedAudioOutputTokens returns the value that was added to the "audio_output_tokens" field in this mutation.
+func (m *UsageLogMutation) AddedAudioOutputTokens() (r int, exists bool) {
+	v := m.addaudio_output_tokens
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetAudioOutputTokens resets all changes to the "audio_output_tokens" field.
+func (m *UsageLogMutation) ResetAudioOutputTokens() {
+	m.audio_output_tokens = nil
+	m.addaudio_output_tokens = nil
+}
+
 // SetInputCost sets the "input_cost" field.
 func (m *UsageLogMutation) SetInputCost(f float64) {
 	m.input_cost = &f
@@ -45187,6 +45246,55 @@ func (m *UsageLogMutation) ResetFirstOutputKind() {
 	delete(m.clearedFields, usagelog.FieldFirstOutputKind)
 }
 
+// SetIsComplete sets the "is_complete" field.
+func (m *UsageLogMutation) SetIsComplete(b bool) {
+	m.is_complete = &b
+}
+
+// IsComplete returns the value of the "is_complete" field in the mutation.
+func (m *UsageLogMutation) IsComplete() (r bool, exists bool) {
+	v := m.is_complete
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldIsComplete returns the old "is_complete" field's value of the UsageLog entity.
+// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageLogMutation) OldIsComplete(ctx context.Context) (v *bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldIsComplete is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldIsComplete requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldIsComplete: %w", err)
+	}
+	return oldValue.IsComplete, nil
+}
+
+// ClearIsComplete clears the value of the "is_complete" field.
+func (m *UsageLogMutation) ClearIsComplete() {
+	m.is_complete = nil
+	m.clearedFields[usagelog.FieldIsComplete] = struct{}{}
+}
+
+// IsCompleteCleared returns if the "is_complete" field was cleared in this mutation.
+func (m *UsageLogMutation) IsCompleteCleared() bool {
+	_, ok := m.clearedFields[usagelog.FieldIsComplete]
+	return ok
+}
+
+// ResetIsComplete resets all changes to the "is_complete" field.
+func (m *UsageLogMutation) ResetIsComplete() {
+	m.is_complete = nil
+	delete(m.clearedFields, usagelog.FieldIsComplete)
+}
+
 // SetUserAgent sets the "user_agent" field.
 func (m *UsageLogMutation) SetUserAgent(s string) {
 	m.user_agent = &s
@@ -46002,7 +46110,7 @@ func (m *UsageLogMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UsageLogMutation) Fields() []string {
-	fields := make([]string, 0, 47)
+	fields := make([]string, 0, 49)
 	if m.user != nil {
 		fields = append(fields, usagelog.FieldUserID)
 	}
@@ -46060,6 +46168,9 @@ func (m *UsageLogMutation) Fields() []string {
 	if m.cache_creation_1h_tokens != nil {
 		fields = append(fields, usagelog.FieldCacheCreation1hTokens)
 	}
+	if m.audio_output_tokens != nil {
+		fields = append(fields, usagelog.FieldAudioOutputTokens)
+	}
 	if m.input_cost != nil {
 		fields = append(fields, usagelog.FieldInputCost)
 	}
@@ -46104,6 +46215,9 @@ func (m *UsageLogMutation) Fields() []string {
 	}
 	if m.first_output_kind != nil {
 		fields = append(fields, usagelog.FieldFirstOutputKind)
+	}
+	if m.is_complete != nil {
+		fields = append(fields, usagelog.FieldIsComplete)
 	}
 	if m.user_agent != nil {
 		fields = append(fields, usagelog.FieldUserAgent)
@@ -46190,6 +46304,8 @@ func (m *UsageLogMutation) Field(name string) (ent.Value, bool) {
 		return m.CacheCreation5mTokens()
 	case usagelog.FieldCacheCreation1hTokens:
 		return m.CacheCreation1hTokens()
+	case usagelog.FieldAudioOutputTokens:
+		return m.AudioOutputTokens()
 	case usagelog.FieldInputCost:
 		return m.InputCost()
 	case usagelog.FieldOutputCost:
@@ -46220,6 +46336,8 @@ func (m *UsageLogMutation) Field(name string) (ent.Value, bool) {
 		return m.FirstOutputMs()
 	case usagelog.FieldFirstOutputKind:
 		return m.FirstOutputKind()
+	case usagelog.FieldIsComplete:
+		return m.IsComplete()
 	case usagelog.FieldUserAgent:
 		return m.UserAgent()
 	case usagelog.FieldIPAddress:
@@ -46293,6 +46411,8 @@ func (m *UsageLogMutation) OldField(ctx context.Context, name string) (ent.Value
 		return m.OldCacheCreation5mTokens(ctx)
 	case usagelog.FieldCacheCreation1hTokens:
 		return m.OldCacheCreation1hTokens(ctx)
+	case usagelog.FieldAudioOutputTokens:
+		return m.OldAudioOutputTokens(ctx)
 	case usagelog.FieldInputCost:
 		return m.OldInputCost(ctx)
 	case usagelog.FieldOutputCost:
@@ -46323,6 +46443,8 @@ func (m *UsageLogMutation) OldField(ctx context.Context, name string) (ent.Value
 		return m.OldFirstOutputMs(ctx)
 	case usagelog.FieldFirstOutputKind:
 		return m.OldFirstOutputKind(ctx)
+	case usagelog.FieldIsComplete:
+		return m.OldIsComplete(ctx)
 	case usagelog.FieldUserAgent:
 		return m.OldUserAgent(ctx)
 	case usagelog.FieldIPAddress:
@@ -46491,6 +46613,13 @@ func (m *UsageLogMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetCacheCreation1hTokens(v)
 		return nil
+	case usagelog.FieldAudioOutputTokens:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAudioOutputTokens(v)
+		return nil
 	case usagelog.FieldInputCost:
 		v, ok := value.(float64)
 		if !ok {
@@ -46595,6 +46724,13 @@ func (m *UsageLogMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetFirstOutputKind(v)
+		return nil
+	case usagelog.FieldIsComplete:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetIsComplete(v)
 		return nil
 	case usagelog.FieldUserAgent:
 		v, ok := value.(string)
@@ -46716,6 +46852,9 @@ func (m *UsageLogMutation) AddedFields() []string {
 	if m.addcache_creation_1h_tokens != nil {
 		fields = append(fields, usagelog.FieldCacheCreation1hTokens)
 	}
+	if m.addaudio_output_tokens != nil {
+		fields = append(fields, usagelog.FieldAudioOutputTokens)
+	}
 	if m.addinput_cost != nil {
 		fields = append(fields, usagelog.FieldInputCost)
 	}
@@ -46783,6 +46922,8 @@ func (m *UsageLogMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedCacheCreation5mTokens()
 	case usagelog.FieldCacheCreation1hTokens:
 		return m.AddedCacheCreation1hTokens()
+	case usagelog.FieldAudioOutputTokens:
+		return m.AddedAudioOutputTokens()
 	case usagelog.FieldInputCost:
 		return m.AddedInputCost()
 	case usagelog.FieldOutputCost:
@@ -46870,6 +47011,13 @@ func (m *UsageLogMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddCacheCreation1hTokens(v)
+		return nil
+	case usagelog.FieldAudioOutputTokens:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAudioOutputTokens(v)
 		return nil
 	case usagelog.FieldInputCost:
 		v, ok := value.(float64)
@@ -47023,6 +47171,9 @@ func (m *UsageLogMutation) ClearedFields() []string {
 	if m.FieldCleared(usagelog.FieldFirstOutputKind) {
 		fields = append(fields, usagelog.FieldFirstOutputKind)
 	}
+	if m.FieldCleared(usagelog.FieldIsComplete) {
+		fields = append(fields, usagelog.FieldIsComplete)
+	}
 	if m.FieldCleared(usagelog.FieldUserAgent) {
 		fields = append(fields, usagelog.FieldUserAgent)
 	}
@@ -47102,6 +47253,9 @@ func (m *UsageLogMutation) ClearField(name string) error {
 		return nil
 	case usagelog.FieldFirstOutputKind:
 		m.ClearFirstOutputKind()
+		return nil
+	case usagelog.FieldIsComplete:
+		m.ClearIsComplete()
 		return nil
 	case usagelog.FieldUserAgent:
 		m.ClearUserAgent()
@@ -47195,6 +47349,9 @@ func (m *UsageLogMutation) ResetField(name string) error {
 	case usagelog.FieldCacheCreation1hTokens:
 		m.ResetCacheCreation1hTokens()
 		return nil
+	case usagelog.FieldAudioOutputTokens:
+		m.ResetAudioOutputTokens()
+		return nil
 	case usagelog.FieldInputCost:
 		m.ResetInputCost()
 		return nil
@@ -47239,6 +47396,9 @@ func (m *UsageLogMutation) ResetField(name string) error {
 		return nil
 	case usagelog.FieldFirstOutputKind:
 		m.ResetFirstOutputKind()
+		return nil
+	case usagelog.FieldIsComplete:
+		m.ResetIsComplete()
 		return nil
 	case usagelog.FieldUserAgent:
 		m.ResetUserAgent()

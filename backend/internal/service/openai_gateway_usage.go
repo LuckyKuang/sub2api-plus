@@ -31,6 +31,7 @@ type OpenAIRecordUsageInput struct {
 	IPAddress          string // 请求的客户端 IP 地址
 	SessionID          string // 客户端显式会话标识（session_id / X-Session-Id 等请求头），仅用于用量行会话关联
 	RequestPayloadHash string
+	IsComplete         *bool // nil 表示正常完整请求；false 表示失败/中断记录
 	APIKeyService      APIKeyQuotaUpdater
 	QuotaPlatform      string // user×platform quota platform resolved by the handler before async billing.
 	// CyberBlocked 为 true 时把该用量行标记为 cyber（request_type=cyber），计费逻辑不变。
@@ -72,6 +73,7 @@ func (s *OpenAIGatewayService) RecordCyberPolicyUsageLog(ctx context.Context, in
 	if s == nil || in.APIKey == nil || in.APIKey.User == nil || in.Account == nil || strings.TrimSpace(in.Model) == "" {
 		return
 	}
+	isComplete := false
 	result := &OpenAIForwardResult{
 		RequestID: in.RequestID,
 		Model:     in.Model,
@@ -93,6 +95,7 @@ func (s *OpenAIGatewayService) RecordCyberPolicyUsageLog(ctx context.Context, in
 		IPAddress:          in.IPAddress,
 		SessionID:          in.SessionID,
 		RequestPayloadHash: in.RequestPayloadHash,
+		IsComplete:         &isComplete,
 		APIKeyService:      in.APIKeyService,
 		ChannelUsageFields: in.ChannelUsageFields,
 		CyberBlocked:       true,
@@ -267,6 +270,8 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		CacheReadTokens:     result.Usage.CacheReadInputTokens,
 		ImageInputTokens:    result.Usage.ImageInputTokens,
 		ImageOutputTokens:   result.Usage.ImageOutputTokens,
+		AudioOutputTokens:   result.Usage.AudioOutputTokens,
+		IsComplete:          usageCompletionPtr(input.IsComplete),
 		ImageCount:          result.ImageCount,
 		ImageSize:           optionalTrimmedStringPtr(result.ImageSize),
 		ImageInputSize:      optionalTrimmedStringPtr(result.ImageInputSize),

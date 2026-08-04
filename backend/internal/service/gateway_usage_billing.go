@@ -49,6 +49,7 @@ type RecordUsageInput struct {
 	SessionID          string             // 客户端显式会话标识（session_id / X-Session-Id 等请求头），仅用于用量行会话关联
 	RequestPayloadHash string             // 请求体语义哈希，用于降低 request_id 误复用时的静默误去重风险
 	ForceCacheBilling  bool               // 强制缓存计费：将 input_tokens 转为 cache_read 计费（用于粘性会话切换）
+	IsComplete         *bool              // nil 表示正常完整请求；false 表示仅记录中断前的部分 usage
 	APIKeyService      APIKeyQuotaUpdater // 可选：用于更新API Key配额
 	QuotaPlatform      string             // user×platform 配额计量平台：handler 在请求 ctx 内经 QuotaPlatform() 算定后传入（后扣运行在 worker 池 background ctx 上，取不到 ForcePlatform）
 
@@ -599,6 +600,7 @@ func (s *GatewayService) RecordUsage(ctx context.Context, input *RecordUsageInpu
 		SessionID:          input.SessionID,
 		RequestPayloadHash: input.RequestPayloadHash,
 		ForceCacheBilling:  input.ForceCacheBilling,
+		IsComplete:         input.IsComplete,
 		APIKeyService:      input.APIKeyService,
 		QuotaPlatform:      input.QuotaPlatform,
 		ChannelUsageFields: input.ChannelUsageFields,
@@ -621,6 +623,7 @@ type RecordUsageLongContextInput struct {
 	LongContextThreshold  int                // 长上下文阈值（如 200000）
 	LongContextMultiplier float64            // 超出阈值部分的倍率（如 2.0）
 	ForceCacheBilling     bool               // 强制缓存计费：将 input_tokens 转为 cache_read 计费（用于粘性会话切换）
+	IsComplete            *bool              // nil 表示正常完整请求；false 表示仅记录中断前的部分 usage
 	APIKeyService         APIKeyQuotaUpdater // API Key 配额服务（可选）
 	QuotaPlatform         string             // user×platform 配额计量平台：handler 在请求 ctx 内经 QuotaPlatform() 算定后传入（后扣运行在 worker 池 background ctx 上，取不到 ForcePlatform）
 
@@ -642,6 +645,7 @@ func (s *GatewayService) RecordUsageWithLongContext(ctx context.Context, input *
 		SessionID:          input.SessionID,
 		RequestPayloadHash: input.RequestPayloadHash,
 		ForceCacheBilling:  input.ForceCacheBilling,
+		IsComplete:         input.IsComplete,
 		APIKeyService:      input.APIKeyService,
 		QuotaPlatform:      input.QuotaPlatform,
 		ChannelUsageFields: input.ChannelUsageFields,
@@ -665,6 +669,7 @@ type recordUsageCoreInput struct {
 	SessionID          string
 	RequestPayloadHash string
 	ForceCacheBilling  bool
+	IsComplete         *bool
 	APIKeyService      APIKeyQuotaUpdater
 	QuotaPlatform      string
 	ChannelUsageFields
@@ -1020,6 +1025,8 @@ func (s *GatewayService) buildRecordUsageLog(
 		CacheCreation5mTokens: result.Usage.CacheCreation5mTokens,
 		CacheCreation1hTokens: result.Usage.CacheCreation1hTokens,
 		ImageOutputTokens:     result.Usage.ImageOutputTokens,
+		AudioOutputTokens:     result.Usage.AudioOutputTokens,
+		IsComplete:            usageCompletionPtr(input.IsComplete),
 		RateMultiplier:        multiplier,
 		AccountRateMultiplier: &accountRateMultiplier,
 		BillingType:           billingType,
@@ -1060,6 +1067,14 @@ func (s *GatewayService) buildRecordUsageLog(
 	}
 
 	return usageLog
+}
+
+func usageCompletionPtr(explicit *bool) *bool {
+	value := true
+	if explicit != nil {
+		value = *explicit
+	}
+	return &value
 }
 
 // resolveBillingMode 根据计费结果和请求类型确定计费模式。

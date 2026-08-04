@@ -1076,6 +1076,55 @@ func TestStreamUpstreamResponse_UsageOnlyDoesNotSetOutputTiming(t *testing.T) {
 	require.Contains(t, rec.Body.String(), "data:")
 }
 
+func TestAntigravityNonStreaming_RecordsFinalOutputWithoutFirstToken(t *testing.T) {
+	tests := []struct {
+		name string
+		run  func(*AntigravityGatewayService, *gin.Context, *http.Response, time.Time) (*antigravityStreamResult, error)
+	}{
+		{
+			name: "gemini",
+			run: func(svc *AntigravityGatewayService, c *gin.Context, resp *http.Response, start time.Time) (*antigravityStreamResult, error) {
+				return svc.handleGeminiStreamToNonStreaming(c, resp, start)
+			},
+		},
+		{
+			name: "claude",
+			run: func(svc *AntigravityGatewayService, c *gin.Context, resp *http.Response, start time.Time) (*antigravityStreamResult, error) {
+				return svc.handleClaudeStreamToNonStreaming(c, resp, start, "claude-sonnet-4-5")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gin.SetMode(gin.TestMode)
+			svc := newAntigravityTestService(&config.Config{
+				Gateway: config.GatewayConfig{MaxLineSize: defaultMaxLineSize},
+			})
+
+			rec := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(rec)
+			c.Request = httptest.NewRequest(http.MethodPost, "/", nil)
+
+			upstreamBody := []byte("data: {\"response\":{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"ok\"}]},\"finishReason\":\"STOP\"}],\"usageMetadata\":{\"promptTokenCount\":8,\"candidatesTokenCount\":3}}}\n\n")
+			resp := &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{},
+				Body:       io.NopCloser(bytes.NewReader(upstreamBody)),
+			}
+
+			result, err := tt.run(svc, c, resp, time.Now().Add(-10*time.Millisecond))
+
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			require.Nil(t, result.firstTokenMs)
+			require.NotNil(t, result.firstOutputMs)
+			require.Equal(t, "text", result.firstOutputKind)
+			require.NotEmpty(t, rec.Body.String())
+		})
+	}
+}
+
 func TestStreamUpstreamResponse_TextDeltaSetsTokenAndOutputTiming(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	svc := newAntigravityTestService(&config.Config{

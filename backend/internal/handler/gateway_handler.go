@@ -828,7 +828,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 
 			// 提交 usage 记录。成功路径与"流中断但 Forward 已观测到 usage 的部分结果"
 			// 错误路径共用：后者若不入账，上游已计量的请求会完全漏记漏计费（#5148）。
-			submitForwardUsage := func(result *service.ForwardResult) {
+			submitForwardUsage := func(result *service.ForwardResult, isComplete bool) {
 				// 捕获请求信息（用于异步记录，避免在 goroutine 中访问 gin.Context）
 				userAgent := c.GetHeader("User-Agent")
 				clientIP := ip.GetClientIP(c)
@@ -869,6 +869,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 						SessionID:          sessionID,
 						RequestPayloadHash: requestPayloadHash,
 						ForceCacheBilling:  forceCacheBilling,
+						IsComplete:         &isComplete,
 						APIKeyService:      h.apiKeyService,
 						ChannelUsageFields: clientRequestedUsageFields(c, channelMapping, reqModel, result.UpstreamModel),
 					}); err != nil {
@@ -984,7 +985,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 				// 避免上游已产生消耗的请求完全漏记（#5148）。failover 错误恒定 result=nil，
 				// 不会走到这里重复计费。
 				if result != nil {
-					submitForwardUsage(result)
+					submitForwardUsage(result, false)
 				}
 				return
 			}
@@ -1009,7 +1010,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 				}
 			}
 
-			submitForwardUsage(result)
+			submitForwardUsage(result, true)
 			return
 		}
 		if !retryWithFallback {

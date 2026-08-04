@@ -684,6 +684,8 @@ func partialStreamUsageResult(resp *http.Response, streamResult *streamingResult
 		Stream:           true,
 		Duration:         time.Since(startTime),
 		FirstTokenMs:     streamResult.firstTokenMs,
+		FirstOutputMs:    streamResult.firstOutputMs,
+		FirstOutputKind:  streamResult.firstOutputKind,
 		ClientDisconnect: streamResult.clientDisconnect,
 	}
 }
