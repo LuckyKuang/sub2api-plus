@@ -563,6 +563,20 @@ func TestSettingService_UpdateSettings_AntigravityUserAgentVersion(t *testing.T)
 	require.Equal(t, "1.23.2", repo.updates[SettingKeyAntigravityUserAgentVersion])
 }
 
+func TestSettingService_UpdateSettings_OpenAICodexUserAgent(t *testing.T) {
+	repo := &settingUpdateRepoStub{}
+	svc := NewSettingService(repo, &config.Config{})
+
+	err := svc.UpdateSettings(context.Background(), &SystemSettings{
+		OpenAICodexUserAgent: "CODEX_CLI_RS/9.9.9 (Ubuntu 22.4.0; x86_64) xterm-256color",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "codex_cli_rs/9.9.9 (Ubuntu 22.4.0; x86_64) xterm-256color", repo.updates[SettingKeyOpenAICodexUserAgent])
+
+	err = svc.UpdateSettings(context.Background(), &SystemSettings{OpenAICodexUserAgent: "curl/8.0"})
+	require.Error(t, err)
+}
+
 func TestSettingService_InitializeDefaultSettingsPersistsConfiguredForwardedClientIPHeadersAndDisablesPasskey(t *testing.T) {
 	repo := &forwardedIPMigrationRepoStub{values: map[string]string{}}
 	cfg := &config.Config{}

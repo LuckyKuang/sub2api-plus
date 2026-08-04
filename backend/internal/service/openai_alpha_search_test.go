@@ -54,9 +54,9 @@ func TestForwardAlphaSearchOAuthPreservesWire(t *testing.T) {
 	c, _ := gin.CreateTestContext(recorder)
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/alpha/search?feature=standalone", bytes.NewReader(body))
 	c.Request.Header.Set("Content-Type", "application/json")
-	c.Request.Header.Set("User-Agent", codexCLIUserAgent)
-	c.Request.Header.Set("Originator", "codex_cli_rs")
-	c.Request.Header.Set("Version", "0.144.1")
+	c.Request.Header.Set("User-Agent", DefaultOpenAICodexUserAgent)
+	c.Request.Header.Set("Originator", "codex-tui")
+	c.Request.Header.Set("Version", codexCLIVersion)
 
 	upstream := &httpUpstreamRecorder{resp: &http.Response{
 		StatusCode: http.StatusOK,
@@ -108,9 +108,9 @@ func TestForwardAlphaSearchPATUsesResponsesWebSearchFallback(t *testing.T) {
 	c, _ := gin.CreateTestContext(recorder)
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/alpha/search", bytes.NewReader(body))
 	c.Request.Header.Set("Content-Type", "application/json")
-	c.Request.Header.Set("User-Agent", codexCLIUserAgent)
-	c.Request.Header.Set("Originator", "codex_cli_rs")
-	c.Request.Header.Set("Version", "0.144.1")
+	c.Request.Header.Set("User-Agent", DefaultOpenAICodexUserAgent)
+	c.Request.Header.Set("Originator", "codex-tui")
+	c.Request.Header.Set("Version", codexCLIVersion)
 	c.Request.Header.Set("OpenAI-Beta", "responses=experimental")
 	c.Request.Header.Set("Accept-Language", "zh-CN")
 	c.Request.Header.Set("Authorization", "Bearer client-token")

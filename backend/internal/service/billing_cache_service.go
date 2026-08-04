@@ -1020,6 +1020,7 @@ func (s *BillingCacheService) checkSubscriptionEligibility(ctx context.Context, 
 	}
 	if subscription != nil {
 		snapshot.OneTimeDailyQuota = subscription.HasOneTimeDailyQuota()
+		snapshot.StartsAt = subscription.StartsAt
 		// Pre-feature Redis cache entries do not have calendar window starts.
 		// The authenticated subscription snapshot supplies those starts without
 		// replacing the Redis usage counters used for the authoritative check.

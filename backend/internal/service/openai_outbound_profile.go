@@ -59,22 +59,37 @@ func NormalizeOpenAIAccountUserAgent(platform string, credentials map[string]any
 	}
 	userAgent, ok := raw.(string)
 	if !ok {
-		return infraerrors.New(http.StatusBadRequest, "OPENAI_CODEX_USER_AGENT_INVALID", "OpenAI account user_agent must be a string")
+		return infraerrors.New(http.StatusBadRequest, "OPENAI_CODEX_USER_AGENT_INVALID", "OpenAI Codex user_agent must be a string")
 	}
-	userAgent = strings.TrimSpace(userAgent)
+	userAgent, err := NormalizeOpenAICodexUserAgent(userAgent)
+	if err != nil {
+		return err
+	}
 	if userAgent == "" {
 		delete(credentials, "user_agent")
 		return nil
 	}
+	credentials["user_agent"] = userAgent
+	return nil
+}
+
+// NormalizeOpenAICodexUserAgent validates and canonicalizes a configured
+// Codex client identity. An empty value means inherit the compiled-in default.
+// Both account and global configuration use this helper so a saved identity can
+// always produce a matching Originator and Version for upstream requests.
+func NormalizeOpenAICodexUserAgent(userAgent string) (string, error) {
+	userAgent = strings.TrimSpace(userAgent)
+	if userAgent == "" {
+		return "", nil
+	}
 	if len(userAgent) > maxOpenAIAccountUserAgentLength {
-		return infraerrors.Newf(http.StatusBadRequest, "OPENAI_CODEX_USER_AGENT_INVALID", "OpenAI account user_agent must be at most %d characters", maxOpenAIAccountUserAgentLength)
+		return "", infraerrors.Newf(http.StatusBadRequest, "OPENAI_CODEX_USER_AGENT_INVALID", "OpenAI Codex user_agent must be at most %d characters", maxOpenAIAccountUserAgentLength)
 	}
 	_, pairedUserAgent, ok := openai.PairCodexClientIdentity(userAgent)
 	if !ok {
-		return infraerrors.New(http.StatusBadRequest, "OPENAI_CODEX_USER_AGENT_INVALID", "OpenAI account user_agent must be a supported Codex User-Agent")
+		return "", infraerrors.New(http.StatusBadRequest, "OPENAI_CODEX_USER_AGENT_INVALID", "OpenAI Codex user_agent must be a supported Codex User-Agent")
 	}
-	credentials["user_agent"] = pairedUserAgent
-	return nil
+	return pairedUserAgent, nil
 }
 
 func resolveOpenAIOutboundIdentityCandidates(accountUA, systemUA string) openAIOutboundIdentity {
@@ -89,7 +104,9 @@ func resolveOpenAIOutboundIdentityCandidates(accountUA, systemUA string) openAIO
 		return identity
 	}
 	// DefaultOpenAICodexUserAgent is a compile-time invariant covered by tests.
-	return openAIOutboundIdentity{UserAgent: codexCLIUserAgent, Originator: "codex_cli_rs", Version: codexCLIVersion}
+	// Keep this defensive return aligned with the normal default rather than
+	// introducing a second, unreachable built-in identity.
+	return openAIOutboundIdentity{UserAgent: DefaultOpenAICodexUserAgent, Originator: codexDefaultOriginator, Version: codexCLIVersion}
 }
 
 func validOpenAIOutboundIdentity(userAgent string) (openAIOutboundIdentity, bool) {

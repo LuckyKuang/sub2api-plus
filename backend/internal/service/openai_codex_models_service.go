@@ -231,18 +231,13 @@ func (c *codexModelsManifestCache) set(key string, manifest *CodexModelsManifest
 // After validating the stable top-level envelope, OAuth response bodies are
 // passed through verbatim. Custom API key manifests receive only the narrowly
 // scoped compatibility adjustments required by custom-provider Codex clients.
-func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, account *Account, clientVersion, ifNoneMatch string) (*CodexModelsManifest, error) {
+func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, account *Account, _ string, ifNoneMatch string) (*CodexModelsManifest, error) {
 	if account == nil {
 		return nil, infraerrors.New(http.StatusInternalServerError, "OPENAI_CODEX_MODELS_ACCOUNT_REQUIRED", "account is required")
 	}
 	credAccount, err := resolveCredentialAccount(ctx, s.accountRepo, account)
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusInternalServerError, "OPENAI_CODEX_MODELS_CREDENTIALS_FAILED", "resolve credential account: %v", err)
-	}
-
-	clientVersion = strings.TrimSpace(clientVersion)
-	if clientVersion == "" {
-		clientVersion = openAICodexProbeVersion
 	}
 
 	requestEndpoint := chatgptCodexModelsURL
@@ -280,13 +275,10 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 	}
 
 	identity := s.resolveOpenAIOutboundIdentity(ctx, credAccount)
-	// OAuth manifest requests are part of the Codex protocol. Its URL query,
-	// Version header, Originator and User-Agent must describe the same client.
-	// Custom API-key upstreams intentionally retain the inbound client_version
-	// compatibility behavior below.
-	if !useAPIKeyUpstream {
-		clientVersion = identity.Version
-	}
+	// The manifest URL is a Codex protocol request for both OAuth and custom
+	// API-key upstreams. Do not let the caller's client_version split it from
+	// the final User-Agent: account identity is authoritative everywhere.
+	clientVersion := identity.Version
 	requestURL, err := buildCodexModelsManifestURL(requestEndpoint, appendModelsPath, clientVersion)
 	if err != nil {
 		if useAPIKeyUpstream {

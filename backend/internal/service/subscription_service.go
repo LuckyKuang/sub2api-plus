@@ -72,6 +72,7 @@ type subscriptionUsageSnapshot struct {
 	WeeklyWindowStart   *time.Time
 	MonthlyWindowStart  *time.Time
 	FiveHourWindowStart *time.Time
+	StartsAt            time.Time
 	ExpiresAt           time.Time
 	OneTimeDailyQuota   bool
 }
@@ -87,6 +88,21 @@ func activeSubscriptionQuotaWindow(start *time.Time, duration time.Duration, now
 	}
 	resetAt := start.Add(duration)
 	return resetAt, now.Before(resetAt)
+}
+
+// normalizedSubscriptionWindowStart translates the unambiguous first-window
+// anchor written by older releases. Later midnight anchors can be explicit
+// administrator resets and therefore remain unchanged.
+func normalizedSubscriptionWindowStart(start *time.Time, startsAt time.Time) *time.Time {
+	if start == nil || startsAt.IsZero() {
+		return start
+	}
+	legacyAnchor := startOfDay(startsAt)
+	if !legacyAnchor.Before(startsAt) || !start.Equal(legacyAnchor) {
+		return start
+	}
+	normalized := startsAt
+	return &normalized
 }
 
 // subscriptionUsageLimitError returns a 429-compatible domain error with the
@@ -115,14 +131,14 @@ func subscriptionUsageLimitError(group *Group, snapshot subscriptionUsageSnapsho
 		dailyResetAt = snapshot.ExpiresAt
 		dailyActive = now.Before(dailyResetAt)
 	} else {
-		dailyResetAt, dailyActive = activeSubscriptionQuotaWindow(snapshot.DailyWindowStart, dailyDuration, now)
+		dailyResetAt, dailyActive = activeSubscriptionQuotaWindow(normalizedSubscriptionWindowStart(snapshot.DailyWindowStart, snapshot.StartsAt), dailyDuration, now)
 	}
 	if group.HasDailyLimit() && snapshot.DailyUsage >= *group.DailyLimitUSD && dailyActive {
 		violations = append(violations, subscriptionLimitViolation{err: ErrDailyLimitExceeded, resetAt: dailyResetAt})
 	}
 
-	appendViolation(group.HasWeeklyLimit(), snapshot.WeeklyUsage, group.WeeklyLimitUSD, snapshot.WeeklyWindowStart, 7*subscriptionDayDuration, ErrWeeklyLimitExceeded)
-	appendViolation(group.HasMonthlyLimit(), snapshot.MonthlyUsage, group.MonthlyLimitUSD, snapshot.MonthlyWindowStart, 30*subscriptionDayDuration, ErrMonthlyLimitExceeded)
+	appendViolation(group.HasWeeklyLimit(), snapshot.WeeklyUsage, group.WeeklyLimitUSD, normalizedSubscriptionWindowStart(snapshot.WeeklyWindowStart, snapshot.StartsAt), 7*subscriptionDayDuration, ErrWeeklyLimitExceeded)
+	appendViolation(group.HasMonthlyLimit(), snapshot.MonthlyUsage, group.MonthlyLimitUSD, normalizedSubscriptionWindowStart(snapshot.MonthlyWindowStart, snapshot.StartsAt), 30*subscriptionDayDuration, ErrMonthlyLimitExceeded)
 	appendViolation(group.HasFiveHourLimit(), snapshot.FiveHourUsage, group.FiveHourLimitUSD, snapshot.FiveHourWindowStart, subscriptionFiveHourDuration, ErrFiveHourLimitExceeded)
 
 	if len(violations) == 0 {
@@ -156,6 +172,7 @@ func subscriptionUsageSnapshotFromSubscription(sub *UserSubscription) subscripti
 		WeeklyWindowStart:   sub.WeeklyWindowStart,
 		MonthlyWindowStart:  sub.MonthlyWindowStart,
 		FiveHourWindowStart: sub.FiveHourWindowStart,
+		StartsAt:            sub.StartsAt,
 		ExpiresAt:           sub.ExpiresAt,
 		OneTimeDailyQuota:   sub.HasOneTimeDailyQuota(),
 	}
@@ -1089,7 +1106,7 @@ func (s *SubscriptionService) CheckUsageLimits(ctx context.Context, sub *UserSub
 		snapshot.MonthlyUsage += additionalCost
 		snapshot.FiveHourUsage += additionalCost
 	}
-	return subscriptionUsageLimitError(group, snapshot, time.Now())
+	return subscriptionUsageLimitError(group, snapshot, s.now())
 }
 
 // ValidateAndCheckLimits 合并验证+限额检查（中间件热路径专用）
@@ -1132,7 +1149,7 @@ func (s *SubscriptionService) ValidateAndCheckLimits(sub *UserSubscription, grou
 
 	// 3. 检查用量限额。达到 limit 即拒绝（不是仅超过），并将准确窗口
 	// 重置时间附加到错误 metadata，供中间件/网关生成 Retry-After。
-	return needsMaintenance, subscriptionUsageLimitError(group, subscriptionUsageSnapshotFromSubscription(sub), time.Now())
+	return needsMaintenance, subscriptionUsageLimitError(group, subscriptionUsageSnapshotFromSubscription(sub), now)
 }
 
 // DoWindowMaintenance 异步执行窗口维护（激活+重置）

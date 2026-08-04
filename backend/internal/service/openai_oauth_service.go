@@ -329,13 +329,6 @@ func (s *OpenAIOAuthService) refreshTokenWithClientIDAndIdentity(ctx context.Con
 	return tokenInfo, nil
 }
 
-// enrichTokenInfo 通过 ChatGPT backend-api 补全 tokenInfo 并设置隐私（best-effort）。
-// 从 accounts/check 获取最新 plan_type、subscription_expires_at、email，
-// 然后尝试关闭训练数据共享。适用于所有获取/刷新 token 的路径。
-func (s *OpenAIOAuthService) enrichTokenInfo(ctx context.Context, tokenInfo *OpenAITokenInfo, proxyURL string) {
-	s.enrichTokenInfoWithAccount(ctx, tokenInfo, proxyURL, nil)
-}
-
 func (s *OpenAIOAuthService) enrichTokenInfoWithAccount(ctx context.Context, tokenInfo *OpenAITokenInfo, proxyURL string, account *Account) {
 	if tokenInfo.AccessToken == "" || s.privacyClientFactory == nil {
 		return

@@ -32,6 +32,12 @@ Do not duplicate current tool or release versions here.
 - Keep README core section IDs and links aligned across all three languages.
   Put details under `docs/` or `deploy/`, not in README files.
 - Keep frontend English and Chinese locale keys aligned.
+- Codex built-in outbound identity is an invariant: with no account UA, no
+  global UA, or an invalid legacy global UA, every built-in fallback must
+  resolve the same complete User-Agent/Originator/Version triple. Keep those
+  fields derived from one source of truth and update exact identity and
+  fallback-path tests together; account custom UA > global UA priority remains
+  unchanged.
 - Use OpenSpec for cross-cutting public API, persistent-data, security-boundary,
   or multi-module changes; small fixes and docs-only changes need none.
 - Never commit credentials, tokens, production configuration, or user data.

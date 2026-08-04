@@ -126,6 +126,11 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	if err := s.normalizeOpenAIAdvancedSchedulerOverrides(settings); err != nil {
 		return nil, err
 	}
+	normalizedOpenAICodexUserAgent, err := NormalizeOpenAICodexUserAgent(settings.OpenAICodexUserAgent)
+	if err != nil {
+		return nil, err
+	}
+	settings.OpenAICodexUserAgent = normalizedOpenAICodexUserAgent
 	settings.PaymentVisibleMethodAlipaySource = alipaySource
 	settings.PaymentVisibleMethodWxpaySource = wxpaySource
 	settings.WeChatConnectAppID = strings.TrimSpace(settings.WeChatConnectAppID)
@@ -441,7 +446,7 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeyRewriteMessageCacheControl] = strconv.FormatBool(settings.RewriteMessageCacheControl)
 	updates[SettingKeyEnableClientDatelineNormalization] = strconv.FormatBool(settings.EnableClientDatelineNormalization)
 	updates[SettingKeyAntigravityUserAgentVersion] = antigravity.NormalizeUserAgentVersion(settings.AntigravityUserAgentVersion)
-	updates[SettingKeyOpenAICodexUserAgent] = strings.TrimSpace(settings.OpenAICodexUserAgent)
+	updates[SettingKeyOpenAICodexUserAgent] = settings.OpenAICodexUserAgent
 	updates[SettingKeyOpenAICodexLocalGroupQuotaEnabled] = strconv.FormatBool(settings.OpenAICodexLocalGroupQuotaEnabled)
 	// codex_cli_only 加固
 	updates[SettingKeyMinCodexVersion] = strings.TrimSpace(settings.MinCodexVersion)

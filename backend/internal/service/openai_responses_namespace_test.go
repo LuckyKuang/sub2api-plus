@@ -159,11 +159,9 @@ func TestStripOpenAIResponsesInputNamespacesPreservesToolCalls(t *testing.T) {
 	require.Equal(t, "n0", gjson.GetBytes(stripped, "input.0.namespace").String())
 	require.False(t, gjson.GetBytes(stripped, "input.1.namespace").Exists())
 	require.Equal(t, "n2", gjson.GetBytes(stripped, "input.2.namespace").String())
-	require.Equal(t, "n3", gjson.GetBytes(stripped, "input.3.namespace").String())
-	require.Equal(t, "n4", gjson.GetBytes(stripped, "input.4.namespace").String())
-	require.Equal(t, "n5", gjson.GetBytes(stripped, "input.5.namespace").String())
-	require.Equal(t, "n6", gjson.GetBytes(stripped, "input.6.namespace").String())
-	require.Equal(t, "n7", gjson.GetBytes(stripped, "input.7.namespace").String())
+	for index := 3; index < 8; index++ {
+		require.False(t, gjson.GetBytes(stripped, "input."+strconv.Itoa(index)+".namespace").Exists())
+	}
 	require.Equal(t, "nested", gjson.GetBytes(stripped, "input.0.content.namespace").String())
 	require.Equal(t, "nested-content", gjson.GetBytes(stripped, "input.1.content.0.namespace").String())
 	require.Equal(t, "tool-namespace", gjson.GetBytes(stripped, "tools.0.namespace").String())

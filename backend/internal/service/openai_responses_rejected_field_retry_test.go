@@ -112,7 +112,7 @@ func TestNormalizeOpenAIResponsesRejectedFieldRetryBodyBindsMaxOutputTokensToRej
 	require.False(t, gjson.GetBytes(retryBody, "max_output_tokens").Exists())
 }
 
-func TestOpenAIGatewayService_APIKeyPreservesToolNamespacesBeforeFirstForward(t *testing.T) {
+func TestOpenAIGatewayService_APIKeyStripsToolNamespacesBeforeFirstForward(t *testing.T) {
 	for _, passthroughEnabled := range []bool{false, true} {
 		for _, path := range []string{"/v1/responses", "/v1/responses/compact"} {
 			t.Run(fmt.Sprintf("passthrough=%t%s", passthroughEnabled, path), func(t *testing.T) {
@@ -132,9 +132,9 @@ func TestOpenAIGatewayService_APIKeyPreservesToolNamespacesBeforeFirstForward(t 
 				require.NoError(t, err)
 				require.NotNil(t, result)
 				require.Len(t, upstream.bodies, 1)
-				require.Equal(t, "collaboration", gjson.GetBytes(upstream.bodies[0], "input.0.namespace").String())
+				require.False(t, gjson.GetBytes(upstream.bodies[0], "input.0.namespace").Exists())
 				require.Equal(t, "list_agents", gjson.GetBytes(upstream.bodies[0], "input.0.name").String())
-				require.Equal(t, "shell", gjson.GetBytes(upstream.bodies[0], "input.1.namespace").String())
+				require.False(t, gjson.GetBytes(upstream.bodies[0], "input.1.namespace").Exists())
 			})
 		}
 	}
@@ -188,7 +188,7 @@ func TestOpenAIGatewayService_RetriesExplicitMaxOutputTokensRejection(t *testing
 	require.Equal(t, "keep", gjson.GetBytes(upstream.bodies[1], "input.0.content.max_output_tokens").String())
 }
 
-func TestOpenAIGatewayService_RetriesMaxOutputTokensWithoutDroppingToolNamespaces(t *testing.T) {
+func TestOpenAIGatewayService_RetriesMaxOutputTokensAfterStrippingToolNamespaces(t *testing.T) {
 	body := []byte(`{"model":"gpt-5.5","stream":false,"max_output_tokens":2048,"input":[{"type":"function_call","name":"list_agents","namespace":"collaboration","arguments":"{}"},{"type":"custom_tool_call","name":"second","namespace":"shell","input":"{}"}]}`)
 	upstream := &httpUpstreamRecorder{responses: []*http.Response{
 		newOpenAIRejectedFieldTestResponse(http.StatusBadRequest, `{"error":{"code":"unsupported_parameter","message":"Unsupported parameter: max_output_tokens","param":"max_output_tokens"}}`),
@@ -206,8 +206,8 @@ func TestOpenAIGatewayService_RetriesMaxOutputTokensWithoutDroppingToolNamespace
 	require.NotNil(t, result)
 	require.Len(t, upstream.bodies, 2)
 	for _, forwardedBody := range upstream.bodies {
-		require.Equal(t, "collaboration", gjson.GetBytes(forwardedBody, "input.0.namespace").String())
-		require.Equal(t, "shell", gjson.GetBytes(forwardedBody, "input.1.namespace").String())
+		require.False(t, gjson.GetBytes(forwardedBody, "input.0.namespace").Exists())
+		require.False(t, gjson.GetBytes(forwardedBody, "input.1.namespace").Exists())
 	}
 	require.Equal(t, int64(2048), gjson.GetBytes(upstream.bodies[0], "max_output_tokens").Int())
 	require.False(t, gjson.GetBytes(upstream.bodies[1], "max_output_tokens").Exists())

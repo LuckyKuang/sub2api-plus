@@ -34,6 +34,6 @@ func TestUpdateSettings_OpenAICodexUserAgentValidation(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, invalid.Code)
 	require.Contains(t, invalid.Body.String(), "supported Codex User-Agent")
 
-	valid := update(t, "codex-tui/0.145.0 (Ubuntu 22.4.0; x86_64) xterm-256color (codex-tui; 0.145.0)")
+	valid := update(t, "codex-tui/0.146.0 (Ubuntu 22.4.0; x86_64) xterm-256color (codex-tui; 0.146.0)")
 	require.Equal(t, http.StatusOK, valid.Code)
 }

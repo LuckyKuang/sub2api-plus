@@ -16,6 +16,37 @@ import (
 
 const testOpenAIAccountUserAgent = "codex_cli_rs/9.9.9 (Ubuntu 22.4.0; x86_64) xterm-256color"
 
+type openAIIdentitySettingRepoStub struct {
+	value string
+}
+
+func (s *openAIIdentitySettingRepoStub) Get(context.Context, string) (*Setting, error) {
+	return nil, ErrSettingNotFound
+}
+
+func (s *openAIIdentitySettingRepoStub) GetValue(_ context.Context, key string) (string, error) {
+	if key != SettingKeyOpenAICodexUserAgent {
+		return "", ErrSettingNotFound
+	}
+	return s.value, nil
+}
+
+func (s *openAIIdentitySettingRepoStub) Set(context.Context, string, string) error { return nil }
+
+func (s *openAIIdentitySettingRepoStub) GetMultiple(context.Context, []string) (map[string]string, error) {
+	return map[string]string{}, nil
+}
+
+func (s *openAIIdentitySettingRepoStub) SetMultiple(context.Context, map[string]string) error {
+	return nil
+}
+
+func (s *openAIIdentitySettingRepoStub) GetAll(context.Context) (map[string]string, error) {
+	return map[string]string{}, nil
+}
+
+func (s *openAIIdentitySettingRepoStub) Delete(context.Context, string) error { return nil }
+
 type openAIIdentityOAuthClientStub struct {
 	exchangeUserAgent  string
 	exchangeOriginator string
@@ -159,4 +190,30 @@ func TestOpenAIGatewayService_ShadowUsesCredentialOwnerIdentity(t *testing.T) {
 func TestOpenAIAccountUserAgentLimit(t *testing.T) {
 	credentials := map[string]any{"user_agent": strings.Repeat("x", 513)}
 	require.Error(t, NormalizeOpenAIAccountUserAgent(PlatformOpenAI, credentials))
+}
+
+func TestOpenAIGatewayService_ResolvedIdentityPrefersAccountThenGlobalThenDefault(t *testing.T) {
+	globalUA := "codex-tui/8.8.8 (Ubuntu 22.4.0; x86_64) xterm-256color (codex-tui; 8.8.8)"
+	settingService := &SettingService{settingRepo: &openAIIdentitySettingRepoStub{value: globalUA}}
+	svc := &OpenAIGatewayService{settingService: settingService}
+
+	account := &Account{
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeAPIKey,
+		Credentials: map[string]any{
+			"user_agent": testOpenAIAccountUserAgent,
+		},
+	}
+	identity := svc.resolveOpenAIOutboundIdentity(context.Background(), account)
+	require.Equal(t, testOpenAIAccountUserAgent, identity.UserAgent)
+	require.Equal(t, "9.9.9", identity.Version)
+
+	account.Credentials = map[string]any{}
+	identity = svc.resolveOpenAIOutboundIdentity(context.Background(), account)
+	require.Equal(t, globalUA, identity.UserAgent)
+	require.Equal(t, "8.8.8", identity.Version)
+
+	svc.settingService = nil
+	identity = svc.resolveOpenAIOutboundIdentity(context.Background(), account)
+	require.Equal(t, DefaultOpenAICodexUserAgent, identity.UserAgent)
 }
