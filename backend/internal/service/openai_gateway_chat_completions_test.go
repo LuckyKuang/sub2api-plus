@@ -450,8 +450,9 @@ func TestForwardAsChatCompletions_ClientDisconnectDrainsUpstreamUsage(t *testing
 	}
 
 	result, err := svc.ForwardAsChatCompletions(context.Background(), c, account, body, "", "gpt-5.1")
-	require.NoError(t, err)
+	require.EqualError(t, err, "stream usage incomplete: client disconnected")
 	require.NotNil(t, result)
+	require.True(t, result.ClientDisconnect)
 	require.Equal(t, 11, result.Usage.InputTokens)
 	require.Equal(t, 5, result.Usage.OutputTokens)
 	require.Equal(t, 4, result.Usage.CacheReadInputTokens)
@@ -835,8 +836,9 @@ func TestForwardAsChatCompletions_TerminalUsageWithoutUpstreamCloseReturns(t *te
 
 	select {
 	case got := <-resultCh:
-		require.NoError(t, got.err)
+		require.EqualError(t, got.err, "stream usage incomplete: client disconnected")
 		require.NotNil(t, got.result)
+		require.True(t, got.result.ClientDisconnect)
 		require.Equal(t, 17, got.result.Usage.InputTokens)
 		require.Equal(t, 8, got.result.Usage.OutputTokens)
 		require.Equal(t, 6, got.result.Usage.CacheReadInputTokens)

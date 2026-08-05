@@ -443,8 +443,9 @@ func TestOpenAIResponseFlush_ClientDisconnectStillDrainsUsage(t *testing.T) {
 
 	result, err := runOpenAIResponseFlushTest(recorder, io.NopCloser(strings.NewReader(first+terminal)), config.GatewayConfig{})
 
-	require.NoError(t, err)
+	require.EqualError(t, err, "stream usage incomplete: client disconnected")
 	require.NotNil(t, result)
+	require.True(t, result.clientDisconnect)
 	require.Equal(t, 7, result.usage.InputTokens)
 	require.Equal(t, 5, result.usage.OutputTokens)
 	require.Equal(t, 2, result.usage.CacheReadInputTokens)

@@ -1584,8 +1584,9 @@ func TestForwardAsAnthropic_ClientDisconnectDrainsUpstreamUsage(t *testing.T) {
 	}
 
 	result, err := svc.ForwardAsAnthropic(context.Background(), c, account, body, "", "gpt-5.1")
-	require.NoError(t, err)
+	require.EqualError(t, err, "stream usage incomplete: client disconnected")
 	require.NotNil(t, result)
+	require.True(t, result.ClientDisconnect)
 	require.Equal(t, 9, result.Usage.InputTokens)
 	require.Equal(t, 4, result.Usage.OutputTokens)
 	require.Equal(t, 3, result.Usage.CacheReadInputTokens)
@@ -1637,8 +1638,9 @@ func TestForwardAsAnthropic_TerminalUsageWithoutUpstreamCloseReturns(t *testing.
 
 	select {
 	case got := <-resultCh:
-		require.NoError(t, got.err)
+		require.EqualError(t, got.err, "stream usage incomplete: client disconnected")
 		require.NotNil(t, got.result)
+		require.True(t, got.result.ClientDisconnect)
 		require.Equal(t, 15, got.result.Usage.InputTokens)
 		require.Equal(t, 6, got.result.Usage.OutputTokens)
 		require.Equal(t, 5, got.result.Usage.CacheReadInputTokens)
@@ -1698,8 +1700,9 @@ func TestForwardAsAnthropic_EventNamedTerminalWithoutUpstreamCloseReturns(t *tes
 
 	select {
 	case got := <-resultCh:
-		require.NoError(t, got.err)
+		require.EqualError(t, got.err, "stream usage incomplete: client disconnected")
 		require.NotNil(t, got.result)
+		require.True(t, got.result.ClientDisconnect)
 		require.Equal(t, 15, got.result.Usage.InputTokens)
 		require.Equal(t, 6, got.result.Usage.OutputTokens)
 		require.Equal(t, 5, got.result.Usage.CacheReadInputTokens)
@@ -1766,8 +1769,9 @@ func TestForwardAsAnthropic_EventNamedTerminalWithKeepaliveReturns(t *testing.T)
 
 	select {
 	case got := <-resultCh:
-		require.NoError(t, got.err)
+		require.EqualError(t, got.err, "stream usage incomplete: client disconnected")
 		require.NotNil(t, got.result)
+		require.True(t, got.result.ClientDisconnect)
 		require.Equal(t, 15, got.result.Usage.InputTokens)
 		require.Equal(t, 6, got.result.Usage.OutputTokens)
 		require.Equal(t, 5, got.result.Usage.CacheReadInputTokens)
