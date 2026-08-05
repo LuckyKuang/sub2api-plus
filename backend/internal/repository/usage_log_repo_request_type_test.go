@@ -77,7 +77,7 @@ func TestUsageLogRepositoryCreateSyncRequestTypeAndLegacyFields(t *testing.T) {
 			sqlmock.AnyArg(), // first_token_ms
 			sqlmock.AnyArg(), // first_output_ms
 			sqlmock.AnyArg(), // first_output_kind
-			true,             // is_complete defaults to true for new rows
+			nil,              // direct repository writes preserve unknown completion state
 			sqlmock.AnyArg(), // user_agent
 			sqlmock.AnyArg(), // ip_address
 			log.ImageCount,
@@ -171,7 +171,7 @@ func TestUsageLogRepositoryCreate_PersistsServiceTier(t *testing.T) {
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
-			true, // is_complete defaults to true for new rows
+			nil, // direct repository writes preserve unknown completion state
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
 			log.ImageCount,
@@ -288,9 +288,8 @@ func TestPrepareUsageLogInsert_PersistsTPSMetadata(t *testing.T) {
 		CreatedAt: time.Date(2025, 1, 5, 12, 0, 1, 0, time.UTC),
 	}
 	defaultPrepared := prepareUsageLogInsert(defaultLog)
-	require.Equal(t, true, defaultPrepared.args[36])
-	require.NotNil(t, defaultLog.IsComplete)
-	require.True(t, *defaultLog.IsComplete)
+	require.Nil(t, defaultPrepared.args[36])
+	require.Nil(t, defaultLog.IsComplete)
 }
 
 func TestPrepareUsageLogInsert_PersistsImageSizeMetadata(t *testing.T) {

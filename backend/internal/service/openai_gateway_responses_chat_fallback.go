@@ -214,15 +214,16 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsResponses(
 
 	if scan.Err != nil {
 		result := &OpenAIForwardResult{
-			RequestID:       requestID,
-			Usage:           scan.Usage,
-			Model:           originalModel,
-			BillingModel:    billingModel,
-			UpstreamModel:   upstreamModel,
-			ReasoningEffort: reasoningEffort,
-			ServiceTier:     serviceTier,
-			Stream:          true,
-			Duration:        time.Since(startTime),
+			RequestID:        requestID,
+			Usage:            scan.Usage,
+			Model:            originalModel,
+			BillingModel:     billingModel,
+			UpstreamModel:    upstreamModel,
+			ReasoningEffort:  reasoningEffort,
+			ServiceTier:      serviceTier,
+			Stream:           true,
+			Duration:         time.Since(startTime),
+			ClientDisconnect: clientDisconnected,
 		}
 		timing.ApplyOpenAIResult(result)
 		return result, fmt.Errorf("stream usage incomplete: %w", scan.Err)
@@ -240,18 +241,33 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsResponses(
 	}
 	if !scan.SawDone {
 		logCCStreamMissingDoneSentinel("openai responses chat fallback", requestID)
+		result := &OpenAIForwardResult{
+			RequestID:        requestID,
+			Usage:            scan.Usage,
+			Model:            originalModel,
+			BillingModel:     billingModel,
+			UpstreamModel:    upstreamModel,
+			ReasoningEffort:  reasoningEffort,
+			ServiceTier:      serviceTier,
+			Stream:           true,
+			Duration:         time.Since(startTime),
+			ClientDisconnect: clientDisconnected,
+		}
+		timing.ApplyOpenAIResult(result)
+		return result, errors.New("stream usage incomplete: missing [DONE]")
 	}
 
 	result := &OpenAIForwardResult{
-		RequestID:       requestID,
-		Usage:           scan.Usage,
-		Model:           originalModel,
-		BillingModel:    billingModel,
-		UpstreamModel:   upstreamModel,
-		ReasoningEffort: reasoningEffort,
-		ServiceTier:     serviceTier,
-		Stream:          true,
-		Duration:        time.Since(startTime),
+		RequestID:        requestID,
+		Usage:            scan.Usage,
+		Model:            originalModel,
+		BillingModel:     billingModel,
+		UpstreamModel:    upstreamModel,
+		ReasoningEffort:  reasoningEffort,
+		ServiceTier:      serviceTier,
+		Stream:           true,
+		Duration:         time.Since(startTime),
+		ClientDisconnect: clientDisconnected,
 	}
 	timing.ApplyOpenAIResult(result)
 	return result, nil

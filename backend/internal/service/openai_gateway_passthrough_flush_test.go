@@ -209,7 +209,7 @@ func TestOpenAIStreamingPassthroughFailedAfterOutputFlushesAtBoundaryAndKeepsUsa
 	require.Equal(t, 2, result.usage.OutputTokens)
 }
 
-func TestOpenAIStreamingPassthroughClientDisconnectStillDrainsTerminalUsage(t *testing.T) {
+func TestOpenAIStreamingPassthroughClientDisconnectMarksIncompleteAndDrainsTerminalUsage(t *testing.T) {
 	firstOutput := `data: {"type":"response.output_text.delta","delta":"partial"}` + "\n\n"
 	terminalEvent := `data: {"type":"response.completed","response":{"id":"resp_drain","usage":{"input_tokens":11,"output_tokens":4,"total_tokens":15}}}` + "\n\n"
 
@@ -219,8 +219,9 @@ func TestOpenAIStreamingPassthroughClientDisconnectStillDrainsTerminalUsage(t *t
 		2,
 	)
 
-	require.NoError(t, err)
+	require.EqualError(t, err, "stream usage incomplete: client disconnected")
 	require.NotNil(t, result)
+	require.True(t, result.clientDisconnect)
 	require.Equal(t, firstOutput, recorder.Body.String())
 	require.Equal(t, []int{len(firstOutput)}, writer.flushBodyLengths)
 	require.Equal(t, 1, writer.failedWrites)
@@ -263,7 +264,7 @@ func TestOpenAIStreamingPassthroughNamespaceRestoreErrorFlushesWrittenResidualOn
 	require.Equal(t, []int{len(writtenPrefix)}, writer.flushBodyLengths)
 }
 
-func TestOpenAIStreamingPassthroughBlankWriteFailureDoesNotFlushAndStillDrainsUsage(t *testing.T) {
+func TestOpenAIStreamingPassthroughBlankWriteFailureMarksIncompleteAndDrainsUsage(t *testing.T) {
 	writtenDataLine := `data: {"type":"response.output_text.delta","delta":"partial"}` + "\n"
 	terminalEvent := `data: {"type":"response.completed","response":{"id":"resp_blank_failure","usage":{"input_tokens":13,"output_tokens":5,"total_tokens":18}}}` + "\n\n"
 
@@ -273,8 +274,9 @@ func TestOpenAIStreamingPassthroughBlankWriteFailureDoesNotFlushAndStillDrainsUs
 		1,
 	)
 
-	require.NoError(t, err)
+	require.EqualError(t, err, "stream usage incomplete: client disconnected")
 	require.NotNil(t, result)
+	require.True(t, result.clientDisconnect)
 	require.Equal(t, writtenDataLine, recorder.Body.String())
 	require.Empty(t, writer.flushBodyLengths)
 	require.Equal(t, 1, writer.successfulWrites)

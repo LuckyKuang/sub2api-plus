@@ -640,7 +640,7 @@ func TestAntigravityCompatClientDisconnectDrainsUsage(t *testing.T) {
 	require.Equal(t, 15, result.usage.OutputTokens)
 }
 
-func TestAntigravityCompatStreamErrorCommitsSingleTerminalFrame(t *testing.T) {
+func TestAntigravityCompatReadErrorRetainsPartialUsage(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	svc := newAntigravityCompatService(config.GatewayConfig{MaxLineSize: defaultMaxLineSize}, nil)
 	c, recorder := newAntigravityCompatContext(http.MethodPost, "/v1/responses", nil)
@@ -657,9 +657,107 @@ func TestAntigravityCompatStreamErrorCommitsSingleTerminalFrame(t *testing.T) {
 	result, err := svc.handleResponsesStreamingFromAntigravity(c, resp, time.Now(), "gemini-3.1-pro-high")
 
 	require.Error(t, err)
-	require.Nil(t, result)
+	require.NotNil(t, result)
+	require.Equal(t, 8, result.usage.InputTokens)
+	require.Equal(t, 1, result.usage.OutputTokens)
+	require.NotNil(t, result.firstOutputMs)
 	require.True(t, IsResponseCommitted(c))
 	require.Equal(t, 1, strings.Count(recorder.Body.String(), "event: error"))
+}
+
+func TestAntigravityCompatMissingTerminalRetainsPartialUsage(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tests := []struct {
+		name string
+		run  func(*AntigravityGatewayService, *gin.Context, *http.Response) (*antigravityStreamResult, error)
+	}{
+		{
+			name: "chat completions",
+			run: func(svc *AntigravityGatewayService, c *gin.Context, resp *http.Response) (*antigravityStreamResult, error) {
+				return svc.handleChatCompletionsStreamingFromAntigravity(c, resp, time.Now(), "gemini-3.1-pro-high", true)
+			},
+		},
+		{
+			name: "responses",
+			run: func(svc *AntigravityGatewayService, c *gin.Context, resp *http.Response) (*antigravityStreamResult, error) {
+				return svc.handleResponsesStreamingFromAntigravity(c, resp, time.Now(), "gemini-3.1-pro-high")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := newAntigravityCompatService(config.GatewayConfig{MaxLineSize: defaultMaxLineSize}, nil)
+			c, recorder := newAntigravityCompatContext(http.MethodPost, "/", nil)
+			resp := &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+				Body: io.NopCloser(strings.NewReader(
+					`data: {"response":{"responseId":"resp_3757","candidates":[{"content":{"parts":[{"text":"partial"}]}}],"usageMetadata":{"promptTokenCount":8,"candidatesTokenCount":3}}}` + "\n\n",
+				)),
+			}
+
+			result, err := tt.run(svc, c, resp)
+
+			require.ErrorContains(t, err, "missing terminal event")
+			require.NotNil(t, result)
+			require.Equal(t, 8, result.usage.InputTokens)
+			require.Equal(t, 3, result.usage.OutputTokens)
+			require.NotNil(t, result.firstTokenMs)
+			require.NotNil(t, result.firstOutputMs)
+			require.Contains(t, recorder.Body.String(), "stream_incomplete")
+			require.NotContains(t, recorder.Body.String(), "data: [DONE]")
+			require.NotContains(t, recorder.Body.String(), "response.completed")
+		})
+	}
+}
+
+func TestAntigravityCompatNonStreamingMissingTerminalRetainsPartialUsage(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tests := []struct {
+		name string
+		body []byte
+		call func(*AntigravityGatewayService, context.Context, *gin.Context, *Account, []byte) (*ForwardResult, error)
+	}{
+		{
+			name: "chat completions",
+			body: []byte(`{"model":"gemini-3.1-pro-high","messages":[{"role":"user","content":"ok"}]}`),
+			call: func(svc *AntigravityGatewayService, ctx context.Context, c *gin.Context, account *Account, body []byte) (*ForwardResult, error) {
+				return svc.ForwardAsChatCompletions(ctx, c, account, body, nil)
+			},
+		},
+		{
+			name: "responses",
+			body: []byte(`{"model":"gemini-3.1-pro-high","input":"ok"}`),
+			call: func(svc *AntigravityGatewayService, ctx context.Context, c *gin.Context, account *Account, body []byte) (*ForwardResult, error) {
+				return svc.ForwardAsResponses(ctx, c, account, body, nil)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			upstream := &queuedHTTPUpstreamStub{responses: []*http.Response{{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+				Body: io.NopCloser(strings.NewReader(
+					`data: {"response":{"responseId":"resp_3757","candidates":[{"content":{"parts":[{"text":"partial"}]}}],"usageMetadata":{"promptTokenCount":8,"candidatesTokenCount":3}}}` + "\n\n",
+				)),
+			}}}
+			svc := newAntigravityCompatService(config.GatewayConfig{MaxLineSize: defaultMaxLineSize}, upstream)
+			c, recorder := newAntigravityCompatContext(http.MethodPost, "/", tt.body)
+
+			result, err := tt.call(svc, context.Background(), c, newAntigravityCompatAccount(AccountTypeOAuth), tt.body)
+
+			require.ErrorContains(t, err, "Failed to parse upstream response")
+			require.NotNil(t, result)
+			require.Equal(t, 8, result.Usage.InputTokens)
+			require.Equal(t, 3, result.Usage.OutputTokens)
+			require.NotContains(t, recorder.Body.String(), "partial")
+		})
+	}
 }
 
 func TestAntigravityCompatKeepaliveAfterFirstEvent(t *testing.T) {
@@ -683,6 +781,11 @@ func TestAntigravityCompatKeepaliveAfterFirstEvent(t *testing.T) {
 	)
 	require.NoError(t, err)
 	time.Sleep(1200 * time.Millisecond)
+	_, err = io.WriteString(
+		writer,
+		`data: {"response":{"responseId":"resp_3757","candidates":[{"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":8,"candidatesTokenCount":3}}}`+"\n\n",
+	)
+	require.NoError(t, err)
 	require.NoError(t, writer.Close())
 	require.NoError(t, <-done)
 	require.Contains(t, recorder.Body.String(), ": ping\n\n")

@@ -1259,11 +1259,10 @@ func prepareUsageLogInsert(log *service.UsageLog) usageLogInsertPrepared {
 	firstToken := nullInt(log.FirstTokenMs)
 	firstOutput := nullInt(log.FirstOutputMs)
 	firstOutputKind := nullString(log.FirstOutputKind)
-	isComplete := true
+	var isComplete any
 	if log.IsComplete != nil {
 		isComplete = *log.IsComplete
 	}
-	log.IsComplete = &isComplete
 	userAgent := nullString(log.UserAgent)
 	ipAddress := nullString(log.IPAddress)
 	imageSize := nullString(log.ImageSize)

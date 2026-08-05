@@ -262,6 +262,7 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
 	var timing streamOutputTiming
 	clientDisconnected := false
 	clientOutputStarted := false
+	sawDone := false
 	pendingLines := make([]string, 0, 8)
 	refusalDetector := newOpenAIChatSilentRefusalDetector(requestBodyLen)
 
@@ -302,7 +303,9 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
 		refusalDetector.ObserveSSELine(line)
 		if payload, ok := extractOpenAISSEDataLine(line); ok {
 			trimmedPayload := strings.TrimSpace(payload)
-			if trimmedPayload != "[DONE]" {
+			if trimmedPayload == "[DONE]" {
+				sawDone = true
+			} else {
 				if u := extractCCStreamUsage(payload); u != nil {
 					usage = *u
 				}
@@ -325,10 +328,11 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
 		}
 	}
 
-	if err := scanner.Err(); err != nil {
-		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+	streamErr := scanner.Err()
+	if streamErr != nil {
+		if !errors.Is(streamErr, context.Canceled) && !errors.Is(streamErr, context.DeadlineExceeded) {
 			logger.L().Warn("openai chat_completions raw: stream read error",
-				zap.Error(err),
+				zap.Error(streamErr),
 				zap.String("request_id", requestID),
 			)
 		}
@@ -356,17 +360,27 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
 	}
 
 	result := &OpenAIForwardResult{
-		RequestID:       requestID,
-		Usage:           usage,
-		Model:           originalModel,
-		BillingModel:    billingModel,
-		UpstreamModel:   upstreamModel,
-		ReasoningEffort: reasoningEffort,
-		ServiceTier:     serviceTier,
-		Stream:          true,
-		Duration:        time.Since(startTime),
+		RequestID:        requestID,
+		Usage:            usage,
+		Model:            originalModel,
+		BillingModel:     billingModel,
+		UpstreamModel:    upstreamModel,
+		ReasoningEffort:  reasoningEffort,
+		ServiceTier:      serviceTier,
+		Stream:           true,
+		Duration:         time.Since(startTime),
+		ClientDisconnect: clientDisconnected,
 	}
 	timing.ApplyOpenAIResult(result)
+	if streamErr != nil {
+		return result, fmt.Errorf("stream usage incomplete: %w", streamErr)
+	}
+	if !sawDone {
+		return result, errors.New("stream usage incomplete: missing [DONE]")
+	}
+	if clientDisconnected {
+		return result, errors.New("client disconnected")
+	}
 	return result, nil
 }
 

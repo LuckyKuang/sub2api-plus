@@ -31,7 +31,7 @@ type OpenAIRecordUsageInput struct {
 	IPAddress          string // 请求的客户端 IP 地址
 	SessionID          string // 客户端显式会话标识（session_id / X-Session-Id 等请求头），仅用于用量行会话关联
 	RequestPayloadHash string
-	IsComplete         *bool // nil 表示正常完整请求；false 表示失败/中断记录
+	IsComplete         *bool // nil 时按 Result.UsageComplete() 推断；false 表示失败/中断记录
 	APIKeyService      APIKeyQuotaUpdater
 	QuotaPlatform      string // user×platform quota platform resolved by the handler before async billing.
 	// CyberBlocked 为 true 时把该用量行标记为 cyber（request_type=cyber），计费逻辑不变。
@@ -271,7 +271,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		ImageInputTokens:    result.Usage.ImageInputTokens,
 		ImageOutputTokens:   result.Usage.ImageOutputTokens,
 		AudioOutputTokens:   result.Usage.AudioOutputTokens,
-		IsComplete:          usageCompletionPtr(input.IsComplete),
+		IsComplete:          usageCompletionPtr(input.IsComplete, result.UsageComplete()),
 		ImageCount:          result.ImageCount,
 		ImageSize:           optionalTrimmedStringPtr(result.ImageSize),
 		ImageInputSize:      optionalTrimmedStringPtr(result.ImageInputSize),

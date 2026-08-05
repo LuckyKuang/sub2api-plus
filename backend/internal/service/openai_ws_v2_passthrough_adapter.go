@@ -1107,6 +1107,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 					Stream:                true,
 					OpenAIWSMode:          true,
 					UpstreamTerminalEvent: normalizeOpenAIWSTerminalEvent(turn.TerminalEventType),
+					ClientDisconnect:      !turn.DownstreamComplete,
 					ResponseHeaders:       cloneHeader(handshakeHeaders),
 					Duration:              turn.Duration,
 					FirstTokenMs:          turn.FirstTokenMs,

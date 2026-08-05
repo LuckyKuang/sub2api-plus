@@ -41,7 +41,7 @@ Chat Completions 没有通用的图片生成输出格式。Responses→Chat 或 
 
 ## Persistence and rollout
 
-首输出字段与 `is_complete` 可空，不回填历史数据；`audio_output_tokens` 非空且默认零。新流式记录在识别到输出时写 `first_output_ms/kind`；严格 token-like 输出另写 `first_token_ms`。正常完成写 `is_complete=true`，中断、失败、取消或不完整终态写 `false`，历史行保持 `NULL`。Ops 新语义查询只纳入带 `first_output_kind` 的新记录，避免与 legacy 首事件数据混合；过滤条件不能限定首输出模态，因为混合模态流可能先出图片/音频、随后才产生有效首 Token。升级迁移同时将现有小时/日派生聚合及系统指标快照中的旧 TTFT 列置空，将存在样本数字段的聚合样本数归零，其他指标保持不变；后续采集与定时聚合按新语义写入或重建仍可由原始用量日志判定的数据。
+首输出字段与 `is_complete` 可空，不回填历史数据；`audio_output_tokens` 非空且默认零。新流式记录在识别到输出时写 `first_output_ms/kind`；严格 token-like 输出另写 `first_token_ms`。只有上游以成功终态结束且客户端已成功收到该终态，才写 `is_complete=true`。中断、客户端断开后 drain、下游终态帧写失败、失败、取消或不完整终态都写 `false`；这些情况仍保留已观测 usage 以支持计费。历史行保持 `NULL`。Ops 新语义查询只纳入带 `first_output_kind` 的新记录，避免与 legacy 首事件数据混合；过滤条件不能限定首输出模态，因为混合模态流可能先出图片/音频、随后才产生有效首 Token。升级迁移同时将现有小时/日派生聚合及系统指标快照中的旧 TTFT 列置空，将存在样本数字段的聚合样本数归零，其他指标保持不变；后续采集与定时聚合按新语义写入或重建仍可由原始用量日志判定的数据。
 
 使用记录保留历史 `first_token_ms` 原值，但当 `first_output_kind` 为空时必须标示为旧版首事件，不能把它展示成新口径的严格首 Token。CSV/Excel 表头也必须说明该列可能承载旧版首事件。
 
@@ -50,6 +50,8 @@ Chat Completions 没有通用的图片生成输出格式。Responses→Chat 或 
 流中途失败但已观测到 usage 时，部分结果必须复制 `first_token_ms`、`first_output_ms` 与 `first_output_kind`，避免图片、音频或混合模态记录退化成 legacy 语义，并写入 `is_complete=false`，防止将部分 Token 误报为完整请求 TPS。
 
 Antigravity 的非流式 Claude/Gemini 路径虽然读取上游 SSE，但只在完整聚合响应形成时观察一次终态输出，并把该观察标记为非 token-like。因此这类记录可有终态 `first_output_ms/kind`，但 `first_token_ms` 必须为空；不得把内部上游分片当成用户首 Token。
+
+Antigravity 的 Gemini→Claude、Gemini→Chat 和 Gemini→Responses 转换必须将真实 `finishReason` 或兼容 `[DONE]` 与 EOF 分开处理。只有前者可以关闭转换后的 SSE 状态机并写出 Claude `message_stop`、Chat `[DONE]`、Responses completed 事件或非流式聚合 JSON；EOF-only 或读取失败必须保留已观测 usage 作为不完整结果，且不得伪造成功终态。
 
 ## Usage-list TPS
 

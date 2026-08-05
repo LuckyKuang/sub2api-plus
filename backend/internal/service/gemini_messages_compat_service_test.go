@@ -715,6 +715,17 @@ func TestExtractGeminiUsage(t *testing.T) {
 			},
 		},
 		{
+			name:    "混合图片音频输出 token",
+			input:   `{"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":100,"candidatesTokensDetails":[{"modality":"IMAGE","tokenCount":25},{"modality":"AUDIO","tokenCount":30},{"modality":"AUDIO","tokenCount":5}]}}`,
+			wantNil: false,
+			wantUsage: &ClaudeUsage{
+				InputTokens:       10,
+				OutputTokens:      100,
+				ImageOutputTokens: 25,
+				AudioOutputTokens: 35,
+			},
+		},
+		{
 			name:    "包含 thoughtsTokenCount",
 			input:   `{"usageMetadata":{"promptTokenCount":100,"candidatesTokenCount":20,"thoughtsTokenCount":50}}`,
 			wantNil: false,
@@ -793,6 +804,12 @@ func TestExtractGeminiUsage(t *testing.T) {
 			}
 			if got.CacheReadInputTokens != tt.wantUsage.CacheReadInputTokens {
 				t.Errorf("CacheReadInputTokens: 期望 %d，实际 %d", tt.wantUsage.CacheReadInputTokens, got.CacheReadInputTokens)
+			}
+			if got.ImageOutputTokens != tt.wantUsage.ImageOutputTokens {
+				t.Errorf("ImageOutputTokens: 期望 %d，实际 %d", tt.wantUsage.ImageOutputTokens, got.ImageOutputTokens)
+			}
+			if got.AudioOutputTokens != tt.wantUsage.AudioOutputTokens {
+				t.Errorf("AudioOutputTokens: 期望 %d，实际 %d", tt.wantUsage.AudioOutputTokens, got.AudioOutputTokens)
 			}
 		})
 	}
@@ -1105,7 +1122,7 @@ func TestGeminiNativeStreaming_MediaAndMetadataTiming(t *testing.T) {
 		},
 		{
 			name:       "inline image",
-			payload:    `{"candidates":[{"content":{"parts":[{"inlineData":{"mimeType":"image/png","data":"aW1hZ2U="}}]}}]}`,
+			payload:    `{"candidates":[{"content":{"parts":[{"inlineData":{"mimeType":"image/png","data":"aW1hZ2U="}}]},"finishReason":"STOP"}]}`,
 			wantKind:   "image",
 			wantOutput: true,
 		},
@@ -1130,6 +1147,44 @@ func TestGeminiNativeStreaming_MediaAndMetadataTiming(t *testing.T) {
 				require.Nil(t, result.firstOutputMs)
 				require.Empty(t, result.firstOutputKind)
 			}
+		})
+	}
+}
+
+func TestGeminiStreaming_MissingTerminalReturnsIncompleteUsage(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	tests := []struct {
+		name string
+		run  func(*GeminiMessagesCompatService, *gin.Context, *http.Response) (any, error)
+	}{
+		{
+			name: "messages",
+			run: func(svc *GeminiMessagesCompatService, c *gin.Context, resp *http.Response) (any, error) {
+				return svc.handleStreamingResponse(c, resp, time.Now(), "claude")
+			},
+		},
+		{
+			name: "native",
+			run: func(svc *GeminiMessagesCompatService, c *gin.Context, resp *http.Response) (any, error) {
+				return svc.handleNativeStreamingResponse(c, resp, time.Now(), false)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(rec)
+			resp := &http.Response{
+				StatusCode: http.StatusOK,
+				Body: io.NopCloser(strings.NewReader(
+					`data: {"candidates":[{"content":{"parts":[{"text":"partial"}]}}],"usageMetadata":{"promptTokenCount":2,"candidatesTokenCount":1}}` + "\n\n",
+				)),
+			}
+
+			result, err := tt.run(&GeminiMessagesCompatService{}, c, resp)
+			require.ErrorContains(t, err, "missing terminal event")
+			require.NotNil(t, result)
 		})
 	}
 }

@@ -45,3 +45,12 @@
 - [x] 7.5 Run full frontend Vitest, lint, typecheck and strict OpenSpec validation.
 - [x] 7.6 Run focused Go tests for timing, usage parsing, persistence and migration paths with Go 1.26.5.
 - [x] 7.7 Persist `audio_output_tokens` and nullable `is_complete`; hide TPS for historical and incomplete records and cover mixed audio output.
+
+## 8. Stream completion lifecycle hardening
+
+- [x] 8.1 Infer `is_complete` from forwarding results when handlers do not explicitly set it; preserve `NULL` only for unknown historical/direct repository writes.
+- [x] 8.2 Return partial OpenAI and Gemini stream results for missing protocol terminal, non-success terminal, client disconnect and upstream read failure, and persist those records as incomplete.
+- [x] 8.3 Require WebSocket terminal-frame delivery before completing a turn; cover drain and terminal write failure.
+- [x] 8.4 Propagate Gemini/Antigravity audio output token details and add focused regression coverage.
+- [x] 8.5 Apply the explicit incomplete-record contract to native Gemini v1beta and Antigravity Gemini stream read failures, with handler and stream regression coverage.
+- [x] 8.6 Require a real Gemini terminal for Antigravity Claude/Chat/Responses conversion and internal aggregation; never synthesize a successful client terminal or JSON response from EOF-only partial data.

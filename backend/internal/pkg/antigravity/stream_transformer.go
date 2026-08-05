@@ -40,6 +40,7 @@ type StreamingProcessor struct {
 	outputTokens      int
 	cacheReadTokens   int
 	imageOutputTokens int
+	audioOutputTokens int
 }
 
 // NewStreamingProcessor 创建流式响应处理器
@@ -69,6 +70,9 @@ func usageToMap(u ClaudeUsage) map[string]any {
 	if u.ImageOutputTokens > 0 {
 		m["image_output_tokens"] = u.ImageOutputTokens
 	}
+	if u.AudioOutputTokens > 0 {
+		m["audio_output_tokens"] = u.AudioOutputTokens
+	}
 	return m
 }
 
@@ -80,8 +84,17 @@ func (p *StreamingProcessor) ProcessLine(line string) []byte {
 	}
 
 	data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-	if data == "" || data == "[DONE]" {
+	if data == "" {
 		return nil
+	}
+	// Some compatible Gemini upstreams use an SSE [DONE] marker instead of a
+	// final candidate.finishReason. It is a real upstream terminal, so convert
+	// it immediately while retaining the distinction from EOF-only shutdown.
+	if data == "[DONE]" {
+		if !p.messageStartSent {
+			return nil
+		}
+		return p.emitFinish("")
 	}
 
 	// 解包 v1internal 响应
@@ -115,6 +128,7 @@ func (p *StreamingProcessor) ProcessLine(line string) []byte {
 		p.outputTokens = geminiResp.UsageMetadata.CandidatesTokenCount + geminiResp.UsageMetadata.ThoughtsTokenCount
 		p.cacheReadTokens = cached
 		p.imageOutputTokens = geminiResp.UsageMetadata.ImageOutputTokens()
+		p.audioOutputTokens = geminiResp.UsageMetadata.AudioOutputTokens()
 	}
 
 	// 处理 parts
@@ -156,6 +170,7 @@ func (p *StreamingProcessor) Finish() ([]byte, *ClaudeUsage) {
 		OutputTokens:         p.outputTokens,
 		CacheReadInputTokens: p.cacheReadTokens,
 		ImageOutputTokens:    p.imageOutputTokens,
+		AudioOutputTokens:    p.audioOutputTokens,
 	}
 
 	if !p.messageStartSent {
@@ -172,7 +187,15 @@ func (p *StreamingProcessor) Finish() ([]byte, *ClaudeUsage) {
 
 // MessageStartSent 报告流中是否已发出过 message_start 事件（即是否收到过有效的上游数据）
 func (p *StreamingProcessor) MessageStartSent() bool {
-	return p.messageStartSent
+	return p != nil && p.messageStartSent
+}
+
+// MessageStopSent reports whether an Anthropic message_stop event has been
+// emitted. Callers that need to infer an upstream terminal must check it before
+// Finish(), because Finish() can synthesize a local closeout for non-streaming
+// aggregation.
+func (p *StreamingProcessor) MessageStopSent() bool {
+	return p != nil && p.messageStopSent
 }
 
 // emitMessageStart 发送 message_start 事件
@@ -188,6 +211,7 @@ func (p *StreamingProcessor) emitMessageStart(v1Resp *V1InternalResponse) []byte
 		usage.OutputTokens = v1Resp.Response.UsageMetadata.CandidatesTokenCount + v1Resp.Response.UsageMetadata.ThoughtsTokenCount
 		usage.CacheReadInputTokens = cached
 		usage.ImageOutputTokens = v1Resp.Response.UsageMetadata.ImageOutputTokens()
+		usage.AudioOutputTokens = v1Resp.Response.UsageMetadata.AudioOutputTokens()
 	}
 
 	responseID := v1Resp.ResponseID
@@ -523,6 +547,7 @@ func (p *StreamingProcessor) emitFinish(finishReason string) []byte {
 		OutputTokens:         p.outputTokens,
 		CacheReadInputTokens: p.cacheReadTokens,
 		ImageOutputTokens:    p.imageOutputTokens,
+		AudioOutputTokens:    p.audioOutputTokens,
 	}
 
 	var usageValue any = usage

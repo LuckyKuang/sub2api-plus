@@ -2034,9 +2034,10 @@ func TestOpenAIGatewayService_OAuthPassthrough_StreamClientDisconnectStillCollec
 	}
 
 	result, err := svc.Forward(context.Background(), c, account, originalBody)
-	require.NoError(t, err)
+	require.EqualError(t, err, "stream usage incomplete: client disconnected")
 	require.NotNil(t, result)
 	require.True(t, result.Stream)
+	require.True(t, result.ClientDisconnect)
 	require.NotNil(t, result.FirstTokenMs)
 	require.Equal(t, 11, result.Usage.InputTokens)
 	require.Equal(t, 7, result.Usage.OutputTokens)

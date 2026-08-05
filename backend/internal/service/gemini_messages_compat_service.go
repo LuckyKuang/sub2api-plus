@@ -1061,15 +1061,19 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 	var firstTokenMs *int
 	var firstOutputMs *int
 	var firstOutputKind string
+	clientDisconnect := false
+	var forwardErr error
 	if req.Stream {
 		streamRes, err := s.handleStreamingResponse(c, resp, startTime, originalModel)
-		if err != nil {
+		if streamRes == nil {
 			return nil, err
 		}
 		usage = streamRes.usage
 		firstTokenMs = streamRes.firstTokenMs
 		firstOutputMs = streamRes.firstOutputMs
 		firstOutputKind = streamRes.firstOutputKind
+		clientDisconnect = streamRes.clientDisconnect
+		forwardErr = err
 	} else {
 		if useUpstreamStream {
 			collected, usageObj, err := collectGeminiSSE(resp.Body, true)
@@ -1100,19 +1104,20 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 	}
 
 	return &ForwardResult{
-		RequestID:       requestID,
-		Usage:           *usage,
-		Model:           originalModel,
-		UpstreamModel:   mappedModel,
-		Stream:          req.Stream,
-		Duration:        time.Since(startTime),
-		FirstTokenMs:    firstTokenMs,
-		FirstOutputMs:   firstOutputMs,
-		FirstOutputKind: firstOutputKind,
-		ImageCount:      imageCount,
-		ImageSize:       imageSize,
-		ImageInputSize:  imageInputSize,
-	}, nil
+		RequestID:        requestID,
+		Usage:            *usage,
+		Model:            originalModel,
+		UpstreamModel:    mappedModel,
+		Stream:           req.Stream,
+		Duration:         time.Since(startTime),
+		FirstTokenMs:     firstTokenMs,
+		FirstOutputMs:    firstOutputMs,
+		FirstOutputKind:  firstOutputKind,
+		ImageCount:       imageCount,
+		ImageSize:        imageSize,
+		ImageInputSize:   imageInputSize,
+		ClientDisconnect: clientDisconnect,
+	}, forwardErr
 }
 
 func isGeminiSignatureRelatedError(respBody []byte) bool {
@@ -1597,16 +1602,20 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 	var firstTokenMs *int
 	var firstOutputMs *int
 	var firstOutputKind string
+	clientDisconnect := false
+	var forwardErr error
 
 	if stream {
 		streamRes, err := s.handleNativeStreamingResponse(c, resp, startTime, isOAuth)
-		if err != nil {
+		if streamRes == nil {
 			return nil, err
 		}
 		usage = streamRes.usage
 		firstTokenMs = streamRes.firstTokenMs
 		firstOutputMs = streamRes.firstOutputMs
 		firstOutputKind = streamRes.firstOutputKind
+		clientDisconnect = streamRes.clientDisconnect
+		forwardErr = err
 	} else {
 		if useUpstreamStream {
 			collected, usageObj, err := collectGeminiSSE(resp.Body, isOAuth)
@@ -1638,19 +1647,20 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 	}
 
 	return &ForwardResult{
-		RequestID:       requestID,
-		Usage:           *usage,
-		Model:           originalModel,
-		UpstreamModel:   mappedModel,
-		Stream:          stream,
-		Duration:        time.Since(startTime),
-		FirstTokenMs:    firstTokenMs,
-		FirstOutputMs:   firstOutputMs,
-		FirstOutputKind: firstOutputKind,
-		ImageCount:      imageCount,
-		ImageSize:       imageSize,
-		ImageInputSize:  imageInputSize,
-	}, nil
+		RequestID:        requestID,
+		Usage:            *usage,
+		Model:            originalModel,
+		UpstreamModel:    mappedModel,
+		Stream:           stream,
+		Duration:         time.Since(startTime),
+		FirstTokenMs:     firstTokenMs,
+		FirstOutputMs:    firstOutputMs,
+		FirstOutputKind:  firstOutputKind,
+		ImageCount:       imageCount,
+		ImageSize:        imageSize,
+		ImageInputSize:   imageInputSize,
+		ClientDisconnect: clientDisconnect,
+	}, forwardErr
 }
 
 // checkErrorPolicyInLoop 在重试循环内预检查错误策略。
@@ -1998,10 +2008,11 @@ func mapGeminiStatusToClaudeErrorType(status string) string {
 }
 
 type geminiStreamResult struct {
-	usage           *ClaudeUsage
-	firstTokenMs    *int
-	firstOutputMs   *int
-	firstOutputKind string
+	usage            *ClaudeUsage
+	firstTokenMs     *int
+	firstOutputMs    *int
+	firstOutputKind  string
+	clientDisconnect bool
 }
 
 func (s *GeminiMessagesCompatService) handleNonStreamingResponse(c *gin.Context, resp *http.Response, originalModel string) (*ClaudeUsage, error) {
@@ -2037,6 +2048,9 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 	if !ok {
 		return nil, errors.New("streaming not supported")
 	}
+	streamWriter := &geminiDisconnectTrackingResponseWriter{ResponseWriter: c.Writer}
+	c.Writer = streamWriter
+	defer func() { c.Writer = streamWriter.ResponseWriter }()
 
 	messageID := generateAnthropicMsgID()
 	messageStart := map[string]any{
@@ -2061,6 +2075,7 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 	var timing streamOutputTiming
 	var usage ClaudeUsage
 	finishReason := ""
+	terminalSeen := false
 	sawToolUse := false
 
 	nextBlockIndex := 0
@@ -2076,7 +2091,13 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil && !errors.Is(err, io.EOF) {
-			return nil, fmt.Errorf("stream read error: %w", err)
+			return &geminiStreamResult{
+				usage:            &usage,
+				firstTokenMs:     timing.firstTokenMs,
+				firstOutputMs:    timing.firstOutputMs,
+				firstOutputKind:  timing.firstOutputKind,
+				clientDisconnect: streamWriter.disconnected,
+			}, fmt.Errorf("stream usage incomplete: %w", err)
 		}
 
 		if !strings.HasPrefix(line, "data:") {
@@ -2087,6 +2108,9 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 		}
 		payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
 		if payload == "" || payload == "[DONE]" {
+			if payload == "[DONE]" {
+				terminalSeen = true
+			}
 			if errors.Is(err, io.EOF) {
 				break
 			}
@@ -2105,6 +2129,7 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 
 		if fr := extractGeminiFinishReason(geminiResp); fr != "" {
 			finishReason = fr
+			terminalSeen = true
 		}
 
 		parts := extractGeminiParts(geminiResp)
@@ -2300,6 +2325,15 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 			break
 		}
 	}
+	if !terminalSeen {
+		return &geminiStreamResult{
+			usage:            &usage,
+			firstTokenMs:     timing.firstTokenMs,
+			firstOutputMs:    timing.firstOutputMs,
+			firstOutputKind:  timing.firstOutputKind,
+			clientDisconnect: streamWriter.disconnected,
+		}, errors.New("stream usage incomplete: missing terminal event")
+	}
 
 	if openBlockIndex >= 0 {
 		writeSSE(c.Writer, "content_block_stop", map[string]any{
@@ -2339,11 +2373,45 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 	flusher.Flush()
 
 	return &geminiStreamResult{
-		usage:           &usage,
-		firstTokenMs:    timing.firstTokenMs,
-		firstOutputMs:   timing.firstOutputMs,
-		firstOutputKind: timing.firstOutputKind,
+		usage:            &usage,
+		firstTokenMs:     timing.firstTokenMs,
+		firstOutputMs:    timing.firstOutputMs,
+		firstOutputKind:  timing.firstOutputKind,
+		clientDisconnect: streamWriter.disconnected,
 	}, nil
+}
+
+// geminiDisconnectTrackingWriter preserves the existing drain-for-billing
+// behavior after a downstream write fails. It records the first failed write
+// and turns later writes into no-ops so stream parsers can keep collecting
+// upstream usage and terminal state.
+type geminiDisconnectTrackingResponseWriter struct {
+	gin.ResponseWriter
+	disconnected bool
+}
+
+func (w *geminiDisconnectTrackingResponseWriter) Write(p []byte) (int, error) {
+	if w == nil || w.ResponseWriter == nil || w.disconnected {
+		return len(p), nil
+	}
+	n, err := w.ResponseWriter.Write(p)
+	if err != nil {
+		w.disconnected = true
+		return len(p), nil
+	}
+	return n, nil
+}
+
+func (w *geminiDisconnectTrackingResponseWriter) WriteString(s string) (int, error) {
+	if w == nil || w.ResponseWriter == nil || w.disconnected {
+		return len(s), nil
+	}
+	n, err := w.ResponseWriter.WriteString(s)
+	if err != nil {
+		w.disconnected = true
+		return len(s), nil
+	}
+	return n, nil
 }
 
 func writeSSE(w io.Writer, event string, data any) {
@@ -2557,10 +2625,11 @@ func mergeCollectedTextParts(response map[string]any, textParts []string) map[st
 }
 
 type geminiNativeStreamResult struct {
-	usage           *ClaudeUsage
-	firstTokenMs    *int
-	firstOutputMs   *int
-	firstOutputKind string
+	usage            *ClaudeUsage
+	firstTokenMs     *int
+	firstOutputMs    *int
+	firstOutputKind  string
+	clientDisconnect bool
 }
 
 func isGeminiInsufficientScope(headers http.Header, body []byte) bool {
@@ -2696,10 +2765,14 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
 	if !ok {
 		return nil, errors.New("streaming not supported")
 	}
+	streamWriter := &geminiDisconnectTrackingResponseWriter{ResponseWriter: c.Writer}
+	c.Writer = streamWriter
+	defer func() { c.Writer = streamWriter.ResponseWriter }()
 
 	reader := bufio.NewReader(resp.Body)
 	usage := &ClaudeUsage{}
 	var timing streamOutputTiming
+	terminalSeen := false
 
 	for {
 		line, err := reader.ReadString('\n')
@@ -2709,6 +2782,9 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
 				payload := strings.TrimSpace(strings.TrimPrefix(trimmed, "data:"))
 				// Keepalive / done markers
 				if payload == "" || payload == "[DONE]" {
+					if payload == "[DONE]" {
+						terminalSeen = true
+					}
 					_, _ = io.WriteString(c.Writer, line)
 					flusher.Flush()
 				} else {
@@ -2728,6 +2804,9 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
 
 					if u := extractGeminiUsage(rawBytes); u != nil {
 						usage = u
+					}
+					if geminiStreamHasTerminal(rawBytes) {
+						terminalSeen = true
 					}
 
 					timing.Observe(startTime, apicompat.ObserveGeminiOutput(rawBytes))
@@ -2751,15 +2830,31 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
 			break
 		}
 		if err != nil {
-			return nil, err
+			return &geminiNativeStreamResult{
+				usage:            usage,
+				firstTokenMs:     timing.firstTokenMs,
+				firstOutputMs:    timing.firstOutputMs,
+				firstOutputKind:  timing.firstOutputKind,
+				clientDisconnect: streamWriter.disconnected,
+			}, fmt.Errorf("stream usage incomplete: %w", err)
 		}
+	}
+	if !terminalSeen {
+		return &geminiNativeStreamResult{
+			usage:            usage,
+			firstTokenMs:     timing.firstTokenMs,
+			firstOutputMs:    timing.firstOutputMs,
+			firstOutputKind:  timing.firstOutputKind,
+			clientDisconnect: streamWriter.disconnected,
+		}, errors.New("stream usage incomplete: missing terminal event")
 	}
 
 	return &geminiNativeStreamResult{
-		usage:           usage,
-		firstTokenMs:    timing.firstTokenMs,
-		firstOutputMs:   timing.firstOutputMs,
-		firstOutputKind: timing.firstOutputKind,
+		usage:            usage,
+		firstTokenMs:     timing.firstTokenMs,
+		firstOutputMs:    timing.firstOutputMs,
+		firstOutputKind:  timing.firstOutputKind,
+		clientDisconnect: streamWriter.disconnected,
 	}, nil
 }
 
@@ -2977,14 +3072,18 @@ func extractGeminiUsage(data []byte) *ClaudeUsage {
 	cached := int(usage.Get("cachedContentTokenCount").Int())
 	thoughts := int(usage.Get("thoughtsTokenCount").Int())
 
-	// 从 candidatesTokensDetails 提取 IMAGE 模态 token 数
+	// 从 candidatesTokensDetails 提取 IMAGE/AUDIO 模态 token 数。输出总量
+	// 包含这两种模态，TPS 分子会在展示侧分别扣除。
 	imageTokens := 0
+	audioTokens := 0
 	candidateDetails := usage.Get("candidatesTokensDetails")
 	if candidateDetails.Exists() {
 		candidateDetails.ForEach(func(_, detail gjson.Result) bool {
-			if detail.Get("modality").String() == "IMAGE" {
-				imageTokens = int(detail.Get("tokenCount").Int())
-				return false
+			switch detail.Get("modality").String() {
+			case "IMAGE":
+				imageTokens += int(detail.Get("tokenCount").Int())
+			case "AUDIO":
+				audioTokens += int(detail.Get("tokenCount").Int())
 			}
 			return true
 		})
@@ -2997,6 +3096,7 @@ func extractGeminiUsage(data []byte) *ClaudeUsage {
 		OutputTokens:         cand + thoughts,
 		CacheReadInputTokens: cached,
 		ImageOutputTokens:    imageTokens,
+		AudioOutputTokens:    audioTokens,
 	}
 }
 
@@ -3192,6 +3292,11 @@ func extractGeminiFinishReason(geminiResp map[string]any) string {
 		}
 	}
 	return ""
+}
+
+func geminiStreamHasTerminal(data []byte) bool {
+	var geminiResp map[string]any
+	return json.Unmarshal(data, &geminiResp) == nil && extractGeminiFinishReason(geminiResp) != ""
 }
 
 func extractGeminiParts(geminiResp map[string]any) []map[string]any {

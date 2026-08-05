@@ -50,10 +50,14 @@ type RelayTurnResult struct {
 	Usage             Usage
 	RequestID         string
 	TerminalEventType string
-	Duration          time.Duration
-	FirstTokenMs      *int
-	FirstOutputMs     *int
-	FirstOutputKind   string
+	// DownstreamComplete is true only when the upstream terminal frame was
+	// successfully delivered to the client. A drained terminal still carries
+	// billable usage, but is not a complete client-visible response.
+	DownstreamComplete bool
+	Duration           time.Duration
+	FirstTokenMs       *int
+	FirstOutputMs      *int
+	FirstOutputKind    string
 }
 
 type RelayExit struct {
@@ -518,8 +522,16 @@ func runUpstreamToClient(
 			return
 		}
 		markActivity()
+		observedEvent := observedUpstreamEvent{}
+		switch msgType {
+		case coderws.MessageText:
+			observedEvent = observeUpstreamMessage(state, payload, startAt, nowFn, onUsageParseFailure)
+		case coderws.MessageBinary:
+			// binary frame 直接透传，不进入 JSON 观测路径（避免无效解析开销）。
+		}
 		if beforeWriteClient != nil {
 			if err := beforeWriteClient(msgType, payload, wroteDownstream); err != nil {
+				emitTurnComplete(onTurnComplete, state, observedEvent, false)
 				emitRelayTrace(onTrace, RelayTraceEvent{
 					Stage:           "upstream_message_rejected",
 					Direction:       "upstream_to_client",
@@ -536,14 +548,6 @@ func runUpstreamToClient(
 				return
 			}
 		}
-		observedEvent := observedUpstreamEvent{}
-		switch msgType {
-		case coderws.MessageText:
-			observedEvent = observeUpstreamMessage(state, payload, startAt, nowFn, onUsageParseFailure)
-		case coderws.MessageBinary:
-			// binary frame 直接透传，不进入 JSON 观测路径（避免无效解析开销）。
-		}
-		emitTurnComplete(onTurnComplete, state, observedEvent)
 		if dropDownstreamWrites != nil && dropDownstreamWrites.Load() {
 			if droppedFrames != nil {
 				droppedFrames.Add(1)
@@ -556,6 +560,7 @@ func runUpstreamToClient(
 				WroteDownstream: wroteDownstream,
 			})
 			if observedEvent.terminal {
+				emitTurnComplete(onTurnComplete, state, observedEvent, false)
 				exitCh <- relayExitSignal{
 					stage:           "drain_terminal",
 					graceful:        true,
@@ -574,6 +579,7 @@ func runUpstreamToClient(
 			afterClientWrite(msgType, payload, writeErr)
 		}
 		if writeErr != nil {
+			emitTurnComplete(onTurnComplete, state, observedEvent, false)
 			emitRelayTrace(onTrace, RelayTraceEvent{
 				Stage:           "write_client_failed",
 				Direction:       "upstream_to_client",
@@ -586,6 +592,7 @@ func runUpstreamToClient(
 			return
 		}
 		wroteDownstream = true
+		emitTurnComplete(onTurnComplete, state, observedEvent, true)
 		if afterWriteClient != nil {
 			afterWriteClient(msgType, payload)
 		}
@@ -730,6 +737,7 @@ func emitTurnComplete(
 	onTurnComplete func(turn RelayTurnResult),
 	state *relayState,
 	observed observedUpstreamEvent,
+	downstreamComplete bool,
 ) {
 	if onTurnComplete == nil || !observed.terminal {
 		return
@@ -743,14 +751,15 @@ func emitTurnComplete(
 		requestModel = state.currentRequestModel()
 	}
 	onTurnComplete(RelayTurnResult{
-		RequestModel:      requestModel,
-		Usage:             observed.usage,
-		RequestID:         responseID,
-		TerminalEventType: observed.eventType,
-		Duration:          observed.duration,
-		FirstTokenMs:      openAIWSRelayCloneIntPtr(observed.firstToken),
-		FirstOutputMs:     openAIWSRelayCloneIntPtr(observed.firstOutput),
-		FirstOutputKind:   observed.outputKind,
+		RequestModel:       requestModel,
+		Usage:              observed.usage,
+		RequestID:          responseID,
+		TerminalEventType:  observed.eventType,
+		DownstreamComplete: downstreamComplete,
+		Duration:           observed.duration,
+		FirstTokenMs:       openAIWSRelayCloneIntPtr(observed.firstToken),
+		FirstOutputMs:      openAIWSRelayCloneIntPtr(observed.firstOutput),
+		FirstOutputKind:    observed.outputKind,
 	})
 }
 

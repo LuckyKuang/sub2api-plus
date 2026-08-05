@@ -282,6 +282,19 @@ func (r *OpenAIForwardResult) SucceededForScheduling() bool {
 	}
 }
 
+// UsageComplete reports whether this result is eligible for complete-stream
+// metrics. Billing may still record partial usage after an interrupted stream,
+// but those records must never drive TPS.
+func (r *OpenAIForwardResult) UsageComplete() bool {
+	if r == nil || r.ClientDisconnect {
+		return false
+	}
+	if !r.Stream || !r.OpenAIWSMode {
+		return true
+	}
+	return r.SucceededForScheduling()
+}
+
 // SetActualOpenAIUpstreamEndpoint records the endpoint selected by the current
 // forwarding attempt. It covers error paths where no OpenAIForwardResult is
 // available for usage and operations logging.

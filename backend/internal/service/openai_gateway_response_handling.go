@@ -30,6 +30,7 @@ type openaiStreamingResult struct {
 	responseID       string
 	imageCount       int
 	imageOutputSizes []string
+	clientDisconnect bool
 }
 
 type openaiNonStreamingResult struct {
@@ -220,6 +221,7 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 	clientDisconnected := false // 客户端断开后继续 drain 上游以收集 usage
 	sawTerminalEvent := false
 	sawFailedEvent := false
+	nonCompleteTerminal := ""
 	failedMessage := ""
 	clientOutputStarted := false
 	upstreamRequestID := strings.TrimSpace(resp.Header.Get("x-request-id"))
@@ -311,6 +313,7 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 			responseID:       responseID,
 			imageCount:       imageCounter.Count(),
 			imageOutputSizes: imageCounter.Sizes(),
+			clientDisconnect: clientDisconnected,
 		}
 	}
 	flushPending := func(disconnectMessage string) {
@@ -357,6 +360,12 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 		}
 		if sawFailedEvent {
 			return resultWithUsage(), fmt.Errorf("upstream response failed: %s", failedMessage)
+		}
+		if nonCompleteTerminal != "" {
+			return resultWithUsage(), fmt.Errorf("stream usage incomplete: upstream terminal %s", nonCompleteTerminal)
+		}
+		if clientDisconnected {
+			return resultWithUsage(), errors.New("stream usage incomplete: client disconnected")
 		}
 		return resultWithUsage(), nil
 	}
@@ -430,6 +439,9 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 			// 初始上游 data 的 type 只解析一次：原始值保持终止事件的精确匹配，规范化值供后续分支复用。
 			if openAIStreamEventIsTerminalWithType(data, eventTypeRaw) {
 				sawTerminalEvent = true
+				if eventType != "response.completed" && eventType != "response.done" && eventType != "response.failed" {
+					nonCompleteTerminal = eventType
+				}
 			}
 			if responseID == "" {
 				responseID = extractOpenAIResponseIDFromJSONBytes(dataBytes)

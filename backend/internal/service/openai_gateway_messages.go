@@ -828,6 +828,7 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 	clientOutputStarted := false
 	var streamFailoverErr error
 	var streamNonFailoverErr error
+	nonCompleteTerminal := ""
 
 	scanner := s.newUpstreamSSEScanner(resp.Body)
 
@@ -877,6 +878,9 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 		isBareErrorEvent := eventType == "error"
 		isTerminalEvent := isOpenAICompatResponsesTerminalEvent(eventType) || isBareErrorEvent
 		if isTerminalEvent {
+			if eventType != "response.completed" && eventType != "response.done" && eventType != "response.failed" && !isBareErrorEvent {
+				nonCompleteTerminal = eventType
+			}
 			if event.Response != nil {
 				if id := strings.TrimSpace(event.Response.ID); id != "" {
 					responseID = id
@@ -990,6 +994,12 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 		}
 		if streamNonFailoverErr != nil {
 			return resultWithUsage(), streamNonFailoverErr
+		}
+		if nonCompleteTerminal != "" {
+			return resultWithUsage(), fmt.Errorf("stream usage incomplete: upstream terminal %s", nonCompleteTerminal)
+		}
+		if clientDisconnected {
+			return resultWithUsage(), errors.New("stream usage incomplete: client disconnected")
 		}
 		if finalEvents := apicompat.FinalizeResponsesAnthropicStream(state); len(finalEvents) > 0 && !clientDisconnected {
 			for _, evt := range finalEvents {

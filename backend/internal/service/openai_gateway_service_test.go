@@ -2061,12 +2061,11 @@ func TestOpenAIStreamingClientDisconnectDrainsUpstreamUsage(t *testing.T) {
 
 	result, err := svc.handleStreamingResponse(c.Request.Context(), resp, c, &Account{ID: 1}, time.Now(), "model", "model")
 	_ = pr.Close()
-	if err != nil {
-		t.Fatalf("expected nil error, got %v", err)
-	}
+	require.EqualError(t, err, "stream usage incomplete: client disconnected")
 	if result == nil || result.usage == nil {
 		t.Fatalf("expected usage result")
 	}
+	require.True(t, result.clientDisconnect)
 	if result.usage.InputTokens != 3 || result.usage.OutputTokens != 5 || result.usage.CacheReadInputTokens != 1 {
 		t.Fatalf("unexpected usage: %+v", *result.usage)
 	}
@@ -2383,7 +2382,7 @@ func TestOpenAIStreamingPassthroughResponseDoneWithoutDoneMarkerStillSucceeds(t 
 	require.Equal(t, 1, result.usage.CacheReadInputTokens)
 }
 
-func TestOpenAIStreamingPassthroughResponseIncompleteWithoutDoneMarkerStillSucceeds(t *testing.T) {
+func TestOpenAIStreamingPassthroughResponseIncompleteWithoutDoneMarkerMarksIncomplete(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cfg := &config.Config{
 		Gateway: config.GatewayConfig{
@@ -2410,7 +2409,7 @@ func TestOpenAIStreamingPassthroughResponseIncompleteWithoutDoneMarkerStillSucce
 
 	result, err := svc.handleStreamingResponsePassthrough(c.Request.Context(), resp, c, &Account{ID: 1}, time.Now(), "", "")
 	_ = pr.Close()
-	require.NoError(t, err)
+	require.EqualError(t, err, "stream usage incomplete: upstream terminal response.incomplete")
 	require.NotNil(t, result)
 	require.NotNil(t, result.usage)
 	require.Equal(t, 2, result.usage.InputTokens)

@@ -247,18 +247,43 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 	responseID := ""
 	imageCount := 0
 	var imageOutputSizes []string
+	clientDisconnected := false
 	if reqStream {
-		result, err := s.handleStreamingResponsePassthrough(ctx, resp, c, account, startTime, reqModel, upstreamPassthroughModel)
-		if err != nil {
-			return nil, err
+		result, streamErr := s.handleStreamingResponsePassthrough(ctx, resp, c, account, startTime, reqModel, upstreamPassthroughModel)
+		if result != nil {
+			usage = result.usage
+			firstTokenMs = result.firstTokenMs
+			firstOutputMs = result.firstOutputMs
+			firstOutputKind = result.firstOutputKind
+			responseID = strings.TrimSpace(result.responseID)
+			imageCount = result.imageCount
+			imageOutputSizes = result.imageOutputSizes
+			clientDisconnected = result.clientDisconnect
 		}
-		usage = result.usage
-		firstTokenMs = result.firstTokenMs
-		firstOutputMs = result.firstOutputMs
-		firstOutputKind = result.firstOutputKind
-		responseID = strings.TrimSpace(result.responseID)
-		imageCount = result.imageCount
-		imageOutputSizes = result.imageOutputSizes
+		if streamErr != nil {
+			if usage == nil {
+				usage = &OpenAIUsage{}
+			}
+			return &OpenAIForwardResult{
+				RequestID:        resp.Header.Get("x-request-id"),
+				ResponseID:       responseID,
+				Usage:            *usage,
+				Model:            reqModel,
+				UpstreamModel:    upstreamPassthroughModel,
+				ServiceTier:      serviceTier,
+				ReasoningEffort:  reasoningEffort,
+				Stream:           true,
+				Duration:         time.Since(startTime),
+				FirstTokenMs:     firstTokenMs,
+				FirstOutputMs:    firstOutputMs,
+				FirstOutputKind:  firstOutputKind,
+				ClientDisconnect: clientDisconnected,
+				ImageCount:       imageCount,
+				ImageSize:        imageSizeTier,
+				ImageInputSize:   imageInputSize,
+				ImageOutputSizes: imageOutputSizes,
+			}, streamErr
+		}
 	} else {
 		result, err := s.handleNonStreamingResponsePassthrough(ctx, resp, c, reqModel, upstreamPassthroughModel)
 		if err != nil {
@@ -283,19 +308,20 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 	}
 
 	forwardResult := &OpenAIForwardResult{
-		RequestID:       resp.Header.Get("x-request-id"),
-		ResponseID:      responseID,
-		Usage:           *usage,
-		Model:           reqModel,
-		UpstreamModel:   upstreamPassthroughModel,
-		ServiceTier:     serviceTier,
-		ReasoningEffort: reasoningEffort,
-		Stream:          reqStream,
-		OpenAIWSMode:    false,
-		Duration:        time.Since(startTime),
-		FirstTokenMs:    firstTokenMs,
-		FirstOutputMs:   firstOutputMs,
-		FirstOutputKind: firstOutputKind,
+		RequestID:        resp.Header.Get("x-request-id"),
+		ResponseID:       responseID,
+		Usage:            *usage,
+		Model:            reqModel,
+		UpstreamModel:    upstreamPassthroughModel,
+		ServiceTier:      serviceTier,
+		ReasoningEffort:  reasoningEffort,
+		Stream:           reqStream,
+		OpenAIWSMode:     false,
+		Duration:         time.Since(startTime),
+		FirstTokenMs:     firstTokenMs,
+		FirstOutputMs:    firstOutputMs,
+		FirstOutputKind:  firstOutputKind,
+		ClientDisconnect: clientDisconnected,
 	}
 	if imageCount > 0 {
 		forwardResult.ImageCount = imageCount
@@ -718,6 +744,7 @@ type openaiStreamingResultPassthrough struct {
 	responseID       string
 	imageCount       int
 	imageOutputSizes []string
+	clientDisconnect bool
 }
 
 type openaiNonStreamingResultPassthrough struct {
@@ -1024,6 +1051,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 	sawDone := false
 	sawTerminalEvent := false
 	sawFailedEvent := false
+	nonCompleteTerminal := ""
 	failedMessage := ""
 	clientOutputStarted := false
 	upstreamRequestID := strings.TrimSpace(resp.Header.Get("x-request-id"))
@@ -1071,6 +1099,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 			responseID:       responseID,
 			imageCount:       imageCounter.Count(),
 			imageOutputSizes: imageCounter.Sizes(),
+			clientDisconnect: clientDisconnected,
 		}
 	}
 
@@ -1154,6 +1183,9 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 			}
 			if openAIStreamEventIsTerminal(trimmedData) {
 				sawTerminalEvent = true
+				if eventType != "response.completed" && eventType != "response.done" && eventType != "response.failed" {
+					nonCompleteTerminal = eventType
+				}
 			}
 			if responseID == "" {
 				responseID = extractOpenAIResponseIDFromJSONBytes(dataBytes)
@@ -1198,6 +1230,12 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 	}
 	if err := documentScanner.Err(); err != nil {
 		if (sawDone || sawTerminalEvent) && !sawFailedEvent {
+			if nonCompleteTerminal != "" {
+				return resultWithUsage(), fmt.Errorf("stream usage incomplete: upstream terminal %s", nonCompleteTerminal)
+			}
+			if clientDisconnected {
+				return resultWithUsage(), errors.New("stream usage incomplete: client disconnected")
+			}
 			s.clearOpenAIProxyStreamDisconnect(account)
 			return resultWithUsage(), nil
 		}
@@ -1233,6 +1271,12 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 	}
 	if sawFailedEvent {
 		return resultWithUsage(), fmt.Errorf("upstream response failed: %s", failedMessage)
+	}
+	if nonCompleteTerminal != "" {
+		return resultWithUsage(), fmt.Errorf("stream usage incomplete: upstream terminal %s", nonCompleteTerminal)
+	}
+	if clientDisconnected {
+		return resultWithUsage(), errors.New("stream usage incomplete: client disconnected")
 	}
 	if !clientDisconnected && !sawDone && !sawTerminalEvent && ctx.Err() == nil {
 		logger.FromContext(ctx).With(

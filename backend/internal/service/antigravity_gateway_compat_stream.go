@@ -144,7 +144,14 @@ func (s *antigravityCompatStreamSession) hasMeaningfulData() bool {
 	return s.responseCommitted
 }
 
+func (s *antigravityCompatStreamSession) hasUpstreamTerminal() bool {
+	return s.processor.MessageStopSent()
+}
+
 func (s *antigravityCompatStreamSession) finish() *antigravityStreamResult {
+	if !s.hasUpstreamTerminal() {
+		return s.collectResult(s.writer.Disconnected())
+	}
 	finalEvents, usage := s.processor.Finish()
 	mergeAntigravityCompatUsage(s.usage, usage)
 	s.consumeClaudeEvents(finalEvents)
@@ -264,6 +271,7 @@ func mergeAntigravityCompatUsage(dst *ClaudeUsage, src *antigravity.ClaudeUsage)
 	dst.CacheCreationInputTokens = src.CacheCreationInputTokens
 	dst.CacheReadInputTokens = src.CacheReadInputTokens
 	dst.ImageOutputTokens = src.ImageOutputTokens
+	dst.AudioOutputTokens = src.AudioOutputTokens
 }
 
 func (s *AntigravityGatewayService) handleAntigravityCompatStream(
@@ -307,6 +315,13 @@ func (s *AntigravityGatewayService) handleAntigravityCompatStream(
 			if !open {
 				if !session.hasMeaningfulData() && !writer.Disconnected() {
 					return nil, antigravityCompatEmptyStreamError()
+				}
+				if !session.hasUpstreamTerminal() {
+					if writer.Disconnected() {
+						return session.collectResult(true), nil
+					}
+					writeAntigravityCompatStreamError(c, adapter, writer, "stream_incomplete")
+					return session.collectResult(false), errors.New("stream usage incomplete: missing terminal event")
 				}
 				return session.finish(), nil
 			}
@@ -427,10 +442,10 @@ func (s *AntigravityGatewayService) handleAntigravityCompatReadError(
 	if errors.Is(err, bufio.ErrTooLong) {
 		logger.LegacyPrintf("service.antigravity_gateway", "SSE line too long (%s): max_size=%d error=%v", prefix, maxLineSize, err)
 		writeAntigravityCompatStreamError(c, session.adapter, session.writer, "response_too_large")
-		return session.result(false), err
+		return session.collectResult(false), err
 	}
 	writeAntigravityCompatStreamError(c, session.adapter, session.writer, "stream_read_error")
-	return nil, fmt.Errorf("stream read error: %w", err)
+	return session.collectResult(false), fmt.Errorf("stream read error: %w", err)
 }
 
 func writeAntigravityCompatStreamError(

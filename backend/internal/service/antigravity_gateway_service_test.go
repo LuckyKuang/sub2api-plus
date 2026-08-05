@@ -1125,6 +1125,58 @@ func TestAntigravityNonStreaming_RecordsFinalOutputWithoutFirstToken(t *testing.
 	}
 }
 
+func TestAntigravityNonStreaming_MissingTerminalRetainsPartialUsage(t *testing.T) {
+	tests := []struct {
+		name    string
+		errPart string
+		run     func(*AntigravityGatewayService, *gin.Context, *http.Response, time.Time) (*antigravityStreamResult, error)
+	}{
+		{
+			name:    "gemini",
+			errPart: "missing terminal event",
+			run: func(svc *AntigravityGatewayService, c *gin.Context, resp *http.Response, start time.Time) (*antigravityStreamResult, error) {
+				return svc.handleGeminiStreamToNonStreaming(c, resp, start)
+			},
+		},
+		{
+			name:    "claude",
+			errPart: "Failed to parse upstream response",
+			run: func(svc *AntigravityGatewayService, c *gin.Context, resp *http.Response, start time.Time) (*antigravityStreamResult, error) {
+				return svc.handleClaudeStreamToNonStreaming(c, resp, start, "claude-sonnet-4-5")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gin.SetMode(gin.TestMode)
+			svc := newAntigravityTestService(&config.Config{
+				Gateway: config.GatewayConfig{MaxLineSize: defaultMaxLineSize},
+			})
+			rec := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(rec)
+			c.Request = httptest.NewRequest(http.MethodPost, "/", nil)
+			resp := &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{},
+				Body: io.NopCloser(strings.NewReader(
+					`data: {"response":{"candidates":[{"content":{"parts":[{"text":"partial"}]}}],"usageMetadata":{"promptTokenCount":5,"candidatesTokenCount":3}}}` + "\n\n",
+				)),
+			}
+
+			result, err := tt.run(svc, c, resp, time.Now())
+
+			require.ErrorContains(t, err, tt.errPart)
+			require.NotNil(t, result)
+			require.Equal(t, 5, result.usage.InputTokens)
+			require.Equal(t, 3, result.usage.OutputTokens)
+			require.Nil(t, result.firstTokenMs)
+			require.Nil(t, result.firstOutputMs)
+			require.NotContains(t, rec.Body.String(), "partial")
+		})
+	}
+}
+
 func TestStreamUpstreamResponse_TextDeltaSetsTokenAndOutputTiming(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	svc := newAntigravityTestService(&config.Config{
@@ -1152,6 +1204,7 @@ func TestStreamUpstreamResponse_TextDeltaSetsTokenAndOutputTiming(t *testing.T) 
 	require.NotNil(t, result.firstTokenMs)
 	require.NotNil(t, result.firstOutputMs)
 	require.Equal(t, "text", result.firstOutputKind)
+	require.True(t, result.terminalDelivered)
 	require.Contains(t, rec.Body.String(), `"text":"hello"`)
 }
 
@@ -1183,6 +1236,9 @@ func TestStreamUpstreamResponse_NormalComplete(t *testing.T) {
 		fmt.Fprintln(pw, `event: message_delta`)
 		fmt.Fprintln(pw, `data: {"type":"message_delta","usage":{"output_tokens":5}}`)
 		fmt.Fprintln(pw, "")
+		fmt.Fprintln(pw, `event: message_stop`)
+		fmt.Fprintln(pw, `data: {"type":"message_stop"}`)
+		fmt.Fprintln(pw, "")
 	}()
 
 	result := svc.streamUpstreamResponse(c, resp, time.Now())
@@ -1193,6 +1249,7 @@ func TestStreamUpstreamResponse_NormalComplete(t *testing.T) {
 	require.NotNil(t, result.usage)
 	require.Equal(t, 5, result.usage.OutputTokens, "should collect output_tokens from message_delta")
 	require.NotNil(t, result.firstTokenMs, "should record first token time")
+	require.True(t, result.terminalDelivered, "only a delivered message_stop completes the stream")
 
 	// 验证数据被透传到客户端
 	body := rec.Body.String()
@@ -1528,6 +1585,63 @@ func TestHandleGeminiStreamingResponse_ContextCanceled(t *testing.T) {
 	require.NotContains(t, rec.Body.String(), "event: error")
 }
 
+func TestHandleGeminiStreamingResponse_ReadErrorRetainsPartialUsage(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	svc := newAntigravityTestService(&config.Config{
+		Gateway: config.GatewayConfig{MaxLineSize: defaultMaxLineSize},
+	})
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/", nil)
+
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{},
+		Body: &streamReadCloser{
+			payload: []byte("data: {\"response\":{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"partial\"}]}}],\"usageMetadata\":{\"promptTokenCount\":5,\"candidatesTokenCount\":3}}}\n"),
+			err:     errors.New("upstream read failed"),
+		},
+	}
+
+	result, err := svc.handleGeminiStreamingResponse(c, resp, time.Now())
+
+	require.Error(t, err)
+	require.NotNil(t, result)
+	require.False(t, result.clientDisconnect)
+	require.NotNil(t, result.firstOutputMs)
+	require.NotNil(t, result.usage)
+	require.Equal(t, 5, result.usage.InputTokens)
+	require.Equal(t, 3, result.usage.OutputTokens)
+}
+
+func TestHandleGeminiStreamingResponse_MissingTerminalReturnsPartialUsage(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	svc := newAntigravityTestService(&config.Config{
+		Gateway: config.GatewayConfig{MaxLineSize: defaultMaxLineSize},
+	})
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/", nil)
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{},
+		Body: io.NopCloser(strings.NewReader(
+			`data: {"response":{"candidates":[{"content":{"parts":[{"text":"partial"}]}}],"usageMetadata":{"promptTokenCount":5,"candidatesTokenCount":3}}}` + "\n\n",
+		)),
+	}
+
+	result, err := svc.handleGeminiStreamingResponse(c, resp, time.Now())
+
+	require.ErrorContains(t, err, "missing terminal event")
+	require.NotNil(t, result)
+	require.NotNil(t, result.usage)
+	require.Equal(t, 5, result.usage.InputTokens)
+	require.Equal(t, 3, result.usage.OutputTokens)
+	require.Contains(t, rec.Body.String(), "stream_incomplete")
+}
+
 // TestHandleClaudeStreamingResponse_ClientDisconnect
 // 验证：Claude 流式转发中客户端断开后继续 drain 上游
 func TestHandleClaudeStreamingResponse_ClientDisconnect(t *testing.T) {
@@ -1621,6 +1735,78 @@ func TestHandleClaudeStreamingResponse_ContextCanceled(t *testing.T) {
 	require.NotNil(t, result)
 	require.True(t, result.clientDisconnect)
 	require.NotContains(t, rec.Body.String(), "event: error")
+}
+
+func TestHandleClaudeStreamingResponse_MissingTerminalRetainsPartialUsage(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	svc := newAntigravityTestService(&config.Config{
+		Gateway: config.GatewayConfig{MaxLineSize: defaultMaxLineSize},
+	})
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{},
+		Body: io.NopCloser(strings.NewReader(
+			`data: {"response":{"candidates":[{"content":{"parts":[{"text":"partial"}]}}],"usageMetadata":{"promptTokenCount":5,"candidatesTokenCount":3}}}` + "\n\n",
+		)),
+	}
+
+	result, err := svc.handleClaudeStreamingResponse(c, resp, time.Now(), "claude-sonnet-4-5")
+
+	require.ErrorContains(t, err, "missing terminal event")
+	require.NotNil(t, result)
+	require.False(t, result.clientDisconnect)
+	require.NotNil(t, result.usage)
+	require.Equal(t, 5, result.usage.InputTokens)
+	require.Equal(t, 3, result.usage.OutputTokens)
+	require.NotNil(t, result.firstTokenMs)
+	require.NotNil(t, result.firstOutputMs)
+	require.Contains(t, rec.Body.String(), "stream_incomplete")
+	require.NotContains(t, rec.Body.String(), "event: message_stop")
+}
+
+func TestForwardUpstream_MissingTerminalReturnsPartialResult(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	response := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+		Body: io.NopCloser(strings.NewReader(strings.Join([]string{
+			`event: message_start`,
+			`data: {"type":"message_start","message":{"usage":{"input_tokens":5}}}`,
+			`event: content_block_delta`,
+			`data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"partial"}}`,
+			`event: message_delta`,
+			`data: {"type":"message_delta","usage":{"output_tokens":3,"image_output_tokens":1,"audio_output_tokens":1}}`,
+		}, "\n"))),
+	}
+	svc := newAntigravityTestService(&config.Config{
+		Gateway: config.GatewayConfig{MaxLineSize: defaultMaxLineSize},
+	})
+	svc.httpUpstream = &httpUpstreamStub{resp: response}
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader(`{"model":"claude-test","stream":true}`))
+	account := &Account{
+		ID:          1,
+		Name:        "upstream",
+		Platform:    PlatformAntigravity,
+		Type:        AccountTypeUpstream,
+		Concurrency: 1,
+		Credentials: map[string]any{"base_url": "https://example.test", "api_key": "key"},
+	}
+
+	result, err := svc.ForwardUpstream(context.Background(), c, account, []byte(`{"model":"claude-test","stream":true}`))
+
+	require.ErrorContains(t, err, "missing terminal event")
+	require.NotNil(t, result)
+	require.Equal(t, 5, result.Usage.InputTokens)
+	require.Equal(t, 3, result.Usage.OutputTokens)
+	require.Equal(t, 1, result.Usage.ImageOutputTokens)
+	require.Equal(t, 1, result.Usage.AudioOutputTokens)
 }
 
 // TestExtractSSEUsage 验证 extractSSEUsage 从 SSE data 行正确提取 usage

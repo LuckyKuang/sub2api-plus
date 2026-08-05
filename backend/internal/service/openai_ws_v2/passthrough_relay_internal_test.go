@@ -145,17 +145,18 @@ func TestRunUpstreamToClient_ErrorAndDropPaths(t *testing.T) {
 		exitCh := make(chan relayExitSignal, 1)
 		drop := &atomic.Bool{}
 		drop.Store(false)
+		var turn RelayTurnResult
 		runUpstreamToClient(
 			context.Background(),
 			newPassthroughTestFrameConn([]passthroughTestFrame{
-				{msgType: coderws.MessageText, payload: []byte(`{"type":"response.output_text.delta","delta":"x"}`)},
+				{msgType: coderws.MessageText, payload: []byte(`{"type":"response.completed","response":{"id":"resp_write_failed","usage":{"input_tokens":1,"output_tokens":1}}}`)},
 			}, true),
 			func(_ coderws.MessageType, _ []byte) error { return errors.New("write failed") },
 			time.Now(),
 			time.Now,
 			&relayState{},
 			nil,
-			nil,
+			func(current RelayTurnResult) { turn = current },
 			nil,
 			nil,
 			nil,
@@ -169,6 +170,8 @@ func TestRunUpstreamToClient_ErrorAndDropPaths(t *testing.T) {
 		)
 		sig := <-exitCh
 		require.Equal(t, "write_client", sig.stage)
+		require.Equal(t, "resp_write_failed", turn.RequestID)
+		require.False(t, turn.DownstreamComplete)
 	})
 
 	t.Run("drop downstream and stop on terminal", func(t *testing.T) {
@@ -178,6 +181,7 @@ func TestRunUpstreamToClient_ErrorAndDropPaths(t *testing.T) {
 		drop := &atomic.Bool{}
 		drop.Store(true)
 		dropped := &atomic.Int64{}
+		var turn RelayTurnResult
 		runUpstreamToClient(
 			context.Background(),
 			newPassthroughTestFrameConn([]passthroughTestFrame{
@@ -191,7 +195,7 @@ func TestRunUpstreamToClient_ErrorAndDropPaths(t *testing.T) {
 			time.Now,
 			&relayState{},
 			nil,
-			nil,
+			func(current RelayTurnResult) { turn = current },
 			nil,
 			nil,
 			nil,
@@ -207,6 +211,8 @@ func TestRunUpstreamToClient_ErrorAndDropPaths(t *testing.T) {
 		require.Equal(t, "drain_terminal", sig.stage)
 		require.True(t, sig.graceful)
 		require.Equal(t, int64(1), dropped.Load())
+		require.Equal(t, "resp_drop", turn.RequestID)
+		require.False(t, turn.DownstreamComplete)
 	})
 }
 
@@ -363,7 +369,7 @@ func TestEmitTurnCompleteCoverage(t *testing.T) {
 		eventType:  "response.output_text.delta",
 		responseID: "resp_ignored",
 		usage:      Usage{InputTokens: 1},
-	})
+	}, true)
 	require.Equal(t, 0, called)
 
 	// 缺少 response_id 时不应触发。
@@ -372,7 +378,7 @@ func TestEmitTurnCompleteCoverage(t *testing.T) {
 	}, &relayState{requestModel: "gpt-5"}, observedUpstreamEvent{
 		terminal:  true,
 		eventType: "response.completed",
-	})
+	}, true)
 	require.Equal(t, 0, called)
 
 	// terminal 且 response_id 存在，应该触发；state=nil 时 model 为空串。
@@ -385,13 +391,14 @@ func TestEmitTurnCompleteCoverage(t *testing.T) {
 		eventType:  "response.completed",
 		responseID: "resp_emit",
 		usage:      Usage{InputTokens: 2, OutputTokens: 3},
-	})
+	}, true)
 	require.Equal(t, 1, called)
 	require.Equal(t, "resp_emit", got.RequestID)
 	require.Equal(t, "response.completed", got.TerminalEventType)
 	require.Equal(t, 2, got.Usage.InputTokens)
 	require.Equal(t, 3, got.Usage.OutputTokens)
 	require.Equal(t, "", got.RequestModel)
+	require.True(t, got.DownstreamComplete)
 }
 
 func TestIsDisconnectErrorCoverage_CloseStatusesAndMessageBranches(t *testing.T) {

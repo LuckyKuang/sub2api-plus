@@ -89,6 +89,45 @@ func TestHandleChatStreamingResponse_ClassifiesHTTP2ReadError(t *testing.T) {
 	require.NotContains(t, message, "INTERNAL_ERROR")
 }
 
+func TestStreamRawChatCompletions_MissingDoneReturnsIncompleteUsage(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header: http.Header{
+			"Content-Type": []string{"text/event-stream"},
+			"x-request-id": []string{"upstream-rid"},
+		},
+		Body: io.NopCloser(strings.NewReader(
+			"data: {\"id\":\"chatcmpl_partial\",\"choices\":[{\"delta\":{\"content\":\"hello\"}}],\"usage\":{\"prompt_tokens\":3,\"completion_tokens\":2,\"total_tokens\":5}}\n\n",
+		)),
+	}
+	svc := &OpenAIGatewayService{cfg: &config.Config{}}
+
+	result, err := svc.streamRawChatCompletions(
+		c,
+		resp,
+		&Account{ID: 1, Platform: PlatformOpenAI},
+		"gpt-test",
+		"gpt-test",
+		"gpt-test",
+		nil,
+		nil,
+		time.Now(),
+		0,
+	)
+
+	require.ErrorContains(t, err, "missing [DONE]")
+	require.NotNil(t, result)
+	require.True(t, result.Stream)
+	require.False(t, result.ClientDisconnect)
+	require.Equal(t, 3, result.Usage.InputTokens)
+	require.Equal(t, 2, result.Usage.OutputTokens)
+}
+
 func TestForwardAsChatCompletions_RejectsResponsesImageGenerationBeforeRawRouting(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

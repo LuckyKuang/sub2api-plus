@@ -245,15 +245,19 @@ func (s *GeminiMessagesCompatService) forwardClaudeBodyAsChatCompletions(
 	var firstTokenMs *int
 	var firstOutputMs *int
 	var firstOutputKind string
+	clientDisconnect := false
+	var forwardErr error
 	if clientStream {
 		streamRes, err := s.handleChatCompletionsStreamingResponseFromGemini(c, resp, startTime, originalModel, account.Type == AccountTypeOAuth, includeUsage)
-		if err != nil {
+		if streamRes == nil {
 			return nil, err
 		}
 		usage = streamRes.usage
 		firstTokenMs = streamRes.firstTokenMs
 		firstOutputMs = streamRes.firstOutputMs
 		firstOutputKind = streamRes.firstOutputKind
+		clientDisconnect = streamRes.clientDisconnect
+		forwardErr = err
 	} else if useUpstreamStream {
 		collected, usageObj, err := collectGeminiSSE(resp.Body, account.Type == AccountTypeOAuth)
 		if err != nil {
@@ -299,8 +303,8 @@ func (s *GeminiMessagesCompatService) forwardClaudeBodyAsChatCompletions(
 		ImageCount:       imageCount,
 		ImageSize:        imageSize,
 		ImageInputSize:   imageInputSize,
-		ClientDisconnect: false,
-	}, nil
+		ClientDisconnect: clientDisconnect,
+	}, forwardErr
 }
 
 func (s *GeminiMessagesCompatService) buildGeminiChatCompletionsUpstreamRequestFunc(
@@ -536,12 +540,14 @@ func (s *GeminiMessagesCompatService) handleChatCompletionsStreamingResponseFrom
 	var usage ClaudeUsage
 	var timing streamOutputTiming
 	suppressChunkTiming := false
+	clientDisconnected := false
 	resultWithUsage := func() *geminiStreamResult {
 		return &geminiStreamResult{
-			usage:           &usage,
-			firstTokenMs:    timing.firstTokenMs,
-			firstOutputMs:   timing.firstOutputMs,
-			firstOutputKind: timing.firstOutputKind,
+			usage:            &usage,
+			firstTokenMs:     timing.firstTokenMs,
+			firstOutputMs:    timing.firstOutputMs,
+			firstOutputKind:  timing.firstOutputKind,
+			clientDisconnect: clientDisconnected,
 		}
 	}
 
@@ -554,6 +560,7 @@ func (s *GeminiMessagesCompatService) handleChatCompletionsStreamingResponseFrom
 			return false
 		}
 		if _, err := io.WriteString(c.Writer, sse); err != nil {
+			clientDisconnected = true
 			return true
 		}
 		return false
@@ -590,6 +597,7 @@ func (s *GeminiMessagesCompatService) handleChatCompletionsStreamingResponseFrom
 	}
 
 	finishReason := ""
+	terminalSeen := false
 	sawToolUse := false
 	nextBlockIndex := 0
 	openBlockIndex := -1
@@ -626,6 +634,9 @@ func (s *GeminiMessagesCompatService) handleChatCompletionsStreamingResponseFrom
 			trimmed := strings.TrimRight(line, "\r\n")
 			if strings.HasPrefix(trimmed, "data:") {
 				payload := strings.TrimSpace(strings.TrimPrefix(trimmed, "data:"))
+				if payload == "[DONE]" {
+					terminalSeen = true
+				}
 				if payload != "" && payload != "[DONE]" {
 					rawBytes := []byte(payload)
 					if isOAuth {
@@ -638,6 +649,7 @@ func (s *GeminiMessagesCompatService) handleChatCompletionsStreamingResponseFrom
 					if err := json.Unmarshal(rawBytes, &geminiResp); err == nil {
 						if fr := extractGeminiFinishReason(geminiResp); fr != "" {
 							finishReason = fr
+							terminalSeen = true
 						}
 						if u := extractGeminiUsage(rawBytes); u != nil {
 							usage = *u
@@ -798,8 +810,11 @@ func (s *GeminiMessagesCompatService) handleChatCompletionsStreamingResponseFrom
 			break
 		}
 		if err != nil {
-			return nil, fmt.Errorf("stream read error: %w", err)
+			return resultWithUsage(), fmt.Errorf("stream usage incomplete: %w", err)
 		}
+	}
+	if !terminalSeen {
+		return resultWithUsage(), errors.New("stream usage incomplete: missing terminal event")
 	}
 
 	if closeOpenBlock() {
@@ -847,7 +862,9 @@ func (s *GeminiMessagesCompatService) handleChatCompletionsStreamingResponseFrom
 		}
 	}
 
-	_, _ = io.WriteString(c.Writer, "data: [DONE]\n\n")
+	if _, err := io.WriteString(c.Writer, "data: [DONE]\n\n"); err != nil {
+		clientDisconnected = true
+	}
 	flusher.Flush()
 
 	return resultWithUsage(), nil

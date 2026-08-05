@@ -166,14 +166,28 @@ type GeminiUsageMetadata struct {
 	PromptTokensDetails     []GeminiTokenDetail `json:"promptTokensDetails,omitempty"`
 }
 
-// ImageOutputTokens 从 CandidatesTokensDetails 中提取 IMAGE 模态的 token 数
+// ImageOutputTokens 从 CandidatesTokensDetails 中提取 IMAGE 模态的 token 数。
+// A response can contain more than one detail entry for a modality, so sum all
+// entries instead of returning the first one.
 func (m *GeminiUsageMetadata) ImageOutputTokens() int {
+	total := 0
 	for _, d := range m.CandidatesTokensDetails {
 		if d.Modality == "IMAGE" {
-			return d.TokenCount
+			total += d.TokenCount
 		}
 	}
-	return 0
+	return total
+}
+
+// AudioOutputTokens extracts AUDIO modality output tokens for usage metrics.
+func (m *GeminiUsageMetadata) AudioOutputTokens() int {
+	total := 0
+	for _, d := range m.CandidatesTokensDetails {
+		if d.Modality == "AUDIO" {
+			total += d.TokenCount
+		}
+	}
+	return total
 }
 
 // GeminiGroundingMetadata Gemini grounding 元数据（Web Search）

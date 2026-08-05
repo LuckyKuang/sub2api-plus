@@ -582,6 +582,14 @@ type ForwardResult struct {
 	ImageSizeBreakdown map[string]int
 }
 
+// UsageComplete reports whether the client received a complete response for
+// usage-list metrics. Services return an error for upstream failures and
+// incomplete terminals; the remaining successful stream case that must be
+// excluded is a downstream disconnect while usage is drained for billing.
+func (r *ForwardResult) UsageComplete() bool {
+	return r != nil && (!r.Stream || !r.ClientDisconnect)
+}
+
 // GatewayFailureStage identifies which request stage failed. The zero value is
 // intentionally treated as inference so existing UpstreamFailoverError callers
 // retain their current behavior.

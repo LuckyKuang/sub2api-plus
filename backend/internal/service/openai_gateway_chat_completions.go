@@ -538,6 +538,7 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 	refusalDetector := newOpenAIChatSilentRefusalDetector(requestBodyLen)
 	var streamFailoverErr *UpstreamFailoverError
 	var streamNonFailoverErr error
+	nonCompleteTerminal := ""
 
 	scanner := s.newUpstreamSSEScanner(resp.Body)
 
@@ -557,13 +558,14 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 
 	resultWithUsage := func() *OpenAIForwardResult {
 		result := &OpenAIForwardResult{
-			RequestID:     requestID,
-			Usage:         usage,
-			Model:         originalModel,
-			BillingModel:  billingModel,
-			UpstreamModel: upstreamModel,
-			Stream:        true,
-			Duration:      time.Since(startTime),
+			RequestID:        requestID,
+			Usage:            usage,
+			Model:            originalModel,
+			BillingModel:     billingModel,
+			UpstreamModel:    upstreamModel,
+			Stream:           true,
+			Duration:         time.Since(startTime),
+			ClientDisconnect: clientDisconnected,
 		}
 		timing.ApplyOpenAIResult(result)
 		return result
@@ -598,6 +600,9 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 
 		isTerminalEvent := isOpenAICompatResponsesTerminalEvent(event.Type)
 		if isTerminalEvent {
+			if event.Type != "response.completed" && event.Type != "response.done" && event.Type != "response.failed" {
+				nonCompleteTerminal = event.Type
+			}
 			if event.Usage != nil {
 				usage = copyOpenAIUsageFromResponsesUsage(event.Usage)
 			}
@@ -740,6 +745,12 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 		}
 		if streamNonFailoverErr != nil {
 			return resultWithUsage(), streamNonFailoverErr
+		}
+		if nonCompleteTerminal != "" {
+			return resultWithUsage(), fmt.Errorf("stream usage incomplete: upstream terminal %s", nonCompleteTerminal)
+		}
+		if clientDisconnected {
+			return resultWithUsage(), errors.New("stream usage incomplete: client disconnected")
 		}
 		if finalChunks := apicompat.FinalizeResponsesChatStream(state); len(finalChunks) > 0 && !clientDisconnected {
 			for _, chunk := range finalChunks {

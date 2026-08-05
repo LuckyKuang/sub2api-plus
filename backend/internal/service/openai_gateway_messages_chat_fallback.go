@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -244,6 +245,20 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsAnthropic(
 	}
 	if !scan.SawDone {
 		logCCStreamMissingDoneSentinel("openai messages chat fallback", requestID)
+		result := &OpenAIForwardResult{
+			RequestID:        requestID,
+			Usage:            usage,
+			Model:            originalModel,
+			BillingModel:     billingModel,
+			UpstreamModel:    upstreamModel,
+			ReasoningEffort:  reasoningEffort,
+			ServiceTier:      serviceTier,
+			Stream:           true,
+			Duration:         time.Since(startTime),
+			ClientDisconnect: clientDisconnected,
+		}
+		timing.ApplyOpenAIResult(result)
+		return result, errors.New("stream usage incomplete: missing [DONE]")
 	}
 
 	result := &OpenAIForwardResult{

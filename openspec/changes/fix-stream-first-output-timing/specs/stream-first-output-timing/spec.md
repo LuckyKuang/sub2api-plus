@@ -118,6 +118,41 @@
 - **THEN** 部分结果 MUST 保留较早的 `first_output_ms` 与 `first_output_kind=image`
 - **THEN** 部分结果 MUST 同时保留稍后的 `first_token_ms`
 
+### Requirement: TPS 完成状态必须代表客户端终态交付
+
+系统 SHALL 在流式请求的上游成功结束且成功向客户端写出终态后，才将用量记录标记为 `is_complete=true`。系统 SHALL 保留已经观测到的部分 usage 用于计费，但对上游失败、取消、不完整终态、缺少协议终态、客户端断开后 drain，或终态下游写失败的记录 MUST 写入 `is_complete=false`。
+
+#### Scenario: 客户端断开后上游仍完成
+
+- **WHEN** 客户端已断开，网关继续 drain 上游并观察到 `response.completed` 与 usage
+- **THEN** 系统 MUST 持久化已观测 usage
+- **THEN** 该记录 MUST 为 `is_complete=false`，且 MUST NOT 显示 TPS
+
+#### Scenario: WebSocket 终态未写给客户端
+
+- **WHEN** WebSocket relay 已观测 `response.completed`，但连接处于 drain 状态或该终态帧写失败
+- **THEN** 该轮用量 MUST 保留并为 `is_complete=false`
+- **THEN** 只有终态帧成功写出时，该轮才 MAY 为 `is_complete=true`
+
+#### Scenario: 上游返回非成功 Responses 终态
+
+- **WHEN** 流收到 `response.incomplete`、`response.cancelled`、`response.canceled` 或 `response.failed`
+- **THEN** 系统 MUST 将已观测 usage 作为部分结果记录
+- **THEN** 该记录 MUST 为 `is_complete=false`
+
+#### Scenario: 原生 Gemini 或 Antigravity Gemini 流在读取时失败
+
+- **WHEN** Gemini `/v1beta/models/*`、Gemini 兼容入口或 Antigravity Gemini 入口已观测到流式 usage 和首输出，随后上游读取失败
+- **THEN** 系统 MUST 将部分结果（包括 usage、首 Token、首输出及客户端断开状态）返回至处理器并持久化
+- **THEN** 该记录 MUST 为 `is_complete=false`
+
+#### Scenario: Antigravity 协议转换流在 EOF 前没有真实 Gemini 终态
+
+- **WHEN** Antigravity 的 Gemini→Claude、Gemini→Chat 或 Gemini→Responses 转换已转发部分输出和 usage，但上游在没有 `finishReason` 或兼容 `[DONE]` 的情况下 EOF
+- **THEN** 系统 MUST 保留已观测 usage 并将该记录标记为 `is_complete=false`
+- **THEN** 系统 MUST NOT 合成 Claude `message_stop`、Chat `[DONE]`、Responses completed 事件或非流式成功 JSON
+- **THEN** 系统 MUST 向仍连接的流式客户端发送不完整错误，并向非流式客户端返回错误响应
+
 ### Requirement: 内部流式收集不得伪造非流式首 Token
 
 系统将上游流收集为非流式下游响应时，SHALL 只把完整聚合输出视为下游首输出，MUST NOT 把内部上游分片记录为下游首 Token。
@@ -149,6 +184,12 @@
 - **WHEN** 完整流式记录的总输出 Token 为 150、音频输出 Token 为 50，且首 Token 后耗时为 1 秒
 - **THEN** TPS 分子 MUST 使用 100 个文本输出 Token
 - **THEN** 页面 MUST 显示 `TPS 100`
+
+#### Scenario: Gemini 与 Antigravity 混合音频输出
+
+- **WHEN** Gemini `candidatesTokensDetails` 包含 `AUDIO` 模态的多个条目
+- **THEN** 系统 MUST 累计这些条目并持久化为 `audio_output_tokens`
+- **THEN** TPS 分子 MUST 扣除累计后的音频输出 Token
 #### Scenario: 混合模态先出图片再出文本
 
 - **WHEN** 新语义流式记录先有图片首输出，随后才有文本首 Token
