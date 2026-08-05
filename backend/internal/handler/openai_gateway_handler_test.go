@@ -139,7 +139,7 @@ func TestOpenAIForwardSucceededForScheduling(t *testing.T) {
 	}))
 	require.False(t, openAIForwardSucceededForScheduling(errors.New("partial image stream failed"), &service.OpenAIForwardResult{
 		OpenAIWSMode: true,
-		ImageCount:    1,
+		ImageCount:   1,
 	}))
 }
 
