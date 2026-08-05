@@ -43,6 +43,28 @@ Do not duplicate current tool or release versions here.
 - Never commit credentials, tokens, production configuration, or user data.
 - Document only commands that exist in repository scripts or Make targets.
 
+## Implementation Principles
+
+- When current requirements replace behavior, remove the obsolete code. Do not
+  retain backward compatibility, shims, legacy fallbacks, or migrations solely
+  to preserve superseded behavior. This does not override requirements stated
+  elsewhere in this file.
+- Choose the simplest design that satisfies current requirements. Do not add
+  speculative abstractions, configuration layers, or extensibility.
+- First deliver the smallest runnable end-to-end implementation. Add layers or
+  complexity only when a working flow demonstrates the need; do not replace
+  working code to anticipate unfinished complexity.
+- Keep components modular, with clear ownership and separation of concerns.
+- Prefer maintained, established libraries over custom implementations unless
+  there is a concrete reason not to.
+- Inspect existing dependencies and project patterns before adding packages or
+  writing custom infrastructure.
+- Choose designs that meet known long-term requirements. Do not adopt a
+  temporary solution that is knowingly intended to be replaced later.
+- For architectural, public-interface, security-boundary, and other high-impact
+  decisions, prefer proven patterns from mature products and maintained
+  libraries over novel designs.
+
 ## Verification
 
 Run checks appropriate to the changed paths as listed in `CONTRIBUTING.md`.

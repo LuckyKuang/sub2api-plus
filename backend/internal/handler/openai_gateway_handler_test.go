@@ -127,15 +127,19 @@ func TestOpenAIHandleStreamingAwareErrorWithCode_EmitsStableClassification(t *te
 }
 
 func TestOpenAIForwardSucceededForScheduling(t *testing.T) {
-	require.True(t, openAIForwardSucceededForScheduling(nil))
-	require.True(t, openAIForwardSucceededForScheduling(&service.OpenAIForwardResult{}))
-	require.True(t, openAIForwardSucceededForScheduling(&service.OpenAIForwardResult{
+	require.True(t, openAIForwardSucceededForScheduling(nil, nil))
+	require.True(t, openAIForwardSucceededForScheduling(nil, &service.OpenAIForwardResult{}))
+	require.True(t, openAIForwardSucceededForScheduling(nil, &service.OpenAIForwardResult{
 		OpenAIWSMode:          true,
 		UpstreamTerminalEvent: "response.completed",
 	}))
-	require.False(t, openAIForwardSucceededForScheduling(&service.OpenAIForwardResult{
+	require.False(t, openAIForwardSucceededForScheduling(nil, &service.OpenAIForwardResult{
 		OpenAIWSMode:          true,
 		UpstreamTerminalEvent: "response.failed",
+	}))
+	require.False(t, openAIForwardSucceededForScheduling(errors.New("partial image stream failed"), &service.OpenAIForwardResult{
+		OpenAIWSMode: true,
+		ImageCount:    1,
 	}))
 }
 
@@ -1344,6 +1348,19 @@ func TestOpenAIResponsesWebSocket_PassthroughUsageLogPersistsUserAgentAndReasoni
 	require.True(t, got.log.OpenAIWSMode)
 }
 
+func TestOpenAIResponsesWebSocket_PassthroughFailedTerminalRecordsIncompleteUsage(t *testing.T) {
+	got := runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
+		firstPayload:      `{"type":"response.create","model":"gpt-5.4","stream":false}`,
+		terminalEventType: "response.failed",
+	})
+
+	require.NotNil(t, got.log.IsComplete)
+	require.False(t, *got.log.IsComplete)
+	require.True(t, got.log.OpenAIWSMode)
+	require.Equal(t, 2, got.log.InputTokens)
+	require.Equal(t, 1, got.log.OutputTokens)
+}
+
 func TestOpenAIResponsesWebSocket_PassthroughUsageLogInfersReasoningFromInitialRequestModel(t *testing.T) {
 	got := runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
 		firstPayload: `{"type":"response.create","model":"gpt-5.4-xhigh","stream":false}`,
@@ -1744,6 +1761,7 @@ func newOpenAIWSHandlerTestServer(t *testing.T, h *OpenAIGatewayHandler, subject
 type openAIResponsesWSUsageLogCase struct {
 	firstPayload              string
 	secondPayload             string
+	terminalEventType         string
 	userAgent                 *string
 	ingressMode               string
 	channelMapping            map[string]string
@@ -2551,6 +2569,10 @@ func runOpenAIResponsesWebSocketUsageLogCase(t *testing.T, tc openAIResponsesWSU
 	if strings.TrimSpace(tc.secondPayload) != "" {
 		turnCount = 2
 	}
+	terminalEventType := tc.terminalEventType
+	if terminalEventType == "" {
+		terminalEventType = "response.completed"
+	}
 	upstreamPayloadCh := make(chan []byte, turnCount)
 	upstreamErrCh := make(chan error, 1)
 	var channelSvc *service.ChannelService
@@ -2587,7 +2609,8 @@ func runOpenAIResponsesWebSocketUsageLogCase(t *testing.T, tc openAIResponsesWSU
 			}
 
 			response := fmt.Sprintf(
-				`{"type":"response.completed","response":{"id":"resp_usage_e2e_%d","model":%q,"usage":{"input_tokens":2,"output_tokens":1}}}`,
+				`{"type":%q,"response":{"id":"resp_usage_e2e_%d","model":%q,"usage":{"input_tokens":2,"output_tokens":1}}}`,
+				terminalEventType,
 				turn,
 				gjson.GetBytes(payload, "model").String(),
 			)
@@ -2735,21 +2758,21 @@ func runOpenAIResponsesWebSocketUsageLogCase(t *testing.T, tc openAIResponsesWSU
 	require.NoError(t, err)
 
 	clientEvents := make([][]byte, 0, turnCount)
-	readCompleted := func() {
+	readTerminalEvent := func() {
 		readCtx, cancelRead := context.WithTimeout(context.Background(), 3*time.Second)
 		_, event, readErr := clientConn.Read(readCtx)
 		cancelRead()
 		require.NoError(t, readErr)
-		require.Equal(t, "response.completed", gjson.GetBytes(event, "type").String())
+		require.Equal(t, terminalEventType, gjson.GetBytes(event, "type").String())
 		clientEvents = append(clientEvents, append([]byte(nil), event...))
 	}
-	readCompleted()
+	readTerminalEvent()
 	if turnCount == 2 {
 		writeCtx, cancelWrite = context.WithTimeout(context.Background(), 3*time.Second)
 		err = clientConn.Write(writeCtx, coderws.MessageText, []byte(tc.secondPayload))
 		cancelWrite()
 		require.NoError(t, err)
-		readCompleted()
+		readTerminalEvent()
 	}
 	_ = clientConn.Close(coderws.StatusNormalClosure, "done")
 

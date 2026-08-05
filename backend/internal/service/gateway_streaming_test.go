@@ -534,6 +534,26 @@ func TestPartialStreamUsageResult_PreservesOutputTiming(t *testing.T) {
 	require.True(t, result.ClientDisconnect)
 }
 
+func TestPartialStreamUsageResult_PreservesAudioOnlyUsage(t *testing.T) {
+	streamResult := &streamingResult{
+		usage: &ClaudeUsage{
+			AudioOutputTokens: 7,
+		},
+	}
+
+	result := partialStreamUsageResult(
+		&http.Response{Header: http.Header{"X-Request-Id": []string{"req-partial-audio"}}},
+		streamResult,
+		"requested-model",
+		"upstream-model",
+		time.Now().Add(-time.Second),
+		errors.New("stream interrupted"),
+	)
+
+	require.NotNil(t, result)
+	require.Equal(t, 7, result.Usage.AudioOutputTokens)
+}
+
 // 对抗用例：上游发 event:error 但 data 行不是合法 JSON。
 // RawData 必须保留原始字节，ExtractUpstreamErrorMessage 不得 panic，
 // upstreamMsg 回退为空字符串（不再丢失原始诊断线索 — Detail 字段仍保留原始 body）。
