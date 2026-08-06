@@ -850,6 +850,34 @@ export async function createSparkShadow(parentId: number, payload: SparkShadowCr
   return data
 }
 
+export interface WeComUsageAlertConfig {
+  enabled: boolean
+  webhook_url: string
+  cron_expression: string
+  force_probe: boolean
+  next_run_at?: string | null
+  last_run_at?: string | null
+  last_error?: string
+}
+
+export async function getWeComUsageAlert(id: number): Promise<WeComUsageAlertConfig> {
+  const { data } = await apiClient.get<WeComUsageAlertConfig>(`/admin/accounts/${id}/wecom-usage-alert`)
+  return data
+}
+
+export async function updateWeComUsageAlert(
+  id: number,
+  payload: Pick<WeComUsageAlertConfig, 'enabled' | 'webhook_url' | 'cron_expression' | 'force_probe'>
+): Promise<WeComUsageAlertConfig> {
+  const { data } = await apiClient.put<WeComUsageAlertConfig>(`/admin/accounts/${id}/wecom-usage-alert`, payload)
+  return data
+}
+
+export async function testWeComUsageAlert(id: number): Promise<WeComUsageAlertConfig> {
+  const { data } = await apiClient.post<WeComUsageAlertConfig>(`/admin/accounts/${id}/wecom-usage-alert/test`)
+  return data
+}
+
 export async function getUpstreamBillingProbeSettings(): Promise<UpstreamBillingProbeSettings> {
   const { data } = await apiClient.get<UpstreamBillingProbeSettings>('/admin/accounts/upstream-billing-probe/settings')
   return data
@@ -974,6 +1002,9 @@ export const accountsAPI = {
   queryOpenAIQuota,
   resetOpenAIQuota,
   createSparkShadow,
+  getWeComUsageAlert,
+  updateWeComUsageAlert,
+  testWeComUsageAlert,
   getUpstreamBillingProbeSettings,
   updateUpstreamBillingProbeSettings,
   setUpstreamBillingProbeEnabled,

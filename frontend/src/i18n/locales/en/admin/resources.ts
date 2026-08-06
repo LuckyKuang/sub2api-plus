@@ -40,6 +40,33 @@ export default {
       autoRecoverHelp: 'Automatically recover account from error/rate-limited state on successful test'
     },
 
+    wecomUsageAlert: {
+      title: 'WeCom Usage Window Alert',
+      menu: 'WeCom Alert',
+      description: 'Periodically push this account\'s usage windows (5h / 7d) to a WeCom group bot. Runs on the server and does not require an admin browser session.',
+      enabled: 'Enable scheduled push',
+      enabledHint: 'When enabled, the backend pushes on the cron schedule',
+      webhookUrl: 'Webhook URL',
+      webhookUrlPlaceholder: 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...',
+      webhookUrlHint: 'WeCom group bot webhook. Stored and displayed in full (not redacted).',
+      cronExpression: 'Cron expression',
+      cronPlaceholder: '0 * * * *',
+      cronHelp: 'Standard 5-field cron (minute hour day month weekday)',
+      cronTooltipTitle: 'Cron examples:',
+      cronTooltipMeaning: 'Defines when the report is pushed automatically.',
+      cronTooltipExampleHourly: '0 * * * *: every hour on the hour',
+      cronTooltipExampleDaily: '0 9 * * *: every day at 09:00',
+      forceProbe: 'Force upstream probe',
+      forceProbeHint: 'When enabled, each push actively probes upstream quota first; when off, local snapshots are preferred.',
+      nextRun: 'Next run',
+      lastRun: 'Last run',
+      lastError: 'Last error',
+      testSend: 'Send test now',
+      testing: 'Sending...',
+      saveSuccess: 'Alert config saved',
+      testSuccess: 'Pushed to WeCom group'
+    },
+
     // Proxies
     proxies: {
       title: 'Proxy Management',

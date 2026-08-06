@@ -40,6 +40,33 @@ export default {
       autoRecoverHelp: '测试成功后自动恢复异常状态的账号'
     },
 
+    wecomUsageAlert: {
+      title: '企业微信用量窗口告警',
+      menu: '企微告警',
+      description: '按 cron 定时将该账号的用量窗口（5h / 7d）推送到企业微信群机器人。任务在服务端执行，不依赖管理员登录态。',
+      enabled: '启用定时推送',
+      enabledHint: '开启后，后台会按 cron 自动推送',
+      webhookUrl: 'Webhook URL',
+      webhookUrlPlaceholder: 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...',
+      webhookUrlHint: '企业微信群机器人 Webhook，完整展示与保存，不做脱敏。',
+      cronExpression: 'Cron 表达式',
+      cronPlaceholder: '0 * * * *',
+      cronHelp: '标准 5 字段 cron（分钟 小时 日 月 星期）',
+      cronTooltipTitle: 'Cron 示例：',
+      cronTooltipMeaning: '定义自动推送时间规则。',
+      cronTooltipExampleHourly: '0 * * * *：每小时整点推送',
+      cronTooltipExampleDaily: '0 9 * * *：每天 09:00 推送',
+      forceProbe: '强制探测上游',
+      forceProbeHint: '开启后每次推送前主动探测上游配额（可能消耗探测配额）；关闭则优先使用本地快照。',
+      nextRun: '下次运行',
+      lastRun: '上次运行',
+      lastError: '上次错误',
+      testSend: '立即测试推送',
+      testing: '推送中...',
+      saveSuccess: '告警配置已保存',
+      testSuccess: '已推送到企业微信群'
+    },
+
     // Proxies Management
     proxies: {
       title: 'IP管理',

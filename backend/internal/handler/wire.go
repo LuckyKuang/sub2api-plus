@@ -48,9 +48,11 @@ func ProvideAdminHandlers(
 	ipAccessControlHandler *admin.IPAccessControlHandler,
 	upstreamBillingProbe *service.UpstreamBillingProbeService,
 	ollamaCloudUsage *service.OllamaCloudUsageService,
+	wecomUsageAlert *service.WeComUsageAlertService,
 ) *AdminHandlers {
 	accountHandler.SetUpstreamBillingProbeService(upstreamBillingProbe)
 	accountHandler.SetOllamaCloudUsageService(ollamaCloudUsage)
+	accountHandler.SetWeComUsageAlertService(wecomUsageAlert)
 	return &AdminHandlers{
 		Dashboard:              dashboardHandler,
 		User:                   userHandler,
