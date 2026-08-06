@@ -1,32 +1,48 @@
-# Design: WeCom usage-window alert
+# Design: Usage alert (multi-channel)
 
 ## Storage (accounts.extra)
 
 | Key | Type | Notes |
 |-----|------|-------|
-| `wecom_usage_alert_enabled` | bool | Must be true to schedule |
-| `wecom_usage_alert_webhook_url` | string | Full WeCom bot URL; shown to admins |
-| `wecom_usage_alert_cron` | string | Standard 5-field cron |
-| `wecom_usage_alert_force_probe` | bool | When true, GetUsage(force=true) |
-| `wecom_usage_alert_next_run_at` | RFC3339 | Computed on save / after run |
-| `wecom_usage_alert_last_run_at` | RFC3339 | Last attempt |
-| `wecom_usage_alert_last_error` | string | Empty on success |
+| `usage_alert_rules` | array | List of rules (max 20) |
+
+Each rule:
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `id` | string | Stable id; generated on create |
+| `enabled` | bool | Independent per rule; multiple can be on |
+| `channel` | string | `wecom` \| `feishu` \| `custom` |
+| `webhook_url` | string | Full HTTPS URL; shown to admins (not redacted) |
+| `cron_expression` | string | Standard 5-field cron |
+| `force_probe` | bool | When true, GetUsage(force=true) |
+| `threshold_enabled` | bool | Default false |
+| `threshold_percent` | int | 1–99 when threshold enabled |
+| `next_run_at` / `last_run_at` / `last_error` | meta | Per-rule |
+
+Legacy single-rule keys `wecom_usage_alert_*` are migrated on read and cleared on save.
+
+## Channels
+
+- **wecom**: markdown `msgtype` to `qyapi.weixin.qq.com/cgi-bin/webhook/send`
+- **feishu**: text `msg_type` to Feishu/Lark bot hook URL
+- **custom**: JSON body with `title`, `markdown`, account/threshold fields to any HTTPS URL
+
+## Threshold
+
+- Off: every due cron tick sends a **用量窗口报告**
+- On: send only when max window utilization ≥ threshold; title **用量阈值告警（≥N%）**
+- Test send always ignores the threshold gate
 
 ## Runtime
 
-1. Runner every minute (same cadence as scheduled tests)
-2. `ListDueWeComUsageAlertAccounts` selects enabled accounts, filters by `next_run_at`
-3. For each account: `GetUsage` → format markdown → POST webhook → update run state
-4. Failures are recorded in `last_error` and still advance `next_run_at`
-
-## Auth / permission
-
-- No admin HTTP session: runner calls service layer directly
-- Upstream tokens come from account credentials already stored server-side
-- WeCom outbound webhook only needs the bot key in the URL
+1. Runner every minute
+2. `ListDueUsageAlertAccounts` loads candidate accounts (new rules or legacy)
+3. For each due enabled rule: GetUsage → optional threshold check → POST webhook → advance that rule's `next_run_at`
+4. Failures set per-rule `last_error` and still advance schedule
 
 ## API
 
-- `GET /admin/accounts/:id/wecom-usage-alert`
-- `PUT /admin/accounts/:id/wecom-usage-alert`
-- `POST /admin/accounts/:id/wecom-usage-alert/test` (send immediately, does not change schedule)
+- `GET/PUT /admin/accounts/:id/usage-alert`
+- `POST /admin/accounts/:id/usage-alert/test` body optional `{ rule_id, rule }`
+- Legacy `/wecom-usage-alert` routes alias the same handlers

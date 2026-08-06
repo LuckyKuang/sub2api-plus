@@ -1,29 +1,34 @@
-# Add WeCom usage-window alert
+# Add usage alert (multi-channel)
 
 ## Problem
 
-Admins need periodic enterprise WeChat (WeCom group bot) reports of an
-account's upstream usage windows (5h / 7d) without relying on browser sessions
-or admin JWT.
+Admins need scheduled usage-window reports for an account pushed to chat bots
+(WeCom / Feishu / custom HTTPS webhook) without relying on browser sessions.
+They also need optional utilization thresholds and multiple concurrent schedules
+per account.
 
 ## Proposal
 
-Add per-account WeCom usage-window alerting:
+Upgrade the former WeCom-only alert into **用量告警 (Usage Alert)**:
 
-- Store `enabled`, webhook URL, cron, and run metadata in `accounts.extra`
-- Backend runner ticks every minute, loads due accounts, calls
-  `AccountUsageService.GetUsage` in-process, posts markdown to the WeCom bot
-- Admin APIs for get/update/test; webhook URL is returned in full (by design)
+- Store multiple rules in `accounts.extra.usage_alert_rules`
+- Each rule: channel (`wecom` | `feishu` | `custom`), webhook URL, cron,
+  force_probe, optional threshold (1–99), run metadata
+- Runner ticks every minute; for each due enabled rule, load usage in-process
+  and POST to the configured webhook
+- Threshold off: push on every cron tick (report title)
+- Threshold on: alert only when max window utilization ≥ threshold (threshold title)
+- Admin APIs: `/admin/accounts/:id/usage-alert` (legacy WeCom path kept as alias)
+- Webhook URLs returned in full (by design); migrate legacy single WeCom Extra keys on read
 
 ## Non-goals
 
-- Threshold-only alerts (can be added later)
-- Global WeCom settings
-- DingTalk / Slack channels
-- Encrypting or redacting the webhook URL
+- Global bot settings
+- DingTalk / Slack first-class channels (use `custom`)
+- Encrypting or redacting webhook URLs
 
 ## Impact
 
-- Persistent data: new Extra keys on accounts
-- Public admin API: `/admin/accounts/:id/wecom-usage-alert`
+- Persistent data: `usage_alert_rules` Extra key (+ legacy WeCom keys cleared on save)
+- Public admin API: `/admin/accounts/:id/usage-alert`
 - Background runner with Start/Stop lifecycle

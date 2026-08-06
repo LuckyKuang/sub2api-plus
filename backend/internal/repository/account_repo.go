@@ -64,6 +64,7 @@ var schedulerNeutralExtraKeyPrefixes = []string{
 	"upstream_billing_probe",
 	"ollama_cloud_usage",
 	"wecom_usage_alert",
+	"usage_alert",
 }
 
 var schedulerNeutralExtraKeys = map[string]struct{}{
