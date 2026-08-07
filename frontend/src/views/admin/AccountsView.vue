@@ -441,7 +441,8 @@
     <AccountTestModal :show="showTest" :account="testingAcc" @close="closeTestModal" />
     <AccountStatsModal :show="showStats" :account="statsAcc" @close="closeStatsModal" />
     <ScheduledTestsPanel :show="showSchedulePanel" :account-id="scheduleAcc?.id ?? null" :model-options="scheduleModelOptions" @close="closeSchedulePanel" />
-    <AccountActionMenu :show="menu.show" :account="menu.acc" :position="menu.pos" @close="menu.show = false" @test="handleTest" @stats="handleViewStats" @schedule="handleSchedule" @duplicate="handleDuplicateAccount" @reauth="handleReAuth" @refresh-token="handleRefresh" @recover-state="handleRecoverState" @reset-quota="handleResetQuota" @set-privacy="handleSetPrivacy" @create-spark-shadow="handleCreateSparkShadow" />
+    <UsageAlertPanel :show="showUsageAlertPanel" :account-id="usageAlertAcc?.id ?? null" @close="closeUsageAlertPanel" />
+    <AccountActionMenu :show="menu.show" :account="menu.acc" :position="menu.pos" @close="menu.show = false" @test="handleTest" @stats="handleViewStats" @schedule="handleSchedule" @usage-alert="handleUsageAlert" @duplicate="handleDuplicateAccount" @reauth="handleReAuth" @refresh-token="handleRefresh" @recover-state="handleRecoverState" @reset-quota="handleResetQuota" @set-privacy="handleSetPrivacy" @create-spark-shadow="handleCreateSparkShadow" />
     <SyncFromCrsModal :show="showSync" @close="showSync = false" @synced="reload" />
     <ImportDataModal :show="showImportData" @close="showImportData = false" @imported="handleDataImported" />
     <BulkEditAccountModal
@@ -513,6 +514,7 @@ import ReAuthAccountModal from '@/components/admin/account/ReAuthAccountModal.vu
 import AccountTestModal from '@/components/admin/account/AccountTestModal.vue'
 import AccountStatsModal from '@/components/admin/account/AccountStatsModal.vue'
 import ScheduledTestsPanel from '@/components/admin/account/ScheduledTestsPanel.vue'
+import UsageAlertPanel from '@/components/admin/account/UsageAlertPanel.vue'
 import type { SelectOption } from '@/components/common/Select.vue'
 import AccountStatusIndicator from '@/components/account/AccountStatusIndicator.vue'
 import AccountUsageCell from '@/components/account/AccountUsageCell.vue'
@@ -610,6 +612,8 @@ const statsAcc = ref<Account | null>(null)
 const showSchedulePanel = ref(false)
 const scheduleAcc = ref<Account | null>(null)
 const scheduleModelOptions = ref<SelectOption[]>([])
+const showUsageAlertPanel = ref(false)
+const usageAlertAcc = ref<Account | null>(null)
 const togglingSchedulable = ref<number | null>(null)
 const menu = reactive<{show:boolean, acc:Account|null, pos:{top:number, left:number}|null}>({ show: false, acc: null, pos: null })
 const exportingData = ref(false)
@@ -1112,6 +1116,7 @@ const isAnyModalOpen = computed(() => {
     showTest.value ||
     showStats.value ||
     showSchedulePanel.value ||
+    showUsageAlertPanel.value ||
     showErrorPassthrough.value ||
     showTLSFingerprintProfiles.value
   )
@@ -2011,6 +2016,15 @@ const handleSchedule = async (a: Account) => {
   }
 }
 const closeSchedulePanel = () => { showSchedulePanel.value = false; scheduleAcc.value = null; scheduleModelOptions.value = [] }
+
+const handleUsageAlert = (a: Account) => {
+  usageAlertAcc.value = a
+  showUsageAlertPanel.value = true
+}
+const closeUsageAlertPanel = () => {
+  showUsageAlertPanel.value = false
+  usageAlertAcc.value = null
+}
 const handleReAuth = (a: Account) => { reAuthAcc.value = a; showReAuth.value = true }
 const duplicatingAccountIDs = new Set<number>()
 const handleDuplicateAccount = async (a: Account) => {

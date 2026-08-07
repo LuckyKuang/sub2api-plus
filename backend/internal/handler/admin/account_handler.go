@@ -64,6 +64,7 @@ type AccountHandler struct {
 	grokImportProber        grokImportProber
 	upstreamBillingProbe    *service.UpstreamBillingProbeService
 	ollamaCloudUsage        *service.OllamaCloudUsageService
+	usageAlert              *service.UsageAlertService
 	exportSecurity          *accountExportSecurity
 }
 

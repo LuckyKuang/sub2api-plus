@@ -862,6 +862,76 @@ export async function createSparkShadow(parentId: number, payload: SparkShadowCr
   return data
 }
 
+export type UsageAlertChannel = 'wecom' | 'feishu' | 'custom'
+
+export interface UsageAlertRule {
+  id?: string
+  enabled: boolean
+  channel: UsageAlertChannel
+  webhook_url: string
+  cron_expression: string
+  force_probe: boolean
+  threshold_enabled: boolean
+  threshold_percent: number
+  threshold_watch_cron?: string
+  cooldown_seconds?: number
+  quiet_hours?: string[]
+  next_run_at?: string | null
+  last_run_at?: string | null
+  threshold_next_run_at?: string | null
+  last_threshold_alert_at?: string | null
+  last_error?: string
+}
+
+export interface UsageAlertConfig {
+  rules: UsageAlertRule[]
+}
+
+export interface UsageAlertTestRequest {
+  rule_id?: string
+  rule?: UsageAlertRule
+}
+
+export async function getUsageAlert(id: number): Promise<UsageAlertConfig> {
+  const { data } = await apiClient.get<UsageAlertConfig>(`/admin/accounts/${id}/usage-alert`)
+  return data
+}
+
+export async function updateUsageAlert(
+  id: number,
+  payload: UsageAlertConfig
+): Promise<UsageAlertConfig> {
+  const { data } = await apiClient.put<UsageAlertConfig>(`/admin/accounts/${id}/usage-alert`, payload)
+  return data
+}
+
+export async function testUsageAlert(
+  id: number,
+  payload?: UsageAlertTestRequest
+): Promise<UsageAlertConfig> {
+  const { data } = await apiClient.post<UsageAlertConfig>(`/admin/accounts/${id}/usage-alert/test`, payload || {})
+  return data
+}
+
+/** @deprecated Use getUsageAlert */
+export const getWeComUsageAlert = getUsageAlert
+/** @deprecated Use updateUsageAlert */
+export async function updateWeComUsageAlert(
+  id: number,
+  payload: UsageAlertConfig
+): Promise<UsageAlertConfig> {
+  return updateUsageAlert(id, payload)
+}
+/** @deprecated Use testUsageAlert */
+export async function testWeComUsageAlert(
+  id: number,
+  payload?: UsageAlertTestRequest
+): Promise<UsageAlertConfig> {
+  return testUsageAlert(id, payload)
+}
+
+export type WeComUsageAlertConfig = UsageAlertConfig
+
 export async function getUpstreamBillingProbeSettings(): Promise<UpstreamBillingProbeSettings> {
   const { data } = await apiClient.get<UpstreamBillingProbeSettings>('/admin/accounts/upstream-billing-probe/settings')
   return data
@@ -987,6 +1057,12 @@ export const accountsAPI = {
   queryOpenAIQuota,
   resetOpenAIQuota,
   createSparkShadow,
+  getUsageAlert,
+  updateUsageAlert,
+  testUsageAlert,
+  getWeComUsageAlert,
+  updateWeComUsageAlert,
+  testWeComUsageAlert,
   getUpstreamBillingProbeSettings,
   updateUpstreamBillingProbeSettings,
   setUpstreamBillingProbeEnabled,
