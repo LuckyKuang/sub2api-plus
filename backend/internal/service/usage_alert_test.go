@@ -53,7 +53,7 @@ func TestNormalizeUsageAlertRuleThreshold(t *testing.T) {
 		ThresholdEnabled:   true,
 		ThresholdPercent:   80,
 		ThresholdWatchCron: "*/5 * * * *",
-		CooldownSeconds:     3600,
+		CooldownSeconds:    3600,
 		QuietHours:         []string{"18:00:00-23:59:59", "00:00:00-09:00:00"},
 	}, now, false)
 	require.NoError(t, err)
@@ -81,7 +81,7 @@ func TestNormalizeUsageAlertConfigMultipleRules(t *testing.T) {
 			ThresholdEnabled:   true,
 			ThresholdPercent:   90,
 			ThresholdWatchCron: "*/10 * * * *",
-			CooldownSeconds:     1800,
+			CooldownSeconds:    1800,
 		},
 	}}, UsageAlertConfig{}, now)
 	require.NoError(t, err)
@@ -184,17 +184,17 @@ func TestAccountHasDueUsageAlertRuleThresholdWatch(t *testing.T) {
 	account := &Account{Extra: map[string]any{
 		UsageAlertRulesExtraKey: []any{
 			map[string]any{
-				"id":                     "r1",
-				"enabled":                true,
-				"channel":                "custom",
-				"webhook_url":            "https://hooks.example.com/x",
-				"cron_expression":        "0 * * * *",
-				"next_run_at":            future.Format(time.RFC3339),
-				"threshold_enabled":      true,
-				"threshold_percent":      80,
-				"threshold_watch_cron":   "*/5 * * * *",
-				"cooldown_seconds":       600,
-				"threshold_next_run_at":  past.Format(time.RFC3339),
+				"id":                    "r1",
+				"enabled":               true,
+				"channel":               "custom",
+				"webhook_url":           "https://hooks.example.com/x",
+				"cron_expression":       "0 * * * *",
+				"next_run_at":           future.Format(time.RFC3339),
+				"threshold_enabled":     true,
+				"threshold_percent":     80,
+				"threshold_watch_cron":  "*/5 * * * *",
+				"cooldown_seconds":      600,
+				"threshold_next_run_at": past.Format(time.RFC3339),
 			},
 		},
 	}}
@@ -204,7 +204,7 @@ func TestAccountHasDueUsageAlertRuleThresholdWatch(t *testing.T) {
 func TestPostWebhookWeComAndCustom(t *testing.T) {
 	t.Parallel()
 	var sawWeCom, sawCustom, sawFeishu bool
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
 		_ = r.Body.Close()
@@ -229,13 +229,57 @@ func TestPostWebhookWeComAndCustom(t *testing.T) {
 	}))
 	defer server.Close()
 
+	// postWebhook validates channel hosts; route those validated URLs to the local TLS server.
+	baseClient := server.Client()
+	baseTransport := baseClient.Transport
+	if baseTransport == nil {
+		baseTransport = http.DefaultTransport
+	}
+	rewrite := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		cloned := req.Clone(req.Context())
+		cloned.URL.Scheme = "https"
+		cloned.URL.Host = strings.TrimPrefix(server.URL, "https://")
+		cloned.Host = cloned.URL.Host
+		return baseTransport.RoundTrip(cloned)
+	})
+
 	svc := NewUsageAlertService(nil, nil, nil)
-	svc.httpClient = server.Client()
+	svc.httpClient = &http.Client{Transport: rewrite, Timeout: usageAlertWebhookTimeout}
 	account := &Account{ID: 1, Name: "a", Platform: "openai", Type: "oauth"}
 	msg := usageAlertMessage{WeCom: "**hi**", Markdown: "# hi", Plain: "hi"}
-	require.NoError(t, svc.postWebhook(t.Context(), UsageAlertChannelWeCom, server.URL, "t", msg, account, nil, UsageAlertRule{}, 0))
-	require.NoError(t, svc.postWebhook(t.Context(), UsageAlertChannelFeishu, server.URL, "t", msg, account, nil, UsageAlertRule{}, 0))
-	require.NoError(t, svc.postWebhook(t.Context(), UsageAlertChannelCustom, server.URL, "t", msg, account, nil, UsageAlertRule{}, 12))
+	require.NoError(t, svc.postWebhook(
+		t.Context(),
+		UsageAlertChannelWeCom,
+		"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=test",
+		"t",
+		msg,
+		account,
+		nil,
+		UsageAlertRule{},
+		0,
+	))
+	require.NoError(t, svc.postWebhook(
+		t.Context(),
+		UsageAlertChannelFeishu,
+		"https://open.feishu.cn/open-apis/bot/v2/hook/test",
+		"t",
+		msg,
+		account,
+		nil,
+		UsageAlertRule{},
+		0,
+	))
+	require.NoError(t, svc.postWebhook(
+		t.Context(),
+		UsageAlertChannelCustom,
+		"https://hooks.example.com/usage",
+		"t",
+		msg,
+		account,
+		nil,
+		UsageAlertRule{},
+		12,
+	))
 	require.True(t, sawWeCom)
 	require.True(t, sawFeishu)
 	require.True(t, sawCustom)
