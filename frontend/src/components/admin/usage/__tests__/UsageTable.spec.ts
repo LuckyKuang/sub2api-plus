@@ -51,13 +51,20 @@ const messages: Record<string, string> = {
 	'usage.latencyFirstToken': 'First Token',
 	'usage.latencyLegacyFirstEvent': 'First Event (Legacy)',
 	'usage.latencyFirstOutput': 'First Output',
+	'usage.latencyFirstOutputKind': 'First Output Kind',
+	'usage.latencyOutputKindText': 'Text',
 	'usage.latencyFirstImage': 'First Image Data',
 	'usage.latencyFirstAudio': 'First Audio Data',
 	'usage.latencyFirstReasoning': 'First Reasoning',
 	'usage.latencyFirstTool': 'First Tool Output',
+	'usage.latencyDetails': 'Latency Details',
+	'usage.latencyLegacyFirstEventHint': 'Legacy first event; not comparable to strict first-token TTFT.',
+	'usage.latencyMediaOnlyHint': 'Media first output only; no strict first-token sample.',
+	'usage.latencyMixedModalityHint': 'First output and first token differ; an earlier non-text or aggregate output arrived first.',
+	'usage.latencyNonTextFirstHint': 'First token-like output was reasoning or a tool call, not necessarily final answer text.',
 	'usage.latencyDuration': 'Total',
 	'usage.latencyTps': 'TPS',
-	'usage.latencyTpsHint': 'Estimated average output rate',
+	'usage.latencyTpsHint': 'Estimated average text output rate: text output tokens ÷ (total duration − first token). Complete stream/ws requests only. Hidden when the generation window is too short, text tokens are too few, or the estimate is unrealistically high.',
   'admin.usage.billingModeToken': 'Token',
   'admin.usage.billingModePerRequest': 'Per request',
   'admin.usage.billingModeImage': 'Image',
@@ -134,7 +141,7 @@ describe('admin UsageTable tooltip', () => {
     } as DOMRect)
   })
 
-  it('renders modality-aware first latency labels and exposes a later token timestamp', () => {
+  it('keeps primary latency as first token and hides modality details behind an info icon', async () => {
     const rows = [
       {
         ...baseImageRow,
@@ -200,6 +207,14 @@ describe('admin UsageTable tooltip', () => {
         first_output_kind: null,
         duration_ms: 900,
       },
+      {
+        ...baseImageRow,
+        request_id: 'req-latency-plain-text',
+        first_token_ms: 100,
+        first_output_ms: 100,
+        first_output_kind: 'text',
+        duration_ms: 1_000,
+      },
     ]
 
     const wrapper = mount(UsageTable, {
@@ -215,15 +230,37 @@ describe('admin UsageTable tooltip', () => {
     })
 
     const text = wrapper.text()
-    expect(text).toContain('First Image Data40msFirst Token120ms')
-    expect(text).toContain('First Image Data75ms')
-    expect(text).toContain('First Audio Data80ms')
-    expect(text).toContain('First Reasoning85ms')
-    expect(text).toContain('First Tool Output88ms')
-    expect(text).toContain('First Output40msFirst Token120ms')
-    expect(text).toContain('First Output90ms')
-    expect(text).toContain('First Event (Legacy)55ms')
-    expect(wrapper.findAll('[data-testid="first-latency-value"]')[0].classes()).toContain('text-gray-600')
+    // Primary column is always First Token / Legacy, never modality labels.
+    expect(text).toContain('First Token 120ms')
+    expect(text).toContain('First Token 85ms')
+    expect(text).toContain('First Token 88ms')
+    expect(text).toContain('First Event (Legacy) 55ms')
+    expect(text).not.toContain('First Image Data')
+    expect(text).not.toContain('First Audio Data')
+    expect(text).not.toContain('First Reasoning')
+    expect(text).not.toContain('First Tool Output')
+
+    const values = wrapper.findAll('[data-testid="first-latency-value"]')
+    expect(values[0].text()).toBe('120ms')
+    expect(values[0].classes()).toContain('text-emerald-600')
+    expect(values[1].text()).toBe('-')
+    expect(values[7].text()).toBe('55ms')
+    expect(values[7].classes()).toContain('text-gray-600')
+
+    // Detail icon for non-plain cases; plain text with matching times has no icon.
+    const triggers = wrapper.findAll('[data-testid="latency-details-trigger"]')
+    expect(triggers).toHaveLength(8)
+
+    await triggers[0].trigger('mouseenter')
+    await nextTick()
+    const tooltip = wrapper.get('[data-testid="latency-details-tooltip"]')
+    expect(tooltip.text()).toContain('Latency Details')
+    expect(tooltip.text()).toContain('First Output Kind')
+    expect(tooltip.text()).toContain('First Image Data')
+    expect(tooltip.text()).toContain('40ms')
+    expect(tooltip.text()).toContain('First Token')
+    expect(tooltip.text()).toContain('120ms')
+    expect(tooltip.text()).toContain('First output and first token differ')
   })
 
   it('shows estimated TPS only for new-semantics stream and websocket rows', () => {
@@ -364,6 +401,70 @@ describe('admin UsageTable tooltip', () => {
         first_output_kind: 'text',
         duration_ms: null,
       },
+      {
+        // generationMs = 250 < 300 → hide (burst / measurement noise)
+        ...baseImageRow,
+        request_id: 'req-tps-short-generation',
+        request_type: 'stream',
+        stream: true,
+        output_tokens: 100,
+        first_token_ms: 100,
+        first_output_ms: 100,
+        first_output_kind: 'text',
+        duration_ms: 350,
+      },
+      {
+        // text tokens = 7 < 8 → hide
+        ...baseImageRow,
+        request_id: 'req-tps-few-tokens',
+        request_type: 'stream',
+        stream: true,
+        output_tokens: 7,
+        image_output_tokens: 0,
+        first_token_ms: 100,
+        first_output_ms: 100,
+        first_output_kind: 'text',
+        duration_ms: 1_100,
+      },
+      {
+        // 1000 tokens / 500ms = 2000 TPS > 500 → hide
+        ...baseImageRow,
+        request_id: 'req-tps-unrealistically-high',
+        request_type: 'stream',
+        stream: true,
+        output_tokens: 1_000,
+        image_output_tokens: 0,
+        first_token_ms: 100,
+        first_output_ms: 100,
+        first_output_kind: 'text',
+        duration_ms: 600,
+      },
+      {
+        // boundary: generationMs = 300, tokens = 8, TPS = 26.7 → show
+        ...baseImageRow,
+        request_id: 'req-tps-min-gates-pass',
+        request_type: 'stream',
+        stream: true,
+        output_tokens: 8,
+        image_output_tokens: 0,
+        first_token_ms: 100,
+        first_output_ms: 100,
+        first_output_kind: 'text',
+        duration_ms: 400,
+      },
+      {
+        // boundary: TPS exactly 500 → show
+        ...baseImageRow,
+        request_id: 'req-tps-max-boundary',
+        request_type: 'stream',
+        stream: true,
+        output_tokens: 150,
+        image_output_tokens: 0,
+        first_token_ms: 100,
+        first_output_ms: 100,
+        first_output_kind: 'text',
+        duration_ms: 400, // 150 * 1000 / 300 = 500
+      },
     ]
 
     const wrapper = mount(UsageTable, {
@@ -378,10 +479,13 @@ describe('admin UsageTable tooltip', () => {
       },
     })
 
-    expect(wrapper.findAll('[data-testid="latency-tps"]').map((node) => node.text())).toEqual(['37', '50', '100', '100'])
-    expect(wrapper.text()).toContain('First Token721msTotal10.86sTPS37')
-    expect(wrapper.text()).toContain('First Image Data40msFirst Token100msTotal1.10sTPS100')
-    expect(wrapper.text()).toContain('First Audio Data20msFirst Token100msTotal1.10sTPS100')
+    // Valid rows: stream 37, ws 50, mixed image 100, mixed audio 100,
+    // min-gates 26.7, max-boundary 500. Short/few/high/invalid stay hidden.
+    expect(wrapper.findAll('[data-testid="latency-tps"]').map((node) => node.text())).toEqual(['37', '50', '100', '100', '26.7', '500'])
+    expect(wrapper.text()).toContain('First Token 721msTotal10.86sTPS37')
+    expect(wrapper.text()).toContain('First Token 100msTotal1.10sTPS100')
+    expect(wrapper.text()).not.toContain('First Image Data')
+    expect(wrapper.text()).not.toContain('First Audio Data')
   })
 
   it('renders missing duration and media first output with neutral latency styles', () => {
@@ -408,10 +512,12 @@ describe('admin UsageTable tooltip', () => {
       },
     })
 
-    expect(wrapper.get('[data-testid="first-latency-value"]').classes()).toContain('text-gray-600')
+    expect(wrapper.get('[data-testid="first-latency-value"]').text()).toBe('-')
+    expect(wrapper.get('[data-testid="first-latency-value"]').classes()).toContain('text-gray-400')
     expect(wrapper.get('[data-testid="latency-bar"]').classes()).toContain('bg-gray-300')
     expect(wrapper.get('[data-testid="latency-duration"]').classes()).toContain('text-gray-400')
     expect(wrapper.get('[data-testid="latency-duration"]').text()).toBe('-')
+    expect(wrapper.find('[data-testid="latency-details-trigger"]').exists()).toBe(true)
   })
 
   it('marks only usage rows that actually applied long-context billing', () => {
