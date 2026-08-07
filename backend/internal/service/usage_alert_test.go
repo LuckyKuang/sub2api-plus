@@ -284,9 +284,3 @@ func TestPostWebhookWeComAndCustom(t *testing.T) {
 	require.True(t, sawFeishu)
 	require.True(t, sawCustom)
 }
-
-type roundTripFunc func(*http.Request) (*http.Response, error)
-
-func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
-	return f(req)
-}
