@@ -32,16 +32,16 @@ const (
 	WeComUsageAlertLastRunAtExtraKey  = "wecom_usage_alert_last_run_at"
 	WeComUsageAlertLastErrorExtraKey  = "wecom_usage_alert_last_error"
 
-	UsageAlertChannelWeCom   = "wecom"
-	UsageAlertChannelFeishu  = "feishu"
-	UsageAlertChannelCustom  = "custom"
+	UsageAlertChannelWeCom  = "wecom"
+	UsageAlertChannelFeishu = "feishu"
+	UsageAlertChannelCustom = "custom"
 
-	usageAlertMaxPerCycle       = 20
-	usageAlertCycleInterval     = time.Minute
-	usageAlertWebhookTimeout    = 15 * time.Second
-	usageAlertMarkdownMaxRunes  = 3500
-	usageAlertMaxRules          = 20
-	usageAlertMaxQuietRanges    = 10
+	usageAlertMaxPerCycle        = 20
+	usageAlertCycleInterval      = time.Minute
+	usageAlertWebhookTimeout     = 15 * time.Second
+	usageAlertMarkdownMaxRunes   = 3500
+	usageAlertMaxRules           = 20
+	usageAlertMaxQuietRanges     = 10
 	usageAlertMaxCooldownSeconds = 30 * 24 * 3600 // 30 days
 )
 
@@ -61,10 +61,10 @@ type UsageAlertRule struct {
 	Cron                 string     `json:"cron_expression"` // scheduled usage report
 	ForceProbe           bool       `json:"force_probe"`
 	ThresholdEnabled     bool       `json:"threshold_enabled"`
-	ThresholdPercent     int        `json:"threshold_percent"`      // 1-99 when threshold_enabled
-	ThresholdWatchCron   string     `json:"threshold_watch_cron"`   // required when threshold_enabled
-	CooldownSeconds       int        `json:"cooldown_seconds"`       // required when threshold_enabled
-	QuietHours           []string   `json:"quiet_hours"`            // optional daily ranges "HH:MM:SS-HH:MM:SS"
+	ThresholdPercent     int        `json:"threshold_percent"`    // 1-99 when threshold_enabled
+	ThresholdWatchCron   string     `json:"threshold_watch_cron"` // required when threshold_enabled
+	CooldownSeconds      int        `json:"cooldown_seconds"`     // required when threshold_enabled
+	QuietHours           []string   `json:"quiet_hours"`          // optional daily ranges "HH:MM:SS-HH:MM:SS"
 	NextRunAt            *time.Time `json:"next_run_at,omitempty"`
 	LastRunAt            *time.Time `json:"last_run_at,omitempty"`
 	ThresholdNextRunAt   *time.Time `json:"threshold_next_run_at,omitempty"`
@@ -714,7 +714,7 @@ func normalizeUsageAlertRule(input UsageAlertRule, now time.Time, allowDisabledI
 		ThresholdEnabled:     input.ThresholdEnabled,
 		ThresholdPercent:     input.ThresholdPercent,
 		ThresholdWatchCron:   strings.TrimSpace(input.ThresholdWatchCron),
-		CooldownSeconds:       input.CooldownSeconds,
+		CooldownSeconds:      input.CooldownSeconds,
 		QuietHours:           nil,
 		NextRunAt:            input.NextRunAt,
 		LastRunAt:            input.LastRunAt,
@@ -1113,7 +1113,7 @@ func buildUsageAlertMessage(
 	quotaTable := formatUsageAlertQuotaTable(rows)
 	localTable := formatUsageAlertLocalTable(rows)
 
-	var body strings.Builder
+	var body usageAlertBuilder
 	if usage != nil && strings.TrimSpace(usage.Error) != "" {
 		body.WriteString("警告：")
 		body.WriteString(strings.TrimSpace(usage.Error))
@@ -1143,7 +1143,7 @@ func buildUsageAlertMessage(
 	plain := truncateRunes(title+"\n\n"+headerPlain+"\n\n"+body.String(), usageAlertMarkdownMaxRunes)
 
 	// WeCom markdown: title + quote header + fenced monospace tables.
-	var wecom strings.Builder
+	var wecom usageAlertBuilder
 	wecom.WriteString("**")
 	wecom.WriteString(escapeWeComMarkdown(title))
 	wecom.WriteString("**\n")
@@ -1183,7 +1183,7 @@ func buildUsageAlertMessage(
 	wecomText := truncateRunes(wecom.String(), usageAlertMarkdownMaxRunes)
 
 	// GFM markdown for custom webhooks / renderers that support tables.
-	var md strings.Builder
+	var md usageAlertBuilder
 	md.WriteString("# ")
 	md.WriteString(title)
 	md.WriteString("\n\n")
@@ -1274,13 +1274,27 @@ func formatUsageAlertReset(progress *UsageProgress) string {
 	return "—"
 }
 
+// usageAlertBuilder centralizes strings.Builder writes, whose errors are
+// guaranteed to be nil for an in-memory builder.
+type usageAlertBuilder struct {
+	strings.Builder
+}
+
+func (b *usageAlertBuilder) WriteString(s string) {
+	_, _ = b.Builder.WriteString(s)
+}
+
+func (b *usageAlertBuilder) WriteByte(c byte) {
+	_ = b.Builder.WriteByte(c)
+}
+
 func formatUsageAlertQuotaTable(rows []usageAlertWindowRow) string {
 	if len(rows) == 0 {
 		return ""
 	}
 	// Monospace table for plain/custom text channels.
 	colWindow, colUtil, colReset := 12, 8, 14
-	var b strings.Builder
+	var b usageAlertBuilder
 	b.WriteString(padUsageAlertCell("窗口", colWindow))
 	b.WriteString(padUsageAlertCell("使用率", colUtil))
 	b.WriteString(padUsageAlertCell("重置时间", colReset))
@@ -1301,7 +1315,7 @@ func formatUsageAlertQuotaLines(rows []usageAlertWindowRow) string {
 	if len(rows) == 0 {
 		return ""
 	}
-	var b strings.Builder
+	var b usageAlertBuilder
 	for i, row := range rows {
 		if i > 0 {
 			b.WriteByte('\n')
@@ -1324,7 +1338,7 @@ func formatUsageAlertLocalTable(rows []usageAlertWindowRow) string {
 		return ""
 	}
 	colWindow, colReq, colTok, colCost, colUser := 12, 8, 10, 10, 10
-	var b strings.Builder
+	var b usageAlertBuilder
 	b.WriteString(padUsageAlertCell("窗口", colWindow))
 	b.WriteString(padUsageAlertCell("请求数", colReq))
 	b.WriteString(padUsageAlertCell("Token", colTok))
@@ -1349,7 +1363,7 @@ func formatUsageAlertLocalTable(rows []usageAlertWindowRow) string {
 }
 
 func formatUsageAlertLocalLines(rows []usageAlertWindowRow) string {
-	var b strings.Builder
+	var b usageAlertBuilder
 	n := 0
 	for _, row := range rows {
 		if row.Progress == nil || row.Progress.WindowStats == nil {
@@ -1368,9 +1382,8 @@ func formatUsageAlertLocalLines(rows []usageAlertWindowRow) string {
 
 func padUsageAlertCell(s string, width int) string {
 	s = strings.TrimSpace(s)
-	runes := []rune(s)
 	n := 0
-	for _, r := range runes {
+	for _, r := range s {
 		if r <= 0x7f {
 			n++
 		} else {
@@ -1382,20 +1395,6 @@ func padUsageAlertCell(s string, width int) string {
 	}
 	return s + strings.Repeat(" ", width-n)
 }
-
-// formatUsageAlertMarkdown keeps a convenience wrapper for tests / callers needing WeCom body.
-func formatUsageAlertMarkdown(
-	account *Account,
-	usage *UsageInfo,
-	now time.Time,
-	title string,
-	thresholdEnabled bool,
-	thresholdPercent int,
-	maxUtil float64,
-) string {
-	return buildUsageAlertMessage(account, usage, now, title, thresholdEnabled, thresholdPercent, maxUtil).WeCom
-}
-
 func escapeWeComMarkdown(s string) string {
 	replacer := strings.NewReplacer("`", "'", "*", "＊", "_", "＿", "\n", " ")
 	return replacer.Replace(s)

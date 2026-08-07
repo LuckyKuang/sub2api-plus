@@ -53,7 +53,7 @@ func TestNormalizeUsageAlertRuleThreshold(t *testing.T) {
 		ThresholdEnabled:   true,
 		ThresholdPercent:   80,
 		ThresholdWatchCron: "*/5 * * * *",
-		CooldownSeconds:     3600,
+		CooldownSeconds:    3600,
 		QuietHours:         []string{"18:00:00-23:59:59", "00:00:00-09:00:00"},
 	}, now, false)
 	require.NoError(t, err)
@@ -81,7 +81,7 @@ func TestNormalizeUsageAlertConfigMultipleRules(t *testing.T) {
 			ThresholdEnabled:   true,
 			ThresholdPercent:   90,
 			ThresholdWatchCron: "*/10 * * * *",
-			CooldownSeconds:     1800,
+			CooldownSeconds:    1800,
 		},
 	}}, UsageAlertConfig{}, now)
 	require.NoError(t, err)
@@ -184,17 +184,17 @@ func TestAccountHasDueUsageAlertRuleThresholdWatch(t *testing.T) {
 	account := &Account{Extra: map[string]any{
 		UsageAlertRulesExtraKey: []any{
 			map[string]any{
-				"id":                     "r1",
-				"enabled":                true,
-				"channel":                "custom",
-				"webhook_url":            "https://hooks.example.com/x",
-				"cron_expression":        "0 * * * *",
-				"next_run_at":            future.Format(time.RFC3339),
-				"threshold_enabled":      true,
-				"threshold_percent":      80,
-				"threshold_watch_cron":   "*/5 * * * *",
-				"cooldown_seconds":       600,
-				"threshold_next_run_at":  past.Format(time.RFC3339),
+				"id":                    "r1",
+				"enabled":               true,
+				"channel":               "custom",
+				"webhook_url":           "https://hooks.example.com/x",
+				"cron_expression":       "0 * * * *",
+				"next_run_at":           future.Format(time.RFC3339),
+				"threshold_enabled":     true,
+				"threshold_percent":     80,
+				"threshold_watch_cron":  "*/5 * * * *",
+				"cooldown_seconds":      600,
+				"threshold_next_run_at": past.Format(time.RFC3339),
 			},
 		},
 	}}
