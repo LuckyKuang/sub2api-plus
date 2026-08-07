@@ -1155,25 +1155,25 @@ func buildUsageAlertMessage(
 		if maxUtil >= float64(thresholdPercent) {
 			wecom.WriteString("（已触发）")
 		}
-		wecom.WriteByte('\n')
+		wecom.AppendByte('\n')
 	}
 	if usage != nil && strings.TrimSpace(usage.Error) != "" {
 		wecom.WriteString("> 警告：")
 		wecom.WriteString(escapeWeComMarkdown(strings.TrimSpace(usage.Error)))
-		wecom.WriteByte('\n')
+		wecom.AppendByte('\n')
 	}
-	wecom.WriteByte('\n')
+	wecom.AppendByte('\n')
 	if len(rows) == 0 {
 		wecom.WriteString("暂无上游限流窗口数据（可能尚未采样，或该账号类型不支持）。")
 	} else {
 		wecom.WriteString("**上游限流使用率**\n")
 		// Avoid ``` code fences: WeCom renders them in reddish syntax colors.
 		wecom.WriteString(formatUsageAlertQuotaLines(rows))
-		wecom.WriteByte('\n')
+		wecom.AppendByte('\n')
 		if localTable != "" {
 			wecom.WriteString("\n**本站窗口统计**\n")
 			wecom.WriteString(formatUsageAlertLocalLines(rows))
-			wecom.WriteByte('\n')
+			wecom.AppendByte('\n')
 		}
 		wecom.WriteString("\n使用率=上游限流已用比例；重置时间=配额下次恢复。")
 		if localTable != "" {
@@ -1194,9 +1194,9 @@ func buildUsageAlertMessage(
 		if maxUtil >= float64(thresholdPercent) {
 			md.WriteString("（已触发）")
 		}
-		md.WriteByte('\n')
+		md.AppendByte('\n')
 	}
-	md.WriteByte('\n')
+	md.AppendByte('\n')
 	if usage != nil && strings.TrimSpace(usage.Error) != "" {
 		md.WriteString("> 警告：")
 		md.WriteString(strings.TrimSpace(usage.Error))
@@ -1284,7 +1284,7 @@ func (b *usageAlertBuilder) WriteString(s string) {
 	_, _ = b.Builder.WriteString(s)
 }
 
-func (b *usageAlertBuilder) WriteByte(c byte) {
+func (b *usageAlertBuilder) AppendByte(c byte) {
 	_ = b.Builder.WriteByte(c)
 }
 
@@ -1298,14 +1298,14 @@ func formatUsageAlertQuotaTable(rows []usageAlertWindowRow) string {
 	b.WriteString(padUsageAlertCell("窗口", colWindow))
 	b.WriteString(padUsageAlertCell("使用率", colUtil))
 	b.WriteString(padUsageAlertCell("重置时间", colReset))
-	b.WriteByte('\n')
+	b.AppendByte('\n')
 	b.WriteString(strings.Repeat("-", colWindow+colUtil+colReset))
-	b.WriteByte('\n')
+	b.AppendByte('\n')
 	for _, row := range rows {
 		b.WriteString(padUsageAlertCell(row.Name, colWindow))
 		b.WriteString(padUsageAlertCell(fmt.Sprintf("%.0f%%", row.Progress.Utilization), colUtil))
 		b.WriteString(padUsageAlertCell(formatUsageAlertReset(row.Progress), colReset))
-		b.WriteByte('\n')
+		b.AppendByte('\n')
 	}
 	return strings.TrimRight(b.String(), "\n")
 }
@@ -1318,7 +1318,7 @@ func formatUsageAlertQuotaLines(rows []usageAlertWindowRow) string {
 	var b usageAlertBuilder
 	for i, row := range rows {
 		if i > 0 {
-			b.WriteByte('\n')
+			b.AppendByte('\n')
 		}
 		b.WriteString(fmt.Sprintf("窗口：%s　使用率：%.0f%%　重置：%s",
 			row.Name, row.Progress.Utilization, formatUsageAlertReset(row.Progress)))
@@ -1344,9 +1344,9 @@ func formatUsageAlertLocalTable(rows []usageAlertWindowRow) string {
 	b.WriteString(padUsageAlertCell("Token", colTok))
 	b.WriteString(padUsageAlertCell("核算成本", colCost))
 	b.WriteString(padUsageAlertCell("用户成本", colUser))
-	b.WriteByte('\n')
+	b.AppendByte('\n')
 	b.WriteString(strings.Repeat("-", colWindow+colReq+colTok+colCost+colUser))
-	b.WriteByte('\n')
+	b.AppendByte('\n')
 	for _, row := range rows {
 		if row.Progress == nil || row.Progress.WindowStats == nil {
 			continue
@@ -1357,7 +1357,7 @@ func formatUsageAlertLocalTable(rows []usageAlertWindowRow) string {
 		b.WriteString(padUsageAlertCell(formatCompactTokenCount(ws.Tokens), colTok))
 		b.WriteString(padUsageAlertCell(fmt.Sprintf("$%.2f", ws.Cost), colCost))
 		b.WriteString(padUsageAlertCell(fmt.Sprintf("$%.2f", ws.UserCost), colUser))
-		b.WriteByte('\n')
+		b.AppendByte('\n')
 	}
 	return strings.TrimRight(b.String(), "\n")
 }
@@ -1371,7 +1371,7 @@ func formatUsageAlertLocalLines(rows []usageAlertWindowRow) string {
 		}
 		ws := row.Progress.WindowStats
 		if n > 0 {
-			b.WriteByte('\n')
+			b.AppendByte('\n')
 		}
 		b.WriteString(fmt.Sprintf("窗口：%s　请求：%d　Token：%s　核算：$%.2f　用户：$%.2f",
 			row.Name, ws.Requests, formatCompactTokenCount(ws.Tokens), ws.Cost, ws.UserCost))
