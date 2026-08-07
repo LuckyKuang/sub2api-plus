@@ -1,0 +1,4 @@
+interface:
+  display_name: "Sub2API Push CLI"
+  short_description: "Validate locally, verify Docker, and push safely"
+  default_prompt: "Use $push-cli to run strict local checks, verify the container runtime, and push the current branch safely."
