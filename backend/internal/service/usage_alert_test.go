@@ -204,7 +204,7 @@ func TestAccountHasDueUsageAlertRuleThresholdWatch(t *testing.T) {
 func TestPostWebhookWeComAndCustom(t *testing.T) {
 	t.Parallel()
 	var sawWeCom, sawCustom, sawFeishu bool
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
 		_ = r.Body.Close()
@@ -229,14 +229,64 @@ func TestPostWebhookWeComAndCustom(t *testing.T) {
 	}))
 	defer server.Close()
 
+	// postWebhook validates channel hosts; route those validated URLs to the local TLS server.
+	baseClient := server.Client()
+	baseTransport := baseClient.Transport
+	if baseTransport == nil {
+		baseTransport = http.DefaultTransport
+	}
+	rewrite := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		cloned := req.Clone(req.Context())
+		cloned.URL.Scheme = "https"
+		cloned.URL.Host = strings.TrimPrefix(server.URL, "https://")
+		cloned.Host = cloned.URL.Host
+		return baseTransport.RoundTrip(cloned)
+	})
+
 	svc := NewUsageAlertService(nil, nil, nil)
-	svc.httpClient = server.Client()
+	svc.httpClient = &http.Client{Transport: rewrite, Timeout: usageAlertWebhookTimeout}
 	account := &Account{ID: 1, Name: "a", Platform: "openai", Type: "oauth"}
 	msg := usageAlertMessage{WeCom: "**hi**", Markdown: "# hi", Plain: "hi"}
-	require.NoError(t, svc.postWebhook(t.Context(), UsageAlertChannelWeCom, server.URL, "t", msg, account, nil, UsageAlertRule{}, 0))
-	require.NoError(t, svc.postWebhook(t.Context(), UsageAlertChannelFeishu, server.URL, "t", msg, account, nil, UsageAlertRule{}, 0))
-	require.NoError(t, svc.postWebhook(t.Context(), UsageAlertChannelCustom, server.URL, "t", msg, account, nil, UsageAlertRule{}, 12))
+	require.NoError(t, svc.postWebhook(
+		t.Context(),
+		UsageAlertChannelWeCom,
+		"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=test",
+		"t",
+		msg,
+		account,
+		nil,
+		UsageAlertRule{},
+		0,
+	))
+	require.NoError(t, svc.postWebhook(
+		t.Context(),
+		UsageAlertChannelFeishu,
+		"https://open.feishu.cn/open-apis/bot/v2/hook/test",
+		"t",
+		msg,
+		account,
+		nil,
+		UsageAlertRule{},
+		0,
+	))
+	require.NoError(t, svc.postWebhook(
+		t.Context(),
+		UsageAlertChannelCustom,
+		"https://hooks.example.com/usage",
+		"t",
+		msg,
+		account,
+		nil,
+		UsageAlertRule{},
+		12,
+	))
 	require.True(t, sawWeCom)
 	require.True(t, sawFeishu)
 	require.True(t, sawCustom)
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
 }

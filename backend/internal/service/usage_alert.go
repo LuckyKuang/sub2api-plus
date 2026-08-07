@@ -452,6 +452,10 @@ func (s *UsageAlertService) postWebhook(
 	rule UsageAlertRule,
 	maxUtil float64,
 ) error {
+	// Always re-check here: scheduled runner paths do not pre-validate at send time.
+	if err := validateUsageAlertWebhookURL(channel, webhookURL); err != nil {
+		return err
+	}
 	var payload any
 	switch strings.ToLower(strings.TrimSpace(channel)) {
 	case UsageAlertChannelFeishu:
@@ -495,7 +499,9 @@ func (s *UsageAlertService) postWebhook(
 	if err != nil {
 		return fmt.Errorf("marshal webhook payload: %w", err)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, webhookURL, bytes.NewReader(body))
+	// webhookURL is validated above by validateUsageAlertWebhookURL (wecom/feishu host+path,
+	// custom https-only). gosec G107 still flags variable URLs after that check.
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, webhookURL, bytes.NewReader(body)) //nolint:gosec // G107: URL prevalidated by validateUsageAlertWebhookURL
 	if err != nil {
 		return fmt.Errorf("create webhook request: %w", err)
 	}
