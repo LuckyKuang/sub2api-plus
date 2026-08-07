@@ -1277,15 +1277,19 @@ func formatUsageAlertReset(progress *UsageProgress) string {
 // usageAlertBuilder centralizes strings.Builder writes, whose errors are
 // guaranteed to be nil for an in-memory builder.
 type usageAlertBuilder struct {
-	strings.Builder
+	builder strings.Builder
 }
 
 func (b *usageAlertBuilder) WriteString(s string) {
-	_, _ = b.Builder.WriteString(s)
+	_, _ = b.builder.WriteString(s)
 }
 
 func (b *usageAlertBuilder) AppendByte(c byte) {
-	_ = b.Builder.WriteByte(c)
+	_ = b.builder.WriteByte(c)
+}
+
+func (b *usageAlertBuilder) String() string {
+	return b.builder.String()
 }
 
 func formatUsageAlertQuotaTable(rows []usageAlertWindowRow) string {
