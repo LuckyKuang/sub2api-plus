@@ -105,7 +105,7 @@ func startRedis(t *testing.T, ctx context.Context) *redis.Client {
 	require.NoError(t, err)
 
 	rdb := redis.NewClient(&redis.Options{
-		Addr: fmt.Sprintf("%s:%d", redisHost, redisPort.Int()),
+		Addr: fmt.Sprintf("%s:%s", redisHost, redisPort.Port()),
 		DB:   0,
 	})
 	require.NoError(t, rdb.Ping(ctx).Err())
