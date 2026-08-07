@@ -202,7 +202,7 @@
           </div>
         </template>
 
-        <!-- 合并首字/总耗时的健康度列：左侧色条上端随首字档、下端随总耗时档，中段(40%-60%)短渐变过渡，便于纵向扫视整体健康状况 -->
+        <!-- 主列固定：首字/总耗时/TPS；首输出模态与时间细节放入 ⓘ hover -->
         <template #cell-latency="{ row }">
           <div class="flex items-stretch gap-2">
             <span
@@ -212,18 +212,27 @@
               aria-hidden="true"
             ></span>
             <div class="grid grid-cols-[max-content_max-content] items-baseline gap-x-2 gap-y-0.5 text-xs">
-              <span class="text-gray-400 dark:text-gray-500">{{ firstLatencyLabel(row) }}</span>
+              <span class="inline-flex items-center gap-1 text-gray-400 dark:text-gray-500">
+                {{ primaryFirstTokenLabel(row) }}
+                <div
+                  v-if="hasLatencyDetails(row)"
+                  data-testid="latency-details-trigger"
+                  class="group relative"
+                  @mouseenter="showLatencyTooltip($event, row)"
+                  @mouseleave="hideLatencyTooltip"
+                >
+                  <div class="flex h-3.5 w-3.5 cursor-help items-center justify-center rounded-full bg-gray-100 transition-colors group-hover:bg-blue-100 dark:bg-gray-700 dark:group-hover:bg-blue-900/50">
+                    <Icon name="infoCircle" size="xs" class="text-gray-400 group-hover:text-blue-500 dark:text-gray-500 dark:group-hover:text-blue-400" />
+                  </div>
+                </div>
+              </span>
               <span
-                v-if="firstLatencyMs(row) != null"
+                v-if="row.first_token_ms != null"
                 data-testid="first-latency-value"
                 class="font-medium tabular-nums"
-                :class="firstLatencyTextClass(row)"
-              >{{ formatDuration(firstLatencyMs(row)) }}</span>
-              <span v-else class="text-gray-400 dark:text-gray-500">-</span>
-              <template v-if="showSeparateFirstToken(row)">
-                <span class="text-gray-400 dark:text-gray-500">{{ t('usage.latencyFirstToken') }}</span>
-                <span class="font-medium tabular-nums" :class="LATENCY_TEXT_CLASSES[firstTokenSeverity(row.first_token_ms!)]">{{ formatDuration(row.first_token_ms) }}</span>
-              </template>
+                :class="primaryFirstTokenTextClass(row)"
+              >{{ formatDuration(row.first_token_ms) }}</span>
+              <span v-else data-testid="first-latency-value" class="text-gray-400 dark:text-gray-500">-</span>
               <span class="text-gray-400 dark:text-gray-500">{{ t('usage.latencyDuration') }}</span>
               <span data-testid="latency-duration" class="font-medium tabular-nums" :class="durationTextClass(row)">{{ formatDuration(row.duration_ms) }}</span>
               <template v-if="estimatedTps(row) != null">
@@ -333,6 +342,49 @@
           <div class="flex items-center justify-between gap-6 border-t border-gray-700 pt-1.5">
             <span class="text-gray-400">{{ t('usage.totalTokens') }}</span>
             <span class="font-semibold text-blue-400">{{ ((tokenTooltipData?.input_tokens || 0) + (tokenTooltipData?.output_tokens || 0) + (tokenTooltipData?.cache_creation_tokens || 0) + (tokenTooltipData?.cache_read_tokens || 0)).toLocaleString() }}</span>
+          </div>
+        </div>
+        <div class="absolute right-full top-1/2 h-0 w-0 -translate-y-1/2 border-b-[6px] border-r-[6px] border-t-[6px] border-b-transparent border-r-gray-900 border-t-transparent dark:border-r-gray-800"></div>
+      </div>
+    </div>
+  </Teleport>
+
+  <!-- Latency Detail Tooltip Portal -->
+  <Teleport to="body">
+    <div
+      v-if="latencyTooltipVisible"
+      data-testid="latency-details-tooltip"
+      class="fixed z-[9999] pointer-events-none -translate-y-1/2"
+      :style="{
+        left: latencyTooltipPosition.x + 'px',
+        top: latencyTooltipPosition.y + 'px'
+      }"
+    >
+      <div class="whitespace-nowrap rounded-lg border border-gray-700 bg-gray-900 px-3 py-2.5 text-xs text-white shadow-xl dark:border-gray-600 dark:bg-gray-800">
+        <div class="space-y-1.5">
+          <div class="text-xs font-semibold text-gray-300 mb-1">{{ t('usage.latencyDetails') }}</div>
+          <div v-if="latencyTooltipData?.first_output_kind" class="flex items-center justify-between gap-4">
+            <span class="text-gray-400">{{ t('usage.latencyFirstOutputKind') }}</span>
+            <span class="font-medium text-white">{{ firstOutputModalityLabel(latencyTooltipData, 'kind') }}</span>
+          </div>
+          <div v-if="latencyTooltipData && latencyDetailFirstOutputMs(latencyTooltipData) != null" class="flex items-center justify-between gap-4">
+            <span class="text-gray-400">{{ firstOutputModalityLabel(latencyTooltipData, 'timing') }}</span>
+            <span class="font-medium text-white">{{ formatDuration(latencyDetailFirstOutputMs(latencyTooltipData)) }}</span>
+          </div>
+          <div v-if="latencyTooltipData?.first_token_ms != null" class="flex items-center justify-between gap-4">
+            <span class="text-gray-400">{{ latencyTooltipData.first_output_kind == null ? t('usage.latencyLegacyFirstEvent') : t('usage.latencyFirstToken') }}</span>
+            <span class="font-medium text-white">{{ formatDuration(latencyTooltipData.first_token_ms) }}</span>
+          </div>
+          <div v-if="latencyTooltipData?.duration_ms != null" class="flex items-center justify-between gap-4">
+            <span class="text-gray-400">{{ t('usage.latencyDuration') }}</span>
+            <span class="font-medium text-white">{{ formatDuration(latencyTooltipData.duration_ms) }}</span>
+          </div>
+          <div v-if="latencyTooltipData && estimatedTps(latencyTooltipData) != null" class="flex items-center justify-between gap-4">
+            <span class="text-gray-400">{{ t('usage.latencyTps') }}</span>
+            <span class="font-medium text-cyan-300">{{ formatTps(estimatedTps(latencyTooltipData)!) }}</span>
+          </div>
+          <div v-if="latencyTooltipNote(latencyTooltipData)" class="border-t border-gray-700 pt-1.5 text-[11px] leading-relaxed text-gray-400">
+            {{ latencyTooltipNote(latencyTooltipData) }}
           </div>
         </div>
         <div class="absolute right-full top-1/2 h-0 w-0 -translate-y-1/2 border-b-[6px] border-r-[6px] border-t-[6px] border-b-transparent border-r-gray-900 border-t-transparent dark:border-r-gray-800"></div>
@@ -607,6 +659,11 @@ const tokenTooltipVisible = ref(false)
 const tokenTooltipPosition = ref({ x: 0, y: 0 })
 const tokenTooltipData = ref<AdminUsageLog | null>(null)
 
+// Tooltip state - latency details
+const latencyTooltipVisible = ref(false)
+const latencyTooltipPosition = ref({ x: 0, y: 0 })
+const latencyTooltipData = ref<AdminUsageLog | null>(null)
+
 const getRequestTypeLabel = (row: AdminUsageLog): string => {
   const requestType = resolveUsageRequestType(row)
   if (requestType === 'cyber') return t('usage.cyber')
@@ -643,50 +700,99 @@ const formatDuration = (ms: number | null | undefined): string => {
   return `${Math.floor(totalSec / 3600)}h ${Math.floor((totalSec % 3600) / 60)}m`
 }
 
-const firstLatencyMs = (row: AdminUsageLog): number | null => {
-  if (row.first_output_kind != null) {
-    return row.first_output_ms ?? row.first_token_ms ?? null
-  }
-  return row.first_token_ms ?? row.first_output_ms ?? null
-}
-
-const firstLatencyLabel = (row: AdminUsageLog): string => {
-  if (row.first_output_kind == null) {
-    return row.first_token_ms != null
-      ? t('usage.latencyLegacyFirstEvent')
-      : t('usage.latencyFirstOutput')
-  }
-  if (row.first_output_kind === 'image') return t('usage.latencyFirstImage')
-  if (row.first_output_kind === 'audio') return t('usage.latencyFirstAudio')
-  if (row.first_output_kind === 'reasoning') return t('usage.latencyFirstReasoning')
-  if (row.first_output_kind === 'tool') return t('usage.latencyFirstTool')
-  if (row.first_output_kind === 'text') {
-    return firstLatencyMs(row) === row.first_token_ms
-      ? t('usage.latencyFirstToken')
-      : t('usage.latencyFirstOutput')
-  }
-  return t('usage.latencyFirstOutput')
-}
-
 const hasStrictFirstToken = (row: AdminUsageLog): boolean =>
   row.first_output_kind != null && row.first_token_ms != null
 
-const showSeparateFirstToken = (row: AdminUsageLog): boolean =>
-  hasStrictFirstToken(row) &&
-  row.first_output_ms != null &&
-  row.first_token_ms !== row.first_output_ms
-
-const firstLatencyUsesTokenSeverity = (row: AdminUsageLog): boolean =>
-  hasStrictFirstToken(row) &&
-  row.first_output_kind !== 'image' &&
-  row.first_output_kind !== 'audio' &&
-  firstLatencyMs(row) === row.first_token_ms
-
-const firstLatencyTextClass = (row: AdminUsageLog): string => {
-  if (!firstLatencyUsesTokenSeverity(row)) {
-    return 'text-gray-600 dark:text-gray-300'
+// Primary column always uses strict first_token_ms (or legacy first_token only).
+const primaryFirstTokenLabel = (row: AdminUsageLog): string => {
+  if (row.first_output_kind == null && row.first_token_ms != null) {
+    return t('usage.latencyLegacyFirstEvent')
   }
-  return LATENCY_TEXT_CLASSES[firstTokenSeverity(row.first_token_ms!)]
+  return t('usage.latencyFirstToken')
+}
+
+const primaryFirstTokenTextClass = (row: AdminUsageLog): string => {
+  if (row.first_token_ms == null) {
+    return 'text-gray-400 dark:text-gray-500'
+  }
+  // Only color by TTFT thresholds for new-semantics token-like samples.
+  if (hasStrictFirstToken(row)) {
+    return LATENCY_TEXT_CLASSES[firstTokenSeverity(row.first_token_ms)]
+  }
+  // Legacy first-event values are not comparable TTFT samples.
+  return 'text-gray-600 dark:text-gray-300'
+}
+
+const hasLatencyDetails = (row: AdminUsageLog): boolean => {
+  // Legacy first-event needs explanation so it is not mistaken for strict TTFT.
+  if (row.first_output_kind == null) {
+    return row.first_token_ms != null
+  }
+  // Non-text first output always deserves a detail popover.
+  if (row.first_output_kind !== 'text') return true
+  // Pure text with matching first output/token is fully represented by the primary column.
+  if (row.first_token_ms == null) return true
+  return row.first_output_ms != null && row.first_output_ms !== row.first_token_ms
+}
+
+// Shared modality labels for latency detail tooltip.
+// role=kind  → value under "First Output Kind" (text → "Text")
+// role=timing → row label for first_output_ms (text → "First Output")
+const firstOutputModalityLabel = (
+  row: AdminUsageLog | null | undefined,
+  role: 'kind' | 'timing',
+): string => {
+  switch (row?.first_output_kind) {
+    case 'image':
+      return t('usage.latencyFirstImage')
+    case 'audio':
+      return t('usage.latencyFirstAudio')
+    case 'reasoning':
+      return t('usage.latencyFirstReasoning')
+    case 'tool':
+      return t('usage.latencyFirstTool')
+    case 'text':
+      return role === 'kind' ? t('usage.latencyOutputKindText') : t('usage.latencyFirstOutput')
+    default:
+      return role === 'kind' ? (row?.first_output_kind ?? '-') : t('usage.latencyFirstOutput')
+  }
+}
+
+const latencyDetailFirstOutputMs = (row: AdminUsageLog | null | undefined): number | null => {
+  if (row == null) return null
+  if (row.first_output_ms != null) return row.first_output_ms
+  // When kind exists but first_output_ms is missing, do not invent a value.
+  return null
+}
+
+const latencyTooltipNote = (row: AdminUsageLog | null | undefined): string | null => {
+  if (row == null) return null
+  if (row.first_output_kind == null && row.first_token_ms != null) {
+    return t('usage.latencyLegacyFirstEventHint')
+  }
+  if (row.first_output_kind === 'image' || row.first_output_kind === 'audio') {
+    if (row.first_token_ms == null) {
+      return t('usage.latencyMediaOnlyHint')
+    }
+    if (row.first_output_ms != null && row.first_output_ms !== row.first_token_ms) {
+      return t('usage.latencyMixedModalityHint')
+    }
+  }
+  if (
+    (row.first_output_kind === 'tool' || row.first_output_kind === 'reasoning') &&
+    row.first_token_ms != null
+  ) {
+    return t('usage.latencyNonTextFirstHint')
+  }
+  if (
+    row.first_output_kind === 'text' &&
+    row.first_output_ms != null &&
+    row.first_token_ms != null &&
+    row.first_output_ms !== row.first_token_ms
+  ) {
+    return t('usage.latencyMixedModalityHint')
+  }
+  return null
 }
 
 const durationTextClass = (row: AdminUsageLog): string => {
@@ -710,6 +816,14 @@ const latencyBarClasses = (row: AdminUsageLog): string | string[] => {
   return LATENCY_BAR_CLASSES[durationSeverity(row.duration_ms)]
 }
 
+// TPS is a coarse estimate (text tokens / post-first-token wall time), not a
+// sampled decode rate. Reliability gates hide short generation windows, tiny
+// samples, and unrealistically high bursts; they do not correct systemic
+// underestimates from long reasoning/tool waits (needs last_token_ms later).
+const TPS_MIN_GENERATION_MS = 300
+const TPS_MIN_TEXT_TOKENS = 8
+const TPS_MAX_VALUE = 500
+
 const estimatedTps = (row: AdminUsageLog): number | null => {
   const requestType = resolveUsageRequestType(row)
   if (requestType !== 'stream' && requestType !== 'ws_v2') return null
@@ -718,10 +832,18 @@ const estimatedTps = (row: AdminUsageLog): number | null => {
 
   const outputTokens = textOutputTokens(row)
   const generationMs = row.duration_ms - row.first_token_ms!
-  if (!Number.isFinite(outputTokens) || outputTokens <= 0 || generationMs <= 0) return null
+  if (
+    !Number.isFinite(outputTokens) ||
+    outputTokens < TPS_MIN_TEXT_TOKENS ||
+    !Number.isFinite(generationMs) ||
+    generationMs < TPS_MIN_GENERATION_MS
+  ) {
+    return null
+  }
 
   const value = outputTokens * 1000 / generationMs
-  return Number.isFinite(value) && value > 0 ? value : null
+  if (!Number.isFinite(value) || value <= 0 || value > TPS_MAX_VALUE) return null
+  return value
 }
 
 const formatTps = (value: number): string =>
@@ -755,5 +877,20 @@ const showTokenTooltip = (event: MouseEvent, row: AdminUsageLog) => {
 const hideTokenTooltip = () => {
   tokenTooltipVisible.value = false
   tokenTooltipData.value = null
+}
+
+// Latency detail tooltip functions
+const showLatencyTooltip = (event: MouseEvent, row: AdminUsageLog) => {
+  const target = event.currentTarget as HTMLElement
+  const rect = target.getBoundingClientRect()
+  latencyTooltipData.value = row
+  latencyTooltipPosition.value.x = rect.right + 8
+  latencyTooltipPosition.value.y = rect.top + rect.height / 2
+  latencyTooltipVisible.value = true
+}
+
+const hideLatencyTooltip = () => {
+  latencyTooltipVisible.value = false
+  latencyTooltipData.value = null
 }
 </script>

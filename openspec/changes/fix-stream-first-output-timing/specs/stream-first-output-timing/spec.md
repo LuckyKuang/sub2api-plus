@@ -165,7 +165,7 @@
 
 ### Requirement: 使用记录 TPS 必须使用严格首 Token 口径
 
-使用记录列表 SHALL 按 `text_output_tokens * 1000 / (duration_ms - first_token_ms)` 派生估算 TPS，其中 `text_output_tokens` SHALL 为输出 Token 减去图片与音频输出 Token 后的非负值。系统 MUST 直接使用严格 `first_token_ms`，MUST NOT 使用首输出或格式化后的时间字符串作为分母起点，并且 MUST 只对 `is_complete=true` 的记录显示 TPS。
+使用记录列表 SHALL 按 `text_output_tokens * 1000 / (duration_ms - first_token_ms)` 派生估算 TPS，其中 `text_output_tokens` SHALL 为输出 Token 减去图片与音频输出 Token 后的非负值。系统 MUST 直接使用严格 `first_token_ms`，MUST NOT 使用首输出或格式化后的时间字符串作为分母起点，并且 MUST 只对 `is_complete=true` 的记录显示 TPS。系统 MUST 额外应用可信度门禁：`text_output_tokens >= 8`、`generation_ms = duration_ms - first_token_ms` 且 `generation_ms >= 300`、以及 `0 < TPS <= 500`；任一条件不满足时 MUST 隐藏 TPS，不得显示 `0`、`NaN`、`Infinity` 或钳制后的虚假值。
 
 #### Scenario: 正常文本流
 
@@ -178,6 +178,28 @@
 - **THEN** 页面 MUST 不显示 TPS
 - **THEN** 页面 MUST NOT 显示 `0`、`NaN` 或 `Infinity`
 
+#### Scenario: 生成窗过短
+
+- **WHEN** 明确完整的新语义流式记录文本输出 Token 充足，但 `duration_ms - first_token_ms < 300`
+- **THEN** 页面 MUST 不显示 TPS
+
+#### Scenario: 文本 Token 过少
+
+- **WHEN** 明确完整的新语义流式记录的文本输出 Token 为 7，且生成窗不小于 300ms
+- **THEN** 页面 MUST 不显示 TPS
+
+#### Scenario: 结果异常偏高
+
+- **WHEN** 明确完整的新语义流式记录按公式得到 TPS 大于 500（例如 1000 文本 Token、生成窗 500ms）
+- **THEN** 页面 MUST 不显示 TPS
+- **THEN** 页面 MUST NOT 显示钳制后的上限值冒充真实吞吐
+
+#### Scenario: 门禁边界仍显示
+
+- **WHEN** 明确完整的新语义流式记录文本输出 Token 为 8、生成窗恰为 300ms
+- **THEN** 页面 MUST 显示对应估算 TPS
+- **WHEN** 明确完整的新语义流式记录按公式得到 TPS 恰为 500
+- **THEN** 页面 MUST 显示 `TPS 500`
 
 #### Scenario: 混合音频输出排除音频 Token
 
@@ -193,11 +215,20 @@
 #### Scenario: 混合模态先出图片再出文本
 
 - **WHEN** 新语义流式记录先有图片首输出，随后才有文本首 Token
-- **THEN** 延迟列 MUST 同时显示首图数据时间与首 Token 时间
-- **THEN** TPS MUST 使用后者计算
+- **THEN** 延迟列主展示 MUST 显示严格首字（`first_token_ms`），MUST NOT 把首图时间标成主列首字
+- **THEN** 延迟列 MUST 提供详情入口，并在详情中展示首输出类型/首图时间与首字时间
+- **THEN** TPS MUST 使用严格首字计算
+
+#### Scenario: 延迟列主展示与详情分层
+
+- **WHEN** 记录为纯文本且 `first_output_ms === first_token_ms`
+- **THEN** 延迟列主展示 MUST 仅为首字、总耗时与（若适用）TPS，MUST NOT 强制展示模态标签
+- **WHEN** 记录为 tool/reasoning/image/audio、仅有媒体首输出、legacy 首事件，或首输出与首字时间不同
+- **THEN** 延迟列 MUST 在首字旁提供详情入口以展示首输出语义
 
 #### Scenario: 媒体或空耗时健康样式
 
-- **WHEN** 首输出为图片/音频，或总耗时为空
+- **WHEN** 无严格首字（例如仅图片/音频首输出），或总耗时为空
 - **THEN** 页面 MUST 使用中性样式表示不可比较指标
 - **THEN** 页面 MUST NOT 把空总耗时当作 `0ms` 的健康值
+- **THEN** 主列首字位置 MUST 显示为空值占位（如 `-`），MUST NOT 用 `first_output_ms` 冒充首字

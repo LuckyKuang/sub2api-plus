@@ -42,6 +42,8 @@
 - [x] 7.2 Lock Antigravity non-streaming aggregate semantics: no first Token, final aggregate first output only.
 - [x] 7.3 Add modality-specific labels, mixed-modality dual timing, neutral missing/media styles and estimated TPS to the shared usage table.
 - [x] 7.4 Synchronize English and Chinese locale keys and add focused Vitest coverage for TPS eligibility and invalid inputs.
+- [x] 7.4a Harden usage-list TPS with reliability gates (`generation_ms >= 300`, `text_output_tokens >= 8`, `TPS <= 500`), hide out-of-range estimates, update locale hints, and extend Vitest coverage for short window / few tokens / unrealistically high / boundary cases.
+- [x] 7.4b Collapse latency primary column to first-token/total/TPS; move first-output modality details into hover; merge modality label helpers; update OpenSpec UI wording and Vitest.
 - [x] 7.5 Run full frontend Vitest, lint, typecheck and strict OpenSpec validation.
 - [x] 7.6 Run focused Go tests for timing, usage parsing, persistence and migration paths with Go 1.26.5.
 - [x] 7.7 Persist `audio_output_tokens` and nullable `is_complete`; hide TPS for historical and incomplete records and cover mixed audio output.

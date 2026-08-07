@@ -59,8 +59,17 @@ TPS 只在使用记录列表中由现有字段派生，不持久化：
 
 `TPS = text_output_tokens * 1000 / (duration_ms - first_token_ms)`
 
-其中 `text_output_tokens` 为 `output_tokens - image_output_tokens - audio_output_tokens`，下限为零。只有 `request_type` 为 `stream` 或 `ws_v2`、`is_complete=true`、`first_output_kind` 非空、首 Token 与总耗时均存在、文本输出 Token 大于零且 `duration_ms > first_token_ms` 时才显示。legacy、同步、Live、失败/中断/取消、完成状态未知、纯媒体、零/负分母及非有限结果不得显示 `0`、`NaN` 或 `Infinity`。
+其中 `text_output_tokens` 为 `output_tokens - image_output_tokens - audio_output_tokens`，下限为零。只有同时满足下列条件时才显示：
 
-显示值四舍五入到最多一位小数并移除末尾 `.0`。说明文案必须把它称为估算平均输出速率，避免与模型侧原始解码吞吐混淆。
+- `request_type` 为 `stream` 或 `ws_v2`
+- `is_complete=true`
+- `first_output_kind` 非空，且严格 `first_token_ms` 与 `duration_ms` 均存在
+- `text_output_tokens >= 8`
+- 生成窗 `generation_ms = duration_ms - first_token_ms` 满足 `generation_ms >= 300`
+- 结果为有限正数，且 `TPS <= 500`
 
-混合模态先出图片或音频、随后才出 token 时，延迟列必须同时显示首输出与首 Token；TPS 始终使用 `first_token_ms`，不得使用优先展示的 `first_output_ms`。图片、音频首分片与 legacy 首事件使用中性首输出样式，不套用文本 TTFT 健康阈值；总耗时为空时也必须使用中性样式。
+legacy、同步、Live、失败/中断/取消、完成状态未知、纯媒体、文本 Token 过少、生成窗过短、结果异常偏高（`>500`）、零/负分母及非有限结果均不得显示 TPS，也不得显示 `0`、`NaN` 或 `Infinity`。门禁用于抑制突发批量吐包、测量噪声与不可信极端值；它不解决长思考/工具等待导致的系统性偏低——那需要后续 `last_token_ms` 生成窗。
+
+显示值四舍五入到最多一位小数并移除末尾 `.0`。说明文案必须把它称为估算平均文本输出速率（文本 Token ÷（总耗时 − 首 Token）），并说明生成窗过短、文本 Token 过少或结果异常偏高时不显示，避免与模型侧原始解码吞吐混淆。
+
+使用记录延迟列主展示固定为：严格首字（`first_token_ms`，无则 `-`）、总耗时、TPS（门禁通过时）。首输出模态与 `first_output_ms` 不铺在主列，而通过首字旁详情图标（hover）展示；当 `first_output_kind` 非纯文本、首输出与首字时间不同、仅有媒体首输出，或为 legacy 首事件时显示该图标。纯文本且 `first_output_ms === first_token_ms` 时不显示详情图标。TPS 始终使用 `first_token_ms`，不得使用 `first_output_ms` 作为分母起点。legacy 首事件与无严格首字的媒体行使用中性样式，不套用文本 TTFT 健康阈值；总耗时为空时也必须使用中性样式。
