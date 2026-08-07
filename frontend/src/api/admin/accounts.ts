@@ -861,8 +861,13 @@ export interface UsageAlertRule {
   force_probe: boolean
   threshold_enabled: boolean
   threshold_percent: number
+  threshold_watch_cron?: string
+  cooldown_seconds?: number
+  quiet_hours?: string[]
   next_run_at?: string | null
   last_run_at?: string | null
+  threshold_next_run_at?: string | null
+  last_threshold_alert_at?: string | null
   last_error?: string
 }
 

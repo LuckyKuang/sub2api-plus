@@ -36,11 +36,13 @@ const (
 	UsageAlertChannelFeishu  = "feishu"
 	UsageAlertChannelCustom  = "custom"
 
-	usageAlertMaxPerCycle      = 20
-	usageAlertCycleInterval    = time.Minute
-	usageAlertWebhookTimeout   = 15 * time.Second
-	usageAlertMarkdownMaxRunes = 3500
-	usageAlertMaxRules         = 20
+	usageAlertMaxPerCycle       = 20
+	usageAlertCycleInterval     = time.Minute
+	usageAlertWebhookTimeout    = 15 * time.Second
+	usageAlertMarkdownMaxRunes  = 3500
+	usageAlertMaxRules          = 20
+	usageAlertMaxQuietRanges    = 10
+	usageAlertMaxCooldownSeconds = 30 * 24 * 3600 // 30 days
 )
 
 var ErrUsageAlertUnavailable = infraerrors.BadRequest("USAGE_ALERT_UNAVAILABLE", "usage alert service is not available")
@@ -52,17 +54,22 @@ var usageAlertCronParser = cron.NewParser(cron.Minute | cron.Hour | cron.Dom | c
 
 // UsageAlertRule is one schedule + channel configuration for an account.
 type UsageAlertRule struct {
-	ID                 string     `json:"id"`
-	Enabled            bool       `json:"enabled"`
-	Channel            string     `json:"channel"` // wecom | feishu | custom
-	WebhookURL         string     `json:"webhook_url"`
-	Cron               string     `json:"cron_expression"`
-	ForceProbe         bool       `json:"force_probe"`
-	ThresholdEnabled   bool       `json:"threshold_enabled"`
-	ThresholdPercent   int        `json:"threshold_percent"` // 1-99 when threshold_enabled
-	NextRunAt          *time.Time `json:"next_run_at,omitempty"`
-	LastRunAt          *time.Time `json:"last_run_at,omitempty"`
-	LastError          string     `json:"last_error,omitempty"`
+	ID                   string     `json:"id"`
+	Enabled              bool       `json:"enabled"`
+	Channel              string     `json:"channel"` // wecom | feishu | custom
+	WebhookURL           string     `json:"webhook_url"`
+	Cron                 string     `json:"cron_expression"` // scheduled usage report
+	ForceProbe           bool       `json:"force_probe"`
+	ThresholdEnabled     bool       `json:"threshold_enabled"`
+	ThresholdPercent     int        `json:"threshold_percent"`      // 1-99 when threshold_enabled
+	ThresholdWatchCron   string     `json:"threshold_watch_cron"`   // required when threshold_enabled
+	CooldownSeconds       int        `json:"cooldown_seconds"`       // required when threshold_enabled
+	QuietHours           []string   `json:"quiet_hours"`            // optional daily ranges "HH:MM:SS-HH:MM:SS"
+	NextRunAt            *time.Time `json:"next_run_at,omitempty"`
+	LastRunAt            *time.Time `json:"last_run_at,omitempty"`
+	ThresholdNextRunAt   *time.Time `json:"threshold_next_run_at,omitempty"`
+	LastThresholdAlertAt *time.Time `json:"last_threshold_alert_at,omitempty"`
+	LastError            string     `json:"last_error,omitempty"`
 }
 
 // UsageAlertConfig is the admin-facing multi-rule config for one account.
@@ -265,7 +272,8 @@ func (s *UsageAlertService) TestSend(ctx context.Context, accountID int64, ruleI
 		return nil, err
 	}
 
-	runErr := s.sendForRule(ctx, account, *rule, true)
+	// Test send ignores quiet hours / cooldown / threshold gate.
+	runErr := s.sendUsageAlert(ctx, account, *rule, "用量窗口报告", false)
 	now := time.Now()
 	for i := range cfg.Rules {
 		if cfg.Rules[i].ID != rule.ID {
@@ -304,26 +312,15 @@ func (s *UsageAlertService) RunDue(ctx context.Context) error {
 		cfg := UsageAlertConfigFromAccount(&account)
 		changed := false
 		for ri := range cfg.Rules {
-			rule := cfg.Rules[ri]
-			if !rule.Enabled {
+			if !cfg.Rules[ri].Enabled {
 				continue
 			}
-			if rule.NextRunAt != nil && rule.NextRunAt.After(now) {
-				continue
+			if s.processReportDue(ctx, &account, &cfg.Rules[ri], now) {
+				changed = true
 			}
-			runErr := s.sendForRule(ctx, &account, rule, false)
-			runAt := time.Now()
-			cfg.Rules[ri].LastRunAt = &runAt
-			if runErr != nil {
-				cfg.Rules[ri].LastError = runErr.Error()
-				logger.LegacyPrintf("service.usage_alert", "send_failed: account_id=%d rule_id=%s err=%v", account.ID, rule.ID, runErr)
-			} else {
-				cfg.Rules[ri].LastError = ""
+			if s.processThresholdDue(ctx, &account, &cfg.Rules[ri], now) {
+				changed = true
 			}
-			if next, nextErr := computeUsageAlertNextRun(rule.Cron, runAt); nextErr == nil {
-				cfg.Rules[ri].NextRunAt = &next
-			}
-			changed = true
 		}
 		if changed {
 			if err := s.accountRepo.UpdateExtra(ctx, account.ID, usageAlertExtraUpdates(cfg)); err != nil {
@@ -334,7 +331,106 @@ func (s *UsageAlertService) RunDue(ctx context.Context) error {
 	return nil
 }
 
-func (s *UsageAlertService) sendForRule(ctx context.Context, account *Account, rule UsageAlertRule, ignoreThreshold bool) error {
+// processReportDue handles the scheduled usage-window report cron.
+func (s *UsageAlertService) processReportDue(ctx context.Context, account *Account, rule *UsageAlertRule, now time.Time) bool {
+	if rule == nil || !rule.Enabled || strings.TrimSpace(rule.Cron) == "" {
+		return false
+	}
+	if rule.NextRunAt != nil && rule.NextRunAt.After(now) {
+		return false
+	}
+
+	quiet, _ := parseUsageAlertQuietHours(rule.QuietHours)
+	if isInQuietHours(now, quiet) {
+		if next, err := nextCronOutsideQuiet(rule.Cron, now, quiet); err == nil {
+			rule.NextRunAt = &next
+		}
+		return true
+	}
+
+	runErr := s.sendUsageAlert(ctx, account, *rule, "用量窗口报告", false)
+	runAt := time.Now()
+	rule.LastRunAt = &runAt
+	if runErr != nil {
+		rule.LastError = runErr.Error()
+		logger.LegacyPrintf("service.usage_alert", "report_failed: account_id=%d rule_id=%s err=%v", account.ID, rule.ID, runErr)
+	} else {
+		rule.LastError = ""
+	}
+	if next, err := nextCronOutsideQuiet(rule.Cron, runAt, quiet); err == nil {
+		rule.NextRunAt = &next
+	}
+	return true
+}
+
+// processThresholdDue handles threshold watch cron + cooldown.
+func (s *UsageAlertService) processThresholdDue(ctx context.Context, account *Account, rule *UsageAlertRule, now time.Time) bool {
+	if rule == nil || !rule.Enabled || !rule.ThresholdEnabled {
+		return false
+	}
+	if strings.TrimSpace(rule.ThresholdWatchCron) == "" || rule.CooldownSeconds <= 0 {
+		return false
+	}
+	if rule.ThresholdNextRunAt != nil && rule.ThresholdNextRunAt.After(now) {
+		return false
+	}
+
+	quiet, _ := parseUsageAlertQuietHours(rule.QuietHours)
+	if isInQuietHours(now, quiet) {
+		if next, err := nextCronOutsideQuiet(rule.ThresholdWatchCron, now, quiet); err == nil {
+			rule.ThresholdNextRunAt = &next
+		}
+		return true
+	}
+
+	// During cooldown: do not fetch usage; wake when cooldown ends.
+	if rule.LastThresholdAlertAt != nil {
+		cooldownUntil := rule.LastThresholdAlertAt.Add(time.Duration(rule.CooldownSeconds) * time.Second)
+		if now.Before(cooldownUntil) {
+			rule.ThresholdNextRunAt = &cooldownUntil
+			return true
+		}
+	}
+
+	usage, err := s.usageSvc.GetUsage(ctx, account.ID, rule.ForceProbe)
+	runAt := time.Now()
+	if err != nil {
+		rule.LastError = fmt.Sprintf("get usage: %v", err)
+		logger.LegacyPrintf("service.usage_alert", "threshold_watch_failed: account_id=%d rule_id=%s err=%v", account.ID, rule.ID, err)
+		if next, nextErr := nextCronOutsideQuiet(rule.ThresholdWatchCron, runAt, quiet); nextErr == nil {
+			rule.ThresholdNextRunAt = &next
+		}
+		return true
+	}
+
+	maxUtil := maxUsageUtilization(usage)
+	if maxUtil < float64(rule.ThresholdPercent) {
+		rule.LastError = ""
+		if next, nextErr := nextCronOutsideQuiet(rule.ThresholdWatchCron, runAt, quiet); nextErr == nil {
+			rule.ThresholdNextRunAt = &next
+		}
+		return true
+	}
+
+	title := fmt.Sprintf("用量阈值告警（≥%d%%）", rule.ThresholdPercent)
+	msg := buildUsageAlertMessage(account, usage, runAt, title, true, rule.ThresholdPercent, maxUtil)
+	if sendErr := s.postWebhook(ctx, rule.Channel, rule.WebhookURL, title, msg, account, usage, *rule, maxUtil); sendErr != nil {
+		rule.LastError = sendErr.Error()
+		logger.LegacyPrintf("service.usage_alert", "threshold_alert_failed: account_id=%d rule_id=%s err=%v", account.ID, rule.ID, sendErr)
+		if next, nextErr := nextCronOutsideQuiet(rule.ThresholdWatchCron, runAt, quiet); nextErr == nil {
+			rule.ThresholdNextRunAt = &next
+		}
+		return true
+	}
+
+	rule.LastError = ""
+	rule.LastThresholdAlertAt = &runAt
+	cooldownUntil := runAt.Add(time.Duration(rule.CooldownSeconds) * time.Second)
+	rule.ThresholdNextRunAt = &cooldownUntil
+	return true
+}
+
+func (s *UsageAlertService) sendUsageAlert(ctx context.Context, account *Account, rule UsageAlertRule, title string, thresholdAlert bool) error {
 	if account == nil {
 		return fmt.Errorf("account is nil")
 	}
@@ -343,17 +439,7 @@ func (s *UsageAlertService) sendForRule(ctx context.Context, account *Account, r
 		return fmt.Errorf("get usage: %w", err)
 	}
 	maxUtil := maxUsageUtilization(usage)
-	thresholdHit := !rule.ThresholdEnabled || maxUtil >= float64(rule.ThresholdPercent)
-	if !ignoreThreshold && rule.ThresholdEnabled && !thresholdHit {
-		// Below threshold: skip send, treat as successful idle tick.
-		return nil
-	}
-
-	title := "用量窗口报告"
-	if rule.ThresholdEnabled {
-		title = fmt.Sprintf("用量阈值告警（≥%d%%）", rule.ThresholdPercent)
-	}
-	msg := buildUsageAlertMessage(account, usage, time.Now(), title, rule.ThresholdEnabled, rule.ThresholdPercent, maxUtil)
+	msg := buildUsageAlertMessage(account, usage, time.Now(), title, thresholdAlert, rule.ThresholdPercent, maxUtil)
 	return s.postWebhook(ctx, rule.Channel, rule.WebhookURL, title, msg, account, usage, rule, maxUtil)
 }
 
@@ -562,26 +648,49 @@ func normalizeUsageAlertConfig(input, existing UsageAlertConfig, now time.Time) 
 			return UsageAlertConfig{}, infraerrors.BadRequest("USAGE_ALERT_DUPLICATE_RULE_ID", "duplicate rule id: "+rule.ID)
 		}
 		seen[rule.ID] = struct{}{}
+
+		quiet, _ := parseUsageAlertQuietHours(rule.QuietHours)
 		if prev, ok := existingByID[rule.ID]; ok {
-			// Preserve run metadata unless cron changed or newly enabled.
 			cronChanged := prev.Cron != rule.Cron
+			watchChanged := prev.ThresholdWatchCron != rule.ThresholdWatchCron || prev.ThresholdEnabled != rule.ThresholdEnabled
 			if !cronChanged {
 				rule.NextRunAt = prev.NextRunAt
 			}
+			if !watchChanged {
+				rule.ThresholdNextRunAt = prev.ThresholdNextRunAt
+			}
 			rule.LastRunAt = prev.LastRunAt
+			rule.LastThresholdAlertAt = prev.LastThresholdAlertAt
 			rule.LastError = prev.LastError
 			if rule.Enabled && (cronChanged || !prev.Enabled || rule.NextRunAt == nil) {
-				if next, err := computeUsageAlertNextRun(rule.Cron, now); err == nil {
+				if next, err := nextCronOutsideQuiet(rule.Cron, now, quiet); err == nil {
 					rule.NextRunAt = &next
 				}
 			}
-		} else if rule.Enabled && rule.NextRunAt == nil {
-			if next, err := computeUsageAlertNextRun(rule.Cron, now); err == nil {
-				rule.NextRunAt = &next
+			if rule.Enabled && rule.ThresholdEnabled && (watchChanged || !prev.Enabled || rule.ThresholdNextRunAt == nil) {
+				if next, err := nextCronOutsideQuiet(rule.ThresholdWatchCron, now, quiet); err == nil {
+					rule.ThresholdNextRunAt = &next
+				}
+			}
+		} else {
+			if rule.Enabled && rule.NextRunAt == nil {
+				if next, err := nextCronOutsideQuiet(rule.Cron, now, quiet); err == nil {
+					rule.NextRunAt = &next
+				}
+			}
+			if rule.Enabled && rule.ThresholdEnabled && rule.ThresholdNextRunAt == nil {
+				if next, err := nextCronOutsideQuiet(rule.ThresholdWatchCron, now, quiet); err == nil {
+					rule.ThresholdNextRunAt = &next
+				}
 			}
 		}
 		if !rule.Enabled {
 			rule.NextRunAt = nil
+			rule.ThresholdNextRunAt = nil
+		}
+		if !rule.ThresholdEnabled {
+			rule.ThresholdNextRunAt = nil
+			rule.LastThresholdAlertAt = nil
 		}
 		out.Rules = append(out.Rules, rule)
 	}
@@ -590,17 +699,22 @@ func normalizeUsageAlertConfig(input, existing UsageAlertConfig, now time.Time) 
 
 func normalizeUsageAlertRule(input UsageAlertRule, now time.Time, allowDisabledIncomplete bool) (UsageAlertRule, error) {
 	out := UsageAlertRule{
-		ID:               strings.TrimSpace(input.ID),
-		Enabled:          input.Enabled,
-		Channel:          strings.ToLower(strings.TrimSpace(input.Channel)),
-		WebhookURL:       strings.TrimSpace(input.WebhookURL),
-		Cron:             strings.TrimSpace(input.Cron),
-		ForceProbe:       input.ForceProbe,
-		ThresholdEnabled: input.ThresholdEnabled,
-		ThresholdPercent: input.ThresholdPercent,
-		NextRunAt:        input.NextRunAt,
-		LastRunAt:        input.LastRunAt,
-		LastError:        strings.TrimSpace(input.LastError),
+		ID:                   strings.TrimSpace(input.ID),
+		Enabled:              input.Enabled,
+		Channel:              strings.ToLower(strings.TrimSpace(input.Channel)),
+		WebhookURL:           strings.TrimSpace(input.WebhookURL),
+		Cron:                 strings.TrimSpace(input.Cron),
+		ForceProbe:           input.ForceProbe,
+		ThresholdEnabled:     input.ThresholdEnabled,
+		ThresholdPercent:     input.ThresholdPercent,
+		ThresholdWatchCron:   strings.TrimSpace(input.ThresholdWatchCron),
+		CooldownSeconds:       input.CooldownSeconds,
+		QuietHours:           nil,
+		NextRunAt:            input.NextRunAt,
+		LastRunAt:            input.LastRunAt,
+		ThresholdNextRunAt:   input.ThresholdNextRunAt,
+		LastThresholdAlertAt: input.LastThresholdAlertAt,
+		LastError:            strings.TrimSpace(input.LastError),
 	}
 	if out.Channel == "" {
 		out.Channel = UsageAlertChannelWeCom
@@ -610,7 +724,19 @@ func normalizeUsageAlertRule(input UsageAlertRule, now time.Time, allowDisabledI
 	default:
 		return out, infraerrors.BadRequest("USAGE_ALERT_INVALID_CHANNEL", "channel must be wecom, feishu, or custom")
 	}
+
+	quiet, quietErr := parseUsageAlertQuietHours(input.QuietHours)
+	if quietErr != nil {
+		return out, quietErr
+	}
+	out.QuietHours = formatUsageAlertQuietHours(quiet)
+
 	if !out.Enabled && allowDisabledIncomplete {
+		if !out.ThresholdEnabled {
+			out.ThresholdPercent = 0
+			out.ThresholdWatchCron = ""
+			out.CooldownSeconds = 0
+		}
 		return out, nil
 	}
 	if out.Enabled || !allowDisabledIncomplete {
@@ -631,8 +757,21 @@ func normalizeUsageAlertRule(input UsageAlertRule, now time.Time, allowDisabledI
 		if out.ThresholdPercent <= 0 || out.ThresholdPercent >= 100 {
 			return out, infraerrors.BadRequest("USAGE_ALERT_INVALID_THRESHOLD", "threshold_percent must be an integer between 1 and 99")
 		}
+		if out.ThresholdWatchCron == "" {
+			return out, infraerrors.BadRequest("USAGE_ALERT_WATCH_CRON_REQUIRED", "threshold_watch_cron is required when threshold is enabled")
+		}
+		if _, err := computeUsageAlertNextRun(out.ThresholdWatchCron, now); err != nil {
+			return out, infraerrors.BadRequest("USAGE_ALERT_INVALID_WATCH_CRON", "invalid threshold_watch_cron: "+err.Error())
+		}
+		if out.CooldownSeconds <= 0 || out.CooldownSeconds > usageAlertMaxCooldownSeconds {
+			return out, infraerrors.BadRequest("USAGE_ALERT_INVALID_COOLDOWN", fmt.Sprintf("cooldown_seconds must be between 1 and %d", usageAlertMaxCooldownSeconds))
+		}
 	} else {
 		out.ThresholdPercent = 0
+		out.ThresholdWatchCron = ""
+		out.CooldownSeconds = 0
+		out.ThresholdNextRunAt = nil
+		out.LastThresholdAlertAt = nil
 	}
 	return out, nil
 }
@@ -694,6 +833,191 @@ func computeUsageAlertNextRun(cronExpr string, from time.Time) (time.Time, error
 		return time.Time{}, err
 	}
 	return sched.Next(from), nil
+}
+
+type usageAlertQuietRange struct {
+	StartSec int // seconds from midnight [0, 86400)
+	EndSec   int // seconds from midnight (0, 86400]; exclusive end semantics via wrap
+	Wrap     bool
+	Raw      string
+}
+
+func parseUsageAlertQuietHours(raw []string) ([]usageAlertQuietRange, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	if len(raw) > usageAlertMaxQuietRanges {
+		return nil, infraerrors.BadRequest("USAGE_ALERT_TOO_MANY_QUIET_HOURS", fmt.Sprintf("at most %d quiet_hours ranges allowed", usageAlertMaxQuietRanges))
+	}
+	out := make([]usageAlertQuietRange, 0, len(raw))
+	for _, item := range raw {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		parts := strings.Split(item, "-")
+		if len(parts) != 2 {
+			return nil, infraerrors.BadRequest("USAGE_ALERT_INVALID_QUIET_HOURS", "quiet_hours entries must look like HH:MM:SS-HH:MM:SS")
+		}
+		startSec, err := parseClockToSeconds(parts[0])
+		if err != nil {
+			return nil, infraerrors.BadRequest("USAGE_ALERT_INVALID_QUIET_HOURS", "invalid quiet_hours start: "+parts[0])
+		}
+		endSec, err := parseClockToSeconds(parts[1])
+		if err != nil {
+			return nil, infraerrors.BadRequest("USAGE_ALERT_INVALID_QUIET_HOURS", "invalid quiet_hours end: "+parts[1])
+		}
+		if startSec == endSec {
+			return nil, infraerrors.BadRequest("USAGE_ALERT_INVALID_QUIET_HOURS", "quiet_hours start and end must differ")
+		}
+		r := usageAlertQuietRange{
+			StartSec: startSec,
+			EndSec:   endSec,
+			Wrap:     startSec > endSec,
+			Raw:      formatClock(startSec) + "-" + formatClock(endSec),
+		}
+		out = append(out, r)
+	}
+	return out, nil
+}
+
+func formatUsageAlertQuietHours(ranges []usageAlertQuietRange) []string {
+	if len(ranges) == 0 {
+		return []string{}
+	}
+	out := make([]string, 0, len(ranges))
+	for _, r := range ranges {
+		out = append(out, r.Raw)
+	}
+	return out
+}
+
+func parseClockToSeconds(raw string) (int, error) {
+	raw = strings.TrimSpace(raw)
+	parts := strings.Split(raw, ":")
+	if len(parts) != 2 && len(parts) != 3 {
+		return 0, fmt.Errorf("invalid clock")
+	}
+	var h, m, s int
+	if _, err := fmt.Sscanf(parts[0], "%d", &h); err != nil {
+		return 0, err
+	}
+	if _, err := fmt.Sscanf(parts[1], "%d", &m); err != nil {
+		return 0, err
+	}
+	if len(parts) == 3 {
+		if _, err := fmt.Sscanf(parts[2], "%d", &s); err != nil {
+			return 0, err
+		}
+	}
+	if h < 0 || h > 23 || m < 0 || m > 59 || s < 0 || s > 59 {
+		return 0, fmt.Errorf("out of range")
+	}
+	return h*3600 + m*60 + s, nil
+}
+
+func formatClock(sec int) string {
+	if sec < 0 {
+		sec = 0
+	}
+	if sec >= 24*3600 {
+		sec = 24*3600 - 1
+	}
+	h := sec / 3600
+	m := (sec % 3600) / 60
+	s := sec % 60
+	return fmt.Sprintf("%02d:%02d:%02d", h, m, s)
+}
+
+func secondsOfDay(t time.Time) int {
+	t = t.In(time.Local)
+	return t.Hour()*3600 + t.Minute()*60 + t.Second()
+}
+
+func isInQuietHours(t time.Time, ranges []usageAlertQuietRange) bool {
+	if len(ranges) == 0 {
+		return false
+	}
+	sec := secondsOfDay(t)
+	for _, r := range ranges {
+		if r.Wrap {
+			// e.g. 22:00:00-06:00:00
+			if sec >= r.StartSec || sec <= r.EndSec {
+				return true
+			}
+			continue
+		}
+		// Inclusive both ends: 18:00:00-23:59:59 covers the whole evening.
+		if sec >= r.StartSec && sec <= r.EndSec {
+			return true
+		}
+	}
+	return false
+}
+
+func quietPeriodEnd(t time.Time, ranges []usageAlertQuietRange) *time.Time {
+	if !isInQuietHours(t, ranges) {
+		return nil
+	}
+	loc := t.Location()
+	dayStart := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, loc)
+	sec := secondsOfDay(t)
+	var candidates []time.Time
+	for _, r := range ranges {
+		inRange := false
+		if r.Wrap {
+			inRange = sec >= r.StartSec || sec <= r.EndSec
+		} else {
+			inRange = sec >= r.StartSec && sec <= r.EndSec
+		}
+		if !inRange {
+			continue
+		}
+		if r.Wrap {
+			if sec >= r.StartSec {
+				// After end seconds tomorrow (+1s so we leave the inclusive end).
+				candidates = append(candidates, dayStart.Add(24*time.Hour).Add(time.Duration(r.EndSec+1)*time.Second))
+			} else {
+				candidates = append(candidates, dayStart.Add(time.Duration(r.EndSec+1)*time.Second))
+			}
+		} else {
+			end := dayStart.Add(time.Duration(r.EndSec+1) * time.Second)
+			candidates = append(candidates, end)
+		}
+	}
+	if len(candidates) == 0 {
+		return nil
+	}
+	best := candidates[0]
+	for _, c := range candidates[1:] {
+		if c.Before(best) {
+			best = c
+		}
+	}
+	return &best
+}
+
+// nextCronOutsideQuiet returns the next cron fire time that is outside quiet hours.
+func nextCronOutsideQuiet(cronExpr string, from time.Time, ranges []usageAlertQuietRange) (time.Time, error) {
+	if len(ranges) == 0 {
+		return computeUsageAlertNextRun(cronExpr, from)
+	}
+	cursor := from
+	for i := 0; i < 500; i++ {
+		next, err := computeUsageAlertNextRun(cronExpr, cursor)
+		if err != nil {
+			return time.Time{}, err
+		}
+		if !isInQuietHours(next, ranges) {
+			return next, nil
+		}
+		if end := quietPeriodEnd(next, ranges); end != nil {
+			cursor = *end
+			continue
+		}
+		cursor = next
+	}
+	return computeUsageAlertNextRun(cronExpr, from)
 }
 
 func newUsageAlertRuleID() string {
@@ -837,16 +1161,15 @@ func buildUsageAlertMessage(
 		wecom.WriteString("暂无上游限流窗口数据（可能尚未采样，或该账号类型不支持）。")
 	} else {
 		wecom.WriteString("**上游限流使用率**\n")
-		wecom.WriteString("```\n")
-		wecom.WriteString(quotaTable)
-		wecom.WriteString("\n```\n")
+		// Avoid ``` code fences: WeCom renders them in reddish syntax colors.
+		wecom.WriteString(formatUsageAlertQuotaLines(rows))
+		wecom.WriteByte('\n')
 		if localTable != "" {
 			wecom.WriteString("\n**本站窗口统计**\n")
-			wecom.WriteString("```\n")
-			wecom.WriteString(localTable)
-			wecom.WriteString("\n```\n")
+			wecom.WriteString(formatUsageAlertLocalLines(rows))
+			wecom.WriteByte('\n')
 		}
-		wecom.WriteString("\n> 使用率=上游限流已用比例；重置时间=配额下次恢复。")
+		wecom.WriteString("\n使用率=上游限流已用比例；重置时间=配额下次恢复。")
 		if localTable != "" {
 			wecom.WriteString("本站统计来自本地用量日志。")
 		}
@@ -949,7 +1272,7 @@ func formatUsageAlertQuotaTable(rows []usageAlertWindowRow) string {
 	if len(rows) == 0 {
 		return ""
 	}
-	// Monospace table that renders cleanly in WeCom code blocks and Feishu plain text.
+	// Monospace table for plain/custom text channels.
 	colWindow, colUtil, colReset := 12, 8, 14
 	var b strings.Builder
 	b.WriteString(padUsageAlertCell("窗口", colWindow))
@@ -965,6 +1288,22 @@ func formatUsageAlertQuotaTable(rows []usageAlertWindowRow) string {
 		b.WriteByte('\n')
 	}
 	return strings.TrimRight(b.String(), "\n")
+}
+
+// formatUsageAlertQuotaLines is WeCom-friendly (no code fence; default black text).
+func formatUsageAlertQuotaLines(rows []usageAlertWindowRow) string {
+	if len(rows) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for i, row := range rows {
+		if i > 0 {
+			b.WriteByte('\n')
+		}
+		b.WriteString(fmt.Sprintf("窗口：%s　使用率：%.0f%%　重置：%s",
+			row.Name, row.Progress.Utilization, formatUsageAlertReset(row.Progress)))
+	}
+	return b.String()
 }
 
 func formatUsageAlertLocalTable(rows []usageAlertWindowRow) string {
@@ -1001,6 +1340,24 @@ func formatUsageAlertLocalTable(rows []usageAlertWindowRow) string {
 		b.WriteByte('\n')
 	}
 	return strings.TrimRight(b.String(), "\n")
+}
+
+func formatUsageAlertLocalLines(rows []usageAlertWindowRow) string {
+	var b strings.Builder
+	n := 0
+	for _, row := range rows {
+		if row.Progress == nil || row.Progress.WindowStats == nil {
+			continue
+		}
+		ws := row.Progress.WindowStats
+		if n > 0 {
+			b.WriteByte('\n')
+		}
+		b.WriteString(fmt.Sprintf("窗口：%s　请求：%d　Token：%s　核算：$%.2f　用户：$%.2f",
+			row.Name, ws.Requests, formatCompactTokenCount(ws.Tokens), ws.Cost, ws.UserCost))
+		n++
+	}
+	return b.String()
 }
 
 func padUsageAlertCell(s string, width int) string {
@@ -1075,17 +1432,23 @@ func truncateRunes(s string, max int) string {
 	return string(runes[:max]) + "…"
 }
 
-// AccountHasDueUsageAlertRule reports whether any enabled rule is due.
+// AccountHasDueUsageAlertRule reports whether any enabled rule is due
+// for report cron and/or threshold watch cron.
 func AccountHasDueUsageAlertRule(account *Account, now time.Time) bool {
 	cfg := UsageAlertConfigFromAccount(account)
 	for _, rule := range cfg.Rules {
 		if !rule.Enabled {
 			continue
 		}
-		if strings.TrimSpace(rule.WebhookURL) == "" || strings.TrimSpace(rule.Cron) == "" {
+		if strings.TrimSpace(rule.WebhookURL) == "" {
 			continue
 		}
-		if rule.NextRunAt == nil || !rule.NextRunAt.After(now) {
+		if strings.TrimSpace(rule.Cron) != "" && (rule.NextRunAt == nil || !rule.NextRunAt.After(now)) {
+			return true
+		}
+		if rule.ThresholdEnabled &&
+			strings.TrimSpace(rule.ThresholdWatchCron) != "" &&
+			(rule.ThresholdNextRunAt == nil || !rule.ThresholdNextRunAt.After(now)) {
 			return true
 		}
 	}

@@ -35,7 +35,7 @@ func TestNormalizeUsageAlertRuleThreshold(t *testing.T) {
 	}, now, false)
 	require.Error(t, err)
 
-	ok, err := normalizeUsageAlertRule(UsageAlertRule{
+	_, err = normalizeUsageAlertRule(UsageAlertRule{
 		Enabled:          true,
 		Channel:          UsageAlertChannelCustom,
 		WebhookURL:       "https://hooks.example.com/x",
@@ -43,8 +43,24 @@ func TestNormalizeUsageAlertRuleThreshold(t *testing.T) {
 		ThresholdEnabled: true,
 		ThresholdPercent: 80,
 	}, now, false)
+	require.Error(t, err) // missing watch cron / cooldown
+
+	ok, err := normalizeUsageAlertRule(UsageAlertRule{
+		Enabled:            true,
+		Channel:            UsageAlertChannelCustom,
+		WebhookURL:         "https://hooks.example.com/x",
+		Cron:               "0 * * * *",
+		ThresholdEnabled:   true,
+		ThresholdPercent:   80,
+		ThresholdWatchCron: "*/5 * * * *",
+		CooldownSeconds:     3600,
+		QuietHours:         []string{"18:00:00-23:59:59", "00:00:00-09:00:00"},
+	}, now, false)
 	require.NoError(t, err)
 	require.Equal(t, 80, ok.ThresholdPercent)
+	require.Equal(t, "*/5 * * * *", ok.ThresholdWatchCron)
+	require.Equal(t, 3600, ok.CooldownSeconds)
+	require.Len(t, ok.QuietHours, 2)
 }
 
 func TestNormalizeUsageAlertConfigMultipleRules(t *testing.T) {
@@ -58,12 +74,14 @@ func TestNormalizeUsageAlertConfigMultipleRules(t *testing.T) {
 			Cron:       "0 * * * *",
 		},
 		{
-			Enabled:          true,
-			Channel:          UsageAlertChannelFeishu,
-			WebhookURL:       "https://open.feishu.cn/open-apis/bot/v2/hook/b",
-			Cron:             "30 * * * *",
-			ThresholdEnabled: true,
-			ThresholdPercent: 90,
+			Enabled:            true,
+			Channel:            UsageAlertChannelFeishu,
+			WebhookURL:         "https://open.feishu.cn/open-apis/bot/v2/hook/b",
+			Cron:               "30 * * * *",
+			ThresholdEnabled:   true,
+			ThresholdPercent:   90,
+			ThresholdWatchCron: "*/10 * * * *",
+			CooldownSeconds:     1800,
 		},
 	}}, UsageAlertConfig{}, now)
 	require.NoError(t, err)
@@ -71,6 +89,7 @@ func TestNormalizeUsageAlertConfigMultipleRules(t *testing.T) {
 	require.NotEmpty(t, cfg.Rules[0].ID)
 	require.NotEmpty(t, cfg.Rules[1].ID)
 	require.NotNil(t, cfg.Rules[0].NextRunAt)
+	require.NotNil(t, cfg.Rules[1].ThresholdNextRunAt)
 }
 
 func TestMaxUsageUtilization(t *testing.T) {
@@ -96,13 +115,15 @@ func TestFormatUsageAlertMarkdownThresholdTitle(t *testing.T) {
 	}, time.Date(2026, 8, 6, 14, 0, 0, 0, time.UTC), "用量阈值告警（≥80%）", true, 80, 88)
 
 	require.Contains(t, msg.WeCom, "用量阈值告警")
+	require.Contains(t, msg.WeCom, "**用量阈值告警（≥80%）**")
 	require.Contains(t, msg.WeCom, "告警阈值：≥80%")
 	require.NotContains(t, msg.WeCom, "最高使用率")
-	require.Contains(t, msg.WeCom, "上游限流使用率")
+	require.Contains(t, msg.WeCom, "**上游限流使用率**")
+	require.NotContains(t, msg.WeCom, "```")
 	require.Contains(t, msg.WeCom, "5小时")
 	require.Contains(t, msg.WeCom, "88%")
-	require.Contains(t, msg.WeCom, "本站窗口统计")
-	require.Contains(t, msg.WeCom, "核算成本")
+	require.Contains(t, msg.WeCom, "**本站窗口统计**")
+	require.Contains(t, msg.WeCom, "核算")
 	require.NotContains(t, msg.WeCom, "A $")
 
 	require.Contains(t, msg.Markdown, "| 窗口 | 含义 | 使用率 | 重置时间 |")
@@ -121,6 +142,63 @@ func TestUsageAlertConfigMigratesLegacyWeCom(t *testing.T) {
 	require.Len(t, cfg.Rules, 1)
 	require.Equal(t, UsageAlertChannelWeCom, cfg.Rules[0].Channel)
 	require.True(t, cfg.Rules[0].Enabled)
+}
+
+func TestUsageAlertQuietHours(t *testing.T) {
+	t.Parallel()
+	ranges, err := parseUsageAlertQuietHours([]string{"18:00:00-23:59:59", "00:00:00-09:00:00"})
+	require.NoError(t, err)
+
+	loc := time.Local
+	inEvening := time.Date(2026, 8, 7, 20, 0, 0, 0, loc)
+	inMorningQuiet := time.Date(2026, 8, 7, 8, 0, 0, 0, loc)
+	inWorkHours := time.Date(2026, 8, 7, 10, 30, 0, 0, loc)
+	require.True(t, isInQuietHours(inEvening, ranges))
+	require.True(t, isInQuietHours(inMorningQuiet, ranges))
+	require.False(t, isInQuietHours(inWorkHours, ranges))
+
+	wrap, err := parseUsageAlertQuietHours([]string{"22:00:00-06:00:00"})
+	require.NoError(t, err)
+	require.True(t, isInQuietHours(time.Date(2026, 8, 7, 23, 0, 0, 0, loc), wrap))
+	require.True(t, isInQuietHours(time.Date(2026, 8, 7, 5, 0, 0, 0, loc), wrap))
+	require.False(t, isInQuietHours(time.Date(2026, 8, 7, 12, 0, 0, 0, loc), wrap))
+}
+
+func TestNextCronOutsideQuiet(t *testing.T) {
+	t.Parallel()
+	ranges, err := parseUsageAlertQuietHours([]string{"00:00:00-09:00:00"})
+	require.NoError(t, err)
+	loc := time.Local
+	from := time.Date(2026, 8, 7, 8, 0, 0, 0, loc) // inside quiet
+	next, err := nextCronOutsideQuiet("0 * * * *", from, ranges)
+	require.NoError(t, err)
+	require.False(t, isInQuietHours(next, ranges))
+	require.GreaterOrEqual(t, next.Hour(), 9)
+}
+
+func TestAccountHasDueUsageAlertRuleThresholdWatch(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	past := now.Add(-time.Minute)
+	future := now.Add(time.Hour)
+	account := &Account{Extra: map[string]any{
+		UsageAlertRulesExtraKey: []any{
+			map[string]any{
+				"id":                     "r1",
+				"enabled":                true,
+				"channel":                "custom",
+				"webhook_url":            "https://hooks.example.com/x",
+				"cron_expression":        "0 * * * *",
+				"next_run_at":            future.Format(time.RFC3339),
+				"threshold_enabled":      true,
+				"threshold_percent":      80,
+				"threshold_watch_cron":   "*/5 * * * *",
+				"cooldown_seconds":       600,
+				"threshold_next_run_at":  past.Format(time.RFC3339),
+			},
+		},
+	}}
+	require.True(t, AccountHasDueUsageAlertRule(account, now))
 }
 
 func TestPostWebhookWeComAndCustom(t *testing.T) {
