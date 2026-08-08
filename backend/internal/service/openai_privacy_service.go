@@ -57,6 +57,7 @@ func disableOpenAITraining(ctx context.Context, clientFactory PrivacyClientFacto
 		SetHeader("Authorization", "Bearer "+accessToken).
 		SetHeader("User-Agent", identity.UserAgent).
 		SetHeader("Originator", identity.Originator).
+		SetHeader("Version", identity.Version).
 		SetHeader("Origin", "https://chatgpt.com").
 		SetHeader("Referer", "https://chatgpt.com/").
 		SetHeader("Accept", "application/json").
@@ -126,6 +127,7 @@ func fetchChatGPTAccountInfo(ctx context.Context, clientFactory PrivacyClientFac
 		SetHeader("Authorization", "Bearer "+accessToken).
 		SetHeader("User-Agent", identity.UserAgent).
 		SetHeader("Originator", identity.Originator).
+		SetHeader("Version", identity.Version).
 		SetHeader("Origin", "https://chatgpt.com").
 		SetHeader("Referer", "https://chatgpt.com/").
 		SetHeader("Accept", "application/json").
@@ -243,6 +245,7 @@ func fetchChatGPTSubscriptionExpiresAt(ctx context.Context, clientFactory Privac
 		SetHeader("Authorization", "Bearer "+accessToken).
 		SetHeader("User-Agent", identity.UserAgent).
 		SetHeader("Originator", identity.Originator).
+		SetHeader("Version", identity.Version).
 		SetHeader("Origin", "https://chatgpt.com").
 		SetHeader("Referer", "https://chatgpt.com/").
 		SetHeader("Accept", "application/json").
@@ -273,10 +276,7 @@ func fetchChatGPTSubscriptionExpiresAt(ctx context.Context, clientFactory Privac
 }
 
 func normalizeOpenAIPrivacyIdentity(identity openAIOutboundIdentity) openAIOutboundIdentity {
-	if resolved, ok := validOpenAIOutboundIdentity(identity.UserAgent); ok {
-		return resolved
-	}
-	return resolveOpenAIOutboundIdentityCandidates("", "")
+	return resolveOpenAIOutboundIdentityWithVersion(identity.UserAgent, "", identity.Version)
 }
 
 // fillAccountInfo 从单个 account 对象中提取 plan_type 和 subscription_expires_at

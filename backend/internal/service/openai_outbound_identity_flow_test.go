@@ -10,14 +10,16 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/config"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
 	"github.com/stretchr/testify/require"
 )
 
 const testOpenAIAccountUserAgent = "codex_cli_rs/9.9.9 (Ubuntu 22.4.0; x86_64) xterm-256color"
+const testOpenAIAccountCurrentUserAgent = "codex_cli_rs/" + codexCLIVersion + " (Ubuntu 22.4.0; x86_64) xterm-256color"
 
 type openAIIdentitySettingRepoStub struct {
-	value string
+	values map[string]string
 }
 
 func (s *openAIIdentitySettingRepoStub) Get(context.Context, string) (*Setting, error) {
@@ -25,16 +27,23 @@ func (s *openAIIdentitySettingRepoStub) Get(context.Context, string) (*Setting, 
 }
 
 func (s *openAIIdentitySettingRepoStub) GetValue(_ context.Context, key string) (string, error) {
-	if key != SettingKeyOpenAICodexUserAgent {
+	value, ok := s.values[key]
+	if !ok {
 		return "", ErrSettingNotFound
 	}
-	return s.value, nil
+	return value, nil
 }
 
 func (s *openAIIdentitySettingRepoStub) Set(context.Context, string, string) error { return nil }
 
-func (s *openAIIdentitySettingRepoStub) GetMultiple(context.Context, []string) (map[string]string, error) {
-	return map[string]string{}, nil
+func (s *openAIIdentitySettingRepoStub) GetMultiple(_ context.Context, keys []string) (map[string]string, error) {
+	values := make(map[string]string, len(keys))
+	for _, key := range keys {
+		if value, ok := s.values[key]; ok {
+			values[key] = value
+		}
+	}
+	return values, nil
 }
 
 func (s *openAIIdentitySettingRepoStub) SetMultiple(context.Context, map[string]string) error {
@@ -50,17 +59,20 @@ func (s *openAIIdentitySettingRepoStub) Delete(context.Context, string) error { 
 type openAIIdentityOAuthClientStub struct {
 	exchangeUserAgent  string
 	exchangeOriginator string
+	exchangeVersion    string
 	refreshUserAgent   string
 	refreshOriginator  string
+	refreshVersion     string
 }
 
 func (s *openAIIdentityOAuthClientStub) ExchangeCode(context.Context, string, string, string, string, string) (*openai.TokenResponse, error) {
 	return nil, errors.New("identity-aware exchange was not used")
 }
 
-func (s *openAIIdentityOAuthClientStub) ExchangeCodeWithIdentity(_ context.Context, _, _, _, _, _, userAgent, originator string) (*openai.TokenResponse, error) {
+func (s *openAIIdentityOAuthClientStub) ExchangeCodeWithIdentity(_ context.Context, _, _, _, _, _, userAgent, originator, version string) (*openai.TokenResponse, error) {
 	s.exchangeUserAgent = userAgent
 	s.exchangeOriginator = originator
+	s.exchangeVersion = version
 	return &openai.TokenResponse{AccessToken: "access", RefreshToken: "refresh", ExpiresIn: 3600}, nil
 }
 
@@ -72,9 +84,10 @@ func (s *openAIIdentityOAuthClientStub) RefreshTokenWithClientID(context.Context
 	return nil, errors.New("identity-aware refresh was not used")
 }
 
-func (s *openAIIdentityOAuthClientStub) RefreshTokenWithClientIDAndIdentity(_ context.Context, _, _, _, userAgent, originator string) (*openai.TokenResponse, error) {
+func (s *openAIIdentityOAuthClientStub) RefreshTokenWithClientIDAndIdentity(_ context.Context, _, _, _, userAgent, originator, version string) (*openai.TokenResponse, error) {
 	s.refreshUserAgent = userAgent
 	s.refreshOriginator = originator
+	s.refreshVersion = version
 	return &openai.TokenResponse{AccessToken: "new-access", RefreshToken: "new-refresh", ExpiresIn: 3600}, nil
 }
 
@@ -124,8 +137,9 @@ func TestOpenAIOAuthService_ReauthorizationUsesCredentialOwnerIdentity(t *testin
 		Code:      "authorization-code",
 	})
 	require.NoError(t, err)
-	require.Equal(t, testOpenAIAccountUserAgent, client.exchangeUserAgent)
+	require.Equal(t, testOpenAIAccountCurrentUserAgent, client.exchangeUserAgent)
 	require.Equal(t, "codex_cli_rs", client.exchangeOriginator)
+	require.Equal(t, codexCLIVersion, client.exchangeVersion)
 }
 
 func TestOpenAIOAuthService_RefreshAndPATUseAccountIdentity(t *testing.T) {
@@ -144,12 +158,14 @@ func TestOpenAIOAuthService_RefreshAndPATUseAccountIdentity(t *testing.T) {
 
 	_, err := svc.RefreshAccountToken(context.Background(), account)
 	require.NoError(t, err)
-	require.Equal(t, testOpenAIAccountUserAgent, client.refreshUserAgent)
+	require.Equal(t, testOpenAIAccountCurrentUserAgent, client.refreshUserAgent)
 	require.Equal(t, "codex_cli_rs", client.refreshOriginator)
+	require.Equal(t, codexCLIVersion, client.refreshVersion)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, testOpenAIAccountUserAgent, r.Header.Get("User-Agent"))
+		require.Equal(t, testOpenAIAccountCurrentUserAgent, r.Header.Get("User-Agent"))
 		require.Equal(t, "codex_cli_rs", r.Header.Get("Originator"))
+		require.Equal(t, codexCLIVersion, r.Header.Get("Version"))
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"email":"user@example.com","chatgpt_user_id":"user","chatgpt_account_id":"account","chatgpt_plan_type":"plus","chatgpt_account_is_fedramp":false}`))
 	}))
@@ -182,9 +198,9 @@ func TestOpenAIGatewayService_ShadowUsesCredentialOwnerIdentity(t *testing.T) {
 	}
 	svc := &OpenAIGatewayService{accountRepo: stubOpenAIAccountRepo{accounts: []Account{parent}}}
 	identity := svc.resolveOpenAIOutboundIdentity(context.Background(), shadow)
-	require.Equal(t, testOpenAIAccountUserAgent, identity.UserAgent)
+	require.Equal(t, testOpenAIAccountCurrentUserAgent, identity.UserAgent)
 	require.Equal(t, "codex_cli_rs", identity.Originator)
-	require.Equal(t, "9.9.9", identity.Version)
+	require.Equal(t, codexCLIVersion, identity.Version)
 }
 
 func TestOpenAIAccountUserAgentLimit(t *testing.T) {
@@ -194,7 +210,10 @@ func TestOpenAIAccountUserAgentLimit(t *testing.T) {
 
 func TestOpenAIGatewayService_ResolvedIdentityPrefersAccountThenGlobalThenDefault(t *testing.T) {
 	globalUA := "codex-tui/8.8.8 (Ubuntu 22.4.0; x86_64) xterm-256color (codex-tui; 8.8.8)"
-	settingService := &SettingService{settingRepo: &openAIIdentitySettingRepoStub{value: globalUA}}
+	globalCurrentUA := "codex-tui/" + codexCLIVersion + " (Ubuntu 22.4.0; x86_64) xterm-256color (codex-tui; " + codexCLIVersion + ")"
+	settingService := &SettingService{settingRepo: &openAIIdentitySettingRepoStub{values: map[string]string{
+		SettingKeyOpenAICodexUserAgent: globalUA,
+	}}}
 	svc := &OpenAIGatewayService{settingService: settingService}
 
 	account := &Account{
@@ -205,15 +224,56 @@ func TestOpenAIGatewayService_ResolvedIdentityPrefersAccountThenGlobalThenDefaul
 		},
 	}
 	identity := svc.resolveOpenAIOutboundIdentity(context.Background(), account)
-	require.Equal(t, testOpenAIAccountUserAgent, identity.UserAgent)
-	require.Equal(t, "9.9.9", identity.Version)
+	require.Equal(t, testOpenAIAccountCurrentUserAgent, identity.UserAgent)
+	require.Equal(t, codexCLIVersion, identity.Version)
 
 	account.Credentials = map[string]any{}
 	identity = svc.resolveOpenAIOutboundIdentity(context.Background(), account)
-	require.Equal(t, globalUA, identity.UserAgent)
-	require.Equal(t, "8.8.8", identity.Version)
+	require.Equal(t, globalCurrentUA, identity.UserAgent)
+	require.Equal(t, codexCLIVersion, identity.Version)
 
 	svc.settingService = nil
 	identity = svc.resolveOpenAIOutboundIdentity(context.Background(), account)
 	require.Equal(t, DefaultOpenAICodexUserAgent, identity.UserAgent)
+}
+
+func TestOpenAIGatewayService_ForceCodexCLILeavesOutboundIdentityPriorityIntact(t *testing.T) {
+	globalUA := "codex-tui/8.8.8 (Ubuntu 22.4.0; x86_64) xterm-256color (codex-tui; 8.8.8)"
+	settingService := &SettingService{settingRepo: &openAIIdentitySettingRepoStub{values: map[string]string{
+		SettingKeyOpenAICodexUserAgent: globalUA,
+	}}}
+	svc := &OpenAIGatewayService{
+		cfg:            &config.Config{Gateway: config.GatewayConfig{ForceCodexCLI: true}},
+		settingService: settingService,
+	}
+	account := &Account{
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+		Credentials: map[string]any{
+			"user_agent": testOpenAIAccountUserAgent,
+		},
+	}
+
+	identity := svc.resolveOpenAIOutboundIdentity(context.Background(), account)
+	require.Equal(t, testOpenAIAccountCurrentUserAgent, identity.UserAgent)
+	require.Equal(t, "codex_cli_rs", identity.Originator)
+	require.Equal(t, codexCLIVersion, identity.Version)
+}
+
+func TestAdminOpenAIPrivacyIdentitySynchronizesConfiguredVersion(t *testing.T) {
+	settingService := &SettingService{settingRepo: &openAIIdentitySettingRepoStub{values: map[string]string{
+		SettingKeyOpenAICodexClientVersion: "0.200.1",
+	}}}
+	account := &Account{
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+		Credentials: map[string]any{
+			"user_agent": testOpenAIAccountUserAgent,
+		},
+	}
+
+	identity := (&adminServiceImpl{settingService: settingService}).resolveOpenAIOutboundIdentity(context.Background(), account)
+	require.Equal(t, "codex_cli_rs/0.200.1 (Ubuntu 22.4.0; x86_64) xterm-256color", identity.UserAgent)
+	require.Equal(t, "codex_cli_rs", identity.Originator)
+	require.Equal(t, "0.200.1", identity.Version)
 }

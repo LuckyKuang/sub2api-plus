@@ -22,6 +22,10 @@ func (s *openaiOAuthClientRefreshStub) ExchangeCode(ctx context.Context, code, c
 	return nil, errors.New("not implemented")
 }
 
+func (s *openaiOAuthClientRefreshStub) ExchangeCodeWithIdentity(ctx context.Context, code, codeVerifier, redirectURI, proxyURL, clientID, userAgent, originator, version string) (*openai.TokenResponse, error) {
+	return nil, errors.New("not implemented")
+}
+
 func (s *openaiOAuthClientRefreshStub) RefreshToken(ctx context.Context, refreshToken, proxyURL string) (*openai.TokenResponse, error) {
 	atomic.AddInt32(&s.refreshCalls, 1)
 	return nil, errors.New("not implemented")
@@ -30,6 +34,10 @@ func (s *openaiOAuthClientRefreshStub) RefreshToken(ctx context.Context, refresh
 func (s *openaiOAuthClientRefreshStub) RefreshTokenWithClientID(ctx context.Context, refreshToken, proxyURL string, clientID string) (*openai.TokenResponse, error) {
 	atomic.AddInt32(&s.refreshCalls, 1)
 	return nil, errors.New("not implemented")
+}
+
+func (s *openaiOAuthClientRefreshStub) RefreshTokenWithClientIDAndIdentity(ctx context.Context, refreshToken, proxyURL, clientID, userAgent, originator, version string) (*openai.TokenResponse, error) {
+	return s.RefreshTokenWithClientID(ctx, refreshToken, proxyURL, clientID)
 }
 
 func TestOpenAIOAuthService_RefreshAccountToken_NoRefreshTokenUsesExistingAccessToken(t *testing.T) {

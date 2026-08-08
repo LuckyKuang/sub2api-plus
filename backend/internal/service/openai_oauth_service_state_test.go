@@ -26,12 +26,20 @@ func (s *openaiOAuthClientStateStub) ExchangeCode(ctx context.Context, code, cod
 	}, nil
 }
 
+func (s *openaiOAuthClientStateStub) ExchangeCodeWithIdentity(ctx context.Context, code, codeVerifier, redirectURI, proxyURL, clientID, userAgent, originator, version string) (*openai.TokenResponse, error) {
+	return s.ExchangeCode(ctx, code, codeVerifier, redirectURI, proxyURL, clientID)
+}
+
 func (s *openaiOAuthClientStateStub) RefreshToken(ctx context.Context, refreshToken, proxyURL string) (*openai.TokenResponse, error) {
 	return nil, errors.New("not implemented")
 }
 
 func (s *openaiOAuthClientStateStub) RefreshTokenWithClientID(ctx context.Context, refreshToken, proxyURL string, clientID string) (*openai.TokenResponse, error) {
 	return s.RefreshToken(ctx, refreshToken, proxyURL)
+}
+
+func (s *openaiOAuthClientStateStub) RefreshTokenWithClientIDAndIdentity(ctx context.Context, refreshToken, proxyURL, clientID, userAgent, originator, version string) (*openai.TokenResponse, error) {
+	return s.RefreshTokenWithClientID(ctx, refreshToken, proxyURL, clientID)
 }
 
 func TestOpenAIOAuthService_ExchangeCode_StateRequired(t *testing.T) {

@@ -113,7 +113,7 @@ const (
 	openAIProbeCacheTTL     = 10 * time.Minute
 	grokProbeRetryTTL       = 1 * time.Minute
 	grokFreeQuotaWindow     = 24 * time.Hour
-	openAICodexProbeVersion = codexCLIVersion
+	openAICodexProbeVersion = codexCLIVersion // 与网关出站身份同源，避免两处硬编码版本各自漂移
 )
 
 // UsageCache 封装账户使用量相关的缓存
@@ -310,19 +310,15 @@ func (s *AccountUsageService) applyOpenAIOutboundIdentity(ctx context.Context, a
 		s.openAIIdentityResolver.applyOpenAIOutboundIdentity(ctx, account, headers, useCodexIdentity)
 		return
 	}
-	accountUA := ""
-	if account != nil {
-		accountUA = account.GetOpenAIUserAgent()
-	}
-	applyResolvedOpenAIOutboundIdentity(headers, resolveOpenAIOutboundIdentityCandidates(accountUA, ""), useCodexIdentity)
+	applyResolvedOpenAIOutboundIdentity(headers, resolveOpenAIOutboundIdentityFromSettings(ctx, account, nil), useCodexIdentity)
 }
 
 func (s *AccountUsageService) buildOpenAIAgentIdentityAuthenticationHeaders(ctx context.Context, account *Account) (http.Header, error) {
-	identity := resolveOpenAIOutboundIdentityCandidates("", "")
+	identity := resolveOpenAIOutboundIdentityFromSettings(ctx, nil, nil)
 	if s != nil && s.openAIIdentityResolver != nil {
 		identity = s.openAIIdentityResolver.resolveOpenAIOutboundIdentity(ctx, account)
 	} else if account != nil {
-		identity = resolveOpenAIOutboundIdentityCandidates(account.GetOpenAIUserAgent(), "")
+		identity = resolveOpenAIOutboundIdentityFromSettings(ctx, account, nil)
 	}
 	return buildAgentIdentityAuthenticationHeadersWithIdentity(ctx, s.accountRepo, s.agentIdentityWS, &s.agentIdentityTaskMu, account, identity)
 }

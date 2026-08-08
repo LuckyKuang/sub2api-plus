@@ -83,29 +83,25 @@ func (s *AccountTestService) applyOpenAIOutboundIdentity(ctx context.Context, ac
 		s.openAIIdentityResolver.applyOpenAIOutboundIdentity(ctx, account, headers, useCodexIdentity)
 		return
 	}
-	accountUA := ""
-	if account != nil {
-		accountUA = account.GetOpenAIUserAgent()
-	}
-	applyResolvedOpenAIOutboundIdentity(headers, resolveOpenAIOutboundIdentityCandidates(accountUA, ""), useCodexIdentity)
+	applyResolvedOpenAIOutboundIdentity(headers, resolveOpenAIOutboundIdentityFromSettings(ctx, account, nil), useCodexIdentity)
 }
 
 func (s *AccountTestService) ensureOpenAIAgentIdentityTask(ctx context.Context, account *Account, expectedTaskID string) error {
-	identity := resolveOpenAIOutboundIdentityCandidates("", "")
+	identity := resolveOpenAIOutboundIdentityFromSettings(ctx, nil, nil)
 	if s != nil && s.openAIIdentityResolver != nil {
 		identity = s.openAIIdentityResolver.resolveOpenAIOutboundIdentity(ctx, account)
 	} else if account != nil {
-		identity = resolveOpenAIOutboundIdentityCandidates(account.GetOpenAIUserAgent(), "")
+		identity = resolveOpenAIOutboundIdentityFromSettings(ctx, account, nil)
 	}
 	return ensureAgentIdentityTaskForAccountWithIdentity(ctx, s.accountRepo, s.agentIdentityWS, &s.agentIdentityTaskMu, account, expectedTaskID, identity)
 }
 
 func (s *AccountTestService) buildOpenAIAgentIdentityAuthenticationHeaders(ctx context.Context, account *Account) (http.Header, error) {
-	identity := resolveOpenAIOutboundIdentityCandidates("", "")
+	identity := resolveOpenAIOutboundIdentityFromSettings(ctx, nil, nil)
 	if s != nil && s.openAIIdentityResolver != nil {
 		identity = s.openAIIdentityResolver.resolveOpenAIOutboundIdentity(ctx, account)
 	} else if account != nil {
-		identity = resolveOpenAIOutboundIdentityCandidates(account.GetOpenAIUserAgent(), "")
+		identity = resolveOpenAIOutboundIdentityFromSettings(ctx, account, nil)
 	}
 	return buildAgentIdentityAuthenticationHeadersWithIdentity(ctx, s.accountRepo, s.agentIdentityWS, &s.agentIdentityTaskMu, account, identity)
 }

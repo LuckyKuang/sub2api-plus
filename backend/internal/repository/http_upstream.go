@@ -30,6 +30,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/proxyutil"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/servertiming"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/tlsfingerprint"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/xai"
 	"github.com/LuckyKuang/sub2api-plus/internal/service"
 	"github.com/LuckyKuang/sub2api-plus/internal/util/urlvalidator"
 	"golang.org/x/mod/semver"
@@ -76,7 +77,7 @@ const (
 	// allowing operators to bump it without waiting for a Sub2API release.
 	grokCLIProxyHost       = "cli-chat-proxy.grok.com"
 	grokOfficialAPIHost    = "api.x.ai"
-	grokCLIStableVersion   = "0.2.93"
+	grokCLIStableVersion   = xai.CLIClientVersion
 	grokCLIVersionOverride = "XAI_GROK_CLI_VERSION"
 	grokFallbackBodyLimit  = 64 << 10
 )

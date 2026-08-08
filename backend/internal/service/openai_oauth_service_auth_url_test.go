@@ -16,11 +16,19 @@ func (s *openaiOAuthClientAuthURLStub) ExchangeCode(ctx context.Context, code, c
 	return nil, errors.New("not implemented")
 }
 
+func (s *openaiOAuthClientAuthURLStub) ExchangeCodeWithIdentity(ctx context.Context, code, codeVerifier, redirectURI, proxyURL, clientID, userAgent, originator, version string) (*openai.TokenResponse, error) {
+	return nil, errors.New("not implemented")
+}
+
 func (s *openaiOAuthClientAuthURLStub) RefreshToken(ctx context.Context, refreshToken, proxyURL string) (*openai.TokenResponse, error) {
 	return nil, errors.New("not implemented")
 }
 
 func (s *openaiOAuthClientAuthURLStub) RefreshTokenWithClientID(ctx context.Context, refreshToken, proxyURL string, clientID string) (*openai.TokenResponse, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (s *openaiOAuthClientAuthURLStub) RefreshTokenWithClientIDAndIdentity(ctx context.Context, refreshToken, proxyURL, clientID, userAgent, originator, version string) (*openai.TokenResponse, error) {
 	return nil, errors.New("not implemented")
 }
 

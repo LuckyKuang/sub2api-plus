@@ -179,11 +179,7 @@ func (s *TokenRefreshService) resolveOpenAIOutboundIdentity(ctx context.Context,
 	if s != nil && s.openAIIdentityResolver != nil {
 		return s.openAIIdentityResolver.resolveOpenAIOutboundIdentity(ctx, account)
 	}
-	accountUA := ""
-	if account != nil {
-		accountUA = account.GetOpenAIUserAgent()
-	}
-	return resolveOpenAIOutboundIdentityCandidates(accountUA, "")
+	return resolveOpenAIOutboundIdentityFromSettings(ctx, account, nil)
 }
 
 // SetRefreshAPI 注入统一的 OAuth 刷新 API

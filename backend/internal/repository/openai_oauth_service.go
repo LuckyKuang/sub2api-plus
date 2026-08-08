@@ -24,18 +24,18 @@ type openaiOAuthService struct {
 }
 
 func (s *openaiOAuthService) ExchangeCode(ctx context.Context, code, codeVerifier, redirectURI, proxyURL, clientID string) (*openai.TokenResponse, error) {
-	return s.exchangeCode(ctx, code, codeVerifier, redirectURI, proxyURL, clientID, "")
+	return s.exchangeCode(ctx, code, codeVerifier, redirectURI, proxyURL, clientID, "", "", "")
 }
 
 func (s *openaiOAuthService) ExchangeCodeWithUserAgent(ctx context.Context, code, codeVerifier, redirectURI, proxyURL, clientID, userAgent string) (*openai.TokenResponse, error) {
-	return s.exchangeCode(ctx, code, codeVerifier, redirectURI, proxyURL, clientID, userAgent)
+	return s.exchangeCode(ctx, code, codeVerifier, redirectURI, proxyURL, clientID, userAgent, "", "")
 }
 
-func (s *openaiOAuthService) ExchangeCodeWithIdentity(ctx context.Context, code, codeVerifier, redirectURI, proxyURL, clientID, userAgent, _ string) (*openai.TokenResponse, error) {
-	return s.exchangeCode(ctx, code, codeVerifier, redirectURI, proxyURL, clientID, userAgent)
+func (s *openaiOAuthService) ExchangeCodeWithIdentity(ctx context.Context, code, codeVerifier, redirectURI, proxyURL, clientID, userAgent, originator, version string) (*openai.TokenResponse, error) {
+	return s.exchangeCode(ctx, code, codeVerifier, redirectURI, proxyURL, clientID, userAgent, originator, version)
 }
 
-func (s *openaiOAuthService) exchangeCode(ctx context.Context, code, codeVerifier, redirectURI, proxyURL, clientID, userAgent string) (*openai.TokenResponse, error) {
+func (s *openaiOAuthService) exchangeCode(ctx context.Context, code, codeVerifier, redirectURI, proxyURL, clientID, userAgent, originator, version string) (*openai.TokenResponse, error) {
 	client, err := createOpenAIReqClient(proxyURL)
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_OAUTH_CLIENT_INIT_FAILED", "create HTTP client: %v", err)
@@ -58,11 +58,12 @@ func (s *openaiOAuthService) exchangeCode(ctx context.Context, code, codeVerifie
 
 	var tokenResp openai.TokenResponse
 
-	userAgent, originator := resolveOpenAIOAuthIdentity(userAgent)
+	userAgent, originator, version = resolveOpenAIOAuthIdentity(userAgent, originator, version)
 	resp, err := client.R().
 		SetContext(ctx).
 		SetHeader("User-Agent", userAgent).
 		SetHeader("Originator", originator).
+		SetHeader("Version", version).
 		SetFormDataFromValues(formData).
 		SetSuccessResult(&tokenResp).
 		Post(s.tokenURL)
@@ -82,22 +83,22 @@ func (s *openaiOAuthService) exchangeCode(ctx context.Context, code, codeVerifie
 }
 
 func (s *openaiOAuthService) RefreshToken(ctx context.Context, refreshToken, proxyURL string) (*openai.TokenResponse, error) {
-	return s.RefreshTokenWithClientID(ctx, refreshToken, proxyURL, "")
+	return s.refreshTokenWithClientID(ctx, refreshToken, proxyURL, "", "", "", "")
 }
 
 func (s *openaiOAuthService) RefreshTokenWithClientID(ctx context.Context, refreshToken, proxyURL string, clientID string) (*openai.TokenResponse, error) {
-	return s.refreshTokenWithClientID(ctx, refreshToken, proxyURL, clientID, "")
+	return s.refreshTokenWithClientID(ctx, refreshToken, proxyURL, clientID, "", "", "")
 }
 
 func (s *openaiOAuthService) RefreshTokenWithClientIDAndUserAgent(ctx context.Context, refreshToken, proxyURL, clientID, userAgent string) (*openai.TokenResponse, error) {
-	return s.refreshTokenWithClientID(ctx, refreshToken, proxyURL, clientID, userAgent)
+	return s.refreshTokenWithClientID(ctx, refreshToken, proxyURL, clientID, userAgent, "", "")
 }
 
-func (s *openaiOAuthService) RefreshTokenWithClientIDAndIdentity(ctx context.Context, refreshToken, proxyURL, clientID, userAgent, _ string) (*openai.TokenResponse, error) {
-	return s.refreshTokenWithClientID(ctx, refreshToken, proxyURL, clientID, userAgent)
+func (s *openaiOAuthService) RefreshTokenWithClientIDAndIdentity(ctx context.Context, refreshToken, proxyURL, clientID, userAgent, originator, version string) (*openai.TokenResponse, error) {
+	return s.refreshTokenWithClientID(ctx, refreshToken, proxyURL, clientID, userAgent, originator, version)
 }
 
-func (s *openaiOAuthService) refreshTokenWithClientID(ctx context.Context, refreshToken, proxyURL, clientID, userAgent string) (*openai.TokenResponse, error) {
+func (s *openaiOAuthService) refreshTokenWithClientID(ctx context.Context, refreshToken, proxyURL, clientID, userAgent, originator, version string) (*openai.TokenResponse, error) {
 	// 调用方应始终传入正确的 client_id；为兼容旧数据，未指定时默认使用 OpenAI ClientID
 	clientID = strings.TrimSpace(clientID)
 	if clientID == "" {
@@ -116,11 +117,12 @@ func (s *openaiOAuthService) refreshTokenWithClientID(ctx context.Context, refre
 
 	var tokenResp openai.TokenResponse
 
-	userAgent, originator := resolveOpenAIOAuthIdentity(userAgent)
+	userAgent, originator, version = resolveOpenAIOAuthIdentity(userAgent, originator, version)
 	resp, err := client.R().
 		SetContext(ctx).
 		SetHeader("User-Agent", userAgent).
 		SetHeader("Originator", originator).
+		SetHeader("Version", version).
 		SetFormDataFromValues(formData).
 		SetSuccessResult(&tokenResp).
 		Post(s.tokenURL)
@@ -139,16 +141,24 @@ func (s *openaiOAuthService) refreshTokenWithClientID(ctx context.Context, refre
 	return &tokenResp, nil
 }
 
-func resolveOpenAIOAuthIdentity(userAgent string) (string, string) {
-	originator, pairedUserAgent, ok := openai.PairCodexClientIdentity(strings.TrimSpace(userAgent))
-	if ok {
-		return pairedUserAgent, originator
+func resolveOpenAIOAuthIdentity(userAgent, _ string, version string) (string, string, string) {
+	if pairedOriginator, pairedUserAgent, ok := openai.PairCodexClientIdentity(strings.TrimSpace(userAgent)); ok {
+		resolvedVersion := service.NormalizeCodexClientVersion(version)
+		if resolvedVersion == "" {
+			resolvedVersion = service.NormalizeCodexClientVersion(openai.CodexUserAgentVersion(pairedUserAgent))
+		}
+		if resolvedVersion != "" && service.CompareVersions(resolvedVersion, service.OpenAICodexUpstreamMinVersion) >= 0 {
+			if rebuilt := openai.SetCodexUserAgentVersion(pairedUserAgent, resolvedVersion); rebuilt != "" {
+				pairedUserAgent = rebuilt
+			}
+			return pairedUserAgent, pairedOriginator, resolvedVersion
+		}
 	}
-	originator, pairedUserAgent, ok = openai.PairCodexClientIdentity(service.DefaultOpenAICodexUserAgent)
-	if ok {
-		return pairedUserAgent, originator
+	defaultOriginator, defaultUserAgent, ok := openai.PairCodexClientIdentity(service.DefaultOpenAICodexUserAgent)
+	if !ok {
+		return service.DefaultOpenAICodexUserAgent, openai.CodexCLIOriginator, service.DefaultOpenAICodexVersion
 	}
-	return service.DefaultOpenAICodexUserAgent, "codex-tui"
+	return defaultUserAgent, defaultOriginator, service.DefaultOpenAICodexVersion
 }
 
 func createOpenAIReqClient(proxyURL string) (*req.Client, error) {

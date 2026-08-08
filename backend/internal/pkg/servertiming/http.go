@@ -53,9 +53,11 @@ func Do(client *http.Client, req *http.Request) (*http.Response, error) {
 		client = http.DefaultClient
 	}
 	if req == nil || !Active(req.Context()) {
+		// #nosec G704 -- this observability wrapper neither creates nor controls request destinations.
 		return client.Do(req)
 	}
 	startedAt := time.Now()
+	// #nosec G704 -- endpoint validation belongs to the caller that constructs the request.
 	response, err := client.Do(req)
 	RecordDependency(req.Context(), dependencyModule(req), startedAt, time.Now())
 	return response, err

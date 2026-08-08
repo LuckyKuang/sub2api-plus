@@ -95,21 +95,21 @@ func (s *OpenAIOAuthServiceSuite) TestExchangeCode_DefaultRedirectURI() {
 }
 
 func (s *OpenAIOAuthServiceSuite) TestExchangeCodeWithIdentityPairsAndFallsBackUserAgent() {
-	requests := make(chan [2]string, 2)
+	requests := make(chan [3]string, 2)
 	s.setupServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requests <- [2]string{r.Header.Get("User-Agent"), r.Header.Get("Originator")}
+		requests <- [3]string{r.Header.Get("User-Agent"), r.Header.Get("Originator"), r.Header.Get("Version")}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, `{"access_token":"at","refresh_token":"rt","token_type":"bearer","expires_in":3600}`)
 	}))
 
 	const validUA = "codex-tui/0.150.0 (Ubuntu 22.4.0; x86_64) xterm-256color (codex-tui; 0.150.0)"
-	_, err := s.svc.ExchangeCodeWithIdentity(s.ctx, "code", "ver", openai.DefaultRedirectURI, "", "", validUA, "client-controlled")
+	_, err := s.svc.ExchangeCodeWithIdentity(s.ctx, "code", "ver", openai.DefaultRedirectURI, "", "", validUA, "client-controlled", "0.150.0")
 	require.NoError(s.T(), err)
-	require.Equal(s.T(), [2]string{validUA, "codex-tui"}, <-requests)
+	require.Equal(s.T(), [3]string{validUA, "codex-tui", "0.150.0"}, <-requests)
 
-	_, err = s.svc.ExchangeCodeWithIdentity(s.ctx, "code", "ver", openai.DefaultRedirectURI, "", "", "Mozilla/5.0", "client-controlled")
+	_, err = s.svc.ExchangeCodeWithIdentity(s.ctx, "code", "ver", openai.DefaultRedirectURI, "", "", "Mozilla/5.0", "client-controlled", "9.9.9")
 	require.NoError(s.T(), err)
-	require.Equal(s.T(), [2]string{service.DefaultOpenAICodexUserAgent, "codex-tui"}, <-requests)
+	require.Equal(s.T(), [3]string{service.DefaultOpenAICodexUserAgent, "codex_cli_rs", service.DefaultOpenAICodexVersion}, <-requests)
 }
 
 func (s *OpenAIOAuthServiceSuite) TestRefreshToken_FormFields() {

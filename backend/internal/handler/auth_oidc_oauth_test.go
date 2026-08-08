@@ -3,6 +3,8 @@ package handler
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/base64"
@@ -132,6 +134,34 @@ func buildRSAJWK(kid string, pub *rsa.PublicKey) oidcJWK {
 		N:   n,
 		E:   e,
 	}
+}
+
+func TestOIDCJWKPublicKeyEC(t *testing.T) {
+	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	encodedPublicKey, err := privateKey.PublicKey.Bytes()
+	require.NoError(t, err)
+	require.Len(t, encodedPublicKey, 65) // Uncompressed P-256 point: prefix plus two 32-byte coordinates.
+
+	jwk := oidcJWK{
+		Kty: "EC",
+		Crv: "P-256",
+		X:   base64.RawURLEncoding.EncodeToString(encodedPublicKey[1:33]),
+		Y:   base64.RawURLEncoding.EncodeToString(encodedPublicKey[33:]),
+	}
+
+	key, err := jwk.publicKey()
+	require.NoError(t, err)
+	publicKey, ok := key.(*ecdsa.PublicKey)
+	require.True(t, ok)
+	require.Equal(t, elliptic.P256(), publicKey.Curve)
+	encodedResolvedPublicKey, err := publicKey.Bytes()
+	require.NoError(t, err)
+	require.Equal(t, encodedPublicKey, encodedResolvedPublicKey)
+
+	jwk.Y = base64.RawURLEncoding.EncodeToString([]byte{0})
+	_, err = jwk.publicKey()
+	require.Error(t, err)
 }
 
 func TestOIDCOAuthBindStartRedirectsAndSetsBindCookies(t *testing.T) {

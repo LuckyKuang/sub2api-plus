@@ -22,7 +22,9 @@ import (
 	"golang.org/x/net/http2"
 )
 
-const codexModelsCustomAccountUserAgent = "codex_cli_rs/9.9.9 (Ubuntu 22.4.0; x86_64) xterm-256color"
+const codexModelsCustomAccountUserAgent = "codex-tui/9.9.9 (Mac OS X 14.0; arm64) iTerm (codex-tui; 9.9.9)"
+
+const codexModelsCustomAccountCurrentUserAgent = "codex-tui/" + codexCLIVersion + " (Mac OS X 14.0; arm64) iTerm (codex-tui; " + codexCLIVersion + ")"
 
 type codexModelsHTTPUpstreamStub struct {
 	do func(req *http.Request, proxyURL string, accountID int64, accountConcurrency int) (*http.Response, error)
@@ -197,7 +199,7 @@ func TestFetchCodexModelsManifestPassthrough(t *testing.T) {
 	if gotAccountID != "acc-123" {
 		t.Errorf("chatgpt-account-id header: got %q", gotAccountID)
 	}
-	if gotOriginator != "codex-tui" {
+	if gotOriginator != "codex_cli_rs" {
 		t.Errorf("originator header: got %q", gotOriginator)
 	}
 	if gotUserAgent != DefaultOpenAICodexUserAgent {
@@ -448,7 +450,7 @@ func TestFetchCodexModelsManifestAPIKeyCustomUpstream(t *testing.T) {
 	if gotRequest.Method != http.MethodGet {
 		t.Errorf("method: got %q", gotRequest.Method)
 	}
-	if gotRequest.URL.String() != "https://upstream.example/v1/models?client_version=9.9.9" {
+	if gotRequest.URL.String() != "https://upstream.example/v1/models?client_version="+codexCLIVersion {
 		t.Errorf("request URL: got %q", gotRequest.URL.String())
 	}
 	if gotRequest.Header.Get("Authorization") != "Bearer sk-upstream" {
@@ -460,7 +462,7 @@ func TestFetchCodexModelsManifestAPIKeyCustomUpstream(t *testing.T) {
 	if gotRequest.Header.Get("Version") != "" {
 		t.Errorf("version header: got %q", gotRequest.Header.Get("Version"))
 	}
-	if gotRequest.Header.Get("User-Agent") != codexModelsCustomAccountUserAgent {
+	if gotRequest.Header.Get("User-Agent") != codexModelsCustomAccountCurrentUserAgent {
 		t.Errorf("user-agent header: got %q", gotRequest.Header.Get("User-Agent"))
 	}
 	if gotRequest.Header.Get("chatgpt-account-id") != "" {
