@@ -11,6 +11,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -359,6 +360,49 @@ def run_runtime_final_gate(runtime: Runtime) -> None:
     )
 
 
+def run_frontend_security_check() -> None:
+    command = ["pnpm", "audit", "--prod", "--audit-level=high", "--json"]
+    print("\n[Frontend production audit]")
+    print(f"$ {display(command)}")
+    result = run_command(command, cwd=ROOT / "frontend", capture=True)
+    output = result.stdout or ""
+    if result.returncode not in (0, 1):
+        raise PushCliError(
+            f"Frontend production audit failed with exit code {result.returncode}"
+            + (f": {output[-2000:].strip()}" if output.strip() else "")
+        )
+    try:
+        audit = json.loads(output)
+    except json.JSONDecodeError as error:
+        raise PushCliError("Frontend production audit returned invalid JSON") from error
+    if not isinstance(audit, dict) or audit.get("error"):
+        raise PushCliError("Frontend production audit returned an audit error")
+
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        suffix=".json",
+        delete=False,
+    ) as audit_file:
+        json.dump(audit, audit_file)
+        audit_path = Path(audit_file.name)
+    try:
+        run_step(
+            "Frontend audit exceptions",
+            [
+                sys.executable,
+                "tools/check_pnpm_audit_exceptions.py",
+                "--audit",
+                str(audit_path),
+                "--exceptions",
+                ".github/audit-exceptions.yml",
+            ],
+            ROOT,
+        )
+    finally:
+        audit_path.unlink(missing_ok=True)
+
+
 def run_local_checks(remote: str, branch: str, runtime: Runtime) -> None:
     python = sys.executable
     backend = ROOT / "backend"
@@ -445,6 +489,7 @@ def run_local_checks(remote: str, branch: str, runtime: Runtime) -> None:
     for name, command, cwd in steps:
         run_step(name, command, cwd)
 
+    run_frontend_security_check()
     run_runtime_final_gate(runtime)
 
 

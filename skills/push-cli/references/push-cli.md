@@ -47,6 +47,16 @@ The matrix mirrors CONTRIBUTING.md, backend/Makefile, and
     pnpm --dir frontend run typecheck
     pnpm --dir frontend run test:run
     pnpm --dir frontend run build
+    pnpm --dir frontend audit --prod --audit-level=high --json
+    python tools/check_pnpm_audit_exceptions.py \
+      --audit <temporary-json> \
+      --exceptions .github/audit-exceptions.yml
+
+The checker writes audit JSON to a temporary file rather than replacing
+frontend/audit.json. A vulnerability exit status is accepted only when the
+output is valid audit JSON and every high/critical advisory has a current,
+matching exception. Audit execution errors, missing exceptions, and expired
+exceptions fail the local gate.
 
 Repository policy and deployment checks:
 

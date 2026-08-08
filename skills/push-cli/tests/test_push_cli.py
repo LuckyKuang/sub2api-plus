@@ -114,6 +114,72 @@ class RuntimeFinalGateTest(unittest.TestCase):
         )
 
 
+class FrontendSecurityCheckTest(unittest.TestCase):
+    def test_vulnerability_exit_runs_exception_checker_with_audit_json(self) -> None:
+        audit = {
+            "advisories": {
+                "1": {
+                    "module_name": "xlsx",
+                    "severity": "high",
+                    "github_advisory_id": "GHSA-example",
+                }
+            }
+        }
+        audit_result = subprocess.CompletedProcess(
+            ["pnpm", "audit"],
+            1,
+            stdout=push_cli.json.dumps(audit),
+        )
+        audit_path: Path | None = None
+
+        def verify_exception_check(
+            name: str,
+            command: list[str],
+            cwd: Path,
+        ) -> None:
+            nonlocal audit_path
+            self.assertEqual("Frontend audit exceptions", name)
+            self.assertEqual(Path.cwd(), cwd)
+            self.assertEqual("--audit", command[2])
+            audit_path = Path(command[3])
+            with audit_path.open(encoding="utf-8") as handle:
+                self.assertEqual(audit, push_cli.json.load(handle))
+            self.assertEqual(
+                ["--exceptions", ".github/audit-exceptions.yml"],
+                command[4:],
+            )
+
+        with (
+            mock.patch.object(push_cli, "ROOT", Path.cwd()),
+            mock.patch.object(push_cli, "run_command", return_value=audit_result),
+            mock.patch.object(push_cli, "run_step", side_effect=verify_exception_check),
+        ):
+            push_cli.run_frontend_security_check()
+
+        self.assertIsNotNone(audit_path)
+        self.assertFalse(audit_path.exists())
+
+    def test_invalid_audit_json_is_a_hard_failure(self) -> None:
+        audit_result = subprocess.CompletedProcess(
+            ["pnpm", "audit"],
+            1,
+            stdout="registry unavailable",
+        )
+        with mock.patch.object(push_cli, "run_command", return_value=audit_result):
+            with self.assertRaisesRegex(push_cli.PushCliError, "invalid JSON"):
+                push_cli.run_frontend_security_check()
+
+    def test_audit_error_payload_is_a_hard_failure(self) -> None:
+        audit_result = subprocess.CompletedProcess(
+            ["pnpm", "audit"],
+            1,
+            stdout='{"error":{"code":"ERR_PNPM_AUDIT_BAD_RESPONSE"}}',
+        )
+        with mock.patch.object(push_cli, "run_command", return_value=audit_result):
+            with self.assertRaisesRegex(push_cli.PushCliError, "audit error"):
+                push_cli.run_frontend_security_check()
+
+
 class LocalChecksTest(unittest.TestCase):
     def test_static_checks_still_run_for_apple_runtime(self) -> None:
         git_miss = subprocess.CompletedProcess(["git"], 1, "")
@@ -121,6 +187,7 @@ class LocalChecksTest(unittest.TestCase):
             mock.patch.object(push_cli, "ROOT", Path("/repo")),
             mock.patch.object(push_cli, "run_command", return_value=git_miss),
             mock.patch.object(push_cli, "run_step") as run_step,
+            mock.patch.object(push_cli, "run_frontend_security_check") as audit_check,
             mock.patch.object(push_cli, "run_runtime_final_gate") as final_gate,
         ):
             runtime = push_cli.Runtime("apple-containers", compose_required=False)
@@ -131,6 +198,7 @@ class LocalChecksTest(unittest.TestCase):
         self.assertIn("Frontend production build", names)
         self.assertIn("Docker Compose security", names)
         self.assertIn("Docker runtime resources", names)
+        audit_check.assert_called_once_with()
         final_gate.assert_called_once_with(runtime)
 
 

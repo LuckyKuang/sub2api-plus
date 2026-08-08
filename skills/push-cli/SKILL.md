@@ -94,6 +94,8 @@ The bundled checker uses commands already defined by the repository:
 
 - Go module tidiness, unit tests, integration tests, and golangci-lint.
 - Frozen pnpm install, frontend lint, typecheck, Vitest, and production build.
+- Production pnpm audit and the same high/critical exception policy used by the
+  Security Scan workflow.
 - Release-policy, OpenAI Codex identity, README synchronization, and migration
   checks when a comparable remote branch exists.
 - Installer syntax, Docker Compose security, Docker runtime resources, and Caddy
