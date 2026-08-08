@@ -129,6 +129,7 @@ class FrontendSecurityCheckTest(unittest.TestCase):
             ["pnpm", "audit"],
             1,
             stdout=push_cli.json.dumps(audit),
+            stderr="node deprecation warning",
         )
         audit_path: Path | None = None
 
@@ -151,11 +152,17 @@ class FrontendSecurityCheckTest(unittest.TestCase):
 
         with (
             mock.patch.object(push_cli, "ROOT", Path.cwd()),
-            mock.patch.object(push_cli, "run_command", return_value=audit_result),
+            mock.patch.object(push_cli, "run_command", return_value=audit_result) as run_command,
             mock.patch.object(push_cli, "run_step", side_effect=verify_exception_check),
         ):
             push_cli.run_frontend_security_check()
 
+        run_command.assert_called_once_with(
+            ["pnpm", "audit", "--prod", "--audit-level=high", "--json"],
+            cwd=Path.cwd() / "frontend",
+            capture=True,
+            merge_stderr=False,
+        )
         self.assertIsNotNone(audit_path)
         self.assertFalse(audit_path.exists())
 

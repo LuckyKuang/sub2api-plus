@@ -49,6 +49,7 @@ def run_command(
     *,
     cwd: Path | None = None,
     capture: bool = False,
+    merge_stderr: bool = True,
 ) -> subprocess.CompletedProcess[str]:
     actual_cwd = ROOT if cwd is None else cwd
     try:
@@ -60,7 +61,9 @@ def run_command(
             encoding="utf-8",
             errors="replace",
             stdout=subprocess.PIPE if capture else None,
-            stderr=subprocess.STDOUT if capture else None,
+            stderr=(subprocess.STDOUT if merge_stderr else subprocess.PIPE)
+            if capture
+            else None,
         )
     except FileNotFoundError as error:
         raise PushCliError(f"required command is unavailable: {error.filename}") from error
@@ -364,12 +367,18 @@ def run_frontend_security_check() -> None:
     command = ["pnpm", "audit", "--prod", "--audit-level=high", "--json"]
     print("\n[Frontend production audit]")
     print(f"$ {display(command)}")
-    result = run_command(command, cwd=ROOT / "frontend", capture=True)
+    result = run_command(
+        command,
+        cwd=ROOT / "frontend",
+        capture=True,
+        merge_stderr=False,
+    )
     output = result.stdout or ""
     if result.returncode not in (0, 1):
+        detail = (result.stderr or output).strip()
         raise PushCliError(
             f"Frontend production audit failed with exit code {result.returncode}"
-            + (f": {output[-2000:].strip()}" if output.strip() else "")
+            + (f": {detail[-2000:]}" if detail else "")
         )
     try:
         audit = json.loads(output)
