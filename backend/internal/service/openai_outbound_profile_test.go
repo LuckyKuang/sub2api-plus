@@ -41,7 +41,7 @@ func TestResolveOpenAIOutboundIdentityCandidates(t *testing.T) {
 			accountUA:      "curl/8.7.1",
 			systemUA:       "not-a-codex-client/1.0",
 			wantUserAgent:  DefaultOpenAICodexUserAgent,
-			wantOriginator: "codex-tui",
+			wantOriginator: "codex_cli_rs",
 			wantVersion:    codexCLIVersion,
 		},
 	}

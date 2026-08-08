@@ -49,25 +49,11 @@ func (s *OpenAIOAuthService) SetAccountRepository(accountRepo AccountRepository)
 }
 
 func (s *OpenAIOAuthService) resolveOpenAIOutboundIdentity(ctx context.Context, account *Account) openAIOutboundIdentity {
-	accountUA := ""
-	if account != nil {
-		accountUA = account.GetOpenAIUserAgent()
+	var settingService *SettingService
+	if s != nil {
+		settingService = s.settingService
 	}
-	systemUA := ""
-	if s != nil && s.settingService != nil {
-		systemUA = s.settingService.GetOpenAICodexUserAgent(ctx)
-	}
-	return resolveOpenAIOutboundIdentityCandidates(accountUA, systemUA)
-}
-
-type openAIOAuthClientWithUserAgent interface {
-	ExchangeCodeWithUserAgent(ctx context.Context, code, codeVerifier, redirectURI, proxyURL, clientID, userAgent string) (*openai.TokenResponse, error)
-	RefreshTokenWithClientIDAndUserAgent(ctx context.Context, refreshToken, proxyURL, clientID, userAgent string) (*openai.TokenResponse, error)
-}
-
-type openAIOAuthClientWithIdentity interface {
-	ExchangeCodeWithIdentity(ctx context.Context, code, codeVerifier, redirectURI, proxyURL, clientID, userAgent, originator string) (*openai.TokenResponse, error)
-	RefreshTokenWithClientIDAndIdentity(ctx context.Context, refreshToken, proxyURL, clientID, userAgent, originator string) (*openai.TokenResponse, error)
+	return resolveOpenAIOutboundIdentityFromSettings(ctx, account, settingService)
 }
 
 // OpenAIAuthURLResult contains the authorization URL and session info
@@ -221,14 +207,7 @@ func (s *OpenAIOAuthService) ExchangeCode(ctx context.Context, input *OpenAIExch
 
 	// Exchange code for token
 	identity := s.resolveOpenAIOutboundIdentity(ctx, account)
-	var tokenResp *openai.TokenResponse
-	if client, ok := s.oauthClient.(openAIOAuthClientWithIdentity); ok {
-		tokenResp, err = client.ExchangeCodeWithIdentity(ctx, input.Code, session.CodeVerifier, redirectURI, proxyURL, clientID, identity.UserAgent, identity.Originator)
-	} else if client, ok := s.oauthClient.(openAIOAuthClientWithUserAgent); ok {
-		tokenResp, err = client.ExchangeCodeWithUserAgent(ctx, input.Code, session.CodeVerifier, redirectURI, proxyURL, clientID, identity.UserAgent)
-	} else {
-		tokenResp, err = s.oauthClient.ExchangeCode(ctx, input.Code, session.CodeVerifier, redirectURI, proxyURL, clientID)
-	}
+	tokenResp, err := s.oauthClient.ExchangeCodeWithIdentity(ctx, input.Code, session.CodeVerifier, redirectURI, proxyURL, clientID, identity.UserAgent, identity.Originator, identity.Version)
 	if err != nil {
 		return nil, err
 	}
@@ -281,15 +260,7 @@ func (s *OpenAIOAuthService) RefreshTokenWithClientID(ctx context.Context, refre
 
 func (s *OpenAIOAuthService) refreshTokenWithClientIDAndIdentity(ctx context.Context, refreshToken string, proxyURL string, clientID string, account *Account) (*OpenAITokenInfo, error) {
 	identity := s.resolveOpenAIOutboundIdentity(ctx, account)
-	var tokenResp *openai.TokenResponse
-	var err error
-	if client, ok := s.oauthClient.(openAIOAuthClientWithIdentity); ok {
-		tokenResp, err = client.RefreshTokenWithClientIDAndIdentity(ctx, refreshToken, proxyURL, clientID, identity.UserAgent, identity.Originator)
-	} else if client, ok := s.oauthClient.(openAIOAuthClientWithUserAgent); ok {
-		tokenResp, err = client.RefreshTokenWithClientIDAndUserAgent(ctx, refreshToken, proxyURL, clientID, identity.UserAgent)
-	} else {
-		tokenResp, err = s.oauthClient.RefreshTokenWithClientID(ctx, refreshToken, proxyURL, clientID)
-	}
+	tokenResp, err := s.oauthClient.RefreshTokenWithClientIDAndIdentity(ctx, refreshToken, proxyURL, clientID, identity.UserAgent, identity.Originator, identity.Version)
 	if err != nil {
 		return nil, err
 	}

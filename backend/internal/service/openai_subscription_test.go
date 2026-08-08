@@ -20,7 +20,8 @@ func TestFetchChatGPTSubscriptionExpiresAt(t *testing.T) {
 		require.Equal(t, "acc_123", r.URL.Query().Get("account_id"))
 		require.Equal(t, "Bearer access-token", r.Header.Get("Authorization"))
 		require.Equal(t, DefaultOpenAICodexUserAgent, r.Header.Get("User-Agent"))
-		require.Equal(t, "codex-tui", r.Header.Get("Originator"))
+		require.Equal(t, "codex_cli_rs", r.Header.Get("Originator"))
+		require.Equal(t, DefaultOpenAICodexVersion, r.Header.Get("Version"))
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -50,7 +51,8 @@ func TestFetchChatGPTAccountInfo_SkipsExpiredWorkspaceCandidate(t *testing.T) {
 		require.Equal(t, "/backend-api/accounts/check/v4-2023-04-27", r.URL.Path)
 		require.Equal(t, "Bearer access-token", r.Header.Get("Authorization"))
 		require.Equal(t, DefaultOpenAICodexUserAgent, r.Header.Get("User-Agent"))
-		require.Equal(t, "codex-tui", r.Header.Get("Originator"))
+		require.Equal(t, "codex_cli_rs", r.Header.Get("Originator"))
+		require.Equal(t, DefaultOpenAICodexVersion, r.Header.Get("Version"))
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -128,4 +130,16 @@ func TestShouldApplyChatGPTAccountInfoPlanType(t *testing.T) {
 	require.False(t, shouldApplyChatGPTAccountInfoPlanType("free", "team"))
 	require.False(t, shouldApplyChatGPTAccountInfoPlanType("", ""))
 	require.True(t, shouldApplyChatGPTAccountInfoPlanType("", "pro"))
+}
+
+func TestNormalizeOpenAIPrivacyIdentityRepairsMismatchedTriple(t *testing.T) {
+	identity := normalizeOpenAIPrivacyIdentity(openAIOutboundIdentity{
+		UserAgent:  "codex-tui/0.150.0 (Mac OS X 15.1.0; arm64) iTerm.app (codex-tui; 0.150.0)",
+		Originator: "client-controlled",
+		Version:    "0.200.1",
+	})
+
+	require.Equal(t, "codex-tui/0.200.1 (Mac OS X 15.1.0; arm64) iTerm.app (codex-tui; 0.200.1)", identity.UserAgent)
+	require.Equal(t, "codex-tui", identity.Originator)
+	require.Equal(t, "0.200.1", identity.Version)
 }

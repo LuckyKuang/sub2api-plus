@@ -11,6 +11,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -36,6 +37,7 @@ class Runtime:
     name: str
     prefix: tuple[str, ...] = ()
     compose_root: str | None = None
+    compose_required: bool = True
 
 
 def display(command: Sequence[str]) -> str:
@@ -47,6 +49,7 @@ def run_command(
     *,
     cwd: Path | None = None,
     capture: bool = False,
+    merge_stderr: bool = True,
 ) -> subprocess.CompletedProcess[str]:
     actual_cwd = ROOT if cwd is None else cwd
     try:
@@ -58,7 +61,9 @@ def run_command(
             encoding="utf-8",
             errors="replace",
             stdout=subprocess.PIPE if capture else None,
-            stderr=subprocess.STDOUT if capture else None,
+            stderr=(subprocess.STDOUT if merge_stderr else subprocess.PIPE)
+            if capture
+            else None,
         )
     except FileNotFoundError as error:
         raise PushCliError(f"required command is unavailable: {error.filename}") from error
@@ -278,7 +283,6 @@ def probe_runtime() -> Runtime:
         return probe_windows_runtime()
 
     if system == "Darwin":
-        container_ready = False
         if shutil.which("container"):
             version_ok, version = optional_capture(["container", "--version"])
             list_ok, list_output = optional_capture(["container", "ls"])
@@ -288,7 +292,7 @@ def probe_runtime() -> Runtime:
                     "Apple Container lifecycle test",
                     ["bash", str(ROOT / "deploy/tests/apple-container-test.sh")],
                 )
-                container_ready = True
+                return Runtime("apple-containers", compose_required=False)
             else:
                 print(
                     "Apple Containers detected but not ready; "
@@ -304,19 +308,12 @@ def probe_runtime() -> Runtime:
         docker_ok, docker_detail = probe_docker()
         if docker_ok:
             label = "colima/docker" if colima_ready else "docker"
-            if container_ready:
-                label = f"apple-containers + {label}"
             print(f"Docker endpoint: {label} ({docker_detail})")
             return Runtime(label)
 
-        if container_ready:
-            raise PushCliError(
-                "Apple Containers passed its native check, but strict push validation "
-                "also requires a working Docker endpoint for the final Compose gate"
-            )
         raise PushCliError(
-            "no usable Docker endpoint found; install or start Colima/Docker "
-            "Desktop, then retry"
+            "Apple Containers is unavailable or not ready, and no usable Colima/"
+            "Docker Desktop endpoint was found; start one supported runtime, then retry"
         )
 
     docker_ok, docker_detail = probe_docker()
@@ -338,6 +335,81 @@ def run_step(
     result = run_command(command, cwd=cwd)
     if result.returncode != 0:
         raise PushCliError(f"{name} failed with exit code {result.returncode}")
+
+
+def run_runtime_final_gate(runtime: Runtime) -> None:
+    if not runtime.compose_required:
+        print("\n[Docker Compose final gate]")
+        print(
+            "not applicable: Apple Containers is the selected macOS runtime; "
+            "Docker image and Compose behavior remain covered by GitHub Actions"
+        )
+        return
+
+    compose_path = "deploy/docker-compose.dev.yml"
+    if runtime.compose_root:
+        compose_path = f"{runtime.compose_root}/deploy/docker-compose.dev.yml"
+    run_step(
+        "Docker Compose final gate",
+        [
+            *runtime.prefix,
+            "docker",
+            "compose",
+            "-f",
+            compose_path,
+            "config",
+            "--quiet",
+        ],
+    )
+
+
+def run_frontend_security_check() -> None:
+    command = ["pnpm", "audit", "--prod", "--audit-level=high", "--json"]
+    print("\n[Frontend production audit]")
+    print(f"$ {display(command)}")
+    result = run_command(
+        command,
+        cwd=ROOT / "frontend",
+        capture=True,
+        merge_stderr=False,
+    )
+    output = result.stdout or ""
+    if result.returncode not in (0, 1):
+        detail = (result.stderr or output).strip()
+        raise PushCliError(
+            f"Frontend production audit failed with exit code {result.returncode}"
+            + (f": {detail[-2000:]}" if detail else "")
+        )
+    try:
+        audit = json.loads(output)
+    except json.JSONDecodeError as error:
+        raise PushCliError("Frontend production audit returned invalid JSON") from error
+    if not isinstance(audit, dict) or audit.get("error"):
+        raise PushCliError("Frontend production audit returned an audit error")
+
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        suffix=".json",
+        delete=False,
+    ) as audit_file:
+        json.dump(audit, audit_file)
+        audit_path = Path(audit_file.name)
+    try:
+        run_step(
+            "Frontend audit exceptions",
+            [
+                sys.executable,
+                "tools/check_pnpm_audit_exceptions.py",
+                "--audit",
+                str(audit_path),
+                "--exceptions",
+                ".github/audit-exceptions.yml",
+            ],
+            ROOT,
+        )
+    finally:
+        audit_path.unlink(missing_ok=True)
 
 
 def run_local_checks(remote: str, branch: str, runtime: Runtime) -> None:
@@ -426,21 +498,8 @@ def run_local_checks(remote: str, branch: str, runtime: Runtime) -> None:
     for name, command, cwd in steps:
         run_step(name, command, cwd)
 
-    compose_path = "deploy/docker-compose.dev.yml"
-    if runtime.compose_root:
-        compose_path = f"{runtime.compose_root}/deploy/docker-compose.dev.yml"
-    run_step(
-        "Docker Compose final gate",
-        [
-            *runtime.prefix,
-            "docker",
-            "compose",
-            "-f",
-            compose_path,
-            "config",
-            "--quiet",
-        ],
-    )
+    run_frontend_security_check()
+    run_runtime_final_gate(runtime)
 
 
 def ensure_clean_after_checks() -> None:

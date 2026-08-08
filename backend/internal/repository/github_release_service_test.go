@@ -33,6 +33,7 @@ func (t *testTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if req.URL.RawQuery != "" {
 		testURL += "?" + req.URL.RawQuery
 	}
+	// #nosec G704 -- testURL is sourced from the local httptest.Server configured by this test.
 	newReq, err := http.NewRequestWithContext(req.Context(), req.Method, testURL, req.Body)
 	if err != nil {
 		return nil, err

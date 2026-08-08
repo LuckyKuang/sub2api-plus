@@ -217,6 +217,34 @@ func TestSettingService_AffiliateAdminRechargeSetting(t *testing.T) {
 	})
 }
 
+func TestSettingService_AsyncImageUserLimitSurvivesAdminRoundTrip(t *testing.T) {
+	readService := NewSettingService(&settingGetAllRepoStub{values: map[string]string{
+		SettingKeyAsyncImageUserImagesPerMinute: "37",
+	}}, &config.Config{})
+
+	settings, err := readService.GetAllSettings(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, 37, settings.AsyncImageUserImagesPerMinute)
+
+	writeRepo := &settingUpdateRepoStub{}
+	writeService := NewSettingService(writeRepo, &config.Config{})
+	require.NoError(t, writeService.UpdateSettings(context.Background(), settings))
+	require.Equal(t, "37", writeRepo.updates[SettingKeyAsyncImageUserImagesPerMinute])
+}
+
+func TestSettingService_MissingModelPlazaAuthStaysPrivateAfterAdminRoundTrip(t *testing.T) {
+	readService := NewSettingService(&settingGetAllRepoStub{values: map[string]string{}}, &config.Config{})
+
+	settings, err := readService.GetAllSettings(context.Background())
+	require.NoError(t, err)
+	require.True(t, settings.ModelPlazaRequireAuth)
+
+	writeRepo := &settingUpdateRepoStub{}
+	writeService := NewSettingService(writeRepo, &config.Config{})
+	require.NoError(t, writeService.UpdateSettings(context.Background(), settings))
+	require.Equal(t, "true", writeRepo.updates[SettingKeyModelPlazaRequireAuth])
+}
+
 func (s *defaultSubGroupReaderStub) GetByID(ctx context.Context, id int64) (*Group, error) {
 	s.calls = append(s.calls, id)
 	if err, ok := s.errBy[id]; ok {

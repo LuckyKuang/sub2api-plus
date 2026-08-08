@@ -190,10 +190,12 @@ func TestSecurityHeaders(t *testing.T) {
 
 		csp := w.Header().Get("Content-Security-Policy")
 		assert.NotEmpty(t, csp)
-		// Default policy should contain these elements
+		// Default policy must retain the broad image rule and permit the enabled
+		// Tencent CAPTCHA client assets.
 		assert.Contains(t, csp, "default-src 'self'")
 		assert.Contains(t, csp, "img-src 'self' data: blob: https:")
 		assert.NotContains(t, csp, "img-src 'self' data: blob: https: http:")
+		assert.Contains(t, csp, TencentCaptchaDomain)
 	})
 
 	t.Run("uses_default_policy_when_whitespace_only", func(t *testing.T) {
@@ -313,6 +315,16 @@ func TestEnhanceCSPPolicy(t *testing.T) {
 
 		count := strings.Count(enhanced, CloudflareInsightsDomain)
 		assert.Equal(t, 1, count)
+	})
+
+	t.Run("adds_tencent_captcha_domain_for_web_sdk", func(t *testing.T) {
+		policy := "default-src 'self'; script-src 'self' __CSP_NONCE__"
+		enhanced := enhanceCSPPolicy(policy)
+
+		assert.Equal(t, 1, countDirectiveValue(enhanced, "script-src", TencentCaptchaDomain))
+		assert.Equal(t, 1, countDirectiveValue(enhanced, "frame-src", TencentCaptchaDomain))
+		assert.Equal(t, 1, countDirectiveValue(enhanced, "style-src", TencentCaptchaStaticDomain))
+		assert.Contains(t, config.DefaultCSPPolicy, "style-src 'self' 'unsafe-inline' https://*.captcha.gtimg.com")
 	})
 
 	t.Run("handles_policy_without_script_src", func(t *testing.T) {

@@ -47,6 +47,16 @@ The matrix mirrors CONTRIBUTING.md, backend/Makefile, and
     pnpm --dir frontend run typecheck
     pnpm --dir frontend run test:run
     pnpm --dir frontend run build
+    pnpm --dir frontend audit --prod --audit-level=high --json
+    python tools/check_pnpm_audit_exceptions.py \
+      --audit <temporary-json> \
+      --exceptions .github/audit-exceptions.yml
+
+The checker writes audit JSON to a temporary file rather than replacing
+frontend/audit.json. A vulnerability exit status is accepted only when the
+output is valid audit JSON and every high/critical advisory has a current,
+matching exception. Audit execution errors, missing exceptions, and expired
+exceptions fail the local gate.
 
 Repository policy and deployment checks:
 
@@ -63,9 +73,19 @@ Repository policy and deployment checks:
 When origin/<current-branch> exists, run
 python3 tools/check_new_migrations.py --base origin/<current-branch>.
 
-## Docker Final Gate
+## Runtime Final Gate
 
-The checker first proves that the selected endpoint answers both:
+When Apple Containers is selected on macOS, the repository lifecycle test is
+the final runtime gate:
+
+    bash deploy/tests/apple-container-test.sh
+
+A successful lifecycle test is sufficient for local runtime validation. The
+Docker Compose gate is reported as not applicable, not passed. GitHub Actions
+remains authoritative for Docker image and Compose behavior.
+
+For Colima, Docker Desktop, WSL2 Docker, and native Linux Docker, the checker
+first proves that the selected endpoint answers both:
 
     docker info
     docker compose version
@@ -75,9 +95,9 @@ user-managed stack:
 
     docker compose -f deploy/docker-compose.dev.yml config --quiet
 
-The static deployment checks above remain required even when the Compose parser
-passes. A missing daemon, missing Compose plugin, or invalid Compose file fails
-the push gate.
+The static deployment checks above remain required for every runtime. On a
+Docker-based path, a missing daemon, missing Compose plugin, or invalid Compose
+file fails the push gate.
 
 ## Runtime Rules
 
@@ -85,12 +105,14 @@ On macOS, the order is:
 
 1. container --version and container ls;
 2. Apple Container lifecycle test;
-3. running Colima and its Docker endpoint;
-4. another directly reachable Docker endpoint.
+3. return success immediately when the Apple lifecycle test passes;
+4. when Apple Containers is absent or not ready, probe running Colima;
+5. probe another directly reachable Docker endpoint such as Docker Desktop.
 
-Apple Containers cannot satisfy the Docker endpoint requirement by themselves.
-If Apple Containers is usable but Docker is not, report the native test result
-and fail the strict push gate.
+If Apple Containers is ready but its lifecycle test fails, stop without falling
+back to Colima or Docker Desktop. Falling back would hide a regression in a
+supported deployment path. If Apple Containers is absent or not ready, fallback
+is allowed. Never start a user-managed runtime implicitly.
 
 On Windows, use a running WSL2 Linux distribution and execute Docker commands
 inside it. Use wslpath to translate the repository path before Compose parsing.

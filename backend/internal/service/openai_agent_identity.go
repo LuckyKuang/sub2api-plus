@@ -173,11 +173,7 @@ func decryptAgentTaskID(key agentIdentityKey, encoded string) (string, error) {
 }
 
 func registerAgentIdentityTask(ctx context.Context, account *Account) (string, error) {
-	accountUA := ""
-	if account != nil {
-		accountUA = account.GetOpenAIUserAgent()
-	}
-	return registerAgentIdentityTaskWithIdentity(ctx, account, resolveOpenAIOutboundIdentityCandidates(accountUA, ""))
+	return registerAgentIdentityTaskWithIdentity(ctx, account, resolveOpenAIOutboundIdentityFromSettings(ctx, account, nil))
 }
 
 func registerAgentIdentityTaskWithIdentity(ctx context.Context, account *Account, identity openAIOutboundIdentity) (string, error) {
@@ -245,11 +241,7 @@ func registerAgentIdentityTaskWithIdentity(ctx context.Context, account *Account
 }
 
 func ensureAgentIdentityTaskForAccount(ctx context.Context, repo AccountRepository, wsInvalidator agentIdentityWSConnectionInvalidator, taskMu *sync.Mutex, account *Account, expectedTaskID string) error {
-	accountUA := ""
-	if account != nil {
-		accountUA = account.GetOpenAIUserAgent()
-	}
-	return ensureAgentIdentityTaskForAccountWithIdentity(ctx, repo, wsInvalidator, taskMu, account, expectedTaskID, resolveOpenAIOutboundIdentityCandidates(accountUA, ""))
+	return ensureAgentIdentityTaskForAccountWithIdentity(ctx, repo, wsInvalidator, taskMu, account, expectedTaskID, resolveOpenAIOutboundIdentityFromSettings(ctx, account, nil))
 }
 
 func ensureAgentIdentityTaskForAccountWithIdentity(ctx context.Context, repo AccountRepository, wsInvalidator agentIdentityWSConnectionInvalidator, taskMu *sync.Mutex, account *Account, expectedTaskID string, identity openAIOutboundIdentity) error {

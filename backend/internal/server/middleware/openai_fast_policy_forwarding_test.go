@@ -176,12 +176,16 @@ func (r *openAIFastPolicyForwardingSettingRepo) GetValue(context.Context, string
 	return r.value, nil
 }
 
+func (r *openAIFastPolicyForwardingSettingRepo) GetMultiple(context.Context, []string) (map[string]string, error) {
+	return map[string]string{}, nil
+}
+
 type openAIFastPolicyForwardingHTTPUpstream struct {
 	client *http.Client
 }
 
 func (u *openAIFastPolicyForwardingHTTPUpstream) Do(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
-	return u.client.Do(req)
+	return u.client.Do(req) //nolint:gosec // Test adapter only forwards requests to its local httptest upstream.
 }
 
 func (u *openAIFastPolicyForwardingHTTPUpstream) DoWithTLS(req *http.Request, proxyURL string, accountID int64, accountConcurrency int, _ *tlsfingerprint.Profile) (*http.Response, error) {

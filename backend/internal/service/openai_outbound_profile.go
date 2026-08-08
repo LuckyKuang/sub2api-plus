@@ -20,6 +20,30 @@ type openAIOutboundIdentity struct {
 	Version    string
 }
 
+// resolveOpenAIOutboundIdentityFromSettings is the single authority for
+// selecting a trusted OpenAI Codex outbound identity. A valid account-level
+// identity wins over a valid system identity; an empty or invalid candidate
+// falls through to the compiled-in default. The selected fingerprint keeps its
+// client name and platform details, while the effective version is synchronized
+// from the setting service so User-Agent, Originator, and Version agree.
+//
+// gateway.force_codex_cli is intentionally absent here. It is an inbound
+// request-classification switch, not an administrator override for an account's
+// configured outbound client identity.
+func resolveOpenAIOutboundIdentityFromSettings(ctx context.Context, account *Account, settingService *SettingService) openAIOutboundIdentity {
+	accountUA := ""
+	if account != nil {
+		accountUA = account.GetOpenAIUserAgent()
+	}
+	systemUA := ""
+	version := codexCLIVersion
+	if settingService != nil {
+		systemUA = settingService.GetOpenAICodexUserAgent(ctx)
+		version = settingService.GetOpenAICodexClientVersion(ctx)
+	}
+	return resolveOpenAIOutboundIdentityWithVersion(accountUA, systemUA, version)
+}
+
 // resolveOpenAIOutboundIdentity uses the account-specific Codex UA when it is
 // valid, then the system setting, and finally the compiled-in default. A value
 // is only valid when it can be paired with an official Codex originator.
@@ -33,15 +57,11 @@ func (s *OpenAIGatewayService) resolveOpenAIOutboundIdentity(ctx context.Context
 			account = credentialAccount
 		}
 	}
-	systemUA := ""
-	if s != nil && s.settingService != nil {
-		systemUA = s.settingService.GetOpenAICodexUserAgent(ctx)
+	var settingService *SettingService
+	if s != nil {
+		settingService = s.settingService
 	}
-	accountUA := ""
-	if account != nil {
-		accountUA = account.GetOpenAIUserAgent()
-	}
-	return resolveOpenAIOutboundIdentityCandidates(accountUA, systemUA)
+	return resolveOpenAIOutboundIdentityFromSettings(ctx, account, settingService)
 }
 
 // NormalizeOpenAIAccountUserAgent validates and canonicalizes the optional
@@ -106,7 +126,24 @@ func resolveOpenAIOutboundIdentityCandidates(accountUA, systemUA string) openAIO
 	// DefaultOpenAICodexUserAgent is a compile-time invariant covered by tests.
 	// Keep this defensive return aligned with the normal default rather than
 	// introducing a second, unreachable built-in identity.
-	return openAIOutboundIdentity{UserAgent: DefaultOpenAICodexUserAgent, Originator: codexDefaultOriginator, Version: codexCLIVersion}
+	return openAIOutboundIdentity{UserAgent: DefaultOpenAICodexUserAgent, Originator: openai.CodexCLIOriginator, Version: DefaultOpenAICodexVersion}
+}
+
+// resolveOpenAIOutboundIdentityWithVersion applies the configured Codex
+// version only after choosing the account, global, or built-in identity. The
+// selected source still owns the client fingerprint, while the User-Agent and
+// Version header stay synchronized for upstream overload handling.
+func resolveOpenAIOutboundIdentityWithVersion(accountUA, systemUA, configuredVersion string) openAIOutboundIdentity {
+	identity := resolveOpenAIOutboundIdentityCandidates(accountUA, systemUA)
+	version := NormalizeCodexClientVersion(configuredVersion)
+	if version == "" || CompareVersions(version, codexUpstreamMinVersion) < 0 {
+		version = codexCLIVersion
+	}
+	if userAgent := openai.SetCodexUserAgentVersion(identity.UserAgent, version); userAgent != "" {
+		identity.UserAgent = userAgent
+		identity.Version = version
+	}
+	return identity
 }
 
 func validOpenAIOutboundIdentity(userAgent string) (openAIOutboundIdentity, bool) {

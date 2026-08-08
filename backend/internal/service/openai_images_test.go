@@ -822,7 +822,8 @@ func TestOpenAIGatewayServiceForwardImages_OAuthPassesNAndReturnsAllImages(t *te
 	require.Equal(t, "acct-123", upstream.lastReq.Header.Get("chatgpt-account-id"))
 	require.Equal(t, "responses=experimental", upstream.lastReq.Header.Get("OpenAI-Beta"))
 	require.Equal(t, DefaultOpenAICodexUserAgent, upstream.lastReq.Header.Get("User-Agent"))
-	require.Equal(t, "codex-tui", upstream.lastReq.Header.Get("originator"))
+	require.Equal(t, "codex_cli_rs", upstream.lastReq.Header.Get("originator"))
+	require.Equal(t, DefaultOpenAICodexVersion, upstream.lastReq.Header.Get("version"))
 
 	require.Equal(t, openAIImagesResponsesMainModel, gjson.GetBytes(upstream.lastBody, "model").String())
 	require.True(t, gjson.GetBytes(upstream.lastBody, "stream").Bool())
@@ -1238,6 +1239,7 @@ func TestOpenAIGatewayServiceForwardImages_APIKeyGenerationUsesConfiguredV1BaseU
 func TestOpenAIGatewayServiceBuildOpenAIImagesRequest_UsesConfiguredCodexUserAgent(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	const configuredUA = "codex-tui/9.9.9 (Mac OS X 14.0; arm64) iTerm (codex-tui; 9.9.9)"
+	const wantUserAgent = "codex-tui/" + codexCLIVersion + " (Mac OS X 14.0; arm64) iTerm (codex-tui; " + codexCLIVersion + ")"
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/images/generations", strings.NewReader(`{"model":"gpt-image-2"}`))
 	req.Header.Set("User-Agent", "Mozilla/5.0 private-browser")
@@ -1264,12 +1266,13 @@ func TestOpenAIGatewayServiceBuildOpenAIImagesRequest_UsesConfiguredCodexUserAge
 
 	upstreamReq, err := svc.buildOpenAIImagesRequest(context.Background(), c, account, []byte(`{"model":"gpt-image-2"}`), "application/json", "test-api-key", openAIImagesGenerationsEndpoint)
 	require.NoError(t, err)
-	require.Equal(t, configuredUA, upstreamReq.Header.Get("User-Agent"))
+	require.Equal(t, wantUserAgent, upstreamReq.Header.Get("User-Agent"))
 }
 
 func TestOpenAIGatewayServiceApplyOpenAIImageUserAgent_OAuthPairsConfiguredIdentity(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	const configuredUA = "codex-tui/9.9.9 (Mac OS X 14.0; arm64) iTerm (codex-tui; 9.9.9)"
+	const wantUserAgent = "codex-tui/" + codexCLIVersion + " (Mac OS X 14.0; arm64) iTerm (codex-tui; " + codexCLIVersion + ")"
 
 	svc := &OpenAIGatewayService{
 		settingService: NewSettingService(&openAIImageSettingRepoStub{values: map[string]string{
@@ -1283,9 +1286,9 @@ func TestOpenAIGatewayServiceApplyOpenAIImageUserAgent_OAuthPairsConfiguredIdent
 
 	svc.applyOpenAIImageUserAgent(context.Background(), &Account{Type: AccountTypeOAuth}, headers)
 
-	require.Equal(t, configuredUA, headers.Get("User-Agent"))
+	require.Equal(t, wantUserAgent, headers.Get("User-Agent"))
 	require.Equal(t, "codex-tui", headers.Get("originator"))
-	require.Equal(t, "9.9.9", headers.Get("version"))
+	require.Equal(t, codexCLIVersion, headers.Get("version"))
 }
 
 func TestDownloadOpenAIImageBytes_UsesCodexUserAgentFallback(t *testing.T) {

@@ -33,10 +33,13 @@ func buildSessionKey(groupID int64, sessionHash string) string {
 func (c *gatewayCache) GetSessionAccountID(ctx context.Context, groupID int64, sessionHash string) (int64, error) {
 	key := buildSessionKey(groupID, sessionHash)
 	accountID, err := c.rdb.Get(ctx, key).Int64()
-	if errors.Is(err, redis.Nil) {
-		return 0, service.ErrGatewayCacheMiss
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return 0, service.ErrStickySessionNotFound
+		}
+		return 0, err
 	}
-	return accountID, err
+	return accountID, nil
 }
 
 func (c *gatewayCache) SetSessionAccountID(ctx context.Context, groupID int64, sessionHash string, accountID int64, ttl time.Duration) error {

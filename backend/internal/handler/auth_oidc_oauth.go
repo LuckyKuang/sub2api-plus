@@ -115,6 +115,9 @@ type oidcJWK struct {
 // OIDCOAuthStart 启动通用 OIDC OAuth 登录流程。
 // GET /api/v1/auth/oauth/oidc/start?redirect=/dashboard
 func (h *AuthHandler) OIDCOAuthStart(c *gin.Context) {
+	if !h.requireActionCaptchaForOAuthLoginStart(c) {
+		return
+	}
 	cfg, err := h.getOIDCOAuthConfig(c.Request.Context())
 	if err != nil {
 		response.ErrorFrom(c, err)
@@ -190,7 +193,7 @@ func (h *AuthHandler) OIDCOAuthStart(c *gin.Context) {
 		return
 	}
 
-	c.Redirect(http.StatusFound, authURL)
+	respondOAuthStart(c, authURL)
 }
 
 // OIDCOAuthCallback 处理 OIDC 回调：校验 id_token、创建/登录用户并重定向到前端。
@@ -1143,10 +1146,19 @@ func (k oidcJWK) publicKey() (any, error) {
 		if err != nil {
 			return nil, fmt.Errorf("decode ec y: %w", err)
 		}
-		if !curve.IsOnCurve(x, y) {
-			return nil, errors.New("ec point is not on curve")
+		coordinateSize := (curve.Params().BitSize + 7) / 8
+		if x.BitLen() > curve.Params().BitSize || y.BitLen() > curve.Params().BitSize {
+			return nil, errors.New("ec coordinate exceeds curve size")
 		}
-		return &ecdsa.PublicKey{Curve: curve, X: x, Y: y}, nil
+		encoded := make([]byte, 1+2*coordinateSize)
+		encoded[0] = 4
+		x.FillBytes(encoded[1 : 1+coordinateSize])
+		y.FillBytes(encoded[1+coordinateSize:])
+		publicKey, err := ecdsa.ParseUncompressedPublicKey(curve, encoded)
+		if err != nil {
+			return nil, fmt.Errorf("parse ec public key: %w", err)
+		}
+		return publicKey, nil
 	default:
 		return nil, fmt.Errorf("unsupported jwk kty: %s", k.Kty)
 	}
