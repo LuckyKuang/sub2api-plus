@@ -36,6 +36,7 @@ class Runtime:
     name: str
     prefix: tuple[str, ...] = ()
     compose_root: str | None = None
+    compose_required: bool = True
 
 
 def display(command: Sequence[str]) -> str:
@@ -278,7 +279,6 @@ def probe_runtime() -> Runtime:
         return probe_windows_runtime()
 
     if system == "Darwin":
-        container_ready = False
         if shutil.which("container"):
             version_ok, version = optional_capture(["container", "--version"])
             list_ok, list_output = optional_capture(["container", "ls"])
@@ -288,7 +288,7 @@ def probe_runtime() -> Runtime:
                     "Apple Container lifecycle test",
                     ["bash", str(ROOT / "deploy/tests/apple-container-test.sh")],
                 )
-                container_ready = True
+                return Runtime("apple-containers", compose_required=False)
             else:
                 print(
                     "Apple Containers detected but not ready; "
@@ -304,19 +304,12 @@ def probe_runtime() -> Runtime:
         docker_ok, docker_detail = probe_docker()
         if docker_ok:
             label = "colima/docker" if colima_ready else "docker"
-            if container_ready:
-                label = f"apple-containers + {label}"
             print(f"Docker endpoint: {label} ({docker_detail})")
             return Runtime(label)
 
-        if container_ready:
-            raise PushCliError(
-                "Apple Containers passed its native check, but strict push validation "
-                "also requires a working Docker endpoint for the final Compose gate"
-            )
         raise PushCliError(
-            "no usable Docker endpoint found; install or start Colima/Docker "
-            "Desktop, then retry"
+            "Apple Containers is unavailable or not ready, and no usable Colima/"
+            "Docker Desktop endpoint was found; start one supported runtime, then retry"
         )
 
     docker_ok, docker_detail = probe_docker()
@@ -338,6 +331,32 @@ def run_step(
     result = run_command(command, cwd=cwd)
     if result.returncode != 0:
         raise PushCliError(f"{name} failed with exit code {result.returncode}")
+
+
+def run_runtime_final_gate(runtime: Runtime) -> None:
+    if not runtime.compose_required:
+        print("\n[Docker Compose final gate]")
+        print(
+            "not applicable: Apple Containers is the selected macOS runtime; "
+            "Docker image and Compose behavior remain covered by GitHub Actions"
+        )
+        return
+
+    compose_path = "deploy/docker-compose.dev.yml"
+    if runtime.compose_root:
+        compose_path = f"{runtime.compose_root}/deploy/docker-compose.dev.yml"
+    run_step(
+        "Docker Compose final gate",
+        [
+            *runtime.prefix,
+            "docker",
+            "compose",
+            "-f",
+            compose_path,
+            "config",
+            "--quiet",
+        ],
+    )
 
 
 def run_local_checks(remote: str, branch: str, runtime: Runtime) -> None:
@@ -426,21 +445,7 @@ def run_local_checks(remote: str, branch: str, runtime: Runtime) -> None:
     for name, command, cwd in steps:
         run_step(name, command, cwd)
 
-    compose_path = "deploy/docker-compose.dev.yml"
-    if runtime.compose_root:
-        compose_path = f"{runtime.compose_root}/deploy/docker-compose.dev.yml"
-    run_step(
-        "Docker Compose final gate",
-        [
-            *runtime.prefix,
-            "docker",
-            "compose",
-            "-f",
-            compose_path,
-            "config",
-            "--quiet",
-        ],
-    )
+    run_runtime_final_gate(runtime)
 
 
 def ensure_clean_after_checks() -> None:

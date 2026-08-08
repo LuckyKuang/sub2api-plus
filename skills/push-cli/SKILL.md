@@ -1,6 +1,6 @@
 ---
 name: push-cli
-description: Safely validate and push Sub2API Plus branch commits. Use when the user asks to push code, publish the current branch to GitHub, or verify local CI readiness before a push. Require an installed and authenticated GitHub CLI, run the repository's strict Go, frontend, documentation, deployment, and container checks, select Apple Containers/Colima/WSL2 Docker by host platform, push only after every check passes, and monitor the resulting GitHub Actions run.
+description: Safely validate and push Sub2API Plus branch commits. Use when the user asks to push code, publish the current branch to GitHub, or verify local CI readiness before a push. Require an installed and authenticated GitHub CLI, run the repository's strict Go, frontend, documentation, deployment, and container checks, use Apple Containers as the self-sufficient primary macOS runtime with Colima/Docker fallback, use WSL2 Docker on Windows, push only after every check passes, and monitor the resulting GitHub Actions run.
 ---
 
 # Push CLI
@@ -17,8 +17,8 @@ To monitor a push after a terminal disconnect or an interrupted local session:
 
     python3 skills/push-cli/scripts/push_cli.py watch
 
-The checker is intentionally strict. It does not provide a skip-Docker, skip-test,
-or unauthenticated fallback mode.
+The checker is intentionally strict. It does not provide a skip-runtime,
+skip-test, or unauthenticated fallback mode.
 
 ## Mandatory GitHub CLI Gate
 
@@ -45,7 +45,7 @@ actual branch transfer because gh does not replace git push.
 2. Require a non-detached branch and a clean worktree. Commit local changes first.
 3. Resolve the declared Go, Node.js, pnpm, and golangci-lint versions.
 4. Probe the host container runtime using the platform rules below.
-5. Run all local checks and the Docker final gate.
+5. Run all local checks and the selected runtime's final gate.
 6. Re-check the worktree. A generated or unexpected file is a failure, not an
    invitation to push it.
 7. For push, run gh auth setup-git, then push exactly
@@ -62,14 +62,16 @@ performs the GitHub CLI gate and remote monitoring for the current branch SHA.
 
 ### macOS
 
-Probe Apple container first. When its CLI and runtime are ready, run the
-repository Apple Container lifecycle test. Apple Containers are not a Docker API
-endpoint, so strict push validation still requires a working Docker endpoint for
-the final Compose gate.
+Probe Apple Containers first. When its CLI and runtime are ready, run the
+repository Apple Container lifecycle test. A passing lifecycle test satisfies
+the macOS runtime gate without Docker, Colima, or Docker Compose. If that test
+fails, stop immediately; do not hide an Apple deployment regression by falling
+back to another runtime.
 
-Probe Colima next. When Colima is running, use its Docker endpoint. If Colima is
-not available, accept another directly reachable Docker endpoint such as Docker
-Desktop. If no Docker endpoint is ready, stop and report the exact missing
+When Apple Containers is absent or not ready, probe Colima next and use its
+Docker endpoint. If Colima is not available, accept another directly reachable
+Docker endpoint such as Docker Desktop. Docker-based paths must pass the Compose
+final gate. If no supported runtime is ready, stop and report the exact missing
 runtime. Do not start or stop Apple Containers, Colima, Docker Desktop, or any
 user-managed stack implicitly.
 
@@ -96,7 +98,12 @@ The bundled checker uses commands already defined by the repository:
   checks when a comparable remote branch exists.
 - Installer syntax, Docker Compose security, Docker runtime resources, and Caddy
   cache policy tests.
-- Docker Compose configuration parsing through the selected Docker endpoint.
+- The full Apple Container lifecycle test when Apple Containers is selected.
+- Docker Compose configuration parsing when a Docker-based runtime is selected.
+
+The Apple Containers path reports the Docker Compose final gate as not
+applicable. It must not report that Compose passed. GitHub Actions remains the
+authoritative Docker image and Compose validation for that path.
 
 Do not replace these commands with ad hoc equivalents or silently downgrade
 tool versions. Local success reduces preventable CI failures but cannot guarantee
