@@ -547,6 +547,36 @@ func TestSettingService_ParseSettingsDefaultsOpenAIOAuthSchedulingRateMultiplier
 	require.Equal(t, 0.05, svc.parseSettings(map[string]string{SettingKeyOpenAIOAuthSchedulingRateMultiplier: "0.05"}).OpenAIOAuthSchedulingRateMultiplier)
 }
 
+func TestSettingService_ParseSettingsGrokCrossClientModelMapRequiresExplicitTrue(t *testing.T) {
+	svc := NewSettingService(&settingUpdateRepoStub{}, &config.Config{})
+
+	tests := []struct {
+		name  string
+		value *string
+		want  bool
+	}{
+		{name: "missing", want: false},
+		{name: "empty", value: stringPointer(""), want: false},
+		{name: "invalid", value: stringPointer("yes"), want: false},
+		{name: "explicit false", value: stringPointer("false"), want: false},
+		{name: "explicit true", value: stringPointer("true"), want: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stored := map[string]string{}
+			if tt.value != nil {
+				stored[SettingKeyGrokCrossClientModelMapEnabled] = *tt.value
+			}
+			require.Equal(t, tt.want, svc.parseSettings(stored).GrokCrossClientModelMapEnabled)
+		})
+	}
+}
+
+func stringPointer(value string) *string {
+	return &value
+}
+
 func TestSettingService_GetAllSettings_OpenAIAdvancedSchedulerEffectiveValuesUseConfig(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.Gateway.OpenAIWS.LBTopK = 13

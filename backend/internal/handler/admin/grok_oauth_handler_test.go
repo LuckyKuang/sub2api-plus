@@ -13,7 +13,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/LuckyKuang/sub2api-plus/internal/config"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
@@ -214,13 +213,6 @@ func (c *grokOAuthHandlerClient) RefreshToken(context.Context, string, string, s
 	return &xai.TokenResponse{AccessToken: "access-token", RefreshToken: "refresh-token", ExpiresIn: 3600}, nil
 }
 
-func (c *grokOAuthHandlerClient) LoginWithPassword(_ context.Context, email, _ string, _ string) (*service.GrokPasswordLoginResult, error) {
-	return &service.GrokPasswordLoginResult{
-		Email:    email,
-		SSOToken: "sso-from-password",
-	}, nil
-}
-
 func (c *grokOAuthHandlerClient) ConvertSSOToBuild(context.Context, string, string) (*xai.TokenResponse, error) {
 	return &xai.TokenResponse{AccessToken: "access-token", RefreshToken: "refresh-token", ExpiresIn: 3600}, nil
 }
@@ -245,26 +237,29 @@ func TestGrokOAuthHandlerValidateSSOTokenReturnsTokenInfo(t *testing.T) {
 	require.NotContains(t, rec.Body.String(), `"sso_token"`)
 }
 
-func TestGrokOAuthHandlerAuthorizePasswordReturnsTokenInfoWithoutPassword(t *testing.T) {
+func TestGrokOAuthHandlerAuthorizePasswordRemainsDisabled(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	oauthClient := &grokOAuthHandlerClient{}
-	cfg := &config.Config{}
-	cfg.Gateway.Grok.PasswordAuthEnabled = true
-	oauthService := service.NewGrokOAuthService(nil, oauthClient, cfg)
+	oauthService := service.NewGrokOAuthService(nil, oauthClient)
 	defer oauthService.Stop()
 	handler := NewGrokOAuthHandler(oauthService, nil, nil, nil)
 
 	router := gin.New()
 	router.POST("/api/v1/admin/grok/oauth/password", handler.AuthorizePassword)
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/grok/oauth/password", strings.NewReader(`{"email":"user@example.com","password":"super-secret"}`))
-	req.Header.Set("Content-Type", "application/json")
-	router.ServeHTTP(rec, req)
+	for _, body := range []string{
+		`{"email":"user@example.com","password":"super-secret"}`,
+		`{`,
+	} {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/grok/oauth/password", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		router.ServeHTTP(rec, req)
 
-	require.Equal(t, http.StatusOK, rec.Code)
-	require.Contains(t, rec.Body.String(), `"access_token":"access-token"`)
-	require.NotContains(t, rec.Body.String(), "super-secret")
+		require.Equal(t, http.StatusForbidden, rec.Code)
+		require.Contains(t, rec.Body.String(), "GROK_OAUTH_PASSWORD_AUTH_DISABLED")
+		require.NotContains(t, rec.Body.String(), "super-secret")
+	}
 }
 
 func TestGrokOAuthHandlerPasswordCapabilityDefaultsToDisabled(t *testing.T) {

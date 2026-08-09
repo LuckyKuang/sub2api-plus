@@ -3,9 +3,9 @@ package routes
 
 import (
 	"github.com/LuckyKuang/sub2api-plus/internal/handler"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/response"
 	"github.com/LuckyKuang/sub2api-plus/internal/server/middleware"
 	"github.com/LuckyKuang/sub2api-plus/internal/service"
-	"github.com/LuckyKuang/sub2api-plus/internal/pkg/response"
 
 	"github.com/gin-gonic/gin"
 )

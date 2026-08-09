@@ -89,7 +89,6 @@ type APIKeyAuthGroupSnapshot struct {
 	FallbackGroupID                 *int64                        `json:"fallback_group_id,omitempty"`
 	FallbackGroupIDOnInvalidRequest *int64                        `json:"fallback_group_id_on_invalid_request,omitempty"`
 
-
 	// Model routing is used by gateway account selection, so it must be part of auth cache snapshot.
 	// Only anthropic groups use these fields; others may leave them empty.
 	ModelRouting        map[string][]int64 `json:"model_routing,omitempty"`

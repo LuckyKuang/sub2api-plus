@@ -2511,6 +2511,112 @@ func TestForwardAsAnthropicForGrokUsesXAIResponses(t *testing.T) {
 	require.Contains(t, recorder.Body.String(), "ok")
 }
 
+func TestForwardAsAnthropicForGrokUsesConfiguredDefaultBaseURL(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	body := []byte(`{
+		"model":"grok","max_tokens":32,"stream":false,
+		"messages":[
+			{"role":"user","content":"hi"},
+			{"role":"assistant","content":[{"type":"thinking","thinking":"plan","signature":"encrypted-reasoning"},{"type":"text","text":"draft"}]},
+			{"role":"user","content":"continue"}
+		]
+	}`)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", bytes.NewReader(body))
+	c.Set("api_key", &APIKey{ID: 5404})
+
+	account := healthyGrokOAuthGatewayTestAccount(60, "access-token")
+	delete(account.Credentials, "base_url")
+	repo := &grokQuotaAccountRepo{
+		mockAccountRepoForPlatform: &mockAccountRepoForPlatform{
+			accountsByID: map[int64]*Account{60: account},
+		},
+	}
+	settingRepo := &grokBaseURLSettingRepoStub{values: map[string]string{
+		SettingKeyGrokDefaultBaseURLMode: GrokDefaultBaseURLModeUSWest2,
+	}}
+	upstream := &httpUpstreamRecorder{responses: []*http.Response{
+		{
+			StatusCode: http.StatusBadRequest,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"code":"invalid-argument","error":"Could not decrypt the provided encrypted_content."}`)),
+		},
+		grokMessagesSSECompletedResponse("resp_grok_regional", 1),
+	}}
+	svc := &OpenAIGatewayService{
+		httpUpstream:      upstream,
+		grokTokenProvider: NewGrokTokenProvider(repo, nil),
+		accountRepo:       repo,
+		settingService:    NewSettingService(settingRepo, nil),
+	}
+
+	result, err := svc.ForwardAsAnthropic(context.Background(), c, account, body, "", "")
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, upstream.requests, 2)
+	for _, request := range upstream.requests {
+		require.Equal(t, xai.DefaultUSWest2BaseURL+"/responses", request.URL.String())
+	}
+	require.True(t, gjson.GetBytes(upstream.bodies[0], "input.1.encrypted_content").Exists())
+	require.False(t, gjson.GetBytes(upstream.bodies[1], "input.1.encrypted_content").Exists())
+}
+
+func TestForwardGrokResponses_StreamErrorPreservesPartialResult(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	body := []byte(`{"model":"grok","stream":true,"input":"hi"}`)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
+	c.Set("api_key", &APIKey{ID: 5405})
+	c.Writer = &failingGinWriter{ResponseWriter: c.Writer, failAfter: 1}
+
+	account := healthyGrokOAuthGatewayTestAccount(61, "access-token")
+	repo := &grokQuotaAccountRepo{
+		mockAccountRepoForPlatform: &mockAccountRepoForPlatform{
+			accountsByID: map[int64]*Account{61: account},
+		},
+	}
+	upstreamSSE := strings.Join([]string{
+		`data: {"type":"response.output_text.delta","delta":"h"}`,
+		"",
+		`data: {"type":"response.completed","response":{"id":"resp_grok_partial","model":"grok-4.5","usage":{"input_tokens":9,"output_tokens":4,"input_tokens_details":{"cached_tokens":2}}}}`,
+		"",
+		"data: [DONE]",
+		"",
+	}, "\n")
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusOK,
+		Header: http.Header{
+			"Content-Type":   []string{"text/event-stream"},
+			"Xai-Request-Id": []string{"xai-rid-partial"},
+		},
+		Body: io.NopCloser(strings.NewReader(upstreamSSE)),
+	}}
+	svc := &OpenAIGatewayService{
+		httpUpstream:      upstream,
+		grokTokenProvider: NewGrokTokenProvider(repo, nil),
+		accountRepo:       repo,
+	}
+
+	result, err := svc.forwardGrokResponses(context.Background(), c, account, body, "grok", true, time.Now())
+
+	require.EqualError(t, err, "stream usage incomplete: client disconnected")
+	require.NotNil(t, result, "Grok stream errors after observable output must preserve the partial result")
+	require.Equal(t, "xai-rid-partial", result.RequestID)
+	require.Equal(t, "resp_grok_partial", result.ResponseID)
+	require.Equal(t, 9, result.Usage.InputTokens)
+	require.Equal(t, 4, result.Usage.OutputTokens)
+	require.Equal(t, 2, result.Usage.CacheReadInputTokens)
+	require.NotNil(t, result.FirstTokenMs)
+	require.NotNil(t, result.FirstOutputMs)
+	require.Equal(t, "text", result.FirstOutputKind)
+	require.True(t, result.ClientDisconnect)
+}
+
 func TestForwardAsAnthropicForGrokFunctionToolUsesCacheCapableMixedRoute(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

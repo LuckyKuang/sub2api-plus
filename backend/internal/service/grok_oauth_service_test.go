@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/LuckyKuang/sub2api-plus/internal/config"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/xai"
 	"github.com/stretchr/testify/require"
 )
@@ -17,9 +16,6 @@ import (
 type grokOAuthClientStub struct {
 	refreshResponse     *xai.TokenResponse
 	ssoResponse         *xai.TokenResponse
-	loginResult         *GrokPasswordLoginResult
-	loginEmail          string
-	loginPassword       string
 	exchangeCalls       int
 	exchangeRedirectURI string
 }
@@ -32,12 +28,6 @@ func (s *grokOAuthClientStub) ExchangeCode(_ context.Context, _, _, redirectURI,
 
 func (s *grokOAuthClientStub) RefreshToken(context.Context, string, string, string) (*xai.TokenResponse, error) {
 	return s.refreshResponse, nil
-}
-
-func (s *grokOAuthClientStub) LoginWithPassword(_ context.Context, email, password, _ string) (*GrokPasswordLoginResult, error) {
-	s.loginEmail = email
-	s.loginPassword = password
-	return s.loginResult, nil
 }
 
 func (s *grokOAuthClientStub) ConvertSSOToBuild(context.Context, string, string) (*xai.TokenResponse, error) {
@@ -239,33 +229,14 @@ func TestGrokOAuthServiceValidateSSOTokenReturnsOAuthTokensWithoutPersistingSSO(
 	require.NotContains(t, creds, "password")
 }
 
-func TestGrokOAuthServiceAuthorizePasswordUsesLoginThenSSOAuthorize(t *testing.T) {
-	client := &grokOAuthClientStub{
-		loginResult: &GrokPasswordLoginResult{
-			Email:    "user@example.com",
-			SSOToken: "password-derived-sso",
-		},
-		ssoResponse: &xai.TokenResponse{
-			AccessToken:  "access-from-password",
-			RefreshToken: "refresh-from-password",
-			ExpiresIn:    3600,
-		},
-	}
-	cfg := &config.Config{}
-	cfg.Gateway.Grok.PasswordAuthEnabled = true
-	svc := NewGrokOAuthService(nil, client, cfg)
+func TestGrokOAuthServiceAuthorizePasswordAlwaysDisabled(t *testing.T) {
+	svc := NewGrokOAuthService(nil, nil)
 	defer svc.Stop()
 
-	require.True(t, svc.GetCapabilities().PasswordAuthEnabled)
-	info, err := svc.AuthorizePassword(context.Background(), " user@example.com ", "  super-secret  ", nil)
-	require.NoError(t, err)
-	require.Equal(t, "user@example.com", info.Email)
-	require.Equal(t, "access-from-password", info.AccessToken)
-	creds := svc.BuildAccountCredentials(info)
-	require.NotContains(t, creds, "password")
-	require.NotContains(t, creds, "sso_token")
-	require.Equal(t, "user@example.com", client.loginEmail)
-	require.Equal(t, "  super-secret  ", client.loginPassword)
+	require.False(t, svc.GetCapabilities().PasswordAuthEnabled)
+	_, err := svc.AuthorizePassword(context.Background(), " user@example.com ", "  super-secret  ", nil)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "GROK_OAUTH_PASSWORD_AUTH_DISABLED")
 }
 
 func TestGrokOAuthServiceAuthorizePasswordDisabledByDefault(t *testing.T) {
@@ -277,7 +248,6 @@ func TestGrokOAuthServiceAuthorizePasswordDisabledByDefault(t *testing.T) {
 	_, err := svc.AuthorizePassword(context.Background(), "user@example.com", "secret", nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "GROK_OAUTH_PASSWORD_AUTH_DISABLED")
-	require.Empty(t, client.loginEmail)
 }
 
 func makeGrokOAuthJWT(claims map[string]any) string {

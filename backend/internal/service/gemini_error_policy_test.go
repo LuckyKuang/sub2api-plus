@@ -3,9 +3,12 @@
 package service
 
 import (
+	"bytes"
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -586,6 +589,48 @@ func TestHandleGeminiUpstreamError_PoolMode429(t *testing.T) {
 			require.True(t, repo.lastRateLimitReset.After(time.Now()))
 		})
 	}
+}
+
+func TestGeminiForwardAsChatCompletions_PoolModeSkippedDoesNotMutateAccountState(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	repo := &geminiErrorPolicyRepo{}
+	upstream := &geminiCompatHTTPUpstreamStub{response: &http.Response{
+		StatusCode: http.StatusUnauthorized,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(`{"error":{"message":"invalid upstream credential"}}`)),
+	}}
+	svc := &GeminiMessagesCompatService{
+		accountRepo:      repo,
+		rateLimitService: NewRateLimitService(repo, nil, &config.Config{}, nil, nil),
+		httpUpstream:     upstream,
+		cfg:              &config.Config{},
+	}
+	account := &Account{
+		ID:          605,
+		Platform:    PlatformGemini,
+		Type:        AccountTypeAPIKey,
+		Concurrency: 1,
+		Credentials: map[string]any{
+			"api_key":   "gemini-api-key",
+			"pool_mode": true,
+		},
+	}
+	body := []byte(`{"model":"gemini-2.5-flash","messages":[{"role":"user","content":"hi"}]}`)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
+
+	result, err := svc.ForwardAsChatCompletions(context.Background(), c, account, body)
+
+	require.Nil(t, result)
+	var failoverErr *UpstreamFailoverError
+	require.ErrorAs(t, err, &failoverErr)
+	require.Equal(t, http.StatusUnauthorized, failoverErr.StatusCode)
+	require.Zero(t, repo.setErrorCalls, "ErrorPolicySkipped must not disable a pool-mode account")
+	require.Zero(t, repo.setTempCalls)
+	require.Zero(t, repo.setRateLimitedCalls)
+	require.Zero(t, repo.setModelRateLimitedCalls)
 }
 
 type geminiErrorPolicyRepo struct {

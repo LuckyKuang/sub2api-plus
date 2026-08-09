@@ -16,11 +16,20 @@ Sub2API Plus v0.1.173+custom.001
   published Plus `187`–`201`).
 - Channel monitor mode defaults remain fail-safe for active probes (`v1`) when
   unset; V2 is explicit opt-in (see `docs/channel-monitor-v2-safe-defaults.md`).
-- Grok cross-client model mapping is off by default; Grok password login remains
-  hard-disabled server-side.
+- Grok cross-client model mapping is off by default (strict opt-in; missing key
+  does not enable silent gpt/claude→grok rewrite). Grok password login stays
+  hard-disabled and hidden from create/reauth UI; the compatibility config flag
+  is ignored and cannot re-enable the server path.
 - OpenAI/Codex gateway keeps Plus identity resolution while adopting official
   routing hints, legacy Responses beta stripping for OAuth, and Grok native
   search surcharge counting.
+- OAuth session-sharing policy is enforced consistently across ordinary HTTP,
+  passthrough HTTP, and Responses WebSocket forwarding; interrupted OpenAI and
+  Grok streams retain observed usage and first-output diagnostics.
+- Grok Anthropic Messages forwarding honors the global endpoint mode on the
+  initial request and encrypted-content retry. OpenAI usage aggregation retains
+  audio output tokens, and Gemini skipped/temp-unscheduled policy outcomes no
+  longer fall through to default account-state mutation.
 - Auth-cache snapshot version includes Plus five-hour/profit fields plus Grok
   search/audio/video model price fields.
 
@@ -35,10 +44,10 @@ Sub2API Plus v0.1.173+custom.001
 
 ## Known issues
 
-- Full frontend `pnpm install` / vitest suite for channel-monitor-v2 should be
-  run before publication.
-- GitHub Release and OCI publication require the separate maintainer approval
-  workflow.
+- No known release blockers were found by the full backend unit/integration,
+  frontend, lint, migration, documentation, identity, and release-policy checks.
+- GitHub Release and OCI publication still require the separate maintainer
+  approval workflow.
 
 ## Upstream baseline
 

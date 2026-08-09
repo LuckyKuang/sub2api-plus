@@ -194,8 +194,11 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyChannelMonitorHideThroughput:         "true",
 
 		// Grok: safe defaults — no cross-vendor model rewrite unless operators enable it.
+		// Keep "false" even though official v0.1.173 later flipped the in-tree default
+		// to true: tag release notes, Plus frontend form default, and the original
+		// 74249b8fe design all treat silent gpt/claude→grok rewrite as opt-in.
 		SettingKeyGrokDefaultTextModel:           "grok-4.5",
-		SettingKeyGrokCrossClientModelMapEnabled: "true",
+		SettingKeyGrokCrossClientModelMapEnabled: "false",
 		SettingKeyGrokDefaultBaseURLMode:         GrokDefaultBaseURLModeCLI,
 
 		// Available channels feature (default disabled; opt-in)
@@ -810,9 +813,9 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	if result.GrokDefaultTextModel == "" {
 		result.GrokDefaultTextModel = "grok-4.5"
 	}
-	// Default true (missing/empty → enabled) so Claude/Codex→Grok mapping keeps working.
-	// Operators can set false to disable silent cross-client rewrite.
-	result.GrokCrossClientModelMapEnabled = !isFalseSettingValue(settings[SettingKeyGrokCrossClientModelMapEnabled])
+	// Strict opt-in: missing/empty/invalid → disabled. Matches InitializeDefaultSettings
+	// and the published breaking-change note (no silent gpt/claude→grok rewrite).
+	result.GrokCrossClientModelMapEnabled = settings[SettingKeyGrokCrossClientModelMapEnabled] == "true"
 	result.GrokDefaultBaseURLMode = normalizeGrokDefaultBaseURLMode(settings[SettingKeyGrokDefaultBaseURLMode])
 
 	// Available channels feature (default: disabled; strict true)

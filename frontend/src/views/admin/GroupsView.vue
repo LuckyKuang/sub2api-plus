@@ -6158,6 +6158,7 @@ const handleUpdateGroup = async () => {
       ),
       five_hour_limit_usd: normalizeOptionalLimit(
         editForm.five_hour_limit_usd as number | string | null,
+      ),
       video_model_prices: serializeVideoModelPrices(
         editForm.video_model_prices,
       ),

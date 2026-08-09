@@ -1046,9 +1046,8 @@ type GatewayConfig struct {
 //   - free_quota_stats_cache_seconds: cache TTL for free-tier usage stats
 //     (hot path never blocks on DB; misses fail open and refresh in background).
 type GatewayGrokConfig struct {
-	// PasswordAuthEnabled controls the optional password-to-SSO OAuth flow.
-	// It defaults to false and must be explicitly enabled by the operator.
-	// When true, POST /admin/grok/oauth/password is functional (not ignored).
+	// PasswordAuthEnabled is retained only for configuration compatibility.
+	// Password-to-SSO OAuth remains hard-disabled; this value is ignored.
 	PasswordAuthEnabled bool `mapstructure:"password_auth_enabled"`
 	// FreeQuotaSoftGateEnabled enables a local rolling-window scheduling guard
 	// for explicitly free Grok OAuth accounts only.

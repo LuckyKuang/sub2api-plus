@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/LuckyKuang/sub2api-plus/internal/config"
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/xai"
 )
@@ -19,19 +18,14 @@ type GrokOAuthService struct {
 	sessionStore *xai.SessionStore
 	proxyRepo    ProxyRepository
 	oauthClient  GrokOAuthClient
-	config       *config.Config
 }
 
-func NewGrokOAuthService(proxyRepo ProxyRepository, oauthClient GrokOAuthClient, configs ...*config.Config) *GrokOAuthService {
-	service := &GrokOAuthService{
+func NewGrokOAuthService(proxyRepo ProxyRepository, oauthClient GrokOAuthClient) *GrokOAuthService {
+	return &GrokOAuthService{
 		sessionStore: xai.NewSessionStore(),
 		proxyRepo:    proxyRepo,
 		oauthClient:  oauthClient,
 	}
-	if len(configs) > 0 {
-		service.config = configs[0]
-	}
-	return service
 }
 
 // WithSessionStore replaces the in-memory OAuth session store (e.g. Redis-backed
@@ -52,11 +46,7 @@ type GrokOAuthCapabilities struct {
 }
 
 func (s *GrokOAuthService) GetCapabilities() GrokOAuthCapabilities {
-	return GrokOAuthCapabilities{PasswordAuthEnabled: s.passwordAuthEnabled()}
-}
-
-func (s *GrokOAuthService) passwordAuthEnabled() bool {
-	return s.config != nil && s.config.Gateway.Grok.PasswordAuthEnabled
+	return GrokOAuthCapabilities{PasswordAuthEnabled: false}
 }
 
 type GrokAuthURLResult struct {
@@ -135,13 +125,6 @@ type GrokTokenInfo struct {
 	TeamID            string `json:"team_id,omitempty"`
 	SubscriptionTier  string `json:"subscription_tier,omitempty"`
 	EntitlementStatus string `json:"entitlement_status,omitempty"`
-}
-
-// GrokPasswordLoginResult is an ephemeral password-login outcome.
-// SSOToken is never persisted and must only feed ConvertSSOToBuild.
-type GrokPasswordLoginResult struct {
-	Email    string `json:"email,omitempty"`
-	SSOToken string `json:"sso_token"`
 }
 
 func (s *GrokOAuthService) ExchangeCode(ctx context.Context, input *GrokExchangeCodeInput) (*GrokTokenInfo, error) {
@@ -264,41 +247,10 @@ func (s *GrokOAuthService) ConvertFromSSO(ctx context.Context, ssoToken string, 
 	return s.ValidateSSOToken(ctx, ssoToken, proxyID)
 }
 
-// AuthorizePassword logs in with email/password, converts the resulting SSO cookie
-// to Build OAuth, and returns OAuth tokens only. Password and raw SSO are never persisted.
-func (s *GrokOAuthService) AuthorizePassword(ctx context.Context, email, password string, proxyID *int64) (*GrokTokenInfo, error) {
-	if !s.passwordAuthEnabled() {
-		return nil, infraerrors.New(http.StatusForbidden, "GROK_OAUTH_PASSWORD_AUTH_DISABLED", "Grok password authorization is disabled")
-	}
-	email = strings.TrimSpace(email)
-	if email == "" {
-		return nil, infraerrors.New(http.StatusBadRequest, "GROK_OAUTH_EMAIL_REQUIRED", "email is required")
-	}
-	if strings.TrimSpace(password) == "" {
-		return nil, infraerrors.New(http.StatusBadRequest, "GROK_OAUTH_PASSWORD_REQUIRED", "password is required")
-	}
-	if err := s.requireOAuthClient(); err != nil {
-		return nil, err
-	}
-	proxyURL, err := s.proxyURL(ctx, proxyID)
-	if err != nil {
-		return nil, err
-	}
-	loginResult, err := s.oauthClient.LoginWithPassword(ctx, email, password, proxyURL)
-	if err != nil {
-		return nil, err
-	}
-	if loginResult == nil || strings.TrimSpace(loginResult.SSOToken) == "" {
-		return nil, infraerrors.New(http.StatusBadGateway, "GROK_OAUTH_PASSWORD_LOGIN_FAILED", "grok password login did not return sso_token")
-	}
-	info, err := s.ValidateSSOToken(ctx, loginResult.SSOToken, proxyID)
-	if err != nil {
-		return nil, err
-	}
-	if strings.TrimSpace(info.Email) == "" {
-		info.Email = loginResult.Email
-	}
-	return info, nil
+// AuthorizePassword is retained as a stable disabled endpoint. Password-based
+// Grok OAuth is not supported and no upstream client receives these values.
+func (s *GrokOAuthService) AuthorizePassword(_ context.Context, _, _ string, _ *int64) (*GrokTokenInfo, error) {
+	return nil, infraerrors.New(http.StatusForbidden, "GROK_OAUTH_PASSWORD_AUTH_DISABLED", "Grok password authorization is disabled")
 }
 
 func validateGrokTokenResponse(tokenResp *xai.TokenResponse) error {

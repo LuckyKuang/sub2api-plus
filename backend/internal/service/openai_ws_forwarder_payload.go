@@ -99,14 +99,21 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 			}
 		}
 	}
-	// OAuth 账号：将 apiKeyID 混入 session 标识符，防止跨用户会话碰撞。
+	// OAuth 账号：统一应用 API-key 隔离或账号级共享策略，并对未授权组 fail closed。
 	if account != nil && account.Type == AccountTypeOAuth {
-		apiKeyID := getAPIKeyIDFromContext(c)
 		if sessionResolution.SessionID != "" {
-			headers.Set("session_id", isolateOpenAISessionID(apiKeyID, sessionResolution.SessionID))
+			upstreamSessionID, err := s.resolveOpenAIUpstreamSessionID(c, account, sessionResolution.SessionID)
+			if err != nil {
+				return nil, openAIWSSessionHeaderResolution{}, err
+			}
+			headers.Set("session_id", upstreamSessionID)
 		}
 		if sessionResolution.ConversationID != "" {
-			headers.Set("conversation_id", isolateOpenAISessionID(apiKeyID, sessionResolution.ConversationID))
+			upstreamConversationID, err := s.resolveOpenAIUpstreamSessionID(c, account, sessionResolution.ConversationID)
+			if err != nil {
+				return nil, openAIWSSessionHeaderResolution{}, err
+			}
+			headers.Set("conversation_id", upstreamConversationID)
 		}
 	} else {
 		if sessionResolution.SessionID != "" {

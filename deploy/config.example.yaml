@@ -464,9 +464,8 @@ gateway:
   # Enabled by default because free detection requires an explicit subscription_tier/plan_type of "free".
   # Stats/query failures fail open so DB issues do not block all Grok traffic.
   grok:
-    # Email/password OAuth is off by default and hidden in the admin UI.
-    # Setting true enables POST /admin/grok/oauth/password (password → SSO → Build OAuth).
-    # Prefer SSO cookie, browser OAuth, or refresh_token re-auth in production.
+    # Compatibility-only setting: email/password OAuth remains hard-disabled
+    # even when true. Use SSO cookie, browser OAuth, or refresh_token re-auth.
     password_auth_enabled: false
     free_quota_soft_gate_enabled: true
     free_quota_token_limit: 500000

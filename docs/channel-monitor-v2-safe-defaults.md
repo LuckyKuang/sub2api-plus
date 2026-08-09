@@ -1,8 +1,7 @@
 # Channel Monitor V2 Safe Defaults & Gentle Backfill
 
-**Date:** 2026-08-08  
-**Status:** Approved for implementation  
-**Branch:** `fix/channel-monitor-v2-ops-ui-blockers` (onto channel-monitor-v2)
+**Date:** 2026-08-08
+**Status:** Approved for implementation
 
 ## Problem
 
@@ -23,7 +22,8 @@
 ## Mode defaults
 
 - Migration `203_channel_monitor_mode.sql` (official `195_channel_monitor_mode.sql`): insert `'v1'` when key missing.
-- If 203 already applied with old checksum, add migration checksum compatibility (do not force rewrite applied DBs to v1).
+- Because migration 203 has not shipped in a Plus release, only its final `v1`
+  checksum is accepted; do not add compatibility for unpublished drafts.
 - Code: `defaultChannelMonitorMode = v1`; empty/invalid normalize → v1.
 - Frontend Settings form default and public feature flag fallback → v1 when missing/invalid.
 - Nil settings on V1 `RunCheck` path remains **fail-closed** (no probes) for test safety — independent of product default.
@@ -47,7 +47,7 @@
 
 ### Error dedup
 
-- Bound the `request_id IN candidate_ids` branch with  
+- Bound the `request_id IN candidate_ids` branch with
   `created_at >= $1 - INTERVAL '90 minutes' AND created_at < $2`.
 
 ## Out of scope

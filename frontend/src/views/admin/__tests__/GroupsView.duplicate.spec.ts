@@ -30,7 +30,6 @@ vi.mock('@/api/admin', () => ({
     groups: {
       list: listGroups,
       duplicate: duplicateGroup,
-      getLiveCapability: async () => ({ supported: false }),
       getModelsListCandidates,
       getUsageSummary,
       getCapacitySummary,
