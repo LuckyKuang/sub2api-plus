@@ -63,6 +63,16 @@ base-URL mode both initially and for the encrypted-content retry. OpenAI usage
 aggregation includes audio output tokens alongside text, cache, and image token
 classes.
 
+## Frontend lockfile ownership
+
+Official v0.1.173 does not change `frontend/package.json` or
+`frontend/pnpm-lock.yaml`. Plus already owns newer Vite, Vitest, DOMPurify, and
+security-override declarations on this branch, so the merge must retain the
+matching Plus lock graph rather than accepting the older official graph during
+conflict resolution. Restoring the merge first parent's exact lockfile avoids
+unrelated dependency re-resolution while making `pnpm install
+--frozen-lockfile` authoritative again.
+
 ## Release preparation
 
 The embedded version, Docker build arguments, deployment examples, release

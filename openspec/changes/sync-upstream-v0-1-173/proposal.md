@@ -22,6 +22,9 @@ baseline must be integrated and verified as a single cross-cutting change.
 - Restore merge-sensitive Plus gateway invariants for OAuth session sharing,
   partial stream accounting, Grok endpoint selection, and all OpenAI token
   classes.
+- Restore the Plus frontend lock graph lost during conflict resolution so it
+  remains synchronized with the retained Vite, Vitest, DOMPurify, and security
+  override declarations.
 - Prepare v0.1.173+custom.001 release metadata without creating a tag,
   GitHub Release, image, or remote push.
 
@@ -36,4 +39,5 @@ baseline must be integrated and verified as a single cross-cutting change.
 - Billing and scheduling: Gemini image output counting, pool-mode error
   handling, partial stream usage, and audio output aggregation are corrected.
 - Operations: deployment examples, release documentation, and upstream mapping
-  move to v0.1.173+custom.001.
+  move to v0.1.173+custom.001; frozen frontend installation remains
+  reproducible from the preserved Plus lockfile.

@@ -30,6 +30,20 @@ and unpublished draft checksums MUST NOT be accepted as historical versions.
 - **THEN** no compatibility checksum may be added solely for a pre-release
   draft of the newly prefixed migration
 
+### Requirement: Frontend dependency locking must preserve Plus ownership
+
+The merged frontend lockfile SHALL remain synchronized with the retained Plus
+dependency declarations and security overrides. An upstream lock graph that
+predates those declarations MUST NOT replace it solely because of merge
+conflict resolution.
+
+#### Scenario: The official release does not change frontend dependencies
+
+- **WHEN** the official release changes neither `frontend/package.json` nor
+  `frontend/pnpm-lock.yaml`, while the Plus parent has a synchronized newer graph
+- **THEN** the merge MUST retain the Plus graph without unrelated re-resolution
+- **THEN** `pnpm install --frozen-lockfile` MUST succeed
+
 ### Requirement: Gemini forwarding must preserve pool and image accounting semantics
 
 Gemini pool-mode accounts without custom error-code handling SHALL remain

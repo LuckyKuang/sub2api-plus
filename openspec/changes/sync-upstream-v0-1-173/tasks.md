@@ -19,6 +19,8 @@
 - [x] 2.6 Restore OAuth session-policy enforcement on every Responses
   transport, partial stream results, Grok Messages endpoint settings, and audio
   token aggregation.
+- [x] 2.7 Restore the pre-merge Plus frontend lock graph and verify that frozen
+  pnpm installation accepts every retained dependency and security override.
 
 ## 3. Release preparation and verification
 
@@ -32,6 +34,7 @@
 Verification completed with strict OpenSpec validation; release, README,
 identity, migration, and documentation policy checks; `go mod tidy -diff`;
 `golangci-lint run ./...`; full Go unit and integration suites; frontend lint,
-typecheck, and all 227 Vitest files (1563 tests); generated Wire refresh; and
-`git diff --check`. The Go suites required local loopback access for existing
-`httptest` servers but had no remaining environment-limited failures.
+typecheck, frozen installation, and all 227 Vitest files (1563 tests); generated
+Wire refresh; and `git diff --check`. The Go suites required local loopback
+access for existing `httptest` servers but had no remaining environment-limited
+failures.

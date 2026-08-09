@@ -32,6 +32,9 @@ Sub2API Plus v0.1.173+custom.001
   longer fall through to default account-state mutation.
 - Auth-cache snapshot version includes Plus five-hour/profit fields plus Grok
   search/audio/video model price fields.
+- Restore the Plus frontend lock graph that was lost during upstream conflict
+  resolution; frozen pnpm installs now retain the intended Vite 6, Vitest 3,
+  DOMPurify, and transitive security overrides without dependency drift.
 
 ## Compatibility and migration
 
