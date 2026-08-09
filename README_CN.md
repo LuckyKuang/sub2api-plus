@@ -72,7 +72,7 @@ curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/
 将现有二进制安装回退到较早的已发布版本：
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- rollback 'v0.1.170+custom.001'
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- rollback 'v0.1.171+custom.001'
 ```
 
 卸载服务和二进制，保留 `/etc/sub2api`：

@@ -78,7 +78,7 @@ curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/
 Roll back an existing binary installation to an earlier published version:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- rollback 'v0.1.170+custom.001'
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- rollback 'v0.1.171+custom.001'
 ```
 
 Remove the service and binary while preserving `/etc/sub2api`:

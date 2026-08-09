@@ -27,11 +27,11 @@ procedures are documented in [`docs/RELEASING.md`](docs/RELEASING.md).
 | `v0.1.166+custom.010` | `v0.1.166` | `dc893dd0b8eab41df5be595ae9fcd1aa74a062b8` | published |
 | `v0.1.168+custom.001` | `v0.1.168` | `99c8e4bf7564823bafbab369acab6539e734c1bb` | published |
 | `v0.1.169+custom.001` | `v0.1.169` | `26d894ef4f50645a4bf1030e378ac892f17d0223` | published |
-| `v0.1.169+custom.002` | `v0.1.169` | `26d894ef4f50645a4bf1030e378ac892f17d0223` | planned |
+| `v0.1.169+custom.002` | `v0.1.169` | `26d894ef4f50645a4bf1030e378ac892f17d0223` | published |
 | `v0.1.170+custom.001` | `v0.1.170` | `c043c24774228ba891ddf90d783aa6dc7d0855b5` | published |
-| `v0.1.170+custom.002` | `v0.1.170` | `c043c24774228ba891ddf90d783aa6dc7d0855b5` | planned |
-| `v0.1.171+custom.001` | `v0.1.171` | `f0e7a9c7a23a7d02fb159b62fa809621eb0475a6` | planned |
-| `v0.1.172+custom.001` | `v0.1.172` | `155c494964c3ea6ecc31f52679525c1034bf0f16` | planned |
+| `v0.1.170+custom.002` | `v0.1.170` | `c043c24774228ba891ddf90d783aa6dc7d0855b5` | published |
+| `v0.1.171+custom.001` | `v0.1.171` | `f0e7a9c7a23a7d02fb159b62fa809621eb0475a6` | published |
+| `v0.1.172+custom.001` | `v0.1.172` | `155c494964c3ea6ecc31f52679525c1034bf0f16` | published |
 
 `v0.1.166+custom.007` is marked invalid because its tag contains embedded and
 documented version `0.1.166+custom.006`. Remote Release and OCI artifact status
