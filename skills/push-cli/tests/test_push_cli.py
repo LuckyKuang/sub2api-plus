@@ -64,7 +64,52 @@ class ProbeRuntimeTest(unittest.TestCase):
 
         probe_docker.assert_not_called()
 
-    def test_unavailable_apple_containers_falls_back_to_colima(self) -> None:
+    def test_installed_apple_containers_not_ready_is_a_hard_failure(self) -> None:
+        with (
+            mock.patch.object(push_cli.platform, "system", return_value="Darwin"),
+            mock.patch.object(push_cli.shutil, "which", return_value="/usr/bin/container"),
+            mock.patch.object(
+                push_cli,
+                "optional_capture",
+                side_effect=[
+                    (True, "container CLI version 1.2.0"),
+                    (False, "runtime is not running"),
+                ],
+            ),
+            mock.patch.object(push_cli, "run_step") as run_step,
+            mock.patch.object(push_cli, "probe_docker") as probe_docker,
+        ):
+            with self.assertRaisesRegex(
+                push_cli.PushCliError,
+                "mandatory runtime.*fallback is forbidden",
+            ):
+                push_cli.probe_runtime()
+
+        run_step.assert_not_called()
+        probe_docker.assert_not_called()
+
+    def test_installed_apple_containers_with_broken_cli_is_a_hard_failure(self) -> None:
+        with (
+            mock.patch.object(push_cli.platform, "system", return_value="Darwin"),
+            mock.patch.object(push_cli.shutil, "which", return_value="/usr/bin/container"),
+            mock.patch.object(
+                push_cli,
+                "optional_capture",
+                return_value=(False, "CLI failed"),
+            ),
+            mock.patch.object(push_cli, "run_step") as run_step,
+            mock.patch.object(push_cli, "probe_docker") as probe_docker,
+        ):
+            with self.assertRaisesRegex(
+                push_cli.PushCliError,
+                "mandatory runtime.*fallback is forbidden",
+            ):
+                push_cli.probe_runtime()
+
+        run_step.assert_not_called()
+        probe_docker.assert_not_called()
+
+    def test_absent_apple_containers_falls_back_to_colima(self) -> None:
         def which(command: str) -> str | None:
             return "/opt/homebrew/bin/colima" if command == "colima" else None
 
@@ -86,6 +131,110 @@ class ProbeRuntimeTest(unittest.TestCase):
 
         self.assertEqual("colima/docker", runtime.name)
         self.assertTrue(runtime.compose_required)
+
+    def test_windows_requires_wsl2_before_any_docker_probe(self) -> None:
+        with (
+            mock.patch.object(push_cli.platform, "system", return_value="Windows"),
+            mock.patch.object(push_cli.shutil, "which", return_value=None),
+            mock.patch.object(push_cli, "probe_docker") as probe_docker,
+        ):
+            with self.assertRaisesRegex(push_cli.PushCliError, "requires wsl.exe"):
+                push_cli.probe_runtime()
+
+        probe_docker.assert_not_called()
+
+    def test_windows_requires_a_running_wsl2_linux_distribution(self) -> None:
+        wsl = "C:/Windows/System32/wsl.exe"
+        with (
+            mock.patch.object(push_cli.platform, "system", return_value="Windows"),
+            mock.patch.object(
+                push_cli.shutil,
+                "which",
+                side_effect=lambda command: wsl if command == "wsl.exe" else None,
+            ),
+            mock.patch.object(
+                push_cli,
+                "capture",
+                return_value="NAME STATE VERSION\nUbuntu Stopped 2",
+            ),
+            mock.patch.object(push_cli, "probe_docker") as probe_docker,
+        ):
+            with self.assertRaisesRegex(
+                push_cli.PushCliError,
+                "none are running: Ubuntu",
+            ):
+                push_cli.probe_runtime()
+
+        probe_docker.assert_not_called()
+
+    def test_windows_uses_docker_inside_running_wsl2_linux(self) -> None:
+        wsl = "C:/Windows/System32/wsl.exe"
+
+        def captured(command: list[str], **_: object) -> str:
+            if command == [wsl, "-l", "-v"]:
+                return "NAME STATE VERSION\nUbuntu-24.04 Running 2"
+            if command == [
+                wsl,
+                "-d",
+                "Ubuntu-24.04",
+                "--",
+                "wslpath",
+                "-a",
+                "/repo",
+            ]:
+                return "/mnt/c/repo"
+            self.fail(f"unexpected command: {command}")
+
+        with (
+            mock.patch.object(push_cli.platform, "system", return_value="Windows"),
+            mock.patch.object(
+                push_cli.shutil,
+                "which",
+                side_effect=lambda command: wsl if command == "wsl.exe" else None,
+            ),
+            mock.patch.object(push_cli, "ROOT", Path("/repo")),
+            mock.patch.object(push_cli, "capture", side_effect=captured),
+            mock.patch.object(
+                push_cli,
+                "probe_docker",
+                return_value=(True, "Docker Compose version v2.40.0"),
+            ) as probe_docker,
+        ):
+            runtime = push_cli.probe_runtime()
+
+        prefix = (wsl, "-d", "Ubuntu-24.04", "--")
+        self.assertEqual("wsl2-docker", runtime.name)
+        self.assertEqual(prefix, runtime.prefix)
+        self.assertEqual("/mnt/c/repo", runtime.compose_root)
+        probe_docker.assert_called_once_with(prefix)
+
+    def test_windows_never_falls_back_to_host_docker(self) -> None:
+        wsl = "C:/Windows/System32/wsl.exe"
+        with (
+            mock.patch.object(push_cli.platform, "system", return_value="Windows"),
+            mock.patch.object(
+                push_cli.shutil,
+                "which",
+                side_effect=lambda command: wsl if command == "wsl.exe" else None,
+            ),
+            mock.patch.object(
+                push_cli,
+                "capture",
+                return_value="NAME STATE VERSION\nUbuntu Running 2",
+            ),
+            mock.patch.object(
+                push_cli,
+                "probe_docker",
+                return_value=(False, "docker is unavailable"),
+            ) as probe_docker,
+        ):
+            with self.assertRaisesRegex(
+                push_cli.PushCliError,
+                "Docker and Docker Compose are not usable inside it",
+            ):
+                push_cli.probe_runtime()
+
+        probe_docker.assert_called_once_with((wsl, "-d", "Ubuntu", "--"))
 
 
 class RuntimeFinalGateTest(unittest.TestCase):
@@ -201,6 +350,7 @@ class LocalChecksTest(unittest.TestCase):
             push_cli.run_local_checks("origin", "feature", runtime)
 
         names = [call.args[0] for call in run_step.call_args_list]
+        self.assertIn("Push CLI self-tests", names)
         self.assertIn("Backend unit tests", names)
         self.assertIn("Frontend production build", names)
         self.assertIn("Docker Compose security", names)
