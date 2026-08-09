@@ -88,6 +88,22 @@ func (c *oauthSessionPolicyCache) DeleteSessionAccountID(_ context.Context, grou
 	return nil
 }
 
+func (c *oauthSessionPolicyCache) SetGrokVideoPendingBilling(_ context.Context, _ string, _ []byte, _ time.Duration) error {
+	return nil
+}
+
+func (c *oauthSessionPolicyCache) GetGrokVideoPendingBilling(_ context.Context, _ string) ([]byte, error) {
+	return nil, nil
+}
+
+func (c *oauthSessionPolicyCache) ClaimGrokVideoBilled(_ context.Context, _ string, _ time.Duration) (bool, error) {
+	return true, nil
+}
+
+func (c *oauthSessionPolicyCache) ReleaseGrokVideoBilled(_ context.Context, _ string) error {
+	return nil
+}
+
 func newOAuthSessionPolicyGinContext(apiKeyID, userID, groupID int64) *gin.Context {
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()
