@@ -168,6 +168,7 @@ func (s *AntigravityGatewayService) forwardAntigravityCompat(
 	account *Account,
 	request antigravityCompatRequest,
 ) (*ForwardResult, error) {
+	beginUpstreamResponseModelObservation(c)
 	call, err := s.prepareAntigravityCompatCall(ctx, c, account, request)
 	if err != nil {
 		return nil, err
@@ -324,17 +325,19 @@ func (s *AntigravityGatewayService) consumeAntigravityCompatResponse(
 	}
 
 	forwardResult := &ForwardResult{
-		RequestID:        requestID,
-		Usage:            *streamResult.usage,
-		Model:            call.request.originalModel,
-		UpstreamModel:    call.billingModel,
-		Stream:           call.request.clientStream,
-		Duration:         time.Since(call.request.startTime),
-		FirstTokenMs:     streamResult.firstTokenMs,
-		FirstOutputMs:    streamResult.firstOutputMs,
-		FirstOutputKind:  streamResult.firstOutputKind,
-		ReasoningEffort:  call.request.reasoningEffort,
-		ClientDisconnect: streamResult.clientDisconnect,
+		RequestID:                     requestID,
+		Usage:                         *streamResult.usage,
+		Model:                         call.request.originalModel,
+		UpstreamModel:                 call.billingModel,
+		UpstreamResponseModel:         observedUpstreamResponseModel(c),
+		UpstreamResponseModelConflict: observedUpstreamResponseModelConflict(c),
+		Stream:                        call.request.clientStream,
+		Duration:                      time.Since(call.request.startTime),
+		FirstTokenMs:                  streamResult.firstTokenMs,
+		FirstOutputMs:                 streamResult.firstOutputMs,
+		FirstOutputKind:               streamResult.firstOutputKind,
+		ReasoningEffort:               call.request.reasoningEffort,
+		ClientDisconnect:              streamResult.clientDisconnect,
 	}
 	return forwardResult, err
 }
@@ -480,7 +483,7 @@ func (s *AntigravityGatewayService) handleChatCompletionsNonStreamingFromAntigra
 	startTime time.Time,
 	originalModel string,
 ) (*antigravityStreamResult, error) {
-	claudeResponse, result, err := s.collectClaudeStreamResponse(resp, startTime, originalModel)
+	claudeResponse, result, err := s.collectClaudeStreamResponse(c, resp, startTime, originalModel)
 	if err != nil {
 		return result, s.mapAntigravityCompatCollectionError(c, err)
 	}
@@ -499,7 +502,7 @@ func (s *AntigravityGatewayService) handleResponsesNonStreamingFromAntigravity(
 	startTime time.Time,
 	originalModel string,
 ) (*antigravityStreamResult, error) {
-	claudeResponse, result, err := s.collectClaudeStreamResponse(resp, startTime, originalModel)
+	claudeResponse, result, err := s.collectClaudeStreamResponse(c, resp, startTime, originalModel)
 	if err != nil {
 		return result, s.mapAntigravityCompatCollectionError(c, err)
 	}

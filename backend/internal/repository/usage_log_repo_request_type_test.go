@@ -21,22 +21,26 @@ func TestUsageLogRepositoryCreateSyncRequestTypeAndLegacyFields(t *testing.T) {
 	repo := &usageLogRepository{sql: db}
 
 	createdAt := time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)
+	upstreamResponseModel := "gpt-5.1"
+	upstreamModelMismatch := true
 	log := &service.UsageLog{
-		UserID:         1,
-		APIKeyID:       2,
-		AccountID:      3,
-		RequestID:      "req-1",
-		Model:          "gpt-5",
-		RequestedModel: "gpt-5",
-		InputTokens:    10,
-		OutputTokens:   20,
-		TotalCost:      1,
-		ActualCost:     1,
-		BillingType:    service.BillingTypeBalance,
-		RequestType:    service.RequestTypeWSV2,
-		Stream:         false,
-		OpenAIWSMode:   false,
-		CreatedAt:      createdAt,
+		UserID:                1,
+		APIKeyID:              2,
+		AccountID:             3,
+		RequestID:             "req-1",
+		Model:                 "gpt-5",
+		RequestedModel:        "gpt-5",
+		UpstreamResponseModel: &upstreamResponseModel,
+		UpstreamModelMismatch: &upstreamModelMismatch,
+		InputTokens:           10,
+		OutputTokens:          20,
+		TotalCost:             1,
+		ActualCost:            1,
+		BillingType:           service.BillingTypeBalance,
+		RequestType:           service.RequestTypeWSV2,
+		Stream:                false,
+		OpenAIWSMode:          false,
+		CreatedAt:             createdAt,
 	}
 
 	mock.ExpectQuery("INSERT INTO usage_logs").
@@ -48,6 +52,8 @@ func TestUsageLogRepositoryCreateSyncRequestTypeAndLegacyFields(t *testing.T) {
 			log.Model,
 			log.RequestedModel,
 			sqlmock.AnyArg(), // upstream_model
+			upstreamResponseModel,
+			upstreamModelMismatch,
 			sqlmock.AnyArg(), // group_id
 			sqlmock.AnyArg(), // subscription_id
 			log.InputTokens,
@@ -141,9 +147,11 @@ func TestUsageLogRepositoryCreate_PersistsServiceTier(t *testing.T) {
 			log.RequestID,
 			log.Model,
 			log.RequestedModel,
-			sqlmock.AnyArg(),
-			sqlmock.AnyArg(),
-			sqlmock.AnyArg(),
+			sqlmock.AnyArg(), // upstream_model
+			nil,              // upstream_response_model
+			nil,              // upstream_model_mismatch
+			sqlmock.AnyArg(), // group_id
+			sqlmock.AnyArg(), // subscription_id
 			log.InputTokens,
 			log.OutputTokens,
 			log.CacheCreationTokens,
@@ -274,8 +282,8 @@ func TestPrepareUsageLogInsert_PersistsTPSMetadata(t *testing.T) {
 
 	prepared := prepareUsageLogInsert(log)
 
-	require.Equal(t, 17, prepared.args[16])
-	require.Equal(t, false, prepared.args[36])
+	require.Equal(t, 17, prepared.args[18])
+	require.Equal(t, false, prepared.args[38])
 	require.NotNil(t, log.IsComplete)
 	require.False(t, *log.IsComplete)
 
@@ -288,7 +296,7 @@ func TestPrepareUsageLogInsert_PersistsTPSMetadata(t *testing.T) {
 		CreatedAt: time.Date(2025, 1, 5, 12, 0, 1, 0, time.UTC),
 	}
 	defaultPrepared := prepareUsageLogInsert(defaultLog)
-	require.Nil(t, defaultPrepared.args[36])
+	require.Nil(t, defaultPrepared.args[38])
 	require.Nil(t, defaultLog.IsComplete)
 }
 
@@ -313,11 +321,11 @@ func TestPrepareUsageLogInsert_PersistsImageSizeMetadata(t *testing.T) {
 		CreatedAt:          time.Date(2025, 1, 6, 12, 0, 0, 0, time.UTC),
 	})
 
-	require.Equal(t, sql.NullString{String: imageSize, Valid: true}, prepared.args[40])
-	require.Equal(t, sql.NullString{String: inputSize, Valid: true}, prepared.args[41])
-	require.Equal(t, sql.NullString{String: outputSize, Valid: true}, prepared.args[42])
-	require.Equal(t, sql.NullString{String: source, Valid: true}, prepared.args[43])
-	breakdownJSON, ok := prepared.args[44].(string)
+	require.Equal(t, sql.NullString{String: imageSize, Valid: true}, prepared.args[42])
+	require.Equal(t, sql.NullString{String: inputSize, Valid: true}, prepared.args[43])
+	require.Equal(t, sql.NullString{String: outputSize, Valid: true}, prepared.args[44])
+	require.Equal(t, sql.NullString{String: source, Valid: true}, prepared.args[45])
+	breakdownJSON, ok := prepared.args[46].(string)
 	require.True(t, ok)
 	require.JSONEq(t, `{"1K":1,"4K":1}`, breakdownJSON)
 }
@@ -849,6 +857,8 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			"gpt-image-2",
 			sql.NullString{Valid: true, String: "gpt-image-2"},
 			sql.NullString{},
+			sql.NullString{Valid: true, String: "gpt-image-2.1"},
+			sql.NullBool{Valid: true, Bool: true},
 			sql.NullInt64{},
 			sql.NullInt64{},
 			0, 0, 0, 0, 0, 0,
@@ -909,6 +919,10 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 		require.NotNil(t, log.IsComplete)
 		require.True(t, *log.IsComplete)
 		require.Zero(t, log.AudioOutputTokens)
+		require.NotNil(t, log.UpstreamResponseModel)
+		require.Equal(t, "gpt-image-2.1", *log.UpstreamResponseModel)
+		require.NotNil(t, log.UpstreamModelMismatch)
+		require.True(t, *log.UpstreamModelMismatch)
 	})
 
 	t.Run("request_type_ws_v2_overrides_legacy", func(t *testing.T) {
@@ -922,6 +936,8 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			"gpt-5", // model
 			sql.NullString{Valid: true, String: "gpt-5"}, // requested_model
 			sql.NullString{},  // upstream_model
+			sql.NullString{},  // upstream_response_model
+			sql.NullBool{},    // upstream_model_mismatch
 			sql.NullInt64{},   // group_id
 			sql.NullInt64{},   // subscription_id
 			1,                 // input_tokens
@@ -996,6 +1012,8 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			"gpt-5",
 			sql.NullString{Valid: true, String: "gpt-5"},
 			sql.NullString{},
+			sql.NullString{},
+			sql.NullBool{},
 			sql.NullInt64{},
 			sql.NullInt64{},
 			1, 2, 3, 4, 5, 6,
@@ -1057,6 +1075,8 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			"gpt-5.4",
 			sql.NullString{Valid: true, String: "gpt-5.4"},
 			sql.NullString{},
+			sql.NullString{},
+			sql.NullBool{},
 			sql.NullInt64{},
 			sql.NullInt64{},
 			1, 2, 3, 4, 5, 6,

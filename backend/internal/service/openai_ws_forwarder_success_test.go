@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
 	coderws "github.com/coder/websocket"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -1008,7 +1009,7 @@ func TestOpenAIGatewayService_Forward_WSv2_OAuthUsesControlledOutboundIdentity(t
 			result, err := svc.Forward(context.Background(), c, account, body)
 			require.NoError(t, err)
 			require.NotNil(t, result)
-			require.Equal(t, "codex_cli_rs", captureDialer.lastHeaders.Get("originator"))
+			require.Equal(t, openai.CodexDefaultOriginator, captureDialer.lastHeaders.Get("originator"))
 			require.Equal(t, codexCLIUserAgent, captureDialer.lastHeaders.Get("user-agent"))
 			require.Equal(t, codexCLIVersion, captureDialer.lastHeaders.Get("version"))
 		})

@@ -16,6 +16,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/apicompat"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/logger"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai_compat"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/tlsfingerprint"
 	"github.com/gin-gonic/gin"
@@ -224,7 +225,7 @@ func TestOpenAIGatewayService_OAuthMessagesBridgeDoesNotInjectDefaultInstruction
 	require.Empty(t, upstream.lastReq.Header.Get("Conversation_Id"))
 	require.Empty(t, upstream.lastReq.Header.Get("OpenAI-Beta"))
 	require.Equal(t, DefaultOpenAICodexUserAgent, upstream.lastReq.Header.Get("User-Agent"))
-	require.Equal(t, "codex_cli_rs", upstream.lastReq.Header.Get("originator"))
+	require.Equal(t, openai.CodexDefaultOriginator, upstream.lastReq.Header.Get("originator"))
 	require.Equal(t, codexCLIVersion, upstream.lastReq.Header.Get("version"))
 }
 
@@ -417,7 +418,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_StreamKeepsToolNameAndBodyNormali
 	// 2) only auth is replaced; inbound auth/cookie are not forwarded
 	require.Equal(t, "Bearer oauth-token", upstream.lastReq.Header.Get("Authorization"))
 	require.Equal(t, codexCLIUserAgent, upstream.lastReq.Header.Get("User-Agent"))
-	require.Equal(t, "codex_cli_rs", upstream.lastReq.Header.Get("originator"))
+	require.Equal(t, openai.CodexDefaultOriginator, upstream.lastReq.Header.Get("originator"))
 	require.Equal(t, codexCLIVersion, upstream.lastReq.Header.Get("version"))
 	require.Empty(t, upstream.lastReq.Header.Get("Cookie"))
 	require.Empty(t, upstream.lastReq.Header.Get("X-Api-Key"))
@@ -992,10 +993,10 @@ func TestOpenAIGatewayService_OAuthLegacy_CompositeCodexUAUsesCodexOriginator(t 
 	_, err := svc.Forward(context.Background(), c, account, inputBody)
 	require.NoError(t, err)
 	require.NotNil(t, upstream.lastReq)
-	// 浏览器型复合 UA 被替换为默认 Codex UA（CLI 形态，避开上游降载桶），
+	// 浏览器型复合 UA 被替换为默认 Codex UA（规范形态，避开上游降载桶），
 	// originator 随最终 UA 配套（issue #3901）。
 	require.Equal(t, DefaultOpenAICodexUserAgent, upstream.lastReq.Header.Get("User-Agent"))
-	require.Equal(t, "codex_cli_rs", upstream.lastReq.Header.Get("originator"))
+	require.Equal(t, openai.CodexDefaultOriginator, upstream.lastReq.Header.Get("originator"))
 	require.NotEqual(t, "opencode", upstream.lastReq.Header.Get("originator"))
 }
 
@@ -1790,7 +1791,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_UsesDefaultOutboundIdentity(t *te
 	require.Equal(t, false, gjson.GetBytes(upstream.lastBody, "store").Bool())
 	require.Equal(t, true, gjson.GetBytes(upstream.lastBody, "stream").Bool())
 	require.Equal(t, DefaultOpenAICodexUserAgent, upstream.lastReq.Header.Get("User-Agent"))
-	require.Equal(t, "codex_cli_rs", upstream.lastReq.Header.Get("Originator"))
+	require.Equal(t, openai.CodexDefaultOriginator, upstream.lastReq.Header.Get("Originator"))
 	require.Equal(t, codexCLIVersion, upstream.lastReq.Header.Get("Version"))
 }
 
@@ -1837,7 +1838,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_InboundIdentityCannotOverrideOutb
 	require.NoError(t, err)
 	require.NotNil(t, upstream.lastReq)
 	require.Equal(t, codexCLIUserAgent, upstream.lastReq.Header.Get("User-Agent"))
-	require.Equal(t, "codex_cli_rs", upstream.lastReq.Header.Get("originator"))
+	require.Equal(t, openai.CodexDefaultOriginator, upstream.lastReq.Header.Get("originator"))
 	require.Equal(t, codexCLIVersion, upstream.lastReq.Header.Get("version"))
 }
 
@@ -1881,7 +1882,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_CodexTuiIdentityUnified(t *testin
 	require.NoError(t, err)
 	require.NotNil(t, upstream.lastReq)
 	require.Equal(t, codexCLIUserAgent, upstream.lastReq.Header.Get("User-Agent"))
-	require.Equal(t, "codex_cli_rs", upstream.lastReq.Header.Get("originator"))
+	require.Equal(t, openai.CodexDefaultOriginator, upstream.lastReq.Header.Get("originator"))
 	require.Equal(t, codexCLIVersion, upstream.lastReq.Header.Get("version"))
 }
 

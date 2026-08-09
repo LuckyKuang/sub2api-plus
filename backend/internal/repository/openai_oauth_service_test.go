@@ -109,7 +109,7 @@ func (s *OpenAIOAuthServiceSuite) TestExchangeCodeWithIdentityPairsAndFallsBackU
 
 	_, err = s.svc.ExchangeCodeWithIdentity(s.ctx, "code", "ver", openai.DefaultRedirectURI, "", "", "Mozilla/5.0", "client-controlled", "9.9.9")
 	require.NoError(s.T(), err)
-	require.Equal(s.T(), [3]string{service.DefaultOpenAICodexUserAgent, "codex_cli_rs", service.DefaultOpenAICodexVersion}, <-requests)
+	require.Equal(s.T(), [3]string{service.DefaultOpenAICodexUserAgent, openai.CodexDefaultOriginator, service.DefaultOpenAICodexVersion}, <-requests)
 }
 
 func (s *OpenAIOAuthServiceSuite) TestRefreshToken_FormFields() {

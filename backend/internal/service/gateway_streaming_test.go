@@ -518,6 +518,7 @@ func TestPartialStreamUsageResult_PreservesOutputTiming(t *testing.T) {
 	}
 
 	result := partialStreamUsageResult(
+		nil,
 		resp,
 		streamResult,
 		"requested-model",
@@ -542,6 +543,7 @@ func TestPartialStreamUsageResult_PreservesAudioOnlyUsage(t *testing.T) {
 	}
 
 	result := partialStreamUsageResult(
+		nil,
 		&http.Response{Header: http.Header{"X-Request-Id": []string{"req-partial-audio"}}},
 		streamResult,
 		"requested-model",

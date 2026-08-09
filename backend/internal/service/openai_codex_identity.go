@@ -21,7 +21,7 @@ const OpenAICodexUpstreamMinVersion = codexUpstreamMinVersion
 // codexClientVersionMaxLen 官方版本号均为短 ASCII 串，远低于此上限。
 const codexClientVersionMaxLen = 64
 
-// codexClientVersionPattern 允许 0.146.0 与 0.147.0-alpha.4 两类官方形态。
+// codexClientVersionPattern 允许 0.147.0 与 0.148.0-alpha.4 两类官方形态。
 var codexClientVersionPattern = regexp.MustCompile(`^[0-9]+(\.[0-9]+){1,3}(-[0-9A-Za-z.]+)?$`)
 
 // NormalizeCodexClientVersion 校验并归一化 Codex 客户端版本号，非法值返回空串。
@@ -35,13 +35,24 @@ func NormalizeCodexClientVersion(version string) string {
 	return version
 }
 
+// normalizeStableCodexClientVersion accepts only release versions suitable for
+// the automatic synchronization setting. Explicit administrator overrides may
+// still select a prerelease through NormalizeCodexClientVersion.
+func normalizeStableCodexClientVersion(version string) string {
+	version = NormalizeCodexClientVersion(version)
+	if version == "" || strings.Contains(version, "-") {
+		return ""
+	}
+	return version
+}
+
 // buildCodexCLIUserAgent 按版本号拼出规范 Codex CLI User-Agent。
 // UA 形态只在 codexCLIUserAgentSuffix 一处定义，避免多处拼装漂移。
 func buildCodexCLIUserAgent(version string) string {
 	if version = NormalizeCodexClientVersion(version); version == "" {
 		return codexCLIUserAgent
 	}
-	return openai.CodexCLIOriginator + "/" + version + codexCLIUserAgentSuffix
+	return openai.CodexDefaultOriginator + "/" + version + codexCLIUserAgentSuffix
 }
 
 // codexIdentityEnforcement 控制 enforceCodexIdentityHeaders 是否强制统一出站身份，

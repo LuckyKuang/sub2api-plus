@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
 	"github.com/stretchr/testify/require"
 )
 
@@ -40,7 +41,7 @@ func TestOpenAIOAuthService_ValidateCodexPersonalAccessToken(t *testing.T) {
 	info, err := svc.ValidateCodexPersonalAccessToken(context.Background(), " at-test-token ", "")
 	require.NoError(t, err)
 	require.Equal(t, "Bearer at-test-token", gotAuthorization)
-	require.Equal(t, "codex_cli_rs", gotOriginator)
+	require.Equal(t, openai.CodexDefaultOriginator, gotOriginator)
 	require.Equal(t, DefaultOpenAICodexUserAgent, gotUserAgent)
 	require.Equal(t, DefaultOpenAICodexVersion, gotVersion)
 	require.Equal(t, OpenAIAuthModePersonalAccessToken, info.AuthMode)

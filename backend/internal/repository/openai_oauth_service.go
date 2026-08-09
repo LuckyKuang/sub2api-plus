@@ -156,7 +156,7 @@ func resolveOpenAIOAuthIdentity(userAgent, _ string, version string) (string, st
 	}
 	defaultOriginator, defaultUserAgent, ok := openai.PairCodexClientIdentity(service.DefaultOpenAICodexUserAgent)
 	if !ok {
-		return service.DefaultOpenAICodexUserAgent, openai.CodexCLIOriginator, service.DefaultOpenAICodexVersion
+		return service.DefaultOpenAICodexUserAgent, openai.CodexDefaultOriginator, service.DefaultOpenAICodexVersion
 	}
 	return defaultUserAgent, defaultOriginator, service.DefaultOpenAICodexVersion
 }

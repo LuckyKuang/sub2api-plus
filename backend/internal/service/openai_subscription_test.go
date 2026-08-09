@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
 	"github.com/imroc/req/v3"
 	"github.com/stretchr/testify/require"
 )
@@ -20,7 +21,7 @@ func TestFetchChatGPTSubscriptionExpiresAt(t *testing.T) {
 		require.Equal(t, "acc_123", r.URL.Query().Get("account_id"))
 		require.Equal(t, "Bearer access-token", r.Header.Get("Authorization"))
 		require.Equal(t, DefaultOpenAICodexUserAgent, r.Header.Get("User-Agent"))
-		require.Equal(t, "codex_cli_rs", r.Header.Get("Originator"))
+		require.Equal(t, openai.CodexDefaultOriginator, r.Header.Get("Originator"))
 		require.Equal(t, DefaultOpenAICodexVersion, r.Header.Get("Version"))
 
 		w.Header().Set("Content-Type", "application/json")
@@ -51,7 +52,7 @@ func TestFetchChatGPTAccountInfo_SkipsExpiredWorkspaceCandidate(t *testing.T) {
 		require.Equal(t, "/backend-api/accounts/check/v4-2023-04-27", r.URL.Path)
 		require.Equal(t, "Bearer access-token", r.Header.Get("Authorization"))
 		require.Equal(t, DefaultOpenAICodexUserAgent, r.Header.Get("User-Agent"))
-		require.Equal(t, "codex_cli_rs", r.Header.Get("Originator"))
+		require.Equal(t, openai.CodexDefaultOriginator, r.Header.Get("Originator"))
 		require.Equal(t, DefaultOpenAICodexVersion, r.Header.Get("Version"))
 
 		w.Header().Set("Content-Type", "application/json")

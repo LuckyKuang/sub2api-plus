@@ -33,6 +33,8 @@ type Usage struct {
 
 type RelayResult struct {
 	RequestModel            string
+	ResponseModel           string
+	ResponseModelConflict   bool
 	Usage                   Usage
 	RequestID               string
 	TerminalEventType       string
@@ -46,10 +48,12 @@ type RelayResult struct {
 }
 
 type RelayTurnResult struct {
-	RequestModel      string
-	Usage             Usage
-	RequestID         string
-	TerminalEventType string
+	RequestModel          string
+	ResponseModel         string
+	ResponseModelConflict bool
+	Usage                 Usage
+	RequestID             string
+	TerminalEventType     string
 	// DownstreamComplete is true only when the upstream terminal frame was
 	// successfully delivered to the client. A drained terminal still carries
 	// billable usage, but is not a complete client-visible response.
@@ -101,6 +105,8 @@ type relayState struct {
 	requestModelMu    sync.RWMutex
 	requestModel      string
 	lastResponseID    string
+	lastResponseModel string
+	responseConflict  bool
 	terminalEventType string
 	firstTokenMs      *int
 	firstOutputMs     *int
@@ -119,21 +125,26 @@ type relayExitSignal struct {
 }
 
 type observedUpstreamEvent struct {
-	terminal    bool
-	eventType   string
-	responseID  string
-	usage       Usage
-	duration    time.Duration
-	firstToken  *int
-	firstOutput *int
-	outputKind  string
+	terminal         bool
+	eventType        string
+	responseID       string
+	usage            Usage
+	responseModel    string
+	responseConflict bool
+	duration         time.Duration
+	firstToken       *int
+	firstOutput      *int
+	outputKind       string
 }
 
 type relayTurnTiming struct {
-	startAt         time.Time
-	firstTokenMs    *int
-	firstOutputMs   *int
-	firstOutputKind string
+	startAt               time.Time
+	firstTokenMs          *int
+	firstOutputMs         *int
+	firstOutputKind       string
+	firstResponseModel    string
+	terminalResponseModel string
+	responseModelConflict bool
 }
 
 func Relay(
@@ -717,6 +728,7 @@ func observeUpstreamMessage(
 		usage:      parsedUsage,
 	}
 	isTerminal := isTerminalEvent(eventType)
+	state.observeResponseModel(responseID, firstRelayResponseModel(message), isTerminal, now)
 	completedTiming, hasCompletedTiming := state.observeOutputTiming(responseID, startAt, now, outputObservation, isTerminal)
 	if !isTerminal {
 		return observed
@@ -727,6 +739,10 @@ func observeUpstreamMessage(
 		state.lastResponseID = responseID
 	}
 	if hasCompletedTiming {
+		observed.responseModel = relayTurnResponseModel(&completedTiming)
+		observed.responseConflict = completedTiming.responseModelConflict
+		state.lastResponseModel = observed.responseModel
+		state.responseConflict = observed.responseConflict
 		duration := now.Sub(completedTiming.startAt)
 		if duration < 0 {
 			duration = 0
@@ -757,16 +773,64 @@ func emitTurnComplete(
 		requestModel = state.currentRequestModel()
 	}
 	onTurnComplete(RelayTurnResult{
-		RequestModel:       requestModel,
-		Usage:              observed.usage,
-		RequestID:          responseID,
-		TerminalEventType:  observed.eventType,
-		DownstreamComplete: downstreamComplete,
-		Duration:           observed.duration,
-		FirstTokenMs:       openAIWSRelayCloneIntPtr(observed.firstToken),
-		FirstOutputMs:      openAIWSRelayCloneIntPtr(observed.firstOutput),
-		FirstOutputKind:    observed.outputKind,
+		RequestModel:          requestModel,
+		ResponseModel:         observed.responseModel,
+		ResponseModelConflict: observed.responseConflict,
+		Usage:                 observed.usage,
+		RequestID:             responseID,
+		TerminalEventType:     observed.eventType,
+		DownstreamComplete:    downstreamComplete,
+		Duration:              observed.duration,
+		FirstTokenMs:          openAIWSRelayCloneIntPtr(observed.firstToken),
+		FirstOutputMs:         openAIWSRelayCloneIntPtr(observed.firstOutput),
+		FirstOutputKind:       observed.outputKind,
 	})
+}
+
+func firstRelayResponseModel(message []byte) string {
+	if len(message) == 0 {
+		return ""
+	}
+	for _, value := range gjson.GetManyBytes(message, "response.model", "model") {
+		if value.Type != gjson.String {
+			continue
+		}
+		if model := strings.TrimSpace(value.String()); model != "" {
+			return model
+		}
+	}
+	return ""
+}
+
+func observeRelayTurnResponseModel(turn *relayTurnTiming, model string, terminal bool) {
+	if turn == nil {
+		return
+	}
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return
+	}
+	current := relayTurnResponseModel(turn)
+	if current != "" && !strings.EqualFold(current, model) {
+		turn.responseModelConflict = true
+	}
+	if terminal {
+		turn.terminalResponseModel = model
+		return
+	}
+	if turn.firstResponseModel == "" {
+		turn.firstResponseModel = model
+	}
+}
+
+func relayTurnResponseModel(turn *relayTurnTiming) string {
+	if turn == nil {
+		return ""
+	}
+	if turn.terminalResponseModel != "" {
+		return turn.terminalResponseModel
+	}
+	return turn.firstResponseModel
 }
 
 func (state *relayState) beginResponseCreate(startedAt time.Time) *relayTurnTiming {
@@ -801,6 +865,42 @@ func (state *relayState) cancelResponseCreate(timing *relayTurnTiming) {
 		}
 	}
 	state.timingMu.Unlock()
+}
+
+func (state *relayState) observeResponseModel(responseID, model string, terminal bool, observedAt time.Time) {
+	if state == nil || strings.TrimSpace(model) == "" {
+		return
+	}
+	state.timingMu.Lock()
+	defer state.timingMu.Unlock()
+
+	var timing *relayTurnTiming
+	if responseID != "" {
+		if state.turnTimingByID == nil {
+			state.turnTimingByID = make(map[string]*relayTurnTiming, 8)
+		}
+		timing = state.turnTimingByID[responseID]
+		if timing == nil {
+			timing = state.pendingTurn
+			if timing == nil {
+				timing = state.activeTurn
+			}
+			if timing == nil {
+				timing = &relayTurnTiming{startAt: observedAt}
+			}
+			state.turnTimingByID[responseID] = timing
+		}
+		if state.pendingTurn == timing {
+			state.pendingTurn = nil
+		}
+		state.activeTurn = timing
+	} else {
+		timing = state.activeTurn
+		if timing == nil {
+			timing = state.pendingTurn
+		}
+	}
+	observeRelayTurnResponseModel(timing, model, terminal)
 }
 
 func (state *relayState) observeOutputTiming(
@@ -1058,6 +1158,8 @@ func enrichResult(result *RelayResult, state *relayState, duration time.Duration
 		return
 	}
 	result.RequestModel = state.currentRequestModel()
+	result.ResponseModel = state.lastResponseModel
+	result.ResponseModelConflict = state.responseConflict
 	result.Usage = state.usage
 	result.RequestID = state.lastResponseID
 	result.TerminalEventType = state.terminalEventType

@@ -13,6 +13,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/pagination"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/timezone"
 	"github.com/dgraph-io/ristretto"
 	"golang.org/x/sync/singleflight"
 )
@@ -509,13 +510,14 @@ func (s *SubscriptionService) withSubscriptionUpdateTx(ctx context.Context, fn f
 
 func renewedSubscriptionTerm(existingSub *UserSubscription, notes string, startsAt, expiresAt time.Time) *UserSubscription {
 	renewed := *existingSub
-	windowStart := startsAt
+	dailyWindowStart := timezone.StartOfDay(startsAt)
+	periodicWindowStart := startsAt
 	renewed.StartsAt = startsAt
 	renewed.ExpiresAt = expiresAt
 	renewed.Status = SubscriptionStatusActive
-	renewed.DailyWindowStart = &windowStart
-	renewed.WeeklyWindowStart = &windowStart
-	renewed.MonthlyWindowStart = &windowStart
+	renewed.DailyWindowStart = &dailyWindowStart
+	renewed.WeeklyWindowStart = &periodicWindowStart
+	renewed.MonthlyWindowStart = &periodicWindowStart
 	renewed.DailyUsageUSD = 0
 	renewed.WeeklyUsageUSD = 0
 	renewed.MonthlyUsageUSD = 0
@@ -975,7 +977,7 @@ func (s *SubscriptionService) checkAndActivateWindowAt(ctx context.Context, sub 
 		return nil
 	}
 
-	return s.userSubRepo.ActivateWindows(ctx, sub.ID, now)
+	return s.userSubRepo.ActivateWindows(ctx, sub.ID, timezone.StartOfDay(now), now)
 }
 
 // AdminResetQuota manually resets the selected usage windows. Calendar windows
@@ -992,15 +994,16 @@ func (s *SubscriptionService) AdminResetQuota(ctx context.Context, subscriptionI
 		return nil, err
 	}
 	now := s.now()
+	dailyStart := timezone.StartOfDay(now)
 	if atomicRepo, ok := s.userSubRepo.(AtomicSubscriptionUsageWindowsResetRepository); ok {
-		if err := atomicRepo.ResetUsageWindowsAtomically(ctx, sub.ID, resetDaily, resetWeekly, resetMonthly, resetFiveHour, now, now); err != nil {
+		if err := atomicRepo.ResetUsageWindowsAtomically(ctx, sub.ID, resetDaily, resetWeekly, resetMonthly, resetFiveHour, dailyStart, now); err != nil {
 			return nil, err
 		}
 	} else {
 		// Compatibility fallback for third-party repository implementations. The
 		// built-in repository always takes the atomic branch above.
 		if resetDaily || resetWeekly || resetMonthly {
-			if err := s.userSubRepo.ResetUsageWindows(ctx, sub.ID, resetDaily, resetWeekly, resetMonthly, now); err != nil {
+			if err := s.userSubRepo.ResetUsageWindows(ctx, sub.ID, resetDaily, resetWeekly, resetMonthly, dailyStart, now); err != nil {
 				return nil, err
 			}
 		}
@@ -1029,8 +1032,8 @@ func (s *SubscriptionService) CheckAndResetWindows(ctx context.Context, sub *Use
 	now := s.now()
 	needsInvalidateCache := false
 
-	// 日窗口重置（24小时）
-	if windowStart, ok := sub.automaticWindowStartAt(sub.DailyWindowStart, 24*time.Hour, now); !sub.HasOneTimeDailyQuota() && ok {
+	// 日窗口按配置时区的日历日刷新；周/月窗口继续使用滚动期限。
+	if windowStart, ok := sub.automaticDailyWindowStartAt(now); ok {
 		expectedWindowStart := sub.DailyWindowStart
 		if err := s.userSubRepo.ResetDailyUsage(ctx, sub.ID, expectedWindowStart, windowStart); err != nil {
 			return err

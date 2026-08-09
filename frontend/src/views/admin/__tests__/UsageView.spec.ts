@@ -49,6 +49,12 @@ const messages: Record<string, string> = {
   'admin.dashboard.day': 'Day',
   'admin.dashboard.hour': 'Hour',
   'admin.usage.failedToLoadUser': 'Failed to load user',
+  'usage.requestedModel': 'Requested model',
+  'usage.sentUpstreamModel': 'Sent upstream model',
+  'usage.upstreamResponseModel': 'Upstream response model',
+  'usage.upstreamModelMismatch': 'Upstream model mismatch',
+  'common.yes': 'Yes',
+  'common.no': 'No',
 }
 
 const formatLocalDate = (date: Date): string => {
@@ -623,6 +629,9 @@ describe('admin UsageView Excel export latency fields', () => {
           account_rate_multiplier: 1,
           total_cost: 0.1,
           actual_cost: 0.1,
+          upstream_model: 'gpt-text-upstream',
+          upstream_response_model: 'gpt-text-response',
+          upstream_model_mismatch: true,
           first_token_ms: 120,
           first_output_ms: 100,
           first_output_kind: 'text',
@@ -687,11 +696,24 @@ describe('admin UsageView Excel export latency fields', () => {
 
     const headers = aoaToSheet.mock.calls[0][0][0] as string[]
     const rows = sheetAddAoa.mock.calls[0][1] as unknown[][]
-		const firstTokenIndex = headers.indexOf('usage.firstTokenOrLegacyEvent')
+    const requestedModelIndex = headers.indexOf('Requested model')
+    const firstTokenIndex = headers.indexOf('usage.firstTokenOrLegacyEvent')
     const firstOutputIndex = headers.indexOf('usage.latencyFirstOutput')
     const firstOutputKindIndex = headers.indexOf('usage.latencyFirstOutputKind')
     const durationIndex = headers.indexOf('usage.duration')
 
+    expect(headers.slice(requestedModelIndex, requestedModelIndex + 4)).toEqual([
+      'Requested model',
+      'Sent upstream model',
+      'Upstream response model',
+      'Upstream model mismatch',
+    ])
+    expect(rows[0].slice(requestedModelIndex, requestedModelIndex + 4)).toEqual([
+      'gpt-text',
+      'gpt-text-upstream',
+      'gpt-text-response',
+      'Yes',
+    ])
     expect(firstTokenIndex).toBeGreaterThan(-1)
     expect(firstOutputIndex).toBe(firstTokenIndex + 1)
     expect(firstOutputKindIndex).toBe(firstOutputIndex + 1)

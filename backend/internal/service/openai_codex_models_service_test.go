@@ -17,6 +17,7 @@ import (
 
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/tlsfingerprint"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/http2"
@@ -199,7 +200,7 @@ func TestFetchCodexModelsManifestPassthrough(t *testing.T) {
 	if gotAccountID != "acc-123" {
 		t.Errorf("chatgpt-account-id header: got %q", gotAccountID)
 	}
-	if gotOriginator != "codex_cli_rs" {
+	if gotOriginator != openai.CodexDefaultOriginator {
 		t.Errorf("originator header: got %q", gotOriginator)
 	}
 	if gotUserAgent != DefaultOpenAICodexUserAgent {

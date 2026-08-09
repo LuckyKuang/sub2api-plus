@@ -61,6 +61,7 @@ type UpdateSettingsRequest struct {
 	TencentCaptchaAppSecretKey   string `json:"tencent_captcha_app_secret_key"`
 	TencentCaptchaCloudSecretID  string `json:"tencent_captcha_cloud_secret_id"`
 	TencentCaptchaCloudSecretKey string `json:"tencent_captcha_cloud_secret_key"`
+	TencentCaptchaRegion         string `json:"tencent_captcha_region"`
 
 	// 阿里云验证码 2.0 设置
 	AliyunCaptchaEnabled         bool   `json:"aliyun_captcha_enabled"`
@@ -646,6 +647,13 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 	}
 	if req.AliyunCaptchaRegion != service.AliyunCaptchaRegionSGP {
 		req.AliyunCaptchaRegion = service.AliyunCaptchaRegionCN
+	}
+	// 天御站点 normalize：未发送保留已存值，非法值一律按中国站落库
+	if _, sent := sentFields["tencent_captcha_region"]; !sent {
+		req.TencentCaptchaRegion = previousSettings.TencentCaptchaRegion
+	}
+	if req.TencentCaptchaRegion != service.TencentCaptchaRegionINTL {
+		req.TencentCaptchaRegion = service.TencentCaptchaRegionCN
 	}
 
 	// Turnstile 参数验证
@@ -1426,7 +1434,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		// 该值会被拼进出站 User-Agent 与 version 头，必须是合法版本号；空串表示跟随自动同步。
 		normalized := strings.TrimSpace(*req.OpenAICodexClientVersion)
 		if normalized != "" && service.NormalizeCodexClientVersion(normalized) == "" {
-			response.Error(c, http.StatusBadRequest, "openai_codex_client_version must be empty or a valid version (e.g. 0.146.0)")
+			response.Error(c, http.StatusBadRequest, "openai_codex_client_version must be empty or a valid version (e.g. 0.147.0)")
 			return
 		}
 		req.OpenAICodexClientVersion = &normalized
@@ -1509,6 +1517,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		TencentCaptchaAppSecretKey:       req.TencentCaptchaAppSecretKey,
 		TencentCaptchaCloudSecretID:      req.TencentCaptchaCloudSecretID,
 		TencentCaptchaCloudSecretKey:     req.TencentCaptchaCloudSecretKey,
+		TencentCaptchaRegion:             req.TencentCaptchaRegion,
 		AliyunCaptchaEnabled:             req.AliyunCaptchaEnabled,
 		AliyunCaptchaAccessKeyID:         req.AliyunCaptchaAccessKeyID,
 		AliyunCaptchaAccessKeySecret:     req.AliyunCaptchaAccessKeySecret,
@@ -2099,6 +2108,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		TencentCaptchaAppSecretKeyConfigured:                   updatedSettings.TencentCaptchaAppSecretKeyConfigured,
 		TencentCaptchaCloudSecretIDConfigured:                  updatedSettings.TencentCaptchaCloudSecretIDConfigured,
 		TencentCaptchaCloudSecretKeyConfigured:                 updatedSettings.TencentCaptchaCloudSecretKeyConfigured,
+		TencentCaptchaRegion:                                   updatedSettings.TencentCaptchaRegion,
 		AliyunCaptchaEnabled:                                   updatedSettings.AliyunCaptchaEnabled,
 		AliyunCaptchaAccessKeyID:                               updatedSettings.AliyunCaptchaAccessKeyID,
 		AliyunCaptchaAccessKeySecretConfigured:                 updatedSettings.AliyunCaptchaAccessKeySecretConfigured,
