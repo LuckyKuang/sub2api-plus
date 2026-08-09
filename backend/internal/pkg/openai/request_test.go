@@ -8,6 +8,7 @@ func TestIsCodexCLIRequest(t *testing.T) {
 		ua   string
 		want bool
 	}{
+		{name: "codex-tui 前缀", ua: "codex-tui/0.147.0 (Ubuntu 24.04; x86_64) xterm-256color", want: true},
 		{name: "codex_cli_rs 前缀", ua: "codex_cli_rs/0.1.0", want: true},
 		{name: "codex_vscode 前缀", ua: "codex_vscode/1.2.3", want: true},
 		{name: "大小写混合", ua: "Codex_CLI_Rs/0.1.0", want: true},

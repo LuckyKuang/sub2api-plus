@@ -265,23 +265,25 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 				usage = &OpenAIUsage{}
 			}
 			return &OpenAIForwardResult{
-				RequestID:        resp.Header.Get("x-request-id"),
-				ResponseID:       responseID,
-				Usage:            *usage,
-				Model:            reqModel,
-				UpstreamModel:    upstreamPassthroughModel,
-				ServiceTier:      serviceTier,
-				ReasoningEffort:  reasoningEffort,
-				Stream:           true,
-				Duration:         time.Since(startTime),
-				FirstTokenMs:     firstTokenMs,
-				FirstOutputMs:    firstOutputMs,
-				FirstOutputKind:  firstOutputKind,
-				ClientDisconnect: clientDisconnected,
-				ImageCount:       imageCount,
-				ImageSize:        imageSizeTier,
-				ImageInputSize:   imageInputSize,
-				ImageOutputSizes: imageOutputSizes,
+				RequestID:                     resp.Header.Get("x-request-id"),
+				ResponseID:                    responseID,
+				Usage:                         *usage,
+				Model:                         reqModel,
+				UpstreamModel:                 upstreamPassthroughModel,
+				UpstreamResponseModel:         observedUpstreamResponseModel(c),
+				UpstreamResponseModelConflict: observedUpstreamResponseModelConflict(c),
+				ServiceTier:                   serviceTier,
+				ReasoningEffort:               reasoningEffort,
+				Stream:                        true,
+				Duration:                      time.Since(startTime),
+				FirstTokenMs:                  firstTokenMs,
+				FirstOutputMs:                 firstOutputMs,
+				FirstOutputKind:               firstOutputKind,
+				ClientDisconnect:              clientDisconnected,
+				ImageCount:                    imageCount,
+				ImageSize:                     imageSizeTier,
+				ImageInputSize:                imageInputSize,
+				ImageOutputSizes:              imageOutputSizes,
 			}, streamErr
 		}
 	} else {
@@ -308,20 +310,22 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 	}
 
 	forwardResult := &OpenAIForwardResult{
-		RequestID:        resp.Header.Get("x-request-id"),
-		ResponseID:       responseID,
-		Usage:            *usage,
-		Model:            reqModel,
-		UpstreamModel:    upstreamPassthroughModel,
-		ServiceTier:      serviceTier,
-		ReasoningEffort:  reasoningEffort,
-		Stream:           reqStream,
-		OpenAIWSMode:     false,
-		Duration:         time.Since(startTime),
-		FirstTokenMs:     firstTokenMs,
-		FirstOutputMs:    firstOutputMs,
-		FirstOutputKind:  firstOutputKind,
-		ClientDisconnect: clientDisconnected,
+		RequestID:                     resp.Header.Get("x-request-id"),
+		ResponseID:                    responseID,
+		Usage:                         *usage,
+		Model:                         reqModel,
+		UpstreamModel:                 upstreamPassthroughModel,
+		UpstreamResponseModel:         observedUpstreamResponseModel(c),
+		UpstreamResponseModelConflict: observedUpstreamResponseModelConflict(c),
+		ServiceTier:                   serviceTier,
+		ReasoningEffort:               reasoningEffort,
+		Stream:                        reqStream,
+		OpenAIWSMode:                  false,
+		Duration:                      time.Since(startTime),
+		FirstTokenMs:                  firstTokenMs,
+		FirstOutputMs:                 firstOutputMs,
+		FirstOutputKind:               firstOutputKind,
+		ClientDisconnect:              clientDisconnected,
 	}
 	if imageCount > 0 {
 		forwardResult.ImageCount = imageCount
@@ -768,6 +772,30 @@ func openAIStreamClientOutputStarted(c *gin.Context, localStarted bool) bool {
 	return OpenAICompactKeepaliveAdjustedWrittenSize(c) >= 0
 }
 
+func openAIStreamEventIsPreamble(eventType string) bool {
+	switch strings.TrimSpace(eventType) {
+	case "response.created", "response.in_progress":
+		return true
+	default:
+		return false
+	}
+}
+
+func openAIStreamDataStartsClientOutput(data, eventType string) bool {
+	trimmed := strings.TrimSpace(data)
+	if trimmed == "" {
+		return false
+	}
+	switch strings.TrimSpace(eventType) {
+	case "response.failed":
+		return false
+	case "error":
+		payload := []byte(trimmed)
+		return !openAIStreamFailedEventShouldFailover(payload, extractOpenAISSEErrorMessage(payload))
+	}
+	return !openAIStreamEventIsPreamble(eventType)
+}
+
 // openAIStreamFailedEventErrorCode 提取流内 failed 事件的错误码（小写），
 // 兼容 response.failed 的嵌套形态与裸 error 形态。
 func openAIStreamFailedEventErrorCode(payload []byte) string {
@@ -789,6 +817,36 @@ func isOpenAIUpstreamCapacityShedEvent(payload []byte) bool {
 		return false
 	}
 }
+
+// openAICapacityShedRetryableClientCode is used when a capacity-shed event
+// must be forwarded after all gateway failover candidates are exhausted.
+const openAICapacityShedRetryableClientCode = "server_error"
+
+// sanitizeOpenAICapacityShedErrorCodeForClient rewrites only capacity-shed
+// error codes into the Codex retryable category. Upstream classification and
+// account-state handling always run against the original payload first.
+func sanitizeOpenAICapacityShedErrorCodeForClient(payload []byte) ([]byte, bool) {
+	if len(payload) == 0 || !gjson.ValidBytes(payload) || !isOpenAIUpstreamCapacityShedEvent(payload) {
+		return payload, false
+	}
+	updated := payload
+	changed := false
+	for _, path := range []string{"response.error.code", "error.code"} {
+		switch strings.ToLower(strings.TrimSpace(gjson.GetBytes(updated, path).String())) {
+		case "server_is_overloaded", "slow_down":
+		default:
+			continue
+		}
+		next, err := sjson.SetBytes(updated, path, openAICapacityShedRetryableClientCode)
+		if err != nil {
+			return payload, false
+		}
+		updated = next
+		changed = true
+	}
+	return updated, changed
+}
+
 func openAIStreamFailedEventSemanticStatus(payload []byte, message string) int {
 	if isOpenAIContextWindowError(message, payload) {
 		return http.StatusBadRequest
@@ -1055,6 +1113,10 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 	originalModel string,
 	mappedModel string,
 ) (*openaiStreamingResultPassthrough, error) {
+	observer := upstreamResponseModelObserverFromContext(c)
+	if observer == nil {
+		observer = beginUpstreamResponseModelObservation(c)
+	}
 	s.writeOpenAIPassthroughResponseHeaders(c, resp.Header)
 
 	// SSE headers
@@ -1139,6 +1201,8 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 		if data, ok := extractOpenAISSEDataLine(line); ok {
 			dataBytes := []byte(data)
 			trimmedData := strings.TrimSpace(data)
+			rawEventType := strings.TrimSpace(gjson.GetBytes(dataBytes, "type").String())
+			observer.ObserveOpenAI(dataBytes, rawEventType)
 			if needModelReplace && strings.Contains(data, mappedModel) {
 				line = s.replaceModelInSSELine(line, mappedModel, originalModel)
 				if replacedData, replaced := extractOpenAISSEDataLine(line); replaced {
@@ -1337,6 +1401,15 @@ func (s *OpenAIGatewayService) handleNonStreamingResponsePassthrough(
 	body, err := ReadUpstreamResponseBody(resp.Body, s.cfg, c, openAITooLargeError)
 	if err != nil {
 		return nil, err
+	}
+	observer := upstreamResponseModelObserverFromContext(c)
+	if observer == nil {
+		observer = beginUpstreamResponseModelObservation(c)
+	}
+	if bodyHasSSEFraming(body) {
+		observeOpenAISSEBody(observer, string(body))
+	} else {
+		observer.ObserveOpenAI(body, strings.TrimSpace(gjson.GetBytes(body, "type").String()))
 	}
 
 	// Detect SSE responses from upstream and convert to JSON.

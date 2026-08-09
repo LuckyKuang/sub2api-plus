@@ -19,6 +19,7 @@ import (
 
 // ForwardUpstream 使用 base_url + /v1/messages + 双 header 认证透传上游 Claude 请求
 func (s *AntigravityGatewayService) ForwardUpstream(ctx context.Context, c *gin.Context, account *Account, body []byte) (*ForwardResult, error) {
+	beginUpstreamResponseModelObservation(c)
 	startTime := time.Now()
 	sessionID := getSessionID(c)
 	prefix := logPrefix(sessionID, account.Name)
@@ -137,6 +138,7 @@ func (s *AntigravityGatewayService) ForwardUpstream(ctx context.Context, c *gin.
 		}
 
 		// 提取 usage
+		upstreamResponseModelObserverFromContext(c).ObserveAnthropic(respBody)
 		usage = s.extractClaudeUsage(respBody)
 
 		c.Header("Content-Type", resp.Header.Get("Content-Type"))
@@ -153,13 +155,15 @@ func (s *AntigravityGatewayService) ForwardUpstream(ctx context.Context, c *gin.
 	}
 
 	return &ForwardResult{
-		Model:            originalModel,
-		Stream:           claudeReq.Stream,
-		Duration:         duration,
-		FirstTokenMs:     firstTokenMs,
-		FirstOutputMs:    firstOutputMs,
-		FirstOutputKind:  firstOutputKind,
-		ClientDisconnect: clientDisconnect,
+		Model:                         originalModel,
+		UpstreamResponseModel:         observedUpstreamResponseModel(c),
+		UpstreamResponseModelConflict: observedUpstreamResponseModelConflict(c),
+		Stream:                        claudeReq.Stream,
+		Duration:                      duration,
+		FirstTokenMs:                  firstTokenMs,
+		FirstOutputMs:                 firstOutputMs,
+		FirstOutputKind:               firstOutputKind,
+		ClientDisconnect:              clientDisconnect,
 		Usage: ClaudeUsage{
 			InputTokens:              usage.InputTokens,
 			OutputTokens:             usage.OutputTokens,
@@ -278,6 +282,9 @@ func (s *AntigravityGatewayService) streamUpstreamResponse(c *gin.Context, resp 
 			lastDataAt = time.Now()
 
 			line := ev.line
+			if data, ok := extractAnthropicSSEDataLine(line); ok {
+				upstreamResponseModelObserverFromContext(c).ObserveAnthropic([]byte(strings.TrimSpace(data)))
+			}
 			if strings.TrimSpace(line) == "" {
 				eventName = ""
 			} else if strings.HasPrefix(line, "event:") {

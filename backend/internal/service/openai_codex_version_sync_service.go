@@ -98,9 +98,9 @@ func (s *OpenAICodexVersionSyncService) runInitial() {
 	s.runOnce()
 }
 
-// syncedWithinInterval 判断已同步值是否仍在一个同步周期内。
+// syncedWithinInterval 判断不低于编译基线的稳定同步值是否仍在一个同步周期内。
 // 借设置行自身的 UpdatedAt 判断，无需额外记录时间戳的设置项。
-// 读取失败或尚无有效同步值时返回 false，让启动同步照常执行。
+// 读取失败、预发布、低于基线或尚无有效同步值时返回 false，让启动同步照常执行。
 func (s *OpenAICodexVersionSyncService) syncedWithinInterval() bool {
 	if s.interval <= 0 {
 		return false
@@ -112,7 +112,8 @@ func (s *OpenAICodexVersionSyncService) syncedWithinInterval() bool {
 	if err != nil || setting == nil || setting.UpdatedAt.IsZero() {
 		return false
 	}
-	if NormalizeCodexClientVersion(setting.Value) == "" {
+	version := normalizeStableCodexClientVersion(setting.Value)
+	if version == "" || CompareVersions(version, codexCLIVersion) < 0 {
 		return false
 	}
 	return time.Since(setting.UpdatedAt) < s.interval
@@ -126,12 +127,16 @@ func (s *OpenAICodexVersionSyncService) runOnce() {
 		return
 	}
 
-	latest := s.fetchLatestStableVersion(ctx)
+	latest := normalizeStableCodexClientVersion(s.fetchLatestStableVersion(ctx))
 	if latest == "" {
 		return
 	}
+	if CompareVersions(latest, codexCLIVersion) < 0 {
+		slog.Warn("openai_codex_version_sync_below_compiled_baseline", "version", latest, "baseline", codexCLIVersion)
+		return
+	}
 
-	current := NormalizeCodexClientVersion(s.currentSyncedVersion(ctx))
+	current := normalizeStableCodexClientVersion(s.currentSyncedVersion(ctx))
 	// 只向前推进：上游偶发返回旧数据或重新发布历史 tag 时不把已同步的版本号降级。
 	if current != "" && CompareVersions(latest, current) <= 0 {
 		return

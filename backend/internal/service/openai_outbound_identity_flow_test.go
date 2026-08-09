@@ -237,6 +237,36 @@ func TestOpenAIGatewayService_ResolvedIdentityPrefersAccountThenGlobalThenDefaul
 	require.Equal(t, DefaultOpenAICodexUserAgent, identity.UserAgent)
 }
 
+func TestOpenAIGatewayService_StaleSyncedVersionDoesNotChangeSelectedSource(t *testing.T) {
+	globalUA := "codex-tui/8.8.8 (Ubuntu 22.4.0; x86_64) WindowsTerminal (codex-tui; 8.8.8)"
+	settingService := &SettingService{settingRepo: &openAIIdentitySettingRepoStub{values: map[string]string{
+		SettingKeyOpenAICodexUserAgent:           globalUA,
+		SettingKeyOpenAICodexClientVersionSynced: "0.146.0",
+	}}}
+	svc := &OpenAIGatewayService{settingService: settingService}
+	account := &Account{
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+		Credentials: map[string]any{
+			"user_agent": testOpenAIAccountUserAgent,
+		},
+	}
+
+	identity := svc.resolveOpenAIOutboundIdentity(context.Background(), account)
+	require.Equal(t, testOpenAIAccountCurrentUserAgent, identity.UserAgent)
+	require.Equal(t, "codex_cli_rs", identity.Originator)
+	require.Equal(t, codexCLIVersion, identity.Version)
+
+	account.Credentials = map[string]any{}
+	identity = svc.resolveOpenAIOutboundIdentity(context.Background(), account)
+	require.Equal(t,
+		"codex-tui/"+codexCLIVersion+" (Ubuntu 22.4.0; x86_64) WindowsTerminal (codex-tui; "+codexCLIVersion+")",
+		identity.UserAgent,
+	)
+	require.Equal(t, "codex-tui", identity.Originator)
+	require.Equal(t, codexCLIVersion, identity.Version)
+}
+
 func TestOpenAIGatewayService_ForceCodexCLILeavesOutboundIdentityPriorityIntact(t *testing.T) {
 	globalUA := "codex-tui/8.8.8 (Ubuntu 22.4.0; x86_64) xterm-256color (codex-tui; 8.8.8)"
 	settingService := &SettingService{settingRepo: &openAIIdentitySettingRepoStub{values: map[string]string{

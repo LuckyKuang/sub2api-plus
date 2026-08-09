@@ -126,13 +126,14 @@ func resolveOpenAIOutboundIdentityCandidates(accountUA, systemUA string) openAIO
 	// DefaultOpenAICodexUserAgent is a compile-time invariant covered by tests.
 	// Keep this defensive return aligned with the normal default rather than
 	// introducing a second, unreachable built-in identity.
-	return openAIOutboundIdentity{UserAgent: DefaultOpenAICodexUserAgent, Originator: openai.CodexCLIOriginator, Version: DefaultOpenAICodexVersion}
+	return openAIOutboundIdentity{UserAgent: DefaultOpenAICodexUserAgent, Originator: openai.CodexDefaultOriginator, Version: DefaultOpenAICodexVersion}
 }
 
 // resolveOpenAIOutboundIdentityWithVersion applies the configured Codex
 // version only after choosing the account, global, or built-in identity. The
-// selected source still owns the client fingerprint, while the User-Agent and
-// Version header stay synchronized for upstream overload handling.
+// selected source still owns the client family and platform fingerprint; only
+// its version declarations are rebuilt so the User-Agent and Version header
+// stay synchronized for upstream overload handling.
 func resolveOpenAIOutboundIdentityWithVersion(accountUA, systemUA, configuredVersion string) openAIOutboundIdentity {
 	identity := resolveOpenAIOutboundIdentityCandidates(accountUA, systemUA)
 	version := NormalizeCodexClientVersion(configuredVersion)

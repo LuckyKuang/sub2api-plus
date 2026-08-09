@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
 	"github.com/stretchr/testify/require"
 )
 
@@ -29,6 +30,21 @@ func TestResolveOpenAIOutboundIdentityCandidates(t *testing.T) {
 			wantVersion:    "0.150.0",
 		},
 		{
+			name:           "合法账号 UA 不受无效系统设置影响",
+			accountUA:      accountUA,
+			systemUA:       "not-a-codex-client/1.0",
+			wantUserAgent:  accountUA,
+			wantOriginator: "codex-tui",
+			wantVersion:    "0.150.0",
+		},
+		{
+			name:           "账号 UA 为空时使用系统设置",
+			systemUA:       testCodexCLIUserAgent,
+			wantUserAgent:  testCodexCLIUserAgent,
+			wantOriginator: "codex_cli_rs",
+			wantVersion:    "0.144.1",
+		},
+		{
 			name:           "无效账号 UA 回退到系统设置",
 			accountUA:      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
 			systemUA:       testCodexCLIUserAgent,
@@ -41,7 +57,13 @@ func TestResolveOpenAIOutboundIdentityCandidates(t *testing.T) {
 			accountUA:      "curl/8.7.1",
 			systemUA:       "not-a-codex-client/1.0",
 			wantUserAgent:  DefaultOpenAICodexUserAgent,
-			wantOriginator: "codex_cli_rs",
+			wantOriginator: openai.CodexDefaultOriginator,
+			wantVersion:    codexCLIVersion,
+		},
+		{
+			name:           "账号与系统 UA 均为空时使用内置默认",
+			wantUserAgent:  DefaultOpenAICodexUserAgent,
+			wantOriginator: openai.CodexDefaultOriginator,
 			wantVersion:    codexCLIVersion,
 		},
 	}
