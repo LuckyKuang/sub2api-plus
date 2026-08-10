@@ -1337,6 +1337,21 @@ func (r *accountRepository) ListByPlatform(ctx context.Context, platform string)
 	return r.accountsToService(ctx, accounts)
 }
 
+// ListOpenAISessionPolicyDiagnosticCandidates returns every configured OpenAI
+// account, including disabled accounts, for post-selection error diagnosis.
+// It must not be used for routing: normal scheduling intentionally considers
+// only accounts that are currently eligible to receive requests.
+func (r *accountRepository) ListOpenAISessionPolicyDiagnosticCandidates(ctx context.Context) ([]service.Account, error) {
+	accounts, err := r.client.Account.Query().
+		Where(dbaccount.PlatformEQ(service.PlatformOpenAI)).
+		Order(dbent.Asc(dbaccount.FieldPriority)).
+		All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return r.accountsToService(ctx, accounts)
+}
+
 func (r *accountRepository) UpdateLastUsed(ctx context.Context, id int64) error {
 	now := time.Now()
 	_, err := r.client.Account.Update().

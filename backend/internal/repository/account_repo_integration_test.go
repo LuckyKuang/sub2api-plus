@@ -665,6 +665,26 @@ func (s *AccountRepoSuite) TestListByPlatform() {
 	s.Require().Equal(service.PlatformAnthropic, accounts[0].Platform)
 }
 
+func (s *AccountRepoSuite) TestListOpenAISessionPolicyDiagnosticCandidates() {
+	group := mustCreateGroup(s.T(), s.client, &service.Group{Name: "openai-diagnostic"})
+	active := mustCreateAccount(s.T(), s.client, &service.Account{Name: "openai-active", Platform: service.PlatformOpenAI, Status: service.StatusActive})
+	disabled := mustCreateAccount(s.T(), s.client, &service.Account{Name: "openai-disabled", Platform: service.PlatformOpenAI, Status: service.StatusDisabled})
+	mustCreateAccount(s.T(), s.client, &service.Account{Name: "anthropic-active", Platform: service.PlatformAnthropic, Status: service.StatusActive})
+	mustBindAccountToGroup(s.T(), s.client, disabled.ID, group.ID, 1)
+
+	accounts, err := s.repo.ListOpenAISessionPolicyDiagnosticCandidates(s.ctx)
+	s.Require().NoError(err, "ListOpenAISessionPolicyDiagnosticCandidates")
+	s.Require().Len(accounts, 2)
+	s.Require().ElementsMatch([]int64{active.ID, disabled.ID}, []int64{accounts[0].ID, accounts[1].ID})
+
+	byID := make(map[int64]service.Account, len(accounts))
+	for _, account := range accounts {
+		byID[account.ID] = account
+	}
+	s.Require().Equal(service.StatusDisabled, byID[disabled.ID].Status)
+	s.Require().Equal([]int64{group.ID}, byID[disabled.ID].GroupIDs)
+}
+
 // --- Preload and VirtualFields ---
 
 func (s *AccountRepoSuite) TestPreload_And_VirtualFields() {

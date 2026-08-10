@@ -68,6 +68,16 @@ func (r schedulerTestOpenAIAccountRepo) ListByPlatform(_ context.Context, platfo
 	return result, nil
 }
 
+func (r schedulerTestOpenAIAccountRepo) ListOpenAISessionPolicyDiagnosticCandidates(_ context.Context) ([]Account, error) {
+	var result []Account
+	for _, acc := range r.accounts {
+		if acc.Platform == PlatformOpenAI {
+			result = append(result, acc)
+		}
+	}
+	return result, nil
+}
+
 type schedulerGroupAwareOpenAIAccountRepo struct {
 	schedulerTestOpenAIAccountRepo
 }
@@ -289,6 +299,38 @@ func TestOpenAIGatewayService_SelectAccountWithScheduler_OAuthSessionPolicyDenia
 			false,
 			ErrNoAvailableAccounts,
 		)
+		require.ErrorIs(t, err, ErrNoAvailableAccounts)
+		require.False(t, errors.Is(err, ErrOpenAIOAuthSessionAccessDenied))
+	})
+
+	t.Run("configured disabled API-key model mapping is not reclassified as OAuth policy denial", func(t *testing.T) {
+		unavailableAPIKey := Account{
+			ID:          51006,
+			Platform:    PlatformOpenAI,
+			Type:        AccountTypeAPIKey,
+			Status:      StatusDisabled,
+			Schedulable: false,
+			Concurrency: 1,
+			GroupIDs:    []int64{blockedGroupID},
+			Credentials: map[string]any{
+				"model_mapping": map[string]any{"codex-auto-review": "gpt-5.4-mini"},
+			},
+		}
+		require.True(t, unavailableAPIKey.IsModelSupported("codex-auto-review"))
+		selection, _, err := newService([]Account{unavailableAPIKey, protectedOAuth}).SelectAccountWithSchedulerForCapability(
+			ctx,
+			&blockedGroupID,
+			"",
+			"",
+			"codex-auto-review",
+			nil,
+			OpenAIUpstreamTransportAny,
+			OpenAIEndpointCapabilityChatCompletions,
+			false,
+			false,
+			true,
+		)
+		require.Nil(t, selection)
 		require.ErrorIs(t, err, ErrNoAvailableAccounts)
 		require.False(t, errors.Is(err, ErrOpenAIOAuthSessionAccessDenied))
 	})

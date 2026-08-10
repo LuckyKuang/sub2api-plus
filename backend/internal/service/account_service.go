@@ -47,6 +47,15 @@ type OAuthRefreshCandidatePager interface {
 	ListOAuthRefreshCandidatePage(ctx context.Context, options OAuthRefreshPageOptions) (*OAuthRefreshCandidatePage, error)
 }
 
+// OpenAISessionPolicyDiagnosticRepository is an optional, narrow repository
+// contract used only to decide whether a no-account result can accurately be
+// explained as an OpenAI OAuth session-sharing policy denial. It deliberately
+// includes configured OpenAI accounts in every status and hydrates their group
+// bindings; it must never be used for account selection.
+type OpenAISessionPolicyDiagnosticRepository interface {
+	ListOpenAISessionPolicyDiagnosticCandidates(ctx context.Context) ([]Account, error)
+}
+
 type AccountRepository interface {
 	Create(ctx context.Context, account *Account) error
 	GetByID(ctx context.Context, id int64) (*Account, error)

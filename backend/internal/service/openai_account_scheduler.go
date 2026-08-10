@@ -2318,16 +2318,18 @@ func (s *OpenAIGatewayService) hasOpenAIOAuthSessionPolicyAccessDenial(
 	if s == nil || s.accountRepo == nil {
 		return false
 	}
-	accounts, err := s.accountRepo.ListByPlatform(ctx, PlatformOpenAI)
+	accounts, err := s.listOpenAISessionPolicyDiagnosticCandidates(ctx)
 	if err != nil {
 		return false
 	}
 	hasDeniedMatchingAccount := false
+	// Any account that is already authorized for the caller's scheduling group
+	// means OAuth policy denial is not the sole cause of selection failure. This
+	// includes API-key accounts, which do not have an OAuth session policy.
 	hasAuthorizedMatchingAccount := false
 	for index := range accounts {
 		account := &accounts[index]
-		if !account.IsOpenAIOAuthSessionSharingEnabled() ||
-			!openAIOAuthPolicyAccountMatchesRequestConfiguration(account, requestedModel, requiredCapability, requiredImageCapability, requireCompact) ||
+		if !openAIAccountMatchesRequestConfiguration(account, requestedModel, requiredCapability, requiredImageCapability, requireCompact) ||
 			!s.isOpenAIAccountTransportCompatible(account, requiredTransport) {
 			continue
 		}
@@ -2335,11 +2337,17 @@ func (s *OpenAIGatewayService) hasOpenAIOAuthSessionPolicyAccessDenial(
 			s.isUpstreamModelRestrictedByChannel(ctx, *groupID, account, requestedModel, requireCompact) {
 			continue
 		}
-		if account.IsOpenAIOAuthSessionGroupAllowed(groupID) {
+		if s.openAIAccountMatchesSchedulingGroup(account, groupID) {
 			// An authorized account means policy is not the sole reason selection
 			// failed. Count it even when it was excluded after an upstream error or
 			// is currently unhealthy/full, so failover preserves the real failure.
+			// This must include non-OAuth accounts: a Codex API-key account may be
+			// unavailable for a runtime reason, but that must not be reported as an
+			// OAuth session-policy rejection from another candidate.
 			hasAuthorizedMatchingAccount = true
+			continue
+		}
+		if !account.IsOpenAIOAuthSessionSharingEnabled() {
 			continue
 		}
 		if _, excluded := excludedIDs[account.ID]; excluded {
@@ -2362,7 +2370,17 @@ func (s *OpenAIGatewayService) hasOpenAIOAuthSessionPolicyAccessDenial(
 	return hasDeniedMatchingAccount && !hasAuthorizedMatchingAccount
 }
 
-func openAIOAuthPolicyAccountMatchesRequestConfiguration(
+func (s *OpenAIGatewayService) listOpenAISessionPolicyDiagnosticCandidates(ctx context.Context) ([]Account, error) {
+	if diagnosticRepo, ok := s.accountRepo.(OpenAISessionPolicyDiagnosticRepository); ok {
+		return diagnosticRepo.ListOpenAISessionPolicyDiagnosticCandidates(ctx)
+	}
+	// Preserve compatibility with focused test doubles and external repository
+	// implementations that predate the narrow diagnostic contract. Production
+	// uses the contract above so disabled configured accounts are included.
+	return s.accountRepo.ListByPlatform(ctx, PlatformOpenAI)
+}
+
+func openAIAccountMatchesRequestConfiguration(
 	account *Account,
 	requestedModel string,
 	requiredCapability OpenAIEndpointCapability,
