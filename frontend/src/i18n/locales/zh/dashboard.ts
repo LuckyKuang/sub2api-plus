@@ -402,6 +402,7 @@ export default {
     exportExcelFailed: '使用数据导出失败',
     imageUnit: '张',
     userAgent: 'User-Agent',
+    sessionId: '会话 ID',
     ipGeo: {
       fetch: '获取地区',
       fetching: '获取中...',

@@ -270,6 +270,16 @@
           <span v-else class="text-sm text-gray-400 dark:text-gray-500">-</span>
         </template>
 
+        <template #cell-session_id="{ row }">
+          <span
+            v-if="row.session_id"
+            data-testid="usage-session-id"
+            class="block max-w-[320px] truncate font-mono text-sm text-gray-600 dark:text-gray-400"
+            :title="row.session_id"
+          >{{ row.session_id }}</span>
+          <span v-else class="text-sm text-gray-400 dark:text-gray-500">-</span>
+        </template>
+
         <template #cell-ip_address="{ row }">
           <div v-if="row.ip_address">
             <span class="text-sm font-mono text-gray-600 dark:text-gray-400">{{ row.ip_address }}</span>

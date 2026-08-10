@@ -1671,6 +1671,10 @@ export interface UsageLog {
   // User-Agent
   user_agent: string | null
   ip_address?: string | null
+  // Explicit client-provided request correlation identifier. It is only returned
+  // to authorized usage-log viewers and is intentionally displayed verbatim for
+  // audit and export workflows.
+  session_id?: string | null
 
   // Cache TTL Override
   cache_ttl_overridden: boolean

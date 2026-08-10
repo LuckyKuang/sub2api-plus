@@ -95,6 +95,7 @@ const DataTableStub = {
         <slot name="cell-tokens" :row="row" />
         <slot name="cell-cost" :row="row" />
 		<slot name="cell-latency" :row="row" />
+        <slot name="cell-session_id" :row="row" />
       </div>
     </div>
   `,
@@ -144,6 +145,32 @@ describe('admin UsageTable tooltip', () => {
       height: 20,
       toJSON: () => ({}),
     } as DOMRect)
+  })
+
+  it('shows the original session ID and marks missing values with a dash', () => {
+    const wrapper = mount(UsageTable, {
+      props: {
+        data: [
+          { ...baseImageRow, request_id: 'req-session-present', session_id: '=audit-session-001' },
+          { ...baseImageRow, request_id: 'req-session-absent', session_id: null },
+        ],
+        loading: false,
+        columns: [{ key: 'session_id', label: 'Session ID' }],
+      },
+      global: {
+        stubs: {
+          DataTable: DataTableStub,
+          EmptyState: true,
+          Icon: true,
+          Teleport: true,
+        },
+      },
+    })
+
+    const sessionID = wrapper.get('[data-testid="usage-session-id"]')
+    expect(sessionID.text()).toBe('=audit-session-001')
+    expect(sessionID.attributes('title')).toBe('=audit-session-001')
+    expect(wrapper.text()).toContain('-')
   })
 
   it('keeps primary latency as first token and hides modality details behind an info icon', async () => {

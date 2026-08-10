@@ -53,6 +53,7 @@ const messages: Record<string, string> = {
   'usage.sentUpstreamModel': 'Sent upstream model',
   'usage.upstreamResponseModel': 'Upstream response model',
   'usage.upstreamModelMismatch': 'Upstream model mismatch',
+  'usage.sessionId': 'Session ID',
   'common.yes': 'Yes',
   'common.no': 'No',
 }
@@ -671,6 +672,7 @@ describe('admin UsageView Excel export latency fields', () => {
           first_output_kind: 'text',
           duration_ms: 345,
           request_id: 'text-request',
+          session_id: '=audit-session-001',
           user_agent: '',
           ip_address: '',
         },
@@ -694,6 +696,7 @@ describe('admin UsageView Excel export latency fields', () => {
           first_output_kind: 'image',
           duration_ms: 500,
           request_id: 'image-request',
+          session_id: null,
           user_agent: '',
           ip_address: '',
         },
@@ -735,6 +738,7 @@ describe('admin UsageView Excel export latency fields', () => {
     const firstOutputIndex = headers.indexOf('usage.latencyFirstOutput')
     const firstOutputKindIndex = headers.indexOf('usage.latencyFirstOutputKind')
     const durationIndex = headers.indexOf('usage.duration')
+    const sessionIDIndex = headers.indexOf('Session ID')
 
     expect(headers.slice(requestedModelIndex, requestedModelIndex + 4)).toEqual([
       'Requested model',
@@ -755,6 +759,9 @@ describe('admin UsageView Excel export latency fields', () => {
     expect(rows).toHaveLength(2)
     expect(rows[0].slice(firstTokenIndex, durationIndex + 1)).toEqual([120, 100, 'text', 345])
     expect(rows[1].slice(firstTokenIndex, durationIndex + 1)).toEqual(['', 220, 'image', 500])
+    expect(sessionIDIndex).toBeGreaterThan(-1)
+    expect(rows[0][sessionIDIndex]).toBe('=audit-session-001')
+    expect(rows[1][sessionIDIndex]).toBe('')
     expect(saveAs).toHaveBeenCalledOnce()
 
     wrapper.unmount()
