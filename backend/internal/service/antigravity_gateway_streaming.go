@@ -40,11 +40,9 @@ func (s *AntigravityGatewayService) observeAntigravityGeminiSSELine(c *gin.Conte
 	if payload == "" || payload == "[DONE]" {
 		return
 	}
-	raw := []byte(payload)
-	if inner, err := s.unwrapV1InternalResponse(raw); err == nil && len(inner) > 0 {
-		raw = inner
-	}
-	observer.ObserveGemini(raw)
+	// Observe the original event envelope: model metadata may live outside the
+	// unwrapped response payload.
+	observer.ObserveGemini([]byte(payload))
 }
 
 // antigravityClientWriter 封装流式响应的客户端写入，自动检测断开并标记。

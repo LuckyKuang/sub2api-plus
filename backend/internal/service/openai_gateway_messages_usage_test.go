@@ -30,3 +30,34 @@ func TestCopyOpenAIUsageFromResponsesUsageTrustsCanonicalCacheCreationValue(t *t
 	require.Zero(t, got.CacheCreationInputTokens)
 	require.Equal(t, 1, got.AudioOutputTokens)
 }
+
+func TestAddOpenAIUsagePreservesEveryTokenClass(t *testing.T) {
+	dst := OpenAIUsage{
+		InputTokens:              1,
+		ImageInputTokens:         2,
+		OutputTokens:             3,
+		CacheCreationInputTokens: 4,
+		CacheReadInputTokens:     5,
+		ImageOutputTokens:        6,
+		AudioOutputTokens:        7,
+	}
+	addOpenAIUsage(&dst, OpenAIUsage{
+		InputTokens:              10,
+		ImageInputTokens:         20,
+		OutputTokens:             30,
+		CacheCreationInputTokens: 40,
+		CacheReadInputTokens:     50,
+		ImageOutputTokens:        60,
+		AudioOutputTokens:        70,
+	})
+
+	require.Equal(t, OpenAIUsage{
+		InputTokens:              11,
+		ImageInputTokens:         22,
+		OutputTokens:             33,
+		CacheCreationInputTokens: 44,
+		CacheReadInputTokens:     55,
+		ImageOutputTokens:        66,
+		AudioOutputTokens:        77,
+	}, dst)
+}

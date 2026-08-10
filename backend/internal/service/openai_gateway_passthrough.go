@@ -19,6 +19,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/apicompat"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/ctxkey"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/logger"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
 	"github.com/LuckyKuang/sub2api-plus/internal/util/responseheaders"
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
@@ -427,6 +428,10 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 
 	// OAuth 透传到 ChatGPT internal API 时补齐必要头。
 	if account.Type == AccountTypeOAuth {
+		// Current Codex OAuth HTTP no longer negotiates the legacy Responses
+		// experiment. Passthrough may receive it from an older client, so remove
+		// only that token while preserving any independent beta negotiation.
+		stripOpenAILegacyResponsesBeta(req.Header)
 		promptCacheKey := strings.TrimSpace(gjson.GetBytes(body, "prompt_cache_key").String())
 		req.Host = "chatgpt.com"
 		if err := resolveAndSetOpenAIChatGPTAccountHeaders(ctx, s.accountRepo, req.Header, account); err != nil {
@@ -446,7 +451,9 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 		} else if req.Header.Get("accept") == "" {
 			req.Header.Set("accept", "text/event-stream")
 		}
-		req.Header.Set("OpenAI-Beta", "responses=experimental")
+		if req.Header.Get("originator") == "" {
+			req.Header.Set("originator", openai.CodexDefaultOriginator)
+		}
 		// 用隔离后的 session 标识符覆盖客户端透传值，防止跨用户会话碰撞。
 		if clientSessionID == "" {
 			clientSessionID = promptCacheKey
@@ -475,15 +482,62 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 		req.Header.Set("accept", "application/json")
 	}
 
+	// 透传模式也支持账户自定义 User-Agent 与 ForceCodexCLI 兜底。
+	customUA := account.GetOpenAIUserAgent()
+	if customUA != "" {
+		req.Header.Set("user-agent", customUA)
+	}
+	if s.cfg != nil && s.cfg.Gateway.ForceCodexCLI {
+		req.Header.Set("user-agent", codexCLIUserAgent)
+	}
+	// 终态收口：透传路径的 OAuth 与非透传完全一致，同样强制统一出站身份
+	// （User-Agent / originator / version 同源自洽），客户端自报身份不会到达上游。
+	if account.Type == AccountTypeOAuth {
+		enforceCodexIdentityHeadersWithUA(req.Header, s.codexIdentityOverrideUA(account))
+	}
+
 	if req.Header.Get("content-type") == "" {
 		req.Header.Set("content-type", "application/json")
 	}
 
 	// 账号级请求头覆写（仅 openai api_key 账号启用时生效；OAuth 路径 no-op）
-	account.applyOpenAIHeaderOverrides(req.Header)
+	account.ApplyHeaderOverrides(req.Header)
 	s.applyOpenAIOutboundIdentity(ctx, account, req.Header, account.Type == AccountTypeOAuth)
+	setOpenAICodexRoutingHintFromBody(req.Header, account, body)
+	logOpenAIRoutingDiagnosticsFromBody(ctx, account, "http_passthrough", req.Header, body, "not_applicable")
 
 	return req, nil
+}
+
+func stripOpenAILegacyResponsesBeta(headers http.Header) {
+	if headers == nil {
+		return
+	}
+
+	preserved := make([]string, 0)
+	for key, values := range headers {
+		if !strings.EqualFold(strings.TrimSpace(key), "OpenAI-Beta") {
+			continue
+		}
+		delete(headers, key)
+		for _, value := range values {
+			parts := strings.Split(value, ",")
+			kept := parts[:0]
+			for _, part := range parts {
+				part = strings.TrimSpace(part)
+				if part == "" || strings.EqualFold(part, "responses=experimental") {
+					continue
+				}
+				kept = append(kept, part)
+			}
+			if len(kept) > 0 {
+				preserved = append(preserved, strings.Join(kept, ", "))
+			}
+		}
+	}
+	for _, value := range preserved {
+		headers.Add("OpenAI-Beta", value)
+	}
 }
 
 func shouldFailoverOpenAIPassthroughResponse(account *Account, statusCode int, responseBody []byte) bool {
@@ -790,6 +844,11 @@ func openAIStreamDataStartsClientOutput(data, eventType string) bool {
 	case "response.failed":
 		return false
 	case "error":
+		// 上游降载/瞬时故障会先推 {"type":"error"} 帧、再以 response.failed 收尾。
+		// 可重试类错误帧不能算客户端输出：一旦把它当首输出 flush，
+		// clientOutputStarted 即被固化，随后的 failed 事件永远进不了 pre-output
+		// failover 分支，只能把致命错误原样转发给客户端。不可重试类
+		// （content_policy / invalid_request 等）维持原样转发，保留上游错误细节。
 		payload := []byte(trimmed)
 		return !openAIStreamFailedEventShouldFailover(payload, extractOpenAISSEErrorMessage(payload))
 	}
@@ -818,13 +877,19 @@ func isOpenAIUpstreamCapacityShedEvent(payload []byte) bool {
 	}
 }
 
-// openAICapacityShedRetryableClientCode is used when a capacity-shed event
-// must be forwarded after all gateway failover candidates are exhausted.
+// openAICapacityShedRetryableClientCode 是把上游容量降载错误转发给客户端时改写
+// 使用的错误码。Codex CLI 按闭集对错误码分类：server_is_overloaded / slow_down
+// 被判为致命错误（客户端提示 "Selected model is at capacity. Please try a
+// different model." 并直接终止会话），而 server_error 等致命集之外的错误码会进入
+// 客户端内置的退避重试。
 const openAICapacityShedRetryableClientCode = "server_error"
 
-// sanitizeOpenAICapacityShedErrorCodeForClient rewrites only capacity-shed
-// error codes into the Codex retryable category. Upstream classification and
-// account-state handling always run against the original payload first.
+// sanitizeOpenAICapacityShedErrorCodeForClient 把即将写给下游客户端的
+// error / response.failed 事件中的容量降载错误码改写为客户端可重试的错误码。
+// 走到转发这一步说明网关侧 failover 已不可用（流中途）或已用尽；保留原始降载码
+// 只会让客户端就地终止会话。错误消息原样保留；监控与账号状态判定都基于改写前
+// 的原始 payload，不受影响。rate_limit 等其他错误码一律不动（客户端依赖
+// rate_limit_exceeded 原码解析重试延时）。
 func sanitizeOpenAICapacityShedErrorCodeForClient(payload []byte) ([]byte, bool) {
 	if len(payload) == 0 || !gjson.ValidBytes(payload) || !isOpenAIUpstreamCapacityShedEvent(payload) {
 		return payload, false
@@ -1117,7 +1182,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 	if observer == nil {
 		observer = beginUpstreamResponseModelObservation(c)
 	}
-	s.writeOpenAIPassthroughResponseHeaders(c, resp.Header)
+	writeOpenAIPassthroughResponseHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
 
 	// SSE headers
 	c.Header("Content-Type", "text/event-stream")
@@ -1137,6 +1202,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 	usage := &OpenAIUsage{}
 	imageCounter := newOpenAIImageOutputCounter()
 	var timing streamOutputTiming
+	var firstTokenMs *int
 	responseID := ""
 	clientDisconnected := false
 	sawDone := false
@@ -1184,7 +1250,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 	resultWithUsage := func() *openaiStreamingResultPassthrough {
 		return &openaiStreamingResultPassthrough{
 			usage:            usage,
-			firstTokenMs:     timing.firstTokenMs,
+			firstTokenMs:     firstTokenMs,
 			firstOutputMs:    timing.firstOutputMs,
 			firstOutputKind:  timing.firstOutputKind,
 			responseID:       responseID,
@@ -1295,7 +1361,21 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 			}
 			observation := apicompat.ObserveResponsesOutput(dataBytes)
 			timing.Observe(startTime, observation)
+			if firstTokenMs == nil && timing.firstTokenMs != nil {
+				firstTokenMs = timing.firstTokenMs
+			}
+			// Prefer semantic output observation for client-output start so preamble /
+			// structural events (e.g. response.output_item.added) do not block pre-output failover.
+			// Keep official openAIStreamDataStartsClientOutput as a secondary signal for
+			// non-retryable error frames that should flush to the client.
 			lineStartsClientOutput = forceFlushFailedEvent || observation.MeaningfulOutput || openAIStreamEventIsTerminal(trimmedData)
+			if !lineStartsClientOutput && openAIStreamDataStartsClientOutput(trimmedData, eventType) {
+				// Only treat as client output when the official classifier is more
+				// conservative than preamble-only: non-retryable error frames.
+				if eventType == "error" {
+					lineStartsClientOutput = true
+				}
+			}
 			s.parseSSEUsageBytes(dataBytes, usage)
 		}
 
@@ -1371,7 +1451,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 	if clientDisconnected {
 		return resultWithUsage(), errors.New("stream usage incomplete: client disconnected")
 	}
-	if !clientDisconnected && !sawDone && !sawTerminalEvent && ctx.Err() == nil {
+	if !sawDone && !sawTerminalEvent && ctx.Err() == nil {
 		logger.FromContext(ctx).With(
 			zap.String("component", "service.openai_gateway"),
 			zap.Int64("account_id", account.ID),
@@ -1433,7 +1513,7 @@ func (s *OpenAIGatewayService) handleNonStreamingResponsePassthrough(
 		usage = s.parseSSEUsageFromBody(string(body))
 	}
 
-	s.writeOpenAIPassthroughResponseHeaders(c, resp.Header)
+	writeOpenAIPassthroughResponseHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
 
 	contentType := resp.Header.Get("Content-Type")
 	if contentType == "" {
@@ -1508,7 +1588,7 @@ func (s *OpenAIGatewayService) handlePassthroughSSEToJSON(resp *http.Response, c
 		body = []byte(bodyText)
 	}
 
-	s.writeOpenAIPassthroughResponseHeaders(c, resp.Header)
+	writeOpenAIPassthroughResponseHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
 
 	contentType := "application/json; charset=utf-8"
 	if !ok {

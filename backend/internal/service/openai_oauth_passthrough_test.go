@@ -2090,6 +2090,63 @@ func TestOpenAIGatewayService_OAuthPassthrough_StreamClientDisconnectStillCollec
 	require.Equal(t, 3, result.Usage.CacheReadInputTokens)
 }
 
+func TestOpenAIGatewayService_StandardResponsesStreamErrorPreservesPartialResult(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	c.Request.Header.Set("User-Agent", "codex_cli_rs/0.1.0")
+	// 允许第一个输出写入，之后模拟客户端断开；上游终态 usage 仍应被读完。
+	c.Writer = &failingGinWriter{ResponseWriter: c.Writer, failAfter: 1}
+
+	body := []byte(`{"model":"gpt-5.2","stream":true,"input":[{"type":"text","text":"hi"}]}`)
+	upstreamSSE := strings.Join([]string{
+		`data: {"type":"response.output_text.delta","delta":"h"}`,
+		"",
+		`data: {"type":"response.completed","response":{"id":"resp_partial","model":"gpt-5.2","usage":{"input_tokens":11,"output_tokens":7,"input_tokens_details":{"cached_tokens":3}}}}`,
+		"",
+		"data: [DONE]",
+		"",
+	}, "\n")
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"text/event-stream"}, "X-Request-Id": []string{"rid-partial"}},
+		Body:       io.NopCloser(strings.NewReader(upstreamSSE)),
+	}}
+	svc := &OpenAIGatewayService{
+		cfg:          &config.Config{Gateway: config.GatewayConfig{ForceCodexCLI: false}},
+		httpUpstream: upstream,
+	}
+	account := &Account{
+		ID:          124,
+		Name:        "openai-oauth",
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeOAuth,
+		Concurrency: 1,
+		Credentials: map[string]any{
+			"access_token":       "oauth-token",
+			"chatgpt_account_id": "chatgpt-acc",
+		},
+		Status:      StatusActive,
+		Schedulable: true,
+	}
+
+	result, err := svc.Forward(context.Background(), c, account, body)
+
+	require.EqualError(t, err, "stream usage incomplete: client disconnected")
+	require.NotNil(t, result, "stream errors after observable output must preserve the partial result")
+	require.Equal(t, "rid-partial", result.RequestID)
+	require.Equal(t, "resp_partial", result.ResponseID)
+	require.Equal(t, 11, result.Usage.InputTokens)
+	require.Equal(t, 7, result.Usage.OutputTokens)
+	require.Equal(t, 3, result.Usage.CacheReadInputTokens)
+	require.NotNil(t, result.FirstTokenMs)
+	require.NotNil(t, result.FirstOutputMs)
+	require.Equal(t, "text", result.FirstOutputKind)
+	require.True(t, result.ClientDisconnect)
+}
+
 func TestOpenAIGatewayService_APIKeyPassthrough_PreservesBodyAndUsesResponsesEndpoint(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

@@ -47,8 +47,9 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	if normalized {
 		body = normalizedBody
 	}
-	// Normalize explicitly-null tool parameter types before dispatch. Upstreams
-	// reject them as request errors, which must not be retried through pools.
+	// 在分流到 passthrough / Codex transform / 原生 ChatCompletions 之前统一修正
+	// 显式为 null 的工具 Schema type，否则 upstream 的 400 会被归一成可重试的 502，
+	// 同一份坏定义在账号池里反复重放。
 	sanitizedToolBody, toolSchemaSanitized, toolSchemaErr := sanitizeOpenAIResponsesToolParameterTypes(body)
 	if toolSchemaErr != nil {
 		return nil, fmt.Errorf("sanitize OpenAI Responses tool parameters: %w", toolSchemaErr)
@@ -940,8 +941,47 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		firstOutputKind := ""
 		responseID := ""
 		imageCount := 0
+		searchCount := 0
 		var imageOutputSizes []string
 		clientDisconnected := false
+		buildForwardResult := func() *OpenAIForwardResult {
+			usageValue := OpenAIUsage{}
+			if usage != nil {
+				usageValue = *usage
+			}
+			result := &OpenAIForwardResult{
+				RequestID:                     resp.Header.Get("x-request-id"),
+				ResponseID:                    responseID,
+				Usage:                         usageValue,
+				Model:                         originalModel,
+				BillingModel:                  billingModel,
+				UpstreamModel:                 upstreamModel,
+				UpstreamResponseModel:         observedUpstreamResponseModel(c),
+				UpstreamResponseModelConflict: observedUpstreamResponseModelConflict(c),
+				ServiceTier:                   serviceTier,
+				ReasoningEffort:               reasoningEffort,
+				Stream:                        reqStream,
+				OpenAIWSMode:                  false,
+				Duration:                      time.Since(startTime),
+				FirstTokenMs:                  firstTokenMs,
+				FirstOutputMs:                 firstOutputMs,
+				FirstOutputKind:               firstOutputKind,
+				ClientDisconnect:              clientDisconnected,
+			}
+			if imageCount > 0 {
+				result.ImageCount = imageCount
+				result.ImageSize = imageSizeTier
+				result.ImageInputSize = imageInputSize
+				result.ImageOutputSizes = imageOutputSizes
+				result.BillingModel = imageBillingModel
+			}
+			// Grok-native web_search / x_search / tool_search tool invocations
+			// are additive to token billing when a search price is configured.
+			if searchCount > 0 && account != nil && account.IsGrok() {
+				result.SearchCount = searchCount
+			}
+			return result
+		}
 		if reqStream {
 			streamResult, streamErr := s.handleStreamingResponseWithReasoning(ctx, resp, c, account, startTime, originalModel, upstreamModel, reasoningEffortValue)
 			if streamResult != nil {
@@ -953,33 +993,10 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 				imageCount = streamResult.imageCount
 				imageOutputSizes = streamResult.imageOutputSizes
 				clientDisconnected = streamResult.clientDisconnect
+				searchCount = streamResult.searchCount
 			}
 			if streamErr != nil {
-				if usage == nil {
-					usage = &OpenAIUsage{}
-				}
-				return &OpenAIForwardResult{
-					RequestID:                     resp.Header.Get("x-request-id"),
-					ResponseID:                    responseID,
-					Usage:                         *usage,
-					Model:                         originalModel,
-					BillingModel:                  billingModel,
-					UpstreamModel:                 upstreamModel,
-					UpstreamResponseModel:         observedUpstreamResponseModel(c),
-					UpstreamResponseModelConflict: observedUpstreamResponseModelConflict(c),
-					ServiceTier:                   serviceTier,
-					ReasoningEffort:               reasoningEffort,
-					Stream:                        true,
-					Duration:                      time.Since(startTime),
-					FirstTokenMs:                  firstTokenMs,
-					FirstOutputMs:                 firstOutputMs,
-					FirstOutputKind:               firstOutputKind,
-					ClientDisconnect:              clientDisconnected,
-					ImageCount:                    imageCount,
-					ImageSize:                     imageSizeTier,
-					ImageInputSize:                imageInputSize,
-					ImageOutputSizes:              imageOutputSizes,
-				}, streamErr
+				return buildForwardResult(), streamErr
 			}
 		} else {
 			nonStreamResult, err := s.handleNonStreamingResponse(ctx, resp, c, account, originalModel, upstreamModel)
@@ -990,6 +1007,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			responseID = strings.TrimSpace(nonStreamResult.responseID)
 			imageCount = nonStreamResult.imageCount
 			imageOutputSizes = nonStreamResult.imageOutputSizes
+			searchCount = nonStreamResult.searchCount
 		}
 		s.bindHTTPResponseAccount(ctx, c, account, responseID)
 
@@ -1001,37 +1019,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			}
 		}
 
-		if usage == nil {
-			usage = &OpenAIUsage{}
-		}
-
-		forwardResult := &OpenAIForwardResult{
-			RequestID:                     resp.Header.Get("x-request-id"),
-			ResponseID:                    responseID,
-			Usage:                         *usage,
-			Model:                         originalModel,
-			BillingModel:                  billingModel,
-			UpstreamModel:                 upstreamModel,
-			UpstreamResponseModel:         observedUpstreamResponseModel(c),
-			UpstreamResponseModelConflict: observedUpstreamResponseModelConflict(c),
-			ServiceTier:                   serviceTier,
-			ReasoningEffort:               reasoningEffort,
-			Stream:                        reqStream,
-			OpenAIWSMode:                  false,
-			Duration:                      time.Since(startTime),
-			FirstTokenMs:                  firstTokenMs,
-			FirstOutputMs:                 firstOutputMs,
-			FirstOutputKind:               firstOutputKind,
-			ClientDisconnect:              clientDisconnected,
-		}
-		if imageCount > 0 {
-			forwardResult.ImageCount = imageCount
-			forwardResult.ImageSize = imageSizeTier
-			forwardResult.ImageInputSize = imageInputSize
-			forwardResult.ImageOutputSizes = imageOutputSizes
-			forwardResult.BillingModel = imageBillingModel
-		}
-		return forwardResult, nil
+		return buildForwardResult(), nil
 	}
 }
 
@@ -1106,7 +1094,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 			req.Header.Del("OpenAI-Beta")
 			req.Header.Del("originator")
 		} else {
-			req.Header.Set("OpenAI-Beta", "responses=experimental")
+			req.Header.Set("originator", resolveOpenAIUpstreamOriginator(c, isCodexCLI))
 		}
 		if isOpenAIResponsesCompactPath(c) {
 			req.Header.Set("accept", "application/json")
@@ -1138,13 +1126,44 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 		req.Header.Set("accept", "application/json")
 	}
 
+	// Apply custom User-Agent if configured
+	customUA := account.GetOpenAIUserAgent()
+	if customUA != "" {
+		req.Header.Set("user-agent", customUA)
+	}
+
+	// 若开启 ForceCodexCLI，则强制将上游 User-Agent 伪装为 Codex CLI。
+	// 用于网关未透传/改写 User-Agent 时，仍能命中 Codex 侧识别逻辑。
+	if s.cfg != nil && s.cfg.Gateway.ForceCodexCLI {
+		req.Header.Set("user-agent", codexCLIUserAgent)
+	}
+
+	// 终态收口：强制统一 OAuth 出站身份（User-Agent / originator / version 同源自洽）。
+	// 客户端自报身份不参与构造，浏览器型 UA 也因此不会再到达上游（原浏览器 UA 兜底已被吸收）。
+	if account.Type == AccountTypeOAuth {
+		enforceCodexIdentityHeadersWithUA(req.Header, s.codexIdentityOverrideUA(account))
+	}
+
 	// Ensure required headers exist
 	if req.Header.Get("content-type") == "" {
 		req.Header.Set("content-type", "application/json")
 	}
 
-	account.applyOpenAIHeaderOverrides(req.Header)
+	// 账号级请求头覆写（仅 openai api_key 账号启用时生效；OAuth 路径 no-op）
+	account.ApplyHeaderOverrides(req.Header)
 	s.applyOpenAIOutboundIdentity(ctx, account, req.Header, account.Type == AccountTypeOAuth)
+	setOpenAICodexRoutingHintFromBody(req.Header, account, body)
+	logOpenAIRoutingDiagnosticsFromBody(ctx, account, "http", req.Header, body, "not_applicable")
 
 	return req, nil
+}
+
+// codexIdentityOverrideUA 返回账号级显式配置的出站 User-Agent，供强制统一身份时作为覆写来源。
+// ForceCodexCLI 语义是「强制使用 Codex CLI 身份」，等价于使用网关规范身份，故返回空串；
+// 该优先级与历史行为一致（ForceCodexCLI 在账号自定义 UA 之后生效）。
+func (s *OpenAIGatewayService) codexIdentityOverrideUA(account *Account) string {
+	if s != nil && s.cfg != nil && s.cfg.Gateway.ForceCodexCLI {
+		return ""
+	}
+	return account.GetOpenAIUserAgent()
 }

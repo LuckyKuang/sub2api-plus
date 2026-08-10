@@ -21,7 +21,14 @@ type grokOAuthClient struct {
 }
 
 func NewGrokOAuthClient() service.GrokOAuthClient {
-	return &grokOAuthClient{tokenURL: xai.EffectiveTokenURL()}
+	// Fail closed: never fall back to an unvalidated EffectiveTokenURL (env can
+	// point at an attacker host and steal code/refresh tokens).
+	tokenURL, err := xai.ValidatedTokenURL()
+	if err != nil || strings.TrimSpace(tokenURL) == "" {
+		// Official allowlisted endpoint only — never EffectiveTokenURL() (raw env).
+		tokenURL = xai.DefaultTokenURL
+	}
+	return &grokOAuthClient{tokenURL: tokenURL}
 }
 
 func (c *grokOAuthClient) ExchangeCode(ctx context.Context, code, codeVerifier, redirectURI, proxyURL, clientID string) (*xai.TokenResponse, error) {
@@ -167,6 +174,20 @@ func grokOAuthStatusError(code, message string, resp *req.Response) error {
 
 func grokOAuthHasExplicitEntitlementDenial(body string) bool {
 	lower := strings.ToLower(body)
+	// Billing exhaustion is recoverable. xAI may include a generic
+	// access_denied code alongside the quota message, so it must win over the
+	// entitlement marker during token refresh.
+	for _, phrase := range []string{
+		"spending limit",
+		"run out of credits",
+		"out of credits",
+		"credits exhausted",
+		"included free usage",
+	} {
+		if strings.Contains(lower, phrase) {
+			return false
+		}
+	}
 	compact := strings.NewReplacer(" ", "", "\n", "", "\r", "", "\t", "").Replace(lower)
 	for _, field := range []string{"error", "code", "reason"} {
 		for _, value := range []string{"access_denied", "entitlement_denied", "subscription_required", "no_active_subscription"} {

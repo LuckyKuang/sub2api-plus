@@ -285,19 +285,29 @@ def probe_runtime() -> Runtime:
     if system == "Darwin":
         if shutil.which("container"):
             version_ok, version = optional_capture(["container", "--version"])
+            if not version_ok:
+                detail = version[-500:] if version else "container --version failed"
+                raise PushCliError(
+                    "Apple Containers is installed on macOS, so it is the mandatory "
+                    "runtime, but its CLI is not usable; Colima/Docker fallback is "
+                    f"forbidden: {detail}"
+                )
             list_ok, list_output = optional_capture(["container", "ls"])
-            if version_ok and list_ok:
-                print(f"Runtime: Apple Containers ({version.splitlines()[0]})")
-                run_step(
-                    "Apple Container lifecycle test",
-                    ["bash", str(ROOT / "deploy/tests/apple-container-test.sh")],
+            if not list_ok:
+                detail = list_output[-500:] if list_output else "container ls failed"
+                raise PushCliError(
+                    "Apple Containers is installed on macOS, so it is the mandatory "
+                    "runtime, but its service is not ready; start or repair Apple "
+                    "Containers and retry. Colima/Docker fallback is forbidden: "
+                    f"{detail}"
                 )
-                return Runtime("apple-containers", compose_required=False)
-            else:
-                print(
-                    "Apple Containers detected but not ready; "
-                    f"{list_output[-500:]}"
-                )
+            version_label = version.splitlines()[0] if version else "version available"
+            print(f"Runtime: Apple Containers ({version_label})")
+            run_step(
+                "Apple Container lifecycle test",
+                ["bash", str(ROOT / "deploy/tests/apple-container-test.sh")],
+            )
+            return Runtime("apple-containers", compose_required=False)
 
         colima_ready = False
         if shutil.which("colima"):
@@ -417,6 +427,11 @@ def run_local_checks(remote: str, branch: str, runtime: Runtime) -> None:
     backend = ROOT / "backend"
     steps: list[tuple[str, Sequence[str], Path]] = [
         ("Go module tidiness", ["go", "mod", "tidy", "-diff"], backend),
+        (
+            "Push CLI self-tests",
+            [python, "skills/push-cli/tests/test_push_cli.py"],
+            ROOT,
+        ),
         ("Backend unit tests", ["go", "test", "-tags=unit", "./..."], backend),
         (
             "Backend integration tests",

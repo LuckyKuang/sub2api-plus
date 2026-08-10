@@ -1,9 +1,11 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -85,6 +87,22 @@ func (c *oauthSessionPolicyCache) RefreshSessionTTL(_ context.Context, _ int64, 
 
 func (c *oauthSessionPolicyCache) DeleteSessionAccountID(_ context.Context, groupID int64, sessionHash string) error {
 	delete(c.values, c.key(groupID, sessionHash))
+	return nil
+}
+
+func (c *oauthSessionPolicyCache) SetGrokVideoPendingBilling(_ context.Context, _ string, _ []byte, _ time.Duration) error {
+	return nil
+}
+
+func (c *oauthSessionPolicyCache) GetGrokVideoPendingBilling(_ context.Context, _ string) ([]byte, error) {
+	return nil, nil
+}
+
+func (c *oauthSessionPolicyCache) ClaimGrokVideoBilled(_ context.Context, _ string, _ time.Duration) (bool, error) {
+	return true, nil
+}
+
+func (c *oauthSessionPolicyCache) ReleaseGrokVideoBilled(_ context.Context, _ string) error {
 	return nil
 }
 
@@ -170,6 +188,98 @@ func TestOpenAIOAuthSessionPolicyDisabledKeepsAPIKeyIsolation(t *testing.T) {
 	second, err := service.resolveOpenAIUpstreamSessionID(newOAuthSessionPolicyGinContext(202, 9001, 11), account, "session-1")
 	require.NoError(t, err)
 	require.NotEqual(t, first, second)
+}
+
+func TestOpenAIOAuthSessionPolicyIsAppliedByAllOutboundBuilders(t *testing.T) {
+	account := newOpenAIOAuthSessionPolicyAccount(77, 11, 12)
+	account.Credentials = map[string]any{
+		"access_token":       "oauth-token",
+		"chatgpt_account_id": "chatgpt-account",
+	}
+	service := &OpenAIGatewayService{}
+	body := []byte(`{"model":"gpt-5.6","stream":true,"prompt_cache_key":"shared-session","input":"hello"}`)
+
+	ordinaryContext := newOAuthSessionPolicyGinContext(101, 9001, 11)
+	ordinaryContext.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
+	ordinary, err := service.buildUpstreamRequest(
+		context.Background(), ordinaryContext, &account, body, "oauth-token", true, "shared-session", true,
+	)
+	require.NoError(t, err)
+
+	passthroughContext := newOAuthSessionPolicyGinContext(202, 9001, 12)
+	passthroughContext.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
+	passthrough, err := service.buildUpstreamRequestOpenAIPassthrough(
+		context.Background(), passthroughContext, &account, body, "oauth-token",
+	)
+	require.NoError(t, err)
+
+	wsContext := newOAuthSessionPolicyGinContext(303, 9001, 11)
+	wsContext.Request = httptest.NewRequest(http.MethodGet, "/v1/responses", nil)
+	wsContext.Request.Header.Set("conversation_id", "shared-session")
+	wsHeaders, _, err := service.buildOpenAIWSHeaders(
+		context.Background(),
+		wsContext,
+		&account,
+		"oauth-token",
+		OpenAIWSProtocolDecision{Transport: OpenAIUpstreamTransportResponsesWebsocketV2},
+		true,
+		"",
+		"",
+		"shared-session",
+		"gpt-5.6",
+		"",
+	)
+	require.NoError(t, err)
+
+	expected, err := service.resolveOpenAIUpstreamSessionID(ordinaryContext, &account, "shared-session")
+	require.NoError(t, err)
+	require.Equal(t, expected, ordinary.Header.Get("session_id"))
+	require.Equal(t, expected, ordinary.Header.Get("conversation_id"))
+	require.Equal(t, expected, passthrough.Header.Get("session_id"))
+	require.Equal(t, expected, passthrough.Header.Get("conversation_id"))
+	require.Equal(t, expected, wsHeaders.Get("session_id"))
+	require.Equal(t, expected, wsHeaders.Get("conversation_id"))
+}
+
+func TestOpenAIOAuthSessionPolicyOutboundBuildersRejectUnauthorizedGroup(t *testing.T) {
+	account := newOpenAIOAuthSessionPolicyAccount(77, 11)
+	account.Credentials = map[string]any{
+		"access_token":       "oauth-token",
+		"chatgpt_account_id": "chatgpt-account",
+	}
+	service := &OpenAIGatewayService{}
+	body := []byte(`{"model":"gpt-5.6","prompt_cache_key":"blocked-session","input":"hello"}`)
+
+	buildContext := func(method string) *gin.Context {
+		c := newOAuthSessionPolicyGinContext(101, 9001, 13)
+		c.Request = httptest.NewRequest(method, "/v1/responses", bytes.NewReader(body))
+		return c
+	}
+
+	_, err := service.buildUpstreamRequest(
+		context.Background(), buildContext(http.MethodPost), &account, body, "oauth-token", true, "blocked-session", true,
+	)
+	require.ErrorIs(t, err, ErrOpenAIOAuthSessionAccessDenied)
+
+	_, err = service.buildUpstreamRequestOpenAIPassthrough(
+		context.Background(), buildContext(http.MethodPost), &account, body, "oauth-token",
+	)
+	require.ErrorIs(t, err, ErrOpenAIOAuthSessionAccessDenied)
+
+	_, _, err = service.buildOpenAIWSHeaders(
+		context.Background(),
+		buildContext(http.MethodGet),
+		&account,
+		"oauth-token",
+		OpenAIWSProtocolDecision{Transport: OpenAIUpstreamTransportResponsesWebsocketV2},
+		true,
+		"",
+		"",
+		"blocked-session",
+		"gpt-5.6",
+		"",
+	)
+	require.ErrorIs(t, err, ErrOpenAIOAuthSessionAccessDenied)
 }
 
 func TestOpenAIOAuthSessionPolicyInvalidConfigurationFailsClosed(t *testing.T) {

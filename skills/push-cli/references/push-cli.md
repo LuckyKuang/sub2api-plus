@@ -39,6 +39,7 @@ The matrix mirrors CONTRIBUTING.md, backend/Makefile, and
 .github/workflows/backend-ci.yml:
 
     cd backend && go mod tidy -diff
+    python3 skills/push-cli/tests/test_push_cli.py
     cd backend && go test -tags=unit ./...
     cd backend && go test -tags=integration ./...
     cd backend && golangci-lint run ./...
@@ -103,20 +104,25 @@ file fails the push gate.
 
 On macOS, the order is:
 
-1. container --version and container ls;
-2. Apple Container lifecycle test;
-3. return success immediately when the Apple lifecycle test passes;
-4. when Apple Containers is absent or not ready, probe running Colima;
-5. probe another directly reachable Docker endpoint such as Docker Desktop.
+1. check whether the Apple Containers `container` CLI is installed before any
+   Colima or Docker probe;
+2. when installed, require `container --version` and `container ls` to succeed;
+3. run the Apple Container lifecycle test and return success when it passes;
+4. if installed Apple Containers is unusable or the lifecycle test fails, stop;
+5. only when Apple Containers is absent, probe running Colima;
+6. then probe another directly reachable Docker endpoint such as Docker Desktop.
 
-If Apple Containers is ready but its lifecycle test fails, stop without falling
-back to Colima or Docker Desktop. Falling back would hide a regression in a
-supported deployment path. If Apple Containers is absent or not ready, fallback
-is allowed. Never start a user-managed runtime implicitly.
+The presence of the `container` CLI makes Apple Containers mandatory on macOS.
+An installed-but-unready runtime is a hard failure, not a fallback condition.
+This prevents Colima or Docker Desktop from hiding an Apple deployment or host
+runtime problem. Never start a user-managed runtime implicitly.
 
-On Windows, use a running WSL2 Linux distribution and execute Docker commands
-inside it. Use wslpath to translate the repository path before Compose parsing.
-Do not use a Windows Docker command that bypasses the WSL2 requirement.
+On Windows, check `wsl.exe -l -v` before any host Docker probe. Require a
+running WSL2 Linux distribution, then execute `docker info` and
+`docker compose version` inside it. Use `wslpath` to translate the repository
+path before Compose parsing. Missing WSL2, no running WSL2 Linux distribution,
+or unusable in-distribution Docker/Compose is a hard failure. Never probe or use
+a Windows-host Docker command as a fallback that bypasses the WSL2 requirement.
 
 On Linux, use the native Docker CLI and daemon. Do not silently use Podman or a
 different container implementation.

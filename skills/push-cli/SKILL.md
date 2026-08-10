@@ -1,6 +1,6 @@
 ---
 name: push-cli
-description: Safely validate and push Sub2API Plus branch commits. Use when the user asks to push code, publish the current branch to GitHub, or verify local CI readiness before a push. Require an installed and authenticated GitHub CLI, run the repository's strict Go, frontend, documentation, deployment, and container checks, use Apple Containers as the self-sufficient primary macOS runtime with Colima/Docker fallback, use WSL2 Docker on Windows, push only after every check passes, and monitor the resulting GitHub Actions run.
+description: Safely validate and push Sub2API Plus branch commits. Use when the user asks to push code, publish the current branch to GitHub, or verify local CI readiness before a push. Require an installed and authenticated GitHub CLI, run the repository's strict Go, frontend, documentation, deployment, and container checks, require Apple Containers whenever it is installed on macOS with Colima/Docker fallback only when it is absent, require usable Docker inside a running WSL2 Linux distribution on Windows without host-Docker fallback, push only after every check passes, and monitor the resulting GitHub Actions run.
 ---
 
 # Push CLI
@@ -62,26 +62,32 @@ performs the GitHub CLI gate and remote monitoring for the current branch SHA.
 
 ### macOS
 
-Probe Apple Containers first. When its CLI and runtime are ready, run the
-repository Apple Container lifecycle test. A passing lifecycle test satisfies
-the macOS runtime gate without Docker, Colima, or Docker Compose. If that test
-fails, stop immediately; do not hide an Apple deployment regression by falling
-back to another runtime.
+Before probing Colima, Docker Desktop, or any Docker endpoint, check whether the
+Apple Containers `container` CLI is installed. This ordering is mandatory. If
+Apple Containers is installed, it is the required macOS runtime: require both
+`container --version` and `container ls` to succeed, then run the repository
+Apple Container lifecycle test. A passing lifecycle test satisfies the macOS
+runtime gate without Docker, Colima, or Docker Compose.
 
-When Apple Containers is absent or not ready, probe Colima next and use its
-Docker endpoint. If Colima is not available, accept another directly reachable
-Docker endpoint such as Docker Desktop. Docker-based paths must pass the Compose
-final gate. If no supported runtime is ready, stop and report the exact missing
-runtime. Do not start or stop Apple Containers, Colima, Docker Desktop, or any
-user-managed stack implicitly.
+If installed Apple Containers is not ready or its lifecycle test fails, stop
+immediately. Do not fall back to Colima or Docker, because doing so would hide an
+Apple deployment or host-runtime failure. Probe Colima and another directly
+reachable Docker endpoint such as Docker Desktop only when Apple Containers is
+confirmed absent. Docker-based paths must pass the Compose final gate. If no
+supported runtime is ready, stop and report the exact missing runtime. Do not
+start or stop Apple Containers, Colima, Docker Desktop, or any user-managed
+stack implicitly.
 
 ### Windows
 
-Probe wsl.exe -l -v and select a running Linux distribution whose version is 2.
-Run docker info and docker compose version inside that distribution. Resolve
-the repository path with wslpath before invoking Docker Compose. Stop when WSL2,
-a Linux distribution, or a running Docker daemon is missing. Do not install or
-start WSL, Linux, Docker Desktop, or Docker Engine implicitly.
+Before probing any Windows-host Docker endpoint, require `wsl.exe -l -v` and
+select a running Linux distribution whose version is 2. Run `docker info` and
+`docker compose version` inside that distribution. Resolve the repository path
+with `wslpath` before invoking Docker Compose. This WSL2-first ordering is
+mandatory. Stop when WSL2, a running WSL2 Linux distribution, Docker Engine, or
+the Compose plugin is missing inside that distribution. Do not fall back to a
+Windows-host Docker CLI or daemon, and do not install or start WSL, Linux,
+Docker Desktop, or Docker Engine implicitly.
 
 ### Linux and other hosts
 
@@ -93,6 +99,8 @@ hosts fail closed instead of claiming that the Docker gate passed.
 The bundled checker uses commands already defined by the repository:
 
 - Go module tidiness, unit tests, integration tests, and golangci-lint.
+- Push CLI self-tests, including the mandatory macOS Apple Containers priority
+  and Windows WSL2 Linux Docker requirement.
 - Frozen pnpm install, frontend lint, typecheck, Vitest, and production build.
 - Production pnpm audit and the same high/critical exception policy used by the
   Security Scan workflow.
