@@ -9,8 +9,8 @@ derives the OCI image tag by preserving the leading `v` and replacing only
 `+` with `-`.
 
 ```text
-Git/GitHub: v0.1.173+custom.001
-GHCR:       ghcr.io/luckykuang/sub2api-plus:v0.1.173-custom.001
+Git/GitHub: v0.1.173+custom.002
+GHCR:       ghcr.io/luckykuang/sub2api-plus:v0.1.173-custom.002
 ```
 
 Pin the GHCR version tag for reproducible deployments. See
@@ -282,7 +282,7 @@ docker compose down -v
 | `SERVER_TRUSTED_PROXIES` | No | *(empty)* | Comma-separated direct reverse-proxy/container CIDRs trusted for client IP recovery. Never use a public CDN range or `/0`. |
 | `SERVER_IP_ACCESS_EMERGENCY_ALLOWLIST` | No | *(empty)* | Fixed administrator egress CIDRs that can bypass global IP blocks during proxy recovery. |
 | `SECURITY_TRUST_FORWARDED_IP_FOR_API_KEY_ACL` | No | `false` | Legacy raw forwarded-header compatibility. Keep disabled with `SERVER_TRUSTED_PROXIES`; an existing database setting can override the initial environment value. |
-| `GATEWAY_OPENAI_PROXY_STREAM_CIRCUIT_DISABLED` | No | `false` | Disables the bounded OpenAI proxy stream-disconnect circuit only for incident diagnosis. |
+| `GATEWAY_OPENAI_PROXY_STREAM_CIRCUIT_DISABLED` | No | `false` | Disables the bounded OpenAI proxy stream/transport-failure circuit only for incident diagnosis. |
 | `GEMINI_OAUTH_CLIENT_ID` | No | *(builtin)* | Google OAuth client ID (Gemini OAuth). Leave empty to use the built-in Gemini CLI client. |
 | `GEMINI_OAUTH_CLIENT_SECRET` | No | *(builtin)* | Google OAuth client secret (Gemini OAuth). Leave empty to use the built-in Gemini CLI client. |
 | `GEMINI_OAUTH_SCOPES` | No | *(default)* | OAuth scopes (Gemini OAuth) |
@@ -510,7 +510,7 @@ Replace the immutable tag with another value reported by `list-versions` when
 needed:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- install --version 'v0.1.173+custom.001'
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- install --version 'v0.1.173+custom.002'
 ```
 
 Roll back an existing binary installation to an earlier published version:
@@ -540,7 +540,7 @@ curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/
 For a downloaded `install.sh`, invoke one operation at a time. For example:
 
 ```bash
-sudo ./install.sh install --version 'v0.1.173+custom.001'
+sudo ./install.sh install --version 'v0.1.173+custom.002'
 ```
 
 Roll back a downloaded-script installation one operation at a time:

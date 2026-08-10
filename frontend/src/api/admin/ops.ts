@@ -904,6 +904,9 @@ export interface OpsErrorLog {
   status_code: number
   platform: string
   model: string
+  // Local routing-capacity failures remain visible in the actionable error
+  // view without changing the established business-limited/SLA metric.
+  is_routing_capacity_limited?: boolean
 
   resolved: boolean
   resolved_at?: string | null
@@ -939,6 +942,16 @@ export interface OpsErrorLog {
 
 }
 
+export interface OpsRoutingDiagnostics {
+  selection_decision?: string
+  selection_layer?: string
+  candidate_pool?: number
+  filtered_candidates?: Record<string, number>
+  transport_failure?: string
+  timeout_phase?: string
+  outbound_identity_source?: 'account' | 'global' | 'compiled_default' | string
+}
+
 export interface OpsErrorDetail extends OpsErrorLog {
   error_body: string
 
@@ -955,6 +968,7 @@ export interface OpsErrorDetail extends OpsErrorLog {
   time_to_first_token_ms?: number | null
 
   is_business_limited: boolean
+  routing_diagnostics?: OpsRoutingDiagnostics
 
   // Bound (non-deleted) key prefix, snapshotted at error time
   api_key_prefix?: string | null

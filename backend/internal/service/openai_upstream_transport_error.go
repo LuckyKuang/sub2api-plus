@@ -28,11 +28,12 @@ var openAITransportFailoverBody = []byte(`{"error":{"type":"upstream_error","mes
 // failure — i.e. the HTTP round-trip never completed (proxy / DNS / TCP / TLS
 // error, no HTTP status code received).
 type openAITransportErrorClass struct {
-	// Persistent marks failures where retrying the same proxy/account is
-	// pointless: expired or rejected proxy credentials, a dead proxy endpoint,
-	// or DNS/routing failure. Such accounts should be temporarily unscheduled
-	// (and alerted on) instead of being repeatedly scheduled into hard failures.
-	Persistent bool
+	// Persistent marks failures where retrying the same endpoint is pointless:
+	// expired or rejected proxy credentials, a dead proxy endpoint, or DNS/routing
+	// failure. A proxy-backed OpenAI account is isolated through the shared proxy
+	// circuit; only an account without that circuit is temporarily unscheduled.
+	Persistent     bool
+	Classification string
 }
 
 // openAIPersistentTransportErrorMarkers are substrings (matched case-insensitively
@@ -71,24 +72,34 @@ func classifyOpenAITransportError(err error) openAITransportErrorClass {
 	}
 
 	// — Typed checks (preferred) ——————————————————————————————————————————————
-	if errors.Is(err, syscall.ECONNREFUSED) ||
-		errors.Is(err, syscall.EHOSTUNREACH) ||
-		errors.Is(err, syscall.ENETUNREACH) {
-		return openAITransportErrorClass{Persistent: true}
+	if errors.Is(err, syscall.ECONNREFUSED) {
+		return openAITransportErrorClass{Persistent: true, Classification: "connection_refused"}
+	}
+	if errors.Is(err, syscall.EHOSTUNREACH) || errors.Is(err, syscall.ENETUNREACH) {
+		return openAITransportErrorClass{Persistent: true, Classification: "network_unreachable"}
 	}
 	var dnsErr *net.DNSError
 	if errors.As(err, &dnsErr) && dnsErr.IsNotFound {
-		return openAITransportErrorClass{Persistent: true}
+		return openAITransportErrorClass{Persistent: true, Classification: "dns_not_found"}
 	}
 
 	// — String-marker fallback ————————————————————————————————————————————————
 	msg := strings.ToLower(err.Error())
 	for _, marker := range openAIPersistentTransportErrorMarkers {
 		if strings.Contains(msg, marker) {
-			return openAITransportErrorClass{Persistent: true}
+			classification := "network_unreachable"
+			switch marker {
+			case "authentication failed", "proxy authentication required":
+				classification = "proxy_authentication_failed"
+			case "connection refused":
+				classification = "connection_refused"
+			case "no such host":
+				classification = "dns_not_found"
+			}
+			return openAITransportErrorClass{Persistent: true, Classification: classification}
 		}
 	}
-	return openAITransportErrorClass{}
+	return openAITransportErrorClass{Classification: "transport_error"}
 }
 
 // handleOpenAIUpstreamTransportError handles a transport-level upstream failure
@@ -106,7 +117,12 @@ func classifyOpenAITransportError(err error) openAITransportErrorClass {
 //
 // passthrough tags the Ops error event for the OpenAI passthrough forward path.
 func (s *OpenAIGatewayService) handleOpenAIUpstreamTransportError(ctx context.Context, c *gin.Context, account *Account, err error, passthrough bool) error {
+	if err == nil {
+		return nil
+	}
 	safeErr := sanitizeUpstreamErrorMessage(err.Error())
+	classification := classifyOpenAITransportError(err)
+	SetOpsRoutingDiagnostics(c, &OpsRoutingDiagnostics{TransportFailure: classification.Classification})
 	setOpsUpstreamError(c, 0, safeErr, "")
 	appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 		Platform:           account.Platform,
@@ -114,7 +130,9 @@ func (s *OpenAIGatewayService) handleOpenAIUpstreamTransportError(ctx context.Co
 		AccountName:        account.Name,
 		UpstreamStatusCode: 0,
 		Passthrough:        passthrough,
-		Kind:               "request_error",
+		Kind:               "transport_error",
+		Scope:              string(GatewayFailureScopeProvider),
+		Reason:             "openai_transport_" + classification.Classification,
 		Message:            safeErr,
 	})
 
@@ -129,14 +147,35 @@ func (s *OpenAIGatewayService) handleOpenAIUpstreamTransportError(ctx context.Co
 		scheduleOllamaCloudUsageActivity(s.deferredService, account)
 	}
 
-	if classifyOpenAITransportError(err).Persistent {
+	if account != nil && classification.Classification != "" {
+		s.recordOpenAIProxyTransportFailure(account, classification.Classification)
+	}
+	if classification.Persistent && s.shouldTempUnscheduleOpenAITransportAccount(account) {
 		s.tempUnscheduleOpenAITransportError(ctx, account, safeErr)
 	}
 
 	return &UpstreamFailoverError{
-		StatusCode:   http.StatusBadGateway,
-		ResponseBody: openAITransportFailoverBody,
+		StatusCode:             http.StatusBadGateway,
+		ResponseBody:           openAITransportFailoverBody,
+		RequestScopedTransient: true,
+		Scope:                  GatewayFailureScopeProvider,
+		Reason:                 GatewayFailureReason("openai_transport_" + classification.Classification),
+		NextAccountAction:      NextAccountRetry,
 	}
+}
+
+// shouldTempUnscheduleOpenAITransportAccount keeps a shared-proxy outage at
+// proxy scope. A configured OpenAI proxy is represented by the bounded circuit
+// and must not also leave an account-specific ten-minute block behind: doing so
+// would make recovery of the proxy circuit ineffective for accounts that share
+// the same endpoint. If the circuit is explicitly disabled for incident
+// diagnosis, retain the legacy account-level protection instead.
+func (s *OpenAIGatewayService) shouldTempUnscheduleOpenAITransportAccount(account *Account) bool {
+	if _, usesProxyCircuit := openAIProxyStreamCircuitProxyID(account); !usesProxyCircuit {
+		return true
+	}
+	circuit := s.getOpenAIProxyStreamCircuit()
+	return circuit == nil || circuit.settings.disabled
 }
 
 // tempUnscheduleOpenAITransportError marks an account temporarily unschedulable

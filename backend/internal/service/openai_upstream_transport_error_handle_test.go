@@ -72,6 +72,9 @@ func TestHandleOpenAIUpstreamTransportError_PersistentEvictsAndFailsOver(t *test
 	var fo *UpstreamFailoverError
 	require.True(t, errors.As(retErr, &fo), "persistent error must return *UpstreamFailoverError")
 	require.Equal(t, http.StatusBadGateway, fo.StatusCode)
+	require.True(t, fo.RequestScopedTransient)
+	require.Equal(t, GatewayFailureScopeProvider, fo.Scope)
+	require.False(t, fo.ShouldReportAccountScheduleFailure(), "provider transport faults must not be misreported as an account/model failure")
 
 	// Persistent → account temporarily unscheduled for ~10min, reason carries cause.
 	require.Len(t, repo.tempUnschedCalls, 1)
@@ -82,9 +85,37 @@ func TestHandleOpenAIUpstreamTransportError_PersistentEvictsAndFailsOver(t *test
 
 	// Immediate in-memory effect so subsequent requests skip it before DB/cache catches up.
 	require.True(t, svc.isOpenAIAccountRuntimeBlocked(account))
+	diagnostics := GetOpsRoutingDiagnostics(c)
+	require.NotNil(t, diagnostics)
+	require.Equal(t, "proxy_authentication_failed", diagnostics.TransportFailure)
 
 	// Must NOT write a response body — the handler owns the (failover) response.
 	require.Equal(t, 0, rec.Body.Len())
+}
+
+func TestHandleOpenAIUpstreamTransportError_PersistentSharedProxyUsesCircuitWithoutAccountEviction(t *testing.T) {
+	repo := &openaiTransportAccountRepoStub{}
+	proxyID := int64(4628)
+	svc := &OpenAIGatewayService{accountRepo: repo}
+	svc.openaiProxyStreamCircuit = newOpenAIProxyStreamCircuit(openAIProxyStreamCircuitSettings{
+		failureThreshold: 1,
+		failureWindow:    time.Minute,
+		quarantineTTL:    10 * time.Minute,
+		collapseInterval: 0,
+		maxEntries:       16,
+	})
+	account := &Account{ID: 4628, Name: "shared-proxy", Platform: PlatformOpenAI, ProxyID: &proxyID}
+	c, _ := newOpenAITransportErrTestContext()
+
+	err := svc.handleOpenAIUpstreamTransportError(
+		context.Background(), c, account, errors.New("proxy connection refused"), false,
+	)
+
+	var fo *UpstreamFailoverError
+	require.ErrorAs(t, err, &fo)
+	require.Empty(t, repo.tempUnschedCalls, "a shared proxy failure must not persist an account cooldown")
+	require.False(t, svc.isOpenAIAccountRuntimeBlocked(account), "the account remains eligible when the proxy circuit recovers")
+	require.True(t, svc.isOpenAIProxyStreamQuarantined(context.Background(), account), "the configured proxy is quarantined at proxy scope")
 }
 
 // A transient blip should fail over but must NOT evict the account.
@@ -100,6 +131,9 @@ func TestHandleOpenAIUpstreamTransportError_TransientFailsOverWithoutEviction(t 
 	var fo *UpstreamFailoverError
 	require.True(t, errors.As(err, &fo), "transient error must return *UpstreamFailoverError")
 	require.Equal(t, http.StatusBadGateway, fo.StatusCode)
+	require.True(t, fo.RequestScopedTransient)
+	require.Equal(t, GatewayFailureScopeProvider, fo.Scope)
+	require.False(t, fo.ShouldReportAccountScheduleFailure())
 
 	// Transient → do NOT evict.
 	require.Empty(t, repo.tempUnschedCalls)

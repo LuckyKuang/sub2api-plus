@@ -11,6 +11,12 @@ import (
 
 const maxOpenAIAccountUserAgentLength = 512
 
+const (
+	openAIOutboundIdentitySourceAccount = "account"
+	openAIOutboundIdentitySourceGlobal  = "global"
+	openAIOutboundIdentitySourceDefault = "compiled_default"
+)
+
 // openAIOutboundIdentity is the trusted client identity used for an upstream
 // OpenAI request. It is deliberately resolved from account and system settings
 // only; caller request headers never participate in this decision.
@@ -18,6 +24,9 @@ type openAIOutboundIdentity struct {
 	UserAgent  string
 	Originator string
 	Version    string
+	// Source deliberately records only the selected configuration tier. It is
+	// safe to persist in Ops diagnostics and never contains the configured UA.
+	Source string
 }
 
 // resolveOpenAIOutboundIdentityFromSettings is the single authority for
@@ -114,19 +123,27 @@ func NormalizeOpenAICodexUserAgent(userAgent string) (string, error) {
 
 func resolveOpenAIOutboundIdentityCandidates(accountUA, systemUA string) openAIOutboundIdentity {
 	if identity, ok := validOpenAIOutboundIdentity(accountUA); ok {
+		identity.Source = openAIOutboundIdentitySourceAccount
 		return identity
 	}
 	if identity, ok := validOpenAIOutboundIdentity(systemUA); ok {
+		identity.Source = openAIOutboundIdentitySourceGlobal
 		return identity
 	}
 	identity, ok := validOpenAIOutboundIdentity(DefaultOpenAICodexUserAgent)
 	if ok {
+		identity.Source = openAIOutboundIdentitySourceDefault
 		return identity
 	}
 	// DefaultOpenAICodexUserAgent is a compile-time invariant covered by tests.
 	// Keep this defensive return aligned with the normal default rather than
 	// introducing a second, unreachable built-in identity.
-	return openAIOutboundIdentity{UserAgent: DefaultOpenAICodexUserAgent, Originator: openai.CodexDefaultOriginator, Version: DefaultOpenAICodexVersion}
+	return openAIOutboundIdentity{
+		UserAgent:  DefaultOpenAICodexUserAgent,
+		Originator: openai.CodexDefaultOriginator,
+		Version:    DefaultOpenAICodexVersion,
+		Source:     openAIOutboundIdentitySourceDefault,
+	}
 }
 
 // resolveOpenAIOutboundIdentityWithVersion applies the configured Codex
@@ -177,8 +194,10 @@ func openAIOutboundIdentityVersion(userAgent string) string {
 // request. Account Header Override and all inbound headers must run before it.
 // OAuth/ChatGPT internal requests additionally receive the originator derived
 // from the final UA. Platform API requests never receive OAuth-only identity.
-func (s *OpenAIGatewayService) applyOpenAIOutboundIdentity(ctx context.Context, account *Account, headers http.Header, useCodexIdentity bool) {
-	applyResolvedOpenAIOutboundIdentity(headers, s.resolveOpenAIOutboundIdentity(ctx, account), useCodexIdentity)
+func (s *OpenAIGatewayService) applyOpenAIOutboundIdentity(ctx context.Context, account *Account, headers http.Header, useCodexIdentity bool) openAIOutboundIdentity {
+	identity := s.resolveOpenAIOutboundIdentity(ctx, account)
+	applyResolvedOpenAIOutboundIdentity(headers, identity, useCodexIdentity)
+	return identity
 }
 
 func applyResolvedOpenAIOutboundIdentity(headers http.Header, identity openAIOutboundIdentity, useCodexIdentity bool) {

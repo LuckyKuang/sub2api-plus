@@ -284,6 +284,8 @@ export default {
         resolved: 'Resolved',
         viewErrors: 'Errors',
         viewExcluded: 'Excluded',
+        viewAll: 'All',
+        view: 'View',
         statusCodeOther: 'Other',
         owner: {
           provider: 'Provider',
@@ -374,6 +376,7 @@ export default {
         tabRequest: 'Request',
         tabResponse: 'Response',
         responseBody: 'Response',
+        routingDiagnostics: 'Routing Diagnostics',
         compareA: 'Compare A',
         compareB: 'Compare B',
         suggestion: 'Suggestion',

@@ -91,6 +91,49 @@ func TestFilterCodexInput_StripsItemIDFromAllToolCallInputTypes(t *testing.T) {
 	}
 }
 
+func TestFilterCodexInput_CustomToolCallPreservesCTCID(t *testing.T) {
+	input := []any{
+		map[string]any{
+			"type":    "custom_tool_call",
+			"id":      "ctc_apply_patch_001",
+			"call_id": "call_apply_patch_001",
+			"name":    "apply_patch",
+		},
+	}
+
+	filtered := filterCodexInputWithOptions(input, codexInputFilterOptions{
+		PreserveReferences: true,
+	})
+
+	require.Len(t, filtered, 1)
+	item, ok := filtered[0].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "ctc_apply_patch_001", item["id"])
+	require.Equal(t, "call_apply_patch_001", item["call_id"])
+}
+
+func TestFilterCodexInput_CustomToolCallStripsFCID(t *testing.T) {
+	input := []any{
+		map[string]any{
+			"type":    "custom_tool_call",
+			"id":      "fc_not_a_custom_tool_call",
+			"call_id": "call_apply_patch_001",
+			"name":    "apply_patch",
+		},
+	}
+
+	filtered := filterCodexInputWithOptions(input, codexInputFilterOptions{
+		PreserveReferences: true,
+	})
+
+	require.Len(t, filtered, 1)
+	item, ok := filtered[0].(map[string]any)
+	require.True(t, ok)
+	_, exists := item["id"]
+	require.False(t, exists)
+	require.Equal(t, "call_apply_patch_001", item["call_id"])
+}
+
 // TestFilterCodexInput_OutputTypeKeepsItemID ensures tool-output items
 // (e.g. function_call_output) keep their id — only call-input types have
 // the fc* constraint.

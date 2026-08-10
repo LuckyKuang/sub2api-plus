@@ -1,7 +1,10 @@
-Sub2API Plus v0.1.173+custom.001
+Sub2API Plus v0.1.173+custom.002
 
 ## Highlights
 
+- Repair OpenAI/Codex error-request handling: preserve valid custom tool-call
+  context, stop unsafe retry-buffer replays, and make routing/transport errors
+  actionable in Ops diagnostics.
 - Sync official v0.1.173: full Grok/xAI integration, channel monitor V2 (passive),
   email-domain registration limits, Grok media/voice/search pricing, and related
   gateway fixes.
@@ -11,6 +14,11 @@ Sub2API Plus v0.1.173+custom.001
 
 ## Changed
 
+- OpenAI Responses custom tool-call IDs now retain the required `ctc` prefix;
+  the retry-buffer-limit `507` is a deterministic, non-retryable client `413`
+  rather than an account failover. Routing-capacity, transport-reset, gateway
+  timeout, and outbound identity-source diagnostics are safely attributed in
+  Ops, and the error screen uses an exact rolling 24-hour window.
 - Import official channel-monitor V2 and Grok pricing migrations as Plus
   forward-only files `202`–`218` (official content renumbered; no rewrite of
   published Plus `187`–`201`).
@@ -38,7 +46,7 @@ Sub2API Plus v0.1.173+custom.001
 
 ## Compatibility and migration
 
-- Apply database migrations `202`–`218` on upgrade from `0.1.172+custom.001`.
+- Apply database migrations `202`–`219` on upgrade from `0.1.172+custom.001`.
 - Migration `218` clears non-Grok (non-composite) group video generation config
   after writing `groups_video_price_backup_218`.
 - Operators that relied on implicit `gpt-*` / `claude-*` → Grok rewriting must

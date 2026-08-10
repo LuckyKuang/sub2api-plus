@@ -6,6 +6,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sort"
@@ -308,6 +309,14 @@ func normalizeOpenAICompatiblePlatform(platform string) string {
 // the generic classification message). Callers that must preserve the legacy
 // message pass "".
 func noAvailableOpenAISelectionError(requestedModel string, compactBlocked bool, details string) error {
+	return noAvailableOpenAISelectionErrorWithDiagnostics(requestedModel, compactBlocked, details, nil)
+}
+
+func noAvailableOpenAISelectionErrorWithStats(requestedModel string, compactBlocked bool, stats openAISelectionFilterStats, extra string) error {
+	return noAvailableOpenAISelectionErrorWithDiagnostics(requestedModel, compactBlocked, stats.summary(extra), stats.diagnostics())
+}
+
+func noAvailableOpenAISelectionErrorWithDiagnostics(requestedModel string, compactBlocked bool, details string, diagnostics *OpsRoutingDiagnostics) error {
 	if compactBlocked {
 		return ErrNoAvailableCompactAccounts
 	}
@@ -318,11 +327,12 @@ func noAvailableOpenAISelectionError(requestedModel string, compactBlocked bool,
 	if details != "" {
 		message += " (" + details + ")"
 	}
-	return openAINoAvailableSelectionError{message: message}
+	return openAINoAvailableSelectionError{message: message, diagnostics: diagnostics}
 }
 
 type openAINoAvailableSelectionError struct {
-	message string
+	message     string
+	diagnostics *OpsRoutingDiagnostics
 }
 
 func (e openAINoAvailableSelectionError) Error() string {
@@ -331,6 +341,27 @@ func (e openAINoAvailableSelectionError) Error() string {
 
 func (e openAINoAvailableSelectionError) Unwrap() error {
 	return ErrNoAvailableAccounts
+}
+
+// OpsRoutingDiagnosticsFromSelectionError exposes the typed scheduler
+// diagnosis to request middleware without interpreting the human-readable
+// selection error message.
+func OpsRoutingDiagnosticsFromSelectionError(err error) *OpsRoutingDiagnostics {
+	if err == nil {
+		return nil
+	}
+	var selectionErr openAINoAvailableSelectionError
+	if !errors.As(err, &selectionErr) || selectionErr.diagnostics == nil {
+		return nil
+	}
+	diagnostics := *selectionErr.diagnostics
+	if selectionErr.diagnostics.FilteredCandidates != nil {
+		diagnostics.FilteredCandidates = make(map[string]int, len(selectionErr.diagnostics.FilteredCandidates))
+		for reason, count := range selectionErr.diagnostics.FilteredCandidates {
+			diagnostics.FilteredCandidates[reason] = count
+		}
+	}
+	return &diagnostics
 }
 
 // openAICompactSupportTier classifies an OpenAI-compatible account by compact capability.

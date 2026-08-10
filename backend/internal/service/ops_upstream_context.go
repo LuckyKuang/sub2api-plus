@@ -15,6 +15,7 @@ const (
 	OpsUpstreamErrorMessageKey = "ops_upstream_error_message"
 	OpsUpstreamErrorDetailKey  = "ops_upstream_error_detail"
 	OpsUpstreamErrorsKey       = "ops_upstream_errors"
+	OpsRoutingDiagnosticsKey   = "ops_routing_diagnostics"
 
 	// Optional stage latencies (milliseconds) for troubleshooting and alerting.
 	OpsAuthLatencyMsKey      = "ops_auth_latency_ms"
@@ -69,6 +70,64 @@ func SetOpsLatencyMs(c *gin.Context, key string, value int64) {
 		return
 	}
 	c.Set(key, value)
+}
+
+// SetOpsRoutingDiagnostics merges safe, typed diagnostics collected by
+// scheduling, upstream transport, and outbound identity code. Later producers
+// can fill independent fields without erasing the first root-cause signal.
+func SetOpsRoutingDiagnostics(c *gin.Context, next *OpsRoutingDiagnostics) {
+	if c == nil || next == nil {
+		return
+	}
+	merged := OpsRoutingDiagnostics{}
+	if existing, ok := c.Get(OpsRoutingDiagnosticsKey); ok {
+		if current, ok := existing.(*OpsRoutingDiagnostics); ok && current != nil {
+			merged = *current
+			if current.FilteredCandidates != nil {
+				merged.FilteredCandidates = make(map[string]int, len(current.FilteredCandidates))
+				for key, value := range current.FilteredCandidates {
+					merged.FilteredCandidates[key] = value
+				}
+			}
+		}
+	}
+	if value := strings.TrimSpace(next.SelectionDecision); value != "" {
+		merged.SelectionDecision = value
+	}
+	if value := strings.TrimSpace(next.SelectionLayer); value != "" {
+		merged.SelectionLayer = value
+	}
+	if next.CandidatePool > 0 {
+		merged.CandidatePool = next.CandidatePool
+	}
+	if next.FilteredCandidates != nil {
+		merged.FilteredCandidates = make(map[string]int, len(next.FilteredCandidates))
+		for key, value := range next.FilteredCandidates {
+			merged.FilteredCandidates[key] = value
+		}
+	}
+	if value := strings.TrimSpace(next.TransportFailure); value != "" {
+		merged.TransportFailure = value
+	}
+	if value := strings.TrimSpace(next.TimeoutPhase); value != "" {
+		merged.TimeoutPhase = value
+	}
+	if value := strings.TrimSpace(next.OutboundIdentitySource); value != "" {
+		merged.OutboundIdentitySource = value
+	}
+	c.Set(OpsRoutingDiagnosticsKey, &merged)
+}
+
+func GetOpsRoutingDiagnostics(c *gin.Context) *OpsRoutingDiagnostics {
+	if c == nil {
+		return nil
+	}
+	value, ok := c.Get(OpsRoutingDiagnosticsKey)
+	if !ok {
+		return nil
+	}
+	diagnostics, _ := value.(*OpsRoutingDiagnostics)
+	return diagnostics
 }
 
 func MarkOpsClientBusinessLimited(c *gin.Context, reason string) {

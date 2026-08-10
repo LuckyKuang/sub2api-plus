@@ -144,6 +144,12 @@
           <Select v-model="filters.upstream_model_mismatch" :options="upstreamModelMismatchOptions" @change="emitChange" />
         </div>
 
+        <!-- Error record view (errors only) -->
+        <div v-if="mode === 'errors'" class="w-full sm:w-auto sm:min-w-[180px]">
+          <label class="input-label">{{ t('admin.ops.errorDetails.view') }}</label>
+          <Select :model-value="errorView" :options="errorViewOptions" @update:model-value="updateErrorView" />
+        </div>
+
         <!-- Error Phase Filter (errors only) -->
         <div v-if="mode === 'errors'" class="w-full sm:w-auto sm:min-w-[180px]">
           <label class="input-label">{{ t('admin.ops.errorLog.type') }}</label>
@@ -212,8 +218,10 @@ interface Props {
   /**
    * errors 模式:隐藏用量专属字段/按钮,显示错误类型+状态码(错误请求 tab 用)
    * ranking 模式:同 usage 但隐藏计费模式筛选与清理/导出按钮(用户排行 tab 用)
-   */
+  */
   mode?: 'usage' | 'errors' | 'ranking'
+  /** Current Ops error record view; meaningful only in errors mode. */
+  errorView?: 'errors' | 'excluded' | 'all'
   /** 嵌入统一卡片内使用：去掉自身卡片外观 */
   flat?: boolean
 }
@@ -221,6 +229,7 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   showActions: true,
   mode: 'usage',
+  errorView: 'errors',
   flat: false
 })
 const emit = defineEmits([
@@ -229,7 +238,8 @@ const emit = defineEmits([
   'refresh',
   'reset',
   'export',
-  'cleanup'
+  'cleanup',
+  'update:errorView'
 ])
 
 const { t } = useI18n()
@@ -304,6 +314,12 @@ const statusCodeOptions = computed<SelectOption[]>(() => [
   ...COMMON_ERROR_STATUS_CODES.map((c) => ({ value: c, label: String(c) })),
 ])
 
+const errorViewOptions = computed<SelectOption[]>(() => [
+  { value: 'errors', label: t('admin.ops.errorDetails.viewErrors') },
+  { value: 'excluded', label: t('admin.ops.errorDetails.viewExcluded') },
+  { value: 'all', label: t('admin.ops.errorDetails.viewAll') },
+])
+
 const billingModeOptions = ref<SelectOption[]>([
   { value: null, label: t('admin.usage.allBillingModes') },
   { value: 'token', label: t('admin.usage.billingModeToken') },
@@ -319,6 +335,12 @@ const upstreamModelMismatchOptions = ref<SelectOption[]>([
 ])
 
 const emitChange = () => emit('change')
+
+const updateErrorView = (value: unknown) => {
+  if (value === 'errors' || value === 'excluded' || value === 'all') {
+    emit('update:errorView', value)
+  }
+}
 
 const clearPendingUserSearch = () => {
   if (userSearchTimeout) {

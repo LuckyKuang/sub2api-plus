@@ -261,6 +261,9 @@ func (s *OpenAIGatewayService) newOpenAIFirstOutputTimeoutError(
 		account.ID, originalModel, reasoningEffort, phase, elapsed, timeout,
 	)
 	requestID := strings.TrimSpace(responseHeaders.Get("x-request-id"))
+	if timeoutPhase := openAIFirstOutputTimeoutDiagnosticPhase(phase); timeoutPhase != "" {
+		SetOpsRoutingDiagnostics(c, &OpsRoutingDiagnostics{TimeoutPhase: timeoutPhase})
+	}
 	appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 		Platform: account.Platform, AccountID: account.ID, AccountName: account.Name,
 		UpstreamStatusCode: http.StatusGatewayTimeout, UpstreamRequestID: requestID,
@@ -274,6 +277,23 @@ func (s *OpenAIGatewayService) newOpenAIFirstOutputTimeoutError(
 		StatusCode:      http.StatusGatewayTimeout,
 		ResponseBody:    []byte(`{"error":{"type":"first_output_timeout","message":"Upstream produced no output before the deadline"}}`),
 		ResponseHeaders: responseHeaders.Clone(), SafeToFailoverAfterWrite: true,
+	}
+}
+
+// openAIFirstOutputTimeoutDiagnosticPhase maps internal stages to the fixed,
+// safe Ops vocabulary. The phase is intentionally not persisted verbatim: it
+// may be extended by implementation details while Ops storage must remain a
+// bounded, documented contract.
+func openAIFirstOutputTimeoutDiagnosticPhase(phase string) string {
+	switch phase {
+	case "response_headers":
+		return "response_header_timeout"
+	case "semantic_output":
+		return "first_semantic_output_timeout"
+	case "websocket_first_semantic_output":
+		return "websocket_first_semantic_output_timeout"
+	default:
+		return ""
 	}
 }
 

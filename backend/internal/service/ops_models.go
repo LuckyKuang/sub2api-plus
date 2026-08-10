@@ -42,6 +42,11 @@ type OpsErrorLog struct {
 	Platform   string `json:"platform"`
 	Model      string `json:"model"`
 
+	// IsRoutingCapacityLimited is independent from IsBusinessLimited so that
+	// operational views can include local capacity failures without changing
+	// the established SLA exclusion series.
+	IsRoutingCapacityLimited bool `json:"is_routing_capacity_limited"`
+
 	Resolved           bool       `json:"resolved"`
 	ResolvedAt         *time.Time `json:"resolved_at"`
 	ResolvedByUserID   *int64     `json:"resolved_by_user_id"`
@@ -96,10 +101,24 @@ type OpsErrorLogDetail struct {
 	TimeToFirstTokenMs *int64 `json:"time_to_first_token_ms"`
 
 	// vNext metric semantics
-	IsBusinessLimited bool `json:"is_business_limited"`
+	IsBusinessLimited  bool                   `json:"is_business_limited"`
+	RoutingDiagnostics *OpsRoutingDiagnostics `json:"routing_diagnostics,omitempty"`
 
 	// Bound (non-deleted) key prefix, snapshotted at error time.
 	APIKeyPrefix string `json:"api_key_prefix,omitempty"`
+}
+
+// OpsRoutingDiagnostics is deliberately a small, sanitized vocabulary for
+// diagnosing local scheduling and upstream transport failures. It never stores
+// raw request headers, credentials, proxy URLs, or user-provided identifiers.
+type OpsRoutingDiagnostics struct {
+	SelectionDecision      string         `json:"selection_decision,omitempty"`
+	SelectionLayer         string         `json:"selection_layer,omitempty"`
+	CandidatePool          int            `json:"candidate_pool,omitempty"`
+	FilteredCandidates     map[string]int `json:"filtered_candidates,omitempty"`
+	TransportFailure       string         `json:"transport_failure,omitempty"`
+	TimeoutPhase           string         `json:"timeout_phase,omitempty"`
+	OutboundIdentitySource string         `json:"outbound_identity_source,omitempty"`
 }
 
 type OpsErrorLogFilter struct {

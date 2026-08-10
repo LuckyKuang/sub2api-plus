@@ -1461,7 +1461,11 @@ func filterCodexInputWithOptions(input []any, opts codexInputFilterOptions) []an
 				}
 			}
 
-			if callID != "" {
+			// Custom tool calls have a distinct item id namespace (ctc_*) and
+			// retain their paired call_id verbatim. Rewriting call_* to fc_* here
+			// breaks a following custom_tool_call_output even when the item id is
+			// valid for the Responses replay contract.
+			if callID != "" && typ != "custom_tool_call" && typ != "custom_tool_call_output" {
 				fixedCallID := fixCallIDPrefix(callID)
 				if fixedCallID != callID {
 					ensureCopy()
@@ -1522,8 +1526,8 @@ func isCodexToolCallItemType(typ string) bool {
 	}
 }
 
-// isCodexToolCallInputType 仅匹配 call-input 类型（不含 output），这些类型的
-// id 必须以 "fc" 开头，上游会校验 "Expected an ID that begins with 'fc'."。
+// isCodexToolCallInputType 仅匹配 call-input 类型（不含 output）。具体 id 前缀
+// 由 openAIResponsesInputItemIDPrefix 按类型决定；custom_tool_call 使用 ctc。
 func isCodexToolCallInputType(typ string) bool {
 	switch typ {
 	case "function_call",

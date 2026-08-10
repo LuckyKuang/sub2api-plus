@@ -2651,6 +2651,17 @@ func (h *OpenAIGatewayHandler) handleFailoverExhausted(c *gin.Context, failoverE
 		)
 		return
 	}
+	if failoverErr.IsOpenAIProxyRetryBufferLimit() {
+		service.SetOpsUpstreamError(c, http.StatusRequestEntityTooLarge, service.OpenAIProxyRetryBufferLimitClientMessage, "")
+		h.handleStreamingAwareError(
+			c,
+			http.StatusRequestEntityTooLarge,
+			"invalid_request_error",
+			service.OpenAIProxyRetryBufferLimitClientMessage,
+			streamStarted,
+		)
+		return
+	}
 	copyFailoverRetryAfter(c, failoverErr.ResponseHeaders)
 	if failoverErr.IsCredentialFailure() {
 		status, message := credentialFailoverClientResponse(failoverErr)

@@ -96,7 +96,11 @@ type OpsInsertErrorLogInput struct {
 	Severity          string
 	StatusCode        int
 	IsBusinessLimited bool
-	IsCountTokens     bool // 是否为 count_tokens 请求
+	// Kept separate from IsBusinessLimited so established SLA calculations
+	// retain their existing semantics while operational views include routing
+	// capacity failures.
+	IsRoutingCapacityLimited bool
+	IsCountTokens            bool // 是否为 count_tokens 请求
 
 	ErrorMessage string
 	ErrorBody    string
@@ -113,6 +117,10 @@ type OpsInsertErrorLogInput struct {
 	// UpstreamErrorsJSON is the sanitized JSON string stored into ops_error_logs.upstream_errors.
 	// It is set by OpsService.RecordError before persisting.
 	UpstreamErrorsJSON *string
+	// RoutingDiagnostics is collected from typed scheduler/transport context and
+	// sanitized+serialized by OpsService before persisting.
+	RoutingDiagnostics     *OpsRoutingDiagnostics
+	RoutingDiagnosticsJSON *string
 
 	AuthLatencyMs      *int64
 	RoutingLatencyMs   *int64

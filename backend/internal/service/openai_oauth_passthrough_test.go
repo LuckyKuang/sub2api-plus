@@ -1387,12 +1387,13 @@ func TestOpenAIGatewayService_OpenAIPassthrough_RetryableStatusesTriggerFailover
 	}
 
 	testCases := []struct {
-		name           string
-		accountType    string
-		statusCode     int
-		body           string
-		expectFailover bool
-		assertRepo     func(t *testing.T, repo *openAIPassthroughFailoverRepo, start time.Time)
+		name            string
+		accountType     string
+		statusCode      int
+		body            string
+		expectFailover  bool
+		expectEventKind string
+		assertRepo      func(t *testing.T, repo *openAIPassthroughFailoverRepo, start time.Time)
 	}{
 		{
 			name:        "oauth_429_rate_limit",
@@ -1444,11 +1445,12 @@ func TestOpenAIGatewayService_OpenAIPassthrough_RetryableStatusesTriggerFailover
 			},
 		},
 		{
-			name:           "oauth_504_gateway_timeout",
-			accountType:    AccountTypeOAuth,
-			statusCode:     http.StatusGatewayTimeout,
-			body:           `{"error":{"message":"gateway timeout","type":"server_error"}}`,
-			expectFailover: false,
+			name:            "oauth_504_gateway_timeout",
+			accountType:     AccountTypeOAuth,
+			statusCode:      http.StatusGatewayTimeout,
+			body:            `{"error":{"message":"gateway timeout","type":"server_error"}}`,
+			expectFailover:  false,
+			expectEventKind: "transport_error",
 			assertRepo: func(t *testing.T, repo *openAIPassthroughFailoverRepo, _ time.Time) {
 				require.Empty(t, repo.rateLimitCalls)
 				require.Empty(t, repo.overloadCalls)
@@ -1535,10 +1537,17 @@ func TestOpenAIGatewayService_OpenAIPassthrough_RetryableStatusesTriggerFailover
 			require.True(t, ok)
 			require.NotEmpty(t, arr)
 			require.True(t, arr[len(arr)-1].Passthrough)
-			if tc.expectFailover {
-				require.Equal(t, "failover", arr[len(arr)-1].Kind)
-			} else {
-				require.Equal(t, "http_error", arr[len(arr)-1].Kind)
+			expectedKind := tc.expectEventKind
+			if expectedKind == "" {
+				if tc.expectFailover {
+					expectedKind = "failover"
+				} else {
+					expectedKind = "http_error"
+				}
+			}
+			require.Equal(t, expectedKind, arr[len(arr)-1].Kind)
+			if expectedKind == "transport_error" {
+				require.Equal(t, string(GatewayFailureScopeProvider), arr[len(arr)-1].Scope)
 			}
 			require.Equal(t, tc.statusCode, arr[len(arr)-1].UpstreamStatusCode)
 
@@ -1610,7 +1619,12 @@ func TestOpenAIGatewayService_APIKeyPassthrough_Transient5xxTriggersFailover(t *
 			events, ok := value.([]*OpsUpstreamErrorEvent)
 			require.True(t, ok)
 			require.NotEmpty(t, events)
-			require.Equal(t, "failover", events[len(events)-1].Kind)
+			expectedKind := "failover"
+			if statusCode == http.StatusGatewayTimeout {
+				expectedKind = "transport_error"
+				require.Equal(t, string(GatewayFailureScopeProvider), events[len(events)-1].Scope)
+			}
+			require.Equal(t, expectedKind, events[len(events)-1].Kind)
 			require.Equal(t, account.ID, events[len(events)-1].AccountID)
 		})
 	}

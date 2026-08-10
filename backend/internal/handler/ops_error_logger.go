@@ -415,6 +415,9 @@ func estimateOpsErrorLogJobBytes(entry *service.OpsInsertErrorLogInput) int64 {
 	if entry.UpstreamErrorsJSON != nil {
 		size += len(*entry.UpstreamErrorsJSON)
 	}
+	if entry.RoutingDiagnosticsJSON != nil {
+		size += len(*entry.RoutingDiagnosticsJSON)
+	}
 	return int64(size)
 }
 
@@ -485,6 +488,9 @@ func markOpsRoutingCapacityLimited(c *gin.Context) {
 		return
 	}
 	c.Set(opsRoutingCapacityLimitedKey, true)
+	service.SetOpsRoutingDiagnostics(c, &service.OpsRoutingDiagnostics{
+		SelectionDecision: "no_available_account",
+	})
 }
 
 func markOpsRoutingCapacityLimitedIfNoAvailable(c *gin.Context, err error) {
@@ -492,6 +498,7 @@ func markOpsRoutingCapacityLimitedIfNoAvailable(c *gin.Context, err error) {
 		return
 	}
 	markOpsRoutingCapacityLimited(c)
+	service.SetOpsRoutingDiagnostics(c, service.OpsRoutingDiagnosticsFromSelectionError(err))
 }
 
 func isOpsRoutingCapacityLimited(c *gin.Context) bool {
@@ -934,6 +941,7 @@ func OpsErrorLoggerMiddleware(ops *service.OpsService) gin.HandlerFunc {
 				CreatedAt: time.Now(),
 			}
 			applyOpsLatencyFieldsFromContext(c, entry)
+			applyOpsRoutingFieldsFromContext(c, entry)
 			applyOpsUpstreamFieldsFromContext(c, entry)
 
 			if apiKey != nil {
@@ -1072,6 +1080,7 @@ func OpsErrorLoggerMiddleware(ops *service.OpsService) gin.HandlerFunc {
 			CreatedAt: time.Now(),
 		}
 		applyOpsLatencyFieldsFromContext(c, entry)
+		applyOpsRoutingFieldsFromContext(c, entry)
 		applyOpsUpstreamFieldsFromContext(c, entry)
 
 		if apiKey != nil {
@@ -1222,6 +1231,7 @@ func logOpsStreamError(c *gin.Context, ops *service.OpsService, wireStatus int) 
 		CreatedAt: time.Now(),
 	}
 	applyOpsLatencyFieldsFromContext(c, entry)
+	applyOpsRoutingFieldsFromContext(c, entry)
 
 	if apiKey != nil {
 		entry.APIKeyID = &apiKey.ID
@@ -1261,6 +1271,14 @@ func applyOpsLatencyFieldsFromContext(c *gin.Context, entry *service.OpsInsertEr
 	entry.UpstreamLatencyMs = getContextLatencyMs(c, service.OpsUpstreamLatencyMsKey)
 	entry.ResponseLatencyMs = getContextLatencyMs(c, service.OpsResponseLatencyMsKey)
 	entry.TimeToFirstTokenMs = getContextLatencyMs(c, service.OpsTimeToFirstTokenMsKey)
+}
+
+func applyOpsRoutingFieldsFromContext(c *gin.Context, entry *service.OpsInsertErrorLogInput) {
+	if c == nil || entry == nil {
+		return
+	}
+	entry.IsRoutingCapacityLimited = isOpsRoutingCapacityLimited(c)
+	entry.RoutingDiagnostics = service.GetOpsRoutingDiagnostics(c)
 }
 
 // applyOpsUpstreamFieldsFromContext captures attempt-level upstream context.

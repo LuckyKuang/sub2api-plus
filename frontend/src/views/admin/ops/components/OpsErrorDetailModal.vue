@@ -129,6 +129,13 @@
         <pre class="mt-4 max-h-[520px] overflow-auto rounded-xl border border-gray-200 bg-white p-4 text-xs text-gray-800 dark:border-dark-700 dark:bg-dark-800 dark:text-gray-100"><code>{{ prettyJSON(primaryResponseBody || '') }}</code></pre>
       </div>
 
+      <!-- Structured diagnostic vocabulary only; the backend rejects raw URLs,
+           request headers, credentials, and arbitrary user-provided strings. -->
+      <div v-if="detail.routing_diagnostics" class="rounded-xl bg-gray-50 p-6 dark:bg-dark-900">
+        <h3 class="text-sm font-black uppercase tracking-wider text-gray-900 dark:text-white">{{ t('admin.ops.errorDetail.routingDiagnostics') }}</h3>
+        <pre class="mt-4 max-h-[360px] overflow-auto rounded-xl border border-gray-200 bg-white p-4 text-xs text-gray-800 dark:border-dark-700 dark:bg-dark-800 dark:text-gray-100"><code>{{ prettyObject(detail.routing_diagnostics) }}</code></pre>
+      </div>
+
       <!-- Upstream errors list (only for request errors) -->
       <div v-if="showUpstreamList" class="rounded-xl bg-gray-50 p-6 dark:bg-dark-900">
         <div class="flex flex-wrap items-center justify-between gap-2">
@@ -329,6 +336,10 @@ function prettyJSON(raw?: string): string {
   } catch {
     return raw
   }
+}
+
+function prettyObject(value: unknown): string {
+  return JSON.stringify(value, null, 2)
 }
 
 async function fetchDetail(id: number) {

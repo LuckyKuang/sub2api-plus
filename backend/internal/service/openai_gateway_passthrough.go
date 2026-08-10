@@ -502,7 +502,8 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 
 	// 账号级请求头覆写（仅 openai api_key 账号启用时生效；OAuth 路径 no-op）
 	account.ApplyHeaderOverrides(req.Header)
-	s.applyOpenAIOutboundIdentity(ctx, account, req.Header, account.Type == AccountTypeOAuth)
+	identity := s.applyOpenAIOutboundIdentity(ctx, account, req.Header, account.Type == AccountTypeOAuth)
+	SetOpsRoutingDiagnostics(c, &OpsRoutingDiagnostics{OutboundIdentitySource: identity.Source})
 	setOpenAICodexRoutingHintFromBody(req.Header, account, body)
 	logOpenAIRoutingDiagnosticsFromBody(ctx, account, "http_passthrough", req.Header, body, "not_applicable")
 
@@ -543,6 +544,9 @@ func stripOpenAILegacyResponsesBeta(headers http.Header) {
 func shouldFailoverOpenAIPassthroughResponse(account *Account, statusCode int, responseBody []byte) bool {
 	if isOpenAIContextWindowError("", responseBody) {
 		return false
+	}
+	if isOpenAIProxyRetryBufferLimitError(statusCode, "", responseBody) {
+		return true
 	}
 	if isOpenAIRequestBodyTooLargeError(statusCode, "", responseBody) {
 		return true
@@ -661,6 +665,24 @@ func (s *OpenAIGatewayService) handleFailoverErrorResponsePassthrough(
 	}
 	setOpsUpstreamError(c, resp.StatusCode, upstreamMsg, upstreamDetail)
 	logOpenAIInstructionsRequiredDebug(ctx, c, account, resp.StatusCode, upstreamMsg, requestBody, body)
+	if connectivityErr := s.handleOpenAIUpstreamConnectivityHTTPError(c, account, resp, body, upstreamMsg, upstreamDetail, true); connectivityErr != nil {
+		return connectivityErr
+	}
+	if isOpenAIProxyRetryBufferLimitError(resp.StatusCode, upstreamMsg, body) {
+		appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+			Platform:             account.Platform,
+			AccountID:            account.ID,
+			AccountName:          account.Name,
+			UpstreamStatusCode:   resp.StatusCode,
+			UpstreamRequestID:    resp.Header.Get("x-request-id"),
+			Passthrough:          true,
+			Kind:                 "request_rejected",
+			Message:              OpenAIProxyRetryBufferLimitClientMessage,
+			Detail:               upstreamDetail,
+			UpstreamResponseBody: upstreamDetail,
+		})
+		return newOpenAIUpstreamFailoverError(resp.StatusCode, resp.Header, body, upstreamMsg, false)
+	}
 	reqModel, _, _ := extractOpenAIRequestMetaFromBody(requestBody)
 	canonicalModel := canonicalOpenAIAccountSchedulingModel(account, reqModel)
 	shouldDisable := s.handleOpenAIAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, body, canonicalModel)
@@ -721,6 +743,31 @@ func (s *OpenAIGatewayService) handleErrorResponsePassthrough(
 	}
 	setOpsUpstreamError(c, resp.StatusCode, upstreamMsg, upstreamDetail)
 	logOpenAIInstructionsRequiredDebug(ctx, c, account, resp.StatusCode, upstreamMsg, requestBody, body)
+	if connectivity := classifyOpenAIUpstreamConnectivityFailure(resp.StatusCode, upstreamMsg, body); connectivity != nil {
+		SetOpsRoutingDiagnostics(c, &OpsRoutingDiagnostics{
+			TransportFailure: connectivity.TransportFailure,
+			TimeoutPhase:     connectivity.TimeoutPhase,
+		})
+		if connectivity.TransportFailure != "" {
+			s.recordOpenAIProxyTransportFailure(account, connectivity.TransportFailure)
+		}
+		appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+			Platform:             account.Platform,
+			AccountID:            account.ID,
+			AccountName:          account.Name,
+			UpstreamStatusCode:   resp.StatusCode,
+			UpstreamRequestID:    resp.Header.Get("x-request-id"),
+			Passthrough:          true,
+			Kind:                 "transport_error",
+			Scope:                string(GatewayFailureScopeProvider),
+			Reason:               string(connectivity.Reason),
+			Message:              upstreamMsg,
+			Detail:               upstreamDetail,
+			UpstreamResponseBody: upstreamDetail,
+		})
+		writeSanitizedOpenAIPassthroughError(c, resp.StatusCode, resp.Header)
+		return fmt.Errorf("upstream connectivity error: %d", resp.StatusCode)
+	}
 	// 错误体虽不会原样透传，运行态账号状态仍需更新，避免粘性路由继续复用
 	// 刚被限流的账号。cyber 例外：不冷却账号。
 	if !cyberHit {

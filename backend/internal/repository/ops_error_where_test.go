@@ -151,3 +151,18 @@ func TestBuildOpsErrorLogsWhere_UserOwnershipIsDirectOnly(t *testing.T) {
 		t.Fatalf("user ownership must not depend on deleted-key attribution: %s", where)
 	}
 }
+
+func TestBuildOpsErrorLogsWhere_RoutingCapacityFailuresRemainActionable(t *testing.T) {
+	errorsWhere, _ := buildOpsErrorLogsWhere(&service.OpsErrorLogFilter{View: "errors"})
+	requireContainsOpsWhere(t, errorsWhere, "COALESCE(e.is_routing_capacity_limited,false) = true")
+
+	excludedWhere, _ := buildOpsErrorLogsWhere(&service.OpsErrorLogFilter{View: "excluded"})
+	requireContainsOpsWhere(t, excludedWhere, "COALESCE(e.is_routing_capacity_limited,false) = false")
+}
+
+func requireContainsOpsWhere(t *testing.T, where, want string) {
+	t.Helper()
+	if !strings.Contains(where, want) {
+		t.Fatalf("where missing %q: %s", want, where)
+	}
+}

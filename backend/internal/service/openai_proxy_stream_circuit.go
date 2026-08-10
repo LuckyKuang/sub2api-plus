@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"time"
 
@@ -252,6 +253,30 @@ func (s *OpenAIGatewayService) recordOpenAIProxyStreamDisconnect(account *Accoun
 		zap.Time("until", until),
 		zap.String("upstream_request_id", upstreamRequestID),
 		zap.String("error", sanitizeUpstreamErrorMessage(streamErr.Error())),
+	)
+}
+
+// recordOpenAIProxyTransportFailure extends the bounded proxy circuit to
+// failures that occur before an HTTP response is available or at an edge
+// gateway. The circuit key is the configured proxy ID (never its URL or
+// credentials), so one failed endpoint can be avoided by all accounts sharing
+// it without persisting any sensitive proxy detail.
+func (s *OpenAIGatewayService) recordOpenAIProxyTransportFailure(account *Account, failure string) {
+	proxyID, ok := openAIProxyStreamCircuitProxyID(account)
+	if !ok || strings.TrimSpace(failure) == "" {
+		return
+	}
+	circuit := s.getOpenAIProxyStreamCircuit()
+	tripped, until := circuit.recordFailure(proxyID, time.Now())
+	if !tripped {
+		return
+	}
+	logger.L().With(zap.String("component", "service.openai_gateway")).Warn(
+		"openai.proxy_quarantined_transport_failure",
+		zap.Int64("proxy_id", proxyID),
+		zap.Int64("account_id", account.ID),
+		zap.Time("until", until),
+		zap.String("failure", failure),
 	)
 }
 

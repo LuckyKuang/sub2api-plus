@@ -3,6 +3,8 @@ package service
 import (
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestSanitizeOpsUpstreamErrorsForQueueBoundsAndRedacts(t *testing.T) {
@@ -46,4 +48,67 @@ func TestSanitizeOpsUpstreamErrorsForQueueBoundsAndRedacts(t *testing.T) {
 			t.Fatal("credential material was not redacted")
 		}
 	}
+}
+
+func TestSanitizeOpsRoutingDiagnosticsUsesOnlyBoundedVocabulary(t *testing.T) {
+	entry := &OpsInsertErrorLogInput{
+		RoutingDiagnostics: &OpsRoutingDiagnostics{
+			SelectionDecision:      "no_available_account",
+			SelectionLayer:         "load_balance",
+			CandidatePool:          7,
+			FilteredCandidates:     map[string]int{"runtime_blocked": 2},
+			TransportFailure:       "connection_reset",
+			TimeoutPhase:           "first_semantic_output_timeout",
+			OutboundIdentitySource: "account",
+		},
+	}
+
+	if err := SanitizeOpsUpstreamErrorsForQueue(entry); err != nil {
+		t.Fatal(err)
+	}
+	require.NotNil(t, entry.RoutingDiagnosticsJSON)
+	require.Nil(t, entry.RoutingDiagnostics)
+	require.JSONEq(t, `{
+  "selection_decision":"no_available_account",
+  "selection_layer":"load_balance",
+  "candidate_pool":7,
+  "filtered_candidates":{"runtime_blocked":2},
+  "transport_failure":"connection_reset",
+  "timeout_phase":"first_semantic_output_timeout",
+  "outbound_identity_source":"account"
+}`, *entry.RoutingDiagnosticsJSON)
+}
+
+func TestSanitizeOpsRoutingDiagnosticsDropsArbitraryValues(t *testing.T) {
+	entry := &OpsInsertErrorLogInput{
+		RoutingDiagnostics: &OpsRoutingDiagnostics{
+			SelectionDecision:      "https://user:secret@example.test/very/not-safe",
+			SelectionLayer:         "too many words for a fixed diagnostic token",
+			CandidatePool:          -1,
+			FilteredCandidates:     map[string]int{"bad value with spaces": -3},
+			TransportFailure:       "Bearer secret",
+			TimeoutPhase:           "timeout phase with spaces",
+			OutboundIdentitySource: "Codex CLI 0.1",
+		},
+	}
+
+	if err := SanitizeOpsUpstreamErrorsForQueue(entry); err != nil {
+		t.Fatal(err)
+	}
+	require.Nil(t, entry.RoutingDiagnosticsJSON)
+	require.Nil(t, entry.RoutingDiagnostics)
+}
+
+func TestSanitizeOpsRoutingDiagnosticsKeepsValidReasonsAfterInvalidFlood(t *testing.T) {
+	filtered := map[string]int{"runtime_blocked": 2}
+	for i := 0; i < 32; i++ {
+		filtered["untrusted_reason_"+string(rune('a'+i))] = 1
+	}
+	entry := &OpsInsertErrorLogInput{
+		RoutingDiagnostics: &OpsRoutingDiagnostics{FilteredCandidates: filtered},
+	}
+
+	require.NoError(t, SanitizeOpsUpstreamErrorsForQueue(entry))
+	require.NotNil(t, entry.RoutingDiagnosticsJSON)
+	require.JSONEq(t, `{"filtered_candidates":{"runtime_blocked":2}}`, *entry.RoutingDiagnosticsJSON)
 }

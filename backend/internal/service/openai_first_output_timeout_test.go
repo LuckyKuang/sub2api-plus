@@ -82,6 +82,9 @@ func TestOpenAIForwardFirstOutputTimeoutIncludesResponseHeaderWait(t *testing.T)
 	require.True(t, failoverErr.SafeToFailoverAfterWrite)
 	require.Less(t, time.Since(started), 1300*time.Millisecond)
 	require.Empty(t, rec.Body.String())
+	diagnostics := GetOpsRoutingDiagnostics(c)
+	require.NotNil(t, diagnostics)
+	require.Equal(t, "response_header_timeout", diagnostics.TimeoutPhase)
 	select {
 	case <-upstream.canceled:
 	default:
@@ -140,6 +143,9 @@ func TestOpenAINativeFirstOutputTimeoutIgnoresPreambleAndCleansReader(t *testing
 	require.Contains(t, string(failoverErr.ResponseBody), "first_output_timeout")
 	require.True(t, failoverErr.SafeToFailoverAfterWrite)
 	require.Empty(t, rec.Body.String())
+	diagnostics := GetOpsRoutingDiagnostics(c)
+	require.NotNil(t, diagnostics)
+	require.Equal(t, "first_semantic_output_timeout", diagnostics.TimeoutPhase)
 	select {
 	case <-body.closed:
 	default:

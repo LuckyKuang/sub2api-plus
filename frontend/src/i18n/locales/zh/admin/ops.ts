@@ -284,6 +284,8 @@ export default {
         resolved: '已解决',
         viewErrors: '错误',
         viewExcluded: '排除项',
+        viewAll: '全部',
+        view: '视图',
         statusCodeOther: '其他',
         owner: {
           provider: '服务商',
@@ -374,6 +376,7 @@ export default {
         tabRequest: '请求详情',
         tabResponse: '响应详情',
         responseBody: '响应详情',
+        routingDiagnostics: '路由诊断',
         compareA: '对比 A',
         compareB: '对比 B',
         suggestion: '处理建议',

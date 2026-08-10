@@ -9,18 +9,27 @@ import (
 )
 
 // Invalid replayed IDs are removed rather than rewritten because a fabricated
-// msg/fc ID may point at a different upstream object.
+// item ID may point at a different upstream object. The prefix is part of the
+// Responses item contract and differs for custom tool calls.
 func shouldStripOpenAIResponsesInputItemID(itemType, id string) bool {
 	if id == "" {
 		return false
 	}
-	if itemType == "message" {
-		return !strings.HasPrefix(id, "msg")
+	prefix := openAIResponsesInputItemIDPrefix(itemType)
+	return prefix != "" && !strings.HasPrefix(id, prefix)
+}
+
+func openAIResponsesInputItemIDPrefix(itemType string) string {
+	switch itemType {
+	case "message":
+		return "msg"
+	case "custom_tool_call":
+		return "ctc"
+	case "function_call", "tool_call", "local_shell_call", "tool_search_call", "mcp_tool_call":
+		return "fc"
+	default:
+		return ""
 	}
-	if isCodexToolCallInputType(itemType) {
-		return !strings.HasPrefix(id, "fc")
-	}
-	return false
 }
 
 func sanitizeOpenAIResponsesInputItemIDs(body []byte) ([]byte, bool, error) {

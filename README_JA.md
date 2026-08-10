@@ -70,7 +70,7 @@ curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/
 が返す別のタグへ置き換えてください：
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- install --version 'v0.1.173+custom.001'
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- install --version 'v0.1.173+custom.002'
 ```
 
 既存のバイナリインストールを以前の公開済みバージョンへロールバックします：

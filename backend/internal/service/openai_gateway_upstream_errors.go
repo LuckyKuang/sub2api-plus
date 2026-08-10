@@ -237,8 +237,65 @@ const OpenAIRequestBodyTooLargeClientMessage = "Request payload is too large"
 
 const openAIRequestBodyTooLargeReason = GatewayFailureReason("openai_request_body_too_large")
 
+// OpenAIProxyRetryBufferLimitClientMessage is returned when the local proxy
+// cannot safely retain the request body required for another upstream attempt.
+// The request must be reduced or retried by the client; replaying it through a
+// different account would reproduce the same unsafe buffering condition.
+const OpenAIProxyRetryBufferLimitClientMessage = "Request payload is too large to retry safely"
+
+const openAIProxyRetryBufferLimitReason = GatewayFailureReason("openai_proxy_retry_buffer_limit")
+
+type openAIUpstreamConnectivityFailure struct {
+	Reason           GatewayFailureReason
+	TransportFailure string
+	TimeoutPhase     string
+}
+
+func classifyOpenAIUpstreamConnectivityFailure(statusCode int, upstreamMsg string, upstreamBody []byte) *openAIUpstreamConnectivityFailure {
+	text := strings.ToLower(strings.TrimSpace(upstreamMsg + "\n" + string(upstreamBody)))
+	if statusCode == http.StatusGatewayTimeout {
+		phase := "gateway_timeout"
+		if strings.Contains(text, "upstream request timeout") || strings.Contains(text, "response header timeout") {
+			phase = "edge_gateway_timeout"
+		}
+		return &openAIUpstreamConnectivityFailure{
+			Reason:       GatewayFailureReason("openai_gateway_timeout"),
+			TimeoutPhase: phase,
+		}
+	}
+	if strings.Contains(text, "connection refused") {
+		return &openAIUpstreamConnectivityFailure{
+			Reason:           GatewayFailureReason("openai_transport_connection_refused"),
+			TransportFailure: "connection_refused",
+		}
+	}
+	if strings.Contains(text, "connection termination") ||
+		strings.Contains(text, "remote connection failure") ||
+		strings.Contains(text, "reset before headers") ||
+		strings.Contains(text, "disconnect/reset") {
+		return &openAIUpstreamConnectivityFailure{
+			Reason:           GatewayFailureReason("openai_transport_connection_reset"),
+			TransportFailure: "connection_reset",
+		}
+	}
+	return nil
+}
+
 func isOpenAIRequestBodyTooLargeError(statusCode int, upstreamMsg string, upstreamBody []byte) bool {
 	return statusCode == http.StatusRequestEntityTooLarge && !isOpenAIContextWindowError(upstreamMsg, upstreamBody)
+}
+
+func isOpenAIProxyRetryBufferLimitError(statusCode int, upstreamMsg string, upstreamBody []byte) bool {
+	if statusCode != http.StatusInsufficientStorage {
+		return false
+	}
+	match := func(value string) bool {
+		return strings.Contains(
+			strings.ToLower(strings.TrimSpace(value)),
+			"exceeded request buffer limit while retrying upstream",
+		)
+	}
+	return match(upstreamMsg) || match(string(upstreamBody))
 }
 
 func newOpenAIUpstreamFailoverError(
@@ -262,6 +319,22 @@ func newOpenAIUpstreamFailoverError(
 		failoverErr.ClientStatusCode = http.StatusRequestEntityTooLarge
 		failoverErr.ClientMessage = OpenAIRequestBodyTooLargeClientMessage
 	}
+	if isOpenAIProxyRetryBufferLimitError(statusCode, upstreamMsg, responseBody) {
+		failoverErr.RetryableOnSameAccount = false
+		failoverErr.RequestScopedTransient = false
+		failoverErr.Scope = GatewayFailureScopeRequest
+		failoverErr.Reason = openAIProxyRetryBufferLimitReason
+		failoverErr.NextAccountAction = NextAccountStop
+		failoverErr.ClientStatusCode = http.StatusRequestEntityTooLarge
+		failoverErr.ClientMessage = OpenAIProxyRetryBufferLimitClientMessage
+	}
+	if connectivity := classifyOpenAIUpstreamConnectivityFailure(statusCode, upstreamMsg, responseBody); connectivity != nil {
+		failoverErr.RetryableOnSameAccount = false
+		failoverErr.RequestScopedTransient = true
+		failoverErr.Scope = GatewayFailureScopeProvider
+		failoverErr.Reason = connectivity.Reason
+		failoverErr.NextAccountAction = NextAccountRetry
+	}
 	return failoverErr
 }
 
@@ -269,6 +342,54 @@ func newOpenAIUpstreamFailoverError(
 // same request even though the selected account rejected its serialized size.
 func (e *UpstreamFailoverError) IsOpenAIRequestBodyTooLarge() bool {
 	return e != nil && e.Reason == openAIRequestBodyTooLargeReason
+}
+
+// IsOpenAIProxyRetryBufferLimit reports a local replay-safety rejection. It is
+// deliberately distinct from account-specific upstream body limits.
+func (e *UpstreamFailoverError) IsOpenAIProxyRetryBufferLimit() bool {
+	return e != nil && e.Reason == openAIProxyRetryBufferLimitReason
+}
+
+func (s *OpenAIGatewayService) handleOpenAIUpstreamConnectivityHTTPError(
+	c *gin.Context,
+	account *Account,
+	resp *http.Response,
+	body []byte,
+	upstreamMsg string,
+	upstreamDetail string,
+	passthrough bool,
+) *UpstreamFailoverError {
+	if resp == nil {
+		return nil
+	}
+	connectivity := classifyOpenAIUpstreamConnectivityFailure(resp.StatusCode, upstreamMsg, body)
+	if connectivity == nil {
+		return nil
+	}
+	SetOpsRoutingDiagnostics(c, &OpsRoutingDiagnostics{
+		TransportFailure: connectivity.TransportFailure,
+		TimeoutPhase:     connectivity.TimeoutPhase,
+	})
+	if account != nil && connectivity.TransportFailure != "" {
+		s.recordOpenAIProxyTransportFailure(account, connectivity.TransportFailure)
+	}
+	event := OpsUpstreamErrorEvent{
+		UpstreamStatusCode: resp.StatusCode,
+		UpstreamRequestID:  resp.Header.Get("x-request-id"),
+		Passthrough:        passthrough,
+		Kind:               "transport_error",
+		Scope:              string(GatewayFailureScopeProvider),
+		Reason:             string(connectivity.Reason),
+		Message:            upstreamMsg,
+		Detail:             upstreamDetail,
+	}
+	if account != nil {
+		event.Platform = account.Platform
+		event.AccountID = account.ID
+		event.AccountName = account.Name
+	}
+	appendOpsUpstreamError(c, event)
+	return newOpenAIUpstreamFailoverError(resp.StatusCode, resp.Header, body, upstreamMsg, false)
 }
 
 func marshalOpenAIUpstreamJSON(v any) ([]byte, error) {
@@ -371,6 +492,22 @@ func (s *OpenAIGatewayService) handleErrorResponse(
 	}
 	setOpsUpstreamError(c, resp.StatusCode, upstreamMsg, upstreamDetail)
 	logOpenAIInstructionsRequiredDebug(ctx, c, account, resp.StatusCode, upstreamMsg, requestBody, body)
+	if isOpenAIProxyRetryBufferLimitError(resp.StatusCode, upstreamMsg, body) {
+		appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+			Platform:           account.Platform,
+			AccountID:          account.ID,
+			AccountName:        account.Name,
+			UpstreamStatusCode: resp.StatusCode,
+			UpstreamRequestID:  resp.Header.Get("x-request-id"),
+			Kind:               "request_rejected",
+			Message:            OpenAIProxyRetryBufferLimitClientMessage,
+			Detail:             upstreamDetail,
+		})
+		return nil, newOpenAIUpstreamFailoverError(resp.StatusCode, resp.Header, body, upstreamMsg, false)
+	}
+	if connectivityErr := s.handleOpenAIUpstreamConnectivityHTTPError(c, account, resp, body, upstreamMsg, upstreamDetail, false); connectivityErr != nil {
+		return nil, connectivityErr
+	}
 
 	if s.cfg != nil && s.cfg.Gateway.LogUpstreamErrorBody {
 		logger.LegacyPrintf("service.openai_gateway",
@@ -595,6 +732,9 @@ func (s *OpenAIGatewayService) handleCompatErrorResponse(
 		upstreamDetail = truncateString(string(body), maxBytes)
 	}
 	setOpsUpstreamError(c, resp.StatusCode, upstreamMsg, upstreamDetail)
+	if connectivityErr := s.handleOpenAIUpstreamConnectivityHTTPError(c, account, resp, body, upstreamMsg, upstreamDetail, false); connectivityErr != nil {
+		return nil, connectivityErr
+	}
 
 	// Apply error passthrough rules
 	if status, errType, errMsg, matched := applyErrorPassthroughRule(

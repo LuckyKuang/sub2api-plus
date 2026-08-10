@@ -39,6 +39,8 @@ func TestOpenAIGatewayService_APIKeyPassthrough_StripsInvalidInputItemIDs(t *tes
 			{"type":"function_call","id":"item_bad_call","call_id":"call_123","name":"exec_command","arguments":"{}"},
 			{"type":"message","id":"msg_valid","role":"user","content":[{"type":"input_text","text":"continue"}]},
 			{"type":"function_call","id":"fc_valid","call_id":"call_456","name":"apply_patch","arguments":"{}"},
+			{"type":"custom_tool_call","id":"ctc_valid","call_id":"call_789","name":"execute","input":"{}"},
+			{"type":"custom_tool_call","id":"fc_invalid_custom","call_id":"call_790","name":"execute","input":"{}"},
 			{"type":"function_call_output","id":"item_output","call_id":"call_123","output":"done"},
 			{"type":"web_search_call","id":"item_unconstrained"}
 		]
@@ -58,9 +60,13 @@ func TestOpenAIGatewayService_APIKeyPassthrough_StripsInvalidInputItemIDs(t *tes
 	require.Equal(t, "{}", gjson.GetBytes(forwarded, "input.1.arguments").String())
 	require.Equal(t, "msg_valid", gjson.GetBytes(forwarded, "input.2.id").String())
 	require.Equal(t, "fc_valid", gjson.GetBytes(forwarded, "input.3.id").String())
-	require.Equal(t, "item_output", gjson.GetBytes(forwarded, "input.4.id").String())
-	require.Equal(t, "call_123", gjson.GetBytes(forwarded, "input.4.call_id").String())
-	require.Equal(t, "item_unconstrained", gjson.GetBytes(forwarded, "input.5.id").String())
+	require.Equal(t, "ctc_valid", gjson.GetBytes(forwarded, "input.4.id").String())
+	require.Equal(t, "call_789", gjson.GetBytes(forwarded, "input.4.call_id").String())
+	require.False(t, gjson.GetBytes(forwarded, "input.5.id").Exists())
+	require.Equal(t, "call_790", gjson.GetBytes(forwarded, "input.5.call_id").String())
+	require.Equal(t, "item_output", gjson.GetBytes(forwarded, "input.6.id").String())
+	require.Equal(t, "call_123", gjson.GetBytes(forwarded, "input.6.call_id").String())
+	require.Equal(t, "item_unconstrained", gjson.GetBytes(forwarded, "input.7.id").String())
 }
 
 func TestSanitizeOpenAIResponsesInputItemIDs_AllocationGrowthIsLinear(t *testing.T) {

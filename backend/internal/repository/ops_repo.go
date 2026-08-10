@@ -42,6 +42,7 @@ INSERT INTO ops_error_logs (
   severity,
   status_code,
   is_business_limited,
+  is_routing_capacity_limited,
   is_count_tokens,
   error_message,
   error_body,
@@ -51,6 +52,7 @@ INSERT INTO ops_error_logs (
   upstream_error_message,
   upstream_error_detail,
   upstream_errors,
+  routing_diagnostics,
   auth_latency_ms,
   routing_latency_ms,
   upstream_latency_ms,
@@ -59,7 +61,7 @@ INSERT INTO ops_error_logs (
   created_at,
   api_key_prefix
 ) VALUES (
-  $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39
+  $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41
 )
 ON CONFLICT (async_task_id) WHERE async_task_id IS NOT NULL DO NOTHING`
 
@@ -166,6 +168,7 @@ func opsInsertErrorLogArgs(input *service.OpsInsertErrorLogInput) []any {
 		opsNullString(input.Severity),
 		opsNullInt(input.StatusCode),
 		input.IsBusinessLimited,
+		input.IsRoutingCapacityLimited,
 		input.IsCountTokens,
 		opsNullString(input.ErrorMessage),
 		opsNullString(input.ErrorBody),
@@ -175,6 +178,7 @@ func opsInsertErrorLogArgs(input *service.OpsInsertErrorLogInput) []any {
 		opsNullString(input.UpstreamErrorMessage),
 		opsNullString(input.UpstreamErrorDetail),
 		opsNullString(input.UpstreamErrorsJSON),
+		opsNullString(input.RoutingDiagnosticsJSON),
 		opsNullInt64(input.AuthLatencyMs),
 		opsNullInt64(input.RoutingLatencyMs),
 		opsNullInt64(input.UpstreamLatencyMs),
@@ -258,6 +262,7 @@ SELECT
   COALESCE(e.upstream_status_code, e.status_code, 0),
   COALESCE(e.platform, ''),
   COALESCE(e.model, ''),
+  COALESCE(e.is_routing_capacity_limited, false),
   COALESCE(e.resolved, false),
   e.resolved_at,
   e.resolved_by_user_id,
@@ -329,6 +334,7 @@ LIMIT $` + itoa(len(args)+1) + ` OFFSET $` + itoa(len(args)+2)
 			&statusCode,
 			&item.Platform,
 			&item.Model,
+			&item.IsRoutingCapacityLimited,
 			&item.Resolved,
 			&resolvedAt,
 			&resolvedBy,
@@ -444,6 +450,8 @@ SELECT
   COALESCE(e.upstream_error_detail, ''),
   COALESCE(e.upstream_errors::text, ''),
   e.is_business_limited,
+  COALESCE(e.is_routing_capacity_limited, false),
+  COALESCE(e.routing_diagnostics::text, ''),
   e.user_id,
   COALESCE(u.email, ''),
   e.api_key_id,
@@ -494,6 +502,7 @@ LIMIT 1`
 	var requestType sql.NullInt64
 	var detailAPIKeyName string
 	var detailAPIKeyDeletedAt sql.NullTime
+	var routingDiagnosticsJSON string
 
 	err := r.db.QueryRowContext(ctx, q, id).Scan(
 		&out.ID,
@@ -519,6 +528,8 @@ LIMIT 1`
 		&out.UpstreamErrorDetail,
 		&out.UpstreamErrors,
 		&out.IsBusinessLimited,
+		&out.IsRoutingCapacityLimited,
+		&routingDiagnosticsJSON,
 		&userID,
 		&out.UserEmail,
 		&apiKeyID,
@@ -612,6 +623,12 @@ LIMIT 1`
 	out.UpstreamErrors = strings.TrimSpace(out.UpstreamErrors)
 	if out.UpstreamErrors == "null" {
 		out.UpstreamErrors = ""
+	}
+	if raw := strings.TrimSpace(routingDiagnosticsJSON); raw != "" && raw != "null" {
+		var diagnostics service.OpsRoutingDiagnostics
+		if err := json.Unmarshal([]byte(raw), &diagnostics); err == nil {
+			out.RoutingDiagnostics = &diagnostics
+		}
 	}
 
 	return &out, nil
@@ -986,14 +1003,14 @@ func buildOpsErrorLogsWhere(filter *service.OpsErrorLogFilter) (string, []any) {
 	}
 	switch view {
 	case "", "errors":
-		clauses = append(clauses, "COALESCE(e.is_business_limited,false) = false")
+		clauses = append(clauses, "(COALESCE(e.is_business_limited,false) = false OR COALESCE(e.is_routing_capacity_limited,false) = true)")
 	case "excluded":
-		clauses = append(clauses, "COALESCE(e.is_business_limited,false) = true")
+		clauses = append(clauses, "COALESCE(e.is_business_limited,false) = true AND COALESCE(e.is_routing_capacity_limited,false) = false")
 	case "all":
 		// no-op
 	default:
 		// treat unknown as default 'errors'
-		clauses = append(clauses, "COALESCE(e.is_business_limited,false) = false")
+		clauses = append(clauses, "(COALESCE(e.is_business_limited,false) = false OR COALESCE(e.is_routing_capacity_limited,false) = true)")
 	}
 	if len(filter.StatusCodes) > 0 {
 		args = append(args, pq.Array(filter.StatusCodes))

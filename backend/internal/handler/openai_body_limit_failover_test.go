@@ -46,6 +46,27 @@ func TestOpenAIBodyLimitFailoverExhausted_ReturnsRedactedResponsesSSE(t *testing
 	require.NotContains(t, body, "must-not-leak")
 }
 
+func TestOpenAIProxyRetryBufferLimitFailoverExhausted_ReturnsStableJSON413(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(nil))
+
+	(&OpenAIGatewayHandler{}).handleFailoverExhausted(c, &service.UpstreamFailoverError{
+		StatusCode:        http.StatusInsufficientStorage,
+		ResponseBody:      []byte(`{"error":{"message":"exceeded request buffer limit while retrying upstream secret=must-not-leak"}}`),
+		Scope:             service.GatewayFailureScopeRequest,
+		Reason:            service.GatewayFailureReason("openai_proxy_retry_buffer_limit"),
+		NextAccountAction: service.NextAccountStop,
+		ClientStatusCode:  http.StatusRequestEntityTooLarge,
+		ClientMessage:     service.OpenAIProxyRetryBufferLimitClientMessage,
+	}, false)
+
+	require.Equal(t, http.StatusRequestEntityTooLarge, rec.Code)
+	require.Contains(t, rec.Body.String(), service.OpenAIProxyRetryBufferLimitClientMessage)
+	require.NotContains(t, rec.Body.String(), "must-not-leak")
+}
+
 func bodyLimitFailoverTestError() *service.UpstreamFailoverError {
 	return &service.UpstreamFailoverError{
 		StatusCode:        http.StatusRequestEntityTooLarge,

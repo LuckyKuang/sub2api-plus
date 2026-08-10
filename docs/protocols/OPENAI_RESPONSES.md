@@ -35,6 +35,42 @@ This response-header compatibility does not make Codex App API-key calls to
 `account/rateLimits/read` available; that App Server authentication behavior is
 outside this gateway's request path.
 
+## Request Replay and Upstream Failures
+
+When a Responses request replays a previous tool call, the gateway preserves an
+item `id` only when its prefix matches the item type. In particular,
+`custom_tool_call` uses `ctc...`; a mismatched item ID is removed rather than
+rewritten. Its `call_id` remains unchanged so the paired
+`custom_tool_call_output` continues to reference the original call.
+
+The exact local proxy response `507` with
+`exceeded request buffer limit while retrying upstream` is not an account or
+model failure. The gateway stops replaying the request, keeps the selected
+account eligible, and returns an OpenAI-compatible `413` with:
+
+```text
+Request payload is too large to retry safely
+```
+
+Reduce the request size or adjust the reverse-proxy retry-buffer policy before
+retrying. The gateway does not retry that request through another account,
+because doing so can duplicate work and billing while encountering the same
+buffer limit.
+
+Connection refusal/reset and HTTP `504` gateway failures are recorded as
+provider or proxy transport failures rather than model-capacity failures. A
+proxy-backed OpenAI account is isolated by the bounded proxy circuit, keyed by
+the configured proxy ID; a shared proxy incident therefore does not directly
+put every associated account into an account-level cooldown. Management error
+records retain only structured, bounded diagnostic categories and never store
+raw proxy URLs, credentials, or outbound User-Agent values.
+
+For the native HTTP/SSE and WebSocket paths, diagnostics distinguish an edge
+gateway timeout from the gateway's own response-header, first-semantic-output,
+and WebSocket first-semantic-output deadlines. A first-output timeout may use
+the existing single, pre-output controlled failover path; it is never enabled
+after semantic output has reached the client.
+
 ## WebSocket Ingress Limits
 
 `gateway.openai_ws` bounds the lifetime and aggregate count of client-facing

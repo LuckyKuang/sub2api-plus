@@ -490,7 +490,7 @@ describe('admin UsageView errors tab filter forwarding', () => {
     vi.useRealTimers()
   })
 
-  it('forwards model/account_id/group_id to listErrorLogs on the errors tab', async () => {
+  it('forwards the default rolling 24-hour window, Error view, and detail filters to listErrorLogs', async () => {
     const wrapper = mount(UsageView, {
       global: { stubs: {
         AppLayout: AppLayoutStub, UsageStatsCards: true, UsageFilters: UsageFiltersStub,
@@ -517,10 +517,44 @@ describe('admin UsageView errors tab filter forwarding', () => {
     await flushPromises()
 
     expect(listErrorLogs).toHaveBeenCalledWith(expect.objectContaining({
-      view: 'all',
+      view: 'errors',
+      time_range: '24h',
+      start_time: undefined,
+      end_time: undefined,
       model: 'gpt-5.3-codex',
       account_id: 7,
       group_id: 3,
+    }))
+  })
+
+  it('uses explicit boundaries after a custom date selection and supports the All view', async () => {
+    const wrapper = mount(UsageView, {
+      global: { stubs: {
+        AppLayout: AppLayoutStub, UsageStatsCards: true, UsageFilters: UsageFiltersStub,
+        UsageTable: true, UsageExportProgress: true, UsageCleanupDialog: true,
+        UserBalanceHistoryModal: true, AuditLogModal: true, Pagination: true, Select: true,
+        DateRangePicker: true, Icon: true, TokenUsageTrend: true,
+        ModelDistributionChart: true, GroupDistributionChart: true, EndpointDistributionChart: true,
+        UserTokenRanking: true, OpsErrorLogTable: true, OpsErrorDetailModal: true,
+      } },
+    })
+    vi.advanceTimersByTime(120)
+    await flushPromises()
+
+    const vm = wrapper.vm as any
+    vm.onDateRangeChange({ startDate: '2026-08-01', endDate: '2026-08-02', preset: 'custom' })
+    await flushPromises()
+    const tabs = wrapper.findAll('[data-testid="usage-detail-tab"]')
+    await tabs[1].trigger('click')
+    await flushPromises()
+    vm.onErrorViewChange('all')
+    await flushPromises()
+
+    expect(listErrorLogs).toHaveBeenLastCalledWith(expect.objectContaining({
+      view: 'all',
+      time_range: undefined,
+      start_time: new Date('2026-08-01T00:00:00').toISOString(),
+      end_time: new Date('2026-08-02T23:59:59.999').toISOString(),
     }))
   })
 })

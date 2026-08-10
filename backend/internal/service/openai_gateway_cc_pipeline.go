@@ -112,6 +112,22 @@ func (s *OpenAIGatewayService) failoverOpenAIUpstreamHTTPError(
 		}
 		upstreamDetail = truncateString(string(respBody), maxBytes)
 	}
+	if connectivityErr := s.handleOpenAIUpstreamConnectivityHTTPError(c, account, resp, respBody, upstreamMsg, upstreamDetail, false); connectivityErr != nil {
+		return connectivityErr
+	}
+	if isOpenAIProxyRetryBufferLimitError(resp.StatusCode, upstreamMsg, respBody) {
+		appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+			Platform:           account.Platform,
+			AccountID:          account.ID,
+			AccountName:        account.Name,
+			UpstreamStatusCode: resp.StatusCode,
+			UpstreamRequestID:  resp.Header.Get("x-request-id"),
+			Kind:               "request_rejected",
+			Message:            OpenAIProxyRetryBufferLimitClientMessage,
+			Detail:             upstreamDetail,
+		})
+		return newOpenAIUpstreamFailoverError(resp.StatusCode, resp.Header, respBody, upstreamMsg, false)
+	}
 	appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 		Platform:           account.Platform,
 		AccountID:          account.ID,
@@ -217,7 +233,8 @@ func (s *OpenAIGatewayService) sendCCUpstreamRequest(
 	// existing generic override behavior.
 	if account.Platform == PlatformOpenAI {
 		account.applyOpenAIHeaderOverrides(upstreamReq.Header)
-		s.applyOpenAIOutboundIdentity(ctx, account, upstreamReq.Header, false)
+		identity := s.applyOpenAIOutboundIdentity(ctx, account, upstreamReq.Header, false)
+		SetOpsRoutingDiagnostics(c, &OpsRoutingDiagnostics{OutboundIdentitySource: identity.Source})
 	} else {
 		account.ApplyHeaderOverrides(upstreamReq.Header)
 	}

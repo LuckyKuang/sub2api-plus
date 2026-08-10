@@ -273,7 +273,8 @@ func (s *OpenAIGatewayService) buildInputTokensUpstreamRequest(
 	}
 
 	account.applyOpenAIHeaderOverrides(req.Header)
-	s.applyOpenAIOutboundIdentity(ctx, account, req.Header, account.Type == AccountTypeOAuth)
+	identity := s.applyOpenAIOutboundIdentity(ctx, account, req.Header, account.Type == AccountTypeOAuth)
+	SetOpsRoutingDiagnostics(c, &OpsRoutingDiagnostics{OutboundIdentitySource: identity.Source})
 
 	return req, nil
 }

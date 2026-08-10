@@ -133,3 +133,51 @@ func TestOpenAIRequestBodyLimitFailover_ContextWindow413DoesNotSwitchAccounts(t 
 		})
 	}
 }
+
+func TestOpenAIProxyRetryBufferLimit_ReturnsRequestScopedNonRetryable413(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	requestBody := []byte(`{"model":"gpt-5.2","stream":false,"input":"hello"}`)
+
+	for _, passthrough := range []bool{false, true} {
+		t.Run(fmt.Sprintf("passthrough_%t", passthrough), func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(rec)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(nil))
+
+			const upstreamBody = `{"error":{"message":"exceeded request buffer limit while retrying upstream"}}`
+			body := &passthroughCloseTrackingReadCloser{Reader: strings.NewReader(upstreamBody)}
+			svc := &OpenAIGatewayService{
+				cfg: &config.Config{Gateway: config.GatewayConfig{ForceCodexCLI: false}},
+				httpUpstream: &httpUpstreamRecorder{resp: &http.Response{
+					StatusCode: http.StatusInsufficientStorage,
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+					Body:       body,
+				}},
+			}
+			account := &Account{
+				ID: 163, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Concurrency: 1,
+				Credentials: map[string]any{"api_key": "sk-test", "base_url": "https://api.example.test"},
+				Extra: map[string]any{
+					"openai_passthrough":         passthrough,
+					"openai_responses_supported": true,
+				},
+				Status: StatusActive, Schedulable: true,
+			}
+
+			result, err := svc.Forward(context.Background(), c, account, requestBody)
+
+			require.Nil(t, result)
+			var failoverErr *UpstreamFailoverError
+			require.ErrorAs(t, err, &failoverErr)
+			require.True(t, failoverErr.IsOpenAIProxyRetryBufferLimit())
+			require.Equal(t, GatewayFailureScopeRequest, failoverErr.Scope)
+			require.Equal(t, NextAccountStop, failoverErr.NextAccountAction)
+			require.False(t, failoverErr.ShouldRetryNextAccount())
+			require.Equal(t, http.StatusRequestEntityTooLarge, failoverErr.ClientStatusCode)
+			require.Equal(t, OpenAIProxyRetryBufferLimitClientMessage, failoverErr.ClientMessage)
+			require.Equal(t, StatusActive, account.Status, "a local retry buffer limit must not degrade account status")
+			require.False(t, c.Writer.Written())
+			require.True(t, body.closed)
+		})
+	}
+}

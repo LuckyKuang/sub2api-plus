@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"math/rand/v2"
 	"strings"
@@ -391,7 +392,10 @@ func SanitizeOpsErrorBodyForQueue(raw string) (string, bool) {
 // SanitizeOpsUpstreamErrorsForQueue bounds and serializes attempt-level data
 // before the entry can consume asynchronous queue capacity.
 func SanitizeOpsUpstreamErrorsForQueue(entry *OpsInsertErrorLogInput) error {
-	return sanitizeOpsUpstreamErrors(entry)
+	if err := sanitizeOpsUpstreamErrors(entry); err != nil {
+		return err
+	}
+	return sanitizeOpsRoutingDiagnostics(entry)
 }
 
 func (s *OpsService) RecordError(ctx context.Context, entry *OpsInsertErrorLogInput) error {
@@ -544,6 +548,9 @@ func (s *OpsService) prepareErrorLogInput(ctx context.Context, entry *OpsInsertE
 	if err := sanitizeOpsUpstreamErrors(entry); err != nil {
 		return nil, false, err
 	}
+	if err := sanitizeOpsRoutingDiagnostics(entry); err != nil {
+		return nil, false, err
+	}
 
 	return entry, true, nil
 }
@@ -615,6 +622,121 @@ func sanitizeOpsUpstreamErrors(entry *OpsInsertErrorLogInput) error {
 	entry.UpstreamErrorsJSON = marshalOpsUpstreamErrors(sanitized)
 	entry.UpstreamErrors = nil
 	return nil
+}
+
+func sanitizeOpsRoutingDiagnostics(entry *OpsInsertErrorLogInput) error {
+	if entry == nil || entry.RoutingDiagnostics == nil {
+		return nil
+	}
+
+	const maxFilteredReasons = 16
+	diagnostics := *entry.RoutingDiagnostics
+	diagnostics.SelectionDecision = sanitizeOpsDiagnosticEnum(diagnostics.SelectionDecision, map[string]struct{}{
+		"no_available_account": {},
+	})
+	diagnostics.SelectionLayer = sanitizeOpsDiagnosticEnum(diagnostics.SelectionLayer, map[string]struct{}{
+		"load_balance": {},
+	})
+	diagnostics.TransportFailure = sanitizeOpsDiagnosticEnum(diagnostics.TransportFailure, map[string]struct{}{
+		"connection_refused":          {},
+		"connection_reset":            {},
+		"dns_not_found":               {},
+		"network_unreachable":         {},
+		"proxy_authentication_failed": {},
+		"transport_error":             {},
+	})
+	diagnostics.TimeoutPhase = sanitizeOpsDiagnosticEnum(diagnostics.TimeoutPhase, map[string]struct{}{
+		"gateway_timeout":                         {},
+		"edge_gateway_timeout":                    {},
+		"response_header_timeout":                 {},
+		"first_semantic_output_timeout":           {},
+		"websocket_first_semantic_output_timeout": {},
+	})
+	diagnostics.OutboundIdentitySource = sanitizeOpsDiagnosticEnum(diagnostics.OutboundIdentitySource, map[string]struct{}{
+		openAIOutboundIdentitySourceAccount: {},
+		openAIOutboundIdentitySourceGlobal:  {},
+		openAIOutboundIdentitySourceDefault: {},
+	})
+	if diagnostics.CandidatePool < 0 {
+		diagnostics.CandidatePool = 0
+	}
+	if diagnostics.CandidatePool > 100000 {
+		diagnostics.CandidatePool = 100000
+	}
+	if len(diagnostics.FilteredCandidates) > 0 {
+		filtered := make(map[string]int, min(len(diagnostics.FilteredCandidates), maxFilteredReasons))
+		for reason, count := range diagnostics.FilteredCandidates {
+			reason = sanitizeOpsRoutingFilterReason(reason)
+			if reason == "" || count <= 0 {
+				continue
+			}
+			if len(filtered) >= maxFilteredReasons {
+				break
+			}
+			if count > 100000 {
+				count = 100000
+			}
+			filtered[reason] = count
+		}
+		diagnostics.FilteredCandidates = filtered
+	}
+
+	if diagnostics.SelectionDecision == "" && diagnostics.SelectionLayer == "" &&
+		diagnostics.CandidatePool == 0 && len(diagnostics.FilteredCandidates) == 0 &&
+		diagnostics.TransportFailure == "" && diagnostics.TimeoutPhase == "" &&
+		diagnostics.OutboundIdentitySource == "" {
+		entry.RoutingDiagnostics = nil
+		entry.RoutingDiagnosticsJSON = nil
+		return nil
+	}
+
+	payload, err := json.Marshal(diagnostics)
+	if err != nil {
+		return fmt.Errorf("marshal routing diagnostics: %w", err)
+	}
+	encoded := string(payload)
+	entry.RoutingDiagnosticsJSON = &encoded
+	entry.RoutingDiagnostics = nil
+	return nil
+}
+
+// sanitizeOpsDiagnosticEnum accepts only server-defined diagnostic values. A
+// token filter alone is insufficient: stripping URL punctuation could preserve
+// credential fragments or user-supplied identifiers in persistent Ops data.
+func sanitizeOpsDiagnosticEnum(value string, allowed map[string]struct{}) string {
+	value = strings.TrimSpace(value)
+	if _, ok := allowed[value]; ok {
+		return value
+	}
+	return ""
+}
+
+func sanitizeOpsRoutingFilterReason(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "quota_auto_pause_5h" || value == "quota_auto_pause_7d" {
+		return value
+	}
+	_, ok := map[string]struct{}{
+		"account_nil":                 {},
+		"capability_mismatch":         {},
+		"channel_upstream_restricted": {},
+		"excluded":                    {},
+		"model_not_supported":         {},
+		"not_schedulable":             {},
+		"oauth_session_group_denied":  {},
+		"platform_mismatch":           {},
+		"privacy_not_set":             {},
+		"profit_invalid_account_rate": {},
+		"profit_threshold":            {},
+		"proxy_stream_quarantined":    {},
+		"runtime_blocked":             {},
+		"shadow_parent_unhealthy":     {},
+		"transport_incompatible":      {},
+	}[value]
+	if !ok {
+		return ""
+	}
+	return value
 }
 
 func (s *OpsService) GetErrorLogs(ctx context.Context, filter *OpsErrorLogFilter) (*OpsErrorLogList, error) {

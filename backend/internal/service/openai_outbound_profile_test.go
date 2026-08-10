@@ -20,6 +20,7 @@ func TestResolveOpenAIOutboundIdentityCandidates(t *testing.T) {
 		wantUserAgent  string
 		wantOriginator string
 		wantVersion    string
+		wantSource     string
 	}{
 		{
 			name:           "合法账号 UA 优先于系统设置",
@@ -28,6 +29,7 @@ func TestResolveOpenAIOutboundIdentityCandidates(t *testing.T) {
 			wantUserAgent:  accountUA,
 			wantOriginator: "codex-tui",
 			wantVersion:    "0.150.0",
+			wantSource:     openAIOutboundIdentitySourceAccount,
 		},
 		{
 			name:           "合法账号 UA 不受无效系统设置影响",
@@ -36,6 +38,7 @@ func TestResolveOpenAIOutboundIdentityCandidates(t *testing.T) {
 			wantUserAgent:  accountUA,
 			wantOriginator: "codex-tui",
 			wantVersion:    "0.150.0",
+			wantSource:     openAIOutboundIdentitySourceAccount,
 		},
 		{
 			name:           "账号 UA 为空时使用系统设置",
@@ -43,6 +46,7 @@ func TestResolveOpenAIOutboundIdentityCandidates(t *testing.T) {
 			wantUserAgent:  testCodexCLIUserAgent,
 			wantOriginator: "codex_cli_rs",
 			wantVersion:    "0.144.1",
+			wantSource:     openAIOutboundIdentitySourceGlobal,
 		},
 		{
 			name:           "无效账号 UA 回退到系统设置",
@@ -51,6 +55,7 @@ func TestResolveOpenAIOutboundIdentityCandidates(t *testing.T) {
 			wantUserAgent:  testCodexCLIUserAgent,
 			wantOriginator: "codex_cli_rs",
 			wantVersion:    "0.144.1",
+			wantSource:     openAIOutboundIdentitySourceGlobal,
 		},
 		{
 			name:           "无效账号与系统 UA 回退内置默认",
@@ -59,12 +64,14 @@ func TestResolveOpenAIOutboundIdentityCandidates(t *testing.T) {
 			wantUserAgent:  DefaultOpenAICodexUserAgent,
 			wantOriginator: openai.CodexDefaultOriginator,
 			wantVersion:    codexCLIVersion,
+			wantSource:     openAIOutboundIdentitySourceDefault,
 		},
 		{
 			name:           "账号与系统 UA 均为空时使用内置默认",
 			wantUserAgent:  DefaultOpenAICodexUserAgent,
 			wantOriginator: openai.CodexDefaultOriginator,
 			wantVersion:    codexCLIVersion,
+			wantSource:     openAIOutboundIdentitySourceDefault,
 		},
 	}
 
@@ -74,6 +81,7 @@ func TestResolveOpenAIOutboundIdentityCandidates(t *testing.T) {
 			require.Equal(t, tt.wantUserAgent, identity.UserAgent)
 			require.Equal(t, tt.wantOriginator, identity.Originator)
 			require.Equal(t, tt.wantVersion, identity.Version)
+			require.Equal(t, tt.wantSource, identity.Source)
 		})
 	}
 }

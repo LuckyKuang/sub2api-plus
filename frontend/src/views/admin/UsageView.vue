@@ -83,7 +83,7 @@
           </button>
         </div>
 
-        <UsageFilters v-model="filters" ref="usageFiltersRef" flat :mode="activeTab" class="border-b border-gray-100 dark:border-dark-700/50" :start-date="startDate" :end-date="endDate" :exporting="exporting" :model-options="modelNameOptions" @change="applyFilters" @refresh="refreshData" @reset="resetFilters" @cleanup="openCleanupDialog" @export="exportToExcel">
+        <UsageFilters v-model="filters" ref="usageFiltersRef" flat :mode="activeTab" class="border-b border-gray-100 dark:border-dark-700/50" :start-date="startDate" :end-date="endDate" :exporting="exporting" :model-options="modelNameOptions" :error-view="errView" @update:error-view="onErrorViewChange" @change="applyFilters" @refresh="refreshData" @reset="resetFilters" @cleanup="openCleanupDialog" @export="exportToExcel">
           <template #after-reset>
             <div v-if="activeTab !== 'ranking'" class="relative" ref="columnDropdownRef">
               <button
@@ -296,6 +296,7 @@ const getGranularityForRange = (start: string, end: string): 'day' | 'hour' => {
 }
 const defaultRange = getLast24HoursRangeDates()
 const startDate = ref(defaultRange.start); const endDate = ref(defaultRange.end)
+const errorDatePreset = ref<string | null>('last24Hours')
 const filters = ref<AdminUsageQueryParams>({ user_id: undefined, model: undefined, group_id: undefined, request_type: undefined, billing_type: null, start_date: startDate.value, end_date: endDate.value })
 const pagination = reactive({ page: 1, page_size: getPersistedPageSize(), total: 0 })
 const sortState = reactive({
@@ -322,9 +323,11 @@ const applyRouteQueryFilters = () => {
 
   if (queryStartDate) {
     startDate.value = queryStartDate
+    errorDatePreset.value = null
   }
   if (queryEndDate) {
     endDate.value = queryEndDate
+    errorDatePreset.value = null
   }
 
   filters.value = {
@@ -359,6 +362,7 @@ const loadRouteUserFilterLabel = async () => {
 const onDateRangeChange = (range: { startDate: string; endDate: string; preset: string | null }) => {
   startDate.value = range.startDate
   endDate.value = range.endDate
+  errorDatePreset.value = range.preset
   filters.value = {
     ...filters.value,
     start_date: range.startDate,
@@ -540,6 +544,7 @@ const resetFilters = () => {
   const range = getLast24HoursRangeDates()
   startDate.value = range.start
   endDate.value = range.end
+  errorDatePreset.value = 'last24Hours'
   filters.value = { start_date: startDate.value, end_date: endDate.value, request_type: undefined, billing_type: null, billing_mode: undefined }
   granularity.value = getGranularityForRange(startDate.value, endDate.value)
   applyFilters()
@@ -788,6 +793,7 @@ const errPageSize = ref(20)
 const errTotal = ref(0)
 const errSortBy = ref('created_at')
 const errSortOrder = ref<'asc' | 'desc'>('desc')
+const errView = ref<'errors' | 'excluded' | 'all'>('errors')
 const showErrorModal = ref(false)
 const selectedErrorId = ref<number | null>(null)
 
@@ -801,9 +807,10 @@ const loadAdminErrors = async () => {
     const resp = await listErrorLogs({
       page: errPage.value,
       page_size: errPageSize.value,
-      view: 'all',
-      start_time: toRFC3339(filters.value.start_date),
-      end_time: toRFC3339(filters.value.end_date, true),
+      view: errView.value,
+      time_range: errorDatePreset.value === 'last24Hours' ? '24h' : undefined,
+      start_time: errorDatePreset.value === 'last24Hours' ? undefined : toRFC3339(filters.value.start_date),
+      end_time: errorDatePreset.value === 'last24Hours' ? undefined : toRFC3339(filters.value.end_date, true),
       user_id: filters.value.user_id ?? undefined,
       api_key_id: filters.value.api_key_id ?? undefined,
       account_id: filters.value.account_id ?? undefined,
@@ -823,6 +830,13 @@ const loadAdminErrors = async () => {
   } finally {
     errLoading.value = false
   }
+}
+
+const onErrorViewChange = (view: 'errors' | 'excluded' | 'all') => {
+  if (errView.value === view) return
+  errView.value = view
+  errPage.value = 1
+  if (activeTab.value === 'errors') loadAdminErrors()
 }
 
 const onErrSort = (sortBy: string, sortOrder: 'asc' | 'desc') => {

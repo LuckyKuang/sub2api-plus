@@ -497,6 +497,28 @@ func TestClassifyOpsRoutingCapacityMarkerExcludesMaskedSelectionFailureFromSLA(t
 	require.Equal(t, "gateway", errorSource)
 }
 
+func TestApplyOpsRoutingFieldsPreservesCapacityMarkerSeparatelyFromSLAMarker(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+
+	markOpsRoutingCapacityLimited(c)
+	service.SetOpsRoutingDiagnostics(c, &service.OpsRoutingDiagnostics{
+		CandidatePool:          3,
+		FilteredCandidates:     map[string]int{"runtime_blocked": 3},
+		OutboundIdentitySource: "global",
+	})
+	entry := &service.OpsInsertErrorLogInput{IsBusinessLimited: true}
+	applyOpsRoutingFieldsFromContext(c, entry)
+
+	require.True(t, entry.IsBusinessLimited, "SLA compatibility marker is owned by classification and must not be rewritten")
+	require.True(t, entry.IsRoutingCapacityLimited)
+	require.NotNil(t, entry.RoutingDiagnostics)
+	require.Equal(t, "no_available_account", entry.RoutingDiagnostics.SelectionDecision)
+	require.Equal(t, 3, entry.RoutingDiagnostics.CandidatePool)
+	require.Equal(t, "global", entry.RoutingDiagnostics.OutboundIdentitySource)
+}
+
 func TestClassifyOpsAuthClientErrorsExcludedFromSLA(t *testing.T) {
 	tests := []struct {
 		name    string
