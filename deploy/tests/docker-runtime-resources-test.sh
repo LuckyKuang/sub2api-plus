@@ -9,17 +9,21 @@ fail() {
   exit 1
 }
 
+normalized_file() {
+  tr -d '\015' < "$1"
+}
+
 assert_line() {
   file=$1
   line=$2
-  grep -Fqx "$line" "$file" || fail "$file is missing: $line"
+  normalized_file "$file" | grep -Fqx "$line" || fail "$file is missing: $line"
 }
 
 assert_count() {
   file=$1
   line=$2
   expected=$3
-  actual=$(grep -Fxc "$line" "$file" || true)
+  actual=$(normalized_file "$file" | grep -Fxc "$line" || true)
   [ "$actual" -eq "$expected" ] || fail "$file has $actual occurrences of '$line', expected $expected"
 }
 
