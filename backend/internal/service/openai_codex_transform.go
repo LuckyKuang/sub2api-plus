@@ -1526,22 +1526,6 @@ func isCodexToolCallItemType(typ string) bool {
 	}
 }
 
-// isCodexToolCallInputType 仅匹配 call-input 类型（不含 output）。具体 id 前缀
-// 由 openAIResponsesInputItemIDPrefix 按类型决定；custom_tool_call 使用 ctc。
-func isCodexToolCallInputType(typ string) bool {
-	switch typ {
-	case "function_call",
-		"tool_call",
-		"local_shell_call",
-		"tool_search_call",
-		"custom_tool_call",
-		"mcp_tool_call":
-		return true
-	default:
-		return false
-	}
-}
-
 func codexInputItemRequiresName(typ string) bool {
 	switch strings.TrimSpace(typ) {
 	case "function_call", "custom_tool_call", "mcp_tool_call":
