@@ -1954,6 +1954,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 	switchCount := 0
 	profitVetoCount := 0
 	failedAccountIDs := make(map[int64]struct{})
+	policyRejectedAccountCount := 0
 	var lastFailoverErr *service.UpstreamFailoverError
 	var oauth429FailoverState service.OpenAIOAuth429FailoverState
 	handleWSFailover := func(account *service.Account, failoverErr *service.UpstreamFailoverError) bool {
@@ -2035,6 +2036,15 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "OpenAI OAuth account access denied")
 				return
 			}
+			// A policy close is correct only when the scheduler actually exhausted
+			// the remaining request-local candidates. Do not hide an unrelated
+			// scheduler/database failure behind a client-profile message merely
+			// because an earlier candidate was ineligible.
+			if policyRejectedAccountCount > 0 && errors.Is(err, service.ErrNoAvailableAccounts) {
+				service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalPolicyDenied)
+				closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, service.CodexOfficialClientsOnlyMessage)
+				return
+			}
 			reqLog.Warn("openai.websocket_account_select_failed",
 				zap.Error(openAICompatibleSelectionErrorForLog(err, requestPlatform)),
 				zap.Int("excluded_account_count", len(failedAccountIDs)),
@@ -2047,6 +2057,11 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			return
 		}
 		if selection == nil || selection.Account == nil {
+			if policyRejectedAccountCount > 0 {
+				service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalPolicyDenied)
+				closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, service.CodexOfficialClientsOnlyMessage)
+				return
+			}
 			if lastFailoverErr != nil {
 				closeOpenAIWSFailoverExhausted(wsConn, lastFailoverErr)
 			} else {
@@ -2056,6 +2071,24 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		}
 
 		account := selection.Account
+		restrictionResult := h.gatewayService.EvaluateCodexClientRestriction(c, account, firstMessage)
+		if restrictionResult.Enabled && !restrictionResult.Matched {
+			// A policy mismatch is a property of this request/account pair, not an
+			// upstream or account-health failure. Release a pre-acquired selection,
+			// exclude it only for this selection loop, then look for an account the
+			// client is actually allowed to use.
+			if selection.Acquired && selection.ReleaseFunc != nil {
+				selection.ReleaseFunc()
+			}
+			failedAccountIDs[account.ID] = struct{}{}
+			policyRejectedAccountCount++
+			reqLog.Info("openai.websocket_account_client_profile_ineligible",
+				zap.Int64("account_id", account.ID),
+				zap.String("reason", restrictionResult.Reason),
+				zap.String("profile", restrictionResult.Profile),
+			)
+			continue
+		}
 		accountMaxConcurrency := account.Concurrency
 		if selection.WaitPlan != nil && selection.WaitPlan.MaxConcurrency > 0 {
 			accountMaxConcurrency = selection.WaitPlan.MaxConcurrency

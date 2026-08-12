@@ -11,12 +11,23 @@ synchronization, inbound headers, generic header overrides, request
 classification, retries, probes, or any lower-priority source.
 
 After selecting the source, the system MAY rebuild only the selected
-User-Agent's leading and official trailing version declarations from the
+User-Agent's leading and matching trailing version declarations from the
 effective version. Rebuilding MUST preserve the selected source, client family,
 paired Originator, OS, architecture, and terminal fingerprint. User-Agent,
 Originator, and Version MUST form one coherent triple, and every eligible HTTP,
 passthrough, WebSocket, image, probe, model, refresh, quota, PAT, and retry
 operation MUST reuse the resolved identity.
+
+For validation of a configured account or global User-Agent, a valid identity
+SHALL be a coherent current official Codex profile. The historical identities
+`codex_app`, `codex_exec`, `codex_sdk_ts`, and `codex_vscode_copilot` SHALL be
+valid only while the global legacy-profile compatibility setting is enabled;
+they remain legacy-compatible identities rather than official profiles. The
+setting MUST default to disabled. With compatibility disabled, an otherwise
+well-formed historical account value is invalid and falls through to the
+global/default candidate, while a historical global value falls through to the
+compiled default. Case variants, arbitrary `codex_*` values, UA substrings,
+and trailer recovery MUST NOT make a configured identity valid.
 
 #### Scenario: A credential-owning account has a valid custom User-Agent
 
@@ -31,6 +42,16 @@ operation MUST reuse the resolved identity.
 - **WHEN** the credential-owning account has no valid custom User-Agent
 - **THEN** the valid global User-Agent MUST be the selected source
 - **THEN** the compiled default MUST NOT replace the valid global identity
+
+#### Scenario: A historical configured identity requires explicit compatibility mode
+
+- **WHEN** an account or global User-Agent has `codex_exec` as its exact
+  leading identity and compatibility mode is disabled
+- **THEN** that candidate is invalid and the normal source fallback applies
+- **WHEN** compatibility mode is enabled and the same identity has a complete
+  semantic version
+- **THEN** it is selected according to the immutable source order with its
+  exact paired Originator and preserved fingerprint.
 
 #### Scenario: No configured candidate is valid
 

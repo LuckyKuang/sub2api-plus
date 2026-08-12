@@ -704,6 +704,7 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_CodexImageBridge
 		req := r.Clone(r.Context())
 		req.Header = req.Header.Clone()
 		req.Header.Set("User-Agent", "codex_cli_rs/0.98.0")
+		req.Header.Set("originator", "codex_cli_rs")
 		ginCtx.Request = req
 		ginCtx.Set("api_key", apiKey)
 

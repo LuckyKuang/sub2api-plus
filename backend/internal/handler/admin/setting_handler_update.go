@@ -245,28 +245,27 @@ type UpdateSettingsRequest struct {
 	BackendModeEnabled bool `json:"backend_mode_enabled"`
 
 	// Gateway forwarding behavior
-	EnableFingerprintUnification           *bool   `json:"enable_fingerprint_unification"`
-	EnableMetadataPassthrough              *bool   `json:"enable_metadata_passthrough"`
-	EnableCCHSigning                       *bool   `json:"enable_cch_signing"`
-	EnableClaudeOAuthSystemPromptInjection *bool   `json:"enable_claude_oauth_system_prompt_injection"`
-	ClaudeOAuthSystemPrompt                *string `json:"claude_oauth_system_prompt"`
-	ClaudeOAuthSystemPromptBlocks          *string `json:"claude_oauth_system_prompt_blocks"`
-	EnableAnthropicCacheTTL1hInjection     *bool   `json:"enable_anthropic_cache_ttl_1h_injection"`
-	RewriteMessageCacheControl             *bool   `json:"rewrite_message_cache_control"`
-	EnableClientDatelineNormalization      *bool   `json:"enable_client_dateline_normalization"`
-	AntigravityUserAgentVersion            *string `json:"antigravity_user_agent_version"`
-	OpenAICodexUserAgent                   *string `json:"openai_codex_user_agent"`
-	OpenAICodexLocalGroupQuotaEnabled      *bool   `json:"openai_codex_local_group_quota_enabled"`
-	OpenAICodexClientVersion               *string `json:"openai_codex_client_version"`
-	OpenAICodexVersionAutoSyncEnabled      *bool   `json:"openai_codex_version_auto_sync_enabled"`
+	EnableFingerprintUnification                 *bool   `json:"enable_fingerprint_unification"`
+	EnableMetadataPassthrough                    *bool   `json:"enable_metadata_passthrough"`
+	EnableCCHSigning                             *bool   `json:"enable_cch_signing"`
+	EnableClaudeOAuthSystemPromptInjection       *bool   `json:"enable_claude_oauth_system_prompt_injection"`
+	ClaudeOAuthSystemPrompt                      *string `json:"claude_oauth_system_prompt"`
+	ClaudeOAuthSystemPromptBlocks                *string `json:"claude_oauth_system_prompt_blocks"`
+	EnableAnthropicCacheTTL1hInjection           *bool   `json:"enable_anthropic_cache_ttl_1h_injection"`
+	RewriteMessageCacheControl                   *bool   `json:"rewrite_message_cache_control"`
+	EnableClientDatelineNormalization            *bool   `json:"enable_client_dateline_normalization"`
+	AntigravityUserAgentVersion                  *string `json:"antigravity_user_agent_version"`
+	OpenAICodexUserAgent                         *string `json:"openai_codex_user_agent"`
+	CodexLegacyClientProfileCompatibilityEnabled *bool   `json:"codex_legacy_client_profile_compatibility_enabled"`
+	OpenAICodexLocalGroupQuotaEnabled            *bool   `json:"openai_codex_local_group_quota_enabled"`
+	OpenAICodexClientVersion                     *string `json:"openai_codex_client_version"`
+	OpenAICodexVersionAutoSyncEnabled            *bool   `json:"openai_codex_version_auto_sync_enabled"`
 
-	// codex_cli_only 加固（global-only）
-	MinCodexVersion                      string `json:"min_codex_version"`
-	MaxCodexVersion                      string `json:"max_codex_version"`
-	CodexCLIOnlyBlacklist                string `json:"codex_cli_only_blacklist"`
-	CodexCLIOnlyWhitelist                string `json:"codex_cli_only_whitelist"`
-	CodexCLIOnlyAllowAppServerClients    *bool  `json:"codex_cli_only_allow_app_server_clients"`
-	CodexCLIOnlyEngineFingerprintSignals string `json:"codex_cli_only_engine_fingerprint_signals"`
+	// codex_cli_only profile policy (global-only)
+	MinCodexVersion       string `json:"min_codex_version"`
+	MaxCodexVersion       string `json:"max_codex_version"`
+	CodexCLIOnlyBlacklist string `json:"codex_cli_only_blacklist"`
+	CodexCLIOnlyWhitelist string `json:"codex_cli_only_whitelist"`
 
 	// Payment visible method routing
 	PaymentVisibleMethodAlipaySource  *string `json:"payment_visible_method_alipay_source"`
@@ -467,6 +466,18 @@ func omittedSettingKeys(sentFields map[string]json.RawMessage) service.OmittedSe
 		}
 	}
 	return omitted
+}
+
+func finalVersionBounds(previousMin, previousMax, requestedMin, requestedMax string, sentFields map[string]json.RawMessage, minField, maxField string) (string, string) {
+	min := strings.TrimSpace(previousMin)
+	max := strings.TrimSpace(previousMax)
+	if _, sent := sentFields[minField]; sent {
+		min = strings.TrimSpace(requestedMin)
+	}
+	if _, sent := sentFields[maxField]; sent {
+		max = strings.TrimSpace(requestedMax)
+	}
+	return min, max
 }
 
 func settingsAuditRequest(req UpdateSettingsRequest) UpdateSettingsRequest {
@@ -1408,20 +1419,41 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		})
 	}
 
-	// 验证最低版本号格式（空字符串=禁用，或合法 semver）
-	if req.MinClaudeCodeVersion != "" {
-		if !semverPattern.MatchString(req.MinClaudeCodeVersion) {
+	// Version bounds use the effective post-update pair, not only the two
+	// fields present in this request. A partial update must not be able to
+	// retain an old max while writing a larger min (or the inverse).
+	finalMinClaudeCodeVersion, finalMaxClaudeCodeVersion := finalVersionBounds(
+		previousSettings.MinClaudeCodeVersion,
+		previousSettings.MaxClaudeCodeVersion,
+		req.MinClaudeCodeVersion,
+		req.MaxClaudeCodeVersion,
+		sentFields,
+		"min_claude_code_version",
+		"max_claude_code_version",
+	)
+	if _, sent := sentFields["min_claude_code_version"]; sent && finalMinClaudeCodeVersion != "" && !service.IsStrictSemanticVersion(finalMinClaudeCodeVersion) {
+		response.Error(c, http.StatusBadRequest, "min_claude_code_version must be empty or a valid semver (e.g. 2.1.63)")
+		return
+	}
+	if _, sent := sentFields["max_claude_code_version"]; sent && finalMaxClaudeCodeVersion != "" && !service.IsStrictSemanticVersion(finalMaxClaudeCodeVersion) {
+		response.Error(c, http.StatusBadRequest, "max_claude_code_version must be empty or a valid semver (e.g. 3.0.0)")
+		return
+	}
+	if _, minSent := sentFields["min_claude_code_version"]; minSent {
+		if finalMaxClaudeCodeVersion != "" && !service.IsStrictSemanticVersion(finalMaxClaudeCodeVersion) {
+			response.Error(c, http.StatusBadRequest, "max_claude_code_version must be empty or a valid semver (e.g. 3.0.0)")
+			return
+		}
+	}
+	if _, maxSent := sentFields["max_claude_code_version"]; maxSent {
+		if finalMinClaudeCodeVersion != "" && !service.IsStrictSemanticVersion(finalMinClaudeCodeVersion) {
 			response.Error(c, http.StatusBadRequest, "min_claude_code_version must be empty or a valid semver (e.g. 2.1.63)")
 			return
 		}
 	}
-
-	// 验证最高版本号格式（空字符串=禁用，或合法 semver）
-	if req.MaxClaudeCodeVersion != "" {
-		if !semverPattern.MatchString(req.MaxClaudeCodeVersion) {
-			response.Error(c, http.StatusBadRequest, "max_claude_code_version must be empty or a valid semver (e.g. 3.0.0)")
-			return
-		}
+	if finalMinClaudeCodeVersion != "" && finalMaxClaudeCodeVersion != "" && service.CompareVersions(finalMaxClaudeCodeVersion, finalMinClaudeCodeVersion) < 0 {
+		response.Error(c, http.StatusBadRequest, "max_claude_code_version must be greater than or equal to min_claude_code_version")
+		return
 	}
 	if req.AntigravityUserAgentVersion != nil {
 		normalized := strings.TrimSpace(*req.AntigravityUserAgentVersion)
@@ -1439,7 +1471,11 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			return
 		}
 		if normalized != "" {
-			if _, _, ok := openai.PairCodexClientIdentity(normalized); !ok {
+			allowLegacyCompatibility := previousSettings.CodexLegacyClientProfileCompatibilityEnabled
+			if req.CodexLegacyClientProfileCompatibilityEnabled != nil {
+				allowLegacyCompatibility = *req.CodexLegacyClientProfileCompatibilityEnabled
+			}
+			if _, _, ok := openai.PairConfiguredCodexClientIdentity(normalized, allowLegacyCompatibility); !ok {
 				response.Error(c, http.StatusBadRequest, "openai_codex_user_agent must be a supported Codex User-Agent")
 				return
 			}
@@ -1455,16 +1491,36 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		req.OpenAICodexClientVersion = &normalized
 	}
 
-	// codex_cli_only 加固：最低/最高 Codex 版本（空=禁用，或合法 semver；max>=min）
-	if req.MinCodexVersion != "" && !semverPattern.MatchString(req.MinCodexVersion) {
+	finalMinCodexVersion, finalMaxCodexVersion := finalVersionBounds(
+		previousSettings.MinCodexVersion,
+		previousSettings.MaxCodexVersion,
+		req.MinCodexVersion,
+		req.MaxCodexVersion,
+		sentFields,
+		"min_codex_version",
+		"max_codex_version",
+	)
+	if _, sent := sentFields["min_codex_version"]; sent && finalMinCodexVersion != "" && !service.IsStrictSemanticVersion(finalMinCodexVersion) {
 		response.Error(c, http.StatusBadRequest, "min_codex_version must be empty or a valid semver (e.g. 0.141.0)")
 		return
 	}
-	if req.MaxCodexVersion != "" && !semverPattern.MatchString(req.MaxCodexVersion) {
+	if _, sent := sentFields["max_codex_version"]; sent && finalMaxCodexVersion != "" && !service.IsStrictSemanticVersion(finalMaxCodexVersion) {
 		response.Error(c, http.StatusBadRequest, "max_codex_version must be empty or a valid semver (e.g. 0.200.0)")
 		return
 	}
-	if req.MinCodexVersion != "" && req.MaxCodexVersion != "" && service.CompareVersions(req.MaxCodexVersion, req.MinCodexVersion) < 0 {
+	if _, minSent := sentFields["min_codex_version"]; minSent {
+		if finalMaxCodexVersion != "" && !service.IsStrictSemanticVersion(finalMaxCodexVersion) {
+			response.Error(c, http.StatusBadRequest, "max_codex_version must be empty or a valid semver (e.g. 0.200.0)")
+			return
+		}
+	}
+	if _, maxSent := sentFields["max_codex_version"]; maxSent {
+		if finalMinCodexVersion != "" && !service.IsStrictSemanticVersion(finalMinCodexVersion) {
+			response.Error(c, http.StatusBadRequest, "min_codex_version must be empty or a valid semver (e.g. 0.141.0)")
+			return
+		}
+	}
+	if finalMinCodexVersion != "" && finalMaxCodexVersion != "" && service.CompareVersions(finalMaxCodexVersion, finalMinCodexVersion) < 0 {
 		response.Error(c, http.StatusBadRequest, "max_codex_version must be greater than or equal to min_codex_version")
 		return
 	}
@@ -1478,19 +1534,6 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		response.Error(c, http.StatusBadRequest, "codex_cli_only_whitelist "+err.Error())
 		return
 	}
-	if err := service.ValidateEngineFingerprintSignalsJSON(req.CodexCLIOnlyEngineFingerprintSignals); err != nil {
-		response.Error(c, http.StatusBadRequest, "codex_cli_only_engine_fingerprint_signals "+err.Error())
-		return
-	}
-
-	// 交叉验证：如果同时设置了最低和最高版本号，最高版本号必须 >= 最低版本号
-	if req.MinClaudeCodeVersion != "" && req.MaxClaudeCodeVersion != "" {
-		if service.CompareVersions(req.MaxClaudeCodeVersion, req.MinClaudeCodeVersion) < 0 {
-			response.Error(c, http.StatusBadRequest, "max_claude_code_version must be greater than or equal to min_claude_code_version")
-			return
-		}
-	}
-
 	// cyber 会话屏蔽 TTL 校验：提供时必须 > 0
 	if req.CyberSessionBlockTTLSeconds != nil && *req.CyberSessionBlockTTLSeconds <= 0 {
 		response.BadRequest(c, "cyber_session_block_ttl_seconds must be > 0")
@@ -1748,6 +1791,12 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.OpenAICodexUserAgent
 		}(),
+		CodexLegacyClientProfileCompatibilityEnabled: func() bool {
+			if req.CodexLegacyClientProfileCompatibilityEnabled != nil {
+				return *req.CodexLegacyClientProfileCompatibilityEnabled
+			}
+			return previousSettings.CodexLegacyClientProfileCompatibilityEnabled
+		}(),
 		OpenAICodexLocalGroupQuotaEnabled: func() bool {
 			if req.OpenAICodexLocalGroupQuotaEnabled != nil {
 				return *req.OpenAICodexLocalGroupQuotaEnabled
@@ -1772,13 +1821,6 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		MaxCodexVersion:       strings.TrimSpace(req.MaxCodexVersion),
 		CodexCLIOnlyBlacklist: strings.TrimSpace(req.CodexCLIOnlyBlacklist),
 		CodexCLIOnlyWhitelist: strings.TrimSpace(req.CodexCLIOnlyWhitelist),
-		CodexCLIOnlyAllowAppServerClients: func() bool {
-			if req.CodexCLIOnlyAllowAppServerClients != nil {
-				return *req.CodexCLIOnlyAllowAppServerClients
-			}
-			return previousSettings.CodexCLIOnlyAllowAppServerClients
-		}(),
-		CodexCLIOnlyEngineFingerprintSignals: strings.TrimSpace(req.CodexCLIOnlyEngineFingerprintSignals),
 		PaymentVisibleMethodAlipaySource: func() string {
 			if req.PaymentVisibleMethodAlipaySource != nil {
 				return strings.TrimSpace(*req.PaymentVisibleMethodAlipaySource)
@@ -2087,8 +2129,6 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		}
 	}
 
-	h.auditSettingsUpdate(c, previousSettings, settings, previousAuthSourceDefaults, authSourceDefaults, auditReq)
-
 	// 重新获取设置返回
 	updatedSettings, err := h.settingService.GetAllSettings(c.Request.Context())
 	if err != nil {
@@ -2101,6 +2141,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
+	h.auditSettingsUpdate(c, previousSettings, updatedSettings, previousAuthSourceDefaults, updatedAuthSourceDefaults, auditReq)
 	updatedDefaultSubscriptions := make([]dto.DefaultSubscriptionSetting, 0, len(updatedSettings.DefaultSubscriptions))
 	for _, sub := range updatedSettings.DefaultSubscriptions {
 		updatedDefaultSubscriptions = append(updatedDefaultSubscriptions, dto.DefaultSubscriptionSetting{
@@ -2284,6 +2325,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		EnableClientDatelineNormalization:                      updatedSettings.EnableClientDatelineNormalization,
 		AntigravityUserAgentVersion:                            updatedSettings.AntigravityUserAgentVersion,
 		OpenAICodexUserAgent:                                   updatedSettings.OpenAICodexUserAgent,
+		CodexLegacyClientProfileCompatibilityEnabled:           updatedSettings.CodexLegacyClientProfileCompatibilityEnabled,
 		OpenAICodexLocalGroupQuotaEnabled:                      updatedSettings.OpenAICodexLocalGroupQuotaEnabled,
 		OpenAICodexClientVersion:                               updatedSettings.OpenAICodexClientVersion,
 		OpenAICodexClientVersionSynced:                         updatedSettings.OpenAICodexClientVersionSynced,
@@ -2292,8 +2334,6 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		MaxCodexVersion:                                        updatedSettings.MaxCodexVersion,
 		CodexCLIOnlyBlacklist:                                  updatedSettings.CodexCLIOnlyBlacklist,
 		CodexCLIOnlyWhitelist:                                  updatedSettings.CodexCLIOnlyWhitelist,
-		CodexCLIOnlyAllowAppServerClients:                      updatedSettings.CodexCLIOnlyAllowAppServerClients,
-		CodexCLIOnlyEngineFingerprintSignals:                   updatedSettings.CodexCLIOnlyEngineFingerprintSignals,
 		PaymentVisibleMethodAlipaySource:                       updatedSettings.PaymentVisibleMethodAlipaySource,
 		PaymentVisibleMethodWxpaySource:                        updatedSettings.PaymentVisibleMethodWxpaySource,
 		PaymentVisibleMethodAlipayEnabled:                      updatedSettings.PaymentVisibleMethodAlipayEnabled,

@@ -16,11 +16,11 @@ import (
 func TestUpdateSettings_OpenAICodexUserAgentValidation(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	update := func(t *testing.T, userAgent string) *httptest.ResponseRecorder {
+	update := func(t *testing.T, payload map[string]any) *httptest.ResponseRecorder {
 		t.Helper()
 		repo := &settingHandlerRepoStub{values: map[string]string{}}
 		handler := NewSettingHandler(service.NewSettingService(repo, &config.Config{Default: config.DefaultConfig{UserConcurrency: 5}}), nil, nil, nil, nil, nil, nil)
-		body, err := json.Marshal(map[string]any{"openai_codex_user_agent": userAgent})
+		body, err := json.Marshal(payload)
 		require.NoError(t, err)
 		recorder := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(recorder)
@@ -30,10 +30,19 @@ func TestUpdateSettings_OpenAICodexUserAgentValidation(t *testing.T) {
 		return recorder
 	}
 
-	invalid := update(t, "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)")
+	invalid := update(t, map[string]any{"openai_codex_user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"})
 	require.Equal(t, http.StatusBadRequest, invalid.Code)
 	require.Contains(t, invalid.Body.String(), "supported Codex User-Agent")
 
-	valid := update(t, "codex-tui/0.146.0 (Ubuntu 22.4.0; x86_64) xterm-256color (codex-tui; 0.146.0)")
+	valid := update(t, map[string]any{"openai_codex_user_agent": "codex-tui/0.146.0 (Ubuntu 22.4.0; x86_64) xterm-256color (codex-tui; 0.146.0)"})
 	require.Equal(t, http.StatusOK, valid.Code)
+
+	legacyWithoutMode := update(t, map[string]any{"openai_codex_user_agent": "codex_exec/0.146.0 (Ubuntu 22.4.0; x86_64) xterm-256color"})
+	require.Equal(t, http.StatusBadRequest, legacyWithoutMode.Code)
+
+	legacyWithMode := update(t, map[string]any{
+		"openai_codex_user_agent":                           "codex_exec/0.146.0 (Ubuntu 22.4.0; x86_64) xterm-256color",
+		"codex_legacy_client_profile_compatibility_enabled": true,
+	})
+	require.Equal(t, http.StatusOK, legacyWithMode.Code)
 }

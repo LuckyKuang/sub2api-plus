@@ -86,6 +86,17 @@ func (s *OpenAIGatewayService) ForwardCountTokensAsAnthropic(
 		return fmt.Errorf("count_tokens: missing account")
 	}
 
+	// This endpoint consumes the same OpenAI credential as Responses and
+	// Messages. Keep a service-level check before parsing or token retrieval so
+	// future callers cannot bypass the handler's candidate-selection gate.
+	restrictionResult := s.detectCodexClientRestriction(c, account, body)
+	logCodexCLIOnlyDetection(ctx, c, account, getAPIKeyIDFromContext(c), restrictionResult, body)
+	if restrictionResult.Enabled && !restrictionResult.Matched {
+		MarkOpsClientBusinessLimited(c, OpsClientBusinessLimitedReasonLocalPolicyDenied)
+		writeAnthropicCountTokensError(c, http.StatusForbidden, "permission_error", CodexClientRestrictionMessage(restrictionResult))
+		return fmt.Errorf("codex_cli_only restriction: approved Codex client profile required")
+	}
+
 	prepared, err := prepareOpenAIInputTokensCountRequest(body, account, defaultMappedModel)
 	if err != nil {
 		writeAnthropicCountTokensError(c, http.StatusBadRequest, "invalid_request_error", "Failed to parse request body")

@@ -34,9 +34,3 @@ func TestValidateCodexWhitelistEntriesJSON(t *testing.T) {
 	require.Error(t, ValidateCodexWhitelistEntriesJSON("not-json"), "非 JSON 应报错")
 	require.Error(t, ValidateCodexWhitelistEntriesJSON(`{"originator":"x"}`), "对象非数组应报错")
 }
-
-func TestValidateEngineFingerprintSignalsJSON_ServiceWrapper(t *testing.T) {
-	require.NoError(t, ValidateEngineFingerprintSignalsJSON(""))
-	require.NoError(t, ValidateEngineFingerprintSignalsJSON(`[{"type":"header_prefix","match":["x-codex-"],"required":true}]`))
-	require.Error(t, ValidateEngineFingerprintSignalsJSON(`[{"type":"bogus","match":["x"]}]`))
-}

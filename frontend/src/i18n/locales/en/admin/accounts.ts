@@ -516,9 +516,9 @@ export default {
           'When enabled, this OpenAI account uses automatic passthrough: the gateway forwards request/response as-is and only swaps auth, while keeping billing/concurrency/audit and necessary safety filtering.',
         accountUserAgent: 'Account Codex User-Agent',
         accountUserAgentPlaceholder: 'Empty: inherit the global Codex User-Agent',
-        accountUserAgentDesc: 'Optional. Overrides the global Codex identity for this account. It must be a supported Codex User-Agent; clearing it restores inheritance.',
+        accountUserAgentDesc: 'Optional. Overrides the global Codex identity for this account. It must be a supported Codex User-Agent; clearing it restores inheritance. Historical identities require the global Legacy Codex Client Profile Compatibility mode.',
         oauthSessionSharing: 'OAuth session-sharing allowlist',
-        oauthSessionSharingDesc: 'Only API keys in this account\'s assigned groups may use the OAuth account and continue its upstream sessions across those groups.',
+        oauthSessionSharingDesc: 'Only OpenAI OAuth accounts support this policy. API keys in this account\'s assigned groups may use the OAuth account and continue its upstream sessions across those groups; OpenAI API-key accounts are not affected.',
         oauthSessionSharingGroupsHint: 'The account\'s assigned groups are the allowlist. Select at least one before saving; other requests are stopped before reaching upstream.',
         flattenNamespaces: 'Flatten Codex namespace tools (compatibility)',
         flattenNamespacesDesc:
@@ -575,12 +575,9 @@ export default {
         planTypeDesc:
           "Manually correct this account's ChatGPT plan tier (Plus / Pro / Free). Note: a token refresh near expiry or a 429 rate-limit response will auto-overwrite this with the real tier.",
         planTypeClear: 'Clear (auto-detect)',
-        codexCLIOnly: 'Codex official clients only',
-        codexCLIOnlyDesc:
-          'Only applies to OpenAI OAuth. When enabled, only Codex official client families are allowed; when disabled, the gateway bypasses this restriction and keeps existing behavior.',
-        codexCLIOnlyAppServer: 'Allow Codex app-server clients',
-        codexCLIOnlyAppServerDesc:
-          "Effective only when the switch above is on. When enabled, this account also allows third-party clients that embed the Codex engine over the app-server protocol (e.g. Claude Code's codex plugin); they still pass the global engine-fingerprint gate. OR-combined with the global app-server toggle.",
+		codexCLIOnly: 'Approved Codex client profiles only',
+		codexCLIOnlyDesc:
+		  'Only applies to OpenAI OAuth. When enabled, only verified Codex request profiles are allowed, including the underlying transport identities shared by official CLI, App, and IDE surfaces. Request headers are spoofable: this does not attest a client binary or by itself determine account sharing.',
         codexImageTool: 'Codex image bridge policy',
         codexImageToolDesc:
           'Controls the hosted image_generation bridge and client-declared image tools on Codex /responses text requests. Hosted auto-injection applies only to non-Responses Lite requests. Account policy takes precedence over channel and global settings; standalone image-generation endpoints are unaffected.',

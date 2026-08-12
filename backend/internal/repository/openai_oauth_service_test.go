@@ -112,6 +112,20 @@ func (s *OpenAIOAuthServiceSuite) TestExchangeCodeWithIdentityPairsAndFallsBackU
 	require.Equal(s.T(), [3]string{service.DefaultOpenAICodexUserAgent, openai.CodexDefaultOriginator, service.DefaultOpenAICodexVersion}, <-requests)
 }
 
+func TestResolveOpenAIOAuthIdentity_LegacyRequiresExplicitResolvedOriginator(t *testing.T) {
+	const legacyUA = "codex_sdk_ts/0.150.0 (Ubuntu 24.04; x86_64) xterm-256color"
+
+	userAgent, originator, version := resolveOpenAIOAuthIdentity(legacyUA, "", "0.150.0")
+	require.Equal(t, service.DefaultOpenAICodexUserAgent, userAgent)
+	require.Equal(t, openai.CodexDefaultOriginator, originator)
+	require.Equal(t, service.DefaultOpenAICodexVersion, version)
+
+	userAgent, originator, version = resolveOpenAIOAuthIdentity(legacyUA, "codex_sdk_ts", "0.150.0")
+	require.Equal(t, legacyUA, userAgent)
+	require.Equal(t, "codex_sdk_ts", originator)
+	require.Equal(t, "0.150.0", version)
+}
+
 func (s *OpenAIOAuthServiceSuite) TestRefreshToken_FormFields() {
 	errCh := make(chan string, 1)
 	s.setupServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

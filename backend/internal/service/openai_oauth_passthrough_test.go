@@ -1930,7 +1930,7 @@ func TestOpenAIGatewayService_CodexCLIOnly_RejectsNonCodexClient(t *testing.T) {
 	_, err := svc.Forward(context.Background(), c, account, inputBody)
 	require.Error(t, err)
 	require.Equal(t, http.StatusForbidden, rec.Code)
-	require.Contains(t, rec.Body.String(), "Codex official clients")
+	require.Contains(t, rec.Body.String(), CodexOfficialClientsOnlyMessage)
 }
 
 func TestOpenAIGatewayService_CodexCLIOnly_AllowOfficialClientFamilies(t *testing.T) {
@@ -1941,11 +1941,12 @@ func TestOpenAIGatewayService_CodexCLIOnly_AllowOfficialClientFamilies(t *testin
 		ua         string
 		originator string
 	}{
-		{name: "codex_cli_rs", ua: "codex_cli_rs/0.99.0", originator: ""},
-		{name: "codex_vscode", ua: "codex_vscode/1.0.0", originator: ""},
-		{name: "codex_app", ua: "codex_app/2.1.0", originator: ""},
-		// req②：codex_cli_only 下 UA 须能解析出引擎版本；originator 命中路径用可解析的非官方前缀 UA。
-		{name: "originator_codex_chatgpt_desktop", ua: "myterm/0.141.0", originator: "codex_chatgpt_desktop"},
+		{name: "codex_cli_rs", ua: "codex_cli_rs/0.99.0", originator: "codex_cli_rs"},
+		{name: "codex_tui", ua: "codex-tui/0.99.0", originator: "codex-tui"},
+		{name: "codex_vscode", ua: "codex_vscode/1.0.0", originator: "codex_vscode"},
+		{name: "codex_desktop", ua: "Codex Desktop/2.1.0", originator: "Codex Desktop"},
+		{name: "codex_jetbrains", ua: "Codex JetBrains/2.1.0", originator: "Codex JetBrains"},
+		{name: "codex_chatgpt_desktop", ua: "codex_chatgpt_desktop/0.141.0", originator: "codex_chatgpt_desktop"},
 	}
 
 	for _, tt := range tests {
@@ -1957,9 +1958,7 @@ func TestOpenAIGatewayService_CodexCLIOnly_AllowOfficialClientFamilies(t *testin
 			if tt.originator != "" {
 				c.Request.Header.Set("originator", tt.originator)
 			}
-			// 引擎指纹头：真实官方客户端必带。本测试用 nil settingService 构造 gateway，
-			// detectCodexClientRestriction 会兜底默认种子指纹信号（只勾 x-codex-），与生产默认策略一致，
-			// 故官方家族也须携带 x-codex-* 才能过门（对齐 TestDetect_EngineFingerprintSignals）。
+			// 官方客户端档案的闭合集合证据：测试请求携带公开 Codex 客户端声明的非空字段。
 			c.Request.Header.Set("x-codex-window-id", "1")
 
 			inputBody := []byte(`{"model":"gpt-5.2","stream":false,"store":true,"input":[{"type":"text","text":"hi"}]}`)

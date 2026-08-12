@@ -2136,11 +2136,53 @@ func (s *OpenAIGatewayService) selectAccountWithScheduler(
 	previousResponseCanMove bool,
 	useUpstreamTokenCost bool,
 ) (*AccountSelectionResult, OpenAIAccountScheduleDecision, error) {
-	if normalizeOpenAICompatiblePlatform(platform) == PlatformOpenAI && strings.TrimSpace(previousResponseID) != "" {
-		if err := s.validateOpenAIOAuthSharedPreviousResponseAccess(ctx, groupID, previousResponseID); err != nil {
-			return nil, OpenAIAccountScheduleDecision{}, err
+	effectiveExcludedIDs := cloneExcludedAccountIDs(excludedIDs)
+	var sharedResponseAccessErr error
+	for {
+		selection, decision, err := s.selectAccountWithSchedulerAttempt(ctx, groupID, previousResponseID, sessionHash, requestedModel, effectiveExcludedIDs, requiredTransport, requiredCapability, requiredImageCapability, requireCompact, platform, previousResponseCanMove, useUpstreamTokenCost)
+		if err != nil {
+			if sharedResponseAccessErr != nil && isOpenAIAccountSelectionUnavailable(err) {
+				return nil, decision, sharedResponseAccessErr
+			}
+			return selection, decision, err
+		}
+		if selection == nil || selection.Account == nil || strings.TrimSpace(previousResponseID) == "" ||
+			!selection.Account.IsOpenAIOAuthSessionSharingEnabled() {
+			return selection, decision, nil
+		}
+		if err := s.validateOpenAISharedPreviousResponseAccountSelection(ctx, groupID, previousResponseID, selection.Account); err == nil {
+			return selection, decision, nil
+		} else {
+			if selection.Acquired && selection.ReleaseFunc != nil {
+				selection.ReleaseFunc()
+			}
+			if effectiveExcludedIDs == nil {
+				effectiveExcludedIDs = make(map[int64]struct{})
+			}
+			if _, alreadyExcluded := effectiveExcludedIDs[selection.Account.ID]; alreadyExcluded {
+				return nil, decision, err
+			}
+			effectiveExcludedIDs[selection.Account.ID] = struct{}{}
+			sharedResponseAccessErr = err
 		}
 	}
+}
+
+func (s *OpenAIGatewayService) selectAccountWithSchedulerAttempt(
+	ctx context.Context,
+	groupID *int64,
+	previousResponseID string,
+	sessionHash string,
+	requestedModel string,
+	excludedIDs map[int64]struct{},
+	requiredTransport OpenAIUpstreamTransport,
+	requiredCapability OpenAIEndpointCapability,
+	requiredImageCapability OpenAIImagesCapability,
+	requireCompact bool,
+	platform string,
+	previousResponseCanMove bool,
+	useUpstreamTokenCost bool,
+) (*AccountSelectionResult, OpenAIAccountScheduleDecision, error) {
 	selection, decision, err := s.selectAccountWithSchedulerOnce(ctx, groupID, previousResponseID, sessionHash, requestedModel, excludedIDs, requiredTransport, requiredCapability, requiredImageCapability, requireCompact, platform, previousResponseCanMove, useUpstreamTokenCost)
 	if err == nil || openAIProxyStreamQuarantineBypassed(ctx) {
 		return selection, decision, err

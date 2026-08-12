@@ -149,53 +149,83 @@ func (h *OpenAIGatewayHandler) CountTokens(c *gin.Context) {
 	if preferredMappedModel != "" {
 		currentRoutingModel = preferredMappedModel
 	}
-	selection, _, err := h.gatewayService.SelectAccountWithSchedulerForCapability(
-		c.Request.Context(),
-		apiKey.GroupID,
-		"",
-		sessionHash,
-		currentRoutingModel,
-		nil,
-		service.OpenAIUpstreamTransportAny,
-		service.OpenAIEndpointCapabilityChatCompletions,
-		false,
-		false,
-		false,
-		openAICompatibleRequestPlatform(c.Request.Context(), apiKey),
-	)
-	service.SetOpsLatencyMs(c, service.OpsAuthLatencyMsKey, time.Since(requestStart).Milliseconds())
-	if err != nil {
-		if errors.Is(err, service.ErrOpenAIOAuthSessionAccessDenied) {
-			h.anthropicErrorResponse(c, http.StatusForbidden, "permission_error", "This OpenAI OAuth account is restricted to authorized API key groups.")
+	failedAccountIDs := make(map[int64]struct{})
+	policyRejectedAccountCount := 0
+	for {
+		selection, _, err := h.gatewayService.SelectAccountWithSchedulerForCapability(
+			c.Request.Context(),
+			apiKey.GroupID,
+			"",
+			sessionHash,
+			currentRoutingModel,
+			failedAccountIDs,
+			service.OpenAIUpstreamTransportAny,
+			service.OpenAIEndpointCapabilityChatCompletions,
+			false,
+			false,
+			false,
+			openAICompatibleRequestPlatform(c.Request.Context(), apiKey),
+		)
+		service.SetOpsLatencyMs(c, service.OpsAuthLatencyMsKey, time.Since(requestStart).Milliseconds())
+		if err != nil {
+			if errors.Is(err, service.ErrOpenAIOAuthSessionAccessDenied) {
+				h.anthropicErrorResponse(c, http.StatusForbidden, "permission_error", "This OpenAI OAuth account is restricted to authorized API key groups.")
+				return
+			}
+			if policyRejectedAccountCount > 0 && errors.Is(err, service.ErrNoAvailableAccounts) {
+				service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalPolicyDenied)
+				h.anthropicErrorResponse(c, http.StatusForbidden, "permission_error", service.CodexOfficialClientsOnlyMessage)
+				return
+			}
+			requestPlatform := openAICompatibleRequestPlatform(c.Request.Context(), apiKey)
+			reqLog.Warn("openai_count_tokens.account_select_failed", zap.Error(openAICompatibleSelectionErrorForLog(err, requestPlatform)))
+			cls := classifyOpenAICompatibleNoAccountErrorFromGin(c, h.gatewayService, apiKey, currentRoutingModel, reqModel)
+			if !cls.ModelNotFound {
+				markOpsRoutingCapacityLimitedIfNoAvailable(c, err)
+			}
+			h.anthropicErrorResponse(c, cls.Status, cls.ErrType, cls.Message)
 			return
 		}
-		requestPlatform := openAICompatibleRequestPlatform(c.Request.Context(), apiKey)
-		reqLog.Warn("openai_count_tokens.account_select_failed", zap.Error(openAICompatibleSelectionErrorForLog(err, requestPlatform)))
-		cls := classifyOpenAICompatibleNoAccountErrorFromGin(c, h.gatewayService, apiKey, currentRoutingModel, reqModel)
-		if !cls.ModelNotFound {
-			markOpsRoutingCapacityLimitedIfNoAvailable(c, err)
+		if selection == nil || selection.Account == nil {
+			if policyRejectedAccountCount > 0 {
+				service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalPolicyDenied)
+				h.anthropicErrorResponse(c, http.StatusForbidden, "permission_error", service.CodexOfficialClientsOnlyMessage)
+				return
+			}
+			cls := classifyOpenAICompatibleNoAccountErrorFromGin(c, h.gatewayService, apiKey, currentRoutingModel, reqModel)
+			if !cls.ModelNotFound {
+				markOpsRoutingCapacityLimited(c)
+			}
+			h.anthropicErrorResponse(c, cls.Status, cls.ErrType, cls.Message)
+			return
 		}
-		h.anthropicErrorResponse(c, cls.Status, cls.ErrType, cls.Message)
-		return
-	}
-	if selection == nil || selection.Account == nil {
-		cls := classifyOpenAICompatibleNoAccountErrorFromGin(c, h.gatewayService, apiKey, currentRoutingModel, reqModel)
-		if !cls.ModelNotFound {
-			markOpsRoutingCapacityLimited(c)
+
+		account := selection.Account
+		restrictionResult := h.gatewayService.EvaluateCodexClientRestriction(c, account, body)
+		if restrictionResult.Enabled && !restrictionResult.Matched {
+			if selection.Acquired && selection.ReleaseFunc != nil {
+				selection.ReleaseFunc()
+			}
+			failedAccountIDs[account.ID] = struct{}{}
+			policyRejectedAccountCount++
+			reqLog.Info("openai_count_tokens.account_client_profile_ineligible",
+				zap.Int64("account_id", account.ID),
+				zap.String("reason", restrictionResult.Reason),
+				zap.String("profile", restrictionResult.Profile),
+			)
+			continue
 		}
-		h.anthropicErrorResponse(c, cls.Status, cls.ErrType, cls.Message)
+
+		setOpsSelectedAccount(c, account.ID, account.Platform)
+		if selection.Acquired && selection.ReleaseFunc != nil {
+			defer selection.ReleaseFunc()
+		}
+		forwardBody := mappedBodyForMessages(channelMapping.Mapped, channelMapping.MappedModel)
+		defaultMappedModel := preferredMappedModel
+
+		if err := h.gatewayService.ForwardCountTokensAsAnthropic(c.Request.Context(), c, account, forwardBody, defaultMappedModel); err != nil {
+			reqLog.Error("openai_count_tokens.forward_failed", zap.Int64("account_id", account.ID), zap.Error(err))
+		}
 		return
-	}
-
-	account := selection.Account
-	setOpsSelectedAccount(c, account.ID, account.Platform)
-	if selection.Acquired && selection.ReleaseFunc != nil {
-		defer selection.ReleaseFunc()
-	}
-	forwardBody := mappedBodyForMessages(channelMapping.Mapped, channelMapping.MappedModel)
-	defaultMappedModel := preferredMappedModel
-
-	if err := h.gatewayService.ForwardCountTokensAsAnthropic(c.Request.Context(), c, account, forwardBody, defaultMappedModel); err != nil {
-		reqLog.Error("openai_count_tokens.forward_failed", zap.Int64("account_id", account.ID), zap.Error(err))
 	}
 }

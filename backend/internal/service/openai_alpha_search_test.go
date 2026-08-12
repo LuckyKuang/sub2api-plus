@@ -96,6 +96,31 @@ func TestForwardAlphaSearchOAuthPreservesWire(t *testing.T) {
 	require.JSONEq(t, string(body), string(upstream.lastBody))
 }
 
+func TestForwardAlphaSearch_CodexProfileGateRunsBeforeCredentialLookup(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	body := []byte(`{"id":"search-session","model":"gpt-5.6-sol","input":[]}`)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/alpha/search", bytes.NewReader(body))
+
+	upstream := &httpUpstreamRecorder{}
+	svc := &OpenAIGatewayService{httpUpstream: upstream}
+	account := &Account{
+		ID:       43,
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+		Extra:    map[string]any{"codex_cli_only": true},
+		Credentials: map[string]any{
+			"access_token": "oauth-token",
+		},
+	}
+
+	_, err := svc.ForwardAlphaSearch(context.Background(), c, account, body)
+	require.Error(t, err)
+	require.Equal(t, http.StatusForbidden, recorder.Code)
+	require.Nil(t, upstream.lastReq, "profile rejection must happen before upstream credential use")
+}
+
 func TestForwardAlphaSearchPATUsesResponsesWebSearchFallback(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	body := []byte(`{

@@ -45,12 +45,13 @@ func resolveOpenAIOutboundIdentityFromSettings(ctx context.Context, account *Acc
 		accountUA = account.GetOpenAIUserAgent()
 	}
 	systemUA := ""
+	allowLegacyCompatibility := false
 	version := codexCLIVersion
 	if settingService != nil {
-		systemUA = settingService.GetOpenAICodexUserAgent(ctx)
+		systemUA, allowLegacyCompatibility = settingService.GetOpenAICodexOutboundProfile(ctx)
 		version = settingService.GetOpenAICodexClientVersion(ctx)
 	}
-	return resolveOpenAIOutboundIdentityWithVersion(accountUA, systemUA, version)
+	return resolveOpenAIOutboundIdentityWithVersionAndCompatibility(accountUA, systemUA, version, allowLegacyCompatibility)
 }
 
 // resolveOpenAIOutboundIdentity uses the account-specific Codex UA when it is
@@ -78,6 +79,14 @@ func (s *OpenAIGatewayService) resolveOpenAIOutboundIdentity(ctx context.Context
 // the global/default identity. The paired UA is stored so User-Agent,
 // Originator, and Version always come from one source of truth.
 func NormalizeOpenAIAccountUserAgent(platform string, credentials map[string]any) error {
+	return NormalizeOpenAIAccountUserAgentWithCompatibility(platform, credentials, false)
+}
+
+// NormalizeOpenAIAccountUserAgentWithCompatibility applies the global legacy
+// migration policy while preserving the account > global > default source
+// precedence. The policy controls validation only; it never rewrites a client
+// family or a platform fingerprint.
+func NormalizeOpenAIAccountUserAgentWithCompatibility(platform string, credentials map[string]any, allowLegacyCompatibility bool) error {
 	if platform != PlatformOpenAI || credentials == nil {
 		return nil
 	}
@@ -90,7 +99,7 @@ func NormalizeOpenAIAccountUserAgent(platform string, credentials map[string]any
 	if !ok {
 		return infraerrors.New(http.StatusBadRequest, "OPENAI_CODEX_USER_AGENT_INVALID", "OpenAI Codex user_agent must be a string")
 	}
-	userAgent, err := NormalizeOpenAICodexUserAgent(userAgent)
+	userAgent, err := NormalizeOpenAICodexUserAgentWithCompatibility(userAgent, allowLegacyCompatibility)
 	if err != nil {
 		return err
 	}
@@ -107,6 +116,13 @@ func NormalizeOpenAIAccountUserAgent(platform string, credentials map[string]any
 // Both account and global configuration use this helper so a saved identity can
 // always produce a matching Originator and Version for upstream requests.
 func NormalizeOpenAICodexUserAgent(userAgent string) (string, error) {
+	return NormalizeOpenAICodexUserAgentWithCompatibility(userAgent, false)
+}
+
+// NormalizeOpenAICodexUserAgentWithCompatibility validates one complete
+// configured identity. Legacy aliases are accepted only through the closed
+// migration set when the global compatibility mode is enabled.
+func NormalizeOpenAICodexUserAgentWithCompatibility(userAgent string, allowLegacyCompatibility bool) (string, error) {
 	userAgent = strings.TrimSpace(userAgent)
 	if userAgent == "" {
 		return "", nil
@@ -114,7 +130,7 @@ func NormalizeOpenAICodexUserAgent(userAgent string) (string, error) {
 	if len(userAgent) > maxOpenAIAccountUserAgentLength {
 		return "", infraerrors.Newf(http.StatusBadRequest, "OPENAI_CODEX_USER_AGENT_INVALID", "OpenAI Codex user_agent must be at most %d characters", maxOpenAIAccountUserAgentLength)
 	}
-	_, pairedUserAgent, ok := openai.PairCodexClientIdentity(userAgent)
+	_, pairedUserAgent, ok := openai.PairConfiguredCodexClientIdentity(userAgent, allowLegacyCompatibility)
 	if !ok {
 		return "", infraerrors.New(http.StatusBadRequest, "OPENAI_CODEX_USER_AGENT_INVALID", "OpenAI Codex user_agent must be a supported Codex User-Agent")
 	}
@@ -122,15 +138,19 @@ func NormalizeOpenAICodexUserAgent(userAgent string) (string, error) {
 }
 
 func resolveOpenAIOutboundIdentityCandidates(accountUA, systemUA string) openAIOutboundIdentity {
-	if identity, ok := validOpenAIOutboundIdentity(accountUA); ok {
+	return resolveOpenAIOutboundIdentityCandidatesWithCompatibility(accountUA, systemUA, false)
+}
+
+func resolveOpenAIOutboundIdentityCandidatesWithCompatibility(accountUA, systemUA string, allowLegacyCompatibility bool) openAIOutboundIdentity {
+	if identity, ok := validOpenAIOutboundIdentityWithCompatibility(accountUA, allowLegacyCompatibility); ok {
 		identity.Source = openAIOutboundIdentitySourceAccount
 		return identity
 	}
-	if identity, ok := validOpenAIOutboundIdentity(systemUA); ok {
+	if identity, ok := validOpenAIOutboundIdentityWithCompatibility(systemUA, allowLegacyCompatibility); ok {
 		identity.Source = openAIOutboundIdentitySourceGlobal
 		return identity
 	}
-	identity, ok := validOpenAIOutboundIdentity(DefaultOpenAICodexUserAgent)
+	identity, ok := validOpenAIOutboundIdentityWithCompatibility(DefaultOpenAICodexUserAgent, false)
 	if ok {
 		identity.Source = openAIOutboundIdentitySourceDefault
 		return identity
@@ -152,7 +172,11 @@ func resolveOpenAIOutboundIdentityCandidates(accountUA, systemUA string) openAIO
 // its version declarations are rebuilt so the User-Agent and Version header
 // stay synchronized for upstream overload handling.
 func resolveOpenAIOutboundIdentityWithVersion(accountUA, systemUA, configuredVersion string) openAIOutboundIdentity {
-	identity := resolveOpenAIOutboundIdentityCandidates(accountUA, systemUA)
+	return resolveOpenAIOutboundIdentityWithVersionAndCompatibility(accountUA, systemUA, configuredVersion, false)
+}
+
+func resolveOpenAIOutboundIdentityWithVersionAndCompatibility(accountUA, systemUA, configuredVersion string, allowLegacyCompatibility bool) openAIOutboundIdentity {
+	identity := resolveOpenAIOutboundIdentityCandidatesWithCompatibility(accountUA, systemUA, allowLegacyCompatibility)
 	version := NormalizeCodexClientVersion(configuredVersion)
 	if version == "" || CompareVersions(version, codexUpstreamMinVersion) < 0 {
 		version = codexCLIVersion
@@ -164,8 +188,8 @@ func resolveOpenAIOutboundIdentityWithVersion(accountUA, systemUA, configuredVer
 	return identity
 }
 
-func validOpenAIOutboundIdentity(userAgent string) (openAIOutboundIdentity, bool) {
-	originator, pairedUA, ok := openai.PairCodexClientIdentity(strings.TrimSpace(userAgent))
+func validOpenAIOutboundIdentityWithCompatibility(userAgent string, allowLegacyCompatibility bool) (openAIOutboundIdentity, bool) {
+	profile, pairedUA, ok := openai.PairConfiguredCodexClientIdentity(strings.TrimSpace(userAgent), allowLegacyCompatibility)
 	if !ok {
 		return openAIOutboundIdentity{}, false
 	}
@@ -173,7 +197,7 @@ func validOpenAIOutboundIdentity(userAgent string) (openAIOutboundIdentity, bool
 	if version == "" {
 		return openAIOutboundIdentity{}, false
 	}
-	return openAIOutboundIdentity{UserAgent: pairedUA, Originator: originator, Version: version}, true
+	return openAIOutboundIdentity{UserAgent: pairedUA, Originator: profile.Originator, Version: version}, true
 }
 
 // openAIOutboundIdentityVersion extracts the client version from a paired

@@ -54,8 +54,8 @@ func TestOpenAIGatewayService_GetCodexClientRestrictionDetector(t *testing.T) {
 
 		result := got.Detect(c, account, CodexRestrictionPolicy{}, nil)
 		require.True(t, result.Enabled)
-		require.True(t, result.Matched)
-		require.Equal(t, CodexClientRestrictionReasonForceCodexCLI, result.Reason)
+		require.False(t, result.Matched, "outbound force mode must not bypass inbound profile authorization")
+		require.Equal(t, CodexClientRestrictionReasonNotMatchedProfile, result.Reason)
 	})
 }
 
@@ -87,7 +87,7 @@ func TestOpenAIGatewayService_Forward_VersionGateMessage(t *testing.T) {
 		require.Error(t, err)
 		require.Equal(t, http.StatusForbidden, rec.Code)
 		require.Contains(t, rec.Body.String(), "Your Codex version (0.39.0) is below the minimum required version (0.42.0)")
-		require.NotContains(t, rec.Body.String(), "This account only allows Codex official clients")
+		require.NotContains(t, rec.Body.String(), CodexOfficialClientsOnlyMessage)
 	})
 
 	t.Run("未命中官方：仍返回通用兜底文案", func(t *testing.T) {
@@ -95,14 +95,37 @@ func TestOpenAIGatewayService_Forward_VersionGateMessage(t *testing.T) {
 		svc := &OpenAIGatewayService{codexDetector: &stubCodexRestrictionDetector{result: CodexClientRestrictionDetectionResult{
 			Enabled: true,
 			Matched: false,
-			Reason:  CodexClientRestrictionReasonNotMatchedUA,
+			Reason:  CodexClientRestrictionReasonNotMatchedProfile,
 		}}}
 
 		_, err := svc.Forward(context.Background(), c, account(), body)
 		require.Error(t, err)
 		require.Equal(t, http.StatusForbidden, rec.Code)
-		require.Contains(t, rec.Body.String(), "This account only allows Codex official clients")
+		require.Contains(t, rec.Body.String(), CodexOfficialClientsOnlyMessage)
 	})
+}
+
+func TestOpenAIGatewayService_ForwardAsAnthropic_RejectsClientProfileBeforeConversion(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", bytes.NewReader(nil))
+	// The payload is deliberately invalid Anthropic JSON. A profile rejection
+	// must occur before conversion so it is observable as a policy failure, not
+	// a parser failure or an upstream call.
+	svc := &OpenAIGatewayService{codexDetector: &stubCodexRestrictionDetector{result: CodexClientRestrictionDetectionResult{
+		Enabled: true,
+		Matched: false,
+		Reason:  CodexClientRestrictionReasonNotMatchedProfile,
+	}}}
+	account := &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth, Extra: map[string]any{"codex_cli_only": true}}
+
+	_, err := svc.ForwardAsAnthropic(context.Background(), c, account, []byte(`not-json`), "", "")
+
+	require.Error(t, err)
+	require.Equal(t, http.StatusForbidden, rec.Code)
+	require.Contains(t, rec.Body.String(), CodexOfficialClientsOnlyMessage)
 }
 
 func TestGetAPIKeyIDFromContext(t *testing.T) {
@@ -157,16 +180,16 @@ func TestLogCodexCLIOnlyDetection_OnlyLogsRejected(t *testing.T) {
 	logCodexCLIOnlyDetection(context.Background(), nil, account, 2002, CodexClientRestrictionDetectionResult{
 		Enabled: true,
 		Matched: true,
-		Reason:  CodexClientRestrictionReasonMatchedUA,
+		Reason:  CodexClientRestrictionReasonMatchedOfficialProfile,
 	}, nil)
 	logCodexCLIOnlyDetection(context.Background(), nil, account, 2002, CodexClientRestrictionDetectionResult{
 		Enabled: true,
 		Matched: false,
-		Reason:  CodexClientRestrictionReasonNotMatchedUA,
+		Reason:  CodexClientRestrictionReasonNotMatchedProfile,
 	}, nil)
 
-	require.False(t, logSink.ContainsMessage("OpenAI codex_cli_only 允许官方客户端请求"))
-	require.True(t, logSink.ContainsMessage("OpenAI codex_cli_only 拒绝非官方客户端请求"))
+	require.False(t, logSink.ContainsMessage("OpenAI codex_cli_only 放行请求"))
+	require.True(t, logSink.ContainsMessage("OpenAI codex_cli_only 拒绝不符合客户端档案的请求"))
 }
 
 func TestLogCodexCLIOnlyDetection_RejectedIncludesRequestDetails(t *testing.T) {
@@ -188,7 +211,7 @@ func TestLogCodexCLIOnlyDetection_RejectedIncludesRequestDetails(t *testing.T) {
 	logCodexCLIOnlyDetection(context.Background(), c, account, 2002, CodexClientRestrictionDetectionResult{
 		Enabled: true,
 		Matched: false,
-		Reason:  CodexClientRestrictionReasonNotMatchedUA,
+		Reason:  CodexClientRestrictionReasonNotMatchedProfile,
 	}, body)
 
 	require.True(t, logSink.ContainsFieldValue("request_user_agent", "codex_cli_rs/0.98.0 (Windows 10.0.19045; x86_64) unknown"))

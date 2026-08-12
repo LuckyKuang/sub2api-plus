@@ -141,8 +141,14 @@ func (s *openaiOAuthService) refreshTokenWithClientID(ctx context.Context, refre
 	return &tokenResp, nil
 }
 
-func resolveOpenAIOAuthIdentity(userAgent, _ string, version string) (string, string, string) {
-	if pairedOriginator, pairedUserAgent, ok := openai.PairCodexClientIdentity(strings.TrimSpace(userAgent)); ok {
+func resolveOpenAIOAuthIdentity(userAgent, requestedOriginator, version string) (string, string, string) {
+	// Normal service calls supply the already policy-approved identity tuple.
+	// Accept a legacy member only when that explicit Originator capability agrees
+	// byte-for-byte; old user-agent-only APIs therefore remain strict current
+	// official-only and cannot accidentally reopen the migration set.
+	profile, pairedUserAgent, ok := openai.PairConfiguredCodexClientIdentity(strings.TrimSpace(userAgent), true)
+	if ok && (profile.Profile != openai.CodexClientProfileLegacyCompatibility || strings.TrimSpace(requestedOriginator) == profile.Originator) {
+		pairedOriginator := profile.Originator
 		resolvedVersion := service.NormalizeCodexClientVersion(version)
 		if resolvedVersion == "" {
 			resolvedVersion = service.NormalizeCodexClientVersion(openai.CodexUserAgentVersion(pairedUserAgent))
@@ -154,11 +160,11 @@ func resolveOpenAIOAuthIdentity(userAgent, _ string, version string) (string, st
 			return pairedUserAgent, pairedOriginator, resolvedVersion
 		}
 	}
-	defaultOriginator, defaultUserAgent, ok := openai.PairCodexClientIdentity(service.DefaultOpenAICodexUserAgent)
+	defaultProfile, defaultUserAgent, ok := openai.PairConfiguredCodexClientIdentity(service.DefaultOpenAICodexUserAgent, false)
 	if !ok {
 		return service.DefaultOpenAICodexUserAgent, openai.CodexDefaultOriginator, service.DefaultOpenAICodexVersion
 	}
-	return defaultUserAgent, defaultOriginator, service.DefaultOpenAICodexVersion
+	return defaultUserAgent, defaultProfile.Originator, service.DefaultOpenAICodexVersion
 }
 
 func createOpenAIReqClient(proxyURL string) (*req.Client, error) {

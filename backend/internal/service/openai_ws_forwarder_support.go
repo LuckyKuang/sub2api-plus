@@ -459,9 +459,6 @@ func (s *OpenAIGatewayService) resolveAccountByPreviousResponseIDForCapability(
 	if responseID == "" {
 		return 0, nil, "", nil, nil
 	}
-	if err := s.validateOpenAIOAuthSharedPreviousResponseAccess(ctx, groupID, responseID); err != nil {
-		return 0, nil, "", nil, err
-	}
 	store := s.getOpenAIWSStateStore()
 	if store == nil {
 		return 0, nil, "", nil, nil
@@ -471,7 +468,10 @@ func (s *OpenAIGatewayService) resolveAccountByPreviousResponseIDForCapability(
 	if err != nil || accountID <= 0 {
 		accountID, err = s.getOpenAIOAuthSharedResponseAccount(ctx, groupID, responseID)
 		if err != nil {
-			return 0, nil, "", nil, err
+			// The OAuth sharing namespace is relevant only after selection reaches
+			// an OAuth account with sharing enabled. A foreign or malformed shared
+			// binding must not preempt a normal API-key continuation or selection.
+			return 0, nil, "", nil, nil
 		}
 		if accountID <= 0 {
 			return 0, nil, "", nil, nil
@@ -559,6 +559,9 @@ func (s *OpenAIGatewayService) resolveAccountByPreviousResponseIDForCapability(
 	}
 	if !openAIOAuthSessionPolicyAllowsSchedulingGroup(account, groupID) {
 		return 0, nil, "", nil, ErrOpenAIOAuthSessionAccessDenied
+	}
+	if err := s.validateOpenAISharedPreviousResponseAccountSelection(ctx, groupID, responseID, account); err != nil {
+		return 0, nil, "", nil, err
 	}
 	return accountID, account, responseID, store, nil
 }

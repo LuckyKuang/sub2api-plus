@@ -3,25 +3,25 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"reflect"
 	"testing"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
-	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
 	"github.com/stretchr/testify/require"
 )
 
 func TestGetCodexRestrictionPolicy(t *testing.T) {
 	svc := NewSettingService(&codexPolicyMigrationRepoStub{values: map[string]string{
-		SettingKeyMinCodexVersion:       "0.141.0",
-		SettingKeyMaxCodexVersion:       "0.200.0",
-		SettingKeyCodexCLIOnlyWhitelist: `[{"originator":"opencode","ua_contains":["opencode/"]}]`,
-		SettingKeyCodexCLIOnlyBlacklist: `[{"originator":"evil"}]`,
+		SettingKeyMinCodexVersion:                              "0.141.0",
+		SettingKeyMaxCodexVersion:                              "0.200.0",
+		SettingKeyCodexLegacyClientProfileCompatibilityEnabled: "true",
+		SettingKeyCodexCLIOnlyWhitelist:                        `[{"originator":"opencode","ua_contains":["opencode/"]}]`,
+		SettingKeyCodexCLIOnlyBlacklist:                        `[{"originator":"evil"}]`,
 	}}, &config.Config{})
 
 	pol := svc.GetCodexRestrictionPolicy(context.Background())
 	require.Equal(t, "0.141.0", pol.MinCodexVersion)
 	require.Equal(t, "0.200.0", pol.MaxCodexVersion)
+	require.True(t, pol.LegacyClientProfileCompatibilityEnabled)
 	require.Len(t, pol.Whitelist, 1)
 	require.Equal(t, "opencode", pol.Whitelist[0].Originator)
 	require.Equal(t, []string{"opencode/"}, pol.Whitelist[0].UAContains)
@@ -36,6 +36,7 @@ func TestGetCodexRestrictionPolicy_DefaultsSafe(t *testing.T) {
 	require.Empty(t, pol.MinCodexVersion)
 	require.Empty(t, pol.Whitelist)
 	require.Empty(t, pol.Blacklist)
+	require.False(t, pol.LegacyClientProfileCompatibilityEnabled)
 }
 
 func TestGetCodexRestrictionPolicy_InvalidJSONSafe(t *testing.T) {
@@ -81,7 +82,8 @@ func (s *codexPolicyMigrationRepoStub) GetAll(ctx context.Context) (map[string]s
 	panic("unused")
 }
 func (s *codexPolicyMigrationRepoStub) Delete(ctx context.Context, key string) error {
-	panic("unused")
+	delete(s.values, key)
+	return nil
 }
 
 func TestMigrateOpenAIAllowClaudeCodeCodexPluginSetting(t *testing.T) {
@@ -105,6 +107,8 @@ func TestMigrateOpenAIAllowClaudeCodeCodexPluginSetting(t *testing.T) {
 		require.Equal(t, "opencode", entries[0].Originator)
 		require.Equal(t, "Claude Code", entries[1].Originator)
 		require.Equal(t, []string{"Claude Code/"}, entries[1].UAContains)
+		_, exists := repo.values[SettingKeyOpenAIAllowClaudeCodeCodexPlugin]
+		require.False(t, exists, "successful migration must consume the deprecated key")
 	})
 
 	t.Run("legacy true does not duplicate existing Claude Code entry", func(t *testing.T) {
@@ -118,87 +122,20 @@ func TestMigrateOpenAIAllowClaudeCodeCodexPluginSetting(t *testing.T) {
 
 		_, wrote := repo.sets[SettingKeyCodexCLIOnlyWhitelist]
 		require.False(t, wrote)
+		_, exists := repo.values[SettingKeyOpenAIAllowClaudeCodeCodexPlugin]
+		require.False(t, exists, "already-migrated state must still consume the deprecated key")
 	})
-}
 
-func TestGetCodexRestrictionPolicy_AllowAppServerClients(t *testing.T) {
-	t.Run("显式 true 开启", func(t *testing.T) {
-		svc := NewSettingService(&codexPolicyMigrationRepoStub{values: map[string]string{
-			SettingKeyCodexCLIOnlyAllowAppServerClients: "true",
-		}}, &config.Config{})
-		require.True(t, svc.GetCodexRestrictionPolicy(context.Background()).AllowAppServerClients)
-	})
-	t.Run("缺失默认 false", func(t *testing.T) {
-		svc := NewSettingService(&codexPolicyMigrationRepoStub{values: map[string]string{}}, &config.Config{})
-		require.False(t, svc.GetCodexRestrictionPolicy(context.Background()).AllowAppServerClients)
-	})
-	t.Run("非 true 值视为 false", func(t *testing.T) {
-		svc := NewSettingService(&codexPolicyMigrationRepoStub{values: map[string]string{
-			SettingKeyCodexCLIOnlyAllowAppServerClients: "1",
-		}}, &config.Config{})
-		require.False(t, svc.GetCodexRestrictionPolicy(context.Background()).AllowAppServerClients)
-	})
-}
-
-func TestGetCodexRestrictionPolicy_EngineFingerprintSignals(t *testing.T) {
-	t.Run("键缺失 → 默认种子(只勾x-codex-)", func(t *testing.T) {
-		svc := NewSettingService(&codexPolicyMigrationRepoStub{values: map[string]string{}}, &config.Config{})
-		pol := svc.GetCodexRestrictionPolicy(context.Background())
-		require.True(t, len(pol.EngineFingerprintSignals) > 0)
-		require.True(t, openaiEngineSignalsEqual(pol.EngineFingerprintSignals, openai.DefaultEngineFingerprintSignals))
-	})
-	t.Run("显式配置 → 原样采用", func(t *testing.T) {
-		raw := `[{"type":"header_exact","match":["session-id"],"required":true}]`
-		svc := NewSettingService(&codexPolicyMigrationRepoStub{values: map[string]string{
-			SettingKeyCodexCLIOnlyEngineFingerprintSignals: raw,
-		}}, &config.Config{})
-		pol := svc.GetCodexRestrictionPolicy(context.Background())
-		require.Len(t, pol.EngineFingerprintSignals, 1)
-		require.Equal(t, "session-id", pol.EngineFingerprintSignals[0].Match[0])
-	})
-	t.Run("非法JSON → 回落默认种子", func(t *testing.T) {
-		svc := NewSettingService(&codexPolicyMigrationRepoStub{values: map[string]string{
-			SettingKeyCodexCLIOnlyEngineFingerprintSignals: "not json",
-		}}, &config.Config{})
-		pol := svc.GetCodexRestrictionPolicy(context.Background())
-		require.True(t, openaiEngineSignalsEqual(pol.EngineFingerprintSignals, openai.DefaultEngineFingerprintSignals))
-	})
-}
-
-func openaiEngineSignalsEqual(a, b []openai.EngineFingerprintSignal) bool {
-	return reflect.DeepEqual(a, b)
-}
-
-func TestMigrateCodexBodyFingerprintToSignals(t *testing.T) {
-	t.Run("信号键已存在 → 不动", func(t *testing.T) {
+	t.Run("legacy false is consumed without changing the whitelist", func(t *testing.T) {
 		repo := &codexPolicyMigrationRepoStub{values: map[string]string{
-			SettingKeyCodexCLIOnlyEngineFingerprintSignals:   `[{"type":"header_exact","match":["session-id"],"required":true}]`,
-			SettingKeyCodexCLIOnlyAllowBodyEngineFingerprint: "true",
+			SettingKeyOpenAIAllowClaudeCodeCodexPlugin: "false",
+			SettingKeyCodexCLIOnlyWhitelist:            `[{"originator":"opencode","ua_contains":["opencode/"]}]`,
 		}}
 		svc := NewSettingService(repo, &config.Config{})
-		require.NoError(t, svc.MigrateCodexBodyFingerprintToSignals(context.Background()))
-		require.Equal(t, `[{"type":"header_exact","match":["session-id"],"required":true}]`, repo.values[SettingKeyCodexCLIOnlyEngineFingerprintSignals])
-	})
-	t.Run("信号键缺失 + 旧body=true → 写种子且body行Required=true", func(t *testing.T) {
-		repo := &codexPolicyMigrationRepoStub{values: map[string]string{
-			SettingKeyCodexCLIOnlyAllowBodyEngineFingerprint: "true",
-		}}
-		svc := NewSettingService(repo, &config.Config{})
-		require.NoError(t, svc.MigrateCodexBodyFingerprintToSignals(context.Background()))
-		sigs, ok := openai.ParseEngineFingerprintSignals(repo.values[SettingKeyCodexCLIOnlyEngineFingerprintSignals])
-		require.True(t, ok)
-		var bodyReq bool
-		for _, s := range sigs {
-			if s.Type == openai.FingerprintSignalBodyPath {
-				bodyReq = s.Required
-			}
-		}
-		require.True(t, bodyReq)
-	})
-	t.Run("信号键缺失 + 旧body=false/缺 → 写种子(body不勾)", func(t *testing.T) {
-		repo := &codexPolicyMigrationRepoStub{values: map[string]string{}}
-		svc := NewSettingService(repo, &config.Config{})
-		require.NoError(t, svc.MigrateCodexBodyFingerprintToSignals(context.Background()))
-		require.Equal(t, openai.DefaultEngineFingerprintSignalsJSON(), repo.values[SettingKeyCodexCLIOnlyEngineFingerprintSignals])
+
+		require.NoError(t, svc.MigrateOpenAIAllowClaudeCodeCodexPluginSetting(context.Background()))
+		require.Equal(t, `[{"originator":"opencode","ua_contains":["opencode/"]}]`, repo.values[SettingKeyCodexCLIOnlyWhitelist])
+		_, exists := repo.values[SettingKeyOpenAIAllowClaudeCodeCodexPlugin]
+		require.False(t, exists)
 	})
 }

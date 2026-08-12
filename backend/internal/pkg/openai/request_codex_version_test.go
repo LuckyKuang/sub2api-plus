@@ -26,10 +26,9 @@ func TestSetCodexUserAgentVersion(t *testing.T) {
 	)
 	require.Equal(t, "codex_cli_rs/0.146.0", SetCodexUserAgentVersion("codex_cli_rs/0.1.0", "0.146.0"))
 
-	// 尾部官方客户端标识组与首段是同一个版本声明的两个出口，必须一并更新，
-	// 否则拼出首段声明新版本、尾部仍是旧版本的自相矛盾身份。
+	// 尾部与首段不一致时，尾部不能再作为身份恢复或重写来源。
 	require.Equal(t,
-		"cccc/0.146.0 (Ubuntu 22.4.0; x86_64) screen (codex-tui; 0.146.0)",
+		"cccc/0.146.0 (Ubuntu 22.4.0; x86_64) screen (codex-tui; 0.142.0)",
 		SetCodexUserAgentVersion("cccc/0.142.0 (Ubuntu 22.4.0; x86_64) screen (codex-tui; 0.142.0)", "0.146.0"),
 	)
 	// OS 括号组不是客户端标识，不得被误改。

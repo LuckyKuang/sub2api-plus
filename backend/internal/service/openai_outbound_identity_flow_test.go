@@ -92,10 +92,20 @@ func (s *openAIIdentityOAuthClientStub) RefreshTokenWithClientIDAndIdentity(_ co
 }
 
 func TestNormalizeOpenAIAccountUserAgent(t *testing.T) {
-	t.Run("canonicalizes compatible originator", func(t *testing.T) {
-		credentials := map[string]any{"user_agent": "CODEX_CLI_RS/9.9.9 (Ubuntu 22.4.0; x86_64) xterm-256color"}
+	t.Run("keeps exact current official identity", func(t *testing.T) {
+		credentials := map[string]any{"user_agent": testOpenAIAccountUserAgent}
 		require.NoError(t, NormalizeOpenAIAccountUserAgent(PlatformOpenAI, credentials))
 		require.Equal(t, testOpenAIAccountUserAgent, credentials["user_agent"])
+	})
+
+	t.Run("rejects case variants and only accepts legacy identity when enabled", func(t *testing.T) {
+		require.Error(t, NormalizeOpenAIAccountUserAgent(PlatformOpenAI, map[string]any{
+			"user_agent": "CODEX_CLI_RS/9.9.9 (Ubuntu 22.4.0; x86_64) xterm-256color",
+		}))
+		legacy := map[string]any{"user_agent": "codex_exec/9.9.9 (Ubuntu 22.4.0; x86_64) xterm-256color"}
+		require.Error(t, NormalizeOpenAIAccountUserAgent(PlatformOpenAI, legacy))
+		require.NoError(t, NormalizeOpenAIAccountUserAgentWithCompatibility(PlatformOpenAI, legacy, true))
+		require.Equal(t, "codex_exec/9.9.9 (Ubuntu 22.4.0; x86_64) xterm-256color", legacy["user_agent"])
 	})
 
 	t.Run("empty inherits global identity", func(t *testing.T) {
@@ -235,6 +245,28 @@ func TestOpenAIGatewayService_ResolvedIdentityPrefersAccountThenGlobalThenDefaul
 	svc.settingService = nil
 	identity = svc.resolveOpenAIOutboundIdentity(context.Background(), account)
 	require.Equal(t, DefaultOpenAICodexUserAgent, identity.UserAgent)
+}
+
+func TestOpenAIGatewayService_LegacyIdentityRequiresGlobalCompatibilityMode(t *testing.T) {
+	legacyUA := "codex_vscode_copilot/8.8.8 (Ubuntu 22.4.0; x86_64) xterm-256color"
+	settings := &SettingService{settingRepo: &openAIIdentitySettingRepoStub{values: map[string]string{
+		SettingKeyOpenAICodexUserAgent: legacyUA,
+	}}}
+	svc := &OpenAIGatewayService{settingService: settings}
+
+	identity := svc.resolveOpenAIOutboundIdentity(context.Background(), &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth})
+	require.Equal(t, DefaultOpenAICodexUserAgent, identity.UserAgent)
+	require.Equal(t, openai.CodexDefaultOriginator, identity.Originator)
+
+	settings = &SettingService{settingRepo: &openAIIdentitySettingRepoStub{values: map[string]string{
+		SettingKeyOpenAICodexUserAgent:                         legacyUA,
+		SettingKeyCodexLegacyClientProfileCompatibilityEnabled: "true",
+	}}}
+	svc.settingService = settings
+	identity = svc.resolveOpenAIOutboundIdentity(context.Background(), &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth})
+	require.Equal(t, "codex_vscode_copilot/"+codexCLIVersion+" (Ubuntu 22.4.0; x86_64) xterm-256color", identity.UserAgent)
+	require.Equal(t, "codex_vscode_copilot", identity.Originator)
+	require.Equal(t, openAIOutboundIdentitySourceGlobal, identity.Source)
 }
 
 func TestOpenAIGatewayService_StaleSyncedVersionDoesNotChangeSelectedSource(t *testing.T) {

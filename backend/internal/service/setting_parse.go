@@ -14,7 +14,6 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/antigravity"
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
-	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/xai"
 )
 
@@ -224,13 +223,11 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyMinClaudeCodeVersion: "",
 		SettingKeyMaxClaudeCodeVersion: "",
 
-		// codex_cli_only 加固（默认：版本不检查、名单空、默认种子指纹信号）
-		SettingKeyMinCodexVersion:                      "",
-		SettingKeyMaxCodexVersion:                      "",
-		SettingKeyCodexCLIOnlyBlacklist:                "",
-		SettingKeyCodexCLIOnlyWhitelist:                "",
-		SettingKeyCodexCLIOnlyAllowAppServerClients:    "false",
-		SettingKeyCodexCLIOnlyEngineFingerprintSignals: openai.DefaultEngineFingerprintSignalsJSON(),
+		// codex_cli_only profile policy（默认：版本不检查、显式兼容名单为空）
+		SettingKeyMinCodexVersion:       "",
+		SettingKeyMaxCodexVersion:       "",
+		SettingKeyCodexCLIOnlyBlacklist: "",
+		SettingKeyCodexCLIOnlyWhitelist: "",
 
 		// 分组隔离（默认不允许未分组 Key 调度）
 		SettingKeyAllowUngroupedKeyScheduling:                        "false",
@@ -241,6 +238,7 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyEnableClientDatelineNormalization:                  "true",
 		SettingKeyAntigravityUserAgentVersion:                        "",
 		SettingKeyOpenAICodexUserAgent:                               "",
+		SettingKeyCodexLegacyClientProfileCompatibilityEnabled:       "false",
 		SettingKeyOpenAICodexLocalGroupQuotaEnabled:                  "false",
 		SettingKeyOpenAICodexClientVersion:                           "",
 		SettingKeyOpenAICodexClientVersionSynced:                     "",
@@ -876,6 +874,7 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	}
 	result.AntigravityUserAgentVersion = antigravity.NormalizeUserAgentVersion(settings[SettingKeyAntigravityUserAgentVersion])
 	result.OpenAICodexUserAgent = strings.TrimSpace(settings[SettingKeyOpenAICodexUserAgent])
+	result.CodexLegacyClientProfileCompatibilityEnabled = settings[SettingKeyCodexLegacyClientProfileCompatibilityEnabled] == "true"
 	result.OpenAICodexLocalGroupQuotaEnabled = settings[SettingKeyOpenAICodexLocalGroupQuotaEnabled] == "true"
 	result.OpenAICodexClientVersion = NormalizeCodexClientVersion(settings[SettingKeyOpenAICodexClientVersion])
 	result.OpenAICodexClientVersionSynced = NormalizeCodexClientVersion(settings[SettingKeyOpenAICodexClientVersionSynced])
@@ -885,17 +884,11 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	} else {
 		result.OpenAICodexVersionAutoSyncEnabled = true
 	}
-	// codex_cli_only 加固
+	// codex_cli_only profile policy
 	result.MinCodexVersion = settings[SettingKeyMinCodexVersion]
 	result.MaxCodexVersion = settings[SettingKeyMaxCodexVersion]
 	result.CodexCLIOnlyBlacklist = settings[SettingKeyCodexCLIOnlyBlacklist]
 	result.CodexCLIOnlyWhitelist = settings[SettingKeyCodexCLIOnlyWhitelist]
-	result.CodexCLIOnlyAllowAppServerClients = settings[SettingKeyCodexCLIOnlyAllowAppServerClients] == "true"
-	if raw := strings.TrimSpace(settings[SettingKeyCodexCLIOnlyEngineFingerprintSignals]); raw != "" {
-		result.CodexCLIOnlyEngineFingerprintSignals = raw
-	} else {
-		result.CodexCLIOnlyEngineFingerprintSignals = openai.DefaultEngineFingerprintSignalsJSON() // 缺失/空 → 展示默认种子
-	}
 
 	// Web search emulation: quick enabled check from the JSON config
 	if raw := settings[SettingKeyWebSearchEmulationConfig]; raw != "" {

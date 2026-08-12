@@ -88,12 +88,15 @@ func TestOpenAIGatewayServiceForward_CodexImageInjectionRespectsGroupCapability(
 		allowImages   bool
 		bridgeEnabled bool
 		responsesLite bool
+		originator    string
 		wantInjected  bool
 	}{
-		{name: "disabled group skips injection", allowImages: false, bridgeEnabled: true, wantInjected: false},
-		{name: "enabled group skips injection by default", allowImages: true, bridgeEnabled: false, wantInjected: false},
-		{name: "enabled group injects image tool when bridge enabled", allowImages: true, bridgeEnabled: true, wantInjected: true},
-		{name: "responses lite skips hosted image bridge", allowImages: true, bridgeEnabled: true, responsesLite: true, wantInjected: false},
+		{name: "disabled group skips injection", allowImages: false, bridgeEnabled: true, originator: "codex_cli_rs", wantInjected: false},
+		{name: "enabled group skips injection by default", allowImages: true, bridgeEnabled: false, originator: "codex_cli_rs", wantInjected: false},
+		{name: "enabled group injects image tool when bridge enabled", allowImages: true, bridgeEnabled: true, originator: "codex_cli_rs", wantInjected: true},
+		{name: "responses lite skips hosted image bridge", allowImages: true, bridgeEnabled: true, responsesLite: true, originator: "codex_cli_rs", wantInjected: false},
+		{name: "ua only skips injection", allowImages: true, bridgeEnabled: true, wantInjected: false},
+		{name: "mismatched originator skips injection", allowImages: true, bridgeEnabled: true, originator: "codex-tui", wantInjected: false},
 	}
 
 	for _, tt := range tests {
@@ -107,7 +110,7 @@ func TestOpenAIGatewayServiceForward_CodexImageInjectionRespectsGroupCapability(
 			}
 			svc := newOpenAIImageGenerationControlTestService(upstream)
 			svc.cfg.Gateway.CodexImageGenerationBridgeEnabled = tt.bridgeEnabled
-			c, _ := newOpenAIImageGenerationControlTestContext(tt.allowImages, "codex_cli_rs/0.98.0")
+			c, _ := newOpenAICodexImageGenerationControlTestContext(tt.allowImages, "codex_cli_rs/0.98.0", tt.originator)
 			if tt.responsesLite {
 				c.Request.Header.Set(responsesLiteHeader, "true")
 			}
@@ -138,7 +141,7 @@ func TestOpenAIGatewayServiceForward_CodexImageInjectionRespectsGroupCapability(
 
 func TestOpenAIBuildUpstreamRequestOpenAIPassthroughForwardsResponsesLiteHeader(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	c, _ := newOpenAIImageGenerationControlTestContext(true, "codex_cli_rs/0.98.0")
+	c, _ := newOpenAICodexImageGenerationControlTestContext(true, "codex_cli_rs/0.98.0", "codex_cli_rs")
 	c.Request.Header.Set(responsesLiteHeader, "true")
 
 	svc := newOpenAIImageGenerationControlTestService(&httpUpstreamRecorder{})
@@ -165,7 +168,7 @@ func TestOpenAIGatewayServiceForward_ExplicitImageToolWorksWithBridgeDisabled(t 
 		},
 	}
 	svc := newOpenAIImageGenerationControlTestService(upstream)
-	c, _ := newOpenAIImageGenerationControlTestContext(true, "codex_cli_rs/0.98.0")
+	c, _ := newOpenAICodexImageGenerationControlTestContext(true, "codex_cli_rs/0.98.0", "codex_cli_rs")
 	account := newOpenAIImageGenerationControlTestAccount()
 	body := []byte(`{"model":"gpt-5.4","input":"draw","stream":false,"tools":[{"type":"image_generation","format":"jpeg"}]}`)
 
@@ -192,7 +195,7 @@ func TestOpenAIGatewayServiceForward_AccountPolicyStripsExplicitImageTool(t *tes
 		},
 	}
 	svc := newOpenAIImageGenerationControlTestService(upstream)
-	c, _ := newOpenAIImageGenerationControlTestContext(true, "codex_cli_rs/0.98.0")
+	c, _ := newOpenAICodexImageGenerationControlTestContext(true, "codex_cli_rs/0.98.0", "codex_cli_rs")
 	account := newOpenAIImageGenerationControlTestAccount()
 	account.Extra = map[string]any{
 		featureKeyCodexImageGenerationExplicitToolPolicy: codexImageGenerationExplicitToolPolicyStrip,
@@ -241,7 +244,7 @@ func TestOpenAIGatewayServiceForward_AccountPolicyStripsImageNamespaceTools(t *t
 				},
 			}
 			svc := newOpenAIImageGenerationControlTestService(upstream)
-			c, _ := newOpenAIImageGenerationControlTestContext(false, "codex_cli_rs/0.144.1")
+			c, _ := newOpenAICodexImageGenerationControlTestContext(false, "codex_cli_rs/0.144.1", "codex_cli_rs")
 			SetOpenAIClientTransport(c, OpenAIClientTransportHTTP)
 			account := newOpenAIImageGenerationControlTestAccount()
 			account.Extra = map[string]any{
@@ -301,7 +304,7 @@ func TestOpenAIGatewayServiceForward_ChannelBridgeOverrideEnablesCodexInjection(
 			featureKeyCodexImageGenerationBridge: map[string]any{PlatformOpenAI: true},
 		},
 	})
-	c, _ := newOpenAIImageGenerationControlTestContext(true, "codex_cli_rs/0.98.0")
+	c, _ := newOpenAICodexImageGenerationControlTestContext(true, "codex_cli_rs/0.98.0", "codex_cli_rs")
 	account := newOpenAIImageGenerationControlTestAccount()
 
 	result, err := svc.Forward(context.Background(), c, account, []byte(`{"model":"gpt-5.4","input":"write code","stream":false}`))
@@ -327,7 +330,7 @@ func TestOpenAIGatewayServiceForward_CodexBridgeDoesNotInjectHostedToolAlongside
 	}
 	svc := newOpenAIImageGenerationControlTestService(upstream)
 	svc.cfg.Gateway.CodexImageGenerationBridgeEnabled = true
-	c, _ := newOpenAIImageGenerationControlTestContext(true, "codex_cli_rs/0.144.1")
+	c, _ := newOpenAICodexImageGenerationControlTestContext(true, "codex_cli_rs/0.144.1", "codex_cli_rs")
 	account := newOpenAIImageGenerationControlTestAccount()
 	body := []byte(`{
 		"model":"gpt-5.5",
@@ -381,7 +384,7 @@ func TestOpenAIGatewayServiceForward_CodexBridgePreservesImageGenFunction(t *tes
 			}
 			svc := newOpenAIImageGenerationControlTestService(upstream)
 			svc.cfg.Gateway.CodexImageGenerationBridgeEnabled = true
-			c, _ := newOpenAIImageGenerationControlTestContext(true, "codex_cli_rs/0.144.1")
+			c, _ := newOpenAICodexImageGenerationControlTestContext(true, "codex_cli_rs/0.144.1", "codex_cli_rs")
 			account := newOpenAIImageGenerationControlTestAccount()
 			body := []byte(`{"model":"gpt-5.5","input":"draw a cat","stream":false,"tools":[` + tt.tool + `]}`)
 
@@ -413,7 +416,7 @@ func TestOpenAIGatewayServiceForward_CodexBridgePreservesExistingToolChoice(t *t
 	}
 	svc := newOpenAIImageGenerationControlTestService(upstream)
 	svc.cfg.Gateway.CodexImageGenerationBridgeEnabled = true
-	c, _ := newOpenAIImageGenerationControlTestContext(true, "codex_cli_rs/0.98.0")
+	c, _ := newOpenAICodexImageGenerationControlTestContext(true, "codex_cli_rs/0.98.0", "codex_cli_rs")
 	account := newOpenAIImageGenerationControlTestAccount()
 
 	result, err := svc.Forward(context.Background(), c, account, []byte(`{"model":"gpt-5.4","input":"draw","stream":false,"tools":[{"type":"image_generation"}],"tool_choice":{"type":"image_generation"}}`))
@@ -436,9 +439,10 @@ func TestOpenAIGatewayServiceForward_CodexBridgeSkipsCompactRequests(t *testing.
 	}
 	svc := newOpenAIImageGenerationControlTestService(upstream)
 	svc.cfg.Gateway.CodexImageGenerationBridgeEnabled = true
-	c, _ := newOpenAIImageGenerationControlTestContext(true, "codex_cli_rs/0.98.0")
+	c, _ := newOpenAICodexImageGenerationControlTestContext(true, "codex_cli_rs/0.98.0", "codex_cli_rs")
 	c.Request = httptest.NewRequest(http.MethodPost, "/openai/v1/responses/compact", nil)
 	c.Request.Header.Set("User-Agent", "codex_cli_rs/0.98.0")
+	c.Request.Header.Set("originator", "codex_cli_rs")
 	account := newOpenAIImageGenerationControlTestAccount()
 
 	// /responses/compact 上游不接受 tool_choice，bridge 注入必须整体豁免 compact 请求。
@@ -734,6 +738,12 @@ func newOpenAIImageGenerationControlTestContext(allowImages bool, userAgent stri
 			ImageRateMultiplier:  1,
 		},
 	})
+	return c, recorder
+}
+
+func newOpenAICodexImageGenerationControlTestContext(allowImages bool, userAgent, originator string) (*gin.Context, *httptest.ResponseRecorder) {
+	c, recorder := newOpenAIImageGenerationControlTestContext(allowImages, userAgent)
+	c.Request.Header.Set("originator", originator)
 	return c, recorder
 }
 

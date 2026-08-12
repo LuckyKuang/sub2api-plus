@@ -2,11 +2,11 @@ package service
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"sort"
 	"strings"
 
+	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/google/uuid"
 )
 
@@ -186,7 +186,10 @@ func normalizeOpenAIOAuthSessionPolicyExtra(
 		return normalized, nil
 	}
 	if platform != PlatformOpenAI || accountType != AccountTypeOAuth {
-		return nil, errors.New("openai_oauth_session_policy is only supported by OpenAI OAuth accounts")
+		return nil, infraerrors.BadRequest(
+			"OPENAI_OAUTH_SESSION_POLICY_UNSUPPORTED_ACCOUNT",
+			"openai_oauth_session_policy is only supported by OpenAI OAuth accounts",
+		)
 	}
 
 	payload, err := json.Marshal(raw)
@@ -195,19 +198,28 @@ func normalizeOpenAIOAuthSessionPolicyExtra(
 	}
 	var policy OpenAIOAuthSessionPolicy
 	if err := json.Unmarshal(payload, &policy); err != nil {
-		return nil, errors.New("openai_oauth_session_policy is invalid")
+		return nil, infraerrors.BadRequest(
+			"OPENAI_OAUTH_SESSION_POLICY_INVALID",
+			"openai_oauth_session_policy is invalid",
+		)
 	}
 	if !policy.Enabled {
 		delete(normalized, OpenAIOAuthSessionPolicyExtraKey)
 		return normalized, nil
 	}
 	if !validUniquePositiveGroupIDs(policy.AllowedGroupIDs) {
-		return nil, errors.New("openai_oauth_session_policy.allowed_group_ids must contain unique positive group IDs")
+		return nil, infraerrors.BadRequest(
+			"OPENAI_OAUTH_SESSION_POLICY_INVALID_GROUPS",
+			"openai_oauth_session_policy.allowed_group_ids must contain unique positive group IDs",
+		)
 	}
 	policy.AllowedGroupIDs = normalizedGroupIDs(policy.AllowedGroupIDs)
 	boundGroupIDs = normalizedGroupIDs(boundGroupIDs)
 	if !sameGroupIDs(policy.AllowedGroupIDs, boundGroupIDs) {
-		return nil, errors.New("openai_oauth_session_policy.allowed_group_ids must exactly match account group bindings")
+		return nil, infraerrors.BadRequest(
+			"OPENAI_OAUTH_SESSION_POLICY_GROUP_MISMATCH",
+			"openai_oauth_session_policy.allowed_group_ids must exactly match account group bindings",
+		)
 	}
 
 	previousPolicy, _, previousValid := previous.OpenAIOAuthSessionPolicy()

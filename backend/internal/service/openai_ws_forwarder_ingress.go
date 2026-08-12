@@ -65,6 +65,20 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	if err := validateOpenAIWSBearerToken(account, token); err != nil {
 		return err
 	}
+	// Keep a defensive gate here as well as in the handler's account-selection
+	// loop. This method can be called by another ingress implementation, and no
+	// caller may acquire an upstream connection for an enabled account before
+	// the same profile policy has accepted its first response.create payload.
+	restrictionResult := s.EvaluateCodexClientRestriction(c, account, firstClientMessage)
+	logCodexCLIOnlyDetection(ctx, c, account, getAPIKeyIDFromContext(c), restrictionResult, firstClientMessage)
+	if restrictionResult.Enabled && !restrictionResult.Matched {
+		MarkOpsClientBusinessLimited(c, OpsClientBusinessLimitedReasonLocalPolicyDenied)
+		return NewOpenAIWSClientCloseError(
+			coderws.StatusPolicyViolation,
+			CodexClientRestrictionMessage(restrictionResult),
+			nil,
+		)
+	}
 
 	// 预取一次 OpenAI Fast Policy settings，绑定到 ctx，让该 WS session
 	// 内所有帧的 evaluateOpenAIFastPolicy 调用复用同一份快照，避免每帧

@@ -509,7 +509,9 @@ export default {
         antigravityUserAgentVersionHint: 'Leave empty to use ANTIGRAVITY_USER_AGENT_VERSION or the built-in default 1.23.2; when set, the admin setting takes precedence.',
         openaiCodexUserAgent: 'OpenAI Codex UA',
         openaiCodexUserAgentPlaceholder: 'codex-tui/0.147.0 (Ubuntu 24.04; x86_64) xterm-256color',
-        openaiCodexUserAgentHint: 'The full Codex User-Agent used for all outbound requests, for customizing the OS / arch / terminal fingerprint. Leave empty to build the standard codex-tui identity from the version below (recommended). If set, its leading version and any official trailing version declaration are synchronized to the version below, so the UA never stays pinned to the release entered here — under capacity pressure the upstream sheds load by client identity and drops stale or non-official identities first with server_is_overloaded.',
+        openaiCodexUserAgentHint: 'The global fallback Codex User-Agent, used when the credential-owning account has no valid account-level identity. Use it to customize the OS / arch / terminal fingerprint. Leave empty to build the standard codex-tui identity from the version below (recommended). If set, its leading version and any coherent trailing version declaration are synchronized to the version below, so the UA never stays pinned to the release entered here — under capacity pressure the upstream sheds load by client identity and drops stale or non-official identities first with server_is_overloaded.',
+        codexLegacyClientProfileCompatibility: 'Legacy Codex Client Profile Compatibility',
+        codexLegacyClientProfileCompatibilityHint: 'Default off. Temporarily allows only codex_app, codex_exec, codex_sdk_ts, and codex_vscode_copilot for configured outbound identities and “Codex official client profiles only” accounts. They remain legacy-compatible profiles, not official profiles; exact User-Agent, originator, semantic version, and known Codex evidence are still required.',
         openaiCodexLocalGroupQuota: 'Codex Local Group Quota',
         openaiCodexLocalGroupQuotaHint: 'Show the authenticated API key\'s subscription 5-hour and 7-day quotas to Codex instead of the selected upstream account quota. Disabled keeps existing upstream quota passthrough.',
         openaiCodexClientVersion: 'Codex client version',
@@ -521,34 +523,19 @@ export default {
         codexHardeningTitle: "Codex Settings",
         codexClientRestrictionTitle: "Codex client restriction",
         codexHardeningDesc:
-          "Only affects OpenAI OAuth accounts with 'Codex official clients only' enabled (global). Beyond User-Agent/Originator, harden the decision with a version range, an engine-fingerprint gate, and black/whitelists.",
+          "Only affects OpenAI OAuth accounts with 'Codex official client profiles only' enabled (globally). Built-in profiles validate a coherent User-Agent, originator, version, and known Codex request header. The blacklist takes priority; the whitelist is only for explicitly approved compatibility clients. Headers are forgeable and are not binary proof of account sharing.",
         minCodexVersion: "Min Codex Version",
         minCodexVersionPlaceholder: "e.g. 0.142.0",
         maxCodexVersion: "Max Codex Version",
         maxCodexVersionPlaceholder: "e.g. 0.200.0",
         codexVersionHint:
           "Official clients only: checks their version against the [min, max] range. Leave a side empty to not limit it.",
-        codexFingerprintSignals: "Codex engine fingerprint signals",
-        codexFingerprintSignalsDesc:
-          "Define engine-fingerprint signals: every Required signal must match (AND); within a row, '/'-separated variants are OR'd. None checked = not enforced. Default checks only the x-codex- prefix. Types: header exact / header prefix / body path.",
-        codexFpTypeHeaderExact: "Header exact",
-        codexFpTypeHeaderPrefix: "Header prefix",
-        codexFpTypeBodyPath: "Body path",
-        codexFpMatchPlaceholder: "match; '/'-separate variants (e.g. session-id / session_id or x-codex-)",
-        codexFpRequired: "Required",
-        codexFingerprintNoRequiredWarn: "No signal is marked Required — the engine-fingerprint gate is inactive, allowing every candidate that passes identity/version. Check at least one signal to enable it.",
-        codexAllowAppServer: "Codex app-server",
-        codexAllowAppServerDesc:
-          "Allow third-party clients that embed the Codex engine and connect over the app-server protocol (e.g. Claude Code's codex plugin). Off by default; when on, such clients are allowed once they pass the engine-fingerprint gate (the signal list below); off = only official clients and the whitelist are allowed.",
         codexBlacklist: "User-Agent/Originator Blacklist",
         codexBlacklistDesc:
           "Deny if any field matches; takes precedence over any allow. originator is exact; User-Agent is a 'contains' match (comma-separated).",
         codexWhitelist: "User-Agent/Originator Whitelist",
         codexWhitelistDesc:
-          "Allow clients outside the official set: requires exact originator and every User-Agent marker present. Still subject to the fingerprint gate unless 'Skip engine fingerprint' is checked.",
-        codexWhitelistSkipFingerprint: "Skip engine fingerprint",
-        codexWhitelistSkipFingerprintTooltip:
-          "Risk: when checked this entry is allowed on originator + User-Agent alone (both forgeable), with no engine-fingerprint backstop. Use only for trusted third-party clients that genuinely do not send a codex engine fingerprint.",
+          "Allow explicitly reviewed compatibility clients outside the official profile set: originator must match exactly, User-Agent must contain every configured marker, and both must name the same client. A known Codex request header is still required.",
         codexOriginatorPlaceholder: "originator (exact, e.g. opencode)",
         codexUaContainsPlaceholder: "User-Agent contains markers, comma-separated (e.g. opencode/)",
         codexAddRow: "Add entry",

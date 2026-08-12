@@ -2,17 +2,16 @@ package openai
 
 import "strings"
 
-// AllowedClientEntry 描述一个被额外放行的非官方 Codex 客户端签名。
-// Originator 必须精确等值匹配（归一化后）。
+// AllowedClientEntry describes an administrator-approved, non-official
+// compatibility profile. It is never reported as an official Codex profile.
+// Originator must agree with the leading User-Agent identity (after normalizing
+// letter case for an explicitly configured third-party entry).
 // UAContains 为必填字段：列表为空，或列表中存在任何空白 marker，均视为非法配置，
 // 整体安全失败（return false）；每一项都必须出现在 User-Agent 中。
-// 这确保双因子匹配不会因缺失 UA 声明而退化为仅凭可伪造的 originator 单因子放行。
-// SkipEngineFingerprint 仅对白名单条目有意义：命中此条则跳过引擎指纹门（管理员显式承担
-// "纯 UA+originator、无引擎兜底"的后门风险，默认 false）。黑名单忽略此字段。
+// This prevents an allow rule from degrading to an Originator-only check.
 type AllowedClientEntry struct {
-	Originator            string   `json:"originator"`
-	UAContains            []string `json:"ua_contains"`
-	SkipEngineFingerprint bool     `json:"skip_engine_fingerprint"`
+	Originator string   `json:"originator"`
+	UAContains []string `json:"ua_contains"`
 }
 
 // IsWhitelistable 报告该条目作为白名单条目是否「有可能命中」——镜像 IsAllowedClientMatch 的结构性
@@ -44,6 +43,9 @@ func IsAllowedClientMatch(userAgent, originator string, entry AllowedClientEntry
 	if normalizeCodexClientHeader(originator) != wantOriginator {
 		return false
 	}
+	if !HasCoherentConfiguredClientIdentity(userAgent, originator) {
+		return false
+	}
 	// 预设必须声明 UA 特征：否则将退化为仅凭可伪造的 originator 单因子匹配。
 	if len(entry.UAContains) == 0 {
 		return false
@@ -63,8 +65,9 @@ func IsAllowedClientMatch(userAgent, originator string, entry AllowedClientEntry
 	return true
 }
 
-// MatchClientEntry 同 MatchClientEntries（双因子 AND，复用 IsAllowedClientMatch），但回传命中的
-// 那条条目，供调用方读取 SkipEngineFingerprint 等条目级配置。未命中返回零值 + false。
+// MatchClientEntry is the MatchClientEntries variant that also returns the
+// matched explicit compatibility entry. It never changes official-profile
+// classification.
 func MatchClientEntry(userAgent, originator string, entries []AllowedClientEntry) (AllowedClientEntry, bool) {
 	for _, e := range entries {
 		if IsAllowedClientMatch(userAgent, originator, e) {
@@ -75,7 +78,7 @@ func MatchClientEntry(userAgent, originator string, entries []AllowedClientEntry
 }
 
 // MatchClientEntries 判断请求头是否命中任一白名单自由条目（双因子 AND）。薄封装 MatchClientEntry。
-// 用于 codex_cli_only 全局白名单：放行官方集未覆盖的 app-server 新 client。
+// 用于 codex_cli_only 全局白名单：放行经管理员审核的兼容客户端。
 func MatchClientEntries(userAgent, originator string, entries []AllowedClientEntry) bool {
 	_, ok := MatchClientEntry(userAgent, originator, entries)
 	return ok

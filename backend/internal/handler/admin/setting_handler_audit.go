@@ -413,12 +413,6 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	if before.MaxCodexVersion != after.MaxCodexVersion {
 		changed = append(changed, "max_codex_version")
 	}
-	if before.CodexCLIOnlyAllowAppServerClients != after.CodexCLIOnlyAllowAppServerClients {
-		changed = append(changed, "codex_cli_only_allow_app_server_clients")
-	}
-	if before.CodexCLIOnlyEngineFingerprintSignals != after.CodexCLIOnlyEngineFingerprintSignals {
-		changed = append(changed, "codex_cli_only_engine_fingerprint_signals")
-	}
 	if before.CodexCLIOnlyBlacklist != after.CodexCLIOnlyBlacklist {
 		changed = append(changed, "codex_cli_only_blacklist")
 	}
@@ -481,6 +475,9 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	}
 	if before.OpenAICodexUserAgent != after.OpenAICodexUserAgent {
 		changed = append(changed, "openai_codex_user_agent")
+	}
+	if before.CodexLegacyClientProfileCompatibilityEnabled != after.CodexLegacyClientProfileCompatibilityEnabled {
+		changed = append(changed, "codex_legacy_client_profile_compatibility_enabled")
 	}
 	if before.OpenAICodexLocalGroupQuotaEnabled != after.OpenAICodexLocalGroupQuotaEnabled {
 		changed = append(changed, "openai_codex_local_group_quota_enabled")

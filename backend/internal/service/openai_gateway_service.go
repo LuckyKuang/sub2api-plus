@@ -36,7 +36,7 @@ const (
 	// 与真实 Codex TUI 的 User-Agent 结构对齐：
 	// {originator}/{version} ({OS} {OS_version}; {arch}) {terminal}
 	// 缺少 OS/架构/终端后缀的形态易被上游指纹识别为非官方客户端。
-	// 该后缀是 UA 形态的唯一定义处，buildCodexCLIUserAgent 按运行时版本号复用它。
+	// 该后缀是编译期默认 Codex CLI UA 形态的唯一定义处。
 	codexCLIUserAgentSuffix = " (Ubuntu 24.04; x86_64) xterm-256color"
 	// codexCLIUserAgent 是编译期兜底 UA；运行时优先使用由后台版本号拼出的规范 UA。
 	// 版本段必须来自 codexCLIVersion：UA 与 version 头是同一个版本声明的两个出口，
@@ -72,35 +72,39 @@ const (
 
 // OpenAI allowed headers whitelist (for non-passthrough).
 var openaiAllowedHeaders = map[string]bool{
-	"accept-language":         true,
-	"content-type":            true,
-	"conversation_id":         true,
-	"session_id":              true,
-	"x-codex-beta-features":   true,
-	"x-codex-installation-id": true,
-	"x-codex-turn-state":      true,
-	"x-codex-turn-metadata":   true,
-	"x-codex-window-id":       true,
-	responsesLiteHeaderKey:    true,
+	"accept-language":          true,
+	"content-type":             true,
+	"conversation_id":          true,
+	"session_id":               true,
+	"x-codex-beta-features":    true,
+	"x-codex-installation-id":  true,
+	"x-codex-parent-thread-id": true,
+	"x-codex-routing-hint":     true,
+	"x-codex-turn-state":       true,
+	"x-codex-turn-metadata":    true,
+	"x-codex-window-id":        true,
+	responsesLiteHeaderKey:     true,
 }
 
 // OpenAI passthrough allowed headers whitelist.
 // 透传模式下仅放行这些低风险请求头，避免将非标准/环境噪声头传给上游触发风控。
 var openaiPassthroughAllowedHeaders = map[string]bool{
-	"accept":                  true,
-	"accept-language":         true,
-	"content-type":            true,
-	"conversation_id":         true,
-	"openai-beta":             true,
-	"user-agent":              true,
-	"originator":              true,
-	"session_id":              true,
-	"x-codex-beta-features":   true,
-	"x-codex-installation-id": true,
-	"x-codex-turn-state":      true,
-	"x-codex-turn-metadata":   true,
-	"x-codex-window-id":       true,
-	responsesLiteHeaderKey:    true,
+	"accept":                   true,
+	"accept-language":          true,
+	"content-type":             true,
+	"conversation_id":          true,
+	"openai-beta":              true,
+	"user-agent":               true,
+	"originator":               true,
+	"session_id":               true,
+	"x-codex-beta-features":    true,
+	"x-codex-installation-id":  true,
+	"x-codex-parent-thread-id": true,
+	"x-codex-routing-hint":     true,
+	"x-codex-turn-state":       true,
+	"x-codex-turn-metadata":    true,
+	"x-codex-window-id":        true,
+	responsesLiteHeaderKey:     true,
 }
 
 // codex_cli_only 拒绝时记录的请求头白名单（仅用于诊断日志，不参与上游透传）
@@ -503,11 +507,6 @@ func NewOpenAIGatewayService(
 	settingService *SettingService,
 	userPlatformQuotaRepo UserPlatformQuotaRepository,
 ) *OpenAIGatewayService {
-	// enforceCodexIdentityHeaders 是 HTTP / 透传 / WS / 探针 等出站路径共用的纯函数收口点，
-	// 拿不到配置，故在此发布进程级开关快照。配置取反义，零值即「强制统一出口开启」。
-	if cfg != nil {
-		SetCodexIdentityEnforcementEnabled(!cfg.Gateway.DisableCodexIdentityEnforcement)
-	}
 	svc := &OpenAIGatewayService{
 		accountRepo:         accountRepo,
 		usageLogRepo:        usageLogRepo,
@@ -1028,10 +1027,12 @@ func SnapshotOpenAICompatibilityFallbackMetrics() OpenAICompatibilityFallbackMet
 	}
 }
 
-func (s *OpenAIGatewayService) detectCodexClientRestriction(c *gin.Context, account *Account, body []byte) CodexClientRestrictionDetectionResult {
-	// 安全默认：即便缺 settingService（仅测试/误配可达）也保持指纹门为默认种子，
-	// 避免零值 policy（nil 信号）让指纹门失败开放。有 settingService 时整体覆盖为全局策略。
-	policy := CodexRestrictionPolicy{EngineFingerprintSignals: openai.DefaultEngineFingerprintSignals}
+// EvaluateCodexClientRestriction evaluates the account's inbound Codex client
+// profile policy without consuming an upstream credential or opening a network
+// connection. Handlers use it while selecting an account; forwarding methods
+// call it again defensively so new protocol paths cannot bypass the boundary.
+func (s *OpenAIGatewayService) EvaluateCodexClientRestriction(c *gin.Context, account *Account, body []byte) CodexClientRestrictionDetectionResult {
+	policy := CodexRestrictionPolicy{}
 	if account != nil && account.IsCodexCLIOnlyEnabled() && s != nil && s.settingService != nil {
 		ctx := context.Background()
 		if c != nil && c.Request != nil {
@@ -1040,6 +1041,10 @@ func (s *OpenAIGatewayService) detectCodexClientRestriction(c *gin.Context, acco
 		policy = s.settingService.GetCodexRestrictionPolicy(ctx)
 	}
 	return s.getCodexClientRestrictionDetector().Detect(c, account, policy, body)
+}
+
+func (s *OpenAIGatewayService) detectCodexClientRestriction(c *gin.Context, account *Account, body []byte) CodexClientRestrictionDetectionResult {
+	return s.EvaluateCodexClientRestriction(c, account, body)
 }
 
 func getAPIKeyIDFromContext(c *gin.Context) int64 {
@@ -1072,7 +1077,7 @@ func isolateOpenAISessionID(apiKeyID int64, raw string) string {
 }
 
 func logCodexCLIOnlyDetection(ctx context.Context, c *gin.Context, account *Account, apiKeyID int64, result CodexClientRestrictionDetectionResult, body []byte) {
-	if !result.Enabled {
+	if !result.Enabled || result.Matched {
 		return
 	}
 	if ctx == nil {
@@ -1086,21 +1091,21 @@ func logCodexCLIOnlyDetection(ctx context.Context, c *gin.Context, account *Acco
 		zap.String("component", "service.openai_gateway"),
 		zap.Int64("account_id", accountID),
 		zap.Bool("codex_cli_only_enabled", result.Enabled),
-		zap.Bool("codex_official_client_match", result.Matched),
+		zap.Bool("codex_client_profile_match", result.Matched),
 		zap.String("reject_reason", result.Reason),
+	}
+	if result.Profile != "" {
+		fields = append(fields, zap.String("codex_client_profile", result.Profile))
+	}
+	if result.DetectedVersion != "" {
+		fields = append(fields, zap.String("codex_client_version", result.DetectedVersion))
 	}
 	if apiKeyID > 0 {
 		fields = append(fields, zap.Int64("api_key_id", apiKeyID))
 	}
-	if !result.Matched {
-		fields = appendCodexCLIOnlyRejectedRequestFields(fields, c, body)
-	}
+	fields = appendCodexCLIOnlyRejectedRequestFields(fields, c, body)
 	log := logger.FromContext(ctx).With(fields...)
-	if result.Matched {
-		log.Info("OpenAI codex_cli_only 放行请求")
-		return
-	}
-	log.Warn("OpenAI codex_cli_only 拒绝非官方客户端请求")
+	log.Warn("OpenAI codex_cli_only 拒绝不符合客户端档案的请求")
 }
 
 func appendCodexCLIOnlyRejectedRequestFields(fields []zap.Field, c *gin.Context, body []byte) []zap.Field {

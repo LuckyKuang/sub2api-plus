@@ -4541,74 +4541,6 @@
                 </p>
 
                 <div>
-                  <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    {{ t("admin.settings.gatewayForwarding.codexFingerprintSignals") }}
-                  </label>
-                  <p class="mb-2 mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    {{ t("admin.settings.gatewayForwarding.codexFingerprintSignalsDesc") }}
-                  </p>
-                  <div
-                    v-for="(row, i) in codexFingerprintRows"
-                    :key="`codex-fp-${i}`"
-                    class="mb-2 flex items-center gap-2"
-                  >
-                    <select v-model="row.type" class="input w-32 text-sm">
-                      <option value="header_exact">{{ t("admin.settings.gatewayForwarding.codexFpTypeHeaderExact") }}</option>
-                      <option value="header_prefix">{{ t("admin.settings.gatewayForwarding.codexFpTypeHeaderPrefix") }}</option>
-                      <option value="body_path">{{ t("admin.settings.gatewayForwarding.codexFpTypeBodyPath") }}</option>
-                    </select>
-                    <input
-                      v-model="row.match"
-                      type="text"
-                      class="input flex-1 font-mono text-sm"
-                      :placeholder="t('admin.settings.gatewayForwarding.codexFpMatchPlaceholder')"
-                    />
-                    <label class="flex shrink-0 items-center gap-1 text-xs text-gray-600 dark:text-gray-400">
-                      <input v-model="row.required" type="checkbox" />
-                      {{ t("admin.settings.gatewayForwarding.codexFpRequired") }}
-                    </label>
-                    <button
-                      type="button"
-                      class="btn btn-secondary btn-sm shrink-0 text-red-600 hover:text-red-700 dark:text-red-400"
-                      @click="removeCodexFingerprintRow(i)"
-                    >
-                      {{ t("admin.settings.gatewayForwarding.codexRemoveRow") }}
-                    </button>
-                  </div>
-                  <button type="button" class="btn btn-secondary btn-sm" @click="addCodexFingerprintRow">
-                    {{ t("admin.settings.gatewayForwarding.codexAddRow") }}
-                  </button>
-                  <p
-                    v-if="codexFingerprintNoRequired"
-                    class="mt-2 text-xs text-amber-600 dark:text-amber-500"
-                  >
-                    {{ t("admin.settings.gatewayForwarding.codexFingerprintNoRequiredWarn") }}
-                  </p>
-                </div>
-
-                <div class="flex items-center justify-between">
-                  <div class="pr-4">
-                    <label
-                      class="block text-sm font-medium text-gray-700 dark:text-gray-300"
-                    >
-                      {{
-                        t("admin.settings.gatewayForwarding.codexAllowAppServer")
-                      }}
-                    </label>
-                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                      {{
-                        t(
-                          "admin.settings.gatewayForwarding.codexAllowAppServerDesc",
-                        )
-                      }}
-                    </p>
-                  </div>
-                  <Toggle
-                    v-model="form.codex_cli_only_allow_app_server_clients"
-                  />
-                </div>
-
-                <div>
                   <label
                     class="block text-sm font-medium text-gray-700 dark:text-gray-300"
                   >
@@ -4693,24 +4625,6 @@
                         )
                       "
                     />
-                    <label
-                      class="flex shrink-0 items-center gap-1 text-xs text-gray-600 dark:text-gray-400"
-                      :title="
-                        t(
-                          'admin.settings.gatewayForwarding.codexWhitelistSkipFingerprintTooltip',
-                        )
-                      "
-                    >
-                      <input
-                        v-model="row.skipEngineFingerprint"
-                        type="checkbox"
-                      />
-                      {{
-                        t(
-                          'admin.settings.gatewayForwarding.codexWhitelistSkipFingerprint',
-                        )
-                      }}
-                    </label>
                     <button
                       type="button"
                       class="btn btn-secondary btn-sm shrink-0 text-red-600 hover:text-red-700 dark:text-red-400"
@@ -5680,6 +5594,22 @@
                     )
                   }}
                 </p>
+              </div>
+
+              <!-- Codex 历史客户端档案兼容模式 -->
+              <div class="flex items-center justify-between gap-4 border-t border-gray-100 pt-4 dark:border-dark-700">
+                <div>
+                  <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {{ t('admin.settings.gatewayForwarding.codexLegacyClientProfileCompatibility') }}
+                  </label>
+                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    {{ t('admin.settings.gatewayForwarding.codexLegacyClientProfileCompatibilityHint') }}
+                  </p>
+                </div>
+                <Toggle
+                  v-model="form.codex_legacy_client_profile_compatibility_enabled"
+                  data-testid="codex-legacy-client-profile-compatibility-toggle"
+                />
               </div>
 
               <div class="flex items-center justify-between gap-4 border-t border-gray-100 pt-4 dark:border-dark-700">
@@ -8781,12 +8711,6 @@ import {
   normalizeRegistrationEmailSuffixDomains,
   parseRegistrationEmailSuffixWhitelistInput,
 } from "@/utils/registrationEmailPolicy";
-import {
-  parseFingerprintSignalsToRows,
-  serializeFingerprintRowsToJSON,
-  defaultFingerprintSignalRows,
-  type FingerprintSignalRow,
-} from "./codexFingerprintSignals";
 
 const { t, locale } = useI18n();
 const appStore = useAppStore();
@@ -9721,18 +9645,17 @@ const form = reactive<SettingsForm>({
   enable_client_dateline_normalization: true,
   antigravity_user_agent_version: "",
   openai_codex_user_agent: "",
+  codex_legacy_client_profile_compatibility_enabled: false,
   openai_codex_local_group_quota_enabled: false,
   openai_codex_client_version: "",
   // 只读展示：自动同步任务写入的官方最新稳定版，不参与提交（提交载荷按字段显式构造）
   openai_codex_client_version_synced: "",
   openai_codex_version_auto_sync_enabled: true,
-  // codex_cli_only 加固
+  // codex_cli_only profile policy
   min_codex_version: "",
   max_codex_version: "",
   codex_cli_only_blacklist: "",
   codex_cli_only_whitelist: "",
-  codex_cli_only_allow_app_server_clients: false,
-  codex_cli_only_engine_fingerprint_signals: "",
   // 余额、订阅到期与账号限额通知
   balance_low_notify_enabled: false,
   balance_low_notify_threshold: 0,
@@ -10627,20 +10550,9 @@ function parseTablePageSizeOptionsInput(raw: string): number[] | null {
 interface CodexClientRow {
   originator: string;
   uaContains: string; // 逗号分隔，序列化时拆成 ua_contains 数组
-  skipEngineFingerprint?: boolean; // 仅白名单：命中即跳过引擎指纹门
 }
 const codexBlacklistRows = ref<CodexClientRow[]>([]);
 const codexWhitelistRows = ref<CodexClientRow[]>([]);
-const codexFingerprintRows = ref<FingerprintSignalRow[]>([]);
-const codexFingerprintNoRequired = computed(
-  () => !codexFingerprintRows.value.some((r) => r.required),
-);
-function addCodexFingerprintRow(): void {
-  codexFingerprintRows.value.push({ type: "header_exact", match: "", required: false });
-}
-function removeCodexFingerprintRow(i: number): void {
-  codexFingerprintRows.value.splice(i, 1);
-}
 
 function parseCodexEntriesToRows(raw: string): CodexClientRow[] {
   if (!raw || !raw.trim()) return [];
@@ -10654,7 +10566,6 @@ function parseCodexEntriesToRows(raw: string): CodexClientRow[] {
             .filter((x: unknown) => typeof x === "string")
             .join(", ")
         : "",
-      skipEngineFingerprint: e?.skip_engine_fingerprint === true,
     }));
   } catch {
     return [];
@@ -10664,18 +10575,13 @@ function parseCodexEntriesToRows(raw: string): CodexClientRow[] {
 function serializeCodexRowsToJSON(rows: CodexClientRow[]): string {
   const entries = rows
     .map((r) => {
-      const entry: {
-        originator: string;
-        ua_contains: string[];
-        skip_engine_fingerprint?: boolean;
-      } = {
+      const entry: { originator: string; ua_contains: string[] } = {
         originator: r.originator.trim(),
         ua_contains: r.uaContains
           .split(",")
           .map((s) => s.trim())
           .filter((s) => s.length > 0),
       };
-      if (r.skipEngineFingerprint) entry.skip_engine_fingerprint = true;
       return entry;
     })
     .filter((e) => e.originator !== "" || e.ua_contains.length > 0);
@@ -10692,7 +10598,6 @@ function addCodexWhitelistRow(): void {
   codexWhitelistRows.value.push({
     originator: "",
     uaContains: "",
-    skipEngineFingerprint: false,
   });
 }
 function removeCodexWhitelistRow(i: number): void {
@@ -10736,9 +10641,6 @@ async function loadSettings() {
     codexWhitelistRows.value = parseCodexEntriesToRows(
       form.codex_cli_only_whitelist,
     );
-    codexFingerprintRows.value = form.codex_cli_only_engine_fingerprint_signals
-      ? parseFingerprintSignalsToRows(form.codex_cli_only_engine_fingerprint_signals)
-      : defaultFingerprintSignalRows();
     form.login_agreement_mode =
       settings.login_agreement_mode === "checkbox" ? "checkbox" : "modal";
     form.channel_monitor_mode =
@@ -11297,6 +11199,8 @@ async function saveSettings() {
         form.antigravity_user_agent_version?.trim() || "",
       openai_codex_user_agent:
         form.openai_codex_user_agent?.trim() || "",
+      codex_legacy_client_profile_compatibility_enabled:
+        form.codex_legacy_client_profile_compatibility_enabled,
       openai_codex_local_group_quota_enabled:
         form.openai_codex_local_group_quota_enabled,
       openai_codex_client_version:
@@ -11305,11 +11209,6 @@ async function saveSettings() {
         form.openai_codex_version_auto_sync_enabled,
       min_codex_version: form.min_codex_version?.trim() || "",
       max_codex_version: form.max_codex_version?.trim() || "",
-      codex_cli_only_allow_app_server_clients:
-        form.codex_cli_only_allow_app_server_clients,
-      codex_cli_only_engine_fingerprint_signals: serializeFingerprintRowsToJSON(
-        codexFingerprintRows.value,
-      ),
       codex_cli_only_blacklist: serializeCodexRowsToJSON(
         codexBlacklistRows.value,
       ),

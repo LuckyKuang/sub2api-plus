@@ -626,10 +626,18 @@ func TestSettingService_UpdateSettings_OpenAICodexUserAgent(t *testing.T) {
 	svc := NewSettingService(repo, &config.Config{})
 
 	err := svc.UpdateSettings(context.Background(), &SystemSettings{
-		OpenAICodexUserAgent: "CODEX_CLI_RS/9.9.9 (Ubuntu 22.4.0; x86_64) xterm-256color",
+		OpenAICodexUserAgent: "codex_cli_rs/9.9.9 (Ubuntu 22.4.0; x86_64) xterm-256color",
 	})
 	require.NoError(t, err)
 	require.Equal(t, "codex_cli_rs/9.9.9 (Ubuntu 22.4.0; x86_64) xterm-256color", repo.updates[SettingKeyOpenAICodexUserAgent])
+	require.Equal(t, "false", repo.updates[SettingKeyCodexLegacyClientProfileCompatibilityEnabled])
+
+	err = svc.UpdateSettings(context.Background(), &SystemSettings{
+		OpenAICodexUserAgent:                         "codex_exec/9.9.9 (Ubuntu 22.4.0; x86_64) xterm-256color",
+		CodexLegacyClientProfileCompatibilityEnabled: true,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "true", repo.updates[SettingKeyCodexLegacyClientProfileCompatibilityEnabled])
 
 	err = svc.UpdateSettings(context.Background(), &SystemSettings{OpenAICodexUserAgent: "curl/8.0"})
 	require.Error(t, err)

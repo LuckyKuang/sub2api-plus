@@ -104,10 +104,13 @@ const DefaultOpenAICodexUserAgent = codexCLIUserAgent
 // cannot construct a mismatched User-Agent / Originator / Version triple.
 const DefaultOpenAICodexVersion = codexCLIVersion
 
-// cachedOpenAICodexUserAgent 缓存 OpenAI Codex UA（进程内缓存，60s TTL）
+// cachedOpenAICodexUserAgent caches the global outbound identity policy. The
+// compatibility bit must share this cache with the UA so one request never
+// observes a legacy UA under a stale policy decision.
 type cachedOpenAICodexUserAgent struct {
-	value     string
-	expiresAt int64 // unix nano
+	value                      string
+	legacyCompatibilityEnabled bool
+	expiresAt                  int64 // unix nano
 }
 
 // cachedOpenAICodexLocalGroupQuota keeps the local Codex quota switch on the
@@ -276,23 +279,24 @@ func (s *SettingService) GetAntigravityUserAgentVersion(ctx context.Context) str
 	return fallback
 }
 
-// GetOpenAICodexUserAgent 返回 OpenAI Codex 上游请求使用的 User-Agent。
-// 后台设置优先；为空时回退到内置默认值。
-func (s *SettingService) GetOpenAICodexUserAgent(ctx context.Context) string {
+// GetOpenAICodexOutboundProfile returns the configured global UA and the
+// explicit legacy-profile compatibility switch as one cached snapshot. The
+// switch defaults to false if the setting is unavailable or malformed.
+func (s *SettingService) GetOpenAICodexOutboundProfile(ctx context.Context) (string, bool) {
 	fallback := DefaultOpenAICodexUserAgent
 	if s == nil || s.settingRepo == nil {
-		return fallback
+		return fallback, false
 	}
 	if cached, ok := s.openAICodexUACache.Load().(*cachedOpenAICodexUserAgent); ok && cached != nil {
 		if time.Now().UnixNano() < cached.expiresAt {
-			return cached.value
+			return cached.value, cached.legacyCompatibilityEnabled
 		}
 	}
 
 	result, _, _ := s.openAICodexUASF.Do("openai_codex_user_agent", func() (any, error) {
 		if cached, ok := s.openAICodexUACache.Load().(*cachedOpenAICodexUserAgent); ok && cached != nil {
 			if time.Now().UnixNano() < cached.expiresAt {
-				return cached.value, nil
+				return cached, nil
 			}
 		}
 		if ctx == nil {
@@ -303,26 +307,30 @@ func (s *SettingService) GetOpenAICodexUserAgent(ctx context.Context) string {
 		value, err := s.settingRepo.GetValue(dbCtx, SettingKeyOpenAICodexUserAgent)
 		if err != nil && !errors.Is(err, ErrSettingNotFound) {
 			slog.Warn("failed to get openai codex user agent setting", "error", err)
-			s.openAICodexUACache.Store(&cachedOpenAICodexUserAgent{
-				value:     fallback,
-				expiresAt: time.Now().Add(openAICodexUserAgentErrorTTL).UnixNano(),
-			})
-			return fallback, nil
+			cached := &cachedOpenAICodexUserAgent{value: fallback, expiresAt: time.Now().Add(openAICodexUserAgentErrorTTL).UnixNano()}
+			s.openAICodexUACache.Store(cached)
+			return cached, nil
+		}
+		legacyValue, legacyErr := s.settingRepo.GetValue(dbCtx, SettingKeyCodexLegacyClientProfileCompatibilityEnabled)
+		if legacyErr != nil && !errors.Is(legacyErr, ErrSettingNotFound) {
+			slog.Warn("failed to get codex legacy client profile compatibility setting", "error", legacyErr)
 		}
 		ua := strings.TrimSpace(value)
 		if ua == "" {
 			ua = fallback
 		}
-		s.openAICodexUACache.Store(&cachedOpenAICodexUserAgent{
-			value:     ua,
-			expiresAt: time.Now().Add(openAICodexUserAgentCacheTTL).UnixNano(),
-		})
-		return ua, nil
+		cached := &cachedOpenAICodexUserAgent{
+			value:                      ua,
+			legacyCompatibilityEnabled: strings.TrimSpace(legacyValue) == "true",
+			expiresAt:                  time.Now().Add(openAICodexUserAgentCacheTTL).UnixNano(),
+		}
+		s.openAICodexUACache.Store(cached)
+		return cached, nil
 	})
-	if ua, ok := result.(string); ok && ua != "" {
-		return ua
+	if cached, ok := result.(*cachedOpenAICodexUserAgent); ok && cached != nil && cached.value != "" {
+		return cached.value, cached.legacyCompatibilityEnabled
 	}
-	return fallback
+	return fallback, false
 }
 
 // IsOpenAICodexLocalGroupQuotaEnabled reports whether Codex clients should
@@ -440,17 +448,6 @@ func (s *SettingService) InvalidateOpenAICodexClientVersionCache() {
 	s.openAICodexVersionCache.Store((*cachedOpenAICodexClientVersion)(nil))
 }
 
-// GetOpenAICodexCanonicalUserAgent 返回出站规范 Codex User-Agent。
-// 未填面板 UA 时按当前生效的客户端版本号拼出标准 Codex TUI UA。
-//
-// 面板 UA 只贡献客户端名与 OS / 架构 / 终端指纹，版本段一律用生效版本重建：该输入框是
-// 唯一能改 UA 后缀的地方，但它填写于某个历史版本，逐字沿用会把出站身份永久钉死在陈旧
-// 版本上并绕过自动同步——而陈旧身份正是上游优先降载的那一侧。
-// 需要固定版本请填「Codex 客户端版本号」并关闭自动同步。
-func (s *SettingService) GetOpenAICodexCanonicalUserAgent(ctx context.Context) string {
-	return resolveOpenAIOutboundIdentityFromSettings(ctx, nil, s).UserAgent
-}
-
 var legacyClaudeCodeCodexWhitelistEntry = openai.AllowedClientEntry{
 	Originator: "Claude Code",
 	UAContains: []string{"Claude Code/"},
@@ -477,6 +474,9 @@ func (s *SettingService) MigrateOpenAIAllowClaudeCodeCodexPluginSetting(ctx cont
 		return fmt.Errorf("get deprecated %s setting: %w", SettingKeyOpenAIAllowClaudeCodeCodexPlugin, err)
 	}
 	if strings.TrimSpace(legacyValue) != "true" {
+		if err := s.settingRepo.Delete(dbCtx, SettingKeyOpenAIAllowClaudeCodeCodexPlugin); err != nil {
+			return fmt.Errorf("delete deprecated %s setting: %w", SettingKeyOpenAIAllowClaudeCodeCodexPlugin, err)
+		}
 		return nil
 	}
 
@@ -491,64 +491,18 @@ func (s *SettingService) MigrateOpenAIAllowClaudeCodeCodexPluginSetting(ctx cont
 			return fmt.Errorf("parse %s setting: %w", SettingKeyCodexCLIOnlyWhitelist, err)
 		}
 	}
-	if codexClientEntriesContain(entries, legacyClaudeCodeCodexWhitelistEntry) {
-		return nil
-	}
-
-	entries = append(entries, legacyClaudeCodeCodexWhitelistEntry)
-	encoded, err := json.Marshal(entries)
-	if err != nil {
-		return fmt.Errorf("marshal %s setting: %w", SettingKeyCodexCLIOnlyWhitelist, err)
-	}
-	if err := s.settingRepo.Set(dbCtx, SettingKeyCodexCLIOnlyWhitelist, string(encoded)); err != nil {
-		return fmt.Errorf("set %s setting: %w", SettingKeyCodexCLIOnlyWhitelist, err)
-	}
-	s.codexRestrictionPolicySF.Forget("codex_restriction_policy")
-	s.codexRestrictionPolicyCache.Store(&cachedCodexRestrictionPolicy{expiresAt: 0})
-	return nil
-}
-
-// MigrateCodexBodyFingerprintToSignals 把已废弃的 codex_cli_only_allow_body_engine_fingerprint
-// 开关并入引擎指纹信号列表。幂等:信号键已存在(非空)则不动;缺失时写默认种子,
-// 并把 body 路径行的 Required 设为旧 body 开关的值(旧 true ⇒ 勾上 body 行)。
-func (s *SettingService) MigrateCodexBodyFingerprintToSignals(ctx context.Context) error {
-	if s == nil || s.settingRepo == nil {
-		return nil
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	dbCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), codexRestrictionPolicyDBTimeout)
-	defer cancel()
-
-	if v, err := s.settingRepo.GetValue(dbCtx, SettingKeyCodexCLIOnlyEngineFingerprintSignals); err == nil && strings.TrimSpace(v) != "" {
-		return nil // 已配置/已迁移
-	} else if err != nil && !errors.Is(err, ErrSettingNotFound) {
-		return fmt.Errorf("get %s setting: %w", SettingKeyCodexCLIOnlyEngineFingerprintSignals, err)
-	}
-
-	bodyOn := false
-	if v, err := s.settingRepo.GetValue(dbCtx, SettingKeyCodexCLIOnlyAllowBodyEngineFingerprint); err == nil {
-		bodyOn = strings.TrimSpace(v) == "true"
-	} else if !errors.Is(err, ErrSettingNotFound) {
-		return fmt.Errorf("get deprecated %s setting: %w", SettingKeyCodexCLIOnlyAllowBodyEngineFingerprint, err)
-	}
-
-	seed := make([]openai.EngineFingerprintSignal, len(openai.DefaultEngineFingerprintSignals))
-	copy(seed, openai.DefaultEngineFingerprintSignals)
-	if bodyOn {
-		for i := range seed {
-			if seed[i].Type == openai.FingerprintSignalBodyPath {
-				seed[i].Required = true
-			}
+	if !codexClientEntriesContain(entries, legacyClaudeCodeCodexWhitelistEntry) {
+		entries = append(entries, legacyClaudeCodeCodexWhitelistEntry)
+		encoded, err := json.Marshal(entries)
+		if err != nil {
+			return fmt.Errorf("marshal %s setting: %w", SettingKeyCodexCLIOnlyWhitelist, err)
+		}
+		if err := s.settingRepo.Set(dbCtx, SettingKeyCodexCLIOnlyWhitelist, string(encoded)); err != nil {
+			return fmt.Errorf("set %s setting: %w", SettingKeyCodexCLIOnlyWhitelist, err)
 		}
 	}
-	encoded, err := json.Marshal(seed)
-	if err != nil {
-		return fmt.Errorf("marshal %s setting: %w", SettingKeyCodexCLIOnlyEngineFingerprintSignals, err)
-	}
-	if err := s.settingRepo.Set(dbCtx, SettingKeyCodexCLIOnlyEngineFingerprintSignals, string(encoded)); err != nil {
-		return fmt.Errorf("set %s setting: %w", SettingKeyCodexCLIOnlyEngineFingerprintSignals, err)
+	if err := s.settingRepo.Delete(dbCtx, SettingKeyOpenAIAllowClaudeCodeCodexPlugin); err != nil {
+		return fmt.Errorf("delete deprecated %s setting: %w", SettingKeyOpenAIAllowClaudeCodeCodexPlugin, err)
 	}
 	s.codexRestrictionPolicySF.Forget("codex_restriction_policy")
 	s.codexRestrictionPolicyCache.Store(&cachedCodexRestrictionPolicy{expiresAt: 0})
@@ -598,9 +552,11 @@ func normalizedCodexClientMarkers(markers []string) map[string]struct{} {
 	return normalized
 }
 
-// GetCodexRestrictionPolicy 读取 codex_cli_only 全局加固策略（黑/白名单、最低版本、引擎指纹门）。
+// GetCodexRestrictionPolicy reads the global policy surrounding built-in Codex
+// client profiles (explicit compatibility entries and engine version bounds).
 // 仅在调用方已确认账号 codex_cli_only 开启时读取；进程内 atomic.Value 缓存（60s TTL）避免热路径访问 DB。
-// 任意键缺失/解析失败 → 安全默认：空名单、空版本、默认种子指纹信号。
+// Missing or invalid settings fail closed to empty compatibility/deny lists and
+// no version range; the fixed built-in client-profile evidence gate remains.
 func (s *SettingService) GetCodexRestrictionPolicy(ctx context.Context) CodexRestrictionPolicy {
 	if cached, ok := s.codexRestrictionPolicyCache.Load().(*cachedCodexRestrictionPolicy); ok && cached != nil {
 		if time.Now().UnixNano() < cached.expiresAt {
@@ -616,17 +572,16 @@ func (s *SettingService) GetCodexRestrictionPolicy(ctx context.Context) CodexRes
 		dbCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), codexRestrictionPolicyDBTimeout)
 		defer cancel()
 
-		pol := CodexRestrictionPolicy{EngineFingerprintSignals: openai.DefaultEngineFingerprintSignals} // 安全默认：默认种子指纹信号
+		pol := CodexRestrictionPolicy{}
 		if v, err := s.settingRepo.GetValue(dbCtx, SettingKeyMinCodexVersion); err == nil {
 			pol.MinCodexVersion = strings.TrimSpace(v)
 		}
 		if v, err := s.settingRepo.GetValue(dbCtx, SettingKeyMaxCodexVersion); err == nil {
 			pol.MaxCodexVersion = strings.TrimSpace(v)
 		}
-		if v, err := s.settingRepo.GetValue(dbCtx, SettingKeyCodexCLIOnlyAllowAppServerClients); err == nil {
-			pol.AllowAppServerClients = strings.TrimSpace(v) == "true" // 仅显式 "true" 开启
+		if v, err := s.settingRepo.GetValue(dbCtx, SettingKeyCodexLegacyClientProfileCompatibilityEnabled); err == nil {
+			pol.LegacyClientProfileCompatibilityEnabled = strings.TrimSpace(v) == "true"
 		}
-		pol.EngineFingerprintSignals = s.loadEngineFingerprintSignals(dbCtx)
 		pol.Whitelist = s.loadCodexClientEntries(dbCtx, SettingKeyCodexCLIOnlyWhitelist)
 		pol.Blacklist = s.loadCodexClientEntries(dbCtx, SettingKeyCodexCLIOnlyBlacklist)
 
@@ -639,7 +594,7 @@ func (s *SettingService) GetCodexRestrictionPolicy(ctx context.Context) CodexRes
 	if pol, ok := result.(CodexRestrictionPolicy); ok {
 		return pol
 	}
-	return CodexRestrictionPolicy{EngineFingerprintSignals: openai.DefaultEngineFingerprintSignals}
+	return CodexRestrictionPolicy{}
 }
 
 // loadCodexClientEntries 读取并解析 []openai.AllowedClientEntry JSON 设置；缺失/空/非法 → nil（安全忽略）。
@@ -653,19 +608,6 @@ func (s *SettingService) loadCodexClientEntries(ctx context.Context, key string)
 		return nil
 	}
 	return entries
-}
-
-// loadEngineFingerprintSignals 读取引擎指纹信号列表;缺失/空/非法 → 默认种子。
-func (s *SettingService) loadEngineFingerprintSignals(ctx context.Context) []openai.EngineFingerprintSignal {
-	v, err := s.settingRepo.GetValue(ctx, SettingKeyCodexCLIOnlyEngineFingerprintSignals)
-	if err != nil || strings.TrimSpace(v) == "" {
-		return openai.DefaultEngineFingerprintSignals
-	}
-	sigs, ok := openai.ParseEngineFingerprintSignals(v)
-	if !ok {
-		return openai.DefaultEngineFingerprintSignals
-	}
-	return sigs
 }
 
 // ValidateCodexClientEntriesJSON 校验 codex_cli_only 名单 JSON 配置（黑名单语义）：
@@ -702,11 +644,6 @@ func ValidateCodexWhitelistEntriesJSON(raw string) error {
 		}
 	}
 	return nil
-}
-
-// ValidateEngineFingerprintSignalsJSON 服务层包装,复用 openai 校验逻辑。
-func ValidateEngineFingerprintSignalsJSON(raw string) error {
-	return openai.ValidateEngineFingerprintSignalsJSON(raw)
 }
 
 // IsBackendModeEnabled checks if backend mode is enabled

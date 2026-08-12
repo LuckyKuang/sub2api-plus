@@ -106,6 +106,7 @@ func (h *OpenAIGatewayHandler) AlphaSearch(c *gin.Context) {
 	sessionHash := h.gatewayService.GenerateSessionHashWithFallback(c, nil, searchID)
 	profitVetoCount := 0
 	failedAccountIDs := make(map[int64]struct{})
+	policyRejectedAccountCount := 0
 	var lastFailoverErr *service.UpstreamFailoverError
 	switchCount := 0
 	var oauth429FailoverState service.OpenAIOAuth429FailoverState
@@ -136,6 +137,11 @@ func (h *OpenAIGatewayHandler) AlphaSearch(c *gin.Context) {
 				h.errorResponse(c, http.StatusForbidden, "permission_error", "This OpenAI OAuth account is restricted to authorized API key groups.")
 				return
 			}
+			if policyRejectedAccountCount > 0 && (selection == nil || errors.Is(err, service.ErrNoAvailableAccounts)) {
+				service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalPolicyDenied)
+				h.errorResponse(c, http.StatusForbidden, "permission_error", service.CodexOfficialClientsOnlyMessage)
+				return
+			}
 			if failoverClientGone(c) {
 				reqLog.Info("openai_alpha_search.account_select_aborted_client_disconnected", zap.Error(err))
 				return
@@ -157,6 +163,20 @@ func (h *OpenAIGatewayHandler) AlphaSearch(c *gin.Context) {
 		}
 
 		account := selection.Account
+		restrictionResult := h.gatewayService.EvaluateCodexClientRestriction(c, account, body)
+		if restrictionResult.Enabled && !restrictionResult.Matched {
+			if selection.Acquired && selection.ReleaseFunc != nil {
+				selection.ReleaseFunc()
+			}
+			failedAccountIDs[account.ID] = struct{}{}
+			policyRejectedAccountCount++
+			reqLog.Info("openai_alpha_search.account_client_profile_ineligible",
+				zap.Int64("account_id", account.ID),
+				zap.String("reason", restrictionResult.Reason),
+				zap.String("profile", restrictionResult.Profile),
+			)
+			continue
+		}
 		setOpsSelectedAccount(c, account.ID, account.Platform)
 		accountRelease, slotResult := h.acquireResponsesAccountSlot(c, apiKey.GroupID, sessionHash, selection, false, &streamStarted, reqLog)
 		if slotResult == openAISlotAcquireProfitVetoed {

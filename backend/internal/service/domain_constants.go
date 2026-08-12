@@ -516,13 +516,6 @@ const (
 	SettingKeyCodexCLIOnlyBlacklist = "codex_cli_only_blacklist"
 	// SettingKeyCodexCLIOnlyWhitelist codex_cli_only 全局白名单（[]AllowedClientEntry JSON，双因子 AND allow）。
 	SettingKeyCodexCLIOnlyWhitelist = "codex_cli_only_whitelist"
-	// SettingKeyCodexCLIOnlyAllowAppServerClients App Server 开关：对未列名客户端开闸（默认 false；仅显式 "true" 开）。
-	SettingKeyCodexCLIOnlyAllowAppServerClients = "codex_cli_only_allow_app_server_clients"
-	// SettingKeyCodexCLIOnlyAllowBodyEngineFingerprint 引擎门 body 通道开关：接受 client_metadata 引擎指纹（默认 false；仅显式 "true" 开）。(已废弃，迁移并入信号列表)
-	SettingKeyCodexCLIOnlyAllowBodyEngineFingerprint = "codex_cli_only_allow_body_engine_fingerprint"
-	// SettingKeyCodexCLIOnlyEngineFingerprintSignals codex_cli_only 引擎指纹门信号列表（[]EngineFingerprintSignal JSON）。
-	// 勾选(required)信号之间 AND;每条 match 变体行内 OR;缺失/空/非法 → 默认种子(只勾 x-codex-)。
-	SettingKeyCodexCLIOnlyEngineFingerprintSignals = "codex_cli_only_engine_fingerprint_signals"
 
 	// SettingKeyMaxClaudeCodeVersion 最高 Claude Code 版本号限制 (semver, 如 "3.0.0"，空值=不检查)
 	SettingKeyMaxClaudeCodeVersion = "max_claude_code_version"
@@ -584,6 +577,10 @@ const (
 	// 当客户端 UA 被识别为浏览器（Chrome/Firefox/Safari/Edge 等）时，转发给 OpenAI 上游前会替换为此值，
 	// 用于避免 Cloudflare 对浏览器型 UA 的质询拦截。
 	SettingKeyOpenAICodexUserAgent = "openai_codex_user_agent"
+	// SettingKeyCodexLegacyClientProfileCompatibilityEnabled temporarily allows
+	// only the reviewed historical Codex wire identities. It is disabled by
+	// default and never changes their status to an official profile.
+	SettingKeyCodexLegacyClientProfileCompatibilityEnabled = "codex_legacy_client_profile_compatibility_enabled"
 	// SettingKeyOpenAICodexLocalGroupQuotaEnabled makes Codex clients observe
 	// this service's subscription 5-hour/7-day quota instead of the selected
 	// upstream account quota. Disabled by default to preserve passthrough.

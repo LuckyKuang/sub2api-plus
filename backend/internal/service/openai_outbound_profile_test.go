@@ -86,6 +86,20 @@ func TestResolveOpenAIOutboundIdentityCandidates(t *testing.T) {
 	}
 }
 
+func TestResolveOpenAIOutboundIdentityCandidatesWithCompatibility(t *testing.T) {
+	legacyUA := "codex_app/0.150.0 (Ubuntu 22.4.0; x86_64) xterm-256color"
+	strict := resolveOpenAIOutboundIdentityCandidatesWithCompatibility(legacyUA, "", false)
+	require.Equal(t, DefaultOpenAICodexUserAgent, strict.UserAgent)
+
+	compatible := resolveOpenAIOutboundIdentityCandidatesWithCompatibility(legacyUA, "", true)
+	require.Equal(t, legacyUA, compatible.UserAgent)
+	require.Equal(t, "codex_app", compatible.Originator)
+	require.Equal(t, openAIOutboundIdentitySourceAccount, compatible.Source)
+
+	caseVariant := resolveOpenAIOutboundIdentityCandidatesWithCompatibility("CODEX_APP/0.150.0", "", true)
+	require.Equal(t, DefaultOpenAICodexUserAgent, caseVariant.UserAgent)
+}
+
 func TestApplyResolvedOpenAIOutboundIdentity(t *testing.T) {
 	identity := resolveOpenAIOutboundIdentityCandidates("", testCodexCLIUserAgent)
 

@@ -297,9 +297,34 @@ func (s *OpenAIGatewayService) getOpenAIOAuthSharedResponseAccount(ctx context.C
 	return accountID, nil
 }
 
-func (s *OpenAIGatewayService) validateOpenAIOAuthSharedPreviousResponseAccess(ctx context.Context, groupID *int64, responseID string) error {
-	_, err := s.getOpenAIOAuthSharedResponseAccount(ctx, groupID, responseID)
-	return err
+// validateOpenAISharedPreviousResponseAccountSelection applies the shared
+// response ownership boundary only after the selected account is known to be
+// an OAuth account with sharing enabled. This prevents a response ID in the
+// OAuth namespace from influencing API-key or ordinary OAuth routing.
+func (s *OpenAIGatewayService) validateOpenAISharedPreviousResponseAccountSelection(
+	ctx context.Context,
+	groupID *int64,
+	responseID string,
+	account *Account,
+) error {
+	if account == nil || !account.IsOpenAIOAuthSessionSharingEnabled() {
+		return nil
+	}
+	store := s.getOpenAIWSStateStore()
+	if store != nil {
+		localAccountID, err := store.GetResponseAccount(ctx, derefGroupID(groupID), responseID)
+		if err == nil && localAccountID > 0 && localAccountID != account.ID {
+			return ErrOpenAIOAuthSessionAccessDenied
+		}
+	}
+	sharedAccountID, err := s.getOpenAIOAuthSharedResponseAccount(ctx, groupID, responseID)
+	if err != nil {
+		return err
+	}
+	if sharedAccountID > 0 && sharedAccountID != account.ID {
+		return ErrOpenAIOAuthSessionAccessDenied
+	}
+	return nil
 }
 
 // bindOpenAIResponseAccount keeps the established group-local previous-response

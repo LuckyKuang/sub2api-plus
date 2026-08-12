@@ -15,6 +15,7 @@ import (
 
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/ctxkey"
+	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 )
 
 type oauthSessionPolicyCache struct {
@@ -78,6 +79,179 @@ func newOpenAIOAuthSessionPolicyAccount(id int64, groupIDs ...int64) Account {
 				"scope_version":     "scope-a",
 			},
 		},
+	}
+}
+
+func TestOpenAIOAuthSessionPolicy_APIKeyAccountsIgnoreLegacyPolicyData(t *testing.T) {
+	groupID := int64(88001)
+	account := &Account{
+		ID:       88002,
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeAPIKey,
+		Extra: map[string]any{
+			OpenAIOAuthSessionPolicyExtraKey: map[string]any{
+				"enabled":           true,
+				"allowed_group_ids": []int64{groupID},
+				"scope_version":     "legacy-data",
+			},
+		},
+	}
+
+	require.False(t, account.IsOpenAIOAuthSessionPolicyApplicable())
+	require.False(t, account.IsOpenAIOAuthSessionSharingEnabled())
+	require.True(t, account.IsOpenAIOAuthSessionGroupAllowed(nil))
+	require.True(t, account.IsOpenAIOAuthSessionGroupAllowed(&groupID))
+	require.True(t, openAIOAuthSessionPolicyAllowsSchedulingGroup(account, nil))
+	require.True(t, openAIOAuthSessionPolicyAllowsSchedulingGroup(account, &groupID))
+
+	_, err := normalizeOpenAIOAuthSessionPolicyExtra(nil, PlatformOpenAI, AccountTypeAPIKey, account.Extra, []int64{groupID})
+	require.Error(t, err, "the management write path must reject OAuth session policy for API-key accounts")
+	require.True(t, infraerrors.IsBadRequest(err), "the management endpoint must expose this validation failure as a client error")
+	require.Equal(t, "OPENAI_OAUTH_SESSION_POLICY_UNSUPPORTED_ACCOUNT", infraerrors.Reason(err))
+}
+
+func TestOpenAIOAuthSessionPolicy_APIKeyLegacyPolicyKeepsSessionAndResponseBindingsLocal(t *testing.T) {
+	groupID := int64(88001)
+	otherAPIKeyID := int64(88003)
+	account := &Account{
+		ID:          88002,
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeAPIKey,
+		Status:      StatusActive,
+		Schedulable: true,
+		Concurrency: 1,
+		Extra: map[string]any{
+			"openai_apikey_responses_websockets_v2_enabled": true,
+			OpenAIOAuthSessionPolicyExtraKey: map[string]any{
+				"enabled":           true,
+				"allowed_group_ids": []int64{groupID},
+				"scope_version":     "legacy-data",
+			},
+		},
+	}
+	service := &OpenAIGatewayService{}
+
+	first, err := service.resolveOpenAIUpstreamSessionID(newOAuthSessionPolicyGinContext(88002, 9001, groupID), account, "session-1")
+	require.NoError(t, err)
+	second, err := service.resolveOpenAIUpstreamSessionID(newOAuthSessionPolicyGinContext(otherAPIKeyID, 9001, groupID), account, "session-1")
+	require.NoError(t, err)
+	require.NotEqual(t, first, second, "API-key accounts must retain API-key-scoped session isolation")
+
+	cache := &oauthSessionPolicyCache{}
+	store := NewOpenAIWSStateStore(cache)
+	cfg := newOpenAIWSV2TestConfig()
+	svc := &OpenAIGatewayService{
+		accountRepo:        stubOpenAIAccountRepo{accounts: []Account{*account}},
+		cache:              cache,
+		cfg:                cfg,
+		concurrencyService: NewConcurrencyService(stubConcurrencyCache{}),
+		openaiWSStateStore: store,
+	}
+	require.NoError(t, store.BindResponseAccount(context.Background(), groupID, "resp-api-key-local", account.ID, time.Hour))
+	// This response ID also exists in the OAuth shared namespace but belongs to
+	// a different user. The local API-key binding must win: OAuth sharing policy
+	// cannot deny, redirect, or otherwise affect an API-key continuation.
+	cache.values[cache.key(openAIOAuthSharedSessionCacheGroupID, openAIOAuthSharedResponseOwnerCacheKey("resp-api-key-local"))] = 9002
+
+	selection, err := svc.SelectAccountByPreviousResponseID(
+		oauthSessionPolicyContext(9001), &groupID, "resp-api-key-local", "gpt-5.1", nil, false,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, selection, "legacy OAuth policy data must not block an API-key response continuation")
+	require.Equal(t, account.ID, selection.Account.ID)
+	if selection.ReleaseFunc != nil {
+		selection.ReleaseFunc()
+	}
+}
+
+func TestOpenAIOAuthSessionPolicy_APIKeySelectionIgnoresForeignSharedPreviousResponse(t *testing.T) {
+	groupID := int64(88004)
+	account := &Account{
+		ID:          88005,
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeAPIKey,
+		Status:      StatusActive,
+		Schedulable: true,
+		Concurrency: 1,
+		Extra: map[string]any{
+			"openai_apikey_responses_websockets_v2_enabled": true,
+		},
+	}
+	cache := &oauthSessionPolicyCache{values: make(map[string]int64)}
+	responseID := "resp-oauth-namespace-collision"
+	cache.values[cache.key(openAIOAuthSharedSessionCacheGroupID, openAIOAuthSharedResponseOwnerCacheKey(responseID))] = 9002
+	svc := &OpenAIGatewayService{
+		accountRepo:        stubOpenAIAccountRepo{accounts: []Account{*account}},
+		cache:              cache,
+		cfg:                newOpenAIWSV2TestConfig(),
+		concurrencyService: NewConcurrencyService(stubConcurrencyCache{}),
+	}
+
+	selection, _, err := svc.SelectAccountWithSchedulerForCapability(
+		oauthSessionPolicyContext(9001),
+		&groupID,
+		responseID,
+		"",
+		"gpt-5.1",
+		nil,
+		OpenAIUpstreamTransportResponsesWebsocketV2,
+		OpenAIEndpointCapabilityChatCompletions,
+		false,
+		false,
+		false,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, selection, "a foreign OAuth shared response must not reject an API-key selection")
+	require.Equal(t, account.ID, selection.Account.ID)
+	if selection.ReleaseFunc != nil {
+		selection.ReleaseFunc()
+	}
+}
+
+func TestOpenAIOAuthSessionPolicy_SharedOAuthRejectionFallsBackToAPIKey(t *testing.T) {
+	groupID := int64(88006)
+	responseID := "resp-shared-oauth-rejected"
+	oauthAccount := newOpenAIOAuthSessionPolicyAccount(88007, groupID)
+	oauthAccount.Priority = 1
+	apiKeyAccount := Account{
+		ID:          88008,
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeAPIKey,
+		Status:      StatusActive,
+		Schedulable: true,
+		Concurrency: 1,
+		Priority:    2,
+		Extra: map[string]any{
+			"openai_apikey_responses_websockets_v2_enabled": true,
+		},
+	}
+	cache := &oauthSessionPolicyCache{values: make(map[string]int64)}
+	cache.values[cache.key(openAIOAuthSharedSessionCacheGroupID, openAIOAuthSharedResponseOwnerCacheKey(responseID))] = 9002
+	svc := &OpenAIGatewayService{
+		accountRepo:        stubOpenAIAccountRepo{accounts: []Account{oauthAccount, apiKeyAccount}},
+		cache:              cache,
+		cfg:                newOpenAIWSV2TestConfig(),
+		concurrencyService: NewConcurrencyService(stubConcurrencyCache{}),
+	}
+
+	selection, _, err := svc.SelectAccountWithSchedulerForCapability(
+		oauthSessionPolicyContext(9001),
+		&groupID,
+		responseID,
+		"",
+		"gpt-5.1",
+		nil,
+		OpenAIUpstreamTransportResponsesWebsocketV2,
+		OpenAIEndpointCapabilityChatCompletions,
+		false,
+		false,
+		false,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, selection)
+	require.Equal(t, apiKeyAccount.ID, selection.Account.ID, "OAuth sharing rejection must not prevent an API-key fallback")
+	if selection.ReleaseFunc != nil {
+		selection.ReleaseFunc()
 	}
 }
 
@@ -431,9 +605,15 @@ func requireOpenAIOAuthStickyBindings(t *testing.T, service *OpenAIGatewayServic
 }
 
 func TestOpenAIOAuthSharedPreviousResponseCacheMissKeepsLegacyContinuationAvailable(t *testing.T) {
-	service := &OpenAIGatewayService{cache: &oauthSessionPolicyCache{}}
+	account := newOpenAIOAuthSessionPolicyAccount(77, 11)
+	service := &OpenAIGatewayService{
+		cache: &oauthSessionPolicyCache{},
+		accountRepo: &oauthSessionPolicyAccountRepo{
+			accounts: map[int64]*Account{account.ID: &account},
+		},
+	}
 
-	err := service.validateOpenAIOAuthSharedPreviousResponseAccess(oauthSessionPolicyContext(9001), nil, "resp_not_shared")
+	err := service.validateOpenAISharedPreviousResponseAccountSelection(oauthSessionPolicyContext(9001), nil, "resp_not_shared", &account)
 	require.NoError(t, err)
 }
 
@@ -441,9 +621,15 @@ func TestOpenAIOAuthLegacySharedPreviousResponseWithoutUserOwnerIsRejected(t *te
 	cache := &oauthSessionPolicyCache{values: make(map[string]int64)}
 	legacyKey := openAIOAuthLegacySharedResponseCacheKey("resp_legacy_shared")
 	cache.values[cache.key(openAIOAuthSharedSessionCacheGroupID, legacyKey)] = 77
-	service := &OpenAIGatewayService{cache: cache}
+	account := newOpenAIOAuthSessionPolicyAccount(77, 11)
+	service := &OpenAIGatewayService{
+		cache: cache,
+		accountRepo: &oauthSessionPolicyAccountRepo{
+			accounts: map[int64]*Account{account.ID: &account},
+		},
+	}
 
-	err := service.validateOpenAIOAuthSharedPreviousResponseAccess(oauthSessionPolicyContext(9001), nil, "resp_legacy_shared")
+	err := service.validateOpenAISharedPreviousResponseAccountSelection(oauthSessionPolicyContext(9001), nil, "resp_legacy_shared", &account)
 	require.ErrorIs(t, err, ErrOpenAIOAuthSessionAccessDenied)
 }
 

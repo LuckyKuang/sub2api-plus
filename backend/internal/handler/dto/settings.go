@@ -202,29 +202,28 @@ type SystemSettings struct {
 	BackendModeEnabled bool `json:"backend_mode_enabled"`
 
 	// Gateway forwarding behavior
-	EnableFingerprintUnification           bool   `json:"enable_fingerprint_unification"`
-	EnableMetadataPassthrough              bool   `json:"enable_metadata_passthrough"`
-	EnableCCHSigning                       bool   `json:"enable_cch_signing"`
-	EnableClaudeOAuthSystemPromptInjection bool   `json:"enable_claude_oauth_system_prompt_injection"`
-	ClaudeOAuthSystemPrompt                string `json:"claude_oauth_system_prompt"`
-	ClaudeOAuthSystemPromptBlocks          string `json:"claude_oauth_system_prompt_blocks"`
-	EnableAnthropicCacheTTL1hInjection     bool   `json:"enable_anthropic_cache_ttl_1h_injection"`
-	RewriteMessageCacheControl             bool   `json:"rewrite_message_cache_control"`
-	EnableClientDatelineNormalization      bool   `json:"enable_client_dateline_normalization"`
-	AntigravityUserAgentVersion            string `json:"antigravity_user_agent_version"`
-	OpenAICodexUserAgent                   string `json:"openai_codex_user_agent"`
-	OpenAICodexLocalGroupQuotaEnabled      bool   `json:"openai_codex_local_group_quota_enabled"`
-	OpenAICodexClientVersion               string `json:"openai_codex_client_version"`
-	OpenAICodexClientVersionSynced         string `json:"openai_codex_client_version_synced"`
-	OpenAICodexVersionAutoSyncEnabled      bool   `json:"openai_codex_version_auto_sync_enabled"`
+	EnableFingerprintUnification                 bool   `json:"enable_fingerprint_unification"`
+	EnableMetadataPassthrough                    bool   `json:"enable_metadata_passthrough"`
+	EnableCCHSigning                             bool   `json:"enable_cch_signing"`
+	EnableClaudeOAuthSystemPromptInjection       bool   `json:"enable_claude_oauth_system_prompt_injection"`
+	ClaudeOAuthSystemPrompt                      string `json:"claude_oauth_system_prompt"`
+	ClaudeOAuthSystemPromptBlocks                string `json:"claude_oauth_system_prompt_blocks"`
+	EnableAnthropicCacheTTL1hInjection           bool   `json:"enable_anthropic_cache_ttl_1h_injection"`
+	RewriteMessageCacheControl                   bool   `json:"rewrite_message_cache_control"`
+	EnableClientDatelineNormalization            bool   `json:"enable_client_dateline_normalization"`
+	AntigravityUserAgentVersion                  string `json:"antigravity_user_agent_version"`
+	OpenAICodexUserAgent                         string `json:"openai_codex_user_agent"`
+	CodexLegacyClientProfileCompatibilityEnabled bool   `json:"codex_legacy_client_profile_compatibility_enabled"`
+	OpenAICodexLocalGroupQuotaEnabled            bool   `json:"openai_codex_local_group_quota_enabled"`
+	OpenAICodexClientVersion                     string `json:"openai_codex_client_version"`
+	OpenAICodexClientVersionSynced               string `json:"openai_codex_client_version_synced"`
+	OpenAICodexVersionAutoSyncEnabled            bool   `json:"openai_codex_version_auto_sync_enabled"`
 
-	// codex_cli_only 加固
-	MinCodexVersion                      string `json:"min_codex_version"`
-	MaxCodexVersion                      string `json:"max_codex_version"`
-	CodexCLIOnlyBlacklist                string `json:"codex_cli_only_blacklist"`
-	CodexCLIOnlyWhitelist                string `json:"codex_cli_only_whitelist"`
-	CodexCLIOnlyAllowAppServerClients    bool   `json:"codex_cli_only_allow_app_server_clients"`
-	CodexCLIOnlyEngineFingerprintSignals string `json:"codex_cli_only_engine_fingerprint_signals"`
+	// codex_cli_only profile policy
+	MinCodexVersion       string `json:"min_codex_version"`
+	MaxCodexVersion       string `json:"max_codex_version"`
+	CodexCLIOnlyBlacklist string `json:"codex_cli_only_blacklist"`
+	CodexCLIOnlyWhitelist string `json:"codex_cli_only_whitelist"`
 
 	// Web Search Emulation
 	WebSearchEmulationEnabled bool `json:"web_search_emulation_enabled"`

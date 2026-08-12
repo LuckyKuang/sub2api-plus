@@ -126,7 +126,7 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	if err := s.normalizeOpenAIAdvancedSchedulerOverrides(settings); err != nil {
 		return nil, err
 	}
-	normalizedOpenAICodexUserAgent, err := NormalizeOpenAICodexUserAgent(settings.OpenAICodexUserAgent)
+	normalizedOpenAICodexUserAgent, err := NormalizeOpenAICodexUserAgentWithCompatibility(settings.OpenAICodexUserAgent, settings.CodexLegacyClientProfileCompatibilityEnabled)
 	if err != nil {
 		return nil, err
 	}
@@ -481,18 +481,17 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeyEnableClientDatelineNormalization] = strconv.FormatBool(settings.EnableClientDatelineNormalization)
 	updates[SettingKeyAntigravityUserAgentVersion] = antigravity.NormalizeUserAgentVersion(settings.AntigravityUserAgentVersion)
 	updates[SettingKeyOpenAICodexUserAgent] = strings.TrimSpace(settings.OpenAICodexUserAgent)
+	updates[SettingKeyCodexLegacyClientProfileCompatibilityEnabled] = strconv.FormatBool(settings.CodexLegacyClientProfileCompatibilityEnabled)
 	updates[SettingKeyOpenAICodexLocalGroupQuotaEnabled] = strconv.FormatBool(settings.OpenAICodexLocalGroupQuotaEnabled)
 	updates[SettingKeyOpenAICodexClientVersion] = NormalizeCodexClientVersion(settings.OpenAICodexClientVersion)
 	updates[SettingKeyOpenAICodexVersionAutoSyncEnabled] = strconv.FormatBool(settings.OpenAICodexVersionAutoSyncEnabled)
 	// SettingKeyOpenAICodexClientVersionSynced 由自动同步任务独占写入，此处不得覆盖，
 	// 否则面板保存会把同步结果清空。
-	// codex_cli_only 加固
+	// codex_cli_only profile policy
 	updates[SettingKeyMinCodexVersion] = strings.TrimSpace(settings.MinCodexVersion)
 	updates[SettingKeyMaxCodexVersion] = strings.TrimSpace(settings.MaxCodexVersion)
 	updates[SettingKeyCodexCLIOnlyBlacklist] = strings.TrimSpace(settings.CodexCLIOnlyBlacklist)
 	updates[SettingKeyCodexCLIOnlyWhitelist] = strings.TrimSpace(settings.CodexCLIOnlyWhitelist)
-	updates[SettingKeyCodexCLIOnlyAllowAppServerClients] = strconv.FormatBool(settings.CodexCLIOnlyAllowAppServerClients)
-	updates[SettingKeyCodexCLIOnlyEngineFingerprintSignals] = strings.TrimSpace(settings.CodexCLIOnlyEngineFingerprintSignals)
 	updates[SettingPaymentVisibleMethodAlipaySource] = settings.PaymentVisibleMethodAlipaySource
 	updates[SettingPaymentVisibleMethodWxpaySource] = settings.PaymentVisibleMethodWxpaySource
 	updates[SettingPaymentVisibleMethodAlipayEnabled] = strconv.FormatBool(settings.PaymentVisibleMethodAlipayEnabled)
@@ -731,8 +730,9 @@ func (s *SettingService) refreshCachedSettings(settings *SystemSettings) {
 		codexUA = DefaultOpenAICodexUserAgent
 	}
 	s.openAICodexUACache.Store(&cachedOpenAICodexUserAgent{
-		value:     codexUA,
-		expiresAt: time.Now().Add(openAICodexUserAgentCacheTTL).UnixNano(),
+		value:                      codexUA,
+		legacyCompatibilityEnabled: settings.CodexLegacyClientProfileCompatibilityEnabled,
+		expiresAt:                  time.Now().Add(openAICodexUserAgentCacheTTL).UnixNano(),
 	})
 	s.openAICodexLocalQuotaSF.Forget("openai_codex_local_group_quota")
 	s.openAICodexLocalQuotaCache.Store(&cachedOpenAICodexLocalGroupQuota{

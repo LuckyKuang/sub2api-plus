@@ -312,7 +312,7 @@ func (s *adminServiceImpl) DuplicateAccount(ctx context.Context, id int64, actor
 	if err := NormalizeHeaderOverrideCredentials(input.Credentials); err != nil {
 		return nil, err
 	}
-	if err := NormalizeOpenAIAccountUserAgent(source.Platform, input.Credentials); err != nil {
+	if err := s.normalizeOpenAIAccountUserAgent(ctx, source.Platform, input.Credentials); err != nil {
 		return nil, err
 	}
 	duplicate, err := buildAccountForCreate(input, accountExtra)
@@ -504,7 +504,7 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 	}
 	// Never persist ephemeral SSO/password secrets after OAuth conversion.
 	input.Credentials = SanitizeStoredCredentials(input.Platform, input.Credentials)
-	if err := NormalizeOpenAIAccountUserAgent(input.Platform, input.Credentials); err != nil {
+	if err := s.normalizeOpenAIAccountUserAgent(ctx, input.Platform, input.Credentials); err != nil {
 		return nil, err
 	}
 
@@ -658,7 +658,7 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 		}
 		// Strip SSO/password residue that must never sit next to OAuth tokens.
 		account.Credentials = SanitizeStoredCredentials(account.Platform, account.Credentials)
-		if err := NormalizeOpenAIAccountUserAgent(account.Platform, account.Credentials); err != nil {
+		if err := s.normalizeOpenAIAccountUserAgent(ctx, account.Platform, account.Credentials); err != nil {
 			return nil, err
 		}
 	}
@@ -942,6 +942,16 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 		return nil, err
 	}
 	return updated, nil
+}
+
+// normalizeOpenAIAccountUserAgent makes account validation observe the same
+// global policy snapshot used later by outbound identity resolution.
+func (s *adminServiceImpl) normalizeOpenAIAccountUserAgent(ctx context.Context, platform string, credentials map[string]any) error {
+	allowLegacyCompatibility := false
+	if s != nil && s.settingService != nil {
+		_, allowLegacyCompatibility = s.settingService.GetOpenAICodexOutboundProfile(ctx)
+	}
+	return NormalizeOpenAIAccountUserAgentWithCompatibility(platform, credentials, allowLegacyCompatibility)
 }
 
 // UpdateAccountExtra 仅对 Extra JSONB 做 key 级合并，避免覆盖其它运行态键

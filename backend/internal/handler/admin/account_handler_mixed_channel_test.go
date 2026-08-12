@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/LuckyKuang/sub2api-plus/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -145,6 +146,27 @@ func TestAccountHandlerUpdateMixedChannelConflictSimplifiedResponse(t *testing.T
 	_, hasRequireConfirmation := resp["require_confirmation"]
 	require.False(t, hasDetails)
 	require.False(t, hasRequireConfirmation)
+}
+
+func TestAccountHandlerUpdateReturnsBadRequestForOAuthSessionPolicyOnAPIKeyAccount(t *testing.T) {
+	adminSvc := newStubAdminService()
+	adminSvc.updateAccountErr = infraerrors.BadRequest(
+		"OPENAI_OAUTH_SESSION_POLICY_UNSUPPORTED_ACCOUNT",
+		"openai_oauth_session_policy is only supported by OpenAI OAuth accounts",
+	)
+	router := setupAccountMixedChannelRouter(adminSvc)
+
+	body := []byte(`{"extra":{"openai_oauth_session_policy":{"enabled":true,"allowed_group_ids":[2]}}}`)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/admin/accounts/3", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Equal(t, float64(http.StatusBadRequest), resp["code"])
+	require.Equal(t, "OPENAI_OAUTH_SESSION_POLICY_UNSUPPORTED_ACCOUNT", resp["reason"])
 }
 
 func TestAccountHandlerUpdateMapsUpstreamBillingRateSyncSettings(t *testing.T) {
