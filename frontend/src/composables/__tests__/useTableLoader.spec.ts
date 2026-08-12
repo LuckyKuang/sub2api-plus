@@ -228,6 +228,24 @@ describe('useTableLoader', () => {
       // 第二次请求的结果生效
       expect(fetchFn).toHaveBeenCalledTimes(2)
     })
+
+    it('忽略未遵守 AbortSignal 的旧请求响应', async () => {
+      let resolveFirst: (value: any) => void
+      const fetchFn = vi.fn()
+        .mockImplementationOnce(() => new Promise((resolve) => { resolveFirst = resolve }))
+        .mockResolvedValueOnce({ items: [{ id: 2 }], total: 1, pages: 1 })
+
+      const { items, load } = useTableLoader({ fetchFn })
+
+      const firstLoad = load()
+      const secondLoad = load()
+      await secondLoad
+
+      resolveFirst!({ items: [{ id: 1 }], total: 1, pages: 1 })
+      await firstLoad
+
+      expect(items.value).toEqual([{ id: 2 }])
+    })
   })
 
   // --- 错误处理 ---

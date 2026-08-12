@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 
 import AccountsView from '../AccountsView.vue'
 
@@ -97,42 +97,47 @@ const AccountTableFiltersStub = {
   template: '<button data-test="change-filter" @click="$emit(\'change\')">change filter</button>'
 }
 
-const mountView = () => mount(AccountsView, {
-  global: {
-    stubs: {
-      AppLayout: { template: '<div><slot /></div>' },
-      TablePageLayout: {
-        template: '<div><slot name="filters" /><slot name="table" /><slot name="pagination" /></div>'
-      },
-      DataTable: { props: ['data'], template: '<div data-test="data-table"></div>' },
-      Pagination: true,
-      ConfirmDialog: true,
-      AccountTableActions: { template: '<div><slot name="beforeCreate" /><slot name="after" /></div>' },
-      AccountTableFilters: AccountTableFiltersStub,
-      AccountBulkActionsBar: AccountBulkActionsBarStub,
-      AccountActionMenu: true,
-      ImportDataModal: true,
-      ReAuthAccountModal: true,
-      AccountTestModal: true,
-      AccountStatsModal: true,
-      ScheduledTestsPanel: true,
-      SyncFromCrsModal: true,
-      TempUnschedStatusModal: true,
-      ErrorPassthroughRulesModal: true,
-      TLSFingerprintProfilesModal: true,
-      CreateAccountModal: true,
-      EditAccountModal: true,
-      BulkEditAccountModal: true,
-      PlatformTypeBadge: true,
-      AccountCapacityCell: true,
-      AccountStatusIndicator: true,
-      AccountTodayStatsCell: true,
-      AccountGroupsCell: true,
-      AccountUsageCell: true,
-      Icon: true
+let wrapper: VueWrapper | null = null
+
+const mountView = () => {
+  wrapper = mount(AccountsView, {
+    global: {
+      stubs: {
+        AppLayout: { template: '<div><slot /></div>' },
+        TablePageLayout: {
+          template: '<div><slot name="filters" /><slot name="table" /><slot name="pagination" /></div>'
+        },
+        DataTable: { props: ['data'], template: '<div data-test="data-table"></div>' },
+        Pagination: true,
+        ConfirmDialog: true,
+        AccountTableActions: { template: '<div><slot name="beforeCreate" /><slot name="after" /></div>' },
+        AccountTableFilters: AccountTableFiltersStub,
+        AccountBulkActionsBar: AccountBulkActionsBarStub,
+        AccountActionMenu: true,
+        ImportDataModal: true,
+        ReAuthAccountModal: true,
+        AccountTestModal: true,
+        AccountStatsModal: true,
+        ScheduledTestsPanel: true,
+        SyncFromCrsModal: true,
+        TempUnschedStatusModal: true,
+        ErrorPassthroughRulesModal: true,
+        TLSFingerprintProfilesModal: true,
+        CreateAccountModal: true,
+        EditAccountModal: true,
+        BulkEditAccountModal: true,
+        PlatformTypeBadge: true,
+        AccountCapacityCell: true,
+        AccountStatusIndicator: true,
+        AccountTodayStatsCell: true,
+        AccountGroupsCell: true,
+        AccountUsageCell: true,
+        Icon: true
+      }
     }
-  }
-})
+  })
+  return wrapper
+}
 
 describe('admin AccountsView select all filtered results', () => {
   beforeEach(() => {
@@ -154,6 +159,11 @@ describe('admin AccountsView select all filtered results', () => {
     getUpstreamBillingProbeSettings.mockResolvedValue({ enabled: true, interval_minutes: 30 })
     getAllProxies.mockResolvedValue([])
     getAllGroups.mockResolvedValue([])
+  })
+
+  afterEach(() => {
+    wrapper?.unmount()
+    wrapper = null
   })
 
   it('selects all matching IDs in one commit and clears the selection when filters change', async () => {

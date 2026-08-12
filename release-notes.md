@@ -14,6 +14,9 @@ Sub2API Plus v0.1.173+custom.002
 
 ## Changed
 
+- Table loaders now discard stale responses after cancellation or component
+  disposal, preventing delayed account-filter reloads from updating an
+  unmounted view or overriding a newer request.
 - OpenAI Responses custom tool-call IDs now retain the required `ctc` prefix;
   the retry-buffer-limit `507` is a deterministic, non-retryable client `413`
   rather than an account failover. Routing-capacity, transport-reset, gateway
