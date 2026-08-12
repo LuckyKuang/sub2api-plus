@@ -10,13 +10,16 @@ import (
 // maxPersistedSessionIDLength bounds the persisted client session identifier to the
 // usage_logs.session_id column width (VARCHAR(255)). Longer values are rejected so
 // distinct identifiers can never alias through truncation.
-const maxPersistedSessionIDLength = 255
+const (
+	maxPersistedSessionIDLength = 255
+	codexSessionIDHeader        = "session-id"
+)
 
 // clientSessionIDHeaders extends the OpenAI-compatible sticky-session signals with
 // native protocol identifiers that are safe to persist but must not alter OpenAI
 // scheduling behavior.
 var clientSessionIDHeaders = append(
-	append([]string(nil), explicitOpenAIHeaderSessionNames...),
+	append([]string{codexSessionIDHeader}, explicitOpenAIHeaderSessionNames...),
 	claudeCodeSessionHeader,
 )
 

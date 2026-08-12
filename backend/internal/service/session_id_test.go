@@ -79,6 +79,7 @@ func TestExtractClientSessionID_SupportedHeaders(t *testing.T) {
 		header string
 		value  string
 	}{
+		{"Codex session-id", codexSessionIDHeader, "codex-A"},
 		{"session_id", "session_id", "sess-A"},
 		{"conversation_id", "conversation_id", "conv-B"},
 		{"X-Session-Affinity", openCodeSessionAffinityHeader, "aff-C"},
@@ -96,12 +97,13 @@ func TestExtractClientSessionID_SupportedHeaders(t *testing.T) {
 }
 
 func TestExtractClientSessionID_HeaderPrecedence(t *testing.T) {
-	// session_id ranks ahead of conversation_id and the X-* variants.
+	// Codex's native session-id ranks ahead of legacy/compatible session headers.
 	c := newSessionHeaderContext(t, map[string]string{
-		"session_id":                "primary",
-		"conversation_id":           "secondary",
-		openCodeSessionIDHeader:     "tertiary",
-		codeBuddyConversationHeader: "quaternary",
+		codexSessionIDHeader:        "primary",
+		"session_id":                "secondary",
+		"conversation_id":           "tertiary",
+		openCodeSessionIDHeader:     "quaternary",
+		codeBuddyConversationHeader: "quinary",
 	})
 	require.Equal(t, "primary", ExtractClientSessionID(c))
 }
@@ -112,12 +114,14 @@ func TestExtractClientSessionID_Sanitizes(t *testing.T) {
 }
 
 func TestExtractClientSessionID_IgnoresNonSessionHeaders(t *testing.T) {
-	// prompt_cache_key, request/message ids, and a Grok conversation header on a
-	// non-Grok request are NOT persisted as session_id.
+	// Thread, prompt-cache, request/message ids, and a Grok conversation header on
+	// a non-Grok request are NOT persisted as session_id.
 	c := newSessionHeaderContext(t, map[string]string{
 		"prompt_cache_key": "cache-key-should-not-persist",
 		"X-Request-Id":     "req-should-not-persist",
 		"x-grok-conv-id":   "grok-conv-should-not-persist",
+		"thread-id":        "thread-should-not-persist",
+		"thread_id":        "legacy-thread-should-not-persist",
 	})
 	require.Equal(t, "", ExtractClientSessionID(c))
 }
