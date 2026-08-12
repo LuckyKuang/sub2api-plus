@@ -125,6 +125,10 @@ export default {
       antigravityProjectIdPlaceholder: 'your-gcp-project-id',
       antigravityProjectIdHint:
         'Antigravity standard-tier accounts that do not receive an automatic project_id need a user-owned GCP project.',
+      accountSchedulingThresholdOverride: 'Account Auto-Pause Threshold Override',
+      accountSchedulingThresholdOverrideHint: 'Override the platform auto-pause threshold for this account only. Disable to use platform settings.',
+      accountSchedulingThresholdOverrideValue: 'Account threshold percent',
+      accountSchedulingThresholdOverrideDisabledHint: 'Use 1-100. The account becomes temporarily unschedulable after reaching this usage percent; 100 disables it for this account.',
       status: {
         active: 'Active',
         inactive: 'Inactive',
@@ -135,10 +139,6 @@ export default {
         rateLimited: 'Rate Limited',
         overloaded: 'Overloaded',
         tempUnschedulable: 'Temp Unschedulable',
-      accountSchedulingThresholdOverride: 'Account Auto-Pause Threshold Override',
-      accountSchedulingThresholdOverrideHint: 'Override the platform auto-pause threshold for this account only. Disable to use platform settings.',
-      accountSchedulingThresholdOverrideValue: 'Account threshold percent',
-      accountSchedulingThresholdOverrideDisabledHint: 'Use 1-100. The account becomes temporarily unschedulable after reaching this usage percent; 100 disables it for this account.',
         quotaExceeded: 'Quota Exceeded',
         unschedulable: 'Unschedulable',
         rateLimitedUntil: 'Rate limited and removed from scheduling. Auto resumes at {time}',
