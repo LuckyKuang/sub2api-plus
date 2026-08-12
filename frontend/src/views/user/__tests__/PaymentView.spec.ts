@@ -277,6 +277,17 @@ async function mountSubscriptionPlanList(planCount: number) {
   return wrapper
 }
 
+describe('PaymentView checkout tabs', () => {
+  it('shows subscription on the left and recharge on the right', async () => {
+    const wrapper = await mountSubscriptionPlanList(1)
+    const tabLabels = wrapper.findAll('button')
+      .map(button => button.text())
+      .filter(label => ['payment.tabSubscribe', 'payment.tabTopUp'].includes(label))
+
+    expect(tabLabels).toEqual(['payment.tabSubscribe', 'payment.tabTopUp'])
+  })
+})
+
 describe('PaymentView subscription plan grid', () => {
   it.each([3, 4, 6])('keeps %i plans on the existing mobile/tablet/desktop grid', async (planCount) => {
     const wrapper = await mountSubscriptionPlanList(planCount)
