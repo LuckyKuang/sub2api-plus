@@ -1,27 +1,34 @@
-Sub2API Plus v0.1.173+custom.003
+Sub2API Plus v0.1.173+custom.004
 
 ## Highlights
 
-- Restore Codex CLI/TUI session IDs in admin usage details and Excel exports.
+- Add explicit Codex client-profile policies for enabled OpenAI OAuth accounts.
+- Keep OAuth shared sessions isolated by account policy, user, group, and
+  response ownership while preserving API-key continuation behavior.
 
 ## Fixed
 
-- Accept the native `session-id` request header sent by Codex CLI/TUI 0.147.0
-  when persisting usage records, while preserving all existing compatible
-  session-header aliases.
-- Keep `thread-id` separate from the persisted usage session ID so thread and
-  session identity retain distinct meanings.
+- Reject cross-group OAuth shared-response continuations without bypassing the
+  proxy stream quarantine fail-open safeguard.
+- Keep Codex request profile enforcement consistent across Responses, Chat
+  Completions, Anthropic-compatible endpoints, Alpha Search, Count Tokens, and
+  WebSocket forwarding.
+- Correct several frontend account-scheduling translations and administration
+  layout details.
 
 ## Compatibility and migration
 
-- No database migration or configuration change is required.
-- Only usage records created after deploying this release can contain the
-  newly recognized Codex session ID; historical NULL values are unchanged.
+- No database migration is required.
+- Existing OpenAI OAuth accounts retain their configured session-sharing policy.
+  Administrators should review enabled client-profile restrictions before
+  deployment because unmatched clients are denied locally.
 
 ## Known issues
 
-- Historical usage records with an empty session ID cannot be reliably
-  backfilled.
+- Client-profile matching validates request characteristics and cannot attest
+  the originating client binary.
+- Existing response chains that do not have a policy-scoped ownership record
+  retain the established group-local continuation behavior.
 
 ## Upstream baseline
 
