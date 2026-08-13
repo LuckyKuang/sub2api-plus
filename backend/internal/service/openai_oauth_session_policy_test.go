@@ -37,6 +37,46 @@ func (r *oauthSessionPolicyAccountRepo) GetByID(_ context.Context, id int64) (*A
 	return account, nil
 }
 
+func (r *oauthSessionPolicyAccountRepo) ListSchedulableByGroupIDAndPlatform(_ context.Context, groupID int64, platform string) ([]Account, error) {
+	accounts := make([]Account, 0, len(r.accounts))
+	for _, account := range r.accounts {
+		if account.Platform == platform && account.IsSchedulable() && openAIStickyAccountMatchesGroup(account, &groupID) {
+			accounts = append(accounts, *account)
+		}
+	}
+	return accounts, nil
+}
+
+func (r *oauthSessionPolicyAccountRepo) ListSchedulableByPlatform(_ context.Context, platform string) ([]Account, error) {
+	accounts := make([]Account, 0, len(r.accounts))
+	for _, account := range r.accounts {
+		if account.Platform == platform && account.IsSchedulable() {
+			accounts = append(accounts, *account)
+		}
+	}
+	return accounts, nil
+}
+
+func (r *oauthSessionPolicyAccountRepo) ListSchedulableUngroupedByPlatform(_ context.Context, platform string) ([]Account, error) {
+	accounts := make([]Account, 0, len(r.accounts))
+	for _, account := range r.accounts {
+		if account.Platform == platform && account.IsSchedulable() && openAIStickyAccountMatchesGroup(account, nil) {
+			accounts = append(accounts, *account)
+		}
+	}
+	return accounts, nil
+}
+
+func (r *oauthSessionPolicyAccountRepo) ListOpenAISessionPolicyDiagnosticCandidates(_ context.Context) ([]Account, error) {
+	accounts := make([]Account, 0, len(r.accounts))
+	for _, account := range r.accounts {
+		if account.Platform == PlatformOpenAI {
+			accounts = append(accounts, *account)
+		}
+	}
+	return accounts, nil
+}
+
 func (c *oauthSessionPolicyCache) key(groupID int64, sessionHash string) string {
 	return fmt.Sprintf("%d:%s", groupID, sessionHash)
 }
