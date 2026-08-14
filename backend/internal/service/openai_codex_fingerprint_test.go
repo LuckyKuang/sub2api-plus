@@ -458,3 +458,27 @@ func TestExtractClientSessionID(t *testing.T) {
 		})
 	}
 }
+
+func TestApplyCodexFingerprintHeaders_DoesNotRewriteIdentityTriple(t *testing.T) {
+	account := newTestOAuthAccount(1, map[string]any{
+		codexFingerprintModeExtraKey: "session",
+	})
+	clientHeaders := http.Header{}
+	clientHeaders.Set("session-id", "client-session-aaa")
+
+	h := http.Header{}
+	h.Set("User-Agent", "codex-tui/0.150.0 (Ubuntu 24.04; x86_64) xterm-256color")
+	h.Set("Originator", "codex-tui")
+	h.Set("Version", "0.150.0")
+	h.Set("session-id", "client-session-aaa")
+
+	ids := resolveCodexFingerprintIDsFromRequest(account, clientHeaders)
+	require.NotNil(t, ids)
+	applyCodexFingerprintHeaders(h, ids)
+
+	assert.Equal(t, "codex-tui/0.150.0 (Ubuntu 24.04; x86_64) xterm-256color", h.Get("User-Agent"))
+	assert.Equal(t, "codex-tui", h.Get("Originator"))
+	assert.Equal(t, "0.150.0", h.Get("Version"))
+	assert.NotEqual(t, "client-session-aaa", h.Get("session-id"))
+	assert.Equal(t, resolveConvergedSessionID(account), h.Get("session-id"))
+}
