@@ -153,3 +153,5 @@ output/
 
 # Vitest / Vite cache at repo root
 .vite/
+.pnpm-store
+.push-cli-temp-tools

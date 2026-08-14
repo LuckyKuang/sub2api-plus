@@ -410,10 +410,32 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		if codexResult.Modified {
 			markDecodedModified()
 		}
-		// 带真实 device_id 时补齐 client_metadata 安装标识，与真实 Codex 对齐（compact 形态不同，跳过）。
-		if !isCompactRequest && applyCodexClientMetadata(decoded, account) {
-			markDecodedModified()
+		// 指纹收敛：一次性解析收敛 ID，请求体和出站头共享同一份 IDs（保证 turn_id 等随机字段一致）。
+		// compact 不改写指纹，但仍要清空 request-scoped IDs，避免同请求后续
+		// compact 尝试继承上一轮普通 Responses 的收敛结果。
+		var fpIDs *codexFingerprintIDs
+		if !isCompactRequest {
+			fingerprintAccount, fingerprintErr := s.resolveCodexFingerprintAccount(ctx, account)
+			if fingerprintErr != nil {
+				return nil, fmt.Errorf("resolve Codex fingerprint credential account: %w", fingerprintErr)
+			}
+			// 带真实 device_id 时补齐 client_metadata 安装标识，与真实 Codex 对齐。
+			// 指纹与 device_id 都必须归属实际持有 OAuth 凭据的账号，而非调度影子。
+			if applyCodexClientMetadata(decoded, fingerprintAccount) {
+				markDecodedModified()
+			}
+			var clientHeaders http.Header
+			if c != nil && c.Request != nil {
+				clientHeaders = c.Request.Header
+			}
+			fpIDs = resolveCodexFingerprintIDsFromRequest(fingerprintAccount, clientHeaders)
+			if fpIDs != nil {
+				if applyCodexFingerprintClientMetadata(decoded, fpIDs) {
+					markDecodedModified()
+				}
+			}
 		}
+		storeCodexFingerprintIDs(c, fpIDs)
 		if codexResult.NormalizedModel != "" {
 			upstreamModel = codexResult.NormalizedModel
 		}
@@ -1140,6 +1162,19 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 		// compact 上游是 unary JSON 协议：API-key 账号也显式声明 Accept，
 		// 避免 OpenAI 兼容网关按 SSE 返回（#3777 期望行为 4）。
 		req.Header.Set("accept", "application/json")
+	}
+
+	// 指纹收敛：使用 Forward() 中预计算的收敛 ID 改写出站头，与请求体使用同一份 IDs。
+	// 必须发生在 Plus 出站身份收口之前，且不得改写 UA / originator / version。
+	// compact 跳过：不得用收敛 session-id 覆盖 Plus 已隔离的 compact 会话命名空间。
+	if account.Type == AccountTypeOAuth && !isOpenAIResponsesCompactPath(c) {
+		fingerprintAccount, fingerprintErr := s.resolveCodexFingerprintAccount(ctx, account)
+		if fingerprintErr != nil {
+			return nil, fmt.Errorf("resolve Codex fingerprint credential account: %w", fingerprintErr)
+		}
+		if ids := loadCodexFingerprintIDs(c, fingerprintAccount); ids != nil {
+			applyCodexFingerprintHeaders(req.Header, ids)
+		}
 	}
 
 	// Ensure required headers exist

@@ -35,6 +35,15 @@ This response-header compatibility does not make Codex App API-key calls to
 `account/rateLimits/read` available; that App Server authentication behavior is
 outside this gateway's request path.
 
+## Codex Fingerprint Convergence
+
+OpenAI OAuth accounts may rewrite outbound Codex installation, session, and
+thread carriers after Plus session-policy resolution. Unset accounts use
+`session` mode. Compact requests skip that rewrite so the isolated compact
+session namespace is not replaced. Usage-log `session_id` stays the sanitized
+client-original value. User-Agent, Originator, and Version keep the account >
+global > compiled-default source order.
+
 ## Request Replay and Upstream Failures
 
 When a Responses request replays a previous tool call, the gateway preserves an

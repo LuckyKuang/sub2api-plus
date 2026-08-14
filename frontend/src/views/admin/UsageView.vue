@@ -649,6 +649,7 @@ const allColumns = computed(() => [
   { key: 'cost', label: t('usage.cost'), sortable: false },
   { key: 'latency', label: t('usage.latency'), sortable: false },
   { key: 'created_at', label: t('usage.time'), sortable: true },
+  { key: 'request_id', label: t('admin.usage.requestId'), sortable: false },
   { key: 'user_agent', label: t('usage.userAgent'), sortable: false },
   { key: 'session_id', label: t('usage.sessionId'), sortable: false },
   { key: 'ip_address', label: t('admin.usage.ipAddress'), sortable: false }

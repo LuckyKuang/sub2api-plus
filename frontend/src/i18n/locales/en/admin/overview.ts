@@ -144,6 +144,7 @@ export default {
         status: 'Status',
         fileName: 'File Name',
         size: 'Size',
+        parts: 'Parts',
         expiresAt: 'Expires At',
         triggeredBy: 'Triggered By',
         startedAt: 'Started At',
@@ -168,6 +169,10 @@ export default {
       empty: 'No backup records',
       actions: {
         download: 'Download',
+        downloadParts: 'Download Parts',
+        downloadPartsHint: 'Download every part in order and concatenate the gzip bytes: on Linux/macOS run cat payload.part-* > backup.sql.gz; on Windows run copy /b payload.part-000001+payload.part-000002 backup.sql.gz.',
+        partLabel: 'Part {index}',
+        downloadFailed: 'Download URL is empty',
         restore: 'Restore',
         restoreConfirm: 'Are you sure you want to restore from this backup? This will overwrite the current database!',
         restorePasswordPrompt: 'Please enter your admin password to confirm the restore operation',
@@ -1001,6 +1006,13 @@ export default {
         description: 'Optional per-group prices for web_search (per 1k calls) and Voice realtime / TTS / STT (USD). Leave empty if unused.',
         searchPricePer1k: 'Search price per 1k calls (USD)',
         pricePlaceholder: 'optional'
+      },
+      modelPricing: {
+        title: 'Per-model group pricing',
+        description: 'Overrides channel and built-in prices for matching models. Long-context tiers come from official presets — do not enter custom intervals. Use per-request tiers such as realtime, tts, and stt for audio.',
+        longContext: 'Enable long-context tier pricing',
+        longContextHint: 'When checked, official/preset long-context tiers apply. When unchecked, token models stay on the first-tier base rate.',
+        add: 'Add model price'
       },
       voicePricing: {
         title: 'Grok Voice Pricing',

@@ -9,13 +9,16 @@ gateway.
 - Responses: `/v1/responses`, `/responses`, `/backend-api/codex/responses`
 - Chat Completions: `/v1/chat/completions`, `/chat/completions`
 - Claude-compatible Messages: `/v1/messages`
+- Standalone search (Grok groups only): `/x_search` (native `x_search`) and
+  `/web_search`
+- Voice (Grok groups only): `/tts`, `/stt`, custom voices, and `/realtime`
 - Image generation and editing
 - Video generation, editing, extension, and status lookup
 - Client-facing Responses WebSocket ingress bridged to the xAI HTTP/SSE
   upstream
 
-TTS, transcription, browser automation, cookie handling, and web scraping are
-outside this provider integration.
+Browser automation, cookie handling, and web scraping are outside this
+provider integration.
 
 ## Account Types
 
@@ -71,3 +74,13 @@ Authentication, entitlement, and rate-limit failures temporarily affect account
 scheduling according to their status. New OAuth media requests require positive
 paid-entitlement evidence; API-key accounts remain eligible. Administrators can
 override media eligibility with `extra.grok_media_eligible`.
+
+## Models and Subscription Tiers
+
+The catalog includes `grok-4.6` (`grok-4.6-latest` maps to it). Unregistered
+Grok text models fall back to the `grok-4.5` price card.
+
+OAuth refresh can replace a stale subscription snapshot with the JWT `tier`
+when that value is more recent. Cross-client model mapping
+(`grok_cross_client_model_map_enabled`) stays opt-in. Password authorization
+remains disabled.

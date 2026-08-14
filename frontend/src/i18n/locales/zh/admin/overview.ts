@@ -144,6 +144,7 @@ export default {
         status: '状态',
         fileName: '文件名',
         size: '大小',
+        parts: '分卷数',
         expiresAt: '过期时间',
         triggeredBy: '触发方式',
         startedAt: '开始时间',
@@ -168,6 +169,10 @@ export default {
       empty: '暂无备份记录',
       actions: {
         download: '下载',
+        downloadParts: '下载分卷',
+        downloadPartsHint: '请按顺序下载全部分卷后拼接 gzip 字节流：Linux/macOS 使用 cat payload.part-* > backup.sql.gz；Windows 使用 copy /b payload.part-000001+payload.part-000002 backup.sql.gz。',
+        partLabel: '第 {index} 卷',
+        downloadFailed: '下载地址为空',
         restore: '恢复',
         restoreConfirm: '确定要从此备份恢复吗？这将覆盖当前数据库！',
         restorePasswordPrompt: '请输入管理员密码以确认恢复操作',
@@ -998,6 +1003,13 @@ export default {
         description: '分组级 web_search（每千次）与 Voice realtime / TTS / STT 单价（USD）。留空表示未配置。',
         searchPricePer1k: '搜索每千次价格（USD）',
         pricePlaceholder: '可选'
+      },
+      modelPricing: {
+        title: '分组逐模型定价',
+        description: '匹配模型后覆盖渠道和内置价格。长上下文阶梯沿用官方/预设价卡，无需再手填区间。音频可用按次层级配置 realtime、tts、stt。',
+        longContext: '启用长上下文阶梯定价',
+        longContextHint: '勾选后按官方/预设阶梯计费；关闭则始终按第一档基础价。',
+        add: '添加模型价格'
       },
       voicePricing: {
         title: 'Grok Voice 定价',

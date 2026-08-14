@@ -25,6 +25,8 @@ func openAIResponsesInputItemIDPrefix(itemType string) string {
 		return "msg"
 	case "custom_tool_call":
 		return "ctc"
+	case "reasoning":
+		return "rs"
 	case "function_call", "tool_call", "local_shell_call", "tool_search_call", "mcp_tool_call":
 		return "fc"
 	default:

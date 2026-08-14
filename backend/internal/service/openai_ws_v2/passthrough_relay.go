@@ -721,6 +721,12 @@ func observeUpstreamMessage(
 	}
 	now := nowFn()
 	outputObservation := apicompat.ObserveResponsesOutput(message)
+	// Some OpenAI WebSocket streams emit a non-empty aggregate `.done` event
+	// without a preceding delta. For relay TTFT, that is the first token-like
+	// output; keep the shared observer's aggregate semantics intact elsewhere.
+	if outputObservation.MeaningfulOutput && isTokenEvent(eventType) {
+		outputObservation.TokenLikeDelta = true
+	}
 	parsedUsage := parseUsageAndAccumulate(state, message, eventType, onUsageParseFailure)
 	observed := observedUpstreamEvent{
 		eventType:  eventType,
@@ -1236,7 +1242,9 @@ func isTokenEvent(eventType string) bool {
 	if strings.Contains(eventType, "image") || strings.Contains(eventType, "audio") {
 		return false
 	}
-	return strings.HasSuffix(eventType, ".delta")
+	return strings.HasSuffix(eventType, ".delta") ||
+		eventType == "response.output_text.done" ||
+		eventType == "response.function_call_arguments.done"
 }
 
 func minDuration(a, b time.Duration) time.Duration {

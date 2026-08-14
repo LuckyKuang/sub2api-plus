@@ -110,6 +110,8 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 		maxLineSize = s.cfg.Gateway.MaxLineSize
 	}
 	var timing streamOutputTiming
+	var firstTokenMs *int
+	firstOutputProgressObserved := false
 	bufferedWriter := bufio.NewWriterSize(w, 4*1024)
 	var firstOutputStage *openAIFirstOutputStage
 	if guardFirstOutput {
@@ -238,6 +240,7 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 	sawTerminalEvent := false
 	sawFailedEvent := false
 	nonCompleteTerminal := ""
+	responsesSemanticOutputSeen := false
 	failedMessage := ""
 	clientOutputStarted := false
 	upstreamRequestID := strings.TrimSpace(resp.Header.Get("x-request-id"))
@@ -246,6 +249,7 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 	eventStartsClientOutput := false
 	var eventObservation apicompat.StreamOutputObservation
 	var eventObservedAt time.Time
+	eventStartsVisibleOutput := false
 	eventShouldFlush := false
 	handlePendingWriteError := func(err error) {
 		if firstOutputStage != nil && !attemptStageCommitted && !firstOutputStage.closed {
@@ -264,11 +268,12 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 		logger.LegacyPrintf("service.openai_gateway", "Client disconnected during streaming, continuing to drain upstream for billing")
 	}
 	completeGuardedEvent := func(queueDrained bool) {
-		completedSemanticEvent := eventStartsClientOutput
+		completedProgressEvent := eventStartsClientOutput
+		completedVisibleEvent := eventStartsVisibleOutput
 		shouldFlush := eventShouldFlush || (queueDrained && clientOutputStarted)
 		eventInProgress = false
 		if !clientDisconnected {
-			if completedSemanticEvent {
+			if completedProgressEvent {
 				applyAttemptResponseHeaders()
 			}
 			if shouldFlush {
@@ -289,9 +294,19 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 				stopFirstOutputTimer()
 			}
 		}
+		if completedProgressEvent && !firstOutputProgressObserved {
+			firstOutputScanGuard.Store(false)
+			firstOutputProgressObserved = true
+			stopFirstOutputTimer()
+		}
+		if completedVisibleEvent && firstTokenMs == nil {
+			ms := int(time.Since(startTime).Milliseconds())
+			firstTokenMs = &ms
+		}
 		eventStartsClientOutput = false
 		eventObservation = apicompat.StreamOutputObservation{}
 		eventObservedAt = time.Time{}
+		eventStartsVisibleOutput = false
 		eventShouldFlush = false
 	}
 	sendErrorEvent := func(reason string) {
@@ -325,9 +340,13 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 	// both list the same call_id — counting both would ~2× the surcharge).
 	streamSearchSeen := make(map[string]struct{})
 	resultWithUsage := func() *openaiStreamingResult {
+		visibleFirstTokenMs := firstTokenMs
+		if visibleFirstTokenMs == nil {
+			visibleFirstTokenMs = timing.firstTokenMs
+		}
 		return &openaiStreamingResult{
 			usage:            usage,
-			firstTokenMs:     timing.firstTokenMs,
+			firstTokenMs:     visibleFirstTokenMs,
 			firstOutputMs:    timing.firstOutputMs,
 			firstOutputKind:  timing.firstOutputKind,
 			responseID:       responseID,
@@ -590,18 +609,41 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 			// until the terminal frame so the following failure remains eligible for
 			// pre-output failover. Limit this special handling to error frames: some
 			// structural Responses events are neither output nor safe to flush early.
+			// Official 176 treats structural Responses progress (for example an
+			// empty output_item.added) as attempt-committing client output so it
+			// can disarm first-output timeout without starting visible TTFT.
+			// Keep Plus retryable-error buffering: those frames must not flush
+			// or commit the attempt before response.failed arrives.
 			retryableErrorFrame := eventType == "error" && !openAIStreamDataStartsClientOutput(data, eventType)
+			officialStartsClientOutput := openAIStreamDataStartsClientOutput(data, eventType)
 			forceFlushBoundary := forceFlushFailedEvent || (eventType == "error" && !retryableErrorFrame) || !gjson.ValidBytes(dataBytes)
-			eventNeedsFlush := forceFlushBoundary || observation.MeaningfulOutput
-			startsClientOutput := forceFlushFailedEvent || (eventType == "error" && !retryableErrorFrame) || observation.MeaningfulOutput
+			eventNeedsFlush := forceFlushBoundary || observation.MeaningfulOutput || (officialStartsClientOutput && !retryableErrorFrame)
+			startsClientOutput := forceFlushFailedEvent || (officialStartsClientOutput && !retryableErrorFrame) || observation.MeaningfulOutput
+			startsVisibleOutput := openAIStreamDataStartsVisibleOutput(data, eventType)
 			if guardFirstOutput {
 				eventStartsClientOutput = eventStartsClientOutput || startsClientOutput
+				eventStartsVisibleOutput = eventStartsVisibleOutput || startsVisibleOutput
+			}
+			if startsClientOutput && !openAIStreamEventTypeIsTerminal(eventType) {
+				responsesSemanticOutputSeen = true
+			}
+			// OpenAI Responses streams that terminate with an empty
+			// response.completed (no output, no usage, no error, nothing sent
+			// to the client) are silent upstream refusals: fail over instead of
+			// recording a successful 0/0 usage turn (issue #5009).
+			if account != nil && account.Platform == PlatformOpenAI &&
+				(eventType == "response.completed" || eventType == "response.done") &&
+				!sawFailedEvent && !responsesSemanticOutputSeen && !clientOutputStarted &&
+				openAIResponsesCompletedEventIsEmpty(dataBytes, usage) {
+				sawTerminalEvent = true
+				streamEarlyErr = newOpenAIResponsesEmptyCompletedFailoverError(c, account, upstreamRequestID)
+				return
 			}
 
 			// 写入客户端（客户端断开后继续 drain 上游）
 			if !clientDisconnected {
 				shouldFlush := queueDrained && (clientOutputStarted || eventNeedsFlush)
-				if firstMeaningfulOutput && observation.MeaningfulOutput {
+				if (firstMeaningfulOutput && observation.MeaningfulOutput) || (firstTokenMs == nil && startsVisibleOutput) {
 					// 保证首个 token 事件尽快出站，避免影响 TTFT。
 					shouldFlush = true
 				}
@@ -615,6 +657,12 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 				}
 			}
 
+			// Record first token time
+			if !guardFirstOutput && firstTokenMs == nil && startsVisibleOutput {
+				ms := int(time.Since(startTime).Milliseconds())
+				firstTokenMs = &ms
+				stopFirstOutputTimer()
+			}
 			s.parseSSEUsageBytes(dataBytes, usage)
 			return
 		}
@@ -773,7 +821,7 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 			return resultWithUsage(), fmt.Errorf("stream data interval timeout")
 
 		case <-firstOutputCh:
-			if timing.firstOutputMs != nil {
+			if timing.firstOutputMs != nil || firstOutputProgressObserved {
 				stopFirstOutputTimer()
 				continue
 			}
@@ -1061,15 +1109,52 @@ func extractOpenAIUsageFromJSONBytes(body []byte) (OpenAIUsage, bool) {
 	if len(body) == 0 || !gjson.ValidBytes(body) {
 		return OpenAIUsage{}, false
 	}
-	if usage, ok := openAIUsageFromGJSON(gjson.GetBytes(body, "usage")); ok {
-		mergeHostedImageGenToolUsage(gjson.GetBytes(body, "tool_usage.image_gen"), &usage)
-		return usage, true
+	// 部分 OpenAI 兼容上游（例如 Cline API）会将标准响应包在 data 字段中：
+	// {"data":{"choices": [...], "usage": {...}}, "success":true}。
+	// 按优先级先保留原有路径，再尝试兼容层 data 包装，
+	// 避免同步请求能正常返回但用量被静默记录为 0。
+	candidates := []struct {
+		usagePath      string
+		imageUsagePath string
+	}{
+		{usagePath: "usage", imageUsagePath: "tool_usage.image_gen"},
+		{usagePath: "response.usage", imageUsagePath: "response.tool_usage.image_gen"},
+		{usagePath: "data.usage", imageUsagePath: "data.tool_usage.image_gen"},
+		{usagePath: "data.response.usage", imageUsagePath: "data.response.tool_usage.image_gen"},
 	}
-	if usage, ok := openAIUsageFromGJSON(gjson.GetBytes(body, "response.usage")); ok {
-		mergeHostedImageGenToolUsage(gjson.GetBytes(body, "response.tool_usage.image_gen"), &usage)
-		return usage, true
+	for _, candidate := range candidates {
+		if usage, ok := openAIUsageFromGJSON(gjson.GetBytes(body, candidate.usagePath)); ok {
+			mergeHostedImageGenToolUsage(gjson.GetBytes(body, candidate.imageUsagePath), &usage)
+			return usage, true
+		}
 	}
 	return OpenAIUsage{}, false
+}
+
+// openAIResponsesCompletedEventIsEmpty reports whether a response.completed /
+// response.done SSE payload carries no usage, no error and no output items.
+// The accumulated usage is consulted too, because OpenAI may deliver usage on
+// an earlier event. An empty terminal event after a stream with no semantic
+// output is treated as a silent upstream refusal (issue #5009).
+func openAIResponsesCompletedEventIsEmpty(data []byte, usage *OpenAIUsage) bool {
+	if len(data) == 0 || !gjson.ValidBytes(data) {
+		return false
+	}
+	if usage != nil && (usage.InputTokens > 0 || usage.OutputTokens > 0 ||
+		usage.ImageInputTokens > 0 || usage.ImageOutputTokens > 0 ||
+		usage.CacheCreationInputTokens > 0 || usage.CacheReadInputTokens > 0) {
+		return false
+	}
+	if gjson.GetBytes(data, "usage").Exists() || gjson.GetBytes(data, "response.usage").Exists() {
+		return false
+	}
+	if gjson.GetBytes(data, "error").Exists() || gjson.GetBytes(data, "response.error").Exists() {
+		return false
+	}
+	if output := gjson.GetBytes(data, "response.output"); output.Exists() && output.IsArray() && len(output.Array()) > 0 {
+		return false
+	}
+	return true
 }
 
 func mergeHostedImageGenToolUsage(imageGen gjson.Result, usage *OpenAIUsage) {
