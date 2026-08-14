@@ -1236,7 +1236,9 @@ func isTokenEvent(eventType string) bool {
 	if strings.Contains(eventType, "image") || strings.Contains(eventType, "audio") {
 		return false
 	}
-	return strings.HasSuffix(eventType, ".delta")
+	return strings.HasSuffix(eventType, ".delta") ||
+		eventType == "response.output_text.done" ||
+		eventType == "response.function_call_arguments.done"
 }
 
 func minDuration(a, b time.Duration) time.Duration {

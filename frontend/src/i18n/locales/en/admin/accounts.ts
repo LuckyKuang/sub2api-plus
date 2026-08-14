@@ -575,9 +575,15 @@ export default {
         planTypeDesc:
           "Manually correct this account's ChatGPT plan tier (Plus / Pro / Free). Note: a token refresh near expiry or a 429 rate-limit response will auto-overwrite this with the real tier.",
         planTypeClear: 'Clear (auto-detect)',
-		codexCLIOnly: 'Approved Codex client profiles only',
-		codexCLIOnlyDesc:
-		  'Only applies to OpenAI OAuth. When enabled, only verified Codex request profiles are allowed, including the underlying transport identities shared by official CLI, App, and IDE surfaces. Request headers are spoofable: this does not attest a client binary or by itself determine account sharing.',
+        codexCLIOnly: 'Approved Codex client profiles only',
+        codexCLIOnlyDesc:
+          'Only applies to OpenAI OAuth. When enabled, only verified Codex request profiles are allowed, including the underlying transport identities shared by official CLI, App, and IDE surfaces. Request headers are spoofable: this does not attest a client binary or by itself determine account sharing.',
+        codexFingerprintMode: 'Codex fingerprint convergence',
+        codexFingerprintModeDesc: 'When multiple users share the same OAuth account, converge device/session identifiers to account-level stable values to reduce upstream-visible device and session count. Off = pass through client identifiers as-is.',
+        codexFingerprintOff: 'Off (passthrough)',
+        codexFingerprintDevice: 'Device only',
+        codexFingerprintSession: 'Device + Session (recommended)',
+        codexFingerprintFull: 'Full convergence',
         codexImageTool: 'Codex image bridge policy',
         codexImageToolDesc:
           'Controls the hosted image_generation bridge and client-declared image tools on Codex /responses text requests. Hosted auto-injection applies only to non-Responses Lite requests. Account policy takes precedence over channel and global settings; standalone image-generation endpoints are unaffected.',
