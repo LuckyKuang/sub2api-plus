@@ -541,12 +541,12 @@ func TestStoreCodexFingerprintIDs_CompactClearsPreviousIDs(t *testing.T) {
 func TestResolveCodexFingerprintAccount_UsesCredentialOwnerForShadow(t *testing.T) {
 	owner := newTestOAuthAccount(101, map[string]any{
 		codexFingerprintModeExtraKey: "session",
-		"openai_device_id":            "owner-device-id",
+		"openai_device_id":           "owner-device-id",
 	})
 	ownerID := owner.ID
 	shadow := newTestOAuthAccount(202, map[string]any{
 		codexFingerprintModeExtraKey: "off",
-		"openai_device_id":            "shadow-device-id",
+		"openai_device_id":           "shadow-device-id",
 	})
 	shadow.ParentAccountID = &ownerID
 	service := &OpenAIGatewayService{
@@ -574,12 +574,12 @@ func TestBuildUpstreamRequest_UsesCredentialOwnerFingerprintIDsForShadow(t *test
 
 	owner := newTestOAuthAccount(101, map[string]any{
 		codexFingerprintModeExtraKey: "session",
-		"openai_device_id":            "owner-device-id",
+		"openai_device_id":           "owner-device-id",
 	})
 	ownerID := owner.ID
 	shadow := newTestOAuthAccount(202, map[string]any{
 		codexFingerprintModeExtraKey: "off",
-		"openai_device_id":            "shadow-device-id",
+		"openai_device_id":           "shadow-device-id",
 	})
 	shadow.ParentAccountID = &ownerID
 	service := &OpenAIGatewayService{
