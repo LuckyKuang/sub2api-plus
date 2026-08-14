@@ -3,7 +3,10 @@ package service
 import (
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"testing"
+
+	"github.com/gin-gonic/gin"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -309,10 +312,16 @@ func TestFingerprintIDs_HeaderAndBody_TurnID_Consistent(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(embeddedRaw), &bodyMeta))
 	bodyEmbeddedTurnID, ok := bodyMeta["turn_id"].(string)
 	require.True(t, ok, "体内嵌 turn-metadata 应包含 string 类型的 turn_id")
+	headerTurnStartedAtUnixMS, ok := headerMeta["turn_started_at_unix_ms"].(float64)
+	require.True(t, ok, "头 turn-metadata 应包含 numeric 类型的 turn_started_at_unix_ms")
+	bodyTurnStartedAtUnixMS, ok := bodyMeta["turn_started_at_unix_ms"].(float64)
+	require.True(t, ok, "体内嵌 turn-metadata 应包含 numeric 类型的 turn_started_at_unix_ms")
 
 	assert.Equal(t, headerTurnID, bodyTurnID, "头和体的 turn_id 必须一致")
 	assert.Equal(t, headerTurnID, bodyEmbeddedTurnID, "头和体内嵌 turn-metadata 的 turn_id 必须一致")
 	assert.Equal(t, ids.turnID, headerTurnID, "所有 turn_id 都应来自同一份 ids")
+	assert.Equal(t, headerTurnStartedAtUnixMS, bodyTurnStartedAtUnixMS, "头和体内嵌 turn-metadata 的 turn_started_at_unix_ms 必须一致")
+	assert.Equal(t, float64(ids.turnStartedAtUnixMS), headerTurnStartedAtUnixMS, "所有 turn_started_at_unix_ms 都应来自同一份 ids")
 }
 
 // --- applyCodexFingerprintClientMetadata ---
@@ -481,4 +490,113 @@ func TestApplyCodexFingerprintHeaders_DoesNotRewriteIdentityTriple(t *testing.T)
 	assert.Equal(t, "0.150.0", h.Get("Version"))
 	assert.NotEqual(t, "client-session-aaa", h.Get("session-id"))
 	assert.Equal(t, resolveConvergedSessionID(account), h.Get("session-id"))
+}
+
+func TestStoreCodexFingerprintIDs_DoesNotLeakAcrossAccounts(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	c, _ := gin.CreateTestContext(nil)
+
+	first := newTestOAuthAccount(1, map[string]any{codexFingerprintModeExtraKey: "session"})
+	secondOff := newTestOAuthAccount(2, map[string]any{codexFingerprintModeExtraKey: "off"})
+	third := newTestOAuthAccount(3, map[string]any{codexFingerprintModeExtraKey: "session"})
+
+	headers := http.Header{}
+	headers.Set("session-id", "client-session-aaa")
+
+	firstIDs := resolveCodexFingerprintIDsFromRequest(first, headers)
+	require.NotNil(t, firstIDs)
+	storeCodexFingerprintIDs(c, firstIDs)
+	require.Equal(t, firstIDs, loadCodexFingerprintIDs(c, first))
+	require.Nil(t, loadCodexFingerprintIDs(c, secondOff), "another account must not inherit stored IDs")
+
+	storeCodexFingerprintIDs(c, resolveCodexFingerprintIDsFromRequest(secondOff, headers))
+	require.Nil(t, loadCodexFingerprintIDs(c, first), "off mode must clear the previous account IDs")
+	require.Nil(t, loadCodexFingerprintIDs(c, secondOff))
+
+	thirdIDs := resolveCodexFingerprintIDsFromRequest(third, headers)
+	require.NotNil(t, thirdIDs)
+	storeCodexFingerprintIDs(c, thirdIDs)
+	require.Equal(t, thirdIDs, loadCodexFingerprintIDs(c, third))
+	require.Nil(t, loadCodexFingerprintIDs(c, first))
+}
+
+func TestStoreCodexFingerprintIDs_CompactClearsPreviousIDs(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	c, _ := gin.CreateTestContext(nil)
+	account := newTestOAuthAccount(1, map[string]any{codexFingerprintModeExtraKey: "session"})
+
+	headers := http.Header{}
+	headers.Set("session-id", "client-session-aaa")
+	ids := resolveCodexFingerprintIDsFromRequest(account, headers)
+	require.NotNil(t, ids)
+	storeCodexFingerprintIDs(c, ids)
+	require.Equal(t, ids, loadCodexFingerprintIDs(c, account))
+
+	// Compact skips rewrite and must store nil so leftover IDs cannot overwrite
+	// the Plus-isolated compact session namespace.
+	storeCodexFingerprintIDs(c, nil)
+	require.Nil(t, loadCodexFingerprintIDs(c, account))
+}
+
+func TestResolveCodexFingerprintAccount_UsesCredentialOwnerForShadow(t *testing.T) {
+	owner := newTestOAuthAccount(101, map[string]any{
+		codexFingerprintModeExtraKey: "session",
+		"openai_device_id":            "owner-device-id",
+	})
+	ownerID := owner.ID
+	shadow := newTestOAuthAccount(202, map[string]any{
+		codexFingerprintModeExtraKey: "off",
+		"openai_device_id":            "shadow-device-id",
+	})
+	shadow.ParentAccountID = &ownerID
+	service := &OpenAIGatewayService{
+		accountRepo: &oauthSessionPolicyAccountRepo{accounts: map[int64]*Account{owner.ID: owner}},
+	}
+
+	resolved, err := service.resolveCodexFingerprintAccount(t.Context(), shadow)
+	require.NoError(t, err)
+	require.Same(t, owner, resolved)
+
+	headers := http.Header{}
+	headers.Set("session-id", "client-session-aaa")
+	ids := resolveCodexFingerprintIDsFromRequest(resolved, headers)
+	require.NotNil(t, ids)
+	assert.Equal(t, owner.ID, ids.accountID)
+	assert.Equal(t, "owner-device-id", ids.installationID)
+	assert.Equal(t, resolveConvergedSessionID(owner), ids.sessionID)
+	assert.NotEqual(t, resolveConvergedSessionID(shadow), ids.sessionID)
+}
+
+func TestBuildUpstreamRequest_UsesCredentialOwnerFingerprintIDsForShadow(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	c, _ := gin.CreateTestContext(nil)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+
+	owner := newTestOAuthAccount(101, map[string]any{
+		codexFingerprintModeExtraKey: "session",
+		"openai_device_id":            "owner-device-id",
+	})
+	ownerID := owner.ID
+	shadow := newTestOAuthAccount(202, map[string]any{
+		codexFingerprintModeExtraKey: "off",
+		"openai_device_id":            "shadow-device-id",
+	})
+	shadow.ParentAccountID = &ownerID
+	service := &OpenAIGatewayService{
+		accountRepo: &oauthSessionPolicyAccountRepo{accounts: map[int64]*Account{owner.ID: owner}},
+	}
+
+	clientHeaders := http.Header{}
+	clientHeaders.Set("session-id", "client-session-aaa")
+	ids := resolveCodexFingerprintIDsFromRequest(owner, clientHeaders)
+	require.NotNil(t, ids)
+	storeCodexFingerprintIDs(c, ids)
+
+	req, err := service.buildUpstreamRequest(
+		t.Context(), c, shadow, []byte(`{"model":"gpt-5"}`), "test-token", false, "", true,
+	)
+	require.NoError(t, err)
+	assert.Equal(t, "owner-device-id", req.Header.Get("x-codex-installation-id"))
+	assert.Equal(t, resolveConvergedSessionID(owner), req.Header.Get("session-id"))
+	assert.NotEqual(t, resolveConvergedSessionID(shadow), req.Header.Get("session-id"))
 }

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
@@ -97,14 +99,16 @@ func resolveConvergedThreadID(account *Account, clientSessionID string) string {
 
 // codexFingerprintIDs 收敛后的完整 ID 集合。
 // 由 resolveCodexFingerprintIDs 一次性生成，同一个实例在头改写和体改写之间共享，
-// 确保所有载体中的 turn_id 等随机字段一致。
+// 确保所有载体中的 turn_id、turn_started_at_unix_ms 等请求级字段一致。
 type codexFingerprintIDs struct {
-	mode           codexFingerprintMode
-	installationID string
-	sessionID      string
-	threadID       string
-	turnID         string
-	windowID       string
+	accountID           int64
+	mode                codexFingerprintMode
+	installationID      string
+	sessionID           string
+	threadID            string
+	turnID              string
+	windowID            string
+	turnStartedAtUnixMS int64
 }
 
 // resolveCodexFingerprintIDs 按收敛模式计算出站 ID 集合。
@@ -113,11 +117,11 @@ type codexFingerprintIDs struct {
 // 返回 nil 表示 off 模式，不需要改写。
 // 注意：包含随机生成的 turn_id，调用方必须只调用一次并共享结果给头改写和体改写。
 func resolveCodexFingerprintIDs(account *Account, clientSessionID string, mode codexFingerprintMode) *codexFingerprintIDs {
-	if mode == codexFingerprintOff {
+	if account == nil || mode == codexFingerprintOff {
 		return nil
 	}
 
-	ids := &codexFingerprintIDs{mode: mode}
+	ids := &codexFingerprintIDs{accountID: account.ID, mode: mode}
 
 	ids.installationID = resolveConvergedInstallationID(account)
 	if ids.installationID == "" {
@@ -136,6 +140,7 @@ func resolveCodexFingerprintIDs(account *Account, clientSessionID string, mode c
 		}
 		ids.turnID = uuid.Must(uuid.NewV7()).String()
 		ids.windowID = ids.threadID + ":0"
+		ids.turnStartedAtUnixMS = time.Now().UnixMilli()
 		return ids
 
 	case codexFingerprintFull:
@@ -143,6 +148,7 @@ func resolveCodexFingerprintIDs(account *Account, clientSessionID string, mode c
 		ids.threadID = ids.sessionID
 		ids.turnID = uuid.Must(uuid.NewV7()).String()
 		ids.windowID = ids.threadID + ":0"
+		ids.turnStartedAtUnixMS = time.Now().UnixMilli()
 		return ids
 	}
 
@@ -157,6 +163,47 @@ func extractClientSessionID(h http.Header) string {
 		return v
 	}
 	return strings.TrimSpace(h.Get("session_id"))
+}
+
+const ginCodexFingerprintIDsKey = "codex_fingerprint_ids"
+
+// resolveCodexFingerprintAccount returns the account that owns the OAuth
+// credential. Spark shadows are schedulable routing entries, but they do not
+// own an upstream Codex device or session identity.
+func (s *OpenAIGatewayService) resolveCodexFingerprintAccount(ctx context.Context, account *Account) (*Account, error) {
+	if account == nil || !account.IsCredentialShadow() {
+		return account, nil
+	}
+	if s == nil || s.accountRepo == nil {
+		return nil, fmt.Errorf("account repository is unavailable")
+	}
+	return resolveCredentialAccount(ctx, s.accountRepo, account)
+}
+
+func storeCodexFingerprintIDs(c *gin.Context, ids *codexFingerprintIDs) {
+	if c == nil {
+		return
+	}
+	if ids == nil {
+		c.Set(ginCodexFingerprintIDsKey, nil)
+		return
+	}
+	c.Set(ginCodexFingerprintIDsKey, ids)
+}
+
+func loadCodexFingerprintIDs(c *gin.Context, account *Account) *codexFingerprintIDs {
+	if c == nil || account == nil {
+		return nil
+	}
+	raw, ok := c.Get(ginCodexFingerprintIDsKey)
+	if !ok || raw == nil {
+		return nil
+	}
+	ids, ok := raw.(*codexFingerprintIDs)
+	if !ok || ids == nil || ids.accountID != account.ID {
+		return nil
+	}
+	return ids
 }
 
 // resolveCodexFingerprintIDsFromRequest 从客户端原始请求头中提取 session-id，
@@ -178,7 +225,7 @@ func resolveCodexFingerprintIDsFromRequest(account *Account, clientHeaders http.
 }
 
 // applyCodexFingerprintHeaders 按预计算的收敛 ID 改写出站 HTTP 头中的设备指纹。
-// 在 buildUpstreamRequest 的白名单透传之后、enforceCodexIdentityHeaders 之前调用。
+// 在 buildUpstreamRequest 的白名单透传之后、applyOpenAIOutboundIdentity 之前调用。
 func applyCodexFingerprintHeaders(h http.Header, ids *codexFingerprintIDs) {
 	if h == nil || ids == nil {
 		return
@@ -208,7 +255,7 @@ func applyCodexFingerprintHeaders(h http.Header, ids *codexFingerprintIDs) {
 		"thread_id":               ids.threadID,
 		"turn_id":                 ids.turnID,
 		"window_id":               ids.windowID,
-		"turn_started_at_unix_ms": time.Now().UnixMilli(),
+		"turn_started_at_unix_ms": ids.turnStartedAtUnixMS,
 	})
 }
 
@@ -274,7 +321,7 @@ func applyCodexFingerprintClientMetadata(reqBody map[string]any, ids *codexFinge
 		"thread_id":               ids.threadID,
 		"turn_id":                 ids.turnID,
 		"window_id":               ids.windowID,
-		"turn_started_at_unix_ms": time.Now().UnixMilli(),
+		"turn_started_at_unix_ms": ids.turnStartedAtUnixMS,
 	})
 
 	reqBody["client_metadata"] = existing
