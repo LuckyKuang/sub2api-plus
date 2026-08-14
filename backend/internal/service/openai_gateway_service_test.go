@@ -2310,8 +2310,10 @@ func TestOpenAIStreamingMissingTerminalEventReturnsIncompleteError(t *testing.T)
 
 	_, err := svc.handleStreamingResponse(c.Request.Context(), resp, c, &Account{ID: 1}, time.Now(), "model", "model")
 	_ = pr.Close()
-	var failoverErr *UpstreamFailoverError
-	require.ErrorAs(t, err, &failoverErr)
+	// Official 176 flushes structural progress such as output_item.added.
+	// After that write the stream is committed, so a missing terminal is an
+	// incomplete-usage error rather than a pre-output failover.
+	require.ErrorContains(t, err, "missing terminal event")
 }
 
 func TestOpenAIStreamingPassthroughMissingTerminalEventReturnsIncompleteError(t *testing.T) {

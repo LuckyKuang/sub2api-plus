@@ -182,7 +182,7 @@ func TestFetchChatGPTAccountInfo_ReportsAccountID(t *testing.T) {
 	chatGPTAccountsCheckURL = server.URL + "/backend-api/accounts/check/v4-2023-04-27"
 	t.Cleanup(func() { chatGPTAccountsCheckURL = oldURL })
 
-	got := fetchChatGPTAccountInfo(context.Background(), newTestPrivacyClientFactory(), "access-token", "", "")
+	got := fetchChatGPTAccountInfo(context.Background(), newTestPrivacyClientFactory(), "access-token", "", "", openAIOutboundIdentity{})
 	require.NotNil(t, got)
 	require.Equal(t, "plus", got.PlanType)
 	require.Equal(t, "personal-account-a", got.AccountID, "应优先取 account.account_id 而不是 map key")
@@ -230,7 +230,7 @@ func TestEnrichTokenInfo_WorkspaceEntitlementDoesNotOverridePersonalSubscription
 		PlanType:         "pro", // 来自 id_token 的个人套餐
 	}
 	svc := &OpenAIOAuthService{privacyClientFactory: newTestPrivacyClientFactory()}
-	svc.enrichTokenInfo(context.Background(), tokenInfo, "")
+	svc.enrichTokenInfoWithAccount(context.Background(), tokenInfo, "", nil)
 
 	require.Equal(t, "pro", tokenInfo.PlanType)
 	require.Equal(t, personalActiveUntil, tokenInfo.SubscriptionExpiresAt,
@@ -273,7 +273,7 @@ func TestEnrichTokenInfo_KeepsEntitlementWhenAccountMatches(t *testing.T) {
 		PlanType:         "plus",
 	}
 	svc := &OpenAIOAuthService{privacyClientFactory: newTestPrivacyClientFactory()}
-	svc.enrichTokenInfo(context.Background(), tokenInfo, "")
+	svc.enrichTokenInfoWithAccount(context.Background(), tokenInfo, "", nil)
 
 	require.Equal(t, entitlementExpiresAt, tokenInfo.SubscriptionExpiresAt)
 	require.Zero(t, subscriptionCalls, "账号一致时不应额外请求订阅端点")
@@ -313,7 +313,7 @@ func TestEnrichTokenInfo_WorkspacePlanTypeKeepsItsOwnExpiry(t *testing.T) {
 		// id_token 没带 chatgpt_plan_type
 	}
 	svc := &OpenAIOAuthService{privacyClientFactory: newTestPrivacyClientFactory()}
-	svc.enrichTokenInfo(context.Background(), tokenInfo, "")
+	svc.enrichTokenInfoWithAccount(context.Background(), tokenInfo, "", nil)
 
 	require.Equal(t, "self_serve_business_usage_based", tokenInfo.PlanType)
 	require.Equal(t, workspaceExpiresAt, tokenInfo.SubscriptionExpiresAt,

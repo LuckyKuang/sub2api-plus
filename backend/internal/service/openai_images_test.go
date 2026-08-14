@@ -76,13 +76,13 @@ func (s *openAIImageSettingRepoStub) Delete(_ context.Context, key string) error
 	delete(s.values, key)
 	return nil
 }
+
 type openAIImagesReadErrorBody struct {
 	err error
 }
 
 func (b *openAIImagesReadErrorBody) Read([]byte) (int, error) { return 0, b.err }
 func (b *openAIImagesReadErrorBody) Close() error             { return nil }
-
 
 func (w *failingOpenAIImageWriter) Write(p []byte) (int, error) {
 	if w.writes >= w.failAfter {

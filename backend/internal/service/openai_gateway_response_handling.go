@@ -340,9 +340,13 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 	// both list the same call_id — counting both would ~2× the surcharge).
 	streamSearchSeen := make(map[string]struct{})
 	resultWithUsage := func() *openaiStreamingResult {
+		visibleFirstTokenMs := firstTokenMs
+		if visibleFirstTokenMs == nil {
+			visibleFirstTokenMs = timing.firstTokenMs
+		}
 		return &openaiStreamingResult{
 			usage:            usage,
-			firstTokenMs:     timing.firstTokenMs,
+			firstTokenMs:     visibleFirstTokenMs,
 			firstOutputMs:    timing.firstOutputMs,
 			firstOutputKind:  timing.firstOutputKind,
 			responseID:       responseID,
@@ -605,10 +609,16 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 			// until the terminal frame so the following failure remains eligible for
 			// pre-output failover. Limit this special handling to error frames: some
 			// structural Responses events are neither output nor safe to flush early.
+			// Official 176 treats structural Responses progress (for example an
+			// empty output_item.added) as attempt-committing client output so it
+			// can disarm first-output timeout without starting visible TTFT.
+			// Keep Plus retryable-error buffering: those frames must not flush
+			// or commit the attempt before response.failed arrives.
 			retryableErrorFrame := eventType == "error" && !openAIStreamDataStartsClientOutput(data, eventType)
+			officialStartsClientOutput := openAIStreamDataStartsClientOutput(data, eventType)
 			forceFlushBoundary := forceFlushFailedEvent || (eventType == "error" && !retryableErrorFrame) || !gjson.ValidBytes(dataBytes)
-			eventNeedsFlush := forceFlushBoundary || observation.MeaningfulOutput
-			startsClientOutput := forceFlushFailedEvent || (eventType == "error" && !retryableErrorFrame) || observation.MeaningfulOutput
+			eventNeedsFlush := forceFlushBoundary || observation.MeaningfulOutput || (officialStartsClientOutput && !retryableErrorFrame)
+			startsClientOutput := forceFlushFailedEvent || (officialStartsClientOutput && !retryableErrorFrame) || observation.MeaningfulOutput
 			startsVisibleOutput := openAIStreamDataStartsVisibleOutput(data, eventType)
 			if guardFirstOutput {
 				eventStartsClientOutput = eventStartsClientOutput || startsClientOutput

@@ -10,18 +10,18 @@
 
 ## 2. Implementation (blocked on review)
 
-- [ ] 2.1 Merge official `v0.1.176` on `upgrade/upstream-v0.1.176`.
-- [ ] 2.2 Import official 221 SQL as `220_group_model_pricing.sql`.
-- [ ] 2.3 Resolve conflicts using the ownership table; regenerate Ent/Wire.
-- [ ] 2.4 Review auto-merged gateway, identity, wire, and usage files.
-- [ ] 2.5 Restore Plus lockfile if conflict resolution disturbs it.
-- [ ] 2.6 Prepare `0.1.176+custom.001` metadata without publishing.
+- [x] 2.1 Merge official `v0.1.176` on `upgrade/upstream-v0.1.176`.
+- [x] 2.2 Import official 221 SQL as `220_group_model_pricing.sql`.
+- [x] 2.3 Resolve conflicts using the ownership table; regenerate Ent/Wire.
+- [x] 2.4 Review auto-merged gateway, identity, wire, and usage files.
+- [x] 2.5 Restore Plus lockfile if conflict resolution disturbs it.
+- [x] 2.6 Prepare `0.1.176+custom.001` metadata without publishing.
 
 ## 3. Verification (after implementation)
 
-- [ ] 3.1 Migration, release, documentation, and OpenSpec checks.
-- [ ] 3.2 Backend lint plus unit/integration tests.
-- [ ] 3.3 Frontend lint, typecheck, frozen install, and Vitest.
-- [ ] 3.4 Add or keep regressions for client-profile deny, cross-group
+- [x] 3.1 Migration, release, documentation, and OpenSpec checks.
+- [x] 3.2 Backend lint plus unit/integration tests.
+- [x] 3.3 Frontend lint, typecheck, frozen install, and Vitest.
+- [x] 3.4 Add or keep regressions for client-profile deny, cross-group
       session deny, fingerprint modes, HTML 403, empty completed
       failover, and group model-pricing lookup.
