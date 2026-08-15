@@ -436,7 +436,7 @@
           </div>
           <div v-if="latencyTooltipData && estimatedTps(latencyTooltipData) != null" class="flex items-center justify-between gap-4">
             <span class="text-gray-400">{{ t('usage.latencyTps') }}</span>
-            <span class="font-medium text-cyan-300">{{ formatTps(estimatedTps(latencyTooltipData)!) }}</span>
+            <span class="font-medium text-cyan-300">{{ formatTpsDisplay(estimatedTps(latencyTooltipData)) }}</span>
           </div>
           <div v-if="latencyTooltipNote(latencyTooltipData)" class="border-t border-gray-700 pt-1.5 text-[11px] leading-relaxed text-gray-400">
             {{ latencyTooltipNote(latencyTooltipData) }}
