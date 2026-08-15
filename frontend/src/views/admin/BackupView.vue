@@ -36,7 +36,15 @@
             <input v-model="s3Form.access_key_id" class="input w-full" />
           </div>
           <div>
-            <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">{{ t('admin.backup.s3.secretAccessKey') }}</label>
+            <div class="mb-1 flex items-center text-xs font-medium text-gray-600 dark:text-gray-400">
+              <span>{{ t('admin.backup.s3.secretAccessKey') }}</span>
+              <HelpTooltip width-class="w-80">
+                <p>{{ t('admin.backup.s3.secretHelp') }}</p>
+              </HelpTooltip>
+              <button type="button" class="ml-2 text-primary-600 underline hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300" @click="showEncryptionKeyGuide = true">
+                {{ t('admin.backup.s3.secretGuideLink') }}
+              </button>
+            </div>
             <input v-model="s3Form.secret_access_key" type="password" class="input w-full" :placeholder="s3SecretConfigured ? t('admin.backup.s3.secretConfigured') : ''" />
           </div>
           <label class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 md:col-span-2">
@@ -100,7 +108,15 @@
               <input v-model="imageStorageForm.access_key_id" class="input w-full" />
             </div>
             <div>
-              <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">{{ t('admin.backup.s3.secretAccessKey') }}</label>
+              <div class="mb-1 flex items-center text-xs font-medium text-gray-600 dark:text-gray-400">
+                <span>{{ t('admin.backup.s3.secretAccessKey') }}</span>
+                <HelpTooltip width-class="w-80">
+                  <p>{{ t('admin.backup.s3.secretHelp') }}</p>
+                </HelpTooltip>
+                <button type="button" class="ml-2 text-primary-600 underline hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300" @click="showEncryptionKeyGuide = true">
+                  {{ t('admin.backup.s3.secretGuideLink') }}
+                </button>
+              </div>
               <input v-model="imageStorageForm.secret_access_key" type="password" class="input w-full" :placeholder="imageStorageSecretConfigured ? t('admin.backup.s3.secretConfigured') : ''" />
             </div>
             <label class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 md:col-span-2">
@@ -354,6 +370,103 @@
         </div>
       </transition>
     </teleport>
+    <teleport to="body">
+      <transition name="modal">
+        <div v-if="showEncryptionKeyGuide" class="fixed inset-0 z-50 flex items-center justify-center p-4" @mousedown.self="showEncryptionKeyGuide = false">
+          <div class="fixed inset-0 bg-black/50" @click="showEncryptionKeyGuide = false"></div>
+          <div class="relative max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white p-6 shadow-2xl dark:bg-dark-800">
+            <button type="button" class="absolute right-4 top-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200" :aria-label="t('common.close')" @click="showEncryptionKeyGuide = false">
+              <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+            <h2 class="mb-3 text-lg font-bold text-gray-900 dark:text-white">{{ t('admin.backup.encryptionKeyGuide.title') }}</h2>
+            <p class="mb-2 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.backup.encryptionKeyGuide.intro') }}</p>
+            <p class="mb-4 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.backup.encryptionKeyGuide.whenNeeded') }}</p>
+
+            <div class="mb-5">
+              <h3 class="mb-2 text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.backup.encryptionKeyGuide.generateTitle') }}</h3>
+              <p class="mb-2 text-sm text-gray-600 dark:text-gray-300">{{ t('admin.backup.encryptionKeyGuide.generateHint') }}</p>
+              <code class="block rounded bg-gray-100 px-3 py-2 text-xs text-gray-800 dark:bg-dark-700 dark:text-gray-200">{{ t('admin.backup.encryptionKeyGuide.generateCommand') }}</code>
+            </div>
+
+            <p class="mb-3 text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('admin.backup.encryptionKeyGuide.pickDeploy') }}</p>
+            <div class="mb-5 flex flex-wrap gap-2">
+              <button
+                v-for="mode in encryptionGuideModes"
+                :key="mode"
+                type="button"
+                class="rounded-lg px-3 py-1.5 text-sm"
+                :class="encryptionGuideMode === mode ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 dark:bg-dark-700 dark:text-gray-300'"
+                @click="encryptionGuideMode = mode"
+              >
+                {{ t(`admin.backup.encryptionKeyGuide.${mode}`) }}
+              </button>
+            </div>
+
+            <div v-if="encryptionGuideMode === 'binary'" class="space-y-3 text-sm text-gray-600 dark:text-gray-300">
+              <h3 class="font-semibold text-gray-900 dark:text-white">{{ t('admin.backup.encryptionKeyGuide.binaryTitle') }}</h3>
+              <p>{{ t('admin.backup.encryptionKeyGuide.binaryWhere') }}</p>
+              <ol class="ml-5 list-decimal space-y-1">
+                <li>{{ t('admin.backup.encryptionKeyGuide.binaryStep1') }}</li>
+                <li>{{ t('admin.backup.encryptionKeyGuide.binaryStep2') }}</li>
+                <li>{{ t('admin.backup.encryptionKeyGuide.binaryStep3') }}</li>
+                <li>{{ t('admin.backup.encryptionKeyGuide.binaryStep4') }}</li>
+                <li>{{ t('admin.backup.encryptionKeyGuide.binaryStep5') }}</li>
+              </ol>
+              <p>{{ t('admin.backup.encryptionKeyGuide.binaryYamlHint') }}</p>
+              <pre class="overflow-x-auto rounded bg-gray-100 px-3 py-2 text-xs text-gray-800 dark:bg-dark-700 dark:text-gray-200">{{ t('admin.backup.encryptionKeyGuide.binaryYaml') }}</pre>
+              <p>{{ t('admin.backup.encryptionKeyGuide.binaryStep6') }}</p>
+              <code class="block rounded bg-gray-100 px-3 py-2 text-xs dark:bg-dark-700">{{ t('admin.backup.encryptionKeyGuide.binaryRestart') }}</code>
+              <code class="block rounded bg-gray-100 px-3 py-2 text-xs dark:bg-dark-700">{{ t('admin.backup.encryptionKeyGuide.binaryStatus') }}</code>
+              <code class="block rounded bg-gray-100 px-3 py-2 text-xs dark:bg-dark-700">{{ t('admin.backup.encryptionKeyGuide.binaryLogs') }}</code>
+              <p>{{ t('admin.backup.encryptionKeyGuide.binaryLogHint') }}</p>
+              <p>{{ t('admin.backup.encryptionKeyGuide.binaryCustomFile') }}</p>
+            </div>
+
+            <div v-else-if="encryptionGuideMode === 'docker'" class="space-y-3 text-sm text-gray-600 dark:text-gray-300">
+              <h3 class="font-semibold text-gray-900 dark:text-white">{{ t('admin.backup.encryptionKeyGuide.dockerTitle') }}</h3>
+              <p>{{ t('admin.backup.encryptionKeyGuide.dockerWhere') }}</p>
+              <ol class="ml-5 list-decimal space-y-1">
+                <li>{{ t('admin.backup.encryptionKeyGuide.dockerStep1') }}</li>
+                <li>{{ t('admin.backup.encryptionKeyGuide.dockerStep2') }}</li>
+                <li>{{ t('admin.backup.encryptionKeyGuide.dockerStep3') }}</li>
+                <li>{{ t('admin.backup.encryptionKeyGuide.dockerStep4') }}</li>
+                <li>{{ t('admin.backup.encryptionKeyGuide.dockerStep5') }}</li>
+                <li>{{ t('admin.backup.encryptionKeyGuide.dockerStep6') }}</li>
+              </ol>
+              <code class="block rounded bg-gray-100 px-3 py-2 text-xs dark:bg-dark-700">{{ t('admin.backup.encryptionKeyGuide.dockerRestart') }}</code>
+              <code class="block rounded bg-gray-100 px-3 py-2 text-xs dark:bg-dark-700">{{ t('admin.backup.encryptionKeyGuide.dockerLogs') }}</code>
+              <p>{{ t('admin.backup.encryptionKeyGuide.dockerFileHint') }}</p>
+            </div>
+
+            <div v-else class="space-y-3 text-sm text-gray-600 dark:text-gray-300">
+              <h3 class="font-semibold text-gray-900 dark:text-white">{{ t('admin.backup.encryptionKeyGuide.standaloneTitle') }}</h3>
+              <p>{{ t('admin.backup.encryptionKeyGuide.standaloneWhere') }}</p>
+              <ol class="ml-5 list-decimal space-y-1">
+                <li>{{ t('admin.backup.encryptionKeyGuide.standaloneStep1') }}</li>
+                <li>{{ t('admin.backup.encryptionKeyGuide.standaloneStep2') }}</li>
+              </ol>
+            </div>
+
+            <div class="mt-5 rounded-lg bg-gray-50 p-3 text-sm text-gray-700 dark:bg-dark-700 dark:text-gray-300">
+              <p class="font-medium">{{ t('admin.backup.encryptionKeyGuide.afterTitle') }}</p>
+              <p class="mt-1">{{ t('admin.backup.encryptionKeyGuide.afterHint') }}</p>
+            </div>
+            <div class="mt-4 rounded-lg bg-amber-50 p-3 text-xs text-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+              <p class="font-medium">{{ t('admin.backup.encryptionKeyGuide.warningsTitle') }}</p>
+              <ul class="mt-2 list-disc space-y-1 pl-4">
+                <li>{{ t('admin.backup.encryptionKeyGuide.warningExisting') }}</li>
+                <li>{{ t('admin.backup.encryptionKeyGuide.warningOnce') }}</li>
+                <li>{{ t('admin.backup.encryptionKeyGuide.warningNotMinio') }}</li>
+                <li>{{ t('admin.backup.encryptionKeyGuide.warningWrongFile') }}</li>
+              </ul>
+            </div>
+            <div class="mt-4 text-right">
+              <button type="button" class="btn btn-primary btn-sm" @click="showEncryptionKeyGuide = false">{{ t('common.close') }}</button>
+            </div>
+          </div>
+        </div>
+      </transition>
+    </teleport>
     <!-- 分卷下载链接 -->
     <teleport to="body">
       <transition name="modal">
@@ -412,11 +525,26 @@ import type {
   ImageStorageConfig,
 } from '@/api/admin/backup'
 import { useStepUp, isStepUpBlocked, isStepUpCancelled, stepUpBlockReason } from '@/composables/useStepUp'
+import { extractApiErrorCode, extractApiErrorMessage } from '@/utils/apiError'
 import TotpStepUpDialog from '@/components/auth/TotpStepUpDialog.vue'
+import HelpTooltip from '@/components/common/HelpTooltip.vue'
 
 const { t } = useI18n()
 const appStore = useAppStore()
 const backupStepUp = useStepUp()
+const showEncryptionKeyGuide = ref(false)
+const encryptionGuideModes = ['binary', 'docker', 'standalone'] as const
+const encryptionGuideMode = ref<(typeof encryptionGuideModes)[number]>('binary')
+
+function reportSecretSaveError(error: unknown): void {
+  if (reportStepUpBlocked(error)) return
+  appStore.showError(extractApiErrorMessage(error, t('errors.networkError')))
+  const code = extractApiErrorCode(error)
+  const message = extractApiErrorMessage(error, '')
+  if (code === 'SECRET_ENCRYPTION_KEY_NOT_CONFIGURED' || message.includes('TOTP_ENCRYPTION_KEY')) {
+    showEncryptionKeyGuide.value = true
+  }
+}
 
 // 敏感操作被 2FA 门控拦截时的统一提示。
 function reportStepUpBlocked(error: unknown): boolean {
@@ -627,7 +755,7 @@ async function saveS3Config() {
       savingS3.value = false
       return
     }
-    appStore.showError((error as { message?: string })?.message || t('errors.networkError'))
+    reportSecretSaveError(error)
   } finally {
     savingS3.value = false
   }
@@ -659,7 +787,7 @@ async function saveImageStorageConfig() {
       savingImageStorage.value = false
       return
     }
-    appStore.showError((error as { message?: string })?.message || t('errors.networkError'))
+    reportSecretSaveError(error)
   } finally {
     savingImageStorage.value = false
   }
