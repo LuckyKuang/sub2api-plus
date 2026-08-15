@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"regexp"
 	"strings"
 
@@ -62,6 +63,7 @@ type SettingHandler struct {
 	notificationEmailService *service.NotificationEmailService
 	totpService              *service.TotpService
 	userService              *service.UserService
+	codexVersionSync         *service.OpenAICodexVersionSyncService
 }
 
 // NewSettingHandler 创建系统设置处理器
@@ -96,6 +98,32 @@ func (h *SettingHandler) SetAliyunCaptchaService(aliyunCaptchaService *service.A
 func (h *SettingHandler) SetStepUpDeps(totpService *service.TotpService, userService *service.UserService) {
 	h.totpService = totpService
 	h.userService = userService
+}
+
+func (h *SettingHandler) SetCodexVersionSync(codexVersionSync *service.OpenAICodexVersionSyncService) {
+	h.codexVersionSync = codexVersionSync
+}
+
+// SyncOpenAICodexVersion POST /api/v1/admin/settings/openai-codex-version/sync
+func (h *SettingHandler) SyncOpenAICodexVersion(c *gin.Context) {
+	if h == nil || h.codexVersionSync == nil {
+		response.Error(c, http.StatusServiceUnavailable, "codex version sync is unavailable")
+		return
+	}
+	result := h.codexVersionSync.SyncNow(c.Request.Context())
+	settings, err := h.settingService.GetAllSettings(c.Request.Context())
+	if err != nil {
+		response.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.Success(c, dto.OpenAICodexVersionSyncResponse{
+		SyncedVersion:    settings.OpenAICodexClientVersionSynced,
+		CheckedAt:        settings.OpenAICodexClientVersionSyncedCheckedAt,
+		Error:            settings.OpenAICodexClientVersionSyncError,
+		Updated:          result.Updated,
+		EffectiveVersion: settings.OpenAICodexClientVersionEffective,
+		Source:           settings.OpenAICodexClientVersionSource,
+	})
 }
 
 // GetSettings 获取所有系统设置
@@ -304,6 +332,10 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		OpenAICodexLocalGroupQuotaEnabled:                      settings.OpenAICodexLocalGroupQuotaEnabled,
 		OpenAICodexClientVersion:                               settings.OpenAICodexClientVersion,
 		OpenAICodexClientVersionSynced:                         settings.OpenAICodexClientVersionSynced,
+		OpenAICodexClientVersionSyncedCheckedAt:                settings.OpenAICodexClientVersionSyncedCheckedAt,
+		OpenAICodexClientVersionSyncError:                      settings.OpenAICodexClientVersionSyncError,
+		OpenAICodexClientVersionEffective:                      settings.OpenAICodexClientVersionEffective,
+		OpenAICodexClientVersionSource:                         settings.OpenAICodexClientVersionSource,
 		OpenAICodexVersionAutoSyncEnabled:                      settings.OpenAICodexVersionAutoSyncEnabled,
 		MinCodexVersion:                                        settings.MinCodexVersion,
 		MaxCodexVersion:                                        settings.MaxCodexVersion,

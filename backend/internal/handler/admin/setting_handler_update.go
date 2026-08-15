@@ -1488,6 +1488,10 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			response.Error(c, http.StatusBadRequest, "openai_codex_client_version must be empty or a valid version (e.g. 0.147.0)")
 			return
 		}
+		if normalized != "" && service.CompareVersions(normalized, service.OpenAICodexUpstreamMinVersion) < 0 {
+			response.Error(c, http.StatusBadRequest, "openai_codex_client_version must be at least "+service.OpenAICodexUpstreamMinVersion)
+			return
+		}
 		req.OpenAICodexClientVersion = &normalized
 	}
 

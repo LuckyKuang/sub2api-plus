@@ -630,6 +630,10 @@ export interface SystemSettings {
   openai_codex_local_group_quota_enabled: boolean;
   openai_codex_client_version: string;
   openai_codex_client_version_synced: string;
+  openai_codex_client_version_synced_checked_at: string;
+  openai_codex_client_version_sync_error: string;
+  openai_codex_client_version_effective: string;
+  openai_codex_client_version_source: "override" | "synced" | "compiled" | string;
   openai_codex_version_auto_sync_enabled: boolean;
   // codex_cli_only profile policy
   min_codex_version: string;
@@ -1050,6 +1054,22 @@ export async function updateSettings(
   const { data } = await apiClient.put<SystemSettings>(
     "/admin/settings",
     settings,
+  );
+  return data;
+}
+
+export interface OpenAICodexVersionSyncResponse {
+  openai_codex_client_version_synced: string;
+  openai_codex_client_version_synced_checked_at: string;
+  openai_codex_client_version_sync_error: string;
+  updated: boolean;
+  openai_codex_client_version_effective: string;
+  openai_codex_client_version_source: "override" | "synced" | "compiled" | string;
+}
+
+export async function syncOpenAICodexVersion(): Promise<OpenAICodexVersionSyncResponse> {
+  const { data } = await apiClient.post<OpenAICodexVersionSyncResponse>(
+    "/admin/settings/openai-codex-version/sync",
   );
   return data;
 }
@@ -1547,6 +1567,7 @@ export async function resetWebSearchUsage(payload: {
 export const settingsAPI = {
   getSettings,
   updateSettings,
+  syncOpenAICodexVersion,
   testSmtpConnection,
   sendTestEmail,
   getEmailTemplates,

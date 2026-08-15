@@ -959,6 +959,10 @@ func TestAPIContracts(t *testing.T) {
 					"openai_codex_local_group_quota_enabled": false,
 					"openai_codex_client_version":             "",
 					"openai_codex_client_version_synced":      "",
+					"openai_codex_client_version_synced_checked_at": "",
+					"openai_codex_client_version_sync_error": "",
+					"openai_codex_client_version_effective": "0.147.0",
+					"openai_codex_client_version_source": "compiled",
 					"openai_codex_version_auto_sync_enabled":  true,
 					"openai_fast_policy_settings": {
 						"rules": []
@@ -1272,6 +1276,10 @@ func TestAPIContracts(t *testing.T) {
 					"openai_codex_local_group_quota_enabled": false,
 					"openai_codex_client_version":             "",
 					"openai_codex_client_version_synced":      "",
+					"openai_codex_client_version_synced_checked_at": "",
+					"openai_codex_client_version_sync_error": "",
+					"openai_codex_client_version_effective": "0.147.0",
+					"openai_codex_client_version_source": "compiled",
 					"openai_codex_version_auto_sync_enabled":  true,
 					"openai_fast_policy_settings": {
 						"rules": []

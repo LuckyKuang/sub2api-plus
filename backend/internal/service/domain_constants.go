@@ -593,6 +593,11 @@ const (
 	// 由 OpenAICodexVersionSyncService 独占写入，面板只读展示；管理员覆写请用
 	// SettingKeyOpenAICodexClientVersion。
 	SettingKeyOpenAICodexClientVersionSynced = "openai_codex_client_version_synced"
+	// SettingKeyOpenAICodexClientVersionSyncedCheckedAt 最近一次实际检查官方仓库的时间（RFC3339 UTC）。
+	// 版本未变化也会更新，避免「当前同步到」停在上次变更时间而被误判为同步失败。
+	SettingKeyOpenAICodexClientVersionSyncedCheckedAt = "openai_codex_client_version_synced_checked_at"
+	// SettingKeyOpenAICodexClientVersionSyncError 最近一次同步失败原因；成功时清空。
+	SettingKeyOpenAICodexClientVersionSyncError = "openai_codex_client_version_sync_error"
 	// SettingKeyOpenAICodexVersionAutoSyncEnabled 是否启用 Codex 客户端版本号自动同步（默认 true）。
 	SettingKeyOpenAICodexVersionAutoSyncEnabled = "openai_codex_version_auto_sync_enabled"
 	// SettingKeyOpenAIAllowClaudeCodeCodexPlugin 已废弃：历史全局开关只作为升级迁移输入读取。

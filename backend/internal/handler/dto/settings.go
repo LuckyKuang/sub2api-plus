@@ -217,6 +217,10 @@ type SystemSettings struct {
 	OpenAICodexLocalGroupQuotaEnabled            bool   `json:"openai_codex_local_group_quota_enabled"`
 	OpenAICodexClientVersion                     string `json:"openai_codex_client_version"`
 	OpenAICodexClientVersionSynced               string `json:"openai_codex_client_version_synced"`
+	OpenAICodexClientVersionSyncedCheckedAt      string `json:"openai_codex_client_version_synced_checked_at"`
+	OpenAICodexClientVersionSyncError            string `json:"openai_codex_client_version_sync_error"`
+	OpenAICodexClientVersionEffective            string `json:"openai_codex_client_version_effective"`
+	OpenAICodexClientVersionSource               string `json:"openai_codex_client_version_source"`
 	OpenAICodexVersionAutoSyncEnabled            bool   `json:"openai_codex_version_auto_sync_enabled"`
 
 	// codex_cli_only profile policy
@@ -541,6 +545,16 @@ type EmailTemplateDetail struct {
 	IsCustom     bool     `json:"is_custom,omitempty"`
 	UpdatedAt    string   `json:"updated_at,omitempty"`
 	Placeholders []string `json:"placeholders,omitempty"`
+}
+
+// OpenAICodexVersionSyncResponse is returned by the admin "sync now" action.
+type OpenAICodexVersionSyncResponse struct {
+	SyncedVersion    string `json:"openai_codex_client_version_synced"`
+	CheckedAt        string `json:"openai_codex_client_version_synced_checked_at"`
+	Error            string `json:"openai_codex_client_version_sync_error"`
+	Updated          bool   `json:"updated"`
+	EffectiveVersion string `json:"openai_codex_client_version_effective"`
+	Source           string `json:"openai_codex_client_version_source"`
 }
 
 // UpdateEmailTemplateRequest updates a template override.
