@@ -587,7 +587,7 @@ class ValidationLaunchTest(unittest.TestCase):
         command = run_step.call_args.args[1]
         self.assertEqual(
             [wsl, "-d", "Ubuntu-24.04", "--", "docker", "run", "--rm", "--cpus", "4", "--memory", "8G"],
-            command[:12],
+            command[:11],
         )
         self.assertIn("/mnt/c/repo:/mnt/c/repo", command)
         self.assertNotIn("go", command)
