@@ -10,10 +10,11 @@ Run these from the repository root:
     python3 skills/push-cli/scripts/push_cli.py watch
 
 check is a read-only push-readiness gate apart from ignored dependency and build
-caches. push repeats the gate in the same process before pushing. watch is for
-monitoring a run after a local terminal disconnect. ensure aligns the host
-toolchain and selected container runtime without requiring a clean worktree or
-running the check matrix.
+caches. It probes the platform runtime on the host, then re-executes the matrix
+inside the validation container. push repeats that gate in the same process
+before pushing. watch is for monitoring a run after a local terminal disconnect.
+ensure prepares the selected container runtime and validation image without
+requiring a clean worktree or running the check matrix.
 
 ## GitHub CLI Gate
 
@@ -26,9 +27,7 @@ The checker requires all of the following:
 
 The repository is derived from the origin remote and is not accepted if it is
 not LuckyKuang/sub2api-plus. A failed auth or permission check stops before
-toolchain alignment, runtime probing, tests, or Git writes. Environment
-alignment and the selected container-runtime probe run before the dirty-worktree
-gate so a stale host can be repaired without committing first.
+runtime probing, image build, tests, or Git writes.
 
 Before a push, the checker runs:
 
@@ -38,10 +37,26 @@ Before a push, the checker runs:
 The exact branch name comes from the checked-out branch. It never pushes another
 local ref selected by an untrusted argument.
 
-## Local Check Matrix
+## Validation Image
+
+The matrix runs in the image built from `deploy/Dockerfile.validation`. The
+image pins Go, Node, pnpm, golangci-lint, goreleaser, Python, and Bash to the
+repository declarations. Host toolchain installers are not used.
+
+Host-side `ensure` and the first half of `check`/`push` only:
+
+1. probe the selected runtime;
+2. inspect or build `sub2api-validation:<dockerfile-digest>`;
+3. launch `container run` / `wsl … docker run` / `docker run`.
+
+A missing runtime or failed image build is a hard failure. Host validation
+fallback is forbidden.
+
+## In-container Check Matrix
 
 The matrix mirrors CONTRIBUTING.md, backend/Makefile, and
-.github/workflows/backend-ci.yml:
+.github/workflows/backend-ci.yml, and always runs with
+`SUB2API_IN_VALIDATION=1`:
 
     cd backend && go mod tidy -diff
     python3 skills/push-cli/tests/test_push_cli.py
@@ -75,22 +90,22 @@ Repository policy and deployment checks:
     sh deploy/tests/docker-compose-security-test.sh
     sh deploy/tests/docker-runtime-resources-test.sh
     bash deploy/test-caddyfile-cache.sh
+    bash deploy/tests/apple-container-test.sh
 
 When origin/<current-branch> exists, run
 python3 tools/check_new_migrations.py --base origin/<current-branch>.
 
+The Apple Container lifecycle test is a fixture script. It runs on every
+platform inside the validation image and is not a substitute for launching
+that image through Apple Containers, WSL2 Docker, or Linux Docker.
+
 ## Runtime Final Gate
 
 When Apple Containers is selected on macOS, `ensure` and the environment probe
-only require `container --version` and `container ls`. The repository
-lifecycle test runs with the local check matrix, not during environment
-alignment:
-
-    bash deploy/tests/apple-container-test.sh
-
-A successful lifecycle test is sufficient for local runtime validation. The
-Docker Compose gate is reported as not applicable, not passed. GitHub Actions
-remains authoritative for Docker image and Compose behavior.
+only require `container --version` and `container ls`. The check matrix then
+runs with `container run`. The Docker Compose gate is reported as not
+applicable, not passed. GitHub Actions remains authoritative for Docker image
+and Compose behavior.
 
 For WSL2 Debian/Ubuntu Docker and native Linux Docker, the checker first proves
 that the selected endpoint answers both:
@@ -114,26 +129,28 @@ On macOS, the order is:
 1. require the Apple Containers `container` CLI;
 2. require `container --version` and `container ls` to succeed;
 3. if Apple Containers is absent or unusable, stop;
-4. during check/push only, run the Apple Container lifecycle test with the
-   local check matrix.
+4. build or inspect the validation image with `container build`/`image inspect`;
+5. during check/push only, run the matrix with `container run`.
 
 Apple Containers is the only supported macOS runtime. Absence, an unusable CLI,
-or a stopped service is an environment failure. A failed lifecycle test is a
-validation failure. Neither case is a fallback condition. Never probe Colima,
-Docker Desktop, or any other Docker endpoint on macOS. Never start a
-user-managed runtime implicitly.
+a stopped service, or a failed image launch is an environment or validation
+failure. Neither case is a fallback condition. Never probe Colima, Docker
+Desktop, or any other Docker endpoint on macOS. Never start a user-managed
+runtime implicitly.
 
 On Windows, check `wsl.exe -l -v` before any host Docker probe. Require a
 running WSL2 Debian or Ubuntu family distribution, then execute `docker info`
 and `docker compose version` inside it. Ignore any other running WSL
-distribution. Use `wslpath` to translate the repository path before Compose
-parsing. Missing WSL2, no running Debian/Ubuntu distribution, or unusable
-in-distribution Docker/Compose is a hard failure. Never probe or use a
-Windows-host Docker command as a fallback that bypasses the WSL2
-Debian/Ubuntu requirement.
+distribution. Use `wslpath` to translate the repository path before image
+build, Compose parsing, and `docker run`. Missing WSL2, no running
+Debian/Ubuntu distribution, or unusable in-distribution Docker/Compose is a
+hard failure. Never probe or use a Windows-host Docker command as a fallback
+that bypasses the WSL2 Debian/Ubuntu requirement. Never run the matrix in the
+WSL shell outside Docker.
 
-On Linux, use the native Docker CLI and daemon. Do not silently use Podman or a
-different container implementation.
+On Linux, use the native Docker CLI and daemon for probe, image build, Compose
+parse, and `docker run`. Do not silently use Podman, a different container
+implementation, or host-side Go/pnpm.
 
 ## Remote Monitoring
 

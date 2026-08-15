@@ -149,11 +149,41 @@ require_command() {
     command -v "$1" >/dev/null 2>&1 || die "Required command not found: $1"
 }
 
+json_extract() {
+    local spec=$1
+    local mode=${2:-raw}
+
+    python3 -c '
+import json
+import sys
+
+spec = sys.argv[1]
+mode = sys.argv[2]
+try:
+    data = json.load(sys.stdin)
+    for part in spec.split("."):
+        if isinstance(data, list):
+            data = data[int(part)]
+        elif isinstance(data, dict):
+            data = data[part]
+        else:
+            raise KeyError(part)
+except Exception:
+    raise SystemExit(1)
+if mode == "json" or isinstance(data, (dict, list)):
+    json.dump(data, sys.stdout, separators=(",", ":"))
+elif data is None:
+    pass
+else:
+    sys.stdout.write(str(data))
+' "${spec}" "${mode}"
+}
+
 require_container_version() {
     local version_output major minor
 
     require_command container
-    require_command plutil
+    require_command python3
     version_output="$(container --version)"
     if [[ ! "${version_output}" =~ ([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
         die "Unable to parse Apple container version: ${version_output}"
@@ -219,7 +249,7 @@ assert_resource_owned() {
     local inspection compact
 
     inspection="$(inspect_resource "${resource_type}" "${resource_name}" | \
-        plutil -extract 0.configuration.labels json -o - -)" || \
+        json_extract 0.configuration.labels json)" || \
         die "Failed to inspect ${resource_type} ${resource_name}."
     compact="$(printf '%s' "${inspection}" | tr -d '[:space:]')"
     if [[ "${compact}" != *"\"${STACK_LABEL_KEY}\":\"${STACK_LABEL_VALUE}\""* ]]; then
@@ -290,7 +320,7 @@ image_digest() {
     local digest
 
     digest="$(container image inspect "${image}" | \
-        plutil -extract 0.configuration.descriptor.digest raw -o - -)" || \
+        json_extract 0.configuration.descriptor.digest raw)" || \
         die "Unable to read image digest for ${image}."
     [[ "${digest}" == sha256:* ]] || die "Apple container returned an invalid image digest for ${image}."
     printf '%s\n' "${digest}"
@@ -301,7 +331,7 @@ container_image_reference() {
     local image
 
     image="$(container inspect "${container_name}" | \
-        plutil -extract 0.configuration.image.reference raw -o - -)" || \
+        json_extract 0.configuration.image.reference raw)" || \
         die "Unable to read the image reference for ${container_name}."
     [[ -n "${image}" ]] || die "Apple container returned an empty image reference for ${container_name}."
     printf '%s\n' "${image}"
@@ -360,7 +390,7 @@ container_ipv4_address() {
     local address
 
     address="$(container inspect "${container_name}" | \
-        plutil -extract 0.status.networks.0.ipv4Address raw -o - -)" || \
+        json_extract 0.status.networks.0.ipv4Address raw)" || \
         die "Unable to read the network address for ${container_name}."
     address="${address%%/*}"
     [[ "${address}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || \
@@ -475,12 +505,20 @@ validate_ipv4_address() {
     done
 }
 
+file_owner() {
+    stat -c '%u' "$1" 2>/dev/null || stat -f '%u' "$1"
+}
+
+file_mode() {
+    stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1"
+}
+
 validate_env_file_security() {
     local owner mode permissions
 
     [[ -f "${ENV_FILE}" ]] || die "Environment file not found: ${ENV_FILE}. Run '$0 init' first."
-    owner="$(stat -f '%u' "${ENV_FILE}")" || die "Unable to read owner for ${ENV_FILE}."
-    mode="$(stat -f '%Lp' "${ENV_FILE}")" || die "Unable to read permissions for ${ENV_FILE}."
+    owner="$(file_owner "${ENV_FILE}")" || die "Unable to read owner for ${ENV_FILE}."
+    mode="$(file_mode "${ENV_FILE}")" || die "Unable to read permissions for ${ENV_FILE}."
     [[ "${owner}" == "${EUID}" ]] || die "Environment file must be owned by the current user: ${ENV_FILE}"
     [[ "${mode}" =~ ^[0-7]+$ ]] || die "Unable to parse permissions for ${ENV_FILE}: ${mode}"
     permissions=$((8#${mode}))
@@ -909,9 +947,9 @@ container_uses_bind_mount() {
     inspection="$(container inspect "${container_name}")" || return 1
     for ((index = 0; index < 32; index++)); do
         source="$(printf '%s' "${inspection}" | \
-            plutil -extract "0.configuration.mounts.${index}.source" raw -o - - 2>/dev/null)" || break
+            json_extract "0.configuration.mounts.${index}.source" raw 2>/dev/null)" || break
         destination="$(printf '%s' "${inspection}" | \
-            plutil -extract "0.configuration.mounts.${index}.destination" raw -o - - 2>/dev/null)" || return 1
+            json_extract "0.configuration.mounts.${index}.destination" raw 2>/dev/null)" || return 1
         if [[ "${source}" == "${expected_source}" && "${destination}" == "${expected_destination}" ]]; then
             return 0
         fi
@@ -1380,7 +1418,7 @@ assert_legacy_volumes_unreferenced() {
             die "Failed to inspect ${container_name} before deleting legacy volumes."
         for ((index = 0; index < 32; index++)); do
             source="$(printf '%s' "${inspection}" | \
-                plutil -extract "0.configuration.mounts.${index}.source" raw -o - - 2>/dev/null)" || break
+                json_extract "0.configuration.mounts.${index}.source" raw 2>/dev/null)" || break
             for volume_name in "${LEGACY_VOLUMES_TO_DELETE[@]}"; do
                 if [[ "${source}" == "${volume_name}" ]]; then
                     die "Refusing to delete ${volume_name}: ${container_name} still references it."

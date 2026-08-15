@@ -469,7 +469,6 @@ class LocalChecksTest(unittest.TestCase):
             mock.patch.object(push_cli, "run_command", return_value=git_miss),
             mock.patch.object(push_cli, "run_step") as run_step,
             mock.patch.object(push_cli, "run_frontend_security_check") as audit_check,
-            mock.patch.object(push_cli, "run_runtime_final_gate") as final_gate,
         ):
             runtime = push_cli.Runtime("apple-containers", compose_required=False)
             push_cli.run_local_checks("origin", "feature", runtime)
@@ -482,21 +481,19 @@ class LocalChecksTest(unittest.TestCase):
         self.assertIn("Docker Compose security", names)
         self.assertIn("Docker runtime resources", names)
         audit_check.assert_called_once_with()
-        final_gate.assert_called_once_with(runtime)
 
-    def test_docker_runtime_skips_apple_lifecycle_test(self) -> None:
+    def test_docker_runtime_still_runs_apple_lifecycle_test(self) -> None:
         git_miss = subprocess.CompletedProcess(["git"], 1, "")
         with (
             mock.patch.object(push_cli, "ROOT", Path("/repo")),
             mock.patch.object(push_cli, "run_command", return_value=git_miss),
             mock.patch.object(push_cli, "run_step") as run_step,
             mock.patch.object(push_cli, "run_frontend_security_check"),
-            mock.patch.object(push_cli, "run_runtime_final_gate"),
         ):
             push_cli.run_local_checks("origin", "feature", push_cli.Runtime("docker"))
 
         names = [call.args[0] for call in run_step.call_args_list]
-        self.assertNotIn("Apple Container lifecycle test", names)
+        self.assertIn("Apple Container lifecycle test", names)
 
 
 class DeclaredToolchainsTest(unittest.TestCase):
@@ -508,77 +505,109 @@ class DeclaredToolchainsTest(unittest.TestCase):
         self.assertRegex(declared.golangci_lint, r"^\d+\.\d+\.\d+$")
 
 
-class EnsureToolchainsTest(unittest.TestCase):
-    def test_skips_installers_when_versions_already_match(self) -> None:
-        declared = push_cli.DeclaredToolchains(
-            go="1.26.6",
-            pnpm="9.15.9",
-            node_major_minimum=20,
-            golangci_lint="2.9.0",
-        )
+class ValidationLaunchTest(unittest.TestCase):
+    def test_macos_launch_uses_apple_container_run(self) -> None:
+        runtime = push_cli.Runtime("apple-containers", compose_required=False)
         with (
-            mock.patch.object(push_cli, "declared_toolchains", return_value=declared),
-            mock.patch.object(push_cli, "current_go_version", return_value="go1.26.6"),
-            mock.patch.object(push_cli, "current_pnpm_version", return_value="9.15.9"),
-            mock.patch.object(push_cli, "current_node_version", return_value="v24.18.0"),
-            mock.patch.object(push_cli, "current_golangci_lint_version", return_value="2.9.0"),
-            mock.patch.object(push_cli, "install_go") as install_go,
-            mock.patch.object(push_cli, "install_pnpm") as install_pnpm,
-            mock.patch.object(push_cli, "install_golangci_lint") as install_lint,
-        ):
-            push_cli.ensure_toolchains()
-
-        install_go.assert_not_called()
-        install_pnpm.assert_not_called()
-        install_lint.assert_not_called()
-
-    def test_installs_only_mismatched_pinned_versions(self) -> None:
-        declared = push_cli.DeclaredToolchains(
-            go="1.26.6",
-            pnpm="9.15.9",
-            node_major_minimum=20,
-            golangci_lint="2.9.0",
-        )
-        with (
-            mock.patch.object(push_cli, "declared_toolchains", return_value=declared),
+            mock.patch.object(push_cli, "ROOT", Path("/repo")),
+            mock.patch.object(push_cli, "SCRIPT", Path("/repo/skills/push-cli/scripts/push_cli.py")),
             mock.patch.object(
-                push_cli,
-                "current_go_version",
-                side_effect=["go1.26.5", "go1.26.6"],
+                push_cli.validation_runtime,
+                "runtime_user",
+                return_value="501:20",
             ),
-            mock.patch.object(push_cli, "current_pnpm_version", return_value="9.15.9"),
-            mock.patch.object(push_cli, "current_node_version", return_value="v24.18.0"),
             mock.patch.object(
-                push_cli,
-                "current_golangci_lint_version",
-                side_effect=["2.12.2", "2.9.0"],
+                push_cli.validation_runtime,
+                "cache_mounts",
+                return_value=[("/cache/go", "/tmp/sub2api-home/go")],
             ),
-            mock.patch.object(push_cli, "install_go") as install_go,
-            mock.patch.object(push_cli, "install_pnpm") as install_pnpm,
-            mock.patch.object(push_cli, "install_golangci_lint") as install_lint,
+            mock.patch.object(
+                push_cli.validation_runtime,
+                "validation_image_ref",
+                return_value="sub2api-validation:test",
+            ),
+            mock.patch.object(push_cli, "run_step") as run_step,
         ):
-            push_cli.ensure_toolchains()
+            push_cli.launch_in_validation(runtime, "origin")
 
-        install_go.assert_called_once_with("1.26.6")
-        install_lint.assert_called_once_with("2.9.0")
-        install_pnpm.assert_not_called()
+        name, command = run_step.call_args.args
+        self.assertEqual("In-container validation", name)
+        self.assertEqual("container", command[0])
+        self.assertIn("run", command)
+        self.assertIn(
+            "type=bind,source=/repo,target=/repo",
+            command,
+        )
+        self.assertNotIn("docker", command)
+        self.assertNotIn("go", command)
+        self.assertNotIn("pnpm", command)
+        self.assertIn("--in-validation", command)
 
-    def test_does_not_auto_change_node(self) -> None:
-        declared = push_cli.DeclaredToolchains(
-            go="1.26.6",
-            pnpm="9.15.9",
-            node_major_minimum=20,
-            golangci_lint="2.9.0",
+    def test_windows_launch_uses_wsl_docker_run(self) -> None:
+        wsl = "C:/Windows/System32/wsl.exe"
+        runtime = push_cli.Runtime(
+            "wsl2-docker",
+            (wsl, "-d", "Ubuntu-24.04", "--"),
+            "/mnt/c/repo",
         )
         with (
-            mock.patch.object(push_cli, "declared_toolchains", return_value=declared),
-            mock.patch.object(push_cli, "current_go_version", return_value="go1.26.6"),
-            mock.patch.object(push_cli, "current_pnpm_version", return_value="9.15.9"),
-            mock.patch.object(push_cli, "current_node_version", return_value="v18.20.0"),
-            mock.patch.object(push_cli, "current_golangci_lint_version", return_value="2.9.0"),
+            mock.patch.object(push_cli, "ROOT", Path("/repo")),
+            mock.patch.object(push_cli, "SCRIPT", Path("/repo/skills/push-cli/scripts/push_cli.py")),
+            mock.patch.object(
+                push_cli.validation_runtime,
+                "runtime_user",
+                return_value="1000:1000",
+            ),
+            mock.patch.object(
+                push_cli.validation_runtime,
+                "cache_mounts",
+                return_value=[("/tmp/cache/go", "/tmp/sub2api-home/go")],
+            ),
+            mock.patch.object(
+                push_cli.validation_runtime,
+                "validation_image_ref",
+                return_value="sub2api-validation:test",
+            ),
+            mock.patch.object(push_cli, "run_step") as run_step,
         ):
-            with self.assertRaisesRegex(push_cli.PushCliError, "does not auto-change Node"):
-                push_cli.ensure_toolchains()
+            push_cli.launch_in_validation(runtime, "origin")
+
+        command = run_step.call_args.args[1]
+        self.assertEqual(
+            [wsl, "-d", "Ubuntu-24.04", "--", "docker", "run"],
+            command[:6],
+        )
+        self.assertIn("/mnt/c/repo:/mnt/c/repo", command)
+        self.assertNotIn("go", command)
+
+    def test_linux_launch_uses_docker_run(self) -> None:
+        runtime = push_cli.Runtime("docker")
+        with (
+            mock.patch.object(push_cli, "ROOT", Path("/repo")),
+            mock.patch.object(push_cli, "SCRIPT", Path("/repo/skills/push-cli/scripts/push_cli.py")),
+            mock.patch.object(
+                push_cli.validation_runtime,
+                "runtime_user",
+                return_value="1000:1000",
+            ),
+            mock.patch.object(
+                push_cli.validation_runtime,
+                "cache_mounts",
+                return_value=[("/cache/go", "/tmp/sub2api-home/go")],
+            ),
+            mock.patch.object(
+                push_cli.validation_runtime,
+                "validation_image_ref",
+                return_value="sub2api-validation:test",
+            ),
+            mock.patch.object(push_cli, "run_step") as run_step,
+        ):
+            push_cli.launch_in_validation(runtime, "origin")
+
+        command = run_step.call_args.args[1]
+        self.assertEqual(["docker", "run"], command[:2])
+        self.assertNotIn("go", command)
+        self.assertNotIn("pnpm", command)
 
 
 class MainFlowTest(unittest.TestCase):
@@ -600,19 +629,28 @@ class MainFlowTest(unittest.TestCase):
 
             return _inner
 
-        args = mock.Mock(action="check", no_ensure=False, remote="origin", repo_root=Path("/repo"))
+        args = mock.Mock(
+            action="check",
+            in_validation=False,
+            remote="origin",
+            repo_root=Path("/repo"),
+        )
         with (
             mock.patch.object(push_cli, "parse_args", return_value=args),
             mock.patch.object(push_cli, "github_gate", side_effect=record("github_gate")),
             mock.patch.object(push_cli, "current_branch", side_effect=record("current_branch")),
-            mock.patch.object(push_cli, "ensure_toolchains", side_effect=record("ensure_toolchains")),
-            mock.patch.object(push_cli, "check_toolchains", side_effect=record("check_toolchains")),
             mock.patch.object(push_cli, "probe_runtime", side_effect=record("probe_runtime")),
+            mock.patch.object(
+                push_cli,
+                "ensure_validation_image",
+                side_effect=record("ensure_validation_image"),
+            ),
             mock.patch.object(
                 push_cli,
                 "require_clean_worktree",
                 side_effect=record("require_clean_worktree"),
             ),
+            mock.patch.object(push_cli, "launch_in_validation") as launch,
             mock.patch.object(push_cli, "run_local_checks") as local_checks,
         ):
             self.assertEqual(1, push_cli.main())
@@ -621,37 +659,91 @@ class MainFlowTest(unittest.TestCase):
             [
                 "github_gate",
                 "current_branch",
-                "ensure_toolchains",
-                "check_toolchains",
                 "probe_runtime",
+                "ensure_validation_image",
                 "require_clean_worktree",
             ],
             order,
         )
+        launch.assert_not_called()
         local_checks.assert_not_called()
 
     def test_ensure_skips_worktree_and_local_checks(self) -> None:
-        args = mock.Mock(action="ensure", no_ensure=False, remote="origin", repo_root=Path("/repo"))
+        args = mock.Mock(
+            action="ensure",
+            in_validation=False,
+            remote="origin",
+            repo_root=Path("/repo"),
+        )
         with (
             mock.patch.object(push_cli, "parse_args", return_value=args),
             mock.patch.object(push_cli, "github_gate", return_value="LuckyKuang/sub2api-plus"),
             mock.patch.object(push_cli, "current_branch", return_value="feature"),
-            mock.patch.object(push_cli, "ensure_toolchains") as ensure,
-            mock.patch.object(push_cli, "check_toolchains") as check,
             mock.patch.object(
                 push_cli,
                 "probe_runtime",
                 return_value=push_cli.Runtime("apple-containers", compose_required=False),
             ) as probe,
+            mock.patch.object(push_cli, "ensure_validation_image") as ensure_image,
             mock.patch.object(push_cli, "require_clean_worktree") as clean,
+            mock.patch.object(push_cli, "launch_in_validation") as launch,
             mock.patch.object(push_cli, "run_local_checks") as local_checks,
+            mock.patch.object(push_cli, "check_toolchains") as check,
         ):
             self.assertEqual(0, push_cli.main())
 
-        ensure.assert_called_once_with()
-        check.assert_called_once_with()
         probe.assert_called_once_with()
+        ensure_image.assert_called_once()
+        check.assert_not_called()
         clean.assert_not_called()
+        launch.assert_not_called()
+        local_checks.assert_not_called()
+
+    def test_host_check_launches_container_instead_of_host_matrix(self) -> None:
+        runtime = push_cli.Runtime("docker")
+        args = mock.Mock(
+            action="check",
+            in_validation=False,
+            remote="origin",
+            repo_root=Path("/repo"),
+        )
+        with (
+            mock.patch.object(push_cli, "parse_args", return_value=args),
+            mock.patch.object(push_cli, "github_gate", return_value="LuckyKuang/sub2api-plus"),
+            mock.patch.object(push_cli, "current_branch", return_value="feature"),
+            mock.patch.object(push_cli, "probe_runtime", return_value=runtime),
+            mock.patch.object(push_cli, "ensure_validation_image"),
+            mock.patch.object(push_cli, "require_clean_worktree"),
+            mock.patch.object(push_cli, "launch_in_validation") as launch,
+            mock.patch.object(push_cli, "run_runtime_final_gate") as final_gate,
+            mock.patch.object(push_cli, "ensure_clean_after_checks"),
+            mock.patch.object(push_cli, "run_local_checks") as local_checks,
+            mock.patch.object(push_cli, "check_toolchains") as check,
+        ):
+            self.assertEqual(0, push_cli.main())
+
+        launch.assert_called_once_with(runtime, "origin")
+        final_gate.assert_called_once_with(runtime)
+        local_checks.assert_not_called()
+        check.assert_not_called()
+
+    def test_in_validation_flag_is_rejected_on_darwin_host(self) -> None:
+        args = mock.Mock(
+            action="check",
+            in_validation=True,
+            remote="origin",
+            repo_root=Path("/repo"),
+        )
+        with (
+            mock.patch.object(push_cli, "parse_args", return_value=args),
+            mock.patch.object(
+                push_cli.validation_runtime,
+                "host_os_forbids_in_validation",
+                return_value=True,
+            ),
+            mock.patch.object(push_cli, "run_local_checks") as local_checks,
+        ):
+            self.assertEqual(1, push_cli.main())
         local_checks.assert_not_called()
 
 

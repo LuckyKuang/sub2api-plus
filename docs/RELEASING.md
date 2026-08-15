@@ -107,35 +107,37 @@ required.
 
 ## Validate and Create the Local Tag
 
-Install the versions declared in `backend/go.mod`, `frontend/package.json`,
-and `.tool-versions`, plus Python 3.10+ and Bash 4+. PostgreSQL and Redis must
-be available when required by integration tests.
-
-Run from the repository root:
+Use release-cli from the repository root. It probes the platform runtime,
+builds `deploy/Dockerfile.validation` when needed, and runs the canonical
+preflight inside that container. Do not install host toolchains for this gate
+and do not invoke `tools/release_preflight.py` directly.
 
 ```bash
-python3 tools/release_preflight.py \
+python3 skills/release-cli/scripts/release_cli.py validate \
   --tag vX.Y.Z+custom.NNN \
-  --notes-file release-notes.md \
-  --create-tag
+  --notes-file release-notes.md
+
+python3 skills/release-cli/scripts/release_cli.py tag \
+  --tag vX.Y.Z+custom.NNN \
+  --notes-file release-notes.md
 ```
 
-The command first checks all toolchains together, then verifies the clean
-worktree, absent local/remote tag, `planned` upstream status, version sources,
-release notes, README contracts, migrations, deployment scripts, Go module
-tidiness, backend tests/lint, and frontend install/lint/typecheck/tests/build.
-It also verifies that `HEAD` and the notes did not change during the run. Only
-after every gate passes does it create and verify the local annotated tag; it
-never pushes.
+The in-container preflight checks all pinned toolchains, then verifies the
+clean worktree, absent local/remote tag, `planned` upstream status, version
+sources, release notes, README contracts, migrations, deployment scripts, Go
+module tidiness, backend tests/lint, and frontend
+install/lint/typecheck/tests/build. It also verifies that `HEAD` and the notes
+did not change during the run. Only after every gate passes does `tag` create
+and verify the local annotated tag; it never pushes.
 
-On macOS, preflight also runs the Apple container lifecycle test. On other
-platforms that test remains a required macOS branch-CI gate, so do not release
-unless the release commit's normal CI is green. The portable Caddy deployment
-test runs locally on every platform.
+The validation container is Apple Containers on macOS, Docker inside WSL2
+Debian or Ubuntu on Windows, and Docker on Linux. Host validation fallback is
+forbidden. The Apple container lifecycle fixture test runs in that image on
+every platform. GitHub Actions remains required after the local gate.
 
-To validate without creating a tag, omit `--create-tag`. Do not manually copy a
-raw `git tag` command after that dry run; rerun with `--create-tag` so the final
-commit, notes, and remote-tag checks remain coupled to tag creation.
+Do not manually copy a raw `git tag` command after a validate dry run; rerun
+`tag` so the final commit, notes, and remote-tag checks remain coupled to tag
+creation.
 
 ## Review and Push
 

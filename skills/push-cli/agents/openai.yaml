@@ -1,4 +1,4 @@
 interface:
   display_name: "Sub2API Push CLI"
-  short_description: "Require Apple Containers on macOS, then push"
-  default_prompt: "Use $push-cli to align the environment before the dirty-worktree gate, require Apple Containers on macOS with no Docker fallback, require Docker inside running WSL2 Debian or Ubuntu on Windows without host fallback, run strict local checks, and push the current branch safely."
+  short_description: "Validate in Apple Container or Docker, then push"
+  default_prompt: "Use $push-cli to probe the platform runtime, refuse host-side validation, run the check matrix inside Apple Containers on macOS, Docker inside WSL2 Debian or Ubuntu on Windows, or Docker on Linux, and push the current branch safely."

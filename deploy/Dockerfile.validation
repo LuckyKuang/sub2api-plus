@@ -1,0 +1,61 @@
+# Validation-only image for push-cli and release-cli.
+# Do not reuse this as an application runtime.
+FROM debian:bookworm-slim
+
+ARG GO_VERSION=1.26.6
+ARG NODE_VERSION=20.19.4
+ARG PNPM_VERSION=9.15.9
+ARG GOLANGCI_LINT_VERSION=2.9.0
+ARG GORELEASER_VERSION=2.17.1
+ARG TARGETARCH
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    GOPATH=/tmp/sub2api-home/go \
+    GOCACHE=/tmp/sub2api-home/go/cache \
+    GOMODCACHE=/tmp/sub2api-home/go/pkg/mod \
+    PNPM_HOME=/tmp/sub2api-home/pnpm \
+    HOME=/tmp/sub2api-home \
+    PATH=/usr/local/go/bin:/usr/local/node/bin:/usr/local/bin:/tmp/sub2api-home/pnpm:$PATH
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        bash \
+        ca-certificates \
+        curl \
+        git \
+        python3 \
+        python3-pip \
+        xz-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN set -eu; \
+    arch="${TARGETARCH:-}"; \
+    if [ -z "${arch}" ]; then \
+        case "$(uname -m)" in \
+            x86_64) arch=amd64 ;; \
+            aarch64|arm64) arch=arm64 ;; \
+            *) echo "unsupported architecture: $(uname -m)" >&2; exit 1 ;; \
+        esac; \
+    fi; \
+    case "${arch}" in \
+        amd64|x86_64) goarch=amd64; nodearch=x64; goreleaser_arch=x86_64 ;; \
+        arm64|aarch64) goarch=arm64; nodearch=arm64; goreleaser_arch=arm64 ;; \
+        *) echo "unsupported architecture: ${arch}" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-${goarch}.tar.gz" \
+        | tar -C /usr/local -xz; \
+    curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${nodearch}.tar.xz" \
+        | tar -C /usr/local -xJ; \
+    ln -s "/usr/local/node-v${NODE_VERSION}-linux-${nodearch}" /usr/local/node; \
+    corepack enable; \
+    corepack prepare "pnpm@${PNPM_VERSION}" --activate; \
+    curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh \
+        | sh -s -- -b /usr/local/bin "v${GOLANGCI_LINT_VERSION}"; \
+    curl -fsSL "https://github.com/goreleaser/goreleaser/releases/download/v${GORELEASER_VERSION}/goreleaser_Linux_${goreleaser_arch}.tar.gz" \
+        | tar -C /usr/local/bin -xz goreleaser; \
+    mkdir -p /tmp/sub2api-home; \
+    chmod 777 /tmp/sub2api-home; \
+    printf 'sub2api-validation\n' >/etc/sub2api-validation
+
+WORKDIR /workspace
+CMD ["python3", "--version"]

@@ -43,8 +43,11 @@ pnpm --dir frontend run typecheck
 pnpm --dir frontend run test:run
 ```
 
-Run the focused tests for the changed package or component while iterating;
-run the broader checks before opening a pull request.
+Run the focused tests for the changed package or component while iterating.
+Before a push or release, use `skills/push-cli` or `skills/release-cli`. Those
+gates run the full matrix inside Apple Containers on macOS, Docker inside WSL2
+Debian or Ubuntu on Windows, and Docker on Linux. Host-side execution of that
+matrix is forbidden.
 
 ## Generated Code
 

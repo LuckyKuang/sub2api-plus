@@ -1,4 +1,4 @@
 interface:
   display_name: "Sub2API Release CLI"
   short_description: "Prepare, tag, publish, and verify releases safely"
-  default_prompt: "Use $release-cli to validate, tag, publish, and verify the requested Sub2API Plus release safely."
+  default_prompt: "Use $release-cli to validate the requested Sub2API Plus release inside the platform validation container, then tag, publish, and verify it safely. Never run release preflight on the host."

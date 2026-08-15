@@ -5,23 +5,25 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import platform
 import re
 import shlex
 import shutil
 import subprocess
 import sys
-import tarfile
 import tempfile
 import time
-import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
 
 ROOT = Path(__file__).resolve().parents[3]
+TOOLS = ROOT / "tools"
+if str(TOOLS) not in sys.path:
+    sys.path.insert(0, str(TOOLS))
+import validation_runtime
+
 DEFAULT_REMOTE = "origin"
 EXPECTED_REPOSITORY = "LuckyKuang/sub2api-plus"
 GO_VERSION_RE = re.compile(r"^go\s+(\d+\.\d+(?:\.\d+)?)\s*$", re.MULTILINE)
@@ -29,19 +31,14 @@ VERSION_RE = re.compile(
     r"\bversion(?:\s*[:=]|\s+)(?:v)?(\d+\.\d+\.\d+)",
     re.IGNORECASE,
 )
-WSL_DEBIAN_UBUNTU_RE = re.compile(r"^(debian|ubuntu)(?:-[\w.]+)?$", re.IGNORECASE)
+SCRIPT = Path(__file__).resolve()
 
 
 class PushCliError(RuntimeError):
     """A hard failure that must stop validation or pushing."""
 
 
-@dataclass(frozen=True)
-class Runtime:
-    name: str
-    prefix: tuple[str, ...] = ()
-    compose_root: str | None = None
-    compose_required: bool = True
+Runtime = validation_runtime.Runtime
 
 
 @dataclass(frozen=True)
@@ -268,312 +265,71 @@ def check_toolchains() -> None:
     )
 
 
-def go_archive_triplet() -> str:
-    system = platform.system()
-    machine = platform.machine().lower()
-    os_name = {"Darwin": "darwin", "Linux": "linux", "Windows": "windows"}.get(system)
-    arch = {
-        "x86_64": "amd64",
-        "amd64": "amd64",
-        "arm64": "arm64",
-        "aarch64": "arm64",
-    }.get(machine)
-    if not os_name or not arch:
-        raise PushCliError(f"unsupported host for pinned Go install: {system} {machine}")
-    return f"{os_name}-{arch}"
-
-
-def install_go(version: str) -> None:
-    if shutil.which("mise"):
-        run_step(f"Install Go {version} with mise", ["mise", "install", f"go@{version}"])
-        run_step(f"Activate Go {version} with mise", ["mise", "use", "-g", f"go@{version}"])
-        return
-    if shutil.which("asdf"):
-        add_plugin = run_command(["asdf", "plugin", "add", "golang"], capture=True)
-        if add_plugin.returncode != 0 and "already added" not in (add_plugin.stdout or "").lower():
-            raise PushCliError(
-                f"asdf plugin add golang failed: {(add_plugin.stdout or '').strip()[-500:]}"
-            )
-        run_step(f"Install Go {version} with asdf", ["asdf", "install", "golang", version])
-        run_step(f"Activate Go {version} with asdf", ["asdf", "set", "-u", "golang", version])
-        return
-
-    archive = f"go{version}.{go_archive_triplet()}.tar.gz"
-    url = f"https://go.dev/dl/{archive}"
-    dest_root = Path.home() / ".sub2api" / "toolchains" / f"go-{version}"
-    print(f"\n[Install Go {version} from {url}]")
-    dest_root.parent.mkdir(parents=True, exist_ok=True)
-    if dest_root.exists():
-        shutil.rmtree(dest_root)
-    dest_root.mkdir(parents=True)
-
-    with tempfile.TemporaryDirectory() as tmp:
-        archive_path = Path(tmp) / archive
-        urllib.request.urlretrieve(url, archive_path)
-        with tarfile.open(archive_path, "r:gz") as tar:
-            tar.extractall(path=tmp)
-        extracted = Path(tmp) / "go"
-        if not extracted.exists():
-            raise PushCliError(f"Go archive did not contain a go/ directory: {url}")
-        shutil.copytree(extracted, dest_root, dirs_exist_ok=True)
-
-    bin_dir = dest_root / "bin"
-    go_bin = bin_dir / "go"
-    if not go_bin.exists():
-        raise PushCliError(f"Go {version} install is missing {go_bin}")
-    os.environ["PATH"] = f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}"
-    os.environ["GOROOT"] = str(dest_root)
-
-
-def install_pnpm(version: str) -> None:
-    if shutil.which("corepack"):
-        run_step("Enable Corepack", ["corepack", "enable"])
-        run_step(
-            f"Activate pnpm {version} with Corepack",
-            ["corepack", "prepare", f"pnpm@{version}", "--activate"],
-        )
-        return
-    if shutil.which("mise"):
-        run_step(f"Install pnpm {version} with mise", ["mise", "install", f"pnpm@{version}"])
-        run_step(f"Activate pnpm {version} with mise", ["mise", "use", "-g", f"pnpm@{version}"])
-        return
-    raise PushCliError(
-        f"pnpm {version} is required but neither corepack nor mise is available to install it"
-    )
-
-
-def install_golangci_lint(version: str) -> None:
-    if shutil.which("mise"):
-        run_step(
-            f"Install golangci-lint {version} with mise",
-            ["mise", "install", f"golangci-lint@{version}"],
-        )
-        run_step(
-            f"Activate golangci-lint {version} with mise",
-            ["mise", "use", "-g", f"golangci-lint@{version}"],
-        )
-        return
-    if shutil.which("asdf"):
-        add_plugin = run_command(["asdf", "plugin", "add", "golangci-lint"], capture=True)
-        if add_plugin.returncode != 0 and "already added" not in (add_plugin.stdout or "").lower():
-            raise PushCliError(
-                "asdf plugin add golangci-lint failed: "
-                + (add_plugin.stdout or "").strip()[-500:]
-            )
-        run_step(
-            f"Install golangci-lint {version} with asdf",
-            ["asdf", "install", "golangci-lint", version],
-        )
-        run_step(
-            f"Activate golangci-lint {version} with asdf",
-            ["asdf", "set", "-u", "golangci-lint", version],
-        )
-        return
-
-    dest_dir = Path.home() / ".sub2api" / "toolchains" / "bin"
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    script_url = "https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh"
-    print(f"\n[Install golangci-lint {version} from official install.sh]")
-    with tempfile.TemporaryDirectory() as tmp:
-        script_path = Path(tmp) / "install.sh"
-        urllib.request.urlretrieve(script_url, script_path)
-        run_step(
-            f"Install golangci-lint {version}",
-            ["sh", str(script_path), "-b", str(dest_dir), f"v{version}"],
-        )
-    os.environ["PATH"] = f"{dest_dir}{os.pathsep}{os.environ.get('PATH', '')}"
-
-
-def ensure_toolchains() -> None:
-    declared = declared_toolchains()
-    print(
-        "Declared toolchains: "
-        f"Go {declared.go}; pnpm {declared.pnpm}; "
-        f"Node.js >={declared.node_major_minimum}; "
-        f"golangci-lint {declared.golangci_lint}"
-    )
-
-    try:
-        go_actual = current_go_version()
-    except PushCliError:
-        go_actual = "missing"
-    if go_actual != f"go{declared.go}":
-        print(f"Go is {go_actual}; aligning to {declared.go}")
-        install_go(declared.go)
-        go_actual = current_go_version()
-        if go_actual != f"go{declared.go}":
-            raise PushCliError(
-                f"Go {declared.go} install finished, but PATH still reports {go_actual}"
-            )
-
-    try:
-        pnpm_actual = current_pnpm_version()
-    except PushCliError:
-        pnpm_actual = "missing"
-    if pnpm_actual != declared.pnpm:
-        print(f"pnpm is {pnpm_actual}; aligning to {declared.pnpm}")
-        install_pnpm(declared.pnpm)
-        pnpm_actual = current_pnpm_version()
-        if pnpm_actual != declared.pnpm:
-            raise PushCliError(
-                f"pnpm {declared.pnpm} install finished, but PATH still reports {pnpm_actual}"
-            )
-
-    try:
-        node_actual = current_node_version()
-        node_ok = node_major(node_actual) >= declared.node_major_minimum
-    except PushCliError:
-        node_actual = "missing"
-        node_ok = False
-    if not node_ok:
-        raise PushCliError(
-            f"Node.js {declared.node_major_minimum}+ is required; found {node_actual}. "
-            "Install or switch Node manually; push-cli does not auto-change Node versions."
-        )
-
-    try:
-        lint_actual = current_golangci_lint_version()
-    except PushCliError:
-        lint_actual = "missing"
-    if lint_actual != declared.golangci_lint:
-        print(f"golangci-lint is {lint_actual}; aligning to {declared.golangci_lint}")
-        install_golangci_lint(declared.golangci_lint)
-        lint_actual = current_golangci_lint_version()
-        if lint_actual != declared.golangci_lint:
-            raise PushCliError(
-                f"golangci-lint {declared.golangci_lint} install finished, "
-                f"but PATH still reports {lint_actual}"
-            )
-
-    print(
-        "Toolchains aligned: "
-        f"Go {go_actual}; pnpm {pnpm_actual}; Node.js {node_actual}; "
-        f"golangci-lint {lint_actual}"
-    )
-
-
 def probe_docker(prefix: Sequence[str] = ()) -> tuple[bool, str]:
-    docker_command = [*prefix, "docker"]
-    info_ok, info_output = optional_capture([*docker_command, "info"])
-    if not info_ok:
-        return False, info_output
-    compose_ok, compose_output = optional_capture(
-        [*docker_command, "compose", "version"]
-    )
-    if not compose_ok:
-        return False, compose_output
-    return True, compose_output.splitlines()[0] if compose_output else "Docker Compose"
+    return validation_runtime.probe_docker(prefix, optional_capture=optional_capture)
 
 
 def normalize_wsl_list_output(output: str) -> str:
-    # wsl.exe -l -v commonly emits UTF-16LE. After a UTF-8 decode that keeps
-    # replacement characters, leftover NULs still split tokens.
-    cleaned = output.replace("\x00", "").replace("\ufeff", "")
-    return cleaned.replace("\r\n", "\n").replace("\r", "\n")
+    return validation_runtime.normalize_wsl_list_output(output)
 
 
 def parse_wsl_distributions(output: str) -> list[tuple[str, str]]:
-    distributions: list[tuple[str, str]] = []
-    for line in normalize_wsl_list_output(output).splitlines():
-        match = re.match(r"^\s*\*?\s*(.*?)\s+(Running|Stopped)\s+2\s*$", line)
-        if match and match.group(1):
-            name = re.sub(r"\s*\(Default\)\s*$", "", match.group(1).strip())
-            if name:
-                distributions.append((name, match.group(2)))
-    return distributions
+    return validation_runtime.parse_wsl_distributions(output)
 
 
 def is_debian_or_ubuntu_wsl(name: str) -> bool:
-    cleaned = re.sub(r"\s*\(Default\)\s*$", "", name.strip())
-    return bool(WSL_DEBIAN_UBUNTU_RE.fullmatch(cleaned))
-
-
-def probe_windows_runtime() -> Runtime:
-    wsl = shutil.which("wsl.exe") or shutil.which("wsl")
-    if not wsl:
-        raise PushCliError("Windows push validation requires wsl.exe")
-    status = capture([wsl, "-l", "-v"])
-    distributions = parse_wsl_distributions(status)
-    supported = [
-        (name, state)
-        for name, state in distributions
-        if is_debian_or_ubuntu_wsl(name)
-    ]
-    if not supported:
-        found = ", ".join(name for name, _ in distributions) or "none"
-        raise PushCliError(
-            "Windows push validation requires a WSL2 Debian or Ubuntu "
-            f"distribution; found: {found}. Host Docker fallback is forbidden"
-        )
-
-    running = [name for name, state in supported if state == "Running"]
-    if not running:
-        names = ", ".join(name for name, _ in supported)
-        raise PushCliError(
-            "WSL2 Debian/Ubuntu distributions exist but none are running: "
-            f"{names}"
-        )
-
-    for distro in running:
-        prefix = (wsl, "-d", distro, "--")
-        docker_ok, detail = probe_docker(prefix)
-        if not docker_ok:
-            continue
-        linux_root = capture(
-            [wsl, "-d", distro, "--", "wslpath", "-a", str(ROOT)]
-        )
-        print(f"Runtime: WSL2/{distro} with Docker ({detail})")
-        return Runtime("wsl2-docker", prefix, linux_root)
-    raise PushCliError(
-        "a running WSL2 Debian/Ubuntu distribution was found, but Docker and "
-        "Docker Compose are not usable inside it. Host Docker fallback is forbidden"
-    )
-
-
-def probe_macos_runtime() -> Runtime:
-    if not shutil.which("container"):
-        raise PushCliError(
-            "macOS push validation requires Apple Containers. Install the "
-            "container CLI and ensure `container --version` and `container ls` "
-            "succeed. Colima/Docker Desktop fallback is forbidden"
-        )
-
-    version_ok, version = optional_capture(["container", "--version"])
-    if not version_ok:
-        detail = version[-500:] if version else "container --version failed"
-        raise PushCliError(
-            "Apple Containers is the mandatory macOS runtime, but its CLI is "
-            "not usable; Colima/Docker fallback is forbidden: "
-            f"{detail}"
-        )
-    list_ok, list_output = optional_capture(["container", "ls"])
-    if not list_ok:
-        detail = list_output[-500:] if list_output else "container ls failed"
-        raise PushCliError(
-            "Apple Containers is the mandatory macOS runtime, but its service "
-            "is not ready; start or repair Apple Containers and retry. "
-            f"Colima/Docker fallback is forbidden: {detail}"
-        )
-    version_label = version.splitlines()[0] if version else "version available"
-    print(f"Runtime: Apple Containers ({version_label})")
-    return Runtime("apple-containers", compose_required=False)
+    return validation_runtime.is_debian_or_ubuntu_wsl(name)
 
 
 def probe_runtime() -> Runtime:
-    system = platform.system()
-    if system == "Windows":
-        return probe_windows_runtime()
+    try:
+        return validation_runtime.probe_runtime(
+            root=ROOT,
+            capture=capture,
+            optional_capture=optional_capture,
+            probe_docker_fn=probe_docker,
+            which=shutil.which,
+            system_name=platform.system(),
+        )
+    except validation_runtime.ValidationRuntimeError as error:
+        raise PushCliError(str(error)) from error
 
-    if system == "Darwin":
-        return probe_macos_runtime()
 
-    docker_ok, docker_detail = probe_docker()
-    if docker_ok:
-        print(f"Runtime: Docker ({docker_detail})")
-        return Runtime("docker")
-    if system == "Linux":
-        raise PushCliError("Linux push validation requires a running Docker daemon")
-    raise PushCliError(f"unsupported host platform: {system}")
+def ensure_validation_image(runtime: Runtime) -> str:
+    try:
+        return validation_runtime.ensure_validation_image(
+            runtime,
+            root=ROOT,
+            optional_capture=optional_capture,
+            run_step=lambda name, command: run_step(name, command),
+        )
+    except validation_runtime.ValidationRuntimeError as error:
+        raise PushCliError(str(error)) from error
+
+
+def launch_in_validation(runtime: Runtime, remote: str) -> None:
+    repo = validation_runtime.mount_root(runtime, ROOT)
+    script = validation_runtime.container_path(SCRIPT, runtime, ROOT)
+    argv = [
+        "python3",
+        script,
+        "check",
+        "--in-validation",
+        "--remote",
+        remote,
+        "--repo-root",
+        repo,
+    ]
+    try:
+        validation_runtime.launch_in_validation(
+            runtime,
+            argv,
+            root=ROOT,
+            capture=capture,
+            run_step=lambda name, command: run_step(name, command),
+        )
+    except validation_runtime.ValidationRuntimeError as error:
+        raise PushCliError(str(error)) from error
 
 
 def run_step(
@@ -666,16 +422,12 @@ def run_frontend_security_check() -> None:
 def run_local_checks(remote: str, branch: str, runtime: Runtime) -> None:
     python = sys.executable
     backend = ROOT / "backend"
-    steps: list[tuple[str, Sequence[str], Path]] = []
-    if runtime.name == "apple-containers":
-        steps.append(
-            (
-                "Apple Container lifecycle test",
-                ["bash", str(ROOT / "deploy/tests/apple-container-test.sh")],
-                ROOT,
-            )
-        )
-    steps.extend([
+    steps: list[tuple[str, Sequence[str], Path]] = [
+        (
+            "Apple Container lifecycle test",
+            ["bash", str(ROOT / "deploy/tests/apple-container-test.sh")],
+            ROOT,
+        ),
         ("Go module tidiness", ["go", "mod", "tidy", "-diff"], backend),
         (
             "Push CLI self-tests",
@@ -747,7 +499,7 @@ def run_local_checks(remote: str, branch: str, runtime: Runtime) -> None:
             ["bash", "deploy/test-caddyfile-cache.sh"],
             ROOT,
         ),
-    ])
+    ]
 
     base_ref = f"{remote}/{branch}"
     base_check = run_command(["git", "rev-parse", "--verify", base_ref], capture=True)
@@ -764,7 +516,6 @@ def run_local_checks(remote: str, branch: str, runtime: Runtime) -> None:
         run_step(name, command, cwd)
 
     run_frontend_security_check()
-    run_runtime_final_gate(runtime)
 
 
 def ensure_clean_after_checks() -> None:
@@ -855,12 +606,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "action",
         choices=("check", "push", "watch", "ensure"),
-        help="align the environment, check locally, push after checking, or watch the current branch run",
+        help="prepare the validation runtime, check in-container, push after checking, or watch the current branch run",
     )
     parser.add_argument(
-        "--no-ensure",
+        "--in-validation",
         action="store_true",
-        help="skip toolchain alignment before check/push",
+        help=argparse.SUPPRESS,
     )
     parser.add_argument(
         "--repo-root",
@@ -877,23 +628,44 @@ def main() -> int:
     args = parse_args()
     ROOT = args.repo_root.resolve()
     try:
+        if args.in_validation:
+            if validation_runtime.host_os_forbids_in_validation():
+                raise PushCliError(
+                    "check --in-validation cannot run on the Darwin/Windows host. "
+                    "Host validation fallback is forbidden"
+                )
+            if not validation_runtime.in_validation_container():
+                raise PushCliError(
+                    "check --in-validation is only valid inside the platform "
+                    "validation container. Host validation fallback is forbidden"
+                )
+            if args.action != "check":
+                raise PushCliError("in-container execution only supports check")
+            branch = current_branch()
+            check_toolchains()
+            run_local_checks(
+                args.remote,
+                branch,
+                Runtime("in-validation", compose_required=False),
+            )
+            print("\nIn-container push checks passed.")
+            return 0
+
         repository = github_gate(args.remote)
         branch = current_branch()
         if args.action == "watch":
             watch_actions(repository, branch)
             return 0
 
-        align = not args.no_ensure or args.action == "ensure"
-        if align:
-            ensure_toolchains()
-        check_toolchains()
         runtime = probe_runtime()
+        ensure_validation_image(runtime)
         if args.action == "ensure":
-            print("\nEnvironment matches the repository pins. No checks were run.")
+            print("\nValidation runtime and image are ready. No checks were run.")
             return 0
 
         require_clean_worktree()
-        run_local_checks(args.remote, branch, runtime)
+        launch_in_validation(runtime, args.remote)
+        run_runtime_final_gate(runtime)
         ensure_clean_after_checks()
         print("\nLocal push checks passed. No branch was pushed.")
 
