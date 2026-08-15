@@ -129,6 +129,7 @@ scripts
 !backend/scripts/resolve-version.sh
 !skills/push-cli/scripts/
 !skills/push-cli/scripts/**
+skills/push-cli/scripts/__pycache__/
 .code-review-state
 #openspec/
 code-reviews/
