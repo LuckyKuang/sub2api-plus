@@ -328,6 +328,7 @@ def cache_mounts(
                 f"{base}/go/golangci-lint",
                 f"{base}/go/xdg-cache",
                 f"{base}/pnpm",
+                f"{base}/frontend-node-modules",
             ]
         )
         return [
@@ -339,10 +340,20 @@ def cache_mounts(
     (base / "pnpm").mkdir(parents=True, exist_ok=True)
     (base / "go" / "golangci-lint").mkdir(parents=True, exist_ok=True)
     (base / "go" / "xdg-cache").mkdir(parents=True, exist_ok=True)
+    (base / "frontend-node-modules").mkdir(parents=True, exist_ok=True)
     return [
         (str(base / "go"), f"{CONTAINER_HOME}/go"),
         (str(base / "pnpm"), f"{CONTAINER_HOME}/pnpm"),
     ]
+
+
+def node_modules_overlay(runtime: Runtime, root: Path) -> tuple[str, str]:
+    repo = mount_root(runtime, root)
+    if runtime.name == "wsl2-docker":
+        source = "/tmp/sub2api-validation-cache/frontend-node-modules"
+    else:
+        source = str(Path.home() / ".cache" / "sub2api-validation" / "frontend-node-modules")
+    return source, f"{repo.rstrip('/')}/frontend/node_modules"
 
 
 def image_inspect_command(runtime: Runtime, image: str) -> list[str]:
@@ -394,6 +405,7 @@ def validation_run_command(
         "--memory",
         "8G",
         *bind_mount_args(runtime, repo, repo),
+        *bind_mount_args(runtime, *node_modules_overlay(runtime, root)),
         "--workdir",
         repo,
         "--env",
