@@ -111,6 +111,7 @@ func (s *authIPAccessRepositorySpy) RecordIPAccessRuleHit(context.Context, strin
 
 func newAuthIPAccessControlForTest(threshold int) (*service.IPAccessControlService, *authIPAccessRepositorySpy) {
 	settings := &authIPAccessSettingStub{values: map[string]string{
+		service.SettingKeyGlobalIPAccessControlEnabled: "true",
 		service.SettingKeyIPAccessControlEnabled:       "true",
 		service.SettingKeyLoginFailureAutoBlockEnabled: "true",
 		service.SettingKeyLoginFailureIPThreshold:      strconv.Itoa(threshold),

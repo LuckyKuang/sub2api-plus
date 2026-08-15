@@ -285,7 +285,7 @@ func TestPrepareUsageLogInsert_PersistsTPSMetadata(t *testing.T) {
 	prepared := prepareUsageLogInsert(log)
 
 	require.Equal(t, 17, prepared.args[18])
-	require.Equal(t, false, prepared.args[38])
+	require.Equal(t, false, prepared.args[39])
 	require.NotNil(t, log.IsComplete)
 	require.False(t, *log.IsComplete)
 
@@ -298,7 +298,7 @@ func TestPrepareUsageLogInsert_PersistsTPSMetadata(t *testing.T) {
 		CreatedAt: time.Date(2025, 1, 5, 12, 0, 1, 0, time.UTC),
 	}
 	defaultPrepared := prepareUsageLogInsert(defaultLog)
-	require.Nil(t, defaultPrepared.args[38])
+	require.Nil(t, defaultPrepared.args[39])
 	require.Nil(t, defaultLog.IsComplete)
 }
 
@@ -323,11 +323,11 @@ func TestPrepareUsageLogInsert_PersistsImageSizeMetadata(t *testing.T) {
 		CreatedAt:          time.Date(2025, 1, 6, 12, 0, 0, 0, time.UTC),
 	})
 
-	require.Equal(t, sql.NullString{String: imageSize, Valid: true}, prepared.args[42])
+	require.Equal(t, sql.NullString{String: imageSize, Valid: true}, prepared.args[46])
 	require.Equal(t, sql.NullString{String: inputSize, Valid: true}, prepared.args[43])
 	require.Equal(t, sql.NullString{String: outputSize, Valid: true}, prepared.args[44])
 	require.Equal(t, sql.NullString{String: source, Valid: true}, prepared.args[45])
-	breakdownJSON, ok := prepared.args[46].(string)
+	breakdownJSON, ok := prepared.args[47].(string)
 	require.True(t, ok)
 	require.JSONEq(t, `{"1K":1,"4K":1}`, breakdownJSON)
 }
@@ -875,6 +875,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			false,
 			sql.NullInt64{},
 			sql.NullInt64{},
+			sql.NullInt64{}, // last_token_ms
 			sql.NullInt64{Valid: true, Int64: 125},
 			sql.NullString{Valid: true, String: "image"},
 			sql.NullBool{Valid: true, Bool: true},
@@ -967,7 +968,8 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			false, // legacy openai ws
 			sql.NullInt64{},
 			sql.NullInt64{},
-			sql.NullInt64{},
+			sql.NullInt64{}, // last_token_ms
+			sql.NullInt64{}, // first_output_ms
 			sql.NullString{},
 			sql.NullBool{},
 			sql.NullString{},
@@ -1030,7 +1032,8 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			false,
 			sql.NullInt64{},
 			sql.NullInt64{},
-			sql.NullInt64{},
+			sql.NullInt64{}, // last_token_ms
+			sql.NullInt64{}, // first_output_ms
 			sql.NullString{},
 			sql.NullBool{},
 			sql.NullString{},
@@ -1093,7 +1096,8 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			false,
 			sql.NullInt64{},
 			sql.NullInt64{},
-			sql.NullInt64{},
+			sql.NullInt64{}, // last_token_ms
+			sql.NullInt64{}, // first_output_ms
 			sql.NullString{},
 			sql.NullBool{},
 			sql.NullString{},

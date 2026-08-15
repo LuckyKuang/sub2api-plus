@@ -82,7 +82,8 @@ func newBlockedIPRouter(t *testing.T) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	access := service.NewIPAccessControlService(
 		&ipAccessMiddlewareSettingsStub{values: map[string]string{
-			service.SettingKeyIPAccessControlEnabled: "true",
+			service.SettingKeyGlobalIPAccessControlEnabled: "true",
+			service.SettingKeyIPAccessControlEnabled:       "true",
 		}},
 		&ipAccessMiddlewareRuleStub{rules: []*service.IPAccessRule{
 			{
