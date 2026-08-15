@@ -1,4 +1,11 @@
-import { describe, it, expect, vi } from 'vitest'
+const appStoreMocks = vi.hoisted(() => ({
+  showSuccess: vi.fn(),
+  showError: vi.fn(),
+}))
+
+vi.mock('@/stores', () => ({ useAppStore: () => appStoreMocks }))
+
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import OpsErrorLogTable from '../OpsErrorLogTable.vue'
 import zhLocale from '@/i18n/locales/zh'
@@ -90,4 +97,27 @@ describe('OpsErrorLogTable i18n keys exist in the errorLog namespace', () => {
       expect(errorLog?.keyDeletedBadge).toBeTruthy()
     })
   }
+})
+
+describe('OpsErrorLogTable user-agent copy', () => {
+  beforeEach(() => {
+    appStoreMocks.showSuccess.mockReset()
+    appStoreMocks.showError.mockReset()
+  })
+
+  it('copies the full user agent without opening the row', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    vi.stubGlobal('navigator', { clipboard: { writeText } })
+
+    const wrapper = mountTable({
+      user_agent: 'Mozilla/5.0 TestAgent',
+    })
+
+    expect(wrapper.text()).toContain('Mozilla/5.0 TestAgent')
+    await wrapper.get('button[title="keys.copyToClipboard"]').trigger('click')
+
+    expect(writeText).toHaveBeenCalledWith('Mozilla/5.0 TestAgent')
+    expect(appStoreMocks.showSuccess).toHaveBeenCalledWith('admin.usage.userAgentCopied')
+    expect(wrapper.emitted('openErrorDetail')).toBeUndefined()
+  })
 })

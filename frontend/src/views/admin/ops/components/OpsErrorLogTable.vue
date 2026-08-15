@@ -132,11 +132,18 @@
         </template>
 
         <template #cell-user_agent="{ row }">
-          <span
-            v-if="row.user_agent"
-            class="block max-w-[320px] truncate text-sm text-gray-600 dark:text-gray-400"
-            :title="row.user_agent"
-          >{{ row.user_agent }}</span>
+          <div v-if="row.user_agent" class="flex max-w-[320px] items-center gap-1.5" @click.stop>
+            <span class="truncate text-sm text-gray-600 dark:text-gray-400" :title="row.user_agent">{{ row.user_agent }}</span>
+            <button
+              type="button"
+              class="shrink-0 rounded p-0.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-dark-700 dark:hover:text-gray-300"
+              :class="copiedUserAgent === row.user_agent ? 'text-green-500 hover:text-green-500' : ''"
+              :title="copiedUserAgent === row.user_agent ? t('keys.copied') : t('keys.copyToClipboard')"
+              @click="copyUserAgent(row.user_agent)"
+            >
+              <Icon :name="copiedUserAgent === row.user_agent ? 'check' : 'copy'" size="sm" class="h-3.5 w-3.5" />
+            </button>
+          </div>
           <span v-else class="text-sm text-gray-400 dark:text-gray-500">-</span>
         </template>
 
@@ -179,13 +186,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import DataTable from '@/components/common/DataTable.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import IpGeoCell from '@/components/common/IpGeoCell.vue'
 import IpGeoBatchToolbar from '@/components/common/IpGeoBatchToolbar.vue'
+import Icon from '@/components/icons/Icon.vue'
+import { useAppStore } from '@/stores'
 import type { OpsErrorLog } from '@/api/admin/ops'
 import type { Column } from '@/components/common/types'
 import { getSeverityClass, formatDateTime } from '../utils/opsFormatters'
@@ -193,6 +202,21 @@ import { mapErrorCategory } from '@/utils/errorCategory'
 import { mapErrorSortKey, statusCodeBadgeClass } from '@/utils/errorBadges'
 
 const { t } = useI18n()
+const appStore = useAppStore()
+const copiedUserAgent = ref<string | null>(null)
+
+const copyUserAgent = async (userAgent: string) => {
+  try {
+    await navigator.clipboard.writeText(userAgent)
+    copiedUserAgent.value = userAgent
+    appStore.showSuccess(t('admin.usage.userAgentCopied'))
+    window.setTimeout(() => {
+      if (copiedUserAgent.value === userAgent) copiedUserAgent.value = null
+    }, 2000)
+  } catch {
+    appStore.showError(t('common.copyFailed'))
+  }
+}
 
 // 列序对齐管理端用量明细:身份(用户→Key→账号)→ 请求形态(平台→模型→端点→分组→类型)
 // → 结果(状态→消息)→ 时间→UA→IP→操作

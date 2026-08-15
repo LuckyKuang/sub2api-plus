@@ -75,6 +75,7 @@ const messages: Record<string, string> = {
   'admin.usage.billingModePerRequest': 'Per request',
   'admin.usage.billingModeImage': 'Image',
 	'admin.usage.requestIdCopied': 'Request ID copied',
+	'admin.usage.userAgentCopied': 'User-Agent copied',
 	'keys.copied': 'Copied',
 	'keys.copyToClipboard': 'Copy to clipboard',
 	'common.copyFailed': 'Copy failed',
@@ -107,6 +108,7 @@ const DataTableStub = {
         <slot name="cell-latency" :row="row" />
         <slot name="cell-session_id" :row="row" />
         <slot name="cell-request_id" :row="row" />
+        <slot name="cell-user_agent" :row="row" />
       </div>
     </div>
   `,
@@ -879,6 +881,43 @@ describe('admin UsageTable request ID column', () => {
 
     expect(writeText).toHaveBeenCalledWith('req-admin-visible-id')
     expect(appStoreMocks.showSuccess).toHaveBeenCalledWith('Request ID copied')
+  })
+
+  it('renders and copies the user agent', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    vi.stubGlobal('navigator', { clipboard: { writeText } })
+    const UserAgentTableStub = {
+      props: ['data'],
+      template: `
+        <div>
+          <div v-for="row in data" :key="row.request_id">
+            <slot name="cell-user_agent" :row="row" />
+          </div>
+        </div>
+      `,
+    }
+
+    const wrapper = mount(UsageTable, {
+      props: {
+        data: [{ ...baseImageRow, user_agent: 'Mozilla/5.0 TestAgent' }],
+        loading: false,
+        columns: [{ key: 'user_agent', label: 'User-Agent' }],
+      },
+      global: {
+        stubs: {
+          DataTable: UserAgentTableStub,
+          EmptyState: true,
+          Icon: true,
+          Teleport: true,
+        },
+      },
+    })
+
+    expect(wrapper.text()).toContain('Mozilla/5.0 TestAgent')
+    await wrapper.get('button[title="Copy to clipboard"]').trigger('click')
+
+    expect(writeText).toHaveBeenCalledWith('Mozilla/5.0 TestAgent')
+    expect(appStoreMocks.showSuccess).toHaveBeenCalledWith('User-Agent copied')
   })
 })
 
