@@ -29,6 +29,7 @@ VERSION_RE = re.compile(
     r"\bversion(?:\s*[:=]|\s+)(?:v)?(\d+\.\d+\.\d+)",
     re.IGNORECASE,
 )
+WSL_DEBIAN_UBUNTU_RE = re.compile(r"^(debian|ubuntu)(?:-[\w.]+)?$", re.IGNORECASE)
 
 
 class PushCliError(RuntimeError):
@@ -464,13 +465,27 @@ def probe_docker(prefix: Sequence[str] = ()) -> tuple[bool, str]:
     return True, compose_output.splitlines()[0] if compose_output else "Docker Compose"
 
 
+def normalize_wsl_list_output(output: str) -> str:
+    # wsl.exe -l -v commonly emits UTF-16LE. After a UTF-8 decode that keeps
+    # replacement characters, leftover NULs still split tokens.
+    cleaned = output.replace("\x00", "").replace("\ufeff", "")
+    return cleaned.replace("\r\n", "\n").replace("\r", "\n")
+
+
 def parse_wsl_distributions(output: str) -> list[tuple[str, str]]:
     distributions: list[tuple[str, str]] = []
-    for line in output.splitlines():
+    for line in normalize_wsl_list_output(output).splitlines():
         match = re.match(r"^\s*\*?\s*(.*?)\s+(Running|Stopped)\s+2\s*$", line)
         if match and match.group(1):
-            distributions.append((match.group(1).strip(), match.group(2)))
+            name = re.sub(r"\s*\(Default\)\s*$", "", match.group(1).strip())
+            if name:
+                distributions.append((name, match.group(2)))
     return distributions
+
+
+def is_debian_or_ubuntu_wsl(name: str) -> bool:
+    cleaned = re.sub(r"\s*\(Default\)\s*$", "", name.strip())
+    return bool(WSL_DEBIAN_UBUNTU_RE.fullmatch(cleaned))
 
 
 def probe_windows_runtime() -> Runtime:
@@ -479,14 +494,25 @@ def probe_windows_runtime() -> Runtime:
         raise PushCliError("Windows push validation requires wsl.exe")
     status = capture([wsl, "-l", "-v"])
     distributions = parse_wsl_distributions(status)
-    running = [name for name, state in distributions if state == "Running"]
+    supported = [
+        (name, state)
+        for name, state in distributions
+        if is_debian_or_ubuntu_wsl(name)
+    ]
+    if not supported:
+        found = ", ".join(name for name, _ in distributions) or "none"
+        raise PushCliError(
+            "Windows push validation requires a WSL2 Debian or Ubuntu "
+            f"distribution; found: {found}. Host Docker fallback is forbidden"
+        )
+
+    running = [name for name, state in supported if state == "Running"]
     if not running:
-        if distributions:
-            names = ", ".join(name for name, _ in distributions)
-            raise PushCliError(
-                f"WSL2 Linux distributions exist but none are running: {names}"
-            )
-        raise PushCliError("no WSL2 Linux distribution was found")
+        names = ", ".join(name for name, _ in supported)
+        raise PushCliError(
+            "WSL2 Debian/Ubuntu distributions exist but none are running: "
+            f"{names}"
+        )
 
     for distro in running:
         prefix = (wsl, "-d", distro, "--")
@@ -499,9 +525,38 @@ def probe_windows_runtime() -> Runtime:
         print(f"Runtime: WSL2/{distro} with Docker ({detail})")
         return Runtime("wsl2-docker", prefix, linux_root)
     raise PushCliError(
-        "a running WSL2 Linux distribution was found, but Docker and Docker "
-        "Compose are not usable inside it"
+        "a running WSL2 Debian/Ubuntu distribution was found, but Docker and "
+        "Docker Compose are not usable inside it. Host Docker fallback is forbidden"
     )
+
+
+def probe_macos_runtime() -> Runtime:
+    if not shutil.which("container"):
+        raise PushCliError(
+            "macOS push validation requires Apple Containers. Install the "
+            "container CLI and ensure `container --version` and `container ls` "
+            "succeed. Colima/Docker Desktop fallback is forbidden"
+        )
+
+    version_ok, version = optional_capture(["container", "--version"])
+    if not version_ok:
+        detail = version[-500:] if version else "container --version failed"
+        raise PushCliError(
+            "Apple Containers is the mandatory macOS runtime, but its CLI is "
+            "not usable; Colima/Docker fallback is forbidden: "
+            f"{detail}"
+        )
+    list_ok, list_output = optional_capture(["container", "ls"])
+    if not list_ok:
+        detail = list_output[-500:] if list_output else "container ls failed"
+        raise PushCliError(
+            "Apple Containers is the mandatory macOS runtime, but its service "
+            "is not ready; start or repair Apple Containers and retry. "
+            f"Colima/Docker fallback is forbidden: {detail}"
+        )
+    version_label = version.splitlines()[0] if version else "version available"
+    print(f"Runtime: Apple Containers ({version_label})")
+    return Runtime("apple-containers", compose_required=False)
 
 
 def probe_runtime() -> Runtime:
@@ -510,48 +565,7 @@ def probe_runtime() -> Runtime:
         return probe_windows_runtime()
 
     if system == "Darwin":
-        if shutil.which("container"):
-            version_ok, version = optional_capture(["container", "--version"])
-            if not version_ok:
-                detail = version[-500:] if version else "container --version failed"
-                raise PushCliError(
-                    "Apple Containers is installed on macOS, so it is the mandatory "
-                    "runtime, but its CLI is not usable; Colima/Docker fallback is "
-                    f"forbidden: {detail}"
-                )
-            list_ok, list_output = optional_capture(["container", "ls"])
-            if not list_ok:
-                detail = list_output[-500:] if list_output else "container ls failed"
-                raise PushCliError(
-                    "Apple Containers is installed on macOS, so it is the mandatory "
-                    "runtime, but its service is not ready; start or repair Apple "
-                    "Containers and retry. Colima/Docker fallback is forbidden: "
-                    f"{detail}"
-                )
-            version_label = version.splitlines()[0] if version else "version available"
-            print(f"Runtime: Apple Containers ({version_label})")
-            run_step(
-                "Apple Container lifecycle test",
-                ["bash", str(ROOT / "deploy/tests/apple-container-test.sh")],
-            )
-            return Runtime("apple-containers", compose_required=False)
-
-        colima_ready = False
-        if shutil.which("colima"):
-            colima_ready, colima_status = optional_capture(["colima", "status"])
-            if colima_ready:
-                print(f"Runtime: Colima ({colima_status.splitlines()[0]})")
-
-        docker_ok, docker_detail = probe_docker()
-        if docker_ok:
-            label = "colima/docker" if colima_ready else "docker"
-            print(f"Docker endpoint: {label} ({docker_detail})")
-            return Runtime(label)
-
-        raise PushCliError(
-            "Apple Containers is unavailable or not ready, and no usable Colima/"
-            "Docker Desktop endpoint was found; start one supported runtime, then retry"
-        )
+        return probe_macos_runtime()
 
     docker_ok, docker_detail = probe_docker()
     if docker_ok:
@@ -652,7 +666,16 @@ def run_frontend_security_check() -> None:
 def run_local_checks(remote: str, branch: str, runtime: Runtime) -> None:
     python = sys.executable
     backend = ROOT / "backend"
-    steps: list[tuple[str, Sequence[str], Path]] = [
+    steps: list[tuple[str, Sequence[str], Path]] = []
+    if runtime.name == "apple-containers":
+        steps.append(
+            (
+                "Apple Container lifecycle test",
+                ["bash", str(ROOT / "deploy/tests/apple-container-test.sh")],
+                ROOT,
+            )
+        )
+    steps.extend([
         ("Go module tidiness", ["go", "mod", "tidy", "-diff"], backend),
         (
             "Push CLI self-tests",
@@ -724,7 +747,7 @@ def run_local_checks(remote: str, branch: str, runtime: Runtime) -> None:
             ["bash", "deploy/test-caddyfile-cache.sh"],
             ROOT,
         ),
-    ]
+    ])
 
     base_ref = f"{remote}/{branch}"
     base_check = run_command(["git", "rev-parse", "--verify", base_ref], capture=True)
@@ -832,7 +855,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "action",
         choices=("check", "push", "watch", "ensure"),
-        help="align toolchains, check locally, push after checking, or watch the current branch run",
+        help="align the environment, check locally, push after checking, or watch the current branch run",
     )
     parser.add_argument(
         "--no-ensure",
@@ -856,21 +879,20 @@ def main() -> int:
     try:
         repository = github_gate(args.remote)
         branch = current_branch()
-        require_clean_worktree()
         if args.action == "watch":
             watch_actions(repository, branch)
             return 0
 
-        if args.action == "ensure":
-            ensure_toolchains()
-            check_toolchains()
-            print("\nToolchains match the repository pins. No checks were run.")
-            return 0
-
-        if args.action == "push" and not args.no_ensure:
+        align = not args.no_ensure or args.action == "ensure"
+        if align:
             ensure_toolchains()
         check_toolchains()
         runtime = probe_runtime()
+        if args.action == "ensure":
+            print("\nEnvironment matches the repository pins. No checks were run.")
+            return 0
+
+        require_clean_worktree()
         run_local_checks(args.remote, branch, runtime)
         ensure_clean_after_checks()
         print("\nLocal push checks passed. No branch was pushed.")

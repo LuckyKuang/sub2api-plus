@@ -6,11 +6,14 @@ Run these from the repository root:
 
     python3 skills/push-cli/scripts/push_cli.py check
     python3 skills/push-cli/scripts/push_cli.py push
+    python3 skills/push-cli/scripts/push_cli.py ensure
     python3 skills/push-cli/scripts/push_cli.py watch
 
 check is a read-only push-readiness gate apart from ignored dependency and build
 caches. push repeats the gate in the same process before pushing. watch is for
-monitoring a run after a local terminal disconnect.
+monitoring a run after a local terminal disconnect. ensure aligns the host
+toolchain and selected container runtime without requiring a clean worktree or
+running the check matrix.
 
 ## GitHub CLI Gate
 
@@ -23,7 +26,9 @@ The checker requires all of the following:
 
 The repository is derived from the origin remote and is not accepted if it is
 not LuckyKuang/sub2api-plus. A failed auth or permission check stops before
-toolchain detection, tests, Docker access, or Git writes.
+toolchain alignment, runtime probing, tests, or Git writes. Environment
+alignment and the selected container-runtime probe run before the dirty-worktree
+gate so a stale host can be repaired without committing first.
 
 Before a push, the checker runs:
 
@@ -76,8 +81,10 @@ python3 tools/check_new_migrations.py --base origin/<current-branch>.
 
 ## Runtime Final Gate
 
-When Apple Containers is selected on macOS, the repository lifecycle test is
-the final runtime gate:
+When Apple Containers is selected on macOS, `ensure` and the environment probe
+only require `container --version` and `container ls`. The repository
+lifecycle test runs with the local check matrix, not during environment
+alignment:
 
     bash deploy/tests/apple-container-test.sh
 
@@ -85,8 +92,8 @@ A successful lifecycle test is sufficient for local runtime validation. The
 Docker Compose gate is reported as not applicable, not passed. GitHub Actions
 remains authoritative for Docker image and Compose behavior.
 
-For Colima, Docker Desktop, WSL2 Docker, and native Linux Docker, the checker
-first proves that the selected endpoint answers both:
+For WSL2 Debian/Ubuntu Docker and native Linux Docker, the checker first proves
+that the selected endpoint answers both:
 
     docker info
     docker compose version
@@ -104,25 +111,26 @@ file fails the push gate.
 
 On macOS, the order is:
 
-1. check whether the Apple Containers `container` CLI is installed before any
-   Colima or Docker probe;
-2. when installed, require `container --version` and `container ls` to succeed;
-3. run the Apple Container lifecycle test and return success when it passes;
-4. if installed Apple Containers is unusable or the lifecycle test fails, stop;
-5. only when Apple Containers is absent, probe running Colima;
-6. then probe another directly reachable Docker endpoint such as Docker Desktop.
+1. require the Apple Containers `container` CLI;
+2. require `container --version` and `container ls` to succeed;
+3. if Apple Containers is absent or unusable, stop;
+4. during check/push only, run the Apple Container lifecycle test with the
+   local check matrix.
 
-The presence of the `container` CLI makes Apple Containers mandatory on macOS.
-An installed-but-unready runtime is a hard failure, not a fallback condition.
-This prevents Colima or Docker Desktop from hiding an Apple deployment or host
-runtime problem. Never start a user-managed runtime implicitly.
+Apple Containers is the only supported macOS runtime. Absence, an unusable CLI,
+or a stopped service is an environment failure. A failed lifecycle test is a
+validation failure. Neither case is a fallback condition. Never probe Colima,
+Docker Desktop, or any other Docker endpoint on macOS. Never start a
+user-managed runtime implicitly.
 
 On Windows, check `wsl.exe -l -v` before any host Docker probe. Require a
-running WSL2 Linux distribution, then execute `docker info` and
-`docker compose version` inside it. Use `wslpath` to translate the repository
-path before Compose parsing. Missing WSL2, no running WSL2 Linux distribution,
-or unusable in-distribution Docker/Compose is a hard failure. Never probe or use
-a Windows-host Docker command as a fallback that bypasses the WSL2 requirement.
+running WSL2 Debian or Ubuntu family distribution, then execute `docker info`
+and `docker compose version` inside it. Ignore any other running WSL
+distribution. Use `wslpath` to translate the repository path before Compose
+parsing. Missing WSL2, no running Debian/Ubuntu distribution, or unusable
+in-distribution Docker/Compose is a hard failure. Never probe or use a
+Windows-host Docker command as a fallback that bypasses the WSL2
+Debian/Ubuntu requirement.
 
 On Linux, use the native Docker CLI and daemon. Do not silently use Podman or a
 different container implementation.
@@ -135,7 +143,8 @@ HEAD SHA. Use GitHub CLI only:
     gh run list --branch <branch> --event push
     gh run watch <run-id> --exit-status
 
-If no matching run appears within the polling window, report that the push
-succeeded but CI discovery is incomplete. Watch every matching run; if any run
-fails, report its URL and failed conclusion without retrying. A successful local
-gate is not a substitute for successful remote runs.
+If no matching run appears within the polling window, stop. A completed push
+without a discovered Actions run is a hard failure, not a partial success.
+Watch every matching run; if any run fails, report its URL and failed
+conclusion without retrying. A successful local gate is not a substitute for
+successful remote runs.

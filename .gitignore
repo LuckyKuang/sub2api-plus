@@ -120,11 +120,15 @@ backend/.installed
 tests
 !deploy/tests/
 !deploy/tests/**
+!skills/push-cli/tests/
+!skills/push-cli/tests/**
 CLAUDE.md
 .claude
 scripts
 !backend/scripts/
 !backend/scripts/resolve-version.sh
+!skills/push-cli/scripts/
+!skills/push-cli/scripts/**
 .code-review-state
 #openspec/
 code-reviews/
