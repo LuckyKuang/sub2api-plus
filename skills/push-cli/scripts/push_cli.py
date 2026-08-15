@@ -5,14 +5,17 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import platform
 import re
 import shlex
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 import time
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
@@ -38,6 +41,14 @@ class Runtime:
     prefix: tuple[str, ...] = ()
     compose_root: str | None = None
     compose_required: bool = True
+
+
+@dataclass(frozen=True)
+class DeclaredToolchains:
+    go: str
+    pnpm: str
+    node_major_minimum: int
+    golangci_lint: str
 
 
 def display(command: Sequence[str]) -> str:
@@ -175,7 +186,7 @@ def declared_tool_version(name: str) -> str:
     raise PushCliError(f".tool-versions does not declare {name}")
 
 
-def check_toolchains() -> None:
+def declared_toolchains() -> DeclaredToolchains:
     package = json.loads((ROOT / "frontend/package.json").read_text(encoding="utf-8"))
     package_manager = package.get("packageManager", "")
     pnpm_match = re.fullmatch(r"pnpm@(.+)", package_manager)
@@ -186,41 +197,257 @@ def check_toolchains() -> None:
     go_match = GO_VERSION_RE.search(go_mod)
     if not go_match:
         raise PushCliError("backend/go.mod does not declare a Go version")
-    go_actual = capture(["go", "env", "GOVERSION"])
-    if go_actual != f"go{go_match.group(1)}":
-        raise PushCliError(
-            f"Go {go_match.group(1)} is required; found {go_actual}"
-        )
 
-    pnpm_actual = capture(["pnpm", "--version"])
-    if pnpm_actual != pnpm_match.group(1):
-        raise PushCliError(
-            f"pnpm {pnpm_match.group(1)} is required; found {pnpm_actual}"
-        )
-
-    node_actual = capture(["node", "--version"])
-    node_match = re.search(r"(\d+)(?:\.(\d+))?", node_actual)
     node_minimum = re.search(
         r">=\s*(\d+)(?:\.(\d+))?", package.get("engines", {}).get("node", "")
     )
-    if not node_match or not node_minimum:
+    if not node_minimum:
         raise PushCliError("unable to determine the Node.js minimum version")
-    if int(node_match.group(1)) < int(node_minimum.group(1)):
-        raise PushCliError(
-            f"Node.js {node_minimum.group(1)}+ is required; found {node_actual}"
-        )
 
-    lint_expected = declared_tool_version("golangci-lint")
+    return DeclaredToolchains(
+        go=go_match.group(1),
+        pnpm=pnpm_match.group(1),
+        node_major_minimum=int(node_minimum.group(1)),
+        golangci_lint=declared_tool_version("golangci-lint"),
+    )
+
+
+def current_go_version() -> str:
+    return capture(["go", "env", "GOVERSION"])
+
+
+def current_pnpm_version() -> str:
+    return capture(["pnpm", "--version"])
+
+
+def current_node_version() -> str:
+    return capture(["node", "--version"])
+
+
+def current_golangci_lint_version() -> str:
     lint_output = capture(["golangci-lint", "version"])
     lint_match = VERSION_RE.search(lint_output)
-    if not lint_match or lint_match.group(1) != lint_expected:
+    if not lint_match:
+        raise PushCliError(f"unable to parse golangci-lint version from {lint_output!r}")
+    return lint_match.group(1)
+
+
+def node_major(version: str) -> int:
+    match = re.search(r"(\d+)", version)
+    if not match:
+        raise PushCliError(f"unable to parse Node.js version from {version!r}")
+    return int(match.group(1))
+
+
+def check_toolchains() -> None:
+    declared = declared_toolchains()
+    go_actual = current_go_version()
+    if go_actual != f"go{declared.go}":
+        raise PushCliError(f"Go {declared.go} is required; found {go_actual}")
+
+    pnpm_actual = current_pnpm_version()
+    if pnpm_actual != declared.pnpm:
+        raise PushCliError(f"pnpm {declared.pnpm} is required; found {pnpm_actual}")
+
+    node_actual = current_node_version()
+    if node_major(node_actual) < declared.node_major_minimum:
         raise PushCliError(
-            f"golangci-lint {lint_expected} is required; found {lint_output!r}"
+            f"Node.js {declared.node_major_minimum}+ is required; found {node_actual}"
+        )
+
+    lint_actual = current_golangci_lint_version()
+    if lint_actual != declared.golangci_lint:
+        raise PushCliError(
+            f"golangci-lint {declared.golangci_lint} is required; found {lint_actual}"
         )
     print(
         "Toolchains: "
         f"Go {go_actual}; pnpm {pnpm_actual}; Node.js {node_actual}; "
-        f"golangci-lint {lint_expected}"
+        f"golangci-lint {lint_actual}"
+    )
+
+
+def go_archive_triplet() -> str:
+    system = platform.system()
+    machine = platform.machine().lower()
+    os_name = {"Darwin": "darwin", "Linux": "linux", "Windows": "windows"}.get(system)
+    arch = {
+        "x86_64": "amd64",
+        "amd64": "amd64",
+        "arm64": "arm64",
+        "aarch64": "arm64",
+    }.get(machine)
+    if not os_name or not arch:
+        raise PushCliError(f"unsupported host for pinned Go install: {system} {machine}")
+    return f"{os_name}-{arch}"
+
+
+def install_go(version: str) -> None:
+    if shutil.which("mise"):
+        run_step(f"Install Go {version} with mise", ["mise", "install", f"go@{version}"])
+        run_step(f"Activate Go {version} with mise", ["mise", "use", "-g", f"go@{version}"])
+        return
+    if shutil.which("asdf"):
+        add_plugin = run_command(["asdf", "plugin", "add", "golang"], capture=True)
+        if add_plugin.returncode != 0 and "already added" not in (add_plugin.stdout or "").lower():
+            raise PushCliError(
+                f"asdf plugin add golang failed: {(add_plugin.stdout or '').strip()[-500:]}"
+            )
+        run_step(f"Install Go {version} with asdf", ["asdf", "install", "golang", version])
+        run_step(f"Activate Go {version} with asdf", ["asdf", "set", "-u", "golang", version])
+        return
+
+    archive = f"go{version}.{go_archive_triplet()}.tar.gz"
+    url = f"https://go.dev/dl/{archive}"
+    dest_root = Path.home() / ".sub2api" / "toolchains" / f"go-{version}"
+    print(f"\n[Install Go {version} from {url}]")
+    dest_root.parent.mkdir(parents=True, exist_ok=True)
+    if dest_root.exists():
+        shutil.rmtree(dest_root)
+    dest_root.mkdir(parents=True)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        archive_path = Path(tmp) / archive
+        urllib.request.urlretrieve(url, archive_path)
+        with tarfile.open(archive_path, "r:gz") as tar:
+            tar.extractall(path=tmp)
+        extracted = Path(tmp) / "go"
+        if not extracted.exists():
+            raise PushCliError(f"Go archive did not contain a go/ directory: {url}")
+        shutil.copytree(extracted, dest_root, dirs_exist_ok=True)
+
+    bin_dir = dest_root / "bin"
+    go_bin = bin_dir / "go"
+    if not go_bin.exists():
+        raise PushCliError(f"Go {version} install is missing {go_bin}")
+    os.environ["PATH"] = f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}"
+    os.environ["GOROOT"] = str(dest_root)
+
+
+def install_pnpm(version: str) -> None:
+    if shutil.which("corepack"):
+        run_step("Enable Corepack", ["corepack", "enable"])
+        run_step(
+            f"Activate pnpm {version} with Corepack",
+            ["corepack", "prepare", f"pnpm@{version}", "--activate"],
+        )
+        return
+    if shutil.which("mise"):
+        run_step(f"Install pnpm {version} with mise", ["mise", "install", f"pnpm@{version}"])
+        run_step(f"Activate pnpm {version} with mise", ["mise", "use", "-g", f"pnpm@{version}"])
+        return
+    raise PushCliError(
+        f"pnpm {version} is required but neither corepack nor mise is available to install it"
+    )
+
+
+def install_golangci_lint(version: str) -> None:
+    if shutil.which("mise"):
+        run_step(
+            f"Install golangci-lint {version} with mise",
+            ["mise", "install", f"golangci-lint@{version}"],
+        )
+        run_step(
+            f"Activate golangci-lint {version} with mise",
+            ["mise", "use", "-g", f"golangci-lint@{version}"],
+        )
+        return
+    if shutil.which("asdf"):
+        add_plugin = run_command(["asdf", "plugin", "add", "golangci-lint"], capture=True)
+        if add_plugin.returncode != 0 and "already added" not in (add_plugin.stdout or "").lower():
+            raise PushCliError(
+                "asdf plugin add golangci-lint failed: "
+                + (add_plugin.stdout or "").strip()[-500:]
+            )
+        run_step(
+            f"Install golangci-lint {version} with asdf",
+            ["asdf", "install", "golangci-lint", version],
+        )
+        run_step(
+            f"Activate golangci-lint {version} with asdf",
+            ["asdf", "set", "-u", "golangci-lint", version],
+        )
+        return
+
+    dest_dir = Path.home() / ".sub2api" / "toolchains" / "bin"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    script_url = "https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh"
+    print(f"\n[Install golangci-lint {version} from official install.sh]")
+    with tempfile.TemporaryDirectory() as tmp:
+        script_path = Path(tmp) / "install.sh"
+        urllib.request.urlretrieve(script_url, script_path)
+        run_step(
+            f"Install golangci-lint {version}",
+            ["sh", str(script_path), "-b", str(dest_dir), f"v{version}"],
+        )
+    os.environ["PATH"] = f"{dest_dir}{os.pathsep}{os.environ.get('PATH', '')}"
+
+
+def ensure_toolchains() -> None:
+    declared = declared_toolchains()
+    print(
+        "Declared toolchains: "
+        f"Go {declared.go}; pnpm {declared.pnpm}; "
+        f"Node.js >={declared.node_major_minimum}; "
+        f"golangci-lint {declared.golangci_lint}"
+    )
+
+    try:
+        go_actual = current_go_version()
+    except PushCliError:
+        go_actual = "missing"
+    if go_actual != f"go{declared.go}":
+        print(f"Go is {go_actual}; aligning to {declared.go}")
+        install_go(declared.go)
+        go_actual = current_go_version()
+        if go_actual != f"go{declared.go}":
+            raise PushCliError(
+                f"Go {declared.go} install finished, but PATH still reports {go_actual}"
+            )
+
+    try:
+        pnpm_actual = current_pnpm_version()
+    except PushCliError:
+        pnpm_actual = "missing"
+    if pnpm_actual != declared.pnpm:
+        print(f"pnpm is {pnpm_actual}; aligning to {declared.pnpm}")
+        install_pnpm(declared.pnpm)
+        pnpm_actual = current_pnpm_version()
+        if pnpm_actual != declared.pnpm:
+            raise PushCliError(
+                f"pnpm {declared.pnpm} install finished, but PATH still reports {pnpm_actual}"
+            )
+
+    try:
+        node_actual = current_node_version()
+        node_ok = node_major(node_actual) >= declared.node_major_minimum
+    except PushCliError:
+        node_actual = "missing"
+        node_ok = False
+    if not node_ok:
+        raise PushCliError(
+            f"Node.js {declared.node_major_minimum}+ is required; found {node_actual}. "
+            "Install or switch Node manually; push-cli does not auto-change Node versions."
+        )
+
+    try:
+        lint_actual = current_golangci_lint_version()
+    except PushCliError:
+        lint_actual = "missing"
+    if lint_actual != declared.golangci_lint:
+        print(f"golangci-lint is {lint_actual}; aligning to {declared.golangci_lint}")
+        install_golangci_lint(declared.golangci_lint)
+        lint_actual = current_golangci_lint_version()
+        if lint_actual != declared.golangci_lint:
+            raise PushCliError(
+                f"golangci-lint {declared.golangci_lint} install finished, "
+                f"but PATH still reports {lint_actual}"
+            )
+
+    print(
+        "Toolchains aligned: "
+        f"Go {go_actual}; pnpm {pnpm_actual}; Node.js {node_actual}; "
+        f"golangci-lint {lint_actual}"
     )
 
 
@@ -604,8 +831,13 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "action",
-        choices=("check", "push", "watch"),
-        help="check locally, push after checking, or watch the current branch run",
+        choices=("check", "push", "watch", "ensure"),
+        help="align toolchains, check locally, push after checking, or watch the current branch run",
+    )
+    parser.add_argument(
+        "--no-ensure",
+        action="store_true",
+        help="skip toolchain alignment before check/push",
     )
     parser.add_argument(
         "--repo-root",
@@ -629,6 +861,14 @@ def main() -> int:
             watch_actions(repository, branch)
             return 0
 
+        if args.action == "ensure":
+            ensure_toolchains()
+            check_toolchains()
+            print("\nToolchains match the repository pins. No checks were run.")
+            return 0
+
+        if args.action == "push" and not args.no_ensure:
+            ensure_toolchains()
         check_toolchains()
         runtime = probe_runtime()
         run_local_checks(args.remote, branch, runtime)

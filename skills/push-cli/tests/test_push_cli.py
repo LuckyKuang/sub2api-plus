@@ -359,5 +359,87 @@ class LocalChecksTest(unittest.TestCase):
         final_gate.assert_called_once_with(runtime)
 
 
+class DeclaredToolchainsTest(unittest.TestCase):
+    def test_reads_repository_pins(self) -> None:
+        declared = push_cli.declared_toolchains()
+        self.assertRegex(declared.go, r"^\d+\.\d+\.\d+$")
+        self.assertRegex(declared.pnpm, r"^\d+\.\d+\.\d+$")
+        self.assertGreaterEqual(declared.node_major_minimum, 20)
+        self.assertRegex(declared.golangci_lint, r"^\d+\.\d+\.\d+$")
+
+
+class EnsureToolchainsTest(unittest.TestCase):
+    def test_skips_installers_when_versions_already_match(self) -> None:
+        declared = push_cli.DeclaredToolchains(
+            go="1.26.6",
+            pnpm="9.15.9",
+            node_major_minimum=20,
+            golangci_lint="2.9.0",
+        )
+        with (
+            mock.patch.object(push_cli, "declared_toolchains", return_value=declared),
+            mock.patch.object(push_cli, "current_go_version", return_value="go1.26.6"),
+            mock.patch.object(push_cli, "current_pnpm_version", return_value="9.15.9"),
+            mock.patch.object(push_cli, "current_node_version", return_value="v24.18.0"),
+            mock.patch.object(push_cli, "current_golangci_lint_version", return_value="2.9.0"),
+            mock.patch.object(push_cli, "install_go") as install_go,
+            mock.patch.object(push_cli, "install_pnpm") as install_pnpm,
+            mock.patch.object(push_cli, "install_golangci_lint") as install_lint,
+        ):
+            push_cli.ensure_toolchains()
+
+        install_go.assert_not_called()
+        install_pnpm.assert_not_called()
+        install_lint.assert_not_called()
+
+    def test_installs_only_mismatched_pinned_versions(self) -> None:
+        declared = push_cli.DeclaredToolchains(
+            go="1.26.6",
+            pnpm="9.15.9",
+            node_major_minimum=20,
+            golangci_lint="2.9.0",
+        )
+        with (
+            mock.patch.object(push_cli, "declared_toolchains", return_value=declared),
+            mock.patch.object(
+                push_cli,
+                "current_go_version",
+                side_effect=["go1.26.5", "go1.26.6"],
+            ),
+            mock.patch.object(push_cli, "current_pnpm_version", return_value="9.15.9"),
+            mock.patch.object(push_cli, "current_node_version", return_value="v24.18.0"),
+            mock.patch.object(
+                push_cli,
+                "current_golangci_lint_version",
+                side_effect=["2.12.2", "2.9.0"],
+            ),
+            mock.patch.object(push_cli, "install_go") as install_go,
+            mock.patch.object(push_cli, "install_pnpm") as install_pnpm,
+            mock.patch.object(push_cli, "install_golangci_lint") as install_lint,
+        ):
+            push_cli.ensure_toolchains()
+
+        install_go.assert_called_once_with("1.26.6")
+        install_lint.assert_called_once_with("2.9.0")
+        install_pnpm.assert_not_called()
+
+    def test_does_not_auto_change_node(self) -> None:
+        declared = push_cli.DeclaredToolchains(
+            go="1.26.6",
+            pnpm="9.15.9",
+            node_major_minimum=20,
+            golangci_lint="2.9.0",
+        )
+        with (
+            mock.patch.object(push_cli, "declared_toolchains", return_value=declared),
+            mock.patch.object(push_cli, "current_go_version", return_value="go1.26.6"),
+            mock.patch.object(push_cli, "current_pnpm_version", return_value="9.15.9"),
+            mock.patch.object(push_cli, "current_node_version", return_value="v18.20.0"),
+            mock.patch.object(push_cli, "current_golangci_lint_version", return_value="2.9.0"),
+        ):
+            with self.assertRaisesRegex(push_cli.PushCliError, "does not auto-change Node"):
+                push_cli.ensure_toolchains()
+
+
 if __name__ == "__main__":
     unittest.main()
