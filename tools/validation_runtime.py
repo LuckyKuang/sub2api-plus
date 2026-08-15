@@ -320,7 +320,16 @@ def cache_mounts(
 ) -> list[tuple[str, str]]:
     if runtime.name == "wsl2-docker":
         base = "/tmp/sub2api-validation-cache"
-        capture([*runtime.prefix, "mkdir", "-p", f"{base}/go", f"{base}/pnpm"])
+        capture(
+            [
+                *runtime.prefix,
+                "mkdir",
+                "-p",
+                f"{base}/go/golangci-lint",
+                f"{base}/go/xdg-cache",
+                f"{base}/pnpm",
+            ]
+        )
         return [
             (f"{base}/go", f"{CONTAINER_HOME}/go"),
             (f"{base}/pnpm", f"{CONTAINER_HOME}/pnpm"),
@@ -328,6 +337,8 @@ def cache_mounts(
     base = Path.home() / ".cache" / "sub2api-validation"
     (base / "go").mkdir(parents=True, exist_ok=True)
     (base / "pnpm").mkdir(parents=True, exist_ok=True)
+    (base / "go" / "golangci-lint").mkdir(parents=True, exist_ok=True)
+    (base / "go" / "xdg-cache").mkdir(parents=True, exist_ok=True)
     return [
         (str(base / "go"), f"{CONTAINER_HOME}/go"),
         (str(base / "pnpm"), f"{CONTAINER_HOME}/pnpm"),
@@ -397,6 +408,10 @@ def validation_run_command(
         f"GOMODCACHE={CONTAINER_HOME}/go/pkg/mod",
         "--env",
         f"PNPM_HOME={CONTAINER_HOME}/pnpm",
+        "--env",
+        f"GOLANGCI_LINT_CACHE={CONTAINER_HOME}/go/golangci-lint",
+        "--env",
+        f"XDG_CACHE_HOME={CONTAINER_HOME}/go/xdg-cache",
         "--env",
         "GOMAXPROCS=4",
         "--env",
