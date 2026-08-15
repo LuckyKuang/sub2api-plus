@@ -54,7 +54,15 @@
       <section class="card">
         <div class="flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 px-5 py-4 dark:border-dark-700">
           <div>
-            <h2 class="font-semibold text-gray-900 dark:text-white">{{ t('admin.ipAccessControl.trustedProxy.title') }}</h2>
+            <div class="flex flex-wrap items-center">
+              <h2 class="font-semibold text-gray-900 dark:text-white">{{ t('admin.ipAccessControl.trustedProxy.title') }}</h2>
+              <HelpTooltip width-class="w-80">
+                <p>{{ t('admin.ipAccessControl.trustedProxy.guideHelp') }}</p>
+              </HelpTooltip>
+              <button type="button" class="ml-2 text-sm text-primary-600 underline hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300" @click="showDeployGuide = true">
+                {{ t('admin.ipAccessControl.trustedProxy.guideLink') }}
+              </button>
+            </div>
             <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.ipAccessControl.trustedProxy.description') }}</p>
           </div>
           <span v-if="proxyStatus" :class="proxyStateClass">{{ proxyStateLabel }}</span>
@@ -125,7 +133,10 @@
           </div>
           <p v-if="!featureEnabled" class="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800 dark:border-amber-800/70 dark:bg-amber-950/30 dark:text-amber-200">{{ t('admin.ipAccessControl.protection.masterSwitchOff') }}</p>
           <p class="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800 dark:border-amber-800/70 dark:bg-amber-950/30 dark:text-amber-200">{{ t('admin.ipAccessControl.protection.proxyHint') }}</p>
-          <p v-if="!proxyStatusLoading && !automaticBlockingReady" class="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs leading-5 text-rose-800 dark:border-rose-800/70 dark:bg-rose-950/30 dark:text-rose-200">{{ t('admin.ipAccessControl.protection.proxyNotReady') }}</p>
+          <p v-if="!proxyStatusLoading && !automaticBlockingReady" class="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs leading-5 text-rose-800 dark:border-rose-800/70 dark:bg-rose-950/30 dark:text-rose-200">
+            {{ t('admin.ipAccessControl.protection.proxyNotReady') }}
+            <button type="button" class="ml-1 underline" @click="showDeployGuide = true">{{ t('admin.ipAccessControl.trustedProxy.guideLink') }}</button>
+          </p>
           <div class="flex justify-end border-t border-gray-100 pt-4 dark:border-dark-700"><button type="button" class="btn btn-primary" :disabled="settingsSaving" @click="saveSettings">{{ settingsSaving ? t('common.saving') : t('common.save') }}</button></div>
         </div>
       </section>
@@ -168,6 +179,100 @@
     </BaseDialog>
     <ConfirmDialog :show="releaseTarget !== null" :title="releaseDialogTitle" :message="releaseDialogMessage" :confirm-text="releaseDialogConfirmText" :cancel-text="t('common.cancel')" danger @confirm="releaseAndReset" @cancel="releaseTarget = null" />
     <ConfirmDialog :show="resetCounterTarget !== null" :title="t('admin.ipAccessControl.failureStates.resetTitle')" :message="t('admin.ipAccessControl.failureStates.resetMessage', { ip: resetCounterTarget })" :confirm-text="t('admin.ipAccessControl.failureStates.resetCounter')" :cancel-text="t('common.cancel')" danger @confirm="resetCounter" @cancel="resetCounterTarget = null" />
+    <teleport to="body">
+      <transition name="modal">
+        <div v-if="showDeployGuide" class="fixed inset-0 z-50 flex items-center justify-center p-4" @mousedown.self="showDeployGuide = false">
+          <div class="fixed inset-0 bg-black/50" @click="showDeployGuide = false"></div>
+          <div class="relative max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white p-6 shadow-2xl dark:bg-dark-800">
+            <button type="button" class="absolute right-4 top-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200" :aria-label="t('common.close')" @click="showDeployGuide = false">
+              <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+            <h2 class="mb-3 text-lg font-bold text-gray-900 dark:text-white">{{ t('admin.ipAccessControl.deployGuide.title') }}</h2>
+            <p class="mb-2 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.ipAccessControl.deployGuide.intro') }}</p>
+            <p class="mb-4 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.ipAccessControl.deployGuide.whenNeeded') }}</p>
+
+            <p class="mb-3 text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('admin.ipAccessControl.deployGuide.pickDeploy') }}</p>
+            <div class="mb-5 flex flex-wrap gap-2">
+              <button
+                v-for="mode in deployGuideModes"
+                :key="mode"
+                type="button"
+                class="rounded-lg px-3 py-1.5 text-sm"
+                :class="deployGuideMode === mode ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 dark:bg-dark-700 dark:text-gray-300'"
+                @click="deployGuideMode = mode"
+              >
+                {{ t(`admin.ipAccessControl.deployGuide.${mode}`) }}
+              </button>
+            </div>
+
+            <div v-if="deployGuideMode === 'binary'" class="space-y-3 text-sm text-gray-600 dark:text-gray-300">
+              <h3 class="font-semibold text-gray-900 dark:text-white">{{ t('admin.ipAccessControl.deployGuide.binaryTitle') }}</h3>
+              <p>{{ t('admin.ipAccessControl.deployGuide.binaryWhere') }}</p>
+              <ol class="ml-5 list-decimal space-y-1">
+                <li>{{ t('admin.ipAccessControl.deployGuide.binaryStep1') }}</li>
+                <li>{{ t('admin.ipAccessControl.deployGuide.binaryStep2') }}</li>
+                <li>{{ t('admin.ipAccessControl.deployGuide.binaryStep3') }}</li>
+                <li>{{ t('admin.ipAccessControl.deployGuide.binaryStep4') }}</li>
+              </ol>
+              <p>{{ t('admin.ipAccessControl.deployGuide.binaryYamlHint') }}</p>
+              <pre class="overflow-x-auto rounded bg-gray-100 px-3 py-2 text-xs text-gray-800 dark:bg-dark-700 dark:text-gray-200">{{ t('admin.ipAccessControl.deployGuide.binaryYaml') }}</pre>
+              <p>{{ t('admin.ipAccessControl.deployGuide.binaryStep5') }}</p>
+              <code class="block rounded bg-gray-100 px-3 py-2 text-xs dark:bg-dark-700">{{ t('admin.ipAccessControl.deployGuide.binaryRestart') }}</code>
+              <code class="block rounded bg-gray-100 px-3 py-2 text-xs dark:bg-dark-700">{{ t('admin.ipAccessControl.deployGuide.binaryStatus') }}</code>
+              <p>{{ t('admin.ipAccessControl.deployGuide.binaryCustomFile') }}</p>
+              <p>{{ t('admin.ipAccessControl.deployGuide.binaryEnvOverride') }}</p>
+            </div>
+
+            <div v-else-if="deployGuideMode === 'docker'" class="space-y-3 text-sm text-gray-600 dark:text-gray-300">
+              <h3 class="font-semibold text-gray-900 dark:text-white">{{ t('admin.ipAccessControl.deployGuide.dockerTitle') }}</h3>
+              <p>{{ t('admin.ipAccessControl.deployGuide.dockerWhere') }}</p>
+              <ol class="ml-5 list-decimal space-y-1">
+                <li>{{ t('admin.ipAccessControl.deployGuide.dockerStep1') }}</li>
+                <li>{{ t('admin.ipAccessControl.deployGuide.dockerStep2') }}</li>
+                <li>{{ t('admin.ipAccessControl.deployGuide.dockerStep3') }}</li>
+                <li>{{ t('admin.ipAccessControl.deployGuide.dockerStep4') }}</li>
+                <li>{{ t('admin.ipAccessControl.deployGuide.dockerStep5') }}</li>
+                <li>{{ t('admin.ipAccessControl.deployGuide.dockerStep6') }}</li>
+              </ol>
+              <code class="block rounded bg-gray-100 px-3 py-2 text-xs dark:bg-dark-700">{{ t('admin.ipAccessControl.deployGuide.dockerRestart') }}</code>
+              <code class="block rounded bg-gray-100 px-3 py-2 text-xs dark:bg-dark-700">{{ t('admin.ipAccessControl.deployGuide.dockerLogs') }}</code>
+              <p>{{ t('admin.ipAccessControl.deployGuide.dockerFileHint') }}</p>
+            </div>
+
+            <div v-else class="space-y-3 text-sm text-gray-600 dark:text-gray-300">
+              <h3 class="font-semibold text-gray-900 dark:text-white">{{ t('admin.ipAccessControl.deployGuide.standaloneTitle') }}</h3>
+              <p>{{ t('admin.ipAccessControl.deployGuide.standaloneWhere') }}</p>
+              <ol class="ml-5 list-decimal space-y-1">
+                <li>{{ t('admin.ipAccessControl.deployGuide.standaloneStep1') }}</li>
+                <li>{{ t('admin.ipAccessControl.deployGuide.standaloneStep2') }}</li>
+              </ol>
+            </div>
+
+            <div class="mt-5 space-y-2 text-sm text-gray-600 dark:text-gray-300">
+              <h3 class="font-semibold text-gray-900 dark:text-white">{{ t('admin.ipAccessControl.deployGuide.proxyTitle') }}</h3>
+              <p>{{ t('admin.ipAccessControl.deployGuide.proxyHint') }}</p>
+              <pre class="overflow-x-auto rounded bg-gray-100 px-3 py-2 text-xs text-gray-800 dark:bg-dark-700 dark:text-gray-200">{{ t('admin.ipAccessControl.deployGuide.proxyNginx') }}</pre>
+            </div>
+            <div class="mt-5 rounded-lg bg-gray-50 p-3 text-sm text-gray-700 dark:bg-dark-700 dark:text-gray-300">
+              <p class="font-medium">{{ t('admin.ipAccessControl.deployGuide.afterTitle') }}</p>
+              <p class="mt-1">{{ t('admin.ipAccessControl.deployGuide.afterHint') }}</p>
+            </div>
+            <div class="mt-4 rounded-lg bg-amber-50 p-3 text-xs text-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+              <p class="font-medium">{{ t('admin.ipAccessControl.deployGuide.warningsTitle') }}</p>
+              <ul class="mt-2 list-disc space-y-1 pl-4">
+                <li>{{ t('admin.ipAccessControl.deployGuide.warningCloudflare') }}</li>
+                <li>{{ t('admin.ipAccessControl.deployGuide.warningEnv') }}</li>
+                <li>{{ t('admin.ipAccessControl.deployGuide.warningLegacy') }}</li>
+                <li>{{ t('admin.ipAccessControl.deployGuide.warningWizard') }}</li>
+              </ul>
+            </div>
+            <div class="mt-4 text-right">
+              <button type="button" class="btn btn-primary btn-sm" @click="showDeployGuide = false">{{ t('common.close') }}</button>
+            </div>
+          </div>
+        </div>
+      </transition>
+    </teleport>
     <TotpStepUpDialog :controller="stepUp" />
   </AppLayout>
 </template>
@@ -188,11 +293,15 @@ import Icon from '@/components/icons/Icon.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import TotpStepUpDialog from '@/components/auth/TotpStepUpDialog.vue'
+import HelpTooltip from '@/components/common/HelpTooltip.vue'
 import { isStepUpBlocked, isStepUpCancelled, stepUpBlockReason, useStepUp } from '@/composables/useStepUp'
 
 const { t } = useI18n()
 const appStore = useAppStore()
 const stepUp = useStepUp()
+const showDeployGuide = ref(false)
+const deployGuideModes = ['binary', 'docker', 'standalone'] as const
+const deployGuideMode = ref<(typeof deployGuideModes)[number]>('binary')
 const proxyStatus = ref<TrustedProxyStatus | null>(null)
 const proxyStatusLoading = ref(true)
 const settings = reactive<IPAccessControlSettings>({ enforcement_enabled: false, login_failure_auto_block_enabled: false, login_failure_threshold: 8, login_failure_window_minutes: 15, login_failure_block_minutes: 1440 })
@@ -389,3 +498,14 @@ function confirmResetCounter(ip: string) { resetCounterTarget.value = ip }
 async function resetCounter() { const ip = resetCounterTarget.value; if (!ip) return; try { await stepUp.run(() => adminAPI.ipAccessControl.resetFailureState(ip)); resetCounterTarget.value = null; appStore.showSuccess(t('admin.ipAccessControl.failureStates.resetSuccess')); await Promise.all([loadFailureStates(), loadRules()]) } catch (error) { if (isStepUpCancelled(error)) resetCounterTarget.value = null; reportSensitiveError(error) } }
 onMounted(() => { void loadProxyStatus(); void loadSettings(); void loadFailureStates(); void loadRules() })
 </script>
+
+<style scoped>
+.modal-enter-active,
+.modal-leave-active {
+  transition: opacity 0.2s ease;
+}
+.modal-enter-from,
+.modal-leave-to {
+  opacity: 0;
+}
+</style>
