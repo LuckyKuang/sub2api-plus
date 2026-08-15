@@ -119,7 +119,8 @@ func (r *ipAccessCleanupRepoStub) CleanupExpiredIPLoginFailureStates(_ context.C
 
 func TestIPAccessControlAllowRuleTakesPrecedence(t *testing.T) {
 	settings := &ipAccessSettingRepoStub{values: map[string]string{
-		SettingKeyIPAccessControlEnabled: "true",
+		SettingKeyGlobalIPAccessControlEnabled: "true",
+		SettingKeyIPAccessControlEnabled:       "true",
 	}}
 	repo := &ipAccessRepoStub{rules: []*IPAccessRule{
 		{IPOrCIDR: "203.0.113.0/24", RuleKind: IPAccessRuleKindManualBlock, Status: IPAccessRuleStatusActive},
@@ -139,7 +140,8 @@ func TestIPAccessControlAllowRuleTakesPrecedence(t *testing.T) {
 
 func TestIPAccessControlEmergencyAllowlistOverridesBlockAndRejectsGlobalRange(t *testing.T) {
 	settings := &ipAccessSettingRepoStub{values: map[string]string{
-		SettingKeyIPAccessControlEnabled: "true",
+		SettingKeyGlobalIPAccessControlEnabled: "true",
+		SettingKeyIPAccessControlEnabled:       "true",
 	}}
 	repo := &ipAccessRepoStub{rules: []*IPAccessRule{{
 		IPOrCIDR: "203.0.113.0/24", RuleKind: IPAccessRuleKindManualBlock, Status: IPAccessRuleStatusActive,
@@ -165,7 +167,8 @@ func TestIPAccessControlEmergencyAllowlistOverridesBlockAndRejectsGlobalRange(t 
 
 func TestIPAccessControlEmergencyAllowlistDoesNotMatchTrustedProxyPeer(t *testing.T) {
 	settings := &ipAccessSettingRepoStub{values: map[string]string{
-		SettingKeyIPAccessControlEnabled: "true",
+		SettingKeyGlobalIPAccessControlEnabled: "true",
+		SettingKeyIPAccessControlEnabled:       "true",
 	}}
 	repo := &ipAccessRepoStub{rules: []*IPAccessRule{{
 		IPOrCIDR: "203.0.113.0/24", RuleKind: IPAccessRuleKindManualBlock, Status: IPAccessRuleStatusActive,
@@ -185,7 +188,8 @@ func TestIPAccessControlEmergencyAllowlistDoesNotMatchTrustedProxyPeer(t *testin
 
 func TestIPAccessControlEmergencyAllowlistRecoversUnsafeProxyChainByDirectPeer(t *testing.T) {
 	settings := &ipAccessSettingRepoStub{values: map[string]string{
-		SettingKeyIPAccessControlEnabled: "true",
+		SettingKeyGlobalIPAccessControlEnabled: "true",
+		SettingKeyIPAccessControlEnabled:       "true",
 	}}
 	svc := NewIPAccessControlService(settings, &ipAccessRepoStub{})
 	if err := svc.ConfigureEmergencyAllowlist([]string{"10.1.2.3"}); err != nil {
@@ -217,7 +221,8 @@ func TestIPAccessControlCleanupUsesConfiguredFailureWindow(t *testing.T) {
 
 func TestIPAccessControlRecordsBlockedRuleHitWithoutRecordingAllowedSource(t *testing.T) {
 	settings := &ipAccessSettingRepoStub{values: map[string]string{
-		SettingKeyIPAccessControlEnabled: "true",
+		SettingKeyGlobalIPAccessControlEnabled: "true",
+		SettingKeyIPAccessControlEnabled:       "true",
 	}}
 	repo := &ipAccessRepoStub{
 		blockHitIPs: make(chan string, 1),
@@ -255,6 +260,7 @@ func TestIPAccessControlRecordsBlockedRuleHitWithoutRecordingAllowedSource(t *te
 func TestIPAccessControlClearsSuccessfulLocalLoginOnlyWhenAutoBlockingIsActive(t *testing.T) {
 	t.Run("automatic blocking active", func(t *testing.T) {
 		settings := &ipAccessSettingRepoStub{values: map[string]string{
+			SettingKeyGlobalIPAccessControlEnabled: "true",
 			SettingKeyIPAccessControlEnabled:       "true",
 			SettingKeyLoginFailureAutoBlockEnabled: "true",
 		}}
@@ -271,6 +277,7 @@ func TestIPAccessControlClearsSuccessfulLocalLoginOnlyWhenAutoBlockingIsActive(t
 
 	t.Run("automatic blocking disabled", func(t *testing.T) {
 		settings := &ipAccessSettingRepoStub{values: map[string]string{
+			SettingKeyGlobalIPAccessControlEnabled: "true",
 			SettingKeyIPAccessControlEnabled:       "true",
 			SettingKeyLoginFailureAutoBlockEnabled: "false",
 		}}
@@ -299,7 +306,8 @@ func TestIPAccessControlSettingsRejectUnsafeThresholds(t *testing.T) {
 
 func TestIPAccessControlUsesStaleSecurityCacheDuringDatabaseFailure(t *testing.T) {
 	settings := &ipAccessSettingRepoStub{values: map[string]string{
-		SettingKeyIPAccessControlEnabled: "true",
+		SettingKeyGlobalIPAccessControlEnabled: "true",
+		SettingKeyIPAccessControlEnabled:       "true",
 	}}
 	repo := &ipAccessRepoStub{rules: []*IPAccessRule{
 		{IPOrCIDR: "203.0.113.8", RuleKind: IPAccessRuleKindManualBlock, Status: IPAccessRuleStatusActive},
@@ -326,7 +334,10 @@ func TestIPAccessControlUsesStaleSecurityCacheDuringDatabaseFailure(t *testing.T
 
 func TestIPAccessControlWarmupRequiresCompleteSnapshot(t *testing.T) {
 	settings := &ipAccessSettingRepoStub{
-		values: map[string]string{SettingKeyIPAccessControlEnabled: "true"},
+		values: map[string]string{
+			SettingKeyGlobalIPAccessControlEnabled: "true",
+			SettingKeyIPAccessControlEnabled:       "true",
+		},
 	}
 	repo := &ipAccessRepoStub{}
 	svc := NewIPAccessControlService(settings, repo)
@@ -360,7 +371,8 @@ func TestIPAccessControlWarmupRequiresCompleteSnapshot(t *testing.T) {
 func TestIPAccessControlDropsExpiredRulesFromStaleCache(t *testing.T) {
 	expiresAt := time.Now().Add(10 * time.Millisecond)
 	settings := &ipAccessSettingRepoStub{values: map[string]string{
-		SettingKeyIPAccessControlEnabled: "true",
+		SettingKeyGlobalIPAccessControlEnabled: "true",
+		SettingKeyIPAccessControlEnabled:       "true",
 	}}
 	repo := &ipAccessRepoStub{rules: []*IPAccessRule{
 		{
@@ -418,6 +430,7 @@ func TestIPAccessControlRejectsGlobalManualRule(t *testing.T) {
 
 func TestIPAccessControlInvalidPersistedLimitsUseSafeDefaults(t *testing.T) {
 	settings := &ipAccessSettingRepoStub{values: map[string]string{
+		SettingKeyGlobalIPAccessControlEnabled: "true",
 		SettingKeyIPAccessControlEnabled:       "true",
 		SettingKeyLoginFailureAutoBlockEnabled: "true",
 		SettingKeyLoginFailureIPThreshold:      "1",
@@ -454,5 +467,82 @@ func TestIPAccessControlDisablingEnforcementClearsHiddenAutoBlockFlag(t *testing
 	}
 	if got.LoginFailureAutoBlock {
 		t.Fatal("auto-block must not remain secretly enabled while enforcement is disabled")
+	}
+}
+
+func TestIPAccessControlMasterSwitchDisablesRuntimeEnforcement(t *testing.T) {
+	settings := &ipAccessSettingRepoStub{values: map[string]string{
+		SettingKeyGlobalIPAccessControlEnabled: "false",
+		SettingKeyIPAccessControlEnabled:       "true",
+		SettingKeyLoginFailureAutoBlockEnabled: "true",
+	}}
+	repo := &ipAccessRepoStub{rules: []*IPAccessRule{
+		{IPOrCIDR: "203.0.113.99", RuleKind: IPAccessRuleKindManualBlock, Status: IPAccessRuleStatusActive},
+	}}
+	svc := NewIPAccessControlService(settings, repo)
+
+	blocked, err := svc.IsBlocked(context.Background(), "203.0.113.99")
+	if err != nil || blocked {
+		t.Fatalf("master switch off must not enforce stored blocks: blocked=%v err=%v", blocked, err)
+	}
+	if _, err := svc.RecordFailedLogin(context.Background(), "203.0.113.99"); err != nil {
+		t.Fatalf("master switch off must not record failures: %v", err)
+	}
+}
+
+func TestIPAccessControlMissingMasterSwitchDoesNotEnableLegacyEnforcement(t *testing.T) {
+	settings := &ipAccessSettingRepoStub{values: map[string]string{
+		SettingKeyIPAccessControlEnabled: "true",
+	}}
+	repo := &ipAccessRepoStub{rules: []*IPAccessRule{
+		{IPOrCIDR: "203.0.113.99", RuleKind: IPAccessRuleKindManualBlock, Status: IPAccessRuleStatusActive},
+	}}
+	svc := NewIPAccessControlService(settings, repo)
+
+	got, err := svc.GetSettings(context.Background())
+	if err != nil {
+		t.Fatalf("get settings: %v", err)
+	}
+	if got.FeatureEnabled || got.RuntimeEnforcementActive() {
+		t.Fatalf("missing master switch must stay off even if legacy enforcement is on: %#v", got)
+	}
+	if _, exists := settings.values[SettingKeyGlobalIPAccessControlEnabled]; exists {
+		t.Fatalf("missing master switch must not be written during read, got %q", settings.values[SettingKeyGlobalIPAccessControlEnabled])
+	}
+	blocked, err := svc.IsBlocked(context.Background(), "203.0.113.99")
+	if err != nil || blocked {
+		t.Fatalf("legacy enforcement alone must not block: blocked=%v err=%v", blocked, err)
+	}
+}
+
+func TestIPAccessControlUpdateSettingsPreservesMasterSwitch(t *testing.T) {
+	settings := &ipAccessSettingRepoStub{values: map[string]string{
+		SettingKeyGlobalIPAccessControlEnabled: "true",
+		SettingKeyIPAccessControlEnabled:       "true",
+	}}
+	svc := NewIPAccessControlService(settings, &ipAccessRepoStub{})
+	if _, err := svc.GetSettings(context.Background()); err != nil {
+		t.Fatalf("prime cache: %v", err)
+	}
+
+	got, err := svc.UpdateSettings(context.Background(), IPAccessControlSettings{
+		EnforcementEnabled:     true,
+		LoginFailureAutoBlock:  false,
+		LoginFailureThreshold:  8,
+		LoginFailureWindowMins: 15,
+		LoginFailureBlockMins:  60,
+	})
+	if err != nil {
+		t.Fatalf("update settings: %v", err)
+	}
+	if !got.FeatureEnabled {
+		t.Fatal("IP page save must not clear the system-settings master switch")
+	}
+	if settings.values[SettingKeyGlobalIPAccessControlEnabled] != "true" {
+		t.Fatalf("master switch must stay persisted, got %q", settings.values[SettingKeyGlobalIPAccessControlEnabled])
+	}
+	cached, err := svc.GetSettings(context.Background())
+	if err != nil || !cached.FeatureEnabled || !cached.RuntimeEnforcementActive() {
+		t.Fatalf("cached snapshot lost the master switch: %#v err=%v", cached, err)
 	}
 }

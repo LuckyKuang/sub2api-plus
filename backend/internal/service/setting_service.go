@@ -154,6 +154,9 @@ type SettingService struct {
 
 	channelMonitorRuntimeListenersMu sync.Mutex
 	channelMonitorRuntimeListeners   []func()
+
+	ipAccessRuntimeListenersMu sync.Mutex
+	ipAccessRuntimeListeners   []func()
 }
 
 // DefaultPlatformQuotaSetting 单 platform 三档限额（nil = 沿用上层；0 = 显式禁用；>0 = 上限）
@@ -397,6 +400,48 @@ func (s *SettingService) SubscribeChannelMonitorRuntime(listener func()) (unsubs
 			return
 		}
 		s.channelMonitorRuntimeListeners[idx] = nil
+	}
+}
+
+func (s *SettingService) SubscribeIPAccessRuntime(listener func()) (unsubscribe func()) {
+	if s == nil || listener == nil {
+		return func() {}
+	}
+	s.ipAccessRuntimeListenersMu.Lock()
+	s.ipAccessRuntimeListeners = append(s.ipAccessRuntimeListeners, listener)
+	idx := len(s.ipAccessRuntimeListeners) - 1
+	s.ipAccessRuntimeListenersMu.Unlock()
+	return func() {
+		s.ipAccessRuntimeListenersMu.Lock()
+		defer s.ipAccessRuntimeListenersMu.Unlock()
+		if idx < 0 || idx >= len(s.ipAccessRuntimeListeners) {
+			return
+		}
+		s.ipAccessRuntimeListeners[idx] = nil
+	}
+}
+
+func (s *SettingService) notifyIPAccessRuntimeListeners() {
+	if s == nil {
+		return
+	}
+	s.ipAccessRuntimeListenersMu.Lock()
+	listeners := make([]func(), 0, len(s.ipAccessRuntimeListeners))
+	for _, l := range s.ipAccessRuntimeListeners {
+		if l != nil {
+			listeners = append(listeners, l)
+		}
+	}
+	s.ipAccessRuntimeListenersMu.Unlock()
+	for _, l := range listeners {
+		func(fn func()) {
+			defer func() {
+				if recovered := recover(); recovered != nil {
+					_ = recovered
+				}
+			}()
+			fn()
+		}(l)
 	}
 }
 

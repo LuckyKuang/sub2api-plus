@@ -354,6 +354,9 @@ type UpdateSettingsRequest struct {
 	// 风控中心功能开关
 	RiskControlEnabled *bool `json:"risk_control_enabled"`
 
+	// 全局 IP 访问控制功能总开关
+	GlobalIPAccessControlEnabled *bool `json:"global_ip_access_control_enabled"`
+
 	// cyber 会话屏蔽开关 + TTL
 	CyberSessionBlockEnabled    *bool `json:"cyber_session_block_enabled"`
 	CyberSessionBlockTTLSeconds *int  `json:"cyber_session_block_ttl_seconds"`
@@ -2004,6 +2007,12 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.RiskControlEnabled
 		}(),
+		GlobalIPAccessControlEnabled: func() bool {
+			if req.GlobalIPAccessControlEnabled != nil {
+				return *req.GlobalIPAccessControlEnabled
+			}
+			return previousSettings.GlobalIPAccessControlEnabled
+		}(),
 		CyberSessionBlockEnabled: func() bool {
 			if req.CyberSessionBlockEnabled != nil {
 				return *req.CyberSessionBlockEnabled
@@ -2416,11 +2425,12 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 
 		AffiliateEnabled: updatedSettings.AffiliateEnabled,
 
-		RiskControlEnabled:          updatedSettings.RiskControlEnabled,
-		CyberSessionBlockEnabled:    updatedSettings.CyberSessionBlockEnabled,
-		CyberSessionBlockTTLSeconds: updatedSettings.CyberSessionBlockTTLSeconds,
-		AccountSchedulingThresholds: updatedSettings.AccountSchedulingThresholds,
-		AllowUserViewErrorRequests:  updatedSettings.AllowUserViewErrorRequests,
+		RiskControlEnabled:           updatedSettings.RiskControlEnabled,
+		GlobalIPAccessControlEnabled: updatedSettings.GlobalIPAccessControlEnabled,
+		CyberSessionBlockEnabled:     updatedSettings.CyberSessionBlockEnabled,
+		CyberSessionBlockTTLSeconds:  updatedSettings.CyberSessionBlockTTLSeconds,
+		AccountSchedulingThresholds:  updatedSettings.AccountSchedulingThresholds,
+		AllowUserViewErrorRequests:   updatedSettings.AllowUserViewErrorRequests,
 	}
 	if fastPolicy, err := h.settingService.GetOpenAIFastPolicySettings(c.Request.Context()); err != nil {
 		slog.Error("openai_fast_policy_settings_get_failed", "error", err)

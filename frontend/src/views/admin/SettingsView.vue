@@ -1716,14 +1716,31 @@
                 {{ t("admin.settings.ipAccessControl.description") }}
               </p>
             </div>
-            <div class="flex flex-wrap items-center justify-between gap-4 p-6">
-              <p class="max-w-3xl text-sm leading-6 text-gray-500 dark:text-gray-400">
-                {{ t("admin.settings.ipAccessControl.hint") }}
-              </p>
-              <RouterLink to="/admin/ip-access-control" class="btn btn-secondary">
-                <Icon name="shield" size="sm" class="mr-1.5" />
-                {{ t("admin.settings.ipAccessControl.manage") }}
-              </RouterLink>
+            <div class="space-y-5 p-6">
+              <div class="flex items-center justify-between gap-4">
+                <div>
+                  <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {{ t("admin.settings.ipAccessControl.enabled") }}
+                  </label>
+                  <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                    {{ t("admin.settings.ipAccessControl.enabledHint") }}
+                  </p>
+                </div>
+                <Toggle v-model="form.global_ip_access_control_enabled" />
+              </div>
+              <div class="flex flex-wrap items-center justify-between gap-4">
+                <p class="max-w-3xl text-sm leading-6 text-gray-500 dark:text-gray-400">
+                  {{ t("admin.settings.ipAccessControl.hint") }}
+                </p>
+                <RouterLink
+                  to="/admin/ip-access-control"
+                  class="btn btn-secondary"
+                  :class="{ 'pointer-events-none opacity-50': !form.global_ip_access_control_enabled }"
+                >
+                  <Icon name="shield" size="sm" class="mr-1.5" />
+                  {{ t("admin.settings.ipAccessControl.manage") }}
+                </RouterLink>
+              </div>
             </div>
           </div>
 
@@ -9479,6 +9496,7 @@ const form = reactive<SettingsForm>({
   hide_ccs_import_button: false,
   payment_enabled: false,
   risk_control_enabled: false,
+  global_ip_access_control_enabled: false,
   cyber_session_block_enabled: false,
   cyber_session_block_ttl_seconds: 3600,
   payment_min_amount: 1,
@@ -11353,6 +11371,7 @@ async function saveSettings() {
       // Payment configuration
       payment_enabled: form.payment_enabled,
       risk_control_enabled: form.risk_control_enabled,
+      global_ip_access_control_enabled: form.global_ip_access_control_enabled,
       cyber_session_block_enabled: form.cyber_session_block_enabled,
       cyber_session_block_ttl_seconds:
         Number(form.cyber_session_block_ttl_seconds) || 3600,

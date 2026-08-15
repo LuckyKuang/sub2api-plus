@@ -56,6 +56,12 @@ declare module 'vue-router' {
     requiresRiskControl?: boolean
 
     /**
+     * 是否要求全局 IP 访问控制功能总开关已启用
+     * @default false
+     */
+    requiresIpAccessControl?: boolean
+
+    /**
      * Whether this route requires async image access. Administrators always
      * have access; users need an eligible image-generation API key.
      * @default false

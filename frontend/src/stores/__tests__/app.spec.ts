@@ -37,6 +37,7 @@ function createPublicSettings(overrides: Partial<PublicSettings> = {}): PublicSe
     hide_ccs_import_button: false,
     payment_enabled: false,
     risk_control_enabled: false,
+    global_ip_access_control_enabled: false,
     table_default_page_size: 20,
     table_page_size_options: [10, 20, 50, 100],
     custom_menu_items: [],

@@ -170,6 +170,8 @@ export default {
         title: 'Global IP Access Control',
         description: 'Manage global IP block rules and automatic blocks after consecutive local login failures. Disabled by default.',
         hint: 'Rules apply consistently to login, the console, user pages, gateway APIs, and async image endpoints. Configure trusted proxy ranges on the server when using Cloudflare or another reverse proxy.',
+        enabled: 'Enable global IP access control',
+        enabledHint: 'Off by default. You must turn this on first, then enable “Global IP Enforcement” on the IP page; both switches are required. When off, the Security Audit entry is hidden. Existing rules and the IP-page toggle are kept but do nothing. Upgrades also stop previous enforcement until this switch is turned on again.',
         manage: 'Configure IP Access Control'
       },
       panelRateLimit: {

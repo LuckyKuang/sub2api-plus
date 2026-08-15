@@ -168,6 +168,7 @@ type SystemSettings struct {
 	DefaultConcurrency            int
 	DefaultBalance                float64
 	RiskControlEnabled            bool
+	GlobalIPAccessControlEnabled  bool
 	CyberSessionBlockEnabled      bool
 	CyberSessionBlockTTLSeconds   int
 	AffiliateEnabled              bool
@@ -401,6 +402,9 @@ type PublicSettings struct {
 
 	// 风控中心功能开关
 	RiskControlEnabled bool `json:"risk_control_enabled"`
+
+	// 全局 IP 访问控制功能总开关（菜单/路由 + 运行时门闩）
+	GlobalIPAccessControlEnabled bool `json:"global_ip_access_control_enabled"`
 
 	// 允许终端用户在用量页查看自己的失败请求
 	AllowUserViewErrorRequests bool `json:"allow_user_view_error_requests"`

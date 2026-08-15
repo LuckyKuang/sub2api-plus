@@ -450,6 +450,9 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	// 风控中心功能开关
 	updates[SettingKeyRiskControlEnabled] = strconv.FormatBool(settings.RiskControlEnabled)
 
+	// 全局 IP 访问控制功能总开关
+	updates[SettingKeyGlobalIPAccessControlEnabled] = strconv.FormatBool(settings.GlobalIPAccessControlEnabled)
+
 	// cyber 会话屏蔽开关 + TTL
 	updates[SettingKeyCyberSessionBlockEnabled] = strconv.FormatBool(settings.CyberSessionBlockEnabled)
 	if settings.CyberSessionBlockTTLSeconds > 0 {
@@ -800,6 +803,7 @@ func (s *SettingService) refreshCachedSettings(settings *SystemSettings) {
 		s.onUpdate() // Invalidate cache after settings update
 	}
 	s.notifyChannelMonitorRuntimeListeners()
+	s.notifyIPAccessRuntimeListeners()
 }
 
 func (s *SettingService) defaultRewriteMessageCacheControl() bool {

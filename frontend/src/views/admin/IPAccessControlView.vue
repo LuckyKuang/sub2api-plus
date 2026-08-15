@@ -123,6 +123,7 @@
             <label class="block"><span class="input-label">{{ t('admin.ipAccessControl.protection.window') }}</span><input v-model.number="settings.login_failure_window_minutes" min="1" max="1440" type="number" class="input" /></label>
             <label class="block"><span class="input-label">{{ t('admin.ipAccessControl.protection.duration') }}</span><input v-model.number="settings.login_failure_block_minutes" min="1" max="525600" type="number" class="input" /></label>
           </div>
+          <p v-if="!featureEnabled" class="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800 dark:border-amber-800/70 dark:bg-amber-950/30 dark:text-amber-200">{{ t('admin.ipAccessControl.protection.masterSwitchOff') }}</p>
           <p class="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800 dark:border-amber-800/70 dark:bg-amber-950/30 dark:text-amber-200">{{ t('admin.ipAccessControl.protection.proxyHint') }}</p>
           <p v-if="!proxyStatusLoading && !automaticBlockingReady" class="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs leading-5 text-rose-800 dark:border-rose-800/70 dark:bg-rose-950/30 dark:text-rose-200">{{ t('admin.ipAccessControl.protection.proxyNotReady') }}</p>
           <div class="flex justify-end border-t border-gray-100 pt-4 dark:border-dark-700"><button type="button" class="btn btn-primary" :disabled="settingsSaving" @click="saveSettings">{{ settingsSaving ? t('common.saving') : t('common.save') }}</button></div>
@@ -224,6 +225,7 @@ const statusOptions = computed(() => [{ value: 'active', label: t('admin.ipAcces
 // deployment or malformed response cannot take down the complete admin view.
 const trustedProxies = computed(() => Array.isArray(proxyStatus.value?.trusted_proxies) ? proxyStatus.value.trusted_proxies : [])
 const forwardedHeaders = computed(() => Array.isArray(proxyStatus.value?.forwarded_headers) ? proxyStatus.value.forwarded_headers : [])
+const featureEnabled = computed(() => appStore.cachedPublicSettings?.global_ip_access_control_enabled === true)
 const automaticBlockingReady = computed(() => proxyStatus.value?.automatic_blocking_ready === true)
 const manualBlockingReady = computed(() => proxyStatus.value?.manual_blocking_ready === true)
 const createKindOptions = computed(() => [

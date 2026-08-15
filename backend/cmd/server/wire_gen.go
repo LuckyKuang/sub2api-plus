@@ -97,7 +97,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	userAttributeService := service.NewUserAttributeService(userAttributeDefinitionRepository, userAttributeValueRepository)
 	ipAccessControlRepository := repository.NewIPAccessControlRepository(db)
 	invalidationBus := repository.NewRedisInvalidationBus(redisClient)
-	ipAccessControlService := service.ProvideIPAccessControlService(settingRepository, ipAccessControlRepository, invalidationBus)
+	ipAccessControlService := service.ProvideIPAccessControlService(settingRepository, ipAccessControlRepository, invalidationBus, settingService)
 	authHandler := handler.ProvideAuthHandler(configConfig, authService, userService, settingService, promoService, redeemService, totpService, userAttributeService, ipAccessControlService)
 	userHandler := handler.NewUserHandler(userService, authService, emailService, emailCache, affiliateService, serviceUserPlatformQuotaRepository)
 	apiKeyHandler := handler.NewAPIKeyHandler(apiKeyService)

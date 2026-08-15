@@ -119,6 +119,11 @@ export const FeatureFlags = {
     mode: 'opt-in',
     label: 'Risk Control',
   }),
+  globalIpAccessControl: defineFlag({
+    key: 'global_ip_access_control_enabled',
+    mode: 'opt-in',
+    label: 'Global IP Access Control',
+  }),
   affiliate: defineFlag({
     key: 'affiliate_enabled',
     mode: 'opt-in',
