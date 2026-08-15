@@ -526,6 +526,11 @@ class ValidationLaunchTest(unittest.TestCase):
                 "validation_image_ref",
                 return_value="sub2api-validation:test",
             ),
+            mock.patch.object(
+                push_cli.validation_runtime,
+                "in_validation_container",
+                return_value=False,
+            ),
             mock.patch.object(push_cli, "run_step") as run_step,
         ):
             push_cli.launch_in_validation(runtime, "origin")
@@ -568,6 +573,11 @@ class ValidationLaunchTest(unittest.TestCase):
                 "validation_image_ref",
                 return_value="sub2api-validation:test",
             ),
+            mock.patch.object(
+                push_cli.validation_runtime,
+                "in_validation_container",
+                return_value=False,
+            ),
             mock.patch.object(push_cli, "run_step") as run_step,
         ):
             push_cli.launch_in_validation(runtime, "origin")
@@ -599,6 +609,11 @@ class ValidationLaunchTest(unittest.TestCase):
                 push_cli.validation_runtime,
                 "validation_image_ref",
                 return_value="sub2api-validation:test",
+            ),
+            mock.patch.object(
+                push_cli.validation_runtime,
+                "in_validation_container",
+                return_value=False,
             ),
             mock.patch.object(push_cli, "run_step") as run_step,
         ):
