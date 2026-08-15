@@ -134,6 +134,10 @@ func (UsageLog) Fields() []ent.Field {
 		field.Int("first_token_ms").
 			Optional().
 			Nillable(),
+		field.Int("last_token_ms").
+			Optional().
+			Nillable().
+			Comment("Elapsed ms to the last token-like delta; NULL = historical or none observed"),
 		field.Int("first_output_ms").
 			Optional().
 			Nillable(),

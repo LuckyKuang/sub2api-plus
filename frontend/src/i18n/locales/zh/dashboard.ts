@@ -345,7 +345,7 @@ export default {
     latencyNonTextFirstHint: '首个 token-like 输出为推理或工具调用，不一定是正文。',
     latencyDuration: '总耗时',
     latencyTps: 'TPS',
-    latencyTpsHint: '估算平均文本输出速率：文本输出 Token ÷（总耗时 − 首 Token）；仅完整 stream/ws 请求。生成窗过短、文本 Token 过少或结果异常偏高时不显示。',
+    latencyTpsHint: '估算平均文本输出速率：文本输出 Token ÷（末 Token − 首 Token）；仅完整 stream/ws 请求。生成窗过短或文本 Token 过少时显示为 -；低于 1 或高于 1000 显示为 < 1 / > 1000。',
     time: '时间',
     ws: 'WS',
     stream: '流式',

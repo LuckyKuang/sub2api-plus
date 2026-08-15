@@ -340,7 +340,7 @@ export default {
     latencyNonTextFirstHint: 'First token-like output was reasoning or a tool call, not necessarily final answer text.',
     latencyDuration: 'Total',
     latencyTps: 'TPS',
-    latencyTpsHint: 'Estimated average text output rate: text output tokens ÷ (total duration − first token). Complete stream/ws requests only. Hidden when the generation window is too short, text tokens are too few, or the estimate is unrealistically high.',
+    latencyTpsHint: 'Estimated average text output rate: text output tokens ÷ (last token − first token). Complete stream/ws requests only. Sample too small (short window or few text tokens) shows "-". Values below 1 or above 1000 show as "< 1" / "> 1000".',
     time: 'Time',
     ws: 'WS',
     stream: 'Stream',

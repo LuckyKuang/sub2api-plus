@@ -25,6 +25,7 @@ import (
 type openaiStreamingResult struct {
 	usage            *OpenAIUsage
 	firstTokenMs     *int
+	lastTokenMs      *int
 	firstOutputMs    *int
 	firstOutputKind  string
 	responseID       string
@@ -111,6 +112,7 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 	}
 	var timing streamOutputTiming
 	var firstTokenMs *int
+	var lastTokenMs *int
 	firstOutputProgressObserved := false
 	bufferedWriter := bufio.NewWriterSize(w, 4*1024)
 	var firstOutputStage *openAIFirstOutputStage
@@ -302,6 +304,7 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 		if completedVisibleEvent && firstTokenMs == nil {
 			ms := int(time.Since(startTime).Milliseconds())
 			firstTokenMs = &ms
+			lastTokenMs = laterTokenMs(lastTokenMs, ms)
 		}
 		eventStartsClientOutput = false
 		eventObservation = apicompat.StreamOutputObservation{}
@@ -344,9 +347,16 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 		if visibleFirstTokenMs == nil {
 			visibleFirstTokenMs = timing.firstTokenMs
 		}
+		visibleLastTokenMs := lastTokenMs
+		if timing.lastTokenMs != nil {
+			visibleLastTokenMs = laterTokenMs(visibleLastTokenMs, *timing.lastTokenMs)
+		} else if visibleLastTokenMs == nil {
+			visibleLastTokenMs = visibleFirstTokenMs
+		}
 		return &openaiStreamingResult{
 			usage:            usage,
 			firstTokenMs:     visibleFirstTokenMs,
+			lastTokenMs:      visibleLastTokenMs,
 			firstOutputMs:    timing.firstOutputMs,
 			firstOutputKind:  timing.firstOutputKind,
 			responseID:       responseID,
@@ -657,10 +667,11 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 				}
 			}
 
-			// Record first token time
+			// Visible-output bypass only seeds first/last when no token-like sample exists.
 			if !guardFirstOutput && firstTokenMs == nil && startsVisibleOutput {
 				ms := int(time.Since(startTime).Milliseconds())
 				firstTokenMs = &ms
+				lastTokenMs = laterTokenMs(lastTokenMs, ms)
 				stopFirstOutputTimer()
 			}
 			s.parseSSEUsageBytes(dataBytes, usage)

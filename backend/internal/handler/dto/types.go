@@ -522,6 +522,7 @@ type UsageLog struct {
 	OpenAIWSMode    bool    `json:"openai_ws_mode"`
 	DurationMs      *int    `json:"duration_ms"`
 	FirstTokenMs    *int    `json:"first_token_ms"`
+	LastTokenMs     *int    `json:"last_token_ms"`
 	FirstOutputMs   *int    `json:"first_output_ms"`
 	FirstOutputKind *string `json:"first_output_kind"`
 	IsComplete      *bool   `json:"is_complete"`

@@ -20,6 +20,7 @@ func TestStreamOutputTimingObserveAt(t *testing.T) {
 		timing.ObserveAt(startedAt, startedAt.Add(20*time.Millisecond), apicompat.StreamOutputObservation{})
 
 		require.Nil(t, timing.firstTokenMs)
+		require.Nil(t, timing.lastTokenMs)
 		require.Nil(t, timing.firstOutputMs)
 		require.Empty(t, timing.firstOutputKind)
 	})
@@ -35,6 +36,7 @@ func TestStreamOutputTimingObserveAt(t *testing.T) {
 		})
 
 		require.Equal(t, 25, requireValue(t, timing.firstTokenMs))
+		require.Equal(t, 25, requireValue(t, timing.lastTokenMs))
 		require.Equal(t, 25, requireValue(t, timing.firstOutputMs))
 		require.Equal(t, "text", timing.firstOutputKind)
 	})
@@ -49,6 +51,7 @@ func TestStreamOutputTimingObserveAt(t *testing.T) {
 		})
 
 		require.Nil(t, timing.firstTokenMs)
+		require.Nil(t, timing.lastTokenMs)
 		require.Equal(t, 30, requireValue(t, timing.firstOutputMs))
 		require.Equal(t, "reasoning", timing.firstOutputKind)
 	})
@@ -68,6 +71,7 @@ func TestStreamOutputTimingObserveAt(t *testing.T) {
 			})
 
 			require.Nil(t, timing.firstTokenMs)
+			require.Nil(t, timing.lastTokenMs)
 			require.Equal(t, 35, requireValue(t, timing.firstOutputMs))
 			require.Equal(t, string(kind), timing.firstOutputKind)
 		})
@@ -93,6 +97,7 @@ func TestStreamOutputTimingObserveAt(t *testing.T) {
 		})
 
 		require.Equal(t, 40, requireValue(t, timing.firstTokenMs))
+		require.Equal(t, 60, requireValue(t, timing.lastTokenMs))
 		require.Equal(t, 10, requireValue(t, timing.firstOutputMs))
 		require.Equal(t, "image", timing.firstOutputKind)
 	})
@@ -108,6 +113,7 @@ func TestStreamOutputTimingObserveAt(t *testing.T) {
 		})
 
 		require.Zero(t, requireValue(t, timing.firstTokenMs))
+		require.Zero(t, requireValue(t, timing.lastTokenMs))
 		require.Zero(t, requireValue(t, timing.firstOutputMs))
 		require.Equal(t, "tool", timing.firstOutputKind)
 	})
@@ -117,9 +123,11 @@ func TestStreamOutputTimingApplyResults(t *testing.T) {
 	t.Parallel()
 
 	firstTokenMs := 20
+	lastTokenMs := 80
 	firstOutputMs := 5
 	timing := &streamOutputTiming{
 		firstTokenMs:    &firstTokenMs,
+		lastTokenMs:     &lastTokenMs,
 		firstOutputMs:   &firstOutputMs,
 		firstOutputKind: "image",
 	}
@@ -127,12 +135,14 @@ func TestStreamOutputTimingApplyResults(t *testing.T) {
 	openAIResult := &OpenAIForwardResult{}
 	timing.ApplyOpenAIResult(openAIResult)
 	require.Equal(t, &firstTokenMs, openAIResult.FirstTokenMs)
+	require.Equal(t, &lastTokenMs, openAIResult.LastTokenMs)
 	require.Equal(t, &firstOutputMs, openAIResult.FirstOutputMs)
 	require.Equal(t, "image", openAIResult.FirstOutputKind)
 
 	forwardResult := &ForwardResult{}
 	timing.ApplyForwardResult(forwardResult)
 	require.Equal(t, &firstTokenMs, forwardResult.FirstTokenMs)
+	require.Equal(t, &lastTokenMs, forwardResult.LastTokenMs)
 	require.Equal(t, &firstOutputMs, forwardResult.FirstOutputMs)
 	require.Equal(t, "image", forwardResult.FirstOutputKind)
 

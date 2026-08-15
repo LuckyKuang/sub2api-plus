@@ -426,6 +426,7 @@ func (s *AntigravityGatewayService) Forward(ctx context.Context, c *gin.Context,
 
 	var usage *ClaudeUsage
 	var firstTokenMs *int
+	var lastTokenMs *int
 	var firstOutputMs *int
 	var firstOutputKind string
 	var clientDisconnect bool
@@ -439,6 +440,7 @@ func (s *AntigravityGatewayService) Forward(ctx context.Context, c *gin.Context,
 		}
 		usage = streamRes.usage
 		firstTokenMs = streamRes.firstTokenMs
+		lastTokenMs = streamRes.lastTokenMs
 		firstOutputMs = streamRes.firstOutputMs
 		firstOutputKind = streamRes.firstOutputKind
 		clientDisconnect = streamRes.clientDisconnect
@@ -452,6 +454,7 @@ func (s *AntigravityGatewayService) Forward(ctx context.Context, c *gin.Context,
 		}
 		usage = streamRes.usage
 		firstTokenMs = streamRes.firstTokenMs
+		lastTokenMs = streamRes.lastTokenMs
 		firstOutputMs = streamRes.firstOutputMs
 		firstOutputKind = streamRes.firstOutputKind
 		forwardErr = err
@@ -467,6 +470,7 @@ func (s *AntigravityGatewayService) Forward(ctx context.Context, c *gin.Context,
 		Stream:                        claudeReq.Stream,
 		Duration:                      time.Since(startTime),
 		FirstTokenMs:                  firstTokenMs,
+		LastTokenMs:                   lastTokenMs,
 		FirstOutputMs:                 firstOutputMs,
 		FirstOutputKind:               firstOutputKind,
 		ClientDisconnect:              clientDisconnect,

@@ -243,6 +243,7 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 
 	var usage *OpenAIUsage
 	var firstTokenMs *int
+	var lastTokenMs *int
 	var firstOutputMs *int
 	firstOutputKind := ""
 	responseID := ""
@@ -254,6 +255,7 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		if result != nil {
 			usage = result.usage
 			firstTokenMs = result.firstTokenMs
+			lastTokenMs = result.lastTokenMs
 			firstOutputMs = result.firstOutputMs
 			firstOutputKind = result.firstOutputKind
 			responseID = strings.TrimSpace(result.responseID)
@@ -278,6 +280,7 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 				Stream:                        true,
 				Duration:                      time.Since(startTime),
 				FirstTokenMs:                  firstTokenMs,
+				LastTokenMs:                   lastTokenMs,
 				FirstOutputMs:                 firstOutputMs,
 				FirstOutputKind:               firstOutputKind,
 				ClientDisconnect:              clientDisconnected,
@@ -324,6 +327,7 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		OpenAIWSMode:                  false,
 		Duration:                      time.Since(startTime),
 		FirstTokenMs:                  firstTokenMs,
+		LastTokenMs:                   lastTokenMs,
 		FirstOutputMs:                 firstOutputMs,
 		FirstOutputKind:               firstOutputKind,
 		ClientDisconnect:              clientDisconnected,
@@ -833,6 +837,7 @@ func collectOpenAIPassthroughTimeoutHeaders(h http.Header) []string {
 type openaiStreamingResultPassthrough struct {
 	usage            *OpenAIUsage
 	firstTokenMs     *int
+	lastTokenMs      *int
 	firstOutputMs    *int
 	firstOutputKind  string
 	responseID       string
@@ -1296,6 +1301,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 	imageCounter := newOpenAIImageOutputCounter()
 	var timing streamOutputTiming
 	var firstTokenMs *int
+	var lastTokenMs *int
 	responseID := ""
 	clientDisconnected := false
 	sawDone := false
@@ -1345,6 +1351,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 		return &openaiStreamingResultPassthrough{
 			usage:            usage,
 			firstTokenMs:     firstTokenMs,
+			lastTokenMs:      lastTokenMs,
 			firstOutputMs:    timing.firstOutputMs,
 			firstOutputKind:  timing.firstOutputKind,
 			responseID:       responseID,
@@ -1458,6 +1465,9 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 			if firstTokenMs == nil && timing.firstTokenMs != nil {
 				firstTokenMs = timing.firstTokenMs
 			}
+			if timing.lastTokenMs != nil {
+				lastTokenMs = laterTokenMs(lastTokenMs, *timing.lastTokenMs)
+			}
 			// Prefer semantic output observation for client-output start so preamble /
 			// structural events (e.g. response.output_item.added) do not block pre-output failover.
 			// Keep official openAIStreamDataStartsClientOutput as a secondary signal for
@@ -1485,6 +1495,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 			if firstTokenMs == nil && openAIStreamDataStartsVisibleOutput(trimmedData, eventType) {
 				ms := int(time.Since(startTime).Milliseconds())
 				firstTokenMs = &ms
+				lastTokenMs = laterTokenMs(lastTokenMs, ms)
 			}
 			s.parseSSEUsageBytes(dataBytes, usage)
 		}

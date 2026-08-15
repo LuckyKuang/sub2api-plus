@@ -40,6 +40,7 @@ type CreateUsageLogRequest struct {
 	Stream                bool    `json:"stream"`
 	DurationMs            *int    `json:"duration_ms"`
 	FirstTokenMs          *int    `json:"first_token_ms"`
+	LastTokenMs           *int    `json:"last_token_ms"`
 	FirstOutputMs         *int    `json:"first_output_ms"`
 	FirstOutputKind       *string `json:"first_output_kind"`
 	IsComplete            *bool   `json:"is_complete"`
@@ -121,6 +122,7 @@ func (s *UsageService) Create(ctx context.Context, req CreateUsageLogRequest) (*
 		Stream:                req.Stream,
 		DurationMs:            req.DurationMs,
 		FirstTokenMs:          req.FirstTokenMs,
+		LastTokenMs:           req.LastTokenMs,
 		FirstOutputMs:         req.FirstOutputMs,
 		FirstOutputKind:       req.FirstOutputKind,
 		IsComplete:            req.IsComplete,

@@ -266,6 +266,7 @@ func (s *GatewayService) forwardAnthropicAPIKeyPassthroughWithInput(
 
 	var usage *ClaudeUsage
 	var firstTokenMs *int
+	var lastTokenMs *int
 	var firstOutputMs *int
 	var firstOutputKind string
 	var clientDisconnect bool
@@ -281,6 +282,7 @@ func (s *GatewayService) forwardAnthropicAPIKeyPassthroughWithInput(
 		}
 		usage = streamResult.usage
 		firstTokenMs = streamResult.firstTokenMs
+		lastTokenMs = streamResult.lastTokenMs
 		firstOutputMs = streamResult.firstOutputMs
 		firstOutputKind = streamResult.firstOutputKind
 		clientDisconnect = streamResult.clientDisconnect
@@ -304,6 +306,7 @@ func (s *GatewayService) forwardAnthropicAPIKeyPassthroughWithInput(
 		Stream:                        input.RequestStream,
 		Duration:                      time.Since(input.StartTime),
 		FirstTokenMs:                  firstTokenMs,
+		LastTokenMs:                   lastTokenMs,
 		FirstOutputMs:                 firstOutputMs,
 		FirstOutputKind:               firstOutputKind,
 		ClientDisconnect:              clientDisconnect,
@@ -428,6 +431,7 @@ func (s *GatewayService) handleStreamingResponseAnthropicAPIKeyPassthrough(
 		return &streamingResult{
 			usage:            usage,
 			firstTokenMs:     timing.firstTokenMs,
+			lastTokenMs:      timing.lastTokenMs,
 			firstOutputMs:    timing.firstOutputMs,
 			firstOutputKind:  timing.firstOutputKind,
 			clientDisconnect: disconnected,

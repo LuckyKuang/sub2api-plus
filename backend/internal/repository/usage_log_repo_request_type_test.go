@@ -81,6 +81,7 @@ func TestUsageLogRepositoryCreateSyncRequestTypeAndLegacyFields(t *testing.T) {
 			true,
 			sqlmock.AnyArg(), // duration_ms
 			sqlmock.AnyArg(), // first_token_ms
+			sqlmock.AnyArg(), // last_token_ms
 			sqlmock.AnyArg(), // first_output_ms
 			sqlmock.AnyArg(), // first_output_kind
 			nil,              // direct repository writes preserve unknown completion state
@@ -177,6 +178,7 @@ func TestUsageLogRepositoryCreate_PersistsServiceTier(t *testing.T) {
 			false,
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
+			sqlmock.AnyArg(), // last_token_ms
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
 			nil, // direct repository writes preserve unknown completion state

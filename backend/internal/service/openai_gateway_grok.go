@@ -189,6 +189,7 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
 
 	var usage *OpenAIUsage
 	var firstTokenMs *int
+	var lastTokenMs *int
 	var firstOutputMs *int
 	firstOutputKind := ""
 	responseID := ""
@@ -214,6 +215,7 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
 			ResponseHeaders:  resp.Header.Clone(),
 			Duration:         time.Since(startTime),
 			FirstTokenMs:     firstTokenMs,
+			LastTokenMs:      lastTokenMs,
 			FirstOutputMs:    firstOutputMs,
 			FirstOutputKind:  firstOutputKind,
 			ClientDisconnect: clientDisconnected,
@@ -240,6 +242,7 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
 		if streamResult != nil {
 			usage = streamResult.usage
 			firstTokenMs = streamResult.firstTokenMs
+			lastTokenMs = streamResult.lastTokenMs
 			firstOutputMs = streamResult.firstOutputMs
 			firstOutputKind = streamResult.firstOutputKind
 			responseID = strings.TrimSpace(streamResult.responseID)

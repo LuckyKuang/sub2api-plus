@@ -71,6 +71,7 @@ func TestMigrationsRunner_IsIdempotent_AndSchemaIsUpToDate(t *testing.T) {
 	requireColumn(t, tx, "usage_logs", "request_type", "smallint", 0, false)
 	requireColumn(t, tx, "usage_logs", "openai_ws_mode", "boolean", 0, false)
 	requireColumn(t, tx, "usage_logs", "first_output_ms", "integer", 0, true)
+	requireColumn(t, tx, "usage_logs", "last_token_ms", "integer", 0, true)
 	requireColumn(t, tx, "usage_logs", "first_output_kind", "character varying", 16, true)
 	requireColumn(t, tx, "usage_logs", "image_input_size", "character varying", 32, true)
 	requireColumn(t, tx, "usage_logs", "image_output_size", "character varying", 32, true)

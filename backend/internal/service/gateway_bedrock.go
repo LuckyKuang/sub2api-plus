@@ -138,6 +138,7 @@ func (s *GatewayService) forwardBedrock(
 	// 响应处理
 	var usage *ClaudeUsage
 	var firstTokenMs *int
+	var lastTokenMs *int
 	var firstOutputMs *int
 	var firstOutputKind string
 	var clientDisconnect bool
@@ -148,6 +149,7 @@ func (s *GatewayService) forwardBedrock(
 		}
 		usage = streamResult.usage
 		firstTokenMs = streamResult.firstTokenMs
+		lastTokenMs = streamResult.lastTokenMs
 		firstOutputMs = streamResult.firstOutputMs
 		firstOutputKind = streamResult.firstOutputKind
 		clientDisconnect = streamResult.clientDisconnect
@@ -169,6 +171,7 @@ func (s *GatewayService) forwardBedrock(
 		Stream:           reqStream,
 		Duration:         time.Since(startTime),
 		FirstTokenMs:     firstTokenMs,
+		LastTokenMs:      lastTokenMs,
 		FirstOutputMs:    firstOutputMs,
 		FirstOutputKind:  firstOutputKind,
 		ClientDisconnect: clientDisconnect,

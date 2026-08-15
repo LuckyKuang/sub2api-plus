@@ -169,6 +169,7 @@ func (s *antigravityCompatStreamSession) result(clientDisconnect bool) *antigrav
 	return &antigravityStreamResult{
 		usage:            s.usage,
 		firstTokenMs:     s.timing.firstTokenMs,
+		lastTokenMs:      s.timing.lastTokenMs,
 		firstOutputMs:    s.timing.firstOutputMs,
 		firstOutputKind:  s.timing.firstOutputKind,
 		clientDisconnect: clientDisconnect,

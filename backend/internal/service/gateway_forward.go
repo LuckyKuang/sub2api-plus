@@ -798,6 +798,7 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 
 	var usage *ClaudeUsage
 	var firstTokenMs *int
+	var lastTokenMs *int
 	var firstOutputMs *int
 	var firstOutputKind string
 	var clientDisconnect bool
@@ -855,6 +856,7 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 		}
 		usage = streamResult.usage
 		firstTokenMs = streamResult.firstTokenMs
+		lastTokenMs = streamResult.lastTokenMs
 		firstOutputMs = streamResult.firstOutputMs
 		firstOutputKind = streamResult.firstOutputKind
 		clientDisconnect = streamResult.clientDisconnect
@@ -875,6 +877,7 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 		Stream:                        reqStream,
 		Duration:                      time.Since(startTime),
 		FirstTokenMs:                  firstTokenMs,
+		LastTokenMs:                   lastTokenMs,
 		FirstOutputMs:                 firstOutputMs,
 		FirstOutputKind:               firstOutputKind,
 		ClientDisconnect:              clientDisconnect,

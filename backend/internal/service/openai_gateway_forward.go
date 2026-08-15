@@ -975,6 +975,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		// Handle normal response
 		var usage *OpenAIUsage
 		var firstTokenMs *int
+		var lastTokenMs *int
 		var firstOutputMs *int
 		firstOutputKind := ""
 		responseID := ""
@@ -1002,6 +1003,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 				OpenAIWSMode:                  false,
 				Duration:                      time.Since(startTime),
 				FirstTokenMs:                  firstTokenMs,
+				LastTokenMs:                   lastTokenMs,
 				FirstOutputMs:                 firstOutputMs,
 				FirstOutputKind:               firstOutputKind,
 				ClientDisconnect:              clientDisconnected,
@@ -1025,6 +1027,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			if streamResult != nil {
 				usage = streamResult.usage
 				firstTokenMs = streamResult.firstTokenMs
+				lastTokenMs = streamResult.lastTokenMs
 				firstOutputMs = streamResult.firstOutputMs
 				firstOutputKind = streamResult.firstOutputKind
 				responseID = strings.TrimSpace(streamResult.responseID)

@@ -1061,6 +1061,7 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 
 	var usage *ClaudeUsage
 	var firstTokenMs *int
+	var lastTokenMs *int
 	var firstOutputMs *int
 	var firstOutputKind string
 	clientDisconnect := false
@@ -1072,6 +1073,7 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 		}
 		usage = streamRes.usage
 		firstTokenMs = streamRes.firstTokenMs
+		lastTokenMs = streamRes.lastTokenMs
 		firstOutputMs = streamRes.firstOutputMs
 		firstOutputKind = streamRes.firstOutputKind
 		clientDisconnect = streamRes.clientDisconnect
@@ -1114,6 +1116,7 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 		Stream:                        req.Stream,
 		Duration:                      time.Since(startTime),
 		FirstTokenMs:                  firstTokenMs,
+		LastTokenMs:                   lastTokenMs,
 		FirstOutputMs:                 firstOutputMs,
 		FirstOutputKind:               firstOutputKind,
 		ImageCount:                    imageCount,
@@ -1353,6 +1356,7 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 					Stream:        false,
 					Duration:      time.Since(startTime),
 					FirstTokenMs:  nil,
+					LastTokenMs:   nil,
 				}, nil
 			}
 			setOpsUpstreamError(c, 0, safeErr, "")
@@ -1423,6 +1427,7 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 					Stream:        false,
 					Duration:      time.Since(startTime),
 					FirstTokenMs:  nil,
+					LastTokenMs:   nil,
 				}, nil
 			}
 			// Final attempt: surface the upstream error body (passed through below) instead of a generic retry error.
@@ -1464,6 +1469,7 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 				Stream:        false,
 				Duration:      time.Since(startTime),
 				FirstTokenMs:  nil,
+				LastTokenMs:   nil,
 			}, nil
 		}
 
@@ -1605,6 +1611,7 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 
 	var usage *ClaudeUsage
 	var firstTokenMs *int
+	var lastTokenMs *int
 	var firstOutputMs *int
 	var firstOutputKind string
 	clientDisconnect := false
@@ -1617,6 +1624,7 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 		}
 		usage = streamRes.usage
 		firstTokenMs = streamRes.firstTokenMs
+		lastTokenMs = streamRes.lastTokenMs
 		firstOutputMs = streamRes.firstOutputMs
 		firstOutputKind = streamRes.firstOutputKind
 		clientDisconnect = streamRes.clientDisconnect
@@ -1660,6 +1668,7 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 		Stream:                        stream,
 		Duration:                      time.Since(startTime),
 		FirstTokenMs:                  firstTokenMs,
+		LastTokenMs:                   lastTokenMs,
 		FirstOutputMs:                 firstOutputMs,
 		FirstOutputKind:               firstOutputKind,
 		ImageCount:                    imageCount,
@@ -2016,6 +2025,7 @@ func mapGeminiStatusToClaudeErrorType(status string) string {
 type geminiStreamResult struct {
 	usage            *ClaudeUsage
 	firstTokenMs     *int
+	lastTokenMs      *int
 	firstOutputMs    *int
 	firstOutputKind  string
 	clientDisconnect bool
@@ -2110,6 +2120,7 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 			return &geminiStreamResult{
 				usage:            &usage,
 				firstTokenMs:     timing.firstTokenMs,
+				lastTokenMs:      timing.lastTokenMs,
 				firstOutputMs:    timing.firstOutputMs,
 				firstOutputKind:  timing.firstOutputKind,
 				clientDisconnect: streamWriter.disconnected,
@@ -2347,6 +2358,7 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 		return &geminiStreamResult{
 			usage:            &usage,
 			firstTokenMs:     timing.firstTokenMs,
+			lastTokenMs:      timing.lastTokenMs,
 			firstOutputMs:    timing.firstOutputMs,
 			firstOutputKind:  timing.firstOutputKind,
 			clientDisconnect: streamWriter.disconnected,
@@ -2393,6 +2405,7 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 	return &geminiStreamResult{
 		usage:            &usage,
 		firstTokenMs:     timing.firstTokenMs,
+		lastTokenMs:      timing.lastTokenMs,
 		firstOutputMs:    timing.firstOutputMs,
 		firstOutputKind:  timing.firstOutputKind,
 		clientDisconnect: streamWriter.disconnected,
@@ -2645,6 +2658,7 @@ func mergeCollectedTextParts(response map[string]any, textParts []string) map[st
 type geminiNativeStreamResult struct {
 	usage            *ClaudeUsage
 	firstTokenMs     *int
+	lastTokenMs      *int
 	firstOutputMs    *int
 	firstOutputKind  string
 	clientDisconnect bool
@@ -2863,6 +2877,7 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
 			return &geminiNativeStreamResult{
 				usage:            usage,
 				firstTokenMs:     timing.firstTokenMs,
+				lastTokenMs:      timing.lastTokenMs,
 				firstOutputMs:    timing.firstOutputMs,
 				firstOutputKind:  timing.firstOutputKind,
 				clientDisconnect: streamWriter.disconnected,
@@ -2873,6 +2888,7 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
 		return &geminiNativeStreamResult{
 			usage:            usage,
 			firstTokenMs:     timing.firstTokenMs,
+			lastTokenMs:      timing.lastTokenMs,
 			firstOutputMs:    timing.firstOutputMs,
 			firstOutputKind:  timing.firstOutputKind,
 			clientDisconnect: streamWriter.disconnected,
@@ -2882,6 +2898,7 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
 	return &geminiNativeStreamResult{
 		usage:            usage,
 		firstTokenMs:     timing.firstTokenMs,
+		lastTokenMs:      timing.lastTokenMs,
 		firstOutputMs:    timing.firstOutputMs,
 		firstOutputKind:  timing.firstOutputKind,
 		clientDisconnect: streamWriter.disconnected,

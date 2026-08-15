@@ -70,7 +70,7 @@ const messages: Record<string, string> = {
 	'usage.latencyNonTextFirstHint': 'First token-like output was reasoning or a tool call, not necessarily final answer text.',
 	'usage.latencyDuration': 'Total',
 	'usage.latencyTps': 'TPS',
-	'usage.latencyTpsHint': 'Estimated average text output rate: text output tokens ÷ (total duration − first token). Complete stream/ws requests only. Hidden when the generation window is too short, text tokens are too few, or the estimate is unrealistically high.',
+	'usage.latencyTpsHint': 'Estimated average text output rate: text output tokens ÷ (last token − first token). Complete stream/ws requests only. Sample too small (short window or few text tokens) shows "-". Values below 1 or above 1000 show as "< 1" / "> 1000".',
   'admin.usage.billingModeToken': 'Token',
   'admin.usage.billingModePerRequest': 'Per request',
   'admin.usage.billingModeImage': 'Image',
@@ -131,6 +131,7 @@ const baseImageRow = {
   image_output_tokens: 0,
   audio_output_tokens: 0,
   is_complete: true,
+  last_token_ms: null,
   cache_creation_tokens: 0,
   cache_read_tokens: 0,
   cache_creation_5m_tokens: 0,
@@ -308,7 +309,7 @@ describe('admin UsageTable tooltip', () => {
     expect(tooltip.text()).toContain('First output and first token differ')
   })
 
-  it('shows estimated TPS only for new-semantics stream and websocket rows', () => {
+  it('shows estimated TPS from last-first token time, clamped outside [1, 1000]', () => {
     const rows = [
       {
         ...baseImageRow,
@@ -320,6 +321,7 @@ describe('admin UsageTable tooltip', () => {
         output_tokens: 375,
         image_output_tokens: 0,
         first_token_ms: 721,
+        last_token_ms: 10_860,
         first_output_ms: 721,
         first_output_kind: 'text',
         duration_ms: 10_860,
@@ -334,6 +336,7 @@ describe('admin UsageTable tooltip', () => {
         output_tokens: 50,
         image_output_tokens: 0,
         first_token_ms: 1_000,
+        last_token_ms: 2_000,
         first_output_ms: 1_000,
         first_output_kind: 'text',
         duration_ms: 2_000,
@@ -348,6 +351,7 @@ describe('admin UsageTable tooltip', () => {
         output_tokens: 105,
         image_output_tokens: 5,
         first_token_ms: 100,
+        last_token_ms: 1_100,
         first_output_ms: 40,
         first_output_kind: 'image',
         duration_ms: 1_100,
@@ -362,6 +366,7 @@ describe('admin UsageTable tooltip', () => {
         output_tokens: 150,
         audio_output_tokens: 50,
         first_token_ms: 100,
+        last_token_ms: 1_100,
         first_output_ms: 20,
         first_output_kind: 'audio',
         duration_ms: 1_100,
@@ -373,6 +378,7 @@ describe('admin UsageTable tooltip', () => {
         stream: true,
         output_tokens: 100,
         first_token_ms: 100,
+        last_token_ms: 1_100,
         first_output_ms: 100,
         first_output_kind: 'text',
         is_complete: false,
@@ -385,6 +391,7 @@ describe('admin UsageTable tooltip', () => {
         stream: true,
         output_tokens: 100,
         first_token_ms: 100,
+        last_token_ms: 1_100,
         first_output_ms: 100,
         first_output_kind: 'text',
         is_complete: null,
@@ -397,6 +404,7 @@ describe('admin UsageTable tooltip', () => {
         stream: false,
         output_tokens: 100,
         first_token_ms: 100,
+        last_token_ms: 1_000,
         first_output_ms: 100,
         first_output_kind: 'text',
         duration_ms: 1_000,
@@ -408,17 +416,19 @@ describe('admin UsageTable tooltip', () => {
         stream: true,
         output_tokens: 100,
         first_token_ms: 100,
+        last_token_ms: 1_000,
         first_output_ms: null,
         first_output_kind: null,
         duration_ms: 1_000,
       },
       {
         ...baseImageRow,
-        request_id: 'req-tps-invalid-duration',
+        request_id: 'req-tps-zero-window',
         request_type: 'stream',
         stream: true,
         output_tokens: 100,
         first_token_ms: 100,
+        last_token_ms: 100,
         first_output_ms: 100,
         first_output_kind: 'text',
         duration_ms: 100,
@@ -431,35 +441,38 @@ describe('admin UsageTable tooltip', () => {
         output_tokens: 5,
         image_output_tokens: 5,
         first_token_ms: 100,
+        last_token_ms: 1_000,
         first_output_ms: 40,
         first_output_kind: 'image',
         duration_ms: 1_000,
       },
       {
         ...baseImageRow,
-        request_id: 'req-tps-missing-duration',
+        request_id: 'req-tps-missing-last',
         request_type: 'stream',
         stream: true,
         output_tokens: 100,
         first_token_ms: 100,
+        last_token_ms: null,
         first_output_ms: 100,
         first_output_kind: 'text',
-        duration_ms: null,
+        duration_ms: 1_100,
       },
       {
-        // generationMs = 250 < 300 → hide (burst / measurement noise)
+        // generationMs = 250 < 300 → dash
         ...baseImageRow,
         request_id: 'req-tps-short-generation',
         request_type: 'stream',
         stream: true,
         output_tokens: 100,
         first_token_ms: 100,
+        last_token_ms: 350,
         first_output_ms: 100,
         first_output_kind: 'text',
         duration_ms: 350,
       },
       {
-        // text tokens = 7 < 8 → hide
+        // text tokens = 7 < 8 → dash
         ...baseImageRow,
         request_id: 'req-tps-few-tokens',
         request_type: 'stream',
@@ -467,12 +480,13 @@ describe('admin UsageTable tooltip', () => {
         output_tokens: 7,
         image_output_tokens: 0,
         first_token_ms: 100,
+        last_token_ms: 1_100,
         first_output_ms: 100,
         first_output_kind: 'text',
         duration_ms: 1_100,
       },
       {
-        // 1000 tokens / 500ms = 2000 TPS > 500 → hide
+        // 1000 tokens / 500ms = 2000 → > 1000
         ...baseImageRow,
         request_id: 'req-tps-unrealistically-high',
         request_type: 'stream',
@@ -480,12 +494,27 @@ describe('admin UsageTable tooltip', () => {
         output_tokens: 1_000,
         image_output_tokens: 0,
         first_token_ms: 100,
+        last_token_ms: 600,
         first_output_ms: 100,
         first_output_kind: 'text',
         duration_ms: 600,
       },
       {
-        // boundary: generationMs = 300, tokens = 8, TPS = 26.7 → show
+        // 8 tokens / 10000ms = 0.8 → < 1
+        ...baseImageRow,
+        request_id: 'req-tps-below-one',
+        request_type: 'stream',
+        stream: true,
+        output_tokens: 8,
+        image_output_tokens: 0,
+        first_token_ms: 100,
+        last_token_ms: 10_100,
+        first_output_ms: 100,
+        first_output_kind: 'text',
+        duration_ms: 10_100,
+      },
+      {
+        // boundary: generationMs = 300, tokens = 8, TPS = 26.7
         ...baseImageRow,
         request_id: 'req-tps-min-gates-pass',
         request_type: 'stream',
@@ -493,22 +522,38 @@ describe('admin UsageTable tooltip', () => {
         output_tokens: 8,
         image_output_tokens: 0,
         first_token_ms: 100,
+        last_token_ms: 400,
         first_output_ms: 100,
         first_output_kind: 'text',
         duration_ms: 400,
       },
       {
-        // boundary: TPS exactly 500 → show
+        // 150 * 1000 / 300 = 500
         ...baseImageRow,
-        request_id: 'req-tps-max-boundary',
+        request_id: 'req-tps-mid-band',
         request_type: 'stream',
         stream: true,
         output_tokens: 150,
         image_output_tokens: 0,
         first_token_ms: 100,
+        last_token_ms: 400,
         first_output_ms: 100,
         first_output_kind: 'text',
-        duration_ms: 400, // 150 * 1000 / 300 = 500
+        duration_ms: 400,
+      },
+      {
+        // 300 * 1000 / 300 = 1000 → show 1000
+        ...baseImageRow,
+        request_id: 'req-tps-max-boundary',
+        request_type: 'stream',
+        stream: true,
+        output_tokens: 300,
+        image_output_tokens: 0,
+        first_token_ms: 100,
+        last_token_ms: 400,
+        first_output_ms: 100,
+        first_output_kind: 'text',
+        duration_ms: 400,
       },
     ]
 
@@ -524,9 +569,26 @@ describe('admin UsageTable tooltip', () => {
       },
     })
 
-    // Valid rows: stream 37, ws 50, mixed image 100, mixed audio 100,
-    // min-gates 26.7, max-boundary 500. Short/few/high/invalid stay hidden.
-    expect(wrapper.findAll('[data-testid="latency-tps"]').map((node) => node.text())).toEqual(['37', '50', '100', '100', '26.7', '500'])
+    expect(wrapper.findAll('[data-testid="latency-tps"]').map((node) => node.text())).toEqual([
+      '37',
+      '50',
+      '100',
+      '100',
+      '-',
+      '-',
+      '-',
+      '-',
+      '-',
+      '-',
+      '-',
+      '-',
+      '-',
+      '> 1000',
+      '< 1',
+      '26.7',
+      '500',
+      '1000',
+    ])
     expect(wrapper.text()).toContain('First Token 721msTotal10.86sTPS37')
     expect(wrapper.text()).toContain('First Token 100msTotal1.10sTPS100')
     expect(wrapper.text()).not.toContain('First Image Data')

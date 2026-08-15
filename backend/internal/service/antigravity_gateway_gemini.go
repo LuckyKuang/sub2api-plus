@@ -81,6 +81,7 @@ func (s *AntigravityGatewayService) ForwardGemini(ctx context.Context, c *gin.Co
 			Stream:       false,
 			Duration:     time.Since(startTime),
 			FirstTokenMs: nil,
+			LastTokenMs:  nil,
 		}, nil
 	default:
 		return nil, s.writeGoogleError(c, http.StatusNotFound, "Unsupported action: "+action)
@@ -398,6 +399,7 @@ handleSuccess:
 
 	var usage *ClaudeUsage
 	var firstTokenMs *int
+	var lastTokenMs *int
 	var firstOutputMs *int
 	var firstOutputKind string
 	var clientDisconnect bool
@@ -412,6 +414,7 @@ handleSuccess:
 		}
 		usage = streamRes.usage
 		firstTokenMs = streamRes.firstTokenMs
+		lastTokenMs = streamRes.lastTokenMs
 		firstOutputMs = streamRes.firstOutputMs
 		firstOutputKind = streamRes.firstOutputKind
 		clientDisconnect = streamRes.clientDisconnect
@@ -425,6 +428,7 @@ handleSuccess:
 		}
 		usage = streamRes.usage
 		firstTokenMs = streamRes.firstTokenMs
+		lastTokenMs = streamRes.lastTokenMs
 		firstOutputMs = streamRes.firstOutputMs
 		firstOutputKind = streamRes.firstOutputKind
 		forwardErr = err
@@ -451,6 +455,7 @@ handleSuccess:
 		Stream:                        stream,
 		Duration:                      time.Since(startTime),
 		FirstTokenMs:                  firstTokenMs,
+		LastTokenMs:                   lastTokenMs,
 		FirstOutputMs:                 firstOutputMs,
 		FirstOutputKind:               firstOutputKind,
 		ClientDisconnect:              clientDisconnect,

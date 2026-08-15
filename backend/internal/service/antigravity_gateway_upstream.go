@@ -108,6 +108,7 @@ func (s *AntigravityGatewayService) ForwardUpstream(ctx context.Context, c *gin.
 	// 处理成功响应（流式/非流式）
 	var usage *ClaudeUsage
 	var firstTokenMs *int
+	var lastTokenMs *int
 	var firstOutputMs *int
 	var firstOutputKind string
 	var clientDisconnect bool
@@ -124,6 +125,7 @@ func (s *AntigravityGatewayService) ForwardUpstream(ctx context.Context, c *gin.
 		streamRes := s.streamUpstreamResponse(c, resp, startTime)
 		usage = streamRes.usage
 		firstTokenMs = streamRes.firstTokenMs
+		lastTokenMs = streamRes.lastTokenMs
 		firstOutputMs = streamRes.firstOutputMs
 		firstOutputKind = streamRes.firstOutputKind
 		clientDisconnect = streamRes.clientDisconnect
@@ -161,6 +163,7 @@ func (s *AntigravityGatewayService) ForwardUpstream(ctx context.Context, c *gin.
 		Stream:                        claudeReq.Stream,
 		Duration:                      duration,
 		FirstTokenMs:                  firstTokenMs,
+		LastTokenMs:                   lastTokenMs,
 		FirstOutputMs:                 firstOutputMs,
 		FirstOutputKind:               firstOutputKind,
 		ClientDisconnect:              clientDisconnect,
@@ -186,6 +189,7 @@ func (s *AntigravityGatewayService) streamUpstreamResponse(c *gin.Context, resp 
 		return &antigravityStreamResult{
 			usage:             usage,
 			firstTokenMs:      timing.firstTokenMs,
+			lastTokenMs:       timing.lastTokenMs,
 			firstOutputMs:     timing.firstOutputMs,
 			firstOutputKind:   timing.firstOutputKind,
 			clientDisconnect:  disconnected,

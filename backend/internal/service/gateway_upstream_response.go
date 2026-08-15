@@ -645,6 +645,7 @@ func (s *GatewayService) handleRetryExhaustedError(ctx context.Context, resp *ht
 type streamingResult struct {
 	usage            *ClaudeUsage
 	firstTokenMs     *int
+	lastTokenMs      *int
 	firstOutputMs    *int
 	firstOutputKind  string
 	clientDisconnect bool // 客户端是否在流式传输过程中断开
@@ -686,6 +687,7 @@ func partialStreamUsageResult(c *gin.Context, resp *http.Response, streamResult 
 		Stream:                        true,
 		Duration:                      time.Since(startTime),
 		FirstTokenMs:                  streamResult.firstTokenMs,
+		LastTokenMs:                   streamResult.lastTokenMs,
 		FirstOutputMs:                 streamResult.firstOutputMs,
 		FirstOutputKind:               streamResult.firstOutputKind,
 		ClientDisconnect:              streamResult.clientDisconnect,
@@ -727,6 +729,7 @@ func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http
 		return &streamingResult{
 			usage:            usage,
 			firstTokenMs:     timing.firstTokenMs,
+			lastTokenMs:      timing.lastTokenMs,
 			firstOutputMs:    timing.firstOutputMs,
 			firstOutputKind:  timing.firstOutputKind,
 			clientDisconnect: disconnected,

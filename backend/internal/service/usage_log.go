@@ -175,6 +175,7 @@ type UsageLog struct {
 	OpenAIWSMode    bool
 	DurationMs      *int
 	FirstTokenMs    *int
+	LastTokenMs     *int
 	FirstOutputMs   *int
 	FirstOutputKind *string
 	IsComplete      *bool
