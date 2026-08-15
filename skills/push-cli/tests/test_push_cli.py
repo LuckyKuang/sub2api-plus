@@ -539,6 +539,8 @@ class ValidationLaunchTest(unittest.TestCase):
         self.assertEqual("In-container validation", name)
         self.assertEqual("container", command[0])
         self.assertIn("run", command)
+        self.assertIn("--memory", command)
+        self.assertIn("8G", command)
         self.assertIn(
             "type=bind,source=/repo,target=/repo",
             command,
@@ -584,8 +586,8 @@ class ValidationLaunchTest(unittest.TestCase):
 
         command = run_step.call_args.args[1]
         self.assertEqual(
-            [wsl, "-d", "Ubuntu-24.04", "--", "docker", "run"],
-            command[:6],
+            [wsl, "-d", "Ubuntu-24.04", "--", "docker", "run", "--rm", "--cpus", "4", "--memory", "8G"],
+            command[:12],
         )
         self.assertIn("/mnt/c/repo:/mnt/c/repo", command)
         self.assertNotIn("go", command)
@@ -620,7 +622,7 @@ class ValidationLaunchTest(unittest.TestCase):
             push_cli.launch_in_validation(runtime, "origin")
 
         command = run_step.call_args.args[1]
-        self.assertEqual(["docker", "run"], command[:2])
+        self.assertEqual(["docker", "run", "--rm", "--cpus", "4", "--memory", "8G"], command[:7])
         self.assertNotIn("go", command)
         self.assertNotIn("pnpm", command)
 
