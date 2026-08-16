@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 import unittest
@@ -25,6 +26,7 @@ BASE = "a" * 40
 HEAD = "b" * 40
 MERGE = "c" * 40
 REPOSITORY = "LuckyKuang/sub2api-plus"
+ROOT = Path(__file__).resolve().parents[3]
 
 
 def marker(base: str = BASE, head: str = HEAD) -> str:
@@ -96,6 +98,20 @@ class ValidationProofTest(unittest.TestCase):
 
 
 class RepositoryPolicyTest(unittest.TestCase):
+    def test_required_contexts_are_emitted_by_pull_request_workflows(self) -> None:
+        workflow_job_re = re.compile(r"^  ([a-zA-Z0-9_-]+):\n", re.MULTILINE)
+        workflow_jobs: set[str] = set()
+        for name in ("backend-ci.yml", "security-scan.yml"):
+            workflow = ROOT.joinpath(".github", "workflows", name).read_text(
+                encoding="utf-8"
+            )
+            workflow_jobs.update(workflow_job_re.findall(workflow))
+
+        expected = release_cli.REQUIRED_PR_STATUS_CONTEXTS - {
+            "sub2api/local-validation"
+        }
+        self.assertEqual(expected - workflow_jobs, set())
+
     def test_auto_merge_must_be_enabled(self) -> None:
         with mock.patch.object(
             release_cli,
