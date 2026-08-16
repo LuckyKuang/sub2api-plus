@@ -56,6 +56,61 @@ def protected_rules(
     ]
 
 
+def automated_environment(
+    *,
+    can_admins_bypass: bool = False,
+    rule_types: tuple[str, ...] = ("branch_policy",),
+) -> dict[str, object]:
+    return {
+        "name": release_cli.RELEASE_ENVIRONMENT,
+        "can_admins_bypass": can_admins_bypass,
+        "protection_rules": [{"type": rule_type} for rule_type in rule_types],
+        "deployment_branch_policy": {
+            "protected_branches": False,
+            "custom_branch_policies": True,
+        },
+    }
+
+
+def release_deployment_policies(
+    *, name: str = release_cli.RELEASE_TAG_POLICY, kind: str = "tag"
+) -> dict[str, object]:
+    return {
+        "total_count": 1,
+        "branch_policies": [{"name": name, "type": kind}],
+    }
+
+
+def tag_ruleset_summary() -> dict[str, object]:
+    return {
+        "id": 42,
+        "target": "tag",
+        "enforcement": "active",
+        "source_type": "Repository",
+    }
+
+
+def tag_ruleset(
+    *,
+    rules: tuple[str, ...] = ("deletion", "update"),
+    bypass_actors: list[dict[str, object]] | None = None,
+) -> dict[str, object]:
+    return {
+        "id": 42,
+        "name": "Protect immutable custom release tags",
+        "target": "tag",
+        "enforcement": "active",
+        "conditions": {
+            "ref_name": {
+                "include": [release_cli.RELEASE_TAG_RULESET_REF],
+                "exclude": [],
+            }
+        },
+        "rules": [{"type": rule_type} for rule_type in rules],
+        "bypass_actors": [] if bypass_actors is None else bypass_actors,
+    }
+
+
 def pull_request(
     *,
     state: str = "OPEN",
@@ -194,6 +249,86 @@ class RepositoryPolicyTest(unittest.TestCase):
             ),
         ):
             release_cli.require_protected_auto_merge(REPOSITORY, "main")
+
+
+class ReleasePublicationPolicyTest(unittest.TestCase):
+    def test_automatic_environment_and_immutable_tag_ruleset_are_accepted(
+        self,
+    ) -> None:
+        with mock.patch.object(
+            release_cli,
+            "json_capture",
+            side_effect=[
+                automated_environment(),
+                release_deployment_policies(),
+                [tag_ruleset_summary()],
+                tag_ruleset(),
+            ],
+        ):
+            release_cli.require_automated_release_policy(REPOSITORY)
+
+    def test_environment_reviewers_are_rejected(self) -> None:
+        with mock.patch.object(
+            release_cli,
+            "json_capture",
+            return_value=automated_environment(
+                rule_types=("required_reviewers", "branch_policy")
+            ),
+        ):
+            with self.assertRaisesRegex(release_cli.ReleaseCliError, "not automatic"):
+                release_cli.require_automated_release_environment(REPOSITORY)
+
+    def test_environment_admin_bypass_is_rejected(self) -> None:
+        with mock.patch.object(
+            release_cli,
+            "json_capture",
+            return_value=automated_environment(can_admins_bypass=True),
+        ):
+            with self.assertRaisesRegex(
+                release_cli.ReleaseCliError, "administrator bypass"
+            ):
+                release_cli.require_automated_release_environment(REPOSITORY)
+
+    def test_environment_requires_exact_custom_tag_policy(self) -> None:
+        with mock.patch.object(
+            release_cli,
+            "json_capture",
+            side_effect=[
+                automated_environment(),
+                release_deployment_policies(name="v*"),
+            ],
+        ):
+            with self.assertRaisesRegex(release_cli.ReleaseCliError, "exactly"):
+                release_cli.require_automated_release_environment(REPOSITORY)
+
+    def test_tag_ruleset_must_block_update_and_deletion_without_bypass(self) -> None:
+        with mock.patch.object(
+            release_cli,
+            "json_capture",
+            side_effect=[
+                [tag_ruleset_summary()],
+                tag_ruleset(
+                    rules=("deletion",),
+                    bypass_actors=[{"actor_type": "RepositoryRole"}],
+                ),
+            ],
+        ):
+            with self.assertRaisesRegex(release_cli.ReleaseCliError, "no-bypass"):
+                release_cli.require_immutable_release_tag_ruleset(REPOSITORY)
+
+    def test_tag_ruleset_must_allow_initial_creation(self) -> None:
+        with mock.patch.object(
+            release_cli,
+            "json_capture",
+            side_effect=[
+                [tag_ruleset_summary()],
+                tag_ruleset(rules=("creation", "deletion", "update")),
+            ],
+        ):
+            with self.assertRaisesRegex(
+                release_cli.ReleaseCliError, "initial release-tag creation"
+            ):
+                release_cli.require_immutable_release_tag_ruleset(REPOSITORY)
 
 
 class RemoteTagTest(unittest.TestCase):
@@ -339,6 +474,9 @@ class MainFlowTest(unittest.TestCase):
             mock.patch.object(release_cli, "run_command", return_value=completed),
             mock.patch.object(release_cli, "remote_tag_exists", return_value=False),
             mock.patch.object(release_cli, "release_details", return_value=None),
+            mock.patch.object(
+                release_cli, "require_automated_release_policy"
+            ) as release_policy,
             mock.patch.object(release_cli, "setup_git_transport"),
             mock.patch.object(release_cli, "run_step") as run_step,
             mock.patch.object(release_cli, "watch_release") as watch,
@@ -349,6 +487,7 @@ class MainFlowTest(unittest.TestCase):
         run_step.assert_called_once_with(
             "Push exact release tag", ["git", "push", "origin", TAG]
         )
+        release_policy.assert_called_once_with(REPOSITORY)
         watch.assert_not_called()
         verify.assert_not_called()
 
@@ -372,6 +511,87 @@ class MainFlowTest(unittest.TestCase):
         success.assert_called_once_with(REPOSITORY, TAG, MERGE)
         verify.assert_called_once_with(REPOSITORY, TAG)
         watch.assert_not_called()
+
+
+class ReleaseMonitoringTest(unittest.TestCase):
+    def test_monitor_watches_automatic_publication_through_success(self) -> None:
+        run = release_cli.WorkflowRun(
+            database_id=123,
+            url="https://github.com/LuckyKuang/sub2api-plus/actions/runs/123",
+            status="in_progress",
+            conclusion=None,
+        )
+        watched = subprocess.CompletedProcess([], 0, "")
+        with (
+            mock.patch.object(release_cli, "find_release_run", return_value=run),
+            mock.patch.object(
+                release_cli,
+                "workflow_state",
+                side_effect=[
+                    {
+                        "status": "in_progress",
+                        "conclusion": None,
+                        "jobs": [],
+                        "url": run.url,
+                    },
+                    {
+                        "status": "completed",
+                        "conclusion": "success",
+                        "jobs": [
+                            {
+                                "name": "Build and publish",
+                                "status": "completed",
+                            }
+                        ],
+                        "url": run.url,
+                    },
+                ],
+            ),
+            mock.patch.object(
+                release_cli, "run_command", return_value=watched
+            ) as run_command,
+        ):
+            release_cli.watch_release(REPOSITORY, TAG, MERGE)
+
+        run_command.assert_called_once_with(
+            [
+                "gh",
+                "run",
+                "watch",
+                "123",
+                "--repo",
+                REPOSITORY,
+                "--exit-status",
+            ],
+            timeout=release_cli.WATCH_SECONDS,
+        )
+
+    def test_waiting_environment_is_policy_drift(self) -> None:
+        run = release_cli.WorkflowRun(
+            database_id=123,
+            url="https://github.com/LuckyKuang/sub2api-plus/actions/runs/123",
+            status="waiting",
+            conclusion=None,
+        )
+        with (
+            mock.patch.object(release_cli, "find_release_run", return_value=run),
+            mock.patch.object(
+                release_cli,
+                "workflow_state",
+                return_value={
+                    "status": "waiting",
+                    "conclusion": None,
+                    "jobs": [
+                        {"name": "Build and publish", "status": "waiting"}
+                    ],
+                    "url": run.url,
+                },
+            ),
+        ):
+            with self.assertRaisesRegex(
+                release_cli.ReleaseCliError, "policy drifted"
+            ):
+                release_cli.watch_release(REPOSITORY, TAG, MERGE)
 
 
 class FinalizationTest(unittest.TestCase):

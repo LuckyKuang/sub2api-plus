@@ -9,7 +9,7 @@
 | `validate` | Merged PR and notes | None | Focused metadata gate passes at merge commit. |
 | `tag` | Merged PR and notes | One local annotated tag | Tag targets tested merge commit. |
 | `publish` | Reviewed local tag | Exact remote tag push | Release workflow is triggered. |
-| `monitor` | Remote tag | None | Watches workflow or pauses for manual approval. |
+| `monitor` | Remote tag | None | Watches automatic workflow publication to completion. |
 | `verify` | Successful workflow | None | Release and immutable assets verified. |
 | `finalize` | Verified Release | Branch, commit, submit-pr | Published status follow-up PR created. |
 
@@ -23,7 +23,10 @@ The repository must expose:
 - Active strict `required_status_checks` for every repository CI, security, and
   local-validation context.
 - Merge-commit mode enabled.
-- A protected `release` Actions environment with manual maintainer approval.
+- A `release` Actions environment with administrator bypass disabled, no
+  reviewer/timer/custom gate, and exactly one tag policy `v*+custom.*`.
+- An active repository Tag ruleset matching `refs/tags/v*+custom.*`, with no
+  bypass actors, that allows initial creation and blocks update and deletion.
 
 The exact required contexts are `sub2api/local-validation`,
 `deployment-config`, `test`, `frontend`, `golangci-lint`, `goreleaser-config`,
@@ -68,15 +71,18 @@ tree.
 
 ## Publication State Machine
 
-`publish` pushes only:
+Before mutation, `publish` reads the Environment, deployment-policy, and
+ruleset APIs and fails closed on drift. It then pushes only:
 
     git push origin vX.Y.Z+custom.NNN
 
-It does not wait for Actions. `monitor` resolves the exact remote annotated tag
-and finds the Release push run by its target SHA, so recovery does not depend on
-a local tag. A waiting `Build and publish` job returns status 2 and its URL;
-approval must remain manual. `verify` does not monitor. It requires the same
-remote tag, the workflow already completed successfully, and checks:
+It does not wait for Actions. The Release workflow verifies the tag first, then
+automatically starts `Build and publish`. `monitor` resolves the exact remote
+annotated tag and finds the Release push run by its target SHA, so recovery does
+not depend on a local tag. A waiting `Build and publish` job is external policy
+drift and fails with its URL; release-cli never approves or bypasses it.
+`verify` does not monitor. It requires the same remote tag, the workflow already
+completed successfully, and checks:
 
 - a non-draft, non-prerelease GitHub Release for the exact tag;
 - `model-pricing.json`;
@@ -90,7 +96,8 @@ remote tag, the workflow already completed successfully, and checks:
 - If a local tag is created but not published, inspect it before `publish`.
 - If remote tag transfer succeeds but the terminal disconnects, resume with
   `monitor`; never rerun `publish` against an existing immutable tag.
-- If workflow approval is pending, approve only in GitHub Actions and rerun
-  `monitor`.
+- If the workflow unexpectedly waits at an Environment gate, restore the
+  checked automatic Environment policy and rerun `monitor`; never approve or
+  bypass the drifted gate through release-cli.
 - If a deterministic finalize branch already exists, inspect it manually;
   `finalize` never resets or overwrites it.
