@@ -3526,6 +3526,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
     }
     if (newAccount.type === 'oauth') {
       const fpMode = extra?.codex_fingerprint_mode as string | undefined
+      // Missing or invalid values use the Plus session default.
       codexFingerprintMode.value = (['off', 'device', 'session', 'full'].includes(fpMode || '')
         ? fpMode as CodexFingerprintMode
         : 'session')
@@ -4890,7 +4891,7 @@ const handleSubmit = async () => {
         delete newExtra.codex_cli_only_allow_app_server
       }
 
-      // 指纹收敛模式：默认 session，不写入；非默认值显式写入（包括 off）
+      // session is represented by an absent key; the other modes are explicit.
       if (props.account.type === 'oauth') {
         if (codexFingerprintMode.value !== 'session') {
           newExtra.codex_fingerprint_mode = codexFingerprintMode.value

@@ -12,6 +12,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
 )
 
 // codexFingerprintMode 控制 OAuth 账号出站请求的设备指纹收敛强度。
@@ -21,7 +23,7 @@ import (
 type codexFingerprintMode string
 
 const (
-	// codexFingerprintOff 不做任何收敛，原样透传客户端标识（默认行为）。
+	// codexFingerprintOff 不做任何收敛，原样透传客户端标识。
 	codexFingerprintOff codexFingerprintMode = "off"
 	// codexFingerprintDevice 仅收敛 installation_id 为账号级恒定值。
 	// 上游看到 1 台设备 + 多会话（每用户各自的 session）。
@@ -35,15 +37,19 @@ const (
 	codexFingerprintFull codexFingerprintMode = "full"
 )
 
-const codexFingerprintModeExtraKey = "codex_fingerprint_mode"
+// CodexFingerprintModeExtraKey is exported for persistence layers that need
+// to remove the key when an administrator restores the implicit session mode.
+const CodexFingerprintModeExtraKey = "codex_fingerprint_mode"
 
 // GetCodexFingerprintMode 从账号 extra JSON 读取指纹收敛模式。
-// 未设置时默认 session（设备+会话收敛），显式设为 "off" 才关闭。
+//
+// Plus 保持 session 为默认值：未设置、空值或非法值都回落到 session，只有
+// 管理员显式存储 off 才关闭收敛。API-key 账号始终为 off。
 func (a *Account) GetCodexFingerprintMode() codexFingerprintMode {
 	if a == nil || !a.IsOpenAIOAuth() {
 		return codexFingerprintOff
 	}
-	raw := strings.TrimSpace(a.GetExtraString(codexFingerprintModeExtraKey))
+	raw := strings.TrimSpace(a.GetExtraString(CodexFingerprintModeExtraKey))
 	switch codexFingerprintMode(raw) {
 	case codexFingerprintOff, codexFingerprintDevice, codexFingerprintSession, codexFingerprintFull:
 		return codexFingerprintMode(raw)
@@ -166,6 +172,10 @@ func extractClientSessionID(h http.Header) string {
 }
 
 const ginCodexFingerprintIDsKey = "codex_fingerprint_ids"
+
+func isOpenAICodexCompactionRequest(c *gin.Context) bool {
+	return isOpenAIResponsesCompactPath(c) || isOpenAINativeCompactionV2(c)
+}
 
 // resolveCodexFingerprintAccount returns the account that owns the OAuth
 // credential. Spark shadows are schedulable routing entries, but they do not
@@ -292,6 +302,21 @@ func applyCodexFingerprintClientMetadata(reqBody map[string]any, ids *codexFinge
 		existing = make(map[string]any)
 	}
 
+	if !applyCodexFingerprintToClientMetadataMap(existing, ids) {
+		return false
+	}
+	reqBody["client_metadata"] = existing
+	return true
+}
+
+// applyCodexFingerprintToClientMetadataMap 是 client_metadata 改写的共享核心，
+// map 版（非透传，body 已解码）与 raw 字节版（透传热路径）都经由它，保证两条
+// 路径的收敛语义永不漂移。
+func applyCodexFingerprintToClientMetadataMap(existing map[string]any, ids *codexFingerprintIDs) bool {
+	if existing == nil || ids == nil {
+		return false
+	}
+
 	modified := false
 
 	if ids.installationID != "" {
@@ -303,9 +328,6 @@ func applyCodexFingerprintClientMetadata(reqBody map[string]any, ids *codexFinge
 		rewriteClientMetadataEmbeddedTurnMetadata(existing, map[string]any{
 			"installation_id": ids.installationID,
 		})
-		if modified {
-			reqBody["client_metadata"] = existing
-		}
 		return modified
 	}
 
@@ -323,9 +345,45 @@ func applyCodexFingerprintClientMetadata(reqBody map[string]any, ids *codexFinge
 		"window_id":               ids.windowID,
 		"turn_started_at_unix_ms": ids.turnStartedAtUnixMS,
 	})
-
-	reqBody["client_metadata"] = existing
 	return true
+}
+
+// applyCodexFingerprintClientMetadataRaw 在原始 JSON 字节上改写 client_metadata，
+// 供透传路径使用——透传是热路径，禁止对可能高达数十 MB 的 body 做全量
+// Unmarshal（见 forwardOpenAIPassthrough 的轻量提取注释）。实现为：gjson 提取
+// client_metadata 小对象单独解码，经共享核心改写后 sjson 一次性拼回，body
+// 其余字节原样保留。语义与 applyCodexFingerprintClientMetadata 逐点一致
+// （含"非对象值整体替换为收敛集合"的行为）。
+func applyCodexFingerprintClientMetadataRaw(body []byte, ids *codexFingerprintIDs) ([]byte, bool, error) {
+	if len(body) == 0 || ids == nil {
+		return body, false, nil
+	}
+	// 非 JSON 对象的 body（数组/标量/畸形）没有 client_metadata 语义，
+	// sjson 在这类根上写字段会改写整体结构，直接放行保持原样。
+	if !gjson.ParseBytes(body).IsObject() {
+		return body, false, nil
+	}
+
+	existing := map[string]any{}
+	if cm := gjson.GetBytes(body, "client_metadata"); cm.IsObject() {
+		if err := json.Unmarshal([]byte(cm.Raw), &existing); err != nil {
+			return body, false, fmt.Errorf("decode client_metadata for fingerprint: %w", err)
+		}
+	}
+
+	if !applyCodexFingerprintToClientMetadataMap(existing, ids) {
+		return body, false, nil
+	}
+
+	raw, err := json.Marshal(existing)
+	if err != nil {
+		return body, false, fmt.Errorf("encode converged client_metadata: %w", err)
+	}
+	next, err := sjson.SetRawBytes(body, "client_metadata", raw)
+	if err != nil {
+		return body, false, fmt.Errorf("splice converged client_metadata: %w", err)
+	}
+	return next, true, nil
 }
 
 // rewriteClientMetadataEmbeddedTurnMetadata 改写 client_metadata 中内嵌的

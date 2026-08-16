@@ -579,10 +579,10 @@ export default {
         codexCLIOnlyDesc:
           'Only applies to OpenAI OAuth. When enabled, only verified Codex request profiles are allowed, including the underlying transport identities shared by official CLI, App, and IDE surfaces. Request headers are spoofable: this does not attest a client binary or by itself determine account sharing.',
         codexFingerprintMode: 'Codex fingerprint convergence',
-        codexFingerprintModeDesc: 'When multiple users share the same OAuth account, converge device/session identifiers to account-level stable values to reduce upstream-visible device and session count. Off = pass through client identifiers as-is.',
+        codexFingerprintModeDesc: 'When multiple users share the same OAuth account, converge device/session identifiers to account-level stable values to reduce upstream-visible device and session count. Session convergence is the default; choose Off to pass client identifiers through unchanged.',
         codexFingerprintOff: 'Off (passthrough)',
         codexFingerprintDevice: 'Device only',
-        codexFingerprintSession: 'Device + Session (recommended)',
+        codexFingerprintSession: 'Device + Session (default)',
         codexFingerprintFull: 'Full convergence',
         codexImageTool: 'Codex image bridge policy',
         codexImageToolDesc:

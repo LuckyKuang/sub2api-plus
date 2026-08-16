@@ -2875,6 +2875,11 @@ func ollamaCloudUsageSnapshotClearRequested(extra map[string]any) bool {
 	return ok && value == nil
 }
 
+func codexFingerprintModeClearRequested(extra map[string]any) bool {
+	value, ok := extra[service.CodexFingerprintModeExtraKey]
+	return ok && value == nil
+}
+
 func (r *accountRepository) BulkUpdate(ctx context.Context, ids []int64, updates service.AccountBulkUpdate) (int64, error) {
 	if len(ids) == 0 {
 		return 0, nil
@@ -2981,6 +2986,9 @@ func (r *accountRepository) BulkUpdate(ctx context.Context, ids []int64, updates
 			}
 			if ollamaCloudUsageSnapshotClearRequested(updates.Extra) {
 				extraExpression = "(" + extraExpression + ") - 'ollama_cloud_usage_snapshot'"
+			}
+			if codexFingerprintModeClearRequested(updates.Extra) {
+				extraExpression = "(" + extraExpression + ") - 'codex_fingerprint_mode'"
 			}
 		}
 		eligibleAccount := "platform IN ('openai', 'anthropic') AND type = 'apikey'"

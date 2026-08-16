@@ -16,6 +16,7 @@ import (
 
 const stickySessionPrefix = "sticky_session:"
 const liveCallPrefix = "live:call:"
+const openAICodexTurnStateOriginPrefix = "openai_codex_turn_state_origin:"
 
 type gatewayCache struct {
 	rdb *redis.Client
@@ -130,6 +131,7 @@ func (c *gatewayCache) ReleaseGrokVideoBilled(ctx context.Context, key string) e
 // Compile-time assertion: gatewayCache must implement CyberSessionBlockStore.
 var _ service.CyberSessionBlockStore = (*gatewayCache)(nil)
 var _ service.LiveCallStore = (*gatewayCache)(nil)
+var _ service.OpenAICodexTurnStateOriginStore = (*gatewayCache)(nil)
 
 const cyberSessionBlockPrefix = "cyber_session_block:"
 
@@ -146,6 +148,29 @@ func (c *gatewayCache) IsCyberSessionBlocked(ctx context.Context, key string) (b
 		return false, err
 	}
 	return n > 0, nil
+}
+
+func openAICodexTurnStateOriginKey(seed string) string {
+	sum := sha256.Sum256([]byte(seed))
+	return openAICodexTurnStateOriginPrefix + hex.EncodeToString(sum[:])
+}
+
+func (c *gatewayCache) SetOpenAICodexTurnStateOrigin(ctx context.Context, seed string, accountID int64, ttl time.Duration) error {
+	if c == nil || c.rdb == nil || strings.TrimSpace(seed) == "" || accountID <= 0 {
+		return errors.New("invalid Codex turn-state provenance")
+	}
+	return c.rdb.Set(ctx, openAICodexTurnStateOriginKey(seed), accountID, ttl).Err()
+}
+
+func (c *gatewayCache) GetOpenAICodexTurnStateOrigin(ctx context.Context, seed string) (int64, error) {
+	if c == nil || c.rdb == nil || strings.TrimSpace(seed) == "" {
+		return 0, errors.New("invalid Codex turn-state provenance")
+	}
+	accountID, err := c.rdb.Get(ctx, openAICodexTurnStateOriginKey(seed)).Int64()
+	if errors.Is(err, redis.Nil) {
+		return 0, nil
+	}
+	return accountID, err
 }
 
 var claimLiveControllerScript = redis.NewScript(`
