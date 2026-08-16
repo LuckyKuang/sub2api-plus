@@ -34,8 +34,8 @@ jobs:
     name: Build and publish
     needs: verify
     runs-on: ubuntu-latest
-    # Repository administrators must protect this environment with required
-    # reviewers and a tag-only deployment policy before the first publication.
+    # release-cli requires this environment to disable administrator bypass,
+    # have no blocking approval gate, and allow only v*+custom.* tags.
     environment:
       name: release
     permissions:

@@ -30,13 +30,18 @@ Before automatic PR promotion is enabled, repository administrators must:
    renamed or later unvalidated job cannot silently leave the merge gate.
 5. Block force pushes and branch deletion; do not give release-cli an admin
    bypass.
-6. Protect the Actions environment named `release` with maintainer review and
-   a release-tag deployment policy.
+6. Configure the Actions environment named `release` with administrator bypass
+   disabled, no required reviewer, wait timer, or custom gate, and exactly one
+   deployment policy for tags matching `v*+custom.*`.
+7. Add an active repository Tag ruleset for `refs/tags/v*+custom.*`. Do not add
+   bypass actors or a creation restriction; block tag updates and deletion.
 
 The source tree cannot create these external governance settings safely.
 `release-cli promote-pr` verifies Auto-merge, merge-commit mode, the required
 pull-request rule, strict current-branch policy, and the complete context list.
-It fails closed when any external prerequisite is absent.
+Before tag transfer, `release-cli publish` verifies the complete Environment
+and Tag ruleset policy. Both actions fail closed when an external prerequisite
+is absent.
 
 ## Prepare the Release PR
 
@@ -165,8 +170,11 @@ python3 skills/release-cli/scripts/release_cli.py publish \
   --tag vX.Y.Z+custom.NNN
 ```
 
-`publish` returns after exact tag transfer. Never use `git push --tags`, reuse
-a version, retag, force push, or create the GitHub Release manually.
+`publish` first verifies the automatic `release` Environment and immutable
+custom-tag ruleset, then returns after exact tag transfer. This explicit command
+is the irreversible publication authorization point. Never use `git push
+--tags`, reuse a version, retag, force push, or create the GitHub Release
+manually.
 
 ## Monitor and Verify
 
@@ -178,10 +186,11 @@ python3 skills/release-cli/scripts/release_cli.py monitor \
   --tag vX.Y.Z+custom.NNN
 ```
 
-The Release workflow reruns its tag verification before publishing. The `Build
-and publish` job is guarded by the protected `release` environment. When it is
-waiting, monitor returns status 2 and prints the Actions URL. A maintainer must
-approve there; never automate or bypass that approval.
+The Release workflow reruns its tag verification before publishing. After the
+verification matrix succeeds, the `Build and publish` job enters the checked
+`release` Environment and starts automatically. If it unexpectedly waits,
+`monitor` reports policy drift and the Actions URL; restore the Environment
+policy and rerun `monitor`. The CLI never approves or bypasses a deployment.
 
 After the workflow succeeds, verify the published state:
 
@@ -230,8 +239,8 @@ and requires the release mapping to be `published`.
 The manifest binds the release tag, fixed asset URL, and data SHA-256. Runtime
 loading also validates dedicated HTTPS hosts, response sizes, JSON shape, and
 version rollback. Release publication authority is the pricing trust boundary,
-so environment reviewers and Release/package permissions must remain limited
-to maintainers.
+so tag-creation authority and Release/package permissions must remain limited
+to trusted maintainers.
 
 ## Failed or Invalid Releases
 
@@ -241,5 +250,8 @@ to maintainers.
 - Publish corrections under the next custom iteration.
 - If tag push succeeded but local observation was interrupted, resume with
   `monitor`; do not rerun `publish`.
+- If `Build and publish` unexpectedly waits, restore the checked Environment
+  policy and rerun `monitor`; do not approve the drifted deployment through the
+  CLI.
 - Deleting an unpublished tag or artifact requires an explicit audit and
   maintainer decision.

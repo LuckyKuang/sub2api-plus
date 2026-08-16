@@ -169,6 +169,15 @@ class WorkflowPolicyTests(unittest.TestCase):
         )
         self.assertNotIn("--clobber", workflow)
 
+    def test_release_publish_is_automatic_only_after_verification(self) -> None:
+        workflow = ROOT.joinpath(".github/workflows/release.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("name: Build and publish", workflow)
+        self.assertIn("needs: verify", workflow)
+        self.assertIn("environment:\n      name: release", workflow)
+        self.assertNotIn("required reviewers", workflow)
+
     def test_actionlint_container_is_pinned_to_a_digest(self) -> None:
         workflow = ROOT.joinpath(".github/workflows/backend-ci.yml").read_text(
             encoding="utf-8"
