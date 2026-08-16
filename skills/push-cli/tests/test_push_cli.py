@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import importlib.util
 import subprocess
 import sys
@@ -476,6 +477,7 @@ class LocalChecksTest(unittest.TestCase):
         names = [call.args[0] for call in run_step.call_args_list]
         self.assertEqual("Apple Container lifecycle test", names[0])
         self.assertIn("Push CLI self-tests", names)
+        self.assertIn("Release CLI self-tests", names)
         self.assertIn("Backend unit tests", names)
         self.assertIn("Frontend production build", names)
         self.assertIn("Docker Compose security", names)
@@ -503,6 +505,31 @@ class DeclaredToolchainsTest(unittest.TestCase):
         self.assertRegex(declared.pnpm, r"^\d+\.\d+\.\d+$")
         self.assertGreaterEqual(declared.node_major_minimum, 20)
         self.assertRegex(declared.golangci_lint, r"^\d+\.\d+\.\d+$")
+
+
+class BranchAndProofTest(unittest.TestCase):
+    def test_default_branch_is_never_pushable(self) -> None:
+        with self.assertRaisesRegex(push_cli.PushCliError, "default branch"):
+            push_cli.require_working_branch("main", "main")
+
+    def test_validation_marker_replaces_stale_marker(self) -> None:
+        old = push_cli.ValidationProof("a" * 40, "b" * 40)
+        new = push_cli.ValidationProof("c" * 40, "d" * 40)
+        body = push_cli.with_validation_marker("Summary", old)
+        updated = push_cli.with_validation_marker(body, new)
+        self.assertEqual(1, len(push_cli.VALIDATION_MARKER_RE.findall(updated)))
+        self.assertIn('"base":"' + "c" * 40 + '"', updated)
+        self.assertNotIn('"base":"' + "a" * 40 + '"', updated)
+
+    def test_latest_base_rejects_stale_branch(self) -> None:
+        stale = subprocess.CompletedProcess([], 1, "")
+        with (
+            mock.patch.object(push_cli, "fetch_default_branch", return_value="a" * 40),
+            mock.patch.object(push_cli, "pushed_sha", return_value="b" * 40),
+            mock.patch.object(push_cli, "run_command", return_value=stale),
+        ):
+            with self.assertRaisesRegex(push_cli.PushCliError, "does not contain"):
+                push_cli.require_latest_base("origin", "main")
 
 
 class ValidationLaunchTest(unittest.TestCase):
@@ -628,7 +655,19 @@ class ValidationLaunchTest(unittest.TestCase):
 
 
 class MainFlowTest(unittest.TestCase):
-    def test_check_probes_environment_before_dirty_worktree(self) -> None:
+    @staticmethod
+    def args(action: str, *, in_validation: bool = False) -> argparse.Namespace:
+        return argparse.Namespace(
+            action=action,
+            in_validation=in_validation,
+            remote="origin",
+            repo_root=Path("/repo"),
+            base_ref=None,
+            title=None,
+            body_file=None,
+        )
+
+    def test_check_rejects_dirty_worktree_before_runtime_start(self) -> None:
         order: list[str] = []
 
         def record(name: str):
@@ -638,6 +677,8 @@ class MainFlowTest(unittest.TestCase):
                     return "LuckyKuang/sub2api-plus"
                 if name == "current_branch":
                     return "feature/new-features-and-fixes"
+                if name == "repository_default_branch":
+                    return "main"
                 if name == "probe_runtime":
                     return push_cli.Runtime("apple-containers", compose_required=False)
                 if name == "require_clean_worktree":
@@ -646,16 +687,16 @@ class MainFlowTest(unittest.TestCase):
 
             return _inner
 
-        args = mock.Mock(
-            action="check",
-            in_validation=False,
-            remote="origin",
-            repo_root=Path("/repo"),
-        )
+        args = self.args("check")
         with (
             mock.patch.object(push_cli, "parse_args", return_value=args),
             mock.patch.object(push_cli, "github_gate", side_effect=record("github_gate")),
             mock.patch.object(push_cli, "current_branch", side_effect=record("current_branch")),
+            mock.patch.object(
+                push_cli,
+                "repository_default_branch",
+                side_effect=record("repository_default_branch"),
+            ),
             mock.patch.object(push_cli, "probe_runtime", side_effect=record("probe_runtime")),
             mock.patch.object(
                 push_cli,
@@ -676,8 +717,7 @@ class MainFlowTest(unittest.TestCase):
             [
                 "github_gate",
                 "current_branch",
-                "probe_runtime",
-                "ensure_validation_image",
+                "repository_default_branch",
                 "require_clean_worktree",
             ],
             order,
@@ -686,12 +726,7 @@ class MainFlowTest(unittest.TestCase):
         local_checks.assert_not_called()
 
     def test_ensure_skips_worktree_and_local_checks(self) -> None:
-        args = mock.Mock(
-            action="ensure",
-            in_validation=False,
-            remote="origin",
-            repo_root=Path("/repo"),
-        )
+        args = self.args("ensure")
         with (
             mock.patch.object(push_cli, "parse_args", return_value=args),
             mock.patch.object(push_cli, "github_gate", return_value="LuckyKuang/sub2api-plus"),
@@ -718,16 +753,12 @@ class MainFlowTest(unittest.TestCase):
 
     def test_host_check_launches_container_instead_of_host_matrix(self) -> None:
         runtime = push_cli.Runtime("docker")
-        args = mock.Mock(
-            action="check",
-            in_validation=False,
-            remote="origin",
-            repo_root=Path("/repo"),
-        )
+        args = self.args("check")
         with (
             mock.patch.object(push_cli, "parse_args", return_value=args),
             mock.patch.object(push_cli, "github_gate", return_value="LuckyKuang/sub2api-plus"),
             mock.patch.object(push_cli, "current_branch", return_value="feature"),
+            mock.patch.object(push_cli, "repository_default_branch", return_value="main"),
             mock.patch.object(push_cli, "probe_runtime", return_value=runtime),
             mock.patch.object(push_cli, "ensure_validation_image"),
             mock.patch.object(push_cli, "require_clean_worktree"),
@@ -739,18 +770,13 @@ class MainFlowTest(unittest.TestCase):
         ):
             self.assertEqual(0, push_cli.main())
 
-        launch.assert_called_once_with(runtime, "origin")
+        launch.assert_called_once_with(runtime, "origin", base_ref=None)
         final_gate.assert_called_once_with(runtime)
         local_checks.assert_not_called()
         check.assert_not_called()
 
     def test_in_validation_flag_is_rejected_on_darwin_host(self) -> None:
-        args = mock.Mock(
-            action="check",
-            in_validation=True,
-            remote="origin",
-            repo_root=Path("/repo"),
-        )
+        args = self.args("check", in_validation=True)
         with (
             mock.patch.object(push_cli, "parse_args", return_value=args),
             mock.patch.object(
@@ -762,6 +788,75 @@ class MainFlowTest(unittest.TestCase):
         ):
             self.assertEqual(1, push_cli.main())
         local_checks.assert_not_called()
+
+    def test_fast_push_never_probes_runtime_or_waits_for_actions(self) -> None:
+        args = self.args("push")
+        with (
+            mock.patch.object(push_cli, "parse_args", return_value=args),
+            mock.patch.object(push_cli, "github_gate", return_value="LuckyKuang/sub2api-plus"),
+            mock.patch.object(push_cli, "current_branch", return_value="feature"),
+            mock.patch.object(push_cli, "repository_default_branch", return_value="main"),
+            mock.patch.object(push_cli, "require_working_branch"),
+            mock.patch.object(push_cli, "require_no_git_operation"),
+            mock.patch.object(push_cli, "require_clean_worktree"),
+            mock.patch.object(push_cli, "push_branch") as push,
+            mock.patch.object(push_cli, "probe_runtime") as probe,
+            mock.patch.object(push_cli, "watch_actions") as watch,
+        ):
+            self.assertEqual(0, push_cli.main())
+
+        push.assert_called_once_with("origin", "feature")
+        probe.assert_not_called()
+        watch.assert_not_called()
+
+    def test_main_push_stops_before_runtime_or_git_mutation(self) -> None:
+        args = self.args("push")
+        with (
+            mock.patch.object(push_cli, "parse_args", return_value=args),
+            mock.patch.object(push_cli, "github_gate", return_value="LuckyKuang/sub2api-plus"),
+            mock.patch.object(push_cli, "current_branch", return_value="main"),
+            mock.patch.object(push_cli, "repository_default_branch", return_value="main"),
+            mock.patch.object(push_cli, "push_branch") as push,
+            mock.patch.object(push_cli, "probe_runtime") as probe,
+        ):
+            self.assertEqual(1, push_cli.main())
+
+        push.assert_not_called()
+        probe.assert_not_called()
+
+    def test_submit_pr_runs_validation_before_push_and_pr_creation(self) -> None:
+        args = self.args("submit-pr")
+        runtime = push_cli.Runtime("apple-containers", compose_required=False)
+        proof = push_cli.ValidationProof("a" * 40, "b" * 40)
+        order: list[str] = []
+
+        def record(name: str):
+            def _inner(*_args: object, **_kwargs: object) -> None:
+                order.append(name)
+            return _inner
+
+        with (
+            mock.patch.object(push_cli, "parse_args", return_value=args),
+            mock.patch.object(push_cli, "github_gate", return_value="LuckyKuang/sub2api-plus"),
+            mock.patch.object(push_cli, "current_branch", return_value="feature"),
+            mock.patch.object(push_cli, "repository_default_branch", return_value="main"),
+            mock.patch.object(push_cli, "require_working_branch"),
+            mock.patch.object(push_cli, "require_no_git_operation"),
+            mock.patch.object(push_cli, "require_clean_worktree"),
+            mock.patch.object(push_cli, "probe_runtime", return_value=runtime),
+            mock.patch.object(push_cli, "ensure_validation_image"),
+            mock.patch.object(push_cli, "require_latest_base", return_value=proof),
+            mock.patch.object(push_cli, "launch_in_validation", side_effect=record("validate")),
+            mock.patch.object(push_cli, "run_runtime_final_gate"),
+            mock.patch.object(push_cli, "ensure_clean_after_checks"),
+            mock.patch.object(push_cli, "require_unchanged_proof", side_effect=record("recheck")),
+            mock.patch.object(push_cli, "push_branch", side_effect=record("push")),
+            mock.patch.object(push_cli, "publish_validation_status", side_effect=record("status")),
+            mock.patch.object(push_cli, "create_or_update_pull_request", side_effect=record("pr")),
+        ):
+            self.assertEqual(0, push_cli.main())
+
+        self.assertEqual(["validate", "recheck", "push", "status", "pr"], order)
 
 
 if __name__ == "__main__":

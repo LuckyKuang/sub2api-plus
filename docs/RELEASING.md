@@ -1,8 +1,9 @@
 # Release Process
 
-This is the canonical process for custom Sub2API Plus releases. Validate
-locally, create the annotated tag locally, review it, and only then push that
-single tag. Publication always requires an explicit maintainer action.
+This is the canonical pull-request-first process for custom Sub2API Plus
+releases. Ordinary branch pushes are fast. The final PR submission performs the
+complete local validation matrix once, and release-cli then relies on that exact
+commit proof plus protected GitHub Actions before merging and tagging.
 
 ## Version Format
 
@@ -15,66 +16,73 @@ single tag. Publication always requires an explicit maintainer action.
 Increment `NNN` on the same upstream baseline and reset it to `001` after
 merging a newer official baseline. `NNN` is always three digits.
 
-## Prepare
+## Repository Prerequisites
+
+Before automatic PR promotion is enabled, repository administrators must:
+
+1. Enable GitHub repository Auto-merge and merge-commit mode.
+2. Protect `main` with a ruleset that requires pull requests.
+3. Require the branch to be current with `main` and require these exact status
+   contexts: `sub2api/local-validation`, `deployment-config`, `test`,
+   `frontend`, `golangci-lint`, `goreleaser-config`, `repository-policy`,
+   `backend-security`, and `frontend-security`.
+4. Keep those contexts synchronized with the CI and Security Scan job IDs so a
+   renamed or later unvalidated job cannot silently leave the merge gate.
+5. Block force pushes and branch deletion; do not give release-cli an admin
+   bypass.
+6. Protect the Actions environment named `release` with maintainer review and
+   a release-tag deployment policy.
+
+The source tree cannot create these external governance settings safely.
+`release-cli promote-pr` verifies Auto-merge, merge-commit mode, the required
+pull-request rule, strict current-branch policy, and the complete context list.
+It fails closed when any external prerequisite is absent.
+
+## Prepare the Release PR
+
+Start a working branch from the latest `origin/main`, then:
 
 1. Confirm the official upstream tag and commit.
 2. Update `backend/cmd/server/VERSION`.
 3. Update every `ARG VERSION=` in `Dockerfile` and `backend/Dockerfile`.
-4. Add the version to `UPSTREAM.md` with status `planned`.
-5. Synchronize the install, rollback, and image examples:
+4. Add the custom version to `UPSTREAM.md` with status `planned`.
+5. Synchronize install, rollback, and image examples:
    `python3 tools/update_release_docs.py`.
 6. Write `release-notes.md` from the template below.
-7. Commit all repository changes; the notes file may remain untracked.
-8. Get the release commit reviewed and ensure its branch CI is green.
-9. Refresh local tags with `git fetch origin --tags`.
+7. Commit all repository changes. Never commit on or push directly to `main`.
+
+Intermediate pushes are intentionally fast and skip local validation:
+
+```bash
+python3 skills/push-cli/scripts/push_cli.py push
+```
+
+When the branch is the final merge candidate, submit it once through the local
+promotion gate:
+
+```bash
+python3 skills/push-cli/scripts/push_cli.py submit-pr
+```
+
+`submit-pr` fetches the current `origin/main`, requires it in the branch,
+records exact base/head SHAs, runs the complete matrix in the platform
+validation container, refetches and rechecks both SHAs, pushes the exact head,
+publishes `sub2api/local-validation`, and creates or reuses the PR. Any later
+head or base change requires another `submit-pr`.
 
 The documentation updater reads the current version from
 `backend/cmd/server/VERSION`. Its rollback example uses the nearest lower
-`published` entry in `UPSTREAM.md`; it deliberately skips `planned`,
-`historical`, `withdrawn`, and `invalid` entries. Check synchronization without
-writing files with:
+`published` entry in `UPSTREAM.md`; it skips `planned`, `historical`,
+`withdrawn`, and `invalid`. Check without writing files with:
 
 ```bash
 python3 tools/update_release_docs.py --check
 ```
 
-Do not create the release tag manually at this stage.
-
-## Pricing Assets
-
-Remote model pricing is published as immutable Release assets. Before the
-first release using this flow, a repository administrator must create and
-protect the GitHub Actions environment named `release`: require maintainer
-review and restrict deployment to the reviewed release-tag policy. Release
-publication authority is the runtime pricing trust boundary, so access to that
-environment and permission to create Releases must remain limited to the sole
-maintainer.
-
-After GoReleaser publishes the normal release, the workflow copies the bundled
-catalog and uploads exactly these immutable assets for the release tag:
-
-- `model-pricing.json`
-- `model-pricing-manifest.json`
-
-The manifest binds the tag, the fixed asset URL, and the data SHA-256. The
-runtime also validates dedicated HTTPS hosts, response sizes, JSON, and version
-rollback before accepting it. On a retry the workflow only accepts an already
-uploaded pricing asset when its bytes are identical; it never replaces an
-asset. Correct a bad asset through a new custom version, never by retagging or
-overwriting the existing Release.
-
-The GitHub environment is necessary but not sufficient repository governance.
-Before enabling publication, administrators must also require pull requests
-and status checks for `main`, restrict tag creation to release maintainers,
-keep Actions restricted to reviewed actions, and require review for changes to
-`.github/workflows/`, release configuration, and deployment security files.
-Those GitHub organization/repository settings cannot be safely created by a
-source-code change and remain a maintainer-controlled prerequisite.
-
 ## Release Notes
 
-The first non-empty line is the annotated-tag subject. Keep every required
-section non-empty and keep the official identifiers inside `Upstream baseline`.
+The first non-empty line is the annotated-tag subject. `Changed` and `Fixed`
+are optional; every other section below is required and non-empty.
 
 ```markdown
 Sub2API Plus vX.Y.Z+custom.NNN
@@ -101,71 +109,137 @@ Official release: vX.Y.Z
 Official commit: <40-character commit>
 ```
 
-`Changed` and `Fixed` are optional. `Highlights`,
-`Compatibility and migration`, `Known issues`, and `Upstream baseline` are
-required.
+## Promote the Release PR
 
-## Validate and Create the Local Tag
+Promotion requires the explicit PR number, intended tag, and reviewed notes:
 
-Use release-cli from the repository root. It probes the platform runtime,
-builds `deploy/Dockerfile.validation` when needed, and runs the canonical
-preflight inside that container. Do not install host toolchains for this gate
-and do not invoke `tools/release_preflight.py` directly.
+```bash
+python3 skills/release-cli/scripts/release_cli.py promote-pr \
+  --tag vX.Y.Z+custom.NNN \
+  --pr <number> \
+  --notes-file release-notes.md
+```
+
+The tool verifies the PR is open, non-draft, same-repository, and targets
+`main`. Its machine marker and successful local-validation status must match
+the current head and current `main` base exactly. It waits for GitHub required
+checks, rechecks both SHAs, and enables native `--auto --merge` without admin
+bypass.
+
+After GitHub merges the PR, release-cli resolves the actual merge commit,
+fetches `origin/main`, and waits for push-triggered `CI` and `Security Scan`
+runs at that exact SHA. A successful PR check alone is insufficient because
+the merge commit may differ from the PR head.
+
+If protected review or another required condition is still pending, promotion
+returns status 2. Complete the GitHub requirement and rerun the same command.
+
+## Validate and Create the Tag
+
+After PR promotion, run the focused release metadata gate against the merged
+PR commit, then repeat it while creating the local annotated tag:
 
 ```bash
 python3 skills/release-cli/scripts/release_cli.py validate \
   --tag vX.Y.Z+custom.NNN \
+  --pr <number> \
   --notes-file release-notes.md
 
 python3 skills/release-cli/scripts/release_cli.py tag \
   --tag vX.Y.Z+custom.NNN \
+  --pr <number> \
   --notes-file release-notes.md
 ```
 
-The in-container preflight checks all pinned toolchains, then verifies the
-clean worktree, absent local/remote tag, `planned` upstream status, version
-sources, release notes, README contracts, migrations, deployment scripts, Go
-module tidiness, backend tests/lint, and frontend
-install/lint/typecheck/tests/build. It also verifies that `HEAD` and the notes
-did not change during the run. Only after every gate passes does `tag` create
-and verify the local annotated tag; it never pushes.
+This gate does not repeat Go, frontend, lint, integration, or deployment
+matrices. Those ran in `submit-pr`, PR Actions, and merged-main Actions. It
+validates release metadata, notes, synchronized examples, exact tree identity,
+and local/remote tag absence. `tag` targets the PR's actual merge commit and
+preserves the notes verbatim. It never pushes.
 
-The validation container is Apple Containers on macOS, Docker inside WSL2
-Debian or Ubuntu on Windows, and Docker on Linux. Host validation fallback is
-forbidden. The Apple container lifecycle fixture test runs in that image on
-every platform. GitHub Actions remains required after the local gate.
-
-Do not manually copy a raw `git tag` command after a validate dry run; rerun
-`tag` so the final commit, notes, and remote-tag checks remain coupled to tag
-creation.
-
-## Review and Push
-
-Inspect the locally created tag, then push only that tag:
+Review the local tag, then explicitly publish only that tag:
 
 ```bash
 git show --no-patch vX.Y.Z+custom.NNN
-git push origin vX.Y.Z+custom.NNN
+python3 skills/release-cli/scripts/release_cli.py publish \
+  --tag vX.Y.Z+custom.NNN
 ```
 
-Never use `git push --tags`. The remote workflow reruns repository checks,
-requires an annotated tag with the exact subject and target commit, validates
-the complete tag message, and only then publishes the GitHub Release and
-images.
+`publish` returns after exact tag transfer. Never use `git push --tags`, reuse
+a version, retag, force push, or create the GitHub Release manually.
 
-## After Publication
+## Monitor and Verify
 
-1. Verify the GitHub Release, checksums, archives, and immutable GHCR tag.
-2. Verify that the application reports the expected embedded version.
-3. Change the `UPSTREAM.md` status from `planned` to `published`.
-4. Keep the immutable version tag for rollback; treat `latest` as a moving
-   convenience tag only.
+Monitor publication separately. The remote annotated tag is the source of
+truth, so this action can resume without relying on a local tag:
+
+```bash
+python3 skills/release-cli/scripts/release_cli.py monitor \
+  --tag vX.Y.Z+custom.NNN
+```
+
+The Release workflow reruns its tag verification before publishing. The `Build
+and publish` job is guarded by the protected `release` environment. When it is
+waiting, monitor returns status 2 and prints the Actions URL. A maintainer must
+approve there; never automate or bypass that approval.
+
+After the workflow succeeds, verify the published state:
+
+```bash
+python3 skills/release-cli/scripts/release_cli.py verify \
+  --tag vX.Y.Z+custom.NNN
+```
+
+Verification requires a successful workflow, a non-draft/non-prerelease GitHub
+Release, and both immutable pricing assets:
+
+- `model-pricing.json`
+- `model-pricing-manifest.json`
+
+The workflow accepts an existing pricing asset only when its bytes are
+identical. Correct a bad asset with a new custom version, never by replacement
+or retagging.
+
+## Finalize Through a PR
+
+After verification, finalize the published mapping:
+
+```bash
+python3 skills/release-cli/scripts/release_cli.py finalize \
+  --tag vX.Y.Z+custom.NNN
+```
+
+`finalize` fetches the latest `origin/main`, creates deterministic branch
+`release/finalize-X.Y.Z-custom.NNN`, changes exactly one `UPSTREAM.md` status
+from `planned` to `published`, validates and commits only that file, then calls
+`push-cli submit-pr`. It never commits or pushes `main` directly.
+
+After the follow-up PR Actions pass, promote it without release notes:
+
+```bash
+python3 skills/release-cli/scripts/release_cli.py promote-pr \
+  --tag vX.Y.Z+custom.NNN \
+  --pr <finalization-pr-number>
+```
+
+The no-notes form is accepted only for the deterministic finalization branch
+and requires the release mapping to be `published`.
+
+## Pricing Assets
+
+The manifest binds the release tag, fixed asset URL, and data SHA-256. Runtime
+loading also validates dedicated HTTPS hosts, response sizes, JSON shape, and
+version rollback. Release publication authority is the pricing trust boundary,
+so environment reviewers and Release/package permissions must remain limited
+to maintainers.
 
 ## Failed or Invalid Releases
 
 - Never reuse or retag a published version.
 - Record an externally visible bad release as `withdrawn` or `invalid` in
-  `UPSTREAM.md`.
+  `UPSTREAM.md` through a separate PR.
 - Publish corrections under the next custom iteration.
+- If tag push succeeded but local observation was interrupted, resume with
+  `monitor`; do not rerun `publish`.
 - Deleting an unpublished tag or artifact requires an explicit audit and
   maintainer decision.

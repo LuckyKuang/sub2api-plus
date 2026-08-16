@@ -1,4 +1,4 @@
-"""Platform-strict validation runtime for push-cli and release-cli.
+"""Platform-strict validation runtime for push-cli local validation.
 
 Host processes may probe the selected container runtime, build or inspect the
 validation image, and launch an in-container command. Check matrices must not

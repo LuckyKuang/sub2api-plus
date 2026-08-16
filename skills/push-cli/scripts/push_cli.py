@@ -26,6 +26,10 @@ import validation_runtime
 
 DEFAULT_REMOTE = "origin"
 EXPECTED_REPOSITORY = "LuckyKuang/sub2api-plus"
+LOCAL_VALIDATION_CONTEXT = "sub2api/local-validation"
+VALIDATION_MARKER_RE = re.compile(
+    r"<!--\s*sub2api-submit-pr:\s*(\{.*?\})\s*-->", re.DOTALL
+)
 GO_VERSION_RE = re.compile(r"^go\s+(\d+\.\d+(?:\.\d+)?)\s*$", re.MULTILINE)
 VERSION_RE = re.compile(
     r"\bversion(?:\s*[:=]|\s+)(?:v)?(\d+\.\d+\.\d+)",
@@ -47,6 +51,12 @@ class DeclaredToolchains:
     pnpm: str
     node_major_minimum: int
     golangci_lint: str
+
+
+@dataclass(frozen=True)
+class ValidationProof:
+    base: str
+    head: str
 
 
 def display(command: Sequence[str]) -> str:
@@ -149,6 +159,16 @@ def github_gate(remote: str) -> str:
     return repository
 
 
+def repository_default_branch(repository: str) -> str:
+    branch = capture(
+        ["gh", "api", f"repos/{repository}", "--jq", ".default_branch"]
+    )
+    if not branch or any(char.isspace() for char in branch):
+        raise PushCliError("GitHub returned an invalid repository default branch")
+    print(f"Default branch: {branch}")
+    return branch
+
+
 def current_branch() -> str:
     branch = capture(["git", "branch", "--show-current"])
     if not branch or branch == "HEAD":
@@ -157,6 +177,35 @@ def current_branch() -> str:
         raise PushCliError(f"invalid current branch name: {branch}")
     print(f"Current branch: {branch}")
     return branch
+
+
+def require_working_branch(branch: str, default_branch: str) -> None:
+    if branch == default_branch:
+        raise PushCliError(
+            f"refusing to push repository default branch {default_branch!r}; "
+            "create or switch to a working branch first"
+        )
+
+
+def require_no_git_operation() -> None:
+    git_dir = Path(capture(["git", "rev-parse", "--git-dir"]))
+    if not git_dir.is_absolute():
+        git_dir = ROOT / git_dir
+    active = [
+        name
+        for name in (
+            "MERGE_HEAD",
+            "CHERRY_PICK_HEAD",
+            "REVERT_HEAD",
+            "rebase-merge",
+            "rebase-apply",
+        )
+        if (git_dir / name).exists()
+    ]
+    if active:
+        raise PushCliError(
+            "an unfinished Git operation is present: " + ", ".join(active)
+        )
 
 
 def require_clean_worktree() -> None:
@@ -307,7 +356,12 @@ def ensure_validation_image(runtime: Runtime) -> str:
         raise PushCliError(str(error)) from error
 
 
-def launch_in_validation(runtime: Runtime, remote: str) -> None:
+def launch_in_validation(
+    runtime: Runtime,
+    remote: str,
+    *,
+    base_ref: str | None = None,
+) -> None:
     repo = validation_runtime.mount_root(runtime, ROOT)
     script = validation_runtime.container_path(SCRIPT, runtime, ROOT)
     argv = [
@@ -320,6 +374,8 @@ def launch_in_validation(runtime: Runtime, remote: str) -> None:
         "--repo-root",
         repo,
     ]
+    if base_ref:
+        argv.extend(["--base-ref", base_ref])
     try:
         validation_runtime.launch_in_validation(
             runtime,
@@ -419,7 +475,13 @@ def run_frontend_security_check() -> None:
         audit_path.unlink(missing_ok=True)
 
 
-def run_local_checks(remote: str, branch: str, runtime: Runtime) -> None:
+def run_local_checks(
+    remote: str,
+    branch: str,
+    runtime: Runtime,
+    *,
+    base_ref: str | None = None,
+) -> None:
     python = sys.executable
     backend = ROOT / "backend"
     steps: list[tuple[str, Sequence[str], Path]] = [
@@ -432,6 +494,11 @@ def run_local_checks(remote: str, branch: str, runtime: Runtime) -> None:
         (
             "Push CLI self-tests",
             [python, "skills/push-cli/tests/test_push_cli.py"],
+            ROOT,
+        ),
+        (
+            "Release CLI self-tests",
+            [python, "skills/release-cli/tests/test_release_cli.py"],
             ROOT,
         ),
         ("Backend unit tests", ["go", "test", "-tags=unit", "./..."], backend),
@@ -501,13 +568,15 @@ def run_local_checks(remote: str, branch: str, runtime: Runtime) -> None:
         ),
     ]
 
-    base_ref = f"{remote}/{branch}"
-    base_check = run_command(["git", "rev-parse", "--verify", base_ref], capture=True)
+    migration_base = base_ref or f"{remote}/{branch}"
+    base_check = run_command(
+        ["git", "rev-parse", "--verify", migration_base], capture=True
+    )
     if base_check.returncode == 0:
         steps.append(
             (
                 "Migration policy",
-                [python, "tools/check_new_migrations.py", "--base", base_ref],
+                [python, "tools/check_new_migrations.py", "--base", migration_base],
                 ROOT,
             )
         )
@@ -530,6 +599,190 @@ def ensure_clean_after_checks() -> None:
 
 def pushed_sha() -> str:
     return capture(["git", "rev-parse", "HEAD"])
+
+
+def fetch_default_branch(remote: str, default_branch: str) -> str:
+    run_step(
+        f"Fetch {remote}/{default_branch}",
+        [
+            "git",
+            "fetch",
+            "--no-tags",
+            remote,
+            f"+refs/heads/{default_branch}:refs/remotes/{remote}/{default_branch}",
+        ],
+    )
+    return capture(["git", "rev-parse", f"{remote}/{default_branch}"])
+
+
+def require_latest_base(remote: str, default_branch: str) -> ValidationProof:
+    base = fetch_default_branch(remote, default_branch)
+    head = pushed_sha()
+    ancestor = run_command(
+        ["git", "merge-base", "--is-ancestor", base, head], capture=True
+    )
+    if ancestor.returncode == 1:
+        raise PushCliError(
+            f"current branch does not contain latest {remote}/{default_branch} "
+            f"({base}); update the branch before submit-pr"
+        )
+    if ancestor.returncode != 0:
+        raise PushCliError("unable to compare the pull-request base and head")
+    return ValidationProof(base=base, head=head)
+
+
+def require_unchanged_proof(
+    proof: ValidationProof,
+    remote: str,
+    default_branch: str,
+) -> None:
+    if pushed_sha() != proof.head:
+        raise PushCliError("HEAD changed while local validation was running")
+    latest_base = fetch_default_branch(remote, default_branch)
+    if latest_base != proof.base:
+        raise PushCliError(
+            f"{remote}/{default_branch} changed from {proof.base} to {latest_base} "
+            "while local validation was running; rerun submit-pr"
+        )
+
+
+def validation_marker(proof: ValidationProof) -> str:
+    payload = json.dumps(
+        {"base": proof.base, "head": proof.head},
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return f"<!-- sub2api-submit-pr: {payload} -->"
+
+
+def with_validation_marker(body: str, proof: ValidationProof) -> str:
+    cleaned = VALIDATION_MARKER_RE.sub("", body).rstrip()
+    marker = validation_marker(proof)
+    return f"{cleaned}\n\n{marker}\n" if cleaned else f"{marker}\n"
+
+
+def publish_validation_status(repository: str, proof: ValidationProof) -> None:
+    run_step(
+        "Publish local-validation commit status",
+        [
+            "gh",
+            "api",
+            "--method",
+            "POST",
+            f"repos/{repository}/statuses/{proof.head}",
+            "-f",
+            "state=success",
+            "-f",
+            f"context={LOCAL_VALIDATION_CONTEXT}",
+            "-f",
+            "description=Platform-container validation passed",
+        ],
+    )
+
+
+def open_pull_requests(
+    repository: str,
+    branch: str,
+    default_branch: str,
+) -> list[dict[str, object]]:
+    output = capture(
+        [
+            "gh",
+            "pr",
+            "list",
+            "--repo",
+            repository,
+            "--state",
+            "open",
+            "--head",
+            branch,
+            "--base",
+            default_branch,
+            "--json",
+            "number,url,isDraft,headRefOid,baseRefOid,body",
+        ]
+    )
+    try:
+        prs = json.loads(output)
+    except json.JSONDecodeError as error:
+        raise PushCliError("gh pr list returned invalid JSON") from error
+    if not isinstance(prs, list) or any(not isinstance(pr, dict) for pr in prs):
+        raise PushCliError("gh pr list returned an unexpected JSON value")
+    return prs
+
+
+def default_pr_body(branch: str) -> str:
+    return (
+        "## Summary\n\n"
+        f"Submit `{branch}` after the repository local-validation gate.\n\n"
+        "## Validation\n\n"
+        "- Platform-container validation matrix passed.\n"
+    )
+
+
+def create_or_update_pull_request(
+    repository: str,
+    branch: str,
+    default_branch: str,
+    proof: ValidationProof,
+    *,
+    title: str | None,
+    body_file: Path | None,
+) -> str:
+    prs = open_pull_requests(repository, branch, default_branch)
+    if len(prs) > 1:
+        raise PushCliError(
+            f"multiple open pull requests exist for {branch} -> {default_branch}"
+        )
+    supplied_body = (
+        default_pr_body(branch)
+    )
+    if body_file is not None:
+        try:
+            supplied_body = body_file.read_text(encoding="utf-8")
+        except OSError as error:
+            raise PushCliError(f"cannot read pull-request body {body_file}: {error}") from error
+    if prs:
+        pr = prs[0]
+        if pr.get("headRefOid") != proof.head:
+            raise PushCliError("existing pull request head does not match validated HEAD")
+        if pr.get("baseRefOid") != proof.base:
+            raise PushCliError(
+                "existing pull request base does not match the validated default branch"
+            )
+        body = with_validation_marker(str(pr.get("body") or supplied_body), proof)
+        number = str(pr.get("number"))
+        run_step(
+            "Update pull-request validation marker",
+            ["gh", "pr", "edit", number, "--repo", repository, "--body", body],
+        )
+        url = str(pr.get("url") or number)
+        print(f"Pull request ready: {url}")
+        return url
+
+    pr_title = title or capture(["git", "log", "-1", "--format=%s"])
+    body = with_validation_marker(supplied_body, proof)
+    url = capture(
+        [
+            "gh",
+            "pr",
+            "create",
+            "--repo",
+            repository,
+            "--base",
+            default_branch,
+            "--head",
+            branch,
+            "--title",
+            pr_title,
+            "--body",
+            body,
+        ]
+    )
+    if not url:
+        raise PushCliError("gh pr create did not return a pull-request URL")
+    print(f"Pull request created: {url}")
+    return url
 
 
 def find_actions_runs(
@@ -605,8 +858,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "action",
-        choices=("check", "push", "watch", "ensure"),
-        help="prepare the validation runtime, check in-container, push after checking, or watch the current branch run",
+        choices=("check", "push", "submit-pr", "watch", "ensure"),
+        help="prepare the runtime, check locally, push quickly, submit a validated PR, or watch branch Actions",
     )
     parser.add_argument(
         "--in-validation",
@@ -620,6 +873,9 @@ def parse_args() -> argparse.Namespace:
         help=argparse.SUPPRESS,
     )
     parser.add_argument("--remote", default=DEFAULT_REMOTE)
+    parser.add_argument("--base-ref", help=argparse.SUPPRESS)
+    parser.add_argument("--title", help="pull-request title for submit-pr")
+    parser.add_argument("--body-file", type=Path, help="pull-request body for submit-pr")
     return parser.parse_args()
 
 
@@ -647,31 +903,64 @@ def main() -> int:
                 args.remote,
                 branch,
                 Runtime("in-validation", compose_required=False),
+                base_ref=args.base_ref,
             )
             print("\nIn-container push checks passed.")
             return 0
 
         repository = github_gate(args.remote)
+        if args.action == "ensure":
+            runtime = probe_runtime()
+            ensure_validation_image(runtime)
+            print("\nValidation runtime and image are ready. No checks were run.")
+            return 0
+
         branch = current_branch()
         if args.action == "watch":
             watch_actions(repository, branch)
             return 0
 
-        runtime = probe_runtime()
-        ensure_validation_image(runtime)
-        if args.action == "ensure":
-            print("\nValidation runtime and image are ready. No checks were run.")
+        default_branch = repository_default_branch(repository)
+        if args.action in {"push", "submit-pr"}:
+            require_working_branch(branch, default_branch)
+            require_no_git_operation()
+            require_clean_worktree()
+
+        if args.action == "push":
+            push_branch(args.remote, branch)
+            print(
+                f"\nPushed {branch} without local validation. "
+                "Use submit-pr for the final validated pull-request submission."
+            )
             return 0
 
-        require_clean_worktree()
-        launch_in_validation(runtime, args.remote)
+        proof = None
+        base_ref = args.base_ref
+        if args.action == "submit-pr":
+            proof = require_latest_base(args.remote, default_branch)
+            base_ref = f"{args.remote}/{default_branch}"
+        else:
+            require_clean_worktree()
+        runtime = probe_runtime()
+        ensure_validation_image(runtime)
+        launch_in_validation(runtime, args.remote, base_ref=base_ref)
         run_runtime_final_gate(runtime)
         ensure_clean_after_checks()
         print("\nLocal push checks passed. No branch was pushed.")
 
-        if args.action == "push":
+        if args.action == "submit-pr":
+            assert proof is not None
+            require_unchanged_proof(proof, args.remote, default_branch)
             push_branch(args.remote, branch)
-            watch_actions(repository, branch)
+            publish_validation_status(repository, proof)
+            create_or_update_pull_request(
+                repository,
+                branch,
+                default_branch,
+                proof,
+                title=args.title,
+                body_file=args.body_file,
+            )
         return 0
     except PushCliError as error:
         print(f"push-cli stopped: {error}", file=sys.stderr)
