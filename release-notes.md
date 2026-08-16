@@ -1,35 +1,41 @@
-Sub2API Plus v0.1.176+custom.001
+Sub2API Plus v0.1.176+custom.002
 
 ## Highlights
 
-- Import official Sub2API v0.1.176 while keeping Plus Codex client-profile
-  enforcement, OAuth session isolation, and the outbound identity triple.
-- Add official Codex fingerprint convergence. Unset OpenAI OAuth accounts
-  use `session` mode: one upstream device and session, with threads derived
-  from the client-original session-id.
-- Add Grok 4.6, JWT subscription-tier detection, per-group model pricing,
-  `/x_search`, and upstream response-model billing.
+- Gate IP access control behind a system-settings master switch. Security
+  Audit stays hidden and enforcement stays off unless
+  `global_ip_access_control_enabled` is explicitly on.
+- Make Codex version auto-sync observable and runnable on demand. Admin
+  settings show the effective outbound version and its source, persist last
+  check time and errors, and can sync from GitHub immediately.
+- Estimate admin usage TPS from last-token timing, and keep out-of-band
+  values visible as `< 1` or `> 1000`.
+- Add admin usage user-agent copy, a trusted-proxy setup guide, and a
+  backup-page guide for the fixed secret encryption key.
+- Run official push and release checks only inside the platform validation
+  container.
 
 ## Changed
 
-- Official OpenAI failover and accounting fixes: HTML 403 is not an account
-  penalty, empty `response.completed` fail over, deterministic 400 stays
-  non-retryable, and visible TTFT ignores terminal events.
-- Group pricing now includes official `model_pricing` and
-  `long_context_pricing_enabled` beside Plus five-hour, live, and
-  profit-control fields.
+- Default the purchase page to the subscription tab.
+- Add missing Tencent Captcha region i18n labels.
+- Show usage latency TPS with the shared `formatTpsDisplay` helper.
+
+## Fixed
+
+- Close GO-2026-6222 by bumping `golang.org/x/image`.
+- Keep validation-container caches, pnpm, frontend overlays, and worktree
+  gates aligned so push-cli and release-cli can finish on Apple Container
+  and Docker.
 
 ## Compatibility and migration
 
-- Database migration `220_group_model_pricing.sql` adds
-  `groups.long_context_pricing_enabled` (default true) and
-  `groups.model_pricing`.
-- Existing OpenAI OAuth accounts without `codex_fingerprint_mode` start
-  using official `session` convergence. Store `off` to keep the previous
-  outbound device/session visibility.
-- Client-profile matching, OAuth session access policy, and
-  account > global > default User-Agent precedence are unchanged.
-- Usage logs still persist the sanitized client-original session-id.
+- Database migration `221_add_usage_log_last_token_ms.sql` adds nullable
+  `usage_logs.last_token_ms`. Historical rows stay NULL and do not show TPS.
+- IP enforcement now requires both the new global master switch and the
+  existing IP-page toggle. Upgrades keep the master switch off, so previous
+  page-only enforcement does not resume until an administrator turns it on.
+- Codex outbound identity source precedence is unchanged.
 
 ## Known issues
 
