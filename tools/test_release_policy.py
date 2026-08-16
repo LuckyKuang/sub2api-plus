@@ -3,12 +3,10 @@
 
 from __future__ import annotations
 
-import sys
 import re
 import tempfile
 import unittest
 from pathlib import Path
-from unittest import mock
 
 import check_release
 import check_new_migrations
@@ -94,50 +92,6 @@ class ReleaseNotesTests(unittest.TestCase):
 
 
 class ReleaseBaselineTests(unittest.TestCase):
-    def test_goreleaser_version_parser_supports_current_and_legacy_output(self) -> None:
-        self.assertEqual(
-            release_preflight.parse_goreleaser_version(
-                "GitVersion:    2.17.1\nGoVersion:     go1.26.5"
-            ),
-            "2.17.1",
-        )
-        self.assertEqual(
-            release_preflight.parse_goreleaser_version(
-                "goreleaser version 2.17.1"
-            ),
-            "2.17.1",
-        )
-
-    def test_goreleaser_version_parser_rejects_go_toolchain_version(self) -> None:
-        self.assertIsNone(
-            release_preflight.parse_goreleaser_version("GoVersion: go1.26.5")
-        )
-
-    def test_docker_tag_version_uses_oci_safe_separator(self) -> None:
-        self.assertEqual(
-            release_preflight.docker_tag_version("v0.1.170+custom.002"),
-            "v0.1.170-custom.002",
-        )
-
-    def test_previous_release_uses_only_eligible_lower_versions(self) -> None:
-        tags = [
-            "v1.2.3+custom.004",
-            "v1.2.3+custom.005",
-            "v1.2.3+custom.006",
-            "v1.2.3+custom.010",
-            "v9.9.9+custom.999",
-        ]
-        statuses = {
-            "v1.2.3+custom.004": "historical",
-            "v1.2.3+custom.005": "published",
-            "v1.2.3+custom.006": "planned",
-            "v1.2.3+custom.010": "published",
-        }
-        self.assertEqual(
-            release_preflight.select_previous_release_tag(tags, statuses, TAG),
-            "v1.2.3+custom.005",
-        )
-
     def test_required_status_is_exact(self) -> None:
         errors: list[str] = []
         check_release.validate_required_status(TAG, "published", "planned", errors)
@@ -238,6 +192,19 @@ class WorkflowPolicyTests(unittest.TestCase):
                 r"DOCKER_TAG_VERSION:\s+v\d+\.\d+\.\d+-custom\.\d{3}",
                 workflow,
             )
+        )
+
+    def test_repository_policy_runs_both_cli_self_tests(self) -> None:
+        workflow = ROOT.joinpath(".github/workflows/backend-ci.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "python skills/push-cli/tests/test_push_cli.py",
+            workflow,
+        )
+        self.assertIn(
+            "python skills/release-cli/tests/test_release_cli.py",
+            workflow,
         )
 
 
@@ -509,26 +476,6 @@ class ReleaseDocumentTests(unittest.TestCase):
                 ],
             )
             self.assertEqual(errors[-1], "Run: python3 tools/update_release_docs.py")
-
-
-class ReleasePreflightHostGateTests(unittest.TestCase):
-    def test_host_execution_is_forbidden(self) -> None:
-        argv = [
-            "release_preflight.py",
-            "--tag",
-            TAG,
-            "--notes-file",
-            "notes.md",
-        ]
-        with (
-            mock.patch.object(sys, "argv", argv),
-            mock.patch.object(
-                release_preflight.validation_runtime,
-                "in_validation_container",
-                return_value=False,
-            ),
-        ):
-            self.assertEqual(1, release_preflight.main())
 
 
 if __name__ == "__main__":

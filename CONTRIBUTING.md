@@ -44,10 +44,24 @@ pnpm --dir frontend run test:run
 ```
 
 Run the focused tests for the changed package or component while iterating.
-Before a push or release, use `skills/push-cli` or `skills/release-cli`. Those
-gates run the full matrix inside Apple Containers on macOS, Docker inside WSL2
-Debian or Ubuntu on Windows, and Docker on Linux. Host-side execution of that
-matrix is forbidden.
+Intermediate branch pushes use the fast path and do not run local tests:
+
+```bash
+python3 skills/push-cli/scripts/push_cli.py push
+```
+
+Before creating or updating the final pull request, run the promotion gate:
+
+```bash
+python3 skills/push-cli/scripts/push_cli.py submit-pr
+```
+
+`submit-pr` requires the latest default-branch base and runs the full matrix
+inside Apple Containers on macOS, Docker inside WSL2 Debian or Ubuntu on
+Windows, and Docker on Linux. Host-side execution of that matrix is forbidden.
+It pushes the validated head, publishes the exact base/head proof, and creates
+or reuses the pull request. Release PR merging and publication use
+`skills/release-cli` after GitHub required checks pass.
 
 ## Generated Code
 
@@ -93,3 +107,7 @@ and include:
 
 Release publication is a separate maintainer action. A pull request must not
 create or move release tags.
+
+Never push `main` directly. The repository ruleset and local CLI must both
+require pull requests. A PR head or default-branch base change after
+`submit-pr` invalidates its local-validation proof and requires resubmission.

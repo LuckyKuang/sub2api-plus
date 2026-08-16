@@ -8,11 +8,11 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/handler/dto"
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/response"
-	"github.com/LuckyKuang/sub2api-plus/internal/pkg/timezone"
 	"github.com/LuckyKuang/sub2api-plus/internal/platform/liveattestation"
 	"github.com/LuckyKuang/sub2api-plus/internal/service"
 
@@ -738,12 +738,10 @@ func (h *GroupHandler) GetStats(c *gin.Context) {
 	_ = groupID // TODO: implement actual stats
 }
 
-// GetUsageSummary returns today's and cumulative cost for all groups.
-// GET /api/v1/admin/groups/usage-summary?timezone=Asia/Shanghai
+// GetUsageSummary returns today's, yesterday's, and cumulative cost for all groups.
+// GET /api/v1/admin/groups/usage-summary
 func (h *GroupHandler) GetUsageSummary(c *gin.Context) {
-	userTZ := c.Query("timezone")
-	now := timezone.NowInUserLocation(userTZ)
-	todayStart := timezone.StartOfDayInUserLocation(now, userTZ)
+	todayStart := service.GroupUsageTodayStart(time.Now())
 
 	results, err := h.dashboardService.GetGroupUsageSummary(c.Request.Context(), todayStart)
 	if err != nil {

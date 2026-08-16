@@ -108,7 +108,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		return s.forwardGrokResponses(ctx, c, account, body, originalModel, reqStream, startTime)
 	}
 
-	if account.Type == AccountTypeAPIKey && !openai_compat.ShouldUseResponsesAPI(account.Extra) {
+	if shouldForwardOpenAIResponsesViaRawChatCompletions(account) {
 		return s.forwardResponsesViaRawChatCompletions(ctx, c, account, body)
 	}
 	if account.Platform == PlatformOpenAI && account.Type == AccountTypeAPIKey {
@@ -414,7 +414,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		// compact 不改写指纹，但仍要清空 request-scoped IDs，避免同请求后续
 		// compact 尝试继承上一轮普通 Responses 的收敛结果。
 		var fpIDs *codexFingerprintIDs
-		if !isCompactRequest {
+		if !isOpenAICodexCompactionRequest(c) {
 			fingerprintAccount, fingerprintErr := s.resolveCodexFingerprintAccount(ctx, account)
 			if fingerprintErr != nil {
 				return nil, fmt.Errorf("resolve Codex fingerprint credential account: %w", fingerprintErr)
@@ -1064,6 +1064,12 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	}
 }
 
+func shouldForwardOpenAIResponsesViaRawChatCompletions(account *Account) bool {
+	return account != nil &&
+		account.Type == AccountTypeAPIKey &&
+		!openai_compat.ShouldUseResponsesAPI(account.Extra)
+}
+
 func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Context, account *Account, body []byte, token string, isStream bool, promptCacheKey string, isCodexCLI bool) (*http.Request, error) {
 	// Determine target URL based on account type
 	var targetURL string
@@ -1124,6 +1130,9 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 			}
 		}
 	}
+	// 客户端回带的 x-codex-turn-state 若已知由其他账号铸造（failover 换号），
+	// 剥离后再出站——异账号 blob 与本账号的（指纹收敛后）出站身份自相矛盾。
+	s.guardOpenAICodexTurnStateEcho(c, account, req.Header)
 	if account.Type == AccountTypeOAuth {
 		compatMessagesBridge := isOpenAICompatMessagesBridgeContext(c) || isOpenAICompatMessagesBridgeBody(body)
 		// 清除客户端透传的 session 头，后续用隔离后的值重新设置，防止跨用户会话碰撞。
@@ -1169,8 +1178,8 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 
 	// 指纹收敛：使用 Forward() 中预计算的收敛 ID 改写出站头，与请求体使用同一份 IDs。
 	// 必须发生在 Plus 出站身份收口之前，且不得改写 UA / originator / version。
-	// compact 跳过：不得用收敛 session-id 覆盖 Plus 已隔离的 compact 会话命名空间。
-	if account.Type == AccountTypeOAuth && !isOpenAIResponsesCompactPath(c) {
+	// 原生与 legacy compact 均跳过，避免覆盖压缩协议自己的会话命名空间。
+	if account.Type == AccountTypeOAuth && !isOpenAICodexCompactionRequest(c) {
 		fingerprintAccount, fingerprintErr := s.resolveCodexFingerprintAccount(ctx, account)
 		if fingerprintErr != nil {
 			return nil, fmt.Errorf("resolve Codex fingerprint credential account: %w", fingerprintErr)
@@ -1189,6 +1198,9 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 	account.ApplyHeaderOverrides(req.Header)
 	identity := s.applyOpenAIOutboundIdentity(ctx, account, req.Header, account.Type == AccountTypeOAuth)
 	SetOpsRoutingDiagnostics(c, &OpsRoutingDiagnostics{OutboundIdentitySource: identity.Source})
+	// x-codex-beta-features：按真实 Codex 的会话级行为补注（在账号级覆写之后，
+	// 并晚于 Plus 身份收口，保证两者都不被通用覆写破坏）。
+	applyOpenAICodexBetaFeatures(c, account, req.Header)
 	setOpenAICodexRoutingHintFromBody(req.Header, account, body)
 	logOpenAIRoutingDiagnosticsFromBody(ctx, account, "http", req.Header, body, "not_applicable")
 

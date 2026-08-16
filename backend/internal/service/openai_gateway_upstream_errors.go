@@ -461,6 +461,7 @@ func (s *OpenAIGatewayService) handleErrorResponse(
 			contentType = "application/json"
 		}
 		c.Data(resp.StatusCode, contentType, body)
+		s.noteStagedOpenAICodexTurnStateCommitted(c, account, resp.Header)
 		if cyberMsg == "" {
 			return nil, fmt.Errorf("openai cyber_policy: %d", resp.StatusCode)
 		}
@@ -477,6 +478,7 @@ func (s *OpenAIGatewayService) handleErrorResponse(
 				"message": clientMsg,
 			},
 		})
+		s.noteStagedOpenAICodexTurnStateCommitted(c, account, resp.Header)
 		return nil, fmt.Errorf("grok content policy rejection: %s", clientMsg)
 	}
 

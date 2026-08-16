@@ -73,11 +73,16 @@ Do not duplicate current tool or release versions here.
 
 ## Verification
 
-Run focused checks from `CONTRIBUTING.md` while iterating. Push and release
-gates must use `skills/push-cli` and `skills/release-cli`. Those commands run
-the official matrix inside Apple Containers on macOS, Docker inside WSL2
-Debian or Ubuntu on Windows, and Docker on Linux. Host-side execution of that
-matrix is forbidden.
+Run focused checks from `CONTRIBUTING.md` while iterating. Ordinary branch
+pushes use the fast `skills/push-cli push` path and must never target the
+repository default branch. The final PR submission must use
+`skills/push-cli submit-pr`; only that action runs the official local matrix
+inside Apple Containers on macOS, Docker inside WSL2 Debian or Ubuntu on
+Windows, and Docker on Linux. Host-side execution of that matrix is forbidden.
+Release promotion must use `skills/release-cli`, the exact submit-pr base/head
+proof, protected GitHub auto-merge without admin bypass, and successful PR and
+merged-main Actions. Release metadata validation must not repeat the complete
+local application matrix.
 Backend changes need relevant Go tests; frontend changes need lint, typecheck,
 and relevant Vitest coverage; locale, deployment, migration, and release
 changes need their dedicated checks.
@@ -88,6 +93,11 @@ changes need their dedicated checks.
 - Tag, embedded version, Docker build args, and `UPSTREAM.md` must agree.
 - Release notes must cover compatibility, known issues, and upstream baseline.
 - Never reuse or retag a published version.
+- Never push or commit release changes directly to `main`; preparation and
+  post-publication status changes must arrive through separate PRs.
+- Tag only the actual PR merge commit after its exact `main` push Actions pass.
+- Keep tag publication, Release monitoring, verification, and finalization as
+  separate resumable actions.
 - Do not create, move, delete, or push tags, Releases, or images without an
   explicit publication request.
 - Preserve intentional Plus changes during upstream merges and update

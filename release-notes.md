@@ -1,52 +1,62 @@
-Sub2API Plus v0.1.176+custom.002
+Sub2API Plus v0.1.177+custom.001
 
 ## Highlights
 
-- Gate IP access control behind a system-settings master switch. Security
-  Audit stays hidden and enforcement stays off unless
-  `global_ip_access_control_enabled` is explicitly on.
-- Make Codex version auto-sync observable and runnable on demand. Admin
-  settings show the effective outbound version and its source, persist last
-  check time and errors, and can sync from GitHub immediately.
-- Estimate admin usage TPS from last-token timing, and keep out-of-band
-  values visible as `< 1` or `> 1000`.
-- Add admin usage user-agent copy, a trusted-proxy setup guide, and a
-  backup-page guide for the fixed secret encryption key.
-- Run official push and release checks only inside the platform validation
-  container.
+- Merge official Sub2API v0.1.177 as the new Plus baseline.
+- Add server-timezone daily group-usage rollups and yesterday cost in the
+  administration UI.
+- Support native Codex remote compaction v2 on `/responses` while retaining
+  the separate legacy `/responses/compact` path.
+- Relay `x-codex-turn-state` with credential-owner provenance and shared-cache
+  protection against known cross-account echoes.
 
 ## Changed
 
-- Default the purchase page to the subscription tab.
-- Add missing Tencent Captcha region i18n labels.
-- Show usage latency TPS with the shared `formatTpsDisplay` helper.
+- Use `TZ`, then `TIMEZONE`, then the configured/default application timezone
+  for persistent group-usage day boundaries. Browser timezone is no longer
+  sent by the group usage page.
+- Advertise the session-level `remote_compaction_v2` Codex beta feature on
+  OAuth HTTP and WebSocket traffic, and require a compaction output item from
+  the native account probe.
+- Restore the account-page auto-refresh preference during module
+  initialization and keep the frontend nanoid lock entry aligned at 3.3.18.
 
 ## Fixed
 
-- Close GO-2026-6222 by bumping `golang.org/x/image`.
-- Keep validation-container caches, pnpm, frontend overlays, and worktree
-  gates aligned so push-cli and release-cli can finish on Apple Container
-  and Docker.
+- Apply Grok long-context pricing from the group switch without an OpenAI
+  account-level veto.
+- Keep unknown Grok image, video, and audio model families out of the text
+  fallback price card.
+- Invalidate and rebuild group rollups after recompute, retention cleanup,
+  partition deletion, late historical writes, or configured timezone change.
 
 ## Compatibility and migration
 
-- Database migration `221_add_usage_log_last_token_ms.sql` adds nullable
-  `usage_logs.last_token_ms`. Historical rows stay NULL and do not show TPS.
-- IP enforcement now requires both the new global master switch and the
-  existing IP-page toggle. Upgrades keep the master switch off, so previous
-  page-only enforcement does not resume until an administrator turns it on.
-- Codex outbound identity source precedence is unchanged.
+- Migration `222_group_usage_daily_rollups.sql` creates derived daily group
+  usage buckets and synchronization state.
+- Migration `223_group_usage_rollup_timezone.sql` records the bucket timezone
+  and rebuilds derived data when that timezone changes.
+- Codex OAuth fingerprint convergence keeps the Plus default: missing, empty,
+  or invalid `codex_fingerprint_mode` values use `session`; only explicit
+  `off` disables convergence. Create, edit, and bulk forms use the same rule.
+- Codex outbound identity precedence remains credential-owner account user
+  agent, then global user agent, then the compiled default.
 
 ## Known issues
 
-- Client-profile matching validates request characteristics and cannot
-  attest the originating client binary.
-- Fingerprint convergence changes only outbound Codex installation,
-  session, and thread carriers. It does not prove a single physical device.
-- Official post-176 Grok long-context and media-fallback fixes are not
-  included; the merge input is tag v0.1.176 only.
+- Turn-state provenance uses Redis when the configured GatewayCache supports
+  it and falls back to process-local best effort if the shared cache is
+  unavailable.
+- Daily rollups are derived data; the first startup after migration or a
+  timezone change may perform additional synchronization work.
+- Client-profile and fingerprint controls cannot attest a physical client
+  binary or device.
+- HTTP fingerprint convergence keeps headers and map/raw `client_metadata`
+  coherent. Pooled WebSocket handshake fingerprint carriers retain their
+  pre-existing behavior and are not converged with each request payload by
+  this release.
 
 ## Upstream baseline
 
-Official release: v0.1.176
-Official commit: e803e3851c0a7e222cfadeafad7b8636ab959d11
+Official release: v0.1.177
+Official commit: 073e92d17178a1ccdb0a27017f572f10c9c7ab62

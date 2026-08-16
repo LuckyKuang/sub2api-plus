@@ -133,6 +133,7 @@ func (s *OpenAIGatewayService) ForwardAlphaSearch(ctx context.Context, c *gin.Co
 		contentType = "application/json"
 	}
 	c.Data(resp.StatusCode, contentType, respBody)
+	s.noteStagedOpenAICodexTurnStateCommitted(c, account, resp.Header)
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		// 非 2xx（错误/重定向）已原样透传给客户端：不是一次成功的搜索，不计费。
 		return nil, nil
@@ -206,6 +207,7 @@ func (s *OpenAIGatewayService) forwardAlphaSearchViaResponsesWebSearch(
 			contentType = "application/json"
 		}
 		c.Data(resp.StatusCode, contentType, respBody)
+		s.noteStagedOpenAICodexTurnStateCommitted(c, account, resp.Header)
 		return nil, nil
 	}
 

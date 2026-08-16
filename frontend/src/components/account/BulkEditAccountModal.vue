@@ -875,6 +875,7 @@
           <label class="input-label mb-0">{{ t('admin.accounts.openai.codexFingerprintMode') }}</label>
           <input
             v-model="enableCodexFingerprintMode"
+            data-testid="bulk-codex-fingerprint-mode-enabled"
             type="checkbox"
             class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
           />
@@ -1772,10 +1773,11 @@ const buildUpdatePayload = (): Record<string, unknown> | null => {
 
   if (enableCodexFingerprintMode.value) {
     const extra = ensureExtra()
+    // Bulk JSONB updates merge keys, so null is the repository's delete sentinel.
     if (codexFingerprintMode.value !== 'session') {
       extra.codex_fingerprint_mode = codexFingerprintMode.value
     } else {
-      delete extra.codex_fingerprint_mode
+      extra.codex_fingerprint_mode = null
     }
   }
 
