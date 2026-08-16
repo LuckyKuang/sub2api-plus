@@ -40,3 +40,21 @@ func normalizeStableCodexClientVersion(version string) string {
 	}
 	return version
 }
+
+const (
+	openAICodexVersionSourceOverride = "override"
+	openAICodexVersionSourceSynced   = "synced"
+	openAICodexVersionSourceCompiled = "compiled"
+)
+
+// resolveOpenAICodexClientVersion 算出站实际声明的版本及来源，必须与转发收口一致：
+// 合法且不低于上游门槛的手填覆写 → 不低于编译基线的稳定同步值 → 内置常量。
+func resolveOpenAICodexClientVersion(override, synced string) (string, string) {
+	if version := NormalizeCodexClientVersion(override); version != "" && CompareVersions(version, codexUpstreamMinVersion) >= 0 {
+		return version, openAICodexVersionSourceOverride
+	}
+	if version := normalizeStableCodexClientVersion(synced); version != "" && CompareVersions(version, codexCLIVersion) >= 0 {
+		return version, openAICodexVersionSourceSynced
+	}
+	return codexCLIVersion, openAICodexVersionSourceCompiled
+}

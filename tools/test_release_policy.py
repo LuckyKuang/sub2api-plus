@@ -3,10 +3,12 @@
 
 from __future__ import annotations
 
+import sys
 import re
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import check_release
 import check_new_migrations
@@ -507,6 +509,26 @@ class ReleaseDocumentTests(unittest.TestCase):
                 ],
             )
             self.assertEqual(errors[-1], "Run: python3 tools/update_release_docs.py")
+
+
+class ReleasePreflightHostGateTests(unittest.TestCase):
+    def test_host_execution_is_forbidden(self) -> None:
+        argv = [
+            "release_preflight.py",
+            "--tag",
+            TAG,
+            "--notes-file",
+            "notes.md",
+        ]
+        with (
+            mock.patch.object(sys, "argv", argv),
+            mock.patch.object(
+                release_preflight.validation_runtime,
+                "in_validation_container",
+                return_value=False,
+            ),
+        ):
+            self.assertEqual(1, release_preflight.main())
 
 
 if __name__ == "__main__":

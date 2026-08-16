@@ -31,6 +31,7 @@ func observeAnthropicSSEOutput(data []byte) apicompat.StreamOutputObservation {
 
 type streamOutputTiming struct {
 	firstTokenMs    *int
+	lastTokenMs     *int
 	firstOutputMs   *int
 	firstOutputKind string
 }
@@ -52,10 +53,21 @@ func (t *streamOutputTiming) ObserveAt(startedAt, observedAt time.Time, observat
 		t.firstOutputMs = &value
 		t.firstOutputKind = string(observation.Kind)
 	}
-	if observation.TokenLikeDelta && t.firstTokenMs == nil {
+	if observation.TokenLikeDelta {
 		value := elapsed
-		t.firstTokenMs = &value
+		if t.firstTokenMs == nil {
+			t.firstTokenMs = &value
+		}
+		t.lastTokenMs = laterTokenMs(t.lastTokenMs, elapsed)
 	}
+}
+
+func laterTokenMs(current *int, candidate int) *int {
+	if current == nil || candidate >= *current {
+		value := candidate
+		return &value
+	}
+	return current
 }
 
 func (t *streamOutputTiming) ApplyOpenAIResult(result *OpenAIForwardResult) {
@@ -63,6 +75,7 @@ func (t *streamOutputTiming) ApplyOpenAIResult(result *OpenAIForwardResult) {
 		return
 	}
 	result.FirstTokenMs = t.firstTokenMs
+	result.LastTokenMs = t.lastTokenMs
 	result.FirstOutputMs = t.firstOutputMs
 	result.FirstOutputKind = t.firstOutputKind
 }
@@ -72,6 +85,7 @@ func (t *streamOutputTiming) ApplyForwardResult(result *ForwardResult) {
 		return
 	}
 	result.FirstTokenMs = t.firstTokenMs
+	result.LastTokenMs = t.lastTokenMs
 	result.FirstOutputMs = t.firstOutputMs
 	result.FirstOutputKind = t.firstOutputKind
 }

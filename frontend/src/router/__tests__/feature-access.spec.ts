@@ -25,6 +25,7 @@ const appStore = vi.hoisted(() => ({
   cachedPublicSettings: null as null | {
     payment_enabled?: boolean
     risk_control_enabled?: boolean
+    global_ip_access_control_enabled?: boolean
     custom_menu_items?: []
   },
   fetchPublicSettings: vi.fn(),
@@ -154,8 +155,9 @@ describe('feature route guard', () => {
   it.each([
     ['payment', { requiresPayment: true }, '/purchase'],
     ['risk control', { requiresRiskControl: true }, '/admin/risk-control'],
+    ['ip access control', { requiresIpAccessControl: true }, '/admin/ip-access-control'],
   ])('does not treat a failed %s settings load as explicitly disabled', async (_name, meta, path) => {
-    authStore.isAdmin = meta.requiresRiskControl === true
+    authStore.isAdmin = meta.requiresRiskControl === true || meta.requiresIpAccessControl === true
     appStore.fetchPublicSettings.mockResolvedValue(null)
 
     const { navigation, next } = runGuard(meta, path)
@@ -174,8 +176,14 @@ describe('feature route guard', () => {
       { risk_control_enabled: false },
       '/admin/settings',
     ],
+    [
+      'ip access control',
+      { requiresIpAccessControl: true },
+      { global_ip_access_control_enabled: false },
+      '/admin/settings',
+    ],
   ])('redirects when loaded settings explicitly disable %s', async (_name, meta, settings, target) => {
-    authStore.isAdmin = meta.requiresRiskControl === true
+    authStore.isAdmin = meta.requiresRiskControl === true || meta.requiresIpAccessControl === true
     appStore.cachedPublicSettings = settings
     appStore.publicSettingsLoaded = true
 

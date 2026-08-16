@@ -416,16 +416,10 @@ func (s *SettingService) GetOpenAICodexClientVersion(ctx context.Context) string
 			})
 			return fallback, nil
 		}
-		version := NormalizeCodexClientVersion(values[SettingKeyOpenAICodexClientVersion])
-		if version == "" {
-			synced := normalizeStableCodexClientVersion(values[SettingKeyOpenAICodexClientVersionSynced])
-			if synced != "" && CompareVersions(synced, fallback) >= 0 {
-				version = synced
-			}
-		}
-		if version == "" {
-			version = fallback
-		}
+		version, _ := resolveOpenAICodexClientVersion(
+			values[SettingKeyOpenAICodexClientVersion],
+			values[SettingKeyOpenAICodexClientVersionSynced],
+		)
 		s.openAICodexVersionCache.Store(&cachedOpenAICodexClientVersion{
 			version:   version,
 			expiresAt: time.Now().Add(openAICodexClientVersionCacheTTL).UnixNano(),

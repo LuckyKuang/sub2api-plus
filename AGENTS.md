@@ -73,7 +73,11 @@ Do not duplicate current tool or release versions here.
 
 ## Verification
 
-Run checks appropriate to the changed paths as listed in `CONTRIBUTING.md`.
+Run focused checks from `CONTRIBUTING.md` while iterating. Push and release
+gates must use `skills/push-cli` and `skills/release-cli`. Those commands run
+the official matrix inside Apple Containers on macOS, Docker inside WSL2
+Debian or Ubuntu on Windows, and Docker on Linux. Host-side execution of that
+matrix is forbidden.
 Backend changes need relevant Go tests; frontend changes need lint, typecheck,
 and relevant Vitest coverage; locale, deployment, migration, and release
 changes need their dedicated checks.

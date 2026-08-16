@@ -286,6 +286,29 @@ describe('PaymentView checkout tabs', () => {
 
     expect(tabLabels).toEqual(['payment.tabSubscribe', 'payment.tabTopUp'])
   })
+
+  it('defaults to the subscription tab when no tab query is provided', async () => {
+    routeState.path = '/purchase'
+    routeState.query = {}
+    getCheckoutInfo.mockReset().mockResolvedValue(checkoutInfoFixture({
+      plans: checkoutInfoWithPlansFixture().data.plans,
+    }))
+    const wrapper = shallowMount(PaymentView, {
+      global: {
+        stubs: {
+          AppLayout: { template: '<div><slot /></div>' },
+          Teleport: true,
+          Transition: false,
+        },
+      },
+    })
+    await flushPromises()
+    await flushPromises()
+
+    const subscribeTab = wrapper.findAll('button').find(button => button.text() === 'payment.tabSubscribe')
+    expect(subscribeTab?.classes()).toContain('bg-white')
+    expect(wrapper.findAllComponents(SubscriptionPlanCard).length).toBeGreaterThan(0)
+  })
 })
 
 describe('PaymentView subscription plan grid', () => {

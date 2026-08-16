@@ -6,11 +6,15 @@ Run these from the repository root:
 
     python3 skills/push-cli/scripts/push_cli.py check
     python3 skills/push-cli/scripts/push_cli.py push
+    python3 skills/push-cli/scripts/push_cli.py ensure
     python3 skills/push-cli/scripts/push_cli.py watch
 
 check is a read-only push-readiness gate apart from ignored dependency and build
-caches. push repeats the gate in the same process before pushing. watch is for
-monitoring a run after a local terminal disconnect.
+caches. It probes the platform runtime on the host, then re-executes the matrix
+inside the validation container. push repeats that gate in the same process
+before pushing. watch is for monitoring a run after a local terminal disconnect.
+ensure prepares the selected container runtime and validation image without
+requiring a clean worktree or running the check matrix.
 
 ## GitHub CLI Gate
 
@@ -23,7 +27,7 @@ The checker requires all of the following:
 
 The repository is derived from the origin remote and is not accepted if it is
 not LuckyKuang/sub2api-plus. A failed auth or permission check stops before
-toolchain detection, tests, Docker access, or Git writes.
+runtime probing, image build, tests, or Git writes.
 
 Before a push, the checker runs:
 
@@ -33,10 +37,26 @@ Before a push, the checker runs:
 The exact branch name comes from the checked-out branch. It never pushes another
 local ref selected by an untrusted argument.
 
-## Local Check Matrix
+## Validation Image
+
+The matrix runs in the image built from `deploy/Dockerfile.validation`. The
+image pins Go, Node, pnpm, golangci-lint, goreleaser, Python, and Bash to the
+repository declarations. Host toolchain installers are not used.
+
+Host-side `ensure` and the first half of `check`/`push` only:
+
+1. probe the selected runtime;
+2. inspect or build `sub2api-validation:<dockerfile-digest>`;
+3. launch `container run` / `wsl … docker run` / `docker run`.
+
+A missing runtime or failed image build is a hard failure. Host validation
+fallback is forbidden.
+
+## In-container Check Matrix
 
 The matrix mirrors CONTRIBUTING.md, backend/Makefile, and
-.github/workflows/backend-ci.yml:
+.github/workflows/backend-ci.yml, and always runs with
+`SUB2API_IN_VALIDATION=1`:
 
     cd backend && go mod tidy -diff
     python3 skills/push-cli/tests/test_push_cli.py
@@ -70,23 +90,25 @@ Repository policy and deployment checks:
     sh deploy/tests/docker-compose-security-test.sh
     sh deploy/tests/docker-runtime-resources-test.sh
     bash deploy/test-caddyfile-cache.sh
+    bash deploy/tests/apple-container-test.sh
 
 When origin/<current-branch> exists, run
 python3 tools/check_new_migrations.py --base origin/<current-branch>.
 
+The Apple Container lifecycle test is a fixture script. It runs on every
+platform inside the validation image and is not a substitute for launching
+that image through Apple Containers, WSL2 Docker, or Linux Docker.
+
 ## Runtime Final Gate
 
-When Apple Containers is selected on macOS, the repository lifecycle test is
-the final runtime gate:
+When Apple Containers is selected on macOS, `ensure` and the environment probe
+only require `container --version` and `container ls`. The check matrix then
+runs with `container run`. The Docker Compose gate is reported as not
+applicable, not passed. GitHub Actions remains authoritative for Docker image
+and Compose behavior.
 
-    bash deploy/tests/apple-container-test.sh
-
-A successful lifecycle test is sufficient for local runtime validation. The
-Docker Compose gate is reported as not applicable, not passed. GitHub Actions
-remains authoritative for Docker image and Compose behavior.
-
-For Colima, Docker Desktop, WSL2 Docker, and native Linux Docker, the checker
-first proves that the selected endpoint answers both:
+For WSL2 Debian/Ubuntu Docker and native Linux Docker, the checker first proves
+that the selected endpoint answers both:
 
     docker info
     docker compose version
@@ -104,28 +126,31 @@ file fails the push gate.
 
 On macOS, the order is:
 
-1. check whether the Apple Containers `container` CLI is installed before any
-   Colima or Docker probe;
-2. when installed, require `container --version` and `container ls` to succeed;
-3. run the Apple Container lifecycle test and return success when it passes;
-4. if installed Apple Containers is unusable or the lifecycle test fails, stop;
-5. only when Apple Containers is absent, probe running Colima;
-6. then probe another directly reachable Docker endpoint such as Docker Desktop.
+1. require the Apple Containers `container` CLI;
+2. require `container --version` and `container ls` to succeed;
+3. if Apple Containers is absent or unusable, stop;
+4. build or inspect the validation image with `container build`/`image inspect`;
+5. during check/push only, run the matrix with `container run`.
 
-The presence of the `container` CLI makes Apple Containers mandatory on macOS.
-An installed-but-unready runtime is a hard failure, not a fallback condition.
-This prevents Colima or Docker Desktop from hiding an Apple deployment or host
-runtime problem. Never start a user-managed runtime implicitly.
+Apple Containers is the only supported macOS runtime. Absence, an unusable CLI,
+a stopped service, or a failed image launch is an environment or validation
+failure. Neither case is a fallback condition. Never probe Colima, Docker
+Desktop, or any other Docker endpoint on macOS. Never start a user-managed
+runtime implicitly.
 
 On Windows, check `wsl.exe -l -v` before any host Docker probe. Require a
-running WSL2 Linux distribution, then execute `docker info` and
-`docker compose version` inside it. Use `wslpath` to translate the repository
-path before Compose parsing. Missing WSL2, no running WSL2 Linux distribution,
-or unusable in-distribution Docker/Compose is a hard failure. Never probe or use
-a Windows-host Docker command as a fallback that bypasses the WSL2 requirement.
+running WSL2 Debian or Ubuntu family distribution, then execute `docker info`
+and `docker compose version` inside it. Ignore any other running WSL
+distribution. Use `wslpath` to translate the repository path before image
+build, Compose parsing, and `docker run`. Missing WSL2, no running
+Debian/Ubuntu distribution, or unusable in-distribution Docker/Compose is a
+hard failure. Never probe or use a Windows-host Docker command as a fallback
+that bypasses the WSL2 Debian/Ubuntu requirement. Never run the matrix in the
+WSL shell outside Docker.
 
-On Linux, use the native Docker CLI and daemon. Do not silently use Podman or a
-different container implementation.
+On Linux, use the native Docker CLI and daemon for probe, image build, Compose
+parse, and `docker run`. Do not silently use Podman, a different container
+implementation, or host-side Go/pnpm.
 
 ## Remote Monitoring
 
@@ -135,7 +160,8 @@ HEAD SHA. Use GitHub CLI only:
     gh run list --branch <branch> --event push
     gh run watch <run-id> --exit-status
 
-If no matching run appears within the polling window, report that the push
-succeeded but CI discovery is incomplete. Watch every matching run; if any run
-fails, report its URL and failed conclusion without retrying. A successful local
-gate is not a substitute for successful remote runs.
+If no matching run appears within the polling window, stop. A completed push
+without a discovered Actions run is a hard failure, not a partial success.
+Watch every matching run; if any run fails, report its URL and failed
+conclusion without retrying. A successful local gate is not a substitute for
+successful remote runs.

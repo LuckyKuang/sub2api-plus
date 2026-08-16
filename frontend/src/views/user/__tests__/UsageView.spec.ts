@@ -116,6 +116,7 @@ const usageLog = {
   image_count: 0,
   image_size: null,
   first_token_ms: 12,
+  last_token_ms: 300,
   first_output_ms: 12,
   first_output_kind: 'text',
   duration_ms: 345,

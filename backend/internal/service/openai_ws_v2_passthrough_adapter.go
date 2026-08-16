@@ -1125,6 +1125,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 					ResponseHeaders:               cloneHeader(handshakeHeaders),
 					Duration:                      turn.Duration,
 					FirstTokenMs:                  turn.FirstTokenMs,
+					LastTokenMs:                   turn.LastTokenMs,
 					FirstOutputMs:                 turn.FirstOutputMs,
 					FirstOutputKind:               turn.FirstOutputKind,
 				}
@@ -1258,6 +1259,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 		ResponseHeaders:               cloneHeader(handshakeHeaders),
 		Duration:                      relayResult.Duration,
 		FirstTokenMs:                  relayResult.FirstTokenMs,
+		LastTokenMs:                   relayResult.LastTokenMs,
 		FirstOutputMs:                 relayResult.FirstOutputMs,
 		FirstOutputKind:               relayResult.FirstOutputKind,
 	}

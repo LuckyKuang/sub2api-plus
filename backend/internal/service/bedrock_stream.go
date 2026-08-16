@@ -53,6 +53,7 @@ func (s *GatewayService) handleBedrockStreamingResponse(
 		return &streamingResult{
 			usage:            usage,
 			firstTokenMs:     timing.firstTokenMs,
+			lastTokenMs:      timing.lastTokenMs,
 			firstOutputMs:    timing.firstOutputMs,
 			firstOutputKind:  timing.firstOutputKind,
 			clientDisconnect: disconnected,

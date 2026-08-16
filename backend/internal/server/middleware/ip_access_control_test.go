@@ -82,7 +82,8 @@ func newBlockedIPRouter(t *testing.T) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	access := service.NewIPAccessControlService(
 		&ipAccessMiddlewareSettingsStub{values: map[string]string{
-			service.SettingKeyIPAccessControlEnabled: "true",
+			service.SettingKeyGlobalIPAccessControlEnabled: "true",
+			service.SettingKeyIPAccessControlEnabled:       "true",
 		}},
 		&ipAccessMiddlewareRuleStub{rules: []*service.IPAccessRule{
 			{
@@ -238,7 +239,8 @@ func TestIPAccessControlMiddlewareEmergencyAllowlistAllowsDirectPeerRecovery(t *
 	gin.SetMode(gin.TestMode)
 	access := service.NewIPAccessControlService(
 		&ipAccessMiddlewareSettingsStub{values: map[string]string{
-			service.SettingKeyIPAccessControlEnabled: "true",
+			service.SettingKeyGlobalIPAccessControlEnabled: "true",
+			service.SettingKeyIPAccessControlEnabled:       "true",
 		}},
 		&ipAccessMiddlewareRuleStub{rules: []*service.IPAccessRule{{
 			IPOrCIDR: "203.0.113.8", RuleKind: service.IPAccessRuleKindManualBlock, Status: service.IPAccessRuleStatusActive,
@@ -265,7 +267,7 @@ func TestIPAccessControlMiddlewareEmergencyAllowlistAllowsDirectPeerRecovery(t *
 func TestIPAccessControlMiddlewareFailsClosedWithoutSnapshot(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	settings := &ipAccessMiddlewareSettingsStub{
-		values: map[string]string{service.SettingKeyIPAccessControlEnabled: "true"},
+		values: map[string]string{service.SettingKeyGlobalIPAccessControlEnabled: "true", service.SettingKeyIPAccessControlEnabled: "true"},
 		err:    errors.New("database unavailable"),
 	}
 	access := service.NewIPAccessControlService(settings, &ipAccessMiddlewareRuleStub{})
@@ -328,7 +330,7 @@ func TestIPAccessControlMiddlewareFailsClosedWithoutSnapshot(t *testing.T) {
 func TestIPAccessControlReadinessRecoversWhenDatabaseReturns(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	settings := &ipAccessMiddlewareSettingsStub{
-		values: map[string]string{service.SettingKeyIPAccessControlEnabled: "true"},
+		values: map[string]string{service.SettingKeyGlobalIPAccessControlEnabled: "true", service.SettingKeyIPAccessControlEnabled: "true"},
 		err:    errors.New("database unavailable"),
 	}
 	rules := &ipAccessMiddlewareRuleStub{}

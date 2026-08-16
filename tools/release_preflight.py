@@ -18,6 +18,10 @@ import release_docs
 
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT / "tools") not in sys.path:
+    sys.path.insert(0, str(ROOT / "tools"))
+import validation_runtime
+
 TAG_RE = release_docs.TAG_RE
 MINIMUM_PYTHON = (3, 10)
 MINIMUM_BASH_MAJOR = 4
@@ -134,6 +138,9 @@ def ensure_tag_absent(tag: str, remote: str) -> None:
         raise RuntimeError(f"local tag already exists: {tag}")
     if local.returncode not in {0, 1}:
         raise RuntimeError(f"unable to inspect local tag {tag}")
+
+    if os.environ.get(validation_runtime.HOST_CHECKED_REMOTE_TAG_ENV) == "1":
+        return
 
     remote_result = run(
         (
@@ -385,6 +392,12 @@ def main() -> int:
     )
     args = parser.parse_args()
 
+    try:
+        validation_runtime.require_in_validation(tool="tools/release_preflight.py")
+    except validation_runtime.ValidationRuntimeError as error:
+        print(f"Preflight stopped: {error}", file=sys.stderr)
+        return 1
+
     tag_match = TAG_RE.fullmatch(args.tag)
     if not tag_match or tag_match.group(4) == "000":
         parser.error("--tag must match vX.Y.Z+custom.NNN with NNN from 001 to 999")
@@ -490,14 +503,11 @@ def main() -> int:
             ("go", "mod", "tidy", "-diff"),
             ROOT / "backend",
         ),
+        Step(
+            "Apple container lifecycle test",
+            ("bash", "deploy/tests/apple-container-test.sh"),
+        ),
     ]
-    if sys.platform == "darwin":
-        steps.append(
-            Step(
-                "Apple container lifecycle test",
-                ("bash", "deploy/tests/apple-container-test.sh"),
-            )
-        )
     steps.extend(
         [
             Step(
@@ -580,20 +590,8 @@ def main() -> int:
         print("\nRelease preflight passed. No tag was created or pushed.")
         print("To repeat the gate and atomically create the local annotated tag, run:")
         print(
-            "  "
-            + display_command(
-                (
-                    sys.executable,
-                    "tools/release_preflight.py",
-                    "--tag",
-                    args.tag,
-                    "--notes-file",
-                    str(notes_file),
-                    "--remote",
-                    args.remote,
-                    "--create-tag",
-                )
-            )
+            "  python3 skills/release-cli/scripts/release_cli.py tag "
+            f"--tag {args.tag} --notes-file {notes_file} --remote {args.remote}"
         )
         return 0
 

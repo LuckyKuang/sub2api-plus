@@ -14,7 +14,9 @@ Run from the repository root:
 
 All actions first execute the GitHub CLI gate. An invalid, missing, expired, or
 underprivileged GitHub CLI login fails before local preflight, tag mutation,
-Docker access, or Git transport.
+runtime access, or Git transport. validate and tag then probe the same
+platform runtime as push-cli and launch the canonical preflight inside the
+validation container. Host-side preflight is forbidden.
 
 ## Action Contract
 
@@ -68,14 +70,21 @@ bypass this requirement. Run monitor again after the approval.
 
 ## Release Validation
 
-validate and tag delegate to the canonical repository command:
+validate and tag launch the canonical repository command inside the platform
+validation container:
 
     python3 tools/release_preflight.py --tag <tag> --notes-file <file>
 
-tag adds --create-tag. That preflight owns validation of clean worktree,
-versions, release notes, UPSTREAM.md planned mapping, README and deployment
-contracts, migrations, toolchains, backend tests and lint, frontend checks,
-and GoReleaser configuration. Never emulate it with a partial command list.
+tag adds --create-tag. The host process only probes Apple Containers, WSL2
+Debian/Ubuntu Docker, or Linux Docker, builds `deploy/Dockerfile.validation`
+when needed, and runs that command with `container run` or `docker run`. Direct
+host execution of `tools/release_preflight.py` exits immediately.
+
+That preflight owns validation of clean worktree, versions, release notes,
+UPSTREAM.md planned mapping, README and deployment contracts, migrations,
+toolchains, backend tests and lint, frontend checks, and GoReleaser
+configuration. Never emulate it with a partial command list or a host
+toolchain.
 
 Before using tag, prepare a release commit and verify its branch CI through
 push-cli. The notes file may be an untracked file as allowed by the canonical

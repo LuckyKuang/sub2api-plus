@@ -46,3 +46,18 @@ func TestUpdateSettings_OpenAICodexUserAgentValidation(t *testing.T) {
 	})
 	require.Equal(t, http.StatusOK, legacyWithMode.Code)
 }
+
+func TestUpdateSettings_OpenAICodexClientVersionRejectsBelowUpstreamMin(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := &settingHandlerRepoStub{values: map[string]string{}}
+	handler := NewSettingHandler(service.NewSettingService(repo, &config.Config{Default: config.DefaultConfig{UserConcurrency: 5}}), nil, nil, nil, nil, nil, nil)
+	body, err := json.Marshal(map[string]any{"openai_codex_client_version": "0.143.0"})
+	require.NoError(t, err)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPut, "/api/v1/admin/settings", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+	handler.UpdateSettings(c)
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "at least")
+}

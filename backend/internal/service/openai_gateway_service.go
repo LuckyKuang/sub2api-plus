@@ -267,6 +267,7 @@ type OpenAIForwardResult struct {
 	ResponseHeaders       http.Header
 	Duration              time.Duration
 	FirstTokenMs          *int
+	LastTokenMs           *int
 	FirstOutputMs         *int
 	FirstOutputKind       string
 	ClientDisconnect      bool

@@ -17,6 +17,11 @@ from typing import Sequence
 
 
 ROOT = Path(__file__).resolve().parents[3]
+TOOLS = ROOT / "tools"
+if str(TOOLS) not in sys.path:
+    sys.path.insert(0, str(TOOLS))
+import validation_runtime
+
 DEFAULT_REMOTE = "origin"
 EXPECTED_REPOSITORY = "LuckyKuang/sub2api-plus"
 TAG_RE = re.compile(r"^v\d+\.\d+\.\d+\+custom\.(?:00[1-9]|0[1-9]\d|[1-9]\d{2})$")
@@ -266,22 +271,81 @@ def release_details(repository: str, tag: str, *, required: bool) -> dict[str, o
     return data
 
 
-def run_preflight(tag: str, notes_file: Path, *, create_tag: bool, remote: str) -> None:
+def optional_capture(
+    command: Sequence[str], *, cwd: Path | None = None
+) -> tuple[bool, str]:
+    try:
+        result = run_command(command, cwd=cwd, capture=True)
+    except ReleaseCliError as error:
+        return False, str(error)
+    return result.returncode == 0, (result.stdout or "").strip()
+
+
+def probe_runtime() -> validation_runtime.Runtime:
+    try:
+        return validation_runtime.probe_runtime(
+            root=ROOT,
+            capture=capture,
+            optional_capture=optional_capture,
+            probe_docker_fn=lambda prefix=(): validation_runtime.probe_docker(
+                prefix, optional_capture=optional_capture
+            ),
+        )
+    except validation_runtime.ValidationRuntimeError as error:
+        raise ReleaseCliError(str(error)) from error
+
+
+def ensure_validation_image(runtime: validation_runtime.Runtime) -> str:
+    try:
+        return validation_runtime.ensure_validation_image(
+            runtime,
+            root=ROOT,
+            optional_capture=optional_capture,
+            run_step=lambda name, command: run_step(name, command),
+        )
+    except validation_runtime.ValidationRuntimeError as error:
+        raise ReleaseCliError(str(error)) from error
+
+
+def run_preflight(
+    tag: str,
+    notes_file: Path,
+    *,
+    create_tag: bool,
+    remote: str,
+    repository: str,
+) -> None:
     if not notes_file.is_file():
         raise ReleaseCliError(f"release notes file does not exist: {notes_file}")
-    command = [
-        sys.executable,
+    runtime = probe_runtime()
+    ensure_validation_image(runtime)
+    if remote_tag_exists(repository, tag):
+        raise ReleaseCliError(f"remote tag already exists on {remote}: {tag}")
+    notes_in_container = validation_runtime.container_path(
+        notes_file.resolve(), runtime, ROOT
+    )
+    argv = [
+        "python3",
         "tools/release_preflight.py",
         "--tag",
         tag,
         "--notes-file",
-        str(notes_file.resolve()),
+        notes_in_container,
         "--remote",
         remote,
     ]
     if create_tag:
-        command.append("--create-tag")
-    run_step("Canonical release preflight", command)
+        argv.append("--create-tag")
+    try:
+        validation_runtime.launch_in_validation(
+            runtime,
+            argv,
+            root=ROOT,
+            capture=capture,
+            run_step=lambda name, command: run_step(name, command),
+        )
+    except validation_runtime.ValidationRuntimeError as error:
+        raise ReleaseCliError(str(error)) from error
 
 
 def find_release_run(repository: str, tag: str, sha: str) -> WorkflowRun:
@@ -560,6 +624,7 @@ def main() -> int:
                 args.notes_file,
                 create_tag=args.action == "tag",
                 remote=args.remote,
+                repository=repository,
             )
             return 0
 

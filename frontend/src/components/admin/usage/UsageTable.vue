@@ -253,10 +253,8 @@
               <span v-else data-testid="first-latency-value" class="text-gray-400 dark:text-gray-500">-</span>
               <span class="text-gray-400 dark:text-gray-500">{{ t('usage.latencyDuration') }}</span>
               <span data-testid="latency-duration" class="font-medium tabular-nums" :class="durationTextClass(row)">{{ formatDuration(row.duration_ms) }}</span>
-              <template v-if="estimatedTps(row) != null">
-                <span class="cursor-help text-gray-400 dark:text-gray-500" :title="t('usage.latencyTpsHint')">{{ t('usage.latencyTps') }}</span>
-                <span data-testid="latency-tps" class="cursor-help font-medium tabular-nums text-cyan-600 dark:text-cyan-400" :title="t('usage.latencyTpsHint')">{{ formatTps(estimatedTps(row)!) }}</span>
-              </template>
+              <span class="cursor-help text-gray-400 dark:text-gray-500" :title="t('usage.latencyTpsHint')">{{ t('usage.latencyTps') }}</span>
+              <span data-testid="latency-tps" class="cursor-help font-medium tabular-nums" :class="estimatedTps(row) == null ? 'text-gray-400 dark:text-gray-500' : 'text-cyan-600 dark:text-cyan-400'" :title="t('usage.latencyTpsHint')">{{ formatTpsDisplay(estimatedTps(row)) }}</span>
             </div>
           </div>
         </template>
@@ -284,7 +282,18 @@
         </template>
 
         <template #cell-user_agent="{ row }">
-          <span v-if="row.user_agent" class="text-sm text-gray-600 dark:text-gray-400 block max-w-[320px] truncate" :title="row.user_agent">{{ formatUserAgent(row.user_agent) }}</span>
+          <div v-if="row.user_agent" class="flex max-w-[320px] items-center gap-1.5">
+            <span class="truncate text-sm text-gray-600 dark:text-gray-400" :title="row.user_agent">{{ formatUserAgent(row.user_agent) }}</span>
+            <button
+              type="button"
+              class="shrink-0 rounded p-0.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-dark-700 dark:hover:text-gray-300"
+              :class="copiedUserAgent === row.user_agent ? 'text-green-500 hover:text-green-500' : ''"
+              :title="copiedUserAgent === row.user_agent ? t('keys.copied') : t('keys.copyToClipboard')"
+              @click="copyUserAgent(row.user_agent)"
+            >
+              <Icon :name="copiedUserAgent === row.user_agent ? 'check' : 'copy'" size="sm" class="h-3.5 w-3.5" />
+            </button>
+          </div>
           <span v-else class="text-sm text-gray-400 dark:text-gray-500">-</span>
         </template>
 
@@ -427,7 +436,7 @@
           </div>
           <div v-if="latencyTooltipData && estimatedTps(latencyTooltipData) != null" class="flex items-center justify-between gap-4">
             <span class="text-gray-400">{{ t('usage.latencyTps') }}</span>
-            <span class="font-medium text-cyan-300">{{ formatTps(estimatedTps(latencyTooltipData)!) }}</span>
+            <span class="font-medium text-cyan-300">{{ formatTpsDisplay(estimatedTps(latencyTooltipData)) }}</span>
           </div>
           <div v-if="latencyTooltipNote(latencyTooltipData)" class="border-t border-gray-700 pt-1.5 text-[11px] leading-relaxed text-gray-400">
             {{ latencyTooltipNote(latencyTooltipData) }}
@@ -670,6 +679,7 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const appStore = useAppStore()
 const copiedRequestId = ref<string | null>(null)
+const copiedUserAgent = ref<string | null>(null)
 const showAccountBilling = props.showAccountBilling
 const showUpstreamEndpoint = props.showUpstreamEndpoint
 const ipGeoBatchLoading = ref(false)
@@ -726,6 +736,19 @@ const copyRequestId = async (requestId: string) => {
     appStore.showSuccess(t('admin.usage.requestIdCopied'))
     window.setTimeout(() => {
       if (copiedRequestId.value === requestId) copiedRequestId.value = null
+    }, 2000)
+  } catch {
+    appStore.showError(t('common.copyFailed'))
+  }
+}
+
+const copyUserAgent = async (userAgent: string) => {
+  try {
+    await navigator.clipboard.writeText(userAgent)
+    copiedUserAgent.value = userAgent
+    appStore.showSuccess(t('admin.usage.userAgentCopied'))
+    window.setTimeout(() => {
+      if (copiedUserAgent.value === userAgent) copiedUserAgent.value = null
     }, 2000)
   } catch {
     appStore.showError(t('common.copyFailed'))
@@ -899,22 +922,22 @@ const latencyBarClasses = (row: AdminUsageLog): string | string[] => {
   return LATENCY_BAR_CLASSES[durationSeverity(row.duration_ms)]
 }
 
-// TPS is a coarse estimate (text tokens / post-first-token wall time), not a
-// sampled decode rate. Reliability gates hide short generation windows, tiny
-// samples, and unrealistically high bursts; they do not correct systemic
-// underestimates from long reasoning/tool waits (needs last_token_ms later).
+// TPS is a coarse estimate (text tokens / last-first token wall time), not a
+// sampled decode rate. Reliability gates hide short generation windows and tiny
+// samples. Values outside [1, 1000] stay visible as < 1 / > 1000.
 const TPS_MIN_GENERATION_MS = 300
 const TPS_MIN_TEXT_TOKENS = 8
-const TPS_MAX_VALUE = 500
+const TPS_DISPLAY_MIN = 1
+const TPS_DISPLAY_MAX = 1000
 
 const estimatedTps = (row: AdminUsageLog): number | null => {
   const requestType = resolveUsageRequestType(row)
   if (requestType !== 'stream' && requestType !== 'ws_v2') return null
   if (row.is_complete !== true) return null
-  if (!hasStrictFirstToken(row) || row.duration_ms == null) return null
+  if (!hasStrictFirstToken(row) || row.last_token_ms == null) return null
 
   const outputTokens = textOutputTokens(row)
-  const generationMs = row.duration_ms - row.first_token_ms!
+  const generationMs = row.last_token_ms - row.first_token_ms!
   if (
     !Number.isFinite(outputTokens) ||
     outputTokens < TPS_MIN_TEXT_TOKENS ||
@@ -925,12 +948,21 @@ const estimatedTps = (row: AdminUsageLog): number | null => {
   }
 
   const value = outputTokens * 1000 / generationMs
-  if (!Number.isFinite(value) || value <= 0 || value > TPS_MAX_VALUE) return null
+  if (!Number.isFinite(value) || value <= 0) return null
   return value
 }
 
-const formatTps = (value: number): string =>
-  (Math.round(value * 10) / 10).toFixed(1).replace(/\.0$/, '')
+const formatTpsNumber = (value: number): string => {
+  if (value >= 100) return String(Math.round(value))
+  return (Math.round(value * 10) / 10).toFixed(1).replace(/\.0$/, '')
+}
+
+const formatTpsDisplay = (value: number | null): string => {
+  if (value == null) return '-'
+  if (value < TPS_DISPLAY_MIN) return `< ${TPS_DISPLAY_MIN}`
+  if (value > TPS_DISPLAY_MAX) return `> ${TPS_DISPLAY_MAX}`
+  return formatTpsNumber(value)
+}
 
 // Cost tooltip functions
 const showTooltip = (event: MouseEvent, row: AdminUsageLog) => {

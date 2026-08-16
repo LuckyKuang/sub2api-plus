@@ -239,6 +239,7 @@ export interface PublicSettings {
   hide_ccs_import_button: boolean
   payment_enabled: boolean
   risk_control_enabled: boolean
+  global_ip_access_control_enabled: boolean
   table_default_page_size: number
   table_page_size_options: number[]
   custom_menu_items: CustomMenuItem[]
@@ -1658,6 +1659,7 @@ export interface UsageLog {
   openai_ws_mode?: boolean
   duration_ms: number | null
   first_token_ms: number | null
+  last_token_ms: number | null
   first_output_ms: number | null
   first_output_kind: 'text' | 'reasoning' | 'tool' | 'image' | 'audio' | null
   is_complete: boolean | null

@@ -53,6 +53,10 @@ const (
 )
 
 type IPAccessControlSettings struct {
+	// FeatureEnabled is the system-settings master switch. It is not written by
+	// the IP page UpdateSettings path; turning it off must keep enforcement_enabled
+	// and stored rules intact while still blocking all runtime enforcement.
+	FeatureEnabled         bool `json:"feature_enabled"`
 	EnforcementEnabled     bool `json:"enforcement_enabled"`
 	LoginFailureAutoBlock  bool `json:"login_failure_auto_block_enabled"`
 	LoginFailureThreshold  int  `json:"login_failure_threshold"`
@@ -89,7 +93,13 @@ func (s IPAccessControlSettings) Validate() (IPAccessControlSettings, error) {
 // AutomaticBlockingActive is deliberately stricter than the UI flag alone:
 // turning off global enforcement also stops collection and new auto bans.
 func (s IPAccessControlSettings) AutomaticBlockingActive() bool {
-	return s.EnforcementEnabled && s.LoginFailureAutoBlock
+	return s.FeatureEnabled && s.EnforcementEnabled && s.LoginFailureAutoBlock
+}
+
+// RuntimeEnforcementActive is the request-path gate: both the feature switch
+// and the IP-page enforcement toggle must be on before any block is applied.
+func (s IPAccessControlSettings) RuntimeEnforcementActive() bool {
+	return s.FeatureEnabled && s.EnforcementEnabled
 }
 
 type IPAccessRule struct {
@@ -377,6 +387,7 @@ func (s *IPAccessControlService) GetSettings(ctx context.Context) (IPAccessContr
 	}
 
 	keys := []string{
+		SettingKeyGlobalIPAccessControlEnabled,
 		SettingKeyIPAccessControlEnabled,
 		SettingKeyLoginFailureAutoBlockEnabled,
 		SettingKeyLoginFailureIPThreshold,
@@ -403,6 +414,7 @@ func (s *IPAccessControlService) GetSettings(ctx context.Context) (IPAccessContr
 	settings.LoginFailureThreshold = parseBoundedIPAccessInt(values[SettingKeyLoginFailureIPThreshold], settings.LoginFailureThreshold, 2, 100)
 	settings.LoginFailureWindowMins = parseBoundedIPAccessInt(values[SettingKeyLoginFailureWindowMinutes], settings.LoginFailureWindowMins, 1, 24*60)
 	settings.LoginFailureBlockMins = parseBoundedIPAccessInt(values[SettingKeyLoginFailureBlockMinutes], settings.LoginFailureBlockMins, 1, 365*24*60)
+	settings.FeatureEnabled = strings.TrimSpace(values[SettingKeyGlobalIPAccessControlEnabled]) == "true"
 	settings, _ = settings.Validate()
 	s.mu.Lock()
 	s.settingsCache = cachedIPAccessSettings{value: settings, expiresAt: now.Add(ipAccessSettingsCacheTTL), valid: true}
@@ -428,6 +440,17 @@ func (s *IPAccessControlService) UpdateSettings(ctx context.Context, settings IP
 	if err := s.settings.SetMultiple(ctx, updates); err != nil {
 		return DefaultIPAccessControlSettings(), err
 	}
+	// The IP page must not persist or clobber the system-settings master switch.
+	// Keep the in-memory snapshot aligned with Evaluate / AutomaticBlockingActive.
+	s.mu.RLock()
+	featureEnabled := s.settingsCache.valid && s.settingsCache.value.FeatureEnabled
+	s.mu.RUnlock()
+	if raw, err := s.settings.GetValue(ctx, SettingKeyGlobalIPAccessControlEnabled); err == nil {
+		featureEnabled = strings.TrimSpace(raw) == "true"
+	} else if !s.settingsCache.valid {
+		featureEnabled = false
+	}
+	validated.FeatureEnabled = featureEnabled
 	s.mu.Lock()
 	s.settingsCache = cachedIPAccessSettings{value: validated, expiresAt: time.Now().Add(ipAccessSettingsCacheTTL), valid: true}
 	s.rulesCache = cachedIPAccessRules{}
@@ -550,7 +573,7 @@ func (s *IPAccessControlService) ListFailureStates(ctx context.Context, filter I
 	if err != nil {
 		return nil, err
 	}
-	if !settings.EnforcementEnabled {
+	if !settings.RuntimeEnforcementActive() {
 		for _, state := range list.Items {
 			if state != nil {
 				state.CurrentlyBlocked = false
@@ -619,7 +642,7 @@ func (s *IPAccessControlService) Evaluate(ctx context.Context, identity ip.Clien
 	if err != nil {
 		return decision, err
 	}
-	if !settings.EnforcementEnabled {
+	if !settings.RuntimeEnforcementActive() {
 		return decision, nil
 	}
 	s.mu.RLock()

@@ -46,7 +46,9 @@ func (r *codexVersionSyncSettingRepoStub) Set(_ context.Context, key, value stri
 		return r.setErr
 	}
 	r.values[key] = value
-	r.writes = append(r.writes, value)
+	if key == SettingKeyOpenAICodexClientVersionSynced {
+		r.writes = append(r.writes, value)
+	}
 	return nil
 }
 
@@ -410,6 +412,55 @@ func TestOpenAICodexVersionSyncInitialRunsWhenStaleOrMissing(t *testing.T) {
 		require.Equal(t, 1, github.calls)
 		require.Equal(t, []string{"0.147.0"}, repo.syncedWrites())
 	})
+}
+
+func TestOpenAICodexVersionSyncNowIgnoresAutoSyncSwitch(t *testing.T) {
+	repo := newCodexVersionSyncSettingRepoStub(map[string]string{
+		SettingKeyOpenAICodexVersionAutoSyncEnabled: "false",
+	})
+	github := &codexVersionSyncGitHubStub{latest: &GitHubRelease{TagName: "rust-v0.147.0"}}
+
+	result := newCodexVersionSyncService(repo, github).SyncNow(context.Background())
+
+	require.Equal(t, "0.147.0", result.SyncedVersion)
+	require.True(t, result.Updated)
+	require.Empty(t, result.Error)
+	require.NotEmpty(t, result.CheckedAt)
+	require.Equal(t, []string{"0.147.0"}, repo.syncedWrites())
+	require.Equal(t, result.CheckedAt, repo.values[SettingKeyOpenAICodexClientVersionSyncedCheckedAt])
+	require.Empty(t, repo.values[SettingKeyOpenAICodexClientVersionSyncError])
+}
+
+func TestOpenAICodexVersionSyncNowRecordsFetchError(t *testing.T) {
+	repo := newCodexVersionSyncSettingRepoStub(map[string]string{
+		SettingKeyOpenAICodexClientVersionSynced: "0.147.0",
+	})
+	github := &codexVersionSyncGitHubStub{
+		latestErr: errors.New("network down"),
+		err:       errors.New("network down"),
+	}
+
+	result := newCodexVersionSyncService(repo, github).SyncNow(context.Background())
+
+	require.Equal(t, "0.147.0", result.SyncedVersion)
+	require.False(t, result.Updated)
+	require.Contains(t, result.Error, "network down")
+	require.Empty(t, repo.syncedWrites())
+	require.Equal(t, "network down", repo.values[SettingKeyOpenAICodexClientVersionSyncError])
+}
+
+func TestResolveOpenAICodexClientVersionSources(t *testing.T) {
+	version, source := resolveOpenAICodexClientVersion("0.150.0", "0.200.0")
+	require.Equal(t, "0.150.0", version)
+	require.Equal(t, openAICodexVersionSourceOverride, source)
+
+	version, source = resolveOpenAICodexClientVersion("0.143.0", "0.200.0")
+	require.Equal(t, "0.200.0", version)
+	require.Equal(t, openAICodexVersionSourceSynced, source)
+
+	version, source = resolveOpenAICodexClientVersion("", "0.146.0")
+	require.Equal(t, codexCLIVersion, version)
+	require.Equal(t, openAICodexVersionSourceCompiled, source)
 }
 
 // 版本比较必须按段取数字：字典序会把 0.99.0 判为大于 0.146.0，

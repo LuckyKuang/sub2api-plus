@@ -20,6 +20,7 @@ import (
 type antigravityStreamResult struct {
 	usage             *ClaudeUsage
 	firstTokenMs      *int
+	lastTokenMs       *int
 	firstOutputMs     *int
 	firstOutputKind   string
 	clientDisconnect  bool // 客户端是否在流式传输过程中断开
@@ -152,6 +153,7 @@ func (s *AntigravityGatewayService) handleGeminiStreamingResponse(c *gin.Context
 		return &antigravityStreamResult{
 			usage:             resultUsage,
 			firstTokenMs:      timing.firstTokenMs,
+			lastTokenMs:       timing.lastTokenMs,
 			firstOutputMs:     timing.firstOutputMs,
 			firstOutputKind:   timing.firstOutputKind,
 			clientDisconnect:  disconnected,
@@ -1207,6 +1209,7 @@ func (s *AntigravityGatewayService) handleClaudeStreamingResponse(c *gin.Context
 		return &antigravityStreamResult{
 			usage:            resultUsage,
 			firstTokenMs:     timing.firstTokenMs,
+			lastTokenMs:      timing.lastTokenMs,
 			firstOutputMs:    timing.firstOutputMs,
 			firstOutputKind:  timing.firstOutputKind,
 			clientDisconnect: disconnected,

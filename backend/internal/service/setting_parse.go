@@ -215,6 +215,9 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		// 风控中心功能（默认关闭，显式启用）
 		SettingKeyRiskControlEnabled: "false",
 
+		// 全局 IP 访问控制功能总开关（默认关闭；缺省/空值一律视为关，不自动迁移旧拦截）
+		SettingKeyGlobalIPAccessControlEnabled: "false",
+
 		// cyber 会话屏蔽（默认关闭，TTL 默认 3600s）
 		SettingKeyCyberSessionBlockEnabled:    "false",
 		SettingKeyCyberSessionBlockTTLSeconds: "3600",
@@ -242,6 +245,8 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyOpenAICodexLocalGroupQuotaEnabled:                  "false",
 		SettingKeyOpenAICodexClientVersion:                           "",
 		SettingKeyOpenAICodexClientVersionSynced:                     "",
+		SettingKeyOpenAICodexClientVersionSyncedCheckedAt:            "",
+		SettingKeyOpenAICodexClientVersionSyncError:                  "",
 		SettingKeyOpenAICodexVersionAutoSyncEnabled:                  "true",
 		SettingPaymentVisibleMethodAlipaySource:                      "",
 		SettingPaymentVisibleMethodWxpaySource:                       "",
@@ -830,6 +835,9 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	// 风控中心功能（默认关闭，严格 true 才启用）
 	result.RiskControlEnabled = settings[SettingKeyRiskControlEnabled] == "true"
 
+	// 全局 IP 访问控制功能总开关（默认关闭，严格 true 才启用；不因旧 enforcement 自动打开）
+	result.GlobalIPAccessControlEnabled = settings[SettingKeyGlobalIPAccessControlEnabled] == "true"
+
 	// cyber 会话屏蔽（默认关闭，TTL 默认 3600s）
 	result.CyberSessionBlockEnabled = settings[SettingKeyCyberSessionBlockEnabled] == "true"
 	if v, err := strconv.Atoi(strings.TrimSpace(settings[SettingKeyCyberSessionBlockTTLSeconds])); err == nil && v > 0 {
@@ -878,6 +886,12 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	result.OpenAICodexLocalGroupQuotaEnabled = settings[SettingKeyOpenAICodexLocalGroupQuotaEnabled] == "true"
 	result.OpenAICodexClientVersion = NormalizeCodexClientVersion(settings[SettingKeyOpenAICodexClientVersion])
 	result.OpenAICodexClientVersionSynced = NormalizeCodexClientVersion(settings[SettingKeyOpenAICodexClientVersionSynced])
+	result.OpenAICodexClientVersionSyncedCheckedAt = strings.TrimSpace(settings[SettingKeyOpenAICodexClientVersionSyncedCheckedAt])
+	result.OpenAICodexClientVersionSyncError = strings.TrimSpace(settings[SettingKeyOpenAICodexClientVersionSyncError])
+	result.OpenAICodexClientVersionEffective, result.OpenAICodexClientVersionSource = resolveOpenAICodexClientVersion(
+		result.OpenAICodexClientVersion,
+		result.OpenAICodexClientVersionSynced,
+	)
 	// 自动同步默认开启：缺失/空值一律视为开启，与 enable_client_dateline_normalization 同一惯例。
 	if v, ok := settings[SettingKeyOpenAICodexVersionAutoSyncEnabled]; ok && v != "" {
 		result.OpenAICodexVersionAutoSyncEnabled = v == "true"

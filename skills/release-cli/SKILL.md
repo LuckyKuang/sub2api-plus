@@ -1,6 +1,6 @@
 ---
 name: release-cli
-description: Prepare, tag, publish, monitor, verify, and finalize immutable Sub2API Plus GitHub releases. Use when the user asks to create a vX.Y.Z+custom.NNN release tag, publish a release through GitHub Actions, check a release workflow, handle the protected release-environment approval, verify release assets, or mark a published version in UPSTREAM.md. Require a working authenticated GitHub CLI before any validation or release operation; use the repository preflight and push only one reviewed annotated tag.
+description: Prepare, tag, publish, monitor, verify, and finalize immutable Sub2API Plus GitHub releases. Use when the user asks to create a vX.Y.Z+custom.NNN release tag, publish a release through GitHub Actions, check a release workflow, handle the protected release-environment approval, verify release assets, or mark a published version in UPSTREAM.md. Require a working authenticated GitHub CLI before any validation or release operation. Run validate and tag only inside the platform validation container: Apple Containers on macOS, Docker inside WSL2 Debian or Ubuntu on Windows, and Docker on Linux. Never validate on the host. Use the repository preflight and push only one reviewed annotated tag.
 ---
 
 # Release CLI
@@ -19,6 +19,12 @@ explicit custom tag:
 Use validate for a read-only preflight. tag repeats the complete preflight and
 creates a local annotated tag only. publish never creates a tag and pushes only
 the named existing tag. monitor pauses at protected-environment approval.
+
+validate and tag share push-cli's runtime rules. They probe Apple Containers on
+macOS, Docker inside a running WSL2 Debian or Ubuntu distribution on Windows, or
+Docker on Linux, then run `tools/release_preflight.py` inside
+`deploy/Dockerfile.validation`. Direct host execution of that preflight is a
+hard failure.
 
 ## Required GitHub CLI Gate
 
@@ -43,7 +49,9 @@ gh auth setup-git. Git is only the transport for the exact tag object.
    UPSTREAM.md with planned status, synchronized release examples, and valid
    release notes. Follow docs/RELEASING.md.
 2. Use push-cli to validate and push the release commit. Branch CI must pass.
-3. Run validate with the intended tag and notes file.
+3. Run validate with the intended tag and notes file. This launches the
+   platform validation container; do not run tools/release_preflight.py on the
+   host.
 4. Run tag. Review the resulting local annotated tag.
 5. Run publish. It pushes only git push origin <tag>; it does not use
    git push --tags, force push, or gh release create. It permits untracked

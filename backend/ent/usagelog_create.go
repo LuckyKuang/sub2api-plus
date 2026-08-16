@@ -477,6 +477,20 @@ func (_c *UsageLogCreate) SetNillableFirstTokenMs(v *int) *UsageLogCreate {
 	return _c
 }
 
+// SetLastTokenMs sets the "last_token_ms" field.
+func (_c *UsageLogCreate) SetLastTokenMs(v int) *UsageLogCreate {
+	_c.mutation.SetLastTokenMs(v)
+	return _c
+}
+
+// SetNillableLastTokenMs sets the "last_token_ms" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableLastTokenMs(v *int) *UsageLogCreate {
+	if v != nil {
+		_c.SetLastTokenMs(*v)
+	}
+	return _c
+}
+
 // SetFirstOutputMs sets the "first_output_ms" field.
 func (_c *UsageLogCreate) SetFirstOutputMs(v int) *UsageLogCreate {
 	_c.mutation.SetFirstOutputMs(v)
@@ -1154,6 +1168,10 @@ func (_c *UsageLogCreate) createSpec() (*UsageLog, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.FirstTokenMs(); ok {
 		_spec.SetField(usagelog.FieldFirstTokenMs, field.TypeInt, value)
 		_node.FirstTokenMs = &value
+	}
+	if value, ok := _c.mutation.LastTokenMs(); ok {
+		_spec.SetField(usagelog.FieldLastTokenMs, field.TypeInt, value)
+		_node.LastTokenMs = &value
 	}
 	if value, ok := _c.mutation.FirstOutputMs(); ok {
 		_spec.SetField(usagelog.FieldFirstOutputMs, field.TypeInt, value)
@@ -1965,6 +1983,30 @@ func (u *UsageLogUpsert) AddFirstTokenMs(v int) *UsageLogUpsert {
 // ClearFirstTokenMs clears the value of the "first_token_ms" field.
 func (u *UsageLogUpsert) ClearFirstTokenMs() *UsageLogUpsert {
 	u.SetNull(usagelog.FieldFirstTokenMs)
+	return u
+}
+
+// SetLastTokenMs sets the "last_token_ms" field.
+func (u *UsageLogUpsert) SetLastTokenMs(v int) *UsageLogUpsert {
+	u.Set(usagelog.FieldLastTokenMs, v)
+	return u
+}
+
+// UpdateLastTokenMs sets the "last_token_ms" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateLastTokenMs() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldLastTokenMs)
+	return u
+}
+
+// AddLastTokenMs adds v to the "last_token_ms" field.
+func (u *UsageLogUpsert) AddLastTokenMs(v int) *UsageLogUpsert {
+	u.Add(usagelog.FieldLastTokenMs, v)
+	return u
+}
+
+// ClearLastTokenMs clears the value of the "last_token_ms" field.
+func (u *UsageLogUpsert) ClearLastTokenMs() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldLastTokenMs)
 	return u
 }
 
@@ -3000,6 +3042,34 @@ func (u *UsageLogUpsertOne) UpdateFirstTokenMs() *UsageLogUpsertOne {
 func (u *UsageLogUpsertOne) ClearFirstTokenMs() *UsageLogUpsertOne {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.ClearFirstTokenMs()
+	})
+}
+
+// SetLastTokenMs sets the "last_token_ms" field.
+func (u *UsageLogUpsertOne) SetLastTokenMs(v int) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetLastTokenMs(v)
+	})
+}
+
+// AddLastTokenMs adds v to the "last_token_ms" field.
+func (u *UsageLogUpsertOne) AddLastTokenMs(v int) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddLastTokenMs(v)
+	})
+}
+
+// UpdateLastTokenMs sets the "last_token_ms" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateLastTokenMs() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateLastTokenMs()
+	})
+}
+
+// ClearLastTokenMs clears the value of the "last_token_ms" field.
+func (u *UsageLogUpsertOne) ClearLastTokenMs() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearLastTokenMs()
 	})
 }
 
@@ -4247,6 +4317,34 @@ func (u *UsageLogUpsertBulk) UpdateFirstTokenMs() *UsageLogUpsertBulk {
 func (u *UsageLogUpsertBulk) ClearFirstTokenMs() *UsageLogUpsertBulk {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.ClearFirstTokenMs()
+	})
+}
+
+// SetLastTokenMs sets the "last_token_ms" field.
+func (u *UsageLogUpsertBulk) SetLastTokenMs(v int) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetLastTokenMs(v)
+	})
+}
+
+// AddLastTokenMs adds v to the "last_token_ms" field.
+func (u *UsageLogUpsertBulk) AddLastTokenMs(v int) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddLastTokenMs(v)
+	})
+}
+
+// UpdateLastTokenMs sets the "last_token_ms" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateLastTokenMs() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateLastTokenMs()
+	})
+}
+
+// ClearLastTokenMs clears the value of the "last_token_ms" field.
+func (u *UsageLogUpsertBulk) ClearLastTokenMs() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearLastTokenMs()
 	})
 }
 

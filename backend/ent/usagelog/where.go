@@ -230,6 +230,11 @@ func FirstTokenMs(v int) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldFirstTokenMs, v))
 }
 
+// LastTokenMs applies equality check predicate on the "last_token_ms" field. It's identical to LastTokenMsEQ.
+func LastTokenMs(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldLastTokenMs, v))
+}
+
 // FirstOutputMs applies equality check predicate on the "first_output_ms" field. It's identical to FirstOutputMsEQ.
 func FirstOutputMs(v int) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldFirstOutputMs, v))
@@ -1843,6 +1848,56 @@ func FirstTokenMsIsNil() predicate.UsageLog {
 // FirstTokenMsNotNil applies the NotNil predicate on the "first_token_ms" field.
 func FirstTokenMsNotNil() predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldNotNull(FieldFirstTokenMs))
+}
+
+// LastTokenMsEQ applies the EQ predicate on the "last_token_ms" field.
+func LastTokenMsEQ(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldLastTokenMs, v))
+}
+
+// LastTokenMsNEQ applies the NEQ predicate on the "last_token_ms" field.
+func LastTokenMsNEQ(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNEQ(FieldLastTokenMs, v))
+}
+
+// LastTokenMsIn applies the In predicate on the "last_token_ms" field.
+func LastTokenMsIn(vs ...int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIn(FieldLastTokenMs, vs...))
+}
+
+// LastTokenMsNotIn applies the NotIn predicate on the "last_token_ms" field.
+func LastTokenMsNotIn(vs ...int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotIn(FieldLastTokenMs, vs...))
+}
+
+// LastTokenMsGT applies the GT predicate on the "last_token_ms" field.
+func LastTokenMsGT(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGT(FieldLastTokenMs, v))
+}
+
+// LastTokenMsGTE applies the GTE predicate on the "last_token_ms" field.
+func LastTokenMsGTE(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGTE(FieldLastTokenMs, v))
+}
+
+// LastTokenMsLT applies the LT predicate on the "last_token_ms" field.
+func LastTokenMsLT(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLT(FieldLastTokenMs, v))
+}
+
+// LastTokenMsLTE applies the LTE predicate on the "last_token_ms" field.
+func LastTokenMsLTE(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLTE(FieldLastTokenMs, v))
+}
+
+// LastTokenMsIsNil applies the IsNil predicate on the "last_token_ms" field.
+func LastTokenMsIsNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIsNull(FieldLastTokenMs))
+}
+
+// LastTokenMsNotNil applies the NotNil predicate on the "last_token_ms" field.
+func LastTokenMsNotNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotNull(FieldLastTokenMs))
 }
 
 // FirstOutputMsEQ applies the EQ predicate on the "first_output_ms" field.

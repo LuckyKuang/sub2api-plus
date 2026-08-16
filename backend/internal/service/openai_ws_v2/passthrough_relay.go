@@ -39,6 +39,7 @@ type RelayResult struct {
 	RequestID               string
 	TerminalEventType       string
 	FirstTokenMs            *int
+	LastTokenMs             *int
 	FirstOutputMs           *int
 	FirstOutputKind         string
 	Duration                time.Duration
@@ -60,6 +61,7 @@ type RelayTurnResult struct {
 	DownstreamComplete bool
 	Duration           time.Duration
 	FirstTokenMs       *int
+	LastTokenMs        *int
 	FirstOutputMs      *int
 	FirstOutputKind    string
 }
@@ -109,6 +111,7 @@ type relayState struct {
 	responseConflict  bool
 	terminalEventType string
 	firstTokenMs      *int
+	lastTokenMs       *int
 	firstOutputMs     *int
 	firstOutputKind   string
 	timingMu          sync.Mutex
@@ -133,6 +136,7 @@ type observedUpstreamEvent struct {
 	responseConflict bool
 	duration         time.Duration
 	firstToken       *int
+	lastToken        *int
 	firstOutput      *int
 	outputKind       string
 }
@@ -140,6 +144,7 @@ type observedUpstreamEvent struct {
 type relayTurnTiming struct {
 	startAt               time.Time
 	firstTokenMs          *int
+	lastTokenMs           *int
 	firstOutputMs         *int
 	firstOutputKind       string
 	firstResponseModel    string
@@ -755,6 +760,7 @@ func observeUpstreamMessage(
 		}
 		observed.duration = duration
 		observed.firstToken = openAIWSRelayCloneIntPtr(completedTiming.firstTokenMs)
+		observed.lastToken = openAIWSRelayCloneIntPtr(completedTiming.lastTokenMs)
 		observed.firstOutput = openAIWSRelayCloneIntPtr(completedTiming.firstOutputMs)
 		observed.outputKind = completedTiming.firstOutputKind
 	}
@@ -788,6 +794,7 @@ func emitTurnComplete(
 		DownstreamComplete:    downstreamComplete,
 		Duration:              observed.duration,
 		FirstTokenMs:          openAIWSRelayCloneIntPtr(observed.firstToken),
+		LastTokenMs:           openAIWSRelayCloneIntPtr(observed.lastToken),
 		FirstOutputMs:         openAIWSRelayCloneIntPtr(observed.firstOutput),
 		FirstOutputKind:       observed.outputKind,
 	})
@@ -928,8 +935,11 @@ func (state *relayState) observeOutputTiming(
 			state.firstOutputMs = intPtr(globalElapsed)
 			state.firstOutputKind = string(observation.Kind)
 		}
-		if observation.TokenLikeDelta && state.firstTokenMs == nil {
-			state.firstTokenMs = intPtr(globalElapsed)
+		if observation.TokenLikeDelta {
+			if state.firstTokenMs == nil {
+				state.firstTokenMs = intPtr(globalElapsed)
+			}
+			state.lastTokenMs = intPtr(globalElapsed)
 		}
 	}
 
@@ -968,8 +978,11 @@ func (state *relayState) observeOutputTiming(
 			timing.firstOutputMs = intPtr(turnElapsed)
 			timing.firstOutputKind = string(observation.Kind)
 		}
-		if observation.TokenLikeDelta && timing.firstTokenMs == nil {
-			timing.firstTokenMs = intPtr(turnElapsed)
+		if observation.TokenLikeDelta {
+			if timing.firstTokenMs == nil {
+				timing.firstTokenMs = intPtr(turnElapsed)
+			}
+			timing.lastTokenMs = intPtr(turnElapsed)
 		}
 	}
 	if !terminal || timing == nil {
@@ -1171,6 +1184,7 @@ func enrichResult(result *RelayResult, state *relayState, duration time.Duration
 	result.TerminalEventType = state.terminalEventType
 	state.timingMu.Lock()
 	result.FirstTokenMs = openAIWSRelayCloneIntPtr(state.firstTokenMs)
+	result.LastTokenMs = openAIWSRelayCloneIntPtr(state.lastTokenMs)
 	result.FirstOutputMs = openAIWSRelayCloneIntPtr(state.firstOutputMs)
 	result.FirstOutputKind = state.firstOutputKind
 	state.timingMu.Unlock()

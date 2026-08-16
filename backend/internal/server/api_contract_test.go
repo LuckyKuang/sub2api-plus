@@ -573,6 +573,7 @@ func TestAPIContracts(t *testing.T) {
 						Stream:                true,
 						DurationMs:            ptr(100),
 						FirstTokenMs:          ptr(50),
+						LastTokenMs:           ptr(90),
 						FirstOutputMs:         ptr(25),
 						FirstOutputKind:       ptr("image"),
 						CreatedAt:             deps.now,
@@ -617,6 +618,7 @@ func TestAPIContracts(t *testing.T) {
 							"stream": true,
 							"duration_ms": 100,
 							"first_token_ms": 50,
+								"last_token_ms": 90,
 							"first_output_ms": 25,
 							"first_output_kind": "image",
 							"is_complete": null,
@@ -959,6 +961,10 @@ func TestAPIContracts(t *testing.T) {
 					"openai_codex_local_group_quota_enabled": false,
 					"openai_codex_client_version":             "",
 					"openai_codex_client_version_synced":      "",
+					"openai_codex_client_version_synced_checked_at": "",
+					"openai_codex_client_version_sync_error": "",
+					"openai_codex_client_version_effective": "0.147.0",
+					"openai_codex_client_version_source": "compiled",
 					"openai_codex_version_auto_sync_enabled":  true,
 					"openai_fast_policy_settings": {
 						"rules": []
@@ -1004,6 +1010,7 @@ func TestAPIContracts(t *testing.T) {
 					"model_plaza_require_auth": true,
 					"model_plaza_description": "",
 					"risk_control_enabled": false,
+					"global_ip_access_control_enabled": false,
 					"cyber_session_block_enabled": false,
 					"cyber_session_block_ttl_seconds": 3600,
 					"affiliate_enabled": false,
@@ -1272,6 +1279,10 @@ func TestAPIContracts(t *testing.T) {
 					"openai_codex_local_group_quota_enabled": false,
 					"openai_codex_client_version":             "",
 					"openai_codex_client_version_synced":      "",
+					"openai_codex_client_version_synced_checked_at": "",
+					"openai_codex_client_version_sync_error": "",
+					"openai_codex_client_version_effective": "0.147.0",
+					"openai_codex_client_version_source": "compiled",
 					"openai_codex_version_auto_sync_enabled":  true,
 					"openai_fast_policy_settings": {
 						"rules": []
@@ -1315,6 +1326,7 @@ func TestAPIContracts(t *testing.T) {
 					"model_plaza_require_auth": true,
 					"model_plaza_description": "",
 					"risk_control_enabled": false,
+					"global_ip_access_control_enabled": false,
 					"cyber_session_block_enabled": false,
 					"cyber_session_block_ttl_seconds": 3600,
 					"affiliate_enabled": false,

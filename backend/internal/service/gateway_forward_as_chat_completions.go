@@ -398,6 +398,7 @@ func (s *GatewayService) handleCCStreamingFromAnthropic(
 			Stream:          true,
 			Duration:        time.Since(startTime),
 			FirstTokenMs:    timing.firstTokenMs,
+			LastTokenMs:     timing.lastTokenMs,
 			FirstOutputMs:   timing.firstOutputMs,
 			FirstOutputKind: timing.firstOutputKind,
 		}

@@ -168,6 +168,7 @@ type SystemSettings struct {
 	DefaultConcurrency            int
 	DefaultBalance                float64
 	RiskControlEnabled            bool
+	GlobalIPAccessControlEnabled  bool
 	CyberSessionBlockEnabled      bool
 	CyberSessionBlockTTLSeconds   int
 	AffiliateEnabled              bool
@@ -242,6 +243,10 @@ type SystemSettings struct {
 	OpenAICodexLocalGroupQuotaEnabled            bool   // Codex 客户端显示本地订阅 5 小时/7 天额度（默认 false）
 	OpenAICodexClientVersion                     string // 出站声明的 Codex 客户端版本号（管理员覆写）；空值跟随自动同步值
 	OpenAICodexClientVersionSynced               string // 自动同步到的官方最新稳定版版本号（只读展示）
+	OpenAICodexClientVersionSyncedCheckedAt      string // 最近一次实际检查官方仓库的时间（RFC3339 UTC）
+	OpenAICodexClientVersionSyncError            string // 最近一次同步失败原因；成功时为空
+	OpenAICodexClientVersionEffective            string // 出站实际声明的版本号
+	OpenAICodexClientVersionSource               string // override / synced / compiled
 	OpenAICodexVersionAutoSyncEnabled            bool   // 是否启用 Codex 客户端版本号自动同步（默认 true）
 	MinCodexVersion                              string // codex_cli_only 最低 Codex 引擎版本；空=不检查
 	MaxCodexVersion                              string // codex_cli_only 最高 Codex 引擎版本；空=不检查
@@ -397,6 +402,9 @@ type PublicSettings struct {
 
 	// 风控中心功能开关
 	RiskControlEnabled bool `json:"risk_control_enabled"`
+
+	// 全局 IP 访问控制功能总开关（菜单/路由 + 运行时门闩）
+	GlobalIPAccessControlEnabled bool `json:"global_ip_access_control_enabled"`
 
 	// 允许终端用户在用量页查看自己的失败请求
 	AllowUserViewErrorRequests bool `json:"allow_user_view_error_requests"`
