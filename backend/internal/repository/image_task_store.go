@@ -43,6 +43,12 @@ func (s *imageTaskStore) Get(ctx context.Context, id string) (*service.ImageTask
 	return &task, nil
 }
 
+func (s *imageTaskStore) Delete(ctx context.Context, id string) error {
+	return s.rdb.Del(ctx, imageTaskKey(id)).Err()
+}
+
 func imageTaskKey(id string) string {
 	return imageTaskKeyPrefix + strings.TrimSpace(id)
 }
+
+var _ service.ImageTaskStore = (*imageTaskStore)(nil)

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { AsyncImageDownloadValidationError, downloadAsyncImageZip, listAsyncImageModels, preferredAsyncImageModel, submitAsyncImageEdit } from '../asyncImage'
+import { AsyncImageDownloadValidationError, deleteAsyncImageTask, downloadAsyncImageZip, listAsyncImageModels, preferredAsyncImageModel, submitAsyncImageEdit } from '../asyncImage'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -54,6 +54,38 @@ describe('async image model API', () => {
 
 		await expect(downloadAsyncImageZip('sk-selected-key', 'imgtask_broken')).rejects.toBeInstanceOf(AsyncImageDownloadValidationError)
 	})
+
+  it('deletes an encoded task ID with the selected API key', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 204 })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(deleteAsyncImageTask('sk-selected-key', 'imgtask/a b')).resolves.toBeUndefined()
+    expect(fetchMock).toHaveBeenCalledWith('http://localhost:3000/v1/images/tasks/imgtask%2Fa%20b', {
+      method: 'DELETE',
+      headers: { Authorization: 'Bearer sk-selected-key' },
+    })
+  })
+
+  it('preserves the backend delete conflict code', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 409,
+      statusText: 'Conflict',
+      json: async () => ({
+        error: {
+          type: 'IMAGE_TASK_DELETE_NOT_ALLOWED',
+          code: 'IMAGE_TASK_DELETE_NOT_ALLOWED',
+          message: 'only failed image tasks can be deleted',
+        },
+      }),
+    }))
+
+    await expect(deleteAsyncImageTask('sk-selected-key', 'imgtask_completed')).rejects.toMatchObject({
+      message: 'only failed image tasks can be deleted',
+      status: 409,
+      code: 'IMAGE_TASK_DELETE_NOT_ALLOWED',
+    })
+  })
 
   it('submits edits as multipart data without overriding the browser boundary', async () => {
     const fetchMock = vi.fn().mockResolvedValue({

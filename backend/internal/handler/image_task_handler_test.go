@@ -124,6 +124,9 @@ func (h *asyncImageMemoryHistory) List(_ context.Context, owner service.ImageTas
 	matched := make([]*service.ImageTaskRecord, 0, len(h.order))
 	for i := len(h.order) - 1; i >= 0; i-- {
 		task := h.tasks[h.order[i]]
+		if task == nil {
+			continue
+		}
 		if task.UserID != owner.UserID || task.APIKeyID != owner.APIKeyID || (filter.Status != "" && task.Status != filter.Status) {
 			continue
 		}
@@ -141,6 +144,28 @@ func (h *asyncImageMemoryHistory) List(_ context.Context, owner service.ImageTas
 		matched = matched[:filter.Limit]
 	}
 	return matched, hasMore, nil
+}
+
+func (h *asyncImageMemoryHistory) Get(_ context.Context, owner service.ImageTaskOwner, id string) (*service.ImageTaskRecord, error) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	task := h.tasks[id]
+	if task == nil || task.UserID != owner.UserID || task.APIKeyID != owner.APIKeyID {
+		return nil, service.ErrImageTaskNotFound
+	}
+	copy := *task
+	return &copy, nil
+}
+
+func (h *asyncImageMemoryHistory) DeleteFailed(_ context.Context, owner service.ImageTaskOwner, id string) (bool, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	task := h.tasks[id]
+	if task == nil || task.UserID != owner.UserID || task.APIKeyID != owner.APIKeyID || task.Status != service.ImageTaskStatusFailed {
+		return false, nil
+	}
+	delete(h.tasks, id)
+	return true, nil
 }
 
 func (s *asyncImageMemoryStore) Save(_ context.Context, task *service.ImageTaskRecord, _ time.Duration) error {
@@ -164,6 +189,13 @@ func (s *asyncImageMemoryStore) Get(_ context.Context, id string) (*service.Imag
 	copy.Result = append(json.RawMessage(nil), task.Result...)
 	copy.Error = append(json.RawMessage(nil), task.Error...)
 	return &copy, nil
+}
+
+func (s *asyncImageMemoryStore) Delete(_ context.Context, id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.tasks, id)
+	return nil
 }
 
 func TestAsyncImageHandlerSubmitAndPoll(t *testing.T) {
@@ -303,6 +335,52 @@ func TestAsyncImageHandlerSubmitEditPreservesMultipartRequestAndTaskType(t *test
 	require.Contains(t, executedContentType, "multipart/form-data")
 	require.Contains(t, string(executedBody), `name="image[]"`)
 	require.Contains(t, string(executedBody), `name="mask"`)
+}
+
+func TestAsyncImageHandlerDeleteFailedTask(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	task := &service.ImageTaskRecord{ID: "imgtask_failed", UserID: 7, APIKeyID: 9, Status: service.ImageTaskStatusFailed}
+	store := &asyncImageMemoryStore{tasks: map[string]*service.ImageTaskRecord{task.ID: task}}
+	history := &asyncImageMemoryHistory{tasks: map[string]*service.ImageTaskRecord{task.ID: task}, order: []string{task.ID}}
+	tasks := service.NewImageTaskServiceWithOptions(store, time.Hour, time.Minute)
+	tasks.SetHistoryRepository(history)
+	h := &AsyncImageHandler{tasks: tasks}
+
+	router := gin.New()
+	router.Use(asyncImageTestAPIKeyMiddleware)
+	router.DELETE("/v1/images/tasks/:task_id", h.Delete)
+	req := httptest.NewRequest(http.MethodDelete, "/v1/images/tasks/"+task.ID, nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusNoContent, w.Code)
+	require.Equal(t, "no-store", w.Header().Get("Cache-Control"))
+	_, getErr := store.Get(context.Background(), task.ID)
+	require.ErrorIs(t, getErr, service.ErrImageTaskNotFound)
+	_, getErr = history.Get(context.Background(), service.ImageTaskOwner{UserID: 7, APIKeyID: 9}, task.ID)
+	require.ErrorIs(t, getErr, service.ErrImageTaskNotFound)
+}
+
+func TestAsyncImageHandlerDeleteRejectsProcessingTask(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	task := &service.ImageTaskRecord{ID: "imgtask_processing", UserID: 7, APIKeyID: 9, Status: service.ImageTaskStatusProcessing}
+	store := &asyncImageMemoryStore{tasks: map[string]*service.ImageTaskRecord{task.ID: task}}
+	history := &asyncImageMemoryHistory{tasks: map[string]*service.ImageTaskRecord{task.ID: task}}
+	tasks := service.NewImageTaskServiceWithOptions(store, time.Hour, time.Minute)
+	tasks.SetHistoryRepository(history)
+	h := &AsyncImageHandler{tasks: tasks}
+
+	router := gin.New()
+	router.Use(asyncImageTestAPIKeyMiddleware)
+	router.DELETE("/v1/images/tasks/:task_id", h.Delete)
+	req := httptest.NewRequest(http.MethodDelete, "/v1/images/tasks/"+task.ID, nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusConflict, w.Code)
+	require.Contains(t, w.Body.String(), "IMAGE_TASK_DELETE_NOT_ALLOWED")
+	_, getErr := store.Get(context.Background(), task.ID)
+	require.NoError(t, getErr)
 }
 
 func TestAsyncImageHandlerFailedTaskEnqueuesOneSanitizedCorrelatedOpsError(t *testing.T) {

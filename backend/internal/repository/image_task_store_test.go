@@ -41,3 +41,17 @@ func TestImageTaskStoreMissing(t *testing.T) {
 	_, err := store.Get(context.Background(), "imgtask_missing")
 	require.ErrorIs(t, err, service.ErrImageTaskNotFound)
 }
+
+func TestImageTaskStoreDeleteIsIdempotent(t *testing.T) {
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = rdb.Close() })
+	store := NewImageTaskStore(rdb)
+	task := &service.ImageTaskRecord{ID: "imgtask_delete", UserID: 7, APIKeyID: 9, Status: service.ImageTaskStatusFailed}
+
+	require.NoError(t, store.Save(context.Background(), task, time.Hour))
+	require.NoError(t, store.Delete(context.Background(), task.ID))
+	require.NoError(t, store.Delete(context.Background(), task.ID))
+	_, err := store.Get(context.Background(), task.ID)
+	require.ErrorIs(t, err, service.ErrImageTaskNotFound)
+}

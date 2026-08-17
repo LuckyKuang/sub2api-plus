@@ -9,10 +9,13 @@ The authenticated gateway exposes both `/v1` paths and their existing no-prefix 
 ```text
 POST /v1/images/generations/async
 POST /v1/images/edits/async
+GET  /v1/images/tasks
 GET  /v1/images/tasks/{task_id}
+GET  /v1/images/tasks/{task_id}/download
+DELETE /v1/images/tasks/{task_id}
 ```
 
-The aliases are `/images/generations/async`, `/images/edits/async`, and `/images/tasks/{task_id}`.
+Every endpoint also has the equivalent no-prefix `/images/...` alias.
 
 Only OpenAI and Grok groups are supported. Requests use the same JSON or multipart payload as the corresponding synchronous endpoint. Streaming image requests are rejected because a polled task returns one final JSON result.
 
@@ -167,3 +170,19 @@ For URL responses, `image_url` mirrors the first `data[].url` for simple clients
 All submit and poll responses include `Cache-Control: no-store`, preventing a CDN from caching the `processing` state. Tasks and results expire 24 hours after their latest state update. A task executes for at most 30 minutes.
 
 Task ownership is scoped to both user and API key. Unknown task IDs and IDs owned by another key both return `404`, avoiding task-existence disclosure. Polling remains available when the completed generation used the key's remaining balance; normal authentication, disabled-key, user, IP, and group checks still apply.
+
+## Delete a failed task
+
+The user task list shows a delete action only for failed rows. The same action is available through the API with the API key that created the task:
+
+```bash
+curl -i -X DELETE \
+  https://api.example.com/v1/images/tasks/imgtask_0123456789abcdef \
+  -H 'Authorization: Bearer sk-...'
+```
+
+A successful deletion returns `204 No Content` and removes both the PostgreSQL `async_image_tasks` history row and the Redis `image_task:{task_id}` execution key. An already expired or absent Redis key still counts as success. The service removes Redis first; if Redis is unavailable, it returns `503` and leaves the history row intact so the operation can be retried.
+
+Only `failed` tasks can be deleted. Deleting an owned `processing` or `completed` task returns `409`. A missing task, a task owned by another user, or a task created by another API key of the same user all return the same `404` response. List, detail, download, and deletion skip subscription, quota, and expiration enforcement so users can manage existing task data after billable access ends. Credential parsing, hard-disabled-key, user-state, IP, group, and ownership checks still apply.
+
+Deleting a task record never scans or deletes S3-compatible object storage. In particular, no object key is reconstructed from the active prefix. Object lifecycle and cleanup remain the responsibility of the configured bucket policy.

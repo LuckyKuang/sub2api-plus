@@ -12,15 +12,18 @@ import (
 )
 
 type imageTaskMemoryStore struct {
-	task    *ImageTaskRecord
-	ttl     time.Duration
-	saveErr error
-	getErr  error
+	task      *ImageTaskRecord
+	ttl       time.Duration
+	saveErr   error
+	getErr    error
+	deleteErr error
 }
 
 type imageTaskMemoryHistory struct {
-	tasks map[string]*ImageTaskRecord
-	order []string
+	tasks     map[string]*ImageTaskRecord
+	order     []string
+	getErr    error
+	deleteErr error
 }
 
 func (h *imageTaskMemoryHistory) Save(_ context.Context, task *ImageTaskRecord) error {
@@ -42,6 +45,9 @@ func (h *imageTaskMemoryHistory) List(_ context.Context, owner ImageTaskOwner, f
 	matched := make([]*ImageTaskRecord, 0, len(h.order))
 	for i := len(h.order) - 1; i >= 0; i-- {
 		task := h.tasks[h.order[i]]
+		if task == nil {
+			continue
+		}
 		if task.UserID != owner.UserID || task.APIKeyID != owner.APIKeyID || (filter.Status != "" && task.Status != filter.Status) {
 			continue
 		}
@@ -59,6 +65,30 @@ func (h *imageTaskMemoryHistory) List(_ context.Context, owner ImageTaskOwner, f
 		matched = matched[:filter.Limit]
 	}
 	return matched, hasMore, nil
+}
+
+func (h *imageTaskMemoryHistory) Get(_ context.Context, owner ImageTaskOwner, id string) (*ImageTaskRecord, error) {
+	if h.getErr != nil {
+		return nil, h.getErr
+	}
+	task := h.tasks[id]
+	if task == nil || task.UserID != owner.UserID || task.APIKeyID != owner.APIKeyID {
+		return nil, ErrImageTaskNotFound
+	}
+	copy := *task
+	return &copy, nil
+}
+
+func (h *imageTaskMemoryHistory) DeleteFailed(_ context.Context, owner ImageTaskOwner, id string) (bool, error) {
+	if h.deleteErr != nil {
+		return false, h.deleteErr
+	}
+	task := h.tasks[id]
+	if task == nil || task.UserID != owner.UserID || task.APIKeyID != owner.APIKeyID || task.Status != ImageTaskStatusFailed {
+		return false, nil
+	}
+	delete(h.tasks, id)
+	return true, nil
 }
 
 func (s *imageTaskMemoryStore) Save(_ context.Context, task *ImageTaskRecord, ttl time.Duration) error {
@@ -80,6 +110,14 @@ func (s *imageTaskMemoryStore) Get(_ context.Context, _ string) (*ImageTaskRecor
 	}
 	copy := *s.task
 	return &copy, nil
+}
+
+func (s *imageTaskMemoryStore) Delete(_ context.Context, _ string) error {
+	if s.deleteErr != nil {
+		return s.deleteErr
+	}
+	s.task = nil
+	return nil
 }
 
 func TestImageTaskServiceLifecycleAndOwnership(t *testing.T) {
@@ -170,4 +208,90 @@ func TestImageTaskServiceHistoryListKeepsMetadataAndScopesByAPIKey(t *testing.T)
 	otherKey, err := svc.List(context.Background(), ImageTaskOwner{UserID: owner.UserID, APIKeyID: owner.APIKeyID + 1}, ImageTaskHistoryFilter{})
 	require.NoError(t, err)
 	require.Empty(t, otherKey.Data)
+}
+
+func TestImageTaskServiceDeleteRemovesOwnedFailedTask(t *testing.T) {
+	owner := ImageTaskOwner{UserID: 7, APIKeyID: 9}
+	task := &ImageTaskRecord{ID: "imgtask_failed", UserID: owner.UserID, APIKeyID: owner.APIKeyID, Status: ImageTaskStatusFailed}
+	store := &imageTaskMemoryStore{task: task}
+	history := &imageTaskMemoryHistory{tasks: map[string]*ImageTaskRecord{task.ID: task}, order: []string{task.ID}}
+	svc := NewImageTaskService(store)
+	svc.SetHistoryRepository(history)
+
+	require.NoError(t, svc.Delete(context.Background(), owner, task.ID))
+	require.Nil(t, store.task)
+	require.NotContains(t, history.tasks, task.ID)
+}
+
+func TestImageTaskServiceDeleteSucceedsWhenRedisTaskExpired(t *testing.T) {
+	owner := ImageTaskOwner{UserID: 7, APIKeyID: 9}
+	task := &ImageTaskRecord{ID: "imgtask_expired", UserID: owner.UserID, APIKeyID: owner.APIKeyID, Status: ImageTaskStatusFailed}
+	store := &imageTaskMemoryStore{}
+	history := &imageTaskMemoryHistory{tasks: map[string]*ImageTaskRecord{task.ID: task}}
+	svc := NewImageTaskService(store)
+	svc.SetHistoryRepository(history)
+
+	require.NoError(t, svc.Delete(context.Background(), owner, task.ID))
+	require.NotContains(t, history.tasks, task.ID)
+}
+
+func TestImageTaskServiceDeleteRejectsNonFailedAndOtherOwner(t *testing.T) {
+	owner := ImageTaskOwner{UserID: 7, APIKeyID: 9}
+	for _, status := range []string{ImageTaskStatusProcessing, ImageTaskStatusCompleted} {
+		task := &ImageTaskRecord{ID: "imgtask_" + status, UserID: owner.UserID, APIKeyID: owner.APIKeyID, Status: status}
+		store := &imageTaskMemoryStore{task: task}
+		history := &imageTaskMemoryHistory{tasks: map[string]*ImageTaskRecord{task.ID: task}}
+		svc := NewImageTaskService(store)
+		svc.SetHistoryRepository(history)
+
+		err := svc.Delete(context.Background(), owner, task.ID)
+		require.ErrorIs(t, err, ErrImageTaskDeleteNotAllowed)
+		require.NotNil(t, store.task)
+		require.Contains(t, history.tasks, task.ID)
+	}
+
+	task := &ImageTaskRecord{ID: "imgtask_other_owner", UserID: owner.UserID, APIKeyID: owner.APIKeyID, Status: ImageTaskStatusFailed}
+	store := &imageTaskMemoryStore{task: task}
+	history := &imageTaskMemoryHistory{tasks: map[string]*ImageTaskRecord{task.ID: task}}
+	svc := NewImageTaskService(store)
+	svc.SetHistoryRepository(history)
+	err := svc.Delete(context.Background(), ImageTaskOwner{UserID: owner.UserID, APIKeyID: owner.APIKeyID + 1}, task.ID)
+	require.ErrorIs(t, err, ErrImageTaskNotFound)
+	require.NotNil(t, store.task)
+	require.Contains(t, history.tasks, task.ID)
+}
+
+func TestImageTaskServiceDeleteRedisFailurePreservesHistory(t *testing.T) {
+	owner := ImageTaskOwner{UserID: 7, APIKeyID: 9}
+	task := &ImageTaskRecord{ID: "imgtask_failed", UserID: owner.UserID, APIKeyID: owner.APIKeyID, Status: ImageTaskStatusFailed}
+	store := &imageTaskMemoryStore{task: task, deleteErr: errors.New("redis unavailable")}
+	history := &imageTaskMemoryHistory{tasks: map[string]*ImageTaskRecord{task.ID: task}}
+	svc := NewImageTaskService(store)
+	svc.SetHistoryRepository(history)
+
+	err := svc.Delete(context.Background(), owner, task.ID)
+	require.ErrorIs(t, err, ErrImageTaskUnavailable)
+	require.NotNil(t, store.task)
+	require.Contains(t, history.tasks, task.ID)
+}
+
+func TestImageTaskServiceDeleteHistoryFailureRemainsRetryable(t *testing.T) {
+	owner := ImageTaskOwner{UserID: 7, APIKeyID: 9}
+	task := &ImageTaskRecord{ID: "imgtask_failed", UserID: owner.UserID, APIKeyID: owner.APIKeyID, Status: ImageTaskStatusFailed}
+	store := &imageTaskMemoryStore{task: task}
+	history := &imageTaskMemoryHistory{
+		tasks:     map[string]*ImageTaskRecord{task.ID: task},
+		deleteErr: errors.New("postgres unavailable"),
+	}
+	svc := NewImageTaskService(store)
+	svc.SetHistoryRepository(history)
+
+	err := svc.Delete(context.Background(), owner, task.ID)
+	require.ErrorIs(t, err, ErrImageTaskUnavailable)
+	require.Nil(t, store.task)
+	require.Contains(t, history.tasks, task.ID)
+
+	history.deleteErr = nil
+	require.NoError(t, svc.Delete(context.Background(), owner, task.ID))
+	require.NotContains(t, history.tasks, task.ID)
 }

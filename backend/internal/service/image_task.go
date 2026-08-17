@@ -30,12 +30,13 @@ const (
 )
 
 var (
-	ErrImageTaskNotFound    = infraerrors.New(http.StatusNotFound, "IMAGE_TASK_NOT_FOUND", "image task not found")
-	ErrImageTaskForbidden   = infraerrors.New(http.StatusForbidden, "IMAGE_TASK_FORBIDDEN", "image task does not belong to this API key")
-	ErrImageTaskUnavailable = infraerrors.New(http.StatusServiceUnavailable, "IMAGE_TASK_UNAVAILABLE", "image task storage is unavailable")
-	ErrImageTaskNoImages    = infraerrors.New(http.StatusConflict, "IMAGE_TASK_NO_IMAGES", "image task has no generated images to download")
-	ErrImageTaskDownload    = infraerrors.New(http.StatusServiceUnavailable, "IMAGE_TASK_DOWNLOAD_UNAVAILABLE", "generated image download is unavailable")
-	ErrImageTaskZipTooLarge = infraerrors.New(http.StatusRequestEntityTooLarge, "IMAGE_TASK_DOWNLOAD_TOO_LARGE", "generated images exceed the download size limit")
+	ErrImageTaskNotFound         = infraerrors.New(http.StatusNotFound, "IMAGE_TASK_NOT_FOUND", "image task not found")
+	ErrImageTaskForbidden        = infraerrors.New(http.StatusForbidden, "IMAGE_TASK_FORBIDDEN", "image task does not belong to this API key")
+	ErrImageTaskUnavailable      = infraerrors.New(http.StatusServiceUnavailable, "IMAGE_TASK_UNAVAILABLE", "image task storage is unavailable")
+	ErrImageTaskDeleteNotAllowed = infraerrors.New(http.StatusConflict, "IMAGE_TASK_DELETE_NOT_ALLOWED", "only failed image tasks can be deleted")
+	ErrImageTaskNoImages         = infraerrors.New(http.StatusConflict, "IMAGE_TASK_NO_IMAGES", "image task has no generated images to download")
+	ErrImageTaskDownload         = infraerrors.New(http.StatusServiceUnavailable, "IMAGE_TASK_DOWNLOAD_UNAVAILABLE", "generated image download is unavailable")
+	ErrImageTaskZipTooLarge      = infraerrors.New(http.StatusRequestEntityTooLarge, "IMAGE_TASK_DOWNLOAD_TOO_LARGE", "generated images exceed the download size limit")
 )
 
 // ImageTaskRecord is the private Redis representation of an asynchronous image
@@ -83,6 +84,7 @@ type ImageTaskOwner struct {
 type ImageTaskStore interface {
 	Save(ctx context.Context, task *ImageTaskRecord, ttl time.Duration) error
 	Get(ctx context.Context, id string) (*ImageTaskRecord, error)
+	Delete(ctx context.Context, id string) error
 }
 
 // ImageStorageResolver reports the currently effective object-storage binding.
@@ -253,6 +255,50 @@ func (s *ImageTaskService) Get(ctx context.Context, owner ImageTaskOwner, id str
 		return nil, ErrImageTaskNotFound
 	}
 	return imageTaskToPublic(task), nil
+}
+
+// Delete removes a failed task's execution state and durable history. The
+// Redis key is deleted first so an infrastructure failure leaves the history
+// row visible and the operation retryable.
+func (s *ImageTaskService) Delete(ctx context.Context, owner ImageTaskOwner, id string) error {
+	if s == nil || s.store == nil || s.history == nil {
+		return ErrImageTaskUnavailable
+	}
+	taskID := strings.TrimSpace(id)
+	task, err := s.history.Get(ctx, owner, taskID)
+	if err != nil {
+		if errors.Is(err, ErrImageTaskNotFound) {
+			return ErrImageTaskNotFound
+		}
+		return ErrImageTaskUnavailable.WithCause(err)
+	}
+	if task.Status != ImageTaskStatusFailed {
+		return ErrImageTaskDeleteNotAllowed
+	}
+	if err := s.store.Delete(ctx, taskID); err != nil {
+		return ErrImageTaskUnavailable.WithCause(err)
+	}
+	deleted, err := s.history.DeleteFailed(ctx, owner, taskID)
+	if err != nil {
+		return ErrImageTaskUnavailable.WithCause(err)
+	}
+	if deleted {
+		return nil
+	}
+
+	// A concurrent identical deletion is already in the desired state. If the
+	// row still exists, its status changed and the failed-only rule wins.
+	current, err := s.history.Get(ctx, owner, taskID)
+	if errors.Is(err, ErrImageTaskNotFound) {
+		return nil
+	}
+	if err != nil {
+		return ErrImageTaskUnavailable.WithCause(err)
+	}
+	if current.Status != ImageTaskStatusFailed {
+		return ErrImageTaskDeleteNotAllowed
+	}
+	return ErrImageTaskUnavailable
 }
 
 // StreamDownloadZip creates one ZIP archive for every image associated with a

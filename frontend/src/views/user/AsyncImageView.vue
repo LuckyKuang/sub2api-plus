@@ -5,18 +5,26 @@
         <div class="flex flex-col gap-3">
           <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
             <div class="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 xl:w-auto xl:grid-cols-[260px_168px]">
-              <select v-model.number="selectedApiKeyId" class="input" :disabled="loadingKeys" @change="selectApiKey">
-                <option :value="0">{{ t('asyncImage.filters.selectKey') }}</option>
-                <option v-for="key in eligibleKeys" :key="key.id" :value="key.id">
-                  {{ key.name }}
-                </option>
-              </select>
-              <select v-model="filters.status" class="input" :disabled="loadingTasks" @change="applyFilters">
-                <option value="">{{ t('asyncImage.filters.allStatuses') }}</option>
-                <option value="processing">{{ t('asyncImage.status.processing') }}</option>
-                <option value="completed">{{ t('asyncImage.status.completed') }}</option>
-                <option value="failed">{{ t('asyncImage.status.failed') }}</option>
-              </select>
+              <Select
+                v-model="selectedApiKeyId"
+                :options="apiKeyFilterOptions"
+                :disabled="loadingKeys"
+                searchable="auto"
+                class="w-full"
+                data-testid="async-image-api-key-filter"
+                :aria-label="t('asyncImage.filters.apiKey')"
+                @change="selectApiKey"
+              />
+              <Select
+                v-model="filters.status"
+                :options="statusFilterOptions"
+                :disabled="loadingTasks"
+                :searchable="false"
+                class="w-full"
+                data-testid="async-image-status-filter"
+                :aria-label="t('asyncImage.filters.allStatuses')"
+                @change="applyFilters"
+              />
             </div>
             <div class="flex flex-wrap items-center gap-2 xl:flex-shrink-0">
               <button type="button" class="btn btn-secondary" :disabled="loadingTasks" :title="t('asyncImage.actions.refresh')" @click="() => loadTasks()">
@@ -76,9 +84,20 @@
           </template>
 
           <template #cell-actions="{ row }">
-            <div class="flex justify-center">
-              <button type="button" class="icon-button" :title="t('asyncImage.actions.view')" @click="selectedTask = row">
+            <div class="flex justify-center gap-1">
+              <button type="button" class="icon-button" :title="t('asyncImage.actions.view')" :data-testid="`view-task-${row.task_id}`" @click="selectedTask = row">
                 <Icon name="eye" size="sm" />
+              </button>
+              <button
+                v-if="row.status === 'failed'"
+                type="button"
+                class="icon-button icon-button-danger"
+                :disabled="deletingTaskId === row.task_id"
+                :title="t('asyncImage.actions.delete')"
+                :data-testid="`delete-task-${row.task_id}`"
+                @click="deleteTarget = row"
+              >
+                <Icon :name="deletingTaskId === row.task_id ? 'refresh' : 'trash'" size="sm" :class="deletingTaskId === row.task_id ? 'animate-spin' : ''" />
               </button>
             </div>
           </template>
@@ -304,6 +323,18 @@
         <p v-else class="text-sm text-gray-500 dark:text-gray-400">{{ t('asyncImage.detail.noImage') }}</p>
       </div>
     </BaseDialog>
+
+    <ConfirmDialog
+      :show="!!deleteTarget"
+      :title="t('asyncImage.delete.title')"
+      :message="deleteConfirmMessage"
+      :confirm-text="t('common.delete')"
+      :cancel-text="t('common.cancel')"
+      :loading="!!deletingTaskId"
+      danger
+      @confirm="confirmDeleteTask"
+      @cancel="deleteTarget = null"
+    />
   </AppLayout>
 </template>
 
@@ -314,9 +345,11 @@ import AppLayout from '@/components/layout/AppLayout.vue'
 import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 import DataTable from '@/components/common/DataTable.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import Select, { type SelectOption } from '@/components/common/Select.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { keysAPI } from '@/api'
-import { AsyncImageDownloadValidationError, downloadAsyncImageZip, getAsyncImageTask, listAsyncImageModels, listAsyncImageTasks, preferredAsyncImageModel, saveAsyncImageBlob, submitAsyncImageEdit, submitAsyncImageGeneration, type AsyncImageTask } from '@/api/asyncImage'
+import { AsyncImageDownloadValidationError, deleteAsyncImageTask, downloadAsyncImageZip, getAsyncImageTask, listAsyncImageModels, listAsyncImageTasks, preferredAsyncImageModel, saveAsyncImageBlob, submitAsyncImageEdit, submitAsyncImageGeneration, type AsyncImageTask } from '@/api/asyncImage'
 import { keyAllowsAsyncImage } from '@/composables/useAsyncImageAccess'
 import { useAppStore } from '@/stores/app'
 import { isGPTImage2, isGPTImage2ExperimentalSize, validateGPTImage2CustomSize } from '@/utils/asyncImageSize'
@@ -353,8 +386,11 @@ const hasMore = ref(false)
 const offset = ref(0)
 const showCreateDialog = ref(false)
 const selectedTask = ref<AsyncImageTask | null>(null)
+const deleteTarget = ref<AsyncImageTask | null>(null)
+const deletingTaskId = ref('')
 let pollTimer: ReturnType<typeof setTimeout> | null = null
 let modelRequestID = 0
+let taskListRequestID = 0
 
 const filters = reactive({ status: '' })
 const form = reactive({ apiKeyId: 0, mode: 'generation' as AsyncImageMode, model: '', prompt: '', size: '1024x1024', customWidth: 1024, customHeight: 1024, quality: 'auto', n: 1 })
@@ -362,6 +398,16 @@ const editImages = ref<EditImageUpload[]>([])
 const editMask = ref<EditImageUpload | null>(null)
 
 const eligibleKeys = computed(() => apiKeys.value.filter(keyAllowsAsyncImage))
+const apiKeyFilterOptions = computed<SelectOption[]>(() => [
+  { value: 0, label: t('asyncImage.filters.selectKey') },
+  ...eligibleKeys.value.map(key => ({ value: key.id, label: key.name || `API Key #${key.id}` })),
+])
+const statusFilterOptions = computed<SelectOption[]>(() => [
+  { value: '', label: t('asyncImage.filters.allStatuses') },
+  { value: 'processing', label: t('asyncImage.status.processing') },
+  { value: 'completed', label: t('asyncImage.status.completed') },
+  { value: 'failed', label: t('asyncImage.status.failed') },
+])
 const selectedApiKey = computed(() => eligibleKeys.value.find(key => key.id === selectedApiKeyId.value) || null)
 const formApiKey = computed(() => eligibleKeys.value.find(key => key.id === form.apiKeyId) || null)
 const selectedTaskApiKey = computed(() => selectedApiKey.value)
@@ -371,6 +417,7 @@ const customSizeValidationCode = computed(() => usingCustomSize.value ? validate
 const customSizeError = computed(() => customSizeValidationCode.value ? t(`asyncImage.create.customSizeErrors.${customSizeValidationCode.value}`) : '')
 const customSizeExperimental = computed(() => usingCustomSize.value && !customSizeValidationCode.value && isGPTImage2ExperimentalSize(form.customWidth, form.customHeight))
 const currentPage = computed(() => Math.floor(offset.value / PAGE_SIZE) + 1)
+const deleteConfirmMessage = computed(() => t('asyncImage.delete.confirm', { taskId: deleteTarget.value?.task_id || '' }))
 const sizeOptions = computed(() => {
   if (!selectedModelIsGPTImage2.value) {
     return [
@@ -579,26 +626,34 @@ async function refreshProcessingTasks() {
   })
 }
 
-async function loadTasks(showError = true) {
+async function loadTasks(showError = true): Promise<boolean> {
   const key = selectedApiKey.value
+  const requestID = ++taskListRequestID
   stopPolling()
   if (!key) {
     tasks.value = []
     hasMore.value = false
-    return
+    loadingTasks.value = false
+    return true
   }
   loadingTasks.value = true
   try {
     const response = await listAsyncImageTasks(key.key, { status: filters.status, limit: PAGE_SIZE, offset: offset.value })
+    if (requestID !== taskListRequestID) return false
     tasks.value = response.data || []
     hasMore.value = response.has_more === true
+    return true
   } catch (error) {
+    if (requestID !== taskListRequestID) return false
     tasks.value = []
     hasMore.value = false
     if (showError) appStore.showError(errorMessage(error, t('asyncImage.errors.loadTasks')))
+    return false
   } finally {
-    loadingTasks.value = false
-    schedulePolling()
+    if (requestID === taskListRequestID) {
+      loadingTasks.value = false
+      schedulePolling()
+    }
   }
 }
 
@@ -611,6 +666,32 @@ function selectApiKey() {
   offset.value = 0
   selectedTask.value = null
   void loadTasks()
+}
+
+async function confirmDeleteTask() {
+  const target = deleteTarget.value
+  const key = selectedApiKey.value
+  if (!target || !key || deletingTaskId.value) return
+
+  deletingTaskId.value = target.task_id
+  try {
+    await deleteAsyncImageTask(key.key, target.task_id)
+    if (selectedTask.value?.task_id === target.task_id) selectedTask.value = null
+    deleteTarget.value = null
+    appStore.showSuccess(t('asyncImage.delete.success'))
+    const loaded = await loadTasks()
+    if (loaded && tasks.value.length === 0 && offset.value > 0) {
+      offset.value = Math.max(0, offset.value - PAGE_SIZE)
+      await loadTasks()
+    }
+  } catch (error) {
+    const code = (error as { code?: string })?.code
+    appStore.showError(t(code === 'IMAGE_TASK_DELETE_NOT_ALLOWED'
+      ? 'asyncImage.errors.deleteNotAllowed'
+      : 'asyncImage.errors.delete'))
+  } finally {
+    deletingTaskId.value = ''
+  }
 }
 
 function previousPage() {
@@ -720,6 +801,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  taskListRequestID++
   stopPolling()
   clearEditUploads()
 })
@@ -728,5 +810,9 @@ onBeforeUnmount(() => {
 <style scoped>
 .icon-button {
   @apply inline-flex h-8 w-8 items-center justify-center rounded border border-gray-200 text-gray-600 transition-colors hover:border-primary-300 hover:bg-primary-50 hover:text-primary-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40 dark:border-dark-600 dark:text-dark-300 dark:hover:border-primary-700 dark:hover:bg-primary-900/20 dark:hover:text-primary-300;
+}
+
+.icon-button-danger {
+  @apply text-red-600 hover:border-red-300 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-60 dark:text-red-400 dark:hover:border-red-800 dark:hover:bg-red-950/30 dark:hover:text-red-300;
 }
 </style>

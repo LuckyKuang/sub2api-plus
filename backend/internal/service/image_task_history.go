@@ -32,6 +32,8 @@ type ImageTaskHistoryFilter struct {
 type ImageTaskHistoryRepository interface {
 	Save(ctx context.Context, task *ImageTaskRecord) error
 	List(ctx context.Context, owner ImageTaskOwner, filter ImageTaskHistoryFilter) ([]*ImageTaskRecord, bool, error)
+	Get(ctx context.Context, owner ImageTaskOwner, id string) (*ImageTaskRecord, error)
+	DeleteFailed(ctx context.Context, owner ImageTaskOwner, id string) (bool, error)
 }
 
 // ImageTaskListResponse is the OpenAI-compatible task collection returned by
