@@ -498,6 +498,31 @@ class LocalChecksTest(unittest.TestCase):
         names = [call.args[0] for call in run_step.call_args_list]
         self.assertIn("Apple Container lifecycle test", names)
 
+    def test_frontend_tests_respect_validation_container_cpu_budget(self) -> None:
+        git_miss = subprocess.CompletedProcess(["git"], 1, "")
+        with (
+            mock.patch.object(push_cli, "ROOT", Path("/repo")),
+            mock.patch.object(push_cli, "run_command", return_value=git_miss),
+            mock.patch.object(push_cli, "run_step") as run_step,
+            mock.patch.object(push_cli, "run_frontend_security_check"),
+        ):
+            push_cli.run_local_checks("origin", "feature", push_cli.Runtime("docker"))
+
+        frontend_test = next(
+            call for call in run_step.call_args_list if call.args[0] == "Frontend tests"
+        )
+        self.assertEqual(
+            [
+                "pnpm",
+                "--dir",
+                "frontend",
+                "run",
+                "test:run",
+                "--maxWorkers=4",
+            ],
+            frontend_test.args[1],
+        )
+
 
 class DeclaredToolchainsTest(unittest.TestCase):
     def test_reads_repository_pins(self) -> None:

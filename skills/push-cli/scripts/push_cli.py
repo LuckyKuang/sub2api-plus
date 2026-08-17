@@ -525,7 +525,14 @@ def run_local_checks(
         ),
         (
             "Frontend tests",
-            ["pnpm", "--dir", "frontend", "run", "test:run"],
+            [
+                "pnpm",
+                "--dir",
+                "frontend",
+                "run",
+                "test:run",
+                "--maxWorkers=4",
+            ],
             ROOT,
         ),
         (
