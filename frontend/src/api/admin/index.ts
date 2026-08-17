@@ -125,6 +125,8 @@ export type {
   IPAccessRule,
   IPAccessRuleKind,
   IPAccessRuleStatus,
+  BlockIPLoginFailureStateRequest,
+  BlockIPLoginFailureStateResponse,
   TrustedProxyConfigurationState,
   TrustedProxyStatus
 } from './ipAccessControl'

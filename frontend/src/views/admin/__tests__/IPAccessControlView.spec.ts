@@ -12,6 +12,7 @@ const {
   listRules,
   createRule,
   releaseRuleAndReset,
+  blockFailureState,
   showError,
   showSuccess,
 } = vi.hoisted(() => ({
@@ -22,6 +23,7 @@ const {
   listRules: vi.fn(),
   createRule: vi.fn(),
   releaseRuleAndReset: vi.fn(),
+  blockFailureState: vi.fn(),
   showError: vi.fn(),
   showSuccess: vi.fn(),
 }))
@@ -36,6 +38,7 @@ vi.mock('@/api/admin', () => ({
       listRules,
       createRule,
       releaseRuleAndReset,
+      blockFailureState,
       resetFailureState: vi.fn(),
     },
   },
@@ -67,7 +70,7 @@ vi.mock('vue-i18n', async () => {
 const AppLayoutStub = defineComponent({ template: '<main><slot /></main>' })
 const DataTableStub = defineComponent({
   props: { data: { type: Array, default: () => [] } },
-  template: '<div><slot name="empty" /></div>',
+  template: '<div><div v-for="(row, index) in data" :key="row.normalized_ip || row.id || index"><slot name="cell-actions" :row="row" /></div><slot v-if="!data.length" name="empty" /></div>',
 })
 const BaseDialogStub = defineComponent({
   props: { show: { type: Boolean, default: false } },
@@ -130,6 +133,7 @@ describe('IPAccessControlView', () => {
       listRules,
       createRule,
       releaseRuleAndReset,
+      blockFailureState,
       showError,
       showSuccess,
     ]) {
@@ -143,6 +147,13 @@ describe('IPAccessControlView', () => {
     listRules.mockResolvedValue(emptyPage())
     createRule.mockResolvedValue({ id: 1 })
     releaseRuleAndReset.mockResolvedValue({ id: 1 })
+    blockFailureState.mockResolvedValue({
+      rule: { id: 42, ip_or_cidr: '203.0.113.8', rule_kind: 'manual_block', status: 'active' },
+      already_blocked: false,
+      effectively_blocked: true,
+      suppressed_by_allow_rule: false,
+      as_of: '2026-08-17T00:00:00Z',
+    })
   })
 
   it('refreshes failure status after saving enforcement settings', async () => {
@@ -150,11 +161,14 @@ describe('IPAccessControlView', () => {
     await flushPromises()
     listFailureStates.mockClear()
 
-    await (wrapper.vm as any).saveSettings()
+    const vm = wrapper.vm as any
+    vm.settingsUnavailable = true
+    await vm.saveSettings()
     await flushPromises()
 
     expect(updateSettings).toHaveBeenCalledTimes(1)
     expect(listFailureStates).toHaveBeenCalledTimes(1)
+    expect(vm.settingsUnavailable).toBe(false)
     wrapper.unmount()
   })
 
@@ -199,10 +213,16 @@ describe('IPAccessControlView', () => {
         items: [{
           normalized_ip: '203.0.113.8',
           failure_count: 1,
+          failure_threshold: 2,
           window_started_at: '2026-07-27T00:00:00Z',
           last_failed_at: '2026-07-27T00:00:00Z',
           window_expires_at: '2026-07-27T00:15:00Z',
-          currently_blocked: false,
+          active_block_rule: false,
+          runtime_enforcement_enabled: true,
+          suppressed_by_allow_rule: false,
+          emergency_allowlisted: false,
+          effectively_blocked: false,
+          as_of: '2026-07-27T00:00:00Z',
         }],
         total: 1,
         page: 1,
@@ -257,6 +277,280 @@ describe('IPAccessControlView', () => {
     expect(bodyText).toContain('admin.ipAccessControl.deployGuide.proxyTunnelHint')
     wrapper.unmount()
     host.remove()
+  })
+
+  it('maps layered failure states to distinct operator labels', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const base = {
+      failure_count: 2,
+      failure_threshold: 2,
+      active_block_rule: true,
+      runtime_enforcement_enabled: true,
+      suppressed_by_allow_rule: false,
+      emergency_allowlisted: false,
+      effectively_blocked: true,
+    }
+
+    expect(vm.failureBlockStatusLabel(base)).toBe('admin.ipAccessControl.failureStates.blocked')
+    expect(vm.failureBlockStatusLabel({ ...base, effectively_blocked: false, suppressed_by_allow_rule: true }))
+      .toBe('admin.ipAccessControl.failureStates.suppressedByAllow')
+    expect(vm.failureBlockStatusLabel({ ...base, effectively_blocked: false, emergency_allowlisted: true }))
+      .toBe('admin.ipAccessControl.failureStates.emergencyAllowlisted')
+    expect(vm.failureBlockStatusLabel({ ...base, effectively_blocked: false, runtime_enforcement_enabled: false }))
+      .toBe('admin.ipAccessControl.failureStates.ruleNotEnforced')
+    expect(vm.failureBlockStatusLabel({ ...base, active_block_rule: false, effectively_blocked: false }))
+      .toBe('admin.ipAccessControl.failureStates.observing')
+    wrapper.unmount()
+  })
+
+  it('submits the dedicated manual-block action once and refreshes both lists', async () => {
+    const state = {
+      normalized_ip: '203.0.113.8',
+      failure_count: 1,
+      failure_threshold: 2,
+      window_started_at: '2026-08-17T00:00:00Z',
+      last_failed_at: '2026-08-17T00:00:00Z',
+      window_expires_at: '2026-08-17T00:15:00Z',
+      active_block_rule: false,
+      runtime_enforcement_enabled: true,
+      suppressed_by_allow_rule: false,
+      emergency_allowlisted: false,
+      effectively_blocked: false,
+      as_of: '2026-08-17T00:00:00Z',
+    }
+    listFailureStates.mockResolvedValue({ ...emptyPage(), items: [state], total: 1 })
+
+    let resolveBlock!: (value: unknown) => void
+    blockFailureState.mockReturnValueOnce(new Promise((resolve) => { resolveBlock = resolve }))
+    const wrapper = mountView()
+    await flushPromises()
+
+    const manualButton = wrapper.findAll('button').find((button) => button.text() === 'admin.ipAccessControl.failureStates.manualBlock')
+    expect(manualButton).toBeTruthy()
+    expect(manualButton!.attributes('disabled')).toBeUndefined()
+
+    const vm = wrapper.vm as any
+    getSettings.mockResolvedValueOnce({ ...defaultSettings, login_failure_block_minutes: 120 })
+    await vm.confirmManualBlock(state)
+    expect(vm.settings.login_failure_block_minutes).toBe(120)
+    listFailureStates.mockClear()
+    listRules.mockClear()
+    const firstSubmit = vm.manualBlockFailureState()
+    await vm.manualBlockFailureState()
+
+    expect(blockFailureState).toHaveBeenCalledTimes(1)
+    expect(blockFailureState).toHaveBeenCalledWith({ ip: '203.0.113.8' })
+    expect(vm.manualBlockSubmitting).toBe(true)
+
+    resolveBlock({
+      rule: { id: 42, ip_or_cidr: '203.0.113.8', rule_kind: 'manual_block', status: 'active' },
+      already_blocked: false,
+      effectively_blocked: true,
+      suppressed_by_allow_rule: false,
+      as_of: '2026-08-17T00:00:00Z',
+    })
+    await firstSubmit
+    await flushPromises()
+
+    expect(vm.manualBlockSubmitting).toBe(false)
+    expect(listFailureStates).toHaveBeenCalledTimes(1)
+    expect(listRules).toHaveBeenCalledTimes(1)
+    expect(showSuccess).toHaveBeenCalledWith('admin.ipAccessControl.failureStates.manualBlockSuccess')
+    wrapper.unmount()
+  })
+
+  it('uses safe alternate actions and disables manual blocking for stale or unenforced state', async () => {
+    const base = {
+      normalized_ip: '203.0.113.8',
+      failure_count: 2,
+      failure_threshold: 2,
+      window_started_at: '2026-08-17T00:00:00Z',
+      last_failed_at: '2026-08-17T00:00:00Z',
+      window_expires_at: '2026-08-17T00:15:00Z',
+      active_block_rule: false,
+      runtime_enforcement_enabled: true,
+      suppressed_by_allow_rule: false,
+      emergency_allowlisted: false,
+      effectively_blocked: false,
+      as_of: '2026-08-17T00:00:00Z',
+    }
+    listFailureStates.mockResolvedValue({
+      ...emptyPage(),
+      total: 4,
+      items: [
+        { ...base, active_block_rule: true, block_rule_ip_or_cidr: '203.0.113.0/24', effectively_blocked: true },
+        { ...base, normalized_ip: '203.0.113.9', suppressed_by_allow_rule: true },
+        { ...base, normalized_ip: '203.0.113.10', runtime_enforcement_enabled: false },
+        { ...base, normalized_ip: '203.0.113.11', emergency_allowlisted: true },
+      ],
+    })
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('admin.ipAccessControl.failureStates.viewRule')
+    expect(wrapper.text()).toContain('admin.ipAccessControl.failureStates.handleAllow')
+    expect(wrapper.text()).toContain('admin.ipAccessControl.failureStates.emergencyAllowActive')
+    const manualButton = wrapper.findAll('button').find((button) => button.text() === 'admin.ipAccessControl.failureStates.manualBlock')
+    expect(manualButton?.attributes('disabled')).toBeDefined()
+
+    const vm = wrapper.vm as any
+    expect(vm.manualBlockDisabledReason({ ...base, runtime_enforcement_enabled: false }))
+      .toBe('admin.ipAccessControl.failureStates.manualBlockDisabledEnforcement')
+    vm.failureStatesUnavailable = true
+    expect(vm.manualBlockDisabledReason({ ...base, runtime_enforcement_enabled: true }))
+      .toBe('admin.ipAccessControl.failureStates.manualBlockDisabledStale')
+
+    vm.failureStatesUnavailable = false
+    vm.settingsUnavailable = true
+    expect(vm.manualBlockDisabledReason({ ...base, runtime_enforcement_enabled: true }))
+      .toBe('admin.ipAccessControl.failureStates.manualBlockDisabledSettings')
+    vm.settingsUnavailable = false
+    expect(vm.manualBlockDisabledReason({ ...base, suppressed_by_allow_rule: true }))
+      .toBe('admin.ipAccessControl.failureStates.manualBlockDisabledAllow')
+    expect(vm.manualBlockDisabledReason({ ...base, emergency_allowlisted: true }))
+      .toBe('admin.ipAccessControl.failureStates.manualBlockDisabledEmergencyAllow')
+    expect(vm.manualBlockDisabledReason({ ...base, active_block_rule: true }))
+      .toBe('admin.ipAccessControl.failureStates.manualBlockDisabledAlreadyBlocked')
+    listRules.mockClear()
+    await vm.focusRulesForFailureState({ ...base, block_rule_ip_or_cidr: '203.0.113.0/24' })
+    expect(vm.filters.query).toBe('203.0.113.0/24')
+    expect(listRules).toHaveBeenCalledWith(expect.objectContaining({ query: '203.0.113.0/24', status: 'active' }))
+    wrapper.unmount()
+  })
+
+  it('does not submit a stale manual-block target after the row disappears', async () => {
+    const state = {
+      normalized_ip: '203.0.113.8',
+      failure_count: 1,
+      failure_threshold: 2,
+      window_started_at: '2026-08-17T00:00:00Z',
+      last_failed_at: '2026-08-17T00:00:00Z',
+      window_expires_at: '2026-08-17T00:15:00Z',
+      active_block_rule: false,
+      runtime_enforcement_enabled: true,
+      suppressed_by_allow_rule: false,
+      emergency_allowlisted: false,
+      effectively_blocked: false,
+      as_of: '2026-08-17T00:00:00Z',
+    }
+    listFailureStates.mockResolvedValue({ ...emptyPage(), items: [state], total: 1 })
+    const wrapper = mountView()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    await vm.confirmManualBlock(state)
+    expect(vm.manualBlockTarget?.normalized_ip).toBe(state.normalized_ip)
+    vm.failureStates = []
+    blockFailureState.mockClear()
+    showError.mockClear()
+    await vm.manualBlockFailureState()
+
+    expect(blockFailureState).not.toHaveBeenCalled()
+    expect(vm.manualBlockTarget).toBeNull()
+    expect(showError).toHaveBeenCalledWith('admin.ipAccessControl.failureStates.manualBlockDisabledStale')
+    wrapper.unmount()
+  })
+
+  it('refreshes visible failure states on the low-frequency timer', async () => {
+    vi.useFakeTimers()
+    const wrapper = mountView()
+    await flushPromises()
+    listFailureStates.mockClear()
+
+    vi.advanceTimersByTime(15_000)
+    await flushPromises()
+
+    expect(listFailureStates).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+    vi.useRealTimers()
+  })
+
+  it('marks displayed failure data stale when refresh fails', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.failureStatesUpdatedAt).toBeInstanceOf(Date)
+
+    listFailureStates.mockRejectedValueOnce(new Error('unavailable'))
+    await vm.loadFailureStates()
+
+    expect(vm.failureStatesUnavailable).toBe(true)
+    expect(vm.failureStatesUpdatedAt).toBeInstanceOf(Date)
+    wrapper.unmount()
+  })
+
+  it('keeps the newest failure-state response when refreshes overlap', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    let resolveOlder!: (value: unknown) => void
+    listFailureStates.mockReset()
+    listFailureStates
+      .mockReturnValueOnce(new Promise((resolve) => { resolveOlder = resolve }))
+      .mockResolvedValueOnce({
+        ...emptyPage(),
+        total: 1,
+        items: [{
+          normalized_ip: '203.0.113.20',
+          failure_count: 2,
+          failure_threshold: 2,
+          window_started_at: '2026-08-17T00:00:00Z',
+          last_failed_at: '2026-08-17T00:01:00Z',
+          window_expires_at: '2026-08-17T00:15:00Z',
+          active_block_rule: true,
+          runtime_enforcement_enabled: true,
+          suppressed_by_allow_rule: false,
+          emergency_allowlisted: false,
+          effectively_blocked: true,
+          as_of: '2026-08-17T00:01:00Z',
+        }],
+      })
+
+    const olderRequest = vm.loadFailureStates()
+    const newerRequest = vm.loadFailureStates()
+    await newerRequest
+    expect(vm.failureStates[0].normalized_ip).toBe('203.0.113.20')
+
+    resolveOlder({
+      ...emptyPage(),
+      total: 1,
+      items: [{
+        normalized_ip: '203.0.113.19',
+        failure_count: 1,
+        failure_threshold: 2,
+        window_started_at: '2026-08-17T00:00:00Z',
+        last_failed_at: '2026-08-17T00:00:30Z',
+        window_expires_at: '2026-08-17T00:15:00Z',
+        active_block_rule: false,
+        runtime_enforcement_enabled: true,
+        suppressed_by_allow_rule: false,
+        emergency_allowlisted: false,
+        effectively_blocked: false,
+        as_of: '2026-08-17T00:00:30Z',
+      }],
+    })
+    await olderRequest
+
+    expect(vm.failureStates[0].normalized_ip).toBe('203.0.113.20')
+    expect(vm.failureStatesLoading).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('keeps the manual-block duration editable when automatic blocking is off', async () => {
+    getSettings.mockResolvedValue({
+      ...defaultSettings,
+      login_failure_auto_block_enabled: false,
+    })
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('admin.ipAccessControl.protection.duration')
+    expect(wrapper.text()).not.toContain('admin.ipAccessControl.protection.threshold')
+    expect(wrapper.text()).not.toContain('admin.ipAccessControl.protection.window')
+    wrapper.unmount()
   })
 
   it('renders safely when an older server returns null collection fields', async () => {

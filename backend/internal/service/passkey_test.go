@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -69,6 +70,37 @@ func (s *passkeyPwSessionStoreStub) Store(context.Context, *PasskeySession, time
 	return "session-token", nil
 }
 
+type passkeyLoginRepoStub struct {
+	PasskeyRepository
+	record  *PasskeyCredentialRecord
+	getErr  error
+	listErr error
+}
+
+func (s *passkeyLoginRepoStub) GetByCredentialID(context.Context, []byte) (*PasskeyCredentialRecord, error) {
+	return s.record, s.getErr
+}
+
+func (s *passkeyLoginRepoStub) ListByUserID(context.Context, int64) ([]PasskeyCredentialRecord, error) {
+	if s.listErr != nil {
+		return nil, s.listErr
+	}
+	if s.record == nil {
+		return nil, nil
+	}
+	return []PasskeyCredentialRecord{*s.record}, nil
+}
+
+type passkeyLoginUserRepoStub struct {
+	UserRepository
+	user *User
+	err  error
+}
+
+func (s *passkeyLoginUserRepoStub) GetByID(context.Context, int64) (*User, error) {
+	return s.user, s.err
+}
+
 func newPasskeyPwService(t *testing.T, user *User) (*PasskeyService, *passkeyPwRepoStub) {
 	t.Helper()
 	repo := &passkeyPwRepoStub{}
@@ -109,4 +141,85 @@ func TestPasskeyEnrollmentAndRevocationRequireAccountPassword(t *testing.T) {
 
 	require.NoError(t, svc.Delete(context.Background(), user.ID, 1, "correct-password"))
 	require.True(t, repo.deleteCalled)
+}
+
+func TestResolvePasskeyLoginUserSeparatesCredentialRejectionFromDependencies(t *testing.T) {
+	credentialID := []byte("credential-id")
+	userHandle := []byte("0123456789abcdef")
+	activeUser := &User{ID: 7, Email: "user@example.com", Status: StatusActive}
+	record := &PasskeyCredentialRecord{
+		UserID:     activeUser.ID,
+		UserHandle: append([]byte(nil), userHandle...),
+		Credential: webauthn.Credential{ID: credentialID},
+	}
+
+	t.Run("missing credential is a verification failure", func(t *testing.T) {
+		svc := &PasskeyService{
+			repo:     &passkeyLoginRepoStub{getErr: ErrPasskeyNotFound},
+			userRepo: &passkeyLoginUserRepoStub{user: activeUser},
+		}
+		_, err := svc.resolvePasskeyLoginUser(context.Background(), credentialID, userHandle)
+		require.ErrorIs(t, err, ErrPasskeyVerify)
+	})
+
+	t.Run("mismatched handle is a verification failure", func(t *testing.T) {
+		svc := &PasskeyService{
+			repo:     &passkeyLoginRepoStub{record: record},
+			userRepo: &passkeyLoginUserRepoStub{user: activeUser},
+		}
+		_, err := svc.resolvePasskeyLoginUser(context.Background(), credentialID, []byte("different-handle"))
+		require.ErrorIs(t, err, ErrPasskeyVerify)
+	})
+
+	t.Run("inactive account is a verification failure", func(t *testing.T) {
+		svc := &PasskeyService{
+			repo:     &passkeyLoginRepoStub{record: record},
+			userRepo: &passkeyLoginUserRepoStub{user: &User{ID: activeUser.ID, Status: StatusDisabled}},
+		}
+		_, err := svc.resolvePasskeyLoginUser(context.Background(), credentialID, userHandle)
+		require.ErrorIs(t, err, ErrPasskeyVerify)
+	})
+
+	t.Run("credential lookup failure is propagated", func(t *testing.T) {
+		dependencyErr := errors.New("passkey database unavailable")
+		svc := &PasskeyService{
+			repo:     &passkeyLoginRepoStub{getErr: dependencyErr},
+			userRepo: &passkeyLoginUserRepoStub{user: activeUser},
+		}
+		_, err := svc.resolvePasskeyLoginUser(context.Background(), credentialID, userHandle)
+		require.ErrorIs(t, err, dependencyErr)
+		require.NotErrorIs(t, err, ErrPasskeyVerify)
+	})
+
+	t.Run("account lookup failure is propagated", func(t *testing.T) {
+		dependencyErr := errors.New("user database unavailable")
+		svc := &PasskeyService{
+			repo:     &passkeyLoginRepoStub{record: record},
+			userRepo: &passkeyLoginUserRepoStub{err: dependencyErr},
+		}
+		_, err := svc.resolvePasskeyLoginUser(context.Background(), credentialID, userHandle)
+		require.ErrorIs(t, err, dependencyErr)
+		require.NotErrorIs(t, err, ErrPasskeyVerify)
+	})
+
+	t.Run("credential list failure is propagated", func(t *testing.T) {
+		dependencyErr := errors.New("passkey list unavailable")
+		svc := &PasskeyService{
+			repo:     &passkeyLoginRepoStub{record: record, listErr: dependencyErr},
+			userRepo: &passkeyLoginUserRepoStub{user: activeUser},
+		}
+		_, err := svc.resolvePasskeyLoginUser(context.Background(), credentialID, userHandle)
+		require.ErrorIs(t, err, dependencyErr)
+		require.NotErrorIs(t, err, ErrPasskeyVerify)
+	})
+
+	t.Run("valid credential resolves its account", func(t *testing.T) {
+		svc := &PasskeyService{
+			repo:     &passkeyLoginRepoStub{record: record},
+			userRepo: &passkeyLoginUserRepoStub{user: activeUser},
+		}
+		resolved, err := svc.resolvePasskeyLoginUser(context.Background(), credentialID, userHandle)
+		require.NoError(t, err)
+		require.Equal(t, activeUser, resolved.(*passkeyUser).account)
+	})
 }

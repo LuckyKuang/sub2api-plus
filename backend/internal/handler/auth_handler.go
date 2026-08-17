@@ -42,18 +42,33 @@ func (h *AuthHandler) SetIPAccessControlService(access *service.IPAccessControlS
 }
 
 func (h *AuthHandler) recordFailedLocalLogin(c *gin.Context) bool {
-	if h.ipAccessControl == nil {
+	return recordFailedAuthentication(c, h.ipAccessControl)
+}
+
+func recordFailedAuthentication(c *gin.Context, access *service.IPAccessControlService) bool {
+	if access == nil {
 		return false
 	}
 	identity := middleware2.TrustedClientIdentity(c)
-	result, err := h.ipAccessControl.RecordFailedLoginForIdentity(c.Request.Context(), identity)
+	result, err := access.RecordFailedLoginForIdentity(c.Request.Context(), identity)
 	if err != nil {
 		slog.Error("IP access control failed to record login failure", "error", err, "client_ip", identity.EffectiveIP)
-		h.abortIPAccessControlUnavailable(c)
+		middleware2.SetAuditExtra(c, map[string]any{
+			"ip_access_result": "unavailable",
+			"ip_source":        string(identity.Source),
+		})
+		abortIPAccessControlUnavailable(c)
 		return true
 	}
-	if result != nil && result.Blocked {
-		extra := map[string]any{"failure_count": result.FailureCount, "ip_source": string(identity.Source)}
+	if result != nil {
+		extra := map[string]any{
+			"failure_count":    result.FailureCount,
+			"ip_access_result": "recorded",
+			"ip_source":        string(identity.Source),
+		}
+		if result.Blocked {
+			extra["ip_access_result"] = "blocked"
+		}
 		if result.Rule != nil {
 			extra["auto_block_rule_id"] = result.Rule.ID
 			if result.Rule.ExpiresAt != nil {
@@ -61,52 +76,16 @@ func (h *AuthHandler) recordFailedLocalLogin(c *gin.Context) bool {
 			}
 		}
 		middleware2.SetAuditExtra(c, extra)
+	}
+	if result != nil && result.Blocked {
 		middleware2.AbortWithError(c, 403, "IP_BANNED", "Access from this IP address has been prohibited.")
 		return true
 	}
 	return false
 }
 
-// clearSuccessfulAuthentication resets a source's failure streak after any
-// completed authentication method proves identity. A streak is a property of
-// the source IP, not of the credential type used for the final success.
-func (h *AuthHandler) clearSuccessfulAuthentication(c *gin.Context) bool {
-	return !clearSuccessfulAuthenticationState(c, h.ipAccessControl)
-}
-
-// clearSuccessfulLocalLogin is kept for focused tests and callers that still
-// use the former name. Its semantics now intentionally cover all successful
-// authentication methods.
-func (h *AuthHandler) clearSuccessfulLocalLogin(c *gin.Context) bool {
-	return h.clearSuccessfulAuthentication(c)
-}
-
-func (h *AuthHandler) recordSuccessfulAuthentication(c *gin.Context, userID int64) bool {
-	if h.clearSuccessfulAuthentication(c) {
-		return false
-	}
+func (h *AuthHandler) recordSuccessfulAuthentication(c *gin.Context, userID int64) {
 	h.authService.RecordSuccessfulLogin(c.Request.Context(), userID)
-	return true
-}
-
-func (h *AuthHandler) abortIPAccessControlUnavailable(c *gin.Context) {
-	abortIPAccessControlUnavailable(c)
-}
-
-// clearSuccessfulAuthenticationState is shared by every login method. This
-// prevents a successful credential from leaving a source IP locked out just
-// because it used a different authentication endpoint.
-func clearSuccessfulAuthenticationState(c *gin.Context, ipAccessControl *service.IPAccessControlService) bool {
-	if ipAccessControl == nil {
-		return true
-	}
-	identity := middleware2.TrustedClientIdentity(c)
-	if err := ipAccessControl.ClearSuccessfulLogin(c.Request.Context(), identity.EffectiveIP); err != nil {
-		slog.Error("IP access control failed to clear successful login state", "error", err, "client_ip", identity.EffectiveIP)
-		abortIPAccessControlUnavailable(c)
-		return false
-	}
-	return true
 }
 
 func abortIPAccessControlUnavailable(c *gin.Context) {
@@ -377,9 +356,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	if !h.recordSuccessfulAuthentication(c, user.ID) {
-		return
-	}
+	h.recordSuccessfulAuthentication(c, user.ID)
 
 	h.respondWithTokenPair(c, user)
 }
@@ -424,9 +401,6 @@ func (h *AuthHandler) Login2FA(c *gin.Context) {
 		}
 		slog.Debug("login_2fa_session_invalid",
 			"temp_token_prefix", tokenPrefix)
-		if h.recordFailedLocalLogin(c) {
-			return
-		}
 		response.BadRequest(c, "Invalid or expired 2FA session")
 		return
 	}
@@ -511,9 +485,7 @@ func (h *AuthHandler) Login2FA(c *gin.Context) {
 		secureCookie := isRequestHTTPS(c)
 		clearOAuthPendingSessionCookie(c, secureCookie)
 		clearOAuthPendingBrowserCookie(c, secureCookie)
-		if !h.recordSuccessfulAuthentication(c, user.ID) {
-			return
-		}
+		h.recordSuccessfulAuthentication(c, user.ID)
 
 		user, err = h.userService.GetByID(c.Request.Context(), session.UserID)
 		if err != nil {
@@ -526,9 +498,7 @@ func (h *AuthHandler) Login2FA(c *gin.Context) {
 	_ = h.totpService.DeleteLoginSession(c.Request.Context(), req.TempToken)
 
 	if session.PendingOAuthBind == nil {
-		if !h.recordSuccessfulAuthentication(c, user.ID) {
-			return
-		}
+		h.recordSuccessfulAuthentication(c, user.ID)
 	}
 
 	h.respondWithTokenPair(c, user)

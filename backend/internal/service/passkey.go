@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -300,19 +301,24 @@ func (s *PasskeyService) FinishLogin(
 		return nil, ErrPasskeySession
 	}
 
+	var dependencyErr error
 	handler := func(rawID, userHandle []byte) (webauthn.User, error) {
-		record, lookupErr := s.repo.GetByCredentialID(ctx, rawID)
-		if lookupErr != nil || record == nil || !bytes.Equal(record.UserHandle, userHandle) {
+		user, resolveErr := s.resolvePasskeyLoginUser(ctx, rawID, userHandle)
+		if resolveErr != nil && !errors.Is(resolveErr, ErrPasskeyVerify) {
+			// The WebAuthn library deliberately receives the generic verification
+			// error so storage details are never exposed to the client. Preserve
+			// the dependency error out of band so the handler does not count a
+			// PostgreSQL failure as an attacker-controlled credential failure.
+			dependencyErr = resolveErr
 			return nil, ErrPasskeyVerify
 		}
-		account, lookupErr := s.userRepo.GetByID(ctx, record.UserID)
-		if lookupErr != nil || account == nil || !account.IsActive() {
-			return nil, ErrPasskeyVerify
-		}
-		return s.loadWebAuthnUser(ctx, account, record.UserHandle)
+		return user, resolveErr
 	}
 
 	validatedUser, credential, err := s.webAuthn.FinishPasskeyLogin(handler, session.WebAuthn, request)
+	if dependencyErr != nil {
+		return nil, dependencyErr
+	}
 	if err != nil {
 		return nil, ErrPasskeyVerify
 	}
@@ -324,6 +330,37 @@ func (s *PasskeyService) FinishLogin(
 		return nil, err
 	}
 	return waUser.account, nil
+}
+
+// resolvePasskeyLoginUser separates credential rejection from dependency
+// failures. Missing/mismatched credentials and inactive accounts are safe to
+// expose as a generic verification failure; database failures must propagate
+// so callers do not feed them into the source-IP failure counter.
+func (s *PasskeyService) resolvePasskeyLoginUser(
+	ctx context.Context,
+	rawID, userHandle []byte,
+) (webauthn.User, error) {
+	record, err := s.repo.GetByCredentialID(ctx, rawID)
+	if err != nil {
+		if errors.Is(err, ErrPasskeyNotFound) {
+			return nil, ErrPasskeyVerify
+		}
+		return nil, err
+	}
+	if record == nil || !bytes.Equal(record.UserHandle, userHandle) {
+		return nil, ErrPasskeyVerify
+	}
+	account, err := s.userRepo.GetByID(ctx, record.UserID)
+	if err != nil {
+		if errors.Is(err, ErrUserNotFound) {
+			return nil, ErrPasskeyVerify
+		}
+		return nil, err
+	}
+	if account == nil || !account.IsActive() {
+		return nil, ErrPasskeyVerify
+	}
+	return s.loadWebAuthnUser(ctx, account, record.UserHandle)
 }
 
 func (s *PasskeyService) List(ctx context.Context, userID int64) ([]PasskeyCredentialSummary, error) {

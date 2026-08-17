@@ -194,7 +194,7 @@ func TestPasskeyCredentialListRemainsAvailableWhenSignInDisabled(t *testing.T) {
 	require.NotContains(t, recorder.Body.String(), "PASSKEY_DISABLED")
 }
 
-func TestPasskeySuccessfulLoginClearsIPFailureState(t *testing.T) {
+func TestPasskeySuccessfulLoginDoesNotClearIPFailureState(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	access, repo := newAuthIPAccessControlForTest(2)
 	handler := &PasskeyHandler{ipAccessControl: access}
@@ -205,12 +205,12 @@ func TestPasskeySuccessfulLoginClearsIPFailureState(t *testing.T) {
 	request.RemoteAddr = "203.0.113.24:43123"
 	ginContext.Request = request
 
-	require.True(t, handler.prepareSuccessfulLogin(ginContext, &service.User{ID: 42, Email: "passkey@example.test"}))
-	require.Equal(t, []string{"203.0.113.24"}, repo.resetIPs)
+	handler.prepareSuccessfulLogin(ginContext, &service.User{ID: 42, Email: "passkey@example.test"})
+	require.Empty(t, repo.resetIPs)
 	require.Equal(t, service.AuditAuthMethodPasskey, ginContext.GetString("auth_method"))
 }
 
-func TestPasskeySuccessfulLoginFailsClosedWhenIPStateCannotBeCleared(t *testing.T) {
+func TestPasskeySuccessfulLoginDoesNotDependOnFailureStateStorage(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	access, repo := newAuthIPAccessControlForTest(2)
 	repo.resetErr = errors.New("failure state database unavailable")
@@ -222,9 +222,13 @@ func TestPasskeySuccessfulLoginFailsClosedWhenIPStateCannotBeCleared(t *testing.
 	request.RemoteAddr = "203.0.113.24:43123"
 	ginContext.Request = request
 
-	require.False(t, handler.prepareSuccessfulLogin(ginContext, &service.User{ID: 42, Email: "passkey@example.test"}))
-	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
-	require.Equal(t, "no-store", recorder.Header().Get("Cache-Control"))
-	require.Equal(t, "5", recorder.Header().Get("Retry-After"))
-	require.Contains(t, recorder.Body.String(), "IP_ACCESS_CONTROL_UNAVAILABLE")
+	handler.prepareSuccessfulLogin(ginContext, &service.User{ID: 42, Email: "passkey@example.test"})
+	require.Empty(t, repo.resetIPs)
+	require.NotEqual(t, http.StatusServiceUnavailable, recorder.Code)
+}
+
+func TestPasskeyLoginFailureClassificationExcludesInfrastructureErrors(t *testing.T) {
+	require.False(t, isPasskeyLoginFailure(service.ErrPasskeySession))
+	require.True(t, isPasskeyLoginFailure(service.ErrPasskeyVerify))
+	require.False(t, isPasskeyLoginFailure(errors.New("passkey repository unavailable")))
 }

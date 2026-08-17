@@ -10,9 +10,22 @@
       </section>
 
       <section class="card">
-        <div class="border-b border-gray-100 px-5 py-4 dark:border-dark-700">
-          <h2 class="font-semibold text-gray-900 dark:text-white">{{ t('admin.ipAccessControl.failureStates.title') }}</h2>
-          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.ipAccessControl.failureStates.description') }}</p>
+        <div class="flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 px-5 py-4 dark:border-dark-700">
+          <div>
+            <h2 class="font-semibold text-gray-900 dark:text-white">{{ t('admin.ipAccessControl.failureStates.title') }}</h2>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.ipAccessControl.failureStates.description') }}</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <span v-if="failureStatesUnavailable" class="rounded bg-rose-100 px-2 py-1 text-xs font-medium text-rose-700 dark:bg-rose-950/50 dark:text-rose-300">
+              {{ t('admin.ipAccessControl.failureStates.unavailable') }}
+            </span>
+            <span v-if="failureStatesUpdatedAt" class="text-xs text-gray-500 dark:text-gray-400">
+              {{ t('admin.ipAccessControl.failureStates.lastUpdated', { time: failureStatesUpdatedAt.toLocaleString() }) }}
+            </span>
+            <button type="button" class="btn btn-secondary btn-sm" :disabled="failureStatesLoading" @click="refreshFailureStates">
+              {{ t('admin.ipAccessControl.failureStates.refresh') }}
+            </button>
+          </div>
         </div>
         <div class="flex flex-wrap items-end gap-3 border-b border-gray-100 p-4 dark:border-dark-700">
           <label class="min-w-52 flex-1">
@@ -23,22 +36,62 @@
         </div>
         <DataTable :columns="failureStateColumns" :data="failureStates" :loading="failureStatesLoading" row-key="normalized_ip">
           <template #cell-normalized_ip="{ value }"><span class="font-mono text-sm">{{ value }}</span></template>
-          <template #cell-failure_count="{ value }"><span class="font-medium text-gray-900 dark:text-white">{{ value }}</span></template>
+          <template #cell-failure_count="{ row }"><span class="font-medium text-gray-900 dark:text-white">{{ row.failure_count }} / {{ row.failure_threshold }}</span></template>
           <template #cell-window_started_at="{ value }"><span class="whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{{ formatTime(value) }}</span></template>
           <template #cell-last_failed_at="{ value }"><span class="whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{{ formatTime(value) }}</span></template>
           <template #cell-window_expires_at="{ value }"><span class="whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{{ formatTime(value) }}</span></template>
-          <template #cell-currently_blocked="{ row }">
-            <span :class="failureBlockStatusClass(row.currently_blocked)">
-              {{ row.currently_blocked ? t('admin.ipAccessControl.failureStates.blocked') : t('admin.ipAccessControl.failureStates.notBlocked') }}
+          <template #cell-effectively_blocked="{ row }">
+            <span :class="failureBlockStatusClass(row)">
+              {{ failureBlockStatusLabel(row) }}
             </span>
           </template>
           <template #cell-actions="{ row }">
-            <button type="button" class="btn btn-secondary btn-sm" @click="confirmResetCounter(row.normalized_ip)">
-              {{ t('admin.ipAccessControl.failureStates.resetCounter') }}
-            </button>
+            <div class="flex flex-wrap items-center gap-2">
+              <button type="button" class="btn btn-secondary btn-sm" @click="confirmResetCounter(row.normalized_ip)">
+                {{ t('admin.ipAccessControl.failureStates.resetCounter') }}
+              </button>
+              <button
+                v-if="row.emergency_allowlisted"
+                type="button"
+                class="btn btn-secondary btn-sm"
+                disabled
+                :title="t('admin.ipAccessControl.failureStates.manualBlockDisabledEmergencyAllow')"
+              >
+                {{ t('admin.ipAccessControl.failureStates.emergencyAllowActive') }}
+              </button>
+              <button
+                v-else-if="row.suppressed_by_allow_rule"
+                type="button"
+                class="btn btn-secondary btn-sm"
+                @click="focusRulesForFailureState(row, true)"
+              >
+                {{ t('admin.ipAccessControl.failureStates.handleAllow') }}
+              </button>
+              <button
+                v-else-if="row.active_block_rule"
+                type="button"
+                class="btn btn-secondary btn-sm"
+                @click="focusRulesForFailureState(row)"
+              >
+                {{ t('admin.ipAccessControl.failureStates.viewRule') }}
+              </button>
+              <button
+                v-else
+                type="button"
+                class="btn btn-danger btn-sm"
+                :disabled="!canManuallyBlockFailureState(row)"
+                :title="manualBlockDisabledReason(row)"
+                @click="confirmManualBlock(row)"
+              >
+                {{ t('admin.ipAccessControl.failureStates.manualBlock') }}
+              </button>
+            </div>
           </template>
           <template #empty><div class="py-10 text-center text-sm text-gray-500">{{ t('admin.ipAccessControl.failureStates.empty') }}</div></template>
         </DataTable>
+        <p class="border-t border-gray-100 px-5 py-3 text-xs text-gray-500 dark:border-dark-700 dark:text-gray-400">
+          {{ t('admin.ipAccessControl.failureStates.operationHint') }}
+        </p>
         <div class="border-t border-gray-100 p-4 dark:border-dark-700">
           <Pagination
             v-if="failureTotal > 0"
@@ -126,9 +179,9 @@
             </div>
             <Toggle v-model="settings.login_failure_auto_block_enabled" :disabled="!settings.enforcement_enabled || (!settings.login_failure_auto_block_enabled && !automaticBlockingReady)" />
           </div>
-          <div v-if="settings.enforcement_enabled && settings.login_failure_auto_block_enabled" class="grid grid-cols-1 gap-4 border-t border-gray-100 pt-5 sm:grid-cols-3 dark:border-dark-700">
-            <label class="block"><span class="input-label">{{ t('admin.ipAccessControl.protection.threshold') }}</span><input v-model.number="settings.login_failure_threshold" min="2" max="100" type="number" class="input" /></label>
-            <label class="block"><span class="input-label">{{ t('admin.ipAccessControl.protection.window') }}</span><input v-model.number="settings.login_failure_window_minutes" min="1" max="1440" type="number" class="input" /></label>
+          <div v-if="settings.enforcement_enabled" class="grid grid-cols-1 gap-4 border-t border-gray-100 pt-5 sm:grid-cols-3 dark:border-dark-700">
+            <label v-if="settings.login_failure_auto_block_enabled" class="block"><span class="input-label">{{ t('admin.ipAccessControl.protection.threshold') }}</span><input v-model.number="settings.login_failure_threshold" min="2" max="100" type="number" class="input" /></label>
+            <label v-if="settings.login_failure_auto_block_enabled" class="block"><span class="input-label">{{ t('admin.ipAccessControl.protection.window') }}</span><input v-model.number="settings.login_failure_window_minutes" min="1" max="1440" type="number" class="input" /></label>
             <label class="block"><span class="input-label">{{ t('admin.ipAccessControl.protection.duration') }}</span><input v-model.number="settings.login_failure_block_minutes" min="1" max="525600" type="number" class="input" /></label>
           </div>
           <p v-if="!featureEnabled" class="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800 dark:border-amber-800/70 dark:bg-amber-950/30 dark:text-amber-200">{{ t('admin.ipAccessControl.protection.masterSwitchOff') }}</p>
@@ -141,7 +194,7 @@
         </div>
       </section>
 
-      <section class="card">
+      <section ref="rulesSection" class="card">
         <div class="flex flex-wrap items-center justify-between gap-4 border-b border-gray-100 px-5 py-4 dark:border-dark-700">
           <div><h2 class="font-semibold text-gray-900 dark:text-white">{{ t('admin.ipAccessControl.rules.title') }}</h2><p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.ipAccessControl.rules.description') }}</p></div>
           <button type="button" class="btn btn-primary" @click="openCreateDialog"><Icon name="plus" size="sm" class="mr-1.5" />{{ t('admin.ipAccessControl.rules.add') }}</button>
@@ -179,6 +232,17 @@
     </BaseDialog>
     <ConfirmDialog :show="releaseTarget !== null" :title="releaseDialogTitle" :message="releaseDialogMessage" :confirm-text="releaseDialogConfirmText" :cancel-text="t('common.cancel')" danger @confirm="releaseAndReset" @cancel="releaseTarget = null" />
     <ConfirmDialog :show="resetCounterTarget !== null" :title="t('admin.ipAccessControl.failureStates.resetTitle')" :message="t('admin.ipAccessControl.failureStates.resetMessage', { ip: resetCounterTarget })" :confirm-text="t('admin.ipAccessControl.failureStates.resetCounter')" :cancel-text="t('common.cancel')" danger @confirm="resetCounter" @cancel="resetCounterTarget = null" />
+    <ConfirmDialog
+      :show="manualBlockTarget !== null"
+      :title="t('admin.ipAccessControl.failureStates.manualBlockTitle')"
+      :message="manualBlockDialogMessage"
+      :confirm-text="manualBlockSubmitting ? t('admin.ipAccessControl.failureStates.blocking') : t('admin.ipAccessControl.failureStates.manualBlock')"
+      :cancel-text="t('common.cancel')"
+      :loading="manualBlockSubmitting"
+      danger
+      @confirm="manualBlockFailureState"
+      @cancel="cancelManualBlock"
+    />
     <teleport to="body">
       <transition name="modal">
         <div v-if="showDeployGuide" class="fixed inset-0 z-50 flex items-center justify-center p-4" @mousedown.self="showDeployGuide = false">
@@ -283,7 +347,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { adminAPI, type IPAccessControlSettings, type IPLoginFailureState, type IPAccessRule, type IPAccessRuleKind, type IPAccessRuleStatus, type TrustedProxyStatus } from '@/api/admin'
 import { useAppStore } from '@/stores'
@@ -311,13 +375,17 @@ const proxyStatus = ref<TrustedProxyStatus | null>(null)
 const proxyStatusLoading = ref(true)
 const settings = reactive<IPAccessControlSettings>({ enforcement_enabled: false, login_failure_auto_block_enabled: false, login_failure_threshold: 8, login_failure_window_minutes: 15, login_failure_block_minutes: 1440 })
 const settingsLoading = ref(true)
+const settingsUnavailable = ref(false)
 const settingsSaving = ref(false)
 const failureStatesLoading = ref(false)
 const failureStates = ref<IPLoginFailureState[]>([])
+const failureStatesUpdatedAt = ref<Date | null>(null)
+const failureStatesUnavailable = ref(false)
 const failureTotal = ref(0)
 const failurePage = ref(1)
 const failurePageSize = ref(20)
 const failureFilters = reactive({ query: '' })
+let failureStatesRequestSequence = 0
 const rulesLoading = ref(false)
 const rules = ref<IPAccessRule[]>([])
 const total = ref(0)
@@ -328,10 +396,17 @@ const createVisible = ref(false)
 const creating = ref(false)
 const releaseTarget = ref<IPAccessRule | null>(null)
 const resetCounterTarget = ref<string | null>(null)
+const manualBlockTarget = ref<IPLoginFailureState | null>(null)
+const manualBlockSubmitting = ref(false)
+const rulesSection = ref<HTMLElement | null>(null)
 const releaseIsAllow = computed(() => releaseTarget.value?.rule_kind === 'allow')
 const releaseDialogTitle = computed(() => t(releaseIsAllow.value ? 'admin.ipAccessControl.rules.removeAllowTitle' : 'admin.ipAccessControl.rules.releaseTitle'))
 const releaseDialogMessage = computed(() => t(releaseIsAllow.value ? 'admin.ipAccessControl.rules.removeAllowMessage' : 'admin.ipAccessControl.rules.releaseMessage'))
 const releaseDialogConfirmText = computed(() => t(releaseIsAllow.value ? 'admin.ipAccessControl.rules.removeAllow' : 'admin.ipAccessControl.rules.releaseReset'))
+const manualBlockDialogMessage = computed(() => t('admin.ipAccessControl.failureStates.manualBlockMessage', {
+  ip: manualBlockTarget.value?.normalized_ip || '',
+  duration: settings.login_failure_block_minutes
+}))
 const createForm = reactive<{ ip_or_cidr: string; rule_kind: Extract<IPAccessRuleKind, 'manual_block' | 'allow'>; reason: string; expires_at: string }>({ ip_or_cidr: '', rule_kind: 'manual_block', reason: '', expires_at: '' })
 
 const statusOptions = computed(() => [{ value: 'active', label: t('admin.ipAccessControl.rules.statusActive') }, { value: 'released', label: t('admin.ipAccessControl.rules.statusReleased') }, { value: 'expired', label: t('admin.ipAccessControl.rules.statusExpired') }])
@@ -352,7 +427,7 @@ const failureStateColumns = computed<Column[]>(() => [
   { key: 'window_started_at', label: t('admin.ipAccessControl.failureStates.windowStartedAt') },
   { key: 'last_failed_at', label: t('admin.ipAccessControl.failureStates.lastFailedAt') },
   { key: 'window_expires_at', label: t('admin.ipAccessControl.failureStates.windowExpiresAt') },
-  { key: 'currently_blocked', label: t('admin.ipAccessControl.failureStates.blockStatus') },
+  { key: 'effectively_blocked', label: t('admin.ipAccessControl.failureStates.blockStatus') },
   { key: 'actions', label: t('common.actions') }
 ])
 const columns = computed<Column[]>(() => [{ key: 'ip_or_cidr', label: t('admin.ipAccessControl.rules.ip') }, { key: 'rule_kind', label: t('admin.ipAccessControl.rules.type') }, { key: 'status', label: t('common.status') }, { key: 'failure_count', label: t('admin.ipAccessControl.rules.failureCount') }, { key: 'hit_count', label: t('admin.ipAccessControl.rules.hitCount') }, { key: 'last_seen_at', label: t('admin.ipAccessControl.rules.lastSeenAt') }, { key: 'expires_at', label: t('admin.ipAccessControl.rules.expiresAt') }, { key: 'actions', label: t('common.actions') }])
@@ -387,7 +462,35 @@ function statusLabel(rule: IPAccessRule): string {
 function kindLabel(value: IPAccessRuleKind): string { return value === 'allow' ? t('admin.ipAccessControl.rules.allow') : value === 'auto_block' ? t('admin.ipAccessControl.rules.autoBlock') : t('admin.ipAccessControl.rules.manualBlock') }
 function statusClass(value: IPAccessRuleStatus): string { return value === 'active' ? 'rounded bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300' : 'rounded bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600 dark:bg-dark-700 dark:text-gray-300' }
 function kindClass(value: IPAccessRuleKind): string { return value === 'allow' ? 'rounded bg-sky-100 px-2 py-1 text-xs font-medium text-sky-700 dark:bg-sky-950/50 dark:text-sky-300' : value === 'auto_block' ? 'rounded bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700 dark:bg-amber-950/50 dark:text-amber-300' : 'rounded bg-rose-100 px-2 py-1 text-xs font-medium text-rose-700 dark:bg-rose-950/50 dark:text-rose-300' }
-function failureBlockStatusClass(blocked: boolean): string { return blocked ? 'rounded bg-rose-100 px-2 py-1 text-xs font-medium text-rose-700 dark:bg-rose-950/50 dark:text-rose-300' : 'rounded bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600 dark:bg-dark-700 dark:text-gray-300' }
+function failureBlockStatusLabel(state: IPLoginFailureState): string {
+  if (state.effectively_blocked) return t('admin.ipAccessControl.failureStates.blocked')
+  if (state.emergency_allowlisted) return t('admin.ipAccessControl.failureStates.emergencyAllowlisted')
+  if (state.suppressed_by_allow_rule) return t('admin.ipAccessControl.failureStates.suppressedByAllow')
+  if (state.active_block_rule && !state.runtime_enforcement_enabled) return t('admin.ipAccessControl.failureStates.ruleNotEnforced')
+  if (state.active_block_rule) return t('admin.ipAccessControl.failureStates.ruleActive')
+  return t('admin.ipAccessControl.failureStates.observing', { count: state.failure_count, threshold: state.failure_threshold })
+}
+function failureBlockStatusClass(state: IPLoginFailureState): string {
+  if (state.effectively_blocked) return 'rounded bg-rose-100 px-2 py-1 text-xs font-medium text-rose-700 dark:bg-rose-950/50 dark:text-rose-300'
+  if (state.emergency_allowlisted) return 'rounded bg-violet-100 px-2 py-1 text-xs font-medium text-violet-700 dark:bg-violet-950/50 dark:text-violet-300'
+  if (state.suppressed_by_allow_rule) return 'rounded bg-sky-100 px-2 py-1 text-xs font-medium text-sky-700 dark:bg-sky-950/50 dark:text-sky-300'
+  if (state.active_block_rule) return 'rounded bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700 dark:bg-amber-950/50 dark:text-amber-300'
+  return 'rounded bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600 dark:bg-dark-700 dark:text-gray-300'
+}
+function manualBlockDisabledReason(state: IPLoginFailureState): string {
+  if (failureStatesUnavailable.value) return t('admin.ipAccessControl.failureStates.manualBlockDisabledStale')
+  if (settingsUnavailable.value) return t('admin.ipAccessControl.failureStates.manualBlockDisabledSettings')
+  if (state.emergency_allowlisted) return t('admin.ipAccessControl.failureStates.manualBlockDisabledEmergencyAllow')
+  if (state.suppressed_by_allow_rule) return t('admin.ipAccessControl.failureStates.manualBlockDisabledAllow')
+  if (state.active_block_rule || state.effectively_blocked) return t('admin.ipAccessControl.failureStates.manualBlockDisabledAlreadyBlocked')
+  if (!state.runtime_enforcement_enabled) return t('admin.ipAccessControl.failureStates.manualBlockDisabledEnforcement')
+  if (!manualBlockingReady.value) return t('admin.ipAccessControl.failureStates.manualBlockDisabledIdentity')
+  if (settingsLoading.value || settingsSaving.value || failureStatesLoading.value || manualBlockSubmitting.value) return t('admin.ipAccessControl.failureStates.manualBlockDisabledBusy')
+  return ''
+}
+function canManuallyBlockFailureState(state: IPLoginFailureState): boolean {
+  return manualBlockDisabledReason(state) === ''
+}
 function reportSensitiveError(error: unknown): void {
   if (isStepUpCancelled(error)) return
   if (isStepUpBlocked(error)) {
@@ -400,13 +503,25 @@ function reportSensitiveError(error: unknown): void {
   }
   appStore.showError(extractApiErrorMessage(error, t('common.error')))
 }
-async function loadSettings() { settingsLoading.value = true; try { Object.assign(settings, await adminAPI.ipAccessControl.getSettings()) } catch (error) { appStore.showError(extractApiErrorMessage(error, t('common.error'))) } finally { settingsLoading.value = false } }
+async function loadSettings() {
+  settingsLoading.value = true
+  try {
+    Object.assign(settings, await adminAPI.ipAccessControl.getSettings())
+    settingsUnavailable.value = false
+  } catch (error) {
+    settingsUnavailable.value = true
+    appStore.showError(extractApiErrorMessage(error, t('common.error')))
+  } finally {
+    settingsLoading.value = false
+  }
+}
 async function loadProxyStatus() { proxyStatusLoading.value = true; try { proxyStatus.value = await adminAPI.ipAccessControl.getTrustedProxyStatus() } catch (error) { appStore.showError(extractApiErrorMessage(error, t('common.error'))) } finally { proxyStatusLoading.value = false } }
 async function saveSettings() {
   settingsSaving.value = true
   try {
     if (!settings.enforcement_enabled) settings.login_failure_auto_block_enabled = false
     Object.assign(settings, await stepUp.run(() => adminAPI.ipAccessControl.updateSettings({ ...settings })))
+    settingsUnavailable.value = false
     await loadFailureStates()
     appStore.showSuccess(t('common.saved'))
   } catch (error) {
@@ -424,23 +539,32 @@ function failureStateQuery() {
   }
 }
 async function loadFailureStates() {
+  const requestSequence = ++failureStatesRequestSequence
+  const requestedPage = failurePage.value
   failureStatesLoading.value = true
   try {
     let result = await adminAPI.ipAccessControl.listFailureStates(failureStateQuery())
+    if (requestSequence !== failureStatesRequestSequence) return
     const lastPage = Math.max(1, Math.ceil(result.total / failurePageSize.value))
-    if (failurePage.value > lastPage) {
+    if (requestedPage > lastPage) {
       failurePage.value = lastPage
       result = await adminAPI.ipAccessControl.listFailureStates(failureStateQuery())
+      if (requestSequence !== failureStatesRequestSequence) return
     }
     failureStates.value = result.items
     failureTotal.value = result.total
+    failureStatesUpdatedAt.value = new Date()
+    failureStatesUnavailable.value = false
   } catch (error) {
+    if (requestSequence !== failureStatesRequestSequence) return
+    failureStatesUnavailable.value = true
     appStore.showError(extractApiErrorMessage(error, t('common.error')))
   } finally {
-    failureStatesLoading.value = false
+    if (requestSequence === failureStatesRequestSequence) failureStatesLoading.value = false
   }
 }
 function searchFailureStates() { failurePage.value = 1; void loadFailureStates() }
+function refreshFailureStates() { if (!failureStatesLoading.value) void loadFailureStates() }
 function changeFailurePage(value: number) { failurePage.value = value; void loadFailureStates() }
 function changeFailurePageSize(value: number) { failurePageSize.value = value; failurePage.value = 1; void loadFailureStates() }
 function ruleQuery() {
@@ -501,7 +625,76 @@ async function releaseAndReset() {
 }
 function confirmResetCounter(ip: string) { resetCounterTarget.value = ip }
 async function resetCounter() { const ip = resetCounterTarget.value; if (!ip) return; try { await stepUp.run(() => adminAPI.ipAccessControl.resetFailureState(ip)); resetCounterTarget.value = null; appStore.showSuccess(t('admin.ipAccessControl.failureStates.resetSuccess')); await Promise.all([loadFailureStates(), loadRules()]) } catch (error) { if (isStepUpCancelled(error)) resetCounterTarget.value = null; reportSensitiveError(error) } }
-onMounted(() => { void loadProxyStatus(); void loadSettings(); void loadFailureStates(); void loadRules() })
+async function confirmManualBlock(state: IPLoginFailureState) {
+  if (!canManuallyBlockFailureState(state)) return
+  // Refresh the server-owned duration before presenting the confirmation.
+  // The request still intentionally omits a duration so submission uses the
+  // latest backend value if another administrator changes it afterwards.
+  await loadSettings()
+  const currentState = failureStates.value.find((item) => item.normalized_ip === state.normalized_ip)
+  if (!currentState) {
+    appStore.showError(t('admin.ipAccessControl.failureStates.manualBlockDisabledStale'))
+    return
+  }
+  if (canManuallyBlockFailureState(currentState)) manualBlockTarget.value = currentState
+}
+function cancelManualBlock() {
+  if (!manualBlockSubmitting.value) manualBlockTarget.value = null
+}
+async function manualBlockFailureState() {
+  const target = manualBlockTarget.value
+  if (!target || manualBlockSubmitting.value) return
+  const currentState = failureStates.value.find((state) => state.normalized_ip === target.normalized_ip)
+  if (!currentState) {
+    manualBlockTarget.value = null
+    appStore.showError(t('admin.ipAccessControl.failureStates.manualBlockDisabledStale'))
+    return
+  }
+  if (!canManuallyBlockFailureState(currentState)) {
+    manualBlockTarget.value = null
+    appStore.showError(manualBlockDisabledReason(currentState))
+    return
+  }
+  manualBlockSubmitting.value = true
+  try {
+    const result = await stepUp.run(() => adminAPI.ipAccessControl.blockFailureState({ ip: target.normalized_ip }))
+    manualBlockTarget.value = null
+    appStore.showSuccess(t(result.already_blocked
+      ? 'admin.ipAccessControl.failureStates.alreadyBlocked'
+      : 'admin.ipAccessControl.failureStates.manualBlockSuccess'))
+    await Promise.all([loadFailureStates(), loadRules()])
+  } catch (error) {
+    manualBlockTarget.value = null
+    reportSensitiveError(error)
+    if (!isStepUpCancelled(error)) await Promise.all([loadFailureStates(), loadRules()])
+  } finally {
+    manualBlockSubmitting.value = false
+  }
+}
+async function focusRulesForFailureState(state: IPLoginFailureState, showAllActive = false) {
+  filters.status = 'active'
+  filters.query = showAllActive ? '' : (state.block_rule_ip_or_cidr || state.normalized_ip)
+  page.value = 1
+  await loadRules()
+  await nextTick()
+  rulesSection.value?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+}
+let failureStateRefreshTimer: ReturnType<typeof setInterval> | null = null
+function refreshFailureStatesWhenVisible() {
+  if (document.visibilityState === 'visible') refreshFailureStates()
+}
+onMounted(() => {
+  void loadProxyStatus()
+  void loadSettings()
+  void loadFailureStates()
+  void loadRules()
+  document.addEventListener('visibilitychange', refreshFailureStatesWhenVisible)
+  failureStateRefreshTimer = setInterval(refreshFailureStatesWhenVisible, 15_000)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('visibilitychange', refreshFailureStatesWhenVisible)
+  if (failureStateRefreshTimer !== null) clearInterval(failureStateRefreshTimer)
+})
 </script>
 
 <style scoped>

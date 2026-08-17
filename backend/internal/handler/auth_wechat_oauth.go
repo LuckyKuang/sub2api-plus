@@ -584,9 +584,7 @@ func (h *AuthHandler) CompleteWeChatOAuthRegistration(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
-	if !h.recordSuccessfulAuthentication(c, user.ID) {
-		return
-	}
+	h.recordSuccessfulAuthentication(c, user.ID)
 	clearOAuthPendingSessionCookie(c, secureCookie)
 	clearOAuthPendingBrowserCookie(c, secureCookie)
 

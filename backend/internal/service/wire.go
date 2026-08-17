@@ -632,6 +632,7 @@ func ProvideIPAccessControlService(
 ) *IPAccessControlService {
 	svc := NewIPAccessControlService(settings, repo)
 	svc.SetInvalidationBus(invalidationBus)
+	svc.StartSecuritySnapshotRefresh(context.Background())
 	svc.StartInvalidationSubscriber(context.Background())
 	svc.StartFailureStateCleanup(context.Background())
 	if settingService != nil {

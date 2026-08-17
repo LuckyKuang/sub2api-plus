@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"regexp"
 	"testing"
 	"time"
@@ -63,6 +64,132 @@ func TestCreateManualIPAccessRuleUsesIndependentTypedArguments(t *testing.T) {
 	}
 }
 
+func TestCreateManualIPBlockForFailureStateCreatesExactRule(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("new sqlmock: %v", err)
+	}
+	closeIPAccessControlTestDB(t, db)
+
+	const normalizedIP = "203.0.113.8"
+	const reason = "manual block from login failure status"
+	actorID := int64(7)
+	now := time.Now().UTC()
+	expiresAt := now.Add(time.Hour)
+	ruleColumns := []string{
+		"id", "ip_or_cidr", "rule_kind", "status", "reason", "failure_count",
+		"first_failed_at", "last_failed_at", "blocked_at", "expires_at", "last_seen_at", "hit_count",
+		"created_by_user_id", "released_by_user_id", "released_at", "created_at", "updated_at",
+	}
+
+	mock.ExpectBegin()
+	mock.ExpectExec(regexp.QuoteMeta("SELECT pg_advisory_xact_lock(hashtext($1))")).
+		WithArgs(normalizedIP).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT EXISTS (")).
+		WithArgs(normalizedIP).
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT " + ipAccessRuleColumns)).
+		WithArgs(normalizedIP).
+		WillReturnRows(sqlmock.NewRows(ruleColumns))
+	mock.ExpectExec(regexp.QuoteMeta("UPDATE ip_access_rules")).
+		WithArgs(normalizedIP).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectQuery(regexp.QuoteMeta("INSERT INTO ip_access_rules")).
+		WithArgs(normalizedIP, reason, expiresAt, actorID).
+		WillReturnRows(sqlmock.NewRows(ruleColumns).AddRow(
+			int64(42), normalizedIP, string(service.IPAccessRuleKindManualBlock), string(service.IPAccessRuleStatusActive), reason, 0,
+			nil, nil, now, expiresAt, nil, int64(0),
+			actorID, nil, nil, now, now,
+		))
+	mock.ExpectCommit()
+
+	repo := NewIPAccessControlRepository(db)
+	result, err := repo.CreateManualIPBlockForFailureState(context.Background(), normalizedIP, reason, expiresAt, actorID)
+	if err != nil {
+		t.Fatalf("create failure-state manual block: %v", err)
+	}
+	if result == nil || result.AlreadyBlocked || result.Rule == nil || result.Rule.ID != 42 ||
+		result.Rule.RuleKind != service.IPAccessRuleKindManualBlock {
+		t.Fatalf("unexpected manual block result: %#v", result)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet SQL expectations: %v", err)
+	}
+}
+
+func TestCreateManualIPBlockForFailureStateReturnsExistingCoveringBlock(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("new sqlmock: %v", err)
+	}
+	closeIPAccessControlTestDB(t, db)
+
+	const normalizedIP = "203.0.113.8"
+	now := time.Now().UTC()
+	expiresAt := now.Add(time.Hour)
+	ruleColumns := []string{
+		"id", "ip_or_cidr", "rule_kind", "status", "reason", "failure_count",
+		"first_failed_at", "last_failed_at", "blocked_at", "expires_at", "last_seen_at", "hit_count",
+		"created_by_user_id", "released_by_user_id", "released_at", "created_at", "updated_at",
+	}
+
+	mock.ExpectBegin()
+	mock.ExpectExec(regexp.QuoteMeta("SELECT pg_advisory_xact_lock(hashtext($1))")).
+		WithArgs(normalizedIP).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT EXISTS (")).
+		WithArgs(normalizedIP).
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT " + ipAccessRuleColumns)).
+		WithArgs(normalizedIP).
+		WillReturnRows(sqlmock.NewRows(ruleColumns).AddRow(
+			int64(9), "203.0.113.0/24", string(service.IPAccessRuleKindAutoBlock), string(service.IPAccessRuleStatusActive), "existing", 2,
+			now, now, now, expiresAt, nil, int64(0),
+			nil, nil, nil, now, now,
+		))
+	mock.ExpectCommit()
+
+	repo := NewIPAccessControlRepository(db)
+	result, err := repo.CreateManualIPBlockForFailureState(context.Background(), normalizedIP, "ignored", expiresAt, 7)
+	if err != nil {
+		t.Fatalf("return existing failure-state block: %v", err)
+	}
+	if result == nil || !result.AlreadyBlocked || result.Rule == nil || result.Rule.ID != 9 {
+		t.Fatalf("covering block must be returned idempotently: %#v", result)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet SQL expectations: %v", err)
+	}
+}
+
+func TestCreateManualIPBlockForFailureStateRejectsAllowCoverage(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("new sqlmock: %v", err)
+	}
+	closeIPAccessControlTestDB(t, db)
+
+	const normalizedIP = "203.0.113.8"
+	mock.ExpectBegin()
+	mock.ExpectExec(regexp.QuoteMeta("SELECT pg_advisory_xact_lock(hashtext($1))")).
+		WithArgs(normalizedIP).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT EXISTS (")).
+		WithArgs(normalizedIP).
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectRollback()
+
+	repo := NewIPAccessControlRepository(db)
+	_, err = repo.CreateManualIPBlockForFailureState(context.Background(), normalizedIP, "ignored", time.Now().Add(time.Hour), 7)
+	if !errors.Is(err, service.ErrIPBlockSuppressedByAllow) {
+		t.Fatalf("expected allow coverage conflict, got %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet SQL expectations: %v", err)
+	}
+}
+
 func TestListActiveIPAccessRulesDoesNotWriteOnRequestPath(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
@@ -90,7 +217,7 @@ func TestListActiveIPAccessRulesDoesNotWriteOnRequestPath(t *testing.T) {
 	}
 }
 
-func TestListIPLoginFailureStatesReturnsCurrentWindowWithBlockStatus(t *testing.T) {
+func TestListIPLoginFailureStatesReturnsLayeredBlockStatus(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatalf("new sqlmock: %v", err)
@@ -102,15 +229,21 @@ func TestListIPLoginFailureStatesReturnsCurrentWindowWithBlockStatus(t *testing.
 	windowSeconds := int64(window.Seconds())
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT COUNT(*) FROM ip_login_failure_states WHERE")).
 		WithArgs(windowSeconds, "%203.0.113%").
-		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(int64(1)))
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT\ns.normalized_ip,")).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(int64(2)))
+	mock.ExpectQuery(`block_rule\.expires_at AS block_expires_at,\s*\(EXISTS \(`).
 		WithArgs(windowSeconds, "%203.0.113%", 25, 25).
 		WillReturnRows(sqlmock.NewRows([]string{
 			"normalized_ip", "failure_count", "window_started_at", "last_failed_at",
-			"window_expires_at", "currently_blocked", "auto_block_rule_id",
+			"window_expires_at", "active_block_rule", "block_rule_id", "block_rule_kind",
+			"block_rule_ip_or_cidr", "blocked_at", "block_expires_at", "suppressed_by_allow_rule",
 		}).AddRow(
 			"203.0.113.8", 4, now.Add(-5*time.Minute), now.Add(-time.Minute),
-			now.Add(10*time.Minute), true, int64(42),
+			now.Add(10*time.Minute), true, int64(42), string(service.IPAccessRuleKindAutoBlock),
+			"203.0.113.8", now.Add(-time.Minute), now.Add(time.Hour), true,
+		).AddRow(
+			"203.0.113.9", 1, now.Add(-4*time.Minute), now.Add(-30*time.Second),
+			now.Add(11*time.Minute), false, nil, nil,
+			nil, nil, nil, true,
 		))
 
 	repo := NewIPAccessControlRepository(db)
@@ -120,13 +253,20 @@ func TestListIPLoginFailureStatesReturnsCurrentWindowWithBlockStatus(t *testing.
 	if err != nil {
 		t.Fatalf("list failure states: %v", err)
 	}
-	if list.Total != 1 || list.Page != 2 || list.PageSize != 25 || len(list.Items) != 1 {
+	if list.Total != 2 || list.Page != 2 || list.PageSize != 25 || len(list.Items) != 2 {
 		t.Fatalf("unexpected list metadata: %#v", list)
 	}
 	state := list.Items[0]
 	if state.NormalizedIP != "203.0.113.8" || state.FailureCount != 4 ||
-		!state.CurrentlyBlocked || state.AutoBlockRuleID == nil || *state.AutoBlockRuleID != 42 {
+		!state.ActiveBlockRule || state.BlockRuleID == nil || *state.BlockRuleID != 42 ||
+		state.BlockRuleKind == nil || *state.BlockRuleKind != service.IPAccessRuleKindAutoBlock ||
+		state.BlockRuleIPOrCIDR == nil || *state.BlockRuleIPOrCIDR != "203.0.113.8" ||
+		state.BlockedAt == nil || state.BlockExpiresAt == nil || !state.SuppressedByAllowRule {
 		t.Fatalf("unexpected failure state: %#v", state)
+	}
+	allowOnly := list.Items[1]
+	if allowOnly.ActiveBlockRule || !allowOnly.SuppressedByAllowRule || allowOnly.BlockRuleID != nil {
+		t.Fatalf("allow coverage must be visible even before a block rule exists: %#v", allowOnly)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("unmet SQL expectations: %v", err)
@@ -146,11 +286,11 @@ func TestRecordFailedLoginDoesNotCreateAutoBlockForMatchingAllowRule(t *testing.
 	windowStartedAt := time.Now().UTC()
 
 	mock.ExpectBegin()
+	mock.ExpectExec(regexp.QuoteMeta("SELECT pg_advisory_xact_lock(hashtext($1))")).
+		WithArgs(normalizedIP).
+		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(regexp.QuoteMeta("UPDATE ip_access_rules")).
 		WithArgs(normalizedIP).
-		WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectExec(regexp.QuoteMeta("DELETE FROM ip_login_failure_states")).
-		WithArgs(normalizedIP, int64(window.Seconds())).
 		WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectQuery(regexp.QuoteMeta("INSERT INTO ip_login_failure_states")).
 		WithArgs(normalizedIP, int64(window.Seconds())).
@@ -159,6 +299,13 @@ func TestRecordFailedLoginDoesNotCreateAutoBlockForMatchingAllowRule(t *testing.
 	// exists. A missing result must not be treated as a database failure.
 	mock.ExpectQuery(regexp.QuoteMeta("INSERT INTO ip_access_rules")).
 		WithArgs(normalizedIP, 3, int64(blockFor.Seconds()), windowStartedAt).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "ip_or_cidr", "rule_kind", "status", "reason", "failure_count",
+			"first_failed_at", "last_failed_at", "blocked_at", "expires_at", "last_seen_at", "hit_count",
+			"created_by_user_id", "released_by_user_id", "released_at", "created_at", "updated_at",
+		}))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT " + ipAccessRuleColumns)).
+		WithArgs(normalizedIP).
 		WillReturnRows(sqlmock.NewRows([]string{
 			"id", "ip_or_cidr", "rule_kind", "status", "reason", "failure_count",
 			"first_failed_at", "last_failed_at", "blocked_at", "expires_at", "last_seen_at", "hit_count",
@@ -192,11 +339,11 @@ func TestRecordFailedLoginCreatesAutoBlockWithoutAllowRule(t *testing.T) {
 	now := time.Now().UTC()
 
 	mock.ExpectBegin()
+	mock.ExpectExec(regexp.QuoteMeta("SELECT pg_advisory_xact_lock(hashtext($1))")).
+		WithArgs(normalizedIP).
+		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(regexp.QuoteMeta("UPDATE ip_access_rules")).
 		WithArgs(normalizedIP).
-		WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectExec(regexp.QuoteMeta("DELETE FROM ip_login_failure_states")).
-		WithArgs(normalizedIP, int64(window.Seconds())).
 		WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectQuery(regexp.QuoteMeta("INSERT INTO ip_login_failure_states")).
 		WithArgs(normalizedIP, int64(window.Seconds())).
@@ -221,6 +368,114 @@ func TestRecordFailedLoginCreatesAutoBlockWithoutAllowRule(t *testing.T) {
 	}
 	if result == nil || !result.Blocked || result.Rule == nil || result.Rule.RuleKind != service.IPAccessRuleKindAutoBlock {
 		t.Fatalf("non-allow IP must receive an automatic block: %#v", result)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet SQL expectations: %v", err)
+	}
+}
+
+func TestRecordFailedLoginReturnsExistingManualBlockWithoutCreatingAutoBlock(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("new sqlmock: %v", err)
+	}
+	closeIPAccessControlTestDB(t, db)
+
+	const normalizedIP = "203.0.113.8"
+	window := 15 * time.Minute
+	blockFor := time.Hour
+	now := time.Now().UTC()
+	ruleColumns := []string{
+		"id", "ip_or_cidr", "rule_kind", "status", "reason", "failure_count",
+		"first_failed_at", "last_failed_at", "blocked_at", "expires_at", "last_seen_at", "hit_count",
+		"created_by_user_id", "released_by_user_id", "released_at", "created_at", "updated_at",
+	}
+
+	mock.ExpectBegin()
+	mock.ExpectExec(regexp.QuoteMeta("SELECT pg_advisory_xact_lock(hashtext($1))")).
+		WithArgs(normalizedIP).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(regexp.QuoteMeta("UPDATE ip_access_rules")).
+		WithArgs(normalizedIP).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectQuery(regexp.QuoteMeta("INSERT INTO ip_login_failure_states")).
+		WithArgs(normalizedIP, int64(window.Seconds())).
+		WillReturnRows(sqlmock.NewRows([]string{"failure_count", "window_started_at"}).AddRow(3, now))
+	mock.ExpectQuery(regexp.QuoteMeta("INSERT INTO ip_access_rules")).
+		WithArgs(normalizedIP, 3, int64(blockFor.Seconds()), now).
+		WillReturnRows(sqlmock.NewRows(ruleColumns))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT " + ipAccessRuleColumns)).
+		WithArgs(normalizedIP).
+		WillReturnRows(sqlmock.NewRows(ruleColumns).AddRow(
+			int64(77), normalizedIP, string(service.IPAccessRuleKindManualBlock), string(service.IPAccessRuleStatusActive), "administrator action", 0,
+			nil, nil, now, now.Add(blockFor), nil, int64(0),
+			int64(7), nil, nil, now, now,
+		))
+	mock.ExpectCommit()
+
+	repo := NewIPAccessControlRepository(db)
+	result, err := repo.RecordFailedLogin(context.Background(), normalizedIP, 3, window, blockFor)
+	if err != nil {
+		t.Fatalf("record failed login with existing manual block: %v", err)
+	}
+	if result == nil || !result.Blocked || result.Rule == nil || result.Rule.ID != 77 ||
+		result.Rule.RuleKind != service.IPAccessRuleKindManualBlock {
+		t.Fatalf("existing manual block must satisfy threshold result: %#v", result)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet SQL expectations: %v", err)
+	}
+}
+
+func TestRecordFailedLoginConfirmsActiveBlockAfterAmbiguousCommit(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("new sqlmock: %v", err)
+	}
+	closeIPAccessControlTestDB(t, db)
+
+	const normalizedIP = "203.0.113.8"
+	window := 15 * time.Minute
+	blockFor := time.Hour
+	now := time.Now().UTC()
+	ruleColumns := []string{
+		"id", "ip_or_cidr", "rule_kind", "status", "reason", "failure_count",
+		"first_failed_at", "last_failed_at", "blocked_at", "expires_at", "last_seen_at", "hit_count",
+		"created_by_user_id", "released_by_user_id", "released_at", "created_at", "updated_at",
+	}
+	ruleRow := func() *sqlmock.Rows {
+		return sqlmock.NewRows(ruleColumns).AddRow(
+			int64(1), normalizedIP, string(service.IPAccessRuleKindAutoBlock), string(service.IPAccessRuleStatusActive), "automatic login failure threshold reached", 3,
+			now, now, now, now.Add(blockFor), nil, int64(0),
+			nil, nil, nil, now, now,
+		)
+	}
+
+	mock.ExpectBegin()
+	mock.ExpectExec(regexp.QuoteMeta("SELECT pg_advisory_xact_lock(hashtext($1))")).
+		WithArgs(normalizedIP).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(regexp.QuoteMeta("UPDATE ip_access_rules")).
+		WithArgs(normalizedIP).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectQuery(regexp.QuoteMeta("INSERT INTO ip_login_failure_states")).
+		WithArgs(normalizedIP, int64(window.Seconds())).
+		WillReturnRows(sqlmock.NewRows([]string{"failure_count", "window_started_at"}).AddRow(3, now))
+	mock.ExpectQuery(regexp.QuoteMeta("INSERT INTO ip_access_rules")).
+		WithArgs(normalizedIP, 3, int64(blockFor.Seconds()), now).
+		WillReturnRows(ruleRow())
+	mock.ExpectCommit().WillReturnError(errors.New("commit result unknown"))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT " + ipAccessRuleColumns)).
+		WithArgs(normalizedIP).
+		WillReturnRows(ruleRow())
+
+	repo := NewIPAccessControlRepository(db)
+	result, err := repo.RecordFailedLogin(context.Background(), normalizedIP, 3, window, blockFor)
+	if err != nil {
+		t.Fatalf("confirmed durable block should recover ambiguous commit: %v", err)
+	}
+	if result == nil || !result.Blocked || result.Rule == nil || result.Rule.ID != 1 {
+		t.Fatalf("unexpected confirmed block result: %#v", result)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("unmet SQL expectations: %v", err)

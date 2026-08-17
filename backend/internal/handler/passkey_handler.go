@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strconv"
@@ -24,7 +25,7 @@ type PasskeyHandler struct {
 	ipAccessControl *service.IPAccessControlService
 }
 
-// SetIPAccessControlService attaches the global successful-login policy while
+// SetIPAccessControlService attaches the global source-IP failure policy while
 // keeping the constructor usable in focused passkey tests.
 func (h *PasskeyHandler) SetIPAccessControlService(access *service.IPAccessControlService) {
 	h.ipAccessControl = access
@@ -118,6 +119,9 @@ func (h *PasskeyHandler) FinishLogin(c *gin.Context) {
 	credentialRequest := cloneRequestWithJSON(c.Request, req.Credential)
 	user, err := h.passkeys.FinishLogin(c.Request.Context(), req.SessionToken, credentialRequest)
 	if err != nil {
+		if isPasskeyLoginFailure(err) && recordFailedAuthentication(c, h.ipAccessControl) {
+			return
+		}
 		response.ErrorFrom(c, err)
 		return
 	}
@@ -125,19 +129,24 @@ func (h *PasskeyHandler) FinishLogin(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
-	if !h.prepareSuccessfulLogin(c, user) {
-		return
-	}
+	h.prepareSuccessfulLogin(c, user)
 	h.authService.RecordSuccessfulLogin(c.Request.Context(), user.ID)
 	respondWithTokenPair(c, h.authService, user)
 }
 
-// prepareSuccessfulLogin applies the shared source-IP policy before any token
-// can be issued for a successfully verified passkey assertion.
-func (h *PasskeyHandler) prepareSuccessfulLogin(c *gin.Context, user *service.User) bool {
+func isPasskeyLoginFailure(err error) bool {
+	// An invalid/expired one-time session did not validate a credential and is
+	// cheap to fabricate. Counting it would let arbitrary requests poison an
+	// otherwise trusted source IP. FinishLogin keeps dependency failures distinct,
+	// so only an actual WebAuthn verification rejection reaches this branch.
+	return errors.Is(err, service.ErrPasskeyVerify)
+}
+
+// prepareSuccessfulLogin records the verified actor without mutating the
+// source IP's independent login-failure window.
+func (h *PasskeyHandler) prepareSuccessfulLogin(c *gin.Context, user *service.User) {
 	middleware2.SetAuditActor(c, user.ID, user.Email)
 	c.Set("auth_method", service.AuditAuthMethodPasskey)
-	return clearSuccessfulAuthenticationState(c, h.ipAccessControl)
 }
 
 func (h *PasskeyHandler) BeginRegistration(c *gin.Context) {
