@@ -38,7 +38,7 @@ procedures are documented in [`docs/RELEASING.md`](docs/RELEASING.md).
 | `v0.1.176+custom.001` | `v0.1.176` | `e803e3851c0a7e222cfadeafad7b8636ab959d11` | published |
 | `v0.1.176+custom.002` | `v0.1.176` | `e803e3851c0a7e222cfadeafad7b8636ab959d11` | published |
 | `v0.1.177+custom.001` | `v0.1.177` | `073e92d17178a1ccdb0a27017f572f10c9c7ab62` | published |
-| `v0.1.177+custom.002` | `v0.1.177` | `073e92d17178a1ccdb0a27017f572f10c9c7ab62` | planned |
+| `v0.1.177+custom.002` | `v0.1.177` | `073e92d17178a1ccdb0a27017f572f10c9c7ab62` | published |
 
 `v0.1.166+custom.007` is marked invalid because its tag contains embedded and
 documented version `0.1.166+custom.006`. Remote Release and OCI artifact status
