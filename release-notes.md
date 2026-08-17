@@ -1,60 +1,46 @@
-Sub2API Plus v0.1.177+custom.001
+Sub2API Plus v0.1.177+custom.002
 
 ## Highlights
 
-- Merge official Sub2API v0.1.177 as the new Plus baseline.
-- Add server-timezone daily group-usage rollups and yesterday cost in the
-  administration UI.
-- Support native Codex remote compaction v2 on `/responses` while retaining
-  the separate legacy `/responses/compact` path.
-- Relay `x-codex-turn-state` with credential-owner provenance and shared-cache
-  protection against known cross-account echoes.
+- Add independent S3-compatible date-path toggles for database backups and
+  asynchronous image results.
+- Add failed asynchronous-image task deletion and aligned API Key/status
+  filters in the task history UI.
+- Keep existing asynchronous-image task management available after a key is
+  exhausted, expired, reassigned, or blocked from new image submissions.
 
 ## Changed
 
-- Use `TZ`, then `TIMEZONE`, then the configured/default application timezone
-  for persistent group-usage day boundaries. Browser timezone is no longer
-  sent by the group usage page.
-- Advertise the session-level `remote_compaction_v2` Codex beta feature on
-  OAuth HTTP and WebSocket traffic, and require a compaction output item from
-  the native account probe.
-- Restore the account-page auto-refresh preference during module
-  initialization and keep the frontend nanoid lock entry aligned at 3.3.18.
+- Date-path settings retain a stable base prefix and resolve `yyyy/MM/dd` from
+  the configured server timezone for each newly created object.
+- Async-image ZIP downloads use private exact object keys, so a later prefix
+  or date-path change cannot redirect a historical download.
 
 ## Fixed
 
-- Apply Grok long-context pricing from the group switch without an OpenAI
-  account-level veto.
-- Keep unknown Grok image, video, and audio model families out of the text
-  fallback price card.
-- Invalidate and rebuild group rollups after recompute, retention cleanup,
-  partition deletion, late historical writes, or configured timezone change.
+- Preserve configured image storage for already-accepted task completion and
+  historical ZIP downloads when administrators disable only new submissions.
+- Delete Redis task state atomically only while its current status is `failed`,
+  preventing a concurrent completion from being removed.
+- Keep all non-disabled owner keys visible for task-history management while
+  restricting new submissions to currently eligible OpenAI/Grok keys.
 
 ## Compatibility and migration
 
-- Migration `222_group_usage_daily_rollups.sql` creates derived daily group
-  usage buckets and synchronization state.
-- Migration `223_group_usage_rollup_timezone.sql` records the bucket timezone
-  and rebuilds derived data when that timezone changes.
-- Codex OAuth fingerprint convergence keeps the Plus default: missing, empty,
-  or invalid `codex_fingerprint_mode` values use `session`; only explicit
-  `off` disables convergence. Create, edit, and bulk forms use the same rule.
-- Codex outbound identity precedence remains credential-owner account user
-  agent, then global user agent, then the compiled default.
+- No database migration is required.
+- Backup date paths default to enabled to retain the existing backup layout;
+  async-image date paths default to disabled to retain the existing image
+  layout. Changing either setting affects only future objects.
+- Existing async-image task URLs remain usable. Tasks completed before this
+  release lack private exact object keys, so their ZIP download may be
+  unavailable until the normal task TTL expires.
 
 ## Known issues
 
-- Turn-state provenance uses Redis when the configured GatewayCache supports
-  it and falls back to process-local best effort if the shared cache is
-  unavailable.
-- Daily rollups are derived data; the first startup after migration or a
-  timezone change may perform additional synchronization work.
-- Client-profile and fingerprint controls cannot attest a physical client
-  binary or device.
-- HTTP fingerprint convergence keeps headers and map/raw `client_metadata`
-  coherent. Pooled WebSocket handshake fingerprint carriers retain their
-  pre-existing behavior and are not converged with each request payload by
-  this release.
+- Async-image tasks completed before this release may not have exact stored
+  object keys and therefore cannot be reconstructed safely for ZIP download.
+  Existing direct result URLs remain unaffected, and the task records expire
+  under their normal TTL.
 
 ## Upstream baseline
 

@@ -166,11 +166,11 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 		ctx := context.WithValue(c.Request.Context(), ctxkey.UserID, apiKey.User.ID)
 		c.Request = c.Request.WithContext(ctx)
 		billingInfoRequest := c.Request.URL.Path == "/v1/sub2api/billing"
-		// Async image task polling only reads data that already belongs to the
-		// authenticated key and must remain available after the completed
-		// generation consumes the key's remaining balance.
+		// Async image task management only accesses data that already belongs to
+		// the authenticated key and must remain available after generation
+		// consumes the key's remaining balance.
 		whamUsageRequest := c.Request.Method == http.MethodGet && c.Request.URL.Path == "/backend-api/wham/usage"
-		skipBilling := c.Request.URL.Path == "/v1/usage" || billingInfoRequest || whamUsageRequest || isAsyncImageTaskRead(c.Request.Method, c.Request.URL.Path)
+		skipBilling := c.Request.URL.Path == "/v1/usage" || billingInfoRequest || whamUsageRequest || isAsyncImageTaskManagement(c.Request.Method, c.Request.URL.Path)
 
 		// ── 4. SimpleMode → early return ─────────────────────────────
 
@@ -333,11 +333,25 @@ func isOpenAICompatibleAPIKeyRequest(c *gin.Context) bool {
 	return false
 }
 
-func isAsyncImageTaskRead(method, path string) bool {
-	if method != http.MethodGet {
+func isAsyncImageTaskManagement(method, path string) bool {
+	if method != http.MethodGet && method != http.MethodDelete {
 		return false
 	}
-	return strings.HasPrefix(path, "/v1/images/tasks/") || strings.HasPrefix(path, "/images/tasks/")
+	path = strings.TrimSuffix(path, "/")
+	for _, root := range []string{"/v1/images/tasks", "/images/tasks"} {
+		if path == root {
+			return method == http.MethodGet
+		}
+		if !strings.HasPrefix(path, root+"/") {
+			continue
+		}
+		segments := strings.Split(strings.TrimPrefix(path, root+"/"), "/")
+		if len(segments) == 1 && segments[0] != "" {
+			return true
+		}
+		return method == http.MethodGet && len(segments) == 2 && segments[0] != "" && segments[1] == "download"
+	}
+	return false
 }
 
 // GetAPIKeyFromContext 从上下文中获取API key

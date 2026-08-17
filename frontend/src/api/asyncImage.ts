@@ -150,6 +150,14 @@ export async function getAsyncImageTask(apiKey: string, taskID: string): Promise
   return response.json()
 }
 
+export async function deleteAsyncImageTask(apiKey: string, taskID: string): Promise<void> {
+  const response = await fetch(buildGatewayUrl(`/v1/images/tasks/${encodeURIComponent(taskID)}`), {
+    method: 'DELETE',
+    headers: authHeaders(apiKey),
+  })
+  if (!response.ok) throw await parseAsyncImageError(response)
+}
+
 export async function downloadAsyncImageZip(apiKey: string, taskID: string): Promise<Blob> {
   const response = await fetch(buildGatewayUrl(`/v1/images/tasks/${encodeURIComponent(taskID)}/download`), {
     headers: authHeaders(apiKey),

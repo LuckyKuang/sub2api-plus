@@ -1320,6 +1320,8 @@ image_storage:
   secret_access_key: ""
   # 对象 key 前缀
   prefix: "images/"
+  # 是否在对象 key 前缀后按服务端时区追加 yyyy/MM/dd/ 日期目录
+  append_date_path: false
   # MinIO / 需要路径风格（path-style）访问的桶设为 true
   force_path_style: false
   # 若填写公开桶 / CDN 域名，则返回 public_base_url/key 永久直链；

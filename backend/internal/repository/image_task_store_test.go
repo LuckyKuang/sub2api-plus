@@ -41,3 +41,33 @@ func TestImageTaskStoreMissing(t *testing.T) {
 	_, err := store.Get(context.Background(), "imgtask_missing")
 	require.ErrorIs(t, err, service.ErrImageTaskNotFound)
 }
+
+func TestImageTaskStoreDeleteIfStatusIsAtomicAndIdempotent(t *testing.T) {
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = rdb.Close() })
+	store := NewImageTaskStore(rdb)
+	task := &service.ImageTaskRecord{ID: "imgtask_delete", UserID: 7, APIKeyID: 9, Status: service.ImageTaskStatusFailed}
+
+	require.NoError(t, store.Save(context.Background(), task, time.Hour))
+	deleted, exists, err := store.DeleteIfStatus(context.Background(), task.ID, service.ImageTaskStatusCompleted)
+	require.NoError(t, err)
+	require.False(t, deleted)
+	require.True(t, exists)
+
+	got, err := store.Get(context.Background(), task.ID)
+	require.NoError(t, err)
+	require.Equal(t, service.ImageTaskStatusFailed, got.Status)
+
+	deleted, exists, err = store.DeleteIfStatus(context.Background(), task.ID, service.ImageTaskStatusFailed)
+	require.NoError(t, err)
+	require.True(t, deleted)
+	require.True(t, exists)
+
+	deleted, exists, err = store.DeleteIfStatus(context.Background(), task.ID, service.ImageTaskStatusFailed)
+	require.NoError(t, err)
+	require.False(t, deleted)
+	require.False(t, exists)
+	_, err = store.Get(context.Background(), task.ID)
+	require.ErrorIs(t, err, service.ErrImageTaskNotFound)
+}

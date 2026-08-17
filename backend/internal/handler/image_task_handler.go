@@ -275,6 +275,27 @@ func (h *AsyncImageHandler) List(c *gin.Context) {
 	c.JSON(http.StatusOK, tasks)
 }
 
+// Delete removes only a failed task owned by the authenticated user and API
+// key. It remains available after image submission is disabled, like List and
+// Get, so existing history can still be managed.
+func (h *AsyncImageHandler) Delete(c *gin.Context) {
+	if !h.pollable() {
+		imageTaskJSONError(c, http.StatusNotFound, "not_found_error", "async image tasks are not enabled")
+		return
+	}
+	apiKey, ok := middleware2.GetAPIKeyFromContext(c)
+	if !ok || apiKey == nil || apiKey.UserID <= 0 || apiKey.ID <= 0 {
+		imageTaskError(c, service.ErrImageTaskForbidden)
+		return
+	}
+	if err := h.tasks.Delete(c.Request.Context(), service.ImageTaskOwner{UserID: apiKey.UserID, APIKeyID: apiKey.ID}, c.Param("task_id")); err != nil {
+		imageTaskError(c, err)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.Status(http.StatusNoContent)
+}
+
 func (h *AsyncImageHandler) checkSecurityAuditBeforeSubmit(c *gin.Context, apiKey *service.APIKey, platform string, body []byte) bool {
 	if h == nil || h.openAI == nil {
 		return true

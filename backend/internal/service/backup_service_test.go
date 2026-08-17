@@ -309,12 +309,36 @@ func seedS3Config(t *testing.T, repo *mockSettingRepo) {
 		AccessKeyID:     "AKID",
 		SecretAccessKey: "ENC:secret123",
 		Prefix:          "backups",
+		AppendDatePath:  true,
 	}
 	data, _ := json.Marshal(cfg)
 	require.NoError(t, repo.Set(context.Background(), settingKeyBackupS3Config, string(data)))
 }
 
 // ─── Tests ───
+
+func TestBackupS3ConfigMissingDatePathDefaultsEnabled(t *testing.T) {
+	var cfg BackupS3Config
+	require.NoError(t, json.Unmarshal([]byte(`{"prefix":"backups/"}`), &cfg))
+	require.True(t, cfg.AppendDatePath)
+
+	require.NoError(t, json.Unmarshal([]byte(`{"prefix":"backups/","append_date_path":false}`), &cfg))
+	require.False(t, cfg.AppendDatePath)
+}
+
+func TestBackupServiceGetEmptyS3ConfigDefaultsDatePathEnabled(t *testing.T) {
+	svc := newTestBackupService(newMockSettingRepo(), &mockDumper{}, newMockObjectStore())
+	cfg, err := svc.GetS3Config(context.Background())
+	require.NoError(t, err)
+	require.True(t, cfg.AppendDatePath)
+}
+
+func TestBackupServiceBuildS3KeyHonorsDatePath(t *testing.T) {
+	svc := newTestBackupService(newMockSettingRepo(), &mockDumper{}, newMockObjectStore())
+	at := time.Date(2026, time.August, 17, 12, 0, 0, 0, time.UTC)
+	require.Equal(t, "backups/2026/08/17/db.sql.gz", svc.buildS3KeyAt(&BackupS3Config{Prefix: "backups/", AppendDatePath: true}, "db.sql.gz", at))
+	require.Equal(t, "backups/db.sql.gz", svc.buildS3KeyAt(&BackupS3Config{Prefix: "backups/", AppendDatePath: false}, "db.sql.gz", at))
+}
 
 func TestBackupService_S3ConfigEncryption(t *testing.T) {
 	repo := newMockSettingRepo()
@@ -494,6 +518,9 @@ func TestBackupService_CreateBackup_SplitsCompressedArchive(t *testing.T) {
 		data, ok := store.objects[part.S3Key]
 		require.True(t, ok)
 		require.LessOrEqual(t, len(data), 32)
+		startedAt, parseErr := time.Parse(time.RFC3339, record.StartedAt)
+		require.NoError(t, parseErr)
+		require.True(t, strings.HasPrefix(part.S3Key, "backups/"+startedAt.Format("2006/01/02")+"/"+record.ID+"/"))
 		compressed.Write(data)
 	}
 	store.mu.Unlock()

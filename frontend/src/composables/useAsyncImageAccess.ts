@@ -5,9 +5,13 @@ import type { ApiKey } from '@/types'
 
 const loaded = ref(false)
 const loading = ref(false)
-const hasAllowedAsyncImageKey = ref(false)
+const hasManageableAsyncImageKey = ref(false)
 let pendingLoad: Promise<boolean> | null = null
 const pageSize = 100
+
+export function keyCanManageAsyncImage(key: ApiKey): boolean {
+  return key.status === 'active' || key.status === 'quota_exhausted' || key.status === 'expired'
+}
 
 export function keyAllowsAsyncImage(key: ApiKey): boolean {
   return key.status === 'active'
@@ -17,33 +21,35 @@ export function keyAllowsAsyncImage(key: ApiKey): boolean {
 
 // Administrators need the entry even when they have not created a personal API
 // key, so they can verify the feature and manage the group-level permission.
-// Users remain gated by an active key whose group explicitly allows images.
-export function canViewAsyncImage(isAdmin: boolean, hasAllowedKey: boolean): boolean {
-  return isAdmin || hasAllowedKey
+// Any non-disabled user key may own history after its status, group, or platform
+// changes, so management access cannot be gated on current submission support.
+export function canViewAsyncImage(isAdmin: boolean, hasManagementKey: boolean): boolean {
+  return isAdmin || hasManagementKey
 }
 
 async function loadAsyncImageAccess(force = false): Promise<boolean> {
   const authStore = useAuthStore()
   if (!authStore.isAuthenticated) {
     loaded.value = true
-    hasAllowedAsyncImageKey.value = false
+    hasManageableAsyncImageKey.value = false
     return false
   }
-  if (loaded.value && !force) return hasAllowedAsyncImageKey.value
+  if (loaded.value && !force) return hasManageableAsyncImageKey.value
   if (pendingLoad && !force) return pendingLoad
 
   loading.value = true
   pendingLoad = (async () => {
     let page = 1
     while (true) {
-      const response = await keysAPI.list(page, pageSize, { status: 'active', sort_by: 'created_at', sort_order: 'desc' })
-      if ((response.items || []).some(keyAllowsAsyncImage)) {
-        hasAllowedAsyncImageKey.value = true
+      const response = await keysAPI.list(page, pageSize, { sort_by: 'created_at', sort_order: 'desc' })
+      if ((response.items || []).some(keyCanManageAsyncImage)) {
+        hasManageableAsyncImageKey.value = true
         loaded.value = true
         return true
       }
-      if (page >= response.pages || (response.items || []).length === 0) {
-        hasAllowedAsyncImageKey.value = false
+      const pages = Number.isFinite(response.pages) && response.pages > 0 ? response.pages : 1
+      if (page >= pages || (response.items || []).length === 0) {
+        hasManageableAsyncImageKey.value = false
         loaded.value = true
         return false
       }
@@ -51,7 +57,7 @@ async function loadAsyncImageAccess(force = false): Promise<boolean> {
     }
   })()
     .catch(() => {
-      hasAllowedAsyncImageKey.value = false
+      hasManageableAsyncImageKey.value = false
       loaded.value = true
       return false
     })
@@ -66,7 +72,7 @@ export function useAsyncImageAccess() {
   const authStore = useAuthStore()
 
   return {
-    canUseAsyncImage: computed(() => canViewAsyncImage(authStore.isAdmin, hasAllowedAsyncImageKey.value)),
+    canUseAsyncImage: computed(() => canViewAsyncImage(authStore.isAdmin, hasManageableAsyncImageKey.value)),
     asyncImageAccessLoaded: computed(() => loaded.value),
     asyncImageAccessLoading: computed(() => loading.value),
     refreshAsyncImageAccess: loadAsyncImageAccess,

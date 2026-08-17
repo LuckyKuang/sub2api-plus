@@ -2,7 +2,7 @@ export default {
   asyncImage: {
     title: '异步图像',
     description: '提交生成或编辑任务后在后台处理，完成后自动显示结果',
-    actions: { create: '新建任务', refresh: '刷新列表', view: '查看结果', submit: '提交任务', downloadAll: '一键下载图片' },
+    actions: { create: '新建任务', refresh: '刷新列表', view: '查看结果', delete: '删除失败任务', submit: '提交任务', downloadAll: '一键下载图片' },
     filters: { apiKey: 'API Key', allStatuses: '全部状态', selectKey: '请选择可用 API Key' },
     columns: { prompt: '提示词', model: '模型', type: '类型', status: '状态', result: '结果', createdAt: '创建时间', actions: '操作' },
     requestTypes: { generation: '生成', edit: '编辑' },
@@ -36,6 +36,11 @@ export default {
       title: '异步图像任务详情', taskId: '任务 ID', prompt: '提示词', error: '错误信息',
       pending: '任务仍在生成中', noImage: '任务已完成，但没有可展示的图片地址',
     },
-    errors: { loadKeys: '加载 API Key 失败', loadModels: '加载可用模型失败', loadTasks: '加载异步图像任务失败', submit: '提交异步图像任务失败', refresh: '刷新任务状态失败', download: '下载生成图片失败', invalidArchive: '下载包无效，请稍后重试' },
+    delete: {
+      title: '删除失败任务',
+      confirm: '确定删除失败任务 {taskId} 吗？此操作不可撤销。',
+      success: '失败任务已删除',
+    },
+    errors: { loadKeys: '加载 API Key 失败', loadModels: '加载可用模型失败', loadTasks: '加载异步图像任务失败', submit: '提交异步图像任务失败', refresh: '刷新任务状态失败', delete: '删除异步图像任务失败', deleteNotAllowed: '只能删除状态为失败的异步图像任务', download: '下载生成图片失败', invalidArchive: '下载包无效，请稍后重试' },
   },
 }

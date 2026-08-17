@@ -105,6 +105,36 @@ func (r *imageTaskHistoryRepository) List(ctx context.Context, owner service.Ima
 	return tasks, hasMore, nil
 }
 
+func (r *imageTaskHistoryRepository) Get(ctx context.Context, owner service.ImageTaskOwner, id string) (*service.ImageTaskRecord, error) {
+	if r == nil || r.db == nil {
+		return nil, fmt.Errorf("async image task history database is unavailable")
+	}
+	task, err := scanImageTaskHistory(r.db.QueryRowContext(ctx, asyncImageTaskSelectSQL+`
+WHERE task_id = $1 AND user_id = $2 AND api_key_id = $3`, id, owner.UserID, owner.APIKeyID))
+	if err == sql.ErrNoRows {
+		return nil, service.ErrImageTaskNotFound
+	}
+	return task, err
+}
+
+func (r *imageTaskHistoryRepository) DeleteFailed(ctx context.Context, owner service.ImageTaskOwner, id string) (bool, error) {
+	if r == nil || r.db == nil {
+		return false, fmt.Errorf("async image task history database is unavailable")
+	}
+	result, err := r.db.ExecContext(ctx, `
+DELETE FROM async_image_tasks
+WHERE task_id = $1 AND user_id = $2 AND api_key_id = $3 AND status = $4`,
+		id, owner.UserID, owner.APIKeyID, service.ImageTaskStatusFailed)
+	if err != nil {
+		return false, err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return affected > 0, nil
+}
+
 const asyncImageTaskColumns = `
 task_id, user_id, api_key_id, request_type, model, prompt_preview,
 status, http_status, image_url, result::text, error::text,

@@ -9,26 +9,31 @@ The authenticated gateway exposes both `/v1` paths and their existing no-prefix 
 ```text
 POST /v1/images/generations/async
 POST /v1/images/edits/async
+GET  /v1/images/tasks
 GET  /v1/images/tasks/{task_id}
+GET  /v1/images/tasks/{task_id}/download
+DELETE /v1/images/tasks/{task_id}
 ```
 
-The aliases are `/images/generations/async`, `/images/edits/async`, and `/images/tasks/{task_id}`.
+Every endpoint also has the equivalent no-prefix `/images/...` alias.
 
 Only OpenAI and Grok groups are supported. Requests use the same JSON or multipart payload as the corresponding synchronous endpoint. Streaming image requests are rejected because a polled task returns one final JSON result.
 
 ## Enabling the feature (object storage)
 
-Asynchronous image tasks are **disabled by default** and gated on object storage. When the switch is off — or the S3 credentials are incomplete — the async endpoints return `404` and never create a task or write to Redis. This is deliberate: without offloading, large `b64_json` results (several MB each, e.g. `gpt-image-1`) would accumulate in Redis and exhaust its memory.
+Asynchronous image tasks are **disabled by default** and gated on object storage. When the switch is off — or the S3 credentials are incomplete — the submission endpoints return `404` and never create a task or write to Redis. This is deliberate: without offloading, large `b64_json` results (several MB each, e.g. `gpt-image-1`) would accumulate in Redis and exhaust its memory. List, detail, download, and failed-task deletion remain available for existing tasks after the switch is turned off; ZIP downloads still require the previously configured object-storage credentials to remain complete.
 
 ### From the admin UI (recommended)
 
 **Admin → Backup → Async image object storage.** Saving the form takes effect immediately — the object-storage client is rebuilt on the next request, so there is no container restart.
 
-Because the async image storage and the database backup share one S3 client, the form defaults to **reusing the backup S3 configuration**: it borrows the endpoint, region and credentials already configured above and keeps only its own bucket and prefix, so backups stay under `backups/` while images go to `images/`. Leave the bucket empty to use the backup bucket as well. Untick the box to point images at a completely separate account.
+Because the async image storage and the database backup share one S3 client, the form defaults to **reusing the backup S3 configuration**: it borrows the endpoint, region and credentials already configured above and keeps only its own bucket, prefix, and date-path choice, so backups stay under `backups/` while images go to `images/`. Leave the bucket empty to use the backup bucket as well. Untick the box to point images at a completely separate account.
+
+Both prefix fields have an independent **Append date path** switch. The stored value remains a stable base such as `images/`; when enabled, each new object is written under a concrete server-timezone directory such as `images/2026/08/17/`. The server resolves the date for every new object, so no scheduled configuration update is needed at midnight. Existing objects are not moved.
 
 Saving requires step-up 2FA when that gate is enabled, for the same reason the backup S3 form does: changing the target redirects generated content to another account.
 
-Turning the switch off stops new submissions but keeps already-accepted tasks pollable, so nothing in flight is stranded.
+Turning the switch off stops new submissions but keeps already-accepted tasks pollable. When the saved storage credentials remain complete, in-flight results are still offloaded and existing completed tasks remain downloadable.
 
 ### From the config file
 
@@ -45,13 +50,14 @@ image_storage:
   access_key_id: "..."
   secret_access_key: "..."
   prefix: "images/"
+  append_date_path: false          # true → images/yyyy/MM/dd/ in the server timezone
   force_path_style: false          # MinIO/path-style buckets set true
   public_base_url: ""              # set to return public_base_url/key直链; empty → presigned URL
   presign_expiry_hours: 24         # presigned link TTL when public_base_url is empty
   max_download_bytes: 33554432     # cap when re-hosting an upstream image URL (32MB)
 ```
 
-When a task completes, each generated image is uploaded to the bucket and the result is rewritten to a compact form: `data[].url` points at the stored object (a permanent `public_base_url/key` link, or a time-limited presigned URL) and `b64_json` is removed. Only this small JSON is stored in Redis. If an upload fails, the task is marked `failed` rather than persisting the raw base64.
+When a task completes, each generated image is uploaded to the bucket and the result is rewritten to a compact form: `data[].url` points at the stored object (a permanent `public_base_url/key` link, or a time-limited presigned URL) and `b64_json` is removed. Only this small JSON and the private exact object keys needed for ZIP downloads are stored in Redis. The object keys are not exposed in the public task response. If an upload fails, the task is marked `failed` rather than persisting the raw base64.
 
 To support a different vendor beyond the S3-compatible client, implement the `service.ImageStorage` interface (`Save(ctx, key, contentType, data) (url, error)`) and provide it in place of the S3 implementation.
 
@@ -164,3 +170,21 @@ For URL responses, `image_url` mirrors the first `data[].url` for simple clients
 All submit and poll responses include `Cache-Control: no-store`, preventing a CDN from caching the `processing` state. Tasks and results expire 24 hours after their latest state update. A task executes for at most 30 minutes.
 
 Task ownership is scoped to both user and API key. Unknown task IDs and IDs owned by another key both return `404`, avoiding task-existence disclosure. Polling remains available when the completed generation used the key's remaining balance; normal authentication, disabled-key, user, IP, and group checks still apply.
+
+## Delete a failed task
+
+The user task list shows a delete action only for failed rows. The same action is available through the API with the API key that created the task:
+
+```bash
+curl -i -X DELETE \
+  https://api.example.com/v1/images/tasks/imgtask_0123456789abcdef \
+  -H 'Authorization: Bearer sk-...'
+```
+
+A successful deletion returns `204 No Content` and removes both the PostgreSQL `async_image_tasks` history row and the Redis `image_task:{task_id}` execution key. An already expired or absent Redis key still counts as success. The service atomically removes Redis first only while its current status is still `failed`; if Redis is unavailable, it returns `503` and leaves the history row intact so the operation can be retried.
+
+Only `failed` tasks can be deleted. Deleting an owned `processing` or `completed` task returns `409`. A missing task, a task owned by another user, or a task created by another API key of the same user all return the same `404` response. List, detail, download, and deletion skip subscription, quota, and expiration enforcement so users can manage existing task data after billable access ends. Credential parsing, hard-disabled-key, user-state, IP, group, and ownership checks still apply.
+
+The task-page API Key filter continues to show every non-disabled key, including expired and quota-exhausted keys and keys whose group or platform changed after task creation, so their owner-scoped history remains manageable. The new-task form remains stricter and offers only active OpenAI/Grok keys whose current group allows image generation.
+
+Deleting a task record never scans or deletes S3-compatible object storage. In particular, no object key is reconstructed from the active prefix. Object lifecycle and cleanup remain the responsibility of the configured bucket policy.

@@ -2,7 +2,7 @@ export default {
   asyncImage: {
     title: 'Async Images',
     description: 'Submit a generation or edit task and view its result when processing completes',
-    actions: { create: 'New Task', refresh: 'Refresh', view: 'View Result', submit: 'Submit Task', downloadAll: 'Download all images' },
+    actions: { create: 'New Task', refresh: 'Refresh', view: 'View Result', delete: 'Delete failed task', submit: 'Submit Task', downloadAll: 'Download all images' },
     filters: { apiKey: 'API Key', allStatuses: 'All statuses', selectKey: 'Select an API key' },
     columns: { prompt: 'Prompt', model: 'Model', type: 'Type', status: 'Status', result: 'Result', createdAt: 'Created', actions: 'Actions' },
     requestTypes: { generation: 'Generation', edit: 'Edit' },
@@ -35,6 +35,11 @@ export default {
       title: 'Async Image Task Details', taskId: 'Task ID', prompt: 'Prompt', error: 'Error',
       pending: 'This task is still processing', noImage: 'The task completed without an image URL',
     },
-    errors: { loadKeys: 'Failed to load API keys', loadModels: 'Failed to load available models', loadTasks: 'Failed to load async image tasks', submit: 'Failed to submit async image task', refresh: 'Failed to refresh task status', download: 'Failed to download generated images', invalidArchive: 'The downloaded archive is invalid. Please try again.' },
+    delete: {
+      title: 'Delete failed task',
+      confirm: 'Delete failed task {taskId}? This action cannot be undone.',
+      success: 'Failed task deleted',
+    },
+    errors: { loadKeys: 'Failed to load API keys', loadModels: 'Failed to load available models', loadTasks: 'Failed to load async image tasks', submit: 'Failed to submit async image task', refresh: 'Failed to refresh task status', delete: 'Failed to delete async image task', deleteNotAllowed: 'Only failed async image tasks can be deleted', download: 'Failed to download generated images', invalidArchive: 'The downloaded archive is invalid. Please try again.' },
   },
 }
