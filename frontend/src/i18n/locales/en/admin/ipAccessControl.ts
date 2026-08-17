@@ -143,15 +143,20 @@ export default {
       standaloneStep1: 'Write the same server.trusted_proxies field used by the official binary.',
       standaloneStep2: 'Stop the old process and start a new one. Reloading the web page does not load this list.',
       proxyTitle: 'The reverse proxy must sanitize forwarding headers',
-      proxyHint: 'The app accepts exactly one address from the direct trusted proxy. Do not use $proxy_add_x_forwarded_for.',
+      proxyHint: 'The app accepts exactly one address from the direct trusted proxy. Do not use $proxy_add_x_forwarded_for. If you only rewrite headers and skip Real IP, the resolved client IP will be a Cloudflare egress address such as 162.158.* or 172.64–172.71.',
+      proxyCloudflareHint: 'For Cloudflare orange-cloud, first confirm nginx -V includes --with-http_realip_module. Then enable Nginx Real IP in the http block and list official Cloudflare CIDRs with set_real_ip_from. A comment is not a configuration. Recheck https://www.cloudflare.com/ips-v4 and https://www.cloudflare.com/ips-v6 before going live.',
+      proxyCloudflareHttp: 'underscores_in_headers on;\n\nreal_ip_header CF-Connecting-IP;\nreal_ip_recursive on;\n\nset_real_ip_from 173.245.48.0/20;\nset_real_ip_from 103.21.244.0/22;\nset_real_ip_from 103.22.200.0/22;\nset_real_ip_from 103.31.4.0/22;\nset_real_ip_from 141.101.64.0/18;\nset_real_ip_from 108.162.192.0/18;\nset_real_ip_from 190.93.240.0/20;\nset_real_ip_from 188.114.96.0/20;\nset_real_ip_from 197.234.240.0/22;\nset_real_ip_from 198.41.128.0/17;\nset_real_ip_from 162.158.0.0/15;\nset_real_ip_from 104.16.0.0/13;\nset_real_ip_from 104.24.0.0/14;\nset_real_ip_from 172.64.0.0/13;\nset_real_ip_from 131.0.72.0/22;\n\nset_real_ip_from 2400:cb00::/32;\nset_real_ip_from 2606:4700::/32;\nset_real_ip_from 2803:f800::/32;\nset_real_ip_from 2405:b500::/32;\nset_real_ip_from 2405:8100::/32;\nset_real_ip_from 2a06:98c0::/29;\nset_real_ip_from 2c0f:f248::/32;',
+      proxyHeaderHint: 'After Real IP is applied, $remote_addr is the client public IP. Overwrite headers on every proxy_pass route; do not append:',
       proxyNginx: 'proxy_set_header X-Real-IP $remote_addr;\nproxy_set_header X-Forwarded-For $remote_addr;\nproxy_set_header CF-Connecting-IP "";',
+      proxyVerify: 'Run nginx -t and reload. Confirm the http block has real directives with nginx -T | grep -E \'real_ip_header|set_real_ip_from\'. Back on this page, the resolved client IP must be your public address, not 162.158.* or 172.64–172.71.',
+      proxyTunnelHint: 'For Cloudflare Tunnel, public Cloudflare CIDRs do not connect to Nginx. set_real_ip_from must list the actual cloudflared peer, commonly 127.0.0.1 and ::1 on the same host. Do not copy only the public Cloudflare ranges.',
       afterTitle: 'Restart, verify this page, then enable the switches',
-      afterHint: 'Return here and check Trusted Proxy Status: the badge is Configured or Explicitly Disabled, the resolved client IP is your public address, and the enforcement identity is safe. Only then turn on the system-settings master switch, and finally enable enforcement on this page.',
+      afterHint: 'Return here and check Trusted Proxy Status: the badge is Configured or Explicitly Disabled, the resolved client IP is your public address (not a Cloudflare egress IP), and the enforcement identity is safe. Only then turn on the system-settings master switch, and finally enable enforcement on this page.',
       warningsTitle: 'Do not do this',
-      warningCloudflare: 'Do not put Cloudflare CIDRs, 0.0.0.0/0, ::/0, or * in the trusted proxy list. Cloudflare does not connect to this process directly.',
+      warningCloudflare: 'Do not put Cloudflare CIDRs, 0.0.0.0/0, ::/0, or * in the application trusted-proxy list. Cloudflare does not connect to this process; official CIDRs belong only in Nginx set_real_ip_from.',
       warningEnv: 'Do not set both the yaml file and SERVER_TRUSTED_PROXIES. If the environment variable exists, even empty, it replaces the file.',
       warningLegacy: 'The legacy forwarded-header compatibility switch does not control global IP enforcement. The global policy uses only server.trusted_proxies.',
-      warningWizard: 'Do not rerun the setup wizard to rewrite the config file. It will drop trusted_proxies.'
+      warningWizard: 'Do not rerun the setup wizard to rewrite the config file. It will drop trusted_proxies.',
     }
   }
 }

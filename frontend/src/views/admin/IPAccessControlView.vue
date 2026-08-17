@@ -251,7 +251,12 @@
             <div class="mt-5 space-y-2 text-sm text-gray-600 dark:text-gray-300">
               <h3 class="font-semibold text-gray-900 dark:text-white">{{ t('admin.ipAccessControl.deployGuide.proxyTitle') }}</h3>
               <p>{{ t('admin.ipAccessControl.deployGuide.proxyHint') }}</p>
+              <p>{{ t('admin.ipAccessControl.deployGuide.proxyCloudflareHint') }}</p>
+              <pre class="overflow-x-auto rounded bg-gray-100 px-3 py-2 text-xs text-gray-800 dark:bg-dark-700 dark:text-gray-200">{{ t('admin.ipAccessControl.deployGuide.proxyCloudflareHttp') }}</pre>
+              <p>{{ t('admin.ipAccessControl.deployGuide.proxyHeaderHint') }}</p>
               <pre class="overflow-x-auto rounded bg-gray-100 px-3 py-2 text-xs text-gray-800 dark:bg-dark-700 dark:text-gray-200">{{ t('admin.ipAccessControl.deployGuide.proxyNginx') }}</pre>
+              <p>{{ t('admin.ipAccessControl.deployGuide.proxyVerify') }}</p>
+              <p>{{ t('admin.ipAccessControl.deployGuide.proxyTunnelHint') }}</p>
             </div>
             <div class="mt-5 rounded-lg bg-gray-50 p-3 text-sm text-gray-700 dark:bg-dark-700 dark:text-gray-300">
               <p class="font-medium">{{ t('admin.ipAccessControl.deployGuide.afterTitle') }}</p>

@@ -143,15 +143,20 @@ export default {
       standaloneStep1: '写入与官方二进制相同的 server.trusted_proxies。',
       standaloneStep2: '停掉旧进程再启动新进程。只刷新网页不会加载这项。',
       proxyTitle: '反代必须清洗转发头',
-      proxyHint: '应用只接受直接可信代理送来的一个地址。不要用 $proxy_add_x_forwarded_for。',
+      proxyHint: '应用只接受直接可信代理送来的一个地址。不要用 $proxy_add_x_forwarded_for。只改转发头、不配 Real IP 时，当前客户端 IP 会变成 Cloudflare 出口（例如 162.158.*、172.64–172.71）。',
+      proxyCloudflareHint: 'Cloudflare 橙云必须先确认 nginx -V 含 --with-http_realip_module，再在 Nginx 的 http 块启用 Real IP，并用官方 CIDR 写 set_real_ip_from。只写注释不算配置。上线前再核对 https://www.cloudflare.com/ips-v4 和 https://www.cloudflare.com/ips-v6。',
+      proxyCloudflareHttp: 'underscores_in_headers on;\n\nreal_ip_header CF-Connecting-IP;\nreal_ip_recursive on;\n\nset_real_ip_from 173.245.48.0/20;\nset_real_ip_from 103.21.244.0/22;\nset_real_ip_from 103.22.200.0/22;\nset_real_ip_from 103.31.4.0/22;\nset_real_ip_from 141.101.64.0/18;\nset_real_ip_from 108.162.192.0/18;\nset_real_ip_from 190.93.240.0/20;\nset_real_ip_from 188.114.96.0/20;\nset_real_ip_from 197.234.240.0/22;\nset_real_ip_from 198.41.128.0/17;\nset_real_ip_from 162.158.0.0/15;\nset_real_ip_from 104.16.0.0/13;\nset_real_ip_from 104.24.0.0/14;\nset_real_ip_from 172.64.0.0/13;\nset_real_ip_from 131.0.72.0/22;\n\nset_real_ip_from 2400:cb00::/32;\nset_real_ip_from 2606:4700::/32;\nset_real_ip_from 2803:f800::/32;\nset_real_ip_from 2405:b500::/32;\nset_real_ip_from 2405:8100::/32;\nset_real_ip_from 2a06:98c0::/29;\nset_real_ip_from 2c0f:f248::/32;',
+      proxyHeaderHint: 'Real IP 生效后，$remote_addr 才是用户公网 IP。所有 proxy_pass 路由用覆盖式转发头，不要追加：',
       proxyNginx: 'proxy_set_header X-Real-IP $remote_addr;\nproxy_set_header X-Forwarded-For $remote_addr;\nproxy_set_header CF-Connecting-IP "";',
+      proxyVerify: '改完执行 nginx -t 并 reload。用 nginx -T | grep -E \'real_ip_header|set_real_ip_from\' 确认 http 块里是真实指令。回到本页后，当前客户端 IP 必须是你的公网地址，不能是 162.158.* 或 172.64–172.71。',
+      proxyTunnelHint: '若走 Cloudflare Tunnel，公网 CF CIDR 不会直连 Nginx。set_real_ip_from 应填写 cloudflared 的实际直连地址，本机常见 127.0.0.1 和 ::1，不要只抄公网 CF 段。',
       afterTitle: '重启后再验收、再开开关',
-      afterHint: '回到本页看「可信代理状态」：徽章为已配置或显式禁用，当前解析 IP 是你的公网地址，封禁身份可安全使用。达标后再开系统设置总开关，最后开本页拦截。',
+      afterHint: '回到本页看「可信代理状态」：徽章为已配置或显式禁用，当前解析 IP 是你的公网地址（不是 Cloudflare 出口），封禁身份可安全使用。达标后再开系统设置总开关，最后开本页拦截。',
       warningsTitle: '不要做这些事',
-      warningCloudflare: '不要把 Cloudflare CIDR、0.0.0.0/0、::/0 或 * 写入可信代理。Cloudflare 不直连本进程。',
+      warningCloudflare: '不要把 Cloudflare CIDR、0.0.0.0/0、::/0 或 * 写入应用的可信代理。Cloudflare 不直连本进程；官方 CIDR 只写在 Nginx 的 set_real_ip_from。',
       warningEnv: '不要同时写 yaml 和 SERVER_TRUSTED_PROXIES。环境变量一旦存在（包括空值）会覆盖文件。',
       warningLegacy: '系统设置里的「旧转发头兼容」不管全局封禁。全局策略只走 server.trusted_proxies。',
-      warningWizard: '不要再跑设置向导覆盖配置文件，trusted_proxies 会被抹掉。'
+      warningWizard: '不要再跑设置向导覆盖配置文件，trusted_proxies 会被抹掉。',
     }
   }
 }

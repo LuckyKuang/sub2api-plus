@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import json
 import subprocess
 import sys
 import unittest
@@ -497,6 +498,31 @@ class LocalChecksTest(unittest.TestCase):
         names = [call.args[0] for call in run_step.call_args_list]
         self.assertIn("Apple Container lifecycle test", names)
 
+    def test_frontend_tests_respect_validation_container_cpu_budget(self) -> None:
+        git_miss = subprocess.CompletedProcess(["git"], 1, "")
+        with (
+            mock.patch.object(push_cli, "ROOT", Path("/repo")),
+            mock.patch.object(push_cli, "run_command", return_value=git_miss),
+            mock.patch.object(push_cli, "run_step") as run_step,
+            mock.patch.object(push_cli, "run_frontend_security_check"),
+        ):
+            push_cli.run_local_checks("origin", "feature", push_cli.Runtime("docker"))
+
+        frontend_test = next(
+            call for call in run_step.call_args_list if call.args[0] == "Frontend tests"
+        )
+        self.assertEqual(
+            [
+                "pnpm",
+                "--dir",
+                "frontend",
+                "run",
+                "test:run",
+                "--maxWorkers=4",
+            ],
+            frontend_test.args[1],
+        )
+
 
 class DeclaredToolchainsTest(unittest.TestCase):
     def test_reads_repository_pins(self) -> None:
@@ -530,6 +556,47 @@ class BranchAndProofTest(unittest.TestCase):
         ):
             with self.assertRaisesRegex(push_cli.PushCliError, "does not contain"):
                 push_cli.require_latest_base("origin", "main")
+
+
+class PullRequestQueryTest(unittest.TestCase):
+    def test_hydrates_base_oid_without_pr_list_base_ref_oid(self) -> None:
+        base_oid = "a" * 40
+        listing = json.dumps(
+            [
+                {
+                    "number": 22,
+                    "url": "https://github.com/LuckyKuang/sub2api-plus/pull/22",
+                    "isDraft": False,
+                    "headRefOid": "b" * 40,
+                    "body": "Summary",
+                }
+            ]
+        )
+        with mock.patch.object(
+            push_cli,
+            "capture",
+            side_effect=[listing, base_oid],
+        ) as capture:
+            prs = push_cli.open_pull_requests(
+                "LuckyKuang/sub2api-plus",
+                "feature",
+                "main",
+            )
+
+        self.assertEqual(base_oid, prs[0]["baseRefOid"])
+        list_command = capture.call_args_list[0].args[0]
+        self.assertIn("number,url,isDraft,headRefOid,body", list_command)
+        self.assertNotIn("baseRefOid", list_command)
+        self.assertEqual(
+            [
+                "gh",
+                "api",
+                "repos/LuckyKuang/sub2api-plus/pulls/22",
+                "--jq",
+                ".base.sha",
+            ],
+            capture.call_args_list[1].args[0],
+        )
 
 
 class ValidationLaunchTest(unittest.TestCase):

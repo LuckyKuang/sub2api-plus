@@ -221,6 +221,44 @@ describe('IPAccessControlView', () => {
     wrapper.unmount()
   })
 
+  it('shows Cloudflare Real IP steps in the deploy guide', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const wrapper = mount(IPAccessControlView, {
+      attachTo: host,
+      global: {
+        stubs: {
+          AppLayout: AppLayoutStub,
+          DataTable: DataTableStub,
+          Pagination: true,
+          Toggle: true,
+          Select: true,
+          Icon: true,
+          BaseDialog: BaseDialogStub,
+          ConfirmDialog: true,
+          TotpStepUpDialog: true,
+          RouterLink: true,
+        },
+      },
+    })
+    await flushPromises()
+
+    const guideLink = wrapper.findAll('button').find((button) => button.text() === 'admin.ipAccessControl.trustedProxy.guideLink')
+    expect(guideLink).toBeTruthy()
+    await guideLink!.trigger('click')
+    await flushPromises()
+
+    const bodyText = document.body.textContent ?? ''
+    expect(bodyText).toContain('admin.ipAccessControl.deployGuide.proxyCloudflareHint')
+    expect(bodyText).toContain('admin.ipAccessControl.deployGuide.proxyCloudflareHttp')
+    expect(bodyText).toContain('admin.ipAccessControl.deployGuide.proxyHeaderHint')
+    expect(bodyText).toContain('admin.ipAccessControl.deployGuide.proxyNginx')
+    expect(bodyText).toContain('admin.ipAccessControl.deployGuide.proxyVerify')
+    expect(bodyText).toContain('admin.ipAccessControl.deployGuide.proxyTunnelHint')
+    wrapper.unmount()
+    host.remove()
+  })
+
   it('renders safely when an older server returns null collection fields', async () => {
     getTrustedProxyStatus.mockResolvedValue({
       ...defaultProxyStatus,
