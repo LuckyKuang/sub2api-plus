@@ -599,6 +599,60 @@ class PullRequestQueryTest(unittest.TestCase):
         )
 
 
+class PullRequestUpdateTest(unittest.TestCase):
+    def test_updates_validation_marker_through_rest_api(self) -> None:
+        repository = "LuckyKuang/sub2api-plus"
+        proof = push_cli.ValidationProof("a" * 40, "b" * 40)
+        stale_proof = push_cli.ValidationProof("c" * 40, "d" * 40)
+        existing_body = push_cli.with_validation_marker("Summary", stale_proof)
+        pull_request = {
+            "number": 22,
+            "url": "https://github.com/LuckyKuang/sub2api-plus/pull/22",
+            "headRefOid": proof.head,
+            "baseRefOid": proof.base,
+            "body": existing_body,
+        }
+        with (
+            mock.patch.object(
+                push_cli,
+                "open_pull_requests",
+                return_value=[pull_request],
+            ),
+            mock.patch.object(push_cli, "run_step") as run_step,
+        ):
+            url = push_cli.create_or_update_pull_request(
+                repository,
+                "feature",
+                "main",
+                proof,
+                title=None,
+                body_file=None,
+            )
+
+        self.assertEqual(pull_request["url"], url)
+        run_step.assert_called_once()
+        command = run_step.call_args.args[1]
+        expected_body = push_cli.with_validation_marker(existing_body, proof)
+        self.assertEqual(
+            [
+                "gh",
+                "api",
+                "--method",
+                "PATCH",
+                "repos/LuckyKuang/sub2api-plus/pulls/22",
+                "-f",
+                f"body={expected_body}",
+            ],
+            command,
+        )
+        updated_body = command[-1].removeprefix("body=")
+        self.assertEqual(1, len(push_cli.VALIDATION_MARKER_RE.findall(updated_body)))
+        self.assertIn('"base":"' + proof.base + '"', updated_body)
+        self.assertIn('"head":"' + proof.head + '"', updated_body)
+        self.assertNotIn("pr", command)
+        self.assertNotIn("edit", command)
+
+
 class ValidationLaunchTest(unittest.TestCase):
     def test_macos_launch_uses_apple_container_run(self) -> None:
         runtime = push_cli.Runtime("apple-containers", compose_required=False)

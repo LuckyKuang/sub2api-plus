@@ -1,6 +1,15 @@
 ---
 name: push-cli
-description: Safely push Sub2API Plus working branches and submit the final locally validated pull request. Use when the user asks to push code, publish the current branch, run the repository validation matrix, create or update a pull request, or verify branch CI. Ordinary push is fast and never runs the local matrix. submit-pr is the only final promotion boundary: it requires the latest default-branch base, runs every check inside the platform validation container, binds the result to exact base/head SHAs, pushes, publishes the local-validation commit status, and creates or reuses the pull request. Never push the repository default branch.
+description: >-
+  Safely push Sub2API Plus working branches and submit the final locally
+  validated pull request. Use when the user asks to push code, publish the
+  current branch, run the repository validation matrix, create or update a
+  pull request, or verify branch CI. Ordinary push is fast and never runs the
+  local matrix. submit-pr is the only final promotion boundary: it requires
+  the latest default-branch base, runs every check inside the platform
+  validation container, binds the result to exact base/head SHAs, pushes,
+  publishes the local-validation commit status, and creates or reuses the pull
+  request. Never push the repository default branch.
 ---
 
 # Push CLI
