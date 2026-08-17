@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useAuthStore } from '@/stores/auth'
+import { useAppStore } from '@/stores/app'
 
 // Mock authAPI
 const mockLogin = vi.fn()
@@ -339,6 +340,25 @@ describe('useAuthStore', () => {
     it('未登录时返回 false', () => {
       const store = useAuthStore()
       expect(store.isAdmin).toBe(false)
+    })
+
+    it('登出后清空管理员版本缓存', async () => {
+      const adminResponse = { ...fakeAuthResponse, user: { ...fakeAdminUser } }
+      mockLogin.mockResolvedValue(adminResponse)
+      mockLogout.mockResolvedValue(undefined)
+      const authStore = useAuthStore()
+      const appStore = useAppStore()
+      await authStore.login({ email: 'admin@example.com', password: '123456' })
+      appStore.currentVersion = '0.1.177'
+      appStore.versionLoaded = true
+      appStore.hasUpdate = true
+
+      await authStore.logout()
+
+      expect(authStore.isAdmin).toBe(false)
+      expect(appStore.currentVersion).toBe('')
+      expect(appStore.versionLoaded).toBe(false)
+      expect(appStore.hasUpdate).toBe(false)
     })
   })
 

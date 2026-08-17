@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useAppStore } from '@/stores/app'
+import { useAuthStore } from '@/stores/auth'
 import { getPublicSettings } from '@/api/auth'
+import { checkUpdates } from '@/api/admin/system'
 import type { PublicSettings } from '@/types'
 
 function createDeferred<T>() {
@@ -65,9 +67,13 @@ function createPublicSettings(overrides: Partial<PublicSettings> = {}): PublicSe
 }
 
 // Mock API 模块
-vi.mock('@/api/admin/system', () => ({
-  checkUpdates: vi.fn(),
-}))
+vi.mock('@/api/admin/system', () => {
+  const checkUpdates = vi.fn()
+  return {
+    checkUpdates,
+    default: { checkUpdates },
+  }
+})
 
 vi.mock('@/api/auth', () => ({
   getPublicSettings: vi.fn(),
@@ -474,6 +480,93 @@ describe('useAppStore', () => {
       expect((window as any).__APP_CONFIG__.table_page_size_options).toEqual([20, 100, 1000])
       expect(localStorage.getItem('table-page-size')).toBeNull()
       expect(localStorage.getItem('table-page-size-source')).toBeNull()
+    })
+  })
+
+  describe('版本信息', () => {
+    it('非管理员调用 fetchVersion 不会请求更新接口', async () => {
+      vi.mocked(checkUpdates).mockReset()
+      const store = useAppStore()
+      const result = await store.fetchVersion()
+
+      expect(result).toBeNull()
+      expect(checkUpdates).not.toHaveBeenCalled()
+    })
+
+    it('管理员可以拉取版本，登出后清空缓存', async () => {
+      vi.mocked(checkUpdates).mockResolvedValue({
+        current_version: '0.1.177',
+        latest_version: '0.1.178',
+        has_update: true,
+        build_type: 'release',
+        cached: false,
+      })
+      const authStore = useAuthStore()
+      authStore.user = { role: 'admin' } as never
+      const store = useAppStore()
+
+      const result = await store.fetchVersion()
+      expect(result?.current_version).toBe('0.1.177')
+      expect(store.currentVersion).toBe('0.1.177')
+      expect(checkUpdates).toHaveBeenCalledTimes(1)
+
+      authStore.user = { role: 'user' } as never
+      await Promise.resolve()
+
+      expect(store.currentVersion).toBe('')
+      expect(store.hasUpdate).toBe(false)
+      expect(store.versionLoaded).toBe(false)
+    })
+
+    it('登出后丢弃尚未返回的版本请求', async () => {
+      const deferred = createDeferred<{
+        current_version: string
+        latest_version: string
+        has_update: boolean
+        build_type: string
+        cached: boolean
+      }>()
+      vi.mocked(checkUpdates).mockReturnValue(deferred.promise)
+      const authStore = useAuthStore()
+      authStore.user = { role: 'admin' } as never
+      const store = useAppStore()
+
+      const pending = store.fetchVersion()
+      await Promise.resolve()
+      authStore.user = { role: 'user' } as never
+      deferred.resolve({
+        current_version: '0.1.177',
+        latest_version: '0.1.178',
+        has_update: true,
+        build_type: 'release',
+        cached: false,
+      })
+
+      await expect(pending).resolves.toBeNull()
+      expect(store.currentVersion).toBe('')
+      expect(store.versionLoaded).toBe(false)
+      expect(store.hasUpdate).toBe(false)
+    })
+
+    it('invalidateVersionCheck 保留当前版本并作废检查结果', async () => {
+      vi.mocked(checkUpdates).mockResolvedValue({
+        current_version: '0.1.177',
+        latest_version: '0.1.178',
+        has_update: true,
+        build_type: 'release',
+        cached: false,
+      })
+      const authStore = useAuthStore()
+      authStore.user = { role: 'admin' } as never
+      const store = useAppStore()
+      await store.fetchVersion()
+
+      store.invalidateVersionCheck()
+
+      expect(store.currentVersion).toBe('0.1.177')
+      expect(store.latestVersion).toBe('0.1.178')
+      expect(store.hasUpdate).toBe(false)
+      expect(store.versionLoaded).toBe(false)
     })
   })
 })

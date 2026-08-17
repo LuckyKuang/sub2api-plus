@@ -781,11 +781,7 @@ func TestGrokQuotaServiceQueryQuotaPaidBillingSkipsActiveProbe(t *testing.T) {
 	require.Empty(t, result.Model)
 	require.Nil(t, result.LocalUsage24h)
 
-	requests, _ := upstream.snapshot()
-	require.Len(t, requests, 2)
-	for _, req := range requests {
-		require.Equal(t, "/v1/billing", req.URL.Path)
-	}
+	requireGrokBillingProbeSkippedActiveUsage(t, upstream)
 }
 
 func TestGrokQuotaServiceQueryQuotaCustomPaidMonthlyLimitSkipsActiveProbe(t *testing.T) {
@@ -806,11 +802,32 @@ func TestGrokQuotaServiceQueryQuotaCustomPaidMonthlyLimitSkipsActiveProbe(t *tes
 	require.InDelta(t, monthlyLimit, *result.Billing.MonthlyLimitCents, 1e-9)
 	require.Nil(t, result.Snapshot)
 
+	requireGrokBillingProbeSkippedActiveUsage(t, upstream)
+}
+
+func requireGrokBillingProbeSkippedActiveUsage(t *testing.T, upstream *grokHybridUpstream) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		requests, _ := upstream.snapshot()
+		return len(requests) >= 2
+	}, time.Second, 10*time.Millisecond)
+
 	requests, _ := upstream.snapshot()
-	require.Len(t, requests, 2)
+	billingRequests := 0
 	for _, req := range requests {
-		require.Equal(t, "/v1/billing", req.URL.Path)
+		switch req.URL.Path {
+		case "/v1/billing":
+			billingRequests++
+		case "/v1/models":
+			// QueryQuota may start a best-effort observed-models sync after a
+			// successful billing probe. That request is not an active usage probe.
+		case "/v1/responses":
+			require.Fail(t, "authoritative billing should skip the active usage probe")
+		default:
+			require.Failf(t, "unexpected Grok quota request", "path=%s", req.URL.Path)
+		}
 	}
+	require.Equal(t, 2, billingRequests)
 }
 
 func TestGrokLocalUsage24hUsesRollingUTCWindow(t *testing.T) {

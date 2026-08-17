@@ -4,8 +4,9 @@
  */
 
 import { defineStore } from 'pinia'
-import { ref, computed, readonly } from 'vue'
+import { ref, computed, readonly, watch } from 'vue'
 import { authAPI, isTotp2FARequired, passkeyAPI, type LoginResponse } from '@/api'
+import { useAppStore } from '@/stores/app'
 import type {
   User,
   LoginRequest,
@@ -94,6 +95,12 @@ export const useAuthStore = defineStore('auth', () => {
 
   const isAdmin = computed(() => {
     return user.value?.role === 'admin'
+  })
+
+  watch(isAdmin, (admin) => {
+    if (!admin) {
+      useAppStore().clearVersionCache()
+    }
   })
 
   const isSimpleMode = computed(() => runMode.value === 'simple')

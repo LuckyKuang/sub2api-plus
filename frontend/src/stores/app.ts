@@ -43,6 +43,7 @@ export const useAppStore = defineStore('app', () => {
   const hasUpdate = ref<boolean>(false)
   const buildType = ref<string>('source')
   const releaseInfo = ref<ReleaseInfo | null>(null)
+  let versionRequestId = 0
 
   // Auto-incrementing ID for toasts
   let toastIdCounter = 0
@@ -240,7 +241,18 @@ export const useAppStore = defineStore('app', () => {
    * Fetch version info (uses cache unless force=true)
    * @param force - Force refresh from API
    */
+  async function currentUserIsAdmin(): Promise<boolean> {
+    // Late import avoids a cycle with auth.ts, which clears this cache on logout.
+    const { useAuthStore } = await import('@/stores/auth')
+    return useAuthStore().isAdmin
+  }
+
   async function fetchVersion(force = false): Promise<VersionInfo | null> {
+    if (!(await currentUserIsAdmin())) {
+      clearVersionCache()
+      return null
+    }
+
     // Return cached data if available and not forcing refresh
     if (versionLoaded.value && !force) {
       return {
@@ -258,9 +270,13 @@ export const useAppStore = defineStore('app', () => {
       return null
     }
 
+    const requestId = versionRequestId
     versionLoading.value = true
     try {
       const data = await checkUpdatesAPI(force)
+      if (requestId !== versionRequestId || !(await currentUserIsAdmin())) {
+        return null
+      }
       currentVersion.value = data.current_version
       latestVersion.value = data.latest_version
       hasUpdate.value = data.has_update
@@ -272,16 +288,32 @@ export const useAppStore = defineStore('app', () => {
       console.error('Failed to fetch version:', error)
       return null
     } finally {
-      versionLoading.value = false
+      if (requestId === versionRequestId) {
+        versionLoading.value = false
+      }
     }
   }
 
   /**
-   * Clear version cache (e.g., after update)
+   * Drop a completed update check without wiping the visible current version.
+   * Used after an in-place update/rollback so the next check refetches.
+   */
+  function invalidateVersionCheck(): void {
+    versionRequestId += 1
+    versionLoaded.value = false
+    versionLoading.value = false
+    hasUpdate.value = false
+  }
+
+  /**
+   * Clear version cache (e.g., after update, logout, or losing admin).
    */
   function clearVersionCache(): void {
-    versionLoaded.value = false
-    hasUpdate.value = false
+    invalidateVersionCheck()
+    currentVersion.value = ''
+    latestVersion.value = ''
+    buildType.value = 'source'
+    releaseInfo.value = null
   }
 
   // ==================== Public Settings Management ====================
@@ -484,6 +516,7 @@ export const useAppStore = defineStore('app', () => {
 
     // Version actions
     fetchVersion,
+    invalidateVersionCheck,
     clearVersionCache,
 
     // Public settings actions
