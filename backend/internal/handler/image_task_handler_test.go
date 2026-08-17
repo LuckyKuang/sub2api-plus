@@ -500,7 +500,7 @@ func TestAsyncImageHandlerDownloadReturnsJSONWhenObjectStorageReadFails(t *testi
 func completedAsyncImageDownloadTask(t *testing.T, storage *asyncImageDownloadStorage) (*service.ImageTaskService, *service.ImageTask) {
 	t.Helper()
 	store := &asyncImageMemoryStore{tasks: make(map[string]*service.ImageTaskRecord)}
-	tasks := service.NewImageTaskServiceWithUploader(store, service.NewImageResultUploader(storage, "images/", 0, nil), time.Hour, time.Minute)
+	tasks := service.NewImageTaskServiceWithUploader(store, service.NewImageResultUploader(storage, "images/", false, 0, nil), time.Hour, time.Minute)
 	owner := service.ImageTaskOwner{UserID: 7, APIKeyID: 9}
 	task, err := tasks.Create(context.Background(), owner)
 	require.NoError(t, err)

@@ -88,7 +88,7 @@ func TestAsyncImageContainerWorkflowWithMinIO(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	store := &asyncImageMemoryStore{tasks: make(map[string]*service.ImageTaskRecord)}
-	tasks := service.NewImageTaskServiceWithUploader(store, service.NewImageResultUploader(storage, "images/", 0, nil), time.Hour, time.Minute)
+	tasks := service.NewImageTaskServiceWithUploader(store, service.NewImageResultUploader(storage, "images/", false, 0, nil), time.Hour, time.Minute)
 	tasks.SetHistoryRepository(repository.NewImageTaskHistoryRepository(db))
 	handler := &AsyncImageHandler{tasks: tasks}
 	handler.execute = func(_ string, c *gin.Context) {

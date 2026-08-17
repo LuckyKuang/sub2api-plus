@@ -28,8 +28,15 @@
             <input v-model="s3Form.bucket" class="input w-full" />
           </div>
           <div>
-            <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">{{ t('admin.backup.s3.prefix') }}</label>
+            <div class="mb-1 flex min-h-6 items-center justify-between gap-3">
+              <label class="block text-xs font-medium text-gray-600 dark:text-gray-400">{{ t('admin.backup.s3.prefix') }}</label>
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.backup.s3.appendDatePath') }}</span>
+                <Toggle v-model="s3Form.append_date_path" data-testid="backup-s3-date-path-toggle" :aria-label="t('admin.backup.s3.appendDatePath')" />
+              </div>
+            </div>
             <input v-model="s3Form.prefix" class="input w-full" placeholder="backups/" />
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.backup.s3.prefixPreview', { prefix: s3PrefixPreview }) }}</p>
           </div>
           <div>
             <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">{{ t('admin.backup.s3.accessKeyId') }}</label>
@@ -56,7 +63,7 @@
           <button type="button" class="btn btn-secondary btn-sm" :disabled="testingS3" @click="testS3">
             {{ testingS3 ? t('common.loading') : t('admin.backup.s3.testConnection') }}
           </button>
-          <button type="button" class="btn btn-primary btn-sm" :disabled="savingS3" @click="saveS3Config">
+          <button type="button" class="btn btn-primary btn-sm" data-testid="save-backup-s3" :disabled="savingS3" @click="saveS3Config">
             {{ savingS3 ? t('common.loading') : t('common.save') }}
           </button>
         </div>
@@ -90,8 +97,15 @@
             <input v-model="imageStorageForm.bucket" class="input w-full" :placeholder="imageStorageForm.reuse_backup_s3 ? t('admin.backup.imageStorage.bucketInherited') : ''" />
           </div>
           <div>
-            <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">{{ t('admin.backup.imageStorage.prefix') }}</label>
+            <div class="mb-1 flex min-h-6 items-center justify-between gap-3">
+              <label class="block text-xs font-medium text-gray-600 dark:text-gray-400">{{ t('admin.backup.imageStorage.prefix') }}</label>
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.backup.s3.appendDatePath') }}</span>
+                <Toggle v-model="imageStorageForm.append_date_path" data-testid="image-storage-date-path-toggle" :aria-label="t('admin.backup.s3.appendDatePath')" />
+              </div>
+            </div>
             <input v-model="imageStorageForm.prefix" class="input w-full" placeholder="images/" />
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.backup.s3.prefixPreview', { prefix: imageStoragePrefixPreview }) }}</p>
           </div>
 
           <template v-if="!imageStorageForm.reuse_backup_s3">
@@ -139,7 +153,7 @@
           <button type="button" class="btn btn-secondary btn-sm" :disabled="testingImageStorage" @click="testImageStorage">
             {{ testingImageStorage ? t('common.loading') : t('admin.backup.s3.testConnection') }}
           </button>
-          <button type="button" class="btn btn-primary btn-sm" :disabled="savingImageStorage" @click="saveImageStorageConfig">
+          <button type="button" class="btn btn-primary btn-sm" data-testid="save-image-storage" :disabled="savingImageStorage" @click="saveImageStorageConfig">
             {{ savingImageStorage ? t('common.loading') : t('common.save') }}
           </button>
         </div>
@@ -528,6 +542,7 @@ import { useStepUp, isStepUpBlocked, isStepUpCancelled, stepUpBlockReason } from
 import { extractApiErrorCode, extractApiErrorMessage } from '@/utils/apiError'
 import TotpStepUpDialog from '@/components/auth/TotpStepUpDialog.vue'
 import HelpTooltip from '@/components/common/HelpTooltip.vue'
+import Toggle from '@/components/common/Toggle.vue'
 
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -565,6 +580,7 @@ const s3Form = ref<BackupS3Config>({
   access_key_id: '',
   secret_access_key: '',
   prefix: 'backups/',
+  append_date_path: true,
   force_path_style: false,
 })
 const s3SecretConfigured = ref(false)
@@ -578,6 +594,7 @@ const imageStorageForm = ref<ImageStorageConfig>({
   reuse_backup_s3: true,
   bucket: '',
   prefix: 'images/',
+  append_date_path: false,
   public_base_url: '',
   presign_expiry_hours: 24,
   max_download_bytes: 33554432,
@@ -590,6 +607,14 @@ const imageStorageForm = ref<ImageStorageConfig>({
 const imageStorageSecretConfigured = ref(false)
 const savingImageStorage = ref(false)
 const testingImageStorage = ref(false)
+
+function prefixPreview(prefix: string, fallback: string, appendDatePath: boolean): string {
+  const base = prefix.trim().replace(/\/+$/, '') || fallback
+  return `${base}/${appendDatePath ? 'yyyy/MM/dd/' : ''}`
+}
+
+const s3PrefixPreview = computed(() => prefixPreview(s3Form.value.prefix, 'backups', s3Form.value.append_date_path))
+const imageStoragePrefixPreview = computed(() => prefixPreview(imageStorageForm.value.prefix, 'images', imageStorageForm.value.append_date_path))
 
 // Schedule config
 const scheduleForm = ref<BackupScheduleConfig>({
@@ -736,6 +761,7 @@ async function loadS3Config() {
       access_key_id: cfg.access_key_id || '',
       secret_access_key: '',
       prefix: cfg.prefix || 'backups/',
+      append_date_path: cfg.append_date_path ?? true,
       force_path_style: cfg.force_path_style,
     }
     s3SecretConfigured.value = Boolean(cfg.access_key_id)
@@ -767,6 +793,7 @@ async function loadImageStorageConfig() {
     imageStorageForm.value = {
       ...config,
       prefix: config.prefix || 'images/',
+      append_date_path: config.append_date_path ?? false,
       region: config.region || 'auto',
       secret_access_key: '',
     }

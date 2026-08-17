@@ -9,10 +9,11 @@ import (
 	"io"
 	"mime"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
+
+	appTimezone "github.com/LuckyKuang/sub2api-plus/internal/pkg/timezone"
 )
 
 const defaultImageMaxDownloadBytes int64 = 32 << 20 // 32 MiB
@@ -29,8 +30,8 @@ type ImageStorage interface {
 }
 
 // ImageStorageReader is an optional companion to ImageStorage. It is used by
-// the async-task ZIP endpoint to open only deterministic objects previously
-// written for that task. Keeping it optional preserves compatibility with
+// the async-task ZIP endpoint to open the exact objects previously written for
+// that task. Keeping it optional preserves compatibility with
 // third-party storage adapters that only support result uploads.
 type ImageStorageReader interface {
 	Open(ctx context.Context, key string) (*ImageStorageObject, error)
@@ -58,10 +59,11 @@ type ImageResultUploader struct {
 	httpClient       *http.Client
 	prefix           string
 	maxDownloadBytes int64
+	appendDatePath   bool
 }
 
 // NewImageResultUploader 构造一个 uploader；storage 为 nil 时 Rewrite 直接透传。
-func NewImageResultUploader(storage ImageStorage, prefix string, maxDownloadBytes int64, httpClient *http.Client) *ImageResultUploader {
+func NewImageResultUploader(storage ImageStorage, prefix string, appendDatePath bool, maxDownloadBytes int64, httpClient *http.Client) *ImageResultUploader {
 	if httpClient == nil {
 		httpClient = defaultImageDownloadHTTPClient()
 	}
@@ -72,6 +74,7 @@ func NewImageResultUploader(storage ImageStorage, prefix string, maxDownloadByte
 		storage:          storage,
 		httpClient:       httpClient,
 		prefix:           prefix,
+		appendDatePath:   appendDatePath,
 		maxDownloadBytes: maxDownloadBytes,
 	}
 }
@@ -84,38 +87,46 @@ func defaultImageDownloadHTTPClient() *http.Client {
 // 返回改写后的紧凑结果（data[i].url 指向对象存储，b64_json 被移除）。
 // 任一图片转存失败即返回 error（调用方据此将任务标记为失败，绝不把大 blob 落 Redis）。
 func (u *ImageResultUploader) Rewrite(ctx context.Context, taskID string, result json.RawMessage) (json.RawMessage, error) {
+	rewritten, _, err := u.rewriteWithKeys(ctx, taskID, result)
+	return rewritten, err
+}
+
+func (u *ImageResultUploader) rewriteWithKeys(ctx context.Context, taskID string, result json.RawMessage) (json.RawMessage, []string, error) {
 	if u == nil || u.storage == nil {
-		return result, nil
+		return result, nil, nil
 	}
 	var top map[string]json.RawMessage
 	if err := json.Unmarshal(result, &top); err != nil {
-		return nil, fmt.Errorf("parse image response: %w", err)
+		return nil, nil, fmt.Errorf("parse image response: %w", err)
 	}
 	rawData, ok := top["data"]
 	if !ok {
 		// 没有 data 数组（结构不符合预期），保持原样返回，交由上层决定。
-		return result, nil
+		return result, nil, nil
 	}
 	var items []map[string]json.RawMessage
 	if err := json.Unmarshal(rawData, &items); err != nil {
-		return nil, fmt.Errorf("parse image response data: %w", err)
+		return nil, nil, fmt.Errorf("parse image response data: %w", err)
 	}
 	if len(items) == 0 {
-		return result, nil
+		return result, nil, nil
 	}
+	createdAt := appTimezone.Now()
+	keys := make([]string, 0, len(items))
 	for i, item := range items {
 		data, contentType, err := u.fetchImageBytes(ctx, item)
 		if err != nil {
-			return nil, fmt.Errorf("image %d: %w", i, err)
+			return nil, nil, fmt.Errorf("image %d: %w", i, err)
 		}
-		key := u.buildKey(taskID, i, contentType)
+		key := u.buildKeyAt(taskID, i, contentType, createdAt)
 		url, err := u.storage.Save(ctx, key, contentType, data)
 		if err != nil {
-			return nil, fmt.Errorf("image %d: upload to object storage: %w", i, err)
+			return nil, nil, fmt.Errorf("image %d: upload to object storage: %w", i, err)
 		}
+		keys = append(keys, key)
 		urlRaw, err := json.Marshal(url)
 		if err != nil {
-			return nil, fmt.Errorf("image %d: encode url: %w", i, err)
+			return nil, nil, fmt.Errorf("image %d: encode url: %w", i, err)
 		}
 		item["url"] = urlRaw
 		delete(item, "b64_json")
@@ -123,14 +134,14 @@ func (u *ImageResultUploader) Rewrite(ctx context.Context, taskID string, result
 	}
 	newData, err := json.Marshal(items)
 	if err != nil {
-		return nil, fmt.Errorf("encode image response data: %w", err)
+		return nil, nil, fmt.Errorf("encode image response data: %w", err)
 	}
 	top["data"] = newData
 	out, err := json.Marshal(top)
 	if err != nil {
-		return nil, fmt.Errorf("encode image response: %w", err)
+		return nil, nil, fmt.Errorf("encode image response: %w", err)
 	}
-	return out, nil
+	return out, keys, nil
 }
 
 func (u *ImageResultUploader) fetchImageBytes(ctx context.Context, item map[string]json.RawMessage) ([]byte, string, error) {
@@ -245,15 +256,15 @@ func (u *ImageResultUploader) download(ctx context.Context, rawURL string) ([]by
 	return data, contentType, nil
 }
 
-func (u *ImageResultUploader) buildKey(taskID string, index int, contentType string) string {
-	return u.prefix + taskID + "-" + strconv.Itoa(index) + extensionForContentType(contentType)
+func (u *ImageResultUploader) buildKeyAt(taskID string, index int, contentType string, at time.Time) string {
+	name := taskID + "-" + strconv.Itoa(index) + extensionForContentType(contentType)
+	return buildObjectStorageKey(u.prefix, "images", u.appendDatePath, at, name)
 }
 
-// OpenStoredTaskImage opens an exact object written by Rewrite. The extension
-// is derived only from the task's stored image URL and must be one of the image
-// formats this uploader can create; neither host nor path from that URL is ever
-// fetched or otherwise trusted.
-func (u *ImageResultUploader) OpenStoredTaskImage(ctx context.Context, taskID string, index int, storedURL string) (*ImageStorageObject, string, error) {
+// OpenStoredTaskImage opens an exact object written by Rewrite. Both the object
+// lookup and ZIP extension come from the private stored key, so public or
+// presigned URL shape changes cannot alter which object is read.
+func (u *ImageResultUploader) OpenStoredTaskImage(ctx context.Context, key string) (*ImageStorageObject, string, error) {
 	if u == nil || u.storage == nil {
 		return nil, "", errors.New("image storage is unavailable")
 	}
@@ -261,11 +272,14 @@ func (u *ImageResultUploader) OpenStoredTaskImage(ctx context.Context, taskID st
 	if !ok {
 		return nil, "", errors.New("image storage does not support reading stored images")
 	}
-	extension := imageExtensionFromStoredURL(storedURL)
-	if extension == "" {
-		return nil, "", errors.New("stored image URL has an unsupported extension")
+	if strings.TrimSpace(key) == "" {
+		return nil, "", errors.New("stored image object key is empty")
 	}
-	object, err := reader.Open(ctx, u.prefix+taskID+"-"+strconv.Itoa(index)+extension)
+	extension := imageExtensionFromObjectKey(key)
+	if extension == "" {
+		return nil, "", errors.New("stored image object key has an unsupported extension")
+	}
+	object, err := reader.Open(ctx, key)
 	if err != nil {
 		return nil, "", err
 	}
@@ -278,12 +292,8 @@ func (u *ImageResultUploader) OpenStoredTaskImage(ctx context.Context, taskID st
 	return object, extension, nil
 }
 
-func imageExtensionFromStoredURL(rawURL string) string {
-	parsed, err := url.Parse(strings.TrimSpace(rawURL))
-	if err != nil {
-		return ""
-	}
-	path := strings.ToLower(parsed.Path)
+func imageExtensionFromObjectKey(key string) string {
+	path := strings.ToLower(strings.TrimSpace(key))
 	for _, extension := range []string{".png", ".jpg", ".jpeg", ".webp", ".gif"} {
 		if strings.HasSuffix(path, extension) {
 			if extension == ".jpeg" {

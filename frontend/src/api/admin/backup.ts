@@ -7,6 +7,7 @@ export interface BackupS3Config {
   access_key_id: string
   secret_access_key?: string
   prefix: string
+  append_date_path: boolean
   force_path_style: boolean
 }
 
@@ -88,6 +89,7 @@ export interface ImageStorageConfig {
   reuse_backup_s3: boolean
   bucket: string
   prefix: string
+  append_date_path: boolean
   public_base_url: string
   presign_expiry_hours: number
   max_download_bytes: number

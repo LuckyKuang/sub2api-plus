@@ -24,7 +24,9 @@ Asynchronous image tasks are **disabled by default** and gated on object storage
 
 **Admin → Backup → Async image object storage.** Saving the form takes effect immediately — the object-storage client is rebuilt on the next request, so there is no container restart.
 
-Because the async image storage and the database backup share one S3 client, the form defaults to **reusing the backup S3 configuration**: it borrows the endpoint, region and credentials already configured above and keeps only its own bucket and prefix, so backups stay under `backups/` while images go to `images/`. Leave the bucket empty to use the backup bucket as well. Untick the box to point images at a completely separate account.
+Because the async image storage and the database backup share one S3 client, the form defaults to **reusing the backup S3 configuration**: it borrows the endpoint, region and credentials already configured above and keeps only its own bucket, prefix, and date-path choice, so backups stay under `backups/` while images go to `images/`. Leave the bucket empty to use the backup bucket as well. Untick the box to point images at a completely separate account.
+
+Both prefix fields have an independent **Append date path** switch. The stored value remains a stable base such as `images/`; when enabled, each new object is written under a concrete server-timezone directory such as `images/2026/08/17/`. The server resolves the date for every new object, so no scheduled configuration update is needed at midnight. Existing objects are not moved.
 
 Saving requires step-up 2FA when that gate is enabled, for the same reason the backup S3 form does: changing the target redirects generated content to another account.
 
@@ -45,13 +47,14 @@ image_storage:
   access_key_id: "..."
   secret_access_key: "..."
   prefix: "images/"
+  append_date_path: false          # true → images/yyyy/MM/dd/ in the server timezone
   force_path_style: false          # MinIO/path-style buckets set true
   public_base_url: ""              # set to return public_base_url/key直链; empty → presigned URL
   presign_expiry_hours: 24         # presigned link TTL when public_base_url is empty
   max_download_bytes: 33554432     # cap when re-hosting an upstream image URL (32MB)
 ```
 
-When a task completes, each generated image is uploaded to the bucket and the result is rewritten to a compact form: `data[].url` points at the stored object (a permanent `public_base_url/key` link, or a time-limited presigned URL) and `b64_json` is removed. Only this small JSON is stored in Redis. If an upload fails, the task is marked `failed` rather than persisting the raw base64.
+When a task completes, each generated image is uploaded to the bucket and the result is rewritten to a compact form: `data[].url` points at the stored object (a permanent `public_base_url/key` link, or a time-limited presigned URL) and `b64_json` is removed. Only this small JSON and the private exact object keys needed for ZIP downloads are stored in Redis. The object keys are not exposed in the public task response. If an upload fails, the task is marked `failed` rather than persisting the raw base64.
 
 To support a different vendor beyond the S3-compatible client, implement the `service.ImageStorage` interface (`Save(ctx, key, contentType, data) (url, error)`) and provide it in place of the S3 implementation.
 

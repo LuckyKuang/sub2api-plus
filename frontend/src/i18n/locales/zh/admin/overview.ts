@@ -93,6 +93,8 @@ export default {
         region: '区域',
         bucket: '存储桶',
         prefix: 'Key 前缀',
+        appendDatePath: '添加日期路径',
+        prefixPreview: '实际前缀：{prefix}',
         accessKeyId: 'Access Key ID',
         secretAccessKey: 'Secret Access Key',
         secretHelp: '保存新的 Secret 前，服务必须已配置固定加密密钥。只测连接，或 Secret 留空沿用已保存的值，不必改这项。',

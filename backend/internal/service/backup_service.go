@@ -23,6 +23,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/logger"
+	appTimezone "github.com/LuckyKuang/sub2api-plus/internal/pkg/timezone"
 )
 
 const (
@@ -101,7 +102,25 @@ type BackupS3Config struct {
 	AccessKeyID     string `json:"access_key_id"`
 	SecretAccessKey string `json:"secret_access_key,omitempty"` //nolint:revive // field name follows AWS convention
 	Prefix          string `json:"prefix"`                      // S3 key 前缀，如 "backups/"
+	AppendDatePath  bool   `json:"append_date_path"`
 	ForcePathStyle  bool   `json:"force_path_style"`
+}
+
+func (c *BackupS3Config) UnmarshalJSON(data []byte) error {
+	type plainBackupS3Config BackupS3Config
+	var decoded plainBackupS3Config
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	if _, present := fields["append_date_path"]; !present {
+		decoded.AppendDatePath = true
+	}
+	*c = BackupS3Config(decoded)
+	return nil
 }
 
 // IsConfigured 检查必要字段是否已配置
@@ -349,7 +368,7 @@ func (s *BackupService) GetS3Config(ctx context.Context) (*BackupS3Config, error
 		return nil, err
 	}
 	if cfg == nil {
-		return &BackupS3Config{}, nil
+		return &BackupS3Config{AppendDatePath: true}, nil
 	}
 	// 脱敏返回
 	cfg.SecretAccessKey = ""
@@ -576,10 +595,10 @@ func (s *BackupService) CreateBackup(ctx context.Context, triggeredBy string, ex
 		return nil, fmt.Errorf("init object store: %w", err)
 	}
 
-	now := time.Now()
+	now := appTimezone.Now()
 	backupID := uuid.New().String()[:8]
 	fileName := fmt.Sprintf("%s_%s.sql.gz", s.dbCfg.DBName, now.Format("20060102_150405"))
-	s3Key := s.buildS3Key(s3Cfg, fileName)
+	s3Key := s.buildS3KeyAt(s3Cfg, fileName, now)
 
 	var expiresAt string
 	if expireDays > 0 {
@@ -665,10 +684,10 @@ func (s *BackupService) StartBackup(ctx context.Context, triggeredBy string, exp
 		return nil, fmt.Errorf("init object store: %w", err)
 	}
 
-	now := time.Now()
+	now := appTimezone.Now()
 	backupID := uuid.New().String()[:8]
 	fileName := fmt.Sprintf("%s_%s.sql.gz", s.dbCfg.DBName, now.Format("20060102_150405"))
-	s3Key := s.buildS3Key(s3Cfg, fileName)
+	s3Key := s.buildS3KeyAt(s3Cfg, fileName, now)
 
 	var expiresAt string
 	if expireDays > 0 {
@@ -831,9 +850,14 @@ func (s *BackupService) uploadBackupArchive(ctx context.Context, record *BackupR
 		return errors.New("backup S3 config is unavailable for split upload")
 	}
 
+	plannedS3Key := record.S3Key
+	directoryEnd := strings.LastIndex(plannedS3Key, "/")
+	if directoryEnd < 0 {
+		return errors.New("backup S3 key has no directory")
+	}
 	record.S3Key = ""
 	record.Parts = make([]BackupPart, 0, len(localParts))
-	partRoot := strings.TrimRight(s.buildS3Key(cfg, record.ID), "/")
+	partRoot := plannedS3Key[:directoryEnd+1] + record.ID
 	for _, part := range localParts {
 		record.Parts = append(record.Parts, BackupPart{
 			Index:     part.Index,
@@ -1283,12 +1307,8 @@ func (s *BackupService) getOrCreateStore(ctx context.Context, cfg *BackupS3Confi
 	return store, nil
 }
 
-func (s *BackupService) buildS3Key(cfg *BackupS3Config, fileName string) string {
-	prefix := strings.TrimRight(cfg.Prefix, "/")
-	if prefix == "" {
-		prefix = "backups"
-	}
-	return fmt.Sprintf("%s/%s/%s", prefix, time.Now().Format("2006/01/02"), fileName)
+func (s *BackupService) buildS3KeyAt(cfg *BackupS3Config, fileName string, at time.Time) string {
+	return buildObjectStorageKey(cfg.Prefix, "backups", cfg.AppendDatePath, at, fileName)
 }
 
 // loadRecords 加载备份记录，区分"无数据"和"数据损坏"

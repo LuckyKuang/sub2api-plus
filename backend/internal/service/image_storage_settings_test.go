@@ -105,6 +105,12 @@ func seedBackupS3(t *testing.T, repo *stubSettingRepo, cfg BackupS3Config) {
 	require.NoError(t, repo.Set(context.Background(), settingKeyBackupS3Config, string(data)))
 }
 
+func TestImageStorageSettingsMissingDatePathDefaultsDisabled(t *testing.T) {
+	var settings ImageStorageSettings
+	require.NoError(t, json.Unmarshal([]byte(`{"prefix":"images/"}`), &settings))
+	require.False(t, settings.AppendDatePath)
+}
+
 // The admin switch must take effect without a restart: that is the entire point
 // of moving image_storage out of config.yaml (#4542).
 func TestImageStorageSettingsToggleTakesEffectWithoutRestart(t *testing.T) {
@@ -144,7 +150,7 @@ func TestImageStorageSettingsReuseBackupCredentials(t *testing.T) {
 		Prefix: "backups/", ForcePathStyle: true,
 	})
 
-	_, err := svc.Update(ctx, ImageStorageSettings{Enabled: true, ReuseBackupS3: true, Prefix: "images"})
+	_, err := svc.Update(ctx, ImageStorageSettings{Enabled: true, ReuseBackupS3: true, Prefix: "images", AppendDatePath: true})
 	require.NoError(t, err)
 	_, enabled := svc.resolve()
 	require.True(t, enabled)
@@ -158,6 +164,7 @@ func TestImageStorageSettingsReuseBackupCredentials(t *testing.T) {
 	require.True(t, got.ForcePathStyle)
 	require.Equal(t, "backup-bucket", got.Bucket, "an empty bucket falls back to the backup bucket")
 	require.Equal(t, "images/", got.Prefix, "images stay under their own prefix so they never collide with backups/")
+	require.True(t, got.AppendDatePath)
 
 	// Reusing must not duplicate the secret into a second row.
 	raw, err := repo.GetValue(ctx, settingKeyImageStorageConfig)

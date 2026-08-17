@@ -48,7 +48,7 @@ func (f *fakeImageStorage) Save(_ context.Context, key, contentType string, data
 
 func TestImageResultUploaderRewritesB64JSON(t *testing.T) {
 	storage := &fakeImageStorage{}
-	uploader := NewImageResultUploader(storage, "images/", 0, nil)
+	uploader := NewImageResultUploader(storage, "images/", false, 0, nil)
 
 	b64 := base64.StdEncoding.EncodeToString(pngBytes)
 	result := json.RawMessage(`{"created":1,"data":[{"b64_json":"` + b64 + `","revised_prompt":"a cat"}]}`)
@@ -72,6 +72,12 @@ func TestImageResultUploaderRewritesB64JSON(t *testing.T) {
 	require.JSONEq(t, `"a cat"`, string(parsed.Data[0]["revised_prompt"]), "unrelated fields preserved")
 }
 
+func TestImageResultUploaderBuildKeyWithDatePath(t *testing.T) {
+	uploader := NewImageResultUploader(&fakeImageStorage{}, "images///", true, 0, nil)
+	at := time.Date(2026, time.August, 17, 12, 0, 0, 0, time.UTC)
+	require.Equal(t, "images/2026/08/17/imgtask_abc-2.png", uploader.buildKeyAt("imgtask_abc", 2, "image/png", at))
+}
+
 func TestImageResultUploaderRewritesURL(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "image/png")
@@ -80,7 +86,7 @@ func TestImageResultUploaderRewritesURL(t *testing.T) {
 	defer upstream.Close()
 
 	storage := &fakeImageStorage{}
-	uploader := NewImageResultUploader(storage, "images/", 0, nil)
+	uploader := NewImageResultUploader(storage, "images/", false, 0, nil)
 
 	result := json.RawMessage(`{"created":1,"data":[{"url":"` + upstream.URL + `/pic.png"}]}`)
 	out, err := uploader.Rewrite(context.Background(), "imgtask_xyz", result)
@@ -104,7 +110,7 @@ func TestImageResultUploaderRewritesImageDataURLWithoutHTTP(t *testing.T) {
 		return nil, errors.New("HTTP must not be called for data URLs")
 	})}
 	storage := &fakeImageStorage{}
-	uploader := NewImageResultUploader(storage, "images/", 0, client)
+	uploader := NewImageResultUploader(storage, "images/", false, 0, client)
 	b64 := base64.StdEncoding.EncodeToString(pngBytes)
 	result := json.RawMessage(`{"data":[{"url":"DATA:image/jpeg;name=photo.jpg;BaSe64,` + b64 + `","revised_prompt":"kept"}]}`)
 
@@ -146,7 +152,7 @@ func TestImageResultUploaderDataURLValidation(t *testing.T) {
 				httpCalls++
 				return nil, errors.New("HTTP must not be called for data URLs")
 			})}
-			uploader := NewImageResultUploader(&fakeImageStorage{}, "images/", 0, client)
+			uploader := NewImageResultUploader(&fakeImageStorage{}, "images/", false, 0, client)
 			result, err := json.Marshal(map[string]any{"data": []map[string]string{{"url": tt.url}}})
 			require.NoError(t, err)
 
@@ -159,7 +165,7 @@ func TestImageResultUploaderDataURLValidation(t *testing.T) {
 
 func TestImageResultUploaderRejectsOversizedImageDataURL(t *testing.T) {
 	storage := &fakeImageStorage{}
-	uploader := NewImageResultUploader(storage, "images/", 3, nil)
+	uploader := NewImageResultUploader(storage, "images/", false, 3, nil)
 	payload := base64.StdEncoding.EncodeToString([]byte("four"))
 	result := json.RawMessage(`{"data":[{"url":"data:image/png;base64,` + payload + `"}]}`)
 
@@ -170,7 +176,7 @@ func TestImageResultUploaderRejectsOversizedImageDataURL(t *testing.T) {
 
 func TestImageResultUploaderB64JSONTakesPrecedenceOverDataURL(t *testing.T) {
 	storage := &fakeImageStorage{}
-	uploader := NewImageResultUploader(storage, "images/", 0, nil)
+	uploader := NewImageResultUploader(storage, "images/", false, 0, nil)
 	b64 := base64.StdEncoding.EncodeToString(pngBytes)
 	result := json.RawMessage(`{"data":[{"b64_json":"` + b64 + `","url":"data:text/plain,not-an-image"}]}`)
 
@@ -182,7 +188,7 @@ func TestImageResultUploaderB64JSONTakesPrecedenceOverDataURL(t *testing.T) {
 
 func TestImageResultUploaderPropagatesStorageError(t *testing.T) {
 	storage := &fakeImageStorage{err: errors.New("bucket unreachable")}
-	uploader := NewImageResultUploader(storage, "images/", 0, nil)
+	uploader := NewImageResultUploader(storage, "images/", false, 0, nil)
 
 	b64 := base64.StdEncoding.EncodeToString(pngBytes)
 	result := json.RawMessage(`{"data":[{"b64_json":"` + b64 + `"}]}`)
@@ -203,7 +209,7 @@ func TestImageResultUploaderNilStoragePassthrough(t *testing.T) {
 func TestImageTaskServiceCompleteOffloadsToStorage(t *testing.T) {
 	store := &imageTaskMemoryStore{}
 	storage := &fakeImageStorage{}
-	uploader := NewImageResultUploader(storage, "images/", 0, nil)
+	uploader := NewImageResultUploader(storage, "images/", false, 0, nil)
 	svc := NewImageTaskServiceWithUploader(store, uploader, time.Hour, time.Minute)
 	require.True(t, svc.Enabled())
 
@@ -221,12 +227,13 @@ func TestImageTaskServiceCompleteOffloadsToStorage(t *testing.T) {
 	require.Equal(t, "https://cdn.test/images/"+created.ID+"-0.png", got.ImageURL)
 	require.NotContains(t, string(got.Result), "b64_json", "large base64 must not be persisted to Redis")
 	require.Len(t, storage.saved, 1)
+	require.Equal(t, []string{"images/" + created.ID + "-0.png"}, store.task.StorageKeys)
 }
 
 func TestImageTaskServiceCompleteOffloadFailureMarksFailed(t *testing.T) {
 	store := &imageTaskMemoryStore{}
 	storage := &fakeImageStorage{err: errors.New("bucket unreachable")}
-	uploader := NewImageResultUploader(storage, "images/", 0, nil)
+	uploader := NewImageResultUploader(storage, "images/", false, 0, nil)
 	svc := NewImageTaskServiceWithUploader(store, uploader, time.Hour, time.Minute)
 
 	owner := ImageTaskOwner{UserID: 1, APIKeyID: 2}

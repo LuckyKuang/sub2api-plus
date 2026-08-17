@@ -33,6 +33,7 @@ type ImageStorageSettings struct {
 
 	Bucket           string `json:"bucket"` // 留空且复用备份时，沿用备份桶
 	Prefix           string `json:"prefix"`
+	AppendDatePath   bool   `json:"append_date_path"`
 	PublicBaseURL    string `json:"public_base_url"`
 	PresignExpiry    int    `json:"presign_expiry_hours"`
 	MaxDownloadBytes int64  `json:"max_download_bytes"`
@@ -149,7 +150,7 @@ func (s *ImageStorageSettingService) resolve() (*ImageResultUploader, bool) {
 		logger.L().Error("image_storage.client_build_failed; async image tasks stay disabled", zap.Error(err))
 		return nil, false
 	}
-	s.uploader = NewImageResultUploader(storage, cfg.Prefix, cfg.MaxDownloadByte, nil)
+	s.uploader = NewImageResultUploader(storage, cfg.Prefix, cfg.AppendDatePath, cfg.MaxDownloadByte, nil)
 	s.enabled = true
 	return s.uploader, true
 }
@@ -254,6 +255,7 @@ func (s *ImageStorageSettingService) TestConnection(ctx context.Context, in Imag
 			fallbackConfig := s.fallback
 			fallbackConfig.Enabled = in.Enabled
 			fallbackConfig.Prefix = in.Prefix
+			fallbackConfig.AppendDatePath = in.AppendDatePath
 			fallbackConfig.PublicBaseURL = in.PublicBaseURL
 			fallbackConfig.PresignExpiry = in.PresignExpiry
 			fallbackConfig.MaxDownloadByte = in.MaxDownloadBytes
@@ -310,6 +312,7 @@ func (s *ImageStorageSettingService) toImageStorageConfig(ctx context.Context, i
 		Enabled:         in.Enabled,
 		Bucket:          in.Bucket,
 		Prefix:          in.Prefix,
+		AppendDatePath:  in.AppendDatePath,
 		PublicBaseURL:   in.PublicBaseURL,
 		PresignExpiry:   in.PresignExpiry,
 		MaxDownloadByte: in.MaxDownloadBytes,
@@ -377,6 +380,7 @@ func settingsFromConfig(cfg config.ImageStorageConfig) *ImageStorageSettings {
 		Enabled:          cfg.Enabled,
 		Bucket:           cfg.Bucket,
 		Prefix:           cfg.Prefix,
+		AppendDatePath:   cfg.AppendDatePath,
 		PublicBaseURL:    cfg.PublicBaseURL,
 		PresignExpiry:    cfg.PresignExpiry,
 		MaxDownloadBytes: cfg.MaxDownloadByte,
