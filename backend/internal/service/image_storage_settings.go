@@ -136,12 +136,11 @@ func (s *ImageStorageSettingService) resolve() (*ImageResultUploader, bool) {
 		logger.L().Warn("image_storage.settings_load_failed; async image tasks stay disabled", zap.Error(err))
 		return nil, false
 	}
-	if !cfg.Enabled {
-		return nil, false
-	}
 	if !cfg.IsConfigured() {
-		logger.L().Warn("image_storage is enabled but not fully configured; async image tasks are disabled",
-			zap.Strings("missing_keys", cfg.MissingCredentialKeys()))
+		if cfg.Enabled {
+			logger.L().Warn("image_storage is enabled but not fully configured; async image tasks are disabled",
+				zap.Strings("missing_keys", cfg.MissingCredentialKeys()))
+		}
 		return nil, false
 	}
 
@@ -151,8 +150,10 @@ func (s *ImageStorageSettingService) resolve() (*ImageResultUploader, bool) {
 		return nil, false
 	}
 	s.uploader = NewImageResultUploader(storage, cfg.Prefix, cfg.AppendDatePath, cfg.MaxDownloadByte, nil)
-	s.enabled = true
-	return s.uploader, true
+	// Keep configured storage available for already-accepted task completion and
+	// historical ZIP downloads even while the switch blocks new submissions.
+	s.enabled = cfg.Enabled
+	return s.uploader, s.enabled
 }
 
 // Invalidate 丢弃缓存，使下一次请求按最新设置重新解析。

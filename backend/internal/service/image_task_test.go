@@ -112,12 +112,18 @@ func (s *imageTaskMemoryStore) Get(_ context.Context, _ string) (*ImageTaskRecor
 	return &copy, nil
 }
 
-func (s *imageTaskMemoryStore) Delete(_ context.Context, _ string) error {
+func (s *imageTaskMemoryStore) DeleteIfStatus(_ context.Context, _ string, status string) (bool, bool, error) {
 	if s.deleteErr != nil {
-		return s.deleteErr
+		return false, false, s.deleteErr
+	}
+	if s.task == nil {
+		return false, false, nil
+	}
+	if s.task.Status != status {
+		return false, true, nil
 	}
 	s.task = nil
-	return nil
+	return true, true, nil
 }
 
 func TestImageTaskServiceLifecycleAndOwnership(t *testing.T) {
@@ -273,6 +279,21 @@ func TestImageTaskServiceDeleteRedisFailurePreservesHistory(t *testing.T) {
 	require.ErrorIs(t, err, ErrImageTaskUnavailable)
 	require.NotNil(t, store.task)
 	require.Contains(t, history.tasks, task.ID)
+}
+
+func TestImageTaskServiceDeleteDoesNotRemoveRedisTaskWhoseStatusChanged(t *testing.T) {
+	owner := ImageTaskOwner{UserID: 7, APIKeyID: 9}
+	historyTask := &ImageTaskRecord{ID: "imgtask_raced", UserID: owner.UserID, APIKeyID: owner.APIKeyID, Status: ImageTaskStatusFailed}
+	redisTask := &ImageTaskRecord{ID: historyTask.ID, UserID: owner.UserID, APIKeyID: owner.APIKeyID, Status: ImageTaskStatusCompleted}
+	store := &imageTaskMemoryStore{task: redisTask}
+	history := &imageTaskMemoryHistory{tasks: map[string]*ImageTaskRecord{historyTask.ID: historyTask}}
+	svc := NewImageTaskService(store)
+	svc.SetHistoryRepository(history)
+
+	err := svc.Delete(context.Background(), owner, historyTask.ID)
+	require.ErrorIs(t, err, ErrImageTaskDeleteNotAllowed)
+	require.Equal(t, ImageTaskStatusCompleted, store.task.Status)
+	require.Contains(t, history.tasks, historyTask.ID)
 }
 
 func TestImageTaskServiceDeleteHistoryFailureRemainsRetryable(t *testing.T) {

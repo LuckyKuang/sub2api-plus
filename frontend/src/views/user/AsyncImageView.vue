@@ -350,7 +350,7 @@ import Select, { type SelectOption } from '@/components/common/Select.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { keysAPI } from '@/api'
 import { AsyncImageDownloadValidationError, deleteAsyncImageTask, downloadAsyncImageZip, getAsyncImageTask, listAsyncImageModels, listAsyncImageTasks, preferredAsyncImageModel, saveAsyncImageBlob, submitAsyncImageEdit, submitAsyncImageGeneration, type AsyncImageTask } from '@/api/asyncImage'
-import { keyAllowsAsyncImage } from '@/composables/useAsyncImageAccess'
+import { keyAllowsAsyncImage, keyCanManageAsyncImage } from '@/composables/useAsyncImageAccess'
 import { useAppStore } from '@/stores/app'
 import { isGPTImage2, isGPTImage2ExperimentalSize, validateGPTImage2CustomSize } from '@/utils/asyncImageSize'
 import type { Column } from '@/components/common/types'
@@ -398,9 +398,10 @@ const editImages = ref<EditImageUpload[]>([])
 const editMask = ref<EditImageUpload | null>(null)
 
 const eligibleKeys = computed(() => apiKeys.value.filter(keyAllowsAsyncImage))
+const manageableKeys = computed(() => apiKeys.value.filter(keyCanManageAsyncImage))
 const apiKeyFilterOptions = computed<SelectOption[]>(() => [
   { value: 0, label: t('asyncImage.filters.selectKey') },
-  ...eligibleKeys.value.map(key => ({ value: key.id, label: key.name || `API Key #${key.id}` })),
+  ...manageableKeys.value.map(key => ({ value: key.id, label: key.name || `API Key #${key.id}` })),
 ])
 const statusFilterOptions = computed<SelectOption[]>(() => [
   { value: '', label: t('asyncImage.filters.allStatuses') },
@@ -408,7 +409,7 @@ const statusFilterOptions = computed<SelectOption[]>(() => [
   { value: 'completed', label: t('asyncImage.status.completed') },
   { value: 'failed', label: t('asyncImage.status.failed') },
 ])
-const selectedApiKey = computed(() => eligibleKeys.value.find(key => key.id === selectedApiKeyId.value) || null)
+const selectedApiKey = computed(() => manageableKeys.value.find(key => key.id === selectedApiKeyId.value) || null)
 const formApiKey = computed(() => eligibleKeys.value.find(key => key.id === form.apiKeyId) || null)
 const selectedTaskApiKey = computed(() => selectedApiKey.value)
 const selectedModelIsGPTImage2 = computed(() => isGPTImage2(form.model))
@@ -487,9 +488,19 @@ function errorMessage(error: unknown, fallback: string) {
 async function loadApiKeys() {
   loadingKeys.value = true
   try {
-    const response = await keysAPI.list(1, 100, { status: 'active', sort_by: 'created_at', sort_order: 'desc' })
-    apiKeys.value = response.items || []
-    if (!selectedApiKeyId.value && eligibleKeys.value.length) selectedApiKeyId.value = eligibleKeys.value[0].id
+    const loadedKeys = [] as ApiKey[]
+    let page = 1
+    while (true) {
+      const response = await keysAPI.list(page, 100, { sort_by: 'created_at', sort_order: 'desc' })
+      loadedKeys.push(...(response.items || []))
+      const pages = Number.isFinite(response.pages) && response.pages > 0 ? response.pages : 1
+      if (page >= pages || (response.items || []).length === 0) break
+      page += 1
+    }
+    apiKeys.value = loadedKeys
+    if (!manageableKeys.value.some(key => key.id === selectedApiKeyId.value)) {
+      selectedApiKeyId.value = eligibleKeys.value[0]?.id || manageableKeys.value[0]?.id || 0
+    }
   } catch (error) {
     appStore.showError(errorMessage(error, t('asyncImage.errors.loadKeys')))
   } finally {
@@ -706,7 +717,9 @@ function nextPage() {
 }
 
 function openCreateDialog() {
-  form.apiKeyId = selectedApiKeyId.value || eligibleKeys.value[0]?.id || 0
+  form.apiKeyId = eligibleKeys.value.some(key => key.id === selectedApiKeyId.value)
+    ? selectedApiKeyId.value
+    : eligibleKeys.value[0]?.id || 0
   form.mode = 'generation'
   form.size = '1024x1024'
   form.customWidth = 1024

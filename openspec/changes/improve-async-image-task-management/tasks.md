@@ -8,6 +8,10 @@
 - [x] 1.4 Classify all task-management paths as authenticated billing bypasses.
 - [x] 1.5 Cover service, repository, handler, routes, and middleware behavior
   with focused Go tests.
+- [x] 1.6 Keep configured object storage available for in-flight completion and
+  historical downloads after new submissions are disabled.
+- [x] 1.7 Delete Redis state atomically only while its current task status is
+  still failed.
 
 ## 2. Frontend
 
@@ -18,6 +22,8 @@
   responsive dimensions stable.
 - [x] 2.4 Keep English and Chinese locale keys aligned and add focused Vitest
   coverage.
+- [x] 2.5 Keep every non-disabled owner key available for task management while
+  restricting new submissions to currently eligible OpenAI/Grok keys.
 
 ## 3. Documentation and verification
 

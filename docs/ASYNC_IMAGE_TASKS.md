@@ -21,7 +21,7 @@ Only OpenAI and Grok groups are supported. Requests use the same JSON or multipa
 
 ## Enabling the feature (object storage)
 
-Asynchronous image tasks are **disabled by default** and gated on object storage. When the switch is off — or the S3 credentials are incomplete — the async endpoints return `404` and never create a task or write to Redis. This is deliberate: without offloading, large `b64_json` results (several MB each, e.g. `gpt-image-1`) would accumulate in Redis and exhaust its memory.
+Asynchronous image tasks are **disabled by default** and gated on object storage. When the switch is off — or the S3 credentials are incomplete — the submission endpoints return `404` and never create a task or write to Redis. This is deliberate: without offloading, large `b64_json` results (several MB each, e.g. `gpt-image-1`) would accumulate in Redis and exhaust its memory. List, detail, download, and failed-task deletion remain available for existing tasks after the switch is turned off; ZIP downloads still require the previously configured object-storage credentials to remain complete.
 
 ### From the admin UI (recommended)
 
@@ -33,7 +33,7 @@ Both prefix fields have an independent **Append date path** switch. The stored v
 
 Saving requires step-up 2FA when that gate is enabled, for the same reason the backup S3 form does: changing the target redirects generated content to another account.
 
-Turning the switch off stops new submissions but keeps already-accepted tasks pollable, so nothing in flight is stranded.
+Turning the switch off stops new submissions but keeps already-accepted tasks pollable. When the saved storage credentials remain complete, in-flight results are still offloaded and existing completed tasks remain downloadable.
 
 ### From the config file
 
@@ -181,8 +181,10 @@ curl -i -X DELETE \
   -H 'Authorization: Bearer sk-...'
 ```
 
-A successful deletion returns `204 No Content` and removes both the PostgreSQL `async_image_tasks` history row and the Redis `image_task:{task_id}` execution key. An already expired or absent Redis key still counts as success. The service removes Redis first; if Redis is unavailable, it returns `503` and leaves the history row intact so the operation can be retried.
+A successful deletion returns `204 No Content` and removes both the PostgreSQL `async_image_tasks` history row and the Redis `image_task:{task_id}` execution key. An already expired or absent Redis key still counts as success. The service atomically removes Redis first only while its current status is still `failed`; if Redis is unavailable, it returns `503` and leaves the history row intact so the operation can be retried.
 
 Only `failed` tasks can be deleted. Deleting an owned `processing` or `completed` task returns `409`. A missing task, a task owned by another user, or a task created by another API key of the same user all return the same `404` response. List, detail, download, and deletion skip subscription, quota, and expiration enforcement so users can manage existing task data after billable access ends. Credential parsing, hard-disabled-key, user-state, IP, group, and ownership checks still apply.
+
+The task-page API Key filter continues to show every non-disabled key, including expired and quota-exhausted keys and keys whose group or platform changed after task creation, so their owner-scoped history remains manageable. The new-task form remains stricter and offers only active OpenAI/Grok keys whose current group allows image generation.
 
 Deleting a task record never scans or deletes S3-compatible object storage. In particular, no object key is reconstructed from the active prefix. Object lifecycle and cleanup remain the responsibility of the configured bucket policy.

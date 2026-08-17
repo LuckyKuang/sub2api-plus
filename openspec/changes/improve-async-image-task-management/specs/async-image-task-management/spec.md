@@ -46,6 +46,13 @@ storage.
 - **THEN** the endpoint MUST return HTTP 503
 - **THEN** the PostgreSQL history row MUST remain available for retry
 
+#### Scenario: Task status changes while deletion is in progress
+
+- **WHEN** a task selected as `failed` has a non-failed Redis state before the
+  Redis deletion is committed
+- **THEN** the Redis task MUST remain unchanged
+- **THEN** the endpoint MUST return HTTP 409 without deleting task history
+
 #### Scenario: Failed task has object references
 
 - **WHEN** an owned failed task is deleted
@@ -72,6 +79,36 @@ scoping checks.
 - **WHEN** a caller without valid API-key credentials requests a task list or
   deletion
 - **THEN** authentication MUST reject the request
+
+#### Scenario: Storage switch is disabled after task acceptance
+
+- **WHEN** an asynchronous image task was accepted while object storage was
+  enabled and an administrator then disables new submissions without removing
+  the configured storage credentials
+- **THEN** the in-flight task MUST still offload its completed image result
+- **THEN** the owner MUST still be able to download the completed task archive
+- **THEN** new asynchronous image submissions MUST remain disabled
+
+#### Scenario: Exhausted key remains selectable in the task UI
+
+- **WHEN** an OpenAI or Grok API key becomes quota-exhausted or expired after
+  creating asynchronous image tasks
+- **THEN** the task UI MUST keep that key available for history management
+- **THEN** the task creation form MUST NOT offer that key for a new submission
+
+#### Scenario: Image generation permission is later disabled
+
+- **WHEN** an API key has existing asynchronous image tasks and its group no
+  longer permits new image generation
+- **THEN** the task UI MUST keep that key available for history management
+- **THEN** the task creation form MUST NOT offer that key for a new submission
+
+#### Scenario: API key is reassigned to another platform
+
+- **WHEN** an API key has existing asynchronous image tasks and its current
+  group is changed to a platform that does not support image submission
+- **THEN** the task UI MUST keep that key available for history management
+- **THEN** the task creation form MUST NOT offer that key for a new submission
 
 ### Requirement: Task filters must use consistent controls
 

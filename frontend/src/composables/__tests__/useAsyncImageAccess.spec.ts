@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canViewAsyncImage, keyAllowsAsyncImage } from '../useAsyncImageAccess'
+import { canViewAsyncImage, keyAllowsAsyncImage, keyCanManageAsyncImage } from '../useAsyncImageAccess'
 import type { ApiKey } from '@/types'
 
 function apiKey(overrides: Partial<ApiKey>): ApiKey {
@@ -51,5 +51,14 @@ describe('async image access', () => {
     expect(keyAllowsAsyncImage(apiKey({ group: { platform: 'grok', allow_image_generation: true } } as Partial<ApiKey>))).toBe(true)
     expect(keyAllowsAsyncImage(apiKey({ group: { platform: 'openai', allow_image_generation: false } } as Partial<ApiKey>))).toBe(false)
     expect(keyAllowsAsyncImage(apiKey({ status: 'inactive', group: { platform: 'openai', allow_image_generation: true } } as Partial<ApiKey>))).toBe(false)
+  })
+
+  it('keeps every non-disabled key available for owner-scoped task management', () => {
+    expect(keyCanManageAsyncImage(apiKey({ status: 'active', group: { platform: 'openai', allow_image_generation: false } } as Partial<ApiKey>))).toBe(true)
+    expect(keyCanManageAsyncImage(apiKey({ status: 'quota_exhausted', group: { platform: 'openai', allow_image_generation: false } } as Partial<ApiKey>))).toBe(true)
+    expect(keyCanManageAsyncImage(apiKey({ status: 'expired', group: { platform: 'grok', allow_image_generation: false } } as Partial<ApiKey>))).toBe(true)
+    expect(keyCanManageAsyncImage(apiKey({ status: 'active', group: { platform: 'anthropic', allow_image_generation: false } } as Partial<ApiKey>))).toBe(true)
+    expect(keyCanManageAsyncImage(apiKey({ status: 'active', group_id: null, group: undefined }))).toBe(true)
+    expect(keyCanManageAsyncImage(apiKey({ status: 'inactive', group: { platform: 'openai', allow_image_generation: true } } as Partial<ApiKey>))).toBe(false)
   })
 })

@@ -11,12 +11,13 @@ owner both produce the same not-found response. Only `failed` is deletable;
 ## Recoverable deletion order
 
 The service first reads the owner-scoped PostgreSQL history status. After
-validating `failed`, it deletes the exact Redis task key and then conditionally
-deletes the PostgreSQL row using owner, task ID, and `status = 'failed'` in the
-predicate. A missing Redis key is successful. If Redis fails, PostgreSQL remains
-unchanged so the user can retry. The conditional database delete protects
-against a concurrent terminal-state update and reports a conflict when the row
-still exists in another status.
+validating `failed`, it atomically deletes the exact Redis task key only if the
+current Redis record is also still `failed`, then conditionally deletes the
+PostgreSQL row using owner, task ID, and `status = 'failed'` in the predicate. A
+missing Redis key is successful. If Redis fails, PostgreSQL remains unchanged so
+the user can retry. The status conditions on both stores protect against a
+concurrent terminal-state update and report a conflict instead of deleting the
+newer task state.
 
 Object storage is deliberately not part of record deletion. Failed tasks do
 not require an S3 scan, and task management must never infer keys from a prefix.
@@ -31,6 +32,17 @@ API-key parsing, hard-disabled-key state, user-state, IP restrictions, and
 handler ownership checks remain in force. List, detail, download, and deletion
 remain available while new image generation is disabled as long as the task
 stores are pollable.
+
+The object-storage resolver treats submission enablement and configured storage
+availability as separate states. Turning off new submissions keeps a valid
+storage client available so already-accepted tasks can finish offloading and
+completed tasks can still be downloaded by their recorded object keys.
+
+The frontend uses the same distinction: every active, quota-exhausted, or
+expired key remains selectable for owner-scoped task history management, even
+if its group or platform changed after task creation. Task submission still
+requires an active OpenAI/Grok key in a group that currently permits image
+generation. Later group changes therefore do not hide existing task history.
 
 ## User interaction
 

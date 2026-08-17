@@ -163,6 +163,50 @@ describe('AsyncImageView task management', () => {
     expect(statusTrigger.attributes('aria-label')).toBe('asyncImage.filters.allStatuses')
   })
 
+  it('keeps exhausted keys selectable for history management but not task creation', async () => {
+    keysList.mockResolvedValue({
+      items: [{
+        id: 11,
+        user_id: 7,
+        key: 'sk-exhausted-key',
+        name: 'Exhausted image key',
+        status: 'quota_exhausted',
+        group: { platform: 'openai', allow_image_generation: true },
+      }],
+    })
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(listAsyncImageTasks).toHaveBeenCalledWith('sk-exhausted-key', expect.objectContaining({ offset: 0 }))
+    expect(wrapper.get('[data-testid="async-image-api-key-filter"] .select-trigger').text()).toContain('Exhausted image key')
+
+    findButtonByText('asyncImage.actions.create')?.click()
+    await flushPromises()
+    expect(wrapper.text()).toContain('asyncImage.create.noKeys')
+  })
+
+  it('keeps a key selectable for history after it moves to another platform', async () => {
+    keysList.mockResolvedValue({
+      items: [{
+        id: 12,
+        user_id: 7,
+        key: 'sk-reassigned-key',
+        name: 'Reassigned key',
+        status: 'active',
+        group: { platform: 'anthropic', allow_image_generation: false },
+      }],
+    })
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(listAsyncImageTasks).toHaveBeenCalledWith('sk-reassigned-key', expect.objectContaining({ offset: 0 }))
+    expect(wrapper.get('[data-testid="async-image-api-key-filter"] .select-trigger').text()).toContain('Reassigned key')
+
+    findButtonByText('asyncImage.actions.create')?.click()
+    await flushPromises()
+    expect(wrapper.text()).toContain('asyncImage.create.noKeys')
+  })
+
   it('shows delete only for failed rows and supports cancel', async () => {
     const wrapper = mountView()
     await flushPromises()

@@ -191,11 +191,18 @@ func (s *asyncImageMemoryStore) Get(_ context.Context, id string) (*service.Imag
 	return &copy, nil
 }
 
-func (s *asyncImageMemoryStore) Delete(_ context.Context, id string) error {
+func (s *asyncImageMemoryStore) DeleteIfStatus(_ context.Context, id, status string) (bool, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	task, exists := s.tasks[id]
+	if !exists {
+		return false, false, nil
+	}
+	if task.Status != status {
+		return false, true, nil
+	}
 	delete(s.tasks, id)
-	return nil
+	return true, true, nil
 }
 
 func TestAsyncImageHandlerSubmitAndPoll(t *testing.T) {

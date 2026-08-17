@@ -101,6 +101,40 @@ func TestImageTaskServiceStreamDownloadZipUsesStoredKeyAfterConfigChange(t *test
 	require.Equal(t, "image-1.png", reader.File[0].Name)
 }
 
+func TestImageTaskServiceCompletesAndDownloadsAfterSubmissionsAreDisabled(t *testing.T) {
+	store := &imageTaskMemoryStore{}
+	storage := &imageTaskDownloadStorage{}
+	uploader := NewImageResultUploader(storage, "images/", false, 0, nil)
+	enabled := true
+	svc := NewImageTaskServiceWithResolver(store, func() (*ImageResultUploader, bool) {
+		return uploader, enabled
+	}, time.Hour, time.Minute)
+	owner := ImageTaskOwner{UserID: 11, APIKeyID: 22}
+
+	require.True(t, svc.Enabled())
+	created, err := svc.Create(context.Background(), owner)
+	require.NoError(t, err)
+
+	// The task was accepted while submissions were enabled. Disabling them must
+	// not prevent the in-flight result from being offloaded or downloaded later.
+	enabled = false
+	require.False(t, svc.Enabled())
+	result := []byte(`{"data":[{"b64_json":"` + base64.StdEncoding.EncodeToString(pngBytes) + `"}]}`)
+	require.NoError(t, svc.Complete(context.Background(), created.ID, http.StatusOK, result))
+	require.Len(t, store.task.StorageKeys, 1)
+	require.NotContains(t, string(store.task.Result), "b64_json")
+
+	var archive bytes.Buffer
+	count, err := svc.StreamDownloadZip(context.Background(), owner, created.ID, &archive)
+	require.NoError(t, err)
+	require.Equal(t, 1, count)
+
+	reader, err := zip.NewReader(bytes.NewReader(archive.Bytes()), int64(archive.Len()))
+	require.NoError(t, err)
+	require.Len(t, reader.File, 1)
+	require.Equal(t, "image-1.png", reader.File[0].Name)
+}
+
 func TestImageTaskServiceStreamDownloadZipRejectsTasksWithoutImages(t *testing.T) {
 	store := &imageTaskMemoryStore{}
 	svc := NewImageTaskServiceWithUploader(store, NewImageResultUploader(&imageTaskDownloadStorage{}, "images/", false, 0, nil), time.Hour, time.Minute)

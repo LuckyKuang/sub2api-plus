@@ -84,13 +84,12 @@ type ImageTaskOwner struct {
 type ImageTaskStore interface {
 	Save(ctx context.Context, task *ImageTaskRecord, ttl time.Duration) error
 	Get(ctx context.Context, id string) (*ImageTaskRecord, error)
-	Delete(ctx context.Context, id string) error
+	DeleteIfStatus(ctx context.Context, id, status string) (deleted bool, exists bool, err error)
 }
 
-// ImageStorageResolver reports the currently effective object-storage binding.
-// It exists so the async image feature can be switched on and off from the admin
-// UI without a restart: the wiring below is fixed at startup, but the answer to
-// "is object storage configured right now" is re-read (and cached) per call.
+// ImageStorageResolver reports the currently effective object-storage binding
+// and whether it accepts new submissions. A non-nil uploader can remain usable
+// for existing tasks while enabled is false.
 type ImageStorageResolver func() (uploader *ImageResultUploader, enabled bool)
 
 type ImageTaskService struct {
@@ -275,10 +274,14 @@ func (s *ImageTaskService) Delete(ctx context.Context, owner ImageTaskOwner, id 
 	if task.Status != ImageTaskStatusFailed {
 		return ErrImageTaskDeleteNotAllowed
 	}
-	if err := s.store.Delete(ctx, taskID); err != nil {
+	deleted, exists, err := s.store.DeleteIfStatus(ctx, taskID, ImageTaskStatusFailed)
+	if err != nil {
 		return ErrImageTaskUnavailable.WithCause(err)
 	}
-	deleted, err := s.history.DeleteFailed(ctx, owner, taskID)
+	if exists && !deleted {
+		return ErrImageTaskDeleteNotAllowed
+	}
+	deleted, err = s.history.DeleteFailed(ctx, owner, taskID)
 	if err != nil {
 		return ErrImageTaskUnavailable.WithCause(err)
 	}
@@ -332,8 +335,8 @@ func (s *ImageTaskService) StreamDownloadZip(ctx context.Context, owner ImageTas
 	if len(task.StorageKeys) != len(urls) {
 		return 0, ErrImageTaskDownload
 	}
-	uploader, enabled := s.current()
-	if !enabled || uploader == nil {
+	uploader, _ := s.current()
+	if uploader == nil {
 		return 0, ErrImageTaskDownload
 	}
 
