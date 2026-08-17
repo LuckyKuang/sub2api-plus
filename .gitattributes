@@ -14,6 +14,9 @@ backend/migrations/*.sql text eol=lf
 # Shell 脚本
 *.sh text eol=lf
 
+# 无扩展名的 Shell 测试夹具
+deploy/tests/fixtures/bin/* text eol=lf
+
 # YAML/YML 配置文件
 *.yaml text eol=lf
 *.yml text eol=lf

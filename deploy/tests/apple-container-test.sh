@@ -19,6 +19,15 @@ fail() {
     exit 1
 }
 
+assert_lf_shebang() {
+    local fixture=$1
+    local shebang
+
+    IFS= read -r shebang <"${fixture}"
+    [[ "${shebang}" == '#!/bin/bash' ]] || \
+        fail "Executable fixture must use an LF shebang: ${fixture}"
+}
+
 assert_exists() {
     [[ -e "$1" ]] || fail "Expected path to exist: $1"
 }
@@ -39,6 +48,9 @@ export PATH="${TEST_DIR}/fixtures/bin:${PATH}"
 export SUB2API_ENV_FILE="${ENV_FILE}"
 
 mkdir -p "${STATE_DIR}"
+
+assert_lf_shebang "${TEST_DIR}/fixtures/bin/container"
+assert_lf_shebang "${TEST_DIR}/fixtures/bin/curl"
 
 file_mode() {
     stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1"
