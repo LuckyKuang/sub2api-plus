@@ -1,8 +1,10 @@
 # 确保所有 SQL 迁移文件使用 LF 换行符
 backend/migrations/*.sql text eol=lf
 
-# Go 源代码文件
+# Go 源代码和模块文件
 *.go text eol=lf
+go.mod text eol=lf
+go.sum text eol=lf
 
 # 前端 源代码文件
 *.ts text eol=lf
