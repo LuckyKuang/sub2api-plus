@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import json
 import subprocess
 import sys
 import unittest
@@ -530,6 +531,47 @@ class BranchAndProofTest(unittest.TestCase):
         ):
             with self.assertRaisesRegex(push_cli.PushCliError, "does not contain"):
                 push_cli.require_latest_base("origin", "main")
+
+
+class PullRequestQueryTest(unittest.TestCase):
+    def test_hydrates_base_oid_without_pr_list_base_ref_oid(self) -> None:
+        base_oid = "a" * 40
+        listing = json.dumps(
+            [
+                {
+                    "number": 22,
+                    "url": "https://github.com/LuckyKuang/sub2api-plus/pull/22",
+                    "isDraft": False,
+                    "headRefOid": "b" * 40,
+                    "body": "Summary",
+                }
+            ]
+        )
+        with mock.patch.object(
+            push_cli,
+            "capture",
+            side_effect=[listing, base_oid],
+        ) as capture:
+            prs = push_cli.open_pull_requests(
+                "LuckyKuang/sub2api-plus",
+                "feature",
+                "main",
+            )
+
+        self.assertEqual(base_oid, prs[0]["baseRefOid"])
+        list_command = capture.call_args_list[0].args[0]
+        self.assertIn("number,url,isDraft,headRefOid,body", list_command)
+        self.assertNotIn("baseRefOid", list_command)
+        self.assertEqual(
+            [
+                "gh",
+                "api",
+                "repos/LuckyKuang/sub2api-plus/pulls/22",
+                "--jq",
+                ".base.sha",
+            ],
+            capture.call_args_list[1].args[0],
+        )
 
 
 class ValidationLaunchTest(unittest.TestCase):
