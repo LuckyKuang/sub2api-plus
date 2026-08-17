@@ -779,7 +779,15 @@ def create_or_update_pull_request(
         number = str(pr.get("number"))
         run_step(
             "Update pull-request validation marker",
-            ["gh", "pr", "edit", number, "--repo", repository, "--body", body],
+            [
+                "gh",
+                "api",
+                "--method",
+                "PATCH",
+                f"repos/{repository}/pulls/{number}",
+                "-f",
+                f"body={body}",
+            ],
         )
         url = str(pr.get("url") or number)
         print(f"Pull request ready: {url}")
