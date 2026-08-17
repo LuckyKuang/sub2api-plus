@@ -61,6 +61,11 @@ type resetIPFailureRequest struct {
 	IP string `json:"ip" binding:"required"`
 }
 
+type blockIPFailureRequest struct {
+	IP     string `json:"ip" binding:"required"`
+	Reason string `json:"reason"`
+}
+
 func (h *IPAccessControlHandler) GetTrustedProxyStatus(c *gin.Context) {
 	policy := h.trustedProxyPolicy()
 	identity := h.identityResolver().Resolve(c)
@@ -276,4 +281,32 @@ func (h *IPAccessControlHandler) ResetFailureState(c *gin.Context) {
 	}
 	servermiddleware.SetAuditExtra(c, map[string]any{"result": "failure_counter_reset"})
 	response.Success(c, gin.H{"ip": strings.TrimSpace(req.IP)})
+}
+
+func (h *IPAccessControlHandler) BlockFailureState(c *gin.Context) {
+	var req blockIPFailureRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	subject, ok := servermiddleware.GetAuthSubjectFromContext(c)
+	if !ok || subject.UserID <= 0 {
+		response.Error(c, http.StatusUnauthorized, "Authorization required")
+		return
+	}
+	if !h.automaticBlockingCanBeEnabled(c) {
+		response.ErrorFrom(c, service.ErrIPAccessIdentityUnsafe)
+		return
+	}
+	result, err := h.service.BlockFailureState(c.Request.Context(), req.IP, req.Reason, subject.UserID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	servermiddleware.SetAuditExtra(c, map[string]any{
+		"result":          "failure_source_manual_blocked",
+		"block_rule_id":   result.Rule.ID,
+		"already_blocked": result.AlreadyBlocked,
+	})
+	response.Success(c, result)
 }

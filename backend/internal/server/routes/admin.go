@@ -140,6 +140,7 @@ func registerIPAccessControlRoutes(admin *gin.RouterGroup, h *handler.Handlers, 
 		// is enabled, require the existing sudo grant for all of them.
 		access.POST("/rules/:id/release-reset", gin.HandlerFunc(stepUpAuth), h.Admin.IPAccessControl.ReleaseRuleAndReset)
 		access.POST("/failure-state/reset", gin.HandlerFunc(stepUpAuth), h.Admin.IPAccessControl.ResetFailureState)
+		access.POST("/failure-state/block", gin.HandlerFunc(stepUpAuth), h.Admin.IPAccessControl.BlockFailureState)
 	}
 }
 

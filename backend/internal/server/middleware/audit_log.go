@@ -59,7 +59,8 @@ var auditExtraAllowedKeys = map[string]struct{}{
 	"event_id": {}, "requested_count": {}, "deleted_events": {}, "deleted_jobs": {},
 	"matched_count": {}, "snapshot_max_id": {}, "filter_hash": {}, "confirm": {},
 	"account_count": {}, "proxy_count": {}, "include_proxies": {},
-	"failure_count": {}, "auto_block_rule_id": {}, "auto_block_expires": {}, "ip_source": {},
+	"failure_count": {}, "auto_block_rule_id": {}, "auto_block_expires": {}, "ip_source": {}, "ip_access_result": {},
+	"block_rule_id": {}, "already_blocked": {},
 }
 
 // SetAuditExtra adds allowlisted, scalar details to the current audit entry.
@@ -142,6 +143,7 @@ var auditActionOverrides = map[string]string{
 	"POST /api/v1/admin/ip-access-control/rules":                   "security.ip_access_rule.create",
 	"POST /api/v1/admin/ip-access-control/rules/:id/release-reset": "security.ip_access_rule.release_reset",
 	"POST /api/v1/admin/ip-access-control/failure-state/reset":     "security.ip_login_failure.reset",
+	"POST /api/v1/admin/ip-access-control/failure-state/block":     "security.ip_login_failure.manual_block",
 	"DELETE /api/v1/admin/settings/admin-api-key":                  "admin.admin_api_key.delete",
 	"PUT /api/v1/admin/prompt-audit/config":                        "admin.prompt_audit.config.update",
 	"POST /api/v1/admin/prompt-audit/endpoints/probe":              "admin.prompt_audit.endpoint.probe",

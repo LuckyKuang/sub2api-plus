@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/ip"
 )
 
@@ -57,14 +58,21 @@ func (r *ipAccessSettingRepoStub) Delete(_ context.Context, key string) error {
 }
 
 type ipAccessRepoStub struct {
-	rules       []*IPAccessRule
-	listErr     error
-	listCalls   int
-	created     *IPAccessRule
-	resetIPs    []string
-	resetErr    error
-	blockHitIPs chan string
-	blockHitErr error
+	rules             []*IPAccessRule
+	listErr           error
+	listCalls         int
+	created           *IPAccessRule
+	manualBlockResult *IPFailureStateBlockRepositoryResult
+	manualBlockErr    error
+	manualBlockCalls  int
+	failureList       *IPLoginFailureStateList
+	resetIPs          []string
+	resetErr          error
+	recordResult      *LoginFailureRecordResult
+	recordErr         error
+	recordCalls       int
+	blockHitIPs       chan string
+	blockHitErr       error
 }
 
 func (r *ipAccessRepoStub) ListIPAccessRules(context.Context, IPAccessRuleFilter) (*IPAccessRuleList, error) {
@@ -75,14 +83,47 @@ func (r *ipAccessRepoStub) ListActiveIPAccessRules(context.Context) ([]*IPAccess
 	return r.rules, r.listErr
 }
 func (r *ipAccessRepoStub) CreateManualIPAccessRule(_ context.Context, rule *IPAccessRule) (*IPAccessRule, error) {
+	if rule.ID == 0 {
+		rule.ID = 100
+	}
 	r.created = rule
 	r.rules = append(r.rules, rule)
 	return rule, nil
+}
+func (r *ipAccessRepoStub) CreateManualIPBlockForFailureState(_ context.Context, normalizedIP, reason string, expiresAt time.Time, actorUserID int64) (*IPFailureStateBlockRepositoryResult, error) {
+	r.manualBlockCalls++
+	if r.manualBlockErr != nil {
+		return nil, r.manualBlockErr
+	}
+	result := r.manualBlockResult
+	if result == nil {
+		actor := actorUserID
+		result = &IPFailureStateBlockRepositoryResult{Rule: &IPAccessRule{
+			ID: 101, IPOrCIDR: normalizedIP, RuleKind: IPAccessRuleKindManualBlock,
+			Status: IPAccessRuleStatusActive, Reason: reason, ExpiresAt: &expiresAt,
+			CreatedByUserID: &actor,
+		}}
+	}
+	if result.Rule != nil {
+		found := false
+		for _, rule := range r.rules {
+			if rule != nil && rule.ID == result.Rule.ID {
+				found = true
+			}
+		}
+		if !found {
+			r.rules = append(r.rules, result.Rule)
+		}
+	}
+	return result, nil
 }
 func (r *ipAccessRepoStub) ReleaseIPAccessRuleAndReset(context.Context, int64, int64) (*IPAccessRule, error) {
 	return nil, ErrIPAccessRuleNotFound
 }
 func (r *ipAccessRepoStub) ListIPLoginFailureStates(context.Context, IPLoginFailureStateFilter, time.Duration) (*IPLoginFailureStateList, error) {
+	if r.failureList != nil {
+		return r.failureList, nil
+	}
 	return &IPLoginFailureStateList{}, nil
 }
 func (r *ipAccessRepoStub) ResetIPLoginFailureState(_ context.Context, normalizedIP string) error {
@@ -93,6 +134,10 @@ func (r *ipAccessRepoStub) ResetIPLoginFailureState(_ context.Context, normalize
 	return nil
 }
 func (r *ipAccessRepoStub) RecordFailedLogin(context.Context, string, int, time.Duration, time.Duration) (*LoginFailureRecordResult, error) {
+	r.recordCalls++
+	if r.recordResult != nil || r.recordErr != nil {
+		return r.recordResult, r.recordErr
+	}
 	return &LoginFailureRecordResult{}, nil
 }
 func (r *ipAccessRepoStub) RecordIPAccessRuleHit(_ context.Context, normalizedIP string) error {
@@ -108,6 +153,23 @@ type ipAccessCleanupRepoStub struct {
 	cleanupLimit  int
 	cleanupCalls  int
 	cleanupErr    error
+}
+
+type overlappingSnapshotRepoStub struct {
+	ipAccessRepoStub
+	secondReadStarted chan struct{}
+	releaseSecondRead chan struct{}
+}
+
+func (r *overlappingSnapshotRepoStub) ListActiveIPAccessRules(context.Context) ([]*IPAccessRule, error) {
+	r.listCalls++
+	if r.listCalls == 2 {
+		stale := append([]*IPAccessRule(nil), r.rules...)
+		close(r.secondReadStarted)
+		<-r.releaseSecondRead
+		return stale, nil
+	}
+	return r.rules, r.listErr
 }
 
 func (r *ipAccessCleanupRepoStub) CleanupExpiredIPLoginFailureStates(_ context.Context, before time.Time, limit int) (int64, error) {
@@ -203,6 +265,78 @@ func TestIPAccessControlEmergencyAllowlistRecoversUnsafeProxyChainByDirectPeer(t
 	}
 }
 
+func TestIPAccessControlEmergencyAllowlistSkipsFailureCountingWithoutExemptingForwardedClients(t *testing.T) {
+	settings := &ipAccessSettingRepoStub{values: map[string]string{
+		SettingKeyGlobalIPAccessControlEnabled: "true",
+		SettingKeyIPAccessControlEnabled:       "true",
+		SettingKeyLoginFailureAutoBlockEnabled: "true",
+		SettingKeyLoginFailureIPThreshold:      "2",
+		SettingKeyLoginFailureWindowMinutes:    "15",
+		SettingKeyLoginFailureBlockMinutes:     "60",
+	}}
+
+	t.Run("verified emergency client", func(t *testing.T) {
+		repo := &ipAccessRepoStub{}
+		svc := NewIPAccessControlService(settings, repo)
+		if err := svc.ConfigureEmergencyAllowlist([]string{"203.0.113.8"}); err != nil {
+			t.Fatalf("configure emergency allowlist: %v", err)
+		}
+		result, err := svc.RecordFailedLoginForIdentity(context.Background(), ip.ClientIdentity{
+			EffectiveIP: "203.0.113.8", DirectPeerIP: "10.1.2.3", SafeForEnforcement: true,
+		})
+		if err != nil || result != nil || repo.recordCalls != 0 {
+			t.Fatalf("emergency client must bypass failure counting: result=%#v calls=%d err=%v", result, repo.recordCalls, err)
+		}
+	})
+
+	t.Run("unsafe recovery peer", func(t *testing.T) {
+		repo := &ipAccessRepoStub{}
+		svc := NewIPAccessControlService(settings, repo)
+		if err := svc.ConfigureEmergencyAllowlist([]string{"10.1.2.3"}); err != nil {
+			t.Fatalf("configure emergency allowlist: %v", err)
+		}
+		result, err := svc.RecordFailedLoginForIdentity(context.Background(), ip.ClientIdentity{
+			DirectPeerIP: "10.1.2.3", FailureReason: "unsafe_proxy_chain",
+		})
+		if err != nil || result != nil || repo.recordCalls != 0 {
+			t.Fatalf("emergency recovery peer must bypass failure counting: result=%#v calls=%d err=%v", result, repo.recordCalls, err)
+		}
+	})
+
+	t.Run("trusted proxy peer does not exempt forwarded client", func(t *testing.T) {
+		repo := &ipAccessRepoStub{}
+		svc := NewIPAccessControlService(settings, repo)
+		if err := svc.ConfigureEmergencyAllowlist([]string{"10.1.2.3"}); err != nil {
+			t.Fatalf("configure emergency allowlist: %v", err)
+		}
+		_, err := svc.RecordFailedLoginForIdentity(context.Background(), ip.ClientIdentity{
+			EffectiveIP: "203.0.113.8", DirectPeerIP: "10.1.2.3", SafeForEnforcement: true,
+		})
+		if err != nil || repo.recordCalls != 1 {
+			t.Fatalf("trusted proxy peer must not exempt the verified client: calls=%d err=%v", repo.recordCalls, err)
+		}
+	})
+
+	t.Run("unsafe forwarded identity cannot claim emergency client address", func(t *testing.T) {
+		repo := &ipAccessRepoStub{}
+		svc := NewIPAccessControlService(settings, repo)
+		if err := svc.ConfigureEmergencyAllowlist([]string{"203.0.113.8"}); err != nil {
+			t.Fatalf("configure emergency allowlist: %v", err)
+		}
+		unsafeIdentity := ip.ClientIdentity{
+			EffectiveIP: "203.0.113.8", DirectPeerIP: "10.1.2.4", SafeForEnforcement: false,
+		}
+		_, err := svc.RecordFailedLoginForIdentity(context.Background(), unsafeIdentity)
+		if !errors.Is(err, ErrIPAccessIdentityUnavailable) || repo.recordCalls != 0 {
+			t.Fatalf("unsafe effective IP must not claim the emergency exemption: calls=%d err=%v", repo.recordCalls, err)
+		}
+		decision, err := svc.Evaluate(context.Background(), unsafeIdentity)
+		if !errors.Is(err, ErrIPAccessIdentityUnavailable) || decision.Allowed {
+			t.Fatalf("unsafe effective IP must not bypass request enforcement: decision=%#v err=%v", decision, err)
+		}
+	})
+}
+
 func TestIPAccessControlCleanupUsesConfiguredFailureWindow(t *testing.T) {
 	settings := &ipAccessSettingRepoStub{values: map[string]string{
 		SettingKeyLoginFailureWindowMinutes: "15",
@@ -257,42 +391,6 @@ func TestIPAccessControlRecordsBlockedRuleHitWithoutRecordingAllowedSource(t *te
 	}
 }
 
-func TestIPAccessControlClearsSuccessfulLocalLoginOnlyWhenAutoBlockingIsActive(t *testing.T) {
-	t.Run("automatic blocking active", func(t *testing.T) {
-		settings := &ipAccessSettingRepoStub{values: map[string]string{
-			SettingKeyGlobalIPAccessControlEnabled: "true",
-			SettingKeyIPAccessControlEnabled:       "true",
-			SettingKeyLoginFailureAutoBlockEnabled: "true",
-		}}
-		repo := &ipAccessRepoStub{}
-		svc := NewIPAccessControlService(settings, repo)
-
-		if err := svc.ClearSuccessfulLocalLogin(context.Background(), "203.0.113.8"); err != nil {
-			t.Fatalf("clear successful local login: %v", err)
-		}
-		if len(repo.resetIPs) != 1 || repo.resetIPs[0] != "203.0.113.8" {
-			t.Fatalf("successful local login did not reset its IP state: %#v", repo.resetIPs)
-		}
-	})
-
-	t.Run("automatic blocking disabled", func(t *testing.T) {
-		settings := &ipAccessSettingRepoStub{values: map[string]string{
-			SettingKeyGlobalIPAccessControlEnabled: "true",
-			SettingKeyIPAccessControlEnabled:       "true",
-			SettingKeyLoginFailureAutoBlockEnabled: "false",
-		}}
-		repo := &ipAccessRepoStub{}
-		svc := NewIPAccessControlService(settings, repo)
-
-		if err := svc.ClearSuccessfulLocalLogin(context.Background(), "203.0.113.8"); err != nil {
-			t.Fatalf("disabled automatic blocking must be a no-op: %v", err)
-		}
-		if len(repo.resetIPs) != 0 {
-			t.Fatalf("disabled automatic blocking unexpectedly wrote login state: %#v", repo.resetIPs)
-		}
-	})
-}
-
 func TestIPAccessControlSettingsRejectUnsafeThresholds(t *testing.T) {
 	_, err := (IPAccessControlSettings{LoginFailureThreshold: 1, LoginFailureWindowMins: 15, LoginFailureBlockMins: 60}).Validate()
 	if err == nil {
@@ -319,16 +417,374 @@ func TestIPAccessControlUsesStaleSecurityCacheDuringDatabaseFailure(t *testing.T
 		t.Fatalf("initial block lookup failed: blocked=%v err=%v", blocked, err)
 	}
 
-	svc.mu.Lock()
-	svc.settingsCache.expiresAt = time.Now().Add(-time.Second)
-	svc.rulesCache.expiresAt = time.Now().Add(-time.Second)
-	svc.mu.Unlock()
 	settings.getErr = errors.New("settings database unavailable")
 	repo.listErr = errors.New("rules database unavailable")
+	if err := svc.refreshSecuritySnapshot(context.Background()); err == nil {
+		t.Fatal("background refresh should report the database failure")
+	}
 
 	blocked, err = svc.IsBlocked(context.Background(), "203.0.113.8")
 	if err != nil || !blocked {
 		t.Fatalf("known block must survive transient database failure: blocked=%v err=%v", blocked, err)
+	}
+}
+
+func TestIPAccessControlRefreshRetriesWhenLocalMutationCommitsDuringRead(t *testing.T) {
+	settings := &ipAccessSettingRepoStub{values: map[string]string{
+		SettingKeyGlobalIPAccessControlEnabled: "true",
+		SettingKeyIPAccessControlEnabled:       "true",
+	}}
+	repo := &overlappingSnapshotRepoStub{
+		secondReadStarted: make(chan struct{}),
+		releaseSecondRead: make(chan struct{}),
+	}
+	svc := NewIPAccessControlService(settings, repo)
+	if err := svc.Warmup(context.Background()); err != nil {
+		t.Fatalf("warmup: %v", err)
+	}
+
+	refreshDone := make(chan error, 1)
+	go func() { refreshDone <- svc.refreshSecuritySnapshot(context.Background()) }()
+	<-repo.secondReadStarted
+
+	rule := &IPAccessRule{
+		ID: 42, IPOrCIDR: "203.0.113.8", RuleKind: IPAccessRuleKindAutoBlock,
+		Status: IPAccessRuleStatusActive,
+	}
+	// The repository update represents the already committed database state;
+	// applyCommittedRule is the service patch that must not be lost when the
+	// older in-flight read is released.
+	repo.rules = []*IPAccessRule{rule}
+	svc.applyCommittedRule(rule)
+	close(repo.releaseSecondRead)
+	if err := <-refreshDone; err != nil {
+		t.Fatalf("refresh after overlapping mutation: %v", err)
+	}
+	if repo.listCalls != 3 {
+		t.Fatalf("overlapping refresh must retry from the new mutation epoch, calls=%d", repo.listCalls)
+	}
+
+	blocked, err := svc.IsBlocked(context.Background(), "203.0.113.8")
+	if err != nil || !blocked {
+		t.Fatalf("stale refresh must not overwrite the committed block: blocked=%v err=%v", blocked, err)
+	}
+}
+
+func TestIPAccessControlLateReleasePatchDoesNotRemoveNewerActiveRule(t *testing.T) {
+	settings := &ipAccessSettingRepoStub{values: map[string]string{
+		SettingKeyGlobalIPAccessControlEnabled: "true",
+		SettingKeyIPAccessControlEnabled:       "true",
+	}}
+	newer := &IPAccessRule{
+		ID: 102, IPOrCIDR: "203.0.113.8", RuleKind: IPAccessRuleKindManualBlock,
+		Status: IPAccessRuleStatusActive,
+	}
+	repo := &ipAccessRepoStub{rules: []*IPAccessRule{newer}}
+	svc := NewIPAccessControlService(settings, repo)
+	if err := svc.Warmup(context.Background()); err != nil {
+		t.Fatalf("warmup: %v", err)
+	}
+
+	svc.applyCommittedRule(&IPAccessRule{
+		ID: 101, IPOrCIDR: "203.0.113.8", RuleKind: IPAccessRuleKindManualBlock,
+		Status: IPAccessRuleStatusReleased,
+	})
+	blocked, err := svc.IsBlocked(context.Background(), "203.0.113.8")
+	if err != nil || !blocked {
+		t.Fatalf("late release result must not remove a newer active row: blocked=%v err=%v", blocked, err)
+	}
+}
+
+func TestIPAccessControlFailsClosedAfterSnapshotMaxStaleness(t *testing.T) {
+	settings := &ipAccessSettingRepoStub{values: map[string]string{
+		SettingKeyGlobalIPAccessControlEnabled: "true",
+		SettingKeyIPAccessControlEnabled:       "true",
+	}}
+	repo := &ipAccessRepoStub{rules: []*IPAccessRule{{
+		IPOrCIDR: "203.0.113.8", RuleKind: IPAccessRuleKindManualBlock, Status: IPAccessRuleStatusActive,
+	}}}
+	svc := NewIPAccessControlService(settings, repo)
+	if err := svc.Warmup(context.Background()); err != nil {
+		t.Fatalf("warmup: %v", err)
+	}
+	svc.mu.Lock()
+	staleAt := time.Now().Add(-ipAccessSecurityMaxStaleness - time.Second)
+	svc.settingsCache.loadedAt = staleAt
+	svc.rulesCache.loadedAt = staleAt
+	svc.mu.Unlock()
+
+	if svc.SecuritySnapshotReady() {
+		t.Fatal("over-stale security snapshot must fail readiness")
+	}
+	if _, err := svc.IsBlocked(context.Background(), "203.0.113.8"); err == nil {
+		t.Fatal("over-stale security snapshot must fail closed")
+	}
+}
+
+func TestIPAccessControlFailureStateSeparatesRuleAndRuntimeStatus(t *testing.T) {
+	settings := &ipAccessSettingRepoStub{values: map[string]string{
+		SettingKeyGlobalIPAccessControlEnabled: "false",
+		SettingKeyIPAccessControlEnabled:       "true",
+		SettingKeyLoginFailureIPThreshold:      "2",
+	}}
+	repo := &ipAccessRepoStub{failureList: &IPLoginFailureStateList{Items: []*IPLoginFailureState{{
+		NormalizedIP: "203.0.113.8", FailureCount: 2, ActiveBlockRule: true,
+	}}}}
+	svc := NewIPAccessControlService(settings, repo)
+
+	list, err := svc.ListFailureStates(context.Background(), IPLoginFailureStateFilter{})
+	if err != nil {
+		t.Fatalf("list failure states: %v", err)
+	}
+	state := list.Items[0]
+	if !state.ActiveBlockRule || state.RuntimeEnforcementEnabled || state.EffectivelyBlocked {
+		t.Fatalf("durable rule must remain visible while runtime enforcement is off: %#v", state)
+	}
+	if state.FailureThreshold != 2 || state.AsOf.IsZero() {
+		t.Fatalf("failure threshold and as-of must be populated: %#v", state)
+	}
+}
+
+func TestIPAccessControlFailureStateReportsEmergencyAllowlistOverride(t *testing.T) {
+	settings := &ipAccessSettingRepoStub{values: map[string]string{
+		SettingKeyGlobalIPAccessControlEnabled: "true",
+		SettingKeyIPAccessControlEnabled:       "true",
+		SettingKeyLoginFailureIPThreshold:      "2",
+	}}
+	repo := &ipAccessRepoStub{failureList: &IPLoginFailureStateList{Items: []*IPLoginFailureState{{
+		NormalizedIP: "203.0.113.8", FailureCount: 2, ActiveBlockRule: true,
+	}}}}
+	svc := NewIPAccessControlService(settings, repo)
+	if err := svc.ConfigureEmergencyAllowlist([]string{"203.0.113.0/24"}); err != nil {
+		t.Fatalf("configure emergency allowlist: %v", err)
+	}
+
+	list, err := svc.ListFailureStates(context.Background(), IPLoginFailureStateFilter{})
+	if err != nil {
+		t.Fatalf("list failure states: %v", err)
+	}
+	state := list.Items[0]
+	if !state.ActiveBlockRule || !state.RuntimeEnforcementEnabled || !state.EmergencyAllowlisted || state.EffectivelyBlocked {
+		t.Fatalf("emergency allowlist must be visible and override the effective block state: %#v", state)
+	}
+}
+
+func TestIPAccessControlBlockFailureStateCreatesEffectiveManualBlockWithoutReset(t *testing.T) {
+	settings := &ipAccessSettingRepoStub{values: map[string]string{
+		SettingKeyGlobalIPAccessControlEnabled: "true",
+		SettingKeyIPAccessControlEnabled:       "true",
+		SettingKeyLoginFailureBlockMinutes:     "60",
+		SettingKeyLoginFailureIPThreshold:      "2",
+		SettingKeyLoginFailureWindowMinutes:    "15",
+		SettingKeyLoginFailureAutoBlockEnabled: "false",
+	}}
+	repo := &ipAccessRepoStub{}
+	svc := NewIPAccessControlService(settings, repo)
+	if err := svc.Warmup(context.Background()); err != nil {
+		t.Fatalf("warmup: %v", err)
+	}
+
+	result, err := svc.BlockFailureState(context.Background(), " 203.0.113.8 ", "", 7)
+	if err != nil {
+		t.Fatalf("block failure state: %v", err)
+	}
+	if result == nil || result.Rule == nil || result.Rule.RuleKind != IPAccessRuleKindManualBlock ||
+		result.Rule.IPOrCIDR != "203.0.113.8" || result.AlreadyBlocked || !result.EffectivelyBlocked ||
+		result.SuppressedByAllowRule || result.AsOf.IsZero() {
+		t.Fatalf("unexpected manual block result: %#v", result)
+	}
+	if result.Rule.Reason != defaultManualFailureBlockReason {
+		t.Fatalf("unexpected default reason: %q", result.Rule.Reason)
+	}
+	if result.Rule.ExpiresAt == nil || time.Until(*result.Rule.ExpiresAt) < 59*time.Minute || time.Until(*result.Rule.ExpiresAt) > 61*time.Minute {
+		t.Fatalf("server settings must determine expiration: %#v", result.Rule.ExpiresAt)
+	}
+	if len(repo.resetIPs) != 0 {
+		t.Fatalf("manual block must preserve failure state: %#v", repo.resetIPs)
+	}
+}
+
+func TestIPAccessControlBlockFailureStateReturnsExistingBlockIdempotently(t *testing.T) {
+	settings := &ipAccessSettingRepoStub{values: map[string]string{
+		SettingKeyGlobalIPAccessControlEnabled: "true",
+		SettingKeyIPAccessControlEnabled:       "true",
+	}}
+	expiresAt := time.Now().Add(time.Hour)
+	existing := &IPAccessRule{
+		ID: 88, IPOrCIDR: "203.0.113.0/24", RuleKind: IPAccessRuleKindAutoBlock,
+		Status: IPAccessRuleStatusActive, ExpiresAt: &expiresAt,
+	}
+	repo := &ipAccessRepoStub{
+		rules: []*IPAccessRule{existing},
+		manualBlockResult: &IPFailureStateBlockRepositoryResult{
+			Rule: existing, AlreadyBlocked: true,
+		},
+	}
+	svc := NewIPAccessControlService(settings, repo)
+	if err := svc.Warmup(context.Background()); err != nil {
+		t.Fatalf("warmup: %v", err)
+	}
+
+	result, err := svc.BlockFailureState(context.Background(), "203.0.113.8", "", 7)
+	if err != nil {
+		t.Fatalf("return existing block: %v", err)
+	}
+	if result == nil || !result.AlreadyBlocked || result.Rule == nil || result.Rule.ID != existing.ID || !result.EffectivelyBlocked {
+		t.Fatalf("unexpected idempotent result: %#v", result)
+	}
+	if len(repo.rules) != 1 {
+		t.Fatalf("idempotent action must not add a duplicate rule: %#v", repo.rules)
+	}
+}
+
+func TestIPAccessControlBlockFailureStateRejectsInactiveEnforcementAndAllowCoverage(t *testing.T) {
+	t.Run("runtime enforcement disabled", func(t *testing.T) {
+		settings := &ipAccessSettingRepoStub{values: map[string]string{
+			SettingKeyGlobalIPAccessControlEnabled: "true",
+			SettingKeyIPAccessControlEnabled:       "false",
+		}}
+		repo := &ipAccessRepoStub{}
+		svc := NewIPAccessControlService(settings, repo)
+		_, err := svc.BlockFailureState(context.Background(), "203.0.113.8", "", 7)
+		if infraerrors.Reason(err) != "IP_ACCESS_ENFORCEMENT_DISABLED" {
+			t.Fatalf("unexpected disabled error: %v", err)
+		}
+		if repo.manualBlockCalls != 0 {
+			t.Fatal("disabled enforcement must be rejected before rule creation")
+		}
+	})
+
+	t.Run("allow rule coverage", func(t *testing.T) {
+		settings := &ipAccessSettingRepoStub{values: map[string]string{
+			SettingKeyGlobalIPAccessControlEnabled: "true",
+			SettingKeyIPAccessControlEnabled:       "true",
+		}}
+		repo := &ipAccessRepoStub{manualBlockErr: ErrIPBlockSuppressedByAllow}
+		svc := NewIPAccessControlService(settings, repo)
+		_, err := svc.BlockFailureState(context.Background(), "203.0.113.8", "", 7)
+		if infraerrors.Reason(err) != "IP_BLOCK_SUPPRESSED_BY_ALLOW" {
+			t.Fatalf("unexpected allow conflict: %v", err)
+		}
+	})
+}
+
+func TestIPAccessControlBlockFailureStateFailsClosedWhenPostCommitRefreshFails(t *testing.T) {
+	settings := &ipAccessSettingRepoStub{values: map[string]string{
+		SettingKeyGlobalIPAccessControlEnabled: "true",
+		SettingKeyIPAccessControlEnabled:       "true",
+	}}
+	repo := &ipAccessRepoStub{}
+	svc := NewIPAccessControlService(settings, repo)
+	if err := svc.Warmup(context.Background()); err != nil {
+		t.Fatalf("warmup: %v", err)
+	}
+	repo.listErr = errors.New("rules database unavailable")
+
+	_, err := svc.BlockFailureState(context.Background(), "203.0.113.8", "", 7)
+	if infraerrors.Reason(err) != "IP_ACCESS_CONTROL_UNAVAILABLE" {
+		t.Fatalf("unconfirmed post-commit state must fail closed: %v", err)
+	}
+}
+
+func TestIPAccessControlRequiresActiveRuleBeforeReportingBlocked(t *testing.T) {
+	settings := &ipAccessSettingRepoStub{values: map[string]string{
+		SettingKeyGlobalIPAccessControlEnabled: "true",
+		SettingKeyIPAccessControlEnabled:       "true",
+		SettingKeyLoginFailureAutoBlockEnabled: "true",
+		SettingKeyLoginFailureIPThreshold:      "2",
+	}}
+	repo := &ipAccessRepoStub{recordResult: &LoginFailureRecordResult{FailureCount: 2, Blocked: true}}
+	svc := NewIPAccessControlService(settings, repo)
+
+	if _, err := svc.RecordFailedLogin(context.Background(), "203.0.113.8"); err == nil {
+		t.Fatal("blocked result without an active durable rule must fail closed")
+	}
+}
+
+func TestIPAccessControlRequiresCommittedBlockToBeEffectiveBeforeReportingBlocked(t *testing.T) {
+	settings := &ipAccessSettingRepoStub{values: map[string]string{
+		SettingKeyGlobalIPAccessControlEnabled: "true",
+		SettingKeyIPAccessControlEnabled:       "true",
+		SettingKeyLoginFailureAutoBlockEnabled: "true",
+		SettingKeyLoginFailureIPThreshold:      "2",
+	}}
+	allow := &IPAccessRule{
+		ID: 1, IPOrCIDR: "203.0.113.8", RuleKind: IPAccessRuleKindAllow,
+		Status: IPAccessRuleStatusActive,
+	}
+	block := &IPAccessRule{
+		ID: 2, IPOrCIDR: "203.0.113.8", RuleKind: IPAccessRuleKindAutoBlock,
+		Status: IPAccessRuleStatusActive,
+	}
+	repo := &ipAccessRepoStub{
+		rules: []*IPAccessRule{allow},
+		recordResult: &LoginFailureRecordResult{
+			FailureCount: 2, Blocked: true, Rule: block,
+		},
+	}
+	svc := NewIPAccessControlService(settings, repo)
+	if err := svc.Warmup(context.Background()); err != nil {
+		t.Fatalf("warmup: %v", err)
+	}
+
+	if _, err := svc.RecordFailedLogin(context.Background(), "203.0.113.8"); err == nil {
+		t.Fatal("a locally allow-suppressed block must not be reported as an effective ban")
+	}
+}
+
+func TestIPAccessControlRequestPathUsesWarmSnapshotWithoutDatabaseReload(t *testing.T) {
+	settings := &ipAccessSettingRepoStub{values: map[string]string{
+		SettingKeyGlobalIPAccessControlEnabled: "true",
+		SettingKeyIPAccessControlEnabled:       "true",
+	}}
+	repo := &ipAccessRepoStub{rules: []*IPAccessRule{{
+		ID: 1, IPOrCIDR: "203.0.113.8", RuleKind: IPAccessRuleKindManualBlock, Status: IPAccessRuleStatusActive,
+	}}}
+	svc := NewIPAccessControlService(settings, repo)
+	if err := svc.Warmup(context.Background()); err != nil {
+		t.Fatalf("warmup: %v", err)
+	}
+
+	for range 20 {
+		blocked, err := svc.IsBlocked(context.Background(), "203.0.113.8")
+		if err != nil || !blocked {
+			t.Fatalf("warm snapshot decision failed: blocked=%v err=%v", blocked, err)
+		}
+	}
+	if settings.getCalls != 1 || repo.listCalls != 1 {
+		t.Fatalf("request path reloaded PostgreSQL: settings=%d rules=%d", settings.getCalls, repo.listCalls)
+	}
+}
+
+func TestIPAccessControlAppliesCommittedAutoBlockBeforePublishingRefresh(t *testing.T) {
+	settings := &ipAccessSettingRepoStub{values: map[string]string{
+		SettingKeyGlobalIPAccessControlEnabled: "true",
+		SettingKeyIPAccessControlEnabled:       "true",
+		SettingKeyLoginFailureAutoBlockEnabled: "true",
+		SettingKeyLoginFailureIPThreshold:      "2",
+	}}
+	rule := &IPAccessRule{
+		ID: 42, IPOrCIDR: "203.0.113.8", RuleKind: IPAccessRuleKindAutoBlock,
+		Status: IPAccessRuleStatusActive,
+	}
+	repo := &ipAccessRepoStub{recordResult: &LoginFailureRecordResult{
+		FailureCount: 2, Blocked: true, Rule: rule,
+	}}
+	svc := NewIPAccessControlService(settings, repo)
+	if err := svc.Warmup(context.Background()); err != nil {
+		t.Fatalf("warmup: %v", err)
+	}
+	if _, err := svc.RecordFailedLogin(context.Background(), "203.0.113.8"); err != nil {
+		t.Fatalf("record failed login: %v", err)
+	}
+	repo.listErr = errors.New("rules database unavailable")
+
+	blocked, err := svc.IsBlocked(context.Background(), "203.0.113.8")
+	if err != nil || !blocked {
+		t.Fatalf("committed auto block must be immediately available locally: blocked=%v err=%v", blocked, err)
+	}
+	if repo.listCalls != 1 {
+		t.Fatalf("request path reloaded rules after local commit: %d", repo.listCalls)
 	}
 }
 

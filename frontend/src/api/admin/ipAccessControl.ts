@@ -63,11 +63,21 @@ export interface IPAccessRuleQuery {
 export interface IPLoginFailureState {
   normalized_ip: string
   failure_count: number
+  failure_threshold: number
   window_started_at: string
   last_failed_at: string
   window_expires_at: string
-  currently_blocked: boolean
-  auto_block_rule_id?: number
+  active_block_rule: boolean
+  block_rule_id?: number
+  block_rule_kind?: Exclude<IPAccessRuleKind, 'allow'>
+  block_rule_ip_or_cidr?: string
+  blocked_at?: string
+  block_expires_at?: string
+  runtime_enforcement_enabled: boolean
+  suppressed_by_allow_rule: boolean
+  emergency_allowlisted: boolean
+  effectively_blocked: boolean
+  as_of: string
 }
 
 export interface IPLoginFailureStateQuery {
@@ -81,6 +91,19 @@ export interface CreateIPAccessRuleRequest {
   rule_kind: Extract<IPAccessRuleKind, 'manual_block' | 'allow'>
   reason?: string
   expires_at?: string
+}
+
+export interface BlockIPLoginFailureStateRequest {
+  ip: string
+  reason?: string
+}
+
+export interface BlockIPLoginFailureStateResponse {
+  rule: IPAccessRule
+  already_blocked: boolean
+  effectively_blocked: true
+  suppressed_by_allow_rule: false
+  as_of: string
 }
 
 async function getSettings(): Promise<IPAccessControlSettings> {
@@ -125,6 +148,13 @@ async function resetFailureState(ip: string): Promise<{ ip: string }> {
   return data
 }
 
+async function blockFailureState(
+  payload: BlockIPLoginFailureStateRequest
+): Promise<BlockIPLoginFailureStateResponse> {
+  const { data } = await apiClient.post('/admin/ip-access-control/failure-state/block', payload)
+  return data
+}
+
 const ipAccessControlAPI = {
   getSettings,
   getTrustedProxyStatus,
@@ -133,7 +163,8 @@ const ipAccessControlAPI = {
   listRules,
   createRule,
   releaseRuleAndReset,
-  resetFailureState
+  resetFailureState,
+  blockFailureState
 }
 
 export default ipAccessControlAPI

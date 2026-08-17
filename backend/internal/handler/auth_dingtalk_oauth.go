@@ -810,9 +810,7 @@ func (h *AuthHandler) CompleteDingTalkOAuthRegistration(c *gin.Context) {
 			h.syncDingTalkIdentityFromClaims(ctx, completionCfg, dtClient, user.ID, claims, true)
 		})
 	}
-	if !h.recordSuccessfulAuthentication(c, user.ID) {
-		return
-	}
+	h.recordSuccessfulAuthentication(c, user.ID)
 	clearOAuthPendingSessionCookie(c, secureCookie)
 	clearOAuthPendingBrowserCookie(c, secureCookie)
 

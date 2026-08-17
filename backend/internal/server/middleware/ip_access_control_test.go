@@ -61,6 +61,9 @@ func (s *ipAccessMiddlewareRuleStub) ListActiveIPAccessRules(context.Context) ([
 func (s *ipAccessMiddlewareRuleStub) CreateManualIPAccessRule(context.Context, *service.IPAccessRule) (*service.IPAccessRule, error) {
 	return nil, nil
 }
+func (s *ipAccessMiddlewareRuleStub) CreateManualIPBlockForFailureState(context.Context, string, string, time.Time, int64) (*service.IPFailureStateBlockRepositoryResult, error) {
+	return nil, nil
+}
 func (s *ipAccessMiddlewareRuleStub) ReleaseIPAccessRuleAndReset(context.Context, int64, int64) (*service.IPAccessRule, error) {
 	return nil, service.ErrIPAccessRuleNotFound
 }

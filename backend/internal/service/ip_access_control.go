@@ -12,9 +12,28 @@ import (
 
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/ip"
+	"golang.org/x/sync/singleflight"
 )
 
-var ErrIPAccessRuleNotFound = infraerrors.NotFound("IP_ACCESS_RULE_NOT_FOUND", "IP access rule not found")
+var (
+	ErrIPAccessRuleNotFound        = infraerrors.NotFound("IP_ACCESS_RULE_NOT_FOUND", "IP access rule not found")
+	ErrIPAccessEnforcementDisabled = infraerrors.Conflict(
+		"IP_ACCESS_ENFORCEMENT_DISABLED",
+		"global IP access enforcement must be enabled before manually blocking a login failure source",
+	)
+	ErrIPBlockSuppressedByAllow = infraerrors.Conflict(
+		"IP_BLOCK_SUPPRESSED_BY_ALLOW",
+		"an active allow rule covers this IP address",
+	)
+	ErrIPBlockSuppressedByEmergencyAllow = infraerrors.Conflict(
+		"IP_BLOCK_SUPPRESSED_BY_EMERGENCY_ALLOW",
+		"the deployment emergency allowlist covers this IP address",
+	)
+	ErrIPAccessIdentityUnsafe = infraerrors.Conflict(
+		"IP_ACCESS_IDENTITY_UNSAFE",
+		"configure a safe client-IP proxy chain before manually blocking a login failure source",
+	)
+)
 
 const (
 	SettingKeyIPAccessControlEnabled       = "ip_access_control_enabled"
@@ -26,14 +45,16 @@ const (
 	defaultLoginFailureIPThreshold   = 8
 	defaultLoginFailureWindowMinutes = 15
 	defaultLoginFailureBlockMinutes  = 24 * 60
-	ipAccessSettingsCacheTTL         = 5 * time.Second
-	ipAccessRulesCacheTTL            = 3 * time.Second
+	ipAccessSecurityRefreshInterval  = 30 * time.Second
+	ipAccessSecurityRefreshTimeout   = 10 * time.Second
+	ipAccessSecurityMaxStaleness     = 2 * time.Minute
 	ipAccessFailureCleanupInterval   = time.Hour
 	ipAccessBlockHitFlushInterval    = time.Minute
 	ipAccessBlockHitWriteTimeout     = 2 * time.Second
 	ipAccessBlockHitTrackedIPLimit   = 4096
 	ipAccessBlockHitWriteConcurrency = 4
 	ipAccessInvalidationChannel      = "sub2api:ip_access_control:invalidate"
+	defaultManualFailureBlockReason  = "manual block from login failure status"
 )
 
 type IPAccessRuleKind string
@@ -137,13 +158,23 @@ type IPAccessRuleList struct {
 }
 
 type IPLoginFailureState struct {
-	NormalizedIP     string    `json:"normalized_ip"`
-	FailureCount     int       `json:"failure_count"`
-	WindowStartedAt  time.Time `json:"window_started_at"`
-	LastFailedAt     time.Time `json:"last_failed_at"`
-	WindowExpiresAt  time.Time `json:"window_expires_at"`
-	CurrentlyBlocked bool      `json:"currently_blocked"`
-	AutoBlockRuleID  *int64    `json:"auto_block_rule_id,omitempty"`
+	NormalizedIP              string            `json:"normalized_ip"`
+	FailureCount              int               `json:"failure_count"`
+	FailureThreshold          int               `json:"failure_threshold"`
+	WindowStartedAt           time.Time         `json:"window_started_at"`
+	LastFailedAt              time.Time         `json:"last_failed_at"`
+	WindowExpiresAt           time.Time         `json:"window_expires_at"`
+	ActiveBlockRule           bool              `json:"active_block_rule"`
+	BlockRuleID               *int64            `json:"block_rule_id,omitempty"`
+	BlockRuleKind             *IPAccessRuleKind `json:"block_rule_kind,omitempty"`
+	BlockRuleIPOrCIDR         *string           `json:"block_rule_ip_or_cidr,omitempty"`
+	BlockedAt                 *time.Time        `json:"blocked_at,omitempty"`
+	BlockExpiresAt            *time.Time        `json:"block_expires_at,omitempty"`
+	RuntimeEnforcementEnabled bool              `json:"runtime_enforcement_enabled"`
+	SuppressedByAllowRule     bool              `json:"suppressed_by_allow_rule"`
+	EmergencyAllowlisted      bool              `json:"emergency_allowlisted"`
+	EffectivelyBlocked        bool              `json:"effectively_blocked"`
+	AsOf                      time.Time         `json:"as_of"`
 }
 
 type IPLoginFailureStateFilter struct {
@@ -165,10 +196,24 @@ type LoginFailureRecordResult struct {
 	Rule         *IPAccessRule
 }
 
+type IPFailureStateBlockRepositoryResult struct {
+	Rule           *IPAccessRule
+	AlreadyBlocked bool
+}
+
+type IPFailureStateBlockResult struct {
+	Rule                  *IPAccessRule `json:"rule"`
+	AlreadyBlocked        bool          `json:"already_blocked"`
+	EffectivelyBlocked    bool          `json:"effectively_blocked"`
+	SuppressedByAllowRule bool          `json:"suppressed_by_allow_rule"`
+	AsOf                  time.Time     `json:"as_of"`
+}
+
 type IPAccessControlRepository interface {
 	ListIPAccessRules(ctx context.Context, filter IPAccessRuleFilter) (*IPAccessRuleList, error)
 	ListActiveIPAccessRules(ctx context.Context) ([]*IPAccessRule, error)
 	CreateManualIPAccessRule(ctx context.Context, rule *IPAccessRule) (*IPAccessRule, error)
+	CreateManualIPBlockForFailureState(ctx context.Context, normalizedIP, reason string, expiresAt time.Time, actorUserID int64) (*IPFailureStateBlockRepositoryResult, error)
 	ReleaseIPAccessRuleAndReset(ctx context.Context, id, actorUserID int64) (*IPAccessRule, error)
 	ListIPLoginFailureStates(ctx context.Context, filter IPLoginFailureStateFilter, window time.Duration) (*IPLoginFailureStateList, error)
 	ResetIPLoginFailureState(ctx context.Context, normalizedIP string) error
@@ -177,16 +222,17 @@ type IPAccessControlRepository interface {
 }
 
 type cachedIPAccessSettings struct {
-	value     IPAccessControlSettings
-	expiresAt time.Time
-	valid     bool
+	value    IPAccessControlSettings
+	loadedAt time.Time
+	valid    bool
 }
 
 type cachedIPAccessRules struct {
 	rules      []*IPAccessRule
 	allowRules *ip.CompiledIPRules
 	blockRules *ip.CompiledIPRules
-	expiresAt  time.Time
+	nextExpiry time.Time
+	loadedAt   time.Time
 	valid      bool
 }
 
@@ -210,9 +256,9 @@ type IPAccessFailureStateCleanupRepository interface {
 	CleanupExpiredIPLoginFailureStates(ctx context.Context, before time.Time, limit int) (int64, error)
 }
 
-// IPAccessControlService owns the durable global block rules and the local
-// password/TOTP failure counters. Rules are cached briefly for request-path
-// efficiency, while every administrative mutation explicitly invalidates it.
+// IPAccessControlService owns durable global rules and source-IP credential
+// failure windows. Requests use a prewarmed in-process policy snapshot; local
+// mutations patch it immediately and background reconciliation keeps it fresh.
 type IPAccessControlService struct {
 	settings SettingRepository
 	repo     IPAccessControlRepository
@@ -220,6 +266,7 @@ type IPAccessControlService struct {
 	mu             sync.RWMutex
 	settingsCache  cachedIPAccessSettings
 	rulesCache     cachedIPAccessRules
+	mutationEpoch  uint64
 	emergencyAllow *ip.CompiledIPRules
 	emergencyCount int
 
@@ -230,6 +277,9 @@ type IPAccessControlService struct {
 	invalidationBus  InvalidationBus
 	invalidationOnce sync.Once
 	cleanupOnce      sync.Once
+	refreshOnce      sync.Once
+	refreshGroup     singleflight.Group
+	refreshCh        chan struct{}
 }
 
 func NewIPAccessControlService(settings SettingRepository, repo IPAccessControlRepository) *IPAccessControlService {
@@ -238,6 +288,7 @@ func NewIPAccessControlService(settings SettingRepository, repo IPAccessControlR
 		repo:                 repo,
 		blockHitLastRecorded: make(map[string]time.Time),
 		blockHitWriteSlots:   make(chan struct{}, ipAccessBlockHitWriteConcurrency),
+		refreshCh:            make(chan struct{}, 1),
 	}
 }
 
@@ -277,7 +328,7 @@ func (s *IPAccessControlService) EmergencyAllowlistStatus() (configured bool, co
 	return s.emergencyCount > 0, s.emergencyCount
 }
 
-// SetInvalidationBus enables immediate cache invalidation across API
+// SetInvalidationBus enables immediate snapshot refresh signals across API
 // instances. It is intentionally optional so compact standalone and unit-test
 // deployments retain the same construction contract.
 func (s *IPAccessControlService) SetInvalidationBus(bus InvalidationBus) {
@@ -288,19 +339,81 @@ func (s *IPAccessControlService) SetInvalidationBus(bus InvalidationBus) {
 }
 
 // StartInvalidationSubscriber keeps the local security snapshot coherent when
-// another instance changes a rule or the global settings. Redis failure never
-// weakens the local policy: the normal short TTL remains the fallback.
+// another instance changes a rule or the global settings. Pub/Sub is only the
+// fast path: reconnect and periodic reconciliation cover disconnects and
+// messages missed while this instance was offline.
 func (s *IPAccessControlService) StartInvalidationSubscriber(ctx context.Context) {
 	if s == nil || s.invalidationBus == nil {
 		return
 	}
 	s.invalidationOnce.Do(func() {
 		go func() {
-			if err := s.invalidationBus.Subscribe(ctx, ipAccessInvalidationChannel, s.invalidateAll); err != nil {
-				slog.Warn("IP access control invalidation subscription ended", "error", err)
+			backoff := time.Second
+			for ctx.Err() == nil {
+				err := s.invalidationBus.Subscribe(ctx, ipAccessInvalidationChannel, s.requestSecurityRefresh)
+				if ctx.Err() != nil {
+					return
+				}
+				if err != nil {
+					slog.Warn("IP access control invalidation subscription ended", "error", err)
+				} else {
+					slog.Warn("IP access control invalidation subscription ended")
+				}
+				s.requestSecurityRefresh()
+				timer := time.NewTimer(backoff)
+				select {
+				case <-ctx.Done():
+					timer.Stop()
+					return
+				case <-timer.C:
+				}
+				if backoff < 30*time.Second {
+					backoff *= 2
+					if backoff > 30*time.Second {
+						backoff = 30 * time.Second
+					}
+				}
 			}
 		}()
 	})
+}
+
+// StartSecuritySnapshotRefresh moves all steady-state PostgreSQL refreshes off
+// the request path. Warmup remains synchronous and is required before traffic.
+func (s *IPAccessControlService) StartSecuritySnapshotRefresh(ctx context.Context) {
+	if s == nil {
+		return
+	}
+	s.refreshOnce.Do(func() {
+		go func() {
+			ticker := time.NewTicker(ipAccessSecurityRefreshInterval)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+				case <-s.refreshCh:
+				}
+				refreshCtx, cancel := context.WithTimeout(ctx, ipAccessSecurityRefreshTimeout)
+				err := s.refreshSecuritySnapshot(refreshCtx)
+				cancel()
+				if err != nil && ctx.Err() == nil {
+					slog.Warn("IP access control security snapshot refresh failed", "error", err)
+				}
+			}
+		}()
+	})
+}
+
+func (s *IPAccessControlService) requestSecurityRefresh() {
+	if s == nil {
+		return
+	}
+	select {
+	case s.refreshCh <- struct{}{}:
+	default:
+	}
 }
 
 // StartFailureStateCleanup keeps expired failure counters bounded even when a
@@ -353,39 +466,47 @@ func (s *IPAccessControlService) Warmup(ctx context.Context) error {
 	if s == nil || s.settings == nil || s.repo == nil {
 		return errors.New("ip access control unavailable")
 	}
-	if _, err := s.GetSettings(ctx); err != nil {
-		return err
-	}
-	if _, err := s.activeRules(ctx); err != nil {
-		return err
-	}
-	return nil
+	return s.refreshSecuritySnapshot(ctx)
 }
 
 // SecuritySnapshotReady reports whether both halves of the last-known-good
-// security snapshot have been loaded. Snapshot TTL expiry does not make the
-// service unready because refresh failures deliberately retain stale policy.
+// security snapshot have been loaded recently enough to remain trustworthy.
+// This prevents a stale allow rule or stale disabled switch from being used
+// indefinitely while every policy refresh is failing.
 func (s *IPAccessControlService) SecuritySnapshotReady() bool {
 	if s == nil {
 		return false
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.settingsCache.valid && s.rulesCache.valid
+	return securitySnapshotFresh(s.settingsCache, s.rulesCache, time.Now())
 }
 
 func (s *IPAccessControlService) GetSettings(ctx context.Context) (IPAccessControlSettings, error) {
 	if s == nil || s.settings == nil {
 		return DefaultIPAccessControlSettings(), errors.New("ip access control settings unavailable")
 	}
-	now := time.Now()
 	s.mu.RLock()
 	cached := s.settingsCache
+	rules := s.rulesCache
 	s.mu.RUnlock()
-	if now.Before(cached.expiresAt) {
+	if securitySnapshotFresh(cached, rules, time.Now()) {
 		return cached.value, nil
 	}
+	if cached.valid && rules.valid {
+		s.requestSecurityRefresh()
+		return DefaultIPAccessControlSettings(), errors.New("IP access control security snapshot is too stale")
+	}
+	if err := s.refreshSecuritySnapshot(ctx); err != nil {
+		return DefaultIPAccessControlSettings(), err
+	}
+	s.mu.RLock()
+	cached = s.settingsCache
+	s.mu.RUnlock()
+	return cached.value, nil
+}
 
+func (s *IPAccessControlService) loadSettings(ctx context.Context) (IPAccessControlSettings, error) {
 	keys := []string{
 		SettingKeyGlobalIPAccessControlEnabled,
 		SettingKeyIPAccessControlEnabled,
@@ -396,16 +517,6 @@ func (s *IPAccessControlService) GetSettings(ctx context.Context) (IPAccessContr
 	}
 	values, err := s.settings.GetMultiple(ctx, keys)
 	if err != nil {
-		s.mu.Lock()
-		fallback := s.settingsCache
-		if fallback.valid {
-			fallback.expiresAt = now.Add(ipAccessSettingsCacheTTL)
-			s.settingsCache = fallback
-		}
-		s.mu.Unlock()
-		if fallback.valid {
-			return fallback.value, nil
-		}
 		return DefaultIPAccessControlSettings(), err
 	}
 	settings := DefaultIPAccessControlSettings()
@@ -416,10 +527,49 @@ func (s *IPAccessControlService) GetSettings(ctx context.Context) (IPAccessContr
 	settings.LoginFailureBlockMins = parseBoundedIPAccessInt(values[SettingKeyLoginFailureBlockMinutes], settings.LoginFailureBlockMins, 1, 365*24*60)
 	settings.FeatureEnabled = strings.TrimSpace(values[SettingKeyGlobalIPAccessControlEnabled]) == "true"
 	settings, _ = settings.Validate()
-	s.mu.Lock()
-	s.settingsCache = cachedIPAccessSettings{value: settings, expiresAt: now.Add(ipAccessSettingsCacheTTL), valid: true}
-	s.mu.Unlock()
 	return settings, nil
+}
+
+func (s *IPAccessControlService) refreshSecuritySnapshot(ctx context.Context) error {
+	if s == nil || s.settings == nil || s.repo == nil {
+		return errors.New("ip access control unavailable")
+	}
+	_, err, _ := s.refreshGroup.Do("complete", func() (any, error) {
+		for {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			s.mu.RLock()
+			startedAtEpoch := s.mutationEpoch
+			s.mu.RUnlock()
+
+			settings, err := s.loadSettings(ctx)
+			if err != nil {
+				return nil, err
+			}
+			rules, err := s.repo.ListActiveIPAccessRules(ctx)
+			if err != nil {
+				return nil, err
+			}
+			now := time.Now()
+			compiled := compileIPAccessRules(rules, now)
+			compiled.loadedAt = now
+
+			s.mu.Lock()
+			if s.mutationEpoch != startedAtEpoch {
+				// A local durable mutation committed while the database reads were
+				// in flight. Installing their older view would temporarily undo the
+				// immediate block/release/settings patch, so retry from a new epoch.
+				s.mu.Unlock()
+				continue
+			}
+			s.settingsCache = cachedIPAccessSettings{value: settings, loadedAt: now, valid: true}
+			s.rulesCache = compiled
+			s.mu.Unlock()
+			return nil, nil
+		}
+	})
+	return err
 }
 
 func (s *IPAccessControlService) UpdateSettings(ctx context.Context, settings IPAccessControlSettings) (IPAccessControlSettings, error) {
@@ -443,18 +593,20 @@ func (s *IPAccessControlService) UpdateSettings(ctx context.Context, settings IP
 	// The IP page must not persist or clobber the system-settings master switch.
 	// Keep the in-memory snapshot aligned with Evaluate / AutomaticBlockingActive.
 	s.mu.RLock()
-	featureEnabled := s.settingsCache.valid && s.settingsCache.value.FeatureEnabled
+	settingsCacheValid := s.settingsCache.valid
+	featureEnabled := settingsCacheValid && s.settingsCache.value.FeatureEnabled
 	s.mu.RUnlock()
 	if raw, err := s.settings.GetValue(ctx, SettingKeyGlobalIPAccessControlEnabled); err == nil {
 		featureEnabled = strings.TrimSpace(raw) == "true"
-	} else if !s.settingsCache.valid {
+	} else if !settingsCacheValid {
 		featureEnabled = false
 	}
 	validated.FeatureEnabled = featureEnabled
 	s.mu.Lock()
-	s.settingsCache = cachedIPAccessSettings{value: validated, expiresAt: time.Now().Add(ipAccessSettingsCacheTTL), valid: true}
-	s.rulesCache = cachedIPAccessRules{}
+	s.mutationEpoch++
+	s.settingsCache = cachedIPAccessSettings{value: validated, loadedAt: time.Now(), valid: true}
 	s.mu.Unlock()
+	s.requestSecurityRefresh()
 	s.publishInvalidation(ctx)
 	return validated, nil
 }
@@ -499,7 +651,7 @@ func (s *IPAccessControlService) AddManualRule(ctx context.Context, value string
 	}
 	created, err := s.repo.CreateManualIPAccessRule(ctx, rule)
 	if err == nil {
-		s.invalidateRules()
+		s.applyCommittedRule(created)
 		s.publishInvalidation(ctx)
 	}
 	return created, err
@@ -511,7 +663,7 @@ func (s *IPAccessControlService) ReleaseRuleAndReset(ctx context.Context, id, ac
 	}
 	rule, err := s.repo.ReleaseIPAccessRuleAndReset(ctx, id, actorUserID)
 	if err == nil {
-		s.invalidateRules()
+		s.applyCommittedRule(rule)
 		s.publishInvalidation(ctx)
 	}
 	return rule, err
@@ -528,33 +680,98 @@ func (s *IPAccessControlService) ResetFailureState(ctx context.Context, rawIP st
 	return s.repo.ResetIPLoginFailureState(ctx, normalized)
 }
 
-// ClearSuccessfulLogin removes an IP's failure streak after any completed
-// authentication flow, including local password/TOTP and external OAuth. It
-// intentionally does nothing while automatic blocking is disabled, so the
-// feature has no authentication-state writes until an administrator enables it.
-func (s *IPAccessControlService) ClearSuccessfulLogin(ctx context.Context, rawIP string) error {
+// BlockFailureState creates an exact-IP manual block from the failure-state
+// management surface. Unlike the generic rule editor, this action promises an
+// immediately enforced result, so it verifies the complete post-commit
+// snapshot before reporting success and never clears the failure counter.
+func (s *IPAccessControlService) BlockFailureState(ctx context.Context, rawIP, reason string, actorUserID int64) (*IPFailureStateBlockResult, error) {
 	if s == nil || s.repo == nil {
-		return nil
-	}
-	settings, err := s.GetSettings(ctx)
-	if err != nil {
-		return err
-	}
-	if !settings.AutomaticBlockingActive() {
-		return nil
+		return nil, infraerrors.ServiceUnavailable("IP_ACCESS_CONTROL_UNAVAILABLE", "IP access control is unavailable")
 	}
 	normalized := ip.NormalizeIP(rawIP)
 	if normalized == "" {
-		return nil
+		return nil, infraerrors.BadRequest("IP_LOGIN_FAILURE_IP_INVALID", "invalid IP address")
 	}
-	return s.repo.ResetIPLoginFailureState(ctx, normalized)
-}
+	if actorUserID <= 0 {
+		return nil, infraerrors.BadRequest("IP_ACCESS_ACTOR_INVALID", "authenticated administrator is required")
+	}
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		reason = defaultManualFailureBlockReason
+	}
+	if len(reason) > 1000 {
+		return nil, infraerrors.BadRequest("IP_ACCESS_RULE_INVALID", "reason is too long")
+	}
 
-// ClearSuccessfulLocalLogin is retained for package callers compiled against
-// the initial feature implementation. Its semantics now cover every completed
-// authentication method.
-func (s *IPAccessControlService) ClearSuccessfulLocalLogin(ctx context.Context, rawIP string) error {
-	return s.ClearSuccessfulLogin(ctx, rawIP)
+	settings, err := s.GetSettings(ctx)
+	if err != nil {
+		return nil, infraerrors.ServiceUnavailable("IP_ACCESS_CONTROL_UNAVAILABLE", "IP access control state could not be confirmed").WithCause(err)
+	}
+	if !settings.RuntimeEnforcementActive() {
+		return nil, ErrIPAccessEnforcementDisabled
+	}
+	s.mu.RLock()
+	emergencyAllow := s.emergencyAllow
+	s.mu.RUnlock()
+	if ip.MatchesCompiledIPRules(normalized, emergencyAllow) {
+		return nil, ErrIPBlockSuppressedByEmergencyAllow
+	}
+
+	expiresAt := time.Now().UTC().Add(time.Duration(settings.LoginFailureBlockMins) * time.Minute)
+	repoResult, err := s.repo.CreateManualIPBlockForFailureState(ctx, normalized, reason, expiresAt, actorUserID)
+	if err != nil {
+		if errors.Is(err, ErrIPBlockSuppressedByAllow) {
+			return nil, ErrIPBlockSuppressedByAllow
+		}
+		return nil, infraerrors.ServiceUnavailable("IP_ACCESS_CONTROL_UNAVAILABLE", "manual IP block could not be confirmed").WithCause(err)
+	}
+	if repoResult == nil || !activeBlockRuleMatchesIP(repoResult.Rule, normalized, time.Now()) {
+		return nil, infraerrors.ServiceUnavailable("IP_ACCESS_CONTROL_UNAVAILABLE", "manual IP block result is not an active rule for the requested IP")
+	}
+
+	s.applyCommittedRule(repoResult.Rule)
+	if !repoResult.AlreadyBlocked {
+		s.publishInvalidation(ctx)
+	}
+	// A row patch is sufficient for the hot path in the common case, but this
+	// action makes a stronger management-plane promise. Reload the complete
+	// snapshot so a concurrently added/removed allow or settings change is
+	// reflected before we claim that the IP is effectively blocked.
+	if err := s.refreshSecuritySnapshot(ctx); err != nil {
+		return nil, infraerrors.ServiceUnavailable("IP_ACCESS_CONTROL_UNAVAILABLE", "manual IP block was stored but runtime enforcement could not be confirmed").WithCause(err)
+	}
+
+	confirmedSettings, err := s.GetSettings(ctx)
+	if err != nil {
+		return nil, infraerrors.ServiceUnavailable("IP_ACCESS_CONTROL_UNAVAILABLE", "manual IP block runtime settings could not be confirmed").WithCause(err)
+	}
+	if !confirmedSettings.RuntimeEnforcementActive() {
+		return nil, ErrIPAccessEnforcementDisabled
+	}
+	snapshot, err := s.activeRuleSnapshot(ctx)
+	if err != nil {
+		return nil, infraerrors.ServiceUnavailable("IP_ACCESS_CONTROL_UNAVAILABLE", "manual IP block runtime rules could not be confirmed").WithCause(err)
+	}
+	s.mu.RLock()
+	emergencyAllow = s.emergencyAllow
+	s.mu.RUnlock()
+	if ip.MatchesCompiledIPRules(normalized, emergencyAllow) {
+		return nil, ErrIPBlockSuppressedByEmergencyAllow
+	}
+	if ip.MatchesCompiledIPRules(normalized, snapshot.allowRules) {
+		return nil, ErrIPBlockSuppressedByAllow
+	}
+	if !ip.MatchesCompiledIPRules(normalized, snapshot.blockRules) {
+		return nil, infraerrors.ServiceUnavailable("IP_ACCESS_CONTROL_UNAVAILABLE", "manual IP block is not active in the runtime policy")
+	}
+
+	return &IPFailureStateBlockResult{
+		Rule:                  repoResult.Rule,
+		AlreadyBlocked:        repoResult.AlreadyBlocked,
+		EffectivelyBlocked:    true,
+		SuppressedByAllowRule: false,
+		AsOf:                  time.Now().UTC(),
+	}, nil
 }
 
 func (s *IPAccessControlService) ListFailureStates(ctx context.Context, filter IPLoginFailureStateFilter) (*IPLoginFailureStateList, error) {
@@ -573,12 +790,20 @@ func (s *IPAccessControlService) ListFailureStates(ctx context.Context, filter I
 	if err != nil {
 		return nil, err
 	}
-	if !settings.RuntimeEnforcementActive() {
-		for _, state := range list.Items {
-			if state != nil {
-				state.CurrentlyBlocked = false
-			}
+	now := time.Now().UTC()
+	s.mu.RLock()
+	emergencyAllow := s.emergencyAllow
+	s.mu.RUnlock()
+	for _, state := range list.Items {
+		if state == nil {
+			continue
 		}
+		state.FailureThreshold = settings.LoginFailureThreshold
+		state.RuntimeEnforcementEnabled = settings.RuntimeEnforcementActive()
+		state.EmergencyAllowlisted = ip.MatchesCompiledIPRules(state.NormalizedIP, emergencyAllow)
+		state.EffectivelyBlocked = state.ActiveBlockRule &&
+			state.RuntimeEnforcementEnabled && !state.SuppressedByAllowRule && !state.EmergencyAllowlisted
+		state.AsOf = now
 	}
 	return list, nil
 }
@@ -602,6 +827,18 @@ func (s *IPAccessControlService) RecordFailedLoginForIdentity(ctx context.Contex
 	if err != nil || !settings.AutomaticBlockingActive() {
 		return nil, err
 	}
+	s.mu.RLock()
+	emergencyAllow := s.emergencyAllow
+	s.mu.RUnlock()
+	// Apply the same break-glass precedence as Evaluate. A verified client IP
+	// on the deployment allowlist is outside automatic IP enforcement. When the
+	// proxy chain itself is unsafe, only a matching transport peer receives the
+	// recovery exemption; a trusted proxy peer must never exempt arbitrary
+	// forwarded clients.
+	if (identity.SafeForEnforcement && ip.MatchesCompiledIPRules(identity.EffectiveIP, emergencyAllow)) ||
+		(!identity.SafeForEnforcement && ip.MatchesCompiledIPRules(identity.DirectPeerIP, emergencyAllow)) {
+		return nil, nil
+	}
 	if !identity.SafeForEnforcement || identity.EffectiveIP == "" {
 		return nil, ErrIPAccessIdentityUnavailable
 	}
@@ -617,8 +854,26 @@ func (s *IPAccessControlService) RecordFailedLoginForIdentity(ctx context.Contex
 		time.Duration(settings.LoginFailureBlockMins)*time.Minute,
 	)
 	if err == nil && result != nil && result.Blocked {
-		s.invalidateRules()
+		if !activeBlockRuleMatchesIP(result.Rule, normalized, time.Now()) {
+			return nil, errors.New("IP access control block result is missing its active durable rule")
+		}
+		s.applyCommittedRule(result.Rule)
 		s.publishInvalidation(ctx)
+		confirmedSettings, settingsErr := s.GetSettings(ctx)
+		if settingsErr != nil {
+			return nil, fmt.Errorf("confirm committed IP access control settings: %w", settingsErr)
+		}
+		if !confirmedSettings.RuntimeEnforcementActive() {
+			return nil, errors.New("committed IP access control block is not enabled in the runtime policy")
+		}
+		snapshot, snapshotErr := s.activeRuleSnapshot(ctx)
+		if snapshotErr != nil {
+			return nil, fmt.Errorf("confirm committed IP access control block: %w", snapshotErr)
+		}
+		if ip.MatchesCompiledIPRules(normalized, snapshot.allowRules) ||
+			!ip.MatchesCompiledIPRules(normalized, snapshot.blockRules) {
+			return nil, errors.New("committed IP access control block is not effective in the runtime policy")
+		}
 	}
 	return result, err
 }
@@ -652,7 +907,7 @@ func (s *IPAccessControlService) Evaluate(ctx context.Context, identity ip.Clien
 	// match the transport peer only while an operator is repairing an unsafe
 	// proxy chain. They are static deployment configuration, never
 	// user-controlled request headers.
-	if ip.MatchesCompiledIPRules(identity.EffectiveIP, emergencyAllow) ||
+	if (identity.SafeForEnforcement && ip.MatchesCompiledIPRules(identity.EffectiveIP, emergencyAllow)) ||
 		(!identity.SafeForEnforcement && ip.MatchesCompiledIPRules(identity.DirectPeerIP, emergencyAllow)) {
 		decision.Allowed = true
 		decision.Reason = "emergency_allowlist"
@@ -691,57 +946,102 @@ func (s *IPAccessControlService) IsBlocked(ctx context.Context, rawIP string) (b
 	return decision.Blocked, err
 }
 
-func (s *IPAccessControlService) activeRules(ctx context.Context) ([]*IPAccessRule, error) {
-	snapshot, err := s.activeRuleSnapshot(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return unexpiredIPAccessRules(snapshot.rules, time.Now()), nil
-}
-
 func (s *IPAccessControlService) activeRuleSnapshot(ctx context.Context) (cachedIPAccessRules, error) {
 	now := time.Now()
 	s.mu.RLock()
 	cached := s.rulesCache
+	settings := s.settingsCache
 	s.mu.RUnlock()
-	if cached.valid && now.Before(cached.expiresAt) {
-		return cached, nil
+	if !cached.valid || !settings.valid {
+		if err := s.refreshSecuritySnapshot(ctx); err != nil {
+			return cachedIPAccessRules{}, err
+		}
+		s.mu.RLock()
+		cached = s.rulesCache
+		settings = s.settingsCache
+		s.mu.RUnlock()
 	}
-	rules, err := s.repo.ListActiveIPAccessRules(ctx)
-	if err != nil {
+	if !securitySnapshotFresh(settings, cached, now) {
+		s.requestSecurityRefresh()
+		return cachedIPAccessRules{}, errors.New("IP access control security snapshot is too stale")
+	}
+	if !cached.nextExpiry.IsZero() && !now.Before(cached.nextExpiry) {
 		s.mu.Lock()
-		fallback := s.rulesCache
-		if fallback.valid {
-			fallback = compileIPAccessRules(fallback.rules, now)
-			s.rulesCache = fallback
+		current := s.rulesCache
+		if current.valid && !current.nextExpiry.IsZero() && !now.Before(current.nextExpiry) {
+			compiled := compileIPAccessRules(current.rules, now)
+			compiled.loadedAt = current.loadedAt
+			s.rulesCache = compiled
+			cached = compiled
+		} else {
+			cached = current
 		}
 		s.mu.Unlock()
-		if fallback.valid {
-			return fallback, nil
-		}
-		return cachedIPAccessRules{}, err
 	}
-	compiled := compileIPAccessRules(rules, now)
-	s.mu.Lock()
-	s.rulesCache = compiled
-	s.mu.Unlock()
-	return compiled, nil
-}
-
-func (s *IPAccessControlService) invalidateRules() {
-	s.mu.Lock()
-	s.rulesCache = cachedIPAccessRules{}
-	s.mu.Unlock()
+	return cached, nil
 }
 
 func (s *IPAccessControlService) invalidateAll() {
 	if s == nil {
 		return
 	}
+	s.requestSecurityRefresh()
+}
+
+// applyCommittedRule patches a durable local mutation into the current
+// complete snapshot. It removes the previous row with the same identity and
+// only retains an active, unexpired replacement. The full snapshot's loadedAt
+// is deliberately preserved because one row mutation is not a full refresh.
+func (s *IPAccessControlService) applyCommittedRule(rule *IPAccessRule) {
+	if s == nil || rule == nil {
+		return
+	}
+	now := time.Now()
 	s.mu.Lock()
-	s.settingsCache = cachedIPAccessSettings{}
-	s.rulesCache = cachedIPAccessRules{}
+	s.mutationEpoch++
+	cached := s.rulesCache
+	if !cached.valid {
+		s.mu.Unlock()
+		s.requestSecurityRefresh()
+		return
+	}
+	rules := make([]*IPAccessRule, 0, len(cached.rules)+1)
+	newerSameKindRuleExists := false
+	for _, existing := range cached.rules {
+		if existing == nil || existing.ID == rule.ID {
+			continue
+		}
+		if existing.IPOrCIDR == rule.IPOrCIDR && existing.RuleKind == rule.RuleKind {
+			// A released/expired result only removes its own row. A newer row
+			// with the same natural key may already have been committed and
+			// patched by another goroutine after this mutation left PostgreSQL.
+			if rule.Status != IPAccessRuleStatusActive || existing.ID > rule.ID {
+				rules = append(rules, existing)
+				if existing.ID > rule.ID {
+					newerSameKindRuleExists = true
+				}
+			}
+			continue
+		}
+		rules = append(rules, existing)
+	}
+	if !newerSameKindRuleExists && rule.Status == IPAccessRuleStatusActive && (rule.ExpiresAt == nil || rule.ExpiresAt.After(now)) {
+		rules = append(rules, rule)
+	}
+	compiled := compileIPAccessRules(rules, now)
+	compiled.loadedAt = cached.loadedAt
+	s.rulesCache = compiled
 	s.mu.Unlock()
+	s.requestSecurityRefresh()
+}
+
+func activeBlockRuleMatchesIP(rule *IPAccessRule, normalizedIP string, now time.Time) bool {
+	if rule == nil || rule.Status != IPAccessRuleStatusActive ||
+		(rule.RuleKind != IPAccessRuleKindManualBlock && rule.RuleKind != IPAccessRuleKindAutoBlock) ||
+		(rule.ExpiresAt != nil && !rule.ExpiresAt.After(now)) {
+		return false
+	}
+	return ip.MatchesCompiledIPRules(normalizedIP, ip.CompileIPRules([]string{rule.IPOrCIDR}))
 }
 
 func (s *IPAccessControlService) publishInvalidation(ctx context.Context) {
@@ -750,7 +1050,8 @@ func (s *IPAccessControlService) publishInvalidation(ctx context.Context) {
 	}
 	// The durable database change has already committed. A transient fan-out
 	// error must not turn that successful operation into an ambiguous failure;
-	// local invalidation is immediate and the normal cache TTL is the fallback.
+	// the local mutation is already applied and periodic reconciliation is the
+	// fallback for any instance that misses this notification.
 	if err := s.invalidationBus.Publish(ctx, ipAccessInvalidationChannel); err != nil {
 		slog.Warn("IP access control invalidation publish failed", "error", err)
 	}
@@ -824,25 +1125,11 @@ func parseBoundedIPAccessInt(value string, fallback, minimum, maximum int) int {
 	return parsed
 }
 
-func unexpiredIPAccessRules(rules []*IPAccessRule, now time.Time) []*IPAccessRule {
-	result := make([]*IPAccessRule, 0, len(rules))
-	for _, rule := range rules {
-		if rule == nil || rule.Status != IPAccessRuleStatusActive {
-			continue
-		}
-		if rule.ExpiresAt != nil && !rule.ExpiresAt.After(now) {
-			continue
-		}
-		result = append(result, rule)
-	}
-	return result
-}
-
 func compileIPAccessRules(rules []*IPAccessRule, now time.Time) cachedIPAccessRules {
 	allow := make([]string, 0, len(rules))
 	block := make([]string, 0, len(rules))
 	active := make([]*IPAccessRule, 0, len(rules))
-	expiresAt := now.Add(ipAccessRulesCacheTTL)
+	var nextExpiry time.Time
 	for _, rule := range rules {
 		if rule == nil || rule.Status != IPAccessRuleStatusActive {
 			continue
@@ -851,8 +1138,8 @@ func compileIPAccessRules(rules []*IPAccessRule, now time.Time) cachedIPAccessRu
 			if !rule.ExpiresAt.After(now) {
 				continue
 			}
-			if rule.ExpiresAt.Before(expiresAt) {
-				expiresAt = *rule.ExpiresAt
+			if nextExpiry.IsZero() || rule.ExpiresAt.Before(nextExpiry) {
+				nextExpiry = *rule.ExpiresAt
 			}
 		}
 		active = append(active, rule)
@@ -867,7 +1154,16 @@ func compileIPAccessRules(rules []*IPAccessRule, now time.Time) cachedIPAccessRu
 		rules:      active,
 		allowRules: ip.CompileIPRules(allow),
 		blockRules: ip.CompileIPRules(block),
-		expiresAt:  expiresAt,
+		nextExpiry: nextExpiry,
+		loadedAt:   now,
 		valid:      true,
 	}
+}
+
+func securitySnapshotFresh(settings cachedIPAccessSettings, rules cachedIPAccessRules, now time.Time) bool {
+	if !settings.valid || !rules.valid || settings.loadedAt.IsZero() || rules.loadedAt.IsZero() {
+		return false
+	}
+	return now.Sub(settings.loadedAt) <= ipAccessSecurityMaxStaleness &&
+		now.Sub(rules.loadedAt) <= ipAccessSecurityMaxStaleness
 }

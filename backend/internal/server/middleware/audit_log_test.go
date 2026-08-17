@@ -33,6 +33,32 @@ func TestDeriveAuditAction(t *testing.T) {
 	}
 }
 
+func TestSetAuditExtraAllowsIPAccessResult(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	SetAuditExtra(c, map[string]any{
+		"ip_access_result": "unavailable",
+		"ip_source":        "direct",
+		"block_rule_id":    int64(42),
+		"already_blocked":  true,
+		"unsafe_detail":    "must not be stored",
+	})
+
+	value, ok := c.Get(auditCtxKeyExtra)
+	require.True(t, ok)
+	extra, ok := value.(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "unavailable", extra["ip_access_result"])
+	require.Equal(t, "direct", extra["ip_source"])
+	require.Equal(t, int64(42), extra["block_rule_id"])
+	require.Equal(t, true, extra["already_blocked"])
+	require.NotContains(t, extra, "unsafe_detail")
+	require.Equal(t,
+		"security.ip_login_failure.manual_block",
+		auditActionOverrides["POST /api/v1/admin/ip-access-control/failure-state/block"],
+	)
+}
+
 type auditCaptureRepository struct {
 	mu   sync.Mutex
 	logs []*service.AuditLog

@@ -54,6 +54,39 @@ func scanIPAccessRule(scan func(dest ...any) error) (*service.IPAccessRule, erro
 	return rule, nil
 }
 
+type ipAccessRuleQueryer interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+// lockExactIPRuleMutations serializes threshold auto-block and administrator
+// exact-IP mutations without turning the rule table into a global bottleneck.
+// Hash collisions only cause harmless extra serialization.
+func lockExactIPRuleMutations(ctx context.Context, tx *sql.Tx, normalizedIP string) error {
+	if tx == nil {
+		return fmt.Errorf("nil IP access rule transaction")
+	}
+	_, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, normalizedIP)
+	return err
+}
+
+func findEffectiveBlockRule(ctx context.Context, queryer ipAccessRuleQueryer, normalizedIP string) (*service.IPAccessRule, error) {
+	return scanIPAccessRule(queryer.QueryRowContext(ctx, `SELECT `+ipAccessRuleColumns+`
+FROM ip_access_rules candidate
+WHERE candidate.status = 'active'
+AND candidate.rule_kind IN ('manual_block', 'auto_block')
+AND (candidate.expires_at IS NULL OR candidate.expires_at > NOW())
+AND $1::inet <<= candidate.ip_or_cidr::cidr
+AND NOT EXISTS (
+	SELECT 1 FROM ip_access_rules allow_rule
+	WHERE allow_rule.status = 'active'
+	AND allow_rule.rule_kind = 'allow'
+	AND (allow_rule.expires_at IS NULL OR allow_rule.expires_at > NOW())
+	AND $1::inet <<= allow_rule.ip_or_cidr::cidr
+)
+ORDER BY masklen(candidate.ip_or_cidr::cidr) DESC, candidate.created_at DESC
+LIMIT 1`, normalizedIP).Scan)
+}
+
 func nullableTime(value sql.NullTime) *time.Time {
 	if !value.Valid {
 		return nil
@@ -160,6 +193,11 @@ func (r *ipAccessControlRepository) CreateManualIPAccessRule(ctx context.Context
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if !strings.Contains(rule.IPOrCIDR, "/") {
+		if err := lockExactIPRuleMutations(ctx, tx, rule.IPOrCIDR); err != nil {
+			return nil, err
+		}
+	}
 	// Move an expired active row out of the partial unique index first, so
 	// re-adding a rule creates a new history record instead of rewriting it.
 	if _, err := tx.ExecContext(ctx, `UPDATE ip_access_rules
@@ -191,6 +229,78 @@ RETURNING ` + ipAccessRuleColumns
 		return nil, err
 	}
 	return created, nil
+}
+
+func (r *ipAccessControlRepository) CreateManualIPBlockForFailureState(
+	ctx context.Context,
+	normalizedIP, reason string,
+	expiresAt time.Time,
+	actorUserID int64,
+) (*service.IPFailureStateBlockRepositoryResult, error) {
+	if r == nil || r.db == nil || normalizedIP == "" || actorUserID <= 0 || expiresAt.IsZero() {
+		return nil, fmt.Errorf("invalid failure-state manual block repository input")
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := lockExactIPRuleMutations(ctx, tx, normalizedIP); err != nil {
+		return nil, err
+	}
+
+	var suppressedByAllow bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS (
+	SELECT 1 FROM ip_access_rules allow_rule
+	WHERE allow_rule.status = 'active'
+	AND allow_rule.rule_kind = 'allow'
+	AND (allow_rule.expires_at IS NULL OR allow_rule.expires_at > NOW())
+	AND $1::inet <<= allow_rule.ip_or_cidr::cidr
+)`, normalizedIP).Scan(&suppressedByAllow); err != nil {
+		return nil, err
+	}
+	if suppressedByAllow {
+		return nil, service.ErrIPBlockSuppressedByAllow
+	}
+
+	existing, err := findEffectiveBlockRule(ctx, tx, normalizedIP)
+	if err == nil {
+		if err := tx.Commit(); err != nil {
+			return nil, err
+		}
+		return &service.IPFailureStateBlockRepositoryResult{Rule: existing, AlreadyBlocked: true}, nil
+	}
+	if err != sql.ErrNoRows {
+		return nil, err
+	}
+
+	// Free an expired exact-IP manual row from the active partial unique index.
+	if _, err := tx.ExecContext(ctx, `UPDATE ip_access_rules
+SET status = 'expired', updated_at = NOW()
+WHERE ip_or_cidr = $1 AND rule_kind = 'manual_block' AND status = 'active'
+AND expires_at IS NOT NULL AND expires_at <= NOW()`, normalizedIP); err != nil {
+		return nil, err
+	}
+	created, err := scanIPAccessRule(tx.QueryRowContext(ctx, `INSERT INTO ip_access_rules (
+ip_or_cidr, rule_kind, status, reason, blocked_at, expires_at, created_by_user_id, created_at, updated_at)
+VALUES ($1, 'manual_block', 'active', $2, NOW(), $3, $4, NOW(), NOW())
+RETURNING `+ipAccessRuleColumns, normalizedIP, reason, expiresAt, actorUserID).Scan)
+	if err != nil {
+		return nil, err
+	}
+	if commitErr := tx.Commit(); commitErr != nil {
+		confirmCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		confirmed, confirmErr := findEffectiveBlockRule(confirmCtx, r.db, normalizedIP)
+		cancel()
+		if confirmErr == nil && confirmed != nil {
+			return &service.IPFailureStateBlockRepositoryResult{
+				Rule:           confirmed,
+				AlreadyBlocked: confirmed.ID != created.ID,
+			}, nil
+		}
+		return nil, commitErr
+	}
+	return &service.IPFailureStateBlockRepositoryResult{Rule: created}, nil
 }
 
 func (r *ipAccessControlRepository) ReleaseIPAccessRuleAndReset(ctx context.Context, id, actorUserID int64) (*service.IPAccessRule, error) {
@@ -277,32 +387,30 @@ s.failure_count,
 s.window_started_at,
 s.last_failed_at,
 s.window_started_at + make_interval(secs => $1::double precision) AS window_expires_at,
-(
-	EXISTS (
-		SELECT 1 FROM ip_access_rules block_rule
-		WHERE block_rule.status = 'active'
-		AND block_rule.rule_kind IN ('manual_block', 'auto_block')
-		AND (block_rule.expires_at IS NULL OR block_rule.expires_at > NOW())
-		AND s.normalized_ip::inet <<= block_rule.ip_or_cidr::cidr
-	)
-	AND NOT EXISTS (
-		SELECT 1 FROM ip_access_rules allow_rule
-		WHERE allow_rule.status = 'active'
-		AND allow_rule.rule_kind = 'allow'
-		AND (allow_rule.expires_at IS NULL OR allow_rule.expires_at > NOW())
-		AND s.normalized_ip::inet <<= allow_rule.ip_or_cidr::cidr
-	)
-) AS currently_blocked,
-(
-	SELECT auto_rule.id FROM ip_access_rules auto_rule
-	WHERE auto_rule.status = 'active'
-	AND auto_rule.rule_kind = 'auto_block'
-	AND auto_rule.ip_or_cidr = s.normalized_ip
-	AND (auto_rule.expires_at IS NULL OR auto_rule.expires_at > NOW())
-	ORDER BY auto_rule.created_at DESC
-	LIMIT 1
-) AS auto_block_rule_id
+(block_rule.id IS NOT NULL) AS active_block_rule,
+block_rule.id AS block_rule_id,
+block_rule.rule_kind AS block_rule_kind,
+block_rule.ip_or_cidr AS block_rule_ip_or_cidr,
+block_rule.blocked_at,
+block_rule.expires_at AS block_expires_at,
+(EXISTS (
+	SELECT 1 FROM ip_access_rules allow_rule
+	WHERE allow_rule.status = 'active'
+	AND allow_rule.rule_kind = 'allow'
+	AND (allow_rule.expires_at IS NULL OR allow_rule.expires_at > NOW())
+	AND s.normalized_ip::inet <<= allow_rule.ip_or_cidr::cidr
+)) AS suppressed_by_allow_rule
 FROM ip_login_failure_states s
+LEFT JOIN LATERAL (
+	SELECT candidate.id, candidate.rule_kind, candidate.ip_or_cidr, candidate.blocked_at, candidate.expires_at
+	FROM ip_access_rules candidate
+	WHERE candidate.status = 'active'
+	AND candidate.rule_kind IN ('manual_block', 'auto_block')
+	AND (candidate.expires_at IS NULL OR candidate.expires_at > NOW())
+	AND s.normalized_ip::inet <<= candidate.ip_or_cidr::cidr
+	ORDER BY masklen(candidate.ip_or_cidr::cidr) DESC, candidate.created_at DESC, candidate.id DESC
+	LIMIT 1
+) block_rule ON TRUE
 WHERE ` + where + fmt.Sprintf(
 		" ORDER BY s.last_failed_at DESC LIMIT $%d OFFSET $%d",
 		len(args)-1,
@@ -322,25 +430,43 @@ WHERE ` + where + fmt.Sprintf(
 	items := make([]*service.IPLoginFailureState, 0)
 	for rows.Next() {
 		state := &service.IPLoginFailureState{}
-		var autoBlockRuleID sql.NullInt64
+		var blockRuleID sql.NullInt64
+		var blockRuleKind sql.NullString
+		var blockRuleIPOrCIDR sql.NullString
+		var blockedAt, blockExpiresAt sql.NullTime
 		if err := rows.Scan(
 			&state.NormalizedIP,
 			&state.FailureCount,
 			&state.WindowStartedAt,
 			&state.LastFailedAt,
 			&state.WindowExpiresAt,
-			&state.CurrentlyBlocked,
-			&autoBlockRuleID,
+			&state.ActiveBlockRule,
+			&blockRuleID,
+			&blockRuleKind,
+			&blockRuleIPOrCIDR,
+			&blockedAt,
+			&blockExpiresAt,
+			&state.SuppressedByAllowRule,
 		); err != nil {
 			return nil, err
 		}
 		state.WindowStartedAt = state.WindowStartedAt.UTC()
 		state.LastFailedAt = state.LastFailedAt.UTC()
 		state.WindowExpiresAt = state.WindowExpiresAt.UTC()
-		if autoBlockRuleID.Valid {
-			value := autoBlockRuleID.Int64
-			state.AutoBlockRuleID = &value
+		if blockRuleID.Valid {
+			value := blockRuleID.Int64
+			state.BlockRuleID = &value
 		}
+		if blockRuleKind.Valid {
+			value := service.IPAccessRuleKind(blockRuleKind.String)
+			state.BlockRuleKind = &value
+		}
+		if blockRuleIPOrCIDR.Valid {
+			value := blockRuleIPOrCIDR.String
+			state.BlockRuleIPOrCIDR = &value
+		}
+		state.BlockedAt = nullableTime(blockedAt)
+		state.BlockExpiresAt = nullableTime(blockExpiresAt)
 		items = append(items, state)
 	}
 	if err := rows.Err(); err != nil {
@@ -408,6 +534,9 @@ func (r *ipAccessControlRepository) RecordFailedLogin(ctx context.Context, norma
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := lockExactIPRuleMutations(ctx, tx, normalizedIP); err != nil {
+		return nil, err
+	}
 	// Expired bans are first released from the active unique index. The failure
 	// counter's rolling window remains independent and naturally restarts.
 	if _, err := tx.ExecContext(ctx, `UPDATE ip_access_rules
@@ -417,20 +546,6 @@ AND expires_at IS NOT NULL AND expires_at <= NOW()`, normalizedIP); err != nil {
 		return nil, err
 	}
 	windowSeconds := int64(window.Seconds())
-	// Bound durable state to the configured rolling window. The current IP is
-	// excluded because its UPSERT below resets it atomically when needed.
-	if _, err := tx.ExecContext(ctx, `DELETE FROM ip_login_failure_states
-WHERE normalized_ip IN (
-	SELECT normalized_ip
-	FROM ip_login_failure_states
-	WHERE normalized_ip <> $1
-	AND last_failed_at <= NOW() - make_interval(secs => $2::double precision)
-	ORDER BY last_failed_at
-	LIMIT 1000
-	FOR UPDATE SKIP LOCKED
-)`, normalizedIP, windowSeconds); err != nil {
-		return nil, err
-	}
 	var (
 		count           int
 		windowStartedAt time.Time
@@ -461,6 +576,13 @@ WHERE NOT EXISTS (
     AND (allow_rule.expires_at IS NULL OR allow_rule.expires_at > NOW())
     AND $1::inet <<= allow_rule.ip_or_cidr::cidr
 )
+AND NOT EXISTS (
+    SELECT 1 FROM ip_access_rules block_rule
+    WHERE block_rule.status = 'active'
+    AND block_rule.rule_kind IN ('manual_block', 'auto_block')
+    AND (block_rule.expires_at IS NULL OR block_rule.expires_at > NOW())
+    AND $1::inet <<= block_rule.ip_or_cidr::cidr
+)
 ON CONFLICT (ip_or_cidr, rule_kind) WHERE status = 'active'
 DO UPDATE SET failure_count = EXCLUDED.failure_count,
 first_failed_at = EXCLUDED.first_failed_at,
@@ -472,13 +594,29 @@ RETURNING `+ipAccessRuleColumns, normalizedIP, count, int64(blockFor.Seconds()),
 		if err != nil && err != sql.ErrNoRows {
 			return nil, err
 		}
+		if err == sql.ErrNoRows {
+			rule, err = findEffectiveBlockRule(ctx, tx, normalizedIP)
+			if err != nil && err != sql.ErrNoRows {
+				return nil, err
+			}
+		}
 		if rule != nil {
 			result.Blocked = true
 			result.Rule = rule
 		}
 	}
-	if err := tx.Commit(); err != nil {
-		return nil, err
+	if commitErr := tx.Commit(); commitErr != nil {
+		if result.Blocked {
+			confirmCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			confirmed, confirmErr := findEffectiveBlockRule(confirmCtx, r.db, normalizedIP)
+			cancel()
+			if confirmErr == nil && confirmed != nil {
+				result.Rule = confirmed
+				result.Blocked = true
+				return result, nil
+			}
+		}
+		return nil, commitErr
 	}
 	return result, nil
 }
