@@ -220,6 +220,9 @@ func TestResolvePasskeyLoginUserSeparatesCredentialRejectionFromDependencies(t *
 		}
 		resolved, err := svc.resolvePasskeyLoginUser(context.Background(), credentialID, userHandle)
 		require.NoError(t, err)
-		require.Equal(t, activeUser, resolved.(*passkeyUser).account)
+		resolvedUser, ok := resolved.(*passkeyUser)
+		require.True(t, ok)
+		require.NotNil(t, resolvedUser)
+		require.Equal(t, activeUser, resolvedUser.account)
 	})
 }

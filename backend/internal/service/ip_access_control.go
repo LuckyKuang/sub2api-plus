@@ -946,14 +946,6 @@ func (s *IPAccessControlService) IsBlocked(ctx context.Context, rawIP string) (b
 	return decision.Blocked, err
 }
 
-func (s *IPAccessControlService) activeRules(ctx context.Context) ([]*IPAccessRule, error) {
-	snapshot, err := s.activeRuleSnapshot(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return unexpiredIPAccessRules(snapshot.rules, time.Now()), nil
-}
-
 func (s *IPAccessControlService) activeRuleSnapshot(ctx context.Context) (cachedIPAccessRules, error) {
 	now := time.Now()
 	s.mu.RLock()
@@ -1131,20 +1123,6 @@ func parseBoundedIPAccessInt(value string, fallback, minimum, maximum int) int {
 		return fallback
 	}
 	return parsed
-}
-
-func unexpiredIPAccessRules(rules []*IPAccessRule, now time.Time) []*IPAccessRule {
-	result := make([]*IPAccessRule, 0, len(rules))
-	for _, rule := range rules {
-		if rule == nil || rule.Status != IPAccessRuleStatusActive {
-			continue
-		}
-		if rule.ExpiresAt != nil && !rule.ExpiresAt.After(now) {
-			continue
-		}
-		result = append(result, rule)
-	}
-	return result
 }
 
 func compileIPAccessRules(rules []*IPAccessRule, now time.Time) cachedIPAccessRules {
