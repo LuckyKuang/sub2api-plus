@@ -420,6 +420,10 @@ func (h *UserHandler) GetUserAPIKeys(c *gin.Context) {
 		response.BadRequest(c, "Invalid user ID")
 		return
 	}
+	if _, err := h.adminService.GetUser(c.Request.Context(), userID); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
 
 	page, pageSize := response.ParsePagination(c)
 	sortBy := c.DefaultQuery("sort_by", "created_at")
@@ -431,9 +435,65 @@ func (h *UserHandler) GetUserAPIKeys(c *gin.Context) {
 		return
 	}
 
-	out := make([]dto.APIKey, 0, len(keys))
+	out := make([]dto.AdminAPIKeySummary, 0, len(keys))
 	for i := range keys {
-		out = append(out, *dto.APIKeyFromService(&keys[i]))
+		out = append(out, *dto.AdminAPIKeySummaryFromService(&keys[i]))
+	}
+	response.Paginated(c, out, total, page, pageSize)
+}
+
+// RequireSupportTarget validates a non-deleted support target once for all
+// routes in the GET-only administrator support namespace. Disabled users are
+// intentionally allowed.
+func (h *UserHandler) RequireSupportTarget(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	userID, err := strconv.ParseInt(c.Param("user_id"), 10, 64)
+	if err != nil || userID <= 0 {
+		response.BadRequest(c, "Invalid user ID")
+		c.Abort()
+		return
+	}
+	user, err := h.adminService.GetUser(c.Request.Context(), userID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		c.Abort()
+		return
+	}
+	c.Set("admin_support_target", user)
+	c.Next()
+}
+
+// GetSupportProfile returns the safe target identity used by the support
+// overview and selector hydration.
+func (h *UserHandler) GetSupportProfile(c *gin.Context) {
+	user, ok := c.Get("admin_support_target")
+	if !ok {
+		response.InternalError(c, "support target is unavailable")
+		return
+	}
+	target, ok := user.(*service.User)
+	if !ok || target == nil {
+		response.InternalError(c, "support target is unavailable")
+		return
+	}
+	response.Success(c, dto.AdminSupportUserFromService(target))
+}
+
+// GetSupportAPIKeys returns metadata only; the target credential value and
+// complete IP rules never enter the response model.
+func (h *UserHandler) GetSupportAPIKeys(c *gin.Context) {
+	userID, _ := strconv.ParseInt(c.Param("user_id"), 10, 64)
+	page, pageSize := response.ParsePagination(c)
+	sortBy := c.DefaultQuery("sort_by", "created_at")
+	sortOrder := c.DefaultQuery("sort_order", "desc")
+	keys, total, err := h.adminService.GetUserAPIKeys(c.Request.Context(), userID, page, pageSize, sortBy, sortOrder)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	out := make([]dto.AdminAPIKeySummary, 0, len(keys))
+	for i := range keys {
+		out = append(out, *dto.AdminAPIKeySummaryFromService(&keys[i]))
 	}
 	response.Paginated(c, out, total, page, pageSize)
 }

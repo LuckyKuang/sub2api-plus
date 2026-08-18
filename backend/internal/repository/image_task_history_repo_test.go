@@ -57,6 +57,49 @@ WHERE task_id = $1 AND user_id = $2 AND api_key_id = $3`
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestImageTaskHistoryRepositoryListByUserDoesNotRequireAPIKey(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	repo := &imageTaskHistoryRepository{db: db}
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	query := asyncImageTaskSelectSQL + ` WHERE user_id = $1 AND status = $2 ORDER BY created_at DESC, id DESC LIMIT $3 OFFSET $4`
+	mock.ExpectQuery(regexp.QuoteMeta(query)).
+		WithArgs(int64(7), service.ImageTaskStatusCompleted, 21, 0).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"task_id", "user_id", "api_key_id", "request_type", "model", "prompt_preview",
+			"status", "http_status", "image_url", "result", "error",
+			"created_at", "completed_at", "expires_at",
+		}).AddRow(
+			"imgtask_user", 7, 99, "generation", "gpt-image-2", "prompt",
+			service.ImageTaskStatusCompleted, 200, "https://example.test/image.png", `{"data":[{"url":"https://example.test/image.png"}]}`, nil,
+			now, now, now.Add(time.Hour),
+		))
+
+	tasks, hasMore, err := repo.ListByUser(context.Background(), 7, service.ImageTaskHistoryFilter{Status: service.ImageTaskStatusCompleted})
+	require.NoError(t, err)
+	require.False(t, hasMore)
+	require.Len(t, tasks, 1)
+	require.Equal(t, int64(99), tasks[0].APIKeyID)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestImageTaskHistoryRepositoryGetByUserScopesTaskToTarget(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	repo := &imageTaskHistoryRepository{db: db}
+	query := asyncImageTaskSelectSQL + `
+WHERE task_id = $1 AND user_id = $2`
+	mock.ExpectQuery(regexp.QuoteMeta(query)).
+		WithArgs("imgtask_other", int64(7)).
+		WillReturnError(sql.ErrNoRows)
+
+	_, err = repo.GetByUser(context.Background(), 7, "imgtask_other")
+	require.ErrorIs(t, err, service.ErrImageTaskNotFound)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestImageTaskHistoryRepositoryDeleteFailedUsesOwnerAndStatus(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)

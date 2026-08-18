@@ -24,6 +24,7 @@ import (
 	pkghttputil "github.com/LuckyKuang/sub2api-plus/internal/pkg/httputil"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/ip"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/logger"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/response"
 	middleware2 "github.com/LuckyKuang/sub2api-plus/internal/server/middleware"
 	"github.com/LuckyKuang/sub2api-plus/internal/service"
 	"github.com/gin-gonic/gin"
@@ -273,6 +274,46 @@ func (h *AsyncImageHandler) List(c *gin.Context) {
 	}
 	c.Header("Cache-Control", "no-store")
 	c.JSON(http.StatusOK, tasks)
+}
+
+// AdminSupportList reads durable task history by the validated support target
+// ID. It never loads a target API key or touches Redis execution state.
+func (h *AsyncImageHandler) AdminSupportList(c *gin.Context) {
+	userID, err := strconv.ParseInt(c.Param("user_id"), 10, 64)
+	if err != nil || userID <= 0 {
+		response.BadRequest(c, "Invalid user ID")
+		return
+	}
+	limit, _ := strconv.Atoi(c.Query("limit"))
+	offset, _ := strconv.Atoi(c.Query("offset"))
+	tasks, err := h.tasks.ListByUser(c.Request.Context(), userID, service.ImageTaskHistoryFilter{
+		Status: c.Query("status"),
+		Limit:  limit,
+		Offset: offset,
+	})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	response.Success(c, tasks)
+}
+
+// AdminSupportGet returns one durable task for the validated target account.
+// No download, retry, deletion, or status-repair route is registered beside it.
+func (h *AsyncImageHandler) AdminSupportGet(c *gin.Context) {
+	userID, err := strconv.ParseInt(c.Param("user_id"), 10, 64)
+	if err != nil || userID <= 0 {
+		response.BadRequest(c, "Invalid user ID")
+		return
+	}
+	task, err := h.tasks.GetByUser(c.Request.Context(), userID, c.Param("task_id"))
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	response.Success(c, task)
 }
 
 // Delete removes only a failed task owned by the authenticated user and API

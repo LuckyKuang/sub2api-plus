@@ -76,6 +76,32 @@ type ImageTask struct {
 	ExpiresAt     int64           `json:"expires_at"`
 }
 
+// AdminImageTask is the credential-free durable task read model used by the
+// administrator support view. APIKeyID is included for diagnosis, but no API
+// key value or mutable execution-store field is exposed.
+type AdminImageTask struct {
+	ID            string          `json:"id"`
+	TaskID        string          `json:"task_id"`
+	Object        string          `json:"object"`
+	APIKeyID      int64           `json:"api_key_id"`
+	RequestType   string          `json:"request_type,omitempty"`
+	Model         string          `json:"model,omitempty"`
+	PromptPreview string          `json:"prompt_preview,omitempty"`
+	Status        string          `json:"status"`
+	HTTPStatus    int             `json:"http_status,omitempty"`
+	ImageURL      string          `json:"image_url,omitempty"`
+	Result        json.RawMessage `json:"result,omitempty"`
+	Error         json.RawMessage `json:"error,omitempty"`
+	CreatedAt     int64           `json:"created_at"`
+	CompletedAt   *int64          `json:"completed_at,omitempty"`
+	ExpiresAt     int64           `json:"expires_at"`
+}
+
+type AdminImageTaskListResponse struct {
+	Items   []*AdminImageTask `json:"items"`
+	HasMore bool              `json:"has_more"`
+}
+
 type ImageTaskOwner struct {
 	UserID   int64
 	APIKeyID int64
@@ -254,6 +280,40 @@ func (s *ImageTaskService) Get(ctx context.Context, owner ImageTaskOwner, id str
 		return nil, ErrImageTaskNotFound
 	}
 	return imageTaskToPublic(task), nil
+}
+
+// ListByUser reads durable history for an administrator support view. It does
+// not consult Redis and therefore cannot repair, refresh, or otherwise mutate
+// target task state.
+func (s *ImageTaskService) ListByUser(ctx context.Context, userID int64, filter ImageTaskHistoryFilter) (*AdminImageTaskListResponse, error) {
+	if s == nil || s.history == nil {
+		return nil, ErrImageTaskUnavailable
+	}
+	filter = normalizeImageTaskHistoryFilter(filter)
+	records, hasMore, err := s.history.ListByUser(ctx, userID, filter)
+	if err != nil {
+		return nil, ErrImageTaskUnavailable.WithCause(err)
+	}
+	items := make([]*AdminImageTask, 0, len(records))
+	for _, record := range records {
+		items = append(items, imageTaskToAdmin(record))
+	}
+	return &AdminImageTaskListResponse{Items: items, HasMore: hasMore}, nil
+}
+
+// GetByUser reads one durable task scoped to the selected support target.
+func (s *ImageTaskService) GetByUser(ctx context.Context, userID int64, id string) (*AdminImageTask, error) {
+	if s == nil || s.history == nil {
+		return nil, ErrImageTaskUnavailable
+	}
+	task, err := s.history.GetByUser(ctx, userID, strings.TrimSpace(id))
+	if err != nil {
+		if errors.Is(err, ErrImageTaskNotFound) {
+			return nil, ErrImageTaskNotFound
+		}
+		return nil, ErrImageTaskUnavailable.WithCause(err)
+	}
+	return imageTaskToAdmin(task), nil
 }
 
 // Delete removes a failed task's execution state and durable history. The
@@ -480,6 +540,29 @@ func imageTaskToPublic(task *ImageTaskRecord) *ImageTask {
 		ID:            task.ID,
 		TaskID:        task.ID,
 		Object:        "image.generation.task",
+		RequestType:   task.RequestType,
+		Model:         task.Model,
+		PromptPreview: task.PromptPreview,
+		Status:        task.Status,
+		HTTPStatus:    task.HTTPStatus,
+		ImageURL:      firstImageTaskURL(task.Result),
+		Result:        task.Result,
+		Error:         task.Error,
+		CreatedAt:     task.CreatedAt,
+		CompletedAt:   task.CompletedAt,
+		ExpiresAt:     task.ExpiresAt,
+	}
+}
+
+func imageTaskToAdmin(task *ImageTaskRecord) *AdminImageTask {
+	if task == nil {
+		return nil
+	}
+	return &AdminImageTask{
+		ID:            task.ID,
+		TaskID:        task.ID,
+		Object:        "image.generation.task",
+		APIKeyID:      task.APIKeyID,
 		RequestType:   task.RequestType,
 		Model:         task.Model,
 		PromptPreview: task.PromptPreview,

@@ -143,6 +143,7 @@ class ProbeRuntimeTest(unittest.TestCase):
 
     def test_windows_uses_docker_inside_running_wsl2_linux(self) -> None:
         wsl = "C:/Windows/System32/wsl.exe"
+        windows_root = Path(r"C:\DevTools\code\github\sub2api-plus")
 
         def captured(command: list[str], **_: object) -> str:
             if command == [wsl, "-l", "-v"]:
@@ -154,9 +155,9 @@ class ProbeRuntimeTest(unittest.TestCase):
                 "--",
                 "wslpath",
                 "-a",
-                "/repo",
+                "C:/DevTools/code/github/sub2api-plus",
             ]:
-                return "/mnt/c/repo"
+                return "/mnt/c/DevTools/code/github/sub2api-plus"
             self.fail(f"unexpected command: {command}")
 
         with (
@@ -166,7 +167,7 @@ class ProbeRuntimeTest(unittest.TestCase):
                 "which",
                 side_effect=lambda command: wsl if command == "wsl.exe" else None,
             ),
-            mock.patch.object(push_cli, "ROOT", Path("/repo")),
+            mock.patch.object(push_cli, "ROOT", windows_root),
             mock.patch.object(push_cli, "capture", side_effect=captured),
             mock.patch.object(
                 push_cli,
@@ -179,7 +180,10 @@ class ProbeRuntimeTest(unittest.TestCase):
         prefix = (wsl, "-d", "Ubuntu-24.04", "--")
         self.assertEqual("wsl2-docker", runtime.name)
         self.assertEqual(prefix, runtime.prefix)
-        self.assertEqual("/mnt/c/repo", runtime.compose_root)
+        self.assertEqual(
+            "/mnt/c/DevTools/code/github/sub2api-plus",
+            runtime.compose_root,
+        )
         probe_docker.assert_called_once_with(prefix)
 
     def test_windows_never_falls_back_to_host_docker(self) -> None:

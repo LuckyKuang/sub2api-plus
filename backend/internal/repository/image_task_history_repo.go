@@ -117,6 +117,61 @@ WHERE task_id = $1 AND user_id = $2 AND api_key_id = $3`, id, owner.UserID, owne
 	return task, err
 }
 
+// ListByUser is the administrator support-view read path. It is intentionally
+// scoped only by user ID so support staff never need the target user's API-key
+// value. The ordinary owner path above remains scoped by both user and key.
+func (r *imageTaskHistoryRepository) ListByUser(ctx context.Context, userID int64, filter service.ImageTaskHistoryFilter) ([]*service.ImageTaskRecord, bool, error) {
+	if r == nil || r.db == nil {
+		return nil, false, fmt.Errorf("async image task history database is unavailable")
+	}
+	filter = normalizeRepositoryImageTaskFilter(filter)
+	query := asyncImageTaskSelectSQL + ` WHERE user_id = $1`
+	args := []any{userID}
+	if filter.Status != "" {
+		query += " AND status = $" + strconv.Itoa(len(args)+1)
+		args = append(args, filter.Status)
+	}
+	query += " ORDER BY created_at DESC, id DESC LIMIT $" + strconv.Itoa(len(args)+1) + " OFFSET $" + strconv.Itoa(len(args)+2)
+	args = append(args, filter.Limit+1, filter.Offset)
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, false, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	tasks := make([]*service.ImageTaskRecord, 0, filter.Limit)
+	for rows.Next() {
+		task, scanErr := scanImageTaskHistory(rows)
+		if scanErr != nil {
+			return nil, false, scanErr
+		}
+		tasks = append(tasks, task)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, false, err
+	}
+	hasMore := len(tasks) > filter.Limit
+	if hasMore {
+		tasks = tasks[:filter.Limit]
+	}
+	return tasks, hasMore, nil
+}
+
+// GetByUser returns a durable task only when it belongs to the selected target
+// account. It does not read or repair Redis execution state.
+func (r *imageTaskHistoryRepository) GetByUser(ctx context.Context, userID int64, id string) (*service.ImageTaskRecord, error) {
+	if r == nil || r.db == nil {
+		return nil, fmt.Errorf("async image task history database is unavailable")
+	}
+	task, err := scanImageTaskHistory(r.db.QueryRowContext(ctx, asyncImageTaskSelectSQL+`
+WHERE task_id = $1 AND user_id = $2`, id, userID))
+	if err == sql.ErrNoRows {
+		return nil, service.ErrImageTaskNotFound
+	}
+	return task, err
+}
+
 func (r *imageTaskHistoryRepository) DeleteFailed(ctx context.Context, owner service.ImageTaskOwner, id string) (bool, error) {
 	if r == nil || r.db == nil {
 		return false, fmt.Errorf("async image task history database is unavailable")

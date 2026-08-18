@@ -2,6 +2,7 @@ package handler
 
 import (
 	"sort"
+	"strconv"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/response"
 	"github.com/LuckyKuang/sub2api-plus/internal/server/middleware"
@@ -131,10 +132,52 @@ func (h *AvailableChannelHandler) List(c *gin.Context) {
 		return
 	}
 
-	userGroups, err := h.apiKeyService.GetAvailableGroups(c.Request.Context(), subject.UserID)
+	out, err := h.listForUser(c, subject.UserID)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
+	}
+	response.Success(c, out)
+}
+
+// AdminSupportList returns the same user-visible channel model for an explicit
+// support target. The authenticated administrator remains the actor; the
+// target ID is never written into the authentication context.
+func (h *AvailableChannelHandler) AdminSupportList(c *gin.Context) {
+	userID, err := strconv.ParseInt(c.Param("user_id"), 10, 64)
+	if err != nil || userID <= 0 {
+		response.BadRequest(c, "Invalid user ID")
+		return
+	}
+
+	if !h.featureEnabled(c) {
+		response.Success(c, gin.H{
+			"items":       []userAvailableChannel{},
+			"group_rates": map[int64]float64{},
+		})
+		return
+	}
+
+	out, err := h.listForUser(c, userID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	rates, err := h.apiKeyService.GetUserGroupRates(c.Request.Context(), userID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, gin.H{
+		"items":       out,
+		"group_rates": rates,
+	})
+}
+
+func (h *AvailableChannelHandler) listForUser(c *gin.Context, userID int64) ([]userAvailableChannel, error) {
+	userGroups, err := h.apiKeyService.GetAvailableGroups(c.Request.Context(), userID)
+	if err != nil {
+		return nil, err
 	}
 	allowedGroupIDs := make(map[int64]struct{}, len(userGroups))
 	for i := range userGroups {
@@ -143,8 +186,7 @@ func (h *AvailableChannelHandler) List(c *gin.Context) {
 
 	channels, err := h.channelService.ListAvailable(c.Request.Context())
 	if err != nil {
-		response.ErrorFrom(c, err)
-		return
+		return nil, err
 	}
 
 	out := make([]userAvailableChannel, 0, len(channels))
@@ -167,7 +209,7 @@ func (h *AvailableChannelHandler) List(c *gin.Context) {
 		})
 	}
 
-	response.Success(c, out)
+	return out, nil
 }
 
 // buildPlatformSections 把一个渠道按 visibleGroups 的平台集合拆成有序的 section 列表：
