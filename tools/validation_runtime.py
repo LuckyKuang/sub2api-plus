@@ -153,7 +153,13 @@ def probe_windows_runtime(
         docker_ok, detail = probe_docker_fn(prefix)
         if not docker_ok:
             continue
-        linux_root = capture([wsl, "-d", distro, "--", "wslpath", "-a", str(root)])
+        # wsl.exe forwards the remaining arguments through a Linux command line,
+        # where Windows backslashes are interpreted as escapes. Use the equivalent
+        # slash-separated Windows spelling so wslpath receives the path intact.
+        windows_root = str(root).replace("\\", "/")
+        linux_root = capture(
+            [wsl, "-d", distro, "--", "wslpath", "-a", windows_root]
+        )
         print(f"Runtime: WSL2/{distro} with Docker ({detail})")
         return Runtime("wsl2-docker", prefix, linux_root)
     raise ValidationRuntimeError(
