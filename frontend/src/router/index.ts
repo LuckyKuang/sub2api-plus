@@ -14,6 +14,7 @@ import { useAsyncImageAccess } from '@/composables/useAsyncImageAccess'
 import { getSetupStatus } from '@/api/setup'
 import { resolveCompletedSetupRedirectPath } from './setupRedirect'
 import { resolveRouteDocumentTitle } from './title'
+import { parseAdminSupportTargetId, selfPathForSupportResource, type AdminSupportResource } from '@/utils/adminSupport'
 
 /**
  * Route definitions with lazy loading
@@ -414,6 +415,114 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/admin',
     redirect: '/admin/dashboard'
+  },
+  {
+    path: '/admin/support/users/:user_id/overview',
+    name: 'AdminSupportOverview',
+    component: () => import('@/views/admin/support/AdminSupportView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      adminSupportResource: 'overview',
+      title: 'User Support Overview',
+      titleKey: 'admin.support.overview'
+    }
+  },
+  {
+    path: '/admin/support/users/:user_id/api-keys',
+    name: 'AdminSupportAPIKeys',
+    component: () => import('@/views/admin/support/AdminSupportView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      adminSupportResource: 'api-keys',
+      title: 'User API Keys',
+      titleKey: 'admin.support.apiKeysTitle'
+    }
+  },
+  {
+    path: '/admin/support/users/:user_id/async-images',
+    name: 'AdminSupportAsyncImages',
+    component: () => import('@/views/admin/support/AdminSupportView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      adminSupportResource: 'async-images',
+      title: 'User Async Images',
+      titleKey: 'admin.support.asyncImagesTitle'
+    }
+  },
+  {
+    path: '/admin/support/users/:user_id/usage',
+    name: 'AdminSupportUsage',
+    component: () => import('@/views/admin/support/AdminSupportView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      adminSupportResource: 'usage',
+      title: 'User Usage',
+      titleKey: 'admin.support.usageTitle'
+    }
+  },
+  {
+    path: '/admin/support/users/:user_id/channels',
+    name: 'AdminSupportChannels',
+    component: () => import('@/views/admin/support/AdminSupportView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      adminSupportResource: 'channels',
+      title: 'User Available Channels',
+      titleKey: 'admin.support.channelsTitle'
+    }
+  },
+  {
+    path: '/admin/support/users/:user_id/channel-status',
+    name: 'AdminSupportChannelStatus',
+    component: () => import('@/views/admin/support/AdminSupportView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      adminSupportResource: 'channel-status',
+      title: 'Channel Status',
+      titleKey: 'admin.support.channelStatusTitle'
+    }
+  },
+  {
+    path: '/admin/support/users/:user_id/subscriptions',
+    name: 'AdminSupportSubscriptions',
+    component: () => import('@/views/admin/support/AdminSupportView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      adminSupportResource: 'subscriptions',
+      title: 'User Subscriptions',
+      titleKey: 'admin.support.subscriptionsTitle'
+    }
+  },
+  {
+    path: '/admin/support/users/:user_id/orders',
+    name: 'AdminSupportOrders',
+    component: () => import('@/views/admin/support/AdminSupportView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      adminSupportResource: 'orders',
+      title: 'User Orders',
+      titleKey: 'admin.support.ordersTitle'
+    }
+  },
+  {
+    path: '/admin/support/users/:user_id/profile',
+    name: 'AdminSupportProfile',
+    component: () => import('@/views/admin/support/AdminSupportView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      adminSupportResource: 'profile',
+      title: 'User Profile',
+      titleKey: 'admin.support.profileTitle'
+    }
   },
   {
     path: '/admin/dashboard',
@@ -901,6 +1010,22 @@ router.beforeEach(async (to, _from, next) => {
   if (requiresAdmin && !authStore.isAdmin) {
     // User is authenticated but not admin, redirect to user dashboard
     next('/dashboard')
+    return
+  }
+
+  const supportResource = to.meta.adminSupportResource as AdminSupportResource | undefined
+  const supportTarget = parseAdminSupportTargetId(to.params.user_id)
+  if (requiresAdmin && authStore.isAdmin && supportResource && supportTarget === null) {
+    next(selfPathForSupportResource(supportResource))
+    return
+  }
+  if (
+    requiresAdmin &&
+    authStore.isAdmin &&
+    supportResource &&
+    supportTarget === authStore.user?.id
+  ) {
+    next(selfPathForSupportResource(supportResource))
     return
   }
 

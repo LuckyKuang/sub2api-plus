@@ -62,12 +62,12 @@ func (h *AdminAPIKeyHandler) UpdateGroup(c *gin.Context) {
 	}
 
 	resp := struct {
-		APIKey                 *dto.APIKey `json:"api_key"`
-		AutoGrantedGroupAccess bool        `json:"auto_granted_group_access"`
-		GrantedGroupID         *int64      `json:"granted_group_id,omitempty"`
-		GrantedGroupName       string      `json:"granted_group_name,omitempty"`
+		APIKey                 *dto.AdminAPIKeySummary `json:"api_key"`
+		AutoGrantedGroupAccess bool                    `json:"auto_granted_group_access"`
+		GrantedGroupID         *int64                  `json:"granted_group_id,omitempty"`
+		GrantedGroupName       string                  `json:"granted_group_name,omitempty"`
 	}{
-		APIKey:                 dto.APIKeyFromService(result.APIKey),
+		APIKey:                 dto.AdminAPIKeySummaryFromService(result.APIKey),
 		AutoGrantedGroupAccess: result.AutoGrantedGroupAccess,
 		GrantedGroupID:         result.GrantedGroupID,
 		GrantedGroupName:       result.GrantedGroupName,

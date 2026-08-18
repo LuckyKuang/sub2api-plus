@@ -102,10 +102,8 @@
 
         <!-- Personal Section for Admin (hidden in simple mode) -->
         <div v-if="!authStore.isSimpleMode" class="sidebar-section">
-          <div class="sidebar-section-title" :class="{ 'sidebar-section-title-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">
-            <span class="sidebar-section-title-text" :class="{ 'sidebar-section-title-text-collapsed': sidebarCollapsed }">
-              {{ t('nav.myAccount') }}
-            </span>
+          <div class="mb-2" :class="sidebarCollapsed ? 'px-1' : 'px-2'">
+            <AdminSupportUserSelector :collapsed="sidebarCollapsed" />
           </div>
 
           <router-link
@@ -192,11 +190,13 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAdminSettingsStore, useAppStore, useAuthStore, useOnboardingStore } from '@/stores'
 import VersionBadge from '@/components/common/VersionBadge.vue'
+import AdminSupportUserSelector from '@/components/layout/AdminSupportUserSelector.vue'
 import { sanitizeSvg } from '@/utils/sanitize'
 import { sanitizeUrl } from '@/utils/url'
 import { FeatureFlags, makeSidebarFlag } from '@/utils/featureFlags'
 import { useBatchImageAccess } from '@/composables/useBatchImageAccess'
 import { useAsyncImageAccess } from '@/composables/useAsyncImageAccess'
+import { adminSupportPath, parseAdminSupportTargetId } from '@/utils/adminSupport'
 
 interface NavItem {
   path: string
@@ -735,10 +735,37 @@ function finalizeNav(items: NavItem[]): NavItem[] {
 // User navigation items (for regular users)
 const userNavItems = computed((): NavItem[] => finalizeNav(buildSelfNavItems(true)))
 
-// Personal navigation items (for admin's "My Account" section, without Dashboard).
-// Admins access 可用渠道 from this section just like regular users — there is no
-// separate admin entry, since the page is purely a user-facing view.
-const personalNavItems = computed((): NavItem[] => finalizeNav(buildSelfNavItems(false)))
+const supportTargetId = computed(() => {
+  return parseAdminSupportTargetId(route.params.user_id)
+})
+
+const isAdminSupportMode = computed(() => {
+  return supportTargetId.value !== null && supportTargetId.value !== authStore.user?.id
+})
+
+function buildSupportNavItems(userId: number): NavItem[] {
+  return [
+    { path: adminSupportPath(userId, 'overview'), label: t('admin.support.overview'), icon: DashboardIcon },
+    { path: adminSupportPath(userId, 'api-keys'), label: t('nav.apiKeys'), icon: KeyIcon },
+    { path: adminSupportPath(userId, 'async-images'), label: t('nav.asyncImage'), icon: BatchImageIcon },
+    { path: adminSupportPath(userId, 'usage'), label: t('nav.usage'), icon: ChartIcon },
+    { path: adminSupportPath(userId, 'channels'), label: t('nav.availableChannels'), icon: ChannelIcon },
+    { path: adminSupportPath(userId, 'channel-status'), label: t('nav.channelStatus'), icon: SignalIcon },
+    { path: adminSupportPath(userId, 'subscriptions'), label: t('nav.mySubscriptions'), icon: CreditCardIcon },
+    { path: adminSupportPath(userId, 'orders'), label: t('nav.myOrders'), icon: OrderListIcon },
+    { path: adminSupportPath(userId, 'profile'), label: t('nav.profile'), icon: UserIcon }
+  ]
+}
+
+// The authenticated administrator keeps the original personal navigation and
+// every existing operation. A different route target gets dedicated read-only
+// support links instead.
+const personalNavItems = computed((): NavItem[] => {
+  if (isAdminSupportMode.value && supportTargetId.value !== null) {
+    return buildSupportNavItems(supportTargetId.value)
+  }
+  return finalizeNav(buildSelfNavItems(false))
+})
 
 // Custom menu items filtered by visibility
 const customMenuItemsForUser = computed(() => {

@@ -68,6 +68,18 @@ declare module 'vue-router' {
      */
     requiresAsyncImageAccess?: boolean
 
+    /** Read-only administrator support resource for an explicit target user. */
+    adminSupportResource?:
+      | 'overview'
+      | 'api-keys'
+      | 'async-images'
+      | 'usage'
+      | 'channels'
+      | 'channel-status'
+      | 'subscriptions'
+      | 'orders'
+      | 'profile'
+
     /**
      * i18n key for the page title
      */

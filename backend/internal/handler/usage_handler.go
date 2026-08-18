@@ -44,6 +44,15 @@ type userGroupStat struct {
 	ActualCost  float64 `json:"actual_cost"`
 }
 
+type adminSupportUsageStats struct {
+	Period            string  `json:"period"`
+	TotalRequests     int64   `json:"total_requests"`
+	TotalTokens       int64   `json:"total_tokens"`
+	TotalCost         float64 `json:"total_cost"`
+	TotalActualCost   float64 `json:"total_actual_cost"`
+	AverageDurationMs float64 `json:"avg_duration_ms"`
+}
+
 // UsageHandler handles usage-related requests
 type UsageHandler struct {
 	usageService   *service.UsageService
@@ -410,6 +419,56 @@ func (h *UsageHandler) Stats(c *gin.Context) {
 	stats.EndpointPaths = nil
 
 	response.Success(c, stats)
+}
+
+// AdminSupportStats returns a credential-free usage summary for the explicit
+// support target. The authenticated administrator remains the actor; only the
+// query filter is scoped to the target user ID.
+func (h *UsageHandler) AdminSupportStats(c *gin.Context) {
+	userID, err := strconv.ParseInt(c.Param("user_id"), 10, 64)
+	if err != nil || userID <= 0 {
+		response.BadRequest(c, "Invalid user ID")
+		return
+	}
+
+	period := strings.TrimSpace(c.DefaultQuery("period", "month"))
+	userTZ := c.Query("timezone")
+	now := timezone.NowInUserLocation(userTZ)
+	var startTime time.Time
+	switch period {
+	case "today":
+		startTime = timezone.StartOfDayInUserLocation(now, userTZ)
+	case "week":
+		startOfDay := timezone.StartOfDayInUserLocation(now, userTZ)
+		daysSinceMonday := (int(startOfDay.Weekday()) + 6) % 7
+		startTime = startOfDay.AddDate(0, 0, -daysSinceMonday)
+	case "month":
+		startOfDay := timezone.StartOfDayInUserLocation(now, userTZ)
+		startTime = time.Date(startOfDay.Year(), startOfDay.Month(), 1, 0, 0, 0, 0, startOfDay.Location())
+	default:
+		response.BadRequest(c, "Invalid period, use today, week, or month")
+		return
+	}
+
+	stats, err := h.usageService.GetStatsWithFilters(c.Request.Context(), usagestats.UsageLogFilters{
+		UserID:            userID,
+		ModelFilterSource: usagestats.ModelSourceRequested,
+		StartTime:         &startTime,
+		EndTime:           &now,
+	})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	response.Success(c, adminSupportUsageStats{
+		Period:            period,
+		TotalRequests:     stats.TotalRequests,
+		TotalTokens:       stats.TotalTokens,
+		TotalCost:         stats.TotalCost,
+		TotalActualCost:   stats.TotalActualCost,
+		AverageDurationMs: stats.AverageDurationMs,
+	})
 }
 
 const (

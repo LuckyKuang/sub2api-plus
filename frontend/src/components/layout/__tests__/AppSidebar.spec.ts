@@ -61,3 +61,15 @@ describe('AppSidebar header styles', () => {
     expect(sidebarBrandBlockMatch?.[0]).not.toContain('overflow: hidden;')
   })
 })
+
+describe('AppSidebar administrator account support mode', () => {
+  it('mounts the account selector and keeps self and target navigation separate', () => {
+    expect(componentSource).toContain('<AdminSupportUserSelector')
+    expect(componentSource).toContain('buildSelfNavItems(false)')
+    expect(componentSource).toContain('buildSupportNavItems(supportTargetId.value)')
+    expect(componentSource).toContain('parseAdminSupportTargetId(route.params.user_id)')
+    expect(componentSource).toContain("adminSupportPath(userId, 'api-keys')")
+    expect(componentSource).toContain("adminSupportPath(userId, 'async-images')")
+    expect(componentSource).not.toContain("label: t('nav.myAccount')")
+  })
+})

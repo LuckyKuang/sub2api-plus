@@ -356,6 +356,53 @@ func (h *PaymentHandler) GetMyOrders(c *gin.Context) {
 	response.Paginated(c, sanitizePaymentOrdersForResponse(orders), int64(total), page, pageSize)
 }
 
+// AdminSupportListOrders returns a target user's orders through the same
+// provider-detail-free DTO used by the user-facing endpoint.
+func (h *PaymentHandler) AdminSupportListOrders(c *gin.Context) {
+	userID, err := strconv.ParseInt(c.Param("user_id"), 10, 64)
+	if err != nil || userID <= 0 {
+		response.BadRequest(c, "Invalid user ID")
+		return
+	}
+
+	page, pageSize := response.ParsePagination(c)
+	orders, total, err := h.paymentService.GetUserOrders(c.Request.Context(), userID, service.OrderListParams{
+		Page:        page,
+		PageSize:    pageSize,
+		Status:      c.Query("status"),
+		OrderType:   c.Query("order_type"),
+		PaymentType: c.Query("payment_type"),
+	})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Paginated(c, sanitizePaymentOrdersForResponse(orders), int64(total), page, pageSize)
+}
+
+// AdminSupportGetOrder returns one order only when it belongs to the explicit
+// support target. No cancel, refund, retry, or fulfillment route is registered
+// in the support namespace.
+func (h *PaymentHandler) AdminSupportGetOrder(c *gin.Context) {
+	userID, err := strconv.ParseInt(c.Param("user_id"), 10, 64)
+	if err != nil || userID <= 0 {
+		response.BadRequest(c, "Invalid user ID")
+		return
+	}
+	orderID, err := strconv.ParseInt(c.Param("order_id"), 10, 64)
+	if err != nil || orderID <= 0 {
+		response.BadRequest(c, "Invalid order ID")
+		return
+	}
+
+	order, err := h.paymentService.GetOrder(c.Request.Context(), orderID, userID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, sanitizePaymentOrderForResponse(order))
+}
+
 // GetOrder returns a single order for the authenticated user.
 // GET /api/v1/payment/orders/:id
 func (h *PaymentHandler) GetOrder(c *gin.Context) {

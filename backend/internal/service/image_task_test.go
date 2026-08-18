@@ -79,6 +79,37 @@ func (h *imageTaskMemoryHistory) Get(_ context.Context, owner ImageTaskOwner, id
 	return &copy, nil
 }
 
+func (h *imageTaskMemoryHistory) ListByUser(_ context.Context, userID int64, filter ImageTaskHistoryFilter) ([]*ImageTaskRecord, bool, error) {
+	filter = normalizeImageTaskHistoryFilter(filter)
+	matched := make([]*ImageTaskRecord, 0, len(h.order))
+	for i := len(h.order) - 1; i >= 0; i-- {
+		task := h.tasks[h.order[i]]
+		if task == nil || task.UserID != userID || (filter.Status != "" && task.Status != filter.Status) {
+			continue
+		}
+		copy := *task
+		matched = append(matched, &copy)
+	}
+	if filter.Offset >= len(matched) {
+		return nil, false, nil
+	}
+	matched = matched[filter.Offset:]
+	hasMore := len(matched) > filter.Limit
+	if hasMore {
+		matched = matched[:filter.Limit]
+	}
+	return matched, hasMore, nil
+}
+
+func (h *imageTaskMemoryHistory) GetByUser(_ context.Context, userID int64, id string) (*ImageTaskRecord, error) {
+	task := h.tasks[id]
+	if task == nil || task.UserID != userID {
+		return nil, ErrImageTaskNotFound
+	}
+	copy := *task
+	return &copy, nil
+}
+
 func (h *imageTaskMemoryHistory) DeleteFailed(_ context.Context, owner ImageTaskOwner, id string) (bool, error) {
 	if h.deleteErr != nil {
 		return false, h.deleteErr
@@ -214,6 +245,38 @@ func TestImageTaskServiceHistoryListKeepsMetadataAndScopesByAPIKey(t *testing.T)
 	otherKey, err := svc.List(context.Background(), ImageTaskOwner{UserID: owner.UserID, APIKeyID: owner.APIKeyID + 1}, ImageTaskHistoryFilter{})
 	require.NoError(t, err)
 	require.Empty(t, otherKey.Data)
+}
+
+func TestImageTaskServiceAdminListByUserReadsAcrossKeysWithoutStoreMutation(t *testing.T) {
+	history := &imageTaskMemoryHistory{
+		tasks: map[string]*ImageTaskRecord{
+			"target-a": {ID: "target-a", UserID: 7, APIKeyID: 9, Status: ImageTaskStatusCompleted, CreatedAt: 10},
+			"target-b": {ID: "target-b", UserID: 7, APIKeyID: 10, Status: ImageTaskStatusFailed, CreatedAt: 20},
+			"other":    {ID: "other", UserID: 8, APIKeyID: 11, Status: ImageTaskStatusCompleted, CreatedAt: 30},
+		},
+		order: []string{"target-a", "target-b", "other"},
+	}
+	svc := NewImageTaskService(&imageTaskMemoryStore{})
+	svc.SetHistoryRepository(history)
+
+	list, err := svc.ListByUser(context.Background(), 7, ImageTaskHistoryFilter{Limit: 20})
+	require.NoError(t, err)
+	require.Len(t, list.Items, 2)
+	require.Equal(t, "target-b", list.Items[0].TaskID)
+	require.Equal(t, int64(10), list.Items[0].APIKeyID)
+	require.Equal(t, "target-a", list.Items[1].TaskID)
+	require.NotContains(t, string(mustImageTaskJSON(t, list)), "storage_keys")
+
+	_, err = svc.GetByUser(context.Background(), 8, "target-a")
+	require.ErrorIs(t, err, ErrImageTaskNotFound)
+	require.Len(t, history.tasks, 3)
+}
+
+func mustImageTaskJSON(t *testing.T, value any) []byte {
+	t.Helper()
+	data, err := json.Marshal(value)
+	require.NoError(t, err)
+	return data
 }
 
 func TestImageTaskServiceDeleteRemovesOwnedFailedTask(t *testing.T) {
