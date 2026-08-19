@@ -181,7 +181,7 @@
           </div>
           <div v-if="settings.enforcement_enabled" class="grid grid-cols-1 gap-4 border-t border-gray-100 pt-5 sm:grid-cols-3 dark:border-dark-700">
             <label v-if="settings.login_failure_auto_block_enabled" class="block"><span class="input-label">{{ t('admin.ipAccessControl.protection.threshold') }}</span><input v-model.number="settings.login_failure_threshold" min="2" max="100" type="number" class="input" /></label>
-            <label v-if="settings.login_failure_auto_block_enabled" class="block"><span class="input-label">{{ t('admin.ipAccessControl.protection.window') }}</span><input v-model.number="settings.login_failure_window_minutes" min="1" max="1440" type="number" class="input" /></label>
+            <label v-if="settings.login_failure_auto_block_enabled" class="block"><span class="input-label">{{ t('admin.ipAccessControl.protection.window') }}</span><input v-model.number="settings.login_failure_window_minutes" min="1" max="525600" type="number" class="input" /></label>
             <label class="block"><span class="input-label">{{ t('admin.ipAccessControl.protection.duration') }}</span><input v-model.number="settings.login_failure_block_minutes" min="1" max="525600" type="number" class="input" /></label>
           </div>
           <p v-if="!featureEnabled" class="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800 dark:border-amber-800/70 dark:bg-amber-950/30 dark:text-amber-200">{{ t('admin.ipAccessControl.protection.masterSwitchOff') }}</p>
@@ -347,7 +347,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { adminAPI, type IPAccessControlSettings, type IPLoginFailureState, type IPAccessRule, type IPAccessRuleKind, type IPAccessRuleStatus, type TrustedProxyStatus } from '@/api/admin'
 import { useAppStore } from '@/stores'
@@ -404,8 +404,7 @@ const releaseDialogTitle = computed(() => t(releaseIsAllow.value ? 'admin.ipAcce
 const releaseDialogMessage = computed(() => t(releaseIsAllow.value ? 'admin.ipAccessControl.rules.removeAllowMessage' : 'admin.ipAccessControl.rules.releaseMessage'))
 const releaseDialogConfirmText = computed(() => t(releaseIsAllow.value ? 'admin.ipAccessControl.rules.removeAllow' : 'admin.ipAccessControl.rules.releaseReset'))
 const manualBlockDialogMessage = computed(() => t('admin.ipAccessControl.failureStates.manualBlockMessage', {
-  ip: manualBlockTarget.value?.normalized_ip || '',
-  duration: settings.login_failure_block_minutes
+  ip: manualBlockTarget.value?.normalized_ip || ''
 }))
 const createForm = reactive<{ ip_or_cidr: string; rule_kind: Extract<IPAccessRuleKind, 'manual_block' | 'allow'>; reason: string; expires_at: string }>({ ip_or_cidr: '', rule_kind: 'manual_block', reason: '', expires_at: '' })
 
@@ -479,13 +478,12 @@ function failureBlockStatusClass(state: IPLoginFailureState): string {
 }
 function manualBlockDisabledReason(state: IPLoginFailureState): string {
   if (failureStatesUnavailable.value) return t('admin.ipAccessControl.failureStates.manualBlockDisabledStale')
-  if (settingsUnavailable.value) return t('admin.ipAccessControl.failureStates.manualBlockDisabledSettings')
   if (state.emergency_allowlisted) return t('admin.ipAccessControl.failureStates.manualBlockDisabledEmergencyAllow')
   if (state.suppressed_by_allow_rule) return t('admin.ipAccessControl.failureStates.manualBlockDisabledAllow')
   if (state.active_block_rule || state.effectively_blocked) return t('admin.ipAccessControl.failureStates.manualBlockDisabledAlreadyBlocked')
   if (!state.runtime_enforcement_enabled) return t('admin.ipAccessControl.failureStates.manualBlockDisabledEnforcement')
   if (!manualBlockingReady.value) return t('admin.ipAccessControl.failureStates.manualBlockDisabledIdentity')
-  if (settingsLoading.value || settingsSaving.value || failureStatesLoading.value || manualBlockSubmitting.value) return t('admin.ipAccessControl.failureStates.manualBlockDisabledBusy')
+  if (settingsSaving.value || failureStatesLoading.value || manualBlockSubmitting.value) return t('admin.ipAccessControl.failureStates.manualBlockDisabledBusy')
   return ''
 }
 function canManuallyBlockFailureState(state: IPLoginFailureState): boolean {
@@ -625,12 +623,8 @@ async function releaseAndReset() {
 }
 function confirmResetCounter(ip: string) { resetCounterTarget.value = ip }
 async function resetCounter() { const ip = resetCounterTarget.value; if (!ip) return; try { await stepUp.run(() => adminAPI.ipAccessControl.resetFailureState(ip)); resetCounterTarget.value = null; appStore.showSuccess(t('admin.ipAccessControl.failureStates.resetSuccess')); await Promise.all([loadFailureStates(), loadRules()]) } catch (error) { if (isStepUpCancelled(error)) resetCounterTarget.value = null; reportSensitiveError(error) } }
-async function confirmManualBlock(state: IPLoginFailureState) {
+function confirmManualBlock(state: IPLoginFailureState) {
   if (!canManuallyBlockFailureState(state)) return
-  // Refresh the server-owned duration before presenting the confirmation.
-  // The request still intentionally omits a duration so submission uses the
-  // latest backend value if another administrator changes it afterwards.
-  await loadSettings()
   const currentState = failureStates.value.find((item) => item.normalized_ip === state.normalized_ip)
   if (!currentState) {
     appStore.showError(t('admin.ipAccessControl.failureStates.manualBlockDisabledStale'))
@@ -679,21 +673,11 @@ async function focusRulesForFailureState(state: IPLoginFailureState, showAllActi
   await nextTick()
   rulesSection.value?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
 }
-let failureStateRefreshTimer: ReturnType<typeof setInterval> | null = null
-function refreshFailureStatesWhenVisible() {
-  if (document.visibilityState === 'visible') refreshFailureStates()
-}
 onMounted(() => {
   void loadProxyStatus()
   void loadSettings()
   void loadFailureStates()
   void loadRules()
-  document.addEventListener('visibilitychange', refreshFailureStatesWhenVisible)
-  failureStateRefreshTimer = setInterval(refreshFailureStatesWhenVisible, 15_000)
-})
-onBeforeUnmount(() => {
-  document.removeEventListener('visibilitychange', refreshFailureStatesWhenVisible)
-  if (failureStateRefreshTimer !== null) clearInterval(failureStateRefreshTimer)
 })
 </script>
 

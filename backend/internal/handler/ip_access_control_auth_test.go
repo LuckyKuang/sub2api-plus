@@ -78,7 +78,7 @@ func (s *authIPAccessRepositorySpy) CreateManualIPAccessRule(context.Context, *s
 	return nil, nil
 }
 
-func (s *authIPAccessRepositorySpy) CreateManualIPBlockForFailureState(context.Context, string, string, time.Time, int64) (*service.IPFailureStateBlockRepositoryResult, error) {
+func (s *authIPAccessRepositorySpy) CreateManualIPBlockForFailureState(context.Context, string, string, int64) (*service.IPFailureStateBlockRepositoryResult, error) {
 	return nil, nil
 }
 
@@ -164,6 +164,33 @@ func TestRecordFailedLocalLoginFailsClosedWhenCounterPersistenceFails(t *testing
 	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
 	require.Equal(t, "5", recorder.Header().Get("Retry-After"))
 	require.Contains(t, recorder.Body.String(), "IP_ACCESS_CONTROL_UNAVAILABLE")
+}
+
+func TestRecordFailedLocalLoginBlocksAtConfiguredThreshold(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	access, repo := newAuthIPAccessControlForTest(2)
+	handler := &AuthHandler{ipAccessControl: access}
+
+	attempt := func() (*httptest.ResponseRecorder, bool) {
+		recorder := httptest.NewRecorder()
+		ctx, _ := gin.CreateTestContext(recorder)
+		request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", nil)
+		request.RemoteAddr = "203.0.113.24:43123"
+		ctx.Request = request
+		return recorder, handler.recordFailedLocalLogin(ctx)
+	}
+
+	first, aborted := attempt()
+	require.False(t, aborted)
+	require.Equal(t, 1, repo.failureCount)
+	require.NotEqual(t, http.StatusForbidden, first.Code)
+
+	second, aborted := attempt()
+	require.True(t, aborted)
+	require.Equal(t, 2, repo.failureCount)
+	require.Equal(t, []string{"203.0.113.24", "203.0.113.24"}, repo.recordedIPs)
+	require.Equal(t, http.StatusForbidden, second.Code)
+	require.Contains(t, second.Body.String(), "IP_BANNED")
 }
 
 type missingLoginSessionTotpCache struct {

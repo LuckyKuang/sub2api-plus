@@ -45,6 +45,7 @@ const (
 	defaultLoginFailureIPThreshold   = 8
 	defaultLoginFailureWindowMinutes = 15
 	defaultLoginFailureBlockMinutes  = 24 * 60
+	maxLoginFailureControlMinutes    = 365 * 24 * 60
 	ipAccessSecurityRefreshInterval  = 30 * time.Second
 	ipAccessSecurityRefreshTimeout   = 10 * time.Second
 	ipAccessSecurityMaxStaleness     = 2 * time.Minute
@@ -99,10 +100,10 @@ func (s IPAccessControlSettings) Validate() (IPAccessControlSettings, error) {
 	if s.LoginFailureThreshold < 2 || s.LoginFailureThreshold > 100 {
 		return s, infraerrors.BadRequest("IP_ACCESS_SETTINGS_INVALID", "login failure threshold must be between 2 and 100")
 	}
-	if s.LoginFailureWindowMins < 1 || s.LoginFailureWindowMins > 24*60 {
-		return s, infraerrors.BadRequest("IP_ACCESS_SETTINGS_INVALID", "login failure window must be between 1 and 1440 minutes")
+	if s.LoginFailureWindowMins < 1 || s.LoginFailureWindowMins > maxLoginFailureControlMinutes {
+		return s, infraerrors.BadRequest("IP_ACCESS_SETTINGS_INVALID", "login failure window must be between 1 and 525600 minutes")
 	}
-	if s.LoginFailureBlockMins < 1 || s.LoginFailureBlockMins > 365*24*60 {
+	if s.LoginFailureBlockMins < 1 || s.LoginFailureBlockMins > maxLoginFailureControlMinutes {
 		return s, infraerrors.BadRequest("IP_ACCESS_SETTINGS_INVALID", "login failure block duration must be between 1 and 525600 minutes")
 	}
 	if !s.EnforcementEnabled {
@@ -197,7 +198,10 @@ type LoginFailureRecordResult struct {
 }
 
 type IPFailureStateBlockRepositoryResult struct {
-	Rule           *IPAccessRule
+	// Rule is the exact permanent manual rule guaranteed by the quick-block action.
+	Rule *IPAccessRule
+	// AlreadyBlocked reports whether an effective block covered the IP before
+	// the permanent manual rule was created or upgraded.
 	AlreadyBlocked bool
 }
 
@@ -213,7 +217,7 @@ type IPAccessControlRepository interface {
 	ListIPAccessRules(ctx context.Context, filter IPAccessRuleFilter) (*IPAccessRuleList, error)
 	ListActiveIPAccessRules(ctx context.Context) ([]*IPAccessRule, error)
 	CreateManualIPAccessRule(ctx context.Context, rule *IPAccessRule) (*IPAccessRule, error)
-	CreateManualIPBlockForFailureState(ctx context.Context, normalizedIP, reason string, expiresAt time.Time, actorUserID int64) (*IPFailureStateBlockRepositoryResult, error)
+	CreateManualIPBlockForFailureState(ctx context.Context, normalizedIP, reason string, actorUserID int64) (*IPFailureStateBlockRepositoryResult, error)
 	ReleaseIPAccessRuleAndReset(ctx context.Context, id, actorUserID int64) (*IPAccessRule, error)
 	ListIPLoginFailureStates(ctx context.Context, filter IPLoginFailureStateFilter, window time.Duration) (*IPLoginFailureStateList, error)
 	ResetIPLoginFailureState(ctx context.Context, normalizedIP string) error
@@ -523,8 +527,8 @@ func (s *IPAccessControlService) loadSettings(ctx context.Context) (IPAccessCont
 	settings.EnforcementEnabled = parseIPAccessBool(values[SettingKeyIPAccessControlEnabled], settings.EnforcementEnabled)
 	settings.LoginFailureAutoBlock = parseIPAccessBool(values[SettingKeyLoginFailureAutoBlockEnabled], settings.LoginFailureAutoBlock)
 	settings.LoginFailureThreshold = parseBoundedIPAccessInt(values[SettingKeyLoginFailureIPThreshold], settings.LoginFailureThreshold, 2, 100)
-	settings.LoginFailureWindowMins = parseBoundedIPAccessInt(values[SettingKeyLoginFailureWindowMinutes], settings.LoginFailureWindowMins, 1, 24*60)
-	settings.LoginFailureBlockMins = parseBoundedIPAccessInt(values[SettingKeyLoginFailureBlockMinutes], settings.LoginFailureBlockMins, 1, 365*24*60)
+	settings.LoginFailureWindowMins = parseBoundedIPAccessInt(values[SettingKeyLoginFailureWindowMinutes], settings.LoginFailureWindowMins, 1, maxLoginFailureControlMinutes)
+	settings.LoginFailureBlockMins = parseBoundedIPAccessInt(values[SettingKeyLoginFailureBlockMinutes], settings.LoginFailureBlockMins, 1, maxLoginFailureControlMinutes)
 	settings.FeatureEnabled = strings.TrimSpace(values[SettingKeyGlobalIPAccessControlEnabled]) == "true"
 	settings, _ = settings.Validate()
 	return settings, nil
@@ -680,7 +684,7 @@ func (s *IPAccessControlService) ResetFailureState(ctx context.Context, rawIP st
 	return s.repo.ResetIPLoginFailureState(ctx, normalized)
 }
 
-// BlockFailureState creates an exact-IP manual block from the failure-state
+// BlockFailureState creates an exact-IP permanent manual block from the failure-state
 // management surface. Unlike the generic rule editor, this action promises an
 // immediately enforced result, so it verifies the complete post-commit
 // snapshot before reporting success and never clears the failure counter.
@@ -717,22 +721,22 @@ func (s *IPAccessControlService) BlockFailureState(ctx context.Context, rawIP, r
 		return nil, ErrIPBlockSuppressedByEmergencyAllow
 	}
 
-	expiresAt := time.Now().UTC().Add(time.Duration(settings.LoginFailureBlockMins) * time.Minute)
-	repoResult, err := s.repo.CreateManualIPBlockForFailureState(ctx, normalized, reason, expiresAt, actorUserID)
+	repoResult, err := s.repo.CreateManualIPBlockForFailureState(ctx, normalized, reason, actorUserID)
 	if err != nil {
 		if errors.Is(err, ErrIPBlockSuppressedByAllow) {
 			return nil, ErrIPBlockSuppressedByAllow
 		}
 		return nil, infraerrors.ServiceUnavailable("IP_ACCESS_CONTROL_UNAVAILABLE", "manual IP block could not be confirmed").WithCause(err)
 	}
-	if repoResult == nil || !activeBlockRuleMatchesIP(repoResult.Rule, normalized, time.Now()) {
-		return nil, infraerrors.ServiceUnavailable("IP_ACCESS_CONTROL_UNAVAILABLE", "manual IP block result is not an active rule for the requested IP")
+	if repoResult == nil || repoResult.Rule == nil ||
+		repoResult.Rule.RuleKind != IPAccessRuleKindManualBlock ||
+		repoResult.Rule.IPOrCIDR != normalized || repoResult.Rule.ExpiresAt != nil ||
+		!activeBlockRuleMatchesIP(repoResult.Rule, normalized, time.Now()) {
+		return nil, infraerrors.ServiceUnavailable("IP_ACCESS_CONTROL_UNAVAILABLE", "manual IP block result is not an active permanent exact-IP rule")
 	}
 
 	s.applyCommittedRule(repoResult.Rule)
-	if !repoResult.AlreadyBlocked {
-		s.publishInvalidation(ctx)
-	}
+	s.publishInvalidation(ctx)
 	// A row patch is sufficient for the hot path in the common case, but this
 	// action makes a stronger management-plane promise. Reload the complete
 	// snapshot so a concurrently added/removed allow or settings change is
