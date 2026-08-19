@@ -90,7 +90,7 @@ func (r *ipAccessRepoStub) CreateManualIPAccessRule(_ context.Context, rule *IPA
 	r.rules = append(r.rules, rule)
 	return rule, nil
 }
-func (r *ipAccessRepoStub) CreateManualIPBlockForFailureState(_ context.Context, normalizedIP, reason string, expiresAt time.Time, actorUserID int64) (*IPFailureStateBlockRepositoryResult, error) {
+func (r *ipAccessRepoStub) CreateManualIPBlockForFailureState(_ context.Context, normalizedIP, reason string, actorUserID int64) (*IPFailureStateBlockRepositoryResult, error) {
 	r.manualBlockCalls++
 	if r.manualBlockErr != nil {
 		return nil, r.manualBlockErr
@@ -100,7 +100,7 @@ func (r *ipAccessRepoStub) CreateManualIPBlockForFailureState(_ context.Context,
 		actor := actorUserID
 		result = &IPFailureStateBlockRepositoryResult{Rule: &IPAccessRule{
 			ID: 101, IPOrCIDR: normalizedIP, RuleKind: IPAccessRuleKindManualBlock,
-			Status: IPAccessRuleStatusActive, Reason: reason, ExpiresAt: &expiresAt,
+			Status: IPAccessRuleStatusActive, Reason: reason,
 			CreatedByUserID: &actor,
 		}}
 	}
@@ -400,6 +400,20 @@ func TestIPAccessControlSettingsRejectUnsafeThresholds(t *testing.T) {
 	if err == nil {
 		t.Fatal("zero window must be rejected")
 	}
+	_, err = (IPAccessControlSettings{
+		LoginFailureThreshold: 8, LoginFailureWindowMins: maxLoginFailureControlMinutes,
+		LoginFailureBlockMins: maxLoginFailureControlMinutes,
+	}).Validate()
+	if err != nil {
+		t.Fatalf("one-year window and block duration must be accepted: %v", err)
+	}
+	_, err = (IPAccessControlSettings{
+		LoginFailureThreshold: 8, LoginFailureWindowMins: maxLoginFailureControlMinutes + 1,
+		LoginFailureBlockMins: 60,
+	}).Validate()
+	if err == nil {
+		t.Fatal("window above one year must be rejected")
+	}
 }
 
 func TestIPAccessControlUsesStaleSecurityCacheDuringDatabaseFailure(t *testing.T) {
@@ -596,15 +610,15 @@ func TestIPAccessControlBlockFailureStateCreatesEffectiveManualBlockWithoutReset
 	if result.Rule.Reason != defaultManualFailureBlockReason {
 		t.Fatalf("unexpected default reason: %q", result.Rule.Reason)
 	}
-	if result.Rule.ExpiresAt == nil || time.Until(*result.Rule.ExpiresAt) < 59*time.Minute || time.Until(*result.Rule.ExpiresAt) > 61*time.Minute {
-		t.Fatalf("server settings must determine expiration: %#v", result.Rule.ExpiresAt)
+	if result.Rule.ExpiresAt != nil {
+		t.Fatalf("failure-state manual block must be permanent: %#v", result.Rule.ExpiresAt)
 	}
 	if len(repo.resetIPs) != 0 {
 		t.Fatalf("manual block must preserve failure state: %#v", repo.resetIPs)
 	}
 }
 
-func TestIPAccessControlBlockFailureStateReturnsExistingBlockIdempotently(t *testing.T) {
+func TestIPAccessControlBlockFailureStateReturnsPermanentManualBlockWhenAlreadyBlocked(t *testing.T) {
 	settings := &ipAccessSettingRepoStub{values: map[string]string{
 		SettingKeyGlobalIPAccessControlEnabled: "true",
 		SettingKeyIPAccessControlEnabled:       "true",
@@ -614,10 +628,14 @@ func TestIPAccessControlBlockFailureStateReturnsExistingBlockIdempotently(t *tes
 		ID: 88, IPOrCIDR: "203.0.113.0/24", RuleKind: IPAccessRuleKindAutoBlock,
 		Status: IPAccessRuleStatusActive, ExpiresAt: &expiresAt,
 	}
+	permanent := &IPAccessRule{
+		ID: 89, IPOrCIDR: "203.0.113.8", RuleKind: IPAccessRuleKindManualBlock,
+		Status: IPAccessRuleStatusActive,
+	}
 	repo := &ipAccessRepoStub{
 		rules: []*IPAccessRule{existing},
 		manualBlockResult: &IPFailureStateBlockRepositoryResult{
-			Rule: existing, AlreadyBlocked: true,
+			Rule: permanent, AlreadyBlocked: true,
 		},
 	}
 	svc := NewIPAccessControlService(settings, repo)
@@ -629,11 +647,12 @@ func TestIPAccessControlBlockFailureStateReturnsExistingBlockIdempotently(t *tes
 	if err != nil {
 		t.Fatalf("return existing block: %v", err)
 	}
-	if result == nil || !result.AlreadyBlocked || result.Rule == nil || result.Rule.ID != existing.ID || !result.EffectivelyBlocked {
+	if result == nil || !result.AlreadyBlocked || result.Rule == nil || result.Rule.ID != permanent.ID ||
+		result.Rule.ExpiresAt != nil || !result.EffectivelyBlocked {
 		t.Fatalf("unexpected idempotent result: %#v", result)
 	}
-	if len(repo.rules) != 1 {
-		t.Fatalf("idempotent action must not add a duplicate rule: %#v", repo.rules)
+	if len(repo.rules) != 2 {
+		t.Fatalf("quick block must add the permanent exact manual rule: %#v", repo.rules)
 	}
 }
 
@@ -683,6 +702,48 @@ func TestIPAccessControlBlockFailureStateFailsClosedWhenPostCommitRefreshFails(t
 	_, err := svc.BlockFailureState(context.Background(), "203.0.113.8", "", 7)
 	if infraerrors.Reason(err) != "IP_ACCESS_CONTROL_UNAVAILABLE" {
 		t.Fatalf("unconfirmed post-commit state must fail closed: %v", err)
+	}
+}
+
+func TestIPAccessControlBlockFailureStateRejectsInvalidRepositoryRule(t *testing.T) {
+	now := time.Now()
+	expiresAt := now.Add(time.Hour)
+	tests := []struct {
+		name string
+		rule *IPAccessRule
+	}{
+		{
+			name: "temporary manual rule",
+			rule: &IPAccessRule{ID: 1, IPOrCIDR: "203.0.113.8", RuleKind: IPAccessRuleKindManualBlock, Status: IPAccessRuleStatusActive, ExpiresAt: &expiresAt},
+		},
+		{
+			name: "automatic rule",
+			rule: &IPAccessRule{ID: 2, IPOrCIDR: "203.0.113.8", RuleKind: IPAccessRuleKindAutoBlock, Status: IPAccessRuleStatusActive},
+		},
+		{
+			name: "different exact IP",
+			rule: &IPAccessRule{ID: 3, IPOrCIDR: "203.0.113.9", RuleKind: IPAccessRuleKindManualBlock, Status: IPAccessRuleStatusActive},
+		},
+		{
+			name: "inactive manual rule",
+			rule: &IPAccessRule{ID: 4, IPOrCIDR: "203.0.113.8", RuleKind: IPAccessRuleKindManualBlock, Status: IPAccessRuleStatusReleased},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			settings := &ipAccessSettingRepoStub{values: map[string]string{
+				SettingKeyGlobalIPAccessControlEnabled: "true",
+				SettingKeyIPAccessControlEnabled:       "true",
+			}}
+			repo := &ipAccessRepoStub{manualBlockResult: &IPFailureStateBlockRepositoryResult{Rule: test.rule}}
+			svc := NewIPAccessControlService(settings, repo)
+
+			_, err := svc.BlockFailureState(context.Background(), "203.0.113.8", "", 7)
+			if infraerrors.Reason(err) != "IP_ACCESS_CONTROL_UNAVAILABLE" {
+				t.Fatalf("invalid repository rule must fail closed: %v", err)
+			}
+		})
 	}
 }
 
@@ -907,6 +968,27 @@ func TestIPAccessControlInvalidPersistedLimitsUseSafeDefaults(t *testing.T) {
 		got.LoginFailureWindowMins != want.LoginFailureWindowMins ||
 		got.LoginFailureBlockMins != want.LoginFailureBlockMins {
 		t.Fatalf("invalid limits did not use defaults: %#v", got)
+	}
+}
+
+func TestIPAccessControlPersistedMaximumLimitsArePreserved(t *testing.T) {
+	settings := &ipAccessSettingRepoStub{values: map[string]string{
+		SettingKeyGlobalIPAccessControlEnabled: "true",
+		SettingKeyIPAccessControlEnabled:       "true",
+		SettingKeyLoginFailureAutoBlockEnabled: "true",
+		SettingKeyLoginFailureIPThreshold:      "2",
+		SettingKeyLoginFailureWindowMinutes:    "525600",
+		SettingKeyLoginFailureBlockMinutes:     "525600",
+	}}
+	svc := NewIPAccessControlService(settings, &ipAccessRepoStub{})
+
+	got, err := svc.GetSettings(context.Background())
+	if err != nil {
+		t.Fatalf("maximum persisted limits should load: %v", err)
+	}
+	if got.LoginFailureWindowMins != maxLoginFailureControlMinutes ||
+		got.LoginFailureBlockMins != maxLoginFailureControlMinutes {
+		t.Fatalf("maximum persisted limits were not preserved: %#v", got)
 	}
 }
 

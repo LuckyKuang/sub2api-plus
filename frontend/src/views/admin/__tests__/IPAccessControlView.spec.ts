@@ -156,6 +156,14 @@ describe('IPAccessControlView', () => {
     })
   })
 
+  it('uses the one-year maximum for both failure window and block duration', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.findAll('input[type="number"][max="525600"]')).toHaveLength(2)
+    wrapper.unmount()
+  })
+
   it('refreshes failure status after saving enforcement settings', async () => {
     const wrapper = mountView()
     await flushPromises()
@@ -332,9 +340,9 @@ describe('IPAccessControlView', () => {
     expect(manualButton!.attributes('disabled')).toBeUndefined()
 
     const vm = wrapper.vm as any
-    getSettings.mockResolvedValueOnce({ ...defaultSettings, login_failure_block_minutes: 120 })
+    getSettings.mockClear()
     await vm.confirmManualBlock(state)
-    expect(vm.settings.login_failure_block_minutes).toBe(120)
+    expect(getSettings).not.toHaveBeenCalled()
     listFailureStates.mockClear()
     listRules.mockClear()
     const firstSubmit = vm.manualBlockFailureState()
@@ -404,8 +412,7 @@ describe('IPAccessControlView', () => {
 
     vm.failureStatesUnavailable = false
     vm.settingsUnavailable = true
-    expect(vm.manualBlockDisabledReason({ ...base, runtime_enforcement_enabled: true }))
-      .toBe('admin.ipAccessControl.failureStates.manualBlockDisabledSettings')
+    expect(vm.manualBlockDisabledReason({ ...base, runtime_enforcement_enabled: true })).toBe('')
     vm.settingsUnavailable = false
     expect(vm.manualBlockDisabledReason({ ...base, suppressed_by_allow_rule: true }))
       .toBe('admin.ipAccessControl.failureStates.manualBlockDisabledAllow')
@@ -453,18 +460,26 @@ describe('IPAccessControlView', () => {
     wrapper.unmount()
   })
 
-  it('refreshes visible failure states on the low-frequency timer', async () => {
+  it('refreshes failure states only after an explicit action', async () => {
     vi.useFakeTimers()
-    const wrapper = mountView()
-    await flushPromises()
-    listFailureStates.mockClear()
+    try {
+      const wrapper = mountView()
+      await flushPromises()
+      listFailureStates.mockClear()
 
-    vi.advanceTimersByTime(15_000)
-    await flushPromises()
+      vi.advanceTimersByTime(60_000)
+      document.dispatchEvent(new Event('visibilitychange'))
+      await flushPromises()
 
-    expect(listFailureStates).toHaveBeenCalledTimes(1)
-    wrapper.unmount()
-    vi.useRealTimers()
+      expect(listFailureStates).not.toHaveBeenCalled()
+      const vm = wrapper.vm as any
+      vm.refreshFailureStates()
+      await flushPromises()
+      expect(listFailureStates).toHaveBeenCalledTimes(1)
+      wrapper.unmount()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('marks displayed failure data stale when refresh fails', async () => {
