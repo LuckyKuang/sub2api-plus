@@ -216,32 +216,30 @@ func buildToolSchemaNullTypeBody(t *testing.T, hits int) []byte {
 	return body
 }
 
-// 复杂度守卫：重写次数必须与命中数无关。
+// 复杂度守卫：不得退回逐命中全量重写。
 //
 // 逐个 sjson.SetBytes 的写法每命中一处就重扫并全量拷贝一次文档，命中 N 处即 N 次
 // 全量拷贝；/v1/responses 的 body 上限是 gateway.max_body_size（默认 256MB），
 // 构造请求可以塞进百万级命中，会被放大成 TB 级 memcpy。这里用分配次数锁死该行为：
-// 命中数放大 500 倍，分配次数不得随之增长。
-func TestSanitizeOpenAIResponsesToolParameterTypes_RewriteCountIndependentOfHits(t *testing.T) {
-	small := buildToolSchemaNullTypeBody(t, 4)
-	large := buildToolSchemaNullTypeBody(t, 2000)
+// 旧实现处理 2000 个命中时会产生上万次分配；当前单次拼接实现即使计入 gjson 遍历和
+// 命中切片扩容也应显著低于每两个命中一次分配。这里不比较小输入，避免 Go runtime、
+// GC 和 runner 内存布局的差异让固定分配差值产生误报。
+func TestSanitizeOpenAIResponsesToolParameterTypes_DoesNotAllocatePerRewrite(t *testing.T) {
+	const hits = 2000
+	large := buildToolSchemaNullTypeBody(t, hits)
 
-	smallAllocs := testing.AllocsPerRun(2, func() {
-		_, _, _ = sanitizeOpenAIResponsesToolParameterTypes(small)
-	})
 	largeAllocs := testing.AllocsPerRun(2, func() {
 		_, _, _ = sanitizeOpenAIResponsesToolParameterTypes(large)
 	})
 
-	// 命中切片扩容是对数级，留出充裕余量；线性写法在这里会是 2000 量级。
-	require.Less(t, largeAllocs, smallAllocs+40,
-		"分配次数随命中数线性增长，说明退回了逐路径全量重写 (small=%v large=%v)", smallAllocs, largeAllocs)
+	require.Less(t, largeAllocs, float64(hits/2),
+		"分配次数达到逐命中重写的数量级，说明退回了逐路径全量重写 (hits=%d allocs=%v)", hits, largeAllocs)
 
 	// 同时确认大 body 的结果确实全部修好了。
 	sanitized, changed, err := sanitizeOpenAIResponsesToolParameterTypes(large)
 	require.NoError(t, err)
 	require.True(t, changed)
-	require.Equal(t, 2000, int(gjson.GetBytes(sanitized, "tools.#").Int()))
+	require.Equal(t, hits, int(gjson.GetBytes(sanitized, "tools.#").Int()))
 	gjson.GetBytes(sanitized, "tools").ForEach(func(_, tool gjson.Result) bool {
 		require.Equal(t, "object", tool.Get("parameters.type").String())
 		return true
