@@ -22,6 +22,7 @@
           <span>/</span>
           <span class="group relative inline-flex cursor-help items-center gap-0.5" tabindex="0">
             <span>{{ cacheLabel() }}: {{ formatTokens(totalCacheTokens) }} <span v-if="tokenShare(totalCacheTokens)" class="text-gray-400">({{ tokenShare(totalCacheTokens) }})</span></span>
+            <span v-if="cacheHitRate">/ {{ t('usage.cacheHitRate') }}: {{ cacheHitRate }}</span>
             <svg
               class="h-3.5 w-3.5 text-gray-400"
               fill="none"
@@ -94,7 +95,7 @@ import { useI18n } from 'vue-i18n'
 import type { AdminUsageStatsResponse } from '@/api/admin/usage'
 import type { UsageStatsResponse } from '@/types'
 import Icon from '@/components/icons/Icon.vue'
-import { formatTokenShare, sumTokenBuckets } from '@/utils/tokenShare'
+import { formatPromptCacheHitRate, formatTokenShare, sumTokenBuckets } from '@/utils/tokenShare'
 
 const props = withDefaults(defineProps<{
   stats: (AdminUsageStatsResponse | UsageStatsResponse) | null
@@ -117,6 +118,12 @@ const strikeStandardCost = computed(() => props.strikeStandardCost)
 const totalCacheTokens = computed(() => sumTokenBuckets(
   props.stats?.total_cache_creation_tokens,
   props.stats?.total_cache_read_tokens,
+))
+
+const cacheHitRate = computed(() => formatPromptCacheHitRate(
+  props.stats?.total_input_tokens,
+  props.stats?.total_cache_read_tokens,
+  props.stats?.total_cache_creation_tokens,
 ))
 
 const tokenShare = (tokens: number | null | undefined): string | null =>

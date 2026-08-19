@@ -143,4 +143,43 @@ describe('admin DashboardView', () => {
       granularity: 'hour'
     }))
   })
+
+  it('shows prompt cache hit rate without output tokens in the denominator', async () => {
+    getSnapshotV2.mockResolvedValueOnce({
+      stats: {
+        ...createDashboardStats(),
+        today_input_tokens: 100,
+        today_output_tokens: 900,
+        today_cache_creation_tokens: 50,
+        today_cache_read_tokens: 50,
+        today_tokens: 1100,
+        total_input_tokens: 100,
+        total_output_tokens: 900,
+        total_cache_creation_tokens: 50,
+        total_cache_read_tokens: 50,
+        total_tokens: 1100
+      },
+      trend: [],
+      models: []
+    })
+
+    const wrapper = mount(DashboardView, {
+      global: {
+        stubs: {
+          AppLayout: { template: '<div><slot /></div>' },
+          LoadingSpinner: true,
+          Icon: true,
+          DateRangePicker: true,
+          Select: true,
+          ModelDistributionChart: true,
+          TokenUsageTrend: true,
+          Line: true
+        }
+      }
+    })
+
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('dashboard.cacheHitRate 25.0%')
+  })
 })

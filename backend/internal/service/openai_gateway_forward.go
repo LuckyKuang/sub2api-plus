@@ -486,7 +486,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		if gjson.GetBytes(body, "max_completion_tokens").Exists() && (account.Type == AccountTypeAPIKey || account.Platform != PlatformOpenAI) {
 			markPatchDelete("max_completion_tokens")
 		}
-		for _, unsupportedField := range []string{"prompt_cache_retention", "safety_identifier", "prompt_cache_options"} {
+		for _, unsupportedField := range []string{"prompt_cache_retention", "safety_identifier"} {
 			if gjson.GetBytes(body, unsupportedField).Exists() {
 				markPatchDelete(unsupportedField)
 			}
@@ -552,6 +552,28 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			}
 			requestView = newOpenAIRequestView(body)
 		}
+	}
+	if normalizedBody, changed, normalizeErr := normalizeOpenAIPromptCacheControlsForAccount(body, account, upstreamModel); normalizeErr != nil {
+		return nil, normalizeErr
+	} else if changed {
+		body = normalizedBody
+		requestView = newOpenAIRequestView(body)
+		reqBody = nil
+	}
+	var cacheIdentityChanged bool
+	body, promptCacheKey, cacheIdentityChanged, err = s.ensureOpenAIResponsesPromptCacheIdentity(
+		c,
+		account,
+		body,
+		promptCacheKey,
+		upstreamModel,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if cacheIdentityChanged {
+		requestView = newOpenAIRequestView(body)
+		reqBody = nil
 	}
 	imageBillingModel := ""
 	imageSizeTier := ""
@@ -1138,6 +1160,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 		// 清除客户端透传的 session 头，后续用隔离后的值重新设置，防止跨用户会话碰撞。
 		clientConversationID := strings.TrimSpace(req.Header.Get("conversation_id"))
 		req.Header.Del("conversation_id")
+		req.Header.Del(codexSessionIDHeader)
 		req.Header.Del("session_id")
 
 		if compatMessagesBridge {
@@ -1152,20 +1175,20 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 				req.Header.Set("version", codexCLIVersion)
 			}
 			compactSession := resolveOpenAICompactSessionID(c)
-			upstreamSessionID, err := s.resolveOpenAIUpstreamSessionID(c, account, compactSession)
+			upstreamSessionID, err := s.resolveOpenAIUpstreamPromptCacheHeaderIdentity(c, account, compactSession)
 			if err != nil {
 				return nil, err
 			}
-			req.Header.Set("session_id", upstreamSessionID)
+			setOpenAIUpstreamSessionIdentity(req.Header, upstreamSessionID)
 		} else {
 			req.Header.Set("accept", "text/event-stream")
 		}
 		if promptCacheKey != "" {
-			isolated, err := s.resolveOpenAIUpstreamSessionID(c, account, promptCacheKey)
+			isolated, err := s.resolveOpenAIUpstreamPromptCacheHeaderIdentity(c, account, promptCacheKey)
 			if err != nil {
 				return nil, err
 			}
-			req.Header.Set("session_id", isolated)
+			setOpenAIUpstreamSessionIdentity(req.Header, isolated)
 			if !compatMessagesBridge || clientConversationID != "" {
 				req.Header.Set("conversation_id", isolated)
 			}
@@ -1175,6 +1198,14 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 		// 避免 OpenAI 兼容网关按 SSE 返回（#3777 期望行为 4）。
 		req.Header.Set("accept", "application/json")
 	}
+	if account.Type != AccountTypeOAuth && promptCacheKey != "" {
+		identity, err := s.resolveOpenAIUpstreamPromptCacheHeaderIdentity(c, account, promptCacheKey)
+		if err != nil {
+			return nil, err
+		}
+		setOpenAIUpstreamSessionIdentity(req.Header, identity)
+	}
+	alignOpenAICodexThreadHeaders(req.Header)
 
 	// 指纹收敛：使用 Forward() 中预计算的收敛 ID 改写出站头，与请求体使用同一份 IDs。
 	// 必须发生在 Plus 出站身份收口之前，且不得改写 UA / originator / version。
@@ -1196,6 +1227,13 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 
 	// 账号级请求头覆写（仅 openai api_key 账号启用时生效；OAuth 路径 no-op）
 	account.ApplyHeaderOverrides(req.Header)
+	// Fingerprint convergence owns device/thread metadata, while the finalized
+	// body key owns the cache session. Re-apply it after every generic header
+	// mutation so prompt_cache_key/session-id/session_id cannot drift.
+	if err := s.alignOpenAIUpstreamSessionIdentityFromBody(c, account, req.Header, body); err != nil {
+		return nil, err
+	}
+	alignOpenAICodexThreadHeaders(req.Header)
 	identity := s.applyOpenAIOutboundIdentity(ctx, account, req.Header, account.Type == AccountTypeOAuth)
 	SetOpsRoutingDiagnostics(c, &OpsRoutingDiagnostics{OutboundIdentitySource: identity.Source})
 	// x-codex-beta-features：按真实 Codex 的会话级行为补注（在账号级覆写之后，

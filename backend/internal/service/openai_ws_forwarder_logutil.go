@@ -65,7 +65,10 @@ func resolveOpenAIWSSessionHeaders(c *gin.Context, promptCacheKey string) openAI
 		ConversationSource: "none",
 	}
 	if c != nil && c.Request != nil {
-		if sessionID := strings.TrimSpace(c.Request.Header.Get("session_id")); sessionID != "" {
+		if sessionID := strings.TrimSpace(c.Request.Header.Get(codexSessionIDHeader)); sessionID != "" {
+			resolution.SessionID = sessionID
+			resolution.SessionSource = "header_session_id_canonical"
+		} else if sessionID := strings.TrimSpace(c.Request.Header.Get("session_id")); sessionID != "" {
 			resolution.SessionID = sessionID
 			resolution.SessionSource = "header_session_id"
 		}
@@ -81,9 +84,9 @@ func resolveOpenAIWSSessionHeaders(c *gin.Context, promptCacheKey string) openAI
 
 	cacheKey := strings.TrimSpace(promptCacheKey)
 	if cacheKey != "" {
-		if resolution.SessionID == "" {
+		if resolution.SessionID == "" || isOpenAIAlignedPromptCacheIdentity(c, cacheKey) {
 			resolution.SessionID = cacheKey
-			resolution.SessionSource = "prompt_cache_key"
+			resolution.SessionSource = "prompt_cache_key_aligned"
 		}
 	}
 	return resolution

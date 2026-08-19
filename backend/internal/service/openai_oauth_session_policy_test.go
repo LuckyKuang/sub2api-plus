@@ -445,14 +445,18 @@ func TestOpenAIOAuthSessionPolicyIsAppliedByAllOutboundBuilders(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	expected, err := service.resolveOpenAIUpstreamSessionID(ordinaryContext, &account, "shared-session")
+	namespacedExpected, err := service.resolveOpenAIUpstreamSessionID(ordinaryContext, &account, "shared-session")
 	require.NoError(t, err)
+	expected := generateSessionUUID(namespacedExpected)
 	require.Equal(t, expected, ordinary.Header.Get("session_id"))
+	require.Equal(t, expected, ordinary.Header.Get(codexSessionIDHeader))
 	require.Equal(t, expected, ordinary.Header.Get("conversation_id"))
 	require.Equal(t, expected, passthrough.Header.Get("session_id"))
+	require.Equal(t, expected, passthrough.Header.Get(codexSessionIDHeader))
 	require.Equal(t, expected, passthrough.Header.Get("conversation_id"))
 	require.Equal(t, expected, wsHeaders.Get("session_id"))
-	require.Equal(t, expected, wsHeaders.Get("conversation_id"))
+	require.Equal(t, expected, wsHeaders.Get(codexSessionIDHeader))
+	require.Equal(t, namespacedExpected, wsHeaders.Get("conversation_id"))
 }
 
 func TestOpenAIOAuthSessionPolicyOutboundBuildersRejectUnauthorizedGroup(t *testing.T) {

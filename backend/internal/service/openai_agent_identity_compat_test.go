@@ -14,6 +14,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
 )
 
 func TestAccountTestServiceOpenAICompactAgentIdentityUsesFreshAssertion(t *testing.T) {
@@ -127,17 +128,22 @@ func TestOpenAIAgentIdentityPassthroughKeepsSessionAndPromptCacheHeaders(t *test
 	c.Request.Header.Set("Authorization", "Bearer inbound-must-not-forward")
 
 	svc := &OpenAIGatewayService{}
+	body, cacheIdentity, changed, err := svc.ensureOpenAIResponsesPromptCacheIdentity(c, account, body, "cache-agent", "gpt-5.4")
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.NotEmpty(t, cacheIdentity)
 	req, err := svc.buildUpstreamRequestOpenAIPassthrough(context.Background(), c, account, body, "")
 	require.NoError(t, err)
 	require.Equal(t, "AgentAssertion", strings.SplitN(req.Header.Get("Authorization"), " ", 2)[0])
 	require.Equal(t, "account-agent-passthrough", req.Header.Get("chatgpt-account-id"))
 	require.NotEqual(t, "client-session", req.Header.Get("session_id"))
 	require.NotEqual(t, "client-conversation", req.Header.Get("conversation_id"))
-	require.Equal(t, isolateOpenAISessionID(0, "client-session"), req.Header.Get("session_id"))
-	require.Equal(t, isolateOpenAISessionID(0, "client-conversation"), req.Header.Get("conversation_id"))
+	require.Equal(t, cacheIdentity, req.Header.Get(codexSessionIDHeader))
+	require.Equal(t, cacheIdentity, req.Header.Get("session_id"))
+	require.Equal(t, generateSessionUUID(isolateOpenAISessionID(0, "client-conversation")), req.Header.Get("conversation_id"))
 	requestBody, err := io.ReadAll(req.Body)
 	require.NoError(t, err)
-	require.Contains(t, string(requestBody), `"prompt_cache_key":"cache-agent"`)
+	require.Equal(t, cacheIdentity, gjson.GetBytes(requestBody, "prompt_cache_key").String())
 
 	// Authentication mode must not affect session isolation or prompt-cache
 	// behavior. Compare the same request with the existing OAuth path instead
@@ -155,7 +161,11 @@ func TestOpenAIAgentIdentityPassthroughKeepsSessionAndPromptCacheHeaders(t *test
 	oauthContext.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
 	oauthContext.Request.Header.Set("session_id", "client-session")
 	oauthContext.Request.Header.Set("conversation_id", "client-conversation")
-	oauthReq, err := svc.buildUpstreamRequestOpenAIPassthrough(context.Background(), oauthContext, oauthAccount, body, "oauth-token")
+	oauthBody := []byte(`{"model":"gpt-5.4","instructions":"Reply OK","input":[],"stream":true,"prompt_cache_key":"cache-agent"}`)
+	oauthBody, oauthCacheIdentity, _, err := svc.ensureOpenAIResponsesPromptCacheIdentity(oauthContext, oauthAccount, oauthBody, "cache-agent", "gpt-5.4")
+	require.NoError(t, err)
+	require.Equal(t, cacheIdentity, oauthCacheIdentity)
+	oauthReq, err := svc.buildUpstreamRequestOpenAIPassthrough(context.Background(), oauthContext, oauthAccount, oauthBody, "oauth-token")
 	require.NoError(t, err)
 	require.Equal(t, oauthReq.Header.Get("session_id"), req.Header.Get("session_id"))
 	require.Equal(t, oauthReq.Header.Get("conversation_id"), req.Header.Get("conversation_id"))

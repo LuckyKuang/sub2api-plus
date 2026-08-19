@@ -133,9 +133,10 @@ server:
 
 Define shared zones in the `http` block. Tune rates to measured legitimate
 traffic; the values below are conservative starting points, not universal
-capacity targets. Keep `underscores_in_headers on;` in this `http` block for
-Codex CLI and CRS-compatible clients: Nginx otherwise drops underscore headers
-such as `session_id`, breaking sticky session routing in multi-account setups.
+capacity targets. Current Codex uses `session-id`, but legacy Codex and
+CRS-compatible clients may still send `session_id`. Keep
+`underscores_in_headers on;` in this `http` block because Nginx otherwise drops
+the legacy underscore header and breaks sticky routing for those clients.
 
 ```nginx
 underscores_in_headers on;

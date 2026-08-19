@@ -301,8 +301,9 @@ func normalizeOpenAICompactRequestBody(body []byte) ([]byte, bool, error) {
 	}
 
 	normalized := []byte(`{}`)
-	// Keep the current Codex /compact schema while still dropping request-scoped
-	// fields such as prompt_cache_key, store, and stream.
+	// Keep the union of the current Codex /compact payload and the public
+	// Platform Compact cache controls. Account/model-aware filtering happens
+	// only after account selection; store and stream remain request-scoped.
 	for _, field := range []string{
 		"model",
 		"input",
@@ -311,6 +312,8 @@ func normalizeOpenAICompactRequestBody(body []byte) ([]byte, bool, error) {
 		"parallel_tool_calls",
 		"reasoning",
 		"service_tier",
+		"prompt_cache_key",
+		"prompt_cache_options",
 		"text",
 		"previous_response_id",
 	} {
@@ -359,6 +362,9 @@ func normalizeOpenAICodexCompactReasoningEffort(body []byte, effectiveModel stri
 
 func resolveOpenAICompactSessionID(c *gin.Context) string {
 	if c != nil {
+		if sessionID := strings.TrimSpace(c.GetHeader(codexSessionIDHeader)); sessionID != "" {
+			return sessionID
+		}
 		if sessionID := strings.TrimSpace(c.GetHeader("session_id")); sessionID != "" {
 			return sessionID
 		}
@@ -371,7 +377,7 @@ func resolveOpenAICompactSessionID(c *gin.Context) string {
 			}
 		}
 	}
-	return uuid.NewString()
+	return ""
 }
 
 // openAIResponsesRequestPathSuffix 返回可拼接到上游 /responses URL 后面的子路径。

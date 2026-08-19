@@ -73,6 +73,65 @@ func TestResponsesUsageNestedCacheWritePresenceOverridesTopLevelAlias(t *testing
 	}
 }
 
+func TestResponsesUsageTopLevelCacheWriteAliasesUsePresencePriority(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		payload string
+		want    int
+	}{
+		{name: "cache_write_tokens", payload: `{"cache_write_tokens":7}`, want: 7},
+		{name: "cache_creation_input_tokens", payload: `{"cache_creation_input_tokens":6}`, want: 6},
+		{name: "cache_write_input_tokens", payload: `{"cache_write_input_tokens":5}`, want: 5},
+		{name: "cache_creation_tokens", payload: `{"cache_creation_tokens":4}`, want: 4},
+		{name: "first explicit zero wins", payload: `{"cache_write_tokens":0,"cache_creation_input_tokens":19}`, want: 0},
+		{name: "negative clamps and wins", payload: `{"cache_write_tokens":-1,"cache_creation_input_tokens":19}`, want: 0},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var usage ResponsesUsage
+			require.NoError(t, json.Unmarshal([]byte(tt.payload), &usage))
+			require.Equal(t, tt.want, usage.CacheCreationInputTokens)
+		})
+	}
+}
+
+func TestResponsesUsageTopLevelCacheReadAliasesFallback(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		payload string
+		want    int
+	}{
+		{name: "cache_read_input_tokens", payload: `{"input_tokens":20,"cache_read_input_tokens":7}`, want: 7},
+		{name: "cache_read_tokens", payload: `{"input_tokens":20,"cache_read_tokens":6}`, want: 6},
+		{name: "cached_tokens", payload: `{"input_tokens":20,"cached_tokens":5}`, want: 5},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var usage ResponsesUsage
+			require.NoError(t, json.Unmarshal([]byte(tt.payload), &usage))
+			require.NotNil(t, usage.InputTokensDetails)
+			require.Equal(t, tt.want, usage.InputTokensDetails.CachedTokens)
+		})
+	}
+}
+
+func TestResponsesUsageNestedCacheReadPresenceOverridesTopLevelAlias(t *testing.T) {
+	for _, tt := range []struct {
+		name       string
+		nestedJSON string
+		want       int
+	}{
+		{name: "explicit zero", nestedJSON: `{"cached_tokens":0}`, want: 0},
+		{name: "nonzero", nestedJSON: `{"cached_tokens":7}`, want: 7},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var usage ResponsesUsage
+			payload := []byte(`{"input_tokens":20,"cache_read_input_tokens":19,"input_tokens_details":` + tt.nestedJSON + `}`)
+			require.NoError(t, json.Unmarshal(payload, &usage))
+			require.NotNil(t, usage.InputTokensDetails)
+			require.Equal(t, tt.want, usage.InputTokensDetails.CachedTokens)
+		})
+	}
+}
+
 func TestChatCompletionsToResponses_SystemMessage(t *testing.T) {
 	req := &ChatCompletionsRequest{
 		Model: "gpt-4o",

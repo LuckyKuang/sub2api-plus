@@ -171,6 +171,7 @@ export default {
     todayTokens: '今日 Tokens',
     todayCacheCreation: '今日缓存创建',
     todayCacheRead: '今日缓存读取',
+    todayCacheHitRate: '今日缓存命中率',
     todayCost: '今日费用',
     rpmTpm: 'RPM / TPM',
     totalRequests: '累计请求',
@@ -179,6 +180,7 @@ export default {
     totalTokensLabel: '累计 Tokens',
     totalCacheCreation: '累计缓存创建',
     totalCacheRead: '累计缓存读取',
+    totalCacheHitRate: '累计缓存命中率',
     totalCost: '累计费用',
     avgDuration: '平均耗时',
     // Messages

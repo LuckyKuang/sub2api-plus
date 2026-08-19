@@ -126,6 +126,7 @@ const (
 var openAIChatGPTInternalUnsupportedFields = []string{
 	"user",
 	"metadata",
+	"prompt_cache_options",
 	"prompt_cache_retention",
 	"safety_identifier",
 	"stream_options",

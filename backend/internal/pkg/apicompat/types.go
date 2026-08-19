@@ -499,16 +499,21 @@ func (u *ResponsesUsage) UnmarshalJSON(data []byte) error {
 	type cacheTokenPresence struct {
 		CacheCreationTokens *int `json:"cache_creation_tokens"`
 		CacheWriteTokens    *int `json:"cache_write_tokens"`
+		CachedTokens        *int `json:"cached_tokens"`
 	}
 	var aux struct {
 		responsesUsageAlias
-		PromptTokens            int                           `json:"prompt_tokens"`
-		CompletionTokens        int                           `json:"completion_tokens"`
-		CacheCreationTokens     int                           `json:"cache_creation_tokens"`
-		CacheWriteInputTokens   int                           `json:"cache_write_input_tokens"`
-		CacheWriteTokens        int                           `json:"cache_write_tokens"`
-		PromptTokensDetails     *ResponsesInputTokensDetails  `json:"prompt_tokens_details,omitempty"`
-		CompletionTokensDetails *ResponsesOutputTokensDetails `json:"completion_tokens_details,omitempty"`
+		PromptTokens             int                           `json:"prompt_tokens"`
+		CompletionTokens         int                           `json:"completion_tokens"`
+		CacheCreationInputTokens *int                          `json:"cache_creation_input_tokens"`
+		CacheCreationTokens      *int                          `json:"cache_creation_tokens"`
+		CacheWriteInputTokens    *int                          `json:"cache_write_input_tokens"`
+		CacheWriteTokens         *int                          `json:"cache_write_tokens"`
+		CacheReadInputTokens     *int                          `json:"cache_read_input_tokens"`
+		CacheReadTokens          *int                          `json:"cache_read_tokens"`
+		CachedTokens             *int                          `json:"cached_tokens"`
+		PromptTokensDetails      *ResponsesInputTokensDetails  `json:"prompt_tokens_details,omitempty"`
+		CompletionTokensDetails  *ResponsesOutputTokensDetails `json:"completion_tokens_details,omitempty"`
 	}
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
@@ -527,21 +532,51 @@ func (u *ResponsesUsage) UnmarshalJSON(data []byte) error {
 	if u.OutputTokens == 0 && aux.CompletionTokens != 0 {
 		u.OutputTokens = aux.CompletionTokens
 	}
-	if u.CacheCreationInputTokens == 0 {
-		switch {
-		case aux.CacheWriteInputTokens > 0:
-			u.CacheCreationInputTokens = aux.CacheWriteInputTokens
-		case aux.CacheCreationTokens > 0:
-			u.CacheCreationInputTokens = aux.CacheCreationTokens
-		case aux.CacheWriteTokens > 0:
-			u.CacheCreationInputTokens = aux.CacheWriteTokens
-		}
+	var fallbackCacheCreationTokens *int
+	switch {
+	case aux.CacheWriteTokens != nil:
+		fallbackCacheCreationTokens = aux.CacheWriteTokens
+	case aux.CacheCreationInputTokens != nil:
+		fallbackCacheCreationTokens = aux.CacheCreationInputTokens
+	case aux.CacheWriteInputTokens != nil:
+		fallbackCacheCreationTokens = aux.CacheWriteInputTokens
+	case aux.CacheCreationTokens != nil:
+		fallbackCacheCreationTokens = aux.CacheCreationTokens
+	}
+	if fallbackCacheCreationTokens != nil {
+		u.CacheCreationInputTokens = max(*fallbackCacheCreationTokens, 0)
 	}
 	if u.InputTokensDetails == nil && aux.PromptTokensDetails != nil {
 		u.InputTokensDetails = aux.PromptTokensDetails
 	}
 	if u.OutputTokensDetails == nil && aux.CompletionTokensDetails != nil {
 		u.OutputTokensDetails = aux.CompletionTokensDetails
+	}
+	var canonicalCacheReadTokens *int
+	switch {
+	case nestedPresence.InputTokensDetails != nil && nestedPresence.InputTokensDetails.CachedTokens != nil:
+		canonicalCacheReadTokens = nestedPresence.InputTokensDetails.CachedTokens
+	case nestedPresence.PromptTokensDetails != nil && nestedPresence.PromptTokensDetails.CachedTokens != nil:
+		canonicalCacheReadTokens = nestedPresence.PromptTokensDetails.CachedTokens
+	}
+	var fallbackCacheReadTokens *int
+	switch {
+	case aux.CacheReadInputTokens != nil:
+		fallbackCacheReadTokens = aux.CacheReadInputTokens
+	case aux.CacheReadTokens != nil:
+		fallbackCacheReadTokens = aux.CacheReadTokens
+	case aux.CachedTokens != nil:
+		fallbackCacheReadTokens = aux.CachedTokens
+	}
+	if canonicalCacheReadTokens != nil || fallbackCacheReadTokens != nil {
+		if u.InputTokensDetails == nil {
+			u.InputTokensDetails = &ResponsesInputTokensDetails{}
+		}
+		if canonicalCacheReadTokens != nil {
+			u.InputTokensDetails.CachedTokens = max(*canonicalCacheReadTokens, 0)
+		} else {
+			u.InputTokensDetails.CachedTokens = max(*fallbackCacheReadTokens, 0)
+		}
 	}
 	var canonicalCacheCreationTokens *int
 	switch {

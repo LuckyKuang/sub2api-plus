@@ -572,9 +572,10 @@ For a complete Cloudflare orange-cloud, same-host Nginx, systemd binary, and
 global IP access-control walkthrough, see the
 [Chinese Cloudflare IP blocking tutorial](CLOUDFLARE_IP_ACCESS_CONTROL_CN.md).
 
-Codex CLI and CRS-compatible clients send `session_id`. Nginx drops headers
-containing underscores by default, which breaks sticky session routing in
-multi-account setups. Add this directive to the Nginx `http` block:
+Current Codex clients send `session-id`; legacy Codex and CRS-compatible clients
+may still send `session_id`. Nginx drops underscore headers by default, which
+breaks sticky session routing for those clients in multi-account setups. Add
+this directive to the Nginx `http` block:
 
 ```nginx
 underscores_in_headers on;

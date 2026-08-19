@@ -466,6 +466,105 @@ func TestOpenAIWSHTTPBridgeRelaysSSEFramesAsWebSocketMessages(t *testing.T) {
 	require.True(t, gjson.GetBytes(upstream.lastBody, "stream").Bool())
 }
 
+func TestProxyOpenAIWSHTTPBridgeTurnFinalizesPromptCacheIdentity(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tests := []struct {
+		name                string
+		account             *Account
+		payload             string
+		wantOptions         bool
+		wantGeneratedKey    bool
+		wantOriginalKeyGone bool
+	}{
+		{
+			name: "gpt_5_6_api_key_preserves_options_and_aligns_explicit_key",
+			account: &Account{
+				ID:          81,
+				Platform:    PlatformOpenAI,
+				Type:        AccountTypeAPIKey,
+				Concurrency: 1,
+			},
+			payload:             `{"type":"response.create","model":"gpt-5.6","input":"hello","prompt_cache_key":"client-cache-key","prompt_cache_options":{"retention":"24h"}}`,
+			wantOptions:         true,
+			wantOriginalKeyGone: true,
+		},
+		{
+			name: "gpt_5_6_oauth_removes_unsupported_options_and_aligns_explicit_key",
+			account: &Account{
+				ID:          82,
+				Platform:    PlatformOpenAI,
+				Type:        AccountTypeOAuth,
+				Concurrency: 1,
+			},
+			payload:             `{"type":"response.create","model":"gpt-5.6","input":"hello","prompt_cache_key":"oauth-cache-key","prompt_cache_options":{"retention":"24h"}}`,
+			wantOriginalKeyGone: true,
+		},
+		{
+			name: "api_key_derives_identity_from_meaningful_input",
+			account: &Account{
+				ID:          83,
+				Platform:    PlatformOpenAI,
+				Type:        AccountTypeAPIKey,
+				Concurrency: 1,
+			},
+			payload:          `{"type":"response.create","model":"gpt-5.6","input":[{"role":"user","content":"stable first turn"}]}`,
+			wantGeneratedKey: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			upstream := &httpUpstreamRecorder{resp: &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+				Body: io.NopCloser(strings.NewReader(strings.Join([]string{
+					`data: {"type":"response.created","response":{"id":"resp_cache_bridge","model":"gpt-5.6"}}`,
+					"",
+					`data: {"type":"response.completed","response":{"id":"resp_cache_bridge","model":"gpt-5.6","usage":{"input_tokens":3,"output_tokens":1}}}`,
+					"",
+				}, "\n"))),
+			}}
+			svc := &OpenAIGatewayService{
+				cfg:          &config.Config{Gateway: config.GatewayConfig{MaxLineSize: defaultMaxLineSize}},
+				httpUpstream: upstream,
+			}
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Request = httptest.NewRequest(http.MethodGet, "/v1/responses", nil)
+			c.Request.Header.Set("thread-id", "thread-cache-bridge")
+			var events [][]byte
+
+			result, err := svc.proxyOpenAIWSHTTPBridgeTurn(
+				context.Background(), c, tt.account, "access-token", []byte(tt.payload), len(tt.payload),
+				"gpt-5.6", "", "", "", "", 1,
+				func(message []byte) error {
+					events = append(events, append([]byte(nil), message...))
+					return nil
+				},
+			)
+
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			require.NotNil(t, upstream.lastReq)
+			require.Len(t, events, 2)
+
+			cacheIdentity := gjson.GetBytes(upstream.lastBody, "prompt_cache_key").String()
+			require.NotEmpty(t, cacheIdentity)
+			require.Equal(t, cacheIdentity, upstream.lastReq.Header.Get(codexSessionIDHeader))
+			require.Equal(t, cacheIdentity, upstream.lastReq.Header.Get("session_id"))
+			require.Equal(t, "thread-cache-bridge", upstream.lastReq.Header.Get("x-client-request-id"))
+			require.Equal(t, tt.wantOptions, gjson.GetBytes(upstream.lastBody, "prompt_cache_options").Exists())
+			if tt.wantOriginalKeyGone {
+				require.NotContains(t, []string{"client-cache-key", "oauth-cache-key"}, cacheIdentity)
+			}
+			if tt.wantGeneratedKey {
+				require.NotEqual(t, deriveOpenAIAnchoredContentSessionSeed([]byte(tt.payload)), cacheIdentity)
+			}
+		})
+	}
+}
+
 func TestProxyOpenAIWSHTTPBridgeTurnForGrokDefaultsEmptyModelTo45(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

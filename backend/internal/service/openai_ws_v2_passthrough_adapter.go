@@ -744,6 +744,28 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 		return NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, blocked.Message, blocked)
 	}
 	firstClientMessage = updatedFirst
+	if account.Platform != PlatformGrok {
+		cacheModel := strings.TrimSpace(gjson.GetBytes(firstClientMessage, "model").String())
+		if cacheModel == "" {
+			cacheModel = capturedSessionModel
+		}
+		cacheBody, _, normalizeErr := normalizeOpenAIPromptCacheControlsForAccount(firstClientMessage, account, cacheModel)
+		if normalizeErr != nil {
+			return fmt.Errorf("normalize first ws prompt cache options: %w", normalizeErr)
+		}
+		firstClientMessage = cacheBody
+		var cacheIdentityErr error
+		firstClientMessage, _, _, cacheIdentityErr = s.ensureOpenAIResponsesPromptCacheIdentity(
+			c,
+			account,
+			firstClientMessage,
+			strings.TrimSpace(gjson.GetBytes(firstClientMessage, "prompt_cache_key").String()),
+			cacheModel,
+		)
+		if cacheIdentityErr != nil {
+			return fmt.Errorf("resolve first ws prompt cache identity: %w", cacheIdentityErr)
+		}
+	}
 
 	// 在 policy filter 之后再提取 service_tier / reasoning_effort 用于
 	// usage 上报：filter
@@ -1013,6 +1035,35 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 				payload = s.ReplaceModelInBody(payload, model)
 			}
 			out, blocked, policyErr := s.applyOpenAIFastPolicyToWSResponseCreate(ctx, account, model, payload)
+			if policyErr == nil && blocked == nil && isResponseCreate && account.Platform != PlatformGrok {
+				cacheBody, _, normalizeErr := normalizeOpenAIPromptCacheControlsForAccount(out, account, model)
+				if normalizeErr != nil {
+					return payload, nil, normalizeErr
+				}
+				out = cacheBody
+				cacheIdentitySeed := strings.TrimSpace(gjson.GetBytes(out, "prompt_cache_key").String())
+				if cacheIdentitySeed == "" {
+					cacheIdentitySeed = promptCacheKey
+				}
+				framePromptCacheIdentity := ""
+				if cacheIdentitySeed != "" {
+					var cacheIdentityErr error
+					out, framePromptCacheIdentity, _, cacheIdentityErr = s.ensureOpenAIResponsesPromptCacheIdentity(
+						c,
+						account,
+						out,
+						cacheIdentitySeed,
+						model,
+					)
+					if cacheIdentityErr != nil {
+						return payload, nil, cacheIdentityErr
+					}
+				}
+				if strings.TrimSpace(framePromptCacheIdentity) != promptCacheKey {
+					err := errors.New("prompt_cache_key cannot change during websocket passthrough")
+					return payload, nil, NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, err.Error(), err)
+				}
+			}
 			// 多轮 passthrough usage：仅在成功（non-block / non-err）
 			// 的 response.create 帧上更新 usageMeta，使用
 			// filter 处理后的 payload，与首帧 policy-after-extract 语义

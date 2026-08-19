@@ -140,6 +140,22 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		return nil, policyErr
 	}
 	body = updatedBody
+	if normalizedBody, changed, normalizeErr := normalizeOpenAIPromptCacheControlsForAccount(body, account, policyModel); normalizeErr != nil {
+		return nil, normalizeErr
+	} else if changed {
+		body = normalizedBody
+	}
+	var cacheIdentityErr error
+	body, _, _, cacheIdentityErr = s.ensureOpenAIResponsesPromptCacheIdentity(
+		c,
+		account,
+		body,
+		strings.TrimSpace(gjson.GetBytes(body, "prompt_cache_key").String()),
+		policyModel,
+	)
+	if cacheIdentityErr != nil {
+		return nil, cacheIdentityErr
+	}
 
 	apiKey := getAPIKeyFromContext(c)
 	// 同一 attempt 的最终 model/body 只判定一次，权限检查与后续图片状态设置共用该结果。
@@ -475,7 +491,10 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 			return nil, fmt.Errorf("resolve chatgpt account headers: %w", err)
 		}
 		// 先保存客户端原始值，再做 compact 补充，避免后续统一隔离时读到已处理的值。
-		clientSessionID := strings.TrimSpace(req.Header.Get("session_id"))
+		clientSessionID := strings.TrimSpace(req.Header.Get(codexSessionIDHeader))
+		if clientSessionID == "" {
+			clientSessionID = strings.TrimSpace(req.Header.Get("session_id"))
+		}
 		clientConversationID := strings.TrimSpace(req.Header.Get("conversation_id"))
 		if isOpenAIResponsesCompactPath(c) {
 			req.Header.Set("accept", "application/json")
@@ -491,22 +510,23 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 		if req.Header.Get("originator") == "" {
 			req.Header.Set("originator", openai.CodexDefaultOriginator)
 		}
-		// 用隔离后的 session 标识符覆盖客户端透传值，防止跨用户会话碰撞。
-		if clientSessionID == "" {
+		// Body key is the canonical aligned cache identity. Prefer it over raw
+		// inbound session aliases so the upstream body/header pair cannot drift.
+		if promptCacheKey != "" {
 			clientSessionID = promptCacheKey
 		}
 		if clientConversationID == "" {
 			clientConversationID = promptCacheKey
 		}
 		if clientSessionID != "" {
-			upstreamSessionID, err := s.resolveOpenAIUpstreamSessionID(c, account, clientSessionID)
+			upstreamSessionID, err := s.resolveOpenAIUpstreamPromptCacheHeaderIdentity(c, account, clientSessionID)
 			if err != nil {
 				return nil, err
 			}
-			req.Header.Set("session_id", upstreamSessionID)
+			setOpenAIUpstreamSessionIdentity(req.Header, upstreamSessionID)
 		}
 		if clientConversationID != "" {
-			upstreamConversationID, err := s.resolveOpenAIUpstreamSessionID(c, account, clientConversationID)
+			upstreamConversationID, err := s.resolveOpenAIUpstreamPromptCacheHeaderIdentity(c, account, clientConversationID)
 			if err != nil {
 				return nil, err
 			}
@@ -518,6 +538,16 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 		// （#3777 期望行为 4）。
 		req.Header.Set("accept", "application/json")
 	}
+	if account.Type != AccountTypeOAuth {
+		if promptCacheKey := strings.TrimSpace(gjson.GetBytes(body, "prompt_cache_key").String()); promptCacheKey != "" {
+			identity, err := s.resolveOpenAIUpstreamPromptCacheHeaderIdentity(c, account, promptCacheKey)
+			if err != nil {
+				return nil, err
+			}
+			setOpenAIUpstreamSessionIdentity(req.Header, identity)
+		}
+	}
+	alignOpenAICodexThreadHeaders(req.Header)
 
 	// 指纹收敛：使用 forwardOpenAIPassthrough 中预计算的收敛 ID 改写出站头，
 	// 与请求体 client_metadata 共享同一份、且属于 credential owner 的 IDs。
@@ -536,6 +566,13 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 
 	// 账号级请求头覆写（仅 openai api_key 账号启用时生效；OAuth 路径 no-op）
 	account.ApplyHeaderOverrides(req.Header)
+	// Fingerprint convergence owns device/thread metadata, while the finalized
+	// body key owns the cache session. Re-apply it after every generic header
+	// mutation so prompt_cache_key/session-id/session_id cannot drift.
+	if err := s.alignOpenAIUpstreamSessionIdentityFromBody(c, account, req.Header, body); err != nil {
+		return nil, err
+	}
+	alignOpenAICodexThreadHeaders(req.Header)
 	identity := s.applyOpenAIOutboundIdentity(ctx, account, req.Header, account.Type == AccountTypeOAuth)
 	SetOpsRoutingDiagnostics(c, &OpsRoutingDiagnostics{OutboundIdentitySource: identity.Source})
 	// x-codex-beta-features：按真实 Codex 的会话级行为补注（在账号级覆写之后，

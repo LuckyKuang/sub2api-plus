@@ -720,14 +720,45 @@ func TestBuildUpstreamRequestOpenAIPassthrough_AppliesStoredFingerprint(t *testi
 	req, err := svc.buildUpstreamRequestOpenAIPassthrough(context.Background(), c, account, body, "test-token")
 	require.NoError(t, err)
 
+	assert.Equal(t, ids.sessionID, req.Header.Get("session-id"), "无 body cache key 时应保留指纹收敛 session-id")
 	assert.Equal(t, ids.sessionID, req.Header.Get("session_id"), "session 模式下出站 session_id 应为账号级收敛值")
 	assert.Equal(t, ids.installationID, req.Header.Get("x-codex-installation-id"))
 	assert.Equal(t, ids.windowID, req.Header.Get("x-codex-window-id"))
 	assert.Equal(t, ids.threadID, req.Header.Get("x-client-request-id"))
+	assert.Equal(t, ids.threadID, req.Header.Get("thread-id"))
 	turnMetadata := req.Header.Get("x-codex-turn-metadata")
 	require.NotEmpty(t, turnMetadata)
 	assert.Contains(t, turnMetadata, ids.sessionID, "turn-metadata JSON 中的 session_id 应被收敛")
 	assert.Contains(t, turnMetadata, `"sandbox":"seatbelt"`, "turn-metadata 未指定字段应原样保留")
+}
+
+func TestBuildUpstreamRequestOpenAIPassthrough_PromptCacheIdentityOverridesSessionFingerprint(t *testing.T) {
+	svc := &OpenAIGatewayService{}
+	account := newTestOAuthAccount(2003, map[string]any{
+		"openai_oauth_passthrough": true,
+		"codex_fingerprint_mode":   "session",
+	})
+
+	c := newFingerprintStageTestContext(t)
+	c.Request.Header.Set("session-id", "real-client-session")
+	c.Request.Header.Set("thread-id", "real-client-thread")
+	c.Request.Header.Set("originator", "codex_cli_rs")
+
+	ids := resolveCodexFingerprintIDsFromRequest(account, c.Request.Header)
+	require.NotNil(t, ids)
+	storeCodexFingerprintIDs(c, ids)
+
+	cacheIdentity := "51e296c6-3942-45c4-9e36-a909f2709590"
+	markOpenAIAlignedPromptCacheIdentity(c, account, cacheIdentity, cacheIdentity)
+	body := []byte(`{"model":"gpt-5.6-sol","input":[],"stream":true,"prompt_cache_key":"` + cacheIdentity + `"}`)
+	req, err := svc.buildUpstreamRequestOpenAIPassthrough(context.Background(), c, account, body, "test-token")
+	require.NoError(t, err)
+
+	assert.Equal(t, cacheIdentity, req.Header.Get("session-id"))
+	assert.Equal(t, cacheIdentity, req.Header.Get("session_id"))
+	assert.Equal(t, ids.installationID, req.Header.Get("x-codex-installation-id"))
+	assert.Equal(t, ids.threadID, req.Header.Get("thread-id"))
+	assert.Equal(t, ids.threadID, req.Header.Get("x-client-request-id"))
 }
 
 func TestBuildUpstreamRequestOpenAIPassthrough_OffModeKeepsIsolatedSession(t *testing.T) {

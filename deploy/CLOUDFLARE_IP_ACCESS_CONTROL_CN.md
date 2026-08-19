@@ -189,8 +189,9 @@ Debian、Ubuntu 等常见发行版默认在 `http` 块中加载
 `/etc/nginx/conf.d/*.conf`。如果当前 Nginx 配置没有该 `include`，应将上面
 内容直接放入 `nginx.conf` 的 `http` 块，不能放在 `stream` 块。
 
-`underscores_in_headers on;` 用于保留 Codex CLI 和 CRS 兼容客户端发送的
-`session_id`，否则 Nginx 默认会丢弃带下划线的请求头，破坏多账号粘性会话。
+当前 Codex 客户端使用 `session-id`；旧版 Codex 和 CRS 兼容客户端仍可能发送
+`session_id`。`underscores_in_headers on;` 用于保留这个旧版下划线请求头，
+否则 Nginx 默认会将其丢弃，破坏这些客户端的多账号粘性会话。
 
 ## 4. 统一覆盖上游客户端 IP 请求头
 

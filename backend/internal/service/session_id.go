@@ -19,7 +19,7 @@ const (
 // native protocol identifiers that are safe to persist but must not alter OpenAI
 // scheduling behavior.
 var clientSessionIDHeaders = append(
-	append([]string{codexSessionIDHeader}, explicitOpenAIHeaderSessionNames...),
+	append([]string(nil), explicitOpenAIHeaderSessionNames...),
 	claudeCodeSessionHeader,
 )
 
