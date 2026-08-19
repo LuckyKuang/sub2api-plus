@@ -268,6 +268,7 @@ func TestBuildCodexUsageProgressFromExtra_IgnoresDurationOverflowingLegacyReset(
 	progress := buildCodexUsageProgressFromExtra(extra, "5h", now)
 	if progress == nil {
 		t.Fatal("expected non-nil progress")
+		return
 	}
 	if progress.ResetsAt != nil {
 		t.Fatalf("expected no reset timestamp from overflowing legacy value, got %v", *progress.ResetsAt)
