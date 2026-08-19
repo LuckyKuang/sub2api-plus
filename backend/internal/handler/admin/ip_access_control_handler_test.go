@@ -139,6 +139,7 @@ func TestBlockFailureStateHandlerRequiresSafeIdentityAndReturnsConfirmedResult(t
 		require.NotNil(t, envelope.Data.Rule)
 		require.Equal(t, service.IPAccessRuleKindManualBlock, envelope.Data.Rule.RuleKind)
 		require.Equal(t, "203.0.113.8", envelope.Data.Rule.IPOrCIDR)
+		require.Nil(t, envelope.Data.Rule.ExpiresAt)
 	})
 }
 
@@ -269,11 +270,11 @@ func (s *handlerIPAccessRepositoryStub) ListActiveIPAccessRules(context.Context)
 func (s *handlerIPAccessRepositoryStub) CreateManualIPAccessRule(context.Context, *service.IPAccessRule) (*service.IPAccessRule, error) {
 	return nil, nil
 }
-func (s *handlerIPAccessRepositoryStub) CreateManualIPBlockForFailureState(_ context.Context, normalizedIP, reason string, expiresAt time.Time, actorUserID int64) (*service.IPFailureStateBlockRepositoryResult, error) {
+func (s *handlerIPAccessRepositoryStub) CreateManualIPBlockForFailureState(_ context.Context, normalizedIP, reason string, actorUserID int64) (*service.IPFailureStateBlockRepositoryResult, error) {
 	actor := actorUserID
 	rule := &service.IPAccessRule{
 		ID: 42, IPOrCIDR: normalizedIP, RuleKind: service.IPAccessRuleKindManualBlock,
-		Status: service.IPAccessRuleStatusActive, Reason: reason, ExpiresAt: &expiresAt,
+		Status: service.IPAccessRuleStatusActive, Reason: reason,
 		CreatedByUserID: &actor,
 	}
 	s.rules = append(s.rules, rule)

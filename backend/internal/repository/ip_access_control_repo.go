@@ -87,6 +87,22 @@ ORDER BY masklen(candidate.ip_or_cidr::cidr) DESC, candidate.created_at DESC
 LIMIT 1`, normalizedIP).Scan)
 }
 
+func findConfirmedFailureStateManualBlockRule(ctx context.Context, queryer ipAccessRuleQueryer, normalizedIP string) (*service.IPAccessRule, error) {
+	return scanIPAccessRule(queryer.QueryRowContext(ctx, `SELECT `+ipAccessRuleColumns+`
+FROM ip_access_rules manual_rule
+WHERE manual_rule.status = 'active'
+AND manual_rule.rule_kind = 'manual_block'
+AND manual_rule.ip_or_cidr = $1
+AND manual_rule.expires_at IS NULL
+AND NOT EXISTS (
+	SELECT 1 FROM ip_access_rules auto_rule
+	WHERE auto_rule.status = 'active'
+	AND auto_rule.rule_kind = 'auto_block'
+	AND auto_rule.ip_or_cidr = $1
+)
+LIMIT 1`, normalizedIP).Scan)
+}
+
 func nullableTime(value sql.NullTime) *time.Time {
 	if !value.Valid {
 		return nil
@@ -234,10 +250,9 @@ RETURNING ` + ipAccessRuleColumns
 func (r *ipAccessControlRepository) CreateManualIPBlockForFailureState(
 	ctx context.Context,
 	normalizedIP, reason string,
-	expiresAt time.Time,
 	actorUserID int64,
 ) (*service.IPFailureStateBlockRepositoryResult, error) {
-	if r == nil || r.db == nil || normalizedIP == "" || actorUserID <= 0 || expiresAt.IsZero() {
+	if r == nil || r.db == nil || normalizedIP == "" || actorUserID <= 0 {
 		return nil, fmt.Errorf("invalid failure-state manual block repository input")
 	}
 	tx, err := r.db.BeginTx(ctx, nil)
@@ -263,14 +278,10 @@ func (r *ipAccessControlRepository) CreateManualIPBlockForFailureState(
 		return nil, service.ErrIPBlockSuppressedByAllow
 	}
 
-	existing, err := findEffectiveBlockRule(ctx, tx, normalizedIP)
-	if err == nil {
-		if err := tx.Commit(); err != nil {
-			return nil, err
-		}
-		return &service.IPFailureStateBlockRepositoryResult{Rule: existing, AlreadyBlocked: true}, nil
-	}
-	if err != sql.ErrNoRows {
+	alreadyBlocked := false
+	if _, err := findEffectiveBlockRule(ctx, tx, normalizedIP); err == nil {
+		alreadyBlocked = true
+	} else if err != sql.ErrNoRows {
 		return nil, err
 	}
 
@@ -281,26 +292,41 @@ WHERE ip_or_cidr = $1 AND rule_kind = 'manual_block' AND status = 'active'
 AND expires_at IS NOT NULL AND expires_at <= NOW()`, normalizedIP); err != nil {
 		return nil, err
 	}
-	created, err := scanIPAccessRule(tx.QueryRowContext(ctx, `INSERT INTO ip_access_rules (
+	permanent, err := scanIPAccessRule(tx.QueryRowContext(ctx, `INSERT INTO ip_access_rules (
 ip_or_cidr, rule_kind, status, reason, blocked_at, expires_at, created_by_user_id, created_at, updated_at)
-VALUES ($1, 'manual_block', 'active', $2, NOW(), $3, $4, NOW(), NOW())
-RETURNING `+ipAccessRuleColumns, normalizedIP, reason, expiresAt, actorUserID).Scan)
+VALUES ($1, 'manual_block', 'active', $2, NOW(), NULL, $3, NOW(), NOW())
+ON CONFLICT (ip_or_cidr, rule_kind) WHERE status = 'active'
+DO UPDATE SET reason = EXCLUDED.reason,
+expires_at = NULL,
+created_by_user_id = EXCLUDED.created_by_user_id,
+blocked_at = COALESCE(ip_access_rules.blocked_at, EXCLUDED.blocked_at),
+updated_at = NOW()
+RETURNING `+ipAccessRuleColumns, normalizedIP, reason, actorUserID).Scan)
 	if err != nil {
+		return nil, err
+	}
+	// The permanent manual rule takes ownership of an exact-IP threshold block.
+	// Keep the automatic rule as released history so a later release of the
+	// manual rule actually unblocks this IP. Covering CIDR rules remain
+	// independent and are intentionally not changed.
+	if _, err := tx.ExecContext(ctx, `UPDATE ip_access_rules
+SET status = 'released', released_by_user_id = $2, released_at = NOW(), updated_at = NOW()
+WHERE ip_or_cidr = $1 AND rule_kind = 'auto_block' AND status = 'active'`, normalizedIP, actorUserID); err != nil {
 		return nil, err
 	}
 	if commitErr := tx.Commit(); commitErr != nil {
 		confirmCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		confirmed, confirmErr := findEffectiveBlockRule(confirmCtx, r.db, normalizedIP)
+		confirmed, confirmErr := findConfirmedFailureStateManualBlockRule(confirmCtx, r.db, normalizedIP)
 		cancel()
 		if confirmErr == nil && confirmed != nil {
 			return &service.IPFailureStateBlockRepositoryResult{
 				Rule:           confirmed,
-				AlreadyBlocked: confirmed.ID != created.ID,
+				AlreadyBlocked: alreadyBlocked,
 			}, nil
 		}
 		return nil, commitErr
 	}
-	return &service.IPFailureStateBlockRepositoryResult{Rule: created}, nil
+	return &service.IPFailureStateBlockRepositoryResult{Rule: permanent, AlreadyBlocked: alreadyBlocked}, nil
 }
 
 func (r *ipAccessControlRepository) ReleaseIPAccessRuleAndReset(ctx context.Context, id, actorUserID int64) (*service.IPAccessRule, error) {
@@ -567,21 +593,21 @@ RETURNING failure_count, window_started_at`
 	if count >= threshold {
 		rule, err := scanIPAccessRule(tx.QueryRowContext(ctx, `INSERT INTO ip_access_rules (
 ip_or_cidr, rule_kind, status, reason, failure_count, first_failed_at, last_failed_at, blocked_at, expires_at, created_at, updated_at)
-SELECT $1, 'auto_block', 'active', 'automatic login failure threshold reached', $2, $4, NOW(), NOW(),
+SELECT $1::text, 'auto_block', 'active', 'automatic login failure threshold reached', $2, $4, NOW(), NOW(),
 NOW() + make_interval(secs => $3::double precision), NOW(), NOW()
 WHERE NOT EXISTS (
     SELECT 1 FROM ip_access_rules allow_rule
     WHERE allow_rule.status = 'active'
     AND allow_rule.rule_kind = 'allow'
     AND (allow_rule.expires_at IS NULL OR allow_rule.expires_at > NOW())
-    AND $1::inet <<= allow_rule.ip_or_cidr::cidr
+    AND $1::text::inet <<= allow_rule.ip_or_cidr::cidr
 )
 AND NOT EXISTS (
     SELECT 1 FROM ip_access_rules block_rule
     WHERE block_rule.status = 'active'
     AND block_rule.rule_kind IN ('manual_block', 'auto_block')
     AND (block_rule.expires_at IS NULL OR block_rule.expires_at > NOW())
-    AND $1::inet <<= block_rule.ip_or_cidr::cidr
+    AND $1::text::inet <<= block_rule.ip_or_cidr::cidr
 )
 ON CONFLICT (ip_or_cidr, rule_kind) WHERE status = 'active'
 DO UPDATE SET failure_count = EXCLUDED.failure_count,
