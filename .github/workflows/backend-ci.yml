@@ -110,6 +110,9 @@ jobs:
           version: ${{ steps.tool-versions.outputs.golangci_lint }}
           args: --timeout=30m
           working-directory: backend
+          # Cached analyzer results can survive linter upgrades and differ by
+          # ref scope, producing stale findings between push and PR runs.
+          skip-cache: true
 
   goreleaser-config:
     runs-on: ubuntu-latest
