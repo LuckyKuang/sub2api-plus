@@ -125,7 +125,7 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 
 	promptCacheKey = strings.TrimSpace(promptCacheKey)
 	compatPromptCacheInjected := false
-	if promptCacheKey == "" && account.Type == AccountTypeOAuth && shouldAutoInjectPromptCacheKeyForCompat(upstreamModel) {
+	if promptCacheKey == "" && !isResponsesShape && shouldAutoInjectPromptCacheKeyForCompat(upstreamModel) {
 		promptCacheKey = deriveCompatPromptCacheKey(&chatReq, upstreamModel)
 		compatPromptCacheInjected = promptCacheKey != ""
 	}
@@ -248,6 +248,21 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 			}
 		}
 	}
+	if normalizedBody, changed, normalizeErr := normalizeOpenAIPromptCacheControlsForAccount(responsesBody, account, upstreamModel); normalizeErr != nil {
+		return nil, normalizeErr
+	} else if changed {
+		responsesBody = normalizedBody
+	}
+	responsesBody, promptCacheKey, _, err = s.ensureOpenAIResponsesPromptCacheIdentity(
+		c,
+		account,
+		responsesBody,
+		promptCacheKey,
+		upstreamModel,
+	)
+	if err != nil {
+		return nil, err
+	}
 
 	// 4b. Apply OpenAI fast policy (may filter service_tier or block the request).
 	updatedBody, policyErr := s.applyOpenAIFastPolicyToBody(ctx, account, upstreamModel, responsesBody)
@@ -273,14 +288,6 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 	releaseUpstreamCtx()
 	if err != nil {
 		return nil, fmt.Errorf("build upstream request: %w", err)
-	}
-
-	if promptCacheKey != "" {
-		upstreamSessionID, err := s.resolveOpenAIUpstreamSessionID(c, account, promptCacheKey)
-		if err != nil {
-			return nil, err
-		}
-		upstreamReq.Header.Set("session_id", generateSessionUUID(upstreamSessionID))
 	}
 
 	// 7. Send request

@@ -4,6 +4,34 @@ Sub2API Plus accepts OpenAI-compatible Responses requests over HTTP and
 client-facing WebSocket ingress. Account routing can use an upstream WebSocket
 or bridge the client WebSocket to an HTTP/SSE upstream.
 
+## Prompt Cache Identity and Usage
+
+Current Codex clients can supply the canonical `session-id`, `thread-id`, and
+`x-client-request-id` headers. The gateway also accepts the supported legacy
+session aliases, including `session_id`, for sticky routing compatibility.
+Thread and client-request identifiers remain paired request context and never
+replace the session-scoped cache identity.
+
+For OpenAI Responses and Compact requests, the gateway resolves one opaque,
+tenant-isolated cache identity from an explicit `prompt_cache_key`, a supported
+session header, or a stable content prefix with a meaningful user/input anchor.
+It writes the finalized UUID to both the upstream `prompt_cache_key` and the
+canonical `session-id` header; the legacy `session_id` alias carries the same
+value. A model-only request does not receive a content-derived key. API-key
+Chat Completions requests converted to Responses use the same behavior, while
+raw Chat Completions forwarding does not receive Responses-only cache fields.
+
+`prompt_cache_options` is forwarded only for GPT-5.6-family OpenAI Platform
+API-key Responses/Compact traffic. ChatGPT OAuth and older or unknown model
+families have that field removed. Deprecated `prompt_cache_retention` is
+removed on every path.
+
+Usage ingestion treats ordinary input, cache-read input, and cache-write input
+as mutually exclusive stored buckets. The UI reports prompt-cache hit rate as
+`cache_read / (input + cache_read + cache_write)`; output tokens are excluded.
+Canonical nested usage details take priority by field presence, including an
+explicit zero, before known top-level compatibility aliases are considered.
+
 ## Codex Rate-Limit Response Headers
 
 For Codex Responses requests, successful HTTP and SSE responses can include

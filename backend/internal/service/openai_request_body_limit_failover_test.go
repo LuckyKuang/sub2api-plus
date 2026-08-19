@@ -82,7 +82,7 @@ func TestOpenAIRequestBodyLimitFailover_HTTP413SwitchesAccountsBeforeWrite(t *te
 			require.Empty(t, rec.Body.String())
 			require.True(t, body.closed)
 			if passthrough {
-				require.Equal(t, requestBody, upstream.lastBody)
+				requireOpenAIAutoCacheIdentityPreservesBody(t, requestBody, upstream.lastBody, upstream.lastReq.Header)
 			} else {
 				require.Equal(t, "gpt-5.2", gjson.GetBytes(upstream.lastBody, "model").String())
 				require.Equal(t, "hello", gjson.GetBytes(upstream.lastBody, "input").String())

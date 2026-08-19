@@ -158,7 +158,8 @@ scanRoot:
 						firstUserCaptured = true
 					}
 				}
-				if !firstUserCaptured && item.Get("type").String() == "input_text" {
+				itemType := item.Get("type").String()
+				if !firstUserCaptured && (itemType == "input_text" || itemType == "text") {
 					_, _ = b.WriteString("|first_user=")
 					if text := item.Get("text").String(); text != "" {
 						_, _ = b.WriteString(text)
@@ -221,7 +222,8 @@ func hasOpenAIContentSessionUserAnchor(body []byte) bool {
 			anchored = hasMeaningfulOpenAIContent(item.Get("content"))
 			return false
 		}
-		if strings.TrimSpace(item.Get("type").String()) == "input_text" {
+		itemType := strings.TrimSpace(item.Get("type").String())
+		if itemType == "input_text" || itemType == "text" {
 			anchored = strings.TrimSpace(item.Get("text").String()) != ""
 			return false
 		}

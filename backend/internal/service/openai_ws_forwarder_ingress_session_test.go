@@ -47,6 +47,41 @@ func (d *openAIWSSingleConnDialer) Dial(
 	return d.conn, 0, nil, nil
 }
 
+type openAIWSStagedCaptureDialer struct {
+	mu          sync.Mutex
+	conn        openAIWSClientConn
+	lastHeaders http.Header
+	dialCount   int
+}
+
+func (d *openAIWSStagedCaptureDialer) Dial(
+	ctx context.Context,
+	wsURL string,
+	headers http.Header,
+	proxyURL string,
+) (openAIWSClientConn, int, http.Header, error) {
+	_ = ctx
+	_ = wsURL
+	_ = proxyURL
+	d.mu.Lock()
+	d.lastHeaders = cloneHeader(headers)
+	d.dialCount++
+	d.mu.Unlock()
+	return d.conn, http.StatusSwitchingProtocols, nil, nil
+}
+
+func (d *openAIWSStagedCaptureDialer) DialCount() int {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.dialCount
+}
+
+func (d *openAIWSStagedCaptureDialer) LastHeaders() http.Header {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return cloneHeader(d.lastHeaders)
+}
+
 func TestOpenAIWSDownstreamWriteContext_CancellationOwnership(t *testing.T) {
 	t.Run("pre-canceled ordinary context is canceled before return", func(t *testing.T) {
 		controlCtx, cancelControl := context.WithCancelCause(context.Background())
@@ -92,7 +127,7 @@ func TestOpenAIWSDownstreamWriteContext_CancellationOwnership(t *testing.T) {
 	})
 }
 
-func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_KeepLeaseAcrossTurns(t *testing.T) {
+func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_ReusesAndRotatesLeaseWithPromptCacheIdentity(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	cfg := &config.Config{}
@@ -110,16 +145,21 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_KeepLeaseAcrossT
 	cfg.Gateway.OpenAIWS.ReadTimeoutSeconds = 3
 	cfg.Gateway.OpenAIWS.WriteTimeoutSeconds = 3
 
-	captureConn := &openAIWSCaptureConn{
+	firstConn := &openAIWSCaptureConn{
 		events: [][]byte{
 			[]byte(`{"type":"response.output_item.done","item":{"id":"ig_ingress_1","type":"image_generation_call","status":"generating","result":"iVBORw0KGgoAAAANSUhEUg/+=="}}`),
 			[]byte(`{"type":"response.completed","response":{"id":"resp_ingress_turn_1","model":"gpt-5.1","usage":{"input_tokens":1,"output_tokens":1}}}`),
 			[]byte(`{"type":"response.completed","response":{"id":"resp_ingress_turn_2","model":"gpt-5.1","usage":{"input_tokens":1,"output_tokens":1}}}`),
 		},
 	}
-	captureDialer := &openAIWSCaptureDialer{conn: captureConn}
+	secondConn := &openAIWSCaptureConn{
+		events: [][]byte{
+			[]byte(`{"type":"response.completed","response":{"id":"resp_ingress_turn_3","model":"gpt-5.1","usage":{"input_tokens":1,"output_tokens":1}}}`),
+		},
+	}
+	dialer := &openAIWSQueueDialer{conns: []openAIWSClientConn{firstConn, secondConn}}
 	pool := newOpenAIWSConnPool(cfg)
-	pool.setClientDialerForTest(captureDialer)
+	pool.setClientDialerForTest(dialer)
 
 	svc := &OpenAIGatewayService{
 		cfg:              cfg,
@@ -147,7 +187,7 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_KeepLeaseAcrossT
 	}
 
 	serverErrCh := make(chan error, 1)
-	turnTerminalCh := make(chan string, 2)
+	turnTerminalCh := make(chan string, 3)
 	hooks := &OpenAIWSIngressHooks{
 		AfterTurn: func(_ int, result *OpenAIForwardResult, turnErr error) {
 			if turnErr == nil && result != nil {
@@ -212,7 +252,7 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_KeepLeaseAcrossT
 		return message
 	}
 
-	writeMessage(`{"type":"response.create","model":"gpt-5.1","stream":false}`)
+	writeMessage(`{"type":"response.create","model":"gpt-5.1","stream":false,"prompt_cache_key":"cache-session-a"}`)
 	firstTurnImageEvent := readMessage()
 	require.Equal(t, "response.output_item.done", gjson.GetBytes(firstTurnImageEvent, "type").String())
 	require.Equal(t, "completed", gjson.GetBytes(firstTurnImageEvent, "item.status").String())
@@ -225,8 +265,14 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_KeepLeaseAcrossT
 	secondTurnEvent := readMessage()
 	require.Equal(t, "response.completed", gjson.GetBytes(secondTurnEvent, "type").String())
 	require.Equal(t, "resp_ingress_turn_2", gjson.GetBytes(secondTurnEvent, "response.id").String())
+
+	writeMessage(`{"type":"response.create","model":"gpt-5.1","stream":false,"prompt_cache_key":"cache-session-b","previous_response_id":"resp_ingress_turn_2"}`)
+	thirdTurnEvent := readMessage()
+	require.Equal(t, "response.completed", gjson.GetBytes(thirdTurnEvent, "type").String())
+	require.Equal(t, "resp_ingress_turn_3", gjson.GetBytes(thirdTurnEvent, "response.id").String())
 	require.Equal(t, "response.completed", <-turnTerminalCh, "首轮 turn 应保留成功终态")
 	require.Equal(t, "response.completed", <-turnTerminalCh, "第二轮 turn 应保留成功终态")
+	require.Equal(t, "response.completed", <-turnTerminalCh, "第三轮 turn 应保留成功终态")
 
 	_ = clientConn.Close(coderws.StatusNormalClosure, "done")
 
@@ -238,9 +284,23 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_KeepLeaseAcrossT
 	}
 
 	metrics := svc.SnapshotOpenAIWSPoolMetrics()
-	require.Equal(t, int64(1), metrics.AcquireTotal, "同一 ingress 会话多 turn 应只获取一次上游 lease")
-	require.Equal(t, 1, captureDialer.DialCount(), "同一 ingress 会话应保持同一上游连接")
-	require.Len(t, captureConn.writes, 2, "应向同一上游连接发送两轮 response.create")
+	require.Equal(t, int64(2), metrics.AcquireTotal, "缓存身份不变时复用 lease，显式切换后应重新获取")
+	require.Equal(t, 2, dialer.DialCount(), "显式切换 prompt_cache_key 应建立带新 session-id 的连接")
+	require.Len(t, firstConn.writes, 2, "缺省 prompt_cache_key 的第二轮应复用首轮连接")
+	require.Len(t, secondConn.writes, 1, "显式切换 prompt_cache_key 的第三轮应使用新连接")
+
+	firstIdentity := generateSessionUUID(isolateOpenAISessionID(0, "cache-session-a"))
+	secondIdentity := generateSessionUUID(isolateOpenAISessionID(0, "cache-session-b"))
+	require.Equal(t, firstIdentity, firstNonEmptyString(firstConn.writes[0]["prompt_cache_key"]))
+	require.Equal(t, firstIdentity, firstNonEmptyString(firstConn.writes[1]["prompt_cache_key"]))
+	require.Equal(t, secondIdentity, firstNonEmptyString(secondConn.writes[0]["prompt_cache_key"]))
+
+	dialHeaders := dialer.DialHeaders()
+	require.Len(t, dialHeaders, 2)
+	require.Equal(t, firstIdentity, dialHeaders[0].Get(codexSessionIDHeader))
+	require.Equal(t, firstIdentity, dialHeaders[0].Get("session_id"))
+	require.Equal(t, secondIdentity, dialHeaders[1].Get(codexSessionIDHeader))
+	require.Equal(t, secondIdentity, dialHeaders[1].Get("session_id"))
 }
 
 func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_LeaseLossSendsRetryClose(t *testing.T) {
@@ -974,12 +1034,8 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_PassthroughModeR
 	cfg.Gateway.OpenAIWS.ReadTimeoutSeconds = 3
 	cfg.Gateway.OpenAIWS.WriteTimeoutSeconds = 3
 
-	upstreamConn := &openAIWSCaptureConn{
-		events: [][]byte{
-			[]byte(`{"type":"response.completed","response":{"id":"resp_passthrough_turn_1","model":"gpt-5.1","output":[{"id":"ig_passthrough_1","type":"image_generation_call","status":"generating","result":"final-image"}],"usage":{"input_tokens":2,"output_tokens":3}}}`),
-		},
-	}
-	captureDialer := &openAIWSCaptureDialer{conn: upstreamConn}
+	upstreamConn := newStagedPassthroughConn()
+	captureDialer := &openAIWSStagedCaptureDialer{conn: upstreamConn}
 	svc := &OpenAIGatewayService{
 		cfg:                       cfg,
 		httpUpstream:              &httpUpstreamRecorder{},
@@ -1006,7 +1062,7 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_PassthroughModeR
 	}
 
 	serverErrCh := make(chan error, 1)
-	resultCh := make(chan *OpenAIForwardResult, 1)
+	resultCh := make(chan *OpenAIForwardResult, 2)
 	hooks := &OpenAIWSIngressHooks{
 		AfterTurn: func(_ int, result *OpenAIForwardResult, turnErr error) {
 			if turnErr == nil && result != nil {
@@ -1057,11 +1113,22 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_PassthroughModeR
 	defer func() {
 		_ = clientConn.CloseNow()
 	}()
+	readUpstreamWrite := func() []byte {
+		select {
+		case payload := <-upstreamConn.writes:
+			return payload
+		case <-time.After(3 * time.Second):
+			t.Fatal("等待 passthrough 上游写入超时")
+			return nil
+		}
+	}
 
 	writeCtx, cancelWrite := context.WithTimeout(context.Background(), 3*time.Second)
-	err = clientConn.Write(writeCtx, coderws.MessageText, []byte(`{"type":"response.create","model":"gpt-5.1","stream":false,"service_tier":"fast","reasoning":{"effort":"HIGH"}}`))
+	err = clientConn.Write(writeCtx, coderws.MessageText, []byte(`{"type":"response.create","model":"gpt-5.1","stream":false,"prompt_cache_key":"passthrough-session","service_tier":"fast","reasoning":{"effort":"HIGH"}}`))
 	cancelWrite()
 	require.NoError(t, err)
+	firstUpstreamWrite := readUpstreamWrite()
+	upstreamConn.Send(`{"type":"response.completed","response":{"id":"resp_passthrough_turn_1","model":"gpt-5.1","output":[{"id":"ig_passthrough_1","type":"image_generation_call","status":"generating","result":"final-image"}],"usage":{"input_tokens":2,"output_tokens":3}}}`)
 
 	readCtx, cancelRead := context.WithTimeout(context.Background(), 3*time.Second)
 	_, event, readErr := clientConn.Read(readCtx)
@@ -1070,12 +1137,24 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_PassthroughModeR
 	require.Equal(t, "response.completed", gjson.GetBytes(event, "type").String())
 	require.Equal(t, "resp_passthrough_turn_1", gjson.GetBytes(event, "response.id").String())
 	require.Equal(t, "completed", gjson.GetBytes(event, "response.output.0.status").String())
+
+	writeCtx, cancelWrite = context.WithTimeout(context.Background(), 3*time.Second)
+	err = clientConn.Write(writeCtx, coderws.MessageText, []byte(`{"type":"response.create","model":"gpt-5.1","stream":false,"previous_response_id":"resp_passthrough_turn_1"}`))
+	cancelWrite()
+	require.NoError(t, err)
+	secondUpstreamWrite := readUpstreamWrite()
+	upstreamConn.Send(`{"type":"response.completed","response":{"id":"resp_passthrough_turn_2","model":"gpt-5.1","usage":{"input_tokens":1,"output_tokens":1}}}`)
+
+	readCtx, cancelRead = context.WithTimeout(context.Background(), 3*time.Second)
+	_, event, readErr = clientConn.Read(readCtx)
+	cancelRead()
+	require.NoError(t, readErr)
+	require.Equal(t, "response.completed", gjson.GetBytes(event, "type").String())
+	require.Equal(t, "resp_passthrough_turn_2", gjson.GetBytes(event, "response.id").String())
 	_ = clientConn.Close(coderws.StatusNormalClosure, "done")
 
 	select {
 	case serverErr := <-serverErrCh:
-		// After normal client close, the server goroutine may receive the close frame
-		// as an error — this is expected behavior, not a test failure.
 		if serverErr != nil {
 			require.Contains(t, serverErr.Error(), "StatusNormalClosure",
 				"server error should only be a normal close frame, got: %v", serverErr)
@@ -1100,9 +1179,18 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_PassthroughModeR
 	case <-time.After(2 * time.Second):
 		t.Fatal("未收到 passthrough turn 结果回调")
 	}
+	select {
+	case result := <-resultCh:
+		require.Equal(t, "resp_passthrough_turn_2", result.RequestID)
+	case <-time.After(2 * time.Second):
+		t.Fatal("未收到 passthrough 第二轮结果回调")
+	}
 
 	require.Equal(t, 1, captureDialer.DialCount(), "passthrough 模式应直接建立上游 websocket")
-	require.Len(t, upstreamConn.writes, 1, "passthrough 模式应透传首条 response.create")
+	expectedCacheIdentity := generateSessionUUID(isolateOpenAISessionID(0, "passthrough-session"))
+	require.Equal(t, expectedCacheIdentity, captureDialer.LastHeaders().Get(codexSessionIDHeader))
+	require.Equal(t, expectedCacheIdentity, gjson.GetBytes(firstUpstreamWrite, "prompt_cache_key").String())
+	require.Equal(t, expectedCacheIdentity, gjson.GetBytes(secondUpstreamWrite, "prompt_cache_key").String())
 }
 
 func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_PassthroughHeadersUsePromptCacheAndTurnState(t *testing.T) {
@@ -1228,10 +1316,13 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_PassthroughHeade
 		t.Fatal("等待 passthrough websocket 结束超时")
 	}
 
-	require.Equal(t, isolateOpenAISessionID(0, "pcache_passthrough"), captureDialer.lastHeaders.Get("session_id"))
+	expectedCacheIdentity := generateSessionUUID(isolateOpenAISessionID(0, "pcache_passthrough"))
+	require.Equal(t, expectedCacheIdentity, captureDialer.lastHeaders.Get(codexSessionIDHeader))
+	require.Equal(t, expectedCacheIdentity, captureDialer.lastHeaders.Get("session_id"))
 	require.Equal(t, "turn-state-1", captureDialer.lastHeaders.Get(openAIWSTurnStateHeader))
 	require.Equal(t, "turn-meta-1", captureDialer.lastHeaders.Get(openAIWSTurnMetadataHeader))
 	require.Len(t, upstreamConn.writes, 1)
+	require.Equal(t, expectedCacheIdentity, firstNonEmptyString(upstreamConn.writes[0]["prompt_cache_key"]))
 	forwarded := requestToJSONString(upstreamConn.writes[0])
 	require.False(t, gjson.Get(forwarded, `tools.#(type=="namespace")`).Exists())
 	require.Equal(t, "collaboration", gjson.Get(forwarded, `input.#(type=="additional_tools").tools.0.name`).String())
@@ -4175,6 +4266,7 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_RejectsMessageID
 type openAIWSQueueDialer struct {
 	mu        sync.Mutex
 	conns     []openAIWSClientConn
+	headers   []http.Header
 	dialCount int
 }
 
@@ -4186,11 +4278,11 @@ func (d *openAIWSQueueDialer) Dial(
 ) (openAIWSClientConn, int, http.Header, error) {
 	_ = ctx
 	_ = wsURL
-	_ = headers
 	_ = proxyURL
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.dialCount++
+	d.headers = append(d.headers, cloneHeader(headers))
 	if len(d.conns) == 0 {
 		return nil, 503, nil, errors.New("no test conn")
 	}
@@ -4205,6 +4297,16 @@ func (d *openAIWSQueueDialer) DialCount() int {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return d.dialCount
+}
+
+func (d *openAIWSQueueDialer) DialHeaders() []http.Header {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	result := make([]http.Header, 0, len(d.headers))
+	for _, headers := range d.headers {
+		result = append(result, cloneHeader(headers))
+	}
+	return result
 }
 
 type openAIWSPreflightFailConn struct {

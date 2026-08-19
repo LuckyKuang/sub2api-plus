@@ -289,11 +289,70 @@ func TestForwardAsChatCompletions_APIKeyPropagatesPromptCacheKeyInResponsesBody(
 	result, err := svc.ForwardAsChatCompletions(context.Background(), c, account, body, "cache-key-123", "gpt-5.4")
 	require.Error(t, err)
 	require.Nil(t, result)
-	require.Equal(t, "cache-key-123", gjson.GetBytes(upstream.lastBody, "prompt_cache_key").String())
+	expectedIdentity := generateSessionUUID(isolateOpenAISessionID(99, "cache-key-123"))
+	require.Equal(t, expectedIdentity, gjson.GetBytes(upstream.lastBody, "prompt_cache_key").String())
 	require.Equal(t, "gpt-5.4", gjson.GetBytes(upstream.lastBody, "model").String())
 	require.Equal(t, "https://api.openai.com/v1/responses", upstream.lastReq.URL.String())
 	require.Equal(t, "Bearer sk-compatible", upstream.lastReq.Header.Get("Authorization"))
-	require.Equal(t, generateSessionUUID(isolateOpenAISessionID(99, "cache-key-123")), upstream.lastReq.Header.Get("session_id"))
+	require.Equal(t, expectedIdentity, upstream.lastReq.Header.Get("session-id"))
+	require.Equal(t, expectedIdentity, upstream.lastReq.Header.Get("session_id"))
+}
+
+func TestForwardAsChatCompletions_APIKeyAutoInjectsStablePromptCacheKey(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	body := []byte(`{"model":"gpt-5.4","messages":[{"role":"system","content":"be helpful"},{"role":"user","content":"hello"}],"stream":false}`)
+	forward := func() string {
+		rec := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(rec)
+		c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
+		c.Set("api_key", &APIKey{ID: 101})
+		upstream := &httpUpstreamRecorder{resp: &http.Response{
+			StatusCode: http.StatusBadRequest,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"error":{"type":"invalid_request_error","message":"stop"}}`)),
+		}}
+		svc := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream}
+		account := &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Credentials: map[string]any{"api_key": "sk-test"}, Extra: map[string]any{"openai_responses_supported": true}}
+		_, _ = svc.ForwardAsChatCompletions(context.Background(), c, account, body, "", "gpt-5.4")
+		identity := gjson.GetBytes(upstream.lastBody, "prompt_cache_key").String()
+		require.NotEmpty(t, identity)
+		require.Equal(t, identity, upstream.lastReq.Header.Get("session-id"))
+		return identity
+	}
+
+	require.Equal(t, forward(), forward())
+}
+
+func TestForwardAsChatCompletions_APIKeyRawFallbackDoesNotInjectResponsesCacheFields(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	body := []byte(`{"model":"gpt-5.4","messages":[{"role":"user","content":"hello"}],"stream":false}`)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
+	c.Set("api_key", &APIKey{ID: 102})
+
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusBadRequest,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(`{"error":{"type":"invalid_request_error","message":"stop"}}`)),
+	}}
+	svc := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream}
+	account := &Account{
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeAPIKey,
+		Credentials: map[string]any{
+			"api_key": "sk-test",
+		},
+		Extra: map[string]any{"openai_responses_supported": false},
+	}
+
+	_, _ = svc.ForwardAsChatCompletions(context.Background(), c, account, body, "", "gpt-5.4")
+
+	require.NotNil(t, upstream.lastReq)
+	require.Equal(t, "https://api.openai.com/v1/chat/completions", upstream.lastReq.URL.String())
+	require.False(t, gjson.GetBytes(upstream.lastBody, "prompt_cache_key").Exists())
+	require.False(t, gjson.GetBytes(upstream.lastBody, "prompt_cache_options").Exists())
+	require.Empty(t, upstream.lastReq.Header.Get(codexSessionIDHeader))
 }
 
 func TestForwardAsChatCompletions_OAuthDoesNotInjectDefaultInstructions(t *testing.T) {

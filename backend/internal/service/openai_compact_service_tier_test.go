@@ -27,7 +27,7 @@ func TestNormalizeOpenAICompactRequestBodyPreservesServiceTier(t *testing.T) {
 	require.True(t, changed)
 	require.Equal(t, "gpt-5.6-sol", gjson.GetBytes(normalized, "model").String())
 	require.Equal(t, "priority", gjson.GetBytes(normalized, "service_tier").String())
-	require.False(t, gjson.GetBytes(normalized, "prompt_cache_key").Exists())
+	require.Equal(t, "compact-cache-key", gjson.GetBytes(normalized, "prompt_cache_key").String())
 	require.False(t, gjson.GetBytes(normalized, "store").Exists())
 	require.False(t, gjson.GetBytes(normalized, "stream").Exists())
 }

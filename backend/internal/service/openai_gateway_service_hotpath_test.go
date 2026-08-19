@@ -185,7 +185,7 @@ func TestOpenAIGatewayService_Forward_DecodedMutationKeepsLaterFieldDeletes(t *t
 }
 
 // #4417：/v1/responses 原生转发路径需将 Chat-Completions 风格的 max_tokens 归一化为
-// max_output_tokens，并移除兼容上游不接受的 prompt_cache_options。
+// max_output_tokens，并按模型能力处理 prompt_cache_options。
 func TestOpenAIGatewayService_Forward_NormalizesMaxTokensAndStripsPromptCacheOptions(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -235,6 +235,13 @@ func TestOpenAIGatewayService_Forward_NormalizesMaxTokensAndStripsPromptCacheOpt
 		out := runForward(t, []byte(`{"model":"gpt-5.4","stream":false,"max_tokens":256,"max_output_tokens":512,"input":[{"type":"message","content":"hi"}]}`))
 		require.Equal(t, int64(512), gjson.GetBytes(out, "max_output_tokens").Int())
 		require.False(t, gjson.GetBytes(out, "max_tokens").Exists())
+	})
+
+	t.Run("GPT-5.6 Platform API 保留 prompt_cache_options", func(t *testing.T) {
+		out := runForward(t, []byte(`{"model":"gpt-5.6-sol","stream":false,"prompt_cache_options":{"mode":"extended","ttl":"24h"},"input":[{"type":"message","role":"user","content":"hi"}]}`))
+		require.Equal(t, "extended", gjson.GetBytes(out, "prompt_cache_options.mode").String())
+		require.Equal(t, "24h", gjson.GetBytes(out, "prompt_cache_options.ttl").String())
+		require.NotEmpty(t, gjson.GetBytes(out, "prompt_cache_key").String())
 	})
 }
 

@@ -29,6 +29,7 @@ const (
 )
 
 var explicitOpenAIHeaderSessionNames = []string{
+	codexSessionIDHeader,
 	"session_id",
 	"conversation_id",
 	openCodeSessionAffinityHeader,
@@ -132,13 +133,14 @@ func (s *OpenAIGatewayService) GenerateExplicitSessionHash(c *gin.Context, body 
 // GenerateSessionHash generates a sticky-session hash for OpenAI requests.
 //
 // Priority:
-//  1. Header: session_id
-//  2. Header: conversation_id
-//  3. Header: x-session-affinity / x-session-id / x-opencode-session (OpenCode)
-//  4. Header: x-conversation-id (CodeBuddy)
-//  5. Header: x-grok-conv-id (Grok groups only)
-//  6. Body:   prompt_cache_key
-//  7. Body:   content-based fallback (model + system + tools + first user message)
+//  1. Header: session-id (current Codex)
+//  2. Header: session_id
+//  3. Header: conversation_id
+//  4. Header: x-session-affinity / x-session-id / x-opencode-session (OpenCode)
+//  5. Header: x-conversation-id (CodeBuddy)
+//  6. Header: x-grok-conv-id (Grok groups only)
+//  7. Body:   prompt_cache_key
+//  8. Body:   content-based fallback (model + system + tools + first user message)
 //
 // Grok sticky affinity is intentionally separate from the upstream
 // prompt_cache_key identity (resolveGrokCacheIdentity): sticky pins an OAuth

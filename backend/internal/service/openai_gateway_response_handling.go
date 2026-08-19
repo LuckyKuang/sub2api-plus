@@ -1287,7 +1287,7 @@ func openAICacheReadTokensFromUsage(value gjson.Result) int {
 		}
 	}
 
-	return firstPositiveGJSONInt(
+	return firstPresentOpenAICacheTokenCount(
 		value.Get("cache_read_input_tokens"),
 		value.Get("cache_read_tokens"),
 		value.Get("cached_tokens"),
@@ -1306,12 +1306,21 @@ func openAICacheCreationTokensFromUsage(value gjson.Result) int {
 		}
 	}
 
-	return firstPositiveGJSONInt(
+	return firstPresentOpenAICacheTokenCount(
 		value.Get("cache_write_tokens"),
 		value.Get("cache_creation_input_tokens"),
 		value.Get("cache_write_input_tokens"),
 		value.Get("cache_creation_tokens"),
 	)
+}
+
+func firstPresentOpenAICacheTokenCount(values ...gjson.Result) int {
+	for _, value := range values {
+		if value.Exists() {
+			return max(int(value.Int()), 0)
+		}
+	}
+	return 0
 }
 
 func (s *OpenAIGatewayService) handleNonStreamingResponse(ctx context.Context, resp *http.Response, c *gin.Context, account *Account, originalModel, mappedModel string) (*openaiNonStreamingResult, error) {

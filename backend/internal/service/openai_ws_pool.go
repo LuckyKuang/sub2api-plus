@@ -77,7 +77,8 @@ type openAIWSAcquireRequest struct {
 }
 
 type openAIWSHandshakeCompatibilityKey struct {
-	betaFeatures string
+	betaFeatures    string
+	sessionIdentity string
 }
 
 type openAIWSConnLease struct {
@@ -2013,8 +2014,47 @@ func normalizeOpenAIWSBetaFeatures(headers http.Header) string {
 
 func normalizeOpenAIWSHandshakeCompatibility(headers http.Header) openAIWSHandshakeCompatibilityKey {
 	return openAIWSHandshakeCompatibilityKey{
-		betaFeatures: normalizeOpenAIWSBetaFeatures(headers),
+		betaFeatures:    normalizeOpenAIWSBetaFeatures(headers),
+		sessionIdentity: normalizeOpenAIWSSessionIdentity(headers),
 	}
+}
+
+func normalizeOpenAIWSSessionIdentity(headers http.Header) string {
+	if identity := firstOpenAIWSHeaderValue(headers, codexSessionIDHeader); identity != "" {
+		return identity
+	}
+	return firstOpenAIWSHeaderValue(headers, "session_id")
+}
+
+func firstOpenAIWSHeaderValue(headers http.Header, target string) string {
+	if len(headers) == 0 {
+		return ""
+	}
+
+	canonicalName := http.CanonicalHeaderKey(strings.TrimSpace(target))
+	if values, ok := headers[canonicalName]; ok {
+		for _, value := range values {
+			if value = strings.TrimSpace(value); value != "" {
+				return value
+			}
+		}
+	}
+
+	variantNames := make([]string, 0)
+	for name := range headers {
+		if name != canonicalName && strings.EqualFold(strings.TrimSpace(name), target) {
+			variantNames = append(variantNames, name)
+		}
+	}
+	sort.Strings(variantNames)
+	for _, name := range variantNames {
+		for _, value := range headers[name] {
+			if value = strings.TrimSpace(value); value != "" {
+				return value
+			}
+		}
+	}
+	return ""
 }
 
 func normalizeOpenAIWSRoutingAffinity(headers http.Header) string {

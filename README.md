@@ -110,9 +110,10 @@ For Codex CLI or CRS-compatible clients, add this directive to the Nginx
 underscores_in_headers on;
 ```
 
-Nginx drops headers containing underscores by default, including `session_id`.
-Without this directive, sticky session routing can break in multi-account
-setups. Validate the complete configuration before reloading:
+Current Codex clients use the hyphenated `session-id`; legacy Codex/CRS-compatible
+clients may still send `session_id`. Nginx drops underscore headers by default,
+so keep this directive to preserve sticky session routing for those clients.
+Validate the complete configuration before reloading:
 
 ```bash
 sudo nginx -t

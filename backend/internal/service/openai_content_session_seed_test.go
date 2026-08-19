@@ -519,6 +519,7 @@ func TestDeriveOpenAIAnchoredContentSessionSeed_RequiresMeaningfulAnchor(t *test
 		[]byte(`{"model":"grok","messages":[{"role":"user","content":[{"type":"text","text":""}]}]}`),
 		[]byte(`{"model":"grok","input":"  "}`),
 		[]byte(`{"model":"grok","input":[{"type":"input_text","text":""}]}`),
+		[]byte(`{"model":"grok","input":[{"type":"text","text":"  "}]}`),
 	}
 	for _, body := range emptyAnchors {
 		require.Empty(t, deriveOpenAIAnchoredContentSessionSeed(body))
@@ -529,6 +530,7 @@ func TestDeriveOpenAIAnchoredContentSessionSeed_RequiresMeaningfulAnchor(t *test
 		[]byte(`{"model":"grok","messages":[{"role":"user","content":[{"type":"text","text":"question"}]}]}`),
 		[]byte(`{"model":"grok","input":"question"}`),
 		[]byte(`{"model":"grok","input":[{"type":"input_text","text":"question"}]}`),
+		[]byte(`{"model":"grok","input":[{"type":"text","text":"question"}]}`),
 	}
 	for _, body := range meaningfulAnchors {
 		require.NotEmpty(t, deriveOpenAIAnchoredContentSessionSeed(body))

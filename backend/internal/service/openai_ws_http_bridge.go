@@ -187,6 +187,27 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 	if err != nil {
 		return nil, fmt.Errorf("prepare http bridge body: %w", err)
 	}
+	if account.Platform != PlatformGrok {
+		effectiveModel := strings.TrimSpace(gjson.GetBytes(body, "model").String())
+		if effectiveModel == "" {
+			effectiveModel = strings.TrimSpace(originalModel)
+		}
+		if normalizedBody, changed, normalizeErr := normalizeOpenAIPromptCacheControlsForAccount(body, account, effectiveModel); normalizeErr != nil {
+			return nil, normalizeErr
+		} else if changed {
+			body = normalizedBody
+		}
+		body, _, _, err = s.ensureOpenAIResponsesPromptCacheIdentity(
+			c,
+			account,
+			body,
+			strings.TrimSpace(gjson.GetBytes(body, "prompt_cache_key").String()),
+			effectiveModel,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("resolve http bridge prompt cache identity: %w", err)
+		}
+	}
 
 	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
 	var upstreamReq *http.Request

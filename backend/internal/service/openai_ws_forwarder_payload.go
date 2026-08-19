@@ -100,6 +100,8 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 		// intentionally excluded because setOpenAICodexRoutingHint derives one
 		// from the selected account and final mapped model below.
 		for _, name := range [...]string{
+			"thread-id",
+			"x-client-request-id",
 			"x-codex-window-id",
 			"x-codex-installation-id",
 			"x-codex-parent-thread-id",
@@ -108,6 +110,7 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 				headers.Set(name, value)
 			}
 		}
+		alignOpenAICodexThreadHeaders(headers)
 	}
 	// 真实 Codex 的 WS 握手同样携带会话级 x-codex-beta-features
 	// （client.rs build_websocket_headers 复用 build_responses_headers），
@@ -118,11 +121,11 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	// OAuth 账号：统一应用 API-key 隔离或账号级共享策略，并对未授权组 fail closed。
 	if account != nil && account.Type == AccountTypeOAuth {
 		if sessionResolution.SessionID != "" {
-			upstreamSessionID, err := s.resolveOpenAIUpstreamSessionID(c, account, sessionResolution.SessionID)
+			upstreamSessionID, err := s.resolveOpenAIUpstreamPromptCacheHeaderIdentity(c, account, sessionResolution.SessionID)
 			if err != nil {
 				return nil, openAIWSSessionHeaderResolution{}, err
 			}
-			headers.Set("session_id", upstreamSessionID)
+			setOpenAIUpstreamSessionIdentity(headers, upstreamSessionID)
 		}
 		if sessionResolution.ConversationID != "" {
 			upstreamConversationID, err := s.resolveOpenAIUpstreamSessionID(c, account, sessionResolution.ConversationID)
@@ -133,7 +136,11 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 		}
 	} else {
 		if sessionResolution.SessionID != "" {
-			headers.Set("session_id", sessionResolution.SessionID)
+			upstreamSessionID, err := s.resolveOpenAIUpstreamPromptCacheHeaderIdentity(c, account, sessionResolution.SessionID)
+			if err != nil {
+				return nil, openAIWSSessionHeaderResolution{}, err
+			}
+			setOpenAIUpstreamSessionIdentity(headers, upstreamSessionID)
 		}
 		if sessionResolution.ConversationID != "" {
 			headers.Set("conversation_id", sessionResolution.ConversationID)

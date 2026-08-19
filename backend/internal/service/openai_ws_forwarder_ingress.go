@@ -171,6 +171,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		payloadBytes       int
 	}
 	ingressSessionOriginalModel := ""
+	ingressSessionPromptCacheIdentity := ""
 
 	applyPayloadMutation := func(current []byte, path string, value any) ([]byte, error) {
 		next, err := sjson.SetBytes(current, path, value)
@@ -410,6 +411,44 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			)
 		}
 		normalized = policyApplied
+		if account.Platform != PlatformGrok {
+			cacheBody, _, normalizeErr := normalizeOpenAIPromptCacheControlsForAccount(normalized, account, upstreamModel)
+			if normalizeErr != nil {
+				return openAIWSClientPayload{}, NewOpenAIWSClientCloseError(
+					coderws.StatusPolicyViolation,
+					"invalid websocket prompt cache options",
+					normalizeErr,
+				)
+			}
+			normalized = cacheBody
+			cacheIdentitySeed := promptCacheKey
+			if cacheIdentitySeed == "" {
+				cacheIdentitySeed = ingressSessionPromptCacheIdentity
+			}
+			// The first frame fixes the upstream handshake identity, including
+			// the valid "no identity" case when it has no explicit/session seed
+			// and no meaningful content anchor. Follow-up frames without an
+			// explicit key must not start auto-deriving an identity mid-connection.
+			if turn == 1 || cacheIdentitySeed != "" {
+				var cacheIdentityErr error
+				normalized, promptCacheKey, _, cacheIdentityErr = s.ensureOpenAIResponsesPromptCacheIdentity(
+					c,
+					account,
+					normalized,
+					cacheIdentitySeed,
+					upstreamModel,
+				)
+				if cacheIdentityErr != nil {
+					return openAIWSClientPayload{}, NewOpenAIWSClientCloseError(
+						coderws.StatusPolicyViolation,
+						"invalid websocket prompt cache identity",
+						cacheIdentityErr,
+					)
+				}
+			} else {
+				promptCacheKey = ""
+			}
+		}
 		ingressSessionOriginalModel = originalModel
 
 		return openAIWSClientPayload{
@@ -461,6 +500,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	if err != nil {
 		return err
 	}
+	ingressSessionPromptCacheIdentity = strings.TrimSpace(firstPayload.promptCacheKey)
 
 	turnState := strings.TrimSpace(c.GetHeader(openAIWSTurnStateHeader))
 	stateStore := s.getOpenAIWSStateStore()
@@ -628,6 +668,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			if parseErr != nil {
 				return parseErr
 			}
+			ingressSessionPromptCacheIdentity = strings.TrimSpace(nextPayload.promptCacheKey)
 			currentBridgePayload = nextPayload
 		}
 	}
@@ -1664,8 +1705,6 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		}
 		nextRoutingFields := gjson.GetManyBytes(nextPayload.payloadRaw, "model", "service_tier")
 		if nextPayload.promptCacheKey != "" {
-			// ingress 会话在整个客户端 WS 生命周期内复用同一上游连接；
-			// prompt_cache_key 对握手头的更新仅在未来需要重新建连时生效。
 			updatedHeaders, _, updHdrErr := s.buildOpenAIWSHeaders(
 				ctx,
 				c,
@@ -1680,11 +1719,29 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 				nextRoutingFields[1].String(),
 			)
 			if updHdrErr != nil {
-				logOpenAIWSModeInfo("ingress_ws_update_headers_failed account_id=%d err=%v", account.ID, updHdrErr)
-			} else {
-				baseAcquireReq.Headers = updatedHeaders
+				return fmt.Errorf("build websocket headers for next turn: %w", updHdrErr)
 			}
+			baseAcquireReq.Headers = updatedHeaders
 		}
+		nextPromptCacheIdentity := strings.TrimSpace(nextPayload.promptCacheKey)
+		promptCacheIdentityChanged := account.Platform != PlatformGrok &&
+			nextPromptCacheIdentity != ingressSessionPromptCacheIdentity
+		if promptCacheIdentityChanged {
+			nextStoreDisabled := s.isOpenAIWSStoreDisabledInRequestRaw(nextPayload.payloadRaw, account)
+			if nextStoreDisabled && nextPayload.previousResponseID != "" {
+				return NewOpenAIWSClientCloseError(
+					coderws.StatusPolicyViolation,
+					"prompt_cache_key cannot change during a store=false response continuation",
+					nil,
+				)
+			}
+			// The session header is fixed by the upstream WebSocket handshake.
+			// Release the healthy lease so this turn is acquired with the new
+			// body-aligned identity. The pool compatibility key prevents reuse of
+			// an idle connection whose handshake used another identity.
+			resetSessionLease(false)
+		}
+		ingressSessionPromptCacheIdentity = nextPromptCacheIdentity
 		setOpenAICodexRoutingHint(baseAcquireReq.Headers, account, nextRoutingFields[0].String(), nextRoutingFields[1].String())
 		if nextPayload.previousResponseID != "" {
 			expectedPrev := strings.TrimSpace(lastTurnResponseID)

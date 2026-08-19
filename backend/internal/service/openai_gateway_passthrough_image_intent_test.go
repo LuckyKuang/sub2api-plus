@@ -50,7 +50,7 @@ func TestOpenAIGatewayService_APIKeyPassthrough_ImageIntentPreservesGateAndBilli
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		require.NotNil(t, upstream.lastReq)
-		require.Equal(t, body, upstream.lastBody)
+		requireOpenAIAutoCacheIdentityPreservesBody(t, body, upstream.lastBody, upstream.lastReq.Header)
 		require.Equal(t, 1, result.ImageCount)
 		require.Equal(t, "gpt-image-2", result.BillingModel)
 		require.Equal(t, "2K", result.ImageSize)

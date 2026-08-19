@@ -2976,13 +2976,13 @@ func TestOpenAIResponsesRequestPathSuffix(t *testing.T) {
 }
 
 func TestNormalizeOpenAICompactRequestBodyPreservesCurrentCodexPayloadFields(t *testing.T) {
-	body := []byte(`{"model":"gpt-5.5","input":[{"type":"message","role":"user","content":"compact me"}],"instructions":"compact-test","tools":[{"type":"function","name":"shell"}],"parallel_tool_calls":true,"reasoning":{"effort":"high"},"text":{"verbosity":"low"},"previous_response_id":"resp_123","store":true,"stream":true,"prompt_cache_key":"cache_123"}`)
+	body := []byte(`{"model":"gpt-5.6-sol","input":[{"type":"message","role":"user","content":"compact me"}],"instructions":"compact-test","tools":[{"type":"function","name":"shell"}],"parallel_tool_calls":true,"reasoning":{"effort":"high"},"text":{"verbosity":"low"},"previous_response_id":"resp_123","store":true,"stream":true,"prompt_cache_key":"cache_123","prompt_cache_options":{"mode":"extended","ttl":"24h"}}`)
 
 	normalized, changed, err := normalizeOpenAICompactRequestBody(body)
 
 	require.NoError(t, err)
 	require.True(t, changed)
-	require.Equal(t, "gpt-5.5", gjson.GetBytes(normalized, "model").String())
+	require.Equal(t, "gpt-5.6-sol", gjson.GetBytes(normalized, "model").String())
 	require.True(t, gjson.GetBytes(normalized, "tools").Exists())
 	require.True(t, gjson.GetBytes(normalized, "parallel_tool_calls").Bool())
 	require.Equal(t, "high", gjson.GetBytes(normalized, "reasoning.effort").String())
@@ -2990,7 +2990,8 @@ func TestNormalizeOpenAICompactRequestBodyPreservesCurrentCodexPayloadFields(t *
 	require.Equal(t, "resp_123", gjson.GetBytes(normalized, "previous_response_id").String())
 	require.False(t, gjson.GetBytes(normalized, "store").Exists())
 	require.False(t, gjson.GetBytes(normalized, "stream").Exists())
-	require.False(t, gjson.GetBytes(normalized, "prompt_cache_key").Exists())
+	require.Equal(t, "cache_123", gjson.GetBytes(normalized, "prompt_cache_key").String())
+	require.Equal(t, "extended", gjson.GetBytes(normalized, "prompt_cache_options.mode").String())
 }
 
 func TestOpenAIBuildUpstreamRequestOpenAIPassthroughPreservesCompactPath(t *testing.T) {
@@ -2998,6 +2999,7 @@ func TestOpenAIBuildUpstreamRequestOpenAIPassthroughPreservesCompactPath(t *test
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses/compact", bytes.NewReader([]byte(`{"model":"gpt-5"}`)))
+	c.Request.Header.Set(codexSessionIDHeader, "official-compact-session")
 
 	svc := &OpenAIGatewayService{}
 	account := &Account{Type: AccountTypeOAuth}
@@ -3008,7 +3010,8 @@ func TestOpenAIBuildUpstreamRequestOpenAIPassthroughPreservesCompactPath(t *test
 	require.Equal(t, "application/json", req.Header.Get("Accept"))
 	require.Equal(t, codexCLIVersion, req.Header.Get("Version"))
 	require.Empty(t, req.Header.Get("OpenAI-Beta"), "Codex OAuth HTTP must not synthesize the legacy responses beta header")
-	require.NotEmpty(t, req.Header.Get("Session_Id"))
+	require.NotEmpty(t, req.Header.Get("Session-Id"))
+	require.Equal(t, req.Header.Get("Session-Id"), req.Header.Get("Session_Id"))
 	require.Equal(t, HTTPUpstreamProfileOpenAI, HTTPUpstreamProfileFromContext(req.Context()))
 }
 
@@ -3043,13 +3046,14 @@ func TestOpenAIBuildUpstreamRequestCompactForcesJSONAcceptForOAuth(t *testing.T)
 		Credentials: map[string]any{"chatgpt_account_id": "chatgpt-acc"},
 	}
 
-	req, err := svc.buildUpstreamRequest(c.Request.Context(), c, account, []byte(`{"model":"gpt-5"}`), "token", false, "", true)
+	req, err := svc.buildUpstreamRequest(c.Request.Context(), c, account, []byte(`{"model":"gpt-5","prompt_cache_key":"cache_123"}`), "token", false, "cache_123", true)
 	require.NoError(t, err)
 	require.Equal(t, chatgptCodexURL+"/compact", req.URL.String())
 	require.Equal(t, "application/json", req.Header.Get("Accept"))
 	require.Equal(t, codexCLIVersion, req.Header.Get("Version"))
 	require.Empty(t, req.Header.Get("OpenAI-Beta"), "Codex OAuth HTTP must not synthesize the legacy responses beta header")
-	require.NotEmpty(t, req.Header.Get("Session_Id"))
+	require.NotEmpty(t, req.Header.Get("Session-Id"))
+	require.Equal(t, req.Header.Get("Session-Id"), req.Header.Get("Session_Id"))
 	require.Equal(t, HTTPUpstreamProfileOpenAI, HTTPUpstreamProfileFromContext(req.Context()))
 }
 

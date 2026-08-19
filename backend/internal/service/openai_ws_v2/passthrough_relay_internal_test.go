@@ -350,11 +350,75 @@ func TestParseUsageAndAccumulateAcceptsChatUsageAliases(t *testing.T) {
 	require.Equal(t, got, state.usage)
 }
 
+func TestParseUsageAndAccumulateAcceptsTopLevelCacheReadAliases(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name  string
+		field string
+	}{
+		{name: "cache_read_input_tokens", field: `"cache_read_input_tokens":4`},
+		{name: "cache_read_tokens", field: `"cache_read_tokens":5`},
+		{name: "cached_tokens", field: `"cached_tokens":6`},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			state := &relayState{}
+			got := parseUsageAndAccumulate(
+				state,
+				[]byte(`{"type":"response.done","response":{"usage":{"input_tokens":12,"output_tokens":3,`+tt.field+`}}}`),
+				"response.done",
+				nil,
+			)
+			require.Positive(t, got.CacheReadInputTokens)
+			require.Equal(t, got.CacheReadInputTokens, state.usage.CacheReadInputTokens)
+		})
+	}
+}
+
+func TestParseUsageAndAccumulateNestedCacheReadZeroOverridesTopLevelAlias(t *testing.T) {
+	t.Parallel()
+
+	state := &relayState{}
+	got := parseUsageAndAccumulate(
+		state,
+		[]byte(`{"type":"response.done","response":{"usage":{"input_tokens":12,"output_tokens":3,"cache_read_input_tokens":9,"input_tokens_details":{"cached_tokens":0}}}}`),
+		"response.done",
+		nil,
+	)
+
+	require.Zero(t, got.CacheReadInputTokens)
+	require.Zero(t, state.usage.CacheReadInputTokens)
+}
+
 func TestOpenAICacheCreationTokensFromUsageNestedZeroWins(t *testing.T) {
 	t.Parallel()
 
 	usage := gjson.Parse(`{"input_tokens_details":{"cache_write_tokens":0},"cache_creation_input_tokens":19}`)
 	require.Zero(t, openAICacheCreationTokensFromUsage(usage))
+}
+
+func TestOpenAICacheCreationTokensFromUsageTopLevelPresencePriority(t *testing.T) {
+	require.Zero(t, openAICacheCreationTokensFromUsage(gjson.Parse(
+		`{"cache_write_tokens":0,"cache_creation_input_tokens":19}`,
+	)))
+	require.Equal(t, 4, openAICacheCreationTokensFromUsage(gjson.Parse(
+		`{"cache_write_tokens":4,"cache_creation_input_tokens":19}`,
+	)))
+}
+
+func TestParseUsageAndAccumulateClampsNegativeCacheReadAlias(t *testing.T) {
+	t.Parallel()
+
+	state := &relayState{}
+	got := parseUsageAndAccumulate(
+		state,
+		[]byte(`{"type":"response.done","response":{"usage":{"input_tokens":12,"output_tokens":3,"cache_read_input_tokens":-1,"cache_read_tokens":9}}}`),
+		"response.done",
+		nil,
+	)
+
+	require.Zero(t, got.CacheReadInputTokens)
+	require.Zero(t, state.usage.CacheReadInputTokens)
 }
 
 func TestEmitTurnCompleteCoverage(t *testing.T) {
