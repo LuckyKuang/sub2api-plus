@@ -51,9 +51,21 @@ END $$;
 ALTER TABLE channel_monitors
     ADD COLUMN IF NOT EXISTS check_mode VARCHAR(32) NOT NULL DEFAULT 'probe';
 
-ALTER TABLE channel_monitors
-    ADD CONSTRAINT channel_monitors_check_mode_check
-    CHECK (check_mode IN ('probe', 'quota', 'quota_probe'));
+-- The runner records applied filenames, but a failed/manual migration can be
+-- retried against a schema that already contains this constraint.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.table_constraints
+        WHERE constraint_name = 'channel_monitors_check_mode_check'
+          AND table_name = 'channel_monitors'
+    ) THEN
+        ALTER TABLE channel_monitors
+            ADD CONSTRAINT channel_monitors_check_mode_check
+            CHECK (check_mode IN ('probe', 'quota', 'quota_probe'));
+    END IF;
+END $$;
 
 ALTER TABLE channel_monitors
     ADD COLUMN IF NOT EXISTS account_id BIGINT REFERENCES accounts(id) ON DELETE SET NULL;

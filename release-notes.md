@@ -23,7 +23,9 @@ Sub2API Plus v0.1.178+custom.001
   and 228 in lexical order; no manual migration command is required. Migration
   224 normalizes the Codex fingerprint mode for top-level OpenAI OAuth
   accounts (defaulting missing or invalid values to `device`) and removes that
-  field from non-applicable accounts.
+  field from non-applicable accounts. Migrations 225, 226, and 228 add channel
+  time pricing, monitor quota modes, and the expanded platform-quota constraint;
+  migration 227 is intentionally unused.
 - Migrations are forward-only. Rolling back the application does not undo the
   migration or its database trigger; back up PostgreSQL before upgrading. A
   database rollback requires restoring a backup or applying an audited

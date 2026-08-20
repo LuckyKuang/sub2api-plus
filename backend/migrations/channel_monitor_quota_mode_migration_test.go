@@ -22,6 +22,8 @@ func TestChannelMonitorQuotaModeMigration(t *testing.T) {
 
 	// check_mode 三态，默认 probe。
 	require.Contains(t, sql, "ADD COLUMN IF NOT EXISTS check_mode VARCHAR(32) NOT NULL DEFAULT 'probe'")
+	require.Contains(t, sql, "constraint_name = 'channel_monitors_check_mode_check'")
+	require.Contains(t, sql, "AND table_name = 'channel_monitors'")
 	require.Contains(t, sql, "CHECK (check_mode IN ('probe', 'quota', 'quota_probe'))")
 
 	// account_id 关联账号，账号删除置空（监控保留，运行时报「账号未关联」）。
