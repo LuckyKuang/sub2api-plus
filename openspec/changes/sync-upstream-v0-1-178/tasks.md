@@ -16,7 +16,8 @@
 - [x] 2.4 Compose upstream Codex fingerprint/compaction/turn handling with Plus
   prompt-cache and timing behavior.
 - [x] 2.5 Regenerate Ent and Wire output after schema/provider changes.
-- [x] 2.6 Rename the duplicate-prefix seed migration to 227 and update tests.
+- [x] 2.6 Keep the latest Plus mode migration at 224, remove the superseded
+  upstream seed backfill, and assign the CN-provider constraint migration 228.
 
 ## 3. Metadata and tests
 

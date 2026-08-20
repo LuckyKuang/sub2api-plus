@@ -16,16 +16,16 @@ and request classification SHALL NOT bypass this order.
 
 ### Requirement: Fingerprint and prompt-cache identity are composed safely
 
-Eligible HTTP requests SHALL stage one fingerprint set after account selection.
-Final prompt-cache/session alignment SHALL occur afterward. Native and legacy
+Eligible HTTP requests SHALL resolve one mode-only fingerprint set after
+account selection using the latest Plus implementation. Final prompt-cache and
+session alignment SHALL follow the Plus request path. Native and legacy
 compaction requests SHALL preserve their compact identity and SHALL not inherit
 ordinary body-cache convergence.
 
 #### Scenario: A compact request follows a normal request
 
-- **WHEN** a compact request is built after a request with staged fingerprint
-  values
-- **THEN** the compact request SHALL clear staged fingerprint carriers
+- **WHEN** a compact request is built after a request with fingerprint values
+- **THEN** the compact request SHALL clear request-scoped fingerprint state
 - **THEN** its raw compact body/session identity SHALL remain unchanged
 
 #### Scenario: OAuth Messages omits instructions

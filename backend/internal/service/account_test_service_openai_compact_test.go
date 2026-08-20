@@ -283,11 +283,8 @@ func TestAccountTestService_TestAccountConnection_OpenAICompactProbeIdentityMatc
 			"access_token":       "oauth-token",
 			"chatgpt_account_id": "chatgpt-acc",
 		},
-		// 收敛是显式 opt-in（#5610），这里显式开启以验证探测身份与真实流量同构。
-		Extra: map[string]any{
-			"codex_fingerprint_mode":     "session",
-			codexFingerprintSeedExtraKey: testCodexFingerprintSeed,
-		},
+		// 显式启用更强的 session 收敛，以验证探测身份与真实流量同构。
+		Extra: map[string]any{"codex_fingerprint_mode": "session"},
 	}
 	repo := &snapshotUpdateAccountRepo{
 		stubOpenAIAccountRepo: stubOpenAIAccountRepo{accounts: []Account{account}},
@@ -307,15 +304,66 @@ func TestAccountTestService_TestAccountConnection_OpenAICompactProbeIdentityMatc
 	require.NoError(t, svc.TestAccountConnection(c, account.ID, "gpt-5.4", "", AccountTestModeCompact))
 
 	// 显式 session 收敛模式：出站身份 = 账号级收敛值
-	seed, ok := codexFingerprintSeed(account.Extra)
-	require.True(t, ok)
-	converged := resolveConvergedSessionID(seed)
+	converged := resolveConvergedSessionID(&account)
 	require.Equal(t, converged, upstream.lastReq.Header.Get("session-id"))
 	require.Equal(t, converged, upstream.lastReq.Header.Get("session_id"))
-	require.Equal(t, resolveConvergedInstallationID(&account, seed), upstream.lastReq.Header.Get("x-codex-installation-id"),
+	require.Equal(t, resolveConvergedInstallationID(&account), upstream.lastReq.Header.Get("x-codex-installation-id"),
 		"真实 Codex 每个请求必带 installation-id，探测不得缺失")
 	require.NotContains(t, upstream.lastReq.Header.Get("session-id"), "probe_compact",
 		"探测标识不得是可被上游一眼识别的字面量")
+	<-updateCalls
+}
+
+func TestAccountTestService_TestAccountConnection_OpenAICompactShadowUsesOwnerFingerprintMode(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	updateCalls := make(chan map[string]any, 1)
+	owner := Account{
+		ID:          7,
+		Name:        "openai-oauth-owner",
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeOAuth,
+		Status:      StatusActive,
+		Schedulable: true,
+		Concurrency: 1,
+		Credentials: map[string]any{
+			"access_token":       "oauth-token",
+			"chatgpt_account_id": "chatgpt-acc",
+		},
+		Extra: map[string]any{CodexFingerprintModeExtraKey: "session"},
+	}
+	ownerID := owner.ID
+	shadow := Account{
+		ID:              8,
+		Name:            "openai-oauth-shadow",
+		Platform:        PlatformOpenAI,
+		Type:            AccountTypeOAuth,
+		Status:          StatusActive,
+		Schedulable:     true,
+		Concurrency:     1,
+		ParentAccountID: &ownerID,
+		QuotaDimension:  QuotaDimensionSpark,
+	}
+	repo := &snapshotUpdateAccountRepo{
+		stubOpenAIAccountRepo: stubOpenAIAccountRepo{accounts: []Account{owner, shadow}},
+		updateExtraCalls:      updateCalls,
+	}
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+		Body:       io.NopCloser(strings.NewReader(compactProbeSSESuccessBody)),
+	}}
+	svc := &AccountTestService{accountRepo: repo, httpUpstream: upstream}
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/admin/accounts/8/test", bytes.NewReader(nil))
+
+	require.NoError(t, svc.TestAccountConnection(c, shadow.ID, "gpt-5.4", "", AccountTestModeCompact))
+
+	require.Equal(t, resolveConvergedSessionID(&owner), upstream.lastReq.Header.Get("session-id"))
+	require.Equal(t, resolveConvergedInstallationID(&owner), upstream.lastReq.Header.Get("x-codex-installation-id"))
+	require.NotEqual(t, resolveConvergedInstallationID(&shadow), upstream.lastReq.Header.Get("x-codex-installation-id"))
 	<-updateCalls
 }
 

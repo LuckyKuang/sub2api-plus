@@ -119,7 +119,6 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 	// Every account attempt starts from an empty fingerprint stage. This prevents
 	// failover from reusing the previous credential owner's IDs.
 	storeCodexFingerprintIDs(c, nil)
-	stageCodexFingerprintIDs(c, nil)
 	upstreamPassthroughModel := ""
 	if isOpenAIResponsesCompactPath(c) {
 		compactMappedModel := resolveOpenAICompactForwardModel(account, reqModel)
@@ -188,7 +187,6 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 				}
 			}
 			storeCodexFingerprintIDs(c, fpIDs)
-			stageCodexFingerprintIDs(c, fpIDs)
 		}
 	}
 
@@ -678,10 +676,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 		if fingerprintErr != nil {
 			return nil, fmt.Errorf("resolve Codex fingerprint credential account: %w", fingerprintErr)
 		}
-		ids := stagedCodexFingerprintIDs(c, fingerprintAccount)
-		if ids == nil {
-			ids = loadCodexFingerprintIDs(c, fingerprintAccount)
-		}
+		ids := loadCodexFingerprintIDs(c, fingerprintAccount)
 		applyCodexFingerprintHeaders(req.Header, ids)
 	}
 	// Fingerprint convergence owns device/thread metadata, while the finalized

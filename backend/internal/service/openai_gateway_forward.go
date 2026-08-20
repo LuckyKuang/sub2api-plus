@@ -405,7 +405,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	if account.Type == AccountTypeOAuth {
 		// Clear request-scoped fingerprint state before resolving this attempt;
 		// retries may reuse the same Gin context for a different account.
-		stageCodexFingerprintIDs(c, nil)
+		storeCodexFingerprintIDs(c, nil)
 		decoded, decodeErr := ensureReqBody()
 		if decodeErr != nil {
 			return nil, decodeErr
@@ -455,7 +455,6 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			}
 		}
 		storeCodexFingerprintIDs(c, fpIDs)
-		stageCodexFingerprintIDs(c, fpIDs)
 		if codexResult.NormalizedModel != "" {
 			upstreamModel = codexResult.NormalizedModel
 		}
@@ -582,28 +581,20 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		requestView = newOpenAIRequestView(body)
 		reqBody = nil
 	}
-	// Finalize prompt-cache identity after OAuth transformation. Explicit
-	// fingerprint-mode Messages bridges intentionally keep the prompt key as a
-	// header-only session identity; legacy/implicit bridges retain the upstream
-	// key in the body for compatibility. Compact owns its raw body namespace.
-	skipBodyCacheIdentity := isOpenAICodexCompactionRequest(c) ||
-		(compatMessagesBridge && account.Type == AccountTypeOAuth && codexFingerprintModeIsExplicit(account.Extra))
-	if !skipBodyCacheIdentity {
-		var cacheIdentityChanged bool
-		body, promptCacheKey, cacheIdentityChanged, err = s.ensureOpenAIResponsesPromptCacheIdentity(
-			c,
-			account,
-			body,
-			promptCacheKey,
-			upstreamModel,
-		)
-		if err != nil {
-			return nil, err
-		}
-		if cacheIdentityChanged {
-			requestView = newOpenAIRequestView(body)
-			reqBody = nil
-		}
+	var cacheIdentityChanged bool
+	body, promptCacheKey, cacheIdentityChanged, err = s.ensureOpenAIResponsesPromptCacheIdentity(
+		c,
+		account,
+		body,
+		promptCacheKey,
+		upstreamModel,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if cacheIdentityChanged {
+		requestView = newOpenAIRequestView(body)
+		reqBody = nil
 	}
 	imageBillingModel := ""
 	imageSizeTier := ""
@@ -1273,10 +1264,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 		if fingerprintErr != nil {
 			return nil, fmt.Errorf("resolve Codex fingerprint credential account: %w", fingerprintErr)
 		}
-		ids := stagedCodexFingerprintIDs(c, fingerprintAccount)
-		if ids == nil {
-			ids = loadCodexFingerprintIDs(c, fingerprintAccount)
-		}
+		ids := loadCodexFingerprintIDs(c, fingerprintAccount)
 		applyCodexFingerprintHeaders(req.Header, ids)
 	}
 	// Fingerprint convergence owns device/thread metadata, while the finalized

@@ -2044,9 +2044,6 @@ func activeCodexFingerprintMode(account *Account) codexFingerprintMode {
 	if account == nil || account.GetCodexFingerprintMode() == codexFingerprintOff {
 		return codexFingerprintOff
 	}
-	if _, ok := codexFingerprintSeed(account.Extra); !ok {
-		return codexFingerprintOff
-	}
 	return account.GetCodexFingerprintMode()
 }
 

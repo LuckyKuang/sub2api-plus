@@ -28,13 +28,13 @@ All active Go source imported by the v0.1.178 merge SHALL use
 ### Requirement: New migrations are forward-only and uniquely named
 
 Imported database changes SHALL be applied by immutable forward-only SQL files
-with unique increasing prefixes. The Codex seed backfill SHALL retain its SQL
-behavior under prefix 227 because the official tag contains two prefix-225
-files.
+with unique increasing prefixes. The latest Plus Codex mode migration SHALL
+remain at prefix 224, and the imported CN-provider quota constraint SHALL use a
+unique later prefix.
 
 #### Scenario: An upgraded database starts
 
-- **WHEN** migrations 224, 225 pricing, 226 monitor quota, and 227 seed
-  backfill are applied in lexical order
+- **WHEN** migrations 224 mode backfill, 225 pricing, 226 monitor quota, and
+  228 CN-provider quota constraint are applied in lexical order
 - **THEN** each migration SHALL run once, be idempotent where documented, and
   SHALL not alter an existing migration checksum

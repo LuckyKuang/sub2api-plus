@@ -461,7 +461,7 @@ describe('EditAccountModal', () => {
   it.each([
     ['missing', {}],
     ['invalid', { codex_fingerprint_mode: 'invalid' }],
-  ])('normalizes %s Codex fingerprint mode to implicit session', async (_name, extra) => {
+  ])('normalizes %s Codex fingerprint mode to explicit device', async (_name, extra) => {
     const account = buildAccount()
     account.type = 'oauth'
     account.extra = extra
@@ -472,14 +472,12 @@ describe('EditAccountModal', () => {
 
     const wrapper = mountModal(account)
     const mode = wrapper.get<HTMLSelectElement>('[data-testid="edit-codex-fingerprint-mode-select"]')
-    expect(mode.element.value).toBe('session')
+    expect(mode.element.value).toBe('device')
 
     await wrapper.get('form#edit-account-form').trigger('submit.prevent')
 
     expect(updateAccountMock).toHaveBeenCalledTimes(1)
-    expect(updateAccountMock.mock.calls[0]?.[1]?.extra).not.toHaveProperty(
-      'codex_fingerprint_mode'
-    )
+    expect(updateAccountMock.mock.calls[0]?.[1]?.extra?.codex_fingerprint_mode).toBe('device')
   })
 
   it('persists explicit off when editing an OAuth account', async () => {
@@ -496,6 +494,23 @@ describe('EditAccountModal', () => {
 
     expect(updateAccountMock).toHaveBeenCalledTimes(1)
     expect(updateAccountMock.mock.calls[0]?.[1]?.extra?.codex_fingerprint_mode).toBe('off')
+  })
+
+  it('persists explicit session when editing an OAuth account', async () => {
+    const account = buildAccount()
+    account.type = 'oauth'
+    account.extra = { codex_fingerprint_mode: 'device' }
+    updateAccountMock.mockReset()
+    checkMixedChannelRiskMock.mockReset()
+    checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+    updateAccountMock.mockResolvedValue(account)
+
+    const wrapper = mountModal(account)
+    await wrapper.get('[data-testid="edit-codex-fingerprint-mode-select"]').setValue('session')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+    expect(updateAccountMock).toHaveBeenCalledTimes(1)
+    expect(updateAccountMock.mock.calls[0]?.[1]?.extra?.codex_fingerprint_mode).toBe('session')
   })
 
   it('hides the Codex namespace flatten toggle for non-OAuth OpenAI accounts', async () => {
@@ -543,6 +558,8 @@ describe('EditAccountModal', () => {
     expect(updateAccountMock.mock.calls[0]?.[1]?.extra).not.toHaveProperty(
       'openai_long_context_billing_enabled'
     )
+    expect(wrapper.find('[data-testid="edit-codex-fingerprint-mode-select"]').exists()).toBe(false)
+    expect(updateAccountMock.mock.calls[0]?.[1]?.extra).not.toHaveProperty('codex_fingerprint_mode')
   })
 
   it('preserves an explicit OpenAI long-context billing opt-out', async () => {

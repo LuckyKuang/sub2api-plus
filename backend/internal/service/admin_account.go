@@ -128,24 +128,22 @@ var duplicateAccountDiscardedExtraKeys = map[string]struct{}{
 	"drive_storage_limit":                    {},
 	"drive_storage_usage":                    {},
 	"drive_tier_updated_at":                  {},
-	// Codex fingerprint convergence uses a per-account random seed, never copied from another account.
-	codexFingerprintSeedExtraKey:           {},
-	"codex_primary_used_percent":           {},
-	"codex_primary_reset_after_seconds":    {},
-	"codex_primary_window_minutes":         {},
-	"codex_secondary_used_percent":         {},
-	"codex_secondary_reset_after_seconds":  {},
-	"codex_secondary_window_minutes":       {},
-	"codex_primary_over_secondary_percent": {},
-	"codex_usage_updated_at":               {},
-	"codex_5h_used_percent":                {},
-	"codex_5h_reset_after_seconds":         {},
-	"codex_5h_window_minutes":              {},
-	"codex_5h_reset_at":                    {},
-	"codex_7d_used_percent":                {},
-	"codex_7d_reset_after_seconds":         {},
-	"codex_7d_window_minutes":              {},
-	"codex_7d_reset_at":                    {},
+	"codex_primary_used_percent":             {},
+	"codex_primary_reset_after_seconds":      {},
+	"codex_primary_window_minutes":           {},
+	"codex_secondary_used_percent":           {},
+	"codex_secondary_reset_after_seconds":    {},
+	"codex_secondary_window_minutes":         {},
+	"codex_primary_over_secondary_percent":   {},
+	"codex_usage_updated_at":                 {},
+	"codex_5h_used_percent":                  {},
+	"codex_5h_reset_after_seconds":           {},
+	"codex_5h_window_minutes":                {},
+	"codex_5h_reset_at":                      {},
+	"codex_7d_used_percent":                  {},
+	"codex_7d_reset_after_seconds":           {},
+	"codex_7d_window_minutes":                {},
+	"codex_7d_reset_at":                      {},
 }
 
 func duplicateAccountExtra(value map[string]any) (map[string]any, error) {
@@ -409,7 +407,6 @@ func buildAccountForCreate(input *CreateAccountInput, accountExtra map[string]an
 	delete(accountExtra, OllamaCloudUsageSessionExtraKey)
 	delete(accountExtra, OllamaCloudUsageAutoRefreshExtraKey)
 	delete(accountExtra, OllamaCloudUsageSnapshotExtraKey)
-	accountExtra = prepareCodexFingerprintExtraForCreate(input.Platform, input.Type, accountExtra)
 	account := &Account{
 		Name:        input.Name,
 		Notes:       normalizeAccountNotes(input.Notes),
@@ -422,6 +419,9 @@ func buildAccountForCreate(input *CreateAccountInput, accountExtra map[string]an
 		Priority:    input.Priority,
 		Status:      StatusActive,
 		Schedulable: true,
+	}
+	if err := account.NormalizeCodexFingerprintMode(); err != nil {
+		return nil, err
 	}
 	if input.ProbeEnabled != nil && *input.ProbeEnabled {
 		if !isUpstreamBillingProbeAccount(account) {
@@ -596,6 +596,9 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 		if err != nil {
 			return nil, err
 		}
+		normalizedExtra = withExistingCodexFingerprintModeIfOmitted(account, normalizedExtra)
+	} else {
+		canonicalizeCodexFingerprintModeForOmittedExtraUpdate(account)
 	}
 	previousProbeIdentity := upstreamBillingProbeIdentity(account)
 	previousOllamaUsageIdentity := ollamaCloudUsageIdentity(account)
@@ -706,7 +709,6 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 				normalizedExtra[key] = v
 			}
 		}
-		normalizedExtra = prepareCodexFingerprintExtraForUpdate(account, normalizedExtra)
 		account.Extra = normalizedExtra
 		if account.Platform == PlatformAntigravity && wasOveragesEnabled && !account.IsOveragesEnabled() {
 			delete(account.Extra, "antigravity_credits_overages") // 清理旧版 overages 运行态
@@ -725,9 +727,6 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 		}
 		ComputeQuotaResetAt(account.Extra)
 		NormalizeFixedQuotaWindows(account.Extra)
-	}
-	if input.Extra == nil {
-		account.Extra = prepareCodexFingerprintExtraForUpdate(account, account.Extra)
 	}
 	if requestedRateSyncEnabledUpdate != nil && *requestedRateSyncEnabledUpdate {
 		if requestedProbeEnabledUpdate != nil && !*requestedProbeEnabledUpdate {
@@ -890,6 +889,9 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 	if err != nil {
 		return nil, err
 	}
+	if err := account.NormalizeCodexFingerprintMode(); err != nil {
+		return nil, err
+	}
 
 	// Spark shadows borrow their credential owner's OAuth session policy. Keep
 	// policy, proxy, group bindings, and billing writes within one transaction
@@ -967,15 +969,15 @@ func (s *adminServiceImpl) UpdateAccountExtra(ctx context.Context, id int64, upd
 	if _, policyUpdateRequested := updates[OpenAIOAuthSessionPolicyExtraKey]; policyUpdateRequested {
 		return errors.New("openai_oauth_session_policy must be updated through the account editor")
 	}
-	// The fingerprint seed is system-managed; repository updates may preserve or
-	// mint it atomically, but callers must never be able to supply one directly.
-	updates = sanitizedCodexFingerprintExtraUpdates(updates)
 	delete(updates, UpstreamBillingProbeEnabledExtraKey)
 	delete(updates, UpstreamBillingRateSyncEnabledExtraKey)
 	delete(updates, UpstreamBillingProbeExtraKey)
 	delete(updates, OllamaCloudUsageSessionExtraKey)
 	delete(updates, OllamaCloudUsageAutoRefreshExtraKey)
 	delete(updates, OllamaCloudUsageSnapshotExtraKey)
+	if err := normalizeCodexFingerprintModeUpdateExtra(updates); err != nil {
+		return err
+	}
 	if _, exists := updates[openAILongContextBillingEnabledKey]; exists {
 		account, err := s.accountRepo.GetByID(ctx, id)
 		if err != nil {
@@ -998,13 +1000,15 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 		return nil, errors.New("openai_oauth_session_policy cannot be changed by bulk update")
 	}
 	// Managed probe/session state may only enter through dedicated typed endpoints.
-	input.Extra = sanitizedCodexFingerprintExtraUpdates(input.Extra)
 	delete(input.Extra, UpstreamBillingProbeEnabledExtraKey)
 	delete(input.Extra, UpstreamBillingRateSyncEnabledExtraKey)
 	delete(input.Extra, UpstreamBillingProbeExtraKey)
 	delete(input.Extra, OllamaCloudUsageSessionExtraKey)
 	delete(input.Extra, OllamaCloudUsageAutoRefreshExtraKey)
 	delete(input.Extra, OllamaCloudUsageSnapshotExtraKey)
+	if err := normalizeCodexFingerprintModeUpdateExtra(input.Extra); err != nil {
+		return nil, err
+	}
 
 	if len(input.AccountIDs) == 0 && input.Filters != nil {
 		accountIDs, err := s.resolveBulkUpdateTargetIDs(ctx, input.Filters)
@@ -1174,10 +1178,9 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 
 	// Prepare bulk updates for columns and JSONB fields.
 	repoUpdates := AccountBulkUpdate{
-		Credentials:                input.Credentials,
-		Extra:                      input.Extra,
-		ProbeEnabled:               input.ProbeEnabled,
-		EnsureCodexFingerprintSeed: ShouldEnsureCodexFingerprintSeedForExtraUpdates(input.Extra),
+		Credentials:  input.Credentials,
+		Extra:        input.Extra,
+		ProbeEnabled: input.ProbeEnabled,
 	}
 	if input.ProbeEnabled != nil {
 		if repoUpdates.Extra == nil {

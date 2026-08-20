@@ -1,3 +1,4 @@
+--
 -- 把 kimi/zhipu/deepseek 平台加入 user_platform_quotas.platform 的 CHECK 约束。
 --
 -- 背景：国产供应商进入 AllowedQuotaPlatforms（internal/service/domain_constants.go），
