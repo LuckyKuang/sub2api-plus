@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
@@ -37,25 +38,124 @@ const (
 	codexFingerprintFull codexFingerprintMode = "full"
 )
 
-// CodexFingerprintModeExtraKey is exported for persistence layers that need
-// to remove the key when an administrator restores the implicit session mode.
+// CodexFingerprintModeExtraKey is the canonical persisted fingerprint mode.
 const CodexFingerprintModeExtraKey = "codex_fingerprint_mode"
+
+func normalizeCodexFingerprintMode(raw any) (codexFingerprintMode, error) {
+	if raw == nil {
+		return codexFingerprintDevice, nil
+	}
+	value, ok := raw.(string)
+	if !ok {
+		return "", infraerrors.BadRequest(
+			"CODEX_FINGERPRINT_MODE_INVALID",
+			"codex_fingerprint_mode must be one of off, device, session, full",
+		)
+	}
+	mode := codexFingerprintMode(strings.TrimSpace(value))
+	if mode == "" {
+		return codexFingerprintDevice, nil
+	}
+	switch mode {
+	case codexFingerprintOff, codexFingerprintDevice, codexFingerprintSession, codexFingerprintFull:
+		return mode, nil
+	default:
+		return "", infraerrors.BadRequest(
+			"CODEX_FINGERPRINT_MODE_INVALID",
+			"codex_fingerprint_mode must be one of off, device, session, full",
+		)
+	}
+}
+
+// NormalizeCodexFingerprintMode persists an explicit canonical mode for every
+// credential-owning OpenAI OAuth account. Shadows inherit their parent's mode.
+func (a *Account) NormalizeCodexFingerprintMode() error {
+	if a == nil {
+		return nil
+	}
+	if !a.IsOpenAIOAuth() || a.IsCredentialShadow() {
+		if a.Extra != nil {
+			delete(a.Extra, CodexFingerprintModeExtraKey)
+		}
+		return nil
+	}
+	var raw any
+	if a.Extra != nil {
+		raw = a.Extra[CodexFingerprintModeExtraKey]
+	}
+	mode, err := normalizeCodexFingerprintMode(raw)
+	if err != nil {
+		return err
+	}
+	if a.Extra == nil {
+		a.Extra = make(map[string]any, 1)
+	}
+	a.Extra[CodexFingerprintModeExtraKey] = string(mode)
+	return nil
+}
+
+// withExistingCodexFingerprintModeIfOmitted carries the account's effective
+// mode into a replacement extra map. It also canonicalizes malformed legacy
+// values to the defensive device default when an update omits the field.
+func withExistingCodexFingerprintModeIfOmitted(account *Account, extra map[string]any) map[string]any {
+	if account == nil || !account.IsOpenAIOAuth() || account.IsCredentialShadow() {
+		return extra
+	}
+	if _, provided := extra[CodexFingerprintModeExtraKey]; provided {
+		return extra
+	}
+	if extra == nil {
+		extra = make(map[string]any, 1)
+	}
+	extra[CodexFingerprintModeExtraKey] = string(account.GetCodexFingerprintMode())
+	return extra
+}
+
+func canonicalizeCodexFingerprintModeForOmittedExtraUpdate(account *Account) {
+	if account == nil || !account.IsOpenAIOAuth() || account.IsCredentialShadow() {
+		return
+	}
+	mode := account.GetCodexFingerprintMode()
+	if account.Extra == nil {
+		account.Extra = make(map[string]any, 1)
+	}
+	account.Extra[CodexFingerprintModeExtraKey] = string(mode)
+}
+
+func normalizeCodexFingerprintModeUpdateExtra(extra map[string]any) error {
+	if extra == nil {
+		return nil
+	}
+	raw, provided := extra[CodexFingerprintModeExtraKey]
+	if !provided {
+		return nil
+	}
+	mode, err := normalizeCodexFingerprintMode(raw)
+	if err != nil {
+		return err
+	}
+	extra[CodexFingerprintModeExtraKey] = string(mode)
+	return nil
+}
 
 // GetCodexFingerprintMode 从账号 extra JSON 读取指纹收敛模式。
 //
-// Plus 保持 session 为默认值：未设置、空值或非法值都回落到 session，只有
-// 管理员显式存储 off 才关闭收敛。API-key 账号始终为 off。
+// Device-only convergence is the defensive fallback for missing or malformed
+// legacy data. Canonical persistence stores every mode explicitly. Accounts
+// that do not own OpenAI OAuth credentials always remain off.
 func (a *Account) GetCodexFingerprintMode() codexFingerprintMode {
-	if a == nil || !a.IsOpenAIOAuth() {
+	if a == nil || !a.IsOpenAIOAuth() || a.IsCredentialShadow() {
 		return codexFingerprintOff
 	}
-	raw := strings.TrimSpace(a.GetExtraString(CodexFingerprintModeExtraKey))
-	switch codexFingerprintMode(raw) {
-	case codexFingerprintOff, codexFingerprintDevice, codexFingerprintSession, codexFingerprintFull:
-		return codexFingerprintMode(raw)
-	default:
-		return codexFingerprintSession
+	var raw any
+	if a.Extra != nil {
+		raw = a.Extra[CodexFingerprintModeExtraKey]
 	}
+	mode, err := normalizeCodexFingerprintMode(raw)
+	if err != nil {
+		return codexFingerprintDevice
+	}
+	return mode
 }
 
 // deriveStableUUIDv4 从种子确定性派生一个 UUIDv4 格式的字符串。

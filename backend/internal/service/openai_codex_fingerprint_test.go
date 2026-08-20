@@ -47,6 +47,9 @@ func TestDeriveStableUUIDv4_ValidFormat(t *testing.T) {
 // --- GetCodexFingerprintMode ---
 
 func TestGetCodexFingerprintMode(t *testing.T) {
+	parentID := int64(9)
+	shadow := newTestOAuthAccount(10, map[string]any{CodexFingerprintModeExtraKey: "session"})
+	shadow.ParentAccountID = &parentID
 	tests := []struct {
 		name     string
 		account  *Account
@@ -54,10 +57,12 @@ func TestGetCodexFingerprintMode(t *testing.T) {
 	}{
 		{"nil 账号", nil, codexFingerprintOff},
 		{"非 OAuth 账号", &Account{Platform: PlatformOpenAI, Type: "api_key"}, codexFingerprintOff},
-		{"无 extra 默认 session", newTestOAuthAccount(1, nil), codexFingerprintSession},
-		{"空值默认 session", newTestOAuthAccount(1, map[string]any{CodexFingerprintModeExtraKey: ""}), codexFingerprintSession},
-		{"空白值默认 session", newTestOAuthAccount(1, map[string]any{CodexFingerprintModeExtraKey: "  "}), codexFingerprintSession},
-		{"非法值默认 session", newTestOAuthAccount(1, map[string]any{CodexFingerprintModeExtraKey: "invalid"}), codexFingerprintSession},
+		{"影子账号不持有模式", shadow, codexFingerprintOff},
+		{"无 extra 默认 device", newTestOAuthAccount(1, nil), codexFingerprintDevice},
+		{"空值默认 device", newTestOAuthAccount(1, map[string]any{CodexFingerprintModeExtraKey: ""}), codexFingerprintDevice},
+		{"空白值默认 device", newTestOAuthAccount(1, map[string]any{CodexFingerprintModeExtraKey: "  "}), codexFingerprintDevice},
+		{"非法值默认 device", newTestOAuthAccount(1, map[string]any{CodexFingerprintModeExtraKey: "invalid"}), codexFingerprintDevice},
+		{"错误类型默认 device", newTestOAuthAccount(1, map[string]any{CodexFingerprintModeExtraKey: true}), codexFingerprintDevice},
 		{"显式 off", newTestOAuthAccount(1, map[string]any{CodexFingerprintModeExtraKey: "off"}), codexFingerprintOff},
 		{"device", newTestOAuthAccount(1, map[string]any{CodexFingerprintModeExtraKey: "device"}), codexFingerprintDevice},
 		{"session", newTestOAuthAccount(1, map[string]any{CodexFingerprintModeExtraKey: "session"}), codexFingerprintSession},
@@ -68,6 +73,84 @@ func TestGetCodexFingerprintMode(t *testing.T) {
 			assert.Equal(t, tt.expected, tt.account.GetCodexFingerprintMode())
 		})
 	}
+}
+
+func TestNormalizeCodexFingerprintMode(t *testing.T) {
+	t.Run("missing becomes explicit device", func(t *testing.T) {
+		account := newTestOAuthAccount(1, nil)
+		require.NoError(t, account.NormalizeCodexFingerprintMode())
+		assert.Equal(t, "device", account.Extra[CodexFingerprintModeExtraKey])
+	})
+
+	t.Run("valid mode is trimmed and retained", func(t *testing.T) {
+		account := newTestOAuthAccount(1, map[string]any{CodexFingerprintModeExtraKey: " session "})
+		require.NoError(t, account.NormalizeCodexFingerprintMode())
+		assert.Equal(t, "session", account.Extra[CodexFingerprintModeExtraKey])
+	})
+
+	t.Run("invalid explicit value is rejected", func(t *testing.T) {
+		account := newTestOAuthAccount(1, map[string]any{CodexFingerprintModeExtraKey: "invalid"})
+		err := account.NormalizeCodexFingerprintMode()
+		require.ErrorContains(t, err, "codex_fingerprint_mode must be one of")
+	})
+
+	t.Run("credential shadow remains unset", func(t *testing.T) {
+		parentID := int64(9)
+		account := newTestOAuthAccount(1, nil)
+		account.ParentAccountID = &parentID
+		require.NoError(t, account.NormalizeCodexFingerprintMode())
+		assert.Nil(t, account.Extra)
+	})
+
+	t.Run("non OAuth account drops the inapplicable mode", func(t *testing.T) {
+		account := &Account{
+			Platform: PlatformOpenAI,
+			Type:     AccountTypeAPIKey,
+			Extra:    map[string]any{CodexFingerprintModeExtraKey: "device"},
+		}
+		require.NoError(t, account.NormalizeCodexFingerprintMode())
+		assert.NotContains(t, account.Extra, CodexFingerprintModeExtraKey)
+	})
+}
+
+func TestNormalizeCodexFingerprintModeUpdateExtra(t *testing.T) {
+	t.Run("null becomes explicit device", func(t *testing.T) {
+		extra := map[string]any{CodexFingerprintModeExtraKey: nil}
+		require.NoError(t, normalizeCodexFingerprintModeUpdateExtra(extra))
+		assert.Equal(t, "device", extra[CodexFingerprintModeExtraKey])
+	})
+
+	t.Run("explicit session remains session", func(t *testing.T) {
+		extra := map[string]any{CodexFingerprintModeExtraKey: "session"}
+		require.NoError(t, normalizeCodexFingerprintModeUpdateExtra(extra))
+		assert.Equal(t, "session", extra[CodexFingerprintModeExtraKey])
+	})
+
+	t.Run("invalid explicit value is rejected", func(t *testing.T) {
+		extra := map[string]any{CodexFingerprintModeExtraKey: "invalid"}
+		err := normalizeCodexFingerprintModeUpdateExtra(extra)
+		require.ErrorContains(t, err, "codex_fingerprint_mode must be one of")
+	})
+}
+
+func TestBuildAccountForCreatePersistsExplicitCodexFingerprintMode(t *testing.T) {
+	t.Run("missing defaults to device", func(t *testing.T) {
+		account, err := buildAccountForCreate(&CreateAccountInput{
+			Platform: PlatformOpenAI,
+			Type:     AccountTypeOAuth,
+		}, nil)
+		require.NoError(t, err)
+		assert.Equal(t, "device", account.Extra[CodexFingerprintModeExtraKey])
+	})
+
+	t.Run("explicit session is retained", func(t *testing.T) {
+		account, err := buildAccountForCreate(&CreateAccountInput{
+			Platform: PlatformOpenAI,
+			Type:     AccountTypeOAuth,
+		}, map[string]any{CodexFingerprintModeExtraKey: "session"})
+		require.NoError(t, err)
+		assert.Equal(t, "session", account.Extra[CodexFingerprintModeExtraKey])
+	})
 }
 
 // --- resolveConvergedInstallationID ---
@@ -120,15 +203,15 @@ func TestResolveCodexFingerprintIDsFromRequest_ExplicitOff(t *testing.T) {
 	assert.Nil(t, ids, "显式 off 模式应返回 nil")
 }
 
-func TestResolveCodexFingerprintIDsFromRequest_DefaultIsSession(t *testing.T) {
+func TestResolveCodexFingerprintIDsFromRequest_DefaultIsDevice(t *testing.T) {
 	account := newTestOAuthAccount(1, nil)
 	ids := resolveCodexFingerprintIDsFromRequest(account, nil)
 	require.NotNil(t, ids)
-	assert.Equal(t, codexFingerprintSession, ids.mode)
+	assert.Equal(t, codexFingerprintDevice, ids.mode)
 }
 
-// 管理员显式 opt-in 的账号行为不变。
-func TestResolveCodexFingerprintIDsFromRequest_ExplicitOptInHonored(t *testing.T) {
+// Every explicit convergence mode remains effective.
+func TestResolveCodexFingerprintIDsFromRequest_ExplicitModesHonored(t *testing.T) {
 	for _, mode := range []string{"device", "session", "full"} {
 		t.Run(mode, func(t *testing.T) {
 			account := newTestOAuthAccount(1, map[string]any{CodexFingerprintModeExtraKey: mode})

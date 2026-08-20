@@ -266,6 +266,9 @@ func (s *AccountService) Create(ctx context.Context, req CreateAccountRequest) (
 	} else {
 		account.AutoPauseOnExpired = true
 	}
+	if err := account.NormalizeCodexFingerprintMode(); err != nil {
+		return nil, err
+	}
 
 	if err := s.accountRepo.Create(ctx, account); err != nil {
 		return nil, fmt.Errorf("create account: %w", err)
@@ -357,7 +360,9 @@ func (s *AccountService) Update(ctx context.Context, id int64, req UpdateAccount
 		delete(extra, OllamaCloudUsageSessionExtraKey)
 		delete(extra, OllamaCloudUsageAutoRefreshExtraKey)
 		delete(extra, OllamaCloudUsageSnapshotExtraKey)
-		account.Extra = extra
+		account.Extra = withExistingCodexFingerprintModeIfOmitted(account, extra)
+	} else {
+		canonicalizeCodexFingerprintModeForOmittedExtraUpdate(account)
 	}
 
 	if req.ProxyID != nil {
@@ -380,6 +385,9 @@ func (s *AccountService) Update(ctx context.Context, id int64, req UpdateAccount
 	}
 	if req.AutoPauseOnExpired != nil {
 		account.AutoPauseOnExpired = *req.AutoPauseOnExpired
+	}
+	if err := account.NormalizeCodexFingerprintMode(); err != nil {
+		return nil, err
 	}
 
 	// 先验证分组是否存在（在任何写操作之前）
