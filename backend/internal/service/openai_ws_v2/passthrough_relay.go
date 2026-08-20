@@ -109,7 +109,6 @@ type relayState struct {
 	usage             Usage
 	requestModelMu    sync.RWMutex
 	requestModel      string
-	pendingTurnStart  atomic.Pointer[time.Time]
 	lastResponseID    string
 	lastResponseModel string
 	responseConflict  bool
@@ -1046,35 +1045,12 @@ func openAIWSRelayGetOrInitTurnTiming(state *relayState, responseID string, now 
 	}
 	timing, ok := state.turnTimingByID[responseID]
 	if !ok || timing == nil || timing.startAt.IsZero() {
-		startAt := state.consumePendingTurnStartedAt()
-		if startAt.IsZero() {
-			startAt = now
-		}
-		timing = &relayTurnTiming{startAt: startAt}
+		timing = &relayTurnTiming{startAt: now}
 		state.turnTimingByID[responseID] = timing
 		state.activeTurn = timing
 		return timing
 	}
 	return timing
-}
-
-func (s *relayState) setPendingTurnStartedAt(startedAt time.Time) {
-	if s == nil || startedAt.IsZero() {
-		return
-	}
-	startedAtCopy := startedAt
-	s.pendingTurnStart.Store(&startedAtCopy)
-}
-
-func (s *relayState) consumePendingTurnStartedAt() time.Time {
-	if s == nil {
-		return time.Time{}
-	}
-	startedAt := s.pendingTurnStart.Swap(nil)
-	if startedAt == nil {
-		return time.Time{}
-	}
-	return *startedAt
 }
 
 func openAIWSRelayDeleteTurnTiming(state *relayState, responseID string) (relayTurnTiming, bool) {
