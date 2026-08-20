@@ -36,14 +36,14 @@
 
 # 4. Verification
 
-- [ ] 4.1 Run focused backend tests, frontend tests, lint, typecheck, locale
+- [x] 4.1 Run focused backend tests, frontend tests, lint, typecheck, locale
   parity, strict OpenSpec validation, and `git diff --check`.
-- [ ] 4.2 Verify self CRUD and non-self read-only behavior at desktop, collapsed
+- [x] 4.2 Verify self CRUD and non-self read-only behavior at desktop, collapsed
   sidebar, and mobile widths with available browser tooling.
 
 Verification status: relevant backend package tests, the complete frontend
 Vitest suite, focused support tests, lint, typecheck, locale parity, production
 build, `go mod tidy -diff`, and `git diff --check` pass. Strict OpenSpec
-validation is pending because the CLI is unavailable in this environment.
-Authenticated desktop, collapsed-sidebar, and mobile visual verification is
-also pending.
+validation passes. Authenticated desktop, collapsed-sidebar, and mobile browser
+verification confirms self CRUD, target switching, persistent read-only state,
+and the absence of target mutation or credential actions.

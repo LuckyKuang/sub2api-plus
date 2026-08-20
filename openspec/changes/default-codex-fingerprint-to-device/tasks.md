@@ -14,5 +14,5 @@
 - [x] 3.1 Cover runtime fallback, persistence normalization, and migration behavior.
 - [x] 3.2 Cover create, edit, and bulk payload semantics.
 - [x] 3.3 Run focused frontend, locale, type, lint, and migration filename checks.
-- [ ] 3.4 Run backend Go formatting, unit tests, and migration integration tests
+- [x] 3.4 Run backend Go formatting, unit tests, and migration integration tests
   when the required Go 1.26.6 and PostgreSQL toolchain is available.
