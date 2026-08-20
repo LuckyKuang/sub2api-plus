@@ -106,6 +106,25 @@ fingerprint rules, and fingerprint-bypass option do not affect authorization.
 `gateway.force_codex_cli` is not an identity source and cannot bypass inbound
 access control or replace the selected outbound identity.
 
+## Outbound fingerprint convergence
+
+Every credential-owning OpenAI OAuth account stores an explicit
+`extra.codex_fingerprint_mode`. New accounts default to `device`; missing,
+empty, null, or malformed legacy values are normalized to `device`. API-key,
+setup-token, and credential-shadow accounts do not own this setting.
+
+| Mode | Upstream-visible identity behavior |
+| --- | --- |
+| `off` | Preserve client device, session, and thread identifiers. |
+| `device` (default) | Converge only the installation identifier to an account-level stable value; preserve each client's session and thread boundaries. |
+| `session` | Converge installation and session identifiers; derive a stable thread from the client-original session. |
+| `full` | Converge installation, session, and thread identifiers to account-level values. |
+
+Administration create, edit, bulk edit, Codex import, PAT creation, and CRS
+synchronization persist the selected value rather than representing a default
+by deleting the key. Native and legacy compact requests retain their existing
+fingerprint-convergence exclusions.
+
 ## Maintaining the profile registry
 
 Do not add a profile based only on a UI/product name or a community report.

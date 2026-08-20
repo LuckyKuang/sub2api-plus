@@ -211,6 +211,9 @@ func TestOpenAIGatewayService_OAuthMessagesBridgeDoesNotInjectDefaultInstruction
 			"access_token":       "oauth-token",
 			"chatgpt_account_id": "chatgpt-acc",
 		},
+		Extra: map[string]any{
+			CodexFingerprintModeExtraKey: string(codexFingerprintSession),
+		},
 		Status:      StatusActive,
 		Schedulable: true,
 	}
