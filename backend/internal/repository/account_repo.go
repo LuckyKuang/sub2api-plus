@@ -173,9 +173,6 @@ func createAccountRecord(ctx context.Context, client *dbent.Client, account *ser
 	if err := account.NormalizeCodexFingerprintMode(); err != nil {
 		return err
 	}
-	if err := account.NormalizeCodexFingerprintMode(); err != nil {
-		return err
-	}
 
 	builder := client.Account.Create().
 		SetName(account.Name).
@@ -498,9 +495,6 @@ func (r *accountRepository) updateAccount(
 ) error {
 	if account == nil {
 		return nil
-	}
-	if err := account.NormalizeCodexFingerprintMode(); err != nil {
-		return err
 	}
 	if err := account.NormalizeCodexFingerprintMode(); err != nil {
 		return err
@@ -2891,6 +2885,7 @@ func (r *accountRepository) BulkUpdate(ctx context.Context, ids []int64, updates
 	if len(ids) == 0 {
 		return 0, nil
 	}
+
 	setClauses := make([]string, 0, 8)
 	args := make([]any, 0, 8)
 
