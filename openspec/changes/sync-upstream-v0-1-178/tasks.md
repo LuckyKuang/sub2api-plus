@@ -32,5 +32,5 @@
 
 - [x] 4.1 Verify generated-code, migration, locale, release-document, and diff
   checks.
-- [ ] 4.2 Push the review branch to the personal fork and open the PR.
+- [x] 4.2 Push the review branch to the personal fork and open the PR.
 - [x] 4.3 Do not create or push tags, Releases, or images in this change.
