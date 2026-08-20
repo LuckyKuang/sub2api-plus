@@ -488,6 +488,26 @@ func (s *OpenAIGatewayService) resolveAccountByPreviousResponseIDForCapability(
 		_ = store.DeleteResponseAccount(ctx, derefGroupID(groupID), responseID)
 		return 0, nil, "", nil, nil
 	}
+	// Snapshot rows may still contain the pre-edit group set. Resolve the
+	// persisted account before any transport, model, or quota short-circuit so a
+	// group removal always invalidates the stale local response binding.
+	if s.schedulerSnapshot != nil && s.accountRepo != nil {
+		latest, latestErr := s.accountRepo.GetByID(ctx, account.ID)
+		if latestErr != nil || latest == nil {
+			_ = store.DeleteResponseAccount(ctx, derefGroupID(groupID), responseID)
+			return 0, nil, "", nil, nil
+		}
+		account = latest
+	}
+	// A response binding is group-local, but the account behind it may have been
+	// edited after the binding was written. Apply the same fresh membership
+	// predicate as ordinary sticky routing for API-key, ordinary OAuth, and
+	// sharing-enabled OAuth accounts. Delete only the local binding: shared OAuth
+	// owner/scope markers are a security boundary and must remain fail-closed.
+	if !s.openAIAccountMatchesSchedulingGroup(account, groupID) {
+		_ = store.DeleteResponseAccount(ctx, derefGroupID(groupID), responseID)
+		return 0, nil, "", nil, nil
+	}
 	// 非 WSv2 场景（如 force_http/全局关闭）不应使用 previous_response_id 粘连，
 	// 以保持“回滚到 HTTP”后的历史行为一致性。
 	if s.getOpenAIWSProtocolResolver().Resolve(account).Transport != OpenAIUpstreamTransportResponsesWebsocketV2 {
@@ -520,38 +540,9 @@ func (s *OpenAIGatewayService) resolveAccountByPreviousResponseIDForCapability(
 	if vetoed, _ := openAIProfitControlVetoReason(ctx, account); vetoed {
 		return 0, nil, "", nil, nil
 	}
-	if s.schedulerSnapshot != nil && s.accountRepo != nil {
-		latest, latestErr := s.accountRepo.GetByID(ctx, account.ID)
-		if latestErr != nil || latest == nil {
-			_ = store.DeleteResponseAccount(ctx, derefGroupID(groupID), responseID)
-			return 0, nil, "", nil, nil
-		}
-		if shouldClearStickySession(latest, requestedModel) || !latest.IsOpenAI() || !latest.IsSchedulable() {
-			_ = store.DeleteResponseAccount(ctx, derefGroupID(groupID), responseID)
-			return 0, nil, "", nil, nil
-		}
-		if !parentHealthyForShadow(latest, s.parentAccountLookup(ctx)) {
-			_ = store.DeleteResponseAccount(ctx, derefGroupID(groupID), responseID)
-			return 0, nil, "", nil, nil
-		}
-		if requestedModel != "" && !latest.IsModelSupported(requestedModel) {
-			return 0, nil, "", nil, nil
-		}
-		if !latest.SupportsOpenAIEndpointCapability(requiredCapability) {
-			return 0, nil, "", nil, nil
-		}
-		if paused, _ := shouldAutoPauseOpenAIAccountByQuota(ctx, latest); paused {
-			return 0, nil, "", nil, nil
-		}
-		// 利润门对最新账号状态复检一次，语义同上：跳过复用、不删绑定。
-		if vetoed, _ := openAIProfitControlVetoReason(ctx, latest); vetoed {
-			return 0, nil, "", nil, nil
-		}
-		if s.isOpenAIAccountRequestRuntimeBlocked(latest, requestedModel) {
-			_ = store.DeleteResponseAccount(ctx, derefGroupID(groupID), responseID)
-			return 0, nil, "", nil, nil
-		}
-		account = latest
+	if s.isOpenAIAccountRequestRuntimeBlocked(account, requestedModel) {
+		_ = store.DeleteResponseAccount(ctx, derefGroupID(groupID), responseID)
+		return 0, nil, "", nil, nil
 	}
 	if requireCompact && openAICompactSupportTier(account) == 0 {
 		_ = store.DeleteResponseAccount(ctx, derefGroupID(groupID), responseID)

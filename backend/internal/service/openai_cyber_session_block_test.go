@@ -24,9 +24,9 @@ func newCyberBlockTestCtx(headers map[string]string, body string) (*gin.Context,
 }
 
 // TestCyberSessionBlockKey verifies F5a key derivation: explicit session signals
-// only (header session_id/conversation_id or body prompt_cache_key), apiKey
-// isolated, and EMPTY when no explicit signal (no content-derived fallback —
-// "不退化" decision).
+// only (direct headers, turn-metadata session_id, or body prompt_cache_key),
+// apiKey isolated, and EMPTY when no explicit signal (no content-derived
+// fallback — "不退化" decision).
 func TestCyberSessionBlockKey(t *testing.T) {
 	c1, b1 := newCyberBlockTestCtx(map[string]string{"session_id": "sess-abc"}, `{}`)
 	k1 := CyberSessionBlockKey(101, c1, b1)
@@ -54,6 +54,21 @@ func TestCyberSessionBlockKey(t *testing.T) {
 	require.NotEmpty(t, k6)
 	c6b, b6b := newCyberBlockTestCtx(map[string]string{"conversation_id": "conv-xyz"}, `{}`)
 	require.Equal(t, k6, CyberSessionBlockKey(101, c6b, b6b), "conversation_id key must be stable")
+
+	// Codex turn metadata uses only its stable session_id; turn_id may rotate.
+	c7, b7 := newCyberBlockTestCtx(map[string]string{
+		"X-Codex-Turn-Metadata": `{"session_id":"metadata-session","turn_id":"turn-1"}`,
+	}, `{}`)
+	c7b, b7b := newCyberBlockTestCtx(map[string]string{
+		"X-Codex-Turn-Metadata": `{"session_id":"metadata-session","turn_id":"turn-2"}`,
+	}, `{}`)
+	require.NotEmpty(t, CyberSessionBlockKey(101, c7, b7))
+	require.Equal(t, CyberSessionBlockKey(101, c7, b7), CyberSessionBlockKey(101, c7b, b7b))
+
+	c8, b8 := newCyberBlockTestCtx(map[string]string{
+		"X-Codex-Turn-Metadata": `{"turn_id":"turn-only"}`,
+	}, `{}`)
+	require.Empty(t, CyberSessionBlockKey(101, c8, b8))
 }
 
 // --- fakes ---

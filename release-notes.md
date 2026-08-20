@@ -18,6 +18,16 @@ Sub2API Plus v0.1.177+custom.002
 
 ## Fixed
 
+- Revalidate OpenAI API-key and OAuth response/session affinity against current
+  group membership and full account eligibility, including every turn of an
+  already-established Responses WebSocket in all ingress modes. Follow-up
+  turns now recheck billing, current model/capability/transport, and image
+  permission before upstream writes, so policy changes take effect without
+  waiting for sticky bindings or long-lived connections to expire.
+- Keep Codex Responses and Alpha Search on one account route by recognizing the
+  stable session in turn metadata; usage correlation and cyber-session blocking
+  now use the same sanitized session value, and default hard-affinity priority
+  changes no longer split an active conversation across accounts.
 - Preserve configured image storage for already-accepted task completion and
   historical ZIP downloads when administrators disable only new submissions.
 - Delete Redis task state atomically only while its current status is `failed`,

@@ -34,6 +34,7 @@ func TestProfitControl_PreviousResponseStickyVetoKeepsBinding(t *testing.T) {
 	groupID := int64(23)
 	now := time.Now()
 	expensive := profitControlWSAccount(31, 0.8, now)
+	expensive.GroupIDs = []int64{groupID}
 
 	cache := &stubGatewayCache{}
 	store := NewOpenAIWSStateStore(cache)
@@ -57,6 +58,7 @@ func TestProfitControl_PreviousResponseStickyVetoKeepsBinding(t *testing.T) {
 
 	// 上游倍率回落（探测刷新）后同一绑定重新可用。
 	recovered := profitControlWSAccount(31, 0.3, time.Now())
+	recovered.GroupIDs = []int64{groupID}
 	svc.accountRepo = stubOpenAIAccountRepo{accounts: []Account{recovered}}
 	selection, err = svc.SelectAccountByPreviousResponseID(ctx, &groupID, "resp_profit", "gpt-5.1", nil, false)
 	require.NoError(t, err)
