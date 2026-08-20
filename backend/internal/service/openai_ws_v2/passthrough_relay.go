@@ -55,6 +55,7 @@ type RelayTurnResult struct {
 	Usage                 Usage
 	RequestID             string
 	TerminalEventType     string
+	StartedAt             time.Time
 	// DownstreamComplete is true only when the upstream terminal frame was
 	// successfully delivered to the client. A drained terminal still carries
 	// billable usage, but is not a complete client-visible response.
@@ -77,6 +78,8 @@ type RelayOptions struct {
 	WriteTimeout                    time.Duration
 	IdleTimeout                     time.Duration
 	UpstreamDrainTimeout            time.Duration
+	FirstTurnStartedAt              time.Time
+	TakeNextTurnStartedAt           func() time.Time
 	FirstMessageType                coderws.MessageType
 	FirstMessageSent                bool
 	FirstResponseCreateStartedAt    time.Time
@@ -132,6 +135,7 @@ type observedUpstreamEvent struct {
 	eventType        string
 	responseID       string
 	usage            Usage
+	startedAt        time.Time
 	responseModel    string
 	responseConflict bool
 	duration         time.Duration
@@ -186,8 +190,15 @@ func Relay(
 	startAt := nowFn()
 	state := &relayState{requestModel: result.RequestModel}
 	metricStartAt := startAt
-	if options.FirstMessageSent && firstMessageType == coderws.MessageText && strings.TrimSpace(gjson.GetBytes(firstClientMessage, "type").String()) == "response.create" {
-		firstTurnStartedAt := options.FirstResponseCreateStartedAt
+	if options.FirstMessageSent && isClientResponseCreateFrame(firstMessageType, firstClientMessage) {
+		// The ingress freezes the accepted first-turn timestamp before the
+		// upstream write. Prefer that value for billing/lifecycle callbacks;
+		// the response-create metric timestamp remains a fallback for callers
+		// that do not provide the ingress hook.
+		firstTurnStartedAt := options.FirstTurnStartedAt
+		if firstTurnStartedAt.IsZero() {
+			firstTurnStartedAt = options.FirstResponseCreateStartedAt
+		}
 		if firstTurnStartedAt.IsZero() {
 			firstTurnStartedAt = startAt
 		}
@@ -212,9 +223,16 @@ func Relay(
 	}
 	writeClientFrameUpstream := func(msgType coderws.MessageType, payload []byte) error {
 		var turnTiming *relayTurnTiming
-		if msgType == coderws.MessageText && strings.TrimSpace(gjson.GetBytes(payload, "type").String()) == "response.create" {
+		if isClientResponseCreateFrame(msgType, payload) {
 			state.setRequestModel(strings.TrimSpace(gjson.GetBytes(payload, "model").String()))
-			turnTiming = state.beginResponseCreate(nowFn())
+			turnStartedAt := time.Time{}
+			if options.TakeNextTurnStartedAt != nil {
+				turnStartedAt = options.TakeNextTurnStartedAt()
+			}
+			if turnStartedAt.IsZero() {
+				turnStartedAt = nowFn()
+			}
+			turnTiming = state.beginResponseCreate(turnStartedAt)
 		}
 		err := writeUpstream(msgType, payload)
 		if err != nil {
@@ -252,8 +270,14 @@ func Relay(
 		})
 	} else {
 		var firstTurnTiming *relayTurnTiming
-		if firstMessageType == coderws.MessageText && strings.TrimSpace(gjson.GetBytes(firstClientMessage, "type").String()) == "response.create" {
-			firstTurnStartedAt := nowFn()
+		if isClientResponseCreateFrame(firstMessageType, firstClientMessage) {
+			firstTurnStartedAt := options.FirstTurnStartedAt
+			if firstTurnStartedAt.IsZero() {
+				firstTurnStartedAt = options.FirstResponseCreateStartedAt
+			}
+			if firstTurnStartedAt.IsZero() {
+				firstTurnStartedAt = nowFn()
+			}
 			firstTurnTiming = state.beginResponseCreate(firstTurnStartedAt)
 			metricStartAt = firstTurnStartedAt
 		}
@@ -456,6 +480,13 @@ func Relay(
 	})
 	_ = clientConn.Close()
 	return result, nil
+}
+
+func isClientResponseCreateFrame(msgType coderws.MessageType, payload []byte) bool {
+	if msgType != coderws.MessageText && msgType != coderws.MessageBinary {
+		return false
+	}
+	return strings.TrimSpace(gjson.GetBytes(payload, "type").String()) == "response.create"
 }
 
 func runClientToUpstream(
@@ -750,6 +781,7 @@ func observeUpstreamMessage(
 		state.lastResponseID = responseID
 	}
 	if hasCompletedTiming {
+		observed.startedAt = completedTiming.startAt
 		observed.responseModel = relayTurnResponseModel(&completedTiming)
 		observed.responseConflict = completedTiming.responseModelConflict
 		state.lastResponseModel = observed.responseModel
@@ -791,6 +823,7 @@ func emitTurnComplete(
 		Usage:                 observed.usage,
 		RequestID:             responseID,
 		TerminalEventType:     observed.eventType,
+		StartedAt:             observed.startedAt,
 		DownstreamComplete:    downstreamComplete,
 		Duration:              observed.duration,
 		FirstTokenMs:          openAIWSRelayCloneIntPtr(observed.firstToken),

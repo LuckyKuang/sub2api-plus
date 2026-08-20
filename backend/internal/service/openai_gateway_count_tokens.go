@@ -43,6 +43,12 @@ type openAIInputTokensCountPrepared struct {
 // locally. Grok does not expose a compatible token-counting endpoint, so this
 // path deliberately avoids account selection, credentials, and upstream calls.
 func EstimateGrokCountTokens(body []byte) (int, error) {
+	return estimateAnthropicCountTokensLocally(body)
+}
+
+// estimateAnthropicCountTokensLocally 走 Anthropic→Responses→tiktoken 链本地估算
+// count_tokens，不发任何上游请求（上游无兼容端点的平台使用）。
+func estimateAnthropicCountTokensLocally(body []byte) (int, error) {
 	var anthropicReq apicompat.AnthropicRequest
 	if err := json.Unmarshal(body, &anthropicReq); err != nil {
 		return 0, fmt.Errorf("parse anthropic count_tokens request: %w", err)
@@ -64,7 +70,7 @@ func EstimateGrokCountTokens(body []byte) (int, error) {
 		ToolChoice:   responsesReq.ToolChoice,
 	})
 	if err != nil {
-		return 0, fmt.Errorf("estimate grok input tokens: %w", err)
+		return 0, fmt.Errorf("estimate input tokens: %w", err)
 	}
 	if estimated < openAIInputTokensFallbackMinimum {
 		estimated = openAIInputTokensFallbackMinimum

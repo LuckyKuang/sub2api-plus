@@ -199,6 +199,13 @@ func (s *OpenAIGatewayService) alignOpenAIUpstreamSessionIdentityFromBody(
 	if promptCacheKey == "" {
 		return nil
 	}
+	if isOpenAICodexCompactionRequest(c) {
+		// The compact endpoint owns its session namespace and the Plus contract
+		// keeps the client key opaque. Do not hash or rewrite it through the
+		// ordinary Responses cache identity layer.
+		setOpenAIUpstreamSessionIdentity(headers, promptCacheKey)
+		return nil
+	}
 	identity, err := s.resolveOpenAIUpstreamPromptCacheHeaderIdentity(c, account, promptCacheKey)
 	if err != nil {
 		return fmt.Errorf("resolve prompt cache header identity: %w", err)

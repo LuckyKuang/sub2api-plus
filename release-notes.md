@@ -1,52 +1,44 @@
-Sub2API Plus v0.1.177+custom.003
+Sub2API Plus v0.1.178+custom.001
 
 ## Highlights
 
-- Add an administrator support view for inspecting a selected user's safe
-  usage, subscription, API key, payment, and asynchronous-image information
-  without changing authentication state or exposing mutation operations.
-- Default OpenAI OAuth account Codex fingerprints to the stable per-device
-  mode across account creation, editing, bulk updates, and persisted data.
-- Keep OpenAI prompt-cache identity and multi-turn account routing stable
-  across Responses, Chat Completions, HTTP, and WebSocket paths.
+- Import official v0.1.178 channel-monitor quota modes, Chinese-provider
+  balance/quota support, and time-based channel pricing.
+- Preserve the latest Plus Codex mode-only behavior, including the explicit
+  `device` default, prompt-cache, compaction, and WebSocket relay safeguards,
+  while adopting the upstream protocol fixes.
+- Add the upstream account, scheduler, billing, and platform UI updates with
+  synchronized English and Chinese locales.
 
 ## Changed
 
-- Backfill every eligible top-level OpenAI OAuth account with an explicit
-  Codex fingerprint mode and enforce valid persisted modes on later writes.
-- Mark administrator support responses as non-cacheable and return only safe
-  API key summaries without plaintext credentials.
-- Align every build image with the declared Go 1.26.6 toolchain, increase the
-  frontend build heap limit, and update the Go archive dependency.
-
-## Fixed
-
-- Revalidate durable account eligibility and billing before WebSocket
-  continuation turns while preserving one stable session route whenever the
-  current account remains eligible.
-- Derive prompt-cache identity from stable request and account properties
-  instead of allocation-dependent tool-schema state.
-- Repair IP login-failure threshold transactions, permanent manual blocks,
-  concurrent updates, setting bounds, and the corresponding administrator UI.
-- Avoid stale administrator support responses after rapid target changes and
-  keep target-user reads side-effect free.
-- Stabilize static-analysis, tool-schema allocation, and Windows WSL path
-  validation coverage used by the release gate.
+- Add forward-only migrations for platform quotas, the Plus Codex mode backfill,
+  channel time pricing, and monitor quota configuration.
+- Keep the custom Go module identity and Plus outbound identity precedence
+  while importing the official v0.1.178 baseline.
 
 ## Compatibility and migration
 
-- Migration 224 backfills missing, empty, or invalid fingerprint modes to
-  `device` for top-level OpenAI OAuth accounts. Existing explicit `off`,
-  `device`, `session`, and `full` values remain unchanged.
-- The migration removes the fingerprint-mode field from ineligible account
-  types and installs a database trigger that rejects invalid future values.
-- No new configuration field or manual operator action is required.
+- Existing data remains compatible. Startup applies migrations 224, 225, 226,
+  and 228 in lexical order; no manual migration command is required. Migration
+  224 normalizes the Codex fingerprint mode for top-level OpenAI OAuth
+  accounts (defaulting missing or invalid values to `device`) and removes that
+  field from non-applicable accounts. Migrations 225, 226, and 228 add channel
+  time pricing, monitor quota modes, and the expanded platform-quota constraint;
+  migration 227 is intentionally unused.
+- Migrations are forward-only. Rolling back the application does not undo the
+  migration or its database trigger; back up PostgreSQL before upgrading. A
+  database rollback requires restoring a backup or applying an audited
+  compensating SQL migration.
+- The release is prepared as `planned` and is not published yet. Do not use
+  its image tag until the release process completes.
 
 ## Known issues
 
-None.
+- The fork PR still requires maintainer review and required GitHub checks
+  before it can be merged into `main`.
 
 ## Upstream baseline
 
-Official release: v0.1.177
-Official commit: 073e92d17178a1ccdb0a27017f572f10c9c7ab62
+Official release: v0.1.178
+Official commit: e0c48a19ed794a565e3858662520afe0a1f9f0ba
