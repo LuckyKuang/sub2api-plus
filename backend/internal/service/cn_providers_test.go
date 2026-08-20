@@ -240,6 +240,15 @@ func TestCNBalanceURL(t *testing.T) {
 		Credentials: map[string]any{"base_url": "https://api.deepseek.com"},
 	}
 	require.Equal(t, "https://api.deepseek.com/user/balance", cnBalanceURL(deepseek))
+
+	deepseekV1 := &Account{
+		Platform:    PlatformDeepseek,
+		Credentials: map[string]any{"base_url": "https://api.deepseek.com/v1/"},
+	}
+	require.Equal(t, "https://api.deepseek.com/user/balance", cnBalanceURL(deepseekV1))
+	require.Empty(t, cnBalanceURL(nil))
+	var nilAccount *Account
+	require.Empty(t, nilAccount.GetOpenAIFormatBaseURL())
 }
 
 // TestCNProviderThresholdCandidates 从 Extra 快照读取 5h / weekly 候选。

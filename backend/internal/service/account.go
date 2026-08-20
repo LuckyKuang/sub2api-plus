@@ -1412,7 +1412,10 @@ func (a *Account) GetAnthropicProtocolBaseURL() string {
 // 端点，不能拿来拼 OpenAI 路径，此时返回该供应商 × 模式的 Chat Completions
 // 默认 base（模型同步等协议族共用路径仍可用）。
 func (a *Account) GetOpenAIFormatBaseURL() string {
-	if a == nil || !a.IsAnthropicProtocol() {
+	if a == nil {
+		return ""
+	}
+	if !a.IsAnthropicProtocol() {
 		return a.GetOpenAIBaseURL()
 	}
 	switch a.Platform {

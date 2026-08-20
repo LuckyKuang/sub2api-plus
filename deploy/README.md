@@ -186,6 +186,11 @@ When using Docker Compose with `AUTO_SETUP=true`:
 - Migrations are applied in lexicographic order (e.g. `001_...sql`, `002_...sql`).
 - `schema_migrations` tracks applied migrations (filename + checksum).
 - Migrations are forward-only; rollback requires a DB backup restore or a manual compensating SQL script.
+- Before upgrading to a release that adds migrations, back up PostgreSQL. The
+  application rollback commands below only change the application image or
+  binary; they do not reverse schema, data, functions, or triggers. For the
+  v0.1.178+custom.001 migration 224, restoring the previous database behavior
+  requires a backup restore or an audited compensating SQL migration.
 
 **Verify `users.allowed_groups` → `user_allowed_groups` backfill**
 

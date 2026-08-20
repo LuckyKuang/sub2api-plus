@@ -19,8 +19,15 @@ Sub2API Plus v0.1.178+custom.001
 
 ## Compatibility and migration
 
-- Existing data remains compatible. Startup applies the new migrations in
-  lexical order: 224, 225, 226, and 228; no manual migration is required.
+- Existing data remains compatible. Startup applies migrations 224, 225, 226,
+  and 228 in lexical order; no manual migration command is required. Migration
+  224 normalizes the Codex fingerprint mode for top-level OpenAI OAuth
+  accounts (defaulting missing or invalid values to `device`) and removes that
+  field from non-applicable accounts.
+- Migrations are forward-only. Rolling back the application does not undo the
+  migration or its database trigger; back up PostgreSQL before upgrading. A
+  database rollback requires restoring a backup or applying an audited
+  compensating SQL migration.
 - The release is prepared as `planned` and is not published yet. Do not use
   its image tag until the release process completes.
 
