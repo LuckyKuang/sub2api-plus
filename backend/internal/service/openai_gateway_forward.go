@@ -21,6 +21,7 @@ import (
 func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, account *Account, body []byte) (*OpenAIForwardResult, error) {
 	beginUpstreamResponseModelObservation(c)
 	clearGrokResponsesClientToolMapping(c)
+	clearOpenAIResponsesClientToolMapping(c)
 	clearOpenAIResponsesNamespaceNames(c)
 	startTime := time.Now()
 	// 固定渠道映射后的请求级 canonical body；账号 normalize/strip 不得改写跨 failover hint。
@@ -106,6 +107,13 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 
 	if account.Platform == PlatformGrok {
 		return s.forwardGrokResponses(ctx, c, account, body, originalModel, reqStream, startTime)
+	}
+
+	// CN 供应商 anthropic 协议账号：/v1/responses 入站是交叉协议组合
+	// （Responses 客户端 × Anthropic 上游），转成 Anthropic 请求走原生端点。
+	// 不能落到下面的 raw-CC 分支——其 URL 构造会把 anthropic base 当 CC base 用。
+	if account.IsAnthropicProtocol() {
+		return s.forwardResponsesViaNativeAnthropic(ctx, c, account, body, reqModel)
 	}
 
 	if shouldForwardOpenAIResponsesViaRawChatCompletions(account) {
@@ -395,13 +403,24 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	}
 
 	if account.Type == AccountTypeOAuth {
+		// Clear request-scoped fingerprint state before resolving this attempt;
+		// retries may reuse the same Gin context for a different account.
+		stageCodexFingerprintIDs(c, nil)
 		decoded, decodeErr := ensureReqBody()
 		if decodeErr != nil {
 			return nil, decodeErr
 		}
 		codexResult := codexTransformResult{}
 		if compatMessagesBridge {
+			// The compatibility bridge already carries Claude's developer guard in
+			// input.  Do not let the generic OAuth transform promote that payload
+			// into the synthetic Codex instructions field; only an explicit
+			// request-level instructions value is retained.
+			_, hadExplicitInstructions := decoded["instructions"]
 			codexResult = applyCodexOAuthTransformWithOptions(decoded, codexOAuthTransformOptions{IsCodexCLI: isCodexCLI, IsCompact: isCompactRequest, SkipDefaultInstructions: true, PreserveToolCallIDs: true})
+			if !hadExplicitInstructions {
+				decoded["instructions"] = ""
+			}
 			ensureCodexOAuthInstructionsField(decoded)
 			markDecodedModified()
 		} else {
@@ -436,10 +455,13 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			}
 		}
 		storeCodexFingerprintIDs(c, fpIDs)
+		stageCodexFingerprintIDs(c, fpIDs)
 		if codexResult.NormalizedModel != "" {
 			upstreamModel = codexResult.NormalizedModel
 		}
-		if codexResult.PromptCacheKey != "" {
+		if currentPromptCacheKey, ok := decoded["prompt_cache_key"].(string); ok && currentPromptCacheKey != "" {
+			promptCacheKey = currentPromptCacheKey
+		} else if codexResult.PromptCacheKey != "" {
 			promptCacheKey = codexResult.PromptCacheKey
 		}
 	}
@@ -560,20 +582,28 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		requestView = newOpenAIRequestView(body)
 		reqBody = nil
 	}
-	var cacheIdentityChanged bool
-	body, promptCacheKey, cacheIdentityChanged, err = s.ensureOpenAIResponsesPromptCacheIdentity(
-		c,
-		account,
-		body,
-		promptCacheKey,
-		upstreamModel,
-	)
-	if err != nil {
-		return nil, err
-	}
-	if cacheIdentityChanged {
-		requestView = newOpenAIRequestView(body)
-		reqBody = nil
+	// Finalize prompt-cache identity after OAuth transformation. Explicit
+	// fingerprint-mode Messages bridges intentionally keep the prompt key as a
+	// header-only session identity; legacy/implicit bridges retain the upstream
+	// key in the body for compatibility. Compact owns its raw body namespace.
+	skipBodyCacheIdentity := isOpenAICodexCompactionRequest(c) ||
+		(compatMessagesBridge && account.Type == AccountTypeOAuth && codexFingerprintModeIsExplicit(account.Extra))
+	if !skipBodyCacheIdentity {
+		var cacheIdentityChanged bool
+		body, promptCacheKey, cacheIdentityChanged, err = s.ensureOpenAIResponsesPromptCacheIdentity(
+			c,
+			account,
+			body,
+			promptCacheKey,
+			upstreamModel,
+		)
+		if err != nil {
+			return nil, err
+		}
+		if cacheIdentityChanged {
+			requestView = newOpenAIRequestView(body)
+			reqBody = nil
+		}
 	}
 	imageBillingModel := ""
 	imageSizeTier := ""
@@ -1109,12 +1139,16 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 			if err != nil {
 				return nil, err
 			}
-			targetURL = buildOpenAIResponsesURL(validatedURL)
+			targetURL = buildOpenAIResponsesURLForPlatform(account.Platform, validatedURL)
 		}
 	default:
 		targetURL = openaiPlatformAPIURL
 	}
 	targetURL = appendOpenAIResponsesRequestPathSuffix(targetURL, openAIResponsesRequestPathSuffix(c))
+
+	// DeepSeek 原生 Responses 端点为无状态实现：强制 store=false、清除
+	// previous_response_id，避免携带状态字段被上游拒绝。
+	body = normalizeDeepSeekResponsesRequestBody(account, body)
 
 	req, err := http.NewRequestWithContext(ctx, "POST", targetURL, bytes.NewReader(body))
 	if err != nil {
@@ -1172,21 +1206,21 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 		if isOpenAIResponsesCompactPath(c) {
 			req.Header.Set("accept", "application/json")
 			if req.Header.Get("version") == "" {
-				req.Header.Set("version", codexCLIVersion)
+				req.Header.Set("version", CodexCanonicalClientVersion())
 			}
 			compactSession := resolveOpenAICompactSessionID(c)
-			upstreamSessionID, err := s.resolveOpenAIUpstreamPromptCacheHeaderIdentity(c, account, compactSession)
-			if err != nil {
-				return nil, err
-			}
-			setOpenAIUpstreamSessionIdentity(req.Header, upstreamSessionID)
+			setOpenAIUpstreamSessionIdentity(req.Header, compactSession)
 		} else {
 			req.Header.Set("accept", "text/event-stream")
 		}
 		if promptCacheKey != "" {
-			isolated, err := s.resolveOpenAIUpstreamPromptCacheHeaderIdentity(c, account, promptCacheKey)
-			if err != nil {
-				return nil, err
+			isolated := promptCacheKey
+			if !isOpenAIResponsesCompactPath(c) {
+				var err error
+				isolated, err = s.resolveOpenAIUpstreamPromptCacheHeaderIdentity(c, account, promptCacheKey)
+				if err != nil {
+					return nil, err
+				}
 			}
 			setOpenAIUpstreamSessionIdentity(req.Header, isolated)
 			if !compatMessagesBridge || clientConversationID != "" {
@@ -1199,9 +1233,13 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 		req.Header.Set("accept", "application/json")
 	}
 	if account.Type != AccountTypeOAuth && promptCacheKey != "" {
-		identity, err := s.resolveOpenAIUpstreamPromptCacheHeaderIdentity(c, account, promptCacheKey)
-		if err != nil {
-			return nil, err
+		identity := promptCacheKey
+		if !isOpenAICodexCompactionRequest(c) {
+			var err error
+			identity, err = s.resolveOpenAIUpstreamPromptCacheHeaderIdentity(c, account, promptCacheKey)
+			if err != nil {
+				return nil, err
+			}
 		}
 		setOpenAIUpstreamSessionIdentity(req.Header, identity)
 	}
@@ -1230,6 +1268,20 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 	// Fingerprint convergence owns device/thread metadata, while the finalized
 	// body key owns the cache session. Re-apply it after every generic header
 	// mutation so prompt_cache_key/session-id/session_id cannot drift.
+	if account.Type == AccountTypeOAuth && !isOpenAICodexCompactionRequest(c) {
+		fingerprintAccount, fingerprintErr := s.resolveCodexFingerprintAccount(ctx, account)
+		if fingerprintErr != nil {
+			return nil, fmt.Errorf("resolve Codex fingerprint credential account: %w", fingerprintErr)
+		}
+		ids := stagedCodexFingerprintIDs(c, fingerprintAccount)
+		if ids == nil {
+			ids = loadCodexFingerprintIDs(c, fingerprintAccount)
+		}
+		applyCodexFingerprintHeaders(req.Header, ids)
+	}
+	// Fingerprint convergence owns device/thread metadata, while the finalized
+	// body key owns the cache session. Apply the fingerprint first, then restore
+	// the body/header cache identity as the final authority.
 	if err := s.alignOpenAIUpstreamSessionIdentityFromBody(c, account, req.Header, body); err != nil {
 		return nil, err
 	}

@@ -46,6 +46,21 @@ func (s *OpenAIGatewayService) ensureOpenAIResponsesPromptCacheIdentity(
 		return body, "", false, nil
 	}
 
+	// A Codex fingerprint pass may have already rewritten the body key to the
+	// account's converged session ID.  Treat that value as finalized instead of
+	// hashing it again through the generic tenant/session namespace; otherwise
+	// body and headers expose different identities on the same attempt.
+	if account != nil && account.Type == AccountTypeOAuth && !isOpenAICodexCompactionRequest(c) {
+		ids := stagedCodexFingerprintIDs(c, account)
+		if ids == nil {
+			ids = loadCodexFingerprintIDs(c, account)
+		}
+		if ids != nil && ids.sessionID != "" && rawIdentity == ids.sessionID {
+			markOpenAIAlignedPromptCacheIdentity(c, account, rawIdentity, ids.sessionID)
+			return body, ids.sessionID, false, nil
+		}
+	}
+
 	// Internal retries do not always carry the finalized body forward. The
 	// Chat-Completions compatibility recovery path, for example, rebuilds the
 	// Responses body from the original request while passing the finalized key
@@ -197,6 +212,13 @@ func (s *OpenAIGatewayService) alignOpenAIUpstreamSessionIdentityFromBody(
 ) error {
 	promptCacheKey := strings.TrimSpace(gjson.GetBytes(body, "prompt_cache_key").String())
 	if promptCacheKey == "" {
+		return nil
+	}
+	if isOpenAICodexCompactionRequest(c) {
+		// The compact endpoint owns its session namespace and the Plus contract
+		// keeps the client key opaque. Do not hash or rewrite it through the
+		// ordinary Responses cache identity layer.
+		setOpenAIUpstreamSessionIdentity(headers, promptCacheKey)
 		return nil
 	}
 	identity, err := s.resolveOpenAIUpstreamPromptCacheHeaderIdentity(c, account, promptCacheKey)

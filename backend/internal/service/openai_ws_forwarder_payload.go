@@ -42,7 +42,7 @@ func (s *OpenAIGatewayService) buildOpenAIResponsesWSURL(account *Account) (stri
 			if err != nil {
 				return "", err
 			}
-			targetURL = buildOpenAIResponsesURL(validatedURL)
+			targetURL = buildOpenAIResponsesURLForPlatform(account.Platform, validatedURL)
 		}
 	default:
 		targetURL = openaiPlatformAPIURL
@@ -79,6 +79,7 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	routingServiceTier string,
 ) (http.Header, openAIWSSessionHeaderResolution, error) {
 	headers := make(http.Header)
+	inboundClientRequestID := ""
 	if account == nil || !account.IsOpenAIAgentIdentity() {
 		headers.Set("authorization", "Bearer "+token)
 	}
@@ -110,6 +111,7 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 				headers.Set(name, value)
 			}
 		}
+		inboundClientRequestID = strings.TrimSpace(c.Request.Header.Get("x-client-request-id"))
 		alignOpenAICodexThreadHeaders(headers)
 	}
 	// 真实 Codex 的 WS 握手同样携带会话级 x-codex-beta-features
@@ -119,12 +121,15 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	// 实际请求因头差异落进不同的连接池兼容分桶。
 	applyOpenAICodexBetaFeatures(c, account, headers)
 	// OAuth 账号：统一应用 API-key 隔离或账号级共享策略，并对未授权组 fail closed。
+	resolvedSessionIdentity := ""
+	resolvedConversationIdentity := ""
 	if account != nil && account.Type == AccountTypeOAuth {
 		if sessionResolution.SessionID != "" {
 			upstreamSessionID, err := s.resolveOpenAIUpstreamPromptCacheHeaderIdentity(c, account, sessionResolution.SessionID)
 			if err != nil {
 				return nil, openAIWSSessionHeaderResolution{}, err
 			}
+			resolvedSessionIdentity = upstreamSessionID
 			setOpenAIUpstreamSessionIdentity(headers, upstreamSessionID)
 		}
 		if sessionResolution.ConversationID != "" {
@@ -132,6 +137,7 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 			if err != nil {
 				return nil, openAIWSSessionHeaderResolution{}, err
 			}
+			resolvedConversationIdentity = upstreamConversationID
 			headers.Set("conversation_id", upstreamConversationID)
 		}
 	} else {
@@ -140,9 +146,11 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 			if err != nil {
 				return nil, openAIWSSessionHeaderResolution{}, err
 			}
+			resolvedSessionIdentity = upstreamSessionID
 			setOpenAIUpstreamSessionIdentity(headers, upstreamSessionID)
 		}
 		if sessionResolution.ConversationID != "" {
+			resolvedConversationIdentity = sessionResolution.ConversationID
 			headers.Set("conversation_id", sessionResolution.ConversationID)
 		}
 	}
@@ -151,6 +159,25 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	}
 	if metadata := strings.TrimSpace(turnMetadata); metadata != "" {
 		headers.Set(openAIWSTurnMetadataHeader, metadata)
+	}
+	stagedFingerprint := stagedCodexFingerprintIDs(c, account)
+	applyCodexFingerprintHeaders(headers, stagedFingerprint)
+	// Fingerprint convergence owns installation/thread metadata. The WS
+	// session header remains the cache identity resolved above; device mode
+	// additionally preserves the client's raw session when no explicit cache
+	// key selected a different identity.
+	if stagedFingerprint != nil && resolvedSessionIdentity != "" {
+		if stagedFingerprint.mode == codexFingerprintDevice && sessionResolution.SessionSource != "prompt_cache_key_aligned" {
+			setOpenAIUpstreamSessionIdentity(headers, sessionResolution.SessionID)
+		} else {
+			setOpenAIUpstreamSessionIdentity(headers, resolvedSessionIdentity)
+		}
+		if stagedFingerprint != nil && stagedFingerprint.mode == codexFingerprintDevice && inboundClientRequestID != "" {
+			headers.Set("x-client-request-id", inboundClientRequestID)
+		}
+	}
+	if resolvedConversationIdentity != "" {
+		headers.Set("conversation_id", resolvedConversationIdentity)
 	}
 
 	if account != nil && account.Type == AccountTypeOAuth {

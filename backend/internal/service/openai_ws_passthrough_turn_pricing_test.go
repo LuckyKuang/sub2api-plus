@@ -74,17 +74,29 @@ func TestPassthroughIngressCallsBeforeTurn(t *testing.T) {
 
 	var hooksMu sync.Mutex
 	beforeTurnCalls := 0
-	afterTurnCalls := 0
+	expectedTurnStartedAt := time.Date(2026, time.August, 17, 9, 59, 59, 0, time.UTC)
+	type hookEvent struct {
+		name      string
+		turn      int
+		startedAt time.Time
+	}
+	var hookEvents []hookEvent
 	hooks := &OpenAIWSIngressHooks{
+		InitialTurnStartedAt: expectedTurnStartedAt,
+		TurnStarted: func(turn int, startedAt time.Time) {
+			hooksMu.Lock()
+			hookEvents = append(hookEvents, hookEvent{name: "TurnStarted", turn: turn, startedAt: startedAt})
+			hooksMu.Unlock()
+		},
 		BeforeTurn: func(int) error {
 			hooksMu.Lock()
 			beforeTurnCalls++
 			hooksMu.Unlock()
 			return nil
 		},
-		AfterTurn: func(int, *OpenAIForwardResult, error) {
+		AfterTurn: func(turn int, _ *OpenAIForwardResult, _ error) {
 			hooksMu.Lock()
-			afterTurnCalls++
+			hookEvents = append(hookEvents, hookEvent{name: "AfterTurn", turn: turn})
 			hooksMu.Unlock()
 		},
 	}
@@ -113,11 +125,16 @@ func TestPassthroughIngressCallsBeforeTurn(t *testing.T) {
 	}
 
 	hooksMu.Lock()
-	gotBefore, gotAfter := beforeTurnCalls, afterTurnCalls
+	gotBefore := beforeTurnCalls
+	gotEvents := append([]hookEvent(nil), hookEvents...)
 	hooksMu.Unlock()
 
 	require.Equal(t, 1, gotBefore, "透传 ingress 必须在首个 response.create 前调用 BeforeTurn")
-	require.Positive(t, gotAfter, "透传 ingress 仍应回调 AfterTurn 提交用量")
+	require.GreaterOrEqual(t, len(gotEvents), 2, "透传 ingress 应报告 TurnStarted 和 AfterTurn")
+	require.Equal(t, "TurnStarted", gotEvents[0].name)
+	require.Equal(t, expectedTurnStartedAt, gotEvents[0].startedAt, "TurnStarted 必须携带入口冻结的首轮开始时刻")
+	require.Equal(t, "AfterTurn", gotEvents[1].name)
+	require.Equal(t, gotEvents[0].turn, gotEvents[1].turn, "TurnStarted 后应提交同一 turn 的 AfterTurn")
 }
 
 func TestPassthroughIngressBeforeTurnRejectsNextTurnBeforeUpstreamWrite(t *testing.T) {
