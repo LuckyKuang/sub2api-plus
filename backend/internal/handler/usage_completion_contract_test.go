@@ -23,6 +23,7 @@ func TestStreamGatewayUsageInputsCarryExplicitCompletion(t *testing.T) {
 		{file: "gateway_handler.go", typeName: "RecordUsageInput"},
 		{file: "gateway_handler_chat_completions.go", typeName: "RecordUsageInput"},
 		{file: "gateway_handler_responses.go", typeName: "RecordUsageInput"},
+		{file: "openai_gateway_handler.go", typeName: "OpenAIRecordUsageInput"},
 		{file: "gemini_v1beta_handler.go", typeName: "RecordUsageLongContextInput"},
 	}
 
@@ -48,6 +49,38 @@ func TestStreamGatewayUsageInputsCarryExplicitCompletion(t *testing.T) {
 			require.Empty(t, missing, "stream-capable handler usage records must set IsComplete explicitly")
 		})
 	}
+}
+
+func TestOpenAIResponsesUsageBillingHasSingleSubmissionPath(t *testing.T) {
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, filepath.Join(".", "openai_gateway_handler.go"), nil, 0)
+	require.NoError(t, err)
+
+	var responses *ast.FuncDecl
+	for _, declaration := range file.Decls {
+		function, ok := declaration.(*ast.FuncDecl)
+		if ok && function.Name.Name == "Responses" {
+			responses = function
+			break
+		}
+	}
+	require.NotNil(t, responses, "expected Responses handler")
+
+	submissionCalls := 0
+	ast.Inspect(responses.Body, func(node ast.Node) bool {
+		call, ok := node.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		selector, ok := call.Fun.(*ast.SelectorExpr)
+		if ok && selector.Sel.Name == "submitOpenAIUsageRecordTask" {
+			submissionCalls++
+		}
+		return true
+	})
+
+	require.Equal(t, 1, submissionCalls,
+		"Responses must submit one usage record per forwarding attempt; partial errors use the same path")
 }
 
 func isServiceInputLiteral(expr ast.Expr, typeName string) bool {
