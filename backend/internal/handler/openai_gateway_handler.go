@@ -47,8 +47,14 @@ type OpenAIGatewayHandler struct {
 }
 
 type openAIWSTurnChannelMappingSnapshot struct {
-	turn    int
-	mapping service.ChannelMappingResult
+	turn           int
+	requestedModel string
+	mapping        service.ChannelMappingResult
+}
+
+type openAIWSTurnCapabilitySnapshot struct {
+	turn       int
+	capability service.OpenAIEndpointCapability
 }
 
 var errOpenAIWSUnsupportedModelSwitch = errors.New("selected account does not support websocket model switch")
@@ -1534,12 +1540,11 @@ const (
 // 由 BeforeTurn 在每个 turn 开始时冻结，AfterTurn 的用量提交读取它；turn 在
 // 连接内串行推进，互斥锁只为跨用量提交 goroutine 的读取安全。
 //
-// 零值语义（重要）：ws_v2 passthrough ingress 只实现了 AfterTurn，没有任何
-// turn 起始回调，BeforeTurn 永远不会被调用。此时本值保持零，RecordUsage 经
-// openAIUsagePricingAt 回退到记录时刻——与引入分组利润控制前的基线一致。
-// 绝不能用建连时刻初始化：那会把透传连接的所有 turn 钉死在建连时的高峰因子，
-// 客户端只要峰前一分钟建连并保活，整条连接就能全程按谷价结算，正是利润控制
-// 想堵的漏洞。透传 ingress 目前不做 turn 级利润复核，只有建连时的准入门。
+// 所有 ingress 模式（包括 ws_v2 passthrough）都必须在每个 response.create 前
+// 调用 BeforeTurn；本值由该回调按 turn 冻结。零值仅用于尚未开始 turn 的连接，
+// RecordUsage 会防御性回退到记录时刻。绝不能用建连时刻初始化：那会把长连接
+// 的所有 turn 钉死在建连时的高峰因子，客户端只要峰前建连并保活即可长期按
+// 旧时刻计费，也会绕过每 turn 的账号硬资格复核。
 type openAIWSTurnPricing struct {
 	mu sync.Mutex
 	at time.Time
@@ -2211,7 +2216,13 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		// Passthrough rejects overlapping response.create frames, so one immutable
 		// turn-tagged slot preserves the exact mapping used for the in-flight request.
 		var turnChannelMapping atomic.Pointer[openAIWSTurnChannelMappingSnapshot]
-		turnChannelMapping.Store(&openAIWSTurnChannelMappingSnapshot{turn: 1, mapping: channelMappingWS})
+		turnChannelMapping.Store(&openAIWSTurnChannelMappingSnapshot{
+			turn:           1,
+			requestedModel: reqModel,
+			mapping:        channelMappingWS,
+		})
+		var turnCapability atomic.Pointer[openAIWSTurnCapabilitySnapshot]
+		turnCapability.Store(&openAIWSTurnCapabilitySnapshot{turn: 1, capability: requiredCapability})
 		// turn 级定价：BeforeTurn 重新冻结 pricingAt 并按最新门复核当前账号，
 		// AfterTurn 的计费读取所属 turn 的时刻。零值起步的语义见
 		// openAIWSTurnPricing 的注释——绝不能用建连时刻初始化。
@@ -2240,6 +2251,16 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 					writeSecurityAuditWSError(ctx, wsConn, decision)
 					return service.NewOpenAIWSClientCloseError(securityAuditWSCloseStatus(decision), securityAuditWSCloseReason(decision), nil)
 				}
+				turnRequiredCapability := service.OpenAIEndpointCapabilityChatCompletions
+				if service.IsExplicitImageGenerationIntent("/v1/responses", model, payload) {
+					if !service.GroupAllowsImageGeneration(apiKey.Group) {
+						return service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, service.ImageGenerationPermissionMessage(), nil)
+					}
+					if requestPlatform == service.PlatformOpenAI {
+						turnRequiredCapability = service.OpenAIEndpointCapabilityResponses
+					}
+				}
+				turnCapability.Store(&openAIWSTurnCapabilitySnapshot{turn: turn, capability: turnRequiredCapability})
 				return nil
 			},
 			MapRequestModel: func(turn int, originalModel string) (string, error) {
@@ -2255,7 +2276,11 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				if turn > 1 && !mappedModelUnchanged && !account.IsModelSupported(model) && !account.IsModelSupported(mapping.MappedModel) {
 					return "", newOpenAIWSUnsupportedModelSwitchError(mapping.MappedModel)
 				}
-				turnChannelMapping.Store(&openAIWSTurnChannelMappingSnapshot{turn: turn, mapping: mapping})
+				turnChannelMapping.Store(&openAIWSTurnChannelMappingSnapshot{
+					turn:           turn,
+					requestedModel: model,
+					mapping:        mapping,
+				})
 				return mapping.MappedModel, nil
 			},
 			BeforeTurn: func(turn int) error {
@@ -2266,11 +2291,59 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				if cyberBlockedThisConn {
 					return service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, cyberSessionBlockedClientMsg, nil)
 				}
-				// 长连接跨峰谷/倍率刷新防护：每个 turn 按当前时刻重装门并复核
-				// 当前账号，越线即要求客户端重连重选（连接绑定单一上游账号，
-				// 无法中途换号）。本 turn 的准入与计费共用同一 pricingAt。
+				// The first turn was checked once before account selection. Recheck each
+				// later turn so a long-lived connection cannot bypass a balance,
+				// subscription, platform-quota, API-key-limit, or RPM decision that a
+				// fresh HTTP request would observe.
+				if turn > 1 {
+					if err := h.billingCacheService.CheckBillingEligibility(ctx, apiKey.User, apiKey, apiKey.Group, subscription, service.QuotaPlatform(ctx, apiKey)); err != nil {
+						reqLog.Info("openai.websocket_turn_billing_eligibility_check_failed",
+							zap.Int("turn", turn),
+							zap.Error(err))
+						return service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "billing check failed", err)
+					}
+				}
+				turnModel := reqModel
+				if snapshot := turnChannelMapping.Load(); snapshot != nil && snapshot.turn == turn {
+					if model := strings.TrimSpace(snapshot.requestedModel); model != "" {
+						turnModel = model
+					}
+				}
+				turnRequiredCapability := requiredCapability
+				if snapshot := turnCapability.Load(); snapshot != nil && snapshot.turn == turn {
+					turnRequiredCapability = snapshot.capability
+				}
+				// 长连接不能在 turn 间安全更换持有凭据的上游账号。每轮从 DB
+				// 重载账号并执行与新 HTTP 请求一致的硬资格检查，使切组、禁用/
+				// 暂停、配额、模型能力和传输模式变更都在写入上游前生效。
+				latestAccount, err := h.gatewayService.RevalidateOpenAIAccountForWebSocketTurn(
+					ctx,
+					account,
+					apiKey.GroupID,
+					requestPlatform,
+					turnModel,
+					requiredTransport,
+					turnRequiredCapability,
+				)
+				if err != nil {
+					reqLog.Warn("openai.websocket_turn_account_revalidation_failed",
+						zap.Int("turn", turn),
+						zap.Int64("account_id", account.ID),
+						zap.Error(err))
+					return service.NewOpenAIWSClientCloseError(coderws.StatusTryAgainLater, "account eligibility could not be revalidated, please reconnect", err)
+				}
+				if latestAccount == nil {
+					reqLog.Info("openai.websocket_turn_account_ineligible",
+						zap.Int("turn", turn),
+						zap.Int64("account_id", account.ID),
+						zap.String("model", turnModel))
+					return service.NewOpenAIWSClientCloseError(coderws.StatusTryAgainLater, "account is no longer eligible for this connection, please reconnect", nil)
+				}
+				// 每个 turn 按当前时刻重装利润门并复核当前账号，越线同样要求
+				// 重连重选（连接绑定单一上游账号，无法中途换号）。本 turn 的
+				// 准入与计费共用同一 pricingAt。
 				turnCtx, turnAt := h.gatewayService.WithOpenAITurnPricingContext(ctx, apiKey.GroupID)
-				if _, vetoed, reason := h.gatewayService.ProfitControlVetoLatest(turnCtx, account); vetoed {
+				if _, vetoed, reason := h.gatewayService.ProfitControlVetoLatest(turnCtx, latestAccount); vetoed {
 					reqLog.Info("openai.websocket_turn_profit_vetoed",
 						zap.Int("turn", turn),
 						zap.Int64("account_id", account.ID),
@@ -2278,6 +2351,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 					return service.NewOpenAIWSClientCloseError(coderws.StatusTryAgainLater, "account is no longer eligible for this connection, please reconnect", nil)
 				}
 				turnPricing.freeze(turnAt)
+				accountMaxConcurrency = latestAccount.Concurrency
 				if turn == 1 {
 					return nil
 				}
@@ -2316,18 +2390,21 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				releaseTurnSlots()
 				turnRequestedModel := reqModel
 				turnUpstreamModel := ""
-				if result != nil && turn > 1 {
-					if model := strings.TrimSpace(result.Model); model != "" {
-						turnRequestedModel = model
-					}
-				}
 				if result != nil {
 					turnUpstreamModel = strings.TrimSpace(result.UpstreamModel)
 				}
 				var turnMapping service.ChannelMappingResult
 				if snapshot := turnChannelMapping.Load(); snapshot != nil && snapshot.turn == turn {
+					if model := strings.TrimSpace(snapshot.requestedModel); model != "" {
+						turnRequestedModel = model
+					}
 					turnMapping = snapshot.mapping
 				} else {
+					if result != nil && turn > 1 {
+						if model := strings.TrimSpace(result.Model); model != "" {
+							turnRequestedModel = model
+						}
+					}
 					turnMapping, _ = h.gatewayService.ResolveChannelMappingAndRestrict(ctx, apiKey.GroupID, turnRequestedModel)
 				}
 				if turnUpstreamModel == "" {

@@ -160,6 +160,7 @@ func TestOpenAIOAuthSessionPolicy_APIKeyLegacyPolicyKeepsSessionAndResponseBindi
 		Status:      StatusActive,
 		Schedulable: true,
 		Concurrency: 1,
+		GroupIDs:    []int64{groupID},
 		Extra: map[string]any{
 			"openai_apikey_responses_websockets_v2_enabled": true,
 			OpenAIOAuthSessionPolicyExtraKey: map[string]any{

@@ -1320,6 +1320,7 @@ func TestOpenAIGatewayService_SelectAccountWithScheduler_EnabledUsesAdvancedPrev
 			Schedulable: true,
 			Concurrency: 1,
 			Priority:    5,
+			GroupIDs:    []int64{groupID},
 			Extra: map[string]any{
 				"openai_apikey_responses_websockets_v2_enabled": true,
 			},
@@ -2463,6 +2464,7 @@ func TestOpenAIGatewayService_SelectAccountWithScheduler_PreviousResponseSticky(
 		Status:      StatusActive,
 		Schedulable: true,
 		Concurrency: 2,
+		GroupIDs:    []int64{groupID},
 		Extra: map[string]any{
 			"openai_apikey_responses_websockets_v2_enabled": true,
 		},
@@ -2506,6 +2508,350 @@ func TestOpenAIGatewayService_SelectAccountWithScheduler_PreviousResponseSticky(
 	require.Equal(t, account.ID, cache.sessionBindings["openai:session_hash_001"])
 	if selection.ReleaseFunc != nil {
 		selection.ReleaseFunc()
+	}
+}
+
+func TestOpenAIGatewayService_SelectAccountWithScheduler_MovableContinuationUsesMigratedSessionRoute(t *testing.T) {
+	resetOpenAIAdvancedSchedulerSettingCacheForTest()
+	defer resetOpenAIAdvancedSchedulerSettingCacheForTest()
+
+	ctx := context.Background()
+	groupID := int64(9010)
+	responseAccount := Account{
+		ID:          90101,
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeAPIKey,
+		Status:      StatusActive,
+		Schedulable: true,
+		Concurrency: 1,
+		Priority:    0,
+		GroupIDs:    []int64{groupID},
+		Extra: map[string]any{
+			"openai_apikey_responses_websockets_v2_enabled": true,
+		},
+	}
+	migratedAccount := Account{
+		ID:          90102,
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeAPIKey,
+		Status:      StatusActive,
+		Schedulable: true,
+		Concurrency: 1,
+		Priority:    50,
+		GroupIDs:    []int64{groupID},
+	}
+	newService := func() (*OpenAIGatewayService, OpenAIWSStateStore) {
+		cache := &schedulerTestGatewayCache{sessionBindings: map[string]int64{
+			"openai:session_migrated_cross_endpoint": migratedAccount.ID,
+		}}
+		svc := &OpenAIGatewayService{
+			accountRepo:        schedulerTestOpenAIAccountRepo{accounts: []Account{responseAccount, migratedAccount}},
+			cache:              cache,
+			cfg:                newSchedulerTestOpenAIWSV2Config(),
+			rateLimitService:   newOpenAIAdvancedSchedulerRateLimitService("true"),
+			concurrencyService: NewConcurrencyService(schedulerTestConcurrencyCache{}),
+		}
+		store := svc.getOpenAIWSStateStore()
+		require.NoError(t, store.BindResponseAccount(ctx, groupID, "resp_before_cross_endpoint_failover", responseAccount.ID, time.Hour))
+		return svc, store
+	}
+
+	t.Run("movable request follows migrated session", func(t *testing.T) {
+		svc, _ := newService()
+		selection, decision, err := svc.SelectAccountWithSchedulerForCapability(
+			ctx,
+			&groupID,
+			"resp_before_cross_endpoint_failover",
+			"session_migrated_cross_endpoint",
+			"gpt-5.1",
+			nil,
+			OpenAIUpstreamTransportAny,
+			OpenAIEndpointCapabilityChatCompletions,
+			false,
+			true,
+			true,
+			PlatformOpenAI,
+		)
+		require.NoError(t, err)
+		require.NotNil(t, selection)
+		require.Equal(t, migratedAccount.ID, selection.Account.ID)
+		require.Equal(t, openAIAccountScheduleLayerSessionSticky, decision.Layer)
+		require.True(t, decision.StickySessionHit)
+		require.False(t, decision.StickyPreviousHit)
+		if selection.ReleaseFunc != nil {
+			selection.ReleaseFunc()
+		}
+	})
+
+	t.Run("non-movable request stays on response owner", func(t *testing.T) {
+		svc, _ := newService()
+		selection, decision, err := svc.SelectAccountWithSchedulerForCapability(
+			ctx,
+			&groupID,
+			"resp_before_cross_endpoint_failover",
+			"session_migrated_cross_endpoint",
+			"gpt-5.1",
+			nil,
+			OpenAIUpstreamTransportAny,
+			OpenAIEndpointCapabilityChatCompletions,
+			false,
+			false,
+			true,
+			PlatformOpenAI,
+		)
+		require.NoError(t, err)
+		require.NotNil(t, selection)
+		require.Equal(t, responseAccount.ID, selection.Account.ID)
+		require.Equal(t, openAIAccountScheduleLayerPreviousResponse, decision.Layer)
+		require.True(t, decision.StickyPreviousHit)
+		if selection.ReleaseFunc != nil {
+			selection.ReleaseFunc()
+		}
+	})
+}
+
+func TestOpenAIGatewayService_SelectAccountWithScheduler_MovableContinuationHonorsSessionStickyEscape(t *testing.T) {
+	resetOpenAIAdvancedSchedulerSettingCacheForTest()
+	defer resetOpenAIAdvancedSchedulerSettingCacheForTest()
+
+	ctx := context.Background()
+	groupID := int64(9012)
+	stickyAccount := Account{
+		ID:          90121,
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeAPIKey,
+		Status:      StatusActive,
+		Schedulable: true,
+		Concurrency: 1,
+		Priority:    0,
+		GroupIDs:    []int64{groupID},
+		Extra: map[string]any{
+			"openai_apikey_responses_websockets_v2_enabled": true,
+		},
+	}
+	replacementAccount := Account{
+		ID:          90122,
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeAPIKey,
+		Status:      StatusActive,
+		Schedulable: true,
+		Concurrency: 1,
+		Priority:    1,
+		GroupIDs:    []int64{groupID},
+		Extra: map[string]any{
+			"openai_apikey_responses_websockets_v2_enabled": true,
+		},
+	}
+	cache := &schedulerTestGatewayCache{sessionBindings: map[string]int64{
+		"openai:session_escape_with_previous": stickyAccount.ID,
+	}}
+	cfg := newSchedulerTestOpenAIWSV2Config()
+	cfg.Gateway.OpenAIScheduler.StickyEscapeEnabled = true
+	cfg.Gateway.OpenAIScheduler.StickyEscapeTTFTMs = 15000
+	cfg.Gateway.OpenAIScheduler.StickyEscapeErrorRate = 0.5
+	svc := &OpenAIGatewayService{
+		accountRepo:      schedulerTestOpenAIAccountRepo{accounts: []Account{stickyAccount, replacementAccount}},
+		cache:            cache,
+		cfg:              cfg,
+		rateLimitService: newOpenAIAdvancedSchedulerRateLimitService("true"),
+		concurrencyService: NewConcurrencyService(schedulerTestConcurrencyCache{acquireResults: map[int64]bool{
+			stickyAccount.ID:      false,
+			replacementAccount.ID: true,
+		}}),
+		openaiAccountStats: newOpenAIAccountRuntimeStats(),
+	}
+	store := svc.getOpenAIWSStateStore()
+	require.NoError(t, store.BindResponseAccount(ctx, groupID, "resp_escape_with_previous", stickyAccount.ID, time.Hour))
+
+	slowTTFT := 20000
+	for i := 0; i < 3; i++ {
+		svc.openaiAccountStats.report(stickyAccount.ID, true, &slowTTFT)
+	}
+
+	selection, decision, err := svc.SelectAccountWithSchedulerForCapability(
+		ctx,
+		&groupID,
+		"resp_escape_with_previous",
+		"session_escape_with_previous",
+		"gpt-5.1",
+		nil,
+		OpenAIUpstreamTransportResponsesWebsocketV2,
+		OpenAIEndpointCapabilityChatCompletions,
+		false,
+		true,
+		true,
+		PlatformOpenAI,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, selection)
+	require.Equal(t, replacementAccount.ID, selection.Account.ID, "previous_response_id must not cancel a session sticky escape")
+	require.Equal(t, openAIAccountScheduleLayerLoadBalance, decision.Layer)
+	require.False(t, decision.StickyPreviousHit)
+	require.False(t, decision.StickySessionHit)
+	if selection.ReleaseFunc != nil {
+		selection.ReleaseFunc()
+	}
+
+	boundSessionAccountID, getErr := cache.GetSessionAccountID(ctx, groupID, "openai:session_escape_with_previous")
+	require.NoError(t, getErr)
+	require.Equal(t, stickyAccount.ID, boundSessionAccountID, "a soft escape must preserve the canonical sticky binding")
+	boundResponseAccountID, getErr := store.GetResponseAccount(ctx, groupID, "resp_escape_with_previous")
+	require.NoError(t, getErr)
+	require.Equal(t, stickyAccount.ID, boundResponseAccountID, "a soft escape must not rewrite the old response owner")
+}
+
+func TestOpenAIGatewayService_SelectAccountWithScheduler_GroupRemovalMigratesWholeSession(t *testing.T) {
+	resetOpenAIAdvancedSchedulerSettingCacheForTest()
+	defer resetOpenAIAdvancedSchedulerSettingCacheForTest()
+
+	ctx := context.Background()
+	groupID := int64(9015)
+	otherGroupID := int64(9016)
+	removedAccount := Account{
+		ID:          90151,
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeAPIKey,
+		Status:      StatusActive,
+		Schedulable: true,
+		Concurrency: 1,
+		Priority:    100,
+		GroupIDs:    []int64{otherGroupID},
+		Extra: map[string]any{
+			"openai_apikey_responses_websockets_v2_enabled": true,
+		},
+	}
+	replacementAccount := Account{
+		ID:          90152,
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeAPIKey,
+		Status:      StatusActive,
+		Schedulable: true,
+		Concurrency: 1,
+		Priority:    0,
+		GroupIDs:    []int64{groupID},
+		Extra: map[string]any{
+			"openai_apikey_responses_websockets_v2_enabled": true,
+		},
+	}
+	cache := &schedulerTestGatewayCache{sessionBindings: map[string]int64{
+		"openai:session_group_removed": removedAccount.ID,
+	}}
+	svc := &OpenAIGatewayService{
+		accountRepo: schedulerGroupAwareOpenAIAccountRepo{schedulerTestOpenAIAccountRepo{
+			accounts: []Account{removedAccount, replacementAccount},
+		}},
+		cache:              cache,
+		cfg:                newSchedulerTestOpenAIWSV2Config(),
+		rateLimitService:   newOpenAIAdvancedSchedulerRateLimitService("true"),
+		concurrencyService: NewConcurrencyService(schedulerTestConcurrencyCache{}),
+	}
+	store := svc.getOpenAIWSStateStore()
+	require.NoError(t, store.BindResponseAccount(ctx, groupID, "resp_group_removed_session", removedAccount.ID, time.Hour))
+
+	selection, decision, err := svc.SelectAccountWithSchedulerForCapability(
+		ctx,
+		&groupID,
+		"resp_group_removed_session",
+		"session_group_removed",
+		"gpt-5.1",
+		nil,
+		OpenAIUpstreamTransportResponsesWebsocketV2,
+		OpenAIEndpointCapabilityChatCompletions,
+		false,
+		true,
+		true,
+		PlatformOpenAI,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, selection)
+	require.Equal(t, replacementAccount.ID, selection.Account.ID)
+	require.Equal(t, openAIAccountScheduleLayerLoadBalance, decision.Layer)
+	require.False(t, decision.StickyPreviousHit)
+	require.False(t, decision.StickySessionHit)
+	if selection.ReleaseFunc != nil {
+		selection.ReleaseFunc()
+	}
+
+	boundResponseAccountID, getErr := store.GetResponseAccount(ctx, groupID, "resp_group_removed_session")
+	require.NoError(t, getErr)
+	require.Zero(t, boundResponseAccountID, "removed account response binding must be invalidated")
+	boundSessionAccountID, getErr := cache.GetSessionAccountID(ctx, groupID, "openai:session_group_removed")
+	require.NoError(t, getErr)
+	require.Equal(t, replacementAccount.ID, boundSessionAccountID, "the whole session route must migrate to the replacement account")
+}
+
+func TestOpenAIGatewayService_SelectAccountWithScheduler_MovableSharedOAuthContinuationUsesAuthorizedMigratedRoute(t *testing.T) {
+	resetOpenAIAdvancedSchedulerSettingCacheForTest()
+	defer resetOpenAIAdvancedSchedulerSettingCacheForTest()
+
+	ctx := oauthSessionPolicyContext(9901)
+	groupID := int64(9020)
+	responseAccount := newOpenAIOAuthSessionPolicyAccount(90201, groupID)
+	migratedAccount := newOpenAIOAuthSessionPolicyAccount(90202, groupID)
+	responseAccount.Priority = 0
+	migratedAccount.Priority = 50
+	responseAccount.Extra["openai_oauth_responses_websockets_v2_enabled"] = true
+	migratedAccount.Extra["openai_oauth_responses_websockets_v2_enabled"] = true
+	cache := &oauthSessionPolicyCache{}
+	svc := &OpenAIGatewayService{
+		accountRepo: &oauthSessionPolicyAccountRepo{accounts: map[int64]*Account{
+			responseAccount.ID: &responseAccount,
+			migratedAccount.ID: &migratedAccount,
+		}},
+		cache:              cache,
+		cfg:                newSchedulerTestOpenAIWSV2Config(),
+		rateLimitService:   newOpenAIAdvancedSchedulerRateLimitService("true"),
+		concurrencyService: NewConcurrencyService(schedulerTestConcurrencyCache{}),
+	}
+	store := svc.getOpenAIWSStateStore()
+	require.NoError(t, svc.bindOpenAIResponseAccount(ctx, store, groupID, &responseAccount, "resp_shared_oauth_before_failover", time.Hour))
+	require.NoError(t, svc.setStickySessionAccountID(ctx, &groupID, "shared_oauth_migrated", migratedAccount.ID, time.Hour))
+
+	selection, decision, err := svc.SelectAccountWithSchedulerForCapability(
+		ctx,
+		&groupID,
+		"resp_shared_oauth_before_failover",
+		"shared_oauth_migrated",
+		"gpt-5.1",
+		nil,
+		OpenAIUpstreamTransportAny,
+		OpenAIEndpointCapabilityChatCompletions,
+		false,
+		true,
+		true,
+		PlatformOpenAI,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, selection)
+	require.Equal(t, migratedAccount.ID, selection.Account.ID)
+	require.Equal(t, openAIAccountScheduleLayerSessionSticky, decision.Layer)
+	require.True(t, decision.StickySessionHit)
+	require.False(t, decision.StickyPreviousHit)
+	if selection.ReleaseFunc != nil {
+		selection.ReleaseFunc()
+	}
+
+	nonMovableSelection, nonMovableDecision, err := svc.SelectAccountWithSchedulerForCapability(
+		ctx,
+		&groupID,
+		"resp_shared_oauth_before_failover",
+		"shared_oauth_migrated",
+		"gpt-5.1",
+		nil,
+		OpenAIUpstreamTransportAny,
+		OpenAIEndpointCapabilityChatCompletions,
+		false,
+		false,
+		true,
+		PlatformOpenAI,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, nonMovableSelection)
+	require.Equal(t, responseAccount.ID, nonMovableSelection.Account.ID, "non-movable OAuth continuation must remain on its response owner")
+	require.Equal(t, openAIAccountScheduleLayerPreviousResponse, nonMovableDecision.Layer)
+	require.True(t, nonMovableDecision.StickyPreviousHit)
+	if nonMovableSelection.ReleaseFunc != nil {
+		nonMovableSelection.ReleaseFunc()
 	}
 }
 
@@ -3765,6 +4111,29 @@ func TestDeriveOpenAISelectionSeed_NoAffinityAddsEntropy(t *testing.T) {
 	require.NotZero(t, seed1)
 	require.NotZero(t, seed2)
 	require.NotEqual(t, seed1, seed2)
+}
+
+func TestDeriveOpenAISelectionSeed_StableSessionSupersedesPreviousResponseID(t *testing.T) {
+	groupID := int64(77)
+	base := OpenAIAccountScheduleRequest{
+		GroupID:        &groupID,
+		SessionHash:    "shared_cross_endpoint_session",
+		RequestedModel: "gpt-5.1",
+	}
+	responses := base
+	responses.PreviousResponseID = "resp_endpoint_specific"
+	alphaSearch := base
+
+	require.Equal(t, deriveOpenAISelectionSeed(alphaSearch), deriveOpenAISelectionSeed(responses),
+		"endpoint-specific response IDs must not split a stable session candidate order")
+
+	firstResponseOnly := base
+	firstResponseOnly.SessionHash = ""
+	firstResponseOnly.PreviousResponseID = "resp_first"
+	secondResponseOnly := firstResponseOnly
+	secondResponseOnly.PreviousResponseID = "resp_second"
+	require.NotEqual(t, deriveOpenAISelectionSeed(firstResponseOnly), deriveOpenAISelectionSeed(secondResponseOnly),
+		"previous_response_id remains the fallback identity when no stable session exists")
 }
 
 func TestBuildOpenAIWeightedSelectionOrder_HandlesInvalidScores(t *testing.T) {

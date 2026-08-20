@@ -389,6 +389,58 @@ func TestOpenAIGatewayService_GenerateSessionHash_Priority(t *testing.T) {
 	}
 }
 
+func TestOpenAIGatewayService_GenerateSessionHash_CodexTurnMetadataSession(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	svc := &OpenAIGatewayService{}
+	newContext := func(path string, metadata string) *gin.Context {
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		c.Request = httptest.NewRequest(http.MethodPost, path, nil)
+		c.Request.Header.Set("X-Codex-Turn-Metadata", metadata)
+		return c
+	}
+
+	responses := newContext("/openai/v1/responses", `{"session_id":"conversation-42","turn_id":"turn-responses"}`)
+	alphaSearch := newContext("/openai/v1/alpha/search", `{"session_id":"conversation-42","turn_id":"turn-search"}`)
+
+	responsesHash := svc.GenerateSessionHash(responses, []byte(`{"prompt_cache_key":"body-fallback"}`))
+	searchHash := svc.GenerateSessionHashWithFallback(alphaSearch, nil, "search-request-id")
+	require.Equal(t, fmt.Sprintf("%016x", xxhash.Sum64String("conversation-42")), responsesHash)
+	require.Equal(t, responsesHash, searchHash, "Responses and Alpha Search must share the metadata session route")
+}
+
+func TestOpenAIGatewayService_GenerateSessionHash_CodexTurnMetadataSafetyAndPriority(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	svc := &OpenAIGatewayService{}
+
+	t.Run("direct header wins", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		c.Request = httptest.NewRequest(http.MethodPost, "/openai/v1/responses", nil)
+		c.Request.Header.Set("session-id", "direct-session")
+		c.Request.Header.Set("X-Codex-Turn-Metadata", `{"session_id":"metadata-session"}`)
+
+		require.Equal(t, "direct-session", explicitOpenAIHeaderSessionID(c))
+	})
+
+	for name, metadata := range map[string]string{
+		"malformed":     `{"session_id":`,
+		"turn only":     `{"turn_id":"turn-rotates"}`,
+		"non string":    `{"session_id":42}`,
+		"empty session": `{"session_id":"   "}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Request = httptest.NewRequest(http.MethodPost, "/openai/v1/alpha/search", nil)
+			c.Request.Header.Set("X-Codex-Turn-Metadata", metadata)
+
+			require.Empty(t, explicitOpenAIHeaderSessionID(c))
+			require.Equal(t, fmt.Sprintf("%016x", xxhash.Sum64String("search-fallback")), svc.GenerateSessionHashWithFallback(c, nil, "search-fallback"))
+		})
+	}
+}
+
 func TestOpenAIGatewayService_ClientSessionHeaderPriority(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()

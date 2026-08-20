@@ -9,6 +9,14 @@ or bridge the client WebSocket to an HTTP/SSE upstream.
 Current Codex clients can supply the canonical `session-id`, `thread-id`, and
 `x-client-request-id` headers. The gateway also accepts the supported legacy
 session aliases, including `session_id`, for sticky routing compatibility.
+When direct session headers are absent, the stable string `session_id` inside
+`X-Codex-Turn-Metadata` is also accepted; request-scoped `turn_id` is never a
+routing key. This lets `/v1/responses` WebSocket ingress and
+`/v1/alpha/search` share one account route even when Alpha Search would
+otherwise fall back to its search ID.
+The same sanitized value is recorded as `usage_logs.session_id` and participates
+in cyber-session blocking. Endpoint fallbacks and `turn_id` remain routing
+details and are not persisted as client session IDs.
 Thread and client-request identifiers remain paired request context and never
 replace the session-scoped cache identity.
 
@@ -20,6 +28,30 @@ canonical `session-id` header; the legacy `session_id` alias carries the same
 value. A model-only request does not receive a content-derived key. API-key
 Chat Completions requests converted to Responses use the same behavior, while
 raw Chat Completions forwarding does not receive Responses-only cache fields.
+
+Under the default hard-affinity mode, account priority changes do not replace a
+valid active session route. The optional sticky-weighted scheduler mode remains
+score-based by design. If the configured health/concurrency sticky escape
+temporarily bypasses a degraded account, a movable Responses continuation does
+not fall back to that account through its older response ID; the temporary
+candidate order is derived from the shared session identity, while the
+canonical sticky binding remains unchanged. Removing an account from the
+requesting group, disabling it, or making it incompatible is always a hard
+invalidation: both ordinary sticky routing and `previous_response_id` routing
+recheck the current account before reuse. Long-lived Responses WebSocket
+connections also run current billing and reload the selected account before
+every turn in `ctx_pool`, `http_bridge`, and `passthrough` modes. The refreshed
+account must still satisfy group, status, schedulability, quota, client-model,
+endpoint-capability, transport, parent-health, runtime-block, scheduling
+threshold, and proxy-quarantine gates. Follow-up image intent also repeats the
+group permission and Responses-capability checks. If any gate fails, the
+gateway closes before sending that turn upstream; a reconnect then performs
+normal account selection. The first turn is billed-eligible once before
+selection, while every later turn is checked once at its pre-turn boundary. A
+movable WebSocket continuation follows a session route that has already failed
+over to another account and removes the old account's response ID before
+forwarding. Tool-output continuations without complete call context remain on
+the response owner and keep the existing fail-closed OAuth ownership checks.
 
 `prompt_cache_options` is forwarded only for GPT-5.6-family OpenAI Platform
 API-key Responses/Compact traffic. ChatGPT OAuth and older or unknown model

@@ -40,6 +40,9 @@ func ExtractClientSessionID(c *gin.Context) string {
 			return sessionID
 		}
 	}
+	if sessionID := sanitizeSessionID(openAICodexTurnMetadataSessionID(c.GetHeader("X-Codex-Turn-Metadata"))); sessionID != "" {
+		return sessionID
+	}
 	if isGrokRequestContext(c) {
 		if sessionID := sanitizeSessionID(c.GetHeader(grokConversationIDHeader)); sessionID != "" {
 			return sessionID

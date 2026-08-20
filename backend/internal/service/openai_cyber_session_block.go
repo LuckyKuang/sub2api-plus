@@ -18,10 +18,10 @@ type CyberSessionBlockStore interface {
 	IsCyberSessionBlocked(ctx context.Context, key string) (bool, error)
 }
 
-// CyberSessionBlockKey 派生会话屏蔽 key：仅用显式会话标识（header
-// session_id/conversation_id 或 body prompt_cache_key），混入 apiKeyID 隔离后
-// sha256。无显式标识返回空串——调用方必须放行（粒度决策：不退化到
-// user/apikey/内容派生）。
+// CyberSessionBlockKey 派生会话屏蔽 key：仅用显式会话标识（直接 session
+// header、X-Codex-Turn-Metadata.session_id 或 body prompt_cache_key），混入
+// apiKeyID 隔离后 sha256。无显式标识返回空串——调用方必须放行（粒度决策：
+// 不退化到 user/apikey/内容派生）。
 func CyberSessionBlockKey(apiKeyID int64, c *gin.Context, body []byte) string {
 	raw := explicitOpenAISessionID(c, body)
 	if raw == "" {

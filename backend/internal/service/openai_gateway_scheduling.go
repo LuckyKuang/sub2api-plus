@@ -52,7 +52,22 @@ func explicitOpenAIHeaderSessionID(c *gin.Context) string {
 			return sessionID
 		}
 	}
-	return ""
+	return openAICodexTurnMetadataSessionID(c.GetHeader("X-Codex-Turn-Metadata"))
+}
+
+// openAICodexTurnMetadataSessionID extracts only the session-scoped identity
+// from Codex turn metadata. turn_id is request-scoped and must never be used for
+// sticky routing, while direct session headers retain precedence in the caller.
+func openAICodexTurnMetadataSessionID(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || !gjson.Valid(raw) {
+		return ""
+	}
+	sessionID := gjson.Get(raw, "session_id")
+	if sessionID.Type != gjson.String {
+		return ""
+	}
+	return strings.TrimSpace(sessionID.String())
 }
 
 // ExtractSessionID extracts the raw session ID from headers or body without hashing.
@@ -138,9 +153,10 @@ func (s *OpenAIGatewayService) GenerateExplicitSessionHash(c *gin.Context, body 
 //  3. Header: conversation_id
 //  4. Header: x-session-affinity / x-session-id / x-opencode-session (OpenCode)
 //  5. Header: x-conversation-id (CodeBuddy)
-//  6. Header: x-grok-conv-id (Grok groups only)
-//  7. Body:   prompt_cache_key
-//  8. Body:   content-based fallback (model + system + tools + first user message)
+//  6. Header: x-codex-turn-metadata.session_id
+//  7. Header: x-grok-conv-id (Grok groups only)
+//  8. Body:   prompt_cache_key
+//  9. Body:   content-based fallback (model + system + tools + first user message)
 //
 // Grok sticky affinity is intentionally separate from the upstream
 // prompt_cache_key identity (resolveGrokCacheIdentity): sticky pins an OAuth
@@ -1567,6 +1583,56 @@ func (s *OpenAIGatewayService) openAIAccountMatchesSchedulingGroup(account *Acco
 		return true
 	}
 	return openAIStickyAccountMatchesGroup(account, groupID)
+}
+
+// RevalidateOpenAIAccountForWebSocketTurn reloads an account from the durable
+// repository before an established WebSocket starts another turn. Long-lived
+// connections do not run account selection again, so this is their equivalent
+// of the hard eligibility pass performed for every HTTP request. A nil result
+// means the connection must stop and let a reconnect select another account;
+// repository failures are returned so callers can fail closed.
+func (s *OpenAIGatewayService) RevalidateOpenAIAccountForWebSocketTurn(
+	ctx context.Context,
+	selected *Account,
+	groupID *int64,
+	platform string,
+	requestedModel string,
+	requiredTransport OpenAIUpstreamTransport,
+	requiredCapability OpenAIEndpointCapability,
+) (*Account, error) {
+	if selected == nil {
+		return nil, nil
+	}
+	if s == nil {
+		return nil, nil
+	}
+
+	latest := selected
+	if s.accountRepo != nil {
+		var err error
+		latest, err = s.accountRepo.GetByID(ctx, selected.ID)
+		if err != nil {
+			return nil, fmt.Errorf("reload OpenAI account %d for websocket turn validation: %w", selected.ID, err)
+		}
+	}
+	if latest == nil || !s.openAIAccountMatchesSchedulingGroup(latest, groupID) {
+		return nil, nil
+	}
+	if !isOpenAICompatibleAccountEligibleForRequestBeforeProfit(ctx, latest, platform, requestedModel, false, requiredCapability) {
+		return nil, nil
+	}
+	if !s.isOpenAIAccountTransportCompatible(latest, requiredTransport) {
+		return nil, nil
+	}
+	if !parentHealthyForShadow(latest, s.parentAccountLookup(ctx)) {
+		return nil, nil
+	}
+	if s.isOpenAIAccountRequestRuntimeBlocked(latest, requestedModel) ||
+		s.isOpenAIAccountBlockedBySchedulingThreshold(ctx, latest) ||
+		s.isOpenAIProxyStreamQuarantined(ctx, latest) {
+		return nil, nil
+	}
+	return latest, nil
 }
 
 func openAIOAuthSessionPolicyAllowsSchedulingGroup(account *Account, groupID *int64) bool {

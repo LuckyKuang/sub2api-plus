@@ -108,6 +108,35 @@ func TestExtractClientSessionID_HeaderPrecedence(t *testing.T) {
 	require.Equal(t, "primary", ExtractClientSessionID(c))
 }
 
+func TestExtractClientSessionID_CodexTurnMetadata(t *testing.T) {
+	t.Run("stable metadata session is persisted", func(t *testing.T) {
+		c := newSessionHeaderContext(t, map[string]string{
+			"X-Codex-Turn-Metadata": `{"session_id":"metadata-session","turn_id":"turn-1"}`,
+		})
+		require.Equal(t, "metadata-session", ExtractClientSessionID(c))
+	})
+
+	t.Run("direct session header keeps precedence", func(t *testing.T) {
+		c := newSessionHeaderContext(t, map[string]string{
+			codexSessionIDHeader:    "direct-session",
+			"X-Codex-Turn-Metadata": `{"session_id":"metadata-session"}`,
+		})
+		require.Equal(t, "direct-session", ExtractClientSessionID(c))
+	})
+
+	for name, metadata := range map[string]string{
+		"turn only":           `{"turn_id":"turn-rotates"}`,
+		"malformed":           `{"session_id":`,
+		"non string":          `{"session_id":42}`,
+		"unsafe control char": `{"session_id":"unsafe\nvalue"}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			c := newSessionHeaderContext(t, map[string]string{"X-Codex-Turn-Metadata": metadata})
+			require.Empty(t, ExtractClientSessionID(c))
+		})
+	}
+}
+
 func TestExtractClientSessionID_Sanitizes(t *testing.T) {
 	c := newSessionHeaderContext(t, map[string]string{openCodeSessionIDHeader: "  clean-123  "})
 	require.Equal(t, "clean-123", ExtractClientSessionID(c))
