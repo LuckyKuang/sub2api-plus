@@ -16,6 +16,15 @@ Sub2API Plus v0.1.178+custom.001
   channel time pricing, and monitor quota configuration.
 - Keep the custom Go module identity and Plus outbound identity precedence
   while importing the official v0.1.178 baseline.
+- Make delayed release finalization resumable after a newer version has already
+  been prepared, while keeping rollback documentation synchronized.
+
+## Fixed
+
+- Converge the selected Codex fingerprint identity across HTTP, WebSocket,
+  compaction, and account-test transports without changing source precedence.
+- Localize the dashboard prompt-cache hit-rate label consistently in English
+  and Chinese.
 
 ## Compatibility and migration
 
@@ -30,13 +39,10 @@ Sub2API Plus v0.1.178+custom.001
   migration or its database trigger; back up PostgreSQL before upgrading. A
   database rollback requires restoring a backup or applying an audited
   compensating SQL migration.
-- The release is prepared as `planned` and is not published yet. Do not use
-  its image tag until the release process completes.
 
 ## Known issues
 
-- The fork PR still requires maintainer review and required GitHub checks
-  before it can be merged into `main`.
+- None known.
 
 ## Upstream baseline
 
