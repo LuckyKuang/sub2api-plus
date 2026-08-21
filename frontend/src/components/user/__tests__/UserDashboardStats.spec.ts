@@ -9,7 +9,7 @@ vi.mock('vue-i18n', async () => {
   return {
     ...actual,
     useI18n: () => ({
-      t: (key: string) => key === 'dashboard.cacheHitRate' ? 'Cache Hit Rate' : key,
+      t: (key: string) => key === 'usage.cacheHitRate' ? 'Cache Hit Rate' : key,
     }),
   }
 })
