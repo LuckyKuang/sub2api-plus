@@ -2229,3 +2229,32 @@ func TestOpenAIWSConnPool_SnapshotTransportMetrics(t *testing.T) {
 	require.Equal(t, int64(2), snapshot.ProxyClientCacheMisses)
 	require.InDelta(t, 1.0/3.0, snapshot.TransportReuseRatio, 0.0001)
 }
+
+func TestNormalizeOpenAIWSHandshakeCompatibilityUsesFinalStableCarriers(t *testing.T) {
+	headers := make(http.Header)
+	headers.Set("session-id", "plus-cache-session")
+	headers.Set("session_id", "plus-cache-session")
+	headers.Set("x-codex-installation-id", "owner-installation")
+	headers.Set("thread-id", "owner-thread")
+	headers.Set("x-client-request-id", "owner-thread")
+	headers.Set("x-codex-window-id", "owner-thread:0")
+
+	compatibility := normalizeOpenAIWSHandshakeCompatibility(headers)
+	require.Equal(t, "plus-cache-session", compatibility.sessionIdentity)
+	require.Equal(t, "owner-installation", compatibility.codexInstallationID)
+	require.Equal(t, "owner-thread", compatibility.threadID)
+	require.Equal(t, "owner-thread", compatibility.clientRequestID)
+	require.Equal(t, "owner-thread:0", compatibility.codexWindowID)
+
+	legacySessionAlias := headers.Clone()
+	legacySessionAlias.Del("session-id")
+	require.Equal(t, compatibility, normalizeOpenAIWSHandshakeCompatibility(legacySessionAlias))
+
+	changedThread := headers.Clone()
+	changedThread.Set("thread-id", "another-client-thread")
+	require.NotEqual(t, compatibility, normalizeOpenAIWSHandshakeCompatibility(changedThread))
+
+	changedInstallation := headers.Clone()
+	changedInstallation.Set("x-codex-installation-id", "another-client-installation")
+	require.NotEqual(t, compatibility, normalizeOpenAIWSHandshakeCompatibility(changedInstallation))
+}

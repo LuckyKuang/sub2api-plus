@@ -115,15 +115,52 @@ setup-token, and credential-shadow accounts do not own this setting.
 
 | Mode | Upstream-visible identity behavior |
 | --- | --- |
-| `off` | Preserve client device, session, and thread identifiers. |
+| `off` | Do not mutate fingerprint-owned body or header carriers. Plus cache, security, session-sharing, and compact policy still apply. |
 | `device` (default) | Converge only the installation identifier to an account-level stable value; preserve each client's session and thread boundaries. |
 | `session` | Converge installation and session identifiers; derive a stable thread from the client-original session. |
 | `full` | Converge installation, session, and thread identifiers to account-level values. |
 
 Administration create, edit, bulk edit, Codex import, PAT creation, and CRS
 synchronization persist the selected value rather than representing a default
-by deleting the key. Native and legacy compact requests retain their existing
-fingerprint-convergence exclusions.
+by deleting the key. Scheduler metadata snapshots retain the explicit mode so
+a selected account does not silently fall back to the default.
+
+Request policy is endpoint-specific:
+
+Here `legacy` names the ChatGPT Codex OAuth compatibility branch used by this
+gateway. It does not mean the public API-key
+[`/v1/responses/compact`](https://developers.openai.com/api/reference/java/resources/responses/methods/compact)
+endpoint is unavailable.
+
+| Request path | Fingerprint policy | Final session/cache authority |
+| --- | --- | --- |
+| Ordinary Responses create turns and Chat/Messages Responses bridges | Configured mode | Plus prompt-cache/session identity |
+| Native remote Compact v2 (`/responses` with `compaction_trigger`) | Configured mode | Plus prompt-cache/session identity |
+| ChatGPT Codex OAuth legacy compact compatibility path | `off`, or installation-only for every other mode | Legacy compact session/cache/thread namespace |
+| HTTP-to-WebSocket and direct Responses WebSocket `response.create` turns | Configured mode per turn | Plus WebSocket session/cache identity |
+| Count-tokens, alpha-search, response retrieve/cancel subpaths, and other non-session endpoints | No fingerprint mutation | Endpoint policy |
+
+Personal access token and Agent Identity accounts are OpenAI OAuth credential
+owners and follow this endpoint matrix. API-key and setup-token accounts are
+excluded. Credential shadows read the mode and stable installation source from
+their credential-owning parent; the shadow never creates an independent
+fingerprint identity.
+
+Fingerprint body/header staging happens before the final cache and outbound
+identity stages. The finalized Plus cache key owns both `session-id` aliases;
+fingerprinting owns installation and thread/turn carriers. Malformed, null,
+array, or scalar embedded `x-codex-turn-metadata` values are rebuilt as JSON
+objects when that carrier is present, while valid unrelated fields are kept.
+Missing carriers are not synthesized solely for embedded metadata.
+WebSocket pool reuse compares every final stable handshake carrier in all four
+modes, including client-owned values preserved by `off` and `device`.
+
+Outbound User-Agent identity has one immutable source order: a valid
+credential-owner `credentials.user_agent`, then a valid global
+`openai_codex_user_agent`, then the compiled default. Originator and Version
+are derived coherently from that selected client family. Version synchronization
+may update only its version declaration and cannot replace the selected source,
+OS, architecture, terminal fingerprint, client family, or Originator.
 
 ## Maintaining the profile registry
 

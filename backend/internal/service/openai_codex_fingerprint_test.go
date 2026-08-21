@@ -615,22 +615,293 @@ func TestStoreCodexFingerprintIDs_DoesNotLeakAcrossAccounts(t *testing.T) {
 	require.Nil(t, loadCodexFingerprintIDs(c, first))
 }
 
-func TestStoreCodexFingerprintIDs_CompactClearsPreviousIDs(t *testing.T) {
+func TestPrepareCodexFingerprintIDs_UsesExplicitRequestPolicies(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	c, _ := gin.CreateTestContext(nil)
-	account := newTestOAuthAccount(1, map[string]any{CodexFingerprintModeExtraKey: "session"})
+	svc := &OpenAIGatewayService{}
+	clientHeaders := http.Header{}
+	clientHeaders.Set("session-id", "client-session-aaa")
 
-	headers := http.Header{}
-	headers.Set("session-id", "client-session-aaa")
-	ids := resolveCodexFingerprintIDsFromRequest(account, headers)
-	require.NotNil(t, ids)
-	storeCodexFingerprintIDs(c, ids)
-	require.Equal(t, ids, loadCodexFingerprintIDs(c, account))
+	tests := []struct {
+		name         string
+		path         string
+		body         []byte
+		mode         string
+		wantPolicy   codexFingerprintRequestPolicy
+		wantMode     codexFingerprintMode
+		wantIDs      bool
+		wantSession  bool
+		wantTurnData bool
+	}{
+		{name: "ordinary session", path: "/v1/responses", mode: "session", wantPolicy: codexFingerprintPolicyOrdinary, wantMode: codexFingerprintSession, wantIDs: true, wantSession: true, wantTurnData: true},
+		{name: "native compact session", path: "/v1/responses", body: []byte(`{"stream":true,"input":[{"type":"compaction_trigger"}]}`), mode: "session", wantPolicy: codexFingerprintPolicyNativeCompact, wantMode: codexFingerprintSession, wantIDs: true, wantSession: true, wantTurnData: true},
+		{name: "legacy compact session is installation only", path: "/v1/responses/compact", mode: "session", wantPolicy: codexFingerprintPolicyLegacyCompact, wantMode: codexFingerprintDevice, wantIDs: true},
+		{name: "legacy compact full is installation only", path: "/v1/responses/compact", mode: "full", wantPolicy: codexFingerprintPolicyLegacyCompact, wantMode: codexFingerprintDevice, wantIDs: true},
+		{name: "legacy compact off", path: "/v1/responses/compact", mode: "off", wantPolicy: codexFingerprintPolicyLegacyCompact},
+		{name: "nested legacy compact remains installation only", path: "/v1/responses/compact/detail", mode: "full", wantPolicy: codexFingerprintPolicyLegacyCompact, wantMode: codexFingerprintDevice, wantIDs: true},
+		{name: "response cancel is not a session", path: "/v1/responses/resp_123/cancel", mode: "session", wantPolicy: codexFingerprintPolicyNonSession},
+		{name: "response retrieve subpath is not a session", path: "/v1/responses/resp_123", mode: "session", wantPolicy: codexFingerprintPolicyNonSession},
+		{name: "count tokens is not a session", path: "/v1/messages/count_tokens", mode: "session", wantPolicy: codexFingerprintPolicyNonSession},
+		{name: "alpha search is not a session", path: "/v1/alpha/search", mode: "session", wantPolicy: codexFingerprintPolicyNonSession},
+	}
 
-	// Compact skips rewrite and must store nil so leftover IDs cannot overwrite
-	// the Plus-isolated compact session namespace.
-	storeCodexFingerprintIDs(c, nil)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest(http.MethodPost, tt.path, nil)
+			account := newTestOAuthAccount(1, map[string]any{
+				CodexFingerprintModeExtraKey: tt.mode,
+				"openai_device_id":           "owner-device",
+			})
+			stale := resolveCodexFingerprintIDs(account, "stale", codexFingerprintFull)
+			storeCodexFingerprintIDs(c, stale)
+
+			policy := resolveCodexFingerprintRequestPolicy(c, tt.body)
+			require.Equal(t, tt.wantPolicy, policy)
+			ids, err := svc.prepareCodexFingerprintIDs(t.Context(), c, account, clientHeaders, policy)
+			require.NoError(t, err)
+			if !tt.wantIDs {
+				require.Nil(t, ids)
+				require.Nil(t, loadCodexFingerprintIDs(c, account), "off must clear an older stage")
+				return
+			}
+			require.NotNil(t, ids)
+			require.Equal(t, tt.wantMode, ids.mode)
+			require.Equal(t, "owner-device", ids.installationID)
+			require.Equal(t, tt.wantSession, ids.sessionID != "")
+			require.Equal(t, tt.wantTurnData, ids.turnID != "")
+			require.Same(t, ids, loadCodexFingerprintIDs(c, account))
+		})
+	}
+}
+
+func TestPrepareCodexFingerprintIDs_PATAndAgentIdentityFollowEndpointSemantics(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	svc := &OpenAIGatewayService{}
+	for _, authMode := range []string{OpenAIAuthModePersonalAccessToken, OpenAIAuthModeAgentIdentity} {
+		t.Run(authMode, func(t *testing.T) {
+			account := newTestOAuthAccount(21, map[string]any{
+				CodexFingerprintModeExtraKey: "session",
+				"openai_device_id":           "owner-device",
+			})
+			account.Credentials = map[string]any{openAIAuthModeCredentialKey: authMode}
+
+			responses, _ := gin.CreateTestContext(httptest.NewRecorder())
+			responses.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+			ids, err := svc.prepareCodexFingerprintIDs(
+				t.Context(),
+				responses,
+				account,
+				http.Header{"Session-Id": []string{"client-session"}},
+				resolveCodexFingerprintRequestPolicy(responses, nil),
+			)
+			require.NoError(t, err)
+			require.NotNil(t, ids)
+			require.Equal(t, codexFingerprintSession, ids.mode)
+
+			alpha, _ := gin.CreateTestContext(httptest.NewRecorder())
+			alpha.Request = httptest.NewRequest(http.MethodPost, "/v1/alpha/search", nil)
+			ids, err = svc.prepareCodexFingerprintIDs(
+				t.Context(),
+				alpha,
+				account,
+				http.Header{"Session-Id": []string{"client-session"}},
+				resolveCodexFingerprintRequestPolicy(alpha, nil),
+			)
+			require.NoError(t, err)
+			require.Nil(t, ids)
+			require.Nil(t, loadCodexFingerprintIDs(alpha, account))
+		})
+	}
+}
+
+func TestPrepareCodexFingerprintIDs_ExcludesAPIKeyAndSetupToken(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	svc := &OpenAIGatewayService{}
+	for _, accountType := range []string{AccountTypeAPIKey, AccountTypeSetupToken} {
+		t.Run(accountType, func(t *testing.T) {
+			account := &Account{
+				ID:       22,
+				Platform: PlatformOpenAI,
+				Type:     accountType,
+				Extra: map[string]any{
+					CodexFingerprintModeExtraKey: "full",
+					"openai_device_id":           "must-not-apply",
+				},
+			}
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+
+			ids, err := svc.prepareCodexFingerprintIDs(
+				t.Context(),
+				c,
+				account,
+				http.Header{"Session-Id": []string{"client-session"}},
+				resolveCodexFingerprintRequestPolicy(c, nil),
+			)
+			require.NoError(t, err)
+			require.Nil(t, ids)
+			require.Nil(t, loadCodexFingerprintIDs(c, account))
+		})
+	}
+}
+
+func TestPrepareCodexFingerprintMap_OffDoesNotMutateBody(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	account := newTestOAuthAccount(7, map[string]any{
+		CodexFingerprintModeExtraKey: "off",
+		"openai_device_id":           "owner-device",
+	})
+	body := map[string]any{
+		"client_metadata": map[string]any{
+			"x-codex-installation-id": "client-device",
+			"session_id":              "client-session",
+		},
+	}
+	want := map[string]any{
+		"client_metadata": map[string]any{
+			"x-codex-installation-id": "client-device",
+			"session_id":              "client-session",
+		},
+	}
+
+	changed, err := (&OpenAIGatewayService{}).prepareCodexFingerprintMap(t.Context(), c, account, body)
+	require.NoError(t, err)
+	require.False(t, changed)
+	require.Equal(t, want, body)
 	require.Nil(t, loadCodexFingerprintIDs(c, account))
+}
+
+func TestCodexEmbeddedTurnMetadata_RebuildsInvalidValues(t *testing.T) {
+	account := newTestOAuthAccount(9, map[string]any{CodexFingerprintModeExtraKey: "session"})
+	ids := resolveCodexFingerprintIDs(account, "client-session", codexFingerprintSession)
+	require.NotNil(t, ids)
+
+	for _, tc := range []struct {
+		name string
+		raw  string
+	}{
+		{name: "invalid JSON", raw: "not-json"},
+		{name: "null", raw: "null"},
+		{name: "array", raw: `[]`},
+		{name: "scalar", raw: `"scalar"`},
+		{name: "empty", raw: ""},
+		{name: "whitespace", raw: "  "},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			header := http.Header{}
+			header.Set("x-codex-turn-metadata", tc.raw)
+			require.NotPanics(t, func() { applyCodexFingerprintHeaders(header, ids) })
+			var headerMetadata map[string]any
+			require.NoError(t, json.Unmarshal([]byte(header.Get("x-codex-turn-metadata")), &headerMetadata))
+			require.Equal(t, ids.installationID, headerMetadata["installation_id"])
+			require.Equal(t, ids.sessionID, headerMetadata["session_id"])
+
+			body := map[string]any{"client_metadata": map[string]any{"x-codex-turn-metadata": tc.raw}}
+			require.NotPanics(t, func() { require.True(t, applyCodexFingerprintClientMetadata(body, ids)) })
+			clientMetadata, ok := body["client_metadata"].(map[string]any)
+			require.True(t, ok)
+			embedded, ok := clientMetadata["x-codex-turn-metadata"].(string)
+			require.True(t, ok)
+			var bodyMetadata map[string]any
+			require.NoError(t, json.Unmarshal([]byte(embedded), &bodyMetadata))
+			require.Equal(t, ids.installationID, bodyMetadata["installation_id"])
+			require.Equal(t, ids.sessionID, bodyMetadata["session_id"])
+
+			rawInput, err := json.Marshal(map[string]any{
+				"model": "gpt-5.6-sol",
+				"client_metadata": map[string]any{
+					"x-codex-turn-metadata": tc.raw,
+				},
+			})
+			require.NoError(t, err)
+			rawOutput, changed, err := applyCodexFingerprintClientMetadataRaw(rawInput, ids)
+			require.NoError(t, err)
+			require.True(t, changed)
+			var rawDecoded map[string]any
+			require.NoError(t, json.Unmarshal(rawOutput, &rawDecoded))
+			rawClientMetadata, ok := rawDecoded["client_metadata"].(map[string]any)
+			require.True(t, ok)
+			rawEmbedded, ok := rawClientMetadata["x-codex-turn-metadata"].(string)
+			require.True(t, ok)
+			var rawMetadata map[string]any
+			require.NoError(t, json.Unmarshal([]byte(rawEmbedded), &rawMetadata))
+			require.Equal(t, ids.installationID, rawMetadata["installation_id"])
+			require.Equal(t, ids.sessionID, rawMetadata["session_id"])
+		})
+	}
+}
+
+func TestCodexEmbeddedTurnMetadata_BodyRebuildsNonStringValues(t *testing.T) {
+	account := newTestOAuthAccount(11, map[string]any{CodexFingerprintModeExtraKey: "session"})
+	ids := resolveCodexFingerprintIDs(account, "client-session", codexFingerprintSession)
+	require.NotNil(t, ids)
+
+	for _, tc := range []struct {
+		name  string
+		value any
+	}{
+		{name: "JSON null", value: nil},
+		{name: "array", value: []any{"wrong"}},
+		{name: "number", value: float64(7)},
+		{name: "boolean", value: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body := map[string]any{
+				"client_metadata": map[string]any{"x-codex-turn-metadata": tc.value},
+			}
+			require.True(t, applyCodexFingerprintClientMetadata(body, ids))
+
+			clientMetadata, ok := body["client_metadata"].(map[string]any)
+			require.True(t, ok)
+			embedded, ok := clientMetadata["x-codex-turn-metadata"].(string)
+			require.True(t, ok)
+			var metadata map[string]any
+			require.NoError(t, json.Unmarshal([]byte(embedded), &metadata))
+			require.Equal(t, ids.installationID, metadata["installation_id"])
+			require.Equal(t, ids.sessionID, metadata["session_id"])
+			require.Equal(t, ids.threadID, metadata["thread_id"])
+		})
+	}
+
+	body := map[string]any{
+		"client_metadata": map[string]any{
+			"x-codex-turn-metadata": map[string]any{"sandbox": "seatbelt"},
+		},
+	}
+	require.True(t, applyCodexFingerprintClientMetadata(body, ids))
+	clientMetadata, ok := body["client_metadata"].(map[string]any)
+	require.True(t, ok)
+	embedded, ok := clientMetadata["x-codex-turn-metadata"].(string)
+	require.True(t, ok)
+	var metadata map[string]any
+	require.NoError(t, json.Unmarshal([]byte(embedded), &metadata))
+	require.Equal(t, "seatbelt", metadata["sandbox"])
+	require.Equal(t, ids.sessionID, metadata["session_id"])
+}
+
+func TestCodexEmbeddedTurnMetadata_PreservesValidExtrasAndMissingCarrier(t *testing.T) {
+	account := newTestOAuthAccount(10, map[string]any{CodexFingerprintModeExtraKey: "device"})
+	ids := resolveCodexFingerprintIDs(account, "", codexFingerprintDevice)
+	require.NotNil(t, ids)
+
+	header := http.Header{}
+	applyCodexFingerprintHeaders(header, ids)
+	require.Empty(t, header.Get("x-codex-turn-metadata"), "missing header carrier must stay missing")
+
+	body := map[string]any{"client_metadata": map[string]any{"trace": "keep"}}
+	require.True(t, applyCodexFingerprintClientMetadata(body, ids))
+	clientMetadata, ok := body["client_metadata"].(map[string]any)
+	require.True(t, ok)
+	require.NotContains(t, clientMetadata, "x-codex-turn-metadata", "missing body carrier must stay missing")
+
+	header.Set("x-codex-turn-metadata", `{"installation_id":"client","sandbox":"seatbelt"}`)
+	applyCodexFingerprintHeaders(header, ids)
+	var metadata map[string]any
+	require.NoError(t, json.Unmarshal([]byte(header.Get("x-codex-turn-metadata")), &metadata))
+	require.Equal(t, ids.installationID, metadata["installation_id"])
+	require.Equal(t, "seatbelt", metadata["sandbox"])
 }
 
 func TestResolveCodexFingerprintAccount_UsesCredentialOwnerForShadow(t *testing.T) {
@@ -660,6 +931,21 @@ func TestResolveCodexFingerprintAccount_UsesCredentialOwnerForShadow(t *testing.
 	assert.Equal(t, "owner-device-id", ids.installationID)
 	assert.Equal(t, resolveConvergedSessionID(owner), ids.sessionID)
 	assert.NotEqual(t, resolveConvergedSessionID(shadow), ids.sessionID)
+
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	prepared, err := service.prepareCodexFingerprintIDs(
+		t.Context(),
+		c,
+		shadow,
+		headers,
+		resolveCodexFingerprintRequestPolicy(c, nil),
+	)
+	require.NoError(t, err)
+	require.NotNil(t, prepared)
+	require.Equal(t, owner.ID, prepared.accountID)
+	require.Same(t, prepared, loadCodexFingerprintIDs(c, owner))
+	require.Nil(t, loadCodexFingerprintIDs(c, shadow))
 }
 
 func TestBuildUpstreamRequest_UsesCredentialOwnerFingerprintIDsForShadow(t *testing.T) {
@@ -723,6 +1009,9 @@ func TestApplyCodexFingerprintClientMetadataRaw_MatchesMapVariant(t *testing.T) 
 		"no_client_metadata": `{"model":"gpt-5.6-sol","input":[],"stream":true}`,
 		"object_with_extras": `{"model":"gpt-5.6-sol","client_metadata":{"session_id":"client-session","traceparent":"00-abc-def-01","x-codex-turn-metadata":"` + embedded + `"},"stream":true}`,
 		"non_object_value":   `{"model":"gpt-5.6-sol","client_metadata":"bogus","stream":true}`,
+		"embedded_null":      `{"model":"gpt-5.6-sol","client_metadata":{"x-codex-turn-metadata":null},"stream":true}`,
+		"embedded_array":     `{"model":"gpt-5.6-sol","client_metadata":{"x-codex-turn-metadata":["wrong"]},"stream":true}`,
+		"embedded_object":    `{"model":"gpt-5.6-sol","client_metadata":{"x-codex-turn-metadata":{"sandbox":"seatbelt"}},"stream":true}`,
 	}
 	for _, mode := range []codexFingerprintMode{codexFingerprintDevice, codexFingerprintSession, codexFingerprintFull} {
 		account := newTestOAuthAccount(4242, nil)
@@ -866,6 +1155,112 @@ func TestBuildUpstreamRequestOpenAIPassthrough_OffModeKeepsIsolatedSession(t *te
 	assert.NotEmpty(t, req.Header.Get("session_id"))
 	assert.NotEqual(t, resolveConvergedSessionID(account), req.Header.Get("session_id"), "off 模式不得收敛 session_id")
 	assert.Empty(t, req.Header.Get("x-codex-window-id"))
+}
+
+func TestPrepareCodexFingerprintRaw_WebSocketTurnsKeepStableIDsAndRotateTurn(t *testing.T) {
+	svc := &OpenAIGatewayService{}
+	account := newTestOAuthAccount(2010, map[string]any{
+		CodexFingerprintModeExtraKey: "full",
+		"openai_device_id":           "ws-owner-installation",
+	})
+	account.Credentials = map[string]any{"chatgpt_account_id": "chatgpt-acc"}
+	c := newFingerprintStageTestContext(t)
+	c.Request.Header.Set("session-id", "ws-client-session")
+
+	firstBody, changed, err := svc.prepareCodexFingerprintRaw(
+		context.Background(),
+		c,
+		account,
+		[]byte(`{"type":"response.create","model":"gpt-5.6-sol","input":[]}`),
+	)
+	require.NoError(t, err)
+	require.True(t, changed)
+	firstIDs := loadCodexFingerprintIDs(c, account)
+	require.NotNil(t, firstIDs)
+	require.Equal(t, "ws-owner-installation", firstIDs.installationID)
+
+	headers, _, err := svc.buildOpenAIWSHeaders(
+		context.Background(),
+		c,
+		account,
+		"token",
+		OpenAIWSProtocolDecision{Transport: OpenAIUpstreamTransportResponsesWebsocketV2},
+		true,
+		"",
+		"",
+		"ws-cache-key",
+		"gpt-5.6-sol",
+		"",
+	)
+	require.NoError(t, err)
+	require.Equal(t, firstIDs.installationID, headers.Get("x-codex-installation-id"))
+	require.Equal(t, firstIDs.threadID, headers.Get("thread-id"))
+	require.Equal(t, firstIDs.threadID, headers.Get("x-client-request-id"))
+	require.NotEmpty(t, headers.Get("session-id"))
+	require.Equal(t, headers.Get("session-id"), headers.Get("session_id"))
+	require.NotEqual(t, firstIDs.sessionID, headers.Get("session-id"), "Plus cache identity is final on WS handshake headers")
+
+	var firstDecoded map[string]any
+	require.NoError(t, json.Unmarshal(firstBody, &firstDecoded))
+	firstMetadata, ok := firstDecoded["client_metadata"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, firstIDs.installationID, firstMetadata["x-codex-installation-id"])
+	require.Equal(t, firstIDs.sessionID, firstMetadata["session_id"])
+	require.Equal(t, firstIDs.turnID, firstMetadata["turn_id"])
+
+	secondBody, changed, err := svc.prepareCodexFingerprintRaw(
+		context.Background(),
+		c,
+		account,
+		[]byte(`{"type":"response.create","model":"gpt-5.6-sol","input":[{"type":"input_text","text":"next"}]}`),
+	)
+	require.NoError(t, err)
+	require.True(t, changed)
+	secondIDs := loadCodexFingerprintIDs(c, account)
+	require.NotNil(t, secondIDs)
+	require.Equal(t, firstIDs.installationID, secondIDs.installationID)
+	require.Equal(t, firstIDs.sessionID, secondIDs.sessionID)
+	require.Equal(t, firstIDs.threadID, secondIDs.threadID)
+	require.NotEqual(t, firstIDs.turnID, secondIDs.turnID)
+
+	var secondDecoded map[string]any
+	require.NoError(t, json.Unmarshal(secondBody, &secondDecoded))
+	secondMetadata, ok := secondDecoded["client_metadata"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, secondIDs.turnID, secondMetadata["turn_id"])
+}
+
+func TestPrepareCodexFingerprintRaw_OffKeepsWebSocketBodyAndPlusSessionPolicy(t *testing.T) {
+	svc := &OpenAIGatewayService{}
+	account := newTestOAuthAccount(2011, map[string]any{CodexFingerprintModeExtraKey: "off"})
+	account.Credentials = map[string]any{"chatgpt_account_id": "chatgpt-acc"}
+	c := newFingerprintStageTestContext(t)
+	c.Request.Header.Set("session-id", "ws-off-client-session")
+	body := []byte(`{"type":"response.create","model":"gpt-5.6-sol","client_metadata":{"session_id":"client-body-session"}}`)
+
+	got, changed, err := svc.prepareCodexFingerprintRaw(context.Background(), c, account, body)
+	require.NoError(t, err)
+	require.False(t, changed)
+	require.Equal(t, body, got)
+	require.Nil(t, loadCodexFingerprintIDs(c, account))
+
+	headers, _, err := svc.buildOpenAIWSHeaders(
+		context.Background(),
+		c,
+		account,
+		"token",
+		OpenAIWSProtocolDecision{Transport: OpenAIUpstreamTransportResponsesWebsocketV2},
+		true,
+		"",
+		"",
+		"ws-off-cache-key",
+		"gpt-5.6-sol",
+		"",
+	)
+	require.NoError(t, err)
+	require.NotEmpty(t, headers.Get("session-id"))
+	require.Equal(t, headers.Get("session-id"), headers.Get("session_id"))
+	require.Empty(t, headers.Get("x-codex-installation-id"))
 }
 
 func TestApplyCodexFingerprintClientMetadataRaw_NonObjectBodyUntouched(t *testing.T) {

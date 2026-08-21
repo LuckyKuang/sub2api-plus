@@ -1997,8 +1997,10 @@ func (s *AccountTestService) testOpenAIChatCompletionsConnection(
 
 // testOpenAICompactConnection probes native remote compaction v2 (streaming
 // /responses with a compaction_trigger input item) and persists the resulting
-// capability state on the account. The legacy unary /responses/compact
-// endpoint has been sunset upstream (404, #5598/#5624) and is no longer probed.
+// capability state on the account. At this baseline the older unary route on
+// the ChatGPT Codex OAuth upstream returned 404 (#5598/#5624), so this probe no
+// longer calls it. This does not describe the public API-key
+// /v1/responses/compact endpoint.
 func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account *Account, testModelID string) error {
 	ctx := c.Request.Context()
 	credentialAccount := account
@@ -2089,15 +2091,19 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
 		req.Header.Set("OpenAI-Beta", "responses=experimental")
 		req.Header.Set("Version", codexCLIVersion)
 		setOpenAIChatGPTAccountHeaders(req.Header, credentialAccount)
-		// 指纹收敛：探测与真实转发走同一个 /responses 端点，身份也必须同构，
-		// 否则探测流量会以「缺 x-codex-installation-id + 非收敛 session」的
-		// 形态暴露在上游眼里。账号关闭收敛（off）时返回 nil，探测保持原样。
-		if fpIDs := resolveCodexFingerprintIDsFromRequest(credentialAccount, req.Header); fpIDs != nil {
+		// Native compact probe 与真实 /responses 转发使用同一指纹策略。
+		// 指纹层先写 installation/thread carriers；下方再恢复 probe cache
+		// session 作为两种 session header alias 的最终权威。off 返回 nil。
+		if fpIDs := resolveCodexFingerprintIDsForPolicy(credentialAccount, req.Header, codexFingerprintPolicyNativeCompact); fpIDs != nil {
 			applyCodexFingerprintHeaders(req.Header, fpIDs)
 		}
 	}
 
 	credentialAccount.applyOpenAIHeaderOverrides(req.Header)
+	// Native compact probes follow the same layered contract as live traffic:
+	// fingerprinting owns installation/thread carriers, while the probe cache
+	// identity is final for both upstream session aliases.
+	setOpenAIUpstreamSessionIdentity(req.Header, probeSessionID)
 	s.applyOpenAIOutboundIdentity(ctx, credentialAccount, req.Header, isOAuth)
 
 	proxyURL := ""
