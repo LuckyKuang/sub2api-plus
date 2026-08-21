@@ -115,7 +115,7 @@
                   <span>&middot;</span>
                   <span>{{ t('dashboard.output') }} {{ todayTokenShare(stats.today_output_tokens) }}</span>
                   <span v-if="todayCacheTokens > 0">&middot; {{ t('dashboard.cache') }} {{ todayTokenShare(todayCacheTokens) }}</span>
-                  <span v-if="todayCacheHitRate">&middot; {{ t('dashboard.cacheHitRate') }} {{ todayCacheHitRate }}</span>
+                  <span v-if="todayCacheHitRate">&middot; {{ t('usage.cacheHitRate') }} {{ todayCacheHitRate }}</span>
                 </p>
                 <p class="text-xs">
                   <span
@@ -158,7 +158,7 @@
                   <span>&middot;</span>
                   <span>{{ t('dashboard.output') }} {{ totalTokenShare(stats.total_output_tokens) }}</span>
                   <span v-if="totalCacheTokens > 0">&middot; {{ t('dashboard.cache') }} {{ totalTokenShare(totalCacheTokens) }}</span>
-                  <span v-if="totalCacheHitRate">&middot; {{ t('dashboard.cacheHitRate') }} {{ totalCacheHitRate }}</span>
+                  <span v-if="totalCacheHitRate">&middot; {{ t('usage.cacheHitRate') }} {{ totalCacheHitRate }}</span>
                 </p>
                 <p class="text-xs">
                   <span

@@ -38,7 +38,7 @@ vi.mock('vue-i18n', async () => {
   return {
     ...actual,
     useI18n: () => ({
-      t: (key: string) => key
+      t: (key: string) => key === 'usage.cacheHitRate' ? 'Cache Hit Rate' : key
     })
   }
 })
@@ -180,6 +180,6 @@ describe('admin DashboardView', () => {
 
     await flushPromises()
 
-    expect(wrapper.text()).toContain('dashboard.cacheHitRate 25.0%')
+    expect(wrapper.text()).toContain('Cache Hit Rate 25.0%')
   })
 })
