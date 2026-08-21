@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 import re
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import check_release
 import check_new_migrations
@@ -97,6 +99,29 @@ class ReleaseBaselineTests(unittest.TestCase):
         check_release.validate_required_status(TAG, "published", "planned", errors)
         self.assertEqual(len(errors), 1)
         self.assertIn("expected 'planned'", errors[0])
+
+    def test_mapping_only_accepts_published_noncurrent_tag(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            root.joinpath("UPSTREAM.md").write_text(
+                "| Custom Release | Official Release | Official Commit | Status |\n"
+                "| --- | --- | --- | --- |\n"
+                f"| `{TAG}` | `{OFFICIAL_TAG}` | `{OFFICIAL_COMMIT}` | published |\n",
+                encoding="utf-8",
+            )
+            argv = [
+                "check_release.py",
+                "--tag",
+                TAG,
+                "--require-status",
+                "published",
+                "--mapping-only",
+            ]
+            with (
+                mock.patch.object(check_release, "ROOT", root),
+                mock.patch.object(sys, "argv", argv),
+            ):
+                self.assertEqual(check_release.main(), 0)
 
 
 class MigrationBaselineTests(unittest.TestCase):
@@ -480,7 +505,7 @@ class ReleaseDocumentTests(unittest.TestCase):
             self.assertEqual(
                 [error for error in errors if "stale release-version" in error],
                 [
-                    f"{rule.path} has stale release-version examples"
+                    f"{Path(rule.path)} has stale release-version examples"
                     for rule in release_docs.DOCUMENT_RULES
                 ],
             )

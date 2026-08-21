@@ -158,6 +158,15 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--tag", help="release tag; defaults to the embedded version")
     parser.add_argument(
+        "--mapping-only",
+        action="store_true",
+        help=(
+            "validate only the requested UPSTREAM.md mapping and status; "
+            "used when finalizing a published tag after the source tree has "
+            "advanced to a newer release"
+        ),
+    )
+    parser.add_argument(
         "--require-status",
         choices=sorted(ALLOWED_STATUSES),
         help="require the UPSTREAM.md row to have this exact status",
@@ -168,11 +177,16 @@ def main() -> int:
     args = parser.parse_args()
 
     errors: list[str] = []
-    embedded = (
-        ROOT.joinpath("backend/cmd/server/VERSION")
-        .read_text(encoding="utf-8")
-        .strip()
-    )
+    if args.mapping_only and not args.tag:
+        parser.error("--mapping-only requires --tag")
+
+    embedded: str | None = None
+    if not args.mapping_only or args.tag is None:
+        embedded = (
+            ROOT.joinpath("backend/cmd/server/VERSION")
+            .read_text(encoding="utf-8")
+            .strip()
+        )
     tag = args.tag or f"v{embedded}"
     match = TAG_RE.fullmatch(tag)
     if not match:
@@ -183,40 +197,45 @@ def main() -> int:
         if iteration == "000":
             fail("custom iteration must be between 001 and 999", errors)
 
-    if embedded != version:
-        fail(
-            f"backend/cmd/server/VERSION is {embedded!r}, expected {version!r}",
-            errors,
-        )
-
-    expected_arg = f"ARG VERSION={version}"
-    for relative in ("Dockerfile", "backend/Dockerfile"):
-        lines = ROOT.joinpath(relative).read_text(encoding="utf-8").splitlines()
-        version_args = [
-            line.strip()
-            for line in lines
-            if line.strip().startswith("ARG VERSION=")
-        ]
-        if not version_args:
-            fail(f"{relative} has no ARG VERSION", errors)
-        for value in version_args:
-            if value != expected_arg:
-                fail(f"{relative} contains {value!r}, expected {expected_arg!r}", errors)
-
-    installer = ROOT.joinpath("deploy/install.sh").read_text(encoding="utf-8")
-    for fragment in INSTALLER_VERSION_FRAGMENTS:
-        if fragment not in installer:
+    if not args.mapping_only:
+        if embedded != version:
             fail(
-                "deploy/install.sh does not enforce the canonical three-digit "
-                f"custom version pattern: {fragment}",
+                f"backend/cmd/server/VERSION is {embedded!r}, expected {version!r}",
                 errors,
             )
+
+        expected_arg = f"ARG VERSION={version}"
+        for relative in ("Dockerfile", "backend/Dockerfile"):
+            lines = ROOT.joinpath(relative).read_text(encoding="utf-8").splitlines()
+            version_args = [
+                line.strip()
+                for line in lines
+                if line.strip().startswith("ARG VERSION=")
+            ]
+            if not version_args:
+                fail(f"{relative} has no ARG VERSION", errors)
+            for value in version_args:
+                if value != expected_arg:
+                    fail(
+                        f"{relative} contains {value!r}, expected {expected_arg!r}",
+                        errors,
+                    )
+
+        installer = ROOT.joinpath("deploy/install.sh").read_text(encoding="utf-8")
+        for fragment in INSTALLER_VERSION_FRAGMENTS:
+            if fragment not in installer:
+                fail(
+                    "deploy/install.sh does not enforce the canonical three-digit "
+                    f"custom version pattern: {fragment}",
+                    errors,
+                )
 
     mapping = parse_upstream(tag, errors)
     if mapping is not None:
         validate_required_status(tag, mapping[2], args.require_status, errors)
 
-    validate_release_documentation(ROOT, errors)
+    if not args.mapping_only:
+        validate_release_documentation(ROOT, errors)
 
     notes: str | None = None
     require_subject = False
