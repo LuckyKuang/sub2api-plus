@@ -25,9 +25,10 @@ func normalizeAccountTestMode(mode string) string {
 }
 
 // createOpenAICompactProbePayload 构造原生 remote compaction v2 探测载荷：
-// 流式 /responses + input 末尾 {"type":"compaction_trigger"}。上游已下线
-// legacy unary /responses/compact（v1 形态恒 404，#5598/#5624），现行 codex
-// 默认协议即 v2（RemoteCompactionV2 Stable + default_enabled）。
+// 流式 /responses + input 末尾 {"type":"compaction_trigger"}。当前审计基线中，
+// ChatGPT Codex OAuth 兼容上游的旧 unary 路由返回 404（#5598/#5624），现行
+// Codex 默认协议为 v2（RemoteCompactionV2 Stable + default_enabled）。这不表示
+// 公共 API-key /v1/responses/compact 端点不可用。
 func createOpenAICompactProbePayload(model string, isOAuth bool) map[string]any {
 	payload := map[string]any{
 		"model":        strings.TrimSpace(model),

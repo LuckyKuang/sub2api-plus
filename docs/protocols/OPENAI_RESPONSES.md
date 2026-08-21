@@ -98,11 +98,39 @@ outside this gateway's request path.
 ## Codex Fingerprint Convergence
 
 OpenAI OAuth accounts may rewrite outbound Codex installation, session, and
-thread carriers after Plus session-policy resolution. Unset accounts use
-`session` mode. Compact requests skip that rewrite so the isolated compact
-session namespace is not replaced. Usage-log `session_id` stays the sanitized
-client-original value. User-Agent, Originator, and Version keep the account >
-global > compiled-default source order.
+thread carriers. Unset accounts use `device` mode. Ordinary Responses,
+Chat-Completions-to-Responses, Messages-to-Responses, HTTP-to-WebSocket, and
+direct Responses WebSocket turns use the configured account mode. Native
+remote Compact v2 is an ordinary Responses session for fingerprint purposes
+and therefore also uses the full configured mode. The ChatGPT Codex OAuth
+legacy compact compatibility path uses installation-only convergence for every
+non-`off` mode and preserves its own compact session, cache, and thread
+namespace.
+
+Here `legacy` refers only to the ChatGPT Codex OAuth compatibility branch used
+by this gateway. The public API-key
+[`/v1/responses/compact`](https://developers.openai.com/api/reference/java/resources/responses/methods/compact)
+endpoint remains a distinct supported OpenAI API surface. Response retrieve,
+cancel, and other non-create subpaths are not session turns and receive no
+fingerprint mutation.
+
+Fingerprint preparation runs before final request construction. Plus
+prompt-cache/session isolation is authoritative for the final `session-id` and
+`session_id` headers, while fingerprint convergence remains authoritative for
+installation and thread/turn metadata. `off` disables only fingerprint-owned
+header and body mutation; it does not disable Plus cache isolation, security,
+session sharing, or compact policy. WebSocket connection reuse compares final
+stable handshake carriers even when `off` or `device` leaves those values
+client-owned. Usage-log `session_id` stays the sanitized client-original value.
+
+Only credential-owning OpenAI OAuth accounts participate. Personal access
+token and Agent Identity accounts follow the same endpoint semantics because
+they are OpenAI OAuth credential owners. API-key, setup-token, and non-session
+endpoints such as count-tokens and alpha-search are excluded. User-Agent,
+Originator, and Version use one source chain: valid credential-owner
+`credentials.user_agent`, then valid global `openai_codex_user_agent`, then the
+compiled default. Version synchronization changes only the version declaration
+of the selected identity.
 
 ## Request Replay and Upstream Failures
 

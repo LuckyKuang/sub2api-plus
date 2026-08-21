@@ -402,10 +402,10 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		}
 	}
 
+	// Every account attempt starts from an empty fingerprint stage. A retry can
+	// switch from OAuth to API-key transport while reusing the same Gin context.
+	storeCodexFingerprintIDs(c, nil)
 	if account.Type == AccountTypeOAuth {
-		// Clear request-scoped fingerprint state before resolving this attempt;
-		// retries may reuse the same Gin context for a different account.
-		storeCodexFingerprintIDs(c, nil)
 		decoded, decodeErr := ensureReqBody()
 		if decodeErr != nil {
 			return nil, decodeErr
@@ -429,32 +429,15 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		if codexResult.Modified {
 			markDecodedModified()
 		}
-		// 指纹收敛：一次性解析收敛 ID，请求体和出站头共享同一份 IDs（保证 turn_id 等随机字段一致）。
-		// compact 不改写指纹，但仍要清空 request-scoped IDs，避免同请求后续
-		// compact 尝试继承上一轮普通 Responses 的收敛结果。
-		var fpIDs *codexFingerprintIDs
-		if !isOpenAICodexCompactionRequest(c) {
-			fingerprintAccount, fingerprintErr := s.resolveCodexFingerprintAccount(ctx, account)
-			if fingerprintErr != nil {
-				return nil, fmt.Errorf("resolve Codex fingerprint credential account: %w", fingerprintErr)
-			}
-			// 带真实 device_id 时补齐 client_metadata 安装标识，与真实 Codex 对齐。
-			// 指纹与 device_id 都必须归属实际持有 OAuth 凭据的账号，而非调度影子。
-			if applyCodexClientMetadata(decoded, fingerprintAccount) {
-				markDecodedModified()
-			}
-			var clientHeaders http.Header
-			if c != nil && c.Request != nil {
-				clientHeaders = c.Request.Header
-			}
-			fpIDs = resolveCodexFingerprintIDsFromRequest(fingerprintAccount, clientHeaders)
-			if fpIDs != nil {
-				if applyCodexFingerprintClientMetadata(decoded, fpIDs) {
-					markDecodedModified()
-				}
-			}
+		// Resolve one credential-owner stage for this attempt. Native compaction
+		// uses the full account mode; legacy compact is installation-only.
+		fingerprintModified, fingerprintErr := s.prepareCodexFingerprintMap(ctx, c, account, decoded)
+		if fingerprintErr != nil {
+			return nil, fingerprintErr
 		}
-		storeCodexFingerprintIDs(c, fpIDs)
+		if fingerprintModified {
+			markDecodedModified()
+		}
 		if codexResult.NormalizedModel != "" {
 			upstreamModel = codexResult.NormalizedModel
 		}
@@ -1196,9 +1179,6 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 		}
 		if isOpenAIResponsesCompactPath(c) {
 			req.Header.Set("accept", "application/json")
-			if req.Header.Get("version") == "" {
-				req.Header.Set("version", CodexCanonicalClientVersion())
-			}
 			compactSession := resolveOpenAICompactSessionID(c)
 			setOpenAIUpstreamSessionIdentity(req.Header, compactSession)
 		} else {
@@ -1225,7 +1205,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 	}
 	if account.Type != AccountTypeOAuth && promptCacheKey != "" {
 		identity := promptCacheKey
-		if !isOpenAICodexCompactionRequest(c) {
+		if !isOpenAIResponsesCompactPath(c) {
 			var err error
 			identity, err = s.resolveOpenAIUpstreamPromptCacheHeaderIdentity(c, account, promptCacheKey)
 			if err != nil {
@@ -1236,19 +1216,6 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 	}
 	alignOpenAICodexThreadHeaders(req.Header)
 
-	// 指纹收敛：使用 Forward() 中预计算的收敛 ID 改写出站头，与请求体使用同一份 IDs。
-	// 必须发生在 Plus 出站身份收口之前，且不得改写 UA / originator / version。
-	// 原生与 legacy compact 均跳过，避免覆盖压缩协议自己的会话命名空间。
-	if account.Type == AccountTypeOAuth && !isOpenAICodexCompactionRequest(c) {
-		fingerprintAccount, fingerprintErr := s.resolveCodexFingerprintAccount(ctx, account)
-		if fingerprintErr != nil {
-			return nil, fmt.Errorf("resolve Codex fingerprint credential account: %w", fingerprintErr)
-		}
-		if ids := loadCodexFingerprintIDs(c, fingerprintAccount); ids != nil {
-			applyCodexFingerprintHeaders(req.Header, ids)
-		}
-	}
-
 	// Ensure required headers exist
 	if req.Header.Get("content-type") == "" {
 		req.Header.Set("content-type", "application/json")
@@ -1256,10 +1223,10 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 
 	// 账号级请求头覆写（仅 openai api_key 账号启用时生效；OAuth 路径 no-op）
 	account.ApplyHeaderOverrides(req.Header)
-	// Fingerprint convergence owns device/thread metadata, while the finalized
-	// body key owns the cache session. Re-apply it after every generic header
-	// mutation so prompt_cache_key/session-id/session_id cannot drift.
-	if account.Type == AccountTypeOAuth && !isOpenAICodexCompactionRequest(c) {
+	// Apply the staged body/header fingerprint set after generic header mutation
+	// and before the final outbound identity. The finalized body key remains the
+	// cache session authority in the following stage.
+	if account.Type == AccountTypeOAuth && stagedCodexFingerprintIDs(c) != nil {
 		fingerprintAccount, fingerprintErr := s.resolveCodexFingerprintAccount(ctx, account)
 		if fingerprintErr != nil {
 			return nil, fmt.Errorf("resolve Codex fingerprint credential account: %w", fingerprintErr)
