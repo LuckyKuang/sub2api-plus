@@ -524,7 +524,7 @@ curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/
 Roll back an existing binary installation to an earlier published version:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- rollback 'v0.1.177+custom.002'
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- rollback 'v0.1.177+custom.003'
 ```
 
 Upgrade to the latest release:
@@ -554,7 +554,7 @@ sudo ./install.sh install --version 'v0.1.178+custom.001'
 Roll back a downloaded-script installation one operation at a time:
 
 ```bash
-sudo ./install.sh rollback 'v0.1.177+custom.002'
+sudo ./install.sh rollback 'v0.1.177+custom.003'
 ```
 
 Or uninstall while preserving `/etc/sub2api`:

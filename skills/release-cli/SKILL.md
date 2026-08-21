@@ -59,9 +59,12 @@ assets.
 ## Finalization
 
 After verification, `finalize` fetches the latest `origin/main`, creates a
-deterministic `release/finalize-<version>` branch, changes exactly one
-`UPSTREAM.md` status from `planned` to `published`, validates and commits only
-that file, then invokes `push-cli submit-pr`. It never commits or pushes main.
+deterministic `release/finalize-<version>` branch, and changes exactly one
+`UPSTREAM.md` status from `planned` to `published`. It validates that historical
+mapping independently from the current embedded version, synchronizes rollback
+examples when a newer release has already been prepared, commits only the
+mapping and those generated documentation updates, then invokes `push-cli
+submit-pr`. It never commits or pushes main.
 Promote the resulting PR through the same `promote-pr` policy after its Actions
 pass, omitting `--notes-file`; that form is accepted only for the deterministic
 finalization branch and requires `published` metadata.

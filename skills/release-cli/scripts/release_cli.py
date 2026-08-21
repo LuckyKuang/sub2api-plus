@@ -44,6 +44,15 @@ REQUIRED_PR_STATUS_CONTEXTS = frozenset(
     }
 )
 PRICING_ASSETS = frozenset({"model-pricing.json", "model-pricing-manifest.json"})
+FINALIZATION_ALLOWED_PATHS = frozenset(
+    {
+        "UPSTREAM.md",
+        "README.md",
+        "README_CN.md",
+        "README_JA.md",
+        "deploy/README.md",
+    }
+)
 POLL_SECONDS = 5
 DISCOVERY_ATTEMPTS = 12
 MERGE_ATTEMPTS = 60
@@ -791,6 +800,18 @@ def run_metadata_preflight(
     run_step("Release metadata preflight", command)
 
 
+def finalization_metadata_command(tag: str) -> list[str]:
+    return [
+        sys.executable,
+        "tools/check_release.py",
+        "--tag",
+        tag,
+        "--require-status",
+        "published",
+        "--mapping-only",
+    ]
+
+
 def require_required_pr_checks(repository: str, number: int) -> None:
     run_step(
         "Wait for required pull-request checks",
@@ -902,14 +923,7 @@ def promote_pull_request(
         verify_release(repository, tag)
         run_step(
             "Validate finalized release metadata",
-            [
-                sys.executable,
-                "tools/check_release.py",
-                "--tag",
-                tag,
-                "--require-status",
-                "published",
-            ],
+            finalization_metadata_command(tag),
         )
     require_required_pr_checks(repository, number)
 
@@ -1256,14 +1270,7 @@ def finalize(repository: str, tag: str, remote: str) -> None:
         )
     path.write_text(updated, encoding="utf-8")
     validation = run_command(
-        [
-            sys.executable,
-            "tools/check_release.py",
-            "--tag",
-            tag,
-            "--require-status",
-            "published",
-        ],
+        finalization_metadata_command(tag),
         capture=True,
     )
     if validation.returncode != 0:
@@ -1273,11 +1280,22 @@ def finalize(repository: str, tag: str, remote: str) -> None:
             "post-publication metadata validation failed; restored UPSTREAM.md"
             + (f": {detail[-2000:]}" if detail else "")
         )
-    run_step("Stage finalized UPSTREAM.md", ["git", "add", "--", "UPSTREAM.md"])
-    staged = capture(["git", "diff", "--cached", "--name-only"])
-    if staged != "UPSTREAM.md":
+    run_step(
+        "Synchronize release documentation",
+        [sys.executable, "tools/update_release_docs.py"],
+    )
+    run_step(
+        "Stage finalized release metadata",
+        ["git", "add", "--", *sorted(FINALIZATION_ALLOWED_PATHS)],
+    )
+    staged = frozenset(
+        capture(["git", "diff", "--cached", "--name-only"]).splitlines()
+    )
+    unexpected = staged - FINALIZATION_ALLOWED_PATHS
+    if "UPSTREAM.md" not in staged or unexpected:
         raise ReleaseCliError(
-            f"finalization staged unexpected paths: {staged or '<none>'}"
+            "finalization staged invalid paths: "
+            f"{', '.join(sorted(staged)) if staged else '<none>'}"
         )
     subject = f"docs(release): mark {tag} published"
     run_step("Commit release finalization", ["git", "commit", "-m", subject])

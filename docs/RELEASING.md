@@ -219,9 +219,12 @@ python3 skills/release-cli/scripts/release_cli.py finalize \
 ```
 
 `finalize` fetches the latest `origin/main`, creates deterministic branch
-`release/finalize-X.Y.Z-custom.NNN`, changes exactly one `UPSTREAM.md` status
-from `planned` to `published`, validates and commits only that file, then calls
-`push-cli submit-pr`. It never commits or pushes `main` directly.
+`release/finalize-X.Y.Z-custom.NNN`, and changes exactly one `UPSTREAM.md`
+status from `planned` to `published`. It validates that historical mapping
+independently from the current embedded version. If a newer release was already
+prepared, it also synchronizes the generated rollback examples; otherwise only
+`UPSTREAM.md` changes. It then calls `push-cli submit-pr` and never commits or
+pushes `main` directly.
 
 After the follow-up PR Actions pass, promote it without release notes:
 

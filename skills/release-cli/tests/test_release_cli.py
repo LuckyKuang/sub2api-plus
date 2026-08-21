@@ -601,6 +601,32 @@ class FinalizationTest(unittest.TestCase):
             release_cli.finalization_branch(TAG),
         )
 
+    def test_finalization_validation_is_mapping_only(self) -> None:
+        self.assertEqual(
+            [
+                sys.executable,
+                "tools/check_release.py",
+                "--tag",
+                TAG,
+                "--require-status",
+                "published",
+                "--mapping-only",
+            ],
+            release_cli.finalization_metadata_command(TAG),
+        )
+
+    def test_delayed_finalization_allows_only_synchronized_release_docs(self) -> None:
+        self.assertEqual(
+            {
+                "UPSTREAM.md",
+                "README.md",
+                "README_CN.md",
+                "README_JA.md",
+                "deploy/README.md",
+            },
+            release_cli.FINALIZATION_ALLOWED_PATHS,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
