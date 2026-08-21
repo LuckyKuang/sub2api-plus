@@ -168,6 +168,20 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	// 账号级请求头覆写（仅 openai api_key 账号启用时生效；OAuth 路径 no-op）。
 	// 覆盖所有 WS 模式（ctx_pool/dedicated/passthrough）的握手头。
 	account.ApplyHeaderOverrides(headers)
+	// The request/body stage owns installation and thread metadata. Preserve the
+	// already isolated cache session and restore it after fingerprint mutation.
+	cacheSessionIdentity := strings.TrimSpace(headers.Get(codexSessionIDHeader))
+	if account != nil && account.Type == AccountTypeOAuth && stagedCodexFingerprintIDs(c) != nil {
+		fingerprintAccount, fingerprintErr := s.resolveCodexFingerprintAccount(ctx, account)
+		if fingerprintErr != nil {
+			return nil, sessionResolution, fmt.Errorf("resolve Codex fingerprint credential account: %w", fingerprintErr)
+		}
+		applyCodexFingerprintHeaders(headers, loadCodexFingerprintIDs(c, fingerprintAccount))
+	}
+	if cacheSessionIdentity != "" {
+		setOpenAIUpstreamSessionIdentity(headers, cacheSessionIdentity)
+	}
+	alignOpenAICodexThreadHeaders(headers)
 	identity := s.applyOpenAIOutboundIdentity(ctx, account, headers, account != nil && account.Type == AccountTypeOAuth)
 	SetOpsRoutingDiagnostics(c, &OpsRoutingDiagnostics{OutboundIdentitySource: identity.Source})
 	setOpenAICodexRoutingHint(headers, account, routingModel, routingServiceTier)

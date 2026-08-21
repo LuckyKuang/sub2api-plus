@@ -91,8 +91,9 @@ func hasOpenAICodexBetaFeaturesHeader(h http.Header) bool {
 //     的那一条，避免向非 Codex 后端撒 Codex 专属头。
 //
 // 已知无解的歧义：用户关掉 v2 且无其他特性时，真实 Codex 同样不发该头，与"老
-// 客户端"在线型上不可区分，此时按默认形态补注。该用户的 legacy 压缩端点本就
-// 已被上游下线（404），不存在可回退的正确行为。
+// 客户端"在线型上不可区分，此时按默认形态补注。在当前审计基线中，ChatGPT
+// Codex OAuth 兼容上游的旧 unary 路由返回 404，因而没有可回退的正确行为；这不
+// 表示公共 API-key /v1/responses/compact 端点不可用。
 func applyOpenAICodexBetaFeatures(c *gin.Context, account *Account, h http.Header) {
 	if h == nil {
 		return

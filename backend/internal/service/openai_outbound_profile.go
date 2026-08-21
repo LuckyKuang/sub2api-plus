@@ -227,7 +227,8 @@ func applyResolvedOpenAIOutboundIdentity(headers http.Header, identity openAIOut
 	}
 	headers.Set("User-Agent", identity.UserAgent)
 	// Keep the Codex protocol version aligned when an endpoint uses it. OAuth
-	// endpoints always require it; API-key compact endpoints set it upstream.
+	// endpoints always require it; API-key endpoints retain Version only when an
+	// earlier endpoint-specific stage supplied it.
 	if useCodexIdentity || headers.Get("Version") != "" {
 		headers.Set("Version", identity.Version)
 	}

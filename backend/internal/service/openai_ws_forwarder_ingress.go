@@ -447,6 +447,17 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 				promptCacheKey = ""
 			}
 		}
+		fingerprintBody, fingerprintChanged, fingerprintErr := s.prepareCodexFingerprintRaw(ctx, c, account, normalized)
+		if fingerprintErr != nil {
+			return openAIWSClientPayload{}, NewOpenAIWSClientCloseError(
+				coderws.StatusInternalError,
+				"prepare websocket fingerprint identity",
+				fingerprintErr,
+			)
+		}
+		if fingerprintChanged {
+			normalized = fingerprintBody
+		}
 		ingressSessionOriginalModel = originalModel
 
 		return openAIWSClientPayload{

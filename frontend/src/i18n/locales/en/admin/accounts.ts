@@ -612,8 +612,8 @@ export default {
         codexCLIOnlyDesc:
           'Only applies to OpenAI OAuth. When enabled, only verified Codex request profiles are allowed, including the underlying transport identities shared by official CLI, App, and IDE surfaces. Request headers are spoofable: this does not attest a client binary or by itself determine account sharing.',
         codexFingerprintMode: 'Codex fingerprint convergence',
-        codexFingerprintModeDesc: 'When multiple users share the same OAuth account, converge client identifiers to account-level stable values. By default, only the device identifier is converged and each client keeps an independent session; choose Off to pass client identifiers through unchanged.',
-        codexFingerprintOff: 'Off (passthrough)',
+        codexFingerprintModeDesc: 'For OpenAI OAuth Responses sessions, converge fingerprint-owned client identifiers to account-level stable values. Device-only is the default. Native Compact v2 follows the selected mode; the ChatGPT Codex OAuth legacy compact compatibility path uses only the stable installation identifier. Off disables fingerprint mutation but does not disable Plus cache, security, or session policy.',
+        codexFingerprintOff: 'Off (no fingerprint rewrite)',
         codexFingerprintDevice: 'Device only (default)',
         codexFingerprintSession: 'Device + Session',
         codexFingerprintFull: 'Full convergence',

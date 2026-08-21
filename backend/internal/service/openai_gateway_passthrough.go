@@ -163,30 +163,14 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		}
 		reqStream = gjson.GetBytes(body, "stream").Bool()
 
-		// 指纹收敛：与非透传路径同门控（原生与 legacy compact 都跳过）。
-		// 一次性解析收敛 ID：请求体 client_metadata 在此改写（raw 字节外科
-		// 手术，透传热路径禁全量 Unmarshal），出站头改写由请求构造器读取
-		// context 中的同一份 IDs 完成（turn_id 等随机字段两侧必须一致）。
-		if !isOpenAICodexCompactionRequest(c) {
-			fingerprintAccount, fingerprintErr := s.resolveCodexFingerprintAccount(ctx, account)
-			if fingerprintErr != nil {
-				return nil, fmt.Errorf("resolve Codex fingerprint credential account: %w", fingerprintErr)
-			}
-			var clientHeaders http.Header
-			if c != nil && c.Request != nil {
-				clientHeaders = c.Request.Header
-			}
-			fpIDs := resolveCodexFingerprintIDsFromRequest(fingerprintAccount, clientHeaders)
-			if fpIDs != nil {
-				fpBody, fpChanged, fpErr := applyCodexFingerprintClientMetadataRaw(body, fpIDs)
-				if fpErr != nil {
-					return nil, fpErr
-				}
-				if fpChanged {
-					body = fpBody
-				}
-			}
-			storeCodexFingerprintIDs(c, fpIDs)
+		// Raw-body adapter consumes the same credential-owner stage as the final
+		// header builder without decoding the complete request body.
+		fpBody, fpChanged, fpErr := s.prepareCodexFingerprintRaw(ctx, c, account, body)
+		if fpErr != nil {
+			return nil, fpErr
+		}
+		if fpChanged {
+			body = fpBody
 		}
 	}
 
@@ -595,17 +579,11 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 		clientConversationID := strings.TrimSpace(req.Header.Get("conversation_id"))
 		if isOpenAIResponsesCompactPath(c) {
 			req.Header.Set("accept", "application/json")
-			if req.Header.Get("version") == "" {
-				req.Header.Set("version", CodexCanonicalClientVersion())
-			}
 			if clientSessionID == "" {
 				clientSessionID = resolveOpenAICompactSessionID(c)
 			}
 		} else if req.Header.Get("accept") == "" {
 			req.Header.Set("accept", "text/event-stream")
-		}
-		if req.Header.Get("originator") == "" {
-			req.Header.Set("originator", resolveCodexOutboundIdentity("").originator)
 		}
 		// Body key is the canonical aligned cache identity. Prefer it over raw
 		// inbound session aliases so the upstream body/header pair cannot drift.
@@ -642,7 +620,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 	if account.Type != AccountTypeOAuth {
 		if promptCacheKey := strings.TrimSpace(gjson.GetBytes(body, "prompt_cache_key").String()); promptCacheKey != "" {
 			identity := promptCacheKey
-			if !isOpenAICodexCompactionRequest(c) {
+			if !isOpenAIResponsesCompactPath(c) {
 				var err error
 				identity, err = s.resolveOpenAIUpstreamPromptCacheHeaderIdentity(c, account, promptCacheKey)
 				if err != nil {
@@ -653,25 +631,15 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 		}
 	}
 	alignOpenAICodexThreadHeaders(req.Header)
-
-	// 指纹收敛：使用 forwardOpenAIPassthrough 中预计算的收敛 ID 改写出站头，
-	// 与请求体 client_metadata 共享同一份、且属于 credential owner 的 IDs。
-	if account.Type == AccountTypeOAuth && !isOpenAICodexCompactionRequest(c) {
-		fingerprintAccount, fingerprintErr := s.resolveCodexFingerprintAccount(ctx, account)
-		if fingerprintErr != nil {
-			return nil, fmt.Errorf("resolve Codex fingerprint credential account: %w", fingerprintErr)
-		}
-		if ids := loadCodexFingerprintIDs(c, fingerprintAccount); ids != nil {
-			applyCodexFingerprintHeaders(req.Header, ids)
-		}
-	}
 	if req.Header.Get("content-type") == "" {
 		req.Header.Set("content-type", "application/json")
 	}
 
 	// 账号级请求头覆写（仅 openai api_key 账号启用时生效；OAuth 路径 no-op）
 	account.ApplyHeaderOverrides(req.Header)
-	if account.Type == AccountTypeOAuth && !isOpenAICodexCompactionRequest(c) {
+	// Apply the raw-body stage once, after generic header mutation and before
+	// final cache-session and outbound-identity convergence.
+	if account.Type == AccountTypeOAuth && stagedCodexFingerprintIDs(c) != nil {
 		fingerprintAccount, fingerprintErr := s.resolveCodexFingerprintAccount(ctx, account)
 		if fingerprintErr != nil {
 			return nil, fmt.Errorf("resolve Codex fingerprint credential account: %w", fingerprintErr)

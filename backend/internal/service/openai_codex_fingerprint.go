@@ -273,8 +273,56 @@ func extractClientSessionID(h http.Header) string {
 
 const ginCodexFingerprintIDsKey = "codex_fingerprint_ids"
 
-func isOpenAICodexCompactionRequest(c *gin.Context) bool {
-	return isOpenAIResponsesCompactPath(c) || isOpenAINativeCompactionV2(c)
+type codexFingerprintRequestPolicy uint8
+
+const (
+	codexFingerprintPolicyNonSession codexFingerprintRequestPolicy = iota
+	codexFingerprintPolicyOrdinary
+	codexFingerprintPolicyNativeCompact
+	codexFingerprintPolicyLegacyCompact
+)
+
+func resolveCodexFingerprintRequestPolicy(c *gin.Context, body []byte) codexFingerprintRequestPolicy {
+	if isOpenAIResponsesCompactPath(c) {
+		return codexFingerprintPolicyLegacyCompact
+	}
+	if !isCodexFingerprintSessionPath(c) {
+		return codexFingerprintPolicyNonSession
+	}
+	if isOpenAINativeCompactionV2(c) || HasCompactionTriggerInInput(body) {
+		return codexFingerprintPolicyNativeCompact
+	}
+	return codexFingerprintPolicyOrdinary
+}
+
+func isCodexFingerprintSessionPath(c *gin.Context) bool {
+	if c == nil || c.Request == nil || c.Request.URL == nil {
+		return false
+	}
+	path := strings.TrimSuffix(strings.TrimSpace(c.Request.URL.Path), "/")
+	for _, prefix := range [...]string{
+		"/backend-api/codex/responses",
+		"/openai/v1/responses",
+		"/v1/responses",
+		"/responses",
+	} {
+		if path == prefix {
+			return true
+		}
+	}
+	for _, endpoint := range [...]string{
+		"/openai/v1/chat/completions",
+		"/v1/chat/completions",
+		"/chat/completions",
+		"/openai/v1/messages",
+		"/v1/messages",
+		"/messages",
+	} {
+		if path == endpoint {
+			return true
+		}
+	}
+	return false
 }
 
 // resolveCodexFingerprintAccount returns the account that owns the OAuth
@@ -305,25 +353,61 @@ func loadCodexFingerprintIDs(c *gin.Context, account *Account) *codexFingerprint
 	if c == nil || account == nil {
 		return nil
 	}
-	raw, ok := c.Get(ginCodexFingerprintIDsKey)
-	if !ok || raw == nil {
-		return nil
-	}
-	ids, ok := raw.(*codexFingerprintIDs)
-	if !ok || ids == nil || ids.accountID != account.ID {
+	ids := stagedCodexFingerprintIDs(c)
+	if ids == nil || ids.accountID != account.ID {
 		return nil
 	}
 	return ids
 }
 
-// resolveCodexFingerprintIDsFromRequest 从客户端原始请求头中提取 session-id，
-// 结合账号配置一次性解析收敛 ID 集合。调用方应将返回的 ids 同时传给
-// applyCodexFingerprintHeaders 和 applyCodexFingerprintClientMetadata。
-func resolveCodexFingerprintIDsFromRequest(account *Account, clientHeaders http.Header) *codexFingerprintIDs {
-	if account == nil {
+func stagedCodexFingerprintIDs(c *gin.Context) *codexFingerprintIDs {
+	if c == nil {
+		return nil
+	}
+	raw, ok := c.Get(ginCodexFingerprintIDsKey)
+	if !ok || raw == nil {
+		return nil
+	}
+	ids, ok := raw.(*codexFingerprintIDs)
+	if !ok || ids == nil {
+		return nil
+	}
+	return ids
+}
+
+func (s *OpenAIGatewayService) prepareCodexFingerprintIDs(
+	ctx context.Context,
+	c *gin.Context,
+	account *Account,
+	clientHeaders http.Header,
+	policy codexFingerprintRequestPolicy,
+) (*codexFingerprintIDs, error) {
+	storeCodexFingerprintIDs(c, nil)
+	if account == nil || !account.IsOpenAIOAuth() || policy == codexFingerprintPolicyNonSession {
+		return nil, nil
+	}
+
+	fingerprintAccount, err := s.resolveCodexFingerprintAccount(ctx, account)
+	if err != nil {
+		return nil, fmt.Errorf("resolve Codex fingerprint credential account: %w", err)
+	}
+	ids := resolveCodexFingerprintIDsForPolicy(fingerprintAccount, clientHeaders, policy)
+	storeCodexFingerprintIDs(c, ids)
+	return ids, nil
+}
+
+func resolveCodexFingerprintIDsForPolicy(
+	account *Account,
+	clientHeaders http.Header,
+	policy codexFingerprintRequestPolicy,
+) *codexFingerprintIDs {
+	if account == nil || !account.IsOpenAIOAuth() || policy == codexFingerprintPolicyNonSession {
 		return nil
 	}
 	mode := account.GetCodexFingerprintMode()
+	if policy == codexFingerprintPolicyLegacyCompact && mode != codexFingerprintOff {
+		mode = codexFingerprintDevice
+	}
 	if mode == codexFingerprintOff {
 		return nil
 	}
@@ -332,6 +416,59 @@ func resolveCodexFingerprintIDsFromRequest(account *Account, clientHeaders http.
 		clientSessionID = extractClientSessionID(clientHeaders)
 	}
 	return resolveCodexFingerprintIDs(account, clientSessionID, mode)
+}
+
+func (s *OpenAIGatewayService) prepareCodexFingerprintMap(
+	ctx context.Context,
+	c *gin.Context,
+	account *Account,
+	reqBody map[string]any,
+) (bool, error) {
+	var clientHeaders http.Header
+	if c != nil && c.Request != nil {
+		clientHeaders = c.Request.Header
+	}
+	ids, err := s.prepareCodexFingerprintIDs(
+		ctx,
+		c,
+		account,
+		clientHeaders,
+		resolveCodexFingerprintRequestPolicy(c, nil),
+	)
+	if err != nil {
+		return false, err
+	}
+	return applyCodexFingerprintClientMetadata(reqBody, ids), nil
+}
+
+func (s *OpenAIGatewayService) prepareCodexFingerprintRaw(
+	ctx context.Context,
+	c *gin.Context,
+	account *Account,
+	body []byte,
+) ([]byte, bool, error) {
+	var clientHeaders http.Header
+	if c != nil && c.Request != nil {
+		clientHeaders = c.Request.Header
+	}
+	ids, err := s.prepareCodexFingerprintIDs(
+		ctx,
+		c,
+		account,
+		clientHeaders,
+		resolveCodexFingerprintRequestPolicy(c, body),
+	)
+	if err != nil {
+		return body, false, err
+	}
+	return applyCodexFingerprintClientMetadataRaw(body, ids)
+}
+
+// resolveCodexFingerprintIDsFromRequest 从客户端原始请求头中提取 session-id，
+// 结合账号配置一次性解析收敛 ID 集合。调用方应将返回的 ids 同时传给
+// applyCodexFingerprintHeaders 和 applyCodexFingerprintClientMetadata。
+func resolveCodexFingerprintIDsFromRequest(account *Account, clientHeaders http.Header) *codexFingerprintIDs {
+	return resolveCodexFingerprintIDsForPolicy(account, clientHeaders, codexFingerprintPolicyOrdinary)
 }
 
 // applyCodexFingerprintHeaders 按预计算的收敛 ID 改写出站 HTTP 头中的设备指纹。
@@ -372,13 +509,14 @@ func applyCodexFingerprintHeaders(h http.Header, ids *codexFingerprintIDs) {
 // rewriteCodexTurnMetadataFields 解析 x-codex-turn-metadata 头中的 JSON，
 // 替换指定字段后回写。保留未指定字段原样（如 sandbox、thread_source 等）。
 func rewriteCodexTurnMetadataFields(h http.Header, fields map[string]any) {
-	raw := strings.TrimSpace(h.Get("x-codex-turn-metadata"))
-	if raw == "" {
+	values := h.Values("x-codex-turn-metadata")
+	if len(values) == 0 {
 		return
 	}
+	raw := strings.TrimSpace(values[0])
 	var metadata map[string]any
-	if err := json.Unmarshal([]byte(raw), &metadata); err != nil {
-		return
+	if err := json.Unmarshal([]byte(raw), &metadata); err != nil || metadata == nil {
+		metadata = make(map[string]any, len(fields))
 	}
 	for k, v := range fields {
 		metadata[k] = v
@@ -487,15 +625,27 @@ func applyCodexFingerprintClientMetadataRaw(body []byte, ids *codexFingerprintID
 }
 
 // rewriteClientMetadataEmbeddedTurnMetadata 改写 client_metadata 中内嵌的
-// x-codex-turn-metadata JSON 字符串里的指定字段。
+// x-codex-turn-metadata。规范 JSON 字符串和对象保留无关字段；已存在的
+// null、数组、标量或畸形字符串重建为规范 JSON 字符串。
 func rewriteClientMetadataEmbeddedTurnMetadata(clientMetadata map[string]any, fields map[string]any) {
-	raw, ok := clientMetadata["x-codex-turn-metadata"].(string)
-	if !ok || raw == "" {
+	value, exists := clientMetadata["x-codex-turn-metadata"]
+	if !exists {
 		return
 	}
 	var metadata map[string]any
-	if err := json.Unmarshal([]byte(raw), &metadata); err != nil {
-		return
+	switch typed := value.(type) {
+	case string:
+		_ = json.Unmarshal([]byte(typed), &metadata)
+	case map[string]any:
+		metadata = typed
+	case map[string]string:
+		metadata = make(map[string]any, len(typed))
+		for key, item := range typed {
+			metadata[key] = item
+		}
+	}
+	if metadata == nil {
+		metadata = make(map[string]any, len(fields))
 	}
 	for k, v := range fields {
 		metadata[k] = v

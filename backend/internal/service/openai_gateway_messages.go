@@ -245,6 +245,9 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 		// OAuth codex transform forces stream=true upstream, so always use
 		// the streaming response handler regardless of what the client asked.
 		isStream = true
+		if _, fingerprintErr := s.prepareCodexFingerprintMap(ctx, c, account, reqBody); fingerprintErr != nil {
+			return nil, fingerprintErr
+		}
 		responsesBody, err = json.Marshal(reqBody)
 		if err != nil {
 			return nil, fmt.Errorf("remarshal after codex transform: %w", err)
@@ -346,7 +349,7 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 			return nil, resolveErr
 		}
 		isolatedSessionID := generateSessionUUID(upstreamSessionID)
-		upstreamReq.Header.Set("session_id", isolatedSessionID)
+		setOpenAIUpstreamSessionIdentity(upstreamReq.Header, isolatedSessionID)
 		if upstreamReq.Header.Get("conversation_id") != "" {
 			upstreamReq.Header.Set("conversation_id", isolatedSessionID)
 		}

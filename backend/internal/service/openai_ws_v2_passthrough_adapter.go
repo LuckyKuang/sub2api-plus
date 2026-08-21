@@ -771,6 +771,13 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 			return fmt.Errorf("resolve first ws prompt cache identity: %w", cacheIdentityErr)
 		}
 	}
+	fingerprintFirst, fingerprintChanged, fingerprintErr := s.prepareCodexFingerprintRaw(ctx, c, account, firstClientMessage)
+	if fingerprintErr != nil {
+		return fmt.Errorf("prepare first ws fingerprint identity: %w", fingerprintErr)
+	}
+	if fingerprintChanged {
+		firstClientMessage = fingerprintFirst
+	}
 
 	// 在 policy filter 之后再提取 service_tier / reasoning_effort 用于
 	// usage 上报：filter
@@ -1075,6 +1082,15 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 				if strings.TrimSpace(framePromptCacheIdentity) != promptCacheKey {
 					err := errors.New("prompt_cache_key cannot change during websocket passthrough")
 					return payload, nil, NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, err.Error(), err)
+				}
+			}
+			if policyErr == nil && blocked == nil && isResponseCreate {
+				fingerprintFrame, fingerprintChanged, fingerprintErr := s.prepareCodexFingerprintRaw(ctx, c, account, out)
+				if fingerprintErr != nil {
+					return payload, nil, fingerprintErr
+				}
+				if fingerprintChanged {
+					out = fingerprintFrame
 				}
 			}
 			// 多轮 passthrough usage：仅在成功（non-block / non-err）
