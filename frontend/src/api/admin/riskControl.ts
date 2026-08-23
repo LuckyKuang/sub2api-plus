@@ -139,6 +139,10 @@ export interface ContentModerationRuntimeStatus {
   dropped: number
   processed: number
   errors: number
+  extraction_attempted: number
+  extraction_succeeded: number
+  extraction_empty: number
+  extraction_failed: number
   pre_block_active: number
   pre_block_checked: number
   pre_block_allowed: number

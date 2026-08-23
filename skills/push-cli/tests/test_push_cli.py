@@ -481,6 +481,16 @@ class LocalChecksTest(unittest.TestCase):
 
         names = [call.args[0] for call in run_step.call_args_list]
         self.assertEqual("Apple Container lifecycle test", names[0])
+        self.assertIn("Compress CLI self-tests", names)
+        compress_test = next(
+            call
+            for call in run_step.call_args_list
+            if call.args[0] == "Compress CLI self-tests"
+        )
+        self.assertEqual(
+            [sys.executable, "skills/compress-cli/tests/test_compress_cli.py"],
+            compress_test.args[1],
+        )
         self.assertIn("Push CLI self-tests", names)
         self.assertIn("Release CLI self-tests", names)
         self.assertIn("Backend unit tests", names)

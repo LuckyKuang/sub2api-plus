@@ -404,33 +404,16 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	}
 
 	setOpsRequestContext(c, "", false)
-	sessionHashBody := body
-	body, ok = h.normalizeOpenAIResponsesCompactRequest(c, reqLog, body)
-	if !ok {
-		return
-	}
-	legacyCompact := service.IsOpenAIResponsesCompactPath(c)
-	nativeV2 := isBareOpenAIResponsesPath(c) && isOpenAIRemoteCompactionV2Request(body)
-	if nativeV2 {
-		// 原生 v2 压缩出站前补注 x-codex-beta-features: remote_compaction_v2，
-		// 与真实 Codex 线型一致（网关链剥头后本级负责恢复，#5586）。
-		service.MarkOpenAINativeCompactionV2(c)
-	}
-	// body-signal compact：上游 unary 等待期间向下游发 SSE 注释行心跳，防止
-	// 反向代理空闲超时掐断长压缩连接（#3887）。首拍延迟一个心跳间隔，快速
-	// 失败仍走 JSON+状态码链路；未标记客户端流式或间隔为 0 时是 no-op。
-	stopCompactKeepalive := service.StartOpenAICompactSSEKeepalive(c, h.openAICompactKeepaliveInterval())
-	defer stopCompactKeepalive()
-
+	securityAuditBody := append([]byte(nil), body...)
 	// 校验请求体 JSON 合法性
-	if !gjson.ValidBytes(body) {
-		logRequestBodyParseFailure(reqLog, body, nil)
+	if !gjson.ValidBytes(securityAuditBody) {
+		logRequestBodyParseFailure(reqLog, securityAuditBody, nil)
 		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "Failed to parse request body")
 		return
 	}
 
 	// 使用 gjson 只读提取字段做校验，避免完整 Unmarshal
-	modelResult := gjson.GetBytes(body, "model")
+	modelResult := gjson.GetBytes(securityAuditBody, "model")
 	if !modelResult.Exists() || modelResult.Type != gjson.String || modelResult.String() == "" {
 		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "model is required")
 		return
@@ -441,17 +424,13 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "Model is not supported by this OpenAI-compatible endpoint for composite groups")
 		return
 	}
-	if cappedBody, changed := applyOpenAIReasoningEffortPolicyForRequest(c, apiKey, body); changed {
-		body = cappedBody
-	}
-
-	reqStream, ok := parseOpenAICompatibleStream(body)
+	rawStream, ok := parseOpenAICompatibleStream(securityAuditBody)
 	if !ok {
 		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", invalidStreamFieldTypeMessage)
 		return
 	}
-	reqLog = reqLog.With(zap.String("model", reqModel), zap.Bool("stream", reqStream))
-	previousResponseID := strings.TrimSpace(gjson.GetBytes(body, "previous_response_id").String())
+	reqLog = reqLog.With(zap.String("model", reqModel), zap.Bool("stream", rawStream))
+	previousResponseID := strings.TrimSpace(gjson.GetBytes(securityAuditBody, "previous_response_id").String())
 	if previousResponseID != "" {
 		previousResponseIDKind := service.ClassifyOpenAIPreviousResponseIDKind(previousResponseID)
 		reqLog = reqLog.With(
@@ -473,13 +452,42 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		return
 	}
 
-	setOpsRequestContext(c, reqModel, reqStream)
-	setOpsEndpointContext(c, "", int16(service.RequestTypeFromLegacy(reqStream, false)))
+	setOpsRequestContext(c, reqModel, rawStream)
+	setOpsEndpointContext(c, "", int16(service.RequestTypeFromLegacy(rawStream, false)))
 
-	if decision := h.checkSecurityAudit(c, reqLog, apiKey, subject, service.ContentModerationProtocolOpenAIResponses, reqModel, body); decision != nil && !decision.AllowNextStage {
+	if decision := h.checkSecurityAudit(c, reqLog, apiKey, subject, service.ContentModerationProtocolOpenAIResponses, reqModel, securityAuditBody); decision != nil && !decision.AllowNextStage {
 		h.openAISecurityAuditError(c, decision)
 		return
 	}
+
+	// 只有安全审核通过后才允许协议归一化改变请求体或路由语义。
+	sessionHashBody := body
+	body, ok = h.normalizeOpenAIResponsesCompactRequest(c, reqLog, body)
+	if !ok {
+		return
+	}
+	legacyCompact := service.IsOpenAIResponsesCompactPath(c)
+	nativeV2 := isBareOpenAIResponsesPath(c) && isOpenAIRemoteCompactionV2Request(body)
+	if nativeV2 {
+		// 原生 v2 压缩出站前补注 x-codex-beta-features: remote_compaction_v2，
+		// 与真实 Codex 线型一致（网关链剥头后本级负责恢复，#5586）。
+		service.MarkOpenAINativeCompactionV2(c)
+	}
+	if cappedBody, changed := applyOpenAIReasoningEffortPolicyForRequest(c, apiKey, body); changed {
+		body = cappedBody
+	}
+	reqStream, ok := parseOpenAICompatibleStream(body)
+	if !ok {
+		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", invalidStreamFieldTypeMessage)
+		return
+	}
+	setOpsRequestContext(c, reqModel, reqStream)
+	setOpsEndpointContext(c, "", int16(service.RequestTypeFromLegacy(reqStream, false)))
+
+	// body-signal compact：审核通过后再启动 SSE 注释行心跳，防止阻断式
+	// 审核等待期间提前提交 200 响应并破坏 503 fail-closed 错误语义。
+	stopCompactKeepalive := service.StartOpenAICompactSSEKeepalive(c, h.openAICompactKeepaliveInterval())
+	defer stopCompactKeepalive()
 
 	// 使用 IsExplicitImageGenerationIntent 排除被动 image_gen namespace 声明。
 	// Codex 在所有请求中被动声明 image_gen namespace，宽泛检测会导致禁了生图的

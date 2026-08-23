@@ -1,0 +1,4 @@
+interface:
+  display_name: "Sub2API AGENTS Compress CLI"
+  short_description: "Compress repository rules without weakening invariants"
+  default_prompt: "Use $compress-cli to update or validate the Sub2API Plus root AGENTS.md. Preserve the compact pipe index, verify real repository paths and commands, and fail closed if security-audit, Codex identity, pull-request, or release invariants are missing or weakened."

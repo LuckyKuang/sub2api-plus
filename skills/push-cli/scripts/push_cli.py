@@ -492,6 +492,11 @@ def run_local_checks(
         ),
         ("Go module tidiness", ["go", "mod", "tidy", "-diff"], backend),
         (
+            "Compress CLI self-tests",
+            [python, "skills/compress-cli/tests/test_compress_cli.py"],
+            ROOT,
+        ),
+        (
             "Push CLI self-tests",
             [python, "skills/push-cli/tests/test_push_cli.py"],
             ROOT,

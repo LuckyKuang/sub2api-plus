@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net/http"
 	"sync"
+
+	"github.com/LuckyKuang/sub2api-plus/internal/service"
 )
 
 type LegacyEngine interface {
@@ -92,7 +94,7 @@ func (c *Coordinator) checkLegacy(ctx context.Context, req Request) (*LegacyDeci
 }
 
 func prioritize(legacy *LegacyDecision, prompt *PromptDecision) Decision {
-	if legacy != nil && legacy.Blocked {
+	if legacy != nil && legacy.Blocked && !legacyDecisionUnavailable(legacy) {
 		status := legacy.StatusCode
 		if status < 400 || status > 599 {
 			status = http.StatusForbidden
@@ -106,13 +108,28 @@ func prioritize(legacy *LegacyDecision, prompt *PromptDecision) Decision {
 			Legacy: legacy, Prompt: prompt, AllowNextStage: false,
 		}
 	}
+	if prompt != nil && prompt.Kind == DecisionBlock {
+		return Decision{Kind: DecisionBlock, HTTPStatus: http.StatusForbidden, ErrorCode: ErrorCodeBlocked,
+			ClientMessage: "提示词安全审计拒绝了该请求，请调整输入后重试", Legacy: legacy, Prompt: prompt}
+	}
+	if legacyDecisionUnavailable(legacy) {
+		status := legacy.StatusCode
+		if status < 500 || status > 599 {
+			status = http.StatusServiceUnavailable
+		}
+		code := legacy.ErrorCode
+		if code == "" {
+			code = service.ContentModerationErrorCodeUnavailable
+		}
+		return Decision{
+			Kind: DecisionUnavailable, HTTPStatus: status, ErrorCode: code, ClientMessage: legacy.Message,
+			Legacy: legacy, Prompt: prompt, AllowNextStage: false,
+		}
+	}
 	if prompt == nil {
 		return allowDecision(legacy, nil)
 	}
 	switch prompt.Kind {
-	case DecisionBlock:
-		return Decision{Kind: DecisionBlock, HTTPStatus: http.StatusForbidden, ErrorCode: ErrorCodeBlocked,
-			ClientMessage: "提示词安全审计拒绝了该请求，请调整输入后重试", Legacy: legacy, Prompt: prompt}
 	case DecisionInvalid:
 		return Decision{Kind: DecisionInvalid, HTTPStatus: http.StatusServiceUnavailable, ErrorCode: ErrorCodeInvalidResponse,
 			ClientMessage: "提示词安全审计暂时不可用，请稍后重试", Legacy: legacy, Prompt: prompt}
@@ -124,6 +141,16 @@ func prioritize(legacy *LegacyDecision, prompt *PromptDecision) Decision {
 	default:
 		return allowDecision(legacy, prompt)
 	}
+}
+
+func legacyDecisionUnavailable(decision *LegacyDecision) bool {
+	if decision == nil {
+		return false
+	}
+	if decision.ErrorCode == service.ContentModerationErrorCodeUnavailable {
+		return true
+	}
+	return decision.Action == service.ContentModerationActionError && !decision.Flagged
 }
 
 func allowDecision(legacy *LegacyDecision, prompt *PromptDecision) Decision {

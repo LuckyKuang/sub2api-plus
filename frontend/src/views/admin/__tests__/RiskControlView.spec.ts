@@ -128,6 +128,10 @@ const runtimeStatus = () => ({
   dropped: 0,
   processed: 0,
   errors: 0,
+  extraction_attempted: 0,
+  extraction_succeeded: 0,
+  extraction_empty: 0,
+  extraction_failed: 0,
   pre_block_active: 0,
   pre_block_checked: 0,
   pre_block_allowed: 0,
@@ -326,6 +330,10 @@ describe('admin RiskControlView', () => {
       pre_block_blocked: 8,
       pre_block_errors: 1,
       pre_block_avg_latency_ms: 86,
+      extraction_attempted: 129,
+      extraction_succeeded: 128,
+      extraction_empty: 0,
+      extraction_failed: 1,
       pre_block_api_key_active: 2,
       pre_block_api_key_available_count: 2,
       pre_block_api_key_total_calls: 128,
@@ -392,6 +400,12 @@ describe('admin RiskControlView', () => {
     expect(wrapper.text()).toContain('72')
     expect(wrapper.text()).toContain('56')
     expect(wrapper.text()).toContain('同步并发 2 / 可用 Key 2，累计 128 次，worker：3 / 7')
+    expect(wrapper.get('[data-test="content-extraction-runtime"]').text()).toContain('admin.riskControl.extractionStatus')
+    expect(wrapper.get('[data-test="content-extraction-metric-attempted"]').text()).toContain('129')
+    expect(wrapper.get('[data-test="content-extraction-metric-succeeded"]').text()).toContain('128')
+    expect(wrapper.get('[data-test="content-extraction-metric-empty"]').text()).toContain('0')
+    expect(wrapper.get('[data-test="content-extraction-metric-failed"]').text()).toContain('1')
+    expect(wrapper.get('[data-test="content-extraction-metric-failed"] dd').classes()).toContain('text-red-700')
 
     const runtimeCards = wrapper.get('[data-test="pre-block-runtime-cards"]')
     const syncCard = wrapper.get('[data-test="pre-block-sync-card"]')

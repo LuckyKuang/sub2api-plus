@@ -56,6 +56,9 @@ func TestCoordinatorModesAndPriority(t *testing.T) {
 		{name: "async only enqueues", mode: ModeAsync, wantKind: DecisionAllow, wantEnqueue: 1},
 		{name: "prompt block", mode: ModeBlocking, prompt: &PromptDecision{Kind: DecisionBlock}, wantKind: DecisionBlock, wantCode: ErrorCodeBlocked, wantEvaluation: 1},
 		{name: "prompt unavailable", mode: ModeBlocking, promptErr: errors.New("down"), wantKind: DecisionUnavailable, wantCode: ErrorCodeUnavailable, wantEvaluation: 1},
+		{name: "legacy unavailable", mode: ModeOff,
+			legacy:   &LegacyDecision{Blocked: true, StatusCode: http.StatusServiceUnavailable, ErrorCode: "content_moderation_unavailable", Message: "legacy unavailable", Action: "error"},
+			wantKind: DecisionUnavailable, wantCode: "content_moderation_unavailable"},
 		{name: "legacy wins both block", mode: ModeBlocking,
 			legacy: &LegacyDecision{Blocked: true, StatusCode: http.StatusForbidden, ErrorCode: "content_policy_violation", Message: "legacy"},
 			prompt: &PromptDecision{Kind: DecisionBlock}, wantKind: DecisionBlock, wantCode: "content_policy_violation", wantEvaluation: 1},
@@ -72,6 +75,35 @@ func TestCoordinatorModesAndPriority(t *testing.T) {
 			require.Equal(t, tt.wantEvaluation, prompt.evaluates.Load())
 		})
 	}
+}
+
+func TestCoordinatorClassifiesLegacyExtractionFailureAsUnavailable(t *testing.T) {
+	legacy := &LegacyDecision{
+		Blocked: true, Flagged: false, StatusCode: http.StatusServiceUnavailable,
+		ErrorCode: "content_moderation_unavailable", Message: "content moderation is temporarily unavailable", Action: "error",
+	}
+	decision := NewCoordinator(
+		&fakeLegacyEngine{decision: legacy},
+		&fakePromptEngine{mode: ModeBlocking, decision: &PromptDecision{Kind: DecisionAllow, AllowNextStage: true}},
+	).Check(context.Background(), Request{})
+
+	require.Equal(t, DecisionUnavailable, decision.Kind)
+	require.Equal(t, http.StatusServiceUnavailable, decision.HTTPStatus)
+	require.Equal(t, "content_moderation_unavailable", decision.ErrorCode)
+	require.Equal(t, "content moderation is temporarily unavailable", decision.ClientMessage)
+	require.False(t, decision.AllowNextStage)
+	require.Same(t, legacy, decision.Legacy)
+}
+
+func TestCoordinatorPromptPolicyBlockWinsLegacyUnavailable(t *testing.T) {
+	decision := NewCoordinator(
+		&fakeLegacyEngine{decision: &LegacyDecision{Blocked: true, StatusCode: http.StatusServiceUnavailable, ErrorCode: "content_moderation_unavailable", Action: "error"}},
+		&fakePromptEngine{mode: ModeBlocking, decision: &PromptDecision{Kind: DecisionBlock}},
+	).Check(context.Background(), Request{})
+
+	require.Equal(t, DecisionBlock, decision.Kind)
+	require.Equal(t, ErrorCodeBlocked, decision.ErrorCode)
+	require.False(t, decision.AllowNextStage)
 }
 
 func TestCoordinatorDoesNotMutateRequestBody(t *testing.T) {

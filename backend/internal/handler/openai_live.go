@@ -56,7 +56,7 @@ func (h *OpenAIGatewayHandler) Live(c *gin.Context) {
 		reqLog,
 		apiKey,
 		subject,
-		service.ContentModerationProtocolOpenAIResponses,
+		service.ContentModerationProtocolOpenAILive,
 		model,
 		request.Session,
 	); decision != nil && !decision.AllowNextStage {
@@ -224,6 +224,14 @@ func (h *OpenAIGatewayHandler) LiveSideband(c *gin.Context) {
 		h.errorResponse(c, http.StatusNotFound, "not_found_error", "Live call not found")
 		return
 	}
+	reqLog := requestLogger(
+		c,
+		"handler.openai_gateway.live_sideband",
+		zap.Int64("user_id", subject.UserID),
+		zap.Int64("api_key_id", apiKey.ID),
+		zap.Any("group_id", apiKey.GroupID),
+		zap.String("model", record.Model),
+	)
 	downstream, err := coderws.Accept(c.Writer, c.Request, &coderws.AcceptOptions{
 		InsecureSkipVerify: true,
 	})
@@ -234,6 +242,19 @@ func (h *OpenAIGatewayHandler) LiveSideband(c *gin.Context) {
 	if err := h.gatewayService.ProxyLiveSidebandWithHooks(c.Request.Context(), record, downstream, &service.LiveSidebandHooks{
 		BeforeFrame: func(ctx context.Context) error {
 			return h.enforceOpenAIWSIPAccess(ctx, trustedClientIdentity)
+		},
+		BeforeClientFrame: func(ctx context.Context, _ coderws.MessageType, payload []byte) error {
+			decision := h.checkSecurityAuditStage(
+				c, reqLog, apiKey, subject,
+				service.ContentModerationProtocolOpenAILive, record.Model, payload, "live_sideband",
+			)
+			if decision == nil || decision.AllowNextStage {
+				return nil
+			}
+			writeSecurityAuditWSError(ctx, downstream, decision)
+			return service.NewOpenAIWSClientCloseError(
+				securityAuditWSCloseStatus(decision), securityAuditWSCloseReason(decision), nil,
+			)
 		},
 		RecheckEvery: 5 * time.Second,
 	}); err != nil {

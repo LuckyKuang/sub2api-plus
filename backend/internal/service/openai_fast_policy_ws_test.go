@@ -285,6 +285,26 @@ func (f *fakePassthroughFrameConn) Close() error {
 	return nil
 }
 
+func TestOpenAIWSPassthroughRejectedNonCreateFrameNeverReachesUpstream(t *testing.T) {
+	client := &fakePassthroughFrameConn{reads: [][]byte{
+		[]byte(`{"type":"conversation.item.create","item":{"type":"message","role":"user","content":"blocked sideband content"}}`),
+	}}
+	upstream := &fakePassthroughFrameConn{}
+	auditCalls := 0
+	policyClient := &openAIWSPolicyEnforcingFrameConn{
+		inner: client,
+		filter: func(msgType coderws.MessageType, payload []byte) ([]byte, *OpenAIFastBlockedError, error) {
+			auditCalls++
+			return payload, nil, NewOpenAIWSClientCloseError(coderws.StatusTryAgainLater, "security audit unavailable", errors.New("audit rejected frame"))
+		},
+	}
+
+	_, _, err := readNextOpenAIWSPassthroughResponseCreate(context.Background(), policyClient, upstream)
+	require.Error(t, err)
+	require.Equal(t, 1, auditCalls)
+	require.Empty(t, upstream.writes)
+}
+
 // gpt55WhitelistFastPolicy 返回一份强制带 model whitelist 的策略，用于
 // 验证 capturedSessionModel fallback 的语义（默认配置没有规则，fallback
 // 路径无法被观察到）。

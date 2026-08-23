@@ -24,6 +24,10 @@ type AtomicMetrics struct {
 	latencyMax   atomic.Int64
 	enqueued     atomic.Int64
 	dropped      atomic.Int64
+	extractTried atomic.Int64
+	extractOK    atomic.Int64
+	extractEmpty atomic.Int64
+	extractFail  atomic.Int64
 	latencyMu    sync.RWMutex
 	latencies    []int64
 	latencyNext  int
@@ -60,7 +64,11 @@ func (m *AtomicMetrics) AuditSnapshot() AuditMetricsSnapshot {
 	if m == nil {
 		return AuditMetricsSnapshot{}
 	}
-	return AuditMetricsSnapshot{Enqueued: m.enqueued.Load(), Dropped: m.dropped.Load()}
+	return AuditMetricsSnapshot{
+		Enqueued: m.enqueued.Load(), Dropped: m.dropped.Load(),
+		ExtractionAttempted: m.extractTried.Load(), ExtractionSucceeded: m.extractOK.Load(),
+		ExtractionEmpty: m.extractEmpty.Load(), ExtractionFailed: m.extractFail.Load(),
+	}
 }
 
 func (m *AtomicMetrics) Observe(kind DecisionKind, latency time.Duration) {
@@ -120,6 +128,21 @@ func (m *AtomicMetrics) IncEnqueued() {
 func (m *AtomicMetrics) IncDropped() {
 	if m != nil {
 		m.dropped.Add(1)
+	}
+}
+
+func (m *AtomicMetrics) ObserveExtraction(outcome ExtractionOutcome) {
+	if m == nil {
+		return
+	}
+	m.extractTried.Add(1)
+	switch outcome {
+	case ExtractionSucceeded:
+		m.extractOK.Add(1)
+	case ExtractionEmpty:
+		m.extractEmpty.Add(1)
+	default:
+		m.extractFail.Add(1)
 	}
 }
 

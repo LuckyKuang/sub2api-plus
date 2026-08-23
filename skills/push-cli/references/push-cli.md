@@ -49,7 +49,7 @@ The marker format is implementation-owned and must occur exactly once:
 The matrix includes:
 
 - Go module tidiness, unit tests, integration tests, and golangci-lint.
-- Push CLI and release CLI self-tests.
+- Compress CLI, push CLI, and release CLI self-tests.
 - Frozen pnpm install, lint, typecheck, Vitest, production build, and production
   audit exception policy.
 - Release policy, release metadata, README synchronization, Codex outbound

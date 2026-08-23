@@ -498,13 +498,13 @@ func (s *OpenAIGatewayService) ProxyLiveSideband(
 	return s.ProxyLiveSidebandWithHooks(ctx, record, downstream, nil)
 }
 
-// LiveSidebandHooks supplies request-owner policy checks to a sideband
-// connection. The service deliberately owns the periodic and per-frame call
-// sites; handlers only provide the policy decision so long-lived websocket
-// sessions cannot outlive an access-control change.
+// LiveSidebandHooks supplies request-owner policy and content-audit checks to a
+// sideband connection. The service owns the call sites so neither long-lived
+// access changes nor client content frames can bypass their pre-forward gates.
 type LiveSidebandHooks struct {
-	BeforeFrame  func(context.Context) error
-	RecheckEvery time.Duration
+	BeforeFrame       func(context.Context) error
+	BeforeClientFrame func(context.Context, coderws.MessageType, []byte) error
+	RecheckEvery      time.Duration
 }
 
 // ProxyLiveSidebandWithHooks lets an authenticated client take over a live
@@ -575,6 +575,12 @@ func (s *OpenAIGatewayService) ProxyLiveSidebandWithHooks(
 			if policyErr := checkPolicy(); policyErr != nil {
 				reportError(policyErr)
 				return
+			}
+			if hooks != nil && hooks.BeforeClientFrame != nil {
+				if auditErr := hooks.BeforeClientFrame(proxyCtx, messageType, payload); auditErr != nil {
+					reportError(auditErr)
+					return
+				}
 			}
 			if writeErr := upstream.WriteFrame(proxyCtx, messageType, payload); writeErr != nil {
 				reportError(writeErr)

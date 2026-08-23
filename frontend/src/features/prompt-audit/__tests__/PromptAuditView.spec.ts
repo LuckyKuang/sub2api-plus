@@ -28,7 +28,9 @@ const runtime = (): PromptAuditRuntime => ({
   process_status: 'running', effective_mode: 'async_audit', expected_config_version: 7, active_config_version: 7,
   worker_total: 4, worker_active: 1, queue_capacity: 100,
   queue: { staging: 0, queued: 0, processing: 1, retry: 0, done: 5, failed: 0, active: 1 },
-  processed_total: 5, failed_total: 0, enqueued_total: 5, dropped_total: 0, database_status: 'ok', redis_status: 'ok', endpoints: {},
+  processed_total: 5, failed_total: 0, enqueued_total: 5, dropped_total: 0,
+  extraction_attempted: 5, extraction_succeeded: 5, extraction_empty: 0, extraction_failed: 0,
+  database_status: 'ok', redis_status: 'ok', endpoints: {},
   guard_metrics: { total: 1, allowed: 1, flagged: 0, blocked: 0, unavailable: 0, invalid: 0, timeouts: 0, failovers: 0, bulkhead_full: 0, record_failed: 0 },
 })
 
