@@ -166,10 +166,11 @@ func extractChat(document *Document, root map[string]any) {
 		}
 		source := SourceMessage
 		controlled := true
-		if role == "system" || role == "developer" {
+		switch role {
+		case "system", "developer":
 			source = SourceInstruction
 			current = true
-		} else if role == "tool" || role == "function" {
+		case "tool", "function":
 			source = SourceToolOutput
 		}
 		if source == SourceToolOutput {
@@ -764,7 +765,8 @@ func appendResponsesItem(document *Document, value any, current bool) {
 		}
 		controlled := true
 		source := SourceMessage
-		if role == "system" || role == "developer" {
+		switch role {
+		case "system", "developer":
 			source = SourceInstruction
 			current = true
 		}
