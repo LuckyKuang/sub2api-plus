@@ -81,13 +81,14 @@ func runSecurityAudit(c *gin.Context, reqLog *zap.Logger, coordinator *securitya
 			return nil
 		}
 		decision := securityaudit.Decision{Kind: securityaudit.DecisionAllow, HTTPStatus: http.StatusOK, AllowNextStage: true}
+		errorCode := contentModerationErrorCode(legacyDecision)
 		decision.Legacy = &securityaudit.LegacyDecision{
 			Allowed: legacyDecision.Allowed, Blocked: legacyDecision.Blocked, Flagged: legacyDecision.Flagged,
 			Message: legacyDecision.Message, StatusCode: legacyDecision.StatusCode,
-			ErrorCode: "content_policy_violation", Action: legacyDecision.Action,
+			ErrorCode: errorCode, Action: legacyDecision.Action,
 		}
 		if legacyDecision.Blocked {
-			decision.Kind, decision.HTTPStatus, decision.ErrorCode, decision.ClientMessage, decision.AllowNextStage = securityaudit.DecisionBlock, contentModerationStatus(legacyDecision), "content_policy_violation", legacyDecision.Message, false
+			decision.Kind, decision.HTTPStatus, decision.ErrorCode, decision.ClientMessage, decision.AllowNextStage = securityaudit.DecisionBlock, contentModerationStatus(legacyDecision), errorCode, legacyDecision.Message, false
 		}
 		if decision.AllowNextStage && cacheCompletion {
 			c.Set(securityAuditCompletedContextKey, true)

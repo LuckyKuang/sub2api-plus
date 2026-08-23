@@ -381,6 +381,7 @@ func TestProxyLiveSidebandForwardsTextAndBinary(t *testing.T) {
 	}
 	proxyResult := make(chan error, 1)
 	var policyChecks atomic.Int32
+	var auditedClientFrames atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		downstream, err := coderws.Accept(writer, request, nil)
 		if err != nil {
@@ -391,6 +392,10 @@ func TestProxyLiveSidebandForwardsTextAndBinary(t *testing.T) {
 		proxyResult <- service.ProxyLiveSidebandWithHooks(request.Context(), record, downstream, &LiveSidebandHooks{
 			BeforeFrame: func(context.Context) error {
 				policyChecks.Add(1)
+				return nil
+			},
+			BeforeClientFrame: func(context.Context, coderws.MessageType, []byte) error {
+				auditedClientFrames.Add(1)
 				return nil
 			},
 			RecheckEvery: time.Hour,
@@ -437,6 +442,7 @@ func TestProxyLiveSidebandForwardsTextAndBinary(t *testing.T) {
 	upstream.reads <- liveTestFrame{err: coderws.CloseError{Code: coderws.StatusNormalClosure}}
 	require.ErrorIs(t, <-proxyResult, ErrLiveCallNotFound)
 	require.GreaterOrEqual(t, policyChecks.Load(), int32(5), "policy must run before dialing and around both transfer directions")
+	require.Equal(t, int32(2), auditedClientFrames.Load(), "every client sideband frame must pass the pre-forward audit hook")
 }
 
 // TestLiveSessionEndedTreatsLeaseLossAsTerminal 锁定：租约续租失败（ErrLiveUnavailable）

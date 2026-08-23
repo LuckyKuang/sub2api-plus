@@ -302,7 +302,7 @@ func TestEnqueuerSkipsOffOutOfScopeAndNoText(t *testing.T) {
 			cfg.GroupIDs = []int64{9}
 			return cfg
 		}(), req: asyncRequest()},
-		{name: "no user text", cfg: asyncConfig(), req: Request{Protocol: "openai_chat_completions", Body: []byte(`{"messages":[{"role":"function","content":"not audited"}]}`)}},
+		{name: "no user text", cfg: asyncConfig(), req: Request{Protocol: "openai_chat_completions", Body: []byte(`{"messages":[{"role":"user","content":"  "}]}`)}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -327,7 +327,7 @@ func TestEnqueuerRecordsAcceptedDroppedAndSkippedMetrics(t *testing.T) {
 			metrics,
 		).Enqueue(context.Background(), asyncRequest()))
 
-		require.Equal(t, AuditMetricsSnapshot{Enqueued: 1}, metrics.AuditSnapshot())
+		require.Equal(t, AuditMetricsSnapshot{Enqueued: 1, ExtractionAttempted: 1, ExtractionSucceeded: 1}, metrics.AuditSnapshot())
 	})
 
 	t.Run("queue full increments dropped", func(t *testing.T) {
@@ -342,7 +342,7 @@ func TestEnqueuerRecordsAcceptedDroppedAndSkippedMetrics(t *testing.T) {
 		).Enqueue(context.Background(), asyncRequest())
 
 		require.ErrorIs(t, err, ErrQueueFull)
-		require.Equal(t, AuditMetricsSnapshot{Dropped: 1}, metrics.AuditSnapshot())
+		require.Equal(t, AuditMetricsSnapshot{Dropped: 1, ExtractionAttempted: 1, ExtractionSucceeded: 1}, metrics.AuditSnapshot())
 	})
 
 	t.Run("skipped request does not increment dropped", func(t *testing.T) {
@@ -356,6 +356,21 @@ func TestEnqueuerRecordsAcceptedDroppedAndSkippedMetrics(t *testing.T) {
 		).Enqueue(context.Background(), asyncRequest()))
 
 		require.Equal(t, AuditMetricsSnapshot{}, metrics.AuditSnapshot())
+	})
+
+	t.Run("content-bearing extraction failure increments dropped and failed", func(t *testing.T) {
+		metrics := NewAtomicMetrics()
+		require.NoError(t, NewEnqueuer(
+			&fakeConfigStore{cfg: asyncConfig(), active: true},
+			&fakeJobRepository{},
+			&fakePayloadStore{},
+			metrics,
+		).Enqueue(context.Background(), Request{
+			Protocol: "openai_responses",
+			Body:     []byte(`{"input":[{"type":"future_content","payload":"missing adapter"}]}`),
+		}))
+
+		require.Equal(t, AuditMetricsSnapshot{Dropped: 1, ExtractionAttempted: 1, ExtractionFailed: 1}, metrics.AuditSnapshot())
 	})
 }
 

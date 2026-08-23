@@ -158,8 +158,9 @@ jobs:
           -color
       - name: Test release policy
         run: python tools/test_release_policy.py
-      - name: Test push and release CLIs
+      - name: Test repository CLIs
         run: |
+          python skills/compress-cli/tests/test_compress_cli.py
           python skills/push-cli/tests/test_push_cli.py
           python skills/release-cli/tests/test_release_cli.py
       - name: Check OpenAI Codex outbound identity

@@ -132,6 +132,52 @@ Originator, and Version use one source chain: valid credential-owner
 compiled default. Version synchronization changes only the version declaration
 of the selected identity.
 
+## Security Audit Content Boundary
+
+Inbound Responses content is normalized for Content Moderation and Prompt
+Audit before account selection, billing, concurrency acquisition, fingerprint
+convergence, request adaptation, or upstream writes. API-key and OAuth account
+paths therefore use the same audit content.
+
+The boundary covers top-level and `response`-nested `instructions`, `tools`,
+`input`, reusable `prompt.variables`, message text, tool definitions, and the
+arguments, input, output, result, or dynamic tools carried by function, custom,
+tool-search, local/hosted shell, apply-patch, computer, MCP, code-interpreter,
+and programmatic-tool-calling items. In particular,
+`function_call_output.output`,
+`custom_tool_call_output.output`, the compatibility
+`tool_search_output.output`, and official `tool_search_output.tools` are
+audited on every HTTP or WebSocket turn. Media fields and encoded screenshots
+remain Content Moderation image inputs but are removed before Prompt Audit text
+serialization and persistence; ordinary text in the same structured result is
+retained.
+The current input item remains client-controlled even when it claims an
+`assistant` role; role labels cannot force latest-turn auditing to scan an old
+user message instead. Current message/tool content is scanned before repeated
+instructions and tool definitions, while all context remains included.
+A supported WebSocket control frame is an explicit no-content case only when it
+contains no canonical content fields or unknown non-empty siblings. An envelope
+`type` value never suppresses `input`, `instructions`, or nested
+`response.input` that is actually present.
+Direct passthrough runs the audit hook for every client text or binary frame,
+including `conversation.item.create` and `session.update`, before any
+non-`response.create` frame is forwarded. Invalid binary/JSON payloads fail
+closed in blocking mode.
+A recognized content-bearing item that cannot be normalized is observable and
+fails closed whenever a blocking audit mode applies.
+Top-level Responses requests, nested `response` objects, and `session.update`
+session objects reject unknown non-empty siblings as incomplete extraction;
+successfully extracted instructions or input never mask such a sibling.
+Content Moderation reports that extraction failure as HTTP `503` with
+`content_moderation_unavailable`; the coordinator classifies it as
+`unavailable`, rather than a policy block or policy-violation error. Compact
+keepalive output and channel mapping start only after this gate. The audit uses
+an immutable copy of the inbound body so compact normalization and reasoning
+policy rewrites cannot remove content from the audited view.
+
+The complete protocol/source matrix is maintained in
+[`docs/SECURITY_AUDIT_CONTENT_COVERAGE.md`](../SECURITY_AUDIT_CONTENT_COVERAGE.md).
+
 ## Request Replay and Upstream Failures
 
 When a Responses request replays a previous tool call, the gateway preserves an

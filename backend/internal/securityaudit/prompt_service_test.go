@@ -84,7 +84,32 @@ func TestPromptServiceBlockingLatestTurnOnlyUsesNarrowSnapshot(t *testing.T) {
 	decision, err := service.Evaluate(context.Background(), Request{Protocol: "openai_chat_completions", Body: []byte(`{"messages":[{"role":"system","content":"system instruction"},{"role":"user","content":"older user input"},{"role":"assistant","content":"previous output"},{"role":"user","content":"latest user input"}]}`)})
 	require.NoError(t, err)
 	require.Equal(t, DecisionAllow, decision.Kind)
-	require.Equal(t, []string{"latest user input", "previous output"}, seen)
+	require.Equal(t, []string{"latest user input", "system instruction\n\nprevious output"}, seen)
+}
+
+func TestPromptServiceBlockingFailsClosedOnContentExtractionFailure(t *testing.T) {
+	metrics := NewAtomicMetrics()
+	service := &PromptService{
+		config: &fakeConfigStore{active: true, cfg: ActiveConfig{
+			RiskControlEnabled: true, Enabled: true, BlockingEnabled: true, AllGroups: true,
+			Scanners: AllScannerIDs, Endpoints: []ActiveEndpoint{{ID: "guard-1", Enabled: true, TimeoutMS: 1000, InputLimit: 4096}},
+		}},
+		evaluator: newGuardEvaluator(PromptScannerFunc(func(context.Context, ActiveEndpoint, string, []string) (*NormalizedResult, error) {
+			t.Fatal("guard evaluator must not run when extraction fails")
+			return nil, nil
+		}), nil, metrics, 1, 1),
+		metrics: metrics,
+	}
+
+	decision, err := service.Evaluate(context.Background(), Request{
+		Protocol: "openai_responses",
+		Body:     []byte(`{"input":[{"type":"local_shell_call","call_id":"c1","action":{"command":"pwd"},"future_payload":"missing adapter"}]}`),
+	})
+	require.Nil(t, decision)
+	var guardErr *GuardError
+	require.ErrorAs(t, err, &guardErr)
+	require.Equal(t, ErrorCodeInvalidResponse, guardErr.Code)
+	require.Equal(t, AuditMetricsSnapshot{ExtractionAttempted: 1, ExtractionFailed: 1}, metrics.AuditSnapshot())
 }
 
 func TestPromptServiceRejectsInvalidDeleteConfirmationClaims(t *testing.T) {

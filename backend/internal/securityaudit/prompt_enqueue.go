@@ -42,14 +42,17 @@ func (e *Enqueuer) Enqueue(ctx context.Context, req Request) error {
 	}
 	snapshot, err := ExtractPromptSnapshot(req)
 	if errors.Is(err, ErrNoPromptText) {
+		e.recordExtraction(ExtractionEmpty)
 		LogInfo(EventEnqueueSkipped, mergeLogFields(baseFields, map[string]any{"status": "skipped", "error_code": "no_user_text"}))
 		return nil
 	}
 	if err != nil {
+		e.recordExtraction(ExtractionFailed)
 		e.recordDropped()
 		LogWarn(EventEnqueueDropped, mergeLogFields(baseFields, map[string]any{"status": "dropped", "error_code": "snapshot_invalid"}))
 		return nil
 	}
+	e.recordExtraction(ExtractionSucceeded)
 	job, err := e.repo.CreateStagingWithCapacity(ctx, snapshot.Redacted(), cfg.ConfigVersion, 3, cfg.QueueCapacity)
 	if err != nil {
 		code := "database_unavailable"
@@ -95,5 +98,11 @@ func (e *Enqueuer) Enqueue(ctx context.Context, req Request) error {
 func (e *Enqueuer) recordDropped() {
 	if e != nil && e.metrics != nil {
 		e.metrics.IncDropped()
+	}
+}
+
+func (e *Enqueuer) recordExtraction(outcome ExtractionOutcome) {
+	if e.metrics != nil {
+		e.metrics.ObserveExtraction(outcome)
 	}
 }

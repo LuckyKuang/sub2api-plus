@@ -6,7 +6,8 @@ import PolicyPanel from '../components/PolicyPanel.vue'
 import EventWorkspace from '../components/EventWorkspace.vue'
 import EventDetailDialog from '../components/EventDetailDialog.vue'
 import FilterDeleteDialog from '../components/FilterDeleteDialog.vue'
-import type { PromptAuditDraft, PromptAuditEndpointDraft, PromptAuditEvent, PromptEventFilters } from '../types'
+import RuntimeOverview from '../components/RuntimeOverview.vue'
+import type { PromptAuditDraft, PromptAuditEndpointDraft, PromptAuditEvent, PromptAuditRuntime, PromptEventFilters } from '../types'
 import { emptyEventFilters, resolveDeleteRangeFilters, SCANNER_CATALOG } from '../viewModel'
 
 vi.mock('vue-i18n', async () => {
@@ -25,6 +26,26 @@ const endpoint = (): PromptAuditEndpointDraft => ({
 
 describe('Prompt Audit components', () => {
   beforeEach(() => vi.restoreAllMocks())
+
+  it('surfaces canonical content extraction outcomes and highlights failures', () => {
+    const runtime: PromptAuditRuntime = {
+      process_status: 'running', effective_mode: 'blocking', expected_config_version: 7, active_config_version: 7,
+      worker_total: 4, worker_active: 1, queue_capacity: 100,
+      queue: { staging: 0, queued: 0, processing: 1, retry: 0, done: 5, failed: 0, active: 1 },
+      processed_total: 5, failed_total: 0, enqueued_total: 5, dropped_total: 0,
+      extraction_attempted: 7, extraction_succeeded: 5, extraction_empty: 1, extraction_failed: 1,
+      database_status: 'ok', redis_status: 'ok', endpoints: {},
+      guard_metrics: { total: 1, allowed: 1, flagged: 0, blocked: 0, unavailable: 0, invalid: 0, timeouts: 0, failovers: 0, bulkhead_full: 0, record_failed: 0 },
+    }
+    const wrapper = mount(RuntimeOverview, { props: { runtime, loading: false, error: '' } })
+
+    expect(wrapper.get('[data-test="extraction-metrics"]').text()).toContain('admin.promptAudit.runtime.extractionMetrics')
+    expect(wrapper.get('[data-test="extraction-metric-attempted"]').text()).toContain('7')
+    expect(wrapper.get('[data-test="extraction-metric-succeeded"]').text()).toContain('5')
+    expect(wrapper.get('[data-test="extraction-metric-empty"]').text()).toContain('1')
+    expect(wrapper.get('[data-test="extraction-metric-failed"]').text()).toContain('1')
+    expect(wrapper.get('[data-test="extraction-metric-failed"] dd').classes()).toContain('text-red-700')
+  })
 
   it('edits a saved endpoint with blank-secret keep, explicit clear, replacement, and probe actions', async () => {
     const wrapper = mount(EndpointPool, {

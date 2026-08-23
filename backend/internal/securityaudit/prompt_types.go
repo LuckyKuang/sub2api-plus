@@ -215,9 +215,21 @@ type GuardMetricsSnapshot struct {
 }
 
 type AuditMetricsSnapshot struct {
-	Enqueued int64 `json:"enqueued"`
-	Dropped  int64 `json:"dropped"`
+	Enqueued            int64 `json:"enqueued"`
+	Dropped             int64 `json:"dropped"`
+	ExtractionAttempted int64 `json:"extraction_attempted"`
+	ExtractionSucceeded int64 `json:"extraction_succeeded"`
+	ExtractionEmpty     int64 `json:"extraction_empty"`
+	ExtractionFailed    int64 `json:"extraction_failed"`
 }
+
+type ExtractionOutcome string
+
+const (
+	ExtractionSucceeded ExtractionOutcome = "succeeded"
+	ExtractionEmpty     ExtractionOutcome = "empty"
+	ExtractionFailed    ExtractionOutcome = "failed"
+)
 
 type QueueStats struct {
 	Staging    int64 `json:"staging"`
@@ -245,6 +257,10 @@ type RuntimeSnapshot struct {
 	FailedTotal           int64                  `json:"failed_total"`
 	EnqueuedTotal         int64                  `json:"enqueued_total"`
 	DroppedTotal          int64                  `json:"dropped_total"`
+	ExtractionAttempted   int64                  `json:"extraction_attempted"`
+	ExtractionSucceeded   int64                  `json:"extraction_succeeded"`
+	ExtractionEmpty       int64                  `json:"extraction_empty"`
+	ExtractionFailed      int64                  `json:"extraction_failed"`
 	LastProcessedAt       *time.Time             `json:"last_processed_at,omitempty"`
 	LastErrorCode         string                 `json:"last_error_code,omitempty"`
 	LastErrorMessage      string                 `json:"last_error_message,omitempty"`
@@ -268,6 +284,7 @@ type Metrics interface {
 	Observe(kind DecisionKind, latency time.Duration)
 	IncEnqueued()
 	IncDropped()
+	ObserveExtraction(outcome ExtractionOutcome)
 	IncTimeout()
 	IncFailover()
 	IncBulkheadFull()

@@ -228,9 +228,13 @@ class WorkflowPolicyTests(unittest.TestCase):
             )
         )
 
-    def test_repository_policy_runs_both_cli_self_tests(self) -> None:
+    def test_repository_policy_runs_all_cli_self_tests(self) -> None:
         workflow = ROOT.joinpath(".github/workflows/backend-ci.yml").read_text(
             encoding="utf-8"
+        )
+        self.assertIn(
+            "python skills/compress-cli/tests/test_compress_cli.py",
+            workflow,
         )
         self.assertIn(
             "python skills/push-cli/tests/test_push_cli.py",

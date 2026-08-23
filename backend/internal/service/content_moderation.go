@@ -20,6 +20,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/auditcontent"
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/httpclient"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/pagination"
@@ -34,12 +35,14 @@ const (
 	contentModerationAPIKeysModeAppend  = "append"
 	contentModerationAPIKeysModeReplace = "replace"
 
-	ContentModerationActionAllow        = "allow"
-	ContentModerationActionBlock        = "block"
-	ContentModerationActionHashBlock    = "hash_block"
-	ContentModerationActionKeywordBlock = "keyword_block"
-	ContentModerationActionError        = "error"
-	ContentModerationActionCyberPolicy  = "cyber_policy" // cyber_policy 硬阻断的风控日志 action（封号计数排除按此值过滤）
+	ContentModerationActionAllow          = "allow"
+	ContentModerationActionBlock          = "block"
+	ContentModerationActionHashBlock      = "hash_block"
+	ContentModerationActionKeywordBlock   = "keyword_block"
+	ContentModerationActionError          = "error"
+	ContentModerationActionCyberPolicy    = "cyber_policy" // cyber_policy 硬阻断的风控日志 action（封号计数排除按此值过滤）
+	ContentModerationErrorCodePolicy      = "content_policy_violation"
+	ContentModerationErrorCodeUnavailable = "content_moderation_unavailable"
 
 	contentModerationKeywordCategory = "keyword"
 
@@ -53,6 +56,7 @@ const (
 
 	ContentModerationProtocolAnthropicMessages = "anthropic_messages"
 	ContentModerationProtocolOpenAIResponses   = "openai_responses"
+	ContentModerationProtocolOpenAILive        = "openai_live"
 	ContentModerationProtocolOpenAIChat        = "openai_chat_completions"
 	ContentModerationProtocolGemini            = "gemini"
 	ContentModerationProtocolOpenAIImages      = "openai_images"
@@ -72,6 +76,7 @@ const (
 	defaultContentModerationViolationWindowHours = 720
 	defaultContentModerationBlockHTTPStatus      = http.StatusForbidden
 	defaultContentModerationBlockMessage         = "内容审计命中风险规则，请调整输入后重试"
+	contentModerationExtractionFailureMessage    = "内容安全审计暂时不可用，请稍后重试"
 	defaultContentModerationRetryCount           = 2
 	maxContentModerationRetryCount               = 5
 	defaultContentModerationHitRetentionDays     = 180
@@ -383,6 +388,7 @@ type ContentModerationDecision struct {
 	HighestScore    float64            `json:"highest_score"`
 	CategoryScores  map[string]float64 `json:"category_scores"`
 	Action          string             `json:"action"`
+	ErrorCode       string             `json:"error_code,omitempty"`
 }
 
 type ContentModerationLog struct {
@@ -447,6 +453,10 @@ type ContentModerationRuntimeStatus struct {
 	Dropped                      int64                           `json:"dropped"`
 	Processed                    int64                           `json:"processed"`
 	Errors                       int64                           `json:"errors"`
+	ExtractionAttempted          int64                           `json:"extraction_attempted"`
+	ExtractionSucceeded          int64                           `json:"extraction_succeeded"`
+	ExtractionEmpty              int64                           `json:"extraction_empty"`
+	ExtractionFailed             int64                           `json:"extraction_failed"`
 	PreBlockActive               int                             `json:"pre_block_active"`
 	PreBlockChecked              int64                           `json:"pre_block_checked"`
 	PreBlockAllowed              int64                           `json:"pre_block_allowed"`
@@ -516,6 +526,10 @@ type ContentModerationService struct {
 	asyncDropped             atomic.Int64
 	asyncProcessed           atomic.Int64
 	asyncErrors              atomic.Int64
+	extractionAttempted      atomic.Int64
+	extractionSucceeded      atomic.Int64
+	extractionEmpty          atomic.Int64
+	extractionFailed         atomic.Int64
 	preBlockActive           atomic.Int64
 	preBlockChecked          atomic.Int64
 	preBlockAllowed          atomic.Int64
@@ -909,8 +923,38 @@ func (s *ContentModerationService) Check(ctx context.Context, input ContentModer
 			"configured_models", cfg.ModelFilter.Models)
 		return allow, nil
 	}
-	content := ExtractContentModerationInput(input.Protocol, input.Body)
+	s.extractionAttempted.Add(1)
+	content, contentBearing, extractionErr := extractContentModerationInput(input.Protocol, input.Body)
+	if extractionErr != nil {
+		s.extractionFailed.Add(1)
+		extractionErrorCode := "invalid_json"
+		if errors.Is(extractionErr, auditcontent.ErrIncompleteContent) {
+			extractionErrorCode = "incomplete_content"
+		}
+		slog.Warn("content_moderation.extraction_failed",
+			"user_id", input.UserID,
+			"api_key_id", input.APIKeyID,
+			"group_id", contentModerationLogGroupID(input.GroupID),
+			"endpoint", input.Endpoint,
+			"protocol", input.Protocol,
+			"body_bytes", len(input.Body),
+			"error_code", extractionErrorCode)
+		return s.contentModerationExtractionFailureDecision(cfg), nil
+	}
 	if content.IsEmpty() {
+		if contentBearing {
+			s.extractionFailed.Add(1)
+			slog.Warn("content_moderation.extraction_failed",
+				"user_id", input.UserID,
+				"api_key_id", input.APIKeyID,
+				"group_id", contentModerationLogGroupID(input.GroupID),
+				"endpoint", input.Endpoint,
+				"protocol", input.Protocol,
+				"body_bytes", len(input.Body),
+				"error_code", "content_bearing_empty")
+			return s.contentModerationExtractionFailureDecision(cfg), nil
+		}
+		s.extractionEmpty.Add(1)
 		slog.Info("content_moderation.skip_empty_input",
 			"user_id", input.UserID,
 			"api_key_id", input.APIKeyID,
@@ -920,6 +964,7 @@ func (s *ContentModerationService) Check(ctx context.Context, input ContentModer
 			"body_bytes", len(input.Body))
 		return allow, nil
 	}
+	s.extractionSucceeded.Add(1)
 	content.Normalize()
 	slog.Info("content_moderation.input_extracted",
 		"user_id", input.UserID,
@@ -1042,6 +1087,18 @@ func (s *ContentModerationService) Check(ctx context.Context, input ContentModer
 	}
 
 	return s.checkSync(ctx, input, cfg, content, hashText, nil, true), nil
+}
+
+func (s *ContentModerationService) contentModerationExtractionFailureDecision(cfg *ContentModerationConfig) *ContentModerationDecision {
+	if cfg == nil || cfg.Mode != ContentModerationModePreBlock {
+		return &ContentModerationDecision{Allowed: true, Action: ContentModerationActionAllow}
+	}
+	s.recordPreBlockSyncMetric(0, ContentModerationActionError)
+	return &ContentModerationDecision{
+		Allowed: false, Blocked: true, Flagged: false,
+		Message: contentModerationExtractionFailureMessage, StatusCode: http.StatusServiceUnavailable,
+		Action: ContentModerationActionError, ErrorCode: ContentModerationErrorCodeUnavailable,
+	}
 }
 
 func (s *ContentModerationService) checkSync(ctx context.Context, input ContentModerationCheckInput, cfg *ContentModerationConfig, content ContentModerationInput, hashText string, queueDelay *int, allowBlock bool) *ContentModerationDecision {
@@ -1430,6 +1487,10 @@ func (s *ContentModerationService) GetStatus(ctx context.Context) (*ContentModer
 		Dropped:                      s.asyncDropped.Load(),
 		Processed:                    s.asyncProcessed.Load(),
 		Errors:                       s.asyncErrors.Load(),
+		ExtractionAttempted:          s.extractionAttempted.Load(),
+		ExtractionSucceeded:          s.extractionSucceeded.Load(),
+		ExtractionEmpty:              s.extractionEmpty.Load(),
+		ExtractionFailed:             s.extractionFailed.Load(),
 		PreBlockActive:               preBlockActive,
 		PreBlockChecked:              preBlockChecked,
 		PreBlockAllowed:              s.preBlockAllowed.Load(),

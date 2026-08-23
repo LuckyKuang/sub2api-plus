@@ -9,6 +9,7 @@ import (
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/ctxkey"
 	"github.com/LuckyKuang/sub2api-plus/internal/securityaudit"
+	"github.com/LuckyKuang/sub2api-plus/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
@@ -156,4 +157,23 @@ func TestLegacyModerationErrorKeepsExistingClientPriority(t *testing.T) {
 	require.Contains(t, recorder.Body.String(), "legacy exact message")
 	require.Contains(t, recorder.Body.String(), "content_policy_violation")
 	require.NotContains(t, recorder.Body.String(), securityaudit.ErrorCodeBlocked)
+}
+
+func TestLegacyModerationExtractionFailureUsesUnavailableEnvelope(t *testing.T) {
+	decision := &securityaudit.Decision{
+		Kind: securityaudit.DecisionUnavailable, HTTPStatus: http.StatusServiceUnavailable,
+		ErrorCode: service.ContentModerationErrorCodeUnavailable, ClientMessage: "content moderation is temporarily unavailable",
+		Legacy: &securityaudit.LegacyDecision{
+			Blocked: true, StatusCode: http.StatusServiceUnavailable,
+			ErrorCode: service.ContentModerationErrorCodeUnavailable,
+			Message:   "content moderation is temporarily unavailable",
+			Action:    service.ContentModerationActionError,
+		},
+	}
+	c, recorder := securityAuditErrorTestContext(t)
+	(&OpenAIGatewayHandler{}).openAISecurityAuditError(c, decision)
+	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
+	require.Contains(t, recorder.Body.String(), service.ContentModerationErrorCodeUnavailable)
+	require.NotContains(t, recorder.Body.String(), service.ContentModerationErrorCodePolicy)
+	require.Equal(t, int64(1013), int64(securityAuditWSCloseStatus(decision)))
 }

@@ -125,6 +125,10 @@ export interface PromptAuditRuntime {
   failed_total: number
   enqueued_total: number
   dropped_total: number
+  extraction_attempted: number
+  extraction_succeeded: number
+  extraction_empty: number
+  extraction_failed: number
   last_processed_at?: string
   last_error_code?: string
   last_error_message?: string

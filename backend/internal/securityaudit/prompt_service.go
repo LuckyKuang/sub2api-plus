@@ -158,10 +158,19 @@ func (s *PromptService) Evaluate(ctx context.Context, req Request) (*PromptDecis
 	}
 	snapshot, err := ExtractBlockingPromptSnapshot(req, cfg.BlockingLatestTurnOnly)
 	if errors.Is(err, ErrNoPromptText) {
+		if s.metrics != nil {
+			s.metrics.ObserveExtraction(ExtractionEmpty)
+		}
 		return &PromptDecision{Kind: DecisionAllow, AllowNextStage: true}, nil
 	}
 	if err != nil {
+		if s.metrics != nil {
+			s.metrics.ObserveExtraction(ExtractionFailed)
+		}
 		return nil, &GuardError{Code: ErrorCodeInvalidResponse, Cause: err}
+	}
+	if s.metrics != nil {
+		s.metrics.ObserveExtraction(ExtractionSucceeded)
 	}
 	return s.evaluator.Evaluate(ctx, cfg, snapshot)
 }
@@ -208,6 +217,10 @@ func (s *PromptService) Runtime(ctx context.Context) RuntimeSnapshot {
 	if s.metrics != nil {
 		auditMetrics := s.metrics.AuditSnapshot()
 		runtime.EnqueuedTotal, runtime.DroppedTotal = auditMetrics.Enqueued, auditMetrics.Dropped
+		runtime.ExtractionAttempted = auditMetrics.ExtractionAttempted
+		runtime.ExtractionSucceeded = auditMetrics.ExtractionSucceeded
+		runtime.ExtractionEmpty = auditMetrics.ExtractionEmpty
+		runtime.ExtractionFailed = auditMetrics.ExtractionFailed
 	}
 	runtime.WorkerHeartbeatAt, runtime.LastProcessedAt = heartbeat, lastProcessed
 	if workerCode != "" {

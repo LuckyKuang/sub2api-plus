@@ -118,6 +118,8 @@ backend/.installed
 tests
 !deploy/tests/
 !deploy/tests/**
+!skills/compress-cli/tests/
+!skills/compress-cli/tests/**
 !skills/push-cli/tests/
 !skills/push-cli/tests/**
 !skills/release-cli/tests/
@@ -127,6 +129,8 @@ CLAUDE.md
 scripts
 !backend/scripts/
 !backend/scripts/resolve-version.sh
+!skills/compress-cli/scripts/
+!skills/compress-cli/scripts/**
 !skills/push-cli/scripts/
 !skills/push-cli/scripts/**
 !skills/release-cli/scripts/
@@ -145,6 +149,7 @@ docs/*
 !docs/PAYMENT_CN.md
 !docs/ADMIN_PAYMENT_INTEGRATION_API.md
 !docs/ASYNC_IMAGE_TASKS.md
+!docs/SECURITY_AUDIT_CONTENT_COVERAGE.md
 !docs/providers/
 !docs/providers/*.md
 !docs/protocols/

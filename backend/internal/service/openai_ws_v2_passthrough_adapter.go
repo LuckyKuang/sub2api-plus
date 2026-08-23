@@ -46,6 +46,25 @@ type openAIWSPolicyEnforcingFrameConn struct {
 	onBlock func(blocked *OpenAIFastBlockedError)
 }
 
+func readNextOpenAIWSPassthroughResponseCreate(
+	ctx context.Context,
+	client openaiwsv2.FrameConn,
+	upstream openaiwsv2.FrameConn,
+) (coderws.MessageType, []byte, error) {
+	for {
+		msgType, payload, err := client.ReadFrame(ctx)
+		if err != nil {
+			return msgType, payload, err
+		}
+		if (msgType == coderws.MessageText || msgType == coderws.MessageBinary) && strings.TrimSpace(gjson.GetBytes(payload, "type").String()) == "response.create" {
+			return msgType, payload, nil
+		}
+		if err := upstream.WriteFrame(ctx, msgType, payload); err != nil {
+			return msgType, payload, err
+		}
+	}
+}
+
 var _ openaiwsv2.FrameConn = (*openAIWSPolicyEnforcingFrameConn)(nil)
 
 func (c *openAIWSPolicyEnforcingFrameConn) ReadFrame(ctx context.Context) (coderws.MessageType, []byte, error) {
@@ -968,6 +987,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 			if msgType != coderws.MessageText && msgType != coderws.MessageBinary {
 				return payload, nil, nil
 			}
+			auditPayload := payload
 			eventType := strings.TrimSpace(gjson.GetBytes(payload, "type").String())
 			isResponseCreate := eventType == "response.create"
 			responseCreateAt := time.Time{}
@@ -984,6 +1004,25 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 					}
 				}()
 			}
+			turnNo := int(completedTurns.Load()) + 1
+			if turnNo < 2 {
+				turnNo = 2
+			}
+			requestModelForThisFrame := usageMeta.requestModelForFrame(auditPayload)
+			if requestModelForThisFrame == "" {
+				requestModelForThisFrame = openAIWSPassthroughRequestModelFromSessionFrame(auditPayload)
+			}
+			if requestModelForThisFrame == "" {
+				requestModelForThisFrame = capturedSessionModel
+			}
+			// readNextClientFrame can forward non-response.create events, so
+			// every client data frame must pass the security-audit hook first.
+			// Turn lifecycle, model mapping, and billing remain create-only.
+			if hooks != nil && hooks.BeforeRequest != nil {
+				if err := hooks.BeforeRequest(turnNo, auditPayload, requestModelForThisFrame); err != nil {
+					return payload, nil, err
+				}
+			}
 			if isResponseCreate {
 				if account.IsOpenAIOAuth() && isOpenAIResponsesLiteWebSocketPayload(payload) {
 					litePayload, _, liteErr := normalizeOpenAIResponsesLiteToolsPayload(payload)
@@ -995,22 +1034,6 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 				if hooks != nil && (hooks.MaxReasoningEffort != "" || len(hooks.ReasoningEffortMappings) > 0) {
 					if capped, changed := ApplyOpenAIReasoningEffortPolicy(payload, hooks.MaxReasoningEffort, hooks.ReasoningEffortMappings); changed {
 						payload = capped
-					}
-				}
-			}
-			turnNo := int(completedTurns.Load()) + 1
-			if turnNo < 2 {
-				turnNo = 2
-			}
-			requestModelForThisFrame := ""
-			if isResponseCreate {
-				requestModelForThisFrame = usageMeta.requestModelForFrame(payload)
-				if requestModelForThisFrame == "" {
-					requestModelForThisFrame = capturedSessionModel
-				}
-				if hooks != nil && hooks.BeforeRequest != nil {
-					if err := hooks.BeforeRequest(turnNo, payload, requestModelForThisFrame); err != nil {
-						return payload, nil, err
 					}
 				}
 				if hooks != nil && hooks.MapRequestModel != nil {
@@ -1144,18 +1167,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 	upstreamFirstMessageSent = true
 
 	readNextClientFrame := func(readCtx context.Context, conn openaiwsv2.FrameConn) (coderws.MessageType, []byte, error) {
-		for {
-			msgType, payload, readErr := conn.ReadFrame(readCtx)
-			if readErr != nil {
-				return msgType, payload, readErr
-			}
-			if (msgType == coderws.MessageText || msgType == coderws.MessageBinary) && strings.TrimSpace(gjson.GetBytes(payload, "type").String()) == "response.create" {
-				return msgType, payload, nil
-			}
-			if writeErr := upstreamFrameConn.WriteFrame(readCtx, msgType, payload); writeErr != nil {
-				return msgType, payload, writeErr
-			}
-		}
+		return readNextOpenAIWSPassthroughResponseCreate(readCtx, conn, upstreamFrameConn)
 	}
 
 	firstTurnStartedAt := time.Time{}

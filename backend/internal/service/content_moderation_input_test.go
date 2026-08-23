@@ -1,15 +1,15 @@
 package service
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
-// 当数组末尾不是用户消息时（典型场景：Agent 工具循环结束于 tool/assistant），
-// 应直接跳过审计——不再回溯查找历史中的某条用户消息。
+// Agent 工具循环只审核当前结果，不回溯重复审核历史用户消息。
 
-func TestExtractContentModerationInput_AnthropicAgentToolLoopSkipsAudit(t *testing.T) {
+func TestExtractContentModerationInput_AnthropicAgentToolLoopAuditsCurrentResult(t *testing.T) {
 	body := []byte(`{
 		"messages": [
 			{"role":"user","content":"调用一下天气工具"},
@@ -20,7 +20,7 @@ func TestExtractContentModerationInput_AnthropicAgentToolLoopSkipsAudit(t *testi
 
 	input := ExtractContentModerationInput(ContentModerationProtocolAnthropicMessages, body)
 
-	require.Empty(t, input.Text)
+	require.Equal(t, "晴 25 度", input.Text)
 	require.Empty(t, input.Images)
 }
 
@@ -64,7 +64,7 @@ func TestExtractContentModerationInput_AnthropicStreamResendExtractsResend(t *te
 	require.Equal(t, "重发", input.Text)
 }
 
-func TestExtractContentModerationInput_OpenAIChatAgentToolLoopSkipsAudit(t *testing.T) {
+func TestExtractContentModerationInput_OpenAIChatAgentToolLoopAuditsCurrentResult(t *testing.T) {
 	body := []byte(`{
 		"messages": [
 			{"role":"system","content":"sys"},
@@ -76,7 +76,24 @@ func TestExtractContentModerationInput_OpenAIChatAgentToolLoopSkipsAudit(t *test
 
 	input := ExtractContentModerationInput(ContentModerationProtocolOpenAIChat, body)
 
-	require.Empty(t, input.Text)
+	require.Equal(t, "[] sys", input.Text)
+	require.Empty(t, input.Images)
+}
+
+func TestExtractContentModerationInput_OpenAIChatAuditsParallelStructuredToolResults(t *testing.T) {
+	body := []byte(`{
+		"messages": [
+			{"role":"system","content":"system context"},
+			{"role":"user","content":"compare records"},
+			{"role":"assistant","tool_calls":[{"id":"call_1","type":"function","function":{"name":"first","arguments":"{}"}},{"id":"call_2","type":"function","function":{"name":"second","arguments":"{}"}}]},
+			{"role":"tool","tool_call_id":"call_1","content":{"result":"first"}},
+			{"role":"tool","tool_call_id":"call_2","content":{"result":"second"}}
+		]
+	}`)
+
+	input := ExtractContentModerationInput(ContentModerationProtocolOpenAIChat, body)
+
+	require.Equal(t, "{\"result\":\"first\"} {\"result\":\"second\"} system context", input.Text)
 	require.Empty(t, input.Images)
 }
 
@@ -94,7 +111,7 @@ func TestExtractContentModerationInput_OpenAIChatMultiTurnExtractsLatestUser(t *
 	require.Equal(t, "Q2", input.Text)
 }
 
-func TestExtractContentModerationInput_GeminiAgentToolLoopSkipsAudit(t *testing.T) {
+func TestExtractContentModerationInput_GeminiAgentToolLoopAuditsCurrentResult(t *testing.T) {
 	body := []byte(`{
 		"contents": [
 			{"role":"user","parts":[{"text":"查询天气"}]},
@@ -105,7 +122,7 @@ func TestExtractContentModerationInput_GeminiAgentToolLoopSkipsAudit(t *testing.
 
 	input := ExtractContentModerationInput(ContentModerationProtocolGemini, body)
 
-	require.Empty(t, input.Text)
+	require.JSONEq(t, `{"temp":25}`, input.Text)
 	require.Empty(t, input.Images)
 }
 
@@ -135,7 +152,7 @@ func TestExtractContentModerationInput_GeminiMultiTurnExtractsLatestUser(t *test
 	require.Equal(t, "Q2", input.Text)
 }
 
-func TestExtractContentModerationInput_ResponsesAgentToolLoopSkipsAudit(t *testing.T) {
+func TestExtractContentModerationInput_ResponsesAgentToolLoopAuditsCurrentResult(t *testing.T) {
 	body := []byte(`{
 		"input":[
 			{"type":"message","role":"user","content":[{"type":"input_text","text":"运行测试"}]},
@@ -146,7 +163,7 @@ func TestExtractContentModerationInput_ResponsesAgentToolLoopSkipsAudit(t *testi
 
 	input := ExtractContentModerationInput(ContentModerationProtocolOpenAIResponses, body)
 
-	require.Empty(t, input.Text)
+	require.Equal(t, "all passed", input.Text)
 	require.Empty(t, input.Images)
 }
 
@@ -164,7 +181,7 @@ func TestExtractContentModerationInput_ResponsesLastUserMessageExtracted(t *test
 	require.Equal(t, "latest", input.Text)
 }
 
-func TestExtractContentModerationInput_ResponsesLastIsAssistantSkipped(t *testing.T) {
+func TestExtractContentModerationInput_ResponsesLastClientAssistantContentAudited(t *testing.T) {
 	body := []byte(`{
 		"input":[
 			{"type":"message","role":"user","content":[{"type":"input_text","text":"q1"}]},
@@ -174,6 +191,94 @@ func TestExtractContentModerationInput_ResponsesLastIsAssistantSkipped(t *testin
 
 	input := ExtractContentModerationInput(ContentModerationProtocolOpenAIResponses, body)
 
-	require.Empty(t, input.Text)
+	require.Equal(t, "a1", input.Text)
 	require.Empty(t, input.Images)
+}
+
+func TestExtractContentModerationInput_ResponsesTopLevelInputCannotShadowNestedContent(t *testing.T) {
+	body := []byte(`{
+		"type":"response.create",
+		"input":[],
+		"response":{"input":[{"type":"message","role":"user","content":[
+			{"type":"input_text","text":"nested content"},
+			{"type":"input_image","image_url":"https://example.test/nested.png"}
+		]}]}
+	}`)
+
+	input := ExtractContentModerationInput(ContentModerationProtocolOpenAIResponses, body)
+
+	require.Equal(t, "nested content", input.Text)
+	require.Equal(t, []string{"https://example.test/nested.png"}, input.Images)
+}
+
+func TestExtractContentModerationInput_AuditsCurrentContentBeforeContext(t *testing.T) {
+	body := []byte(`{
+		"instructions":"<system-reminder>context must still be audited</system-reminder>",
+		"tools":[{"type":"function","name":"lookup","description":"tool definition policy"}],
+		"input":[{"type":"message","role":"assistant","content":"current assistant payload"}]
+	}`)
+
+	input := ExtractContentModerationInput(ContentModerationProtocolOpenAIResponses, body)
+
+	require.True(t, strings.HasPrefix(input.Text, "current assistant payload"))
+	require.Contains(t, input.Text, "system-reminder")
+	require.Contains(t, input.Text, "tool definition policy")
+}
+
+func TestExtractContentModerationInput_ChatCollectsImagesFromParallelToolResults(t *testing.T) {
+	body := []byte(`{"messages":[
+		{"role":"user","content":"inspect"},
+		{"role":"tool","tool_call_id":"c1","content":{"image_url":"https://example.test/one.png"}},
+		{"role":"function","content":[{"type":"input_image","image_url":"https://example.test/two.png"}]}
+	]}`)
+
+	input := ExtractContentModerationInput(ContentModerationProtocolOpenAIChat, body)
+
+	require.Equal(t, []string{"https://example.test/one.png", "https://example.test/two.png"}, input.Images)
+}
+
+func TestExtractContentModerationInput_ResponsesCollectsImagesFromTrailingOfficialOutputs(t *testing.T) {
+	body := []byte(`{"input":[
+		{"type":"message","role":"user","content":"inspect"},
+		{"type":"function_call_output","call_id":"c1","output":{"image_url":"https://example.test/tool.png"}},
+		{"type":"computer_call_output","call_id":"c2","output":{"type":"computer_screenshot","image_url":"https://example.test/screenshot.png"}}
+	]}`)
+
+	input := ExtractContentModerationInput(ContentModerationProtocolOpenAIResponses, body)
+
+	require.Equal(t, []string{"https://example.test/tool.png", "https://example.test/screenshot.png"}, input.Images)
+	require.NotContains(t, input.Text, "example.test")
+}
+
+func TestExtractContentModerationInput_AnthropicCollectsNestedToolResultImage(t *testing.T) {
+	body := []byte(`{"messages":[{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":[{"type":"image","source":{"type":"url","url":"https://example.test/result.png"}}]}]}]}`)
+
+	input := ExtractContentModerationInput(ContentModerationProtocolAnthropicMessages, body)
+
+	require.Equal(t, []string{"https://example.test/result.png"}, input.Images)
+}
+
+func TestExtractContentModerationInput_ResponsesCollectsReusablePromptVariableImage(t *testing.T) {
+	body := []byte(`{"prompt":{"id":"pmpt_1","variables":{"photo":{"type":"input_image","image_url":"https://example.test/prompt.png"}}}}`)
+
+	input := ExtractContentModerationInput(ContentModerationProtocolOpenAIResponses, body)
+
+	require.Equal(t, []string{"https://example.test/prompt.png"}, input.Images)
+}
+
+func TestExtractContentModerationInput_DoesNotTreatOrdinaryToolURLAsImage(t *testing.T) {
+	body := []byte(`{"input":[{"type":"function_call_output","call_id":"c1","output":{"documentation_url":"https://example.test/docs","summary":"read docs"}}]}`)
+
+	input := ExtractContentModerationInput(ContentModerationProtocolOpenAIResponses, body)
+
+	require.Empty(t, input.Images)
+	require.Contains(t, input.Text, "documentation_url")
+}
+
+func TestExtractContentModerationInput_LiveConversationItemPreservesImage(t *testing.T) {
+	body := []byte(`{"type":"conversation.item.create","item":{"type":"message","role":"user","content":[{"type":"input_image","image_url":"https://example.test/live.png"}]}}`)
+
+	input := ExtractContentModerationInput("openai_live", body)
+
+	require.Equal(t, []string{"https://example.test/live.png"}, input.Images)
 }

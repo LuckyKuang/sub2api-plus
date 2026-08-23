@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/securityaudit"
+	middleware2 "github.com/LuckyKuang/sub2api-plus/internal/server/middleware"
 	"github.com/LuckyKuang/sub2api-plus/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -63,6 +65,59 @@ func TestParseLiveCallRequestRejectsInvalidJSONShape(t *testing.T) {
 		context.Request = request
 		_, err := parseLiveCallRequest(context)
 		require.Error(t, err)
+	}
+}
+
+func TestLiveInitialSessionUsesLiveAuditProtocolBeforeDownstreamServices(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	session := `{"model":"gpt-live-test","instructions":"audit instructions","input_audio_transcription":{"prompt":"audit transcription context"}}`
+
+	for _, test := range []struct {
+		name      string
+		multipart bool
+	}{
+		{name: "json"},
+		{name: "multipart", multipart: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			engine := blockingHandlerPromptEngine()
+			handler := &OpenAIGatewayHandler{securityAuditCoordinator: securityaudit.NewCoordinator(nil, engine)}
+			router := gin.New()
+			router.Use(func(c *gin.Context) {
+				groupID := int64(3)
+				user := &service.User{ID: 7, Username: "live-user", Email: "live@example.test"}
+				c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{
+					ID: 9, UserID: 7, User: user, Name: "live-key", GroupID: &groupID,
+					Group: &service.Group{ID: groupID, Name: "live-group", Platform: service.PlatformOpenAI, AllowLive: true},
+				})
+				c.Set(string(middleware2.ContextKeyUser), middleware2.AuthSubject{UserID: 7, Concurrency: 2})
+				c.Next()
+			})
+			router.POST("/v1/live", handler.Live)
+
+			contentType := "application/json"
+			body := bytes.NewBufferString(`{"sdp":"v=0\\r\\n","session":` + session + `}`)
+			if test.multipart {
+				body.Reset()
+				writer := multipart.NewWriter(body)
+				require.NoError(t, writer.WriteField("sdp", "v=0\r\n"))
+				require.NoError(t, writer.WriteField("session", session))
+				require.NoError(t, writer.Close())
+				contentType = writer.FormDataContentType()
+			}
+			request := httptest.NewRequest(http.MethodPost, "/v1/live", body)
+			request.Header.Set("Content-Type", contentType)
+			recorder := httptest.NewRecorder()
+			require.NotPanics(t, func() { router.ServeHTTP(recorder, request) }, "blocking audit must stop before nil downstream services")
+
+			require.Equal(t, http.StatusForbidden, recorder.Code)
+			evaluated, _, requests := engine.snapshot()
+			require.Equal(t, 1, evaluated)
+			require.Len(t, requests, 1)
+			require.Equal(t, service.ContentModerationProtocolOpenAILive, requests[0].Protocol)
+			require.JSONEq(t, session, string(requests[0].Body))
+			require.Equal(t, "gpt-live-test", requests[0].Model)
+		})
 	}
 }
 

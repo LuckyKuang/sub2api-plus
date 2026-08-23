@@ -41,6 +41,10 @@ golangci-lint run ./...
 pnpm --dir frontend run lint:check
 pnpm --dir frontend run typecheck
 pnpm --dir frontend run test:run
+
+# Repository AGENTS.md contract
+python3 skills/compress-cli/scripts/compress_cli.py check AGENTS.md
+python3 skills/compress-cli/tests/test_compress_cli.py
 ```
 
 Run the focused tests for the changed package or component while iterating.

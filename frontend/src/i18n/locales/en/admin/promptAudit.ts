@@ -36,11 +36,11 @@ export default {
       title: 'Runtime overview',
       description: 'Shows the configuration currently active on the server. Unsaved draft changes do not affect these values.',
       process: 'Process status', mode: 'Effective mode', version: 'Active / expected version', workers: 'Active / total workers',
-      queue: 'Active jobs / capacity', dependencies: 'Dependencies', guardMetrics: 'Synchronous Guard metrics', latest: 'Latest processing and error',
+      queue: 'Active jobs / capacity', dependencies: 'Dependencies', guardMetrics: 'Synchronous Guard metrics', extractionMetrics: 'Content extraction coverage', latest: 'Latest processing and error',
       queueBreakdown: 'queued {queued} · processing {processing} · retry {retry} · done {done} · failed {failed}',
       deliveryTotals: 'Total enqueued {enqueued} · dropped {dropped} · processed {processed} · failed {failed}',
     },
-    metrics: { total: 'Total', allowed: 'Allowed', flagged: 'Flagged', blocked: 'Blocked', unavailable: 'Unavailable', timeouts: 'Timeouts', failovers: 'Failovers' },
+    metrics: { total: 'Total', allowed: 'Allowed', flagged: 'Flagged', blocked: 'Blocked', unavailable: 'Unavailable', timeouts: 'Timeouts', failovers: 'Failovers', extractionAttempted: 'Attempted', extractionSucceeded: 'Succeeded', extractionEmpty: 'No text', extractionFailed: 'Failed' },
     pool: {
       title: 'Audit pool', description: 'Enabled OpenAI-compatible nodes are tried in order. Probes run from the server network.',
       add: 'Add node', edit: 'Edit node', empty: 'No audit nodes configured.', node: 'Node', model: 'Model', limits: 'Timeout / chunk limit', credential: 'Credential and probe',

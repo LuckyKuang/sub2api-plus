@@ -21,4 +21,11 @@ describe('risk control locale copy', () => {
     expect(zh.admin.riskControl.preBlockAPIKeyLoadHint).not.toContain('Worker 池')
     expect(en.admin.riskControl.preBlockAPIKeyLoadHint).not.toContain('worker pool')
   })
+
+  it('makes extraction failures operationally visible in both locales', () => {
+    expect(zh.admin.riskControl.extractionStatusHint).toContain('提取失败非零')
+    expect(en.admin.riskControl.extractionStatusHint).toContain('failed count')
+    expect(zh.admin.riskControl.extractionFailed).toBe('提取失败')
+    expect(en.admin.riskControl.extractionFailed).toBe('Failed')
+  })
 })
