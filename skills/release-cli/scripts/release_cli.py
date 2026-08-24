@@ -20,6 +20,12 @@ ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_REMOTE = "origin"
 EXPECTED_REPOSITORY = "LuckyKuang/sub2api-plus"
 LOCAL_VALIDATION_CONTEXT = "sub2api/local-validation"
+FULL_PROFILE = "full"
+FINALIZATION_PROFILE = "release-finalization"
+VALIDATION_DESCRIPTIONS = {
+    FULL_PROFILE: "Platform-container validation passed",
+    FINALIZATION_PROFILE: "Deterministic release finalization passed",
+}
 VALIDATION_MARKER_RE = re.compile(
     r"<!--\s*sub2api-submit-pr:\s*(\{.*?\})\s*-->", re.DOTALL
 )
@@ -79,6 +85,8 @@ class WorkflowRun:
 class ValidationProof:
     base: str
     head: str
+    profile: str = FULL_PROFILE
+    tag: str | None = None
 
 
 @dataclass(frozen=True)
@@ -685,7 +693,23 @@ def parse_validation_proof(body: str) -> ValidationProof:
         raise ReleaseCliError("pull-request validation marker has an invalid base SHA")
     if not isinstance(head, str) or not re.fullmatch(r"[0-9a-f]{40}", head):
         raise ReleaseCliError("pull-request validation marker has an invalid head SHA")
-    return ValidationProof(base=base, head=head)
+    profile = payload.get("profile")
+    tag = payload.get("tag")
+    if profile == FULL_PROFILE:
+        if set(payload) != {"base", "head", "profile"}:
+            raise ReleaseCliError("full validation marker has unexpected fields")
+        return ValidationProof(base=base, head=head, profile=profile)
+    if profile == FINALIZATION_PROFILE:
+        if set(payload) != {"base", "head", "profile", "tag"}:
+            raise ReleaseCliError(
+                "release-finalization validation marker has unexpected fields"
+            )
+        if not isinstance(tag, str) or TAG_RE.fullmatch(tag) is None:
+            raise ReleaseCliError(
+                "release-finalization validation marker has an invalid tag"
+            )
+        return ValidationProof(base=base, head=head, profile=profile, tag=tag)
+    raise ReleaseCliError("pull-request validation marker has an invalid profile")
 
 
 def pull_request_details(repository: str, number: int) -> PullRequest:
@@ -728,7 +752,11 @@ def pull_request_details(repository: str, number: int) -> PullRequest:
         raise ReleaseCliError("gh pr view returned incomplete metadata") from error
 
 
-def require_local_validation_status(repository: str, head: str) -> None:
+def require_local_validation_status(
+    repository: str,
+    head: str,
+    profile: str,
+) -> None:
     data = json_capture(
         ["gh", "api", f"repos/{repository}/commits/{head}/status"],
         description="GitHub commit status API",
@@ -740,9 +768,14 @@ def require_local_validation_status(repository: str, head: str) -> None:
         for status in data["statuses"]
         if isinstance(status, dict) and status.get("context") == LOCAL_VALIDATION_CONTEXT
     ]
-    if not matching or matching[0].get("state") != "success":
+    expected_description = VALIDATION_DESCRIPTIONS[profile]
+    if (
+        not matching
+        or matching[0].get("state") != "success"
+        or matching[0].get("description") != expected_description
+    ):
         raise ReleaseCliError(
-            f"{head} has no successful {LOCAL_VALIDATION_CONTEXT} status"
+            f"{head} has no successful {profile} {LOCAL_VALIDATION_CONTEXT} status"
         )
 
 
@@ -771,7 +804,7 @@ def require_promotable_pr(
         raise ReleaseCliError(
             "pull-request base changed after local validation; rerun submit-pr"
         )
-    require_local_validation_status(repository, pr.head_oid)
+    require_local_validation_status(repository, pr.head_oid, proof.profile)
     return proof
 
 
@@ -809,6 +842,27 @@ def finalization_metadata_command(tag: str) -> list[str]:
         "--require-status",
         "published",
         "--mapping-only",
+    ]
+
+
+def finalization_tree_command(
+    proof: ValidationProof,
+    branch: str,
+) -> list[str]:
+    if proof.tag is None:
+        raise ReleaseCliError("release-finalization proof has no tag")
+    return [
+        sys.executable,
+        "tools/release_finalization.py",
+        "validate",
+        "--base",
+        proof.base,
+        "--head",
+        proof.head,
+        "--tag",
+        proof.tag,
+        "--branch",
+        branch,
     ]
 
 
@@ -907,12 +961,20 @@ def promote_pull_request(
         )
     setup_git_transport()
     if notes_file is not None:
+        if proof.profile != FULL_PROFILE or proof.tag is not None:
+            raise ReleaseCliError(
+                "release-candidate promotion requires the full validation profile"
+            )
         if remote_tag_exists(repository, tag):
             raise ReleaseCliError(f"remote tag already exists: {tag}")
         run_metadata_preflight(
             tag, notes_file, proof.head, create_tag=False, remote=remote
         )
     else:
+        if proof.profile != FINALIZATION_PROFILE or proof.tag != tag:
+            raise ReleaseCliError(
+                "release-finalization promotion requires a matching typed tag proof"
+            )
         if pr.head_branch != finalization_branch(tag):
             raise ReleaseCliError(
                 "--notes-file is required unless promoting the deterministic "
@@ -924,6 +986,10 @@ def promote_pull_request(
         run_step(
             "Validate finalized release metadata",
             finalization_metadata_command(tag),
+        )
+        run_step(
+            "Validate deterministic finalization tree",
+            finalization_tree_command(proof, pr.head_branch),
         )
     require_required_pr_checks(repository, number)
 
@@ -1309,6 +1375,10 @@ def finalize(repository: str, tag: str, remote: str) -> None:
             remote,
             "--title",
             subject,
+            "--profile",
+            FINALIZATION_PROFILE,
+            "--tag",
+            tag,
         ],
     )
     print(

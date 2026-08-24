@@ -480,7 +480,7 @@ class LocalChecksTest(unittest.TestCase):
             push_cli.run_local_checks("origin", "feature", runtime)
 
         names = [call.args[0] for call in run_step.call_args_list]
-        self.assertEqual("Apple Container lifecycle test", names[0])
+        self.assertIn("Apple Container lifecycle test", names)
         self.assertIn("Compress CLI self-tests", names)
         compress_test = next(
             call
@@ -497,7 +497,7 @@ class LocalChecksTest(unittest.TestCase):
         self.assertIn("Frontend production build", names)
         self.assertIn("Docker Compose security", names)
         self.assertIn("Docker runtime resources", names)
-        audit_check.assert_called_once_with()
+        audit_check.assert_called_once_with(lane="frontend")
 
     def test_docker_runtime_still_runs_apple_lifecycle_test(self) -> None:
         git_miss = subprocess.CompletedProcess(["git"], 1, "")
@@ -512,7 +512,7 @@ class LocalChecksTest(unittest.TestCase):
         names = [call.args[0] for call in run_step.call_args_list]
         self.assertIn("Apple Container lifecycle test", names)
 
-    def test_frontend_tests_respect_validation_container_cpu_budget(self) -> None:
+    def test_parallel_frontend_tests_respect_validation_container_cpu_budget(self) -> None:
         git_miss = subprocess.CompletedProcess(["git"], 1, "")
         with (
             mock.patch.object(push_cli, "ROOT", Path("/repo")),
@@ -521,6 +521,36 @@ class LocalChecksTest(unittest.TestCase):
             mock.patch.object(push_cli, "run_frontend_security_check"),
         ):
             push_cli.run_local_checks("origin", "feature", push_cli.Runtime("docker"))
+
+        frontend_test = next(
+            call for call in run_step.call_args_list if call.args[0] == "Frontend tests"
+        )
+        self.assertEqual(
+            [
+                "pnpm",
+                "--dir",
+                "frontend",
+                "run",
+                "test:run",
+                "--maxWorkers=2",
+            ],
+            frontend_test.args[1],
+        )
+
+    def test_serial_frontend_tests_use_the_full_container_cpu_budget(self) -> None:
+        git_miss = subprocess.CompletedProcess(["git"], 1, "")
+        with (
+            mock.patch.object(push_cli, "ROOT", Path("/repo")),
+            mock.patch.object(push_cli, "run_command", return_value=git_miss),
+            mock.patch.object(push_cli, "run_step") as run_step,
+            mock.patch.object(push_cli, "run_frontend_security_check"),
+        ):
+            push_cli.run_local_checks(
+                "origin",
+                "feature",
+                push_cli.Runtime("docker"),
+                serial=True,
+            )
 
         frontend_test = next(
             call for call in run_step.call_args_list if call.args[0] == "Frontend tests"
@@ -559,7 +589,19 @@ class BranchAndProofTest(unittest.TestCase):
         updated = push_cli.with_validation_marker(body, new)
         self.assertEqual(1, len(push_cli.VALIDATION_MARKER_RE.findall(updated)))
         self.assertIn('"base":"' + "c" * 40 + '"', updated)
+        self.assertIn('"profile":"full"', updated)
         self.assertNotIn('"base":"' + "a" * 40 + '"', updated)
+
+    def test_finalization_marker_binds_the_published_tag(self) -> None:
+        proof = push_cli.ValidationProof(
+            "a" * 40,
+            "b" * 40,
+            profile=push_cli.FINALIZATION_PROFILE,
+            tag="v1.2.3+custom.009",
+        )
+        marker = push_cli.validation_marker(proof)
+        self.assertIn('"profile":"release-finalization"', marker)
+        self.assertIn('"tag":"v1.2.3+custom.009"', marker)
 
     def test_latest_base_rejects_stale_branch(self) -> None:
         stale = subprocess.CompletedProcess([], 1, "")
@@ -695,7 +737,7 @@ class ValidationLaunchTest(unittest.TestCase):
             ),
             mock.patch.object(push_cli, "run_step") as run_step,
         ):
-            push_cli.launch_in_validation(runtime, "origin")
+            push_cli.launch_in_validation(runtime, "origin", serial=True)
 
         name, command = run_step.call_args.args
         self.assertEqual("In-container validation", name)
@@ -711,6 +753,7 @@ class ValidationLaunchTest(unittest.TestCase):
         self.assertNotIn("go", command)
         self.assertNotIn("pnpm", command)
         self.assertIn("--in-validation", command)
+        self.assertIn("--serial", command)
 
     def test_windows_launch_uses_wsl_docker_run(self) -> None:
         wsl = "C:/Windows/System32/wsl.exe"
@@ -791,7 +834,14 @@ class ValidationLaunchTest(unittest.TestCase):
 
 class MainFlowTest(unittest.TestCase):
     @staticmethod
-    def args(action: str, *, in_validation: bool = False) -> argparse.Namespace:
+    def args(
+        action: str,
+        *,
+        in_validation: bool = False,
+        profile: str = push_cli.FULL_PROFILE,
+        tag: str | None = None,
+        serial: bool = False,
+    ) -> argparse.Namespace:
         return argparse.Namespace(
             action=action,
             in_validation=in_validation,
@@ -800,6 +850,9 @@ class MainFlowTest(unittest.TestCase):
             base_ref=None,
             title=None,
             body_file=None,
+            profile=profile,
+            tag=tag,
+            serial=serial,
         )
 
     def test_check_rejects_dirty_worktree_before_runtime_start(self) -> None:
@@ -905,7 +958,12 @@ class MainFlowTest(unittest.TestCase):
         ):
             self.assertEqual(0, push_cli.main())
 
-        launch.assert_called_once_with(runtime, "origin", base_ref=None)
+        launch.assert_called_once_with(
+            runtime,
+            "origin",
+            base_ref=None,
+            serial=False,
+        )
         final_gate.assert_called_once_with(runtime)
         local_checks.assert_not_called()
         check.assert_not_called()
@@ -992,6 +1050,57 @@ class MainFlowTest(unittest.TestCase):
             self.assertEqual(0, push_cli.main())
 
         self.assertEqual(["validate", "recheck", "push", "status", "pr"], order)
+
+    def test_finalization_submit_pr_runs_focused_checks_without_runtime(self) -> None:
+        tag = "v1.2.3+custom.009"
+        args = self.args(
+            "submit-pr",
+            profile=push_cli.FINALIZATION_PROFILE,
+            tag=tag,
+        )
+        proof = push_cli.ValidationProof(
+            "a" * 40,
+            "b" * 40,
+            profile=push_cli.FINALIZATION_PROFILE,
+            tag=tag,
+        )
+        order: list[str] = []
+
+        def record(name: str):
+            def _inner(*_args: object, **_kwargs: object) -> None:
+                order.append(name)
+
+            return _inner
+
+        with (
+            mock.patch.object(push_cli, "parse_args", return_value=args),
+            mock.patch.object(push_cli, "github_gate", return_value="LuckyKuang/sub2api-plus"),
+            mock.patch.object(push_cli, "current_branch", return_value="release/finalize-1.2.3-custom.009"),
+            mock.patch.object(push_cli, "repository_default_branch", return_value="main"),
+            mock.patch.object(push_cli, "require_working_branch"),
+            mock.patch.object(push_cli, "require_no_git_operation"),
+            mock.patch.object(push_cli, "require_clean_worktree"),
+            mock.patch.object(push_cli, "require_latest_base", return_value=proof),
+            mock.patch.object(
+                push_cli,
+                "run_release_finalization_checks",
+                side_effect=record("validate"),
+            ),
+            mock.patch.object(push_cli, "ensure_clean_after_checks"),
+            mock.patch.object(push_cli, "require_unchanged_proof", side_effect=record("recheck")),
+            mock.patch.object(push_cli, "push_branch", side_effect=record("push")),
+            mock.patch.object(push_cli, "publish_validation_status", side_effect=record("status")),
+            mock.patch.object(push_cli, "create_or_update_pull_request", side_effect=record("pr")),
+            mock.patch.object(push_cli, "probe_runtime") as probe,
+            mock.patch.object(push_cli, "ensure_validation_image") as image,
+            mock.patch.object(push_cli, "launch_in_validation") as launch,
+        ):
+            self.assertEqual(0, push_cli.main())
+
+        self.assertEqual(["validate", "recheck", "push", "status", "pr"], order)
+        probe.assert_not_called()
+        image.assert_not_called()
+        launch.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -17,6 +17,7 @@ on:
   pull_request:
 
 permissions:
+  actions: read
   contents: read
 
 jobs:
@@ -25,9 +26,20 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
           ref: ${{ inputs.ref || github.ref }}
+      - name: Classify validation profile
+        id: validation-profile
+        uses: ./.github/actions/classify-release-finalization
+        with:
+          base: ${{ github.event.pull_request.base.sha || github.event.before }}
+          head: ${{ github.event.pull_request.head.sha || github.sha }}
+          branch: ${{ github.head_ref || github.ref_name }}
+          default-branch: ${{ github.event.repository.default_branch }}
+          event: ${{ github.event_name }}
       - name: Check deployment scripts
+        if: steps.validation-profile.outputs.profile == 'full'
         run: |
           /bin/bash -n deploy/apple-container.sh
           /bin/bash deploy/tests/apple-container-test.sh
@@ -40,25 +52,40 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
           ref: ${{ inputs.ref || github.ref }}
+      - name: Classify validation profile
+        id: validation-profile
+        uses: ./.github/actions/classify-release-finalization
+        with:
+          base: ${{ github.event.pull_request.base.sha || github.event.before }}
+          head: ${{ github.event.pull_request.head.sha || github.sha }}
+          branch: ${{ github.head_ref || github.ref_name }}
+          default-branch: ${{ github.event.repository.default_branch }}
+          event: ${{ github.event_name }}
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        if: steps.validation-profile.outputs.profile == 'full'
         with:
           go-version-file: backend/go.mod
           check-latest: false
           cache: true
           cache-dependency-path: backend/go.sum
       - name: Verify Go version
+        if: steps.validation-profile.outputs.profile == 'full'
         working-directory: backend
         run: |
           test "$(go env GOVERSION)" = "go$(awk '/^go / { print $2 }' go.mod)"
       - name: Check Go module tidiness
+        if: steps.validation-profile.outputs.profile == 'full'
         working-directory: backend
         run: go mod tidy -diff
       - name: Unit tests
+        if: steps.validation-profile.outputs.profile == 'full'
         working-directory: backend
         run: make test-unit
       - name: Integration tests
+        if: steps.validation-profile.outputs.profile == 'full'
         working-directory: backend
         run: make test-integration
 
@@ -67,22 +94,36 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
           ref: ${{ inputs.ref || github.ref }}
+      - name: Classify validation profile
+        id: validation-profile
+        uses: ./.github/actions/classify-release-finalization
+        with:
+          base: ${{ github.event.pull_request.base.sha || github.event.before }}
+          head: ${{ github.event.pull_request.head.sha || github.sha }}
+          branch: ${{ github.head_ref || github.ref_name }}
+          default-branch: ${{ github.event.repository.default_branch }}
+          event: ${{ github.event_name }}
       - name: Setup pnpm
+        if: steps.validation-profile.outputs.profile == 'full'
         uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
         with:
           package_json_file: frontend/package.json
       - name: Setup Node.js
+        if: steps.validation-profile.outputs.profile == 'full'
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "20"
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
       - name: Install frontend dependencies
+        if: steps.validation-profile.outputs.profile == 'full'
         working-directory: frontend
         run: pnpm install --frozen-lockfile
       - name: Frontend lint, typecheck, and critical tests
+        if: steps.validation-profile.outputs.profile == 'full'
         run: make test-frontend
 
   golangci-lint:
@@ -90,21 +131,34 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
           ref: ${{ inputs.ref || github.ref }}
+      - name: Classify validation profile
+        id: validation-profile
+        uses: ./.github/actions/classify-release-finalization
+        with:
+          base: ${{ github.event.pull_request.base.sha || github.event.before }}
+          head: ${{ github.event.pull_request.head.sha || github.sha }}
+          branch: ${{ github.head_ref || github.ref_name }}
+          default-branch: ${{ github.event.repository.default_branch }}
+          event: ${{ github.event_name }}
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        if: steps.validation-profile.outputs.profile == 'full'
         with:
           go-version-file: backend/go.mod
           check-latest: false
           cache: true
           cache-dependency-path: backend/go.sum
       - name: Resolve lint version
+        if: steps.validation-profile.outputs.profile == 'full'
         id: tool-versions
         run: |
           VERSION="$(awk '$1 == "golangci-lint" { print $2 }' .tool-versions)"
           test -n "$VERSION"
           echo "golangci_lint=v$VERSION" >> "$GITHUB_OUTPUT"
       - name: golangci-lint
+        if: steps.validation-profile.outputs.profile == 'full'
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
         with:
           version: ${{ steps.tool-versions.outputs.golangci_lint }}
@@ -119,9 +173,20 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
           ref: ${{ inputs.ref || github.ref }}
+      - name: Classify validation profile
+        id: validation-profile
+        uses: ./.github/actions/classify-release-finalization
+        with:
+          base: ${{ github.event.pull_request.base.sha || github.event.before }}
+          head: ${{ github.event.pull_request.head.sha || github.sha }}
+          branch: ${{ github.head_ref || github.ref_name }}
+          default-branch: ${{ github.event.repository.default_branch }}
+          event: ${{ github.event_name }}
       - name: Resolve GoReleaser version
+        if: steps.validation-profile.outputs.profile == 'full'
         id: tool-versions
         run: |
           VERSION="$(awk '$1 == "goreleaser" { print $2 }' .tool-versions)"
@@ -131,6 +196,7 @@ jobs:
           [[ "$APP_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+\+custom\.[0-9]{3}$ ]]
           echo "docker_tag_version=v${APP_VERSION/+custom./-custom.}" >> "$GITHUB_OUTPUT"
       - name: Validate GoReleaser configuration
+        if: steps.validation-profile.outputs.profile == 'full'
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7
         with:
           version: ${{ steps.tool-versions.outputs.goreleaser }}
@@ -151,25 +217,54 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
           ref: ${{ inputs.ref || github.ref }}
+      - name: Classify validation profile
+        id: validation-profile
+        uses: ./.github/actions/classify-release-finalization
+        with:
+          base: ${{ github.event.pull_request.base.sha || github.event.before }}
+          head: ${{ github.event.pull_request.head.sha || github.sha }}
+          branch: ${{ github.head_ref || github.ref_name }}
+          default-branch: ${{ github.event.repository.default_branch }}
+          event: ${{ github.event_name }}
+      - name: Verify published release finalization
+        if: steps.validation-profile.outputs.profile == 'release-finalization'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.validation-profile.outputs.tag }}
+        run: |
+          python tools/check_published_release.py \
+            --repository "$GITHUB_REPOSITORY" \
+            --tag "$RELEASE_TAG"
+          python tools/check_release.py \
+            --tag "$RELEASE_TAG" \
+            --require-status published \
+            --mapping-only
       - name: Lint GitHub Actions workflows
+        if: steps.validation-profile.outputs.profile == 'full'
         run: >-
           docker run --rm -v "$PWD:/repo:ro" -w /repo
           rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
           -color
       - name: Test release policy
+        if: steps.validation-profile.outputs.profile == 'full'
         run: python tools/test_release_policy.py
       - name: Test repository CLIs
+        if: steps.validation-profile.outputs.profile == 'full'
         run: |
           python skills/compress-cli/tests/test_compress_cli.py
           python skills/push-cli/tests/test_push_cli.py
           python skills/release-cli/tests/test_release_cli.py
       - name: Check OpenAI Codex outbound identity
+        if: steps.validation-profile.outputs.profile == 'full'
         run: python tools/check_openai_codex_identity.py
       - name: Check README synchronization
+        if: steps.validation-profile.outputs.profile == 'full'
         run: python tools/check_readme_sync.py
       - name: Check release metadata sources
+        if: steps.validation-profile.outputs.profile == 'full'
         run: python tools/check_release.py
       - name: Check migration changes
+        if: steps.validation-profile.outputs.profile == 'full'
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           RELEASE_TAG: ${{ inputs.release-tag }}

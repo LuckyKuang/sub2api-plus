@@ -29,8 +29,17 @@ REPOSITORY = "LuckyKuang/sub2api-plus"
 ROOT = Path(__file__).resolve().parents[3]
 
 
-def marker(base: str = BASE, head: str = HEAD) -> str:
-    payload = json.dumps({"base": base, "head": head}, separators=(",", ":"))
+def marker(
+    base: str = BASE,
+    head: str = HEAD,
+    *,
+    profile: str = release_cli.FULL_PROFILE,
+    tag: str | None = None,
+) -> str:
+    data = {"base": base, "head": head, "profile": profile}
+    if tag is not None:
+        data["tag"] = tag
+    payload = json.dumps(data, separators=(",", ":"))
     return f"<!-- sub2api-submit-pr: {payload} -->"
 
 
@@ -144,6 +153,27 @@ class ValidationProofTest(unittest.TestCase):
     def test_duplicate_marker_is_rejected(self) -> None:
         with self.assertRaisesRegex(release_cli.ReleaseCliError, "exactly one"):
             release_cli.parse_validation_proof(marker() + "\n" + marker())
+
+    def test_release_finalization_marker_requires_matching_tag(self) -> None:
+        proof = release_cli.parse_validation_proof(
+            marker(profile=release_cli.FINALIZATION_PROFILE, tag=TAG)
+        )
+        self.assertEqual(
+            release_cli.ValidationProof(
+                BASE,
+                HEAD,
+                profile=release_cli.FINALIZATION_PROFILE,
+                tag=TAG,
+            ),
+            proof,
+        )
+
+    def test_legacy_untyped_marker_is_rejected(self) -> None:
+        payload = json.dumps({"base": BASE, "head": HEAD}, separators=(",", ":"))
+        with self.assertRaisesRegex(release_cli.ReleaseCliError, "profile"):
+            release_cli.parse_validation_proof(
+                f"<!-- sub2api-submit-pr: {payload} -->"
+            )
 
     def test_changed_pr_head_is_rejected(self) -> None:
         pr = pull_request(head="d" * 40)
@@ -428,7 +458,12 @@ class PromotionTest(unittest.TestCase):
         candidate = release_cli.PullRequest(
             **{**pull_request().__dict__, "head_branch": final_branch}
         )
-        proof = release_cli.ValidationProof(BASE, HEAD)
+        proof = release_cli.ValidationProof(
+            BASE,
+            HEAD,
+            profile=release_cli.FINALIZATION_PROFILE,
+            tag=TAG,
+        )
         with (
             mock.patch.object(release_cli, "require_clean_worktree"),
             mock.patch.object(release_cli, "repository_default_branch", return_value="main"),

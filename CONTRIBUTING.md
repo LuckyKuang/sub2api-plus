@@ -60,12 +60,19 @@ Before creating or updating the final pull request, run the promotion gate:
 python3 skills/push-cli/scripts/push_cli.py submit-pr
 ```
 
-`submit-pr` requires the latest default-branch base and runs the full matrix
-inside Apple Containers on macOS, Docker inside WSL2 Debian or Ubuntu on
-Windows, and Docker on Linux. Host-side execution of that matrix is forbidden.
-It pushes the validated head, publishes the exact base/head proof, and creates
-or reuses the pull request. Release PR merging and publication use
-`skills/release-cli` after GitHub required checks pass.
+`submit-pr` defaults to the `full` profile. It requires the latest
+default-branch base and runs the complete matrix inside Apple Containers on
+macOS, Docker inside WSL2 Debian or Ubuntu on Windows, and Docker on Linux.
+Independent backend-test, backend-lint/policy, and frontend lanes run with
+bounded concurrency and report step/lane wall-clock durations; no check is
+removed. Host-side execution of that matrix is forbidden. For diagnosis or a
+same-commit timing baseline, pass `--serial` to `check`.
+
+The `release-finalization` profile is not a general fast option. Only
+`release-cli finalize` may request it for a verified published tag and a tree
+that can be regenerated exactly from its recorded base. Both profiles bind the
+exact base/head SHAs, and finalization also binds the tag. Release PR merging
+and publication use `skills/release-cli` after GitHub required checks pass.
 
 ## Generated Code
 

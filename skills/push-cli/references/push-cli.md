@@ -5,7 +5,7 @@
 | Action | Local matrix | GitHub mutation | Result |
 | --- | --- | --- | --- |
 | `push` | None | Exact current-branch push | Fast intermediate branch publication. |
-| `submit-pr` | Complete platform-container matrix | Exact push, commit status, PR create/update | Final locally validated candidate. |
+| `submit-pr` | Full platform-container matrix by default; deterministic published-release gate only for release-cli finalization | Exact push, typed commit status, PR create/update | Final candidate with exact typed proof. |
 | `check` | Complete platform-container matrix | None | Read-only validation result. |
 | `ensure` | Image preparation only | None | Runtime and validation image ready. |
 | `watch` | None | None | Watches branch push runs at current HEAD. |
@@ -26,7 +26,7 @@ needed. Use `submit-pr`, never ordinary push, for the final PR candidate.
 
 ## Validated Submission
 
-`submit-pr` performs this fail-closed sequence:
+The default `full` `submit-pr` performs this fail-closed sequence:
 
 1. Fetch `refs/heads/<default>` into `refs/remotes/origin/<default>` without
    fetching tags.
@@ -40,13 +40,23 @@ needed. Use `submit-pr`, never ordinary push, for the final PR candidate.
 9. Publish commit status context `sub2api/local-validation` for the head.
 10. Create or update one PR whose base/head marker matches those SHAs.
 
-The marker format is implementation-owned and must occur exactly once:
+The full marker format is implementation-owned and must occur exactly once:
 
-    <!-- sub2api-submit-pr: {"base":"<sha>","head":"<sha>"} -->
+    <!-- sub2api-submit-pr: {"base":"<sha>","head":"<sha>","profile":"full"} -->
+
+For post-publication metadata, release-cli invokes:
+
+    python3 skills/push-cli/scripts/push_cli.py submit-pr \
+      --profile release-finalization --tag vX.Y.Z+custom.NNN
+
+That proof additionally includes the exact tag. Before any mutation, push-cli
+requires the deterministic branch, regenerates its complete expected tree from
+the recorded base, and verifies the published Release and immutable assets. No
+other caller or branch may use this profile.
 
 ## In-Container Matrix
 
-The matrix includes:
+The full matrix includes every existing command and runs three bounded lanes:
 
 - Go module tidiness, unit tests, integration tests, and golangci-lint.
 - Compress CLI, push CLI, and release CLI self-tests.
@@ -56,6 +66,14 @@ The matrix includes:
   identity, and migration checks against the validated default-branch base.
 - Installer syntax, Docker deployment security/resources, Caddy cache policy,
   and the Apple Container lifecycle fixture.
+
+The backend-test lane keeps module tidiness before unit and integration tests.
+The backend-lint/policy lane serializes lint and repository policy commands.
+The frontend lane keeps install before lint, typecheck, full Vitest, build, and
+audit. Default parallel execution limits Vitest to two workers within the
+four-CPU container; `--serial` uses four. Every command and lane reports elapsed
+monotonic time. A failure stops new steps and joins already-running commands;
+neither scheduling mode can publish a partial proof.
 
 Apple Containers reports Docker Compose parsing as not applicable. WSL2 Docker
 and Linux Docker must parse `deploy/docker-compose.dev.yml` successfully.

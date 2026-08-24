@@ -37,17 +37,19 @@ strictness, a protected rule, or a context is missing. It invokes
 
 ## Submitted PR Proof
 
-`push-cli submit-pr` owns the proof. Release promotion requires exactly one PR
-marker with 40-character base/head SHAs, a matching current PR base/head, and a
-successful `sub2api/local-validation` status on the head. The PR must come from
-`LuckyKuang/sub2api-plus`, remain open and non-draft, and target the GitHub
-default branch.
+`push-cli submit-pr` owns the proof. Release promotion requires exactly one
+typed PR marker with 40-character base/head SHAs, a matching current PR
+base/head, and a successful profile-specific `sub2api/local-validation` status
+on the head. `full` forbids a tag; `release-finalization` requires the exact
+published tag. The PR must come from `LuckyKuang/sub2api-plus`, remain open and
+non-draft, and target the GitHub default branch.
 
 After required checks complete, promotion refetches the default branch and PR.
 Any head or base change stops the merge and requires another `submit-pr`.
-Release-candidate promotion requires the notes file and `planned` metadata.
-Promotion without notes is accepted only for the deterministic finalize branch
-and requires the tag's metadata to be `published`.
+Release-candidate promotion requires the notes file, `planned` metadata, and a
+`full` proof. Promotion without notes requires the matching
+`release-finalization` proof and deterministic branch, then independently
+regenerates the tree and verifies the published Release and immutable assets.
 
 ## Main Commit Gate
 
@@ -81,8 +83,12 @@ automatically starts `Build and publish`. `monitor` resolves the exact remote
 annotated tag and finds the Release push run by its target SHA, so recovery does
 not depend on a local tag. A waiting `Build and publish` job is external policy
 drift and fails with its URL; release-cli never approves or bypasses it.
-`verify` does not monitor. It requires the same remote tag, the workflow already
-completed successfully, and checks:
+The tag-triggered workflow first validates the annotated tag, release notes,
+planned mapping, `main` containment, and successful push-triggered `CI` and
+`Security Scan` runs at the exact target SHA. This focused provenance gate does
+not rerun the complete application matrix. `verify` does not monitor. It
+requires the same remote tag, the workflow already completed successfully, and
+checks:
 
 - a non-draft, non-prerelease GitHub Release for the exact tag;
 - `model-pricing.json`;

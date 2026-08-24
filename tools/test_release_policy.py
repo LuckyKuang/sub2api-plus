@@ -12,8 +12,10 @@ from unittest import mock
 
 import check_release
 import check_new_migrations
+import check_published_release
 import release_docs
 import release_preflight
+import workflow_provenance
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -155,6 +157,122 @@ class MigrationBaselineTests(unittest.TestCase):
             )
 
 
+class WorkflowProvenanceTests(unittest.TestCase):
+    @staticmethod
+    def run(
+        workflow: str,
+        *,
+        branch: str = "main",
+        sha: str = OFFICIAL_COMMIT,
+        status: str = "completed",
+        conclusion: str = "success",
+    ) -> dict[str, object]:
+        return {
+            "workflowName": workflow,
+            "event": "push",
+            "headBranch": branch,
+            "headSha": sha,
+            "status": status,
+            "conclusion": conclusion,
+        }
+
+    def test_exact_successful_main_runs_pass(self) -> None:
+        runs = [self.run("CI"), self.run("Security Scan")]
+        self.assertEqual(
+            runs,
+            workflow_provenance.require_successful_workflows(
+                runs,
+                branch="main",
+                sha=OFFICIAL_COMMIT,
+            ),
+        )
+
+    def test_wrong_branch_or_sha_does_not_satisfy_provenance(self) -> None:
+        runs = [
+            self.run("CI", branch="release/candidate"),
+            self.run("Security Scan", sha="b" * 40),
+        ]
+        with self.assertRaisesRegex(
+            workflow_provenance.WorkflowProvenanceError,
+            "CI: missing; Security Scan: missing",
+        ):
+            workflow_provenance.require_successful_workflows(
+                runs,
+                branch="main",
+                sha=OFFICIAL_COMMIT,
+            )
+
+    def test_missing_required_workflow_fails(self) -> None:
+        with self.assertRaisesRegex(
+            workflow_provenance.WorkflowProvenanceError,
+            "Security Scan: missing",
+        ):
+            workflow_provenance.require_successful_workflows(
+                [self.run("CI")],
+                branch="main",
+                sha=OFFICIAL_COMMIT,
+            )
+
+    def test_any_unsuccessful_exact_run_fails(self) -> None:
+        runs = [
+            self.run("CI"),
+            self.run("CI", conclusion="failure"),
+            self.run("Security Scan"),
+        ]
+        with self.assertRaisesRegex(
+            workflow_provenance.WorkflowProvenanceError,
+            "CI: completed/failure",
+        ):
+            workflow_provenance.require_successful_workflows(
+                runs,
+                branch="main",
+                sha=OFFICIAL_COMMIT,
+            )
+
+
+class PublishedReleaseCheckTests(unittest.TestCase):
+    def test_ci_wrapper_verifies_remote_tag_workflow_and_assets_read_only(self) -> None:
+        published = mock.Mock(target=OFFICIAL_COMMIT)
+        argv = [
+            "check_published_release.py",
+            "--repository",
+            "LuckyKuang/sub2api-plus",
+            "--tag",
+            TAG,
+        ]
+        with (
+            mock.patch.object(sys, "argv", argv),
+            mock.patch.object(check_published_release.release_cli, "validate_tag") as validate,
+            mock.patch.object(
+                check_published_release.release_cli,
+                "require_published_remote_tag",
+                return_value=published,
+            ) as remote_tag,
+            mock.patch.object(
+                check_published_release.release_cli,
+                "require_release_workflow_success",
+            ) as workflow,
+            mock.patch.object(
+                check_published_release.release_cli,
+                "verify_release",
+            ) as release,
+            mock.patch.object(
+                check_published_release.release_cli,
+                "github_gate",
+            ) as github_gate,
+        ):
+            self.assertEqual(check_published_release.main(), 0)
+
+        validate.assert_called_once_with(TAG)
+        remote_tag.assert_called_once_with("LuckyKuang/sub2api-plus", TAG)
+        workflow.assert_called_once_with(
+            "LuckyKuang/sub2api-plus",
+            TAG,
+            OFFICIAL_COMMIT,
+        )
+        release.assert_called_once_with("LuckyKuang/sub2api-plus", TAG)
+        github_gate.assert_not_called()
+
 class WorkflowPolicyTests(unittest.TestCase):
     def test_external_actions_are_pinned_to_commits(self) -> None:
         action_re = re.compile(r"^\s*uses:\s*([^@\s]+)@([^\s#]+)", re.MULTILINE)
@@ -202,6 +320,68 @@ class WorkflowPolicyTests(unittest.TestCase):
         self.assertIn("needs: verify", workflow)
         self.assertIn("environment:\n      name: release", workflow)
         self.assertNotIn("required reviewers", workflow)
+
+    def test_release_verifies_exact_main_workflow_provenance(self) -> None:
+        workflow = ROOT.joinpath(".github/workflows/release.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("name: Verify release provenance", workflow)
+        self.assertIn("tools/workflow_provenance.py", workflow)
+        self.assertIn("git merge-base --is-ancestor", workflow)
+        self.assertNotIn("uses: ./.github/workflows/backend-ci.yml", workflow)
+        self.assertRegex(
+            workflow,
+            r"verify:\n(?:.|\n)*?permissions:\n\s+actions: read\n\s+contents: read",
+        )
+
+    def test_every_required_remote_context_classifies_finalization_first(self) -> None:
+        expected_jobs = {
+            "backend-ci.yml": {
+                "deployment-config",
+                "test",
+                "frontend",
+                "golangci-lint",
+                "goreleaser-config",
+                "repository-policy",
+            },
+            "security-scan.yml": {"backend-security", "frontend-security"},
+        }
+        job_re = re.compile(
+            r"^  (?P<job>[a-z0-9-]+):\n(?P<body>.*?)(?=^  [a-z0-9-]+:\n|\Z)",
+            re.MULTILINE | re.DOTALL,
+        )
+        for workflow_name, required_jobs in expected_jobs.items():
+            workflow = ROOT.joinpath(".github", "workflows", workflow_name).read_text(
+                encoding="utf-8"
+            )
+            jobs = {match.group("job"): match.group("body") for match in job_re.finditer(workflow)}
+            self.assertEqual(required_jobs - jobs.keys(), set())
+            for job in sorted(required_jobs):
+                with self.subTest(workflow=workflow_name, job=job):
+                    body = jobs[job]
+                    self.assertIn(
+                        "uses: ./.github/actions/classify-release-finalization",
+                        body,
+                    )
+                    self.assertIn("fetch-depth: 0", body)
+
+    def test_finalization_repository_policy_rechecks_published_release(self) -> None:
+        workflow = ROOT.joinpath(".github/workflows/backend-ci.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("tools/check_published_release.py", workflow)
+        self.assertIn("--require-status published", workflow)
+        self.assertIn("--mapping-only", workflow)
+        self.assertIn(
+            "if: steps.validation-profile.outputs.profile == 'release-finalization'",
+            workflow,
+        )
+
+    def test_security_scan_does_not_run_for_tag_pushes(self) -> None:
+        workflow = ROOT.joinpath(".github/workflows/security-scan.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertRegex(workflow, r"push:\n\s+branches:\n\s+- \"\*\*\"")
 
     def test_actionlint_container_is_pinned_to_a_digest(self) -> None:
         workflow = ROOT.joinpath(".github/workflows/backend-ci.yml").read_text(

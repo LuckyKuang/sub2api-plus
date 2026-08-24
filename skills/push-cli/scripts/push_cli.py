@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import json
 import platform
 import re
@@ -12,6 +13,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -27,6 +29,13 @@ import validation_runtime
 DEFAULT_REMOTE = "origin"
 EXPECTED_REPOSITORY = "LuckyKuang/sub2api-plus"
 LOCAL_VALIDATION_CONTEXT = "sub2api/local-validation"
+FULL_PROFILE = "full"
+FINALIZATION_PROFILE = "release-finalization"
+VALIDATION_PROFILES = (FULL_PROFILE, FINALIZATION_PROFILE)
+VALIDATION_DESCRIPTIONS = {
+    FULL_PROFILE: "Platform-container validation passed",
+    FINALIZATION_PROFILE: "Deterministic release finalization passed",
+}
 VALIDATION_MARKER_RE = re.compile(
     r"<!--\s*sub2api-submit-pr:\s*(\{.*?\})\s*-->", re.DOTALL
 )
@@ -36,6 +45,7 @@ VERSION_RE = re.compile(
     re.IGNORECASE,
 )
 SCRIPT = Path(__file__).resolve()
+OUTPUT_LOCK = threading.Lock()
 
 
 class PushCliError(RuntimeError):
@@ -57,6 +67,16 @@ class DeclaredToolchains:
 class ValidationProof:
     base: str
     head: str
+    profile: str = FULL_PROFILE
+    tag: str | None = None
+
+
+@dataclass(frozen=True)
+class ValidationStep:
+    name: str
+    command: Sequence[str]
+    cwd: Path
+    lane: str
 
 
 def display(command: Sequence[str]) -> str:
@@ -361,6 +381,7 @@ def launch_in_validation(
     remote: str,
     *,
     base_ref: str | None = None,
+    serial: bool = False,
 ) -> None:
     repo = validation_runtime.mount_root(runtime, ROOT)
     script = validation_runtime.container_path(SCRIPT, runtime, ROOT)
@@ -376,6 +397,8 @@ def launch_in_validation(
     ]
     if base_ref:
         argv.extend(["--base-ref", base_ref])
+    if serial:
+        argv.append("--serial")
     try:
         validation_runtime.launch_in_validation(
             runtime,
@@ -392,10 +415,22 @@ def run_step(
     name: str,
     command: Sequence[str],
     cwd: Path | None = None,
+    *,
+    lane: str | None = None,
+    capture_output: bool = False,
 ) -> None:
-    print(f"\n[{name}]")
-    print(f"$ {display(command)}")
-    result = run_command(command, cwd=cwd)
+    label = f"{lane}: {name}" if lane else name
+    with OUTPUT_LOCK:
+        print(f"\n[{label}]")
+        print(f"$ {display(command)}")
+    started = time.monotonic()
+    result = run_command(command, cwd=cwd, capture=capture_output)
+    elapsed = time.monotonic() - started
+    with OUTPUT_LOCK:
+        if capture_output and result.stdout:
+            print(result.stdout.rstrip())
+        outcome = "completed" if result.returncode == 0 else "failed"
+        print(f"[{label}] {outcome} in {elapsed:.1f}s")
     if result.returncode != 0:
         raise PushCliError(f"{name} failed with exit code {result.returncode}")
 
@@ -426,10 +461,13 @@ def run_runtime_final_gate(runtime: Runtime) -> None:
     )
 
 
-def run_frontend_security_check() -> None:
+def run_frontend_security_check(*, lane: str | None = None) -> None:
     command = ["pnpm", "audit", "--prod", "--audit-level=high", "--json"]
-    print("\n[Frontend production audit]")
-    print(f"$ {display(command)}")
+    label = f"{lane}: Frontend production audit" if lane else "Frontend production audit"
+    with OUTPUT_LOCK:
+        print(f"\n[{label}]")
+        print(f"$ {display(command)}")
+    started = time.monotonic()
     result = run_command(
         command,
         cwd=ROOT / "frontend",
@@ -459,20 +497,28 @@ def run_frontend_security_check() -> None:
         json.dump(audit, audit_file)
         audit_path = Path(audit_file.name)
     try:
-        run_step(
-            "Frontend audit exceptions",
-            [
-                sys.executable,
-                "tools/check_pnpm_audit_exceptions.py",
-                "--audit",
-                str(audit_path),
-                "--exceptions",
-                ".github/audit-exceptions.yml",
-            ],
-            ROOT,
-        )
+        exception_command = [
+            sys.executable,
+            "tools/check_pnpm_audit_exceptions.py",
+            "--audit",
+            str(audit_path),
+            "--exceptions",
+            ".github/audit-exceptions.yml",
+        ]
+        if lane is None:
+            run_step("Frontend audit exceptions", exception_command, ROOT)
+        else:
+            run_step(
+                "Frontend audit exceptions",
+                exception_command,
+                ROOT,
+                lane=lane,
+                capture_output=True,
+            )
     finally:
         audit_path.unlink(missing_ok=True)
+    with OUTPUT_LOCK:
+        print(f"[{label}] completed in {time.monotonic() - started:.1f}s")
 
 
 def run_local_checks(
@@ -481,54 +527,79 @@ def run_local_checks(
     runtime: Runtime,
     *,
     base_ref: str | None = None,
+    serial: bool = False,
 ) -> None:
     python = sys.executable
     backend = ROOT / "backend"
-    steps: list[tuple[str, Sequence[str], Path]] = [
-        (
+    frontend_workers = "4" if serial else "2"
+    steps = [
+        ValidationStep(
             "Apple Container lifecycle test",
             ["bash", str(ROOT / "deploy/tests/apple-container-test.sh")],
             ROOT,
+            "backend-lint-policy",
         ),
-        ("Go module tidiness", ["go", "mod", "tidy", "-diff"], backend),
-        (
+        ValidationStep(
+            "Go module tidiness",
+            ["go", "mod", "tidy", "-diff"],
+            backend,
+            "backend-tests",
+        ),
+        ValidationStep(
             "Compress CLI self-tests",
             [python, "skills/compress-cli/tests/test_compress_cli.py"],
             ROOT,
+            "backend-lint-policy",
         ),
-        (
+        ValidationStep(
             "Push CLI self-tests",
             [python, "skills/push-cli/tests/test_push_cli.py"],
             ROOT,
+            "backend-lint-policy",
         ),
-        (
+        ValidationStep(
             "Release CLI self-tests",
             [python, "skills/release-cli/tests/test_release_cli.py"],
             ROOT,
+            "backend-lint-policy",
         ),
-        ("Backend unit tests", ["go", "test", "-tags=unit", "./..."], backend),
-        (
+        ValidationStep(
+            "Backend unit tests",
+            ["go", "test", "-tags=unit", "./..."],
+            backend,
+            "backend-tests",
+        ),
+        ValidationStep(
             "Backend integration tests",
             ["go", "test", "-tags=integration", "./..."],
             backend,
+            "backend-tests",
         ),
-        ("Backend lint", ["golangci-lint", "run", "./..."], backend),
-        (
+        ValidationStep(
+            "Backend lint",
+            ["golangci-lint", "run", "./..."],
+            backend,
+            "backend-lint-policy",
+        ),
+        ValidationStep(
             "Frontend frozen install",
             ["pnpm", "--dir", "frontend", "install", "--frozen-lockfile"],
             ROOT,
+            "frontend",
         ),
-        (
+        ValidationStep(
             "Frontend lint",
             ["pnpm", "--dir", "frontend", "run", "lint:check"],
             ROOT,
+            "frontend",
         ),
-        (
+        ValidationStep(
             "Frontend typecheck",
             ["pnpm", "--dir", "frontend", "run", "typecheck"],
             ROOT,
+            "frontend",
         ),
-        (
+        ValidationStep(
             "Frontend tests",
             [
                 "pnpm",
@@ -536,47 +607,70 @@ def run_local_checks(
                 "frontend",
                 "run",
                 "test:run",
-                "--maxWorkers=4",
+                f"--maxWorkers={frontend_workers}",
             ],
             ROOT,
+            "frontend",
         ),
-        (
+        ValidationStep(
             "Frontend production build",
             ["pnpm", "--dir", "frontend", "run", "build"],
             ROOT,
+            "frontend",
         ),
-        (
+        ValidationStep(
             "Release policy tests",
             [python, "tools/test_release_policy.py"],
             ROOT,
+            "backend-lint-policy",
         ),
-        (
+        ValidationStep(
             "Codex outbound identity",
             [python, "tools/check_openai_codex_identity.py"],
             ROOT,
+            "backend-lint-policy",
         ),
-        ("README synchronization", [python, "tools/check_readme_sync.py"], ROOT),
-        ("Release metadata sources", [python, "tools/check_release.py"], ROOT),
-        ("Linux installer syntax", ["bash", "-n", "deploy/install.sh"], ROOT),
-        (
+        ValidationStep(
+            "README synchronization",
+            [python, "tools/check_readme_sync.py"],
+            ROOT,
+            "backend-lint-policy",
+        ),
+        ValidationStep(
+            "Release metadata sources",
+            [python, "tools/check_release.py"],
+            ROOT,
+            "backend-lint-policy",
+        ),
+        ValidationStep(
+            "Linux installer syntax",
+            ["bash", "-n", "deploy/install.sh"],
+            ROOT,
+            "backend-lint-policy",
+        ),
+        ValidationStep(
             "Apple installer syntax",
             ["bash", "-n", "deploy/apple-container.sh"],
             ROOT,
+            "backend-lint-policy",
         ),
-        (
+        ValidationStep(
             "Docker Compose security",
             ["sh", "deploy/tests/docker-compose-security-test.sh"],
             ROOT,
+            "backend-lint-policy",
         ),
-        (
+        ValidationStep(
             "Docker runtime resources",
             ["sh", "deploy/tests/docker-runtime-resources-test.sh"],
             ROOT,
+            "backend-lint-policy",
         ),
-        (
+        ValidationStep(
             "Caddy cache policy",
             ["bash", "deploy/test-caddyfile-cache.sh"],
             ROOT,
+            "backend-lint-policy",
         ),
     ]
 
@@ -586,17 +680,79 @@ def run_local_checks(
     )
     if base_check.returncode == 0:
         steps.append(
-            (
+            ValidationStep(
                 "Migration policy",
                 [python, "tools/check_new_migrations.py", "--base", migration_base],
                 ROOT,
+                "backend-lint-policy",
             )
         )
 
-    for name, command, cwd in steps:
-        run_step(name, command, cwd)
+    started = time.monotonic()
+    if serial:
+        for step in steps:
+            run_step(step.name, step.command, step.cwd)
+        run_frontend_security_check()
+    else:
+        lane_names = ("backend-tests", "backend-lint-policy", "frontend")
+        stop_requested = threading.Event()
 
-    run_frontend_security_check()
+        def run_lane(lane_name: str) -> None:
+            lane_steps = [step for step in steps if step.lane == lane_name]
+            lane_started = time.monotonic()
+            for step in lane_steps:
+                if stop_requested.is_set():
+                    with OUTPUT_LOCK:
+                        print(f"\n[Lane {lane_name}] stopped before {step.name}")
+                    return
+                try:
+                    run_step(
+                        step.name,
+                        step.command,
+                        step.cwd,
+                        lane=lane_name,
+                        capture_output=True,
+                    )
+                except Exception:
+                    stop_requested.set()
+                    raise
+            if lane_name == "frontend" and not stop_requested.is_set():
+                try:
+                    run_frontend_security_check(lane=lane_name)
+                except Exception:
+                    stop_requested.set()
+                    raise
+            with OUTPUT_LOCK:
+                print(
+                    f"\n[Lane {lane_name}] completed in "
+                    f"{time.monotonic() - lane_started:.1f}s"
+                )
+
+        failures: list[str] = []
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=len(lane_names),
+            thread_name_prefix="validation",
+        ) as executor:
+            futures = {
+                executor.submit(run_lane, lane_name): lane_name
+                for lane_name in lane_names
+            }
+            for future in concurrent.futures.as_completed(futures):
+                lane_name = futures[future]
+                try:
+                    future.result()
+                except Exception as error:
+                    failures.append(f"{lane_name}: {error}")
+        if failures:
+            raise PushCliError(
+                "local validation lane failure(s):\n" + "\n".join(failures)
+            )
+
+    mode = "serial" if serial else "parallel"
+    print(
+        f"\nFull local matrix ({mode}) completed in "
+        f"{time.monotonic() - started:.1f}s"
+    )
 
 
 def ensure_clean_after_checks() -> None:
@@ -607,6 +763,43 @@ def ensure_clean_after_checks() -> None:
         raise PushCliError(
             "checks created or exposed worktree changes; refusing to push:\n" + status
         )
+
+
+def run_release_finalization_checks(
+    proof: ValidationProof,
+    branch: str,
+    remote: str,
+) -> None:
+    if proof.profile != FINALIZATION_PROFILE or proof.tag is None:
+        raise PushCliError("release-finalization checks require a typed tag proof")
+    run_step(
+        "Validate deterministic release finalization",
+        [
+            sys.executable,
+            "tools/release_finalization.py",
+            "validate",
+            "--base",
+            proof.base,
+            "--head",
+            proof.head,
+            "--tag",
+            proof.tag,
+            "--branch",
+            branch,
+        ],
+    )
+    run_step(
+        "Verify published release",
+        [
+            sys.executable,
+            "skills/release-cli/scripts/release_cli.py",
+            "verify",
+            "--tag",
+            proof.tag,
+            "--remote",
+            remote,
+        ],
+    )
 
 
 def pushed_sha() -> str:
@@ -627,7 +820,13 @@ def fetch_default_branch(remote: str, default_branch: str) -> str:
     return capture(["git", "rev-parse", f"{remote}/{default_branch}"])
 
 
-def require_latest_base(remote: str, default_branch: str) -> ValidationProof:
+def require_latest_base(
+    remote: str,
+    default_branch: str,
+    *,
+    profile: str = FULL_PROFILE,
+    tag: str | None = None,
+) -> ValidationProof:
     base = fetch_default_branch(remote, default_branch)
     head = pushed_sha()
     ancestor = run_command(
@@ -640,7 +839,7 @@ def require_latest_base(remote: str, default_branch: str) -> ValidationProof:
         )
     if ancestor.returncode != 0:
         raise PushCliError("unable to compare the pull-request base and head")
-    return ValidationProof(base=base, head=head)
+    return ValidationProof(base=base, head=head, profile=profile, tag=tag)
 
 
 def require_unchanged_proof(
@@ -659,11 +858,14 @@ def require_unchanged_proof(
 
 
 def validation_marker(proof: ValidationProof) -> str:
-    payload = json.dumps(
-        {"base": proof.base, "head": proof.head},
-        separators=(",", ":"),
-        sort_keys=True,
-    )
+    data: dict[str, str] = {
+        "base": proof.base,
+        "head": proof.head,
+        "profile": proof.profile,
+    }
+    if proof.tag is not None:
+        data["tag"] = proof.tag
+    payload = json.dumps(data, separators=(",", ":"), sort_keys=True)
     return f"<!-- sub2api-submit-pr: {payload} -->"
 
 
@@ -687,7 +889,7 @@ def publish_validation_status(repository: str, proof: ValidationProof) -> None:
             "-f",
             f"context={LOCAL_VALIDATION_CONTEXT}",
             "-f",
-            "description=Platform-container validation passed",
+            f"description={VALIDATION_DESCRIPTIONS[proof.profile]}",
         ],
     )
 
@@ -741,12 +943,17 @@ def open_pull_requests(
     return prs
 
 
-def default_pr_body(branch: str) -> str:
+def default_pr_body(branch: str, proof: ValidationProof) -> str:
+    validation = (
+        "Platform-container validation matrix passed."
+        if proof.profile == FULL_PROFILE
+        else f"Deterministic finalization for `{proof.tag}` passed."
+    )
     return (
         "## Summary\n\n"
         f"Submit `{branch}` after the repository local-validation gate.\n\n"
         "## Validation\n\n"
-        "- Platform-container validation matrix passed.\n"
+        f"- {validation}\n"
     )
 
 
@@ -764,9 +971,7 @@ def create_or_update_pull_request(
         raise PushCliError(
             f"multiple open pull requests exist for {branch} -> {default_branch}"
         )
-    supplied_body = (
-        default_pr_body(branch)
-    )
+    supplied_body = default_pr_body(branch, proof)
     if body_file is not None:
         try:
             supplied_body = body_file.read_text(encoding="utf-8")
@@ -914,6 +1119,21 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--base-ref", help=argparse.SUPPRESS)
     parser.add_argument("--title", help="pull-request title for submit-pr")
     parser.add_argument("--body-file", type=Path, help="pull-request body for submit-pr")
+    parser.add_argument(
+        "--profile",
+        choices=VALIDATION_PROFILES,
+        default=FULL_PROFILE,
+        help="validation profile for submit-pr",
+    )
+    parser.add_argument(
+        "--tag",
+        help="published custom tag required by the release-finalization profile",
+    )
+    parser.add_argument(
+        "--serial",
+        action="store_true",
+        help="run the full validation matrix serially for diagnostics or benchmarking",
+    )
     return parser.parse_args()
 
 
@@ -942,11 +1162,24 @@ def main() -> int:
                 branch,
                 Runtime("in-validation", compose_required=False),
                 base_ref=args.base_ref,
+                serial=args.serial,
             )
             print("\nIn-container push checks passed.")
             return 0
 
         repository = github_gate(args.remote)
+        if args.action != "submit-pr" and (
+            args.profile != FULL_PROFILE or args.tag is not None
+        ):
+            raise PushCliError("--profile and --tag are valid only for submit-pr")
+        if args.serial and args.action not in {"check", "submit-pr"}:
+            raise PushCliError("--serial is valid only for check or submit-pr")
+        if args.profile == FULL_PROFILE and args.tag is not None:
+            raise PushCliError("the full validation profile does not accept --tag")
+        if args.profile == FINALIZATION_PROFILE and args.tag is None:
+            raise PushCliError("release-finalization submit-pr requires --tag")
+        if args.profile == FINALIZATION_PROFILE and args.serial:
+            raise PushCliError("release-finalization does not run the full serial matrix")
         if args.action == "ensure":
             runtime = probe_runtime()
             ensure_validation_image(runtime)
@@ -975,16 +1208,30 @@ def main() -> int:
         proof = None
         base_ref = args.base_ref
         if args.action == "submit-pr":
-            proof = require_latest_base(args.remote, default_branch)
+            proof = require_latest_base(
+                args.remote,
+                default_branch,
+                profile=args.profile,
+                tag=args.tag,
+            )
             base_ref = f"{args.remote}/{default_branch}"
         else:
             require_clean_worktree()
-        runtime = probe_runtime()
-        ensure_validation_image(runtime)
-        launch_in_validation(runtime, args.remote, base_ref=base_ref)
-        run_runtime_final_gate(runtime)
+        if proof is not None and proof.profile == FINALIZATION_PROFILE:
+            run_release_finalization_checks(proof, branch, args.remote)
+        else:
+            runtime = probe_runtime()
+            ensure_validation_image(runtime)
+            launch_in_validation(
+                runtime,
+                args.remote,
+                base_ref=base_ref,
+                serial=args.serial,
+            )
+            run_runtime_final_gate(runtime)
         ensure_clean_after_checks()
-        print("\nLocal push checks passed. No branch was pushed.")
+        profile = proof.profile if proof is not None else FULL_PROFILE
+        print(f"\nLocal {profile} checks passed. No branch was pushed.")
 
         if args.action == "submit-pr":
             assert proof is not None

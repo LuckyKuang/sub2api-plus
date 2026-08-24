@@ -103,16 +103,23 @@ PROTECTED_FRAGMENTS = {
     ),
     "Submit PR": (
         "skills/push-cli submit-pr",
-        "Host-side execution of that matrix is forbidden",
+        "full profile",
+        "deterministic finalization tree",
+        "release-finalization",
+        "Host-side execution of the full matrix is forbidden",
     ),
     "Release Promotion": (
         "skills/release-cli",
+        "exact typed submit-pr proof",
+        "Independently regenerate release-finalization trees",
         "without admin bypass",
         "Release metadata validation must not repeat the complete local application matrix",
     ),
     "Release Flow": (
         "Never push or commit release changes directly to main",
         "Tag only the actual PR merge commit",
+        "exact main push CI and Security Scan evidence",
+        "reuse that exact evidence rather than rerun the application matrix",
         "separate and resumable",
     ),
     "Publication Safety": (
