@@ -10,7 +10,26 @@ import (
 	"strings"
 )
 
-var ErrIncompleteContent = errors.New("audit content extraction is incomplete")
+const maxIncompleteReasons = 8
+
+const (
+	maxIncompletePathLength       = 128
+	maxIncompleteIdentifierLength = 64
+)
+
+type IncompleteKind string
+
+const (
+	IncompleteUnsupportedItemType IncompleteKind = "unsupported_item_type"
+	IncompleteUnextractable       IncompleteKind = "unextractable_content"
+)
+
+type IncompleteReason struct {
+	Kind     IncompleteKind `json:"kind"`
+	Path     string         `json:"path,omitempty"`
+	Field    string         `json:"field,omitempty"`
+	ItemType string         `json:"item_type,omitempty"`
+}
 
 type Source string
 
@@ -44,10 +63,13 @@ type Image struct {
 }
 
 type Document struct {
-	Segments       []Segment
-	Images         []Image
-	ContentBearing bool
-	Incomplete     bool
+	Segments           []Segment
+	Images             []Image
+	ContentBearing     bool
+	Incomplete         bool
+	IncompleteReasons  []IncompleteReason
+	incompletePath     []string
+	incompletePathUsed bool
 }
 
 func Extract(protocol string, body []byte) (Document, error) {
@@ -94,6 +116,8 @@ func Extract(protocol string, body []byte) (Document, error) {
 		extractDefault(&document, root)
 	}
 	normalizeDocument(&document)
+	document.incompletePath = nil
+	document.incompletePathUsed = false
 	return document, nil
 }
 
@@ -129,6 +153,10 @@ func normalizeDocument(document *Document) {
 		}
 	}
 	document.Images = images
+	if len(document.IncompleteReasons) > 0 {
+		document.Incomplete = true
+		document.ContentBearing = true
+	}
 }
 
 func extractDefault(document *Document, root map[string]any) {
@@ -176,11 +204,13 @@ func extractChat(document *Document, root map[string]any) {
 		}
 	}
 	for index, item := range messages {
+		pop := withIncompletePath(document, fmt.Sprintf("messages[%d]", index))
 		message, ok := item.(map[string]any)
 		if !ok {
 			if hasNonEmptyValue(item) {
 				markIncompleteContent(document)
 			}
+			pop()
 			continue
 		}
 		role := normalizedRole(message["role"])
@@ -211,6 +241,7 @@ func extractChat(document *Document, root map[string]any) {
 		}
 		appendChatToolCalls(document, message, role, current)
 		markUnknownNonEmptyFields(document, message, "role", "content", "name", "tool_call_id", "tool_calls", "function_call", "refusal", "audio")
+		pop()
 	}
 }
 
@@ -279,11 +310,13 @@ func extractAnthropic(document *Document, root map[string]any) {
 		return
 	}
 	for index, item := range messages {
+		pop := withIncompletePath(document, fmt.Sprintf("messages[%d]", index))
 		message, ok := item.(map[string]any)
 		if !ok {
 			if hasNonEmptyValue(item) {
 				markIncompleteContent(document)
 			}
+			pop()
 			continue
 		}
 		role := normalizedRole(message["role"])
@@ -292,6 +325,7 @@ func extractAnthropic(document *Document, root map[string]any) {
 		}
 		appendAnthropicContent(document, message["content"], role, index == len(messages)-1)
 		markUnknownNonEmptyFields(document, message, "role", "content")
+		pop()
 	}
 }
 
@@ -414,12 +448,15 @@ func extractResponsesRoot(document *Document, root map[string]any) {
 		markUnknownNonEmptyFields(document, root, "type", "event_id", "response_id")
 	case "", "response.create":
 		markUnknownResponsesRequestFields(document, root, true)
+		markUnrecognizedResponsesObject(document, root, true)
 	default:
-		if !hasAnyKey(root, "instructions", "tools", "prompt", "input", "response") {
-			markIncompleteContent(document)
-		} else {
+		markIncomplete(document, IncompleteReason{Kind: IncompleteUnsupportedItemType, ItemType: typeName})
+		if hasAnyKey(root, "instructions", "tools", "prompt", "input", "response") {
 			markUnknownResponsesRequestFields(document, root, true)
 		}
+	}
+	if _, exists := root["input_audio_transcription"]; exists {
+		markIncomplete(document, IncompleteReason{Kind: IncompleteUnextractable, Field: "input_audio_transcription"})
 	}
 	if instructions, exists := root["instructions"]; exists {
 		markContentBearing(document, instructions)
@@ -451,6 +488,7 @@ func extractResponsesRoot(document *Document, root map[string]any) {
 		extractResponsesValue(document, input)
 	}
 	markUnknownResponsesRequestFields(document, response, false)
+	markUnrecognizedResponsesObject(document, response, false)
 }
 
 func extractResponsesSession(document *Document, session map[string]any) {
@@ -464,10 +502,11 @@ func extractResponsesSession(document *Document, session map[string]any) {
 		extractResponsesValue(document, input)
 	}
 	markUnknownResponsesRequestFields(document, session, false)
+	markUnrecognizedResponsesObject(document, session, false)
 }
 
-func markUnknownResponsesRequestFields(document *Document, values map[string]any, envelope bool) {
-	allowed := []string{
+func responsesRequestFields(envelope bool) []string {
+	fields := []string{
 		"background", "context_management", "conversation", "include", "input", "instructions",
 		"max_output_tokens", "max_tool_calls", "metadata", "model", "parallel_tool_calls",
 		"previous_response_id", "prompt", "prompt_cache_key", "prompt_cache_options",
@@ -476,9 +515,20 @@ func markUnknownResponsesRequestFields(document *Document, values map[string]any
 		"tool_choice", "tools", "top_logprobs", "top_p", "truncation", "user",
 	}
 	if envelope {
-		allowed = append(allowed, "type", "event_id", "response")
+		fields = append(fields, "type", "event_id", "response")
 	}
-	markUnknownNonEmptyFields(document, values, allowed...)
+	return fields
+}
+
+func markUnknownResponsesRequestFields(document *Document, values map[string]any, envelope bool) {
+	markUnknownNonEmptyFields(document, values, responsesRequestFields(envelope)...)
+}
+
+func markUnrecognizedResponsesObject(document *Document, values map[string]any, envelope bool) {
+	if !hasNonEmptyValue(values) || hasRecognizedObjectField(values, responsesRequestFields(envelope)) {
+		return
+	}
+	markIncomplete(document, IncompleteReason{Kind: IncompleteUnextractable})
 }
 
 func appendResponsesPrompt(document *Document, value any) {
@@ -541,6 +591,8 @@ func appendResponsesPrompt(document *Document, value any) {
 }
 
 func extractResponsesValue(document *Document, value any) {
+	pop := withIncompletePath(document, "input")
+	defer pop()
 	switch typed := value.(type) {
 	case string:
 		markContentBearing(document, typed)
@@ -549,14 +601,16 @@ func extractResponsesValue(document *Document, value any) {
 		if len(typed) == 0 {
 			return
 		}
-		currentStart := len(typed) - 1
-		if isResponsesToolOutput(typed[currentStart]) {
+		currentStart := responsesCurrentStart(typed)
+		if currentStart < len(typed) && isResponsesToolOutput(typed[currentStart]) {
 			for currentStart > 0 && isResponsesToolOutput(typed[currentStart-1]) {
 				currentStart--
 			}
 		}
 		for index, item := range typed {
+			itemPop := withIncompletePath(document, fmt.Sprintf("[%d]", index))
 			appendResponsesItem(document, item, index >= currentStart)
+			itemPop()
 		}
 	case map[string]any:
 		appendResponsesItem(document, typed, true)
@@ -565,6 +619,18 @@ func extractResponsesValue(document *Document, value any) {
 			markIncompleteContent(document)
 		}
 	}
+}
+
+func responsesCurrentStart(values []any) int {
+	for index := len(values) - 1; index >= 0; index-- {
+		var candidate Document
+		appendResponsesItem(&candidate, values[index], true)
+		normalizeDocument(&candidate)
+		if len(candidate.Segments) > 0 || len(candidate.Images) > 0 || !candidate.Incomplete {
+			return index
+		}
+	}
+	return len(values)
 }
 
 func appendResponsesItem(document *Document, value any, current bool) {
@@ -794,7 +860,11 @@ func appendResponsesItem(document *Document, value any, current bool) {
 		}
 		if _, hasContent := typed["content"]; !hasContent {
 			if _, hasText := typed["text"]; !hasText && responsesItemRequiresExtraction(typeName, role, typed) {
-				markIncompleteContent(document)
+				if typeName != "" {
+					markIncomplete(document, IncompleteReason{Kind: IncompleteUnsupportedItemType, ItemType: typeName})
+				} else {
+					markIncompleteContent(document)
+				}
 			}
 		}
 		if typeName == "output_text" {
@@ -822,7 +892,7 @@ func appendResponsesItem(document *Document, value any, current bool) {
 			if isImageType(typeName) {
 				markUnknownNonEmptyFields(document, typed, "type", "image_url", "url", "file_id", "detail", "source", "data", "media_type", "mime_type", "filename", "text", "content")
 			} else if typeName != "" {
-				markIncompleteContent(document)
+				markIncomplete(document, IncompleteReason{Kind: IncompleteUnsupportedItemType, ItemType: typeName})
 			}
 		}
 	default:
@@ -882,8 +952,8 @@ func extractLiveRoot(document *Document, root map[string]any) {
 	case "response.cancel":
 		markUnknownNonEmptyFields(document, root, "type", "event_id", "response_id")
 	default:
-		// New client event types must be explicitly classified before blocking
-		// audit modes can forward them to the upstream Live control channel.
+		// New client event types remain observable until an adapter classifies
+		// them, but extraction failure alone does not block forwarding.
 		if hasAnyKey(root, "instructions", "tools", "prompt", "input", "input_audio_transcription", "audio") {
 			extractLiveSession(document, root)
 		}
@@ -894,11 +964,13 @@ func extractLiveRoot(document *Document, root map[string]any) {
 func extractLiveSession(document *Document, session map[string]any) {
 	extractLiveSessionFields(document, session)
 	markUnknownLiveSessionFields(document, session, false)
+	markUnrecognizedLiveSessionObject(document, session, false)
 }
 
 func extractLiveResponseCreate(document *Document, root map[string]any) {
 	extractLiveSessionFields(document, root)
 	markUnknownLiveSessionFields(document, root, true)
+	markUnrecognizedLiveSessionObject(document, root, true)
 	responseValue, exists := root["response"]
 	if !exists || !hasNonEmptyValue(responseValue) {
 		return
@@ -936,8 +1008,8 @@ func extractLiveSessionFields(document *Document, session map[string]any) {
 	markKnownStringOrObjectFields(document, session["truncation"], "type", "retention_ratio", "token_limits")
 }
 
-func markUnknownLiveSessionFields(document *Document, session map[string]any, envelope bool) {
-	allowed := []string{
+func liveSessionFields(envelope bool) []string {
+	fields := []string{
 		"type", "model", "instructions", "tools", "tool_choice", "prompt", "input",
 		"audio", "input_audio_format", "output_audio_format", "input_audio_transcription",
 		"turn_detection", "modalities", "output_modalities", "voice", "speed", "temperature",
@@ -945,11 +1017,37 @@ func markUnknownLiveSessionFields(document *Document, session map[string]any, en
 		"reasoning", "tracing", "truncation", "delegation", "conversation", "metadata",
 	}
 	if envelope {
-		allowed = append(allowed, "event_id", "response")
+		fields = append(fields, "event_id", "response")
 	}
-	markUnknownNonEmptyFields(document, session,
-		allowed...,
-	)
+	return fields
+}
+
+func markUnknownLiveSessionFields(document *Document, session map[string]any, envelope bool) {
+	markUnknownNonEmptyFields(document, session, liveSessionFields(envelope)...)
+}
+
+func markUnrecognizedLiveSessionObject(document *Document, session map[string]any, envelope bool) {
+	if !hasNonEmptyValue(session) || hasRecognizedObjectField(session, liveSessionFields(envelope)) {
+		return
+	}
+	markIncomplete(document, IncompleteReason{Kind: IncompleteUnextractable})
+}
+
+func hasRecognizedObjectField(values map[string]any, fields []string) bool {
+	for _, field := range fields {
+		value, exists := values[field]
+		if !exists {
+			continue
+		}
+		// An empty discriminator does not classify an otherwise unknown object.
+		// Other recognized fields count by presence because false, zero, and null
+		// are valid configuration values.
+		if field == "type" && normalizedType(value) == "" {
+			continue
+		}
+		return true
+	}
+	return false
 }
 
 func extractLiveAudio(document *Document, value any) {
@@ -1013,29 +1111,12 @@ func extractLiveTranscription(document *Document, value any) {
 }
 
 func markKnownConfigObjectFields(document *Document, value any, allowed ...string) {
-	if !hasNonEmptyValue(value) {
-		return
-	}
-	object, ok := value.(map[string]any)
-	if !ok {
-		markIncompleteContent(document)
-		return
-	}
-	markUnknownNonEmptyFields(document, object, allowed...)
+	markKnownStringOrObjectFields(document, value, allowed...)
 }
 
-func markKnownStringOrObjectFields(document *Document, value any, allowed ...string) {
-	if !hasNonEmptyValue(value) {
-		return
-	}
-	switch typed := value.(type) {
-	case string:
-		return
-	case map[string]any:
-		markUnknownNonEmptyFields(document, typed, allowed...)
-	default:
-		markIncompleteContent(document)
-	}
+func markKnownStringOrObjectFields(*Document, any, ...string) {
+	// Nested config objects may be strings or maps. Unknown sibling keys are
+	// ignored; missing adapters and unextractable content remain observable.
 }
 
 func extractAlphaSearch(document *Document, root map[string]any) {
@@ -1046,11 +1127,6 @@ func extractAlphaSearch(document *Document, root map[string]any) {
 			markIncompleteContent(document)
 		}
 	} else {
-		for key, value := range commands {
-			if key != "search_query" && hasNonEmptyValue(value) {
-				markIncompleteContent(document)
-			}
-		}
 		queriesValue, queriesExist := commands["search_query"]
 		queries, queriesOK := asSlice(queriesValue)
 		if !queriesOK {
@@ -1355,11 +1431,111 @@ func markContentBearing(document *Document, value any) {
 }
 
 func markIncompleteContent(document *Document) {
+	markIncomplete(document, IncompleteReason{Kind: IncompleteUnextractable})
+}
+
+func withIncompletePath(document *Document, segment string) func() {
+	if document == nil || strings.TrimSpace(segment) == "" {
+		return func() {}
+	}
+	document.incompletePath = append(document.incompletePath, segment)
+	document.incompletePathUsed = true
+	return func() {
+		if document == nil || len(document.incompletePath) == 0 {
+			return
+		}
+		document.incompletePath = document.incompletePath[:len(document.incompletePath)-1]
+	}
+}
+
+func currentIncompletePath(document *Document) string {
+	if document == nil || len(document.incompletePath) == 0 {
+		return ""
+	}
+	return strings.Join(document.incompletePath, ".")
+}
+
+func markIncomplete(document *Document, reason IncompleteReason) {
 	if document == nil {
 		return
 	}
 	document.ContentBearing = true
 	document.Incomplete = true
+	if reason.Kind == "" {
+		reason.Kind = IncompleteUnextractable
+	}
+	if reason.Path == "" && document.incompletePathUsed {
+		reason.Path = currentIncompletePath(document)
+	}
+	if reason.Field != "" {
+		if reason.Path == "" {
+			reason.Path = reason.Field
+		} else if !strings.HasSuffix(reason.Path, "."+reason.Field) && reason.Path != reason.Field {
+			reason.Path = reason.Path + "." + reason.Field
+		}
+	}
+	reason = sanitizeIncompleteReason(reason)
+	for _, existing := range document.IncompleteReasons {
+		if existing.Kind == reason.Kind && existing.Path == reason.Path && existing.Field == reason.Field && existing.ItemType == reason.ItemType {
+			return
+		}
+	}
+	if len(document.IncompleteReasons) >= maxIncompleteReasons {
+		return
+	}
+	document.IncompleteReasons = append(document.IncompleteReasons, reason)
+}
+
+// SanitizeIncompleteReasons returns a bounded copy that is safe to attach to
+// structured logs. Incomplete item types originate in client-controlled JSON.
+func SanitizeIncompleteReasons(reasons []IncompleteReason) []IncompleteReason {
+	if len(reasons) == 0 {
+		return nil
+	}
+	if len(reasons) > maxIncompleteReasons {
+		reasons = reasons[:maxIncompleteReasons]
+	}
+	out := make([]IncompleteReason, 0, len(reasons))
+	for _, reason := range reasons {
+		reason = sanitizeIncompleteReason(reason)
+		if reason.ItemType != "" {
+			reason.ItemType = "unknown_item_type"
+		}
+		out = append(out, reason)
+	}
+	return out
+}
+
+func sanitizeIncompleteReason(reason IncompleteReason) IncompleteReason {
+	switch reason.Kind {
+	case IncompleteUnsupportedItemType, IncompleteUnextractable:
+	default:
+		reason.Kind = IncompleteUnextractable
+	}
+	reason.Path = sanitizeIncompleteIdentifier(reason.Path, maxIncompletePathLength, "unknown_path", true)
+	reason.Field = sanitizeIncompleteIdentifier(reason.Field, maxIncompleteIdentifierLength, "unknown_field", false)
+	reason.ItemType = sanitizeIncompleteIdentifier(reason.ItemType, maxIncompleteIdentifierLength, "unknown_item_type", false)
+	return reason
+}
+
+func sanitizeIncompleteIdentifier(value string, maxLength int, fallback string, allowBrackets bool) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "" {
+		return ""
+	}
+	if len(value) > maxLength {
+		return fallback
+	}
+	for _, char := range value {
+		if char >= 'a' && char <= 'z' || char >= '0' && char <= '9' || char == '_' || char == '-' || char == '.' {
+			continue
+		}
+		if allowBrackets && (char == '[' || char == ']') {
+			continue
+		}
+		return fallback
+	}
+	return value
 }
 
 func contentRequiresExtraction(value any) bool {
@@ -1662,20 +1838,10 @@ func hasNonEmptyValue(value any) bool {
 	}
 }
 
-func markUnknownNonEmptyFields(document *Document, values map[string]any, allowed ...string) {
-	if len(values) == 0 {
-		return
-	}
-	allowedSet := make(map[string]struct{}, len(allowed))
-	for _, key := range allowed {
-		allowedSet[key] = struct{}{}
-	}
-	for key, value := range values {
-		if _, ok := allowedSet[key]; ok || !hasNonEmptyValue(value) {
-			continue
-		}
-		markIncompleteContent(document)
-	}
+func markUnknownNonEmptyFields(*Document, map[string]any, ...string) {
+	// Unknown sibling keys on a recognized object are ignored so both audit
+	// engines continue with extracted text. Unsupported item types and
+	// unextractable content remain observable through markIncomplete.
 }
 
 func sanitizeStructuredValue(value any, mediaContext bool) (any, bool) {

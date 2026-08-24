@@ -12,6 +12,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestExtractPromptSnapshotIgnoresCodexOriginator(t *testing.T) {
+	snapshot, err := ExtractPromptSnapshot(Request{
+		Protocol: "openai_responses",
+		Body:     []byte(`{"originator":"codex_cli_rs","input":[{"type":"message","role":"user","content":"hi"}]}`),
+	})
+	require.NoError(t, err)
+	require.True(t, strings.HasPrefix(snapshot.ScanText, "hi"))
+}
+
 func TestExtractPromptSnapshotProtocols(t *testing.T) {
 	tests := []struct {
 		protocol, body, first string
@@ -233,7 +242,7 @@ func TestResponsesFramesAuditAnyContentAndPreserveStage(t *testing.T) {
 		Protocol: "openai_responses", Stage: "subsequent_turn",
 		Body: []byte(`{"type":"conversation.item.create","event_id":"evt_123"}`),
 	})
-	require.True(t, errors.Is(err, ErrPromptContentExtract))
+	require.True(t, errors.Is(err, ErrNoPromptText))
 }
 
 func TestPromptSnapshotEmptyAndLongUnicodeInput(t *testing.T) {
@@ -279,28 +288,35 @@ func TestPromptSnapshotAuditsCurrentToolOutputsAndSpecializedInputs(t *testing.T
 	}
 }
 
-func TestPromptSnapshotContentBearingUnknownItemFailsExtraction(t *testing.T) {
-	for _, body := range []string{
-		`{"input":[{"type":"future_content","payload":"must add adapter"}]}`,
-		`{"input":[{"type":"message","role":"user","content":"safe extracted text"},{"type":"future_content","payload":"must not be omitted"}]}`,
-		`{"input":[{"type":"local_shell_call","call_id":"c1","action":{"command":"pwd"},"future_payload":"must not be hidden"}]}`,
-		`{"instructions":"safe root text","future_payload":"must not be hidden"}`,
-		`{"type":"session.update","session":{"instructions":"safe session text","future_payload":"must not be hidden"}}`,
-	} {
-		_, err := ExtractBlockingPromptSnapshot(Request{
-			Protocol: "openai_responses",
-			Body:     []byte(body),
-		}, true)
-		require.ErrorIs(t, err, ErrPromptContentExtract)
-	}
-
+func TestPromptSnapshotUnknownItemPassesEmptyAndKeepsExtractedSibling(t *testing.T) {
 	_, err := ExtractBlockingPromptSnapshot(Request{
+		Protocol: "openai_responses",
+		Body:     []byte(`{"input":[{"type":"future_content","payload":"must add adapter"}]}`),
+	}, true)
+	require.ErrorIs(t, err, ErrNoPromptText)
+
+	partial, err := ExtractBlockingPromptSnapshot(Request{
+		Protocol: "openai_responses",
+		Body:     []byte(`{"input":[{"type":"message","role":"user","content":"safe extracted text"},{"type":"future_content","payload":"must not be omitted"}]}`),
+	}, true)
+	require.NoError(t, err)
+	require.Contains(t, partial.ScanText, "safe extracted text")
+	require.NotContains(t, partial.ScanText, "must not be omitted")
+
+	snapshot, err := ExtractBlockingPromptSnapshot(Request{
+		Protocol: "openai_responses",
+		Body:     []byte(`{"input":[{"type":"local_shell_call","call_id":"c1","action":{"command":"pwd"},"future_payload":"must not be hidden"}]}`),
+	}, true)
+	require.NoError(t, err)
+	require.Contains(t, snapshot.ScanText, "pwd")
+
+	snapshot, err = ExtractBlockingPromptSnapshot(Request{
 		Protocol: "openai_live",
 		Body:     []byte(`{"type":"session.update","session":{"instructions":"safe live text","future_payload":"must not be hidden"}}`),
 	}, true)
-	require.ErrorIs(t, err, ErrPromptContentExtract)
+	require.NoError(t, err)
+	require.Contains(t, snapshot.ScanText, "safe live text")
 }
-
 func TestBlockingPromptSnapshotPrioritizesCurrentClientControlledRolesAndKeepsContext(t *testing.T) {
 	tests := []struct {
 		name, protocol, body, priority string

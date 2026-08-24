@@ -159,22 +159,23 @@ prevents platform context or external tool content from being reported as a
 user policy violation. Prompt Audit continues to cover those excluded segments;
 its latest-turn mode treats a current client-submitted `assistant` item as
 untrusted and prioritizes it instead of falling back to an older user message.
-A supported WebSocket control frame is an explicit no-content case only when it
-contains no canonical content fields or unknown non-empty siblings. An envelope
-`type` value never suppresses `input`, `instructions`, or nested
-`response.input` that is actually present.
+A supported WebSocket control frame may produce no audit input. Unknown sibling
+keys, unsupported event/item types, and valid-JSON unrecognized structures pass
+through without an audit-derived block. When the canonical extractor recognizes
+`input`, `instructions`, or nested `response.input`, an envelope `type` value
+does not suppress those extracted segments. An unsupported envelope type is
+still counted and safely logged as an extraction failure while those extracted
+segments remain auditable.
+Non-empty root, nested `response`, and session objects with no recognized field
+are counted and safely logged as extraction failures before they pass through;
+unknown sibling keys on an otherwise recognized object remain ordinary success.
 Direct passthrough runs the audit hook for every client text or binary frame,
 including `conversation.item.create` and `session.update`, before any
-non-`response.create` frame is forwarded. Invalid binary/JSON payloads fail
-closed in blocking mode.
-A recognized content-bearing item that cannot be normalized is observable and
-fails closed whenever a blocking audit mode applies.
-Top-level Responses requests, nested `response` objects, and `session.update`
-session objects reject unknown non-empty siblings as incomplete extraction;
-successfully extracted instructions or input never mask such a sibling.
-Content Moderation reports that extraction failure as HTTP `503` with
-`content_moderation_unavailable`; the coordinator classifies it as
-`unavailable`, rather than a policy block or policy-violation error. Compact
+non-`response.create` frame is forwarded. Unsupported binary/JSON content and
+recognized items that cannot be normalized are logged and pass through unless
+independent transport/basic validation rejects them. Successfully extracted
+sibling content remains auditable. Extraction failure alone never becomes a
+policy block, unavailable decision, HTTP 503, or WebSocket close. Compact
 keepalive output and channel mapping start only after this gate. The audit uses
 an immutable copy of the inbound body so compact normalization and reasoning
 policy rewrites cannot remove content from the audited view.

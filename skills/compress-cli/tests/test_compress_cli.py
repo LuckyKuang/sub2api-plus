@@ -63,31 +63,53 @@ class CompressCliTest(unittest.TestCase):
         errors = self.validate_text(changed)
         self.assert_error_contains(errors, "missing required category 'Security Audit'")
 
-    def test_successful_sibling_cannot_hide_incomplete_extraction(self) -> None:
+    def test_successful_sibling_remains_auditable(self) -> None:
         changed = self.valid_document.replace(
-            "partial/incomplete extraction hidden by successful sibling content",
-            "partial extraction",
+            "Successfully extracted sibling content remains auditable",
+            "Extracted sibling content may be ignored",
         )
         errors = self.validate_text(changed)
         self.assert_error_contains(
             errors,
-            "partial/incomplete extraction hidden by successful sibling content",
+            "Successfully extracted sibling content remains auditable",
         )
 
-    def test_blocking_audit_must_fail_closed(self) -> None:
+    def test_extraction_failure_must_pass_through(self) -> None:
         changed = self.valid_document.replace(
-            "fail closed whenever a blocking audit mode is active",
-            "report an error when possible",
+            "pass through without an audit-derived block",
+            "fail closed whenever blocking mode is active",
         )
         errors = self.validate_text(changed)
         self.assert_error_contains(
             errors,
-            "fail closed whenever a blocking audit mode is active",
+            "pass through without an audit-derived block",
+        )
+
+    def test_extraction_failure_cannot_become_unavailable(self) -> None:
+        changed = self.valid_document.replace(
+            "must not become policy violations, unavailable decisions, HTTP 503 responses, or WebSocket closes",
+            "may become an unavailable decision",
+        )
+        errors = self.validate_text(changed)
+        self.assert_error_contains(
+            errors,
+            "must not become policy violations, unavailable decisions",
+        )
+
+    def test_audit_exceptions_require_safe_structured_logs(self) -> None:
+        changed = self.valid_document.replace(
+            "Every extraction, evaluation, or audit-dependency exception must emit a structured log",
+            "Audit exceptions may be logged",
+        )
+        errors = self.validate_text(changed)
+        self.assert_error_contains(
+            errors,
+            "Every extraction, evaluation, or audit-dependency exception must emit a structured log",
         )
 
     def test_account_session_routing_cannot_bypass_audit(self) -> None:
         changed = self.valid_document.replace(
-            "routing, retries, probes, protocol adapters, transforms, request classification, and upstream merges must not bypass or weaken this boundary",
+            "routing, retries, probes, protocol adapters, transforms, request classification, and upstream merges must not bypass this boundary",
             "routing behavior is implementation-defined",
         )
         errors = self.validate_text(changed)

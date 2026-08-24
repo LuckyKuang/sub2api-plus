@@ -508,14 +508,13 @@ func TestContentModerationCheck_PreBlockKeywordHitSkipsUpstreamCall(t *testing.T
 	require.Equal(t, "secret-token", logs[0].MatchedKeyword, "blocked log must record which keyword was hit")
 }
 
-func TestContentModerationCheck_ContentBearingExtractionFailureIsModeAware(t *testing.T) {
+func TestContentModerationCheck_ContentBearingExtractionFailureAlwaysAllows(t *testing.T) {
 	for _, test := range []struct {
-		name        string
-		mode        string
-		wantBlocked bool
+		name string
+		mode string
 	}{
-		{name: "pre-block fails closed", mode: ContentModerationModePreBlock, wantBlocked: true},
-		{name: "observe records failure and allows", mode: ContentModerationModeObserve, wantBlocked: false},
+		{name: "pre-block", mode: ContentModerationModePreBlock},
+		{name: "observe", mode: ContentModerationModeObserve},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			cfg := defaultContentModerationConfig()
@@ -534,19 +533,12 @@ func TestContentModerationCheck_ContentBearingExtractionFailureIsModeAware(t *te
 			decision, err := svc.Check(context.Background(), ContentModerationCheckInput{
 				Protocol: ContentModerationProtocolOpenAIResponses,
 				Endpoint: "/v1/responses",
-				Body:     []byte(`{"input":[{"type":"message","role":"user","content":"visible user text","future_payload":"missing adapter"}]}`),
+				Body:     []byte(`{"input":[{"type":"future_content","payload":"missing adapter"}]}`),
 			})
 			require.NoError(t, err)
-			require.Equal(t, test.wantBlocked, decision.Blocked)
-			if test.wantBlocked {
-				require.False(t, decision.Allowed)
-				require.Equal(t, http.StatusServiceUnavailable, decision.StatusCode)
-				require.Equal(t, ContentModerationActionError, decision.Action)
-				require.Equal(t, ContentModerationErrorCodeUnavailable, decision.ErrorCode)
-			} else {
-				require.True(t, decision.Allowed)
-				require.Empty(t, decision.ErrorCode)
-			}
+			require.False(t, decision.Blocked)
+			require.True(t, decision.Allowed)
+			require.Empty(t, decision.ErrorCode)
 			status, err := svc.GetStatus(context.Background())
 			require.NoError(t, err)
 			require.Equal(t, int64(1), status.ExtractionAttempted)
@@ -555,7 +547,139 @@ func TestContentModerationCheck_ContentBearingExtractionFailureIsModeAware(t *te
 	}
 }
 
-func TestContentModerationCheck_SessionUnknownSiblingFailsClosed(t *testing.T) {
+func TestContentModerationCheck_AuditsExtractedSiblingDespiteIncompleteContent(t *testing.T) {
+	cfg := defaultContentModerationConfig()
+	cfg.Enabled = true
+	cfg.Mode = ContentModerationModePreBlock
+	cfg.BlockedKeywords = []string{"audit-this-sibling"}
+	cfg.KeywordBlockingMode = ContentModerationKeywordModeKeywordOnly
+	rawCfg, err := json.Marshal(cfg)
+	require.NoError(t, err)
+	svc := NewContentModerationService(
+		&contentModerationTestSettingRepo{values: map[string]string{
+			SettingKeyRiskControlEnabled:      "true",
+			SettingKeyContentModerationConfig: string(rawCfg),
+		}},
+		&contentModerationTestRepo{}, nil, nil, nil, nil, nil, nil,
+	)
+
+	decision, err := svc.Check(context.Background(), ContentModerationCheckInput{
+		Protocol: ContentModerationProtocolOpenAIResponses,
+		Endpoint: "/v1/responses",
+		Body: []byte(`{"input":[` +
+			`{"type":"message","role":"user","content":"audit-this-sibling"},` +
+			`{"type":"future_content","payload":"missing adapter"}]}`),
+	})
+	require.NoError(t, err)
+	require.True(t, decision.Blocked)
+	require.Equal(t, ContentModerationActionKeywordBlock, decision.Action)
+	status, err := svc.GetStatus(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, int64(1), status.ExtractionFailed)
+	require.Zero(t, status.ExtractionSucceeded)
+}
+
+func TestContentModerationExtractionFailureLogIsSafeAndComplete(t *testing.T) {
+	const canary = "CONTENT_MODERATION_EXTRACTION_CANARY_DO_NOT_LOG"
+	var output bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&output, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	cfg := defaultContentModerationConfig()
+	cfg.Enabled = true
+	cfg.Mode = ContentModerationModePreBlock
+	rawCfg, err := json.Marshal(cfg)
+	require.NoError(t, err)
+	svc := NewContentModerationService(
+		&contentModerationTestSettingRepo{values: map[string]string{
+			SettingKeyRiskControlEnabled:      "true",
+			SettingKeyContentModerationConfig: string(rawCfg),
+		}},
+		&contentModerationTestRepo{}, nil, nil, nil, nil, nil, nil,
+	)
+	typeValue := "moderation_canary_secret"
+	body := []byte(`{"input":[{"type":"` + typeValue + `","payload":"` + canary + `"}]}`)
+	decision, err := svc.Check(context.Background(), ContentModerationCheckInput{
+		RequestID: "req-safe-log", Protocol: ContentModerationProtocolOpenAIResponses,
+		Endpoint: "/v1/responses", Stage: "subsequent_turn", Body: body,
+	})
+	require.NoError(t, err)
+	require.True(t, decision.Allowed)
+
+	logs := output.String()
+	require.Contains(t, logs, "content_moderation.extraction_failed")
+	require.Contains(t, logs, "req-safe-log")
+	require.Contains(t, logs, "/v1/responses")
+	require.Contains(t, logs, "openai_responses")
+	require.Contains(t, logs, "subsequent_turn")
+	require.Contains(t, logs, `"body_bytes":`)
+	require.Contains(t, logs, "incomplete_content")
+	require.Contains(t, logs, "unknown_item_type")
+	require.NotContains(t, logs, typeValue)
+	require.NotContains(t, logs, canary)
+}
+
+func TestContentModerationValidUnrecognizedJSONIsLoggedAsExtractionFailure(t *testing.T) {
+	var output bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&output, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	cfg := defaultContentModerationConfig()
+	cfg.Enabled = true
+	cfg.Mode = ContentModerationModePreBlock
+	rawCfg, err := json.Marshal(cfg)
+	require.NoError(t, err)
+	svc := NewContentModerationService(
+		&contentModerationTestSettingRepo{values: map[string]string{
+			SettingKeyRiskControlEnabled:      "true",
+			SettingKeyContentModerationConfig: string(rawCfg),
+		}},
+		&contentModerationTestRepo{}, nil, nil, nil, nil, nil, nil,
+	)
+	body := []byte(`{"future_payload":{"shape":"unrecognized"}}`)
+	for _, protocol := range []string{ContentModerationProtocolOpenAIResponses, ContentModerationProtocolOpenAILive} {
+		decision, checkErr := svc.Check(context.Background(), ContentModerationCheckInput{
+			RequestID: "req-unrecognized", Endpoint: "/v1/compat",
+			Protocol: protocol, Stage: "http", Body: body,
+		})
+		require.NoError(t, checkErr)
+		require.True(t, decision.Allowed)
+	}
+	require.Contains(t, output.String(), "content_moderation.extraction_failed")
+	require.Contains(t, output.String(), "incomplete_content")
+	status, err := svc.GetStatus(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, int64(2), status.ExtractionFailed)
+	require.Zero(t, status.ExtractionEmpty)
+}
+
+func TestContentModerationExceptionAttrsExcludeRawUserAndErrorFields(t *testing.T) {
+	const emailCanary = "audit-canary@example.test"
+	var output bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&output, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	userID := int64(7)
+	log := &ContentModerationLog{
+		RequestID: "req-dependency", UserID: &userID, UserEmail: emailCanary,
+		Endpoint: "/v1/responses", Protocol: ContentModerationProtocolOpenAIResponses,
+		Stage: "subsequent_turn", BodyBytes: 123,
+	}
+	slog.Warn("content_moderation.test_dependency_failed", contentModerationExceptionAttrs(log, "dependency_failed", "dependency_error")...)
+
+	text := output.String()
+	for _, expected := range []string{"req-dependency", "/v1/responses", "openai_responses", "subsequent_turn", "dependency_failed", "dependency_error"} {
+		require.Contains(t, text, expected)
+	}
+	require.NotContains(t, text, emailCanary)
+	require.NotContains(t, text, `"error":`)
+	require.NotContains(t, text, `"recover":`)
+}
+
+func TestContentModerationCheck_SessionUnknownSiblingIsAllowed(t *testing.T) {
 	for _, protocol := range []string{ContentModerationProtocolOpenAIResponses, ContentModerationProtocolOpenAILive} {
 		t.Run(protocol, func(t *testing.T) {
 			cfg := defaultContentModerationConfig()
@@ -577,16 +701,13 @@ func TestContentModerationCheck_SessionUnknownSiblingFailsClosed(t *testing.T) {
 				Body:     []byte(`{"type":"session.update","session":{"instructions":"visible session content","future_payload":"must not be hidden"}}`),
 			})
 			require.NoError(t, checkErr)
-			require.True(t, decision.Blocked)
-			require.False(t, decision.Allowed)
-			require.Equal(t, http.StatusServiceUnavailable, decision.StatusCode)
-			require.Equal(t, ContentModerationActionError, decision.Action)
-			require.Equal(t, ContentModerationErrorCodeUnavailable, decision.ErrorCode)
+			require.False(t, decision.Blocked)
+			require.True(t, decision.Allowed)
 		})
 	}
 }
 
-func TestContentModerationCheck_InvalidJSONStillFailsClosedInPreBlock(t *testing.T) {
+func TestContentModerationCheck_InvalidJSONAllowsAtAuditLayer(t *testing.T) {
 	cfg := defaultContentModerationConfig()
 	cfg.Enabled = true
 	cfg.Mode = ContentModerationModePreBlock
@@ -606,9 +727,9 @@ func TestContentModerationCheck_InvalidJSONStillFailsClosedInPreBlock(t *testing
 		Body:     []byte(`{"input":`),
 	})
 	require.NoError(t, err)
-	require.True(t, decision.Blocked)
-	require.Equal(t, http.StatusServiceUnavailable, decision.StatusCode)
-	require.Equal(t, ContentModerationErrorCodeUnavailable, decision.ErrorCode)
+	require.True(t, decision.Allowed)
+	require.False(t, decision.Blocked)
+	require.Empty(t, decision.ErrorCode)
 }
 
 func TestContentModerationCheck_KeywordsIgnoredInObserveMode(t *testing.T) {

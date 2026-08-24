@@ -1,39 +1,36 @@
-Sub2API Plus v0.1.178+custom.003
+Sub2API Plus v0.1.178+custom.004
 
 ## Highlights
 
-- Restore Content Moderation to current direct-user text and images so a
-  policy violation is attributed only to a user submission, not to platform
-  or tool content.
-- Keep Prompt Audit on the same canonical extraction document, including
-  instructions, tool traffic, and assistant or model items, so the security
-  boundary stays fully visible.
-- Treat incomplete extraction as a failure for both engines before either
-  selection policy is applied.
+- Align Content Moderation and Prompt Audit extraction behavior with
+  `v0.1.177+custom.003`: incomplete or unrecognized content is observable and
+  passes through without an audit-derived block.
+- Preserve extracted sibling content for independent policy evaluation across
+  HTTP, Responses WebSocket, and Live Sideband request paths.
+- Add safe structured logs for extraction, worker, queue, persistence, and
+  runtime audit exceptions without exposing request content or raw errors.
 
 ## Changed
 
-- Select Chat and Anthropic user-role content, plus the protocol-defined
-  roleless user forms in Responses, Live, and Gemini, as Content Moderation
-  inputs. Direct Alpha Search queries, embedding strings, and media prompts
-  remain eligible.
-- Exclude instructions, system or developer context, reusable prompt
-  variables, assistant or model messages, reasoning, tool definitions,
-  calls, results, approval responses, and tool-produced images from Content
-  Moderation while leaving those segments available to Prompt Audit.
-- Keep the official v0.1.178 baseline and Plus customizations; this
-  iteration does not change the embedded Codex identity precedence.
+- Use one canonical extraction result for both audit engines, with bounded and
+  sanitized incomplete-reason diagnostics.
+- Treat recognized-object unknown sibling fields as compatible extensions,
+  while unknown item types, frames, and wholly unrecognized structures are
+  counted and logged before pass-through.
+- Keep the official v0.1.178 baseline and existing Codex identity precedence.
 
 ## Fixed
 
-- Restore the `v0.1.177+custom.003` user-attribution rule that a later
-  shared-extractor expansion had broadened beyond direct-user content.
-- Satisfy audit-content lint after the extraction-scope change.
+- Prevent extraction failures from being converted into policy blocks,
+  unavailable decisions, HTTP 503 responses, or WebSocket closes.
+- Ensure an unsupported frame carrying recognized content remains observable
+  while its extracted content can still trigger an independent policy block.
 
 ## Compatibility and migration
 
-- None. Existing data remains compatible and this iteration adds no database
-  migrations.
+- No database migrations or configuration changes. Clients can continue to
+  send compatible extension fields and unknown protocol frames; those requests
+  now retain the established pass-through behavior.
 
 ## Known issues
 

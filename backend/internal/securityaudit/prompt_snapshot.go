@@ -12,9 +12,16 @@ import (
 )
 
 var (
-	ErrNoPromptText         = errors.New("prompt audit request contains no user text")
-	ErrPromptContentExtract = errors.New("prompt audit content-bearing request produced no auditable text")
+	ErrNoPromptText = errors.New("prompt audit request contains no user text")
+)
 
+type promptExtractionDiagnostic struct {
+	Failed    bool
+	ErrorCode string
+	Reasons   []auditcontent.IncompleteReason
+}
+
+var (
 	bearerPattern = regexp.MustCompile(`(?i)\bBearer\s+[A-Za-z0-9._~+\-/]+=*`)
 	apiKeyPattern = regexp.MustCompile(`(?i)\b(sk|rk|pk|api[_-]?key|token|secret|password)[-_:=\s]+[A-Za-z0-9._~+\-/]{8,}`)
 	canaryPattern = regexp.MustCompile(`(?i)([A-Z]+_CANARY_)[A-Za-z0-9_-]+`)
@@ -34,23 +41,29 @@ type promptSegment struct {
 }
 
 func ExtractPromptSnapshot(req Request) (PromptSnapshot, error) {
-	return extractPromptSnapshot(req, false)
+	snapshot, _, err := extractPromptSnapshotWithDiagnostics(req, false)
+	return snapshot, err
 }
 
 // ExtractBlockingPromptSnapshot builds the narrow, low-latency blocking input
 // when configured. Asynchronous auditing always uses ExtractPromptSnapshot so
 // the complete client-controlled transcript is retained for review.
 func ExtractBlockingPromptSnapshot(req Request, latestTurnOnly bool) (PromptSnapshot, error) {
-	return extractPromptSnapshot(req, latestTurnOnly)
+	snapshot, _, err := extractPromptSnapshotWithDiagnostics(req, latestTurnOnly)
+	return snapshot, err
 }
 
-func extractPromptSnapshot(req Request, latestTurnOnly bool) (PromptSnapshot, error) {
+func extractPromptSnapshotWithDiagnostics(req Request, latestTurnOnly bool) (PromptSnapshot, promptExtractionDiagnostic, error) {
 	document, err := auditcontent.Extract(req.Protocol, req.Body)
 	if err != nil {
-		return PromptSnapshot{}, errors.New("prompt audit request JSON is invalid")
+		return PromptSnapshot{}, promptExtractionDiagnostic{Failed: true, ErrorCode: "invalid_json"}, errors.New("prompt audit request JSON is invalid")
 	}
+	diagnostic := promptExtractionDiagnostic{}
 	if document.Incomplete {
-		return PromptSnapshot{}, ErrPromptContentExtract
+		diagnostic = promptExtractionDiagnostic{
+			Failed: true, ErrorCode: "incomplete_content",
+			Reasons: auditcontent.SanitizeIncompleteReasons(document.IncompleteReasons),
+		}
 	}
 	extracted := promptSegmentsFromAuditContent(document)
 	segments := normalizeSegmentsLatestUserFirst(extracted)
@@ -58,10 +71,7 @@ func extractPromptSnapshot(req Request, latestTurnOnly bool) (PromptSnapshot, er
 		segments = blockingSegmentsLatestUserAndPreviousOutput(extracted)
 	}
 	if len(segments) == 0 {
-		if document.ContentBearing && len(document.Images) == 0 {
-			return PromptSnapshot{}, ErrPromptContentExtract
-		}
-		return PromptSnapshot{}, ErrNoPromptText
+		return PromptSnapshot{}, diagnostic, ErrNoPromptText
 	}
 	scanText, metadataText := buildPrioritizedScanText(segments)
 	digest := sha256.Sum256([]byte(metadataText))
@@ -77,8 +87,8 @@ func extractPromptSnapshot(req Request, latestTurnOnly bool) (PromptSnapshot, er
 		PromptHash: hex.EncodeToString(digest[:]), RedactedPreview: BuildPromptPreview(metadataText, DefaultPromptPreviewMaxRunes),
 		FullPrompt:   BuildFullPrompt(metadataText, DefaultFullPromptMaxRunes),
 		PromptLength: utf8.RuneCountInString(metadataText), MessageCount: len(segments), Stage: stage,
-		ScanText: scanText,
-	}, nil
+		ScanText: scanText, BodyBytes: len(req.Body),
+	}, diagnostic, nil
 }
 
 func promptSegmentsFromAuditContent(document auditcontent.Document) []promptSegment {

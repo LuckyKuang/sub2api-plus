@@ -151,16 +151,24 @@ func TestExtractClassifiesControlAndUnextractableContent(t *testing.T) {
 	require.True(t, malformedSearch.Incomplete)
 	require.Empty(t, malformedSearch.Segments)
 
+	extraCommand, err := Extract("openai_alpha_search", []byte(`{"commands":{"search_query":[{"q":"OpenAI news"}],"foo":"bar"}}`))
+	require.NoError(t, err)
+	require.False(t, extraCommand.Incomplete)
+	require.Equal(t, []string{"OpenAI news"}, segmentTexts(extraCommand.Segments))
+
 	httpTypeSpoof, err := Extract("openai_responses", []byte(`{"type":"future.control","input":"must still be audited"}`))
 	require.NoError(t, err)
 	require.Equal(t, []string{"must still be audited"}, segmentTexts(httpTypeSpoof.Segments))
-	require.False(t, httpTypeSpoof.Incomplete)
+	require.True(t, httpTypeSpoof.Incomplete)
+	require.Equal(t, IncompleteUnsupportedItemType, httpTypeSpoof.IncompleteReasons[0].Kind)
 
 	partial, err := Extract("openai_responses", []byte(`{"input":[{"type":"message","role":"user","content":"safe extracted text"},{"type":"future_content","payload":"must not be omitted"}]}`))
 	require.NoError(t, err)
 	require.Equal(t, []string{"safe extracted text"}, segmentTexts(partial.Segments))
 	require.True(t, partial.ContentBearing)
 	require.True(t, partial.Incomplete)
+	require.Equal(t, IncompleteUnsupportedItemType, partial.IncompleteReasons[0].Kind)
+	require.Equal(t, []string{"safe extracted text"}, segmentTexts(currentSegments(partial)))
 }
 
 func TestExtractResponsesReusablePromptVariables(t *testing.T) {
@@ -223,26 +231,25 @@ func TestExtractResponsesOfficialToolSearchOutputAuditsDynamicTools(t *testing.T
 	require.Equal(t, []Source{SourceToolDefinition}, segmentSources(document.Segments))
 }
 
-func TestExtractKnownResponsesAndLiveTypesRejectUnknownContentFields(t *testing.T) {
+func TestExtractRecognizedResponsesAndLiveObjectsIgnoreUnknownSiblingFields(t *testing.T) {
 	responses, err := Extract("openai_responses", []byte(`{"input":[{"type":"local_shell_call","call_id":"c1","action":{"command":"pwd"},"future_payload":"must not be hidden"}]}`))
 	require.NoError(t, err)
 	require.Contains(t, strings.Join(segmentTexts(responses.Segments), "\n"), "pwd")
-	require.True(t, responses.Incomplete)
+	require.False(t, responses.Incomplete)
 
 	live, err := Extract("openai_live", []byte(`{"type":"response.cancel","payload":"must not be hidden"}`))
 	require.NoError(t, err)
-	require.True(t, live.ContentBearing)
-	require.True(t, live.Incomplete)
+	require.False(t, live.Incomplete)
 
 	responsesControl, err := Extract("openai_responses", []byte(`{"type":"response.cancel","payload":"must not be hidden"}`))
 	require.NoError(t, err)
-	require.True(t, responsesControl.ContentBearing)
-	require.True(t, responsesControl.Incomplete)
+	require.False(t, responsesControl.Incomplete)
 
 	responsesUnknown, err := Extract("openai_responses", []byte(`{"type":"future.client.event","payload":"must be classified"}`))
 	require.NoError(t, err)
 	require.True(t, responsesUnknown.ContentBearing)
 	require.True(t, responsesUnknown.Incomplete)
+	require.Equal(t, IncompleteUnsupportedItemType, responsesUnknown.IncompleteReasons[0].Kind)
 
 	conversation, err := Extract("openai_responses", []byte(`{"type":"conversation.item.create","item":{"type":"message","role":"user","content":"sideband content"}}`))
 	require.NoError(t, err)
@@ -259,16 +266,15 @@ func TestExtractKnownResponsesAndLiveTypesRejectUnknownContentFields(t *testing.
 		require.NoError(t, extractErr)
 		require.Equal(t, []string{"visible session content"}, segmentTexts(unknownSession.Segments))
 		require.True(t, unknownSession.ContentBearing)
-		require.True(t, unknownSession.Incomplete, protocol)
+		require.False(t, unknownSession.Incomplete, protocol)
 	}
 
 	legacyTranscription, err := Extract("openai_live", []byte(`{"type":"session.update","session":{"input_audio_transcription":{"prompt":"visible transcription context","future_payload":"must not be hidden"}}}`))
 	require.NoError(t, err)
 	require.Equal(t, []string{"visible transcription context"}, segmentTexts(legacyTranscription.Segments))
-	require.True(t, legacyTranscription.Incomplete)
+	require.False(t, legacyTranscription.Incomplete)
 }
-
-func TestExtractResponsesRequestObjectsRejectUnknownSiblingFields(t *testing.T) {
+func TestExtractResponsesRequestObjectsIgnoreUnknownSiblingFields(t *testing.T) {
 	for _, body := range []string{
 		`{"model":"gpt-test","instructions":"visible root content","future_payload":"must not be hidden"}`,
 		`{"type":"response.create","response":{"model":"gpt-test","input":"visible nested content","future_payload":"must not be hidden"}}`,
@@ -276,8 +282,44 @@ func TestExtractResponsesRequestObjectsRejectUnknownSiblingFields(t *testing.T) 
 		document, err := Extract("openai_responses", []byte(body))
 		require.NoError(t, err)
 		require.True(t, document.ContentBearing)
-		require.True(t, document.Incomplete)
+		require.False(t, document.Incomplete)
 	}
+}
+
+func TestExtractResponsesUnrecognizedNonEmptyObjectsAreObservable(t *testing.T) {
+	for _, test := range []struct {
+		protocol string
+		body     string
+	}{
+		{protocol: "openai_responses", body: `{"future_payload":{"shape":"unrecognized"}}`},
+		{protocol: "openai_responses", body: `{"type":"","future_payload":{"shape":"unrecognized"}}`},
+		{protocol: "openai_responses", body: `{"response":{"future_payload":{"shape":"unrecognized"}}}`},
+		{protocol: "openai_responses", body: `{"type":"session.update","session":{"future_payload":{"shape":"unrecognized"}}}`},
+		{protocol: "openai_live", body: `{"future_payload":{"shape":"unrecognized"}}`},
+		{protocol: "openai_live", body: `{"type":"","future_payload":{"shape":"unrecognized"}}`},
+		{protocol: "openai_live", body: `{"type":"session.update","session":{"future_payload":{"shape":"unrecognized"}}}`},
+	} {
+		document, err := Extract(test.protocol, []byte(test.body))
+		require.NoError(t, err)
+		require.True(t, document.ContentBearing)
+		require.True(t, document.Incomplete)
+		require.Empty(t, document.Segments)
+		require.Equal(t, IncompleteUnextractable, document.IncompleteReasons[0].Kind)
+	}
+
+	metadata, err := Extract("openai_responses", []byte(`{"model":"gpt-test","future_payload":{"shape":"ignored sibling"}}`))
+	require.NoError(t, err)
+	require.False(t, metadata.Incomplete)
+	liveMetadata, err := Extract("openai_live", []byte(`{"model":"gpt-live-test","future_payload":{"shape":"ignored sibling"}}`))
+	require.NoError(t, err)
+	require.False(t, liveMetadata.Incomplete)
+}
+
+func TestExtractResponsesCreateWithAudioOutputIsComplete(t *testing.T) {
+	document, err := Extract("openai_responses", []byte(`{"type":"response.create","instructions":"inspect safely","input":"nested turn","audio":{"output":{"voice":"marin"}}}`))
+	require.NoError(t, err)
+	require.False(t, document.Incomplete)
+	require.Equal(t, []string{"inspect safely", "nested turn"}, segmentTexts(document.Segments))
 }
 
 func TestLiveInitialSessionCannotSucceedUnderResponsesAdapter(t *testing.T) {
@@ -291,10 +333,10 @@ func TestLiveInitialSessionCannotSucceedUnderResponsesAdapter(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{"visible instructions"}, segmentTexts(document.Segments))
 	require.True(t, document.ContentBearing)
-	require.True(t, document.Incomplete, "a protocol regression must fail closed instead of silently omitting transcription context")
+	require.True(t, document.Incomplete, "a protocol regression must remain observable instead of silently omitting transcription context")
 }
 
-func TestExtractKnownMessageAndContentBlocksRejectUnknownSiblingFields(t *testing.T) {
+func TestExtractKnownMessageAndContentBlocksIgnoreUnknownSiblingFields(t *testing.T) {
 	for _, test := range []struct {
 		protocol string
 		body     string
@@ -307,7 +349,82 @@ func TestExtractKnownMessageAndContentBlocksRejectUnknownSiblingFields(t *testin
 		document, err := Extract(test.protocol, []byte(test.body))
 		require.NoError(t, err)
 		require.True(t, document.ContentBearing)
-		require.True(t, document.Incomplete)
+		require.False(t, document.Incomplete)
+	}
+}
+
+func TestExtractRecordsIncompleteReasonsWithoutValues(t *testing.T) {
+	document, err := Extract("openai_responses", []byte(`{"input":[{"type":"message","role":"user","content":"visible user text","foo":"bar"}]}`))
+	require.NoError(t, err)
+	require.False(t, document.Incomplete)
+	require.Equal(t, []string{"visible user text"}, segmentTexts(document.Segments))
+	require.Empty(t, document.IncompleteReasons)
+
+	unsupported, err := Extract("openai_responses", []byte(`{"input":[{"type":"future_content","payload":"must add adapter"}]}`))
+	require.NoError(t, err)
+	require.True(t, unsupported.Incomplete)
+	require.NotEmpty(t, unsupported.IncompleteReasons)
+	require.Equal(t, IncompleteUnsupportedItemType, unsupported.IncompleteReasons[0].Kind)
+	require.Equal(t, "future_content", unsupported.IncompleteReasons[0].ItemType)
+	require.NotContains(t, unsupported.IncompleteReasons[0].ItemType, "must add adapter")
+}
+
+func TestExtractSanitizesAttackerControlledIncompleteReasonIdentifiers(t *testing.T) {
+	const canary = "EXTRACTION_REASON_CANARY_DO_NOT_LOG"
+	typeValue := strings.Repeat("future_", 20) + canary
+	document, err := Extract("openai_responses", []byte(`{"input":[{"type":"`+typeValue+`","payload":"secret"}]}`))
+	require.NoError(t, err)
+	require.True(t, document.Incomplete)
+	require.Len(t, document.IncompleteReasons, 1)
+	require.Equal(t, "unknown_item_type", document.IncompleteReasons[0].ItemType)
+	require.NotContains(t, document.IncompleteReasons[0].ItemType, canary)
+
+	shortSecret := "secret_canary_token"
+	safe := SanitizeIncompleteReasons([]IncompleteReason{{Kind: IncompleteUnsupportedItemType, ItemType: shortSecret}})
+	require.Equal(t, "unknown_item_type", safe[0].ItemType)
+	require.NotContains(t, safe[0].ItemType, shortSecret)
+}
+
+func TestExtractIgnoresKnownClientMetadataWithoutFailingClosed(t *testing.T) {
+	tests := []struct {
+		name     string
+		protocol string
+		body     string
+		want     []string
+	}{
+		{
+			name: "responses originator", protocol: "openai_responses",
+			body: `{"model":"gpt-test","originator":"codex_cli_rs","input":[{"type":"message","role":"user","content":"hi"}]}`,
+			want: []string{"hi"},
+		},
+		{
+			name: "responses message cache_control", protocol: "openai_responses",
+			body: `{"input":[{"type":"message","role":"user","content":"hi","cache_control":{"type":"ephemeral"}}]}`,
+			want: []string{"hi"},
+		},
+		{
+			name: "responses input_text cache_control", protocol: "openai_responses",
+			body: `{"input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"hi","cache_control":{"type":"ephemeral"}}]}]}`,
+			want: []string{"hi"},
+		},
+		{
+			name: "chat cache_control", protocol: "openai_chat_completions",
+			body: `{"messages":[{"role":"user","content":"hi","cache_control":{"type":"ephemeral"}}]}`,
+			want: []string{"hi"},
+		},
+		{
+			name: "anthropic cache_control", protocol: "anthropic_messages",
+			body: `{"messages":[{"role":"user","content":[{"type":"text","text":"hi","cache_control":{"type":"ephemeral"}}]}]}`,
+			want: []string{"hi"},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			document, err := Extract(test.protocol, []byte(test.body))
+			require.NoError(t, err)
+			require.False(t, document.Incomplete)
+			require.Equal(t, test.want, segmentTexts(document.Segments))
+		})
 	}
 }
 

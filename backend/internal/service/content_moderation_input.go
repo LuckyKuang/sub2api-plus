@@ -13,14 +13,14 @@ func ExtractContentModerationText(protocol string, body []byte) string {
 }
 
 func ExtractContentModerationInput(protocol string, body []byte) ContentModerationInput {
-	input, _, _ := extractContentModerationInput(protocol, body)
+	input, _, _, _ := extractContentModerationInput(protocol, body)
 	return input
 }
 
-func extractContentModerationInput(protocol string, body []byte) (ContentModerationInput, bool, error) {
+func extractContentModerationInput(protocol string, body []byte) (ContentModerationInput, bool, []auditcontent.IncompleteReason, error) {
 	document, err := auditcontent.Extract(protocol, body)
 	if err != nil {
-		return ContentModerationInput{}, false, err
+		return ContentModerationInput{}, false, nil, err
 	}
 	var parts []string
 	for _, segment := range document.Segments {
@@ -44,9 +44,9 @@ func extractContentModerationInput(protocol string, body []byte) (ContentModerat
 	}
 	out.Normalize()
 	if document.Incomplete {
-		return out, true, auditcontent.ErrIncompleteContent
+		return out, true, auditcontent.SanitizeIncompleteReasons(document.IncompleteReasons), nil
 	}
-	return out, !out.IsEmpty(), nil
+	return out, !out.IsEmpty(), nil, nil
 }
 
 func isModerationDirectUser(protocol, role string, source auditcontent.Source, current bool) bool {

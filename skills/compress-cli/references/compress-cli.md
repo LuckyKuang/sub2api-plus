@@ -23,21 +23,30 @@ does not use npm-only, Maven, or Spring Boot contributor workflows.
 
 ## Protected Semantics
 
-Treat `Security Audit` and `Codex Identity` as immutable, same-priority
-security rules. Compression must retain the following behavior:
+Treat `Security Audit` and `Codex Identity` as same-priority security rules.
+Compression must retain the following behavior unless an explicit policy
+change updates this reference, the validator, its tests, and the linked source:
 
-- Every content-bearing HTTP or WebSocket request or turn is classified and
-  audited after authentication/basic validation and before account selection,
-  billing, concurrency acquisition, upstream writes, or other side effects.
+- Every accepted HTTP or WebSocket request or turn enters the audit boundary
+  after authentication/basic validation and before account selection, billing,
+  concurrency acquisition, upstream writes, or other side effects.
 - API-key or OAuth account type, session affinity, routing, retries, probes,
   protocol adapters, transformations, classification, and upstream merges
   cannot bypass the audit boundary.
 - Content Moderation and Prompt Audit consume the same canonical extraction
-  contract. Unknown or partially extracted content remains observable and
-  fails closed whenever a blocking audit mode is active, even when a sibling
-  field was extracted successfully.
+  contract. In compatibility with `v0.1.177+custom.003`, unknown item types,
+  unknown Responses/Live frames, unknown sibling fields, valid-JSON
+  unrecognized structures, and other incomplete or unextractable content pass
+  through without an audit-derived block. Successfully extracted sibling
+  content remains auditable.
+- Extraction failures cannot become policy violations, unavailable decisions,
+  HTTP 503 responses, or WebSocket closes. Every extraction, evaluation, or
+  audit-dependency exception emits a structured log with request ID, endpoint,
+  protocol, stage, a stable error code/reason, and available byte counts,
+  without raw content, credentials, or unsanitized user fields. Invalid syntax
+  remains the endpoint basic-validation responsibility.
 - Endpoint or payload changes update the security-audit coverage document and
-  semantic, transport, account-type, and side-effect-order tests.
+  semantic, transport, account-type, pass-through, and side-effect-order tests.
 - Codex outbound identity keeps the credential-owning account, valid global
   setting, and compiled default precedence. Header or request paths cannot
   bypass it, and identity changes update the complete outbound-path test set.
@@ -59,5 +68,5 @@ rewrite the document and does not claim that automated checks replace semantic
 review of the diff.
 
 When a legitimate policy change alters a protected anchor, update the rule,
-validator, tests, and linked source in the same change. Do not relax the
-validator first merely to make a changed document pass.
+validator, tests, this reference, and the linked source in the same change. Do
+not relax the validator first merely to make a changed document pass.

@@ -77,7 +77,7 @@ func TestCoordinatorModesAndPriority(t *testing.T) {
 	}
 }
 
-func TestCoordinatorClassifiesLegacyExtractionFailureAsUnavailable(t *testing.T) {
+func TestCoordinatorClassifiesLegacyModerationDependencyAsUnavailable(t *testing.T) {
 	legacy := &LegacyDecision{
 		Blocked: true, Flagged: false, StatusCode: http.StatusServiceUnavailable,
 		ErrorCode: "content_moderation_unavailable", Message: "content moderation is temporarily unavailable", Action: "error",

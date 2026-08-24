@@ -87,7 +87,7 @@ func TestPromptServiceBlockingLatestTurnOnlyUsesNarrowSnapshot(t *testing.T) {
 	require.Equal(t, []string{"latest user input", "system instruction\n\nprevious output"}, seen)
 }
 
-func TestPromptServiceBlockingFailsClosedOnContentExtractionFailure(t *testing.T) {
+func TestPromptServiceBlockingAllowsEmptyContentExtractionFailure(t *testing.T) {
 	metrics := NewAtomicMetrics()
 	service := &PromptService{
 		config: &fakeConfigStore{active: true, cfg: ActiveConfig{
@@ -102,13 +102,81 @@ func TestPromptServiceBlockingFailsClosedOnContentExtractionFailure(t *testing.T
 	}
 
 	decision, err := service.Evaluate(context.Background(), Request{
+		RequestID: "req-extract", Endpoint: "/v1/responses", Stage: "http",
 		Protocol: "openai_responses",
-		Body:     []byte(`{"input":[{"type":"local_shell_call","call_id":"c1","action":{"command":"pwd"},"future_payload":"missing adapter"}]}`),
+		Body:     []byte(`{"input":[{"type":"future_content","payload":"missing adapter"}]}`),
 	})
-	require.Nil(t, decision)
-	var guardErr *GuardError
-	require.ErrorAs(t, err, &guardErr)
-	require.Equal(t, ErrorCodeInvalidResponse, guardErr.Code)
+	require.NoError(t, err)
+	require.Equal(t, DecisionAllow, decision.Kind)
+	require.True(t, decision.AllowNextStage)
+	require.Equal(t, AuditMetricsSnapshot{ExtractionAttempted: 1, ExtractionFailed: 1}, metrics.AuditSnapshot())
+}
+
+func TestPromptServiceBlockingExtractionCompatibilityCasesAllow(t *testing.T) {
+	tests := []struct {
+		name     string
+		protocol string
+		body     string
+		failed   bool
+	}{
+		{name: "unknown responses frame", protocol: "openai_responses", body: `{"type":"future.client.event","payload":"unknown"}`, failed: true},
+		{name: "unknown live frame", protocol: "openai_live", body: `{"type":"future.live.control","payload":"unknown"}`, failed: true},
+		{name: "valid unrecognized live structure", protocol: "openai_live", body: `{"future_payload":{"shape":"unrecognized"}}`, failed: true},
+		{name: "invalid json at audit layer", protocol: "openai_responses", body: `{"input":`, failed: true},
+		{name: "valid unrecognized structure", protocol: "openai_responses", body: `{"future_payload":{"shape":"unrecognized"}}`, failed: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			metrics := NewAtomicMetrics()
+			promptService := &PromptService{
+				config: &fakeConfigStore{active: true, cfg: ActiveConfig{
+					RiskControlEnabled: true, Enabled: true, BlockingEnabled: true, AllGroups: true,
+					Scanners: AllScannerIDs, Endpoints: []ActiveEndpoint{{ID: "guard-1", Enabled: true, TimeoutMS: 1000, InputLimit: 4096}},
+				}},
+				evaluator: newGuardEvaluator(PromptScannerFunc(func(context.Context, ActiveEndpoint, string, []string) (*NormalizedResult, error) {
+					t.Fatal("empty compatibility payload must not run the guard evaluator")
+					return nil, nil
+				}), nil, metrics, 1, 1),
+				metrics: metrics,
+			}
+
+			decision, err := promptService.Evaluate(context.Background(), Request{
+				RequestID: "req-compat", Endpoint: "/v1/compat", Protocol: test.protocol, Body: []byte(test.body), Stage: "subsequent_turn",
+			})
+			require.NoError(t, err)
+			require.Equal(t, DecisionAllow, decision.Kind)
+			require.True(t, decision.AllowNextStage)
+			if test.failed {
+				require.Equal(t, AuditMetricsSnapshot{ExtractionAttempted: 1, ExtractionFailed: 1}, metrics.AuditSnapshot())
+			} else {
+				require.Equal(t, AuditMetricsSnapshot{ExtractionAttempted: 1, ExtractionEmpty: 1}, metrics.AuditSnapshot())
+			}
+		})
+	}
+}
+
+func TestPromptServiceBlockingAuditsExtractedSiblingDespiteIncompleteContent(t *testing.T) {
+	metrics := NewAtomicMetrics()
+	var scanned string
+	service := &PromptService{
+		config: &fakeConfigStore{active: true, cfg: ActiveConfig{
+			RiskControlEnabled: true, Enabled: true, BlockingEnabled: true, AllGroups: true,
+			Scanners: AllScannerIDs, Endpoints: []ActiveEndpoint{{ID: "guard-1", Enabled: true, TimeoutMS: 1000, InputLimit: 4096}},
+		}},
+		evaluator: newGuardEvaluator(PromptScannerFunc(func(_ context.Context, _ ActiveEndpoint, chunk string, _ []string) (*NormalizedResult, error) {
+			scanned = chunk
+			return &NormalizedResult{Decision: EventPass, RiskLevel: RiskLow, Action: ActionAllow, ScannerScores: map[string]float64{}, ScannerEvidence: map[string]string{}}, nil
+		}), nil, metrics, 1, 1),
+		metrics: metrics,
+	}
+
+	decision, err := service.Evaluate(context.Background(), Request{
+		Protocol: "openai_responses",
+		Body:     []byte(`{"input":[{"type":"message","role":"user","content":"audit this sibling"},{"type":"future_content","payload":"missing adapter"}]}`),
+	})
+	require.NoError(t, err)
+	require.Equal(t, DecisionAllow, decision.Kind)
+	require.Contains(t, scanned, "audit this sibling")
 	require.Equal(t, AuditMetricsSnapshot{ExtractionAttempted: 1, ExtractionFailed: 1}, metrics.AuditSnapshot())
 }
 

@@ -4,6 +4,8 @@ import (
 	"context"
 	"log/slog"
 	"strings"
+
+	"github.com/LuckyKuang/sub2api-plus/internal/auditcontent"
 )
 
 const (
@@ -17,6 +19,7 @@ const (
 	EventJobEnqueued          = "prompt_audit.job_enqueued"
 	EventEnqueueSkipped       = "prompt_audit.enqueue_skipped"
 	EventEnqueueDropped       = "prompt_audit.enqueue_dropped"
+	EventExtractionFailed     = "prompt_audit.extraction_failed"
 	EventAuditStarted         = "prompt_audit.started"
 	EventProcessingReclaimed  = "prompt_audit.processing_reclaimed"
 	EventProcessed            = "prompt_audit.processed"
@@ -40,7 +43,7 @@ const (
 var knownLogEvents = map[string]struct{}{
 	EventConfigUpdated: {}, EventConfigLoaded: {}, EventConfigReloadDegraded: {}, EventConfigTokenInvalid: {},
 	EventProbeStarted: {}, EventProbeFinished: {}, EventProbeFailed: {},
-	EventJobEnqueued: {}, EventEnqueueSkipped: {}, EventEnqueueDropped: {},
+	EventJobEnqueued: {}, EventEnqueueSkipped: {}, EventEnqueueDropped: {}, EventExtractionFailed: {},
 	EventAuditStarted: {}, EventProcessingReclaimed: {}, EventProcessed: {}, EventProcessFailed: {}, EventFindingRecorded: {},
 	EventChunkStarted: {}, EventChunkCompleted: {}, EventChunkFailed: {}, EventChunksAggregated: {},
 	EventEvaluationStarted: {}, EventGuardAllowed: {}, EventGuardBlocked: {}, EventGuardFailed: {}, EventResultRecordFailed: {},
@@ -56,6 +59,7 @@ var allowedLogFields = map[string]struct{}{
 	"queue_length": {}, "queue_capacity": {}, "stage": {}, "upstream_dispatched": {},
 	"billing_preconsumed": {}, "worker_id": {}, "reclaimed_total": {}, "attempts": {},
 	"max_attempts": {}, "claim_version": {}, "http_status": {}, "retryable": {},
+	"body_bytes": {}, "incomplete_reasons": {},
 }
 
 func LogInfo(event string, fields map[string]any) {
@@ -84,6 +88,13 @@ func safeAttrs(fields map[string]any) []slog.Attr {
 		if _, allowed := allowedLogFields[key]; !allowed {
 			continue
 		}
+		if key == "incomplete_reasons" {
+			reasons, ok := value.([]auditcontent.IncompleteReason)
+			if !ok {
+				continue
+			}
+			value = auditcontent.SanitizeIncompleteReasons(reasons)
+		}
 		if text, ok := value.(string); ok {
 			if key == "error_kind" || key == "error_code" {
 				value = stableErrorCode(text)
@@ -108,18 +119,57 @@ func mergeLogFields(base map[string]any, extra map[string]any) map[string]any {
 }
 
 func requestLogFields(req Request) map[string]any {
+	stage := strings.TrimSpace(req.Stage)
+	if stage == "" {
+		stage = "http"
+	}
 	return map[string]any{
 		"request_id": req.RequestID, "user_id": req.UserID, "api_key_id": req.APIKeyID,
 		"group_id": pointerLogID(req.GroupID), "provider": req.Provider, "protocol": req.Protocol,
-		"endpoint": req.Endpoint, "model": req.Model, "stage": req.Stage,
+		"endpoint": req.Endpoint, "model": req.Model, "stage": stage, "body_bytes": len(req.Body),
 	}
 }
 
+func logPromptExtractionFailure(req Request, diagnostic promptExtractionDiagnostic) {
+	code := diagnostic.ErrorCode
+	if strings.TrimSpace(code) == "" {
+		code = "content_extraction_failed"
+	}
+	LogWarn(EventExtractionFailed, mergeLogFields(requestLogFields(req), map[string]any{
+		"status": "failed", "error_code": code, "error_kind": "content_extraction",
+		"incomplete_reasons": diagnostic.Reasons,
+	}))
+}
+
+func logPromptRequestFailure(req Request, kind DecisionKind, code string) {
+	LogWarn(EventGuardFailed, mergeLogFields(requestLogFields(req), map[string]any{
+		"decision": kind, "status": "failed", "error_code": code, "error_kind": "audit_dependency",
+		"upstream_dispatched": false, "billing_preconsumed": false,
+	}))
+}
+
+func promptRuntimeLogFields() map[string]any {
+	return map[string]any{
+		"request_id": "", "endpoint": "runtime", "protocol": "internal",
+		"stage": "runtime", "body_bytes": 0,
+	}
+}
+
+func logPromptRuntimeFailure(event, code string) {
+	LogWarn(event, mergeLogFields(promptRuntimeLogFields(), map[string]any{
+		"status": "failed", "error_code": code, "error_kind": "audit_dependency",
+	}))
+}
+
 func snapshotLogFields(snapshot PromptSnapshot) map[string]any {
+	stage := strings.TrimSpace(snapshot.Stage)
+	if stage == "" {
+		stage = "http"
+	}
 	return map[string]any{
 		"request_id": snapshot.RequestID, "user_id": snapshot.UserID, "api_key_id": snapshot.APIKeyID,
 		"group_id": pointerLogID(snapshot.GroupID), "provider": snapshot.Provider, "protocol": snapshot.Protocol,
-		"endpoint": snapshot.Endpoint, "model": snapshot.Model, "stage": snapshot.Stage,
+		"endpoint": snapshot.Endpoint, "model": snapshot.Model, "stage": stage, "body_bytes": snapshot.BodyBytes,
 	}
 }
 

@@ -76,7 +76,6 @@ const (
 	defaultContentModerationViolationWindowHours = 720
 	defaultContentModerationBlockHTTPStatus      = http.StatusForbidden
 	defaultContentModerationBlockMessage         = "内容审计命中风险规则，请调整输入后重试"
-	contentModerationExtractionFailureMessage    = "内容安全审计暂时不可用，请稍后重试"
 	defaultContentModerationRetryCount           = 2
 	maxContentModerationRetryCount               = 5
 	defaultContentModerationHitRetentionDays     = 180
@@ -324,6 +323,7 @@ type ContentModerationCheckInput struct {
 	Model      string
 	Protocol   string
 	Body       []byte
+	Stage      string
 }
 
 type ContentModerationInput struct {
@@ -420,6 +420,9 @@ type ContentModerationLog struct {
 	UserStatus        string             `json:"user_status"`
 	QueueDelayMS      *int               `json:"queue_delay_ms,omitempty"`
 	CreatedAt         time.Time          `json:"created_at"`
+	Protocol          string             `json:"-"`
+	Stage             string             `json:"-"`
+	BodyBytes         int                `json:"-"`
 }
 
 type ContentModerationLogFilter struct {
@@ -829,22 +832,31 @@ func (s *ContentModerationService) Check(ctx context.Context, input ContentModer
 	allow := &ContentModerationDecision{Allowed: true, Action: ContentModerationActionAllow}
 	if s == nil || s.settingRepo == nil || s.repo == nil {
 		slog.Info("content_moderation.skip_unavailable",
-			"user_id", input.UserID,
-			"api_key_id", input.APIKeyID,
-			"group_id", contentModerationLogGroupID(input.GroupID),
-			"endpoint", input.Endpoint,
-			"protocol", input.Protocol)
-		return allow, nil
-	}
-	runtimeSnapshot, err := s.loadRuntimeSnapshot(ctx)
-	if err != nil {
-		slog.Warn("content_moderation.skip_config_load_failed",
+			"request_id", input.RequestID,
 			"user_id", input.UserID,
 			"api_key_id", input.APIKeyID,
 			"group_id", contentModerationLogGroupID(input.GroupID),
 			"endpoint", input.Endpoint,
 			"protocol", input.Protocol,
-			"error", err)
+			"stage", contentModerationAuditStage(input.Stage),
+			"body_bytes", len(input.Body),
+			"error_code", "service_unavailable",
+			"error_kind", "audit_dependency")
+		return allow, nil
+	}
+	runtimeSnapshot, err := s.loadRuntimeSnapshot(ctx)
+	if err != nil {
+		slog.Warn("content_moderation.skip_config_load_failed",
+			"request_id", input.RequestID,
+			"user_id", input.UserID,
+			"api_key_id", input.APIKeyID,
+			"group_id", contentModerationLogGroupID(input.GroupID),
+			"endpoint", input.Endpoint,
+			"protocol", input.Protocol,
+			"stage", contentModerationAuditStage(input.Stage),
+			"body_bytes", len(input.Body),
+			"error_code", "config_load_failed",
+			"error_kind", contentModerationErrorKind(err))
 		return allow, nil
 	}
 	if !runtimeSnapshot.riskControlEnabled {
@@ -924,47 +936,45 @@ func (s *ContentModerationService) Check(ctx context.Context, input ContentModer
 		return allow, nil
 	}
 	s.extractionAttempted.Add(1)
-	content, contentBearing, extractionErr := extractContentModerationInput(input.Protocol, input.Body)
-	if extractionErr != nil {
+	content, _, incompleteReasons, extractionErr := extractContentModerationInput(input.Protocol, input.Body)
+	extractionFailed := extractionErr != nil || len(incompleteReasons) > 0
+	if extractionFailed {
 		s.extractionFailed.Add(1)
 		extractionErrorCode := "invalid_json"
-		if errors.Is(extractionErr, auditcontent.ErrIncompleteContent) {
+		if extractionErr == nil {
 			extractionErrorCode = "incomplete_content"
 		}
 		slog.Warn("content_moderation.extraction_failed",
+			"request_id", input.RequestID,
 			"user_id", input.UserID,
 			"api_key_id", input.APIKeyID,
 			"group_id", contentModerationLogGroupID(input.GroupID),
 			"endpoint", input.Endpoint,
 			"protocol", input.Protocol,
+			"stage", contentModerationAuditStage(input.Stage),
 			"body_bytes", len(input.Body),
-			"error_code", extractionErrorCode)
-		return s.contentModerationExtractionFailureDecision(cfg), nil
+			"error_code", extractionErrorCode,
+			"error_kind", "content_extraction",
+			"incomplete_reasons", auditcontent.SanitizeIncompleteReasons(incompleteReasons))
 	}
 	if content.IsEmpty() {
-		if contentBearing {
-			s.extractionFailed.Add(1)
-			slog.Warn("content_moderation.extraction_failed",
-				"user_id", input.UserID,
-				"api_key_id", input.APIKeyID,
-				"group_id", contentModerationLogGroupID(input.GroupID),
-				"endpoint", input.Endpoint,
-				"protocol", input.Protocol,
-				"body_bytes", len(input.Body),
-				"error_code", "content_bearing_empty")
-			return s.contentModerationExtractionFailureDecision(cfg), nil
+		if !extractionFailed {
+			s.extractionEmpty.Add(1)
 		}
-		s.extractionEmpty.Add(1)
 		slog.Info("content_moderation.skip_empty_input",
+			"request_id", input.RequestID,
 			"user_id", input.UserID,
 			"api_key_id", input.APIKeyID,
 			"group_id", contentModerationLogGroupID(input.GroupID),
 			"endpoint", input.Endpoint,
 			"protocol", input.Protocol,
+			"stage", contentModerationAuditStage(input.Stage),
 			"body_bytes", len(input.Body))
 		return allow, nil
 	}
-	s.extractionSucceeded.Add(1)
+	if !extractionFailed {
+		s.extractionSucceeded.Add(1)
+	}
 	content.Normalize()
 	slog.Info("content_moderation.input_extracted",
 		"user_id", input.UserID,
@@ -1018,7 +1028,15 @@ func (s *ContentModerationService) Check(ctx context.Context, input ContentModer
 	if cfg.PreHashCheckEnabled && s.hashCache != nil {
 		matched, err := s.hashCache.HasFlaggedInputHash(ctx, hashText)
 		if err != nil {
-			slog.Warn("content_moderation.hash_check_failed", "user_id", input.UserID, "endpoint", input.Endpoint, "error", err)
+			slog.Warn("content_moderation.hash_check_failed",
+				"request_id", input.RequestID,
+				"user_id", input.UserID,
+				"endpoint", input.Endpoint,
+				"protocol", input.Protocol,
+				"stage", contentModerationAuditStage(input.Stage),
+				"body_bytes", len(input.Body),
+				"error_code", "hash_check_failed",
+				"error_kind", contentModerationErrorKind(err))
 		}
 		if matched {
 			if cfg.Mode == ContentModerationModePreBlock {
@@ -1067,11 +1085,16 @@ func (s *ContentModerationService) Check(ctx context.Context, input ContentModer
 			s.recordPreBlockSyncMetric(0, ContentModerationActionError)
 		}
 		slog.Warn("content_moderation.skip_no_audit_api_keys",
+			"request_id", input.RequestID,
 			"user_id", input.UserID,
 			"api_key_id", input.APIKeyID,
 			"group_id", contentModerationLogGroupID(input.GroupID),
 			"endpoint", input.Endpoint,
-			"protocol", input.Protocol)
+			"protocol", input.Protocol,
+			"stage", contentModerationAuditStage(input.Stage),
+			"body_bytes", len(input.Body),
+			"error_code", "no_audit_api_keys",
+			"error_kind", "audit_dependency")
 		return allow, nil
 	}
 	if cfg.Mode == ContentModerationModeObserve {
@@ -1089,15 +1112,61 @@ func (s *ContentModerationService) Check(ctx context.Context, input ContentModer
 	return s.checkSync(ctx, input, cfg, content, hashText, nil, true), nil
 }
 
-func (s *ContentModerationService) contentModerationExtractionFailureDecision(cfg *ContentModerationConfig) *ContentModerationDecision {
-	if cfg == nil || cfg.Mode != ContentModerationModePreBlock {
-		return &ContentModerationDecision{Allowed: true, Action: ContentModerationActionAllow}
+func contentModerationAuditStage(stage string) string {
+	stage = strings.TrimSpace(stage)
+	if stage == "" {
+		return "http"
 	}
-	s.recordPreBlockSyncMetric(0, ContentModerationActionError)
-	return &ContentModerationDecision{
-		Allowed: false, Blocked: true, Flagged: false,
-		Message: contentModerationExtractionFailureMessage, StatusCode: http.StatusServiceUnavailable,
-		Action: ContentModerationActionError, ErrorCode: ContentModerationErrorCodeUnavailable,
+	return stage
+}
+
+func contentModerationErrorKind(err error) string {
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return "timeout"
+	case errors.Is(err, context.Canceled):
+		return "canceled"
+	default:
+		return "dependency_error"
+	}
+}
+
+func contentModerationExceptionAttrs(log *ContentModerationLog, errorCode, errorKind string) []any {
+	requestID, endpoint, protocol, stage := "", "", "unknown", "async"
+	bodyBytes, userID := 0, int64(0)
+	if log != nil {
+		requestID = log.RequestID
+		endpoint = log.Endpoint
+		if strings.TrimSpace(log.Protocol) != "" {
+			protocol = log.Protocol
+		}
+		if strings.TrimSpace(log.Stage) != "" {
+			stage = log.Stage
+		}
+		bodyBytes = log.BodyBytes
+		userID = contentModerationEmailUserID(log)
+	}
+	return []any{
+		"request_id", requestID,
+		"user_id", userID,
+		"endpoint", endpoint,
+		"protocol", protocol,
+		"stage", contentModerationAuditStage(stage),
+		"body_bytes", bodyBytes,
+		"error_code", errorCode,
+		"error_kind", errorKind,
+	}
+}
+
+func contentModerationRuntimeExceptionAttrs(errorCode string, err error) []any {
+	return []any{
+		"request_id", "",
+		"endpoint", "runtime",
+		"protocol", "internal",
+		"stage", "runtime",
+		"body_bytes", 0,
+		"error_code", errorCode,
+		"error_kind", contentModerationErrorKind(err),
 	}
 }
 
@@ -1116,21 +1185,25 @@ func (s *ContentModerationService) checkSync(ctx context.Context, input ContentM
 			s.recordPreBlockSyncMetric(latency, ContentModerationActionError)
 		}
 		slog.Warn("content_moderation.audit_api_failed",
+			"request_id", input.RequestID,
 			"user_id", input.UserID,
 			"api_key_id", input.APIKeyID,
 			"group_id", contentModerationLogGroupID(input.GroupID),
 			"endpoint", input.Endpoint,
 			"protocol", input.Protocol,
+			"stage", contentModerationAuditStage(input.Stage),
+			"body_bytes", len(input.Body),
 			"mode", cfg.Mode,
 			"allow_block", allowBlock,
 			"queue_delay_ms", queueDelay,
 			"latency_ms", latency,
-			"error", err)
+			"error_code", "audit_dependency_failed",
+			"error_kind", contentModerationErrorKind(err))
 		if queueDelay != nil {
 			s.asyncErrors.Add(1)
 		}
 		if cfg.RecordNonHits {
-			log := s.buildLog(input, cfg, ContentModerationActionError, false, "", 0, nil, content.ExcerptText(), &latency, queueDelay, err.Error())
+			log := s.buildLog(input, cfg, ContentModerationActionError, false, "", 0, nil, content.ExcerptText(), &latency, queueDelay, "audit_dependency_failed")
 			_ = s.repo.CreateLog(ctx, log)
 		}
 		return allow
@@ -1222,7 +1295,11 @@ func (s *ContentModerationService) enqueueAsync(input ContentModerationCheckInpu
 		queueSize = cfg.QueueSize
 	}
 	if len(s.asyncQueue) >= queueSize {
-		slog.Warn("content_moderation.async_queue_full", "user_id", input.UserID, "endpoint", input.Endpoint, "queue_size", queueSize)
+		slog.Warn("content_moderation.async_queue_full",
+			"request_id", input.RequestID, "user_id", input.UserID,
+			"endpoint", input.Endpoint, "protocol", input.Protocol,
+			"stage", contentModerationAuditStage(input.Stage), "body_bytes", len(input.Body),
+			"queue_size", queueSize, "error_code", "async_queue_full", "error_kind", "audit_dependency")
 		s.asyncDropped.Add(1)
 		return
 	}
@@ -1236,7 +1313,11 @@ func (s *ContentModerationService) enqueueAsync(input ContentModerationCheckInpu
 	case s.asyncQueue <- task:
 		s.asyncEnqueued.Add(1)
 	default:
-		slog.Warn("content_moderation.async_queue_full", "user_id", input.UserID, "endpoint", input.Endpoint)
+		slog.Warn("content_moderation.async_queue_full",
+			"request_id", input.RequestID, "user_id", input.UserID,
+			"endpoint", input.Endpoint, "protocol", input.Protocol,
+			"stage", contentModerationAuditStage(input.Stage), "body_bytes", len(input.Body),
+			"queue_size", queueSize, "error_code", "async_queue_full", "error_kind", "audit_dependency")
 		s.asyncDropped.Add(1)
 	}
 }
@@ -1251,10 +1332,16 @@ func (s *ContentModerationService) enqueueRecord(input ContentModerationCheckInp
 	}
 	if len(s.asyncQueue) >= queueSize {
 		slog.Warn("content_moderation.record_queue_full",
+			"request_id", input.RequestID,
 			"user_id", input.UserID,
 			"endpoint", input.Endpoint,
+			"protocol", input.Protocol,
+			"stage", contentModerationAuditStage(input.Stage),
+			"body_bytes", len(input.Body),
 			"action", log.Action,
-			"queue_size", queueSize)
+			"queue_size", queueSize,
+			"error_code", "record_queue_full",
+			"error_kind", "audit_dependency")
 		s.asyncDropped.Add(1)
 		return
 	}
@@ -1272,9 +1359,16 @@ func (s *ContentModerationService) enqueueRecord(input ContentModerationCheckInp
 		s.asyncEnqueued.Add(1)
 	default:
 		slog.Warn("content_moderation.record_queue_full",
+			"request_id", input.RequestID,
 			"user_id", input.UserID,
 			"endpoint", input.Endpoint,
-			"action", log.Action)
+			"protocol", input.Protocol,
+			"stage", contentModerationAuditStage(input.Stage),
+			"body_bytes", len(input.Body),
+			"action", log.Action,
+			"queue_size", queueSize,
+			"error_code", "record_queue_full",
+			"error_kind", "audit_dependency")
 		s.asyncDropped.Add(1)
 	}
 }
@@ -1297,8 +1391,16 @@ func (s *ContentModerationService) worker(id int) {
 		func() {
 			defer cancel()
 			defer func() {
-				if r := recover(); r != nil {
-					slog.Error("content_moderation.worker_panic", "worker_id", id, "recover", r)
+				if recover() != nil {
+					logContext := task.log
+					if logContext == nil {
+						logContext = &ContentModerationLog{
+							RequestID: task.input.RequestID, Endpoint: task.input.Endpoint,
+							Protocol: task.input.Protocol, Stage: task.input.Stage, BodyBytes: len(task.input.Body),
+						}
+					}
+					attrs := append(contentModerationExceptionAttrs(logContext, "worker_panic", "panic"), "worker_id", id)
+					slog.Error("content_moderation.worker_panic", attrs...)
 				}
 			}()
 			if task.log != nil {
@@ -1464,7 +1566,7 @@ func (s *ContentModerationService) GetStatus(ctx context.Context) (*ContentModer
 		if n, err := s.hashCache.CountFlaggedInputHashes(ctx); err == nil {
 			flaggedHashCount = n
 		} else {
-			slog.Warn("content_moderation.hash_count_failed", "error", err)
+			slog.Warn("content_moderation.hash_count_failed", contentModerationRuntimeExceptionAttrs("hash_count_failed", err)...)
 		}
 	}
 	var lastCleanupAt *time.Time
@@ -1527,7 +1629,7 @@ func (s *ContentModerationService) runCleanupOnce() {
 	defer cancel()
 	cfg, err := s.loadConfig(ctx)
 	if err != nil {
-		slog.Warn("content_moderation.cleanup_load_config_failed", "error", err)
+		slog.Warn("content_moderation.cleanup_load_config_failed", contentModerationRuntimeExceptionAttrs("cleanup_config_load_failed", err)...)
 		return
 	}
 	now := time.Now()
@@ -1535,7 +1637,7 @@ func (s *ContentModerationService) runCleanupOnce() {
 	nonHitBefore := now.AddDate(0, 0, -cfg.NonHitRetentionDays)
 	result, err := s.repo.CleanupExpiredLogs(ctx, hitBefore, nonHitBefore)
 	if err != nil {
-		slog.Warn("content_moderation.cleanup_failed", "error", err)
+		slog.Warn("content_moderation.cleanup_failed", contentModerationRuntimeExceptionAttrs("cleanup_failed", err)...)
 		return
 	}
 	if result == nil {
@@ -1612,7 +1714,7 @@ func (s *ContentModerationService) triggerRuntimeSnapshotRefresh() {
 		defer cancel()
 		if _, err := s.refreshRuntimeSnapshot(ctx); err != nil {
 			s.runtimeRefreshRetryAt.Store(time.Now().Add(s.runtimeSnapshotTTL()).UnixNano())
-			slog.Warn("content_moderation.runtime_snapshot_refresh_failed", "error", err)
+			slog.Warn("content_moderation.runtime_snapshot_refresh_failed", contentModerationRuntimeExceptionAttrs("runtime_snapshot_refresh_failed", err)...)
 		}
 	}()
 }
@@ -1944,6 +2046,9 @@ func (s *ContentModerationService) buildLog(input ContentModerationCheckInput, c
 		UpstreamLatencyMS: latency,
 		QueueDelayMS:      queueDelay,
 		Error:             errText,
+		Protocol:          input.Protocol,
+		Stage:             contentModerationAuditStage(input.Stage),
+		BodyBytes:         len(input.Body),
 	}
 }
 
@@ -1953,7 +2058,7 @@ func (s *ContentModerationService) persistContentModerationLog(ctx context.Conte
 	}
 	if recordHash && s.hashCache != nil {
 		if err := s.hashCache.RecordFlaggedInputHash(ctx, hashText); err != nil {
-			slog.Warn("content_moderation.record_hash_failed", "user_id", contentModerationEmailUserID(log), "endpoint", log.Endpoint, "error", err)
+			slog.Warn("content_moderation.record_hash_failed", contentModerationExceptionAttrs(log, "record_hash_failed", contentModerationErrorKind(err))...)
 		}
 	}
 	autoBanJustApplied := false
@@ -1963,7 +2068,8 @@ func (s *ContentModerationService) persistContentModerationLog(ctx context.Conte
 	}
 	if s.repo != nil {
 		if err := s.repo.CreateLog(ctx, log); err != nil {
-			slog.Warn("content_moderation.create_log_failed", "user_id", contentModerationEmailUserID(log), "endpoint", log.Endpoint, "action", log.Action, "error", err)
+			attrs := append(contentModerationExceptionAttrs(log, "create_log_failed", contentModerationErrorKind(err)), "action", log.Action)
+			slog.Warn("content_moderation.create_log_failed", attrs...)
 			return
 		}
 	}
@@ -1978,6 +2084,8 @@ func (s *ContentModerationService) applyFlaggedAccountSideEffects(ctx context.Co
 		since := time.Now().Add(-time.Duration(cfg.ViolationWindowHours) * time.Hour)
 		if n, err := s.repo.CountFlaggedByUserSince(ctx, *log.UserID, since, cfg.CyberPolicyExcludeFromBanCount); err == nil {
 			count = n + 1
+		} else {
+			slog.Warn("content_moderation.ban_count_failed", contentModerationExceptionAttrs(log, "ban_count_failed", contentModerationErrorKind(err))...)
 		}
 	}
 	log.ViolationCount = count
@@ -1985,7 +2093,7 @@ func (s *ContentModerationService) applyFlaggedAccountSideEffects(ctx context.Co
 	if cfg.AutoBanEnabled && cfg.BanThreshold > 0 && count >= cfg.BanThreshold && s.userRepo != nil {
 		user, err := s.userRepo.GetByID(ctx, *log.UserID)
 		if err != nil {
-			slog.Warn("content_moderation.ban_get_user_failed", "user_id", *log.UserID, "error", err)
+			slog.Warn("content_moderation.ban_get_user_failed", contentModerationExceptionAttrs(log, "ban_get_user_failed", contentModerationErrorKind(err))...)
 			return false
 		}
 		if user.IsAdmin() {
@@ -1996,7 +2104,7 @@ func (s *ContentModerationService) applyFlaggedAccountSideEffects(ctx context.Co
 		if user.Status != StatusDisabled {
 			user.Status = StatusDisabled
 			if err := s.userRepo.Update(ctx, user, UserUpdateFields{Status: true}); err != nil {
-				slog.Warn("content_moderation.ban_update_user_failed", "user_id", *log.UserID, "error", err)
+				slog.Warn("content_moderation.ban_update_user_failed", contentModerationExceptionAttrs(log, "ban_update_user_failed", contentModerationErrorKind(err))...)
 				return false
 			}
 			if s.authCacheInvalidator != nil {
@@ -2019,14 +2127,14 @@ func (s *ContentModerationService) sendFlaggedNotificationSideEffects(ctx contex
 	emailSent := false
 	if cfg.EmailOnHit {
 		if err := s.sendViolationEmail(ctx, cfg, log); err != nil {
-			slog.Warn("content_moderation.email_failed", "user_id", *log.UserID, "email", log.UserEmail, "error", err)
+			slog.Warn("content_moderation.email_failed", contentModerationExceptionAttrs(log, "violation_email_failed", contentModerationErrorKind(err))...)
 		} else {
 			emailSent = true
 		}
 	}
 	if autoBanJustApplied {
 		if err := s.sendAccountDisabledEmail(ctx, cfg, log); err != nil {
-			slog.Warn("content_moderation.ban_email_failed", "user_id", *log.UserID, "email", log.UserEmail, "error", err)
+			slog.Warn("content_moderation.ban_email_failed", contentModerationExceptionAttrs(log, "account_disabled_email_failed", contentModerationErrorKind(err))...)
 		} else {
 			emailSent = true
 		}
@@ -2051,7 +2159,8 @@ func (s *ContentModerationService) sendViolationEmail(ctx context.Context, cfg *
 			if !shouldFallbackNotificationEmail(err) {
 				return err
 			}
-			slog.Warn("template content moderation violation email failed; falling back to built-in body", "log_id", log.ID, "recipient_hash", notificationEmailHash(log.UserEmail), "err", err.Error())
+			attrs := append(contentModerationExceptionAttrs(log, "violation_email_template_failed", contentModerationErrorKind(err)), "log_id", log.ID, "recipient_hash", notificationEmailHash(log.UserEmail))
+			slog.Warn("content_moderation.violation_email_template_failed", attrs...)
 		}
 	}
 	subject := fmt.Sprintf("[%s] 账户风控提醒 / Risk Control Notice", sanitizeEmailHeader(siteName))
@@ -2076,7 +2185,8 @@ func (s *ContentModerationService) sendAccountDisabledEmail(ctx context.Context,
 			if !shouldFallbackNotificationEmail(err) {
 				return err
 			}
-			slog.Warn("template content moderation disabled email failed; falling back to built-in body", "log_id", log.ID, "recipient_hash", notificationEmailHash(log.UserEmail), "err", err.Error())
+			attrs := append(contentModerationExceptionAttrs(log, "disabled_email_template_failed", contentModerationErrorKind(err)), "log_id", log.ID, "recipient_hash", notificationEmailHash(log.UserEmail))
+			slog.Warn("content_moderation.disabled_email_template_failed", attrs...)
 		}
 	}
 	subject := fmt.Sprintf("[%s] 账户已被禁用 / Account Disabled", sanitizeEmailHeader(siteName))
@@ -3054,9 +3164,16 @@ func (s *ContentModerationService) RecordCyberPolicyEvent(ctx context.Context, i
 	if s == nil || s.repo == nil {
 		return
 	}
+	logContext := &ContentModerationLog{
+		RequestID: in.RequestID, Endpoint: in.Endpoint, Protocol: ContentModerationProtocolOpenAIResponses,
+		Stage: "post_upstream", BodyBytes: len(in.UpstreamMessage) + len(in.UpstreamBody),
+	}
+	if in.UserID > 0 {
+		logContext.UserID = &in.UserID
+	}
 	runtimeSnapshot, err := s.loadRuntimeSnapshot(ctx)
 	if err != nil {
-		slog.Warn("content_moderation.cyber_runtime_snapshot_load_failed", "error", err)
+		slog.Warn("content_moderation.cyber_runtime_snapshot_load_failed", contentModerationExceptionAttrs(logContext, "cyber_runtime_snapshot_load_failed", contentModerationErrorKind(err))...)
 		return
 	}
 	if !runtimeSnapshot.riskControlEnabled {
@@ -3100,6 +3217,9 @@ func (s *ContentModerationService) RecordCyberPolicyEvent(ctx context.Context, i
 		HighestScore:    1.0,
 		Error:           trimRunes(redactContentModerationSecrets(errBody), maxModerationExcerptRunes*4),
 		CreatedAt:       time.Now(),
+		Protocol:        ContentModerationProtocolOpenAIResponses,
+		Stage:           "post_upstream",
+		BodyBytes:       len(in.UpstreamMessage) + len(in.UpstreamBody),
 	}
 	// 开关开时 cyber_policy 不参与封号计数：当次不判定（此处跳过），
 	// 历史行由 CountFlaggedByUserSince 的 excludeCyberPolicy 排除。
@@ -3111,18 +3231,18 @@ func (s *ContentModerationService) RecordCyberPolicyEvent(ctx context.Context, i
 	logPersisted := true
 	if err := s.repo.CreateLog(ctx, log); err != nil {
 		logPersisted = false
-		slog.Warn("content_moderation.cyber_create_log_failed", "user_id", in.UserID, "error", err)
+		slog.Warn("content_moderation.cyber_create_log_failed", contentModerationExceptionAttrs(log, "cyber_create_log_failed", contentModerationErrorKind(err))...)
 	}
 	emailSent := false
 	if s.emailService != nil && strings.TrimSpace(log.UserEmail) != "" {
 		if err := s.sendCyberPolicyEmail(ctx, log); err != nil {
-			slog.Warn("content_moderation.cyber_email_failed", "user_id", in.UserID, "error", err)
+			slog.Warn("content_moderation.cyber_email_failed", contentModerationExceptionAttrs(log, "cyber_email_failed", contentModerationErrorKind(err))...)
 		} else {
 			emailSent = true
 		}
 		if autoBanned {
 			if err := s.sendAccountDisabledEmail(ctx, cfg, log); err != nil {
-				slog.Warn("content_moderation.cyber_ban_email_failed", "user_id", in.UserID, "error", err)
+				slog.Warn("content_moderation.cyber_ban_email_failed", contentModerationExceptionAttrs(log, "cyber_ban_email_failed", contentModerationErrorKind(err))...)
 			} else {
 				emailSent = true
 			}
@@ -3130,7 +3250,8 @@ func (s *ContentModerationService) RecordCyberPolicyEvent(ctx context.Context, i
 	}
 	if logPersisted && emailSent {
 		if err := s.repo.UpdateLogEmailSent(ctx, log.ID, true); err != nil {
-			slog.Warn("content_moderation.cyber_update_email_sent_failed", "log_id", log.ID, "error", err)
+			attrs := append(contentModerationExceptionAttrs(log, "cyber_update_email_sent_failed", contentModerationErrorKind(err)), "log_id", log.ID)
+			slog.Warn("content_moderation.cyber_update_email_sent_failed", attrs...)
 		}
 	}
 }
@@ -3159,7 +3280,7 @@ func (s *ContentModerationService) sendCyberPolicyEmail(ctx context.Context, log
 		if !shouldFallbackNotificationEmail(err) {
 			return err
 		}
-		slog.Warn("template cyber policy email failed; falling back", "err", err.Error())
+		slog.Warn("content_moderation.cyber_email_template_failed", contentModerationExceptionAttrs(log, "cyber_email_template_failed", contentModerationErrorKind(err))...)
 	}
 	subject := fmt.Sprintf("[%s] 网络安全策略拦截 / Cyber Policy Notice", sanitizeEmailHeader(siteName))
 	return s.emailService.SendEmail(ctx, log.UserEmail, subject, buildCyberPolicyNoticeEmailBody(siteName, log))
