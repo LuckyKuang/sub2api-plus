@@ -1570,7 +1570,7 @@ func appendImageData(document *Document, value map[string]any, role string, sour
 func appendImage(document *Document, value, role string, source Source, current, controlled bool) {
 	value = strings.TrimSpace(value)
 	lower := strings.ToLower(value)
-	if value == "" || !(strings.HasPrefix(lower, "data:image/") || strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://")) {
+	if value == "" || !strings.HasPrefix(lower, "data:image/") && !strings.HasPrefix(lower, "http://") && !strings.HasPrefix(lower, "https://") {
 		return
 	}
 	document.ContentBearing = true
