@@ -112,6 +112,25 @@ class CompressCliTest(unittest.TestCase):
         errors = self.validate_text(changed)
         self.assert_error_contains(errors, "terminal fingerprint")
 
+    def test_release_finalization_profile_cannot_lose_deterministic_gate(self) -> None:
+        changed = self.valid_document.replace(
+            "Only a verified published tag on its deterministic finalization tree may use release-finalization",
+            "Finalization may use a smaller check set",
+        )
+        errors = self.validate_text(changed)
+        self.assert_error_contains(errors, "deterministic finalization tree")
+
+    def test_tag_workflow_must_reuse_exact_main_evidence(self) -> None:
+        changed = self.valid_document.replace(
+            "The tag workflow must reuse that exact evidence rather than rerun the application matrix",
+            "The tag workflow validates the release",
+        )
+        errors = self.validate_text(changed)
+        self.assert_error_contains(
+            errors,
+            "reuse that exact evidence rather than rerun the application matrix",
+        )
+
     def test_unknown_source_path_fails(self) -> None:
         changed = self.valid_document.replace(
             "Go=backend/go.mod",

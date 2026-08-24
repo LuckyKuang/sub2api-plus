@@ -1,0 +1,51 @@
+name: Classify release finalization
+description: Select full or deterministic release-finalization validation.
+
+inputs:
+  base:
+    description: Candidate base SHA
+    required: false
+    default: ""
+  head:
+    description: Candidate head SHA
+    required: true
+  branch:
+    description: Candidate branch name
+    required: false
+    default: ""
+  default-branch:
+    description: Repository default branch
+    required: true
+  event:
+    description: GitHub event name
+    required: true
+
+outputs:
+  profile:
+    description: full or release-finalization
+    value: ${{ steps.classify.outputs.profile }}
+  tag:
+    description: Published custom tag for release-finalization
+    value: ${{ steps.classify.outputs.tag }}
+
+runs:
+  using: composite
+  steps:
+    - name: Regenerate and classify the candidate tree
+      id: classify
+      shell: bash
+      env:
+        CANDIDATE_BASE: ${{ inputs.base }}
+        CANDIDATE_HEAD: ${{ inputs.head }}
+        CANDIDATE_BRANCH: ${{ inputs.branch }}
+        DEFAULT_BRANCH: ${{ inputs.default-branch }}
+        EVENT_NAME: ${{ inputs.event }}
+      run: |
+        set -euo pipefail
+        python tools/release_finalization.py classify \
+          --base "$CANDIDATE_BASE" \
+          --head "$CANDIDATE_HEAD" \
+          --branch "$CANDIDATE_BRANCH" \
+          --default-branch "$DEFAULT_BRANCH" \
+          --event "$EVENT_NAME" \
+          --github-output "$GITHUB_OUTPUT"

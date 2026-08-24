@@ -22,13 +22,90 @@ concurrency:
 
 jobs:
   verify:
-    name: Verify release ref
-    uses: ./.github/workflows/backend-ci.yml
-    with:
-      ref: ${{ inputs.tag || github.ref }}
-      release-tag: ${{ inputs.tag || github.ref_name }}
+    name: Verify release provenance
+    runs-on: ubuntu-latest
     permissions:
+      actions: read
       contents: read
+    steps:
+      - name: Check out the release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Resolve and verify release provenance
+        id: provenance
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            TAG_NAME="$INPUT_TAG"
+          else
+            TAG_NAME="${GITHUB_REF#refs/tags/}"
+          fi
+
+          if ! [[ "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+\+custom\.[0-9]{3}$ ]]; then
+            echo "Invalid release tag: $TAG_NAME" >&2
+            exit 1
+          fi
+
+          TAG_REF="refs/tags/$TAG_NAME"
+          git show-ref --verify --quiet "$TAG_REF" || {
+            echo "Tag does not exist: $TAG_NAME" >&2
+            exit 1
+          }
+          if [ "$(git cat-file -t "$TAG_REF")" != "tag" ]; then
+            echo "Release tag must be annotated: $TAG_NAME" >&2
+            exit 1
+          fi
+
+          TARGET_SHA="$(git rev-parse "$TAG_REF^{}")"
+          if [ "$TARGET_SHA" != "$(git rev-parse HEAD)" ]; then
+            echo "Checked-out commit does not match $TAG_NAME" >&2
+            exit 1
+          fi
+
+          EXPECTED_SUBJECT="Sub2API Plus $TAG_NAME"
+          TAG_SUBJECT="$(git for-each-ref --format='%(contents:subject)' "$TAG_REF")"
+          if [ "$TAG_SUBJECT" != "$EXPECTED_SUBJECT" ]; then
+            echo "Tag subject must be: $EXPECTED_SUBJECT" >&2
+            exit 1
+          fi
+
+          NOTES_FILE="$RUNNER_TEMP/release-provenance-notes.md"
+          git for-each-ref --format='%(contents)' "$TAG_REF" > "$NOTES_FILE"
+          git fetch --no-tags origin \
+            "+refs/heads/$DEFAULT_BRANCH:refs/remotes/origin/$DEFAULT_BRANCH"
+          git merge-base --is-ancestor "$TARGET_SHA" "origin/$DEFAULT_BRANCH" || {
+            echo "$TAG_NAME target is not contained by origin/$DEFAULT_BRANCH" >&2
+            exit 1
+          }
+
+          {
+            echo "tag=$TAG_NAME"
+            echo "target=$TARGET_SHA"
+            echo "notes_file=$NOTES_FILE"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Verify release metadata and notes
+        run: |
+          python tools/check_release.py \
+            --tag "${{ steps.provenance.outputs.tag }}" \
+            --notes-file "${{ steps.provenance.outputs.notes_file }}" \
+            --require-status planned
+
+      - name: Verify exact main workflow evidence
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python tools/workflow_provenance.py \
+            --repository "$GITHUB_REPOSITORY" \
+            --branch "${{ github.event.repository.default_branch }}" \
+            --sha "${{ steps.provenance.outputs.target }}"
 
   release:
     name: Build and publish

@@ -1,4 +1,4 @@
 interface:
   display_name: "Sub2API Release CLI"
   short_description: "Prepare, tag, publish, and verify releases safely"
-  default_prompt: "Use $release-cli to verify the exact push-cli submit-pr proof, promote the PR through protected GitHub auto-merge, wait for Actions at the resulting main merge commit, run focused release metadata validation, require the automatic tag-only release Environment and immutable custom-tag ruleset before publication, and keep tag, publish, monitor, verify, and finalize as explicit resumable actions. Never use admin bypass, approve a deployment, or repeat the full local application matrix."
+  default_prompt: "Use $release-cli to require an exact typed push-cli proof, promote through protected GitHub auto-merge, wait for CI and Security Scan at the resulting main SHA, let the tag workflow reuse that exact provenance, and keep tag, publish, monitor, verify, and deterministic release-finalization as explicit resumable actions. Never use admin bypass, approve a deployment, or repeat the full application matrix for an unchanged tag or finalization tree."

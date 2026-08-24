@@ -1,9 +1,11 @@
 # Release Process
 
 This is the canonical pull-request-first process for custom Sub2API Plus
-releases. Ordinary branch pushes are fast. The final PR submission performs the
-complete local validation matrix once, and release-cli then relies on that exact
-commit proof plus protected GitHub Actions before merging and tagging.
+releases. Ordinary branch pushes are fast. The release-candidate PR uses the
+typed `full` proof and performs the complete local validation matrix once.
+Release-cli then relies on that exact commit proof plus protected GitHub Actions
+before merging and tagging; post-publication finalization uses a separate,
+strictly deterministic proof profile.
 
 ## Version Format
 
@@ -69,11 +71,13 @@ promotion gate:
 python3 skills/push-cli/scripts/push_cli.py submit-pr
 ```
 
-`submit-pr` fetches the current `origin/main`, requires it in the branch,
-records exact base/head SHAs, runs the complete matrix in the platform
-validation container, refetches and rechecks both SHAs, pushes the exact head,
-publishes `sub2api/local-validation`, and creates or reuses the PR. Any later
-head or base change requires another `submit-pr`.
+`submit-pr` defaults to `profile=full`: it fetches the current `origin/main`,
+requires it in the branch, records exact base/head SHAs, runs the complete
+matrix in three bounded platform-container lanes, refetches and rechecks both
+SHAs, pushes the exact head, publishes the typed
+`sub2api/local-validation` status, and creates or reuses the PR. Any later head
+or base change requires another `submit-pr`. `check --serial` is available only
+for diagnosis and same-commit timing comparisons; it runs the same check set.
 
 The documentation updater reads the current version from
 `backend/cmd/server/VERSION`. Its rollback example uses the nearest lower
@@ -186,11 +190,15 @@ python3 skills/release-cli/scripts/release_cli.py monitor \
   --tag vX.Y.Z+custom.NNN
 ```
 
-The Release workflow reruns its tag verification before publishing. After the
-verification matrix succeeds, the `Build and publish` job enters the checked
-`release` Environment and starts automatically. If it unexpectedly waits,
-`monitor` reports policy drift and the Actions URL; restore the Environment
-policy and rerun `monitor`. The CLI never approves or bypasses a deployment.
+The Release workflow runs a focused provenance gate before publishing. It
+requires the annotated tag to target a commit contained by `main`, validates
+the tag notes and planned mapping, and requires successful push-triggered `CI`
+and `Security Scan` runs for that exact main SHA. It does not rerun backend,
+frontend, lint, integration, deployment, or security application matrices.
+After provenance succeeds, `Build and publish` enters the checked `release`
+Environment and starts automatically. If it unexpectedly waits, `monitor`
+reports policy drift and the Actions URL; restore the Environment policy and
+rerun `monitor`. The CLI never approves or bypasses a deployment.
 
 After the workflow succeeds, verify the published state:
 
@@ -223,8 +231,11 @@ python3 skills/release-cli/scripts/release_cli.py finalize \
 status from `planned` to `published`. It validates that historical mapping
 independently from the current embedded version. If a newer release was already
 prepared, it also synchronizes the generated rollback examples; otherwise only
-`UPSTREAM.md` changes. It then calls `push-cli submit-pr` and never commits or
-pushes `main` directly.
+`UPSTREAM.md` changes. It then calls `push-cli submit-pr --profile
+release-finalization --tag <tag>` and never commits or pushes `main` directly.
+Push-cli regenerates the complete expected tree from the recorded base and
+verifies the published Release and immutable assets; it does not run the full
+application container matrix.
 
 After the follow-up PR Actions pass, promote it without release notes:
 
@@ -234,8 +245,12 @@ python3 skills/release-cli/scripts/release_cli.py promote-pr \
   --pr <finalization-pr-number>
 ```
 
-The no-notes form is accepted only for the deterministic finalization branch
-and requires the release mapping to be `published`.
+The no-notes form is accepted only when the typed proof carries the matching
+tag and deterministic finalization branch. Promotion independently regenerates
+the tree and requires the Release, immutable assets, and `published` mapping.
+Every required PR and merged-main context runs the same classifier before it
+selects focused finalization validation; ambiguous or non-deterministic changes
+fail closed.
 
 ## Pricing Assets
 

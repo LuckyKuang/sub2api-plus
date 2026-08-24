@@ -5,11 +5,13 @@ description: >-
   validated pull request. Use when the user asks to push code, publish the
   current branch, run the repository validation matrix, create or update a
   pull request, or verify branch CI. Ordinary push is fast and never runs the
-  local matrix. submit-pr is the only final promotion boundary: it requires
-  the latest default-branch base, runs every check inside the platform
-  validation container, binds the result to exact base/head SHAs, pushes,
-  publishes the local-validation commit status, and creates or reuses the pull
-  request. Never push the repository default branch.
+  local matrix. submit-pr is the only final promotion boundary: its default
+  full profile requires the latest default-branch base, runs every check inside
+  the platform validation container, binds the result to exact base/head SHAs,
+  pushes, publishes the local-validation commit status, and creates or reuses
+  the pull request. The release-finalization profile is reserved for
+  release-cli and requires a verified tag plus an exactly regenerated metadata
+  tree. Never push the repository default branch.
 ---
 
 # Push CLI
@@ -19,6 +21,7 @@ Run commands from the repository root:
     python3 skills/push-cli/scripts/push_cli.py push
     python3 skills/push-cli/scripts/push_cli.py submit-pr
     python3 skills/push-cli/scripts/push_cli.py check
+    python3 skills/push-cli/scripts/push_cli.py check --serial
     python3 skills/push-cli/scripts/push_cli.py ensure
     python3 skills/push-cli/scripts/push_cli.py watch
 
@@ -28,17 +31,28 @@ request, or wait for Actions. It rejects the GitHub default branch, detached
 HEAD, unfinished Git operations, an unexpected remote, and every force/tag/all
 push form.
 
-`submit-pr` is the final promotion action. It fetches the current GitHub default
-branch, requires that commit to be contained by the candidate branch, records
-the exact base and head, and runs the complete local matrix inside the platform
-validation container. After the matrix it refetches the default branch and
-requires the worktree, base, and head to be unchanged. It then pushes the exact
-head, publishes `sub2api/local-validation=success`, and creates or reuses one
-pull request to the default branch.
+`submit-pr` is the final promotion action. Its default `full` profile fetches
+the current GitHub default branch, requires that commit to be contained by the
+candidate branch, records the exact base and head, and runs the complete local
+matrix inside the platform validation container. After the matrix it refetches
+the default branch and requires the worktree, base, and head to be unchanged.
+It then pushes the exact head, publishes the profile-specific
+`sub2api/local-validation=success`, and creates or reuses one pull request to
+the default branch.
 
-`check` runs the same local matrix without pushing or creating a PR. `ensure`
-only prepares the platform runtime and validation image. `watch` observes
-push-triggered Actions for the current branch and SHA.
+`release-cli finalize` alone invokes `submit-pr --profile
+release-finalization --tag <tag>`. That path requires the deterministic branch,
+regenerates the complete expected tree from the recorded base, and verifies the
+already published Release and immutable assets. It does not start the full
+application container matrix. Treat the profile and tag as implementation
+inputs; do not use them to accelerate an ordinary or release-candidate PR.
+
+`check` runs the same full local matrix without pushing or creating a PR. It
+uses bounded parallel lanes by default; `check --serial` preserves the original
+ordering for diagnosis and same-commit timing comparisons. Both modes run the
+same command and test set. `ensure` only prepares the platform runtime and
+validation image. `watch` observes push-triggered Actions for the current
+branch and SHA.
 
 ## Mandatory GitHub CLI Gate
 
@@ -60,17 +74,19 @@ Only `check`, `submit-pr`, and `ensure` access the validation runtime.
 - Windows: Docker inside a running WSL2 Debian or Ubuntu distribution only.
 - Linux: directly reachable Docker Engine and Compose plugin.
 
-Every Go, frontend, Python policy, installer, and lifecycle check runs inside
-`deploy/Dockerfile.validation`. Host processes may only perform GitHub/Git
-gates, runtime probes, image management, Compose parsing, and container launch.
+Every full-profile Go, frontend, Python policy, installer, and lifecycle check
+runs inside `deploy/Dockerfile.validation`. Host processes may only perform
+GitHub/Git gates, runtime probes, image management, Compose parsing, container
+launch, or the deterministic finalization checks owned by release-cli.
 
 ## Pull-Request Proof
 
-The PR body contains one machine-readable base/head marker and its head commit
-carries the `sub2api/local-validation` status. A later branch commit has no
-matching status. A later default-branch update no longer matches the marker.
-Either condition requires another `submit-pr`; never edit the marker or status
-manually.
+The PR body contains one machine-readable typed marker and its head commit
+carries the profile-specific `sub2api/local-validation` status description.
+`full` binds base/head and forbids a tag. `release-finalization` binds
+base/head/tag. A later branch commit has no matching status; a later
+default-branch update no longer matches the marker. Either condition requires
+another `submit-pr`; never edit the marker or status manually.
 
 `submit-pr` creates a ready PR by default. `--title` and `--body-file` may
 provide reviewed PR text. If exactly one open PR already exists for the same
@@ -84,6 +100,8 @@ head/base SHAs.
 - Never imply that ordinary `push` performed local validation.
 - Never publish a success status until the post-matrix base/head/worktree
   recheck and exact branch push both succeed.
+- Never request `release-finalization` outside release-cli or accept it without
+  exact deterministic-tree and published-release verification.
 - Never create a PR for a stale default-branch base.
 - Never run the matrix on the host or silently downgrade tool versions.
 - Treat a local validation failure as a hard stop before push or PR mutation.

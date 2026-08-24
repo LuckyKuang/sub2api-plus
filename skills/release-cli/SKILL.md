@@ -18,10 +18,11 @@ Run from the repository root with an explicit custom tag:
 
 ## Release Boundary
 
-The release candidate must first be submitted with `push-cli submit-pr`.
-`promote-pr` accepts only an explicit open, non-draft, same-repository PR to the
-GitHub default branch. Its PR marker and `sub2api/local-validation` status must
-match the current head and current default-branch base exactly.
+The release candidate must first be submitted with the default `full` profile
+of `push-cli submit-pr`. `promote-pr` accepts only an explicit open, non-draft,
+same-repository PR to the GitHub default branch. Its typed PR marker and
+profile-specific `sub2api/local-validation` status must match the current head
+and current default-branch base exactly.
 
 Before enabling auto-merge, require repository Auto-merge and merge-commit
 mode, an active default-branch `pull_request` rule, strict current-branch
@@ -32,7 +33,9 @@ bypasses branch policy.
 
 After merge, resolve the actual merge commit, require it in `origin/main`, and
 wait for both `CI` and `Security Scan` push workflows at that exact SHA. A tag
-cannot be created before those runs succeed.
+cannot be created before those runs succeed. The tag-triggered Release workflow
+revalidates and reuses this exact provenance instead of rerunning the complete
+application matrix.
 
 ## Tag and Publication
 
@@ -64,10 +67,16 @@ deterministic `release/finalize-<version>` branch, and changes exactly one
 mapping independently from the current embedded version, synchronizes rollback
 examples when a newer release has already been prepared, commits only the
 mapping and those generated documentation updates, then invokes `push-cli
-submit-pr`. It never commits or pushes main.
+submit-pr --profile release-finalization --tag <tag>`. Push-cli regenerates the
+complete expected tree from the recorded base and re-verifies the published
+Release and immutable assets; it never runs the full application matrix for
+this profile or commits/pushes main.
+
 Promote the resulting PR through the same `promote-pr` policy after its Actions
-pass, omitting `--notes-file`; that form is accepted only for the deterministic
-finalization branch and requires `published` metadata.
+pass, omitting `--notes-file`. That form requires the matching typed tag proof,
+deterministic branch, regenerated tree, published metadata, Release workflow,
+and immutable assets. Required PR and merged-main contexts classify the same
+tree before selecting focused checks and fail closed on ambiguity.
 
 ## Safety
 
