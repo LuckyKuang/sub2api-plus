@@ -32,12 +32,9 @@ var (
 const promptAuditPrioritySeparator = "\x00SUB2API_PROMPT_AUDIT_PRIORITY_END\x00"
 
 type promptSegment struct {
-	text             string
-	user             bool
-	role             string
-	source           auditcontent.Source
-	current          bool
-	clientControlled bool
+	text string
+	user bool
+	role string
 }
 
 func ExtractPromptSnapshot(req Request) (PromptSnapshot, error) {
@@ -94,16 +91,37 @@ func extractPromptSnapshotWithDiagnostics(req Request, latestTurnOnly bool) (Pro
 func promptSegmentsFromAuditContent(document auditcontent.Document) []promptSegment {
 	segments := make([]promptSegment, 0, len(document.Segments))
 	for _, segment := range document.Segments {
+		if !isPromptAuditConversationSegment(segment) {
+			continue
+		}
+		role := segment.Role
+		user := role == "user"
+		if role == "" && (segment.Source == auditcontent.SourceMessage ||
+			segment.Source == auditcontent.SourceSearchQuery ||
+			segment.Source == auditcontent.SourceEmbeddingInput ||
+			segment.Source == auditcontent.SourceMediaPrompt) {
+			user = true
+			role = "user"
+		}
 		segments = append(segments, promptSegment{
-			text:             segment.Text,
-			user:             segment.Role == "user" || segment.Current && segment.ClientControlled,
-			role:             segment.Role,
-			source:           segment.Source,
-			current:          segment.Current,
-			clientControlled: segment.ClientControlled,
+			text: segment.Text,
+			user: user,
+			role: role,
 		})
 	}
 	return segments
+}
+
+func isPromptAuditConversationSegment(segment auditcontent.Segment) bool {
+	switch segment.Source {
+	case auditcontent.SourceMessage, auditcontent.SourceInstruction,
+		auditcontent.SourceSearchQuery, auditcontent.SourceEmbeddingInput,
+		auditcontent.SourceMediaPrompt, auditcontent.SourcePromptVariable,
+		auditcontent.SourceReasoning:
+		return true
+	default:
+		return false
+	}
 }
 
 // DefaultPromptPreviewMaxRunes caps how much sanitized prompt text may be
@@ -120,17 +138,11 @@ func normalizeSegmentsLatestUserFirst(values []promptSegment) []string {
 	if len(normalized) == 0 {
 		return nil
 	}
-	priorityIndex := latestPrioritySegment(normalized, false)
-	if priorityIndex < 0 {
-		priorityIndex = latestPrioritySegment(normalized, true)
-	}
-	if priorityIndex < 0 {
-		priorityIndex = len(normalized) - 1
-		for index := len(normalized) - 1; index >= 0; index-- {
-			if isUserSegment(normalized[index]) {
-				priorityIndex = index
-				break
-			}
+	priorityIndex := len(normalized) - 1
+	for index := len(normalized) - 1; index >= 0; index-- {
+		if isUserSegment(normalized[index]) {
+			priorityIndex = index
+			break
 		}
 	}
 	result := make([]string, 0, len(normalized))
@@ -144,13 +156,11 @@ func normalizeSegmentsLatestUserFirst(values []promptSegment) []string {
 }
 
 // blockingSegmentsLatestUserAndPreviousOutput limits synchronous guard input to
-// the current client-controlled turn and the nearest preceding assistant/model
-// turn. Full transcript scanning remains the default when narrowing is disabled.
+// the current user turn and the nearest preceding assistant/model turn. It is
+// deliberately opt-in because full transcript scanning remains stronger at
+// finding client-controlled content placed in older or non-user messages.
 func blockingSegmentsLatestUserAndPreviousOutput(values []promptSegment) []string {
 	normalized := normalizedPromptSegments(values)
-	if current := currentClientSegmentsWithPreviousOutput(normalized); len(current) > 0 {
-		return current
-	}
 	latestUserStart := latestUserSegmentStart(normalized)
 	if latestUserStart < 0 {
 		return normalizeSegmentsLatestUserFirst(values)
@@ -164,78 +174,14 @@ func blockingSegmentsLatestUserAndPreviousOutput(values []promptSegment) []strin
 		currentUserText = append(currentUserText, segment.text)
 	}
 	selected := []promptSegment{{text: strings.Join(currentUserText, "\n\n"), user: true, role: "user"}}
-	selected = appendPreviousAssistantOutput(selected, normalized, latestUserStart)
+	for index := latestUserStart - 1; index >= 0; index-- {
+		if !isAssistantOutputSegment(normalized[index]) {
+			continue
+		}
+		selected = append(selected, normalized[index])
+		break
+	}
 	return promptSegmentTexts(selected)
-}
-
-func latestPrioritySegment(values []promptSegment, includeContext bool) int {
-	for index := len(values) - 1; index >= 0; index-- {
-		segment := values[index]
-		if !segment.current || !segment.clientControlled {
-			continue
-		}
-		if !includeContext && isPromptContextSegment(segment) {
-			continue
-		}
-		return index
-	}
-	return -1
-}
-
-func currentClientSegmentsWithPreviousOutput(values []promptSegment) []string {
-	start, current := collectCurrentClientSegments(values, false)
-	if len(current) == 0 {
-		_, current = collectCurrentClientSegments(values, true)
-		if len(current) == 0 {
-			return nil
-		}
-	}
-	selected := []promptSegment{{text: strings.Join(current, "\n\n"), user: true, role: "user"}}
-	if start >= 0 {
-		for _, segment := range values {
-			if segment.current && segment.clientControlled && isPromptContextSegment(segment) {
-				selected = append(selected, segment)
-			}
-		}
-	}
-	selected = appendPreviousAssistantOutput(selected, values, start)
-	return promptSegmentTexts(selected)
-}
-
-func collectCurrentClientSegments(values []promptSegment, includeContext bool) (int, []string) {
-	start := -1
-	current := make([]string, 0, len(values))
-	for index, segment := range values {
-		if !segment.current || !segment.clientControlled {
-			continue
-		}
-		if !includeContext && isPromptContextSegment(segment) {
-			continue
-		}
-		if start < 0 {
-			start = index
-		}
-		current = append(current, segment.text)
-	}
-	return start, current
-}
-
-func isPromptContextSegment(segment promptSegment) bool {
-	return segment.source == auditcontent.SourceInstruction || segment.source == auditcontent.SourceToolDefinition
-}
-
-func appendPreviousAssistantOutput(selected, values []promptSegment, before int) []promptSegment {
-	for index := before - 1; index >= 0; index-- {
-		if !isAssistantOutputSegment(values[index]) {
-			continue
-		}
-		start := index
-		for start > 0 && isAssistantOutputSegment(values[start-1]) {
-			start--
-		}
-		return append(selected, values[start:index+1]...)
-	}
-	return selected
 }
 
 func normalizedPromptSegments(values []promptSegment) []promptSegment {

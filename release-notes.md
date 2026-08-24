@@ -1,36 +1,26 @@
-Sub2API Plus v0.1.178+custom.004
+Sub2API Plus v0.1.178+custom.005
 
 ## Highlights
 
-- Align Content Moderation and Prompt Audit extraction behavior with
-  `v0.1.177+custom.003`: incomplete or unrecognized content is observable and
-  passes through without an audit-derived block.
-- Preserve extracted sibling content for independent policy evaluation across
-  HTTP, Responses WebSocket, and Live Sideband request paths.
-- Add safe structured logs for extraction, worker, queue, persistence, and
-  runtime audit exceptions without exposing request content or raw errors.
+- Keep Content Moderation on current direct-user text and images.
+- Restore Prompt Audit conversation-text selection to `v0.1.177+custom.003`, so ordinary Codex `hi` requests are not blocked by client tool schemas.
+- Continue sharing one canonical extractor, without converting extraction failures into policy blocks.
 
 ## Changed
 
-- Use one canonical extraction result for both audit engines, with bounded and
-  sanitized incomplete-reason diagnostics.
-- Treat recognized-object unknown sibling fields as compatible extensions,
-  while unknown item types, frames, and wholly unrecognized structures are
-  counted and logged before pass-through.
-- Keep the official v0.1.178 baseline and existing Codex identity precedence.
+- Prompt Audit full/async scans messages, instructions/system context, reusable prompt variables, reasoning, and search/embedding/media prompts.
+- Prompt Audit no longer sends static `tools`/`functions` schemas, structured tool-call arguments, or tool/function outputs to Qwen3Guard.
+- Blocking latest-turn-only again scans only the latest user text plus the nearest preceding assistant/model output.
 
 ## Fixed
 
-- Prevent extraction failures from being converted into policy blocks,
-  unavailable decisions, HTTP 503 responses, or WebSocket closes.
-- Ensure an unsupported frame carrying recognized content remains observable
-  while its extracted content can still trigger an independent policy block.
+- Stop treating Codex and other client tool definitions as jailbreak prompt text.
+- Keep `hi` plus a large tool schema from producing a Prompt Audit block while still scanning jailbreak text in user/system/assistant conversation content.
 
 ## Compatibility and migration
 
-- No database migrations or configuration changes. Clients can continue to
-  send compatible extension fields and unknown protocol frames; those requests
-  now retain the established pass-through behavior.
+- No database migrations. Existing Prompt Audit endpoints, scanners, and jailbreak policy are unchanged; only the scanned conversation-text selection is restored.
+- Content Moderation behavior is unchanged.
 
 ## Known issues
 

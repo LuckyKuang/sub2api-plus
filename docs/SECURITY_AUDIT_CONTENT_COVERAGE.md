@@ -93,18 +93,19 @@ Both engines consume the same canonical document:
 | Engine/mode | Segment selection |
 | --- | --- |
 | Content Moderation | Scans only current direct-user text and images. Chat and Anthropic require an explicit `user` role; Responses, Live, and Gemini also accept their protocol-defined roleless user forms. Direct Alpha Search queries, embedding strings, and media prompts remain eligible. Instructions, system/developer context, reusable prompt variables, assistant/model messages, reasoning, tool definitions/calls/results, approval responses, and tool-produced images are excluded so platform or external content is not attributed to the user. |
-| Prompt Audit full/async | Scans all canonical segments subject to existing size, redaction, and persistence rules |
-| Prompt Audit blocking latest-turn-only | Prioritizes current client-controlled segments, then current instructions/tool definitions and the nearest relevant prior assistant/model output; it never trusts the inbound role to select an older user turn |
+| Prompt Audit full/async | Scans conversation text from the canonical document: messages, instructions/system context, reusable prompt variables, reasoning, and search/embedding/media prompts. It excludes tool/function definitions, structured tool-call arguments, and tool/function outputs so platform schemas and tool results are not treated as user prompts. |
+| Prompt Audit blocking latest-turn-only | Restores the `v0.1.177+custom.003` narrow scan: the latest user text plus the nearest preceding assistant/model output. Instructions, tool definitions, older turns, and structured tool calls are omitted from the blocking input. |
 
 Sharing a canonical document does not mean that the engines select identical
-segments. Prompt Audit provides full security-boundary visibility, while
-Content Moderation preserves the `v0.1.177+custom.003` attribution rule: only a
-direct user submission may produce a user content-policy violation. A turn
-containing only a tool result, assistant/model content, or platform context is
-a valid empty Content Moderation selection, but remains visible to Prompt
-Audit. Incomplete canonical extraction is observable but does not override
-either engine's selection policy: extracted content is still evaluated, while
-an empty selection passes through.
+segments. Content Moderation preserves the `v0.1.177+custom.003` attribution
+rule: only a direct user submission may produce a user content-policy
+violation. Prompt Audit keeps the same version's conversation-text policy:
+ordinary `hi` plus a client tool schema must not become a jailbreak block, while
+jailbreak text in user/system/assistant/tool message content remains auditable.
+A turn containing only a tool result or tool schema is a valid empty Prompt
+Audit selection. Incomplete canonical extraction is observable but does not
+override either engine's selection policy: extracted content is still
+evaluated, while an empty selection passes through.
 
 ## Failure Semantics
 

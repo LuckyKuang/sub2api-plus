@@ -54,7 +54,7 @@ RUN pnpm run build
 FROM --platform=${BUILDPLATFORM} ${GOLANG_IMAGE} AS backend-builder
 
 # Build arguments for version info (set by CI)
-ARG VERSION=0.1.178+custom.004
+ARG VERSION=0.1.178+custom.005
 ARG COMMIT=docker
 ARG DATE
 ARG GOPROXY
@@ -108,7 +108,7 @@ FROM ${POSTGRES_IMAGE} AS pg-client
 # -----------------------------------------------------------------------------
 FROM ${ALPINE_IMAGE}
 
-ARG VERSION=0.1.178+custom.004
+ARG VERSION=0.1.178+custom.005
 
 # Labels
 LABEL maintainer="LuckyKuang <https://github.com/luckykuang>"

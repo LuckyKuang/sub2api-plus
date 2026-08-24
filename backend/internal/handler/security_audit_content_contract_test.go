@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/securityaudit"
@@ -84,40 +83,50 @@ func TestContentModerationUsesLatestUserTextWithoutInstructionContext(t *testing
 	}
 }
 
-func TestPromptAuditStillCoversInstructionsAndCurrentClientContent(t *testing.T) {
+func TestPromptAuditUsesConversationTextWithoutToolSchema(t *testing.T) {
 	tests := []struct {
 		name     string
 		protocol string
 		body     string
-		current  []string
+		full     []string
+		latest   string
+		omit     []string
 	}{
 		{
-			name: "current assistant role plus context", protocol: service.ContentModerationProtocolOpenAIResponses,
+			name: "assistant text is scanned but tool schema is not", protocol: service.ContentModerationProtocolOpenAIResponses,
 			body: `{"instructions":"audit instruction","tools":[{"type":"function","name":"lookup","description":"audit tool definition"}],` +
 				`"input":[{"type":"message","role":"user","content":"older prompt"},{"type":"message","role":"assistant","content":"current assistant payload"}]}`,
-			current: []string{"current assistant payload", "audit instruction", "audit tool definition"},
+			full:   []string{"current assistant payload", "audit instruction", "older prompt"},
+			latest: "older prompt",
+			omit:   []string{"audit tool definition"},
 		},
 		{
-			name: "responses function result", protocol: service.ContentModerationProtocolOpenAIResponses,
-			body:    `{"input":[{"type":"message","role":"user","content":"older prompt"},{"type":"function_call_output","call_id":"call_1","output":"current tool result"}]}`,
-			current: []string{"current tool result"},
+			name: "responses function result is not prompt-audit conversation text", protocol: service.ContentModerationProtocolOpenAIResponses,
+			body:   `{"input":[{"type":"message","role":"user","content":"older prompt"},{"type":"function_call_output","call_id":"call_1","output":"current tool result"}]}`,
+			full:   []string{"older prompt"},
+			latest: "older prompt",
+			omit:   []string{"current tool result"},
 		},
 		{
-			name: "responses reusable prompt variables", protocol: service.ContentModerationProtocolOpenAIResponses,
-			body:    `{"prompt":{"id":"pmpt_1","variables":{"plain":"reusable variable","typed":{"type":"input_text","text":"typed variable"}}}}`,
-			current: []string{"reusable variable", "typed variable"},
+			name: "responses reusable prompt variables remain conversation text", protocol: service.ContentModerationProtocolOpenAIResponses,
+			body:   `{"prompt":{"id":"pmpt_1","variables":{"plain":"reusable variable","typed":{"type":"input_text","text":"typed variable"}}}}`,
+			full:   []string{"reusable variable", "typed variable"},
+			latest: "typed variable",
 		},
 		{
-			name: "live initial session", protocol: service.ContentModerationProtocolOpenAILive,
+			name: "live initial session instructions remain conversation text", protocol: service.ContentModerationProtocolOpenAILive,
 			body: `{"model":"gpt-live-test","instructions":"live instructions",` +
 				`"input_audio_transcription":{"model":"gpt-4o-transcribe","prompt":"legacy transcription context"},` +
 				`"audio":{"input":{"transcription":{"model":"gpt-live-transcribe","prompt":"current transcription context","keywords":["premium plan","AC-42"]}}}}`,
-			current: []string{"live instructions", "legacy transcription context", "current transcription context", "premium plan", "AC-42"},
+			full:   []string{"live instructions", "legacy transcription context", "current transcription context", "premium plan", "AC-42"},
+			latest: "live instructions",
 		},
 		{
-			name: "chat parallel structured tool results and system context", protocol: service.ContentModerationProtocolOpenAIChat,
-			body:    `{"messages":[{"role":"system","content":"chat system context"},{"role":"user","content":"older"},{"role":"assistant","tool_calls":[{"function":{"arguments":"{}"}}]},{"role":"tool","content":{"first":true}},{"role":"function","content":{"second":false}}]}`,
-			current: []string{`{"first":true}`, `{"second":false}`, "chat system context"},
+			name: "chat tool-role and tool-call arguments are omitted", protocol: service.ContentModerationProtocolOpenAIChat,
+			body:   `{"messages":[{"role":"system","content":"chat system context"},{"role":"user","content":"older"},{"role":"assistant","tool_calls":[{"function":{"arguments":"{\"secret\":true}"}}]},{"role":"tool","content":{"first":true}},{"role":"function","content":{"second":false}}]}`,
+			full:   []string{"chat system context", "older"},
+			latest: "older",
+			omit:   []string{`"secret":true`, `{"first":true}`, `{"second":false}`},
 		},
 	}
 
@@ -134,11 +143,14 @@ func TestPromptAuditStillCoversInstructionsAndCurrentClientContent(t *testing.T)
 			}, true)
 			require.NoError(t, err)
 
-			for _, expected := range test.current {
+			for _, expected := range test.full {
 				require.Contains(t, full.ScanText, expected)
-				require.Contains(t, latest.ScanText, expected)
 			}
-			require.True(t, strings.HasPrefix(latest.ScanText, test.current[0]))
+			require.Contains(t, latest.ScanText, test.latest)
+			for _, omitted := range test.omit {
+				require.NotContains(t, full.ScanText, omitted)
+				require.NotContains(t, latest.ScanText, omitted)
+			}
 		})
 	}
 }

@@ -20,9 +20,9 @@ Image{URL, Role, Source, Current, ClientControlled}
 
 ### 2. 两套引擎共享解析但保留选择策略
 
-Prompt Audit 消费所有规范化段，并继续按最新客户端输入优先生成快照。启用 `blocking_latest_turn_only` 时，选择当前客户端控制段、当前 instructions/工具定义上下文及其最近的历史 assistant/model 输出。
+Prompt Audit 消费规范化对话文本，恢复 `v0.1.177+custom.003` 的扫描范围：messages、instructions/system 上下文、reusable prompt variables、reasoning、search/embedding/media prompt。工具/函数定义、结构化 tool-call arguments 以及 tool/function outputs 仍由共享提取器规范化，但不进入 Prompt Audit 扫描，避免把 Codex 等客户端 schema 或工具结果当成用户越狱。启用 `blocking_latest_turn_only` 时，只扫描最新 user 文本及其最近的历史 assistant/model 输出。
 
-Content Moderation 在同一规范化结果上执行独立的直接用户归因选择，恢复 `v0.1.177+custom.003` 的产品语义：普通消息协议只选择最后一个当前直接用户消息中的文本和图片；Chat/Anthropic 要求显式 `user` 角色，Responses/Live/Gemini 允许其协议定义的无角色用户简写。Alpha Search 查询、Embeddings 字符串和 Images/media prompt 属于直接用户输入。instructions、system/developer 上下文、assistant/model 消息、reasoning、工具定义/调用/结果、审批响应、reusable prompt variables 及其图片均不进入 Content Moderation，避免把平台或外部内容归因为用户违规。它们仍完整保留给 Prompt Audit。
+Content Moderation 在同一规范化结果上执行独立的直接用户归因选择，恢复 `v0.1.177+custom.003` 的产品语义：普通消息协议只选择最后一个当前直接用户消息中的文本和图片；Chat/Anthropic 要求显式 `user` 角色，Responses/Live/Gemini 允许其协议定义的无角色用户简写。Alpha Search 查询、Embeddings 字符串和 Images/media prompt 属于直接用户输入。instructions、system/developer 上下文、assistant/model 消息、reasoning、工具定义/调用/结果、审批响应、reusable prompt variables 及其图片均不进入 Content Moderation，避免把平台或外部内容归因为用户违规。Prompt Audit 继续扫描其中的对话文本，但不扫描静态工具 schema。
 
 规范化成功但没有直接用户内容时，Content Moderation 产生合法空选择并跳过外部 Moderations 请求。`Incomplete=true` 只用于指标和日志，不覆盖引擎选择：已成功提取的内容继续审核，没有可选内容时直接放行。
 
