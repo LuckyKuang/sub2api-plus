@@ -84,7 +84,7 @@ func TestPromptServiceBlockingLatestTurnOnlyUsesNarrowSnapshot(t *testing.T) {
 	decision, err := service.Evaluate(context.Background(), Request{Protocol: "openai_chat_completions", Body: []byte(`{"messages":[{"role":"system","content":"system instruction"},{"role":"user","content":"older user input"},{"role":"assistant","content":"previous output"},{"role":"user","content":"latest user input"}]}`)})
 	require.NoError(t, err)
 	require.Equal(t, DecisionAllow, decision.Kind)
-	require.Equal(t, []string{"latest user input", "system instruction\n\nprevious output"}, seen)
+	require.Equal(t, []string{"latest user input", "previous output"}, seen)
 }
 
 func TestPromptServiceBlockingAllowsEmptyContentExtractionFailure(t *testing.T) {

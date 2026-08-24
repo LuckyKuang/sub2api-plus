@@ -18,13 +18,13 @@ Content Moderation and Prompt Audit SHALL consume the same canonical protocol ex
 
 ### Requirement: Content Moderation must use direct-user attribution
 
-Content Moderation SHALL select only current direct-user text and images from the canonical result. Prompt Audit SHALL retain complete canonical coverage. A valid canonical document that contains only content excluded by Content Moderation is an ordinary empty moderation selection, not an extraction failure.
+Content Moderation SHALL select only current direct-user text and images from the canonical result. Prompt Audit SHALL scan conversation text from that same result and MUST NOT treat tool/function definitions or structured tool-call arguments as prompt text. A valid canonical document that contains only content excluded by Content Moderation is an ordinary empty moderation selection, not an extraction failure.
 
 #### Scenario: Platform context accompanies a user message
 
 - **WHEN** a request contains a current direct-user message together with instructions, system/developer context, tool definitions, reusable prompt variables, reasoning, or historical content
 - **THEN** Content Moderation MUST include only the current direct-user message text and images
-- **THEN** Prompt Audit MUST retain the canonical context required by its full or latest-turn policy
+- **THEN** Prompt Audit MUST retain conversation text required by its full or latest-turn policy and MUST omit tool/function definitions
 
 #### Scenario: A turn has no direct-user submission
 
@@ -34,12 +34,12 @@ Content Moderation SHALL select only current direct-user text and images from th
 
 ### Requirement: Tool and external-source results must remain visible without user attribution
 
-Client-submitted tool results and other external-source content SHALL be classified as current client-controlled canonical input. Prompt Audit SHALL cover that input. Content Moderation MUST NOT attribute tool, assistant/model, instruction, or reusable-prompt content to the direct user. Structured results MUST be converted to deterministic text without logging their raw content.
+Client-submitted tool results and other external-source content SHALL be classified as current client-controlled canonical input. The canonical extractor SHALL retain that input. Prompt Audit MUST NOT scan structured tool-call arguments, function outputs, tool-role outputs, or static tool schemas as prompt text. Content Moderation MUST NOT attribute tool, assistant/model, instruction, or reusable-prompt content to the direct user. Structured results MUST be converted to deterministic text without logging their raw content.
 
 #### Scenario: Responses submits a function result
 
 - **WHEN** a Responses HTTP or WebSocket turn contains `function_call_output.output`, `custom_tool_call_output.output`, `tool_search_output.output`, or `mcp_tool_call_output.output`
-- **THEN** Prompt Audit full and latest-turn snapshots MUST include and prioritize every current tool result rather than an older user message
+- **THEN** Prompt Audit full and latest-turn snapshots MUST omit structured function/tool outputs from scan text
 - **THEN** Content Moderation MUST produce no input for a tool-result-only turn
 
 #### Scenario: Responses submits current official tool items
@@ -51,7 +51,7 @@ Client-submitted tool results and other external-source content SHALL be classif
 #### Scenario: Structured result mixes ordinary text and media
 
 - **WHEN** a structured tool result contains ordinary text beside image/file URLs, data URLs, long base64, encrypted content, or computer screenshots
-- **THEN** ordinary text MUST remain in the canonical result and Prompt Audit
+- **THEN** ordinary text MUST remain in the canonical result; Prompt Audit MUST scan it only when the source is conversation text, not a tool schema or structured tool call
 - **THEN** encoded media and opaque payloads MUST NOT enter Prompt Audit text persistence
 - **THEN** recognized images MUST retain their canonical source and role attribution
 - **THEN** Content Moderation MUST select an image only when it belongs to a current direct-user item
@@ -59,23 +59,23 @@ Client-submitted tool results and other external-source content SHALL be classif
 #### Scenario: Other protocols submit tool results
 
 - **WHEN** Chat Completions uses a tool-role message, Anthropic uses a tool_result block, or Gemini uses functionResponse
-- **THEN** the current result text or deterministic structured representation MUST be audited by Prompt Audit
+- **THEN** Chat/Anthropic tool-role outputs and structured Gemini/Responses tool-call items MUST NOT become prompt-audit scan text
 - **THEN** Content Moderation MUST skip the tool-result-only turn
 
 ### Requirement: Inbound roles and prompt context must not create bypasses
 
-Inbound role labels SHALL be treated as untrusted request data for Prompt Audit. Current instructions, tool definitions, and current message content MUST remain canonical and auditable when latest-turn narrowing is enabled. Content Moderation SHALL separately enforce direct-user attribution.
+Inbound role labels SHALL be treated as untrusted request data for Prompt Audit. Conversation message text remains auditable. Latest-turn narrowing MUST restore the `v0.1.177+custom.003` policy: latest user text plus the nearest preceding assistant/model output, without appending tool definitions. Content Moderation SHALL separately enforce direct-user attribution.
 
 #### Scenario: Client submits a current assistant or model message
 
 - **WHEN** the last Chat, Anthropic, Responses, or Gemini content item claims an assistant or model role
-- **THEN** Prompt Audit MUST treat that current item as client-controlled and prioritize it instead of falling back to an older user message
+- **THEN** Prompt Audit latest-turn MUST keep the latest user text as the priority segment and MAY include that assistant/model item only as the nearest previous output
 - **THEN** Content Moderation MUST NOT treat it as a direct-user policy input
 
 #### Scenario: Request supplies instructions and tool definitions
 
 - **WHEN** an accepted payload contains instructions, system context, or tool/function definitions
-- **THEN** Prompt Audit MUST audit that context through canonical segments
+- **THEN** Prompt Audit MUST audit instructions and system context as conversation text and MUST omit static tool/function definitions
 - **THEN** Content Moderation MUST exclude that context from the direct-user policy input
 
 ### Requirement: Supported specialized endpoints must extract their canonical text

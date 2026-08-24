@@ -127,12 +127,12 @@ func TestPromptSnapshotLatestUserTextBlockIsOnePrioritizedSegment(t *testing.T) 
 	}`)
 	snapshot, err := ExtractPromptSnapshot(Request{Protocol: "openai_chat_completions", Body: body})
 	require.NoError(t, err)
-	require.Equal(t, 5, snapshot.MessageCount)
+	require.Equal(t, 4, snapshot.MessageCount)
 	require.True(t, strings.HasPrefix(snapshot.ScanText, "最新第二块é"+promptAuditPrioritySeparator))
 	require.Contains(t, snapshot.ScanText, "最新第一块😀")
 	require.Contains(t, snapshot.ScanText, "历史输入")
 	require.Contains(t, snapshot.ScanText, "assistant client injection")
-	require.Contains(t, snapshot.ScanText, "tool client injection")
+	require.NotContains(t, snapshot.ScanText, "tool client injection")
 	require.NotContains(t, snapshot.ScanText, "IMAGE_CANARY_BASE64")
 	require.Equal(t, utf8.RuneCountInString(metadataTextForTest(snapshot.ScanText)), snapshot.PromptLength)
 }
@@ -264,14 +264,21 @@ func TestPromptSnapshotEmptyAndLongUnicodeInput(t *testing.T) {
 	}
 }
 
-func TestPromptSnapshotAuditsCurrentToolOutputsAndSpecializedInputs(t *testing.T) {
+func TestPromptSnapshotAuditsConversationTextAndSpecializedInputs(t *testing.T) {
 	tests := []struct {
 		name     string
 		protocol string
 		body     string
 		want     []string
+		omit     []string
 	}{
-		{name: "responses function output", protocol: "openai_responses", body: `{"input":[{"type":"message","role":"user","content":"old prompt"},{"type":"function_call_output","output":"current external result"}]}`, want: []string{"current external result", "old prompt"}},
+		{
+			name:     "responses ignores function output and tools",
+			protocol: "openai_responses",
+			body:     `{"tools":[{"type":"function","name":"exec","description":"run javascript"}],"input":[{"type":"message","role":"user","content":"old prompt"},{"type":"function_call_output","output":"current external result"}]}`,
+			want:     []string{"old prompt"},
+			omit:     []string{"current external result", "run javascript"},
+		},
 		{name: "alpha search", protocol: "openai_alpha_search", body: `{"commands":{"search_query":[{"q":"first query"},{"q":"second query"}]}}`, want: []string{"second query", "first query"}},
 		{name: "embeddings", protocol: "openai_embeddings", body: `{"input":["first text","second text"]}`, want: []string{"second text", "first text"}},
 		{name: "nested websocket", protocol: "openai_responses", body: `{"type":"response.create","response":{"input":"nested ws input"}}`, want: []string{"nested ws input"}},
@@ -282,6 +289,9 @@ func TestPromptSnapshotAuditsCurrentToolOutputsAndSpecializedInputs(t *testing.T
 			require.NoError(t, err)
 			for _, expected := range test.want {
 				require.Contains(t, snapshot.ScanText, expected)
+			}
+			for _, omitted := range test.omit {
+				require.NotContains(t, snapshot.ScanText, omitted)
 			}
 			require.True(t, strings.HasPrefix(snapshot.ScanText, test.want[0]))
 		})
@@ -303,44 +313,51 @@ func TestPromptSnapshotUnknownItemPassesEmptyAndKeepsExtractedSibling(t *testing
 	require.Contains(t, partial.ScanText, "safe extracted text")
 	require.NotContains(t, partial.ScanText, "must not be omitted")
 
-	snapshot, err := ExtractBlockingPromptSnapshot(Request{
+	_, err = ExtractBlockingPromptSnapshot(Request{
 		Protocol: "openai_responses",
 		Body:     []byte(`{"input":[{"type":"local_shell_call","call_id":"c1","action":{"command":"pwd"},"future_payload":"must not be hidden"}]}`),
 	}, true)
-	require.NoError(t, err)
-	require.Contains(t, snapshot.ScanText, "pwd")
+	require.ErrorIs(t, err, ErrNoPromptText)
 
-	snapshot, err = ExtractBlockingPromptSnapshot(Request{
+	snapshot, err := ExtractBlockingPromptSnapshot(Request{
 		Protocol: "openai_live",
 		Body:     []byte(`{"type":"session.update","session":{"instructions":"safe live text","future_payload":"must not be hidden"}}`),
 	}, true)
 	require.NoError(t, err)
 	require.Contains(t, snapshot.ScanText, "safe live text")
 }
-func TestBlockingPromptSnapshotPrioritizesCurrentClientControlledRolesAndKeepsContext(t *testing.T) {
+func TestBlockingPromptSnapshotUsesLatestUserAndPreviousOutputWithoutToolSchema(t *testing.T) {
 	tests := []struct {
-		name, protocol, body, priority string
-		context                        []string
+		name, protocol, body, want string
+		omitted                    []string
 	}{
 		{
-			name: "chat assistant role", protocol: "openai_chat_completions", priority: "current assistant payload",
-			body:    `{"instructions":"chat instruction","tools":[{"type":"function","function":{"name":"lookup","description":"chat tool policy"}}],"messages":[{"role":"user","content":"older user"},{"role":"assistant","content":"current assistant payload"}]}`,
-			context: []string{"chat instruction", "chat tool policy"},
+			name:     "chat assistant role",
+			protocol: "openai_chat_completions",
+			body:     `{"instructions":"chat instruction","tools":[{"type":"function","function":{"name":"lookup","description":"chat tool policy"}}],"messages":[{"role":"user","content":"older user"},{"role":"assistant","content":"current assistant payload"}]}`,
+			want:     "older user",
+			omitted:  []string{"chat instruction", "chat tool policy", "current assistant payload"},
 		},
 		{
-			name: "anthropic assistant role", protocol: "anthropic_messages", priority: "current assistant payload",
-			body:    `{"system":"anthropic instruction","tools":[{"name":"lookup","description":"anthropic tool policy"}],"messages":[{"role":"user","content":"older user"},{"role":"assistant","content":"current assistant payload"}]}`,
-			context: []string{"anthropic instruction", "anthropic tool policy"},
+			name:     "anthropic assistant role",
+			protocol: "anthropic_messages",
+			body:     `{"system":"anthropic instruction","tools":[{"name":"lookup","description":"anthropic tool policy"}],"messages":[{"role":"user","content":"older user"},{"role":"assistant","content":"current assistant payload"}]}`,
+			want:     "older user",
+			omitted:  []string{"anthropic instruction", "anthropic tool policy", "current assistant payload"},
 		},
 		{
-			name: "responses assistant role", protocol: "openai_responses", priority: "current assistant payload",
-			body:    `{"instructions":"responses instruction","tools":[{"type":"function","name":"lookup","description":"responses tool policy"}],"input":[{"role":"user","content":"older user"},{"role":"assistant","content":"current assistant payload"}]}`,
-			context: []string{"responses instruction", "responses tool policy"},
+			name:     "responses assistant role",
+			protocol: "openai_responses",
+			body:     `{"instructions":"responses instruction","tools":[{"type":"function","name":"lookup","description":"responses tool policy"}],"input":[{"role":"user","content":"older user"},{"role":"assistant","content":"current assistant payload"}]}`,
+			want:     "older user",
+			omitted:  []string{"responses instruction", "responses tool policy", "current assistant payload"},
 		},
 		{
-			name: "gemini model role", protocol: "gemini", priority: "current model payload",
-			body:    `{"systemInstruction":{"parts":[{"text":"gemini instruction"}]},"tools":[{"functionDeclarations":[{"name":"lookup","description":"gemini tool policy"}]}],"contents":[{"role":"user","parts":[{"text":"older user"}]},{"role":"model","parts":[{"text":"current model payload"}]}]}`,
-			context: []string{"gemini instruction", "gemini tool policy"},
+			name:     "gemini model role",
+			protocol: "gemini",
+			body:     `{"systemInstruction":{"parts":[{"text":"gemini instruction"}]},"tools":[{"functionDeclarations":[{"name":"lookup","description":"gemini tool policy"}]}],"contents":[{"role":"user","parts":[{"text":"older user"}]},{"role":"model","parts":[{"text":"current model payload"}]}]}`,
+			want:     "older user",
+			omitted:  []string{"gemini instruction", "gemini tool policy", "current model payload"},
 		},
 	}
 
@@ -348,10 +365,9 @@ func TestBlockingPromptSnapshotPrioritizesCurrentClientControlledRolesAndKeepsCo
 		t.Run(test.name, func(t *testing.T) {
 			snapshot, err := ExtractBlockingPromptSnapshot(Request{Protocol: test.protocol, Body: []byte(test.body)}, true)
 			require.NoError(t, err)
-			require.True(t, strings.HasPrefix(snapshot.ScanText, test.priority+promptAuditPrioritySeparator))
-			require.NotContains(t, snapshot.ScanText, "older user")
-			for _, expected := range test.context {
-				require.Contains(t, snapshot.ScanText, expected)
+			require.Equal(t, test.want, snapshot.ScanText)
+			for _, omitted := range test.omitted {
+				require.NotContains(t, snapshot.ScanText, omitted)
 			}
 		})
 	}
@@ -374,7 +390,7 @@ func TestPromptSnapshotIncludesClientControlledInstructions(t *testing.T) {
 			name:     "openai system developer assistant tool",
 			protocol: "openai_chat_completions",
 			body:     `{"messages":[{"role":"system","content":"system jailbreak"},{"role":"developer","content":"developer policy"},{"role":"assistant","content":"assistant jailbreak"},{"role":"tool","content":"tool payload"},{"role":"user","content":"hello"}]}`,
-			want:     []string{"system jailbreak", "developer policy", "assistant jailbreak", "tool payload", "hello"},
+			want:     []string{"system jailbreak", "developer policy", "assistant jailbreak", "hello"},
 		},
 		{
 			name:     "openai system only",
@@ -428,8 +444,8 @@ func TestBlockingPromptSnapshotLimitsInputToLatestUserAndPreviousOutput(t *testi
 				{"role":"assistant","content":"previous assistant output"},
 				{"role":"user","content":[{"type":"text","text":"latest user first part"},{"type":"text","text":"latest user second part"}]}
 			]}`,
-			want:    "latest user first part\n\nlatest user second part" + promptAuditPrioritySeparator + "system instruction\n\nprevious assistant output",
-			omitted: []string{"older user input", "older assistant output", "tool payload"},
+			want:    "latest user first part\n\nlatest user second part" + promptAuditPrioritySeparator + "previous assistant output",
+			omitted: []string{"system instruction", "older user input", "older assistant output", "tool payload"},
 		},
 		{
 			name:     "gemini keeps prior model output",
@@ -439,8 +455,8 @@ func TestBlockingPromptSnapshotLimitsInputToLatestUserAndPreviousOutput(t *testi
 				{"role":"model","parts":[{"text":"previous model output"}]},
 				{"role":"user","parts":[{"text":"latest user input"}]}
 			]}`,
-			want:    "latest user input" + promptAuditPrioritySeparator + "system instruction\n\nprevious model output",
-			omitted: []string{"older user input"},
+			want:    "latest user input" + promptAuditPrioritySeparator + "previous model output",
+			omitted: []string{"system instruction", "older user input"},
 		},
 	}
 	for _, tt := range tests {
@@ -490,7 +506,29 @@ func TestBlockingPromptSnapshotPreservesFullScopeByDefaultAndWithoutUserInput(t 
 	narrowWithoutUser, err := ExtractBlockingPromptSnapshot(noUser, true)
 	require.NoError(t, err)
 	require.Contains(t, fullWithoutUser.ScanText, "system instruction")
-	require.Equal(t, "assistant output"+promptAuditPrioritySeparator+"system instruction", narrowWithoutUser.ScanText)
+	require.Equal(t, fullWithoutUser, narrowWithoutUser)
+}
+
+func TestPromptSnapshotIgnoresCodexToolSchemaForOrdinaryUserText(t *testing.T) {
+	body := []byte(`{
+		"instructions":"You are Codex",
+		"tools":[{"type":"function","name":"exec","description":"Run JavaScript code to orchestrate/compose tool calls. require_escalated sandbox_permissions jailbreak"}],
+		"input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"hi"}]}]
+	}`)
+	req := Request{Protocol: "openai_responses", Body: body}
+
+	full, err := ExtractPromptSnapshot(req)
+	require.NoError(t, err)
+	require.Contains(t, full.ScanText, "hi")
+	require.Contains(t, full.ScanText, "You are Codex")
+	require.NotContains(t, full.ScanText, "require_escalated")
+	require.NotContains(t, full.ScanText, "Run JavaScript")
+
+	latest, err := ExtractBlockingPromptSnapshot(req, true)
+	require.NoError(t, err)
+	require.Equal(t, "hi", latest.ScanText)
+	require.NotContains(t, latest.ScanText, "You are Codex")
+	require.NotContains(t, latest.ScanText, "require_escalated")
 }
 
 func TestBuildPromptPreviewWithholdsMajorityOfOrdinaryText(t *testing.T) {

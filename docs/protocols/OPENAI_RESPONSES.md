@@ -143,22 +143,21 @@ The canonical boundary covers top-level and `response`-nested `instructions`,
 `tools`, `input`, reusable `prompt.variables`, message text, tool definitions,
 and the arguments, input, output, result, or dynamic tools carried by function,
 custom, tool-search, local/hosted shell, apply-patch, computer, MCP,
-code-interpreter, and programmatic-tool-calling items. In particular,
-`function_call_output.output`,
-`custom_tool_call_output.output`, the compatibility
-`tool_search_output.output`, and official `tool_search_output.tools` are
-available to Prompt Audit on every HTTP or WebSocket turn. Media fields and
-encoded screenshots are removed before Prompt Audit text serialization and
-persistence; ordinary text in the same structured result is retained.
+code-interpreter, and programmatic-tool-calling items. Media fields and
+encoded screenshots are removed before text serialization and persistence;
+ordinary text in the same structured result is retained.
 
 Content Moderation consumes the same canonical result but selects only the
 current direct-user message text and images. It excludes `instructions`, tool
 definitions, reusable prompt variables, assistant/model messages, reasoning,
 tool calls/results, approval responses, and tool-produced screenshots. This
 prevents platform context or external tool content from being reported as a
-user policy violation. Prompt Audit continues to cover those excluded segments;
-its latest-turn mode treats a current client-submitted `assistant` item as
-untrusted and prioritizes it instead of falling back to an older user message.
+user policy violation. Prompt Audit also consumes that canonical result, but
+its selection follows `v0.1.177+custom.003`: conversation text such as
+`instructions`, message text, and reusable prompt variables is scanned, while
+static `tools` schemas and structured tool-call arguments/results are not
+treated as prompt text. Latest-turn blocking scans the latest user text plus
+the nearest preceding assistant/model output.
 A supported WebSocket control frame may produce no audit input. Unknown sibling
 keys, unsupported event/item types, and valid-JSON unrecognized structures pass
 through without an audit-derived block. When the canonical extractor recognizes
