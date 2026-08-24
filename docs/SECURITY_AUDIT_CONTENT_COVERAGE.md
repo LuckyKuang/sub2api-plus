@@ -22,18 +22,20 @@ content that is present in an accepted payload.
 
 ## Canonical Result
 
-The shared extractor returns a protocol-independent document containing
-segments with `Text`, `Role`, `Source`, `Current`, and `ClientControlled`, plus
-`ContentBearing` and `Incomplete` classifications.
+The shared extractor returns a protocol-independent document containing text
+segments and image inputs. Both carry `Role`, `Source`, `Current`, and
+`ClientControlled`; the document also carries `ContentBearing` and `Incomplete`
+classifications.
 
 - `Current` identifies the new content in this request or turn. Consecutive
   trailing tool results are all current.
 - `ClientControlled` is independent of the claimed role. A current
   `assistant` or `model` message remains client-controlled inbound content.
 - Structured tool arguments and results are encoded as deterministic JSON.
-- Recognized media blocks are explicit no-text content. Content Moderation
-  preserves its separate image inputs; Prompt Audit does not scan URLs or
-  encoded media as prompt text. Structured results are sanitized before text
+- Recognized media blocks are explicit no-text content. Images remain in the
+  canonical result with the same role, source, and current-turn attribution as
+  their containing item. Prompt Audit does not scan URLs or encoded media as
+  prompt text. Structured results are sanitized before text
   serialization so image/file URLs, data URLs, long base64 payloads, encrypted
   compaction data, screenshots, and image-generation results are not persisted;
   ordinary text beside those fields remains auditable.
@@ -80,9 +82,18 @@ Both engines consume the same canonical document:
 
 | Engine/mode | Segment selection |
 | --- | --- |
-| Content Moderation | Scans current segments, with current messages and tool results placed before repeated context; image extraction follows the same current rule, including consecutive Chat/Responses tool outputs, nested Anthropic tool results, reusable prompt variables, and computer screenshots |
+| Content Moderation | Scans only current direct-user text and images. Chat and Anthropic require an explicit `user` role; Responses, Live, and Gemini also accept their protocol-defined roleless user forms. Direct Alpha Search queries, embedding strings, and media prompts remain eligible. Instructions, system/developer context, reusable prompt variables, assistant/model messages, reasoning, tool definitions/calls/results, approval responses, and tool-produced images are excluded so platform or external content is not attributed to the user. |
 | Prompt Audit full/async | Scans all canonical segments subject to existing size, redaction, and persistence rules |
 | Prompt Audit blocking latest-turn-only | Prioritizes current client-controlled segments, then current instructions/tool definitions and the nearest relevant prior assistant/model output; it never trusts the inbound role to select an older user turn |
+
+Sharing a canonical document does not mean that the engines select identical
+segments. Prompt Audit provides full security-boundary visibility, while
+Content Moderation preserves the `v0.1.177+custom.003` attribution rule: only a
+direct user submission may produce a user content-policy violation. A turn
+containing only a tool result, assistant/model content, or platform context is
+a valid empty Content Moderation selection, but remains visible to Prompt
+Audit. Incomplete canonical extraction is still an extraction failure for both
+engines before either selection policy is applied.
 
 ## Failure Semantics
 

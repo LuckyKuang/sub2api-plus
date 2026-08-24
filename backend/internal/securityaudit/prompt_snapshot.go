@@ -58,7 +58,7 @@ func extractPromptSnapshot(req Request, latestTurnOnly bool) (PromptSnapshot, er
 		segments = blockingSegmentsLatestUserAndPreviousOutput(extracted)
 	}
 	if len(segments) == 0 {
-		if document.ContentBearing {
+		if document.ContentBearing && len(document.Images) == 0 {
 			return PromptSnapshot{}, ErrPromptContentExtract
 		}
 		return PromptSnapshot{}, ErrNoPromptText

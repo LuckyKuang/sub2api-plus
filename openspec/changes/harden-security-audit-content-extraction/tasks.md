@@ -8,7 +8,8 @@
 
 - [x] 2.1 Add the dependency-free canonical audit-content parser and real-payload unit tests.
 - [x] 2.2 Move Prompt Audit protocol text extraction onto canonical segments without changing redaction, hashing, persistence, or scanner behavior.
-- [x] 2.3 Move Content Moderation text extraction onto canonical current segments while preserving image handling and risk side effects.
+- [x] 2.3 Move Content Moderation extraction onto a canonical-document selector while preserving risk side effects.
+- [x] 2.4 Preserve canonical image attribution and restore Content Moderation to current direct-user selection without narrowing Prompt Audit coverage.
 
 ## 3. Security behavior and observability
 
@@ -23,3 +24,4 @@
 
 - [x] 4.1 Add dual-engine semantic payload-contract tests and update obsolete tests that codified tool-loop skips.
 - [x] 4.2 Run gofmt, focused audit/service/handler tests, OpenSpec strict validation, AGENTS format validation, and `git diff --check`.
+- [x] 4.3 Add regression coverage proving platform context and tool-only turns do not become Content Moderation violations while incomplete extraction still fails closed.
