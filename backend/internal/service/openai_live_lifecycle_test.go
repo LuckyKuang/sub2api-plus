@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/auditcontent"
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
 	coderws "github.com/coder/websocket"
 	"github.com/stretchr/testify/require"
@@ -394,8 +395,15 @@ func TestProxyLiveSidebandForwardsTextAndBinary(t *testing.T) {
 				policyChecks.Add(1)
 				return nil
 			},
-			BeforeClientFrame: func(context.Context, coderws.MessageType, []byte) error {
+			BeforeClientFrame: func(_ context.Context, _ coderws.MessageType, payload []byte) error {
+				document, extractErr := auditcontent.Extract(ContentModerationProtocolOpenAILive, payload)
+				if extractErr == nil && !document.Incomplete {
+					return errors.New("expected unknown or binary Live frame to fail extraction")
+				}
 				auditedClientFrames.Add(1)
+				if strings.Contains(string(payload), `"type":"future.audit_block"`) {
+					return NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "audit_blocked", nil)
+				}
 				return nil
 			},
 			RecheckEvery: time.Hour,
@@ -435,14 +443,23 @@ func TestProxyLiveSidebandForwardsTextAndBinary(t *testing.T) {
 	require.Equal(t, coderws.MessageBinary, messageType)
 	require.Equal(t, []byte{4, 5, 6}, payload)
 
+	require.NoError(t, client.Write(ctx, coderws.MessageText, []byte(`{"type":"future.audit_block","payload":"blocked"}`)))
+	select {
+	case frame := <-upstream.writes:
+		t.Fatalf("audit-rejected Live frame reached upstream: %s", frame.payload)
+	case <-time.After(100 * time.Millisecond):
+	}
+	proxyErr := <-proxyResult
+	var auditClose *OpenAIWSClientCloseError
+	require.ErrorAs(t, proxyErr, &auditClose)
+	require.Equal(t, coderws.StatusPolicyViolation, auditClose.StatusCode())
+
 	require.Equal(t, "wss://chatgpt.com/backend-api/codex/call_proxy", dialer.url)
 	require.Equal(t, "Bearer test-access-token", dialer.headers.Get("Authorization"))
 	require.Equal(t, "acct_test", dialer.headers.Get("Chatgpt-Account-Id"))
 	require.Equal(t, `{"v":1,"s":0,"t":"v1.sideband"}`, dialer.headers.Get(liveAttestationHeader))
-	upstream.reads <- liveTestFrame{err: coderws.CloseError{Code: coderws.StatusNormalClosure}}
-	require.ErrorIs(t, <-proxyResult, ErrLiveCallNotFound)
 	require.GreaterOrEqual(t, policyChecks.Load(), int32(5), "policy must run before dialing and around both transfer directions")
-	require.Equal(t, int32(2), auditedClientFrames.Load(), "every client sideband frame must pass the pre-forward audit hook")
+	require.Equal(t, int32(3), auditedClientFrames.Load(), "every client sideband frame must pass the pre-forward audit hook")
 }
 
 // TestLiveSessionEndedTreatsLeaseLossAsTerminal 锁定：租约续租失败（ErrLiveUnavailable）

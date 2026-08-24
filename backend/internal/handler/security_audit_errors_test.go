@@ -159,7 +159,7 @@ func TestLegacyModerationErrorKeepsExistingClientPriority(t *testing.T) {
 	require.NotContains(t, recorder.Body.String(), securityaudit.ErrorCodeBlocked)
 }
 
-func TestLegacyModerationExtractionFailureUsesUnavailableEnvelope(t *testing.T) {
+func TestLegacyModerationDependencyFailureUsesUnavailableEnvelope(t *testing.T) {
 	decision := &securityaudit.Decision{
 		Kind: securityaudit.DecisionUnavailable, HTTPStatus: http.StatusServiceUnavailable,
 		ErrorCode: service.ContentModerationErrorCodeUnavailable, ClientMessage: "content moderation is temporarily unavailable",

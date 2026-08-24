@@ -111,48 +111,69 @@ The shared extractor SHALL cover specialized endpoint payloads instead of relyin
 
 - **WHEN** a passthrough connection receives `conversation.item.create`, `session.update`, another text frame, or a binary client frame
 - **THEN** the frame MUST enter the same security-audit hook before any upstream write
-- **THEN** an invalid or rejected frame MUST produce zero upstream writes
+- **THEN** an extraction failure MUST continue to the upstream write unless independent transport validation or a confirmed policy decision rejects the frame
 
-### Requirement: Content-bearing extraction failures must be visible and fail closed in blocking mode
+### Requirement: Content extraction failures must be visible and pass through
 
-Every enabled audit engine SHALL count extraction attempts, successes, empty selections, and failures. A canonical payload classified as content-bearing but producing neither an auditable text segment nor a recognized image, or containing any non-empty content item that cannot be completely normalized, SHALL be an extraction failure, not an ordinary empty or successful request. Extractable sibling items MUST NOT hide a partial extraction failure. After successful canonical extraction, an engine MAY select no content when its documented attribution policy excludes every canonical item.
+Every enabled audit engine SHALL count extraction attempts, successes, empty selections, and failures. Unknown item types, unknown Responses/Live frames, unknown sibling fields, valid-JSON unrecognized structures, and other incomplete or unextractable content MUST pass through without an audit-derived block. Successfully extracted sibling content MUST remain available to both engines. A detected extraction failure MUST be recorded independently from an ordinary empty selection, but MUST NOT become a policy violation, unavailable decision, HTTP 503 response, or WebSocket close.
 
 #### Scenario: Observe mode cannot extract expected content
 
 - **WHEN** a content-bearing payload cannot be normalized while an audit engine is asynchronous or observe-only
-- **THEN** the request MAY continue
-- **THEN** the engine MUST increment extraction failure metrics and emit a structured log without raw content
+- **THEN** the request MUST continue
+- **THEN** the engine MUST increment extraction failure metrics and emit a safe structured log
 
 #### Scenario: Blocking mode cannot extract expected content
 
 - **WHEN** a content-bearing payload cannot be normalized while either blocking audit engine applies
-- **THEN** the request MUST be rejected before account selection, billing, concurrency acquisition, or upstream writes
-- **THEN** the response MUST use the engine's existing unavailable or invalid audit error envelope
-- **THEN** Content Moderation extraction failures MUST use `content_moderation_unavailable`, not the policy-violation code
+- **THEN** successfully extracted content MUST still be evaluated by that engine
+- **THEN** an empty selection MUST pass through without an audit-derived block
+- **THEN** the extraction failure MUST NOT use an unavailable, invalid-response, or policy-violation envelope
 
 #### Scenario: A payload mixes supported and unknown content items
 
 - **WHEN** one item produces auditable text but a non-empty sibling content item has no canonical adapter
-- **THEN** the payload MUST be classified as an incomplete extraction
-- **THEN** a blocking audit mode MUST fail closed instead of treating the extracted sibling as complete coverage
+- **THEN** the unsupported item MAY be classified as an incomplete extraction for observability
+- **THEN** both engines MUST continue to evaluate the successfully extracted sibling content
+- **THEN** the unsupported item MUST NOT cause an audit-derived block
+
+#### Scenario: An unknown frame also carries recognized content
+
+- **WHEN** an unsupported Responses or Live envelope type carries a recognized `input`, `instructions`, or nested `response.input` sibling
+- **THEN** both engines MUST count and safely log an extraction failure for the unsupported frame
+- **THEN** both engines MUST continue to evaluate the successfully extracted sibling content
+- **THEN** the extraction failure alone MUST NOT cause an HTTP error or WebSocket close
 
 #### Scenario: A known type contains an unknown sibling field
 
-- **WHEN** a known message, tool item, or control event contains valid extracted content and an additional unknown non-empty field
-- **THEN** the payload MUST be classified as incomplete
-- **THEN** the successful known field MUST NOT hide the unsupported sibling
+- **WHEN** a known message, tool item, or control event contains valid extracted content and an additional unknown non-empty field such as `foo` or `future_payload`
+- **THEN** extraction MUST succeed
+- **THEN** Content Moderation and Prompt Audit MUST continue to scan the extracted text
+
+#### Scenario: A known type contains ignored protocol metadata
+
+- **WHEN** a known request, message, or content block contains extracted user text together with `originator` or `cache_control`
+- **THEN** extraction MUST succeed
+- **THEN** Content Moderation and Prompt Audit MUST continue to scan the extracted user text
 
 #### Scenario: A request or session object contains an unknown sibling field
 
 - **WHEN** a Responses request root, nested `response`, Responses/Live session, or Live transcription object contains valid extracted text and an additional unknown non-empty field
-- **THEN** the payload MUST be classified as incomplete
-- **THEN** blocking mode MUST reject it before any downstream side effect
+- **THEN** extraction MUST succeed
+- **THEN** Content Moderation and Prompt Audit MUST continue to scan the extracted text
+
+#### Scenario: A non-empty request or session object is wholly unrecognized
+
+- **WHEN** a Responses or Live root, nested `response`, or session object is non-empty but contains no recognized request, control, content, or metadata field
+- **THEN** both engines MUST count and safely log an extraction failure
+- **THEN** the request MUST pass through without an audit-derived block
 
 #### Scenario: Structured serialization fails
 
 - **WHEN** a recognized structured value cannot be sanitized or deterministically serialized
-- **THEN** extraction MUST set `Incomplete` instead of silently dropping the value
-- **THEN** blocking mode MUST fail closed
+- **THEN** extraction MUST record a bounded incomplete reason without raw content
+- **THEN** successfully extracted sibling content MUST remain auditable
+- **THEN** the request MUST pass through if no other content or policy decision blocks it
 
 #### Scenario: Explicit control frame contains no content
 
@@ -170,7 +191,15 @@ Every enabled audit engine SHALL count extraction attempts, successes, empty sel
 
 - **WHEN** Embeddings input contains token IDs that the canonical layer cannot reliably decode
 - **THEN** the request MUST NOT count numeric JSON as successfully audited text
-- **THEN** a blocking audit mode MUST fail closed
+- **THEN** the extraction failure MUST be logged and the request MUST pass through
+
+#### Scenario: An audit exception is observed
+
+- **WHEN** content extraction, audit evaluation, or an audit dependency returns an exception
+- **THEN** a structured log MUST include request ID, endpoint, protocol, stage, a stable error code or reason, and available byte counts
+- **THEN** the log MUST NOT include raw content, credentials, or unsanitized user fields
+- **THEN** extraction exceptions MUST preserve pass-through semantics, while independent dependency failures retain their documented availability decisions
+- **THEN** asynchronous persistence, hash-cache, account-side-effect, notification, worker, runtime, and post-upstream audit failures MUST NOT log raw errors, panic values, or recipient addresses
 
 ### Requirement: Coverage tests must prove extraction semantics and side-effect order
 
@@ -186,10 +215,11 @@ Every supported content-bearing endpoint and payload family SHALL have tests usi
 #### Scenario: Gateway ordering test executes
 
 - **WHEN** HTTP and WebSocket security-audit ordering tests run for API-key and OAuth paths
-- **THEN** blocking or invalid extraction decisions MUST prove zero account-selection, billing, concurrency, and upstream side effects
+- **THEN** extraction failures MUST prove pass-through to the expected downstream side effects
+- **THEN** confirmed policy blocks MUST still prove zero account-selection, billing, concurrency, and upstream side effects
 
-#### Scenario: Content Moderation extraction is unavailable
+#### Scenario: Content Moderation extraction fails
 
 - **WHEN** Content Moderation pre-block cannot completely extract a content-bearing request
-- **THEN** the coordinator MUST classify the gateway outcome as unavailable with HTTP 503 and `content_moderation_unavailable`
-- **THEN** logs and metrics MUST NOT classify that system failure as a confirmed policy block
+- **THEN** the coordinator MUST allow the request to continue without HTTP 503 or `content_moderation_unavailable`
+- **THEN** logs and metrics MUST record the extraction failure without classifying it as a confirmed policy block

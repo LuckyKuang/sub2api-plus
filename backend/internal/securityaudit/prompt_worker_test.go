@@ -358,11 +358,12 @@ func TestEnqueuerRecordsAcceptedDroppedAndSkippedMetrics(t *testing.T) {
 		require.Equal(t, AuditMetricsSnapshot{}, metrics.AuditSnapshot())
 	})
 
-	t.Run("content-bearing extraction failure increments dropped and failed", func(t *testing.T) {
+	t.Run("empty content extraction failure is skipped and not dropped", func(t *testing.T) {
 		metrics := NewAtomicMetrics()
+		repo := &fakeJobRepository{}
 		require.NoError(t, NewEnqueuer(
 			&fakeConfigStore{cfg: asyncConfig(), active: true},
-			&fakeJobRepository{},
+			repo,
 			&fakePayloadStore{},
 			metrics,
 		).Enqueue(context.Background(), Request{
@@ -370,7 +371,23 @@ func TestEnqueuerRecordsAcceptedDroppedAndSkippedMetrics(t *testing.T) {
 			Body:     []byte(`{"input":[{"type":"future_content","payload":"missing adapter"}]}`),
 		}))
 
-		require.Equal(t, AuditMetricsSnapshot{Dropped: 1, ExtractionAttempted: 1, ExtractionFailed: 1}, metrics.AuditSnapshot())
+		require.Zero(t, repo.createdSnapshot.MessageCount)
+		require.Equal(t, AuditMetricsSnapshot{ExtractionAttempted: 1, ExtractionFailed: 1}, metrics.AuditSnapshot())
+	})
+
+	t.Run("partial content extraction failure still enqueues extracted sibling", func(t *testing.T) {
+		metrics := NewAtomicMetrics()
+		repo := &fakeJobRepository{createJob: &Job{ID: 45}}
+		payload := &fakePayloadStore{values: map[int64]string{}}
+		require.NoError(t, NewEnqueuer(
+			&fakeConfigStore{cfg: asyncConfig(), active: true}, repo, payload, metrics,
+		).Enqueue(context.Background(), Request{
+			Protocol: "openai_responses",
+			Body:     []byte(`{"input":[{"type":"message","role":"user","content":"audit this sibling"},{"type":"future_content","payload":"missing adapter"}]}`),
+		}))
+
+		require.Contains(t, payload.values[45], "audit this sibling")
+		require.Equal(t, AuditMetricsSnapshot{Enqueued: 1, ExtractionAttempted: 1, ExtractionFailed: 1}, metrics.AuditSnapshot())
 	})
 }
 

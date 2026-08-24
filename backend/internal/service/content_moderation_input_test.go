@@ -3,7 +3,6 @@ package service
 import (
 	"testing"
 
-	"github.com/LuckyKuang/sub2api-plus/internal/auditcontent"
 	"github.com/stretchr/testify/require"
 )
 
@@ -212,6 +211,25 @@ func TestExtractContentModerationInput_ResponsesTopLevelInputCannotShadowNestedC
 	require.Equal(t, []string{"https://example.test/nested.png"}, input.Images)
 }
 
+func TestExtractContentModerationInput_IgnoresCodexAndClaudeMetadata(t *testing.T) {
+	body := []byte(`{
+		"model":"gpt-5.6-luna",
+		"originator":"codex_cli_rs",
+		"input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"hi","cache_control":{"type":"ephemeral"}}]}]
+	}`)
+	input, contentBearing, _, err := extractContentModerationInput(ContentModerationProtocolOpenAIResponses, body)
+	require.NoError(t, err)
+	require.True(t, contentBearing)
+	require.Equal(t, "hi", input.Text)
+
+	chat, chatBearing, _, chatErr := extractContentModerationInput(ContentModerationProtocolOpenAIChat, []byte(`{
+		"messages":[{"role":"user","content":"hi","cache_control":{"type":"ephemeral"}}]
+	}`))
+	require.NoError(t, chatErr)
+	require.True(t, chatBearing)
+	require.Equal(t, "hi", chat.Text)
+}
+
 func TestExtractContentModerationInput_DoesNotAuditInstructionsOrToolDefinitions(t *testing.T) {
 	body := []byte(`{
 		"instructions":"<system-reminder>context must still be audited</system-reminder>",
@@ -335,14 +353,15 @@ func TestExtractContentModerationInput_ResponsesStringInputIsAudited(t *testing.
 	require.Equal(t, "你好", input.Text)
 }
 
-func TestExtractContentModerationInput_UnknownSiblingFailsWithoutHidingLatestUser(t *testing.T) {
-	body := []byte(`{"input":[{"type":"message","role":"user","content":"你好","future_payload":"must not hide user text"}]}`)
+func TestExtractContentModerationInput_UnknownSiblingIsIgnored(t *testing.T) {
+	body := []byte(`{"input":[{"type":"message","role":"user","content":"你好","foo":"bar"}]}`)
 
-	input, contentBearing, err := extractContentModerationInput(ContentModerationProtocolOpenAIResponses, body)
+	input, contentBearing, reasons, err := extractContentModerationInput(ContentModerationProtocolOpenAIResponses, body)
 
-	require.ErrorIs(t, err, auditcontent.ErrIncompleteContent)
+	require.NoError(t, err)
 	require.True(t, contentBearing)
 	require.Equal(t, "你好", input.Text)
+	require.Empty(t, reasons)
 }
 
 func TestExtractContentModerationInput_RequiresExplicitUserRoleForChatAndAnthropic(t *testing.T) {

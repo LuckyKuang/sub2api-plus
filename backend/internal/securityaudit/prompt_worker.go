@@ -39,6 +39,7 @@ func NewRunner(config ConfigStore, repo JobRepository, payload PayloadStore, sca
 
 func (r *Runner) Start(ctx context.Context) error {
 	if r == nil || r.config == nil || r.repo == nil || r.payload == nil || r.scanner == nil {
+		logPromptRuntimeFailure(EventProcessFailed, "worker_dependencies_unavailable")
 		return errors.New("prompt audit worker dependencies unavailable")
 	}
 	r.mu.Lock()
@@ -51,6 +52,7 @@ func (r *Runner) Start(ctx context.Context) error {
 	r.mu.Unlock()
 	if err := r.payload.Ping(runCtx); err != nil {
 		r.setLastError("payload_store_unavailable", err.Error())
+		logPromptRuntimeFailure(EventProcessFailed, "payload_store_unavailable")
 	}
 	for workerID := 0; workerID < MaxWorkerCount; workerID++ {
 		r.wg.Add(1)
@@ -78,7 +80,9 @@ func (r *Runner) Shutdown(ctx context.Context) error {
 	case <-done:
 		return nil
 	case <-ctx.Done():
-		LogWarn(EventProcessFailed, map[string]any{"status": "shutdown_timeout", "error_code": "worker_shutdown_timeout"})
+		LogWarn(EventProcessFailed, mergeLogFields(promptRuntimeLogFields(), map[string]any{
+			"status": "shutdown_timeout", "error_code": "worker_shutdown_timeout", "error_kind": "audit_dependency",
+		}))
 		return ctx.Err()
 	}
 }
@@ -101,6 +105,7 @@ func (r *Runner) worker(ctx context.Context, workerID int) {
 				job, claimed, err := r.repo.ClaimNextJob(ctx, r.clock.Now())
 				if err != nil {
 					r.setLastError("claim_job_failed", err.Error())
+					logPromptRuntimeFailure(EventProcessFailed, "claim_job_failed")
 					break
 				}
 				if !claimed {
@@ -152,6 +157,9 @@ func (r *Runner) processJob(ctx context.Context, workerID int, cfg ActiveConfig,
 	started := r.clock.Now()
 	for index, chunk := range chunks {
 		if err := r.repo.RefreshLease(ctx, job.ID, job.ClaimVersion, r.clock.Now()); err != nil {
+			LogWarn(EventProcessFailed, mergeLogFields(baseFields, map[string]any{
+				"worker_id": workerID, "status": "failed", "error_code": "lease_refresh_failed", "error_kind": "audit_dependency",
+			}))
 			return err
 		}
 		chunkStarted := r.clock.Now()
@@ -191,6 +199,9 @@ func (r *Runner) processJob(ctx context.Context, workerID int, cfg ActiveConfig,
 	}))
 	event, err := r.repo.Complete(ctx, job, aggregated, cfg.StorePassEvents)
 	if err != nil {
+		LogWarn(EventProcessFailed, mergeLogFields(baseFields, map[string]any{
+			"worker_id": workerID, "status": "failed", "error_code": "job_complete_failed", "error_kind": "audit_dependency",
+		}))
 		return err
 	}
 	if deleteErr := r.payload.Delete(ctx, job.ID); deleteErr != nil {
@@ -243,11 +254,19 @@ func (r *Runner) finishFailure(ctx context.Context, job *Job, err error) error {
 	if retryable && job.Attempts < job.MaxAttempts {
 		next := r.clock.Now().Add(retryBackoff(job.Attempts))
 		if updateErr := r.repo.Retry(ctx, job.ID, job.ClaimVersion, next, code, "prompt guard temporarily unavailable"); updateErr != nil {
+			LogWarn(EventProcessFailed, mergeLogFields(baseFields, map[string]any{
+				"attempts": job.Attempts, "max_attempts": job.MaxAttempts, "status": "failed",
+				"error_code": "job_retry_failed", "error_kind": "audit_dependency",
+			}))
 			return updateErr
 		}
 		LogWarn(EventProcessFailed, mergeLogFields(baseFields, map[string]any{"attempts": job.Attempts, "max_attempts": job.MaxAttempts, "status": "retry", "error_code": code, "retryable": true}))
 	} else {
 		if updateErr := r.repo.Fail(ctx, job.ID, job.ClaimVersion, code, "prompt guard processing failed"); updateErr != nil {
+			LogWarn(EventProcessFailed, mergeLogFields(baseFields, map[string]any{
+				"attempts": job.Attempts, "max_attempts": job.MaxAttempts, "status": "failed",
+				"error_code": "job_fail_failed", "error_kind": "audit_dependency",
+			}))
 			return updateErr
 		}
 		_ = r.payload.Delete(ctx, job.ID)
@@ -270,6 +289,7 @@ func (r *Runner) reclaimer(ctx context.Context) {
 			count, err := r.repo.ReclaimStale(ctx, now.Add(-2*time.Minute), now.Add(-90*time.Second), 100)
 			if err != nil {
 				r.setLastError("reclaim_failed", err.Error())
+				logPromptRuntimeFailure(EventProcessFailed, "reclaim_failed")
 				continue
 			}
 			if count > 0 {

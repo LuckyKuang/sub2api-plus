@@ -51,6 +51,7 @@ func NewPromptService(
 
 func (s *PromptService) Start(ctx context.Context) error {
 	if s == nil || s.config == nil || s.runner == nil {
+		logPromptRuntimeFailure(EventProcessFailed, "service_dependencies_unavailable")
 		return errors.New("prompt audit service unavailable")
 	}
 	s.lifecycleMu.Lock()
@@ -63,6 +64,12 @@ func (s *PromptService) Start(ctx context.Context) error {
 	s.lifecycleMu.Unlock()
 	configErr := s.config.Start(background)
 	workerErr := s.runner.Start(background)
+	if configErr != nil {
+		logPromptRuntimeFailure(EventConfigReloadDegraded, "config_start_failed")
+	}
+	if workerErr != nil {
+		logPromptRuntimeFailure(EventProcessFailed, "worker_start_failed")
+	}
 	return errors.Join(configErr, workerErr)
 }
 
@@ -95,7 +102,11 @@ func (s *PromptService) Shutdown(ctx context.Context) error {
 		configErr = s.config.Shutdown(ctx)
 	}
 	if workerErr != nil {
+		logPromptRuntimeFailure(EventProcessFailed, "worker_shutdown_failed")
 		return workerErr
+	}
+	if configErr != nil {
+		logPromptRuntimeFailure(EventConfigReloadDegraded, "config_shutdown_failed")
 	}
 	return configErr
 }
@@ -108,7 +119,14 @@ func (s *PromptService) EffectiveMode() Mode {
 }
 
 func (s *PromptService) Enqueue(_ context.Context, req Request) error {
-	if s == nil || s.enqueuer == nil || s.EffectiveMode() != ModeAsync {
+	if s == nil || s.EffectiveMode() != ModeAsync {
+		return nil
+	}
+	if s.enqueuer == nil {
+		if s.metrics != nil {
+			s.metrics.IncDropped()
+		}
+		LogWarn(EventEnqueueDropped, mergeLogFields(requestLogFields(req), map[string]any{"status": "dropped", "error_code": "enqueuer_unavailable", "error_kind": "audit_dependency"}))
 		return nil
 	}
 	select {
@@ -117,7 +135,7 @@ func (s *PromptService) Enqueue(_ context.Context, req Request) error {
 		if s.metrics != nil {
 			s.metrics.IncDropped()
 		}
-		LogWarn(EventEnqueueDropped, map[string]any{"request_id": req.RequestID, "status": "dropped", "error_code": "local_enqueue_busy"})
+		LogWarn(EventEnqueueDropped, mergeLogFields(requestLogFields(req), map[string]any{"status": "dropped", "error_code": "local_enqueue_busy", "error_kind": "audit_dependency"}))
 		return nil
 	}
 	s.lifecycleMu.Lock()
@@ -125,6 +143,7 @@ func (s *PromptService) Enqueue(_ context.Context, req Request) error {
 	s.lifecycleMu.Unlock()
 	if background == nil {
 		<-s.enqueueSlots
+		LogWarn(EventEnqueueDropped, mergeLogFields(requestLogFields(req), map[string]any{"status": "dropped", "error_code": "service_not_started", "error_kind": "audit_dependency"}))
 		return errors.New("prompt audit service not started")
 	}
 	requestCopy := req.Clone()
@@ -141,14 +160,17 @@ func (s *PromptService) Enqueue(_ context.Context, req Request) error {
 
 func (s *PromptService) Evaluate(ctx context.Context, req Request) (*PromptDecision, error) {
 	if s == nil || s.config == nil || s.evaluator == nil {
+		logPromptRequestFailure(req, DecisionUnavailable, ErrorCodeUnavailable)
 		return nil, &GuardError{Code: ErrorCodeUnavailable}
 	}
 	if s.config.BlockingActivationDegraded() {
+		logPromptRequestFailure(req, DecisionUnavailable, ErrorCodeUnavailable)
 		return nil, &GuardError{Code: ErrorCodeUnavailable}
 	}
 	cfg, ok := s.config.Active()
 	if !ok {
 		if s.config.EffectiveMode() == ModeBlocking {
+			logPromptRequestFailure(req, DecisionUnavailable, ErrorCodeUnavailable)
 			return nil, &GuardError{Code: ErrorCodeUnavailable}
 		}
 		return &PromptDecision{Kind: DecisionAllow, AllowNextStage: true}, nil
@@ -156,20 +178,30 @@ func (s *PromptService) Evaluate(ctx context.Context, req Request) (*PromptDecis
 	if cfg.EffectiveMode() != ModeBlocking || !cfg.IncludesGroup(req.GroupID) {
 		return &PromptDecision{Kind: DecisionAllow, AllowNextStage: true}, nil
 	}
-	snapshot, err := ExtractBlockingPromptSnapshot(req, cfg.BlockingLatestTurnOnly)
-	if errors.Is(err, ErrNoPromptText) {
+	snapshot, diagnostic, err := extractPromptSnapshotWithDiagnostics(req, cfg.BlockingLatestTurnOnly)
+	if diagnostic.Failed {
 		if s.metrics != nil {
+			s.metrics.ObserveExtraction(ExtractionFailed)
+		}
+		logPromptExtractionFailure(req, diagnostic)
+	}
+	if errors.Is(err, ErrNoPromptText) {
+		if s.metrics != nil && !diagnostic.Failed {
 			s.metrics.ObserveExtraction(ExtractionEmpty)
 		}
 		return &PromptDecision{Kind: DecisionAllow, AllowNextStage: true}, nil
 	}
 	if err != nil {
-		if s.metrics != nil {
-			s.metrics.ObserveExtraction(ExtractionFailed)
+		if !diagnostic.Failed {
+			diagnostic = promptExtractionDiagnostic{Failed: true, ErrorCode: "content_extraction_failed"}
+			if s.metrics != nil {
+				s.metrics.ObserveExtraction(ExtractionFailed)
+			}
+			logPromptExtractionFailure(req, diagnostic)
 		}
-		return nil, &GuardError{Code: ErrorCodeInvalidResponse, Cause: err}
+		return &PromptDecision{Kind: DecisionAllow, AllowNextStage: true}, nil
 	}
-	if s.metrics != nil {
+	if s.metrics != nil && !diagnostic.Failed {
 		s.metrics.ObserveExtraction(ExtractionSucceeded)
 	}
 	return s.evaluator.Evaluate(ctx, cfg, snapshot)
@@ -200,17 +232,23 @@ func (s *PromptService) Runtime(ctx context.Context) RuntimeSnapshot {
 		if err != nil {
 			runtime.DatabaseStatus = "error"
 			runtime.LastErrorCode = "database_unavailable"
+			logPromptRuntimeFailure(EventProcessFailed, "queue_stats_failed")
 		} else {
 			runtime.Queue = stats
 		}
 	} else {
 		runtime.DatabaseStatus = "error"
 	}
-	if s.payload == nil || s.payload.Ping(ctx) != nil {
+	payloadUnavailable := s.payload == nil
+	if !payloadUnavailable {
+		payloadUnavailable = s.payload.Ping(ctx) != nil
+	}
+	if payloadUnavailable {
 		runtime.RedisStatus = "error"
 		if runtime.LastErrorCode == "" {
 			runtime.LastErrorCode = "payload_store_unavailable"
 		}
+		logPromptRuntimeFailure(EventProcessFailed, "payload_store_unavailable")
 	}
 	activeWorkers, processed, failed, heartbeat, lastProcessed, workerCode, workerMessage := s.runner.Snapshot()
 	runtime.WorkerActive, runtime.ProcessedTotal, runtime.FailedTotal = activeWorkers, processed, failed
