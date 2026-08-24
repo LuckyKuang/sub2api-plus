@@ -1,29 +1,34 @@
-Sub2API Plus v0.1.178+custom.002
+Sub2API Plus v0.1.178+custom.003
 
 ## Highlights
 
-- Harden the shared security-audit content-extraction contract so Content
-  Moderation and Prompt Audit consume the same canonical protocol document.
-- Fail closed on incomplete or partial extraction whenever a blocking audit
-  mode is active, including sibling content that would otherwise hide a failed
-  field.
-- Surface extraction metrics in risk-control and prompt-audit runtimes, and
-  document the protocol matrix in `docs/SECURITY_AUDIT_CONTENT_COVERAGE.md`.
+- Restore Content Moderation to current direct-user text and images so a
+  policy violation is attributed only to a user submission, not to platform
+  or tool content.
+- Keep Prompt Audit on the same canonical extraction document, including
+  instructions, tool traffic, and assistant or model items, so the security
+  boundary stays fully visible.
+- Treat incomplete extraction as a failure for both engines before either
+  selection policy is applied.
 
 ## Changed
 
-- Route every content-bearing HTTP request, WebSocket turn, and Live Sideband
-  client frame through `backend/internal/auditcontent` after authentication
-  and before account selection, billing, concurrency, routing, or upstream
-  writes.
-- Keep the official v0.1.178 baseline and Plus customizations; this iteration
-  does not change the embedded Codex identity precedence.
+- Select Chat and Anthropic user-role content, plus the protocol-defined
+  roleless user forms in Responses, Live, and Gemini, as Content Moderation
+  inputs. Direct Alpha Search queries, embedding strings, and media prompts
+  remain eligible.
+- Exclude instructions, system or developer context, reusable prompt
+  variables, assistant or model messages, reasoning, tool definitions,
+  calls, results, approval responses, and tool-produced images from Content
+  Moderation while leaving those segments available to Prompt Audit.
+- Keep the official v0.1.178 baseline and Plus customizations; this
+  iteration does not change the embedded Codex identity precedence.
 
 ## Fixed
 
-- Treat a partial extraction hidden by successful sibling content as an
-  extraction failure, not a successful or empty request.
-- Satisfy staticcheck tagged-switch lint in audit extraction role handling.
+- Restore the `v0.1.177+custom.003` user-attribution rule that a later
+  shared-extractor expansion had broadened beyond direct-user content.
+- Satisfy audit-content lint after the extraction-scope change.
 
 ## Compatibility and migration
 
