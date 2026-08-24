@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"sort"
 	"strings"
@@ -22,6 +23,8 @@ const (
 	SourceSearchQuery    Source = "search_query"
 	SourceEmbeddingInput Source = "embedding_input"
 	SourceMediaPrompt    Source = "media_prompt"
+	SourcePromptVariable Source = "prompt_variable"
+	SourceReasoning      Source = "reasoning"
 )
 
 type Segment struct {
@@ -32,8 +35,17 @@ type Segment struct {
 	ClientControlled bool
 }
 
+type Image struct {
+	URL              string
+	Role             string
+	Source           Source
+	Current          bool
+	ClientControlled bool
+}
+
 type Document struct {
 	Segments       []Segment
+	Images         []Image
 	ContentBearing bool
 	Incomplete     bool
 }
@@ -102,6 +114,21 @@ func normalizeDocument(document *Document) {
 		}
 	}
 	document.Segments = out
+	images := make([]Image, 0, len(document.Images))
+	seenImages := make(map[string]struct{}, len(document.Images))
+	for _, image := range document.Images {
+		image.URL = strings.TrimSpace(image.URL)
+		image.Role = strings.ToLower(strings.TrimSpace(image.Role))
+		key := image.URL + "\x00" + image.Role + "\x00" + string(image.Source) + fmt.Sprintf("\x00%t\x00%t", image.Current, image.ClientControlled)
+		if image.URL != "" {
+			if _, duplicate := seenImages[key]; duplicate {
+				continue
+			}
+			seenImages[key] = struct{}{}
+			images = append(images, image)
+		}
+	}
+	document.Images = images
 }
 
 func extractDefault(document *Document, root map[string]any) {
@@ -180,7 +207,7 @@ func extractChat(document *Document, root map[string]any) {
 		}
 		if refusal, exists := message["refusal"]; exists {
 			markContentBearing(document, refusal)
-			appendStructured(document, refusal, role, source, current, controlled)
+			appendStructured(document, refusal, "assistant", SourceMessage, current, controlled)
 		}
 		appendChatToolCalls(document, message, role, current)
 		markUnknownNonEmptyFields(document, message, "role", "content", "name", "tool_call_id", "tool_calls", "function_call", "refusal", "audio")
@@ -302,12 +329,13 @@ func appendAnthropicContent(document *Document, value any, role string, current 
 				markIncompleteContent(document)
 				return
 			}
-			appendStructured(document, thinking, role, SourceMessage, current, true)
+			appendStructured(document, thinking, "assistant", SourceReasoning, current, true)
 			markUnknownNonEmptyFields(document, typed, "type", "thinking", "signature")
 		case typeName == "redacted_thinking":
 			markUnknownNonEmptyFields(document, typed, "type", "data")
 			return
 		case typeName == "image" || typeName == "image_url" || typeName == "input_image":
+			appendImageValues(document, typed, role, SourceMessage, current, true, true)
 			if text, exists := typed["text"]; exists {
 				markContentBearing(document, text)
 				appendStructured(document, text, role, SourceMessage, current, true)
@@ -319,11 +347,16 @@ func appendAnthropicContent(document *Document, value any, role string, current 
 			markUnknownNonEmptyFields(document, typed, "type", "source", "image_url", "url", "text", "content", "cache_control")
 			return
 		default:
+			contentRole := role
+			if typeName == "output_text" {
+				contentRole = "assistant"
+			}
+			appendImageValues(document, typed, contentRole, SourceMessage, current, true, false)
 			if text, ok := typed["text"].(string); ok {
-				appendText(document, text, role, SourceMessage, current, true)
+				appendText(document, text, contentRole, SourceMessage, current, true)
 			}
 			if content, exists := typed["content"]; exists {
-				appendAnthropicContent(document, content, role, current)
+				appendAnthropicContent(document, content, contentRole, current)
 			}
 			if typeName == "" || typeName == "text" || typeName == "input_text" || typeName == "output_text" {
 				markUnknownNonEmptyFields(document, typed, "type", "text", "content", "citations", "cache_control")
@@ -480,7 +513,7 @@ func appendResponsesPrompt(document *Document, value any) {
 		document.ContentBearing = true
 		switch typed := value.(type) {
 		case string:
-			appendText(document, typed, "user", SourceMessage, true, true)
+			appendText(document, typed, "user", SourcePromptVariable, true, true)
 		case map[string]any:
 			typeName := normalizedType(typed["type"])
 			switch typeName {
@@ -489,13 +522,14 @@ func appendResponsesPrompt(document *Document, value any) {
 				if !exists {
 					markIncompleteContent(document)
 				} else {
-					appendStructured(document, text, "user", SourceMessage, true, true)
+					appendStructured(document, text, "user", SourcePromptVariable, true, true)
 				}
 				markUnknownNonEmptyFields(document, typed, "type", "text")
 			case "image", "image_url", "input_image", "input_file", "file":
-				// Reusable prompt variables can contain media. The legacy
-				// moderation path extracts images separately; encoded media is
-				// never persisted as prompt text.
+				appendImageValues(document, typed, "user", SourcePromptVariable, true, true, true)
+				// Reusable prompt variables can contain media. Canonical image
+				// attribution keeps it available to Prompt Audit without treating
+				// it as a direct-user Content Moderation input.
 				markUnknownNonEmptyFields(document, typed, "type", "image_url", "url", "file_id", "file_url", "file_data", "filename", "detail", "source", "data", "media_type", "mime_type")
 			default:
 				markIncompleteContent(document)
@@ -668,7 +702,7 @@ func appendResponsesItem(document *Document, value any, current bool) {
 		case "mcp_approval_response":
 			if reason, exists := typed["reason"]; exists {
 				markContentBearing(document, reason)
-				appendStructured(document, reason, roleOr(role, "user"), SourceMessage, current, true)
+				appendStructured(document, reason, roleOr(role, "user"), SourceToolOutput, current, true)
 			}
 			markUnknownNonEmptyFields(document, typed, "type", "id", "approval_request_id", "approve", "reason")
 			return
@@ -725,7 +759,7 @@ func appendResponsesItem(document *Document, value any, current bool) {
 			for _, key := range []string{"summary", "content", "text"} {
 				if payload, exists := typed[key]; exists {
 					markContentBearing(document, payload)
-					appendContent(document, payload, roleOr(role, "assistant"), SourceMessage, current, true)
+					appendContent(document, payload, "assistant", SourceReasoning, current, true)
 				}
 			}
 			markUnknownNonEmptyFields(document, typed, "type", "id", "status", "summary", "content", "text", "encrypted_content")
@@ -747,7 +781,7 @@ func appendResponsesItem(document *Document, value any, current bool) {
 				markIncompleteContent(document)
 			} else {
 				markContentBearing(document, refusal)
-				appendStructured(document, refusal, role, SourceMessage, current, true)
+				appendStructured(document, refusal, "assistant", SourceMessage, current, true)
 			}
 			markUnknownNonEmptyFields(document, typed, "type", "refusal")
 			return
@@ -762,6 +796,9 @@ func appendResponsesItem(document *Document, value any, current bool) {
 			if _, hasText := typed["text"]; !hasText && responsesItemRequiresExtraction(typeName, role, typed) {
 				markIncompleteContent(document)
 			}
+		}
+		if typeName == "output_text" {
+			role = "assistant"
 		}
 		controlled := true
 		source := SourceMessage
@@ -1174,14 +1211,21 @@ func appendGeminiParts(document *Document, value any, role string, source Source
 			continue
 		}
 		recognized := false
+		hasFunctionCall := false
+		hasFunctionResponse := false
 		if text, exists := part["text"]; exists {
 			recognized = true
 			markContentBearing(document, text)
-			appendStructured(document, text, role, source, current, true)
+			textRole, textSource := role, source
+			if thought, _ := part["thought"].(bool); thought {
+				textRole, textSource = "model", SourceReasoning
+			}
+			appendStructured(document, text, textRole, textSource, current, true)
 		}
 		for _, key := range []string{"functionCall", "function_call"} {
 			if call, ok := part[key].(map[string]any); ok {
 				recognized = true
+				hasFunctionCall = true
 				arguments := firstExisting(call, "args", "arguments")
 				if arguments == nil {
 					markIncompleteContent(document)
@@ -1194,6 +1238,7 @@ func appendGeminiParts(document *Document, value any, role string, source Source
 		for _, key := range []string{"functionResponse", "function_response"} {
 			if response, ok := part[key].(map[string]any); ok {
 				recognized = true
+				hasFunctionResponse = true
 				output, exists := response["response"]
 				if !exists {
 					markIncompleteContent(document)
@@ -1203,6 +1248,17 @@ func appendGeminiParts(document *Document, value any, role string, source Source
 				appendToolOutput(document, output, current)
 			}
 		}
+		imageRole, imageSource := role, source
+		if thought, _ := part["thought"].(bool); thought {
+			imageRole, imageSource = "model", SourceReasoning
+		}
+		switch {
+		case hasFunctionResponse:
+			imageRole, imageSource = "tool", SourceToolOutput
+		case hasFunctionCall:
+			imageRole, imageSource = roleOr(role, "model"), SourceToolCall
+		}
+		appendImageValues(document, part, imageRole, imageSource, current, true, false)
 		if !recognized && !isGeminiMediaPart(part) && hasNonEmptyValue(part) {
 			markIncompleteContent(document)
 		}
@@ -1245,6 +1301,9 @@ func appendGeminiInstances(document *Document, value any) {
 }
 
 func extractMediaPrompts(document *Document, root map[string]any) {
+	for _, key := range []string{"image", "images", "mask", "reference_images"} {
+		appendImageValues(document, root[key], "user", SourceMediaPrompt, true, true, true)
+	}
 	seen := make(map[string]struct{})
 	var walk func(any, string)
 	walk = func(value any, key string) {
@@ -1371,6 +1430,16 @@ func appendContent(document *Document, value any, role string, source Source, cu
 	case map[string]any:
 		before := len(document.Segments)
 		typeName := normalizedType(typed["type"])
+		contentRole, contentSource := role, source
+		switch typeName {
+		case "output_text":
+			contentRole = "assistant"
+		case "summary_text":
+			contentRole, contentSource = "assistant", SourceReasoning
+		}
+		if typeName != "tool_result" {
+			appendImageValues(document, typed, contentRole, contentSource, current, controlled, false)
+		}
 		if isImageType(typeName) && !hasAnyKey(typed, "text", "content") {
 			markUnknownNonEmptyFields(document, typed, "type", "image_url", "url", "file_id", "detail", "source", "data", "media_type", "mime_type", "filename")
 			return
@@ -1389,16 +1458,24 @@ func appendContent(document *Document, value any, role string, source Source, cu
 			return
 		}
 		if text, exists := typed["text"]; exists {
-			appendStructured(document, text, role, source, current, controlled)
+			appendStructured(document, text, contentRole, contentSource, current, controlled)
 		}
 		if content, exists := typed["content"]; exists {
-			appendContent(document, content, role, source, current, controlled)
+			appendContent(document, content, contentRole, contentSource, current, controlled)
+		}
+		if typeName == "refusal" {
+			refusal, exists := typed["refusal"]
+			if !exists {
+				markIncompleteContent(document)
+			} else {
+				appendStructured(document, refusal, "assistant", contentSource, current, controlled)
+			}
 		}
 		if len(document.Segments) == before && contentRequiresExtraction(typed) {
 			markIncompleteContent(document)
 		}
 		switch typeName {
-		case "", "text", "input_text", "output_text":
+		case "", "text", "input_text", "output_text", "summary_text":
 			markUnknownNonEmptyFields(document, typed, "type", "text", "content", "annotations", "logprobs")
 		case "message":
 			markUnknownNonEmptyFields(document, typed, "type", "id", "status", "role", "content", "text")
@@ -1420,6 +1497,7 @@ func appendStructured(document *Document, value any, role string, source Source,
 	if value == nil {
 		return
 	}
+	appendImageValues(document, value, role, source, current, controlled, false)
 	if text, ok := value.(string); ok {
 		if looksLikeEncodedMediaPayload(text) {
 			return
@@ -1446,6 +1524,87 @@ func appendText(document *Document, text, role string, source Source, current, c
 	document.Segments = append(document.Segments, Segment{
 		Text: text, Role: role, Source: source, Current: current, ClientControlled: controlled,
 	})
+}
+
+func appendImageValues(document *Document, value any, role string, source Source, current, controlled, mediaContext bool) {
+	if document == nil || value == nil {
+		return
+	}
+	switch typed := value.(type) {
+	case string:
+		candidate := strings.TrimSpace(typed)
+		if mediaContext || strings.HasPrefix(strings.ToLower(candidate), "data:image/") {
+			appendImage(document, candidate, role, source, current, controlled)
+		}
+	case []any:
+		for _, item := range typed {
+			appendImageValues(document, item, role, source, current, controlled, mediaContext)
+		}
+	case map[string]any:
+		appendImageData(document, typed, role, source, current, controlled)
+		objectMedia := mediaContext || isImageMediaType(normalizedType(typed["type"]))
+		keys := make([]string, 0, len(typed))
+		for key := range typed {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			childMedia := objectMedia || isImageValueField(key)
+			appendImageValues(document, typed[key], role, source, current, controlled, childMedia)
+		}
+	}
+}
+
+func appendImageData(document *Document, value map[string]any, role string, source Source, current, controlled bool) {
+	mimeType := firstString(value, "media_type", "mediaType", "mime_type", "mimeType")
+	if !strings.HasPrefix(strings.ToLower(strings.TrimSpace(mimeType)), "image/") {
+		return
+	}
+	data := firstString(value, "data", "base64")
+	if strings.TrimSpace(data) == "" {
+		return
+	}
+	appendImage(document, fmt.Sprintf("data:%s;base64,%s", strings.TrimSpace(mimeType), strings.TrimSpace(data)), role, source, current, controlled)
+}
+
+func appendImage(document *Document, value, role string, source Source, current, controlled bool) {
+	value = strings.TrimSpace(value)
+	lower := strings.ToLower(value)
+	if value == "" || !strings.HasPrefix(lower, "data:image/") && !strings.HasPrefix(lower, "http://") && !strings.HasPrefix(lower, "https://") {
+		return
+	}
+	document.ContentBearing = true
+	document.Images = append(document.Images, Image{
+		URL: value, Role: role, Source: source, Current: current, ClientControlled: controlled,
+	})
+}
+
+func firstString(values map[string]any, keys ...string) string {
+	for _, key := range keys {
+		if value, ok := values[key].(string); ok && strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func isImageMediaType(typeName string) bool {
+	switch typeName {
+	case "image", "image_url", "input_image", "output_image", "computer_screenshot":
+		return true
+	default:
+		return false
+	}
+}
+
+func isImageValueField(key string) bool {
+	normalized := strings.NewReplacer("_", "", "-", "").Replace(strings.ToLower(strings.TrimSpace(key)))
+	switch normalized {
+	case "image", "images", "imageurl", "screenshot", "partialscreenshot", "partialimage", "mask", "referenceimages", "inlinedata", "filedata", "fileuri":
+		return true
+	default:
+		return false
+	}
 }
 
 func normalizedRole(value any) string {

@@ -175,6 +175,9 @@ func TestExtractResponsesReusablePromptVariables(t *testing.T) {
 	require.True(t, document.ContentBearing)
 	require.False(t, document.Incomplete)
 	require.Equal(t, []string{"variable text", "typed variable"}, segmentTexts(document.Segments))
+	require.Equal(t, []Source{SourcePromptVariable, SourcePromptVariable}, segmentSources(document.Segments))
+	require.Equal(t, []string{"https://example.test/image.png"}, imageURLs(document.Images))
+	require.Equal(t, SourcePromptVariable, document.Images[0].Source)
 }
 
 func TestExtractResponsesOfficialExtendedInputItems(t *testing.T) {
@@ -376,16 +379,59 @@ func TestExtractTreatsRecognizedMediaOnlyBlocksAsExplicitNoText(t *testing.T) {
 		protocol, body string
 	}{
 		{"openai_chat_completions", `{"messages":[{"role":"user","content":[{"type":"image_url","image_url":{"url":"https://example.test/a.png"}}]}]}`},
-		{"anthropic_messages", `{"messages":[{"role":"user","content":[{"type":"image","source":{"type":"base64","data":"AAAA"}}]}]}`},
+		{"anthropic_messages", `{"messages":[{"role":"user","content":[{"type":"image","source":{"type":"base64","media_type":"image/png","data":"AAAA"}}]}]}`},
 		{"openai_responses", `{"input":[{"type":"message","role":"user","content":[{"type":"input_image","image_url":"https://example.test/a.png"}]}]}`},
 		{"gemini", `{"contents":[{"role":"user","parts":[{"inlineData":{"mimeType":"image/png","data":"AAAA"}}]}]}`},
 	}
 	for _, test := range tests {
 		document, err := Extract(test.protocol, []byte(test.body))
 		require.NoError(t, err)
-		require.False(t, document.ContentBearing)
+		require.True(t, document.ContentBearing)
 		require.Empty(t, document.Segments)
+		require.Len(t, document.Images, 1)
+		require.True(t, document.Images[0].Current)
+		require.Equal(t, "user", document.Images[0].Role)
 	}
+}
+
+func TestExtractLiveSessionInputCarriesCanonicalImage(t *testing.T) {
+	document, err := Extract("openai_live", []byte(`{"type":"session.update","session":{"input":[{"type":"message","role":"user","content":[{"type":"input_image","image_url":"https://example.test/live-session.png"}]}]}}`))
+	require.NoError(t, err)
+	require.False(t, document.Incomplete)
+	require.Equal(t, []string{"https://example.test/live-session.png"}, imageURLs(document.Images))
+	require.True(t, document.Images[0].Current)
+	require.Equal(t, SourceMessage, document.Images[0].Source)
+}
+
+func TestExtractKeepsReasoningSourceDistinctFromToolCalls(t *testing.T) {
+	document, err := Extract("anthropic_messages", []byte(`{"messages":[{"role":"assistant","content":[{"type":"thinking","thinking":"private reasoning"}]}]}`))
+	require.NoError(t, err)
+	require.False(t, document.Incomplete)
+	require.Equal(t, []string{"private reasoning"}, segmentTexts(document.Segments))
+	require.Equal(t, []Source{SourceReasoning}, segmentSources(document.Segments))
+}
+
+func TestExtractClassifiesResponsesAndGeminiModelOutput(t *testing.T) {
+	responses, err := Extract("openai_responses", []byte(`{"input":[
+		{"type":"reasoning","summary":[{"type":"summary_text","text":"reasoning summary"}]},
+		{"type":"message","content":[{"type":"output_text","text":"model output"},{"type":"refusal","refusal":"model refusal"}]},
+		{"type":"output_text","text":"direct output item"}
+	]}`))
+	require.NoError(t, err)
+	require.False(t, responses.Incomplete)
+	require.Equal(t, []string{"reasoning summary", "model output", "model refusal", "direct output item"}, segmentTexts(responses.Segments))
+	require.Equal(t, []Source{SourceReasoning, SourceMessage, SourceMessage, SourceMessage}, segmentSources(responses.Segments))
+	for _, segment := range responses.Segments {
+		require.Equal(t, "assistant", segment.Role)
+	}
+
+	gemini, err := Extract("gemini", []byte(`{"contents":[{"parts":[{"text":"private thought","thought":true},{"text":"direct user text"}]}]}`))
+	require.NoError(t, err)
+	require.False(t, gemini.Incomplete)
+	require.Equal(t, []string{"private thought", "direct user text"}, segmentTexts(gemini.Segments))
+	require.Equal(t, []Source{SourceReasoning, SourceMessage}, segmentSources(gemini.Segments))
+	require.Equal(t, "model", gemini.Segments[0].Role)
+	require.Empty(t, gemini.Segments[1].Role)
 }
 
 func TestExtractMediaTypeCannotSuppressPresentText(t *testing.T) {
@@ -431,6 +477,14 @@ func segmentSources(segments []Segment) []Source {
 	result := make([]Source, 0, len(segments))
 	for _, segment := range segments {
 		result = append(result, segment.Source)
+	}
+	return result
+}
+
+func imageURLs(images []Image) []string {
+	result := make([]string, 0, len(images))
+	for _, image := range images {
+		result = append(result, image.URL)
 	}
 	return result
 }

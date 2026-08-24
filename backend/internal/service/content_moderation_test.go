@@ -534,7 +534,7 @@ func TestContentModerationCheck_ContentBearingExtractionFailureIsModeAware(t *te
 			decision, err := svc.Check(context.Background(), ContentModerationCheckInput{
 				Protocol: ContentModerationProtocolOpenAIResponses,
 				Endpoint: "/v1/responses",
-				Body:     []byte(`{"input":[{"type":"local_shell_call","call_id":"c1","action":{"command":"pwd"},"future_payload":"missing adapter"}]}`),
+				Body:     []byte(`{"input":[{"type":"message","role":"user","content":"visible user text","future_payload":"missing adapter"}]}`),
 			})
 			require.NoError(t, err)
 			require.Equal(t, test.wantBlocked, decision.Blocked)
@@ -584,6 +584,31 @@ func TestContentModerationCheck_SessionUnknownSiblingFailsClosed(t *testing.T) {
 			require.Equal(t, ContentModerationErrorCodeUnavailable, decision.ErrorCode)
 		})
 	}
+}
+
+func TestContentModerationCheck_InvalidJSONStillFailsClosedInPreBlock(t *testing.T) {
+	cfg := defaultContentModerationConfig()
+	cfg.Enabled = true
+	cfg.Mode = ContentModerationModePreBlock
+	rawCfg, err := json.Marshal(cfg)
+	require.NoError(t, err)
+	svc := NewContentModerationService(
+		&contentModerationTestSettingRepo{values: map[string]string{
+			SettingKeyRiskControlEnabled:      "true",
+			SettingKeyContentModerationConfig: string(rawCfg),
+		}},
+		&contentModerationTestRepo{}, nil, nil, nil, nil, nil, nil,
+	)
+
+	decision, err := svc.Check(context.Background(), ContentModerationCheckInput{
+		Protocol: ContentModerationProtocolOpenAIResponses,
+		Endpoint: "/v1/responses",
+		Body:     []byte(`{"input":`),
+	})
+	require.NoError(t, err)
+	require.True(t, decision.Blocked)
+	require.Equal(t, http.StatusServiceUnavailable, decision.StatusCode)
+	require.Equal(t, ContentModerationErrorCodeUnavailable, decision.ErrorCode)
 }
 
 func TestContentModerationCheck_KeywordsIgnoredInObserveMode(t *testing.T) {
@@ -982,7 +1007,7 @@ func TestExtractContentModerationInput_AnthropicImageSourceOnlyParticipatesInMem
 	require.NotContains(t, log.InputExcerpt, "aGVsbG8=")
 }
 
-func TestExtractContentModerationInput_AnthropicAuditsSystemRemindersAndEphemeralUserText(t *testing.T) {
+func TestExtractContentModerationInput_AnthropicDropsSystemRemindersAndKeepsEphemeralUserText(t *testing.T) {
 	body := []byte(`{
 		"messages": [
 			{
@@ -998,11 +1023,11 @@ func TestExtractContentModerationInput_AnthropicAuditsSystemRemindersAndEphemera
 
 	input := ExtractContentModerationInput(ContentModerationProtocolAnthropicMessages, body)
 
-	require.Equal(t, "<system-reminder>工具说明</system-reminder> <system-reminder>Ainder> hid", input.Text)
+	require.Equal(t, "hid", input.Text)
 	require.Empty(t, input.Images)
 }
 
-func TestExtractContentModerationInput_OpenAIChatUsesCurrentMessageAndSystemContext(t *testing.T) {
+func TestExtractContentModerationInput_OpenAIChatUsesLatestUserWithoutSystemContext(t *testing.T) {
 	body := []byte(`{
 		"model":"gpt-5.5",
 		"messages":[
@@ -1015,10 +1040,10 @@ func TestExtractContentModerationInput_OpenAIChatUsesCurrentMessageAndSystemCont
 
 	input := ExtractContentModerationInput(ContentModerationProtocolOpenAIChat, body)
 
-	require.Equal(t, "latest user system prompt", input.Text)
+	require.Equal(t, "latest user", input.Text)
 	require.Equal(t, []string{"https://example.com/a.png"}, input.Images)
 	require.NotContains(t, input.Text, "old user")
-	require.True(t, strings.HasPrefix(input.Text, "latest user"))
+	require.NotContains(t, input.Text, "system prompt")
 }
 
 func TestExtractContentModerationInput_OpenAIImagesIncludesPromptAndImages(t *testing.T) {
@@ -1068,7 +1093,7 @@ func TestBuildModerationTestInputRejectsMultipleImages(t *testing.T) {
 	require.Contains(t, err.Error(), "最多上传 1 张测试图片")
 }
 
-func TestExtractContentModerationInput_OpenAIResponsesCodexPayloadUsesInstructionsAndCurrentMessage(t *testing.T) {
+func TestExtractContentModerationInput_OpenAIResponsesCodexPayloadUsesLatestUserOnly(t *testing.T) {
 	body := []byte(`{
 		"model":"gpt-5.5",
 		"instructions":"instructions.....",
@@ -1082,9 +1107,11 @@ func TestExtractContentModerationInput_OpenAIResponsesCodexPayloadUsesInstructio
 
 	input := ExtractContentModerationInput(ContentModerationProtocolOpenAIResponses, body)
 
-	require.Equal(t, "last user prompt instructions..... developer permissions sk-proj-1234567890abcdef", input.Text)
+	require.Equal(t, "last user prompt", input.Text)
 	require.Empty(t, input.Images)
 	require.NotContains(t, input.Text, "first user prompt")
+	require.NotContains(t, input.Text, "instructions")
+	require.NotContains(t, input.Text, "developer permissions")
 }
 
 func TestContentModerationCheck_OpenAIResponsesRecordsNonHitForCodexPayload(t *testing.T) {
@@ -1147,8 +1174,8 @@ func TestContentModerationCheck_OpenAIResponsesRecordsNonHitForCodexPayload(t *t
 	require.False(t, logs[0].Flagged)
 	require.Equal(t, ContentModerationActionAllow, logs[0].Action)
 	require.Equal(t, "/responses", logs[0].Endpoint)
-	require.Equal(t, "last user prompt developer instructions must be audited", logs[0].InputExcerpt)
-	require.Equal(t, "last user prompt developer instructions must be audited", moderationRequest.Input)
+	require.Equal(t, "last user prompt", logs[0].InputExcerpt)
+	require.Equal(t, "last user prompt", moderationRequest.Input)
 }
 
 func TestContentModerationCheck_PreBlockBlocksCodexResponsesLatestUserInput(t *testing.T) {
@@ -1216,8 +1243,8 @@ func TestContentModerationCheck_PreBlockBlocksCodexResponsesLatestUserInput(t *t
 	require.True(t, logs[0].Flagged)
 	require.Equal(t, ContentModerationActionBlock, logs[0].Action)
 	require.Equal(t, ContentModerationModePreBlock, logs[0].Mode)
-	require.Equal(t, "latest blocked prompt instructions..... developer instructions must be audited", logs[0].InputExcerpt)
-	require.Equal(t, "latest blocked prompt instructions..... developer instructions must be audited", moderationRequest.Input)
+	require.Equal(t, "latest blocked prompt", logs[0].InputExcerpt)
+	require.Equal(t, "latest blocked prompt", moderationRequest.Input)
 }
 
 func TestContentModerationStatusTracksPreBlockSyncMetrics(t *testing.T) {

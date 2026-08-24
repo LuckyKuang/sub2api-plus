@@ -14,17 +14,33 @@ Content Moderation and Prompt Audit SHALL consume the same canonical protocol ex
 
 - **WHEN** a supported endpoint begins accepting a new user, tool, search, instruction, or structured content field
 - **THEN** the canonical extraction contract and real-payload tests MUST be updated in the same change
-- **THEN** both audit engines MUST receive the new field without independent parser changes
+- **THEN** the field MUST be available to both audit-engine selection policies without independent protocol parsers
 
-### Requirement: Tool and external-source results must be audited as current input
+### Requirement: Content Moderation must use direct-user attribution
 
-Client-submitted tool results and other external-source content SHALL be classified as current client-controlled input. Structured results MUST be converted to deterministic text without logging their raw content.
+Content Moderation SHALL select only current direct-user text and images from the canonical result. Prompt Audit SHALL retain complete canonical coverage. A valid canonical document that contains only content excluded by Content Moderation is an ordinary empty moderation selection, not an extraction failure.
+
+#### Scenario: Platform context accompanies a user message
+
+- **WHEN** a request contains a current direct-user message together with instructions, system/developer context, tool definitions, reusable prompt variables, reasoning, or historical content
+- **THEN** Content Moderation MUST include only the current direct-user message text and images
+- **THEN** Prompt Audit MUST retain the canonical context required by its full or latest-turn policy
+
+#### Scenario: A turn has no direct-user submission
+
+- **WHEN** a valid turn contains only assistant/model content, tool calls/results, approvals, instructions, or prompt variables
+- **THEN** Content Moderation MUST skip the external Moderations request
+- **THEN** Prompt Audit MUST continue to apply its configured selection policy
+
+### Requirement: Tool and external-source results must remain visible without user attribution
+
+Client-submitted tool results and other external-source content SHALL be classified as current client-controlled canonical input. Prompt Audit SHALL cover that input. Content Moderation MUST NOT attribute tool, assistant/model, instruction, or reusable-prompt content to the direct user. Structured results MUST be converted to deterministic text without logging their raw content.
 
 #### Scenario: Responses submits a function result
 
 - **WHEN** a Responses HTTP or WebSocket turn contains `function_call_output.output`, `custom_tool_call_output.output`, `tool_search_output.output`, or `mcp_tool_call_output.output`
-- **THEN** every current tool result MUST be included in Content Moderation input
-- **THEN** Prompt Audit full and latest-turn snapshots MUST prioritize the current tool result rather than an older user message
+- **THEN** Prompt Audit full and latest-turn snapshots MUST include and prioritize every current tool result rather than an older user message
+- **THEN** Content Moderation MUST produce no input for a tool-result-only turn
 
 #### Scenario: Responses submits current official tool items
 
@@ -35,30 +51,32 @@ Client-submitted tool results and other external-source content SHALL be classif
 #### Scenario: Structured result mixes ordinary text and media
 
 - **WHEN** a structured tool result contains ordinary text beside image/file URLs, data URLs, long base64, encrypted content, or computer screenshots
-- **THEN** ordinary text MUST remain in both audit engines
+- **THEN** ordinary text MUST remain in the canonical result and Prompt Audit
 - **THEN** encoded media and opaque payloads MUST NOT enter Prompt Audit text persistence
-- **THEN** recognized images MUST remain available to Content Moderation through its image input
+- **THEN** recognized images MUST retain their canonical source and role attribution
+- **THEN** Content Moderation MUST select an image only when it belongs to a current direct-user item
 
 #### Scenario: Other protocols submit tool results
 
 - **WHEN** Chat Completions uses a tool-role message, Anthropic uses a tool_result block, or Gemini uses functionResponse
-- **THEN** the current result text or deterministic structured representation MUST be audited by both engines
+- **THEN** the current result text or deterministic structured representation MUST be audited by Prompt Audit
+- **THEN** Content Moderation MUST skip the tool-result-only turn
 
 ### Requirement: Inbound roles and prompt context must not create bypasses
 
-Inbound role labels SHALL be treated as untrusted request data. Current instructions, tool definitions, and current message content MUST remain auditable when latest-turn narrowing is enabled.
+Inbound role labels SHALL be treated as untrusted request data for Prompt Audit. Current instructions, tool definitions, and current message content MUST remain canonical and auditable when latest-turn narrowing is enabled. Content Moderation SHALL separately enforce direct-user attribution.
 
 #### Scenario: Client submits a current assistant or model message
 
 - **WHEN** the last Chat, Anthropic, Responses, or Gemini content item claims an assistant or model role
-- **THEN** both engines MUST treat that current item as client-controlled input
-- **THEN** Prompt Audit MUST prioritize it instead of falling back to an older user message
+- **THEN** Prompt Audit MUST treat that current item as client-controlled and prioritize it instead of falling back to an older user message
+- **THEN** Content Moderation MUST NOT treat it as a direct-user policy input
 
 #### Scenario: Request supplies instructions and tool definitions
 
 - **WHEN** an accepted payload contains instructions, system context, or tool/function definitions
-- **THEN** both engines MUST audit that context through canonical segments
-- **THEN** bounded Content Moderation input MUST place the current message or tool result before repeated context
+- **THEN** Prompt Audit MUST audit that context through canonical segments
+- **THEN** Content Moderation MUST exclude that context from the direct-user policy input
 
 ### Requirement: Supported specialized endpoints must extract their canonical text
 
@@ -67,19 +85,21 @@ The shared extractor SHALL cover specialized endpoint payloads instead of relyin
 #### Scenario: Alpha Search carries queries
 
 - **WHEN** Alpha Search contains one or more non-empty `commands.search_query[].q` values or Responses-shaped recent conversation in `input`
-- **THEN** every current query and input delta MUST be included in both audit engines before routing and billing
+- **THEN** every current query and direct-user input delta MUST be included in both audit engines before routing and billing
 
 #### Scenario: Live or Embeddings carries content
 
 - **WHEN** Live carries initial session instructions/input, a Sideband session/item/response update, or Embeddings carries a string/string-array input
-- **THEN** all current text values MUST be included in both audit engines
+- **THEN** all current text values MUST remain available to Prompt Audit
+- **THEN** Content Moderation MUST include direct-user Live input and embedding strings but exclude Live session instructions, assistant/model items, and tool items
 - **THEN** every Live Sideband client frame MUST be audited before its upstream write
 
 #### Scenario: Live carries transcription context
 
 - **WHEN** an initial Live HTTP session or session update carries legacy `input_audio_transcription.prompt`/`keywords` or current `audio.input.transcription.prompt`/`keywords`
 - **THEN** the initial request and Sideband update MUST use the `openai_live` adapter
-- **THEN** every prompt and keyword MUST be included in both audit engines before billing, concurrency acquisition, or an upstream write
+- **THEN** every prompt and keyword MUST be included in Prompt Audit before billing, concurrency acquisition, or an upstream write
+- **THEN** Content Moderation MUST exclude that transcription configuration from direct-user policy input
 
 #### Scenario: Responses WebSocket uses a nested envelope
 
@@ -95,7 +115,7 @@ The shared extractor SHALL cover specialized endpoint payloads instead of relyin
 
 ### Requirement: Content-bearing extraction failures must be visible and fail closed in blocking mode
 
-Every enabled audit engine SHALL count extraction attempts, successes, empty control cases, and failures. A payload classified as content-bearing but producing no auditable segment, or containing any non-empty content item that cannot be completely normalized, SHALL be an extraction failure, not an ordinary empty or successful request. Extractable sibling items MUST NOT hide a partial extraction failure.
+Every enabled audit engine SHALL count extraction attempts, successes, empty selections, and failures. A canonical payload classified as content-bearing but producing neither an auditable text segment nor a recognized image, or containing any non-empty content item that cannot be completely normalized, SHALL be an extraction failure, not an ordinary empty or successful request. Extractable sibling items MUST NOT hide a partial extraction failure. After successful canonical extraction, an engine MAY select no content when its documented attribution policy excludes every canonical item.
 
 #### Scenario: Observe mode cannot extract expected content
 
@@ -160,7 +180,8 @@ Every supported content-bearing endpoint and payload family SHALL have tests usi
 
 - **WHEN** the security-audit test suite runs
 - **THEN** it MUST pass real payloads through the canonical extractor, Content Moderation, and Prompt Audit
-- **THEN** it MUST assert non-empty expected current content and correct tool-result priority
+- **THEN** it MUST assert Prompt Audit coverage and correct tool-result priority
+- **THEN** it MUST assert that Content Moderation includes direct-user input while excluding instructions, assistant/model content, reusable prompt variables, and tool content
 
 #### Scenario: Gateway ordering test executes
 

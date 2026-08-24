@@ -139,22 +139,26 @@ Audit before account selection, billing, concurrency acquisition, fingerprint
 convergence, request adaptation, or upstream writes. API-key and OAuth account
 paths therefore use the same audit content.
 
-The boundary covers top-level and `response`-nested `instructions`, `tools`,
-`input`, reusable `prompt.variables`, message text, tool definitions, and the
-arguments, input, output, result, or dynamic tools carried by function, custom,
-tool-search, local/hosted shell, apply-patch, computer, MCP, code-interpreter,
-and programmatic-tool-calling items. In particular,
+The canonical boundary covers top-level and `response`-nested `instructions`,
+`tools`, `input`, reusable `prompt.variables`, message text, tool definitions,
+and the arguments, input, output, result, or dynamic tools carried by function,
+custom, tool-search, local/hosted shell, apply-patch, computer, MCP,
+code-interpreter, and programmatic-tool-calling items. In particular,
 `function_call_output.output`,
 `custom_tool_call_output.output`, the compatibility
 `tool_search_output.output`, and official `tool_search_output.tools` are
-audited on every HTTP or WebSocket turn. Media fields and encoded screenshots
-remain Content Moderation image inputs but are removed before Prompt Audit text
-serialization and persistence; ordinary text in the same structured result is
-retained.
-The current input item remains client-controlled even when it claims an
-`assistant` role; role labels cannot force latest-turn auditing to scan an old
-user message instead. Current message/tool content is scanned before repeated
-instructions and tool definitions, while all context remains included.
+available to Prompt Audit on every HTTP or WebSocket turn. Media fields and
+encoded screenshots are removed before Prompt Audit text serialization and
+persistence; ordinary text in the same structured result is retained.
+
+Content Moderation consumes the same canonical result but selects only the
+current direct-user message text and images. It excludes `instructions`, tool
+definitions, reusable prompt variables, assistant/model messages, reasoning,
+tool calls/results, approval responses, and tool-produced screenshots. This
+prevents platform context or external tool content from being reported as a
+user policy violation. Prompt Audit continues to cover those excluded segments;
+its latest-turn mode treats a current client-submitted `assistant` item as
+untrusted and prioritizes it instead of falling back to an older user message.
 A supported WebSocket control frame is an explicit no-content case only when it
 contains no canonical content fields or unknown non-empty siblings. An envelope
 `type` value never suppresses `input`, `instructions`, or nested

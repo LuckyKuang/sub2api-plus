@@ -7,11 +7,11 @@
 ## What Changes
 
 - 新增独立共享的安全审核内容提取包，统一解析协议、角色、当前请求增量、instructions、工具定义、工具结果和文本来源。
-- Content Moderation 与 Prompt Audit 共同消费共享提取结果；两者保留各自的风险模型、配置、持久化和副作用。
+- Content Moderation 与 Prompt Audit 共同消费共享提取结果，但保留不同选择策略：Content Moderation 只归因当前直接用户文本/图片，Prompt Audit 保持完整规范化覆盖。
 - 覆盖 Responses HTTP/WS 顶层、`response.*`、session-update 载荷、`prompt.variables`、官方 shell/computer/MCP/PTC/tool-search 形态、Alpha Search、Live 初始 session、新旧转录 prompt/keywords 与每个 Sideband/Responses passthrough 客户端数据帧、Embeddings 字符串数组，以及 Chat/Anthropic/Gemini 工具结果。
-- 结构化文本审核前剥离媒体 URL、data URL、长 base64 和加密载荷；Content Moderation 图片路径复用 canonical current 规则。
+- 结构化文本审核前剥离媒体 URL、data URL、长 base64 和加密载荷；规范化结果为图片保留角色、来源和当前轮归因，Content Moderation 只选择直接用户图片。
 - Content Moderation 提取不可用在协调器中分类为 unavailable；confirmed policy match 才分类为 block。
-- 将入口当前增量（包括伪装为 assistant/model 的消息）和工具结果视为客户端控制输入；阻断模式的 latest-turn 策略必须优先扫描当前增量，而不是回退到历史用户消息。
+- 将入口当前增量（包括伪装为 assistant/model 的消息）和工具结果视为 Prompt Audit 的客户端控制输入；阻断模式的 latest-turn 策略必须优先扫描当前增量，而不是回退到历史用户消息。Content Moderation 排除 assistant/model、instructions、工具内容和 reusable prompt variables，避免将平台或外部内容报告为用户违规。
 - 区分显式控制帧与内容承载载荷。请求根对象、嵌套 response/session 和转录配置的未知非空兄弟字段，以及结构化内容规范化或序列化失败，都必须产生不完整提取；启用阻断审核时必须在任何账号、计费或上游副作用前拒绝。
 - 增加真实协议载荷的双引擎语义测试和提取尝试、成功、空内容、失败计数。
 - 固化仓库级不可绕过安全审核规约，使任何协议、账号、会话、路由或转换变更必须同步更新覆盖矩阵和测试。
