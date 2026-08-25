@@ -1,8 +1,7 @@
 package service
 
 import (
-	"crypto/rand"
-	"math/big"
+	"log/slog"
 	"strings"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/auditcontent"
@@ -96,11 +95,10 @@ func limitContentModerationImages(images []string) []string {
 	if len(images) <= maxContentModerationInputImages {
 		return images
 	}
-	idx, err := rand.Int(rand.Reader, big.NewInt(int64(len(images))))
-	if err != nil {
-		return images[:maxContentModerationInputImages]
-	}
-	return []string{images[int(idx.Int64())]}
+	slog.Warn("content_moderation.images_truncated",
+		"image_count", len(images),
+		"kept", maxContentModerationInputImages)
+	return images[:maxContentModerationInputImages]
 }
 
 func normalizeContentModerationText(text string) string {

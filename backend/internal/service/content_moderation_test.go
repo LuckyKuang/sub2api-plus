@@ -1182,7 +1182,7 @@ func TestExtractContentModerationInput_OpenAIImagesIncludesPromptAndImages(t *te
 	require.Equal(t, []string{"https://example.com/source.png", "data:image/png;base64,aGVsbG8="}, input.Images)
 }
 
-func TestContentModerationInput_NormalizeKeepsImagesAndModerationInputSamplesOneImage(t *testing.T) {
+func TestContentModerationInput_NormalizeKeepsImagesAndModerationInputKeepsAllCurrentImages(t *testing.T) {
 	images := []string{
 		"data:image/png;base64,Zmlyc3Q=",
 		"data:image/png;base64,c2Vjb25k",
@@ -1197,21 +1197,22 @@ func TestContentModerationInput_NormalizeKeepsImagesAndModerationInputSamplesOne
 
 	parts, ok := input.ModerationInput().([]moderationAPIInputPart)
 	require.True(t, ok)
-	require.Len(t, parts, 2)
+	require.Len(t, parts, 3)
 	require.Equal(t, "text", parts[0].Type)
 	require.Equal(t, "image_url", parts[1].Type)
-	require.NotNil(t, parts[1].ImageURL)
-	require.Contains(t, images, parts[1].ImageURL.URL)
+	require.Equal(t, "image_url", parts[2].Type)
+	require.Equal(t, images[0], parts[1].ImageURL.URL)
+	require.Equal(t, images[1], parts[2].ImageURL.URL)
 }
 
-func TestBuildModerationTestInputRejectsMultipleImages(t *testing.T) {
-	_, _, err := buildModerationTestInput("check image", []string{
+func TestBuildModerationTestInputAcceptsMultipleImages(t *testing.T) {
+	parts, count, err := buildModerationTestInput("check image", []string{
 		"data:image/png;base64,Zmlyc3Q=",
 		"data:image/png;base64,c2Vjb25k",
 	})
-
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "最多上传 1 张测试图片")
+	require.NoError(t, err)
+	require.Equal(t, 2, count)
+	require.Len(t, parts, 3)
 }
 
 func TestExtractContentModerationInput_OpenAIResponsesCodexPayloadUsesLatestUserOnly(t *testing.T) {
@@ -2097,4 +2098,28 @@ func TestContentModerationUpdateConfig_CyberPolicyExcludeFromBanCount(t *testing
 	})
 	require.NoError(t, err)
 	require.False(t, view.CyberPolicyExcludeFromBanCount)
+}
+
+func TestContentModerationUpdateConfig_CyberPolicyAutoBanEnabled(t *testing.T) {
+	settingRepo := &contentModerationTestSettingRepo{values: map[string]string{}}
+	svc := NewContentModerationService(settingRepo, nil, nil, nil, nil, nil, nil, nil)
+
+	view, err := svc.GetConfig(context.Background())
+	require.NoError(t, err)
+	require.False(t, view.CyberPolicyAutoBanEnabled)
+
+	enabled := true
+	view, err = svc.UpdateConfig(context.Background(), UpdateContentModerationConfigInput{
+		CyberPolicyAutoBanEnabled: &enabled,
+	})
+	require.NoError(t, err)
+	require.True(t, view.CyberPolicyAutoBanEnabled)
+
+	var saved ContentModerationConfig
+	require.NoError(t, json.Unmarshal([]byte(settingRepo.values[SettingKeyContentModerationConfig]), &saved))
+	require.True(t, saved.CyberPolicyAutoBanEnabled)
+
+	view, err = svc.UpdateConfig(context.Background(), UpdateContentModerationConfigInput{})
+	require.NoError(t, err)
+	require.True(t, view.CyberPolicyAutoBanEnabled)
 }

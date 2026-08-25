@@ -434,3 +434,164 @@ func TestRecordCyberPolicyEvent_DefaultCountsTowardBan(t *testing.T) {
 	require.Len(t, logs, 1)
 	require.GreaterOrEqual(t, logs[0].ViolationCount, 1, "默认路径行为不变（现状回归）")
 }
+
+type recordingAuthCacheInvalidator struct {
+	keys    []string
+	userIDs []int64
+}
+
+func (r *recordingAuthCacheInvalidator) InvalidateAuthCacheByKey(ctx context.Context, key string) {
+	r.keys = append(r.keys, key)
+}
+
+func (r *recordingAuthCacheInvalidator) InvalidateAuthCacheByUserID(ctx context.Context, userID int64) {
+	r.userIDs = append(r.userIDs, userID)
+}
+
+func (r *recordingAuthCacheInvalidator) InvalidateAuthCacheByGroupID(ctx context.Context, groupID int64) {
+}
+
+type recordingAPIKeyMutator struct {
+	key     *APIKey
+	updated []APIKey
+}
+
+func (r *recordingAPIKeyMutator) GetByID(ctx context.Context, id int64) (*APIKey, error) {
+	if r.key == nil || r.key.ID != id {
+		return nil, ErrAPIKeyNotFound
+	}
+	clone := *r.key
+	return &clone, nil
+}
+
+func (r *recordingAPIKeyMutator) Update(ctx context.Context, key *APIKey, fields APIKeyUpdateFields) error {
+	if key == nil {
+		return nil
+	}
+	clone := *key
+	r.updated = append(r.updated, clone)
+	r.key = &clone
+	return nil
+}
+
+func TestRecordCyberPolicyEvent_AutoBanDisabledDoesNotBan(t *testing.T) {
+	repo := &contentModerationTestRepo{}
+	users := &contentModerationTestUserRepo{user: &User{ID: 8, Role: RoleUser, Status: StatusActive}}
+	svc := NewContentModerationService(
+		&contentModerationTestSettingRepo{values: map[string]string{
+			SettingKeyRiskControlEnabled:      "true",
+			SettingKeyContentModerationConfig: `{"cyber_policy_auto_ban_enabled":false,"cyber_policy_exclude_from_ban_count":true}`,
+		}},
+		repo, nil, nil, users, nil, nil, nil,
+	)
+	svc.RecordCyberPolicyEvent(context.Background(), CyberPolicyRecordInput{
+		UserID: 8, UserEmail: "u@x.com", APIKeyID: 3, Model: "gpt-5", Endpoint: "/v1/responses",
+		UpstreamMessage: "flagged", UpstreamStatus: 400,
+	})
+	require.Empty(t, users.updated)
+	logs := repo.snapshotLogs()
+	require.Len(t, logs, 1)
+	require.False(t, logs[0].AutoBanned)
+}
+
+func TestRecordCyberPolicyEvent_AutoBanDisablesRegularUser(t *testing.T) {
+	repo := &contentModerationTestRepo{}
+	users := &contentModerationTestUserRepo{user: &User{ID: 8, Role: RoleUser, Status: StatusActive}}
+	cache := &recordingAuthCacheInvalidator{}
+	svc := NewContentModerationService(
+		&contentModerationTestSettingRepo{values: map[string]string{
+			SettingKeyRiskControlEnabled:      "true",
+			SettingKeyContentModerationConfig: `{"cyber_policy_auto_ban_enabled":true}`,
+		}},
+		repo, nil, nil, users, nil, cache, nil,
+	)
+	svc.RecordCyberPolicyEvent(context.Background(), CyberPolicyRecordInput{
+		UserID: 8, UserEmail: "u@x.com", APIKeyID: 3, Model: "gpt-5", Endpoint: "/v1/responses",
+		UpstreamMessage: "flagged", UpstreamStatus: 400,
+	})
+	require.Len(t, users.updated, 1)
+	require.Equal(t, StatusDisabled, users.updated[0].Status)
+	require.Equal(t, []int64{8}, cache.userIDs)
+	logs := repo.snapshotLogs()
+	require.Len(t, logs, 1)
+	require.True(t, logs[0].AutoBanned)
+	require.Equal(t, 1, logs[0].ViolationCount)
+}
+
+func TestRecordCyberPolicyEvent_AutoBanDisablesAdminAPIKeyOnly(t *testing.T) {
+	repo := &contentModerationTestRepo{}
+	users := &contentModerationTestUserRepo{user: &User{ID: 9, Role: RoleAdmin, Status: StatusActive}}
+	keys := &recordingAPIKeyMutator{key: &APIKey{ID: 44, UserID: 9, Key: "sk-admin", Status: StatusAPIKeyActive}}
+	cache := &recordingAuthCacheInvalidator{}
+	svc := NewContentModerationService(
+		&contentModerationTestSettingRepo{values: map[string]string{
+			SettingKeyRiskControlEnabled:      "true",
+			SettingKeyContentModerationConfig: `{"cyber_policy_auto_ban_enabled":true}`,
+		}},
+		repo, nil, nil, users, nil, cache, nil,
+	)
+	svc.SetAPIKeyRepository(keys)
+	svc.RecordCyberPolicyEvent(context.Background(), CyberPolicyRecordInput{
+		UserID: 9, UserEmail: "admin@x.com", APIKeyID: 44, Model: "gpt-5", Endpoint: "/v1/responses",
+		UpstreamMessage: "flagged", UpstreamStatus: 400,
+	})
+	require.Empty(t, users.updated)
+	require.Equal(t, StatusActive, users.user.Status)
+	require.Len(t, keys.updated, 1)
+	require.Equal(t, StatusAPIKeyDisabled, keys.updated[0].Status)
+	require.Equal(t, []string{"sk-admin"}, cache.keys)
+	require.Empty(t, cache.userIDs)
+	logs := repo.snapshotLogs()
+	require.Len(t, logs, 1)
+	require.True(t, logs[0].AutoBanned)
+}
+
+func TestEnforceCyberPolicyAutoBan_DisablesRegularUserWithoutWaitingRecord(t *testing.T) {
+	users := &contentModerationTestUserRepo{user: &User{ID: 8, Role: RoleUser, Status: StatusActive}}
+	cache := &recordingAuthCacheInvalidator{}
+	svc := NewContentModerationService(
+		&contentModerationTestSettingRepo{values: map[string]string{
+			SettingKeyRiskControlEnabled:      "true",
+			SettingKeyContentModerationConfig: `{"cyber_policy_auto_ban_enabled":true}`,
+		}},
+		&contentModerationTestRepo{}, nil, nil, users, nil, cache, nil,
+	)
+	svc.EnforceCyberPolicyAutoBan(context.Background(), CyberPolicyRecordInput{UserID: 8, Model: "gpt-5"})
+	require.Len(t, users.updated, 1)
+	require.Equal(t, StatusDisabled, users.updated[0].Status)
+	require.Equal(t, []int64{8}, cache.userIDs)
+}
+
+func TestEnforceCyberPolicyAutoBan_DisabledSwitchDoesNothing(t *testing.T) {
+	users := &contentModerationTestUserRepo{user: &User{ID: 8, Role: RoleUser, Status: StatusActive}}
+	svc := NewContentModerationService(
+		&contentModerationTestSettingRepo{values: map[string]string{
+			SettingKeyRiskControlEnabled:      "true",
+			SettingKeyContentModerationConfig: `{"cyber_policy_auto_ban_enabled":false}`,
+		}},
+		&contentModerationTestRepo{}, nil, nil, users, nil, nil, nil,
+	)
+	svc.EnforceCyberPolicyAutoBan(context.Background(), CyberPolicyRecordInput{UserID: 8, Model: "gpt-5"})
+	require.Empty(t, users.updated)
+}
+
+func TestEnforceCyberPolicyAutoBan_DisablesAdminAPIKeyOnly(t *testing.T) {
+	users := &contentModerationTestUserRepo{user: &User{ID: 9, Role: RoleAdmin, Status: StatusActive}}
+	keys := &recordingAPIKeyMutator{key: &APIKey{ID: 44, UserID: 9, Key: "sk-admin", Status: StatusAPIKeyActive}}
+	cache := &recordingAuthCacheInvalidator{}
+	svc := NewContentModerationService(
+		&contentModerationTestSettingRepo{values: map[string]string{
+			SettingKeyRiskControlEnabled:      "true",
+			SettingKeyContentModerationConfig: `{"cyber_policy_auto_ban_enabled":true}`,
+		}},
+		&contentModerationTestRepo{}, nil, nil, users, nil, cache, nil,
+	)
+	svc.SetAPIKeyRepository(keys)
+	svc.EnforceCyberPolicyAutoBan(context.Background(), CyberPolicyRecordInput{UserID: 9, APIKeyID: 44, Model: "gpt-5"})
+	require.Empty(t, users.updated)
+	require.Equal(t, StatusActive, users.user.Status)
+	require.Len(t, keys.updated, 1)
+	require.Equal(t, StatusAPIKeyDisabled, keys.updated[0].Status)
+	require.Equal(t, []string{"sk-admin"}, cache.keys)
+	require.Empty(t, cache.userIDs)
+}
