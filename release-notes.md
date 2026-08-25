@@ -27,7 +27,6 @@ Sub2API Plus v0.1.181+custom.001
 ## Known issues
 
 - OAuth transport plugins are experimental and default off.
-- Frontend lockfile still needs a frozen `pnpm install` after this merge so plugin and `dompurify 3.4.14` dependencies are fully converged.
 
 ## Upstream baseline
 
