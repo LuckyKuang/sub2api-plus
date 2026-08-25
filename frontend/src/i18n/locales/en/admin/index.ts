@@ -8,6 +8,7 @@ import audit from './audit'
 import promptAudit from './promptAudit'
 import ipAccessControl from './ipAccessControl'
 import support from './support'
+import plugins from './plugins'
 
 export default {
   ...overview,
@@ -20,4 +21,5 @@ export default {
   ...promptAudit,
   ...ipAccessControl,
   ...support,
+  ...plugins,
 }

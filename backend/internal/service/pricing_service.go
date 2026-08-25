@@ -583,12 +583,12 @@ func (s *PricingService) useFallbackPricing() error {
 	if err != nil {
 		return fmt.Errorf("read fallback pricing file: %w", err)
 	}
-	if _, err := s.parsePricingData(data); err != nil {
-		return fmt.Errorf("parse fallback pricing file: %w", err)
-	}
-	if err := writeFileAtomic(s.getPricingFilePath(), data); err != nil {
-		return fmt.Errorf("persist fallback pricing file: %w", err)
-	}
+		if _, err := s.parsePricingData(data); err != nil {
+			return fmt.Errorf("parse fallback pricing file: %w", err)
+		}
+		if err := writeFileAtomic(s.getPricingFilePath(), data); err != nil {
+			return fmt.Errorf("persist fallback pricing file: %w", err)
+		}
 	logger.LegacyPrintf("service.pricing", "[Pricing] Using bundled fallback file: %s", fallbackFile)
 	return s.loadPricingData(s.getPricingFilePath())
 }

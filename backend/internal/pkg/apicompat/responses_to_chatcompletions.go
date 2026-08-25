@@ -23,10 +23,11 @@ func ResponsesToChatCompletions(resp *ResponsesResponse, model string) *ChatComp
 	}
 
 	out := &ChatCompletionsResponse{
-		ID:      id,
-		Object:  "chat.completion",
-		Created: time.Now().Unix(),
-		Model:   model,
+		ID:          id,
+		Object:      "chat.completion",
+		Created:     time.Now().Unix(),
+		Model:       model,
+		ServiceTier: resp.ServiceTier,
 	}
 
 	var contentText string
@@ -121,6 +122,7 @@ type ResponsesEventToChatState struct {
 	ID                     string
 	Model                  string
 	Created                int64
+	ServiceTier            string // upstream tier observed on response events; echoed on chunks
 	SentRole               bool
 	SawToolCall            bool
 	SawText                bool
@@ -215,12 +217,13 @@ func FinalizeResponsesChatStream(state *ResponsesEventToChatState) []ChatComplet
 
 	if state.IncludeUsage && state.Usage != nil {
 		chunks = append(chunks, ChatCompletionsChunk{
-			ID:      state.ID,
-			Object:  "chat.completion.chunk",
-			Created: state.Created,
-			Model:   state.Model,
-			Choices: []ChatChunkChoice{},
-			Usage:   state.Usage,
+			ID:          state.ID,
+			Object:      "chat.completion.chunk",
+			Created:     state.Created,
+			Model:       state.Model,
+			ServiceTier: state.ServiceTier,
+			Choices:     []ChatChunkChoice{},
+			Usage:       state.Usage,
 		})
 	}
 
@@ -245,6 +248,9 @@ func resToChatHandleCreated(evt *ResponsesStreamEvent, state *ResponsesEventToCh
 		}
 		if state.Model == "" && evt.Response.Model != "" {
 			state.Model = evt.Response.Model
+		}
+		if evt.Response.ServiceTier != "" {
+			state.ServiceTier = evt.Response.ServiceTier
 		}
 	}
 	// Emit the role chunk.
@@ -517,6 +523,9 @@ func resToChatHandleCompleted(evt *ResponsesStreamEvent, state *ResponsesEventTo
 		if evt.Response.Usage != nil {
 			state.Usage = chatUsageFromResponsesUsage(evt.Response.Usage)
 		}
+		if evt.Response.ServiceTier != "" {
+			state.ServiceTier = evt.Response.ServiceTier
+		}
 
 		switch evt.Response.Status {
 		case "incomplete":
@@ -545,12 +554,13 @@ func resToChatHandleCompleted(evt *ResponsesStreamEvent, state *ResponsesEventTo
 
 	if state.IncludeUsage && state.Usage != nil {
 		chunks = append(chunks, ChatCompletionsChunk{
-			ID:      state.ID,
-			Object:  "chat.completion.chunk",
-			Created: state.Created,
-			Model:   state.Model,
-			Choices: []ChatChunkChoice{},
-			Usage:   state.Usage,
+			ID:          state.ID,
+			Object:      "chat.completion.chunk",
+			Created:     state.Created,
+			Model:       state.Model,
+			ServiceTier: state.ServiceTier,
+			Choices:     []ChatChunkChoice{},
+			Usage:       state.Usage,
 		})
 	}
 
@@ -755,10 +765,11 @@ func completionDetailsFromResponses(src *ResponsesOutputTokensDetails) *ChatToke
 
 func makeChatDeltaChunk(state *ResponsesEventToChatState, delta ChatDelta) ChatCompletionsChunk {
 	return ChatCompletionsChunk{
-		ID:      state.ID,
-		Object:  "chat.completion.chunk",
-		Created: state.Created,
-		Model:   state.Model,
+		ID:          state.ID,
+		Object:      "chat.completion.chunk",
+		Created:     state.Created,
+		Model:       state.Model,
+		ServiceTier: state.ServiceTier,
 		Choices: []ChatChunkChoice{{
 			Index:        0,
 			Delta:        delta,
@@ -776,10 +787,11 @@ func makeChatAggregateDeltaChunk(state *ResponsesEventToChatState, delta ChatDel
 func makeChatFinishChunk(state *ResponsesEventToChatState, finishReason string) ChatCompletionsChunk {
 	empty := ""
 	return ChatCompletionsChunk{
-		ID:      state.ID,
-		Object:  "chat.completion.chunk",
-		Created: state.Created,
-		Model:   state.Model,
+		ID:          state.ID,
+		Object:      "chat.completion.chunk",
+		Created:     state.Created,
+		Model:       state.Model,
+		ServiceTier: state.ServiceTier,
 		Choices: []ChatChunkChoice{{
 			Index:        0,
 			Delta:        ChatDelta{Content: &empty},

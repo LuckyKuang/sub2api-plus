@@ -194,10 +194,9 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyChannelMonitorShowQuota:              "false",
 
 		// Grok: safe defaults — no cross-vendor model rewrite unless operators enable it.
-		// Keep "false" even though official v0.1.173 later flipped the in-tree default
-		// to true: tag release notes, Plus frontend form default, and the original
-		// 74249b8fe design all treat silent gpt/claude→grok rewrite as opt-in.
-		SettingKeyGrokDefaultTextModel:           "grok-4.5",
+		// Keep "false" even though official later flipped the in-tree default
+		// to true: silent gpt/claude→grok rewrite remains opt-in in Plus.
+		SettingKeyGrokDefaultTextModel:           "grok-4.6",
 		SettingKeyGrokCrossClientModelMapEnabled: "false",
 		SettingKeyGrokDefaultBaseURLMode:         GrokDefaultBaseURLModeCLI,
 
@@ -205,9 +204,10 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyAvailableChannelsEnabled: "false",
 
 		// Model plaza feature (default disabled; opt-in, sign-in required when enabled)
-		SettingKeyModelPlazaEnabled:     "false",
-		SettingKeyModelPlazaRequireAuth: "true",
-		SettingKeyModelPlazaDescription: "",
+		SettingKeyModelPlazaEnabled:       "false",
+		SettingKeyModelPlazaRequireAuth:   "true",
+		SettingKeyModelPlazaDescription:   "",
+		SettingKeyPluginManagementEnabled: "false",
 
 		// Affiliate (邀请返利) feature (default disabled; opt-in)
 		SettingKeyAffiliateEnabled:              "false",
@@ -818,7 +818,7 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	// Grok default mapping policy
 	result.GrokDefaultTextModel = strings.TrimSpace(settings[SettingKeyGrokDefaultTextModel])
 	if result.GrokDefaultTextModel == "" {
-		result.GrokDefaultTextModel = "grok-4.5"
+		result.GrokDefaultTextModel = "grok-4.6"
 	}
 	// Strict opt-in: missing/empty/invalid → disabled. Matches InitializeDefaultSettings
 	// and the published breaking-change note (no silent gpt/claude→grok rewrite).
@@ -832,6 +832,7 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	result.ModelPlazaEnabled = settings[SettingKeyModelPlazaEnabled] == "true"
 	result.ModelPlazaRequireAuth = settings[SettingKeyModelPlazaRequireAuth] != "false"
 	result.ModelPlazaDescription = settings[SettingKeyModelPlazaDescription]
+	result.PluginManagementEnabled = settings[SettingKeyPluginManagementEnabled] == "true"
 
 	// Affiliate (邀请返利) feature (default: disabled; strict true)
 	result.AffiliateEnabled = settings[SettingKeyAffiliateEnabled] == "true"

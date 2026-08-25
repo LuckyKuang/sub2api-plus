@@ -533,3 +533,7 @@ func (s *OpenAIGatewayService) redactAgentIdentitySensitiveBody(ctx context.Cont
 	}
 	return redactAgentIdentitySensitiveBodyForAccount(ctx, s.accountRepo, account, body)
 }
+
+func buildAgentIdentityAuthenticationHeaders(ctx context.Context, repo AccountRepository, wsInvalidator agentIdentityWSConnectionInvalidator, taskMu *sync.Mutex, account *Account) (http.Header, error) {
+	return buildAgentIdentityAuthenticationHeadersWithIdentity(ctx, repo, wsInvalidator, taskMu, account, openAIOutboundIdentity{})
+}

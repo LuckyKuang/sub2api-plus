@@ -1,32 +1,35 @@
-Sub2API Plus v0.1.178+custom.005
+Sub2API Plus v0.1.181+custom.001
 
 ## Highlights
 
-- Keep Content Moderation on current direct-user text and images.
-- Restore Prompt Audit conversation-text selection to `v0.1.177+custom.003`, so ordinary Codex `hi` requests are not blocked by client tool schemas.
-- Continue sharing one canonical extractor, without converting extraction failures into policy blocks.
+- Import official Sub2API v0.1.179–v0.1.181: adaptive Chinese-provider protocols, channel Fast/Flex/context multipliers, Composite Codex/CN routing, Fast `service_tier`, reset-card auto-use, experimental OAuth transport plugins, Go 1.27.0, and the four 181 compatibility fixes.
+- Keep Plus Prompt Audit conversation-text selection, admin user support view, IP access master switch, Codex mode-only fingerprint with `device` default, usage TPS, and release tooling.
 
 ## Changed
 
-- Prompt Audit full/async scans messages, instructions/system context, reusable prompt variables, reasoning, and search/embedding/media prompts.
-- Prompt Audit no longer sends static `tools`/`functions` schemas, structured tool-call arguments, or tool/function outputs to Qwen3Guard.
-- Blocking latest-turn-only again scans only the latest user text plus the nearest preceding assistant/model output.
+- Go toolchain is `1.27.0`; golangci-lint is `2.13.0`.
+- Usage aggregation uses official GROUPING SETS; Plus TPS (`last_token_ms`) remains.
+- Fast `service_tier` covers Responses, Chat, and WebSocket.
+- Experimental OAuth transport plugins ship with API, admin UI, config, and docs, and stay disabled by default.
+- Official migrations land as Plus `229` usage-log indexes, `230` Composite CN routes, `231` channel multipliers, `232` plugins, and `233` plugin artifacts.
 
 ## Fixed
 
-- Stop treating Codex and other client tool definitions as jailbreak prompt text.
-- Keep `hi` plus a large tool schema from producing a Prompt Audit block while still scanning jailbreak text in user/system/assistant conversation content.
+- Gemini tool-schema cleanup, Grok official CLI User-Agent, Responses Lite `parallel_tool_calls`, and batch cleanup of unsupported `status` fields from official v0.1.181.
 
 ## Compatibility and migration
 
-- No database migrations. Existing Prompt Audit endpoints, scanners, and jailbreak policy are unchanged; only the scanned conversation-text selection is restored.
-- Content Moderation behavior is unchanged.
+- **Breaking billing change from official v0.1.179:** long-context billing now activates when either the group switch or the account switch is enabled. Existing OpenAI traffic above 272k context may start paying 2× input / 1.5× output.
+- Published Plus migrations 224/225/226/228 are unchanged. Do not reuse empty prefix `227`.
+- Official `225_backfill_codex_fingerprint_seed.sql` is not imported. Codex identity remains mode-only and derived from the credential-owning account.
+- Fresh databases and upgrades from `v0.1.178+custom.005` both apply `229`–`233`.
 
 ## Known issues
 
-- None known.
+- OAuth transport plugins are experimental and default off.
+- Frontend lockfile still needs a frozen `pnpm install` after this merge so plugin and `dompurify 3.4.14` dependencies are fully converged.
 
 ## Upstream baseline
 
-Official release: v0.1.178
-Official commit: e0c48a19ed794a565e3858662520afe0a1f9f0ba
+Official release: v0.1.181
+Official commit: 3af5443b224823ae507a50c7b113aa50604409c8

@@ -17,6 +17,47 @@ import (
 	"github.com/tidwall/sjson"
 )
 
+// codexFingerprintIDsContextKey 是暂存在 gin context 的收敛 ID 集合键。
+// 由 Forward（非透传）或 forwardOpenAIPassthrough（透传）解析后写入，请求
+// 构造器读取用于出站头改写——请求体与出站头必须共享同一份 IDs，保证
+// turn_id 等随机字段一致。
+const codexFingerprintIDsContextKey = "codex_fingerprint_ids"
+
+// stageCodexFingerprintIDs 将本 attempt 解析出的收敛 ID 暂存到 gin context。
+// 必须无条件覆写（含 nil）：failover 从收敛账号切到 off 账号时，上一账号的
+// IDs 不得残留并被误应用到新账号的出站头（typed-nil 由应用侧 nil 守卫吸收）。
+func stageCodexFingerprintIDs(c *gin.Context, ids *codexFingerprintIDs) {
+	if c != nil {
+		c.Set(codexFingerprintIDsContextKey, ids)
+	}
+}
+
+func stagedCodexFingerprintIDs(c *gin.Context, account *Account) *codexFingerprintIDs {
+	if c == nil || account == nil || !account.UsesOpenAICodexProtocol() {
+		return nil
+	}
+	value, ok := c.Get(codexFingerprintIDsContextKey)
+	if !ok {
+		return nil
+	}
+	ids, ok := value.(*codexFingerprintIDs)
+	if !ok || ids == nil || ids.accountID != account.ID {
+		return nil
+	}
+	return ids
+}
+
+// applyStagedCodexFingerprintHeaders 读取 context 暂存的收敛 ID 并改写出站头。
+// 非透传与透传两个请求构造器共用本函数，防止应用语义漂移。仅解析该
+// snapshot 的 OAuth 账号可读取，避免 stale context 跨账号 failover 泄漏。
+func applyStagedCodexFingerprintHeaders(c *gin.Context, account *Account, h http.Header) {
+	applyCodexFingerprintHeaders(h, stagedCodexFingerprintIDs(c, account))
+}
+
+func applyStagedCodexFingerprintClientMetadata(c *gin.Context, account *Account, reqBody map[string]any) bool {
+	return applyCodexFingerprintClientMetadata(reqBody, stagedCodexFingerprintIDs(c, account))
+}
+
 // codexFingerprintMode 控制 OAuth 账号出站请求的设备指纹收敛强度。
 // 多人共享同一 OAuth 账号时，每个用户的 Codex 客户端会携带各自不同的
 // installation_id / session_id / thread_id，上游据此判定设备数和会话数。
@@ -353,27 +394,13 @@ func loadCodexFingerprintIDs(c *gin.Context, account *Account) *codexFingerprint
 	if c == nil || account == nil {
 		return nil
 	}
-	ids := stagedCodexFingerprintIDs(c)
+	ids := stagedCodexFingerprintIDs(c, account)
 	if ids == nil || ids.accountID != account.ID {
 		return nil
 	}
 	return ids
 }
 
-func stagedCodexFingerprintIDs(c *gin.Context) *codexFingerprintIDs {
-	if c == nil {
-		return nil
-	}
-	raw, ok := c.Get(ginCodexFingerprintIDsKey)
-	if !ok || raw == nil {
-		return nil
-	}
-	ids, ok := raw.(*codexFingerprintIDs)
-	if !ok || ids == nil {
-		return nil
-	}
-	return ids
-}
 
 func (s *OpenAIGatewayService) prepareCodexFingerprintIDs(
 	ctx context.Context,
@@ -653,4 +680,8 @@ func rewriteClientMetadataEmbeddedTurnMetadata(clientMetadata map[string]any, fi
 	if rebuilt, err := json.Marshal(metadata); err == nil {
 		clientMetadata["x-codex-turn-metadata"] = string(rebuilt)
 	}
+}
+
+func sanitizedCodexFingerprintExtraUpdates(updates map[string]any) map[string]any {
+	return updates
 }
