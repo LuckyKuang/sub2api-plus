@@ -45,7 +45,7 @@ procedures are documented in [`docs/RELEASING.md`](docs/RELEASING.md).
 | `v0.1.178+custom.003` | `v0.1.178` | `e0c48a19ed794a565e3858662520afe0a1f9f0ba` | published |
 | `v0.1.178+custom.004` | `v0.1.178` | `e0c48a19ed794a565e3858662520afe0a1f9f0ba` | published |
 | `v0.1.178+custom.005` | `v0.1.178` | `e0c48a19ed794a565e3858662520afe0a1f9f0ba` | published |
-| `v0.1.181+custom.001` | `v0.1.181` | `3af5443b224823ae507a50c7b113aa50604409c8` | planned |
+| `v0.1.182+custom.001` | `v0.1.182` | `5a7d469622911a6b1291a692376df5fa03f9ac2e` | planned |
 
 `v0.1.166+custom.007` is marked invalid because its tag contains embedded and
 documented version `0.1.166+custom.006`. Remote Release and OCI artifact status
@@ -54,9 +54,9 @@ still require a maintainer audit. Do not reuse or retag `.007`.
 ## Current Version
 
 ```text
-Git/GitHub: v0.1.181+custom.001
-Application: 0.1.181+custom.001
-GHCR: ghcr.io/luckykuang/sub2api-plus:v0.1.181-custom.001
+Git/GitHub: v0.1.182+custom.001
+Application: 0.1.182+custom.001
+GHCR: ghcr.io/luckykuang/sub2api-plus:v0.1.182-custom.001
 ```
 
 ## Naming
