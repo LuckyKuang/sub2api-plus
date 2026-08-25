@@ -3,13 +3,13 @@ package service
 // 本文件承载 /v1/responses 透传转发及其流式、非流式响应与错误处理。
 
 import (
-	"github.com/LuckyKuang/sub2api-plus/internal/pkg/ctxkey"
 	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/ctxkey"
 	"io"
 	"net/http"
 	"sort"

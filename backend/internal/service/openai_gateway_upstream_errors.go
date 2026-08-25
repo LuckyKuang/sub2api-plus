@@ -931,6 +931,6 @@ func (e *UpstreamFailoverError) IsOpenAICapacityShed() bool {
 
 const (
 	openAIUpstreamAccessUnavailableClientMessage = "Upstream access is temporarily unavailable, please retry later"
-	OpenAIUpstreamAccessStateReason = GatewayFailureReason("openai_upstream_access_state")
-	OpenAIHTTPContinuationUnsupportedReason = GatewayFailureReason("openai_http_continuation_unsupported")
+	OpenAIUpstreamAccessStateReason              = GatewayFailureReason("openai_upstream_access_state")
+	OpenAIHTTPContinuationUnsupportedReason      = GatewayFailureReason("openai_http_continuation_unsupported")
 )

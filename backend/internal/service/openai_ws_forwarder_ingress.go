@@ -1011,7 +1011,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		turnHasFunctionCallOutput := openAIWSRawPayloadHasToolCallOutput(payload)
 		eventCount := 0
 		tokenEventCount := 0
-			var firstTokenMs *int
+		var firstTokenMs *int
 		terminalEventCount := 0
 		replayCollector := &openAIWSToolCallReplayCollector{}
 		firstEventType := ""

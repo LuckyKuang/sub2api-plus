@@ -262,7 +262,7 @@ type ccStreamScanState struct {
 	// Err 为 scanner 读错误（客户端 context 取消不属于此类，会原样带出）。
 	// 非 nil 时调用方必须跳过 finalize 并返回 usage-incomplete 错误，避免
 	// 把上游截断伪装成正常收尾。
-	Err error
+	Err          error
 	FirstTokenMs *int
 }
 

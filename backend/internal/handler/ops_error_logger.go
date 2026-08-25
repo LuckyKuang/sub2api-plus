@@ -1539,12 +1539,11 @@ func logOpsStreamErrorValue(c *gin.Context, ops *service.OpsService, wireStatus 
 		CreatedAt: time.Now(),
 	}
 	applyOpsLatencyFieldsFromContext(c, entry)
-		applyOpsRoutingFieldsFromContext(c, entry)
-		applyOpsUpstreamFieldsFromContext(c, entry)
-		if streamErr.Turn > 0 {
-			applyOpsStreamErrorSnapshot(entry, streamErr)
-		}
-
+	applyOpsRoutingFieldsFromContext(c, entry)
+	applyOpsUpstreamFieldsFromContext(c, entry)
+	if streamErr.Turn > 0 {
+		applyOpsStreamErrorSnapshot(entry, streamErr)
+	}
 
 	if apiKey != nil {
 		entry.APIKeyID = &apiKey.ID
