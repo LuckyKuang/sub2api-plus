@@ -20,7 +20,7 @@
       release notes, and install/rollback examples.
 - [x] 3.2 Run `go mod tidy -diff`, focused Responses Lite/image/WebSocket/Codex
       tests, and migration checks in Debian WSL.
-- [ ] 3.3 Verify generated-code output has no drift.
+- [x] 3.3 Verify generated-code output has no drift.
 - [x] 3.4 Run frontend lint, typecheck, locale parity, and relevant Vitest in
       Debian WSL.
 - [x] 3.5 Run release-document, release-policy, and diff checks.

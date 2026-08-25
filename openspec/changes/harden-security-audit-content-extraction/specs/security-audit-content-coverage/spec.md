@@ -64,19 +64,28 @@ Client-submitted tool results and other external-source content SHALL be classif
 
 ### Requirement: Inbound roles and prompt context must not create bypasses
 
-Inbound role labels SHALL be treated as untrusted request data for Prompt Audit. Conversation message text remains auditable. Latest-turn narrowing MUST restore the `v0.1.177+custom.003` policy: latest user text plus the nearest preceding assistant/model output, without appending tool definitions. Content Moderation SHALL separately enforce direct-user attribution.
+Inbound role labels SHALL be treated as untrusted request data for Prompt Audit. Conversation message text remains auditable. Synchronous blocking MUST scan only the latest user text: `SourceMessage` with `role=user`, or a role-less Responses/Gemini/embeddings/media prompt treated as user. Instructions, reasoning, prompt variables, previous assistant/model output, older user turns, and tool definitions MUST NOT enter blocking. Asynchronous Prompt Audit MAY retain the complete transcript for review and MUST NOT rewrite that result into a block. Content Moderation SHALL separately enforce direct-user attribution.
 
 #### Scenario: Client submits a current assistant or model message
 
 - **WHEN** the last Chat, Anthropic, Responses, or Gemini content item claims an assistant or model role
-- **THEN** Prompt Audit latest-turn MUST keep the latest user text as the priority segment and MAY include that assistant/model item only as the nearest previous output
+- **THEN** Prompt Audit blocking MUST keep only the latest user text and MUST NOT append that assistant/model item
 - **THEN** Content Moderation MUST NOT treat it as a direct-user policy input
 
 #### Scenario: Request supplies instructions and tool definitions
 
 - **WHEN** an accepted payload contains instructions, system context, or tool/function definitions
-- **THEN** Prompt Audit MUST audit instructions and system context as conversation text and MUST omit static tool/function definitions
+- **THEN** asynchronous Prompt Audit MUST audit instructions and system context as conversation text and MUST omit static tool/function definitions
+- **THEN** Prompt Audit blocking MUST omit instructions, system context, and tool/function definitions
 - **THEN** Content Moderation MUST exclude that context from the direct-user policy input
+
+#### Scenario: Codex Responses sends a short user turn with harness instructions
+
+- **WHEN** a Responses payload contains Codex `instructions`, tool schema, and a latest user message `hi`
+- **THEN** Content Moderation MUST scan `hi` and allow it
+- **THEN** Prompt Audit blocking MUST scan exactly `hi` with `chunk_total=1` and MUST NOT include `instructions` or tool schema
+- **THEN** a jailbreak written in the latest user text MUST still block
+- **THEN** a jailbreak written only in `instructions` or tools MUST NOT block
 
 ### Requirement: Supported specialized endpoints must extract their canonical text
 
