@@ -190,8 +190,8 @@ func normalizeOpenAIResponsesRejectedFieldRetryBody(statusCode int, body, respon
 			return nil, "", false, fmt.Errorf("delete rejected max_output_tokens: %w", err)
 		}
 		return retryBody, "max_output_tokens parameter rejection", true, nil
-		}
-			if index, ok := openAIResponsesRejectedContentIndex(contentParam); ok &&
+	}
+	if index, ok := openAIResponsesRejectedContentIndex(contentParam); ok &&
 		contentParam == messageContentParam && isExplicitOpenAIResponsesNullContentRejection(code, message) {
 		return normalizeOpenAIResponsesRejectedNullContentAtIndex(body, index)
 	}

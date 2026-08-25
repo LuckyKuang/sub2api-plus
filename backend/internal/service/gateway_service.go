@@ -619,22 +619,22 @@ type ForwardResult struct {
 	// response before any client-facing rewrite or protocol conversion.
 	UpstreamResponseModel         string
 	UpstreamResponseModelConflict bool
-		// UpstreamResponseServiceTier is the tier the upstream reports having used
-		// (Anthropic usage.speed: "fast" / "standard"); "" when not declared.
-		UpstreamResponseServiceTier string
-		Stream                      bool
-		Duration                    time.Duration
-		FirstTokenMs                *int // 首个文本/推理/工具 token-like 增量（流式请求）
-		LastTokenMs                 *int // 最后一个文本/推理/工具 token-like 增量（流式请求）
-		FirstOutputMs               *int // 首个下游可消费输出（流式请求）
-		FirstOutputKind             string
-		ClientDisconnect            bool // 客户端是否在流式传输过程中断开
-		ReasoningEffort             *string
-		// ServiceTier records the tier requested by the client. OpenAI uses
-		// service_tier; Anthropic speed=fast is normalized to "fast". Usage recording
-		// lowers it to UpstreamResponseServiceTier when the upstream reports a
-		// cheaper tier (see ResolveBillingServiceTier).
-		ServiceTier *string
+	// UpstreamResponseServiceTier is the tier the upstream reports having used
+	// (Anthropic usage.speed: "fast" / "standard"); "" when not declared.
+	UpstreamResponseServiceTier string
+	Stream                      bool
+	Duration                    time.Duration
+	FirstTokenMs                *int // 首个文本/推理/工具 token-like 增量（流式请求）
+	LastTokenMs                 *int // 最后一个文本/推理/工具 token-like 增量（流式请求）
+	FirstOutputMs               *int // 首个下游可消费输出（流式请求）
+	FirstOutputKind             string
+	ClientDisconnect            bool // 客户端是否在流式传输过程中断开
+	ReasoningEffort             *string
+	// ServiceTier records the tier requested by the client. OpenAI uses
+	// service_tier; Anthropic speed=fast is normalized to "fast". Usage recording
+	// lowers it to UpstreamResponseServiceTier when the upstream reports a
+	// cheaper tier (see ResolveBillingServiceTier).
+	ServiceTier *string
 
 	// 图片生成计费字段（图片生成模型使用）
 	ImageCount         int    // 生成的图片数量
@@ -1539,22 +1539,22 @@ func (s *GatewayService) initDebugGatewayBodyFile(path string) {
 	}
 
 	// 如果 path 指向一个已存在的目录，自动追加默认文件名
-		// #nosec G703 -- this opt-in debug path is an administrator-controlled environment setting.
-		if info, err := os.Stat(path); err == nil && info.IsDir() { //nolint:gosec // G703: path 仅来自启动环境变量 SUB2API_DEBUG_GATEWAY_BODY（运维配置），非请求输入
+	// #nosec G703 -- this opt-in debug path is an administrator-controlled environment setting.
+	if info, err := os.Stat(path); err == nil && info.IsDir() { //nolint:gosec // G703: path 仅来自启动环境变量 SUB2API_DEBUG_GATEWAY_BODY（运维配置），非请求输入
 		path = filepath.Join(path, debugGatewayBodyDefaultFilename)
 	}
 
 	// 确保父目录存在
 	if dir := filepath.Dir(path); dir != "." {
-			// #nosec G703 -- this opt-in debug path is an administrator-controlled environment setting.
-			if err := os.MkdirAll(dir, 0755); err != nil { //nolint:gosec // G703: 同上
+		// #nosec G703 -- this opt-in debug path is an administrator-controlled environment setting.
+		if err := os.MkdirAll(dir, 0755); err != nil { //nolint:gosec // G703: 同上
 			slog.Error("failed to create gateway debug log directory", "dir", dir, "error", err)
 			return
 		}
 	}
 
-		// #nosec G703 -- this opt-in debug path is an administrator-controlled environment setting.
-		f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644) //nolint:gosec // G703: 同上
+	// #nosec G703 -- this opt-in debug path is an administrator-controlled environment setting.
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644) //nolint:gosec // G703: 同上
 	if err != nil {
 		slog.Error("failed to open gateway debug log file", "path", path, "error", err)
 		return

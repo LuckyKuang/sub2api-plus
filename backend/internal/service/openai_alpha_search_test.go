@@ -56,10 +56,10 @@ func TestForwardAlphaSearchOAuthPreservesWire(t *testing.T) {
 	c, _ := gin.CreateTestContext(recorder)
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/alpha/search?feature=standalone", bytes.NewReader(body))
 	c.Request.Header.Set("Content-Type", "application/json")
-		c.Request.Header.Set("User-Agent", DefaultOpenAICodexUserAgent)
-		c.Request.Header.Set("Originator", "codex-tui")
-		c.Request.Header.Set("Version", codexCLIVersion)
-		c.Request.Header.Set("X-Codex-Turn-Metadata", `{"session_id":"search-session","turn_id":"search-turn"}`)
+	c.Request.Header.Set("User-Agent", DefaultOpenAICodexUserAgent)
+	c.Request.Header.Set("Originator", "codex-tui")
+	c.Request.Header.Set("Version", codexCLIVersion)
+	c.Request.Header.Set("X-Codex-Turn-Metadata", `{"session_id":"search-session","turn_id":"search-turn"}`)
 
 	upstream := &httpUpstreamRecorder{resp: &http.Response{
 		StatusCode: http.StatusOK,

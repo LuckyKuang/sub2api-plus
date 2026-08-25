@@ -362,9 +362,9 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 
 		AvailableChannelsEnabled: settings[SettingKeyAvailableChannelsEnabled] == "true",
 
-			ModelPlazaEnabled:       settings[SettingKeyModelPlazaEnabled] == "true",
-			ModelPlazaRequireAuth:   settings[SettingKeyModelPlazaRequireAuth] != "false",
-			PluginManagementEnabled: settings[SettingKeyPluginManagementEnabled] == "true",
+		ModelPlazaEnabled:       settings[SettingKeyModelPlazaEnabled] == "true",
+		ModelPlazaRequireAuth:   settings[SettingKeyModelPlazaRequireAuth] != "false",
+		PluginManagementEnabled: settings[SettingKeyPluginManagementEnabled] == "true",
 
 		AffiliateEnabled: settings[SettingKeyAffiliateEnabled] == "true",
 
@@ -621,17 +621,17 @@ type PublicSettingsInjectionPayload struct {
 	// ChannelMonitorHideThroughput is public so the user UI can hide RPM/TPM
 	// without waiting for API redaction alone (defense in depth).
 	ChannelMonitorHideThroughput bool `json:"channel_monitor_hide_throughput"`
-		// ChannelMonitorShowQuota gates the user-facing quota/balance display;
-		// it fails closed when unset.
-		ChannelMonitorShowQuota      bool `json:"channel_monitor_show_quota"`
-		AvailableChannelsEnabled     bool `json:"available_channels_enabled"`
-		ModelPlazaEnabled            bool `json:"model_plaza_enabled"`
-		ModelPlazaRequireAuth        bool `json:"model_plaza_require_auth"`
-		PluginManagementEnabled      bool `json:"plugin_management_enabled"`
-		AffiliateEnabled             bool `json:"affiliate_enabled"`
-		RiskControlEnabled           bool `json:"risk_control_enabled"`
-		GlobalIPAccessControlEnabled bool `json:"global_ip_access_control_enabled"`
-		AllowUserViewErrorRequests   bool `json:"allow_user_view_error_requests"`
+	// ChannelMonitorShowQuota gates the user-facing quota/balance display;
+	// it fails closed when unset.
+	ChannelMonitorShowQuota      bool `json:"channel_monitor_show_quota"`
+	AvailableChannelsEnabled     bool `json:"available_channels_enabled"`
+	ModelPlazaEnabled            bool `json:"model_plaza_enabled"`
+	ModelPlazaRequireAuth        bool `json:"model_plaza_require_auth"`
+	PluginManagementEnabled      bool `json:"plugin_management_enabled"`
+	AffiliateEnabled             bool `json:"affiliate_enabled"`
+	RiskControlEnabled           bool `json:"risk_control_enabled"`
+	GlobalIPAccessControlEnabled bool `json:"global_ip_access_control_enabled"`
+	AllowUserViewErrorRequests   bool `json:"allow_user_view_error_requests"`
 }
 
 // GetPublicSettingsForInjection returns public settings in a format suitable for HTML injection.

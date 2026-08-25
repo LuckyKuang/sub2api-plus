@@ -71,12 +71,12 @@ func TestCodexAccountIdentityNamespaceUsesStableCredentialSource(t *testing.T) {
 	require.Equal(t, codexAccountIdentityNamespace(firstUser), codexAccountIdentityNamespace(sameUser))
 	require.NotEqual(t, codexAccountIdentityNamespace(firstUser), codexAccountIdentityNamespace(secondUser))
 
-			localRow := &Account{ID: 11, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
-		otherRow := &Account{ID: 12, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
-		require.Equal(t, "account:11", codexAccountIdentityNamespace(localRow))
-		require.NotEqual(t, codexAccountIdentityNamespace(localRow), codexAccountIdentityNamespace(otherRow))
+	localRow := &Account{ID: 11, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
+	otherRow := &Account{ID: 12, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
+	require.Equal(t, "account:11", codexAccountIdentityNamespace(localRow))
+	require.NotEqual(t, codexAccountIdentityNamespace(localRow), codexAccountIdentityNamespace(otherRow))
 
-		setupTokenA := &Account{ID: 30, Platform: PlatformOpenAI, Type: AccountTypeSetupToken, Credentials: map[string]any{"access_token": "setup-token-a"}}
+	setupTokenA := &Account{ID: 30, Platform: PlatformOpenAI, Type: AccountTypeSetupToken, Credentials: map[string]any{"access_token": "setup-token-a"}}
 	setupTokenADuplicate := &Account{ID: 31, Platform: PlatformOpenAI, Type: AccountTypeSetupToken, Credentials: map[string]any{"access_token": "setup-token-a"}}
 	setupTokenB := &Account{ID: 32, Platform: PlatformOpenAI, Type: AccountTypeSetupToken, Credentials: map[string]any{"access_token": "setup-token-b"}}
 	setupNamespace := codexAccountIdentityNamespace(setupTokenA)

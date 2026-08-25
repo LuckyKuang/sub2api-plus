@@ -78,7 +78,7 @@ type RelayExit struct {
 }
 
 type RelayOptions struct {
-	FirstResponseCreateStartedAt time.Time
+	FirstResponseCreateStartedAt    time.Time
 	WriteTimeout                    time.Duration
 	IdleTimeout                     time.Duration
 	UpstreamDrainTimeout            time.Duration

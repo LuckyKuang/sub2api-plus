@@ -249,6 +249,7 @@ func pairCodexIdentityHeaders(h http.Header) {
 		h.Set("version", resolveCodexOutboundIdentity("").version)
 	}
 }
+
 // normalizeStableCodexClientVersion accepts only release versions suitable for
 // automatic synchronization. Explicit administrator overrides may still select
 // another valid version through NormalizeCodexClientVersion.

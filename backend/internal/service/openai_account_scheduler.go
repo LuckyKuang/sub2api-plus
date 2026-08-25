@@ -453,24 +453,24 @@ func (s *defaultOpenAIAccountScheduler) Select(
 		}
 	}
 
-		if req.GuardianParentAccountID > 0 {
-			parentReq := req
-			parentReq.StickyAccountID = req.GuardianParentAccountID
-			parentReq.PreserveStickyBinding = true
-			selection, _, err := s.selectBySessionHash(ctx, parentReq)
-			if err != nil {
-				return nil, decision, err
-			}
-			if selection != nil && selection.Account != nil {
-				decision.Layer = openAIAccountScheduleLayerGuardianParent
-				decision.StickySessionHit = true
-				decision.SelectedAccountID = selection.Account.ID
-				decision.SelectedAccountType = selection.Account.Type
-				return selection, decision, nil
-			}
+	if req.GuardianParentAccountID > 0 {
+		parentReq := req
+		parentReq.StickyAccountID = req.GuardianParentAccountID
+		parentReq.PreserveStickyBinding = true
+		selection, _, err := s.selectBySessionHash(ctx, parentReq)
+		if err != nil {
+			return nil, decision, err
 		}
+		if selection != nil && selection.Account != nil {
+			decision.Layer = openAIAccountScheduleLayerGuardianParent
+			decision.StickySessionHit = true
+			decision.SelectedAccountID = selection.Account.ID
+			decision.SelectedAccountType = selection.Account.Type
+			return selection, decision, nil
+		}
+	}
 
-		if !req.StickyWeighted && !sessionChecked {
+	if !req.StickyWeighted && !sessionChecked {
 		selection, escapedSticky, err := s.selectBySessionHash(ctx, req)
 		if err != nil {
 			return nil, decision, err
@@ -1814,15 +1814,15 @@ func (s *defaultOpenAIAccountScheduler) isAccountRequestCompatibleReason(ctx con
 	if account == nil {
 		return false, "account_nil"
 	}
-		// The scheduler's candidate pool is already group-scoped and may contain
-		// lightweight accounts without hydrated GroupIDs. Only the OAuth session
-		// policy is an additional access-control veto at this initial filter stage.
-		if !openAIOAuthSessionPolicyAllowsSchedulingGroup(account, req.GroupID) {
-			return false, "oauth_session_group_denied"
-		}
-		if req.RequirePrivacySet && !account.IsPrivacySet() {
-			return false, "privacy_not_set"
-		}
+	// The scheduler's candidate pool is already group-scoped and may contain
+	// lightweight accounts without hydrated GroupIDs. Only the OAuth session
+	// policy is an additional access-control veto at this initial filter stage.
+	if !openAIOAuthSessionPolicyAllowsSchedulingGroup(account, req.GroupID) {
+		return false, "oauth_session_group_denied"
+	}
+	if req.RequirePrivacySet && !account.IsPrivacySet() {
+		return false, "privacy_not_set"
+	}
 	if s != nil && s.service != nil && s.service.isOpenAIAccountRequestRuntimeBlocked(account, req.RequestedModel) {
 		return false, "runtime_blocked"
 	}

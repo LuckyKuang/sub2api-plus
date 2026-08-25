@@ -401,7 +401,6 @@ func loadCodexFingerprintIDs(c *gin.Context, account *Account) *codexFingerprint
 	return ids
 }
 
-
 func (s *OpenAIGatewayService) prepareCodexFingerprintIDs(
 	ctx context.Context,
 	c *gin.Context,

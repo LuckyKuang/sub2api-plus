@@ -839,6 +839,10 @@ func TestNormalizeOpenAIOAuthSessionPolicyRequiresExactAccountGroups(t *testing.
 	require.NotEmpty(t, policy["scope_version"])
 }
 
-func (c *oauthSessionPolicyCache) SetReasoningContent(_ context.Context, _ string, _ string, _ time.Duration) error { return nil }
+func (c *oauthSessionPolicyCache) SetReasoningContent(_ context.Context, _ string, _ string, _ time.Duration) error {
+	return nil
+}
 
-func (c *oauthSessionPolicyCache) GetReasoningContent(_ context.Context, _ string) (string, error) { return "", ErrReasoningContentNotFound }
+func (c *oauthSessionPolicyCache) GetReasoningContent(_ context.Context, _ string) (string, error) {
+	return "", ErrReasoningContentNotFound
+}

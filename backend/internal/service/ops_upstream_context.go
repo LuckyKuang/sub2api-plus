@@ -16,8 +16,8 @@ const (
 	OpsUpstreamErrorMessageKey = "ops_upstream_error_message"
 	OpsUpstreamErrorDetailKey  = "ops_upstream_error_detail"
 	OpsUpstreamErrorsKey       = "ops_upstream_errors"
-	OpsRoutingDiagnosticsKey = "ops_routing_diagnostics"
-	OpsUpstreamModelKey      = "ops_upstream_model"
+	OpsRoutingDiagnosticsKey   = "ops_routing_diagnostics"
+	OpsUpstreamModelKey        = "ops_upstream_model"
 
 	// Optional stage latencies (milliseconds) for troubleshooting and alerting.
 	OpsAuthLatencyMsKey      = "ops_auth_latency_ms"
