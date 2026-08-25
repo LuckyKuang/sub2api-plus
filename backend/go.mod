@@ -1,6 +1,6 @@
 module github.com/LuckyKuang/sub2api-plus
 
-go 1.26.6
+go 1.27.0
 
 require (
 	entgo.io/ent v0.14.5
@@ -24,6 +24,8 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/google/wire v0.7.0
 	github.com/gorilla/websocket v1.5.3
+	github.com/hashicorp/go-hclog v1.6.3
+	github.com/hashicorp/go-plugin v1.8.0
 	github.com/imroc/req/v3 v3.59.0
 	github.com/klauspost/compress v1.18.7
 	github.com/lib/pq v1.10.9
@@ -54,6 +56,8 @@ require (
 	golang.org/x/net v0.57.0
 	golang.org/x/sync v0.22.0
 	golang.org/x/term v0.45.0
+	google.golang.org/grpc v1.82.1
+	google.golang.org/protobuf v1.36.11
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.44.3
@@ -120,12 +124,14 @@ require (
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/go-webauthn/x v0.2.6 // indirect
 	github.com/goccy/go-json v0.10.2 // indirect
+	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/go-tpm v0.9.8 // indirect
 	github.com/google/subcommands v1.2.0 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/hashicorp/hcl/v2 v2.18.1 // indirect
+	github.com/hashicorp/yamux v0.1.2 // indirect
 	github.com/icholy/digest v1.1.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.4 // indirect
@@ -149,6 +155,7 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
+	github.com/oklog/run v1.1.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.2 // indirect
@@ -198,7 +205,7 @@ require (
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.41.0 // indirect
 	golang.org/x/tools v0.48.0 // indirect
-	google.golang.org/protobuf v1.36.10 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260414002931-afd174a4e478 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	modernc.org/libc v1.67.6 // indirect
 	modernc.org/mathutil v1.7.1 // indirect

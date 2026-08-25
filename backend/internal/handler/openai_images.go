@@ -272,7 +272,11 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 				var imageUpstreamErr *service.OpenAIImagesUpstreamError
 				if errors.As(err, &imageUpstreamErr) {
 					retryableServerError := service.IsOpenAIImagesRetryableUpstreamError(imageUpstreamErr)
-					h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, account.GetMappedModel(requestModel), !retryableServerError, nil)
+					if retryableServerError {
+						h.gatewayService.ReportOpenAIAccountScheduleResult(account, openAIAccountScheduleModel(c, account, requestModel, false, result), false, nil, err)
+					} else {
+						h.gatewayService.ReportOpenAIAccountScheduleResult(account, openAIAccountScheduleModel(c, account, requestModel, false, result), true, nil)
+					}
 					logEvent := "openai.images.upstream_user_error"
 					if retryableServerError {
 						logEvent = "openai.images.upstream_server_error_after_flush"
@@ -288,7 +292,7 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 				}
 				var failoverErr *service.UpstreamFailoverError
 				if errors.As(err, &failoverErr) {
-					h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, account.GetMappedModel(requestModel), false, nil)
+					h.gatewayService.ReportOpenAIAccountScheduleResult(account, openAIAccountScheduleModel(c, account, requestModel, false, result), false, nil, err)
 					if service.OpenAIImagesJSONKeepaliveAdjustedWrittenSize(c) != writerSizeBeforeForward {
 						reqLog.Warn("openai.images.upstream_failover_skipped_after_flush",
 							zap.Int64("account_id", account.ID),
@@ -305,19 +309,21 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 						return
 					}
 					if failoverErr.RetryableOnSameAccount {
-						retryLimit := account.GetPoolModeRetryCount()
-						if sameAccountRetryCount[account.ID] < retryLimit {
+						retryLimit := effectiveSameAccountRetryLimit(failoverErr, account)
+						if sameAccountRetryAllowed(failoverErr, sameAccountRetryCount[account.ID], retryLimit) {
 							sameAccountRetryCount[account.ID]++
+							retryDelay := sameAccountRetryDelayFor(failoverErr, sameAccountRetryCount[account.ID])
 							reqLog.Warn("openai.images.pool_mode_same_account_retry",
 								zap.Int64("account_id", account.ID),
 								zap.Int("upstream_status", failoverErr.StatusCode),
 								zap.Int("retry_limit", retryLimit),
 								zap.Int("retry_count", sameAccountRetryCount[account.ID]),
+								zap.Duration("retry_delay", retryDelay),
 							)
 							select {
 							case <-requestCtx.Done():
 								return
-							case <-time.After(sameAccountRetryDelay):
+							case <-time.After(retryDelay):
 							}
 							continue
 						}
@@ -342,7 +348,7 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 					)
 					continue
 				}
-				h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, account.GetMappedModel(requestModel), false, nil)
+				h.gatewayService.ReportOpenAIAccountScheduleResult(account, openAIAccountScheduleModel(c, account, requestModel, false, result), false, nil, err)
 				upstreamErrorAlreadyCommunicated := openAIForwardErrorAlreadyCommunicated(c, writerSizeBeforeForward, err)
 				wroteFallback := false
 				if !upstreamErrorAlreadyCommunicated {
@@ -369,9 +375,9 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 			}
 			// Image output latency is tracked as first_output_ms/first_output_kind.
 			// It must never feed the text TTFT scheduler.
-			h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, account.GetMappedModel(requestModel), true, nil)
+			h.gatewayService.ReportOpenAIAccountScheduleResult(account, openAIAccountScheduleModel(c, account, requestModel, false, result), true, nil)
 		} else {
-			h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, account.GetMappedModel(requestModel), true, nil)
+			h.gatewayService.ReportOpenAIAccountScheduleResult(account, openAIAccountScheduleModel(c, account, requestModel, false, result), true, nil)
 		}
 
 		userAgent := c.GetHeader("User-Agent")
