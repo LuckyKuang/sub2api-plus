@@ -38,7 +38,7 @@ func NormalizeCodexClientVersion(version string) string {
 
 // buildCodexCLIUserAgent 按版本号拼出规范 Codex TUI User-Agent。
 // UA 形态只在 codexCLIUserAgentSuffix 一处定义，避免多处拼装漂移。
-func buildCodexCLIUserAgent(version string) string {
+func buildCodexCLIUserAgent(version string) string { //nolint:unused // retained for Codex UA construction
 	if version = NormalizeCodexClientVersion(version); version == "" {
 		return codexCLIUserAgent
 	}

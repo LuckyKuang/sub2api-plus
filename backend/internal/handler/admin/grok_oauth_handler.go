@@ -159,12 +159,8 @@ func (h *GrokOAuthHandler) ValidateSSOToken(c *gin.Context) {
 // AuthorizePassword is a stable hard-disabled endpoint. Do not bind the body:
 // submitted credentials must not enter application-level password flow code.
 func (h *GrokOAuthHandler) AuthorizePassword(c *gin.Context) {
-	tokenInfo, err := h.grokOAuthService.AuthorizePassword(c.Request.Context(), "", "", nil)
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-	response.Success(c, tokenInfo)
+	_, err := h.grokOAuthService.AuthorizePassword(c.Request.Context(), "", "", nil)
+	response.ErrorFrom(c, err)
 }
 
 func (h *GrokOAuthHandler) RefreshAccountToken(c *gin.Context) {

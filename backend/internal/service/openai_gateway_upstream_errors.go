@@ -219,6 +219,9 @@ func (s *OpenAIGatewayService) shouldFailoverUpstreamError(statusCode int) bool 
 }
 
 func (s *OpenAIGatewayService) shouldFailoverOpenAIUpstreamResponse(statusCode int, upstreamMsg string, upstreamBody []byte) bool {
+	if hit, _, _ := detectOpenAICyberPolicy(upstreamBody); hit {
+		return false
+	}
 	if isOpenAIContextWindowError(upstreamMsg, upstreamBody) {
 		return false
 	}
@@ -910,7 +913,7 @@ func isOpenAIHTTPUpstreamAccessStateError(_ int, _ string, body []byte) bool {
 	return isOpenAIUpstreamAccessStateError("", body)
 }
 
-func openAICapacityShedClientMessage(upstreamMsg string, body []byte) string {
+func openAICapacityShedClientMessage(upstreamMsg string, body []byte) string { //nolint:unused // capacity-shed client message helper
 	for _, candidate := range []string{
 		upstreamMsg,
 		gjson.GetBytes(body, "error.message").String(),

@@ -189,7 +189,7 @@ func setOpenAIUpstreamSessionIdentity(headers http.Header, identity string) {
 // prompt_cache_key authoritative after fingerprinting and account-level header
 // overrides have run. This preserves Codex's body/header cache identity even
 // when an earlier stage supplied a different session identity.
-func (s *OpenAIGatewayService) alignOpenAIUpstreamSessionIdentityFromBody(
+func (s *OpenAIGatewayService) alignOpenAIUpstreamSessionIdentityFromBody( //nolint:unused // compact/session identity alignment helper
 	c *gin.Context,
 	account *Account,
 	headers http.Header,
