@@ -43,6 +43,10 @@ const (
 	// handler before it detaches a multipart request into a background task.
 	OpenAIImageMaxUploadPartBytes  int64 = 20 << 20 // 20 MiB per multipart upload part
 	openAIImagesResponsesMainModel       = "gpt-5.4-mini"
+	// Keep the official multipart parser limit aligned with the Plus
+	// asynchronous-handler limit.
+	openAIImageMaxUploadPartSize           = OpenAIImageMaxUploadPartBytes
+	openAIImagesVerbatimPromptInstructions = "When invoking the image_generation tool, use the user's image prompt verbatim. Do not rewrite, expand, summarize, embellish, translate, normalize punctuation, or add or remove visual details or constraints. Preserve the original language, wording, capitalization, quotes, and punctuation exactly."
 )
 
 // OpenAIImageUploadTooLargeError marks a multipart input image that exceeded
