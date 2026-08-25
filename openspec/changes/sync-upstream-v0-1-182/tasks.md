@@ -18,8 +18,10 @@
 
 - [x] 3.1 Prepare `0.1.182+custom.001`, the planned `UPSTREAM.md` mapping,
       release notes, and install/rollback examples.
-- [ ] 3.2 Run `go mod tidy -diff`, focused Responses Lite/image/WebSocket/Codex
-      tests, generated-code and migration checks.
-- [ ] 3.3 Run frontend lint, typecheck, locale parity, and relevant Vitest.
-- [ ] 3.4 Run release-document and diff checks in the required environment.
-- [x] 3.5 Do not create or push tags, Releases, images, or a remote branch.
+- [x] 3.2 Run `go mod tidy -diff`, focused Responses Lite/image/WebSocket/Codex
+      tests, and migration checks in Debian WSL.
+- [ ] 3.3 Verify generated-code output has no drift.
+- [x] 3.4 Run frontend lint, typecheck, locale parity, and relevant Vitest in
+      Debian WSL.
+- [x] 3.5 Run release-document, release-policy, and diff checks.
+- [x] 3.6 Do not create or push tags, Releases, images, or a remote branch.
