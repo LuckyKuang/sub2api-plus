@@ -13,11 +13,13 @@ import (
 	"time"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
-	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
 )
+
+const alphaSearchAccountUserAgent = "codex_cli_rs/9.9.9 (Ubuntu 22.4.0; x86_64) xterm-256color"
+const alphaSearchCurrentAccountUserAgent = "codex_cli_rs/" + codexCLIVersion + " (Ubuntu 22.4.0; x86_64) xterm-256color"
 
 type alphaSearchAccountStateRepo struct {
 	AccountRepository
@@ -66,7 +68,10 @@ func TestForwardAlphaSearchOAuthPreservesWire(t *testing.T) {
 		Header:     http.Header{"Content-Type": []string{"application/json"}},
 		Body:       io.NopCloser(strings.NewReader(`{"encrypted_output":"ciphertext","output":"search result"}`)),
 	}}
-	service := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream}
+	service := &OpenAIGatewayService{
+		cfg:          &config.Config{Gateway: config.GatewayConfig{ForceCodexCLI: true}},
+		httpUpstream: upstream,
+	}
 	account := &Account{
 		ID:          42,
 		Platform:    PlatformOpenAI,
@@ -75,6 +80,7 @@ func TestForwardAlphaSearchOAuthPreservesWire(t *testing.T) {
 		Credentials: map[string]any{
 			"access_token":       "oauth-token",
 			"chatgpt_account_id": "chatgpt-account",
+			"user_agent":         alphaSearchAccountUserAgent,
 		},
 	}
 
@@ -92,8 +98,8 @@ func TestForwardAlphaSearchOAuthPreservesWire(t *testing.T) {
 	require.Equal(t, "chatgpt-account", upstream.lastReq.Header.Get("chatgpt-account-id"))
 	require.Equal(t, "application/json", upstream.lastReq.Header.Get("Accept"))
 	require.Equal(t, codexCLIVersion, upstream.lastReq.Header.Get("Version"))
-	require.Equal(t, DefaultOpenAICodexUserAgent, upstream.lastReq.Header.Get("User-Agent"))
-	require.Equal(t, openai.CodexDefaultOriginator, upstream.lastReq.Header.Get("Originator"))
+	require.Equal(t, alphaSearchCurrentAccountUserAgent, upstream.lastReq.Header.Get("User-Agent"))
+	require.Equal(t, "codex_cli_rs", upstream.lastReq.Header.Get("Originator"))
 	require.Empty(t, upstream.lastReq.Header.Get("OpenAI-Beta"))
 	require.Equal(t,
 		scopeCodexAccountIdentityValue(account, 0, "session", "search-session"),
@@ -162,7 +168,10 @@ func TestForwardAlphaSearchPATUsesResponsesWebSearchFallback(t *testing.T) {
 		Header:     http.Header{"Content-Type": []string{"text/event-stream"}, "x-request-id": []string{"req-search"}},
 		Body:       io.NopCloser(strings.NewReader(alphaSearchResponsesSSE("search result"))),
 	}}
-	service := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream}
+	service := &OpenAIGatewayService{
+		cfg:          &config.Config{Gateway: config.GatewayConfig{ForceCodexCLI: true}},
+		httpUpstream: upstream,
+	}
 	account := &Account{
 		ID:          43,
 		Platform:    PlatformOpenAI,
@@ -173,6 +182,7 @@ func TestForwardAlphaSearchPATUsesResponsesWebSearchFallback(t *testing.T) {
 			"auth_mode":                  OpenAIAuthModePersonalAccessToken,
 			"chatgpt_account_id":         "chatgpt-account",
 			"chatgpt_account_is_fedramp": true,
+			"user_agent":                 alphaSearchAccountUserAgent,
 		},
 	}
 
@@ -196,8 +206,8 @@ func TestForwardAlphaSearchPATUsesResponsesWebSearchFallback(t *testing.T) {
 		scopeCodexAccountIdentityValue(account, 0, "turn", "turn-1"),
 		gjson.Get(upstream.lastReq.Header.Get("X-Codex-Turn-Metadata"), "turn_id").String(),
 	)
-	require.Equal(t, DefaultOpenAICodexUserAgent, upstream.lastReq.Header.Get("User-Agent"))
-	require.Equal(t, openai.CodexDefaultOriginator, upstream.lastReq.Header.Get("Originator"))
+	require.Equal(t, alphaSearchCurrentAccountUserAgent, upstream.lastReq.Header.Get("User-Agent"))
+	require.Equal(t, "codex_cli_rs", upstream.lastReq.Header.Get("Originator"))
 	require.Empty(t, upstream.lastReq.Header.Get("X-Codex-Beta-Features"))
 	require.Empty(t, upstream.lastReq.Header.Get("X-Codex-Turn-State"))
 	require.Empty(t, upstream.lastReq.Header.Get(responsesLiteHeaderKey))

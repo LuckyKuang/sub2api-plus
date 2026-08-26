@@ -162,31 +162,28 @@ func (s *AccountTestService) SetSettingService(settingService *SettingService) {
 	}
 }
 
-func (s *AccountTestService) applyOpenAIOutboundIdentity(ctx context.Context, account *Account, headers http.Header, useCodexIdentity bool) {
+func (s *AccountTestService) resolveOpenAIOutboundIdentity(ctx context.Context, account *Account) openAIOutboundIdentity {
 	if s != nil && s.openAIIdentityResolver != nil {
-		s.openAIIdentityResolver.applyOpenAIOutboundIdentity(ctx, account, headers, useCodexIdentity)
-		return
+		return s.openAIIdentityResolver.resolveOpenAIOutboundIdentity(ctx, account)
 	}
-	applyResolvedOpenAIOutboundIdentity(headers, resolveOpenAIOutboundIdentityFromSettings(ctx, account, nil), useCodexIdentity)
+	var settingService *SettingService
+	if s != nil {
+		settingService = s.settingService
+	}
+	return resolveOpenAIOutboundIdentityFromSettings(ctx, account, settingService)
+}
+
+func (s *AccountTestService) applyOpenAIOutboundIdentity(ctx context.Context, account *Account, headers http.Header, useCodexIdentity bool) {
+	applyResolvedOpenAIOutboundIdentity(headers, s.resolveOpenAIOutboundIdentity(ctx, account), useCodexIdentity)
 }
 
 func (s *AccountTestService) ensureOpenAIAgentIdentityTask(ctx context.Context, account *Account, expectedTaskID string) error {
-	identity := resolveOpenAIOutboundIdentityFromSettings(ctx, nil, nil)
-	if s != nil && s.openAIIdentityResolver != nil {
-		identity = s.openAIIdentityResolver.resolveOpenAIOutboundIdentity(ctx, account)
-	} else if account != nil {
-		identity = resolveOpenAIOutboundIdentityFromSettings(ctx, account, nil)
-	}
+	identity := s.resolveOpenAIOutboundIdentity(ctx, account)
 	return ensureAgentIdentityTaskForAccountWithIdentity(ctx, s.accountRepo, s.agentIdentityWS, &s.agentIdentityTaskMu, account, expectedTaskID, identity)
 }
 
 func (s *AccountTestService) buildOpenAIAgentIdentityAuthenticationHeaders(ctx context.Context, account *Account) (http.Header, error) {
-	identity := resolveOpenAIOutboundIdentityFromSettings(ctx, nil, nil)
-	if s != nil && s.openAIIdentityResolver != nil {
-		identity = s.openAIIdentityResolver.resolveOpenAIOutboundIdentity(ctx, account)
-	} else if account != nil {
-		identity = resolveOpenAIOutboundIdentityFromSettings(ctx, account, nil)
-	}
+	identity := s.resolveOpenAIOutboundIdentity(ctx, account)
 	return buildAgentIdentityAuthenticationHeadersWithIdentity(ctx, s.accountRepo, s.agentIdentityWS, &s.agentIdentityTaskMu, account, identity)
 }
 

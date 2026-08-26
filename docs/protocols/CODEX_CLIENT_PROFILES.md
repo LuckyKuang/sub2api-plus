@@ -161,6 +161,14 @@ credential-owner `credentials.user_agent`, then a valid global
 are derived coherently from that selected client family. Version synchronization
 may update only its version declaration and cannot replace the selected source,
 OS, architecture, terminal fingerprint, client family, or Originator.
+The account-aware resolver is the final identity authority for Messages,
+native Alpha Search, the PAT Responses web-search fallback, and OAuth model
+manifest synchronization. Endpoint header staging, inbound identity headers,
+gateway.force_codex_cli, and model-manifest URL construction cannot select a
+different source or split the three declarations.
+Agent Identity task registration and its immediately retried upstream request
+reuse one resolved snapshot; a concurrent settings update takes effect only on
+the next independently resolved request.
 
 ## Maintaining the profile registry
 
