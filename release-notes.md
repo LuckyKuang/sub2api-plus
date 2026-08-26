@@ -1,29 +1,25 @@
-Sub2API Plus v0.1.183+custom.001
+Sub2API Plus v0.1.183+custom.002
 
 ## Highlights
 
-- Import official Sub2API v0.1.183 on top of the completed Plus v0.1.182 integration.
-- Keep Plus Prompt Audit conversation-text selection, admin user support view, IP access master switch, Codex mode-only fingerprint with `device` default, usage TPS, and release tooling.
-- Prompt Audit blocking still scans only the latest user turn; content moderation still sends up to 16 current-user images, and the default-off `cyber_policy` auto-ban remains.
+- Preserve the OpenAI OAuth client identity as one coherent User-Agent, Originator, and Version triplet across every audited outbound path.
+- Keep the immutable identity source order: credential-owning account, then global setting, then compiled default.
 
 ## Fixed
 
-- Codex `session-id` affinity now takes priority over `session_id` on sticky routing and WebSocket session resolution.
-- OpenAI sticky sessions keep a one-request capacity spillover temporary, so a full wait queue does not rewrite the durable account binding.
-- OpenAI OAuth 429 quota-exhausted responses can pause the account instead of treating every 429 as a same-account retry.
-- Responses custom tool-call item IDs stay typed after restore.
-- Email rebind adds alias and concurrency guards.
-- Kimi concurrency 403 stays recoverable; Antigravity compatible token limits are clamped; channel-monitor v2 composite aggregation uses NULLIF.
+- Messages bridging, native Alpha Search, PAT web-search fallback, and OAuth model-manifest synchronization now finish with the account-aware identity resolver.
+- Agent Identity task registration and its immediate retry now reuse one resolved identity snapshot, so a concurrent settings update cannot split the triplet.
+- Account test and model synchronization fallbacks now honor the configured SettingService and credential-owner identity.
+- Static path guards prevent inbound headers, force mode, generic overrides, retries, probes, and future endpoint staging from bypassing identity precedence.
 
 ## Compatibility and migration
 
-- Published Plus migrations 224/225/226/228 are unchanged; prefix 227 remains unused.
-- Upgrades from v0.1.178+custom.005 apply Plus migrations 229–233. Official v0.1.183 adds no additional SQL migrations.
-- Experimental OAuth transport plugins remain disabled by default.
+- No database migration, configuration migration, or public API change is required.
+- Existing valid account-level `credentials.user_agent` values retain priority; empty or invalid candidates continue to fall through to the next configured source.
 
 ## Known issues
 
-- OAuth transport plugins are experimental and default off.
+None.
 
 ## Upstream baseline
 
