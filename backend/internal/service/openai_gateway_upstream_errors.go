@@ -341,6 +341,43 @@ func newOpenAIUpstreamFailoverError(
 	return failoverErr
 }
 
+func (s *OpenAIGatewayService) newOpenAIAccountFailoverError(
+	account *Account,
+	statusCode int,
+	responseHeaders http.Header,
+	responseBody []byte,
+	upstreamMsg string,
+	shouldDisable bool,
+	retryableOnSameAccount bool,
+) *UpstreamFailoverError {
+	return s.newOpenAIAccountFailoverErrorWithClassificationHeaders(account, statusCode, responseHeaders, responseHeaders, responseBody, upstreamMsg, shouldDisable, retryableOnSameAccount)
+}
+
+func (s *OpenAIGatewayService) newOpenAIAccountFailoverErrorWithClassificationHeaders(
+	account *Account,
+	statusCode int,
+	responseHeaders http.Header,
+	classificationHeaders http.Header,
+	responseBody []byte,
+	upstreamMsg string,
+	shouldDisable bool,
+	retryableOnSameAccount bool,
+) *UpstreamFailoverError {
+	oauth429Retry := s.shouldRetryOpenAIOAuth429OnSameAccountWithResponse(account, statusCode, shouldDisable, classificationHeaders, responseBody)
+	failoverErr := newOpenAIUpstreamFailoverError(
+		statusCode,
+		responseHeaders,
+		responseBody,
+		upstreamMsg,
+		retryableOnSameAccount || oauth429Retry,
+	)
+	if oauth429Retry {
+		failoverErr.SameAccountRetryDeadline = s.openAIOAuth429RetryDeadline(account)
+		failoverErr.SameAccountRetryDelay = openAIOAuth429SameAccountRetryDelay(responseHeaders, failoverErr.SameAccountRetryDeadline)
+	}
+	return failoverErr
+}
+
 // IsOpenAIRequestBodyTooLarge reports whether another account may accept the
 // same request even though the selected account rejected its serialized size.
 func (e *UpstreamFailoverError) IsOpenAIRequestBodyTooLarge() bool {
@@ -856,30 +893,6 @@ func isOpenAIRequestScopedCapacityShed(upstreamMsg string, upstreamBody []byte) 
 	return isOpenAIUpstreamCapacityShedEvent(upstreamBody) ||
 		isOpenAICapacityShedMessage(upstreamMsg) ||
 		(!gjson.ValidBytes(upstreamBody) && isOpenAICapacityShedMessage(string(upstreamBody)))
-}
-
-func (s *OpenAIGatewayService) newOpenAIAccountFailoverError(
-	account *Account,
-	statusCode int,
-	responseHeaders http.Header,
-	responseBody []byte,
-	upstreamMsg string,
-	shouldDisable bool,
-	retryableOnSameAccount bool,
-) *UpstreamFailoverError {
-	oauth429Retry := s.shouldRetryOpenAIOAuth429OnSameAccount(account, statusCode, shouldDisable)
-	failoverErr := newOpenAIUpstreamFailoverError(
-		statusCode,
-		responseHeaders,
-		responseBody,
-		upstreamMsg,
-		retryableOnSameAccount || oauth429Retry,
-	)
-	if oauth429Retry {
-		failoverErr.SameAccountRetryDeadline = s.openAIOAuth429RetryDeadline(account)
-		failoverErr.SameAccountRetryDelay = openAIOAuth429SameAccountRetryDelay(responseHeaders, failoverErr.SameAccountRetryDeadline)
-	}
-	return failoverErr
 }
 
 func isOpenAIUpstreamAccessStateError(_ string, body []byte) bool {

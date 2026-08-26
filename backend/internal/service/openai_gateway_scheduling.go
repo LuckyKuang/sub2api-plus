@@ -1286,6 +1286,11 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 	}
 
 	// ============ Layer 1: Sticky session ============
+	// A healthy sticky account whose bounded wait queue is full may be used as a
+	// one-request capacity spillover in Layer 2. Keep that spillover temporary:
+	// rewriting the durable binding here would make a short burst migrate the
+	// whole conversation to a cache-cold account.
+	stickySpillover := false
 	if sessionHash != "" {
 		accountID := stickyAccountID
 		if accountID > 0 && !isExcluded(accountID) {
@@ -1327,6 +1332,7 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 								MaxWaiting:     cfg.StickySessionMaxWaiting,
 							})
 						}
+						stickySpillover = true
 					}
 				}
 			}
@@ -1481,7 +1487,7 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 				if selectErr != nil {
 					return nil, true, selectErr
 				}
-				if sessionHash != "" && !gatewayProfitControlGateActive(ctx) {
+				if sessionHash != "" && !stickySpillover && !gatewayProfitControlGateActive(ctx) {
 					_ = s.bindOpenAIStickySessionAccount(ctx, groupID, sessionHash, fresh, openaiStickySessionTTL)
 				}
 				return selection, true, nil
@@ -1520,7 +1526,7 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 				if selectErr != nil {
 					return nil, selectErr
 				}
-				if sessionHash != "" && !gatewayProfitControlGateActive(ctx) {
+				if sessionHash != "" && !stickySpillover && !gatewayProfitControlGateActive(ctx) {
 					_ = s.bindOpenAIStickySessionAccount(ctx, groupID, sessionHash, fresh, openaiStickySessionTTL)
 				}
 				return selection, nil
