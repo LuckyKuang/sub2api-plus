@@ -172,10 +172,6 @@ func decryptAgentTaskID(key agentIdentityKey, encoded string) (string, error) {
 	return taskID, nil
 }
 
-func registerAgentIdentityTask(ctx context.Context, account *Account) (string, error) {
-	return registerAgentIdentityTaskWithIdentity(ctx, account, resolveOpenAIOutboundIdentityFromSettings(ctx, account, nil))
-}
-
 func registerAgentIdentityTaskWithIdentity(ctx context.Context, account *Account, identity openAIOutboundIdentity) (string, error) {
 	key, err := agentIdentityKeyFromAccount(account)
 	if err != nil {
@@ -238,10 +234,6 @@ func registerAgentIdentityTaskWithIdentity(ctx context.Context, account *Account
 		return "", errors.New("agent task registration response omitted task id")
 	}
 	return decryptAgentTaskID(key, encrypted)
-}
-
-func ensureAgentIdentityTaskForAccount(ctx context.Context, repo AccountRepository, wsInvalidator agentIdentityWSConnectionInvalidator, taskMu *sync.Mutex, account *Account, expectedTaskID string) error {
-	return ensureAgentIdentityTaskForAccountWithIdentity(ctx, repo, wsInvalidator, taskMu, account, expectedTaskID, resolveOpenAIOutboundIdentityFromSettings(ctx, account, nil))
 }
 
 func ensureAgentIdentityTaskForAccountWithIdentity(ctx context.Context, repo AccountRepository, wsInvalidator agentIdentityWSConnectionInvalidator, taskMu *sync.Mutex, account *Account, expectedTaskID string, identity openAIOutboundIdentity) error {
@@ -440,7 +432,11 @@ func (s *OpenAIGatewayService) refreshOpenAIAgentIdentityHeaders(ctx context.Con
 	if refreshed == nil {
 		refreshed = make(http.Header)
 	}
-	authHeaders, err := buildAgentIdentityAuthenticationHeadersWithIdentity(ctx, s.accountRepo, s, &s.agentIdentityTaskMu, credAccount, s.resolveOpenAIOutboundIdentity(ctx, credAccount))
+	// Resolve once so task registration and the retried upstream request use the
+	// same identity snapshot even when an administrator updates settings while
+	// recovery is in progress.
+	identity := s.resolveOpenAIOutboundIdentity(ctx, credAccount)
+	authHeaders, err := buildAgentIdentityAuthenticationHeadersWithIdentity(ctx, s.accountRepo, s, &s.agentIdentityTaskMu, credAccount, identity)
 	if err != nil {
 		return nil, err
 	}
@@ -448,7 +444,7 @@ func (s *OpenAIGatewayService) refreshOpenAIAgentIdentityHeaders(ctx context.Con
 	// A task recovery must rebuild the complete Codex identity, not merely the
 	// assertion. This prevents a prior mutable header set from leaving a stale
 	// User-Agent, Originator, or Version on the retry.
-	applyResolvedOpenAIOutboundIdentity(refreshed, s.resolveOpenAIOutboundIdentity(ctx, credAccount), true)
+	applyResolvedOpenAIOutboundIdentity(refreshed, identity, true)
 	return refreshed, nil
 }
 
@@ -532,8 +528,4 @@ func (s *OpenAIGatewayService) redactAgentIdentitySensitiveBody(ctx context.Cont
 		return body
 	}
 	return redactAgentIdentitySensitiveBodyForAccount(ctx, s.accountRepo, account, body)
-}
-
-func buildAgentIdentityAuthenticationHeaders(ctx context.Context, repo AccountRepository, wsInvalidator agentIdentityWSConnectionInvalidator, taskMu *sync.Mutex, account *Account) (http.Header, error) {
-	return buildAgentIdentityAuthenticationHeadersWithIdentity(ctx, repo, wsInvalidator, taskMu, account, openAIOutboundIdentity{})
 }

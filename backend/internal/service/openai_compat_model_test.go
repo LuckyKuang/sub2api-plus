@@ -175,6 +175,57 @@ func TestForwardAsAnthropic_UsesExactFableMessagesDispatchModel(t *testing.T) {
 	require.Equal(t, "claude-fable-5", gjson.GetBytes(rec.Body.Bytes(), "model").String())
 }
 
+func TestForwardAsAnthropic_OAuthPreservesAccountIdentityTriplet(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	const configuredVersion = "0.200.1"
+	const accountUserAgent = "codex_cli_rs/9.9.9 (Ubuntu 22.4.0; x86_64) xterm-256color"
+	const expectedUserAgent = "codex_cli_rs/" + configuredVersion + " (Ubuntu 22.4.0; x86_64) xterm-256color"
+	cfg := &config.Config{
+		Gateway:  config.GatewayConfig{ForceCodexCLI: true},
+		Security: config.SecurityConfig{URLAllowlist: config.URLAllowlistConfig{Enabled: false}},
+	}
+	upstream := &httpUpstreamRecorder{resp: openAICompatSSECompletedResponse("resp_account_identity", "gpt-5.6-sol")}
+	svc := &OpenAIGatewayService{
+		httpUpstream: upstream,
+		cfg:          cfg,
+		settingService: NewSettingService(&openAIImageSettingRepoStub{values: map[string]string{
+			SettingKeyOpenAICodexUserAgent:     "codex-tui/8.8.8 (Ubuntu 22.4.0; x86_64) xterm-256color (codex-tui; 8.8.8)",
+			SettingKeyOpenAICodexClientVersion: configuredVersion,
+		}}, cfg),
+	}
+	account := &Account{
+		ID:          201,
+		Name:        "openai-oauth-account-identity",
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeOAuth,
+		Concurrency: 1,
+		Credentials: map[string]any{
+			"access_token":       "oauth-token",
+			"chatgpt_account_id": "chatgpt-account",
+			"user_agent":         accountUserAgent,
+		},
+	}
+	body := []byte(`{"model":"claude-fable-5","max_tokens":16,"messages":[{"role":"user","content":"hello"}],"stream":false}`)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Request.Header.Set("User-Agent", "codex-tui/7.7.7 (Windows 11; x86_64) WindowsTerminal (codex-tui; 7.7.7)")
+	c.Request.Header.Set("Originator", "codex-tui")
+	c.Request.Header.Set("Version", "7.7.7")
+
+	result, err := svc.ForwardAsAnthropic(context.Background(), c, account, body, "", "gpt-5.6-sol")
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, upstream.lastReq)
+	require.Equal(t, expectedUserAgent, upstream.lastReq.Header.Get("User-Agent"))
+	require.Equal(t, "codex_cli_rs", upstream.lastReq.Header.Get("Originator"))
+	require.Equal(t, configuredVersion, upstream.lastReq.Header.Get("Version"))
+	require.Equal(t, "responses=experimental", upstream.lastReq.Header.Get("OpenAI-Beta"))
+}
+
 func TestForwardAsAnthropic_NormalizesRoutingAndEffortForGpt54XHigh(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)

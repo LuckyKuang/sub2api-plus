@@ -25,7 +25,7 @@ func TestEnsureCodexIdentityHeaders(t *testing.T) {
 		headers := make(http.Header)
 
 		ensureCodexIdentityHeaders(headers)
-		enforceCodexIdentityHeaders(headers)
+		enforceCodexIdentityHeadersWithUA(headers, "")
 
 		requireCanonicalCodexIdentity(t, headers)
 		require.Equal(t, "responses=experimental", headers.Get("OpenAI-Beta"))
@@ -38,7 +38,7 @@ func TestEnsureCodexIdentityHeaders(t *testing.T) {
 		headers.Set("version", "0.150.0")
 
 		ensureCodexIdentityHeaders(headers)
-		enforceCodexIdentityHeaders(headers)
+		enforceCodexIdentityHeadersWithUA(headers, "")
 
 		requireCanonicalCodexIdentity(t, headers)
 	})
@@ -56,7 +56,7 @@ func TestEnforceCodexIdentityHeaders(t *testing.T) {
 			headers.Set("user-agent", userAgent)
 			headers.Set("version", "0.1.0")
 
-			enforceCodexIdentityHeaders(headers)
+			enforceCodexIdentityHeadersWithUA(headers, "")
 
 			requireCanonicalCodexIdentity(t, headers)
 		})
@@ -83,7 +83,7 @@ func TestEnforceCodexIdentityHeadersFollowsCanonicalResolver(t *testing.T) {
 
 	headers := make(http.Header)
 	headers.Set("originator", "codex-tui")
-	enforceCodexIdentityHeaders(headers)
+	enforceCodexIdentityHeadersWithUA(headers, "")
 
 	require.Equal(t, "codex_cli_rs", headers.Get("originator"))
 	require.Equal(t, "codex_cli_rs/0.200.1 (Ubuntu 24.04; x86_64) xterm-256color", headers.Get("user-agent"))

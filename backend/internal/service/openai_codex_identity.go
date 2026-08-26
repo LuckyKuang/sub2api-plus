@@ -200,12 +200,6 @@ func applyOpenAICodexProbeHeaders(h http.Header) {
 	h.Set("X-Codex-Window-ID", uuid.NewString())
 }
 
-// enforceCodexIdentityHeaders 收口 OAuth（ChatGPT 内部接口）出站请求的客户端身份头。
-// 见 enforceCodexIdentityHeadersWithUA；无账号级自定义 User-Agent 时使用本函数。
-func enforceCodexIdentityHeaders(h http.Header) {
-	enforceCodexIdentityHeadersWithUA(h, "")
-}
-
 // enforceCodexIdentityHeadersWithUA 强制统一 OAuth 出站身份：User-Agent / originator / version
 // 一律改写为网关的规范身份，客户端自报身份不参与构造。上游在容量紧张时按客户端身份分优先级
 // 降载，被降载的请求会拿到 HTTP 200 + 流内 server_is_overloaded；统一出口可确保没有请求带着

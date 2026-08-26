@@ -119,10 +119,11 @@ func TestRegisterAgentIdentityTaskAcceptsPlaintextAndEncryptedResponses(t *testi
 		"agent_runtime_id":  key.runtimeID,
 		"agent_private_key": privateKey,
 	}}
-	taskID, err := registerAgentIdentityTask(context.Background(), account)
+	identity := resolveOpenAIOutboundIdentityFromSettings(context.Background(), account, nil)
+	taskID, err := registerAgentIdentityTaskWithIdentity(context.Background(), account, identity)
 	require.NoError(t, err)
 	require.Equal(t, "task-plain", taskID)
-	taskID, err = registerAgentIdentityTask(context.Background(), account)
+	taskID, err = registerAgentIdentityTaskWithIdentity(context.Background(), account, identity)
 	require.NoError(t, err)
 	require.Equal(t, "task-encrypted", taskID)
 }
@@ -185,7 +186,8 @@ func TestEnsureAgentIdentityTaskSharesLockAcrossServicesForSameAccount(t *testin
 	for _, request := range requests {
 		go func() {
 			<-start
-			errors <- ensureAgentIdentityTaskForAccount(context.Background(), repo, nil, &sync.Mutex{}, request, "")
+			identity := resolveOpenAIOutboundIdentityFromSettings(context.Background(), request, nil)
+			errors <- ensureAgentIdentityTaskForAccountWithIdentity(context.Background(), repo, nil, &sync.Mutex{}, request, "", identity)
 		}()
 	}
 	close(start)
@@ -195,6 +197,49 @@ func TestEnsureAgentIdentityTaskSharesLockAcrossServicesForSameAccount(t *testin
 	defer registerMu.Unlock()
 	require.Equal(t, 1, registerCalls)
 	require.Equal(t, "task-shared", repo.account.GetCredential("task_id"))
+}
+
+func TestRefreshOpenAIAgentIdentityHeadersUsesOneIdentitySnapshot(t *testing.T) {
+	key, privateKey := newTestAgentIdentityKey(t)
+	settingsRepo := &agentIdentitySettingRepoStub{values: map[string]string{
+		SettingKeyOpenAICodexUserAgent:     "codex-tui/9.9.9 (Ubuntu 22.4.0; x86_64) xterm-256color (codex-tui; 9.9.9)",
+		SettingKeyOpenAICodexClientVersion: "0.200.1",
+	}}
+	settings := &SettingService{settingRepo: settingsRepo}
+	account := &Account{ID: 9002, Type: AccountTypeOAuth, Platform: PlatformOpenAI, Credentials: map[string]any{
+		"auth_mode":         OpenAIAuthModeAgentIdentity,
+		"agent_runtime_id":  key.runtimeID,
+		"agent_private_key": privateKey,
+	}}
+	repo := &agentIdentityCredentialsRepo{account: account}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "codex-tui/0.200.1 (Ubuntu 22.4.0; x86_64) xterm-256color (codex-tui; 0.200.1)", r.Header.Get("User-Agent"))
+		require.Equal(t, "codex-tui", r.Header.Get("Originator"))
+		require.Equal(t, "0.200.1", r.Header.Get("Version"))
+		settingsRepo.setValue(SettingKeyOpenAICodexClientVersion, "0.201.0")
+		settings.InvalidateOpenAICodexClientVersionCache()
+		_, _ = w.Write([]byte(`{"task_id":"task-refreshed"}`))
+	}))
+	defer server.Close()
+	oldBase := openAIAgentIdentityAuthAPIBaseURL
+	openAIAgentIdentityAuthAPIBaseURL = server.URL
+	t.Cleanup(func() { openAIAgentIdentityAuthAPIBaseURL = oldBase })
+
+	service := &OpenAIGatewayService{accountRepo: repo, settingService: settings}
+	refreshed, err := service.refreshOpenAIAgentIdentityHeaders(context.Background(), account, http.Header{
+		"User-Agent": {"stale-client/1.0"},
+		"Originator": {"stale-client"},
+		"Version":    {"1.0"},
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, refreshed.Get("Authorization"))
+	require.Equal(t, "codex-tui/0.200.1 (Ubuntu 22.4.0; x86_64) xterm-256color (codex-tui; 0.200.1)", refreshed.Get("User-Agent"))
+	require.Equal(t, "codex-tui", refreshed.Get("Originator"))
+	require.Equal(t, "0.200.1", refreshed.Get("Version"))
+
+	nextIdentity := service.resolveOpenAIOutboundIdentity(context.Background(), account)
+	require.Equal(t, "0.201.0", nextIdentity.Version)
 }
 
 func cloneAgentIdentityTestAccount(account *Account) *Account {
@@ -208,6 +253,55 @@ type agentIdentityCredentialsRepo struct {
 	credentials map[string]any
 	account     *Account
 	mu          sync.Mutex
+}
+
+type agentIdentitySettingRepoStub struct {
+	mu     sync.RWMutex
+	values map[string]string
+}
+
+func (s *agentIdentitySettingRepoStub) Get(context.Context, string) (*Setting, error) {
+	return nil, ErrSettingNotFound
+}
+
+func (s *agentIdentitySettingRepoStub) GetValue(_ context.Context, key string) (string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	value, ok := s.values[key]
+	if !ok {
+		return "", ErrSettingNotFound
+	}
+	return value, nil
+}
+
+func (s *agentIdentitySettingRepoStub) Set(context.Context, string, string) error { return nil }
+
+func (s *agentIdentitySettingRepoStub) GetMultiple(_ context.Context, keys []string) (map[string]string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	values := make(map[string]string, len(keys))
+	for _, key := range keys {
+		if value, ok := s.values[key]; ok {
+			values[key] = value
+		}
+	}
+	return values, nil
+}
+
+func (s *agentIdentitySettingRepoStub) SetMultiple(context.Context, map[string]string) error {
+	return nil
+}
+
+func (s *agentIdentitySettingRepoStub) GetAll(context.Context) (map[string]string, error) {
+	return map[string]string{}, nil
+}
+
+func (s *agentIdentitySettingRepoStub) Delete(context.Context, string) error { return nil }
+
+func (s *agentIdentitySettingRepoStub) setValue(key, value string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.values[key] = value
 }
 
 func (r *agentIdentityCredentialsRepo) GetByID(_ context.Context, _ int64) (*Account, error) {
