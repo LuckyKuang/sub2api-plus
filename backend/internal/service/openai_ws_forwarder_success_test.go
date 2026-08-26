@@ -632,7 +632,14 @@ func TestOpenAIGatewayService_BuildOpenAIWSHeadersDeviceModePreservesNamespacedC
 	require.Equal(t, ids.installationID, headers.Get("x-codex-installation-id"))
 	require.NotEqual(t, "client-installation", headers.Get("x-codex-installation-id"))
 	require.Equal(t, scopeCodexAccountIdentityValue(account, 0, "window", "client-window"), headers.Get("x-codex-window-id"))
-	require.Equal(t, scopeCodexAccountIdentityValue(account, 0, "session", "client-session"), headers.Get("session-id"))
+	expectedSessionIdentity, resolveErr := svc.resolveOpenAIUpstreamPromptCacheHeaderIdentity(
+		c,
+		account,
+		"client-session",
+	)
+	require.NoError(t, resolveErr)
+	require.Equal(t, expectedSessionIdentity, headers.Get("session-id"))
+	require.Equal(t, expectedSessionIdentity, headers.Get("session_id"))
 	require.Equal(t, scopeCodexAccountIdentityValue(account, 0, "thread", "client-thread"), headers.Get("thread-id"))
 	require.Equal(t, scopeCodexAccountIdentityValue(account, 0, "request", "client-request"), headers.Get("x-client-request-id"))
 }
@@ -973,9 +980,9 @@ func TestOpenAIGatewayService_Forward_WSv2_OAuthStoreFalseByDefault(t *testing.T
 	require.Equal(t, "http-ws-owner-installation", captureDialer.lastHeaders.Get("x-codex-installation-id"))
 	require.Equal(t, resolveConvergedThreadID(account, "sess-oauth-1"), captureDialer.lastHeaders.Get("thread-id"))
 	require.Equal(t, captureDialer.lastHeaders.Get("thread-id"), captureDialer.lastHeaders.Get("x-client-request-id"))
-	// OAuth session identity 使用租户隔离后的确定性 UUID；独立的
-	// conversation_id 继续使用既有隔离命名空间。测试中 apiKeyID=0。
-	expectedSessionIdentity := generateSessionUUID(isolateOpenAISessionID(0, "sess-oauth-1"))
+	// Header and body cache identities must use the same account-aware resolver.
+	expectedSessionIdentity, resolveErr := svc.resolveOpenAIUpstreamPromptCacheHeaderIdentity(c, account, "sess-oauth-1")
+	require.NoError(t, resolveErr)
 	require.Equal(t, expectedSessionIdentity, captureDialer.lastHeaders.Get(codexSessionIDHeader))
 	require.Equal(t, expectedSessionIdentity, captureDialer.lastHeaders.Get("session_id"))
 	require.Equal(t, isolateOpenAISessionID(0, "conv-oauth-1"), captureDialer.lastHeaders.Get("conversation_id"))
@@ -1199,8 +1206,9 @@ func TestOpenAIGatewayService_Forward_WSv2_HeaderSessionFallbackFromPromptCacheK
 	require.NotNil(t, result)
 	require.Equal(t, "resp_prompt_cache_key", result.RequestID)
 
-	// OAuth 账号的 prompt cache/session identity 应是租户隔离后的确定性 UUID。
-	expectedCacheIdentity := generateSessionUUID(isolateOpenAISessionID(0, "pcache_123"))
+	// Header and body cache identities must use the same account-aware resolver.
+	expectedCacheIdentity, resolveErr := svc.resolveOpenAIUpstreamPromptCacheHeaderIdentity(c, account, "pcache_123")
+	require.NoError(t, resolveErr)
 	require.Equal(t, expectedCacheIdentity, captureDialer.lastHeaders.Get(codexSessionIDHeader))
 	require.Equal(t, expectedCacheIdentity, captureDialer.lastHeaders.Get("session_id"))
 	require.Empty(t, captureDialer.lastHeaders.Get("conversation_id"))

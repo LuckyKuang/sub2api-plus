@@ -96,6 +96,26 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 	// /v1/chat/completions URL. Detect it before adaptive routing so adaptive
 	// accounts never forward the body unchanged to a Chat Completions endpoint.
 	isResponsesShape := !gjson.GetBytes(body, "messages").Exists() && gjson.GetBytes(body, "input").Exists()
+	if isResponsesShape {
+		var responsesReq apicompat.ResponsesRequest
+		if err := json.Unmarshal(body, &responsesReq); err == nil {
+			effectiveTools, toolsErr := apicompat.EffectiveResponsesTools(&responsesReq)
+			if toolsErr != nil {
+				return nil, fmt.Errorf("inspect responses-shaped chat completions tools: %w", toolsErr)
+			}
+			if apicompat.ResponsesToolsContainImageGeneration(effectiveTools) {
+				message := "image_generation output cannot be represented by /v1/chat/completions; use /v1/responses or /v1/images"
+				c.JSON(http.StatusBadRequest, gin.H{
+					"error": gin.H{
+						"type":    "invalid_request_error",
+						"message": message,
+						"param":   "tools",
+					},
+				})
+				return nil, errors.New(message)
+			}
+		}
+	}
 
 	// 自适应账号的标准 Chat Completions 入站使用供应商原生 CC 端点。
 	// Responses 形状下，DeepSeek 继续走下方原生 Responses 链；Kimi/GLM
@@ -156,7 +176,7 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 
 	promptCacheKey = strings.TrimSpace(promptCacheKey)
 	compatPromptCacheInjected := false
-	if promptCacheKey == "" && account.UsesOpenAICodexProtocol() && shouldAutoInjectPromptCacheKeyForCompat(upstreamModel) {
+	if promptCacheKey == "" && !isResponsesShape && shouldAutoInjectPromptCacheKeyForCompat(upstreamModel) {
 		promptCacheKey = deriveCompatPromptCacheKey(&chatReq, upstreamModel)
 		compatPromptCacheInjected = promptCacheKey != ""
 	}
@@ -265,6 +285,9 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 			reqBody["prompt_cache_key"] = promptCacheKey
 		}
 		applyCodexAccountIdentityClientMetadataMap(reqBody, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c))
+		if _, fingerprintErr := s.prepareCodexFingerprintMap(ctx, c, account, reqBody); fingerprintErr != nil {
+			return nil, fingerprintErr
+		}
 		responsesBody, err = json.Marshal(reqBody)
 		if err != nil {
 			return nil, fmt.Errorf("remarshal after codex transform: %w", err)
@@ -288,6 +311,21 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 				}
 			}
 		}
+	}
+	if normalizedBody, changed, normalizeErr := normalizeOpenAIPromptCacheControlsForAccount(responsesBody, account, upstreamModel); normalizeErr != nil {
+		return nil, normalizeErr
+	} else if changed {
+		responsesBody = normalizedBody
+	}
+	responsesBody, promptCacheKey, _, err = s.ensureOpenAIResponsesPromptCacheIdentity(
+		c,
+		account,
+		responsesBody,
+		promptCacheKey,
+		upstreamModel,
+	)
+	if err != nil {
+		return nil, err
 	}
 
 	// 4b. Apply OpenAI fast policy (may filter service_tier or block the request).
@@ -314,11 +352,6 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 	releaseUpstreamCtx()
 	if err != nil {
 		return nil, fmt.Errorf("build upstream request: %w", err)
-	}
-
-	if promptCacheKey != "" {
-		apiKeyID := getAPIKeyIDFromContext(c)
-		upstreamReq.Header.Set("session_id", generateSessionUUID(isolateOpenAIUpstreamSessionID(apiKeyID, codexAccountIdentitySource(c, account), promptCacheKey)))
 	}
 
 	// 7. Send request
@@ -636,8 +669,7 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 	state.IncludeUsage = true
 
 	var usage OpenAIUsage
-	var firstTokenMs *int
-	firstChunk := true
+	var timing streamOutputTiming
 	clientDisconnected := false
 	clientOutputStarted := false
 	pendingSSE := make([]string, 0, 4)
@@ -682,7 +714,11 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 			UpstreamResponseServiceTier:   observedUpstreamResponseServiceTier(c),
 			Stream:                        true,
 			Duration:                      time.Since(startTime),
-			FirstTokenMs:                  firstTokenMs,
+			FirstTokenMs:                  timing.firstTokenMs,
+			LastTokenMs:                   timing.lastTokenMs,
+			FirstOutputMs:                 timing.firstOutputMs,
+			FirstOutputKind:               timing.firstOutputKind,
+			ClientDisconnect:              clientDisconnected,
 		}
 		if searchCount > 0 {
 			out.SearchCount = searchCount
@@ -692,11 +728,7 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 
 	processDataLine := func(payload string) bool {
 		payload = string(restoreCodexToolNamesFromContext(c, []byte(payload)))
-		if firstChunk {
-			firstChunk = false
-			ms := int(time.Since(startTime).Milliseconds())
-			firstTokenMs = &ms
-		}
+		timing.Observe(startTime, apicompat.ObserveResponsesOutput([]byte(payload)))
 		if countSearch {
 			searchCount += countGrokNativeSearchCallsInSSEDataDedup([]byte(payload), streamSearchSeen)
 		}
@@ -931,6 +963,9 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 			c.Writer.Flush()
 		}
 		logOpenAISuccessMissingUsage(c.Request.Context(), c, account, resp, &usage, terminalEventType, clientDisconnected)
+		if clientDisconnected {
+			return resultWithUsage(), fmt.Errorf("stream usage incomplete: client disconnected")
+		}
 		return resultWithUsage(), nil
 	}
 

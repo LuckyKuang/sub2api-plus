@@ -56,7 +56,7 @@ func TestOpenAIResponsesTTFTStartsAtVisibleOutput(t *testing.T) {
 	}
 }
 
-func TestOpenAIResponsesTTFTStartsAtCompletedImage(t *testing.T) {
+func TestOpenAIResponsesFirstOutputStartsAtCompletedImage(t *testing.T) {
 	for _, passthrough := range []bool{false, true} {
 		name := "native"
 		if passthrough {
@@ -65,8 +65,10 @@ func TestOpenAIResponsesTTFTStartsAtCompletedImage(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			result := runSyntheticVisibleTTFTStream(t, passthrough, 120*time.Millisecond, 0,
 				`{"type":"response.output_item.done","item":{"id":"item_test","type":"image_generation_call","result":"dGVzdA=="}}`)
-			require.NotNil(t, result.firstTokenMs)
-			require.GreaterOrEqual(t, *result.firstTokenMs, 100)
+			require.Nil(t, result.firstTokenMs)
+			require.NotNil(t, result.firstOutputMs)
+			require.GreaterOrEqual(t, *result.firstOutputMs, 100)
+			require.Equal(t, "image", result.firstOutputKind)
 		})
 	}
 }
@@ -137,7 +139,11 @@ func runSyntheticVisibleTTFTStream(t *testing.T, passthrough bool, visibleDelay 
 		var passthroughResult *openaiStreamingResultPassthrough
 		passthroughResult, err = svc.handleStreamingResponsePassthrough(context.Background(), resp, c, account, started, "test-model", "test-model")
 		if passthroughResult != nil {
-			result = &openaiStreamingResult{firstTokenMs: passthroughResult.firstTokenMs}
+			result = &openaiStreamingResult{
+				firstTokenMs:    passthroughResult.firstTokenMs,
+				firstOutputMs:   passthroughResult.firstOutputMs,
+				firstOutputKind: passthroughResult.firstOutputKind,
+			}
 		}
 	} else {
 		result, err = svc.handleStreamingResponse(context.Background(), resp, c, account, started, "test-model", "test-model")

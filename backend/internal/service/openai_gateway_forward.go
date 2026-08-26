@@ -500,7 +500,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			if c != nil && c.Request != nil {
 				clientHeaders = c.Request.Header
 			}
-			fpIDs := resolveCodexFingerprintIDsFromRequest(account, clientHeaders)
+			fpIDs := resolveCodexFingerprintIDsFromRequest(codexAccountIdentitySource(c, account), clientHeaders)
 			if fpIDs != nil {
 				if applyCodexFingerprintClientMetadata(decoded, fpIDs) {
 					markDecodedModified()
@@ -569,7 +569,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		if gjson.GetBytes(body, "max_completion_tokens").Exists() && (account.Type == AccountTypeAPIKey || account.Platform != PlatformOpenAI) {
 			markPatchDelete("max_completion_tokens")
 		}
-		for _, unsupportedField := range []string{"prompt_cache_retention", "safety_identifier", "prompt_cache_options"} {
+		for _, unsupportedField := range []string{"prompt_cache_retention", "safety_identifier"} {
 			if gjson.GetBytes(body, unsupportedField).Exists() {
 				markPatchDelete(unsupportedField)
 			}
@@ -666,6 +666,28 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		return nil, fmt.Errorf("normalize compaction trigger order: %w", normalizeErr)
 	} else if changed {
 		body = normalizedBody
+		requestView = newOpenAIRequestView(body)
+		reqBody = nil
+	}
+	if normalizedBody, changed, normalizeErr := normalizeOpenAIPromptCacheControlsForAccount(body, account, upstreamModel); normalizeErr != nil {
+		return nil, normalizeErr
+	} else if changed {
+		body = normalizedBody
+		requestView = newOpenAIRequestView(body)
+		reqBody = nil
+	}
+	var cacheIdentityChanged bool
+	body, promptCacheKey, cacheIdentityChanged, err = s.ensureOpenAIResponsesPromptCacheIdentity(
+		c,
+		account,
+		body,
+		promptCacheKey,
+		upstreamModel,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if cacheIdentityChanged {
 		requestView = newOpenAIRequestView(body)
 		reqBody = nil
 	}
@@ -1105,6 +1127,11 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		// Handle normal response
 		var usage *OpenAIUsage
 		var firstTokenMs *int
+		var lastTokenMs *int
+		var firstOutputMs *int
+		firstOutputKind := ""
+		clientDisconnect := false
+		var terminalErr error
 		responseID := ""
 		imageCount := 0
 		searchCount := 0
@@ -1146,10 +1173,18 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 					}
 					return s.handleErrorResponse(ctx, compactResp, c, account, body, resolveOpenAIErrorSchedulingModel(billingModel, upstreamModel))
 				}
-				return nil, err
+				var failoverErr *UpstreamFailoverError
+				if streamResult == nil || errors.As(err, &failoverErr) {
+					return nil, err
+				}
+				terminalErr = err
 			}
 			usage = streamResult.usage
 			firstTokenMs = streamResult.firstTokenMs
+			lastTokenMs = streamResult.lastTokenMs
+			firstOutputMs = streamResult.firstOutputMs
+			firstOutputKind = streamResult.firstOutputKind
+			clientDisconnect = streamResult.clientDisconnect
 			responseID = strings.TrimSpace(streamResult.responseID)
 			imageCount = streamResult.imageCount
 			imageOutputSizes = streamResult.imageOutputSizes
@@ -1209,6 +1244,10 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			OpenAIWSMode:                  false,
 			Duration:                      time.Since(startTime),
 			FirstTokenMs:                  firstTokenMs,
+			LastTokenMs:                   lastTokenMs,
+			FirstOutputMs:                 firstOutputMs,
+			FirstOutputKind:               firstOutputKind,
+			ClientDisconnect:              clientDisconnect,
 		}
 		if imageCount > 0 {
 			forwardResult.ImageCount = imageCount
@@ -1223,7 +1262,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		if searchCount > 0 && account != nil && account.IsGrok() {
 			forwardResult.SearchCount = searchCount
 		}
-		return forwardResult, nil
+		return forwardResult, terminalErr
 	}
 }
 
@@ -1327,6 +1366,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 		// 清除客户端透传的 session 头，后续用隔离后的值重新设置，防止跨用户会话碰撞。
 		clientConversationID := strings.TrimSpace(req.Header.Get("conversation_id"))
 		req.Header.Del("conversation_id")
+		req.Header.Del(codexSessionIDHeader)
 		req.Header.Del("session_id")
 
 		if compatMessagesBridge {
@@ -1335,20 +1375,26 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 		} else {
 			req.Header.Set("originator", resolveOpenAIUpstreamOriginator(c, isCodexCLI))
 		}
-		apiKeyID := getAPIKeyIDFromContext(c)
 		if isOpenAIResponsesCompactPath(c) {
 			req.Header.Set("accept", "application/json")
 			if req.Header.Get("version") == "" {
 				req.Header.Set("version", CodexCanonicalClientVersion())
 			}
 			compactSession := resolveOpenAICompactSessionID(c)
-			req.Header.Set("session_id", isolateOpenAIUpstreamSessionID(apiKeyID, codexAccountIdentitySource(c, account), compactSession))
+			upstreamSessionID, err := s.resolveOpenAIUpstreamPromptCacheHeaderIdentity(c, account, compactSession)
+			if err != nil {
+				return nil, err
+			}
+			setOpenAIUpstreamSessionIdentity(req.Header, upstreamSessionID)
 		} else {
 			req.Header.Set("accept", "text/event-stream")
 		}
 		if promptCacheKey != "" {
-			isolated := isolateOpenAIUpstreamSessionID(apiKeyID, codexAccountIdentitySource(c, account), promptCacheKey)
-			req.Header.Set("session_id", isolated)
+			isolated, err := s.resolveOpenAIUpstreamPromptCacheHeaderIdentity(c, account, promptCacheKey)
+			if err != nil {
+				return nil, err
+			}
+			setOpenAIUpstreamSessionIdentity(req.Header, isolated)
 			if !compatMessagesBridge || clientConversationID != "" {
 				req.Header.Set("conversation_id", isolated)
 			}
@@ -1358,6 +1404,14 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 		// 避免 OpenAI 兼容网关按 SSE 返回（#3777 期望行为 4）。
 		req.Header.Set("accept", "application/json")
 	}
+	if !account.UsesOpenAICodexProtocol() && promptCacheKey != "" {
+		identity, err := s.resolveOpenAIUpstreamPromptCacheHeaderIdentity(c, account, promptCacheKey)
+		if err != nil {
+			return nil, err
+		}
+		setOpenAIUpstreamSessionIdentity(req.Header, identity)
+	}
+	alignOpenAICodexThreadHeaders(req.Header)
 
 	// Apply custom User-Agent if configured
 	customUA := account.GetOpenAIUserAgent()
@@ -1376,7 +1430,9 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 	applyCodexAccountIdentityHeaders(req.Header, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c))
 
 	// 指纹收敛：使用 Forward() 中预计算的收敛 ID 改写出站头，与请求体使用同一份 IDs。
-	applyStagedCodexFingerprintHeaders(c, account, req.Header)
+	if err := s.applyStagedCodexFingerprintHeadersForAccount(ctx, c, account, req.Header); err != nil {
+		return nil, err
+	}
 
 	// 终态收口：强制统一 OAuth 出站身份（User-Agent / originator / version 同源自洽）。
 	// 客户端自报身份不参与构造，浏览器型 UA 也因此不会再到达上游（原浏览器 UA 兜底已被吸收）。
@@ -1391,9 +1447,15 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 
 	// 账号级请求头覆写（仅 openai api_key 账号启用时生效；OAuth 路径 no-op）
 	account.ApplyHeaderOverrides(req.Header)
+	if err := s.alignOpenAIUpstreamSessionIdentityFromBody(c, account, req.Header, body); err != nil {
+		return nil, err
+	}
+	alignOpenAICodexThreadHeaders(req.Header)
 	// x-codex-beta-features：按真实 Codex 的会话级行为补注（在账号级覆写之后，
 	// 保证不被覆盖丢失）。
 	applyOpenAICodexBetaFeatures(c, account, req.Header)
+	identity := s.applyOpenAIOutboundIdentity(ctx, account, req.Header, account.UsesOpenAICodexProtocol())
+	SetOpsRoutingDiagnostics(c, &OpsRoutingDiagnostics{OutboundIdentitySource: identity.Source})
 	setOpenAICodexRoutingHintFromBody(req.Header, account, body)
 	logOpenAIRoutingDiagnosticsFromBody(ctx, account, "http", req.Header, body, "not_applicable")
 

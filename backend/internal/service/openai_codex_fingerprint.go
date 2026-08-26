@@ -54,6 +54,23 @@ func applyStagedCodexFingerprintHeaders(c *gin.Context, account *Account, h http
 	applyCodexFingerprintHeaders(h, stagedCodexFingerprintIDs(c, account))
 }
 
+func (s *OpenAIGatewayService) applyStagedCodexFingerprintHeadersForAccount(
+	ctx context.Context,
+	c *gin.Context,
+	account *Account,
+	headers http.Header,
+) error {
+	if account == nil || !account.UsesOpenAICodexProtocol() {
+		return nil
+	}
+	fingerprintAccount, err := s.resolveCodexFingerprintAccount(ctx, account)
+	if err != nil {
+		return fmt.Errorf("resolve Codex fingerprint credential account: %w", err)
+	}
+	applyCodexFingerprintHeaders(headers, loadCodexFingerprintIDs(c, fingerprintAccount))
+	return nil
+}
+
 func applyStagedCodexFingerprintClientMetadata(c *gin.Context, account *Account, reqBody map[string]any) bool { //nolint:unused // staged fingerprint helper kept for request-body path
 	return applyCodexFingerprintClientMetadata(reqBody, stagedCodexFingerprintIDs(c, account))
 }

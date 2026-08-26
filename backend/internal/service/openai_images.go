@@ -845,6 +845,7 @@ func (s *OpenAIGatewayService) buildOpenAIImagesRequest(
 		req.Header.Set("Content-Type", contentType)
 	}
 	account.applyOpenAIHeaderOverrides(req.Header)
+	stripOpenAILegacyResponsesBeta(req.Header)
 	s.applyOpenAIImageUserAgent(ctx, account, req.Header)
 	return req, nil
 }
@@ -853,7 +854,7 @@ func (s *OpenAIGatewayService) buildOpenAIImagesRequest(
 // traffic. A valid account Codex UA wins, followed by the system UA and the
 // compiled-in default; inbound headers and generic overrides never participate.
 func (s *OpenAIGatewayService) applyOpenAIImageUserAgent(ctx context.Context, account *Account, headers http.Header) {
-	s.applyOpenAIOutboundIdentity(ctx, account, headers, account != nil && account.Type == AccountTypeOAuth)
+	s.applyOpenAIOutboundIdentity(ctx, account, headers, account != nil && account.UsesOpenAICodexProtocol())
 }
 
 func buildOpenAIImagesURL(base string, endpoint string) string {

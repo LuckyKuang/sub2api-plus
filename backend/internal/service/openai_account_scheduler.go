@@ -2341,8 +2341,27 @@ func (s *OpenAIGatewayService) selectAccountWithSchedulerOnce(
 	platform = NormalizeOpenAICompatiblePlatform(platform)
 	decision := OpenAIAccountScheduleDecision{}
 	stickyPreviousAccountID := int64(0)
+	groupRemovedResponseAccountID := int64(0)
+	var groupRemovedResponseStore OpenAIWSStateStore
 	if previousResponseCanMove && strings.TrimSpace(previousResponseID) != "" && platform == PlatformOpenAI {
+		groupRemovedResponseStore = s.getOpenAIWSStateStore()
+		if groupRemovedResponseStore != nil {
+			boundAccountID, lookupErr := groupRemovedResponseStore.GetResponseAccount(ctx, derefGroupID(groupID), strings.TrimSpace(previousResponseID))
+			if lookupErr == nil && boundAccountID > 0 {
+				if boundAccount, accountErr := s.getSchedulableAccount(ctx, boundAccountID); accountErr == nil && boundAccount != nil &&
+					!s.openAIAccountMatchesSchedulingGroup(boundAccount, groupID) {
+					groupRemovedResponseAccountID = boundAccountID
+				}
+			}
+		}
 		stickyPreviousAccountID = s.ResolveAccountIDByPreviousResponseIDForScheduler(ctx, groupID, previousResponseID, requestedModel, excludedIDs, requiredCapability, requireCompact)
+	}
+	invalidateGroupRemovedResponseBinding := func(selection *AccountSelectionResult) {
+		if groupRemovedResponseAccountID <= 0 || groupRemovedResponseStore == nil || selection == nil || selection.Account == nil ||
+			selection.Account.ID == groupRemovedResponseAccountID {
+			return
+		}
+		_ = groupRemovedResponseStore.DeleteResponseAccount(ctx, derefGroupID(groupID), strings.TrimSpace(previousResponseID))
 	}
 	preserveGuardianParentBinding := preserveOpenAIGuardianParentBinding(ctx, sessionHash)
 	guardianParentAccountID := int64(0)
@@ -2375,6 +2394,7 @@ func (s *OpenAIGatewayService) selectAccountWithSchedulerOnce(
 				return nil, decision, err
 			}
 			if selection != nil && selection.Account != nil {
+				invalidateGroupRemovedResponseBinding(selection)
 				decision.Layer = openAIAccountScheduleLayerGuardianParent
 				decision.StickySessionHit = true
 				decision.SelectedAccountID = selection.Account.ID
@@ -2398,6 +2418,7 @@ func (s *OpenAIGatewayService) selectAccountWithSchedulerOnce(
 				}
 				if accountSupportsOpenAICapabilities(selection.Account, requiredCapability, requiredImageCapability) {
 					decision.StickyPreviousHit = stickyPreviousAccountID > 0 && stickyPreviousAccountID == selection.Account.ID
+					invalidateGroupRemovedResponseBinding(selection)
 					return selection, decision, nil
 				}
 				if selection.ReleaseFunc != nil {
@@ -2425,6 +2446,7 @@ func (s *OpenAIGatewayService) selectAccountWithSchedulerOnce(
 			if s.isOpenAIAccountTransportCompatible(selection.Account, requiredTransport) &&
 				accountSupportsOpenAICapabilities(selection.Account, requiredCapability, requiredImageCapability) {
 				decision.StickyPreviousHit = stickyPreviousAccountID > 0 && stickyPreviousAccountID == selection.Account.ID
+				invalidateGroupRemovedResponseBinding(selection)
 				return selection, decision, nil
 			}
 			if selection.ReleaseFunc != nil {
@@ -2479,6 +2501,7 @@ func (s *OpenAIGatewayService) selectAccountWithSchedulerOnce(
 	if err != nil || selection == nil || selection.Account == nil {
 		return selection, decision, s.mapOpenAIOAuthSessionPolicySelectionError(ctx, groupID, platform, requestedModel, excludedIDs, requiredTransport, requiredCapability, requiredImageCapability, requireCompact, err)
 	}
+	invalidateGroupRemovedResponseBinding(selection)
 	return selection, decision, err
 }
 

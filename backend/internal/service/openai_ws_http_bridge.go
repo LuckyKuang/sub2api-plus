@@ -393,6 +393,14 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 		if buildErr != nil {
 			return nil, buildErr
 		}
+		// The HTTP bridge represents one established WebSocket turn. Preserve the
+		// ingress thread as its request correlation ID even when device/session
+		// fingerprint convergence rewrites the wider Codex identity surface.
+		if c != nil && c.Request != nil {
+			if threadID := strings.TrimSpace(c.Request.Header.Get("thread-id")); threadID != "" {
+				upstreamReq.Header.Set("x-client-request-id", threadID)
+			}
+		}
 		if account.Platform != PlatformGrok && isOpenAIResponsesLiteWebSocketPayload(payload) {
 			upstreamReq.Header.Set(responsesLiteHeader, "true")
 		}

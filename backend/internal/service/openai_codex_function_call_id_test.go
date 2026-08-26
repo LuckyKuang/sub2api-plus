@@ -216,7 +216,7 @@ func TestFilterCodexInput_CustomToolCallPreservesCTCID(t *testing.T) {
 	item, ok := filtered[0].(map[string]any)
 	require.True(t, ok)
 	require.Equal(t, "ctc_apply_patch_001", item["id"])
-	require.Equal(t, "call_apply_patch_001", item["call_id"])
+	require.Equal(t, "ctc_apply_patch_001", item["call_id"])
 }
 
 func TestFilterCodexInput_CustomToolCallStripsFCID(t *testing.T) {
@@ -238,7 +238,7 @@ func TestFilterCodexInput_CustomToolCallStripsFCID(t *testing.T) {
 	require.True(t, ok)
 	_, exists := item["id"]
 	require.False(t, exists)
-	require.Equal(t, "call_apply_patch_001", item["call_id"])
+	require.Equal(t, "ctc_apply_patch_001", item["call_id"])
 }
 
 // TestFilterCodexInput_OutputTypeKeepsItemID ensures tool-output items

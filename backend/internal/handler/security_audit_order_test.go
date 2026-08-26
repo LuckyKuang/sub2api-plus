@@ -94,7 +94,7 @@ func TestResponsesPassthroughAuditsRawPayloadOutsideResponseCreateGate(t *testin
 	require.NotEqual(t, -1, captureIndex)
 	require.NotEqual(t, -1, hookIndex)
 	require.Less(t, captureIndex, hookIndex)
-	normalizeIndex := strings.Index(source, "normalizeOpenAIResponsesLiteToolsPayload(payload)")
+	normalizeIndex := strings.Index(source, "normalizeOpenAIResponsesLitePayloadForAccount(payload, account)")
 	require.Greater(t, normalizeIndex, hookIndex, "passthrough payload normalization must start after raw-frame audit")
 	nextCreateGate := strings.Index(source[hookIndex:], "if isResponseCreate {")
 	require.Greater(t, nextCreateGate, 0, "model mapping and turn lifecycle gate must begin after the all-frame audit hook")

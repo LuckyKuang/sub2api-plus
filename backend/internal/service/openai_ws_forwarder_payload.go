@@ -116,7 +116,9 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 				headers.Set(name, value)
 			}
 		}
-		alignOpenAICodexThreadHeaders(headers)
+		if strings.TrimSpace(headers.Get("x-client-request-id")) == "" {
+			alignOpenAICodexThreadHeaders(headers)
+		}
 	}
 	// 真实 Codex 的 WS 握手同样携带会话级 x-codex-beta-features
 	// （client.rs build_websocket_headers 复用 build_responses_headers），
@@ -124,8 +126,9 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	// 之外：该头是账号/会话级属性，不依赖入站请求是否存在，也避免预热与
 	// 实际请求因头差异落进不同的连接池兼容分桶。
 	applyOpenAICodexBetaFeatures(c, account, headers)
-	// OAuth 账号：统一应用 API-key 隔离或账号级共享策略，并对未授权组 fail closed。
-	if account != nil && account.Type == AccountTypeOAuth {
+	// Codex credential accounts apply either API-key isolation or the explicit
+	// account sharing policy. Setup tokens use the same ChatGPT protocol surface.
+	if account != nil && account.UsesOpenAICodexProtocol() {
 		if sessionResolution.SessionID != "" {
 			upstreamSessionID, err := s.resolveOpenAIUpstreamPromptCacheHeaderIdentity(c, account, sessionResolution.SessionID)
 			if err != nil {
@@ -152,6 +155,10 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 			headers.Set("conversation_id", sessionResolution.ConversationID)
 		}
 	}
+	// Preserve the Plus cache/session identity before account namespace and
+	// fingerprint projection rewrite the wider Codex identity surface. The
+	// cache identity is the final authority for both session spellings.
+	cacheSessionIdentity := strings.TrimSpace(headers.Get(codexSessionIDHeader))
 	if state := strings.TrimSpace(turnState); state != "" {
 		headers.Set(openAIWSTurnStateHeader, state)
 	}
@@ -159,9 +166,11 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 		headers.Set(openAIWSTurnMetadataHeader, metadata)
 	}
 	applyCodexAccountIdentityHeaders(headers, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c))
-	applyStagedCodexFingerprintHeaders(c, account, headers)
+	if err := s.applyStagedCodexFingerprintHeadersForAccount(ctx, c, account, headers); err != nil {
+		return nil, sessionResolution, err
+	}
 
-	if account != nil && account.Type == AccountTypeOAuth {
+	if account != nil && account.UsesOpenAICodexProtocol() {
 		if err := resolveAndSetOpenAIChatGPTAccountHeaders(ctx, s.accountRepo, headers, account); err != nil {
 			return nil, sessionResolution, fmt.Errorf("resolve chatgpt account headers: %w", err)
 		}
@@ -199,19 +208,13 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	account.ApplyHeaderOverrides(headers)
 	// The request/body stage owns installation and thread metadata. Preserve the
 	// already isolated cache session and restore it after fingerprint mutation.
-	cacheSessionIdentity := strings.TrimSpace(headers.Get(codexSessionIDHeader))
-	if account != nil && account.Type == AccountTypeOAuth && stagedCodexFingerprintIDs(c, account) != nil {
-		fingerprintAccount, fingerprintErr := s.resolveCodexFingerprintAccount(ctx, account)
-		if fingerprintErr != nil {
-			return nil, sessionResolution, fmt.Errorf("resolve Codex fingerprint credential account: %w", fingerprintErr)
-		}
-		applyCodexFingerprintHeaders(headers, loadCodexFingerprintIDs(c, fingerprintAccount))
-	}
 	if cacheSessionIdentity != "" {
 		setOpenAIUpstreamSessionIdentity(headers, cacheSessionIdentity)
 	}
-	alignOpenAICodexThreadHeaders(headers)
-	identity := s.applyOpenAIOutboundIdentity(ctx, account, headers, account != nil && account.Type == AccountTypeOAuth)
+	if strings.TrimSpace(headers.Get("x-client-request-id")) == "" {
+		alignOpenAICodexThreadHeaders(headers)
+	}
+	identity := s.applyOpenAIOutboundIdentity(ctx, account, headers, account != nil && account.UsesOpenAICodexProtocol())
 	SetOpsRoutingDiagnostics(c, &OpsRoutingDiagnostics{OutboundIdentitySource: identity.Source})
 	setOpenAICodexRoutingHint(headers, account, routingModel, routingServiceTier)
 	logOpenAIRoutingDiagnostics(

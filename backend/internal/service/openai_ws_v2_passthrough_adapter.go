@@ -808,7 +808,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 		}
 		firstClientMessage = cacheBody
 		var cacheIdentityErr error
-		firstClientMessage, _, _, cacheIdentityErr = s.ensureOpenAIResponsesPromptCacheIdentity(
+		firstClientMessage, promptCacheKey, _, cacheIdentityErr = s.ensureOpenAIResponsesPromptCacheIdentity(
 			c,
 			account,
 			firstClientMessage,

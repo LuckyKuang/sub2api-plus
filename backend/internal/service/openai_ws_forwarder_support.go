@@ -554,6 +554,11 @@ func (s *OpenAIGatewayService) resolveAccountByPreviousResponseIDForCapability(
 		_ = store.DeleteResponseAccount(ctx, derefGroupID(groupID), responseID)
 		return 0, nil, "", nil, nil
 	}
+	// Remember whether the scheduler snapshot considered the binding group-local.
+	// A persisted mismatch after a matching snapshot is an actual group removal;
+	// an account that was already outside the group is only a transient policy
+	// miss and must not destroy a response binding owned by another routing view.
+	snapshotMatchedGroup := s.openAIAccountMatchesSchedulingGroup(account, groupID)
 	// Snapshot rows may still contain the pre-edit group set. Resolve the
 	// persisted account before any transport, model, or quota short-circuit so a
 	// group removal always invalidates the stale local response binding.
@@ -571,7 +576,9 @@ func (s *OpenAIGatewayService) resolveAccountByPreviousResponseIDForCapability(
 	// sharing-enabled OAuth accounts. Delete only the local binding: shared OAuth
 	// owner/scope markers are a security boundary and must remain fail-closed.
 	if !s.openAIAccountMatchesSchedulingGroup(account, groupID) {
-		_ = store.DeleteResponseAccount(ctx, derefGroupID(groupID), responseID)
+		if snapshotMatchedGroup {
+			_ = store.DeleteResponseAccount(ctx, derefGroupID(groupID), responseID)
+		}
 		return 0, nil, "", nil, nil
 	}
 	// OAuth/SetupToken continuation state lives on the WSv2 session and cannot

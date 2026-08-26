@@ -38,6 +38,18 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	if _, err := s.prepareCodexAccountIdentitySource(ctx, c, account); err != nil {
 		return nil, err
 	}
+	restrictionResult := s.detectCodexClientRestriction(c, account, body)
+	logCodexCLIOnlyDetection(ctx, c, account, getAPIKeyIDFromContext(c), restrictionResult, body)
+	if restrictionResult.Enabled && !restrictionResult.Matched {
+		MarkOpsClientBusinessLimited(c, OpsClientBusinessLimitedReasonLocalPolicyDenied)
+		c.JSON(http.StatusForbidden, gin.H{
+			"error": gin.H{
+				"type":    "forbidden_error",
+				"message": CodexClientRestrictionMessage(restrictionResult),
+			},
+		})
+		return nil, fmt.Errorf("codex_cli_only restriction: approved Codex client profile required")
+	}
 
 	// 入口分流（国产供应商 Anthropic 协议）：上游为供应商原生 Anthropic 端点时，
 	// /v1/messages 请求零转换直通（仅模型名映射 + 少量 body 清洗），完整保留
@@ -906,8 +918,7 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 	state.Model = originalModel
 	var usage OpenAIUsage
 	responseID := ""
-	var firstTokenMs *int
-	firstChunk := true
+	var timing streamOutputTiming
 	clientDisconnected := false
 	clientOutputStarted := false
 	var streamFailoverErr error
@@ -951,7 +962,10 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 			UpstreamResponseServiceTier:   observedUpstreamResponseServiceTier(c),
 			Stream:                        true,
 			Duration:                      time.Since(startTime),
-			FirstTokenMs:                  firstTokenMs,
+			FirstTokenMs:                  timing.firstTokenMs,
+			LastTokenMs:                   timing.lastTokenMs,
+			FirstOutputMs:                 timing.firstOutputMs,
+			FirstOutputKind:               timing.firstOutputKind,
 			ClientDisconnect:              clientDisconnected,
 		}
 		if searchCount > 0 {
@@ -963,11 +977,7 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 	// processDataLine handles a single "data: ..." SSE line from upstream.
 	processDataLine := func(payload string) bool {
 		payload = string(restoreCodexToolNamesFromContext(c, []byte(payload)))
-		if firstChunk {
-			firstChunk = false
-			ms := int(time.Since(startTime).Milliseconds())
-			firstTokenMs = &ms
-		}
+		timing.Observe(startTime, apicompat.ObserveResponsesOutput([]byte(payload)))
 		if countSearch {
 			searchCount += countGrokNativeSearchCallsInSSEDataDedup([]byte(payload), streamSearchSeen)
 		}
@@ -1124,6 +1134,9 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 			}
 		}
 		logOpenAISuccessMissingUsage(c.Request.Context(), c, account, resp, &usage, terminalEventType, clientDisconnected)
+		if clientDisconnected {
+			return resultWithUsage(), fmt.Errorf("stream usage incomplete: client disconnected")
+		}
 		return resultWithUsage(), nil
 	}
 
@@ -1343,6 +1356,9 @@ func copyOpenAIUsageFromResponsesUsage(usage *apicompat.ResponsesUsage) OpenAIUs
 	}
 	if usage.InputTokensDetails != nil {
 		result.CacheReadInputTokens = usage.InputTokensDetails.CachedTokens
+	}
+	if usage.OutputTokensDetails != nil {
+		result.AudioOutputTokens = usage.OutputTokensDetails.AudioTokens
 	}
 	return result
 }

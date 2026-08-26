@@ -1642,11 +1642,7 @@ func filterCodexInputWithOptions(input []any, opts codexInputFilterOptions) []an
 				}
 			}
 
-			// Custom tool calls have a distinct item id namespace (ctc_*) and
-			// retain their paired call_id verbatim. Rewriting call_* to fc_* here
-			// breaks a following custom_tool_call_output even when the item id is
-			// valid for the Responses replay contract.
-			if callID != "" && typ != "custom_tool_call" && typ != "custom_tool_call_output" {
+			if callID != "" {
 				fixedCallID := fixCallIDPrefix(callID)
 				if fixedCallID != callID {
 					ensureCopy()

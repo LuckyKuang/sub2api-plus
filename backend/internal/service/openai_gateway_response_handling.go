@@ -122,7 +122,7 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 	if s.cfg != nil && s.cfg.Gateway.MaxLineSize > 0 {
 		maxLineSize = s.cfg.Gateway.MaxLineSize
 	}
-	var firstTokenMs *int
+	var timing streamOutputTiming
 	firstOutputProgressObserved := false
 	bufferedWriter := bufio.NewWriterSize(w, 4*1024)
 	var firstOutputStage *openAIFirstOutputStage
@@ -268,6 +268,8 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 	eventInProgress := false
 	eventStartsClientOutput := false
 	eventStartsVisibleOutput := false
+	var eventObservation apicompat.StreamOutputObservation
+	var eventObservedAt time.Time
 	eventShouldFlush := false
 	handlePendingWriteError := func(err error) {
 		if firstOutputStage != nil && !firstOutputStage.closed {
@@ -304,17 +306,19 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 				}
 			}
 		}
-		if completedProgressEvent && !firstOutputProgressObserved {
-			firstOutputScanGuard.Store(false)
-			firstOutputProgressObserved = true
-			stopFirstOutputTimer()
-		}
-		if completedVisibleEvent && firstTokenMs == nil {
-			ms := int(time.Since(startTime).Milliseconds())
-			firstTokenMs = &ms
+		if completedVisibleEvent && eventObservation.MeaningfulOutput {
+			hadFirstOutput := timing.firstOutputMs != nil
+			timing.ObserveAt(startTime, eventObservedAt, eventObservation)
+			if !hadFirstOutput && timing.firstOutputMs != nil {
+				firstOutputScanGuard.Store(false)
+				firstOutputProgressObserved = true
+				stopFirstOutputTimer()
+			}
 		}
 		eventStartsClientOutput = false
 		eventStartsVisibleOutput = false
+		eventObservation = apicompat.StreamOutputObservation{}
+		eventObservedAt = time.Time{}
 		eventShouldFlush = false
 	}
 	sendErrorEvent := func(reason string) {
@@ -351,10 +355,14 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 	resultWithUsage := func() *openaiStreamingResult {
 		return &openaiStreamingResult{
 			usage:            usage,
-			firstTokenMs:     firstTokenMs,
+			firstTokenMs:     timing.firstTokenMs,
+			lastTokenMs:      timing.lastTokenMs,
+			firstOutputMs:    timing.firstOutputMs,
+			firstOutputKind:  timing.firstOutputKind,
 			responseID:       responseID,
 			imageCount:       imageCounter.Count(),
 			imageOutputSizes: imageCounter.Sizes(),
+			clientDisconnect: clientDisconnected,
 			searchCount:      searchCounter,
 		}
 	}
@@ -411,6 +419,9 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 			return resultWithUsage(), fmt.Errorf("upstream response failed: %s", failedMessage)
 		}
 		logOpenAISuccessMissingUsage(ctx, c, account, resp, usage, terminalEventType, clientDisconnected)
+		if clientDisconnected {
+			return resultWithUsage(), fmt.Errorf("stream usage incomplete: client disconnected")
+		}
 		return resultWithUsage(), nil
 	}
 	handleScanErr := func(scanErr error) (*openaiStreamingResult, error, bool) {
@@ -665,13 +676,20 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 				line = s.replaceModelInSSELine(line, mappedModel, originalModel)
 			}
 			startsClientOutput := forceFlushFailedEvent || openAIStreamDataStartsClientOutput(data, eventType)
-			startsVisibleOutput := openAIStreamDataStartsVisibleOutput(data, eventType)
+			observation := apicompat.ObserveResponsesOutput(dataBytes)
+			startsVisibleOutput := observation.MeaningfulOutput
 			if stageFirstOutput {
 				eventStartsClientOutput = eventStartsClientOutput || startsClientOutput
 				eventStartsVisibleOutput = eventStartsVisibleOutput || startsVisibleOutput
+				if observation.MeaningfulOutput && !eventObservation.MeaningfulOutput {
+					eventObservation = observation
+					eventObservedAt = time.Now()
+				}
 				if startsClientOutput {
 					firstOutputScanGuard.Store(false)
 				}
+			} else {
+				timing.Observe(startTime, observation)
 			}
 			if startsClientOutput && !openAIStreamEventTypeIsTerminal(eventType) {
 				responsesSemanticOutputSeen = true
@@ -692,7 +710,7 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 			// 写入客户端（客户端断开后继续 drain 上游）
 			if !clientDisconnected && !failureDelivered && !suppressCurrentEvent {
 				shouldFlush := queueDrained && (clientOutputStarted || startsClientOutput)
-				if firstTokenMs == nil && startsVisibleOutput {
+				if timing.firstTokenMs == nil && startsVisibleOutput {
 					// 保证首个 token 事件尽快出站，避免影响 TTFT。
 					shouldFlush = true
 				}
@@ -706,12 +724,6 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 				}
 			}
 
-			// Record first token time
-			if !guardFirstOutput && firstTokenMs == nil && startsVisibleOutput {
-				ms := int(time.Since(startTime).Milliseconds())
-				firstTokenMs = &ms
-				stopFirstOutputTimer()
-			}
 			s.parseSSEUsageBytesWithType(dataBytes, eventType, usage)
 			return
 		}
@@ -1505,6 +1517,10 @@ func openAIUsageFromGJSON(value gjson.Result) (OpenAIUsage, bool) {
 	if imageOutputTokens == 0 {
 		imageOutputTokens = value.Get("completion_tokens_details.image_tokens").Int()
 	}
+	audioOutputTokens := value.Get("output_tokens_details.audio_tokens").Int()
+	if audioOutputTokens == 0 {
+		audioOutputTokens = value.Get("completion_tokens_details.audio_tokens").Int()
+	}
 	// 图片输入 token（如 gpt-image-2 的 /v1/images/edits 带图请求），
 	// 上游在 input_tokens_details.image_tokens 单独回传，用于图/文输入分价计费。
 	// 普通文本请求该字段为 0，走原路径行为不变。
@@ -1519,6 +1535,7 @@ func openAIUsageFromGJSON(value gjson.Result) (OpenAIUsage, bool) {
 		CacheCreationInputTokens: cacheCreationTokens,
 		CacheReadInputTokens:     cacheReadTokens,
 		ImageOutputTokens:        int(imageOutputTokens),
+		AudioOutputTokens:        int(audioOutputTokens),
 	}, true
 }
 
@@ -1532,7 +1549,7 @@ func openAICacheReadTokensFromUsage(value gjson.Result) int {
 		}
 	}
 
-	return firstPositiveGJSONInt(
+	return firstPresentOpenAICacheTokenCount(
 		value.Get("cache_read_input_tokens"),
 		value.Get("cache_read_tokens"),
 		value.Get("cached_tokens"),
@@ -1551,12 +1568,21 @@ func openAICacheCreationTokensFromUsage(value gjson.Result) int {
 		}
 	}
 
-	return firstPositiveGJSONInt(
+	return firstPresentOpenAICacheTokenCount(
 		value.Get("cache_write_tokens"),
 		value.Get("cache_creation_input_tokens"),
 		value.Get("cache_write_input_tokens"),
 		value.Get("cache_creation_tokens"),
 	)
+}
+
+func firstPresentOpenAICacheTokenCount(values ...gjson.Result) int {
+	for _, value := range values {
+		if value.Exists() {
+			return max(int(value.Int()), 0)
+		}
+	}
+	return 0
 }
 
 func (s *OpenAIGatewayService) handleNonStreamingResponse(ctx context.Context, resp *http.Response, c *gin.Context, account *Account, originalModel, mappedModel string) (*openaiNonStreamingResult, error) {
@@ -2107,9 +2133,25 @@ func normalizeResponsesStreamingTerminalOutput(data []byte, acc *apicompat.Buffe
 func responsesStreamEventMayContributeToOutput(eventType string) bool {
 	switch eventType {
 	case "response.output_text.delta",
+		"response.output_text.done",
+		"response.refusal.delta",
+		"response.refusal.done",
+		"response.content_part.added",
+		"response.content_part.done",
+		"response.reasoning_summary_part.added",
+		"response.reasoning_summary_part.done",
 		"response.output_item.added",
+		"response.output_item.done",
 		"response.function_call_arguments.delta",
-		"response.reasoning_summary_text.delta":
+		"response.function_call_arguments.done",
+		"response.custom_tool_call_input.delta",
+		"response.custom_tool_call_input.done",
+		"response.tool_search_call_arguments.delta",
+		"response.tool_search_call_arguments.done",
+		"response.reasoning_summary_text.delta",
+		"response.reasoning_summary_text.done",
+		"response.reasoning_text.delta",
+		"response.reasoning_text.done":
 		return true
 	default:
 		return false

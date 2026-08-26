@@ -15,6 +15,7 @@ import (
 	coderws "github.com/coder/websocket"
 	"github.com/tidwall/gjson"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/apicompat"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/xai"
 )
 
@@ -120,6 +121,8 @@ type relayState struct {
 	responseConflict        bool
 	terminalEventType       string
 	firstTokenMs            *int
+	firstOutputMs           *int
+	firstOutputKind         string
 	turnTimingByID          map[string]*relayTurnTiming
 	activeTurn              *relayTurnTiming
 	pendingBareError        *observedUpstreamEvent
@@ -143,11 +146,15 @@ type observedUpstreamEvent struct {
 	responseServiceTier string
 	duration            time.Duration
 	firstToken          *int
+	firstOutput         *int
+	firstOutputKind     string
 }
 
 type relayTurnTiming struct {
 	startAt               time.Time
 	firstTokenMs          *int
+	firstOutputMs         *int
+	firstOutputKind       string
 	firstResponseModel    string
 	terminalResponseModel string
 	responseModelConflict bool
@@ -740,6 +747,7 @@ func observeUpstreamMessage(
 		responseID = strings.TrimSpace(values[3].String())
 	}
 	now := nowFn()
+	outputObservation := apicompat.ObserveResponsesOutput(message)
 
 	if state.firstTokenMs == nil && isTokenEvent(eventType) {
 		ms := int(now.Sub(startAt).Milliseconds())
@@ -751,6 +759,13 @@ func observeUpstreamMessage(
 			if tms >= 0 {
 				state.activeTurn.firstTokenMs = &tms
 			}
+		}
+	}
+	if state.firstOutputMs == nil && outputObservation.MeaningfulOutput {
+		ms := int(now.Sub(startAt).Milliseconds())
+		if ms >= 0 {
+			state.firstOutputMs = &ms
+			state.firstOutputKind = string(outputObservation.Kind)
 		}
 	}
 	parsedUsage := parseUsageAndAccumulate(state, message, eventType, onUsageParseFailure)
@@ -770,6 +785,13 @@ func observeUpstreamMessage(
 		}
 	} else {
 		turnTiming = state.activeTurn
+	}
+	if turnTiming != nil && turnTiming.firstOutputMs == nil && outputObservation.MeaningfulOutput {
+		ms := int(now.Sub(turnTiming.startAt).Milliseconds())
+		if ms >= 0 {
+			turnTiming.firstOutputMs = &ms
+			turnTiming.firstOutputKind = string(outputObservation.Kind)
+		}
 	}
 	observeRelayTurnResponseModel(turnTiming, firstRelayResponseModel(message), isTerminalEvent(eventType))
 	if !isTerminalEvent(eventType) {
@@ -845,6 +867,8 @@ func finalizeObservedRelayTerminal(state *relayState, observed observedUpstreamE
 			observed.startedAt = turnTiming.startAt
 			observed.duration = duration
 			observed.firstToken = openAIWSRelayCloneIntPtr(turnTiming.firstTokenMs)
+			observed.firstOutput = openAIWSRelayCloneIntPtr(turnTiming.firstOutputMs)
+			observed.firstOutputKind = turnTiming.firstOutputKind
 		}
 	} else {
 		state.consumePendingTurnStartedAt()
@@ -880,6 +904,8 @@ func emitTurnComplete(
 		StartedAt:             observed.startedAt,
 		Duration:              observed.duration,
 		FirstTokenMs:          openAIWSRelayCloneIntPtr(observed.firstToken),
+		FirstOutputMs:         openAIWSRelayCloneIntPtr(observed.firstOutput),
+		FirstOutputKind:       observed.firstOutputKind,
 	})
 }
 
@@ -1217,6 +1243,8 @@ func enrichResult(result *RelayResult, state *relayState, duration time.Duration
 	result.RequestID = state.lastResponseID
 	result.TerminalEventType = state.terminalEventType
 	result.FirstTokenMs = state.firstTokenMs
+	result.FirstOutputMs = state.firstOutputMs
+	result.FirstOutputKind = state.firstOutputKind
 }
 
 func (s *relayState) setRequestModel(model string) {

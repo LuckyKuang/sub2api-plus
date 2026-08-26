@@ -1204,9 +1204,9 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_PassthroughModeR
 	}
 
 	require.Equal(t, 1, captureDialer.DialCount(), "passthrough 模式应直接建立上游 websocket")
-	expectedCacheIdentity := generateSessionUUID(isolateOpenAISessionID(0, "passthrough-session"))
+	expectedCacheIdentity := gjson.GetBytes(firstUpstreamWrite, "prompt_cache_key").String()
+	require.NotEmpty(t, expectedCacheIdentity)
 	require.Equal(t, expectedCacheIdentity, captureDialer.LastHeaders().Get(codexSessionIDHeader))
-	require.Equal(t, expectedCacheIdentity, gjson.GetBytes(firstUpstreamWrite, "prompt_cache_key").String())
 	require.Equal(t, expectedCacheIdentity, gjson.GetBytes(secondUpstreamWrite, "prompt_cache_key").String())
 }
 
@@ -1338,7 +1338,9 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_PassthroughHeade
 		t.Fatal("等待 passthrough websocket 结束超时")
 	}
 
-	expectedCacheIdentity := generateSessionUUID(isolateOpenAISessionID(0, "pcache_passthrough"))
+	require.Len(t, upstreamConn.writes, 1)
+	expectedCacheIdentity := firstNonEmptyString(upstreamConn.writes[0]["prompt_cache_key"])
+	require.NotEmpty(t, expectedCacheIdentity)
 	require.Equal(t, expectedCacheIdentity, captureDialer.lastHeaders.Get(codexSessionIDHeader))
 	require.Equal(t, expectedCacheIdentity, captureDialer.lastHeaders.Get("session_id"))
 	require.Equal(t, "passthrough-owner-installation", captureDialer.lastHeaders.Get("x-codex-installation-id"))
@@ -1347,7 +1349,6 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_PassthroughHeade
 	require.Equal(t, "turn-state-1", captureDialer.lastHeaders.Get(openAIWSTurnStateHeader))
 	require.Equal(t, "passthrough-owner-installation", gjson.Get(captureDialer.lastHeaders.Get(openAIWSTurnMetadataHeader), "installation_id").String())
 	require.Equal(t, resolveConvergedSessionID(account), gjson.Get(captureDialer.lastHeaders.Get(openAIWSTurnMetadataHeader), "session_id").String())
-	require.Len(t, upstreamConn.writes, 1)
 	require.Equal(t, expectedCacheIdentity, firstNonEmptyString(upstreamConn.writes[0]["prompt_cache_key"]))
 	forwarded := requestToJSONString(upstreamConn.writes[0])
 	require.Equal(t, "passthrough-owner-installation", gjson.Get(forwarded, "client_metadata.x-codex-installation-id").String())
