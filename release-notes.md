@@ -1,24 +1,24 @@
-Sub2API Plus v0.1.182+custom.001
+Sub2API Plus v0.1.183+custom.001
 
 ## Highlights
 
-- Import official Sub2API v0.1.182 on top of the completed Plus v0.1.179–v0.1.181 integration.
+- Import official Sub2API v0.1.183 on top of the completed Plus v0.1.182 integration.
 - Keep Plus Prompt Audit conversation-text selection, admin user support view, IP access master switch, Codex mode-only fingerprint with `device` default, usage TPS, and release tooling.
-- Prompt Audit blocking now scans only the latest user turn, so Codex instructions and tool schemas no longer inflate Guard chunks or false-positive jailbreaks.
-- Content moderation sends up to 16 current-user images, and a default-off `cyber_policy` auto-ban can immediately disable a regular user or the triggering admin API key.
+- Prompt Audit blocking still scans only the latest user turn; content moderation still sends up to 16 current-user images, and the default-off `cyber_policy` auto-ban remains.
 
 ## Fixed
 
-- Responses Lite now normalizes OAuth, API-key, HTTP-bridge, and WebSocket requests consistently, preserves numeric precision, and pins the supported parallel-tool-call mode.
-- OAuth image generation keeps the user's prompt verbatim.
-- OpenCode Go account resets, Anthropic cache billing, Antigravity routing, Composite Kimi Code K3 routing, channel-monitor attribution, and payment-result balance refresh include official v0.1.182 fixes.
-- Prompt Audit no longer blocks ordinary Codex `hi` turns that only carry harness instructions.
-- Two-image user turns are no longer sampled down to one inbound moderation image.
+- Codex `session-id` affinity now takes priority over `session_id` on sticky routing and WebSocket session resolution.
+- OpenAI sticky sessions keep a one-request capacity spillover temporary, so a full wait queue does not rewrite the durable account binding.
+- OpenAI OAuth 429 quota-exhausted responses can pause the account instead of treating every 429 as a same-account retry.
+- Responses custom tool-call item IDs stay typed after restore.
+- Email rebind adds alias and concurrency guards.
+- Kimi concurrency 403 stays recoverable; Antigravity compatible token limits are clamped; channel-monitor v2 composite aggregation uses NULLIF.
 
 ## Compatibility and migration
 
 - Published Plus migrations 224/225/226/228 are unchanged; prefix 227 remains unused.
-- Upgrades from v0.1.178+custom.005 apply Plus migrations 229–233. Official v0.1.182 adds no additional SQL migrations.
+- Upgrades from v0.1.178+custom.005 apply Plus migrations 229–233. Official v0.1.183 adds no additional SQL migrations.
 - Experimental OAuth transport plugins remain disabled by default.
 
 ## Known issues
@@ -27,5 +27,5 @@ Sub2API Plus v0.1.182+custom.001
 
 ## Upstream baseline
 
-Official release: v0.1.182
-Official commit: 5a7d469622911a6b1291a692376df5fa03f9ac2e
+Official release: v0.1.183
+Official commit: e8cb019fabf8b55199436229044cbf9aa7a82564
