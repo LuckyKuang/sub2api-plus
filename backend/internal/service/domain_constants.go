@@ -64,6 +64,7 @@ const (
 	APIProtocolChatCompletions = domain.APIProtocolChatCompletions
 	APIProtocolAnthropic       = domain.APIProtocolAnthropic
 	APIProtocolResponses       = domain.APIProtocolResponses
+	APIProtocolAdaptive        = domain.APIProtocolAdaptive
 )
 
 // 国产 OpenAI 兼容供应商各模式的默认 base_url。
@@ -521,6 +522,10 @@ const (
 	// the Model Plaza page (global pricing notes, exchange rate, promotions, ...).
 	SettingKeyModelPlazaDescription = "model_plaza_description"
 
+	// SettingKeyPluginManagementEnabled controls sidebar visibility only; it does
+	// not stop or otherwise change already loaded plugin runtimes.
+	SettingKeyPluginManagementEnabled = "plugin_management_enabled"
+
 	// SettingKeyUpstreamBillingProbeSettings stores the global enable switch and interval
 	// for probing remote Sub2API API-key billing metadata.
 	SettingKeyUpstreamBillingProbeSettings = "upstream_billing_probe_settings"
@@ -537,6 +542,8 @@ const (
 
 	// SettingKeyRateLimit429CooldownSettings stores JSON config for 429 fallback cooldown handling.
 	SettingKeyRateLimit429CooldownSettings = "rate_limit_429_cooldown_settings"
+	// SettingKeyOpenAIAPIKeyHealthBreakerSettings stores the opt-in OpenAI pool API-key breaker config.
+	SettingKeyOpenAIAPIKeyHealthBreakerSettings = "openai_apikey_health_breaker_settings"
 
 	// =========================
 	// Stream Timeout Handling
@@ -578,7 +585,10 @@ const (
 	// SettingKeyCodexCLIOnlyBlacklist codex_cli_only 全局黑名单（[]AllowedClientEntry JSON，OR deny）。
 	SettingKeyCodexCLIOnlyBlacklist = "codex_cli_only_blacklist"
 	// SettingKeyCodexCLIOnlyWhitelist codex_cli_only 全局白名单（[]AllowedClientEntry JSON，双因子 AND allow）。
-	SettingKeyCodexCLIOnlyWhitelist = "codex_cli_only_whitelist"
+	SettingKeyCodexCLIOnlyWhitelist                  = "codex_cli_only_whitelist"
+	SettingKeyCodexCLIOnlyAllowAppServerClients      = "codex_cli_only_allow_app_server_clients"
+	SettingKeyCodexCLIOnlyAllowBodyEngineFingerprint = "codex_cli_only_allow_body_engine_fingerprint"
+	SettingKeyCodexCLIOnlyEngineFingerprintSignals   = "codex_cli_only_engine_fingerprint_signals"
 
 	// SettingKeyMaxClaudeCodeVersion 最高 Claude Code 版本号限制 (semver, 如 "3.0.0"，空值=不检查)
 	SettingKeyMaxClaudeCodeVersion = "max_claude_code_version"

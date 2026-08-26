@@ -838,3 +838,11 @@ func TestNormalizeOpenAIOAuthSessionPolicyRequiresExactAccountGroups(t *testing.
 	require.Equal(t, []int64{11, 12}, policy["allowed_group_ids"])
 	require.NotEmpty(t, policy["scope_version"])
 }
+
+func (c *oauthSessionPolicyCache) SetReasoningContent(_ context.Context, _ string, _ string, _ time.Duration) error {
+	return nil
+}
+
+func (c *oauthSessionPolicyCache) GetReasoningContent(_ context.Context, _ string) (string, error) {
+	return "", ErrReasoningContentNotFound
+}

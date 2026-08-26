@@ -42,11 +42,13 @@ func ExtractPromptSnapshot(req Request) (PromptSnapshot, error) {
 	return snapshot, err
 }
 
-// ExtractBlockingPromptSnapshot builds the narrow, low-latency blocking input
-// when configured. Asynchronous auditing always uses ExtractPromptSnapshot so
-// the complete client-controlled transcript is retained for review.
+// ExtractBlockingPromptSnapshot builds the synchronous guard input. Blocking
+// always scans only the latest user text; the latestTurnOnly argument is kept
+// for call-site compatibility and is ignored. Asynchronous auditing always
+// uses ExtractPromptSnapshot so the complete transcript is retained for review.
 func ExtractBlockingPromptSnapshot(req Request, latestTurnOnly bool) (PromptSnapshot, error) {
-	snapshot, _, err := extractPromptSnapshotWithDiagnostics(req, latestTurnOnly)
+	_ = latestTurnOnly
+	snapshot, _, err := extractPromptSnapshotWithDiagnostics(req, true)
 	return snapshot, err
 }
 
@@ -62,10 +64,12 @@ func extractPromptSnapshotWithDiagnostics(req Request, latestTurnOnly bool) (Pro
 			Reasons: auditcontent.SanitizeIncompleteReasons(document.IncompleteReasons),
 		}
 	}
-	extracted := promptSegmentsFromAuditContent(document)
-	segments := normalizeSegmentsLatestUserFirst(extracted)
+	extracted := promptSegmentsFromAuditContent(document, latestTurnOnly)
+	var segments []string
 	if latestTurnOnly {
-		segments = blockingSegmentsLatestUserAndPreviousOutput(extracted)
+		segments = blockingSegmentsLatestUser(extracted)
+	} else {
+		segments = normalizeSegmentsLatestUserFirst(extracted)
 	}
 	if len(segments) == 0 {
 		return PromptSnapshot{}, diagnostic, ErrNoPromptText
@@ -88,10 +92,10 @@ func extractPromptSnapshotWithDiagnostics(req Request, latestTurnOnly bool) (Pro
 	}, diagnostic, nil
 }
 
-func promptSegmentsFromAuditContent(document auditcontent.Document) []promptSegment {
+func promptSegmentsFromAuditContent(document auditcontent.Document, latestTurnOnly bool) []promptSegment {
 	segments := make([]promptSegment, 0, len(document.Segments))
 	for _, segment := range document.Segments {
-		if !isPromptAuditConversationSegment(segment) {
+		if !isPromptAuditConversationSegment(segment, latestTurnOnly) {
 			continue
 		}
 		role := segment.Role
@@ -112,7 +116,19 @@ func promptSegmentsFromAuditContent(document auditcontent.Document) []promptSegm
 	return segments
 }
 
-func isPromptAuditConversationSegment(segment auditcontent.Segment) bool {
+func isPromptAuditConversationSegment(segment auditcontent.Segment, latestTurnOnly bool) bool {
+	if latestTurnOnly {
+		switch segment.Source {
+		case auditcontent.SourceMessage:
+			// Keep assistant/model messages as turn separators so older user
+			// text is not joined with the latest user turn. They are not emitted.
+			return true
+		case auditcontent.SourceSearchQuery, auditcontent.SourceEmbeddingInput, auditcontent.SourceMediaPrompt:
+			return true
+		default:
+			return false
+		}
+	}
 	switch segment.Source {
 	case auditcontent.SourceMessage, auditcontent.SourceInstruction,
 		auditcontent.SourceSearchQuery, auditcontent.SourceEmbeddingInput,
@@ -155,15 +171,14 @@ func normalizeSegmentsLatestUserFirst(values []promptSegment) []string {
 	return result
 }
 
-// blockingSegmentsLatestUserAndPreviousOutput limits synchronous guard input to
-// the current user turn and the nearest preceding assistant/model turn. It is
-// deliberately opt-in because full transcript scanning remains stronger at
-// finding client-controlled content placed in older or non-user messages.
-func blockingSegmentsLatestUserAndPreviousOutput(values []promptSegment) []string {
+// blockingSegmentsLatestUser limits synchronous guard input to the current
+// user turn. Instructions, previous assistant/model output, and older user
+// messages stay out of blocking so client harness text cannot trip the guard.
+func blockingSegmentsLatestUser(values []promptSegment) []string {
 	normalized := normalizedPromptSegments(values)
 	latestUserStart := latestUserSegmentStart(normalized)
 	if latestUserStart < 0 {
-		return normalizeSegmentsLatestUserFirst(values)
+		return nil
 	}
 	latestUserEnd := latestUserStart
 	for latestUserEnd < len(normalized) && isUserSegment(normalized[latestUserEnd]) {
@@ -173,15 +188,7 @@ func blockingSegmentsLatestUserAndPreviousOutput(values []promptSegment) []strin
 	for _, segment := range normalized[latestUserStart:latestUserEnd] {
 		currentUserText = append(currentUserText, segment.text)
 	}
-	selected := []promptSegment{{text: strings.Join(currentUserText, "\n\n"), user: true, role: "user"}}
-	for index := latestUserStart - 1; index >= 0; index-- {
-		if !isAssistantOutputSegment(normalized[index]) {
-			continue
-		}
-		selected = append(selected, normalized[index])
-		break
-	}
-	return promptSegmentTexts(selected)
+	return []string{strings.Join(currentUserText, "\n\n")}
 }
 
 func normalizedPromptSegments(values []promptSegment) []promptSegment {
@@ -211,18 +218,6 @@ func latestUserSegmentStart(values []promptSegment) int {
 
 func isUserSegment(segment promptSegment) bool {
 	return segment.user || segment.role == "user"
-}
-
-func isAssistantOutputSegment(segment promptSegment) bool {
-	return segment.role == "assistant" || segment.role == "model"
-}
-
-func promptSegmentTexts(values []promptSegment) []string {
-	result := make([]string, 0, len(values))
-	for _, value := range values {
-		result = append(result, value.text)
-	}
-	return result
 }
 
 func buildPrioritizedScanText(segments []string) (scanText string, metadataText string) {

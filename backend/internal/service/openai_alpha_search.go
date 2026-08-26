@@ -30,10 +30,9 @@ func (s *OpenAIGatewayService) ForwardAlphaSearch(ctx context.Context, c *gin.Co
 	if s == nil || c == nil || account == nil {
 		return nil, fmt.Errorf("service, context, and account are required")
 	}
-
-	// Alpha Search has its own request shape but consumes the selected OpenAI
-	// credential. Recheck the profile here before any credential lookup so this
-	// path cannot become an ingress-policy bypass.
+	if _, err := s.prepareCodexAccountIdentitySource(ctx, c, account); err != nil {
+		return nil, err
+	}
 	restrictionResult := s.detectCodexClientRestriction(c, account, body)
 	logCodexCLIOnlyDetection(ctx, c, account, getAPIKeyIDFromContext(c), restrictionResult, body)
 	if restrictionResult.Enabled && !restrictionResult.Matched {
@@ -46,7 +45,6 @@ func (s *OpenAIGatewayService) ForwardAlphaSearch(ctx context.Context, c *gin.Co
 		})
 		return nil, fmt.Errorf("codex_cli_only restriction: approved Codex client profile required")
 	}
-
 	modelResult := gjson.GetBytes(body, "model")
 	requestedModel := strings.TrimSpace(modelResult.String())
 	if modelResult.Type != gjson.String || requestedModel == "" {
@@ -75,6 +73,7 @@ func (s *OpenAIGatewayService) ForwardAlphaSearch(ctx context.Context, c *gin.Co
 	if err := s.ensureOpenAIAlphaSearchAuthMetadata(ctx, account, token, proxyURL); err != nil {
 		return nil, err
 	}
+	SetOpsUpstreamModel(c, upstreamModel)
 
 	// Codex Personal Access Token（at-...）目前可访问 ChatGPT Codex
 	// /responses，但会被 standalone /alpha/search 的 access enforcement
@@ -90,7 +89,7 @@ func (s *OpenAIGatewayService) ForwardAlphaSearch(ctx context.Context, c *gin.Co
 	}
 
 	upstreamStart := time.Now()
-	resp, err := s.httpUpstream.Do(req, proxyURL, account.ID, account.Concurrency)
+	resp, err := s.doOpenAIUpstream(req, proxyURL, account)
 	SetOpsLatencyMs(c, OpsUpstreamLatencyMsKey, time.Since(upstreamStart).Milliseconds())
 	if err != nil {
 		return nil, s.handleOpenAIUpstreamTransportError(ctx, c, account, err, true)
@@ -114,26 +113,28 @@ func (s *OpenAIGatewayService) ForwardAlphaSearch(ctx context.Context, c *gin.Co
 			// 真正的凭据失效由普通 Responses 请求或 whoami 校验判定。
 			shouldDisable := false
 			if shouldApplyOpenAIAlphaSearchAccountErrorSideEffects(resp.StatusCode) {
-				shouldDisable = s.handleFailoverSideEffects(ctx, resp, account, respBody, upstreamModel)
+				shouldDisable = s.handleFailoverSideEffects(ctx, resp, account, respBody, openAIAlphaSearchSchedulingModel(account, requestedModel))
 			}
-			return nil, &UpstreamFailoverError{
-				StatusCode:             resp.StatusCode,
-				ResponseBody:           respBody,
-				RetryableOnSameAccount: !shouldDisable && account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode),
+			retryableOnSameAccount := !shouldDisable && account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode)
+			if account.IsOpenAIOAuthLike() && resp.StatusCode == http.StatusTooManyRequests {
+				return nil, s.newOpenAIAccountFailoverError(account, resp.StatusCode, resp.Header, respBody, upstreamMessage, shouldDisable, retryableOnSameAccount)
 			}
+			if isOpenAIHTTPUpstreamAccessStateError(resp.StatusCode, upstreamMessage, respBody) {
+				return nil, newOpenAIUpstreamFailoverError(resp.StatusCode, resp.Header, respBody, upstreamMessage, retryableOnSameAccount)
+			}
+			return nil, &UpstreamFailoverError{StatusCode: resp.StatusCode, ResponseBody: respBody, RetryableOnSameAccount: retryableOnSameAccount}
 		}
 	}
 
 	if !account.IsShadow() {
 		s.UpdateCodexUsageSnapshotFromHeaders(ctx, account.ID, resp.Header)
 	}
-	s.writeOpenAIPassthroughResponseHeaders(c, resp.Header)
+	writeOpenAIPassthroughResponseHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
 	contentType := resp.Header.Get("Content-Type")
 	if contentType == "" {
 		contentType = "application/json"
 	}
 	c.Data(resp.StatusCode, contentType, respBody)
-	s.noteStagedOpenAICodexTurnStateCommitted(c, account, resp.Header)
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		// 非 2xx（错误/重定向）已原样透传给客户端：不是一次成功的搜索，不计费。
 		return nil, nil
@@ -171,7 +172,7 @@ func (s *OpenAIGatewayService) forwardAlphaSearchViaResponsesWebSearch(
 	SetActualOpenAIUpstreamEndpoint(c, "/v1/responses")
 
 	upstreamStart := time.Now()
-	resp, err := s.httpUpstream.Do(req, proxyURL, account.ID, account.Concurrency)
+	resp, err := s.doOpenAIUpstream(req, proxyURL, account)
 	SetOpsLatencyMs(c, OpsUpstreamLatencyMsKey, time.Since(upstreamStart).Milliseconds())
 	if err != nil {
 		return nil, s.handleOpenAIUpstreamTransportError(ctx, c, account, err, true)
@@ -190,24 +191,26 @@ func (s *OpenAIGatewayService) forwardAlphaSearchViaResponsesWebSearch(
 			// 仍按 alpha/search 工具请求处理：PAT 的工具链路失败不能直接永久置错。
 			shouldDisable := false
 			if shouldApplyOpenAIAlphaSearchAccountErrorSideEffects(resp.StatusCode) {
-				shouldDisable = s.handleFailoverSideEffects(ctx, resp, account, respBody, upstreamModel)
+				shouldDisable = s.handleFailoverSideEffects(ctx, resp, account, respBody, openAIAlphaSearchSchedulingModel(account, requestedModel))
 			}
-			return nil, &UpstreamFailoverError{
-				StatusCode:             resp.StatusCode,
-				ResponseBody:           respBody,
-				RetryableOnSameAccount: !shouldDisable && account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode),
+			retryableOnSameAccount := !shouldDisable && account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode)
+			if account.IsOpenAIOAuthLike() && resp.StatusCode == http.StatusTooManyRequests {
+				return nil, s.newOpenAIAccountFailoverError(account, resp.StatusCode, resp.Header, respBody, upstreamMessage, shouldDisable, retryableOnSameAccount)
 			}
+			if isOpenAIHTTPUpstreamAccessStateError(resp.StatusCode, upstreamMessage, respBody) {
+				return nil, newOpenAIUpstreamFailoverError(resp.StatusCode, resp.Header, respBody, upstreamMessage, retryableOnSameAccount)
+			}
+			return nil, &UpstreamFailoverError{StatusCode: resp.StatusCode, ResponseBody: respBody, RetryableOnSameAccount: retryableOnSameAccount}
 		}
 	}
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		s.writeOpenAIPassthroughResponseHeaders(c, resp.Header)
+		writeOpenAIPassthroughResponseHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
 		contentType := resp.Header.Get("Content-Type")
 		if contentType == "" {
 			contentType = "application/json"
 		}
 		c.Data(resp.StatusCode, contentType, respBody)
-		s.noteStagedOpenAICodexTurnStateCommitted(c, account, resp.Header)
 		return nil, nil
 	}
 
@@ -218,9 +221,6 @@ func (s *OpenAIGatewayService) forwardAlphaSearchViaResponsesWebSearch(
 	if err != nil {
 		return nil, err
 	}
-	// The Responses fallback rebuilds the alpha/search payload instead of
-	// forwarding its headers. Still expose the enabled local Codex quota view.
-	s.applyCodexLocalGroupQuotaHeaders(c)
 	c.Data(http.StatusOK, "application/json", alphaRespBody)
 	return &OpenAIForwardResult{
 		RequestID:        strings.TrimSpace(resp.Header.Get("x-request-id")),
@@ -231,6 +231,10 @@ func (s *OpenAIGatewayService) forwardAlphaSearchViaResponsesWebSearch(
 		Duration:         time.Since(upstreamStart),
 		WebSearchCalls:   1,
 	}, nil
+}
+
+func openAIAlphaSearchSchedulingModel(account *Account, requestedModel string) string {
+	return canonicalOpenAIAccountSchedulingModel(account, requestedModel)
 }
 
 func (s *OpenAIGatewayService) buildOpenAIAlphaSearchResponsesWebSearchRequest(ctx context.Context, c *gin.Context, account *Account, alphaBody []byte, body []byte, token string) (*http.Request, error) {
@@ -260,19 +264,36 @@ func (s *OpenAIGatewayService) buildOpenAIAlphaSearchResponsesWebSearchRequest(c
 	if turnMetadata := openAIAlphaSearchInboundHeader(c, "X-Codex-Turn-Metadata"); turnMetadata != "" {
 		req.Header.Set("X-Codex-Turn-Metadata", turnMetadata)
 	}
-	req.Header.Set("Version", codexCLIVersion)
+	canonical := resolveCodexOutboundIdentity("")
+	if version := openAIAlphaSearchInboundHeader(c, "Version"); version != "" {
+		req.Header.Set("Version", version)
+	} else {
+		req.Header.Set("Version", canonical.version)
+	}
+	if originator := openAIAlphaSearchInboundHeader(c, "Originator"); originator != "" {
+		req.Header.Set("Originator", originator)
+	} else {
+		req.Header.Set("Originator", canonical.originator)
+	}
+	if customUA := account.GetOpenAIUserAgent(); customUA != "" {
+		req.Header.Set("User-Agent", customUA)
+	} else if userAgent := openAIAlphaSearchInboundHeader(c, "User-Agent"); userAgent != "" {
+		req.Header.Set("User-Agent", userAgent)
+	} else {
+		req.Header.Set("User-Agent", canonical.userAgent)
+	}
+	if s.cfg != nil && s.cfg.Gateway.ForceCodexCLI {
+		req.Header.Set("User-Agent", canonical.userAgent)
+	}
+	apiKeyID := getAPIKeyIDFromContext(c)
 	if sessionID := strings.TrimSpace(gjson.GetBytes(alphaBody, "id").String()); sessionID != "" {
-		isolated, resolveErr := s.resolveOpenAIUpstreamSessionID(c, account, sessionID)
-		if resolveErr != nil {
-			return nil, resolveErr
-		}
+		isolated := isolateOpenAIUpstreamSessionID(apiKeyID, codexAccountIdentitySource(c, account), sessionID)
 		req.Header.Set("Session_ID", isolated)
 		req.Header.Set("Conversation_ID", isolated)
 	}
-	account.applyOpenAIHeaderOverrides(req.Header)
-	// This fallback always targets the ChatGPT Codex /responses endpoint, even
-	// for a PAT account stored as an API-key account type.
-	s.applyOpenAIOutboundIdentity(ctx, account, req.Header, true)
+	applyCodexAccountIdentityHeaders(req.Header, codexAccountIdentitySource(c, account), apiKeyID)
+	enforceCodexIdentityHeadersWithUA(req.Header, s.codexIdentityOverrideUA(account))
+	account.ApplyHeaderOverrides(req.Header)
 	return req, nil
 }
 
@@ -388,12 +409,33 @@ func (s *OpenAIGatewayService) buildOpenAIAlphaSearchRequest(ctx context.Context
 		if turnMetadata := openAIAlphaSearchInboundHeader(c, "X-Codex-Turn-Metadata"); turnMetadata != "" {
 			req.Header.Set("X-Codex-Turn-Metadata", turnMetadata)
 		}
-		req.Header.Set("Version", codexCLIVersion)
+		applyCodexAccountIdentityHeaders(req.Header, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c))
+		canonical := resolveCodexOutboundIdentity("")
+		if version := openAIAlphaSearchInboundHeader(c, "Version"); version != "" {
+			req.Header.Set("Version", version)
+		} else {
+			req.Header.Set("Version", canonical.version)
+		}
+		if originator := openAIAlphaSearchInboundHeader(c, "Originator"); originator != "" {
+			req.Header.Set("Originator", originator)
+		} else {
+			req.Header.Set("Originator", canonical.originator)
+		}
+		if customUA := account.GetOpenAIUserAgent(); customUA != "" {
+			req.Header.Set("User-Agent", customUA)
+		} else if userAgent := openAIAlphaSearchInboundHeader(c, "User-Agent"); userAgent != "" {
+			req.Header.Set("User-Agent", userAgent)
+		} else {
+			req.Header.Set("User-Agent", canonical.userAgent)
+		}
+		if s.cfg != nil && s.cfg.Gateway.ForceCodexCLI {
+			req.Header.Set("User-Agent", canonical.userAgent)
+		}
+		enforceCodexIdentityHeadersWithUA(req.Header, s.codexIdentityOverrideUA(account))
 	}
 
-	account.applyOpenAIHeaderOverrides(req.Header)
+	account.ApplyHeaderOverrides(req.Header)
 	stripOpenAIAlphaSearchResponsesHeaders(req.Header)
-	s.applyOpenAIOutboundIdentity(ctx, account, req.Header, account.Type == AccountTypeOAuth)
 	return req, nil
 }
 
@@ -435,6 +477,7 @@ var openAIAlphaSearchUnsupportedBodyFields = [...]string{
 	// alpha/search 会对这些字段返回 Unknown parameter（例如 prompt_cache_key）。
 	"prompt_cache_key",
 	"prompt_cache_retention",
+	"store",
 }
 
 func sanitizeOpenAIAlphaSearchBody(body []byte) ([]byte, error) {
@@ -476,7 +519,7 @@ func (s *OpenAIGatewayService) ensureOpenAIAlphaSearchAuthMetadata(ctx context.C
 	if oauthService == nil {
 		return nil
 	}
-	tokenInfo, err := oauthService.validateCodexPersonalAccessTokenWithAccount(ctx, token, proxyURL, account)
+	tokenInfo, err := oauthService.ValidateCodexPersonalAccessToken(ctx, token, proxyURL)
 	if err != nil {
 		return fmt.Errorf("validate Codex PAT metadata for alpha/search: %w", err)
 	}
@@ -638,7 +681,7 @@ func (s *OpenAIGatewayService) openAIAlphaSearchURL(account *Account) (string, e
 		return "", fmt.Errorf("account is required")
 	}
 	switch account.Type {
-	case AccountTypeOAuth:
+	case AccountTypeOAuth, AccountTypeSetupToken:
 		return chatgptCodexAlphaSearchURL, nil
 	case AccountTypeAPIKey:
 		baseURL := account.GetOpenAIBaseURL()

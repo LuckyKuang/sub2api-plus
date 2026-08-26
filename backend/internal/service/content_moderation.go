@@ -85,7 +85,7 @@ const (
 	contentModerationKeyRateLimitFreezeDuration  = time.Minute
 	contentModerationKeyAuthFreezeDuration       = 10 * time.Minute
 	contentModerationKeyHTTPErrorFreezeDuration  = 10 * time.Second
-	maxContentModerationInputImages              = 1
+	maxContentModerationInputImages              = 16
 	maxContentModerationTestImages               = maxContentModerationInputImages
 	maxContentModerationTestImageBytes           = 8 * 1024 * 1024
 	maxContentModerationTestImageDataURLBytes    = 12 * 1024 * 1024
@@ -176,6 +176,9 @@ type ContentModerationConfig struct {
 	// 当次不判定封号，且历史 cyber 行在 CountFlaggedByUserSince 中被排除。
 	// 默认 false（计入，与历史行为一致；旧配置 JSON 无此字段时反序列化为 false）。
 	CyberPolicyExcludeFromBanCount bool `json:"cyber_policy_exclude_from_ban_count"`
+	// CyberPolicyAutoBanEnabled 为 true 时，上游 cyber_policy 命中立即停用：
+	// 普通用户封账号；管理员只禁用触发该请求的 API Key。默认 false。
+	CyberPolicyAutoBanEnabled bool `json:"cyber_policy_auto_ban_enabled"`
 }
 
 type ContentModerationConfigView struct {
@@ -211,6 +214,7 @@ type ContentModerationConfigView struct {
 	KeywordBlockingMode            string                          `json:"keyword_blocking_mode"`
 	ModelFilter                    ContentModerationModelFilter    `json:"model_filter"`
 	CyberPolicyExcludeFromBanCount bool                            `json:"cyber_policy_exclude_from_ban_count"`
+	CyberPolicyAutoBanEnabled      bool                            `json:"cyber_policy_auto_ban_enabled"`
 }
 
 type ContentModerationAPIKeyStatus struct {
@@ -303,6 +307,7 @@ type UpdateContentModerationConfigInput struct {
 	KeywordBlockingMode            *string                       `json:"keyword_blocking_mode"`
 	ModelFilter                    *ContentModerationModelFilter `json:"model_filter"`
 	CyberPolicyExcludeFromBanCount *bool                         `json:"cyber_policy_exclude_from_ban_count"`
+	CyberPolicyAutoBanEnabled      *bool                         `json:"cyber_policy_auto_ban_enabled"`
 }
 
 type ContentModerationModelFilter struct {
@@ -518,6 +523,7 @@ type ContentModerationService struct {
 	userRepo                 UserRepository
 	proxyRepo                ProxyRepository
 	authCacheInvalidator     APIKeyAuthCacheInvalidator
+	apiKeyRepo               contentModerationAPIKeyMutator
 	emailService             *EmailService
 	httpClient               *http.Client
 	moderationProxyCache     atomic.Pointer[moderationProxyURLCacheEntry]
@@ -587,6 +593,22 @@ type contentModerationKeyHealth struct {
 	SyncLatencyMS  int64
 }
 
+func ProvideContentModerationService(
+	settingRepo SettingRepository,
+	repo ContentModerationRepository,
+	hashCache ContentModerationHashCache,
+	groupRepo GroupRepository,
+	userRepo UserRepository,
+	proxyRepo ProxyRepository,
+	authCacheInvalidator APIKeyAuthCacheInvalidator,
+	emailService *EmailService,
+	apiKeyRepo APIKeyRepository,
+) *ContentModerationService {
+	svc := NewContentModerationService(settingRepo, repo, hashCache, groupRepo, userRepo, proxyRepo, authCacheInvalidator, emailService)
+	svc.SetAPIKeyRepository(apiKeyRepo)
+	return svc
+}
+
 func NewContentModerationService(
 	settingRepo SettingRepository,
 	repo ContentModerationRepository,
@@ -618,6 +640,18 @@ func NewContentModerationService(
 		go svc.cleanupWorker()
 	}
 	return svc
+}
+
+type contentModerationAPIKeyMutator interface {
+	GetByID(ctx context.Context, id int64) (*APIKey, error)
+	Update(ctx context.Context, key *APIKey, fields APIKeyUpdateFields) error
+}
+
+func (s *ContentModerationService) SetAPIKeyRepository(repo contentModerationAPIKeyMutator) {
+	if s == nil {
+		return
+	}
+	s.apiKeyRepo = repo
 }
 
 func (s *ContentModerationService) GetConfig(ctx context.Context) (*ContentModerationConfigView, error) {
@@ -715,6 +749,9 @@ func (s *ContentModerationService) UpdateConfig(ctx context.Context, input Updat
 	}
 	if input.CyberPolicyExcludeFromBanCount != nil {
 		cfg.CyberPolicyExcludeFromBanCount = *input.CyberPolicyExcludeFromBanCount
+	}
+	if input.CyberPolicyAutoBanEnabled != nil {
+		cfg.CyberPolicyAutoBanEnabled = *input.CyberPolicyAutoBanEnabled
 	}
 	if input.Thresholds != nil {
 		cfg.Thresholds = mergeContentModerationThresholds(ContentModerationDefaultThresholds(), *input.Thresholds)
@@ -2278,6 +2315,7 @@ func defaultContentModerationConfig() *ContentModerationConfig {
 			Models: []string{},
 		},
 		CyberPolicyExcludeFromBanCount: false,
+		CyberPolicyAutoBanEnabled:      false,
 	}
 }
 
@@ -2610,6 +2648,7 @@ func (s *ContentModerationService) configView(cfg *ContentModerationConfig) *Con
 		KeywordBlockingMode:            cfg.KeywordBlockingMode,
 		ModelFilter:                    cloneContentModerationModelFilter(cfg.ModelFilter),
 		CyberPolicyExcludeFromBanCount: cfg.CyberPolicyExcludeFromBanCount,
+		CyberPolicyAutoBanEnabled:      cfg.CyberPolicyAutoBanEnabled,
 	}
 }
 
@@ -3157,7 +3196,8 @@ type CyberPolicyRecordInput struct {
 }
 
 // RecordCyberPolicyEvent 把一次 cyber_policy 硬阻断写入风控中心日志、计入违规计数、
-// 并给用户发邮件。当前请求已由 gateway 透传给用户；本方法仅做事后记录/通知/计数。
+// 并给用户发邮件。当次请求已由 gateway 透传；停用动作由 EnforceCyberPolicyAutoBan 同步执行，
+// 本方法负责记账/通知，并在已停用账号上补发封禁邮件。
 // 受 risk_control_enabled 总开关和内容审核 group/model scope 约束，
 // 不受内容审核 Enabled/Mode/sample 约束。
 func (s *ContentModerationService) RecordCyberPolicyEvent(ctx context.Context, in CyberPolicyRecordInput) {
@@ -3221,11 +3261,23 @@ func (s *ContentModerationService) RecordCyberPolicyEvent(ctx context.Context, i
 		Stage:           "post_upstream",
 		BodyBytes:       len(in.UpstreamMessage) + len(in.UpstreamBody),
 	}
-	// 开关开时 cyber_policy 不参与封号计数：当次不判定（此处跳过），
-	// 历史行由 CountFlaggedByUserSince 的 excludeCyberPolicy 排除。
+	// 独立开关立即停用；未开启时仍可按通用次数计入封号。
+	// 立即停用打开时强制不计入通用封号次数，避免双计。
 	autoBanned := false
-	if !cfg.CyberPolicyExcludeFromBanCount {
+	if cfg.CyberPolicyAutoBanEnabled {
+		autoBanned = s.applyCyberPolicyAutoBan(ctx, log)
+	} else if !cfg.CyberPolicyExcludeFromBanCount {
 		autoBanned = s.applyFlaggedAccountSideEffects(ctx, cfg, log)
+	}
+	sendAccountDisabledNotice := autoBanned
+	if !sendAccountDisabledNotice && cfg.CyberPolicyAutoBanEnabled && log.UserID != nil && s.userRepo != nil {
+		if user, err := s.userRepo.GetByID(ctx, *log.UserID); err == nil && user != nil && !user.IsAdmin() && user.Status == StatusDisabled {
+			sendAccountDisabledNotice = true
+			log.AutoBanned = true
+			if log.ViolationCount == 0 {
+				log.ViolationCount = 1
+			}
+		}
 	}
 	log.EmailSent = false
 	logPersisted := true
@@ -3240,7 +3292,7 @@ func (s *ContentModerationService) RecordCyberPolicyEvent(ctx context.Context, i
 		} else {
 			emailSent = true
 		}
-		if autoBanned {
+		if sendAccountDisabledNotice {
 			if err := s.sendAccountDisabledEmail(ctx, cfg, log); err != nil {
 				slog.Warn("content_moderation.cyber_ban_email_failed", contentModerationExceptionAttrs(log, "cyber_ban_email_failed", contentModerationErrorKind(err))...)
 			} else {
@@ -3254,6 +3306,105 @@ func (s *ContentModerationService) RecordCyberPolicyEvent(ctx context.Context, i
 			slog.Warn("content_moderation.cyber_update_email_sent_failed", attrs...)
 		}
 	}
+}
+
+func (s *ContentModerationService) EnforceCyberPolicyAutoBan(ctx context.Context, in CyberPolicyRecordInput) {
+	if s == nil || !in.CyberPolicyAutoBanRequested() {
+		return
+	}
+	runtimeSnapshot, err := s.loadRuntimeSnapshot(ctx)
+	if err != nil || runtimeSnapshot == nil || !runtimeSnapshot.riskControlEnabled {
+		return
+	}
+	cfg := runtimeSnapshot.config
+	if cfg == nil || !cfg.CyberPolicyAutoBanEnabled {
+		return
+	}
+	if !cfg.includesGroup(in.GroupID) || !cfg.includesModel(in.Model) {
+		return
+	}
+	log := &ContentModerationLog{}
+	if in.UserID > 0 {
+		log.UserID = &in.UserID
+	}
+	if in.APIKeyID > 0 {
+		log.APIKeyID = &in.APIKeyID
+	}
+	log.RequestID = in.RequestID
+	log.Endpoint = in.Endpoint
+	log.Model = in.Model
+	log.Protocol = ContentModerationProtocolOpenAIResponses
+	log.Stage = "post_upstream"
+	_ = s.applyCyberPolicyAutoBan(ctx, log)
+}
+
+func (in CyberPolicyRecordInput) CyberPolicyAutoBanRequested() bool {
+	return in.UserID > 0
+}
+
+func (s *ContentModerationService) applyCyberPolicyAutoBan(ctx context.Context, log *ContentModerationLog) bool {
+	if s == nil || log == nil || s.userRepo == nil || log.UserID == nil || *log.UserID <= 0 {
+		return false
+	}
+	user, err := s.userRepo.GetByID(ctx, *log.UserID)
+	if err != nil {
+		slog.Warn("content_moderation.cyber_ban_get_user_failed", contentModerationExceptionAttrs(log, "cyber_ban_get_user_failed", contentModerationErrorKind(err))...)
+		return false
+	}
+	if user.IsAdmin() {
+		return s.disableTriggeringAPIKey(ctx, log)
+	}
+	applied := false
+	if user.Status != StatusDisabled {
+		user.Status = StatusDisabled
+		if err := s.userRepo.Update(ctx, user, UserUpdateFields{Status: true}); err != nil {
+			slog.Warn("content_moderation.cyber_ban_update_user_failed", contentModerationExceptionAttrs(log, "cyber_ban_update_user_failed", contentModerationErrorKind(err))...)
+			return false
+		}
+		if s.authCacheInvalidator != nil {
+			s.authCacheInvalidator.InvalidateAuthCacheByUserID(ctx, *log.UserID)
+		}
+		applied = true
+	}
+	log.AutoBanned = true
+	log.ViolationCount = 1
+	return applied
+}
+
+func (s *ContentModerationService) disableTriggeringAPIKey(ctx context.Context, log *ContentModerationLog) bool {
+	if s == nil || log == nil {
+		return false
+	}
+	if log.APIKeyID == nil || *log.APIKeyID <= 0 {
+		slog.Error("content_moderation.cyber_admin_key_missing", contentModerationExceptionAttrs(log, "cyber_admin_key_missing", "audit_dependency")...)
+		return false
+	}
+	if s.apiKeyRepo == nil {
+		slog.Error("content_moderation.cyber_admin_key_repo_missing", contentModerationExceptionAttrs(log, "cyber_admin_key_repo_missing", "audit_dependency")...)
+		return false
+	}
+	apiKey, err := s.apiKeyRepo.GetByID(ctx, *log.APIKeyID)
+	if err != nil {
+		slog.Error("content_moderation.cyber_admin_key_get_failed", append(contentModerationExceptionAttrs(log, "cyber_admin_key_get_failed", contentModerationErrorKind(err)), "api_key_id", *log.APIKeyID)...)
+		return false
+	}
+	if apiKey.UserID != *log.UserID {
+		slog.Error("content_moderation.cyber_admin_key_owner_mismatch", append(contentModerationExceptionAttrs(log, "cyber_admin_key_owner_mismatch", "audit_dependency"), "api_key_id", *log.APIKeyID)...)
+		return false
+	}
+	if apiKey.Status != StatusAPIKeyDisabled {
+		apiKey.Status = StatusAPIKeyDisabled
+		if err := s.apiKeyRepo.Update(ctx, apiKey, APIKeyUpdateFields{Status: true}); err != nil {
+			slog.Error("content_moderation.cyber_admin_key_update_failed", append(contentModerationExceptionAttrs(log, "cyber_admin_key_update_failed", contentModerationErrorKind(err)), "api_key_id", *log.APIKeyID)...)
+			return false
+		}
+	}
+	if s.authCacheInvalidator != nil && strings.TrimSpace(apiKey.Key) != "" {
+		s.authCacheInvalidator.InvalidateAuthCacheByKey(ctx, apiKey.Key)
+	}
+	log.AutoBanned = true
+	log.ViolationCount = 1
+	return false
 }
 
 func (s *ContentModerationService) sendCyberPolicyEmail(ctx context.Context, log *ContentModerationLog) error {

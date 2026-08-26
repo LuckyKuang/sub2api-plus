@@ -386,3 +386,31 @@ func TestExtractContentModerationInput_LiveSessionInstructionsAreNotAudited(t *t
 	require.Empty(t, input.Text)
 	require.Empty(t, input.Images)
 }
+
+func TestExtractContentModerationInput_KeepsBothCurrentUserImages(t *testing.T) {
+	body := []byte(`{"input":[{"type":"message","role":"user","content":[
+		{"type":"input_text","text":"你看一下DELAY模块"},
+		{"type":"input_image","image_url":"https://example.test/one.png"},
+		{"type":"input_image","image_url":"https://example.test/two.png"}
+	]}]}`)
+	input := ExtractContentModerationInput(ContentModerationProtocolOpenAIResponses, body)
+	require.Equal(t, "你看一下DELAY模块", input.Text)
+	require.Equal(t, []string{"https://example.test/one.png", "https://example.test/two.png"}, input.Images)
+
+	payload, ok := input.ModerationInput().([]moderationAPIInputPart)
+	require.True(t, ok)
+	require.Len(t, payload, 3)
+	require.Equal(t, "text", payload[0].Type)
+	require.Equal(t, "你看一下DELAY模块", payload[0].Text)
+	require.Equal(t, "https://example.test/one.png", payload[1].ImageURL.URL)
+	require.Equal(t, "https://example.test/two.png", payload[2].ImageURL.URL)
+}
+
+func TestLimitContentModerationImagesKeepsFirstSixteen(t *testing.T) {
+	images := make([]string, 18)
+	for i := range images {
+		images[i] = "https://example.test/" + string(rune('a'+i)) + ".png"
+	}
+	got := limitContentModerationImages(images)
+	require.Equal(t, images[:16], got)
+}

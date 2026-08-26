@@ -54,11 +54,11 @@ func Do(client *http.Client, req *http.Request) (*http.Response, error) {
 	}
 	if req == nil || !Active(req.Context()) {
 		// #nosec G704 -- this observability wrapper neither creates nor controls request destinations.
-		return client.Do(req)
+		return client.Do(req) //nolint:gosec // G704: 通用埋点包装器，不构造 URL；请求由调用方构造，SSRF 信任边界在调用方
 	}
 	startedAt := time.Now()
 	// #nosec G704 -- endpoint validation belongs to the caller that constructs the request.
-	response, err := client.Do(req)
+	response, err := client.Do(req) //nolint:gosec // G704: 同上
 	RecordDependency(req.Context(), dependencyModule(req), startedAt, time.Now())
 	return response, err
 }

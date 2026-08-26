@@ -1,32 +1,31 @@
-Sub2API Plus v0.1.178+custom.005
+Sub2API Plus v0.1.183+custom.001
 
 ## Highlights
 
-- Keep Content Moderation on current direct-user text and images.
-- Restore Prompt Audit conversation-text selection to `v0.1.177+custom.003`, so ordinary Codex `hi` requests are not blocked by client tool schemas.
-- Continue sharing one canonical extractor, without converting extraction failures into policy blocks.
-
-## Changed
-
-- Prompt Audit full/async scans messages, instructions/system context, reusable prompt variables, reasoning, and search/embedding/media prompts.
-- Prompt Audit no longer sends static `tools`/`functions` schemas, structured tool-call arguments, or tool/function outputs to Qwen3Guard.
-- Blocking latest-turn-only again scans only the latest user text plus the nearest preceding assistant/model output.
+- Import official Sub2API v0.1.183 on top of the completed Plus v0.1.182 integration.
+- Keep Plus Prompt Audit conversation-text selection, admin user support view, IP access master switch, Codex mode-only fingerprint with `device` default, usage TPS, and release tooling.
+- Prompt Audit blocking still scans only the latest user turn; content moderation still sends up to 16 current-user images, and the default-off `cyber_policy` auto-ban remains.
 
 ## Fixed
 
-- Stop treating Codex and other client tool definitions as jailbreak prompt text.
-- Keep `hi` plus a large tool schema from producing a Prompt Audit block while still scanning jailbreak text in user/system/assistant conversation content.
+- Codex `session-id` affinity now takes priority over `session_id` on sticky routing and WebSocket session resolution.
+- OpenAI sticky sessions keep a one-request capacity spillover temporary, so a full wait queue does not rewrite the durable account binding.
+- OpenAI OAuth 429 quota-exhausted responses can pause the account instead of treating every 429 as a same-account retry.
+- Responses custom tool-call item IDs stay typed after restore.
+- Email rebind adds alias and concurrency guards.
+- Kimi concurrency 403 stays recoverable; Antigravity compatible token limits are clamped; channel-monitor v2 composite aggregation uses NULLIF.
 
 ## Compatibility and migration
 
-- No database migrations. Existing Prompt Audit endpoints, scanners, and jailbreak policy are unchanged; only the scanned conversation-text selection is restored.
-- Content Moderation behavior is unchanged.
+- Published Plus migrations 224/225/226/228 are unchanged; prefix 227 remains unused.
+- Upgrades from v0.1.178+custom.005 apply Plus migrations 229–233. Official v0.1.183 adds no additional SQL migrations.
+- Experimental OAuth transport plugins remain disabled by default.
 
 ## Known issues
 
-- None known.
+- OAuth transport plugins are experimental and default off.
 
 ## Upstream baseline
 
-Official release: v0.1.178
-Official commit: e0c48a19ed794a565e3858662520afe0a1f9f0ba
+Official release: v0.1.183
+Official commit: e8cb019fabf8b55199436229044cbf9aa7a82564

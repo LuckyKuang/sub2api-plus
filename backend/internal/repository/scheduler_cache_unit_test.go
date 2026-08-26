@@ -309,7 +309,7 @@ func TestBuildSchedulerMetadataAccount_KeepsOpenAIWSFlags(t *testing.T) {
 			"openai_ws_force_http":                         true,
 			"openai_responses_mode":                        "force_chat_completions",
 			"openai_responses_supported":                   false,
-			service.CodexFingerprintModeExtraKey:            "session",
+			service.CodexFingerprintModeExtraKey:           "session",
 			"mixed_scheduling":                             true,
 			"unused_large_field":                           "drop-me",
 		},

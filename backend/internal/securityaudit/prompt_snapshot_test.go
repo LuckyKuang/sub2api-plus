@@ -319,12 +319,17 @@ func TestPromptSnapshotUnknownItemPassesEmptyAndKeepsExtractedSibling(t *testing
 	}, true)
 	require.ErrorIs(t, err, ErrNoPromptText)
 
-	snapshot, err := ExtractBlockingPromptSnapshot(Request{
+	_, err = ExtractBlockingPromptSnapshot(Request{
 		Protocol: "openai_live",
 		Body:     []byte(`{"type":"session.update","session":{"instructions":"safe live text","future_payload":"must not be hidden"}}`),
 	}, true)
+	require.ErrorIs(t, err, ErrNoPromptText)
+	fullLive, err := ExtractPromptSnapshot(Request{
+		Protocol: "openai_live",
+		Body:     []byte(`{"type":"session.update","session":{"instructions":"safe live text","future_payload":"must not be hidden"}}`),
+	})
 	require.NoError(t, err)
-	require.Contains(t, snapshot.ScanText, "safe live text")
+	require.Contains(t, fullLive.ScanText, "safe live text")
 }
 func TestBlockingPromptSnapshotUsesLatestUserAndPreviousOutputWithoutToolSchema(t *testing.T) {
 	tests := []struct {
@@ -428,13 +433,13 @@ func TestPromptSnapshotIncludesClientControlledInstructions(t *testing.T) {
 	}
 }
 
-func TestBlockingPromptSnapshotLimitsInputToLatestUserAndPreviousOutput(t *testing.T) {
+func TestBlockingPromptSnapshotLimitsInputToLatestUser(t *testing.T) {
 	tests := []struct {
 		name, protocol, body, want string
 		omitted                    []string
 	}{
 		{
-			name:     "chat keeps multipart latest user and prior assistant",
+			name:     "chat keeps multipart latest user without prior assistant",
 			protocol: "openai_chat_completions",
 			body: `{"messages":[
 				{"role":"system","content":"system instruction"},
@@ -444,19 +449,19 @@ func TestBlockingPromptSnapshotLimitsInputToLatestUserAndPreviousOutput(t *testi
 				{"role":"assistant","content":"previous assistant output"},
 				{"role":"user","content":[{"type":"text","text":"latest user first part"},{"type":"text","text":"latest user second part"}]}
 			]}`,
-			want:    "latest user first part\n\nlatest user second part" + promptAuditPrioritySeparator + "previous assistant output",
-			omitted: []string{"system instruction", "older user input", "older assistant output", "tool payload"},
+			want:    "latest user first part\n\nlatest user second part",
+			omitted: []string{"system instruction", "older user input", "older assistant output", "tool payload", "previous assistant output"},
 		},
 		{
-			name:     "gemini keeps prior model output",
+			name:     "gemini keeps latest user without prior model output",
 			protocol: "gemini",
 			body: `{"systemInstruction":{"parts":[{"text":"system instruction"}]},"contents":[
 				{"role":"user","parts":[{"text":"older user input"}]},
 				{"role":"model","parts":[{"text":"previous model output"}]},
 				{"role":"user","parts":[{"text":"latest user input"}]}
 			]}`,
-			want:    "latest user input" + promptAuditPrioritySeparator + "previous model output",
-			omitted: []string{"system instruction", "older user input"},
+			want:    "latest user input",
+			omitted: []string{"system instruction", "older user input", "previous model output"},
 		},
 	}
 	for _, tt := range tests {
@@ -464,6 +469,7 @@ func TestBlockingPromptSnapshotLimitsInputToLatestUserAndPreviousOutput(t *testi
 			snapshot, err := ExtractBlockingPromptSnapshot(Request{Protocol: tt.protocol, Body: []byte(tt.body)}, true)
 			require.NoError(t, err)
 			require.Equal(t, tt.want, snapshot.ScanText)
+			require.Equal(t, 1, snapshot.MessageCount)
 			for _, omitted := range tt.omitted {
 				require.NotContains(t, snapshot.ScanText, omitted)
 			}
@@ -487,31 +493,37 @@ func TestResponsesOutputTextIncludedInFullAndLatestTurnSnapshots(t *testing.T) {
 
 	latestTurn, err := ExtractBlockingPromptSnapshot(req, true)
 	require.NoError(t, err)
-	require.Equal(t, "captured latest user input"+promptAuditPrioritySeparator+"captured previous assistant output", latestTurn.ScanText)
-	require.Equal(t, 2, latestTurn.MessageCount)
+	require.Equal(t, "captured latest user input", latestTurn.ScanText)
+	require.Equal(t, 1, latestTurn.MessageCount)
 	require.NotContains(t, latestTurn.ScanText, "earlier user input")
+	require.NotContains(t, latestTurn.ScanText, "captured previous assistant output")
 }
 
-func TestBlockingPromptSnapshotPreservesFullScopeByDefaultAndWithoutUserInput(t *testing.T) {
+func TestBlockingPromptSnapshotAlwaysUsesLatestUserAndSkipsInstructionOnly(t *testing.T) {
 	req := Request{Protocol: "openai_chat_completions", Body: []byte(`{"messages":[{"role":"system","content":"system instruction"},{"role":"user","content":"older user input"},{"role":"assistant","content":"previous output"},{"role":"user","content":"latest user input"}]}`)}
 	full, err := ExtractPromptSnapshot(req)
 	require.NoError(t, err)
+	require.Contains(t, full.ScanText, "system instruction")
+	require.Contains(t, full.ScanText, "previous output")
+
 	defaultBlocking, err := ExtractBlockingPromptSnapshot(req, false)
 	require.NoError(t, err)
-	require.Equal(t, full, defaultBlocking)
+	require.Equal(t, "latest user input", defaultBlocking.ScanText)
+	require.NotContains(t, defaultBlocking.ScanText, "system instruction")
+	require.NotContains(t, defaultBlocking.ScanText, "previous output")
+	require.NotContains(t, defaultBlocking.ScanText, "older user input")
 
 	noUser := Request{Protocol: "openai_chat_completions", Body: []byte(`{"messages":[{"role":"system","content":"system instruction"},{"role":"assistant","content":"assistant output"}]}`)}
 	fullWithoutUser, err := ExtractPromptSnapshot(noUser)
 	require.NoError(t, err)
-	narrowWithoutUser, err := ExtractBlockingPromptSnapshot(noUser, true)
-	require.NoError(t, err)
 	require.Contains(t, fullWithoutUser.ScanText, "system instruction")
-	require.Equal(t, fullWithoutUser, narrowWithoutUser)
+	_, err = ExtractBlockingPromptSnapshot(noUser, true)
+	require.ErrorIs(t, err, ErrNoPromptText)
 }
 
 func TestPromptSnapshotIgnoresCodexToolSchemaForOrdinaryUserText(t *testing.T) {
 	body := []byte(`{
-		"instructions":"You are Codex",
+		"instructions":"You are Codex ... sandbox ... require_escalated ...",
 		"tools":[{"type":"function","name":"exec","description":"Run JavaScript code to orchestrate/compose tool calls. require_escalated sandbox_permissions jailbreak"}],
 		"input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"hi"}]}]
 	}`)
@@ -521,14 +533,16 @@ func TestPromptSnapshotIgnoresCodexToolSchemaForOrdinaryUserText(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, full.ScanText, "hi")
 	require.Contains(t, full.ScanText, "You are Codex")
-	require.NotContains(t, full.ScanText, "require_escalated")
 	require.NotContains(t, full.ScanText, "Run JavaScript")
 
-	latest, err := ExtractBlockingPromptSnapshot(req, true)
+	latest, err := ExtractBlockingPromptSnapshot(req, false)
 	require.NoError(t, err)
 	require.Equal(t, "hi", latest.ScanText)
+	require.Equal(t, 1, latest.MessageCount)
+	require.Equal(t, []string{"hi"}, SplitRunes(latest.ScanText, 8))
 	require.NotContains(t, latest.ScanText, "You are Codex")
 	require.NotContains(t, latest.ScanText, "require_escalated")
+	require.NotContains(t, latest.ScanText, "sandbox")
 }
 
 func TestBuildPromptPreviewWithholdsMajorityOfOrdinaryText(t *testing.T) {

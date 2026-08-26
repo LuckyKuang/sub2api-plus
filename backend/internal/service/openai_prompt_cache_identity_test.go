@@ -312,8 +312,12 @@ func TestOpenAIResponsesCompactPromptCacheFinalization(t *testing.T) {
 			require.NotEmpty(t, identity)
 			require.Equal(t, identity, upstream.lastReq.Header.Get(codexSessionIDHeader))
 			require.Equal(t, identity, upstream.lastReq.Header.Get("session_id"))
-			require.Equal(t, "thread-compact-1", upstream.lastReq.Header.Get("thread-id"))
-			require.Equal(t, "thread-compact-1", upstream.lastReq.Header.Get("x-client-request-id"))
+			expectedThreadID := "thread-compact-1"
+			if tt.account.UsesOpenAICodexProtocol() {
+				expectedThreadID = scopeCodexAccountIdentityValue(&tt.account, 77, "thread", expectedThreadID)
+			}
+			require.Equal(t, expectedThreadID, upstream.lastReq.Header.Get("thread-id"))
+			require.Equal(t, expectedThreadID, upstream.lastReq.Header.Get("x-client-request-id"))
 			require.Equal(t, tt.wantOptions, gjson.GetBytes(upstream.lastBody, "prompt_cache_options").Exists())
 		})
 	}

@@ -92,7 +92,24 @@ func (s *OpenAIGatewayService) ensureOpenAIResponsesPromptCacheIdentity(
 // namespace and formats it as a deterministic UUID. The result stays well
 // below the public 64-character prompt_cache_key limit.
 func (s *OpenAIGatewayService) resolveOpenAIPromptCacheIdentity(c *gin.Context, account *Account, raw string) (string, error) {
-	namespaced, err := s.resolveOpenAIUpstreamSessionID(c, account, raw)
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", nil
+	}
+
+	var (
+		namespaced string
+		err        error
+	)
+	if account != nil && account.IsOpenAIOAuthSessionSharingEnabled() {
+		namespaced, err = s.resolveOpenAIUpstreamSessionID(c, account, raw)
+	} else {
+		namespaced = isolateOpenAIUpstreamSessionID(
+			getAPIKeyIDFromContext(c),
+			codexAccountIdentitySource(c, account),
+			raw,
+		)
+	}
 	if err != nil || namespaced == "" {
 		return "", err
 	}
@@ -189,7 +206,7 @@ func setOpenAIUpstreamSessionIdentity(headers http.Header, identity string) {
 // prompt_cache_key authoritative after fingerprinting and account-level header
 // overrides have run. This preserves Codex's body/header cache identity even
 // when an earlier stage supplied a different session identity.
-func (s *OpenAIGatewayService) alignOpenAIUpstreamSessionIdentityFromBody(
+func (s *OpenAIGatewayService) alignOpenAIUpstreamSessionIdentityFromBody( //nolint:unused // compact/session identity alignment helper
 	c *gin.Context,
 	account *Account,
 	headers http.Header,

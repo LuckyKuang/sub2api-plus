@@ -140,7 +140,7 @@ func TestOpenAIAgentIdentityPassthroughKeepsSessionAndPromptCacheHeaders(t *test
 	require.NotEqual(t, "client-conversation", req.Header.Get("conversation_id"))
 	require.Equal(t, cacheIdentity, req.Header.Get(codexSessionIDHeader))
 	require.Equal(t, cacheIdentity, req.Header.Get("session_id"))
-	require.Equal(t, generateSessionUUID(isolateOpenAISessionID(0, "client-conversation")), req.Header.Get("conversation_id"))
+	require.Equal(t, generateSessionUUID(isolateOpenAIUpstreamSessionID(0, account, "client-conversation")), req.Header.Get("conversation_id"))
 	requestBody, err := io.ReadAll(req.Body)
 	require.NoError(t, err)
 	require.Equal(t, cacheIdentity, gjson.GetBytes(requestBody, "prompt_cache_key").String())
@@ -153,7 +153,7 @@ func TestOpenAIAgentIdentityPassthroughKeepsSessionAndPromptCacheHeaders(t *test
 		Platform: PlatformOpenAI,
 		Type:     AccountTypeOAuth,
 		Credentials: map[string]any{
-			"chatgpt_account_id": "account-oauth-passthrough",
+			"chatgpt_account_id": "account-agent-passthrough",
 		},
 	}
 	oauthRecorder := httptest.NewRecorder()

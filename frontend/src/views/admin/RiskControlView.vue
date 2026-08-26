@@ -904,6 +904,13 @@
                 </div>
                 <Toggle v-model="configForm.auto_ban_enabled" />
               </div>
+              <div class="flex items-center justify-between rounded-lg border border-gray-100 p-4 dark:border-dark-700">
+                <div>
+                  <p class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.riskControl.cyberPolicyAutoBan') }}</p>
+                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.cyberPolicyAutoBanHint') }}</p>
+                </div>
+                <Toggle v-model="configForm.cyber_policy_auto_ban_enabled" />
+              </div>
               <div class="flex items-center justify-between rounded-lg border border-gray-100 p-4 dark:border-dark-700 lg:col-span-2">
                 <div>
                   <p class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.riskControl.cyberPolicyExcludeBan') }}</p>
@@ -1189,7 +1196,7 @@ type RiskThresholdRow = {
   defaultValue: number
 }
 
-const maxModerationTestImages = 1
+const maxModerationTestImages = 16
 const maxModerationTestImageSize = 8 * 1024 * 1024
 const maxVisibleApiKeyRows: number = 3
 const blockedKeywordMax = 10000
@@ -1264,6 +1271,7 @@ const configForm = reactive({
   block_message: defaultBlockMessage(),
   email_on_hit: true,
   auto_ban_enabled: true,
+  cyber_policy_auto_ban_enabled: false,
   cyber_policy_exclude_from_ban_count: false,
   ban_threshold: 10,
   violation_window_hours: 720,
@@ -1771,6 +1779,7 @@ function applyConfig(config: ContentModerationConfig) {
   configForm.block_message = config.block_message || defaultBlockMessage()
   configForm.email_on_hit = config.email_on_hit ?? true
   configForm.auto_ban_enabled = config.auto_ban_enabled ?? true
+  configForm.cyber_policy_auto_ban_enabled = config.cyber_policy_auto_ban_enabled ?? false
   configForm.cyber_policy_exclude_from_ban_count = config.cyber_policy_exclude_from_ban_count ?? false
   configForm.ban_threshold = config.ban_threshold || 10
   configForm.violation_window_hours = config.violation_window_hours || 720
@@ -1857,6 +1866,7 @@ async function saveConfig() {
       block_message: configForm.block_message || defaultBlockMessage(),
       email_on_hit: configForm.email_on_hit,
       auto_ban_enabled: configForm.auto_ban_enabled,
+      cyber_policy_auto_ban_enabled: configForm.cyber_policy_auto_ban_enabled,
       cyber_policy_exclude_from_ban_count: configForm.cyber_policy_exclude_from_ban_count,
       ban_threshold: Number(configForm.ban_threshold) || 10,
       violation_window_hours: Number(configForm.violation_window_hours) || 720,

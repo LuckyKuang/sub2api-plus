@@ -91,6 +91,7 @@ func TestPromptAuditUsesConversationTextWithoutToolSchema(t *testing.T) {
 		full     []string
 		latest   string
 		omit     []string
+		noLatest bool
 	}{
 		{
 			name: "assistant text is scanned but tool schema is not", protocol: service.ContentModerationProtocolOpenAIResponses,
@@ -109,17 +110,17 @@ func TestPromptAuditUsesConversationTextWithoutToolSchema(t *testing.T) {
 		},
 		{
 			name: "responses reusable prompt variables remain conversation text", protocol: service.ContentModerationProtocolOpenAIResponses,
-			body:   `{"prompt":{"id":"pmpt_1","variables":{"plain":"reusable variable","typed":{"type":"input_text","text":"typed variable"}}}}`,
-			full:   []string{"reusable variable", "typed variable"},
-			latest: "typed variable",
+			body:     `{"prompt":{"id":"pmpt_1","variables":{"plain":"reusable variable","typed":{"type":"input_text","text":"typed variable"}}}}`,
+			full:     []string{"reusable variable", "typed variable"},
+			noLatest: true,
 		},
 		{
 			name: "live initial session instructions remain conversation text", protocol: service.ContentModerationProtocolOpenAILive,
 			body: `{"model":"gpt-live-test","instructions":"live instructions",` +
 				`"input_audio_transcription":{"model":"gpt-4o-transcribe","prompt":"legacy transcription context"},` +
 				`"audio":{"input":{"transcription":{"model":"gpt-live-transcribe","prompt":"current transcription context","keywords":["premium plan","AC-42"]}}}}`,
-			full:   []string{"live instructions", "legacy transcription context", "current transcription context", "premium plan", "AC-42"},
-			latest: "live instructions",
+			full:     []string{"live instructions", "legacy transcription context", "current transcription context", "premium plan", "AC-42"},
+			noLatest: true,
 		},
 		{
 			name: "chat tool-role and tool-call arguments are omitted", protocol: service.ContentModerationProtocolOpenAIChat,
@@ -141,15 +142,21 @@ func TestPromptAuditUsesConversationTextWithoutToolSchema(t *testing.T) {
 				Protocol: test.protocol,
 				Body:     []byte(test.body),
 			}, true)
-			require.NoError(t, err)
+			if test.noLatest {
+				require.ErrorIs(t, err, securityaudit.ErrNoPromptText)
+			} else {
+				require.NoError(t, err)
+				require.Contains(t, latest.ScanText, test.latest)
+				for _, omitted := range test.omit {
+					require.NotContains(t, latest.ScanText, omitted)
+				}
+			}
 
 			for _, expected := range test.full {
 				require.Contains(t, full.ScanText, expected)
 			}
-			require.Contains(t, latest.ScanText, test.latest)
 			for _, omitted := range test.omit {
 				require.NotContains(t, full.ScanText, omitted)
-				require.NotContains(t, latest.ScanText, omitted)
 			}
 		})
 	}

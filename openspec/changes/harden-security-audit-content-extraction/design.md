@@ -20,7 +20,7 @@ Image{URL, Role, Source, Current, ClientControlled}
 
 ### 2. 两套引擎共享解析但保留选择策略
 
-Prompt Audit 消费规范化对话文本，恢复 `v0.1.177+custom.003` 的扫描范围：messages、instructions/system 上下文、reusable prompt variables、reasoning、search/embedding/media prompt。工具/函数定义、结构化 tool-call arguments 以及 tool/function outputs 仍由共享提取器规范化，但不进入 Prompt Audit 扫描，避免把 Codex 等客户端 schema 或工具结果当成用户越狱。启用 `blocking_latest_turn_only` 时，只扫描最新 user 文本及其最近的历史 assistant/model 输出。
+Prompt Audit 消费规范化对话文本，恢复 `v0.1.177+custom.003` 的扫描范围：messages、instructions/system 上下文、reusable prompt variables、reasoning、search/embedding/media prompt。工具/函数定义、结构化 tool-call arguments 以及 tool/function outputs 仍由共享提取器规范化，但不进入 Prompt Audit 扫描，避免把 Codex 等客户端 schema 或工具结果当成用户越狱。同步 blocking 固定只扫描最新 user 文本；无 role 的 Responses/Gemini/embeddings/media prompt 仍算 user。instructions、reasoning、prompt variables 和上一轮 assistant/model 不进入 blocking。`blocking_latest_turn_only` 仅保留配置兼容，异步全量审计仍存完整对话且不得回写成拦截。
 
 Content Moderation 在同一规范化结果上执行独立的直接用户归因选择，恢复 `v0.1.177+custom.003` 的产品语义：普通消息协议只选择最后一个当前直接用户消息中的文本和图片；Chat/Anthropic 要求显式 `user` 角色，Responses/Live/Gemini 允许其协议定义的无角色用户简写。Alpha Search 查询、Embeddings 字符串和 Images/media prompt 属于直接用户输入。instructions、system/developer 上下文、assistant/model 消息、reasoning、工具定义/调用/结果、审批响应、reusable prompt variables 及其图片均不进入 Content Moderation，避免把平台或外部内容归因为用户违规。Prompt Audit 继续扫描其中的对话文本，但不扫描静态工具 schema。
 

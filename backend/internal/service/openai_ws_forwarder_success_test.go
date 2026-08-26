@@ -596,6 +596,54 @@ func TestOpenAIGatewayService_BuildOpenAIWSHeadersPreservesCodexIdentity(t *test
 	require.Empty(t, headers.Get("X-Test"))
 }
 
+func TestOpenAIGatewayService_BuildOpenAIWSHeadersDeviceModePreservesNamespacedClientSessionIdentity(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodGet, "/v1/responses", nil)
+	c.Request.Header.Set("User-Agent", "codex_cli_rs/0.144.1")
+	c.Request.Header.Set("X-Codex-Installation-ID", "client-installation")
+	c.Request.Header.Set("X-Codex-Window-ID", "client-window")
+	c.Request.Header.Set("session-id", "client-session")
+	c.Request.Header.Set("thread-id", "client-thread")
+	c.Request.Header.Set("x-client-request-id", "client-request")
+
+	account := newTestOAuthAccount(1300, map[string]any{CodexFingerprintModeExtraKey: "device"})
+	ids := resolveCodexFingerprintIDsFromRequest(account, c.Request.Header)
+	require.NotNil(t, ids)
+	stageCodexFingerprintIDs(c, ids)
+
+	svc := &OpenAIGatewayService{}
+	headers, _, err := svc.buildOpenAIWSHeaders(
+		context.Background(),
+		c,
+		account,
+		"token",
+		OpenAIWSProtocolDecision{Transport: OpenAIUpstreamTransportResponsesWebsocketV2},
+		true,
+		"",
+		"",
+		"",
+		"",
+		"",
+	)
+
+	require.NoError(t, err)
+	require.Equal(t, ids.installationID, headers.Get("x-codex-installation-id"))
+	require.NotEqual(t, "client-installation", headers.Get("x-codex-installation-id"))
+	require.Equal(t, scopeCodexAccountIdentityValue(account, 0, "window", "client-window"), headers.Get("x-codex-window-id"))
+	expectedSessionIdentity, resolveErr := svc.resolveOpenAIUpstreamPromptCacheHeaderIdentity(
+		c,
+		account,
+		"client-session",
+	)
+	require.NoError(t, resolveErr)
+	require.Equal(t, expectedSessionIdentity, headers.Get("session-id"))
+	require.Equal(t, expectedSessionIdentity, headers.Get("session_id"))
+	require.Equal(t, scopeCodexAccountIdentityValue(account, 0, "thread", "client-thread"), headers.Get("thread-id"))
+	require.Equal(t, scopeCodexAccountIdentityValue(account, 0, "request", "client-request"), headers.Get("x-client-request-id"))
+}
+
 func TestLogOpenAIWSBindResponseAccountWarn(t *testing.T) {
 	require.NotPanics(t, func() {
 		logOpenAIWSBindResponseAccountWarn(1, 2, "resp_ok", nil)
@@ -932,9 +980,9 @@ func TestOpenAIGatewayService_Forward_WSv2_OAuthStoreFalseByDefault(t *testing.T
 	require.Equal(t, "http-ws-owner-installation", captureDialer.lastHeaders.Get("x-codex-installation-id"))
 	require.Equal(t, resolveConvergedThreadID(account, "sess-oauth-1"), captureDialer.lastHeaders.Get("thread-id"))
 	require.Equal(t, captureDialer.lastHeaders.Get("thread-id"), captureDialer.lastHeaders.Get("x-client-request-id"))
-	// OAuth session identity 使用租户隔离后的确定性 UUID；独立的
-	// conversation_id 继续使用既有隔离命名空间。测试中 apiKeyID=0。
-	expectedSessionIdentity := generateSessionUUID(isolateOpenAISessionID(0, "sess-oauth-1"))
+	// Header and body cache identities must use the same account-aware resolver.
+	expectedSessionIdentity, resolveErr := svc.resolveOpenAIUpstreamPromptCacheHeaderIdentity(c, account, "sess-oauth-1")
+	require.NoError(t, resolveErr)
 	require.Equal(t, expectedSessionIdentity, captureDialer.lastHeaders.Get(codexSessionIDHeader))
 	require.Equal(t, expectedSessionIdentity, captureDialer.lastHeaders.Get("session_id"))
 	require.Equal(t, isolateOpenAISessionID(0, "conv-oauth-1"), captureDialer.lastHeaders.Get("conversation_id"))
@@ -1158,8 +1206,9 @@ func TestOpenAIGatewayService_Forward_WSv2_HeaderSessionFallbackFromPromptCacheK
 	require.NotNil(t, result)
 	require.Equal(t, "resp_prompt_cache_key", result.RequestID)
 
-	// OAuth 账号的 prompt cache/session identity 应是租户隔离后的确定性 UUID。
-	expectedCacheIdentity := generateSessionUUID(isolateOpenAISessionID(0, "pcache_123"))
+	// Header and body cache identities must use the same account-aware resolver.
+	expectedCacheIdentity, resolveErr := svc.resolveOpenAIUpstreamPromptCacheHeaderIdentity(c, account, "pcache_123")
+	require.NoError(t, resolveErr)
 	require.Equal(t, expectedCacheIdentity, captureDialer.lastHeaders.Get(codexSessionIDHeader))
 	require.Equal(t, expectedCacheIdentity, captureDialer.lastHeaders.Get("session_id"))
 	require.Empty(t, captureDialer.lastHeaders.Get("conversation_id"))
@@ -1949,13 +1998,13 @@ func (c *openAIWSCaptureConn) WriteJSON(ctx context.Context, value any) error {
 		c.writes = append(c.writes, cloneMapStringAny(payload))
 	case json.RawMessage:
 		var parsed map[string]any
-		if err := json.Unmarshal(payload, &parsed); err == nil {
+		if err := decodeOpenAIJSONUseNumber(payload, &parsed); err == nil {
 			c.lastWrite = cloneMapStringAny(parsed)
 			c.writes = append(c.writes, cloneMapStringAny(parsed))
 		}
 	case []byte:
 		var parsed map[string]any
-		if err := json.Unmarshal(payload, &parsed); err == nil {
+		if err := decodeOpenAIJSONUseNumber(payload, &parsed); err == nil {
 			c.lastWrite = cloneMapStringAny(parsed)
 			c.writes = append(c.writes, cloneMapStringAny(parsed))
 		}
