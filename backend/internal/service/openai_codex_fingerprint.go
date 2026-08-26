@@ -47,13 +47,6 @@ func stagedCodexFingerprintIDs(c *gin.Context, account *Account) *codexFingerpri
 	return ids
 }
 
-// applyStagedCodexFingerprintHeaders 读取 context 暂存的收敛 ID 并改写出站头。
-// 非透传与透传两个请求构造器共用本函数，防止应用语义漂移。仅解析该
-// snapshot 的 OAuth 账号可读取，避免 stale context 跨账号 failover 泄漏。
-func applyStagedCodexFingerprintHeaders(c *gin.Context, account *Account, h http.Header) {
-	applyCodexFingerprintHeaders(h, stagedCodexFingerprintIDs(c, account))
-}
-
 func (s *OpenAIGatewayService) applyStagedCodexFingerprintHeadersForAccount(
 	ctx context.Context,
 	c *gin.Context,
