@@ -459,6 +459,12 @@ func (s *BillingService) initFallbackPricing() {
 		CacheReadPricePerTokenPriority: 0.3e-6,
 		SupportsCacheBreakdown:         false,
 	}
+	// Codex Auto Review：仅同名标准价，不含 Luna 的 cache-write / 长上下文 / Fast 档。
+	s.fallbackPrices["codex-auto-review"] = &ModelPricing{
+		InputPricePerToken:     0.2e-6,
+		OutputPricePerToken:    1.2e-6,
+		CacheReadPricePerToken: 0.02e-6,
+	}
 
 	// ============================================================
 	// 国产 LLM 兜底定价（数据源：各家官方定价页/USD 口径）
@@ -911,6 +917,10 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 		return s.fallbackPrices["doubao-embedding-vision"]
 	}
 
+	if modelLower == "codex-auto-review" {
+		return s.fallbackPrices["codex-auto-review"]
+	}
+
 	// OpenAI（GPT-5 / Codex 族）：仅匹配已知型号，避免未知 OpenAI 型号误计价。
 	if normalized := normalizeKnownOpenAICodexModel(modelLower); normalized != "" {
 		switch normalized {
@@ -1087,6 +1097,49 @@ func (s *BillingService) GetModelPricing(model string) (*ModelPricing, error) {
 	}
 
 	return nil, fmt.Errorf("%w for model: %s", ErrModelPricingUnavailable, model)
+}
+
+// GetCodexAutoReviewProtectedPricing returns the same-name auto-review price
+// for the unmapped Luna mismatch billing branch. Identified non-zero token
+// prices are kept; an all-zero dynamic row is replaced by the hardcoded
+// auto-review fallback. It never reads Luna or any other model price.
+func (s *BillingService) GetCodexAutoReviewProtectedPricing() (*ModelPricing, error) {
+	if s == nil {
+		return nil, fmt.Errorf("%w for model: %s", ErrModelPricingUnavailable, codexAutoReviewModel)
+	}
+	pricing, err := s.GetModelPricing(codexAutoReviewModel)
+	if err == nil && hasPositiveCodexAutoReviewTokenPrice(pricing) {
+		return pricing, nil
+	}
+	fallback := s.codexAutoReviewFallbackPricing()
+	if fallback == nil {
+		if err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("%w for model: %s", ErrModelPricingUnavailable, codexAutoReviewModel)
+	}
+	return s.applyModelSpecificPricingPolicy(codexAutoReviewModel, fallback), nil
+}
+
+func (s *BillingService) codexAutoReviewFallbackPricing() *ModelPricing {
+	if s == nil {
+		return nil
+	}
+	return s.fallbackPrices[codexAutoReviewModel]
+}
+
+func hasPositiveCodexAutoReviewTokenPrice(pricing *ModelPricing) bool {
+	if pricing == nil {
+		return false
+	}
+	return pricing.InputPricePerToken > 0 ||
+		pricing.OutputPricePerToken > 0 ||
+		pricing.CacheReadPricePerToken > 0 ||
+		pricing.CacheCreationPricePerToken > 0
+}
+
+func isCodexAutoReviewProtectedChannelOrGroupSource(resolved *ResolvedPricing) bool {
+	return resolved != nil && (resolved.Source == PricingSourceGroup || resolved.Source == PricingSourceChannel)
 }
 
 // GetModelPricingWithChannel 获取模型定价，渠道配置的价格覆盖默认值
