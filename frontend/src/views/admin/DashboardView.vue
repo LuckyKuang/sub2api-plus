@@ -115,7 +115,6 @@
                   <span>&middot;</span>
                   <span>{{ t('dashboard.output') }} {{ todayTokenShare(stats.today_output_tokens) }}</span>
                   <span v-if="todayCacheTokens > 0">&middot; {{ t('dashboard.cache') }} {{ todayTokenShare(todayCacheTokens) }}</span>
-                  <span v-if="todayCacheHitRate">&middot; {{ t('usage.cacheHitRate') }} {{ todayCacheHitRate }}</span>
                 </p>
                 <p class="text-xs">
                   <span
@@ -158,7 +157,6 @@
                   <span>&middot;</span>
                   <span>{{ t('dashboard.output') }} {{ totalTokenShare(stats.total_output_tokens) }}</span>
                   <span v-if="totalCacheTokens > 0">&middot; {{ t('dashboard.cache') }} {{ totalTokenShare(totalCacheTokens) }}</span>
-                  <span v-if="totalCacheHitRate">&middot; {{ t('usage.cacheHitRate') }} {{ totalCacheHitRate }}</span>
                 </p>
                 <p class="text-xs">
                   <span
@@ -377,7 +375,7 @@ import Select from '@/components/common/Select.vue'
 import ModelDistributionChart from '@/components/charts/ModelDistributionChart.vue'
 import TokenUsageTrend from '@/components/charts/TokenUsageTrend.vue'
 import { useBatchImageAccess } from '@/composables/useBatchImageAccess'
-import { formatPromptCacheHitRate, formatTokenShare, sumTokenBuckets } from '@/utils/tokenShare'
+import { formatTokenShare, sumTokenBuckets } from '@/utils/tokenShare'
 
 import {
   Chart as ChartJS,
@@ -433,18 +431,6 @@ const todayCacheTokens = computed(() => sumTokenBuckets(
 const totalCacheTokens = computed(() => sumTokenBuckets(
   stats.value?.total_cache_creation_tokens,
   stats.value?.total_cache_read_tokens,
-))
-
-const todayCacheHitRate = computed(() => formatPromptCacheHitRate(
-  stats.value?.today_input_tokens,
-  stats.value?.today_cache_read_tokens,
-  stats.value?.today_cache_creation_tokens,
-))
-
-const totalCacheHitRate = computed(() => formatPromptCacheHitRate(
-  stats.value?.total_input_tokens,
-  stats.value?.total_cache_read_tokens,
-  stats.value?.total_cache_creation_tokens,
 ))
 
 const todayTokenShare = (tokens: number | null | undefined): string =>

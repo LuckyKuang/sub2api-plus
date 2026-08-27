@@ -13,7 +13,6 @@ const messages: Record<string, string> = {
   'usage.cacheBreakdown': 'Cache Token Breakdown',
   'usage.cacheCreationTokensLabel': 'Cache Creation',
   'usage.cacheReadTokensLabel': 'Cache Read',
-  'usage.cacheHitRate': 'Cache Hit Rate',
   'usage.totalCost': 'Total Cost',
   'usage.accountCost': 'Cost',
   'usage.standardCost': 'Standard',
@@ -64,6 +63,6 @@ describe('UsageStatsCards', () => {
     expect(text).toContain('12')
     expect(text).toContain('Cache Read')
     expect(text).toContain('22')
-    expect(text).toContain('Cache Hit Rate: 16.4%')
+    expect(text).not.toContain('Cache Hit Rate')
   })
 })

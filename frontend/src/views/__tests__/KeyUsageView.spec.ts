@@ -53,7 +53,6 @@ const messages: Record<string, string> = {
   'keyUsage.todayTokens': 'Today Tokens',
   'keyUsage.todayCacheCreation': 'Today Cache Creation',
   'keyUsage.todayCacheRead': 'Today Cache Read',
-  'keyUsage.todayCacheHitRate': 'Today Cache Hit Rate',
   'keyUsage.todayCost': 'Today Cost',
   'keyUsage.rpmTpm': 'RPM / TPM',
   'keyUsage.totalRequests': 'Total Requests',
@@ -62,7 +61,6 @@ const messages: Record<string, string> = {
   'keyUsage.totalTokensLabel': 'Total Tokens',
   'keyUsage.totalCacheCreation': 'Total Cache Creation',
   'keyUsage.totalCacheRead': 'Total Cache Read',
-  'keyUsage.totalCacheHitRate': 'Total Cache Hit Rate',
   'keyUsage.totalCost': 'Total Cost',
   'keyUsage.avgDuration': 'Avg Duration',
   'keyUsage.querySuccess': 'Query successful',
@@ -198,8 +196,10 @@ describe('KeyUsageView daily detail', () => {
     expect(text).toContain('Date')
     expect(text).toContain('Cache Read')
     expect(text).toContain('Cache Write')
-    expect(text).toContain('Cache Hit Rate')
-    expect(text).toContain('21.4%')
+    expect(text).not.toContain('Cache Hit Rate')
+    expect(text).not.toContain('Today Cache Hit Rate')
+    expect(text).not.toContain('Total Cache Hit Rate')
+    expect(text).toContain('8.8%')
     expect(text).toContain('2026-05-19')
     expect(text).toContain('12')
     expect(text).toContain('100')

@@ -9,7 +9,7 @@ vi.mock('vue-i18n', async () => {
   return {
     ...actual,
     useI18n: () => ({
-      t: (key: string) => key === 'usage.cacheHitRate' ? 'Cache Hit Rate' : key,
+      t: (key: string) => key,
     }),
   }
 })
@@ -39,7 +39,7 @@ const stats: UserDashboardStats = {
 }
 
 describe('UserDashboardStats', () => {
-  it('shows prompt cache hit rate without output tokens in the denominator', () => {
+  it('shows token shares without prompt cache hit rate', () => {
     const wrapper = mount(UserDashboardStatsComponent, {
       props: {
         stats,
@@ -53,6 +53,12 @@ describe('UserDashboardStats', () => {
       },
     })
 
-    expect(wrapper.text()).toContain('Cache Hit Rate: 25.0%')
+    const text = wrapper.text()
+    expect(text).not.toContain('Cache Hit Rate')
+    expect(text).toContain('dashboard.input: 100')
+    expect(text).toContain('dashboard.output: 900')
+    expect(text).toContain('dashboard.cache: 100')
+    expect(text).toContain('(9.1%)')
+    expect(text).toContain('(81.8%)')
   })
 })

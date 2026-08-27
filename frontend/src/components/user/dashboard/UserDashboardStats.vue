@@ -83,7 +83,6 @@
             <span>/</span>
             <span>{{ t('dashboard.output') }}: {{ formatTokens(stats?.today_output_tokens || 0) }} <span v-if="todayTokenShare(stats?.today_output_tokens)" class="text-gray-400">({{ todayTokenShare(stats?.today_output_tokens) }})</span></span>
             <span v-if="todayCacheTokens > 0">/ {{ t('dashboard.cache') }}: {{ formatTokens(todayCacheTokens) }} <span v-if="todayTokenShare(todayCacheTokens)" class="text-gray-400">({{ todayTokenShare(todayCacheTokens) }})</span></span>
-            <span v-if="todayCacheHitRate">/ {{ t('usage.cacheHitRate') }}: {{ todayCacheHitRate }}</span>
           </p>
         </div>
       </div>
@@ -103,7 +102,6 @@
             <span>/</span>
             <span>{{ t('dashboard.output') }}: {{ formatTokens(stats?.total_output_tokens || 0) }} <span v-if="totalTokenShare(stats?.total_output_tokens)" class="text-gray-400">({{ totalTokenShare(stats?.total_output_tokens) }})</span></span>
             <span v-if="totalCacheTokens > 0">/ {{ t('dashboard.cache') }}: {{ formatTokens(totalCacheTokens) }} <span v-if="totalTokenShare(totalCacheTokens)" class="text-gray-400">({{ totalTokenShare(totalCacheTokens) }})</span></span>
-            <span v-if="totalCacheHitRate">/ {{ t('usage.cacheHitRate') }}: {{ totalCacheHitRate }}</span>
           </p>
         </div>
       </div>
@@ -243,7 +241,7 @@ import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
 import type { UserDashboardStats as UserStatsType } from '@/api/usage'
 import type { PlatformQuotaItem } from '@/types'
-import { formatPromptCacheHitRate, formatTokenShare, sumTokenBuckets } from '@/utils/tokenShare'
+import { formatTokenShare, sumTokenBuckets } from '@/utils/tokenShare'
 
 interface FusedPlatformCard {
   platform: string
@@ -351,18 +349,6 @@ const todayCacheTokens = computed(() => sumTokenBuckets(
 const totalCacheTokens = computed(() => sumTokenBuckets(
   props.stats?.total_cache_creation_tokens,
   props.stats?.total_cache_read_tokens,
-))
-
-const todayCacheHitRate = computed(() => formatPromptCacheHitRate(
-  props.stats?.today_input_tokens,
-  props.stats?.today_cache_read_tokens,
-  props.stats?.today_cache_creation_tokens,
-))
-
-const totalCacheHitRate = computed(() => formatPromptCacheHitRate(
-  props.stats?.total_input_tokens,
-  props.stats?.total_cache_read_tokens,
-  props.stats?.total_cache_creation_tokens,
 ))
 
 const todayTokenShare = (tokens: number | null | undefined): string | null =>

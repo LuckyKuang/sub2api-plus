@@ -171,7 +171,6 @@ export default {
     todayTokens: 'Today Tokens',
     todayCacheCreation: 'Today Cache Creation',
     todayCacheRead: 'Today Cache Read',
-    todayCacheHitRate: 'Today Cache Hit Rate',
     todayCost: 'Today Cost',
     rpmTpm: 'RPM / TPM',
     totalRequests: 'Total Requests',
@@ -180,7 +179,6 @@ export default {
     totalTokensLabel: 'Total Tokens',
     totalCacheCreation: 'Total Cache Creation',
     totalCacheRead: 'Total Cache Read',
-    totalCacheHitRate: 'Total Cache Hit Rate',
     totalCost: 'Total Cost',
     avgDuration: 'Avg Duration',
     // Messages
