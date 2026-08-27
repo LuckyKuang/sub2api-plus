@@ -45,7 +45,8 @@ func ExtractPromptSnapshot(req Request) (PromptSnapshot, error) {
 // ExtractBlockingPromptSnapshot builds the synchronous guard input. Blocking
 // always scans only the latest user text; the latestTurnOnly argument is kept
 // for call-site compatibility and is ignored. Asynchronous auditing always
-// uses ExtractPromptSnapshot so the complete transcript is retained for review.
+// uses ExtractPromptSnapshot and retains every user turn in this request,
+// excluding harness instructions, tool schema, and assistant output.
 func ExtractBlockingPromptSnapshot(req Request, latestTurnOnly bool) (PromptSnapshot, error) {
 	_ = latestTurnOnly
 	snapshot, _, err := extractPromptSnapshotWithDiagnostics(req, true)
@@ -117,23 +118,24 @@ func promptSegmentsFromAuditContent(document auditcontent.Document, latestTurnOn
 }
 
 func isPromptAuditConversationSegment(segment auditcontent.Segment, latestTurnOnly bool) bool {
-	if latestTurnOnly {
-		switch segment.Source {
-		case auditcontent.SourceMessage:
+	switch segment.Source {
+	case auditcontent.SourceSearchQuery, auditcontent.SourceEmbeddingInput, auditcontent.SourceMediaPrompt:
+		return true
+	case auditcontent.SourceMessage:
+		if latestTurnOnly {
 			// Keep assistant/model messages as turn separators so older user
 			// text is not joined with the latest user turn. They are not emitted.
 			return true
-		case auditcontent.SourceSearchQuery, auditcontent.SourceEmbeddingInput, auditcontent.SourceMediaPrompt:
-			return true
-		default:
-			return false
 		}
+		return isPromptAuditUserRole(segment.Role)
+	default:
+		return false
 	}
-	switch segment.Source {
-	case auditcontent.SourceMessage, auditcontent.SourceInstruction,
-		auditcontent.SourceSearchQuery, auditcontent.SourceEmbeddingInput,
-		auditcontent.SourceMediaPrompt, auditcontent.SourcePromptVariable,
-		auditcontent.SourceReasoning:
+}
+
+func isPromptAuditUserRole(role string) bool {
+	switch strings.ToLower(strings.TrimSpace(role)) {
+	case "", "user":
 		return true
 	default:
 		return false
