@@ -56,7 +56,7 @@ FROM accounts
 WHERE id = $1
 `, accountID).Scan(&rate, &extra))
 	require.InDelta(t, 0.4, rate, 0.00001)
-	require.JSONEq(t, `{"retained":"value"}`, extra)
+	require.JSONEq(t, `{"openai_long_context_billing_enabled":false,"retained":"value"}`, extra)
 
 	var settingCount int
 	require.NoError(t, tx.QueryRowContext(ctx, `
