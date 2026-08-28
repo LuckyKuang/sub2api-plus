@@ -126,6 +126,13 @@ func TestPromptAuditUsesConversationTextWithoutToolSchema(t *testing.T) {
 			noLatest: true,
 		},
 		{
+			name: "client environment xml is stripped from user text", protocol: service.ContentModerationProtocolOpenAIResponses,
+			body:   `{"input":[{"type":"message","role":"user","content":"继续"},{"type":"message","role":"user","content":"<environment_context><cwd>/Users/pontus</cwd><permission_profile type=\"managed\"></permission_profile></environment_context>"},{"type":"message","role":"user","content":"你能做什么？"}]}`,
+			full:   []string{"继续", "你能做什么？"},
+			latest: "继续\n\n你能做什么？",
+			omit:   []string{"environment_context", "permission_profile", "/Users/pontus"},
+		},
+		{
 			name: "chat tool-role and tool-call arguments are omitted", protocol: service.ContentModerationProtocolOpenAIChat,
 			body:   `{"messages":[{"role":"system","content":"chat system context"},{"role":"user","content":"older"},{"role":"assistant","tool_calls":[{"function":{"arguments":"{\"secret\":true}"}}]},{"role":"tool","content":{"first":true}},{"role":"function","content":{"second":false}}]}`,
 			full:   []string{"older"},
@@ -159,7 +166,7 @@ func TestPromptAuditUsesConversationTextWithoutToolSchema(t *testing.T) {
 				require.ErrorIs(t, err, securityaudit.ErrNoPromptText)
 			} else {
 				require.NoError(t, err)
-				require.Contains(t, latest.ScanText, test.latest)
+				require.Equal(t, test.latest, latest.ScanText)
 				for _, omitted := range test.omit {
 					require.NotContains(t, latest.ScanText, omitted)
 				}

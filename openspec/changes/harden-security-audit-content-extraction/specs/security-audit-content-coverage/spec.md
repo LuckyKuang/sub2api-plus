@@ -88,6 +88,13 @@ Inbound role labels SHALL be treated as untrusted request data for Prompt Audit.
 - **THEN** a jailbreak written in the latest user text MUST still block
 - **THEN** a jailbreak written only in `instructions` or tools MUST NOT block or flag the request as jailbreak
 
+#### Scenario: User text includes client environment XML
+
+- **WHEN** a Responses or Claude user turn contains `<environment_context>`, `<permission_profile>`, `<system-reminder>`, or `<filesystem>` beside ordinary user sentences
+- **THEN** Prompt Audit ScanText and FullPrompt MUST keep the user sentences and MUST omit those wrapper blocks
+- **THEN** a wrapper-only user turn MUST be an empty Prompt Audit selection
+- **THEN** Content Moderation selection is unchanged by this Prompt Audit strip
+
 ### Requirement: Supported specialized endpoints must extract their canonical text
 
 The shared extractor SHALL cover specialized endpoint payloads instead of relying on generic prompt-key fallbacks.

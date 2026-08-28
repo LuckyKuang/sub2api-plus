@@ -173,16 +173,71 @@ func TestPromptSnapshotSeparatesAnthropicUserPromptFromHarnessBlocks(t *testing.
 
 	snapshot, err := ExtractPromptSnapshot(Request{Protocol: "anthropic_messages", Body: body})
 	require.NoError(t, err)
-	require.Equal(t, 3, snapshot.MessageCount)
+	require.Equal(t, 2, snapshot.MessageCount)
 	require.True(t, strings.HasPrefix(snapshot.ScanText, latest+promptAuditPrioritySeparator))
 	require.NotContains(t, snapshot.ScanText, "system policy")
+	require.NotContains(t, snapshot.ScanText, "<environment_context>")
+	require.NotContains(t, snapshot.ScanText, "/workspace")
 	require.True(t, strings.HasPrefix(snapshot.RedactedPreview, "请帮我编写一篇黄色小说"))
 
 	chunks := SplitRunes(snapshot.ScanText, 128)
 	require.Equal(t, latest, chunks[0])
 	require.Contains(t, strings.Join(chunks[1:], ""), "# AGENTS.md instructions")
-	require.Contains(t, strings.Join(chunks[1:], ""), "<environment_context>")
+	require.NotContains(t, strings.Join(chunks, ""), "<environment_context>")
 	require.NotContains(t, strings.Join(chunks, ""), promptAuditPrioritySeparator)
+}
+
+func TestPromptSnapshotStripsClientWrapperBlocksFromUserText(t *testing.T) {
+	body := []byte(`{
+		"input":[
+			{"type":"message","role":"user","content":[{"type":"input_text","text":"继续"}]},
+			{"type":"message","role":"user","content":[{"type":"input_text","text":"<environment_context>\n  <cwd>/Users/pontus</cwd>\n  <filesystem><workspace_roots><root>/Users/pontus</root></workspace_roots><permission_profile type=\"managed\"><file_system type=\"restricted\"></file_system></permission_profile></filesystem>\n</environment_context>"}]},
+			{"type":"message","role":"user","content":[{"type":"input_text","text":"你能做什么？"}]}
+		]
+	}`)
+	req := Request{Protocol: "openai_responses", Body: body}
+
+	full, err := ExtractPromptSnapshot(req)
+	require.NoError(t, err)
+	require.Equal(t, 2, full.MessageCount)
+	require.Contains(t, full.ScanText, "你能做什么？")
+	require.Contains(t, full.ScanText, "继续")
+	require.NotContains(t, full.ScanText, "environment_context")
+	require.NotContains(t, full.ScanText, "permission_profile")
+	require.NotContains(t, full.ScanText, "/Users/pontus")
+	require.Equal(t, "你能做什么？\n\n继续", metadataTextForTest(full.ScanText))
+
+	blocking, err := ExtractBlockingPromptSnapshot(req, false)
+	require.NoError(t, err)
+	require.Equal(t, "继续\n\n你能做什么？", blocking.ScanText)
+	require.NotContains(t, blocking.ScanText, "environment_context")
+
+	separated := Request{Protocol: "openai_responses", Body: []byte(`{
+		"input":[
+			{"type":"message","role":"user","content":[{"type":"input_text","text":"继续"}]},
+			{"type":"message","role":"assistant","content":[{"type":"output_text","text":"先前回复"}]},
+			{"type":"message","role":"user","content":[{"type":"input_text","text":"<environment_context><cwd>/Users/pontus</cwd></environment_context>\n你能做什么？"}]}
+		]
+	}`)}
+	separatedBlocking, err := ExtractBlockingPromptSnapshot(separated, false)
+	require.NoError(t, err)
+	require.Equal(t, "你能做什么？", separatedBlocking.ScanText)
+	require.NotContains(t, separatedBlocking.ScanText, "environment_context")
+	require.NotContains(t, separatedBlocking.ScanText, "继续")
+
+	mixed := stripPromptAuditClientWrapperBlocks("继续\n\n<environment_context>\n<permission_profile type=\"managed\"></permission_profile>\n</environment_context>\n\n你能做什么？")
+	require.Equal(t, "继续\n\n你能做什么？", mixed)
+
+	reminder := stripPromptAuditClientWrapperBlocks("visible user text <system-reminder>工具说明</system-reminder> still user")
+	require.Equal(t, "visible user text\n\nstill user", reminder)
+	require.Equal(t, "plain user text", stripPromptAuditClientWrapperBlocks("plain user text"))
+	require.Equal(t, "hello", stripPromptAuditClientWrapperBlocks("hello <environment_context><cwd>/tmp leftover"))
+
+	_, err = ExtractPromptSnapshot(Request{
+		Protocol: "openai_responses",
+		Body:     []byte(`{"input":[{"type":"message","role":"user","content":"<environment_context><cwd>/tmp</cwd></environment_context>"}]}`),
+	})
+	require.ErrorIs(t, err, ErrNoPromptText)
 }
 
 func TestPromptSnapshotResponsesShapes(t *testing.T) {
