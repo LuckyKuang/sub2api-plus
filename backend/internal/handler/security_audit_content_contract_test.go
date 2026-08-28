@@ -95,7 +95,7 @@ func TestPromptAuditUsesConversationTextWithoutToolSchema(t *testing.T) {
 		noLatest bool
 	}{
 		{
-			name: "assistant text is scanned but tool schema is not", protocol: service.ContentModerationProtocolOpenAIResponses,
+			name: "assistant text and tool schema are excluded", protocol: service.ContentModerationProtocolOpenAIResponses,
 			body: `{"instructions":"audit instruction","tools":[{"type":"function","name":"lookup","description":"audit tool definition"}],` +
 				`"input":[{"type":"message","role":"user","content":"older prompt"},{"type":"message","role":"assistant","content":"current assistant payload"}]}`,
 			full:   []string{"older prompt"},
@@ -110,14 +110,14 @@ func TestPromptAuditUsesConversationTextWithoutToolSchema(t *testing.T) {
 			omit:   []string{"current tool result"},
 		},
 		{
-			name: "responses reusable prompt variables remain conversation text", protocol: service.ContentModerationProtocolOpenAIResponses,
+			name: "responses reusable prompt variables are excluded", protocol: service.ContentModerationProtocolOpenAIResponses,
 			body:     `{"prompt":{"id":"pmpt_1","variables":{"plain":"reusable variable","typed":{"type":"input_text","text":"typed variable"}}}}`,
 			omit:     []string{"reusable variable", "typed variable"},
 			noFull:   true,
 			noLatest: true,
 		},
 		{
-			name: "live initial session instructions remain conversation text", protocol: service.ContentModerationProtocolOpenAILive,
+			name: "live session instructions and transcription context are excluded", protocol: service.ContentModerationProtocolOpenAILive,
 			body: `{"model":"gpt-live-test","instructions":"live instructions",` +
 				`"input_audio_transcription":{"model":"gpt-4o-transcribe","prompt":"legacy transcription context"},` +
 				`"audio":{"input":{"transcription":{"model":"gpt-live-transcribe","prompt":"current transcription context","keywords":["premium plan","AC-42"]}}}}`,

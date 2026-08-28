@@ -163,6 +163,55 @@ func TestRunSecurityAuditLogsWebSocketChecksAndCacheHits(t *testing.T) {
 	require.Equal(t, int64(1), engine.evaluates.Load())
 }
 
+func TestRunSecurityAuditExcludesHarnessAcrossHTTPAndWebSocketStages(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	httpPayload := []byte(`{
+		"instructions":"You are Codex. sandbox_permissions require_escalated jailbreak",
+		"tools":[{"type":"function","name":"exec","description":"Run JavaScript in the sandbox"}],
+		"input":[{"type":"message","role":"user","content":"hi"}]
+	}`)
+	wsPayload := []byte(`{
+		"type":"response.create",
+		"response":{
+			"instructions":"You are Codex. sandbox_permissions require_escalated jailbreak",
+			"tools":[{"type":"function","name":"exec","description":"Run JavaScript in the sandbox"}],
+			"input":[{"type":"message","role":"user","content":"hi"}]
+		}
+	}`)
+	tests := []struct {
+		name    string
+		mode    securityaudit.Mode
+		stage   string
+		payload []byte
+	}{
+		{name: "blocking HTTP", mode: securityaudit.ModeBlocking, stage: "http", payload: httpPayload},
+		{name: "blocking websocket", mode: securityaudit.ModeBlocking, stage: "subsequent_turn", payload: wsPayload},
+		{name: "async HTTP", mode: securityaudit.ModeAsync, stage: "http", payload: httpPayload},
+		{name: "async websocket", mode: securityaudit.ModeAsync, stage: "first_turn", payload: wsPayload},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			engine := &turnCountingEngine{mode: test.mode, captureSnapshot: true}
+			coordinator := securityaudit.NewCoordinator(nil, engine)
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+			groupID := int64(3)
+			apiKey := &service.APIKey{ID: 9, UserID: 7, GroupID: &groupID, Group: &service.Group{ID: groupID}}
+
+			decision := runSecurityAudit(
+				c, nil, coordinator, nil, apiKey,
+				middleware2.AuthSubject{UserID: 7},
+				service.ContentModerationProtocolOpenAIResponses, "codex-auto-review", test.payload, test.stage,
+			)
+
+			require.NotNil(t, decision)
+			require.True(t, decision.AllowNextStage)
+			require.Equal(t, "hi", engine.capturedScanText())
+		})
+	}
+}
+
 type blockingCompatibilityConfigStore struct {
 	cfg securityaudit.ActiveConfig
 }
@@ -247,21 +296,42 @@ func TestExtractionFailuresAllowAPIKeyAndOAuthDownstreamStages(t *testing.T) {
 }
 
 type turnCountingEngine struct {
-	mode      securityaudit.Mode
-	enqueues  atomic.Int64
-	evaluates atomic.Int64
-	decisions []*securityaudit.PromptDecision
+	mode            securityaudit.Mode
+	enqueues        atomic.Int64
+	evaluates       atomic.Int64
+	decisions       []*securityaudit.PromptDecision
+	captureSnapshot bool
+	lastScanText    atomic.Value
 }
 
 func (e *turnCountingEngine) EffectiveMode() securityaudit.Mode { return e.mode }
-func (e *turnCountingEngine) Enqueue(context.Context, securityaudit.Request) error {
+func (e *turnCountingEngine) Enqueue(_ context.Context, req securityaudit.Request) error {
 	e.enqueues.Add(1)
+	if e.captureSnapshot {
+		if snapshot, err := securityaudit.ExtractPromptSnapshot(req); err == nil {
+			e.lastScanText.Store(snapshot.ScanText)
+		}
+	}
 	return nil
 }
-func (e *turnCountingEngine) Evaluate(context.Context, securityaudit.Request) (*securityaudit.PromptDecision, error) {
+func (e *turnCountingEngine) Evaluate(_ context.Context, req securityaudit.Request) (*securityaudit.PromptDecision, error) {
 	call := e.evaluates.Add(1)
+	if e.captureSnapshot {
+		if snapshot, err := securityaudit.ExtractBlockingPromptSnapshot(req, true); err == nil {
+			e.lastScanText.Store(snapshot.ScanText)
+		}
+	}
 	if int(call) <= len(e.decisions) {
 		return e.decisions[call-1], nil
 	}
 	return &securityaudit.PromptDecision{Kind: securityaudit.DecisionAllow, AllowNextStage: true}, nil
+}
+
+func (e *turnCountingEngine) capturedScanText() string {
+	if value := e.lastScanText.Load(); value != nil {
+		if scanText, ok := value.(string); ok {
+			return scanText
+		}
+	}
+	return ""
 }

@@ -224,10 +224,14 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	longContextBillingGate := openAILongContextBillingGate(billingAccount)
 	var protectedPricingSource string
 	if protectedMismatch {
-		cost, protectedPricingSource, err = s.calculateCodexAutoReviewProtectedTokenCost(
+		cost, protectedPricingSource, err = s.calculateCodexAutoReviewProtectedCost(
 			ctx,
+			result,
 			apiKey,
 			multiplier,
+			imageMultiplier,
+			videoMultiplier,
+			baseMultiplier,
 			pricingAt,
 			tokens,
 		)
@@ -748,10 +752,14 @@ func isUnmappedCodexAutoReviewLunaMismatch(
 	return mismatch != nil && *mismatch
 }
 
-func (s *OpenAIGatewayService) calculateCodexAutoReviewProtectedTokenCost(
+func (s *OpenAIGatewayService) calculateCodexAutoReviewProtectedCost(
 	ctx context.Context,
+	result *OpenAIForwardResult,
 	apiKey *APIKey,
 	multiplier float64,
+	imageMultiplier float64,
+	videoMultiplier float64,
+	baseMultiplier float64,
 	pricingAt time.Time,
 	tokens UsageTokens,
 ) (*CostBreakdown, string, error) {
@@ -767,6 +775,29 @@ func (s *OpenAIGatewayService) calculateCodexAutoReviewProtectedTokenCost(
 			GroupID: &gid,
 			Group:   apiKey.Group,
 		})
+	}
+
+	// Preserve the ordinary unified billing dispatch for usage shapes and
+	// administrator cards that are not token-priced. The mismatch protection is
+	// deliberately limited to the token-pricing leg; it must not turn search,
+	// audio, image, video, or per-request usage into a free token record.
+	if (result != nil && (result.WebSearchCalls > 0 || result.AudioUsage != nil || result.ImageCount > 0 || result.VideoCount > 0)) ||
+		isCodexAutoReviewProtectedNonTokenSource(resolved) {
+		cost, err := s.calculateOpenAIRecordUsageCost(
+			ctx,
+			result,
+			apiKey,
+			[]string{codexAutoReviewModel},
+			multiplier,
+			imageMultiplier,
+			videoMultiplier,
+			baseMultiplier,
+			tokens,
+			"",
+			nil,
+			pricingAt,
+		)
+		return cost, codexAutoReviewProtectedPricingSource(resolved), err
 	}
 
 	var pricing *ModelPricing
@@ -800,7 +831,29 @@ func (s *OpenAIGatewayService) calculateCodexAutoReviewProtectedTokenCost(
 	if cost != nil {
 		cost.BillingMode = string(BillingModeToken)
 	}
+	if result != nil && result.SearchCount > 0 {
+		searchCost := s.billingService.CalculateSearchCost(
+			result.SearchCount,
+			groupSearchPricePer1kFromAPIKey(apiKey),
+			baseMultiplier,
+		)
+		if searchCost != nil && cost != nil {
+			cost.TotalCost += searchCost.TotalCost
+			cost.ActualCost += searchCost.ActualCost
+		}
+	}
 	return cost, source, nil
+}
+
+func isCodexAutoReviewProtectedNonTokenSource(resolved *ResolvedPricing) bool {
+	return isCodexAutoReviewProtectedChannelOrGroupSource(resolved) && resolved.Mode != BillingModeToken
+}
+
+func codexAutoReviewProtectedPricingSource(resolved *ResolvedPricing) string {
+	if resolved == nil {
+		return ""
+	}
+	return resolved.Source
 }
 
 func logCodexAutoReviewLunaMismatchProtected(

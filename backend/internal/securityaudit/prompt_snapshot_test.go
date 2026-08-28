@@ -46,6 +46,30 @@ func TestExtractPromptSnapshotProtocols(t *testing.T) {
 	}
 }
 
+func TestPromptSnapshotRequiresExplicitUserRoleForChatAndAnthropic(t *testing.T) {
+	tests := []struct {
+		name, protocol, body string
+		want                 string
+		wantNoText           bool
+	}{
+		{name: "chat", protocol: "openai_chat_completions", body: `{"messages":[{"content":"roleless chat"}]}`, wantNoText: true},
+		{name: "anthropic", protocol: "anthropic_messages", body: `{"messages":[{"content":"roleless anthropic"}]}`, wantNoText: true},
+		{name: "responses", protocol: "openai_responses", body: `{"input":[{"type":"message","content":"roleless responses"}]}`, want: "roleless responses"},
+		{name: "gemini", protocol: "gemini", body: `{"contents":[{"parts":[{"text":"roleless gemini"}]}]}`, want: "roleless gemini"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			snapshot, err := ExtractPromptSnapshot(Request{Protocol: test.protocol, Body: []byte(test.body)})
+			if test.wantNoText {
+				require.ErrorIs(t, err, ErrNoPromptText)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, test.want, snapshot.ScanText)
+		})
+	}
+}
+
 func TestSnapshotRedactsCanariesAndPreservesHashOfScanText(t *testing.T) {
 	body := `{"messages":[{"role":"user","content":"PROMPT_CANARY_ABC123 email@example.com +86 138 0013 8000 Bearer AUTH_CANARY_XYZ sk-secretvalue123 password=supersecret123"}]}`
 	snapshot, err := ExtractPromptSnapshot(Request{Protocol: "openai_chat_completions", Body: []byte(body)})

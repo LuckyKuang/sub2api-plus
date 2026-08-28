@@ -59,8 +59,9 @@ families have that field removed. Deprecated `prompt_cache_retention` is
 removed on every path.
 
 Usage ingestion treats ordinary input, cache-read input, and cache-write input
-as mutually exclusive stored buckets. The UI reports prompt-cache hit rate as
-`cache_read / (input + cache_read + cache_write)`; output tokens are excluded.
+as mutually exclusive stored buckets. Usage pages may report each bucket's
+share of total tokens, but do not derive a prompt-cache hit rate from these
+counters.
 Canonical nested usage details take priority by field presence, including an
 explicit zero, before known top-level compatibility aliases are considered.
 

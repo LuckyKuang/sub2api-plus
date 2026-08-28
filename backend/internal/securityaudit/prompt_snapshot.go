@@ -65,7 +65,7 @@ func extractPromptSnapshotWithDiagnostics(req Request, latestTurnOnly bool) (Pro
 			Reasons: auditcontent.SanitizeIncompleteReasons(document.IncompleteReasons),
 		}
 	}
-	extracted := promptSegmentsFromAuditContent(document, latestTurnOnly)
+	extracted := promptSegmentsFromAuditContent(document, req.Protocol, latestTurnOnly)
 	var segments []string
 	if latestTurnOnly {
 		segments = blockingSegmentsLatestUser(extracted)
@@ -93,15 +93,16 @@ func extractPromptSnapshotWithDiagnostics(req Request, latestTurnOnly bool) (Pro
 	}, diagnostic, nil
 }
 
-func promptSegmentsFromAuditContent(document auditcontent.Document, latestTurnOnly bool) []promptSegment {
+func promptSegmentsFromAuditContent(document auditcontent.Document, protocol string, latestTurnOnly bool) []promptSegment {
+	allowRolelessMessage := promptAuditAllowsRolelessMessage(protocol)
 	segments := make([]promptSegment, 0, len(document.Segments))
 	for _, segment := range document.Segments {
-		if !isPromptAuditConversationSegment(segment, latestTurnOnly) {
+		if !isPromptAuditConversationSegment(segment, allowRolelessMessage, latestTurnOnly) {
 			continue
 		}
 		role := segment.Role
 		user := role == "user"
-		if role == "" && (segment.Source == auditcontent.SourceMessage ||
+		if role == "" && ((segment.Source == auditcontent.SourceMessage && allowRolelessMessage) ||
 			segment.Source == auditcontent.SourceSearchQuery ||
 			segment.Source == auditcontent.SourceEmbeddingInput ||
 			segment.Source == auditcontent.SourceMediaPrompt) {
@@ -117,7 +118,7 @@ func promptSegmentsFromAuditContent(document auditcontent.Document, latestTurnOn
 	return segments
 }
 
-func isPromptAuditConversationSegment(segment auditcontent.Segment, latestTurnOnly bool) bool {
+func isPromptAuditConversationSegment(segment auditcontent.Segment, allowRolelessMessage bool, latestTurnOnly bool) bool {
 	switch segment.Source {
 	case auditcontent.SourceSearchQuery, auditcontent.SourceEmbeddingInput, auditcontent.SourceMediaPrompt:
 		return true
@@ -127,15 +128,26 @@ func isPromptAuditConversationSegment(segment auditcontent.Segment, latestTurnOn
 			// text is not joined with the latest user turn. They are not emitted.
 			return true
 		}
-		return isPromptAuditUserRole(segment.Role)
+		return isPromptAuditUserRole(segment.Role, allowRolelessMessage)
 	default:
 		return false
 	}
 }
 
-func isPromptAuditUserRole(role string) bool {
+func isPromptAuditUserRole(role string, allowRoleless bool) bool {
 	switch strings.ToLower(strings.TrimSpace(role)) {
-	case "", "user":
+	case "user":
+		return true
+	case "":
+		return allowRoleless
+	default:
+		return false
+	}
+}
+
+func promptAuditAllowsRolelessMessage(protocol string) bool {
+	switch strings.ToLower(strings.TrimSpace(protocol)) {
+	case "openai_responses", "openai_live", "gemini":
 		return true
 	default:
 		return false
