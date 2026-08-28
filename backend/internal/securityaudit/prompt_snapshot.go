@@ -29,6 +29,13 @@ var (
 	phonePattern  = regexp.MustCompile(`(?:\+?\d[\d\s().-]{8,}\d)`)
 )
 
+var promptAuditClientWrapperTags = []string{
+	"environment_context",
+	"permission_profile",
+	"system-reminder",
+	"filesystem",
+}
+
 const promptAuditPrioritySeparator = "\x00SUB2API_PROMPT_AUDIT_PRIORITY_END\x00"
 
 type promptSegment struct {
@@ -109,8 +116,15 @@ func promptSegmentsFromAuditContent(document auditcontent.Document, protocol str
 			user = true
 			role = "user"
 		}
+		segText := segment.Text
+		if user {
+			segText = stripPromptAuditClientWrapperBlocks(segText)
+			if segText == "" {
+				continue
+			}
+		}
 		segments = append(segments, promptSegment{
-			text: segment.Text,
+			text: segText,
 			user: user,
 			role: role,
 		})
@@ -232,6 +246,87 @@ func latestUserSegmentStart(values []promptSegment) int {
 
 func isUserSegment(segment promptSegment) bool {
 	return segment.user || segment.role == "user"
+}
+
+// stripPromptAuditClientWrapperBlocks removes client harness XML from user
+// text while keeping the surrounding user-authored sentences. Whole blocks
+// are dropped; leftover wrapper-only segments become empty and are omitted.
+func stripPromptAuditClientWrapperBlocks(text string) string {
+	text = strings.TrimSpace(text)
+	if text == "" || !strings.Contains(text, "<") {
+		return text
+	}
+	stripped := text
+	for {
+		next := stripOnePromptAuditClientWrapperBlock(stripped)
+		if next == stripped {
+			break
+		}
+		stripped = next
+	}
+	stripped = strings.ReplaceAll(stripped, "\r\n", "\n")
+	for strings.Contains(stripped, "\n\n\n") {
+		stripped = strings.ReplaceAll(stripped, "\n\n\n", "\n\n")
+	}
+	return strings.TrimSpace(stripped)
+}
+
+func stripOnePromptAuditClientWrapperBlock(text string) string {
+	lower := strings.ToLower(text)
+	bestStart, bestEnd := -1, -1
+	for _, name := range promptAuditClientWrapperTags {
+		openToken := "<" + name
+		searchFrom := 0
+		for {
+			openRel := strings.Index(lower[searchFrom:], openToken)
+			if openRel < 0 {
+				break
+			}
+			openAt := searchFrom + openRel
+			afterName := openAt + len(openToken)
+			if afterName < len(lower) {
+				next := lower[afterName]
+				if next != '>' && next != '/' && next != ' ' && next != '\t' && next != '\n' && next != '\r' {
+					searchFrom = afterName
+					continue
+				}
+			}
+			gt := strings.Index(text[openAt:], ">")
+			if gt < 0 {
+				break
+			}
+			tagEnd := openAt + gt + 1
+			rawTag := text[openAt:tagEnd]
+			if strings.HasSuffix(strings.TrimSpace(rawTag), "/>") {
+				if bestStart < 0 || openAt < bestStart {
+					bestStart, bestEnd = openAt, tagEnd
+				}
+				break
+			}
+			closeToken := "</" + name
+			closeRel := strings.Index(lower[tagEnd:], closeToken)
+			if closeRel < 0 {
+				if bestStart < 0 || openAt < bestStart {
+					bestStart, bestEnd = openAt, len(text)
+				}
+				break
+			}
+			closeAt := tagEnd + closeRel
+			closeGt := strings.Index(text[closeAt:], ">")
+			if closeGt < 0 {
+				break
+			}
+			end := closeAt + closeGt + 1
+			if bestStart < 0 || openAt < bestStart {
+				bestStart, bestEnd = openAt, end
+			}
+			break
+		}
+	}
+	if bestStart < 0 {
+		return text
+	}
+	return strings.TrimSpace(text[:bestStart]) + "\n\n" + strings.TrimSpace(text[bestEnd:])
 }
 
 func buildPrioritizedScanText(segments []string) (scanText string, metadataText string) {
