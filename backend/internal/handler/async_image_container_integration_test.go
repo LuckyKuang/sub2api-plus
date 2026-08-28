@@ -81,7 +81,7 @@ func TestAsyncImageContainerWorkflowWithMinIO(t *testing.T) {
 	require.NoError(t, storage.Check(ctx), "the administrator connection check must validate bucket read/write/delete permissions")
 
 	probes, err := s3Client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
-		Bucket: aws.String(asyncImageContainerTestBucket), Prefix: aws.String("images/.sub2api-healthcheck/"),
+		Bucket: aws.String(asyncImageContainerTestBucket), Prefix: aws.String("images/.healthcheck/"),
 	})
 	require.NoError(t, err)
 	require.Empty(t, probes.Contents, "connection health checks must remove their probe objects")

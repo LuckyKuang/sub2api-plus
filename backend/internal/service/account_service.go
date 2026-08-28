@@ -152,25 +152,11 @@ type OpenAIOAuthPolicyTransactionRepository interface {
 	) error
 }
 
-// AccountBillingSettingsRepository applies an admin edit without overwriting a
-// rate_multiplier that a successful upstream probe synchronized after the edit
-// form was loaded. A nil rateMultiplier means the request did not edit it.
-type AccountBillingSettingsRepository interface {
-	UpdateWithAccountBillingSettings(
-		ctx context.Context,
-		account *Account,
-		probeEnabled *bool,
-		rateSyncEnabled *bool,
-		rateMultiplier *float64,
-	) error
-}
-
 // AdminAccountRepository makes the account-duplication write capability an explicit
 // construction dependency without forcing read-only gateway test doubles to implement it.
 type AdminAccountRepository interface {
 	AccountRepository
 	AccountDuplicateRepository
-	AccountBillingSettingsRepository
 }
 
 // AccountBulkUpdate describes the fields that can be updated in a bulk operation.
@@ -186,7 +172,6 @@ type AccountBulkUpdate struct {
 	Schedulable    *bool
 	Credentials    map[string]any
 	Extra          map[string]any
-	ProbeEnabled   *bool
 }
 
 // CreateAccountRequest 创建账号请求

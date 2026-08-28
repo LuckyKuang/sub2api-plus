@@ -2341,7 +2341,6 @@ func applyBillingQuotaHeaders(c *gin.Context, err error, retryAfter int) {
 		return
 	}
 	c.Header("X-RateLimit-Reset", strconv.FormatInt(resetAt.Unix(), 10))
-	c.Header("X-Sub2API-RateLimit-Reset-At", resetAt.UTC().Format(time.RFC3339))
 }
 
 func billingErrorDetails(err error) (status int, code, message string, retryAfter int) {

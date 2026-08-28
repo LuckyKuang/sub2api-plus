@@ -209,6 +209,33 @@ func TestApplyHeaderOverridesNoOpPaths(t *testing.T) {
 	blocked.ApplyHeaderOverrides(nil)
 }
 
+func TestApplyHeaderOverridesAlwaysStripsOutboundIdentity(t *testing.T) {
+	account := headerOverrideTestAccount(PlatformOpenAI, AccountTypeOAuth, nil)
+	header := http.Header{
+		"User-Agent":                   {"sub2api-client/1"},
+		"X-Sub2API-Trace":              {"internal"},
+		grokClientToolCacheOptInHeader: {"prefer-cache"},
+		"X-Grok-Conv-Id":               {"conversation"},
+	}
+
+	account.ApplyHeaderOverrides(header)
+
+	require.Empty(t, header.Get("User-Agent"))
+	require.Empty(t, header.Get("X-Sub2API-Trace"))
+	require.Empty(t, header.Get(grokClientToolCacheOptInHeader))
+	require.Equal(t, "conversation", header.Get("X-Grok-Conv-Id"))
+
+	apiKey := headerOverrideTestAccount(PlatformOpenAI, AccountTypeAPIKey, map[string]any{
+		credKeyHeaderOverrideEnabled: true,
+		credKeyHeaderOverrides: map[string]any{
+			"user-agent": "sub2api-custom/1",
+		},
+	})
+	header = http.Header{}
+	apiKey.ApplyHeaderOverrides(header)
+	require.Empty(t, header.Get("User-Agent"))
+}
+
 func TestNormalizeHeaderOverrideCredentials(t *testing.T) {
 	t.Run("nil credentials no-op", func(t *testing.T) {
 		require.NoError(t, NormalizeHeaderOverrideCredentials(nil))
@@ -295,6 +322,28 @@ func TestNormalizeHeaderOverrideCredentials(t *testing.T) {
 			})
 			require.Error(t, err, "blocked header %q should be rejected", name)
 		}
+	})
+
+	t.Run("rejects reserved project header name", func(t *testing.T) {
+		err := NormalizeHeaderOverrideCredentials(map[string]any{
+			credKeyHeaderOverrides: map[string]any{"X-Sub2API-Trace": "v"},
+		})
+		require.Error(t, err)
+	})
+
+	t.Run("rejects local gateway control header", func(t *testing.T) {
+		err := NormalizeHeaderOverrideCredentials(map[string]any{
+			credKeyHeaderOverrides: map[string]any{grokClientToolCacheOptInHeader: "prefer-cache"},
+		})
+		require.Error(t, err)
+	})
+
+	t.Run("allows product name in ordinary value", func(t *testing.T) {
+		creds := map[string]any{
+			credKeyHeaderOverrides: map[string]any{"X-Organization": "Sub2API Plus"},
+		}
+		require.NoError(t, NormalizeHeaderOverrideCredentials(creds))
+		require.Equal(t, map[string]any{"x-organization": "Sub2API Plus"}, creds[credKeyHeaderOverrides])
 	})
 
 	t.Run("allows tab inside value", func(t *testing.T) {

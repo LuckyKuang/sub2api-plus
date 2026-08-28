@@ -1,8 +1,7 @@
 package service
 
-// 分组利润控制离线预演：使用生产只读导出的分组配置、账号倍率、探测状态、
+// 分组利润控制离线预演：使用生产只读导出的分组配置、账号倍率、
 // 用户覆盖倍率与主力模型清单，复用线上 U/D/epsilon 语义推演准入。
-// 探测状态仅用于解释账号倍率来源是否健康，不影响准入结论。
 
 import (
 	"math"
@@ -11,14 +10,8 @@ import (
 )
 
 const (
-	ProfitPreviewRateSourceManual        = "manual"
-	ProfitPreviewRateSourceUpstreamProbe = "upstream_probe_sync"
-
-	ProfitPreviewWarningProbeMissing     = "probe_snapshot_missing"
-	ProfitPreviewWarningProbeStale       = "probe_snapshot_stale"
-	ProfitPreviewWarningProbeFailed      = "probe_failed"
-	ProfitPreviewWarningProbeUnsupported = "probe_unsupported"
-	ProfitPreviewWarningManualRateOne    = "manual_rate_1_suspected_unmaintained"
+	ProfitPreviewRateSourceManual     = "manual"
+	ProfitPreviewWarningManualRateOne = "manual_rate_1_suspected_unmaintained"
 )
 
 // ProfitPreviewGroupInput 是一个分组的预演输入。
@@ -163,10 +156,7 @@ func previewAccountProfitAdmission(
 		Platform:   account.Platform,
 		RateSource: ProfitPreviewRateSourceManual,
 	}
-	if enabled, _ := account.Extra[UpstreamBillingRateSyncEnabledExtraKey].(bool); enabled {
-		verdict.RateSource = ProfitPreviewRateSourceUpstreamProbe
-		verdict.Warnings = append(verdict.Warnings, profitPreviewProbeWarnings(account, evalAt)...)
-	} else if account.RateMultiplier != nil && *account.RateMultiplier == 1 {
+	if account.RateMultiplier != nil && *account.RateMultiplier == 1 {
 		verdict.Warnings = append(verdict.Warnings, ProfitPreviewWarningManualRateOne)
 	}
 
@@ -190,22 +180,4 @@ func previewAccountProfitAdmission(
 		verdict.RejectedUnderMinD = profitControlOverThreshold(*account.RateMultiplier, thresholdMinD)
 	}
 	return verdict
-}
-
-func profitPreviewProbeWarnings(account *Account, evalAt time.Time) []string {
-	snapshot := decodeUpstreamBillingProbeSnapshot(account.Extra)
-	if snapshot == nil {
-		return []string{ProfitPreviewWarningProbeMissing}
-	}
-	switch snapshot.Status {
-	case UpstreamBillingProbeStatusFailed:
-		return []string{ProfitPreviewWarningProbeFailed}
-	case UpstreamBillingProbeStatusUnsupported:
-		return []string{ProfitPreviewWarningProbeUnsupported}
-	case UpstreamBillingProbeStatusOK:
-		if snapshot.FreshUntil == nil || !evalAt.Before(*snapshot.FreshUntil) {
-			return []string{ProfitPreviewWarningProbeStale}
-		}
-	}
-	return nil
 }

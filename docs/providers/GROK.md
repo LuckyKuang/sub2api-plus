@@ -20,6 +20,16 @@ gateway.
 Browser automation, cookie handling, and web scraping are outside this
 provider integration.
 
+## Request-Level Tool Cache Preference
+
+Custom clients and integrations may send
+`X-Grok-Client-Tool-Cache: prefer-cache` to enable, or
+`X-Grok-Client-Tool-Cache: off` to disable, the request-level tool-cache
+preference where the Grok route supports it. This is a Sub2API Plus gateway
+control, not an official Grok/xAI header. The gateway consumes it locally and
+does not forward it upstream. The retired branded and generic gateway header
+names are not recognized.
+
 ## Account Types
 
 OAuth accounts use the xAI subscription authorization flow and subscription

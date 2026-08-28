@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/xai"
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
@@ -16,7 +17,7 @@ import (
 const (
 	grokConversationIDHeader         = "X-Grok-Conv-Id"
 	claudeCodeSessionHeader          = "X-Claude-Code-Session-Id"
-	grokClientToolCacheOptInHeader   = "X-Sub2API-Grok-Client-Tool-Cache"
+	grokClientToolCacheOptInHeader   = brandidentity.GrokClientToolCacheHeader
 	grokFreeCacheNativeToolsJSON     = `[{"type":"web_search"},{"type":"x_search"}]`
 	grokFreeCacheDisabledToolChoice  = "none"
 	grokClientToolCacheOptInExtraKey = "grok_client_tool_cache_enabled"
@@ -212,8 +213,8 @@ func applyGrokFreeMessagesFunctionToolCacheRoute(body, intentSourceBody []byte, 
 }
 
 // applyGrokFreeRequestToolCacheRoute also accepts a request-scoped opt-in. The
-// sub2api header is consumed locally because buildGrokResponsesRequest only
-// forwards the explicitly supported OpenAI-Beta header from downstream.
+// gateway control header is consumed locally and stripped at every outbound
+// boundary; it is not an official Grok/xAI upstream header.
 func applyGrokFreeRequestToolCacheRoute(c *gin.Context, body, intentSourceBody []byte, account *Account, cacheIdentity string) ([]byte, error) {
 	allowPureClientTools, accountPolicyExplicit := grokClientToolCacheAccountPolicy(account)
 	requestOptOut := false

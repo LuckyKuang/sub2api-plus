@@ -16,6 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	pluginv1 "github.com/LuckyKuang/sub2api-plus/pkg/pluginapi/v1"
 	hclog "github.com/hashicorp/go-hclog"
 	hcplugin "github.com/hashicorp/go-plugin"
@@ -206,6 +207,7 @@ func (r *pluginRuntime) roundTrip(ctx context.Context, request *http.Request, pr
 	if request == nil || request.URL == nil || account == nil {
 		return nil, errors.New("插件出站请求参数不完整")
 	}
+	brandidentity.FilterOutboundRequest(request)
 	streamCtx, cancel := context.WithCancel(ctx)
 	stream, err := r.api.Forward(streamCtx)
 	if err != nil {
@@ -400,6 +402,7 @@ func (b *pluginResponseBody) Close() error {
 }
 
 func headersToPlugin(headers http.Header) map[string]*pluginv1.HeaderValues {
+	brandidentity.StripOutboundHeaders(headers)
 	out := make(map[string]*pluginv1.HeaderValues, len(headers))
 	for key, values := range headers {
 		out[key] = &pluginv1.HeaderValues{Values: append([]string(nil), values...)}

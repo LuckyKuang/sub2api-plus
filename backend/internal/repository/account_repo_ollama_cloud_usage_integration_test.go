@@ -218,22 +218,23 @@ func TestListDueOllamaCloudUsageAccountsUsesGroupMaxLastUsedAndFailsOpen(t *test
 	}
 }
 
-func TestLockAndMergeAccountProbeExtraCoalescesNullableOllamaGroupIdentity(t *testing.T) {
+func TestLockAndMergeAccountExtraCoalescesNullableOllamaGroupIdentity(t *testing.T) {
 	ctx := context.Background()
 	tx := testEntTx(t)
 	account := mustCreateAccount(t, tx.Client(), &service.Account{
 		Name: "ordinary-openai-without-base-url", Platform: service.PlatformOpenAI, Type: service.AccountTypeAPIKey,
 		Credentials: map[string]any{"api_key": "sk-no-base-url"},
-		Extra:       map[string]any{service.UpstreamBillingProbeEnabledExtraKey: true},
+		Extra:       map[string]any{},
 	})
 	loaded, err := newAccountRepositoryWithSQL(tx.Client(), tx, nil).GetByID(ctx, account.ID)
 	require.NoError(t, err)
 
-	merged, err := lockAndMergeAccountProbeExtra(ctx, tx.Client(), loaded, nil, nil)
+	merged, err := lockAndMergeAccountExtra(ctx, tx.Client(), loaded)
 
 	require.NoError(t, err, "a NULL Ollama eligibility expression must scan as false")
 	require.NotContains(t, merged, service.OllamaCloudUsageSessionExtraKey)
-	require.Equal(t, true, merged[service.UpstreamBillingProbeEnabledExtraKey])
+	require.NotContains(t, merged, "upstream_billing_probe_enabled")
+	require.NotContains(t, merged, "upstream_billing_probe")
 }
 
 func TestOllamaCloudUsageGroupWritesAreAtomicAcrossPlatformsAndURLVariants(t *testing.T) {
@@ -480,27 +481,10 @@ func TestProxyIdentityUpdateInvalidatesOllamaSnapshotAndRejectsInFlightCAS(t *te
 }
 
 // 无变化的凭证持久化（如 CRS 同步重放同一凭证）不得触发任何 extra 清理；
-// 真实变化仍必须按旧语义清 openai 探测快照。
 func TestUpdateCredentialsUnchangedCredentialsPreserveManagedExtra(t *testing.T) {
 	ctx := context.Background()
 	tx := testEntTx(t)
 	repo := newAccountRepositoryWithSQL(tx.Client(), tx, nil)
-
-	probeAccount := mustCreateAccount(t, tx.Client(), &service.Account{
-		Name: "openai-probe-unchanged", Platform: service.PlatformOpenAI, Type: service.AccountTypeAPIKey,
-		Credentials: map[string]any{"api_key": "sk-probe", "base_url": "https://relay.example.com/v1"},
-		Extra: map[string]any{
-			service.UpstreamBillingProbeEnabledExtraKey: true,
-			service.UpstreamBillingProbeExtraKey:        map[string]any{"status": "ok"},
-		},
-	})
-	require.NoError(t, repo.UpdateCredentials(ctx, probeAccount.ID, map[string]any{
-		"api_key": "sk-probe", "base_url": "https://relay.example.com/v1",
-	}))
-	probeLoaded, err := repo.GetByID(ctx, probeAccount.ID)
-	require.NoError(t, err)
-	require.Contains(t, probeLoaded.Extra, service.UpstreamBillingProbeExtraKey,
-		"unchanged credentials must not clear the probe snapshot")
 
 	now := time.Now().UTC()
 	ollamaAccount := mustCreateAccount(t, tx.Client(), &service.Account{
@@ -522,14 +506,6 @@ func TestUpdateCredentialsUnchangedCredentialsPreserveManagedExtra(t *testing.T)
 	require.Equal(t, "cipher:wos-session=fixture", ollamaLoaded.Extra[service.OllamaCloudUsageSessionExtraKey])
 	require.Equal(t, true, ollamaLoaded.Extra[service.OllamaCloudUsageAutoRefreshExtraKey])
 	require.Contains(t, ollamaLoaded.Extra, service.OllamaCloudUsageSnapshotExtraKey)
-
-	require.NoError(t, repo.UpdateCredentials(ctx, probeAccount.ID, map[string]any{
-		"api_key": "sk-probe", "base_url": "https://relay.example.org/v1",
-	}))
-	probeLoaded, err = repo.GetByID(ctx, probeAccount.ID)
-	require.NoError(t, err)
-	require.NotContains(t, probeLoaded.Extra, service.UpstreamBillingProbeExtraKey,
-		"changed credentials must keep clearing the probe snapshot")
 }
 
 // TestListDueOllamaCloudUsageAccountsSQLDueRulesMatchService proves the SQL

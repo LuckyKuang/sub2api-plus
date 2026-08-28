@@ -21,8 +21,6 @@ import type {
   OpenAICodexPATCreateRequest,
   CheckMixedChannelRequest,
   CheckMixedChannelResponse,
-  UpstreamBillingProbeResult,
-  UpstreamBillingProbeSettings,
   OllamaCloudUsageSettings,
   OllamaCloudUsageState
 } from '@/types'
@@ -977,38 +975,6 @@ export async function testWeComUsageAlert(
 
 export type WeComUsageAlertConfig = UsageAlertConfig
 
-export async function getUpstreamBillingProbeSettings(): Promise<UpstreamBillingProbeSettings> {
-  const { data } = await apiClient.get<UpstreamBillingProbeSettings>('/admin/accounts/upstream-billing-probe/settings')
-  return data
-}
-
-export async function updateUpstreamBillingProbeSettings(
-  settings: UpstreamBillingProbeSettings
-): Promise<UpstreamBillingProbeSettings> {
-  const { data } = await apiClient.put<UpstreamBillingProbeSettings>(
-    '/admin/accounts/upstream-billing-probe/settings',
-    settings
-  )
-  return data
-}
-
-export async function setUpstreamBillingProbeEnabled(id: number, enabled: boolean): Promise<void> {
-  await apiClient.put(`/admin/accounts/${id}/upstream-billing-probe`, { enabled })
-}
-
-export async function probeUpstreamBilling(id: number): Promise<UpstreamBillingProbeResult> {
-  const { data } = await apiClient.post<UpstreamBillingProbeResult>(`/admin/accounts/${id}/upstream-billing-probe`)
-  return data
-}
-
-export async function probeUpstreamBillingBatch(accountIds: number[]): Promise<UpstreamBillingProbeResult[]> {
-  const { data } = await apiClient.post<{ results: UpstreamBillingProbeResult[] }>(
-    '/admin/accounts/upstream-billing-probe/batch',
-    { account_ids: accountIds }
-  )
-  return data.results
-}
-
 export async function getOllamaCloudUsageSettings(): Promise<OllamaCloudUsageSettings> {
   const { data } = await apiClient.get<OllamaCloudUsageSettings>('/admin/accounts/ollama-cloud-usage/settings')
   return data
@@ -1109,11 +1075,6 @@ export const accountsAPI = {
   getWeComUsageAlert,
   updateWeComUsageAlert,
   testWeComUsageAlert,
-  getUpstreamBillingProbeSettings,
-  updateUpstreamBillingProbeSettings,
-  setUpstreamBillingProbeEnabled,
-  probeUpstreamBilling,
-  probeUpstreamBillingBatch,
   getOllamaCloudUsageSettings,
   updateOllamaCloudUsageSettings,
   getOllamaCloudUsage,

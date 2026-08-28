@@ -214,7 +214,7 @@ func bulkUpdateOnlyChangesLongContext(input *BulkUpdateAccountsInput) bool {
 	if input == nil || input.Name != "" || input.ProxyID != nil || input.Concurrency != nil ||
 		input.Priority != nil || input.RateMultiplier != nil || input.LoadFactor != nil ||
 		input.Status != "" || input.Schedulable != nil || input.GroupIDs != nil ||
-		len(input.Credentials) != 0 || input.ProbeEnabled != nil {
+		len(input.Credentials) != 0 {
 		return false
 	}
 	if len(input.Extra) != 1 {

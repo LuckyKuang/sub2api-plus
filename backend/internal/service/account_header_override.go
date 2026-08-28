@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 
 	"golang.org/x/net/http/httpguts"
@@ -179,6 +180,7 @@ func (a *Account) ApplyHeaderOverrides(h http.Header) {
 	if h == nil {
 		return
 	}
+	brandidentity.StripOutboundHeaders(h)
 	overrides := a.GetHeaderOverrides()
 	if len(overrides) == 0 {
 		return
@@ -194,6 +196,7 @@ func (a *Account) ApplyHeaderOverrides(h http.Header) {
 		}
 		h[resolveWireCasing(name)] = []string{value}
 	}
+	brandidentity.StripOutboundHeaders(h)
 }
 
 // NormalizeHeaderOverrideCredentials 校验并原地规范化 credentials 中的请求头覆写字段。
@@ -281,6 +284,10 @@ func normalizeHeaderOverrideEntry(name, value string) (string, string, error) {
 	if isHeaderOverrideBlockedName(lowerName) {
 		return "", "", infraerrors.Newf(http.StatusBadRequest, "INVALID_HEADER_OVERRIDE",
 			"header %q is not allowed to be overridden", lowerName)
+	}
+	if brandidentity.IsReservedHeaderName(lowerName) || brandidentity.IsLocalControlHeaderName(lowerName) {
+		return "", "", infraerrors.New(http.StatusBadRequest, "INVALID_HEADER_OVERRIDE",
+			"header name uses a reserved protocol identifier")
 	}
 	if len(value) > maxHeaderOverrideValueLength {
 		return "", "", infraerrors.Newf(http.StatusBadRequest, "INVALID_HEADER_OVERRIDE",

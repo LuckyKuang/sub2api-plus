@@ -5,7 +5,6 @@ package service
 import (
 	"context"
 	"errors"
-	"net/http"
 	"reflect"
 	"testing"
 
@@ -166,14 +165,14 @@ func TestAdminService_BulkUpdateAccounts_AllSuccessIDs(t *testing.T) {
 	require.Len(t, result.Results, 3)
 }
 
-func TestAdminService_BulkUpdateAccounts_RejectsRateChangeForSyncedAccounts(t *testing.T) {
+func TestAdminService_BulkUpdateAccounts_AllowsRateChangeDespiteRetiredProbeFlags(t *testing.T) {
 	repo := &accountRepoStubForBulkUpdate{
 		getByIDsAccounts: []*Account{
 			{
 				ID: 1,
 				Extra: map[string]any{
-					UpstreamBillingProbeEnabledExtraKey:    true,
-					UpstreamBillingRateSyncEnabledExtraKey: true,
+					"upstream_billing_probe_enabled":     true,
+					"upstream_billing_rate_sync_enabled": true,
 				},
 			},
 			{ID: 2, Extra: map[string]any{}},
@@ -187,18 +186,12 @@ func TestAdminService_BulkUpdateAccounts_RejectsRateChangeForSyncedAccounts(t *t
 		RateMultiplier: &rateMultiplier,
 	})
 
-	require.Nil(t, result)
-	require.Error(t, err)
-	var appErr *infraerrors.ApplicationError
-	require.ErrorAs(t, err, &appErr)
-	require.Equal(t, int32(http.StatusConflict), appErr.Code)
-	require.Equal(t, "UPSTREAM_BILLING_RATE_SYNC_BULK_CONFLICT", appErr.Reason)
-	require.Equal(t, "1", appErr.Metadata["count"])
+	require.NoError(t, err)
+	require.NotNil(t, result)
 	require.True(t, repo.getByIDsCalled)
-	require.Empty(t, repo.bulkUpdateIDs, "rate conflict must be rejected before any write")
+	require.Equal(t, []int64{1, 2}, repo.bulkUpdateIDs)
 }
 
-// TestAdminService_BulkUpdateAccounts_PartialFailureIDs 验证部分失败时 success_ids/failed_ids 正确。
 func TestAdminService_BulkUpdateAccounts_PartialFailureIDs(t *testing.T) {
 	repo := &accountRepoStubForBulkUpdate{
 		bindGroupErrByID: map[int64]error{

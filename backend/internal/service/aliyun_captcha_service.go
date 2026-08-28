@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -73,8 +75,13 @@ func normalizeAliyunCaptchaRegion(value string) string {
 	return AliyunCaptchaRegionCN
 }
 
-// aliyunCredentialValidationParam 用于后台保存时探测凭证有效性的假验证参数
-const aliyunCredentialValidationParam = "sub2api-credential-validation"
+func randomAliyunCredentialValidationParam() string {
+	buf := make([]byte, 16)
+	if _, err := rand.Read(buf); err != nil {
+		return hex.EncodeToString([]byte("fallback-credential-check"))
+	}
+	return hex.EncodeToString(buf)
+}
 
 // aliyunInvalidCredentialCodes 表示 AK/SK 本身无效的阿里云错误码；
 // 其余错误码（如 param 无效）说明签名已通过、凭证可用。
@@ -156,7 +163,7 @@ func (s *AliyunCaptchaService) ValidateCredentials(ctx context.Context, accessKe
 		Endpoint:        aliyunCaptchaEndpoint(region),
 	}
 
-	_, err := s.verifier.VerifyCaptcha(ctx, cred, aliyunCredentialValidationParam)
+	_, err := s.verifier.VerifyCaptcha(ctx, cred, randomAliyunCredentialValidationParam())
 	if err != nil {
 		var apiErr *AliyunCaptchaAPIError
 		if errors.As(err, &apiErr) {

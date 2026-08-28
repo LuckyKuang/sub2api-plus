@@ -37,7 +37,6 @@ func applySubscriptionQuotaResetHeaders(c *gin.Context, err error) {
 	}
 	c.Header("Retry-After", strconv.Itoa(seconds))
 	c.Header("X-RateLimit-Reset", strconv.FormatInt(resetAt.Unix(), 10))
-	c.Header("X-Sub2API-RateLimit-Reset-At", resetAt.UTC().Format(time.RFC3339))
 }
 
 func subscriptionQuotaResponseCode(err error) string {

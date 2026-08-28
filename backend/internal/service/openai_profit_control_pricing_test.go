@@ -20,7 +20,7 @@ func TestProfitControl_RequestPricingContext(t *testing.T) {
 	svc := &OpenAIGatewayService{}
 	groupID := int64(61)
 	now := time.Now()
-	expensive := upstreamCostTestAccount(1, UpstreamBillingProbeStatusOK, 0.8, now.Add(-time.Minute), 30*time.Minute)
+	expensive := upstreamCostTestAccount(1, "ok", 0.8, now.Add(-time.Minute), 30*time.Minute)
 	profitControlTestAccountWithRate(expensive, 0.8)
 
 	t.Run("installs gate and pricing instant", func(t *testing.T) {
@@ -70,7 +70,7 @@ func TestProfitControl_GateReuseKeepsThresholdAcrossFailover(t *testing.T) {
 	otherGate, _ := otherCtx.Value(openAIProfitControlGateCtxKey{}).(*openAIProfitControlGate)
 	require.Nil(t, otherGate, "成员分组未启用利润控制时父分组门必须清除")
 	now := time.Now()
-	expensive := upstreamCostTestAccount(8, UpstreamBillingProbeStatusOK, 0.9, now.Add(-time.Minute), 30*time.Minute)
+	expensive := upstreamCostTestAccount(8, "ok", 0.9, now.Add(-time.Minute), 30*time.Minute)
 	vetoed, _ := openAIProfitControlVetoReason(otherCtx, expensive)
 	require.False(t, vetoed)
 }
@@ -102,7 +102,7 @@ func TestProfitControl_PricingAtFixesDownstreamPeakFactor(t *testing.T) {
 func TestProfitControl_UsesAccountRateInsteadOfProbeSnapshot(t *testing.T) {
 	gate := &openAIProfitControlGate{threshold: 0.5, pricingAt: time.Now().Add(-12 * time.Hour)}
 	ctx := context.WithValue(context.Background(), openAIProfitControlGateCtxKey{}, gate)
-	account := upstreamCostTestAccount(9, UpstreamBillingProbeStatusOK, 0.1, time.Now().Add(-3*time.Hour), 30*time.Minute)
+	account := upstreamCostTestAccount(9, "ok", 0.1, time.Now().Add(-3*time.Hour), 30*time.Minute)
 	profitControlTestAccountWithRate(account, 0.8)
 	vetoed, reason := openAIProfitControlVetoReason(ctx, account)
 	require.True(t, vetoed)
@@ -113,7 +113,7 @@ func TestProfitControl_UsesAccountRateInsteadOfProbeSnapshot(t *testing.T) {
 // 因此唯一文本调度入口必须照常安装利润门。
 func TestProfitControl_ResponsesCapabilityUsesTextGateAtScheduler(t *testing.T) {
 	now := time.Now()
-	expensive := upstreamCostTestAccount(51, UpstreamBillingProbeStatusOK, 0.8, now.Add(-time.Minute), 30*time.Minute)
+	expensive := upstreamCostTestAccount(51, "ok", 0.8, now.Add(-time.Minute), 30*time.Minute)
 	expensive.Status = StatusActive
 	expensive.Schedulable = true
 	expensive.Concurrency = 2
@@ -140,7 +140,7 @@ func TestProfitControl_AccountRateSemantics(t *testing.T) {
 	now := time.Now()
 	missing := upstreamCostTestOAuthAccount(2)
 	manualOAuth := profitControlTestAccountWithRate(upstreamCostTestOAuthAccount(3), 0.3)
-	expensive := profitControlTestAccountWithRate(upstreamCostTestAccount(4, UpstreamBillingProbeStatusOK, 0.1, now.Add(-3*time.Hour), 30*time.Minute), 0.8)
+	expensive := profitControlTestAccountWithRate(upstreamCostTestAccount(4, "ok", 0.1, now.Add(-3*time.Hour), 30*time.Minute), 0.8)
 
 	group := profitControlTestGroup(77, 0.5, 0)
 	group.RateMultiplier = 1
@@ -202,7 +202,7 @@ func TestOpenAIProfitControlStickyBindingOccursOnlyAfterTerminalAdmission(t *tes
 func TestProfitControl_TurnPricingContext(t *testing.T) {
 	svc := &OpenAIGatewayService{}
 	groupID := int64(63)
-	expensive := upstreamCostTestAccount(3, UpstreamBillingProbeStatusOK, 0.8, time.Now().Add(-time.Minute), 30*time.Minute)
+	expensive := upstreamCostTestAccount(3, "ok", 0.8, time.Now().Add(-time.Minute), 30*time.Minute)
 	profitControlTestAccountWithRate(expensive, 0.8)
 
 	t.Run("refreshes instant and re-resolves gate config", func(t *testing.T) {
