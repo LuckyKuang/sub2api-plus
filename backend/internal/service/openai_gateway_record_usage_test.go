@@ -2963,3 +2963,771 @@ func TestOpenAIGatewayServiceRecordUsage_ServiceTierNeverRaisedByUpstreamRespons
 	require.NoError(t, calcErr)
 	require.InDelta(t, baseCost.TotalCost, usageRepo.lastLog.TotalCost, 1e-10)
 }
+
+func testCodexAutoReviewFixturePrice() float64 { return 2e-6 }
+func testGPT56LunaFixturePrice() float64       { return 9e-6 }
+
+func newCodexAutoReviewLunaMismatchPricingService(autoReviewInput, lunaInput float64, autoReviewZero bool) *PricingService {
+	autoReview := &LiteLLMModelPricing{
+		InputCostPerToken:       autoReviewInput,
+		OutputCostPerToken:      autoReviewInput * 6,
+		CacheReadInputTokenCost: autoReviewInput / 10,
+	}
+	if autoReviewZero {
+		autoReview = &LiteLLMModelPricing{}
+	}
+	return &PricingService{
+		pricingData: map[string]*LiteLLMModelPricing{
+			"codex-auto-review": autoReview,
+			"gpt-5.6-luna": {
+				InputCostPerToken:                   lunaInput,
+				InputCostPerTokenPriority:           lunaInput * 2,
+				OutputCostPerToken:                  lunaInput * 6,
+				OutputCostPerTokenPriority:          lunaInput * 12,
+				CacheCreationInputTokenCost:         lunaInput * 1.25,
+				CacheCreationInputTokenCostPriority: lunaInput * 2.5,
+				CacheReadInputTokenCost:             lunaInput / 10,
+				CacheReadInputTokenCostPriority:     lunaInput / 5,
+				LongContextInputTokenThreshold:      openAIGPT54LongContextInputThreshold,
+				LongContextInputCostMultiplier:      openAIGPT54LongContextInputMultiplier,
+				LongContextOutputCostMultiplier:     openAIGPT54LongContextOutputMultiplier,
+			},
+		},
+	}
+}
+
+func newCodexAutoReviewLunaMismatchService(
+	t *testing.T,
+	usageRepo *openAIRecordUsageLogRepoStub,
+	userRepo *openAIRecordUsageUserRepoStub,
+	autoReviewInput, lunaInput float64,
+	autoReviewZero bool,
+) *OpenAIGatewayService {
+	t.Helper()
+	svc := newOpenAIRecordUsageServiceForTest(usageRepo, userRepo, &openAIRecordUsageSubRepoStub{}, nil)
+	svc.billingService = NewBillingService(&config.Config{}, newCodexAutoReviewLunaMismatchPricingService(autoReviewInput, lunaInput, autoReviewZero))
+	svc.resolver = NewModelPricingResolver(nil, svc.billingService)
+	return svc
+}
+
+func expectedDistinctModelCost(t *testing.T, svc *OpenAIGatewayService, model string, usage OpenAIUsage, multiplier float64) *CostBreakdown {
+	t.Helper()
+	return expectedOpenAICost(t, svc, model, usage, multiplier)
+}
+
+func TestIsUnmappedCodexAutoReviewLunaMismatch(t *testing.T) {
+	trueMismatch := true
+	_ = trueMismatch
+	baseInput := &OpenAIRecordUsageInput{ChannelUsageFields: ChannelUsageFields{OriginalModel: "codex-auto-review"}}
+	baseResult := &OpenAIForwardResult{
+		Model:                 "codex-auto-review",
+		UpstreamModel:         "codex-auto-review",
+		UpstreamResponseModel: "gpt-5.6-luna",
+	}
+	require.True(t, isUnmappedCodexAutoReviewLunaMismatch(baseInput, baseResult))
+
+	emptyMapped := &OpenAIRecordUsageInput{ChannelUsageFields: ChannelUsageFields{OriginalModel: "codex-auto-review", ChannelMappedModel: ""}}
+	require.True(t, isUnmappedCodexAutoReviewLunaMismatch(emptyMapped, baseResult))
+
+	sameMapped := &OpenAIRecordUsageInput{ChannelUsageFields: ChannelUsageFields{OriginalModel: "codex-auto-review", ChannelMappedModel: "codex-auto-review"}}
+	require.True(t, isUnmappedCodexAutoReviewLunaMismatch(sameMapped, baseResult))
+
+	require.False(t, isUnmappedCodexAutoReviewLunaMismatch(nil, baseResult))
+	require.False(t, isUnmappedCodexAutoReviewLunaMismatch(baseInput, nil))
+
+	mapped := &OpenAIRecordUsageInput{ChannelUsageFields: ChannelUsageFields{OriginalModel: "codex-auto-review", ChannelMappedModel: "gpt-5.6-luna"}}
+	require.False(t, isUnmappedCodexAutoReviewLunaMismatch(mapped, baseResult))
+
+	otherResponse := *baseResult
+	otherResponse.UpstreamResponseModel = "gpt-5.6-terra"
+	require.False(t, isUnmappedCodexAutoReviewLunaMismatch(baseInput, &otherResponse))
+
+	matched := *baseResult
+	matched.UpstreamResponseModel = "codex-auto-review"
+	require.False(t, isUnmappedCodexAutoReviewLunaMismatch(baseInput, &matched))
+
+	conflict := *baseResult
+	conflict.UpstreamResponseModelConflict = true
+	require.False(t, isUnmappedCodexAutoReviewLunaMismatch(baseInput, &conflict))
+
+	otherRequest := &OpenAIRecordUsageInput{ChannelUsageFields: ChannelUsageFields{OriginalModel: "gpt-5.6-luna"}}
+	require.False(t, isUnmappedCodexAutoReviewLunaMismatch(otherRequest, &OpenAIForwardResult{
+		Model:                 "gpt-5.6-luna",
+		UpstreamModel:         "gpt-5.6-luna",
+		UpstreamResponseModel: "gpt-5.6-luna",
+	}))
+}
+
+func TestOpenAIGatewayServiceRecordUsage_UnmappedCodexAutoReviewLunaMismatchUsesAutoReviewPrice(t *testing.T) {
+	autoReviewInput := testCodexAutoReviewFixturePrice()
+	lunaInput := testGPT56LunaFixturePrice()
+	usage := OpenAIUsage{InputTokens: 1000, OutputTokens: 200, CacheCreationInputTokens: 50, CacheReadInputTokens: 100}
+
+	for _, mapped := range []string{"", "codex-auto-review"} {
+		t.Run("mapped_"+mapped, func(t *testing.T) {
+			usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
+			userRepo := &openAIRecordUsageUserRepoStub{}
+			svc := newCodexAutoReviewLunaMismatchService(t, usageRepo, userRepo, autoReviewInput, lunaInput, false)
+			autoCost := expectedDistinctModelCost(t, svc, "codex-auto-review", usage, 1.1)
+			lunaCost := expectedDistinctModelCost(t, svc, "gpt-5.6-luna", usage, 1.1)
+			require.Greater(t, lunaCost.ActualCost, autoCost.ActualCost)
+
+			err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
+				Result: &OpenAIForwardResult{
+					RequestID:             "resp_auto_review_luna_mismatch",
+					Model:                 "codex-auto-review",
+					UpstreamModel:         "codex-auto-review",
+					UpstreamResponseModel: "gpt-5.6-luna",
+					Usage:                 usage,
+					Duration:              time.Second,
+				},
+				APIKey:  &APIKey{ID: 10},
+				User:    &User{ID: 20},
+				Account: &Account{ID: 30, Platform: PlatformOpenAI},
+				ChannelUsageFields: ChannelUsageFields{
+					OriginalModel:      "codex-auto-review",
+					ChannelMappedModel: mapped,
+				},
+			})
+			require.NoError(t, err)
+			require.NotNil(t, usageRepo.lastLog)
+			require.InDelta(t, autoCost.ActualCost, usageRepo.lastLog.ActualCost, 1e-12)
+			require.Greater(t, usageRepo.lastLog.ActualCost, 0.0)
+			require.NotEqual(t, lunaCost.ActualCost, usageRepo.lastLog.ActualCost)
+			require.Zero(t, usageRepo.lastLog.CacheCreationCost)
+			require.False(t, usageRepo.lastLog.LongContextBillingApplied)
+			require.NotNil(t, usageRepo.lastLog.UpstreamModelMismatch)
+			require.True(t, *usageRepo.lastLog.UpstreamModelMismatch)
+		})
+	}
+}
+
+func TestOpenAIGatewayServiceRecordUsage_MappedCodexAutoReviewToLunaKeepsLunaPrice(t *testing.T) {
+	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
+	userRepo := &openAIRecordUsageUserRepoStub{}
+	svc := newCodexAutoReviewLunaMismatchService(t, usageRepo, userRepo, testCodexAutoReviewFixturePrice(), testGPT56LunaFixturePrice(), false)
+	usage := OpenAIUsage{InputTokens: 1000, OutputTokens: 200, CacheCreationInputTokens: 50, CacheReadInputTokens: 100}
+	autoCost := expectedDistinctModelCost(t, svc, "codex-auto-review", usage, 1.1)
+	lunaCost := expectedDistinctModelCost(t, svc, "gpt-5.6-luna", usage, 1.1)
+	require.Greater(t, lunaCost.ActualCost, autoCost.ActualCost)
+
+	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
+		Result: &OpenAIForwardResult{
+			RequestID:             "resp_auto_review_mapped_luna",
+			Model:                 "gpt-5.6-luna",
+			BillingModel:          "gpt-5.6-luna",
+			UpstreamModel:         "gpt-5.6-luna",
+			UpstreamResponseModel: "gpt-5.6-luna",
+			Usage:                 usage,
+			Duration:              time.Second,
+		},
+		APIKey:  &APIKey{ID: 10},
+		User:    &User{ID: 20},
+		Account: &Account{ID: 30, Platform: PlatformOpenAI},
+		ChannelUsageFields: ChannelUsageFields{
+			OriginalModel:      "codex-auto-review",
+			ChannelMappedModel: "gpt-5.6-luna",
+			BillingModelSource: BillingModelSourceChannelMapped,
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, usageRepo.lastLog)
+	require.InDelta(t, lunaCost.ActualCost, usageRepo.lastLog.ActualCost, 1e-12)
+	require.NotEqual(t, autoCost.ActualCost, usageRepo.lastLog.ActualCost)
+	require.Greater(t, usageRepo.lastLog.CacheCreationCost, 0.0)
+}
+
+func TestOpenAIGatewayServiceRecordUsage_CodexAutoReviewOtherResponseKeepsExistingBehavior(t *testing.T) {
+	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
+	userRepo := &openAIRecordUsageUserRepoStub{}
+	svc := newCodexAutoReviewLunaMismatchService(t, usageRepo, userRepo, testCodexAutoReviewFixturePrice(), testGPT56LunaFixturePrice(), false)
+	usage := OpenAIUsage{InputTokens: 20, OutputTokens: 10}
+	autoCost := expectedDistinctModelCost(t, svc, "codex-auto-review", usage, 1.1)
+
+	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
+		Result: &OpenAIForwardResult{
+			RequestID:             "resp_auto_review_other_response",
+			Model:                 "codex-auto-review",
+			UpstreamModel:         "codex-auto-review",
+			UpstreamResponseModel: "gpt-5.6-terra",
+			Usage:                 usage,
+			Duration:              time.Second,
+		},
+		APIKey:  &APIKey{ID: 10},
+		User:    &User{ID: 20},
+		Account: &Account{ID: 30, Platform: PlatformOpenAI},
+		ChannelUsageFields: ChannelUsageFields{
+			OriginalModel:      "codex-auto-review",
+			ChannelMappedModel: "codex-auto-review",
+		},
+	})
+	require.NoError(t, err)
+	require.InDelta(t, autoCost.ActualCost, usageRepo.lastLog.ActualCost, 1e-12)
+}
+
+func TestOpenAIGatewayServiceRecordUsage_CodexAutoReviewMatchingLunaNameSkipsProtection(t *testing.T) {
+	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
+	userRepo := &openAIRecordUsageUserRepoStub{}
+	svc := newCodexAutoReviewLunaMismatchService(t, usageRepo, userRepo, testCodexAutoReviewFixturePrice(), testGPT56LunaFixturePrice(), false)
+	usage := OpenAIUsage{InputTokens: 20, OutputTokens: 10}
+	lunaCost := expectedDistinctModelCost(t, svc, "gpt-5.6-luna", usage, 1.1)
+
+	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
+		Result: &OpenAIForwardResult{
+			RequestID:             "resp_auto_review_matching_names",
+			Model:                 "gpt-5.6-luna",
+			BillingModel:          "gpt-5.6-luna",
+			UpstreamModel:         "gpt-5.6-luna",
+			UpstreamResponseModel: "gpt-5.6-luna",
+			Usage:                 usage,
+			Duration:              time.Second,
+		},
+		APIKey:  &APIKey{ID: 10},
+		User:    &User{ID: 20},
+		Account: &Account{ID: 30, Platform: PlatformOpenAI},
+		ChannelUsageFields: ChannelUsageFields{
+			OriginalModel:      "codex-auto-review",
+			ChannelMappedModel: "codex-auto-review",
+			BillingModelSource: BillingModelSourceUpstream,
+		},
+	})
+	require.NoError(t, err)
+	require.InDelta(t, lunaCost.ActualCost, usageRepo.lastLog.ActualCost, 1e-12)
+}
+
+func TestOpenAIGatewayServiceRecordUsage_OtherRequestedModelLunaMismatchUnchanged(t *testing.T) {
+	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
+	userRepo := &openAIRecordUsageUserRepoStub{}
+	svc := newCodexAutoReviewLunaMismatchService(t, usageRepo, userRepo, testCodexAutoReviewFixturePrice(), testGPT56LunaFixturePrice(), false)
+	usage := OpenAIUsage{InputTokens: 20, OutputTokens: 10}
+	lunaCost := expectedDistinctModelCost(t, svc, "gpt-5.6-luna", usage, 1.1)
+
+	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
+		Result: &OpenAIForwardResult{
+			RequestID:             "resp_other_model_luna",
+			Model:                 "gpt-5.6-luna",
+			UpstreamModel:         "gpt-5.6-luna",
+			UpstreamResponseModel: "gpt-5.6-luna",
+			Usage:                 usage,
+			Duration:              time.Second,
+		},
+		APIKey:             &APIKey{ID: 10},
+		User:               &User{ID: 20},
+		Account:            &Account{ID: 30, Platform: PlatformOpenAI},
+		ChannelUsageFields: ChannelUsageFields{OriginalModel: "gpt-5.6-luna", ChannelMappedModel: "gpt-5.6-luna"},
+	})
+	require.NoError(t, err)
+	require.InDelta(t, lunaCost.ActualCost, usageRepo.lastLog.ActualCost, 1e-12)
+}
+
+func TestOpenAIGatewayServiceRecordUsage_CodexAutoReviewResponseConflictSkipsProtection(t *testing.T) {
+	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
+	userRepo := &openAIRecordUsageUserRepoStub{}
+	svc := newCodexAutoReviewLunaMismatchService(t, usageRepo, userRepo, testCodexAutoReviewFixturePrice(), testGPT56LunaFixturePrice(), false)
+	usage := OpenAIUsage{InputTokens: 20, OutputTokens: 10}
+	autoCost := expectedDistinctModelCost(t, svc, "codex-auto-review", usage, 1.1)
+
+	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
+		Result: &OpenAIForwardResult{
+			RequestID:                     "resp_auto_review_conflict",
+			Model:                         "codex-auto-review",
+			UpstreamModel:                 "codex-auto-review",
+			UpstreamResponseModel:         "gpt-5.6-luna",
+			UpstreamResponseModelConflict: true,
+			Usage:                         usage,
+			Duration:                      time.Second,
+		},
+		APIKey:  &APIKey{ID: 10},
+		User:    &User{ID: 20},
+		Account: &Account{ID: 30, Platform: PlatformOpenAI},
+		ChannelUsageFields: ChannelUsageFields{
+			OriginalModel:      "codex-auto-review",
+			ChannelMappedModel: "codex-auto-review",
+			BillingModelSource: BillingModelSourceResponse,
+		},
+	})
+	require.NoError(t, err)
+	require.InDelta(t, autoCost.ActualCost, usageRepo.lastLog.ActualCost, 1e-12)
+}
+
+func TestOpenAIGatewayServiceRecordUsage_UnmappedAutoReviewZeroDynamicUsesFallback(t *testing.T) {
+	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
+	userRepo := &openAIRecordUsageUserRepoStub{}
+	svc := newCodexAutoReviewLunaMismatchService(t, usageRepo, userRepo, testCodexAutoReviewFixturePrice(), testGPT56LunaFixturePrice(), true)
+	usage := OpenAIUsage{InputTokens: 1000, OutputTokens: 200, CacheCreationInputTokens: 80, CacheReadInputTokens: 40}
+	lunaCost := expectedDistinctModelCost(t, svc, "gpt-5.6-luna", usage, 1.1)
+	fallback, err := svc.billingService.GetCodexAutoReviewProtectedPricing()
+	require.NoError(t, err)
+	fallbackCost := svc.billingService.computeTokenBreakdown(fallback, UsageTokens{
+		InputTokens:         1000 - 80 - 40,
+		OutputTokens:        200,
+		CacheCreationTokens: 80,
+		CacheReadTokens:     40,
+	}, 1.1, "", false)
+
+	err = svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
+		Result: &OpenAIForwardResult{
+			RequestID:             "resp_auto_review_zero_dynamic",
+			Model:                 "codex-auto-review",
+			UpstreamModel:         "codex-auto-review",
+			UpstreamResponseModel: "gpt-5.6-luna",
+			Usage:                 usage,
+			Duration:              time.Second,
+		},
+		APIKey:             &APIKey{ID: 10},
+		User:               &User{ID: 20},
+		Account:            &Account{ID: 30, Platform: PlatformOpenAI},
+		ChannelUsageFields: ChannelUsageFields{OriginalModel: "codex-auto-review"},
+	})
+	require.NoError(t, err)
+	require.Greater(t, usageRepo.lastLog.ActualCost, 0.0)
+	require.InDelta(t, fallbackCost.ActualCost, usageRepo.lastLog.ActualCost, 1e-12)
+	require.NotEqual(t, lunaCost.ActualCost, usageRepo.lastLog.ActualCost)
+	require.Zero(t, usageRepo.lastLog.CacheCreationCost)
+}
+
+func TestOpenAIGatewayServiceRecordUsage_ProtectedMismatchDoesNotApplyLunaLongContextOrTier(t *testing.T) {
+	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
+	userRepo := &openAIRecordUsageUserRepoStub{}
+	svc := newCodexAutoReviewLunaMismatchService(t, usageRepo, userRepo, testCodexAutoReviewFixturePrice(), testGPT56LunaFixturePrice(), false)
+	svc.resolver = NewModelPricingResolver(nil, svc.billingService)
+	priority := "priority"
+	usage := OpenAIUsage{InputTokens: openAIGPT54LongContextInputThreshold + 1, OutputTokens: 10}
+
+	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
+		Result: &OpenAIForwardResult{
+			RequestID:             "resp_auto_review_no_luna_rules",
+			Model:                 "codex-auto-review",
+			UpstreamModel:         "codex-auto-review",
+			UpstreamResponseModel: "gpt-5.6-luna",
+			ServiceTier:           &priority,
+			Usage:                 usage,
+			Duration:              time.Second,
+		},
+		APIKey: &APIKey{ID: 10, Group: &Group{ID: 7, LongContextPricingEnabled: true, RateMultiplier: 1.1}},
+		User:   &User{ID: 20},
+		Account: &Account{
+			ID:       30,
+			Platform: PlatformOpenAI,
+			Type:     AccountTypeOAuth,
+			Extra:    map[string]any{"openai_long_context_billing_enabled": true},
+		},
+		ChannelUsageFields: ChannelUsageFields{OriginalModel: "codex-auto-review", ChannelMappedModel: "codex-auto-review"},
+	})
+	require.NoError(t, err)
+	autoCost := expectedDistinctModelCost(t, svc, "codex-auto-review", usage, 1.1)
+	lunaCost, calcErr := svc.billingService.CalculateCostWithServiceTier("gpt-5.6-luna", UsageTokens{InputTokens: usage.InputTokens, OutputTokens: usage.OutputTokens}, 1.1, "priority")
+	require.NoError(t, calcErr)
+	require.InDelta(t, autoCost.ActualCost, usageRepo.lastLog.ActualCost, 1e-12)
+	require.NotEqual(t, lunaCost.ActualCost, usageRepo.lastLog.ActualCost)
+	require.False(t, usageRepo.lastLog.LongContextBillingApplied)
+}
+
+func TestOpenAIGatewayServiceRecordUsage_ProtectedMismatchAppliesUserAndPeakMultipliers(t *testing.T) {
+	groupID := int64(44)
+	userRate := 1.8
+	usage := OpenAIUsage{InputTokens: 15, OutputTokens: 4, CacheReadInputTokens: 3}
+	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
+	userRepo := &openAIRecordUsageUserRepoStub{}
+	rateRepo := &openAIUserGroupRateRepoStub{rate: &userRate}
+	svc := newOpenAIRecordUsageServiceForTest(usageRepo, userRepo, &openAIRecordUsageSubRepoStub{}, rateRepo)
+	svc.billingService = NewBillingService(&config.Config{}, newCodexAutoReviewLunaMismatchPricingService(testCodexAutoReviewFixturePrice(), testGPT56LunaFixturePrice(), false))
+	svc.resolver = NewModelPricingResolver(nil, svc.billingService)
+
+	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
+		Result: &OpenAIForwardResult{
+			RequestID:             "resp_auto_review_multipliers",
+			Model:                 "codex-auto-review",
+			UpstreamModel:         "codex-auto-review",
+			UpstreamResponseModel: "gpt-5.6-luna",
+			Usage:                 usage,
+			Duration:              time.Second,
+		},
+		APIKey: &APIKey{
+			ID:      1001,
+			GroupID: i64p(groupID),
+			Group: &Group{
+				ID:                 groupID,
+				RateMultiplier:     1.4,
+				SubscriptionType:   "subscription",
+				PeakRateEnabled:    true,
+				PeakStart:          "00:00",
+				PeakEnd:            "23:59",
+				PeakRateMultiplier: 3.0,
+			},
+		},
+		User:               &User{ID: 2001},
+		Account:            &Account{ID: 3001, Platform: PlatformOpenAI},
+		ChannelUsageFields: ChannelUsageFields{OriginalModel: "codex-auto-review", ChannelMappedModel: "codex-auto-review"},
+	})
+	require.NoError(t, err)
+	expected := expectedOpenAICost(t, svc, "codex-auto-review", usage, userRate*3.0)
+	require.InDelta(t, expected.ActualCost, usageRepo.lastLog.ActualCost, 1e-12)
+	require.InDelta(t, userRate*3.0, usageRepo.lastLog.RateMultiplier, 1e-12)
+}
+
+func TestOpenAIGatewayServiceRecordUsage_ProtectedMismatchPrefersGroupSameNamePrice(t *testing.T) {
+	groupInput := 4e-6
+	usage := OpenAIUsage{InputTokens: 100, OutputTokens: 50}
+	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
+	userRepo := &openAIRecordUsageUserRepoStub{}
+	svc := newCodexAutoReviewLunaMismatchService(t, usageRepo, userRepo, testCodexAutoReviewFixturePrice(), testGPT56LunaFixturePrice(), true)
+	svc.resolver = NewModelPricingResolver(nil, svc.billingService)
+	apiKey := &APIKey{
+		ID: 10,
+		Group: &Group{
+			ID:             9,
+			RateMultiplier: 1.1,
+			ModelPricing: []ChannelModelPricing{{
+				Models:      []string{"codex-auto-review"},
+				BillingMode: BillingModeToken,
+				InputPrice:  &groupInput,
+				OutputPrice: func() *float64 { v := 5e-6; return &v }(),
+			}},
+		},
+	}
+
+	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
+		Result: &OpenAIForwardResult{
+			RequestID:             "resp_auto_review_group_price",
+			Model:                 "codex-auto-review",
+			UpstreamModel:         "codex-auto-review",
+			UpstreamResponseModel: "gpt-5.6-luna",
+			Usage:                 usage,
+			Duration:              time.Second,
+		}, APIKey: apiKey,
+		User:               &User{ID: 20},
+		Account:            &Account{ID: 30, Platform: PlatformOpenAI},
+		ChannelUsageFields: ChannelUsageFields{OriginalModel: "codex-auto-review", ChannelMappedModel: "codex-auto-review"},
+	})
+	require.NoError(t, err)
+	groupCost, calcErr := svc.billingService.CalculateCostUnified(CostInput{
+		Ctx:            context.Background(),
+		Model:          "codex-auto-review",
+		Group:          apiKey.Group,
+		GroupID:        &apiKey.Group.ID,
+		Tokens:         UsageTokens{InputTokens: 100, OutputTokens: 50},
+		RateMultiplier: 1.1,
+		Resolver:       svc.resolver,
+	})
+	require.NoError(t, calcErr)
+	fallback, ferr := svc.billingService.GetCodexAutoReviewProtectedPricing()
+	require.NoError(t, ferr)
+	fallbackCost := svc.billingService.computeTokenBreakdown(fallback, UsageTokens{InputTokens: 100, OutputTokens: 50}, 1.1, "", false)
+	require.InDelta(t, groupCost.ActualCost, usageRepo.lastLog.ActualCost, 1e-12)
+	require.NotEqual(t, fallbackCost.ActualCost, usageRepo.lastLog.ActualCost)
+}
+
+func TestOpenAIGatewayServiceRecordUsage_ProtectedMismatchSkipsResponseModelReplacement(t *testing.T) {
+	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
+	userRepo := &openAIRecordUsageUserRepoStub{}
+	svc := newCodexAutoReviewLunaMismatchService(t, usageRepo, userRepo, testCodexAutoReviewFixturePrice(), testGPT56LunaFixturePrice(), false)
+	usage := OpenAIUsage{InputTokens: 20, OutputTokens: 10}
+	autoCost := expectedDistinctModelCost(t, svc, "codex-auto-review", usage, 1.1)
+	lunaCost := expectedDistinctModelCost(t, svc, "gpt-5.6-luna", usage, 1.1)
+	require.Greater(t, lunaCost.ActualCost, autoCost.ActualCost)
+
+	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
+		Result: &OpenAIForwardResult{
+			RequestID:             "resp_auto_review_skip_response_model",
+			Model:                 "codex-auto-review",
+			UpstreamModel:         "codex-auto-review",
+			UpstreamResponseModel: "gpt-5.6-luna",
+			Usage:                 usage,
+			Duration:              time.Second,
+		},
+		APIKey:  &APIKey{ID: 10},
+		User:    &User{ID: 20},
+		Account: &Account{ID: 30, Platform: PlatformOpenAI},
+		ChannelUsageFields: ChannelUsageFields{
+			OriginalModel:      "codex-auto-review",
+			ChannelMappedModel: "codex-auto-review",
+			BillingModelSource: BillingModelSourceResponse,
+		},
+	})
+	require.NoError(t, err)
+	require.InDelta(t, autoCost.ActualCost, usageRepo.lastLog.ActualCost, 1e-12)
+	require.NotEqual(t, lunaCost.ActualCost, usageRepo.lastLog.ActualCost)
+}
+
+func TestOpenAIGatewayServiceRecordUsage_ProtectedMismatchWSPathUsesSameProtection(t *testing.T) {
+	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
+	userRepo := &openAIRecordUsageUserRepoStub{}
+	svc := newCodexAutoReviewLunaMismatchService(t, usageRepo, userRepo, testCodexAutoReviewFixturePrice(), testGPT56LunaFixturePrice(), false)
+	usage := OpenAIUsage{InputTokens: 20, OutputTokens: 10}
+	autoCost := expectedDistinctModelCost(t, svc, "codex-auto-review", usage, 1.1)
+
+	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
+		Result: &OpenAIForwardResult{
+			RequestID:             "ws_auto_review_luna_mismatch",
+			Model:                 "codex-auto-review",
+			UpstreamModel:         "codex-auto-review",
+			UpstreamResponseModel: "gpt-5.6-luna",
+			Usage:                 usage,
+			Duration:              time.Second,
+			OpenAIWSMode:          true,
+			Stream:                true,
+		},
+		APIKey:             &APIKey{ID: 10},
+		User:               &User{ID: 20},
+		Account:            &Account{ID: 30, Platform: PlatformOpenAI},
+		ChannelUsageFields: ChannelUsageFields{OriginalModel: "codex-auto-review", ChannelMappedModel: "codex-auto-review"},
+	})
+	require.NoError(t, err)
+	require.InDelta(t, autoCost.ActualCost, usageRepo.lastLog.ActualCost, 1e-12)
+	require.True(t, usageRepo.lastLog.OpenAIWSMode)
+}
+
+func TestOpenAIGatewayServiceRecordUsage_ProtectedMismatchKeepsSearchSurcharge(t *testing.T) {
+	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
+	userRepo := &openAIRecordUsageUserRepoStub{}
+	svc := newCodexAutoReviewLunaMismatchService(t, usageRepo, userRepo, testCodexAutoReviewFixturePrice(), testGPT56LunaFixturePrice(), false)
+	searchPrice := 8.0
+	usage := OpenAIUsage{InputTokens: 100, OutputTokens: 20}
+	autoCost := expectedDistinctModelCost(t, svc, codexAutoReviewModel, usage, 1.1)
+	searchCost := svc.billingService.CalculateSearchCost(3, &searchPrice, 1.1)
+
+	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
+		Result: &OpenAIForwardResult{
+			RequestID:             "resp_auto_review_search_surcharge",
+			Model:                 codexAutoReviewModel,
+			UpstreamModel:         codexAutoReviewModel,
+			UpstreamResponseModel: "gpt-5.6-luna",
+			Usage:                 usage,
+			SearchCount:           3,
+			Duration:              time.Second,
+		},
+		APIKey: &APIKey{ID: 10, Group: &Group{ID: 7, RateMultiplier: 1.1, SearchPricePer1k: &searchPrice}},
+		User:   &User{ID: 20},
+		Account: &Account{
+			ID:       30,
+			Platform: PlatformOpenAI,
+		},
+		ChannelUsageFields: ChannelUsageFields{OriginalModel: codexAutoReviewModel},
+	})
+	require.NoError(t, err)
+	require.InDelta(t, autoCost.ActualCost+searchCost.ActualCost, usageRepo.lastLog.ActualCost, 1e-12)
+}
+
+func TestOpenAIGatewayServiceRecordUsage_ProtectedMismatchKeepsWebSearchBilling(t *testing.T) {
+	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
+	userRepo := &openAIRecordUsageUserRepoStub{}
+	svc := newCodexAutoReviewLunaMismatchService(t, usageRepo, userRepo, testCodexAutoReviewFixturePrice(), testGPT56LunaFixturePrice(), false)
+	webSearchPrice := 0.015
+	expected := svc.billingService.CalculateWebSearchCost(2, &webSearchPrice, 1.1)
+
+	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
+		Result: &OpenAIForwardResult{
+			RequestID:             "resp_auto_review_web_search",
+			Model:                 codexAutoReviewModel,
+			UpstreamModel:         codexAutoReviewModel,
+			UpstreamResponseModel: "gpt-5.6-luna",
+			WebSearchCalls:        2,
+			Duration:              time.Second,
+		},
+		APIKey: &APIKey{ID: 10, Group: &Group{ID: 7, RateMultiplier: 1.1, WebSearchPricePerCall: &webSearchPrice}},
+		User:   &User{ID: 20},
+		Account: &Account{
+			ID:       30,
+			Platform: PlatformOpenAI,
+		},
+		ChannelUsageFields: ChannelUsageFields{OriginalModel: codexAutoReviewModel},
+	})
+	require.NoError(t, err)
+	require.InDelta(t, expected.ActualCost, usageRepo.lastLog.ActualCost, 1e-12)
+}
+
+func TestOpenAIGatewayServiceRecordUsage_ProtectedMismatchKeepsImageBilling(t *testing.T) {
+	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
+	userRepo := &openAIRecordUsageUserRepoStub{}
+	svc := newCodexAutoReviewLunaMismatchService(t, usageRepo, userRepo, testCodexAutoReviewFixturePrice(), testGPT56LunaFixturePrice(), false)
+	imagePrice := 0.04
+	expected := svc.billingService.CalculateImageCost(codexAutoReviewModel, ImageBillingSize1K, 2, &ImagePriceConfig{Price1K: &imagePrice}, 1.1)
+
+	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
+		Result: &OpenAIForwardResult{
+			RequestID:             "resp_auto_review_image",
+			Model:                 codexAutoReviewModel,
+			UpstreamModel:         codexAutoReviewModel,
+			UpstreamResponseModel: "gpt-5.6-luna",
+			ImageCount:            2,
+			ImageSize:             ImageBillingSize1K,
+			Duration:              time.Second,
+		},
+		APIKey: &APIKey{ID: 10, Group: &Group{ID: 7, RateMultiplier: 1.1, ImagePrice1K: &imagePrice}},
+		User:   &User{ID: 20},
+		Account: &Account{
+			ID:       30,
+			Platform: PlatformOpenAI,
+		},
+		ChannelUsageFields: ChannelUsageFields{OriginalModel: codexAutoReviewModel},
+	})
+	require.NoError(t, err)
+	require.InDelta(t, expected.ActualCost, usageRepo.lastLog.ActualCost, 1e-12)
+}
+
+func TestOpenAIGatewayServiceRecordUsage_ProtectedMismatchKeepsAudioBilling(t *testing.T) {
+	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
+	userRepo := &openAIRecordUsageUserRepoStub{}
+	svc := newCodexAutoReviewLunaMismatchService(t, usageRepo, userRepo, testCodexAutoReviewFixturePrice(), testGPT56LunaFixturePrice(), false)
+	audioPrice := 20.0
+	expected := svc.billingService.CalculateAudioCost("tts", 0.25, &audioPriceConfig{TTSPerMChars: &audioPrice}, 1.1)
+
+	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
+		Result: &OpenAIForwardResult{
+			RequestID:             "resp_auto_review_audio",
+			Model:                 codexAutoReviewModel,
+			UpstreamModel:         codexAutoReviewModel,
+			UpstreamResponseModel: "gpt-5.6-luna",
+			AudioUsage:            &AudioUsage{Mode: "tts", DurationOrUnits: 0.25},
+			Duration:              time.Second,
+		},
+		APIKey: &APIKey{ID: 10, Group: &Group{ID: 7, RateMultiplier: 1.1, AudioTTSPricePerMillionChars: &audioPrice}},
+		User:   &User{ID: 20},
+		Account: &Account{
+			ID:       30,
+			Platform: PlatformOpenAI,
+		},
+		ChannelUsageFields: ChannelUsageFields{OriginalModel: codexAutoReviewModel},
+	})
+	require.NoError(t, err)
+	require.InDelta(t, expected.ActualCost, usageRepo.lastLog.ActualCost, 1e-12)
+	require.NotNil(t, usageRepo.lastLog.BillingMode)
+	require.Equal(t, string(BillingModePerRequest), *usageRepo.lastLog.BillingMode)
+}
+
+func TestOpenAIGatewayServiceRecordUsage_ProtectedMismatchKeepsVideoBilling(t *testing.T) {
+	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
+	userRepo := &openAIRecordUsageUserRepoStub{}
+	svc := newCodexAutoReviewLunaMismatchService(t, usageRepo, userRepo, testCodexAutoReviewFixturePrice(), testGPT56LunaFixturePrice(), false)
+	videoPrice := 0.05
+	expected := svc.billingService.CalculateVideoCost(
+		codexAutoReviewModel,
+		VideoBillingResolution720P,
+		1,
+		2,
+		&VideoPriceConfig{Price720P: &videoPrice},
+		1.1,
+	)
+
+	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
+		Result: &OpenAIForwardResult{
+			RequestID:             "resp_auto_review_video",
+			Model:                 codexAutoReviewModel,
+			UpstreamModel:         codexAutoReviewModel,
+			UpstreamResponseModel: "gpt-5.6-luna",
+			VideoCount:            1,
+			VideoResolution:       VideoBillingResolution720P,
+			VideoDurationSeconds:  2,
+			Duration:              time.Second,
+		},
+		APIKey: &APIKey{ID: 10, Group: &Group{ID: 7, RateMultiplier: 1.1, VideoPrice720P: &videoPrice}},
+		User:   &User{ID: 20},
+		Account: &Account{
+			ID:       30,
+			Platform: PlatformOpenAI,
+		},
+		ChannelUsageFields: ChannelUsageFields{OriginalModel: codexAutoReviewModel},
+	})
+	require.NoError(t, err)
+	require.InDelta(t, expected.ActualCost, usageRepo.lastLog.ActualCost, 1e-12)
+	require.NotNil(t, usageRepo.lastLog.BillingMode)
+	require.Equal(t, string(BillingModeVideo), *usageRepo.lastLog.BillingMode)
+}
+
+func TestOpenAIGatewayServiceRecordUsage_ProtectedMismatchKeepsSameNamePerRequestCard(t *testing.T) {
+	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
+	userRepo := &openAIRecordUsageUserRepoStub{}
+	svc := newCodexAutoReviewLunaMismatchService(t, usageRepo, userRepo, testCodexAutoReviewFixturePrice(), testGPT56LunaFixturePrice(), false)
+	svc.resolver = NewModelPricingResolver(nil, svc.billingService)
+	perRequestPrice := 0.025
+	apiKey := &APIKey{
+		ID: 10,
+		Group: &Group{
+			ID:             9,
+			RateMultiplier: 1.1,
+			ModelPricing: []ChannelModelPricing{{
+				Models:          []string{codexAutoReviewModel},
+				BillingMode:     BillingModePerRequest,
+				PerRequestPrice: &perRequestPrice,
+			}},
+		},
+	}
+
+	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
+		Result: &OpenAIForwardResult{
+			RequestID:             "resp_auto_review_per_request",
+			Model:                 codexAutoReviewModel,
+			UpstreamModel:         codexAutoReviewModel,
+			UpstreamResponseModel: "gpt-5.6-luna",
+			Usage:                 OpenAIUsage{InputTokens: 100, OutputTokens: 20},
+			Duration:              time.Second,
+		},
+		APIKey:             apiKey,
+		User:               &User{ID: 20},
+		Account:            &Account{ID: 30, Platform: PlatformOpenAI},
+		ChannelUsageFields: ChannelUsageFields{OriginalModel: codexAutoReviewModel},
+	})
+	require.NoError(t, err)
+	require.InDelta(t, perRequestPrice*1.1, usageRepo.lastLog.ActualCost, 1e-12)
+	require.NotNil(t, usageRepo.lastLog.BillingMode)
+	require.Equal(t, string(BillingModePerRequest), *usageRepo.lastLog.BillingMode)
+}
+
+func TestBillingServiceGetCodexAutoReviewProtectedPricing(t *testing.T) {
+	nonzero := NewBillingService(&config.Config{}, newCodexAutoReviewLunaMismatchPricingService(testCodexAutoReviewFixturePrice(), testGPT56LunaFixturePrice(), false))
+	pricing, err := nonzero.GetCodexAutoReviewProtectedPricing()
+	require.NoError(t, err)
+	require.InDelta(t, testCodexAutoReviewFixturePrice(), pricing.InputPricePerToken, 1e-12)
+	require.Zero(t, pricing.CacheCreationPricePerToken)
+	require.Zero(t, pricing.LongContextInputThreshold)
+
+	zero := NewBillingService(&config.Config{}, newCodexAutoReviewLunaMismatchPricingService(0, testGPT56LunaFixturePrice(), true))
+	fallback, err := zero.GetCodexAutoReviewProtectedPricing()
+	require.NoError(t, err)
+	require.InDelta(t, 0.2e-6, fallback.InputPricePerToken, 1e-12)
+	require.InDelta(t, 1.2e-6, fallback.OutputPricePerToken, 1e-12)
+	require.InDelta(t, 0.02e-6, fallback.CacheReadPricePerToken, 1e-12)
+	require.Zero(t, fallback.CacheCreationPricePerToken)
+	require.Zero(t, fallback.LongContextInputThreshold)
+	require.Zero(t, fallback.InputPricePerTokenPriority)
+
+	missing := NewBillingService(&config.Config{}, nil)
+	missing.fallbackPrices = map[string]*ModelPricing{}
+	_, err = missing.GetCodexAutoReviewProtectedPricing()
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrModelPricingUnavailable)
+
+	genericZero := NewBillingService(&config.Config{}, newCodexAutoReviewLunaMismatchPricingService(0, testGPT56LunaFixturePrice(), true))
+	generic, err := genericZero.GetModelPricing("codex-auto-review")
+	require.NoError(t, err)
+	require.Zero(t, generic.InputPricePerToken)
+	require.Zero(t, generic.OutputPricePerToken)
+}
+
+func TestOpenAIGatewayServiceRecordUsage_ProtectedMismatchMissingFallbackRecordsNonFreeError(t *testing.T) {
+	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
+	userRepo := &openAIRecordUsageUserRepoStub{}
+	svc := newCodexAutoReviewLunaMismatchService(t, usageRepo, userRepo, 0, testGPT56LunaFixturePrice(), true)
+	svc.billingService.fallbackPrices = map[string]*ModelPricing{}
+	usage := OpenAIUsage{InputTokens: 20, OutputTokens: 10}
+
+	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
+		Result: &OpenAIForwardResult{
+			RequestID:             "resp_auto_review_missing_fallback",
+			Model:                 "codex-auto-review",
+			UpstreamModel:         "codex-auto-review",
+			UpstreamResponseModel: "gpt-5.6-luna",
+			Usage:                 usage,
+			Duration:              time.Second,
+		},
+		APIKey:             &APIKey{ID: 10},
+		User:               &User{ID: 20},
+		Account:            &Account{ID: 30, Platform: PlatformOpenAI},
+		ChannelUsageFields: ChannelUsageFields{OriginalModel: "codex-auto-review"},
+	})
+	require.NoError(t, err)
+	require.Zero(t, usageRepo.lastLog.ActualCost)
+	require.Zero(t, usageRepo.lastLog.TotalCost)
+	require.Equal(t, 0, userRepo.deductCalls)
+}

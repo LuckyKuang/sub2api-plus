@@ -21,7 +21,7 @@ func legacyProfitDiagnosticService(accounts []Account) *OpenAIGatewayService {
 
 func legacyProfitDiagnosticAccount(id int64) *Account {
 	now := time.Now()
-	a := upstreamCostTestAccount(id, UpstreamBillingProbeStatusOK, 0.9, now.Add(-time.Minute), 30*time.Minute)
+	a := upstreamCostTestAccount(id, "ok", 0.9, now.Add(-time.Minute), 30*time.Minute)
 	a.Status = StatusActive
 	a.Schedulable = true
 	a.Concurrency = 1

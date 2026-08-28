@@ -13,15 +13,14 @@ func TestPreviewProfitAdmissionUsesAccountRatesAndPreinitializesModels(t *testin
 	group.Name = "VIP-preview"
 
 	cheap := profitControlTestAccountWithRate(
-		upstreamCostTestAccount(1, UpstreamBillingProbeStatusOK, 1.0, now.Add(-3*time.Hour), 30*time.Minute),
+		upstreamCostTestAccount(1, "ok", 1.0, now.Add(-3*time.Hour), 30*time.Minute),
 		0.5,
 	)
 	cheap.Name = "cheap"
-	cheap.Extra[UpstreamBillingRateSyncEnabledExtraKey] = true
 	cheap.Credentials = map[string]any{"model_mapping": map[string]any{"gpt-sol": "gpt-sol"}}
 
 	boundary := profitControlTestAccountWithRate(
-		upstreamCostTestAccount(2, UpstreamBillingProbeStatusOK, 0.8, now.Add(-time.Minute), 30*time.Minute),
+		upstreamCostTestAccount(2, "ok", 0.8, now.Add(-time.Minute), 30*time.Minute),
 		0.8,
 	)
 	boundary.Name = "boundary"
@@ -31,7 +30,7 @@ func TestPreviewProfitAdmissionUsesAccountRatesAndPreinitializesModels(t *testin
 	}}
 
 	expensive := profitControlTestAccountWithRate(
-		upstreamCostTestAccount(3, UpstreamBillingProbeStatusOK, 0.2, now.Add(-time.Minute), 30*time.Minute),
+		upstreamCostTestAccount(3, "ok", 0.2, now.Add(-time.Minute), 30*time.Minute),
 		1.0,
 	)
 	expensive.Name = "expensive"
@@ -59,8 +58,7 @@ func TestPreviewProfitAdmissionUsesAccountRatesAndPreinitializesModels(t *testin
 		byID[verdict.AccountID] = verdict
 	}
 	require.Equal(t, ProfitPreviewClassAdmitted, byID[cheap.ID].Class)
-	require.Equal(t, ProfitPreviewRateSourceUpstreamProbe, byID[cheap.ID].RateSource)
-	require.Contains(t, byID[cheap.ID].Warnings, ProfitPreviewWarningProbeStale)
+	require.Equal(t, ProfitPreviewRateSourceManual, byID[cheap.ID].RateSource)
 	require.True(t, byID[cheap.ID].RejectedUnderMinD)
 
 	require.Equal(t, ProfitPreviewClassAdmitted, byID[boundary.ID].Class, "U == 阈值按 epsilon 语义准入")
@@ -83,11 +81,11 @@ func TestPreviewProfitAdmissionAssumeEnabled(t *testing.T) {
 	group.ProfitControlEnabled = false
 
 	cheapAccount := profitControlTestAccountWithRate(
-		upstreamCostTestAccount(1, UpstreamBillingProbeStatusOK, 0.9, now.Add(-time.Minute), 30*time.Minute),
+		upstreamCostTestAccount(1, "ok", 0.9, now.Add(-time.Minute), 30*time.Minute),
 		0.2,
 	)
 	expensiveAccount := profitControlTestAccountWithRate(
-		upstreamCostTestAccount(2, UpstreamBillingProbeStatusOK, 0.2, now.Add(-time.Minute), 30*time.Minute),
+		upstreamCostTestAccount(2, "ok", 0.2, now.Add(-time.Minute), 30*time.Minute),
 		0.9,
 	)
 

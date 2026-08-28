@@ -3121,8 +3121,8 @@ func newOpenAILegacyUpstreamRateOrder(accounts []*Account, now time.Time, oauthS
 			continue
 		}
 		// 与 openAIUpstreamCostFactors 使用同一道平台门控：只有 OpenAI 平台账号
-		// 的倍率参与 legacy 低倍率优先排序。上游自报倍率来自中转方，不能让它对
-		// 其他平台的调度产生影响——否则自报低价即可吸走流量，而实际结算走本地倍率。
+		// 的倍率参与 legacy 低倍率优先排序。账号倍率由管理员手动配置，不能让
+		// OpenAI 的调度参数影响其他平台账号。
 		if !account.IsOpenAIApiKey() && !account.IsOpenAIOAuthLike() {
 			continue
 		}
@@ -3140,11 +3140,18 @@ func newOpenAILegacyUpstreamRateOrder(accounts []*Account, now time.Time, oauthS
 	return openAILegacyUpstreamRateOrder{enabled: len(rates) >= 2 && distinct, rates: rates}
 }
 
-func openAISchedulingRate(account *Account, now time.Time, oauthSchedulingRateMultiplier float64) (float64, bool) {
+func openAISchedulingRate(account *Account, _ time.Time, oauthSchedulingRateMultiplier float64) (float64, bool) {
 	if account != nil && account.IsOpenAIOAuthLike() {
 		return oauthSchedulingRateMultiplier, true
 	}
-	return openAIFreshUpstreamBillingRate(account, now)
+	if account == nil || !account.IsOpenAIApiKey() || account.RateMultiplier == nil {
+		return 0, false
+	}
+	rate := *account.RateMultiplier
+	if rate < 0 || math.IsNaN(rate) || math.IsInf(rate, 0) {
+		return 0, false
+	}
+	return rate, true
 }
 
 // compare returns -1 when a should be selected before b, 1 when b should be
@@ -3168,29 +3175,6 @@ func (o openAILegacyUpstreamRateOrder) compare(a, b *Account) int {
 		return -1
 	}
 	return 1
-}
-
-func openAIFreshUpstreamBillingRate(account *Account, now time.Time) (float64, bool) {
-	if !isUpstreamBillingProbeAccount(account) {
-		return 0, false
-	}
-	snapshot := decodeUpstreamBillingProbeSnapshot(account.Extra)
-	if snapshot == nil || (snapshot.Status != UpstreamBillingProbeStatusOK && snapshot.Status != UpstreamBillingProbeStatusFailed) ||
-		snapshot.ReceivedAt == nil || snapshot.ReceivedAt.IsZero() {
-		return 0, false
-	}
-	receivedAt := *snapshot.ReceivedAt
-	freshUntil := snapshot.FreshUntil
-	if freshUntil == nil && snapshot.Status == UpstreamBillingProbeStatusOK {
-		interval := snapshot.NextProbeAt.Sub(receivedAt)
-		if interval > 0 {
-			freshUntil = probeTimePtr(receivedAt.Add(2 * interval))
-		}
-	}
-	if freshUntil == nil || !freshUntil.After(receivedAt) || now.Before(receivedAt) || now.After(*freshUntil) {
-		return 0, false
-	}
-	return upstreamBillingRateAt(snapshot.Data, now)
 }
 
 func openAIQuotaHeadroomFactor(account *Account, now time.Time) float64 {

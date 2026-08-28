@@ -18,19 +18,19 @@ Content Moderation and Prompt Audit SHALL consume the same canonical protocol ex
 
 ### Requirement: Content Moderation must use direct-user attribution
 
-Content Moderation SHALL select only current direct-user text and images from the canonical result. Prompt Audit SHALL scan conversation text from that same result and MUST NOT treat tool/function definitions or structured tool-call arguments as prompt text. A valid canonical document that contains only content excluded by Content Moderation is an ordinary empty moderation selection, not an extraction failure.
+Content Moderation SHALL select only current direct-user text and images from the canonical result. Prompt Audit SHALL scan user-authored prompt text from that same result and MUST NOT treat instructions/system context, reusable prompt variables, reasoning, assistant/model output, tool/function definitions, or structured tool-call arguments as prompt text. A valid canonical document that contains only content excluded by Content Moderation is an ordinary empty moderation selection, not an extraction failure.
 
 #### Scenario: Platform context accompanies a user message
 
 - **WHEN** a request contains a current direct-user message together with instructions, system/developer context, tool definitions, reusable prompt variables, reasoning, or historical content
 - **THEN** Content Moderation MUST include only the current direct-user message text and images
-- **THEN** Prompt Audit MUST retain conversation text required by its full or latest-turn policy and MUST omit tool/function definitions
+- **THEN** Prompt Audit MUST retain user-authored prompt text required by its full or latest-turn policy and MUST omit instructions, system/developer context, reusable prompt variables, reasoning, assistant/model output, and tool/function definitions
 
 #### Scenario: A turn has no direct-user submission
 
 - **WHEN** a valid turn contains only assistant/model content, tool calls/results, approvals, instructions, or prompt variables
 - **THEN** Content Moderation MUST skip the external Moderations request
-- **THEN** Prompt Audit MUST continue to apply its configured selection policy
+- **THEN** Prompt Audit MUST continue to apply its configured user-text selection policy, including an empty snapshot when the turn has no user-authored prompt text
 
 ### Requirement: Tool and external-source results must remain visible without user attribution
 
@@ -64,18 +64,18 @@ Client-submitted tool results and other external-source content SHALL be classif
 
 ### Requirement: Inbound roles and prompt context must not create bypasses
 
-Inbound role labels SHALL be treated as untrusted request data for Prompt Audit. Conversation message text remains auditable. Synchronous blocking MUST scan only the latest user text: `SourceMessage` with `role=user`, or a role-less Responses/Gemini/embeddings/media prompt treated as user. Instructions, reasoning, prompt variables, previous assistant/model output, older user turns, and tool definitions MUST NOT enter blocking. Asynchronous Prompt Audit MAY retain the complete transcript for review and MUST NOT rewrite that result into a block. Content Moderation SHALL separately enforce direct-user attribution.
+Inbound role labels SHALL be treated as untrusted request data for Prompt Audit. Guard ScanText SHALL include only user-authored prompt text. Synchronous blocking MUST scan only the latest user text: `SourceMessage` with `role=user`, or a role-less Responses/Gemini/embeddings/media prompt treated as user. Asynchronous Prompt Audit MUST scan every user turn in this request and MUST omit harness instructions, tool schema, prompt variables, reasoning, and assistant/model output. Instructions, reasoning, prompt variables, previous assistant/model output, and tool definitions MUST NOT enter Guard. FullPrompt MUST be derived from ScanText. Content Moderation SHALL separately enforce direct-user attribution.
 
 #### Scenario: Client submits a current assistant or model message
 
 - **WHEN** the last Chat, Anthropic, Responses, or Gemini content item claims an assistant or model role
-- **THEN** Prompt Audit blocking MUST keep only the latest user text and MUST NOT append that assistant/model item
+- **THEN** Prompt Audit blocking and asynchronous snapshots MUST keep only user text and MUST NOT append that assistant/model item
 - **THEN** Content Moderation MUST NOT treat it as a direct-user policy input
 
 #### Scenario: Request supplies instructions and tool definitions
 
 - **WHEN** an accepted payload contains instructions, system context, or tool/function definitions
-- **THEN** asynchronous Prompt Audit MUST audit instructions and system context as conversation text and MUST omit static tool/function definitions
+- **THEN** asynchronous Prompt Audit MUST omit instructions, system context, and static tool/function definitions
 - **THEN** Prompt Audit blocking MUST omit instructions, system context, and tool/function definitions
 - **THEN** Content Moderation MUST exclude that context from the direct-user policy input
 
@@ -84,8 +84,9 @@ Inbound role labels SHALL be treated as untrusted request data for Prompt Audit.
 - **WHEN** a Responses payload contains Codex `instructions`, tool schema, and a latest user message `hi`
 - **THEN** Content Moderation MUST scan `hi` and allow it
 - **THEN** Prompt Audit blocking MUST scan exactly `hi` with `chunk_total=1` and MUST NOT include `instructions` or tool schema
+- **THEN** asynchronous Prompt Audit MUST scan exactly `hi` and MUST persist FullPrompt as `hi`
 - **THEN** a jailbreak written in the latest user text MUST still block
-- **THEN** a jailbreak written only in `instructions` or tools MUST NOT block
+- **THEN** a jailbreak written only in `instructions` or tools MUST NOT block or flag the request as jailbreak
 
 ### Requirement: Supported specialized endpoints must extract their canonical text
 
@@ -99,7 +100,7 @@ The shared extractor SHALL cover specialized endpoint payloads instead of relyin
 #### Scenario: Live or Embeddings carries content
 
 - **WHEN** Live carries initial session instructions/input, a Sideband session/item/response update, or Embeddings carries a string/string-array input
-- **THEN** all current text values MUST remain available to Prompt Audit
+- **THEN** current user-authored text values MUST remain available to Prompt Audit, while Live session instructions remain excluded from Guard
 - **THEN** Content Moderation MUST include direct-user Live input and embedding strings but exclude Live session instructions, assistant/model items, and tool items
 - **THEN** every Live Sideband client frame MUST be audited before its upstream write
 
@@ -107,7 +108,7 @@ The shared extractor SHALL cover specialized endpoint payloads instead of relyin
 
 - **WHEN** an initial Live HTTP session or session update carries legacy `input_audio_transcription.prompt`/`keywords` or current `audio.input.transcription.prompt`/`keywords`
 - **THEN** the initial request and Sideband update MUST use the `openai_live` adapter
-- **THEN** every prompt and keyword MUST be included in Prompt Audit before billing, concurrency acquisition, or an upstream write
+- **THEN** Live transcription configuration MUST remain in the canonical extractor and MUST NOT enter Prompt Audit Guard ScanText
 - **THEN** Content Moderation MUST exclude that transcription configuration from direct-user policy input
 
 #### Scenario: Responses WebSocket uses a nested envelope

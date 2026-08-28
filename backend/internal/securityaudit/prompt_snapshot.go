@@ -45,7 +45,8 @@ func ExtractPromptSnapshot(req Request) (PromptSnapshot, error) {
 // ExtractBlockingPromptSnapshot builds the synchronous guard input. Blocking
 // always scans only the latest user text; the latestTurnOnly argument is kept
 // for call-site compatibility and is ignored. Asynchronous auditing always
-// uses ExtractPromptSnapshot so the complete transcript is retained for review.
+// uses ExtractPromptSnapshot and retains every user turn in this request,
+// excluding harness instructions, tool schema, and assistant output.
 func ExtractBlockingPromptSnapshot(req Request, latestTurnOnly bool) (PromptSnapshot, error) {
 	_ = latestTurnOnly
 	snapshot, _, err := extractPromptSnapshotWithDiagnostics(req, true)
@@ -64,7 +65,7 @@ func extractPromptSnapshotWithDiagnostics(req Request, latestTurnOnly bool) (Pro
 			Reasons: auditcontent.SanitizeIncompleteReasons(document.IncompleteReasons),
 		}
 	}
-	extracted := promptSegmentsFromAuditContent(document, latestTurnOnly)
+	extracted := promptSegmentsFromAuditContent(document, req.Protocol, latestTurnOnly)
 	var segments []string
 	if latestTurnOnly {
 		segments = blockingSegmentsLatestUser(extracted)
@@ -92,15 +93,16 @@ func extractPromptSnapshotWithDiagnostics(req Request, latestTurnOnly bool) (Pro
 	}, diagnostic, nil
 }
 
-func promptSegmentsFromAuditContent(document auditcontent.Document, latestTurnOnly bool) []promptSegment {
+func promptSegmentsFromAuditContent(document auditcontent.Document, protocol string, latestTurnOnly bool) []promptSegment {
+	allowRolelessMessage := promptAuditAllowsRolelessMessage(protocol)
 	segments := make([]promptSegment, 0, len(document.Segments))
 	for _, segment := range document.Segments {
-		if !isPromptAuditConversationSegment(segment, latestTurnOnly) {
+		if !isPromptAuditConversationSegment(segment, allowRolelessMessage, latestTurnOnly) {
 			continue
 		}
 		role := segment.Role
 		user := role == "user"
-		if role == "" && (segment.Source == auditcontent.SourceMessage ||
+		if role == "" && ((segment.Source == auditcontent.SourceMessage && allowRolelessMessage) ||
 			segment.Source == auditcontent.SourceSearchQuery ||
 			segment.Source == auditcontent.SourceEmbeddingInput ||
 			segment.Source == auditcontent.SourceMediaPrompt) {
@@ -116,24 +118,36 @@ func promptSegmentsFromAuditContent(document auditcontent.Document, latestTurnOn
 	return segments
 }
 
-func isPromptAuditConversationSegment(segment auditcontent.Segment, latestTurnOnly bool) bool {
-	if latestTurnOnly {
-		switch segment.Source {
-		case auditcontent.SourceMessage:
+func isPromptAuditConversationSegment(segment auditcontent.Segment, allowRolelessMessage bool, latestTurnOnly bool) bool {
+	switch segment.Source {
+	case auditcontent.SourceSearchQuery, auditcontent.SourceEmbeddingInput, auditcontent.SourceMediaPrompt:
+		return true
+	case auditcontent.SourceMessage:
+		if latestTurnOnly {
 			// Keep assistant/model messages as turn separators so older user
 			// text is not joined with the latest user turn. They are not emitted.
 			return true
-		case auditcontent.SourceSearchQuery, auditcontent.SourceEmbeddingInput, auditcontent.SourceMediaPrompt:
-			return true
-		default:
-			return false
 		}
+		return isPromptAuditUserRole(segment.Role, allowRolelessMessage)
+	default:
+		return false
 	}
-	switch segment.Source {
-	case auditcontent.SourceMessage, auditcontent.SourceInstruction,
-		auditcontent.SourceSearchQuery, auditcontent.SourceEmbeddingInput,
-		auditcontent.SourceMediaPrompt, auditcontent.SourcePromptVariable,
-		auditcontent.SourceReasoning:
+}
+
+func isPromptAuditUserRole(role string, allowRoleless bool) bool {
+	switch strings.ToLower(strings.TrimSpace(role)) {
+	case "user":
+		return true
+	case "":
+		return allowRoleless
+	default:
+		return false
+	}
+}
+
+func promptAuditAllowsRolelessMessage(protocol string) bool {
+	switch strings.ToLower(strings.TrimSpace(protocol)) {
+	case "openai_responses", "openai_live", "gemini":
 		return true
 	default:
 		return false

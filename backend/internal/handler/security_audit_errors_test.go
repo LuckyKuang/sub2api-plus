@@ -129,7 +129,7 @@ func TestPromptGuardGeminiErrorEnvelopeGolden(t *testing.T) {
 		errorInfo := requireObject(t, details[0])
 		require.Equal(t, "type.googleapis.com/google.rpc.ErrorInfo", errorInfo["@type"])
 		require.Equal(t, decision.ErrorCode, errorInfo["reason"])
-		require.Equal(t, "sub2api.securityaudit", errorInfo["domain"])
+		require.Equal(t, "gateway.security", errorInfo["domain"])
 		metadata := requireObject(t, errorInfo["metadata"])
 		require.Equal(t, map[string]any{"request_id": "request-error-golden"}, metadata)
 	}

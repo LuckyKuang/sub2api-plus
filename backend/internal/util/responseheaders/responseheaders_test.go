@@ -88,3 +88,20 @@ func TestFilterHeadersEnabledUsesAllowlist(t *testing.T) {
 		t.Fatalf("expected X-Blocked removed, got %q", filtered.Get("X-Blocked"))
 	}
 }
+
+func TestFilterHeadersCannotAllowReservedProjectHeader(t *testing.T) {
+	src := http.Header{
+		"X-Sub2API-Trace":   {"internal"},
+		"X-RateLimit-Reset": {"123"},
+	}
+	filtered := FilterHeaders(src, CompileHeaderFilter(config.ResponseHeaderConfig{
+		Enabled:           true,
+		AdditionalAllowed: []string{"x-sub2api-trace", "x-ratelimit-reset"},
+	}))
+	if got := filtered.Get("X-Sub2API-Trace"); got != "" {
+		t.Fatalf("expected reserved project header removal, got %q", got)
+	}
+	if got := filtered.Get("X-RateLimit-Reset"); got != "123" {
+		t.Fatalf("expected standard rate-limit header preservation, got %q", got)
+	}
+}

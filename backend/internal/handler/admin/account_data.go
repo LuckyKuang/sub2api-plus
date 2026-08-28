@@ -643,6 +643,7 @@ func (h *AccountHandler) importData(ctx context.Context, req DataImportRequest) 
 		}
 
 		enrichCredentialsFromIDToken(&item)
+		stripImportedUpstreamBillingProbeExtra(&item)
 		if stripImportedOpenAIOAuthSessionPolicy(&item) {
 			result.Warnings = append(result.Warnings, DataImportError{
 				Kind:    "account",
@@ -704,6 +705,17 @@ func (h *AccountHandler) importData(ctx context.Context, req DataImportRequest) 
 	}
 
 	return result, nil
+}
+
+// Retired billing-probe metadata must not be reintroduced by importing an old
+// backup. The manually maintained rate_multiplier field is preserved.
+func stripImportedUpstreamBillingProbeExtra(item *DataAccount) {
+	if item == nil || item.Extra == nil {
+		return
+	}
+	delete(item.Extra, "upstream_billing_probe")
+	delete(item.Extra, "upstream_billing_probe_enabled")
+	delete(item.Extra, "upstream_billing_rate_sync_enabled")
 }
 
 // OpenAI OAuth session policies contain instance-local numeric group IDs and a

@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/proxyurl"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/servertiming"
 
@@ -73,8 +74,8 @@ func instrumentReqClient(client *req.Client) *req.Client {
 		return nil
 	}
 	client.GetTransport().WrapRoundTripFunc(func(rt http.RoundTripper) req.HttpRoundTripFunc {
-		timed := servertiming.WrapRoundTripper(rt)
-		return timed.RoundTrip
+		filtered := brandidentity.WrapRoundTripper(servertiming.WrapRoundTripper(rt))
+		return filtered.RoundTrip
 	})
 	return client
 }

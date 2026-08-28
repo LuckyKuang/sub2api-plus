@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
@@ -217,6 +218,7 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	identity := s.applyOpenAIOutboundIdentity(ctx, account, headers, account != nil && account.UsesOpenAICodexProtocol())
 	SetOpsRoutingDiagnostics(c, &OpsRoutingDiagnostics{OutboundIdentitySource: identity.Source})
 	setOpenAICodexRoutingHint(headers, account, routingModel, routingServiceTier)
+	brandidentity.StripOutboundHeaders(headers)
 	logOpenAIRoutingDiagnostics(
 		ctx,
 		account,

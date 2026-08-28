@@ -35,7 +35,7 @@ import {
 import { Line } from 'vue-chartjs'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import type { TrendDataPoint } from '@/types'
-import { formatTokenShare, promptCacheHitRate, sumTokenBuckets } from '@/utils/tokenShare'
+import { formatTokenShare, sumTokenBuckets } from '@/utils/tokenShare'
 
 ChartJS.register(
   CategoryScale,
@@ -65,8 +65,7 @@ const chartColors = computed(() => ({
   input: '#3b82f6',
   output: '#10b981',
   cacheCreation: '#f59e0b',
-  cacheRead: '#06b6d4',
-  cacheHitRate: '#8b5cf6'
+  cacheRead: '#06b6d4'
 }))
 
 const chartData = computed(() => {
@@ -106,20 +105,6 @@ const chartData = computed(() => {
         backgroundColor: `${chartColors.value.cacheRead}20`,
         fill: true,
         tension: 0.3
-      },
-      {
-        label: 'Cache Hit Rate',
-        data: props.trendData.map((d) => promptCacheHitRate(
-          d.input_tokens,
-          d.cache_read_tokens,
-          d.cache_creation_tokens,
-        ) ?? 0),
-        borderColor: chartColors.value.cacheHitRate,
-        backgroundColor: `${chartColors.value.cacheHitRate}20`,
-        borderDash: [5, 5],
-        fill: false,
-        tension: 0.3,
-        yAxisID: 'yPercent'
       }
     ]
   }
@@ -148,9 +133,6 @@ const lineOptions = computed(() => ({
     tooltip: {
       callbacks: {
         label: (context: any) => {
-          if (context.dataset.yAxisID === 'yPercent') {
-            return `${context.dataset.label}: ${context.raw.toFixed(1)}%`
-          }
           const point = props.trendData[context.dataIndex]
           const totalTokens = point
             ? sumTokenBuckets(point.input_tokens, point.output_tokens, point.cache_creation_tokens, point.cache_read_tokens)
@@ -190,21 +172,6 @@ const lineOptions = computed(() => ({
           size: 10
         },
         callback: (value: string | number) => formatTokens(Number(value))
-      }
-    },
-    yPercent: {
-      position: 'right' as const,
-      min: 0,
-      max: 100,
-      grid: {
-        drawOnChartArea: false
-      },
-      ticks: {
-        color: chartColors.value.cacheHitRate,
-        font: {
-          size: 10
-        },
-        callback: (value: string | number) => `${value}%`
       }
     }
   }

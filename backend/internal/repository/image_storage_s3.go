@@ -129,7 +129,7 @@ func (s *S3ImageStorage) Check(ctx context.Context) error {
 		return fmt.Errorf("S3 HeadBucket failed: %w", err)
 	}
 
-	key := ".sub2api-healthcheck/" + uuid.NewString()
+	key := ".healthcheck/" + uuid.NewString()
 	if s.prefix != "" {
 		key = s.prefix + "/" + key
 	}

@@ -319,7 +319,7 @@ func (s *GitHubReleaseServiceSuite) TestFetchLatestRelease_Success() {
 	s.srv = newLocalTestServer(s.T(), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(s.T(), "/repos/test/repo/releases/latest", r.URL.Path)
 		require.Equal(s.T(), "application/vnd.github.v3+json", r.Header.Get("Accept"))
-		require.Equal(s.T(), "Sub2API-Plus-Updater", r.Header.Get("User-Agent"))
+		require.Equal(s.T(), "api-gateway-updater", r.Header.Get("User-Agent"))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(releaseJSON))
@@ -371,7 +371,7 @@ func (s *GitHubReleaseServiceSuite) TestFetchRecentReleases_Success() {
 		require.Equal(s.T(), "/repos/test/repo/releases", r.URL.Path)
 		require.Equal(s.T(), "15", r.URL.Query().Get("per_page"))
 		require.Equal(s.T(), "application/vnd.github.v3+json", r.Header.Get("Accept"))
-		require.Equal(s.T(), "Sub2API-Plus-Updater", r.Header.Get("User-Agent"))
+		require.Equal(s.T(), "api-gateway-updater", r.Header.Get("User-Agent"))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(releasesJSON))

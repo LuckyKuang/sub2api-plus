@@ -153,6 +153,22 @@ func TestPluginRuntimeReturnsAndAppliesNormalizedConfig(t *testing.T) {
 	require.Equal(t, normalized, client.applied)
 }
 
+func TestHeadersToPluginStripsGatewayIdentityAndLocalControls(t *testing.T) {
+	header := http.Header{
+		"User-Agent":                   {"sub2api-client/1"},
+		"X-Sub2API-Trace":              {"internal"},
+		grokClientToolCacheOptInHeader: {"prefer-cache"},
+		"X-Grok-Conv-Id":               {"conversation"},
+	}
+
+	encoded := headersToPlugin(header)
+
+	require.NotContains(t, encoded, "User-Agent")
+	require.NotContains(t, encoded, "X-Sub2API-Trace")
+	require.NotContains(t, encoded, grokClientToolCacheOptInHeader)
+	require.Equal(t, []string{"conversation"}, encoded["X-Grok-Conv-Id"].Values)
+}
+
 func TestPluginRuntimeRejectsInvalidNormalizedConfig(t *testing.T) {
 	client := &normalizingPluginClient{normalized: []byte(`{"broken"`)}
 	runtime := &pluginRuntime{api: client}

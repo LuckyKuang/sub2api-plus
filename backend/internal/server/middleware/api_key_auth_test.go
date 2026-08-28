@@ -341,7 +341,7 @@ func TestAPIKeyAuthSubscriptionFiveHourLimitReturnsResetHeaders(t *testing.T) {
 	require.Contains(t, recorder.Body.String(), "GROUP_FIVE_HOUR_LIMIT_EXCEEDED")
 	require.NotEmpty(t, recorder.Header().Get("Retry-After"))
 	require.Equal(t, strconv.FormatInt(subscription.FiveHourWindowStart.Add(5*time.Hour).Unix(), 10), recorder.Header().Get("X-RateLimit-Reset"))
-	require.Equal(t, subscription.FiveHourWindowStart.Add(5*time.Hour).Format(time.RFC3339), recorder.Header().Get("X-Sub2API-RateLimit-Reset-At"))
+	require.Empty(t, recorder.Header().Get("X-Sub2API-RateLimit-Reset-At"))
 }
 
 func TestAPIKeyAuthSetsGroupContext(t *testing.T) {
@@ -1292,100 +1292,6 @@ func TestAPIKeyAuthTouchesLastUsedInStandardMode(t *testing.T) {
 	require.Equal(t, 1, touchCalls)
 }
 
-func TestAPIKeyAuthBillingInfoSkipsBillingAndSideEffects(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	group := &service.Group{
-		ID:               42,
-		Name:             "subscription",
-		Status:           service.StatusActive,
-		Hydrated:         true,
-		SubscriptionType: service.SubscriptionTypeSubscription,
-	}
-	user := &service.User{
-		ID:          7,
-		Role:        service.RoleUser,
-		Status:      service.StatusActive,
-		Balance:     0,
-		Concurrency: 3,
-	}
-	expiredAt := time.Now().Add(-time.Hour)
-	apiKey := &service.APIKey{
-		ID:        100,
-		UserID:    user.ID,
-		Key:       "billing-info-auth-only",
-		Status:    service.StatusAPIKeyQuotaExhausted,
-		User:      user,
-		GroupID:   &group.ID,
-		Group:     group,
-		Quota:     1,
-		QuotaUsed: 1,
-		ExpiresAt: &expiredAt,
-	}
-
-	touchCalls := 0
-	subscriptionCalls := 0
-	apiKeyRepo := &stubApiKeyRepo{
-		getByKey: func(context.Context, string) (*service.APIKey, error) {
-			clone := *apiKey
-			return &clone, nil
-		},
-		updateLastUsed: func(context.Context, int64, time.Time) error {
-			touchCalls++
-			return nil
-		},
-	}
-	subscriptionRepo := &stubUserSubscriptionRepo{
-		getActive: func(context.Context, int64, int64) (*service.UserSubscription, error) {
-			subscriptionCalls++
-			return nil, service.ErrSubscriptionNotFound
-		},
-	}
-	cfg := &config.Config{RunMode: config.RunModeStandard}
-	apiKeyService := service.NewAPIKeyService(apiKeyRepo, nil, nil, nil, nil, nil, cfg)
-	subscriptionService := service.NewSubscriptionService(nil, subscriptionRepo, nil, nil, cfg)
-	t.Cleanup(subscriptionService.Stop)
-	router := newAuthTestRouter(apiKeyService, subscriptionService, cfg)
-
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/v1/sub2api/billing", nil)
-	req.Header.Set("x-api-key", apiKey.Key)
-	router.ServeHTTP(w, req)
-
-	require.Equal(t, http.StatusOK, w.Code)
-	require.Zero(t, subscriptionCalls)
-	require.Zero(t, touchCalls)
-}
-
-func TestAPIKeyAuthBillingInfoSkipsLastUsedInSimpleMode(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	user := &service.User{ID: 7, Role: service.RoleUser, Status: service.StatusActive}
-	apiKey := &service.APIKey{ID: 100, UserID: user.ID, Key: "billing-info-simple", Status: service.StatusActive, User: user}
-	touchCalls := 0
-	apiKeyRepo := &stubApiKeyRepo{
-		getByKey: func(context.Context, string) (*service.APIKey, error) {
-			clone := *apiKey
-			return &clone, nil
-		},
-		updateLastUsed: func(context.Context, int64, time.Time) error {
-			touchCalls++
-			return nil
-		},
-	}
-	cfg := &config.Config{RunMode: config.RunModeSimple}
-	apiKeyService := service.NewAPIKeyService(apiKeyRepo, nil, nil, nil, nil, nil, cfg)
-	router := newAuthTestRouter(apiKeyService, nil, cfg)
-
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/v1/sub2api/billing", nil)
-	req.Header.Set("x-api-key", apiKey.Key)
-	router.ServeHTTP(w, req)
-
-	require.Equal(t, http.StatusOK, w.Code)
-	require.Zero(t, touchCalls)
-}
-
 func TestAPIKeyAuthUsageStillTouchesLastUsed(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -1583,7 +1489,6 @@ func newAuthTestRouter(apiKeyService *service.APIKeyService, subscriptionService
 	router.POST("/v1/responses", ok)
 	router.POST("/v1/messages", ok)
 	router.GET("/v1/usage", ok)
-	router.GET("/v1/sub2api/billing", ok)
 	return router
 }
 

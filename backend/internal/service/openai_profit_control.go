@@ -16,8 +16,8 @@ package service
 //     （用户-分组覆盖 ?? 分组默认）× Group.PeakMultiplierAt(pricingAt)，绝不在
 //     用户有覆盖时退回分组默认；开关与 margin/buffer 则始终取被调度
 //     openai/grok 分组。
-//   - U（上游成本倍率）取 accounts.rate_multiplier。倍率可以由运营者手工维护，
-//     也可以由上游倍率探测同步写回；利润门不再耦合探测协议、新鲜度或账号类型。
+//   - U（上游成本倍率）取 accounts.rate_multiplier，由运营者手工维护；利润门不
+//     耦合账号类型。
 //     0 是合法的免费上游倍率；nil、负数、NaN、Inf 属于非法数据并保守拒绝。
 //
 // 装门点（gate 随 ctx 传播，请求内复用，覆盖等待/重试/failover/抢槽后终检）：

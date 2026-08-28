@@ -401,9 +401,9 @@ func normalizeOpenAILongContextBillingUpdateExtra(account *Account, input *Updat
 
 func buildAccountForCreate(input *CreateAccountInput, accountExtra map[string]any) (*Account, error) {
 	// Probe/session state is system-managed. New accounts always start with automatic refresh disabled.
-	delete(accountExtra, UpstreamBillingProbeEnabledExtraKey)
-	delete(accountExtra, UpstreamBillingRateSyncEnabledExtraKey)
-	delete(accountExtra, UpstreamBillingProbeExtraKey)
+	delete(accountExtra, "upstream_billing_probe_enabled")
+	delete(accountExtra, "upstream_billing_rate_sync_enabled")
+	delete(accountExtra, "upstream_billing_probe")
 	delete(accountExtra, OllamaCloudUsageSessionExtraKey)
 	delete(accountExtra, OllamaCloudUsageAutoRefreshExtraKey)
 	delete(accountExtra, OllamaCloudUsageSnapshotExtraKey)
@@ -422,15 +422,6 @@ func buildAccountForCreate(input *CreateAccountInput, accountExtra map[string]an
 	}
 	if err := account.NormalizeCodexFingerprintMode(); err != nil {
 		return nil, err
-	}
-	if input.ProbeEnabled != nil && *input.ProbeEnabled {
-		if !isUpstreamBillingProbeAccount(account) {
-			return nil, ErrUpstreamBillingProbeAccountInvalid
-		}
-		if account.Extra == nil {
-			account.Extra = make(map[string]any)
-		}
-		account.Extra[UpstreamBillingProbeEnabledExtraKey] = true
 	}
 	// 预计算固定时间重置的下次重置时间
 	if account.Extra != nil {
@@ -612,7 +603,6 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 	} else {
 		canonicalizeCodexFingerprintModeForOmittedExtraUpdate(account)
 	}
-	previousProbeIdentity := upstreamBillingProbeIdentity(account)
 	previousOllamaUsageIdentity := ollamaCloudUsageIdentity(account)
 	// 安全/身份不变量(影子账号):通用更新路径被 edit/re-auth/refresh/batch 共用,
 	// 必须在此守住,否则仅在创建时的保证可被这些路径绕过。
@@ -682,23 +672,10 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 	}
 	// Extra 使用 map：需要区分“未提供(nil)”与“显式清空({})”。
 	// 关闭配额限制时前端会删除 quota_* 键并提交 extra:{}，此时也必须落库。
-	requestedProbeEnabledUpdate := input.ProbeEnabled
-	requestedRateSyncEnabledUpdate := input.RateSyncEnabled
 	if input.Extra != nil {
-		requestedProbeEnabled, hasRequestedProbeEnabled := normalizedExtra[UpstreamBillingProbeEnabledExtraKey]
-		if hasRequestedProbeEnabled {
-			enabled, ok := requestedProbeEnabled.(bool)
-			if !ok {
-				return nil, infraerrors.BadRequest("INVALID_UPSTREAM_BILLING_PROBE_ENABLED", "upstream_billing_probe_enabled must be a boolean")
-			}
-			if requestedProbeEnabledUpdate != nil && *requestedProbeEnabledUpdate != enabled {
-				return nil, infraerrors.BadRequest("CONFLICTING_UPSTREAM_BILLING_PROBE_ENABLED", "conflicting upstream_billing_probe_enabled values")
-			}
-			requestedProbeEnabledUpdate = &enabled
-		}
-		delete(normalizedExtra, UpstreamBillingProbeEnabledExtraKey)
-		delete(normalizedExtra, UpstreamBillingRateSyncEnabledExtraKey)
-		delete(normalizedExtra, UpstreamBillingProbeExtraKey)
+		delete(normalizedExtra, "upstream_billing_probe_enabled")
+		delete(normalizedExtra, "upstream_billing_rate_sync_enabled")
+		delete(normalizedExtra, "upstream_billing_probe")
 		delete(normalizedExtra, OllamaCloudUsageSessionExtraKey)
 		delete(normalizedExtra, OllamaCloudUsageAutoRefreshExtraKey)
 		delete(normalizedExtra, OllamaCloudUsageSnapshotExtraKey)
@@ -710,9 +687,6 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 			"quota_weekly_used",
 			"quota_weekly_start",
 			grokBillingExtraKey,
-			UpstreamBillingProbeEnabledExtraKey,
-			UpstreamBillingRateSyncEnabledExtraKey,
-			UpstreamBillingProbeExtraKey,
 			OllamaCloudUsageSessionExtraKey,
 			OllamaCloudUsageAutoRefreshExtraKey,
 			OllamaCloudUsageSnapshotExtraKey,
@@ -741,35 +715,6 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 		ComputeQuotaResetAt(account.Extra)
 		NormalizeFixedQuotaWindows(account.Extra)
 	}
-	if requestedRateSyncEnabledUpdate != nil && *requestedRateSyncEnabledUpdate {
-		if requestedProbeEnabledUpdate != nil && !*requestedProbeEnabledUpdate {
-			return nil, infraerrors.BadRequest(
-				"UPSTREAM_BILLING_RATE_SYNC_REQUIRES_PROBE",
-				"upstream billing rate sync requires upstream billing probe",
-			)
-		}
-		enabled := true
-		requestedProbeEnabledUpdate = &enabled
-	}
-	if requestedProbeEnabledUpdate != nil && !*requestedProbeEnabledUpdate {
-		disabled := false
-		requestedRateSyncEnabledUpdate = &disabled
-	}
-	if (requestedProbeEnabledUpdate != nil && *requestedProbeEnabledUpdate) ||
-		(requestedRateSyncEnabledUpdate != nil && *requestedRateSyncEnabledUpdate) {
-		if !isUpstreamBillingProbeAccount(account) {
-			return nil, ErrUpstreamBillingProbeAccountInvalid
-		}
-	}
-	if account.Extra == nil && (requestedProbeEnabledUpdate != nil || requestedRateSyncEnabledUpdate != nil) {
-		account.Extra = make(map[string]any)
-	}
-	if requestedProbeEnabledUpdate != nil {
-		account.Extra[UpstreamBillingProbeEnabledExtraKey] = *requestedProbeEnabledUpdate
-	}
-	if requestedRateSyncEnabledUpdate != nil {
-		account.Extra[UpstreamBillingRateSyncEnabledExtraKey] = *requestedRateSyncEnabledUpdate
-	}
 	// 影子代理恒继承母账号(由 propagateProxyToShadows 同步),不接受独立编辑——外审 B/P1;
 	// 否则要等母账号下次改 proxy 才被覆盖,期间影子会出现"有时继承、有时独立"的漂移。
 	if input.ProxyID != nil && !account.IsCredentialShadow() {
@@ -780,13 +725,6 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 			account.ProxyID = input.ProxyID
 		}
 		account.Proxy = nil // 清除关联对象，防止 GORM Save 时根据 Proxy.ID 覆盖 ProxyID
-	}
-	if !reflect.DeepEqual(previousProbeIdentity, upstreamBillingProbeIdentity(account)) && account.Extra != nil {
-		delete(account.Extra, UpstreamBillingProbeExtraKey)
-		if !isUpstreamBillingProbeAccount(account) {
-			delete(account.Extra, UpstreamBillingProbeEnabledExtraKey)
-			delete(account.Extra, UpstreamBillingRateSyncEnabledExtraKey)
-		}
 	}
 	if account.Extra != nil {
 		if !IsOllamaCloudUsageAccount(account) {
@@ -810,13 +748,6 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 	if input.RateMultiplier != nil {
 		if *input.RateMultiplier < 0 {
 			return nil, errors.New("rate_multiplier must be >= 0")
-		}
-		// 同步开启时倍率归上游所有，手工值活不过下一次成功探测（表现为"改了又自己
-		// 变回去"），与批量路径一样直接拒绝。判断的是本次请求生效后的状态：上面
-		// 已把请求携带的两个开关落进 account.Extra，所以"同一请求关闭同步 + 改倍率"
-		// （用户显式收回所有权）会走到这里时读到 false，正常放行。
-		if upstreamBillingRateSyncEnabled(account) {
-			return nil, ErrUpstreamBillingRateSyncConflict
 		}
 		account.RateMultiplier = input.RateMultiplier
 	}
@@ -912,21 +843,7 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 	_, hasOpenAIOAuthSessionPolicy, _ := account.OpenAIOAuthSessionPolicy()
 	policyMutation := account.IsOpenAIOAuth() && (hadOpenAIOAuthSessionPolicy || hasOpenAIOAuthSessionPolicy)
 	persist := func(writeCtx context.Context, repo AccountRepository) error {
-		updater, _ := repo.(AccountBillingSettingsRepository)
-		if updater == nil {
-			updater = s.accountBillingRepo
-		}
-		if updater != nil {
-			if err := updater.UpdateWithAccountBillingSettings(
-				writeCtx,
-				account,
-				requestedProbeEnabledUpdate,
-				requestedRateSyncEnabledUpdate,
-				input.RateMultiplier,
-			); err != nil {
-				return err
-			}
-		} else if err := persistAdminAccountUpdate(writeCtx, repo, account, requestedProbeEnabledUpdate); err != nil {
+		if err := repo.Update(writeCtx, account); err != nil {
 			return err
 		}
 		if input.ProxyID != nil && !account.IsCredentialShadow() {
@@ -984,9 +901,9 @@ func (s *adminServiceImpl) UpdateAccountExtra(ctx context.Context, id int64, upd
 	}
 	updates = sanitizedCodexFingerprintExtraUpdates(updates)
 	updates = stripOpenAIAutoResetCreditManagedExtra(updates, true)
-	delete(updates, UpstreamBillingProbeEnabledExtraKey)
-	delete(updates, UpstreamBillingRateSyncEnabledExtraKey)
-	delete(updates, UpstreamBillingProbeExtraKey)
+	delete(updates, "upstream_billing_probe_enabled")
+	delete(updates, "upstream_billing_rate_sync_enabled")
+	delete(updates, "upstream_billing_probe")
 	delete(updates, OllamaCloudUsageSessionExtraKey)
 	delete(updates, OllamaCloudUsageAutoRefreshExtraKey)
 	delete(updates, OllamaCloudUsageSnapshotExtraKey)
@@ -1014,12 +931,12 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 	if _, policyUpdateRequested := input.Extra[OpenAIOAuthSessionPolicyExtraKey]; policyUpdateRequested {
 		return nil, errors.New("openai_oauth_session_policy cannot be changed by bulk update")
 	}
-	// Managed probe/session state may only enter through dedicated typed endpoints.
+	// Managed session state may only enter through dedicated typed endpoints.
 	input.Extra = sanitizedCodexFingerprintExtraUpdates(input.Extra)
 	input.Extra = stripOpenAIAutoResetCreditManagedExtra(input.Extra, true)
-	delete(input.Extra, UpstreamBillingProbeEnabledExtraKey)
-	delete(input.Extra, UpstreamBillingRateSyncEnabledExtraKey)
-	delete(input.Extra, UpstreamBillingProbeExtraKey)
+	delete(input.Extra, "upstream_billing_probe_enabled")
+	delete(input.Extra, "upstream_billing_rate_sync_enabled")
+	delete(input.Extra, "upstream_billing_probe")
 	delete(input.Extra, OllamaCloudUsageSessionExtraKey)
 	delete(input.Extra, OllamaCloudUsageAutoRefreshExtraKey)
 	delete(input.Extra, OllamaCloudUsageSnapshotExtraKey)
@@ -1061,7 +978,7 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 	// An enabled OAuth session policy makes a bulk group change security-sensitive.
 	needOAuthSessionPolicyValidation := input.GroupIDs != nil
 	var cachedTargets []*Account
-	if len(input.Credentials) > 0 || input.ProxyID != nil || needMixedChannelCheck || hasLongContextBillingUpdate || input.ProbeEnabled != nil || input.RateMultiplier != nil || needOAuthSessionPolicyValidation {
+	if len(input.Credentials) > 0 || input.ProxyID != nil || needMixedChannelCheck || hasLongContextBillingUpdate || input.RateMultiplier != nil || needOAuthSessionPolicyValidation {
 		loaded, err := s.accountRepo.GetByIDs(ctx, input.AccountIDs)
 		if err != nil {
 			return nil, err
@@ -1080,17 +997,6 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 			return nil, err
 		}
 		result.LongContextInheritedCount = inheritedCount
-	}
-	if input.ProbeEnabled != nil {
-		for _, accountID := range input.AccountIDs {
-			account, ok := targetsByID[accountID]
-			if !ok {
-				return nil, ErrAccountNotFound
-			}
-			if !isUpstreamBillingProbeAccount(account) {
-				return nil, ErrUpstreamBillingProbeAccountInvalid
-			}
-		}
 	}
 	if hasLongContextBillingUpdate {
 		for _, account := range cachedTargets {
@@ -1166,23 +1072,8 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 		if *input.RateMultiplier < 0 {
 			return nil, errors.New("rate_multiplier must be >= 0")
 		}
-		syncEnabledCount := 0
-		for _, account := range cachedTargets {
-			if account == nil || account.Extra == nil {
-				continue
-			}
-			enabled, _ := account.Extra[UpstreamBillingRateSyncEnabledExtraKey].(bool)
-			if enabled {
-				syncEnabledCount++
-			}
-		}
-		if syncEnabledCount > 0 {
-			return nil, ErrUpstreamBillingRateSyncBulkConflict.WithMetadata(map[string]string{
-				"count": strconv.Itoa(syncEnabledCount),
-			})
-		}
-	}
 
+	}
 	// 校验并规范化请求头覆写配置（批量路径为 JSONB 顶层 key 合并，直接校验增量即可）
 	if err := NormalizeHeaderOverrideCredentials(input.Credentials); err != nil {
 		return nil, err
@@ -1195,26 +1086,8 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 
 	// Prepare bulk updates for columns and JSONB fields.
 	repoUpdates := AccountBulkUpdate{
-		Credentials:  input.Credentials,
-		Extra:        input.Extra,
-		ProbeEnabled: input.ProbeEnabled,
-	}
-	if input.ProbeEnabled != nil {
-		if repoUpdates.Extra == nil {
-			repoUpdates.Extra = make(map[string]any)
-		}
-		repoUpdates.Extra[UpstreamBillingProbeEnabledExtraKey] = *input.ProbeEnabled
-		if !*input.ProbeEnabled {
-			repoUpdates.Extra[UpstreamBillingRateSyncEnabledExtraKey] = false
-		}
-	}
-	if updatesUpstreamBillingProbeIdentity(input.Credentials) || input.ProxyID != nil {
-		if repoUpdates.Extra == nil {
-			repoUpdates.Extra = make(map[string]any)
-		}
-		// JSON null makes every reader treat the old snapshot as absent and lets the
-		// next enabled runner cycle probe the new upstream identity immediately.
-		repoUpdates.Extra[UpstreamBillingProbeExtraKey] = nil
+		Credentials: input.Credentials,
+		Extra:       input.Extra,
 	}
 	if input.Name != "" {
 		repoUpdates.Name = &input.Name
@@ -1287,31 +1160,6 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 	}
 
 	return result, nil
-}
-
-func updatesUpstreamBillingProbeIdentity(credentials map[string]any) bool {
-	for _, key := range []string{"api_key", "base_url", credKeyHeaderOverrideEnabled, credKeyHeaderOverrides} {
-		if _, ok := credentials[key]; ok {
-			return true
-		}
-	}
-	return false
-}
-
-func upstreamBillingProbeIdentity(account *Account) map[string]any {
-	if account == nil {
-		return nil
-	}
-	identity := map[string]any{"platform": account.Platform, "type": account.Type, "proxy_id": nil}
-	if account.ProxyID != nil {
-		identity["proxy_id"] = *account.ProxyID
-	}
-	for _, key := range []string{"api_key", "base_url", credKeyHeaderOverrideEnabled, credKeyHeaderOverrides} {
-		if value, ok := account.Credentials[key]; ok {
-			identity[key] = value
-		}
-	}
-	return identity
 }
 
 func (s *adminServiceImpl) resolveBulkUpdateTargetIDs(ctx context.Context, filters *BulkUpdateAccountFilters) ([]int64, error) {
@@ -1648,18 +1496,6 @@ func propagateOpenAIOAuthSessionPolicyToShadowsWithRepo(ctx context.Context, rep
 		if err := syncOpenAIOAuthSessionPolicyToSparkShadow(ctx, repo, parent, shadow, configured); err != nil {
 			return err
 		}
-	}
-	return nil
-}
-
-func persistAdminAccountUpdate(ctx context.Context, repo AccountRepository, account *Account, requestedProbeEnabledUpdate *bool) error {
-	if err := repo.Update(ctx, account); err != nil {
-		return err
-	}
-	if requestedProbeEnabledUpdate != nil && isUpstreamBillingProbeAccount(account) {
-		return repo.UpdateExtra(ctx, account.ID, map[string]any{
-			UpstreamBillingProbeEnabledExtraKey: *requestedProbeEnabledUpdate,
-		})
 	}
 	return nil
 }

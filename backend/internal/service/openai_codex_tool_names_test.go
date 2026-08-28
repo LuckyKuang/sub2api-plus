@@ -66,7 +66,7 @@ func TestAliasOpenAIOAuthReservedToolNames_CollisionDoesNotMutate(t *testing.T) 
 	require.NoError(t, err)
 
 	reverse, changed, err := aliasOpenAIOAuthReservedToolNames(reqBody)
-	require.ErrorContains(t, err, `both normalize to "python__sub2api"`)
+	require.ErrorContains(t, err, `both normalize to "python__gateway"`)
 	require.False(t, changed)
 	require.Nil(t, reverse)
 	after, marshalErr := json.Marshal(reqBody)
@@ -102,20 +102,20 @@ func TestRestoreCodexToolNamesFromContext_HTTPAndWSPayloadShapes(t *testing.T) {
 	setCodexToolNameReverse(c, map[string]string{codexPythonToolAlias: "python"})
 
 	streamEvent := restoreCodexToolNamesFromContext(c, []byte(
-		`{"type":"response.output_item.done","item":{"type":"function_call","name":"python__sub2api"},"note":"python__sub2api"}`,
+		`{"type":"response.output_item.done","item":{"type":"function_call","name":"python__gateway"},"note":"python__gateway"}`,
 	))
 	require.Equal(t, "python", gjson.GetBytes(streamEvent, "item.name").String())
-	require.Equal(t, "python__sub2api", gjson.GetBytes(streamEvent, "note").String())
+	require.Equal(t, "python__gateway", gjson.GetBytes(streamEvent, "note").String())
 
 	nonStreaming := restoreCodexToolNamesFromContext(c, []byte(
-		`{"id":"resp_1","output":[{"type":"function_call","name":"python__sub2api"}]}`,
+		`{"id":"resp_1","output":[{"type":"function_call","name":"python__gateway"}]}`,
 	))
 	require.Equal(t, "python", gjson.GetBytes(nonStreaming, "output.0.name").String())
 
 	setCodexToolNameReverse(c, nil)
 	require.JSONEq(t,
-		`{"type":"response.output_item.added","item":{"name":"python__sub2api"}}`,
-		string(restoreCodexToolNamesFromContext(c, []byte(`{"type":"response.output_item.added","item":{"name":"python__sub2api"}}`))),
+		`{"type":"response.output_item.added","item":{"name":"python__gateway"}}`,
+		string(restoreCodexToolNamesFromContext(c, []byte(`{"type":"response.output_item.added","item":{"name":"python__gateway"}}`))),
 	)
 }
 
@@ -136,7 +136,7 @@ func TestAliasOpenAIOAuthReservedToolNames_SessionUpdateOnlyTouchesFunctionProto
 
 func TestRestoreCodexToolNamesInJSON_OnlyTouchesResponseToolCallNodesAndPreservesNumbers(t *testing.T) {
 	reverse := map[string]string{codexPythonToolAlias: "python"}
-	body := []byte(`{"type":"response.completed","response":{"output":[{"type":"function_call","name":"python__sub2api"},{"type":"message","name":"python__sub2api","content":[]}]},"metadata":{"name":"python__sub2api"},"sequence":900719925474099312345}`)
+	body := []byte(`{"type":"response.completed","response":{"output":[{"type":"function_call","name":"python__gateway"},{"type":"message","name":"python__gateway","content":[]}]},"metadata":{"name":"python__gateway"},"sequence":900719925474099312345}`)
 
 	restored := restoreCodexToolNamesInJSON(body, reverse)
 	require.Equal(t, "python", gjson.GetBytes(restored, "response.output.0.name").String())
@@ -154,17 +154,17 @@ func TestRestoreCodexToolNamesInJSON_ExplicitHTTPAndSSEToolCallProtocols(t *test
 	}{
 		{
 			name: "chat http",
-			body: `{"choices":[{"message":{"tool_calls":[{"type":"function","function":{"name":"python__sub2api"}}]}}],"metadata":{"name":"python__sub2api"}}`,
+			body: `{"choices":[{"message":{"tool_calls":[{"type":"function","function":{"name":"python__gateway"}}]}}],"metadata":{"name":"python__gateway"}}`,
 			path: "choices.0.message.tool_calls.0.function.name",
 		},
 		{
 			name: "chat sse",
-			body: `{"choices":[{"delta":{"tool_calls":[{"type":"function","function":{"name":"python__sub2api"}}]}}],"metadata":{"name":"python__sub2api"}}`,
+			body: `{"choices":[{"delta":{"tool_calls":[{"type":"function","function":{"name":"python__gateway"}}]}}],"metadata":{"name":"python__gateway"}}`,
 			path: "choices.0.delta.tool_calls.0.function.name",
 		},
 		{
 			name: "messages tool use",
-			body: `{"type":"content_block_start","content":[{"type":"tool_use","name":"python__sub2api"}],"metadata":{"name":"python__sub2api"}}`,
+			body: `{"type":"content_block_start","content":[{"type":"tool_use","name":"python__gateway"}],"metadata":{"name":"python__gateway"}}`,
 			path: "content.0.name",
 		},
 	}
@@ -209,26 +209,26 @@ func TestCodexToolNameReverse_WSSessionReplacementDoesNotChangeActiveTurn(t *tes
 	first := []byte(`{"type":"response.create","tools":[{"type":"function","name":"python"}]}`)
 	updateCodexToolNameReverseForWSFrame(c, first, map[string]string{codexPythonToolAlias: "python"})
 
-	update := []byte(`{"type":"session.update","session":{"tools":[{"type":"function","name":"python__sub2api"}]}}`)
+	update := []byte(`{"type":"session.update","session":{"tools":[{"type":"function","name":"python__gateway"}]}}`)
 	updateCodexToolNameReverseForWSFrame(c, update, nil)
-	currentOutput := restoreCodexToolNamesFromContext(c, []byte(`{"type":"response.output_item.done","item":{"type":"function_call","name":"python__sub2api"}}`))
+	currentOutput := restoreCodexToolNamesFromContext(c, []byte(`{"type":"response.output_item.done","item":{"type":"function_call","name":"python__gateway"}}`))
 	require.Equal(t, "python", gjson.GetBytes(currentOutput, "item.name").String())
-	sessionEcho := restoreCodexToolNamesFromContext(c, []byte(`{"type":"session.updated","session":{"tools":[{"type":"function","name":"python__sub2api"}]}}`))
+	sessionEcho := restoreCodexToolNamesFromContext(c, []byte(`{"type":"session.updated","session":{"tools":[{"type":"function","name":"python__gateway"}]}}`))
 	require.Equal(t, codexPythonToolAlias, gjson.GetBytes(sessionEcho, "session.tools.0.name").String())
 
 	next := []byte(`{"type":"response.create","input":"next"}`)
 	updateCodexToolNameReverseForWSFrame(c, next, nil)
-	nextOutput := restoreCodexToolNamesFromContext(c, []byte(`{"type":"response.output_item.done","item":{"type":"function_call","name":"python__sub2api"}}`))
+	nextOutput := restoreCodexToolNamesFromContext(c, []byte(`{"type":"response.output_item.done","item":{"type":"function_call","name":"python__gateway"}}`))
 	require.Equal(t, codexPythonToolAlias, gjson.GetBytes(nextOutput, "item.name").String())
 
 	sessionPython := []byte(`{"type":"session.update","session":{"tools":[{"type":"function","name":"python"}]}}`)
 	updateCodexToolNameReverseForWSFrame(c, sessionPython, map[string]string{codexPythonToolAlias: "python"})
-	explicitLiteral := []byte(`{"type":"response.create","input":[{"type":"additional_tools","tools":[{"type":"function","name":"python__sub2api"}]}]}`)
+	explicitLiteral := []byte(`{"type":"response.create","input":[{"type":"additional_tools","tools":[{"type":"function","name":"python__gateway"}]}]}`)
 	updateCodexToolNameReverseForWSFrame(c, explicitLiteral, nil)
-	literalOutput := restoreCodexToolNamesFromContext(c, []byte(`{"type":"response.output_item.done","item":{"type":"function_call","name":"python__sub2api"}}`))
+	literalOutput := restoreCodexToolNamesFromContext(c, []byte(`{"type":"response.output_item.done","item":{"type":"function_call","name":"python__gateway"}}`))
 	require.Equal(t, codexPythonToolAlias, gjson.GetBytes(literalOutput, "item.name").String())
 	updateCodexToolNameReverseForWSFrame(c, next, nil)
-	inheritedOutput := restoreCodexToolNamesFromContext(c, []byte(`{"type":"response.output_item.done","item":{"type":"function_call","name":"python__sub2api"}}`))
+	inheritedOutput := restoreCodexToolNamesFromContext(c, []byte(`{"type":"response.output_item.done","item":{"type":"function_call","name":"python__gateway"}}`))
 	require.Equal(t, "python", gjson.GetBytes(inheritedOutput, "item.name").String())
 }
 
@@ -240,7 +240,7 @@ func TestDecodeOpenAIJSONUseNumberRejectsTrailingDocument(t *testing.T) {
 func TestRestoreCodexToolNamesFromSSEContextUsesEventLineTypeWithoutAddingType(t *testing.T) {
 	c, _ := gin.CreateTestContext(nil)
 	setCodexToolNameReverse(c, map[string]string{codexPythonToolAlias: codexReservedPythonToolName})
-	payload := []byte(`{"item":{"type":"function_call","name":"python__sub2api"},"metadata":{"name":"python__sub2api"}}`)
+	payload := []byte(`{"item":{"type":"function_call","name":"python__gateway"},"metadata":{"name":"python__gateway"}}`)
 
 	restored := restoreCodexToolNamesFromSSEContext(c, payload, "response.output_item.done")
 

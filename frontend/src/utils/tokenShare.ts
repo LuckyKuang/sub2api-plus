@@ -25,31 +25,3 @@ export function sumTokenBuckets(...values: Array<number | null | undefined>): nu
     return total + (Number.isFinite(numberValue) && numberValue > 0 ? numberValue : 0)
   }, 0)
 }
-
-/**
- * Prompt-cache hit rate uses only mutually-exclusive input-side buckets.
- * Persisted input excludes cache read/write, so adding the three reconstructs
- * the upstream total input without counting output tokens.
- */
-export function promptCacheHitRate(
-  input: number | null | undefined,
-  cacheRead: number | null | undefined,
-  cacheWrite: number | null | undefined,
-): number | null {
-  const denominator = sumTokenBuckets(input, cacheRead, cacheWrite)
-  if (denominator <= 0) return null
-  const safeCacheRead = Number(cacheRead)
-  const numerator = Number.isFinite(safeCacheRead) && safeCacheRead > 0 ? safeCacheRead : 0
-  return Math.min(100, Math.max(0, (numerator / denominator) * 100))
-}
-
-export function formatPromptCacheHitRate(
-  input: number | null | undefined,
-  cacheRead: number | null | undefined,
-  cacheWrite: number | null | undefined,
-): string | null {
-  const rate = promptCacheHitRate(input, cacheRead, cacheWrite)
-  if (rate == null) return null
-  if (rate > 0 && rate < 0.1) return '<0.1%'
-  return `${rate.toFixed(1)}%`
-}

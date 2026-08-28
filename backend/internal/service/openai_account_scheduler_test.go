@@ -3327,7 +3327,7 @@ func TestOpenAIGatewayService_SelectAccountWithScheduler_SessionStickyEscapeDisa
 func TestOpenAIGatewayService_SelectAccountWithScheduler_SubscriptionPriorityChoosesSubscriptionPoolFirst(t *testing.T) {
 	ctx := context.Background()
 	groupID := int64(10120)
-	cheapAPIKey := upstreamCostTestAccount(21602, UpstreamBillingProbeStatusOK, 0.01, time.Now().Add(-time.Minute), 30*time.Minute)
+	cheapAPIKey := upstreamCostTestAccount(21602, "ok", 0.01, time.Now().Add(-time.Minute), 30*time.Minute)
 	cheapAPIKey.Status = StatusActive
 	cheapAPIKey.Schedulable = true
 	cheapAPIKey.Concurrency = 1
