@@ -59,9 +59,12 @@ default-branch, container-only validation, protected PR, immutable tag,
 publication authorization, and upstream-merge rules. Every validation command,
 including focused iteration checks, must run in Apple Containers on macOS,
 Docker inside WSL2 Debian or Ubuntu on Windows, or Docker on Linux; host-side
-validation is forbidden. After every validation attempt, remove the project
-validation container, caches, images, and historical writable snapshots from
-that runtime without pruning unrelated projects.
+validation is forbidden. After every validation attempt, remove project
+validation containers, temporary resources, and historical writable snapshots.
+Retain only project validation images and dependency caches whose deterministic
+identities match the current pinned toolchain and dependency-lock inputs, and
+remove stale project validation generations without pruning unrelated projects
+or global runtime resources.
 
 ## Validation
 

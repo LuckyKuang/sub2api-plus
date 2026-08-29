@@ -25,10 +25,14 @@ All validation, including focused checks while iterating, must run in the
 platform validation container: Apple Containers on macOS, Docker inside WSL2
 Debian or Ubuntu on Windows, and Docker on Linux. Do not run tests, lint,
 typechecking, builds, policy checks, or other validation on the host.
-After every validation attempt, successful or failed, remove the project
-validation container, its cache directories, validation images, and historical
-writable snapshots from that runtime. Cleanup must remain scoped to Sub2API
-validation resources and must not prune unrelated projects.
+After every validation attempt, successful or failed, remove the one-shot
+project validation container, temporary resources, and historical writable
+snapshots. Retain the Sub2API validation image whose deterministic identity
+matches the current resolved Go, Node, pnpm, golangci-lint, and GoReleaser pins.
+Retain dependency caches only for the generation matching that image and the
+current Go and pnpm lock inputs. Remove stale Sub2API validation generations;
+never prune unrelated projects or global runtime, builder, image, volume, or
+system resources.
 
 Inside that container, with GNU Make available, run the repository checks from
 the root:

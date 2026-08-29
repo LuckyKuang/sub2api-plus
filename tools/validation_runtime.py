@@ -29,6 +29,8 @@ VALIDATION_GIT_NAME = "sub2api-validation"
 VALIDATION_GIT_EMAIL = "validation@sub2api.local"
 NODE_VERSION = "20.19.4"
 GO_VERSION_RE = re.compile(r"^go\s+(\d+\.\d+(?:\.\d+)?)\s*$", re.MULTILINE)
+VALIDATION_GENERATION_RE = re.compile(r"^[0-9a-f]{16}$")
+LEGACY_CACHE_DIRECTORIES = frozenset({"go", "pnpm", "frontend-node-modules"})
 WSL_DEBIAN_UBUNTU_RE = re.compile(r"^(debian|ubuntu)(?:-[\w.]+)?$", re.IGNORECASE)
 Capture = Callable[..., str]
 OptionalCapture = Callable[..., tuple[bool, str]]
@@ -239,24 +241,40 @@ def validation_image_digest(root: Path) -> str:
     if not dockerfile.is_file():
         raise ValidationRuntimeError(f"missing validation Dockerfile: {dockerfile}")
     hasher = hashlib.sha256()
-    for relative in (
-        DOCKERFILE_RELATIVE,
-        Path("backend/go.mod"),
-        Path("frontend/package.json"),
-        Path(".tool-versions"),
-    ):
-        path = root / relative
-        if not path.is_file():
-            raise ValidationRuntimeError(f"missing validation pin file: {path}")
-        hasher.update(relative.as_posix().encode("utf-8"))
+    hasher.update(DOCKERFILE_RELATIVE.as_posix().encode("utf-8"))
+    hasher.update(b"\0")
+    hasher.update(dockerfile.read_bytes())
+    hasher.update(b"\0")
+    for key, value in sorted(declared_validation_pins(root).items()):
+        hasher.update(key.encode("utf-8"))
         hasher.update(b"\0")
-        hasher.update(path.read_bytes())
+        hasher.update(value.encode("utf-8"))
         hasher.update(b"\0")
     return hasher.hexdigest()[:16]
 
 
 def validation_image_ref(root: Path) -> str:
     return f"{IMAGE_NAME}:{validation_image_digest(root)}"
+
+
+def validation_cache_digest(root: Path) -> str:
+    hasher = hashlib.sha256()
+    hasher.update(validation_image_digest(root).encode("utf-8"))
+    hasher.update(b"\0")
+    for relative in (
+        Path("backend/go.mod"),
+        Path("backend/go.sum"),
+        Path("frontend/package.json"),
+        Path("frontend/pnpm-lock.yaml"),
+    ):
+        path = root / relative
+        if not path.is_file():
+            raise ValidationRuntimeError(f"missing validation cache input: {path}")
+        hasher.update(relative.as_posix().encode("utf-8"))
+        hasher.update(b"\0")
+        hasher.update(path.read_bytes())
+        hasher.update(b"\0")
+    return hasher.hexdigest()[:16]
 
 
 def declared_tool_version(root: Path, name: str) -> str:
@@ -322,10 +340,13 @@ def runtime_user(runtime: Runtime, *, capture: Capture) -> str | None:
 def cache_mounts(
     runtime: Runtime,
     *,
+    root: Path,
     capture: Capture,
+    generation: str | None = None,
 ) -> list[tuple[str, str]]:
+    generation = generation or validation_cache_digest(root)
     if runtime.name == "wsl2-docker":
-        base = "/tmp/sub2api-validation-cache"
+        base = f"/tmp/sub2api-validation-cache/{generation}"
         capture(
             [
                 *runtime.prefix,
@@ -341,7 +362,7 @@ def cache_mounts(
             (f"{base}/go", f"{CONTAINER_HOME}/go"),
             (f"{base}/pnpm", f"{CONTAINER_HOME}/pnpm"),
         ]
-    base = Path.home() / ".cache" / "sub2api-validation"
+    base = Path.home() / ".cache" / "sub2api-validation" / generation
     (base / "go").mkdir(parents=True, exist_ok=True)
     (base / "pnpm").mkdir(parents=True, exist_ok=True)
     (base / "go" / "golangci-lint").mkdir(parents=True, exist_ok=True)
@@ -353,12 +374,24 @@ def cache_mounts(
     ]
 
 
-def node_modules_overlay(runtime: Runtime, root: Path) -> tuple[str, str]:
+def node_modules_overlay(
+    runtime: Runtime,
+    root: Path,
+    *,
+    generation: str | None = None,
+) -> tuple[str, str]:
     repo = mount_root(runtime, root)
+    generation = generation or validation_cache_digest(root)
     if runtime.name == "wsl2-docker":
-        source = "/tmp/sub2api-validation-cache/frontend-node-modules"
+        source = f"/tmp/sub2api-validation-cache/{generation}/frontend-node-modules"
     else:
-        source = str(Path.home() / ".cache" / "sub2api-validation" / "frontend-node-modules")
+        source = str(
+            Path.home()
+            / ".cache"
+            / "sub2api-validation"
+            / generation
+            / "frontend-node-modules"
+        )
     return source, f"{repo.rstrip('/')}/frontend/node_modules"
 
 
@@ -400,6 +433,7 @@ def validation_run_command(
     image: str,
     user: str | None,
     caches: Sequence[tuple[str, str]],
+    cache_generation: str | None = None,
 ) -> list[str]:
     repo = mount_root(runtime, root)
     command = [
@@ -411,7 +445,10 @@ def validation_run_command(
         "--memory",
         "8G",
         *bind_mount_args(runtime, repo, repo),
-        *bind_mount_args(runtime, *node_modules_overlay(runtime, root)),
+        *bind_mount_args(
+            runtime,
+            *node_modules_overlay(runtime, root, generation=cache_generation),
+        ),
         "--workdir",
         repo,
         "--env",
@@ -518,6 +555,7 @@ def launch_in_validation(
             "refusing to launch a nested validation container"
         )
     image = validation_image_ref(root)
+    cache_generation = validation_cache_digest(root)
     try:
         command = validation_run_command(
             runtime,
@@ -525,13 +563,33 @@ def launch_in_validation(
             root=root,
             image=image,
             user=runtime_user(runtime, capture=capture),
-            caches=cache_mounts(runtime, capture=capture),
+            caches=cache_mounts(
+                runtime,
+                root=root,
+                capture=capture,
+                generation=cache_generation,
+            ),
+            cache_generation=cache_generation,
         )
         run_step("In-container validation", command)
-    finally:
+    except BaseException:
+        try:
+            cleanup_validation_runtime(
+                runtime,
+                image=image,
+                cache_generation=cache_generation,
+                capture=capture,
+                run_step=run_step,
+            )
+        except Exception as cleanup_error:
+            print(f"Warning: validation cleanup failed: {cleanup_error}")
+        raise
+    else:
         cleanup_validation_runtime(
             runtime,
             image=image,
+            cache_generation=cache_generation,
+            capture=capture,
             run_step=run_step,
         )
 
@@ -540,29 +598,79 @@ def cleanup_validation_runtime(
     runtime: Runtime,
     *,
     image: str,
+    cache_generation: str,
+    capture: Capture,
     run_step: Callable[[str, Sequence[str]], None],
 ) -> None:
-    """Remove resources owned by one project validation attempt.
+    """Retain the current validation generation and remove stale generations.
 
-    Validation containers use --rm, so deleting the validation image removes
-    their remaining image snapshot. Cache cleanup is scoped to the dedicated
-    Sub2API validation directory and never invokes a global runtime prune.
+    Validation containers use --rm, so their writable snapshots are already
+    removed. Cleanup is scoped to deterministic Sub2API validation images and
+    cache directories and never invokes a global runtime prune.
     """
 
+    if not VALIDATION_GENERATION_RE.fullmatch(cache_generation):
+        raise ValidationRuntimeError(
+            f"invalid validation cache generation: {cache_generation!r}"
+        )
     engine = engine_command(runtime)
     image_delete = "delete" if runtime.name == "apple-containers" else "rm"
-    try:
+    current_tag = image.rsplit(":", 1)[-1]
+    if not VALIDATION_GENERATION_RE.fullmatch(current_tag):
+        raise ValidationRuntimeError(f"invalid validation image reference: {image!r}")
+    image_list = capture([*engine, "image", "list"])
+    for line in image_list.splitlines()[1:]:
+        fields = line.split()
+        if len(fields) < 2:
+            continue
+        repository, tag = fields[:2]
+        if repository not in {IMAGE_NAME, f"localhost/{IMAGE_NAME}"}:
+            continue
+        if not VALIDATION_GENERATION_RE.fullmatch(tag):
+            continue
+        reference = f"{repository}:{tag}"
+        if tag == current_tag:
+            continue
         run_step(
-            "Remove validation image and snapshots",
-            [*engine, "image", image_delete, image],
+            "Remove stale validation image",
+            [*engine, "image", image_delete, reference],
         )
-    finally:
-        if runtime.name == "wsl2-docker":
-            run_step(
-                "Remove validation caches",
-                [*runtime.prefix, "rm", "-rf", "/tmp/sub2api-validation-cache"],
-            )
-        else:
-            cache_root = Path.home() / ".cache" / "sub2api-validation"
-            if cache_root.exists():
-                shutil.rmtree(cache_root)
+
+    if runtime.name == "wsl2-docker":
+        cache_root = "/tmp/sub2api-validation-cache"
+        generations = capture(
+            [
+                *runtime.prefix,
+                "find",
+                cache_root,
+                "-mindepth",
+                "1",
+                "-maxdepth",
+                "1",
+                "-type",
+                "d",
+                "-printf",
+                "%f\n",
+            ]
+        )
+        for generation in generations.splitlines():
+            if generation == cache_generation:
+                continue
+            if (
+                VALIDATION_GENERATION_RE.fullmatch(generation)
+                or generation in LEGACY_CACHE_DIRECTORIES
+            ):
+                run_step(
+                    "Remove stale validation cache",
+                    [*runtime.prefix, "rm", "-rf", f"{cache_root}/{generation}"],
+                )
+    else:
+        cache_root = Path.home() / ".cache" / "sub2api-validation"
+        if cache_root.exists():
+            for path in cache_root.iterdir():
+                if path.name == cache_generation:
+                    continue
+                if path.is_symlink():
+                    path.unlink()
+                elif path.is_dir():
+                    shutil.rmtree(path)

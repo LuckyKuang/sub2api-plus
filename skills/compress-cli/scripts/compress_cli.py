@@ -111,8 +111,9 @@ PROTECTED_FRAGMENTS = {
         "Docker inside WSL2 Debian/Ubuntu on Windows",
         "Docker on Linux",
         "Host-side validation is forbidden",
-        "After every validation remove the project validation container, caches, images, and historical writable snapshots",
-        "without pruning unrelated projects",
+        "After every validation remove project validation containers, temporary resources, and historical writable snapshots",
+        "Retain only project validation images and dependency caches whose deterministic identities match the current pinned toolchain and dependency-lock inputs",
+        "Remove stale project validation generations without pruning unrelated projects or global runtime resources",
     ),
     "Push": (
         "skills/push-cli push",
