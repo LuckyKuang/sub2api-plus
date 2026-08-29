@@ -78,6 +78,10 @@ Every full-profile Go, frontend, Python policy, installer, and lifecycle check
 runs inside `deploy/Dockerfile.validation`. Host processes may only perform
 GitHub/Git gates, runtime probes, image management, Compose parsing, container
 launch, or the deterministic finalization checks owned by release-cli.
+After every container validation attempt, push-cli removes the project
+validation image, dedicated dependency caches, and the `--rm` validation
+container writable snapshot. Cleanup is mandatory on success and failure and
+never invokes a global prune that could affect unrelated projects.
 
 ## Pull-Request Proof
 

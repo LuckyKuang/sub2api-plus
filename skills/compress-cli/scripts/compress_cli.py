@@ -106,6 +106,14 @@ PROTECTED_FRAGMENTS = {
     "Documented Commands": (
         "repository scripts or Make targets",
     ),
+    "Verification": (
+        "All validation must run in Apple Containers on macOS",
+        "Docker inside WSL2 Debian/Ubuntu on Windows",
+        "Docker on Linux",
+        "Host-side validation is forbidden",
+        "After every validation remove the project validation container, caches, images, and historical writable snapshots",
+        "without pruning unrelated projects",
+    ),
     "Push": (
         "skills/push-cli push",
         "Never target the repository default branch",

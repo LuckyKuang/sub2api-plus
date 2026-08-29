@@ -90,6 +90,7 @@ type RelayOptions struct {
 	StartClientAfterFirstDownstream bool
 	OnUsageParseFailure             func(eventType string, usageRaw string)
 	OnTurnComplete                  func(turn RelayTurnResult)
+	TransformClientMessage          func(msgType coderws.MessageType, payload []byte) ([]byte, bool, error)
 	BeforeWriteClient               func(msgType coderws.MessageType, payload []byte, wroteDownstream bool) error
 	BeforeClientWrite               func(msgType coderws.MessageType, payload []byte)
 	AfterClientWrite                func(msgType coderws.MessageType, payload []byte, writeErr error)
@@ -307,6 +308,7 @@ func Relay(
 			state,
 			options.OnUsageParseFailure,
 			options.OnTurnComplete,
+			options.TransformClientMessage,
 			options.BeforeWriteClient,
 			options.BeforeClientWrite,
 			options.AfterClientWrite,
@@ -533,6 +535,7 @@ func runUpstreamToClient(
 	state *relayState,
 	onUsageParseFailure func(eventType string, usageRaw string),
 	onTurnComplete func(turn RelayTurnResult),
+	transformClientMessage func(msgType coderws.MessageType, payload []byte) ([]byte, bool, error),
 	beforeWriteClient func(msgType coderws.MessageType, payload []byte, wroteDownstream bool) error,
 	beforeClientWrite func(msgType coderws.MessageType, payload []byte),
 	afterClientWrite func(msgType coderws.MessageType, payload []byte, writeErr error),
@@ -565,6 +568,29 @@ func runUpstreamToClient(
 			return
 		}
 		markActivity()
+		if transformClientMessage != nil {
+			var emit bool
+			payload, emit, err = transformClientMessage(msgType, payload)
+			if err != nil {
+				emitRelayTrace(onTrace, RelayTraceEvent{
+					Stage:           "transform_client_message_failed",
+					Direction:       "upstream_to_client",
+					MessageType:     relayMessageTypeString(msgType),
+					PayloadBytes:    len(payload),
+					WroteDownstream: wroteDownstream,
+					Error:           err.Error(),
+				})
+				exitCh <- relayExitSignal{stage: "transform_client_message", err: err, wroteDownstream: wroteDownstream}
+				return
+			}
+			if !emit {
+				if droppedFrames != nil {
+					droppedFrames.Add(1)
+				}
+				markActivity()
+				continue
+			}
+		}
 		if beforeWriteClient != nil {
 			if err := beforeWriteClient(msgType, payload, wroteDownstream); err != nil {
 				emitRelayTrace(onTrace, RelayTraceEvent{

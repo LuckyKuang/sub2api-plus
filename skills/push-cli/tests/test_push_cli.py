@@ -5,6 +5,7 @@ import importlib.util
 import json
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -735,6 +736,7 @@ class ValidationLaunchTest(unittest.TestCase):
                 "in_validation_container",
                 return_value=False,
             ),
+            mock.patch.object(push_cli.validation_runtime, "cleanup_validation_runtime") as cleanup,
             mock.patch.object(push_cli, "run_step") as run_step,
         ):
             push_cli.launch_in_validation(runtime, "origin", serial=True)
@@ -754,6 +756,7 @@ class ValidationLaunchTest(unittest.TestCase):
         self.assertNotIn("pnpm", command)
         self.assertIn("--in-validation", command)
         self.assertIn("--serial", command)
+        cleanup.assert_called_once()
 
     def test_windows_launch_uses_wsl_docker_run(self) -> None:
         wsl = "C:/Windows/System32/wsl.exe"
@@ -785,6 +788,7 @@ class ValidationLaunchTest(unittest.TestCase):
                 "in_validation_container",
                 return_value=False,
             ),
+            mock.patch.object(push_cli.validation_runtime, "cleanup_validation_runtime") as cleanup,
             mock.patch.object(push_cli, "run_step") as run_step,
         ):
             push_cli.launch_in_validation(runtime, "origin")
@@ -796,6 +800,7 @@ class ValidationLaunchTest(unittest.TestCase):
         )
         self.assertIn("/mnt/c/repo:/mnt/c/repo", command)
         self.assertNotIn("go", command)
+        cleanup.assert_called_once()
 
     def test_linux_launch_uses_docker_run(self) -> None:
         runtime = push_cli.Runtime("docker")
@@ -822,6 +827,7 @@ class ValidationLaunchTest(unittest.TestCase):
                 "in_validation_container",
                 return_value=False,
             ),
+            mock.patch.object(push_cli.validation_runtime, "cleanup_validation_runtime") as cleanup,
             mock.patch.object(push_cli, "run_step") as run_step,
         ):
             push_cli.launch_in_validation(runtime, "origin")
@@ -830,6 +836,109 @@ class ValidationLaunchTest(unittest.TestCase):
         self.assertEqual(["docker", "run", "--rm", "--cpus", "4", "--memory", "8G"], command[:7])
         self.assertNotIn("go", command)
         self.assertNotIn("pnpm", command)
+        cleanup.assert_called_once()
+
+    def test_cleanup_runs_when_validation_fails(self) -> None:
+        runtime = push_cli.Runtime("apple-containers", compose_required=False)
+        with (
+            mock.patch.object(
+                push_cli.validation_runtime,
+                "runtime_user",
+                return_value="501:20",
+            ),
+            mock.patch.object(
+                push_cli.validation_runtime,
+                "cache_mounts",
+                return_value=[],
+            ),
+            mock.patch.object(
+                push_cli.validation_runtime,
+                "validation_image_ref",
+                return_value="sub2api-validation:test",
+            ),
+            mock.patch.object(
+                push_cli.validation_runtime,
+                "in_validation_container",
+                return_value=False,
+            ),
+            mock.patch.object(
+                push_cli.validation_runtime,
+                "cleanup_validation_runtime",
+            ) as cleanup,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "validation failed"):
+                push_cli.validation_runtime.launch_in_validation(
+                    runtime,
+                    ["true"],
+                    root=Path("/repo"),
+                    capture=mock.Mock(),
+                    run_step=mock.Mock(side_effect=RuntimeError("validation failed")),
+                )
+
+        cleanup.assert_called_once_with(
+            runtime,
+            image="sub2api-validation:test",
+            run_step=mock.ANY,
+        )
+
+
+class ValidationCleanupTest(unittest.TestCase):
+    def test_apple_cleanup_deletes_image_and_scoped_cache(self) -> None:
+        runtime = push_cli.Runtime("apple-containers", compose_required=False)
+        commands: list[tuple[str, list[str]]] = []
+        with tempfile.TemporaryDirectory() as temp_dir:
+            home = Path(temp_dir)
+            cache = home / ".cache" / "sub2api-validation"
+            cache.mkdir(parents=True)
+            (cache / "cache-entry").write_text("x", encoding="utf-8")
+            with mock.patch.object(push_cli.validation_runtime.Path, "home", return_value=home):
+                push_cli.validation_runtime.cleanup_validation_runtime(
+                    runtime,
+                    image="sub2api-validation:test",
+                    run_step=lambda name, command: commands.append((name, list(command))),
+                )
+
+            self.assertFalse(cache.exists())
+
+        self.assertEqual(
+            [("Remove validation image and snapshots", ["container", "image", "delete", "sub2api-validation:test"])],
+            commands,
+        )
+
+    def test_linux_cleanup_tolerates_missing_scoped_cache(self) -> None:
+        runtime = push_cli.Runtime("docker")
+        commands: list[tuple[str, list[str]]] = []
+        with tempfile.TemporaryDirectory() as temp_dir:
+            home = Path(temp_dir)
+            with mock.patch.object(push_cli.validation_runtime.Path, "home", return_value=home):
+                push_cli.validation_runtime.cleanup_validation_runtime(
+                    runtime,
+                    image="sub2api-validation:test",
+                    run_step=lambda name, command: commands.append((name, list(command))),
+                )
+
+        self.assertEqual(
+            [("Remove validation image and snapshots", ["docker", "image", "rm", "sub2api-validation:test"])],
+            commands,
+        )
+
+    def test_wsl_cleanup_deletes_only_project_image_and_cache(self) -> None:
+        prefix = ("wsl.exe", "-d", "Ubuntu-24.04", "--")
+        runtime = push_cli.Runtime("wsl2-docker", prefix, "/mnt/c/repo")
+        commands: list[tuple[str, list[str]]] = []
+        push_cli.validation_runtime.cleanup_validation_runtime(
+            runtime,
+            image="sub2api-validation:test",
+            run_step=lambda name, command: commands.append((name, list(command))),
+        )
+
+        self.assertEqual(
+            [
+                ("Remove validation image and snapshots", [*prefix, "docker", "image", "rm", "sub2api-validation:test"]),
+                ("Remove validation caches", [*prefix, "rm", "-rf", "/tmp/sub2api-validation-cache"]),
+            ],
+            commands,
+        )
 
 
 class MainFlowTest(unittest.TestCase):

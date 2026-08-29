@@ -77,6 +77,12 @@ neither scheduling mode can publish a partial proof.
 
 Apple Containers reports Docker Compose parsing as not applicable. WSL2 Docker
 and Linux Docker must parse `deploy/docker-compose.dev.yml` successfully.
+After each validation attempt, successful or failed, the launcher deletes the
+`sub2api-validation` image used by that attempt and the dedicated
+`sub2api-validation` cache directory. Validation containers use `--rm`, so
+their writable VM/container snapshots are removed as well. Cleanup is scoped
+to these project-owned resources and does not run a global container, image,
+builder, volume, or system prune.
 
 ## Recovery
 

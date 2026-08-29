@@ -141,7 +141,7 @@ func (s *OpenAIGatewayService) ForwardEmbeddings(
 			}
 			return nil, &UpstreamFailoverError{StatusCode: resp.StatusCode, ResponseBody: respBody, RetryableOnSameAccount: retryableOnSameAccount}
 		}
-		s.writeOpenAIEmbeddingsUpstreamResponse(c, resp, respBody)
+		s.writeOpenAIEmbeddingsUpstreamResponse(c, resp, account, respBody)
 		return nil, fmt.Errorf("upstream returned status %d", resp.StatusCode)
 	}
 
@@ -153,7 +153,7 @@ func (s *OpenAIGatewayService) ForwardEmbeddings(
 		return nil, fmt.Errorf("read upstream body: %w", err)
 	}
 
-	s.writeOpenAIEmbeddingsUpstreamResponse(c, resp, respBody)
+	s.writeOpenAIEmbeddingsUpstreamResponse(c, resp, account, respBody)
 
 	return &OpenAIForwardResult{
 		RequestID:     firstNonEmptyString(resp.Header.Get("x-request-id"), resp.Header.Get("request-id")),
@@ -166,7 +166,7 @@ func (s *OpenAIGatewayService) ForwardEmbeddings(
 	}, nil
 }
 
-func (s *OpenAIGatewayService) writeOpenAIEmbeddingsUpstreamResponse(c *gin.Context, resp *http.Response, body []byte) {
+func (s *OpenAIGatewayService) writeOpenAIEmbeddingsUpstreamResponse(c *gin.Context, resp *http.Response, account *Account, body []byte) {
 	if c == nil || resp == nil {
 		return
 	}
@@ -176,7 +176,7 @@ func (s *OpenAIGatewayService) writeOpenAIEmbeddingsUpstreamResponse(c *gin.Cont
 	if resp.Header != nil {
 		responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
 	}
-	s.applyCodexLocalGroupQuotaHeaders(c)
+	s.finalizeCodexClientQuotaHeaders(c.Writer.Header(), c, account)
 	if ct := resp.Header.Get("Content-Type"); ct != "" {
 		c.Writer.Header().Set("Content-Type", ct)
 	} else {

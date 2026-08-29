@@ -14,6 +14,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/ctxkey"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
 )
 
 type resetAtLocalQuotaSettingRepo struct {
@@ -138,18 +139,58 @@ func codexLocalQuotaCompletedSSE() string {
 		"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_quota\",\"model\":\"gpt-5\",\"status\":\"completed\",\"output\":[{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"hello\"}]}],\"usage\":{\"input_tokens\":4,\"output_tokens\":2,\"total_tokens\":6}}}\n\n"
 }
 
-func TestApplyCodexLocalGroupQuotaHeadersToPreservesUpstreamAndDisabledView(t *testing.T) {
+func TestFinalizeCodexClientQuotaHeadersPolicy(t *testing.T) {
 	enabledSvc, c, _, _, _ := newCodexLocalQuotaResponseTestContext(t, true, "/v1/responses")
 	upstream := codexLocalQuotaUpstreamHeaders()
-	staged := enabledSvc.applyCodexLocalGroupQuotaHeadersTo(upstream.Clone(), c)
+	passthroughAccount := &Account{
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+		Extra:    map[string]any{"openai_passthrough": true},
+	}
+	staged := enabledSvc.finalizeCodexClientQuotaHeaders(upstream.Clone(), c, passthroughAccount)
 	requireLocalCodexQuotaHeaders(t, staged)
 	require.Equal(t, "upstream-primary", upstream.Get("X-Codex-Primary-Reset-At"))
 	require.Equal(t, "upstream-secondary", upstream.Get("X-Codex-Secondary-Reset-At"))
 
 	disabledSvc, disabledContext, _, _, _ := newCodexLocalQuotaResponseTestContext(t, false, "/v1/responses")
-	disabled := disabledSvc.applyCodexLocalGroupQuotaHeadersTo(upstream.Clone(), disabledContext)
-	require.Equal(t, "upstream-primary", disabled.Get("X-Codex-Primary-Reset-At"))
-	require.Equal(t, "upstream-secondary", disabled.Get("X-Codex-Secondary-Reset-At"))
+	passthrough := disabledSvc.finalizeCodexClientQuotaHeaders(upstream.Clone(), disabledContext, passthroughAccount)
+	require.Equal(t, "upstream-primary", passthrough.Get("X-Codex-Primary-Reset-At"))
+	require.Equal(t, "upstream-secondary", passthrough.Get("X-Codex-Secondary-Reset-At"))
+
+	hidden := disabledSvc.finalizeCodexClientQuotaHeaders(upstream.Clone(), disabledContext, &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth})
+	require.Empty(t, hidden.Get("X-Codex-Primary-Reset-At"))
+	require.Empty(t, hidden.Get("X-Codex-Secondary-Reset-At"))
+}
+
+func TestFinalizeCodexClientQuotaEventPolicy(t *testing.T) {
+	upstream := []byte(`{"type":"codex.rate_limits","rate_limits":{"primary":{"used_percent":90,"window_minutes":10080,"reset_at":1780000001},"secondary":{"used_percent":80,"window_minutes":300,"reset_at":1780003601}}}`)
+	passthroughAccount := &Account{
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+		Extra:    map[string]any{"openai_passthrough": true},
+	}
+
+	enabledSvc, enabledContext, _, _, _ := newCodexLocalQuotaResponseTestContext(t, true, "/v1/responses")
+	local, emit := enabledSvc.finalizeCodexClientQuotaEvent(upstream, enabledContext, passthroughAccount)
+	require.True(t, emit)
+	require.Equal(t, 25.0, gjson.GetBytes(local, "rate_limits.primary.used_percent").Float())
+	require.Equal(t, int64(10080), gjson.GetBytes(local, "rate_limits.primary.window_minutes").Int())
+	require.Equal(t, 25.0, gjson.GetBytes(local, "rate_limits.secondary.used_percent").Float())
+	require.Equal(t, int64(300), gjson.GetBytes(local, "rate_limits.secondary.window_minutes").Int())
+
+	disabledSvc, disabledContext, _, _, _ := newCodexLocalQuotaResponseTestContext(t, false, "/v1/responses")
+	passthrough, emit := disabledSvc.finalizeCodexClientQuotaEvent(upstream, disabledContext, passthroughAccount)
+	require.True(t, emit)
+	require.Equal(t, upstream, passthrough)
+
+	hidden, emit := disabledSvc.finalizeCodexClientQuotaEvent(upstream, disabledContext, &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth})
+	require.False(t, emit)
+	require.Nil(t, hidden)
+
+	modelSpecific := []byte(`{"type":"codex.rate_limits","metered_limit_name":"codex_bengalfox","rate_limits":{"primary":{"used_percent":70}}}`)
+	preserved, emit := disabledSvc.finalizeCodexClientQuotaEvent(modelSpecific, disabledContext, &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth})
+	require.True(t, emit)
+	require.Equal(t, modelSpecific, preserved)
 }
 
 func TestCodexLocalGroupQuotaHeadersReachResponsesStreamingClient(t *testing.T) {

@@ -518,12 +518,51 @@ def launch_in_validation(
             "refusing to launch a nested validation container"
         )
     image = validation_image_ref(root)
-    command = validation_run_command(
-        runtime,
-        argv,
-        root=root,
-        image=image,
-        user=runtime_user(runtime, capture=capture),
-        caches=cache_mounts(runtime, capture=capture),
-    )
-    run_step("In-container validation", command)
+    try:
+        command = validation_run_command(
+            runtime,
+            argv,
+            root=root,
+            image=image,
+            user=runtime_user(runtime, capture=capture),
+            caches=cache_mounts(runtime, capture=capture),
+        )
+        run_step("In-container validation", command)
+    finally:
+        cleanup_validation_runtime(
+            runtime,
+            image=image,
+            run_step=run_step,
+        )
+
+
+def cleanup_validation_runtime(
+    runtime: Runtime,
+    *,
+    image: str,
+    run_step: Callable[[str, Sequence[str]], None],
+) -> None:
+    """Remove resources owned by one project validation attempt.
+
+    Validation containers use --rm, so deleting the validation image removes
+    their remaining image snapshot. Cache cleanup is scoped to the dedicated
+    Sub2API validation directory and never invokes a global runtime prune.
+    """
+
+    engine = engine_command(runtime)
+    image_delete = "delete" if runtime.name == "apple-containers" else "rm"
+    try:
+        run_step(
+            "Remove validation image and snapshots",
+            [*engine, "image", image_delete, image],
+        )
+    finally:
+        if runtime.name == "wsl2-docker":
+            run_step(
+                "Remove validation caches",
+                [*runtime.prefix, "rm", "-rf", "/tmp/sub2api-validation-cache"],
+            )
+        else:
+            cache_root = Path.home() / ".cache" / "sub2api-validation"
+            if cache_root.exists():
+                shutil.rmtree(cache_root)

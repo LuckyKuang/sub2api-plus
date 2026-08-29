@@ -1213,7 +1213,7 @@ func TestOpenAIImagesOAuthBodyReadTransportErrorFailover(t *testing.T) {
 	account := &Account{ID: 5400, Name: "openai-oauth", Platform: PlatformOpenAI, Type: AccountTypeOAuth}
 	svc := &OpenAIGatewayService{}
 
-	_, _, _, readErr := svc.handleOpenAIImagesOAuthNonStreamingResponse(resp, c, "b64_json", "gpt-image-2")
+	_, _, _, readErr := svc.handleOpenAIImagesOAuthNonStreamingResponse(resp, c, account, "b64_json", "gpt-image-2")
 	require.Error(t, readErr)
 	err := svc.handleOpenAIImagesOAuthResponseError(context.Background(), c, account, "gpt-image-2", "https://api.openai.com/v1/responses", resp, OpenAIImagesJSONKeepaliveAdjustedWrittenSize(c), readErr)
 

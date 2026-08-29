@@ -45,7 +45,7 @@ func (s *OpenAIGatewayService) newUpstreamSSEScanner(r io.Reader) *bufio.Scanner
 // newStreamHeaderWriter 返回幂等的 SSE 响应头写入闭包：首次调用时透传过滤后的
 // 上游响应头并写入标准 SSE 头 + 200 状态码，后续调用为 no-op。延迟到首个事件
 // 写出前才提交响应头，使上游早期失败仍可改走 failover 或非流式错误响应。
-func (s *OpenAIGatewayService) newStreamHeaderWriter(c *gin.Context, upstream http.Header) func() {
+func (s *OpenAIGatewayService) newStreamHeaderWriter(c *gin.Context, upstream http.Header, account *Account) func() {
 	headersWritten := false
 	return func() {
 		if headersWritten {
@@ -55,7 +55,7 @@ func (s *OpenAIGatewayService) newStreamHeaderWriter(c *gin.Context, upstream ht
 		if s.responseHeaderFilter != nil {
 			responseheaders.WriteFilteredHeaders(c.Writer.Header(), upstream, s.responseHeaderFilter)
 		}
-		s.applyCodexLocalGroupQuotaHeaders(c)
+		s.finalizeCodexClientQuotaHeaders(c.Writer.Header(), c, account)
 		c.Writer.Header().Set("Content-Type", "text/event-stream")
 		c.Writer.Header().Set("Cache-Control", "no-cache")
 		c.Writer.Header().Set("Connection", "keep-alive")

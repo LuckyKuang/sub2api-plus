@@ -1290,6 +1290,7 @@ func boundedJSONNonNegativeInt(value gjson.Result) (int, bool) {
 func (s *OpenAIGatewayService) handleOpenAIImagesOAuthNonStreamingResponse(
 	resp *http.Response,
 	c *gin.Context,
+	account *Account,
 	responseFormat string,
 	fallbackModel string,
 ) (OpenAIUsage, int, []string, error) {
@@ -1346,7 +1347,7 @@ func (s *OpenAIGatewayService) handleOpenAIImagesOAuthNonStreamingResponse(
 		return OpenAIUsage{}, 0, nil, err
 	}
 	responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
-	s.applyCodexLocalGroupQuotaHeaders(c)
+	s.finalizeCodexClientQuotaHeaders(c.Writer.Header(), c, account)
 	c.Data(resp.StatusCode, "application/json; charset=utf-8", responseBody)
 	return usage, len(results), openAIResponsesImageResultSizes(results), nil
 }
@@ -1354,13 +1355,14 @@ func (s *OpenAIGatewayService) handleOpenAIImagesOAuthNonStreamingResponse(
 func (s *OpenAIGatewayService) handleOpenAIImagesOAuthStreamingResponse(
 	resp *http.Response,
 	c *gin.Context,
+	account *Account,
 	startTime time.Time,
 	responseFormat string,
 	streamPrefix string,
 	fallbackModel string,
 ) (OpenAIUsage, int, []string, *int, error) {
 	responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
-	s.applyCodexLocalGroupQuotaHeaders(c)
+	s.finalizeCodexClientQuotaHeaders(c.Writer.Header(), c, account)
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
@@ -1870,7 +1872,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesOAuth(
 	// keepalive 心跳字节，避免 failover 第 2 轮起把上一轮心跳残留误判为已写响应。
 	writerSizeBeforeResponse := OpenAIImagesJSONKeepaliveAdjustedWrittenSize(c)
 	if parsed.Stream {
-		usage, imageCount, imageOutputSizes, firstOutputMs, err = s.handleOpenAIImagesOAuthStreamingResponse(resp, c, startTime, parsed.ResponseFormat, openAIImagesStreamPrefix(parsed), requestModel)
+		usage, imageCount, imageOutputSizes, firstOutputMs, err = s.handleOpenAIImagesOAuthStreamingResponse(resp, c, account, startTime, parsed.ResponseFormat, openAIImagesStreamPrefix(parsed), requestModel)
 		if err != nil {
 			if imageCount > 0 {
 				result := &OpenAIForwardResult{
@@ -1904,7 +1906,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesOAuth(
 			)
 		}
 	} else {
-		usage, imageCount, imageOutputSizes, err = s.handleOpenAIImagesOAuthNonStreamingResponse(resp, c, parsed.ResponseFormat, requestModel)
+		usage, imageCount, imageOutputSizes, err = s.handleOpenAIImagesOAuthNonStreamingResponse(resp, c, account, parsed.ResponseFormat, requestModel)
 		if err != nil {
 			return nil, s.handleOpenAIImagesOAuthResponseError(
 				upstreamCtx,

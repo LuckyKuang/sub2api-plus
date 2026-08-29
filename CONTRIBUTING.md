@@ -21,7 +21,17 @@ pnpm --dir frontend install --frozen-lockfile
 
 ## Development Checks
 
-With GNU Make available, run the repository checks from the root:
+All validation, including focused checks while iterating, must run in the
+platform validation container: Apple Containers on macOS, Docker inside WSL2
+Debian or Ubuntu on Windows, and Docker on Linux. Do not run tests, lint,
+typechecking, builds, policy checks, or other validation on the host.
+After every validation attempt, successful or failed, remove the project
+validation container, its cache directories, validation images, and historical
+writable snapshots from that runtime. Cleanup must remain scoped to Sub2API
+validation resources and must not prune unrelated projects.
+
+Inside that container, with GNU Make available, run the repository checks from
+the root:
 
 ```bash
 make test
@@ -47,7 +57,8 @@ python3 skills/compress-cli/scripts/compress_cli.py check AGENTS.md
 python3 skills/compress-cli/tests/test_compress_cli.py
 ```
 
-Run the focused tests for the changed package or component while iterating.
+Run the focused tests for the changed package or component inside the same
+platform validation container while iterating.
 Intermediate branch pushes use the fast path and do not run local tests:
 
 ```bash
@@ -65,7 +76,7 @@ default-branch base and runs the complete matrix inside Apple Containers on
 macOS, Docker inside WSL2 Debian or Ubuntu on Windows, and Docker on Linux.
 Independent backend-test, backend-lint/policy, and frontend lanes run with
 bounded concurrency and report step/lane wall-clock durations; no check is
-removed. Host-side execution of that matrix is forbidden. For diagnosis or a
+removed. Host-side execution of any validation is forbidden. For diagnosis or a
 same-commit timing baseline, pass `--serial` to `check`.
 
 The `release-finalization` profile is not a general fast option. Only

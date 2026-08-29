@@ -158,6 +158,22 @@ class CompressCliTest(unittest.TestCase):
         errors = self.validate_text(changed)
         self.assert_error_contains(errors, "deterministic finalization tree")
 
+    def test_all_validation_remains_platform_container_only(self) -> None:
+        changed = self.valid_document.replace(
+            "Host-side validation is forbidden",
+            "Host-side focused validation is allowed",
+        )
+        errors = self.validate_text(changed)
+        self.assert_error_contains(errors, "Host-side validation is forbidden")
+
+    def test_validation_cleanup_remains_mandatory_and_scoped(self) -> None:
+        changed = self.valid_document.replace(
+            "After every validation remove the project validation container, caches, images, and historical writable snapshots",
+            "Validation cleanup is optional",
+        )
+        errors = self.validate_text(changed)
+        self.assert_error_contains(errors, "After every validation remove")
+
     def test_tag_workflow_must_reuse_exact_main_evidence(self) -> None:
         changed = self.valid_document.replace(
             "The tag workflow must reuse that exact evidence rather than rerun the application matrix",

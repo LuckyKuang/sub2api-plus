@@ -1044,6 +1044,11 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			if normalized, changed := normalizeCompletedImageGenerationStatus(upstreamMessage); changed {
 				upstreamMessage = normalized
 			}
+			var emitQuotaEvent bool
+			upstreamMessage, emitQuotaEvent = s.finalizeCodexClientQuotaEvent(upstreamMessage, c, account)
+			if !emitQuotaEvent {
+				continue
+			}
 
 			eventType, eventResponseID, _ := parseOpenAIWSEventEnvelope(upstreamMessage)
 			responseModelObserver.ObserveOpenAI(upstreamMessage, eventType)
