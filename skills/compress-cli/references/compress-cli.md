@@ -5,7 +5,8 @@
 This skill maintains only the root `AGENTS.md` for Sub2API Plus. The document is
 a compact index of normative rules, not a substitute for `CONTRIBUTING.md`,
 `docs/RELEASING.md`, deployment documentation, protocol documentation, or an
-OpenSpec change.
+local OpenSpec change. OpenSpec implementation plans are untracked working
+artifacts; durable behavior belongs in the owning documentation and tests.
 
 Do not import templates from unrelated repositories. This project uses Go,
 Vue, pnpm, repository-local Python CLIs, and platform validation containers. It
@@ -51,8 +52,10 @@ change updates this reference, the validator, its tests, and the linked source:
   setting, and compiled default precedence. Header or request paths cannot
   bypass it, and identity changes update the complete outbound-path test set.
 
-Also preserve OpenSpec routing, secret handling, generated-code, migration,
-pnpm, default-branch, container-only validation, protected PR, immutable tag,
+Also preserve the rule that cross-cutting OpenSpec plans stay local and
+untracked while durable behavior is committed to its owning documentation and
+tests. Preserve secret handling, generated-code, migration, pnpm,
+default-branch, container-only validation, protected PR, immutable tag,
 publication authorization, and upstream-merge rules.
 
 ## Validation

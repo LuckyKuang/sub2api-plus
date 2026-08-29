@@ -93,9 +93,12 @@ PROTECTED_FRAGMENTS = {
         "HTTP/WS/account-type pass-through and side-effect-order tests",
     ),
     "OpenSpec": (
+        "local untracked openspec/changes/ plans",
         "cross-cutting public API",
         "security-boundary",
         "multi-module changes",
+        "Do not commit openspec/changes/",
+        "owning documentation and tests",
     ),
     "Secrets": (
         "Never commit credentials, tokens, production configuration, or user data",

@@ -134,6 +134,22 @@ class CompressCliTest(unittest.TestCase):
         errors = self.validate_text(changed)
         self.assert_error_contains(errors, "terminal fingerprint")
 
+    def test_openspec_plans_remain_local_and_untracked(self) -> None:
+        changed = self.valid_document.replace(
+            "Do not commit openspec/changes/",
+            "Commit completed OpenSpec changes",
+        )
+        errors = self.validate_text(changed)
+        self.assert_error_contains(errors, "Do not commit openspec/changes/")
+
+    def test_openspec_durable_behavior_has_a_tracked_owner(self) -> None:
+        changed = self.valid_document.replace(
+            "Commit durable behavior to the owning documentation and tests",
+            "Use local plans as the durable record",
+        )
+        errors = self.validate_text(changed)
+        self.assert_error_contains(errors, "owning documentation and tests")
+
     def test_release_finalization_profile_cannot_lose_deterministic_gate(self) -> None:
         changed = self.valid_document.replace(
             "Only a verified published tag on its deterministic finalization tree may use release-finalization",

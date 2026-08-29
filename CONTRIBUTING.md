@@ -101,9 +101,15 @@ numeric prefix and create a forward-only migration.
 
 ## Specifications
 
-Create or update an OpenSpec change for cross-cutting features or changes to
-public APIs, persistent data, security boundaries, or multi-module behavior.
-Small fixes and documentation-only changes do not require a new proposal.
+Use a local OpenSpec change to plan cross-cutting features or changes to public
+APIs, persistent data, security boundaries, or multi-module behavior. The
+`openspec/changes/` directory is intentionally untracked and must not be
+included in pull requests. Start from the tracked example under
+`openspec/examples/` when useful.
+
+Record durable behavior in the owning documentation and automated tests. Use
+pull request descriptions and commit history for change rationale. Small fixes
+and documentation-only changes do not require an OpenSpec plan.
 
 ## Pull Requests
 
