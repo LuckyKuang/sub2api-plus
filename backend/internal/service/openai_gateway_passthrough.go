@@ -2372,10 +2372,23 @@ func (s *OpenAIGatewayService) writeOpenAIPassthroughResponseHeaders(c *gin.Cont
 }
 
 func (s *OpenAIGatewayService) applyCodexLocalGroupQuotaHeaders(c *gin.Context) {
-	if c == nil || c.Request == nil || !s.IsCodexLocalGroupQuotaEnabledForGroup(c.Request.Context(), groupFromRequestContext(c)) {
+	if c == nil {
 		return
 	}
-	applyCodexLocalQuotaHeaders(c.Writer.Header(), groupFromRequestContext(c), codexLocalSubscriptionFromGin(c))
+	s.applyCodexLocalGroupQuotaHeadersTo(c.Writer.Header(), c)
+}
+
+// applyCodexLocalGroupQuotaHeadersTo finalizes a client-facing header set. It
+// returns the destination because staged Responses headers may start nil.
+func (s *OpenAIGatewayService) applyCodexLocalGroupQuotaHeadersTo(dst http.Header, c *gin.Context) http.Header {
+	if c == nil || c.Request == nil || !s.IsCodexLocalGroupQuotaEnabledForGroup(c.Request.Context(), groupFromRequestContext(c)) {
+		return dst
+	}
+	if dst == nil {
+		dst = make(http.Header)
+	}
+	applyCodexLocalQuotaHeaders(dst, groupFromRequestContext(c), codexLocalSubscriptionFromGin(c))
+	return dst
 }
 
 func (s *OpenAIGatewayService) ApplyCodexLocalGroupQuotaHeadersForRequest(c *gin.Context) {

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/ctxkey"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
@@ -72,6 +73,12 @@ func TestForwardAlphaSearchOAuthPreservesWire(t *testing.T) {
 		cfg:          &config.Config{Gateway: config.GatewayConfig{ForceCodexCLI: true}},
 		httpUpstream: upstream,
 	}
+	quotaService, _, _, group, subscription := newCodexLocalQuotaResponseTestContext(t, true, "/v1/alpha/search")
+	service.settingService = quotaService.settingService
+	c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), ctxkey.Group, group))
+	c.Set("subscription", subscription)
+	upstream.resp.Header.Set("X-Codex-Primary-Reset-At", "upstream-primary")
+	upstream.resp.Header.Set("X-Codex-Secondary-Reset-At", "upstream-secondary")
 	account := &Account{
 		ID:          42,
 		Platform:    PlatformOpenAI,
@@ -92,6 +99,8 @@ func TestForwardAlphaSearchOAuthPreservesWire(t *testing.T) {
 	require.Equal(t, "gpt-5.6-sol", result.Model)
 	require.Equal(t, http.StatusOK, recorder.Code)
 	require.JSONEq(t, `{"encrypted_output":"ciphertext","output":"search result"}`, recorder.Body.String())
+	requireLocalCodexQuotaHeaders(t, recorder.Header())
+	require.Equal(t, "upstream-primary", upstream.resp.Header.Get("X-Codex-Primary-Reset-At"))
 	require.Equal(t, chatgptCodexAlphaSearchURL+"?feature=standalone", upstream.lastReq.URL.String())
 	require.Equal(t, "chatgpt.com", upstream.lastReq.Host)
 	require.Equal(t, "Bearer oauth-token", upstream.lastReq.Header.Get("Authorization"))
@@ -172,6 +181,12 @@ func TestForwardAlphaSearchPATUsesResponsesWebSearchFallback(t *testing.T) {
 		cfg:          &config.Config{Gateway: config.GatewayConfig{ForceCodexCLI: true}},
 		httpUpstream: upstream,
 	}
+	quotaService, _, _, group, subscription := newCodexLocalQuotaResponseTestContext(t, true, "/v1/alpha/search")
+	service.settingService = quotaService.settingService
+	c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), ctxkey.Group, group))
+	c.Set("subscription", subscription)
+	upstream.resp.Header.Set("X-Codex-Primary-Reset-At", "upstream-primary")
+	upstream.resp.Header.Set("X-Codex-Secondary-Reset-At", "upstream-secondary")
 	account := &Account{
 		ID:          43,
 		Platform:    PlatformOpenAI,
@@ -194,6 +209,8 @@ func TestForwardAlphaSearchPATUsesResponsesWebSearchFallback(t *testing.T) {
 	require.Equal(t, "/v1/responses", result.UpstreamEndpoint)
 	require.Equal(t, http.StatusOK, recorder.Code)
 	require.JSONEq(t, `{"output":"search result","results":[{"type":"text_result","ref_id":"turn0search0","url":"https://example.com/news","title":"Example News"}]}`, recorder.Body.String())
+	requireLocalCodexQuotaHeaders(t, recorder.Header())
+	require.Equal(t, "upstream-primary", upstream.resp.Header.Get("X-Codex-Primary-Reset-At"))
 	require.Equal(t, chatgptCodexURL, upstream.lastReq.URL.String())
 	require.Equal(t, "Bearer at-test-token", upstream.lastReq.Header.Get("Authorization"))
 	require.Equal(t, "chatgpt-account", upstream.lastReq.Header.Get("ChatGPT-Account-ID"))
