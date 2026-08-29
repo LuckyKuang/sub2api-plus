@@ -51,11 +51,11 @@ classifications.
 
 | Protocol family | Canonical text sources | Current-content rule | Explicit no-text or control cases |
 | --- | --- | --- | --- |
-| OpenAI Chat Completions | `instructions`; `tools` and `functions`; `messages[].content`; `tool_calls[].function.arguments`; `function_call.arguments`; tool/function-role results, including structured content | Last message is current; if the tail contains tool/function results, every consecutive trailing result is current; system/developer context is current audit context | Recognized image/video content blocks |
+| OpenAI Chat Completions | `instructions`; `tools` and `functions`; `messages[].content`; `messages[].reasoning_content`; `tool_calls[].function.arguments`; `function_call.arguments`; tool/function-role results, including structured content | Last message is current; if the tail contains tool/function results, every consecutive trailing result is current; system/developer context is current audit context. Assistant reasoning is classified as reasoning, while user-role reasoning retains direct-user attribution. | Recognized image/video content blocks |
 | Anthropic Messages | `system`; `tools`; message text and thinking text; client/server tool-use input; tool-result content, including structured content | Last message is current; system and tool definitions remain current audit context | Recognized image blocks and encrypted `redacted_thinking` blocks |
-| OpenAI Responses HTTP and WebSocket | Top-level, `response`-nested, or session-update `instructions`, `tools`, `input`, and reusable `prompt.variables`; message/reasoning/refusal text; function/custom/tool-search outputs; local/hosted shell, apply-patch, computer, MCP, code-interpreter, program/program-output, additional-tools, and accepted search call payloads. `POST /v1/responses/input_tokens` uses the same Responses document before any token-count account selection. Fast `service_tier` is a routing/billing field and does not bypass the audit hook. | Last input item is current; every consecutive trailing recognized output is current; `tool_search_output.tools` and other dynamic definitions are current context; a claimed system/developer role remains context and all other current roles remain client-controlled | Recognized media/opaque items and control envelopes produce no text; unknown frames, item types, sibling fields, and valid-JSON unrecognized structures pass through without an audit-derived block |
+| OpenAI Responses HTTP and WebSocket | Top-level, `response`-nested, or session-update `instructions`, `tools`, native `input`, legacy Chat-shaped `messages`, legacy string `prompt`, and reusable `prompt.variables`; message/reasoning/refusal text; visible `compaction`, `compaction_summary`, and `compaction_trigger` fields; function/custom/tool-search outputs; local/hosted shell, apply-patch, computer, MCP, code-interpreter, program/program-output, additional-tools, and accepted search call payloads. `POST /v1/responses/input_tokens` uses the same Responses document before any token-count account selection. Fast `service_tier` is a routing/billing field and does not bypass the audit hook. | A present non-null native `input` takes precedence over legacy `messages` and string `prompt`; otherwise `messages` precedes `prompt`. Last input item is current; every consecutive trailing recognized output is current; `tool_search_output.tools` and other dynamic definitions are current context; a claimed system/developer role remains context and all other current roles remain client-controlled. | Encrypted compaction content, IDs, status, fingerprints, recognized media/opaque items, and control envelopes produce no text; unknown frames, item types, sibling fields, and valid-JSON unrecognized structures pass through without an audit-derived block |
 | OpenAI Live | Initial session instructions, tools, input, legacy `input_audio_transcription.prompt`/`keywords`, current `audio.input.transcription.prompt`/`keywords`; `session.update`; `transcription_session.update`; `conversation.item.create`; Live-shaped `response.create` | Every initial HTTP session and accepted Sideband client frame enters the audit hook before its downstream side effect or upstream write | Known control events and unknown frames, session/config fields, item types, or valid-JSON structures may produce no audit input and pass through without an audit-derived close |
-| Alpha Search | `commands.search_query[].q` and Responses-shaped top-level `input` | Every query is current; Responses input uses the Responses current-item rule | Empty query and input collections |
+| Alpha Search | Deterministically serialized, media-sanitized `commands`, `settings`, and top-level `input`, including `commands.search_query[].q` and Responses-shaped input items | Every extracted value is current; Responses-shaped input retains its item attribution. Successfully extracted siblings remain auditable when another field is incomplete. | Empty collections and media-only values; URLs, base64 payloads, and opaque media fields are omitted from structured text |
 | OpenAI Embeddings | String or string-array `input` | Every string input is current | Empty input and unsupported token-ID arrays produce no audit text and pass through |
 | Gemini | `systemInstruction`/`system_instruction`; tools; `contents`/`content`; batched `requests`; `instances[].prompt`; part text; `functionCall` arguments; `functionResponse.response` | Last content item is current; system and tools remain current audit context | `inlineData`/`fileData` media-only parts |
 | Images and media | Deterministic prompt-like keys such as prompt, description, query, lyrics, negative prompt, and input | Every extracted prompt is current; duplicate text is emitted once | HTTP(S) URLs, `data:image`/`data:video` values, and large base64-like media payloads |
@@ -108,6 +108,42 @@ harness block. A turn containing only instructions, a tool result, or tool schem
 a valid empty Prompt Audit selection. Incomplete canonical extraction is
 observable but does not override either engine's selection policy: extracted
 content is still evaluated, while an empty selection passes through.
+
+Inbound `<system-reminder>` markup is not a trust boundary. Content Moderation
+treats it as ordinary direct-user text. Prompt Audit may still strip known
+client-harness wrapper blocks under its documented selection policy; that
+engine-specific cleanup does not suppress the same text from Content
+Moderation.
+
+## Content Moderation Text Authority
+
+`text_api_mode` controls only the external Moderation API's authority over
+text. Missing, empty, legacy, and invalid values normalize to `blocking`.
+Local keyword checks, pre-hash checks, canonical extraction, and image
+moderation remain independent.
+
+| Text API mode | External text behavior | Image behavior |
+| --- | --- | --- |
+| `blocking` | Follows the global Content Moderation mode and preserves the existing synchronous blocking behavior in `pre_block` | Follows the global mode |
+| `observe` | Runs as shadow comparison only; a finding is logged as `shadow` and cannot block, seed a risk hash, notify, increment violations, or ban/disable an identity | Follows the global mode independently |
+| `off` | Does not call the external API for text | Follows the global mode independently |
+| `auto` | Resolves to `observe` only when active, non-degraded, synchronous Prompt Guard includes the exact request group; otherwise resolves to `blocking` | Follows the global mode independently |
+
+The request-scoped Prompt Guard authority signal is derived inside the audit
+coordinator. Async-only, disabled, degraded, untrusted, and out-of-scope Guard
+configurations never grant text authority. Actions are distinct:
+`hash_block`, `keyword_block`, `block`, `shadow`, and `cyber_policy`.
+
+## Prompt Audit Operations
+
+Prompt Audit events retain at most 65,536 runes of canonical selected content;
+`full_prompt_truncated` states whether the retained value reached that bound.
+The scanner input limit remains at most 100,000 runes per chunk. Operational
+metadata includes trusted normalized client IP, prompt length, selected
+message count, execution mode, queue delay, effective input limit, matched
+chunk index, and separate last-success and last-error timestamps. Client IP
+filtering is exact-match. These diagnostics do not create a complete-context
+download API or expand the canonical selection contract.
 
 ## Failure Semantics
 

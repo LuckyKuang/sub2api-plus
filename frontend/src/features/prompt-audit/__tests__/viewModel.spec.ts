@@ -77,9 +77,11 @@ describe('Prompt Audit view model', () => {
     filters.start_at = '2026-07-15T10:00'
     filters.end_at = '2026-07-16T10:00'
     filters.group_id = '9'
+    filters.client_ip = '203.0.113.42'
     expect(hasExplicitDeleteRange(filters)).toBe(true)
     expect(eventFilterPayload(filters)).toMatchObject({
       group_id: 9,
+      client_ip: '203.0.113.42',
       start_at: new Date(filters.start_at).toISOString(),
       end_at: new Date(filters.end_at).toISOString(),
     })

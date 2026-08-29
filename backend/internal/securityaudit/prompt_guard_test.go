@@ -181,7 +181,48 @@ func TestGuardEvaluatorBlockStopsRemainingChunksButReportsPlannedTotal(t *testin
 	require.Equal(t, DecisionBlock, decision.Kind)
 	require.Equal(t, 1, calls)
 	require.Equal(t, 3, decision.Result.ChunkTotal)
+	require.Equal(t, 3, decision.Result.InputLimit)
+	require.Equal(t, 1, decision.Result.MatchedChunkIndex)
 	require.Equal(t, int64(1), metrics.Snapshot().Blocked)
+}
+
+func TestGuardEvaluatorRecordsMatchedChunkIndex(t *testing.T) {
+	calls := 0
+	scanner := PromptScannerFunc(func(context.Context, ActiveEndpoint, string, []string) (*NormalizedResult, error) {
+		calls++
+		if calls == 1 {
+			return &NormalizedResult{Decision: EventPass, RiskLevel: RiskLow, Action: ActionAllow, ScannerScores: map[string]float64{}, ScannerEvidence: map[string]string{}}, nil
+		}
+		return &NormalizedResult{Decision: EventCritical, RiskLevel: RiskCritical, Action: ActionBlock, Categories: []string{"jailbreak"}, MatchedScanners: []string{"jailbreak"}, ScannerScores: map[string]float64{"jailbreak": 1}, ScannerEvidence: map[string]string{"jailbreak": "Jailbreak"}}, nil
+	})
+	evaluator := newGuardEvaluator(scanner, nil, NewAtomicMetrics(), 2, 2)
+	decision, err := evaluator.Evaluate(context.Background(), guardConfig(
+		ActiveEndpoint{ID: "one", Enabled: true, TimeoutMS: 1000, InputLimit: 3},
+	), PromptSnapshot{ScanText: "abcdefghi", PromptLength: 9})
+	require.NoError(t, err)
+	require.Equal(t, DecisionBlock, decision.Kind)
+	require.Equal(t, 2, decision.Result.MatchedChunkIndex)
+	require.Equal(t, 3, decision.Result.InputLimit)
+	require.Equal(t, 3, decision.Result.ChunkTotal)
+}
+
+func TestGuardEvaluatorSplitsInputAboveMaximumLimit(t *testing.T) {
+	calls := 0
+	scanner := PromptScannerFunc(func(_ context.Context, _ ActiveEndpoint, prompt string, _ []string) (*NormalizedResult, error) {
+		calls++
+		require.LessOrEqual(t, len([]rune(prompt)), MaxInputLimit)
+		return &NormalizedResult{Decision: EventPass, RiskLevel: RiskLow, Action: ActionAllow, ScannerScores: map[string]float64{}, ScannerEvidence: map[string]string{}}, nil
+	})
+	evaluator := newGuardEvaluator(scanner, nil, NewAtomicMetrics(), 2, 2)
+	promptLength := MaxInputLimit + 1
+	decision, err := evaluator.Evaluate(context.Background(), guardConfig(
+		ActiveEndpoint{ID: "one", Enabled: true, TimeoutMS: 1000, InputLimit: MaxInputLimit},
+	), PromptSnapshot{ScanText: strings.Repeat("a", promptLength), PromptLength: promptLength})
+	require.NoError(t, err)
+	require.Equal(t, DecisionAllow, decision.Kind)
+	require.Equal(t, 2, calls)
+	require.Equal(t, 2, decision.Result.ChunkTotal)
+	require.Equal(t, MaxInputLimit, decision.Result.InputLimit)
 }
 
 func TestGuardEvaluatorFlagSharedDeadlineFailClosedAndContextCancel(t *testing.T) {

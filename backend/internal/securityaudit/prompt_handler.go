@@ -268,10 +268,17 @@ func eventFilterFromQuery(c *gin.Context) (EventFilter, error) {
 	if err != nil {
 		return EventFilter{}, err
 	}
+	clientIP := strings.TrimSpace(c.Query("client_ip"))
+	if clientIP != "" {
+		clientIP = normalizePromptClientIP(clientIP)
+		if clientIP == "" {
+			return EventFilter{}, infraerrors.BadRequest("prompt_audit_invalid_client_ip", "客户端 IP 无效")
+		}
+	}
 	filter := EventFilter{
 		Decision: c.Query("decision"), RiskLevel: c.Query("risk_level"), Endpoint: c.Query("endpoint"),
 		GroupID: groupID, UserID: userID, APIKeyID: apiKeyID, RequestID: c.Query("request_id"),
-		PromptHash: c.Query("prompt_hash"), Keyword: c.Query("keyword"),
+		ClientIP: clientIP, PromptHash: c.Query("prompt_hash"), Keyword: c.Query("keyword"),
 	}
 	if value := strings.TrimSpace(c.Query("start_at")); value != "" {
 		filter.StartAt = parseTimeQuery(value)

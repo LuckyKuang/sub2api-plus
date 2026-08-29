@@ -130,6 +130,7 @@ export interface PromptAuditRuntime {
   extraction_empty: number
   extraction_failed: number
   last_processed_at?: string
+  last_error_at?: string
   last_error_code?: string
   last_error_message?: string
   database_status: string
@@ -140,6 +141,7 @@ export interface PromptAuditRuntime {
 
 export interface PromptSnapshot {
   request_id: string
+  client_ip: string
   user_id: number
   username: string
   user_email: string
@@ -154,6 +156,7 @@ export interface PromptSnapshot {
   prompt_hash: string
   redacted_preview: string
   full_prompt: string
+  full_prompt_truncated: boolean
   prompt_length: number
   message_count: number
   stage: string
@@ -180,6 +183,7 @@ export interface PromptAuditEvent {
   id: number
   job_id: number
   snapshot: PromptSnapshot
+  execution_mode: PromptAuditMode
   decision: PromptDecision
   risk_level: PromptRiskLevel
   action: 'Allow' | 'Warn' | 'Block' | string
@@ -194,6 +198,9 @@ export interface PromptAuditEvent {
   policy_version: number
   config_version: number
   chunk_total: number
+  queue_delay_ms?: number | null
+  input_limit?: number | null
+  matched_chunk_index?: number | null
   latency_ms: number
   issue_summaries: PromptIssueSummary[]
   created_at: string
@@ -207,6 +214,7 @@ export interface PromptEventFilters {
   user_id: string
   api_key_id: string
   request_id: string
+  client_ip: string
   prompt_hash: string
   keyword: string
   start_at: string

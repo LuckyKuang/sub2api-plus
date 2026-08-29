@@ -31,8 +31,9 @@ func (c *advancingClock) Now() time.Time {
 }
 
 type fakeConfigStore struct {
-	cfg    ActiveConfig
-	active bool
+	cfg      ActiveConfig
+	active   bool
+	degraded bool
 }
 
 func (s *fakeConfigStore) Start(context.Context) error    { return nil }
@@ -47,7 +48,7 @@ func (s *fakeConfigStore) EffectiveMode() Mode {
 	}
 	return s.cfg.EffectiveMode()
 }
-func (s *fakeConfigStore) BlockingActivationDegraded() bool { return false }
+func (s *fakeConfigStore) BlockingActivationDegraded() bool { return s.degraded }
 func (s *fakeConfigStore) Public() (PublicConfig, error)    { return PublicConfig{}, nil }
 func (s *fakeConfigStore) Save(context.Context, UpdateConfigRequest, int64) (PublicConfig, error) {
 	return PublicConfig{}, nil
@@ -73,6 +74,7 @@ type fakeJobRepository struct {
 	createdSnapshot PromptSnapshot
 	markedCode      string
 	completedResult *NormalizedResult
+	completedJob    *Job
 	completedStore  bool
 	completeCount   int
 	eventCount      int
@@ -139,10 +141,11 @@ func (r *fakeJobRepository) RefreshLease(context.Context, int64, int64, time.Tim
 	r.refreshes++
 	return r.refreshErr
 }
-func (r *fakeJobRepository) Complete(_ context.Context, _ *Job, result *NormalizedResult, storePass bool) (*Event, error) {
+func (r *fakeJobRepository) Complete(_ context.Context, job *Job, result *NormalizedResult, storePass bool) (*Event, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.completeCount++
+	r.completedJob = job
 	r.completedResult, r.completedStore = result, storePass
 	if r.completeErr != nil {
 		return nil, r.completeErr
@@ -418,6 +421,20 @@ func TestWorkerCompletesPassWithoutEventRefreshesEveryChunkAndDeletesPayload(t *
 	require.Equal(t, int64(1), metrics.Snapshot().Allowed)
 }
 
+func TestWorkerMarksReconstructedContentIncompleteAfterNULRemoval(t *testing.T) {
+	repo := &fakeJobRepository{}
+	payload := &fakePayloadStore{values: map[int64]string{51: "abc\x00def"}}
+	runner := NewRunner(&fakeConfigStore{cfg: asyncConfig(), active: true}, repo, payload, PromptScannerFunc(func(_ context.Context, _ ActiveEndpoint, _ string, _ []string) (*NormalizedResult, error) {
+		return integrationResult(EventPass), nil
+	}), NewAtomicMetrics())
+	job := workerJob(1, 3)
+	job.Snapshot.PromptLength = 7
+	require.NoError(t, runner.processJob(context.Background(), 0, asyncConfig(), job))
+	require.NotNil(t, repo.completedJob)
+	require.Equal(t, "abcdef", repo.completedJob.Snapshot.FullPrompt)
+	require.True(t, repo.completedJob.Snapshot.FullPromptTruncated)
+}
+
 func TestWorkerRetryBackoffTerminalFailureAndFailover(t *testing.T) {
 	now := time.Unix(200, 0).UTC()
 	for _, tt := range []struct {
@@ -479,6 +496,49 @@ func TestWorkerRetryBackoffTerminalFailureAndFailover(t *testing.T) {
 	require.Equal(t, int64(1), metrics.Snapshot().Failovers)
 }
 
+func TestWorkerPersistenceFailuresUpdateRuntimeErrorTimestamp(t *testing.T) {
+	tests := []struct {
+		name     string
+		repo     *fakeJobRepository
+		scan     PromptScannerFunc
+		job      *Job
+		wantCode string
+	}{
+		{
+			name: "complete", repo: &fakeJobRepository{completeErr: errors.New("complete failed")},
+			scan: func(context.Context, ActiveEndpoint, string, []string) (*NormalizedResult, error) {
+				return integrationResult(EventPass), nil
+			},
+			job: workerJob(1, 3), wantCode: "job_complete_failed",
+		},
+		{
+			name: "retry", repo: &fakeJobRepository{retryErr: errors.New("retry failed")},
+			scan: func(context.Context, ActiveEndpoint, string, []string) (*NormalizedResult, error) {
+				return nil, &GuardError{Code: ErrorCodeUnavailable, Retryable: true}
+			},
+			job: workerJob(1, 3), wantCode: "job_retry_failed",
+		},
+		{
+			name: "fail", repo: &fakeJobRepository{failErr: errors.New("fail failed")},
+			scan: func(context.Context, ActiveEndpoint, string, []string) (*NormalizedResult, error) {
+				return nil, &GuardError{Code: ErrorCodeInvalidResponse}
+			},
+			job: workerJob(1, 3), wantCode: "job_fail_failed",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			runner := NewRunner(&fakeConfigStore{cfg: asyncConfig(), active: true}, test.repo,
+				&fakePayloadStore{values: map[int64]string{51: "abc"}}, test.scan, NewAtomicMetrics())
+			runner.clock = fixedClock{now: time.Unix(456, 0).UTC()}
+			require.Error(t, runner.processJob(context.Background(), 0, asyncConfig(), test.job))
+			_, _, _, _, _, code, _ := runner.Snapshot()
+			require.Equal(t, test.wantCode, code)
+			require.Equal(t, time.Unix(456, 0).UTC(), *runner.LastErrorAt())
+		})
+	}
+}
+
 func TestWorkerPanicLeaseLossAndLifecycleAreContained(t *testing.T) {
 	t.Run("panic", func(t *testing.T) {
 		repo := &fakeJobRepository{}
@@ -486,11 +546,14 @@ func TestWorkerPanicLeaseLossAndLifecycleAreContained(t *testing.T) {
 		runner := NewRunner(&fakeConfigStore{cfg: asyncConfig(), active: true}, repo, payload, PromptScannerFunc(func(context.Context, ActiveEndpoint, string, []string) (*NormalizedResult, error) {
 			panic("scanner panic canary")
 		}), NewAtomicMetrics())
+		errorAt := time.Unix(123, 0).UTC()
+		runner.clock = fixedClock{now: errorAt}
 		require.NotPanics(t, func() { runner.processSafely(context.Background(), 0, asyncConfig(), workerJob(1, 3)) })
 		_, _, failed, _, _, code, message := runner.Snapshot()
 		require.Equal(t, int64(1), failed)
 		require.Equal(t, "worker_panic", code)
 		require.NotContains(t, message, "canary")
+		require.Equal(t, errorAt, *runner.LastErrorAt())
 		require.Equal(t, 1, repo.failed)
 	})
 
@@ -506,6 +569,9 @@ func TestWorkerPanicLeaseLossAndLifecycleAreContained(t *testing.T) {
 		require.Zero(t, calls)
 		require.Zero(t, repo.retried)
 		require.Zero(t, repo.failed)
+		_, _, _, _, _, code, _ := runner.Snapshot()
+		require.Equal(t, "lease_refresh_failed", code)
+		require.NotNil(t, runner.LastErrorAt())
 	})
 
 	t.Run("start and shutdown", func(t *testing.T) {
@@ -543,6 +609,39 @@ func TestWorkerPanicLeaseLossAndLifecycleAreContained(t *testing.T) {
 		defer cancel2()
 		require.NoError(t, runner.Shutdown(ctx2))
 	})
+}
+
+func TestWorkerSuccessAdvancesProcessedTimeWithoutOverwritingPriorError(t *testing.T) {
+	repo := &fakeJobRepository{}
+	payload := &fakePayloadStore{values: map[int64]string{51: "abc"}}
+	scanCalls := 0
+	runner := NewRunner(&fakeConfigStore{cfg: asyncConfig(), active: true}, repo, payload, PromptScannerFunc(func(context.Context, ActiveEndpoint, string, []string) (*NormalizedResult, error) {
+		scanCalls++
+		if scanCalls == 1 {
+			return nil, &GuardError{Code: ErrorCodeUnavailable, Retryable: true}
+		}
+		return integrationResult(EventPass), nil
+	}), NewAtomicMetrics())
+
+	errorAt := time.Unix(123, 0).UTC()
+	runner.clock = fixedClock{now: errorAt}
+	runner.processSafely(context.Background(), 0, asyncConfig(), workerJob(1, 3))
+	_, processed, failed, _, lastProcessed, code, _ := runner.Snapshot()
+	require.Zero(t, processed)
+	require.Equal(t, int64(1), failed)
+	require.Nil(t, lastProcessed)
+	require.Equal(t, ErrorCodeUnavailable, code)
+	require.Equal(t, errorAt, *runner.LastErrorAt())
+
+	successAt := time.Unix(456, 0).UTC()
+	runner.clock = fixedClock{now: successAt}
+	runner.processSafely(context.Background(), 0, asyncConfig(), workerJob(2, 3))
+	_, processed, failed, _, lastProcessed, code, _ = runner.Snapshot()
+	require.Equal(t, int64(1), processed)
+	require.Equal(t, int64(1), failed)
+	require.Equal(t, successAt, *lastProcessed)
+	require.Equal(t, ErrorCodeUnavailable, code)
+	require.Equal(t, errorAt, *runner.LastErrorAt())
 }
 
 func TestPromptAuditSyntheticAsyncBaseline(t *testing.T) {

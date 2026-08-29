@@ -41,4 +41,14 @@ describe('Prompt Audit API', () => {
       snapshot_max_id: 10, filter_hash: 'a'.repeat(64), confirmation_token: 'opaque-token', confirm: true,
     }))
   })
+
+  it('sends an exact client IP event filter', async () => {
+    client.get.mockResolvedValue({ data: { items: [], total: 0 } })
+    const filters = emptyEventFilters()
+    filters.client_ip = '203.0.113.42'
+    await promptAuditAPI.listEvents(filters, 1, 20)
+    expect(client.get).toHaveBeenCalledWith('/admin/prompt-audit/events', {
+      params: expect.objectContaining({ page: 1, page_size: 20, client_ip: '203.0.113.42' }),
+    })
+  })
 })

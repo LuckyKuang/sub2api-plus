@@ -43,7 +43,7 @@ func openPromptAuditIntegrationDB(t *testing.T) *sql.DB {
 		);
 	`)
 	require.NoError(t, err)
-	for _, name := range []string{"181_prompt_audit.sql", "182_prompt_audit_full_prompt.sql"} {
+	for _, name := range []string{"181_prompt_audit.sql", "182_prompt_audit_full_prompt.sql", "235_prompt_audit_observability.sql", "236_prompt_audit_client_ip_index_notx.sql"} {
 		migration, err := os.ReadFile(filepath.Join("..", "..", "migrations", name))
 		require.NoError(t, err)
 		// The migration runner can retry an interrupted deployment; the migration
@@ -73,7 +73,7 @@ func insertIdentity(t *testing.T, db *sql.DB, table string) int64 {
 
 func integrationSnapshot(seed string) PromptSnapshot {
 	return PromptSnapshot{
-		RequestID: "request-" + seed, UsernameSnapshot: "user-" + seed,
+		RequestID: "request-" + seed, ClientIP: "203.0.113.42", UsernameSnapshot: "user-" + seed,
 		UserEmailSnapshot: "user-" + seed + "@example.test", APIKeyNameSnapshot: "key-" + seed,
 		GroupName: "group-" + seed, Provider: "openai", Endpoint: "/v1/chat/completions",
 		Protocol: "openai_chat", Model: "gpt-test", PromptHash: strings.Repeat(seed[:1], 64),
@@ -87,7 +87,7 @@ func integrationResult(decision EventDecision) *NormalizedResult {
 		Categories: []string{}, MatchedScanners: []string{}, ScannerScores: map[string]float64{},
 		ScannerEvidence: map[string]string{}, ScannerBackend: "qwen3guard-openai",
 		ScannerVersion: "test", GuardEndpointID: "guard-1", PolicyID: "priority",
-		PolicyVersion: 1, ChunkTotal: 1, LatencyMS: 2,
+		PolicyVersion: 1, ChunkTotal: 1, InputLimit: 100000, LatencyMS: 2,
 	}
 	if decision != EventPass {
 		result.RiskLevel = RiskCritical
@@ -97,6 +97,7 @@ func integrationResult(decision EventDecision) *NormalizedResult {
 		result.MatchedScanners = []string{"pii"}
 		result.ScannerScores["pii"] = 1
 		result.ScannerEvidence["pii"] = "redacted evidence"
+		result.MatchedChunkIndex = 1
 	}
 	return result
 }
@@ -110,15 +111,30 @@ func TestPromptAuditMigrationSchemaAndLeakageGate(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = rows.Close() }()
 	forbidden := []string{"raw_prompt", "raw_request", "payload", "token", "authorization", "credential", "ciphertext"}
+	columns := map[string]bool{}
 	for rows.Next() {
 		var tableName, columnName string
 		require.NoError(t, rows.Scan(&tableName, &columnName))
+		columns[tableName+"."+columnName] = true
 		lower := strings.ToLower(columnName)
 		for _, word := range forbidden {
 			require.NotContainsf(t, lower, word, "%s.%s is a forbidden raw/credential column", tableName, columnName)
 		}
 	}
 	require.NoError(t, rows.Err())
+	for _, column := range []string{
+		"prompt_audit_jobs.client_ip",
+		"prompt_audit_events.client_ip",
+		"prompt_audit_events.prompt_length",
+		"prompt_audit_events.message_count",
+		"prompt_audit_events.execution_mode",
+		"prompt_audit_events.queue_delay_ms",
+		"prompt_audit_events.input_limit",
+		"prompt_audit_events.matched_chunk_index",
+		"prompt_audit_events.full_prompt_truncated",
+	} {
+		require.Truef(t, columns[column], "missing column %s", column)
+	}
 
 	indexRows, err := db.QueryContext(ctx, `SELECT indexname FROM pg_indexes
 		WHERE schemaname='public' AND tablename IN ('prompt_audit_jobs','prompt_audit_events')`)
@@ -137,6 +153,7 @@ func TestPromptAuditMigrationSchemaAndLeakageGate(t *testing.T) {
 		"idx_prompt_audit_events_decision_created", "idx_prompt_audit_events_risk_created",
 		"idx_prompt_audit_events_user_created", "idx_prompt_audit_events_api_key_created",
 		"idx_prompt_audit_events_group_created", "idx_prompt_audit_events_prompt_hash", "idx_prompt_audit_events_created",
+		"idx_prompt_audit_events_client_ip_created",
 	} {
 		require.Truef(t, indexes[name], "missing index %s", name)
 	}
@@ -151,36 +168,91 @@ func TestPromptAuditMigrationSchemaAndLeakageGate(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestPromptAuditDatabasePersistsFullPromptOnEventsOnly(t *testing.T) {
+func TestPromptAuditObservabilityMigrationBackfillsHistoricalTruncation(t *testing.T) {
+	db := openPromptAuditIntegrationDB(t)
+	ctx := context.Background()
+	var jobID int64
+	require.NoError(t, db.QueryRowContext(ctx, `
+		INSERT INTO prompt_audit_jobs(prompt_length,message_count,execution_mode,client_ip)
+		VALUES (65537,2,'blocking','203.0.113.42') RETURNING id`).Scan(&jobID))
+	var eventID int64
+	retained := strings.Repeat("x", 65536) + "…"
+	require.NoError(t, db.QueryRowContext(ctx, `
+		INSERT INTO prompt_audit_events(job_id,full_prompt)
+		VALUES ($1,$2) RETURNING id`, jobID, retained).Scan(&eventID))
+
+	migration, err := os.ReadFile(filepath.Join("..", "..", "migrations", "235_prompt_audit_observability.sql"))
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, string(migration))
+	require.NoError(t, err)
+
+	var promptLength, messageCount int
+	var executionMode, clientIP string
+	var queueDelay, inputLimit, matchedChunk sql.NullInt64
+	var truncated bool
+	require.NoError(t, db.QueryRowContext(ctx, `
+		SELECT prompt_length,message_count,execution_mode,client_ip,queue_delay_ms,input_limit,
+		       matched_chunk_index,full_prompt_truncated
+		FROM prompt_audit_events WHERE id=$1`, eventID).Scan(
+		&promptLength, &messageCount, &executionMode, &clientIP, &queueDelay, &inputLimit, &matchedChunk, &truncated,
+	))
+	require.Equal(t, 65537, promptLength)
+	require.Equal(t, 2, messageCount)
+	require.Equal(t, "blocking", executionMode)
+	require.Equal(t, "203.0.113.42", clientIP)
+	require.False(t, queueDelay.Valid)
+	require.False(t, inputLimit.Valid)
+	require.False(t, matchedChunk.Valid)
+	require.True(t, truncated)
+}
+
+func TestPromptAuditDatabasePersistsBoundedPromptOnEventsOnly(t *testing.T) {
 	db := openPromptAuditIntegrationDB(t)
 	repo := NewPostgreSQLRepository(db)
 	ctx := context.Background()
 	const promptCanary = "PROMPT_AUDIT_CANARY_SECRET_DO_NOT_PERSIST"
+	promptText := strings.Repeat("长", 70000) + promptCanary
+	body, err := json.Marshal(map[string]any{"messages": []map[string]string{{"role": "user", "content": promptText}}})
+	require.NoError(t, err)
 	request := Request{
-		RequestID: "canary-request", Provider: "openai",
+		RequestID: "canary-request", ClientIP: "203.0.113.42", Provider: "openai",
 		Endpoint: "/v1/chat/completions", Protocol: "openai_chat", Model: "gpt-test", Stage: "http",
-		Body: []byte(`{"messages":[{"role":"user","content":"` + promptCanary + `"}]}`),
+		Body: body,
 	}
 	snapshot, err := ExtractPromptSnapshot(request)
 	require.NoError(t, err)
 	require.NotContains(t, snapshot.RedactedPreview, promptCanary)
-	require.Contains(t, snapshot.FullPrompt, promptCanary)
+	require.NotContains(t, snapshot.FullPrompt, promptCanary)
+	require.Equal(t, strings.Repeat("长", DefaultFullPromptMaxRunes), snapshot.FullPrompt)
+	require.True(t, snapshot.FullPromptTruncated)
 	event, err := repo.RecordBlocking(ctx, snapshot.Redacted(), 1, integrationResult(EventCritical), true)
 	require.NoError(t, err)
-	// The event intentionally retains the full prompt for admin review; the
-	// redacted preview and transient job row still never contain it.
+	// The event retains bounded content for admin review; omitted content and
+	// the transient job row are never persisted.
 	adminJSON, err := json.Marshal(event)
 	require.NoError(t, err)
-	require.Contains(t, string(adminJSON), promptCanary)
+	require.NotContains(t, string(adminJSON), promptCanary)
 	require.NotContains(t, event.Snapshot.RedactedPreview, promptCanary)
+	require.Equal(t, strings.Repeat("长", DefaultFullPromptMaxRunes), event.Snapshot.FullPrompt)
+	require.Equal(t, "203.0.113.42", event.Snapshot.ClientIP)
+	require.Equal(t, ModeBlocking, event.ExecutionMode)
+	require.NotNil(t, event.QueueDelayMS)
+	require.Zero(t, *event.QueueDelayMS)
+	require.NotNil(t, event.InputLimit)
+	require.Equal(t, 100000, *event.InputLimit)
+	require.NotNil(t, event.MatchedChunkIndex)
+	require.Equal(t, 1, *event.MatchedChunkIndex)
+	require.True(t, event.Snapshot.FullPromptTruncated)
 
 	var storedFullPrompt string
 	require.NoError(t, db.QueryRow(`SELECT full_prompt FROM prompt_audit_events WHERE id=$1`, event.ID).Scan(&storedFullPrompt))
-	require.Contains(t, storedFullPrompt, promptCanary)
+	require.Equal(t, strings.Repeat("长", DefaultFullPromptMaxRunes), storedFullPrompt)
+	require.NotContains(t, storedFullPrompt, promptCanary)
 
 	detail, err := repo.GetEvent(ctx, event.ID)
 	require.NoError(t, err)
-	require.Contains(t, detail.Snapshot.FullPrompt, promptCanary)
+	require.Equal(t, strings.Repeat("长", DefaultFullPromptMaxRunes), detail.Snapshot.FullPrompt)
+	require.NotContains(t, detail.Snapshot.FullPrompt, promptCanary)
 
 	var jobJSON string
 	require.NoError(t, db.QueryRow(`SELECT row_to_json(j)::text FROM prompt_audit_jobs j WHERE id=$1`, event.JobID).Scan(&jobJSON))
@@ -279,6 +351,9 @@ func TestPromptAuditRepositoryAdmissionClaimFencingAndEventTransaction(t *testin
 	event, err := repo.Complete(ctx, secondClaim, integrationResult(EventCritical), true)
 	require.NoError(t, err)
 	require.NotNil(t, event)
+	require.NotNil(t, event.QueueDelayMS)
+	require.GreaterOrEqual(t, *event.QueueDelayMS, 0)
+	require.Equal(t, ModeAsync, event.ExecutionMode)
 	var status string
 	var eventCount int
 	require.NoError(t, db.QueryRow(`SELECT status FROM prompt_audit_jobs WHERE id=$1`, secondClaim.ID).Scan(&status))
@@ -312,7 +387,7 @@ func TestPromptAuditRepositoryForeignKeysFiltersAndStableIdentitySnapshots(t *te
 	page, err := repo.ListEvents(ctx, EventFilter{
 		Decision: string(EventCritical), RiskLevel: string(RiskCritical), Endpoint: snapshot.Endpoint,
 		GroupID: &groupID, UserID: &userID, APIKeyID: &apiKeyID, RequestID: snapshot.RequestID,
-		PromptHash: snapshot.PromptHash, Keyword: snapshot.UsernameSnapshot, StartAt: &start, EndAt: &end,
+		ClientIP: snapshot.ClientIP, PromptHash: snapshot.PromptHash, Keyword: snapshot.UsernameSnapshot, StartAt: &start, EndAt: &end,
 	}, 1, 10)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), page.Total)
@@ -321,6 +396,7 @@ func TestPromptAuditRepositoryForeignKeysFiltersAndStableIdentitySnapshots(t *te
 	require.Equal(t, snapshot.UsernameSnapshot, page.Items[0].Snapshot.UsernameSnapshot)
 	require.Equal(t, snapshot.UserEmailSnapshot, page.Items[0].Snapshot.UserEmailSnapshot)
 	require.Equal(t, snapshot.APIKeyNameSnapshot, page.Items[0].Snapshot.APIKeyNameSnapshot)
+	require.Equal(t, snapshot.ClientIP, page.Items[0].Snapshot.ClientIP)
 
 	_, err = db.Exec(`DELETE FROM users WHERE id=$1`, userID)
 	require.NoError(t, err)

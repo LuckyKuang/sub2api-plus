@@ -109,6 +109,8 @@ func (g *GuardEvaluator) Evaluate(ctx context.Context, cfg ActiveConfig, snapsho
 			logGuardFailure(snapshot, cfg, kind, code, "", g.clock.Now().Sub(start))
 			return nil, err
 		}
+		result.InputLimit = inputLimit
+		result.MatchedChunkIndex = index + 1
 		result.ChunkTotal = len(chunks)
 		results = append(results, result)
 		LogInfo(EventChunkCompleted, mergeLogFields(baseFields, map[string]any{
@@ -129,6 +131,7 @@ func (g *GuardEvaluator) Evaluate(ctx context.Context, cfg ActiveConfig, snapsho
 		logGuardFailure(snapshot, cfg, DecisionInvalid, ErrorCodeInvalidResponse, "", g.clock.Now().Sub(start))
 		return nil, &GuardError{Code: ErrorCodeInvalidResponse, Cause: err}
 	}
+	aggregated.InputLimit = inputLimit
 	aggregated.ChunkTotal = len(chunks)
 	kind := DecisionAllow
 	if aggregated.Action == ActionWarn {

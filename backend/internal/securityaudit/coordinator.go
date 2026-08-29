@@ -19,6 +19,10 @@ type PromptEngine interface {
 	Evaluate(ctx context.Context, req Request) (*PromptDecision, error)
 }
 
+type blockingScopePromptEngine interface {
+	BlockingApplies(req Request) bool
+}
+
 type Coordinator struct {
 	legacy LegacyEngine
 	prompt PromptEngine
@@ -52,13 +56,17 @@ func (c *Coordinator) Check(ctx context.Context, req Request) Decision {
 }
 
 func (c *Coordinator) checkBlocking(ctx context.Context, req Request) Decision {
+	legacyReq := req.Clone()
+	if scoped, ok := c.prompt.(blockingScopePromptEngine); ok {
+		legacyReq.PromptTextAuthority = scoped.BlockingApplies(req)
+	}
 	var wg sync.WaitGroup
 	wg.Add(2)
 	var legacy *LegacyDecision
 	var prompt *PromptDecision
 	go func() {
 		defer wg.Done()
-		legacy, _ = c.checkLegacy(ctx, req)
+		legacy, _ = c.checkLegacy(ctx, legacyReq)
 	}()
 	go func() {
 		defer wg.Done()

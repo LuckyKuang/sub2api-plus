@@ -23,6 +23,16 @@ func TestContentModerationUsesLatestUserTextWithoutInstructionContext(t *testing
 			want: "你好",
 		},
 		{
+			name: "responses legacy messages alias", protocol: service.ContentModerationProtocolOpenAIResponses,
+			body: `{"messages":[{"role":"system","content":"legacy system"},{"role":"user","content":"legacy user"}]}`,
+			want: "legacy user",
+		},
+		{
+			name: "responses native input precedes aliases", protocol: service.ContentModerationProtocolOpenAIResponses,
+			body: `{"input":"native user","messages":[{"role":"user","content":"ignored alias"}],"prompt":"ignored prompt"}`,
+			want: "native user",
+		},
+		{
 			name: "responses tool loop skipped", protocol: service.ContentModerationProtocolOpenAIResponses,
 			body: `{"input":[{"type":"message","role":"user","content":"older prompt"},{"type":"function_call_output","call_id":"call_1","output":"current tool result"}]}`,
 		},
@@ -43,6 +53,16 @@ func TestContentModerationUsesLatestUserTextWithoutInstructionContext(t *testing
 			name: "chat latest user", protocol: service.ContentModerationProtocolOpenAIChat,
 			body: `{"messages":[{"role":"system","content":"chat system context"},{"role":"user","content":"你好"}]}`,
 			want: "你好",
+		},
+		{
+			name: "chat user reasoning and reminder remain direct user text", protocol: service.ContentModerationProtocolOpenAIChat,
+			body: `{"messages":[{"role":"assistant","reasoning_content":"assistant private"},{"role":"user","content":"<system-reminder>untrusted</system-reminder> question","reasoning_content":"user reasoning"}]}`,
+			want: "<system-reminder>untrusted</system-reminder> question user reasoning",
+		},
+		{
+			name: "alpha search structured semantics", protocol: "openai_alpha_search",
+			body: `{"commands":{"search_query":[{"q":"security query"}],"mode":"deep"},"settings":{"region":"global"},"input":[{"type":"message","role":"user","content":"recent context"}]}`,
+			want: `{"mode":"deep","search_query":[{"q":"security query"}]} {"region":"global"} [{"content":"recent context","role":"user","type":"message"}]`,
 		},
 		{
 			name: "chat tool result skipped", protocol: service.ContentModerationProtocolOpenAIChat,
@@ -108,6 +128,26 @@ func TestPromptAuditUsesConversationTextWithoutToolSchema(t *testing.T) {
 			full:   []string{"older prompt"},
 			latest: "older prompt",
 			omit:   []string{"current tool result"},
+		},
+		{
+			name: "responses legacy messages and prompt aliases", protocol: service.ContentModerationProtocolOpenAIResponses,
+			body:   `{"messages":[{"role":"user","content":"legacy prompt text"}],"prompt":"lower priority alias"}`,
+			full:   []string{"legacy prompt text"},
+			latest: "legacy prompt text",
+			omit:   []string{"lower priority alias"},
+		},
+		{
+			name: "chat user reasoning is prompt text", protocol: service.ContentModerationProtocolOpenAIChat,
+			body:   `{"messages":[{"role":"assistant","reasoning_content":"assistant private"},{"role":"user","content":"question","reasoning_content":"user reasoning"}]}`,
+			full:   []string{"question", "user reasoning"},
+			latest: "question\n\nuser reasoning",
+			omit:   []string{"assistant private"},
+		},
+		{
+			name: "alpha search semantic fields", protocol: "openai_alpha_search",
+			body:   `{"commands":{"search_query":[{"q":"security query"}],"mode":"deep"},"settings":{"region":"global"},"input":[{"type":"message","role":"user","content":"recent context"}]}`,
+			full:   []string{"security query", "deep", "global", "recent context"},
+			latest: "{\"mode\":\"deep\",\"search_query\":[{\"q\":\"security query\"}]}\n\n{\"region\":\"global\"}\n\n[{\"content\":\"recent context\",\"role\":\"user\",\"type\":\"message\"}]",
 		},
 		{
 			name: "responses reusable prompt variables are excluded", protocol: service.ContentModerationProtocolOpenAIResponses,

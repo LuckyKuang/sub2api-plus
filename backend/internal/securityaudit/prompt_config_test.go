@@ -424,6 +424,9 @@ func TestParseLegacyConfigDefaultsMissingFieldsWithoutEnablingBlocking(t *testin
 func TestUpdateConfigStrictBoundsAndKnownValues(t *testing.T) {
 	valid := promptAuditUpdateRequest(1, 1, "")
 	require.NoError(t, validateUpdateConfigRequest(valid))
+	require.Equal(t, 100000, MaxInputLimit)
+	valid.Endpoints[0].InputLimit = MaxInputLimit
+	require.NoError(t, validateUpdateConfigRequest(valid))
 
 	tests := []struct {
 		name   string

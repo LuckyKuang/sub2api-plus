@@ -2,6 +2,7 @@ import { apiClient } from '../client'
 
 export type ModerationMode = 'off' | 'observe' | 'pre_block'
 export type KeywordBlockingMode = 'keyword_only' | 'keyword_and_api' | 'api_only'
+export type ContentModerationTextAPIMode = 'auto' | 'blocking' | 'observe' | 'off'
 export type ContentModerationModelFilterType = 'all' | 'include' | 'exclude'
 
 export interface ContentModerationModelFilter {
@@ -40,6 +41,7 @@ export interface ContentModerationConfig {
   pre_hash_check_enabled: boolean
   blocked_keywords: string[]
   keyword_blocking_mode: KeywordBlockingMode
+  text_api_mode: ContentModerationTextAPIMode
   model_filter: ContentModerationModelFilter
   cyber_policy_exclude_from_ban_count: boolean
   cyber_policy_auto_ban_enabled: boolean
@@ -121,6 +123,7 @@ export interface UpdateContentModerationConfig {
   pre_hash_check_enabled?: boolean
   blocked_keywords?: string[]
   keyword_blocking_mode?: KeywordBlockingMode
+  text_api_mode?: ContentModerationTextAPIMode
   model_filter?: ContentModerationModelFilter
   cyber_policy_exclude_from_ban_count?: boolean
   cyber_policy_auto_ban_enabled?: boolean
@@ -130,6 +133,7 @@ export interface ContentModerationRuntimeStatus {
   enabled: boolean
   risk_control_enabled: boolean
   mode: ModerationMode
+  text_api_mode: ContentModerationTextAPIMode
   worker_count: number
   max_workers: number
   active_workers: number

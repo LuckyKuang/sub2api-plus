@@ -39,6 +39,7 @@ const (
 	ContentModerationActionBlock          = "block"
 	ContentModerationActionHashBlock      = "hash_block"
 	ContentModerationActionKeywordBlock   = "keyword_block"
+	ContentModerationActionShadow         = "shadow"
 	ContentModerationActionError          = "error"
 	ContentModerationActionCyberPolicy    = "cyber_policy" // cyber_policy 硬阻断的风控日志 action（封号计数排除按此值过滤）
 	ContentModerationErrorCodePolicy      = "content_policy_violation"
@@ -49,6 +50,11 @@ const (
 	ContentModerationKeywordModeKeywordOnly   = "keyword_only"
 	ContentModerationKeywordModeKeywordAndAPI = "keyword_and_api"
 	ContentModerationKeywordModeAPIOnly       = "api_only"
+
+	ContentModerationTextAPIModeAuto     = "auto"
+	ContentModerationTextAPIModeBlocking = "blocking"
+	ContentModerationTextAPIModeObserve  = "observe"
+	ContentModerationTextAPIModeOff      = "off"
 
 	ContentModerationModelFilterAll     = "all"
 	ContentModerationModelFilterInclude = "include"
@@ -171,6 +177,7 @@ type ContentModerationConfig struct {
 	PreHashCheckEnabled  bool                         `json:"pre_hash_check_enabled"`
 	BlockedKeywords      []string                     `json:"blocked_keywords"`
 	KeywordBlockingMode  string                       `json:"keyword_blocking_mode"`
+	TextAPIMode          string                       `json:"text_api_mode"`
 	ModelFilter          ContentModerationModelFilter `json:"model_filter"`
 	// CyberPolicyExcludeFromBanCount 为 true 时，cyber_policy 命中不参与自动封号计数：
 	// 当次不判定封号，且历史 cyber 行在 CountFlaggedByUserSince 中被排除。
@@ -212,6 +219,7 @@ type ContentModerationConfigView struct {
 	PreHashCheckEnabled            bool                            `json:"pre_hash_check_enabled"`
 	BlockedKeywords                []string                        `json:"blocked_keywords"`
 	KeywordBlockingMode            string                          `json:"keyword_blocking_mode"`
+	TextAPIMode                    string                          `json:"text_api_mode"`
 	ModelFilter                    ContentModerationModelFilter    `json:"model_filter"`
 	CyberPolicyExcludeFromBanCount bool                            `json:"cyber_policy_exclude_from_ban_count"`
 	CyberPolicyAutoBanEnabled      bool                            `json:"cyber_policy_auto_ban_enabled"`
@@ -305,6 +313,7 @@ type UpdateContentModerationConfigInput struct {
 	PreHashCheckEnabled            *bool                         `json:"pre_hash_check_enabled"`
 	BlockedKeywords                *[]string                     `json:"blocked_keywords"`
 	KeywordBlockingMode            *string                       `json:"keyword_blocking_mode"`
+	TextAPIMode                    *string                       `json:"text_api_mode"`
 	ModelFilter                    *ContentModerationModelFilter `json:"model_filter"`
 	CyberPolicyExcludeFromBanCount *bool                         `json:"cyber_policy_exclude_from_ban_count"`
 	CyberPolicyAutoBanEnabled      *bool                         `json:"cyber_policy_auto_ban_enabled"`
@@ -329,6 +338,10 @@ type ContentModerationCheckInput struct {
 	Protocol   string
 	Body       []byte
 	Stage      string
+	// PromptTextAuthority is true only when blocking Prompt Guard covers this
+	// exact request. Auto mode may then observe external text moderation while
+	// leaving local checks and image moderation authoritative.
+	PromptTextAuthority bool
 }
 
 type ContentModerationInput struct {
@@ -450,6 +463,7 @@ type ContentModerationRuntimeStatus struct {
 	Enabled                      bool                            `json:"enabled"`
 	RiskControlEnabled           bool                            `json:"risk_control_enabled"`
 	Mode                         string                          `json:"mode"`
+	TextAPIMode                  string                          `json:"text_api_mode"`
 	WorkerCount                  int                             `json:"worker_count"`
 	MaxWorkers                   int                             `json:"max_workers"`
 	ActiveWorkers                int                             `json:"active_workers"`
@@ -572,6 +586,7 @@ type contentModerationTask struct {
 	config           *ContentModerationConfig
 	recordHash       bool
 	applySideEffects bool
+	shadowOnly       bool
 	enqueuedAt       time.Time
 }
 
@@ -734,6 +749,9 @@ func (s *ContentModerationService) UpdateConfig(ctx context.Context, input Updat
 	}
 	if input.KeywordBlockingMode != nil {
 		cfg.KeywordBlockingMode = strings.TrimSpace(*input.KeywordBlockingMode)
+	}
+	if input.TextAPIMode != nil {
+		cfg.TextAPIMode = strings.TrimSpace(*input.TextAPIMode)
 	}
 	if input.ModelFilter != nil {
 		cfg.ModelFilter = *input.ModelFilter
@@ -919,6 +937,9 @@ func (s *ContentModerationService) Check(ctx context.Context, input ContentModer
 		"model", input.Model,
 		"enabled", cfg.Enabled,
 		"mode", cfg.Mode,
+		"text_api_mode", cfg.TextAPIMode,
+		"effective_text_api_mode", cfg.effectiveTextAPIMode(input.PromptTextAuthority),
+		"prompt_text_authority", input.PromptTextAuthority,
 		"all_groups", cfg.AllGroups,
 		"configured_group_ids", cfg.GroupIDs,
 		"in_group_scope", inGroupScope,
@@ -1051,7 +1072,7 @@ func (s *ContentModerationService) Check(ctx context.Context, input ContentModer
 				}, nil
 			}
 		}
-		if cfg.KeywordBlockingMode == ContentModerationKeywordModeKeywordOnly {
+		if cfg.KeywordBlockingMode == ContentModerationKeywordModeKeywordOnly && len(content.Images) == 0 {
 			s.recordPreBlockSyncMetric(0, ContentModerationActionAllow)
 			slog.Info("content_moderation.skip_api_keyword_only",
 				"user_id", input.UserID,
@@ -1104,7 +1125,20 @@ func (s *ContentModerationService) Check(ctx context.Context, input ContentModer
 			}, nil
 		}
 	}
-	if !cfg.shouldSample(hashText) {
+	textAPIMode := cfg.effectiveTextAPIMode(input.PromptTextAuthority)
+	if cfg.KeywordBlockingMode == ContentModerationKeywordModeKeywordOnly {
+		textAPIMode = ContentModerationTextAPIModeOff
+	}
+	externalContent := ContentModerationInput{Images: append([]string(nil), content.Images...)}
+	if textAPIMode != ContentModerationTextAPIModeOff {
+		externalContent.Text = content.Text
+	}
+	externalContent.Normalize()
+	if externalContent.IsEmpty() {
+		return allow, nil
+	}
+	hasBlockingImages := cfg.Mode == ContentModerationModePreBlock && len(content.Images) > 0
+	if !hasBlockingImages && !cfg.shouldSample(hashText) {
 		if cfg.Mode == ContentModerationModePreBlock {
 			s.recordPreBlockSyncMetric(0, ContentModerationActionAllow)
 		}
@@ -1142,11 +1176,37 @@ func (s *ContentModerationService) Check(ctx context.Context, input ContentModer
 			"endpoint", input.Endpoint,
 			"protocol", input.Protocol,
 			"queue_len", len(s.asyncQueue))
-		s.enqueueAsync(input, cfg, content, hashText)
+		if textAPIMode == ContentModerationTextAPIModeObserve {
+			if strings.TrimSpace(content.Text) != "" {
+				shadow := ContentModerationInput{Text: content.Text}
+				shadow.Normalize()
+				s.enqueueAsync(input, cfg, shadow, shadow.Hash(), true)
+			}
+			if len(content.Images) > 0 {
+				images := ContentModerationInput{Images: append([]string(nil), content.Images...)}
+				images.Normalize()
+				s.enqueueAsync(input, cfg, images, images.Hash(), false)
+			}
+		} else {
+			s.enqueueAsync(input, cfg, externalContent, externalContent.Hash(), false)
+		}
 		return allow, nil
 	}
 
-	return s.checkSync(ctx, input, cfg, content, hashText, nil, true), nil
+	if textAPIMode == ContentModerationTextAPIModeBlocking {
+		return s.checkSync(ctx, input, cfg, externalContent, externalContent.Hash(), nil, true, true), nil
+	}
+	if textAPIMode == ContentModerationTextAPIModeObserve && strings.TrimSpace(content.Text) != "" {
+		shadow := ContentModerationInput{Text: content.Text}
+		shadow.Normalize()
+		s.enqueueAsync(input, cfg, shadow, shadow.Hash(), true)
+	}
+	if len(content.Images) == 0 {
+		return allow, nil
+	}
+	images := ContentModerationInput{Images: append([]string(nil), content.Images...)}
+	images.Normalize()
+	return s.checkSync(ctx, input, cfg, images, images.Hash(), nil, true, true), nil
 }
 
 func contentModerationAuditStage(stage string) string {
@@ -1207,7 +1267,7 @@ func contentModerationRuntimeExceptionAttrs(errorCode string, err error) []any {
 	}
 }
 
-func (s *ContentModerationService) checkSync(ctx context.Context, input ContentModerationCheckInput, cfg *ContentModerationConfig, content ContentModerationInput, hashText string, queueDelay *int, allowBlock bool) *ContentModerationDecision {
+func (s *ContentModerationService) checkSync(ctx context.Context, input ContentModerationCheckInput, cfg *ContentModerationConfig, content ContentModerationInput, hashText string, queueDelay *int, allowBlock, applySideEffects bool) *ContentModerationDecision {
 	allow := &ContentModerationDecision{Allowed: true, Action: ContentModerationActionAllow}
 	trackPreBlock := queueDelay == nil && allowBlock && cfg != nil && cfg.Mode == ContentModerationModePreBlock
 	if trackPreBlock {
@@ -1252,6 +1312,8 @@ func (s *ContentModerationService) checkSync(ctx context.Context, input ContentM
 	if allowBlock && flagged && cfg.Mode == ContentModerationModePreBlock {
 		action = ContentModerationActionBlock
 		blocked = true
+	} else if flagged && !applySideEffects {
+		action = ContentModerationActionShadow
 	}
 	if trackPreBlock {
 		s.recordPreBlockSyncMetric(latency, action)
@@ -1275,9 +1337,9 @@ func (s *ContentModerationService) checkSync(ctx context.Context, input ContentM
 	if flagged || cfg.RecordNonHits {
 		log := s.buildLog(input, cfg, action, flagged, highestCategory, highestScore, result.CategoryScores, content.ExcerptText(), &latency, queueDelay, "")
 		if queueDelay == nil && cfg.Mode == ContentModerationModePreBlock {
-			s.enqueueRecord(input, cfg, log, hashText, flagged, flagged)
+			s.enqueueRecord(input, cfg, log, hashText, flagged && applySideEffects, flagged && applySideEffects)
 		} else {
-			s.persistContentModerationLog(ctx, cfg, log, hashText, flagged, flagged)
+			s.persistContentModerationLog(ctx, cfg, log, hashText, flagged && applySideEffects, flagged && applySideEffects)
 		}
 	}
 	if blocked {
@@ -1323,7 +1385,7 @@ func (s *ContentModerationService) recordPreBlockSyncMetric(latencyMS int, actio
 	}
 }
 
-func (s *ContentModerationService) enqueueAsync(input ContentModerationCheckInput, cfg *ContentModerationConfig, content ContentModerationInput, hashText string) {
+func (s *ContentModerationService) enqueueAsync(input ContentModerationCheckInput, cfg *ContentModerationConfig, content ContentModerationInput, hashText string, shadowOnly bool) {
 	if s == nil || s.asyncQueue == nil {
 		return
 	}
@@ -1344,6 +1406,7 @@ func (s *ContentModerationService) enqueueAsync(input ContentModerationCheckInpu
 		input:      input,
 		content:    content,
 		inputHash:  hashText,
+		shadowOnly: shadowOnly,
 		enqueuedAt: time.Now(),
 	}
 	select {
@@ -1462,10 +1525,13 @@ func (s *ContentModerationService) worker(id int) {
 			if !cfg.includesModel(task.input.Model) {
 				return
 			}
+			if task.shadowOnly && cfg.effectiveTextAPIMode(task.input.PromptTextAuthority) == ContentModerationTextAPIModeOff {
+				return
+			}
 			s.asyncActive.Add(1)
 			defer s.asyncActive.Add(-1)
 			queueDelay := int(time.Since(task.enqueuedAt).Milliseconds())
-			_ = s.checkSync(ctx, task.input, cfg, task.content, task.inputHash, &queueDelay, false)
+			_ = s.checkSync(ctx, task.input, cfg, task.content, task.inputHash, &queueDelay, false, !task.shadowOnly)
 			s.asyncProcessed.Add(1)
 		}()
 	}
@@ -1615,6 +1681,7 @@ func (s *ContentModerationService) GetStatus(ctx context.Context) (*ContentModer
 		Enabled:                      cfg.Enabled,
 		RiskControlEnabled:           riskEnabled,
 		Mode:                         cfg.Mode,
+		TextAPIMode:                  cfg.TextAPIMode,
 		WorkerCount:                  cfg.WorkerCount,
 		MaxWorkers:                   maxContentModerationWorkerCount,
 		ActiveWorkers:                active,
@@ -2310,6 +2377,7 @@ func defaultContentModerationConfig() *ContentModerationConfig {
 		PreHashCheckEnabled:  false,
 		BlockedKeywords:      []string{},
 		KeywordBlockingMode:  ContentModerationKeywordModeKeywordAndAPI,
+		TextAPIMode:          ContentModerationTextAPIModeBlocking,
 		ModelFilter: ContentModerationModelFilter{
 			Type:   ContentModerationModelFilterAll,
 			Models: []string{},
@@ -2416,6 +2484,7 @@ func (cfg *ContentModerationConfig) normalize() {
 	cfg.Thresholds = mergeContentModerationThresholds(ContentModerationDefaultThresholds(), cfg.Thresholds)
 	cfg.BlockedKeywords = normalizeBlockedKeywords(cfg.BlockedKeywords)
 	cfg.KeywordBlockingMode = normalizeKeywordBlockingMode(cfg.KeywordBlockingMode)
+	cfg.TextAPIMode = normalizeContentModerationTextAPIMode(cfg.TextAPIMode)
 	cfg.ModelFilter = normalizeContentModerationModelFilter(cfg.ModelFilter)
 }
 
@@ -2646,6 +2715,7 @@ func (s *ContentModerationService) configView(cfg *ContentModerationConfig) *Con
 		PreHashCheckEnabled:            cfg.PreHashCheckEnabled,
 		BlockedKeywords:                append([]string(nil), cfg.BlockedKeywords...),
 		KeywordBlockingMode:            cfg.KeywordBlockingMode,
+		TextAPIMode:                    cfg.TextAPIMode,
 		ModelFilter:                    cloneContentModerationModelFilter(cfg.ModelFilter),
 		CyberPolicyExcludeFromBanCount: cfg.CyberPolicyExcludeFromBanCount,
 		CyberPolicyAutoBanEnabled:      cfg.CyberPolicyAutoBanEnabled,
@@ -2989,6 +3059,35 @@ func normalizeKeywordBlockingMode(mode string) string {
 	default:
 		return ContentModerationKeywordModeKeywordAndAPI
 	}
+}
+
+func normalizeContentModerationTextAPIMode(mode string) string {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case ContentModerationTextAPIModeAuto:
+		return ContentModerationTextAPIModeAuto
+	case ContentModerationTextAPIModeBlocking:
+		return ContentModerationTextAPIModeBlocking
+	case ContentModerationTextAPIModeObserve:
+		return ContentModerationTextAPIModeObserve
+	case ContentModerationTextAPIModeOff:
+		return ContentModerationTextAPIModeOff
+	default:
+		return ContentModerationTextAPIModeBlocking
+	}
+}
+
+func (cfg *ContentModerationConfig) effectiveTextAPIMode(promptTextAuthority bool) string {
+	mode := ContentModerationTextAPIModeBlocking
+	if cfg != nil {
+		mode = normalizeContentModerationTextAPIMode(cfg.TextAPIMode)
+	}
+	if mode != ContentModerationTextAPIModeAuto {
+		return mode
+	}
+	if promptTextAuthority {
+		return ContentModerationTextAPIModeObserve
+	}
+	return ContentModerationTextAPIModeBlocking
 }
 
 func normalizeContentModerationModelFilter(filter ContentModerationModelFilter) ContentModerationModelFilter {

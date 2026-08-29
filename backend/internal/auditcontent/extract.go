@@ -187,6 +187,10 @@ func extractChat(document *Document, root map[string]any) {
 	appendToolDefinitions(document, root["tools"])
 	appendToolDefinitions(document, root["functions"])
 	messagesValue, messagesExist := root["messages"]
+	appendChatMessages(document, messagesValue, messagesExist)
+}
+
+func appendChatMessages(document *Document, messagesValue any, messagesExist bool) {
 	messages, ok := asSlice(messagesValue)
 	if !ok {
 		if messagesExist && hasNonEmptyValue(messagesValue) {
@@ -239,8 +243,16 @@ func extractChat(document *Document, root map[string]any) {
 			markContentBearing(document, refusal)
 			appendStructured(document, refusal, "assistant", SourceMessage, current, controlled)
 		}
+		if reasoning, exists := message["reasoning_content"]; exists {
+			markContentBearing(document, reasoning)
+			reasoningRole, reasoningSource := role, SourceMessage
+			if reasoningRole == "assistant" {
+				reasoningSource = SourceReasoning
+			}
+			appendStructured(document, reasoning, reasoningRole, reasoningSource, current, controlled)
+		}
 		appendChatToolCalls(document, message, role, current)
-		markUnknownNonEmptyFields(document, message, "role", "content", "name", "tool_call_id", "tool_calls", "function_call", "refusal", "audio")
+		markUnknownNonEmptyFields(document, message, "role", "content", "name", "tool_call_id", "tool_calls", "function_call", "refusal", "reasoning_content", "audio")
 		pop()
 	}
 }
@@ -463,8 +475,17 @@ func extractResponsesRoot(document *Document, root map[string]any) {
 		appendContent(document, instructions, "system", SourceInstruction, true, true)
 	}
 	appendToolDefinitions(document, root["tools"])
-	appendResponsesPrompt(document, root["prompt"])
-	if input, exists := root["input"]; exists {
+	input, hasInput := root["input"]
+	hasNativeInput := hasInput && input != nil
+	hasLegacyMessages := false
+	if !hasNativeInput {
+		messages, hasMessages := root["messages"]
+		messageItems, messagesAreArray := asSlice(messages)
+		hasLegacyMessages = messagesAreArray && len(messageItems) > 0
+		appendChatMessages(document, messages, hasMessages)
+	}
+	appendResponsesPromptOrLegacyAlias(document, root["prompt"], hasNativeInput || hasLegacyMessages)
+	if hasInput {
 		extractResponsesValue(document, input)
 	}
 	responseValue, responseExists := root["response"]
@@ -483,8 +504,17 @@ func extractResponsesRoot(document *Document, root map[string]any) {
 		appendContent(document, instructions, "system", SourceInstruction, true, true)
 	}
 	appendToolDefinitions(document, response["tools"])
-	appendResponsesPrompt(document, response["prompt"])
-	if input, exists := response["input"]; exists {
+	input, hasInput = response["input"]
+	hasNativeInput = hasInput && input != nil
+	hasLegacyMessages = false
+	if !hasNativeInput {
+		messages, hasMessages := response["messages"]
+		messageItems, messagesAreArray := asSlice(messages)
+		hasLegacyMessages = messagesAreArray && len(messageItems) > 0
+		appendChatMessages(document, messages, hasMessages)
+	}
+	appendResponsesPromptOrLegacyAlias(document, response["prompt"], hasNativeInput || hasLegacyMessages)
+	if hasInput {
 		extractResponsesValue(document, input)
 	}
 	markUnknownResponsesRequestFields(document, response, false)
@@ -508,7 +538,7 @@ func extractResponsesSession(document *Document, session map[string]any) {
 func responsesRequestFields(envelope bool) []string {
 	fields := []string{
 		"background", "context_management", "conversation", "include", "input", "instructions",
-		"max_output_tokens", "max_tool_calls", "metadata", "model", "parallel_tool_calls",
+		"max_output_tokens", "max_tool_calls", "messages", "metadata", "model", "parallel_tool_calls",
 		"previous_response_id", "prompt", "prompt_cache_key", "prompt_cache_options",
 		"prompt_cache_retention", "reasoning", "reasoning_effort", "safety_identifier",
 		"service_tier", "store", "stream", "stream_options", "temperature", "text",
@@ -588,6 +618,17 @@ func appendResponsesPrompt(document *Document, value any) {
 			markIncompleteContent(document)
 		}
 	}
+}
+
+func appendResponsesPromptOrLegacyAlias(document *Document, value any, hasHigherPriorityInput bool) {
+	if text, ok := value.(string); ok {
+		if !hasHigherPriorityInput {
+			markContentBearing(document, text)
+			appendText(document, text, "user", SourceMessage, true, true)
+		}
+		return
+	}
+	appendResponsesPrompt(document, value)
 }
 
 func extractResponsesValue(document *Document, value any) {
@@ -818,8 +859,8 @@ func appendResponsesItem(document *Document, value any, current bool) {
 			}
 			markUnknownNonEmptyFields(document, typed, "type", "id", "role", "tools")
 			return
-		case "compaction":
-			markUnknownNonEmptyFields(document, typed, "type", "id", "encrypted_content")
+		case "compaction", "compaction_summary", "compaction_trigger":
+			appendVisibleCompactionFields(document, typed, current)
 			return
 		case "reasoning":
 			for _, key := range []string{"summary", "content", "text"} {
@@ -1120,40 +1161,27 @@ func markKnownStringOrObjectFields(*Document, any, ...string) {
 }
 
 func extractAlphaSearch(document *Document, root map[string]any) {
-	commandsValue, commandsExist := root["commands"]
-	commands, ok := commandsValue.(map[string]any)
-	if !ok {
-		if commandsExist && hasNonEmptyValue(commandsValue) {
-			markIncompleteContent(document)
+	// PAT fallback serializes all three fields into one upstream user prompt.
+	for _, key := range []string{"commands", "settings", "input"} {
+		value, exists := root[key]
+		if !exists || !hasNonEmptyValue(value) {
+			continue
 		}
-	} else {
-		queriesValue, queriesExist := commands["search_query"]
-		queries, queriesOK := asSlice(queriesValue)
-		if !queriesOK {
-			if queriesExist && hasNonEmptyValue(queriesValue) {
-				markIncompleteContent(document)
-			}
-		} else {
-			for _, value := range queries {
-				query, queryOK := value.(map[string]any)
-				if !queryOK {
-					if hasNonEmptyValue(value) {
-						markIncompleteContent(document)
-					}
-					continue
-				}
-				q, exists := query["q"]
-				if !exists && hasNonEmptyValue(query) {
-					markIncompleteContent(document)
-					continue
-				}
-				markContentBearing(document, q)
-				appendStructured(document, q, "user", SourceSearchQuery, true, true)
-			}
-		}
+		markContentBearing(document, value)
+		appendStructured(document, value, "user", SourceSearchQuery, true, true)
 	}
-	if input, exists := root["input"]; exists {
-		extractResponsesValue(document, input)
+}
+
+func appendVisibleCompactionFields(document *Document, item map[string]any, current bool) {
+	visible := visibleCompactionFields(item)
+	if len(visible) == 0 {
+		return
+	}
+	markContentBearing(document, visible)
+	before := len(document.Segments)
+	appendStructured(document, visible, "assistant", SourceReasoning, current, true)
+	if len(document.Segments) == before && contentRequiresExtraction(visible) {
+		markIncompleteContent(document)
 	}
 }
 
@@ -1553,8 +1581,11 @@ func contentRequiresExtraction(value any) bool {
 		return false
 	case map[string]any:
 		typeName := normalizedType(typed["type"])
-		if typeName == "redacted_thinking" || typeName == "compaction" {
+		if typeName == "redacted_thinking" {
 			return false
+		}
+		if isCompactionAuditContentType(typeName) {
+			return hasVisibleCompactionFields(typed)
 		}
 		if typeName == "tool_result" {
 			return contentRequiresExtraction(typed["content"])
@@ -1610,7 +1641,7 @@ func appendContent(document *Document, value any, role string, source Source, cu
 		switch typeName {
 		case "output_text":
 			contentRole = "assistant"
-		case "summary_text":
+		case "summary_text", "reasoning_text":
 			contentRole, contentSource = "assistant", SourceReasoning
 		}
 		if typeName != "tool_result" {
@@ -1651,7 +1682,7 @@ func appendContent(document *Document, value any, role string, source Source, cu
 			markIncompleteContent(document)
 		}
 		switch typeName {
-		case "", "text", "input_text", "output_text", "summary_text":
+		case "", "text", "input_text", "output_text", "summary_text", "reasoning_text":
 			markUnknownNonEmptyFields(document, typed, "type", "text", "content", "annotations", "logprobs")
 		case "message":
 			markUnknownNonEmptyFields(document, typed, "type", "id", "status", "role", "content", "text")
@@ -1674,23 +1705,40 @@ func appendStructured(document *Document, value any, role string, source Source,
 		return
 	}
 	appendImageValues(document, value, role, source, current, controlled, false)
-	if text, ok := value.(string); ok {
-		if looksLikeEncodedMediaPayload(text) {
-			return
-		}
-		appendText(document, text, role, source, current, controlled)
-		return
-	}
-	sanitized, keep := sanitizeStructuredValue(value, false)
-	if !keep {
-		return
-	}
-	raw, err := json.Marshal(sanitized)
+	text, keep, err := structuredText(value)
 	if err != nil {
 		markIncompleteContent(document)
 		return
 	}
-	appendText(document, string(raw), role, source, current, controlled)
+	if !keep {
+		return
+	}
+	appendText(document, text, role, source, current, controlled)
+}
+
+// StructuredText returns the deterministic sanitized representation used by
+// canonical structured audit segments.
+func StructuredText(value any) (string, bool) {
+	text, keep, _ := structuredText(value)
+	return text, keep
+}
+
+func structuredText(value any) (string, bool, error) {
+	if text, ok := value.(string); ok {
+		if looksLikeEncodedMediaPayload(text) || strings.TrimSpace(text) == "" {
+			return "", false, nil
+		}
+		return text, true, nil
+	}
+	sanitized, keep := sanitizeStructuredValue(value, false)
+	if !keep {
+		return "", false, nil
+	}
+	raw, err := json.Marshal(sanitized)
+	if err != nil {
+		return "", false, err
+	}
+	return string(raw), true, nil
 }
 
 func appendText(document *Document, text, role string, source Source, current, controlled bool) {
@@ -1863,8 +1911,15 @@ func sanitizeStructuredValue(value any, mediaContext bool) (any, bool) {
 		return out, len(out) > 0
 	case map[string]any:
 		typeName := normalizedType(typed["type"])
-		if typeName == "compaction" || typeName == "redacted_thinking" {
+		if typeName == "redacted_thinking" {
 			return nil, false
+		}
+		if isCompactionAuditContentType(typeName) {
+			visible := visibleCompactionFields(typed)
+			if len(visible) == 0 {
+				return nil, false
+			}
+			return sanitizeStructuredValue(visible, mediaContext)
 		}
 		mediaObject := mediaContext || isImageType(typeName) || isMediaDescriptor(typed)
 		out := make(map[string]any, len(typed))
@@ -1891,6 +1946,34 @@ func sanitizeStructuredValue(value any, mediaContext bool) (any, bool) {
 	default:
 		return typed, true
 	}
+}
+
+func isCompactionAuditContentType(typeName string) bool {
+	switch typeName {
+	case "compaction", "compaction_summary", "compaction_trigger":
+		return true
+	default:
+		return false
+	}
+}
+
+func hasVisibleCompactionFields(item map[string]any) bool {
+	return len(visibleCompactionFields(item)) > 0
+}
+
+func visibleCompactionFields(item map[string]any) map[string]any {
+	visible := make(map[string]any)
+	for key, value := range item {
+		switch key {
+		case "type", "id", "status", "encrypted_content":
+			continue
+		default:
+			if hasNonEmptyValue(value) {
+				visible[key] = value
+			}
+		}
+	}
+	return visible
 }
 
 func isMediaDescriptor(value map[string]any) bool {

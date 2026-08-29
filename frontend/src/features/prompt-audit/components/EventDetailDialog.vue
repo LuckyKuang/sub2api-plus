@@ -2,15 +2,21 @@
   <BaseDialog :show="show" :title="t('admin.promptAudit.events.detailTitle')" width="extra-wide" @close="$emit('close')">
     <div v-if="loading" class="py-12 text-center text-sm text-gray-500" aria-busy="true">{{ t('common.loading') }}</div>
     <div v-else-if="event" class="flex flex-col">
-      <div class="flex flex-wrap gap-2 border-b border-gray-200 pb-3 dark:border-dark-700" role="tablist">
-        <button v-for="tab in tabs" :key="tab" type="button" role="tab" :aria-selected="activeTab === tab" class="rounded-md px-3 py-1.5 text-sm" :class="activeTab === tab ? 'bg-primary-50 text-primary-700 dark:bg-primary-950/40 dark:text-primary-300' : 'text-gray-600 dark:text-dark-300'" @click="activeTab = tab">
-          {{ t(`admin.promptAudit.events.tabs.${tab}`) }}
-        </button>
+      <div class="flex flex-wrap items-center gap-3 border-b border-gray-200 pb-3 dark:border-dark-700">
+        <div class="flex flex-wrap gap-2" role="tablist">
+          <button v-for="tab in tabs" :id="tabId(tab)" :key="tab" type="button" role="tab" :aria-selected="activeTab === tab" :aria-controls="panelId(tab)" :tabindex="activeTab === tab ? 0 : -1" class="rounded-md px-3 py-1.5 text-sm" :class="activeTab === tab ? 'bg-primary-50 text-primary-700 dark:bg-primary-950/40 dark:text-primary-300' : 'text-gray-600 dark:text-dark-300'" @click="activeTab = tab" @keydown.left.prevent="moveTab(-1)" @keydown.right.prevent="moveTab(1)">
+            {{ t(`admin.promptAudit.events.tabs.${tab}`) }}
+          </button>
+        </div>
+      </div>
+
+      <div v-if="event.snapshot.full_prompt_truncated" role="alert" class="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-200" data-test="prompt-truncated-warning">
+        {{ t('admin.promptAudit.events.promptTruncatedWarning') }}
       </div>
 
       <!-- Fixed panel height so switching tabs does not resize the dialog -->
       <div class="mt-5 h-[min(62vh,36rem)] overflow-y-auto" data-test="event-detail-tab-panel">
-        <div v-show="activeTab === 'summary'" class="grid gap-5 lg:grid-cols-2" role="tabpanel">
+        <div v-show="activeTab === 'summary'" :id="panelId('summary')" class="grid gap-5 lg:grid-cols-2" role="tabpanel" :aria-labelledby="tabId('summary')">
           <div>
             <h4 class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.promptAudit.events.promptFull') }}</h4>
             <pre class="mt-2 max-h-[min(46vh,26rem)] overflow-auto whitespace-pre-wrap break-words rounded-lg bg-gray-50 p-4 text-sm text-gray-700 dark:bg-dark-900 dark:text-dark-200" data-test="summary-prompt-full">{{ displayPrompt(event) }}</pre>
@@ -20,13 +26,16 @@
             <dt class="text-gray-500">{{ t('admin.promptAudit.events.user') }}</dt><dd>{{ event.snapshot.username || '—' }}</dd>
             <dt class="text-gray-500">{{ t('admin.promptAudit.events.email') }}</dt><dd>{{ event.snapshot.user_email || '—' }}</dd>
             <dt class="text-gray-500">{{ t('admin.promptAudit.events.apiKey') }}</dt><dd>{{ event.snapshot.api_key_name || '—' }}</dd>
+            <dt class="text-gray-500">{{ t('admin.promptAudit.events.clientIp') }}</dt><dd class="font-mono">{{ event.snapshot.client_ip || '—' }}</dd>
             <dt class="text-gray-500">{{ t('admin.promptAudit.events.group') }}</dt><dd>{{ event.snapshot.group_name || '—' }}</dd>
             <dt class="text-gray-500">{{ t('admin.promptAudit.events.model') }}</dt><dd>{{ event.snapshot.model || '—' }}</dd>
+            <dt class="text-gray-500">{{ t('admin.promptAudit.events.executionMode') }}</dt><dd>{{ formatMode(event.execution_mode) }}</dd>
+            <dt class="text-gray-500">{{ t('admin.promptAudit.events.promptSize') }}</dt><dd>{{ t('admin.promptAudit.events.promptSizeValue', { chars: formatNumber(event.snapshot.prompt_length), messages: formatNumber(event.snapshot.message_count) }) }}</dd>
             <dt class="text-gray-500">{{ t('admin.promptAudit.events.categories') }}</dt><dd>{{ formatCategories(event.categories) }}</dd>
           </dl>
         </div>
 
-        <div v-show="activeTab === 'risks'" class="space-y-5" role="tabpanel">
+        <div v-show="activeTab === 'risks'" :id="panelId('risks')" class="space-y-5" role="tabpanel" :aria-labelledby="tabId('risks')">
           <div class="grid gap-4 lg:grid-cols-2">
             <section data-test="risk-prompt-preview">
               <h4 class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.promptAudit.events.promptFull') }}</h4>
@@ -58,7 +67,7 @@
           </div>
         </div>
 
-        <dl v-show="activeTab === 'technical'" class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm" role="tabpanel">
+        <dl v-show="activeTab === 'technical'" :id="panelId('technical')" class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm" role="tabpanel" :aria-labelledby="tabId('technical')">
           <dt class="text-gray-500">{{ t('admin.promptAudit.events.requestId') }}</dt><dd class="break-all font-mono">{{ event.snapshot.request_id || '—' }}</dd>
           <dt class="text-gray-500">{{ t('admin.promptAudit.events.promptHash') }}</dt><dd class="break-all font-mono">{{ event.snapshot.prompt_hash }}</dd>
           <dt class="text-gray-500">{{ t('admin.promptAudit.events.technical.scanner') }}</dt><dd>{{ event.scanner_backend }} · {{ event.scanner_version }}</dd>
@@ -66,7 +75,14 @@
           <dt class="text-gray-500">{{ t('admin.promptAudit.events.technical.guardEndpoint') }}</dt><dd>{{ event.guard_endpoint_id }}</dd>
           <dt class="text-gray-500">{{ t('admin.promptAudit.events.technical.config') }}</dt><dd>v{{ event.config_version }}</dd>
           <dt class="text-gray-500">{{ t('admin.promptAudit.events.technical.chunks') }}</dt><dd>{{ event.chunk_total }}</dd>
-          <dt class="text-gray-500">{{ t('admin.promptAudit.events.technical.latency') }}</dt><dd>{{ event.latency_ms }} ms</dd>
+          <dt class="text-gray-500">{{ t('admin.promptAudit.events.technical.matchedChunk') }}</dt><dd>{{ event.matched_chunk_index ?? '—' }}</dd>
+          <dt class="text-gray-500">{{ t('admin.promptAudit.events.technical.inputLimit') }}</dt><dd>{{ event.input_limit == null ? '—' : formatNumber(event.input_limit) }}</dd>
+          <dt class="text-gray-500">{{ t('admin.promptAudit.events.queueDelay') }}</dt><dd>{{ formatDuration(event.queue_delay_ms) }}</dd>
+          <dt class="text-gray-500">{{ t('admin.promptAudit.events.technical.latency') }}</dt><dd>{{ formatDuration(event.latency_ms) }}</dd>
+          <dt class="text-gray-500">{{ t('admin.promptAudit.events.executionMode') }}</dt><dd>{{ formatMode(event.execution_mode) }}</dd>
+          <dt class="text-gray-500">{{ t('admin.promptAudit.events.clientIp') }}</dt><dd class="font-mono">{{ event.snapshot.client_ip || '—' }}</dd>
+          <dt class="text-gray-500">{{ t('admin.promptAudit.events.promptSize') }}</dt><dd>{{ t('admin.promptAudit.events.promptSizeValue', { chars: formatNumber(event.snapshot.prompt_length), messages: formatNumber(event.snapshot.message_count) }) }}</dd>
+          <dt class="text-gray-500">{{ t('admin.promptAudit.events.contentStatus') }}</dt><dd>{{ event.snapshot.full_prompt_truncated ? t('admin.promptAudit.events.contentTruncated') : t('admin.promptAudit.events.contentComplete') }}</dd>
           <dt class="text-gray-500">{{ t('admin.promptAudit.events.stage') }}</dt><dd>{{ event.snapshot.stage || 'http' }}</dd>
           <dt class="text-gray-500">{{ t('admin.promptAudit.events.technical.protocol') }}</dt><dd>{{ event.snapshot.protocol }} · {{ event.snapshot.endpoint }}</dd>
         </dl>
@@ -89,6 +105,18 @@ const tabs = ['summary', 'risks', 'technical'] as const
 const activeTab = ref<(typeof tabs)[number]>('summary')
 watch(() => props.event?.id, () => { activeTab.value = 'summary' })
 
+function tabId(tab: (typeof tabs)[number]): string {
+  return `prompt-audit-event-tab-${tab}`
+}
+function panelId(tab: (typeof tabs)[number]): string {
+  return `prompt-audit-event-panel-${tab}`
+}
+function moveTab(offset: number) {
+  const current = tabs.indexOf(activeTab.value)
+  activeTab.value = tabs[(current + offset + tabs.length) % tabs.length]
+  requestAnimationFrame(() => document.getElementById(tabId(activeTab.value))?.focus())
+}
+
 const DECISIONS = new Set(['pass', 'flag', 'critical'])
 const ACTIONS = new Set(['Allow', 'Warn', 'Block'])
 const RISK_LEVELS = new Set(['low', 'medium', 'high', 'critical'])
@@ -110,6 +138,19 @@ function translateCategory(category: string): string {
 function formatCategories(categories: string[]): string {
   if (!categories.length) return '—'
   return categories.map(translateCategory).join(', ')
+}
+function formatMode(mode: string): string {
+  const key = `admin.promptAudit.mode.${mode}`
+  const label = t(key)
+  return label === key ? mode || '—' : label
+}
+function formatDuration(value?: number | null): string {
+  if (value == null) return '—'
+  if (value < 1000) return `${value} ms`
+  return `${(value / 1000).toFixed(value < 10000 ? 2 : 1)} s`
+}
+function formatNumber(value: number): string {
+  return new Intl.NumberFormat().format(value)
 }
 function translateEvidence(value: string): string {
   const byId = SCANNER_CATALOG.find((scanner) => scanner.id === value)
@@ -135,6 +176,9 @@ function formatGuardReturn(event: PromptAuditEvent): string {
     scanner_version: event.scanner_version,
     guard_endpoint_id: event.guard_endpoint_id,
     chunk_total: event.chunk_total,
+    matched_chunk_index: event.matched_chunk_index ?? null,
+    input_limit: event.input_limit ?? null,
+    queue_delay_ms: event.queue_delay_ms ?? null,
     latency_ms: event.latency_ms,
   }, null, 2)
 }

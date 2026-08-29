@@ -93,7 +93,7 @@
     </div>
 
     <BaseDialog :show="Boolean(editing)" :title="editingIndex < 0 ? t('admin.promptAudit.pool.add') : t('admin.promptAudit.pool.edit')" width="wide" @close="closeEditor">
-      <form v-if="editing" class="grid gap-4 sm:grid-cols-2" @submit.prevent="saveEditor">
+      <form v-if="editing" ref="editorForm" class="grid gap-4 sm:grid-cols-2" @submit.prevent="saveEditor">
         <label class="space-y-1 text-sm text-gray-700 dark:text-dark-200">
           <span>{{ t('admin.promptAudit.pool.name') }}</span>
           <input v-model="editing.name" class="input w-full" required :aria-label="t('admin.promptAudit.pool.name')" />
@@ -121,12 +121,15 @@
         </label>
         <label class="space-y-1 text-sm text-gray-700 dark:text-dark-200">
           <span>{{ t('admin.promptAudit.pool.timeout') }}</span>
-          <input v-model.number="editing.timeout_ms" class="input w-full" type="number" min="100" max="30000" required :aria-label="t('admin.promptAudit.pool.timeout')" />
+          <input v-model.number="editing.timeout_ms" class="input w-full" type="number" :min="MIN_GUARD_TIMEOUT_MS" :max="MAX_GUARD_TIMEOUT_MS" step="1" required :aria-label="t('admin.promptAudit.pool.timeout')" />
+          <span class="block text-xs text-gray-500 dark:text-dark-400">{{ t('admin.promptAudit.pool.timeoutRange', { min: formatNumber(MIN_GUARD_TIMEOUT_MS), max: formatNumber(MAX_GUARD_TIMEOUT_MS) }) }}</span>
         </label>
         <label class="space-y-1 text-sm text-gray-700 dark:text-dark-200">
           <span>{{ t('admin.promptAudit.pool.inputLimit') }}</span>
-          <input v-model.number="editing.input_limit" class="input w-full" type="number" min="128" max="100000" required :aria-label="t('admin.promptAudit.pool.inputLimit')" />
+          <input v-model.number="editing.input_limit" class="input w-full" type="number" :min="MIN_GUARD_INPUT_LIMIT" :max="MAX_GUARD_INPUT_LIMIT" step="1" required :aria-label="t('admin.promptAudit.pool.inputLimit')" />
+          <span class="block text-xs text-gray-500 dark:text-dark-400">{{ t('admin.promptAudit.pool.inputLimitRange', { min: formatNumber(MIN_GUARD_INPUT_LIMIT), max: formatNumber(MAX_GUARD_INPUT_LIMIT) }) }}</span>
         </label>
+        <p class="text-xs leading-5 text-gray-500 dark:text-dark-400 sm:col-span-2">{{ t('admin.promptAudit.pool.inputLimitBehavior') }}</p>
       </form>
       <template #footer>
         <div class="flex justify-end gap-3">
@@ -143,7 +146,14 @@ import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import type { PromptAuditEndpointDraft, PromptProbeResult } from '../types'
-import { cloneData, createDefaultEndpoint } from '../viewModel'
+import {
+  cloneData,
+  createDefaultEndpoint,
+  MAX_GUARD_INPUT_LIMIT,
+  MAX_GUARD_TIMEOUT_MS,
+  MIN_GUARD_INPUT_LIMIT,
+  MIN_GUARD_TIMEOUT_MS,
+} from '../viewModel'
 
 const props = defineProps<{
   endpoints: PromptAuditEndpointDraft[]
@@ -157,6 +167,7 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const editing = ref<PromptAuditEndpointDraft | null>(null)
 const editingIndex = ref(-1)
+const editorForm = ref<HTMLFormElement | null>(null)
 
 function openCreate() {
   editingIndex.value = -1
@@ -171,6 +182,7 @@ function closeEditor() {
   editingIndex.value = -1
 }
 function saveEditor() {
+  if (!editorForm.value?.reportValidity()) return
   if (!editing.value?.id.trim() || !editing.value.name.trim() || !editing.value.base_url.trim()) return
   const next = props.endpoints.map((item) => cloneData(item))
   const value = cloneData(editing.value)
@@ -179,6 +191,10 @@ function saveEditor() {
   else next.splice(editingIndex.value, 1, value)
   emit('update:endpoints', next)
   closeEditor()
+}
+
+function formatNumber(value: number): string {
+  return new Intl.NumberFormat().format(value)
 }
 function toggleEndpoint(id: string) {
   emit('update:endpoints', props.endpoints.map((item) => item.id === id ? { ...item, enabled: !item.enabled } : cloneData(item)))

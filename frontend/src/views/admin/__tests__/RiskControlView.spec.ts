@@ -104,6 +104,7 @@ const baseConfig = (): ContentModerationConfig => ({
   pre_hash_check_enabled: false,
   blocked_keywords: [],
   keyword_blocking_mode: 'keyword_and_api',
+  text_api_mode: 'blocking',
   thresholds: {
     harassment: 0.98,
     sexual: 0.65,
@@ -118,6 +119,7 @@ const runtimeStatus = () => ({
   enabled: true,
   risk_control_enabled: true,
   mode: 'pre_block',
+  text_api_mode: 'blocking',
   worker_count: 4,
   max_workers: 32,
   active_workers: 0,
@@ -248,6 +250,7 @@ describe('admin RiskControlView', () => {
     await flushPromises()
 
     expect(updateConfig).toHaveBeenCalledWith(expect.objectContaining({
+      text_api_mode: 'blocking',
       model_filter: {
         type: 'include',
         models: ['gpt-5.5', 'gpt-5.4'],

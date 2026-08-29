@@ -416,6 +416,11 @@
                 <Select v-model="configForm.mode" :options="modeOptions" />
                 <p class="mt-2 text-xs leading-5 text-gray-500 dark:text-gray-400">{{ modeDescription(configForm.mode) }}</p>
               </div>
+              <div class="lg:col-span-2">
+                <label class="input-label">{{ t('admin.riskControl.textApiMode') }}</label>
+                <Select v-model="configForm.text_api_mode" :options="textAPIModeOptions" />
+                <p class="mt-2 text-xs leading-5 text-gray-500 dark:text-gray-400">{{ t(`admin.riskControl.textApiModeDesc.${configForm.text_api_mode}`) }}</p>
+              </div>
               <div>
                 <label class="input-label">{{ t('admin.riskControl.baseUrl') }}</label>
                 <input v-model.trim="configForm.base_url" type="url" class="input" placeholder="https://api.openai.com" />
@@ -1160,6 +1165,7 @@ import type {
   ContentModerationModelFilter,
   ContentModerationModelFilterType,
   ContentModerationRuntimeStatus,
+  ContentModerationTextAPIMode,
   ContentModerationTestAuditResult,
   KeywordBlockingMode,
   ModerationMode,
@@ -1281,6 +1287,7 @@ const configForm = reactive({
   thresholds: { ...riskThresholdDefaults } as Record<string, number>,
   blocked_keywords_text: '',
   keyword_blocking_mode: 'keyword_and_api' as KeywordBlockingMode,
+  text_api_mode: 'blocking' as ContentModerationTextAPIMode,
   model_filter_type: 'all' as ContentModerationModelFilterType,
   model_filter_models: [] as string[],
 })
@@ -1315,6 +1322,13 @@ const modeOptions = computed<SelectOption[]>(() => [
   { value: 'pre_block', label: t('admin.riskControl.modePreBlock') },
   { value: 'observe', label: t('admin.riskControl.modeObserve') },
   { value: 'off', label: t('admin.riskControl.modeOff') },
+])
+
+const textAPIModeOptions = computed<SelectOption[]>(() => [
+  { value: 'auto', label: t('admin.riskControl.textApiModes.auto') },
+  { value: 'blocking', label: t('admin.riskControl.textApiModes.blocking') },
+  { value: 'observe', label: t('admin.riskControl.textApiModes.observe') },
+  { value: 'off', label: t('admin.riskControl.textApiModes.off') },
 ])
 
 const keywordBlockingModeOptions = computed<Array<{ value: KeywordBlockingMode; label: string; description: string }>>(() => [
@@ -1789,6 +1803,7 @@ function applyConfig(config: ContentModerationConfig) {
   configForm.thresholds = riskThresholdsFromConfig(config.thresholds)
   configForm.blocked_keywords_text = Array.isArray(config.blocked_keywords) ? config.blocked_keywords.join('\n') : ''
   configForm.keyword_blocking_mode = normalizeKeywordBlockingMode(config.keyword_blocking_mode)
+  configForm.text_api_mode = config.text_api_mode || 'blocking'
   const modelFilter = normalizeModelFilter(config.model_filter)
   configForm.model_filter_type = modelFilter.type
   configForm.model_filter_models = modelFilter.models
@@ -1876,6 +1891,7 @@ async function saveConfig() {
       thresholds: buildRiskThresholdPayload(),
       blocked_keywords: blockedKeywordList.value,
       keyword_blocking_mode: configForm.keyword_blocking_mode,
+      text_api_mode: configForm.text_api_mode,
       model_filter: modelFilterPayload,
     }
     const keys = parseApiKeys(configForm.api_keys_text)
@@ -2187,6 +2203,8 @@ function modeDescription(mode: ModerationMode): string {
 function resultLabel(row: ContentModerationLog): string {
   if (row.action === 'cyber_policy') return t('admin.riskControl.action.cyberPolicy')
   if (row.action === 'keyword_block') return t('admin.riskControl.action.keywordBlock')
+  if (row.action === 'hash_block') return t('admin.riskControl.action.hashBlock')
+  if (row.action === 'shadow') return t('admin.riskControl.action.shadow')
   if (row.action === 'block') return t('admin.riskControl.action.block')
   if (row.action === 'error' || row.error) return t('admin.riskControl.action.error')
   if (row.flagged) return t('admin.riskControl.result.hit')
@@ -2194,7 +2212,7 @@ function resultLabel(row: ContentModerationLog): string {
 }
 
 function resultBadgeClass(row: ContentModerationLog): string {
-  if (row.action === 'block' || row.action === 'keyword_block' || row.action === 'cyber_policy') return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+  if (row.action === 'block' || row.action === 'keyword_block' || row.action === 'hash_block' || row.action === 'cyber_policy') return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
   if (row.action === 'error' || row.error) return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
   if (row.flagged) return 'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-300'
   return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
