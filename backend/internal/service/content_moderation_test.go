@@ -1283,6 +1283,31 @@ func TestContentModerationUpdateConfigPersistsTextAPIMode(t *testing.T) {
 	require.Equal(t, ContentModerationTextAPIModeBlocking, parsed.TextAPIMode)
 }
 
+func TestContentModerationEndpointPoolMigratesLegacyAndPreservesStoredKeys(t *testing.T) {
+	legacy := `{"enabled":true,"mode":"pre_block","base_url":"https://legacy.example","model":"legacy-model","api_keys":["sk-legacy"],"timeout_ms":4321}`
+	cfg, err := parseContentModerationConfig(legacy)
+	require.NoError(t, err)
+	require.Len(t, cfg.Endpoints, 1)
+	require.Equal(t, "https://legacy.example", cfg.Endpoints[0].BaseURL)
+	require.Equal(t, "legacy-model", cfg.Endpoints[0].Model)
+	require.Equal(t, []string{"sk-legacy"}, cfg.Endpoints[0].APIKeys)
+	require.Equal(t, 4321, cfg.Endpoints[0].TimeoutMS)
+
+	repo := &contentModerationTestSettingRepo{values: map[string]string{SettingKeyContentModerationConfig: legacy}}
+	svc := NewContentModerationService(repo, nil, nil, nil, nil, nil, nil, nil)
+	update := cfg.Endpoints[0]
+	update.Name = "Primary"
+	update.APIKeys = nil // Omitted secrets from the admin view must be retained.
+	view, err := svc.UpdateConfig(context.Background(), UpdateContentModerationConfigInput{Endpoints: &[]ContentModerationEndpoint{update}})
+	require.NoError(t, err)
+	require.Equal(t, "Primary", view.Endpoints[0].Name)
+	require.Equal(t, 1, view.Endpoints[0].APIKeyCount)
+
+	saved, err := parseContentModerationConfig(repo.values[SettingKeyContentModerationConfig])
+	require.NoError(t, err)
+	require.Equal(t, []string{"sk-legacy"}, saved.Endpoints[0].APIKeys)
+}
+
 func TestExtractContentModerationInput_AnthropicImageSourceOnlyParticipatesInMemory(t *testing.T) {
 	body := []byte(`{
 		"messages": [
@@ -1781,6 +1806,58 @@ func TestContentModerationCallModeration_FreezesByHTTPStatus(t *testing.T) {
 			require.LessOrEqual(t, remaining, tt.maxFreeze)
 		})
 	}
+}
+
+func TestContentModerationEndpointPool_FailsOverAndRecoversOnRealRequest(t *testing.T) {
+	primaryCalls := 0
+	primaryHealthy := false
+	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		primaryCalls++
+		if !primaryHealthy {
+			_ = json.NewEncoder(w).Encode(moderationAPIResponse{})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(moderationAPIResponse{Results: []moderationAPIResult{{Flagged: false}}})
+	}))
+	defer primary.Close()
+
+	secondaryCalls := 0
+	secondary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		secondaryCalls++
+		_ = json.NewEncoder(w).Encode(moderationAPIResponse{Results: []moderationAPIResult{{Flagged: false}}})
+	}))
+	defer secondary.Close()
+
+	cfg := defaultContentModerationConfig()
+	cfg.RetryCount = 0
+	cfg.Endpoints = []ContentModerationEndpoint{
+		{ID: "a", Name: "A", Enabled: true, Priority: 1, BaseURL: primary.URL, Model: "test", APIKeys: []string{"key-a"}, TimeoutMS: 1000, CooldownSeconds: 60, FailureThreshold: 1},
+		{ID: "b", Name: "B", Enabled: true, Priority: 2, BaseURL: secondary.URL, Model: "test", APIKeys: []string{"key-b"}, TimeoutMS: 1000, CooldownSeconds: 60, FailureThreshold: 1},
+	}
+	cfg.normalize()
+	svc := NewContentModerationService(nil, nil, nil, nil, nil, nil, nil, nil)
+
+	result, err := svc.callModeration(context.Background(), cfg, "hello")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 1, primaryCalls)
+	require.Equal(t, 1, secondaryCalls)
+	require.Equal(t, "cooldown", svc.endpointRuntime(cfg.Endpoints[0]).Status)
+
+	// Cooldown expiry itself sends no traffic. The next real request becomes
+	// the passive half-open recovery call.
+	svc.endpointHealthMu.Lock()
+	svc.endpointHealth["a"].CooldownUntil = time.Now().Add(-time.Second)
+	svc.endpointHealthMu.Unlock()
+	primaryHealthy = true
+	require.Equal(t, 1, primaryCalls)
+
+	result, err = svc.callModeration(context.Background(), cfg, "next")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 2, primaryCalls)
+	require.Equal(t, 1, secondaryCalls)
+	require.Equal(t, "healthy", svc.endpointRuntime(cfg.Endpoints[0]).Status)
 }
 
 func TestContentModerationTestAPIKeys_400DoesNotFreezeAPIKey(t *testing.T) {

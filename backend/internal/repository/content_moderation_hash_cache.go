@@ -2,13 +2,29 @@ package repository
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"strings"
+	"time"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/service"
 	"github.com/redis/go-redis/v9"
 )
 
 const contentModerationFlaggedHashSetKey = "content_moderation:flagged_hashes"
+
+var contentModerationEndpointClaimScript = redis.NewScript(`
+if redis.call('EXISTS', KEYS[1]) == 0 then
+  return {1, 0}
+end
+if redis.call('EXISTS', KEYS[2]) == 1 then
+  return {0, 0}
+end
+if redis.call('SET', KEYS[3], '1', 'NX', 'PX', ARGV[1]) then
+  return {1, 1}
+end
+return {0, 0}
+`)
 
 type contentModerationHashCache struct {
 	rdb *redis.Client
@@ -68,4 +84,80 @@ func (c *contentModerationHashCache) CountFlaggedInputHashes(ctx context.Context
 		return 0, nil
 	}
 	return c.rdb.SCard(ctx, contentModerationFlaggedHashSetKey).Result()
+}
+
+func (c *contentModerationHashCache) ClaimEndpoint(ctx context.Context, endpointID string, probeTTL time.Duration) (bool, bool, error) {
+	if c == nil || c.rdb == nil {
+		return true, false, nil
+	}
+	openKey, cooldownKey, probeKey := contentModerationEndpointStateKeys(endpointID)
+	if openKey == "" {
+		return false, false, nil
+	}
+	if probeTTL <= 0 {
+		probeTTL = 5 * time.Second
+	}
+	result, err := contentModerationEndpointClaimScript.Run(ctx, c.rdb, []string{openKey, cooldownKey, probeKey}, probeTTL.Milliseconds()).Slice()
+	if err != nil {
+		return false, false, err
+	}
+	if len(result) != 2 {
+		return false, false, redis.Nil
+	}
+	claimed, _ := result[0].(int64)
+	halfOpen, _ := result[1].(int64)
+	return claimed == 1, halfOpen == 1, nil
+}
+
+func (c *contentModerationHashCache) OpenEndpoint(ctx context.Context, endpointID string, cooldown time.Duration) error {
+	if c == nil || c.rdb == nil {
+		return nil
+	}
+	openKey, cooldownKey, probeKey := contentModerationEndpointStateKeys(endpointID)
+	if openKey == "" {
+		return nil
+	}
+	if cooldown <= 0 {
+		cooldown = time.Minute
+	}
+	_, err := c.rdb.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+		pipe.Set(ctx, openKey, "1", 0)
+		pipe.Set(ctx, cooldownKey, "1", cooldown)
+		pipe.Del(ctx, probeKey)
+		return nil
+	})
+	return err
+}
+
+func (c *contentModerationHashCache) CloseEndpoint(ctx context.Context, endpointID string) error {
+	if c == nil || c.rdb == nil {
+		return nil
+	}
+	openKey, cooldownKey, probeKey := contentModerationEndpointStateKeys(endpointID)
+	if openKey == "" {
+		return nil
+	}
+	return c.rdb.Del(ctx, openKey, cooldownKey, probeKey).Err()
+}
+
+func (c *contentModerationHashCache) ReleaseEndpointProbe(ctx context.Context, endpointID string) error {
+	if c == nil || c.rdb == nil {
+		return nil
+	}
+	_, _, probeKey := contentModerationEndpointStateKeys(endpointID)
+	if probeKey == "" {
+		return nil
+	}
+	return c.rdb.Del(ctx, probeKey).Err()
+}
+
+func contentModerationEndpointStateKeys(endpointID string) (string, string, string) {
+	endpointID = strings.TrimSpace(endpointID)
+	if endpointID == "" {
+		return "", "", ""
+	}
+	digest := sha256.Sum256([]byte(endpointID))
+	suffix := hex.EncodeToString(digest[:8])
+	prefix := "content_moderation:endpoint:" + suffix
+	return prefix + ":open", prefix + ":cooldown", prefix + ":probe"
 }

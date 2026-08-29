@@ -134,6 +134,23 @@ coordinator. Async-only, disabled, degraded, untrusted, and out-of-scope Guard
 configurations never grant text authority. Actions are distinct:
 `hash_block`, `keyword_block`, `block`, `shadow`, and `cyber_policy`.
 
+## Content Moderation Endpoint Failover
+
+External Moderation API calls use enabled endpoints in administrator-defined
+priority order and rotate usable keys inside each endpoint. Retryable transport,
+timeout, 5xx, invalid-response, or exhausted-key failures may place that
+endpoint into cooldown and continue the same audit evaluation with the next
+endpoint. Authentication and rate-limit responses first affect only the
+corresponding key.
+
+Cooldown recovery is passive: expiry never creates probe traffic. The next real
+moderation request performs the single half-open attempt; concurrent requests
+skip that endpoint until the attempt finishes. Manual connection tests are
+administrator actions and do not run on a schedule. Context cancellation and
+canonical extraction failures never penalize endpoint health. If every endpoint
+is unavailable, the existing dependency-failure behavior remains authoritative;
+an unavailable dependency is not converted into a policy violation.
+
 ## Prompt Audit Operations
 
 Prompt Audit events retain at most 65,536 runes of canonical selected content;

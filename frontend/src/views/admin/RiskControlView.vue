@@ -417,19 +417,31 @@
                 <p class="mt-2 text-xs leading-5 text-gray-500 dark:text-gray-400">{{ modeDescription(configForm.mode) }}</p>
               </div>
               <div class="lg:col-span-2">
-                <label class="input-label">{{ t('admin.riskControl.textApiMode') }}</label>
-                <Select v-model="configForm.text_api_mode" :options="textAPIModeOptions" />
-                <p class="mt-2 text-xs leading-5 text-gray-500 dark:text-gray-400">{{ t(`admin.riskControl.textApiModeDesc.${configForm.text_api_mode}`) }}</p>
+                <div class="mb-1 flex items-center gap-1.5">
+                  <label class="input-label mb-0">{{ t('admin.riskControl.textApiMode') }}</label>
+                  <button
+                    type="button"
+                    class="inline-flex h-6 w-6 items-center justify-center text-gray-400 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:hover:text-gray-200"
+                    :aria-label="t('admin.riskControl.policyHelp.open')"
+                    @click="policyHelpOpen = true"
+                  >
+                    <Icon name="exclamationCircle" size="sm" />
+                  </button>
+                </div>
+                <Select v-model="configForm.text_api_mode" :options="textAPIModeOptions" :disabled="configForm.mode === 'off'" />
+                <p data-test="moderation-effective-behavior" class="mt-2 text-xs leading-5 text-gray-500 dark:text-gray-400">
+                  {{ t('admin.riskControl.policyHelp.current') }}{{ effectiveTextPolicyDescription }}
+                </p>
               </div>
-              <div>
+              <div v-if="configForm.endpoints.length === 0">
                 <label class="input-label">{{ t('admin.riskControl.baseUrl') }}</label>
                 <input v-model.trim="configForm.base_url" type="url" class="input" placeholder="https://api.openai.com" />
               </div>
-              <div>
+              <div v-if="configForm.endpoints.length === 0">
                 <label class="input-label">{{ t('admin.riskControl.model') }}</label>
                 <input v-model.trim="configForm.model" type="text" class="input" placeholder="omni-moderation-latest" />
               </div>
-              <div>
+              <div v-if="configForm.endpoints.length === 0">
                 <label class="input-label">{{ t('admin.riskControl.timeoutMs') }}</label>
                 <input v-model.number="configForm.timeout_ms" type="number" min="500" max="30000" class="input" />
               </div>
@@ -444,14 +456,74 @@
                   <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">%</span>
                 </div>
               </div>
-              <div>
+              <div v-if="configForm.endpoints.length === 0">
                 <label class="input-label">{{ t('admin.riskControl.proxy') }}</label>
                 <ProxySelector v-model="configForm.proxy_id" :proxies="proxies" />
                 <p class="mt-2 text-xs leading-5 text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.proxyHint') }}</p>
               </div>
             </div>
 
-            <div class="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm dark:border-dark-700 dark:bg-dark-800">
+            <section data-test="moderation-endpoint-pool" class="border-t border-gray-200 pt-5 dark:border-dark-700">
+              <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h3 class="text-base font-semibold text-gray-900 dark:text-white">{{ t('admin.riskControl.endpointPool.title') }}</h3>
+                  <p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.endpointPool.hint') }}</p>
+                </div>
+                <button type="button" class="btn btn-secondary inline-flex items-center gap-2" @click="addModerationEndpoint">
+                  <Icon name="plus" size="sm" />
+                  {{ t('admin.riskControl.endpointPool.add') }}
+                </button>
+              </div>
+
+              <div class="space-y-4">
+                <div
+                  v-for="(endpoint, index) in configForm.endpoints"
+                  :key="endpoint.id"
+                  class="border border-gray-200 p-4 dark:border-dark-700"
+                >
+                  <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div class="flex min-w-0 items-center gap-3">
+                      <span class="flex h-8 w-8 flex-shrink-0 items-center justify-center bg-gray-100 text-sm font-semibold text-gray-700 dark:bg-dark-700 dark:text-gray-200">{{ index + 1 }}</span>
+                      <div class="min-w-0">
+                        <p class="truncate text-sm font-semibold text-gray-900 dark:text-white">{{ endpoint.name || t('admin.riskControl.endpointPool.unnamed') }}</p>
+                        <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{{ endpointStatusLabel(endpoint) }}</p>
+                      </div>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                      <button type="button" class="btn btn-secondary" :disabled="endpointTestingID === endpoint.id" @click="testModerationEndpoint(endpoint)">
+                        <Icon name="beaker" size="sm" />
+                        {{ t('admin.riskControl.endpointPool.test') }}
+                      </button>
+                      <button type="button" class="btn btn-secondary" :disabled="index === 0" :aria-label="t('admin.riskControl.endpointPool.moveUp')" @click="moveModerationEndpoint(index, -1)"><Icon name="arrowUp" size="sm" /></button>
+                      <button type="button" class="btn btn-secondary" :disabled="index === configForm.endpoints.length - 1" :aria-label="t('admin.riskControl.endpointPool.moveDown')" @click="moveModerationEndpoint(index, 1)"><Icon name="arrowDown" size="sm" /></button>
+                      <button type="button" class="btn btn-secondary" @click="toggleEndpointPause(endpoint)">
+                        {{ endpoint.manual_paused ? t('admin.riskControl.endpointPool.resume') : t('admin.riskControl.endpointPool.pause') }}
+                      </button>
+                      <button type="button" class="btn btn-secondary text-red-600" :disabled="configForm.endpoints.length === 1" :aria-label="t('admin.riskControl.endpointPool.delete')" @click="removeModerationEndpoint(index)"><Icon name="trash" size="sm" /></button>
+                      <Toggle v-model="endpoint.enabled" />
+                    </div>
+                  </div>
+
+                  <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    <div><label class="input-label">{{ t('admin.riskControl.endpointPool.name') }}</label><input v-model.trim="endpoint.name" class="input" type="text" /></div>
+                    <div class="md:col-span-2"><label class="input-label">{{ t('admin.riskControl.baseUrl') }}</label><input v-model.trim="endpoint.base_url" class="input" type="url" /></div>
+                    <div><label class="input-label">{{ t('admin.riskControl.model') }}</label><input v-model.trim="endpoint.model" class="input" type="text" /></div>
+                    <div><label class="input-label">{{ t('admin.riskControl.timeoutMs') }}</label><input v-model.number="endpoint.timeout_ms" class="input" type="number" min="500" max="30000" /></div>
+                    <div><label class="input-label">{{ t('admin.riskControl.endpointPool.cooldown') }}</label><input v-model.number="endpoint.cooldown_seconds" class="input" type="number" min="1" max="86400" /></div>
+                    <div><label class="input-label">{{ t('admin.riskControl.endpointPool.failureThreshold') }}</label><input v-model.number="endpoint.failure_threshold" class="input" type="number" min="1" max="20" /></div>
+                    <div><label class="input-label">{{ t('admin.riskControl.proxy') }}</label><ProxySelector v-model="endpoint.proxy_id" :proxies="proxies" /></div>
+                    <div class="md:col-span-2 xl:col-span-4">
+                      <label class="input-label">{{ t('admin.riskControl.endpointPool.apiKeys') }}</label>
+                      <textarea v-model="endpoint.api_keys_text" class="input min-h-20 resize-y font-mono text-sm" :placeholder="endpoint.api_key_count ? t('admin.riskControl.endpointPool.keysKeep', { count: endpoint.api_key_count }) : t('admin.riskControl.endpointPool.keysRequired')"></textarea>
+                      <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.endpointPool.keysHint') }}</p>
+                    </div>
+                  </div>
+                  <p v-if="endpoint.runtime.last_error" class="mt-3 break-words text-xs text-red-600 dark:text-red-300">{{ endpoint.runtime.last_error }}</p>
+                </div>
+              </div>
+            </section>
+
+            <div v-if="configForm.endpoints.length === 0" class="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm dark:border-dark-700 dark:bg-dark-800">
               <div class="flex flex-col gap-4 border-b border-gray-100 bg-gray-50 px-4 py-4 dark:border-dark-700 dark:bg-dark-800/60 lg:flex-row lg:items-center lg:justify-between">
                 <div class="flex items-start gap-3">
                   <span class="mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-primary-50 text-primary-600 dark:bg-primary-900/30 dark:text-primary-300">
@@ -1086,6 +1158,45 @@
       </BaseDialog>
 
       <BaseDialog
+        :show="policyHelpOpen"
+        :title="t('admin.riskControl.policyHelp.title')"
+        width="extra-wide"
+        @close="policyHelpOpen = false"
+      >
+        <div class="space-y-5">
+          <div class="border-l-4 border-primary-500 bg-gray-50 px-4 py-3 dark:bg-dark-800">
+            <p class="text-sm text-gray-600 dark:text-gray-300">{{ t('admin.riskControl.policyHelp.summary') }}</p>
+            <p class="mt-2 text-sm font-semibold text-gray-900 dark:text-white">
+              {{ t('admin.riskControl.policyHelp.current') }}{{ effectiveTextPolicyDescription }}
+            </p>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="min-w-[900px] w-full text-left text-sm">
+              <thead class="border-b border-gray-200 text-xs text-gray-500 dark:border-dark-700 dark:text-gray-400">
+                <tr>
+                  <th class="px-3 py-2">{{ t('admin.riskControl.policyHelp.globalMode') }}</th>
+                  <th class="px-3 py-2">{{ t('admin.riskControl.policyHelp.textPolicy') }}</th>
+                  <th class="px-3 py-2">{{ t('admin.riskControl.policyHelp.behavior') }}</th>
+                  <th class="px-3 py-2">{{ t('admin.riskControl.policyHelp.canBlock') }}</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100 dark:divide-dark-700">
+                <tr v-for="row in policyMatrixRows" :key="`${row.mode}-${row.policy}`">
+                  <td class="px-3 py-3 font-medium text-gray-900 dark:text-white">{{ row.modeLabel }}</td>
+                  <td class="px-3 py-3 text-gray-700 dark:text-gray-300">{{ row.policyLabel }}</td>
+                  <td class="px-3 py-3 leading-5 text-gray-600 dark:text-gray-400">{{ row.behavior }}</td>
+                  <td class="px-3 py-3 text-gray-700 dark:text-gray-300">{{ row.canBlock }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <template #footer>
+          <button type="button" class="btn btn-primary" @click="policyHelpOpen = false">{{ t('common.close') }}</button>
+        </template>
+      </BaseDialog>
+
+      <BaseDialog
         :show="inputDetailRow !== null"
         :title="t('admin.riskControl.inputDetailTitle')"
         width="wide"
@@ -1161,6 +1272,7 @@ import type {
   ContentModerationAPIKeyLoad,
   ContentModerationAPIKeyStatus,
   ContentModerationConfig,
+  ContentModerationEndpoint,
   ContentModerationLog,
   ContentModerationModelFilter,
   ContentModerationModelFilterType,
@@ -1201,6 +1313,7 @@ type RiskThresholdRow = {
   value: number
   defaultValue: number
 }
+type ModerationEndpointDraft = ContentModerationEndpoint & { api_keys_text: string; persisted: boolean }
 
 const maxModerationTestImages = 16
 const maxModerationTestImageSize = 8 * 1024 * 1024
@@ -1232,9 +1345,11 @@ const saving = ref(false)
 const logsLoading = ref(false)
 const statusLoading = ref(false)
 const apiKeyTesting = ref(false)
+const endpointTestingID = ref<string | null>(null)
 const hashActionLoading = ref(false)
 const unbanningUserID = ref<number | null>(null)
 const settingsOpen = ref(false)
+const policyHelpOpen = ref(false)
 const activeSettingsTab = ref<SettingsTab>('basic')
 const groupSearch = ref('')
 const flaggedHashInput = ref('')
@@ -1263,6 +1378,7 @@ const configForm = reactive({
   api_key_count: 0,
   api_key_masks: [] as string[],
   api_key_statuses: [] as ContentModerationAPIKeyStatus[],
+  endpoints: [] as ModerationEndpointDraft[],
   api_keys_mode: 'append' as APIKeysWriteMode,
   clear_api_key: false,
   timeout_ms: 3000,
@@ -1325,11 +1441,33 @@ const modeOptions = computed<SelectOption[]>(() => [
 ])
 
 const textAPIModeOptions = computed<SelectOption[]>(() => [
-  { value: 'auto', label: t('admin.riskControl.textApiModes.auto') },
-  { value: 'blocking', label: t('admin.riskControl.textApiModes.blocking') },
+  { value: 'auto', label: t(configForm.mode === 'observe' ? 'admin.riskControl.textApiModes.autoObserve' : 'admin.riskControl.textApiModes.auto') },
+  { value: 'blocking', label: t(configForm.mode === 'observe' ? 'admin.riskControl.textApiModes.normalObserve' : 'admin.riskControl.textApiModes.blocking') },
   { value: 'observe', label: t('admin.riskControl.textApiModes.observe') },
   { value: 'off', label: t('admin.riskControl.textApiModes.off') },
 ])
+
+const effectiveTextPolicyDescription = computed(() => {
+  const mode = configForm.mode === 'off' ? 'off' : configForm.mode
+  const policy = mode === 'off' ? 'any' : configForm.text_api_mode
+  return t(`admin.riskControl.policyHelp.combinations.${mode}.${policy}`)
+})
+
+const policyMatrixRows = computed(() => {
+  const combinations = [
+    ['pre_block', 'auto', 'depends'], ['pre_block', 'blocking', 'yes'],
+    ['pre_block', 'observe', 'textNoImageYes'], ['pre_block', 'off', 'textNo'],
+    ['observe', 'auto', 'no'], ['observe', 'blocking', 'no'],
+    ['observe', 'observe', 'no'], ['observe', 'off', 'no'], ['off', 'any', 'no'],
+  ] as const
+  return combinations.map(([mode, policy, block]) => ({
+    mode, policy,
+    modeLabel: t(`admin.riskControl.policyHelp.modeLabels.${mode}`),
+    policyLabel: t(`admin.riskControl.policyHelp.policyLabels.${policy}`),
+    behavior: t(`admin.riskControl.policyHelp.combinations.${mode}.${policy}`),
+    canBlock: t(`admin.riskControl.policyHelp.blockLabels.${block}`),
+  }))
+})
 
 const keywordBlockingModeOptions = computed<Array<{ value: KeywordBlockingMode; label: string; description: string }>>(() => [
   {
@@ -1776,6 +1914,14 @@ function applyConfig(config: ContentModerationConfig) {
   configForm.api_key_count = config.api_key_count || 0
   configForm.api_key_masks = Array.isArray(config.api_key_masks) ? [...config.api_key_masks] : []
   configForm.api_key_statuses = Array.isArray(config.api_key_statuses) ? [...config.api_key_statuses] : []
+  configForm.endpoints = (Array.isArray(config.endpoints) ? config.endpoints : []).map((endpoint) => ({
+    ...endpoint,
+    proxy_id: endpoint.proxy_id ?? null,
+    api_key_masks: [...(endpoint.api_key_masks || [])],
+    api_key_statuses: [...(endpoint.api_key_statuses || [])],
+    api_keys_text: '',
+    persisted: true,
+  }))
   configForm.api_keys_mode = 'append'
   configForm.clear_api_key = false
   pendingDeleteApiKeyHashes.value = []
@@ -1827,6 +1973,7 @@ async function loadAll() {
       configForm.api_key_statuses = [...runtimeStatus.api_key_statuses]
       prunePendingDeleteAPIKeyHashes()
     }
+    mergeEndpointRuntime(runtimeStatus.endpoints)
     await loadLogs()
   } catch (err: unknown) {
     appStore.showError(extractApiErrorMessage(err, t('admin.riskControl.loadFailed')))
@@ -1844,6 +1991,7 @@ async function loadStatus(silent = true) {
       configForm.api_key_statuses = [...runtimeStatus.api_key_statuses]
       prunePendingDeleteAPIKeyHashes()
     }
+    mergeEndpointRuntime(runtimeStatus.endpoints)
   } catch (err: unknown) {
     if (!silent) {
       appStore.showError(extractApiErrorMessage(err, t('admin.riskControl.statusFailed')))
@@ -1893,6 +2041,20 @@ async function saveConfig() {
       keyword_blocking_mode: configForm.keyword_blocking_mode,
       text_api_mode: configForm.text_api_mode,
       model_filter: modelFilterPayload,
+      endpoints: configForm.endpoints.map((endpoint, index) => ({
+        id: endpoint.id,
+        name: endpoint.name,
+        enabled: endpoint.enabled,
+        priority: index + 1,
+        base_url: endpoint.base_url,
+        model: endpoint.model,
+        proxy_id: endpoint.proxy_id ?? null,
+        api_keys: parseApiKeys(endpoint.api_keys_text),
+        timeout_ms: Number(endpoint.timeout_ms) || 3000,
+        cooldown_seconds: Number(endpoint.cooldown_seconds) || 60,
+        failure_threshold: Number(endpoint.failure_threshold) || 1,
+        manual_paused: endpoint.manual_paused,
+      })),
     }
     const keys = parseApiKeys(configForm.api_keys_text)
     if (!payload.clear_api_key && configForm.api_keys_mode === 'replace' && keys.length === 0) {
@@ -2013,6 +2175,95 @@ async function clearFlaggedHashes() {
 function openSettings() {
   activeSettingsTab.value = 'basic'
   settingsOpen.value = true
+}
+
+function mergeEndpointRuntime(endpoints: ContentModerationEndpoint[] | undefined) {
+  if (!Array.isArray(endpoints)) return
+  const runtimeByID = new Map(endpoints.map((endpoint) => [endpoint.id, endpoint]))
+  configForm.endpoints = configForm.endpoints.map((endpoint) => {
+    const latest = runtimeByID.get(endpoint.id)
+    return latest ? { ...endpoint, runtime: latest.runtime, manual_paused: latest.manual_paused, enabled: latest.enabled } : endpoint
+  })
+}
+
+function addModerationEndpoint() {
+  const id = `endpoint-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
+  configForm.endpoints.push({
+    id,
+    name: t('admin.riskControl.endpointPool.defaultName', { index: configForm.endpoints.length + 1 }),
+    enabled: true,
+    priority: configForm.endpoints.length + 1,
+    base_url: 'https://api.openai.com',
+    model: 'omni-moderation-latest',
+    proxy_id: null,
+    api_key_configured: false,
+    api_key_count: 0,
+    api_key_masks: [],
+    api_key_statuses: [],
+    timeout_ms: 3000,
+    cooldown_seconds: 60,
+    failure_threshold: 1,
+    manual_paused: false,
+    runtime: { status: 'healthy', failure_count: 0, last_error: '', half_open: false },
+    api_keys_text: '',
+    persisted: false,
+  })
+}
+
+function removeModerationEndpoint(index: number) {
+  if (configForm.endpoints.length <= 1) return
+  configForm.endpoints.splice(index, 1)
+}
+
+function moveModerationEndpoint(index: number, direction: -1 | 1) {
+  const next = index + direction
+  if (next < 0 || next >= configForm.endpoints.length) return
+  const [endpoint] = configForm.endpoints.splice(index, 1)
+  if (endpoint) configForm.endpoints.splice(next, 0, endpoint)
+}
+
+function endpointStatusLabel(endpoint: ModerationEndpointDraft): string {
+  return t(`admin.riskControl.endpointPool.status.${endpoint.manual_paused ? 'manual_pause' : endpoint.runtime.status}`)
+}
+
+async function testModerationEndpoint(endpoint: ModerationEndpointDraft) {
+  const keys = parseApiKeys(endpoint.api_keys_text)
+  if (!endpoint.api_key_configured && keys.length === 0) {
+    appStore.showError(t('admin.riskControl.endpointPool.keysRequired'))
+    return
+  }
+  endpointTestingID.value = endpoint.id
+  try {
+    await adminAPI.riskControl.testAPIKeys({
+      endpoint_id: endpoint.persisted ? endpoint.id : undefined,
+      api_keys: keys,
+      base_url: endpoint.base_url,
+      model: endpoint.model,
+      timeout_ms: Number(endpoint.timeout_ms) || 3000,
+      proxy_id: endpoint.proxy_id ?? 0,
+      prompt: moderationTestPrompt.value,
+      images: moderationTestImages.value,
+    })
+    appStore.showSuccess(t('admin.riskControl.endpointPool.testSuccess', { name: endpoint.name }))
+  } catch (err: unknown) {
+    appStore.showError(extractApiErrorMessage(err, t('admin.riskControl.endpointPool.testFailed')))
+  } finally {
+    endpointTestingID.value = null
+  }
+}
+
+async function toggleEndpointPause(endpoint: ModerationEndpointDraft) {
+  if (!endpoint.persisted) {
+    endpoint.manual_paused = !endpoint.manual_paused
+    return
+  }
+  try {
+    const updated = await adminAPI.riskControl.setEndpointPaused(endpoint.id, !endpoint.manual_paused)
+    applyConfig(updated)
+    appStore.showSuccess(t(endpoint.manual_paused ? 'admin.riskControl.endpointPool.resumed' : 'admin.riskControl.endpointPool.paused'))
+  } catch (err: unknown) {
+    appStore.showError(extractApiErrorMessage(err, t('admin.riskControl.endpointPool.pauseFailed')))
+  }
 }
 
 function reloadLogsFromFirstPage() {

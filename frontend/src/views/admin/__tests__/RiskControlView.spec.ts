@@ -84,6 +84,13 @@ const baseConfig = (): ContentModerationConfig => ({
   api_key_count: 0,
   api_key_masks: [],
   api_key_statuses: [],
+  endpoints: [{
+    id: 'default', name: 'OpenAI', enabled: true, priority: 1,
+    base_url: 'https://api.openai.com', model: 'omni-moderation-latest', proxy_id: null,
+    api_key_configured: false, api_key_count: 0, api_key_masks: [], api_key_statuses: [],
+    timeout_ms: 3000, cooldown_seconds: 60, failure_threshold: 1, manual_paused: false,
+    runtime: { status: 'healthy', failure_count: 0, last_error: '', half_open: false },
+  }],
   timeout_ms: 3000,
   sample_rate: 100,
   all_groups: true,
@@ -146,6 +153,7 @@ const runtimeStatus = () => ({
   pre_block_api_key_total_calls: 0,
   pre_block_api_key_loads: [],
   api_key_statuses: [],
+  endpoints: baseConfig().endpoints,
   flagged_hash_count: 0,
   last_cleanup_deleted_hit: 0,
   last_cleanup_deleted_non_hit: 0,
@@ -432,5 +440,32 @@ describe('admin RiskControlView', () => {
       'max-h-[280px]',
       'overflow-y-auto',
     ]))
+  })
+
+  it('shows the effective policy matrix and the migrated endpoint pool', async () => {
+    const wrapper = mount(RiskControlView, {
+      global: {
+        stubs: {
+          AppLayout: AppLayoutStub,
+          BaseDialog: BaseDialogStub,
+          Icon: true,
+          Select: true,
+          Toggle: true,
+          Pagination: true,
+          ModelWhitelistSelector: ModelWhitelistSelectorStub,
+          ProxySelector: true,
+        },
+      },
+    })
+
+    await flushPromises()
+    await findButtonByText(wrapper, 'admin.riskControl.openSettings').trigger('click')
+
+    expect(wrapper.get('[data-test="moderation-endpoint-pool"]').text()).toContain('admin.riskControl.endpointPool.title')
+    expect(wrapper.get('[data-test="moderation-effective-behavior"]').text()).toContain('admin.riskControl.policyHelp.combinations.pre_block.blocking')
+
+    await wrapper.get('button[aria-label="admin.riskControl.policyHelp.open"]').trigger('click')
+    expect(wrapper.text()).toContain('admin.riskControl.policyHelp.combinations.observe.blocking')
+    expect(wrapper.text()).toContain('admin.riskControl.policyHelp.combinations.off.any')
   })
 })

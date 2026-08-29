@@ -67,12 +67,14 @@ const (
 	ContentModerationProtocolGemini            = "gemini"
 	ContentModerationProtocolOpenAIImages      = "openai_images"
 
-	defaultContentModerationBaseURL   = "https://api.openai.com"
-	defaultContentModerationModel     = "omni-moderation-latest"
-	defaultContentModerationTimeoutMS = 3000
-	maxContentModerationTimeoutMS     = 30000
-	maxModerationInputRunes           = 12000
-	maxModerationExcerptRunes         = 240
+	defaultContentModerationBaseURL          = "https://api.openai.com"
+	defaultContentModerationModel            = "omni-moderation-latest"
+	defaultContentModerationTimeoutMS        = 3000
+	defaultContentModerationCooldownSeconds  = 60
+	defaultContentModerationFailureThreshold = 1
+	maxContentModerationTimeoutMS            = 30000
+	maxModerationInputRunes                  = 12000
+	maxModerationExcerptRunes                = 240
 
 	defaultContentModerationWorkerCount          = 4
 	maxContentModerationWorkerCount              = 32
@@ -157,6 +159,7 @@ type ContentModerationConfig struct {
 	ProxyID              *int64                       `json:"proxy_id,omitempty"`
 	APIKey               string                       `json:"api_key,omitempty"`
 	APIKeys              []string                     `json:"api_keys,omitempty"`
+	Endpoints            []ContentModerationEndpoint  `json:"endpoints,omitempty"`
 	TimeoutMS            int                          `json:"timeout_ms"`
 	SampleRate           int                          `json:"sample_rate"`
 	AllGroups            bool                         `json:"all_groups"`
@@ -188,6 +191,50 @@ type ContentModerationConfig struct {
 	CyberPolicyAutoBanEnabled bool `json:"cyber_policy_auto_ban_enabled"`
 }
 
+type ContentModerationEndpoint struct {
+	ID               string   `json:"id"`
+	Name             string   `json:"name"`
+	Enabled          bool     `json:"enabled"`
+	Priority         int      `json:"priority"`
+	BaseURL          string   `json:"base_url"`
+	Model            string   `json:"model"`
+	ProxyID          *int64   `json:"proxy_id,omitempty"`
+	APIKeys          []string `json:"api_keys,omitempty"`
+	TimeoutMS        int      `json:"timeout_ms"`
+	CooldownSeconds  int      `json:"cooldown_seconds"`
+	FailureThreshold int      `json:"failure_threshold"`
+	ManualPaused     bool     `json:"manual_paused"`
+}
+
+type ContentModerationEndpointView struct {
+	ID               string                           `json:"id"`
+	Name             string                           `json:"name"`
+	Enabled          bool                             `json:"enabled"`
+	Priority         int                              `json:"priority"`
+	BaseURL          string                           `json:"base_url"`
+	Model            string                           `json:"model"`
+	ProxyID          *int64                           `json:"proxy_id"`
+	APIKeyConfigured bool                             `json:"api_key_configured"`
+	APIKeyCount      int                              `json:"api_key_count"`
+	APIKeyMasks      []string                         `json:"api_key_masks"`
+	APIKeyStatuses   []ContentModerationAPIKeyStatus  `json:"api_key_statuses"`
+	TimeoutMS        int                              `json:"timeout_ms"`
+	CooldownSeconds  int                              `json:"cooldown_seconds"`
+	FailureThreshold int                              `json:"failure_threshold"`
+	ManualPaused     bool                             `json:"manual_paused"`
+	Runtime          ContentModerationEndpointRuntime `json:"runtime"`
+}
+
+type ContentModerationEndpointRuntime struct {
+	Status        string     `json:"status"`
+	FailureCount  int        `json:"failure_count"`
+	LastError     string     `json:"last_error"`
+	LastSuccessAt *time.Time `json:"last_success_at,omitempty"`
+	LastFailureAt *time.Time `json:"last_failure_at,omitempty"`
+	CooldownUntil *time.Time `json:"cooldown_until,omitempty"`
+	HalfOpen      bool       `json:"half_open"`
+}
+
 type ContentModerationConfigView struct {
 	Enabled                        bool                            `json:"enabled"`
 	Mode                           string                          `json:"mode"`
@@ -199,6 +246,7 @@ type ContentModerationConfigView struct {
 	APIKeyCount                    int                             `json:"api_key_count"`
 	APIKeyMasks                    []string                        `json:"api_key_masks"`
 	APIKeyStatuses                 []ContentModerationAPIKeyStatus `json:"api_key_statuses"`
+	Endpoints                      []ContentModerationEndpointView `json:"endpoints"`
 	TimeoutMS                      int                             `json:"timeout_ms"`
 	SampleRate                     int                             `json:"sample_rate"`
 	AllGroups                      bool                            `json:"all_groups"`
@@ -256,10 +304,11 @@ type ContentModerationAPIKeyLoad struct {
 }
 
 type TestContentModerationAPIKeysInput struct {
-	APIKeys   []string `json:"api_keys"`
-	BaseURL   string   `json:"base_url"`
-	Model     string   `json:"model"`
-	TimeoutMS int      `json:"timeout_ms"`
+	EndpointID string   `json:"endpoint_id"`
+	APIKeys    []string `json:"api_keys"`
+	BaseURL    string   `json:"base_url"`
+	Model      string   `json:"model"`
+	TimeoutMS  int      `json:"timeout_ms"`
 	// ProxyID nil 表示沿用已保存配置的代理；<=0 表示强制直连测试；>0 表示指定代理测试。
 	ProxyID *int64   `json:"proxy_id"`
 	Prompt  string   `json:"prompt"`
@@ -293,6 +342,7 @@ type UpdateContentModerationConfigInput struct {
 	APIKeysMode                    string                        `json:"api_keys_mode"`
 	DeleteAPIKeyHashes             *[]string                     `json:"delete_api_key_hashes"`
 	ClearAPIKey                    bool                          `json:"clear_api_key"`
+	Endpoints                      *[]ContentModerationEndpoint  `json:"endpoints"`
 	TimeoutMS                      *int                          `json:"timeout_ms"`
 	SampleRate                     *int                          `json:"sample_rate"`
 	AllGroups                      *bool                         `json:"all_groups"`
@@ -490,6 +540,7 @@ type ContentModerationRuntimeStatus struct {
 	PreBlockAPIKeyTotalCalls     int64                           `json:"pre_block_api_key_total_calls"`
 	PreBlockAPIKeyLoads          []ContentModerationAPIKeyLoad   `json:"pre_block_api_key_loads"`
 	APIKeyStatuses               []ContentModerationAPIKeyStatus `json:"api_key_statuses"`
+	Endpoints                    []ContentModerationEndpointView `json:"endpoints"`
 	FlaggedHashCount             int64                           `json:"flagged_hash_count"`
 	LastCleanupAt                *time.Time                      `json:"last_cleanup_at,omitempty"`
 	LastCleanupDeletedHit        int64                           `json:"last_cleanup_deleted_hit"`
@@ -527,6 +578,16 @@ type ContentModerationHashCache interface {
 	DeleteFlaggedInputHash(ctx context.Context, inputHash string) (bool, error)
 	ClearFlaggedInputHashes(ctx context.Context) (int64, error)
 	CountFlaggedInputHashes(ctx context.Context) (int64, error)
+}
+
+// ContentModerationEndpointStateStore is an optional distributed circuit
+// store implemented by the Redis-backed hash cache. Keeping it separate
+// preserves lightweight test implementations of ContentModerationHashCache.
+type ContentModerationEndpointStateStore interface {
+	ClaimEndpoint(ctx context.Context, endpointID string, probeTTL time.Duration) (claimed bool, halfOpen bool, err error)
+	OpenEndpoint(ctx context.Context, endpointID string, cooldown time.Duration) error
+	CloseEndpoint(ctx context.Context, endpointID string) error
+	ReleaseEndpointProbe(ctx context.Context, endpointID string) error
 }
 
 type ContentModerationService struct {
@@ -568,6 +629,8 @@ type ContentModerationService struct {
 	runtimeRefreshRetryAt    atomic.Int64
 	keyHealthMu              sync.Mutex
 	keyHealth                map[string]*contentModerationKeyHealth
+	endpointHealthMu         sync.Mutex
+	endpointHealth           map[string]*contentModerationEndpointHealth
 }
 
 type contentModerationRuntimeSnapshot struct {
@@ -606,6 +669,15 @@ type contentModerationKeyHealth struct {
 	SyncSuccess    int64
 	SyncErrors     int64
 	SyncLatencyMS  int64
+}
+
+type contentModerationEndpointHealth struct {
+	FailureCount  int
+	LastError     string
+	LastSuccessAt time.Time
+	LastFailureAt time.Time
+	CooldownUntil time.Time
+	HalfOpen      bool
 }
 
 func ProvideContentModerationService(
@@ -647,6 +719,7 @@ func NewContentModerationService(
 		workerCount:          maxContentModerationWorkerCount,
 		asyncQueue:           make(chan contentModerationTask, maxContentModerationQueueSize),
 		keyHealth:            make(map[string]*contentModerationKeyHealth),
+		endpointHealth:       make(map[string]*contentModerationEndpointHealth),
 	}
 	if settingRepo != nil && repo != nil {
 		for i := 0; i < svc.workerCount; i++ {
@@ -677,6 +750,35 @@ func (s *ContentModerationService) GetConfig(ctx context.Context) (*ContentModer
 	return s.configView(cfg), nil
 }
 
+func (s *ContentModerationService) SetEndpointPaused(ctx context.Context, endpointID string, paused bool) (*ContentModerationConfigView, error) {
+	cfg, err := s.loadConfig(ctx)
+	if err != nil {
+		return nil, err
+	}
+	found := false
+	for i := range cfg.Endpoints {
+		if cfg.Endpoints[i].ID == strings.TrimSpace(endpointID) {
+			cfg.Endpoints[i].ManualPaused = paused
+			found = true
+			break
+		}
+	}
+	if !found {
+		return nil, infraerrors.NotFound("CONTENT_MODERATION_ENDPOINT_NOT_FOUND", "内容审计平台不存在")
+	}
+	if !paused {
+		if store, ok := s.hashCache.(ContentModerationEndpointStateStore); ok {
+			if err := store.CloseEndpoint(ctx, strings.TrimSpace(endpointID)); err != nil {
+				slog.Warn("content_moderation.endpoint_state_close_failed", "endpoint_id", strings.TrimSpace(endpointID), "reason", "redis_error")
+			}
+		}
+		s.endpointHealthMu.Lock()
+		delete(s.endpointHealth, strings.TrimSpace(endpointID))
+		s.endpointHealthMu.Unlock()
+	}
+	return s.UpdateConfig(ctx, UpdateContentModerationConfigInput{Endpoints: &cfg.Endpoints})
+}
+
 func (s *ContentModerationService) UpdateConfig(ctx context.Context, input UpdateContentModerationConfigInput) (*ContentModerationConfigView, error) {
 	cfg, err := s.loadConfig(ctx)
 	if err != nil {
@@ -684,6 +786,9 @@ func (s *ContentModerationService) UpdateConfig(ctx context.Context, input Updat
 	}
 	if input.Enabled != nil {
 		cfg.Enabled = *input.Enabled
+	}
+	if input.Endpoints != nil {
+		cfg.Endpoints = mergeContentModerationEndpoints(cfg.Endpoints, *input.Endpoints)
 	}
 	if input.Mode != nil {
 		cfg.Mode = strings.TrimSpace(*input.Mode)
@@ -796,6 +901,13 @@ func (s *ContentModerationService) UpdateConfig(ctx context.Context, input Updat
 			cfg.APIKey = ""
 		}
 	}
+	if input.Endpoints == nil && len(cfg.Endpoints) > 0 {
+		cfg.Endpoints[0].BaseURL = cfg.BaseURL
+		cfg.Endpoints[0].Model = cfg.Model
+		cfg.Endpoints[0].ProxyID = cloneInt64Ptr(cfg.ProxyID)
+		cfg.Endpoints[0].APIKeys = append([]string(nil), cfg.APIKeys...)
+		cfg.Endpoints[0].TimeoutMS = cfg.TimeoutMS
+	}
 	if err := s.validateConfig(ctx, cfg); err != nil {
 		return nil, err
 	}
@@ -820,6 +932,25 @@ func (s *ContentModerationService) TestAPIKeys(ctx context.Context, input TestCo
 	}
 	keys := normalizeModerationAPIKeys(input.APIKeys)
 	configured := false
+	if strings.TrimSpace(input.EndpointID) != "" {
+		found := false
+		for _, endpoint := range cfg.Endpoints {
+			if endpoint.ID != strings.TrimSpace(input.EndpointID) {
+				continue
+			}
+			cfg.BaseURL, cfg.Model = endpoint.BaseURL, endpoint.Model
+			cfg.ProxyID, cfg.TimeoutMS = cloneInt64Ptr(endpoint.ProxyID), endpoint.TimeoutMS
+			if len(keys) == 0 {
+				keys = append([]string(nil), endpoint.APIKeys...)
+				configured = true
+			}
+			found = true
+			break
+		}
+		if !found {
+			return nil, infraerrors.NotFound("CONTENT_MODERATION_ENDPOINT_NOT_FOUND", "内容审计平台不存在")
+		}
+	}
 	if len(keys) == 0 {
 		keys = cfg.apiKeys()
 		configured = true
@@ -1708,6 +1839,7 @@ func (s *ContentModerationService) GetStatus(ctx context.Context) (*ContentModer
 		PreBlockAPIKeyTotalCalls:     s.preBlockAPIKeyTotalCalls(cfg.apiKeys()),
 		PreBlockAPIKeyLoads:          s.preBlockAPIKeyLoads(cfg.apiKeys()),
 		APIKeyStatuses:               s.apiKeyStatuses(cfg.apiKeys()),
+		Endpoints:                    s.endpointViews(cfg.Endpoints),
 		FlaggedHashCount:             flaggedHashCount,
 		LastCleanupAt:                lastCleanupAt,
 		LastCleanupDeletedHit:        s.lastCleanupDeletedHit.Load(),
@@ -1925,12 +2057,17 @@ func (s *ContentModerationService) validateConfig(ctx context.Context, cfg *Cont
 	default:
 		return infraerrors.BadRequest("INVALID_CONTENT_MODERATION_MODE", "内容审计模式无效")
 	}
-	if _, err := url.ParseRequestURI(cfg.BaseURL); err != nil {
-		return infraerrors.BadRequest("INVALID_CONTENT_MODERATION_BASE_URL", "OpenAI Base URL 无效")
+	if len(cfg.Endpoints) == 0 {
+		return infraerrors.BadRequest("CONTENT_MODERATION_ENDPOINT_REQUIRED", "至少需要配置一个内容审计平台")
 	}
-	if cfg.ProxyID != nil && s.proxyRepo != nil {
-		if _, err := s.proxyRepo.GetByID(ctx, *cfg.ProxyID); err != nil {
-			return infraerrors.BadRequest("INVALID_CONTENT_MODERATION_PROXY", fmt.Sprintf("代理服务器不存在: %d", *cfg.ProxyID))
+	for _, endpoint := range cfg.Endpoints {
+		if _, err := url.ParseRequestURI(endpoint.BaseURL); err != nil {
+			return infraerrors.BadRequest("INVALID_CONTENT_MODERATION_BASE_URL", fmt.Sprintf("内容审计平台 %s 的 Base URL 无效", endpoint.Name))
+		}
+		if endpoint.ProxyID != nil && s.proxyRepo != nil {
+			if _, err := s.proxyRepo.GetByID(ctx, *endpoint.ProxyID); err != nil {
+				return infraerrors.BadRequest("INVALID_CONTENT_MODERATION_PROXY", fmt.Sprintf("内容审计平台 %s 的代理服务器不存在: %d", endpoint.Name, *endpoint.ProxyID))
+			}
 		}
 	}
 	if cfg.BlockStatus < 400 || cfg.BlockStatus > 599 {
@@ -1950,6 +2087,57 @@ func (s *ContentModerationService) validateConfig(ctx context.Context, cfg *Cont
 }
 
 func (s *ContentModerationService) callModeration(ctx context.Context, cfg *ContentModerationConfig, input any, trackKeyLoad ...bool) (*moderationAPIResult, error) {
+	if cfg == nil {
+		return nil, errors.New("content moderation config unavailable")
+	}
+	if len(cfg.Endpoints) == 0 {
+		cfg = cloneContentModerationConfig(cfg)
+		cfg.normalize()
+	}
+	trackLoad := len(trackKeyLoad) > 0 && trackKeyLoad[0]
+	var lastErr error
+	for _, endpoint := range cfg.Endpoints {
+		if !endpoint.Enabled || endpoint.ManualPaused || len(endpoint.APIKeys) == 0 {
+			continue
+		}
+		claimed, halfOpen := s.claimModerationEndpoint(ctx, endpoint)
+		if !claimed {
+			continue
+		}
+		result, httpStatus, err := s.callModerationEndpoint(ctx, cfg, endpoint, input, trackLoad)
+		if err == nil {
+			s.markModerationEndpointSuccess(ctx, endpoint.ID)
+			return result, nil
+		}
+		if halfOpen {
+			s.releaseModerationEndpointHalfOpen(ctx, endpoint.ID)
+		}
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) && ctx.Err() != nil {
+			return nil, err
+		}
+		lastErr = err
+		if contentModerationEndpointRetryable(httpStatus, err) {
+			s.markModerationEndpointFailure(ctx, endpoint, httpStatus, err)
+		}
+		slog.Warn("content_moderation.endpoint_failover",
+			"endpoint_id", endpoint.ID,
+			"endpoint_name", endpoint.Name,
+			"http_status", httpStatus,
+			"reason", contentModerationEndpointErrorReason(httpStatus, err))
+	}
+	if lastErr == nil {
+		lastErr = errors.New("no content moderation endpoint available")
+	}
+	return nil, lastErr
+}
+
+func (s *ContentModerationService) callModerationEndpoint(ctx context.Context, baseCfg *ContentModerationConfig, endpoint ContentModerationEndpoint, input any, trackLoad bool) (*moderationAPIResult, int, error) {
+	cfg := cloneContentModerationConfig(baseCfg)
+	cfg.BaseURL = endpoint.BaseURL
+	cfg.Model = endpoint.Model
+	cfg.ProxyID = cloneInt64Ptr(endpoint.ProxyID)
+	cfg.APIKeys = append([]string(nil), endpoint.APIKeys...)
+	cfg.TimeoutMS = endpoint.TimeoutMS
 	attempts := cfg.RetryCount + 1
 	if attempts <= 0 {
 		attempts = 1
@@ -1957,8 +2145,8 @@ func (s *ContentModerationService) callModeration(ctx context.Context, cfg *Cont
 	if attempts > maxContentModerationRetryCount+1 {
 		attempts = maxContentModerationRetryCount + 1
 	}
-	trackLoad := len(trackKeyLoad) > 0 && trackKeyLoad[0]
 	var lastErr error
+	lastHTTPStatus := 0
 	for attempt := 0; attempt < attempts; attempt++ {
 		key, ok := s.nextUsableAPIKey(cfg)
 		if !ok {
@@ -1971,13 +2159,14 @@ func (s *ContentModerationService) callModeration(ctx context.Context, cfg *Cont
 		start := time.Now()
 		httpStatus := 0
 		result, err := s.callModerationOnceWithInput(ctx, cfg, key, input, &httpStatus)
+		lastHTTPStatus = httpStatus
 		latency := int(time.Since(start).Milliseconds())
 		if err == nil {
 			if trackLoad {
 				s.finishModerationAPIKeyCall(key, latency, true)
 			}
 			s.markAPIKeySuccess(key, latency, httpStatus)
-			return result, nil
+			return result, httpStatus, nil
 		}
 		if trackLoad {
 			s.finishModerationAPIKeyCall(key, latency, false)
@@ -1993,11 +2182,127 @@ func (s *ContentModerationService) callModeration(ctx context.Context, cfg *Cont
 		wait := time.Duration(100*(attempt+1)) * time.Millisecond
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return nil, lastHTTPStatus, ctx.Err()
 		case <-time.After(wait):
 		}
 	}
-	return nil, lastErr
+	return nil, lastHTTPStatus, lastErr
+}
+
+func contentModerationEndpointRetryable(httpStatus int, err error) bool {
+	if err == nil || errors.Is(err, context.Canceled) {
+		return false
+	}
+	return httpStatus == 0 || httpStatus == http.StatusTooManyRequests || httpStatus == 529 || httpStatus >= 500 || (httpStatus >= 200 && httpStatus < 300)
+}
+
+func contentModerationEndpointErrorReason(httpStatus int, err error) string {
+	if errors.Is(err, context.Canceled) {
+		return "context_canceled"
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return "timeout"
+	}
+	if httpStatus >= 200 && httpStatus < 300 {
+		return "invalid_response"
+	}
+	if httpStatus > 0 {
+		return fmt.Sprintf("http_%d", httpStatus)
+	}
+	if err != nil && strings.Contains(err.Error(), "no moderation api key available") {
+		return "no_usable_key"
+	}
+	return "transport_error"
+}
+
+func (s *ContentModerationService) claimModerationEndpoint(ctx context.Context, endpoint ContentModerationEndpoint) (bool, bool) {
+	if store, ok := s.hashCache.(ContentModerationEndpointStateStore); ok {
+		probeTTL := time.Duration(endpoint.TimeoutMS+1000) * time.Millisecond
+		claimed, halfOpen, err := store.ClaimEndpoint(ctx, endpoint.ID, probeTTL)
+		if err == nil {
+			return claimed, halfOpen
+		}
+		slog.Warn("content_moderation.endpoint_state_claim_failed", "endpoint_id", endpoint.ID, "reason", "redis_error")
+	}
+	now := time.Now()
+	s.endpointHealthMu.Lock()
+	defer s.endpointHealthMu.Unlock()
+	state := s.endpointHealth[endpoint.ID]
+	if state == nil {
+		state = &contentModerationEndpointHealth{}
+		s.endpointHealth[endpoint.ID] = state
+	}
+	if state.CooldownUntil.After(now) {
+		return false, false
+	}
+	if !state.CooldownUntil.IsZero() {
+		if state.HalfOpen {
+			return false, false
+		}
+		state.HalfOpen = true
+		return true, true
+	}
+	return true, false
+}
+
+func (s *ContentModerationService) releaseModerationEndpointHalfOpen(ctx context.Context, id string) {
+	if store, ok := s.hashCache.(ContentModerationEndpointStateStore); ok {
+		if err := store.ReleaseEndpointProbe(ctx, id); err != nil {
+			slog.Warn("content_moderation.endpoint_state_release_failed", "endpoint_id", id, "reason", "redis_error")
+		}
+	}
+	s.endpointHealthMu.Lock()
+	defer s.endpointHealthMu.Unlock()
+	if state := s.endpointHealth[id]; state != nil {
+		state.HalfOpen = false
+	}
+}
+
+func (s *ContentModerationService) markModerationEndpointSuccess(ctx context.Context, id string) {
+	if store, ok := s.hashCache.(ContentModerationEndpointStateStore); ok {
+		if err := store.CloseEndpoint(ctx, id); err != nil {
+			slog.Warn("content_moderation.endpoint_state_close_failed", "endpoint_id", id, "reason", "redis_error")
+		}
+	}
+	now := time.Now()
+	s.endpointHealthMu.Lock()
+	defer s.endpointHealthMu.Unlock()
+	state := s.endpointHealth[id]
+	if state == nil {
+		state = &contentModerationEndpointHealth{}
+		s.endpointHealth[id] = state
+	}
+	state.FailureCount = 0
+	state.LastError = ""
+	state.LastSuccessAt = now
+	state.CooldownUntil = time.Time{}
+	state.HalfOpen = false
+}
+
+func (s *ContentModerationService) markModerationEndpointFailure(ctx context.Context, endpoint ContentModerationEndpoint, httpStatus int, err error) {
+	now := time.Now()
+	s.endpointHealthMu.Lock()
+	state := s.endpointHealth[endpoint.ID]
+	if state == nil {
+		state = &contentModerationEndpointHealth{}
+		s.endpointHealth[endpoint.ID] = state
+	}
+	state.FailureCount++
+	state.LastError = contentModerationEndpointErrorReason(httpStatus, err)
+	state.LastFailureAt = now
+	state.HalfOpen = false
+	shouldOpen := state.FailureCount >= endpoint.FailureThreshold
+	if state.FailureCount >= endpoint.FailureThreshold {
+		state.CooldownUntil = now.Add(time.Duration(endpoint.CooldownSeconds) * time.Second)
+	}
+	s.endpointHealthMu.Unlock()
+	if shouldOpen {
+		if store, ok := s.hashCache.(ContentModerationEndpointStateStore); ok {
+			if storeErr := store.OpenEndpoint(ctx, endpoint.ID, time.Duration(endpoint.CooldownSeconds)*time.Second); storeErr != nil {
+				slog.Warn("content_moderation.endpoint_state_open_failed", "endpoint_id", endpoint.ID, "reason", "redis_error")
+			}
+		}
+	}
 }
 
 func (s *ContentModerationService) callModerationOnceWithInput(ctx context.Context, cfg *ContentModerationConfig, apiKey string, input any, httpStatus *int) (*moderationAPIResult, error) {
@@ -2394,6 +2699,7 @@ func cloneContentModerationConfig(cfg *ContentModerationConfig) *ContentModerati
 	clone := *cfg
 	clone.ProxyID = cloneInt64Ptr(cfg.ProxyID)
 	clone.APIKeys = append([]string(nil), cfg.APIKeys...)
+	clone.Endpoints = cloneContentModerationEndpoints(cfg.Endpoints)
 	clone.GroupIDs = append([]int64(nil), cfg.GroupIDs...)
 	clone.BlockedKeywords = append([]string(nil), cfg.BlockedKeywords...)
 	clone.Thresholds = cloneFloatMap(cfg.Thresholds)
@@ -2430,6 +2736,23 @@ func (cfg *ContentModerationConfig) normalize() {
 	}
 	if cfg.TimeoutMS > maxContentModerationTimeoutMS {
 		cfg.TimeoutMS = maxContentModerationTimeoutMS
+	}
+	if len(cfg.Endpoints) == 0 {
+		cfg.Endpoints = []ContentModerationEndpoint{{
+			ID: "default", Name: "OpenAI", Enabled: true, Priority: 1,
+			BaseURL: cfg.BaseURL, Model: cfg.Model, ProxyID: cloneInt64Ptr(cfg.ProxyID),
+			APIKeys: append([]string(nil), cfg.APIKeys...), TimeoutMS: cfg.TimeoutMS,
+			CooldownSeconds:  defaultContentModerationCooldownSeconds,
+			FailureThreshold: defaultContentModerationFailureThreshold,
+		}}
+	}
+	cfg.Endpoints = normalizeContentModerationEndpoints(cfg.Endpoints)
+	// Legacy fields mirror the first endpoint for old clients during the
+	// transition. Runtime routing is exclusively endpoint-pool based.
+	if len(cfg.Endpoints) > 0 {
+		primary := cfg.Endpoints[0]
+		cfg.BaseURL, cfg.Model, cfg.ProxyID = primary.BaseURL, primary.Model, cloneInt64Ptr(primary.ProxyID)
+		cfg.APIKeys, cfg.TimeoutMS = append([]string(nil), primary.APIKeys...), primary.TimeoutMS
 	}
 	if cfg.SampleRate < 0 {
 		cfg.SampleRate = 0
@@ -2486,6 +2809,85 @@ func (cfg *ContentModerationConfig) normalize() {
 	cfg.KeywordBlockingMode = normalizeKeywordBlockingMode(cfg.KeywordBlockingMode)
 	cfg.TextAPIMode = normalizeContentModerationTextAPIMode(cfg.TextAPIMode)
 	cfg.ModelFilter = normalizeContentModerationModelFilter(cfg.ModelFilter)
+}
+
+func cloneContentModerationEndpoints(endpoints []ContentModerationEndpoint) []ContentModerationEndpoint {
+	out := make([]ContentModerationEndpoint, len(endpoints))
+	for i := range endpoints {
+		out[i] = endpoints[i]
+		out[i].ProxyID = cloneInt64Ptr(endpoints[i].ProxyID)
+		out[i].APIKeys = append([]string(nil), endpoints[i].APIKeys...)
+	}
+	return out
+}
+
+func mergeContentModerationEndpoints(current, updates []ContentModerationEndpoint) []ContentModerationEndpoint {
+	keysByID := make(map[string][]string, len(current))
+	for _, endpoint := range current {
+		keysByID[endpoint.ID] = append([]string(nil), endpoint.APIKeys...)
+	}
+	out := cloneContentModerationEndpoints(updates)
+	for i := range out {
+		if len(out[i].APIKeys) == 0 {
+			out[i].APIKeys = append([]string(nil), keysByID[out[i].ID]...)
+		}
+	}
+	return out
+}
+
+func normalizeContentModerationEndpoints(endpoints []ContentModerationEndpoint) []ContentModerationEndpoint {
+	out := cloneContentModerationEndpoints(endpoints)
+	seen := make(map[string]struct{}, len(out))
+	for i := range out {
+		ep := &out[i]
+		ep.ID = strings.TrimSpace(ep.ID)
+		if ep.ID == "" {
+			ep.ID = fmt.Sprintf("endpoint-%d", i+1)
+		}
+		if _, exists := seen[ep.ID]; exists {
+			ep.ID = fmt.Sprintf("%s-%d", ep.ID, i+1)
+		}
+		seen[ep.ID] = struct{}{}
+		ep.Name = strings.TrimSpace(ep.Name)
+		if ep.Name == "" {
+			ep.Name = fmt.Sprintf("Moderation %d", i+1)
+		}
+		ep.BaseURL = strings.TrimRight(strings.TrimSpace(ep.BaseURL), "/")
+		if ep.BaseURL == "" {
+			ep.BaseURL = defaultContentModerationBaseURL
+		}
+		ep.Model = strings.TrimSpace(ep.Model)
+		if ep.Model == "" {
+			ep.Model = defaultContentModerationModel
+		}
+		if ep.ProxyID != nil && *ep.ProxyID <= 0 {
+			ep.ProxyID = nil
+		}
+		ep.APIKeys = normalizeModerationAPIKeys(ep.APIKeys)
+		if ep.TimeoutMS <= 0 {
+			ep.TimeoutMS = defaultContentModerationTimeoutMS
+		}
+		if ep.TimeoutMS > maxContentModerationTimeoutMS {
+			ep.TimeoutMS = maxContentModerationTimeoutMS
+		}
+		if ep.CooldownSeconds <= 0 {
+			ep.CooldownSeconds = defaultContentModerationCooldownSeconds
+		}
+		if ep.CooldownSeconds > 86400 {
+			ep.CooldownSeconds = 86400
+		}
+		if ep.FailureThreshold <= 0 {
+			ep.FailureThreshold = defaultContentModerationFailureThreshold
+		}
+		if ep.Priority <= 0 {
+			ep.Priority = i + 1
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Priority < out[j].Priority })
+	for i := range out {
+		out[i].Priority = i + 1
+	}
+	return out
 }
 
 func (cfg *ContentModerationConfig) includesGroup(groupID *int64) bool {
@@ -2647,6 +3049,9 @@ func (s *ContentModerationService) markAPIKeyError(key string, errText string, l
 }
 
 func contentModerationFreezeDurationForHTTPStatus(httpStatus int) time.Duration {
+	if httpStatus >= 200 && httpStatus < 300 {
+		return 0
+	}
 	switch httpStatus {
 	case 0, http.StatusBadRequest:
 		return 0
@@ -2695,6 +3100,7 @@ func (s *ContentModerationService) configView(cfg *ContentModerationConfig) *Con
 		APIKeyCount:                    len(keys),
 		APIKeyMasks:                    masks,
 		APIKeyStatuses:                 s.apiKeyStatuses(keys),
+		Endpoints:                      s.endpointViews(cfg.Endpoints),
 		TimeoutMS:                      cfg.TimeoutMS,
 		SampleRate:                     cfg.SampleRate,
 		AllGroups:                      cfg.AllGroups,
@@ -2720,6 +3126,68 @@ func (s *ContentModerationService) configView(cfg *ContentModerationConfig) *Con
 		CyberPolicyExcludeFromBanCount: cfg.CyberPolicyExcludeFromBanCount,
 		CyberPolicyAutoBanEnabled:      cfg.CyberPolicyAutoBanEnabled,
 	}
+}
+
+func (s *ContentModerationService) endpointViews(endpoints []ContentModerationEndpoint) []ContentModerationEndpointView {
+	out := make([]ContentModerationEndpointView, 0, len(endpoints))
+	for _, endpoint := range endpoints {
+		masks := make([]string, 0, len(endpoint.APIKeys))
+		for _, key := range endpoint.APIKeys {
+			masks = append(masks, maskSecretTail(key))
+		}
+		out = append(out, ContentModerationEndpointView{
+			ID: endpoint.ID, Name: endpoint.Name, Enabled: endpoint.Enabled,
+			Priority: endpoint.Priority, BaseURL: endpoint.BaseURL, Model: endpoint.Model,
+			ProxyID: cloneInt64Ptr(endpoint.ProxyID), APIKeyConfigured: len(endpoint.APIKeys) > 0,
+			APIKeyCount: len(endpoint.APIKeys), APIKeyMasks: masks,
+			APIKeyStatuses: s.apiKeyStatuses(endpoint.APIKeys), TimeoutMS: endpoint.TimeoutMS,
+			CooldownSeconds: endpoint.CooldownSeconds, FailureThreshold: endpoint.FailureThreshold,
+			ManualPaused: endpoint.ManualPaused, Runtime: s.endpointRuntime(endpoint),
+		})
+	}
+	return out
+}
+
+func (s *ContentModerationService) endpointRuntime(endpoint ContentModerationEndpoint) ContentModerationEndpointRuntime {
+	runtime := ContentModerationEndpointRuntime{Status: "healthy"}
+	if !endpoint.Enabled {
+		runtime.Status = "disabled"
+		return runtime
+	}
+	if endpoint.ManualPaused {
+		runtime.Status = "manual_pause"
+		return runtime
+	}
+	s.endpointHealthMu.Lock()
+	defer s.endpointHealthMu.Unlock()
+	state := s.endpointHealth[endpoint.ID]
+	if state == nil {
+		return runtime
+	}
+	runtime.FailureCount = state.FailureCount
+	runtime.LastError = state.LastError
+	runtime.HalfOpen = state.HalfOpen
+	if !state.LastSuccessAt.IsZero() {
+		t := state.LastSuccessAt
+		runtime.LastSuccessAt = &t
+	}
+	if !state.LastFailureAt.IsZero() {
+		t := state.LastFailureAt
+		runtime.LastFailureAt = &t
+	}
+	if !state.CooldownUntil.IsZero() {
+		t := state.CooldownUntil
+		runtime.CooldownUntil = &t
+		if state.CooldownUntil.After(time.Now()) {
+			runtime.Status = "cooldown"
+		} else {
+			runtime.Status = "half_open"
+		}
+	}
+	if state.HalfOpen {
+		runtime.Status = "half_open"
+	}
+	return runtime
 }
 
 func (s *ContentModerationService) apiKeyStatuses(keys []string) []ContentModerationAPIKeyStatus {
