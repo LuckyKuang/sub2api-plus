@@ -36,6 +36,7 @@
         </select>
       </label>
       <FilterInput v-model="localFilters.endpoint" :label="t('admin.promptAudit.events.endpoint')" @change="filtersChanged" />
+      <FilterInput v-model="localFilters.client_ip" :label="t('admin.promptAudit.events.clientIp')" @change="filtersChanged" />
       <FilterInput v-model="localFilters.group_id" :label="t('admin.promptAudit.events.groupId')" type="number" @change="filtersChanged" />
       <FilterInput v-model="localFilters.user_id" :label="t('admin.promptAudit.events.userId')" type="number" @change="filtersChanged" />
       <FilterInput v-model="localFilters.api_key_id" :label="t('admin.promptAudit.events.apiKeyId')" type="number" @change="filtersChanged" />
@@ -57,25 +58,40 @@
     </form>
     <div v-if="error" role="alert" class="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-300">{{ error }}</div>
     <div class="mt-5 overflow-x-auto rounded-xl border border-gray-200 dark:border-dark-700/60">
-      <table class="min-w-[1120px] w-full text-left text-sm">
+      <table class="min-w-[1420px] w-full text-left text-sm">
         <thead class="bg-gray-50 text-xs uppercase tracking-wide text-gray-500 dark:bg-dark-900/70 dark:text-dark-400">
           <tr>
             <th class="w-10 px-3 py-3"><input type="checkbox" :checked="allSelected" :aria-label="t('admin.promptAudit.events.selectAll')" @change="toggleAll" /></th>
             <th class="px-3 py-3 font-medium">{{ t('admin.promptAudit.events.time') }}</th>
+            <th class="px-3 py-3 font-medium">{{ t('admin.promptAudit.events.clientIp') }}</th>
             <th class="px-3 py-3 font-medium">{{ t('admin.promptAudit.events.identity') }}</th>
             <th class="px-3 py-3 font-medium">{{ t('admin.promptAudit.events.group') }}</th>
             <th class="px-3 py-3 font-medium">{{ t('admin.promptAudit.events.route') }}</th>
             <th class="px-3 py-3 font-medium">{{ t('admin.promptAudit.events.result') }}</th>
+            <th class="px-3 py-3 font-medium">{{ t('admin.promptAudit.events.durations') }}</th>
             <th class="px-3 py-3 font-medium">{{ t('admin.promptAudit.events.preview') }}</th>
             <th class="px-3 py-3 text-right font-medium">{{ t('admin.promptAudit.common.actions') }}</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-gray-100 bg-white dark:divide-dark-700 dark:bg-transparent">
-          <tr v-if="loading"><td colspan="8" class="px-4 py-12 text-center text-gray-500" aria-busy="true">{{ t('common.loading') }}</td></tr>
-          <tr v-else-if="events.length === 0"><td colspan="8" class="px-4 py-12 text-center text-gray-500">{{ t('admin.promptAudit.events.empty') }}</td></tr>
+          <tr v-if="loading"><td colspan="10" class="px-4 py-12 text-center text-gray-500" aria-busy="true">{{ t('common.loading') }}</td></tr>
+          <tr v-else-if="events.length === 0"><td colspan="10" class="px-4 py-12 text-center text-gray-500">{{ t('admin.promptAudit.events.empty') }}</td></tr>
           <tr v-for="event in events" v-else :key="event.id" :data-test="`event-${event.id}`" class="align-top hover:bg-gray-50/70 dark:hover:bg-dark-800/70">
             <td class="px-3 py-3"><input type="checkbox" :checked="selectedIds.includes(event.id)" :aria-label="t('admin.promptAudit.events.selectEvent', { id: event.id })" @change="toggleOne(event.id)" /></td>
             <td class="whitespace-nowrap px-3 py-3 text-xs text-gray-600 dark:text-dark-300">{{ formatDate(event.created_at) }}</td>
+            <td class="px-3 py-3">
+              <button
+                v-if="event.snapshot.client_ip"
+                type="button"
+                class="font-mono text-xs text-primary-600 hover:underline dark:text-primary-300"
+                :title="t('admin.promptAudit.events.filterByIp', { ip: event.snapshot.client_ip })"
+                :aria-label="t('admin.promptAudit.events.filterByIp', { ip: event.snapshot.client_ip })"
+                @click="filterByIP(event.snapshot.client_ip)"
+              >
+                {{ event.snapshot.client_ip }}
+              </button>
+              <span v-else>—</span>
+            </td>
             <td class="px-3 py-3">
               <CopyLine :label="t('admin.promptAudit.events.user')" :value="event.snapshot.username" />
               <CopyLine :label="t('admin.promptAudit.events.email')" :value="event.snapshot.user_email" />
@@ -89,6 +105,11 @@
             <td class="px-3 py-3">
               <span class="rounded-full px-2 py-0.5 text-xs font-medium" :class="decisionClass(event.decision)">{{ formatDecisionRisk(event.decision, event.risk_level) }}</span>
               <p class="mt-2 max-w-48 truncate text-xs text-gray-500" :title="formatCategories(event.categories)">{{ formatCategories(event.categories) }}</p>
+            </td>
+            <td class="whitespace-nowrap px-3 py-3 text-xs text-gray-600 dark:text-dark-300">
+              <p>{{ t('admin.promptAudit.events.queueDelay') }} · {{ formatDuration(event.queue_delay_ms) }}</p>
+              <p class="mt-1">{{ t('admin.promptAudit.events.auditLatency') }} · {{ formatDuration(event.latency_ms) }}</p>
+              <p class="mt-1 text-gray-400 dark:text-dark-500">{{ formatMode(event.execution_mode) }}</p>
             </td>
             <td class="max-w-xs px-3 py-3"><p class="line-clamp-2 break-words text-gray-600 dark:text-dark-300">{{ event.snapshot.redacted_preview || '—' }}</p></td>
             <td class="whitespace-nowrap px-3 py-3 text-right">
@@ -171,6 +192,10 @@ function resetFilters() {
   Object.assign(localFilters, emptyEventFilters())
   applyFilters()
 }
+function filterByIP(value: string) {
+  localFilters.client_ip = value
+  applyFilters()
+}
 function toggleOne(id: number) {
   const selected = new Set(props.selectedIds)
   if (selected.has(id)) selected.delete(id)
@@ -182,6 +207,17 @@ function toggleAll() {
 }
 function formatDate(value: string): string {
   return new Intl.DateTimeFormat(locale.value, { dateStyle: 'short', timeStyle: 'medium' }).format(new Date(value))
+}
+function formatDuration(value?: number | null): string {
+  if (value == null) return '—'
+  if (value < 1000) return `${value} ms`
+  return `${(value / 1000).toFixed(value < 10000 ? 2 : 1)} s`
+}
+function formatMode(mode?: string): string {
+  if (!mode) return '—'
+  const key = `admin.promptAudit.mode.${mode}`
+  const label = t(key)
+  return label === key ? mode : label
 }
 function decisionClass(decision: string): string {
   if (decision === 'critical') return 'bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-300'

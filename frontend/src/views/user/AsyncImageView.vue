@@ -279,7 +279,7 @@
 
     <BaseDialog :show="!!selectedTask" :title="t('asyncImage.detail.title')" width="extra-wide" @close="selectedTask = null">
       <div v-if="selectedTask" class="space-y-5">
-        <div class="grid grid-cols-1 gap-3 sm:grid-cols-4">
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           <div>
             <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('asyncImage.columns.status') }}</p>
             <span class="mt-1 inline-flex badge" :class="statusClass(selectedTask.status)">{{ statusLabel(selectedTask.status) }}</span>
@@ -296,6 +296,14 @@
             <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('asyncImage.detail.taskId') }}</p>
             <p class="mt-1 truncate font-mono text-xs text-gray-700 dark:text-gray-300" :title="selectedTask.task_id">{{ selectedTask.task_id }}</p>
           </div>
+          <div>
+            <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('asyncImage.detail.requestedImages') }}</p>
+            <p class="mt-1 text-sm font-medium text-gray-900 dark:text-white">{{ selectedTask.requested_images || 1 }}</p>
+          </div>
+          <div>
+            <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('asyncImage.detail.actualImages') }}</p>
+            <p class="mt-1 text-sm font-medium text-gray-900 dark:text-white">{{ selectedTask.actual_images ?? taskImageUrls(selectedTask).length }}</p>
+          </div>
         </div>
         <div>
           <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('asyncImage.detail.prompt') }}</p>
@@ -308,6 +316,9 @@
           {{ t('asyncImage.detail.pending') }}
         </div>
         <div v-else-if="taskImageUrls(selectedTask).length" class="space-y-3">
+          <div v-if="imageCountMismatch(selectedTask)" class="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-200">
+            {{ t('asyncImage.detail.countMismatch', { requested: selectedTask.requested_images || 1, actual: selectedTask.actual_images ?? taskImageUrls(selectedTask).length }) }}
+          </div>
           <div class="flex justify-end">
             <button type="button" class="btn btn-secondary btn-sm" :disabled="downloading || !selectedTaskApiKey" @click="downloadSelectedTask">
               <Icon :name="downloading ? 'refresh' : 'download'" size="sm" class="mr-1.5" :class="downloading ? 'animate-spin' : ''" />
@@ -479,6 +490,13 @@ function requestTypeClass(requestType?: string) {
 function taskImageUrls(task: AsyncImageTask): string[] {
   const urls = [task.image_url, ...(task.result?.data || []).map(item => item.url)].filter((url): url is string => Boolean(url))
   return [...new Set(urls)]
+}
+
+function imageCountMismatch(task: AsyncImageTask): boolean {
+  if (task.status !== 'completed') return false
+  const requested = task.requested_images || 1
+  const actual = task.actual_images ?? taskImageUrls(task).length
+  return actual < requested
 }
 
 function errorMessage(error: unknown, fallback: string) {

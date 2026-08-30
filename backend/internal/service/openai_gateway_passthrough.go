@@ -1769,6 +1769,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 		observer = beginUpstreamResponseModelObservation(c)
 	}
 	writeOpenAIPassthroughResponseHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
+	s.finalizeCodexClientQuotaHeaders(c.Writer.Header(), c, account)
 
 	// SSE headers
 	c.Header("Content-Type", "text/event-stream")
@@ -2199,6 +2200,7 @@ func (s *OpenAIGatewayService) handleNonStreamingResponsePassthrough(
 	logOpenAISuccessMissingUsage(ctx, c, account, resp, usage, "json", false)
 
 	writeOpenAIPassthroughResponseHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
+	s.finalizeCodexClientQuotaHeaders(c.Writer.Header(), c, account)
 
 	contentType := resp.Header.Get("Content-Type")
 	if contentType == "" {
@@ -2243,7 +2245,7 @@ func (s *OpenAIGatewayService) handlePassthroughSSEToJSON(resp *http.Response, c
 		if compactErr := newOpenAICompactFallbackSignal(c, terminalPayload, msg); compactErr != nil {
 			return nil, compactErr
 		}
-		return nil, s.writeOpenAINonStreamingProtocolError(resp, c, msg)
+		return nil, s.writeOpenAINonStreamingProtocolError(resp, c, account, msg)
 	}
 	finalResponse, ok := extractCodexFinalResponse(bodyText)
 
@@ -2282,6 +2284,7 @@ func (s *OpenAIGatewayService) handlePassthroughSSEToJSON(resp *http.Response, c
 	}
 
 	writeOpenAIPassthroughResponseHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
+	s.finalizeCodexClientQuotaHeaders(c.Writer.Header(), c, account)
 	logOpenAISuccessMissingUsage(c.Request.Context(), c, account, resp, usage, terminalType, false)
 
 	contentType := "application/json; charset=utf-8"
@@ -2363,23 +2366,19 @@ func writeOpenAIPassthroughResponseHeaders(dst http.Header, src http.Header, fil
 	}
 }
 
-func (s *OpenAIGatewayService) writeOpenAIPassthroughResponseHeaders(c *gin.Context, src http.Header) {
+func (s *OpenAIGatewayService) writeOpenAIPassthroughResponseHeaders(c *gin.Context, src http.Header, account *Account) {
 	if c == nil {
 		return
 	}
 	writeOpenAIPassthroughResponseHeaders(c.Writer.Header(), src, s.responseHeaderFilter)
-	s.applyCodexLocalGroupQuotaHeaders(c)
-}
-
-func (s *OpenAIGatewayService) applyCodexLocalGroupQuotaHeaders(c *gin.Context) {
-	if c == nil || c.Request == nil || !s.IsCodexLocalGroupQuotaEnabledForGroup(c.Request.Context(), groupFromRequestContext(c)) {
-		return
-	}
-	applyCodexLocalQuotaHeaders(c.Writer.Header(), groupFromRequestContext(c), codexLocalSubscriptionFromGin(c))
+	s.finalizeCodexClientQuotaHeaders(c.Writer.Header(), c, account)
 }
 
 func (s *OpenAIGatewayService) ApplyCodexLocalGroupQuotaHeadersForRequest(c *gin.Context) {
-	s.applyCodexLocalGroupQuotaHeaders(c)
+	if c == nil {
+		return
+	}
+	s.finalizeCodexClientQuotaHeaders(c.Writer.Header(), c, nil)
 }
 
 func groupFromRequestContext(c *gin.Context) *Group {
@@ -2406,19 +2405,7 @@ func applyCodexLocalQuotaHeaders(dst http.Header, group *Group, sub *UserSubscri
 	if dst == nil {
 		return
 	}
-	for _, key := range []string{
-		"X-Codex-Primary-Used-Percent",
-		"X-Codex-Primary-Reset-After-Seconds",
-		"X-Codex-Primary-Reset-At",
-		"X-Codex-Primary-Window-Minutes",
-		"X-Codex-Secondary-Used-Percent",
-		"X-Codex-Secondary-Reset-After-Seconds",
-		"X-Codex-Secondary-Reset-At",
-		"X-Codex-Secondary-Window-Minutes",
-		"X-Codex-Primary-Over-Secondary-Limit-Percent",
-	} {
-		dst.Del(key)
-	}
+	removeCodexDefaultQuotaHeaders(dst)
 	quota := BuildCodexLocalGroupQuotaUsage(group, sub, time.Now())
 	if quota == nil {
 		return

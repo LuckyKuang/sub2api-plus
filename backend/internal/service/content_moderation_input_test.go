@@ -317,8 +317,26 @@ func TestExtractContentModerationInput_AuditsDirectEmbeddingAndSearchInput(t *te
 	embeddings := ExtractContentModerationInput("openai_embeddings", []byte(`{"input":["embedding one","embedding two"]}`))
 	require.Equal(t, "embedding one embedding two", embeddings.Text)
 
-	search := ExtractContentModerationInput("openai_alpha_search", []byte(`{"commands":{"search_query":[{"q":"security query"}]},"input":[{"type":"message","role":"user","content":"recent search context"}]}`))
-	require.Equal(t, "security query recent search context", search.Text)
+	search := ExtractContentModerationInput("openai_alpha_search", []byte(`{"commands":{"search_query":[{"q":"security query"}],"mode":"deep"},"settings":{"region":"global"},"input":[{"type":"message","role":"user","content":"recent search context"}]}`))
+	require.Contains(t, search.Text, `"security query"`)
+	require.Contains(t, search.Text, `"mode":"deep"`)
+	require.Contains(t, search.Text, `"region":"global"`)
+	require.Contains(t, search.Text, `"recent search context"`)
+}
+
+func TestExtractContentModerationInput_ResponsesAliasesReminderAndReasoning(t *testing.T) {
+	messages := ExtractContentModerationInput(ContentModerationProtocolOpenAIResponses, []byte(`{"messages":[{"role":"user","content":"legacy user"}]}`))
+	require.Equal(t, "legacy user", messages.Text)
+	prompt := ExtractContentModerationInput(ContentModerationProtocolOpenAIResponses, []byte(`{"prompt":"legacy prompt"}`))
+	require.Equal(t, "legacy prompt", prompt.Text)
+	native := ExtractContentModerationInput(ContentModerationProtocolOpenAIResponses, []byte(`{"input":"native","messages":[{"role":"user","content":"ignored"}]}`))
+	require.Equal(t, "native", native.Text)
+
+	reminder := `<system-reminder>untrusted</system-reminder> real question`
+	chat := ExtractContentModerationInput(ContentModerationProtocolOpenAIChat, []byte(`{"messages":[{"role":"assistant","reasoning_content":"assistant reasoning"},{"role":"user","content":"`+reminder+`","reasoning_content":"user reasoning"}]}`))
+	require.Contains(t, chat.Text, reminder)
+	require.Contains(t, chat.Text, "user reasoning")
+	require.NotContains(t, chat.Text, "assistant reasoning")
 }
 
 func TestExtractContentModerationInput_AnthropicThinkingIsNotAudited(t *testing.T) {

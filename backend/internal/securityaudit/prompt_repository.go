@@ -41,26 +41,30 @@ type Job struct {
 }
 
 type Event struct {
-	ID              int64              `json:"id"`
-	JobID           int64              `json:"job_id"`
-	Snapshot        PromptSnapshot     `json:"snapshot"`
-	Decision        EventDecision      `json:"decision"`
-	RiskLevel       RiskLevel          `json:"risk_level"`
-	Action          Action             `json:"action"`
-	Categories      []string           `json:"categories"`
-	MatchedScanners []string           `json:"matched_scanners"`
-	ScannerScores   map[string]float64 `json:"scanner_scores"`
-	ScannerEvidence map[string]string  `json:"scanner_evidence"`
-	ScannerBackend  string             `json:"scanner_backend"`
-	ScannerVersion  string             `json:"scanner_version"`
-	GuardEndpointID string             `json:"guard_endpoint_id"`
-	PolicyID        string             `json:"policy_id"`
-	PolicyVersion   int                `json:"policy_version"`
-	ConfigVersion   int64              `json:"config_version"`
-	ChunkTotal      int                `json:"chunk_total"`
-	LatencyMS       int                `json:"latency_ms"`
-	IssueSummaries  []IssueSummary     `json:"issue_summaries"`
-	CreatedAt       time.Time          `json:"created_at"`
+	ID                int64              `json:"id"`
+	JobID             int64              `json:"job_id"`
+	Snapshot          PromptSnapshot     `json:"snapshot"`
+	ExecutionMode     Mode               `json:"execution_mode"`
+	Decision          EventDecision      `json:"decision"`
+	RiskLevel         RiskLevel          `json:"risk_level"`
+	Action            Action             `json:"action"`
+	Categories        []string           `json:"categories"`
+	MatchedScanners   []string           `json:"matched_scanners"`
+	ScannerScores     map[string]float64 `json:"scanner_scores"`
+	ScannerEvidence   map[string]string  `json:"scanner_evidence"`
+	ScannerBackend    string             `json:"scanner_backend"`
+	ScannerVersion    string             `json:"scanner_version"`
+	GuardEndpointID   string             `json:"guard_endpoint_id"`
+	PolicyID          string             `json:"policy_id"`
+	PolicyVersion     int                `json:"policy_version"`
+	ConfigVersion     int64              `json:"config_version"`
+	ChunkTotal        int                `json:"chunk_total"`
+	QueueDelayMS      *int               `json:"queue_delay_ms"`
+	InputLimit        *int               `json:"input_limit"`
+	MatchedChunkIndex *int               `json:"matched_chunk_index"`
+	LatencyMS         int                `json:"latency_ms"`
+	IssueSummaries    []IssueSummary     `json:"issue_summaries"`
+	CreatedAt         time.Time          `json:"created_at"`
 }
 
 type JobRepository interface {
@@ -187,7 +191,7 @@ func (r *PostgreSQLRepository) Complete(ctx context.Context, job *Job, result *N
 	}
 	var event *Event
 	if shouldStorePromptAuditEvent(result.Decision, storePassEvents) {
-		event, err = insertEvent(ctx, tx, job.ID, job.Snapshot.Redacted(), job.ConfigVersion, result)
+		event, err = insertEvent(ctx, tx, job.ID, job.Snapshot.Redacted(), job.ExecutionMode, job.ConfigVersion, queueDelayMilliseconds(job), result)
 		if err != nil {
 			return nil, err
 		}
@@ -293,7 +297,7 @@ func (r *PostgreSQLRepository) RecordBlocking(ctx context.Context, snapshot Prom
 	}
 	var event *Event
 	if shouldStorePromptAuditEvent(result.Decision, storePassEvents) {
-		event, err = insertEvent(ctx, tx, job.ID, snapshot.Redacted(), configVersion, result)
+		event, err = insertEvent(ctx, tx, job.ID, snapshot.Redacted(), ModeBlocking, configVersion, 0, result)
 		if err != nil {
 			return nil, err
 		}
@@ -310,6 +314,13 @@ func shouldStorePromptAuditEvent(decision EventDecision, storePassEvents bool) b
 	return decision != EventPass || storePassEvents
 }
 
+func queueDelayMilliseconds(job *Job) int {
+	if job == nil || job.ProcessingStartedAt == nil || !job.ProcessingStartedAt.After(job.CreatedAt) {
+		return 0
+	}
+	return int(job.ProcessingStartedAt.Sub(job.CreatedAt).Milliseconds())
+}
+
 type sqlQueryer interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 }
@@ -323,18 +334,18 @@ func insertJob(ctx context.Context, queryer sqlQueryer, snapshot PromptSnapshot,
 		INSERT INTO prompt_audit_jobs (
 			request_id,user_id,username_snapshot,user_email_snapshot,api_key_id,api_key_name_snapshot,
 			group_id,group_name,provider,endpoint,protocol,model,prompt_hash,redacted_preview,
-			prompt_length,message_count,stage,execution_mode,config_version,status,max_attempts,processed_at
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,`+processedExpr+`)
+			prompt_length,message_count,stage,execution_mode,config_version,status,max_attempts,client_ip,processed_at
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,`+processedExpr+`)
 		RETURNING `+jobColumns("prompt_audit_jobs"),
 		snapshot.RequestID, nullableID(snapshot.UserID), snapshot.UsernameSnapshot, snapshot.UserEmailSnapshot,
 		nullableID(snapshot.APIKeyID), snapshot.APIKeyNameSnapshot, snapshot.GroupID, snapshot.GroupName,
 		snapshot.Provider, snapshot.Endpoint, snapshot.Protocol, snapshot.Model, snapshot.PromptHash,
 		snapshot.RedactedPreview, snapshot.PromptLength, snapshot.MessageCount, normalizeStage(snapshot.Stage),
-		string(mode), configVersion, status, maxAttempts)
+		string(mode), configVersion, status, maxAttempts, snapshot.ClientIP)
 	return scanJob(row)
 }
 
-func insertEvent(ctx context.Context, queryer sqlQueryer, jobID int64, snapshot PromptSnapshot, configVersion int64, result *NormalizedResult) (*Event, error) {
+func insertEvent(ctx context.Context, queryer sqlQueryer, jobID int64, snapshot PromptSnapshot, executionMode Mode, configVersion int64, queueDelayMS int, result *NormalizedResult) (*Event, error) {
 	categories, _ := json.Marshal(result.Categories)
 	matched, _ := json.Marshal(result.MatchedScanners)
 	scores, _ := json.Marshal(result.ScannerScores)
@@ -349,9 +360,11 @@ func insertEvent(ctx context.Context, queryer sqlQueryer, jobID int64, snapshot 
 			group_id,group_name,provider,endpoint,protocol,model,prompt_hash,redacted_preview,stage,
 			decision,risk_level,action,categories,matched_scanners,scanner_scores,scanner_evidence,
 			scanner_backend,scanner_version,guard_endpoint_id,policy_id,policy_version,config_version,chunk_total,latency_ms,
-			full_prompt
+			full_prompt,client_ip,prompt_length,message_count,execution_mode,queue_delay_ms,input_limit,matched_chunk_index,
+			full_prompt_truncated
 		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,
-			$20::jsonb,$21::jsonb,$22::jsonb,$23::jsonb,$24,$25,$26,$27,$28,$29,$30,$31,$32)
+			$20::jsonb,$21::jsonb,$22::jsonb,$23::jsonb,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,
+			$36,$37,$38,$39,$40)
 		RETURNING `+eventDetailColumns("prompt_audit_events"),
 		jobID, snapshot.RequestID, nullableID(snapshot.UserID), snapshot.UsernameSnapshot, snapshot.UserEmailSnapshot,
 		nullableID(snapshot.APIKeyID), snapshot.APIKeyNameSnapshot, snapshot.GroupID, snapshot.GroupName,
@@ -359,7 +372,8 @@ func insertEvent(ctx context.Context, queryer sqlQueryer, jobID int64, snapshot 
 		snapshot.RedactedPreview, normalizeStage(snapshot.Stage), string(result.Decision), string(result.RiskLevel),
 		string(result.Action), categories, matched, scores, evidenceJSON, result.ScannerBackend, result.ScannerVersion,
 		result.GuardEndpointID, result.PolicyID, result.PolicyVersion, configVersion, result.ChunkTotal, result.LatencyMS,
-		snapshot.FullPrompt)
+		snapshot.FullPrompt, snapshot.ClientIP, snapshot.PromptLength, snapshot.MessageCount, string(executionMode), queueDelayMS,
+		nullablePositiveInt(result.InputLimit), nullablePositiveInt(result.MatchedChunkIndex), snapshot.FullPromptTruncated)
 	return scanEvent(row, true)
 }
 
@@ -376,7 +390,7 @@ func scanJob(row rowScanner) (*Job, error) {
 		&job.Snapshot.RedactedPreview, &job.Snapshot.PromptLength, &job.Snapshot.MessageCount, &job.Snapshot.Stage,
 		&job.ExecutionMode, &job.ConfigVersion, &job.Status, &job.Attempts, &job.MaxAttempts, &job.ClaimVersion,
 		&job.NextAttemptAt, &processingStarted, &processed, &job.LastErrorCode, &job.LastErrorMessage,
-		&job.CreatedAt, &job.UpdatedAt,
+		&job.CreatedAt, &job.UpdatedAt, &job.Snapshot.ClientIP,
 	)
 	if err != nil {
 		return nil, err
@@ -402,7 +416,7 @@ func jobColumns(alias string) string {
 		%[1]s.prompt_length,%[1]s.message_count,%[1]s.stage,%[1]s.execution_mode,%[1]s.config_version,%[1]s.status,
 		%[1]s.attempts,%[1]s.max_attempts,%[1]s.claim_version,%[1]s.next_attempt_at,
 		%[1]s.processing_started_at,%[1]s.processed_at,%[1]s.last_error_code,%[1]s.last_error_message,
-		%[1]s.created_at,%[1]s.updated_at`, alias)
+		%[1]s.created_at,%[1]s.updated_at,%[1]s.client_ip`, alias)
 }
 
 func normalizeStage(stage string) string {
@@ -428,6 +442,13 @@ func requireOneRow(result sql.Result, err error, missing error) error {
 }
 
 func nullableID(value int64) any {
+	if value <= 0 {
+		return nil
+	}
+	return value
+}
+
+func nullablePositiveInt(value int) any {
 	if value <= 0 {
 		return nil
 	}

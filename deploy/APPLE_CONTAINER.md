@@ -217,15 +217,19 @@ the disk usage of arbitrary host bind directories. Inspect and back up those
 host paths separately.
 
 The `up` and `upgrade` commands do not invoke `container build`, so they do not
-create Apple Builder cache. If an operator separately uses `container build`,
+create Apple Builder cache. Project validation retains only its current
+deterministic `sub2api-validation` image and dependency-cache generation; it
+does not own or prune the global Apple Builder. Exact application-build base
+images and Builder layers may remain reusable while their versions still match
+the repository Dockerfiles. If an operator separately uses `container build`,
 the builder can be stopped without deleting its cache:
 
 ```bash
 container builder stop
 ```
 
-Delete the builder and its reusable build cache only when a subsequent full
-rebuild is acceptable:
+Delete the builder and its reusable build cache only after confirming it is not
+shared by another project and a subsequent full rebuild is acceptable:
 
 ```bash
 container builder delete

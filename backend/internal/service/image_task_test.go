@@ -36,6 +36,7 @@ func (h *imageTaskMemoryHistory) Save(_ context.Context, task *ImageTaskRecord) 
 	copy := *task
 	copy.Result = append(json.RawMessage(nil), task.Result...)
 	copy.Error = append(json.RawMessage(nil), task.Error...)
+	copy.StorageKeys = append([]string(nil), task.StorageKeys...)
 	h.tasks[task.ID] = &copy
 	return nil
 }
@@ -216,14 +217,16 @@ func TestImageTaskServiceHistoryListKeepsMetadataAndScopesByAPIKey(t *testing.T)
 	owner := ImageTaskOwner{UserID: 7, APIKeyID: 9}
 
 	created, err := svc.CreateWithMetadata(context.Background(), owner, ImageTaskMetadata{
-		RequestType:   "generation",
-		Model:         "gpt-image-1",
-		PromptPreview: "Draw a glass greenhouse under a bright sky.",
+		RequestType:     "generation",
+		Model:           "gpt-image-1",
+		PromptPreview:   "Draw a glass greenhouse under a bright sky.",
+		RequestedImages: 2,
 	})
 	require.NoError(t, err)
 	require.Equal(t, "generation", created.RequestType)
 	require.Equal(t, "gpt-image-1", created.Model)
 	require.Equal(t, "Draw a glass greenhouse under a bright sky.", created.PromptPreview)
+	require.Equal(t, 2, created.RequestedImages)
 
 	processing, err := svc.List(context.Background(), owner, ImageTaskHistoryFilter{})
 	require.NoError(t, err)
@@ -240,11 +243,25 @@ func TestImageTaskServiceHistoryListKeepsMetadataAndScopesByAPIKey(t *testing.T)
 	require.Len(t, completed.Data, 1)
 	require.Equal(t, ImageTaskStatusCompleted, completed.Data[0].Status)
 	require.Equal(t, "https://storage.example.test/images/task.png", completed.Data[0].ImageURL)
+	require.Equal(t, 2, completed.Data[0].RequestedImages)
+	require.Equal(t, 1, completed.Data[0].ActualImages)
 	require.NotNil(t, completed.Data[0].CompletedAt)
 
 	otherKey, err := svc.List(context.Background(), ImageTaskOwner{UserID: owner.UserID, APIKeyID: owner.APIKeyID + 1}, ImageTaskHistoryFilter{})
 	require.NoError(t, err)
 	require.Empty(t, otherKey.Data)
+}
+
+func TestImageTaskPublicViewDerivesLegacyCompletedImageCount(t *testing.T) {
+	task := imageTaskToPublic(&ImageTaskRecord{
+		ID:              "imgtask_legacy",
+		Status:          ImageTaskStatusCompleted,
+		RequestedImages: 0,
+		ActualImages:    0,
+		Result:          json.RawMessage(`{"data":[{"url":"https://example.test/one.png"},{"url":"https://example.test/two.png"}]}`),
+	})
+	require.Equal(t, 1, task.RequestedImages)
+	require.Equal(t, 2, task.ActualImages)
 }
 
 func TestImageTaskServiceAdminListByUserReadsAcrossKeysWithoutStoreMutation(t *testing.T) {

@@ -7,6 +7,10 @@ import type {
 } from './types'
 
 export const DEFAULT_GUARD_MODEL = 'sileader/qwen3guard:0.6b'
+export const MIN_GUARD_TIMEOUT_MS = 100
+export const MAX_GUARD_TIMEOUT_MS = 30000
+export const MIN_GUARD_INPUT_LIMIT = 128
+export const MAX_GUARD_INPUT_LIMIT = 100000
 
 export const SCANNER_CATALOG = [
   { id: 'violent', label: 'Violent' },
@@ -99,6 +103,7 @@ export function emptyEventFilters(): PromptEventFilters {
     user_id: '',
     api_key_id: '',
     request_id: '',
+    client_ip: '',
     prompt_hash: '',
     keyword: '',
     start_at: '',
@@ -114,7 +119,7 @@ function toISO(value: string): string | undefined {
 
 export function eventQueryParams(filters: PromptEventFilters): Record<string, string | number> {
   const result: Record<string, string | number> = {}
-  for (const key of ['decision', 'risk_level', 'endpoint', 'request_id', 'prompt_hash', 'keyword'] as const) {
+  for (const key of ['decision', 'risk_level', 'endpoint', 'request_id', 'client_ip', 'prompt_hash', 'keyword'] as const) {
     const value = filters[key].trim()
     if (value) result[key] = value
   }

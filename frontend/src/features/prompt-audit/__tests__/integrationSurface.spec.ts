@@ -7,6 +7,10 @@ import zh from '@/i18n/locales/zh'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const read = (path: string) => readFileSync(resolve(here, path), 'utf8')
+const localeKeys = (value: unknown, prefix = ''): string[] => {
+  if (!value || typeof value !== 'object') return [prefix]
+  return Object.entries(value).flatMap(([key, child]) => localeKeys(child, prefix ? `${prefix}.${key}` : key)).sort()
+}
 
 describe('Prompt Audit integration surface', () => {
   it('registers an admin and risk-control guarded route', () => {
@@ -27,7 +31,7 @@ describe('Prompt Audit integration surface', () => {
   })
 
   it('keeps Prompt Audit locale trees symmetric and all operational controls named', () => {
-    expect(Object.keys(zh.admin.promptAudit)).toEqual(Object.keys(en.admin.promptAudit))
+    expect(localeKeys(zh.admin.promptAudit)).toEqual(localeKeys(en.admin.promptAudit))
     expect(zh.nav.securityAudit).toBeTruthy()
     expect(en.nav.securityAudit).toBeTruthy()
     const endpoint = read('../components/EndpointPool.vue')

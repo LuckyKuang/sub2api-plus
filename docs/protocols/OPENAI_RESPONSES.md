@@ -79,18 +79,30 @@ subscription quota view is enabled:
   clients that only understand a relative countdown.
 
 When local Codex subscription quota is enabled, `Primary` represents the local
-7-day window and `Secondary` represents the local rolling 5-hour window. The
-gateway clears all upstream rate-limit fields before writing the local values,
-so one response never mixes upstream reset times with local percentages or
-window sizes. With the local view disabled, eligible upstream headers are
-passed through unchanged for HTTP and SSE responses.
+7-day window and `Secondary` represents the local rolling 5-hour window. This
+local view is authoritative even when the selected OpenAI account enables
+automatic passthrough. The gateway clears all upstream default rate-limit
+fields before writing the local values, so one response never mixes upstream
+reset times with local percentages or window sizes.
+
+When the local view is disabled, the selected account's real default quota is
+visible only when that account enables OpenAI automatic passthrough. Otherwise
+the gateway removes the default `Primary` and `Secondary` quota fields after
+generic response-header filtering, so an additional response-header allowance
+cannot bypass this policy.
 
 A client WebSocket `101` response is committed before the gateway connects to
 the selected upstream. The gateway therefore writes only the local quota view
-known before the upgrade. When that view is disabled, it does not inject Codex
-quota headers into the `101` response and cannot pass through headers from a
-later upstream handshake. HTTP and SSE headers are finalized before their
-response bodies are written.
+known before the upgrade. The official WebSocket client updates quota from
+in-band `codex.rate_limits` events, so the gateway applies the same policy to
+the default `codex` event family: replace it with local subscription windows,
+pass it through for an automatic-passthrough account, or suppress it. Named
+model-specific limit families remain independent. HTTP and SSE headers are
+finalized before their response bodies are written.
+
+The dedicated `/backend-api/wham/usage` route remains a local-only view. It
+returns the API key subscription quota when the local setting is enabled and
+returns 404 otherwise; it does not select an account or proxy upstream quota.
 
 This response-header compatibility does not make Codex App API-key calls to
 `account/rateLimits/read` available; that App Server authentication behavior is

@@ -93,15 +93,27 @@ PROTECTED_FRAGMENTS = {
         "HTTP/WS/account-type pass-through and side-effect-order tests",
     ),
     "OpenSpec": (
+        "local untracked openspec/changes/ plans",
         "cross-cutting public API",
         "security-boundary",
         "multi-module changes",
+        "Do not commit openspec/changes/",
+        "owning documentation and tests",
     ),
     "Secrets": (
         "Never commit credentials, tokens, production configuration, or user data",
     ),
     "Documented Commands": (
         "repository scripts or Make targets",
+    ),
+    "Verification": (
+        "All validation must run in Apple Containers on macOS",
+        "Docker inside WSL2 Debian/Ubuntu on Windows",
+        "Docker on Linux",
+        "Host-side validation is forbidden",
+        "After every validation remove project validation containers, temporary resources, and historical writable snapshots",
+        "Retain only project validation images and dependency caches whose deterministic identities match the current pinned toolchain and dependency-lock inputs",
+        "Remove stale project validation generations without pruning unrelated projects or global runtime resources",
     ),
     "Push": (
         "skills/push-cli push",

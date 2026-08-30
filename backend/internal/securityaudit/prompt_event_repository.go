@@ -22,6 +22,7 @@ type EventFilter struct {
 	UserID     *int64     `json:"user_id,omitempty"`
 	APIKeyID   *int64     `json:"api_key_id,omitempty"`
 	RequestID  string     `json:"request_id,omitempty"`
+	ClientIP   string     `json:"client_ip,omitempty"`
 	PromptHash string     `json:"prompt_hash,omitempty"`
 	Keyword    string     `json:"keyword,omitempty"`
 	StartAt    *time.Time `json:"start_at,omitempty"`
@@ -241,6 +242,9 @@ func validateDeleteFilter(filter EventFilter) error {
 	if filter.StartAt == nil || filter.EndAt == nil || !filter.StartAt.Before(*filter.EndAt) {
 		return errors.New("prompt audit filter delete requires a valid explicit time range")
 	}
+	if strings.TrimSpace(filter.ClientIP) != "" && normalizePromptClientIP(filter.ClientIP) == "" {
+		return errors.New("prompt audit filter contains an invalid client IP")
+	}
 	return nil
 }
 
@@ -249,6 +253,11 @@ func canonicalEventFilter(filter EventFilter) EventFilter {
 	filter.RiskLevel = strings.TrimSpace(strings.ToLower(filter.RiskLevel))
 	filter.Endpoint = strings.TrimSpace(filter.Endpoint)
 	filter.RequestID = strings.TrimSpace(filter.RequestID)
+	if normalized := normalizePromptClientIP(filter.ClientIP); normalized != "" {
+		filter.ClientIP = normalized
+	} else {
+		filter.ClientIP = strings.TrimSpace(filter.ClientIP)
+	}
 	filter.PromptHash = strings.ToLower(strings.TrimSpace(filter.PromptHash))
 	filter.Keyword = strings.TrimSpace(filter.Keyword)
 	if filter.StartAt != nil {
@@ -291,14 +300,17 @@ func buildEventWhere(filter EventFilter, firstIndex int) (string, []any) {
 	if filter.RequestID != "" {
 		add(" AND e.request_id=$%d", filter.RequestID)
 	}
+	if filter.ClientIP != "" {
+		add(" AND e.client_ip=$%d", filter.ClientIP)
+	}
 	if filter.PromptHash != "" {
 		add(" AND e.prompt_hash=$%d", filter.PromptHash)
 	}
 	if filter.Keyword != "" {
-		add(` AND (e.request_id ILIKE $%d OR e.prompt_hash ILIKE $%d OR e.redacted_preview ILIKE $%d
+		add(` AND (e.request_id ILIKE $%d OR e.client_ip ILIKE $%d OR e.prompt_hash ILIKE $%d OR e.redacted_preview ILIKE $%d
 			OR e.username_snapshot ILIKE $%d OR e.user_email_snapshot ILIKE $%d OR e.api_key_name_snapshot ILIKE $%d)`, "%"+TrimRunes(filter.Keyword, 128)+"%")
-		// The clause has six placeholders but add only supplied one. Rebuild it with one shared placeholder.
-		clauses[len(clauses)-1] = fmt.Sprintf(` AND (e.request_id ILIKE $%[1]d OR e.prompt_hash ILIKE $%[1]d OR e.redacted_preview ILIKE $%[1]d
+		// The clause has several placeholders but add only supplied one. Rebuild it with one shared placeholder.
+		clauses[len(clauses)-1] = fmt.Sprintf(` AND (e.request_id ILIKE $%[1]d OR e.client_ip ILIKE $%[1]d OR e.prompt_hash ILIKE $%[1]d OR e.redacted_preview ILIKE $%[1]d
 			OR e.username_snapshot ILIKE $%[1]d OR e.user_email_snapshot ILIKE $%[1]d OR e.api_key_name_snapshot ILIKE $%[1]d)`, firstIndex+len(args)-1)
 	}
 	if filter.StartAt != nil {
@@ -317,7 +329,9 @@ func eventColumns(alias string) string {
 		%[1]s.stage,%[1]s.decision,%[1]s.risk_level,%[1]s.action,%[1]s.categories,%[1]s.matched_scanners,
 		%[1]s.scanner_scores,%[1]s.scanner_evidence,%[1]s.scanner_backend,%[1]s.scanner_version,
 		%[1]s.guard_endpoint_id,%[1]s.policy_id,%[1]s.policy_version,%[1]s.config_version,
-		%[1]s.chunk_total,%[1]s.latency_ms,%[1]s.created_at`, alias)
+		%[1]s.chunk_total,%[1]s.latency_ms,%[1]s.created_at,%[1]s.client_ip,%[1]s.prompt_length,
+		%[1]s.message_count,%[1]s.execution_mode,%[1]s.queue_delay_ms,%[1]s.input_limit,
+		%[1]s.matched_chunk_index,%[1]s.full_prompt_truncated`, alias)
 }
 
 // eventDetailColumns adds the full prompt, which can be large, so it is only
@@ -329,6 +343,7 @@ func eventDetailColumns(alias string) string {
 func scanEvent(row rowScanner, withFullPrompt ...bool) (*Event, error) {
 	event := &Event{}
 	var userID, apiKeyID, groupID sql.NullInt64
+	var queueDelayMS, inputLimit, matchedChunkIndex sql.NullInt64
 	var categories, matched, scores, evidence []byte
 	dest := []any{&event.ID, &event.JobID, &event.Snapshot.RequestID, &userID,
 		&event.Snapshot.UsernameSnapshot, &event.Snapshot.UserEmailSnapshot, &apiKeyID,
@@ -337,7 +352,9 @@ func scanEvent(row rowScanner, withFullPrompt ...bool) (*Event, error) {
 		&event.Snapshot.PromptHash, &event.Snapshot.RedactedPreview, &event.Snapshot.Stage, &event.Decision,
 		&event.RiskLevel, &event.Action, &categories, &matched, &scores, &evidence, &event.ScannerBackend,
 		&event.ScannerVersion, &event.GuardEndpointID, &event.PolicyID, &event.PolicyVersion,
-		&event.ConfigVersion, &event.ChunkTotal, &event.LatencyMS, &event.CreatedAt}
+		&event.ConfigVersion, &event.ChunkTotal, &event.LatencyMS, &event.CreatedAt, &event.Snapshot.ClientIP,
+		&event.Snapshot.PromptLength, &event.Snapshot.MessageCount, &event.ExecutionMode, &queueDelayMS,
+		&inputLimit, &matchedChunkIndex, &event.Snapshot.FullPromptTruncated}
 	if len(withFullPrompt) > 0 && withFullPrompt[0] {
 		dest = append(dest, &event.Snapshot.FullPrompt)
 	}
@@ -348,6 +365,9 @@ func scanEvent(row rowScanner, withFullPrompt ...bool) (*Event, error) {
 	event.Snapshot.UserID = nullableInt64Value(userID)
 	event.Snapshot.APIKeyID = nullableInt64Value(apiKeyID)
 	event.Snapshot.GroupID = nullableInt64Ptr(groupID)
+	event.QueueDelayMS = nullableIntPtr(queueDelayMS)
+	event.InputLimit = nullableIntPtr(inputLimit)
+	event.MatchedChunkIndex = nullableIntPtr(matchedChunkIndex)
 	_ = json.Unmarshal(categories, &event.Categories)
 	_ = json.Unmarshal(matched, &event.MatchedScanners)
 	_ = json.Unmarshal(scores, &event.ScannerScores)
@@ -357,6 +377,14 @@ func scanEvent(row rowScanner, withFullPrompt ...bool) (*Event, error) {
 		ScannerEvidence: event.ScannerEvidence}
 	event.IssueSummaries = BuildIssueSummaries(result)
 	return event, nil
+}
+
+func nullableIntPtr(value sql.NullInt64) *int {
+	if !value.Valid {
+		return nil
+	}
+	result := int(value.Int64)
+	return &result
 }
 
 func scanReturnedJobIDs(rows *sql.Rows) ([]int64, error) {

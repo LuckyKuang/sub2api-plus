@@ -26,10 +26,12 @@ WHERE task_id = $1 AND user_id = $2 AND api_key_id = $3`
 		WillReturnRows(sqlmock.NewRows([]string{
 			"task_id", "user_id", "api_key_id", "request_type", "model", "prompt_preview",
 			"status", "http_status", "image_url", "result", "error",
+			"storage_keys", "requested_images", "actual_images",
 			"created_at", "completed_at", "expires_at",
 		}).AddRow(
 			"imgtask_failed", owner.UserID, owner.APIKeyID, "generation", "gpt-image-2", "prompt",
 			service.ImageTaskStatusFailed, 502, nil, nil, `{"type":"upstream_error"}`,
+			`[]`, 2, 0,
 			now, now, now.Add(time.Hour),
 		))
 
@@ -69,10 +71,12 @@ func TestImageTaskHistoryRepositoryListByUserDoesNotRequireAPIKey(t *testing.T) 
 		WillReturnRows(sqlmock.NewRows([]string{
 			"task_id", "user_id", "api_key_id", "request_type", "model", "prompt_preview",
 			"status", "http_status", "image_url", "result", "error",
+			"storage_keys", "requested_images", "actual_images",
 			"created_at", "completed_at", "expires_at",
 		}).AddRow(
 			"imgtask_user", 7, 99, "generation", "gpt-image-2", "prompt",
 			service.ImageTaskStatusCompleted, 200, "https://example.test/image.png", `{"data":[{"url":"https://example.test/image.png"}]}`, nil,
+			`["images/task.png"]`, 2, 1,
 			now, now, now.Add(time.Hour),
 		))
 
@@ -81,6 +85,9 @@ func TestImageTaskHistoryRepositoryListByUserDoesNotRequireAPIKey(t *testing.T) 
 	require.False(t, hasMore)
 	require.Len(t, tasks, 1)
 	require.Equal(t, int64(99), tasks[0].APIKeyID)
+	require.Equal(t, []string{"images/task.png"}, tasks[0].StorageKeys)
+	require.Equal(t, 2, tasks[0].RequestedImages)
+	require.Equal(t, 1, tasks[0].ActualImages)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 

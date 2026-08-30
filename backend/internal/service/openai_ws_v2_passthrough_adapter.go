@@ -1325,6 +1325,13 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 					hooks.AfterTurn(turnNo, turnResult, nil)
 				}
 			},
+			TransformClientMessage: func(msgType coderws.MessageType, payload []byte) ([]byte, bool, error) {
+				if msgType != coderws.MessageText {
+					return payload, true, nil
+				}
+				finalized, emit := s.finalizeCodexClientQuotaEvent(payload, c, account)
+				return finalized, emit, nil
+			},
 			BeforeClientWrite: func(msgType coderws.MessageType, payload []byte) {
 				if msgType == coderws.MessageText && openAIWSPassthroughIsTerminalOutput(payload) {
 					turnLifecycle.beginTerminalWrite()

@@ -15,9 +15,10 @@ const (
 // user-facing task list. The original request payload and API key never enter
 // the task history.
 type ImageTaskMetadata struct {
-	RequestType   string
-	Model         string
-	PromptPreview string
+	RequestType     string
+	Model           string
+	PromptPreview   string
+	RequestedImages int
 }
 
 // ImageTaskHistoryFilter limits a task list to the authenticated API key.
@@ -53,6 +54,9 @@ func normalizeImageTaskMetadata(in ImageTaskMetadata) ImageTaskMetadata {
 	}
 	in.Model = truncateImageTaskText(strings.TrimSpace(in.Model), 128)
 	in.PromptPreview = truncateImageTaskText(strings.TrimSpace(in.PromptPreview), imageTaskPromptPreviewMax)
+	if in.RequestedImages <= 0 {
+		in.RequestedImages = 1
+	}
 	return in
 }
 

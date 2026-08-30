@@ -26,16 +26,24 @@ func (r *imageTaskHistoryRepository) Save(ctx context.Context, task *service.Ima
 	if task == nil || task.ID == "" || task.UserID <= 0 || task.APIKeyID <= 0 {
 		return fmt.Errorf("invalid async image task history record")
 	}
+	storageKeyValues := task.StorageKeys
+	if storageKeyValues == nil {
+		storageKeyValues = []string{}
+	}
+	storageKeys, err := json.Marshal(storageKeyValues)
+	if err != nil {
+		return fmt.Errorf("marshal async image task storage keys: %w", err)
+	}
 
-	_, err := r.db.ExecContext(ctx, `
+	_, err = r.db.ExecContext(ctx, `
 INSERT INTO async_image_tasks (
     task_id, user_id, api_key_id, request_type, model, prompt_preview,
-    status, http_status, image_url, result, error,
+    status, http_status, image_url, result, error, storage_keys, requested_images, actual_images,
     created_at, completed_at, expires_at, updated_at
 ) VALUES (
     $1, $2, $3, $4, $5, NULLIF($6, ''),
-    $7, NULLIF($8, 0), NULLIF($9, ''), $10::jsonb, $11::jsonb,
-    $12, $13, $14, NOW()
+    $7, NULLIF($8, 0), NULLIF($9, ''), $10::jsonb, $11::jsonb, $12::jsonb, $13, $14,
+    $15, $16, $17, NOW()
 )
 ON CONFLICT (task_id) DO UPDATE SET
     request_type = EXCLUDED.request_type,
@@ -46,6 +54,9 @@ ON CONFLICT (task_id) DO UPDATE SET
     image_url = EXCLUDED.image_url,
     result = EXCLUDED.result,
     error = EXCLUDED.error,
+    storage_keys = EXCLUDED.storage_keys,
+    requested_images = EXCLUDED.requested_images,
+    actual_images = EXCLUDED.actual_images,
     completed_at = EXCLUDED.completed_at,
     expires_at = EXCLUDED.expires_at,
     updated_at = NOW()`,
@@ -60,6 +71,9 @@ ON CONFLICT (task_id) DO UPDATE SET
 		imageTaskFirstURL(task.Result),
 		serviceImageTaskJSONText(task.Result),
 		serviceImageTaskJSONText(task.Error),
+		string(storageKeys),
+		task.RequestedImages,
+		task.ActualImages,
 		time.Unix(task.CreatedAt, 0).UTC(),
 		imageTaskHistoryCompletedAt(task.CompletedAt),
 		time.Unix(task.ExpiresAt, 0).UTC(),
@@ -193,19 +207,21 @@ WHERE task_id = $1 AND user_id = $2 AND api_key_id = $3 AND status = $4`,
 const asyncImageTaskColumns = `
 task_id, user_id, api_key_id, request_type, model, prompt_preview,
 status, http_status, image_url, result::text, error::text,
+storage_keys::text, requested_images, actual_images,
 created_at, completed_at, expires_at`
 
 const asyncImageTaskSelectSQL = `SELECT ` + asyncImageTaskColumns + ` FROM async_image_tasks`
 
 func scanImageTaskHistory(row interface{ Scan(...any) error }) (*service.ImageTaskRecord, error) {
 	var task service.ImageTaskRecord
-	var promptPreview, imageURL, result, taskError sql.NullString
+	var promptPreview, imageURL, result, taskError, storageKeys sql.NullString
 	var httpStatus sql.NullInt64
 	var completedAt sql.NullTime
 	var createdAt, expiresAt time.Time
 	if err := row.Scan(
 		&task.ID, &task.UserID, &task.APIKeyID, &task.RequestType, &task.Model, &promptPreview,
 		&task.Status, &httpStatus, &imageURL, &result, &taskError,
+		&storageKeys, &task.RequestedImages, &task.ActualImages,
 		&createdAt, &completedAt, &expiresAt,
 	); err != nil {
 		return nil, err
@@ -221,6 +237,9 @@ func scanImageTaskHistory(row interface{ Scan(...any) error }) (*service.ImageTa
 	}
 	if taskError.Valid {
 		task.Error = json.RawMessage(taskError.String)
+	}
+	if storageKeys.Valid {
+		_ = json.Unmarshal([]byte(storageKeys.String), &task.StorageKeys)
 	}
 	task.CreatedAt = createdAt.Unix()
 	if completedAt.Valid {

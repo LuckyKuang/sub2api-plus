@@ -134,6 +134,22 @@ class CompressCliTest(unittest.TestCase):
         errors = self.validate_text(changed)
         self.assert_error_contains(errors, "terminal fingerprint")
 
+    def test_openspec_plans_remain_local_and_untracked(self) -> None:
+        changed = self.valid_document.replace(
+            "Do not commit openspec/changes/",
+            "Commit completed OpenSpec changes",
+        )
+        errors = self.validate_text(changed)
+        self.assert_error_contains(errors, "Do not commit openspec/changes/")
+
+    def test_openspec_durable_behavior_has_a_tracked_owner(self) -> None:
+        changed = self.valid_document.replace(
+            "Commit durable behavior to the owning documentation and tests",
+            "Use local plans as the durable record",
+        )
+        errors = self.validate_text(changed)
+        self.assert_error_contains(errors, "owning documentation and tests")
+
     def test_release_finalization_profile_cannot_lose_deterministic_gate(self) -> None:
         changed = self.valid_document.replace(
             "Only a verified published tag on its deterministic finalization tree may use release-finalization",
@@ -141,6 +157,38 @@ class CompressCliTest(unittest.TestCase):
         )
         errors = self.validate_text(changed)
         self.assert_error_contains(errors, "deterministic finalization tree")
+
+    def test_all_validation_remains_platform_container_only(self) -> None:
+        changed = self.valid_document.replace(
+            "Host-side validation is forbidden",
+            "Host-side focused validation is allowed",
+        )
+        errors = self.validate_text(changed)
+        self.assert_error_contains(errors, "Host-side validation is forbidden")
+
+    def test_validation_ephemeral_cleanup_remains_mandatory(self) -> None:
+        changed = self.valid_document.replace(
+            "After every validation remove project validation containers, temporary resources, and historical writable snapshots",
+            "Validation cleanup is optional",
+        )
+        errors = self.validate_text(changed)
+        self.assert_error_contains(errors, "After every validation remove")
+
+    def test_current_validation_generation_must_remain_reusable(self) -> None:
+        changed = self.valid_document.replace(
+            "Retain only project validation images and dependency caches whose deterministic identities match the current pinned toolchain and dependency-lock inputs",
+            "Delete all project validation images and caches",
+        )
+        errors = self.validate_text(changed)
+        self.assert_error_contains(errors, "Retain only project validation images")
+
+    def test_stale_validation_cleanup_remains_scoped(self) -> None:
+        changed = self.valid_document.replace(
+            "Remove stale project validation generations without pruning unrelated projects or global runtime resources",
+            "Prune the container runtime after validation",
+        )
+        errors = self.validate_text(changed)
+        self.assert_error_contains(errors, "without pruning unrelated projects")
 
     def test_tag_workflow_must_reuse_exact_main_evidence(self) -> None:
         changed = self.valid_document.replace(

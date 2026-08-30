@@ -68,6 +68,52 @@ func TestPromptServiceStartReportsDependencyFailureWithoutPanic(t *testing.T) {
 	require.NoError(t, service.Shutdown(ctx))
 }
 
+func TestPromptServiceBlockingAppliesOnlyToActiveCoveredGroups(t *testing.T) {
+	groupID := int64(7)
+	otherGroupID := int64(8)
+	base := ActiveConfig{
+		RiskControlEnabled: true, Enabled: true, BlockingEnabled: true,
+		GroupIDs: []int64{groupID}, Endpoints: []ActiveEndpoint{{ID: "guard", Enabled: true}},
+	}
+	tests := []struct {
+		name     string
+		store    *fakeConfigStore
+		groupID  *int64
+		expected bool
+	}{
+		{name: "covered blocking group", store: &fakeConfigStore{active: true, cfg: base}, groupID: &groupID, expected: true},
+		{name: "out of scope group", store: &fakeConfigStore{active: true, cfg: base}, groupID: &otherGroupID},
+		{name: "degraded activation", store: &fakeConfigStore{active: true, degraded: true, cfg: base}, groupID: &groupID},
+		{name: "inactive config", store: &fakeConfigStore{cfg: base}, groupID: &groupID},
+		{name: "async only", store: &fakeConfigStore{active: true, cfg: ActiveConfig{RiskControlEnabled: true, Enabled: true, AllGroups: true}}, groupID: &groupID},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			promptService := &PromptService{config: test.store}
+			require.Equal(t, test.expected, promptService.BlockingApplies(Request{GroupID: test.groupID}))
+		})
+	}
+}
+
+func TestApplyRuntimeErrorKeepsTheMostRecentDependencyOrWorkerError(t *testing.T) {
+	workerErrorAt := time.Unix(100, 0).UTC()
+	databaseErrorAt := time.Unix(200, 0).UTC()
+	newerWorkerErrorAt := time.Unix(300, 0).UTC()
+	runtime := RuntimeSnapshot{}
+
+	applyRuntimeError(&runtime, "older_worker_error", "older worker", &workerErrorAt)
+	applyRuntimeError(&runtime, "database_unavailable", "", &databaseErrorAt)
+	require.Equal(t, "database_unavailable", runtime.LastErrorCode)
+	require.Empty(t, runtime.LastErrorMessage)
+	require.Equal(t, databaseErrorAt, *runtime.LastErrorAt)
+
+	applyRuntimeError(&runtime, "newer_worker_error", "newer worker", &newerWorkerErrorAt)
+	applyRuntimeError(&runtime, "stale_dependency_error", "stale dependency", &databaseErrorAt)
+	require.Equal(t, "newer_worker_error", runtime.LastErrorCode)
+	require.Equal(t, "newer worker", runtime.LastErrorMessage)
+	require.Equal(t, newerWorkerErrorAt, *runtime.LastErrorAt)
+}
+
 func TestPromptServiceBlockingAlwaysUsesLatestUserOnly(t *testing.T) {
 	seen := make([]string, 0, 2)
 	evaluator := newGuardEvaluator(PromptScannerFunc(func(_ context.Context, _ ActiveEndpoint, chunk string, _ []string) (*NormalizedResult, error) {

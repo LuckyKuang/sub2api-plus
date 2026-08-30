@@ -21,7 +21,21 @@ pnpm --dir frontend install --frozen-lockfile
 
 ## Development Checks
 
-With GNU Make available, run the repository checks from the root:
+All validation, including focused checks while iterating, must run in the
+platform validation container: Apple Containers on macOS, Docker inside WSL2
+Debian or Ubuntu on Windows, and Docker on Linux. Do not run tests, lint,
+typechecking, builds, policy checks, or other validation on the host.
+After every validation attempt, successful or failed, remove the one-shot
+project validation container, temporary resources, and historical writable
+snapshots. Retain the Sub2API validation image whose deterministic identity
+matches the current resolved Go, Node, pnpm, golangci-lint, and GoReleaser pins.
+Retain dependency caches only for the generation matching that image and the
+current Go and pnpm lock inputs. Remove stale Sub2API validation generations;
+never prune unrelated projects or global runtime, builder, image, volume, or
+system resources.
+
+Inside that container, with GNU Make available, run the repository checks from
+the root:
 
 ```bash
 make test
@@ -47,7 +61,8 @@ python3 skills/compress-cli/scripts/compress_cli.py check AGENTS.md
 python3 skills/compress-cli/tests/test_compress_cli.py
 ```
 
-Run the focused tests for the changed package or component while iterating.
+Run the focused tests for the changed package or component inside the same
+platform validation container while iterating.
 Intermediate branch pushes use the fast path and do not run local tests:
 
 ```bash
@@ -65,7 +80,7 @@ default-branch base and runs the complete matrix inside Apple Containers on
 macOS, Docker inside WSL2 Debian or Ubuntu on Windows, and Docker on Linux.
 Independent backend-test, backend-lint/policy, and frontend lanes run with
 bounded concurrency and report step/lane wall-clock durations; no check is
-removed. Host-side execution of that matrix is forbidden. For diagnosis or a
+removed. Host-side execution of any validation is forbidden. For diagnosis or a
 same-commit timing baseline, pass `--serial` to `check`.
 
 The `release-finalization` profile is not a general fast option. Only
@@ -101,9 +116,15 @@ numeric prefix and create a forward-only migration.
 
 ## Specifications
 
-Create or update an OpenSpec change for cross-cutting features or changes to
-public APIs, persistent data, security boundaries, or multi-module behavior.
-Small fixes and documentation-only changes do not require a new proposal.
+Use a local OpenSpec change to plan cross-cutting features or changes to public
+APIs, persistent data, security boundaries, or multi-module behavior. The
+`openspec/changes/` directory is intentionally untracked and must not be
+included in pull requests. Start from the tracked example under
+`openspec/examples/` when useful.
+
+Record durable behavior in the owning documentation and automated tests. Use
+pull request descriptions and commit history for change rationale. Small fixes
+and documentation-only changes do not require an OpenSpec plan.
 
 ## Pull Requests
 

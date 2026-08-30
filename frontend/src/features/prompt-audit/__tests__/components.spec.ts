@@ -34,6 +34,8 @@ describe('Prompt Audit components', () => {
       queue: { staging: 0, queued: 0, processing: 1, retry: 0, done: 5, failed: 0, active: 1 },
       processed_total: 5, failed_total: 0, enqueued_total: 5, dropped_total: 0,
       extraction_attempted: 7, extraction_succeeded: 5, extraction_empty: 1, extraction_failed: 1,
+      last_processed_at: '2026-07-16T00:05:00Z', last_error_at: '2026-07-16T00:01:00Z',
+      last_error_code: 'prompt_guard_unavailable', last_error_message: 'Prompt Guard unavailable',
       database_status: 'ok', redis_status: 'ok', endpoints: {},
       guard_metrics: { total: 1, allowed: 1, flagged: 0, blocked: 0, unavailable: 0, invalid: 0, timeouts: 0, failovers: 0, bulkhead_full: 0, record_failed: 0 },
     }
@@ -45,6 +47,9 @@ describe('Prompt Audit components', () => {
     expect(wrapper.get('[data-test="extraction-metric-empty"]').text()).toContain('1')
     expect(wrapper.get('[data-test="extraction-metric-failed"]').text()).toContain('1')
     expect(wrapper.get('[data-test="extraction-metric-failed"] dd').classes()).toContain('text-red-700')
+    expect(wrapper.text()).toContain('admin.promptAudit.runtime.lastProcessed')
+    expect(wrapper.text()).toContain('admin.promptAudit.runtime.lastError')
+    expect(wrapper.text()).toContain('prompt_guard_unavailable')
   })
 
   it('edits a saved endpoint with blank-secret keep, explicit clear, replacement, and probe actions', async () => {
@@ -59,6 +64,10 @@ describe('Prompt Audit components', () => {
     const token = wrapper.get<HTMLInputElement>('[aria-label="admin.promptAudit.pool.apiKey"]')
     expect(token.element.value).toBe('')
     expect(token.attributes('placeholder')).toContain('admin.promptAudit.pool.keepSecret')
+    expect(wrapper.text()).toContain('admin.promptAudit.pool.timeoutRange')
+    expect(wrapper.text()).toContain('admin.promptAudit.pool.inputLimitRange')
+    expect(wrapper.text()).toContain('admin.promptAudit.pool.inputLimitBehavior')
+    expect(wrapper.get('[aria-label="admin.promptAudit.pool.inputLimit"]').attributes('max')).toBe('100000')
 
     await wrapper.get<HTMLInputElement>('[aria-label="admin.promptAudit.pool.clearSecret"]').setValue(true)
     await token.setValue('replacement-canary')
@@ -107,8 +116,8 @@ describe('Prompt Audit components', () => {
 
   it('keeps identity fields separate, supports selection, and opens filter deletion from the toolbar', async () => {
     const event: PromptAuditEvent = {
-      id: 1, job_id: 1, decision: 'critical', risk_level: 'critical', action: 'Block', categories: ['pii'], matched_scanners: ['pii'], scanner_scores: { pii: 1 }, scanner_evidence: { pii: 'redacted' }, scanner_backend: 'qwen3guard-openai', scanner_version: '1', guard_endpoint_id: 'guard-1', policy_id: 'priority', policy_version: 1, config_version: 1, chunk_total: 1, latency_ms: 10, issue_summaries: [], created_at: '2026-07-16T00:00:00Z',
-      snapshot: { request_id: 'req-1', user_id: 1, username: 'alice', user_email: 'alice@example.test', api_key_id: 2, api_key_name: 'alice-key', group_id: 3, group_name: 'Alpha', provider: 'openai', endpoint: '/v1/chat/completions', protocol: 'openai_chat', model: 'gpt-test', prompt_hash: 'a'.repeat(64), redacted_preview: 'redacted preview', full_prompt: 'full prompt text', prompt_length: 10, message_count: 1, stage: 'http' },
+      id: 1, job_id: 1, execution_mode: 'async_audit', decision: 'critical', risk_level: 'critical', action: 'Block', categories: ['pii'], matched_scanners: ['pii'], scanner_scores: { pii: 1 }, scanner_evidence: { pii: 'redacted' }, scanner_backend: 'qwen3guard-openai', scanner_version: '1', guard_endpoint_id: 'guard-1', policy_id: 'priority', policy_version: 1, config_version: 1, chunk_total: 1, queue_delay_ms: 2500, input_limit: 100000, matched_chunk_index: 1, latency_ms: 10, issue_summaries: [], created_at: '2026-07-16T00:00:00Z',
+      snapshot: { request_id: 'req-1', client_ip: '203.0.113.42', user_id: 1, username: 'alice', user_email: 'alice@example.test', api_key_id: 2, api_key_name: 'alice-key', group_id: 3, group_name: 'Alpha', provider: 'openai', endpoint: '/v1/chat/completions', protocol: 'openai_chat', model: 'gpt-test', prompt_hash: 'a'.repeat(64), redacted_preview: 'redacted preview', full_prompt: 'full prompt text', full_prompt_truncated: false, prompt_length: 10, message_count: 1, stage: 'http' },
     }
     const wrapper = mount(EventWorkspace, {
       props: { events: [event], total: 1, page: 1, pageSize: 20, filters: emptyEventFilters(), selectedIds: [], loading: false, error: '' },
@@ -119,11 +128,15 @@ describe('Prompt Audit components', () => {
     expect(wrapper.text()).toContain('alice-key')
     expect(wrapper.text()).toContain('admin.promptAudit.decisions.critical · admin.promptAudit.riskLevels.critical')
     expect(wrapper.text()).toContain('admin.promptAudit.scanners.pii')
+    expect(wrapper.text()).toContain('203.0.113.42')
+    expect(wrapper.text()).toContain('2.50 s')
     expect(wrapper.get('[data-test="filter-delete"]').attributes()).not.toHaveProperty('disabled')
     await wrapper.get('[data-test="filter-delete"]').trigger('click')
     expect(wrapper.emitted('preview-delete')).toHaveLength(1)
     await wrapper.get('[aria-label="admin.promptAudit.events.selectEvent"]').setValue(true)
     expect(wrapper.emitted('selection')?.at(-1)?.[0]).toEqual([1])
+    await wrapper.get('[aria-label="admin.promptAudit.events.filterByIp"]').trigger('click')
+    expect((wrapper.emitted('search')?.at(-1)?.[0] as PromptEventFilters).client_ip).toBe('203.0.113.42')
   })
 
   it('resolves delete range presets to an epoch start and a cutoff end', () => {
@@ -224,12 +237,12 @@ describe('Prompt Audit components', () => {
 
   it('shows the full unredacted prompt and structured guard return on the risks tab', async () => {
     const event: PromptAuditEvent = {
-      id: 1, job_id: 1, decision: 'critical', risk_level: 'critical', action: 'Block',
+      id: 1, job_id: 1, execution_mode: 'blocking', decision: 'critical', risk_level: 'critical', action: 'Block',
       categories: ['sexual_content_or_sexual_acts'], matched_scanners: ['sexual_content_or_sexual_acts'],
       scanner_scores: { sexual_content_or_sexual_acts: 1 },
       scanner_evidence: { sexual_content_or_sexual_acts: 'Sexual Content or Sexual Acts' },
       scanner_backend: 'qwen3guard-openai', scanner_version: 'qwen3guard', guard_endpoint_id: 'guard-1',
-      policy_id: 'priority', policy_version: 1, config_version: 1, chunk_total: 1, latency_ms: 12,
+      policy_id: 'priority', policy_version: 1, config_version: 1, chunk_total: 4, queue_delay_ms: 0, input_limit: 100000, matched_chunk_index: 3, latency_ms: 12,
       issue_summaries: [{
         category: 'sexual_content_or_sexual_acts', scanner_id: 'sexual_content_or_sexual_acts',
         title: '性内容或性行为', description: 'Sexual content or sexual acts', severity: 'critical',
@@ -239,10 +252,10 @@ describe('Prompt Audit components', () => {
       }],
       created_at: '2026-07-16T00:00:00Z',
       snapshot: {
-        request_id: 'req-1', user_id: 1, username: 'alice', user_email: 'alice@example.test',
+        request_id: 'req-1', client_ip: '203.0.113.42', user_id: 1, username: 'alice', user_email: 'alice@example.test',
         api_key_id: 2, api_key_name: 'alice-key', group_id: 3, group_name: 'Alpha', provider: 'openai',
         endpoint: '/v1/chat/completions', protocol: 'openai_chat', model: 'gpt-test',
-        prompt_hash: 'a'.repeat(64), redacted_preview: 'redacted prompt body', full_prompt: 'complete unmasked prompt body', prompt_length: 20,
+        prompt_hash: 'a'.repeat(64), redacted_preview: 'redacted prompt body', full_prompt: 'complete unmasked prompt body', full_prompt_truncated: false, prompt_length: 20,
         message_count: 1, stage: 'http',
       },
     }
@@ -264,20 +277,22 @@ describe('Prompt Audit components', () => {
     expect(wrapper.get('[data-test="risk-guard-return"]').text()).toContain('"decision": "admin.promptAudit.decisions.critical"')
     expect(wrapper.get('[data-test="risk-guard-return"]').text()).toContain('admin.promptAudit.scanners.sexual_content_or_sexual_acts')
     expect(wrapper.get('[data-test="risk-issue"]').text()).toContain('admin.promptAudit.scanners.sexual_content_or_sexual_acts')
+
+    expect(wrapper.find('[data-test="download-prompt"]').exists()).toBe(false)
   })
 
   it('falls back to the redacted preview for events stored before full prompts were kept', async () => {
     const event: PromptAuditEvent = {
-      id: 2, job_id: 2, decision: 'flag', risk_level: 'medium', action: 'Warn',
+      id: 2, job_id: 2, execution_mode: 'async_audit', decision: 'flag', risk_level: 'medium', action: 'Warn',
       categories: ['pii'], matched_scanners: ['pii'], scanner_scores: {}, scanner_evidence: {},
       scanner_backend: 'qwen3guard-openai', scanner_version: '1', guard_endpoint_id: 'guard-1',
       policy_id: 'priority', policy_version: 1, config_version: 1, chunk_total: 1, latency_ms: 5,
       issue_summaries: [], created_at: '2026-07-16T00:00:00Z',
       snapshot: {
-        request_id: 'req-2', user_id: 1, username: 'bob', user_email: '', api_key_id: 2,
+        request_id: 'req-2', client_ip: '', user_id: 1, username: 'bob', user_email: '', api_key_id: 2,
         api_key_name: 'bob-key', group_id: 3, group_name: 'Alpha', provider: 'openai',
         endpoint: '/v1/chat/completions', protocol: 'openai_chat', model: 'gpt-test',
-        prompt_hash: 'b'.repeat(64), redacted_preview: 'legacy redacted preview', full_prompt: '', prompt_length: 20,
+        prompt_hash: 'b'.repeat(64), redacted_preview: 'legacy redacted preview', full_prompt: '', full_prompt_truncated: true, prompt_length: 20,
         message_count: 1, stage: 'http',
       },
     }
@@ -288,5 +303,7 @@ describe('Prompt Audit components', () => {
     const riskTab = wrapper.findAll('[role="tab"]').find((tab) => tab.text().includes('admin.promptAudit.events.tabs.risks'))
     await riskTab!.trigger('click')
     expect(wrapper.get('[data-test="risk-prompt-full"]').text()).toContain('legacy redacted preview')
+    expect(wrapper.get('[data-test="prompt-truncated-warning"]').text()).toContain('admin.promptAudit.events.promptTruncatedWarning')
+    expect(wrapper.find('[data-test="download-prompt"]').exists()).toBe(false)
   })
 })

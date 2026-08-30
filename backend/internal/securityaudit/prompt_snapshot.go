@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"net"
 	"regexp"
 	"strings"
 	"unicode/utf8"
@@ -84,17 +85,18 @@ func extractPromptSnapshotWithDiagnostics(req Request, latestTurnOnly bool) (Pro
 	}
 	scanText, metadataText := buildPrioritizedScanText(segments)
 	digest := sha256.Sum256([]byte(metadataText))
+	fullPrompt := BuildFullPrompt(metadataText, DefaultFullPromptMaxRunes)
 	stage := strings.TrimSpace(req.Stage)
 	if stage == "" {
 		stage = "http"
 	}
 	return PromptSnapshot{
-		RequestID: req.RequestID, UserID: req.UserID, UsernameSnapshot: req.Username,
+		RequestID: req.RequestID, ClientIP: normalizePromptClientIP(req.ClientIP), UserID: req.UserID, UsernameSnapshot: req.Username,
 		UserEmailSnapshot: req.UserEmail, APIKeyID: req.APIKeyID, APIKeyNameSnapshot: req.APIKeyName,
 		GroupID: cloneInt64Ptr(req.GroupID), GroupName: req.GroupName, Provider: req.Provider,
 		Endpoint: req.Endpoint, Protocol: req.Protocol, Model: req.Model,
 		PromptHash: hex.EncodeToString(digest[:]), RedactedPreview: BuildPromptPreview(metadataText, DefaultPromptPreviewMaxRunes),
-		FullPrompt:   BuildFullPrompt(metadataText, DefaultFullPromptMaxRunes),
+		FullPrompt: fullPrompt, FullPromptTruncated: utf8.RuneCountInString(fullPrompt) < utf8.RuneCountInString(metadataText),
 		PromptLength: utf8.RuneCountInString(metadataText), MessageCount: len(segments), Stage: stage,
 		ScanText: scanText, BodyBytes: len(req.Body),
 	}, diagnostic, nil
@@ -171,11 +173,6 @@ func promptAuditAllowsRolelessMessage(protocol string) bool {
 // DefaultPromptPreviewMaxRunes caps how much sanitized prompt text may be
 // considered before BuildPromptPreview withholds the majority for storage/UI.
 const DefaultPromptPreviewMaxRunes = 96
-
-// DefaultFullPromptMaxRunes caps how much unredacted prompt text is persisted
-// on an audit event for admin review. It is deliberately generous so realistic
-// prompts are kept intact while bounding per-row storage.
-const DefaultFullPromptMaxRunes = 65536
 
 func normalizeSegmentsLatestUserFirst(values []promptSegment) []string {
 	normalized := normalizedPromptSegments(values)
@@ -388,20 +385,35 @@ func BuildPromptPreview(value string, maxRunes int) string {
 	return preview
 }
 
-// BuildFullPrompt returns the complete prompt text for audit-event storage and
-// admin review, without redaction. NUL bytes are stripped because PostgreSQL
-// TEXT rejects them, and the result is capped at maxRunes.
+// DefaultFullPromptMaxRunes bounds the existing admin-only event content.
+const DefaultFullPromptMaxRunes = 65536
+
+// BuildFullPrompt returns bounded event text for administrator review. NUL
+// bytes are stripped because PostgreSQL TEXT rejects them.
 func BuildFullPrompt(value string, maxRunes int) string {
 	if maxRunes <= 0 {
 		maxRunes = DefaultFullPromptMaxRunes
 	}
 	value = strings.ReplaceAll(value, "\x00", "")
-	return TrimRunes(strings.TrimSpace(value), maxRunes)
+	value = strings.TrimSpace(value)
+	runes := []rune(value)
+	if len(runes) <= maxRunes {
+		return value
+	}
+	return string(runes[:maxRunes])
 }
 
 // FullPromptFromScanText reconstructs display text from the worker payload.
 func FullPromptFromScanText(scanText string) string {
 	return BuildFullPrompt(strings.ReplaceAll(scanText, promptAuditPrioritySeparator, "\n\n"), DefaultFullPromptMaxRunes)
+}
+
+func normalizePromptClientIP(value string) string {
+	parsed := net.ParseIP(strings.TrimSpace(value))
+	if parsed == nil {
+		return ""
+	}
+	return parsed.String()
 }
 
 func TrimRunes(value string, limit int) string {

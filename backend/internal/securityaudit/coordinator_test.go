@@ -15,10 +15,12 @@ type fakeLegacyEngine struct {
 	decision *LegacyDecision
 	err      error
 	calls    atomic.Int64
+	last     Request
 }
 
-func (f *fakeLegacyEngine) Check(context.Context, Request) (*LegacyDecision, error) {
+func (f *fakeLegacyEngine) Check(_ context.Context, req Request) (*LegacyDecision, error) {
 	f.calls.Add(1)
+	f.last = req
 	return f.decision, f.err
 }
 
@@ -28,9 +30,11 @@ type fakePromptEngine struct {
 	err       error
 	enqueues  atomic.Int64
 	evaluates atomic.Int64
+	applies   bool
 }
 
-func (f *fakePromptEngine) EffectiveMode() Mode { return f.mode }
+func (f *fakePromptEngine) EffectiveMode() Mode          { return f.mode }
+func (f *fakePromptEngine) BlockingApplies(Request) bool { return f.applies }
 func (f *fakePromptEngine) Enqueue(context.Context, Request) error {
 	f.enqueues.Add(1)
 	return f.err
@@ -38,6 +42,23 @@ func (f *fakePromptEngine) Enqueue(context.Context, Request) error {
 func (f *fakePromptEngine) Evaluate(context.Context, Request) (*PromptDecision, error) {
 	f.evaluates.Add(1)
 	return f.decision, f.err
+}
+
+func TestCoordinatorMarksLegacyTextAuthorityOnlyWhenPromptCoversRequest(t *testing.T) {
+	legacy := &fakeLegacyEngine{decision: &LegacyDecision{Allowed: true}}
+	prompt := &fakePromptEngine{
+		mode: ModeBlocking, applies: true,
+		decision: &PromptDecision{Kind: DecisionAllow, AllowNextStage: true},
+	}
+	decision := NewCoordinator(legacy, prompt).Check(context.Background(), Request{APIKeyID: 7})
+	require.True(t, decision.AllowNextStage)
+	require.True(t, legacy.last.PromptTextAuthority)
+
+	legacy = &fakeLegacyEngine{decision: &LegacyDecision{Allowed: true}}
+	prompt.applies = false
+	decision = NewCoordinator(legacy, prompt).Check(context.Background(), Request{APIKeyID: 7})
+	require.True(t, decision.AllowNextStage)
+	require.False(t, legacy.last.PromptTextAuthority)
 }
 
 func TestCoordinatorModesAndPriority(t *testing.T) {
@@ -103,6 +124,7 @@ func TestCoordinatorPromptPolicyBlockWinsLegacyUnavailable(t *testing.T) {
 
 	require.Equal(t, DecisionBlock, decision.Kind)
 	require.Equal(t, ErrorCodeBlocked, decision.ErrorCode)
+	require.Equal(t, "提示词安全审计拒绝了该请求，请调整输入后重试", decision.ClientMessage)
 	require.False(t, decision.AllowNextStage)
 }
 

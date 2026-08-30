@@ -34,6 +34,7 @@ export default {
     },
     detail: {
       title: '异步图像任务详情', taskId: '任务 ID', prompt: '提示词', error: '错误信息',
+      requestedImages: '请求数量', actualImages: '实际数量', countMismatch: '请求生成 {requested} 张，上游实际返回 {actual} 张。任务已保留成功生成的图片。',
       pending: '任务仍在生成中', noImage: '任务已完成，但没有可展示的图片地址',
     },
     delete: {

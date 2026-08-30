@@ -118,6 +118,14 @@ func (s *PromptService) EffectiveMode() Mode {
 	return s.config.EffectiveMode()
 }
 
+func (s *PromptService) BlockingApplies(req Request) bool {
+	if s == nil || s.config == nil || s.config.BlockingActivationDegraded() {
+		return false
+	}
+	cfg, ok := s.config.Active()
+	return ok && cfg.EffectiveMode() == ModeBlocking && cfg.IncludesGroup(req.GroupID)
+}
+
 func (s *PromptService) Enqueue(_ context.Context, req Request) error {
 	if s == nil || s.EffectiveMode() != ModeAsync {
 		return nil
@@ -231,13 +239,16 @@ func (s *PromptService) Runtime(ctx context.Context) RuntimeSnapshot {
 		stats, err := s.repo.QueueStats(ctx)
 		if err != nil {
 			runtime.DatabaseStatus = "error"
-			runtime.LastErrorCode = "database_unavailable"
+			now := s.clock.Now()
+			applyRuntimeError(&runtime, "database_unavailable", "", &now)
 			logPromptRuntimeFailure(EventProcessFailed, "queue_stats_failed")
 		} else {
 			runtime.Queue = stats
 		}
 	} else {
 		runtime.DatabaseStatus = "error"
+		now := s.clock.Now()
+		applyRuntimeError(&runtime, "database_unavailable", "", &now)
 	}
 	payloadUnavailable := s.payload == nil
 	if !payloadUnavailable {
@@ -245,9 +256,8 @@ func (s *PromptService) Runtime(ctx context.Context) RuntimeSnapshot {
 	}
 	if payloadUnavailable {
 		runtime.RedisStatus = "error"
-		if runtime.LastErrorCode == "" {
-			runtime.LastErrorCode = "payload_store_unavailable"
-		}
+		now := s.clock.Now()
+		applyRuntimeError(&runtime, "payload_store_unavailable", "", &now)
 		logPromptRuntimeFailure(EventProcessFailed, "payload_store_unavailable")
 	}
 	activeWorkers, processed, failed, heartbeat, lastProcessed, workerCode, workerMessage := s.runner.Snapshot()
@@ -262,7 +272,7 @@ func (s *PromptService) Runtime(ctx context.Context) RuntimeSnapshot {
 	}
 	runtime.WorkerHeartbeatAt, runtime.LastProcessedAt = heartbeat, lastProcessed
 	if workerCode != "" {
-		runtime.LastErrorCode, runtime.LastErrorMessage = workerCode, workerMessage
+		applyRuntimeError(&runtime, workerCode, workerMessage, s.runner.LastErrorAt())
 	}
 	if mode != ModeOff {
 		runtime.ProcessStatus = "running"
@@ -274,6 +284,20 @@ func (s *PromptService) Runtime(ctx context.Context) RuntimeSnapshot {
 		}
 	}
 	return runtime
+}
+
+func applyRuntimeError(runtime *RuntimeSnapshot, code, message string, occurredAt *time.Time) {
+	if runtime == nil || code == "" {
+		return
+	}
+	if runtime.LastErrorCode != "" {
+		if occurredAt == nil || runtime.LastErrorAt != nil && !occurredAt.After(*runtime.LastErrorAt) {
+			return
+		}
+	}
+	runtime.LastErrorCode = code
+	runtime.LastErrorMessage = message
+	runtime.LastErrorAt = occurredAt
 }
 
 type ProbeRequest struct {

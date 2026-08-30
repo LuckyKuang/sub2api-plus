@@ -101,6 +101,32 @@ func TestImageTaskServiceStreamDownloadZipUsesStoredKeyAfterConfigChange(t *test
 	require.Equal(t, "image-1.png", reader.File[0].Name)
 }
 
+func TestImageTaskServiceStreamDownloadZipFallsBackToDurableHistory(t *testing.T) {
+	store := &imageTaskMemoryStore{}
+	history := &imageTaskMemoryHistory{}
+	storage := &imageTaskDownloadStorage{}
+	svc := NewImageTaskServiceWithUploader(store, NewImageResultUploader(storage, "images/", false, 0, nil), time.Hour, time.Minute)
+	svc.SetHistoryRepository(history)
+	owner := ImageTaskOwner{UserID: 11, APIKeyID: 22}
+	created, err := svc.CreateWithMetadata(context.Background(), owner, ImageTaskMetadata{RequestedImages: 2})
+	require.NoError(t, err)
+
+	imageOne := append([]byte(nil), pngBytes...)
+	imageTwo := append(append([]byte(nil), pngBytes...), []byte("two")...)
+	result := []byte(`{"data":[{"b64_json":"` + base64.StdEncoding.EncodeToString(imageOne) + `"},{"b64_json":"` + base64.StdEncoding.EncodeToString(imageTwo) + `"}]}`)
+	require.NoError(t, svc.Complete(context.Background(), created.ID, http.StatusOK, result))
+	store.task = nil
+
+	var archive bytes.Buffer
+	count, err := svc.StreamDownloadZip(context.Background(), owner, created.ID, &archive)
+	require.NoError(t, err)
+	require.Equal(t, 2, count)
+	require.NotEmpty(t, archive.Bytes())
+
+	_, err = svc.StreamDownloadZip(context.Background(), ImageTaskOwner{UserID: owner.UserID, APIKeyID: owner.APIKeyID + 1}, created.ID, io.Discard)
+	require.ErrorIs(t, err, ErrImageTaskNotFound)
+}
+
 func TestImageTaskServiceCompletesAndDownloadsAfterSubmissionsAreDisabled(t *testing.T) {
 	store := &imageTaskMemoryStore{}
 	storage := &imageTaskDownloadStorage{}

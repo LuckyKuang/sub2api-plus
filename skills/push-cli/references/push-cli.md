@@ -77,6 +77,14 @@ neither scheduling mode can publish a partial proof.
 
 Apple Containers reports Docker Compose parsing as not applicable. WSL2 Docker
 and Linux Docker must parse `deploy/docker-compose.dev.yml` successfully.
+After each validation attempt, successful or failed, validation containers use
+`--rm`, so their writable VM/container snapshots are removed. The launcher
+retains the `sub2api-validation:<toolchain-digest>` image matching the resolved
+Go, Node, pnpm, golangci-lint, and GoReleaser pins. Dependency caches use a
+separate generation derived from that image plus the current Go and pnpm lock
+inputs. Cleanup removes only stale Sub2API validation image and cache
+generations and does not run a global container, image, builder, volume, or
+system prune.
 
 ## Recovery
 

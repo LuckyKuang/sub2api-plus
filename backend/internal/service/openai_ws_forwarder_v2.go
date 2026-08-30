@@ -384,7 +384,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		// WSv2 writes SSE directly and therefore bypasses the normal OpenAI
 		// response helpers. Apply the local Codex quota view before its first
 		// downstream write.
-		s.applyCodexLocalGroupQuotaHeaders(c)
+		s.finalizeCodexClientQuotaHeaders(c.Writer.Header(), c, account)
 		c.Header("Content-Type", "text/event-stream")
 		c.Header("Cache-Control", "no-cache")
 		c.Header("Connection", "keep-alive")
@@ -532,6 +532,11 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		if normalized, changed := normalizeCompletedImageGenerationStatus(message); changed {
 			message = normalized
 		}
+		var emitQuotaEvent bool
+		message, emitQuotaEvent = s.finalizeCodexClientQuotaEvent(message, c, account)
+		if !emitQuotaEvent {
+			continue
+		}
 
 		eventType, eventResponseID, responseField := parseOpenAIWSEventEnvelope(message)
 		if eventType == "" {
@@ -660,7 +665,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 				emitStreamMessage(message, true)
 			}
 			if !reqStream {
-				s.applyCodexLocalGroupQuotaHeaders(c)
+				s.finalizeCodexClientQuotaHeaders(c.Writer.Header(), c, account)
 				c.JSON(statusCode, gin.H{
 					"error": gin.H{
 						"type":    "upstream_error",
@@ -743,7 +748,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 			responseID = strings.TrimSpace(gjson.GetBytes(finalResponse, "id").String())
 		}
 
-		s.applyCodexLocalGroupQuotaHeaders(c)
+		s.finalizeCodexClientQuotaHeaders(c.Writer.Header(), c, account)
 		c.Data(http.StatusOK, "application/json", finalResponse)
 	} else {
 		flushStreamWriter(true)

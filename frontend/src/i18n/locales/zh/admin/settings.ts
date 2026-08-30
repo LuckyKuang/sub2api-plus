@@ -511,7 +511,7 @@ export default {
         codexLegacyClientProfileCompatibility: '旧版 Codex 客户端档案兼容模式',
         codexLegacyClientProfileCompatibilityHint: '默认关闭。仅临时允许 codex_app、codex_exec、codex_sdk_ts、codex_vscode_copilot 用于配置的出站身份及开启「仅允许 Codex 官方客户端档案」的账号；它们始终是旧版兼容档案，不会被标记为官方档案，仍必须精确匹配 User-Agent、originator、语义化版本和已知 Codex 证据请求头。',
         openaiCodexLocalGroupQuota: 'Codex 本地分组额度',
-        openaiCodexLocalGroupQuotaHint: '向 Codex 展示当前 API Key 所属订阅的 5 小时和 7 天额度，而不是所选上游账号的额度。关闭时保持现有上游额度透传行为。',
+        openaiCodexLocalGroupQuotaHint: '向 Codex 展示当前 API Key 所属订阅的 5 小时和 7 天额度，即使所选账号开启自动透传也会覆盖。关闭后，仅自动透传账号会展示真实账号额度，其他账号不返回额度数据。',
         openaiCodexClientVersion: 'Codex 客户端版本号',
         openaiCodexClientVersionPlaceholder: '留空则跟随自动同步',
         openaiCodexClientVersionHint: '网关对上游声明的 Codex 客户端版本号，User-Agent 与 version 头同源使用。留空表示使用自动同步到的官方最新稳定版；填写后固定为该版本，不再跟随同步。',

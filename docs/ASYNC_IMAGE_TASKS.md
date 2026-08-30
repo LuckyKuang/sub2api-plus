@@ -155,6 +155,8 @@ For URL responses, `image_url` mirrors the first `data[].url` for simple clients
   "id": "imgtask_0123456789abcdef",
   "task_id": "imgtask_0123456789abcdef",
   "object": "image.generation.task",
+  "requested_images": 2,
+  "actual_images": 0,
   "status": "failed",
   "http_status": 502,
   "error": {
@@ -167,9 +169,16 @@ For URL responses, `image_url` mirrors the first `data[].url` for simple clients
 }
 ```
 
-All submit and poll responses include `Cache-Control: no-store`, preventing a CDN from caching the `processing` state. Tasks and results expire 24 hours after their latest state update. A task executes for at most 30 minutes.
+All submit and poll responses include `Cache-Control: no-store`, preventing a CDN from caching the `processing` state. `requested_images` records the accepted `n` value and `actual_images` records the number of completed result images. A short upstream result remains completed and retains every successful image; the user console shows the mismatch instead of silently presenting it as a fulfilled count. Tasks and results expire 24 hours after their latest state update. A task executes for at most 30 minutes.
 
 Task ownership is scoped to both user and API key. Unknown task IDs and IDs owned by another key both return `404`, avoiding task-existence disclosure. Polling remains available when the completed generation used the key's remaining balance; normal authentication, disabled-key, user, IP, and group checks still apply.
+
+Completed ZIP downloads first use Redis execution state and fall back to the
+owner-scoped PostgreSQL history row when that execution key has expired. The
+history stores the exact object keys as private server metadata; public and
+administrator task responses never expose those keys. The fallback preserves
+the original user plus API-key ownership check and does not reconstruct object
+paths from the currently configured prefix.
 
 ## Delete a failed task
 

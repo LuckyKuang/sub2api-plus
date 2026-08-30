@@ -67,11 +67,7 @@ func isModerationDirectUser(protocol, role string, source auditcontent.Source, c
 }
 
 func moderationUserText(text string) string {
-	text = strings.TrimSpace(text)
-	if text == "" || strings.Contains(text, "<system-reminder>") {
-		return ""
-	}
-	return text
+	return strings.TrimSpace(text)
 }
 
 func normalizeModerationImages(images []string) []string {

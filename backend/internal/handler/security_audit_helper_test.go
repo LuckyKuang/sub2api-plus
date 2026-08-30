@@ -27,6 +27,17 @@ func TestCachesSecurityAuditCompletionSkipsWebSocketStages(t *testing.T) {
 	require.False(t, isSecurityAuditWebSocketStage("http"))
 }
 
+func TestBuildSecurityAuditRequestCapturesClientIP(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	c.Request.RemoteAddr = "203.0.113.42:4321"
+
+	request := buildSecurityAuditRequest(c, nil, middleware2.AuthSubject{UserID: 7}, "openai_responses", "gpt-test", []byte(`{"input":"hi"}`), "http")
+	require.Equal(t, "203.0.113.42", request.ClientIP)
+}
+
 func TestRunSecurityAuditDoesNotSkipSubsequentWebSocketTurns(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	engine := &turnCountingEngine{mode: securityaudit.ModeAsync}

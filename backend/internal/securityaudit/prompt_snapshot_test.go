@@ -97,12 +97,29 @@ func TestSnapshotFullPromptKeepsUnredactedText(t *testing.T) {
 	require.Equal(t, snapshot.FullPrompt, snapshot.Redacted().FullPrompt)
 }
 
-func TestBuildFullPromptStripsNULAndTruncates(t *testing.T) {
-	require.Equal(t, "abcd", BuildFullPrompt("ab\x00cd", 0))
-	long := strings.Repeat("长", DefaultFullPromptMaxRunes+10)
-	trimmed := BuildFullPrompt(long, DefaultFullPromptMaxRunes)
-	require.Equal(t, DefaultFullPromptMaxRunes+1, utf8.RuneCountInString(trimmed))
-	require.True(t, strings.HasSuffix(trimmed, "…"))
+func TestSnapshotBoundsLongPromptAndNormalizesClientIP(t *testing.T) {
+	content := strings.Repeat("长", 70000)
+	body, err := json.Marshal(map[string]any{"messages": []map[string]string{{"role": "user", "content": content}}})
+	require.NoError(t, err)
+
+	snapshot, err := ExtractPromptSnapshot(Request{
+		Protocol: "openai_chat_completions",
+		ClientIP: "2001:0db8:0:0:0:0:0:1",
+		Body:     body,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "2001:db8::1", snapshot.ClientIP)
+	require.Less(t, utf8.RuneCountInString(snapshot.FullPrompt), utf8.RuneCountInString(content))
+	require.Equal(t, 70000, snapshot.PromptLength)
+	require.True(t, snapshot.FullPromptTruncated)
+}
+
+func TestBuildFullPromptStripsNULAndRetainsBound(t *testing.T) {
+	require.Equal(t, "abcd", BuildFullPrompt("ab\x00cd", DefaultFullPromptMaxRunes))
+	long := strings.Repeat("长", 65546)
+	stored := BuildFullPrompt(long, DefaultFullPromptMaxRunes)
+	require.Equal(t, DefaultFullPromptMaxRunes, utf8.RuneCountInString(stored))
+	require.Equal(t, strings.Repeat("长", DefaultFullPromptMaxRunes), stored)
 }
 
 func TestFullPromptFromScanTextRestoresMultiSegmentLayout(t *testing.T) {
@@ -359,7 +376,7 @@ func TestPromptSnapshotAuditsConversationTextAndSpecializedInputs(t *testing.T) 
 			want:     []string{"old prompt"},
 			omit:     []string{"current external result", "run javascript"},
 		},
-		{name: "alpha search", protocol: "openai_alpha_search", body: `{"commands":{"search_query":[{"q":"first query"},{"q":"second query"}]}}`, want: []string{"second query", "first query"}},
+		{name: "alpha search", protocol: "openai_alpha_search", body: `{"commands":{"search_query":[{"q":"first query"},{"q":"second query"}]}}`, want: []string{`{"search_query":[{"q":"first query"},{"q":"second query"}]}`, "first query", "second query"}},
 		{name: "embeddings", protocol: "openai_embeddings", body: `{"input":["first text","second text"]}`, want: []string{"second text", "first text"}},
 		{name: "nested websocket", protocol: "openai_responses", body: `{"type":"response.create","response":{"input":"nested ws input"}}`, want: []string{"nested ws input"}},
 	}

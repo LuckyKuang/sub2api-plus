@@ -277,7 +277,7 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
 		observer = beginUpstreamResponseModelObservation(c)
 	}
 	requestID := resp.Header.Get("x-request-id")
-	writeStreamHeaders := s.newStreamHeaderWriter(c, resp.Header)
+	writeStreamHeaders := s.newStreamHeaderWriter(c, resp.Header, account)
 	scanner := s.newUpstreamSSEScanner(resp.Body)
 
 	var usage OpenAIUsage
@@ -478,7 +478,7 @@ func (s *OpenAIGatewayService) bufferRawChatCompletions(
 	if s.responseHeaderFilter != nil {
 		responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
 	}
-	s.applyCodexLocalGroupQuotaHeaders(c)
+	s.finalizeCodexClientQuotaHeaders(c.Writer.Header(), c, account)
 	if ct := resp.Header.Get("Content-Type"); ct != "" {
 		c.Writer.Header().Set("Content-Type", ct)
 	} else {

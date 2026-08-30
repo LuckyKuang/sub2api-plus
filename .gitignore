@@ -137,7 +137,7 @@ scripts
 !skills/release-cli/scripts/
 !skills/release-cli/scripts/**
 .code-review-state
-#openspec/
+/openspec/changes/
 code-reviews/
 backend/cmd/server/server
 deploy/docker-compose.override.yml

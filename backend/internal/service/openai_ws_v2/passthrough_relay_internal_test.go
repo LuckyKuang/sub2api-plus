@@ -108,6 +108,51 @@ func TestRunClientToUpstream_ErrorPaths(t *testing.T) {
 func TestRunUpstreamToClient_ErrorAndDropPaths(t *testing.T) {
 	t.Parallel()
 
+	t.Run("transform replaces and suppresses messages", func(t *testing.T) {
+		t.Parallel()
+
+		exitCh := make(chan relayExitSignal, 1)
+		dropped := &atomic.Int64{}
+		written := make([][]byte, 0, 1)
+		runUpstreamToClient(
+			context.Background(),
+			newPassthroughTestFrameConn([]passthroughTestFrame{
+				{msgType: coderws.MessageText, payload: []byte(`{"type":"codex.rate_limits","drop":true}`)},
+				{msgType: coderws.MessageText, payload: []byte(`{"type":"codex.rate_limits","replace":true}`)},
+			}, true),
+			func(_ coderws.MessageType, payload []byte) error {
+				written = append(written, append([]byte(nil), payload...))
+				return nil
+			},
+			time.Now(),
+			time.Now,
+			&relayState{},
+			nil,
+			nil,
+			func(_ coderws.MessageType, payload []byte) ([]byte, bool, error) {
+				if gjson.GetBytes(payload, "drop").Bool() {
+					return nil, false, nil
+				}
+				return []byte(`{"type":"codex.rate_limits","source":"local"}`), true, nil
+			},
+			nil,
+			nil,
+			nil,
+			nil,
+			&atomic.Bool{},
+			nil,
+			dropped,
+			func() {},
+			nil,
+			exitCh,
+		)
+
+		sig := <-exitCh
+		require.Equal(t, "read_upstream", sig.stage)
+		require.Equal(t, int64(1), dropped.Load())
+		require.Equal(t, [][]byte{[]byte(`{"type":"codex.rate_limits","source":"local"}`)}, written)
+	})
+
 	t.Run("read upstream eof", func(t *testing.T) {
 		t.Parallel()
 
@@ -121,6 +166,7 @@ func TestRunUpstreamToClient_ErrorAndDropPaths(t *testing.T) {
 			time.Now(),
 			time.Now,
 			&relayState{},
+			nil,
 			nil,
 			nil,
 			nil,
@@ -160,6 +206,7 @@ func TestRunUpstreamToClient_ErrorAndDropPaths(t *testing.T) {
 			nil,
 			nil,
 			nil,
+			nil,
 			drop,
 			nil,
 			nil,
@@ -190,6 +237,7 @@ func TestRunUpstreamToClient_ErrorAndDropPaths(t *testing.T) {
 			time.Now(),
 			time.Now,
 			&relayState{},
+			nil,
 			nil,
 			nil,
 			nil,

@@ -190,13 +190,15 @@ func (h *AsyncImageHandler) Submit(c *gin.Context) {
 	c.Header("Location", pollURL)
 	c.Header("Retry-After", "3")
 	c.JSON(http.StatusAccepted, gin.H{
-		"id":         task.ID,
-		"task_id":    task.TaskID,
-		"object":     task.Object,
-		"status":     task.Status,
-		"created_at": task.CreatedAt,
-		"expires_at": task.ExpiresAt,
-		"poll_url":   pollURL,
+		"id":               task.ID,
+		"task_id":          task.TaskID,
+		"object":           task.Object,
+		"requested_images": task.RequestedImages,
+		"actual_images":    task.ActualImages,
+		"status":           task.Status,
+		"created_at":       task.CreatedAt,
+		"expires_at":       task.ExpiresAt,
+		"poll_url":         pollURL,
 	})
 
 	go h.run(task.ID, platform, taskCtx, recorder, cancel, h.asyncImageOpsSnapshot(c, apiKey, platform, task, metadata))
@@ -579,15 +581,15 @@ func (h *AsyncImageHandler) taskMetadata(c *gin.Context, platform string, body [
 	}
 	if platform == service.PlatformGrok {
 		parsed := service.ParseGrokMediaRequest(c.GetHeader("Content-Type"), body)
-		return service.ImageTaskMetadata{RequestType: requestType, Model: parsed.Model, PromptPreview: parsed.Prompt}
+		return service.ImageTaskMetadata{RequestType: requestType, Model: parsed.Model, PromptPreview: parsed.Prompt, RequestedImages: parsed.N}
 	}
 	if h != nil && h.openAI != nil && h.openAI.gatewayService != nil {
 		parsed, err := h.openAI.gatewayService.ParseOpenAIImagesRequest(c, body)
 		if err == nil && parsed != nil {
-			return service.ImageTaskMetadata{RequestType: requestType, Model: parsed.Model, PromptPreview: parsed.Prompt}
+			return service.ImageTaskMetadata{RequestType: requestType, Model: parsed.Model, PromptPreview: parsed.Prompt, RequestedImages: parsed.N}
 		}
 	}
-	return service.ImageTaskMetadata{RequestType: requestType}
+	return service.ImageTaskMetadata{RequestType: requestType, RequestedImages: h.requestedImages(c, platform, body)}
 }
 
 func (h *AsyncImageHandler) executeWithGateway(platform string, c *gin.Context) {

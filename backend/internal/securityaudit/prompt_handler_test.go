@@ -209,6 +209,7 @@ func TestPromptAdminRejectsInvalidEventIDsTimesAndPagination(t *testing.T) {
 		{http.MethodGet, "/admin/prompt-audit/events/not-a-number", nil, "prompt_audit_invalid_event_id"},
 		{http.MethodDelete, "/admin/prompt-audit/events/-1", nil, "prompt_audit_invalid_event_id"},
 		{http.MethodGet, "/admin/prompt-audit/events?group_id=bad", nil, "prompt_audit_invalid_filter_id"},
+		{http.MethodGet, "/admin/prompt-audit/events?client_ip=not-an-ip", nil, "prompt_audit_invalid_client_ip"},
 		{http.MethodGet, "/admin/prompt-audit/events?start_at=not-time", nil, "prompt_audit_invalid_time"},
 		{http.MethodGet, "/admin/prompt-audit/events?page=0", nil, "prompt_audit_invalid_pagination"},
 		{http.MethodPost, "/admin/prompt-audit/events/batch-delete", map[string]any{"ids": []int64{1, -2}}, "prompt_audit_invalid_event_id"},
@@ -217,6 +218,17 @@ func TestPromptAdminRejectsInvalidEventIDsTimesAndPagination(t *testing.T) {
 		require.Equalf(t, http.StatusBadRequest, response.Code, "%s %s", tc.method, tc.path)
 		require.Contains(t, response.Body.String(), tc.reason)
 	}
+}
+
+func TestPromptAdminNormalizesClientIPFilter(t *testing.T) {
+	service := &fakePromptAdminService{list: func(_ context.Context, filter EventFilter, page, pageSize int) (*EventPage, error) {
+		require.Equal(t, "2001:db8::1", filter.ClientIP)
+		require.Equal(t, 1, page)
+		require.Equal(t, 20, pageSize)
+		return &EventPage{}, nil
+	}}
+	response := promptAdminRequest(t, promptAdminRouter(service), http.MethodGet, "/admin/prompt-audit/events?client_ip=2001%3A0db8%3A%3A1", nil)
+	require.Equal(t, http.StatusOK, response.Code)
 }
 
 func validHandlerUpdateRequest(token string) UpdateConfigRequest {

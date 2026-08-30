@@ -2,6 +2,7 @@ import { apiClient } from '../client'
 
 export type ModerationMode = 'off' | 'observe' | 'pre_block'
 export type KeywordBlockingMode = 'keyword_only' | 'keyword_and_api' | 'api_only'
+export type ContentModerationTextAPIMode = 'auto' | 'blocking' | 'observe' | 'off'
 export type ContentModerationModelFilterType = 'all' | 'include' | 'exclude'
 
 export interface ContentModerationModelFilter {
@@ -20,6 +21,7 @@ export interface ContentModerationConfig {
   api_key_count: number
   api_key_masks: string[]
   api_key_statuses: ContentModerationAPIKeyStatus[]
+  endpoints: ContentModerationEndpoint[]
   timeout_ms: number
   sample_rate: number
   all_groups: boolean
@@ -40,9 +42,56 @@ export interface ContentModerationConfig {
   pre_hash_check_enabled: boolean
   blocked_keywords: string[]
   keyword_blocking_mode: KeywordBlockingMode
+  text_api_mode: ContentModerationTextAPIMode
   model_filter: ContentModerationModelFilter
   cyber_policy_exclude_from_ban_count: boolean
   cyber_policy_auto_ban_enabled: boolean
+}
+
+export type ContentModerationEndpointStatus = 'healthy' | 'degraded' | 'error' | 'cooldown' | 'manual_pause' | 'half_open' | 'disabled'
+
+export interface ContentModerationEndpointRuntime {
+  status: ContentModerationEndpointStatus
+  failure_count: number
+  last_error: string
+  last_success_at?: string
+  last_failure_at?: string
+  cooldown_until?: string
+  half_open: boolean
+}
+
+export interface ContentModerationEndpoint {
+  id: string
+  name: string
+  enabled: boolean
+  priority: number
+  base_url: string
+  model: string
+  proxy_id: number | null
+  api_key_configured: boolean
+  api_key_count: number
+  api_key_masks: string[]
+  api_key_statuses: ContentModerationAPIKeyStatus[]
+  timeout_ms: number
+  cooldown_seconds: number
+  failure_threshold: number
+  manual_paused: boolean
+  runtime: ContentModerationEndpointRuntime
+}
+
+export interface UpdateContentModerationEndpoint {
+  id: string
+  name: string
+  enabled: boolean
+  priority: number
+  base_url: string
+  model: string
+  proxy_id?: number | null
+  api_keys?: string[]
+  timeout_ms: number
+  cooldown_seconds: number
+  failure_threshold: number
+  manual_paused: boolean
 }
 
 export type ContentModerationAPIKeyStatusValue = 'unknown' | 'ok' | 'error' | 'frozen'
@@ -64,6 +113,7 @@ export interface ContentModerationAPIKeyStatus {
 }
 
 export interface TestContentModerationAPIKeysPayload {
+  endpoint_id?: string
   api_keys?: string[]
   base_url?: string
   model?: string
@@ -101,6 +151,7 @@ export interface UpdateContentModerationConfig {
   api_keys_mode?: 'append' | 'replace'
   delete_api_key_hashes?: string[]
   clear_api_key?: boolean
+  endpoints?: UpdateContentModerationEndpoint[]
   timeout_ms?: number
   sample_rate?: number
   all_groups?: boolean
@@ -121,6 +172,7 @@ export interface UpdateContentModerationConfig {
   pre_hash_check_enabled?: boolean
   blocked_keywords?: string[]
   keyword_blocking_mode?: KeywordBlockingMode
+  text_api_mode?: ContentModerationTextAPIMode
   model_filter?: ContentModerationModelFilter
   cyber_policy_exclude_from_ban_count?: boolean
   cyber_policy_auto_ban_enabled?: boolean
@@ -130,6 +182,7 @@ export interface ContentModerationRuntimeStatus {
   enabled: boolean
   risk_control_enabled: boolean
   mode: ModerationMode
+  text_api_mode: ContentModerationTextAPIMode
   worker_count: number
   max_workers: number
   active_workers: number
@@ -156,6 +209,7 @@ export interface ContentModerationRuntimeStatus {
   pre_block_api_key_total_calls: number
   pre_block_api_key_loads: ContentModerationAPIKeyLoad[]
   api_key_statuses: ContentModerationAPIKeyStatus[]
+  endpoints: ContentModerationEndpoint[]
   flagged_hash_count: number
   last_cleanup_at?: string
   last_cleanup_deleted_hit: number
@@ -185,6 +239,8 @@ export interface ContentModerationLog {
   api_key_name: string
   group_id: number | null
   group_name: string
+  moderation_endpoint_id: string
+  moderation_endpoint_name: string
   endpoint: string
   provider: string
   model: string
@@ -264,6 +320,14 @@ export async function testAPIKeys(
   return data
 }
 
+export async function setEndpointPaused(endpointID: string, paused: boolean): Promise<ContentModerationConfig> {
+  const action = paused ? 'pause' : 'resume'
+  const { data } = await apiClient.post<ContentModerationConfig>(
+    `/admin/risk-control/endpoints/${encodeURIComponent(endpointID)}/${action}`
+  )
+  return data
+}
+
 export async function listLogs(
   params: ListContentModerationLogsParams = {}
 ): Promise<ContentModerationLogsResponse> {
@@ -297,6 +361,7 @@ export const riskControlAPI = {
   updateConfig,
   getStatus,
   testAPIKeys,
+  setEndpointPaused,
   listLogs,
   unbanUser,
   deleteFlaggedHash,
