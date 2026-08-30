@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -1840,6 +1841,8 @@ func TestContentModerationEndpointPool_FailsOverAndRecoversOnRealRequest(t *test
 	result, err := svc.callModeration(context.Background(), cfg, "hello")
 	require.NoError(t, err)
 	require.NotNil(t, result)
+	require.Equal(t, "b", result.EndpointID)
+	require.Equal(t, "B", result.EndpointName)
 	require.Equal(t, 1, primaryCalls)
 	require.Equal(t, 1, secondaryCalls)
 	require.Equal(t, "cooldown", svc.endpointRuntime(cfg.Endpoints[0]).Status)
@@ -1858,6 +1861,23 @@ func TestContentModerationEndpointPool_FailsOverAndRecoversOnRealRequest(t *test
 	require.Equal(t, 2, primaryCalls)
 	require.Equal(t, 1, secondaryCalls)
 	require.Equal(t, "healthy", svc.endpointRuntime(cfg.Endpoints[0]).Status)
+}
+
+func TestContentModerationEndpointRuntimeDistinguishesDegradedAndError(t *testing.T) {
+	endpoint := ContentModerationEndpoint{
+		ID: "endpoint-a", Name: "A", Enabled: true, APIKeys: []string{"key-a"},
+		FailureThreshold: 2, CooldownSeconds: 60,
+	}
+	svc := NewContentModerationService(nil, nil, nil, nil, nil, nil, nil, nil)
+	svc.markModerationEndpointFailure(context.Background(), endpoint, http.StatusInternalServerError, errors.New("upstream failed"))
+	require.Equal(t, "degraded", svc.endpointRuntime(endpoint).Status)
+
+	svc.markAPIKeyError("key-a", "invalid credentials", 10, http.StatusUnauthorized)
+	require.Equal(t, "error", svc.endpointRuntime(endpoint).Status)
+
+	svc.markModerationEndpointSuccess(context.Background(), endpoint.ID)
+	svc.markAPIKeySuccess("key-a", 8, http.StatusOK)
+	require.Equal(t, "healthy", svc.endpointRuntime(endpoint).Status)
 }
 
 func TestContentModerationTestAPIKeys_400DoesNotFreezeAPIKey(t *testing.T) {
@@ -2112,6 +2132,11 @@ func TestContentModerationCheck_PreBlockFlaggedWritesRedisHashCache(t *testing.T
 	cfg.PreHashCheckEnabled = true
 	cfg.BaseURL = server.URL
 	cfg.APIKeys = []string{"sk-test"}
+	cfg.Endpoints = []ContentModerationEndpoint{{
+		ID: "primary-moderation", Name: "Primary Moderation", Enabled: true,
+		BaseURL: server.URL, Model: cfg.Model, APIKeys: []string{"sk-test"},
+		TimeoutMS: cfg.TimeoutMS, CooldownSeconds: 60, FailureThreshold: 1,
+	}}
 	cfg.BlockStatus = http.StatusConflict
 	cfg.BlockMessage = "命中风险输入"
 	rawCfg, err := json.Marshal(cfg)
@@ -2156,7 +2181,11 @@ func TestContentModerationCheck_PreBlockFlaggedWritesRedisHashCache(t *testing.T
 	require.Equal(t, 1, requestCount)
 	logs := requireContentModerationLogCount(t, repo, 2)
 	require.Equal(t, ContentModerationActionBlock, logs[0].Action)
+	require.Equal(t, "primary-moderation", logs[0].ModerationEndpointID)
+	require.Equal(t, "Primary Moderation", logs[0].ModerationEndpointName)
 	require.Equal(t, ContentModerationActionHashBlock, logs[1].Action)
+	require.Empty(t, logs[1].ModerationEndpointID)
+	require.Empty(t, logs[1].ModerationEndpointName)
 }
 
 func TestContentModerationDeleteFlaggedInputHash_NormalizesAndDeletes(t *testing.T) {

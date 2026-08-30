@@ -42,59 +42,65 @@ var (
 // ImageTaskRecord is the private Redis representation of an asynchronous image
 // request. Ownership fields are intentionally omitted from the public view.
 type ImageTaskRecord struct {
-	ID            string          `json:"id"`
-	UserID        int64           `json:"user_id"`
-	APIKeyID      int64           `json:"api_key_id"`
-	RequestType   string          `json:"request_type,omitempty"`
-	Model         string          `json:"model,omitempty"`
-	PromptPreview string          `json:"prompt_preview,omitempty"`
-	Status        string          `json:"status"`
-	HTTPStatus    int             `json:"http_status,omitempty"`
-	Result        json.RawMessage `json:"result,omitempty"`
-	StorageKeys   []string        `json:"storage_keys,omitempty"`
-	Error         json.RawMessage `json:"error,omitempty"`
-	CreatedAt     int64           `json:"created_at"`
-	CompletedAt   *int64          `json:"completed_at,omitempty"`
-	ExpiresAt     int64           `json:"expires_at"`
+	ID              string          `json:"id"`
+	UserID          int64           `json:"user_id"`
+	APIKeyID        int64           `json:"api_key_id"`
+	RequestType     string          `json:"request_type,omitempty"`
+	Model           string          `json:"model,omitempty"`
+	PromptPreview   string          `json:"prompt_preview,omitempty"`
+	RequestedImages int             `json:"requested_images"`
+	ActualImages    int             `json:"actual_images"`
+	Status          string          `json:"status"`
+	HTTPStatus      int             `json:"http_status,omitempty"`
+	Result          json.RawMessage `json:"result,omitempty"`
+	StorageKeys     []string        `json:"storage_keys,omitempty"`
+	Error           json.RawMessage `json:"error,omitempty"`
+	CreatedAt       int64           `json:"created_at"`
+	CompletedAt     *int64          `json:"completed_at,omitempty"`
+	ExpiresAt       int64           `json:"expires_at"`
 }
 
 // ImageTask is the API-safe task representation returned to callers.
 type ImageTask struct {
-	ID            string          `json:"id"`
-	TaskID        string          `json:"task_id"`
-	Object        string          `json:"object"`
-	RequestType   string          `json:"request_type,omitempty"`
-	Model         string          `json:"model,omitempty"`
-	PromptPreview string          `json:"prompt_preview,omitempty"`
-	Status        string          `json:"status"`
-	HTTPStatus    int             `json:"http_status,omitempty"`
-	ImageURL      string          `json:"image_url,omitempty"`
-	Result        json.RawMessage `json:"result,omitempty"`
-	Error         json.RawMessage `json:"error,omitempty"`
-	CreatedAt     int64           `json:"created_at"`
-	CompletedAt   *int64          `json:"completed_at,omitempty"`
-	ExpiresAt     int64           `json:"expires_at"`
+	ID              string          `json:"id"`
+	TaskID          string          `json:"task_id"`
+	Object          string          `json:"object"`
+	RequestType     string          `json:"request_type,omitempty"`
+	Model           string          `json:"model,omitempty"`
+	PromptPreview   string          `json:"prompt_preview,omitempty"`
+	RequestedImages int             `json:"requested_images"`
+	ActualImages    int             `json:"actual_images"`
+	Status          string          `json:"status"`
+	HTTPStatus      int             `json:"http_status,omitempty"`
+	ImageURL        string          `json:"image_url,omitempty"`
+	Result          json.RawMessage `json:"result,omitempty"`
+	Error           json.RawMessage `json:"error,omitempty"`
+	CreatedAt       int64           `json:"created_at"`
+	CompletedAt     *int64          `json:"completed_at,omitempty"`
+	ExpiresAt       int64           `json:"expires_at"`
 }
 
 // AdminImageTask is the credential-free durable task read model used by the
 // administrator support view. APIKeyID is included for diagnosis, but no API
 // key value or mutable execution-store field is exposed.
 type AdminImageTask struct {
-	ID            string          `json:"id"`
-	TaskID        string          `json:"task_id"`
-	Object        string          `json:"object"`
-	APIKeyID      int64           `json:"api_key_id"`
-	RequestType   string          `json:"request_type,omitempty"`
-	Model         string          `json:"model,omitempty"`
-	PromptPreview string          `json:"prompt_preview,omitempty"`
-	Status        string          `json:"status"`
-	HTTPStatus    int             `json:"http_status,omitempty"`
-	ImageURL      string          `json:"image_url,omitempty"`
-	Result        json.RawMessage `json:"result,omitempty"`
-	Error         json.RawMessage `json:"error,omitempty"`
-	CreatedAt     int64           `json:"created_at"`
-	CompletedAt   *int64          `json:"completed_at,omitempty"`
-	ExpiresAt     int64           `json:"expires_at"`
+	ID              string          `json:"id"`
+	TaskID          string          `json:"task_id"`
+	Object          string          `json:"object"`
+	APIKeyID        int64           `json:"api_key_id"`
+	RequestType     string          `json:"request_type,omitempty"`
+	Model           string          `json:"model,omitempty"`
+	PromptPreview   string          `json:"prompt_preview,omitempty"`
+	RequestedImages int             `json:"requested_images"`
+	ActualImages    int             `json:"actual_images"`
+	Status          string          `json:"status"`
+	HTTPStatus      int             `json:"http_status,omitempty"`
+	ImageURL        string          `json:"image_url,omitempty"`
+	Result          json.RawMessage `json:"result,omitempty"`
+	Error           json.RawMessage `json:"error,omitempty"`
+	CreatedAt       int64           `json:"created_at"`
+	CompletedAt     *int64          `json:"completed_at,omitempty"`
+	ExpiresAt       int64           `json:"expires_at"`
 }
 
 type AdminImageTaskListResponse struct {
@@ -216,15 +222,16 @@ func (s *ImageTaskService) CreateWithMetadata(ctx context.Context, owner ImageTa
 	metadata = normalizeImageTaskMetadata(metadata)
 	now := time.Now().UTC()
 	task := &ImageTaskRecord{
-		ID:            "imgtask_" + strings.ReplaceAll(uuid.NewString(), "-", ""),
-		UserID:        owner.UserID,
-		APIKeyID:      owner.APIKeyID,
-		RequestType:   metadata.RequestType,
-		Model:         metadata.Model,
-		PromptPreview: metadata.PromptPreview,
-		Status:        ImageTaskStatusProcessing,
-		CreatedAt:     now.Unix(),
-		ExpiresAt:     now.Add(s.ttl).Unix(),
+		ID:              "imgtask_" + strings.ReplaceAll(uuid.NewString(), "-", ""),
+		UserID:          owner.UserID,
+		APIKeyID:        owner.APIKeyID,
+		RequestType:     metadata.RequestType,
+		Model:           metadata.Model,
+		PromptPreview:   metadata.PromptPreview,
+		RequestedImages: metadata.RequestedImages,
+		Status:          ImageTaskStatusProcessing,
+		CreatedAt:       now.Unix(),
+		ExpiresAt:       now.Add(s.ttl).Unix(),
 	}
 	if s.history != nil {
 		if err := s.history.Save(ctx, task); err != nil {
@@ -375,12 +382,22 @@ func (s *ImageTaskService) StreamDownloadZip(ctx context.Context, owner ImageTas
 	if s == nil || s.store == nil {
 		return 0, ErrImageTaskUnavailable
 	}
-	task, err := s.store.Get(ctx, strings.TrimSpace(id))
+	taskID := strings.TrimSpace(id)
+	task, err := s.store.Get(ctx, taskID)
 	if err != nil {
-		if errors.Is(err, ErrImageTaskNotFound) {
+		if !errors.Is(err, ErrImageTaskNotFound) {
+			return 0, ErrImageTaskUnavailable.WithCause(err)
+		}
+		if s.history == nil {
 			return 0, ErrImageTaskNotFound
 		}
-		return 0, ErrImageTaskUnavailable.WithCause(err)
+		task, err = s.history.Get(ctx, owner, taskID)
+		if err != nil {
+			if errors.Is(err, ErrImageTaskNotFound) {
+				return 0, ErrImageTaskNotFound
+			}
+			return 0, ErrImageTaskUnavailable.WithCause(err)
+		}
 	}
 	if task.UserID != owner.UserID || task.APIKeyID != owner.APIKeyID {
 		return 0, ErrImageTaskNotFound
@@ -518,6 +535,7 @@ func (s *ImageTaskService) finish(ctx context.Context, id, status string, status
 	task.HTTPStatus = statusCode
 	task.Result = result
 	task.StorageKeys = append([]string(nil), storageKeys...)
+	task.ActualImages = imageTaskResultCount(result)
 	task.Error = taskErr
 	task.CompletedAt = &completedAt
 	task.ExpiresAt = now.Add(s.ttl).Unix()
@@ -536,21 +554,28 @@ func imageTaskToPublic(task *ImageTaskRecord) *ImageTask {
 	if task == nil {
 		return nil
 	}
+	requestedImages := task.RequestedImages
+	if requestedImages <= 0 {
+		requestedImages = 1
+	}
+	actualImages := normalizedImageTaskActualImages(task)
 	return &ImageTask{
-		ID:            task.ID,
-		TaskID:        task.ID,
-		Object:        "image.generation.task",
-		RequestType:   task.RequestType,
-		Model:         task.Model,
-		PromptPreview: task.PromptPreview,
-		Status:        task.Status,
-		HTTPStatus:    task.HTTPStatus,
-		ImageURL:      firstImageTaskURL(task.Result),
-		Result:        task.Result,
-		Error:         task.Error,
-		CreatedAt:     task.CreatedAt,
-		CompletedAt:   task.CompletedAt,
-		ExpiresAt:     task.ExpiresAt,
+		ID:              task.ID,
+		TaskID:          task.ID,
+		Object:          "image.generation.task",
+		RequestType:     task.RequestType,
+		Model:           task.Model,
+		PromptPreview:   task.PromptPreview,
+		RequestedImages: requestedImages,
+		ActualImages:    actualImages,
+		Status:          task.Status,
+		HTTPStatus:      task.HTTPStatus,
+		ImageURL:        firstImageTaskURL(task.Result),
+		Result:          task.Result,
+		Error:           task.Error,
+		CreatedAt:       task.CreatedAt,
+		CompletedAt:     task.CompletedAt,
+		ExpiresAt:       task.ExpiresAt,
 	}
 }
 
@@ -558,22 +583,29 @@ func imageTaskToAdmin(task *ImageTaskRecord) *AdminImageTask {
 	if task == nil {
 		return nil
 	}
+	requestedImages := task.RequestedImages
+	if requestedImages <= 0 {
+		requestedImages = 1
+	}
+	actualImages := normalizedImageTaskActualImages(task)
 	return &AdminImageTask{
-		ID:            task.ID,
-		TaskID:        task.ID,
-		Object:        "image.generation.task",
-		APIKeyID:      task.APIKeyID,
-		RequestType:   task.RequestType,
-		Model:         task.Model,
-		PromptPreview: task.PromptPreview,
-		Status:        task.Status,
-		HTTPStatus:    task.HTTPStatus,
-		ImageURL:      firstImageTaskURL(task.Result),
-		Result:        task.Result,
-		Error:         task.Error,
-		CreatedAt:     task.CreatedAt,
-		CompletedAt:   task.CompletedAt,
-		ExpiresAt:     task.ExpiresAt,
+		ID:              task.ID,
+		TaskID:          task.ID,
+		Object:          "image.generation.task",
+		APIKeyID:        task.APIKeyID,
+		RequestType:     task.RequestType,
+		Model:           task.Model,
+		PromptPreview:   task.PromptPreview,
+		RequestedImages: requestedImages,
+		ActualImages:    actualImages,
+		Status:          task.Status,
+		HTTPStatus:      task.HTTPStatus,
+		ImageURL:        firstImageTaskURL(task.Result),
+		Result:          task.Result,
+		Error:           task.Error,
+		CreatedAt:       task.CreatedAt,
+		CompletedAt:     task.CompletedAt,
+		ExpiresAt:       task.ExpiresAt,
 	}
 }
 
@@ -604,6 +636,29 @@ func imageTaskURLs(result json.RawMessage) []string {
 		}
 	}
 	return urls
+}
+
+func imageTaskResultCount(result json.RawMessage) int {
+	if len(result) == 0 || !json.Valid(result) {
+		return 0
+	}
+	var response struct {
+		Data []json.RawMessage `json:"data"`
+	}
+	if json.Unmarshal(result, &response) != nil {
+		return 0
+	}
+	return len(response.Data)
+}
+
+func normalizedImageTaskActualImages(task *ImageTaskRecord) int {
+	if task == nil {
+		return 0
+	}
+	if task.ActualImages > 0 || task.Status != ImageTaskStatusCompleted {
+		return task.ActualImages
+	}
+	return imageTaskResultCount(task.Result)
 }
 
 func imageTaskErrorJSON(errorType, message string) json.RawMessage {

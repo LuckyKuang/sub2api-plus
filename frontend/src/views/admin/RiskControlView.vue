@@ -296,6 +296,7 @@
                   <th class="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.table.group') }}</th>
                   <th class="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.table.user') }}</th>
                   <th class="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.table.apiKey') }}</th>
+                  <th class="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.table.moderationPlatform') }}</th>
                   <th class="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.table.endpoint') }}</th>
                   <th class="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.table.result') }}</th>
                   <th class="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.table.highest') }}</th>
@@ -306,10 +307,10 @@
               </thead>
               <tbody class="divide-y divide-gray-100 bg-white dark:divide-dark-800 dark:bg-dark-800">
                 <tr v-if="logsLoading">
-                  <td colspan="10" class="px-5 py-12 text-center text-sm text-gray-500 dark:text-gray-400">{{ t('common.loading') }}</td>
+                  <td colspan="11" class="px-5 py-12 text-center text-sm text-gray-500 dark:text-gray-400">{{ t('common.loading') }}</td>
                 </tr>
                 <tr v-else-if="logs.length === 0">
-                  <td colspan="10" class="px-5 py-12 text-center text-sm text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.emptyLogs') }}</td>
+                  <td colspan="11" class="px-5 py-12 text-center text-sm text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.emptyLogs') }}</td>
                 </tr>
                 <template v-else>
                   <tr v-for="row in logs" :key="row.id" class="hover:bg-gray-50 dark:hover:bg-dark-700/60">
@@ -320,6 +321,7 @@
                       <div v-if="row.user_id" class="text-xs text-gray-400">UID {{ row.user_id }}</div>
                     </td>
                     <td class="whitespace-nowrap px-5 py-4 text-sm text-gray-700 dark:text-gray-300">{{ row.api_key_name || '-' }}</td>
+                    <td class="whitespace-nowrap px-5 py-4 text-sm text-gray-700 dark:text-gray-300">{{ row.moderation_endpoint_name || '-' }}</td>
                     <td class="whitespace-nowrap px-5 py-4 text-sm text-gray-700 dark:text-gray-300">
                       <div>{{ row.endpoint || '-' }}</div>
                       <div class="text-xs text-gray-400">{{ row.provider || '-' }} / {{ row.model || '-' }}</div>
@@ -486,7 +488,10 @@
                       <span class="flex h-8 w-8 flex-shrink-0 items-center justify-center bg-gray-100 text-sm font-semibold text-gray-700 dark:bg-dark-700 dark:text-gray-200">{{ index + 1 }}</span>
                       <div class="min-w-0">
                         <p class="truncate text-sm font-semibold text-gray-900 dark:text-white">{{ endpoint.name || t('admin.riskControl.endpointPool.unnamed') }}</p>
-                        <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{{ endpointStatusLabel(endpoint) }}</p>
+                        <span class="mt-1 inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium" :class="endpointStatusBadgeClass(endpoint)">
+                          <span class="h-1.5 w-1.5 rounded-full" :class="endpointStatusDotClass(endpoint)"></span>
+                          {{ endpointStatusLabel(endpoint) }}
+                        </span>
                       </div>
                     </div>
                     <div class="flex flex-wrap items-center gap-2">
@@ -1224,6 +1229,10 @@
                 {{ inputDetailRow.highest_category || '-' }} / {{ percent(inputDetailRow.highest_score) }}
               </p>
             </div>
+            <div class="rounded-lg border border-gray-100 bg-gray-50 p-4 dark:border-dark-700 dark:bg-dark-800/70">
+              <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.table.moderationPlatform') }}</p>
+              <p class="mt-1 truncate text-sm font-semibold text-gray-900 dark:text-white" :title="inputDetailRow.moderation_endpoint_name || ''">{{ inputDetailRow.moderation_endpoint_name || '-' }}</p>
+            </div>
             <div v-if="inputDetailRow.matched_keyword" class="rounded-lg border border-red-100 bg-red-50 p-4 dark:border-red-900/60 dark:bg-red-900/20">
               <p class="text-xs font-medium text-red-500 dark:text-red-300">{{ t('admin.riskControl.matchedKeyword') }}</p>
               <p class="mt-1 truncate text-sm font-semibold text-red-700 dark:text-red-200" :title="inputDetailRow.matched_keyword">{{ inputDetailRow.matched_keyword }}</p>
@@ -1273,6 +1282,7 @@ import type {
   ContentModerationAPIKeyStatus,
   ContentModerationConfig,
   ContentModerationEndpoint,
+  ContentModerationEndpointStatus,
   ContentModerationLog,
   ContentModerationModelFilter,
   ContentModerationModelFilterType,
@@ -2224,6 +2234,26 @@ function moveModerationEndpoint(index: number, direction: -1 | 1) {
 
 function endpointStatusLabel(endpoint: ModerationEndpointDraft): string {
   return t(`admin.riskControl.endpointPool.status.${endpoint.manual_paused ? 'manual_pause' : endpoint.runtime.status}`)
+}
+
+function effectiveEndpointStatus(endpoint: ModerationEndpointDraft): ContentModerationEndpointStatus {
+  return endpoint.manual_paused ? 'manual_pause' : endpoint.runtime.status
+}
+
+function endpointStatusBadgeClass(endpoint: ModerationEndpointDraft): string {
+  const status = effectiveEndpointStatus(endpoint)
+  if (status === 'healthy') return 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+  if (status === 'error') return 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+  if (status === 'disabled') return 'bg-gray-100 text-gray-600 dark:bg-dark-700 dark:text-gray-300'
+  return 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+}
+
+function endpointStatusDotClass(endpoint: ModerationEndpointDraft): string {
+  const status = effectiveEndpointStatus(endpoint)
+  if (status === 'healthy') return 'bg-emerald-500'
+  if (status === 'error') return 'bg-red-500'
+  if (status === 'disabled') return 'bg-gray-400'
+  return 'bg-amber-500'
 }
 
 async function testModerationEndpoint(endpoint: ModerationEndpointDraft) {

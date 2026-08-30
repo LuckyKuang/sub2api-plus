@@ -460,37 +460,39 @@ type ContentModerationDecision struct {
 }
 
 type ContentModerationLog struct {
-	ID                int64              `json:"id"`
-	RequestID         string             `json:"request_id"`
-	UserID            *int64             `json:"user_id,omitempty"`
-	UserEmail         string             `json:"user_email"`
-	APIKeyID          *int64             `json:"api_key_id,omitempty"`
-	APIKeyName        string             `json:"api_key_name"`
-	GroupID           *int64             `json:"group_id,omitempty"`
-	GroupName         string             `json:"group_name"`
-	Endpoint          string             `json:"endpoint"`
-	Provider          string             `json:"provider"`
-	Model             string             `json:"model"`
-	Mode              string             `json:"mode"`
-	Action            string             `json:"action"`
-	Flagged           bool               `json:"flagged"`
-	HighestCategory   string             `json:"highest_category"`
-	HighestScore      float64            `json:"highest_score"`
-	MatchedKeyword    string             `json:"matched_keyword"`
-	CategoryScores    map[string]float64 `json:"category_scores"`
-	ThresholdSnapshot map[string]float64 `json:"threshold_snapshot"`
-	InputExcerpt      string             `json:"input_excerpt"`
-	UpstreamLatencyMS *int               `json:"upstream_latency_ms,omitempty"`
-	Error             string             `json:"error"`
-	ViolationCount    int                `json:"violation_count"`
-	AutoBanned        bool               `json:"auto_banned"`
-	EmailSent         bool               `json:"email_sent"`
-	UserStatus        string             `json:"user_status"`
-	QueueDelayMS      *int               `json:"queue_delay_ms,omitempty"`
-	CreatedAt         time.Time          `json:"created_at"`
-	Protocol          string             `json:"-"`
-	Stage             string             `json:"-"`
-	BodyBytes         int                `json:"-"`
+	ID                     int64              `json:"id"`
+	RequestID              string             `json:"request_id"`
+	UserID                 *int64             `json:"user_id,omitempty"`
+	UserEmail              string             `json:"user_email"`
+	APIKeyID               *int64             `json:"api_key_id,omitempty"`
+	APIKeyName             string             `json:"api_key_name"`
+	GroupID                *int64             `json:"group_id,omitempty"`
+	GroupName              string             `json:"group_name"`
+	ModerationEndpointID   string             `json:"moderation_endpoint_id"`
+	ModerationEndpointName string             `json:"moderation_endpoint_name"`
+	Endpoint               string             `json:"endpoint"`
+	Provider               string             `json:"provider"`
+	Model                  string             `json:"model"`
+	Mode                   string             `json:"mode"`
+	Action                 string             `json:"action"`
+	Flagged                bool               `json:"flagged"`
+	HighestCategory        string             `json:"highest_category"`
+	HighestScore           float64            `json:"highest_score"`
+	MatchedKeyword         string             `json:"matched_keyword"`
+	CategoryScores         map[string]float64 `json:"category_scores"`
+	ThresholdSnapshot      map[string]float64 `json:"threshold_snapshot"`
+	InputExcerpt           string             `json:"input_excerpt"`
+	UpstreamLatencyMS      *int               `json:"upstream_latency_ms,omitempty"`
+	Error                  string             `json:"error"`
+	ViolationCount         int                `json:"violation_count"`
+	AutoBanned             bool               `json:"auto_banned"`
+	EmailSent              bool               `json:"email_sent"`
+	UserStatus             string             `json:"user_status"`
+	QueueDelayMS           *int               `json:"queue_delay_ms,omitempty"`
+	CreatedAt              time.Time          `json:"created_at"`
+	Protocol               string             `json:"-"`
+	Stage                  string             `json:"-"`
+	BodyBytes              int                `json:"-"`
 }
 
 type ContentModerationLogFilter struct {
@@ -940,6 +942,7 @@ func (s *ContentModerationService) TestAPIKeys(ctx context.Context, input TestCo
 			}
 			cfg.BaseURL, cfg.Model = endpoint.BaseURL, endpoint.Model
 			cfg.ProxyID, cfg.TimeoutMS = cloneInt64Ptr(endpoint.ProxyID), endpoint.TimeoutMS
+			cfg.APIKeys = append([]string(nil), endpoint.APIKeys...)
 			if len(keys) == 0 {
 				keys = append([]string(nil), endpoint.APIKeys...)
 				configured = true
@@ -972,6 +975,9 @@ func (s *ContentModerationService) TestAPIKeys(ctx context.Context, input TestCo
 			cfg.ProxyID = nil
 		}
 	}
+	// Test overrides are request-scoped. Rebuild a single ephemeral endpoint so
+	// normalize cannot restore the persisted pool's primary endpoint values.
+	cfg.Endpoints = nil
 	cfg.normalize()
 	testInput, imageCount, err := buildModerationTestInput(input.Prompt, input.Images)
 	if err != nil {
@@ -1467,6 +1473,8 @@ func (s *ContentModerationService) checkSync(ctx context.Context, input ContentM
 		"queue_delay_ms", queueDelay)
 	if flagged || cfg.RecordNonHits {
 		log := s.buildLog(input, cfg, action, flagged, highestCategory, highestScore, result.CategoryScores, content.ExcerptText(), &latency, queueDelay, "")
+		log.ModerationEndpointID = result.EndpointID
+		log.ModerationEndpointName = result.EndpointName
 		if queueDelay == nil && cfg.Mode == ContentModerationModePreBlock {
 			s.enqueueRecord(input, cfg, log, hashText, flagged && applySideEffects, flagged && applySideEffects)
 		} else {
@@ -2107,6 +2115,8 @@ func (s *ContentModerationService) callModeration(ctx context.Context, cfg *Cont
 		result, httpStatus, err := s.callModerationEndpoint(ctx, cfg, endpoint, input, trackLoad)
 		if err == nil {
 			s.markModerationEndpointSuccess(ctx, endpoint.ID)
+			result.EndpointID = endpoint.ID
+			result.EndpointName = endpoint.Name
 			return result, nil
 		}
 		if halfOpen {
@@ -3159,9 +3169,12 @@ func (s *ContentModerationService) endpointRuntime(endpoint ContentModerationEnd
 		return runtime
 	}
 	s.endpointHealthMu.Lock()
-	defer s.endpointHealthMu.Unlock()
 	state := s.endpointHealth[endpoint.ID]
 	if state == nil {
+		s.endpointHealthMu.Unlock()
+		if s.endpointAllAPIKeysErrored(endpoint) {
+			runtime.Status = "error"
+		}
 		return runtime
 	}
 	runtime.FailureCount = state.FailureCount
@@ -3187,7 +3200,30 @@ func (s *ContentModerationService) endpointRuntime(endpoint ContentModerationEnd
 	if state.HalfOpen {
 		runtime.Status = "half_open"
 	}
+	if runtime.Status == "healthy" && runtime.FailureCount > 0 {
+		runtime.Status = "degraded"
+	}
+	s.endpointHealthMu.Unlock()
+	if (runtime.Status == "healthy" || runtime.Status == "degraded") && s.endpointAllAPIKeysErrored(endpoint) {
+		runtime.Status = "error"
+	}
 	return runtime
+}
+
+func (s *ContentModerationService) endpointAllAPIKeysErrored(endpoint ContentModerationEndpoint) bool {
+	keys := normalizeModerationAPIKeys(endpoint.APIKeys)
+	if len(keys) == 0 || s == nil {
+		return len(keys) == 0
+	}
+	s.keyHealthMu.Lock()
+	defer s.keyHealthMu.Unlock()
+	for _, key := range keys {
+		state := s.keyHealth[moderationAPIKeyHash(key)]
+		if state == nil || strings.TrimSpace(state.LastError) == "" {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *ContentModerationService) apiKeyStatuses(keys []string) []ContentModerationAPIKeyStatus {
@@ -3427,6 +3463,8 @@ type moderationAPIResponse struct {
 type moderationAPIResult struct {
 	Flagged        bool               `json:"flagged"`
 	CategoryScores map[string]float64 `json:"category_scores"`
+	EndpointID     string             `json:"-"`
+	EndpointName   string             `json:"-"`
 }
 
 func evaluateModerationScores(scores map[string]float64, thresholds map[string]float64) (bool, string, float64) {

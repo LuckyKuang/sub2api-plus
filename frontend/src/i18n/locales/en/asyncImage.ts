@@ -33,6 +33,7 @@ export default {
     },
     detail: {
       title: 'Async Image Task Details', taskId: 'Task ID', prompt: 'Prompt', error: 'Error',
+      requestedImages: 'Requested', actualImages: 'Generated', countMismatch: 'Requested {requested} images, but the upstream returned {actual}. Successfully generated images were retained.',
       pending: 'This task is still processing', noImage: 'The task completed without an image URL',
     },
     delete: {

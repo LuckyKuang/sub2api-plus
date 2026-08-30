@@ -151,6 +151,13 @@ canonical extraction failures never penalize endpoint health. If every endpoint
 is unavailable, the existing dependency-failure behavior remains authoritative;
 an unavailable dependency is not converted into a policy violation.
 
+Successful API-backed audit records snapshot the stable moderation endpoint ID
+and its display name so operators can distinguish the platform that actually
+produced the decision after failover. Local keyword/hash decisions, dependency
+failures without a moderation decision, and historical rows keep both values
+empty. Endpoint URLs, API keys, raw content, and unsanitized upstream errors are
+not added to audit records.
+
 ## Prompt Audit Operations
 
 Prompt Audit events retain at most 65,536 runes of canonical selected content;

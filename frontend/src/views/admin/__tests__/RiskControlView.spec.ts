@@ -468,4 +468,32 @@ describe('admin RiskControlView', () => {
     expect(wrapper.text()).toContain('admin.riskControl.policyHelp.combinations.observe.blocking')
     expect(wrapper.text()).toContain('admin.riskControl.policyHelp.combinations.off.any')
   })
+
+  it('shows moderation platform attribution and warning endpoint health', async () => {
+    const config = baseConfig()
+    config.endpoints[0]!.runtime = { status: 'degraded', failure_count: 1, last_error: 'http_500', half_open: false }
+    getConfig.mockResolvedValue(config)
+    getStatus.mockResolvedValue({ ...runtimeStatus(), endpoints: config.endpoints })
+    listLogs.mockResolvedValue({
+      items: [{
+        id: 1, request_id: 'req-1', user_id: 7, user_email: 'user@example.test', api_key_id: 9, api_key_name: 'Key',
+        group_id: 3, group_name: 'Default', moderation_endpoint_id: 'default', moderation_endpoint_name: 'OpenAI Moderation',
+        endpoint: '/v1/responses', provider: 'openai', model: 'gpt-5', mode: 'pre_block', action: 'allow', flagged: false,
+        highest_category: 'harassment', highest_score: 0.1, matched_keyword: '', category_scores: {}, threshold_snapshot: {},
+        input_excerpt: 'hello', upstream_latency_ms: 12, error: '', violation_count: 0, auto_banned: false, email_sent: false,
+        user_status: 'active', queue_delay_ms: null, created_at: '2026-08-30T00:00:00Z',
+      }],
+      total: 1, page: 1, page_size: 20, pages: 1,
+    })
+    const wrapper = mount(RiskControlView, {
+      global: { stubs: { AppLayout: AppLayoutStub, BaseDialog: BaseDialogStub, Icon: true, Select: true, Toggle: true, Pagination: true, ModelWhitelistSelector: ModelWhitelistSelectorStub, ProxySelector: true } },
+    })
+
+    await flushPromises()
+    expect(wrapper.text()).toContain('OpenAI Moderation')
+    await findButtonByText(wrapper, 'admin.riskControl.openSettings').trigger('click')
+    const pool = wrapper.get('[data-test="moderation-endpoint-pool"]')
+    expect(pool.text()).toContain('admin.riskControl.endpointPool.status.degraded')
+    expect(pool.find('.bg-amber-50').exists()).toBe(true)
+  })
 })

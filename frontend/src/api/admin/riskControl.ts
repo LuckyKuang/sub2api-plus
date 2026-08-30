@@ -48,7 +48,7 @@ export interface ContentModerationConfig {
   cyber_policy_auto_ban_enabled: boolean
 }
 
-export type ContentModerationEndpointStatus = 'healthy' | 'cooldown' | 'manual_pause' | 'half_open' | 'disabled'
+export type ContentModerationEndpointStatus = 'healthy' | 'degraded' | 'error' | 'cooldown' | 'manual_pause' | 'half_open' | 'disabled'
 
 export interface ContentModerationEndpointRuntime {
   status: ContentModerationEndpointStatus
@@ -239,6 +239,8 @@ export interface ContentModerationLog {
   api_key_name: string
   group_id: number | null
   group_name: string
+  moderation_endpoint_id: string
+  moderation_endpoint_name: string
   endpoint: string
   provider: string
   model: string

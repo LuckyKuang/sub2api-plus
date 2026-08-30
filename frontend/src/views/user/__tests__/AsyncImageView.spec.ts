@@ -223,6 +223,26 @@ describe('AsyncImageView task management', () => {
     expect(wrapper.find('[data-testid="delete-task-imgtask_failed"]').exists()).toBe(true)
   })
 
+  it('shows requested and actual image counts when the upstream returns fewer images', async () => {
+    listAsyncImageTasks.mockResolvedValue({
+      object: 'list',
+      data: [{
+        ...completedTask,
+        requested_images: 3,
+        actual_images: 1,
+        result: { data: [{ url: 'https://images.example.test/one.png' }] },
+      }],
+      has_more: false,
+    })
+    const wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="view-task-imgtask_completed"]').trigger('click')
+    expect(wrapper.text()).toContain('asyncImage.detail.requestedImages')
+    expect(wrapper.text()).toContain('asyncImage.detail.actualImages')
+    expect(wrapper.text()).toContain('asyncImage.detail.countMismatch')
+  })
+
   it('uses the selected API key and shows pending state only on the deleted row', async () => {
     let finishDelete!: () => void
     deleteAsyncImageTask.mockReturnValue(new Promise<void>((resolve) => { finishDelete = resolve }))
