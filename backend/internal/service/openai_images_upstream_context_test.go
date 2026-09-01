@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -125,7 +126,8 @@ func TestForwardOpenAIImagesAPIKey_StreamKeepsDetachedUpstreamContext(t *testing
 		"流式路径原本就脱钩，不能被改回随客户端取消")
 }
 
-// 两个 detach 辅助函数的语义差异是本次修复的根据，锁死它们防止被悄悄改动。
+// Both helpers detach settlement from downstream cancellation. The stream-
+// aware helper additionally bounds non-stream settlement with a deadline.
 func TestDetachUpstreamContextSemantics(t *testing.T) {
 	t.Run("detachUpstreamContext_always_detaches", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -135,13 +137,15 @@ func TestDetachUpstreamContextSemantics(t *testing.T) {
 		require.NoError(t, detached.Err())
 	})
 
-	t.Run("detachStreamUpstreamContext_keeps_cancel_when_not_streaming", func(t *testing.T) {
+	t.Run("detachStreamUpstreamContext_bounds_non_stream_settlement", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
-		same, release := detachStreamUpstreamContext(ctx, false)
+		detached, release := detachStreamUpstreamContext(ctx, false)
 		defer release()
-		require.ErrorIs(t, same.Err(), context.Canceled,
-			"非流式时该函数原样返回请求 context —— 生图路径不能用它")
+		require.NoError(t, detached.Err())
+		deadline, ok := detached.Deadline()
+		require.True(t, ok)
+		require.WithinDuration(t, time.Now().Add(15*time.Minute), deadline, time.Second)
 	})
 
 	t.Run("detachStreamUpstreamContext_detaches_when_streaming", func(t *testing.T) {

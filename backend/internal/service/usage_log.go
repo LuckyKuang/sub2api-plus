@@ -170,18 +170,20 @@ type UsageLog struct {
 	// AccountStatsCost 账号统计定价预计算费用（nil = 使用默认公式 total_cost × account_rate_multiplier）
 	AccountStatsCost *float64
 
-	BillingType     int8
-	RequestType     RequestType
-	Stream          bool
-	OpenAIWSMode    bool
-	DurationMs      *int
-	FirstTokenMs    *int
-	LastTokenMs     *int
-	FirstOutputMs   *int
-	FirstOutputKind *string
-	IsComplete      *bool
-	UserAgent       *string
-	IPAddress       *string
+	BillingType      int8
+	RequestType      RequestType
+	Stream           bool
+	OpenAIWSMode     bool
+	DurationMs       *int
+	FirstTokenMs     *int
+	LastTokenMs      *int
+	FirstOutputMs    *int
+	FirstOutputKind  *string
+	IsComplete       *bool
+	CompletionStatus string
+	UsageSource      string
+	UserAgent        *string
+	IPAddress        *string
 	// SessionID is the explicit client-provided request correlation identifier
 	// (e.g. the session_id / X-Session-Id headers). Nil when the client sent no
 	// valid session header. It is never derived from prompt_cache_key or content.
@@ -211,6 +213,45 @@ type UsageLog struct {
 	Account      *Account
 	Group        *Group
 	Subscription *UserSubscription
+}
+
+const (
+	UsageCompletionUnknown            = "unknown"
+	UsageCompletionCompleted          = "completed"
+	UsageCompletionClientDisconnected = "client_disconnected"
+	UsageCompletionIncomplete         = "incomplete"
+
+	UsageSourceUnknown       = "unknown"
+	UsageSourceUpstreamExact = "upstream_exact"
+	UsageSourcePartial       = "partial"
+	UsageSourceEstimated     = "estimated"
+	UsageSourceReconciled    = "reconciled"
+)
+
+func (u *UsageLog) SyncCompletionMetadata() {
+	if u == nil {
+		return
+	}
+	if strings.TrimSpace(u.CompletionStatus) == "" {
+		switch {
+		case u.IsComplete == nil:
+			u.CompletionStatus = UsageCompletionUnknown
+		case *u.IsComplete:
+			u.CompletionStatus = UsageCompletionCompleted
+		default:
+			u.CompletionStatus = UsageCompletionIncomplete
+		}
+	}
+	if strings.TrimSpace(u.UsageSource) == "" {
+		switch u.CompletionStatus {
+		case UsageCompletionCompleted:
+			u.UsageSource = UsageSourceUpstreamExact
+		case UsageCompletionClientDisconnected, UsageCompletionIncomplete:
+			u.UsageSource = UsageSourcePartial
+		default:
+			u.UsageSource = UsageSourceUnknown
+		}
+	}
 }
 
 func (u *UsageLog) TotalTokens() int {

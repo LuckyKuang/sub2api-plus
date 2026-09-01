@@ -598,7 +598,8 @@ func (s *OpenAIGatewayService) ForwardImages(
 	body []byte,
 	parsed *OpenAIImagesRequest,
 	channelMappedModel string,
-) (*OpenAIForwardResult, error) {
+) (result *OpenAIForwardResult, err error) {
+	defer func() { finalizeClientDisconnectForwardResult(ctx, c, result, err) }()
 	if parsed == nil {
 		return nil, fmt.Errorf("parsed images request is required")
 	}
@@ -714,6 +715,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 		return s.handleOpenAIImagesErrorResponse(upstreamCtx, resp, c, account, upstreamModel)
 	}
 	defer func() { _ = resp.Body.Close() }()
+	MarkClientDisconnectUpstreamAccepted(ctx)
 
 	var usage OpenAIUsage
 	imageCount := parsed.N

@@ -327,7 +327,9 @@ type SystemSettings struct {
 	PluginManagementEnabled bool   `json:"plugin_management_enabled"`
 
 	// 风控中心功能开关
-	RiskControlEnabled bool `json:"risk_control_enabled"`
+	RiskControlEnabled                      bool `json:"risk_control_enabled"`
+	ClientDisconnectConsecutiveBanEnabled   bool `json:"client_disconnect_consecutive_ban_enabled"`
+	ClientDisconnectConsecutiveBanThreshold int  `json:"client_disconnect_consecutive_ban_threshold"`
 
 	// 全局 IP 访问控制功能总开关
 	GlobalIPAccessControlEnabled bool `json:"global_ip_access_control_enabled"`

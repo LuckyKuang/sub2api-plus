@@ -35,6 +35,8 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 		h.responsesErrorResponse(c, http.StatusInternalServerError, "api_error", "User context not found")
 		return
 	}
+	disconnectLifecycle := startClientDisconnectRiskLifecycle(c, h.clientDisconnectRisk, subject.UserID, apiKey.ID, "anthropic_responses")
+	defer disconnectLifecycle.Neutral(c.Request.Context())
 	reqLog := requestLogger(
 		c,
 		"handler.gateway.responses",

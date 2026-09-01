@@ -149,6 +149,14 @@ func (UsageLog) Fields() []ent.Field {
 			Optional().
 			Nillable().
 			Comment("Whether the upstream output completed normally; NULL means historical or unknown"),
+		field.String("completion_status").
+			MaxLen(32).
+			Default("unknown").
+			Comment("Explicit terminal status for this usage row"),
+		field.String("usage_source").
+			MaxLen(32).
+			Default("unknown").
+			Comment("Quality/source of the usage used for billing"),
 		field.String("user_agent").
 			MaxLen(512).
 			Optional().

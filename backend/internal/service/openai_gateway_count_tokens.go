@@ -71,9 +71,11 @@ func (s *OpenAIGatewayService) ForwardResponsesInputTokens(
 		writeOpenAIResponsesInputTokensError(c, http.StatusBadGateway, "upstream_error", "Failed to get access token")
 		return fmt.Errorf("responses input_tokens: get access token: %w", err)
 	}
+	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
+	defer releaseUpstreamCtx()
 
 	upstreamBody := ReplaceModelInBody(body, prepared.UpstreamModel)
-	upstreamReq, err := s.buildInputTokensUpstreamRequest(ctx, c, account, upstreamBody, token)
+	upstreamReq, err := s.buildInputTokensUpstreamRequest(upstreamCtx, c, account, upstreamBody, token)
 	if err != nil {
 		writeOpenAIResponsesInputTokensError(c, http.StatusInternalServerError, "api_error", "Failed to build request")
 		return fmt.Errorf("responses input_tokens: build upstream request: %w", err)
@@ -91,6 +93,9 @@ func (s *OpenAIGatewayService) ForwardResponsesInputTokens(
 		return fmt.Errorf("responses input_tokens: upstream request failed: %s", safeErr)
 	}
 	defer func() { _ = resp.Body.Close() }()
+	MarkClientDisconnectUpstreamAccepted(ctx)
+	completed := false
+	defer func() { finalizeUnbilledClientDisconnectRequest(ctx, completed) }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -104,7 +109,7 @@ func (s *OpenAIGatewayService) ForwardResponsesInputTokens(
 			return nil
 		}
 		if s.rateLimitService != nil {
-			s.rateLimitService.HandleUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody)
+			s.rateLimitService.HandleUpstreamError(upstreamCtx, account, resp.StatusCode, resp.Header, respBody)
 		}
 		upstreamMsg := sanitizeUpstreamErrorMessage(strings.TrimSpace(extractUpstreamErrorMessage(respBody)))
 		setOpsUpstreamError(c, resp.StatusCode, upstreamMsg, "")
@@ -125,6 +130,7 @@ func (s *OpenAIGatewayService) ForwardResponsesInputTokens(
 		contentType = "application/json"
 	}
 	c.Data(http.StatusOK, contentType, respBody)
+	completed = true
 	return nil
 }
 
@@ -300,8 +306,10 @@ func (s *OpenAIGatewayService) ForwardCountTokensAsAnthropic(
 		writeAnthropicCountTokensError(c, http.StatusBadGateway, "upstream_error", "Failed to get access token")
 		return fmt.Errorf("get access token: %w", err)
 	}
+	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
+	defer releaseUpstreamCtx()
 
-	upstreamReq, err := s.buildInputTokensUpstreamRequest(ctx, c, account, upstreamBody, token)
+	upstreamReq, err := s.buildInputTokensUpstreamRequest(upstreamCtx, c, account, upstreamBody, token)
 	if err != nil {
 		writeAnthropicCountTokensError(c, http.StatusInternalServerError, "api_error", "Failed to build request")
 		return fmt.Errorf("build input_tokens request: %w", err)
@@ -319,6 +327,9 @@ func (s *OpenAIGatewayService) ForwardCountTokensAsAnthropic(
 		return fmt.Errorf("openai input_tokens upstream request failed: %s", safeErr)
 	}
 	defer func() { _ = resp.Body.Close() }()
+	MarkClientDisconnectUpstreamAccepted(ctx)
+	completed := false
+	defer func() { finalizeUnbilledClientDisconnectRequest(ctx, completed) }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -334,7 +345,7 @@ func (s *OpenAIGatewayService) ForwardCountTokensAsAnthropic(
 		}
 
 		if s.rateLimitService != nil {
-			s.rateLimitService.HandleUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody)
+			s.rateLimitService.HandleUpstreamError(upstreamCtx, account, resp.StatusCode, resp.Header, respBody)
 		}
 
 		if isOpenAIInputTokensUnsupported(resp.StatusCode, respBody) {
@@ -375,6 +386,7 @@ func (s *OpenAIGatewayService) ForwardCountTokensAsAnthropic(
 	c.JSON(http.StatusOK, gin.H{
 		"input_tokens": int(inputTokens.Int()),
 	})
+	completed = true
 	return nil
 }
 

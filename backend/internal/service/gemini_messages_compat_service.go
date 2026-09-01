@@ -581,7 +581,18 @@ func (s *GeminiMessagesCompatService) SelectAccountForAIStudioEndpoints(ctx cont
 	return s.hydrateSelectedAccount(ctx, selected)
 }
 
-func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Context, account *Account, body []byte) (*ForwardResult, error) {
+func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Context, account *Account, body []byte) (result *ForwardResult, err error) {
+	defer func() {
+		if result != nil {
+			usageComplete := result.UsageComplete()
+			if finalizeClientDisconnectState(ctx, result.Stream, result.ClientDisconnect, usageComplete, clientRequestCanceled(c), err) {
+				result.ClientDisconnect = true
+				result.ClientDisconnectUsageSource = UsageSourceUpstreamExact
+			}
+		} else {
+			finalizeClientDisconnectState(ctx, false, false, false, clientRequestCanceled(c), err)
+		}
+	}()
 	beginUpstreamResponseModelObservation(c)
 	beginGeminiImageOutputObservation(c)
 	startTime := time.Now()
@@ -936,6 +947,9 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 		break
 	}
 	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 400 {
+		MarkClientDisconnectUpstreamAccepted(ctx)
+	}
 
 	if resp.StatusCode >= 400 {
 		respBody := s.readUpstreamErrorBody(resp)
@@ -1140,7 +1154,18 @@ func isGeminiSignatureRelatedError(respBody []byte) bool {
 	return strings.Contains(msg, "thought_signature") || strings.Contains(msg, "signature")
 }
 
-func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.Context, account *Account, originalModel string, action string, stream bool, body []byte) (*ForwardResult, error) {
+func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.Context, account *Account, originalModel string, action string, stream bool, body []byte) (result *ForwardResult, err error) {
+	defer func() {
+		if result != nil {
+			usageComplete := result.UsageComplete()
+			if finalizeClientDisconnectState(ctx, result.Stream, result.ClientDisconnect, usageComplete, clientRequestCanceled(c), err) {
+				result.ClientDisconnect = true
+				result.ClientDisconnectUsageSource = UsageSourceUpstreamExact
+			}
+		} else {
+			finalizeClientDisconnectState(ctx, false, false, false, clientRequestCanceled(c), err)
+		}
+	}()
 	beginUpstreamResponseModelObservation(c)
 	beginGeminiImageOutputObservation(c)
 	startTime := time.Now()
@@ -1448,6 +1473,9 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 		break
 	}
 	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 400 {
+		MarkClientDisconnectUpstreamAccepted(ctx)
+	}
 
 	requestID := resp.Header.Get(requestIDHeader)
 	if requestID == "" {

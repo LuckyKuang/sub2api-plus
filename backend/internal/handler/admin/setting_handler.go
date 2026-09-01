@@ -292,6 +292,8 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		DefaultConcurrency:                                     settings.DefaultConcurrency,
 		DefaultBalance:                                         settings.DefaultBalance,
 		RiskControlEnabled:                                     settings.RiskControlEnabled,
+		ClientDisconnectConsecutiveBanEnabled:                  settings.ClientDisconnectConsecutiveBanEnabled,
+		ClientDisconnectConsecutiveBanThreshold:                settings.ClientDisconnectConsecutiveBanThreshold,
 		GlobalIPAccessControlEnabled:                           settings.GlobalIPAccessControlEnabled,
 		CyberSessionBlockEnabled:                               settings.CyberSessionBlockEnabled,
 		CyberSessionBlockTTLSeconds:                            settings.CyberSessionBlockTTLSeconds,

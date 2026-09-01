@@ -44,6 +44,11 @@ type OpenAIGatewayHandler struct {
 	imageLimiter               *imageConcurrencyLimiter
 	maxAccountSwitches         int
 	cfg                        *config.Config
+	clientDisconnectRisk       *service.ClientDisconnectRiskService
+}
+
+func (h *OpenAIGatewayHandler) SetClientDisconnectRiskService(risk *service.ClientDisconnectRiskService) {
+	h.clientDisconnectRisk = risk
 }
 
 type openAIWSTurnChannelMappingSnapshot struct {
@@ -421,6 +426,8 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		h.errorResponse(c, http.StatusInternalServerError, "api_error", "User context not found")
 		return
 	}
+	disconnectLifecycle := startClientDisconnectRiskLifecycle(c, h.clientDisconnectRisk, subject.UserID, apiKey.ID, "openai_responses")
+	defer disconnectLifecycle.Neutral(c.Request.Context())
 	reqLog := requestLogger(
 		c,
 		"handler.openai_gateway.responses",
@@ -947,7 +954,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 
 		// 使用量记录通过有界 worker 池提交，避免请求热路径创建无界 goroutine。
 		cyberBlocked := service.GetOpsCyberPolicy(c) != nil
-		h.submitOpenAIUsageRecordTask(c.Request.Context(), result, func(ctx context.Context) {
+		h.submitOpenAIUsageRecordTask(c.Request.Context(), func(ctx context.Context) {
 			if err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{
 				Result:             result,
 				APIKey:             apiKey,
@@ -1147,6 +1154,8 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 		h.anthropicErrorResponse(c, http.StatusInternalServerError, "api_error", "User context not found")
 		return
 	}
+	disconnectLifecycle := startClientDisconnectRiskLifecycle(c, h.clientDisconnectRisk, subject.UserID, apiKey.ID, "openai_anthropic_messages")
+	defer disconnectLifecycle.Neutral(c.Request.Context())
 	reqLog := requestLogger(
 		c,
 		"handler.openai_gateway.messages",
@@ -1481,7 +1490,7 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 		isComplete := err == nil && result.UsageComplete()
 
 		cyberBlocked := service.GetOpsCyberPolicy(c) != nil
-		h.submitOpenAIUsageRecordTask(c.Request.Context(), result, func(ctx context.Context) {
+		h.submitOpenAIUsageRecordTask(c.Request.Context(), func(ctx context.Context) {
 			if err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{
 				Result:             result,
 				APIKey:             apiKey,
@@ -2414,6 +2423,13 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		var requestPayloadHash string
 		var turnStartsMu sync.Mutex
 		turnStarts := make(map[int]time.Time, 4)
+		var turnDisconnectRiskMu sync.Mutex
+		turnDisconnectRisks := make(map[int]*service.ClientDisconnectLifecycle, 4)
+		role, roleAvailable := middleware2.GetUserRoleFromContext(c)
+		baseRequestID, _ := clientLifecycleCtx.Value(ctxkey.ClientRequestID).(string)
+		if strings.TrimSpace(baseRequestID) == "" {
+			baseRequestID = uuid.NewString()
+		}
 		recordTurnStart := func(turn int, startedAt time.Time) {
 			if turn <= 0 || startedAt.IsZero() {
 				return
@@ -2421,6 +2437,21 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			turnStartsMu.Lock()
 			turnStarts[turn] = startedAt
 			turnStartsMu.Unlock()
+			if roleAvailable && h.clientDisconnectRisk != nil {
+				lifecycle := h.clientDisconnectRisk.NewLifecycle(
+					subject.UserID,
+					apiKey.ID,
+					role,
+					fmt.Sprintf("%s-ws-turn-%d", strings.TrimSpace(baseRequestID), turn),
+					"openai_responses_ws",
+				)
+				if lifecycle != nil {
+					turnDisconnectRiskMu.Lock()
+					turnDisconnectRisks[turn] = lifecycle
+					turnDisconnectRiskMu.Unlock()
+					lifecycle.Accepted(clientLifecycleCtx)
+				}
+			}
 		}
 		getTurnStart := func(turn int) time.Time {
 			turnStartsMu.Lock()
@@ -2604,6 +2635,22 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				return nil
 			},
 			AfterTurn: func(turn int, result *service.OpenAIForwardResult, turnErr error) {
+				turnDisconnectRiskMu.Lock()
+				disconnectLifecycle := turnDisconnectRisks[turn]
+				delete(turnDisconnectRisks, turn)
+				turnDisconnectRiskMu.Unlock()
+				if disconnectLifecycle != nil {
+					switch {
+					case result != nil && result.ClientDisconnect:
+						disconnectLifecycle.Disconnected(clientLifecycleCtx)
+					case turnErr == nil && result != nil && result.UsageComplete():
+						disconnectLifecycle.Completed(clientLifecycleCtx)
+					case clientLifecycleCtx.Err() != nil:
+						disconnectLifecycle.Disconnected(clientLifecycleCtx)
+					default:
+						disconnectLifecycle.Neutral(clientLifecycleCtx)
+					}
+				}
 				turnStart := getTurnStart(turn)
 				cyberBlockBody := takeCyberTurnBody(turn)
 				// F1: cyber 标记按 turn 生命周期清理——defer 保证任意早返回路径都执行；
@@ -2679,7 +2726,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				sessionID := service.ExtractClientSessionID(c)
 				turnRecordPricingAt := turnPricing.currentOr(turnStart)
 				cyberBlocked := service.GetOpsCyberPolicy(c) != nil
-				h.submitOpenAIUsageRecordTask(ctx, result, func(taskCtx context.Context) {
+				h.submitOpenAIUsageRecordTask(ctx, func(taskCtx context.Context) {
 					if err := h.gatewayService.RecordUsage(taskCtx, &service.OpenAIRecordUsageInput{
 						Result:             result,
 						APIKey:             apiKey,
@@ -2949,14 +2996,12 @@ func (h *OpenAIGatewayHandler) submitUsageRecordTask(parent context.Context, tas
 	}
 	task = wrapUsageRecordTaskContext(parent, task)
 	if h.usageRecordWorkerPool != nil {
-		if mode := h.usageRecordWorkerPool.Submit(task); mode != service.UsageRecordSubmitModeDroppedStopped {
+		if mode := h.usageRecordWorkerPool.Submit(task); !mode.Dropped() {
 			return
 		}
-		// 池已停止（进程关停窗口）：计费任务不能静默丢失，降级为内联同步执行。
-		// 显式配置的 drop/sample 溢出丢弃仍按配置语义保留。
 		logger.L().With(
 			zap.String("component", "handler.openai_gateway.responses"),
-		).Warn("openai.usage_record_task_stopped_sync_fallback")
+		).Warn("openai.usage_record_task_dropped_sync_fallback")
 	}
 	// 回退路径：worker 池未注入或已停止时同步执行，避免退回到无界 goroutine 模式。
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -2972,40 +3017,12 @@ func (h *OpenAIGatewayHandler) submitUsageRecordTask(parent context.Context, tas
 	task(ctx)
 }
 
-func (h *OpenAIGatewayHandler) submitOpenAIUsageRecordTask(parent context.Context, result *service.OpenAIForwardResult, task service.UsageRecordTask) {
-	// Money-critical bills never drop on pool overflow: media, search surcharge, voice.
-	if result != nil && (result.ImageCount > 0 || result.VideoCount > 0 ||
-		result.SearchCount > 0 || result.WebSearchCalls > 0 || result.AudioUsage != nil) {
-		h.submitMandatoryUsageRecordTask(parent, task)
-		return
-	}
+func (h *OpenAIGatewayHandler) submitOpenAIUsageRecordTask(parent context.Context, task service.UsageRecordTask) {
 	h.submitUsageRecordTask(parent, task)
 }
 
 func (h *OpenAIGatewayHandler) submitMandatoryUsageRecordTask(parent context.Context, task service.UsageRecordTask) {
-	if task == nil {
-		return
-	}
-	task = wrapUsageRecordTaskContext(parent, task)
-	if h.usageRecordWorkerPool != nil {
-		if mode := h.usageRecordWorkerPool.Submit(task); !mode.Dropped() {
-			return
-		}
-		logger.L().With(
-			zap.String("component", "handler.openai_gateway.usage"),
-		).Warn("openai.usage_record_task_mandatory_sync_fallback")
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	defer func() {
-		if recovered := recover(); recovered != nil {
-			logger.L().With(
-				zap.String("component", "handler.openai_gateway.usage"),
-				zap.Any("panic", recovered),
-			).Error("openai.usage_record_task_panic_recovered")
-		}
-	}()
-	task(ctx)
+	h.submitUsageRecordTask(parent, task)
 }
 
 func (h *OpenAIGatewayHandler) acquireImageGenerationSlot(c *gin.Context, streamStarted bool) (func(), bool) {

@@ -1861,6 +1861,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesOAuth(
 		return s.handleOpenAIImagesErrorResponse(upstreamCtx, resp, c, account, requestModel)
 	}
 	defer func() { _ = resp.Body.Close() }()
+	MarkClientDisconnectUpstreamAccepted(ctx)
 
 	var (
 		usage            OpenAIUsage

@@ -158,6 +158,9 @@ type SettingService struct {
 
 	ipAccessRuntimeListenersMu sync.Mutex
 	ipAccessRuntimeListeners   []func()
+
+	clientDisconnectRiskRuntimeListenersMu sync.Mutex
+	clientDisconnectRiskRuntimeListeners   []func()
 }
 
 // DefaultPlatformQuotaSetting 单 platform 三档限额（nil = 沿用上层；0 = 显式禁用；>0 = 上限）
@@ -419,6 +422,44 @@ func (s *SettingService) SubscribeIPAccessRuntime(listener func()) (unsubscribe 
 			return
 		}
 		s.ipAccessRuntimeListeners[idx] = nil
+	}
+}
+
+func (s *SettingService) SubscribeClientDisconnectRiskRuntime(listener func()) (unsubscribe func()) {
+	if s == nil || listener == nil {
+		return func() {}
+	}
+	s.clientDisconnectRiskRuntimeListenersMu.Lock()
+	s.clientDisconnectRiskRuntimeListeners = append(s.clientDisconnectRiskRuntimeListeners, listener)
+	idx := len(s.clientDisconnectRiskRuntimeListeners) - 1
+	s.clientDisconnectRiskRuntimeListenersMu.Unlock()
+	return func() {
+		s.clientDisconnectRiskRuntimeListenersMu.Lock()
+		defer s.clientDisconnectRiskRuntimeListenersMu.Unlock()
+		if idx >= 0 && idx < len(s.clientDisconnectRiskRuntimeListeners) {
+			s.clientDisconnectRiskRuntimeListeners[idx] = nil
+		}
+	}
+}
+
+func (s *SettingService) notifyClientDisconnectRiskRuntimeListeners() {
+	if s == nil {
+		return
+	}
+	s.clientDisconnectRiskRuntimeListenersMu.Lock()
+	listeners := append([]func(){}, s.clientDisconnectRiskRuntimeListeners...)
+	s.clientDisconnectRiskRuntimeListenersMu.Unlock()
+	for _, listener := range listeners {
+		if listener != nil {
+			func(fn func()) {
+				defer func() {
+					if recovered := recover(); recovered != nil {
+						_ = recovered // keep settings writes healthy
+					}
+				}()
+				fn()
+			}(listener)
+		}
 	}
 }
 

@@ -28,6 +28,18 @@ func TestUsageLogFromService_IncludesOpenAIWSMode(t *testing.T) {
 	require.False(t, UsageLogFromServiceAdmin(httpLog).OpenAIWSMode)
 }
 
+func TestUsageLogFromService_NormalizesMissingCompletionMetadata(t *testing.T) {
+	log := &service.UsageLog{}
+
+	userDTO := UsageLogFromService(log)
+	adminDTO := UsageLogFromServiceAdmin(log)
+
+	require.Equal(t, service.UsageCompletionUnknown, userDTO.CompletionStatus)
+	require.Equal(t, service.UsageSourceUnknown, userDTO.UsageSource)
+	require.Equal(t, service.UsageCompletionUnknown, adminDTO.CompletionStatus)
+	require.Equal(t, service.UsageSourceUnknown, adminDTO.UsageSource)
+}
+
 func TestUsageLogFromService_PrefersRequestTypeForLegacyFields(t *testing.T) {
 	t.Parallel()
 

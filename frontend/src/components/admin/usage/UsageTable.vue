@@ -71,6 +71,14 @@
               </div>
             </div>
             <span v-else class="font-medium text-gray-900 dark:text-white">{{ row.model }}</span>
+			<span
+			  v-if="row.completion_status === 'client_disconnected' || row.is_complete === false"
+			  data-testid="usage-incomplete-badge"
+			  class="inline-flex w-fit items-center rounded bg-amber-50 px-1.5 py-px text-[10px] font-medium text-amber-700 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/30"
+			  :title="row.completion_status === 'client_disconnected' ? t('usage.clientDisconnectedHint') : t('usage.incompleteHint')"
+			>
+			  {{ row.completion_status === 'client_disconnected' ? t('usage.clientDisconnected') : t('usage.incomplete') }}
+			</span>
             <div
               v-if="row.upstream_model_mismatch === true && row.upstream_response_model"
               class="break-all pl-3 text-[11px]"

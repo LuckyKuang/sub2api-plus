@@ -23,7 +23,8 @@ func (s *OpenAIGatewayService) ForwardEmbeddings(
 	account *Account,
 	body []byte,
 	defaultMappedModel string,
-) (*OpenAIForwardResult, error) {
+) (result *OpenAIForwardResult, err error) {
+	defer func() { finalizeClientDisconnectForwardResult(ctx, c, result, err) }()
 	startTime := time.Now()
 
 	originalModel := strings.TrimSpace(gjson.GetBytes(body, "model").String())
@@ -144,6 +145,7 @@ func (s *OpenAIGatewayService) ForwardEmbeddings(
 		s.writeOpenAIEmbeddingsUpstreamResponse(c, resp, account, respBody)
 		return nil, fmt.Errorf("upstream returned status %d", resp.StatusCode)
 	}
+	MarkClientDisconnectUpstreamAccepted(ctx)
 
 	respBody, err := ReadUpstreamResponseBody(resp.Body, s.cfg, c, openAITooLargeError)
 	if err != nil {

@@ -1583,6 +1583,8 @@ export type RedeemCodeType = 'balance' | 'concurrency' | 'subscription' | 'invit
 export type UsageRequestType = 'unknown' | 'sync' | 'stream' | 'ws_v2' | 'cyber' | 'live'
 export type ImageSizeSource = 'output' | 'input' | 'default' | 'legacy'
 export type ImageSizeBreakdown = Record<string, number>
+export type UsageCompletionStatus = 'unknown' | 'completed' | 'client_disconnected' | 'incomplete'
+export type UsageSource = 'unknown' | 'upstream_exact' | 'partial' | 'estimated' | 'reconciled'
 
 export interface UsageLog {
   id: number
@@ -1626,6 +1628,8 @@ export interface UsageLog {
   first_output_ms: number | null
   first_output_kind: 'text' | 'reasoning' | 'tool' | 'image' | 'audio' | null
   is_complete: boolean | null
+  completion_status: UsageCompletionStatus
+  usage_source: UsageSource
 
   // 图片生成字段
   image_count: number

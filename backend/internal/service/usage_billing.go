@@ -42,6 +42,11 @@ type UsageBillingCommand struct {
 	APIKeyQuotaCost     float64
 	APIKeyRateLimitCost float64
 	AccountQuotaCost    float64
+
+	// UsageLog is committed in the same transaction as the billing effects.
+	// It is intentionally excluded from the idempotency fingerprint because the
+	// fingerprint already contains the billable identity, units, and amounts.
+	UsageLog *UsageLog
 }
 
 func (c *UsageBillingCommand) Normalize() {
@@ -164,6 +169,7 @@ type AccountQuotaState struct {
 
 type UsageBillingApplyResult struct {
 	Applied              bool
+	UsageLogPersisted    bool
 	APIKeyQuotaExhausted bool
 	NewBalance           *float64           // post-deduction balance (nil = no balance deduction)
 	BalanceOverdrafted   bool               // true when the sufficient-balance guard missed and debt was still recorded
@@ -180,6 +186,7 @@ type BatchImageBalanceHoldCommand struct {
 	BatchID            string
 	HoldAmount         float64
 	ActualAmount       float64
+	UsageLog           *UsageLog
 }
 
 func (c *BatchImageBalanceHoldCommand) Normalize() {
@@ -213,9 +220,10 @@ func buildBatchImageBalanceHoldFingerprint(c *BatchImageBalanceHoldCommand) stri
 }
 
 type BatchImageBalanceHoldResult struct {
-	Applied       bool
-	NewBalance    *float64
-	FrozenBalance *float64
+	Applied           bool
+	UsageLogPersisted bool
+	NewBalance        *float64
+	FrozenBalance     *float64
 }
 
 type UsageBillingRepository interface {
