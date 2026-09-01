@@ -266,22 +266,22 @@ the release workflow preserves the leading `v` and replaces only `+` with
 `-`. The current mapping is:
 
 ```text
-Git/GitHub:         v0.1.184+custom.001
-Application:        0.1.184+custom.001
-Apple/OCI image:    ghcr.io/luckykuang/sub2api-plus:v0.1.184-custom.001
+Git/GitHub:         v0.1.185+custom.001
+Application:        0.1.185+custom.001
+Apple/OCI image:    ghcr.io/luckykuang/sub2api-plus:v0.1.185-custom.001
 ```
 
 Use the following values when building or publishing this OCI image:
 
 ```bash
 docker build \
-  --build-arg VERSION=0.1.184+custom.001 \
-  --tag ghcr.io/luckykuang/sub2api-plus:v0.1.184-custom.001 \
+  --build-arg VERSION=0.1.185+custom.001 \
+  --tag ghcr.io/luckykuang/sub2api-plus:v0.1.185-custom.001 \
   .
 ```
 
 After that image is available to the Apple `container` runtime, set
-`APPLE_CONTAINER_SUB2API_IMAGE=ghcr.io/luckykuang/sub2api-plus:v0.1.184-custom.001`. Until then, keep
+`APPLE_CONTAINER_SUB2API_IMAGE=ghcr.io/luckykuang/sub2api-plus:v0.1.185-custom.001`. Until then, keep
 the published image as the runtime base and use `APPLE_CONTAINER_SUB2API_BINARY`
 for the custom binary.
 
