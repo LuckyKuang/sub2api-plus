@@ -245,6 +245,7 @@ type UpdateSettingsRequest struct {
 	BackendModeEnabled bool `json:"backend_mode_enabled"`
 
 	// Gateway forwarding behavior
+	OpenAITTFTMode                         *string `json:"openai_ttft_mode"`
 	EnableFingerprintUnification                 *bool   `json:"enable_fingerprint_unification"`
 	EnableMetadataPassthrough                    *bool   `json:"enable_metadata_passthrough"`
 	EnableCCHSigning                             *bool   `json:"enable_cch_signing"`
@@ -262,10 +263,12 @@ type UpdateSettingsRequest struct {
 	OpenAICodexVersionAutoSyncEnabled            *bool   `json:"openai_codex_version_auto_sync_enabled"`
 
 	// codex_cli_only profile policy (global-only)
-	MinCodexVersion       string `json:"min_codex_version"`
-	MaxCodexVersion       string `json:"max_codex_version"`
-	CodexCLIOnlyBlacklist string `json:"codex_cli_only_blacklist"`
-	CodexCLIOnlyWhitelist string `json:"codex_cli_only_whitelist"`
+	MinCodexVersion                      string `json:"min_codex_version"`
+	MaxCodexVersion                      string `json:"max_codex_version"`
+	CodexCLIOnlyBlacklist                string `json:"codex_cli_only_blacklist"`
+	CodexCLIOnlyWhitelist                string `json:"codex_cli_only_whitelist"`
+	CodexCLIOnlyAllowAppServerClients    *bool  `json:"codex_cli_only_allow_app_server_clients"`
+	CodexCLIOnlyEngineFingerprintSignals *string `json:"codex_cli_only_engine_fingerprint_signals"`
 
 	// Payment visible method routing
 	PaymentVisibleMethodAlipaySource  *string `json:"payment_visible_method_alipay_source"`
@@ -1545,6 +1548,12 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		response.Error(c, http.StatusBadRequest, "codex_cli_only_whitelist "+err.Error())
 		return
 	}
+	if req.CodexCLIOnlyEngineFingerprintSignals != nil {
+		if err := service.ValidateEngineFingerprintSignalsJSON(*req.CodexCLIOnlyEngineFingerprintSignals); err != nil {
+			response.Error(c, http.StatusBadRequest, "codex_cli_only_engine_fingerprint_signals "+err.Error())
+			return
+		}
+	}
 	// cyber 会话屏蔽 TTL 校验：提供时必须 > 0
 	if req.CyberSessionBlockTTLSeconds != nil && *req.CyberSessionBlockTTLSeconds <= 0 {
 		response.BadRequest(c, "cyber_session_block_ttl_seconds must be > 0")
@@ -1742,6 +1751,12 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.EnableFingerprintUnification
 		}(),
+		OpenAITTFTMode: func() string {
+			if req.OpenAITTFTMode != nil {
+				return *req.OpenAITTFTMode
+			}
+			return previousSettings.OpenAITTFTMode
+		}(),
 		EnableMetadataPassthrough: func() bool {
 			if req.EnableMetadataPassthrough != nil {
 				return *req.EnableMetadataPassthrough
@@ -1832,6 +1847,18 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		MaxCodexVersion:       strings.TrimSpace(req.MaxCodexVersion),
 		CodexCLIOnlyBlacklist: strings.TrimSpace(req.CodexCLIOnlyBlacklist),
 		CodexCLIOnlyWhitelist: strings.TrimSpace(req.CodexCLIOnlyWhitelist),
+		CodexCLIOnlyAllowAppServerClients: func() bool {
+			if req.CodexCLIOnlyAllowAppServerClients != nil {
+				return *req.CodexCLIOnlyAllowAppServerClients
+			}
+			return previousSettings.CodexCLIOnlyAllowAppServerClients
+		}(),
+		CodexCLIOnlyEngineFingerprintSignals: func() string {
+			if req.CodexCLIOnlyEngineFingerprintSignals != nil {
+				return strings.TrimSpace(*req.CodexCLIOnlyEngineFingerprintSignals)
+			}
+			return previousSettings.CodexCLIOnlyEngineFingerprintSignals
+		}(),
 		PaymentVisibleMethodAlipaySource: func() string {
 			if req.PaymentVisibleMethodAlipaySource != nil {
 				return strings.TrimSpace(*req.PaymentVisibleMethodAlipaySource)
@@ -2363,6 +2390,8 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		MaxCodexVersion:                                        updatedSettings.MaxCodexVersion,
 		CodexCLIOnlyBlacklist:                                  updatedSettings.CodexCLIOnlyBlacklist,
 		CodexCLIOnlyWhitelist:                                  updatedSettings.CodexCLIOnlyWhitelist,
+		CodexCLIOnlyAllowAppServerClients:                      updatedSettings.CodexCLIOnlyAllowAppServerClients,
+		CodexCLIOnlyEngineFingerprintSignals:                   updatedSettings.CodexCLIOnlyEngineFingerprintSignals,
 		PaymentVisibleMethodAlipaySource:                       updatedSettings.PaymentVisibleMethodAlipaySource,
 		PaymentVisibleMethodWxpaySource:                        updatedSettings.PaymentVisibleMethodWxpaySource,
 		PaymentVisibleMethodAlipayEnabled:                      updatedSettings.PaymentVisibleMethodAlipayEnabled,

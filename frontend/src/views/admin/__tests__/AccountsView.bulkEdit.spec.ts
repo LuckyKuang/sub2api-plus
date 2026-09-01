@@ -26,7 +26,7 @@ vi.mock('@/api/admin', () => ({
     accounts: {
       list: listAccounts,
       listWithEtag,
-      getBatchTodayStats,
+          getBatchTodayStats,
       delete: vi.fn(),
       batchClearError: vi.fn(),
       batchRefresh: vi.fn(),
@@ -239,5 +239,3 @@ describe('admin AccountsView bulk edit scope', () => {
 
 
 
-
-})
