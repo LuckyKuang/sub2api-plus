@@ -24,6 +24,7 @@ import (
 type stagedPassthroughFrame struct {
 	messageType coderws.MessageType
 	payload     []byte
+	err         error
 }
 
 type stagedPassthroughConn struct {
@@ -45,6 +46,10 @@ func (c *stagedPassthroughConn) Send(payload string) {
 	c.frames <- stagedPassthroughFrame{messageType: coderws.MessageText, payload: []byte(payload)}
 }
 
+func (c *stagedPassthroughConn) Fail(err error) {
+	c.frames <- stagedPassthroughFrame{err: err}
+}
+
 func (c *stagedPassthroughConn) WriteJSON(context.Context, any) error { return nil }
 
 func (c *stagedPassthroughConn) ReadMessage(ctx context.Context) ([]byte, error) {
@@ -64,7 +69,7 @@ func (c *stagedPassthroughConn) ReadFrame(ctx context.Context) (coderws.MessageT
 	case <-c.closed:
 		return coderws.MessageText, nil, errOpenAIWSConnClosed
 	case frame := <-c.frames:
-		return frame.messageType, append([]byte(nil), frame.payload...), nil
+		return frame.messageType, append([]byte(nil), frame.payload...), frame.err
 	}
 }
 
@@ -194,7 +199,9 @@ func startPassthroughLifecycleServer(
 		ginCtx.Request = req
 		serverErr <- svc.ProxyResponsesWebSocketFromClient(controlCtx, ginCtx, conn, account, "sk-test", firstMessage, hooks)
 	}))
-	return serve
+	return server, serverErr
+}
+
 func startPassthroughLifecycleServerWithHooks(
 	t *testing.T,
 	controlCtx context.Context,
@@ -240,9 +247,6 @@ func startPassthroughLifecycleServerWithHooks(
 		serverErr <- svc.ProxyResponsesWebSocketFromClient(controlCtx, ginCtx, conn, account, "sk-test", firstMessage, hooks)
 	}))
 	return server, serverErr
-}
-
-r, serverErr
 }
 
 func TestPassthroughLifecycle_UnknownFramePassesAuditHookAndWritesUpstream(t *testing.T) {
@@ -990,41 +994,3 @@ func TestPassthroughLifecycle_CloseReasonTruncationPreservesUTF8(t *testing.T) {
 		t.Fatal("passthrough close reason test did not exit")
 	}
 }
-
-func dialPassthroughLifecycleClient(t *testing.T, server *httptest.Server) *coderws.Conn {
-	t.Helper()
-	return dialPassthroughLifecycleClientWithPayload(t, server, `{"type":"response.create","model":"gpt-5.1","stream":false}`)
-}
-
-func dialPassthroughLifecycleClientWithPayload(t *testing.T, server *httptest.Server, payload string) *coderws.Conn {
-	t.Helper()
-	dialCtx, cancelDial := context.WithTimeout(context.Background(), 3*time.Second)
-	clientConn, _, err := coderws.Dial(dialCtx, "ws"+strings.TrimPrefix(server.URL, "http"), nil)
-	cancelDial()
-	require.NoError(t, err)
-	writeCtx, cancelWrite := context.WithTimeout(context.Background(), 3*time.Second)
-	err = clientConn.Write(writeCtx, coderws.MessageText, []byte(payload))
-	cancelWrite()
-	require.NoError(t, err)
-	return clientConn
-}
-
-func readPassthroughLifecycleFrame(t *testing.T, clientConn *coderws.Conn, timeout time.Duration) ([]byte, error) {
-	t.Helper()
-	readCtx, cancelRead := context.WithTimeout(context.Background(), timeout)
-	_, payload, err := clientConn.Read(readCtx)
-	cancelRead()
-	return payload, err
-}
-
-func requirePassthroughUpstreamWrite(t *testing.T, upstream *stagedPassthroughConn, timeout time.Duration) []byte {
-	t.Helper()
-	select {
-	case payload := <-upstream.writes:
-		return payload
-	case <-time.After(timeout):
-		t.Fatal("passthrough request was not forwarded upstream")
-		return nil
-	}
-}
-

@@ -1105,21 +1105,8 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 					}
 				}
 				usageMeta.captureRequestedReasoningEffort(originalResponseCreate)
-			}
-			turnNo := int(completedTurns.Load()) + 1
-			if turnNo < 2 {
-				turnNo = 2
-			}
-			requestModelForThisFrame := ""
-			if isResponseCreate {
-				requestModelForThisFrame = usageMeta.requestModelForFrame(payload)
-				if requestModelForThisFrame == "" {
-					requestModelForThisFrame = capturedSessionModel
-				}
-				if hooks != nil && hooks.BeforeRequest != nil {
-					if err := hooks.BeforeRequest(turnNo, payload, requestModelForThisFrame); err != nil {
-						return payload, nil, err
-					}
+				if mappedModel := usageMeta.requestModelForFrame(payload); mappedModel != "" {
+					requestModelForThisFrame = mappedModel
 				}
 				if hooks != nil && hooks.MapRequestModel != nil {
 					upstreamModel, err := hooks.MapRequestModel(turnNo, requestModelForThisFrame)

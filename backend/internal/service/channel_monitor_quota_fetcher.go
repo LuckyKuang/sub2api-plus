@@ -171,6 +171,21 @@ func (f *ChannelMonitorQuotaFetcher) Fetch(ctx context.Context, accountID int64)
 	}
 }
 
+func (f *ChannelMonitorQuotaFetcher) fetchShared(accountID int64) *domain.MonitorQuotaSnapshot {
+	if cached, ok := f.cachedSnapshot(accountID, time.Now()); ok {
+		return cached
+	}
+	fetchCtx, cancel := context.WithTimeout(context.Background(), monitorQuotaFetchTimeout)
+	defer cancel()
+	snapshot := f.fetchUncached(fetchCtx, accountID, time.Now())
+	ttl := monitorQuotaFetchCacheTTL
+	if !snapshot.Success {
+		ttl = monitorQuotaErrorCacheTTL
+	}
+	f.storeSnapshot(accountID, snapshot, time.Now().Add(ttl))
+	return snapshot
+}
+
 func (f *ChannelMonitorQuotaFetcher) cachedSnapshot(accountID int64, now time.Time) (*domain.MonitorQuotaSnapshot, bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

@@ -53,6 +53,7 @@ func (r codexModelsFailoverAccountRepo) ListByPlatform(_ context.Context, platfo
 		}
 	}
 	return accounts, nil
+}
 
 func (r codexModelsFailoverAccountRepo) ListSchedulableByGroupID(_ context.Context, _ int64) ([]service.Account, error) {
 	return append([]service.Account(nil), r.accounts...), nil
@@ -174,6 +175,8 @@ func TestCodexModelsRejectsGroupOutsideOAuthSessionWhitelist(t *testing.T) {
 	}
 	if !strings.Contains(recorder.Body.String(), "permission_error") {
 		t.Fatalf("body does not contain permission_error: %s", recorder.Body.String())
+	}
+}
 
 func TestCodexModelsAppliesLocalFiltersBeforeClientETag(t *testing.T) {
 	gin.SetMode(gin.TestMode)
