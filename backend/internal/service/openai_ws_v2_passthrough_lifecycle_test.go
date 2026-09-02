@@ -10,8 +10,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"unicode/utf8"
 	"time"
+	"unicode/utf8"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/auditcontent"
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
