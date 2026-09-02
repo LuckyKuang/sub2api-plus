@@ -334,7 +334,7 @@ describe('PaymentView recharge rate preview', () => {
   it('uses the selected payment method currency in both locale templates', async () => {
     translate.mockClear()
     routeState.path = '/purchase'
-    routeState.query = {}
+    routeState.query = { tab: 'recharge' }
     getCheckoutInfo.mockReset().mockResolvedValue(checkoutInfoFixture({
       balance_recharge_multiplier: 0.5,
       methods: {

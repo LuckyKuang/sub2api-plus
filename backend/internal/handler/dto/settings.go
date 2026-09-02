@@ -202,7 +202,7 @@ type SystemSettings struct {
 	BackendModeEnabled bool `json:"backend_mode_enabled"`
 
 	// Gateway forwarding behavior
-	OpenAITTFTMode                         string `json:"openai_ttft_mode"`
+	OpenAITTFTMode                               string `json:"openai_ttft_mode"`
 	EnableFingerprintUnification                 bool   `json:"enable_fingerprint_unification"`
 	EnableMetadataPassthrough                    bool   `json:"enable_metadata_passthrough"`
 	EnableCCHSigning                             bool   `json:"enable_cch_signing"`
@@ -225,8 +225,8 @@ type SystemSettings struct {
 	OpenAICodexVersionAutoSyncEnabled            bool   `json:"openai_codex_version_auto_sync_enabled"`
 
 	// codex_cli_only profile policy
-	MinCodexVersion       string `json:"min_codex_version"`
-	MaxCodexVersion       string `json:"max_codex_version"`
+	MinCodexVersion                      string `json:"min_codex_version"`
+	MaxCodexVersion                      string `json:"max_codex_version"`
 	CodexCLIOnlyBlacklist                string `json:"codex_cli_only_blacklist"`
 	CodexCLIOnlyWhitelist                string `json:"codex_cli_only_whitelist"`
 	CodexCLIOnlyAllowAppServerClients    bool   `json:"codex_cli_only_allow_app_server_clients"`

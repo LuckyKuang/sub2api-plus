@@ -313,18 +313,6 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsResponses(
 	return result, nil
 }
 
-func chatChunkStartsResponsesOutput(chunk *apicompat.ChatCompletionsChunk) bool {
-	if chunk == nil {
-		return false
-	}
-	for _, choice := range chunk.Choices {
-		if choice.Delta.Content != nil || choice.Delta.ReasoningContent != nil || len(choice.Delta.ToolCalls) > 0 {
-			return true
-		}
-	}
-	return false
-}
-
 // responsesReasoningCacheTTL 是 reasoning 缓存（按 reasoning item id）的过期时间。
 // Codex 会话可能跨多天恢复历史，取 7 天。
 const responsesReasoningCacheTTL = 7 * 24 * time.Hour

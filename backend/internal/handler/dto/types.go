@@ -532,7 +532,7 @@ type UsageLog struct {
 	OpenAIWSMode bool   `json:"openai_ws_mode"`
 	// NativeCompactionV2 is true only for requests positively identified at
 	// runtime as the native OpenAI remote compaction v2 wire.
-	NativeCompactionV2 bool `json:"native_compaction_v2"`
+	NativeCompactionV2 bool    `json:"native_compaction_v2"`
 	DurationMs         *int    `json:"duration_ms"`
 	FirstTokenMs       *int    `json:"first_token_ms"`
 	LastTokenMs        *int    `json:"last_token_ms"`

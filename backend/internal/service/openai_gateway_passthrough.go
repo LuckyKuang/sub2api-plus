@@ -1335,6 +1335,16 @@ func openAIStreamDataStartsTTFT(data, eventType string, forceOutput bool, mode s
 	return forceOutput || openAIStreamDataStartsSemanticTTFT(data, eventType)
 }
 
+func selectOpenAIFirstTokenMs(mode string, semantic, visible *int) *int {
+	if normalizeOpenAITTFTMode(mode) == OpenAITTFTModeVisible {
+		return visible
+	}
+	if semantic != nil {
+		return semantic
+	}
+	return visible
+}
+
 // openAIStreamFailedEventErrorCode 提取流内 failed 事件的错误码（小写），
 // 兼容 response.failed 的嵌套形态与裸 error 形态。
 func openAIStreamFailedEventErrorCode(payload []byte) string {
@@ -1910,6 +1920,8 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 	usage := &OpenAIUsage{}
 	imageCounter := newOpenAIImageOutputCounter()
 	var timing streamOutputTiming
+	var firstTokenMs *int
+	ttftMode := s.openAITTFTMode(ctx)
 	responseID := ""
 	clientDisconnected := false
 	sawDone := false
@@ -2026,7 +2038,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 	resultWithUsage := func() *openaiStreamingResultPassthrough {
 		return &openaiStreamingResultPassthrough{
 			usage:            usage,
-			firstTokenMs:     timing.firstTokenMs,
+			firstTokenMs:     selectOpenAIFirstTokenMs(ttftMode, firstTokenMs, timing.firstTokenMs),
 			lastTokenMs:      timing.lastTokenMs,
 			firstOutputMs:    timing.firstOutputMs,
 			firstOutputKind:  timing.firstOutputKind,
@@ -2193,6 +2205,10 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 				line = "data: " + string(sanitizedData)
 			}
 			lineStartsClientOutput = forceFlushFailedEvent || openAIStreamDataStartsClientOutput(trimmedData, eventType)
+			if firstTokenMs == nil && openAIStreamDataStartsTTFT(trimmedData, eventType, forceFlushFailedEvent, ttftMode) {
+				ms := int(time.Since(startTime).Milliseconds())
+				firstTokenMs = &ms
+			}
 			if lineStartsClientOutput && trimmedData != "[DONE]" && !openAIStreamEventTypeIsTerminal(eventType) {
 				semanticOutputSeen = true
 			}

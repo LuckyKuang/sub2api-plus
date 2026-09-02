@@ -285,7 +285,6 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
 	var timing streamOutputTiming
 	clientDisconnected := false
 	clientOutputStarted := false
-	sawDone := false
 	pendingLines := make([]string, 0, 8)
 	refusalDetector := newOpenAIChatSilentRefusalDetector(requestBodyLen)
 	var terminal openAIRawStreamTerminalState
@@ -328,9 +327,7 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
 		if payload, ok := extractOpenAISSEDataLine(line); ok {
 			trimmedPayload := strings.TrimSpace(payload)
 			terminal.ObserveDataLine(trimmedPayload)
-			if trimmedPayload == "[DONE]" {
-				sawDone = true
-			} else {
+			if trimmedPayload != "[DONE]" {
 				observer.ObserveOpenAI([]byte(payload), strings.TrimSpace(gjson.Get(payload, "type").String()))
 				if u := extractCCStreamUsage(payload); u != nil {
 					usage = *u
@@ -440,14 +437,8 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
 	}
 
 	result := resultWithUsage()
-	if scanErr != nil {
+	if scanErr != nil && !clientAborted {
 		return result, fmt.Errorf("stream usage incomplete: %w", scanErr)
-	}
-	if !sawDone {
-		return result, errors.New("stream usage incomplete: missing [DONE]")
-	}
-	if clientDisconnected {
-		return result, errors.New("client disconnected")
 	}
 	return result, nil
 }

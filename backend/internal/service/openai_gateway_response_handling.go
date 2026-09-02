@@ -369,7 +369,7 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 	resultWithUsage := func() *openaiStreamingResult {
 		return &openaiStreamingResult{
 			usage:            usage,
-			firstTokenMs:     timing.firstTokenMs,
+			firstTokenMs:     selectOpenAIFirstTokenMs(ttftMode, firstTokenMs, timing.firstTokenMs),
 			lastTokenMs:      timing.lastTokenMs,
 			firstOutputMs:    timing.firstOutputMs,
 			firstOutputKind:  timing.firstOutputKind,
@@ -693,6 +693,10 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 			observation := apicompat.ObserveResponsesOutput(dataBytes)
 			startsVisibleOutput := observation.MeaningfulOutput
 			startsTTFTOutput := openAIStreamDataStartsTTFT(data, eventType, forceFlushFailedEvent, ttftMode)
+			if !stageFirstOutput && startsTTFTOutput && firstTokenMs == nil {
+				ms := int(time.Since(startTime).Milliseconds())
+				firstTokenMs = &ms
+			}
 			if stageFirstOutput {
 				eventStartsClientOutput = eventStartsClientOutput || startsClientOutput
 				eventStartsVisibleOutput = eventStartsVisibleOutput || startsVisibleOutput
