@@ -93,27 +93,84 @@ func contentModerationSessionBlockKey(userID, apiKeyID int64, sessionID string) 
 }
 
 func (s *ContentModerationService) lookupBlockedSession(ctx context.Context, cfg *ContentModerationConfig, input ContentModerationCheckInput) *ContentModerationDecision {
-	if s == nil || cfg == nil || !cfg.SessionBlockEnabled || strings.TrimSpace(input.SessionID) == "" || s.hashCache == nil {
+	if s == nil || cfg == nil || !cfg.SessionBlockEnabled || strings.TrimSpace(input.SessionID) == "" {
 		return nil
 	}
 	blockKey := contentModerationSessionBlockKey(input.UserID, input.APIKeyID, input.SessionID)
 	if blockKey == "" {
 		return nil
 	}
-	matched, err := s.hashCache.HasBlockedSession(ctx, blockKey)
-	if err != nil {
-		slog.Warn("content_moderation.session_block_check_failed",
-			"request_id", input.RequestID,
-			"user_id", input.UserID,
-			"api_key_id", input.APIKeyID,
-			"endpoint", input.Endpoint,
-			"protocol", input.Protocol,
-			"stage", contentModerationAuditStage(input.Stage),
-			"body_bytes", len(input.Body),
-			"error_code", "session_block_check_failed",
-			"error_kind", contentModerationErrorKind(err))
-		return nil
+	cached := false
+	if s.hashCache != nil {
+		hit, err := s.hashCache.HasBlockedSession(ctx, blockKey)
+		if err != nil {
+			slog.Warn("content_moderation.session_block_check_failed",
+				"request_id", input.RequestID,
+				"user_id", input.UserID,
+				"api_key_id", input.APIKeyID,
+				"endpoint", input.Endpoint,
+				"protocol", input.Protocol,
+				"stage", contentModerationAuditStage(input.Stage),
+				"body_bytes", len(input.Body),
+				"error_code", "session_block_check_failed",
+				"error_kind", contentModerationErrorKind(err))
+		} else {
+			cached = hit
+		}
 	}
+	matched := cached
+	if s.repo != nil {
+		block, err := s.repo.GetSessionBlockByKey(ctx, blockKey)
+		if err != nil {
+			slog.Warn("content_moderation.session_block_lookup_failed",
+				"request_id", input.RequestID,
+				"user_id", input.UserID,
+				"api_key_id", input.APIKeyID,
+				"endpoint", input.Endpoint,
+				"protocol", input.Protocol,
+				"stage", contentModerationAuditStage(input.Stage),
+				"body_bytes", len(input.Body),
+				"error_code", "session_block_lookup_failed",
+				"error_kind", contentModerationErrorKind(err))
+			if !cached {
+				return nil
+			}
+		} else if block != nil && block.ExpiresAt.After(time.Now()) {
+			matched = true
+			if !cached && s.hashCache != nil {
+				ttl := time.Until(block.ExpiresAt)
+				if ttl > 0 {
+					if err := s.hashCache.RecordBlockedSession(ctx, blockKey, ttl); err != nil {
+						slog.Warn("content_moderation.session_block_rehydrate_failed",
+							"request_id", input.RequestID,
+							"user_id", input.UserID,
+							"endpoint", input.Endpoint,
+							"protocol", input.Protocol,
+							"stage", contentModerationAuditStage(input.Stage),
+							"body_bytes", len(input.Body),
+							"error_code", "session_block_rehydrate_failed",
+							"error_kind", contentModerationErrorKind(err))
+					}
+				}
+			}
+		} else {
+			matched = false
+			if cached && s.hashCache != nil {
+				if _, err := s.hashCache.DeleteBlockedSession(ctx, blockKey); err != nil {
+					slog.Warn("content_moderation.session_block_stale_cache_delete_failed",
+						"request_id", input.RequestID,
+						"user_id", input.UserID,
+						"endpoint", input.Endpoint,
+						"protocol", input.Protocol,
+						"stage", contentModerationAuditStage(input.Stage),
+						"body_bytes", len(input.Body),
+						"error_code", "session_block_stale_cache_delete_failed",
+						"error_kind", contentModerationErrorKind(err))
+				}
+			}
+		}
+	}
+
 	if !matched {
 		return nil
 	}
@@ -161,22 +218,6 @@ func (s *ContentModerationService) recordAPISessionBlock(ctx context.Context, cf
 	}
 	ttl := contentModerationSessionBlockTTL(cfg.SessionBlockTTLSeconds)
 	expiresAt := time.Now().Add(ttl)
-	if s.hashCache != nil {
-		if err := s.hashCache.RecordBlockedSession(ctx, blockKey, ttl); err != nil {
-			slog.Warn("content_moderation.session_block_record_failed",
-				"request_id", input.RequestID,
-				"user_id", input.UserID,
-				"endpoint", input.Endpoint,
-				"protocol", input.Protocol,
-				"stage", contentModerationAuditStage(input.Stage),
-				"body_bytes", len(input.Body),
-				"error_code", "session_block_record_failed",
-				"error_kind", contentModerationErrorKind(err))
-		}
-	}
-	if s.repo == nil {
-		return
-	}
 	var userID *int64
 	if input.UserID > 0 {
 		id := input.UserID
@@ -187,7 +228,7 @@ func (s *ContentModerationService) recordAPISessionBlock(ctx context.Context, cf
 		id := input.APIKeyID
 		apiKeyID = &id
 	}
-	if err := s.repo.UpsertSessionBlock(ctx, &ContentModerationSessionBlock{
+	block := &ContentModerationSessionBlock{
 		BlockKey:        blockKey,
 		SessionID:       sessionID,
 		UserID:          userID,
@@ -199,16 +240,34 @@ func (s *ContentModerationService) recordAPISessionBlock(ctx context.Context, cf
 		HighestCategory: decision.HighestCategory,
 		HighestScore:    decision.HighestScore,
 		ExpiresAt:       expiresAt,
-	}); err != nil {
-		slog.Warn("content_moderation.session_block_persist_failed",
-			"request_id", input.RequestID,
-			"user_id", input.UserID,
-			"endpoint", input.Endpoint,
-			"protocol", input.Protocol,
-			"stage", contentModerationAuditStage(input.Stage),
-			"body_bytes", len(input.Body),
-			"error_code", "session_block_persist_failed",
-			"error_kind", contentModerationErrorKind(err))
+	}
+	if s.repo != nil {
+		if err := s.repo.UpsertSessionBlock(ctx, block); err != nil {
+			slog.Warn("content_moderation.session_block_persist_failed",
+				"request_id", input.RequestID,
+				"user_id", input.UserID,
+				"endpoint", input.Endpoint,
+				"protocol", input.Protocol,
+				"stage", contentModerationAuditStage(input.Stage),
+				"body_bytes", len(input.Body),
+				"error_code", "session_block_persist_failed",
+				"error_kind", contentModerationErrorKind(err))
+		} else if !block.ExpiresAt.IsZero() {
+			ttl = time.Until(block.ExpiresAt)
+		}
+	}
+	if s.hashCache != nil && ttl > 0 {
+		if err := s.hashCache.RecordBlockedSession(ctx, blockKey, ttl); err != nil {
+			slog.Warn("content_moderation.session_block_record_failed",
+				"request_id", input.RequestID,
+				"user_id", input.UserID,
+				"endpoint", input.Endpoint,
+				"protocol", input.Protocol,
+				"stage", contentModerationAuditStage(input.Stage),
+				"body_bytes", len(input.Body),
+				"error_code", "session_block_record_failed",
+				"error_kind", contentModerationErrorKind(err))
+		}
 	}
 }
 
@@ -248,14 +307,14 @@ func (s *ContentModerationService) DeleteSessionBlock(ctx context.Context, block
 	if err != nil {
 		return nil, fmt.Errorf("get content moderation session block: %w", err)
 	}
+	deleted, err := s.repo.DeleteSessionBlockByKey(ctx, blockKey)
+	if err != nil {
+		return nil, fmt.Errorf("delete content moderation session block: %w", err)
+	}
 	if s.hashCache != nil {
 		if _, err := s.hashCache.DeleteBlockedSession(ctx, blockKey); err != nil {
 			return nil, fmt.Errorf("delete content moderation session block cache: %w", err)
 		}
-	}
-	deleted, err := s.repo.DeleteSessionBlockByKey(ctx, blockKey)
-	if err != nil {
-		return nil, fmt.Errorf("delete content moderation session block: %w", err)
 	}
 	sessionID := ""
 	if existing != nil {
@@ -272,14 +331,14 @@ func (s *ContentModerationService) ClearSessionBlocks(ctx context.Context) (*Con
 	if s == nil || s.repo == nil {
 		return nil, infraerrors.InternalServer("CONTENT_MODERATION_REPOSITORY_UNAVAILABLE", "内容审计仓储不可用")
 	}
+	deleted, err := s.repo.ClearSessionBlocks(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("clear content moderation session blocks: %w", err)
+	}
 	if s.hashCache != nil {
 		if _, err := s.hashCache.ClearBlockedSessions(ctx); err != nil {
 			return nil, fmt.Errorf("clear content moderation session block cache: %w", err)
 		}
-	}
-	deleted, err := s.repo.ClearSessionBlocks(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("clear content moderation session blocks: %w", err)
 	}
 	return &ContentModerationClearSessionBlocksResult{Deleted: deleted}, nil
 }

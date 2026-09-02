@@ -71,6 +71,20 @@ WHERE client_disconnect_risk_states.generation <= EXCLUDED.generation`, input.Us
 	}
 	var sequence int64
 	err = tx.QueryRowContext(ctx, `
+SELECT next_sequence FROM client_disconnect_risk_states
+WHERE user_id = $1 AND generation = $2
+FOR UPDATE`, input.UserID, input.Generation).Scan(&sequence)
+	if errors.Is(err, sql.ErrNoRows) {
+		if err = tx.Commit(); err != nil {
+			return 0, err
+		}
+		return 0, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("lock client disconnect state: %w", err)
+	}
+
+	err = tx.QueryRowContext(ctx, `
 SELECT sequence FROM client_disconnect_risk_events
 WHERE user_id = $1 AND generation = $2 AND request_id = $3`,
 		input.UserID, input.Generation, input.RequestID).Scan(&sequence)
@@ -96,8 +110,7 @@ RETURNING next_sequence`, input.UserID, input.Generation).Scan(&sequence)
 	_, err = tx.ExecContext(ctx, `
 INSERT INTO client_disconnect_risk_events
     (user_id, generation, sequence, request_id, api_key_id, protocol)
-VALUES ($1, $2, $3, $4, NULLIF($5, 0), $6)
-ON CONFLICT (user_id, generation, request_id) DO NOTHING`,
+VALUES ($1, $2, $3, $4, NULLIF($5, 0), $6)`,
 		input.UserID, input.Generation, sequence, input.RequestID, input.APIKeyID, input.Protocol)
 	if err != nil {
 		return 0, fmt.Errorf("insert client disconnect event: %w", err)

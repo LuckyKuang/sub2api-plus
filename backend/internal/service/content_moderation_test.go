@@ -79,9 +79,10 @@ func (r *contentModerationTestSettingRepo) Delete(ctx context.Context, key strin
 }
 
 type contentModerationTestRepo struct {
-	mu            sync.Mutex
-	logs          []ContentModerationLog
-	sessionBlocks []ContentModerationSessionBlock
+	mu                 sync.Mutex
+	logs               []ContentModerationLog
+	sessionBlocks      []ContentModerationSessionBlock
+	getSessionBlockErr error
 }
 
 func (r *contentModerationTestRepo) CreateLog(ctx context.Context, log *ContentModerationLog) error {
@@ -127,9 +128,29 @@ func (r *contentModerationTestRepo) UpdateLogEmailSent(ctx context.Context, id i
 func (r *contentModerationTestRepo) UpsertSessionBlock(ctx context.Context, block *ContentModerationSessionBlock) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if block != nil {
-		r.sessionBlocks = append(r.sessionBlocks, *block)
+	if block == nil {
+		return nil
 	}
+	now := time.Now()
+	for i, existing := range r.sessionBlocks {
+		if existing.BlockKey != block.BlockKey {
+			continue
+		}
+		if existing.ExpiresAt.After(now) {
+			block.ExpiresAt = existing.ExpiresAt
+			block.CreatedAt = existing.CreatedAt
+		} else if block.CreatedAt.IsZero() {
+			block.CreatedAt = now
+		}
+		block.ID = existing.ID
+		r.sessionBlocks[i] = *block
+		return nil
+	}
+	if block.CreatedAt.IsZero() {
+		block.CreatedAt = now
+	}
+	block.ID = int64(len(r.sessionBlocks) + 1)
+	r.sessionBlocks = append(r.sessionBlocks, *block)
 	return nil
 }
 
@@ -138,6 +159,18 @@ func (r *contentModerationTestRepo) ListSessionBlocks(ctx context.Context, filte
 }
 
 func (r *contentModerationTestRepo) GetSessionBlockByKey(ctx context.Context, blockKey string) (*ContentModerationSessionBlock, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.getSessionBlockErr != nil {
+		return nil, r.getSessionBlockErr
+	}
+	blockKey = strings.TrimSpace(blockKey)
+	for _, item := range r.sessionBlocks {
+		if item.BlockKey == blockKey {
+			clone := item
+			return &clone, nil
+		}
+	}
 	return nil, nil
 }
 

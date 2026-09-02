@@ -194,7 +194,7 @@ type ContentModerationConfig struct {
 	// SessionBlockEnabled 为 true 时，外部 Moderation API 阈值拦截会写入会话黑名单。
 	// 默认 false。关键词拦截、hash_block、shadow、Prompt Guard 不写入。
 	SessionBlockEnabled bool `json:"session_block_enabled"`
-	// SessionBlockTTLSeconds 会话黑名单 TTL，默认 30 天。命中不续期。
+	// SessionBlockTTLSeconds 会话黑名单 TTL，默认 30 天。命中不续期；Redis 只缓存剩余 TTL，PostgreSQL 是权威来源。
 	SessionBlockTTLSeconds int `json:"session_block_ttl_seconds"`
 }
 

@@ -23,7 +23,13 @@ users.
 A request affects the streak only after an authenticated external request has
 been accepted by an upstream service. Validation failures, account-selection
 failures, internal probes, retries before upstream acceptance, and scheduled
-tests do not count.
+tests do not count. OpenAI Responses WebSocket turns use the same rule at the
+write boundary: they are counted after `BeforeTurn` succeeds (account
+revalidation, billing eligibility, and concurrency), immediately before the
+upstream write. A `response.create` that fails admission never creates an
+event. If `BeforeTurn` succeeds but the first upstream write or handshake
+fails, the turn is still finalized as a neutral/error outcome so the
+ordered queue cannot stall on a pending event.
 
 Settings changes invalidate the local process cache immediately. In a
 multi-instance deployment, another process may observe the new value after the
@@ -49,9 +55,10 @@ reusing `X-Request-ID` cannot suppress the streak. Concurrent requests receive
 per-user sequence numbers and are processed in acceptance order rather than
 callback completion order. State generations only move forward; an instance
 with a stale settings cache cannot roll a user back to an older generation or
-delete current-generation events. OpenAI Responses WebSocket requests are
-counted per accepted turn; closing a connection after a completed turn is not
-a disconnect outcome.
+delete current-generation events. Concurrent `Begin` calls for one user take
+a row lock on that user's risk state so sequence numbers stay contiguous.
+OpenAI Responses WebSocket requests are counted per admitted turn; closing a
+connection after a completed turn is not a disconnect outcome.
 
 Administrator and feature-disabled requests remain auditable, but their events
 have effective `enforce=false` and do not increment or reset the streak. The
@@ -133,7 +140,8 @@ Completions; Gemini v1beta; OpenAI Responses, Messages, Chat Completions,
 Images, Embeddings and Alpha Search; Grok media and voice HTTP; standalone Grok
 Web Search and X Search; remote Anthropic/OpenAI token-count endpoints; and
 OpenAI Responses WebSocket turns. Grok Voice Realtime is counted per upstream
-response turn, not per connection:
-`response.created` accepts a turn, successful terminal events reset the streak,
-failed terminal events are neutral, and only still-pending response IDs become
-disconnected when the connection closes.
+response turn, not per connection: `response.created` accepts a turn, successful
+terminal events reset the streak, failed terminal events are neutral, and only
+still-pending response IDs become disconnected when the connection closes. A
+missing user role skips Grok Realtime counting so the administrator exemption
+cannot be lost.

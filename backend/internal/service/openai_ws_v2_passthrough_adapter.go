@@ -747,6 +747,13 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 			return err
 		}
 	}
+	firstTurnSettled := false
+	defer func() {
+		if firstTurnSettled || hooks == nil || hooks.AfterTurn == nil {
+			return
+		}
+		hooks.AfterTurn(1, nil, wrapOpenAIWSIngressTurnError("write_upstream", errors.New("first websocket turn did not reach upstream"), false))
+	}()
 	capturedSessionModel := openAIWSPassthroughPolicyModelForFrame(account, firstClientMessage)
 	if capturedSessionModel != "" && capturedSessionModel != strings.TrimSpace(gjson.GetBytes(firstClientMessage, "model").String()) {
 		firstClientMessage = s.ReplaceModelInBody(firstClientMessage, capturedSessionModel)
@@ -1222,6 +1229,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 			false,
 		)
 	}
+	firstTurnSettled = true
 	upstreamFirstMessageSent = true
 
 	readNextClientFrame := func(readCtx context.Context, conn openaiwsv2.FrameConn) (coderws.MessageType, []byte, error) {

@@ -158,11 +158,18 @@ session table. Keyword hits, hash blocks, shadow findings, Prompt Guard
 blocks, extraction failures, and missing session IDs never seed it.
 Administrators are blocked for the current request only and are not written
 into the session blacklist. Raw audio frames remain unextractable and are
-not a session-block trigger. Redis lookup failures fail open. Administrators
-may list, delete a specific tenant-isolated block key, or clear the durable
-session-block index from Risk Control. An active session block still rejects
-later turns even when the current request is outside the configured group or
-model filter.
+not a session-block trigger. Redis is a TTL cache in front of the durable
+table. A cache miss or Redis error falls back to PostgreSQL and, on a live
+row, rehydrates the remaining TTL with `SETNX` so later hits do not extend
+expiry. A Redis hit is confirmed against PostgreSQL; an expired or deleted
+row clears the cache and does not block. If Redis still has the key and
+PostgreSQL is unavailable, the cached hit remains authoritative. A cache
+miss plus a PostgreSQL error fails open. Administrators may list, delete a
+specific tenant-isolated block key, or clear the durable session-block index
+from Risk Control. Deletes and clears write PostgreSQL first, then Redis, so
+a later lookup cannot resurrect a removed block. An active session block
+still rejects later turns even when the current request is outside the
+configured group or model filter.
 
 ## Content Moderation Endpoint Failover
 

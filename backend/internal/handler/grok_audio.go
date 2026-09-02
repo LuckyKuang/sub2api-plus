@@ -185,7 +185,7 @@ func (t *grokRealtimeTurnTracker) observer(ctx context.Context) *service.GrokRea
 }
 
 func (t *grokRealtimeTurnTracker) accept(ctx context.Context, responseID string) {
-	if t == nil || t.risk == nil {
+	if t == nil || t.risk == nil || strings.TrimSpace(t.role) == "" {
 		return
 	}
 	t.mu.Lock()

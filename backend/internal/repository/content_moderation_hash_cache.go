@@ -106,7 +106,8 @@ func (c *contentModerationHashCache) RecordBlockedSession(ctx context.Context, b
 	if ttl <= 0 {
 		ttl = time.Duration(service.DefaultContentModerationSessionBlockTTLSeconds()) * time.Second
 	}
-	return c.rdb.Set(ctx, redisKey, "1", ttl).Err()
+	_, err := c.rdb.SetNX(ctx, redisKey, "1", ttl).Result()
+	return err
 }
 
 func (c *contentModerationHashCache) HasBlockedSession(ctx context.Context, blockKey string) (bool, error) {

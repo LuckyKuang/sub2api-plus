@@ -51,6 +51,19 @@ func TestGrokRealtimeTurnTrackerMatchesByResponseIDAndResetsOnCompletion(t *test
 	require.Equal(t, service.ClientDisconnectOutcomeDisconnected, repo.finalizes[2].Outcome)
 }
 
+func TestGrokRealtimeTurnTrackerSkipsWhenRoleMissing(t *testing.T) {
+	repo := &clientDisconnectRiskHandlerRepoStub{}
+	risk := service.NewClientDisconnectRiskService(repo, nil, nil)
+	tracker := newGrokRealtimeTurnTracker(risk, 7, 11, "", "server-request")
+	observer := tracker.observer(context.Background())
+
+	observer.Accepted("resp-a")
+	tracker.disconnectOutstanding(context.Background())
+
+	require.Empty(t, repo.begins)
+	require.Empty(t, repo.finalizes)
+}
+
 func TestGrokRealtimeTurnTrackerDeduplicatesPendingResponseAndAuditsAdmin(t *testing.T) {
 	repo := &clientDisconnectRiskHandlerRepoStub{}
 	risk := service.NewClientDisconnectRiskService(repo, nil, nil)

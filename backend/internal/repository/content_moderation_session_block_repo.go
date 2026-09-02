@@ -33,9 +33,17 @@ ON CONFLICT (block_key) DO UPDATE SET
     model = EXCLUDED.model,
     highest_category = EXCLUDED.highest_category,
     highest_score = EXCLUDED.highest_score,
-    expires_at = EXCLUDED.expires_at,
-    created_at = NOW()
-RETURNING id, created_at`,
+    expires_at = CASE
+        WHEN content_moderation_session_blocks.expires_at > NOW()
+            THEN content_moderation_session_blocks.expires_at
+        ELSE EXCLUDED.expires_at
+    END,
+    created_at = CASE
+        WHEN content_moderation_session_blocks.expires_at > NOW()
+            THEN content_moderation_session_blocks.created_at
+        ELSE NOW()
+    END
+RETURNING id, created_at, expires_at`,
 		block.BlockKey,
 		block.SessionID,
 		nullableInt64Ptr(block.UserID),
@@ -47,7 +55,7 @@ RETURNING id, created_at`,
 		block.HighestCategory,
 		block.HighestScore,
 		block.ExpiresAt,
-	).Scan(&block.ID, &block.CreatedAt)
+	).Scan(&block.ID, &block.CreatedAt, &block.ExpiresAt)
 	if err != nil {
 		return fmt.Errorf("upsert content moderation session block: %w", err)
 	}

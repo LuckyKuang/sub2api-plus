@@ -2437,20 +2437,29 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			turnStartsMu.Lock()
 			turnStarts[turn] = startedAt
 			turnStartsMu.Unlock()
-			if roleAvailable && h.clientDisconnectRisk != nil {
-				lifecycle := h.clientDisconnectRisk.NewLifecycle(
-					subject.UserID,
-					apiKey.ID,
-					role,
-					fmt.Sprintf("%s-ws-turn-%d", strings.TrimSpace(baseRequestID), turn),
-					"openai_responses_ws",
-				)
-				if lifecycle != nil {
-					turnDisconnectRiskMu.Lock()
-					turnDisconnectRisks[turn] = lifecycle
-					turnDisconnectRiskMu.Unlock()
-					lifecycle.Accepted(clientLifecycleCtx)
-				}
+		}
+		acceptTurnDisconnectRisk := func(turn int) {
+			if turn <= 0 || !roleAvailable || h.clientDisconnectRisk == nil {
+				return
+			}
+			turnDisconnectRiskMu.Lock()
+			if _, exists := turnDisconnectRisks[turn]; exists {
+				turnDisconnectRiskMu.Unlock()
+				return
+			}
+			lifecycle := h.clientDisconnectRisk.NewLifecycle(
+				subject.UserID,
+				apiKey.ID,
+				role,
+				fmt.Sprintf("%s-ws-turn-%d", strings.TrimSpace(baseRequestID), turn),
+				"openai_responses_ws",
+			)
+			if lifecycle != nil {
+				turnDisconnectRisks[turn] = lifecycle
+			}
+			turnDisconnectRiskMu.Unlock()
+			if lifecycle != nil {
+				lifecycle.Accepted(clientLifecycleCtx)
 			}
 		}
 		getTurnStart := func(turn int) time.Time {
@@ -2605,6 +2614,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				turnPricing.freeze(turnAt)
 				accountMaxConcurrency = latestAccount.Concurrency
 				if turn == 1 {
+					acceptTurnDisconnectRisk(turn)
 					return nil
 				}
 				// 防御式清理：避免异常路径下旧槽位覆盖导致泄漏。
@@ -2632,6 +2642,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				}
 				currentUserRelease = wrapReleaseOnDone(ctx, userReleaseFunc)
 				currentAccountRelease = wrapReleaseOnDone(ctx, accountReleaseFunc)
+				acceptTurnDisconnectRisk(turn)
 				return nil
 			},
 			AfterTurn: func(turn int, result *service.OpenAIForwardResult, turnErr error) {
