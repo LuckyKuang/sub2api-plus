@@ -249,6 +249,24 @@ describe('IPAccessControlView', () => {
     wrapper.unmount()
   })
 
+  it('does not treat a missing last-seen timestamp as a permanent block', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const vm = wrapper.vm as any
+    expect(vm.formatExpiryTime()).toBe('admin.ipAccessControl.rules.never')
+    expect(vm.formatLastSeenTime()).toBe('admin.ipAccessControl.rules.lastSeenNever')
+    expect(vm.formatLastSeenTime()).not.toBe('admin.ipAccessControl.rules.never')
+    expect(vm.formatTimestamp()).toBe('—')
+    expect(vm.formatTimestamp()).not.toBe('admin.ipAccessControl.rules.never')
+    expect(vm.formatExpiryTime('2026-08-17T12:00:00Z')).not.toBe('admin.ipAccessControl.rules.never')
+    expect(vm.formatLastSeenTime('2026-08-17T12:00:00Z')).not.toBe('admin.ipAccessControl.rules.lastSeenNever')
+    const autoBlock = { expires_at: '2026-08-18T12:00:00Z', last_seen_at: null as string | null }
+    expect(vm.formatExpiryTime(autoBlock.expires_at)).not.toBe('admin.ipAccessControl.rules.never')
+    expect(vm.formatLastSeenTime(autoBlock.last_seen_at ?? undefined)).toBe('admin.ipAccessControl.rules.lastSeenNever')
+    wrapper.unmount()
+  })
+
   it('shows Cloudflare Real IP steps in the deploy guide', async () => {
     const host = document.createElement('div')
     document.body.appendChild(host)
