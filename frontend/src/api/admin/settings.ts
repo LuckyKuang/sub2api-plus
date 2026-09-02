@@ -645,6 +645,8 @@ export interface SystemSettings {
   // codex_cli_only profile policy
   min_codex_version: string;
   max_codex_version: string;
+  codex_cli_only_allow_app_server_clients: boolean;
+  codex_cli_only_engine_fingerprint_signals: string;
   codex_cli_only_blacklist: string;
   codex_cli_only_whitelist: string;
   web_search_emulation_enabled?: boolean;
@@ -962,6 +964,8 @@ export interface UpdateSettingsRequest {
   // codex_cli_only profile policy
   min_codex_version?: string;
   max_codex_version?: string;
+  codex_cli_only_allow_app_server_clients?: boolean;
+  codex_cli_only_engine_fingerprint_signals?: string;
   codex_cli_only_blacklist?: string;
   codex_cli_only_whitelist?: string;
   // Payment configuration
