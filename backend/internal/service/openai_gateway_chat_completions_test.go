@@ -89,7 +89,7 @@ func TestHandleChatStreamingResponse_ClassifiesHTTP2ReadError(t *testing.T) {
 	require.NotContains(t, message, "INTERNAL_ERROR")
 }
 
-func TestStreamRawChatCompletions_MissingDoneReturnsIncompleteUsage(t *testing.T) {
+func TestStreamRawChatCompletions_MissingDoneWithUsageSucceeds(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	rec := httptest.NewRecorder()
@@ -120,7 +120,7 @@ func TestStreamRawChatCompletions_MissingDoneReturnsIncompleteUsage(t *testing.T
 		0,
 	)
 
-	require.ErrorContains(t, err, "missing [DONE]")
+	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.True(t, result.Stream)
 	require.False(t, result.ClientDisconnect)

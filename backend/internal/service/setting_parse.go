@@ -12,9 +12,9 @@ import (
 	"strings"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
-	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/antigravity"
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/xai"
 )
 
@@ -229,10 +229,10 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyMaxClaudeCodeVersion: "",
 
 		// codex_cli_only profile policy（默认：版本不检查、显式兼容名单为空）
-		SettingKeyMinCodexVersion:       "",
-		SettingKeyMaxCodexVersion:       "",
-		SettingKeyCodexCLIOnlyBlacklist: "",
-		SettingKeyCodexCLIOnlyWhitelist: "",
+		SettingKeyMinCodexVersion:                      "",
+		SettingKeyMaxCodexVersion:                      "",
+		SettingKeyCodexCLIOnlyBlacklist:                "",
+		SettingKeyCodexCLIOnlyWhitelist:                "",
 		SettingKeyCodexCLIOnlyAllowAppServerClients:    "false",
 		SettingKeyCodexCLIOnlyEngineFingerprintSignals: openai.DefaultEngineFingerprintSignalsJSON(),
 

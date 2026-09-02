@@ -27,14 +27,14 @@ func TestGatewayRoutesCodexModelsManifestPathIsRegistered(t *testing.T) {
 	require.Equal(t, registered["/v1/models"], registered["/models"], "root alias should use the same platform-aware handler")
 }
 
-func TestDispatchCodexModelsGatewayKeepsOnlyOpenAIOnLiveManifestHandler(t *testing.T) {
+func TestDispatchCodexModelsGatewayKeepsOpenAIAndCompositeOnLiveManifestHandler(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	tests := []struct {
 		platform   string
 		wantOpenAI bool
 	}{
 		{platform: service.PlatformOpenAI, wantOpenAI: true},
-		{platform: service.PlatformComposite},
+		{platform: service.PlatformComposite, wantOpenAI: true},
 		{platform: service.PlatformGrok},
 		{platform: service.PlatformDeepseek},
 	}
