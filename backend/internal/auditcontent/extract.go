@@ -8,6 +8,8 @@ import (
 	"io"
 	"sort"
 	"strings"
+
+	"github.com/LuckyKuang/sub2api-plus/internal/openaiwire"
 )
 
 const maxIncompleteReasons = 8
@@ -76,6 +78,11 @@ func Extract(protocol string, body []byte) (Document, error) {
 	if len(body) == 0 {
 		return Document{}, nil
 	}
+	normalizedProtocol := normalizeProtocol(protocol)
+	if isResponsesProtocol(normalizedProtocol) {
+		body, _ = openaiwire.NormalizeCodexAutomationBootstrap(body)
+		body, _ = openaiwire.NormalizeCodexDelegationBootstrap(body)
+	}
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	decoder.UseNumber()
 	var decoded any
@@ -95,7 +102,7 @@ func Extract(protocol string, body []byte) (Document, error) {
 	}
 
 	var document Document
-	switch normalizeProtocol(protocol) {
+	switch normalizedProtocol {
 	case "openai_chat_completions", "openai_chat", "chat_completions":
 		extractChat(&document, root)
 	case "anthropic_messages", "claude_messages", "messages":
@@ -119,6 +126,15 @@ func Extract(protocol string, body []byte) (Document, error) {
 	document.incompletePath = nil
 	document.incompletePathUsed = false
 	return document, nil
+}
+
+func isResponsesProtocol(protocol string) bool {
+	switch protocol {
+	case "openai_responses", "responses", "responses_websocket":
+		return true
+	default:
+		return false
+	}
 }
 
 func normalizeProtocol(protocol string) string {
