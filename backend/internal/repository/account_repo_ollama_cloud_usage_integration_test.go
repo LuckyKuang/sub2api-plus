@@ -422,7 +422,7 @@ func TestOllamaCloudUsageEligibilityExtendsToCNOpenAICompatPlatforms(t *testing.
 	// lockAndMerge 组身份守卫：CN 行凭证未变时必须保留 ollama 托管键。
 	kimiLoaded, err := repo.GetByID(ctx, kimi.ID)
 	require.NoError(t, err)
-	merged, err := lockAndMergeAccountProbeExtra(ctx, tx.Client(), kimiLoaded, nil, nil)
+	merged, err := lockAndMergeAccountExtra(ctx, tx.Client(), kimiLoaded)
 	require.NoError(t, err)
 	require.Equal(t, "cipher:cn-shared", merged[service.OllamaCloudUsageSessionExtraKey])
 	require.Equal(t, true, merged[service.OllamaCloudUsageAutoRefreshExtraKey])
@@ -445,36 +445,6 @@ func TestOllamaCloudUsageEligibilityExtendsToCNOpenAICompatPlatforms(t *testing.
 	require.Contains(t, []int64{kimi.ID, zhipu.ID, deepseek.ID}, due[0].ID,
 		"due 行必须来自 CN 平台的 ollama 组员")
 	require.NotNil(t, due[0].LastUsedAt)
-}
-
-// 语义等价性端到端：普通（非 ollama）kimi apikey 账号改凭证落进 Ollama 分支后，
-// probe 快照仍被清理，开关键与其它 extra 键不受影响。
-func TestUpdateCredentialsPlainCNAPIKeyAccountCleanupIsSemanticallyEquivalent(t *testing.T) {
-	ctx := context.Background()
-	tx := testEntTx(t)
-	repo := newAccountRepositoryWithSQL(tx.Client(), tx, nil)
-	account := mustCreateAccount(t, tx.Client(), &service.Account{
-		Name: "plain-kimi-apikey", Platform: service.PlatformKimi, Type: service.AccountTypeAPIKey,
-		Credentials: map[string]any{"api_key": "sk-moonshot", "base_url": "https://api.moonshot.cn"},
-		Extra: map[string]any{
-			service.UpstreamBillingProbeExtraKey:        map[string]any{"status": "ok"},
-			service.UpstreamBillingProbeEnabledExtraKey: true,
-			"custom_note": "keep-me",
-		},
-	})
-
-	require.NoError(t, repo.UpdateCredentials(ctx, account.ID, map[string]any{
-		"api_key": "sk-moonshot-rotated", "base_url": "https://api.moonshot.cn",
-	}))
-
-	loaded, err := repo.GetByID(ctx, account.ID)
-	require.NoError(t, err)
-	require.NotContains(t, loaded.Extra, service.UpstreamBillingProbeExtraKey,
-		"probe 快照仍必须被清理")
-	require.Equal(t, true, loaded.Extra[service.UpstreamBillingProbeEnabledExtraKey],
-		"探测开关键不受清理影响")
-	require.Equal(t, "keep-me", loaded.Extra["custom_note"], "其它 extra 键不得误伤")
-	require.NotContains(t, loaded.Extra, service.OllamaCloudUsageSessionExtraKey)
 }
 
 func TestOllamaCloudUsageCredentialAndBulkUpdatesPreserveManagedStateOnlyWhenSafe(t *testing.T) {
