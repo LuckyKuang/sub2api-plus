@@ -87,6 +87,7 @@ func newOpenAIWSPassthroughHandlerHarness(t *testing.T, upstreamURL string) *ope
 		contentModerationService: moderationSvc,
 		concurrencyHelper:        NewConcurrencyHelper(service.NewConcurrencyService(concurrencyCache), SSEPingFormatNone, time.Second),
 	}
+	attachDisabledIPAccessControlForWebSocketTest(h)
 
 	apiKey := &service.APIKey{
 		ID:      1851,
@@ -312,7 +313,10 @@ func TestOpenAIResponsesWebSocketV2PassthroughNonCyberTurnAllowsFollowup(t *test
 	}
 	select {
 	case second := <-secondUpstreamFrame:
-		require.JSONEq(t, secondPayload, string(second))
+		require.Equal(t, "response.create", gjson.GetBytes(second, "type").String())
+		require.Equal(t, "gpt-5.1", gjson.GetBytes(second, "model").String())
+		require.Equal(t, "follow-up", gjson.GetBytes(second, "input").String())
+		require.NotEmpty(t, gjson.GetBytes(second, "prompt_cache_key").String())
 	default:
 		t.Fatal("non-cyber follow-up did not reach upstream")
 	}

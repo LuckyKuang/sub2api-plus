@@ -1967,11 +1967,6 @@ const buildUpdatePayload = (): Record<string, unknown> | null => {
     extra.codex_cli_only = codexCLIOnlyEnabled.value
   }
 
-  if (enableCodexFingerprintMode.value && allOpenAIOAuthOnly.value) {
-    const extra = ensureExtra()
-    extra.codex_cli_only_allow_app_server = codexCLIOnlyAppServerEnabled.value
-  }
-
   if (enableCodexFingerprintMode.value) {
     const extra = ensureExtra()
     // off 必须显式落键，不能靠删本地键表达。批量更新走 JSONB 顶层合并

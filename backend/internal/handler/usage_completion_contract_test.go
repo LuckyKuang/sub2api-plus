@@ -24,7 +24,7 @@ func TestStreamGatewayUsageInputsCarryExplicitCompletion(t *testing.T) {
 		{file: "gateway_handler_chat_completions.go", typeName: "RecordUsageInput"},
 		{file: "gateway_handler_responses.go", typeName: "RecordUsageInput"},
 		{file: "openai_gateway_handler.go", typeName: "OpenAIRecordUsageInput"},
-		{file: "gemini_v1beta_handler.go", typeName: "RecordUsageLongContextInput"},
+		{file: "gemini_v1beta_handler.go", typeName: "RecordUsageInput"},
 	}
 
 	for _, tt := range tests {

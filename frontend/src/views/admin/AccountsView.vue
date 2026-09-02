@@ -1126,7 +1126,6 @@ useSwipeSelect(accountTableRef, {
 
 const resetAutoRefreshCache = () => {
   autoRefreshETag.value = null
-  upstreamBillingRateETag.value = null
 }
 
 const isFirstLoad = ref(true)
@@ -1145,7 +1144,7 @@ const load = async () => {
     isFirstLoad.value = false
     delete requestParams.lite
   }
-  if (options.refreshTodayStats !== false) await refreshTodayStatsBatch()
+  await refreshTodayStatsBatch()
 }
 
 const reload = async () => {
@@ -2381,7 +2380,6 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-  upstreamBillingRateAbortController?.abort()
   if (usageBatchFlushTimer !== null) {
     clearTimeout(usageBatchFlushTimer)
     usageBatchFlushTimer = null
