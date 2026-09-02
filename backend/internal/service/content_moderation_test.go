@@ -78,8 +78,9 @@ func (r *contentModerationTestSettingRepo) Delete(ctx context.Context, key strin
 }
 
 type contentModerationTestRepo struct {
-	mu   sync.Mutex
-	logs []ContentModerationLog
+	mu            sync.Mutex
+	logs          []ContentModerationLog
+	sessionBlocks []ContentModerationSessionBlock
 }
 
 func (r *contentModerationTestRepo) CreateLog(ctx context.Context, log *ContentModerationLog) error {
@@ -100,7 +101,7 @@ func (r *contentModerationTestRepo) CountFlaggedByUserSince(ctx context.Context,
 	defer r.mu.Unlock()
 	count := 0
 	for _, log := range r.logs {
-		if log.UserID == nil || *log.UserID != userID || !log.Flagged || log.Action == ContentModerationActionHashBlock || log.Action == ContentModerationActionShadow {
+		if log.UserID == nil || *log.UserID != userID || !log.Flagged || log.Action == ContentModerationActionHashBlock || log.Action == ContentModerationActionSessionBlock || log.Action == ContentModerationActionShadow {
 			continue
 		}
 		if excludeCyberPolicy && log.Action == ContentModerationActionCyberPolicy {
@@ -120,6 +121,39 @@ func (r *contentModerationTestRepo) CleanupExpiredLogs(ctx context.Context, hitB
 
 func (r *contentModerationTestRepo) UpdateLogEmailSent(ctx context.Context, id int64, sent bool) error {
 	return nil
+}
+
+func (r *contentModerationTestRepo) UpsertSessionBlock(ctx context.Context, block *ContentModerationSessionBlock) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if block != nil {
+		r.sessionBlocks = append(r.sessionBlocks, *block)
+	}
+	return nil
+}
+
+func (r *contentModerationTestRepo) ListSessionBlocks(ctx context.Context, filter ContentModerationSessionBlockFilter) ([]ContentModerationSessionBlock, *pagination.PaginationResult, error) {
+	return nil, nil, nil
+}
+
+func (r *contentModerationTestRepo) GetSessionBlockByKey(ctx context.Context, blockKey string) (*ContentModerationSessionBlock, error) {
+	return nil, nil
+}
+
+func (r *contentModerationTestRepo) DeleteSessionBlockByKey(ctx context.Context, blockKey string) (int64, error) {
+	return 0, nil
+}
+
+func (r *contentModerationTestRepo) ClearSessionBlocks(ctx context.Context) (int64, error) {
+	return 0, nil
+}
+
+func (r *contentModerationTestRepo) CountActiveSessionBlocks(ctx context.Context, now time.Time) (int64, error) {
+	return 0, nil
+}
+
+func (r *contentModerationTestRepo) DeleteExpiredSessionBlocks(ctx context.Context, now time.Time) (int64, error) {
+	return 0, nil
 }
 
 func (r *contentModerationTestRepo) snapshotLogs() []ContentModerationLog {
@@ -153,6 +187,7 @@ func requireRecordedHashCount(t *testing.T, cache *contentModerationTestHashCach
 type contentModerationTestHashCache struct {
 	mu            sync.Mutex
 	hashes        map[string]struct{}
+	sessions      map[string]struct{}
 	recorded      []string
 	checked       []string
 	deleted       []string
@@ -372,6 +407,41 @@ func (c *contentModerationTestHashCache) CountFlaggedInputHashes(ctx context.Con
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return int64(len(c.hashes)), nil
+}
+
+func (c *contentModerationTestHashCache) RecordBlockedSession(ctx context.Context, blockKey string, ttl time.Duration) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.sessions == nil {
+		c.sessions = map[string]struct{}{}
+	}
+	c.sessions[blockKey] = struct{}{}
+	return nil
+}
+
+func (c *contentModerationTestHashCache) HasBlockedSession(ctx context.Context, blockKey string) (bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	_, ok := c.sessions[blockKey]
+	return ok, nil
+}
+
+func (c *contentModerationTestHashCache) DeleteBlockedSession(ctx context.Context, blockKey string) (bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if _, ok := c.sessions[blockKey]; !ok {
+		return false, nil
+	}
+	delete(c.sessions, blockKey)
+	return true, nil
+}
+
+func (c *contentModerationTestHashCache) ClearBlockedSessions(ctx context.Context) (int64, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	deleted := int64(len(c.sessions))
+	c.sessions = map[string]struct{}{}
+	return deleted, nil
 }
 
 func (c *contentModerationTestHashCache) snapshotRecorded() []string {

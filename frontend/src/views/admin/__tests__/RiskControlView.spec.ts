@@ -36,6 +36,9 @@ vi.mock('@/api/admin', () => ({
       testAPIKeys: vi.fn(),
       deleteFlaggedHash: vi.fn(),
       clearFlaggedHashes: vi.fn(),
+      listSessionBlocks: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 20, pages: 1 }),
+      deleteSessionBlock: vi.fn(),
+      clearSessionBlocks: vi.fn(),
       unbanUser: vi.fn(),
     },
     groups: {
@@ -109,6 +112,8 @@ const baseConfig = (): ContentModerationConfig => ({
   hit_retention_days: 180,
   non_hit_retention_days: 3,
   pre_hash_check_enabled: false,
+  session_block_enabled: false,
+  session_block_ttl_seconds: 2592000,
   blocked_keywords: [],
   keyword_blocking_mode: 'keyword_and_api',
   text_api_mode: 'blocking',
@@ -155,6 +160,7 @@ const runtimeStatus = () => ({
   api_key_statuses: [],
   endpoints: baseConfig().endpoints,
   flagged_hash_count: 0,
+  blocked_session_count: 0,
   last_cleanup_deleted_hit: 0,
   last_cleanup_deleted_non_hit: 0,
 })

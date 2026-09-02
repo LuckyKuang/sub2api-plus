@@ -222,6 +222,9 @@ func registerContentModerationRoutes(admin *gin.RouterGroup, h *handler.Handlers
 		risk.POST("/users/:user_id/unban", h.Admin.ContentModeration.UnbanUser)
 		risk.DELETE("/hashes", h.Admin.ContentModeration.DeleteFlaggedHash)
 		risk.DELETE("/hashes/all", h.Admin.ContentModeration.ClearFlaggedHashes)
+		risk.GET("/sessions", h.Admin.ContentModeration.ListSessionBlocks)
+		risk.DELETE("/sessions", h.Admin.ContentModeration.DeleteSessionBlock)
+		risk.DELETE("/sessions/all", h.Admin.ContentModeration.ClearSessionBlocks)
 	}
 }
 

@@ -132,7 +132,28 @@ moderation remain independent.
 The request-scoped Prompt Guard authority signal is derived inside the audit
 coordinator. Async-only, disabled, degraded, untrusted, and out-of-scope Guard
 configurations never grant text authority. Actions are distinct:
-`hash_block`, `keyword_block`, `block`, `shadow`, and `cyber_policy`.
+`hash_block`, `keyword_block`, `block`, `session_block`, `shadow`, and
+`cyber_policy`.
+
+## Content Moderation Session Block
+
+When `session_block_enabled` is true, an API-backed Content Moderation
+`pre_block` decision with `action=block` (text or image threshold hit) records
+the explicit client session ID for `session_block_ttl_seconds` (default 30
+days). Later HTTP and WebSocket turns that present the same tenant-isolated
+session ID are rejected as `session_block` before another Moderation API call,
+account selection, billing, or upstream write.
+
+The block is independent of cyber-policy user bans and of the OpenAI cyber
+session table. Keyword hits, hash blocks, shadow findings, Prompt Guard
+blocks, extraction failures, and missing session IDs never seed it.
+Administrators are blocked for the current request only and are not written
+into the session blacklist. Raw audio frames remain unextractable and are
+not a session-block trigger. Redis lookup failures fail open. Administrators
+may list, delete a specific tenant-isolated block key, or clear the durable
+session-block index from Risk Control. An active session block still rejects
+later turns even when the current request is outside the configured group or
+model filter.
 
 ## Content Moderation Endpoint Failover
 

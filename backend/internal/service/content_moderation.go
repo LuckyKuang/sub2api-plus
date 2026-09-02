@@ -42,6 +42,7 @@ const (
 	ContentModerationActionShadow         = "shadow"
 	ContentModerationActionError          = "error"
 	ContentModerationActionCyberPolicy    = "cyber_policy" // cyber_policy 硬阻断的风控日志 action（封号计数排除按此值过滤）
+	ContentModerationActionSessionBlock   = "session_block"
 	ContentModerationErrorCodePolicy      = "content_policy_violation"
 	ContentModerationErrorCodeUnavailable = "content_moderation_unavailable"
 
@@ -189,6 +190,11 @@ type ContentModerationConfig struct {
 	// CyberPolicyAutoBanEnabled 为 true 时，上游 cyber_policy 命中立即停用：
 	// 普通用户封账号；管理员只禁用触发该请求的 API Key。默认 false。
 	CyberPolicyAutoBanEnabled bool `json:"cyber_policy_auto_ban_enabled"`
+	// SessionBlockEnabled 为 true 时，外部 Moderation API 阈值拦截会写入会话黑名单。
+	// 默认 false。关键词拦截、hash_block、shadow、Prompt Guard 不写入。
+	SessionBlockEnabled bool `json:"session_block_enabled"`
+	// SessionBlockTTLSeconds 会话黑名单 TTL，默认 30 天。命中不续期。
+	SessionBlockTTLSeconds int `json:"session_block_ttl_seconds"`
 }
 
 type ContentModerationEndpoint struct {
@@ -271,6 +277,8 @@ type ContentModerationConfigView struct {
 	ModelFilter                    ContentModerationModelFilter    `json:"model_filter"`
 	CyberPolicyExcludeFromBanCount bool                            `json:"cyber_policy_exclude_from_ban_count"`
 	CyberPolicyAutoBanEnabled      bool                            `json:"cyber_policy_auto_ban_enabled"`
+	SessionBlockEnabled            bool                            `json:"session_block_enabled"`
+	SessionBlockTTLSeconds         int                             `json:"session_block_ttl_seconds"`
 }
 
 type ContentModerationAPIKeyStatus struct {
@@ -367,6 +375,8 @@ type UpdateContentModerationConfigInput struct {
 	ModelFilter                    *ContentModerationModelFilter `json:"model_filter"`
 	CyberPolicyExcludeFromBanCount *bool                         `json:"cyber_policy_exclude_from_ban_count"`
 	CyberPolicyAutoBanEnabled      *bool                         `json:"cyber_policy_auto_ban_enabled"`
+	SessionBlockEnabled            *bool                         `json:"session_block_enabled"`
+	SessionBlockTTLSeconds         *int                          `json:"session_block_ttl_seconds"`
 }
 
 type ContentModerationModelFilter struct {
@@ -392,6 +402,8 @@ type ContentModerationCheckInput struct {
 	// exact request. Auto mode may then observe external text moderation while
 	// leaving local checks and image moderation authoritative.
 	PromptTextAuthority bool
+	SessionID           string
+	AdminUser           bool
 }
 
 type ContentModerationInput struct {
@@ -547,6 +559,7 @@ type ContentModerationRuntimeStatus struct {
 	LastCleanupAt                *time.Time                      `json:"last_cleanup_at,omitempty"`
 	LastCleanupDeletedHit        int64                           `json:"last_cleanup_deleted_hit"`
 	LastCleanupDeletedNonHit     int64                           `json:"last_cleanup_deleted_non_hit"`
+	BlockedSessionCount          int64                           `json:"blocked_session_count"`
 }
 
 type ContentModerationUnbanUserResult struct {
@@ -566,12 +579,19 @@ type ContentModerationClearHashesResult struct {
 type ContentModerationRepository interface {
 	CreateLog(ctx context.Context, log *ContentModerationLog) error
 	ListLogs(ctx context.Context, filter ContentModerationLogFilter) ([]ContentModerationLog, *pagination.PaginationResult, error)
-	// CountFlaggedByUserSince 统计窗口内计入封号的违规次数（排除 hash_block；
+	// CountFlaggedByUserSince 统计窗口内计入封号的违规次数（排除 hash_block、session_block；
 	// excludeCyberPolicy 为 true 时额外排除 cyber_policy 行）。
 	CountFlaggedByUserSince(ctx context.Context, userID int64, since time.Time, excludeCyberPolicy bool) (int, error)
 	CleanupExpiredLogs(ctx context.Context, hitBefore time.Time, nonHitBefore time.Time) (*ContentModerationCleanupResult, error)
 	// UpdateLogEmailSent 回写邮件发送结果（F7：CreateLog 先行后补 EmailSent）。
 	UpdateLogEmailSent(ctx context.Context, id int64, sent bool) error
+	UpsertSessionBlock(ctx context.Context, block *ContentModerationSessionBlock) error
+	ListSessionBlocks(ctx context.Context, filter ContentModerationSessionBlockFilter) ([]ContentModerationSessionBlock, *pagination.PaginationResult, error)
+	GetSessionBlockByKey(ctx context.Context, blockKey string) (*ContentModerationSessionBlock, error)
+	DeleteSessionBlockByKey(ctx context.Context, blockKey string) (int64, error)
+	ClearSessionBlocks(ctx context.Context) (int64, error)
+	CountActiveSessionBlocks(ctx context.Context, now time.Time) (int64, error)
+	DeleteExpiredSessionBlocks(ctx context.Context, now time.Time) (int64, error)
 }
 
 type ContentModerationHashCache interface {
@@ -580,6 +600,10 @@ type ContentModerationHashCache interface {
 	DeleteFlaggedInputHash(ctx context.Context, inputHash string) (bool, error)
 	ClearFlaggedInputHashes(ctx context.Context) (int64, error)
 	CountFlaggedInputHashes(ctx context.Context) (int64, error)
+	RecordBlockedSession(ctx context.Context, blockKey string, ttl time.Duration) error
+	HasBlockedSession(ctx context.Context, blockKey string) (bool, error)
+	DeleteBlockedSession(ctx context.Context, blockKey string) (bool, error)
+	ClearBlockedSessions(ctx context.Context) (int64, error)
 }
 
 // ContentModerationEndpointStateStore is an optional distributed circuit
@@ -878,6 +902,12 @@ func (s *ContentModerationService) UpdateConfig(ctx context.Context, input Updat
 	if input.CyberPolicyAutoBanEnabled != nil {
 		cfg.CyberPolicyAutoBanEnabled = *input.CyberPolicyAutoBanEnabled
 	}
+	if input.SessionBlockEnabled != nil {
+		cfg.SessionBlockEnabled = *input.SessionBlockEnabled
+	}
+	if input.SessionBlockTTLSeconds != nil {
+		cfg.SessionBlockTTLSeconds = *input.SessionBlockTTLSeconds
+	}
 	if input.Thresholds != nil {
 		cfg.Thresholds = mergeContentModerationThresholds(ContentModerationDefaultThresholds(), *input.Thresholds)
 	}
@@ -1086,7 +1116,8 @@ func (s *ContentModerationService) Check(ctx context.Context, input ContentModer
 		"sample_rate", cfg.SampleRate,
 		"api_key_count", len(cfg.apiKeys()),
 		"pre_hash_check_enabled", cfg.PreHashCheckEnabled,
-		"record_non_hits", cfg.RecordNonHits)
+		"record_non_hits", cfg.RecordNonHits,
+		"session_block_enabled", cfg.SessionBlockEnabled)
 	if !cfg.Enabled {
 		slog.Info("content_moderation.skip_config_disabled",
 			"user_id", input.UserID,
@@ -1104,6 +1135,9 @@ func (s *ContentModerationService) Check(ctx context.Context, input ContentModer
 			"endpoint", input.Endpoint,
 			"protocol", input.Protocol)
 		return allow, nil
+	}
+	if blocked := s.lookupBlockedSession(ctx, cfg, input); blocked != nil {
+		return blocked, nil
 	}
 	if !inGroupScope {
 		slog.Info("content_moderation.skip_group_out_of_scope",
@@ -1482,7 +1516,7 @@ func (s *ContentModerationService) checkSync(ctx context.Context, input ContentM
 		}
 	}
 	if blocked {
-		return &ContentModerationDecision{
+		decision := &ContentModerationDecision{
 			Allowed:         false,
 			Blocked:         true,
 			Flagged:         true,
@@ -1493,6 +1527,8 @@ func (s *ContentModerationService) checkSync(ctx context.Context, input ContentM
 			CategoryScores:  result.CategoryScores,
 			Action:          action,
 		}
+		s.recordAPISessionBlock(ctx, cfg, input, decision)
+		return decision
 	}
 	return &ContentModerationDecision{
 		Allowed:         true,
@@ -1515,7 +1551,7 @@ func (s *ContentModerationService) recordPreBlockSyncMetric(latencyMS int, actio
 	}
 	s.preBlockLatencyTotalMS.Add(int64(latencyMS))
 	switch action {
-	case ContentModerationActionBlock, ContentModerationActionHashBlock, ContentModerationActionKeywordBlock:
+	case ContentModerationActionBlock, ContentModerationActionHashBlock, ContentModerationActionKeywordBlock, ContentModerationActionSessionBlock:
 		s.preBlockBlocked.Add(1)
 	case ContentModerationActionError:
 		s.preBlockErrors.Add(1)
@@ -1811,6 +1847,14 @@ func (s *ContentModerationService) GetStatus(ctx context.Context) (*ContentModer
 			slog.Warn("content_moderation.hash_count_failed", contentModerationRuntimeExceptionAttrs("hash_count_failed", err)...)
 		}
 	}
+	var blockedSessionCount int64
+	if s.repo != nil {
+		if n, err := s.repo.CountActiveSessionBlocks(ctx, time.Now()); err == nil {
+			blockedSessionCount = n
+		} else {
+			slog.Warn("content_moderation.session_block_count_failed", contentModerationRuntimeExceptionAttrs("session_block_count_failed", err)...)
+		}
+	}
 	var lastCleanupAt *time.Time
 	if unix := s.lastCleanupUnix.Load(); unix > 0 {
 		t := time.Unix(unix, 0)
@@ -1849,6 +1893,7 @@ func (s *ContentModerationService) GetStatus(ctx context.Context) (*ContentModer
 		APIKeyStatuses:               s.apiKeyStatuses(cfg.apiKeys()),
 		Endpoints:                    s.endpointViews(cfg.Endpoints),
 		FlaggedHashCount:             flaggedHashCount,
+		BlockedSessionCount:          blockedSessionCount,
 		LastCleanupAt:                lastCleanupAt,
 		LastCleanupDeletedHit:        s.lastCleanupDeletedHit.Load(),
 		LastCleanupDeletedNonHit:     s.lastCleanupDeletedNonHit.Load(),
@@ -1890,6 +1935,7 @@ func (s *ContentModerationService) runCleanupOnce() {
 	s.lastCleanupUnix.Store(result.FinishedAt.Unix())
 	s.lastCleanupDeletedHit.Store(result.DeletedHit)
 	s.lastCleanupDeletedNonHit.Store(result.DeletedNonHit)
+	s.cleanupExpiredSessionBlocks(ctx)
 }
 
 func (s *ContentModerationService) loadConfig(ctx context.Context) (*ContentModerationConfig, error) {
@@ -2699,6 +2745,8 @@ func defaultContentModerationConfig() *ContentModerationConfig {
 		},
 		CyberPolicyExcludeFromBanCount: false,
 		CyberPolicyAutoBanEnabled:      false,
+		SessionBlockEnabled:            false,
+		SessionBlockTTLSeconds:         defaultContentModerationSessionBlockTTLSeconds,
 	}
 }
 
@@ -2819,6 +2867,15 @@ func (cfg *ContentModerationConfig) normalize() {
 	cfg.KeywordBlockingMode = normalizeKeywordBlockingMode(cfg.KeywordBlockingMode)
 	cfg.TextAPIMode = normalizeContentModerationTextAPIMode(cfg.TextAPIMode)
 	cfg.ModelFilter = normalizeContentModerationModelFilter(cfg.ModelFilter)
+	if cfg.SessionBlockTTLSeconds <= 0 {
+		cfg.SessionBlockTTLSeconds = defaultContentModerationSessionBlockTTLSeconds
+	}
+	if cfg.SessionBlockTTLSeconds < minContentModerationSessionBlockTTLSeconds {
+		cfg.SessionBlockTTLSeconds = minContentModerationSessionBlockTTLSeconds
+	}
+	if cfg.SessionBlockTTLSeconds > maxContentModerationSessionBlockTTLSeconds {
+		cfg.SessionBlockTTLSeconds = maxContentModerationSessionBlockTTLSeconds
+	}
 }
 
 func cloneContentModerationEndpoints(endpoints []ContentModerationEndpoint) []ContentModerationEndpoint {
@@ -3135,6 +3192,8 @@ func (s *ContentModerationService) configView(cfg *ContentModerationConfig) *Con
 		ModelFilter:                    cloneContentModerationModelFilter(cfg.ModelFilter),
 		CyberPolicyExcludeFromBanCount: cfg.CyberPolicyExcludeFromBanCount,
 		CyberPolicyAutoBanEnabled:      cfg.CyberPolicyAutoBanEnabled,
+		SessionBlockEnabled:            cfg.SessionBlockEnabled,
+		SessionBlockTTLSeconds:         cfg.SessionBlockTTLSeconds,
 	}
 }
 
