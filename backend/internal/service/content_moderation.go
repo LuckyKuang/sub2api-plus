@@ -19,6 +19,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/auditcontent"
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
@@ -494,6 +495,8 @@ type ContentModerationLog struct {
 	CategoryScores         map[string]float64 `json:"category_scores"`
 	ThresholdSnapshot      map[string]float64 `json:"threshold_snapshot"`
 	InputExcerpt           string             `json:"input_excerpt"`
+	InputContent           string             `json:"input_content"`
+	InputContentTruncated  bool               `json:"input_content_truncated"`
 	UpstreamLatencyMS      *int               `json:"upstream_latency_ms,omitempty"`
 	Error                  string             `json:"error"`
 	ViolationCount         int                `json:"violation_count"`
@@ -2489,31 +2492,35 @@ func (s *ContentModerationService) buildLog(input ContentModerationCheckInput, c
 	if input.APIKeyID > 0 {
 		apiKeyID = &input.APIKeyID
 	}
+	redacted := strings.ReplaceAll(redactContentModerationSecrets(text), string(rune(0)), "")
+	content := trimRunes(redacted, maxModerationInputRunes)
 	return &ContentModerationLog{
-		RequestID:         input.RequestID,
-		UserID:            userID,
-		UserEmail:         input.UserEmail,
-		APIKeyID:          apiKeyID,
-		APIKeyName:        input.APIKeyName,
-		GroupID:           cloneInt64Ptr(input.GroupID),
-		GroupName:         input.GroupName,
-		Endpoint:          input.Endpoint,
-		Provider:          input.Provider,
-		Model:             input.Model,
-		Mode:              cfg.Mode,
-		Action:            action,
-		Flagged:           flagged,
-		HighestCategory:   highestCategory,
-		HighestScore:      highestScore,
-		CategoryScores:    cloneFloatMap(scores),
-		ThresholdSnapshot: cloneFloatMap(cfg.Thresholds),
-		InputExcerpt:      trimRunes(redactContentModerationSecrets(text), maxModerationExcerptRunes),
-		UpstreamLatencyMS: latency,
-		QueueDelayMS:      queueDelay,
-		Error:             errText,
-		Protocol:          input.Protocol,
-		Stage:             contentModerationAuditStage(input.Stage),
-		BodyBytes:         len(input.Body),
+		RequestID:             input.RequestID,
+		UserID:                userID,
+		UserEmail:             input.UserEmail,
+		APIKeyID:              apiKeyID,
+		APIKeyName:            input.APIKeyName,
+		GroupID:               cloneInt64Ptr(input.GroupID),
+		GroupName:             input.GroupName,
+		Endpoint:              input.Endpoint,
+		Provider:              input.Provider,
+		Model:                 input.Model,
+		Mode:                  cfg.Mode,
+		Action:                action,
+		Flagged:               flagged,
+		HighestCategory:       highestCategory,
+		HighestScore:          highestScore,
+		CategoryScores:        cloneFloatMap(scores),
+		ThresholdSnapshot:     cloneFloatMap(cfg.Thresholds),
+		InputExcerpt:          trimRunes(redacted, maxModerationExcerptRunes),
+		InputContent:          content,
+		InputContentTruncated: utf8.RuneCountInString(redacted) > maxModerationInputRunes,
+		UpstreamLatencyMS:     latency,
+		QueueDelayMS:          queueDelay,
+		Error:                 errText,
+		Protocol:              input.Protocol,
+		Stage:                 contentModerationAuditStage(input.Stage),
+		BodyBytes:             len(input.Body),
 	}
 }
 

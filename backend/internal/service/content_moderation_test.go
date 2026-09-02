@@ -13,6 +13,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/pagination"
 	"github.com/stretchr/testify/require"
@@ -488,6 +489,67 @@ func TestBuildContentModerationLog_RedactsInputExcerpt(t *testing.T) {
 
 	require.NotContains(t, log.InputExcerpt, "sk-proj-1234567890abcdef")
 	require.Contains(t, log.InputExcerpt, "[已脱敏]")
+	require.Equal(t, log.InputExcerpt, log.InputContent)
+	require.False(t, log.InputContentTruncated)
+}
+
+func TestBuildContentModerationLog_PersistsScanWindowNotListExcerpt(t *testing.T) {
+	svc := &ContentModerationService{}
+	cfg := defaultContentModerationConfig()
+	long := strings.Repeat("审", 300)
+	log := svc.buildLog(ContentModerationCheckInput{Endpoint: "/v1/chat/completions"}, cfg, ContentModerationActionBlock, true, "sexual", 0.9, map[string]float64{"sexual": 0.9}, long, nil, nil, "")
+	require.Equal(t, 240, utf8.RuneCountInString(log.InputExcerpt))
+	require.Equal(t, 300, utf8.RuneCountInString(log.InputContent))
+	require.False(t, log.InputContentTruncated)
+	require.True(t, strings.HasPrefix(log.InputContent, log.InputExcerpt))
+
+	overWindow := strings.Repeat("窗", maxModerationInputRunes+20)
+	truncated := svc.buildLog(ContentModerationCheckInput{Endpoint: "/v1/chat/completions"}, cfg, ContentModerationActionBlock, true, "sexual", 0.9, map[string]float64{"sexual": 0.9}, overWindow, nil, nil, "")
+	require.Equal(t, maxModerationExcerptRunes, utf8.RuneCountInString(truncated.InputExcerpt))
+	require.Equal(t, maxModerationInputRunes, utf8.RuneCountInString(truncated.InputContent))
+	require.True(t, truncated.InputContentTruncated)
+}
+
+func TestContentModerationCheck_PersistsNormalizedScanWindowWithoutTruncationFlag(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(moderationAPIResponse{Results: []moderationAPIResult{{CategoryScores: map[string]float64{"sexual": 0.01}}}})
+	}))
+	defer server.Close()
+
+	cfg := defaultContentModerationConfig()
+	cfg.Enabled = true
+	cfg.Mode = ContentModerationModePreBlock
+	cfg.BaseURL = server.URL
+	cfg.APIKeys = []string{"sk-test"}
+	cfg.RecordNonHits = true
+	rawCfg, err := json.Marshal(cfg)
+	require.NoError(t, err)
+
+	repo := &contentModerationTestRepo{}
+	svc := NewContentModerationService(
+		&contentModerationTestSettingRepo{values: map[string]string{
+			SettingKeyRiskControlEnabled:      "true",
+			SettingKeyContentModerationConfig: string(rawCfg),
+		}},
+		repo,
+		&contentModerationTestHashCache{},
+		nil, nil, nil, nil, nil,
+	)
+
+	prompt := strings.Repeat("窗", maxModerationInputRunes+50)
+	body, err := json.Marshal(map[string]any{"messages": []map[string]string{{"role": "user", "content": prompt}}})
+	require.NoError(t, err)
+	decision, err := svc.Check(context.Background(), ContentModerationCheckInput{
+		Endpoint: "/v1/chat/completions",
+		Protocol: ContentModerationProtocolOpenAIChat,
+		Body:     body,
+	})
+	require.NoError(t, err)
+	require.False(t, decision.Blocked)
+	logs := requireContentModerationLogCount(t, repo, 1)
+	require.Equal(t, maxModerationExcerptRunes, utf8.RuneCountInString(logs[0].InputExcerpt))
+	require.Equal(t, maxModerationInputRunes, utf8.RuneCountInString(logs[0].InputContent))
+	require.False(t, logs[0].InputContentTruncated, "Normalize already clipped the scan window before persist")
 }
 
 func TestRedactContentModerationSecrets_LongHexAndTokens(t *testing.T) {

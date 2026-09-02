@@ -447,6 +447,7 @@ export default {
       unbanFailed: '解封用户失败',
       inputDetailTitle: '输入摘要详情',
       inputDetailContent: '完整内容',
+      inputDetailTruncated: '已截断到内容审核扫描窗（12000 字符），更长原文未送审。',
       matchedKeyword: '命中关键词',
       queueDelay: '排队 {ms} ms',
       allGroups: '全部分组',

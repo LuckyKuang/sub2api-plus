@@ -486,7 +486,7 @@ describe('admin RiskControlView', () => {
         group_id: 3, group_name: 'Default', moderation_endpoint_id: 'default', moderation_endpoint_name: 'OpenAI Moderation',
         endpoint: '/v1/responses', provider: 'openai', model: 'gpt-5', mode: 'pre_block', action: 'allow', flagged: false,
         highest_category: 'harassment', highest_score: 0.1, matched_keyword: '', category_scores: {}, threshold_snapshot: {},
-        input_excerpt: 'hello', upstream_latency_ms: 12, error: '', violation_count: 0, auto_banned: false, email_sent: false,
+        input_excerpt: 'hello', input_content: 'hello full scan window', input_content_truncated: false, upstream_latency_ms: 12, error: '', violation_count: 0, auto_banned: false, email_sent: false,
         user_status: 'active', queue_delay_ms: null, created_at: '2026-08-30T00:00:00Z',
       }],
       total: 1, page: 1, page_size: 20, pages: 1,

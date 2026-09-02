@@ -447,6 +447,7 @@ export default {
       unbanFailed: 'Failed to unban user',
       inputDetailTitle: 'Input Summary Detail',
       inputDetailContent: 'Full Content',
+      inputDetailTruncated: 'Truncated to the Content Moderation scan window (12,000 characters); longer source text was not sent to the API.',
       matchedKeyword: 'Matched Keyword',
       queueDelay: 'Queued {ms} ms',
       allGroups: 'All Groups',

@@ -1323,6 +1323,9 @@
                 <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
                   {{ inputDetailRow.endpoint || '-' }} · {{ inputDetailRow.provider || '-' }} / {{ inputDetailRow.model || '-' }}
                 </p>
+                <p v-if="inputDetailRow.input_content_truncated" class="mt-2 text-xs text-amber-700 dark:text-amber-300">
+                  {{ t('admin.riskControl.inputDetailTruncated') }}
+                </p>
               </div>
               <span v-if="inputDetailRow.group_name" class="inline-flex rounded-md bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-700 dark:bg-sky-900/20 dark:text-sky-300">
                 {{ inputDetailRow.group_name }}
@@ -1864,7 +1867,7 @@ const riskThresholdRows = computed<RiskThresholdRow[]>(() => (
 
 const inputDetailText = computed(() => {
   if (!inputDetailRow.value) return '-'
-  return inputDetailRow.value.input_excerpt || inputDetailRow.value.error || '-'
+  return inputDetailRow.value.input_content || inputDetailRow.value.input_excerpt || inputDetailRow.value.error || '-'
 })
 
 const queueUsagePercent = computed(() => `${Math.min(100, Math.max(0, status.value?.queue_usage_percent ?? 0)).toFixed(1)}%`)

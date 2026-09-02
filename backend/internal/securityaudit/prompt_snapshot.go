@@ -53,8 +53,10 @@ func ExtractPromptSnapshot(req Request) (PromptSnapshot, error) {
 // ExtractBlockingPromptSnapshot builds the synchronous guard input. Blocking
 // always scans only the latest user text; the latestTurnOnly argument is kept
 // for call-site compatibility and is ignored. Asynchronous auditing always
-// uses ExtractPromptSnapshot and retains every user turn in this request,
-// excluding harness instructions, tool schema, and assistant output.
+// uses ExtractPromptSnapshot and retains every user turn in this request in
+// newest-to-oldest order, excluding harness instructions, tool schema, and
+// assistant output. Admin full prompt and redacted preview follow that order
+// so the preview head is the latest user turn.
 func ExtractBlockingPromptSnapshot(req Request, latestTurnOnly bool) (PromptSnapshot, error) {
 	_ = latestTurnOnly
 	snapshot, _, err := extractPromptSnapshotWithDiagnostics(req, true)
@@ -179,19 +181,9 @@ func normalizeSegmentsLatestUserFirst(values []promptSegment) []string {
 	if len(normalized) == 0 {
 		return nil
 	}
-	priorityIndex := len(normalized) - 1
-	for index := len(normalized) - 1; index >= 0; index-- {
-		if isUserSegment(normalized[index]) {
-			priorityIndex = index
-			break
-		}
-	}
 	result := make([]string, 0, len(normalized))
-	result = append(result, normalized[priorityIndex].text)
-	for index, segment := range normalized {
-		if index != priorityIndex {
-			result = append(result, segment.text)
-		}
+	for index := len(normalized) - 1; index >= 0; index-- {
+		result = append(result, normalized[index].text)
 	}
 	return result
 }
