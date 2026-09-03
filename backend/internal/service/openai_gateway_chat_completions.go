@@ -60,6 +60,10 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 	defaultMappedModel string,
 ) (*OpenAIForwardResult, error) {
 	beginUpstreamResponseModelObservation(c)
+	ClearActualOpenAIUpstreamEndpoint(c)
+	if shouldForwardOpenAIResponsesViaRawChatCompletions(account) {
+		SetActualOpenAIUpstreamEndpoint(c, "/v1/chat/completions")
+	}
 	setCodexToolNameReverse(c, nil)
 	if _, err := s.prepareCodexAccountIdentitySource(ctx, c, account); err != nil {
 		return nil, err
@@ -118,13 +122,13 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 	}
 
 	// 自适应账号的标准 Chat Completions 入站使用供应商原生 CC 端点。
-	// Responses 形状下，DeepSeek 继续走下方原生 Responses 链；Kimi/GLM
+	// Responses 形状下，DeepSeek / Kimi 继续走下方原生 Responses 链；GLM
 	// 没有 Responses 端点，先转换成 Chat Completions 再直转。
 	if account.IsAdaptiveAPIProtocol() {
 		if !isResponsesShape {
 			return s.forwardAsRawChatCompletions(ctx, c, account, body, defaultMappedModel)
 		}
-		if account.Platform != PlatformDeepseek {
+		if !account.SupportsNativeCNResponses() {
 			var responsesReq apicompat.ResponsesRequest
 			if err := json.Unmarshal(body, &responsesReq); err != nil {
 				return nil, fmt.Errorf("parse responses-shaped chat completions request: %w", err)
@@ -142,7 +146,7 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 			}
 			return s.forwardAsRawChatCompletions(ctx, c, account, chatBody, defaultMappedModel)
 		}
-		// DeepSeek 原生 Responses 请求继续走下方 Responses→Chat 回程转换。
+		// DeepSeek / Kimi 原生 Responses 请求继续走下方 Responses→Chat 回程转换。
 	}
 
 	// 入口分流（国产供应商 Anthropic 协议）：上游为供应商原生 Anthropic 端点，
@@ -284,7 +288,15 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 		} else if promptCacheKey != "" {
 			reqBody["prompt_cache_key"] = promptCacheKey
 		}
+		// This path aligns prompt_cache_key below with the shared body/header
+		// identity helper. Keep account identity rewriting limited to metadata so
+		// recovery retries cannot scope an already aligned key a second time.
+		promptCacheValue, hasPromptCacheValue := reqBody["prompt_cache_key"]
+		delete(reqBody, "prompt_cache_key")
 		applyCodexAccountIdentityClientMetadataMap(reqBody, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c))
+		if hasPromptCacheValue {
+			reqBody["prompt_cache_key"] = promptCacheValue
+		}
 		if _, fingerprintErr := s.prepareCodexFingerprintMap(ctx, c, account, reqBody); fingerprintErr != nil {
 			return nil, fingerprintErr
 		}
@@ -317,15 +329,17 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 	} else if changed {
 		responsesBody = normalizedBody
 	}
-	responsesBody, promptCacheKey, _, err = s.ensureOpenAIResponsesPromptCacheIdentity(
-		c,
-		account,
-		responsesBody,
-		promptCacheKey,
-		upstreamModel,
-	)
-	if err != nil {
-		return nil, err
+	if !isResponsesShape || strings.TrimSpace(promptCacheKey) != "" || strings.TrimSpace(gjson.GetBytes(responsesBody, "prompt_cache_key").String()) != "" {
+		responsesBody, promptCacheKey, _, err = s.ensureOpenAIResponsesPromptCacheIdentity(
+			c,
+			account,
+			responsesBody,
+			promptCacheKey,
+			upstreamModel,
+		)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// 4b. Apply OpenAI fast policy (may filter service_tier or block the request).
@@ -339,6 +353,7 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 		return nil, policyErr
 	}
 	responsesBody = updatedBody
+	responsesReq.ServiceTier = normalizedOpenAIServiceTierValue(gjson.GetBytes(responsesBody, "service_tier").String())
 
 	// 5. Get access token
 	token, _, err := s.GetAccessToken(ctx, account)
@@ -540,7 +555,7 @@ func (s *OpenAIGatewayService) handleChatBufferedStreamingResponse(
 		}
 		message := openAICompatFailedResponseMessage(finalResponse)
 		if openAIStreamFailedEventShouldFailover(payload, message) {
-			return nil, s.newOpenAIStreamFailoverError(c, account, false, requestID, payload, message, resp.Header)
+			return nil, s.newOpenAIStreamFailoverErrorWithModel(c, account, false, requestID, payload, message, upstreamModel, resp.Header)
 		}
 		message = s.recordOpenAIStreamUpstreamError(c, account, false, requestID, "http_error", payload, message)
 		// response.failed 到达在 HTTP 200 SSE 流上，无真实 HTTP 错误码；统一走语义
@@ -795,7 +810,7 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 				shouldFailover = openAIStreamErrorEventShouldFailover(payloadBytes, message)
 			}
 			if !clientOutputStarted && shouldFailover {
-				streamFailoverErr = s.newOpenAIStreamFailoverError(c, account, false, requestID, payloadBytes, message, resp.Header)
+				streamFailoverErr = s.newOpenAIStreamFailoverErrorWithModel(c, account, false, requestID, payloadBytes, message, upstreamModel, resp.Header)
 				return true
 			}
 			message = s.recordOpenAIStreamUpstreamError(c, account, false, requestID, "http_error", payloadBytes, message)

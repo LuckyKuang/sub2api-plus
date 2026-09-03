@@ -621,6 +621,7 @@ export interface SystemSettings {
   allow_ungrouped_key_scheduling: boolean;
 
   // Gateway forwarding behavior
+  openai_ttft_mode: string;
   enable_fingerprint_unification: boolean;
   enable_metadata_passthrough: boolean;
   enable_cch_signing: boolean;
@@ -644,6 +645,8 @@ export interface SystemSettings {
   // codex_cli_only profile policy
   min_codex_version: string;
   max_codex_version: string;
+  codex_cli_only_allow_app_server_clients: boolean;
+  codex_cli_only_engine_fingerprint_signals: string;
   codex_cli_only_blacklist: string;
   codex_cli_only_whitelist: string;
   web_search_emulation_enabled?: boolean;
@@ -944,6 +947,7 @@ export interface UpdateSettingsRequest {
   min_claude_code_version?: string;
   max_claude_code_version?: string;
   allow_ungrouped_key_scheduling?: boolean;
+  openai_ttft_mode?: string;
   enable_fingerprint_unification?: boolean;
   enable_metadata_passthrough?: boolean;
   enable_cch_signing?: boolean;
@@ -962,6 +966,8 @@ export interface UpdateSettingsRequest {
   // codex_cli_only profile policy
   min_codex_version?: string;
   max_codex_version?: string;
+  codex_cli_only_allow_app_server_clients?: boolean;
+  codex_cli_only_engine_fingerprint_signals?: string;
   codex_cli_only_blacklist?: string;
   codex_cli_only_whitelist?: string;
   // Payment configuration

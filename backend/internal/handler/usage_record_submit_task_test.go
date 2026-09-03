@@ -182,7 +182,7 @@ func TestOpenAIGatewayHandlerSubmitOpenAIUsageRecordTask_ImageResultUsesMandator
 	pool.Submit(func(ctx context.Context) {})
 
 	var called atomic.Bool
-	h.submitOpenAIUsageRecordTask(context.Background(), func(ctx context.Context) {
+	h.submitOpenAIUsageRecordTask(context.Background(), &service.OpenAIForwardResult{ImageCount: 1}, func(ctx context.Context) {
 		called.Store(true)
 	})
 	close(release)
@@ -212,7 +212,7 @@ func TestOpenAIGatewayHandlerSubmitOpenAIUsageRecordTask_SearchCountUsesMandator
 	pool.Submit(func(ctx context.Context) {})
 
 	var called atomic.Bool
-	h.submitOpenAIUsageRecordTask(context.Background(), func(ctx context.Context) {
+	h.submitOpenAIUsageRecordTask(context.Background(), &service.OpenAIForwardResult{SearchCount: 3}, func(ctx context.Context) {
 		called.Store(true)
 	})
 	close(release)

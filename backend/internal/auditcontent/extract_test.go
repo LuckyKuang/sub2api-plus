@@ -171,6 +171,40 @@ func TestExtractClassifiesControlAndUnextractableContent(t *testing.T) {
 	require.Equal(t, []string{"safe extracted text"}, segmentTexts(currentSegments(partial)))
 }
 
+func TestExtractResponsesCodexBootstrapUsesUserAttribution(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		text string
+	}{
+		{
+			name: "automation bootstrap",
+			body: `{"model":"gpt-5","input":[{"type":"function_call_output","namespace":"codex_app","name":"automation_update","output":"Automation: Scheduled project review\nAutomation ID: wiki\nAutomation memory: $CODEX_HOME/automations/wiki/memory.md\nLast run: never\n\nReview the project"}]}`,
+			text: "Automation: Scheduled project review\nAutomation ID: wiki\nAutomation memory: $CODEX_HOME/automations/wiki/memory.md\nLast run: never\n\nReview the project",
+		},
+		{
+			name: "delegation bootstrap",
+			body: `{"model":"gpt-5","input":[{"type":"function_call_output","namespace":"codex_tui","name":"create_thread","output":"<codex_delegation><source_thread_id>thread-1</source_thread_id><input>review security</input></codex_delegation>"}]}`,
+			text: "<codex_delegation><source_thread_id>thread-1</source_thread_id><input>review security</input></codex_delegation>",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			document, err := Extract("openai_responses", []byte(test.body))
+			require.NoError(t, err)
+			require.False(t, document.Incomplete)
+			require.Len(t, document.Segments, 1)
+			segment := document.Segments[0]
+			require.Equal(t, test.text, segment.Text)
+			require.Equal(t, "user", segment.Role)
+			require.Equal(t, SourceMessage, segment.Source)
+			require.True(t, segment.Current)
+			require.True(t, segment.ClientControlled)
+		})
+	}
+}
+
 func TestExtractResponsesLegacyAliasesUseIngressPrecedence(t *testing.T) {
 	tests := []struct {
 		name string

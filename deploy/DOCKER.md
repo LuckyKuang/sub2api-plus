@@ -49,6 +49,20 @@ volumes:
   redis_data:
 ```
 
+## Startup and Database Recovery
+
+Sub2API runs database migrations while starting. PostgreSQL may still be
+recovering briefly after a host or Docker daemon restart. The application
+retries transient PostgreSQL startup and connection errors with bounded
+exponential backoff, then continues startup when the database is ready.
+Permanent errors such as invalid credentials, migration checksum mismatches,
+SQL errors, and incompatible data fail immediately.
+
+The Compose deployment also checks PostgreSQL readiness with both `pg_isready`
+and a simple SQL query. `depends_on: condition: service_healthy` helps order a
+fresh Compose start, but application-level retries are still required when
+Docker restores existing containers after a host restart.
+
 ## Environment Variables
 
 | Variable | Description | Required | Default |
@@ -74,7 +88,7 @@ application container after changing these values.
 ## Tags
 
 - `latest` - Latest stable release
-- `vX.Y.Z-custom.NNN` - Immutable fork release, for example `v0.1.183-custom.004`
+- `vX.Y.Z-custom.NNN` - Immutable fork release, for example `v0.2.0-custom.001`
 - `x.y` - Latest patch of minor version
 - `x` - Latest minor of major version
 
@@ -83,8 +97,8 @@ preserves the leading `v` and replaces only `+` with `-` to produce the
 OCI-compatible image tag. For example:
 
 ```text
-Git/GitHub: v0.1.183+custom.004
-GHCR:       ghcr.io/luckykuang/sub2api-plus:v0.1.183-custom.004
+Git/GitHub: v0.2.0+custom.001
+GHCR:       ghcr.io/luckykuang/sub2api-plus:v0.2.0-custom.001
 ```
 
 Pin the immutable release tag in production. Use `latest` only when automatic

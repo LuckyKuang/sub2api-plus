@@ -107,6 +107,9 @@ export interface AdminUser extends User {
   last_used_at?: string | null
   // 用户专属分组倍率配置 (group_id -> rate_multiplier)
   group_rates?: Record<number, number>
+  // 为 true 时该用户仅可使用 allowed_groups 中列出的公开分组。
+  // 管理侧权限开关，普通用户接口不返回。
+  restrict_public_groups?: boolean
   // 当前并发数（仅管理员列表接口返回）
   current_concurrency?: number
 }
@@ -542,9 +545,13 @@ export interface OpenAIMessagesDispatchModelConfig {
   exact_model_mappings?: Record<string, string>
 }
 
+export type ReasoningEffortMatchType = 'exact' | 'prefix' | 'suffix'
+
 export interface ReasoningEffortMapping {
   from: string
   to: string
+  match_type?: ReasoningEffortMatchType
+  model?: string
 }
 
 export interface Group {
@@ -555,6 +562,7 @@ export interface Group {
   rate_multiplier: number
   rpm_limit?: number // Group-level RPM cap (0 = unlimited); overrides user-level rpm_limit when set
   max_reasoning_effort?: string // OpenAI/Codex reasoning ceiling; empty means unlimited
+  max_reasoning_effort_over_limit?: string // downgrade (default) or deny when over the ceiling
   reasoning_effort_mappings?: ReasoningEffortMapping[]
   is_exclusive: boolean
   status: 'active' | 'inactive'
@@ -610,6 +618,8 @@ export interface Group {
 }
 
 export interface AdminGroup extends Group {
+  force_openai_fast: boolean
+  free_openai_fast: boolean
   model_pricing: import('@/api/admin/channels').ChannelModelPricing[]
   // 分组利润控制（openai/anthropic/gemini/grok/antigravity 分组可启用；margin/buffer 为小数存储）。
   // 仅管理员可见：与 rate_multiplier 相乘即可反推上游成本上限，不得下放到 Group。
@@ -775,6 +785,8 @@ export interface CreateGroupRequest {
   monthly_limit_usd?: number | null
   five_hour_limit_usd?: number | null
   long_context_pricing_enabled?: boolean
+  force_openai_fast?: boolean
+  free_openai_fast?: boolean
   model_pricing?: import('@/api/admin/channels').ChannelModelPricing[]
   allow_image_generation?: boolean
   allow_batch_image_generation?: boolean
@@ -818,6 +830,7 @@ export interface CreateGroupRequest {
   model_routing_enabled?: boolean
   rpm_limit?: number
   max_reasoning_effort?: string
+  max_reasoning_effort_over_limit?: string
   reasoning_effort_mappings?: ReasoningEffortMapping[]
   require_oauth_only?: boolean
   require_privacy_set?: boolean
@@ -838,6 +851,8 @@ export interface UpdateGroupRequest {
   monthly_limit_usd?: number | null
   five_hour_limit_usd?: number | null
   long_context_pricing_enabled?: boolean
+  force_openai_fast?: boolean
+  free_openai_fast?: boolean
   model_pricing?: import('@/api/admin/channels').ChannelModelPricing[]
   allow_image_generation?: boolean
   allow_batch_image_generation?: boolean
@@ -881,6 +896,7 @@ export interface UpdateGroupRequest {
   model_routing_enabled?: boolean
   rpm_limit?: number
   max_reasoning_effort?: string
+  max_reasoning_effort_over_limit?: string
   reasoning_effort_mappings?: ReasoningEffortMapping[]
   require_oauth_only?: boolean
   require_privacy_set?: boolean
@@ -1622,6 +1638,7 @@ export interface UsageLog {
   request_type?: UsageRequestType
   stream: boolean
   openai_ws_mode?: boolean
+  native_compaction_v2: boolean
   duration_ms: number | null
   first_token_ms: number | null
   last_token_ms: number | null
@@ -1672,6 +1689,7 @@ export interface UsageLogAccountSummary {
 
 export interface AdminUsageLog extends UsageLog {
   upstream_model?: string | null
+  upstream_reasoning_effort?: string | null
   upstream_response_model?: string | null
   upstream_model_mismatch?: boolean | null
   model_mapping_chain?: string | null
@@ -1940,6 +1958,7 @@ export interface UpdateUserRequest {
   rpm_limit?: number
   status?: 'active' | 'disabled'
   allowed_groups?: number[] | null
+  restrict_public_groups?: boolean
   // 用户专属分组倍率配置 (group_id -> rate_multiplier | null)
   // null 表示删除该分组的专属倍率
   group_rates?: Record<number, number | null>
@@ -2071,6 +2090,7 @@ export interface UsageQueryParams {
   model?: string
   request_type?: UsageRequestType
   stream?: boolean
+  native_compaction_v2?: boolean | null
   billing_type?: number | null
   billing_mode?: string | null
   start_date?: string

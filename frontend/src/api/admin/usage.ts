@@ -175,6 +175,7 @@ export async function getStats(params: {
   model?: string
   request_type?: UsageRequestType
   stream?: boolean
+  native_compaction_v2?: boolean | null
   upstream_model_mismatch?: boolean
 	completion_status?: AdminUsageQueryParams['completion_status']
 	usage_source?: AdminUsageQueryParams['usage_source']

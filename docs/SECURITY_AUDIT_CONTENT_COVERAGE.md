@@ -86,6 +86,22 @@ extraction failure rather than an ordinary empty request. Both engines count
 and safely log that failure before allowing it. Unknown sibling keys remain
 ignored when the containing object has at least one recognized field.
 
+Call-less Codex automation and delegation bootstrap items are a documented
+Responses exception to ordinary tool-output attribution. When the shared strict
+wire validator confirms the supported namespace/name, envelope, missing call
+anchor, unique JSON-member, and empty `previous_response_id` requirements, the
+canonical extractor classifies the output as a current client-controlled user
+message because the post-audit protocol adapter sends that exact text upstream
+as `role=user`. Ordinary function/tool outputs, unsafe or ambiguous bootstrap
+shapes, and outputs with a real call/reference anchor remain tool output and are
+excluded by both engines. The handler still audits the immutable inbound bytes
+before applying the actual request transform.
+
+Anthropic and Bedrock `fallbacks` are outbound routing/control fields rather
+than prompt text. Sanitizing them for upstream beta compatibility happens only
+after ingress audit; recognized message, system, and tool-definition siblings
+retain the canonical attribution in the protocol matrix above.
+
 ## Engine Selection
 
 Both engines consume the same canonical document:

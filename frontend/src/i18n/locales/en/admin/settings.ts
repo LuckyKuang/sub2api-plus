@@ -478,6 +478,10 @@ export default {
         grokBaseURLModeUSEast1: 'Regional API (us-east-1)',
         grokBaseURLModeUSWest2: 'Regional API (us-west-2)',
         grokBaseURLModeEUWest1: 'Regional API (eu-west-1)',
+        openaiTTFTMode: 'OpenAI Responses first-token metric',
+        openaiTTFTModeSemantic: 'Legacy-compatible (semantic event)',
+        openaiTTFTModeVisible: 'Actual visible output',
+        openaiTTFTModeHint: 'The default records first_token_ms at the first non-preamble semantic event. Actual visible output records it only when non-empty text, tool arguments, or image content arrives.',
         fingerprintUnification: 'Fingerprint Unification',
         fingerprintUnificationHint: 'Unify X-Stainless-* headers across users sharing the same OAuth account. Disabling passes through each client\'s original headers.',
         metadataPassthrough: 'Metadata Passthrough',
@@ -550,12 +554,27 @@ export default {
         maxCodexVersionPlaceholder: "e.g. 0.200.0",
         codexVersionHint:
           "Official clients only: checks their version against the [min, max] range. Leave a side empty to not limit it.",
+        codexFingerprintSignals: "Codex engine fingerprint signals",
+        codexFingerprintSignalsDesc:
+          "Define engine-fingerprint signals: every Required signal must match (AND); within a row, '/'-separated variants are OR'd. None checked = not enforced. Default checks only the x-codex- prefix. Types: header exact / header prefix / body path.",
+        codexFpTypeHeaderExact: "Header exact",
+        codexFpTypeHeaderPrefix: "Header prefix",
+        codexFpTypeBodyPath: "Body path",
+        codexFpMatchPlaceholder: "match; '/'-separate variants (e.g. session-id / session_id or x-codex-)",
+        codexFpRequired: "Required",
+        codexFingerprintNoRequiredWarn: "No signal is marked Required — the engine-fingerprint gate is inactive, allowing every candidate that passes identity/version. Check at least one signal to enable it.",
+        codexAllowAppServer: "Codex app-server",
+        codexAllowAppServerDesc:
+          "Allow third-party clients that embed the Codex engine and connect over the app-server protocol (e.g. Claude Code's codex plugin). Off by default; when on, such clients are allowed once they pass the engine-fingerprint gate; off = only official clients and the whitelist are allowed.",
         codexBlacklist: "User-Agent/Originator Blacklist",
         codexBlacklistDesc:
           "Deny if any field matches; takes precedence over any allow. originator is exact; User-Agent is a 'contains' match (comma-separated).",
         codexWhitelist: "User-Agent/Originator Whitelist",
         codexWhitelistDesc:
           "Allow explicitly reviewed compatibility clients outside the official profile set: originator must match exactly, User-Agent must contain every configured marker, and both must name the same client. A known Codex request header is still required.",
+        codexWhitelistSkipFingerprint: "Skip engine fingerprint",
+        codexWhitelistSkipFingerprintTooltip:
+          "Risk: when checked this entry is allowed on originator + User-Agent alone (both forgeable), with no engine-fingerprint backstop. Use only for trusted third-party clients that genuinely do not send a Codex engine fingerprint.",
         codexOriginatorPlaceholder: "originator (exact, e.g. opencode)",
         codexUaContainsPlaceholder: "User-Agent contains markers, comma-separated (e.g. opencode/)",
         codexAddRow: "Add entry",

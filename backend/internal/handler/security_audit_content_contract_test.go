@@ -37,6 +37,16 @@ func TestContentModerationUsesLatestUserTextWithoutInstructionContext(t *testing
 			body: `{"input":[{"type":"message","role":"user","content":"older prompt"},{"type":"function_call_output","call_id":"call_1","output":"current tool result"}]}`,
 		},
 		{
+			name: "responses automation bootstrap is direct user text", protocol: service.ContentModerationProtocolOpenAIResponses,
+			body: `{"model":"gpt-5","input":[{"type":"function_call_output","namespace":"codex_app","name":"automation_update","output":"Automation: Scheduled review\nAutomation ID: wiki\nAutomation memory: $CODEX_HOME/automations/wiki/memory.md\nLast run: never\n\nReview security"}]}`,
+			want: "Automation: Scheduled review Automation ID: wiki Automation memory: $CODEX_HOME/automations/wiki/memory.md Last run: never Review security",
+		},
+		{
+			name: "responses delegation bootstrap is direct user text", protocol: service.ContentModerationProtocolOpenAIResponses,
+			body: `{"model":"gpt-5","input":[{"type":"function_call_output","namespace":"codex_app","name":"create_thread","output":"<codex_delegation><source_thread_id>thread-1</source_thread_id><input>review security</input></codex_delegation>"}]}`,
+			want: "<codex_delegation><source_thread_id>thread-1</source_thread_id><input>review security</input></codex_delegation>",
+		},
+		{
 			name: "responses assistant item skipped", protocol: service.ContentModerationProtocolOpenAIResponses,
 			body: `{"input":[{"type":"message","role":"user","content":"older prompt"},{"type":"message","role":"assistant","content":"current assistant payload"}]}`,
 		},
@@ -128,6 +138,18 @@ func TestPromptAuditUsesConversationTextWithoutToolSchema(t *testing.T) {
 			full:   []string{"older prompt"},
 			latest: "older prompt",
 			omit:   []string{"current tool result"},
+		},
+		{
+			name: "responses automation bootstrap is prompt text", protocol: service.ContentModerationProtocolOpenAIResponses,
+			body:   `{"model":"gpt-5","input":[{"type":"function_call_output","namespace":"codex_app","name":"automation_update","output":"Automation: Scheduled review\nAutomation ID: wiki\nAutomation memory: $CODEX_HOME/automations/wiki/memory.md\nLast run: never\n\nReview security"}]}`,
+			full:   []string{"Automation: Scheduled review", "Review security"},
+			latest: "Automation: Scheduled review\nAutomation ID: wiki\nAutomation memory: $CODEX_HOME/automations/wiki/memory.md\nLast run: never\n\nReview security",
+		},
+		{
+			name: "responses delegation bootstrap is prompt text", protocol: service.ContentModerationProtocolOpenAIResponses,
+			body:   `{"model":"gpt-5","input":[{"type":"function_call_output","namespace":"codex_tui","name":"send_message_to_thread","output":"<codex_delegation><source_thread_id>thread-1</source_thread_id><input>review security</input></codex_delegation>"}]}`,
+			full:   []string{"<codex_delegation>", "review security"},
+			latest: "<codex_delegation><source_thread_id>thread-1</source_thread_id><input>review security</input></codex_delegation>",
 		},
 		{
 			name: "responses legacy messages and prompt aliases", protocol: service.ContentModerationProtocolOpenAIResponses,
