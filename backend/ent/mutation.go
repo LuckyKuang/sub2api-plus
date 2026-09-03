@@ -44555,6 +44555,8 @@ type UsageLogMutation struct {
 	addfirst_output_ms           *int
 	first_output_kind            *string
 	is_complete                  *bool
+	completion_status            *string
+	usage_source                 *string
 	user_agent                   *string
 	ip_address                   *string
 	image_count                  *int
@@ -46736,6 +46738,78 @@ func (m *UsageLogMutation) ResetIsComplete() {
 	delete(m.clearedFields, usagelog.FieldIsComplete)
 }
 
+// SetCompletionStatus sets the "completion_status" field.
+func (m *UsageLogMutation) SetCompletionStatus(s string) {
+	m.completion_status = &s
+}
+
+// CompletionStatus returns the value of the "completion_status" field in the mutation.
+func (m *UsageLogMutation) CompletionStatus() (r string, exists bool) {
+	v := m.completion_status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCompletionStatus returns the old "completion_status" field's value of the UsageLog entity.
+// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageLogMutation) OldCompletionStatus(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCompletionStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCompletionStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCompletionStatus: %w", err)
+	}
+	return oldValue.CompletionStatus, nil
+}
+
+// ResetCompletionStatus resets all changes to the "completion_status" field.
+func (m *UsageLogMutation) ResetCompletionStatus() {
+	m.completion_status = nil
+}
+
+// SetUsageSource sets the "usage_source" field.
+func (m *UsageLogMutation) SetUsageSource(s string) {
+	m.usage_source = &s
+}
+
+// UsageSource returns the value of the "usage_source" field in the mutation.
+func (m *UsageLogMutation) UsageSource() (r string, exists bool) {
+	v := m.usage_source
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUsageSource returns the old "usage_source" field's value of the UsageLog entity.
+// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageLogMutation) OldUsageSource(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUsageSource is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUsageSource requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUsageSource: %w", err)
+	}
+	return oldValue.UsageSource, nil
+}
+
+// ResetUsageSource resets all changes to the "usage_source" field.
+func (m *UsageLogMutation) ResetUsageSource() {
+	m.usage_source = nil
+}
+
 // SetUserAgent sets the "user_agent" field.
 func (m *UsageLogMutation) SetUserAgent(s string) {
 	m.user_agent = &s
@@ -47551,7 +47625,7 @@ func (m *UsageLogMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UsageLogMutation) Fields() []string {
-	fields := make([]string, 0, 52)
+	fields := make([]string, 0, 54)
 	if m.user != nil {
 		fields = append(fields, usagelog.FieldUserID)
 	}
@@ -47668,6 +47742,12 @@ func (m *UsageLogMutation) Fields() []string {
 	}
 	if m.is_complete != nil {
 		fields = append(fields, usagelog.FieldIsComplete)
+	}
+	if m.completion_status != nil {
+		fields = append(fields, usagelog.FieldCompletionStatus)
+	}
+	if m.usage_source != nil {
+		fields = append(fields, usagelog.FieldUsageSource)
 	}
 	if m.user_agent != nil {
 		fields = append(fields, usagelog.FieldUserAgent)
@@ -47794,6 +47874,10 @@ func (m *UsageLogMutation) Field(name string) (ent.Value, bool) {
 		return m.FirstOutputKind()
 	case usagelog.FieldIsComplete:
 		return m.IsComplete()
+	case usagelog.FieldCompletionStatus:
+		return m.CompletionStatus()
+	case usagelog.FieldUsageSource:
+		return m.UsageSource()
 	case usagelog.FieldUserAgent:
 		return m.UserAgent()
 	case usagelog.FieldIPAddress:
@@ -47907,6 +47991,10 @@ func (m *UsageLogMutation) OldField(ctx context.Context, name string) (ent.Value
 		return m.OldFirstOutputKind(ctx)
 	case usagelog.FieldIsComplete:
 		return m.OldIsComplete(ctx)
+	case usagelog.FieldCompletionStatus:
+		return m.OldCompletionStatus(ctx)
+	case usagelog.FieldUsageSource:
+		return m.OldUsageSource(ctx)
 	case usagelog.FieldUserAgent:
 		return m.OldUserAgent(ctx)
 	case usagelog.FieldIPAddress:
@@ -48214,6 +48302,20 @@ func (m *UsageLogMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetIsComplete(v)
+		return nil
+	case usagelog.FieldCompletionStatus:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCompletionStatus(v)
+		return nil
+	case usagelog.FieldUsageSource:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUsageSource(v)
 		return nil
 	case usagelog.FieldUserAgent:
 		v, ok := value.(string)
@@ -48921,6 +49023,12 @@ func (m *UsageLogMutation) ResetField(name string) error {
 		return nil
 	case usagelog.FieldIsComplete:
 		m.ResetIsComplete()
+		return nil
+	case usagelog.FieldCompletionStatus:
+		m.ResetCompletionStatus()
+		return nil
+	case usagelog.FieldUsageSource:
+		m.ResetUsageSource()
 		return nil
 	case usagelog.FieldUserAgent:
 		m.ResetUserAgent()

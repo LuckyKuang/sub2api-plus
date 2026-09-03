@@ -641,6 +641,14 @@ func usageLogFromServiceUser(l *service.UsageLog) UsageLog {
 	if requestedModel == "" {
 		requestedModel = l.Model
 	}
+	completionStatus := l.CompletionStatus
+	if completionStatus == "" {
+		completionStatus = service.UsageCompletionUnknown
+	}
+	usageSource := l.UsageSource
+	if usageSource == "" {
+		usageSource = service.UsageSourceUnknown
+	}
 	return UsageLog{
 		ID:                        l.ID,
 		UserID:                    l.UserID,
@@ -679,6 +687,8 @@ func usageLogFromServiceUser(l *service.UsageLog) UsageLog {
 		FirstOutputMs:             l.FirstOutputMs,
 		FirstOutputKind:           l.FirstOutputKind,
 		IsComplete:                l.IsComplete,
+		CompletionStatus:          completionStatus,
+		UsageSource:               usageSource,
 		ImageCount:                l.ImageCount,
 		ImageSize:                 l.ImageSize,
 		ImageInputSize:            l.ImageInputSize,

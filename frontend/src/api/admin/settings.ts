@@ -654,6 +654,8 @@ export interface SystemSettings {
   // Payment configuration
   payment_enabled: boolean;
   risk_control_enabled: boolean;
+  client_disconnect_consecutive_ban_enabled: boolean;
+  client_disconnect_consecutive_ban_threshold: number;
   global_ip_access_control_enabled: boolean;
 
   // Cyber session block
@@ -971,6 +973,8 @@ export interface UpdateSettingsRequest {
   // Payment configuration
   payment_enabled?: boolean;
   risk_control_enabled?: boolean;
+  client_disconnect_consecutive_ban_enabled?: boolean;
+  client_disconnect_consecutive_ban_threshold?: number;
   global_ip_access_control_enabled?: boolean;
 
   // Cyber session block

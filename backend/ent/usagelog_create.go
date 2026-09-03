@@ -533,6 +533,34 @@ func (_c *UsageLogCreate) SetNillableIsComplete(v *bool) *UsageLogCreate {
 	return _c
 }
 
+// SetCompletionStatus sets the "completion_status" field.
+func (_c *UsageLogCreate) SetCompletionStatus(v string) *UsageLogCreate {
+	_c.mutation.SetCompletionStatus(v)
+	return _c
+}
+
+// SetNillableCompletionStatus sets the "completion_status" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableCompletionStatus(v *string) *UsageLogCreate {
+	if v != nil {
+		_c.SetCompletionStatus(*v)
+	}
+	return _c
+}
+
+// SetUsageSource sets the "usage_source" field.
+func (_c *UsageLogCreate) SetUsageSource(v string) *UsageLogCreate {
+	_c.mutation.SetUsageSource(v)
+	return _c
+}
+
+// SetNillableUsageSource sets the "usage_source" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableUsageSource(v *string) *UsageLogCreate {
+	if v != nil {
+		_c.SetUsageSource(*v)
+	}
+	return _c
+}
+
 // SetUserAgent sets the "user_agent" field.
 func (_c *UsageLogCreate) SetUserAgent(v string) *UsageLogCreate {
 	_c.mutation.SetUserAgent(v)
@@ -835,6 +863,14 @@ func (_c *UsageLogCreate) defaults() {
 		v := usagelog.DefaultStream
 		_c.mutation.SetStream(v)
 	}
+	if _, ok := _c.mutation.CompletionStatus(); !ok {
+		v := usagelog.DefaultCompletionStatus
+		_c.mutation.SetCompletionStatus(v)
+	}
+	if _, ok := _c.mutation.UsageSource(); !ok {
+		v := usagelog.DefaultUsageSource
+		_c.mutation.SetUsageSource(v)
+	}
 	if _, ok := _c.mutation.ImageCount(); !ok {
 		v := usagelog.DefaultImageCount
 		_c.mutation.SetImageCount(v)
@@ -964,6 +1000,22 @@ func (_c *UsageLogCreate) check() error {
 	if v, ok := _c.mutation.FirstOutputKind(); ok {
 		if err := usagelog.FirstOutputKindValidator(v); err != nil {
 			return &ValidationError{Name: "first_output_kind", err: fmt.Errorf(`ent: validator failed for field "UsageLog.first_output_kind": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.CompletionStatus(); !ok {
+		return &ValidationError{Name: "completion_status", err: errors.New(`ent: missing required field "UsageLog.completion_status"`)}
+	}
+	if v, ok := _c.mutation.CompletionStatus(); ok {
+		if err := usagelog.CompletionStatusValidator(v); err != nil {
+			return &ValidationError{Name: "completion_status", err: fmt.Errorf(`ent: validator failed for field "UsageLog.completion_status": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.UsageSource(); !ok {
+		return &ValidationError{Name: "usage_source", err: errors.New(`ent: missing required field "UsageLog.usage_source"`)}
+	}
+	if v, ok := _c.mutation.UsageSource(); ok {
+		if err := usagelog.UsageSourceValidator(v); err != nil {
+			return &ValidationError{Name: "usage_source", err: fmt.Errorf(`ent: validator failed for field "UsageLog.usage_source": %w`, err)}
 		}
 	}
 	if v, ok := _c.mutation.UserAgent(); ok {
@@ -1184,6 +1236,14 @@ func (_c *UsageLogCreate) createSpec() (*UsageLog, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.IsComplete(); ok {
 		_spec.SetField(usagelog.FieldIsComplete, field.TypeBool, value)
 		_node.IsComplete = &value
+	}
+	if value, ok := _c.mutation.CompletionStatus(); ok {
+		_spec.SetField(usagelog.FieldCompletionStatus, field.TypeString, value)
+		_node.CompletionStatus = value
+	}
+	if value, ok := _c.mutation.UsageSource(); ok {
+		_spec.SetField(usagelog.FieldUsageSource, field.TypeString, value)
+		_node.UsageSource = value
 	}
 	if value, ok := _c.mutation.UserAgent(); ok {
 		_spec.SetField(usagelog.FieldUserAgent, field.TypeString, value)
@@ -2067,6 +2127,30 @@ func (u *UsageLogUpsert) UpdateIsComplete() *UsageLogUpsert {
 // ClearIsComplete clears the value of the "is_complete" field.
 func (u *UsageLogUpsert) ClearIsComplete() *UsageLogUpsert {
 	u.SetNull(usagelog.FieldIsComplete)
+	return u
+}
+
+// SetCompletionStatus sets the "completion_status" field.
+func (u *UsageLogUpsert) SetCompletionStatus(v string) *UsageLogUpsert {
+	u.Set(usagelog.FieldCompletionStatus, v)
+	return u
+}
+
+// UpdateCompletionStatus sets the "completion_status" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateCompletionStatus() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldCompletionStatus)
+	return u
+}
+
+// SetUsageSource sets the "usage_source" field.
+func (u *UsageLogUpsert) SetUsageSource(v string) *UsageLogUpsert {
+	u.Set(usagelog.FieldUsageSource, v)
+	return u
+}
+
+// UpdateUsageSource sets the "usage_source" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateUsageSource() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldUsageSource)
 	return u
 }
 
@@ -3140,6 +3224,34 @@ func (u *UsageLogUpsertOne) UpdateIsComplete() *UsageLogUpsertOne {
 func (u *UsageLogUpsertOne) ClearIsComplete() *UsageLogUpsertOne {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.ClearIsComplete()
+	})
+}
+
+// SetCompletionStatus sets the "completion_status" field.
+func (u *UsageLogUpsertOne) SetCompletionStatus(v string) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetCompletionStatus(v)
+	})
+}
+
+// UpdateCompletionStatus sets the "completion_status" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateCompletionStatus() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateCompletionStatus()
+	})
+}
+
+// SetUsageSource sets the "usage_source" field.
+func (u *UsageLogUpsertOne) SetUsageSource(v string) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetUsageSource(v)
+	})
+}
+
+// UpdateUsageSource sets the "usage_source" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateUsageSource() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateUsageSource()
 	})
 }
 
@@ -4415,6 +4527,34 @@ func (u *UsageLogUpsertBulk) UpdateIsComplete() *UsageLogUpsertBulk {
 func (u *UsageLogUpsertBulk) ClearIsComplete() *UsageLogUpsertBulk {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.ClearIsComplete()
+	})
+}
+
+// SetCompletionStatus sets the "completion_status" field.
+func (u *UsageLogUpsertBulk) SetCompletionStatus(v string) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetCompletionStatus(v)
+	})
+}
+
+// UpdateCompletionStatus sets the "completion_status" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateCompletionStatus() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateCompletionStatus()
+	})
+}
+
+// SetUsageSource sets the "usage_source" field.
+func (u *UsageLogUpsertBulk) SetUsageSource(v string) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetUsageSource(v)
+	})
+}
+
+// UpdateUsageSource sets the "usage_source" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateUsageSource() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateUsageSource()
 	})
 }
 

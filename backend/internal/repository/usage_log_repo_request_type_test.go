@@ -109,6 +109,8 @@ func TestUsageLogRepositoryCreateSyncRequestTypeAndLegacyFields(t *testing.T) {
 			sqlmock.AnyArg(), // billing_mode
 			sqlmock.AnyArg(), // account_stats_cost
 			sqlmock.AnyArg(), // session_id
+			service.UsageCompletionUnknown,
+			service.UsageSourceUnknown,
 			log.NativeCompactionV2,
 			createdAt,
 		).
@@ -208,6 +210,8 @@ func TestUsageLogRepositoryCreate_PersistsServiceTier(t *testing.T) {
 			sqlmock.AnyArg(), // billing_mode
 			sqlmock.AnyArg(), // account_stats_cost
 			sqlmock.AnyArg(), // session_id
+			service.UsageCompletionUnknown,
+			service.UsageSourceUnknown,
 			log.NativeCompactionV2,
 			createdAt,
 		).
@@ -1006,6 +1010,8 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},
 			sql.NullFloat64{},
 			sql.NullString{},
+			service.UsageCompletionCompleted,
+			service.UsageSourceUpstreamExact,
 			false, // native_compaction_v2
 			now,
 		}})
@@ -1101,7 +1107,9 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},  // billing_mode
 			sql.NullFloat64{}, // account_stats_cost
 			sql.NullString{},  // session_id
-			false,             // native_compaction_v2
+			service.UsageCompletionUnknown,
+			service.UsageSourceUnknown,
+			false, // native_compaction_v2
 			now,
 		}})
 		require.NoError(t, err)
@@ -1167,7 +1175,9 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},  // billing_mode
 			sql.NullFloat64{}, // account_stats_cost
 			sql.NullString{},  // session_id
-			true,              // native_compaction_v2
+			service.UsageCompletionUnknown,
+			service.UsageSourceUnknown,
+			true, // native_compaction_v2
 			now,
 		}})
 		require.NoError(t, err)
@@ -1234,7 +1244,9 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},  // billing_mode
 			sql.NullFloat64{}, // account_stats_cost
 			sql.NullString{},  // session_id
-			false,             // native_compaction_v2
+			service.UsageCompletionUnknown,
+			service.UsageSourceUnknown,
+			false, // native_compaction_v2
 			now,
 		}})
 		require.NoError(t, err)

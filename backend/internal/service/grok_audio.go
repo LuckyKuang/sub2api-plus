@@ -31,7 +31,8 @@ var supportedGrokVoiceHTTPEndpoints = map[string]struct{}{
 // the custom-voices CRUD/audio subresources).
 // The response is intentionally passed through because TTS returns audio bytes
 // while STT returns JSON and xAI may add format-specific headers.
-func (s *OpenAIGatewayService) ForwardGrokVoice(ctx context.Context, c *gin.Context, account *Account, endpoint string, body []byte, contentType string) (*OpenAIForwardResult, error) {
+func (s *OpenAIGatewayService) ForwardGrokVoice(ctx context.Context, c *gin.Context, account *Account, endpoint string, body []byte, contentType string) (result *OpenAIForwardResult, err error) {
+	defer func() { finalizeClientDisconnectForwardResult(ctx, c, result, err) }()
 	if s == nil || account == nil {
 		return nil, fmt.Errorf("grok voice service/account is required")
 	}
@@ -102,6 +103,7 @@ func (s *OpenAIGatewayService) ForwardGrokVoice(ctx context.Context, c *gin.Cont
 	if resp.StatusCode >= 400 {
 		return s.handleGrokMediaErrorResponse(ctx, resp, c, account, resp.Header.Get("x-request-id"), endpoint)
 	}
+	MarkClientDisconnectUpstreamAccepted(ctx)
 	data, err := ReadUpstreamResponseBody(resp.Body, s.cfg, c, openAITooLargeError)
 	if err != nil {
 		return nil, err
@@ -138,6 +140,12 @@ func (s *OpenAIGatewayService) ProxyGrokRealtime(ctx context.Context, c *gin.Con
 }
 
 type GrokRealtimeUpstream struct{ conn openAIWSClientConn }
+
+type GrokRealtimeTurnObserver struct {
+	Accepted  func(responseID string)
+	Completed func(responseID string)
+	Failed    func(responseID string)
+}
 
 // GrokRealtimeDialError preserves an HTTP status returned before WebSocket
 // upgrade so handlers can apply the normal Grok account policy.
@@ -198,6 +206,10 @@ func (s *OpenAIGatewayService) HandleGrokRealtimeUpstreamError(ctx context.Conte
 }
 
 func (s *OpenAIGatewayService) ProxyGrokRealtimeConn(ctx context.Context, c *gin.Context, client *coderws.Conn, upstream *GrokRealtimeUpstream) (bool, error) {
+	return s.ProxyGrokRealtimeConnWithObserver(ctx, c, client, upstream, nil)
+}
+
+func (s *OpenAIGatewayService) ProxyGrokRealtimeConnWithObserver(ctx context.Context, c *gin.Context, client *coderws.Conn, upstream *GrokRealtimeUpstream, observer *GrokRealtimeTurnObserver) (bool, error) {
 	if s == nil || client == nil || upstream == nil || upstream.conn == nil {
 		return false, fmt.Errorf("realtime connection is required")
 	}
@@ -219,6 +231,7 @@ func (s *OpenAIGatewayService) ProxyGrokRealtimeConn(ctx context.Context, c *gin
 			if grokRealtimeEventHasAudio(msg) {
 				audioObserved.Store(true)
 			}
+			observeGrokRealtimeUpstreamTurn(msg, observer)
 			if writeErr := client.Write(ctx, coderws.MessageText, msg); writeErr != nil {
 				errCh <- writeErr
 				return
@@ -253,6 +266,40 @@ func (s *OpenAIGatewayService) ProxyGrokRealtimeConn(ctx context.Context, c *gin
 	}()
 
 	return awaitGrokRealtimeAudioObserved(errCh, &audioObserved)
+}
+
+func observeGrokRealtimeUpstreamTurn(msg []byte, observer *GrokRealtimeTurnObserver) {
+	if observer == nil || !gjson.ValidBytes(msg) {
+		return
+	}
+	eventType := strings.ToLower(strings.TrimSpace(gjson.GetBytes(msg, "type").String()))
+	responseID := strings.TrimSpace(gjson.GetBytes(msg, "response.id").String())
+	if responseID == "" {
+		responseID = strings.TrimSpace(gjson.GetBytes(msg, "response_id").String())
+	}
+	switch eventType {
+	case "response.created":
+		if observer.Accepted != nil {
+			observer.Accepted(responseID)
+		}
+	case "response.completed":
+		if observer.Completed != nil {
+			observer.Completed(responseID)
+		}
+	case "response.done":
+		status := strings.ToLower(strings.TrimSpace(gjson.GetBytes(msg, "response.status").String()))
+		if status == "" || status == "completed" {
+			if observer.Completed != nil {
+				observer.Completed(responseID)
+			}
+		} else if observer.Failed != nil {
+			observer.Failed(responseID)
+		}
+	case "response.failed", "response.cancelled", "response.canceled":
+		if observer.Failed != nil {
+			observer.Failed(responseID)
+		}
+	}
 }
 
 // ProbeGrokRealtime performs the upstream WebSocket handshake without sending

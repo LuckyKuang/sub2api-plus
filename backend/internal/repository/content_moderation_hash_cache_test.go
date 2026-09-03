@@ -45,3 +45,22 @@ func TestContentModerationEndpointCircuitUsesPassiveHalfOpenLock(t *testing.T) {
 	require.True(t, claimed)
 	require.False(t, halfOpen)
 }
+
+func TestContentModerationHashCache_RecordBlockedSessionDoesNotRenewTTL(t *testing.T) {
+	server := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: server.Addr()})
+	t.Cleanup(func() { _ = client.Close() })
+	cache := &contentModerationHashCache{rdb: client}
+	ctx := context.Background()
+	blockKey := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
+	require.NoError(t, cache.RecordBlockedSession(ctx, blockKey, time.Minute))
+	ttl := server.TTL(contentModerationSessionBlockRedisKey(blockKey))
+	require.Greater(t, ttl, 50*time.Second)
+
+	server.FastForward(30 * time.Second)
+	require.NoError(t, cache.RecordBlockedSession(ctx, blockKey, time.Hour))
+	remaining := server.TTL(contentModerationSessionBlockRedisKey(blockKey))
+	require.Greater(t, remaining, 20*time.Second)
+	require.Less(t, remaining, 40*time.Second)
+}

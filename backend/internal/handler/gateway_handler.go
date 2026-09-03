@@ -57,6 +57,11 @@ type GatewayHandler struct {
 	maxAccountSwitchesGemini  int
 	cfg                       *config.Config
 	settingService            *service.SettingService
+	clientDisconnectRisk      *service.ClientDisconnectRiskService
+}
+
+func (h *GatewayHandler) SetClientDisconnectRiskService(risk *service.ClientDisconnectRiskService) {
+	h.clientDisconnectRisk = risk
 }
 
 // NewGatewayHandler creates a new GatewayHandler
@@ -132,6 +137,8 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 		h.errorResponse(c, http.StatusInternalServerError, "api_error", "User context not found")
 		return
 	}
+	disconnectLifecycle := startClientDisconnectRiskLifecycle(c, h.clientDisconnectRisk, subject.UserID, apiKey.ID, "anthropic_messages")
+	defer disconnectLifecycle.Neutral(c.Request.Context())
 	reqLog := requestLogger(
 		c,
 		"handler.gateway.messages",
@@ -2072,11 +2079,13 @@ func (h *GatewayHandler) CountTokens(c *gin.Context) {
 		return
 	}
 
-	_, ok = middleware2.GetAuthSubjectFromContext(c)
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
 	if !ok {
 		h.errorResponse(c, http.StatusInternalServerError, "api_error", "User context not found")
 		return
 	}
+	disconnectLifecycle := startClientDisconnectRiskLifecycle(c, h.clientDisconnectRisk, subject.UserID, apiKey.ID, "anthropic_count_tokens")
+	defer disconnectLifecycle.Neutral(c.Request.Context())
 	reqLog := requestLogger(
 		c,
 		"handler.gateway.count_tokens",
@@ -2514,14 +2523,12 @@ func (h *GatewayHandler) submitUsageRecordTask(parent context.Context, task serv
 	}
 	task = wrapUsageRecordTaskContext(parent, task)
 	if h.usageRecordWorkerPool != nil {
-		if mode := h.usageRecordWorkerPool.Submit(task); mode != service.UsageRecordSubmitModeDroppedStopped {
+		if mode := h.usageRecordWorkerPool.Submit(task); !mode.Dropped() {
 			return
 		}
-		// 池已停止（进程关停窗口）：计费任务不能静默丢失，降级为内联同步执行。
-		// 显式配置的 drop/sample 溢出丢弃仍按配置语义保留。
 		logger.L().With(
 			zap.String("component", "handler.gateway.messages"),
-		).Warn("gateway.usage_record_task_stopped_sync_fallback")
+		).Warn("gateway.usage_record_task_dropped_sync_fallback")
 	}
 	// 回退路径：worker 池未注入或已停止时同步执行，避免退回到无界 goroutine 模式。
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -2539,29 +2546,7 @@ func (h *GatewayHandler) submitUsageRecordTask(parent context.Context, task serv
 
 // submitMandatoryUsageRecordTask never silently drops billing work on pool overflow.
 func (h *GatewayHandler) submitMandatoryUsageRecordTask(parent context.Context, task service.UsageRecordTask) {
-	if task == nil {
-		return
-	}
-	task = wrapUsageRecordTaskContext(parent, task)
-	if h.usageRecordWorkerPool != nil {
-		if mode := h.usageRecordWorkerPool.Submit(task); !mode.Dropped() {
-			return
-		}
-		logger.L().With(
-			zap.String("component", "handler.gateway.usage"),
-		).Warn("gateway.usage_record_task_mandatory_sync_fallback")
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	defer func() {
-		if recovered := recover(); recovered != nil {
-			logger.L().With(
-				zap.String("component", "handler.gateway.usage"),
-				zap.Any("panic", recovered),
-			).Error("gateway.usage_record_task_panic_recovered")
-		}
-	}()
-	task(ctx)
+	h.submitUsageRecordTask(parent, task)
 }
 
 // getUserMsgQueueMode 获取当前请求的 UMQ 模式

@@ -153,6 +153,8 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 		googleError(c, http.StatusInternalServerError, "User context not found")
 		return
 	}
+	disconnectLifecycle := startClientDisconnectRiskLifecycle(c, h.clientDisconnectRisk, authSubject.UserID, apiKey.ID, "gemini_v1beta")
+	defer disconnectLifecycle.Neutral(c.Request.Context())
 	reqLog := requestLogger(
 		c,
 		"handler.gemini_v1beta.models",

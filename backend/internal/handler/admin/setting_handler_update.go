@@ -359,7 +359,9 @@ type UpdateSettingsRequest struct {
 	AffiliateEnabled *bool `json:"affiliate_enabled"`
 
 	// 风控中心功能开关
-	RiskControlEnabled *bool `json:"risk_control_enabled"`
+	RiskControlEnabled                      *bool `json:"risk_control_enabled"`
+	ClientDisconnectConsecutiveBanEnabled   *bool `json:"client_disconnect_consecutive_ban_enabled"`
+	ClientDisconnectConsecutiveBanThreshold *int  `json:"client_disconnect_consecutive_ban_threshold"`
 
 	// 全局 IP 访问控制功能总开关
 	GlobalIPAccessControlEnabled *bool `json:"global_ip_access_control_enabled"`
@@ -1559,6 +1561,11 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		response.BadRequest(c, "cyber_session_block_ttl_seconds must be > 0")
 		return
 	}
+	if req.ClientDisconnectConsecutiveBanThreshold != nil &&
+		(*req.ClientDisconnectConsecutiveBanThreshold < 1 || *req.ClientDisconnectConsecutiveBanThreshold > 1000) {
+		response.BadRequest(c, "client_disconnect_consecutive_ban_threshold must be between 1 and 1000")
+		return
+	}
 
 	settings := &service.SystemSettings{
 		// 系统全局 platform quota 默认值（整体替换语义）
@@ -2050,6 +2057,19 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.RiskControlEnabled
 		}(),
+		ClientDisconnectConsecutiveBanEnabled: func() bool {
+			if req.ClientDisconnectConsecutiveBanEnabled != nil {
+				return *req.ClientDisconnectConsecutiveBanEnabled
+			}
+			return previousSettings.ClientDisconnectConsecutiveBanEnabled
+		}(),
+		ClientDisconnectConsecutiveBanThreshold: func() int {
+			if req.ClientDisconnectConsecutiveBanThreshold != nil {
+				return *req.ClientDisconnectConsecutiveBanThreshold
+			}
+			return previousSettings.ClientDisconnectConsecutiveBanThreshold
+		}(),
+		ClientDisconnectConsecutiveBanGeneration: previousSettings.ClientDisconnectConsecutiveBanGeneration,
 		GlobalIPAccessControlEnabled: func() bool {
 			if req.GlobalIPAccessControlEnabled != nil {
 				return *req.GlobalIPAccessControlEnabled
@@ -2069,7 +2089,6 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			return previousSettings.CyberSessionBlockTTLSeconds
 		}(),
 	}
-
 	// req.AuthSourceXxxPlatformQuotas 为 nil 表示本次请求未包含该 source 的 quota 配置（保留 previousAuthSourceDefaults 中的值）；
 	// non-nil（含 empty map）表示整体覆盖：empty map = 清空该 source 的所有 quota 配置。
 	authSourceDefaults := &service.AuthSourceDefaultSettings{
@@ -2472,12 +2491,14 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 
 		AffiliateEnabled: updatedSettings.AffiliateEnabled,
 
-		RiskControlEnabled:           updatedSettings.RiskControlEnabled,
-		GlobalIPAccessControlEnabled: updatedSettings.GlobalIPAccessControlEnabled,
-		CyberSessionBlockEnabled:     updatedSettings.CyberSessionBlockEnabled,
-		CyberSessionBlockTTLSeconds:  updatedSettings.CyberSessionBlockTTLSeconds,
-		AccountSchedulingThresholds:  updatedSettings.AccountSchedulingThresholds,
-		AllowUserViewErrorRequests:   updatedSettings.AllowUserViewErrorRequests,
+		RiskControlEnabled:                      updatedSettings.RiskControlEnabled,
+		ClientDisconnectConsecutiveBanEnabled:   updatedSettings.ClientDisconnectConsecutiveBanEnabled,
+		ClientDisconnectConsecutiveBanThreshold: updatedSettings.ClientDisconnectConsecutiveBanThreshold,
+		GlobalIPAccessControlEnabled:            updatedSettings.GlobalIPAccessControlEnabled,
+		CyberSessionBlockEnabled:                updatedSettings.CyberSessionBlockEnabled,
+		CyberSessionBlockTTLSeconds:             updatedSettings.CyberSessionBlockTTLSeconds,
+		AccountSchedulingThresholds:             updatedSettings.AccountSchedulingThresholds,
+		AllowUserViewErrorRequests:              updatedSettings.AllowUserViewErrorRequests,
 	}
 	if fastPolicy, err := h.settingService.GetOpenAIFastPolicySettings(c.Request.Context()); err != nil {
 		slog.Error("openai_fast_policy_settings_get_failed", "error", err)

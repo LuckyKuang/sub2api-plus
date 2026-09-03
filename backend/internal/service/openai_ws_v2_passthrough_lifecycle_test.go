@@ -28,10 +28,11 @@ type stagedPassthroughFrame struct {
 }
 
 type stagedPassthroughConn struct {
-	frames    chan stagedPassthroughFrame
-	writes    chan []byte
-	closed    chan struct{}
-	closeOnce sync.Once
+	frames        chan stagedPassthroughFrame
+	writes        chan []byte
+	closed        chan struct{}
+	closeOnce     sync.Once
+	failNextWrite atomic.Bool
 }
 
 func newStagedPassthroughConn() *stagedPassthroughConn {
@@ -76,6 +77,9 @@ func (c *stagedPassthroughConn) ReadFrame(ctx context.Context) (coderws.MessageT
 func (c *stagedPassthroughConn) WriteFrame(ctx context.Context, _ coderws.MessageType, payload []byte) error {
 	if ctx == nil {
 		ctx = context.Background()
+	}
+	if c.failNextWrite.Swap(false) {
+		return errors.New("forced first write failure")
 	}
 	select {
 	case <-ctx.Done():

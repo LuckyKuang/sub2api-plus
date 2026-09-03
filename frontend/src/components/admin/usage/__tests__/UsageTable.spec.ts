@@ -71,9 +71,13 @@ const messages: Record<string, string> = {
 	'usage.latencyDuration': 'Total',
 	'usage.latencyTps': 'TPS',
 	'usage.latencyTpsHint': 'Estimated average text output rate: text output tokens ÷ (last token − first token). Complete stream/ws requests only. Sample too small (short window or few text tokens) shows "-". Values below 1 or above 1000 show as "< 1" / "> 1000".',
-  'usage.stream': 'Stream',
-  'usage.sync': 'Sync',
-  'usage.nativeCompactionV2': 'Compaction',
+		'usage.incomplete': 'Incomplete',
+		'usage.incompleteHint': 'The request ended before a complete terminal result.',
+		'usage.clientDisconnected': 'Client disconnected',
+		'usage.clientDisconnectedHint': 'The client disconnected after upstream acceptance.',
+		'usage.stream': 'Stream',
+		'usage.sync': 'Sync',
+		'usage.nativeCompactionV2': 'Compaction',
   'admin.usage.billingModeToken': 'Token',
   'admin.usage.billingModePerRequest': 'Per request',
   'admin.usage.billingModeImage': 'Image',
@@ -164,6 +168,44 @@ describe('admin UsageTable tooltip', () => {
       toJSON: () => ({}),
     } as DOMRect)
   })
+
+	it('shows an incomplete usage badge only for explicitly incomplete records', () => {
+		const wrapper = mount(UsageTable, {
+			props: {
+				data: [
+					{ ...baseImageRow, request_id: 'req-incomplete', is_complete: false },
+					{ ...baseImageRow, request_id: 'req-complete', is_complete: true },
+				],
+				loading: false,
+				columns: [{ key: 'model', label: 'Model' }],
+			},
+			global: { stubs: { DataTable: DataTableStub, Icon: true } },
+		})
+
+		expect(wrapper.findAll('[data-testid="usage-incomplete-badge"]')).toHaveLength(1)
+		expect(wrapper.get('[data-testid="usage-incomplete-badge"]').text()).toBe('Incomplete')
+	})
+
+	it('distinguishes a client disconnect from a generic incomplete record', () => {
+		const wrapper = mount(UsageTable, {
+			props: {
+				data: [{
+					...baseImageRow,
+					request_id: 'req-client-disconnected',
+					is_complete: false,
+					completion_status: 'client_disconnected',
+					usage_source: 'partial',
+				}],
+				loading: false,
+				columns: [{ key: 'model', label: 'Model' }],
+			},
+			global: { stubs: { DataTable: DataTableStub, Icon: true } },
+		})
+
+		const badge = wrapper.get('[data-testid="usage-incomplete-badge"]')
+		expect(badge.text()).toBe('Client disconnected')
+		expect(badge.attributes('title')).toBe('The client disconnected after upstream acceptance.')
+	})
 
   it('shows the original session ID and marks missing values with a dash', () => {
     const wrapper = mount(UsageTable, {

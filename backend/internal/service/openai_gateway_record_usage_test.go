@@ -351,6 +351,38 @@ func TestOpenAIGatewayServiceRecordUsage_ZeroUsageStillWritesUsageLog(t *testing
 	require.Zero(t, billingRepo.lastCmd.AccountQuotaCost)
 }
 
+func TestOpenAIGatewayServiceRecordUsage_NonStreamDisconnectKeepsExactUsageSource(t *testing.T) {
+	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
+	billingRepo := &openAIRecordUsageBillingRepoStub{result: &UsageBillingApplyResult{Applied: true}}
+	svc := newOpenAIRecordUsageServiceWithBillingRepoForTest(
+		usageRepo,
+		billingRepo,
+		&openAIRecordUsageUserRepoStub{},
+		&openAIRecordUsageSubRepoStub{},
+		nil,
+	)
+
+	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
+		Result: &OpenAIForwardResult{
+			RequestID:                   "req_non_stream_disconnect",
+			Model:                       "gpt-5.1",
+			ClientDisconnect:            true,
+			ClientDisconnectUsageSource: UsageSourceUpstreamExact,
+			Usage:                       OpenAIUsage{InputTokens: 10, OutputTokens: 5},
+		},
+		APIKey:  &APIKey{ID: 1000, Quota: 100, Group: &Group{RateMultiplier: 1}},
+		User:    &User{ID: 2000},
+		Account: &Account{ID: 3000, Type: AccountTypeAPIKey},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, usageRepo.lastLog)
+	require.Equal(t, UsageCompletionClientDisconnected, usageRepo.lastLog.CompletionStatus)
+	require.Equal(t, UsageSourceUpstreamExact, usageRepo.lastLog.UsageSource)
+	require.NotNil(t, usageRepo.lastLog.IsComplete)
+	require.False(t, *usageRepo.lastLog.IsComplete)
+}
+
 func TestOpenAIGatewayServiceRecordUsage_MissingPricingRecordsZeroCostUsageLog(t *testing.T) {
 	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
 	billingRepo := &openAIRecordUsageBillingRepoStub{result: &UsageBillingApplyResult{Applied: true}}

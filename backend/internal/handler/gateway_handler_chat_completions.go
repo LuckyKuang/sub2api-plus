@@ -35,6 +35,8 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 		h.chatCompletionsErrorResponse(c, http.StatusInternalServerError, "api_error", "User context not found")
 		return
 	}
+	disconnectLifecycle := startClientDisconnectRiskLifecycle(c, h.clientDisconnectRisk, subject.UserID, apiKey.ID, "anthropic_chat_completions")
+	defer disconnectLifecycle.Neutral(c.Request.Context())
 	reqLog := requestLogger(
 		c,
 		"handler.gateway.chat_completions",

@@ -3,10 +3,13 @@
 package handler
 
 import (
+	"context"
 	"testing"
 	"time"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/service"
 	coderws "github.com/coder/websocket"
+	"github.com/stretchr/testify/require"
 )
 
 func TestIsExpectedGrokRealtimeClose(t *testing.T) {
@@ -23,6 +26,58 @@ func TestIsExpectedGrokRealtimeClose(t *testing.T) {
 	if isExpectedGrokRealtimeClose(coderws.CloseError{Code: coderws.StatusPolicyViolation}) {
 		t.Fatal("policy violations must not be treated as billable normal closes")
 	}
+}
+
+func TestGrokRealtimeTurnTrackerMatchesByResponseIDAndResetsOnCompletion(t *testing.T) {
+	repo := &clientDisconnectRiskHandlerRepoStub{}
+	risk := service.NewClientDisconnectRiskService(repo, nil, nil)
+	tracker := newGrokRealtimeTurnTracker(risk, 7, 11, service.RoleUser, "server-request")
+	observer := tracker.observer(context.Background())
+
+	observer.Accepted("resp-a")
+	observer.Accepted("resp-b")
+	observer.Completed("resp-b")
+	tracker.disconnectOutstanding(context.Background())
+	observer.Accepted("resp-c")
+	tracker.disconnectOutstanding(context.Background())
+
+	require.Len(t, repo.begins, 3)
+	require.Len(t, repo.finalizes, 3)
+	require.Equal(t, "server-request:grok-turn:1", repo.begins[0].RequestID)
+	require.Equal(t, "server-request:grok-turn:2", repo.begins[1].RequestID)
+	require.Equal(t, "server-request:grok-turn:3", repo.begins[2].RequestID)
+	require.Equal(t, service.ClientDisconnectOutcomeCompleted, repo.finalizes[0].Outcome)
+	require.Equal(t, service.ClientDisconnectOutcomeDisconnected, repo.finalizes[1].Outcome)
+	require.Equal(t, service.ClientDisconnectOutcomeDisconnected, repo.finalizes[2].Outcome)
+}
+
+func TestGrokRealtimeTurnTrackerSkipsWhenRoleMissing(t *testing.T) {
+	repo := &clientDisconnectRiskHandlerRepoStub{}
+	risk := service.NewClientDisconnectRiskService(repo, nil, nil)
+	tracker := newGrokRealtimeTurnTracker(risk, 7, 11, "", "server-request")
+	observer := tracker.observer(context.Background())
+
+	observer.Accepted("resp-a")
+	tracker.disconnectOutstanding(context.Background())
+
+	require.Empty(t, repo.begins)
+	require.Empty(t, repo.finalizes)
+}
+
+func TestGrokRealtimeTurnTrackerDeduplicatesPendingResponseAndAuditsAdmin(t *testing.T) {
+	repo := &clientDisconnectRiskHandlerRepoStub{}
+	risk := service.NewClientDisconnectRiskService(repo, nil, nil)
+	tracker := newGrokRealtimeTurnTracker(risk, 7, 11, service.RoleAdmin, "server-request")
+	observer := tracker.observer(context.Background())
+
+	observer.Accepted("resp-a")
+	observer.Accepted("resp-a")
+	tracker.disconnectOutstanding(context.Background())
+
+	require.Len(t, repo.begins, 1)
+	require.Len(t, repo.finalizes, 1)
+	require.Equal(t, service.ClientDisconnectOutcomeDisconnected, repo.finalizes[0].Outcome)
+	require.False(t, repo.finalizes[0].Enforce)
 }
 
 func TestGrokRealtimeBillingResultRequiresObservedAudio(t *testing.T) {

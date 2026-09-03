@@ -37,9 +37,9 @@
         <DataTable :columns="failureStateColumns" :data="failureStates" :loading="failureStatesLoading" row-key="normalized_ip">
           <template #cell-normalized_ip="{ value }"><span class="font-mono text-sm">{{ value }}</span></template>
           <template #cell-failure_count="{ row }"><span class="font-medium text-gray-900 dark:text-white">{{ row.failure_count }} / {{ row.failure_threshold }}</span></template>
-          <template #cell-window_started_at="{ value }"><span class="whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{{ formatTime(value) }}</span></template>
-          <template #cell-last_failed_at="{ value }"><span class="whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{{ formatTime(value) }}</span></template>
-          <template #cell-window_expires_at="{ value }"><span class="whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{{ formatTime(value) }}</span></template>
+          <template #cell-window_started_at="{ value }"><span class="whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{{ formatTimestamp(value) }}</span></template>
+          <template #cell-last_failed_at="{ value }"><span class="whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{{ formatTimestamp(value) }}</span></template>
+          <template #cell-window_expires_at="{ value }"><span class="whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{{ formatTimestamp(value) }}</span></template>
           <template #cell-effectively_blocked="{ row }">
             <span :class="failureBlockStatusClass(row)">
               {{ failureBlockStatusLabel(row) }}
@@ -210,8 +210,8 @@
           <template #cell-status="{ row }"><span :class="statusClass(row.status)">{{ statusLabel(row) }}</span></template>
           <template #cell-failure_count="{ row }"><span>{{ row.failure_count || '—' }}</span></template>
           <template #cell-hit_count="{ row }"><span>{{ row.hit_count ?? 0 }}</span></template>
-          <template #cell-last_seen_at="{ value }"><span class="whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{{ formatTime(value) }}</span></template>
-          <template #cell-expires_at="{ value }"><span class="whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{{ formatTime(value) }}</span></template>
+          <template #cell-last_seen_at="{ value }"><span class="whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{{ formatLastSeenTime(value) }}</span></template>
+          <template #cell-expires_at="{ value }"><span class="whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{{ formatExpiryTime(value) }}</span></template>
           <template #cell-actions="{ row }"><div class="flex flex-wrap items-center gap-2"><button v-if="row.status === 'active' && !row.ip_or_cidr.includes('/') && row.rule_kind !== 'allow'" type="button" class="btn btn-secondary btn-sm" @click="confirmResetCounter(row.ip_or_cidr)">{{ t('admin.ipAccessControl.rules.resetCounter') }}</button><button v-if="row.status === 'active'" type="button" class="btn btn-danger btn-sm" @click="confirmRelease(row)">{{ row.rule_kind === 'allow' ? t('admin.ipAccessControl.rules.removeAllow') : t('admin.ipAccessControl.rules.releaseReset') }}</button><span v-else class="text-xs text-gray-400">—</span></div></template>
           <template #empty><div class="py-10 text-center text-sm text-gray-500">{{ t('admin.ipAccessControl.rules.empty') }}</div></template>
         </DataTable>
@@ -452,7 +452,9 @@ const proxyStatusMessageClass = computed(() => {
   if (status?.configuration_state === 'invalid') return 'border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-800/70 dark:bg-rose-950/30 dark:text-rose-200'
   return 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800/70 dark:bg-amber-950/30 dark:text-amber-200'
 })
-function formatTime(value?: string): string { return value ? new Date(value).toLocaleString() : t('admin.ipAccessControl.rules.never') }
+function formatTimestamp(value?: string): string { return value ? new Date(value).toLocaleString() : '—' }
+function formatExpiryTime(value?: string): string { return value ? new Date(value).toLocaleString() : t('admin.ipAccessControl.rules.never') }
+function formatLastSeenTime(value?: string): string { return value ? new Date(value).toLocaleString() : t('admin.ipAccessControl.rules.lastSeenNever') }
 function statusLabel(rule: IPAccessRule): string {
   if (rule.status === 'active') return t('admin.ipAccessControl.rules.statusActive')
   if (rule.status === 'released') return t(rule.rule_kind === 'allow' ? 'admin.ipAccessControl.rules.statusRemoved' : 'admin.ipAccessControl.rules.statusReleased')

@@ -634,6 +634,7 @@ type ForwardResult struct {
 	FirstOutputMs               *int // 首个下游可消费输出（流式请求）
 	FirstOutputKind             string
 	ClientDisconnect            bool // 客户端是否在流式传输过程中断开
+	ClientDisconnectUsageSource string
 	ReasoningEffort             *string
 	// RequestedReasoningEffort is the client-requested effort before mapping.
 	RequestedReasoningEffort *string
@@ -1372,6 +1373,9 @@ func (s *GatewayService) DoGrokNativeResponsesJSON(ctx context.Context, account 
 		return nil, &UpstreamFailoverError{StatusCode: http.StatusBadGateway, Reason: GatewayFailureReason("grok_search_transport")}
 	}
 	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 400 {
+		MarkClientDisconnectUpstreamAccepted(ctx)
+	}
 	respBytes, readErr := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if readErr != nil {
 		return nil, &UpstreamFailoverError{

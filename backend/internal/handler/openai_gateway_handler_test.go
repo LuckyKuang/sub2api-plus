@@ -1353,6 +1353,28 @@ func (r *contentModerationHandlerTestRepo) UpdateLogEmailSent(ctx context.Contex
 	return nil
 }
 
+func (r *contentModerationHandlerTestRepo) UpsertSessionBlock(ctx context.Context, block *service.ContentModerationSessionBlock) error {
+	return nil
+}
+func (r *contentModerationHandlerTestRepo) ListSessionBlocks(ctx context.Context, filter service.ContentModerationSessionBlockFilter) ([]service.ContentModerationSessionBlock, *pagination.PaginationResult, error) {
+	return nil, nil, nil
+}
+func (r *contentModerationHandlerTestRepo) GetSessionBlockByKey(ctx context.Context, blockKey string) (*service.ContentModerationSessionBlock, error) {
+	return nil, nil
+}
+func (r *contentModerationHandlerTestRepo) DeleteSessionBlockByKey(ctx context.Context, blockKey string) (int64, error) {
+	return 0, nil
+}
+func (r *contentModerationHandlerTestRepo) ClearSessionBlocks(ctx context.Context) (int64, error) {
+	return 0, nil
+}
+func (r *contentModerationHandlerTestRepo) CountActiveSessionBlocks(ctx context.Context, now time.Time) (int64, error) {
+	return 0, nil
+}
+func (r *contentModerationHandlerTestRepo) DeleteExpiredSessionBlocks(ctx context.Context, now time.Time) (int64, error) {
+	return 0, nil
+}
+
 func TestOpenAIResponsesWebSocket_ContentModerationBlocksFirstFrame(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

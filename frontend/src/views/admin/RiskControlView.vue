@@ -1008,6 +1008,18 @@
                 <label class="input-label">{{ t('admin.riskControl.violationWindowHours') }}</label>
                 <input v-model.number="configForm.violation_window_hours" type="number" min="1" max="8760" class="input" />
               </div>
+              <div class="flex items-center justify-between rounded-lg border border-gray-100 p-4 dark:border-dark-700 lg:col-span-2">
+                <div>
+                  <p class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.riskControl.sessionBlock') }}</p>
+                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.sessionBlockHint') }}</p>
+                </div>
+                <Toggle v-model="configForm.session_block_enabled" />
+              </div>
+              <div>
+                <label class="input-label">{{ t('admin.riskControl.sessionBlockTTL') }}</label>
+                <input v-model.number="configForm.session_block_ttl_seconds" type="number" min="60" max="7776000" class="input" />
+                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.sessionBlockTTLHint') }}</p>
+              </div>
             </div>
           </div>
 
@@ -1066,6 +1078,71 @@
                 </div>
               </div>
             </div>
+          </div>
+
+          <div v-else-if="activeSettingsTab === 'sessionBlocks'" class="space-y-5">
+            <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <h3 class="text-base font-semibold text-gray-900 dark:text-white">{{ t('admin.riskControl.sessionBlocks') }}</h3>
+                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.sessionBlocksHint') }}</p>
+              </div>
+              <button
+                type="button"
+                class="btn btn-secondary inline-flex items-center justify-center gap-2 text-red-600 hover:text-red-700 dark:text-red-300"
+                :disabled="sessionActionLoading || sessionBlocks.length === 0"
+                @click="clearSessionBlocks"
+              >
+                <Icon name="trash" size="sm" />
+                {{ t('admin.riskControl.clearSessionBlocks') }}
+              </button>
+            </div>
+            <p class="text-sm text-gray-600 dark:text-gray-300">{{ t('admin.riskControl.sessionBlockCount', { count: formatNumber(status?.blocked_session_count ?? sessionPagination.total) }) }}</p>
+            <div class="flex flex-col gap-2 sm:flex-row">
+              <input v-model.trim="sessionFilters.search" type="search" class="input" :placeholder="t('admin.riskControl.sessionBlockSearch')" @keyup.enter="reloadSessionBlocksFromFirstPage" />
+              <button type="button" class="btn btn-secondary" :disabled="sessionBlocksLoading" @click="reloadSessionBlocksFromFirstPage">{{ t('admin.riskControl.refresh') }}</button>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="min-w-full divide-y divide-gray-200 dark:divide-dark-700">
+                <thead class="bg-gray-50 dark:bg-dark-800">
+                  <tr>
+                    <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.table.time') }}</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">session_id</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.table.user') }}</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.table.apiKey') }}</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.sessionBlockExpires') }}</th>
+                    <th class="px-4 py-3"></th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100 bg-white dark:divide-dark-800 dark:bg-dark-800">
+                  <tr v-if="sessionBlocksLoading">
+                    <td colspan="6" class="px-4 py-10 text-center text-sm text-gray-500 dark:text-gray-400">{{ t('common.loading') }}</td>
+                  </tr>
+                  <tr v-else-if="sessionBlocks.length === 0">
+                    <td colspan="6" class="px-4 py-10 text-center text-sm text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.sessionBlockEmpty') }}</td>
+                  </tr>
+                  <tr v-for="row in sessionBlocks" :key="row.id" class="hover:bg-gray-50 dark:hover:bg-dark-700/60">
+                    <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{{ formatDateTime(row.created_at) }}</td>
+                    <td class="px-4 py-3 font-mono text-sm text-gray-700 dark:text-gray-300">{{ row.session_id }}</td>
+                    <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{{ row.user_email || '-' }}</td>
+                    <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{{ row.api_key_name || '-' }}</td>
+                    <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{{ formatDateTime(row.expires_at) }}</td>
+                    <td class="px-4 py-3 text-right">
+                      <button type="button" class="btn btn-secondary text-xs" :disabled="sessionActionLoading" @click="deleteSessionBlock(row.block_key)">
+                        {{ t('admin.riskControl.deleteSessionBlock') }}
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <Pagination
+              v-if="sessionPagination.total > 0"
+              :page="sessionPagination.page"
+              :total="sessionPagination.total"
+              :page-size="sessionPagination.page_size"
+              @update:page="onSessionPageChange"
+              @update:pageSize="onSessionPageSizeChange"
+            />
           </div>
 
           <div v-else-if="activeSettingsTab === 'keywords'" class="space-y-5">
@@ -1246,6 +1323,9 @@
                 <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
                   {{ inputDetailRow.endpoint || '-' }} · {{ inputDetailRow.provider || '-' }} / {{ inputDetailRow.model || '-' }}
                 </p>
+                <p v-if="inputDetailRow.input_content_truncated" class="mt-2 text-xs text-amber-700 dark:text-amber-300">
+                  {{ t('admin.riskControl.inputDetailTruncated') }}
+                </p>
               </div>
               <span v-if="inputDetailRow.group_name" class="inline-flex rounded-md bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-700 dark:bg-sky-900/20 dark:text-sky-300">
                 {{ inputDetailRow.group_name }}
@@ -1284,6 +1364,7 @@ import type {
   ContentModerationEndpoint,
   ContentModerationEndpointStatus,
   ContentModerationLog,
+  ContentModerationSessionBlock,
   ContentModerationModelFilter,
   ContentModerationModelFilterType,
   ContentModerationRuntimeStatus,
@@ -1298,7 +1379,7 @@ import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
 import { formatDateTime as formatDateTimeValue } from '@/utils/format'
 
-type SettingsTab = 'basic' | 'scope' | 'runtime' | 'response' | 'riskThresholds' | 'retention' | 'keywords'
+type SettingsTab = 'basic' | 'scope' | 'runtime' | 'response' | 'riskThresholds' | 'retention' | 'keywords' | 'sessionBlocks'
 type WorkerSlotState = 'active' | 'idle' | 'disabled'
 type APIKeysWriteMode = 'append' | 'replace'
 type OverviewIcon = 'shield' | 'key' | 'users' | 'document'
@@ -1363,6 +1444,18 @@ const policyHelpOpen = ref(false)
 const activeSettingsTab = ref<SettingsTab>('basic')
 const groupSearch = ref('')
 const flaggedHashInput = ref('')
+const sessionActionLoading = ref(false)
+const sessionBlocksLoading = ref(false)
+const sessionBlocks = ref<ContentModerationSessionBlock[]>([])
+const sessionFilters = reactive({
+  search: '',
+})
+const sessionPagination = reactive({
+  page: 1,
+  page_size: 20,
+  total: 0,
+  pages: 1,
+})
 const groups = ref<AdminGroup[]>([])
 const proxies = ref<Proxy[]>([])
 const logs = ref<ContentModerationLog[]>([])
@@ -1410,6 +1503,8 @@ const configForm = reactive({
   hit_retention_days: 180,
   non_hit_retention_days: 3,
   pre_hash_check_enabled: false,
+  session_block_enabled: false,
+  session_block_ttl_seconds: 2592000,
   thresholds: { ...riskThresholdDefaults } as Record<string, number>,
   blocked_keywords_text: '',
   keyword_blocking_mode: 'keyword_and_api' as KeywordBlockingMode,
@@ -1441,6 +1536,7 @@ const settingsTabs = computed<Array<{ id: SettingsTab; label: string }>>(() => [
   { id: 'response', label: t('admin.riskControl.tabs.response') },
   { id: 'riskThresholds', label: t('admin.riskControl.tabs.riskThresholds') },
   { id: 'keywords', label: t('admin.riskControl.tabs.keywords') },
+  { id: 'sessionBlocks', label: t('admin.riskControl.tabs.sessionBlocks') },
   { id: 'retention', label: t('admin.riskControl.tabs.retention') },
 ])
 
@@ -1771,7 +1867,7 @@ const riskThresholdRows = computed<RiskThresholdRow[]>(() => (
 
 const inputDetailText = computed(() => {
   if (!inputDetailRow.value) return '-'
-  return inputDetailRow.value.input_excerpt || inputDetailRow.value.error || '-'
+  return inputDetailRow.value.input_content || inputDetailRow.value.input_excerpt || inputDetailRow.value.error || '-'
 })
 
 const queueUsagePercent = computed(() => `${Math.min(100, Math.max(0, status.value?.queue_usage_percent ?? 0)).toFixed(1)}%`)
@@ -1956,6 +2052,8 @@ function applyConfig(config: ContentModerationConfig) {
   configForm.hit_retention_days = config.hit_retention_days || 180
   configForm.non_hit_retention_days = Math.min(Math.max(config.non_hit_retention_days || 3, 1), 3)
   configForm.pre_hash_check_enabled = config.pre_hash_check_enabled ?? false
+  configForm.session_block_enabled = config.session_block_enabled ?? false
+  configForm.session_block_ttl_seconds = config.session_block_ttl_seconds || 2592000
   configForm.thresholds = riskThresholdsFromConfig(config.thresholds)
   configForm.blocked_keywords_text = Array.isArray(config.blocked_keywords) ? config.blocked_keywords.join('\n') : ''
   configForm.keyword_blocking_mode = normalizeKeywordBlockingMode(config.keyword_blocking_mode)
@@ -1984,7 +2082,7 @@ async function loadAll() {
       prunePendingDeleteAPIKeyHashes()
     }
     mergeEndpointRuntime(runtimeStatus.endpoints)
-    await loadLogs()
+    await Promise.all([loadLogs(), loadSessionBlocks()])
   } catch (err: unknown) {
     appStore.showError(extractApiErrorMessage(err, t('admin.riskControl.loadFailed')))
   } finally {
@@ -2046,6 +2144,8 @@ async function saveConfig() {
       hit_retention_days: Number(configForm.hit_retention_days) || 180,
       non_hit_retention_days: Math.min(Math.max(Number(configForm.non_hit_retention_days) || 3, 1), 3),
       pre_hash_check_enabled: configForm.pre_hash_check_enabled,
+      session_block_enabled: configForm.session_block_enabled,
+      session_block_ttl_seconds: Number(configForm.session_block_ttl_seconds) || 2592000,
       thresholds: buildRiskThresholdPayload(),
       blocked_keywords: blockedKeywordList.value,
       keyword_blocking_mode: configForm.keyword_blocking_mode,
@@ -2182,9 +2282,78 @@ async function clearFlaggedHashes() {
   }
 }
 
+async function loadSessionBlocks() {
+  sessionBlocksLoading.value = true
+  try {
+    const result = await adminAPI.riskControl.listSessionBlocks({
+      page: sessionPagination.page,
+      page_size: sessionPagination.page_size,
+      search: sessionFilters.search || undefined,
+    })
+    sessionBlocks.value = result.items || []
+    sessionPagination.total = result.total
+    sessionPagination.pages = result.pages
+    sessionPagination.page = result.page
+    sessionPagination.page_size = result.page_size
+  } catch (err: unknown) {
+    appStore.showError(extractApiErrorMessage(err, t('admin.riskControl.sessionBlockDeleteFailed')))
+  } finally {
+    sessionBlocksLoading.value = false
+  }
+}
+
+function reloadSessionBlocksFromFirstPage() {
+  sessionPagination.page = 1
+  void loadSessionBlocks()
+}
+
+function onSessionPageChange(page: number) {
+  sessionPagination.page = page
+  void loadSessionBlocks()
+}
+
+function onSessionPageSizeChange(pageSize: number) {
+  sessionPagination.page_size = pageSize
+  sessionPagination.page = 1
+  void loadSessionBlocks()
+}
+
+async function deleteSessionBlock(blockKey: string) {
+  if (!blockKey || sessionActionLoading.value) return
+  sessionActionLoading.value = true
+  try {
+    const result = await adminAPI.riskControl.deleteSessionBlock(blockKey)
+    await loadSessionBlocks()
+    await loadStatus(true)
+    appStore.showSuccess(result.deleted ? t('admin.riskControl.sessionBlockDeleted', { count: 1 }) : t('admin.riskControl.sessionBlockNotFound'))
+  } catch (err: unknown) {
+    appStore.showError(extractApiErrorMessage(err, t('admin.riskControl.sessionBlockDeleteFailed')))
+  } finally {
+    sessionActionLoading.value = false
+  }
+}
+
+async function clearSessionBlocks() {
+  if (sessionActionLoading.value) return
+  const confirmed = window.confirm(t('admin.riskControl.clearSessionBlocksConfirm'))
+  if (!confirmed) return
+  sessionActionLoading.value = true
+  try {
+    const result = await adminAPI.riskControl.clearSessionBlocks()
+    await loadSessionBlocks()
+    await loadStatus(true)
+    appStore.showSuccess(t('admin.riskControl.sessionBlocksCleared', { count: result.deleted }))
+  } catch (err: unknown) {
+    appStore.showError(extractApiErrorMessage(err, t('admin.riskControl.sessionBlocksClearFailed')))
+  } finally {
+    sessionActionLoading.value = false
+  }
+}
+
 function openSettings() {
   activeSettingsTab.value = 'basic'
   settingsOpen.value = true
+  void loadSessionBlocks()
 }
 
 function mergeEndpointRuntime(endpoints: ContentModerationEndpoint[] | undefined) {
@@ -2485,6 +2654,7 @@ function resultLabel(row: ContentModerationLog): string {
   if (row.action === 'cyber_policy') return t('admin.riskControl.action.cyberPolicy')
   if (row.action === 'keyword_block') return t('admin.riskControl.action.keywordBlock')
   if (row.action === 'hash_block') return t('admin.riskControl.action.hashBlock')
+  if (row.action === 'session_block') return t('admin.riskControl.action.sessionBlock')
   if (row.action === 'shadow') return t('admin.riskControl.action.shadow')
   if (row.action === 'block') return t('admin.riskControl.action.block')
   if (row.action === 'error' || row.error) return t('admin.riskControl.action.error')
@@ -2493,7 +2663,7 @@ function resultLabel(row: ContentModerationLog): string {
 }
 
 function resultBadgeClass(row: ContentModerationLog): string {
-  if (row.action === 'block' || row.action === 'keyword_block' || row.action === 'hash_block' || row.action === 'cyber_policy') return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+  if (row.action === 'block' || row.action === 'keyword_block' || row.action === 'hash_block' || row.action === 'session_block' || row.action === 'cyber_policy') return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
   if (row.action === 'error' || row.error) return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
   if (row.flagged) return 'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-300'
   return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'

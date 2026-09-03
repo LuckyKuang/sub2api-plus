@@ -134,6 +134,7 @@ func (s *GatewayService) forwardBedrock(
 	if parsed.OnUpstreamAccepted != nil {
 		parsed.OnUpstreamAccepted()
 	}
+	MarkClientDisconnectUpstreamAccepted(ctx)
 
 	// 响应处理
 	var usage *ClaudeUsage

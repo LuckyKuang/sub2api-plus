@@ -11,7 +11,19 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-const contentModerationFlaggedHashSetKey = "content_moderation:flagged_hashes"
+const (
+	contentModerationFlaggedHashSetKey     = "content_moderation:flagged_hashes"
+	contentModerationSessionBlockKeyPrefix = "content_moderation:session_block:"
+	contentModerationSessionBlockScanCount = 256
+)
+
+func contentModerationSessionBlockRedisKey(blockKey string) string {
+	blockKey = strings.TrimSpace(blockKey)
+	if blockKey == "" {
+		return ""
+	}
+	return contentModerationSessionBlockKeyPrefix + blockKey
+}
 
 var contentModerationEndpointClaimScript = redis.NewScript(`
 if redis.call('EXISTS', KEYS[1]) == 0 then
@@ -84,6 +96,70 @@ func (c *contentModerationHashCache) CountFlaggedInputHashes(ctx context.Context
 		return 0, nil
 	}
 	return c.rdb.SCard(ctx, contentModerationFlaggedHashSetKey).Result()
+}
+
+func (c *contentModerationHashCache) RecordBlockedSession(ctx context.Context, blockKey string, ttl time.Duration) error {
+	redisKey := contentModerationSessionBlockRedisKey(blockKey)
+	if c == nil || c.rdb == nil || redisKey == "" {
+		return nil
+	}
+	if ttl <= 0 {
+		ttl = time.Duration(service.DefaultContentModerationSessionBlockTTLSeconds()) * time.Second
+	}
+	_, err := c.rdb.SetNX(ctx, redisKey, "1", ttl).Result()
+	return err
+}
+
+func (c *contentModerationHashCache) HasBlockedSession(ctx context.Context, blockKey string) (bool, error) {
+	redisKey := contentModerationSessionBlockRedisKey(blockKey)
+	if c == nil || c.rdb == nil || redisKey == "" {
+		return false, nil
+	}
+	n, err := c.rdb.Exists(ctx, redisKey).Result()
+	if err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}
+
+func (c *contentModerationHashCache) DeleteBlockedSession(ctx context.Context, blockKey string) (bool, error) {
+	redisKey := contentModerationSessionBlockRedisKey(blockKey)
+	if c == nil || c.rdb == nil || redisKey == "" {
+		return false, nil
+	}
+	deleted, err := c.rdb.Del(ctx, redisKey).Result()
+	if err != nil {
+		return false, err
+	}
+	return deleted > 0, nil
+}
+
+func (c *contentModerationHashCache) ClearBlockedSessions(ctx context.Context) (int64, error) {
+	if c == nil || c.rdb == nil {
+		return 0, nil
+	}
+	var (
+		cursor  uint64
+		deleted int64
+	)
+	for {
+		keys, next, err := c.rdb.Scan(ctx, cursor, contentModerationSessionBlockKeyPrefix+"*", contentModerationSessionBlockScanCount).Result()
+		if err != nil {
+			return deleted, err
+		}
+		if len(keys) > 0 {
+			n, err := c.rdb.Del(ctx, keys...).Result()
+			if err != nil {
+				return deleted, err
+			}
+			deleted += n
+		}
+		cursor = next
+		if cursor == 0 {
+			break
+		}
+	}
+	return deleted, nil
 }
 
 func (c *contentModerationHashCache) ClaimEndpoint(ctx context.Context, endpointID string, probeTTL time.Duration) (bool, bool, error) {

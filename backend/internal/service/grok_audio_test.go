@@ -81,6 +81,28 @@ func TestGrokRealtimeEventHasAudio(t *testing.T) {
 	require.True(t, grokRealtimeEventHasAudio([]byte(`{"type":"response.output_audio.delta","audio":"abc"}`)))
 }
 
+func TestObserveGrokRealtimeUpstreamTurnClassifiesTerminalStatus(t *testing.T) {
+	var accepted, completed, failed []string
+	observer := &GrokRealtimeTurnObserver{
+		Accepted:  func(id string) { accepted = append(accepted, id) },
+		Completed: func(id string) { completed = append(completed, id) },
+		Failed:    func(id string) { failed = append(failed, id) },
+	}
+
+	observeGrokRealtimeUpstreamTurn([]byte(`{"type":"response.created","response":{"id":"resp-a"}}`), observer)
+	observeGrokRealtimeUpstreamTurn([]byte(`{"type":"response.done","response":{"id":"resp-a","status":"completed"}}`), observer)
+	observeGrokRealtimeUpstreamTurn([]byte(`{"type":"response.done","response":{"id":"resp-b","status":"failed"}}`), observer)
+	observeGrokRealtimeUpstreamTurn([]byte(`{"type":"response.done","response":{"id":"resp-c","status":"cancelled"}}`), observer)
+	observeGrokRealtimeUpstreamTurn([]byte(`{"type":"response.done","response":{"id":"resp-d","status":"incomplete"}}`), observer)
+	observeGrokRealtimeUpstreamTurn([]byte(`{"type":"response.failed","response":{"id":"resp-e"}}`), observer)
+	observeGrokRealtimeUpstreamTurn([]byte(`{"type":"response.completed","response_id":"resp-f"}`), observer)
+	observeGrokRealtimeUpstreamTurn([]byte(`not-json`), observer)
+
+	require.Equal(t, []string{"resp-a"}, accepted)
+	require.Equal(t, []string{"resp-a", "resp-f"}, completed)
+	require.Equal(t, []string{"resp-b", "resp-c", "resp-d", "resp-e"}, failed)
+}
+
 func TestForwardGrokVoice_RejectsUnknownEndpoint(t *testing.T) {
 	svc := &OpenAIGatewayService{}
 	_, err := svc.ForwardGrokVoice(context.Background(), nil, &Account{Platform: PlatformGrok}, "unknown", []byte(`{}`), "application/json")

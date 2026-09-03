@@ -375,6 +375,8 @@ const baseSettingsResponse = {
   table_default_page_size: 20,
   table_page_size_options: [10, 20, 50, 100],
   backend_mode_enabled: false,
+	client_disconnect_consecutive_ban_enabled: true,
+	client_disconnect_consecutive_ban_threshold: 10,
   custom_menu_items: [],
   custom_endpoints: [],
   frontend_url: "",
@@ -718,6 +720,27 @@ describe("admin SettingsView payment visible method controls", () => {
       expect.objectContaining({ compact_home_enabled: true }),
     );
   });
+
+	it("loads and submits the consecutive client disconnect ban settings", async () => {
+		const wrapper = mountView();
+		await flushPromises();
+
+		const toggle = wrapper.get('[data-testid="client-disconnect-ban-toggle"]');
+		expect((toggle.element as HTMLInputElement).checked).toBe(true);
+		const threshold = wrapper.get('[data-testid="client-disconnect-ban-threshold"]');
+		expect((threshold.element as HTMLInputElement).value).toBe("10");
+
+		await threshold.setValue("25");
+		await wrapper.find("form").trigger("submit.prevent");
+		await flushPromises();
+
+		expect(updateSettings).toHaveBeenCalledWith(
+			expect.objectContaining({
+				client_disconnect_consecutive_ban_enabled: true,
+				client_disconnect_consecutive_ban_threshold: 25,
+			}),
+		);
+	});
 
   it("renders panel rate limit card and saves settings", async () => {
     getPanelRateLimitSettings.mockClear();

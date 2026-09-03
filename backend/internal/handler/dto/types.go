@@ -539,6 +539,8 @@ type UsageLog struct {
 	FirstOutputMs      *int    `json:"first_output_ms"`
 	FirstOutputKind    *string `json:"first_output_kind"`
 	IsComplete         *bool   `json:"is_complete"`
+	CompletionStatus   string  `json:"completion_status"`
+	UsageSource        string  `json:"usage_source"`
 
 	// 图片生成字段
 	ImageCount         int            `json:"image_count"`

@@ -438,6 +438,20 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		ImageSizeBreakdown:       result.ImageSizeBreakdown,
 		NativeCompactionV2:       input.NativeCompactionV2,
 	}
+	if result.ClientDisconnect {
+		usageLog.CompletionStatus = UsageCompletionClientDisconnected
+		usageLog.UsageSource = result.ClientDisconnectUsageSource
+		if usageLog.UsageSource == "" {
+			usageLog.UsageSource = UsageSourcePartial
+		}
+	}
+	usageLog.SyncCompletionMetadata()
+	if result.AudioUsage != nil && strings.EqualFold(strings.TrimSpace(result.AudioUsage.Mode), "realtime") {
+		usageLog.UsageSource = UsageSourceEstimated
+		usageLog.CompletionStatus = UsageCompletionCompleted
+		completed := true
+		usageLog.IsComplete = &completed
+	}
 	isVideoUsage := isGrokVideoUsageResult(result, billingModels)
 	if isVideoUsage {
 		usageLog.VideoCount = result.VideoCount
@@ -535,8 +549,8 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		quotaPlatform = PlatformFromAPIKey(apiKey)
 	}
 
-	billingErr := func() error {
-		_, err := applyUsageBilling(ctx, requestID, usageLog, &postUsageBillingParams{
+	usageLogPersisted, billingErr := func() (bool, error) {
+		persisted, err := applyUsageBilling(ctx, requestID, usageLog, &postUsageBillingParams{
 			Cost:                  cost,
 			User:                  user,
 			APIKey:                apiKey,
@@ -548,7 +562,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 			APIKeyService:         input.APIKeyService,
 			Platform:              quotaPlatform,
 		}, s.billingDeps(), s.usageBillingRepo)
-		return err
+		return persisted, err
 	}()
 
 	if billingErr != nil {
@@ -556,7 +570,9 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		writeUsageLogBestEffort(ctx, s.usageLogRepo, usageLog, "service.openai_gateway")
 		return billingErr
 	}
-	writeUsageLogBestEffort(ctx, s.usageLogRepo, usageLog, "service.openai_gateway")
+	if !usageLogPersisted {
+		writeUsageLogBestEffort(ctx, s.usageLogRepo, usageLog, "service.openai_gateway")
+	}
 
 	return nil
 }

@@ -594,6 +594,12 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	if before.RiskControlEnabled != after.RiskControlEnabled {
 		changed = append(changed, "risk_control_enabled")
 	}
+	if before.ClientDisconnectConsecutiveBanEnabled != after.ClientDisconnectConsecutiveBanEnabled {
+		changed = append(changed, service.SettingKeyClientDisconnectConsecutiveBanEnabled)
+	}
+	if before.ClientDisconnectConsecutiveBanThreshold != after.ClientDisconnectConsecutiveBanThreshold {
+		changed = append(changed, service.SettingKeyClientDisconnectConsecutiveBanThreshold)
+	}
 	if before.GlobalIPAccessControlEnabled != after.GlobalIPAccessControlEnabled {
 		changed = append(changed, "global_ip_access_control_enabled")
 	}

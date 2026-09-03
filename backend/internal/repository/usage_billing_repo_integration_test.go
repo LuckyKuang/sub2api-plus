@@ -80,6 +80,156 @@ func TestUsageBillingRepositoryApply_DeduplicatesBalanceBilling(t *testing.T) {
 	require.Equal(t, 1, dedupCount)
 }
 
+func TestUsageBillingRepositoryApply_PersistsUsageInBillingTransaction(t *testing.T) {
+	ctx := context.Background()
+	client := testEntClient(t)
+	repo := NewUsageBillingRepository(client, integrationDB)
+	user := mustCreateUser(t, client, &service.User{
+		Email:        fmt.Sprintf("usage-billing-atomic-%d@example.com", time.Now().UnixNano()),
+		PasswordHash: "hash", Balance: 100,
+	})
+	apiKey := mustCreateApiKey(t, client, &service.APIKey{
+		UserID: user.ID, Key: "sk-usage-atomic-" + uuid.NewString(), Name: "atomic",
+	})
+	account := mustCreateAccount(t, client, &service.Account{
+		Name: "usage-billing-atomic-account-" + uuid.NewString(), Type: service.AccountTypeAPIKey,
+	})
+	requestID := uuid.NewString()
+	cleanupPersistedUsageLogFixture(t, ctx, user.ID, apiKey.ID, account.ID, requestID)
+	completed := true
+	result, err := repo.Apply(ctx, &service.UsageBillingCommand{
+		RequestID: requestID, APIKeyID: apiKey.ID, UserID: user.ID,
+		AccountID: account.ID, AccountType: service.AccountTypeAPIKey, BalanceCost: 1.25,
+		UsageLog: &service.UsageLog{
+			UserID: user.ID, APIKeyID: apiKey.ID, AccountID: account.ID,
+			RequestID: requestID, Model: "atomic-model", ActualCost: 1.25,
+			IsComplete: &completed,
+		},
+	})
+	require.NoError(t, err)
+	require.True(t, result.Applied)
+	require.True(t, result.UsageLogPersisted)
+
+	var balance float64
+	require.NoError(t, integrationDB.QueryRowContext(ctx, "SELECT balance FROM users WHERE id = $1", user.ID).Scan(&balance))
+	require.InDelta(t, 98.75, balance, 0.000001)
+	var status, source string
+	require.NoError(t, integrationDB.QueryRowContext(ctx, `
+SELECT completion_status, usage_source FROM usage_logs
+WHERE request_id = $1 AND api_key_id = $2`, requestID, apiKey.ID).Scan(&status, &source))
+	require.Equal(t, service.UsageCompletionCompleted, status)
+	require.Equal(t, service.UsageSourceUpstreamExact, source)
+}
+
+func TestUsageBillingRepositoryApply_RollsBackBillingWhenUsageInsertFails(t *testing.T) {
+	ctx := context.Background()
+	client := testEntClient(t)
+	repo := NewUsageBillingRepository(client, integrationDB)
+	user := mustCreateUser(t, client, &service.User{
+		Email:        fmt.Sprintf("usage-billing-rollback-%d@example.com", time.Now().UnixNano()),
+		PasswordHash: "hash", Balance: 100,
+	})
+	apiKey := mustCreateApiKey(t, client, &service.APIKey{
+		UserID: user.ID, Key: "sk-usage-rollback-" + uuid.NewString(), Name: "rollback",
+	})
+	requestID := uuid.NewString()
+	_, err := repo.Apply(ctx, &service.UsageBillingCommand{
+		RequestID: requestID, APIKeyID: apiKey.ID, UserID: user.ID, BalanceCost: 1.25,
+		UsageLog: &service.UsageLog{
+			UserID: user.ID, APIKeyID: apiKey.ID, AccountID: 0,
+			RequestID: requestID, Model: "",
+		},
+	})
+	require.Error(t, err)
+	var balance float64
+	require.NoError(t, integrationDB.QueryRowContext(ctx, "SELECT balance FROM users WHERE id = $1", user.ID).Scan(&balance))
+	require.InDelta(t, 100.0, balance, 0.000001)
+	var dedupCount int
+	require.NoError(t, integrationDB.QueryRowContext(ctx, `
+SELECT COUNT(*) FROM usage_billing_dedup WHERE request_id = $1 AND api_key_id = $2`, requestID, apiKey.ID).Scan(&dedupCount))
+	require.Zero(t, dedupCount)
+}
+
+func TestUsageBillingRepositoryCaptureBatchImage_PersistsUsageAtomically(t *testing.T) {
+	ctx := context.Background()
+	client := testEntClient(t)
+	repo := NewUsageBillingRepository(client, integrationDB)
+	user := mustCreateUser(t, client, &service.User{
+		Email: fmt.Sprintf("batch-capture-atomic-%d@example.com", time.Now().UnixNano()), PasswordHash: "hash", Balance: 100,
+	})
+	apiKey := mustCreateApiKey(t, client, &service.APIKey{
+		UserID: user.ID, Key: "sk-batch-capture-" + uuid.NewString(), Name: "batch-capture",
+	})
+	account := mustCreateAccount(t, client, &service.Account{
+		Name: "batch-capture-account-" + uuid.NewString(), Type: service.AccountTypeAPIKey,
+	})
+	batchID := "imgbatch_" + strings.ReplaceAll(uuid.NewString(), "-", "")
+	_, err := repo.ReserveBatchImageBalance(ctx, &service.BatchImageBalanceHoldCommand{
+		RequestID: service.BatchImageHoldRequestID(batchID), APIKeyID: apiKey.ID,
+		UserID: user.ID, BatchID: batchID, HoldAmount: 2,
+	})
+	require.NoError(t, err)
+	completed := true
+	requestID := service.BatchImageCaptureRequestID(batchID)
+	cleanupPersistedUsageLogFixture(t, ctx, user.ID, apiKey.ID, account.ID, requestID)
+	result, err := repo.CaptureBatchImageBalance(ctx, &service.BatchImageBalanceHoldCommand{
+		RequestID: requestID, APIKeyID: apiKey.ID, UserID: user.ID, BatchID: batchID,
+		HoldAmount: 2, ActualAmount: 1.25,
+		UsageLog: &service.UsageLog{
+			UserID: user.ID, APIKeyID: apiKey.ID, AccountID: account.ID,
+			RequestID: requestID, Model: "imagen-batch", ActualCost: 1.25,
+			IsComplete: &completed,
+		},
+	})
+	require.NoError(t, err)
+	require.True(t, result.Applied)
+	require.True(t, result.UsageLogPersisted)
+
+	var balance, frozen float64
+	require.NoError(t, integrationDB.QueryRowContext(ctx, `SELECT balance, frozen_balance FROM users WHERE id = $1`, user.ID).Scan(&balance, &frozen))
+	require.InDelta(t, 98.75, balance, 0.000001)
+	require.InDelta(t, 0, frozen, 0.000001)
+	var count int
+	require.NoError(t, integrationDB.QueryRowContext(ctx, `SELECT COUNT(*) FROM usage_logs WHERE request_id = $1 AND api_key_id = $2`, requestID, apiKey.ID).Scan(&count))
+	require.Equal(t, 1, count)
+}
+
+func TestUsageBillingRepositoryCaptureBatchImage_RollsBackWhenUsageInsertFails(t *testing.T) {
+	ctx := context.Background()
+	client := testEntClient(t)
+	repo := NewUsageBillingRepository(client, integrationDB)
+	user := mustCreateUser(t, client, &service.User{
+		Email: fmt.Sprintf("batch-capture-rollback-%d@example.com", time.Now().UnixNano()), PasswordHash: "hash", Balance: 100,
+	})
+	apiKey := mustCreateApiKey(t, client, &service.APIKey{
+		UserID: user.ID, Key: "sk-batch-rollback-" + uuid.NewString(), Name: "batch-rollback",
+	})
+	batchID := "imgbatch_" + strings.ReplaceAll(uuid.NewString(), "-", "")
+	_, err := repo.ReserveBatchImageBalance(ctx, &service.BatchImageBalanceHoldCommand{
+		RequestID: service.BatchImageHoldRequestID(batchID), APIKeyID: apiKey.ID,
+		UserID: user.ID, BatchID: batchID, HoldAmount: 2,
+	})
+	require.NoError(t, err)
+	requestID := service.BatchImageCaptureRequestID(batchID)
+	_, err = repo.CaptureBatchImageBalance(ctx, &service.BatchImageBalanceHoldCommand{
+		RequestID: requestID, APIKeyID: apiKey.ID, UserID: user.ID, BatchID: batchID,
+		HoldAmount: 2, ActualAmount: 1.25,
+		UsageLog: &service.UsageLog{
+			UserID: user.ID, APIKeyID: apiKey.ID, AccountID: 0,
+			RequestID: requestID, Model: "invalid-account", ActualCost: 1.25,
+		},
+	})
+	require.Error(t, err)
+
+	var balance, frozen float64
+	require.NoError(t, integrationDB.QueryRowContext(ctx, `SELECT balance, frozen_balance FROM users WHERE id = $1`, user.ID).Scan(&balance, &frozen))
+	require.InDelta(t, 98, balance, 0.000001, "the original hold remains reserved")
+	require.InDelta(t, 2, frozen, 0.000001, "failed capture must not release frozen funds")
+	var claimCount int
+	require.NoError(t, integrationDB.QueryRowContext(ctx, `SELECT COUNT(*) FROM usage_billing_dedup WHERE request_id = $1 AND api_key_id = $2`, requestID, apiKey.ID).Scan(&claimCount))
+	require.Zero(t, claimCount, "failed usage insert must roll back the capture claim")
+}
+
 func TestUsageBillingRepositoryApply_DeduplicatesSubscriptionBilling(t *testing.T) {
 	ctx := context.Background()
 	client := testEntClient(t)
@@ -181,6 +331,27 @@ func TestUsageBillingRepositoryApply_ResetsExpiredFiveHourSubscriptionWindow(t *
 	require.NoError(t, integrationDB.QueryRowContext(ctx, "SELECT five_hour_usage_usd, five_hour_window_start FROM user_subscriptions WHERE id = $1", subscription.ID).Scan(&fiveHourUsage, &fiveHourWindowStart))
 	require.InDelta(t, 2.5, fiveHourUsage, 0.000001)
 	require.WithinDuration(t, beforeCharge, fiveHourWindowStart, 5*time.Second)
+}
+
+func cleanupPersistedUsageLogFixture(t *testing.T, ctx context.Context, userID, apiKeyID, accountID int64, requestID string) {
+	t.Helper()
+	t.Cleanup(func() {
+		cleanupCtx := context.Background()
+		for _, statement := range []struct {
+			query string
+			args  []any
+		}{
+			{"DELETE FROM usage_logs WHERE request_id = $1 AND api_key_id = $2", []any{requestID, apiKeyID}},
+			{"DELETE FROM usage_billing_dedup_archive WHERE api_key_id = $1", []any{apiKeyID}},
+			{"DELETE FROM usage_billing_dedup WHERE api_key_id = $1", []any{apiKeyID}},
+			{"DELETE FROM api_keys WHERE id = $1", []any{apiKeyID}},
+			{"DELETE FROM accounts WHERE id = $1", []any{accountID}},
+			{"DELETE FROM users WHERE id = $1", []any{userID}},
+		} {
+			_, err := integrationDB.ExecContext(cleanupCtx, statement.query, statement.args...)
+			require.NoError(t, err, "cleanup persisted usage log fixture")
+		}
+	})
 }
 
 func cleanupUsageBillingSubscriptionFixture(t *testing.T, ctx context.Context, userID, groupID, apiKeyID, subscriptionID int64) {

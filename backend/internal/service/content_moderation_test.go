@@ -13,6 +13,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/pagination"
 	"github.com/stretchr/testify/require"
@@ -78,8 +79,10 @@ func (r *contentModerationTestSettingRepo) Delete(ctx context.Context, key strin
 }
 
 type contentModerationTestRepo struct {
-	mu   sync.Mutex
-	logs []ContentModerationLog
+	mu                 sync.Mutex
+	logs               []ContentModerationLog
+	sessionBlocks      []ContentModerationSessionBlock
+	getSessionBlockErr error
 }
 
 func (r *contentModerationTestRepo) CreateLog(ctx context.Context, log *ContentModerationLog) error {
@@ -100,7 +103,7 @@ func (r *contentModerationTestRepo) CountFlaggedByUserSince(ctx context.Context,
 	defer r.mu.Unlock()
 	count := 0
 	for _, log := range r.logs {
-		if log.UserID == nil || *log.UserID != userID || !log.Flagged || log.Action == ContentModerationActionHashBlock || log.Action == ContentModerationActionShadow {
+		if log.UserID == nil || *log.UserID != userID || !log.Flagged || log.Action == ContentModerationActionHashBlock || log.Action == ContentModerationActionSessionBlock || log.Action == ContentModerationActionShadow {
 			continue
 		}
 		if excludeCyberPolicy && log.Action == ContentModerationActionCyberPolicy {
@@ -120,6 +123,71 @@ func (r *contentModerationTestRepo) CleanupExpiredLogs(ctx context.Context, hitB
 
 func (r *contentModerationTestRepo) UpdateLogEmailSent(ctx context.Context, id int64, sent bool) error {
 	return nil
+}
+
+func (r *contentModerationTestRepo) UpsertSessionBlock(ctx context.Context, block *ContentModerationSessionBlock) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if block == nil {
+		return nil
+	}
+	now := time.Now()
+	for i, existing := range r.sessionBlocks {
+		if existing.BlockKey != block.BlockKey {
+			continue
+		}
+		if existing.ExpiresAt.After(now) {
+			block.ExpiresAt = existing.ExpiresAt
+			block.CreatedAt = existing.CreatedAt
+		} else if block.CreatedAt.IsZero() {
+			block.CreatedAt = now
+		}
+		block.ID = existing.ID
+		r.sessionBlocks[i] = *block
+		return nil
+	}
+	if block.CreatedAt.IsZero() {
+		block.CreatedAt = now
+	}
+	block.ID = int64(len(r.sessionBlocks) + 1)
+	r.sessionBlocks = append(r.sessionBlocks, *block)
+	return nil
+}
+
+func (r *contentModerationTestRepo) ListSessionBlocks(ctx context.Context, filter ContentModerationSessionBlockFilter) ([]ContentModerationSessionBlock, *pagination.PaginationResult, error) {
+	return nil, nil, nil
+}
+
+func (r *contentModerationTestRepo) GetSessionBlockByKey(ctx context.Context, blockKey string) (*ContentModerationSessionBlock, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.getSessionBlockErr != nil {
+		return nil, r.getSessionBlockErr
+	}
+	blockKey = strings.TrimSpace(blockKey)
+	for _, item := range r.sessionBlocks {
+		if item.BlockKey == blockKey {
+			clone := item
+			return &clone, nil
+		}
+	}
+	return nil, nil
+}
+
+func (r *contentModerationTestRepo) DeleteSessionBlockByKey(ctx context.Context, blockKey string) (int64, error) {
+	return 0, nil
+}
+
+func (r *contentModerationTestRepo) ClearSessionBlocks(ctx context.Context) (int64, error) {
+	return 0, nil
+}
+
+func (r *contentModerationTestRepo) CountActiveSessionBlocks(ctx context.Context, now time.Time) (int64, error) {
+	return 0, nil
+}
+
+func (r *contentModerationTestRepo) DeleteExpiredSessionBlocks(ctx context.Context, now time.Time) (int64, error) {
+	return 0, nil
 }
 
 func (r *contentModerationTestRepo) snapshotLogs() []ContentModerationLog {
@@ -153,6 +221,7 @@ func requireRecordedHashCount(t *testing.T, cache *contentModerationTestHashCach
 type contentModerationTestHashCache struct {
 	mu            sync.Mutex
 	hashes        map[string]struct{}
+	sessions      map[string]struct{}
 	recorded      []string
 	checked       []string
 	deleted       []string
@@ -374,6 +443,41 @@ func (c *contentModerationTestHashCache) CountFlaggedInputHashes(ctx context.Con
 	return int64(len(c.hashes)), nil
 }
 
+func (c *contentModerationTestHashCache) RecordBlockedSession(ctx context.Context, blockKey string, ttl time.Duration) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.sessions == nil {
+		c.sessions = map[string]struct{}{}
+	}
+	c.sessions[blockKey] = struct{}{}
+	return nil
+}
+
+func (c *contentModerationTestHashCache) HasBlockedSession(ctx context.Context, blockKey string) (bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	_, ok := c.sessions[blockKey]
+	return ok, nil
+}
+
+func (c *contentModerationTestHashCache) DeleteBlockedSession(ctx context.Context, blockKey string) (bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if _, ok := c.sessions[blockKey]; !ok {
+		return false, nil
+	}
+	delete(c.sessions, blockKey)
+	return true, nil
+}
+
+func (c *contentModerationTestHashCache) ClearBlockedSessions(ctx context.Context) (int64, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	deleted := int64(len(c.sessions))
+	c.sessions = map[string]struct{}{}
+	return deleted, nil
+}
+
 func (c *contentModerationTestHashCache) snapshotRecorded() []string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -418,6 +522,67 @@ func TestBuildContentModerationLog_RedactsInputExcerpt(t *testing.T) {
 
 	require.NotContains(t, log.InputExcerpt, "sk-proj-1234567890abcdef")
 	require.Contains(t, log.InputExcerpt, "[已脱敏]")
+	require.Equal(t, log.InputExcerpt, log.InputContent)
+	require.False(t, log.InputContentTruncated)
+}
+
+func TestBuildContentModerationLog_PersistsScanWindowNotListExcerpt(t *testing.T) {
+	svc := &ContentModerationService{}
+	cfg := defaultContentModerationConfig()
+	long := strings.Repeat("审", 300)
+	log := svc.buildLog(ContentModerationCheckInput{Endpoint: "/v1/chat/completions"}, cfg, ContentModerationActionBlock, true, "sexual", 0.9, map[string]float64{"sexual": 0.9}, long, nil, nil, "")
+	require.Equal(t, 240, utf8.RuneCountInString(log.InputExcerpt))
+	require.Equal(t, 300, utf8.RuneCountInString(log.InputContent))
+	require.False(t, log.InputContentTruncated)
+	require.True(t, strings.HasPrefix(log.InputContent, log.InputExcerpt))
+
+	overWindow := strings.Repeat("窗", maxModerationInputRunes+20)
+	truncated := svc.buildLog(ContentModerationCheckInput{Endpoint: "/v1/chat/completions"}, cfg, ContentModerationActionBlock, true, "sexual", 0.9, map[string]float64{"sexual": 0.9}, overWindow, nil, nil, "")
+	require.Equal(t, maxModerationExcerptRunes, utf8.RuneCountInString(truncated.InputExcerpt))
+	require.Equal(t, maxModerationInputRunes, utf8.RuneCountInString(truncated.InputContent))
+	require.True(t, truncated.InputContentTruncated)
+}
+
+func TestContentModerationCheck_PersistsNormalizedScanWindowWithoutTruncationFlag(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(moderationAPIResponse{Results: []moderationAPIResult{{CategoryScores: map[string]float64{"sexual": 0.01}}}})
+	}))
+	defer server.Close()
+
+	cfg := defaultContentModerationConfig()
+	cfg.Enabled = true
+	cfg.Mode = ContentModerationModePreBlock
+	cfg.BaseURL = server.URL
+	cfg.APIKeys = []string{"sk-test"}
+	cfg.RecordNonHits = true
+	rawCfg, err := json.Marshal(cfg)
+	require.NoError(t, err)
+
+	repo := &contentModerationTestRepo{}
+	svc := NewContentModerationService(
+		&contentModerationTestSettingRepo{values: map[string]string{
+			SettingKeyRiskControlEnabled:      "true",
+			SettingKeyContentModerationConfig: string(rawCfg),
+		}},
+		repo,
+		&contentModerationTestHashCache{},
+		nil, nil, nil, nil, nil,
+	)
+
+	prompt := strings.Repeat("窗", maxModerationInputRunes+50)
+	body, err := json.Marshal(map[string]any{"messages": []map[string]string{{"role": "user", "content": prompt}}})
+	require.NoError(t, err)
+	decision, err := svc.Check(context.Background(), ContentModerationCheckInput{
+		Endpoint: "/v1/chat/completions",
+		Protocol: ContentModerationProtocolOpenAIChat,
+		Body:     body,
+	})
+	require.NoError(t, err)
+	require.False(t, decision.Blocked)
+	logs := requireContentModerationLogCount(t, repo, 1)
+	require.Equal(t, maxModerationExcerptRunes, utf8.RuneCountInString(logs[0].InputExcerpt))
+	require.Equal(t, maxModerationInputRunes, utf8.RuneCountInString(logs[0].InputContent))
+	require.False(t, logs[0].InputContentTruncated, "Normalize already clipped the scan window before persist")
 }
 
 func TestRedactContentModerationSecrets_LongHexAndTokens(t *testing.T) {

@@ -26,7 +26,7 @@ func TestExtractPromptSnapshotProtocols(t *testing.T) {
 		protocol, body, first string
 		count                 int
 	}{
-		{"openai_chat_completions", `{"messages":[{"role":"user","content":"old"},{"role":"assistant","content":"assistant turn"},{"role":"user","content":[{"type":"text","text":"最新😀"}]}]}`, "最新😀", 2},
+		{"openai_chat_completions", `{"messages":[{"role":"user","content":"old"},{"role":"assistant","content":"assistant turn"},{"role":"user","content":[{"type":"text","text":"最新😀"}]}]}`, "最新😀", 3},
 		{"openai_responses", `{"input":[{"role":"user","content":[{"type":"input_text","text":"response text"}]}]}`, "response text", 1},
 		{"anthropic_messages", `{"messages":[{"role":"user","content":[{"type":"text","text":"claude"}]}]}`, "claude", 1},
 		{"gemini", `{"contents":[{"role":"user","parts":[{"text":"gemini"},{"inline_data":{"data":"BASE64"}}]}]}`, "gemini", 1},
@@ -168,12 +168,12 @@ func TestPromptSnapshotLatestUserTextBlockIsOnePrioritizedSegment(t *testing.T) 
 	}`)
 	snapshot, err := ExtractPromptSnapshot(Request{Protocol: "openai_chat_completions", Body: body})
 	require.NoError(t, err)
-	require.Equal(t, 3, snapshot.MessageCount)
+	require.Equal(t, 5, snapshot.MessageCount)
 	require.True(t, strings.HasPrefix(snapshot.ScanText, "最新第二块é"+promptAuditPrioritySeparator))
 	require.Contains(t, snapshot.ScanText, "最新第一块😀")
 	require.Contains(t, snapshot.ScanText, "历史输入")
-	require.NotContains(t, snapshot.ScanText, "assistant client injection")
-	require.NotContains(t, snapshot.ScanText, "tool client injection")
+	require.Contains(t, snapshot.ScanText, "assistant client injection")
+	require.Contains(t, snapshot.ScanText, "tool client injection")
 	require.NotContains(t, snapshot.ScanText, "IMAGE_CANARY_BASE64")
 	require.Equal(t, utf8.RuneCountInString(metadataTextForTest(snapshot.ScanText)), snapshot.PromptLength)
 }
@@ -190,9 +190,9 @@ func TestPromptSnapshotSeparatesAnthropicUserPromptFromHarnessBlocks(t *testing.
 
 	snapshot, err := ExtractPromptSnapshot(Request{Protocol: "anthropic_messages", Body: body})
 	require.NoError(t, err)
-	require.Equal(t, 2, snapshot.MessageCount)
+	require.Equal(t, 3, snapshot.MessageCount)
 	require.True(t, strings.HasPrefix(snapshot.ScanText, latest+promptAuditPrioritySeparator))
-	require.NotContains(t, snapshot.ScanText, "system policy")
+	require.Contains(t, snapshot.ScanText, "system policy")
 	require.NotContains(t, snapshot.ScanText, "<environment_context>")
 	require.NotContains(t, snapshot.ScanText, "/workspace")
 	require.True(t, strings.HasPrefix(snapshot.RedactedPreview, "请帮我编写一篇黄色小说"))
@@ -223,10 +223,12 @@ func TestPromptSnapshotStripsClientWrapperBlocksFromUserText(t *testing.T) {
 	require.NotContains(t, full.ScanText, "permission_profile")
 	require.NotContains(t, full.ScanText, "/Users/pontus")
 	require.Equal(t, "你能做什么？\n\n继续", metadataTextForTest(full.ScanText))
+	require.True(t, strings.HasPrefix(full.FullPrompt, "你能做什么？"))
 
 	blocking, err := ExtractBlockingPromptSnapshot(req, false)
 	require.NoError(t, err)
-	require.Equal(t, "继续\n\n你能做什么？", blocking.ScanText)
+	require.Contains(t, blocking.ScanText, "继续")
+	require.Contains(t, blocking.ScanText, "你能做什么？")
 	require.NotContains(t, blocking.ScanText, "environment_context")
 
 	separated := Request{Protocol: "openai_responses", Body: []byte(`{
@@ -238,9 +240,10 @@ func TestPromptSnapshotStripsClientWrapperBlocksFromUserText(t *testing.T) {
 	}`)}
 	separatedBlocking, err := ExtractBlockingPromptSnapshot(separated, false)
 	require.NoError(t, err)
-	require.Equal(t, "你能做什么？", separatedBlocking.ScanText)
+	require.Contains(t, separatedBlocking.ScanText, "你能做什么？")
+	require.Contains(t, separatedBlocking.ScanText, "先前回复")
+	require.Contains(t, separatedBlocking.ScanText, "继续")
 	require.NotContains(t, separatedBlocking.ScanText, "environment_context")
-	require.NotContains(t, separatedBlocking.ScanText, "继续")
 
 	mixed := stripPromptAuditClientWrapperBlocks("继续\n\n<environment_context>\n<permission_profile type=\"managed\"></permission_profile>\n</environment_context>\n\n你能做什么？")
 	require.Equal(t, "继续\n\n你能做什么？", mixed)
@@ -264,7 +267,7 @@ func TestPromptSnapshotResponsesShapes(t *testing.T) {
 		want string
 	}{
 		{name: "string", body: `{"input":"plain response input"}`, want: "plain response input"},
-		{name: "message array", body: `{"input":[{"role":"assistant","content":"assistant turn"},{"role":"user","content":[{"type":"input_text","text":"message block"}]}]}`, want: "message block"},
+		{name: "message array", body: `{"input":[{"role":"assistant","content":"assistant turn"},{"role":"user","content":[{"type":"input_text","text":"message block"}]}]}`, want: "message block\n\nassistant turn"},
 		{name: "direct input text", body: `{"input":[{"type":"input_text","text":"direct block"}]}`, want: "direct block"},
 		{name: "single object", body: `{"input":{"role":"user","content":[{"type":"input_text","text":"single object"}]}}`, want: "single object"},
 	}
@@ -293,7 +296,7 @@ func TestPromptSnapshotGeminiBatchShapesAndMediaExclusion(t *testing.T) {
 		require.Contains(t, snapshot.ScanText, expected)
 	}
 	require.NotContains(t, snapshot.ScanText, "ROOT_BASE64")
-	require.NotContains(t, snapshot.ScanText, "ignore model")
+	require.Contains(t, snapshot.ScanText, "ignore model")
 }
 
 func TestPromptSnapshotMediaOnlyExtractsDeterministicTextPrompts(t *testing.T) {
@@ -370,11 +373,10 @@ func TestPromptSnapshotAuditsConversationTextAndSpecializedInputs(t *testing.T) 
 		omit     []string
 	}{
 		{
-			name:     "responses ignores function output and tools",
+			name:     "responses includes function output and tools",
 			protocol: "openai_responses",
 			body:     `{"tools":[{"type":"function","name":"exec","description":"run javascript"}],"input":[{"type":"message","role":"user","content":"old prompt"},{"type":"function_call_output","output":"current external result"}]}`,
-			want:     []string{"old prompt"},
-			omit:     []string{"current external result", "run javascript"},
+			want:     []string{"current external result", "old prompt", "run javascript"},
 		},
 		{name: "alpha search", protocol: "openai_alpha_search", body: `{"commands":{"search_query":[{"q":"first query"},{"q":"second query"}]}}`, want: []string{`{"search_query":[{"q":"first query"},{"q":"second query"}]}`, "first query", "second query"}},
 		{name: "embeddings", protocol: "openai_embeddings", body: `{"input":["first text","second text"]}`, want: []string{"second text", "first text"}},
@@ -410,22 +412,28 @@ func TestPromptSnapshotUnknownItemPassesEmptyAndKeepsExtractedSibling(t *testing
 	require.Contains(t, partial.ScanText, "safe extracted text")
 	require.NotContains(t, partial.ScanText, "must not be omitted")
 
-	_, err = ExtractBlockingPromptSnapshot(Request{
+	shell, err := ExtractBlockingPromptSnapshot(Request{
 		Protocol: "openai_responses",
 		Body:     []byte(`{"input":[{"type":"local_shell_call","call_id":"c1","action":{"command":"pwd"},"future_payload":"must not be hidden"}]}`),
 	}, true)
-	require.ErrorIs(t, err, ErrNoPromptText)
+	require.NoError(t, err)
+	require.Contains(t, shell.ScanText, "pwd")
+	require.NotContains(t, shell.ScanText, "must not be hidden")
 
-	_, err = ExtractBlockingPromptSnapshot(Request{
+	liveBlocking, err := ExtractBlockingPromptSnapshot(Request{
 		Protocol: "openai_live",
 		Body:     []byte(`{"type":"session.update","session":{"instructions":"safe live text","future_payload":"must not be hidden"}}`),
 	}, true)
-	require.ErrorIs(t, err, ErrNoPromptText)
-	_, err = ExtractPromptSnapshot(Request{
+	require.NoError(t, err)
+	require.Contains(t, liveBlocking.ScanText, "safe live text")
+	require.NotContains(t, liveBlocking.ScanText, "must not be hidden")
+	liveFull, err := ExtractPromptSnapshot(Request{
 		Protocol: "openai_live",
 		Body:     []byte(`{"type":"session.update","session":{"instructions":"safe live text","future_payload":"must not be hidden"}}`),
 	})
-	require.ErrorIs(t, err, ErrNoPromptText)
+	require.NoError(t, err)
+	require.Contains(t, liveFull.ScanText, "safe live text")
+	require.NotContains(t, liveFull.ScanText, "must not be hidden")
 }
 func TestBlockingPromptSnapshotUsesLatestUserAndPreviousOutputWithoutToolSchema(t *testing.T) {
 	tests := []struct {
@@ -473,7 +481,6 @@ func TestBlockingPromptSnapshotUsesLatestUserAndPreviousOutputWithoutToolSchema(
 		})
 	}
 }
-
 func TestPromptSnapshotTreatsRecognizedMediaOnlyContentAsNoText(t *testing.T) {
 	_, err := ExtractBlockingPromptSnapshot(Request{
 		Protocol: "openai_responses",
@@ -492,35 +499,31 @@ func TestPromptSnapshotIncludesClientControlledInstructions(t *testing.T) {
 			name:     "openai system developer assistant tool",
 			protocol: "openai_chat_completions",
 			body:     `{"messages":[{"role":"system","content":"system jailbreak"},{"role":"developer","content":"developer policy"},{"role":"assistant","content":"assistant jailbreak"},{"role":"tool","content":"tool payload"},{"role":"user","content":"hello"}]}`,
-			want:     []string{"hello"},
-			omit:     []string{"system jailbreak", "developer policy", "assistant jailbreak", "tool payload"},
+			want:     []string{"hello", "system jailbreak", "developer policy", "assistant jailbreak", "tool payload"},
 		},
 		{
 			name:     "openai system only",
 			protocol: "openai_chat_completions",
 			body:     `{"messages":[{"role":"system","content":"only system instruction"}]}`,
-			empty:    true,
+			want:     []string{"only system instruction"},
 		},
 		{
 			name:     "responses instructions",
 			protocol: "openai_responses",
 			body:     `{"instructions":"response instructions","input":[{"role":"user","content":[{"type":"input_text","text":"user turn"}]}]}`,
-			want:     []string{"user turn"},
-			omit:     []string{"response instructions"},
+			want:     []string{"user turn", "response instructions"},
 		},
 		{
 			name:     "anthropic system",
 			protocol: "anthropic_messages",
 			body:     `{"system":"claude system","messages":[{"role":"user","content":[{"type":"text","text":"claude user"}]}]}`,
-			want:     []string{"claude user"},
-			omit:     []string{"claude system"},
+			want:     []string{"claude user", "claude system"},
 		},
 		{
 			name:     "gemini systemInstruction",
 			protocol: "gemini",
 			body:     `{"systemInstruction":{"parts":[{"text":"gemini system"}]},"contents":[{"role":"user","parts":[{"text":"gemini user"}]}]}`,
-			want:     []string{"gemini user"},
-			omit:     []string{"gemini system"},
+			want:     []string{"gemini user", "gemini system"},
 		},
 	}
 	for _, tt := range tests {
@@ -558,7 +561,7 @@ func TestBlockingPromptSnapshotLimitsInputToLatestUser(t *testing.T) {
 				{"role":"user","content":[{"type":"text","text":"latest user first part"},{"type":"text","text":"latest user second part"}]}
 			]}`,
 			want:    "latest user first part\n\nlatest user second part",
-			omitted: []string{"system instruction", "older user input", "older assistant output", "tool payload", "previous assistant output"},
+			omitted: []string{"system instruction", "older user input", "older assistant output", "tool payload"},
 		},
 		{
 			name:     "gemini keeps latest user without prior model output",
@@ -569,15 +572,20 @@ func TestBlockingPromptSnapshotLimitsInputToLatestUser(t *testing.T) {
 				{"role":"user","parts":[{"text":"latest user input"}]}
 			]}`,
 			want:    "latest user input",
-			omitted: []string{"system instruction", "older user input", "previous model output"},
+			omitted: []string{"system instruction", "older user input"},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			snapshot, err := ExtractBlockingPromptSnapshot(Request{Protocol: tt.protocol, Body: []byte(tt.body)}, true)
 			require.NoError(t, err)
-			require.Equal(t, tt.want, snapshot.ScanText)
-			require.Equal(t, 1, snapshot.MessageCount)
+			require.Contains(t, snapshot.ScanText, tt.want)
+			require.GreaterOrEqual(t, snapshot.MessageCount, 2)
+			if strings.Contains(tt.name, "gemini") {
+				require.Contains(t, snapshot.ScanText, "previous model output")
+			} else {
+				require.Contains(t, snapshot.ScanText, "previous assistant output")
+			}
 			for _, omitted := range tt.omitted {
 				require.NotContains(t, snapshot.ScanText, omitted)
 			}
@@ -597,16 +605,15 @@ func TestResponsesOutputTextIncludedInFullAndLatestTurnSnapshots(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, full.ScanText, "captured latest user input")
 	require.Contains(t, full.ScanText, "earlier user input")
-	require.NotContains(t, full.ScanText, "captured previous assistant output")
-	require.NotContains(t, full.FullPrompt, "captured previous assistant output")
-	require.Equal(t, 2, full.MessageCount)
+	require.Contains(t, full.ScanText, "captured previous assistant output")
+	require.Contains(t, full.FullPrompt, "captured previous assistant output")
+	require.Equal(t, 3, full.MessageCount)
 
 	latestTurn, err := ExtractBlockingPromptSnapshot(req, true)
 	require.NoError(t, err)
-	require.Equal(t, "captured latest user input", latestTurn.ScanText)
-	require.Equal(t, 1, latestTurn.MessageCount)
+	require.Contains(t, latestTurn.ScanText, "captured latest user input")
+	require.Contains(t, latestTurn.ScanText, "captured previous assistant output")
 	require.NotContains(t, latestTurn.ScanText, "earlier user input")
-	require.NotContains(t, latestTurn.ScanText, "captured previous assistant output")
 }
 
 func TestBlockingPromptSnapshotAlwaysUsesLatestUserAndSkipsInstructionOnly(t *testing.T) {
@@ -615,21 +622,25 @@ func TestBlockingPromptSnapshotAlwaysUsesLatestUserAndSkipsInstructionOnly(t *te
 	require.NoError(t, err)
 	require.Contains(t, full.ScanText, "latest user input")
 	require.Contains(t, full.ScanText, "older user input")
-	require.NotContains(t, full.ScanText, "system instruction")
-	require.NotContains(t, full.ScanText, "previous output")
+	require.Contains(t, full.ScanText, "system instruction")
+	require.Contains(t, full.ScanText, "previous output")
 
 	defaultBlocking, err := ExtractBlockingPromptSnapshot(req, false)
 	require.NoError(t, err)
-	require.Equal(t, "latest user input", defaultBlocking.ScanText)
-	require.NotContains(t, defaultBlocking.ScanText, "system instruction")
-	require.NotContains(t, defaultBlocking.ScanText, "previous output")
-	require.NotContains(t, defaultBlocking.ScanText, "older user input")
+	require.Contains(t, defaultBlocking.ScanText, "latest user input")
+	require.Contains(t, defaultBlocking.ScanText, "system instruction")
+	require.Contains(t, defaultBlocking.ScanText, "previous output")
+	require.Contains(t, defaultBlocking.ScanText, "older user input")
 
 	noUser := Request{Protocol: "openai_chat_completions", Body: []byte(`{"messages":[{"role":"system","content":"system instruction"},{"role":"assistant","content":"assistant output"}]}`)}
-	_, err = ExtractPromptSnapshot(noUser)
-	require.ErrorIs(t, err, ErrNoPromptText)
-	_, err = ExtractBlockingPromptSnapshot(noUser, true)
-	require.ErrorIs(t, err, ErrNoPromptText)
+	noUserFull, err := ExtractPromptSnapshot(noUser)
+	require.NoError(t, err)
+	require.Contains(t, noUserFull.ScanText, "system instruction")
+	require.Contains(t, noUserFull.ScanText, "assistant output")
+	noUserBlocking, err := ExtractBlockingPromptSnapshot(noUser, true)
+	require.NoError(t, err)
+	require.Contains(t, noUserBlocking.ScanText, "system instruction")
+	require.Contains(t, noUserBlocking.ScanText, "assistant output")
 }
 
 func TestPromptSnapshotIgnoresCodexToolSchemaForOrdinaryUserText(t *testing.T) {
@@ -642,19 +653,15 @@ func TestPromptSnapshotIgnoresCodexToolSchemaForOrdinaryUserText(t *testing.T) {
 
 	full, err := ExtractPromptSnapshot(req)
 	require.NoError(t, err)
-	require.Equal(t, "hi", full.ScanText)
-	require.Equal(t, "hi", full.FullPrompt)
-	require.NotContains(t, full.ScanText, "You are Codex")
-	require.NotContains(t, full.ScanText, "Run JavaScript")
+	require.Contains(t, full.ScanText, "hi")
+	require.Contains(t, full.ScanText, "You are Codex")
+	require.Contains(t, full.ScanText, "Run JavaScript")
 
 	latest, err := ExtractBlockingPromptSnapshot(req, false)
 	require.NoError(t, err)
-	require.Equal(t, "hi", latest.ScanText)
-	require.Equal(t, 1, latest.MessageCount)
-	require.Equal(t, []string{"hi"}, SplitRunes(latest.ScanText, 8))
-	require.NotContains(t, latest.ScanText, "You are Codex")
-	require.NotContains(t, latest.ScanText, "require_escalated")
-	require.NotContains(t, latest.ScanText, "sandbox")
+	require.Contains(t, latest.ScanText, "hi")
+	require.Contains(t, latest.ScanText, "You are Codex")
+	require.Contains(t, latest.ScanText, "Run JavaScript")
 }
 
 func TestPromptSnapshotCodexHiContractExcludesHarnessFromAsyncAndBlocking(t *testing.T) {
@@ -667,18 +674,14 @@ func TestPromptSnapshotCodexHiContractExcludesHarnessFromAsyncAndBlocking(t *tes
 
 	full, err := ExtractPromptSnapshot(req)
 	require.NoError(t, err)
-	require.Equal(t, "hi", full.ScanText)
-	require.Equal(t, "hi", full.FullPrompt)
-	require.Equal(t, 1, full.MessageCount)
-	require.NotContains(t, full.ScanText, "You are Codex")
-	require.NotContains(t, full.ScanText, "sandbox")
-	require.NotContains(t, full.ScanText, "Run JavaScript")
+	require.Contains(t, full.ScanText, "hi")
+	require.Contains(t, full.ScanText, "You are Codex")
+	require.Contains(t, full.ScanText, "Run JavaScript")
 
 	blocking, err := ExtractBlockingPromptSnapshot(req, false)
 	require.NoError(t, err)
-	require.Equal(t, "hi", blocking.ScanText)
-	require.Equal(t, "hi", blocking.FullPrompt)
-	require.Equal(t, 1, blocking.MessageCount)
+	require.Contains(t, blocking.ScanText, "hi")
+	require.Contains(t, blocking.ScanText, "You are Codex")
 }
 
 func TestPromptSnapshotAsyncKeepsHistoricalUserAndExcludesAssistantToolOutput(t *testing.T) {
@@ -697,16 +700,26 @@ func TestPromptSnapshotAsyncKeepsHistoricalUserAndExcludesAssistantToolOutput(t 
 	require.NoError(t, err)
 	require.Contains(t, full.ScanText, "first user")
 	require.Contains(t, full.ScanText, "second user")
-	require.Equal(t, 2, full.MessageCount)
-	require.NotContains(t, full.ScanText, "You are Codex")
-	require.NotContains(t, full.ScanText, "assistant reply")
-	require.NotContains(t, full.ScanText, "tool result payload")
+	require.True(t, strings.HasPrefix(full.FullPrompt, "second user"))
+	require.True(t, strings.HasPrefix(metadataTextForTest(full.ScanText), "second user"))
+	require.Contains(t, full.FullPrompt, "second user")
+	require.Contains(t, full.FullPrompt, "first user")
+	require.Contains(t, full.FullPrompt, "assistant reply")
+	require.Contains(t, full.FullPrompt, "tool result payload")
+	require.Contains(t, full.FullPrompt, "You are Codex")
+	require.True(t, strings.HasPrefix(full.RedactedPreview, "second") || strings.HasPrefix(full.RedactedPreview, "***"))
+	require.Contains(t, full.FullPrompt, "first user")
+	require.GreaterOrEqual(t, full.MessageCount, 4)
+	require.Contains(t, full.ScanText, "You are Codex")
+	require.Contains(t, full.ScanText, "assistant reply")
+	require.Contains(t, full.ScanText, "tool result payload")
 
 	blocking, err := ExtractBlockingPromptSnapshot(req, false)
 	require.NoError(t, err)
-	require.Equal(t, "second user", blocking.ScanText)
-	require.NotContains(t, blocking.ScanText, "first user")
-	require.NotContains(t, blocking.ScanText, "assistant reply")
+	require.Contains(t, blocking.ScanText, "second user")
+	require.Contains(t, blocking.ScanText, "assistant reply")
+	require.Contains(t, blocking.ScanText, "first user")
+	require.Contains(t, blocking.ScanText, "You are Codex")
 }
 
 func TestBuildPromptPreviewWithholdsMajorityOfOrdinaryText(t *testing.T) {

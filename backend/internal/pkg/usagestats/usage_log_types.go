@@ -283,6 +283,8 @@ type UsageLogFilters struct {
 	BillingType           *int8
 	BillingMode           string
 	UpstreamModelMismatch *bool
+	CompletionStatus      string
+	UsageSource           string
 	StartTime             *time.Time
 	EndTime               *time.Time
 	// ExactTotal requests exact COUNT(*) for pagination. Default false for fast large-table paging.

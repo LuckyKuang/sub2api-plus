@@ -36,6 +36,8 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 		h.errorResponse(c, http.StatusInternalServerError, "api_error", "User context not found")
 		return
 	}
+	disconnectLifecycle := startClientDisconnectRiskLifecycle(c, h.clientDisconnectRisk, subject.UserID, apiKey.ID, "openai_images")
+	defer disconnectLifecycle.Neutral(c.Request.Context())
 	reqLog := requestLogger(
 		c,
 		"handler.openai_gateway.images",

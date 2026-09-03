@@ -7293,6 +7293,39 @@
             <div class="flex items-center justify-between">
               <div>
                 <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {{ t('admin.settings.features.riskControl.disconnectBan') }}
+                </label>
+                <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t('admin.settings.features.riskControl.disconnectBanHint') }}
+                </p>
+              </div>
+			  <Toggle
+				v-model="form.client_disconnect_consecutive_ban_enabled"
+				data-testid="client-disconnect-ban-toggle"
+			  />
+            </div>
+
+            <div v-if="form.client_disconnect_consecutive_ban_enabled">
+              <label class="input-label">
+                {{ t('admin.settings.features.riskControl.disconnectBanThreshold') }}
+                <span class="text-red-500">*</span>
+              </label>
+              <input
+                v-model.number="form.client_disconnect_consecutive_ban_threshold"
+                type="number"
+                min="1"
+                max="1000"
+                class="input"
+				data-testid="client-disconnect-ban-threshold"
+              />
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                {{ t('admin.settings.features.riskControl.disconnectBanThresholdHint') }}
+              </p>
+            </div>
+
+            <div class="flex items-center justify-between">
+              <div>
+                <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
                   {{ t('admin.settings.features.riskControl.cyberSessionBlock') }}
                 </label>
                 <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
@@ -9584,6 +9617,8 @@ const form = reactive<SettingsForm>({
   hide_ccs_import_button: false,
   payment_enabled: false,
   risk_control_enabled: false,
+  client_disconnect_consecutive_ban_enabled: true,
+  client_disconnect_consecutive_ban_threshold: 10,
   global_ip_access_control_enabled: false,
   cyber_session_block_enabled: false,
   cyber_session_block_ttl_seconds: 3600,
@@ -11501,6 +11536,12 @@ async function saveSettings() {
       // Payment configuration
       payment_enabled: form.payment_enabled,
       risk_control_enabled: form.risk_control_enabled,
+      client_disconnect_consecutive_ban_enabled:
+        form.client_disconnect_consecutive_ban_enabled,
+      client_disconnect_consecutive_ban_threshold: Math.min(
+        1000,
+        Math.max(1, Number(form.client_disconnect_consecutive_ban_threshold) || 10),
+      ),
       global_ip_access_control_enabled: form.global_ip_access_control_enabled,
       cyber_session_block_enabled: form.cyber_session_block_enabled,
       cyber_session_block_ttl_seconds:
