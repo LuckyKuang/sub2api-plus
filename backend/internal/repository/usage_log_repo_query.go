@@ -585,9 +585,9 @@ func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, e
 		&billingMode,
 		&accountStatsCost,
 		&sessionID,
-		completionStatus          string
-		usageSource               string
-		nativeCompactionV2        bool
+		&completionStatus,
+		&usageSource,
+		&nativeCompactionV2,
 		&createdAt,
 	); err != nil {
 		return nil, err

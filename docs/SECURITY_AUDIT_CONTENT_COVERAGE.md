@@ -109,19 +109,20 @@ Both engines consume the same canonical document:
 | Engine/mode | Segment selection |
 | --- | --- |
 | Content Moderation | Scans only current direct-user text and images. Chat and Anthropic require an explicit `user` role; Responses, Live, and Gemini also accept their protocol-defined roleless user forms. Direct Alpha Search queries, embedding strings, and media prompts remain eligible. Instructions, system/developer context, reusable prompt variables, assistant/model messages, reasoning, tool definitions/calls/results, approval responses, and tool-produced images are excluded so platform or external content is not attributed to the user. |
-| Prompt Audit full/async | Scans every user-authored prompt in this request: `SourceMessage` with `role=user` (or a role-less Responses/Gemini/embeddings/media form treated as user), plus search queries, embedding strings, and media prompts. Stored full prompt and redacted preview are newest-to-oldest so the preview head is the latest user turn. It excludes instructions/system/developer context, reusable prompt variables, reasoning, assistant/model text, and tool/function definitions, arguments, and outputs. Client harness XML blocks inside user text (`environment_context`, `permission_profile`, `system-reminder`, `filesystem`) are stripped; surrounding user sentences remain. |
-| Prompt Audit blocking latest-turn-only | Scans only the latest user text after the same client-harness XML strip. Instructions, tool definitions, older user turns, assistant/model output, and structured tool calls are omitted from the blocking input. `blocking_latest_turn_only` is stored for compatibility and does not change this selection. |
+| Prompt Audit full/async | Scans the client-controlled transcript: user messages (including role-less Responses/Gemini/embeddings/media forms), plus system/developer/instructions, assistant/model text, reasoning, tool definitions/calls/results, reusable prompt variables, search queries, embedding strings, and media prompts. Stored full prompt and redacted preview remain newest-to-oldest so the preview head is the latest turn. Client harness XML blocks inside user text (`environment_context`, `permission_profile`, `system-reminder`, `filesystem`) are stripped; surrounding user sentences remain. |
+| Prompt Audit blocking latest-turn-only | When enabled, scans the latest user text after the same client-harness XML strip, plus the nearest preceding assistant/model turn so continuation jailbreaks cannot drop the prior output. Older user turns, instructions, and tool schema stay out of this narrow window. A request with no user text cannot be narrowed safely and falls back to the full client-controlled transcript. |
 
 Sharing a canonical document does not mean that the engines select identical
 segments. Content Moderation preserves the `v0.1.177+custom.003` attribution
 rule: only a direct user submission may produce a user content-policy
-violation. Prompt Audit Guard scans only user-authored prompt text: ordinary
-`hi` plus Codex/Claude instructions or a client tool schema must not become a
-jailbreak hit, while jailbreak text written in the latest user message still
-blocks. Client wrapper XML such as `<environment_context>` inside a user
-message is stripped so sentences like `你能做什么？` are scanned without the
-harness block. A turn containing only instructions, a tool result, or tool schema is
-a valid empty Prompt Audit selection. Incomplete canonical extraction is
+violation. Prompt Audit Guard scans the client-controlled transcript, so
+jailbreak text in system/developer/assistant/tool fields remains visible to
+blocking and async review. Ordinary user `hi` still blocks when that text
+itself is a jailbreak. Client wrapper XML such as `<environment_context>`
+inside a user message is stripped so sentences like `你能做什么？` are scanned
+without the harness block. A turn containing only instructions, a tool
+result, or tool schema is still Prompt Audit content; a request with no
+recognized client-controlled text remains an empty selection. Incomplete canonical extraction is
 observable but does not override either engine's selection policy: extracted
 content is still evaluated, while an empty selection passes through.
 

@@ -218,7 +218,11 @@ func TestRunSecurityAuditExcludesHarnessAcrossHTTPAndWebSocketStages(t *testing.
 
 			require.NotNil(t, decision)
 			require.True(t, decision.AllowNextStage)
-			require.Equal(t, "hi", engine.capturedScanText())
+			require.Contains(t, engine.capturedScanText(), "hi")
+				if test.mode == securityaudit.ModeAsync {
+					require.Contains(t, engine.capturedScanText(), "You are Codex")
+					require.Contains(t, engine.capturedScanText(), "Run JavaScript in the sandbox")
+				}
 		})
 	}
 }

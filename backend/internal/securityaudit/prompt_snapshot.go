@@ -50,16 +50,13 @@ func ExtractPromptSnapshot(req Request) (PromptSnapshot, error) {
 	return snapshot, err
 }
 
-// ExtractBlockingPromptSnapshot builds the synchronous guard input. Blocking
-// always scans only the latest user text; the latestTurnOnly argument is kept
-// for call-site compatibility and is ignored. Asynchronous auditing always
-// uses ExtractPromptSnapshot and retains every user turn in this request in
-// newest-to-oldest order, excluding harness instructions, tool schema, and
-// assistant output. Admin full prompt and redacted preview follow that order
-// so the preview head is the latest user turn.
+// ExtractBlockingPromptSnapshot builds the synchronous guard input.
+// When latestTurnOnly is true, the scan window is the latest user turn plus the
+// nearest preceding assistant/model turn. When it is false, blocking uses the
+// same client-controlled transcript as async review. A request without user
+// content cannot be narrowed safely and falls back to that full transcript.
 func ExtractBlockingPromptSnapshot(req Request, latestTurnOnly bool) (PromptSnapshot, error) {
-	_ = latestTurnOnly
-	snapshot, _, err := extractPromptSnapshotWithDiagnostics(req, true)
+	snapshot, _, err := extractPromptSnapshotWithDiagnostics(req, latestTurnOnly)
 	return snapshot, err
 }
 
@@ -75,12 +72,10 @@ func extractPromptSnapshotWithDiagnostics(req Request, latestTurnOnly bool) (Pro
 			Reasons: auditcontent.SanitizeIncompleteReasons(document.IncompleteReasons),
 		}
 	}
-	extracted := promptSegmentsFromAuditContent(document, req.Protocol, latestTurnOnly)
-	var segments []string
+	extracted := promptSegmentsFromAuditContent(document, req.Protocol)
+	segments := normalizeSegmentsLatestUserFirst(extracted)
 	if latestTurnOnly {
-		segments = blockingSegmentsLatestUser(extracted)
-	} else {
-		segments = normalizeSegmentsLatestUserFirst(extracted)
+		segments = blockingSegmentsLatestUserAndPreviousOutput(extracted)
 	}
 	if len(segments) == 0 {
 		return PromptSnapshot{}, diagnostic, ErrNoPromptText
@@ -104,14 +99,14 @@ func extractPromptSnapshotWithDiagnostics(req Request, latestTurnOnly bool) (Pro
 	}, diagnostic, nil
 }
 
-func promptSegmentsFromAuditContent(document auditcontent.Document, protocol string, latestTurnOnly bool) []promptSegment {
+func promptSegmentsFromAuditContent(document auditcontent.Document, protocol string) []promptSegment {
 	allowRolelessMessage := promptAuditAllowsRolelessMessage(protocol)
 	segments := make([]promptSegment, 0, len(document.Segments))
 	for _, segment := range document.Segments {
-		if !isPromptAuditConversationSegment(segment, allowRolelessMessage, latestTurnOnly) {
+		if !isPromptAuditClientControlledSegment(segment, allowRolelessMessage) {
 			continue
 		}
-		role := segment.Role
+		role := strings.ToLower(strings.TrimSpace(segment.Role))
 		user := role == "user"
 		if role == "" && ((segment.Source == auditcontent.SourceMessage && allowRolelessMessage) ||
 			segment.Source == auditcontent.SourceSearchQuery ||
@@ -119,6 +114,16 @@ func promptSegmentsFromAuditContent(document auditcontent.Document, protocol str
 			segment.Source == auditcontent.SourceMediaPrompt) {
 			user = true
 			role = "user"
+		}
+		if role == "" {
+			switch segment.Source {
+			case auditcontent.SourceInstruction, auditcontent.SourcePromptVariable:
+				role = "system"
+			case auditcontent.SourceToolCall, auditcontent.SourceToolDefinition, auditcontent.SourceToolOutput:
+				role = "tool"
+			case auditcontent.SourceReasoning:
+				role = "assistant"
+			}
 		}
 		segText := segment.Text
 		if user {
@@ -136,28 +141,23 @@ func promptSegmentsFromAuditContent(document auditcontent.Document, protocol str
 	return segments
 }
 
-func isPromptAuditConversationSegment(segment auditcontent.Segment, allowRolelessMessage bool, latestTurnOnly bool) bool {
+func isPromptAuditClientControlledSegment(segment auditcontent.Segment, allowRolelessMessage bool) bool {
 	switch segment.Source {
-	case auditcontent.SourceSearchQuery, auditcontent.SourceEmbeddingInput, auditcontent.SourceMediaPrompt:
+	case auditcontent.SourceSearchQuery, auditcontent.SourceEmbeddingInput, auditcontent.SourceMediaPrompt,
+		auditcontent.SourceInstruction, auditcontent.SourcePromptVariable,
+		auditcontent.SourceToolCall, auditcontent.SourceToolDefinition, auditcontent.SourceToolOutput,
+		auditcontent.SourceReasoning:
 		return true
 	case auditcontent.SourceMessage:
-		if latestTurnOnly {
-			// Keep assistant/model messages as turn separators so older user
-			// text is not joined with the latest user turn. They are not emitted.
+		role := strings.ToLower(strings.TrimSpace(segment.Role))
+		switch role {
+		case "user", "system", "developer", "assistant", "tool", "model":
 			return true
+		case "":
+			return allowRolelessMessage
+		default:
+			return false
 		}
-		return isPromptAuditUserRole(segment.Role, allowRolelessMessage)
-	default:
-		return false
-	}
-}
-
-func isPromptAuditUserRole(role string, allowRoleless bool) bool {
-	switch strings.ToLower(strings.TrimSpace(role)) {
-	case "user":
-		return true
-	case "":
-		return allowRoleless
 	default:
 		return false
 	}
@@ -188,14 +188,15 @@ func normalizeSegmentsLatestUserFirst(values []promptSegment) []string {
 	return result
 }
 
-// blockingSegmentsLatestUser limits synchronous guard input to the current
-// user turn. Instructions, previous assistant/model output, and older user
-// messages stay out of blocking so client harness text cannot trip the guard.
-func blockingSegmentsLatestUser(values []promptSegment) []string {
+// blockingSegmentsLatestUserAndPreviousOutput limits synchronous guard input
+// to the current user turn and the nearest preceding assistant/model turn.
+// A request without user content cannot be narrowed safely and falls back to
+// the complete client-controlled transcript.
+func blockingSegmentsLatestUserAndPreviousOutput(values []promptSegment) []string {
 	normalized := normalizedPromptSegments(values)
 	latestUserStart := latestUserSegmentStart(normalized)
 	if latestUserStart < 0 {
-		return nil
+		return normalizeSegmentsLatestUserFirst(values)
 	}
 	latestUserEnd := latestUserStart
 	for latestUserEnd < len(normalized) && isUserSegment(normalized[latestUserEnd]) {
@@ -205,7 +206,19 @@ func blockingSegmentsLatestUser(values []promptSegment) []string {
 	for _, segment := range normalized[latestUserStart:latestUserEnd] {
 		currentUserText = append(currentUserText, segment.text)
 	}
-	return []string{strings.Join(currentUserText, "\n\n")}
+	selected := []promptSegment{{text: strings.Join(currentUserText, "\n\n"), user: true, role: "user"}}
+	for index := latestUserStart - 1; index >= 0; index-- {
+		if !isAssistantOutputSegment(normalized[index]) {
+			continue
+		}
+		start := index
+		for start > 0 && isAssistantOutputSegment(normalized[start-1]) {
+			start--
+		}
+		selected = append(selected, normalized[start:index+1]...)
+		break
+	}
+	return promptSegmentTexts(selected)
 }
 
 func normalizedPromptSegments(values []promptSegment) []promptSegment {
@@ -235,6 +248,18 @@ func latestUserSegmentStart(values []promptSegment) int {
 
 func isUserSegment(segment promptSegment) bool {
 	return segment.user || segment.role == "user"
+}
+
+func isAssistantOutputSegment(segment promptSegment) bool {
+	return segment.role == "assistant" || segment.role == "model"
+}
+
+func promptSegmentTexts(values []promptSegment) []string {
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		result = append(result, value.text)
+	}
+	return result
 }
 
 // stripPromptAuditClientWrapperBlocks removes client harness XML from user
