@@ -8,7 +8,7 @@ import (
 )
 
 func TestUsageLogCompletionMetadataMigration(t *testing.T) {
-	content, err := FS.ReadFile("240_usage_log_completion_metadata.sql")
+	content, err := FS.ReadFile("247_usage_log_completion_metadata.sql")
 	require.NoError(t, err)
 	sql := strings.Join(strings.Fields(string(content)), " ")
 	require.Contains(t, sql, "completion_status VARCHAR(32) NOT NULL DEFAULT 'unknown'")

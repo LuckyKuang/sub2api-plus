@@ -8,7 +8,7 @@ import (
 )
 
 func TestClientDisconnectLifecycleObservabilityMigration(t *testing.T) {
-	content, err := FS.ReadFile("239_client_disconnect_lifecycle_observability.sql")
+	content, err := FS.ReadFile("246_client_disconnect_lifecycle_observability.sql")
 	require.NoError(t, err)
 	sql := strings.Join(strings.Fields(string(content)), " ")
 	require.Contains(t, sql, "completion_status VARCHAR(32)")

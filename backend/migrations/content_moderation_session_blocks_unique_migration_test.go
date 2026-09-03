@@ -7,7 +7,7 @@ import (
 )
 
 func TestContentModerationSessionBlocksUniqueMigrationPromotesConstraint(t *testing.T) {
-	sql, err := FS.ReadFile("242_content_moderation_session_blocks_unique.sql")
+	sql, err := FS.ReadFile("249_content_moderation_session_blocks_unique.sql")
 	require.NoError(t, err)
 	text := string(sql)
 	require.Contains(t, text, "content_moderation_session_blocks_block_key_key")

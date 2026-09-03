@@ -7,7 +7,7 @@ import (
 )
 
 func TestContentModerationSessionBlocksMigrationCreatesDurableIndex(t *testing.T) {
-	sql, err := FS.ReadFile("241_content_moderation_session_blocks.sql")
+	sql, err := FS.ReadFile("248_content_moderation_session_blocks.sql")
 	require.NoError(t, err)
 	text := string(sql)
 	for _, fragment := range []string{
