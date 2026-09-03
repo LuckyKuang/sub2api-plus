@@ -228,7 +228,7 @@ func TestPromptSnapshotStripsClientWrapperBlocksFromUserText(t *testing.T) {
 	blocking, err := ExtractBlockingPromptSnapshot(req, false)
 	require.NoError(t, err)
 	require.Contains(t, blocking.ScanText, "继续")
-		require.Contains(t, blocking.ScanText, "你能做什么？")
+	require.Contains(t, blocking.ScanText, "你能做什么？")
 	require.NotContains(t, blocking.ScanText, "environment_context")
 
 	separated := Request{Protocol: "openai_responses", Body: []byte(`{

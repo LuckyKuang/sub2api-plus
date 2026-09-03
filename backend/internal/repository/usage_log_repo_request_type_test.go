@@ -111,8 +111,8 @@ func TestUsageLogRepositoryCreateSyncRequestTypeAndLegacyFields(t *testing.T) {
 			sqlmock.AnyArg(), // session_id
 			service.UsageCompletionUnknown,
 			service.UsageSourceUnknown,
-				log.NativeCompactionV2,
-				createdAt,
+			log.NativeCompactionV2,
+			createdAt,
 		).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "created_at"}).AddRow(int64(99), createdAt))
 
@@ -212,8 +212,8 @@ func TestUsageLogRepositoryCreate_PersistsServiceTier(t *testing.T) {
 			sqlmock.AnyArg(), // session_id
 			service.UsageCompletionUnknown,
 			service.UsageSourceUnknown,
-				log.NativeCompactionV2,
-				createdAt,
+			log.NativeCompactionV2,
+			createdAt,
 		).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "created_at"}).AddRow(int64(100), createdAt))
 
@@ -1012,8 +1012,8 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},
 			service.UsageCompletionCompleted,
 			service.UsageSourceUpstreamExact,
-				false, // native_compaction_v2
-				now,
+			false, // native_compaction_v2
+			now,
 		}})
 		require.NoError(t, err)
 		require.Equal(t, 2, log.ImageCount)
@@ -1109,8 +1109,8 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},  // session_id
 			service.UsageCompletionUnknown,
 			service.UsageSourceUnknown,
-				false, // native_compaction_v2
-				now,
+			false, // native_compaction_v2
+			now,
 		}})
 		require.NoError(t, err)
 		require.NotNil(t, log.ServiceTier)
@@ -1177,8 +1177,8 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},  // session_id
 			service.UsageCompletionUnknown,
 			service.UsageSourceUnknown,
-				true, // native_compaction_v2
-				now,
+			true, // native_compaction_v2
+			now,
 		}})
 		require.NoError(t, err)
 		require.NotNil(t, log.ServiceTier)
@@ -1246,8 +1246,8 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},  // session_id
 			service.UsageCompletionUnknown,
 			service.UsageSourceUnknown,
-				false, // native_compaction_v2
-				now,
+			false, // native_compaction_v2
+			now,
 		}})
 		require.NoError(t, err)
 		require.NotNil(t, log.ServiceTier)

@@ -128,14 +128,14 @@ func TestPromptAuditUsesConversationTextWithoutToolSchema(t *testing.T) {
 			name: "assistant text and tool schema are included", protocol: service.ContentModerationProtocolOpenAIResponses,
 			body: `{"instructions":"audit instruction","tools":[{"type":"function","name":"lookup","description":"audit tool definition"}],` +
 				`"input":[{"type":"message","role":"user","content":"older prompt"},{"type":"message","role":"assistant","content":"current assistant payload"}]}`,
-				full:   []string{"older prompt", "current assistant payload", "audit instruction", "audit tool definition"},
-				latest: "older prompt",
+			full:   []string{"older prompt", "current assistant payload", "audit instruction", "audit tool definition"},
+			latest: "older prompt",
 		},
 		{
 			name: "responses function result is prompt-audit conversation text", protocol: service.ContentModerationProtocolOpenAIResponses,
 			body:   `{"input":[{"type":"message","role":"user","content":"older prompt"},{"type":"function_call_output","call_id":"call_1","output":"current tool result"}]}`,
-				full:   []string{"older prompt", "current tool result"},
-				latest: "older prompt",
+			full:   []string{"older prompt", "current tool result"},
+			latest: "older prompt",
 		},
 		{
 			name: "responses automation bootstrap is prompt text", protocol: service.ContentModerationProtocolOpenAIResponses,
@@ -159,8 +159,8 @@ func TestPromptAuditUsesConversationTextWithoutToolSchema(t *testing.T) {
 		{
 			name: "chat user reasoning is prompt text", protocol: service.ContentModerationProtocolOpenAIChat,
 			body:   `{"messages":[{"role":"assistant","reasoning_content":"assistant private"},{"role":"user","content":"question","reasoning_content":"user reasoning"}]}`,
-				full:   []string{"question", "user reasoning", "assistant private"},
-				latest: "question\n\nuser reasoning",
+			full:   []string{"question", "user reasoning", "assistant private"},
+			latest: "question\n\nuser reasoning",
 		},
 		{
 			name: "alpha search semantic fields", protocol: "openai_alpha_search",
@@ -169,18 +169,18 @@ func TestPromptAuditUsesConversationTextWithoutToolSchema(t *testing.T) {
 			latest: "{\"mode\":\"deep\",\"search_query\":[{\"q\":\"security query\"}]}\n\n{\"region\":\"global\"}\n\n[{\"content\":\"recent context\",\"role\":\"user\",\"type\":\"message\"}]",
 		},
 		{
-				name: "responses reusable prompt variables are included", protocol: service.ContentModerationProtocolOpenAIResponses,
-				body:   `{"prompt":{"id":"pmpt_1","variables":{"plain":"reusable variable","typed":{"type":"input_text","text":"typed variable"}}}}`,
-				full:   []string{"reusable variable", "typed variable"},
-				latest: "reusable variable",
+			name: "responses reusable prompt variables are included", protocol: service.ContentModerationProtocolOpenAIResponses,
+			body:   `{"prompt":{"id":"pmpt_1","variables":{"plain":"reusable variable","typed":{"type":"input_text","text":"typed variable"}}}}`,
+			full:   []string{"reusable variable", "typed variable"},
+			latest: "reusable variable",
 		},
 		{
-				name: "live session instructions and transcription context are included", protocol: service.ContentModerationProtocolOpenAILive,
-				body: `{"model":"gpt-live-test","instructions":"live instructions",` +
-					`"input_audio_transcription":{"model":"gpt-4o-transcribe","prompt":"legacy transcription context"},` +
-					`"audio":{"input":{"transcription":{"model":"gpt-live-transcribe","prompt":"current transcription context","keywords":["premium plan","AC-42"]}}}}`,
-				full:   []string{"live instructions", "legacy transcription context", "current transcription context", "premium plan", "AC-42"},
-				latest: "live instructions",
+			name: "live session instructions and transcription context are included", protocol: service.ContentModerationProtocolOpenAILive,
+			body: `{"model":"gpt-live-test","instructions":"live instructions",` +
+				`"input_audio_transcription":{"model":"gpt-4o-transcribe","prompt":"legacy transcription context"},` +
+				`"audio":{"input":{"transcription":{"model":"gpt-live-transcribe","prompt":"current transcription context","keywords":["premium plan","AC-42"]}}}}`,
+			full:   []string{"live instructions", "legacy transcription context", "current transcription context", "premium plan", "AC-42"},
+			latest: "live instructions",
 		},
 		{
 			name: "client environment xml is stripped from user text", protocol: service.ContentModerationProtocolOpenAIResponses,
@@ -190,10 +190,10 @@ func TestPromptAuditUsesConversationTextWithoutToolSchema(t *testing.T) {
 			omit:   []string{"environment_context", "permission_profile", "/Users/pontus"},
 		},
 		{
-				name: "chat tool-role and tool-call arguments are included", protocol: service.ContentModerationProtocolOpenAIChat,
-				body:   `{"messages":[{"role":"system","content":"chat system context"},{"role":"user","content":"older"},{"role":"assistant","tool_calls":[{"function":{"arguments":"{\"secret\":true}"}}]},{"role":"tool","content":{"first":true}},{"role":"function","content":{"second":false}}]}`,
-				full:   []string{"older", "chat system context", `"secret":true`, `{"first":true}`},
-				latest: "older",
+			name: "chat tool-role and tool-call arguments are included", protocol: service.ContentModerationProtocolOpenAIChat,
+			body:   `{"messages":[{"role":"system","content":"chat system context"},{"role":"user","content":"older"},{"role":"assistant","tool_calls":[{"function":{"arguments":"{\"secret\":true}"}}]},{"role":"tool","content":{"first":true}},{"role":"function","content":{"second":false}}]}`,
+			full:   []string{"older", "chat system context", `"secret":true`, `{"first":true}`},
+			latest: "older",
 		},
 	}
 

@@ -65,7 +65,9 @@ func TestPrepareUsageLogInsert_SessionIDNullWhenAbsent(t *testing.T) {
 
 	empty := ""
 	preparedEmpty := prepareUsageLogInsert(newSessionIDUsageLog(&empty))
-	nsEmpty := preparedEmpty.args[len(preparedEmpty.args)-5].(sql.NullString)
+	emptySessionArg := preparedEmpty.args[len(preparedEmpty.args)-5]
+	nsEmpty, ok := emptySessionArg.(sql.NullString)
+	require.True(t, ok, "session_id arg should be a sql.NullString, got %T", emptySessionArg)
 	require.False(t, nsEmpty.Valid, "empty session id must also be NULL")
 }
 

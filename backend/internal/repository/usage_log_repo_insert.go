@@ -88,9 +88,9 @@ var usageLogInsertArgTypes = [...]string{
 	"text",        // billing_mode
 	"numeric",     // account_stats_cost
 	"text",        // session_id
-		"text",        // completion_status
-		"text",        // usage_source
-		"boolean",     // native_compaction_v2
+	"text",        // completion_status
+	"text",        // usage_source
+	"boolean",     // native_compaction_v2
 	"timestamptz", // created_at
 }
 
@@ -769,7 +769,7 @@ func buildUsageLogBatchInsertQuery(keys []string, preparedByKey map[string]usage
 
 	// Each batch row prepends the synthetic input_index before the 66
 	// usage-log column values.
-		args := make([]any, 0, len(keys)*(len(usageLogInsertArgTypes)+1))
+	args := make([]any, 0, len(keys)*(len(usageLogInsertArgTypes)+1))
 	argPos := 1
 	for idx, key := range keys {
 		if idx > 0 {
@@ -1432,7 +1432,7 @@ func prepareUsageLogInsert(log *service.UsageLog) usageLogInsertPrepared {
 			billingTier,
 			billingMode,
 			log.AccountStatsCost, // account_stats_cost
-			sessionID, // session_id
+			sessionID,            // session_id
 			log.CompletionStatus,
 			log.UsageSource,
 			log.NativeCompactionV2,
