@@ -95,6 +95,7 @@ func TestUsageBillingRepositoryApply_PersistsUsageInBillingTransaction(t *testin
 		Name: "usage-billing-atomic-account-" + uuid.NewString(), Type: service.AccountTypeAPIKey,
 	})
 	requestID := uuid.NewString()
+	cleanupPersistedUsageLogFixture(t, ctx, user.ID, apiKey.ID, account.ID, requestID)
 	completed := true
 	result, err := repo.Apply(ctx, &service.UsageBillingCommand{
 		RequestID: requestID, APIKeyID: apiKey.ID, UserID: user.ID,
@@ -170,6 +171,7 @@ func TestUsageBillingRepositoryCaptureBatchImage_PersistsUsageAtomically(t *test
 	require.NoError(t, err)
 	completed := true
 	requestID := service.BatchImageCaptureRequestID(batchID)
+	cleanupPersistedUsageLogFixture(t, ctx, user.ID, apiKey.ID, account.ID, requestID)
 	result, err := repo.CaptureBatchImageBalance(ctx, &service.BatchImageBalanceHoldCommand{
 		RequestID: requestID, APIKeyID: apiKey.ID, UserID: user.ID, BatchID: batchID,
 		HoldAmount: 2, ActualAmount: 1.25,
@@ -329,6 +331,27 @@ func TestUsageBillingRepositoryApply_ResetsExpiredFiveHourSubscriptionWindow(t *
 	require.NoError(t, integrationDB.QueryRowContext(ctx, "SELECT five_hour_usage_usd, five_hour_window_start FROM user_subscriptions WHERE id = $1", subscription.ID).Scan(&fiveHourUsage, &fiveHourWindowStart))
 	require.InDelta(t, 2.5, fiveHourUsage, 0.000001)
 	require.WithinDuration(t, beforeCharge, fiveHourWindowStart, 5*time.Second)
+}
+
+func cleanupPersistedUsageLogFixture(t *testing.T, ctx context.Context, userID, apiKeyID, accountID int64, requestID string) {
+	t.Helper()
+	t.Cleanup(func() {
+		cleanupCtx := context.Background()
+		for _, statement := range []struct {
+			query string
+			args  []any
+		}{
+			{"DELETE FROM usage_logs WHERE request_id = $1 AND api_key_id = $2", []any{requestID, apiKeyID}},
+			{"DELETE FROM usage_billing_dedup_archive WHERE api_key_id = $1", []any{apiKeyID}},
+			{"DELETE FROM usage_billing_dedup WHERE api_key_id = $1", []any{apiKeyID}},
+			{"DELETE FROM api_keys WHERE id = $1", []any{apiKeyID}},
+			{"DELETE FROM accounts WHERE id = $1", []any{accountID}},
+			{"DELETE FROM users WHERE id = $1", []any{userID}},
+		} {
+			_, err := integrationDB.ExecContext(cleanupCtx, statement.query, statement.args...)
+			require.NoError(t, err, "cleanup persisted usage log fixture")
+		}
+	})
 }
 
 func cleanupUsageBillingSubscriptionFixture(t *testing.T, ctx context.Context, userID, groupID, apiKeyID, subscriptionID int64) {
