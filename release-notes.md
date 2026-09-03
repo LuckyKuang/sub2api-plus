@@ -1,32 +1,33 @@
-Sub2API Plus v0.1.183+custom.004
+Sub2API Plus v0.2.0+custom.001
 
 ## Highlights
 
-- Added configurable OpenAI-compatible Content Moderation endpoint pools with priority failover, cooldown, manual pause, and health visibility.
-- Improved Prompt Audit and Content Moderation observability and protocol coverage.
-- Added Moderation platform attribution and status semantics to audit records.
-- Improved asynchronous image task durability, requested/actual image observability, and PostgreSQL-backed ZIP download recovery.
+- Imported official Sub2API v0.2.0 while preserving Plus security-audit ordering, Codex identity precedence, billing, routing, and deployment contracts.
+- Added per-group OpenAI reasoning-effort over-limit handling and Force Fast / Free Fast controls.
+- Added interval-aware one-hour cache-write pricing for channel and account-stat billing.
+- Added native compaction and requested reasoning-effort usage visibility, plus per-user public-group restrictions.
 
 ## Changed
 
-- Prompt Guard audits user input only.
-- Added text Moderation API strategy guidance and clarified its interaction with global moderation modes.
+- Added Codex automation and delegation bootstrap normalization after the immutable ingress security-audit gate.
+- Added upstream session isolation for Chat Completions compatibility forwarding without weakening Plus tenant isolation.
+- Added Kimi-native Responses routing, fallback sanitization, and updated model/reasoning policy support from the official baseline.
 
 ## Fixed
 
-- Fixed manual Moderation endpoint tests being overwritten by persisted pool configuration.
-- Fixed multi-image async edit submission and durable task metadata.
-- Fixed completed async image ZIP downloads after Redis task expiry.
+- Preserved Plus prompt-cache compatibility behavior while incorporating official API-key cache identity fixes.
+- Preserved Plus WebSocket turn pricing, capability, security-audit, and account-attribution behavior while adopting official reasoning-policy fields.
+- Updated API-key authentication snapshots to include both Plus billing fields and the official Free Fast group field.
 
 ## Compatibility and migration
 
-Database migration 237 adds Moderation endpoint attribution and asynchronous image storage/count metadata. Existing completed image tasks can recover actual image counts from stored result data, but tasks completed before storage keys were persisted cannot recover ZIP downloads after Redis expiry.
+Database migrations 238 through 244 add native compaction and requested reasoning-effort usage fields, per-user public-group restrictions, one-hour cache-write pricing, and group Force Fast, reasoning over-limit, and Free Fast controls. Official v0.2.0 migrations were assigned new Plus migration identities 241 through 244 so already deployed Plus migrations remain immutable and execute first.
 
 ## Known issues
 
-HTTP image object URLs on a different origin remain blocked by the default CSP. Use an HTTPS image storage or CDN URL for browser previews.
+None.
 
 ## Upstream baseline
 
-Official release: v0.1.183
-Official commit: e8cb019fabf8b55199436229044cbf9aa7a82564
+Official release: v0.2.0
+Official commit: aa236488351eb71e120fc2b6fb32e36b0374c918

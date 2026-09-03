@@ -467,6 +467,10 @@ export default {
         grokBaseURLModeUSEast1: '区域 API（us-east-1）',
         grokBaseURLModeUSWest2: '区域 API（us-west-2）',
         grokBaseURLModeEUWest1: '区域 API（eu-west-1）',
+        openaiTTFTMode: 'OpenAI Responses 首 token 统计口径',
+        openaiTTFTModeSemantic: '历史兼容（语义事件）',
+        openaiTTFTModeVisible: '真实可见输出',
+        openaiTTFTModeHint: '默认使用历史兼容口径，首个非预置语义事件即记录 first_token_ms。选择真实可见输出后，仅在首个非空文本、工具参数或图片内容到达时记录。',
         fingerprintUnification: '指纹统一化',
         fingerprintUnificationHint: '统一共享同一 OAuth 账号的用户的 X-Stainless-* 请求头。关闭后透传客户端原始请求头。',
         metadataPassthrough: 'Metadata 透传',
@@ -539,12 +543,27 @@ export default {
         maxCodexVersionPlaceholder: '例如 0.200.0',
         codexVersionHint:
           '仅对官方客户端生效，校验其版本是否落在 [最低, 最高] 区间。留空表示该侧不限制。',
+        codexFingerprintSignals: 'Codex 引擎指纹信号',
+        codexFingerprintSignalsDesc:
+          '定义引擎指纹信号：勾「必须」的信号需全部命中（AND），每条 / 分隔的变体取或（OR）；一条都不勾即不校验。默认只勾 x-codex- 前缀。类型：头精确 / 头前缀 / body 路径。',
+        codexFpTypeHeaderExact: '头精确',
+        codexFpTypeHeaderPrefix: '头前缀',
+        codexFpTypeBodyPath: 'body 路径',
+        codexFpMatchPlaceholder: '匹配，变体用 / 分隔（如 session-id / session_id 或 x-codex-）',
+        codexFpRequired: '必须',
+        codexFingerprintNoRequiredWarn: '未勾选任何「必须」信号——引擎指纹门当前不生效，等于放行所有通过身份/版本的候选。如需启用校验，请至少勾选一条信号。',
+        codexAllowAppServer: 'Codex app-server',
+        codexAllowAppServerDesc:
+          '放行内嵌 Codex 引擎、经 app-server 协议接入的第三方客户端（如 Claude Code 的 codex 插件）。默认关闭；开启后此类客户端通过引擎指纹门即放行，关闭则仅放行官方客户端与白名单。',
         codexBlacklist: 'User-Agent/Originator 黑名单',
         codexBlacklistDesc:
           '命中任一字段即拒，优先于一切放行。originator 精确匹配，User-Agent 为包含匹配（多个用逗号分隔）。',
         codexWhitelist: 'User-Agent/Originator 白名单',
         codexWhitelistDesc:
           '放行官方档案集之外、经过明确审核的兼容客户端：originator 必须精确匹配，User-Agent 必须同时包含配置的所有标记，且两者的客户端名称必须一致；仍须携带一个已知 Codex 请求头。',
+        codexWhitelistSkipFingerprint: '跳过引擎指纹',
+        codexWhitelistSkipFingerprintTooltip:
+          '风险：勾选后该条仅凭 originator + User-Agent（均可伪造）放行，不再要求引擎指纹兜底。仅用于确属可信、但本身不发 Codex 引擎指纹的第三方客户端。',
         codexOriginatorPlaceholder: 'originator（精确，如 opencode）',
         codexUaContainsPlaceholder: 'User-Agent 包含标记，逗号分隔（如 opencode/）',
         codexAddRow: '添加一条',

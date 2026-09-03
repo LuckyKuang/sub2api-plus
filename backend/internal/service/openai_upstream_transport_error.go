@@ -36,12 +36,12 @@ type openAITransportErrorClass struct {
 	Classification string
 }
 
-// openAIPersistentTransportErrorMarkers are substrings (matched case-insensitively
+// persistentUpstreamTransportErrorMarkers are substrings (matched case-insensitively
 // against the raw transport error) that indicate a durable proxy/network fault.
 // Matched signals are intentionally specific failure *reasons*, not the operation
 // (e.g. we match "connection refused", not "proxyconnect") so that a transient
 // failure of the same operation (a proxy timeout) is NOT misclassified as durable.
-var openAIPersistentTransportErrorMarkers = []string{
+var persistentUpstreamTransportErrorMarkers = []string{
 	"authentication failed",         // SOCKS5 RFC1929 / proxy credentials rejected (expired account)
 	"proxy authentication required", // HTTP proxy 407
 	"connection refused",            // proxy/upstream endpoint down
@@ -50,7 +50,7 @@ var openAIPersistentTransportErrorMarkers = []string{
 	"no such host", // DNS resolution failure (bad/expired proxy hostname)
 }
 
-// classifyOpenAITransportError decides whether a transport-level upstream error
+// classifyUpstreamTransportError decides whether a transport-level upstream error
 // is durable (Persistent — evict the account + alert) or a transient blip
 // (fail over to a healthy account but keep this one schedulable).
 //
@@ -85,7 +85,7 @@ func classifyOpenAITransportError(err error) openAITransportErrorClass {
 
 	// — String-marker fallback ————————————————————————————————————————————————
 	msg := strings.ToLower(err.Error())
-	for _, marker := range openAIPersistentTransportErrorMarkers {
+	for _, marker := range persistentUpstreamTransportErrorMarkers {
 		if strings.Contains(msg, marker) {
 			classification := "network_unreachable"
 			switch marker {
@@ -240,4 +240,11 @@ func (s *OpenAIGatewayService) tempUnscheduleOpenAITransportError(ctx context.Co
 		zap.Time("until", until),
 		zap.String("reason", reason),
 	)
+}
+
+// classifyUpstreamTransportError is the shared Anthropic/Bedrock alias for the
+// Plus OpenAI transport classifier so durable proxy/network faults keep the
+// same eviction semantics across gateways.
+func classifyUpstreamTransportError(err error) openAITransportErrorClass {
+	return classifyOpenAITransportError(err)
 }

@@ -4606,6 +4606,64 @@
                 </p>
 
                 <div>
+                  <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {{ t("admin.settings.gatewayForwarding.codexFingerprintSignals") }}
+                  </label>
+                  <p class="mb-2 mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    {{ t("admin.settings.gatewayForwarding.codexFingerprintSignalsDesc") }}
+                  </p>
+                  <div
+                    v-for="(row, i) in codexFingerprintRows"
+                    :key="`codex-fp-${i}`"
+                    class="mb-2 flex items-center gap-2"
+                  >
+                    <select v-model="row.type" class="input w-32 text-sm">
+                      <option value="header_exact">{{ t("admin.settings.gatewayForwarding.codexFpTypeHeaderExact") }}</option>
+                      <option value="header_prefix">{{ t("admin.settings.gatewayForwarding.codexFpTypeHeaderPrefix") }}</option>
+                      <option value="body_path">{{ t("admin.settings.gatewayForwarding.codexFpTypeBodyPath") }}</option>
+                    </select>
+                    <input
+                      v-model="row.match"
+                      type="text"
+                      class="input flex-1 font-mono text-sm"
+                      :placeholder="t('admin.settings.gatewayForwarding.codexFpMatchPlaceholder')"
+                    />
+                    <label class="flex shrink-0 items-center gap-1 text-xs text-gray-600 dark:text-gray-400">
+                      <input v-model="row.required" type="checkbox" />
+                      {{ t("admin.settings.gatewayForwarding.codexFpRequired") }}
+                    </label>
+                    <button
+                      type="button"
+                      class="btn btn-secondary btn-sm shrink-0 text-red-600 hover:text-red-700 dark:text-red-400"
+                      @click="removeCodexFingerprintRow(i)"
+                    >
+                      {{ t("admin.settings.gatewayForwarding.codexRemoveRow") }}
+                    </button>
+                  </div>
+                  <button type="button" class="btn btn-secondary btn-sm" @click="addCodexFingerprintRow">
+                    {{ t("admin.settings.gatewayForwarding.codexAddRow") }}
+                  </button>
+                  <p
+                    v-if="codexFingerprintNoRequired"
+                    class="mt-2 text-xs text-amber-600 dark:text-amber-500"
+                  >
+                    {{ t("admin.settings.gatewayForwarding.codexFingerprintNoRequiredWarn") }}
+                  </p>
+                </div>
+
+                <div class="flex items-center justify-between">
+                  <div class="pr-4">
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      {{ t("admin.settings.gatewayForwarding.codexAllowAppServer") }}
+                    </label>
+                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      {{ t("admin.settings.gatewayForwarding.codexAllowAppServerDesc") }}
+                    </p>
+                  </div>
+                  <Toggle v-model="form.codex_cli_only_allow_app_server_clients" />
+                </div>
+
+                <div>
                   <label
                     class="block text-sm font-medium text-gray-700 dark:text-gray-300"
                   >
@@ -4690,6 +4748,13 @@
                         )
                       "
                     />
+                    <label
+                      class="flex shrink-0 items-center gap-1 text-xs text-gray-600 dark:text-gray-400"
+                      :title="t('admin.settings.gatewayForwarding.codexWhitelistSkipFingerprintTooltip')"
+                    >
+                      <input v-model="row.skipEngineFingerprint" type="checkbox" />
+                      {{ t("admin.settings.gatewayForwarding.codexWhitelistSkipFingerprint") }}
+                    </label>
                     <button
                       type="button"
                       class="btn btn-secondary btn-sm shrink-0 text-red-600 hover:text-red-700 dark:text-red-400"
@@ -5151,6 +5216,32 @@
                     {{ t("admin.settings.gatewayForwarding.grokDefaultBaseURLModeHint") }}
                   </p>
                 </div>
+
+              <!-- OpenAI Responses 首 token 统计 -->
+              <div class="border-b border-gray-100 pb-5 dark:border-dark-700 md:col-span-2">
+                <label
+                  for="openai-ttft-mode"
+                  class="text-sm font-medium text-gray-700 dark:text-gray-300"
+                >
+                  {{ t("admin.settings.gatewayForwarding.openaiTTFTMode") }}
+                </label>
+                <select
+                  id="openai-ttft-mode"
+                  v-model="form.openai_ttft_mode"
+                  class="input mt-2 w-full"
+                  data-testid="openai-ttft-mode"
+                >
+                  <option value="semantic">
+                    {{ t("admin.settings.gatewayForwarding.openaiTTFTModeSemantic") }}
+                  </option>
+                  <option value="visible">
+                    {{ t("admin.settings.gatewayForwarding.openaiTTFTModeVisible") }}
+                  </option>
+                </select>
+                <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t("admin.settings.gatewayForwarding.openaiTTFTModeHint") }}
+                </p>
+              </div>
 
               <!-- Fingerprint Unification -->
               <div class="flex items-center justify-between">
@@ -8753,6 +8844,12 @@ import {
 import TotpStepUpDialog from "@/components/auth/TotpStepUpDialog.vue";
 import { affiliatesAPI, type AffiliateAdminEntry, type SimpleUser as AffiliateSimpleUser } from "@/api/admin/affiliates";
 import { extractApiErrorMessage, extractI18nErrorMessage } from "@/utils/apiError";
+import {
+  parseFingerprintSignalsToRows,
+  serializeFingerprintRowsToJSON,
+  defaultFingerprintSignalRows,
+  type FingerprintSignalRow,
+} from "./codexFingerprintSignals";
 import { useAppStore } from "@/stores";
 import { useAdminSettingsStore } from "@/stores/adminSettings";
 import { normalizeVisibleMethod } from "@/components/payment/paymentFlow";
@@ -9679,6 +9776,7 @@ const form = reactive<SettingsForm>({
   openai_advanced_scheduler_weight_previous_response: "",
   openai_advanced_scheduler_weight_session_sticky: "",
   // Gateway forwarding behavior
+  openai_ttft_mode: "semantic",
   enable_fingerprint_unification: true,
   enable_metadata_passthrough: false,
   enable_cch_signing: false,
@@ -9703,6 +9801,8 @@ const form = reactive<SettingsForm>({
   // codex_cli_only profile policy
   min_codex_version: "",
   max_codex_version: "",
+  codex_cli_only_allow_app_server_clients: false,
+  codex_cli_only_engine_fingerprint_signals: "",
   codex_cli_only_blacklist: "",
   codex_cli_only_whitelist: "",
   // 余额、订阅到期与账号限额通知
@@ -10602,9 +10702,20 @@ function parseTablePageSizeOptionsInput(raw: string): number[] | null {
 interface CodexClientRow {
   originator: string;
   uaContains: string; // 逗号分隔，序列化时拆成 ua_contains 数组
+  skipEngineFingerprint?: boolean;
 }
 const codexBlacklistRows = ref<CodexClientRow[]>([]);
 const codexWhitelistRows = ref<CodexClientRow[]>([]);
+const codexFingerprintRows = ref<FingerprintSignalRow[]>([]);
+const codexFingerprintNoRequired = computed(
+  () => !codexFingerprintRows.value.some((r) => r.required),
+);
+function addCodexFingerprintRow(): void {
+  codexFingerprintRows.value.push({ type: "header_exact", match: "", required: false });
+}
+function removeCodexFingerprintRow(i: number): void {
+  codexFingerprintRows.value.splice(i, 1);
+}
 
 function parseCodexEntriesToRows(raw: string): CodexClientRow[] {
   if (!raw || !raw.trim()) return [];
@@ -10618,6 +10729,7 @@ function parseCodexEntriesToRows(raw: string): CodexClientRow[] {
             .filter((x: unknown) => typeof x === "string")
             .join(", ")
         : "",
+      skipEngineFingerprint: e?.skip_engine_fingerprint === true,
     }));
   } catch {
     return [];
@@ -10627,13 +10739,18 @@ function parseCodexEntriesToRows(raw: string): CodexClientRow[] {
 function serializeCodexRowsToJSON(rows: CodexClientRow[]): string {
   const entries = rows
     .map((r) => {
-      const entry: { originator: string; ua_contains: string[] } = {
+      const entry: {
+        originator: string;
+        ua_contains: string[];
+        skip_engine_fingerprint?: boolean;
+      } = {
         originator: r.originator.trim(),
         ua_contains: r.uaContains
           .split(",")
           .map((s) => s.trim())
           .filter((s) => s.length > 0),
       };
+      if (r.skipEngineFingerprint) entry.skip_engine_fingerprint = true;
       return entry;
     })
     .filter((e) => e.originator !== "" || e.ua_contains.length > 0);
@@ -10650,6 +10767,7 @@ function addCodexWhitelistRow(): void {
   codexWhitelistRows.value.push({
     originator: "",
     uaContains: "",
+    skipEngineFingerprint: false,
   });
 }
 function removeCodexWhitelistRow(i: number): void {
@@ -10787,6 +10905,14 @@ async function loadSettings() {
     codexWhitelistRows.value = parseCodexEntriesToRows(
       form.codex_cli_only_whitelist,
     );
+    form.codex_cli_only_allow_app_server_clients = Boolean(
+      settings.codex_cli_only_allow_app_server_clients,
+    );
+    form.codex_cli_only_engine_fingerprint_signals =
+      settings.codex_cli_only_engine_fingerprint_signals || "";
+    codexFingerprintRows.value = form.codex_cli_only_engine_fingerprint_signals
+      ? parseFingerprintSignalsToRows(form.codex_cli_only_engine_fingerprint_signals)
+      : defaultFingerprintSignalRows();
     form.login_agreement_mode =
       settings.login_agreement_mode === "checkbox" ? "checkbox" : "modal";
     form.channel_monitor_mode =
@@ -11331,6 +11457,8 @@ async function saveSettings() {
       min_claude_code_version: form.min_claude_code_version,
       max_claude_code_version: form.max_claude_code_version,
       allow_ungrouped_key_scheduling: form.allow_ungrouped_key_scheduling,
+      openai_ttft_mode:
+        form.openai_ttft_mode === "visible" ? "visible" : "semantic",
       enable_fingerprint_unification: form.enable_fingerprint_unification,
       enable_metadata_passthrough: form.enable_metadata_passthrough,
       enable_cch_signing: form.enable_cch_signing,
@@ -11359,6 +11487,11 @@ async function saveSettings() {
         form.openai_codex_version_auto_sync_enabled,
       min_codex_version: form.min_codex_version?.trim() || "",
       max_codex_version: form.max_codex_version?.trim() || "",
+      codex_cli_only_allow_app_server_clients:
+        form.codex_cli_only_allow_app_server_clients,
+      codex_cli_only_engine_fingerprint_signals: serializeFingerprintRowsToJSON(
+        codexFingerprintRows.value,
+      ),
       codex_cli_only_blacklist: serializeCodexRowsToJSON(
         codexBlacklistRows.value,
       ),

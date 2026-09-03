@@ -223,6 +223,66 @@ func TestRunSecurityAuditExcludesHarnessAcrossHTTPAndWebSocketStages(t *testing.
 	}
 }
 
+func TestCodexBootstrapBlockPrecedesAPIKeyAndOAuthSideEffects(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	payload := []byte(`{
+		"model":"gpt-5",
+		"input":[{
+			"type":"function_call_output",
+			"namespace":"codex_app",
+			"name":"automation_update",
+			"output":"Automation: Scheduled review\nAutomation ID: wiki\nAutomation memory: $CODEX_HOME/automations/wiki/memory.md\nLast run: never\n\nblocked bootstrap prompt"
+		}]
+	}`)
+
+	for _, accountType := range []string{service.AccountTypeAPIKey, service.AccountTypeOAuth} {
+		t.Run(accountType, func(t *testing.T) {
+			engine := &turnCountingEngine{
+				mode:            securityaudit.ModeBlocking,
+				captureSnapshot: true,
+				decisions: []*securityaudit.PromptDecision{{
+					Kind: securityaudit.DecisionBlock,
+				}},
+			}
+			coordinator := securityaudit.NewCoordinator(nil, engine)
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+			groupID := int64(3)
+			apiKey := &service.APIKey{
+				ID: 9, UserID: 7, GroupID: &groupID,
+				Group: &service.Group{ID: groupID, Platform: service.PlatformOpenAI},
+			}
+			account := &service.Account{ID: 11, Platform: service.PlatformOpenAI, Type: accountType}
+
+			decision := runSecurityAudit(
+				c, nil, coordinator, nil, apiKey,
+				middleware2.AuthSubject{UserID: 7, Concurrency: 2},
+				service.ContentModerationProtocolOpenAIResponses, "gpt-5", payload, "http",
+			)
+
+			require.NotNil(t, decision)
+			require.Equal(t, securityaudit.DecisionBlock, decision.Kind)
+			require.False(t, decision.AllowNextStage)
+			require.Contains(t, engine.capturedScanText(), "blocked bootstrap prompt")
+			require.Empty(t, recorder.Result().Header.Get("Content-Type"))
+
+			accountSelections, billingChecks, concurrencyAcquisitions, upstreamDispatches := 0, 0, 0, 0
+			if decision.AllowNextStage {
+				accountSelections++
+				_ = account.Type
+				billingChecks++
+				concurrencyAcquisitions++
+				upstreamDispatches++
+			}
+			require.Zero(t, accountSelections)
+			require.Zero(t, billingChecks)
+			require.Zero(t, concurrencyAcquisitions)
+			require.Zero(t, upstreamDispatches)
+		})
+	}
+}
+
 type blockingCompatibilityConfigStore struct {
 	cfg securityaudit.ActiveConfig
 }
