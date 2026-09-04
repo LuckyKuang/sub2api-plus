@@ -75,8 +75,8 @@ func NewOpenAICodexClientRestrictionDetector(_ *config.Config) *OpenAICodexClien
 //
 //  1. disabled accounts bypass the restriction;
 //  2. configured deny entries win;
-//  3. requests must match a coherent current-official profile, an explicitly
-//     enabled legacy profile, or an explicit compatibility entry;
+//  3. requests must match a current-official ingress profile, an explicitly
+//     enabled coherent legacy profile, or an explicit compatibility entry;
 //  4. every allowed profile needs one known, non-empty Codex evidence header;
 //  5. reviewed current and legacy profiles honour the configured engine-version
 //     range.
@@ -102,7 +102,10 @@ func (d *OpenAICodexClientRestrictionDetector) Detect(c *gin.Context, account *A
 		return CodexClientRestrictionDetectionResult{Enabled: true, Reason: CodexClientRestrictionReasonBlacklisted}
 	}
 
-	profile, recognizedProfile := openai.ClassifyCodexClientProfile(userAgent, originator, policy.LegacyClientProfileCompatibilityEnabled)
+	profile, recognizedProfile := openai.ClassifyOfficialCodexIngressProfile(userAgent, originator)
+	if !recognizedProfile && policy.LegacyClientProfileCompatibilityEnabled {
+		profile, recognizedProfile = openai.ClassifyCodexClientProfile(userAgent, originator, true)
+	}
 	compatibilityEntry := false
 	skipFingerprint := false
 	appServerAllowed := false

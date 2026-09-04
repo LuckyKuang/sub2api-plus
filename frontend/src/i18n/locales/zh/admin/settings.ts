@@ -540,7 +540,7 @@ export default {
         codexHardeningTitle: 'Codex 设置',
         codexClientRestrictionTitle: 'Codex 客户端限制',
         codexHardeningDesc:
-          '仅对已开启「仅允许 Codex 官方客户端档案」的 OpenAI OAuth 账号生效（全局）。内置档案校验匹配的 User-Agent、originator、版本及已知 Codex 请求头；黑名单优先，白名单仅用于明确配置的兼容客户端。请求头可伪造，不能作为二次分享的二进制证明。',
+          '仅对已开启「仅允许 Codex 官方客户端档案」的 OpenAI OAuth 账号生效（全局）。内置档案以 User-Agent 校验官方传输客户端和版本，并独立校验官方线程或产品 originator 及已知 Codex 请求头；黑名单优先，白名单仅用于明确配置的兼容客户端。请求头可伪造，不能作为二次分享的二进制证明。',
         minCodexVersion: '最低 Codex 版本',
         minCodexVersionPlaceholder: '例如 0.142.0',
         maxCodexVersion: '最高 Codex 版本',

@@ -118,9 +118,27 @@ func TestDetectCodexClientProfile(t *testing.T) {
 		require.Equal(t, CodexClientRestrictionReasonVersionTooLow, tooOld.Reason)
 	})
 
-	t.Run("UA and Originator must be an exact coherent pair", func(t *testing.T) {
+	t.Run("official transport accepts reviewed product-service originators", func(t *testing.T) {
+		for _, originator := range []string{
+			"chatgpt_cca",
+			"codex_work_desktop",
+			"codex_work_web",
+			"codex_work_mobile",
+			"codex_work_cca",
+		} {
+			t.Run(originator, func(t *testing.T) {
+				headers := officialCodexProfileHeaders("codex_vscode")
+				headers["originator"] = originator
+				result := detector.Detect(newCodexProfileDetectorContext(headers), account, CodexRestrictionPolicy{}, nil)
+				require.True(t, result.Matched)
+				require.Equal(t, string(openai.CodexClientProfileIDE), result.Profile)
+			})
+		}
+	})
+
+	t.Run("official transport with unknown Originator is rejected", func(t *testing.T) {
 		headers := officialCodexProfileHeaders("codex_cli_rs")
-		headers["originator"] = "codex_vscode"
+		headers["originator"] = "unknown_service"
 		result := detector.Detect(newCodexProfileDetectorContext(headers), account, CodexRestrictionPolicy{}, nil)
 		require.False(t, result.Matched)
 		require.Equal(t, CodexClientRestrictionReasonNotMatchedProfile, result.Reason)
@@ -156,8 +174,8 @@ func TestDetectCodexClientProfile(t *testing.T) {
 	})
 
 	t.Run("Responses WebSocket handshake accepts the official window identifier", func(t *testing.T) {
-		// Upstream Codex builds its Responses WebSocket handshake with the
-		// coherent originator/UA pair and x-codex-window-id. Keep this fixture
+		// Upstream Codex builds its Responses WebSocket handshake with an
+		// official transport identity and x-codex-window-id. Keep this fixture
 		// separate from the HTTP installation-id shape so a future tightening
 		// cannot accidentally block the official streaming transport.
 		headers := officialCodexProfileHeaders("codex_cli_rs")

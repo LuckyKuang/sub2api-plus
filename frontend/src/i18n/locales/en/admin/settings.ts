@@ -547,7 +547,7 @@ export default {
         codexHardeningTitle: "Codex Settings",
         codexClientRestrictionTitle: "Codex client restriction",
         codexHardeningDesc:
-          "Only affects OpenAI OAuth accounts with 'Codex official client profiles only' enabled (globally). Built-in profiles validate a coherent User-Agent, originator, version, and known Codex request header. The blacklist takes priority; the whitelist is only for explicitly approved compatibility clients. Headers are forgeable and are not binary proof of account sharing.",
+          "Only affects OpenAI OAuth accounts with 'Codex official client profiles only' enabled (globally). Built-in profiles validate the official transport client and version from User-Agent, then independently validate the official thread or product originator and a known Codex request header. The blacklist takes priority; the whitelist is only for explicitly approved compatibility clients. Headers are forgeable and are not binary proof of account sharing.",
         minCodexVersion: "Min Codex Version",
         minCodexVersionPlaceholder: "e.g. 0.142.0",
         maxCodexVersion: "Max Codex Version",
