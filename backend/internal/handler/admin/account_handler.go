@@ -2585,18 +2585,34 @@ func (h *AccountHandler) GetAvailableModels(c *gin.Context) {
 			return
 		}
 
-		// Return mapped models
-		var models []openai.Model
+		defaultByID := make(map[string]openai.Model, len(openai.DefaultModels))
+		defaultRank := make(map[string]int, len(openai.DefaultModels))
+		for rank, model := range openai.DefaultModels {
+			defaultByID[model.ID] = model
+			defaultRank[model.ID] = rank
+		}
+
+		requestedModels := make([]string, 0, len(mapping))
 		for requestedModel := range mapping {
-			var found bool
-			for _, dm := range openai.DefaultModels {
-				if dm.ID == requestedModel {
-					models = append(models, dm)
-					found = true
-					break
-				}
+			requestedModels = append(requestedModels, requestedModel)
+		}
+		sort.Slice(requestedModels, func(i, j int) bool {
+			leftRank, leftKnown := defaultRank[requestedModels[i]]
+			rightRank, rightKnown := defaultRank[requestedModels[j]]
+			if leftKnown != rightKnown {
+				return leftKnown
 			}
-			if !found {
+			if leftKnown {
+				return leftRank < rightRank
+			}
+			return requestedModels[i] < requestedModels[j]
+		})
+
+		var models []openai.Model
+		for _, requestedModel := range requestedModels {
+			if defaultModel, found := defaultByID[requestedModel]; found {
+				models = append(models, defaultModel)
+			} else {
 				models = append(models, openai.Model{
 					ID:          requestedModel,
 					Object:      "model",

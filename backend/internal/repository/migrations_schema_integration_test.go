@@ -203,6 +203,73 @@ WHERE ns.nspname = 'public'
 	requireColumn(t, tx, "user_allowed_groups", "created_at", "timestamp with time zone", 0, false)
 }
 
+func TestMigration251_ChannelMonitorGPT6AstraFactoryOrdering(t *testing.T) {
+	migrationSQL, err := dbmigrations.FS.ReadFile("251_channel_monitor_gpt6_astra.sql")
+	require.NoError(t, err)
+
+	t.Run("prepends Astra once to factory configuration", func(t *testing.T) {
+		tx := testTx(t)
+		_, err := tx.Exec(`
+CREATE TEMP TABLE channel_monitor_v2_config (
+    id BIGINT PRIMARY KEY,
+    platforms JSONB NOT NULL,
+    version BIGINT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    updated_by BIGINT
+)`)
+		require.NoError(t, err)
+		_, err = tx.Exec(`
+INSERT INTO channel_monitor_v2_config (id, platforms, version, updated_at, updated_by)
+VALUES (1, '[{"platform":"openai","enabled":true,"models":["gpt-5.6-sol","gpt-5.6-terra"]}]', 1, NOW(), NULL)`)
+		require.NoError(t, err)
+
+		_, err = tx.Exec(string(migrationSQL))
+		require.NoError(t, err)
+		_, err = tx.Exec(string(migrationSQL))
+		require.NoError(t, err)
+
+		var modelsJSON string
+		var version int
+		require.NoError(t, tx.QueryRow(`
+SELECT platform->'models', version
+FROM channel_monitor_v2_config,
+     jsonb_array_elements(platforms) AS entries(platform)
+WHERE id = 1 AND platform->>'platform' = 'openai'`).Scan(&modelsJSON, &version))
+		require.JSONEq(t, `["gpt-6-astra","gpt-5.6-sol","gpt-5.6-terra"]`, modelsJSON)
+		require.Equal(t, 2, version)
+	})
+
+	t.Run("preserves operator-customized configuration", func(t *testing.T) {
+		tx := testTx(t)
+		_, err := tx.Exec(`
+CREATE TEMP TABLE channel_monitor_v2_config (
+    id BIGINT PRIMARY KEY,
+    platforms JSONB NOT NULL,
+    version BIGINT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    updated_by BIGINT
+)`)
+		require.NoError(t, err)
+		_, err = tx.Exec(`
+INSERT INTO channel_monitor_v2_config (id, platforms, version, updated_at, updated_by)
+VALUES (1, '[{"platform":"openai","enabled":true,"models":["gpt-5.6-sol"]}]', 7, NOW(), 42)`)
+		require.NoError(t, err)
+
+		_, err = tx.Exec(string(migrationSQL))
+		require.NoError(t, err)
+
+		var modelsJSON string
+		var version int
+		require.NoError(t, tx.QueryRow(`
+SELECT platform->'models', version
+FROM channel_monitor_v2_config,
+     jsonb_array_elements(platforms) AS entries(platform)
+WHERE id = 1 AND platform->>'platform' = 'openai'`).Scan(&modelsJSON, &version))
+		require.JSONEq(t, `["gpt-5.6-sol"]`, modelsJSON)
+		require.Equal(t, 7, version)
+	})
+}
+
 func TestMigration195_InvalidatesLegacyPreaggregatedTTFT(t *testing.T) {
 	tx := testTx(t)
 	ctx := context.Background()

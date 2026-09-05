@@ -4,6 +4,46 @@ Sub2API Plus accepts OpenAI-compatible Responses requests over HTTP and
 client-facing WebSocket ingress. Account routing can use an upstream WebSocket
 or bridge the client WebSocket to an HTTP/SSE upstream.
 
+## GPT-6 Astra
+
+The gateway exposes only OpenAI's canonical `gpt-6-astra` model ID. It does
+not create a `gpt-6` alias or treat reasoning-level suffixes as model IDs.
+Astra accepts `low`, `medium`, `high`, `xhigh`, and `max` reasoning effort;
+it does not accept `none` or `minimal`. Configured Codex catalogs default it
+to `low` and preserve `max` as distinct from `xhigh` in request and usage
+metadata. The additional Codex catalog level `ultra` is a client-side
+multi-agent preset that delegates with `xhigh`; it is never sent upstream as
+an API reasoning effort.
+
+Generated API client configuration advertises the 1,050,000-token API context
+window and 128,000-token maximum output. Configured Codex catalogs follow the
+Codex client contract separately: the active context window is 272,000 and the
+maximum configuration override is 872,000.
+
+Default OpenAI model catalogs and model-mapping presets list Astra first. The
+admin account test UI still prefers `gpt-5.6-sol` when it is available, so
+catalog presentation order does not silently change the connectivity probe.
+
+Default API cost accounting uses $10 input, $1 cached input, $12.50 cache
+write, and $50 output per million tokens. Flex is half of Standard and Fast is
+twice Standard. OpenAI publishes Batch at half of Standard through its separate
+Batch API; this Responses gateway does not infer Batch from `service_tier`.
+When total input is 272,001 tokens or more, the whole-request long-context
+policy multiplies all ordinary input, cache-read input, and cache-write input
+by 2 and all output by 1.5. The 272,000-token boundary retains Standard rates.
+Platform API-key Astra requests always apply this official cost policy;
+ChatGPT OAuth account policy remains independently configurable. Group and
+channel custom selling-price overrides retain their existing precedence.
+
+Astra tool calling requires the Responses API. Callers must omit
+`temperature`, `top_p`, and `top_logprobs`; Chat Completions callers must also
+omit `logprobs`, and Responses callers must not request
+`message.output_text.logprobs` through `include`. Fast/priority processing is
+not available with EU data residency and does not carry a latency SLA.
+Responses features such as async tool calls, `configuration_update`, and
+mid-turn WebSocket steering pass through the gateway without Astra-specific
+rewriting.
+
 ## Prompt Cache Identity and Usage
 
 Current Codex clients can supply the canonical `session-id`, `thread-id`, and
@@ -53,10 +93,12 @@ over to another account and removes the old account's response ID before
 forwarding. Tool-output continuations without complete call context remain on
 the response owner and keep the existing fail-closed OAuth ownership checks.
 
-`prompt_cache_options` is forwarded only for GPT-5.6-family OpenAI Platform
-API-key Responses/Compact traffic. ChatGPT OAuth and older or unknown model
-families have that field removed. Deprecated `prompt_cache_retention` is
-removed on every path.
+`prompt_cache_options` is forwarded only for GPT-6 Astra and GPT-5.6-family
+OpenAI Platform API-key Responses/Compact traffic. ChatGPT OAuth and older or
+unknown model families have that field removed. Deprecated
+`prompt_cache_retention` is removed on every path. Current callers should use
+`prompt_cache_options.ttl` with the only supported value, `30m`; setting
+`mode` to `explicit` disables the implicit cache breakpoint.
 
 Usage ingestion treats ordinary input, cache-read input, and cache-write input
 as mutually exclusive stored buckets. Usage pages may report each bucket's

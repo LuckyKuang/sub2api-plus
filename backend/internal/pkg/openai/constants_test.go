@@ -10,7 +10,12 @@ func TestDefaultModelsIncludeBareGPT56Alias(t *testing.T) {
 	require.Contains(t, DefaultModelIDs(), "gpt-5.6")
 }
 
-func TestDefaultModelsPreferConcreteGPT56SolForAccountTests(t *testing.T) {
+func TestDefaultModelsListLatestFlagshipFirst(t *testing.T) {
 	require.NotEmpty(t, DefaultModels)
-	require.Equal(t, "gpt-5.6-sol", DefaultModels[0].ID)
+	require.Equal(t, "gpt-6-astra", DefaultModels[0].ID)
+}
+
+func TestDefaultModelsExposeOnlyCanonicalGPT6Astra(t *testing.T) {
+	require.Contains(t, DefaultModelIDs(), "gpt-6-astra")
+	require.NotContains(t, DefaultModelIDs(), "gpt-6")
 }
