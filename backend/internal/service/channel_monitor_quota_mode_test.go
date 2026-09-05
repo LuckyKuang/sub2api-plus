@@ -267,10 +267,10 @@ func TestValidateCreateParams_CheckModeMatrix(t *testing.T) {
 			wantErr: ErrChannelMonitorInvalidEndpoint,
 		},
 		{
-			name: "probe requires api key",
+			name: "probe requires api key before endpoint DNS resolution",
 			params: ChannelMonitorCreateParams{
 				Provider: MonitorProviderOpenAI, CheckMode: MonitorCheckModeProbe,
-				Endpoint: "https://api.openai.com", IntervalSeconds: 60, PrimaryModel: "gpt-5",
+				Endpoint: "https://must-not-resolve.invalid", IntervalSeconds: 60, PrimaryModel: "gpt-5",
 			},
 			wantErr: ErrChannelMonitorMissingAPIKey,
 		},

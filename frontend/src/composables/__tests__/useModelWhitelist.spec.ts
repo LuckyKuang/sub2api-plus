@@ -4,7 +4,12 @@ vi.mock('@/api/admin/accounts', () => ({
   getAntigravityDefaultModelMapping: vi.fn()
 }))
 
-import { buildModelMappingObject, getModelsByPlatform, splitModelMappingObject } from '../useModelWhitelist'
+import {
+  buildModelMappingObject,
+  getModelsByPlatform,
+  getPresetMappingsByPlatform,
+  splitModelMappingObject
+} from '../useModelWhitelist'
 
 describe('useModelWhitelist', () => {
   it('openai 模型列表包含 GPT-5.4 官方快照', () => {
@@ -15,6 +20,39 @@ describe('useModelWhitelist', () => {
     expect(models).toContain('gpt-5.4-2026-03-05')
     expect(models).toContain('codex-auto-review')
     expect(models).toContain('gpt-5.6')
+    expect(models).toContain('gpt-6-astra')
+    expect(models).not.toContain('gpt-6')
+  })
+
+  it('openai 预设映射将最新旗舰模型放在首位', () => {
+    const presets = getPresetMappingsByPlatform('openai')
+
+    expect(presets[0]).toMatchObject({
+      from: 'gpt-6-astra',
+      to: 'gpt-6-astra'
+    })
+    expect(presets.map(preset => preset.from).slice(0, 8)).toEqual([
+      'gpt-6-astra',
+      'gpt-5.6',
+      'gpt-5.6-sol',
+      'gpt-5.6-terra',
+      'gpt-5.6-luna',
+      'gpt-5.5',
+      'gpt-5.4',
+      'claude-haiku-4-5-20251001'
+    ])
+  })
+
+  it('openai 模型列表按新系列优先排列', () => {
+    expect(getModelsByPlatform('openai').slice(0, 7)).toEqual([
+      'gpt-6-astra',
+      'gpt-5.6',
+      'gpt-5.6-sol',
+      'gpt-5.6-terra',
+      'gpt-5.6-luna',
+      'gpt-5.5',
+      'gpt-5.4'
+    ])
   })
 
   it('openai 模型列表不再暴露已下线的 ChatGPT 登录 Codex 模型', () => {

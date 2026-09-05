@@ -311,6 +311,7 @@ const (
 	configuredCodexGrokContext         = 500_000
 	configuredCodexGrokBuildContext    = 256_000
 	configuredCodexGPT56MaxContext     = 872_000
+	configuredCodexGPT6AstraMaxContext = 872_000
 	configuredCodexToolOutputMaxTokens = 10_000
 )
 
@@ -389,6 +390,10 @@ type configuredCodexModelDescriptor struct {
 	ModelSpecialty                    any                             `json:"model_specialty"`
 	ToolMode                          any                             `json:"tool_mode"`
 	MultiAgentVersion                 any                             `json:"multi_agent_version"`
+	MultiAgentReasoningEffort         any                             `json:"multi_agent_reasoning_effort"`
+	PreferWebSockets                  bool                            `json:"prefer_websockets"`
+	MinimalClientVersion              any                             `json:"minimal_client_version"`
+	RequiresSandboxedReview           bool                            `json:"requires_sandboxed_review"`
 }
 
 type codexModelMetadataOverride struct {
@@ -480,7 +485,7 @@ func newConfiguredCodexModelDescriptor(modelID string) configuredCodexModelDescr
 		}
 		if isOpenAICodexReasoningGPTModel(modelID) {
 			defaultReasoningLevel := "medium"
-			if getNormalizedCodexModel(modelID) == "gpt-5.6-sol" {
+			if getNormalizedCodexModel(modelID) == "gpt-5.6-sol" || isOpenAIGPT6AstraModel(modelID) {
 				defaultReasoningLevel = "low"
 			}
 			descriptor.DefaultReasoningLevel = &defaultReasoningLevel
@@ -489,6 +494,23 @@ func newConfiguredCodexModelDescriptor(modelID string) configuredCodexModelDescr
 			descriptor.TruncationPolicy = configuredCodexTruncationPolicy{Mode: "tokens", Limit: configuredCodexToolOutputMaxTokens}
 			if isOpenAIGPT56Model(modelID) {
 				descriptor.MaxContextWindow = configuredCodexGPT56MaxContext
+			}
+			if isOpenAIGPT6AstraModel(modelID) {
+				descriptor.Priority = 1
+				descriptor.ContextWindow = configuredCodexFallbackContext
+				descriptor.MaxContextWindow = configuredCodexGPT6AstraMaxContext
+				descriptor.InputModalities = []string{"text", "image"}
+				descriptor.SupportsImageDetailOriginal = true
+				descriptor.WebSearchToolType = "text_and_image"
+				applyPatchToolType := "freeform"
+				descriptor.ApplyPatchToolType = &applyPatchToolType
+				descriptor.ToolMode = "code_mode_only"
+				descriptor.MultiAgentVersion = "v2"
+				descriptor.MultiAgentReasoningEffort = "xhigh"
+				descriptor.PreferWebSockets = true
+				descriptor.MinimalClientVersion = "0.153.0"
+				descriptor.NodeREPLAutoReviewRequired = true
+				descriptor.CompHash = "3000"
 			}
 		}
 		if SupportsVerbosity(modelID) {
@@ -503,6 +525,9 @@ func newConfiguredCodexModelDescriptor(modelID string) configuredCodexModelDescr
 
 func configuredCodexSupportsPriorityServiceTier(modelID string) bool {
 	normalized := canonicalizeOpenAIModelAliasSpelling(modelID)
+	if isOpenAIGPT6AstraModel(normalized) {
+		return true
+	}
 	for _, family := range []string{"gpt-5.4", "gpt-5.5", "gpt-5.6"} {
 		if normalized == family || strings.HasPrefix(normalized, family+"-") {
 			return true
@@ -567,13 +592,13 @@ func configuredCodexGPTReasoningLevels(modelID string) []configuredCodexReasonin
 		{Effort: "xhigh", Description: "Extra-high reasoning depth for difficult tasks"},
 	}
 	normalized := getNormalizedCodexModel(modelID)
-	if isOpenAIGPT56Model(modelID) {
+	if isOpenAIGPT6AstraModel(modelID) || isOpenAIGPT56Model(modelID) {
 		levels = append(levels, configuredCodexReasoningLevel{
 			Effort:      "max",
 			Description: "Maximum reasoning depth for complex tasks",
 		})
 	}
-	if normalized == "gpt-5.6-sol" || normalized == "gpt-5.6-terra" {
+	if isOpenAIGPT6AstraModel(modelID) || normalized == "gpt-5.6-sol" || normalized == "gpt-5.6-terra" {
 		levels = append(levels, configuredCodexReasoningLevel{
 			Effort:      "ultra",
 			Description: "Maximum reasoning with automatic task delegation",
@@ -592,12 +617,13 @@ func isOpenAICodexGPTModel(modelID string) bool {
 
 func isOpenAICodexReasoningGPTModel(modelID string) bool {
 	normalized := canonicalizeOpenAIModelAliasSpelling(modelID)
-	return strings.HasPrefix(normalized, "gpt-5")
+	return isOpenAIGPT6AstraModel(normalized) || strings.HasPrefix(normalized, "gpt-5")
 }
 
 func isOpenAICodexImageInputModel(modelID string) bool {
 	normalized := canonicalizeOpenAIModelAliasSpelling(modelID)
-	return strings.HasPrefix(normalized, "gpt-5") ||
+	return isOpenAIGPT6AstraModel(normalized) ||
+		strings.HasPrefix(normalized, "gpt-5") ||
 		strings.HasPrefix(normalized, "gpt-4o") ||
 		strings.HasPrefix(normalized, "gpt-4.1") ||
 		strings.HasPrefix(normalized, "gpt-4.5") ||
@@ -1823,6 +1849,7 @@ func CodexModelsManifestETag(body []byte) string {
 }
 
 var apiKeyCodexModelsWithoutResponsesLite = map[string]struct{}{
+	"gpt-6-astra":   {},
 	"gpt-5.6-sol":   {},
 	"gpt-5.6-terra": {},
 	"gpt-5.6-luna":  {},

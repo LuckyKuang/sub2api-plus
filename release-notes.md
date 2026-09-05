@@ -1,27 +1,28 @@
-Sub2API Plus v0.2.0+custom.002
+Sub2API Plus v0.2.0+custom.003
 
 ## Highlights
 
-- Added client-disconnect lifecycle tracking, ordered streak enforcement, automatic user disabling, and administrator event review.
-- Added durable Content Moderation session blocks and persisted redacted moderation input for administrator review.
+Adds canonical GPT-6 Astra support across OpenAI discovery, Codex catalogs,
+generated client configuration, request metadata, and billing.
 
 ## Changed
 
-- Prompt Audit now scans the official client-controlled transcript; latest-turn blocking includes the nearest preceding assistant/model output, while Content Moderation remains limited to direct-user content.
-- Empty IP last-seen times no longer display as permanent bans for unhit automatic blocks.
-
-## Fixed
-
-- Hardened usage settlement after client disconnects so accepted requests retain billing and lifecycle outcomes without silently dropping queued work.
-- Closed session-block and disconnect-risk settlement holes so PostgreSQL remains the session-block source of truth and admitted OpenAI WS turns still settle after disconnect.
+- Lists GPT-6 Astra first while retaining GPT-5.6 Sol as the account-test model.
+- Mirrors the official Codex Astra instructions, default low reasoning level,
+  multi-agent Ultra preset, and client capability metadata.
+- Uses official Standard, Flex, Fast, prompt-cache, and whole-request
+  long-context pricing for OpenAI Platform API-key traffic.
 
 ## Compatibility and migration
 
-Database migrations 245 through 250 add client-disconnect lifecycle state and events, usage completion metadata, durable Content Moderation session blocks, and persisted moderation input.
+Only the canonical `gpt-6-astra` ID is added. Existing model pricing, including
+the configured GPT-5.6 Sol rates, is unchanged. At 272,001 total input tokens
+and above, all Astra input and cache tokens are billed at 2x and all output
+tokens at 1.5x.
 
 ## Known issues
 
-None.
+Fast/priority processing is unavailable for GPT-6 Astra with EU data residency.
 
 ## Upstream baseline
 

@@ -1397,6 +1397,13 @@ func TestNormalizeCodexModel_Gpt53(t *testing.T) {
 	}
 }
 
+func TestNormalizeCodexModel_GPT6AstraUsesOnlyCanonicalID(t *testing.T) {
+	require.Equal(t, "gpt-6-astra", normalizeCodexModel("gpt-6-astra"))
+	require.Equal(t, "gpt-6-astra", normalizeCodexModel("openai/gpt-6-astra"))
+	require.Equal(t, "gpt-6", normalizeCodexModel("gpt-6"))
+	require.Equal(t, "gpt-6-astra-max", normalizeCodexModel("gpt-6-astra-max"))
+}
+
 func TestNormalizeCodexModel_RemovedModelsFallbackToSupportedTargets(t *testing.T) {
 	cases := map[string]string{
 		"":                   "gpt-5.4",

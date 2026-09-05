@@ -1335,6 +1335,60 @@ func TestOpenAIGatewayServiceRecordUsage_GroupOrAccountLongContextAllows(t *test
 	})
 }
 
+func TestOpenAIGatewayServiceRecordUsage_GPT6AstraPlatformAPIKeyAlwaysUsesOfficialLongContextRates(t *testing.T) {
+	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
+	userRepo := &openAIRecordUsageUserRepoStub{}
+	svc := newOpenAIRecordUsageServiceForTest(usageRepo, userRepo, &openAIRecordUsageSubRepoStub{}, nil)
+	tokens := OpenAIUsage{
+		InputTokens:              272_001,
+		CacheCreationInputTokens: 100_000,
+		CacheReadInputTokens:     72_001,
+		OutputTokens:             100,
+	}
+	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
+		Result: &OpenAIForwardResult{
+			RequestID: "resp_gpt6_astra_long_context",
+			Usage:     tokens,
+			Model:     "gpt-6-astra",
+			Duration:  time.Second,
+		},
+		APIKey: openAIRecordUsageAPIKeyWithGroup(svc, 1060, false),
+		User:   &User{ID: 2060},
+		Account: &Account{
+			ID:       3060,
+			Platform: PlatformOpenAI,
+			Type:     AccountTypeAPIKey,
+			Extra:    map[string]any{openAILongContextBillingEnabledKey: false},
+		},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, usageRepo.lastLog)
+	require.True(t, usageRepo.lastLog.LongContextBillingApplied)
+	require.InDelta(t, 100_000*10e-6*2, usageRepo.lastLog.InputCost, 1e-12)
+	require.InDelta(t, 100_000*12.5e-6*2, usageRepo.lastLog.CacheCreationCost, 1e-12)
+	require.InDelta(t, 72_001*1e-6*2, usageRepo.lastLog.CacheReadCost, 1e-12)
+	require.InDelta(t, 100*50e-6*1.5, usageRepo.lastLog.OutputCost, 1e-12)
+	require.InDelta(t, usageRepo.lastLog.TotalCost*1.1, usageRepo.lastLog.ActualCost, 1e-12)
+	require.Equal(t, 1, userRepo.deductCalls)
+}
+
+func TestOpenAILongContextBillingGate_AstraOverrideIsScopedToPlatformAPIKeys(t *testing.T) {
+	disabled := map[string]any{openAILongContextBillingEnabledKey: false}
+
+	astraAPIKey := openAILongContextBillingGate(&Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Extra: disabled}, "gpt-6-astra")
+	require.NotNil(t, astraAPIKey)
+	require.True(t, *astraAPIKey)
+
+	existingModel := openAILongContextBillingGate(&Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Extra: disabled}, "gpt-5.6-sol")
+	require.NotNil(t, existingModel)
+	require.False(t, *existingModel)
+
+	astraOAuth := openAILongContextBillingGate(&Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth, Extra: disabled}, "gpt-6-astra")
+	require.NotNil(t, astraOAuth)
+	require.False(t, *astraOAuth)
+}
+
 // openai_long_context_billing_enabled is an OpenAI-only account setting, so it
 // must not veto the official Grok >=200k ladder: a Grok account has no way to
 // ever set that flag, which would make the group toggle unreachable.

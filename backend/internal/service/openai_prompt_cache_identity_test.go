@@ -203,11 +203,20 @@ func TestEnsureOpenAIResponsesPromptCacheIdentitySkipsModelOnlyFallback(t *testi
 }
 
 func TestNormalizeOpenAIPromptCacheControlsForAccount(t *testing.T) {
-	body := []byte(`{"model":"gpt-5.6-sol","prompt_cache_options":{"mode":"extended","ttl":"24h"},"prompt_cache_retention":"24h"}`)
+	body := []byte(`{"model":"gpt-5.6-sol","prompt_cache_options":{"mode":"explicit","ttl":"30m"},"prompt_cache_retention":"24h"}`)
 
 	t.Run("gpt-5.6 platform api key preserves", func(t *testing.T) {
 		account := &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}
 		normalized, changed, err := normalizeOpenAIPromptCacheControlsForAccount(body, account, "gpt-5.6-sol")
+		require.NoError(t, err)
+		require.True(t, changed)
+		require.True(t, gjson.GetBytes(normalized, "prompt_cache_options").Exists())
+		require.False(t, gjson.GetBytes(normalized, "prompt_cache_retention").Exists())
+	})
+
+	t.Run("gpt-6-astra platform api key preserves", func(t *testing.T) {
+		account := &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}
+		normalized, changed, err := normalizeOpenAIPromptCacheControlsForAccount(body, account, "gpt-6-astra")
 		require.NoError(t, err)
 		require.True(t, changed)
 		require.True(t, gjson.GetBytes(normalized, "prompt_cache_options").Exists())
@@ -283,7 +292,7 @@ func TestOpenAIResponsesCompactPromptCacheFinalization(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			body := []byte(`{"model":"` + tt.model + `","input":[{"type":"message","role":"user","content":"compact me"}],"prompt_cache_key":"client-compact-cache","prompt_cache_options":{"mode":"extended","ttl":"24h"},"store":true,"stream":true}`)
+			body := []byte(`{"model":"` + tt.model + `","input":[{"type":"message","role":"user","content":"compact me"}],"prompt_cache_key":"client-compact-cache","prompt_cache_options":{"mode":"explicit","ttl":"30m"},"store":true,"stream":true}`)
 			normalizedBody, changed, err := normalizeOpenAICompactRequestBody(body)
 			require.NoError(t, err)
 			require.True(t, changed)

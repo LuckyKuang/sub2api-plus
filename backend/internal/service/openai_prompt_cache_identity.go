@@ -244,7 +244,7 @@ func shouldPreserveOpenAIPromptCacheOptions(account *Account, effectiveModel str
 	return account != nil &&
 		account.Platform == PlatformOpenAI &&
 		account.Type == AccountTypeAPIKey &&
-		isOpenAIGPT56Model(effectiveModel)
+		(isOpenAIGPT6AstraModel(effectiveModel) || isOpenAIGPT56Model(effectiveModel))
 }
 
 func normalizeOpenAIPromptCacheControlsForAccount(body []byte, account *Account, effectiveModel string) ([]byte, bool, error) {

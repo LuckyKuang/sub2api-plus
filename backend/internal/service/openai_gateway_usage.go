@@ -241,7 +241,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	if result.ServiceTier != nil {
 		serviceTier = strings.TrimSpace(*result.ServiceTier)
 	}
-	longContextBillingGate := openAILongContextBillingGate(billingAccount)
+	longContextBillingGate := openAILongContextBillingGate(billingAccount, billingModels...)
 	var protectedPricingSource string
 	if protectedMismatch {
 		cost, protectedPricingSource, err = s.calculateCodexAutoReviewProtectedCost(
@@ -595,13 +595,23 @@ func (s *OpenAIGatewayService) hasIdentifiedOpenAIResponsePricing(ctx context.Co
 }
 
 // openAILongContextBillingGate returns the per-account long-context opt-in.
+// Platform API-key requests for GPT-6 Astra always use OpenAI's mandatory
+// whole-request pricing above 272K input tokens.
 // The flag is an OpenAI-only account setting, so other platforms (Grok) return
 // nil — "no per-account gate" — and are governed by the group toggle alone.
 // Returning a hardcoded false for them would veto the official model ladders
 // (e.g. the Grok >=200k 2x card) that no account setting can ever re-enable.
-func openAILongContextBillingGate(account *Account) *bool {
+func openAILongContextBillingGate(account *Account, billingModels ...string) *bool {
 	if account == nil || !account.IsOpenAI() {
 		return nil
+	}
+	if account.Type == AccountTypeAPIKey {
+		for _, model := range billingModels {
+			if isOpenAIGPT6AstraModel(model) {
+				enabled := true
+				return &enabled
+			}
+		}
 	}
 	enabled := account.IsOpenAILongContextBillingEnabled()
 	return &enabled

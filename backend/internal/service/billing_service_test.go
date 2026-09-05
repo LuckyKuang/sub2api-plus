@@ -344,6 +344,117 @@ func TestFallbackPricing_OpenAIGPT55ProUsesOfficialPrices(t *testing.T) {
 	require.Zero(t, pricing.OutputPricePerTokenPriority)
 }
 
+func TestFallbackPricing_OpenAIGPT6AstraUsesOfficialPrices(t *testing.T) {
+	svc := newTestBillingService()
+
+	pricing, err := svc.GetModelPricing("gpt-6-astra")
+	require.NoError(t, err)
+	require.InDelta(t, 10e-6, pricing.InputPricePerToken, 1e-12)
+	require.InDelta(t, 50e-6, pricing.OutputPricePerToken, 1e-12)
+	require.InDelta(t, 1e-6, pricing.CacheReadPricePerToken, 1e-12)
+	require.InDelta(t, 12.5e-6, pricing.CacheCreationPricePerToken, 1e-12)
+	require.InDelta(t, 20e-6, pricing.InputPricePerTokenPriority, 1e-12)
+	require.InDelta(t, 100e-6, pricing.OutputPricePerTokenPriority, 1e-12)
+	require.InDelta(t, 2e-6, pricing.CacheReadPricePerTokenPriority, 1e-12)
+	require.InDelta(t, 25e-6, pricing.CacheCreationPricePerTokenPriority, 1e-12)
+	require.Equal(t, 272_000, pricing.LongContextInputThreshold)
+	require.InDelta(t, 2.0, pricing.LongContextInputMultiplier, 1e-12)
+	require.InDelta(t, 1.5, pricing.LongContextOutputMultiplier, 1e-12)
+}
+
+func TestCalculateCost_OpenAIGPT6AstraLongContextBoundaryAndTiers(t *testing.T) {
+	svc := newTestBillingService()
+
+	atBoundary, err := svc.CalculateCost("gpt-6-astra", UsageTokens{InputTokens: 272_000, OutputTokens: 10}, 1)
+	require.NoError(t, err)
+	require.False(t, atBoundary.LongContextBillingApplied)
+	require.InDelta(t, 272_000*10e-6, atBoundary.InputCost, 1e-10)
+	require.InDelta(t, 10*50e-6, atBoundary.OutputCost, 1e-10)
+
+	tokens := UsageTokens{
+		InputTokens:         272_001,
+		CacheReadTokens:     1_000,
+		CacheCreationTokens: 2_000,
+		OutputTokens:        100,
+	}
+	standard, err := svc.CalculateCost("gpt-6-astra", tokens, 1)
+	require.NoError(t, err)
+	require.True(t, standard.LongContextBillingApplied)
+	require.InDelta(t, float64(tokens.InputTokens)*10e-6*2, standard.InputCost, 1e-10)
+	require.InDelta(t, float64(tokens.CacheReadTokens)*1e-6*2, standard.CacheReadCost, 1e-10)
+	require.InDelta(t, float64(tokens.CacheCreationTokens)*12.5e-6*2, standard.CacheCreationCost, 1e-10)
+	require.InDelta(t, float64(tokens.OutputTokens)*50e-6*1.5, standard.OutputCost, 1e-10)
+
+	fast, err := svc.CalculateCostWithServiceTier("gpt-6-astra", tokens, 1, "fast")
+	require.NoError(t, err)
+	require.InDelta(t, standard.TotalCost*2, fast.TotalCost, 1e-10)
+
+	flex, err := svc.CalculateCostWithServiceTier("gpt-6-astra", tokens, 1, "flex")
+	require.NoError(t, err)
+	require.InDelta(t, standard.TotalCost*0.5, flex.TotalCost, 1e-10)
+}
+
+func TestCalculateCost_OpenAIGPT6AstraWholeRequestStartsAt272001TotalInput(t *testing.T) {
+	svc := newTestBillingService()
+	atBoundary := UsageTokens{
+		InputTokens:         100_000,
+		CacheCreationTokens: 100_000,
+		CacheReadTokens:     72_000,
+		OutputTokens:        100,
+	}
+	boundaryCost, err := svc.CalculateCost("gpt-6-astra", atBoundary, 1)
+	require.NoError(t, err)
+	require.False(t, boundaryCost.LongContextBillingApplied)
+	require.InDelta(t, 100_000*10e-6, boundaryCost.InputCost, 1e-12)
+	require.InDelta(t, 100_000*12.5e-6, boundaryCost.CacheCreationCost, 1e-12)
+	require.InDelta(t, 72_000*1e-6, boundaryCost.CacheReadCost, 1e-12)
+	require.InDelta(t, 100*50e-6, boundaryCost.OutputCost, 1e-12)
+
+	aboveBoundary := atBoundary
+	aboveBoundary.CacheReadTokens++
+	aboveCost, err := svc.CalculateCost("gpt-6-astra", aboveBoundary, 1)
+	require.NoError(t, err)
+	require.True(t, aboveCost.LongContextBillingApplied)
+	require.InDelta(t, 100_000*10e-6*2, aboveCost.InputCost, 1e-12)
+	require.InDelta(t, 100_000*12.5e-6*2, aboveCost.CacheCreationCost, 1e-12)
+	require.InDelta(t, 72_001*1e-6*2, aboveCost.CacheReadCost, 1e-12)
+	require.InDelta(t, 100*50e-6*1.5, aboveCost.OutputCost, 1e-12)
+}
+
+func TestBillingServiceGetModelPricing_OpenAIGPT6AstraOverridesStaleDefaultCatalogOnly(t *testing.T) {
+	pricingSvc := &PricingService{pricingData: map[string]*LiteLLMModelPricing{
+		"gpt-6-astra": {
+			InputCostPerToken:               1e-6,
+			OutputCostPerToken:              2e-6,
+			CacheReadInputTokenCost:         3e-7,
+			LongContextInputTokenThreshold:  999_999,
+			LongContextInputCostMultiplier:  1.1,
+			LongContextOutputCostMultiplier: 1.2,
+		},
+		"gpt-5.6-sol": {
+			InputCostPerToken:  7e-6,
+			OutputCostPerToken: 31e-6,
+		},
+	}}
+	svc := NewBillingService(&config.Config{}, pricingSvc)
+
+	astra, err := svc.GetModelPricing("gpt-6-astra")
+	require.NoError(t, err)
+	require.InDelta(t, 10e-6, astra.InputPricePerToken, 1e-12)
+	require.InDelta(t, 50e-6, astra.OutputPricePerToken, 1e-12)
+	require.InDelta(t, 1e-6, astra.CacheReadPricePerToken, 1e-12)
+	require.InDelta(t, 12.5e-6, astra.CacheCreationPricePerToken, 1e-12)
+	require.Equal(t, 272_000, astra.LongContextInputThreshold)
+	require.InDelta(t, 2.0, astra.LongContextInputMultiplier, 1e-12)
+	require.InDelta(t, 1.5, astra.LongContextOutputMultiplier, 1e-12)
+
+	// The Astra policy must not rewrite any existing model's catalog prices.
+	sol, err := svc.GetModelPricing("gpt-5.6-sol")
+	require.NoError(t, err)
+	require.InDelta(t, 7e-6, sol.InputPricePerToken, 1e-12)
+	require.InDelta(t, 31e-6, sol.OutputPricePerToken, 1e-12)
+}
+
 // 回归测试 #2293：长上下文计费触发时，cache_read_tokens 也应应用 LongContextInputMultiplier。
 // 修复前：CacheReadCost = tokens * 0.25e-6 （漏乘倍率，少计费用）。
 // 修复后：CacheReadCost = tokens * 0.25e-6 * LongContextInputMultiplier(=2.0)。

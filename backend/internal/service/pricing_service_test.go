@@ -514,6 +514,29 @@ func TestPricingService_BareGPT56AliasDeterministicallyUsesSol(t *testing.T) {
 	}
 }
 
+func TestGPT6AstraDedicatedFallbackUsesOfficialRates(t *testing.T) {
+	pricingSvc := &PricingService{pricingData: map[string]*LiteLLMModelPricing{
+		"gpt-5.1-codex": {InputCostPerToken: 1.25e-6},
+	}}
+	pricing := pricingSvc.GetModelPricing("gpt-6-astra")
+	require.NotNil(t, pricing)
+	require.InDelta(t, 10e-6, pricing.InputCostPerToken, 1e-12)
+	require.InDelta(t, 1e-6, pricing.CacheReadInputTokenCost, 1e-12)
+	require.InDelta(t, 12.5e-6, pricing.CacheCreationInputTokenCost, 1e-12)
+	require.InDelta(t, 50e-6, pricing.OutputCostPerToken, 1e-12)
+	require.InDelta(t, 20e-6, pricing.InputCostPerTokenPriority, 1e-12)
+	require.InDelta(t, 2e-6, pricing.CacheReadInputTokenCostPriority, 1e-12)
+	require.InDelta(t, 25e-6, pricing.CacheCreationInputTokenCostPriority, 1e-12)
+	require.InDelta(t, 100e-6, pricing.OutputCostPerTokenPriority, 1e-12)
+	require.Equal(t, 272_000, pricing.LongContextInputTokenThreshold)
+	require.InDelta(t, 2.0, pricing.LongContextInputCostMultiplier, 1e-12)
+	require.InDelta(t, 1.5, pricing.LongContextOutputCostMultiplier, 1e-12)
+
+	require.Equal(t, "gpt-6-astra", normalizeModelNameForPricing("openai/gpt-6-astra"))
+	require.Equal(t, "gpt-6", normalizeModelNameForPricing("gpt-6"))
+	require.Equal(t, "gpt-6-astra-max", normalizeModelNameForPricing("gpt-6-astra-max"))
+}
+
 func TestDefaultPricingIncludesOfficialGPT56Rates(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join("..", "..", "resources", "model-pricing", "model_prices_and_context_window.json"))
 	require.NoError(t, err)
