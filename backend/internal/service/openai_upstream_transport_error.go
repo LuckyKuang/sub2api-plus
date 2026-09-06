@@ -125,6 +125,8 @@ func (s *OpenAIGatewayService) handleOpenAIUpstreamTransportError(ctx context.Co
 	SetOpsRoutingDiagnostics(c, &OpsRoutingDiagnostics{TransportFailure: classification.Classification})
 	setOpsUpstreamError(c, 0, safeErr, "")
 	appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+		ProxyID:            opsUpstreamProxyID(account),
+		ProxyName:          opsUpstreamProxyName(account),
 		Platform:           account.Platform,
 		AccountID:          account.ID,
 		AccountName:        account.Name,

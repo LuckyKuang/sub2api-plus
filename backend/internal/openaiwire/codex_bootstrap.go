@@ -13,16 +13,16 @@ import (
 // NormalizeCodexDelegationBootstrap converts a validated call-less Codex
 // delegation output into the user message shape sent upstream.
 func NormalizeCodexDelegationBootstrap(body []byte) ([]byte, bool) {
-	return normalizeCodexCallOutputBootstrap(body, isCodexDelegationCandidate)
+	return normalizeCodexCallOutputBootstrap(body, isCodexDelegationCandidate, true)
 }
 
 // NormalizeCodexAutomationBootstrap converts a validated call-less Codex
 // automation output into the user message shape sent upstream.
 func NormalizeCodexAutomationBootstrap(body []byte) ([]byte, bool) {
-	return normalizeCodexCallOutputBootstrap(body, isCodexAutomationCandidate)
+	return normalizeCodexCallOutputBootstrap(body, isCodexAutomationCandidate, false)
 }
 
-func normalizeCodexCallOutputBootstrap(body []byte, isCandidate func(map[string]any) bool) ([]byte, bool) {
+func normalizeCodexCallOutputBootstrap(body []byte, isCandidate func(map[string]any) bool, allowHistoricalContext bool) ([]byte, bool) {
 	if !hasUniqueJSONMembers(body) {
 		return body, false
 	}
@@ -34,7 +34,7 @@ func normalizeCodexCallOutputBootstrap(body []byte, isCandidate func(map[string]
 	}
 	if previousResponseID, exists := request["previous_response_id"]; exists {
 		value, ok := previousResponseID.(string)
-		if !ok || strings.TrimSpace(value) != "" {
+		if !ok || (!allowHistoricalContext && strings.TrimSpace(value) != "") {
 			return body, false
 		}
 	}
@@ -43,27 +43,33 @@ func normalizeCodexCallOutputBootstrap(body []byte, isCandidate func(map[string]
 		return body, false
 	}
 
-	// Any call/reference anchor makes a call-less output ambiguous. Responses
-	// built-ins follow the *_call / *_call_output naming convention, so classify
-	// by the wire type shape instead of maintaining an incomplete allowlist.
+	// Delegation may coexist with historical anchors only when their IDs make
+	// them unambiguous; automation retains the bootstrap-only boundary.
 	for _, raw := range input {
 		item, ok := raw.(map[string]any)
 		if !ok {
 			continue
 		}
 		typ := stringField(item, "type")
-		if typ == "item_reference" || strings.HasSuffix(typ, "_call") {
-			return body, false
-		}
-		if isResponsesCallOutputType(typ) {
+		if isCandidate(item) {
 			callIDValue, exists := item["call_id"]
 			callID, isString := callIDValue.(string)
 			if exists && (!isString || strings.TrimSpace(callID) != "") {
 				return body, false
 			}
-			if !isCandidate(item) {
-				return body, false
+			continue
+		}
+		if typ == "item_reference" {
+			if allowHistoricalContext && strings.TrimSpace(stringField(item, "id")) != "" {
+				continue
 			}
+			return body, false
+		}
+		if strings.HasSuffix(typ, "_call") || isResponsesCallOutputType(typ) {
+			if allowHistoricalContext && strings.TrimSpace(stringField(item, "call_id")) != "" {
+				continue
+			}
+			return body, false
 		}
 	}
 
@@ -171,7 +177,7 @@ func isCodexAutomationCandidate(item map[string]any) bool {
 		return false
 	}
 	output, ok := item["output"].(string)
-	return ok && validCodexAutomationBootstrap(output)
+	return ok && (validCodexAutomationBootstrap(output) || validCodexAutomationHeartbeat(output))
 }
 
 func stringField(item map[string]any, key string) string {
@@ -247,6 +253,56 @@ func validCodexAutomationLastRun(value string) bool {
 	}
 	epochMillis, err := strconv.ParseInt(value[separator+2:len(value)-1], 10, 64)
 	return err == nil && runAt.UnixMilli() == epochMillis
+}
+
+func validCodexAutomationHeartbeat(value string) bool {
+	decoder := xml.NewDecoder(strings.NewReader(value))
+	var rootSeen, automationIDSeen bool
+	var automationID bytes.Buffer
+	depth := 0
+	for {
+		token, err := decoder.Token()
+		if err == io.EOF {
+			id := automationID.String()
+			return rootSeen && automationIDSeen && depth == 0 &&
+				strings.TrimSpace(id) == id && validCodexAutomationID(id)
+		}
+		if err != nil {
+			return false
+		}
+		switch current := token.(type) {
+		case xml.StartElement:
+			depth++
+			if current.Name.Space != "" || len(current.Attr) != 0 || depth > 2 {
+				return false
+			}
+			if depth == 1 {
+				if rootSeen || current.Name.Local != "heartbeat" {
+					return false
+				}
+				rootSeen = true
+			} else if automationIDSeen || current.Name.Local != "automation_id" {
+				return false
+			}
+			automationIDSeen = depth == 2
+		case xml.EndElement:
+			if current.Name.Space != "" {
+				return false
+			}
+			depth--
+			if depth < 0 {
+				return false
+			}
+		case xml.CharData:
+			if depth == 2 {
+				_, _ = automationID.Write(current)
+			} else if len(bytes.TrimSpace(current)) != 0 {
+				return false
+			}
+		case xml.Comment, xml.ProcInst, xml.Directive:
+			return false
+		}
+	}
 }
 
 func validCodexDelegationEnvelope(value string) bool {

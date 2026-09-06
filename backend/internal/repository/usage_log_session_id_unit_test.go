@@ -30,7 +30,7 @@ func newSessionIDUsageLog(sessionID *string) *service.UsageLog {
 // arg slice / arg-type table so the INSERT column lists stay in sync. session_id
 // precedes completion_status, usage_source, native_compaction_v2, and created_at.
 func TestPrepareUsageLogInsert_SessionIDArgWiring(t *testing.T) {
-	require.Len(t, usageLogInsertArgTypes, 68, "arg-type table must include completion metadata, native compaction and requested reasoning effort")
+	require.Len(t, usageLogInsertArgTypes, 69, "arg-type table must include upstream request ID, completion metadata, native compaction and requested reasoning effort")
 
 	sessionID := "sess-persisted-123"
 	prepared := prepareUsageLogInsert(newSessionIDUsageLog(&sessionID))

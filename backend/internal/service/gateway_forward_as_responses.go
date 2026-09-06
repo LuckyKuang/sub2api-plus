@@ -161,6 +161,8 @@ func (s *GatewayService) ForwardAsResponses(
 
 		if s.shouldFailoverUpstreamError(resp.StatusCode) {
 			appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+				ProxyID:            opsUpstreamProxyID(account),
+				ProxyName:          opsUpstreamProxyName(account),
 				Platform:           account.Platform,
 				AccountID:          account.ID,
 				AccountName:        account.Name,
@@ -466,6 +468,7 @@ func (s *GatewayService) handleResponsesBufferedStreamingResponse(
 
 	return &ForwardResult{
 		RequestID:       requestID,
+		UpstreamHeaders: resp.Header,
 		Usage:           usage,
 		Model:           originalModel,
 		UpstreamModel:   mappedModel,
@@ -513,6 +516,7 @@ func (s *GatewayService) handleResponsesStreamingResponse(
 	resultWithUsage := func() *ForwardResult {
 		result := &ForwardResult{
 			RequestID:       requestID,
+			UpstreamHeaders: resp.Header,
 			Usage:           usage,
 			Model:           originalModel,
 			UpstreamModel:   mappedModel,

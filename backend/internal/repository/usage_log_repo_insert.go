@@ -87,6 +87,7 @@ var usageLogInsertArgTypes = [...]string{
 	"text",        // billing_tier
 	"text",        // billing_mode
 	"numeric",     // account_stats_cost
+	"text",        // upstream_request_id
 	"text",        // session_id
 	"text",        // completion_status
 	"text",        // usage_source
@@ -294,6 +295,7 @@ func (r *usageLogRepository) createSingle(ctx context.Context, sqlq sqlExecutor,
 			billing_tier,
 			billing_mode,
 			account_stats_cost,
+			upstream_request_id,
 			session_id,
 			completion_status,
 			usage_source,
@@ -305,7 +307,7 @@ func (r *usageLogRepository) createSingle(ctx context.Context, sqlq sqlExecutor,
 			$10, $11, $12, $13,
 			$14, $15, $16, $17,
 			$18, $19, $20, $21, $22, $23,
-			$24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62, $63, $64, $65, $66, $67, $68
+			$24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62, $63, $64, $65, $66, $67, $68, $69
 		)
 		ON CONFLICT (request_id, api_key_id) DO NOTHING
 		RETURNING id, created_at
@@ -760,6 +762,7 @@ func buildUsageLogBatchInsertQuery(keys []string, preparedByKey map[string]usage
 			billing_tier,
 			billing_mode,
 			account_stats_cost,
+			upstream_request_id,
 			session_id,
 			completion_status,
 			usage_source,
@@ -861,6 +864,7 @@ func buildUsageLogBatchInsertQuery(keys []string, preparedByKey map[string]usage
 				billing_tier,
 				billing_mode,
 				account_stats_cost,
+				upstream_request_id,
 				session_id,
 			completion_status,
 			usage_source,
@@ -931,6 +935,7 @@ func buildUsageLogBatchInsertQuery(keys []string, preparedByKey map[string]usage
 				billing_tier,
 				billing_mode,
 				account_stats_cost,
+				upstream_request_id,
 				session_id,
 			completion_status,
 			usage_source,
@@ -1041,6 +1046,7 @@ func buildUsageLogBestEffortInsertQuery(preparedList []usageLogInsertPrepared) (
 			billing_tier,
 			billing_mode,
 			account_stats_cost,
+			upstream_request_id,
 			session_id,
 			completion_status,
 			usage_source,
@@ -1137,6 +1143,7 @@ func buildUsageLogBestEffortInsertQuery(preparedList []usageLogInsertPrepared) (
 			billing_tier,
 			billing_mode,
 			account_stats_cost,
+			upstream_request_id,
 			session_id,
 			completion_status,
 			usage_source,
@@ -1207,6 +1214,7 @@ func buildUsageLogBestEffortInsertQuery(preparedList []usageLogInsertPrepared) (
 			billing_tier,
 			billing_mode,
 			account_stats_cost,
+			upstream_request_id,
 			session_id,
 			completion_status,
 			usage_source,
@@ -1285,6 +1293,7 @@ func execUsageLogInsertNoResult(ctx context.Context, sqlq sqlExecutor, prepared 
 			billing_tier,
 			billing_mode,
 			account_stats_cost,
+			upstream_request_id,
 			session_id,
 			completion_status,
 			usage_source,
@@ -1296,7 +1305,7 @@ func execUsageLogInsertNoResult(ctx context.Context, sqlq sqlExecutor, prepared 
 			$10, $11, $12, $13,
 			$14, $15, $16, $17,
 			$18, $19, $20, $21, $22, $23,
-			$24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62, $63, $64, $65, $66, $67, $68
+			$24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62, $63, $64, $65, $66, $67, $68, $69
 		)
 		ON CONFLICT (request_id, api_key_id) DO NOTHING
 	`, prepared.args...)
@@ -1346,6 +1355,7 @@ func prepareUsageLogInsert(log *service.UsageLog) usageLogInsertPrepared {
 	modelMappingChain := nullString(log.ModelMappingChain)
 	billingTier := nullString(log.BillingTier)
 	billingMode := nullString(log.BillingMode)
+	upstreamRequestID := nullString(log.UpstreamRequestID)
 	sessionID := nullString(log.SessionID)
 	requestedModel := strings.TrimSpace(log.RequestedModel)
 	if requestedModel == "" {
@@ -1432,6 +1442,7 @@ func prepareUsageLogInsert(log *service.UsageLog) usageLogInsertPrepared {
 			billingTier,
 			billingMode,
 			log.AccountStatsCost, // account_stats_cost
+			upstreamRequestID,    // upstream_request_id
 			sessionID,            // session_id
 			log.CompletionStatus,
 			log.UsageSource,
