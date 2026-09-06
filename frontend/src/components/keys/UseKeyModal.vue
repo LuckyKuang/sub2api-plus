@@ -1310,7 +1310,7 @@ function generateOpenCodeConfig(platform: string, baseUrl: string, apiKey: strin
     'gpt-6-astra': {
       name: 'GPT-6 Astra',
       limit: {
-        context: 1050000,
+        context: 872000,
         output: 128000
       },
       options: {

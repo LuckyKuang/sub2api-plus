@@ -50,6 +50,7 @@ const messages: Record<string, string> = {
   'admin.dashboard.hour': 'Hour',
   'admin.usage.failedToLoadUser': 'Failed to load user',
   'admin.usage.requestId': 'Request ID',
+  'admin.usage.upstreamRequestId': 'Upstream ID',
   'usage.requestedModel': 'Requested model',
   'usage.sentUpstreamModel': 'Sent upstream model',
   'usage.upstreamResponseModel': 'Upstream response model',
@@ -527,6 +528,18 @@ describe('admin UsageView request ID column visibility', () => {
       expect.arrayContaining([
         expect.objectContaining({ key: 'request_id', label: 'Request ID' }),
         expect.objectContaining({ key: 'session_id', label: 'Session ID' }),
+      ]),
+    )
+    expect(usageTable.props('columns')).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ key: 'upstream_request_id' })]),
+    )
+
+    await wrapper.get('[data-testid="usage-column-settings"]').trigger('click')
+    await wrapper.get('[data-testid="usage-column-toggle-upstream_request_id"]').trigger('click')
+
+    expect(usageTable.props('columns')).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: 'upstream_request_id', label: 'Upstream ID' }),
       ]),
     )
   })

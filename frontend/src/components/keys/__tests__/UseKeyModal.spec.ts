@@ -637,7 +637,7 @@ describe('UseKeyModal', () => {
     expect(models['gpt-5.6'].name).toBe('GPT-5.6 (Sol)')
     expect(models['gpt-6-astra']).toEqual({
       name: 'GPT-6 Astra',
-      limit: { context: 1050000, output: 128000 },
+      limit: { context: 872000, output: 128000 },
       options: { store: false },
       variants: { low: {}, medium: {}, high: {}, xhigh: {}, max: {} }
     })

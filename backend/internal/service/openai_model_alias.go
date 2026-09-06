@@ -108,13 +108,6 @@ func normalizeKnownOpenAICodexModel(model string) string {
 	}
 }
 
-// isOpenAIGPT6AstraModel recognizes only OpenAI's canonical Astra model ID.
-// Reasoning levels and future snapshots are request/catalog metadata, not
-// aliases for model names that OpenAI has not published.
-func isOpenAIGPT6AstraModel(model string) bool {
-	return canonicalizeOpenAIModelAliasSpelling(model) == "gpt-6-astra"
-}
-
 // isOpenAIGPT56Model 判断是否 GPT-5.6 系列模型；入参可为原始模型名
 // （含大小写/路径/后缀变体）或已归一化的基名，两者均能正确识别。
 func isOpenAIGPT56Model(model string) bool {
@@ -131,6 +124,13 @@ func isOpenAIGPT56Model(model string) bool {
 		}
 	}
 	return false
+}
+
+// isOpenAIGPT6AstraModel recognizes only OpenAI's canonical Astra model ID.
+// Reasoning levels and future snapshots are request/catalog metadata, not
+// aliases for model names that OpenAI has not published.
+func isOpenAIGPT6AstraModel(model string) bool {
+	return canonicalizeOpenAIModelAliasSpelling(model) == "gpt-6-astra"
 }
 
 func appendUsageBillingModelCandidate(candidates []string, seen map[string]struct{}, model string) []string {

@@ -730,6 +730,65 @@ describe('EditAccountModal', () => {
     expect(updateAccountMock.mock.calls[0]?.[1]?.extra?.codex_fingerprint_mode).toBe('session')
   })
 
+  it('writes the upstream request id header into extra only when configured', async () => {
+    const account = buildAccount()
+    account.extra = { openai_compact_mode: 'force_on' }
+    updateAccountMock.mockReset().mockResolvedValue(account)
+    checkMixedChannelRiskMock.mockReset().mockResolvedValue({ has_risk: false })
+
+    const untouched = mountModal(account)
+    await untouched.get('form#edit-account-form').trigger('submit.prevent')
+    expect(updateAccountMock.mock.calls[0]?.[1]?.extra?.upstream_request_id_header).toBeUndefined()
+
+    updateAccountMock.mockClear()
+    const wrapper = mountModal(account)
+    await wrapper.get('[data-testid="upstream-request-id-header"]').setValue(' X-Oneapi-Request-Id ')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+    expect(updateAccountMock).toHaveBeenCalledTimes(1)
+    expect(updateAccountMock.mock.calls[0]?.[1]?.extra).toMatchObject({
+      openai_compact_mode: 'force_on',
+      upstream_request_id_header: 'X-Oneapi-Request-Id'
+    })
+  })
+
+  it('removes the upstream request id header from extra when cleared', async () => {
+    const account = buildAccount()
+    account.extra = { upstream_request_id_header: 'X-Request-ID' }
+    updateAccountMock.mockReset().mockResolvedValue(account)
+    checkMixedChannelRiskMock.mockReset().mockResolvedValue({ has_risk: false })
+
+    const wrapper = mountModal(account)
+    const input = wrapper.get('[data-testid="upstream-request-id-header"]')
+    expect((input.element as HTMLInputElement).value).toBe('X-Request-ID')
+    await input.setValue('')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+    expect(updateAccountMock.mock.calls[0]?.[1]?.extra).not.toHaveProperty('upstream_request_id_header')
+  })
+
+  it('writes and removes images_url_to_b64_json when toggled', async () => {
+    const account = buildAccount()
+    updateAccountMock.mockReset().mockResolvedValue(account)
+    checkMixedChannelRiskMock.mockReset().mockResolvedValue({ has_risk: false })
+
+    const enabled = mountModal(account)
+    const enableToggle = enabled.get('[data-testid="openai-images-url-to-b64-json-toggle"]')
+    expect(enableToggle.attributes('aria-checked')).toBe('false')
+    await enableToggle.trigger('click')
+    await enabled.get('form#edit-account-form').trigger('submit.prevent')
+    expect(updateAccountMock.mock.calls[0]?.[1]?.extra?.images_url_to_b64_json).toBe(true)
+
+    updateAccountMock.mockClear()
+    account.extra = { images_url_to_b64_json: true }
+    const disabled = mountModal(account)
+    const disableToggle = disabled.get('[data-testid="openai-images-url-to-b64-json-toggle"]')
+    expect(disableToggle.attributes('aria-checked')).toBe('true')
+    await disableToggle.trigger('click')
+    await disabled.get('form#edit-account-form').trigger('submit.prevent')
+    expect(updateAccountMock.mock.calls[0]?.[1]?.extra).not.toHaveProperty('images_url_to_b64_json')
+  })
+
   it('hides the Codex namespace flatten toggle for non-OAuth OpenAI accounts', async () => {
     const account = buildAccount()
     const wrapper = mountModal(account)

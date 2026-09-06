@@ -6,8 +6,10 @@ or bridge the client WebSocket to an HTTP/SSE upstream.
 
 ## GPT-6 Astra
 
-The gateway exposes only OpenAI's canonical `gpt-6-astra` model ID. It does
-not create a `gpt-6` alias or treat reasoning-level suffixes as model IDs.
+The gateway uses OpenAI's canonical `gpt-6-astra` model ID. For Plus client
+compatibility, the legacy `gpt-6` spelling is accepted only as an alias and is
+canonicalized to `gpt-6-astra`; it is not a separate model or billing identity.
+Reasoning-level suffixes are never treated as model IDs.
 Astra accepts `low`, `medium`, `high`, `xhigh`, and `max` reasoning effort;
 it does not accept `none` or `minimal`. Configured Codex catalogs default it
 to `low` and preserve `max` as distinct from `xhigh` in request and usage
