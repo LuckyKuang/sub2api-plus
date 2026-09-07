@@ -47,7 +47,7 @@ func TestClientDisconnectRiskLifecycle_FinalizeWaitsForAcceptedSequence(t *testi
 	started := make(chan struct{}, 1)
 	repo := &clientDisconnectRiskRepoStub{beginGate: gate, beginStarted: started}
 	service := NewClientDisconnectRiskService(repo, nil, nil)
-	lifecycle := service.NewLifecycle(7, 11, RoleUser, "request-concurrent", "test")
+	lifecycle := service.NewLifecycle(7, 11, RoleUser, "request-concurrent", "session-test", "test")
 
 	acceptedDone := make(chan struct{})
 	go func() {
@@ -84,10 +84,19 @@ func (r *clientDisconnectRiskRepoStub) ListEvents(context.Context, ClientDisconn
 	return nil, 0, nil
 }
 
+func TestClientDisconnectSessionScope(t *testing.T) {
+	scope := ClientDisconnectSessionScope("session-a", 11)
+	require.Equal(t, scope, ClientDisconnectSessionScope(" session-a ", 99), "a valid session owns the scope independently of the API key")
+	require.NotEqual(t, scope, ClientDisconnectSessionScope("session-b", 11))
+	require.Equal(t, "sessionless:key:11", ClientDisconnectSessionScope("", 11))
+	require.Equal(t, "sessionless:key:11", ClientDisconnectSessionScope("bad\nsession", 11))
+	require.Len(t, scope, len("session:")+64)
+}
+
 func TestClientDisconnectRiskLifecycle_DeduplicatesFinalOutcome(t *testing.T) {
 	repo := &clientDisconnectRiskRepoStub{}
 	service := NewClientDisconnectRiskService(repo, nil, nil)
-	lifecycle := service.NewLifecycle(7, 11, RoleUser, "request-1", "test")
+	lifecycle := service.NewLifecycle(7, 11, RoleUser, "request-1", "session-test", "test")
 	require.NotNil(t, lifecycle)
 
 	lifecycle.Accepted(context.Background())
@@ -99,13 +108,16 @@ func TestClientDisconnectRiskLifecycle_DeduplicatesFinalOutcome(t *testing.T) {
 	require.Len(t, repo.finalizes, 1)
 	require.Equal(t, ClientDisconnectOutcomeDisconnected, repo.finalizes[0].Outcome)
 	require.Equal(t, 10, repo.finalizes[0].Threshold)
-	require.True(t, repo.finalizes[0].Enforce)
+	require.False(t, repo.finalizes[0].Enforce, "automatic banning must default to disabled")
+	require.Equal(t, "session-test", repo.begins[0].SessionID)
+	require.Equal(t, ClientDisconnectSessionScope("session-test", 11), repo.begins[0].SessionScope)
+	require.Equal(t, repo.begins[0].SessionScope, repo.finalizes[0].SessionScope)
 }
 
 func TestClientDisconnectRiskLifecycle_RetriesBeginDuringFinalization(t *testing.T) {
 	repo := &clientDisconnectRiskRepoStub{beginErr: errors.New("temporary begin failure")}
 	service := NewClientDisconnectRiskService(repo, nil, nil)
-	lifecycle := service.NewLifecycle(7, 11, RoleUser, "request-retry-begin", "test")
+	lifecycle := service.NewLifecycle(7, 11, RoleUser, "request-retry-begin", "session-test", "test")
 
 	lifecycle.Accepted(context.Background())
 	repo.beginErr = nil
@@ -119,7 +131,7 @@ func TestClientDisconnectRiskLifecycle_RetriesBeginDuringFinalization(t *testing
 func TestClientDisconnectRiskLifecycle_RetriesOriginalFinalOutcome(t *testing.T) {
 	repo := &clientDisconnectRiskRepoStub{finalizeErr: errors.New("temporary finalize failure")}
 	service := NewClientDisconnectRiskService(repo, nil, nil)
-	lifecycle := service.NewLifecycle(7, 11, RoleUser, "request-retry-finalize", "test")
+	lifecycle := service.NewLifecycle(7, 11, RoleUser, "request-retry-finalize", "session-test", "test")
 
 	lifecycle.Accepted(context.Background())
 	lifecycle.Disconnected(context.Background())
@@ -134,7 +146,7 @@ func TestClientDisconnectRiskLifecycle_RetriesOriginalFinalOutcome(t *testing.T)
 func TestClientDisconnectRiskLifecycle_AdministratorIsAuditedButNotEnforced(t *testing.T) {
 	repo := &clientDisconnectRiskRepoStub{}
 	service := NewClientDisconnectRiskService(repo, nil, nil)
-	lifecycle := service.NewLifecycle(7, 11, RoleAdmin, "request-1", "test")
+	lifecycle := service.NewLifecycle(7, 11, RoleAdmin, "request-1", "session-test", "test")
 	require.NotNil(t, lifecycle)
 	lifecycle.Accepted(context.Background())
 	lifecycle.Disconnected(context.Background())
@@ -166,7 +178,7 @@ func TestClientDisconnectRiskLifecycle_AutoBanInvalidatesUserAuthCache(t *testin
 	}}
 	invalidator := &clientDisconnectRiskAuthInvalidatorStub{}
 	service := NewClientDisconnectRiskService(repo, nil, invalidator)
-	lifecycle := service.NewLifecycle(7, 11, RoleUser, "request-ban", "test")
+	lifecycle := service.NewLifecycle(7, 11, RoleUser, "request-ban", "session-test", "test")
 
 	lifecycle.Accepted(context.Background())
 	canceledCtx, cancel := context.WithCancel(context.Background())
@@ -180,7 +192,7 @@ func TestClientDisconnectRiskLifecycle_AutoBanInvalidatesUserAuthCache(t *testin
 func TestFinalizeClientDisconnectForwardResult_IncompleteResultDoesNotResetStreak(t *testing.T) {
 	repo := &clientDisconnectRiskRepoStub{}
 	riskService := NewClientDisconnectRiskService(repo, nil, nil)
-	lifecycle := riskService.NewLifecycle(7, 11, RoleUser, "request-incomplete", "test")
+	lifecycle := riskService.NewLifecycle(7, 11, RoleUser, "request-incomplete", "session-test", "test")
 	ctx := WithClientDisconnectLifecycle(context.Background(), lifecycle)
 	lifecycle.Accepted(ctx)
 
@@ -200,7 +212,7 @@ func TestFinalizeClientDisconnectForwardResult_IncompleteResultDoesNotResetStrea
 func TestFinalizeClientDisconnectForwardResult_DisconnectWithResultMarksPartialUsage(t *testing.T) {
 	repo := &clientDisconnectRiskRepoStub{}
 	riskService := NewClientDisconnectRiskService(repo, nil, nil)
-	lifecycle := riskService.NewLifecycle(7, 11, RoleUser, "request-partial", "test")
+	lifecycle := riskService.NewLifecycle(7, 11, RoleUser, "request-partial", "session-test", "test")
 	ctx := WithClientDisconnectLifecycle(context.Background(), lifecycle)
 	lifecycle.Accepted(ctx)
 
@@ -218,7 +230,7 @@ func TestFinalizeClientDisconnectForwardResult_DisconnectWithResultMarksPartialU
 func TestFinalizeClientDisconnectForwardResult_NonStreamCancellationMarksExactUsageDisconnect(t *testing.T) {
 	repo := &clientDisconnectRiskRepoStub{}
 	riskService := NewClientDisconnectRiskService(repo, nil, nil)
-	lifecycle := riskService.NewLifecycle(7, 11, RoleUser, "request-non-stream", "test")
+	lifecycle := riskService.NewLifecycle(7, 11, RoleUser, "request-non-stream", "session-test", "test")
 	ctx := WithClientDisconnectLifecycle(context.Background(), lifecycle)
 	lifecycle.Accepted(ctx)
 
@@ -240,7 +252,7 @@ func TestFinalizeClientDisconnectForwardResult_NonStreamCancellationMarksExactUs
 func TestFinalizeClientDisconnectForwardResult_StreamCompletionIgnoresLateContextCancellation(t *testing.T) {
 	repo := &clientDisconnectRiskRepoStub{}
 	riskService := NewClientDisconnectRiskService(repo, nil, nil)
-	lifecycle := riskService.NewLifecycle(7, 11, RoleUser, "request-stream-complete", "test")
+	lifecycle := riskService.NewLifecycle(7, 11, RoleUser, "request-stream-complete", "session-test", "test")
 	ctx := WithClientDisconnectLifecycle(context.Background(), lifecycle)
 	lifecycle.Accepted(ctx)
 
@@ -259,7 +271,7 @@ func TestFinalizeClientDisconnectForwardResult_StreamCompletionIgnoresLateContex
 func TestFinalizeUnbilledClientDisconnectRequest_CancellationWinsOverSuccess(t *testing.T) {
 	repo := &clientDisconnectRiskRepoStub{}
 	riskService := NewClientDisconnectRiskService(repo, nil, nil)
-	lifecycle := riskService.NewLifecycle(7, 11, RoleUser, "request-count-tokens", "count_tokens")
+	lifecycle := riskService.NewLifecycle(7, 11, RoleUser, "request-count-tokens", "session-test", "count_tokens")
 	requestCtx, cancel := context.WithCancel(WithClientDisconnectLifecycle(context.Background(), lifecycle))
 	lifecycle.Accepted(requestCtx)
 	cancel()
@@ -275,7 +287,7 @@ func TestFinalizeUnbilledClientDisconnectRequest_CancellationWinsOverSuccess(t *
 func TestFinalizeUnbilledClientDisconnectRequest_CompletedResetsStreak(t *testing.T) {
 	repo := &clientDisconnectRiskRepoStub{}
 	riskService := NewClientDisconnectRiskService(repo, nil, nil)
-	lifecycle := riskService.NewLifecycle(7, 11, RoleUser, "request-count-tokens", "count_tokens")
+	lifecycle := riskService.NewLifecycle(7, 11, RoleUser, "request-count-tokens", "session-test", "count_tokens")
 	requestCtx := WithClientDisconnectLifecycle(context.Background(), lifecycle)
 	lifecycle.Accepted(requestCtx)
 

@@ -9617,7 +9617,7 @@ const form = reactive<SettingsForm>({
   hide_ccs_import_button: false,
   payment_enabled: false,
   risk_control_enabled: false,
-  client_disconnect_consecutive_ban_enabled: true,
+  client_disconnect_consecutive_ban_enabled: false,
   client_disconnect_consecutive_ban_threshold: 10,
   global_ip_access_control_enabled: false,
   cyber_session_block_enabled: false,

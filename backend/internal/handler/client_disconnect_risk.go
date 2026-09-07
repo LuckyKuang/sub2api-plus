@@ -26,7 +26,8 @@ func startClientDisconnectRiskLifecycle(
 		return nil
 	}
 	requestID := trustedClientRequestID(c)
-	lifecycle := risk.NewLifecycle(userID, apiKeyID, role, requestID, protocol)
+	sessionID := service.ExtractClientSessionID(c)
+	lifecycle := risk.NewLifecycle(userID, apiKeyID, role, requestID, sessionID, protocol)
 	if lifecycle != nil {
 		c.Request = c.Request.WithContext(service.WithClientDisconnectLifecycle(c.Request.Context(), lifecycle))
 	}

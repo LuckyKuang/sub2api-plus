@@ -23,7 +23,7 @@ func (r *settingRepository) GetClientDisconnectRiskSettings(ctx context.Context)
 	if err != nil {
 		return false, 0, err
 	}
-	enabled := !strings.EqualFold(strings.TrimSpace(values[service.SettingKeyClientDisconnectConsecutiveBanEnabled]), "false")
+	enabled := strings.EqualFold(strings.TrimSpace(values[service.SettingKeyClientDisconnectConsecutiveBanEnabled]), "true")
 	generation := int64(1)
 	if parsed, parseErr := strconv.ParseInt(strings.TrimSpace(values[service.SettingKeyClientDisconnectConsecutiveBanGeneration]), 10, 64); parseErr == nil && parsed > 0 {
 		generation = parsed
@@ -61,21 +61,21 @@ func (r *settingRepository) SetMultipleWithClientDisconnectRiskGeneration(
 	if err != nil {
 		return 0, err
 	}
-	currentEnabled := true
+	currentEnabled := false
 	generation := int64(1)
 	for _, item := range current {
 		switch item.Key {
 		case service.SettingKeyClientDisconnectConsecutiveBanEnabled:
-			currentEnabled = !strings.EqualFold(strings.TrimSpace(item.Value), "false")
+			currentEnabled = strings.EqualFold(strings.TrimSpace(item.Value), "true")
 		case service.SettingKeyClientDisconnectConsecutiveBanGeneration:
 			if parsed, parseErr := strconv.ParseInt(strings.TrimSpace(item.Value), 10, 64); parseErr == nil && parsed > 0 {
 				generation = parsed
 			}
 		}
 	}
-	requestedEnabled := !strings.EqualFold(
+	requestedEnabled := strings.EqualFold(
 		strings.TrimSpace(values[service.SettingKeyClientDisconnectConsecutiveBanEnabled]),
-		"false",
+		"true",
 	)
 	if requestedEnabled != currentEnabled {
 		generation++

@@ -3,13 +3,15 @@ import { flushPromises, mount } from '@vue/test-utils'
 
 import ClientDisconnectEventsPanel from '../ClientDisconnectEventsPanel.vue'
 
-const { listClientDisconnectEvents, showError } = vi.hoisted(() => ({
+const { listClientDisconnectEvents, searchUsers, searchApiKeys, showError } = vi.hoisted(() => ({
   listClientDisconnectEvents: vi.fn(),
+  searchUsers: vi.fn(),
+  searchApiKeys: vi.fn(),
   showError: vi.fn(),
 }))
 
 vi.mock('@/api/admin/usage', () => ({
-  adminUsageAPI: { listClientDisconnectEvents },
+  adminUsageAPI: { listClientDisconnectEvents, searchUsers, searchApiKeys },
 }))
 
 vi.mock('@/stores/app', () => ({
@@ -36,12 +38,19 @@ vi.mock('vue-i18n', async () => {
 describe('ClientDisconnectEventsPanel', () => {
   beforeEach(() => {
     listClientDisconnectEvents.mockReset()
+    searchUsers.mockReset()
+    searchApiKeys.mockReset()
     showError.mockReset()
+    searchUsers.mockResolvedValue([{ id: 7, email: 'owner@example.com', deleted: false }])
+    searchApiKeys.mockResolvedValue([{ id: 11, name: 'Codex Desktop', user_id: 7 }])
     listClientDisconnectEvents.mockResolvedValue({
       items: [{
         user_id: 7,
+        user_email: 'owner@example.com',
         api_key_id: 11,
+        api_key_name: 'Codex Desktop',
         request_id: 'req-server-owned',
+        session_id: 'codex-session-1',
         protocol: 'openai.responses',
         generation: 3,
         sequence: 9,
@@ -69,39 +78,73 @@ describe('ClientDisconnectEventsPanel', () => {
     await flushPromises()
 
     expect(listClientDisconnectEvents).toHaveBeenCalledWith(expect.objectContaining({ page: 1, page_size: 20 }))
+    expect(wrapper.text()).toContain('owner@example.com')
+    expect(wrapper.text()).toContain('Codex Desktop')
     expect(wrapper.text()).toContain('req-server-owned')
+    expect(wrapper.text()).toContain('codex-session-1')
     expect(wrapper.text()).toContain('openai.responses')
     expect(wrapper.text()).toContain('admin.usage.disconnectEvents.usageMissing')
     expect(wrapper.text()).toContain('admin.usage.disconnectEvents.banned')
-    expect(wrapper.text()).toContain('10 / 10')
+    const eventCells = wrapper.get('tbody tr').findAll('td')
+    expect(eventCells[11]!.text()).toBe('10')
+    expect(eventCells[12]!.text()).toBe('10')
     expect(showError).not.toHaveBeenCalled()
   })
 
   it('forwards validated event filters from the UI', async () => {
+    vi.useFakeTimers()
     const wrapper = mount(ClientDisconnectEventsPanel, {
       global: { stubs: { Icon: true, Pagination: true } },
     })
     await flushPromises()
     listClientDisconnectEvents.mockClear()
 
-    const numberInputs = wrapper.findAll('input[type="number"]')
-    await numberInputs[0]!.setValue('7')
-    await numberInputs[1]!.setValue('11')
-    const selects = wrapper.findAll('select')
-    await selects[0]!.setValue('client_disconnected')
-    await selects[1]!.setValue('usage_missing')
-    await selects[2]!.setValue('true')
-    await selects[3]!.setValue('true')
+    const userFilter = wrapper.get('[data-testid="disconnect-user-filter"]')
+    await userFilter.trigger('focus')
+    await userFilter.setValue('owner')
+    await vi.advanceTimersByTimeAsync(300)
+    await flushPromises()
+    await wrapper.findAll('button').find((button) => button.text().includes('owner@example.com'))!.trigger('click')
+    await flushPromises()
+    expect(listClientDisconnectEvents).toHaveBeenLastCalledWith(expect.objectContaining({ user_id: 7 }))
+
+    await wrapper.get('[data-testid="disconnect-api-key-filter"]').trigger('focus')
+    await flushPromises()
+    await wrapper.findAll('button').find((button) => button.text().includes('Codex Desktop'))!.trigger('click')
+    await wrapper.get('[data-testid="disconnect-request-filter"]').setValue('req-server-owned')
+    await wrapper.get('[data-testid="disconnect-session-filter"]').setValue('codex-session-1')
+    await wrapper.get('[data-testid="disconnect-protocol-filter"]').setValue('openai.responses')
+    await wrapper.get('[data-testid="disconnect-accepted-from"]').setValue('2026-09-01T08:00')
+    await wrapper.get('[data-testid="disconnect-accepted-to"]').setValue('2026-09-02T08:00')
+    await wrapper.get('[data-testid="disconnect-finalized-from"]').setValue('2026-09-01T08:01')
+    await wrapper.get('[data-testid="disconnect-finalized-to"]').setValue('2026-09-02T08:01')
+    await wrapper.get('[data-testid="disconnect-outcome-filter"]').setValue('client_disconnected')
+    await wrapper.get('[data-testid="disconnect-completion-filter"]').setValue('usage_missing')
+    await wrapper.get('[data-testid="disconnect-usage-source-filter"]').setValue('partial')
+    await wrapper.get('[data-testid="disconnect-usage-missing-filter"]').setValue('true')
+    await wrapper.get('[data-testid="disconnect-enforce-filter"]').setValue('true')
+    await wrapper.get('[data-testid="disconnect-auto-ban-filter"]').setValue('true')
     await flushPromises()
 
     expect(listClientDisconnectEvents).toHaveBeenLastCalledWith(expect.objectContaining({
       user_id: 7,
       api_key_id: 11,
+      request_id: 'req-server-owned',
+      session_id: 'codex-session-1',
+      protocol: 'openai.responses',
+      accepted_from: new Date('2026-09-01T08:00').toISOString(),
+      accepted_to: new Date('2026-09-02T08:00').toISOString(),
+      finalized_from: new Date('2026-09-01T08:01').toISOString(),
+      finalized_to: new Date('2026-09-02T08:01').toISOString(),
       outcome: 'client_disconnected',
       completion_status: 'usage_missing',
+      usage_source: 'partial',
       usage_missing: true,
+      enforce: true,
       auto_banned: true,
       page: 1,
     }))
+    wrapper.unmount()
+    vi.useRealTimers()
   })
 })

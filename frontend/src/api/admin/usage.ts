@@ -106,8 +106,11 @@ export type ClientDisconnectCompletionStatus =
 
 export interface ClientDisconnectRiskEvent {
   user_id: number
+  user_email: string
   api_key_id?: number
+  api_key_name?: string
   request_id: string
+  session_id?: string
   protocol: string
   generation: number
   sequence: number
@@ -126,10 +129,19 @@ export interface ClientDisconnectRiskEvent {
 export interface ClientDisconnectEventQueryParams {
   user_id?: number
   api_key_id?: number
+  request_id?: string
+  session_id?: string
+  protocol?: string
   outcome?: ClientDisconnectOutcome
   completion_status?: ClientDisconnectCompletionStatus
+  usage_source?: 'upstream_exact' | 'partial' | 'estimated' | 'reconciled'
   usage_missing?: boolean
+  enforce?: boolean
   auto_banned?: boolean
+  accepted_from?: string
+  accepted_to?: string
+  finalized_from?: string
+  finalized_to?: string
   page?: number
   page_size?: number
 }

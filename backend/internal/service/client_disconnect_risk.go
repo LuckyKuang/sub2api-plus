@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -21,16 +22,19 @@ const (
 )
 
 type ClientDisconnectRiskBegin struct {
-	UserID     int64
-	Generation int64
-	RequestID  string
-	APIKeyID   int64
-	Protocol   string
+	UserID       int64
+	Generation   int64
+	RequestID    string
+	SessionID    string
+	SessionScope string
+	APIKeyID     int64
+	Protocol     string
 }
 
 type ClientDisconnectRiskFinalize struct {
 	UserID           int64
 	Generation       int64
+	SessionScope     string
 	Sequence         int64
 	Outcome          ClientDisconnectOutcome
 	Threshold        int
@@ -47,8 +51,11 @@ type ClientDisconnectRiskResult struct {
 
 type ClientDisconnectRiskEvent struct {
 	UserID           int64      `json:"user_id"`
+	UserEmail        string     `json:"user_email"`
 	APIKeyID         *int64     `json:"api_key_id,omitempty"`
+	APIKeyName       *string    `json:"api_key_name,omitempty"`
 	RequestID        string     `json:"request_id"`
+	SessionID        *string    `json:"session_id,omitempty"`
 	Protocol         string     `json:"protocol"`
 	Generation       int64      `json:"generation"`
 	Sequence         int64      `json:"sequence"`
@@ -67,10 +74,19 @@ type ClientDisconnectRiskEvent struct {
 type ClientDisconnectRiskEventFilter struct {
 	UserID           int64
 	APIKeyID         int64
+	RequestID        string
+	SessionID        string
+	Protocol         string
 	Outcome          string
 	CompletionStatus string
+	UsageSource      string
 	UsageMissing     *bool
+	Enforce          *bool
 	AutoBanned       *bool
+	AcceptedFrom     *time.Time
+	AcceptedTo       *time.Time
+	FinalizedFrom    *time.Time
+	FinalizedTo      *time.Time
 	Page             int
 	PageSize         int
 }
@@ -127,7 +143,7 @@ func (s *ClientDisconnectRiskService) settingsFor(ctx context.Context) clientDis
 		return *cached
 	}
 
-	result := clientDisconnectRiskSettings{enabled: true, threshold: 10, generation: 1, expiresAt: now.Add(2 * time.Second)}
+	result := clientDisconnectRiskSettings{enabled: false, threshold: 10, generation: 1, expiresAt: now.Add(2 * time.Second)}
 	if s.settingService != nil {
 		settings, err := s.settingService.GetAllSettings(ctx)
 		if err != nil {
@@ -151,17 +167,29 @@ func (s *ClientDisconnectRiskService) settingsFor(ctx context.Context) clientDis
 	return result
 }
 
-func (s *ClientDisconnectRiskService) NewLifecycle(userID, apiKeyID int64, role, requestID, protocol string) *ClientDisconnectLifecycle {
+func ClientDisconnectSessionScope(sessionID string, apiKeyID int64) string {
+	sessionID = sanitizeSessionID(sessionID)
+	if sessionID == "" {
+		return fmt.Sprintf("sessionless:key:%d", apiKeyID)
+	}
+	digest := sha256.Sum256([]byte(sessionID))
+	return fmt.Sprintf("session:%x", digest)
+}
+
+func (s *ClientDisconnectRiskService) NewLifecycle(userID, apiKeyID int64, role, requestID, sessionID, protocol string) *ClientDisconnectLifecycle {
 	if s == nil || s.repo == nil || userID <= 0 {
 		return nil
 	}
+	sessionID = sanitizeSessionID(sessionID)
 	return &ClientDisconnectLifecycle{
-		service:   s,
-		userID:    userID,
-		apiKeyID:  apiKeyID,
-		requestID: strings.TrimSpace(requestID),
-		protocol:  strings.TrimSpace(protocol),
-		exempt:    strings.EqualFold(strings.TrimSpace(role), RoleAdmin),
+		service:      s,
+		userID:       userID,
+		apiKeyID:     apiKeyID,
+		requestID:    strings.TrimSpace(requestID),
+		sessionID:    sessionID,
+		sessionScope: ClientDisconnectSessionScope(sessionID, apiKeyID),
+		protocol:     strings.TrimSpace(protocol),
+		exempt:       strings.EqualFold(strings.TrimSpace(role), RoleAdmin),
 	}
 }
 
@@ -194,6 +222,8 @@ type ClientDisconnectLifecycle struct {
 	userID              int64
 	apiKeyID            int64
 	requestID           string
+	sessionID           string
+	sessionScope        string
 	protocol            string
 	exempt              bool
 	mu                  sync.Mutex
@@ -234,6 +264,7 @@ func (l *ClientDisconnectLifecycle) Accepted(ctx context.Context) {
 	defer cancel()
 	sequence, err := l.service.repo.Begin(beginCtx, ClientDisconnectRiskBegin{
 		UserID: l.userID, Generation: settings.generation, RequestID: requestID,
+		SessionID: l.sessionID, SessionScope: l.sessionScope,
 		APIKeyID: l.apiKeyID, Protocol: l.protocol,
 	})
 	if err != nil {
@@ -300,7 +331,7 @@ func (l *ClientDisconnectLifecycle) finalize(ctx context.Context, outcome Client
 	finalizeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
 	result, err := l.service.repo.Finalize(finalizeCtx, ClientDisconnectRiskFinalize{
-		UserID: l.userID, Generation: generation, Sequence: sequence,
+		UserID: l.userID, Generation: generation, SessionScope: l.sessionScope, Sequence: sequence,
 		Outcome: pending.outcome, Threshold: settings.threshold,
 		Enforce:          settings.enabled && settings.generation == generation && !l.exempt,
 		CompletionStatus: pending.completionStatus,
@@ -327,6 +358,7 @@ func (l *ClientDisconnectLifecycle) finalize(ctx context.Context, outcome Client
 			"user_id", l.userID,
 			"api_key_id", l.apiKeyID,
 			"request_id", l.requestID,
+			"session_scope", l.sessionScope,
 			"protocol", l.protocol,
 			"consecutive_count", result.ConsecutiveCount,
 			"threshold", settings.threshold,

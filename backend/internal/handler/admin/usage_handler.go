@@ -47,6 +47,22 @@ func (h *UsageHandler) ListClientDisconnectEvents(c *gin.Context) {
 			*target = value
 		}
 	}
+	for name, target := range map[string]*string{
+		"request_id": &filter.RequestID,
+		"session_id": &filter.SessionID,
+		"protocol":   &filter.Protocol,
+	} {
+		value := strings.TrimSpace(c.Query(name))
+		limit := 255
+		if name == "protocol" {
+			limit = 64
+		}
+		if len(value) > limit {
+			response.BadRequest(c, "Invalid "+name)
+			return
+		}
+		*target = value
+	}
 	filter.Outcome = strings.TrimSpace(c.Query("outcome"))
 	switch filter.Outcome {
 	case "", "pending", string(service.ClientDisconnectOutcomeCompleted), string(service.ClientDisconnectOutcomeDisconnected), string(service.ClientDisconnectOutcomeNeutral):
@@ -61,7 +77,18 @@ func (h *UsageHandler) ListClientDisconnectEvents(c *gin.Context) {
 		response.BadRequest(c, "Invalid completion_status")
 		return
 	}
-	for name, target := range map[string]**bool{"usage_missing": &filter.UsageMissing, "auto_banned": &filter.AutoBanned} {
+	filter.UsageSource = strings.TrimSpace(c.Query("usage_source"))
+	switch filter.UsageSource {
+	case "", "upstream_exact", "partial", "estimated", "reconciled":
+	default:
+		response.BadRequest(c, "Invalid usage_source")
+		return
+	}
+	for name, target := range map[string]**bool{
+		"usage_missing": &filter.UsageMissing,
+		"enforce":       &filter.Enforce,
+		"auto_banned":   &filter.AutoBanned,
+	} {
 		if raw := strings.TrimSpace(c.Query(name)); raw != "" {
 			value, err := strconv.ParseBool(raw)
 			if err != nil {
@@ -70,6 +97,29 @@ func (h *UsageHandler) ListClientDisconnectEvents(c *gin.Context) {
 			}
 			*target = &value
 		}
+	}
+	for name, target := range map[string]**time.Time{
+		"accepted_from":  &filter.AcceptedFrom,
+		"accepted_to":    &filter.AcceptedTo,
+		"finalized_from": &filter.FinalizedFrom,
+		"finalized_to":   &filter.FinalizedTo,
+	} {
+		if raw := strings.TrimSpace(c.Query(name)); raw != "" {
+			value, err := time.Parse(time.RFC3339, raw)
+			if err != nil {
+				response.BadRequest(c, "Invalid "+name+", use RFC3339")
+				return
+			}
+			*target = &value
+		}
+	}
+	if filter.AcceptedFrom != nil && filter.AcceptedTo != nil && filter.AcceptedFrom.After(*filter.AcceptedTo) {
+		response.BadRequest(c, "accepted_from must not be after accepted_to")
+		return
+	}
+	if filter.FinalizedFrom != nil && filter.FinalizedTo != nil && filter.FinalizedFrom.After(*filter.FinalizedTo) {
+		response.BadRequest(c, "finalized_from must not be after finalized_to")
+		return
 	}
 	if h.disconnectRisk == nil {
 		response.Paginated(c, []service.ClientDisconnectRiskEvent{}, 0, page, pageSize)
