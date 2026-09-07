@@ -1,32 +1,30 @@
-Sub2API Plus v0.1.183+custom.004
+Sub2API Plus v0.2.0+custom.003
 
 ## Highlights
 
-- Added configurable OpenAI-compatible Content Moderation endpoint pools with priority failover, cooldown, manual pause, and health visibility.
-- Improved Prompt Audit and Content Moderation observability and protocol coverage.
-- Added Moderation platform attribution and status semantics to audit records.
-- Improved asynchronous image task durability, requested/actual image observability, and PostgreSQL-backed ZIP download recovery.
+Adds canonical GPT-6 Astra support across OpenAI discovery, Codex catalogs,
+generated client configuration, request metadata, and billing.
 
 ## Changed
 
-- Prompt Guard audits user input only.
-- Added text Moderation API strategy guidance and clarified its interaction with global moderation modes.
-
-## Fixed
-
-- Fixed manual Moderation endpoint tests being overwritten by persisted pool configuration.
-- Fixed multi-image async edit submission and durable task metadata.
-- Fixed completed async image ZIP downloads after Redis task expiry.
+- Lists GPT-6 Astra first while retaining GPT-5.6 Sol as the account-test model.
+- Mirrors the official Codex Astra instructions, default low reasoning level,
+  multi-agent Ultra preset, and client capability metadata.
+- Uses official Standard, Flex, Fast, prompt-cache, and whole-request
+  long-context pricing for OpenAI Platform API-key traffic.
 
 ## Compatibility and migration
 
-Database migration 237 adds Moderation endpoint attribution and asynchronous image storage/count metadata. Existing completed image tasks can recover actual image counts from stored result data, but tasks completed before storage keys were persisted cannot recover ZIP downloads after Redis expiry.
+Only the canonical `gpt-6-astra` ID is added. Existing model pricing, including
+the configured GPT-5.6 Sol rates, is unchanged. At 272,001 total input tokens
+and above, all Astra input and cache tokens are billed at 2x and all output
+tokens at 1.5x.
 
 ## Known issues
 
-HTTP image object URLs on a different origin remain blocked by the default CSP. Use an HTTPS image storage or CDN URL for browser previews.
+Fast/priority processing is unavailable for GPT-6 Astra with EU data residency.
 
 ## Upstream baseline
 
-Official release: v0.1.183
-Official commit: e8cb019fabf8b55199436229044cbf9aa7a82564
+Official release: v0.2.0
+Official commit: aa236488351eb71e120fc2b6fb32e36b0374c918

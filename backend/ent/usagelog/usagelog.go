@@ -92,6 +92,10 @@ const (
 	FieldFirstOutputKind = "first_output_kind"
 	// FieldIsComplete holds the string denoting the is_complete field in the database.
 	FieldIsComplete = "is_complete"
+	// FieldCompletionStatus holds the string denoting the completion_status field in the database.
+	FieldCompletionStatus = "completion_status"
+	// FieldUsageSource holds the string denoting the usage_source field in the database.
+	FieldUsageSource = "usage_source"
 	// FieldUserAgent holds the string denoting the user_agent field in the database.
 	FieldUserAgent = "user_agent"
 	// FieldIPAddress holds the string denoting the ip_address field in the database.
@@ -209,6 +213,8 @@ var Columns = []string{
 	FieldFirstOutputMs,
 	FieldFirstOutputKind,
 	FieldIsComplete,
+	FieldCompletionStatus,
+	FieldUsageSource,
 	FieldUserAgent,
 	FieldIPAddress,
 	FieldImageCount,
@@ -287,6 +293,14 @@ var (
 	DefaultStream bool
 	// FirstOutputKindValidator is a validator for the "first_output_kind" field. It is called by the builders before save.
 	FirstOutputKindValidator func(string) error
+	// DefaultCompletionStatus holds the default value on creation for the "completion_status" field.
+	DefaultCompletionStatus string
+	// CompletionStatusValidator is a validator for the "completion_status" field. It is called by the builders before save.
+	CompletionStatusValidator func(string) error
+	// DefaultUsageSource holds the default value on creation for the "usage_source" field.
+	DefaultUsageSource string
+	// UsageSourceValidator is a validator for the "usage_source" field. It is called by the builders before save.
+	UsageSourceValidator func(string) error
 	// UserAgentValidator is a validator for the "user_agent" field. It is called by the builders before save.
 	UserAgentValidator func(string) error
 	// IPAddressValidator is a validator for the "ip_address" field. It is called by the builders before save.
@@ -512,6 +526,16 @@ func ByFirstOutputKind(opts ...sql.OrderTermOption) OrderOption {
 // ByIsComplete orders the results by the is_complete field.
 func ByIsComplete(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldIsComplete, opts...).ToFunc()
+}
+
+// ByCompletionStatus orders the results by the completion_status field.
+func ByCompletionStatus(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCompletionStatus, opts...).ToFunc()
+}
+
+// ByUsageSource orders the results by the usage_source field.
+func ByUsageSource(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldUsageSource, opts...).ToFunc()
 }
 
 // ByUserAgent orders the results by the user_agent field.

@@ -393,6 +393,7 @@ func TestAPIContracts(t *testing.T) {
 						"require_oauth_only": false,
 						"require_privacy_set": false,
 						"max_reasoning_effort": "",
+						"max_reasoning_effort_over_limit": "",
 						"reasoning_effort_mappings": null,
 						"rpm_limit": 0,
 						"created_at": "2025-01-02T03:04:05Z",
@@ -596,6 +597,7 @@ func TestAPIContracts(t *testing.T) {
 								"request_id": "req_123",
 								"model": "claude-3",
 								"request_type": "stream",
+								"native_compaction_v2": false,
 								"openai_ws_mode": false,
 								"group_id": null,
 								"subscription_id": null,
@@ -622,6 +624,8 @@ func TestAPIContracts(t *testing.T) {
 							"first_output_ms": 25,
 							"first_output_kind": "image",
 							"is_complete": null,
+							"completion_status": "unknown",
+							"usage_source": "unknown",
 							"image_count": 0,
 							"image_size": null,
 							"image_input_size": null,
@@ -909,7 +913,9 @@ func TestAPIContracts(t *testing.T) {
 					"max_claude_code_version": "",
 					"min_codex_version": "",
 					"max_codex_version": "",
+					"codex_cli_only_allow_app_server_clients": false,
 					"codex_cli_only_blacklist": "",
+					"codex_cli_only_engine_fingerprint_signals": "",
 					"codex_cli_only_whitelist": "",
 					"compact_home_enabled": false,
 					"allow_ungrouped_key_scheduling": false,
@@ -931,6 +937,7 @@ func TestAPIContracts(t *testing.T) {
 					"payment_visible_method_wxpay_enabled": false,
 					"openai_low_upstream_rate_priority_enabled": true,
 					"openai_oauth_scheduling_rate_multiplier": 0.05,
+					"openai_ttft_mode": "semantic",
 					"openai_advanced_scheduler_enabled": true,
 					"openai_advanced_scheduler_sticky_weighted_enabled": false,
 					"openai_advanced_scheduler_subscription_priority_enabled": false,
@@ -1032,7 +1039,9 @@ func TestAPIContracts(t *testing.T) {
 					"wechat_connect_redirect_url": "",
 					"wechat_connect_frontend_redirect_url": "/auth/wechat/callback",
 					"wechat_connect_scopes": "snsapi_login",
-					"allow_user_view_error_requests": false
+					"allow_user_view_error_requests": false,
+					"client_disconnect_consecutive_ban_enabled": true,
+					"client_disconnect_consecutive_ban_threshold": 10
 				}
 			}`,
 		},
@@ -1241,7 +1250,9 @@ func TestAPIContracts(t *testing.T) {
 					"antigravity_user_agent_version": "",
 					"min_codex_version": "",
 					"max_codex_version": "",
+					"codex_cli_only_allow_app_server_clients": false,
 					"codex_cli_only_blacklist": "",
+					"codex_cli_only_engine_fingerprint_signals": "",
 					"codex_cli_only_whitelist": "",
 					"compact_home_enabled": false,
 					"web_search_emulation_enabled": false,
@@ -1251,6 +1262,7 @@ func TestAPIContracts(t *testing.T) {
 					"payment_visible_method_wxpay_enabled": false,
 					"openai_low_upstream_rate_priority_enabled": false,
 					"openai_oauth_scheduling_rate_multiplier": 1,
+					"openai_ttft_mode": "semantic",
 					"openai_advanced_scheduler_enabled": false,
 					"openai_advanced_scheduler_sticky_weighted_enabled": false,
 					"openai_advanced_scheduler_subscription_priority_enabled": false,
@@ -1386,7 +1398,9 @@ func TestAPIContracts(t *testing.T) {
 					"auth_source_default_dingtalk_grant_on_signup": false,
 					"auth_source_default_dingtalk_grant_on_first_bind": false,
 					"force_email_on_third_party_signup": false,
-					"allow_user_view_error_requests": false
+					"allow_user_view_error_requests": false,
+					"client_disconnect_consecutive_ban_enabled": true,
+					"client_disconnect_consecutive_ban_threshold": 10
 				}
 			}`,
 		},
@@ -2047,7 +2061,7 @@ func (s *stubAccountRepo) IncrementQuotaUsed(ctx context.Context, id int64, amou
 	return errors.New("not implemented")
 }
 
-func (s *stubAccountRepo) ResetQuotaUsed(ctx context.Context, id int64) error {
+func (s *stubAccountRepo) ResetQuotaUsedAndClearRateLimitCooldown(ctx context.Context, id int64) error {
 	return errors.New("not implemented")
 }
 

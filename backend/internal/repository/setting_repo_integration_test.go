@@ -4,9 +4,12 @@ package repository
 
 import (
 	"context"
+	"strconv"
+	"sync"
 	"testing"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/service"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -160,4 +163,50 @@ func (s *SettingRepoSuite) TestSetMultiple_UpdateToEmpty() {
 	got, err = s.repo.GetValue(s.ctx, "clearable_key")
 	s.Require().NoError(err)
 	s.Require().Equal("", got, "value should be updated to empty string")
+}
+
+func TestSettingRepositoryClientDisconnectGenerationWriteIsAtomic(t *testing.T) {
+	ctx := context.Background()
+	repo := NewSettingRepository(testEntClient(t)).(*settingRepository)
+	require := require.New(t)
+	require.NoError(repo.SetMultiple(ctx, map[string]string{
+		service.SettingKeyClientDisconnectConsecutiveBanEnabled:    "true",
+		service.SettingKeyClientDisconnectConsecutiveBanGeneration: "100",
+	}))
+
+	start := make(chan struct{})
+	results := make(chan int64, 2)
+	errors := make(chan error, 2)
+	var workers sync.WaitGroup
+	for i := 0; i < 2; i++ {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			<-start
+			generation, err := repo.SetMultipleWithClientDisconnectRiskGeneration(ctx, map[string]string{
+				service.SettingKeyClientDisconnectConsecutiveBanEnabled:   "false",
+				service.SettingKeyClientDisconnectConsecutiveBanThreshold: "10",
+			})
+			results <- generation
+			errors <- err
+		}()
+	}
+	close(start)
+	workers.Wait()
+	close(results)
+	close(errors)
+	for err := range errors {
+		require.NoError(err)
+	}
+	for generation := range results {
+		require.Equal(int64(101), generation)
+	}
+
+	values, err := repo.GetMultiple(ctx, []string{
+		service.SettingKeyClientDisconnectConsecutiveBanEnabled,
+		service.SettingKeyClientDisconnectConsecutiveBanGeneration,
+	})
+	require.NoError(err)
+	require.Equal("false", values[service.SettingKeyClientDisconnectConsecutiveBanEnabled])
+	require.Equal(strconv.FormatInt(101, 10), values[service.SettingKeyClientDisconnectConsecutiveBanGeneration])
 }

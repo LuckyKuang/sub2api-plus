@@ -68,6 +68,22 @@ func (h *GatewayHandler) WebSearch(c *gin.Context) {
 		}})
 		return
 	}
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{
+			"type":    "api_error",
+			"message": "User context not found",
+		}})
+		return
+	}
+	disconnectLifecycle := startClientDisconnectRiskLifecycle(c, h.clientDisconnectRisk, subject.UserID, apiKey.ID, searchLabel)
+	defer func() {
+		if c.Request.Context().Err() != nil {
+			disconnectLifecycle.Disconnected(c.Request.Context())
+			return
+		}
+		disconnectLifecycle.Neutral(c.Request.Context())
+	}()
 
 	if apiKey.Group == nil || apiKey.Group.Platform != "grok" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{
@@ -88,7 +104,6 @@ func (h *GatewayHandler) WebSearch(c *gin.Context) {
 		return
 	}
 
-	subject, _ := middleware2.GetAuthSubjectFromContext(c)
 	reqLog := requestLogger(c, "handler.gateway.web_search")
 	// Audit user search query before upstream Grok web_search traffic.
 	auditBody, _ := json.Marshal(map[string]any{
@@ -210,7 +225,6 @@ func (h *GatewayHandler) WebSearch(c *gin.Context) {
 		}})
 		return
 	}
-
 	userAgent := c.GetHeader("User-Agent")
 	clientIP := ip.GetClientIP(c)
 	inboundEndpoint := GetInboundEndpoint(c)
@@ -263,6 +277,11 @@ func (h *GatewayHandler) WebSearch(c *gin.Context) {
 		"provider":    providerName,
 		"max_results": maxResults,
 	})
+	if c.Request.Context().Err() != nil {
+		disconnectLifecycle.Disconnected(c.Request.Context())
+		return
+	}
+	disconnectLifecycle.Completed(c.Request.Context())
 }
 
 // acquireWebSearchAccountSlot resolves an immediate slot or WaitPlan wait.

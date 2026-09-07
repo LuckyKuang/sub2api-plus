@@ -127,6 +127,12 @@
           <Select v-model="filters.request_type" :options="requestTypeOptions" @change="emitChange" />
         </div>
 
+        <!-- Native compaction is independent of the transport request type. -->
+        <div v-if="mode !== 'errors'" class="w-full sm:w-auto sm:min-w-[180px]">
+          <label class="input-label">{{ t('usage.compactionFilter') }}</label>
+          <Select v-model="filters.native_compaction_v2" :options="compactionOptions" @change="emitChange" />
+        </div>
+
         <!-- Billing Type Filter (usage only) -->
         <div v-if="mode !== 'errors'" class="w-full sm:w-auto sm:min-w-[200px]">
           <label class="input-label">{{ t('admin.usage.billingType') }}</label>
@@ -143,6 +149,16 @@
           <label class="input-label">{{ t('admin.usage.upstreamModelAudit') }}</label>
           <Select v-model="filters.upstream_model_mismatch" :options="upstreamModelMismatchOptions" @change="emitChange" />
         </div>
+
+		<div v-if="mode === 'usage'" class="w-full sm:w-auto sm:min-w-[200px]">
+		  <label class="input-label">{{ t('admin.usage.completionStatus') }}</label>
+		  <Select v-model="filters.completion_status" :options="completionStatusOptions" @change="emitChange" />
+		</div>
+
+		<div v-if="mode === 'usage'" class="w-full sm:w-auto sm:min-w-[200px]">
+		  <label class="input-label">{{ t('admin.usage.usageSource') }}</label>
+		  <Select v-model="filters.usage_source" :options="usageSourceOptions" @change="emitChange" />
+		</div>
 
         <!-- Error record view (errors only) -->
         <div v-if="mode === 'errors'" class="w-full sm:w-auto sm:min-w-[180px]">
@@ -284,6 +300,11 @@ const requestTypeOptions = ref<SelectOption[]>([
   { value: 'cyber', label: t('usage.cyber') }
 ])
 
+const compactionOptions = ref<SelectOption[]>([
+  { value: null, label: t('usage.allCompactionTypes') },
+  { value: true, label: t('usage.compactionOnly') }
+])
+
 const billingTypeOptions = ref<SelectOption[]>([
   { value: null, label: t('admin.usage.allBillingTypes') },
   { value: 0, label: t('admin.usage.billingTypeBalance') },
@@ -332,6 +353,23 @@ const upstreamModelMismatchOptions = ref<SelectOption[]>([
   { value: null, label: t('admin.usage.allUpstreamModelAudit') },
   { value: true, label: t('admin.usage.upstreamModelMismatchOnly') },
   { value: false, label: t('admin.usage.upstreamModelMatchedOnly') }
+])
+
+const completionStatusOptions = computed<SelectOption[]>(() => [
+  { value: null, label: t('admin.usage.allCompletionStatuses') },
+  { value: 'completed', label: t('admin.usage.completionCompleted') },
+  { value: 'client_disconnected', label: t('usage.clientDisconnected') },
+  { value: 'incomplete', label: t('usage.incomplete') },
+  { value: 'unknown', label: t('usage.unknown') }
+])
+
+const usageSourceOptions = computed<SelectOption[]>(() => [
+  { value: null, label: t('admin.usage.allUsageSources') },
+  { value: 'upstream_exact', label: t('admin.usage.usageSourceExact') },
+  { value: 'partial', label: t('admin.usage.usageSourcePartial') },
+  { value: 'estimated', label: t('admin.usage.usageSourceEstimated') },
+  { value: 'reconciled', label: t('admin.usage.usageSourceReconciled') },
+  { value: 'unknown', label: t('usage.unknown') }
 ])
 
 const emitChange = () => emit('change')

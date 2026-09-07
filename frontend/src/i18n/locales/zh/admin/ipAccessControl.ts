@@ -112,6 +112,7 @@ export default {
       failureCount: '触发封禁时失败次数',
       hitCount: '已记录拦截批次',
       lastSeenAt: '最近记录时间',
+      lastSeenNever: '尚未命中',
       hitCountHint: '为避免攻击流量放大数据库写入，同一来源的拦截记录会限频汇总。',
       manualBlock: '手动封禁',
       manualBlockUnavailable: '当前代理链无法安全识别客户端 IP，手动封禁已禁用。可以继续创建运维白名单，或修正部署配置后再封禁。',

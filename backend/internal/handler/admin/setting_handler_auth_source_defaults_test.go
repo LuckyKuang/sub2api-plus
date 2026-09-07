@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -46,6 +47,18 @@ func (s *settingHandlerRepoStub) GetMultiple(ctx context.Context, keys []string)
 		}
 	}
 	return out, nil
+}
+
+func (s *settingHandlerRepoStub) GetClientDisconnectRiskSettings(context.Context) (bool, int64, error) {
+	enabled := true
+	if value, ok := s.values[service.SettingKeyClientDisconnectConsecutiveBanEnabled]; ok {
+		enabled = value != "false"
+	}
+	generation := int64(1)
+	if value := s.values[service.SettingKeyClientDisconnectConsecutiveBanGeneration]; value != "" {
+		_, _ = fmt.Sscan(value, &generation)
+	}
+	return enabled, generation, nil
 }
 
 func (s *settingHandlerRepoStub) SetMultiple(ctx context.Context, settings map[string]string) error {

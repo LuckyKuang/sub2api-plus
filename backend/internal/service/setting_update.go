@@ -43,8 +43,7 @@ func (s *SettingService) UpdateSettingsOmitting(ctx context.Context, settings *S
 		return err
 	}
 	omitted.dropFrom(updates)
-
-	if err := s.settingRepo.SetMultiple(ctx, updates); err != nil {
+	if err := s.persistSystemSettingsUpdates(ctx, settings, updates); err != nil {
 		return err
 	}
 	s.refreshCachedSettingsAfterWrite(ctx, settings, omitted)
@@ -73,11 +72,62 @@ func (s *SettingService) UpdateSettingsWithAuthSourceDefaultsOmitting(ctx contex
 		updates[key] = value
 	}
 	omitted.dropFrom(updates)
-
-	if err := s.settingRepo.SetMultiple(ctx, updates); err != nil {
+	if err := s.persistSystemSettingsUpdates(ctx, settings, updates); err != nil {
 		return err
 	}
 	s.refreshCachedSettingsAfterWrite(ctx, settings, omitted)
+	return nil
+}
+
+func (s *SettingService) persistSystemSettingsUpdates(ctx context.Context, settings *SystemSettings, updates map[string]string) error {
+	if _, writesEnabled := updates[SettingKeyClientDisconnectConsecutiveBanEnabled]; writesEnabled {
+		if writer, ok := s.settingRepo.(interface {
+			SetMultipleWithClientDisconnectRiskGeneration(context.Context, map[string]string) (int64, error)
+		}); ok {
+			generation, err := writer.SetMultipleWithClientDisconnectRiskGeneration(ctx, updates)
+			if err != nil {
+				return err
+			}
+			settings.ClientDisconnectConsecutiveBanGeneration = generation
+			return nil
+		}
+	}
+	if err := s.normalizeClientDisconnectRiskGeneration(ctx, settings, updates); err != nil {
+		return err
+	}
+	return s.settingRepo.SetMultiple(ctx, updates)
+}
+
+// normalizeClientDisconnectRiskGeneration keeps the streak-reset generation
+// owned by the settings service so non-HTTP callers cannot bypass it.
+func (s *SettingService) normalizeClientDisconnectRiskGeneration(ctx context.Context, settings *SystemSettings, updates map[string]string) error {
+	requestedValue, writesEnabled := updates[SettingKeyClientDisconnectConsecutiveBanEnabled]
+	if !writesEnabled {
+		delete(updates, SettingKeyClientDisconnectConsecutiveBanGeneration)
+		return nil
+	}
+
+	currentEnabled := !isFalseSettingValue(requestedValue)
+	currentGeneration := settings.ClientDisconnectConsecutiveBanGeneration
+	if currentGeneration < 1 {
+		currentGeneration = 1
+	}
+	if reader, ok := s.settingRepo.(interface {
+		GetClientDisconnectRiskSettings(context.Context) (bool, int64, error)
+	}); ok {
+		var err error
+		currentEnabled, currentGeneration, err = reader.GetClientDisconnectRiskSettings(ctx)
+		if err != nil {
+			return err
+		}
+	}
+
+	requestedEnabled := !isFalseSettingValue(requestedValue)
+	if requestedEnabled != currentEnabled {
+		currentGeneration++
+	}
+	settings.ClientDisconnectConsecutiveBanGeneration = currentGeneration
+	updates[SettingKeyClientDisconnectConsecutiveBanGeneration] = strconv.FormatInt(currentGeneration, 10)
 	return nil
 }
 
@@ -99,6 +149,17 @@ func (s *SettingService) refreshCachedSettingsAfterWrite(ctx context.Context, se
 }
 
 func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, settings *SystemSettings) (map[string]string, error) {
+	if settings.ClientDisconnectConsecutiveBanThreshold == 0 {
+		// Preserve source compatibility for internal whole-document callers that
+		// predate this setting. The HTTP update path still rejects an explicit 0.
+		settings.ClientDisconnectConsecutiveBanThreshold = 10
+	}
+	if settings.ClientDisconnectConsecutiveBanThreshold < 1 || settings.ClientDisconnectConsecutiveBanThreshold > 1000 {
+		return nil, infraerrors.BadRequest(
+			"INVALID_CLIENT_DISCONNECT_CONSECUTIVE_BAN_THRESHOLD",
+			"client disconnect consecutive ban threshold must be between 1 and 1000",
+		)
+	}
 	if err := s.validateDefaultSubscriptionGroups(ctx, settings.DefaultSubscriptions); err != nil {
 		return nil, err
 	}
@@ -451,6 +512,12 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 
 	// 风控中心功能开关
 	updates[SettingKeyRiskControlEnabled] = strconv.FormatBool(settings.RiskControlEnabled)
+	updates[SettingKeyClientDisconnectConsecutiveBanEnabled] = strconv.FormatBool(settings.ClientDisconnectConsecutiveBanEnabled)
+	updates[SettingKeyClientDisconnectConsecutiveBanThreshold] = strconv.Itoa(settings.ClientDisconnectConsecutiveBanThreshold)
+	if settings.ClientDisconnectConsecutiveBanGeneration < 1 {
+		settings.ClientDisconnectConsecutiveBanGeneration = 1
+	}
+	updates[SettingKeyClientDisconnectConsecutiveBanGeneration] = strconv.FormatInt(settings.ClientDisconnectConsecutiveBanGeneration, 10)
 
 	// 全局 IP 访问控制功能总开关
 	updates[SettingKeyGlobalIPAccessControlEnabled] = strconv.FormatBool(settings.GlobalIPAccessControlEnabled)
@@ -472,6 +539,11 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeyBackendModeEnabled] = strconv.FormatBool(settings.BackendModeEnabled)
 
 	// Gateway forwarding behavior
+	mode := normalizeOpenAITTFTMode(settings.OpenAITTFTMode)
+	if strings.TrimSpace(settings.OpenAITTFTMode) != "" && strings.ToLower(strings.TrimSpace(settings.OpenAITTFTMode)) != OpenAITTFTModeSemantic && strings.ToLower(strings.TrimSpace(settings.OpenAITTFTMode)) != OpenAITTFTModeVisible {
+		return nil, fmt.Errorf("%s must be one of: %s/%s", SettingKeyOpenAITTFTMode, OpenAITTFTModeSemantic, OpenAITTFTModeVisible)
+	}
+	updates[SettingKeyOpenAITTFTMode] = mode
 	updates[SettingKeyEnableFingerprintUnification] = strconv.FormatBool(settings.EnableFingerprintUnification)
 	updates[SettingKeyEnableMetadataPassthrough] = strconv.FormatBool(settings.EnableMetadataPassthrough)
 	updates[SettingKeyEnableCCHSigning] = strconv.FormatBool(settings.EnableCCHSigning)
@@ -497,6 +569,8 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeyMaxCodexVersion] = strings.TrimSpace(settings.MaxCodexVersion)
 	updates[SettingKeyCodexCLIOnlyBlacklist] = strings.TrimSpace(settings.CodexCLIOnlyBlacklist)
 	updates[SettingKeyCodexCLIOnlyWhitelist] = strings.TrimSpace(settings.CodexCLIOnlyWhitelist)
+	updates[SettingKeyCodexCLIOnlyAllowAppServerClients] = strconv.FormatBool(settings.CodexCLIOnlyAllowAppServerClients)
+	updates[SettingKeyCodexCLIOnlyEngineFingerprintSignals] = strings.TrimSpace(settings.CodexCLIOnlyEngineFingerprintSignals)
 	updates[SettingPaymentVisibleMethodAlipaySource] = settings.PaymentVisibleMethodAlipaySource
 	updates[SettingPaymentVisibleMethodWxpaySource] = settings.PaymentVisibleMethodWxpaySource
 	updates[SettingPaymentVisibleMethodAlipayEnabled] = strconv.FormatBool(settings.PaymentVisibleMethodAlipayEnabled)
@@ -709,6 +783,7 @@ func (s *SettingService) refreshCachedSettings(settings *SystemSettings) {
 	})
 	gatewayForwardingSF.Forget("gateway_forwarding")
 	gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{
+		openAITTFTMode:                   normalizeOpenAITTFTMode(settings.OpenAITTFTMode),
 		fingerprintUnification:           settings.EnableFingerprintUnification,
 		metadataPassthrough:              settings.EnableMetadataPassthrough,
 		cchSigning:                       settings.EnableCCHSigning,
@@ -806,6 +881,7 @@ func (s *SettingService) refreshCachedSettings(settings *SystemSettings) {
 	}
 	s.notifyChannelMonitorRuntimeListeners()
 	s.notifyIPAccessRuntimeListeners()
+	s.notifyClientDisconnectRiskRuntimeListeners()
 }
 
 func (s *SettingService) defaultRewriteMessageCacheControl() bool {

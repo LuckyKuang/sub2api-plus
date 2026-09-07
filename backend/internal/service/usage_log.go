@@ -131,10 +131,14 @@ type UsageLog struct {
 	// ServiceTier records the billable request tier, e.g. OpenAI "priority" / "flex"
 	// or Anthropic "fast".
 	ServiceTier *string
-	// ReasoningEffort is the request's reasoning effort level.
+	// ReasoningEffort is the effective effort recorded for this request after
+	// group policy rewriting and model-family remapping (e.g. max -> xhigh).
 	// OpenAI: "low" / "medium" / "high" / "xhigh"; Claude: "low" / "medium" / "high" / "max".
 	// Nil means not provided / not applicable.
 	ReasoningEffort *string
+	// RequestedReasoningEffort is the client-requested effort before mapping.
+	// Nil means historical rows, or that no explicit/suffix-derived effort was observed.
+	RequestedReasoningEffort *string
 	// InboundEndpoint is the client-facing API endpoint path, e.g. /v1/chat/completions.
 	InboundEndpoint *string
 	// UpstreamEndpoint is the normalized upstream endpoint path, e.g. /v1/responses.
@@ -170,22 +174,29 @@ type UsageLog struct {
 	// AccountStatsCost 账号统计定价预计算费用（nil = 使用默认公式 total_cost × account_rate_multiplier）
 	AccountStatsCost *float64
 
-	BillingType     int8
-	RequestType     RequestType
-	Stream          bool
-	OpenAIWSMode    bool
-	DurationMs      *int
-	FirstTokenMs    *int
-	LastTokenMs     *int
-	FirstOutputMs   *int
-	FirstOutputKind *string
-	IsComplete      *bool
-	UserAgent       *string
-	IPAddress       *string
+	BillingType        int8
+	RequestType        RequestType
+	Stream             bool
+	OpenAIWSMode       bool
+	NativeCompactionV2 bool
+	DurationMs         *int
+	FirstTokenMs       *int
+	LastTokenMs        *int
+	FirstOutputMs      *int
+	FirstOutputKind    *string
+	IsComplete         *bool
+	CompletionStatus   string
+	UsageSource        string
+	UserAgent          *string
+	IPAddress          *string
 	// SessionID is the explicit client-provided request correlation identifier
 	// (e.g. the session_id / X-Session-Id headers). Nil when the client sent no
 	// valid session header. It is never derived from prompt_cache_key or content.
 	SessionID *string
+	// UpstreamRequestID 是直接上游在响应头中声明的请求标识，只读账户
+	// extra.upstream_request_id_header 指定的头；账户未指定头名、WS 轮次
+	// 与上游没有该头的路径为 nil。
+	UpstreamRequestID *string
 
 	// Cache TTL Override 标记（管理员强制替换了缓存 TTL 计费）
 	CacheTTLOverridden bool
@@ -211,6 +222,45 @@ type UsageLog struct {
 	Account      *Account
 	Group        *Group
 	Subscription *UserSubscription
+}
+
+const (
+	UsageCompletionUnknown            = "unknown"
+	UsageCompletionCompleted          = "completed"
+	UsageCompletionClientDisconnected = "client_disconnected"
+	UsageCompletionIncomplete         = "incomplete"
+
+	UsageSourceUnknown       = "unknown"
+	UsageSourceUpstreamExact = "upstream_exact"
+	UsageSourcePartial       = "partial"
+	UsageSourceEstimated     = "estimated"
+	UsageSourceReconciled    = "reconciled"
+)
+
+func (u *UsageLog) SyncCompletionMetadata() {
+	if u == nil {
+		return
+	}
+	if strings.TrimSpace(u.CompletionStatus) == "" {
+		switch {
+		case u.IsComplete == nil:
+			u.CompletionStatus = UsageCompletionUnknown
+		case *u.IsComplete:
+			u.CompletionStatus = UsageCompletionCompleted
+		default:
+			u.CompletionStatus = UsageCompletionIncomplete
+		}
+	}
+	if strings.TrimSpace(u.UsageSource) == "" {
+		switch u.CompletionStatus {
+		case UsageCompletionCompleted:
+			u.UsageSource = UsageSourceUpstreamExact
+		case UsageCompletionClientDisconnected, UsageCompletionIncomplete:
+			u.UsageSource = UsageSourcePartial
+		default:
+			u.UsageSource = UsageSourceUnknown
+		}
+	}
 }
 
 func (u *UsageLog) TotalTokens() int {

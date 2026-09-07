@@ -202,6 +202,7 @@ type SystemSettings struct {
 	BackendModeEnabled bool `json:"backend_mode_enabled"`
 
 	// Gateway forwarding behavior
+	OpenAITTFTMode                               string `json:"openai_ttft_mode"`
 	EnableFingerprintUnification                 bool   `json:"enable_fingerprint_unification"`
 	EnableMetadataPassthrough                    bool   `json:"enable_metadata_passthrough"`
 	EnableCCHSigning                             bool   `json:"enable_cch_signing"`
@@ -224,10 +225,12 @@ type SystemSettings struct {
 	OpenAICodexVersionAutoSyncEnabled            bool   `json:"openai_codex_version_auto_sync_enabled"`
 
 	// codex_cli_only profile policy
-	MinCodexVersion       string `json:"min_codex_version"`
-	MaxCodexVersion       string `json:"max_codex_version"`
-	CodexCLIOnlyBlacklist string `json:"codex_cli_only_blacklist"`
-	CodexCLIOnlyWhitelist string `json:"codex_cli_only_whitelist"`
+	MinCodexVersion                      string `json:"min_codex_version"`
+	MaxCodexVersion                      string `json:"max_codex_version"`
+	CodexCLIOnlyBlacklist                string `json:"codex_cli_only_blacklist"`
+	CodexCLIOnlyWhitelist                string `json:"codex_cli_only_whitelist"`
+	CodexCLIOnlyAllowAppServerClients    bool   `json:"codex_cli_only_allow_app_server_clients"`
+	CodexCLIOnlyEngineFingerprintSignals string `json:"codex_cli_only_engine_fingerprint_signals"`
 
 	// Web Search Emulation
 	WebSearchEmulationEnabled bool `json:"web_search_emulation_enabled"`
@@ -327,7 +330,9 @@ type SystemSettings struct {
 	PluginManagementEnabled bool   `json:"plugin_management_enabled"`
 
 	// 风控中心功能开关
-	RiskControlEnabled bool `json:"risk_control_enabled"`
+	RiskControlEnabled                      bool `json:"risk_control_enabled"`
+	ClientDisconnectConsecutiveBanEnabled   bool `json:"client_disconnect_consecutive_ban_enabled"`
+	ClientDisconnectConsecutiveBanThreshold int  `json:"client_disconnect_consecutive_ban_threshold"`
 
 	// 全局 IP 访问控制功能总开关
 	GlobalIPAccessControlEnabled bool `json:"global_ip_access_control_enabled"`
@@ -456,6 +461,10 @@ type OverloadCooldownSettings struct {
 type RateLimit429CooldownSettings struct {
 	Enabled         bool `json:"enabled"`
 	CooldownSeconds int  `json:"cooldown_seconds"`
+}
+
+type OpenAIImagesOAuthUnavailableCooldownSettings struct {
+	CooldownMinutes int `json:"cooldown_minutes"`
 }
 
 // PanelRateLimitSettings 面板 API 限流配置 DTO

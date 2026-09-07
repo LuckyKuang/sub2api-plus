@@ -1361,6 +1361,8 @@ func TestApplyCodexOAuthTransform_EmptyInput(t *testing.T) {
 
 func TestNormalizeCodexModel_Gpt53(t *testing.T) {
 	cases := map[string]string{
+		"gpt-6-astra":               "gpt-6-astra",
+		"openai/gpt-6-astra":        "gpt-6-astra",
 		"gpt-5.4":                   "gpt-5.4",
 		"gpt5.5":                    "gpt-5.5",
 		"openai/gpt5.5":             "gpt-5.5",
@@ -1395,6 +1397,13 @@ func TestNormalizeCodexModel_Gpt53(t *testing.T) {
 	for input, expected := range cases {
 		require.Equal(t, expected, normalizeCodexModel(input))
 	}
+}
+
+func TestNormalizeCodexModel_GPT6AstraUsesOnlyCanonicalID(t *testing.T) {
+	require.Equal(t, "gpt-6-astra", normalizeCodexModel("gpt-6-astra"))
+	require.Equal(t, "gpt-6-astra", normalizeCodexModel("openai/gpt-6-astra"))
+	require.Equal(t, "gpt-6", normalizeCodexModel("gpt-6"))
+	require.Equal(t, "gpt-6-astra-max", normalizeCodexModel("gpt-6-astra-max"))
 }
 
 func TestNormalizeCodexModel_RemovedModelsFallbackToSupportedTargets(t *testing.T) {

@@ -165,21 +165,24 @@ type SystemSettings struct {
 	CustomMenuItems             string // JSON array of custom menu items
 	CustomEndpoints             string // JSON array of custom endpoints
 
-	DefaultConcurrency            int
-	DefaultBalance                float64
-	RiskControlEnabled            bool
-	GlobalIPAccessControlEnabled  bool
-	CyberSessionBlockEnabled      bool
-	CyberSessionBlockTTLSeconds   int
-	AffiliateEnabled              bool
-	AffiliateRebateRate           float64
-	AffiliateRebateFreezeHours    int
-	AffiliateRebateDurationDays   int
-	AffiliateRebatePerInviteeCap  float64
-	AdminRechargeRebateEnabled    bool
-	DefaultUserRPMLimit           int
-	AsyncImageUserImagesPerMinute int
-	DefaultSubscriptions          []DefaultSubscriptionSetting
+	DefaultConcurrency                       int
+	DefaultBalance                           float64
+	RiskControlEnabled                       bool
+	ClientDisconnectConsecutiveBanEnabled    bool
+	ClientDisconnectConsecutiveBanThreshold  int
+	ClientDisconnectConsecutiveBanGeneration int64
+	GlobalIPAccessControlEnabled             bool
+	CyberSessionBlockEnabled                 bool
+	CyberSessionBlockTTLSeconds              int
+	AffiliateEnabled                         bool
+	AffiliateRebateRate                      float64
+	AffiliateRebateFreezeHours               int
+	AffiliateRebateDurationDays              int
+	AffiliateRebatePerInviteeCap             float64
+	AdminRechargeRebateEnabled               bool
+	DefaultUserRPMLimit                      int
+	AsyncImageUserImagesPerMinute            int
+	DefaultSubscriptions                     []DefaultSubscriptionSetting
 
 	// Model fallback configuration
 	EnableModelFallback      bool   `json:"enable_model_fallback"`
@@ -230,6 +233,7 @@ type SystemSettings struct {
 	BackendModeEnabled bool
 
 	// Gateway forwarding behavior
+	OpenAITTFTMode                               string // Responses first_token_ms 统计口径（默认 semantic）
 	EnableFingerprintUnification                 bool   // 是否统一 OAuth 账号的指纹头（默认 true）
 	EnableMetadataPassthrough                    bool   // 是否透传客户端原始 metadata（默认 false）
 	EnableCCHSigning                             bool   // 已废弃 no-op：新版 CLI 取消 cch 签名后网关不再注入/签名 cch，开关无效果
@@ -254,6 +258,8 @@ type SystemSettings struct {
 	MaxCodexVersion                              string // codex_cli_only 最高 Codex 引擎版本；空=不检查
 	CodexCLIOnlyBlacklist                        string // codex_cli_only 全局黑名单 JSON（[]AllowedClientEntry，OR deny）
 	CodexCLIOnlyWhitelist                        string // codex_cli_only 全局白名单 JSON（[]AllowedClientEntry，AND allow）
+	CodexCLIOnlyAllowAppServerClients            bool   // codex_cli_only App Server 开关：对未列名客户端开闸（默认 false）
+	CodexCLIOnlyEngineFingerprintSignals         string // codex_cli_only 引擎指纹门信号列表 JSON（[]EngineFingerprintSignal）
 
 	// Web Search Emulation
 	WebSearchEmulationEnabled bool // 是否启用 web search 模拟
@@ -574,6 +580,16 @@ type RateLimit429CooldownSettings struct {
 	CooldownSeconds int `json:"cooldown_seconds"`
 }
 
+// OpenAIImagesOAuthUnavailableCooldownSettings controls how long an OAuth account's image capability is paused when unavailable.
+type OpenAIImagesOAuthUnavailableCooldownSettings struct {
+	CooldownMinutes int `json:"cooldown_minutes"`
+}
+
+const (
+	openAIImagesOAuthUnavailableDefaultCooldownMinutes = 30
+	openAIImagesOAuthUnavailableMaxCooldownMinutes     = 120
+)
+
 // OpenAIAPIKeyHealthBreakerSettings controls cross-instance failure counting for OpenAI pool API keys.
 type OpenAIAPIKeyHealthBreakerSettings struct {
 	Enabled          bool `json:"enabled"`
@@ -605,6 +621,10 @@ func DefaultRateLimit429CooldownSettings() *RateLimit429CooldownSettings {
 		Enabled:         true,
 		CooldownSeconds: 5,
 	}
+}
+
+func DefaultOpenAIImagesOAuthUnavailableCooldownSettings() *OpenAIImagesOAuthUnavailableCooldownSettings {
+	return &OpenAIImagesOAuthUnavailableCooldownSettings{CooldownMinutes: openAIImagesOAuthUnavailableDefaultCooldownMinutes}
 }
 
 // DefaultBetaPolicySettings 返回默认的 Beta 策略配置
@@ -663,15 +683,17 @@ func DefaultBetaPolicySettings() *BetaPolicySettings {
 // OpenAI Fast Policy 策略常量
 // OpenAI 的 "fast 模式" 通过请求体中的 service_tier 字段识别：
 //   - "priority"（客户端可传 "fast"，归一化为 "priority"）：fast 模式
+//   - "ultrafast"：Codex/API 的 Ultrafast 档位
 //   - "flex"：低优先级模式
 //   - 省略：normal 默认
 //
 // 本策略复用 BetaPolicyAction*/BetaPolicyScope* 常量语义，只是匹配键从
 // anthropic-beta header 换成 body 的 service_tier 字段。
 const (
-	OpenAIFastTierAny      = "all"      // 匹配任意已识别的 service_tier
-	OpenAIFastTierPriority = "priority" // 仅匹配 fast（priority）
-	OpenAIFastTierFlex     = "flex"     // 仅匹配 flex
+	OpenAIFastTierAny       = "all"       // 匹配任意已识别的 service_tier
+	OpenAIFastTierPriority  = "priority"  // 仅匹配 fast（priority）
+	OpenAIFastTierUltrafast = "ultrafast" // 仅匹配 ultrafast
+	OpenAIFastTierFlex      = "flex"      // 仅匹配 flex
 
 	// OpenAIFastPolicyActionForcePriority 会保留 service_tier 字段并强制写成
 	// priority，用于把 flex/auto/default/scale 等已识别 tier 收敛为 fast。
@@ -680,7 +702,7 @@ const (
 
 // OpenAIFastPolicyRule 单条 OpenAI fast/flex 策略规则
 type OpenAIFastPolicyRule struct {
-	ServiceTier          string   `json:"service_tier"`                     // "priority" | "flex" | "auto" | "default" | "scale" | "all"
+	ServiceTier          string   `json:"service_tier"`                     // "priority" | "ultrafast" | "flex" | "auto" | "default" | "scale" | "all"
 	Action               string   `json:"action"`                           // "pass" | "filter" | "block" | "force_priority"
 	Scope                string   `json:"scope"`                            // "all" | "oauth" | "apikey" | "bedrock"
 	UserIDs              []int64  `json:"user_ids,omitempty"`               // 空=所有 Sub2API 用户；非空=仅指定 API Key 所属用户

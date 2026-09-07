@@ -56,8 +56,10 @@ func TestMigrationsRunner_IsIdempotent_AndSchemaIsUpToDate(t *testing.T) {
 	requireColumn(t, tx, "accounts", "session_window_status", "character varying", 20, true)
 	requireIndex(t, tx, "accounts", "idx_accounts_autopause_expiry_due")
 
-	// groups: OpenAI Live 默认关闭，管理员显式开启后才可访问。
+	// groups: OpenAI Live 与 Fast 强制策略都默认关闭，管理员显式开启后才生效。
 	requireColumn(t, tx, "groups", "allow_live", "boolean", 0, false)
+	requireColumn(t, tx, "groups", "force_openai_fast", "boolean", 0, false)
+	requireColumn(t, tx, "groups", "free_openai_fast", "boolean", 0, false)
 
 	// api_keys: key length should be 128
 	requireColumn(t, tx, "api_keys", "key", "character varying", 128, false)
@@ -73,6 +75,9 @@ func TestMigrationsRunner_IsIdempotent_AndSchemaIsUpToDate(t *testing.T) {
 	requireColumn(t, tx, "usage_logs", "first_output_ms", "integer", 0, true)
 	requireColumn(t, tx, "usage_logs", "last_token_ms", "integer", 0, true)
 	requireColumn(t, tx, "usage_logs", "first_output_kind", "character varying", 16, true)
+	requireColumn(t, tx, "usage_logs", "native_compaction_v2", "boolean", 0, false)
+	requireColumnDefaultContains(t, tx, "usage_logs", "native_compaction_v2", "false")
+	requireColumn(t, tx, "usage_logs", "requested_reasoning_effort", "character varying", 20, true)
 	requireColumn(t, tx, "usage_logs", "image_input_size", "character varying", 32, true)
 	requireColumn(t, tx, "usage_logs", "image_output_size", "character varying", 32, true)
 	requireColumn(t, tx, "usage_logs", "image_size_source", "character varying", 16, true)
@@ -82,6 +87,8 @@ func TestMigrationsRunner_IsIdempotent_AndSchemaIsUpToDate(t *testing.T) {
 	requireColumn(t, tx, "usage_logs", "video_duration_seconds", "integer", 0, true)
 	requireColumn(t, tx, "usage_logs", "upstream_response_model", "character varying", 200, true)
 	requireColumn(t, tx, "usage_logs", "upstream_model_mismatch", "boolean", 0, true)
+	requireColumn(t, tx, "usage_logs", "completion_status", "character varying", 32, false)
+	requireColumn(t, tx, "usage_logs", "usage_source", "character varying", 32, false)
 	requireIndex(t, tx, "usage_logs", usageLogsUpstreamModelMismatchIndex)
 
 	var mismatchIndexDef string
@@ -194,6 +201,73 @@ WHERE ns.nspname = 'public'
 
 	// user_allowed_groups: created_at should be timestamptz
 	requireColumn(t, tx, "user_allowed_groups", "created_at", "timestamp with time zone", 0, false)
+}
+
+func TestMigration251_ChannelMonitorGPT6AstraFactoryOrdering(t *testing.T) {
+	migrationSQL, err := dbmigrations.FS.ReadFile("251_channel_monitor_gpt6_astra.sql")
+	require.NoError(t, err)
+
+	t.Run("prepends Astra once to factory configuration", func(t *testing.T) {
+		tx := testTx(t)
+		_, err := tx.Exec(`
+CREATE TEMP TABLE channel_monitor_v2_config (
+    id BIGINT PRIMARY KEY,
+    platforms JSONB NOT NULL,
+    version BIGINT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    updated_by BIGINT
+)`)
+		require.NoError(t, err)
+		_, err = tx.Exec(`
+INSERT INTO channel_monitor_v2_config (id, platforms, version, updated_at, updated_by)
+VALUES (1, '[{"platform":"openai","enabled":true,"models":["gpt-5.6-sol","gpt-5.6-terra"]}]', 1, NOW(), NULL)`)
+		require.NoError(t, err)
+
+		_, err = tx.Exec(string(migrationSQL))
+		require.NoError(t, err)
+		_, err = tx.Exec(string(migrationSQL))
+		require.NoError(t, err)
+
+		var modelsJSON string
+		var version int
+		require.NoError(t, tx.QueryRow(`
+SELECT platform->'models', version
+FROM channel_monitor_v2_config,
+     jsonb_array_elements(platforms) AS entries(platform)
+WHERE id = 1 AND platform->>'platform' = 'openai'`).Scan(&modelsJSON, &version))
+		require.JSONEq(t, `["gpt-6-astra","gpt-5.6-sol","gpt-5.6-terra"]`, modelsJSON)
+		require.Equal(t, 2, version)
+	})
+
+	t.Run("preserves operator-customized configuration", func(t *testing.T) {
+		tx := testTx(t)
+		_, err := tx.Exec(`
+CREATE TEMP TABLE channel_monitor_v2_config (
+    id BIGINT PRIMARY KEY,
+    platforms JSONB NOT NULL,
+    version BIGINT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    updated_by BIGINT
+)`)
+		require.NoError(t, err)
+		_, err = tx.Exec(`
+INSERT INTO channel_monitor_v2_config (id, platforms, version, updated_at, updated_by)
+VALUES (1, '[{"platform":"openai","enabled":true,"models":["gpt-5.6-sol"]}]', 7, NOW(), 42)`)
+		require.NoError(t, err)
+
+		_, err = tx.Exec(string(migrationSQL))
+		require.NoError(t, err)
+
+		var modelsJSON string
+		var version int
+		require.NoError(t, tx.QueryRow(`
+SELECT platform->'models', version
+FROM channel_monitor_v2_config,
+     jsonb_array_elements(platforms) AS entries(platform)
+WHERE id = 1 AND platform->>'platform' = 'openai'`).Scan(&modelsJSON, &version))
+		require.JSONEq(t, `["gpt-5.6-sol"]`, modelsJSON)
+		require.Equal(t, 7, version)
+	})
 }
 
 func TestMigration195_InvalidatesLegacyPreaggregatedTTFT(t *testing.T) {
