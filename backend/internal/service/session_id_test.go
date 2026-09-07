@@ -25,7 +25,7 @@ func newSessionHeaderContext(t *testing.T, headers map[string]string) *gin.Conte
 	return c
 }
 
-func TestSanitizeSessionID(t *testing.T) {
+func TestNormalizeClientSessionID(t *testing.T) {
 	longRunes := strings.Repeat("a", maxPersistedSessionIDLength+50)
 	multibyte := strings.Repeat("好", maxPersistedSessionIDLength+10)
 
@@ -52,8 +52,8 @@ func TestSanitizeSessionID(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := sanitizeSessionID(tc.in)
-			require.Equal(t, tc.want, got, "sanitizeSessionID(%q)", tc.in)
+			got := NormalizeClientSessionID(tc.in)
+			require.Equal(t, tc.want, got, "NormalizeClientSessionID(%q)", tc.in)
 			// Sanitized output must never exceed the DB column bound (rune-counted).
 			require.LessOrEqual(t, len([]rune(got)), maxPersistedSessionIDLength)
 		})

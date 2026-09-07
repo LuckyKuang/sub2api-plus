@@ -5,6 +5,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,8 +19,36 @@ func clientDisconnectIntegrationScope() string {
 	return service.ClientDisconnectSessionScope(clientDisconnectIntegrationSessionID, 0)
 }
 
+func setClientDisconnectIntegrationSettings(t *testing.T, enabled bool, generation int64) {
+	t.Helper()
+	var previousEnabled, previousGeneration string
+	require.NoError(t, integrationDB.QueryRowContext(context.Background(), `
+SELECT value FROM settings WHERE key = $1`, service.SettingKeyClientDisconnectConsecutiveBanEnabled).Scan(&previousEnabled))
+	require.NoError(t, integrationDB.QueryRowContext(context.Background(), `
+SELECT value FROM settings WHERE key = $1`, service.SettingKeyClientDisconnectConsecutiveBanGeneration).Scan(&previousGeneration))
+	_, err := integrationDB.ExecContext(context.Background(), `
+UPDATE settings
+SET value = CASE key WHEN $1 THEN $3 ELSE $4 END, updated_at = NOW()
+WHERE key IN ($1, $2)`,
+		service.SettingKeyClientDisconnectConsecutiveBanEnabled,
+		service.SettingKeyClientDisconnectConsecutiveBanGeneration,
+		fmt.Sprintf("%t", enabled), fmt.Sprintf("%d", generation))
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_, cleanupErr := integrationDB.ExecContext(context.Background(), `
+UPDATE settings
+SET value = CASE key WHEN $1 THEN $3 ELSE $4 END, updated_at = NOW()
+WHERE key IN ($1, $2)`,
+			service.SettingKeyClientDisconnectConsecutiveBanEnabled,
+			service.SettingKeyClientDisconnectConsecutiveBanGeneration,
+			previousEnabled, previousGeneration)
+		require.NoError(t, cleanupErr)
+	})
+}
+
 func createClientDisconnectRiskUser(t *testing.T, role string) *service.User {
 	t.Helper()
+	setClientDisconnectIntegrationSettings(t, true, 1)
 	repo := newUserRepositoryWithSQL(testEntClient(t), integrationDB)
 	user := &service.User{
 		Email:        fmt.Sprintf("disconnect-risk-%d@example.com", time.Now().UnixNano()),
@@ -237,6 +266,7 @@ func TestClientDisconnectRiskRepository_PersistsLifecycleMetadataAndPriorGenerat
 	})
 	require.NoError(t, err)
 
+	setClientDisconnectIntegrationSettings(t, true, 2)
 	second, err := repo.Begin(ctx, service.ClientDisconnectRiskBegin{
 		UserID: user.ID, Generation: 2, RequestID: "generation-two", SessionID: clientDisconnectIntegrationSessionID,
 		APIKeyID: apiKey.ID, Protocol: "grok_realtime",
@@ -383,10 +413,96 @@ func TestClientDisconnectRiskRepository_DeduplicatesLogicalRequest(t *testing.T)
 	require.Equal(t, int64(1), nextSequence)
 }
 
+func TestClientDisconnectRiskRepository_DeduplicatesLogicalRequestAcrossSessions(t *testing.T) {
+	ctx := context.Background()
+	user := createClientDisconnectRiskUser(t, service.RoleUser)
+	repo := NewClientDisconnectRiskRepository(integrationDB)
+	sessions := []string{"dedupe-session-a", "dedupe-session-b"}
+	sequences := make([]int64, len(sessions))
+	errs := make([]error, len(sessions))
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	for index, sessionID := range sessions {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			sequences[index], errs[index] = repo.Begin(ctx, service.ClientDisconnectRiskBegin{
+				UserID: user.ID, Generation: 1, RequestID: "same-cross-session-request", SessionID: sessionID,
+			})
+		}()
+	}
+	close(start)
+	wg.Wait()
+
+	require.NoError(t, errs[0])
+	require.NoError(t, errs[1])
+	require.ElementsMatch(t, []int64{0, 1}, sequences, "only the winning session receives an event cursor")
+	var eventCount, stateCount int
+	require.NoError(t, integrationDB.QueryRowContext(ctx, `
+SELECT COUNT(*) FROM client_disconnect_risk_events
+WHERE user_id = $1 AND generation = 1 AND request_id = 'same-cross-session-request'`, user.ID).Scan(&eventCount))
+	require.Equal(t, 1, eventCount)
+	require.NoError(t, integrationDB.QueryRowContext(ctx, `
+SELECT COUNT(*) FROM client_disconnect_risk_states WHERE user_id = $1`, user.ID).Scan(&stateCount))
+	require.Equal(t, 1, stateCount)
+}
+
+func TestClientDisconnectRiskRepository_DisabledNewGenerationCannotEnforceQueuedEvents(t *testing.T) {
+	ctx := context.Background()
+	user := createClientDisconnectRiskUser(t, service.RoleUser)
+	repo := NewClientDisconnectRiskRepository(integrationDB)
+	first, err := repo.Begin(ctx, service.ClientDisconnectRiskBegin{
+		UserID: user.ID, Generation: 1, RequestID: "pending-before-disable", SessionID: clientDisconnectIntegrationSessionID,
+	})
+	require.NoError(t, err)
+	second, err := repo.Begin(ctx, service.ClientDisconnectRiskBegin{
+		UserID: user.ID, Generation: 1, RequestID: "queued-before-disable", SessionID: clientDisconnectIntegrationSessionID,
+	})
+	require.NoError(t, err)
+
+	result, err := repo.Finalize(ctx, service.ClientDisconnectRiskFinalize{
+		UserID: user.ID, Generation: 1, SessionScope: clientDisconnectIntegrationScope(), Sequence: second,
+		Outcome: service.ClientDisconnectOutcomeDisconnected, Threshold: 1, Enforce: true,
+	})
+	require.NoError(t, err)
+	require.Zero(t, result.ConsecutiveCount)
+
+	setClientDisconnectIntegrationSettings(t, false, 2)
+	result, err = repo.Finalize(ctx, service.ClientDisconnectRiskFinalize{
+		UserID: user.ID, Generation: 1, SessionScope: clientDisconnectIntegrationScope(), Sequence: first,
+		Outcome: service.ClientDisconnectOutcomeNeutral, Threshold: 1, Enforce: true,
+	})
+	require.NoError(t, err)
+	require.Zero(t, result.ConsecutiveCount)
+	require.False(t, result.AutoBanned)
+
+	var status string
+	require.NoError(t, integrationDB.QueryRowContext(ctx, `SELECT status FROM users WHERE id = $1`, user.ID).Scan(&status))
+	require.Equal(t, service.StatusActive, status)
+	var enforced bool
+	require.NoError(t, integrationDB.QueryRowContext(ctx, `
+SELECT enforce FROM client_disconnect_risk_events
+WHERE user_id = $1 AND generation = 1 AND request_id = 'pending-before-disable'`, user.ID).Scan(&enforced))
+	require.False(t, enforced)
+}
+
+func TestClientDisconnectRiskRepository_RejectsMismatchedSessionScope(t *testing.T) {
+	user := createClientDisconnectRiskUser(t, service.RoleUser)
+	repo := NewClientDisconnectRiskRepository(integrationDB)
+	sequence, err := repo.Begin(context.Background(), service.ClientDisconnectRiskBegin{
+		UserID: user.ID, Generation: 1, RequestID: "mismatched-session-scope",
+		SessionID: "session-a", SessionScope: service.ClientDisconnectSessionScope("session-b", 0),
+	})
+	require.Error(t, err)
+	require.Zero(t, sequence)
+}
+
 func TestClientDisconnectRiskRepository_StaleGenerationCannotRollBackState(t *testing.T) {
 	ctx := context.Background()
 	user := createClientDisconnectRiskUser(t, service.RoleUser)
 	repo := NewClientDisconnectRiskRepository(integrationDB)
+	setClientDisconnectIntegrationSettings(t, true, 2)
 
 	currentSequence, err := repo.Begin(ctx, service.ClientDisconnectRiskBegin{
 		UserID: user.ID, Generation: 2, RequestID: "current-generation", SessionID: clientDisconnectIntegrationSessionID,
@@ -395,7 +511,7 @@ func TestClientDisconnectRiskRepository_StaleGenerationCannotRollBackState(t *te
 	require.Equal(t, int64(1), currentSequence)
 
 	staleSequence, err := repo.Begin(ctx, service.ClientDisconnectRiskBegin{
-		UserID: user.ID, Generation: 1, RequestID: "stale-generation", SessionID: clientDisconnectIntegrationSessionID,
+		UserID: user.ID, Generation: 1, RequestID: "stale-generation", SessionID: "new-session-with-stale-generation",
 	})
 	require.NoError(t, err)
 	require.Zero(t, staleSequence)

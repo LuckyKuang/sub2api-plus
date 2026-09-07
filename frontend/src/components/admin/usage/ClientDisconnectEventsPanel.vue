@@ -214,7 +214,7 @@
             <td class="whitespace-nowrap px-4 py-4 text-sm" :class="event.usage_missing ? 'font-medium text-red-600 dark:text-red-300' : 'text-gray-700 dark:text-gray-300'">{{ event.usage_missing ? t('common.yes') : t('common.no') }}</td>
             <td class="whitespace-nowrap px-4 py-4 text-sm text-gray-700 dark:text-gray-300">{{ event.consecutive_after ?? '-' }}</td>
             <td class="whitespace-nowrap px-4 py-4 text-sm text-gray-700 dark:text-gray-300">{{ event.threshold ?? '-' }}</td>
-            <td class="whitespace-nowrap px-4 py-4 text-sm text-gray-700 dark:text-gray-300">{{ event.enforce ? t('admin.usage.disconnectEvents.enforced') : t('admin.usage.disconnectEvents.auditOnly') }}</td>
+            <td class="whitespace-nowrap px-4 py-4 text-sm text-gray-700 dark:text-gray-300">{{ enforcementLabel(event.enforce) }}</td>
             <td class="whitespace-nowrap px-4 py-4 text-sm">
               <span v-if="event.auto_banned" class="inline-flex rounded-md bg-red-100 px-2 py-1 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-300">{{ t('admin.usage.disconnectEvents.banned') }}</span>
               <span v-else class="text-gray-400">-</span>
@@ -260,6 +260,7 @@ let userSearchTimer: ReturnType<typeof setTimeout> | undefined
 let apiKeySearchTimer: ReturnType<typeof setTimeout> | undefined
 let userSearchSequence = 0
 let apiKeySearchSequence = 0
+let eventLoadSequence = 0
 
 const draft = reactive({
   user_id: undefined as number | undefined,
@@ -310,24 +311,33 @@ function queryParams(): ClientDisconnectEventQueryParams {
 }
 
 async function loadEvents() {
+  eventLoadSequence += 1
+  const sequence = eventLoadSequence
   loading.value = true
   try {
     const result = await adminUsageAPI.listClientDisconnectEvents(queryParams())
+    if (sequence !== eventLoadSequence) return
     events.value = result.items
     Object.assign(pagination, { total: result.total, page: result.page, page_size: result.page_size })
   } catch (error: unknown) {
+    if (sequence !== eventLoadSequence) return
     appStore.showError(extractApiErrorMessage(error, t('admin.usage.disconnectEvents.failedToLoad')))
   } finally {
-    loading.value = false
+    if (sequence === eventLoadSequence) loading.value = false
   }
 }
 
 function searchUsers() {
+  const clearedAppliedIdentity = draft.user_id !== undefined || draft.api_key_id !== undefined
   draft.user_id = undefined
   clearAPIKey()
+  if (clearedAppliedIdentity) applyFilters()
   userSearchSequence += 1
   const sequence = userSearchSequence
-  if (userSearchTimer) clearTimeout(userSearchTimer)
+  if (userSearchTimer) {
+    clearTimeout(userSearchTimer)
+    userSearchTimer = undefined
+  }
   const query = userKeyword.value.trim()
   if (!query) { userResults.value = []; return }
   userSearchTimer = setTimeout(async () => {
@@ -341,6 +351,10 @@ function searchUsers() {
 }
 
 function selectUser(user: SimpleUser) {
+  if (userSearchTimer) {
+    clearTimeout(userSearchTimer)
+    userSearchTimer = undefined
+  }
   userSearchSequence += 1
   userKeyword.value = user.email
   draft.user_id = user.id
@@ -352,6 +366,10 @@ function selectUser(user: SimpleUser) {
 }
 
 function clearUser() {
+  if (userSearchTimer) {
+    clearTimeout(userSearchTimer)
+    userSearchTimer = undefined
+  }
   userSearchSequence += 1
   userKeyword.value = ''
   draft.user_id = undefined
@@ -377,7 +395,10 @@ async function loadAPIKeys(query: string) {
 }
 
 function searchAPIKeys() {
+  const clearedAppliedAPIKey = draft.api_key_id !== undefined
   draft.api_key_id = undefined
+  if (clearedAppliedAPIKey) applyFilters()
+  apiKeySearchSequence += 1
   if (apiKeySearchTimer) clearTimeout(apiKeySearchTimer)
   apiKeySearchTimer = setTimeout(() => void loadAPIKeys(apiKeyKeyword.value.trim()), 300)
 }
@@ -388,6 +409,10 @@ function openAPIKeyDropdown() {
 }
 
 function selectAPIKey(key: SimpleApiKey) {
+  if (apiKeySearchTimer) {
+    clearTimeout(apiKeySearchTimer)
+    apiKeySearchTimer = undefined
+  }
   apiKeySearchSequence += 1
   apiKeyKeyword.value = key.name || String(key.id)
   draft.api_key_id = key.id
@@ -396,6 +421,10 @@ function selectAPIKey(key: SimpleApiKey) {
 }
 
 function clearAPIKey() {
+  if (apiKeySearchTimer) {
+    clearTimeout(apiKeySearchTimer)
+    apiKeySearchTimer = undefined
+  }
   apiKeySearchSequence += 1
   apiKeyKeyword.value = ''
   draft.api_key_id = undefined
@@ -430,6 +459,10 @@ function outcomeLabel(outcome: ClientDisconnectOutcome): string {
 function usageSourceLabel(source: UsageSource): string {
   return t(`admin.usage.disconnectEvents.${source.replace(/_([a-z])/g, (_, char: string) => char.toUpperCase())}`)
 }
+function enforcementLabel(enforce: boolean | undefined): string {
+  if (enforce === undefined) return '-'
+  return enforce ? t('admin.usage.disconnectEvents.enforced') : t('admin.usage.disconnectEvents.auditOnly')
+}
 function statusClass(status: ClientDisconnectCompletionStatus): string {
   if (status === 'client_disconnected' || status === 'usage_missing') return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
   if (status === 'completed') return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
@@ -447,6 +480,7 @@ function closeDropdowns(event: MouseEvent) {
 
 onMounted(() => { document.addEventListener('click', closeDropdowns); void loadEvents() })
 onUnmounted(() => {
+  eventLoadSequence += 1
   if (userSearchTimer) clearTimeout(userSearchTimer)
   if (apiKeySearchTimer) clearTimeout(apiKeySearchTimer)
   document.removeEventListener('click', closeDropdowns)

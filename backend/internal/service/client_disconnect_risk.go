@@ -168,7 +168,7 @@ func (s *ClientDisconnectRiskService) settingsFor(ctx context.Context) clientDis
 }
 
 func ClientDisconnectSessionScope(sessionID string, apiKeyID int64) string {
-	sessionID = sanitizeSessionID(sessionID)
+	sessionID = NormalizeClientSessionID(sessionID)
 	if sessionID == "" {
 		return fmt.Sprintf("sessionless:key:%d", apiKeyID)
 	}
@@ -180,7 +180,7 @@ func (s *ClientDisconnectRiskService) NewLifecycle(userID, apiKeyID int64, role,
 	if s == nil || s.repo == nil || userID <= 0 {
 		return nil
 	}
-	sessionID = sanitizeSessionID(sessionID)
+	sessionID = NormalizeClientSessionID(sessionID)
 	return &ClientDisconnectLifecycle{
 		service:      s,
 		userID:       userID,

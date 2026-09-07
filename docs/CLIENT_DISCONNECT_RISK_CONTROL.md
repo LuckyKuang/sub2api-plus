@@ -34,9 +34,11 @@ ordered queue cannot stall on a pending event.
 
 Settings changes invalidate the local process cache immediately. In a
 multi-instance deployment, another process may observe the new value after the
-short settings cache interval (currently at most two seconds); the generation
-check prevents events from an older enabled generation from enforcing a ban
-after that process observes the switch.
+short settings cache interval (currently at most two seconds). Once an enabled
+switch update commits, repository-level persisted generation and enforcement
+checks prevent stale instances from creating or enforcing events from the old
+generation without waiting for that cache interval. Threshold-only changes
+still follow the short settings cache interval.
 
 Outcomes are applied in upstream-acceptance order for each user session:
 
@@ -55,7 +57,14 @@ automatic enforcement is enabled.
 The server-generated client request ID remains the per-request idempotency key
 within a generation. Client-provided correlation headers are never used for
 request deduplication, so reusing `X-Request-ID` cannot suppress an event. The
-sanitized inbound session identifier independently selects the streak scope.
+repository serializes duplicate trusted request IDs across session scopes, so
+an inconsistent retry cannot create a second event or surface a uniqueness
+error. The persisted settings generation is checked before creating any new
+session state, preventing an instance with stale settings from reopening an
+older enforcement generation. Finalization also checks the persisted enabled
+state and generation before applying any queued outcome, so disabling the
+feature cannot allow an older cached lifecycle to enforce a ban. The sanitized
+inbound session identifier independently selects the streak scope.
 Current Codex clients use `session-id`; supported legacy and protocol-specific
 aliases follow the canonical session extraction contract used by usage logs.
 Concurrent requests receive per-session sequence numbers and are processed in

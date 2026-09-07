@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -23,12 +24,52 @@ func NewClientDisconnectRiskRepository(db *sql.DB) service.ClientDisconnectRiskR
 	return &clientDisconnectRiskRepository{db: db}
 }
 
+func readLockedClientDisconnectRiskSettings(ctx context.Context, tx *sql.Tx) (bool, int64, error) {
+	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock_shared(hashtext($1))`, clientDisconnectRiskSettingsLockKey); err != nil {
+		return false, 0, fmt.Errorf("lock client disconnect settings: %w", err)
+	}
+	rows, err := tx.QueryContext(ctx, `
+SELECT key, value FROM settings
+WHERE key IN ($1, $2)`,
+		service.SettingKeyClientDisconnectConsecutiveBanEnabled,
+		service.SettingKeyClientDisconnectConsecutiveBanGeneration)
+	if err != nil {
+		return false, 0, fmt.Errorf("read client disconnect settings: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	enabled := false
+	generation := int64(1)
+	for rows.Next() {
+		var key, value string
+		if err = rows.Scan(&key, &value); err != nil {
+			return false, 0, fmt.Errorf("scan client disconnect settings: %w", err)
+		}
+		switch key {
+		case service.SettingKeyClientDisconnectConsecutiveBanEnabled:
+			enabled = strings.EqualFold(strings.TrimSpace(value), "true")
+		case service.SettingKeyClientDisconnectConsecutiveBanGeneration:
+			if parsed, parseErr := strconv.ParseInt(strings.TrimSpace(value), 10, 64); parseErr == nil && parsed > 0 {
+				generation = parsed
+			}
+		}
+	}
+	if err = rows.Err(); err != nil {
+		return false, 0, fmt.Errorf("iterate client disconnect settings: %w", err)
+	}
+	return enabled, generation, nil
+}
+
 func (r *clientDisconnectRiskRepository) Begin(ctx context.Context, input service.ClientDisconnectRiskBegin) (int64, error) {
+	input.RequestID = strings.TrimSpace(input.RequestID)
+	input.SessionID = service.NormalizeClientSessionID(input.SessionID)
+	input.Protocol = strings.TrimSpace(input.Protocol)
+	derivedSessionScope := service.ClientDisconnectSessionScope(input.SessionID, input.APIKeyID)
 	input.SessionScope = strings.TrimSpace(input.SessionScope)
 	if input.SessionScope == "" {
-		input.SessionScope = service.ClientDisconnectSessionScope(input.SessionID, input.APIKeyID)
+		input.SessionScope = derivedSessionScope
 	}
-	if input.UserID <= 0 || input.Generation <= 0 || strings.TrimSpace(input.RequestID) == "" || input.SessionScope == "" {
+	if input.UserID <= 0 || input.Generation <= 0 || input.RequestID == "" || input.SessionScope != derivedSessionScope {
 		return 0, fmt.Errorf("invalid client disconnect risk begin input")
 	}
 	tx, err := r.db.BeginTx(ctx, nil)
@@ -36,6 +77,16 @@ func (r *clientDisconnectRiskRepository) Begin(ctx context.Context, input servic
 		return 0, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	_, configuredGeneration, err := readLockedClientDisconnectRiskSettings(ctx, tx)
+	if err != nil {
+		return 0, err
+	}
+	if input.Generation != configuredGeneration {
+		if err = tx.Commit(); err != nil {
+			return 0, err
+		}
+		return 0, nil
+	}
 	var status, userEmail string
 	if err = tx.QueryRowContext(ctx, `SELECT status, email FROM users WHERE id = $1 AND deleted_at IS NULL FOR SHARE`, input.UserID).Scan(&status, &userEmail); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -48,6 +99,29 @@ func (r *clientDisconnectRiskRepository) Begin(ctx context.Context, input servic
 			return 0, err
 		}
 		return 0, nil
+	}
+	lockKey := fmt.Sprintf("%d:%d:%s", input.UserID, input.Generation, input.RequestID)
+	if _, err = tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, lockKey); err != nil {
+		return 0, fmt.Errorf("lock client disconnect request: %w", err)
+	}
+
+	var existingScope string
+	var sequence int64
+	err = tx.QueryRowContext(ctx, `
+SELECT session_scope, sequence FROM client_disconnect_risk_events
+WHERE user_id = $1 AND generation = $2 AND request_id = $3`,
+		input.UserID, input.Generation, input.RequestID).Scan(&existingScope, &sequence)
+	if err == nil {
+		if err = tx.Commit(); err != nil {
+			return 0, err
+		}
+		if existingScope != input.SessionScope {
+			return 0, nil
+		}
+		return sequence, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return 0, fmt.Errorf("read existing client disconnect request: %w", err)
 	}
 
 	stateResult, err := tx.ExecContext(ctx, `
@@ -73,7 +147,6 @@ WHERE client_disconnect_risk_states.generation <= EXCLUDED.generation`, input.Us
 		}
 		return 0, nil
 	}
-	var sequence int64
 	err = tx.QueryRowContext(ctx, `
 SELECT next_sequence FROM client_disconnect_risk_states
 WHERE user_id = $1 AND session_scope = $2 AND generation = $3
@@ -86,20 +159,6 @@ FOR UPDATE`, input.UserID, input.SessionScope, input.Generation).Scan(&sequence)
 	}
 	if err != nil {
 		return 0, fmt.Errorf("lock client disconnect state: %w", err)
-	}
-
-	err = tx.QueryRowContext(ctx, `
-SELECT sequence FROM client_disconnect_risk_events
-WHERE user_id = $1 AND session_scope = $2 AND generation = $3 AND request_id = $4`,
-		input.UserID, input.SessionScope, input.Generation, input.RequestID).Scan(&sequence)
-	if err == nil {
-		if err = tx.Commit(); err != nil {
-			return 0, err
-		}
-		return sequence, nil
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return 0, fmt.Errorf("read existing client disconnect sequence: %w", err)
 	}
 
 	err = tx.QueryRowContext(ctx, `
@@ -116,9 +175,9 @@ INSERT INTO client_disconnect_risk_events
     (user_id, session_scope, generation, sequence, request_id, session_id,
      api_key_id, protocol, user_email, api_key_name)
 VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''), NULLIF($7, 0), $8, $9,
-        (SELECT name FROM api_keys WHERE id = NULLIF($7, 0) AND user_id = $1))`,
+		(SELECT name FROM api_keys WHERE id = NULLIF($7, 0) AND user_id = $1))`,
 		input.UserID, input.SessionScope, input.Generation, sequence, input.RequestID,
-		strings.TrimSpace(input.SessionID), input.APIKeyID, input.Protocol, userEmail)
+		input.SessionID, input.APIKeyID, input.Protocol, userEmail)
 	if err != nil {
 		return 0, fmt.Errorf("insert client disconnect event: %w", err)
 	}
@@ -164,6 +223,11 @@ func (r *clientDisconnectRiskRepository) Finalize(ctx context.Context, input ser
 		return result, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	configuredEnabled, configuredGeneration, err := readLockedClientDisconnectRiskSettings(ctx, tx)
+	if err != nil {
+		return result, err
+	}
+	generationEnforced := configuredEnabled && configuredGeneration == input.Generation
 
 	if _, err = tx.ExecContext(ctx, `
 UPDATE client_disconnect_risk_events
@@ -174,7 +238,7 @@ SET outcome = $5, threshold = $6,
     completion_status = $8, usage_source = NULLIF($9, ''), usage_missing = $10,
     finalized_at = NOW()
 WHERE user_id = $1 AND session_scope = $2 AND generation = $3 AND sequence = $4 AND outcome = 'pending'`,
-		input.UserID, input.SessionScope, input.Generation, input.Sequence, input.Outcome, input.Threshold, input.Enforce,
+		input.UserID, input.SessionScope, input.Generation, input.Sequence, input.Outcome, input.Threshold, input.Enforce && generationEnforced,
 		completionStatus, usageSource, usageMissing); err != nil {
 		return result, fmt.Errorf("finalize client disconnect event: %w", err)
 	}
@@ -229,7 +293,7 @@ WHERE user_id = $1 AND session_scope = $2 AND generation = $3 AND sequence = $4 
 			eventEnforce = sql.NullBool{Bool: false, Valid: true}
 		}
 
-		if eventEnforce.Valid && eventEnforce.Bool {
+		if generationEnforced && eventEnforce.Valid && eventEnforce.Bool {
 			switch outcome {
 			case service.ClientDisconnectOutcomeCompleted:
 				streak = 0
@@ -243,7 +307,7 @@ WHERE user_id = $1 AND session_scope = $2 AND generation = $3 AND sequence = $4 
 		}
 
 		autoBanned := false
-		if eventEnforce.Valid && eventEnforce.Bool && eventThreshold.Valid &&
+		if generationEnforced && eventEnforce.Valid && eventEnforce.Bool && eventThreshold.Valid &&
 			outcome == service.ClientDisconnectOutcomeDisconnected && streak >= int(eventThreshold.Int64) {
 			var bannedUserID int64
 			err = tx.QueryRowContext(ctx, `

@@ -35,6 +35,35 @@ vi.mock('vue-i18n', async () => {
   return { ...actual, useI18n: () => ({ t: (key: string) => key }) }
 })
 
+function eventResponse(requestId: string, enforce: boolean | undefined) {
+  return {
+    items: [{
+      user_id: 7,
+      user_email: 'owner@example.com',
+      api_key_id: 11,
+      api_key_name: 'Codex Desktop',
+      request_id: requestId,
+      session_id: 'codex-session-1',
+      protocol: 'openai.responses',
+      generation: 3,
+      sequence: 9,
+      outcome: 'client_disconnected' as const,
+      completion_status: 'usage_missing' as const,
+      usage_missing: true,
+      consecutive_after: 10,
+      threshold: 10,
+      enforce,
+      auto_banned: true,
+      accepted_at: '2026-09-01T00:00:00Z',
+      finalized_at: '2026-09-01T00:00:01Z',
+    }],
+    total: 1,
+    page: 1,
+    page_size: 20,
+    pages: 1,
+  }
+}
+
 describe('ClientDisconnectEventsPanel', () => {
   beforeEach(() => {
     listClientDisconnectEvents.mockReset()
@@ -43,32 +72,7 @@ describe('ClientDisconnectEventsPanel', () => {
     showError.mockReset()
     searchUsers.mockResolvedValue([{ id: 7, email: 'owner@example.com', deleted: false }])
     searchApiKeys.mockResolvedValue([{ id: 11, name: 'Codex Desktop', user_id: 7 }])
-    listClientDisconnectEvents.mockResolvedValue({
-      items: [{
-        user_id: 7,
-        user_email: 'owner@example.com',
-        api_key_id: 11,
-        api_key_name: 'Codex Desktop',
-        request_id: 'req-server-owned',
-        session_id: 'codex-session-1',
-        protocol: 'openai.responses',
-        generation: 3,
-        sequence: 9,
-        outcome: 'client_disconnected',
-        completion_status: 'usage_missing',
-        usage_missing: true,
-        consecutive_after: 10,
-        threshold: 10,
-        enforce: true,
-        auto_banned: true,
-        accepted_at: '2026-09-01T00:00:00Z',
-        finalized_at: '2026-09-01T00:00:01Z',
-      }],
-      total: 1,
-      page: 1,
-      page_size: 20,
-      pages: 1,
-    })
+    listClientDisconnectEvents.mockResolvedValue(eventResponse('req-server-owned', true))
   })
 
   it('shows metadata-only missing-usage and auto-ban lifecycle results', async () => {
@@ -144,7 +148,43 @@ describe('ClientDisconnectEventsPanel', () => {
       auto_banned: true,
       page: 1,
     }))
+
+    listClientDisconnectEvents.mockClear()
+    await userFilter.setValue('different-user')
+    await flushPromises()
+    expect(listClientDisconnectEvents).toHaveBeenLastCalledWith(expect.objectContaining({
+      user_id: undefined,
+      api_key_id: undefined,
+    }))
     wrapper.unmount()
     vi.useRealTimers()
+  })
+
+  it('keeps the newest filter response and renders unknown enforcement accurately', async () => {
+    let resolveInitial!: (value: ReturnType<typeof eventResponse>) => void
+    const initialResponse = new Promise<ReturnType<typeof eventResponse>>((resolve) => {
+      resolveInitial = resolve
+    })
+    listClientDisconnectEvents.mockReset()
+    listClientDisconnectEvents
+      .mockReturnValueOnce(initialResponse)
+      .mockResolvedValueOnce(eventResponse('newest-request', undefined))
+
+    const wrapper = mount(ClientDisconnectEventsPanel, {
+      global: { stubs: { Icon: true, Pagination: true } },
+    })
+    await wrapper.get('[data-testid="disconnect-outcome-filter"]').setValue('client_disconnected')
+    await flushPromises()
+
+    let eventCells = wrapper.get('tbody tr').findAll('td')
+    expect(eventCells[4]!.text()).toBe('newest-request')
+    expect(eventCells[13]!.text()).toBe('-')
+
+    resolveInitial(eventResponse('stale-request', true))
+    await flushPromises()
+    eventCells = wrapper.get('tbody tr').findAll('td')
+    expect(eventCells[4]!.text()).toBe('newest-request')
+    expect(showError).not.toHaveBeenCalled()
+    wrapper.unmount()
   })
 })
