@@ -1,7 +1,8 @@
 # Client Disconnect Risk Control
 
-The client-disconnect risk control protects paid upstream requests from repeated
-client cancellation while preserving normal cancellation and billing behavior.
+The client-disconnect risk control records paid upstream requests that end after
+client cancellation and can optionally enforce a per-session consecutive limit
+while preserving normal cancellation and billing behavior.
 It is independent of Content Moderation and Prompt Audit policy decisions.
 
 ## Settings
@@ -10,7 +11,7 @@ Administrators configure the feature under Settings > Risk Control.
 
 | Setting | Default | Valid values | Meaning |
 | --- | --- | --- | --- |
-| `client_disconnect_consecutive_ban_enabled` | `true` | `true`, `false` | Enables automatic disabling for consecutive client disconnects. |
+| `client_disconnect_consecutive_ban_enabled` | `false` | `true`, `false` | Enables automatic disabling for consecutive client disconnects. |
 | `client_disconnect_consecutive_ban_threshold` | `10` | `1..1000` | Number of consecutive qualifying disconnects that disables an ordinary user. |
 
 Changing the enabled switch advances an internal generation. Disabling and then
@@ -33,11 +34,13 @@ ordered queue cannot stall on a pending event.
 
 Settings changes invalidate the local process cache immediately. In a
 multi-instance deployment, another process may observe the new value after the
-short settings cache interval (currently at most two seconds); the generation
-check prevents events from an older enabled generation from enforcing a ban
-after that process observes the switch.
+short settings cache interval (currently at most two seconds). Once an enabled
+switch update commits, repository-level persisted generation and enforcement
+checks prevent stale instances from creating or enforcing events from the old
+generation without waiting for that cache interval. Threshold-only changes
+still follow the short settings cache interval.
 
-Outcomes are applied in upstream-acceptance order for each user:
+Outcomes are applied in upstream-acceptance order for each user session:
 
 | Outcome | Streak effect |
 | --- | --- |
@@ -45,22 +48,42 @@ Outcomes are applied in upstream-acceptance order for each user:
 | Client disconnected before valid completion | Increment by `1` |
 | Upstream error, timeout, or other neutral result | No change |
 
-This is a strict success reset. For example, nine disconnects, one successful
-request, and nine more disconnects leave the streak at nine. The next qualifying
-disconnect reaches the default threshold and disables the user.
+This is a strict success reset within one session. For example, nine disconnects,
+one successful request, and nine more disconnects in the same session leave that
+session's streak at nine. A success in another session does not reset it. The next
+qualifying disconnect reaches the configured threshold and disables the user when
+automatic enforcement is enabled.
 
-The server-generated client request ID is deduplicated within a generation.
-Client-provided correlation headers are never used as the deduplication key, so
-reusing `X-Request-ID` cannot suppress the streak. Concurrent requests receive
-per-user sequence numbers and are processed in acceptance order rather than
-callback completion order. State generations only move forward; an instance
-with a stale settings cache cannot roll a user back to an older generation or
-delete current-generation events. Concurrent `Begin` calls for one user take
-a row lock on that user's risk state so sequence numbers stay contiguous.
+The server-generated client request ID remains the per-request idempotency key
+within a generation. Client-provided correlation headers are never used for
+request deduplication, so reusing `X-Request-ID` cannot suppress an event. The
+repository serializes duplicate trusted request IDs across session scopes, so
+an inconsistent retry cannot create a second event or surface a uniqueness
+error. The persisted settings generation is checked before creating any new
+session state, preventing an instance with stale settings from reopening an
+older enforcement generation. Finalization also checks the persisted enabled
+state and generation before applying any queued outcome, so disabling the
+feature cannot allow an older cached lifecycle to enforce a ban. The sanitized
+inbound session identifier independently selects the streak scope.
+Current Codex clients use `session-id`; supported legacy and protocol-specific
+aliases follow the canonical session extraction contract used by usage logs.
+Concurrent requests receive per-session sequence numbers and are processed in
+acceptance order rather than callback completion order. A pending request blocks
+only later results in the same session. State generations only move forward; an
+instance with a stale settings cache cannot roll a session back to an older
+generation or delete current-generation events.
+
+Requests without a valid explicit session identifier use a deterministic
+API-key-scoped sessionless bucket. This preserves enforcement coverage without
+mixing different API keys. Session identifiers are client-controlled correlation
+data, not proof of a trusted device: a client that deliberately rotates session
+IDs can avoid building one session streak. Operators who need adversarial,
+user-wide abuse detection should use a separate rolling-window policy rather than
+treating this consecutive-session control as device attestation.
 OpenAI Responses WebSocket requests are counted per admitted turn; closing a
 connection after a completed turn is not a disconnect outcome.
 
-Administrator and feature-disabled requests remain auditable, but their events
+Automatic enforcement is disabled by default. Administrator and feature-disabled requests remain auditable, but their events
 have effective `enforce=false` and do not increment or reset the streak. The
 repository derives the administrator exemption again from the current database
 role, so a stale caller cannot opt an administrator into enforcement. Promoting
@@ -109,11 +132,13 @@ Automatic bans emit the structured event
 `client_disconnect_risk_events`; current streaks are stored in
 `client_disconnect_risk_states`.
 
-Useful fields include `request_id`, `api_key_id`, `protocol`, `outcome`,
+Useful fields include `user_email`, `api_key_name`, `request_id`, `session_id`,
+`protocol`, `outcome`,
 `completion_status`, `usage_source`, `usage_missing`, `consecutive_after`,
 `threshold`, `enforce`, `auto_banned`, `accepted_at`, and `finalized_at`. The
 admin endpoint `GET /api/v1/admin/usage/client-disconnect-events` provides
-fixed-order pagination and validated filters for these records. These records
+fixed-order pagination and validated identity, correlation, protocol, time,
+outcome, usage, and enforcement filters for these records. These records
 contain request metadata, not raw prompts, credentials, errors, or response
 bodies. The administrator Usage Records page exposes the same metadata in its
 Client Disconnects tab, including missing-usage and auto-ban filters.

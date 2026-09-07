@@ -57,6 +57,62 @@ func TestClassifyCodexClientProfile_RejectsLooseLegacyAndOfficialForms(t *testin
 	}
 }
 
+func TestClassifyOfficialCodexIngressProfile_AcceptsReviewedThreadOriginators(t *testing.T) {
+	transports := []struct {
+		originator string
+		profile    CodexClientProfile
+	}{
+		{"codex_cli_rs", CodexClientProfileCLI},
+		{"codex-tui", CodexClientProfileTUI},
+		{"codex_vscode", CodexClientProfileIDE},
+		{"codex_chatgpt_desktop", CodexClientProfileDesktop},
+		{"Codex Desktop", CodexClientProfileFamily},
+	}
+	threadOriginators := []string{
+		"chatgpt_cca",
+		"codex_work_desktop",
+		"codex_work_web",
+		"codex_work_mobile",
+		"codex_work_cca",
+	}
+
+	for _, transport := range transports {
+		for _, threadOriginator := range threadOriginators {
+			t.Run(transport.originator+"/"+threadOriginator, func(t *testing.T) {
+				ua := transport.originator + "/0.147.0 (Ubuntu 24.04; x86_64) xterm-256color"
+				match, ok := ClassifyOfficialCodexIngressProfile(ua, threadOriginator)
+				require.True(t, ok)
+				require.Equal(t, transport.profile, match.Profile)
+				require.Equal(t, threadOriginator, match.Originator)
+				require.Equal(t, "0.147.0", match.Version)
+			})
+		}
+	}
+}
+
+func TestClassifyOfficialCodexIngressProfile_RejectsUnknownOrInvalidIdentity(t *testing.T) {
+	tests := []struct {
+		name       string
+		userAgent  string
+		originator string
+	}{
+		{"unknown transport", "curl/0.147.0", "chatgpt_cca"},
+		{"unknown originator", "codex_cli_rs/0.147.0", "unknown_service"},
+		{"mismatched transport originator", "codex_cli_rs/0.147.0", "codex_vscode"},
+		{"legacy transport", "codex_exec/0.147.0", "chatgpt_cca"},
+		{"thread originator case variant", "codex_cli_rs/0.147.0", "ChatGPT_CCA"},
+		{"originator whitespace", "codex_cli_rs/0.147.0", " chatgpt_cca "},
+		{"invalid version", "codex_cli_rs/0.147", "chatgpt_cca"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, ok := ClassifyOfficialCodexIngressProfile(tt.userAgent, tt.originator)
+			require.False(t, ok)
+		})
+	}
+}
+
 func TestPairConfiguredCodexClientIdentity_PreservesExactConfiguredUA(t *testing.T) {
 	ua := "codex_exec/0.147.0 (Mac OS X 15.0; arm64) iTerm.app"
 	_, _, ok := PairConfiguredCodexClientIdentity(ua, false)

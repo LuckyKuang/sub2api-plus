@@ -32,7 +32,7 @@ func ClaudeCodeSessionIDFromHeader(c *gin.Context) string {
 	if c == nil || c.Request == nil {
 		return ""
 	}
-	return sanitizeSessionID(c.GetHeader(claudeCodeSessionHeader))
+	return NormalizeClientSessionID(c.GetHeader(claudeCodeSessionHeader))
 }
 
 // ExtractClientSessionID resolves the explicit client-provided session identifier from
@@ -40,35 +40,36 @@ func ClaudeCodeSessionIDFromHeader(c *gin.Context) string {
 // protocol-agnostic and shared by every gateway handler so all supported protocols
 // record session_id through one seam. Returns "" when no valid identifier is present.
 //
-// This value feeds only usage_logs.session_id persistence. It does NOT affect sticky
-// routing, account selection, request_id semantics, or upstream prompt caching, which
-// keep their own (intentionally broader) session-signal resolution.
+// This value feeds usage_logs.session_id persistence and session-scoped client
+// disconnect risk ordering. It does NOT affect sticky routing, account selection,
+// request_id semantics, or upstream prompt caching, which keep their own
+// (intentionally broader) session-signal resolution.
 func ExtractClientSessionID(c *gin.Context) string {
 	if c == nil || c.Request == nil {
 		return ""
 	}
 	for _, header := range clientSessionIDHeaders {
-		if sessionID := sanitizeSessionID(c.GetHeader(header)); sessionID != "" {
+		if sessionID := NormalizeClientSessionID(c.GetHeader(header)); sessionID != "" {
 			return sessionID
 		}
 	}
-	if sessionID := sanitizeSessionID(openAICodexTurnMetadataSessionID(c.GetHeader("X-Codex-Turn-Metadata"))); sessionID != "" {
+	if sessionID := NormalizeClientSessionID(openAICodexTurnMetadataSessionID(c.GetHeader("X-Codex-Turn-Metadata"))); sessionID != "" {
 		return sessionID
 	}
 	if isGrokRequestContext(c) {
-		if sessionID := sanitizeSessionID(c.GetHeader(grokConversationIDHeader)); sessionID != "" {
+		if sessionID := NormalizeClientSessionID(c.GetHeader(grokConversationIDHeader)); sessionID != "" {
 			return sessionID
 		}
 	}
 	return ""
 }
 
-// sanitizeSessionID normalizes a raw client-supplied session identifier for safe
+// NormalizeClientSessionID normalizes a raw client-supplied session identifier for safe
 // persistence: it trims surrounding whitespace, rejects the value outright if it
 // contains any control character (CR/LF/tab/NUL/…) so a log- or header-injection style
 // payload cannot slip into stored correlation data, and rejects values longer than
 // the DB column bound. Absent or invalid input yields "".
-func sanitizeSessionID(raw string) string {
+func NormalizeClientSessionID(raw string) string {
 	if !utf8.ValidString(raw) {
 		return ""
 	}

@@ -44,12 +44,59 @@ func TestOpenAICodexClientRestrictionDetector_Detect(t *testing.T) {
 		require.Equal(t, CodexClientRestrictionReasonDisabled, result.Reason)
 	})
 
+	t.Run("non OpenAI OAuth accounts bypass Codex profile restriction", func(t *testing.T) {
+		tests := []struct {
+			name        string
+			platform    string
+			accountType string
+		}{
+			{name: "OpenAI API key", platform: PlatformOpenAI, accountType: AccountTypeAPIKey},
+			{name: "OpenAI setup token", platform: PlatformOpenAI, accountType: AccountTypeSetupToken},
+			{name: "OpenAI upstream", platform: PlatformOpenAI, accountType: AccountTypeUpstream},
+			{name: "Anthropic OAuth", platform: PlatformAnthropic, accountType: AccountTypeOAuth},
+			{name: "Gemini OAuth", platform: PlatformGemini, accountType: AccountTypeOAuth},
+			{name: "Antigravity OAuth", platform: PlatformAntigravity, accountType: AccountTypeOAuth},
+			{name: "Grok OAuth", platform: PlatformGrok, accountType: AccountTypeOAuth},
+			{name: "Kimi API key", platform: PlatformKimi, accountType: AccountTypeAPIKey},
+			{name: "Zhipu API key", platform: PlatformZhipu, accountType: AccountTypeAPIKey},
+			{name: "DeepSeek API key", platform: PlatformDeepseek, accountType: AccountTypeAPIKey},
+			{name: "Composite OAuth", platform: PlatformComposite, accountType: AccountTypeOAuth},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				account := &Account{
+					Platform: tt.platform,
+					Type:     tt.accountType,
+					Extra:    map[string]any{"codex_cli_only": true},
+				}
+				result := detector.Detect(
+					newCodexRestrictionContext(officialUA, "chatgpt_cca", true),
+					account,
+					CodexRestrictionPolicy{},
+					nil,
+				)
+				require.False(t, result.Enabled)
+				require.False(t, result.Matched)
+				require.Equal(t, CodexClientRestrictionReasonDisabled, result.Reason)
+			})
+		}
+	})
+
 	t.Run("official coherent profile with known evidence is accepted", func(t *testing.T) {
 		result := detector.Detect(newCodexRestrictionContext(officialUA, "codex_cli_rs", true), codexCLIOnlyAccount(), CodexRestrictionPolicy{}, nil)
 		require.True(t, result.Enabled)
 		require.True(t, result.Matched)
 		require.Equal(t, CodexClientRestrictionReasonMatchedOfficialProfile, result.Reason)
 		require.Equal(t, "0.150.0", result.DetectedVersion)
+	})
+
+	t.Run("official transport with Search product originator is accepted", func(t *testing.T) {
+		result := detector.Detect(newCodexRestrictionContext(officialUA, "chatgpt_cca", true), codexCLIOnlyAccount(), CodexRestrictionPolicy{}, nil)
+		require.True(t, result.Enabled)
+		require.True(t, result.Matched)
+		require.Equal(t, CodexClientRestrictionReasonMatchedOfficialProfile, result.Reason)
+		require.Equal(t, string(openai.CodexClientProfileCLI), result.Profile)
 	})
 
 	t.Run("official profile without known evidence fails closed", func(t *testing.T) {

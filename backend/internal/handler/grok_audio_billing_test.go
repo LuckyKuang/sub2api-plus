@@ -31,7 +31,7 @@ func TestIsExpectedGrokRealtimeClose(t *testing.T) {
 func TestGrokRealtimeTurnTrackerMatchesByResponseIDAndResetsOnCompletion(t *testing.T) {
 	repo := &clientDisconnectRiskHandlerRepoStub{}
 	risk := service.NewClientDisconnectRiskService(repo, nil, nil)
-	tracker := newGrokRealtimeTurnTracker(risk, 7, 11, service.RoleUser, "server-request")
+	tracker := newGrokRealtimeTurnTracker(risk, 7, 11, service.RoleUser, "server-request", "grok-session")
 	observer := tracker.observer(context.Background())
 
 	observer.Accepted("resp-a")
@@ -54,7 +54,7 @@ func TestGrokRealtimeTurnTrackerMatchesByResponseIDAndResetsOnCompletion(t *test
 func TestGrokRealtimeTurnTrackerSkipsWhenRoleMissing(t *testing.T) {
 	repo := &clientDisconnectRiskHandlerRepoStub{}
 	risk := service.NewClientDisconnectRiskService(repo, nil, nil)
-	tracker := newGrokRealtimeTurnTracker(risk, 7, 11, "", "server-request")
+	tracker := newGrokRealtimeTurnTracker(risk, 7, 11, "", "server-request", "grok-session")
 	observer := tracker.observer(context.Background())
 
 	observer.Accepted("resp-a")
@@ -67,7 +67,7 @@ func TestGrokRealtimeTurnTrackerSkipsWhenRoleMissing(t *testing.T) {
 func TestGrokRealtimeTurnTrackerDeduplicatesPendingResponseAndAuditsAdmin(t *testing.T) {
 	repo := &clientDisconnectRiskHandlerRepoStub{}
 	risk := service.NewClientDisconnectRiskService(repo, nil, nil)
-	tracker := newGrokRealtimeTurnTracker(risk, 7, 11, service.RoleAdmin, "server-request")
+	tracker := newGrokRealtimeTurnTracker(risk, 7, 11, service.RoleAdmin, "server-request", "grok-session")
 	observer := tracker.observer(context.Background())
 
 	observer.Accepted("resp-a")

@@ -31,21 +31,25 @@ are reviewed against a specific upstream source or release rather than fetched
 at runtime.
 
 The current registry was checked against upstream commit
-[`d06dc732`](https://github.com/openai/codex/blob/d06dc73290729d2bcb464b955a4cfd9992abc35d/codex-rs/login/src/auth/default_client.rs#L40-L165):
-the default HTTP client sets both `originator` and `User-Agent`, and the
-first-party predicate lists the fixed names plus the `Codex ` family. The
-gateway mirrors that family rule instead of inventing a fixed
-`codex_jetbrains` or `codex_app` alias that the upstream source does not list.
+[`a7ab2d66`](https://github.com/openai/codex/blob/a7ab2d66d781b903cb060288a89e26e8d2b9a05f/codex-rs/login/src/auth/default_client.rs#L40-L165).
+The default HTTP client supplies the process-level `User-Agent` and
+`originator`. A thread may then override only `originator`; it does not rewrite
+the process-level User-Agent. The reviewed product-service sources are
+`chatgpt_cca`, `codex_work_desktop`, `codex_work_web`, `codex_work_mobile`, and
+`codex_work_cca`, as defined by the upstream
+[`ThreadManager`](https://github.com/openai/codex/blob/a7ab2d66d781b903cb060288a89e26e8d2b9a05f/codex-rs/core/src/thread_manager.rs#L300-L313).
+The upstream Alpha Search integration test specifically sends
+`originator: chatgpt_cca` while using the shared Codex HTTP client.
 
 For a built-in profile, all of the following are required:
 
 1. `User-Agent` and `originator` are both present.
-2. The leading User-Agent client name exactly equals `originator`, including
-   case.
+2. The leading User-Agent client name is in the reviewed transport registry,
+   or is the exact case-sensitive upstream `Codex ` product family.
 3. The leading User-Agent version is valid semantic version text.
-4. The originator is in the reviewed built-in registry, or is the exact
-   case-sensitive upstream `Codex ` product family (for example, `Codex
-   Desktop` or `Codex JetBrains`).
+4. The originator either exactly matches the leading User-Agent transport
+   identity or is one of the reviewed product-service sources above. A
+   different transport identity is not accepted as a thread override.
 5. At least one known, non-empty Codex request header is present:
    `x-codex-installation-id`, `x-codex-routing-hint`,
    `x-codex-turn-state`, `x-codex-turn-metadata`,
@@ -58,10 +62,12 @@ routing hint after selecting the destination account, rather than forwarding a
 caller-supplied hint for a different account.
 
 An arbitrary `X-Codex-*` header, a User-Agent substring, a trailing User-Agent
-identity, a missing `originator`, or a case-rewritten `Codex ` family does not
-pass this gate. The optional global minimum/maximum Codex version bounds apply
-to built-in profiles. Policy versions use strict SemVer 2.0: they require a
-complete `MAJOR.MINOR.PATCH` core without a `v` prefix or leading zeroes.
+identity, an unknown or missing `originator`, or a case-rewritten official
+identity does not pass this gate. Product-service originators do not make an
+unknown transport User-Agent official. The optional global minimum/maximum
+Codex version bounds apply to built-in profiles. Policy versions use strict
+SemVer 2.0: they require a complete `MAJOR.MINOR.PATCH` core without a `v`
+prefix or leading zeroes.
 Valid prerelease and build metadata are accepted, with normal SemVer
 precedence (`0.147.0-alpha.4` is lower than `0.147.0`, and build metadata does
 not change precedence). Historical outbound version normalization remains a
@@ -177,8 +183,8 @@ For every registry addition or change:
 
 1. Record a reviewed official OpenAI upstream source or release reference that
    shows the client wire identity.
-2. Add regression fixtures for the coherent `User-Agent`, `originator`,
-   version, and known request-header evidence.
+2. Add regression fixtures for the transport `User-Agent`, independently
+   reviewed `originator`, version, and known request-header evidence.
 3. Verify every ingress path above, including WebSocket, Count Tokens, and
    Alpha Search ineligible-candidate cases.
 4. Update this document and the Chinese/English admin descriptions if the

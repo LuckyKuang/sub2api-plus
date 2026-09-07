@@ -2550,6 +2550,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		if strings.TrimSpace(baseRequestID) == "" {
 			baseRequestID = uuid.NewString()
 		}
+		clientSessionID := service.ExtractClientSessionID(c)
 		recordTurnStart := func(turn int, startedAt time.Time) {
 			if turn <= 0 || startedAt.IsZero() {
 				return
@@ -2572,6 +2573,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				apiKey.ID,
 				role,
 				fmt.Sprintf("%s-ws-turn-%d", strings.TrimSpace(baseRequestID), turn),
+				clientSessionID,
 				"openai_responses_ws",
 			)
 			if lifecycle != nil {

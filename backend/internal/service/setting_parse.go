@@ -216,8 +216,8 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 
 		// 风控中心功能（默认关闭，显式启用）
 		SettingKeyRiskControlEnabled: "false",
-		// 客户端连续断开自动封禁独立于内容审计总开关，默认开启。
-		SettingKeyClientDisconnectConsecutiveBanEnabled:    "true",
+		// 客户端连续断开自动封禁独立于内容审计总开关，默认关闭。
+		SettingKeyClientDisconnectConsecutiveBanEnabled:    "false",
 		SettingKeyClientDisconnectConsecutiveBanThreshold:  "10",
 		SettingKeyClientDisconnectConsecutiveBanGeneration: "1",
 
@@ -846,7 +846,10 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 
 	// 风控中心功能（默认关闭，严格 true 才启用）
 	result.RiskControlEnabled = settings[SettingKeyRiskControlEnabled] == "true"
-	result.ClientDisconnectConsecutiveBanEnabled = !isFalseSettingValue(settings[SettingKeyClientDisconnectConsecutiveBanEnabled])
+	result.ClientDisconnectConsecutiveBanEnabled = strings.EqualFold(
+		strings.TrimSpace(settings[SettingKeyClientDisconnectConsecutiveBanEnabled]),
+		"true",
+	)
 	result.ClientDisconnectConsecutiveBanThreshold = 10
 	if value, err := strconv.Atoi(strings.TrimSpace(settings[SettingKeyClientDisconnectConsecutiveBanThreshold])); err == nil {
 		result.ClientDisconnectConsecutiveBanThreshold = boundedIntOrDefault(value, 1, 1000, 10)

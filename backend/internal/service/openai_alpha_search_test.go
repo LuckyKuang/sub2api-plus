@@ -43,7 +43,7 @@ func alphaSearchResponsesSSE(output string) string {
 		`data: {"type":"response.completed","response":{"output":[{"type":"message","content":[{"type":"output_text","text":` + strconv.Quote(output) + `}]}]}}` + "\n\n"
 }
 
-func TestForwardAlphaSearchOAuthPreservesWire(t *testing.T) {
+func TestForwardAlphaSearchOAuthAcceptsOfficialProductOriginatorAndPreservesWire(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	body := []byte(`{
 		"id":"search-session",
@@ -60,7 +60,7 @@ func TestForwardAlphaSearchOAuthPreservesWire(t *testing.T) {
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/alpha/search?feature=standalone", bytes.NewReader(body))
 	c.Request.Header.Set("Content-Type", "application/json")
 	c.Request.Header.Set("User-Agent", DefaultOpenAICodexUserAgent)
-	c.Request.Header.Set("Originator", "codex-tui")
+	c.Request.Header.Set("Originator", "chatgpt_cca")
 	c.Request.Header.Set("Version", codexCLIVersion)
 	c.Request.Header.Set("X-Codex-Turn-Metadata", `{"session_id":"search-session","turn_id":"search-turn"}`)
 
@@ -84,6 +84,7 @@ func TestForwardAlphaSearchOAuthPreservesWire(t *testing.T) {
 		Platform:    PlatformOpenAI,
 		Type:        AccountTypeOAuth,
 		Concurrency: 1,
+		Extra:       map[string]any{"codex_cli_only": true},
 		Credentials: map[string]any{
 			"access_token":       "oauth-token",
 			"chatgpt_account_id": "chatgpt-account",

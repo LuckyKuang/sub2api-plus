@@ -65,6 +65,19 @@ func TestStartClientDisconnectRiskLifecycleUsesServerClientRequestID(t *testing.
 	require.Equal(t, "server-request-2", repo.begins[1].RequestID)
 }
 
+func TestStartClientDisconnectRiskLifecycleCapturesCanonicalCodexSessionID(t *testing.T) {
+	repo := &clientDisconnectRiskHandlerRepoStub{}
+	risk := service.NewClientDisconnectRiskService(repo, nil, nil)
+	c := newClientDisconnectRiskHandlerContext("request-id", "server-request")
+	c.Request.Header.Set("session-id", " codex-session-1 ")
+
+	startClientDisconnectRiskLifecycle(c, risk, 7, 11, "openai_responses").Accepted(c.Request.Context())
+
+	require.Len(t, repo.begins, 1)
+	require.Equal(t, "codex-session-1", repo.begins[0].SessionID)
+	require.Equal(t, service.ClientDisconnectSessionScope("codex-session-1", 11), repo.begins[0].SessionScope)
+}
+
 func TestStartClientDisconnectRiskLifecycleGeneratesTrustedFallbackID(t *testing.T) {
 	repo := &clientDisconnectRiskHandlerRepoStub{}
 	risk := service.NewClientDisconnectRiskService(repo, nil, nil)

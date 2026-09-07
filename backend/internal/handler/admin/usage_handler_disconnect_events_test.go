@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/service"
 	"github.com/gin-gonic/gin"
@@ -38,20 +39,39 @@ func TestUsageHandlerListClientDisconnectEventsValidatesAndForwardsFilters(t *te
 	router.GET("/events", h.ListClientDisconnectEvents)
 
 	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodGet, "/events?user_id=7&api_key_id=11&outcome=client_disconnected&completion_status=client_disconnected&usage_missing=true&auto_banned=false&page=2&page_size=10", nil)
+	request := httptest.NewRequest(http.MethodGet, "/events?user_id=7&api_key_id=11&request_id=req-1&session_id=session-1&protocol=openai_responses&outcome=client_disconnected&completion_status=client_disconnected&usage_source=partial&usage_missing=true&enforce=true&auto_banned=false&accepted_from=2026-09-01T00:00:00Z&accepted_to=2026-09-02T00:00:00Z&finalized_from=2026-09-01T00:01:00Z&finalized_to=2026-09-02T00:01:00Z&page=2&page_size=10", nil)
 	router.ServeHTTP(recorder, request)
 
 	require.Equal(t, http.StatusOK, recorder.Code)
 	require.Equal(t, int64(7), repo.filter.UserID)
 	require.Equal(t, int64(11), repo.filter.APIKeyID)
+	require.Equal(t, "req-1", repo.filter.RequestID)
+	require.Equal(t, "session-1", repo.filter.SessionID)
+	require.Equal(t, "openai_responses", repo.filter.Protocol)
 	require.Equal(t, "client_disconnected", repo.filter.Outcome)
 	require.Equal(t, "client_disconnected", repo.filter.CompletionStatus)
+	require.Equal(t, "partial", repo.filter.UsageSource)
 	require.NotNil(t, repo.filter.UsageMissing)
 	require.True(t, *repo.filter.UsageMissing)
+	require.NotNil(t, repo.filter.Enforce)
+	require.True(t, *repo.filter.Enforce)
 	require.NotNil(t, repo.filter.AutoBanned)
 	require.False(t, *repo.filter.AutoBanned)
+	require.Equal(t, time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC), *repo.filter.AcceptedFrom)
+	require.Equal(t, time.Date(2026, 9, 2, 0, 0, 0, 0, time.UTC), *repo.filter.AcceptedTo)
+	require.Equal(t, time.Date(2026, 9, 1, 0, 1, 0, 0, time.UTC), *repo.filter.FinalizedFrom)
+	require.Equal(t, time.Date(2026, 9, 2, 0, 1, 0, 0, time.UTC), *repo.filter.FinalizedTo)
 	require.Equal(t, 2, repo.filter.Page)
 	require.Equal(t, 10, repo.filter.PageSize)
+}
+
+func TestUsageHandlerListClientDisconnectEventsRejectsInvertedTimeRange(t *testing.T) {
+	h := NewUsageHandler(nil, nil, nil, nil)
+	router := gin.New()
+	router.GET("/events", h.ListClientDisconnectEvents)
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/events?accepted_from=2026-09-02T00:00:00Z&accepted_to=2026-09-01T00:00:00Z", nil))
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
 }
 
 func TestUsageHandlerListClientDisconnectEventsRejectsUnknownStatus(t *testing.T) {

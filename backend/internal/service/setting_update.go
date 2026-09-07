@@ -107,7 +107,7 @@ func (s *SettingService) normalizeClientDisconnectRiskGeneration(ctx context.Con
 		return nil
 	}
 
-	currentEnabled := !isFalseSettingValue(requestedValue)
+	currentEnabled := strings.EqualFold(strings.TrimSpace(requestedValue), "true")
 	currentGeneration := settings.ClientDisconnectConsecutiveBanGeneration
 	if currentGeneration < 1 {
 		currentGeneration = 1
@@ -122,7 +122,7 @@ func (s *SettingService) normalizeClientDisconnectRiskGeneration(ctx context.Con
 		}
 	}
 
-	requestedEnabled := !isFalseSettingValue(requestedValue)
+	requestedEnabled := strings.EqualFold(strings.TrimSpace(requestedValue), "true")
 	if requestedEnabled != currentEnabled {
 		currentGeneration++
 	}

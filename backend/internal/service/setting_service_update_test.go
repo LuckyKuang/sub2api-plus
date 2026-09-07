@@ -247,6 +247,31 @@ func TestSettingServiceUsesAtomicClientDisconnectGenerationWriter(t *testing.T) 
 	require.Equal(t, "false", repo.updates[SettingKeyClientDisconnectConsecutiveBanEnabled])
 }
 
+func TestSettingServiceClientDisconnectRiskDefaultsDisabled(t *testing.T) {
+	for name, value := range map[string]string{
+		"missing": "",
+		"invalid": "enabled",
+		"false":   "false",
+	} {
+		t.Run(name, func(t *testing.T) {
+			values := map[string]string{}
+			if name != "missing" {
+				values[SettingKeyClientDisconnectConsecutiveBanEnabled] = value
+			}
+			settings, err := NewSettingService(&settingGetAllRepoStub{values: values}, &config.Config{}).
+				GetAllSettings(context.Background())
+			require.NoError(t, err)
+			require.False(t, settings.ClientDisconnectConsecutiveBanEnabled)
+		})
+	}
+
+	settings, err := NewSettingService(&settingGetAllRepoStub{values: map[string]string{
+		SettingKeyClientDisconnectConsecutiveBanEnabled: " true ",
+	}}, &config.Config{}).GetAllSettings(context.Background())
+	require.NoError(t, err)
+	require.True(t, settings.ClientDisconnectConsecutiveBanEnabled)
+}
+
 func TestSettingService_AsyncImageUserLimitSurvivesAdminRoundTrip(t *testing.T) {
 	readService := NewSettingService(&settingGetAllRepoStub{values: map[string]string{
 		SettingKeyAsyncImageUserImagesPerMinute: "37",
