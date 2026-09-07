@@ -203,3 +203,51 @@ func TestPassthroughIngressBeforeTurnRejectsNextTurnBeforeUpstreamWrite(t *testi
 	require.Equal(t, []string{"map:1", "before:1", "map:2", "before:2"}, gotHookOrder,
 		"passthrough must resolve the current turn model before durable turn eligibility runs")
 }
+
+func TestPassthroughIngressAfterTurnSettlesWhenFirstWriteNeverReachesUpstream(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	controlCtx, cancelControl := context.WithCancelCause(context.Background())
+	defer cancelControl(context.Canceled)
+
+	upstream := newStagedPassthroughConn()
+	upstream.failNextWrite.Store(true)
+	var hooksMu sync.Mutex
+	afterTurns := 0
+	var afterTurnErr error
+	hooks := &OpenAIWSIngressHooks{
+		BeforeTurn: func(int) error { return nil },
+		AfterTurn: func(turn int, result *OpenAIForwardResult, err error) {
+			hooksMu.Lock()
+			afterTurns++
+			afterTurnErr = err
+			hooksMu.Unlock()
+			require.Equal(t, 1, turn)
+			require.Nil(t, result)
+		},
+	}
+
+	server, serverErr := startPassthroughHookRecordingServer(
+		t,
+		controlCtx,
+		newPassthroughLifecycleService(passthroughLifecycleConfig(), upstream),
+		passthroughLifecycleAccount(),
+		hooks,
+	)
+	defer server.Close()
+	clientConn := dialPassthroughLifecycleClient(t, server)
+	defer func() { _ = clientConn.CloseNow() }()
+
+	select {
+	case err := <-serverErr:
+		require.Error(t, err)
+	case <-time.After(3 * time.Second):
+		t.Fatal("passthrough ingress did not exit after first upstream write failed")
+	}
+
+	hooksMu.Lock()
+	gotAfter := afterTurns
+	gotErr := afterTurnErr
+	hooksMu.Unlock()
+	require.Equal(t, 1, gotAfter, "BeforeTurn success must still settle AfterTurn when the first write never reaches upstream")
+	require.Error(t, gotErr)
+}

@@ -229,7 +229,7 @@ func invalidateProxyProbeSnapshots(ctx context.Context, exec sqlExecutor, proxyI
 			updated_at = NOW()
 		WHERE proxy_id = $1
 			AND type = 'apikey'
-			AND platform IN ('openai', 'anthropic')
+			AND platform IN (`+ollamaCloudUsagePlatformsSQL+`)
 			AND extra ? 'ollama_cloud_usage_snapshot'
 			AND extra -> 'ollama_cloud_usage_snapshot' <> 'null'::jsonb
 			AND deleted_at IS NULL

@@ -50,6 +50,8 @@ type contentModerationConfigRequest struct {
 	// service.UpdateContentModerationConfigInput 已支持，此前 handler 层缺透传导致开关静默失效。
 	CyberPolicyExcludeFromBanCount *bool                                 `json:"cyber_policy_exclude_from_ban_count"`
 	CyberPolicyAutoBanEnabled      *bool                                 `json:"cyber_policy_auto_ban_enabled"`
+	SessionBlockEnabled            *bool                                 `json:"session_block_enabled"`
+	SessionBlockTTLSeconds         *int                                  `json:"session_block_ttl_seconds"`
 	RetryCount                     *int                                  `json:"retry_count"`
 	HitRetentionDays               *int                                  `json:"hit_retention_days"`
 	NonHitRetentionDays            *int                                  `json:"non_hit_retention_days"`
@@ -118,6 +120,8 @@ func (h *ContentModerationHandler) UpdateConfig(c *gin.Context) {
 		ViolationWindowHours:           req.ViolationWindowHours,
 		CyberPolicyExcludeFromBanCount: req.CyberPolicyExcludeFromBanCount,
 		CyberPolicyAutoBanEnabled:      req.CyberPolicyAutoBanEnabled,
+		SessionBlockEnabled:            req.SessionBlockEnabled,
+		SessionBlockTTLSeconds:         req.SessionBlockTTLSeconds,
 		RetryCount:                     req.RetryCount,
 		HitRetentionDays:               req.HitRetentionDays,
 		NonHitRetentionDays:            req.NonHitRetentionDays,
@@ -277,4 +281,58 @@ func parseContentModerationDate(raw string) (time.Time, bool, error) {
 	}
 	t, err := time.Parse("2006-01-02", raw)
 	return t, err == nil, err
+}
+
+type contentModerationSessionBlockRequest struct {
+	BlockKey string `json:"block_key"`
+}
+
+func (h *ContentModerationHandler) ListSessionBlocks(c *gin.Context) {
+	page, pageSize := response.ParsePagination(c)
+	filter := service.ContentModerationSessionBlockFilter{
+		Pagination: pagination.PaginationParams{
+			Page:      page,
+			PageSize:  pageSize,
+			SortOrder: pagination.SortOrderDesc,
+		},
+		SessionID: c.Query("session_id"),
+		Search:    c.Query("search"),
+	}
+	if raw := strings.TrimSpace(c.Query("user_id")); raw != "" {
+		userID, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || userID <= 0 {
+			response.BadRequest(c, "Invalid user_id")
+			return
+		}
+		filter.UserID = &userID
+	}
+	items, pageResult, err := h.service.ListSessionBlocks(c.Request.Context(), filter)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Paginated(c, items, pageResult.Total, pageResult.Page, pageResult.PageSize)
+}
+
+func (h *ContentModerationHandler) DeleteSessionBlock(c *gin.Context) {
+	var req contentModerationSessionBlockRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	result, err := h.service.DeleteSessionBlock(c.Request.Context(), req.BlockKey)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, result)
+}
+
+func (h *ContentModerationHandler) ClearSessionBlocks(c *gin.Context) {
+	result, err := h.service.ClearSessionBlocks(c.Request.Context())
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, result)
 }

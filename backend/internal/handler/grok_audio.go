@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/ip"
@@ -34,6 +36,12 @@ func (h *OpenAIGatewayHandler) GrokRealtime(c *gin.Context) {
 	if !h.ensureResponsesDependencies(c, nil) {
 		return
 	}
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok {
+		h.errorResponse(c, http.StatusInternalServerError, "api_error", "User context not found")
+		return
+	}
+	role, _ := middleware2.GetUserRoleFromContext(c)
 	subscription, _ := middleware2.GetSubscriptionFromContext(c)
 	if err := h.billingCacheService.CheckBillingEligibility(c.Request.Context(), apiKey.User, apiKey, apiKey.Group, subscription, service.QuotaPlatform(c.Request.Context(), apiKey)); err != nil {
 		status, code, message, retryAfter := billingErrorDetails(err)
@@ -130,7 +138,11 @@ func (h *OpenAIGatewayHandler) GrokRealtime(c *gin.Context) {
 	defer func() { _ = conn.CloseNow() }()
 
 	started := time.Now()
-	audioObserved, proxyErr := h.gatewayService.ProxyGrokRealtimeConn(c.Request.Context(), c, conn, upstream)
+	turns := newGrokRealtimeTurnTracker(h.clientDisconnectRisk, subject.UserID, apiKey.ID, role, trustedClientRequestID(c))
+	audioObserved, proxyErr := h.gatewayService.ProxyGrokRealtimeConnWithObserver(
+		c.Request.Context(), c, conn, upstream, turns.observer(c.Request.Context()),
+	)
+	turns.disconnectOutstanding(c.Request.Context())
 	elapsed := time.Since(started)
 	if proxyErr != nil {
 		reqLog.Info("grok_realtime.proxy_failed", zap.Error(proxyErr))
@@ -141,6 +153,105 @@ func (h *OpenAIGatewayHandler) GrokRealtime(c *gin.Context) {
 	}
 	if result := grokRealtimeBillingResult(model, elapsed, audioObserved); result != nil {
 		h.recordGrokVoiceUsage(c, apiKey, selection.Account, subscription, "realtime", nil, result)
+	}
+}
+
+type grokRealtimeTurnTracker struct {
+	mu        sync.Mutex
+	risk      *service.ClientDisconnectRiskService
+	userID    int64
+	apiKeyID  int64
+	role      string
+	requestID string
+	next      int64
+	pending   []grokRealtimePendingTurn
+}
+
+type grokRealtimePendingTurn struct {
+	responseID string
+	lifecycle  *service.ClientDisconnectLifecycle
+}
+
+func newGrokRealtimeTurnTracker(risk *service.ClientDisconnectRiskService, userID, apiKeyID int64, role, requestID string) *grokRealtimeTurnTracker {
+	return &grokRealtimeTurnTracker{risk: risk, userID: userID, apiKeyID: apiKeyID, role: role, requestID: requestID}
+}
+
+func (t *grokRealtimeTurnTracker) observer(ctx context.Context) *service.GrokRealtimeTurnObserver {
+	return &service.GrokRealtimeTurnObserver{
+		Accepted:  func(responseID string) { t.accept(ctx, responseID) },
+		Completed: func(responseID string) { t.finalize(ctx, responseID, true) },
+		Failed:    func(responseID string) { t.finalize(ctx, responseID, false) },
+	}
+}
+
+func (t *grokRealtimeTurnTracker) accept(ctx context.Context, responseID string) {
+	if t == nil || t.risk == nil || strings.TrimSpace(t.role) == "" {
+		return
+	}
+	t.mu.Lock()
+	responseID = strings.TrimSpace(responseID)
+	if responseID != "" {
+		for _, turn := range t.pending {
+			if turn.responseID == responseID {
+				t.mu.Unlock()
+				return
+			}
+		}
+	}
+	t.next++
+	lifecycle := t.risk.NewLifecycle(t.userID, t.apiKeyID, t.role,
+		fmt.Sprintf("%s:grok-turn:%d", t.requestID, t.next), "grok_realtime")
+	if lifecycle != nil {
+		lifecycle.Accepted(ctx)
+		t.pending = append(t.pending, grokRealtimePendingTurn{responseID: responseID, lifecycle: lifecycle})
+	}
+	t.mu.Unlock()
+}
+
+func (t *grokRealtimeTurnTracker) finalize(ctx context.Context, responseID string, completed bool) {
+	if t == nil {
+		return
+	}
+	t.mu.Lock()
+	if len(t.pending) == 0 {
+		t.mu.Unlock()
+		return
+	}
+	index := 0
+	responseID = strings.TrimSpace(responseID)
+	if responseID != "" {
+		index = -1
+		for i, turn := range t.pending {
+			if turn.responseID == responseID {
+				index = i
+				break
+			}
+		}
+		if index < 0 {
+			t.mu.Unlock()
+			return
+		}
+	}
+	lifecycle := t.pending[index].lifecycle
+	t.pending = append(t.pending[:index], t.pending[index+1:]...)
+	t.mu.Unlock()
+	if completed {
+		lifecycle.Completed(ctx)
+	} else {
+		lifecycle.Neutral(ctx)
+	}
+}
+
+func (t *grokRealtimeTurnTracker) disconnectOutstanding(ctx context.Context) {
+	if t == nil {
+		return
+	}
+	t.mu.Lock()
+	pending := append([]grokRealtimePendingTurn(nil), t.pending...)
+	t.pending = nil
+	t.mu.Unlock()
+	for _, turn := range pending {
+		turn.lifecycle.Disconnected(ctx)
 	}
 }
 
@@ -179,6 +290,13 @@ func (h *OpenAIGatewayHandler) GrokVoice(c *gin.Context, endpoint string) {
 	if !h.ensureResponsesDependencies(c, nil) {
 		return
 	}
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok {
+		h.errorResponse(c, http.StatusInternalServerError, "api_error", "User context not found")
+		return
+	}
+	disconnectLifecycle := startClientDisconnectRiskLifecycle(c, h.clientDisconnectRisk, subject.UserID, apiKey.ID, "grok_voice")
+	defer disconnectLifecycle.Neutral(c.Request.Context())
 	subscription, _ := middleware2.GetSubscriptionFromContext(c)
 	if err := h.billingCacheService.CheckBillingEligibility(c.Request.Context(), apiKey.User, apiKey, apiKey.Group, subscription, service.QuotaPlatform(c.Request.Context(), apiKey)); err != nil {
 		status, code, message, retryAfter := billingErrorDetails(err)
@@ -195,7 +313,6 @@ func (h *OpenAIGatewayHandler) GrokVoice(c *gin.Context, endpoint string) {
 		return
 	}
 	if endpoint == "tts" {
-		subject, _ := middleware2.GetAuthSubjectFromContext(c)
 		reqLog := requestLogger(c, "handler.openai_gateway.grok_voice", zap.String("endpoint", endpoint))
 		// TTS bodies use {"input":"..."} (and variants). Normalize to chat messages so
 		// content moderation extractors see the spoken text.

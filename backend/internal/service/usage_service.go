@@ -44,6 +44,8 @@ type CreateUsageLogRequest struct {
 	FirstOutputMs         *int    `json:"first_output_ms"`
 	FirstOutputKind       *string `json:"first_output_kind"`
 	IsComplete            *bool   `json:"is_complete"`
+	CompletionStatus      string  `json:"completion_status"`
+	UsageSource           string  `json:"usage_source"`
 }
 
 // UsageStats 使用统计
@@ -126,6 +128,8 @@ func (s *UsageService) Create(ctx context.Context, req CreateUsageLogRequest) (*
 		FirstOutputMs:         req.FirstOutputMs,
 		FirstOutputKind:       req.FirstOutputKind,
 		IsComplete:            req.IsComplete,
+		CompletionStatus:      req.CompletionStatus,
+		UsageSource:           req.UsageSource,
 	}
 
 	inserted, err := s.usageRepo.Create(txCtx, usageLog)

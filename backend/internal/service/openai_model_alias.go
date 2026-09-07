@@ -65,6 +65,8 @@ func normalizeKnownOpenAICodexModel(model string) string {
 	}
 
 	switch {
+	case isOpenAIGPT6AstraModel(normalized):
+		return "gpt-6-astra"
 	case strings.Contains(normalized, "gpt-5.6-sol"):
 		return "gpt-5.6-sol"
 	case strings.Contains(normalized, "gpt-5.6-terra"):
@@ -122,6 +124,13 @@ func isOpenAIGPT56Model(model string) bool {
 		}
 	}
 	return false
+}
+
+// isOpenAIGPT6AstraModel recognizes only OpenAI's canonical Astra model ID.
+// Reasoning levels and future snapshots are request/catalog metadata, not
+// aliases for model names that OpenAI has not published.
+func isOpenAIGPT6AstraModel(model string) bool {
+	return canonicalizeOpenAIModelAliasSpelling(model) == "gpt-6-astra"
 }
 
 func appendUsageBillingModelCandidate(candidates []string, seen map[string]struct{}, model string) []string {

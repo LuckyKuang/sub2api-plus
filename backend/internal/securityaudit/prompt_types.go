@@ -83,6 +83,8 @@ type Request struct {
 	Body                []byte
 	Stage               string
 	PromptTextAuthority bool
+	SessionID           string
+	AdminUser           bool
 }
 
 func (r Request) Clone() Request {

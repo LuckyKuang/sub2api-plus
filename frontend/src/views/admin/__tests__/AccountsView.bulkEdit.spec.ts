@@ -235,9 +235,4 @@ describe('admin AccountsView bulk edit scope', () => {
       sortable: true
     })
   })
-
-
-
-
-
 })

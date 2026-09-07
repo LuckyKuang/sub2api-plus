@@ -250,6 +250,16 @@ func IsComplete(v bool) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldIsComplete, v))
 }
 
+// CompletionStatus applies equality check predicate on the "completion_status" field. It's identical to CompletionStatusEQ.
+func CompletionStatus(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldCompletionStatus, v))
+}
+
+// UsageSource applies equality check predicate on the "usage_source" field. It's identical to UsageSourceEQ.
+func UsageSource(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldUsageSource, v))
+}
+
 // UserAgent applies equality check predicate on the "user_agent" field. It's identical to UserAgentEQ.
 func UserAgent(v string) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldUserAgent, v))
@@ -2043,6 +2053,136 @@ func IsCompleteIsNil() predicate.UsageLog {
 // IsCompleteNotNil applies the NotNil predicate on the "is_complete" field.
 func IsCompleteNotNil() predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldNotNull(FieldIsComplete))
+}
+
+// CompletionStatusEQ applies the EQ predicate on the "completion_status" field.
+func CompletionStatusEQ(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldCompletionStatus, v))
+}
+
+// CompletionStatusNEQ applies the NEQ predicate on the "completion_status" field.
+func CompletionStatusNEQ(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNEQ(FieldCompletionStatus, v))
+}
+
+// CompletionStatusIn applies the In predicate on the "completion_status" field.
+func CompletionStatusIn(vs ...string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIn(FieldCompletionStatus, vs...))
+}
+
+// CompletionStatusNotIn applies the NotIn predicate on the "completion_status" field.
+func CompletionStatusNotIn(vs ...string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotIn(FieldCompletionStatus, vs...))
+}
+
+// CompletionStatusGT applies the GT predicate on the "completion_status" field.
+func CompletionStatusGT(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGT(FieldCompletionStatus, v))
+}
+
+// CompletionStatusGTE applies the GTE predicate on the "completion_status" field.
+func CompletionStatusGTE(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGTE(FieldCompletionStatus, v))
+}
+
+// CompletionStatusLT applies the LT predicate on the "completion_status" field.
+func CompletionStatusLT(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLT(FieldCompletionStatus, v))
+}
+
+// CompletionStatusLTE applies the LTE predicate on the "completion_status" field.
+func CompletionStatusLTE(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLTE(FieldCompletionStatus, v))
+}
+
+// CompletionStatusContains applies the Contains predicate on the "completion_status" field.
+func CompletionStatusContains(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldContains(FieldCompletionStatus, v))
+}
+
+// CompletionStatusHasPrefix applies the HasPrefix predicate on the "completion_status" field.
+func CompletionStatusHasPrefix(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldHasPrefix(FieldCompletionStatus, v))
+}
+
+// CompletionStatusHasSuffix applies the HasSuffix predicate on the "completion_status" field.
+func CompletionStatusHasSuffix(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldHasSuffix(FieldCompletionStatus, v))
+}
+
+// CompletionStatusEqualFold applies the EqualFold predicate on the "completion_status" field.
+func CompletionStatusEqualFold(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEqualFold(FieldCompletionStatus, v))
+}
+
+// CompletionStatusContainsFold applies the ContainsFold predicate on the "completion_status" field.
+func CompletionStatusContainsFold(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldContainsFold(FieldCompletionStatus, v))
+}
+
+// UsageSourceEQ applies the EQ predicate on the "usage_source" field.
+func UsageSourceEQ(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldUsageSource, v))
+}
+
+// UsageSourceNEQ applies the NEQ predicate on the "usage_source" field.
+func UsageSourceNEQ(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNEQ(FieldUsageSource, v))
+}
+
+// UsageSourceIn applies the In predicate on the "usage_source" field.
+func UsageSourceIn(vs ...string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIn(FieldUsageSource, vs...))
+}
+
+// UsageSourceNotIn applies the NotIn predicate on the "usage_source" field.
+func UsageSourceNotIn(vs ...string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotIn(FieldUsageSource, vs...))
+}
+
+// UsageSourceGT applies the GT predicate on the "usage_source" field.
+func UsageSourceGT(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGT(FieldUsageSource, v))
+}
+
+// UsageSourceGTE applies the GTE predicate on the "usage_source" field.
+func UsageSourceGTE(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGTE(FieldUsageSource, v))
+}
+
+// UsageSourceLT applies the LT predicate on the "usage_source" field.
+func UsageSourceLT(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLT(FieldUsageSource, v))
+}
+
+// UsageSourceLTE applies the LTE predicate on the "usage_source" field.
+func UsageSourceLTE(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLTE(FieldUsageSource, v))
+}
+
+// UsageSourceContains applies the Contains predicate on the "usage_source" field.
+func UsageSourceContains(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldContains(FieldUsageSource, v))
+}
+
+// UsageSourceHasPrefix applies the HasPrefix predicate on the "usage_source" field.
+func UsageSourceHasPrefix(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldHasPrefix(FieldUsageSource, v))
+}
+
+// UsageSourceHasSuffix applies the HasSuffix predicate on the "usage_source" field.
+func UsageSourceHasSuffix(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldHasSuffix(FieldUsageSource, v))
+}
+
+// UsageSourceEqualFold applies the EqualFold predicate on the "usage_source" field.
+func UsageSourceEqualFold(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEqualFold(FieldUsageSource, v))
+}
+
+// UsageSourceContainsFold applies the ContainsFold predicate on the "usage_source" field.
+func UsageSourceContainsFold(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldContainsFold(FieldUsageSource, v))
 }
 
 // UserAgentEQ applies the EQ predicate on the "user_agent" field.

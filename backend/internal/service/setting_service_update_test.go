@@ -21,6 +21,22 @@ type settingUpdateRepoStub struct {
 	setMultipleErr error
 }
 
+type atomicRiskSettingUpdateRepoStub struct {
+	settingUpdateRepoStub
+	atomicCalls int
+	generation  int64
+	atomicErr   error
+}
+
+func (s *atomicRiskSettingUpdateRepoStub) SetMultipleWithClientDisconnectRiskGeneration(_ context.Context, updates map[string]string) (int64, error) {
+	s.atomicCalls++
+	s.updates = make(map[string]string, len(updates))
+	for key, value := range updates {
+		s.updates[key] = value
+	}
+	return s.generation, s.atomicErr
+}
+
 func (s *settingUpdateRepoStub) Get(ctx context.Context, key string) (*Setting, error) {
 	panic("unexpected Get call")
 }
@@ -215,6 +231,20 @@ func TestSettingService_AffiliateAdminRechargeSetting(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "true", repo.updates[SettingKeyAffiliateAdminRechargeEnabled])
 	})
+}
+
+func TestSettingServiceUsesAtomicClientDisconnectGenerationWriter(t *testing.T) {
+	repo := &atomicRiskSettingUpdateRepoStub{generation: 42}
+	svc := NewSettingService(repo, &config.Config{})
+	settings := &SystemSettings{
+		ClientDisconnectConsecutiveBanEnabled:   false,
+		ClientDisconnectConsecutiveBanThreshold: 10,
+	}
+
+	require.NoError(t, svc.UpdateSettings(context.Background(), settings))
+	require.Equal(t, 1, repo.atomicCalls)
+	require.Equal(t, int64(42), settings.ClientDisconnectConsecutiveBanGeneration)
+	require.Equal(t, "false", repo.updates[SettingKeyClientDisconnectConsecutiveBanEnabled])
 }
 
 func TestSettingService_AsyncImageUserLimitSurvivesAdminRoundTrip(t *testing.T) {

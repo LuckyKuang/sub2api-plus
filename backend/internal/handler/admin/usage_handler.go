@@ -25,6 +25,62 @@ type UsageHandler struct {
 	apiKeyService  *service.APIKeyService
 	adminService   service.AdminService
 	cleanupService *service.UsageCleanupService
+	disconnectRisk *service.ClientDisconnectRiskService
+}
+
+func (h *UsageHandler) SetClientDisconnectRiskService(risk *service.ClientDisconnectRiskService) {
+	if h != nil {
+		h.disconnectRisk = risk
+	}
+}
+
+func (h *UsageHandler) ListClientDisconnectEvents(c *gin.Context) {
+	page, pageSize := response.ParsePagination(c)
+	filter := service.ClientDisconnectRiskEventFilter{Page: page, PageSize: pageSize}
+	for name, target := range map[string]*int64{"user_id": &filter.UserID, "api_key_id": &filter.APIKeyID} {
+		if raw := strings.TrimSpace(c.Query(name)); raw != "" {
+			value, err := strconv.ParseInt(raw, 10, 64)
+			if err != nil || value <= 0 {
+				response.BadRequest(c, "Invalid "+name)
+				return
+			}
+			*target = value
+		}
+	}
+	filter.Outcome = strings.TrimSpace(c.Query("outcome"))
+	switch filter.Outcome {
+	case "", "pending", string(service.ClientDisconnectOutcomeCompleted), string(service.ClientDisconnectOutcomeDisconnected), string(service.ClientDisconnectOutcomeNeutral):
+	default:
+		response.BadRequest(c, "Invalid outcome")
+		return
+	}
+	filter.CompletionStatus = strings.TrimSpace(c.Query("completion_status"))
+	switch filter.CompletionStatus {
+	case "", "pending", "completed", "client_disconnected", "upstream_failed", "upstream_timeout", "usage_missing":
+	default:
+		response.BadRequest(c, "Invalid completion_status")
+		return
+	}
+	for name, target := range map[string]**bool{"usage_missing": &filter.UsageMissing, "auto_banned": &filter.AutoBanned} {
+		if raw := strings.TrimSpace(c.Query(name)); raw != "" {
+			value, err := strconv.ParseBool(raw)
+			if err != nil {
+				response.BadRequest(c, "Invalid "+name+" value, use true or false")
+				return
+			}
+			*target = &value
+		}
+	}
+	if h.disconnectRisk == nil {
+		response.Paginated(c, []service.ClientDisconnectRiskEvent{}, 0, page, pageSize)
+		return
+	}
+	events, total, err := h.disconnectRisk.ListEvents(c.Request.Context(), filter)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Paginated(c, events, total, page, pageSize)
 }
 
 // NewUsageHandler creates a new admin usage handler
@@ -112,6 +168,10 @@ func (h *UsageHandler) List(c *gin.Context) {
 	model := c.Query("model")
 	requestID := strings.TrimSpace(c.Query("request_id"))
 	billingMode := strings.TrimSpace(c.Query("billing_mode"))
+	completionStatus, usageSource, ok := parseUsageCompletionFilters(c)
+	if !ok {
+		return
+	}
 
 	var requestType *int16
 	var stream *bool
@@ -130,6 +190,12 @@ func (h *UsageHandler) List(c *gin.Context) {
 			return
 		}
 		stream = &val
+	}
+
+	nativeCompactionV2, err := parseOptionalBoolDashboardFilter(c, "native_compaction_v2")
+	if err != nil {
+		response.BadRequest(c, "Invalid native_compaction_v2 value, use true or false")
+		return
 	}
 
 	var billingType *int8
@@ -192,9 +258,12 @@ func (h *UsageHandler) List(c *gin.Context) {
 		ModelFilterSource:     usagestats.ModelSourceRequested,
 		RequestType:           requestType,
 		Stream:                stream,
+		NativeCompactionV2:    nativeCompactionV2,
 		BillingType:           billingType,
 		BillingMode:           billingMode,
 		UpstreamModelMismatch: upstreamModelMismatch,
+		CompletionStatus:      completionStatus,
+		UsageSource:           usageSource,
 		StartTime:             startTime,
 		EndTime:               endTime,
 		ExactTotal:            exactTotal,
@@ -211,6 +280,26 @@ func (h *UsageHandler) List(c *gin.Context) {
 		out = append(out, *dto.UsageLogFromServiceAdmin(&records[i]))
 	}
 	response.Paginated(c, out, result.Total, page, pageSize)
+}
+
+func parseUsageCompletionFilters(c *gin.Context) (string, string, bool) {
+	completionStatus := strings.TrimSpace(c.Query("completion_status"))
+	switch completionStatus {
+	case "", service.UsageCompletionUnknown, service.UsageCompletionCompleted,
+		service.UsageCompletionClientDisconnected, service.UsageCompletionIncomplete:
+	default:
+		response.BadRequest(c, "Invalid completion_status")
+		return "", "", false
+	}
+	usageSource := strings.TrimSpace(c.Query("usage_source"))
+	switch usageSource {
+	case "", service.UsageSourceUnknown, service.UsageSourceUpstreamExact,
+		service.UsageSourcePartial, service.UsageSourceEstimated, service.UsageSourceReconciled:
+	default:
+		response.BadRequest(c, "Invalid usage_source")
+		return "", "", false
+	}
+	return completionStatus, usageSource, true
 }
 
 // Stats handles getting usage statistics with filters
@@ -256,6 +345,10 @@ func (h *UsageHandler) Stats(c *gin.Context) {
 
 	model := c.Query("model")
 	billingMode := strings.TrimSpace(c.Query("billing_mode"))
+	completionStatus, usageSource, ok := parseUsageCompletionFilters(c)
+	if !ok {
+		return
+	}
 
 	var requestType *int16
 	var stream *bool
@@ -274,6 +367,12 @@ func (h *UsageHandler) Stats(c *gin.Context) {
 			return
 		}
 		stream = &val
+	}
+
+	nativeCompactionV2, err := parseOptionalBoolDashboardFilter(c, "native_compaction_v2")
+	if err != nil {
+		response.BadRequest(c, "Invalid native_compaction_v2 value, use true or false")
+		return
 	}
 
 	var billingType *int8
@@ -344,9 +443,12 @@ func (h *UsageHandler) Stats(c *gin.Context) {
 		ModelFilterSource:     usagestats.ModelSourceRequested,
 		RequestType:           requestType,
 		Stream:                stream,
+		NativeCompactionV2:    nativeCompactionV2,
 		BillingType:           billingType,
 		BillingMode:           billingMode,
 		UpstreamModelMismatch: upstreamModelMismatch,
+		CompletionStatus:      completionStatus,
+		UsageSource:           usageSource,
 		StartTime:             &startTime,
 		EndTime:               &endTime,
 	}

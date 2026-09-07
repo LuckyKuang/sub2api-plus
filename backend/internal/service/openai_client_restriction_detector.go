@@ -19,8 +19,10 @@ const (
 	CodexClientRestrictionReasonMatchedLegacyCompatibilityProfile = "legacy_compatibility_client_profile_matched"
 	CodexClientRestrictionReasonMatchedCompatibilityEntry         = "compatibility_client_profile_matched"
 	CodexClientRestrictionReasonNotMatchedProfile                 = "codex_client_profile_not_matched"
+	CodexClientRestrictionReasonMatchedAppServerClient            = "app_server_client_matched"
 	CodexClientRestrictionReasonBlacklisted                       = "blacklist_matched"
 	CodexClientRestrictionReasonMissingKnownEvidence              = "missing_known_codex_evidence"
+	CodexClientRestrictionReasonMissingEngineFingerprint          = "missing_engine_fingerprint"
 	CodexClientRestrictionReasonVersionTooLow                     = "codex_version_too_low"
 	CodexClientRestrictionReasonVersionTooHigh                    = "codex_version_too_high"
 )
@@ -36,6 +38,8 @@ type CodexRestrictionPolicy struct {
 	MinCodexVersion                         string
 	MaxCodexVersion                         string
 	LegacyClientProfileCompatibilityEnabled bool
+	AllowAppServerClients                   bool
+	EngineFingerprintSignals                []openai.EngineFingerprintSignal
 }
 
 // CodexClientRestrictionDetectionResult is the account-policy decision.
@@ -100,10 +104,20 @@ func (d *OpenAICodexClientRestrictionDetector) Detect(c *gin.Context, account *A
 
 	profile, recognizedProfile := openai.ClassifyCodexClientProfile(userAgent, originator, policy.LegacyClientProfileCompatibilityEnabled)
 	compatibilityEntry := false
+	skipFingerprint := false
+	appServerAllowed := false
 	if !recognizedProfile {
-		_, compatibilityEntry = openai.MatchClientEntry(userAgent, originator, policy.Whitelist)
+		entry, ok := openai.MatchClientEntry(userAgent, originator, policy.Whitelist)
+		compatibilityEntry = ok
+		if ok {
+			skipFingerprint = entry.SkipEngineFingerprint
+		}
 		if !compatibilityEntry {
-			return CodexClientRestrictionDetectionResult{Enabled: true, Reason: CodexClientRestrictionReasonNotMatchedProfile}
+			if policy.AllowAppServerClients || account.IsCodexCLIOnlyAppServerAllowed() {
+				appServerAllowed = true
+			} else {
+				return CodexClientRestrictionDetectionResult{Enabled: true, Reason: CodexClientRestrictionReasonNotMatchedProfile}
+			}
 		}
 	}
 
@@ -112,10 +126,23 @@ func (d *OpenAICodexClientRestrictionDetector) Detect(c *gin.Context, account *A
 	}
 
 	if compatibilityEntry {
+		if !skipFingerprint && !openai.EvaluateEngineFingerprint(headers, body, policy.EngineFingerprintSignals) {
+			return CodexClientRestrictionDetectionResult{Enabled: true, Reason: CodexClientRestrictionReasonMissingEngineFingerprint}
+		}
 		return CodexClientRestrictionDetectionResult{
 			Enabled: true,
 			Matched: true,
 			Reason:  CodexClientRestrictionReasonMatchedCompatibilityEntry,
+		}
+	}
+	if appServerAllowed {
+		if !openai.EvaluateEngineFingerprint(headers, body, policy.EngineFingerprintSignals) {
+			return CodexClientRestrictionDetectionResult{Enabled: true, Reason: CodexClientRestrictionReasonMissingEngineFingerprint}
+		}
+		return CodexClientRestrictionDetectionResult{
+			Enabled: true,
+			Matched: true,
+			Reason:  CodexClientRestrictionReasonMatchedAppServerClient,
 		}
 	}
 
@@ -135,6 +162,9 @@ func (d *OpenAICodexClientRestrictionDetector) Detect(c *gin.Context, account *A
 	reason := CodexClientRestrictionReasonMatchedOfficialProfile
 	if profile.Profile == openai.CodexClientProfileLegacyCompatibility {
 		reason = CodexClientRestrictionReasonMatchedLegacyCompatibilityProfile
+	}
+	if !openai.EvaluateEngineFingerprint(headers, body, policy.EngineFingerprintSignals) {
+		return CodexClientRestrictionDetectionResult{Enabled: true, Reason: CodexClientRestrictionReasonMissingEngineFingerprint}
 	}
 	return CodexClientRestrictionDetectionResult{
 		Enabled: true, Matched: true, Reason: reason,

@@ -14,6 +14,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/antigravity"
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/xai"
 )
 
@@ -215,6 +216,10 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 
 		// 风控中心功能（默认关闭，显式启用）
 		SettingKeyRiskControlEnabled: "false",
+		// 客户端连续断开自动封禁独立于内容审计总开关，默认开启。
+		SettingKeyClientDisconnectConsecutiveBanEnabled:    "true",
+		SettingKeyClientDisconnectConsecutiveBanThreshold:  "10",
+		SettingKeyClientDisconnectConsecutiveBanGeneration: "1",
 
 		// 全局 IP 访问控制功能总开关（默认关闭；缺省/空值一律视为关，不自动迁移旧拦截）
 		SettingKeyGlobalIPAccessControlEnabled: "false",
@@ -228,10 +233,12 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyMaxClaudeCodeVersion: "",
 
 		// codex_cli_only profile policy（默认：版本不检查、显式兼容名单为空）
-		SettingKeyMinCodexVersion:       "",
-		SettingKeyMaxCodexVersion:       "",
-		SettingKeyCodexCLIOnlyBlacklist: "",
-		SettingKeyCodexCLIOnlyWhitelist: "",
+		SettingKeyMinCodexVersion:                      "",
+		SettingKeyMaxCodexVersion:                      "",
+		SettingKeyCodexCLIOnlyBlacklist:                "",
+		SettingKeyCodexCLIOnlyWhitelist:                "",
+		SettingKeyCodexCLIOnlyAllowAppServerClients:    "false",
+		SettingKeyCodexCLIOnlyEngineFingerprintSignals: openai.DefaultEngineFingerprintSignalsJSON(),
 
 		// 分组隔离（默认不允许未分组 Key 调度）
 		SettingKeyAllowUngroupedKeyScheduling:                        "false",
@@ -839,6 +846,15 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 
 	// 风控中心功能（默认关闭，严格 true 才启用）
 	result.RiskControlEnabled = settings[SettingKeyRiskControlEnabled] == "true"
+	result.ClientDisconnectConsecutiveBanEnabled = !isFalseSettingValue(settings[SettingKeyClientDisconnectConsecutiveBanEnabled])
+	result.ClientDisconnectConsecutiveBanThreshold = 10
+	if value, err := strconv.Atoi(strings.TrimSpace(settings[SettingKeyClientDisconnectConsecutiveBanThreshold])); err == nil {
+		result.ClientDisconnectConsecutiveBanThreshold = boundedIntOrDefault(value, 1, 1000, 10)
+	}
+	result.ClientDisconnectConsecutiveBanGeneration = 1
+	if value, err := strconv.ParseInt(strings.TrimSpace(settings[SettingKeyClientDisconnectConsecutiveBanGeneration]), 10, 64); err == nil && value > 0 {
+		result.ClientDisconnectConsecutiveBanGeneration = value
+	}
 
 	// 全局 IP 访问控制功能总开关（默认关闭，严格 true 才启用；不因旧 enforcement 自动打开）
 	result.GlobalIPAccessControlEnabled = settings[SettingKeyGlobalIPAccessControlEnabled] == "true"
@@ -860,6 +876,7 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 
 	// Gateway forwarding behavior (defaults: fingerprint=true, metadata_passthrough=false,
 	// cch_signing=false, claude_oauth_system_prompt_injection=true)
+	result.OpenAITTFTMode = normalizeOpenAITTFTMode(settings[SettingKeyOpenAITTFTMode])
 	if v, ok := settings[SettingKeyEnableFingerprintUnification]; ok && v != "" {
 		result.EnableFingerprintUnification = v == "true"
 	} else {
@@ -908,6 +925,12 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	result.MaxCodexVersion = settings[SettingKeyMaxCodexVersion]
 	result.CodexCLIOnlyBlacklist = settings[SettingKeyCodexCLIOnlyBlacklist]
 	result.CodexCLIOnlyWhitelist = settings[SettingKeyCodexCLIOnlyWhitelist]
+	result.CodexCLIOnlyAllowAppServerClients = settings[SettingKeyCodexCLIOnlyAllowAppServerClients] == "true"
+	if raw := strings.TrimSpace(settings[SettingKeyCodexCLIOnlyEngineFingerprintSignals]); raw != "" {
+		result.CodexCLIOnlyEngineFingerprintSignals = raw
+	} else {
+		result.CodexCLIOnlyEngineFingerprintSignals = openai.DefaultEngineFingerprintSignalsJSON()
+	}
 
 	// Web search emulation: quick enabled check from the JSON config
 	if raw := settings[SettingKeyWebSearchEmulationConfig]; raw != "" {
@@ -993,6 +1016,13 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	})
 
 	return result
+}
+
+func normalizeOpenAITTFTMode(mode string) string {
+	if strings.EqualFold(strings.TrimSpace(mode), OpenAITTFTModeVisible) {
+		return OpenAITTFTModeVisible
+	}
+	return OpenAITTFTModeSemantic
 }
 
 func clampAffiliateRebateRate(value float64) float64 {

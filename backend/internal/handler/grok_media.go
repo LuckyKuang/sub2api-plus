@@ -65,6 +65,8 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 		h.errorResponse(c, http.StatusInternalServerError, "api_error", "User context not found")
 		return
 	}
+	disconnectLifecycle := startClientDisconnectRiskLifecycle(c, h.clientDisconnectRisk, subject.UserID, apiKey.ID, "grok_media")
+	defer disconnectLifecycle.Neutral(c.Request.Context())
 
 	reqLog := requestLogger(
 		c,

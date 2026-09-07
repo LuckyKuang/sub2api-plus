@@ -46,6 +46,8 @@ export interface ContentModerationConfig {
   model_filter: ContentModerationModelFilter
   cyber_policy_exclude_from_ban_count: boolean
   cyber_policy_auto_ban_enabled: boolean
+  session_block_enabled: boolean
+  session_block_ttl_seconds: number
 }
 
 export type ContentModerationEndpointStatus = 'healthy' | 'degraded' | 'error' | 'cooldown' | 'manual_pause' | 'half_open' | 'disabled'
@@ -176,6 +178,8 @@ export interface UpdateContentModerationConfig {
   model_filter?: ContentModerationModelFilter
   cyber_policy_exclude_from_ban_count?: boolean
   cyber_policy_auto_ban_enabled?: boolean
+  session_block_enabled?: boolean
+  session_block_ttl_seconds?: number
 }
 
 export interface ContentModerationRuntimeStatus {
@@ -211,6 +215,7 @@ export interface ContentModerationRuntimeStatus {
   api_key_statuses: ContentModerationAPIKeyStatus[]
   endpoints: ContentModerationEndpoint[]
   flagged_hash_count: number
+  blocked_session_count: number
   last_cleanup_at?: string
   last_cleanup_deleted_hit: number
   last_cleanup_deleted_non_hit: number
@@ -253,6 +258,8 @@ export interface ContentModerationLog {
   category_scores: Record<string, number>
   threshold_snapshot: Record<string, number>
   input_excerpt: string
+  input_content: string
+  input_content_truncated: boolean
   upstream_latency_ms: number | null
   error: string
   violation_count: number
@@ -293,6 +300,50 @@ export interface DeleteFlaggedHashResponse {
 }
 
 export interface ClearFlaggedHashesResponse {
+  deleted: number
+}
+
+export interface ContentModerationSessionBlock {
+  id: number
+  block_key: string
+  session_id: string
+  user_id: number | null
+  user_email: string
+  api_key_id: number | null
+  api_key_name: string
+  request_id: string
+  endpoint: string
+  protocol: string
+  model: string
+  highest_category: string
+  highest_score: number
+  expires_at: string
+  created_at: string
+}
+
+export interface ListContentModerationSessionBlocksParams {
+  page?: number
+  page_size?: number
+  session_id?: string
+  user_id?: number
+  search?: string
+}
+
+export interface ContentModerationSessionBlocksResponse {
+  items: ContentModerationSessionBlock[]
+  total: number
+  page: number
+  page_size: number
+  pages: number
+}
+
+export interface DeleteSessionBlockResponse {
+  block_key: string
+  session_id: string
+  deleted: boolean
+}
+
+export interface ClearSessionBlocksResponse {
   deleted: number
 }
 
@@ -356,6 +407,27 @@ export async function clearFlaggedHashes(): Promise<ClearFlaggedHashesResponse> 
   return data
 }
 
+export async function listSessionBlocks(
+  params: ListContentModerationSessionBlocksParams = {}
+): Promise<ContentModerationSessionBlocksResponse> {
+  const { data } = await apiClient.get<ContentModerationSessionBlocksResponse>('/admin/risk-control/sessions', {
+    params,
+  })
+  return data
+}
+
+export async function deleteSessionBlock(blockKey: string): Promise<DeleteSessionBlockResponse> {
+  const { data } = await apiClient.delete<DeleteSessionBlockResponse>('/admin/risk-control/sessions', {
+    data: { block_key: blockKey },
+  })
+  return data
+}
+
+export async function clearSessionBlocks(): Promise<ClearSessionBlocksResponse> {
+  const { data } = await apiClient.delete<ClearSessionBlocksResponse>('/admin/risk-control/sessions/all')
+  return data
+}
+
 export const riskControlAPI = {
   getConfig,
   updateConfig,
@@ -366,6 +438,9 @@ export const riskControlAPI = {
   unbanUser,
   deleteFlaggedHash,
   clearFlaggedHashes,
+  listSessionBlocks,
+  deleteSessionBlock,
+  clearSessionBlocks,
 }
 
 export default riskControlAPI

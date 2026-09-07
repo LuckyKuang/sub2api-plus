@@ -87,10 +87,51 @@ export interface AdminUsageQueryParams extends UsageQueryParams {
   upstream_model_mismatch?: boolean
   sort_by?: string
   sort_order?: 'asc' | 'desc'
+  completion_status?: 'unknown' | 'completed' | 'client_disconnected' | 'incomplete'
+  usage_source?: 'unknown' | 'upstream_exact' | 'partial' | 'estimated' | 'reconciled'
   // 错误请求 tab 专属筛选(仅传给错误列表接口;共用同一 filters 对象)
   error_phase?: string | null
   error_category?: string | null
   status_code?: number | null
+}
+
+export type ClientDisconnectOutcome = 'pending' | 'completed' | 'client_disconnected' | 'neutral'
+export type ClientDisconnectCompletionStatus =
+  | 'pending'
+  | 'completed'
+  | 'client_disconnected'
+  | 'upstream_failed'
+  | 'upstream_timeout'
+  | 'usage_missing'
+
+export interface ClientDisconnectRiskEvent {
+  user_id: number
+  api_key_id?: number
+  request_id: string
+  protocol: string
+  generation: number
+  sequence: number
+  outcome: ClientDisconnectOutcome
+  completion_status: ClientDisconnectCompletionStatus
+  usage_source?: 'upstream_exact' | 'partial' | 'estimated' | 'reconciled'
+  usage_missing: boolean
+  consecutive_after?: number
+  threshold?: number
+  enforce?: boolean
+  auto_banned: boolean
+  accepted_at: string
+  finalized_at?: string
+}
+
+export interface ClientDisconnectEventQueryParams {
+  user_id?: number
+  api_key_id?: number
+  outcome?: ClientDisconnectOutcome
+  completion_status?: ClientDisconnectCompletionStatus
+  usage_missing?: boolean
+  auto_banned?: boolean
+  page?: number
+  page_size?: number
 }
 
 // ==================== API Functions ====================
@@ -111,6 +152,16 @@ export async function list(
   return data
 }
 
+export async function listClientDisconnectEvents(
+  params: ClientDisconnectEventQueryParams
+): Promise<PaginatedResponse<ClientDisconnectRiskEvent>> {
+  const { data } = await apiClient.get<PaginatedResponse<ClientDisconnectRiskEvent>>(
+    '/admin/usage/client-disconnect-events',
+    { params }
+  )
+  return data
+}
+
 /**
  * Get usage statistics with optional filters (admin only)
  * @param params - Query parameters for filtering
@@ -124,7 +175,10 @@ export async function getStats(params: {
   model?: string
   request_type?: UsageRequestType
   stream?: boolean
+  native_compaction_v2?: boolean | null
   upstream_model_mismatch?: boolean
+	completion_status?: AdminUsageQueryParams['completion_status']
+	usage_source?: AdminUsageQueryParams['usage_source']
   period?: string
   start_date?: string
   end_date?: string
@@ -208,6 +262,7 @@ export async function cancelCleanupTask(taskId: number): Promise<{ id: number; s
 
 export const adminUsageAPI = {
   list,
+  listClientDisconnectEvents,
   getStats,
   searchUsers,
   searchApiKeys,

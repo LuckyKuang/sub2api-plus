@@ -3,6 +3,7 @@
 package admin
 
 import (
+	"fmt"
 	"net/http"
 	"testing"
 
@@ -51,6 +52,45 @@ func TestUpdateSettingsFullPayloadStillClearsSentEmptyFields(t *testing.T) {
 
 	require.Equal(t, "", repo.values[service.SettingKeySiteName],
 		"an explicitly sent empty value is a deliberate clear, not an omission")
+}
+
+func TestUpdateSettingsClientDisconnectBanThresholdBounds(t *testing.T) {
+	for _, threshold := range []int{1, 1000} {
+		h, repo := newStepUpSwitchTestHandler(t, map[string]string{})
+		rec := doUpdateSettings(t, h, map[string]any{
+			"client_disconnect_consecutive_ban_threshold": threshold,
+		}, nil)
+		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, fmt.Sprint(threshold), repo.values[service.SettingKeyClientDisconnectConsecutiveBanThreshold])
+	}
+
+	for _, threshold := range []int{-1, 0, 1001} {
+		h, _ := newStepUpSwitchTestHandler(t, map[string]string{})
+		rec := doUpdateSettings(t, h, map[string]any{
+			"client_disconnect_consecutive_ban_threshold": threshold,
+		}, nil)
+		require.Equal(t, http.StatusBadRequest, rec.Code)
+	}
+}
+
+func TestUpdateSettingsClientDisconnectBanToggleAdvancesGeneration(t *testing.T) {
+	h, repo := newStepUpSwitchTestHandler(t, map[string]string{
+		service.SettingKeyClientDisconnectConsecutiveBanEnabled:    "true",
+		service.SettingKeyClientDisconnectConsecutiveBanThreshold:  "10",
+		service.SettingKeyClientDisconnectConsecutiveBanGeneration: "7",
+	})
+
+	rec := doUpdateSettings(t, h, map[string]any{
+		"client_disconnect_consecutive_ban_enabled": false,
+	}, nil)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "8", repo.values[service.SettingKeyClientDisconnectConsecutiveBanGeneration])
+
+	rec = doUpdateSettings(t, h, map[string]any{
+		"client_disconnect_consecutive_ban_enabled": true,
+	}, nil)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "9", repo.values[service.SettingKeyClientDisconnectConsecutiveBanGeneration])
 }
 
 // smtp_from_email is the one request field whose JSON name differs from its

@@ -10,8 +10,9 @@ import "strings"
 // 整体安全失败（return false）；每一项都必须出现在 User-Agent 中。
 // This prevents an allow rule from degrading to an Originator-only check.
 type AllowedClientEntry struct {
-	Originator string   `json:"originator"`
-	UAContains []string `json:"ua_contains"`
+	Originator            string   `json:"originator"`
+	UAContains            []string `json:"ua_contains"`
+	SkipEngineFingerprint bool     `json:"skip_engine_fingerprint"`
 }
 
 // IsWhitelistable 报告该条目作为白名单条目是否「有可能命中」——镜像 IsAllowedClientMatch 的结构性

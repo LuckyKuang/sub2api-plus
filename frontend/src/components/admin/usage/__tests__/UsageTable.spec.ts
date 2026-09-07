@@ -71,10 +71,18 @@ const messages: Record<string, string> = {
 	'usage.latencyDuration': 'Total',
 	'usage.latencyTps': 'TPS',
 	'usage.latencyTpsHint': 'Estimated average text output rate: text output tokens ÷ (last token − first token). Complete stream/ws requests only. Sample too small (short window or few text tokens) shows "-". Values below 1 or above 1000 show as "< 1" / "> 1000".',
+		'usage.incomplete': 'Incomplete',
+		'usage.incompleteHint': 'The request ended before a complete terminal result.',
+		'usage.clientDisconnected': 'Client disconnected',
+		'usage.clientDisconnectedHint': 'The client disconnected after upstream acceptance.',
+		'usage.stream': 'Stream',
+		'usage.sync': 'Sync',
+		'usage.nativeCompactionV2': 'Compaction',
   'admin.usage.billingModeToken': 'Token',
   'admin.usage.billingModePerRequest': 'Per request',
   'admin.usage.billingModeImage': 'Image',
 	'admin.usage.requestIdCopied': 'Request ID copied',
+	'admin.usage.upstreamRequestIdCopied': 'Upstream ID copied',
 	'admin.usage.userAgentCopied': 'User-Agent copied',
 	'keys.copied': 'Copied',
 	'keys.copyToClipboard': 'Copy to clipboard',
@@ -102,12 +110,14 @@ const DataTableStub = {
     <div>
       <div v-for="row in data" :key="row.request_id">
         <slot name="cell-model" :row="row" :value="row.model" />
+        <slot name="cell-reasoning_effort" :row="row" :value="row.reasoning_effort" />
         <slot name="cell-billing_mode" :row="row" />
         <slot name="cell-tokens" :row="row" />
         <slot name="cell-cost" :row="row" />
         <slot name="cell-latency" :row="row" />
         <slot name="cell-session_id" :row="row" />
         <slot name="cell-request_id" :row="row" />
+        <slot name="cell-upstream_request_id" :row="row" />
         <slot name="cell-user_agent" :row="row" />
       </div>
     </div>
@@ -160,6 +170,44 @@ describe('admin UsageTable tooltip', () => {
       toJSON: () => ({}),
     } as DOMRect)
   })
+
+	it('shows an incomplete usage badge only for explicitly incomplete records', () => {
+		const wrapper = mount(UsageTable, {
+			props: {
+				data: [
+					{ ...baseImageRow, request_id: 'req-incomplete', is_complete: false },
+					{ ...baseImageRow, request_id: 'req-complete', is_complete: true },
+				],
+				loading: false,
+				columns: [{ key: 'model', label: 'Model' }],
+			},
+			global: { stubs: { DataTable: DataTableStub, Icon: true } },
+		})
+
+		expect(wrapper.findAll('[data-testid="usage-incomplete-badge"]')).toHaveLength(1)
+		expect(wrapper.get('[data-testid="usage-incomplete-badge"]').text()).toBe('Incomplete')
+	})
+
+	it('distinguishes a client disconnect from a generic incomplete record', () => {
+		const wrapper = mount(UsageTable, {
+			props: {
+				data: [{
+					...baseImageRow,
+					request_id: 'req-client-disconnected',
+					is_complete: false,
+					completion_status: 'client_disconnected',
+					usage_source: 'partial',
+				}],
+				loading: false,
+				columns: [{ key: 'model', label: 'Model' }],
+			},
+			global: { stubs: { DataTable: DataTableStub, Icon: true } },
+		})
+
+		const badge = wrapper.get('[data-testid="usage-incomplete-badge"]')
+		expect(badge.text()).toBe('Client disconnected')
+		expect(badge.attributes('title')).toBe('The client disconnected after upstream acceptance.')
+	})
 
   it('shows the original session ID and marks missing values with a dash', () => {
     const wrapper = mount(UsageTable, {
@@ -659,6 +707,56 @@ describe('admin UsageTable tooltip', () => {
     expect(wrapper.get('[data-testid="long-context-billing-marker"]').text()).toBe('x2')
   })
 
+  it('keeps the request type badge and adds a separate badge only for native compaction rows', () => {
+    const DataTableStreamStub = {
+      props: ['data'],
+      template: `
+        <div>
+          <div v-for="row in data" :key="row.request_id">
+            <slot name="cell-stream" :row="row" />
+          </div>
+        </div>
+      `,
+    }
+    const wrapper = mount(UsageTable, {
+      props: {
+        data: [
+          {
+            ...baseImageRow,
+            request_id: 'req-compaction-stream',
+            request_type: 'stream',
+            stream: true,
+            native_compaction_v2: true,
+          },
+          {
+            ...baseImageRow,
+            request_id: 'req-historical-sync',
+            request_type: 'sync',
+            stream: false,
+            native_compaction_v2: false,
+          },
+        ],
+        loading: false,
+        columns: [],
+      },
+      global: {
+        stubs: {
+          DataTable: DataTableStreamStub,
+          EmptyState: true,
+          Icon: true,
+          Teleport: true,
+        },
+      },
+    })
+
+    const requestBadges = wrapper.findAll('[data-testid="request-type-badge"]')
+    expect(requestBadges).toHaveLength(2)
+    expect(requestBadges[0].text()).toBe('Stream')
+    expect(requestBadges[1].text()).toBe('Sync')
+    expect(wrapper.findAll('[data-testid="native-compaction-badge"]')).toHaveLength(1)
+    expect(wrapper.get('[data-testid="native-compaction-badge"]').text()).toBe('Compaction')
+  })
+
   it('shows service tier and billing breakdown in cost tooltip', async () => {
     const row = {
       request_id: 'req-admin-1',
@@ -745,6 +843,86 @@ describe('admin UsageTable tooltip', () => {
     const text = wrapper.text()
     expect(text).toContain('claude-sonnet-4')
     expect(text).toContain('claude-sonnet-4-20250514')
+  })
+
+  it('shows requested and forwarded reasoning effort separately when they differ', () => {
+    const wrapper = mount(UsageTable, {
+      props: {
+        data: [{
+          request_id: 'req-admin-effort-1',
+          model: 'gpt-5.4',
+          reasoning_effort: 'max',
+          upstream_reasoning_effort: 'xhigh',
+        }],
+        loading: false,
+        columns: [],
+      },
+      global: {
+        stubs: {
+          DataTable: DataTableStub,
+          EmptyState: true,
+          Icon: true,
+          Teleport: true,
+        },
+      },
+    })
+
+    const text = wrapper.text()
+    expect(text).toContain('Max')
+    expect(text).toContain('XHigh')
+    expect(text).toContain('↳')
+  })
+
+  it('shows a single reasoning effort when requested matches forwarded', () => {
+    const wrapper = mount(UsageTable, {
+      props: {
+        data: [{
+          request_id: 'req-admin-effort-2',
+          model: 'gpt-5.6-sol',
+          reasoning_effort: 'max',
+        }],
+        loading: false,
+        columns: [],
+      },
+      global: {
+        stubs: {
+          DataTable: DataTableStub,
+          EmptyState: true,
+          Icon: true,
+          Teleport: true,
+        },
+      },
+    })
+
+    const text = wrapper.text()
+    expect(text).toContain('Max')
+    expect(text).not.toContain('↳')
+  })
+
+  it('hides mapped reasoning effort for user rows that only have the requested value', () => {
+    const wrapper = mount(UsageTable, {
+      props: {
+        data: [{
+          request_id: 'req-user-effort-1',
+          model: 'gpt-5.4',
+          reasoning_effort: 'max',
+        }],
+        loading: false,
+        columns: [],
+      },
+      global: {
+        stubs: {
+          DataTable: DataTableStub,
+          EmptyState: true,
+          Icon: true,
+          Teleport: true,
+        },
+      },
+    })
+
+    expect(wrapper.text()).toContain('Max')
+    expect(wrapper.text()).not.toContain('XHigh')
+    expect(wrapper.text()).not.toContain('↳')
   })
 
 	it.each([
@@ -945,6 +1123,33 @@ describe('admin UsageTable request ID column', () => {
     expect(appStoreMocks.showSuccess).toHaveBeenCalledWith('Request ID copied')
   })
 
+  it('renders and copies the upstream ID', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    vi.stubGlobal('navigator', { clipboard: { writeText } })
+
+    const wrapper = mount(UsageTable, {
+      props: {
+        data: [{ ...baseImageRow, request_id: '', upstream_request_id: '20260903082826779695' }],
+        loading: false,
+        columns: [{ key: 'upstream_request_id', label: 'Upstream ID' }],
+      },
+      global: {
+        stubs: {
+          DataTable: DataTableStub,
+          EmptyState: true,
+          Icon: true,
+          Teleport: true,
+        },
+      },
+    })
+
+    expect(wrapper.text()).toContain('20260903082826779695')
+    await wrapper.get('button[title="Copy to clipboard"]').trigger('click')
+
+    expect(writeText).toHaveBeenCalledWith('20260903082826779695')
+    expect(appStoreMocks.showSuccess).toHaveBeenCalledWith('Upstream ID copied')
+  })
+
   it('renders and copies the user agent', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     vi.stubGlobal('navigator', { clipboard: { writeText } })
@@ -1089,6 +1294,7 @@ const DataTableStubWithUser = {
       <div v-for="row in data" :key="row.request_id">
         <slot name="cell-user" :row="row" />
         <slot name="cell-model" :row="row" :value="row.model" />
+        <slot name="cell-reasoning_effort" :row="row" :value="row.reasoning_effort" />
         <slot name="cell-billing_mode" :row="row" />
         <slot name="cell-tokens" :row="row" />
         <slot name="cell-cost" :row="row" />

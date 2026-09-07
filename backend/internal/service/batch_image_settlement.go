@@ -55,12 +55,11 @@ func (r *BatchImageModelPricingResolver) BatchImageUnitPrice(ctx context.Context
 }
 
 type BatchImageSettlementService struct {
-	Repo         BatchImageRepository
-	BillingRepo  UsageBillingRepository
-	UsageLogRepo UsageLogRepository
-	Pricing      BatchImagePricingResolver
-	AuthCache    APIKeyAuthCacheInvalidator
-	Config       *config.Config
+	Repo        BatchImageRepository
+	BillingRepo UsageBillingRepository
+	Pricing     BatchImagePricingResolver
+	AuthCache   APIKeyAuthCacheInvalidator
+	Config      *config.Config
 }
 
 type BatchImageSettlementResult struct {
@@ -149,7 +148,9 @@ func (s *BatchImageSettlementService) Settle(ctx context.Context, batchID string
 		return nil, ErrBatchImageSettlementCostExceedsHold
 	}
 
-	if err := captureBatchImageBalanceHold(ctx, s.BillingRepo, job, actualCost, manifestHash); err != nil {
+	now := time.Now()
+	usageLog := buildBatchImageSettlementUsageLog(job, actualCost, result.RequestID, now)
+	if err := captureBatchImageBalanceHold(ctx, s.BillingRepo, job, actualCost, manifestHash, usageLog); err != nil {
 		msg := truncateBatchImageMessage(err.Error(), batchImageMaxErrorMessageLength)
 		if failErr := s.recordSettlementFailure(ctx, job, "SETTLEMENT_BILLING_FAILED", msg); failErr != nil {
 			return nil, failErr
@@ -158,7 +159,6 @@ func (s *BatchImageSettlementService) Settle(ctx context.Context, batchID string
 	}
 	s.invalidateAuthCache(ctx, job.UserID)
 
-	now := time.Now()
 	outputExpiresAt := now.Add(s.outputRetentionAfterTerminal())
 	if err := s.Repo.MarkBatchImageJobSettled(ctx, MarkBatchImageJobSettledParams{
 		BatchID:         job.BatchID,
@@ -177,8 +177,6 @@ func (s *BatchImageSettlementService) Settle(ctx context.Context, batchID string
 	}); err != nil {
 		return nil, err
 	}
-	s.recordUsageLog(ctx, job, actualCost, result.RequestID, now)
-
 	return result, nil
 }
 
@@ -249,16 +247,17 @@ func (s *BatchImageSettlementService) failExhaustedSettlement(ctx context.Contex
 	return ErrBatchImageSettlementBillingFailed
 }
 
-func (s *BatchImageSettlementService) recordUsageLog(ctx context.Context, job *BatchImageJob, actualCost float64, requestID string, createdAt time.Time) {
-	if s == nil || s.UsageLogRepo == nil || job == nil || job.APIKeyID == nil || job.AccountID == nil {
-		return
+func buildBatchImageSettlementUsageLog(job *BatchImageJob, actualCost float64, requestID string, createdAt time.Time) *UsageLog {
+	if job == nil || job.APIKeyID == nil || job.AccountID == nil {
+		return nil
 	}
 	billingMode := string(BillingModeImage)
 	accountRateMultiplier := job.AccountRateMultiplier
 	inboundEndpoint := "/v1/images/batches"
 	upstreamEndpoint := "vertex:batchPredictionJobs"
 	imageSize := "1K"
-	usageLog := &UsageLog{
+	complete := true
+	return &UsageLog{
 		UserID:                job.UserID,
 		APIKeyID:              *job.APIKeyID,
 		AccountID:             *job.AccountID,
@@ -278,9 +277,11 @@ func (s *BatchImageSettlementService) recordUsageLog(ctx context.Context, job *B
 		BillingMode:           &billingMode,
 		ImageSize:             &imageSize,
 		SessionID:             job.SessionID,
+		IsComplete:            &complete,
+		CompletionStatus:      UsageCompletionCompleted,
+		UsageSource:           UsageSourceUpstreamExact,
 		CreatedAt:             createdAt,
 	}
-	writeUsageLogBestEffort(ctx, s.UsageLogRepo, usageLog, "service.batch_image_settlement")
 }
 
 func (s *BatchImageSettlementService) invalidateAuthCache(ctx context.Context, userID int64) {

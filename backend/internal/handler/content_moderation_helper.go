@@ -116,6 +116,10 @@ func buildContentModerationInput(c *gin.Context, apiKey *service.APIKey, subject
 	if input.Endpoint == "" && c.Request != nil && c.Request.URL != nil {
 		input.Endpoint = c.Request.URL.Path
 	}
+	input.SessionID = service.ExtractClientSessionID(c)
+	if role, ok := middleware2.GetUserRoleFromContext(c); ok {
+		input.AdminUser = role == service.RoleAdmin
+	}
 	return input
 }
 

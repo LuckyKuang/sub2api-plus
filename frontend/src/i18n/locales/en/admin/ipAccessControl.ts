@@ -112,6 +112,7 @@ export default {
       failureCount: 'Failures at Block Trigger',
       hitCount: 'Recorded Block Events',
       lastSeenAt: 'Last Recorded Block',
+      lastSeenNever: 'Not recorded yet',
       hitCountHint: 'To avoid attacker-amplified database writes, block events from the same source are rate-limited and aggregated.',
       manualBlock: 'Manual Block',
       manualBlockUnavailable: 'The current proxy chain cannot safely identify the client IP, so manual blocking is disabled. You may still create an operational allow rule or correct the deployment configuration first.',

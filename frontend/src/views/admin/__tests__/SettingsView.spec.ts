@@ -375,6 +375,8 @@ const baseSettingsResponse = {
   table_default_page_size: 20,
   table_page_size_options: [10, 20, 50, 100],
   backend_mode_enabled: false,
+	client_disconnect_consecutive_ban_enabled: true,
+	client_disconnect_consecutive_ban_threshold: 10,
   custom_menu_items: [],
   custom_endpoints: [],
   frontend_url: "",
@@ -447,6 +449,13 @@ const baseSettingsResponse = {
   min_claude_code_version: "",
   max_claude_code_version: "",
   allow_ungrouped_key_scheduling: false,
+  openai_ttft_mode: "semantic",
+  min_codex_version: "",
+  max_codex_version: "",
+  codex_cli_only_allow_app_server_clients: false,
+  codex_cli_only_engine_fingerprint_signals: "",
+  codex_cli_only_blacklist: "",
+  codex_cli_only_whitelist: "",
   enable_fingerprint_unification: true,
   enable_metadata_passthrough: false,
   enable_cch_signing: false,
@@ -711,6 +720,27 @@ describe("admin SettingsView payment visible method controls", () => {
       expect.objectContaining({ compact_home_enabled: true }),
     );
   });
+
+	it("loads and submits the consecutive client disconnect ban settings", async () => {
+		const wrapper = mountView();
+		await flushPromises();
+
+		const toggle = wrapper.get('[data-testid="client-disconnect-ban-toggle"]');
+		expect((toggle.element as HTMLInputElement).checked).toBe(true);
+		const threshold = wrapper.get('[data-testid="client-disconnect-ban-threshold"]');
+		expect((threshold.element as HTMLInputElement).value).toBe("10");
+
+		await threshold.setValue("25");
+		await wrapper.find("form").trigger("submit.prevent");
+		await flushPromises();
+
+		expect(updateSettings).toHaveBeenCalledWith(
+			expect.objectContaining({
+				client_disconnect_consecutive_ban_enabled: true,
+				client_disconnect_consecutive_ban_threshold: 25,
+			}),
+		);
+	});
 
   it("renders panel rate limit card and saves settings", async () => {
     getPanelRateLimitSettings.mockClear();
@@ -1330,6 +1360,27 @@ describe("admin SettingsView payment visible method controls", () => {
     const payload = updateSettings.mock.calls.at(-1)?.[0] as Record<string, unknown>;
     expect(payload.grok_default_text_model).toBe("grok-custom-text");
     expect(payload.grok_cross_client_model_map_enabled).toBe(false);
+  });
+
+  it("loads and saves the OpenAI Responses first-token metric mode", async () => {
+    getSettings.mockResolvedValueOnce({
+      ...baseSettingsResponse,
+      openai_ttft_mode: "visible",
+    });
+    const wrapper = mountView();
+
+    await flushPromises();
+    await openGatewayTab(wrapper);
+
+    const modeSelect = wrapper.get('[data-testid="openai-ttft-mode"]');
+    expect((modeSelect.element as HTMLSelectElement).value).toBe("visible");
+
+    await modeSelect.setValue("semantic");
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    const payload = updateSettings.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+    expect(payload.openai_ttft_mode).toBe("semantic");
   });
 
   it("loads fail-safe-off Ollama Cloud usage refresh settings and saves an explicit opt-in", async () => {
