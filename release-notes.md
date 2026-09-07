@@ -1,30 +1,34 @@
-Sub2API Plus v0.2.0+custom.003
+Sub2API Plus v0.2.1+custom.002
 
 ## Highlights
 
-Adds canonical GPT-6 Astra support across OpenAI discovery, Codex catalogs,
-generated client configuration, request metadata, and billing.
+Hardens client-disconnect risk control by tracking each logical session
+independently, and accepts current official Codex search client profiles.
 
 ## Changed
 
-- Lists GPT-6 Astra first while retaining GPT-5.6 Sol as the account-test model.
-- Mirrors the official Codex Astra instructions, default low reasoning level,
-  multi-agent Ultra preset, and client capability metadata.
-- Uses official Standard, Flex, Fast, prompt-cache, and whole-request
-  long-context pricing for OpenAI Platform API-key traffic.
+- Scopes disconnect counters, blocking decisions, and administrative event
+  views to the resolved session so unrelated sessions no longer affect one
+  another.
+- Preserves session identity throughout disconnect lifecycle cleanup and adds
+  migration-backed storage for the new scope.
+- Recognizes the official Codex search client profile while preserving the
+  credential-owned identity precedence rules.
+- Updates `docker/setup-buildx-action` to 4.3.0 and `google.golang.org/grpc` to
+  1.83.1.
 
 ## Compatibility and migration
 
-Only the canonical `gpt-6-astra` ID is added. Existing model pricing, including
-the configured GPT-5.6 Sol rates, is unchanged. At 272,001 total input tokens
-and above, all Astra input and cache tokens are billed at 2x and all output
-tokens at 1.5x.
+Database migration 256 runs automatically, preserves existing disconnect
+events under the `legacy` scope, advances the processing generation, and
+rebuilds risk state per session. The migration disables consecutive-disconnect
+banning so administrators can review the new scope before re-enabling it.
 
 ## Known issues
 
-Fast/priority processing is unavailable for GPT-6 Astra with EU data residency.
+No release-specific known issues.
 
 ## Upstream baseline
 
-Official release: v0.2.0
-Official commit: aa236488351eb71e120fc2b6fb32e36b0374c918
+Official release: v0.2.1
+Official commit: 578785ee7fb35030b094b69624efe25670a36f5f
