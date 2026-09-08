@@ -231,7 +231,7 @@
       <template #pagination>
         <div
           v-if="visibleBatchJobs.length > 0 || pagination.page > 1"
-          class="flex flex-col gap-3 border-t border-gray-200 bg-white px-4 py-3 dark:border-dark-700 dark:bg-dark-800 sm:flex-row sm:items-center sm:justify-between sm:px-6"
+          class="pagination-card card flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6"
         >
           <div class="flex flex-wrap items-center gap-3 text-sm text-gray-700 dark:text-gray-300">
             <i18n-t keypath="batchImage.pagination.pageNumber" tag="span" scope="global">

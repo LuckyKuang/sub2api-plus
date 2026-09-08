@@ -4,10 +4,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { AdminGroup } from '@/types'
 import GroupsView from '@/views/admin/GroupsView.vue'
+import Select from '@/components/common/Select.vue'
 
 const {
   listGroups,
   duplicateGroup,
+  createGroup,
   updateGroup,
   getModelsListCandidates,
   getUsageSummary,
@@ -18,6 +20,7 @@ const {
 } = vi.hoisted(() => ({
   listGroups: vi.fn(),
   duplicateGroup: vi.fn(),
+  createGroup: vi.fn(),
   updateGroup: vi.fn(),
   getModelsListCandidates: vi.fn(),
   getUsageSummary: vi.fn(),
@@ -37,7 +40,7 @@ vi.mock('@/api/admin', () => ({
       getCapacitySummary,
       getLiveCapability,
       getAll: vi.fn(),
-      create: vi.fn(),
+      create: createGroup,
       update: updateGroup,
       delete: vi.fn(),
       updateSortOrder: vi.fn()
@@ -175,6 +178,7 @@ describe('GroupsView duplicate action', () => {
     for (const fn of [
       listGroups,
       duplicateGroup,
+      createGroup,
       updateGroup,
       getModelsListCandidates,
       getUsageSummary,
@@ -203,10 +207,66 @@ describe('GroupsView duplicate action', () => {
     getUsageSummary.mockResolvedValue([])
     getCapacitySummary.mockResolvedValue([])
     getLiveCapability.mockResolvedValue({ supported: false })
+    createGroup.mockResolvedValue(sourceGroup)
   })
 
   afterEach(() => {
     vi.restoreAllMocks()
+  })
+
+  it('keeps the exclusive switch visible, defaults it on for subscriptions, and submits that value', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    const createButton = wrapper.findAll('button').find(button => button.text() === 'admin.groups.createGroup')
+    expect(createButton).toBeTruthy()
+    await createButton!.trigger('click')
+    const form = wrapper.get('#create-group-form')
+    const exclusive = () => form.get('[aria-label="admin.groups.form.exclusive"]')
+    expect(exclusive().attributes('aria-checked')).toBe('false')
+    const billing = wrapper.findAllComponents(Select).find(select =>
+      select.props('options').some(option => option.value === 'subscription'))
+    expect(billing).toBeTruthy()
+    billing!.vm.$emit('update:modelValue', 'subscription')
+    await flushPromises()
+    expect(exclusive().attributes('aria-checked')).toBe('true')
+    await form.get('input').setValue('Subscription default')
+    await form.trigger('submit')
+    await flushPromises()
+    expect(createGroup).toHaveBeenCalledWith(expect.objectContaining({
+      subscription_type: 'subscription', is_exclusive: true,
+    }))
+    wrapper.unmount()
+  })
+
+  it('preserves manual exclusivity after switching back to standard billing', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.findAll('button').find(button => button.text() === 'admin.groups.createGroup')!.trigger('click')
+    const billing = wrapper.findAllComponents(Select).find(select =>
+      select.props('options').some(option => option.value === 'subscription'))!
+    billing.vm.$emit('update:modelValue', 'subscription')
+    await flushPromises()
+    billing.vm.$emit('update:modelValue', 'standard')
+    await flushPromises()
+    const exclusive = wrapper.get('#create-group-form [aria-label="admin.groups.form.exclusive"]')
+    expect(exclusive.attributes('aria-checked')).toBe('true')
+    await exclusive.trigger('click')
+    expect(exclusive.attributes('aria-checked')).toBe('false')
+    wrapper.unmount()
+  })
+
+  it.each([true, false])('shows the saved exclusivity of an existing subscription: %s', async (isExclusive) => {
+    listGroups.mockResolvedValue({
+      items: [{ ...sourceGroup, subscription_type: 'subscription', is_exclusive: isExclusive }],
+      total: 1, page: 1, page_size: 20, pages: 1,
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.findAll('button').find(button => button.text() === 'common.edit')!.trigger('click')
+    await flushPromises()
+    const exclusive = wrapper.get('#edit-group-form [aria-label="admin.groups.form.exclusive"]')
+    expect(exclusive.attributes('aria-checked')).toBe(String(isExclusive))
+    wrapper.unmount()
   })
 
   it('duplicates the selected group, reports success, and refreshes the list', async () => {
@@ -278,6 +338,28 @@ describe('GroupsView duplicate action', () => {
     expect(showSuccess).toHaveBeenCalledWith('admin.groups.duplicateSuccess')
     expect(showError).toHaveBeenCalledWith('admin.groups.failedToLoad')
     expect(showError).not.toHaveBeenCalledWith('admin.groups.duplicateFailed')
+    wrapper.unmount()
+  })
+
+  it('keeps OAuth and privacy switches independent and submits their selected values', async () => {
+    updateGroup.mockResolvedValue(sourceGroup)
+    const wrapper = mountView()
+    await flushPromises()
+    const editButton = wrapper.findAll('button').find(button => button.text() === 'common.edit')
+    await editButton!.trigger('click')
+    await flushPromises()
+    const oauth = wrapper.get('[aria-label="admin.groups.accountFilters.oauthOnly"]')
+    const privacy = wrapper.get('[aria-label="admin.groups.accountFilters.privacySetOnly"]')
+    await oauth.trigger('click')
+    expect(oauth.attributes('aria-checked')).toBe('true')
+    expect(privacy.attributes('aria-checked')).toBe('false')
+    await privacy.trigger('click')
+    await wrapper.get('#edit-group-form').trigger('submit')
+    await flushPromises()
+    expect(updateGroup).toHaveBeenCalledWith(42, expect.objectContaining({
+      require_oauth_only: true,
+      require_privacy_set: true,
+    }))
     wrapper.unmount()
   })
 

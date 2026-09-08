@@ -109,7 +109,7 @@
           <div v-if="detail.invitees.length === 0" class="mt-4 rounded-xl border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500 dark:border-dark-700 dark:text-dark-400">
             {{ t('affiliate.invitees.empty') }}
           </div>
-          <div v-else class="mt-4 overflow-x-auto">
+          <div v-else class="table-container mt-4 overflow-x-auto">
             <table class="w-full min-w-[560px] text-left text-sm">
               <thead>
                 <tr class="border-b border-gray-200 text-gray-500 dark:border-dark-700 dark:text-dark-400">

@@ -175,6 +175,20 @@ describe('PromptAuditView', () => {
     expect(wrapper.get('[data-test="dialog-preview-state"]').text()).toBe('none')
   })
 
+  it('prevents the save switch label default action while updating the draft once', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-test="tab-config"]').trigger('click')
+    const button = wrapper.get('[data-test="store-pass-toggle"]')
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true })
+    button.element.dispatchEvent(event)
+    await flushPromises()
+    expect(event.defaultPrevented).toBe(true)
+    expect(button.attributes('aria-checked')).toBe('true')
+    expect(mocks.updateConfig).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
   it('uses native labeled switches and a responsive fixed save surface', async () => {
     const wrapper = mountView()
     await flushPromises()

@@ -1,5 +1,5 @@
 <template>
-  <div data-testid="client-disconnect-events-panel">
+  <div class="min-w-0 w-full" data-testid="client-disconnect-events-panel">
     <div class="border-b border-gray-100 px-4 py-4 dark:border-dark-700/50">
       <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5">
         <div ref="userSearchRef" class="relative">
@@ -175,8 +175,8 @@
       </div>
     </div>
 
-    <div class="overflow-x-auto">
-      <table class="min-w-[2200px] divide-y divide-gray-200 dark:divide-dark-700">
+    <div class="table-container min-w-0 w-full max-w-full overflow-x-auto">
+      <table class="w-full min-w-[2200px] divide-y divide-gray-200 dark:divide-dark-700">
         <thead class="bg-gray-50 dark:bg-dark-800">
           <tr>
             <th v-for="heading in headings" :key="heading" class="whitespace-nowrap px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400">{{ heading }}</th>

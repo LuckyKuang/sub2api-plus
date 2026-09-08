@@ -64,6 +64,8 @@ onUnmounted(() => {
 }
 
 .table-scroll-container :deep(.table-wrapper) {
+  border: 0;
+  border-radius: inherit;
   @apply flex-1 overflow-x-auto overflow-y-auto;
   /* 确保横向滚动条显示在最底部 */
   scrollbar-gutter: stable;
@@ -76,7 +78,7 @@ onUnmounted(() => {
 }
 
 .table-scroll-container :deep(thead) {
-  @apply bg-gray-50/80 dark:bg-dark-800/80 backdrop-blur-sm;
+  background-color: var(--table-header-bg);
 }
 
 .table-scroll-container :deep(tbody) {
@@ -88,7 +90,8 @@ onUnmounted(() => {
 }
 
 .table-scroll-container :deep(td) {
-  @apply px-5 py-4 text-sm text-gray-700 dark:text-gray-300 border-b border-gray-100 dark:border-dark-800;
+  @apply px-5 py-4 text-sm text-gray-700 dark:text-gray-300;
+  border-bottom: 1px solid var(--table-row-border);
 }
 
 /* 移动端：恢复正常滚动 */

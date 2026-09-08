@@ -448,6 +448,7 @@
 </template>
 
 <script setup lang="ts">
+import { useDocumentDarkMode } from '@/composables/useDocumentDarkMode'
 import { ref, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
@@ -496,14 +497,12 @@ const loading = ref(false)
 const stats = ref<AccountUsageStatsResponse | null>(null)
 
 // Dark mode detection
-const isDarkMode = computed(() => {
-  return document.documentElement.classList.contains('dark')
-})
+const isDarkMode = useDocumentDarkMode()
 
 // Chart colors
 const chartColors = computed(() => ({
-  text: isDarkMode.value ? '#e5e7eb' : '#374151',
-  grid: isDarkMode.value ? '#374151' : '#e5e7eb'
+  text: isDarkMode.value ? '#e5e5e5' : '#525252',
+  grid: isDarkMode.value ? '#404040' : '#e5e5e5'
 }))
 
 // Line chart data

@@ -148,7 +148,7 @@
       </div>
 
       <!-- Pagination -->
-      <div v-if="totalPages > 1" class="flex items-center justify-center gap-2 pt-2">
+      <div v-if="totalPages > 1" class="pagination-card card flex items-center justify-center gap-2 px-4 py-3">
         <button
           :disabled="currentPage <= 1"
           class="btn btn-secondary px-3 py-1 text-sm"

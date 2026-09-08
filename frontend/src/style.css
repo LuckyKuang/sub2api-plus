@@ -3,6 +3,22 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --table-header-bg: theme('colors.gray.100');
+    --table-body-bg: theme('colors.white');
+    --table-hover-bg: theme('colors.gray.50');
+    --table-selected-bg: theme('colors.gray.200');
+    --table-row-border: theme('colors.gray.200');
+  }
+
+  .dark {
+    --table-header-bg: theme('colors.dark.900');
+    --table-body-bg: theme('colors.dark.800');
+    --table-hover-bg: #303030;
+    --table-selected-bg: #383838;
+    --table-row-border: theme('colors.dark.700');
+  }
+
   * {
     @apply border-gray-200 dark:border-dark-700;
   }
@@ -17,7 +33,7 @@
   }
 
   body {
-    @apply bg-gray-50 text-gray-900 dark:bg-dark-950 dark:text-gray-100;
+    @apply bg-canvas text-gray-900 dark:bg-dark-950 dark:text-gray-100;
     @apply min-h-screen;
   }
 
@@ -80,10 +96,8 @@
   }
 
   .btn-primary {
-    @apply bg-gradient-to-r from-primary-500 to-primary-600;
-    @apply text-white shadow-md shadow-primary-500/25;
-    @apply hover:from-primary-600 hover:to-primary-700 hover:shadow-lg hover:shadow-primary-500/30;
-    @apply dark:shadow-primary-500/20;
+    @apply bg-primary-500 text-primary-950 shadow-sm;
+    @apply hover:bg-primary-400;
   }
 
   .btn-secondary {
@@ -210,25 +224,24 @@
     -moz-appearance: textfield;
   }
 
-  /* ============ 玻璃效果 ============ */
+  /* ============ 实色表面 ============ */
   .glass {
-    @apply bg-white/80 backdrop-blur-xl dark:bg-dark-800/80;
+    @apply bg-white dark:bg-dark-900;
   }
 
   .glass-card {
-    @apply bg-white/70 dark:bg-dark-800/70;
-    @apply backdrop-blur-xl;
+    @apply bg-white dark:bg-dark-800;
     @apply rounded-2xl;
-    @apply border border-white/20 dark:border-dark-700/50;
+    @apply border border-gray-200 dark:border-dark-700;
     @apply shadow-glass;
     @apply transition-all duration-300;
   }
 
   /* ============ 卡片样式 ============ */
   .card {
-    @apply bg-white dark:bg-dark-800/50;
+    @apply bg-white dark:bg-dark-800;
     @apply rounded-2xl;
-    @apply border border-gray-100 dark:border-dark-700/50;
+    @apply border border-gray-200 dark:border-dark-700;
     @apply shadow-card;
     @apply transition-all duration-300;
   }
@@ -239,9 +252,8 @@
   }
 
   .card-glass {
-    @apply bg-white/70 dark:bg-dark-800/70;
-    @apply backdrop-blur-xl;
-    @apply border border-white/20 dark:border-dark-700/50;
+    @apply bg-white dark:bg-dark-800;
+    @apply border border-gray-200 dark:border-dark-700;
     @apply shadow-glass;
   }
 
@@ -309,7 +321,7 @@
 
   /* ============ 表格样式 ============ */
   .table-container {
-    @apply overflow-x-auto rounded-xl border border-gray-200 dark:border-dark-700;
+    @apply overflow-x-auto rounded-2xl border border-gray-200 dark:border-dark-700;
   }
 
   .table {
@@ -319,14 +331,14 @@
   .table th {
     @apply px-4 py-3 text-left font-medium;
     @apply text-gray-600 dark:text-dark-300;
-    @apply bg-gray-50 dark:bg-dark-800/50;
+    background-color: var(--table-header-bg);
     @apply border-b border-gray-200 dark:border-dark-700;
   }
 
   .table td {
     @apply px-4 py-3;
     @apply text-gray-700 dark:text-gray-300;
-    @apply border-b border-gray-100 dark:border-dark-800;
+    border-bottom: 1px solid var(--table-row-border);
   }
 
   .table tr:last-child td {
@@ -335,7 +347,10 @@
 
   .table tbody tr {
     @apply transition-colors duration-150;
-    @apply hover:bg-gray-50 dark:hover:bg-dark-800/30;
+  }
+
+  .table tbody tr:hover {
+    background-color: var(--table-hover-bg);
   }
 
   /* ============ 徽章样式 ============ */
@@ -577,6 +592,11 @@
     @apply hover:bg-primary-100 dark:hover:bg-primary-900/30;
   }
 
+  .theme-toggle {
+    @apply bg-transparent text-gray-600 hover:bg-gray-100 hover:text-gray-900;
+    @apply dark:bg-transparent dark:text-gray-300 dark:hover:bg-dark-800 dark:hover:text-gray-100;
+  }
+
   .sidebar-section {
     @apply mb-6;
   }
@@ -663,27 +683,6 @@
     @apply transition-all duration-300;
   }
 
-  /* ============ 开关 ============ */
-  .switch {
-    @apply relative h-6 w-11 cursor-pointer rounded-full;
-    @apply bg-gray-300 dark:bg-dark-600;
-    @apply transition-colors duration-200;
-  }
-
-  .switch-active {
-    @apply bg-primary-500;
-  }
-
-  .switch-thumb {
-    @apply absolute left-0.5 top-0.5 h-5 w-5 rounded-full;
-    @apply bg-white shadow-sm;
-    @apply transition-transform duration-200;
-  }
-
-  .switch-active .switch-thumb {
-    @apply translate-x-5;
-  }
-
   /* ============ 代码块 ============ */
   .code {
     @apply font-mono text-sm;
@@ -748,14 +747,29 @@
 }
 
 @layer utilities {
+  /* 表头和表体共享实色背景，固定列由 DataTable 复用同一组变量。 */
+  table thead,
+  table thead th {
+    background-color: var(--table-header-bg);
+  }
+
+  table tbody {
+    background-color: var(--table-body-bg);
+  }
+
+  /* 单元格直接绘制行间分割线，覆盖固定列；虚拟滚动占位行不绘制。 */
+  table > tbody > tr:not([aria-hidden="true"]):not(:last-child) > :is(td, th) {
+    border-bottom: 1px solid var(--table-row-border);
+  }
+
   /* 文字渐变 */
   .text-gradient {
     @apply bg-gradient-to-r from-primary-500 to-accent-500 bg-clip-text text-transparent;
   }
 
-  /* 玻璃效果 */
+  /* 固定表面颜色，避免底层内容透出 */
   .glass {
-    @apply bg-white/80 backdrop-blur-xl dark:bg-dark-800/80;
+    @apply bg-white dark:bg-dark-900;
   }
 
   /* 隐藏滚动条 */

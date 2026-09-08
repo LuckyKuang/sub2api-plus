@@ -164,7 +164,7 @@ describe('UseKeyModal', () => {
 
     const parsed = JSON.parse(wrapper.find('pre code').text())
     expect(parsed.provider.grok.npm).toBe('@ai-sdk/openai-compatible')
-    expect(parsed.provider.grok.name).toBe('Grok via Sub2API')
+    expect(parsed.provider.grok.name).toBe('Grok via Sub2API Plus')
     expect(parsed.provider.grok.options).toEqual({
       baseURL: 'https://example.com/v1',
       apiKey: 'sk-grok-test'

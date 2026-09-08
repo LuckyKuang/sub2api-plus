@@ -531,7 +531,7 @@ onMounted(async () => {
           </div>
         </div>
       </div>
-      <div v-else class="overflow-auto">
+      <div v-else class="table-container overflow-auto">
         <table class="min-w-full table-fixed divide-y divide-gray-200 dark:divide-dark-700">
           <thead class="bg-gray-50 dark:bg-dark-900">
             <tr>

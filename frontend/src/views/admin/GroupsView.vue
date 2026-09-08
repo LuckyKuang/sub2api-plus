@@ -645,10 +645,7 @@
           v-model:over-limit="createForm.max_reasoning_effort_over_limit"
           v-model:mappings="createForm.reasoning_effort_mappings"
         />
-        <div
-          v-if="createForm.subscription_type !== 'subscription'"
-          data-tour="group-form-exclusive"
-        >
+        <div data-tour="group-form-exclusive">
           <div class="mb-1.5 flex items-center gap-1">
             <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
               {{ t("admin.groups.form.exclusive") }}
@@ -693,23 +690,10 @@
             </div>
           </div>
           <div class="flex items-center gap-3">
-            <button
-              type="button"
-              @click="createForm.is_exclusive = !createForm.is_exclusive"
-              :class="[
-                'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-                createForm.is_exclusive
-                  ? 'bg-primary-500'
-                  : 'bg-gray-300 dark:bg-dark-600',
-              ]"
-            >
-              <span
-                :class="[
-                  'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
-                  createForm.is_exclusive ? 'translate-x-6' : 'translate-x-1',
-                ]"
-              />
-            </button>
+            <Toggle
+              v-model="createForm.is_exclusive"
+              :aria-label="t('admin.groups.form.exclusive')"
+            />
             <span class="text-sm text-gray-500 dark:text-gray-400">
               {{
                 createForm.is_exclusive
@@ -805,23 +789,9 @@
                 {{ t("admin.groups.modelsList.hint", { endpoint: modelsListEndpoint(createForm.platform) }) }}
               </p>
             </div>
-            <button
-              type="button"
-              @click="createModelsListState.enabled = !createModelsListState.enabled"
-              :class="[
-                'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors',
-                createModelsListState.enabled
-                  ? 'bg-primary-500'
-                  : 'bg-gray-300 dark:bg-dark-600',
-              ]"
-            >
-              <span
-                :class="[
-                  'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
-                  createModelsListState.enabled ? 'translate-x-6' : 'translate-x-1',
-                ]"
-              />
-            </button>
+            <Toggle
+              v-model="createModelsListState.enabled"
+            />
           </div>
           <div
             v-if="createModelsListState.enabled"
@@ -1386,23 +1356,9 @@
             </div>
           </div>
           <div class="flex items-center gap-3">
-            <button
-              type="button"
-              @click="createForm.mcp_xml_inject = !createForm.mcp_xml_inject"
-              :class="[
-                'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-                createForm.mcp_xml_inject
-                  ? 'bg-primary-500'
-                  : 'bg-gray-300 dark:bg-dark-600',
-              ]"
-            >
-              <span
-                :class="[
-                  'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
-                  createForm.mcp_xml_inject ? 'translate-x-6' : 'translate-x-1',
-                ]"
-              />
-            </button>
+            <Toggle
+              v-model="createForm.mcp_xml_inject"
+            />
             <span class="text-sm text-gray-500 dark:text-gray-400">
               {{
                 createForm.mcp_xml_inject
@@ -1444,27 +1400,9 @@
             </div>
           </div>
           <div class="flex items-center gap-3">
-            <button
-              type="button"
-              @click="
-                createForm.claude_code_only = !createForm.claude_code_only
-              "
-              :class="[
-                'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-                createForm.claude_code_only
-                  ? 'bg-primary-500'
-                  : 'bg-gray-300 dark:bg-dark-600',
-              ]"
-            >
-              <span
-                :class="[
-                  'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
-                  createForm.claude_code_only
-                    ? 'translate-x-6'
-                    : 'translate-x-1',
-                ]"
-              />
-            </button>
+            <Toggle
+              v-model="createForm.claude_code_only"
+            />
             <span class="text-sm text-gray-500 dark:text-gray-400">
               {{
                 createForm.claude_code_only
@@ -1618,27 +1556,11 @@
             <label class="text-sm text-gray-600 dark:text-gray-400">
               {{ t("admin.groups.openaiFast.force") }}
             </label>
-            <button
-              type="button"
-              role="switch"
-              :aria-checked="createForm.force_openai_fast"
+            <Toggle
+              v-model="createForm.force_openai_fast"
               :aria-label="t('admin.groups.openaiFast.force')"
               data-testid="create-force-openai-fast"
-              @click="createForm.force_openai_fast = !createForm.force_openai_fast"
-              class="relative inline-flex h-6 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
-              :class="
-                createForm.force_openai_fast
-                  ? 'bg-primary-500'
-                  : 'bg-gray-300 dark:bg-dark-600'
-              "
-            >
-              <span
-                class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
-                :class="
-                  createForm.force_openai_fast ? 'translate-x-6' : 'translate-x-1'
-                "
-              />
-            </button>
+            />
           </div>
           <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
             {{ t("admin.groups.openaiFast.hint") }}
@@ -1647,27 +1569,11 @@
             <label class="text-sm text-gray-600 dark:text-gray-400">
               {{ t("admin.groups.openaiFast.free") }}
             </label>
-            <button
-              type="button"
-              role="switch"
-              :aria-checked="createForm.free_openai_fast"
+            <Toggle
+              v-model="createForm.free_openai_fast"
               :aria-label="t('admin.groups.openaiFast.free')"
               data-testid="create-free-openai-fast"
-              @click="createForm.free_openai_fast = !createForm.free_openai_fast"
-              class="relative inline-flex h-6 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
-              :class="
-                createForm.free_openai_fast
-                  ? 'bg-emerald-500'
-                  : 'bg-gray-300 dark:bg-dark-600'
-              "
-            >
-              <span
-                class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
-                :class="
-                  createForm.free_openai_fast ? 'translate-x-6' : 'translate-x-1'
-                "
-              />
-            </button>
+            />
           </div>
           <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
             {{ t("admin.groups.openaiFast.freeHint") }}
@@ -1686,21 +1592,9 @@
             <label class="text-sm text-gray-600 dark:text-gray-400">{{
               t("admin.groups.openaiLive.allow")
             }}</label>
-            <button
-              type="button"
-              @click="toggleLive('create')"
-              class="relative inline-flex h-6 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
-              :class="
-                createForm.allow_live
-                  ? 'bg-primary-500'
-                  : 'bg-gray-300 dark:bg-dark-600'
-              "
-            >
-              <span
-                class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
-                :class="createForm.allow_live ? 'translate-x-6' : 'translate-x-1'"
-              />
-            </button>
+            <Toggle
+              :model-value="!!createForm.allow_live" @update:model-value="toggleLive('create')"
+            />
           </div>
           <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
             {{ t("admin.groups.openaiLive.hint") }}
@@ -1721,28 +1615,9 @@
             <label class="text-sm text-gray-600 dark:text-gray-400">{{
               t("admin.groups.openaiMessages.allowDispatch")
             }}</label>
-            <button
-              type="button"
-              @click="
-                createForm.allow_messages_dispatch =
-                  !createForm.allow_messages_dispatch
-              "
-              class="relative inline-flex h-6 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
-              :class="
-                createForm.allow_messages_dispatch
-                  ? 'bg-primary-500'
-                  : 'bg-gray-300 dark:bg-dark-600'
-              "
-            >
-              <span
-                class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
-                :class="
-                  createForm.allow_messages_dispatch
-                    ? 'translate-x-6'
-                    : 'translate-x-1'
-                "
-              />
-            </button>
+            <Toggle
+              v-model="createForm.allow_messages_dispatch"
+            />
           </div>
           <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
             {{ t("admin.groups.openaiMessages.allowDispatchHint") }}
@@ -1967,27 +1842,10 @@
                 }}
               </p>
             </div>
-            <button
-              type="button"
-              @click="
-                createForm.require_oauth_only = !createForm.require_oauth_only
-              "
-              class="relative inline-flex h-6 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
-              :class="
-                createForm.require_oauth_only
-                  ? 'bg-primary-500'
-                  : 'bg-gray-300 dark:bg-dark-600'
-              "
-            >
-              <span
-                class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
-                :class="
-                  createForm.require_oauth_only
-                    ? 'translate-x-6'
-                    : 'translate-x-1'
-                "
-              />
-            </button>
+            <Toggle
+              v-model="createForm.require_oauth_only"
+              :aria-label="t('admin.groups.accountFilters.oauthOnly')"
+            />
           </div>
 
           <!-- require_privacy_set toggle -->
@@ -2004,27 +1862,10 @@
                 }}
               </p>
             </div>
-            <button
-              type="button"
-              @click="
-                createForm.require_privacy_set = !createForm.require_privacy_set
-              "
-              class="relative inline-flex h-6 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
-              :class="
-                createForm.require_privacy_set
-                  ? 'bg-primary-500'
-                  : 'bg-gray-300 dark:bg-dark-600'
-              "
-            >
-              <span
-                class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
-                :class="
-                  createForm.require_privacy_set
-                    ? 'translate-x-6'
-                    : 'translate-x-1'
-                "
-              />
-            </button>
+            <Toggle
+              v-model="createForm.require_privacy_set"
+              :aria-label="t('admin.groups.accountFilters.privacySetOnly')"
+            />
           </div>
         </div>
 
@@ -2081,28 +1922,9 @@
           </div>
           <!-- 启用开关 -->
           <div class="flex items-center gap-3 mb-3">
-            <button
-              type="button"
-              @click="
-                createForm.model_routing_enabled =
-                  !createForm.model_routing_enabled
-              "
-              :class="[
-                'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-                createForm.model_routing_enabled
-                  ? 'bg-primary-500'
-                  : 'bg-gray-300 dark:bg-dark-600',
-              ]"
-            >
-              <span
-                :class="[
-                  'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
-                  createForm.model_routing_enabled
-                    ? 'translate-x-6'
-                    : 'translate-x-1',
-                ]"
-              />
-            </button>
+            <Toggle
+              v-model="createForm.model_routing_enabled"
+            />
             <span class="text-sm text-gray-500 dark:text-gray-400">
               {{
                 createForm.model_routing_enabled
@@ -2457,7 +2279,7 @@
           v-model:over-limit="editForm.max_reasoning_effort_over_limit"
           v-model:mappings="editForm.reasoning_effort_mappings"
         />
-        <div v-if="editForm.subscription_type !== 'subscription'">
+        <div>
           <div class="mb-1.5 flex items-center gap-1">
             <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
               {{ t("admin.groups.form.exclusive") }}
@@ -2502,23 +2324,10 @@
             </div>
           </div>
           <div class="flex items-center gap-3">
-            <button
-              type="button"
-              @click="editForm.is_exclusive = !editForm.is_exclusive"
-              :class="[
-                'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-                editForm.is_exclusive
-                  ? 'bg-primary-500'
-                  : 'bg-gray-300 dark:bg-dark-600',
-              ]"
-            >
-              <span
-                :class="[
-                  'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
-                  editForm.is_exclusive ? 'translate-x-6' : 'translate-x-1',
-                ]"
-              />
-            </button>
+            <Toggle
+              v-model="editForm.is_exclusive"
+              :aria-label="t('admin.groups.form.exclusive')"
+            />
             <span class="text-sm text-gray-500 dark:text-gray-400">
               {{
                 editForm.is_exclusive
@@ -2619,23 +2428,9 @@
                 {{ t("admin.groups.modelsList.hint", { endpoint: modelsListEndpoint(editForm.platform) }) }}
               </p>
             </div>
-            <button
-              type="button"
-              @click="editModelsListState.enabled = !editModelsListState.enabled"
-              :class="[
-                'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors',
-                editModelsListState.enabled
-                  ? 'bg-primary-500'
-                  : 'bg-gray-300 dark:bg-dark-600',
-              ]"
-            >
-              <span
-                :class="[
-                  'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
-                  editModelsListState.enabled ? 'translate-x-6' : 'translate-x-1',
-                ]"
-              />
-            </button>
+            <Toggle
+              v-model="editModelsListState.enabled"
+            />
           </div>
           <div
             v-if="editModelsListState.enabled"
@@ -3200,23 +2995,9 @@
             </div>
           </div>
           <div class="flex items-center gap-3">
-            <button
-              type="button"
-              @click="editForm.mcp_xml_inject = !editForm.mcp_xml_inject"
-              :class="[
-                'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-                editForm.mcp_xml_inject
-                  ? 'bg-primary-500'
-                  : 'bg-gray-300 dark:bg-dark-600',
-              ]"
-            >
-              <span
-                :class="[
-                  'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
-                  editForm.mcp_xml_inject ? 'translate-x-6' : 'translate-x-1',
-                ]"
-              />
-            </button>
+            <Toggle
+              v-model="editForm.mcp_xml_inject"
+            />
             <span class="text-sm text-gray-500 dark:text-gray-400">
               {{
                 editForm.mcp_xml_inject
@@ -3258,23 +3039,9 @@
             </div>
           </div>
           <div class="flex items-center gap-3">
-            <button
-              type="button"
-              @click="editForm.claude_code_only = !editForm.claude_code_only"
-              :class="[
-                'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-                editForm.claude_code_only
-                  ? 'bg-primary-500'
-                  : 'bg-gray-300 dark:bg-dark-600',
-              ]"
-            >
-              <span
-                :class="[
-                  'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
-                  editForm.claude_code_only ? 'translate-x-6' : 'translate-x-1',
-                ]"
-              />
-            </button>
+            <Toggle
+              v-model="editForm.claude_code_only"
+            />
             <span class="text-sm text-gray-500 dark:text-gray-400">
               {{
                 editForm.claude_code_only
@@ -3438,27 +3205,11 @@
             <label class="text-sm text-gray-600 dark:text-gray-400">
               {{ t("admin.groups.openaiFast.force") }}
             </label>
-            <button
-              type="button"
-              role="switch"
-              :aria-checked="editForm.force_openai_fast"
+            <Toggle
+              v-model="editForm.force_openai_fast"
               :aria-label="t('admin.groups.openaiFast.force')"
               data-testid="edit-force-openai-fast"
-              @click="editForm.force_openai_fast = !editForm.force_openai_fast"
-              class="relative inline-flex h-6 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
-              :class="
-                editForm.force_openai_fast
-                  ? 'bg-primary-500'
-                  : 'bg-gray-300 dark:bg-dark-600'
-              "
-            >
-              <span
-                class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
-                :class="
-                  editForm.force_openai_fast ? 'translate-x-6' : 'translate-x-1'
-                "
-              />
-            </button>
+            />
           </div>
           <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
             {{ t("admin.groups.openaiFast.hint") }}
@@ -3467,27 +3218,11 @@
             <label class="text-sm text-gray-600 dark:text-gray-400">
               {{ t("admin.groups.openaiFast.free") }}
             </label>
-            <button
-              type="button"
-              role="switch"
-              :aria-checked="editForm.free_openai_fast"
+            <Toggle
+              v-model="editForm.free_openai_fast"
               :aria-label="t('admin.groups.openaiFast.free')"
               data-testid="edit-free-openai-fast"
-              @click="editForm.free_openai_fast = !editForm.free_openai_fast"
-              class="relative inline-flex h-6 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
-              :class="
-                editForm.free_openai_fast
-                  ? 'bg-emerald-500'
-                  : 'bg-gray-300 dark:bg-dark-600'
-              "
-            >
-              <span
-                class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
-                :class="
-                  editForm.free_openai_fast ? 'translate-x-6' : 'translate-x-1'
-                "
-              />
-            </button>
+            />
           </div>
           <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
             {{ t("admin.groups.openaiFast.freeHint") }}
@@ -3506,21 +3241,9 @@
             <label class="text-sm text-gray-600 dark:text-gray-400">{{
               t("admin.groups.openaiLive.allow")
             }}</label>
-            <button
-              type="button"
-              @click="toggleLive('edit')"
-              class="relative inline-flex h-6 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
-              :class="
-                editForm.allow_live
-                  ? 'bg-primary-500'
-                  : 'bg-gray-300 dark:bg-dark-600'
-              "
-            >
-              <span
-                class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
-                :class="editForm.allow_live ? 'translate-x-6' : 'translate-x-1'"
-              />
-            </button>
+            <Toggle
+              :model-value="!!editForm.allow_live" @update:model-value="toggleLive('edit')"
+            />
           </div>
           <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
             {{ t("admin.groups.openaiLive.hint") }}
@@ -3541,28 +3264,9 @@
             <label class="text-sm text-gray-600 dark:text-gray-400">{{
               t("admin.groups.openaiMessages.allowDispatch")
             }}</label>
-            <button
-              type="button"
-              @click="
-                editForm.allow_messages_dispatch =
-                  !editForm.allow_messages_dispatch
-              "
-              class="relative inline-flex h-6 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
-              :class="
-                editForm.allow_messages_dispatch
-                  ? 'bg-primary-500'
-                  : 'bg-gray-300 dark:bg-dark-600'
-              "
-            >
-              <span
-                class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
-                :class="
-                  editForm.allow_messages_dispatch
-                    ? 'translate-x-6'
-                    : 'translate-x-1'
-                "
-              />
-            </button>
+            <Toggle
+              v-model="editForm.allow_messages_dispatch"
+            />
           </div>
           <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
             {{ t("admin.groups.openaiMessages.allowDispatchHint") }}
@@ -3786,27 +3490,10 @@
                 }}
               </p>
             </div>
-            <button
-              type="button"
-              @click="
-                editForm.require_oauth_only = !editForm.require_oauth_only
-              "
-              class="relative inline-flex h-6 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
-              :class="
-                editForm.require_oauth_only
-                  ? 'bg-primary-500'
-                  : 'bg-gray-300 dark:bg-dark-600'
-              "
-            >
-              <span
-                class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
-                :class="
-                  editForm.require_oauth_only
-                    ? 'translate-x-6'
-                    : 'translate-x-1'
-                "
-              />
-            </button>
+            <Toggle
+              v-model="editForm.require_oauth_only"
+              :aria-label="t('admin.groups.accountFilters.oauthOnly')"
+            />
           </div>
 
           <!-- require_privacy_set toggle -->
@@ -3823,27 +3510,10 @@
                 }}
               </p>
             </div>
-            <button
-              type="button"
-              @click="
-                editForm.require_privacy_set = !editForm.require_privacy_set
-              "
-              class="relative inline-flex h-6 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
-              :class="
-                editForm.require_privacy_set
-                  ? 'bg-primary-500'
-                  : 'bg-gray-300 dark:bg-dark-600'
-              "
-            >
-              <span
-                class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
-                :class="
-                  editForm.require_privacy_set
-                    ? 'translate-x-6'
-                    : 'translate-x-1'
-                "
-              />
-            </button>
+            <Toggle
+              v-model="editForm.require_privacy_set"
+              :aria-label="t('admin.groups.accountFilters.privacySetOnly')"
+            />
           </div>
         </div>
 
@@ -3900,27 +3570,9 @@
           </div>
           <!-- 启用开关 -->
           <div class="flex items-center gap-3 mb-3">
-            <button
-              type="button"
-              @click="
-                editForm.model_routing_enabled = !editForm.model_routing_enabled
-              "
-              :class="[
-                'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-                editForm.model_routing_enabled
-                  ? 'bg-primary-500'
-                  : 'bg-gray-300 dark:bg-dark-600',
-              ]"
-            >
-              <span
-                :class="[
-                  'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
-                  editForm.model_routing_enabled
-                    ? 'translate-x-6'
-                    : 'translate-x-1',
-                ]"
-              />
-            </button>
+            <Toggle
+              v-model="editForm.model_routing_enabled"
+            />
             <span class="text-sm text-gray-500 dark:text-gray-400">
               {{
                 editForm.model_routing_enabled
@@ -4273,7 +3925,7 @@
             >
               {{ t("admin.groups.compositeRoutes.empty") }}
             </div>
-            <div v-else class="overflow-x-auto">
+            <div v-else class="table-container overflow-x-auto">
               <table class="min-w-full divide-y divide-gray-200 text-sm dark:divide-dark-600">
                 <thead class="bg-gray-50 text-left text-xs font-medium uppercase tracking-wide text-gray-500 dark:bg-dark-800 dark:text-gray-400">
                   <tr>
@@ -4603,6 +4255,7 @@
 </template>
 
 <script setup lang="ts">
+import Toggle from '@/components/common/Toggle.vue'
 import { ref, reactive, computed, onMounted, onUnmounted, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useAppStore } from "@/stores/app";

@@ -52,6 +52,26 @@ func (s *settingPublicRepoStub) Delete(ctx context.Context, key string) error {
 	panic("unexpected Delete call")
 }
 
+func TestSettingService_GetPublicSettings_SiteName(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		values map[string]string
+		want   string
+	}{
+		{"fresh_install", map[string]string{}, "Sub2API Plus"},
+		{"empty", map[string]string{SettingKeySiteName: ""}, "Sub2API Plus"},
+		{"custom", map[string]string{SettingKeySiteName: "My Gateway"}, "My Gateway"},
+		{"explicit_upstream_name", map[string]string{SettingKeySiteName: "Sub2API"}, "Sub2API"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := NewSettingService(&settingPublicRepoStub{values: tt.values}, &config.Config{})
+			settings, err := svc.GetPublicSettings(context.Background())
+			require.NoError(t, err)
+			require.Equal(t, tt.want, settings.SiteName)
+		})
+	}
+}
+
 func TestSettingService_GetPublicSettings_ExposesRegistrationEmailSuffixWhitelist(t *testing.T) {
 	repo := &settingPublicRepoStub{
 		values: map[string]string{

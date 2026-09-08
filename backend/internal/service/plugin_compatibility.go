@@ -26,12 +26,12 @@ func EvaluatePluginCompatibility(manifest PluginManifest, host PluginHostInfo) P
 		manifest.Requires.TransportAPI != pluginv1.TransportAPIVersion ||
 		manifest.Requires.UIBridge != pluginv1.UIBridgeVersion {
 		result.Status = "incompatible"
-		result.Message = "插件协议版本与当前 Sub2API 不兼容"
+		result.Message = "插件协议版本与当前 Sub2API Plus 不兼容"
 		return result
 	}
 	if !matchesSemverRange(host.Version, manifest.Requires.Sub2API) {
 		result.Status = "incompatible"
-		result.Message = fmt.Sprintf("当前 Sub2API %s 不满足插件要求 %s", host.Version, manifest.Requires.Sub2API)
+		result.Message = fmt.Sprintf("当前 Sub2API Plus %s 不满足插件要求 %s", host.Version, manifest.Requires.Sub2API)
 		return result
 	}
 	result.Compatible = true
@@ -43,10 +43,10 @@ func EvaluatePluginCompatibility(manifest PluginManifest, host PluginHostInfo) P
 	}
 	if result.Tested {
 		result.Status = "compatible"
-		result.Message = "当前 Sub2API 版本已由插件声明测试"
+		result.Message = "当前 Sub2API Plus 版本已由插件声明测试"
 	} else {
 		result.Status = "untested"
-		result.Message = "版本范围兼容，但插件未声明已测试当前 Sub2API 版本"
+		result.Message = "版本范围兼容，但插件未声明已测试当前 Sub2API Plus 版本"
 	}
 	return result
 }

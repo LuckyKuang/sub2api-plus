@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useDocumentDarkMode } from '@/composables/useDocumentDarkMode'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Chart as ChartJS, BarElement, CategoryScale, Legend, LinearScale, Tooltip } from 'chart.js'
@@ -18,11 +19,11 @@ interface Props {
 const props = defineProps<Props>()
 const { t } = useI18n()
 
-const isDarkMode = computed(() => document.documentElement.classList.contains('dark'))
+const isDarkMode = useDocumentDarkMode()
 const colors = computed(() => ({
   blue: '#3b82f6',
-  grid: isDarkMode.value ? '#374151' : '#f3f4f6',
-  text: isDarkMode.value ? '#9ca3af' : '#6b7280'
+  grid: isDarkMode.value ? '#404040' : '#e5e5e5',
+  text: isDarkMode.value ? '#e5e5e5' : '#525252'
 }))
 
 const hasData = computed(() => (props.latencyData?.total_requests ?? 0) > 0)

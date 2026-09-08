@@ -1049,7 +1049,7 @@ preferred_method = "api_key"
 [model."grok-4.5"]
 model = "grok-4.5"                          # id sent to the API
 name = "Grok 4.5"                           # shown in /model picker
-description = "Grok 4.5 via Sub2API (Responses)"
+description = "Grok 4.5 via Sub2API Plus (Responses)"
 # base_url inherits from [endpoints].models_base_url; override only if needed:
 # base_url = "${baseUrl}"
 env_key = "XAI_API_KEY"                     # or: api_key = "${apiKey}"  (not recommended)
@@ -1247,7 +1247,7 @@ disable_response_storage = true
 model_catalog_json = "${escapeTomlBasicString(codexModelCatalogPath.value)}"
 
 [model_providers.sub2api]
-name = "Sub2API ${label}"
+name = "Sub2API Plus ${label}"
 base_url = "${baseUrl}"
 env_key = "SUB2API_API_KEY"
 wire_api = "responses"
@@ -1835,7 +1835,7 @@ function generateOpenCodeConfig(platform: string, baseUrl: string, apiKey: strin
   } else if (platform === 'grok') {
     // Custom provider pointing at Sub2API OpenAI-compatible Responses/Chat endpoints.
     provider[platform].npm = '@ai-sdk/openai-compatible'
-    provider[platform].name = 'Grok via Sub2API'
+    provider[platform].name = 'Grok via Sub2API Plus'
     provider[platform].models = grokModels
   }
 
