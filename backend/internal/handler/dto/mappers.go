@@ -726,6 +726,7 @@ func usageLogFromServiceUser(l *service.UsageLog) UsageLog {
 		DurationMs:                l.DurationMs,
 		FirstTokenMs:              l.FirstTokenMs,
 		LastTokenMs:               l.LastTokenMs,
+		TimingVersion:             l.TimingVersion,
 		FirstOutputMs:             l.FirstOutputMs,
 		FirstOutputKind:           l.FirstOutputKind,
 		IsComplete:                l.IsComplete,

@@ -303,6 +303,9 @@ func TestFinalizeLiveCallIsIdempotentAndWritesZeroUsage(t *testing.T) {
 	log := usageRepo.logs[0]
 	usageRepo.mu.Unlock()
 	require.Equal(t, RequestTypeLive, log.RequestType)
+	require.Equal(t, 1, log.TimingVersion)
+	require.Nil(t, log.FirstTokenMs)
+	require.Nil(t, log.LastTokenMs)
 	require.Equal(t, record.CallHash, log.RequestID)
 	require.NotEqual(t, record.CallID, log.RequestID)
 	require.NotNil(t, log.DurationMs)

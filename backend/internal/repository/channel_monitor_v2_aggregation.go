@@ -176,8 +176,8 @@ SELECT date_trunc('minute', ul.created_at), %s, COALESCE(ul.group_id, 0), %s,
        COALESCE(SUM(ul.output_tokens) FILTER (WHERE ` + usageLogSuccessFilterUL + `), 0),
        COALESCE(SUM(ul.cache_creation_tokens) FILTER (WHERE ` + usageLogSuccessFilterUL + `), 0),
        COALESCE(SUM(ul.cache_read_tokens) FILTER (WHERE ` + usageLogSuccessFilterUL + `), 0),
-       COALESCE(SUM(ul.first_token_ms) FILTER (WHERE ul.first_token_ms IS NOT NULL AND ` + usageLogSuccessFilterUL + `), 0),
-       COUNT(ul.first_token_ms) FILTER (WHERE ` + usageLogSuccessFilterUL + `),
+       COALESCE(SUM(ul.first_token_ms) FILTER (WHERE ul.timing_version = 1 AND ul.first_token_ms IS NOT NULL AND ` + usageLogSuccessFilterUL + `), 0),
+       COUNT(ul.first_token_ms) FILTER (WHERE ul.timing_version = 1 AND ` + usageLogSuccessFilterUL + `),
        COALESCE(SUM(ul.duration_ms) FILTER (WHERE ul.duration_ms IS NOT NULL AND ` + usageLogSuccessFilterUL + `), 0),
        COUNT(ul.duration_ms) FILTER (WHERE ` + usageLogSuccessFilterUL + `), NOW()
 FROM usage_logs ul
@@ -199,8 +199,8 @@ SELECT date_trunc('minute', ul.created_at), %s, COALESCE(ul.group_id, 0), %s, ul
        COALESCE(SUM(ul.output_tokens) FILTER (WHERE ` + usageLogSuccessFilterUL + `), 0),
        COALESCE(SUM(ul.cache_creation_tokens) FILTER (WHERE ` + usageLogSuccessFilterUL + `), 0),
        COALESCE(SUM(ul.cache_read_tokens) FILTER (WHERE ` + usageLogSuccessFilterUL + `), 0),
-       COALESCE(SUM(ul.first_token_ms) FILTER (WHERE ul.first_token_ms IS NOT NULL AND ` + usageLogSuccessFilterUL + `), 0),
-       COUNT(ul.first_token_ms) FILTER (WHERE ` + usageLogSuccessFilterUL + `),
+       COALESCE(SUM(ul.first_token_ms) FILTER (WHERE ul.timing_version = 1 AND ul.first_token_ms IS NOT NULL AND ` + usageLogSuccessFilterUL + `), 0),
+       COUNT(ul.first_token_ms) FILTER (WHERE ul.timing_version = 1 AND ` + usageLogSuccessFilterUL + `),
        COALESCE(SUM(ul.duration_ms) FILTER (WHERE ul.duration_ms IS NOT NULL AND ` + usageLogSuccessFilterUL + `), 0),
        COUNT(ul.duration_ms) FILTER (WHERE ` + usageLogSuccessFilterUL + `), NOW()
 FROM usage_logs ul
@@ -219,7 +219,7 @@ FROM usage_logs ul
 LEFT JOIN groups g ON g.id = ul.group_id
 LEFT JOIN accounts a ON a.id = ul.account_id
 CROSS JOIN LATERAL (VALUES (0::bigint), (ul.user_id)) audience(user_id)
-CROSS JOIN LATERAL (VALUES ('ttft'::text, ul.first_token_ms), ('duration'::text, ul.duration_ms)) latency(metric, value_ms)
+CROSS JOIN LATERAL (VALUES ('ttft'::text, CASE WHEN ul.timing_version = 1 THEN ul.first_token_ms END), ('duration'::text, ul.duration_ms)) latency(metric, value_ms)
 WHERE ul.created_at >= $1 AND ul.created_at < $2
   AND audience.user_id IS NOT NULL AND latency.value_ms IS NOT NULL AND latency.value_ms >= 0
   AND ` + usageLogSuccessFilterUL + `

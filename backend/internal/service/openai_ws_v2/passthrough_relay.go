@@ -122,6 +122,7 @@ type relayState struct {
 	responseConflict        bool
 	terminalEventType       string
 	firstTokenMs            *int
+	lastTokenMs             *int
 	firstOutputMs           *int
 	firstOutputKind         string
 	turnTimingByID          map[string]*relayTurnTiming
@@ -147,6 +148,7 @@ type observedUpstreamEvent struct {
 	responseServiceTier string
 	duration            time.Duration
 	firstToken          *int
+	lastToken           *int
 	firstOutput         *int
 	firstOutputKind     string
 }
@@ -154,6 +156,7 @@ type observedUpstreamEvent struct {
 type relayTurnTiming struct {
 	startAt               time.Time
 	firstTokenMs          *int
+	lastTokenMs           *int
 	firstOutputMs         *int
 	firstOutputKind       string
 	firstResponseModel    string
@@ -784,16 +787,13 @@ func observeUpstreamMessage(
 	now := nowFn()
 	outputObservation := apicompat.ObserveResponsesOutput(message)
 
-	if state.firstTokenMs == nil && isTokenEvent(eventType) {
+	if outputObservation.TokenLikeDelta {
 		ms := int(now.Sub(startAt).Milliseconds())
 		if ms >= 0 {
-			state.firstTokenMs = &ms
-		}
-		if state.activeTurn != nil && state.activeTurn.firstTokenMs == nil {
-			tms := int(now.Sub(state.activeTurn.startAt).Milliseconds())
-			if tms >= 0 {
-				state.activeTurn.firstTokenMs = &tms
+			if state.firstTokenMs == nil {
+				state.firstTokenMs = &ms
 			}
+			state.lastTokenMs = &ms
 		}
 	}
 	if state.firstOutputMs == nil && outputObservation.MeaningfulOutput {
@@ -812,14 +812,17 @@ func observeUpstreamMessage(
 	var turnTiming *relayTurnTiming
 	if responseID != "" {
 		turnTiming = openAIWSRelayGetOrInitTurnTiming(state, responseID, now)
-		if turnTiming != nil && turnTiming.firstTokenMs == nil && isTokenEvent(eventType) {
-			ms := int(now.Sub(turnTiming.startAt).Milliseconds())
-			if ms >= 0 {
-				turnTiming.firstTokenMs = &ms
-			}
-		}
 	} else {
 		turnTiming = state.activeTurn
+	}
+	if turnTiming != nil && outputObservation.TokenLikeDelta {
+		ms := int(now.Sub(turnTiming.startAt).Milliseconds())
+		if ms >= 0 {
+			if turnTiming.firstTokenMs == nil {
+				turnTiming.firstTokenMs = &ms
+			}
+			turnTiming.lastTokenMs = &ms
+		}
 	}
 	if turnTiming != nil && turnTiming.firstOutputMs == nil && outputObservation.MeaningfulOutput {
 		ms := int(now.Sub(turnTiming.startAt).Milliseconds())
@@ -902,6 +905,7 @@ func finalizeObservedRelayTerminal(state *relayState, observed observedUpstreamE
 			observed.startedAt = turnTiming.startAt
 			observed.duration = duration
 			observed.firstToken = openAIWSRelayCloneIntPtr(turnTiming.firstTokenMs)
+			observed.lastToken = openAIWSRelayCloneIntPtr(turnTiming.lastTokenMs)
 			observed.firstOutput = openAIWSRelayCloneIntPtr(turnTiming.firstOutputMs)
 			observed.firstOutputKind = turnTiming.firstOutputKind
 		}
@@ -939,6 +943,7 @@ func emitTurnComplete(
 		StartedAt:             observed.startedAt,
 		Duration:              observed.duration,
 		FirstTokenMs:          openAIWSRelayCloneIntPtr(observed.firstToken),
+		LastTokenMs:           openAIWSRelayCloneIntPtr(observed.lastToken),
 		FirstOutputMs:         openAIWSRelayCloneIntPtr(observed.firstOutput),
 		FirstOutputKind:       observed.firstOutputKind,
 	})
@@ -1278,6 +1283,7 @@ func enrichResult(result *RelayResult, state *relayState, duration time.Duration
 	result.RequestID = state.lastResponseID
 	result.TerminalEventType = state.terminalEventType
 	result.FirstTokenMs = state.firstTokenMs
+	result.LastTokenMs = state.lastTokenMs
 	result.FirstOutputMs = state.firstOutputMs
 	result.FirstOutputKind = state.firstOutputKind
 }
@@ -1337,13 +1343,6 @@ func shouldParseUsage(eventType string) bool {
 		return true
 	}
 	return strings.HasPrefix(eventType, "response.") && !strings.HasSuffix(eventType, ".delta")
-}
-
-func isTokenEvent(eventType string) bool {
-	eventType = strings.TrimSpace(eventType)
-	return strings.HasSuffix(eventType, ".delta") ||
-		eventType == "response.output_text.done" ||
-		eventType == "response.function_call_arguments.done"
 }
 
 func minDuration(a, b time.Duration) time.Duration {

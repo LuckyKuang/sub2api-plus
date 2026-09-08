@@ -5,6 +5,11 @@ Moderation and Prompt Audit. The shared implementation is
 `backend/internal/auditcontent`; protocol handlers and account paths must not
 maintain alternate text extractors.
 
+Usage timing observers are separate from this ingress extraction contract.
+Classifying upstream `compaction`/`compaction_summary` output for timing does not
+add an ingress extraction rule, policy decision, or audit bypass. Encrypted
+compact output is not treated as a text-token delta; see [usage timing](USAGE_TIMING.md).
+
 ## Boundary And Ordering
 
 Every accepted HTTP request, WebSocket turn, and Live Sideband client frame

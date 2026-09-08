@@ -241,6 +241,7 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsAnthropic(
 			UpstreamResponseServiceTier: observedUpstreamResponseServiceTier(c),
 			ServiceTier:                 resolvedOpenAIUpstreamServiceTier(c, serviceTier),
 			Stream:                      true,
+			UsageIncomplete:             scan.usageIncomplete(),
 			Duration:                    time.Since(startTime),
 			FirstTokenMs:                scan.FirstTokenMs,
 			ClientDisconnect:            clientDisconnected,
@@ -279,6 +280,7 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsAnthropic(
 			ReasoningEffort:  reasoningEffort,
 			ServiceTier:      serviceTier,
 			Stream:           true,
+			UsageIncomplete:  scan.usageIncomplete(),
 			Duration:         time.Since(startTime),
 			ClientDisconnect: clientDisconnected,
 		}
@@ -297,6 +299,7 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsAnthropic(
 		UpstreamResponseServiceTier: observedUpstreamResponseServiceTier(c),
 		ServiceTier:                 resolvedOpenAIUpstreamServiceTier(c, serviceTier),
 		Stream:                      true,
+		UsageIncomplete:             scan.usageIncomplete(),
 		Duration:                    time.Since(startTime),
 		FirstTokenMs:                scan.FirstTokenMs,
 		ClientDisconnect:            clientDisconnected,

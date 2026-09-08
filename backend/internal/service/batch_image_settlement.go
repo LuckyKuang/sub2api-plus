@@ -274,6 +274,7 @@ func buildBatchImageSettlementUsageLog(job *BatchImageJob, actualCost float64, r
 		AccountRateMultiplier: &accountRateMultiplier,
 		BillingType:           BillingTypeBalance,
 		RequestType:           RequestTypeSync,
+		TimingVersion:         1, // Settlement has no observed token-generation window.
 		BillingMode:           &billingMode,
 		ImageSize:             &imageSize,
 		SessionID:             job.SessionID,

@@ -634,6 +634,7 @@ type UsageLog struct {
 	DurationMs         *int    `json:"duration_ms"`
 	FirstTokenMs       *int    `json:"first_token_ms"`
 	LastTokenMs        *int    `json:"last_token_ms"`
+	TimingVersion      int     `json:"timing_version"`
 	FirstOutputMs      *int    `json:"first_output_ms"`
 	FirstOutputKind    *string `json:"first_output_kind"`
 	IsComplete         *bool   `json:"is_complete"`

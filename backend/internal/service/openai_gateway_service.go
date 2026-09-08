@@ -282,14 +282,16 @@ type OpenAIForwardResult struct {
 	OpenAIWSMode             bool
 	// UpstreamTerminalEvent is the normalized terminal event observed on an
 	// upstream Responses WebSocket turn. Empty preserves legacy/non-WS success.
-	UpstreamTerminalEvent       string
-	ResponseHeaders             http.Header
-	Duration                    time.Duration
-	FirstTokenMs                *int
-	LastTokenMs                 *int
-	FirstOutputMs               *int
-	FirstOutputKind             string
-	ClientDisconnect            bool
+	UpstreamTerminalEvent string
+	ResponseHeaders       http.Header
+	Duration              time.Duration
+	FirstTokenMs          *int
+	LastTokenMs           *int
+	FirstOutputMs         *int
+	FirstOutputKind       string
+	ClientDisconnect      bool
+	// UsageIncomplete excludes synthesized completion after truncated/error upstream streams from TPS.
+	UsageIncomplete             bool
 	ClientDisconnectUsageSource string
 	ImageCount                  int
 	ImageSize                   string
@@ -334,7 +336,7 @@ func (r *OpenAIForwardResult) SucceededForScheduling() bool {
 // metrics. Billing may still record partial usage after an interrupted stream,
 // but those records must never drive TPS.
 func (r *OpenAIForwardResult) UsageComplete() bool {
-	if r == nil || r.ClientDisconnect {
+	if r == nil || r.ClientDisconnect || r.UsageIncomplete {
 		return false
 	}
 	if !r.Stream || !r.OpenAIWSMode {

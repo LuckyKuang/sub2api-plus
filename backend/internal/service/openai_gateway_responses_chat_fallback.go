@@ -242,6 +242,7 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsResponses(
 			UpstreamResponseServiceTier: observedUpstreamResponseServiceTier(c),
 			ServiceTier:                 resolvedOpenAIUpstreamServiceTier(c, serviceTier),
 			Stream:                      true,
+			UsageIncomplete:             scan.usageIncomplete(),
 			Duration:                    time.Since(startTime),
 			FirstTokenMs:                scan.FirstTokenMs,
 			ClientDisconnect:            clientDisconnected,
@@ -250,7 +251,7 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsResponses(
 		return result, fmt.Errorf("stream usage incomplete: %w", scan.Err)
 	}
 	if err := state.ValidateToolCallArguments(); err != nil {
-		return &OpenAIForwardResult{
+		result := &OpenAIForwardResult{
 			RequestID:                   requestID,
 			UpstreamHeaders:             resp.Header,
 			Usage:                       scan.Usage,
@@ -261,9 +262,11 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsResponses(
 			UpstreamResponseServiceTier: observedUpstreamResponseServiceTier(c),
 			ServiceTier:                 resolvedOpenAIUpstreamServiceTier(c, serviceTier),
 			Stream:                      true,
+			UsageIncomplete:             scan.usageIncomplete(),
 			Duration:                    time.Since(startTime),
-			FirstTokenMs:                scan.FirstTokenMs,
-		}, fmt.Errorf("invalid tool call arguments from upstream: %w", err)
+		}
+		timing.ApplyOpenAIResult(result)
+		return result, fmt.Errorf("invalid tool call arguments from upstream: %w", err)
 	}
 
 	finalEvents := apicompat.FinalizeChatCompletionsResponsesStream(state)
@@ -290,6 +293,7 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsResponses(
 			UpstreamResponseServiceTier: observedUpstreamResponseServiceTier(c),
 			ServiceTier:                 resolvedOpenAIUpstreamServiceTier(c, serviceTier),
 			Stream:                      true,
+			UsageIncomplete:             scan.usageIncomplete(),
 			Duration:                    time.Since(startTime),
 			FirstTokenMs:                scan.FirstTokenMs,
 			ClientDisconnect:            clientDisconnected,
@@ -309,6 +313,7 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsResponses(
 		UpstreamResponseServiceTier: observedUpstreamResponseServiceTier(c),
 		ServiceTier:                 resolvedOpenAIUpstreamServiceTier(c, serviceTier),
 		Stream:                      true,
+		UsageIncomplete:             scan.usageIncomplete(),
 		Duration:                    time.Since(startTime),
 		FirstTokenMs:                scan.FirstTokenMs,
 		ClientDisconnect:            clientDisconnected,

@@ -1656,8 +1656,9 @@ export interface UsageLog {
   duration_ms: number | null
   first_token_ms: number | null
   last_token_ms: number | null
+  timing_version?: number
   first_output_ms: number | null
-  first_output_kind: 'text' | 'reasoning' | 'tool' | 'image' | 'audio' | null
+  first_output_kind: 'text' | 'reasoning' | 'tool' | 'image' | 'audio' | 'compaction' | null
   is_complete: boolean | null
   completion_status: UsageCompletionStatus
   usage_source: UsageSource
