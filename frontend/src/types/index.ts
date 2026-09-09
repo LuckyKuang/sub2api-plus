@@ -650,6 +650,13 @@ export interface AdminGroup extends Group {
 
   // 分组排序
   sort_order: number
+
+  // OpenAI OAuth 官方周窗口跟随重置（仅管理员可见）
+  quota_reset_source_account_id?: number | null
+  quota_reset_source_account_name?: string
+  quota_reset_source_reset_at?: string | null
+  quota_reset_include_monthly?: boolean
+  quota_reset_source_status?: 'disabled' | 'waiting' | 'active' | 'invalid'
 }
 
 export interface ModelsListConfig {
@@ -792,6 +799,8 @@ export interface CreateGroupRequest {
   weekly_limit_usd?: number | null
   monthly_limit_usd?: number | null
   five_hour_limit_usd?: number | null
+  quota_reset_source_account_id?: number | null
+  quota_reset_include_monthly?: boolean
   long_context_pricing_enabled?: boolean
   force_openai_fast?: boolean
   free_openai_fast?: boolean
@@ -859,6 +868,8 @@ export interface UpdateGroupRequest {
   weekly_limit_usd?: number | null
   monthly_limit_usd?: number | null
   five_hour_limit_usd?: number | null
+  quota_reset_source_account_id?: number | null
+  quota_reset_include_monthly?: boolean
   long_context_pricing_enabled?: boolean
   force_openai_fast?: boolean
   free_openai_fast?: boolean

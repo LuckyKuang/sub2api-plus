@@ -1354,6 +1354,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 				if msgType != coderws.MessageText {
 					return payload, true, nil
 				}
+				observeOpenAIWeeklyResetEvent(ctx, account, payload)
 				finalized, emit := s.finalizeCodexClientQuotaEvent(payload, c, account)
 				return finalized, emit, nil
 			},

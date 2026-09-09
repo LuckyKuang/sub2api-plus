@@ -1043,7 +1043,26 @@ export default {
         fiveHourLimit: '5小时限额（USD）',
         defaultValidityDays: '默认有效期（天）',
         validityHint: '分配给用户时订阅的有效天数',
-        noLimit: '无限制'
+        noLimit: '无限制',
+        quotaFollowReset: {
+          source: '跟随 OpenAI OAuth 官方周额度重置',
+          disabled: '未启用',
+          searchSource: '搜索 OpenAI OAuth 账号',
+          noSources: '没有可用的 OpenAI OAuth 账号',
+          hint: '仅被动观测：首次获取到的官方周窗口下次重置时间只建立基线，不重置额度；后续该时间变化时，本分组只重置一次，且不影响账号路由。',
+          includeMonthly: '同时重置月额度',
+          includeMonthlyHint: '仅当本分组设置了月限额时可选；没有月限额的分组会自动跳过月额度重置。',
+          invalidSource: '来源 {name}（ID {id}）已被删除或不再是可用的 OpenAI OAuth 账号。重新选择来源前，自动重置已失效。',
+          invalidSourceOption: '[已失效] {name}（ID {id}）',
+          waitingBaseline: '正在等待首次被动获取官方周窗口重置时间；首次值只建立基线，不会重置额度。',
+          currentBaseline: '当前官方重置时间基线：{time}',
+          status: {
+            active: '跟随 {source}',
+            waiting: '等待 {source} 基线',
+            invalid: '来源已失效：{source}',
+            disabled: '未启用'
+          }
+        }
       },
       imagePricing: {
         title: '图片生成计费',

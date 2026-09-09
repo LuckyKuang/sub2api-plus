@@ -532,6 +532,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		if normalized, changed := normalizeCompletedImageGenerationStatus(message); changed {
 			message = normalized
 		}
+		observeOpenAIWeeklyResetEvent(ctx, account, message)
 		var emitQuotaEvent bool
 		message, emitQuotaEvent = s.finalizeCodexClientQuotaEvent(message, c, account)
 		if !emitQuotaEvent {

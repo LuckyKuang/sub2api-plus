@@ -56,6 +56,16 @@ const (
 	FieldFiveHourLimitUsd = "five_hour_limit_usd"
 	// FieldDefaultValidityDays holds the string denoting the default_validity_days field in the database.
 	FieldDefaultValidityDays = "default_validity_days"
+	// FieldQuotaResetSourceAccountID holds the string denoting the quota_reset_source_account_id field in the database.
+	FieldQuotaResetSourceAccountID = "quota_reset_source_account_id"
+	// FieldQuotaResetSourceAccountName holds the string denoting the quota_reset_source_account_name field in the database.
+	FieldQuotaResetSourceAccountName = "quota_reset_source_account_name"
+	// FieldQuotaResetSourceResetAt holds the string denoting the quota_reset_source_reset_at field in the database.
+	FieldQuotaResetSourceResetAt = "quota_reset_source_reset_at"
+	// FieldQuotaResetIncludeMonthly holds the string denoting the quota_reset_include_monthly field in the database.
+	FieldQuotaResetIncludeMonthly = "quota_reset_include_monthly"
+	// FieldQuotaResetConfigVersion holds the string denoting the quota_reset_config_version field in the database.
+	FieldQuotaResetConfigVersion = "quota_reset_config_version"
 	// FieldAllowImageGeneration holds the string denoting the allow_image_generation field in the database.
 	FieldAllowImageGeneration = "allow_image_generation"
 	// FieldAllowBatchImageGeneration holds the string denoting the allow_batch_image_generation field in the database.
@@ -245,6 +255,11 @@ var Columns = []string{
 	FieldMonthlyLimitUsd,
 	FieldFiveHourLimitUsd,
 	FieldDefaultValidityDays,
+	FieldQuotaResetSourceAccountID,
+	FieldQuotaResetSourceAccountName,
+	FieldQuotaResetSourceResetAt,
+	FieldQuotaResetIncludeMonthly,
+	FieldQuotaResetConfigVersion,
 	FieldAllowImageGeneration,
 	FieldAllowBatchImageGeneration,
 	FieldImageRateIndependent,
@@ -361,6 +376,14 @@ var (
 	SubscriptionTypeValidator func(string) error
 	// DefaultDefaultValidityDays holds the default value on creation for the "default_validity_days" field.
 	DefaultDefaultValidityDays int
+	// DefaultQuotaResetSourceAccountName holds the default value on creation for the "quota_reset_source_account_name" field.
+	DefaultQuotaResetSourceAccountName string
+	// QuotaResetSourceAccountNameValidator is a validator for the "quota_reset_source_account_name" field. It is called by the builders before save.
+	QuotaResetSourceAccountNameValidator func(string) error
+	// DefaultQuotaResetIncludeMonthly holds the default value on creation for the "quota_reset_include_monthly" field.
+	DefaultQuotaResetIncludeMonthly bool
+	// DefaultQuotaResetConfigVersion holds the default value on creation for the "quota_reset_config_version" field.
+	DefaultQuotaResetConfigVersion int64
 	// DefaultAllowImageGeneration holds the default value on creation for the "allow_image_generation" field.
 	DefaultAllowImageGeneration bool
 	// DefaultAllowBatchImageGeneration holds the default value on creation for the "allow_batch_image_generation" field.
@@ -545,6 +568,31 @@ func ByFiveHourLimitUsd(opts ...sql.OrderTermOption) OrderOption {
 // ByDefaultValidityDays orders the results by the default_validity_days field.
 func ByDefaultValidityDays(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldDefaultValidityDays, opts...).ToFunc()
+}
+
+// ByQuotaResetSourceAccountID orders the results by the quota_reset_source_account_id field.
+func ByQuotaResetSourceAccountID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldQuotaResetSourceAccountID, opts...).ToFunc()
+}
+
+// ByQuotaResetSourceAccountName orders the results by the quota_reset_source_account_name field.
+func ByQuotaResetSourceAccountName(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldQuotaResetSourceAccountName, opts...).ToFunc()
+}
+
+// ByQuotaResetSourceResetAt orders the results by the quota_reset_source_reset_at field.
+func ByQuotaResetSourceResetAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldQuotaResetSourceResetAt, opts...).ToFunc()
+}
+
+// ByQuotaResetIncludeMonthly orders the results by the quota_reset_include_monthly field.
+func ByQuotaResetIncludeMonthly(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldQuotaResetIncludeMonthly, opts...).ToFunc()
+}
+
+// ByQuotaResetConfigVersion orders the results by the quota_reset_config_version field.
+func ByQuotaResetConfigVersion(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldQuotaResetConfigVersion, opts...).ToFunc()
 }
 
 // ByAllowImageGeneration orders the results by the allow_image_generation field.

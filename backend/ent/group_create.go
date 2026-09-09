@@ -302,6 +302,76 @@ func (_c *GroupCreate) SetNillableDefaultValidityDays(v *int) *GroupCreate {
 	return _c
 }
 
+// SetQuotaResetSourceAccountID sets the "quota_reset_source_account_id" field.
+func (_c *GroupCreate) SetQuotaResetSourceAccountID(v int64) *GroupCreate {
+	_c.mutation.SetQuotaResetSourceAccountID(v)
+	return _c
+}
+
+// SetNillableQuotaResetSourceAccountID sets the "quota_reset_source_account_id" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableQuotaResetSourceAccountID(v *int64) *GroupCreate {
+	if v != nil {
+		_c.SetQuotaResetSourceAccountID(*v)
+	}
+	return _c
+}
+
+// SetQuotaResetSourceAccountName sets the "quota_reset_source_account_name" field.
+func (_c *GroupCreate) SetQuotaResetSourceAccountName(v string) *GroupCreate {
+	_c.mutation.SetQuotaResetSourceAccountName(v)
+	return _c
+}
+
+// SetNillableQuotaResetSourceAccountName sets the "quota_reset_source_account_name" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableQuotaResetSourceAccountName(v *string) *GroupCreate {
+	if v != nil {
+		_c.SetQuotaResetSourceAccountName(*v)
+	}
+	return _c
+}
+
+// SetQuotaResetSourceResetAt sets the "quota_reset_source_reset_at" field.
+func (_c *GroupCreate) SetQuotaResetSourceResetAt(v time.Time) *GroupCreate {
+	_c.mutation.SetQuotaResetSourceResetAt(v)
+	return _c
+}
+
+// SetNillableQuotaResetSourceResetAt sets the "quota_reset_source_reset_at" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableQuotaResetSourceResetAt(v *time.Time) *GroupCreate {
+	if v != nil {
+		_c.SetQuotaResetSourceResetAt(*v)
+	}
+	return _c
+}
+
+// SetQuotaResetIncludeMonthly sets the "quota_reset_include_monthly" field.
+func (_c *GroupCreate) SetQuotaResetIncludeMonthly(v bool) *GroupCreate {
+	_c.mutation.SetQuotaResetIncludeMonthly(v)
+	return _c
+}
+
+// SetNillableQuotaResetIncludeMonthly sets the "quota_reset_include_monthly" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableQuotaResetIncludeMonthly(v *bool) *GroupCreate {
+	if v != nil {
+		_c.SetQuotaResetIncludeMonthly(*v)
+	}
+	return _c
+}
+
+// SetQuotaResetConfigVersion sets the "quota_reset_config_version" field.
+func (_c *GroupCreate) SetQuotaResetConfigVersion(v int64) *GroupCreate {
+	_c.mutation.SetQuotaResetConfigVersion(v)
+	return _c
+}
+
+// SetNillableQuotaResetConfigVersion sets the "quota_reset_config_version" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableQuotaResetConfigVersion(v *int64) *GroupCreate {
+	if v != nil {
+		_c.SetQuotaResetConfigVersion(*v)
+	}
+	return _c
+}
+
 // SetAllowImageGeneration sets the "allow_image_generation" field.
 func (_c *GroupCreate) SetAllowImageGeneration(v bool) *GroupCreate {
 	_c.mutation.SetAllowImageGeneration(v)
@@ -1101,6 +1171,18 @@ func (_c *GroupCreate) defaults() error {
 		v := group.DefaultDefaultValidityDays
 		_c.mutation.SetDefaultValidityDays(v)
 	}
+	if _, ok := _c.mutation.QuotaResetSourceAccountName(); !ok {
+		v := group.DefaultQuotaResetSourceAccountName
+		_c.mutation.SetQuotaResetSourceAccountName(v)
+	}
+	if _, ok := _c.mutation.QuotaResetIncludeMonthly(); !ok {
+		v := group.DefaultQuotaResetIncludeMonthly
+		_c.mutation.SetQuotaResetIncludeMonthly(v)
+	}
+	if _, ok := _c.mutation.QuotaResetConfigVersion(); !ok {
+		v := group.DefaultQuotaResetConfigVersion
+		_c.mutation.SetQuotaResetConfigVersion(v)
+	}
 	if _, ok := _c.mutation.AllowImageGeneration(); !ok {
 		v := group.DefaultAllowImageGeneration
 		_c.mutation.SetAllowImageGeneration(v)
@@ -1303,6 +1385,20 @@ func (_c *GroupCreate) check() error {
 	}
 	if _, ok := _c.mutation.DefaultValidityDays(); !ok {
 		return &ValidationError{Name: "default_validity_days", err: errors.New(`ent: missing required field "Group.default_validity_days"`)}
+	}
+	if _, ok := _c.mutation.QuotaResetSourceAccountName(); !ok {
+		return &ValidationError{Name: "quota_reset_source_account_name", err: errors.New(`ent: missing required field "Group.quota_reset_source_account_name"`)}
+	}
+	if v, ok := _c.mutation.QuotaResetSourceAccountName(); ok {
+		if err := group.QuotaResetSourceAccountNameValidator(v); err != nil {
+			return &ValidationError{Name: "quota_reset_source_account_name", err: fmt.Errorf(`ent: validator failed for field "Group.quota_reset_source_account_name": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.QuotaResetIncludeMonthly(); !ok {
+		return &ValidationError{Name: "quota_reset_include_monthly", err: errors.New(`ent: missing required field "Group.quota_reset_include_monthly"`)}
+	}
+	if _, ok := _c.mutation.QuotaResetConfigVersion(); !ok {
+		return &ValidationError{Name: "quota_reset_config_version", err: errors.New(`ent: missing required field "Group.quota_reset_config_version"`)}
 	}
 	if _, ok := _c.mutation.AllowImageGeneration(); !ok {
 		return &ValidationError{Name: "allow_image_generation", err: errors.New(`ent: missing required field "Group.allow_image_generation"`)}
@@ -1538,6 +1634,26 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.DefaultValidityDays(); ok {
 		_spec.SetField(group.FieldDefaultValidityDays, field.TypeInt, value)
 		_node.DefaultValidityDays = value
+	}
+	if value, ok := _c.mutation.QuotaResetSourceAccountID(); ok {
+		_spec.SetField(group.FieldQuotaResetSourceAccountID, field.TypeInt64, value)
+		_node.QuotaResetSourceAccountID = &value
+	}
+	if value, ok := _c.mutation.QuotaResetSourceAccountName(); ok {
+		_spec.SetField(group.FieldQuotaResetSourceAccountName, field.TypeString, value)
+		_node.QuotaResetSourceAccountName = value
+	}
+	if value, ok := _c.mutation.QuotaResetSourceResetAt(); ok {
+		_spec.SetField(group.FieldQuotaResetSourceResetAt, field.TypeTime, value)
+		_node.QuotaResetSourceResetAt = &value
+	}
+	if value, ok := _c.mutation.QuotaResetIncludeMonthly(); ok {
+		_spec.SetField(group.FieldQuotaResetIncludeMonthly, field.TypeBool, value)
+		_node.QuotaResetIncludeMonthly = value
+	}
+	if value, ok := _c.mutation.QuotaResetConfigVersion(); ok {
+		_spec.SetField(group.FieldQuotaResetConfigVersion, field.TypeInt64, value)
+		_node.QuotaResetConfigVersion = value
 	}
 	if value, ok := _c.mutation.AllowImageGeneration(); ok {
 		_spec.SetField(group.FieldAllowImageGeneration, field.TypeBool, value)
@@ -2174,6 +2290,90 @@ func (u *GroupUpsert) UpdateDefaultValidityDays() *GroupUpsert {
 // AddDefaultValidityDays adds v to the "default_validity_days" field.
 func (u *GroupUpsert) AddDefaultValidityDays(v int) *GroupUpsert {
 	u.Add(group.FieldDefaultValidityDays, v)
+	return u
+}
+
+// SetQuotaResetSourceAccountID sets the "quota_reset_source_account_id" field.
+func (u *GroupUpsert) SetQuotaResetSourceAccountID(v int64) *GroupUpsert {
+	u.Set(group.FieldQuotaResetSourceAccountID, v)
+	return u
+}
+
+// UpdateQuotaResetSourceAccountID sets the "quota_reset_source_account_id" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateQuotaResetSourceAccountID() *GroupUpsert {
+	u.SetExcluded(group.FieldQuotaResetSourceAccountID)
+	return u
+}
+
+// AddQuotaResetSourceAccountID adds v to the "quota_reset_source_account_id" field.
+func (u *GroupUpsert) AddQuotaResetSourceAccountID(v int64) *GroupUpsert {
+	u.Add(group.FieldQuotaResetSourceAccountID, v)
+	return u
+}
+
+// ClearQuotaResetSourceAccountID clears the value of the "quota_reset_source_account_id" field.
+func (u *GroupUpsert) ClearQuotaResetSourceAccountID() *GroupUpsert {
+	u.SetNull(group.FieldQuotaResetSourceAccountID)
+	return u
+}
+
+// SetQuotaResetSourceAccountName sets the "quota_reset_source_account_name" field.
+func (u *GroupUpsert) SetQuotaResetSourceAccountName(v string) *GroupUpsert {
+	u.Set(group.FieldQuotaResetSourceAccountName, v)
+	return u
+}
+
+// UpdateQuotaResetSourceAccountName sets the "quota_reset_source_account_name" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateQuotaResetSourceAccountName() *GroupUpsert {
+	u.SetExcluded(group.FieldQuotaResetSourceAccountName)
+	return u
+}
+
+// SetQuotaResetSourceResetAt sets the "quota_reset_source_reset_at" field.
+func (u *GroupUpsert) SetQuotaResetSourceResetAt(v time.Time) *GroupUpsert {
+	u.Set(group.FieldQuotaResetSourceResetAt, v)
+	return u
+}
+
+// UpdateQuotaResetSourceResetAt sets the "quota_reset_source_reset_at" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateQuotaResetSourceResetAt() *GroupUpsert {
+	u.SetExcluded(group.FieldQuotaResetSourceResetAt)
+	return u
+}
+
+// ClearQuotaResetSourceResetAt clears the value of the "quota_reset_source_reset_at" field.
+func (u *GroupUpsert) ClearQuotaResetSourceResetAt() *GroupUpsert {
+	u.SetNull(group.FieldQuotaResetSourceResetAt)
+	return u
+}
+
+// SetQuotaResetIncludeMonthly sets the "quota_reset_include_monthly" field.
+func (u *GroupUpsert) SetQuotaResetIncludeMonthly(v bool) *GroupUpsert {
+	u.Set(group.FieldQuotaResetIncludeMonthly, v)
+	return u
+}
+
+// UpdateQuotaResetIncludeMonthly sets the "quota_reset_include_monthly" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateQuotaResetIncludeMonthly() *GroupUpsert {
+	u.SetExcluded(group.FieldQuotaResetIncludeMonthly)
+	return u
+}
+
+// SetQuotaResetConfigVersion sets the "quota_reset_config_version" field.
+func (u *GroupUpsert) SetQuotaResetConfigVersion(v int64) *GroupUpsert {
+	u.Set(group.FieldQuotaResetConfigVersion, v)
+	return u
+}
+
+// UpdateQuotaResetConfigVersion sets the "quota_reset_config_version" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateQuotaResetConfigVersion() *GroupUpsert {
+	u.SetExcluded(group.FieldQuotaResetConfigVersion)
+	return u
+}
+
+// AddQuotaResetConfigVersion adds v to the "quota_reset_config_version" field.
+func (u *GroupUpsert) AddQuotaResetConfigVersion(v int64) *GroupUpsert {
+	u.Add(group.FieldQuotaResetConfigVersion, v)
 	return u
 }
 
@@ -3351,6 +3551,104 @@ func (u *GroupUpsertOne) AddDefaultValidityDays(v int) *GroupUpsertOne {
 func (u *GroupUpsertOne) UpdateDefaultValidityDays() *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateDefaultValidityDays()
+	})
+}
+
+// SetQuotaResetSourceAccountID sets the "quota_reset_source_account_id" field.
+func (u *GroupUpsertOne) SetQuotaResetSourceAccountID(v int64) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetQuotaResetSourceAccountID(v)
+	})
+}
+
+// AddQuotaResetSourceAccountID adds v to the "quota_reset_source_account_id" field.
+func (u *GroupUpsertOne) AddQuotaResetSourceAccountID(v int64) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.AddQuotaResetSourceAccountID(v)
+	})
+}
+
+// UpdateQuotaResetSourceAccountID sets the "quota_reset_source_account_id" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateQuotaResetSourceAccountID() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateQuotaResetSourceAccountID()
+	})
+}
+
+// ClearQuotaResetSourceAccountID clears the value of the "quota_reset_source_account_id" field.
+func (u *GroupUpsertOne) ClearQuotaResetSourceAccountID() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.ClearQuotaResetSourceAccountID()
+	})
+}
+
+// SetQuotaResetSourceAccountName sets the "quota_reset_source_account_name" field.
+func (u *GroupUpsertOne) SetQuotaResetSourceAccountName(v string) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetQuotaResetSourceAccountName(v)
+	})
+}
+
+// UpdateQuotaResetSourceAccountName sets the "quota_reset_source_account_name" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateQuotaResetSourceAccountName() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateQuotaResetSourceAccountName()
+	})
+}
+
+// SetQuotaResetSourceResetAt sets the "quota_reset_source_reset_at" field.
+func (u *GroupUpsertOne) SetQuotaResetSourceResetAt(v time.Time) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetQuotaResetSourceResetAt(v)
+	})
+}
+
+// UpdateQuotaResetSourceResetAt sets the "quota_reset_source_reset_at" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateQuotaResetSourceResetAt() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateQuotaResetSourceResetAt()
+	})
+}
+
+// ClearQuotaResetSourceResetAt clears the value of the "quota_reset_source_reset_at" field.
+func (u *GroupUpsertOne) ClearQuotaResetSourceResetAt() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.ClearQuotaResetSourceResetAt()
+	})
+}
+
+// SetQuotaResetIncludeMonthly sets the "quota_reset_include_monthly" field.
+func (u *GroupUpsertOne) SetQuotaResetIncludeMonthly(v bool) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetQuotaResetIncludeMonthly(v)
+	})
+}
+
+// UpdateQuotaResetIncludeMonthly sets the "quota_reset_include_monthly" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateQuotaResetIncludeMonthly() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateQuotaResetIncludeMonthly()
+	})
+}
+
+// SetQuotaResetConfigVersion sets the "quota_reset_config_version" field.
+func (u *GroupUpsertOne) SetQuotaResetConfigVersion(v int64) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetQuotaResetConfigVersion(v)
+	})
+}
+
+// AddQuotaResetConfigVersion adds v to the "quota_reset_config_version" field.
+func (u *GroupUpsertOne) AddQuotaResetConfigVersion(v int64) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.AddQuotaResetConfigVersion(v)
+	})
+}
+
+// UpdateQuotaResetConfigVersion sets the "quota_reset_config_version" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateQuotaResetConfigVersion() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateQuotaResetConfigVersion()
 	})
 }
 
@@ -4825,6 +5123,104 @@ func (u *GroupUpsertBulk) AddDefaultValidityDays(v int) *GroupUpsertBulk {
 func (u *GroupUpsertBulk) UpdateDefaultValidityDays() *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateDefaultValidityDays()
+	})
+}
+
+// SetQuotaResetSourceAccountID sets the "quota_reset_source_account_id" field.
+func (u *GroupUpsertBulk) SetQuotaResetSourceAccountID(v int64) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetQuotaResetSourceAccountID(v)
+	})
+}
+
+// AddQuotaResetSourceAccountID adds v to the "quota_reset_source_account_id" field.
+func (u *GroupUpsertBulk) AddQuotaResetSourceAccountID(v int64) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.AddQuotaResetSourceAccountID(v)
+	})
+}
+
+// UpdateQuotaResetSourceAccountID sets the "quota_reset_source_account_id" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateQuotaResetSourceAccountID() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateQuotaResetSourceAccountID()
+	})
+}
+
+// ClearQuotaResetSourceAccountID clears the value of the "quota_reset_source_account_id" field.
+func (u *GroupUpsertBulk) ClearQuotaResetSourceAccountID() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.ClearQuotaResetSourceAccountID()
+	})
+}
+
+// SetQuotaResetSourceAccountName sets the "quota_reset_source_account_name" field.
+func (u *GroupUpsertBulk) SetQuotaResetSourceAccountName(v string) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetQuotaResetSourceAccountName(v)
+	})
+}
+
+// UpdateQuotaResetSourceAccountName sets the "quota_reset_source_account_name" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateQuotaResetSourceAccountName() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateQuotaResetSourceAccountName()
+	})
+}
+
+// SetQuotaResetSourceResetAt sets the "quota_reset_source_reset_at" field.
+func (u *GroupUpsertBulk) SetQuotaResetSourceResetAt(v time.Time) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetQuotaResetSourceResetAt(v)
+	})
+}
+
+// UpdateQuotaResetSourceResetAt sets the "quota_reset_source_reset_at" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateQuotaResetSourceResetAt() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateQuotaResetSourceResetAt()
+	})
+}
+
+// ClearQuotaResetSourceResetAt clears the value of the "quota_reset_source_reset_at" field.
+func (u *GroupUpsertBulk) ClearQuotaResetSourceResetAt() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.ClearQuotaResetSourceResetAt()
+	})
+}
+
+// SetQuotaResetIncludeMonthly sets the "quota_reset_include_monthly" field.
+func (u *GroupUpsertBulk) SetQuotaResetIncludeMonthly(v bool) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetQuotaResetIncludeMonthly(v)
+	})
+}
+
+// UpdateQuotaResetIncludeMonthly sets the "quota_reset_include_monthly" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateQuotaResetIncludeMonthly() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateQuotaResetIncludeMonthly()
+	})
+}
+
+// SetQuotaResetConfigVersion sets the "quota_reset_config_version" field.
+func (u *GroupUpsertBulk) SetQuotaResetConfigVersion(v int64) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetQuotaResetConfigVersion(v)
+	})
+}
+
+// AddQuotaResetConfigVersion adds v to the "quota_reset_config_version" field.
+func (u *GroupUpsertBulk) AddQuotaResetConfigVersion(v int64) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.AddQuotaResetConfigVersion(v)
+	})
+}
+
+// UpdateQuotaResetConfigVersion sets the "quota_reset_config_version" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateQuotaResetConfigVersion() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateQuotaResetConfigVersion()
 	})
 }
 

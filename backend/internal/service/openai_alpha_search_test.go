@@ -653,10 +653,19 @@ func TestForwardAlphaSearchOAuthNotFoundPassesThrough(t *testing.T) {
 	upstreamBody := `{"detail":"Not Found"}`
 	upstream := &httpUpstreamRecorder{resp: &http.Response{
 		StatusCode: http.StatusNotFound,
-		Header:     http.Header{"Content-Type": []string{"application/json"}},
-		Body:       io.NopCloser(strings.NewReader(upstreamBody)),
+		Header: http.Header{
+			"Content-Type":                   []string{"application/json"},
+			"X-Codex-Primary-Window-Minutes": []string{"10080"},
+			"X-Codex-Primary-Reset-At":       []string{"1780000001"},
+		},
+		Body: io.NopCloser(strings.NewReader(upstreamBody)),
 	}}
-	service := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream}
+	accountRepo := &alphaSearchAccountStateRepo{}
+	service := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream, accountRepo: accountRepo}
+	observerRepo := &quotaFollowObservationRecorder{}
+	observer := &OpenAIGroupQuotaFollowResetService{repo: observerRepo}
+	setOpenAIGroupQuotaFollowResetObserver(observer)
+	t.Cleanup(func() { clearOpenAIGroupQuotaFollowResetObserver(observer) })
 	account := &Account{
 		ID:          10,
 		Platform:    PlatformOpenAI,
@@ -674,6 +683,7 @@ func TestForwardAlphaSearchOAuthNotFoundPassesThrough(t *testing.T) {
 	require.Nil(t, result)
 	require.Equal(t, http.StatusNotFound, recorder.Code)
 	require.JSONEq(t, upstreamBody, recorder.Body.String())
+	require.Zero(t, observerRepo.calls, "non-2xx responses must not drive quota reset observations")
 }
 
 func TestShouldApplyOpenAIAlphaSearchAccountErrorSideEffects(t *testing.T) {

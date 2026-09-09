@@ -15,6 +15,7 @@ const {
   getUsageSummary,
   getCapacitySummary,
   getLiveCapability,
+  listAccounts,
   showSuccess,
   showError
 } = vi.hoisted(() => ({
@@ -26,6 +27,7 @@ const {
   getUsageSummary: vi.fn(),
   getCapacitySummary: vi.fn(),
   getLiveCapability: vi.fn(),
+  listAccounts: vi.fn(),
   showSuccess: vi.fn(),
   showError: vi.fn()
 }))
@@ -46,7 +48,7 @@ vi.mock('@/api/admin', () => ({
       updateSortOrder: vi.fn()
     },
     accounts: {
-      list: vi.fn(),
+      list: listAccounts,
       getById: vi.fn()
     }
   }
@@ -184,6 +186,7 @@ describe('GroupsView duplicate action', () => {
       getUsageSummary,
       getCapacitySummary,
       getLiveCapability,
+      listAccounts,
       showSuccess,
       showError
     ]) {
@@ -207,6 +210,7 @@ describe('GroupsView duplicate action', () => {
     getUsageSummary.mockResolvedValue([])
     getCapacitySummary.mockResolvedValue([])
     getLiveCapability.mockResolvedValue({ supported: false })
+    listAccounts.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 100, pages: 0 })
     createGroup.mockResolvedValue(sourceGroup)
   })
 
@@ -252,6 +256,50 @@ describe('GroupsView duplicate action', () => {
     expect(exclusive.attributes('aria-checked')).toBe('true')
     await exclusive.trigger('click')
     expect(exclusive.attributes('aria-checked')).toBe('false')
+    wrapper.unmount()
+  })
+
+  it('offers only credential-owning OpenAI OAuth reset sources and submits the selected account', async () => {
+    listAccounts.mockResolvedValue({
+      items: [
+        { id: 501, name: 'Eligible OAuth', platform: 'openai', type: 'oauth', parent_account_id: null },
+        { id: 502, name: 'OpenAI API key', platform: 'openai', type: 'apikey', parent_account_id: null },
+        { id: 503, name: 'OAuth shadow', platform: 'openai', type: 'oauth', parent_account_id: 501 },
+      ],
+      total: 3,
+      page: 1,
+      page_size: 100,
+      pages: 1,
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.findAll('button').find(button => button.text() === 'admin.groups.createGroup')!.trigger('click')
+    await flushPromises()
+
+    const vm = wrapper.vm as unknown as {
+      quotaResetSourceAccounts: Array<{ id: number }>
+      createForm: {
+        platform: string
+        subscription_type: string
+        quota_reset_source_account_id: number | null
+      }
+    }
+    expect(vm.quotaResetSourceAccounts.map(account => account.id)).toEqual([501])
+    vm.createForm.platform = 'openai'
+    vm.createForm.subscription_type = 'subscription'
+    vm.createForm.quota_reset_source_account_id = 501
+    await flushPromises()
+    await wrapper.get('#create-group-form input').setValue('Follow upstream reset')
+    await wrapper.get('#create-group-form').trigger('submit')
+    await flushPromises()
+
+    expect(listAccounts).toHaveBeenCalledWith(1, 100, { platform: 'openai', type: 'oauth' })
+    expect(createGroup).toHaveBeenCalledWith(expect.objectContaining({
+      platform: 'openai',
+      subscription_type: 'subscription',
+      quota_reset_source_account_id: 501,
+      quota_reset_include_monthly: false,
+    }))
     wrapper.unmount()
   })
 

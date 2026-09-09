@@ -291,6 +291,27 @@ func (_u *UserSubscriptionUpdate) AddFiveHourUsageUsd(v float64) *UserSubscripti
 	return _u
 }
 
+// SetQuotaFollowResetEventID sets the "quota_follow_reset_event_id" field.
+func (_u *UserSubscriptionUpdate) SetQuotaFollowResetEventID(v int64) *UserSubscriptionUpdate {
+	_u.mutation.ResetQuotaFollowResetEventID()
+	_u.mutation.SetQuotaFollowResetEventID(v)
+	return _u
+}
+
+// SetNillableQuotaFollowResetEventID sets the "quota_follow_reset_event_id" field if the given value is not nil.
+func (_u *UserSubscriptionUpdate) SetNillableQuotaFollowResetEventID(v *int64) *UserSubscriptionUpdate {
+	if v != nil {
+		_u.SetQuotaFollowResetEventID(*v)
+	}
+	return _u
+}
+
+// AddQuotaFollowResetEventID adds value to the "quota_follow_reset_event_id" field.
+func (_u *UserSubscriptionUpdate) AddQuotaFollowResetEventID(v int64) *UserSubscriptionUpdate {
+	_u.mutation.AddQuotaFollowResetEventID(v)
+	return _u
+}
+
 // SetAssignedBy sets the "assigned_by" field.
 func (_u *UserSubscriptionUpdate) SetAssignedBy(v int64) *UserSubscriptionUpdate {
 	_u.mutation.SetAssignedBy(v)
@@ -568,6 +589,12 @@ func (_u *UserSubscriptionUpdate) sqlSave(ctx context.Context) (_node int, err e
 	}
 	if value, ok := _u.mutation.AddedFiveHourUsageUsd(); ok {
 		_spec.AddField(usersubscription.FieldFiveHourUsageUsd, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.QuotaFollowResetEventID(); ok {
+		_spec.SetField(usersubscription.FieldQuotaFollowResetEventID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedQuotaFollowResetEventID(); ok {
+		_spec.AddField(usersubscription.FieldQuotaFollowResetEventID, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.AssignedAt(); ok {
 		_spec.SetField(usersubscription.FieldAssignedAt, field.TypeTime, value)
@@ -990,6 +1017,27 @@ func (_u *UserSubscriptionUpdateOne) AddFiveHourUsageUsd(v float64) *UserSubscri
 	return _u
 }
 
+// SetQuotaFollowResetEventID sets the "quota_follow_reset_event_id" field.
+func (_u *UserSubscriptionUpdateOne) SetQuotaFollowResetEventID(v int64) *UserSubscriptionUpdateOne {
+	_u.mutation.ResetQuotaFollowResetEventID()
+	_u.mutation.SetQuotaFollowResetEventID(v)
+	return _u
+}
+
+// SetNillableQuotaFollowResetEventID sets the "quota_follow_reset_event_id" field if the given value is not nil.
+func (_u *UserSubscriptionUpdateOne) SetNillableQuotaFollowResetEventID(v *int64) *UserSubscriptionUpdateOne {
+	if v != nil {
+		_u.SetQuotaFollowResetEventID(*v)
+	}
+	return _u
+}
+
+// AddQuotaFollowResetEventID adds value to the "quota_follow_reset_event_id" field.
+func (_u *UserSubscriptionUpdateOne) AddQuotaFollowResetEventID(v int64) *UserSubscriptionUpdateOne {
+	_u.mutation.AddQuotaFollowResetEventID(v)
+	return _u
+}
+
 // SetAssignedBy sets the "assigned_by" field.
 func (_u *UserSubscriptionUpdateOne) SetAssignedBy(v int64) *UserSubscriptionUpdateOne {
 	_u.mutation.SetAssignedBy(v)
@@ -1297,6 +1345,12 @@ func (_u *UserSubscriptionUpdateOne) sqlSave(ctx context.Context) (_node *UserSu
 	}
 	if value, ok := _u.mutation.AddedFiveHourUsageUsd(); ok {
 		_spec.AddField(usersubscription.FieldFiveHourUsageUsd, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.QuotaFollowResetEventID(); ok {
+		_spec.SetField(usersubscription.FieldQuotaFollowResetEventID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedQuotaFollowResetEventID(); ok {
+		_spec.AddField(usersubscription.FieldQuotaFollowResetEventID, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.AssignedAt(); ok {
 		_spec.SetField(usersubscription.FieldAssignedAt, field.TypeTime, value)

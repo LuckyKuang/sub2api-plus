@@ -135,6 +135,11 @@ func FiveHourUsageUsd(v float64) predicate.UserSubscription {
 	return predicate.UserSubscription(sql.FieldEQ(FieldFiveHourUsageUsd, v))
 }
 
+// QuotaFollowResetEventID applies equality check predicate on the "quota_follow_reset_event_id" field. It's identical to QuotaFollowResetEventIDEQ.
+func QuotaFollowResetEventID(v int64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldEQ(FieldQuotaFollowResetEventID, v))
+}
+
 // AssignedBy applies equality check predicate on the "assigned_by" field. It's identical to AssignedByEQ.
 func AssignedBy(v int64) predicate.UserSubscription {
 	return predicate.UserSubscription(sql.FieldEQ(FieldAssignedBy, v))
@@ -823,6 +828,46 @@ func FiveHourUsageUsdLT(v float64) predicate.UserSubscription {
 // FiveHourUsageUsdLTE applies the LTE predicate on the "five_hour_usage_usd" field.
 func FiveHourUsageUsdLTE(v float64) predicate.UserSubscription {
 	return predicate.UserSubscription(sql.FieldLTE(FieldFiveHourUsageUsd, v))
+}
+
+// QuotaFollowResetEventIDEQ applies the EQ predicate on the "quota_follow_reset_event_id" field.
+func QuotaFollowResetEventIDEQ(v int64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldEQ(FieldQuotaFollowResetEventID, v))
+}
+
+// QuotaFollowResetEventIDNEQ applies the NEQ predicate on the "quota_follow_reset_event_id" field.
+func QuotaFollowResetEventIDNEQ(v int64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldNEQ(FieldQuotaFollowResetEventID, v))
+}
+
+// QuotaFollowResetEventIDIn applies the In predicate on the "quota_follow_reset_event_id" field.
+func QuotaFollowResetEventIDIn(vs ...int64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldIn(FieldQuotaFollowResetEventID, vs...))
+}
+
+// QuotaFollowResetEventIDNotIn applies the NotIn predicate on the "quota_follow_reset_event_id" field.
+func QuotaFollowResetEventIDNotIn(vs ...int64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldNotIn(FieldQuotaFollowResetEventID, vs...))
+}
+
+// QuotaFollowResetEventIDGT applies the GT predicate on the "quota_follow_reset_event_id" field.
+func QuotaFollowResetEventIDGT(v int64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldGT(FieldQuotaFollowResetEventID, v))
+}
+
+// QuotaFollowResetEventIDGTE applies the GTE predicate on the "quota_follow_reset_event_id" field.
+func QuotaFollowResetEventIDGTE(v int64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldGTE(FieldQuotaFollowResetEventID, v))
+}
+
+// QuotaFollowResetEventIDLT applies the LT predicate on the "quota_follow_reset_event_id" field.
+func QuotaFollowResetEventIDLT(v int64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldLT(FieldQuotaFollowResetEventID, v))
+}
+
+// QuotaFollowResetEventIDLTE applies the LTE predicate on the "quota_follow_reset_event_id" field.
+func QuotaFollowResetEventIDLTE(v int64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldLTE(FieldQuotaFollowResetEventID, v))
 }
 
 // AssignedByEQ applies the EQ predicate on the "assigned_by" field.

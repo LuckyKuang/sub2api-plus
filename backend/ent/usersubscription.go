@@ -51,6 +51,8 @@ type UserSubscription struct {
 	MonthlyUsageUsd float64 `json:"monthly_usage_usd,omitempty"`
 	// FiveHourUsageUsd holds the value of the "five_hour_usage_usd" field.
 	FiveHourUsageUsd float64 `json:"five_hour_usage_usd,omitempty"`
+	// Latest OpenAI OAuth source reset event applied to this subscription
+	QuotaFollowResetEventID int64 `json:"quota_follow_reset_event_id,omitempty"`
 	// AssignedBy holds the value of the "assigned_by" field.
 	AssignedBy *int64 `json:"assigned_by,omitempty"`
 	// AssignedAt holds the value of the "assigned_at" field.
@@ -127,7 +129,7 @@ func (*UserSubscription) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case usersubscription.FieldDailyUsageUsd, usersubscription.FieldWeeklyUsageUsd, usersubscription.FieldMonthlyUsageUsd, usersubscription.FieldFiveHourUsageUsd:
 			values[i] = new(sql.NullFloat64)
-		case usersubscription.FieldID, usersubscription.FieldUserID, usersubscription.FieldGroupID, usersubscription.FieldAssignedBy:
+		case usersubscription.FieldID, usersubscription.FieldUserID, usersubscription.FieldGroupID, usersubscription.FieldQuotaFollowResetEventID, usersubscription.FieldAssignedBy:
 			values[i] = new(sql.NullInt64)
 		case usersubscription.FieldStatus, usersubscription.FieldNotes:
 			values[i] = new(sql.NullString)
@@ -254,6 +256,12 @@ func (_m *UserSubscription) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field five_hour_usage_usd", values[i])
 			} else if value.Valid {
 				_m.FiveHourUsageUsd = value.Float64
+			}
+		case usersubscription.FieldQuotaFollowResetEventID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field quota_follow_reset_event_id", values[i])
+			} else if value.Valid {
+				_m.QuotaFollowResetEventID = value.Int64
 			}
 		case usersubscription.FieldAssignedBy:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -388,6 +396,9 @@ func (_m *UserSubscription) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("five_hour_usage_usd=")
 	builder.WriteString(fmt.Sprintf("%v", _m.FiveHourUsageUsd))
+	builder.WriteString(", ")
+	builder.WriteString("quota_follow_reset_event_id=")
+	builder.WriteString(fmt.Sprintf("%v", _m.QuotaFollowResetEventID))
 	builder.WriteString(", ")
 	if v := _m.AssignedBy; v != nil {
 		builder.WriteString("assigned_by=")

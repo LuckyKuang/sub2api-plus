@@ -787,7 +787,7 @@ describe('admin UsageView Excel export latency fields', () => {
           created_at: '2026-08-01T00:00:00Z',
           model: 'gpt-text',
           input_tokens: 1,
-          output_tokens: 2,
+          output_tokens: 20,
           cache_read_tokens: 0,
           cache_creation_tokens: 0,
           input_cost: 0,
@@ -801,8 +801,12 @@ describe('admin UsageView Excel export latency fields', () => {
           upstream_model: 'gpt-text-upstream',
           upstream_response_model: 'gpt-text-response',
           upstream_model_mismatch: true,
+          timing_version: 1,
+          request_type: 'stream',
+          stream: true,
+          is_complete: true,
           first_token_ms: 120,
-          last_token_ms: 300,
+          last_token_ms: 1120,
           first_output_ms: 100,
           first_output_kind: 'text',
           duration_ms: 345,
@@ -870,10 +874,12 @@ describe('admin UsageView Excel export latency fields', () => {
     const headers = aoaToSheet.mock.calls[0][0][0] as string[]
     const rows = sheetAddAoa.mock.calls[0][1] as unknown[][]
     const requestedModelIndex = headers.indexOf('Requested model')
-    const firstTokenIndex = headers.indexOf('usage.firstTokenOrLegacyEvent')
+    const firstTokenIndex = headers.indexOf('usage.latencyFirstToken')
     const firstOutputIndex = headers.indexOf('usage.latencyFirstOutput')
     const firstOutputKindIndex = headers.indexOf('usage.latencyFirstOutputKind')
     const durationIndex = headers.indexOf('usage.duration')
+    const tpsIndex = headers.indexOf('usage.latencyTps')
+    const unavailableReasonIndex = headers.indexOf('usage.timingUnavailableReason')
     const sessionIDIndex = headers.indexOf('Session ID')
 
     expect(headers.slice(requestedModelIndex, requestedModelIndex + 4)).toEqual([
@@ -892,9 +898,11 @@ describe('admin UsageView Excel export latency fields', () => {
     expect(firstOutputIndex).toBe(firstTokenIndex + 1)
     expect(firstOutputKindIndex).toBe(firstOutputIndex + 1)
     expect(durationIndex).toBe(firstOutputKindIndex + 1)
+    expect(tpsIndex).toBe(durationIndex + 1)
+    expect(unavailableReasonIndex).toBe(tpsIndex + 1)
     expect(rows).toHaveLength(2)
-    expect(rows[0].slice(firstTokenIndex, durationIndex + 1)).toEqual([120, 100, 'text', 345])
-    expect(rows[1].slice(firstTokenIndex, durationIndex + 1)).toEqual(['', 220, 'image', 500])
+    expect(rows[0].slice(firstTokenIndex, unavailableReasonIndex + 1)).toEqual([120, 100, 'text', 345, 20, ''])
+    expect(rows[1].slice(firstTokenIndex, unavailableReasonIndex + 1)).toEqual(['', 220, 'image', 500, '', 'usage.timingUnavailableHistorical'])
     expect(sessionIDIndex).toBeGreaterThan(-1)
     expect(rows[0][sessionIDIndex]).toBe('=audit-session-001')
     expect(rows[1][sessionIDIndex]).toBe('')

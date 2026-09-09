@@ -85,6 +85,25 @@ func (f optionalLimitField) ToServiceInput() *float64 {
 	return &unlimited
 }
 
+type optionalInt64Field struct {
+	set   bool
+	value *int64
+}
+
+func (f *optionalInt64Field) UnmarshalJSON(data []byte) error {
+	f.set = true
+	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
+		f.value = nil
+		return nil
+	}
+	var value int64
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	f.value = &value
+	return nil
+}
+
 // NewGroupHandler creates a new admin group handler
 func NewGroupHandler(adminService service.AdminService, dashboardService *service.DashboardService, groupCapacityService *service.GroupCapacityService) *GroupHandler {
 	return &GroupHandler{
@@ -106,6 +125,8 @@ type CreateGroupRequest struct {
 	WeeklyLimitUSD            optionalLimitField            `json:"weekly_limit_usd"`
 	MonthlyLimitUSD           optionalLimitField            `json:"monthly_limit_usd"`
 	FiveHourLimitUSD          optionalLimitField            `json:"five_hour_limit_usd"`
+	QuotaResetSourceAccountID optionalInt64Field            `json:"quota_reset_source_account_id"`
+	QuotaResetIncludeMonthly  bool                          `json:"quota_reset_include_monthly"`
 	LongContextPricingEnabled *bool                         `json:"long_context_pricing_enabled"`
 	ModelPricing              []service.ChannelModelPricing `json:"model_pricing"`
 	// 图片生成计费配置（antigravity 和 gemini 平台使用，负数表示清除配置）
@@ -182,6 +203,8 @@ type UpdateGroupRequest struct {
 	WeeklyLimitUSD            optionalLimitField             `json:"weekly_limit_usd"`
 	MonthlyLimitUSD           optionalLimitField             `json:"monthly_limit_usd"`
 	FiveHourLimitUSD          optionalLimitField             `json:"five_hour_limit_usd"`
+	QuotaResetSourceAccountID optionalInt64Field             `json:"quota_reset_source_account_id"`
+	QuotaResetIncludeMonthly  *bool                          `json:"quota_reset_include_monthly"`
 	LongContextPricingEnabled *bool                          `json:"long_context_pricing_enabled"`
 	ModelPricing              *[]service.ChannelModelPricing `json:"model_pricing"`
 	// 图片生成计费配置（antigravity 和 gemini 平台使用，负数表示清除配置）
@@ -527,6 +550,8 @@ func (h *GroupHandler) Create(c *gin.Context) {
 		WeeklyLimitUSD:                  req.WeeklyLimitUSD.ToServiceInput(),
 		MonthlyLimitUSD:                 req.MonthlyLimitUSD.ToServiceInput(),
 		FiveHourLimitUSD:                req.FiveHourLimitUSD.ToServiceInput(),
+		QuotaResetSourceAccountID:       req.QuotaResetSourceAccountID.value,
+		QuotaResetIncludeMonthly:        req.QuotaResetIncludeMonthly,
 		LongContextPricingEnabled:       req.LongContextPricingEnabled,
 		ModelPricing:                    req.ModelPricing,
 		AllowImageGeneration:            req.AllowImageGeneration,
@@ -661,6 +686,9 @@ func (h *GroupHandler) Update(c *gin.Context) {
 		WeeklyLimitUSD:                  req.WeeklyLimitUSD.ToServiceInput(),
 		MonthlyLimitUSD:                 req.MonthlyLimitUSD.ToServiceInput(),
 		FiveHourLimitUSD:                req.FiveHourLimitUSD.ToServiceInput(),
+		QuotaResetSourceAccountID:       req.QuotaResetSourceAccountID.value,
+		QuotaResetSourceAccountIDSet:    req.QuotaResetSourceAccountID.set,
+		QuotaResetIncludeMonthly:        req.QuotaResetIncludeMonthly,
 		LongContextPricingEnabled:       req.LongContextPricingEnabled,
 		ModelPricing:                    req.ModelPricing,
 		AllowImageGeneration:            req.AllowImageGeneration,

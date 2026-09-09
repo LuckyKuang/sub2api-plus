@@ -136,12 +136,32 @@ var codexCLIOnlyDebugHeaderWhitelist = []string{
 type OpenAICodexUsageSnapshot struct {
 	PrimaryUsedPercent          *float64 `json:"primary_used_percent,omitempty"`
 	PrimaryResetAfterSeconds    *int     `json:"primary_reset_after_seconds,omitempty"`
+	PrimaryResetAtUnix          *int64   `json:"primary_reset_at_unix,omitempty"`
 	PrimaryWindowMinutes        *int     `json:"primary_window_minutes,omitempty"`
 	SecondaryUsedPercent        *float64 `json:"secondary_used_percent,omitempty"`
 	SecondaryResetAfterSeconds  *int     `json:"secondary_reset_after_seconds,omitempty"`
+	SecondaryResetAtUnix        *int64   `json:"secondary_reset_at_unix,omitempty"`
 	SecondaryWindowMinutes      *int     `json:"secondary_window_minutes,omitempty"`
 	PrimaryOverSecondaryPercent *float64 `json:"primary_over_secondary_percent,omitempty"`
 	UpdatedAt                   string   `json:"updated_at,omitempty"`
+}
+
+func (s *OpenAICodexUsageSnapshot) WeeklyResetAt() (time.Time, bool) {
+	if s == nil {
+		return time.Time{}, false
+	}
+	if s.PrimaryWindowMinutes != nil && *s.PrimaryWindowMinutes > 360 && s.PrimaryResetAtUnix != nil && validOpenAIQuotaResetUnix(*s.PrimaryResetAtUnix) {
+		return time.Unix(*s.PrimaryResetAtUnix, 0).UTC(), true
+	}
+	if s.SecondaryWindowMinutes != nil && *s.SecondaryWindowMinutes > 360 && s.SecondaryResetAtUnix != nil && validOpenAIQuotaResetUnix(*s.SecondaryResetAtUnix) {
+		return time.Unix(*s.SecondaryResetAtUnix, 0).UTC(), true
+	}
+	return time.Time{}, false
+}
+
+func validOpenAIQuotaResetUnix(value int64) bool {
+	// Keep raw upstream timestamps within the JSON/RFC3339 calendar range.
+	return value > 0 && value <= 253402300799
 }
 
 // NormalizedCodexLimits contains normalized 5h/7d rate limit data

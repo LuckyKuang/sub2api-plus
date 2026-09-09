@@ -262,6 +262,21 @@
                     }}</span
                   >
                 </div>
+                <div
+                  v-if="row.platform === 'openai' && row.quota_reset_source_account_id"
+                  :class="[
+                    'flex items-center gap-1',
+                    row.quota_reset_source_status === 'invalid'
+                      ? 'text-red-600 dark:text-red-400'
+                      : 'text-gray-500 dark:text-gray-400',
+                  ]"
+                >
+                  <Icon
+                    :name="row.quota_reset_source_status === 'invalid' ? 'exclamationTriangle' : 'refresh'"
+                    size="xs"
+                  />
+                  <span>{{ quotaResetStatusLabel(row) }}</span>
+                </div>
               </div>
             </div>
           </template>
@@ -775,6 +790,43 @@
                 class="input"
                 :placeholder="t('admin.groups.subscription.noLimit')"
               />
+            </div>
+            <div
+              v-if="createForm.platform === 'openai'"
+              class="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-dark-600 dark:bg-dark-800"
+            >
+              <div>
+                <label class="input-label">{{
+                  t("admin.groups.subscription.quotaFollowReset.source")
+                }}</label>
+                <Select
+                  v-model="createForm.quota_reset_source_account_id"
+                  data-testid="create-quota-reset-source"
+                  :options="createQuotaResetSourceOptions"
+                  :loading="quotaResetSourcesLoading"
+                  searchable
+                  :search-placeholder="t('admin.groups.subscription.quotaFollowReset.searchSource')"
+                  :empty-text="t('admin.groups.subscription.quotaFollowReset.noSources')"
+                />
+                <p class="input-hint">
+                  {{ t("admin.groups.subscription.quotaFollowReset.hint") }}
+                </p>
+              </div>
+              <label class="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+                <input
+                  v-model="createForm.quota_reset_include_monthly"
+                  data-testid="create-quota-reset-monthly"
+                  type="checkbox"
+                  class="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-dark-500 dark:bg-dark-700"
+                  :disabled="!canIncludeMonthlyReset(createForm)"
+                />
+                <span>
+                  {{ t("admin.groups.subscription.quotaFollowReset.includeMonthly") }}
+                  <span class="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">
+                    {{ t("admin.groups.subscription.quotaFollowReset.includeMonthlyHint") }}
+                  </span>
+                </span>
+              </label>
             </div>
           </div>
         </div>
@@ -2414,6 +2466,70 @@
                 class="input"
                 :placeholder="t('admin.groups.subscription.noLimit')"
               />
+            </div>
+            <div
+              v-if="editForm.platform === 'openai'"
+              class="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-dark-600 dark:bg-dark-800"
+            >
+              <div>
+                <label class="input-label">{{
+                  t("admin.groups.subscription.quotaFollowReset.source")
+                }}</label>
+                <Select
+                  v-model="editForm.quota_reset_source_account_id"
+                  data-testid="edit-quota-reset-source"
+                  :options="editQuotaResetSourceOptions"
+                  :loading="quotaResetSourcesLoading"
+                  searchable
+                  :search-placeholder="t('admin.groups.subscription.quotaFollowReset.searchSource')"
+                  :empty-text="t('admin.groups.subscription.quotaFollowReset.noSources')"
+                />
+                <p class="input-hint">
+                  {{ t("admin.groups.subscription.quotaFollowReset.hint") }}
+                </p>
+                <p
+                  v-if="editingGroup?.quota_reset_source_status === 'invalid' && editForm.quota_reset_source_account_id === editingGroup.quota_reset_source_account_id"
+                  class="mt-2 text-xs text-red-600 dark:text-red-400"
+                >
+                  {{
+                    t("admin.groups.subscription.quotaFollowReset.invalidSource", {
+                      name: editingGroup.quota_reset_source_account_name || `#${editingGroup.quota_reset_source_account_id}`,
+                      id: editingGroup.quota_reset_source_account_id,
+                    })
+                  }}
+                </p>
+                <p
+                  v-else-if="editForm.quota_reset_source_account_id === editingGroup?.quota_reset_source_account_id && editingGroup?.quota_reset_source_status === 'waiting'"
+                  class="mt-2 text-xs text-amber-600 dark:text-amber-400"
+                >
+                  {{ t("admin.groups.subscription.quotaFollowReset.waitingBaseline") }}
+                </p>
+                <p
+                  v-else-if="editForm.quota_reset_source_account_id === editingGroup?.quota_reset_source_account_id && editingGroup?.quota_reset_source_reset_at"
+                  class="mt-2 text-xs text-gray-500 dark:text-gray-400"
+                >
+                  {{
+                    t("admin.groups.subscription.quotaFollowReset.currentBaseline", {
+                      time: formatQuotaResetTime(editingGroup.quota_reset_source_reset_at),
+                    })
+                  }}
+                </p>
+              </div>
+              <label class="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+                <input
+                  v-model="editForm.quota_reset_include_monthly"
+                  data-testid="edit-quota-reset-monthly"
+                  type="checkbox"
+                  class="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-dark-500 dark:bg-dark-700"
+                  :disabled="!canIncludeMonthlyReset(editForm)"
+                />
+                <span>
+                  {{ t("admin.groups.subscription.quotaFollowReset.includeMonthly") }}
+                  <span class="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">
+                    {{ t("admin.groups.subscription.quotaFollowReset.includeMonthlyHint") }}
+                  </span>
+                </span>
+              </label>
             </div>
           </div>
         </div>
@@ -4262,6 +4378,7 @@ import { useAppStore } from "@/stores/app";
 import { useOnboardingStore } from "@/stores/onboarding";
 import { adminAPI } from "@/api/admin";
 import type {
+  Account,
   AdminGroup,
   CodexModelsManifestConfig,
   CompositeModelRoute,
@@ -4770,6 +4887,9 @@ const copyAccountsGroupOptionsForEdit = computed(() => {
 
 const groups = ref<AdminGroup[]>([]);
 const loading = ref(false);
+const quotaResetSourceAccounts = ref<Account[]>([]);
+const quotaResetSourcesLoading = ref(false);
+let quotaResetSourcesRequest: Promise<void> | null = null;
 type GroupUsageSummary = {
   today_cost: number;
   yesterday_cost: number;
@@ -4912,6 +5032,8 @@ const createForm = reactive({
   weekly_limit_usd: null as number | null,
   monthly_limit_usd: null as number | null,
   five_hour_limit_usd: null as number | null,
+  quota_reset_source_account_id: null as number | null,
+  quota_reset_include_monthly: false,
   long_context_pricing_enabled: true,
   force_openai_fast: false,
   free_openai_fast: false,
@@ -5277,6 +5399,8 @@ const editForm = reactive({
   weekly_limit_usd: null as number | null,
   monthly_limit_usd: null as number | null,
   five_hour_limit_usd: null as number | null,
+  quota_reset_source_account_id: null as number | null,
+  quota_reset_include_monthly: false,
   long_context_pricing_enabled: true,
   force_openai_fast: false,
   free_openai_fast: false,
@@ -5342,6 +5466,103 @@ const editForm = reactive({
   max_reasoning_effort_over_limit: reasoningEffortOverLimitDowngrade,
   reasoning_effort_mappings: [] as ReasoningEffortMappingRow[],
 });
+
+const quotaResetSourceOptions = computed(() => [
+  {
+    value: null,
+    label: t("admin.groups.subscription.quotaFollowReset.disabled"),
+  },
+  ...quotaResetSourceAccounts.value.map((account) => ({
+    value: account.id,
+    label: `${account.name} (#${account.id})`,
+  })),
+]);
+
+const createQuotaResetSourceOptions = computed(
+  () => quotaResetSourceOptions.value,
+);
+
+const editQuotaResetSourceOptions = computed(() => {
+  const options = [...quotaResetSourceOptions.value];
+  const sourceID = editingGroup.value?.quota_reset_source_account_id;
+  if (
+    sourceID &&
+    !quotaResetSourceAccounts.value.some((account) => account.id === sourceID)
+  ) {
+    options.push({
+      value: sourceID,
+      label: t("admin.groups.subscription.quotaFollowReset.invalidSourceOption", {
+        name:
+          editingGroup.value?.quota_reset_source_account_name || `#${sourceID}`,
+        id: sourceID,
+      }),
+    });
+  }
+  return options;
+});
+
+const loadQuotaResetSourceAccounts = async () => {
+  if (quotaResetSourcesRequest) {
+    return quotaResetSourcesRequest;
+  }
+  quotaResetSourcesRequest = (async () => {
+    quotaResetSourcesLoading.value = true;
+    try {
+      const accounts: Account[] = [];
+      const pageSize = 100;
+      let page = 1;
+      let total = 0;
+      do {
+        const response = await adminAPI.accounts.list(page, pageSize, {
+          platform: "openai",
+          type: "oauth",
+        });
+        accounts.push(
+          ...response.items.filter(
+            (account) =>
+              account.platform === "openai" &&
+              account.type === "oauth" &&
+              !account.parent_account_id,
+          ),
+        );
+        total = response.total;
+        page += 1;
+        if (response.items.length === 0) break;
+      } while ((page - 1) * pageSize < total);
+      quotaResetSourceAccounts.value = accounts;
+    } catch (error) {
+      quotaResetSourceAccounts.value = [];
+      console.error("Error loading OpenAI OAuth quota reset sources:", error);
+    } finally {
+      quotaResetSourcesLoading.value = false;
+      quotaResetSourcesRequest = null;
+    }
+  })();
+  return quotaResetSourcesRequest;
+};
+
+const canIncludeMonthlyReset = (form: {
+  quota_reset_source_account_id: number | null;
+  monthly_limit_usd: number | string | null;
+}) =>
+  !!form.quota_reset_source_account_id &&
+  normalizeOptionalLimit(form.monthly_limit_usd) !== null;
+
+const formatQuotaResetTime = (value: string) =>
+  new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "medium",
+  }).format(new Date(value));
+
+const quotaResetStatusLabel = (group: AdminGroup) => {
+  const source =
+    group.quota_reset_source_account_name ||
+    `#${group.quota_reset_source_account_id}`;
+  return t(
+    `admin.groups.subscription.quotaFollowReset.status.${group.quota_reset_source_status || "waiting"}`,
+    { source },
+  );
+};
 
 type ImagePricingFormState = {
   platform: GroupPlatform;
@@ -5722,6 +5943,7 @@ const handleSort = (key: string, order: 'asc' | 'desc') => {
 
 const openCreateModal = () => {
   showCreateModal.value = true;
+  void loadQuotaResetSourceAccounts();
   loadModelsListCandidates("create", 0, createForm.platform);
 };
 
@@ -5741,6 +5963,8 @@ const closeCreateModal = () => {
   createForm.weekly_limit_usd = null;
   createForm.monthly_limit_usd = null;
   createForm.five_hour_limit_usd = null;
+  createForm.quota_reset_source_account_id = null;
+  createForm.quota_reset_include_monthly = false;
   createForm.allow_image_generation = false;
   createForm.allow_batch_image_generation = false;
   createForm.image_rate_independent = false;
@@ -5884,6 +6108,16 @@ const handleCreateGroup = async () => {
       five_hour_limit_usd: normalizeOptionalLimit(
         createForm.five_hour_limit_usd as number | string | null,
       ),
+      quota_reset_source_account_id:
+        createForm.platform === "openai" &&
+        createForm.subscription_type === "subscription"
+          ? createForm.quota_reset_source_account_id
+          : null,
+      quota_reset_include_monthly:
+        createForm.platform === "openai" &&
+        createForm.subscription_type === "subscription" &&
+        canIncludeMonthlyReset(createForm) &&
+        createForm.quota_reset_include_monthly,
       ...(Object.keys(videoModelPrices).length > 0
         ? { video_model_prices: videoModelPrices }
         : {}),
@@ -6001,6 +6235,10 @@ const handleEdit = async (group: AdminGroup) => {
   editForm.weekly_limit_usd = group.weekly_limit_usd;
   editForm.monthly_limit_usd = group.monthly_limit_usd;
   editForm.five_hour_limit_usd = group.five_hour_limit_usd;
+  editForm.quota_reset_source_account_id =
+    group.quota_reset_source_account_id ?? null;
+  editForm.quota_reset_include_monthly =
+    group.quota_reset_include_monthly ?? false;
   editForm.long_context_pricing_enabled =
     group.long_context_pricing_enabled ?? true;
   editForm.force_openai_fast = group.force_openai_fast ?? false;
@@ -6107,6 +6345,7 @@ const handleEdit = async (group: AdminGroup) => {
     group.model_routing,
   );
   loadModelsListCandidates("edit", group.id, group.platform);
+  void loadQuotaResetSourceAccounts();
   showEditModal.value = true;
 };
 
@@ -6136,6 +6375,8 @@ const closeEditModal = () => {
   editForm.video_price_720p = null;
   editForm.video_price_1080p = null;
   editForm.video_model_prices = createVideoModelPricesForm();
+  editForm.quota_reset_source_account_id = null;
+  editForm.quota_reset_include_monthly = false;
   editForm.long_context_pricing_enabled = true;
   editForm.force_openai_fast = false;
   editForm.free_openai_fast = false;
@@ -6209,6 +6450,16 @@ const handleUpdateGroup = async () => {
       five_hour_limit_usd: normalizeOptionalLimit(
         editForm.five_hour_limit_usd as number | string | null,
       ),
+      quota_reset_source_account_id:
+        editForm.platform === "openai" &&
+        editForm.subscription_type === "subscription"
+          ? editForm.quota_reset_source_account_id
+          : null,
+      quota_reset_include_monthly:
+        editForm.platform === "openai" &&
+        editForm.subscription_type === "subscription" &&
+        canIncludeMonthlyReset(editForm) &&
+        editForm.quota_reset_include_monthly,
       video_model_prices: serializeVideoModelPrices(
         editForm.video_model_prices,
       ),
@@ -6609,6 +6860,46 @@ watch(
       editForm.peak_start = "";
       editForm.peak_end = "";
       editForm.peak_rate_multiplier = 1.0;
+    }
+  },
+);
+
+watch(
+  () => [
+    createForm.platform,
+    createForm.subscription_type,
+    createForm.quota_reset_source_account_id,
+    createForm.monthly_limit_usd,
+  ],
+  () => {
+    if (
+      createForm.platform !== "openai" ||
+      createForm.subscription_type !== "subscription"
+    ) {
+      createForm.quota_reset_source_account_id = null;
+    }
+    if (!canIncludeMonthlyReset(createForm)) {
+      createForm.quota_reset_include_monthly = false;
+    }
+  },
+);
+
+watch(
+  () => [
+    editForm.platform,
+    editForm.subscription_type,
+    editForm.quota_reset_source_account_id,
+    editForm.monthly_limit_usd,
+  ],
+  () => {
+    if (
+      editForm.platform !== "openai" ||
+      editForm.subscription_type !== "subscription"
+    ) {
+      editForm.quota_reset_source_account_id = null;
+    }
+    if (!canIncludeMonthlyReset(editForm)) {
+      editForm.quota_reset_include_monthly = false;
     }
   },
 );
