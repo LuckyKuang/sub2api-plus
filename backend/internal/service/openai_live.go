@@ -927,6 +927,7 @@ func (s *OpenAIGatewayService) finalizeLiveCall(record *LiveCallRecord) {
 		RateMultiplier:   1,
 		BillingType:      billingType,
 		RequestType:      RequestTypeLive,
+		TimingVersion:    1, // Session summary has no observed token-generation window.
 		DurationMs:       &duration,
 		UserAgent:        &userAgent,
 		IPAddress:        &ipAddress,

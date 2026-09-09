@@ -47,6 +47,8 @@ const (
 	FieldMonthlyUsageUsd = "monthly_usage_usd"
 	// FieldFiveHourUsageUsd holds the string denoting the five_hour_usage_usd field in the database.
 	FieldFiveHourUsageUsd = "five_hour_usage_usd"
+	// FieldQuotaFollowResetEventID holds the string denoting the quota_follow_reset_event_id field in the database.
+	FieldQuotaFollowResetEventID = "quota_follow_reset_event_id"
 	// FieldAssignedBy holds the string denoting the assigned_by field in the database.
 	FieldAssignedBy = "assigned_by"
 	// FieldAssignedAt holds the string denoting the assigned_at field in the database.
@@ -112,6 +114,7 @@ var Columns = []string{
 	FieldWeeklyUsageUsd,
 	FieldMonthlyUsageUsd,
 	FieldFiveHourUsageUsd,
+	FieldQuotaFollowResetEventID,
 	FieldAssignedBy,
 	FieldAssignedAt,
 	FieldNotes,
@@ -153,6 +156,8 @@ var (
 	DefaultMonthlyUsageUsd float64
 	// DefaultFiveHourUsageUsd holds the default value on creation for the "five_hour_usage_usd" field.
 	DefaultFiveHourUsageUsd float64
+	// DefaultQuotaFollowResetEventID holds the default value on creation for the "quota_follow_reset_event_id" field.
+	DefaultQuotaFollowResetEventID int64
 	// DefaultAssignedAt holds the default value on creation for the "assigned_at" field.
 	DefaultAssignedAt func() time.Time
 )
@@ -243,6 +248,11 @@ func ByMonthlyUsageUsd(opts ...sql.OrderTermOption) OrderOption {
 // ByFiveHourUsageUsd orders the results by the five_hour_usage_usd field.
 func ByFiveHourUsageUsd(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldFiveHourUsageUsd, opts...).ToFunc()
+}
+
+// ByQuotaFollowResetEventID orders the results by the quota_follow_reset_event_id field.
+func ByQuotaFollowResetEventID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldQuotaFollowResetEventID, opts...).ToFunc()
 }
 
 // ByAssignedBy orders the results by the assigned_by field.

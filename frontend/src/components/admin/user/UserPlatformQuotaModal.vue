@@ -16,7 +16,7 @@
         {{ t('admin.users.platformQuota.subtitle', { email: user.email }) }}
       </p>
       <div v-if="loading" class="py-10 text-center text-gray-500">{{ t('common.loading') }}</div>
-      <div v-else class="overflow-x-auto">
+      <div v-else class="table-container overflow-x-auto">
         <table class="min-w-full text-sm">
           <thead>
             <tr class="border-b border-gray-200 text-gray-700 dark:border-dark-700 dark:text-gray-300">

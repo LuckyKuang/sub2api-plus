@@ -167,6 +167,11 @@ type Group struct {
 // 注意：普通用户接口不得返回 model_routing/account_count/account_groups 等内部信息。
 type AdminGroup struct {
 	Group
+	QuotaResetSourceAccountID   *int64     `json:"quota_reset_source_account_id"`
+	QuotaResetSourceAccountName string     `json:"quota_reset_source_account_name"`
+	QuotaResetSourceResetAt     *time.Time `json:"quota_reset_source_reset_at"`
+	QuotaResetIncludeMonthly    bool       `json:"quota_reset_include_monthly"`
+	QuotaResetSourceStatus      string     `json:"quota_reset_source_status"`
 	// ForceOpenAIFast 是管理端请求策略，用户侧分组 DTO 无需暴露。
 	ForceOpenAIFast bool `json:"force_openai_fast"`
 	// FreeOpenAIFast 是管理端计费策略，用户侧分组 DTO 无需暴露。
@@ -634,6 +639,7 @@ type UsageLog struct {
 	DurationMs         *int    `json:"duration_ms"`
 	FirstTokenMs       *int    `json:"first_token_ms"`
 	LastTokenMs        *int    `json:"last_token_ms"`
+	TimingVersion      int     `json:"timing_version"`
 	FirstOutputMs      *int    `json:"first_output_ms"`
 	FirstOutputKind    *string `json:"first_output_kind"`
 	IsComplete         *bool   `json:"is_complete"`

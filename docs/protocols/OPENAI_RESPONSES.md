@@ -4,6 +4,11 @@ Sub2API Plus accepts OpenAI-compatible Responses requests over HTTP and
 client-facing WebSocket ingress. Account routing can use an upstream WebSocket
 or bridge the client WebSocket to an HTTP/SSE upstream.
 
+Usage timing follows the shared [first-token/total-duration/TPS contract](../USAGE_TIMING.md),
+including HTTP passthrough, individual WS turns, and remote compaction. Aggregate
+compact output does not create a token clock. The obsolete `openai_ttft_mode`
+admin setting has been removed; `timing_version` identifies verified usage data.
+
 ## GPT-6 Astra
 
 The gateway uses OpenAI's canonical `gpt-6-astra` model ID. For Plus client
@@ -147,6 +152,36 @@ finalized before their response bodies are written.
 The dedicated `/backend-api/wham/usage` route remains a local-only view. It
 returns the API key subscription quota when the local setting is enabled and
 returns 404 otherwise; it does not select an account or proxy upstream quota.
+
+Administrators may optionally bind an OpenAI subscription group to one
+credential-owning OpenAI OAuth account as its quota-reset source. This binding
+does not change the group's routing pool. The gateway never polls an upstream
+quota endpoint for this feature. It passively observes the source account's raw
+default weekly-window `Reset-At` value on successful Responses traffic and the
+equivalent default `codex.rate_limits` WebSocket event before applying any
+client-facing local quota rewrite.
+
+Saving a new or changed binding locks its source and establishes a baseline
+from the latest locally observed value in the same transaction. If no value
+exists yet, the first observation establishes the baseline without resetting
+subscriptions. Ordinary group edits preserve the current baseline; stale
+source-configuration saves are rejected for reload. A strictly later value creates one durable,
+idempotent reset event for every group bound to that source. Each event resets
+the active subscriptions' 5-hour, daily, and weekly usage; monthly usage is
+reset only when the group explicitly enables it and has a monthly limit. Event
+application and usage billing lock the group and subscription records in the
+same order, so a concurrent charge is deterministically ordered before or after
+the reset. Deleting the source account leaves its recorded name and ID on the
+group for diagnosis, but disables further automatic resets until another
+eligible source is selected.
+
+Multiple workers process each group's pending events in order, preserving
+earlier monthly-reset decisions. Billing consumes eligible pending events
+before adding the request's cost, including inside a caller-owned transaction;
+subsequent worker passes cannot erase that cost. Pending events with deleted,
+ineligible, disabled, or replaced sources are ignored by both paths. Persistence
+of an already received upstream observation uses a bounded five-second context
+independent of downstream cancellation and makes no additional upstream call.
 
 This response-header compatibility does not make Codex App API-key calls to
 `account/rateLimits/read` available; that App Server authentication behavior is

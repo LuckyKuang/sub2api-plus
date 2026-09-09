@@ -47,7 +47,7 @@ func TestOpsTTFTAggregationUsesStrictTokenSamplesAcrossMixedModalities(t *testin
 	})
 
 	usageRepo := newUsageLogRepositoryWithSQL(client, integrationDB)
-	createUsage := func(suffix string, firstTokenMs, firstOutputMs *int, firstOutputKind *string) {
+	createUsage := func(suffix string, timingVersion int, firstTokenMs, firstOutputMs *int, firstOutputKind *string) {
 		t.Helper()
 		_, err := usageRepo.Create(ctx, &service.UsageLog{
 			UserID:          user.ID,
@@ -59,6 +59,7 @@ func TestOpsTTFTAggregationUsesStrictTokenSamplesAcrossMixedModalities(t *testin
 			InputTokens:     1,
 			OutputTokens:    1,
 			Stream:          true,
+			TimingVersion:   timingVersion,
 			FirstTokenMs:    firstTokenMs,
 			FirstOutputMs:   firstOutputMs,
 			FirstOutputKind: firstOutputKind,
@@ -73,10 +74,11 @@ func TestOpsTTFTAggregationUsesStrictTokenSamplesAcrossMixedModalities(t *testin
 	textFirstToken := 20
 	imageKind := "image"
 	textKind := "text"
-	createUsage("-legacy", &legacyFirstToken, nil, nil)
-	createUsage("-image", nil, &imageFirstOutput, &imageKind)
-	createUsage("-mixed", &mixedFirstToken, &imageFirstOutput, &imageKind)
-	createUsage("-text", &textFirstToken, &textFirstToken, &textKind)
+	createUsage("-legacy", 0, &legacyFirstToken, nil, nil)
+	createUsage("-legacy-with-kind", 0, &legacyFirstToken, &legacyFirstToken, &textKind)
+	createUsage("-image", 1, nil, &imageFirstOutput, &imageKind)
+	createUsage("-mixed", 1, &mixedFirstToken, &imageFirstOutput, &imageKind)
+	createUsage("-text", 1, &textFirstToken, &textFirstToken, &textKind)
 
 	opsRepo := NewOpsRepository(integrationDB).(*opsRepository)
 	filter := &service.OpsDashboardFilter{

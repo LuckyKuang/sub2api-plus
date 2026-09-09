@@ -93,7 +93,7 @@ server:
 # 填写浏览器访问使用的完整 Origin。
 webauthn:
   enabled: false
-  rp_display_name: "Sub2API"
+  rp_display_name: "Sub2API Plus"
   # Example / 示例: "sub2api.example.com"
   rp_id: ""
   # Example / 示例: ["https://sub2api.example.com"]

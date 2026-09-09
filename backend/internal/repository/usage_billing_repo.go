@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"strings"
+	"time"
 
 	dbent "github.com/LuckyKuang/sub2api-plus/ent"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/logger"
@@ -241,7 +242,10 @@ func (r *usageBillingRepository) applyUsageBillingEffects(ctx context.Context, t
 	return nil
 }
 
-func incrementUsageBillingSubscription(ctx context.Context, tx *sql.Tx, subscriptionID int64, costUSD float64) error {
+func incrementUsageBillingSubscription(ctx context.Context, tx sqlExecutor, subscriptionID int64, costUSD float64) error {
+	if err := applyPendingQuotaFollowResetForSubscription(ctx, tx, subscriptionID); err != nil {
+		return err
+	}
 	const updateSQL = `
 		UPDATE user_subscriptions us
 		SET
@@ -282,6 +286,119 @@ func incrementUsageBillingSubscription(ctx context.Context, tx *sql.Tx, subscrip
 		return nil
 	}
 	return service.ErrSubscriptionNotFound
+}
+
+// applyPendingQuotaFollowResetForSubscription locks the subscription row and
+// applies every newer event as one reset before the caller increments usage.
+// The event marker makes the worker's later bulk pass a no-op for this row.
+func applyPendingQuotaFollowResetForSubscription(ctx context.Context, tx sqlExecutor, subscriptionID int64) error {
+	var groupID int64
+	err := scanSingleRow(ctx, tx, `
+		SELECT group_id
+		FROM user_subscriptions
+		WHERE id = $1 AND deleted_at IS NULL
+	`, []any{subscriptionID}, &groupID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return service.ErrSubscriptionNotFound
+	}
+	if err != nil {
+		return err
+	}
+
+	// Observation and worker transactions lock the group before subscriptions.
+	// Taking the same lock order establishes whether this charge is before or
+	// after a newly observed reset event, and prevents post-reset usage from
+	// being erased by a concurrently committed event.
+	var groupExists bool
+	err = scanSingleRow(ctx, tx, `
+		SELECT TRUE
+		FROM groups
+		WHERE id = $1 AND deleted_at IS NULL
+		FOR SHARE
+	`, []any{groupID}, &groupExists)
+	if errors.Is(err, sql.ErrNoRows) {
+		return service.ErrSubscriptionNotFound
+	}
+	if err != nil {
+		return err
+	}
+
+	var lockedGroupID, appliedEventID int64
+	var startsAt, expiresAt time.Time
+	var status string
+	err = scanSingleRow(ctx, tx, `
+		SELECT group_id, quota_follow_reset_event_id, starts_at, expires_at, status
+		FROM user_subscriptions
+		WHERE id = $1 AND deleted_at IS NULL
+		FOR UPDATE
+	`, []any{subscriptionID}, &lockedGroupID, &appliedEventID, &startsAt, &expiresAt, &status)
+	if errors.Is(err, sql.ErrNoRows) {
+		return service.ErrSubscriptionNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if lockedGroupID != groupID {
+		return errors.New("subscription group changed while applying quota reset")
+	}
+	if status != service.SubscriptionStatusActive {
+		return nil
+	}
+
+	var newestEventID sql.NullInt64
+	var effectiveAt sql.NullTime
+	var resetMonthly sql.NullBool
+	var monthlyEffectiveAt sql.NullTime
+	err = scanSingleRow(ctx, tx, `
+		WITH eligible AS (
+			SELECT e.id, e.effective_at,
+			       e.include_monthly AND g.monthly_limit_usd IS NOT NULL AND g.monthly_limit_usd > 0 AS reset_monthly
+			FROM group_quota_follow_reset_events e
+			JOIN groups g ON g.id = e.group_id
+			JOIN accounts a ON a.id = e.source_account_id
+			  AND a.deleted_at IS NULL AND a.platform = $3
+			  AND a.type = $7 AND a.parent_account_id IS NULL
+			WHERE e.group_id = $1
+			  AND e.id > $2
+			  AND e.status IN ('pending', 'completed')
+			  AND e.source_account_id = g.quota_reset_source_account_id
+			  AND e.config_version = g.quota_reset_config_version
+			  AND g.platform = $3
+			  AND g.subscription_type = $4
+			  AND g.deleted_at IS NULL
+			  AND e.effective_at >= $5
+			  AND e.effective_at < $6
+		)
+		SELECT id, effective_at, (SELECT BOOL_OR(reset_monthly) FROM eligible),
+		       (SELECT MAX(effective_at) FROM eligible WHERE reset_monthly)
+		FROM eligible
+		ORDER BY id DESC
+		LIMIT 1
+	`, []any{groupID, appliedEventID, service.PlatformOpenAI, service.SubscriptionTypeSubscription, startsAt, expiresAt, service.AccountTypeOAuth}, &newestEventID, &effectiveAt, &resetMonthly, &monthlyEffectiveAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !newestEventID.Valid || !effectiveAt.Valid {
+		return nil
+	}
+	_, err = tx.ExecContext(ctx, `
+		UPDATE user_subscriptions
+		SET daily_usage_usd = 0,
+		    weekly_usage_usd = 0,
+		    five_hour_usage_usd = 0,
+		    monthly_usage_usd = CASE WHEN $3 THEN 0 ELSE monthly_usage_usd END,
+		    daily_window_start = $2,
+		    weekly_window_start = $2,
+		    five_hour_window_start = $2,
+		    monthly_window_start = CASE WHEN $3 THEN $5 ELSE monthly_window_start END,
+		    quota_follow_reset_event_id = $1,
+		    updated_at = GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
+		WHERE id = $4 AND quota_follow_reset_event_id < $1
+	`, newestEventID.Int64, effectiveAt.Time, resetMonthly.Valid && resetMonthly.Bool, subscriptionID, monthlyEffectiveAt)
+	return err
 }
 
 func deductUsageBillingBalance(ctx context.Context, tx *sql.Tx, userID int64, amount float64) (float64, bool, error) {

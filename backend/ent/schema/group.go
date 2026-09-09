@@ -101,6 +101,25 @@ func (Group) Fields() []ent.Field {
 			Comment("订阅分组 5 小时 USD 限额；NULL 或非正数表示不限制"),
 		field.Int("default_validity_days").
 			Default(30),
+		field.Int64("quota_reset_source_account_id").
+			Optional().
+			Nillable().
+			Comment("OpenAI subscription quota reset source account; intentionally not an FK so deleted source identity remains diagnosable"),
+		field.String("quota_reset_source_account_name").
+			MaxLen(100).
+			Default("").
+			Comment("Source account name snapshot retained when the source account is deleted"),
+		field.Time("quota_reset_source_reset_at").
+			Optional().
+			Nillable().
+			SchemaType(map[string]string{dialect.Postgres: "timestamptz"}).
+			Comment("Last accepted raw upstream weekly reset_at; first value is baseline only"),
+		field.Bool("quota_reset_include_monthly").
+			Default(false).
+			Comment("Whether a source reset also clears monthly subscription usage when the group has a monthly limit"),
+		field.Int64("quota_reset_config_version").
+			Default(0).
+			Comment("Monotonic generation used to reject events from an obsolete source configuration"),
 
 		// 图片生成计费配置（antigravity 和 gemini 平台使用）
 		field.Bool("allow_image_generation").

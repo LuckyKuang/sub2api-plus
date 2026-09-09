@@ -66,6 +66,36 @@ func (s *UsageLogRepoSuite) createUsageLog(user *service.User, apiKey *service.A
 
 // --- Create / GetByID ---
 
+func (s *UsageLogRepoSuite) TestStrictTimingRoundTrip() {
+	user := mustCreateUser(s.T(), s.client, &service.User{Email: "strict-timing@test.com"})
+	key := mustCreateApiKey(s.T(), s.client, &service.APIKey{UserID: user.ID, Key: "sk-strict-timing", Name: "timing"})
+	account := mustCreateAccount(s.T(), s.client, &service.Account{Name: "timing"})
+	first, last := 120, 920
+	textKind, compactKind := "text", "compaction"
+	for _, version := range []int{0, 1} {
+		log := &service.UsageLog{UserID: user.ID, APIKeyID: key.ID, AccountID: account.ID,
+			RequestID: uuid.NewString(), Model: "timing-test", TimingVersion: version,
+			FirstTokenMs: &first, LastTokenMs: &last, FirstOutputKind: &textKind}
+		_, err := s.repo.Create(s.ctx, log)
+		s.Require().NoError(err)
+		stored, err := s.repo.GetByID(s.ctx, log.ID)
+		s.Require().NoError(err)
+		s.Equal(version, stored.TimingVersion)
+		s.Equal(first, *stored.FirstTokenMs)
+		s.Equal(last, *stored.LastTokenMs)
+	}
+	compact := &service.UsageLog{UserID: user.ID, APIKeyID: key.ID, AccountID: account.ID,
+		RequestID: uuid.NewString(), Model: "timing-test", TimingVersion: 1, FirstOutputKind: &compactKind}
+	_, err := s.repo.Create(s.ctx, compact)
+	s.Require().NoError(err)
+	stored, err := s.repo.GetByID(s.ctx, compact.ID)
+	s.Require().NoError(err)
+	s.Require().NotNil(stored.FirstOutputKind)
+	s.Equal("compaction", *stored.FirstOutputKind)
+	s.Nil(stored.FirstTokenMs)
+	s.Nil(stored.LastTokenMs)
+}
+
 func (s *UsageLogRepoSuite) TestCreate() {
 	user := mustCreateUser(s.T(), s.client, &service.User{Email: "create@test.com"})
 	apiKey := mustCreateApiKey(s.T(), s.client, &service.APIKey{UserID: user.ID, Key: "sk-create", Name: "k"})

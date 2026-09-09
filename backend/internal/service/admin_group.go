@@ -299,6 +299,20 @@ func groupSupportsOpenAIFast(platform string) bool {
 	return platform == PlatformOpenAI || platform == PlatformComposite
 }
 
+func (s *adminServiceImpl) resolveOpenAIQuotaResetSource(ctx context.Context, accountID int64) (*Account, error) {
+	if accountID <= 0 {
+		return nil, infraerrors.BadRequest("INVALID_QUOTA_RESET_SOURCE", "quota reset source account is invalid")
+	}
+	account, err := s.accountRepo.GetByID(ctx, accountID)
+	if err != nil {
+		return nil, infraerrors.BadRequest("INVALID_QUOTA_RESET_SOURCE", "quota reset source must be an existing OpenAI OAuth account")
+	}
+	if account.Platform != PlatformOpenAI || account.Type != AccountTypeOAuth || account.ParentAccountID != nil {
+		return nil, infraerrors.BadRequest("INVALID_QUOTA_RESET_SOURCE", "quota reset source must be a credential-owning OpenAI OAuth account")
+	}
+	return account, nil
+}
+
 func sanitizeGroupOpenAIFast(group *Group) {
 	if group == nil || !groupSupportsOpenAIFast(group.Platform) {
 		if group != nil {
@@ -350,6 +364,16 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 	weeklyLimit := normalizeLimit(input.WeeklyLimitUSD)
 	monthlyLimit := normalizeLimit(input.MonthlyLimitUSD)
 	fiveHourLimit := normalizeLimit(input.FiveHourLimitUSD)
+	var quotaResetSource *Account
+	if input.QuotaResetSourceAccountID != nil {
+		if platform != PlatformOpenAI || subscriptionType != SubscriptionTypeSubscription {
+			return nil, infraerrors.BadRequest("INVALID_QUOTA_RESET_SOURCE", "quota reset source is supported only for OpenAI subscription groups")
+		}
+		quotaResetSource, err = s.resolveOpenAIQuotaResetSource(ctx, *input.QuotaResetSourceAccountID)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	// 图片价格：负数表示清除（使用默认价格），0 保留（表示免费）
 	imagePrice1K := normalizePrice(input.ImagePrice1K)
@@ -494,6 +518,7 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 		WeeklyLimitUSD:                  weeklyLimit,
 		MonthlyLimitUSD:                 monthlyLimit,
 		FiveHourLimitUSD:                fiveHourLimit,
+		QuotaResetIncludeMonthly:        quotaResetSource != nil && input.QuotaResetIncludeMonthly && monthlyLimit != nil,
 		LongContextPricingEnabled:       longContextPricingEnabled,
 		ModelPricing:                    modelPricing,
 		AllowImageGeneration:            allowImageGeneration,
@@ -545,6 +570,12 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 		MaxReasoningEffort:          maxReasoningEffort,
 		MaxReasoningEffortOverLimit: maxReasoningEffortOverLimit,
 		ReasoningEffortMappings:     reasoningEffortMappings,
+	}
+	if quotaResetSource != nil {
+		group.QuotaResetSourceAccountID = &quotaResetSource.ID
+		group.QuotaResetSourceAccountName = quotaResetSource.Name
+		group.QuotaResetConfigVersion = 1
+		group.QuotaResetSourceValid = true
 	}
 	sanitizeGroupMessagesDispatchFields(group)
 	sanitizeGroupOpenAIFast(group)
@@ -681,6 +712,7 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 
 	// 渠道缓存里存了 groupID → platform 的映射，改了平台要让它失效（见函数末尾）
 	previousPlatform := group.Platform
+	previousQuotaResetVersion := group.QuotaResetConfigVersion
 
 	if input.Name != "" {
 		group.Name = input.Name
@@ -730,6 +762,49 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 	}
 	if input.FiveHourLimitUSD != nil {
 		group.FiveHourLimitUSD = normalizeLimit(input.FiveHourLimitUSD)
+	}
+	if input.QuotaResetSourceAccountIDSet {
+		if input.QuotaResetSourceAccountID == nil || *input.QuotaResetSourceAccountID <= 0 {
+			if group.QuotaResetSourceAccountID != nil {
+				group.QuotaResetConfigVersion++
+			}
+			group.QuotaResetSourceAccountID = nil
+			group.QuotaResetSourceAccountName = ""
+			group.QuotaResetSourceResetAt = nil
+			group.QuotaResetSourceValid = false
+		} else if group.QuotaResetSourceAccountID != nil && *group.QuotaResetSourceAccountID == *input.QuotaResetSourceAccountID {
+			// Preserve an unchanged source, including a deleted source, so other
+			// group settings remain editable while the UI reports the invalid binding.
+		} else {
+			account, resolveErr := s.resolveOpenAIQuotaResetSource(ctx, *input.QuotaResetSourceAccountID)
+			if resolveErr != nil {
+				return nil, resolveErr
+			}
+			group.QuotaResetSourceAccountID = &account.ID
+			group.QuotaResetSourceAccountName = account.Name
+			group.QuotaResetSourceValid = true
+			group.QuotaResetConfigVersion++
+			group.QuotaResetSourceResetAt = nil // Established atomically by the repository.
+		}
+	}
+	if input.QuotaResetIncludeMonthly != nil {
+		group.QuotaResetIncludeMonthly = *input.QuotaResetIncludeMonthly
+	}
+	if !group.SupportsOpenAIQuotaFollowReset() {
+		if group.QuotaResetSourceAccountID != nil {
+			group.QuotaResetConfigVersion++
+		}
+		group.QuotaResetSourceAccountID = nil
+		group.QuotaResetSourceAccountName = ""
+		group.QuotaResetSourceResetAt = nil
+		group.QuotaResetSourceValid = false
+		group.QuotaResetIncludeMonthly = false
+	} else if group.QuotaResetSourceAccountID == nil || group.MonthlyLimitUSD == nil {
+		group.QuotaResetIncludeMonthly = false
+	}
+	group.QuotaResetSourceChanged = group.QuotaResetConfigVersion != previousQuotaResetVersion
+	if group.QuotaResetSourceChanged {
+		group.QuotaResetConfigVersion = previousQuotaResetVersion + 1
 	}
 	// 图片生成计费配置：负数表示清除（使用默认价格）
 	if input.AllowImageGeneration != nil {

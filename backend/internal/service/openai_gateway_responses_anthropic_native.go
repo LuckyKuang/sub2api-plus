@@ -327,9 +327,9 @@ func (s *OpenAIGatewayService) handleResponsesStreamingFromNativeAnthropic(
 	clientToolRestorer := apicompat.NewResponsesClientToolStreamRestorer(clientToolMapping)
 
 	var usage ClaudeUsage
-	var firstTokenMs *int
-	firstChunk := true
+	var timing streamOutputTiming
 	clientDisconnected := false
+	sawMessageStop, sawUpstreamError := false, false
 
 	scanner := bufio.NewScanner(resp.Body)
 	maxLineSize := defaultMaxLineSize
@@ -350,8 +350,12 @@ func (s *OpenAIGatewayService) handleResponsesStreamingFromNativeAnthropic(
 			ReasoningEffort:  reasoningEffort,
 			Stream:           true,
 			Duration:         time.Since(startTime),
-			FirstTokenMs:     firstTokenMs,
+			FirstTokenMs:     timing.firstTokenMs,
+			LastTokenMs:      timing.lastTokenMs,
+			FirstOutputMs:    timing.firstOutputMs,
+			FirstOutputKind:  timing.firstOutputKind,
 			ClientDisconnect: clientDisconnected,
+			UsageIncomplete:  !sawMessageStop || sawUpstreamError,
 		}
 	}
 
@@ -384,11 +388,9 @@ func (s *OpenAIGatewayService) handleResponsesStreamingFromNativeAnthropic(
 	// output_tokens 只在末尾 message_delta 携带，提前退出会把整段生成记成 ~1
 	// token，payg 上游照常计费而平台漏记。状态机照常推进以保证 finalize 一致。
 	processAnthropicEvent := func(event *apicompat.AnthropicStreamEvent) {
-		if firstChunk {
-			firstChunk = false
-			ms := int(time.Since(startTime).Milliseconds())
-			firstTokenMs = &ms
-		}
+		sawMessageStop = sawMessageStop || event.Type == "message_stop"
+		sawUpstreamError = sawUpstreamError || event.Type == "error"
+		timing.Observe(startTime, apicompat.ObserveAnthropicOutput(event))
 
 		if event.Type == "message_delta" && event.Usage != nil {
 			mergeAnthropicUsage(&usage, *event.Usage)

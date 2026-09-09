@@ -222,11 +222,11 @@
           </div>
         </div>
 
-        <div class="overflow-x-auto">
+        <div class="table-container overflow-x-auto">
           <table class="w-full min-w-[800px] text-sm">
             <thead>
               <tr class="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-500 dark:border-dark-700 dark:text-gray-400">
-                <th class="py-2 pr-4">ID</th>
+                <th class="px-4 py-2">ID</th>
                 <th class="py-2 pr-4">{{ t('admin.backup.columns.status') }}</th>
                 <th class="py-2 pr-4">{{ t('admin.backup.columns.fileName') }}</th>
                 <th class="py-2 pr-4">{{ t('admin.backup.columns.size') }}</th>
@@ -234,12 +234,12 @@
                 <th class="py-2 pr-4">{{ t('admin.backup.columns.expiresAt') }}</th>
                 <th class="py-2 pr-4">{{ t('admin.backup.columns.triggeredBy') }}</th>
                 <th class="py-2 pr-4">{{ t('admin.backup.columns.startedAt') }}</th>
-                <th class="py-2">{{ t('admin.backup.columns.actions') }}</th>
+                <th class="py-2 pr-4">{{ t('admin.backup.columns.actions') }}</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="record in backups" :key="record.id" class="border-b border-gray-100 align-top dark:border-dark-800">
-                <td class="py-3 pr-4 font-mono text-xs">{{ record.id }}</td>
+                <td class="px-4 py-3 font-mono text-xs">{{ record.id }}</td>
                 <td class="py-3 pr-4">
                   <span
                     class="rounded px-2 py-0.5 text-xs"
@@ -260,7 +260,7 @@
                   {{ record.triggered_by === 'scheduled' ? t('admin.backup.trigger.scheduled') : t('admin.backup.trigger.manual') }}
                 </td>
                 <td class="py-3 pr-4 text-xs">{{ formatDate(record.started_at) }}</td>
-                <td class="py-3 text-xs">
+                <td class="py-3 pr-4 text-xs">
                   <div class="flex flex-wrap gap-1">
                     <button
                       v-if="record.status === 'completed'"

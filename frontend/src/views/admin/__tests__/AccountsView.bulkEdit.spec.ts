@@ -36,7 +36,7 @@ vi.mock('@/api/admin', () => ({
       getAll: getAllProxies
     },
     groups: {
-      getAll: getAllGroups
+      getAllIncludingInactive: getAllGroups
     }
   }
 }))
@@ -74,6 +74,7 @@ const DataTableStub = {
         <div data-test="select-row"><slot name="cell-select" :row="row" /></div>
         <slot name="cell-created_at" :value="row.created_at" :row="row" />
         <div data-test="account-rate"><slot name="cell-rate_multiplier" :row="row" /></div>
+        <slot name="cell-groups" :row="row" />
       </div>
     </div>
   `
@@ -120,6 +121,26 @@ describe('admin AccountsView bulk edit scope', () => {
     getBatchTodayStats.mockResolvedValue({ stats: {} })
     getAllProxies.mockResolvedValue([])
     getAllGroups.mockResolvedValue([])
+  })
+
+  it('renders lite account group IDs when the group catalog arrives without reloading accounts', async () => {
+    let resolveGroups!: (groups: unknown[]) => void
+    getAllGroups.mockReturnValue(new Promise(resolve => { resolveGroups = resolve }))
+    listAccounts.mockResolvedValue({ items: [{ id: 1, name: 'Lite account', group_ids: [7] }], total: 1, page: 1, page_size: 20, pages: 1 })
+    const wrapper = mount(AccountsView, { shallow: true, global: { stubs: {
+      AppLayout: { template: '<div><slot /></div>' },
+      TablePageLayout: { template: '<div><slot name="table" /></div>' },
+      DataTable: DataTableStub,
+    } } })
+    await flushPromises()
+    const cells = () => wrapper.findComponent({ name: 'AccountGroupsCell' })
+    expect(cells().props('groups')).toEqual([])
+    const group = { id: 7, name: 'First visit inactive group', platform: 'openai', status: 'inactive' }
+    resolveGroups([group])
+    await flushPromises()
+    expect(cells().props('groups')).toEqual([group])
+    expect(listAccounts).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
   })
 
   it('opens bulk edit in filtered-results mode from the bulk actions dropdown', async () => {

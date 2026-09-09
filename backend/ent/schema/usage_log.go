@@ -131,6 +131,7 @@ func (UsageLog) Fields() []ent.Field {
 		field.Int("duration_ms").
 			Optional().
 			Nillable(),
+		field.Int("timing_version").Default(0),
 		field.Int("first_token_ms").
 			Optional().
 			Nillable(),

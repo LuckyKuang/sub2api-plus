@@ -706,6 +706,27 @@ func (_u *UsageLogUpdate) ClearDurationMs() *UsageLogUpdate {
 	return _u
 }
 
+// SetTimingVersion sets the "timing_version" field.
+func (_u *UsageLogUpdate) SetTimingVersion(v int) *UsageLogUpdate {
+	_u.mutation.ResetTimingVersion()
+	_u.mutation.SetTimingVersion(v)
+	return _u
+}
+
+// SetNillableTimingVersion sets the "timing_version" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableTimingVersion(v *int) *UsageLogUpdate {
+	if v != nil {
+		_u.SetTimingVersion(*v)
+	}
+	return _u
+}
+
+// AddTimingVersion adds value to the "timing_version" field.
+func (_u *UsageLogUpdate) AddTimingVersion(v int) *UsageLogUpdate {
+	_u.mutation.AddTimingVersion(v)
+	return _u
+}
+
 // SetFirstTokenMs sets the "first_token_ms" field.
 func (_u *UsageLogUpdate) SetFirstTokenMs(v int) *UsageLogUpdate {
 	_u.mutation.ResetFirstTokenMs()
@@ -1463,6 +1484,12 @@ func (_u *UsageLogUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.DurationMsCleared() {
 		_spec.ClearField(usagelog.FieldDurationMs, field.TypeInt)
+	}
+	if value, ok := _u.mutation.TimingVersion(); ok {
+		_spec.SetField(usagelog.FieldTimingVersion, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedTimingVersion(); ok {
+		_spec.AddField(usagelog.FieldTimingVersion, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.FirstTokenMs(); ok {
 		_spec.SetField(usagelog.FieldFirstTokenMs, field.TypeInt, value)
@@ -2420,6 +2447,27 @@ func (_u *UsageLogUpdateOne) ClearDurationMs() *UsageLogUpdateOne {
 	return _u
 }
 
+// SetTimingVersion sets the "timing_version" field.
+func (_u *UsageLogUpdateOne) SetTimingVersion(v int) *UsageLogUpdateOne {
+	_u.mutation.ResetTimingVersion()
+	_u.mutation.SetTimingVersion(v)
+	return _u
+}
+
+// SetNillableTimingVersion sets the "timing_version" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableTimingVersion(v *int) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetTimingVersion(*v)
+	}
+	return _u
+}
+
+// AddTimingVersion adds value to the "timing_version" field.
+func (_u *UsageLogUpdateOne) AddTimingVersion(v int) *UsageLogUpdateOne {
+	_u.mutation.AddTimingVersion(v)
+	return _u
+}
+
 // SetFirstTokenMs sets the "first_token_ms" field.
 func (_u *UsageLogUpdateOne) SetFirstTokenMs(v int) *UsageLogUpdateOne {
 	_u.mutation.ResetFirstTokenMs()
@@ -3207,6 +3255,12 @@ func (_u *UsageLogUpdateOne) sqlSave(ctx context.Context) (_node *UsageLog, err 
 	}
 	if _u.mutation.DurationMsCleared() {
 		_spec.ClearField(usagelog.FieldDurationMs, field.TypeInt)
+	}
+	if value, ok := _u.mutation.TimingVersion(); ok {
+		_spec.SetField(usagelog.FieldTimingVersion, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedTimingVersion(); ok {
+		_spec.AddField(usagelog.FieldTimingVersion, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.FirstTokenMs(); ok {
 		_spec.SetField(usagelog.FieldFirstTokenMs, field.TypeInt, value)

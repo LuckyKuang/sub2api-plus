@@ -35,12 +35,20 @@ type Group struct {
 	// an already committed one-click copy. It must never be mapped to API DTOs.
 	DuplicateOperationID string
 
-	SubscriptionType    string
-	DailyLimitUSD       *float64
-	WeeklyLimitUSD      *float64
-	MonthlyLimitUSD     *float64
-	FiveHourLimitUSD    *float64
-	DefaultValidityDays int
+	SubscriptionType            string
+	DailyLimitUSD               *float64
+	WeeklyLimitUSD              *float64
+	MonthlyLimitUSD             *float64
+	FiveHourLimitUSD            *float64
+	DefaultValidityDays         int
+	QuotaResetSourceAccountID   *int64
+	QuotaResetSourceAccountName string
+	QuotaResetSourceResetAt     *time.Time
+	QuotaResetIncludeMonthly    bool
+	QuotaResetConfigVersion     int64
+	QuotaResetSourceValid       bool
+	// QuotaResetSourceChanged is persistence intent, never exposed by the API.
+	QuotaResetSourceChanged bool
 
 	// 图片生成计费配置（antigravity 和 gemini 平台使用）
 	AllowImageGeneration         bool
@@ -165,6 +173,10 @@ func (g *Group) HasMonthlyLimit() bool {
 
 func (g *Group) HasFiveHourLimit() bool {
 	return g.FiveHourLimitUSD != nil && *g.FiveHourLimitUSD > 0
+}
+
+func (g *Group) SupportsOpenAIQuotaFollowReset() bool {
+	return g != nil && g.Platform == PlatformOpenAI && g.SubscriptionType == SubscriptionTypeSubscription
 }
 
 // GetImagePrice 根据 image_size 返回对应的图片生成价格

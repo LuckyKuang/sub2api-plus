@@ -1046,7 +1046,26 @@ export default {
         fiveHourLimit: '5-Hour Limit (USD)',
         defaultValidityDays: 'Default Validity (Days)',
         validityHint: 'Number of days the subscription is valid when assigned to a user',
-        noLimit: 'No limit'
+        noLimit: 'No limit',
+        quotaFollowReset: {
+          source: 'Follow OpenAI OAuth weekly reset',
+          disabled: 'Disabled',
+          searchSource: 'Search OpenAI OAuth accounts',
+          noSources: 'No eligible OpenAI OAuth accounts',
+          hint: 'Passive only: the first observed official weekly reset time establishes a baseline. A later change resets this group once; this does not affect account routing.',
+          includeMonthly: 'Reset monthly quota at the same time',
+          includeMonthlyHint: 'Available only when this group has a monthly limit. Groups without a monthly limit are skipped automatically.',
+          invalidSource: 'Source {name} (ID {id}) no longer exists or is no longer an eligible OpenAI OAuth account. Automatic reset is inactive until another source is selected.',
+          invalidSourceOption: '[Invalid] {name} (ID {id})',
+          waitingBaseline: 'Waiting for the first passively observed weekly reset time. This first value will not reset quotas.',
+          currentBaseline: 'Current official reset-time baseline: {time}',
+          status: {
+            active: 'Following {source}',
+            waiting: 'Waiting for {source} baseline',
+            invalid: 'Source invalid: {source}',
+            disabled: 'Disabled'
+          }
+        }
       },
       imagePricing: {
         title: 'Image Generation Pricing',
@@ -1230,9 +1249,9 @@ export default {
       openaiLive: {
         title: 'OpenAI Live',
         allow: 'Allow Live access',
-        hint: 'When enabled, API keys in this OpenAI group can create and control Live voice sessions. Disabled by default. The Sub2API server must run on Apple Silicon macOS with the official ChatGPT app installed; client platforms are unrestricted.',
+        hint: 'When enabled, API keys in this OpenAI group can create and control Live voice sessions. Disabled by default. The Sub2API Plus server must run on Apple Silicon macOS with the official ChatGPT app installed; client platforms are unrestricted.',
         unsupportedTitle: 'Current server does not support Live',
-        unsupportedMessage: 'This Sub2API server cannot generate the required Live attestation. Live will not work even if enabled. Continue anyway?',
+        unsupportedMessage: 'This Sub2API Plus server cannot generate the required Live attestation. Live will not work even if enabled. Continue anyway?',
         enableAnyway: 'Enable anyway'
       },
       openaiFast: {

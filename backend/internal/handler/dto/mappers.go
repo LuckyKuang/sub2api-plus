@@ -148,6 +148,11 @@ func GroupFromServiceAdmin(g *service.Group) *AdminGroup {
 	}
 	out := &AdminGroup{
 		Group:                       groupFromServiceBase(g),
+		QuotaResetSourceAccountID:   g.QuotaResetSourceAccountID,
+		QuotaResetSourceAccountName: g.QuotaResetSourceAccountName,
+		QuotaResetSourceResetAt:     g.QuotaResetSourceResetAt,
+		QuotaResetIncludeMonthly:    g.QuotaResetIncludeMonthly,
+		QuotaResetSourceStatus:      quotaResetSourceStatus(g),
 		ForceOpenAIFast:             g.ForceOpenAIFast,
 		FreeOpenAIFast:              g.FreeOpenAIFast,
 		ProfitControlEnabled:        g.ProfitControlEnabled,
@@ -175,6 +180,19 @@ func GroupFromServiceAdmin(g *service.Group) *AdminGroup {
 		}
 	}
 	return out
+}
+
+func quotaResetSourceStatus(g *service.Group) string {
+	if g == nil || g.QuotaResetSourceAccountID == nil {
+		return "disabled"
+	}
+	if !g.QuotaResetSourceValid {
+		return "invalid"
+	}
+	if g.QuotaResetSourceResetAt == nil {
+		return "waiting"
+	}
+	return "active"
 }
 
 func groupFromServiceBase(g *service.Group) Group {
@@ -726,6 +744,7 @@ func usageLogFromServiceUser(l *service.UsageLog) UsageLog {
 		DurationMs:                l.DurationMs,
 		FirstTokenMs:              l.FirstTokenMs,
 		LastTokenMs:               l.LastTokenMs,
+		TimingVersion:             l.TimingVersion,
 		FirstOutputMs:             l.FirstOutputMs,
 		FirstOutputKind:           l.FirstOutputKind,
 		IsComplete:                l.IsComplete,

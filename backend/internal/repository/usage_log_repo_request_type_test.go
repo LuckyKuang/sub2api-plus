@@ -113,6 +113,7 @@ func TestUsageLogRepositoryCreateSyncRequestTypeAndLegacyFields(t *testing.T) {
 			service.UsageCompletionUnknown,
 			service.UsageSourceUnknown,
 			log.NativeCompactionV2,
+			log.TimingVersion,
 			createdAt,
 		).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "created_at"}).AddRow(int64(99), createdAt))
@@ -215,6 +216,7 @@ func TestUsageLogRepositoryCreate_PersistsServiceTier(t *testing.T) {
 			service.UsageCompletionUnknown,
 			service.UsageSourceUnknown,
 			log.NativeCompactionV2,
+			log.TimingVersion,
 			createdAt,
 		).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "created_at"}).AddRow(int64(100), createdAt))
@@ -286,6 +288,7 @@ func TestPrepareUsageLogInsert_PersistsTPSMetadata(t *testing.T) {
 		APIKeyID:          2,
 		AccountID:         3,
 		RequestID:         "req-tps-metadata",
+		TimingVersion:     1,
 		Model:             "gpt-5",
 		AudioOutputTokens: 17,
 		IsComplete:        &incomplete,
@@ -296,6 +299,7 @@ func TestPrepareUsageLogInsert_PersistsTPSMetadata(t *testing.T) {
 
 	require.Equal(t, 17, prepared.args[18])
 	require.Equal(t, false, prepared.args[39])
+	require.Equal(t, 1, prepared.args[len(prepared.args)-2])
 	require.NotNil(t, log.IsComplete)
 	require.False(t, *log.IsComplete)
 
@@ -309,6 +313,7 @@ func TestPrepareUsageLogInsert_PersistsTPSMetadata(t *testing.T) {
 	}
 	defaultPrepared := prepareUsageLogInsert(defaultLog)
 	require.Nil(t, defaultPrepared.args[39])
+	require.Equal(t, 0, defaultPrepared.args[len(defaultPrepared.args)-2])
 	require.Nil(t, defaultLog.IsComplete)
 }
 
@@ -328,8 +333,8 @@ func TestPrepareUsageLogInsert_PersistsNativeCompactionV2WithoutChangingRequestT
 	prepared := prepareUsageLogInsert(log)
 
 	require.Len(t, prepared.args, len(usageLogInsertArgTypes))
-	require.Equal(t, "boolean", usageLogInsertArgTypes[len(usageLogInsertArgTypes)-2])
-	require.Equal(t, true, prepared.args[len(prepared.args)-2])
+	require.Equal(t, "boolean", usageLogInsertArgTypes[len(usageLogInsertArgTypes)-3])
+	require.Equal(t, true, prepared.args[len(prepared.args)-3])
 	require.Equal(t, int16(service.RequestTypeStream), prepared.args[31])
 	require.Equal(t, service.RequestTypeStream, log.RequestType)
 	require.True(t, log.Stream)
@@ -1016,6 +1021,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			service.UsageCompletionCompleted,
 			service.UsageSourceUpstreamExact,
 			false, // native_compaction_v2
+			0,     // timing_version
 			now,
 		}})
 		require.NoError(t, err)
@@ -1114,6 +1120,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			service.UsageCompletionUnknown,
 			service.UsageSourceUnknown,
 			false, // native_compaction_v2
+			0,     // timing_version
 			now,
 		}})
 		require.NoError(t, err)
@@ -1183,6 +1190,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			service.UsageCompletionUnknown,
 			service.UsageSourceUnknown,
 			true, // native_compaction_v2
+			0,    // timing_version
 			now,
 		}})
 		require.NoError(t, err)
@@ -1253,6 +1261,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			service.UsageCompletionUnknown,
 			service.UsageSourceUnknown,
 			false, // native_compaction_v2
+			0,     // timing_version
 			now,
 		}})
 		require.NoError(t, err)

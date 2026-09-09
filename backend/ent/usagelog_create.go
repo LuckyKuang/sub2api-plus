@@ -463,6 +463,20 @@ func (_c *UsageLogCreate) SetNillableDurationMs(v *int) *UsageLogCreate {
 	return _c
 }
 
+// SetTimingVersion sets the "timing_version" field.
+func (_c *UsageLogCreate) SetTimingVersion(v int) *UsageLogCreate {
+	_c.mutation.SetTimingVersion(v)
+	return _c
+}
+
+// SetNillableTimingVersion sets the "timing_version" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableTimingVersion(v *int) *UsageLogCreate {
+	if v != nil {
+		_c.SetTimingVersion(*v)
+	}
+	return _c
+}
+
 // SetFirstTokenMs sets the "first_token_ms" field.
 func (_c *UsageLogCreate) SetFirstTokenMs(v int) *UsageLogCreate {
 	_c.mutation.SetFirstTokenMs(v)
@@ -863,6 +877,10 @@ func (_c *UsageLogCreate) defaults() {
 		v := usagelog.DefaultStream
 		_c.mutation.SetStream(v)
 	}
+	if _, ok := _c.mutation.TimingVersion(); !ok {
+		v := usagelog.DefaultTimingVersion
+		_c.mutation.SetTimingVersion(v)
+	}
 	if _, ok := _c.mutation.CompletionStatus(); !ok {
 		v := usagelog.DefaultCompletionStatus
 		_c.mutation.SetCompletionStatus(v)
@@ -996,6 +1014,9 @@ func (_c *UsageLogCreate) check() error {
 	}
 	if _, ok := _c.mutation.Stream(); !ok {
 		return &ValidationError{Name: "stream", err: errors.New(`ent: missing required field "UsageLog.stream"`)}
+	}
+	if _, ok := _c.mutation.TimingVersion(); !ok {
+		return &ValidationError{Name: "timing_version", err: errors.New(`ent: missing required field "UsageLog.timing_version"`)}
 	}
 	if v, ok := _c.mutation.FirstOutputKind(); ok {
 		if err := usagelog.FirstOutputKindValidator(v); err != nil {
@@ -1216,6 +1237,10 @@ func (_c *UsageLogCreate) createSpec() (*UsageLog, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.DurationMs(); ok {
 		_spec.SetField(usagelog.FieldDurationMs, field.TypeInt, value)
 		_node.DurationMs = &value
+	}
+	if value, ok := _c.mutation.TimingVersion(); ok {
+		_spec.SetField(usagelog.FieldTimingVersion, field.TypeInt, value)
+		_node.TimingVersion = value
 	}
 	if value, ok := _c.mutation.FirstTokenMs(); ok {
 		_spec.SetField(usagelog.FieldFirstTokenMs, field.TypeInt, value)
@@ -2019,6 +2044,24 @@ func (u *UsageLogUpsert) AddDurationMs(v int) *UsageLogUpsert {
 // ClearDurationMs clears the value of the "duration_ms" field.
 func (u *UsageLogUpsert) ClearDurationMs() *UsageLogUpsert {
 	u.SetNull(usagelog.FieldDurationMs)
+	return u
+}
+
+// SetTimingVersion sets the "timing_version" field.
+func (u *UsageLogUpsert) SetTimingVersion(v int) *UsageLogUpsert {
+	u.Set(usagelog.FieldTimingVersion, v)
+	return u
+}
+
+// UpdateTimingVersion sets the "timing_version" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateTimingVersion() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldTimingVersion)
+	return u
+}
+
+// AddTimingVersion adds v to the "timing_version" field.
+func (u *UsageLogUpsert) AddTimingVersion(v int) *UsageLogUpsert {
+	u.Add(usagelog.FieldTimingVersion, v)
 	return u
 }
 
@@ -3098,6 +3141,27 @@ func (u *UsageLogUpsertOne) UpdateDurationMs() *UsageLogUpsertOne {
 func (u *UsageLogUpsertOne) ClearDurationMs() *UsageLogUpsertOne {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.ClearDurationMs()
+	})
+}
+
+// SetTimingVersion sets the "timing_version" field.
+func (u *UsageLogUpsertOne) SetTimingVersion(v int) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetTimingVersion(v)
+	})
+}
+
+// AddTimingVersion adds v to the "timing_version" field.
+func (u *UsageLogUpsertOne) AddTimingVersion(v int) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddTimingVersion(v)
+	})
+}
+
+// UpdateTimingVersion sets the "timing_version" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateTimingVersion() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateTimingVersion()
 	})
 }
 
@@ -4401,6 +4465,27 @@ func (u *UsageLogUpsertBulk) UpdateDurationMs() *UsageLogUpsertBulk {
 func (u *UsageLogUpsertBulk) ClearDurationMs() *UsageLogUpsertBulk {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.ClearDurationMs()
+	})
+}
+
+// SetTimingVersion sets the "timing_version" field.
+func (u *UsageLogUpsertBulk) SetTimingVersion(v int) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetTimingVersion(v)
+	})
+}
+
+// AddTimingVersion adds v to the "timing_version" field.
+func (u *UsageLogUpsertBulk) AddTimingVersion(v int) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddTimingVersion(v)
+	})
+}
+
+// UpdateTimingVersion sets the "timing_version" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateTimingVersion() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateTimingVersion()
 	})
 }
 

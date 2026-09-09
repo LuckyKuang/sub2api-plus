@@ -219,6 +219,7 @@
 </template>
 
 <script setup lang="ts">
+import { strictFirstTokenMs, estimatedTps, tpsUnavailableReason } from '@/utils/usageTiming'
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
@@ -663,10 +664,12 @@ const exportToCSV = async () => {
       'Rate Multiplier',
       'Billed Cost',
       'Original Cost',
-		'First Token / Legacy First Event (ms)',
+		'First Token (ms)',
       'First Output (ms)',
       'First Output Kind',
       'Duration (ms)',
+      'TPS',
+      'Unavailable reason',
     ]
     const rows = allLogs.map((log) => [
       log.created_at,
@@ -684,10 +687,12 @@ const exportToCSV = async () => {
       log.rate_multiplier,
       log.actual_cost.toFixed(8),
       log.total_cost.toFixed(8),
-      log.first_token_ms ?? '',
+      strictFirstTokenMs(log) ?? '',
       log.first_output_ms ?? '',
       log.first_output_kind ?? '',
       log.duration_ms ?? '',
+      estimatedTps(log) ?? '',
+      tpsUnavailableReason(log) ? t(tpsUnavailableReason(log)!) : '',
     ].map(escapeCSVValue))
     const csvContent = [
       headers.map(escapeCSVValue).join(','),

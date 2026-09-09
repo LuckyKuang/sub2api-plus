@@ -144,6 +144,7 @@
 </template>
 
 <script setup lang="ts">
+import Toggle from '@/components/common/Toggle.vue'
 import { computed, defineComponent, h, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
@@ -205,32 +206,16 @@ const SaveToggle = defineComponent({
   props: { label: { type: String, required: true }, modelValue: { type: Boolean, required: true }, disabled: { type: Boolean, default: false } },
   emits: ['update:modelValue'],
   setup(props, { emit, attrs }) {
-    return () => h('label', { class: ['flex items-center gap-2.5 text-sm', props.disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'] }, [
-      h('button', {
+    return () => h('label', { class: ['flex items-center gap-2.5 text-sm', props.disabled ? 'cursor-not-allowed' : 'cursor-pointer'] }, [
+      h(Toggle, {
         ...attrs,
-        type: 'button',
-        role: 'switch',
-        'aria-checked': props.modelValue,
+        modelValue: props.modelValue,
         'aria-label': props.label,
         disabled: props.disabled,
-        class: [
-          'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2',
-          props.modelValue ? 'bg-primary-600' : 'bg-gray-300 dark:bg-dark-600',
-          props.disabled ? 'cursor-not-allowed' : 'cursor-pointer',
-        ],
-        onClick: (event: MouseEvent) => {
-          event.preventDefault()
-          if (!props.disabled) emit('update:modelValue', !props.modelValue)
-        },
-      }, [
-        h('span', {
-          class: [
-            'pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 ease-in-out',
-            props.modelValue ? 'translate-x-5' : 'translate-x-0',
-          ],
-        }),
-      ]),
-      h('span', { class: 'select-none text-gray-700 dark:text-dark-200' }, props.label),
+        onClick: (event: MouseEvent) => event.preventDefault(),
+        'onUpdate:modelValue': (value: boolean) => emit('update:modelValue', value),
+      }),
+      h('span', { class: ['select-none text-gray-700 dark:text-dark-200', { 'opacity-50': props.disabled }] }, props.label),
     ])
   },
 })

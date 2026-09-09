@@ -125,6 +125,7 @@ const DataTableStub = {
 }
 
 const baseImageRow = {
+  timing_version: 1,
   request_id: 'req-admin-image',
   model: 'gpt-image-2',
   actual_cost: 0.4,
@@ -299,6 +300,7 @@ describe('admin UsageTable tooltip', () => {
         first_token_ms: 55,
         first_output_ms: null,
         first_output_kind: null,
+        timing_version: 0,
         duration_ms: 900,
       },
       {
@@ -324,11 +326,12 @@ describe('admin UsageTable tooltip', () => {
     })
 
     const text = wrapper.text()
-    // Primary column is always First Token / Legacy, never modality labels.
+    // Primary column always uses First Token, with unverified history unavailable.
     expect(text).toContain('First Token 120ms')
     expect(text).toContain('First Token 85ms')
     expect(text).toContain('First Token 88ms')
-    expect(text).toContain('First Event (Legacy) 55ms')
+    expect(text).not.toContain('First Event (Legacy)')
+    expect(text).not.toContain('55ms')
     expect(text).not.toContain('First Image Data')
     expect(text).not.toContain('First Audio Data')
     expect(text).not.toContain('First Reasoning')
@@ -338,12 +341,11 @@ describe('admin UsageTable tooltip', () => {
     expect(values[0].text()).toBe('120ms')
     expect(values[0].classes()).toContain('text-emerald-600')
     expect(values[1].text()).toBe('-')
-    expect(values[7].text()).toBe('55ms')
-    expect(values[7].classes()).toContain('text-gray-600')
+    expect(values[7].text()).toBe('-')
 
-    // Detail icon for non-plain cases; plain text with matching times has no icon.
+    // Missing TPS metadata also makes details available for plain text.
     const triggers = wrapper.findAll('[data-testid="latency-details-trigger"]')
-    expect(triggers).toHaveLength(8)
+    expect(triggers).toHaveLength(9)
 
     await triggers[0].trigger('mouseenter')
     await nextTick()
@@ -355,6 +357,7 @@ describe('admin UsageTable tooltip', () => {
     expect(tooltip.text()).toContain('First Token')
     expect(tooltip.text()).toContain('120ms')
     expect(tooltip.text()).toContain('First output and first token differ')
+    expect(tooltip.get('[data-testid="tps-unavailable-reason"]').text()).toContain('TPS')
   })
 
   it('shows estimated TPS from last-first token time, clamped outside [1, 1000]', () => {
@@ -467,6 +470,7 @@ describe('admin UsageTable tooltip', () => {
         last_token_ms: 1_000,
         first_output_ms: null,
         first_output_kind: null,
+        timing_version: 0,
         duration_ms: 1_000,
       },
       {
@@ -789,8 +793,8 @@ describe('admin UsageTable tooltip', () => {
       },
     })
 
-    const tooltipTriggers = wrapper.findAll('.group.relative')
-    await tooltipTriggers[tooltipTriggers.length - 1].trigger('mouseenter')
+    const costTrigger = wrapper.get('[data-testid="cost-details-trigger"]')
+    await costTrigger.trigger('mouseenter')
     await nextTick()
 
     const text = wrapper.text()

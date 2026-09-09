@@ -323,9 +323,9 @@ func (s *OpenAIGatewayService) handleCCStreamingFromNativeAnthropic(
 	ccState.IncludeUsage = includeUsage
 
 	var usage ClaudeUsage
-	var firstTokenMs *int
-	firstChunk := true
+	var timing streamOutputTiming
 	clientDisconnected := false
+	sawMessageStop, sawUpstreamError := false, false
 
 	scanner := bufio.NewScanner(resp.Body)
 	maxLineSize := defaultMaxLineSize
@@ -346,8 +346,12 @@ func (s *OpenAIGatewayService) handleCCStreamingFromNativeAnthropic(
 			ReasoningEffort:  reasoningEffort,
 			Stream:           true,
 			Duration:         time.Since(startTime),
-			FirstTokenMs:     firstTokenMs,
+			FirstTokenMs:     timing.firstTokenMs,
+			LastTokenMs:      timing.lastTokenMs,
+			FirstOutputMs:    timing.firstOutputMs,
+			FirstOutputKind:  timing.firstOutputKind,
 			ClientDisconnect: clientDisconnected,
+			UsageIncomplete:  !sawMessageStop || sawUpstreamError,
 		}
 	}
 
@@ -396,11 +400,9 @@ func (s *OpenAIGatewayService) handleCCStreamingFromNativeAnthropic(
 	}
 
 	processAnthropicEvent := func(event *apicompat.AnthropicStreamEvent) bool {
-		if firstChunk {
-			firstChunk = false
-			ms := int(time.Since(startTime).Milliseconds())
-			firstTokenMs = &ms
-		}
+		sawMessageStop = sawMessageStop || event.Type == "message_stop"
+		sawUpstreamError = sawUpstreamError || event.Type == "error"
+		timing.Observe(startTime, apicompat.ObserveAnthropicOutput(event))
 
 		// usage 恒累计（含客户端断开后的排水阶段，payg 上游照常计费）。
 		if event.Type == "message_delta" && event.Usage != nil {

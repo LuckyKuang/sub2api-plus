@@ -217,6 +217,20 @@ func (_c *UserSubscriptionCreate) SetNillableFiveHourUsageUsd(v *float64) *UserS
 	return _c
 }
 
+// SetQuotaFollowResetEventID sets the "quota_follow_reset_event_id" field.
+func (_c *UserSubscriptionCreate) SetQuotaFollowResetEventID(v int64) *UserSubscriptionCreate {
+	_c.mutation.SetQuotaFollowResetEventID(v)
+	return _c
+}
+
+// SetNillableQuotaFollowResetEventID sets the "quota_follow_reset_event_id" field if the given value is not nil.
+func (_c *UserSubscriptionCreate) SetNillableQuotaFollowResetEventID(v *int64) *UserSubscriptionCreate {
+	if v != nil {
+		_c.SetQuotaFollowResetEventID(*v)
+	}
+	return _c
+}
+
 // SetAssignedBy sets the "assigned_by" field.
 func (_c *UserSubscriptionCreate) SetAssignedBy(v int64) *UserSubscriptionCreate {
 	_c.mutation.SetAssignedBy(v)
@@ -374,6 +388,10 @@ func (_c *UserSubscriptionCreate) defaults() error {
 		v := usersubscription.DefaultFiveHourUsageUsd
 		_c.mutation.SetFiveHourUsageUsd(v)
 	}
+	if _, ok := _c.mutation.QuotaFollowResetEventID(); !ok {
+		v := usersubscription.DefaultQuotaFollowResetEventID
+		_c.mutation.SetQuotaFollowResetEventID(v)
+	}
 	if _, ok := _c.mutation.AssignedAt(); !ok {
 		if usersubscription.DefaultAssignedAt == nil {
 			return fmt.Errorf("ent: uninitialized usersubscription.DefaultAssignedAt (forgotten import ent/runtime?)")
@@ -423,6 +441,9 @@ func (_c *UserSubscriptionCreate) check() error {
 	}
 	if _, ok := _c.mutation.FiveHourUsageUsd(); !ok {
 		return &ValidationError{Name: "five_hour_usage_usd", err: errors.New(`ent: missing required field "UserSubscription.five_hour_usage_usd"`)}
+	}
+	if _, ok := _c.mutation.QuotaFollowResetEventID(); !ok {
+		return &ValidationError{Name: "quota_follow_reset_event_id", err: errors.New(`ent: missing required field "UserSubscription.quota_follow_reset_event_id"`)}
 	}
 	if _, ok := _c.mutation.AssignedAt(); !ok {
 		return &ValidationError{Name: "assigned_at", err: errors.New(`ent: missing required field "UserSubscription.assigned_at"`)}
@@ -515,6 +536,10 @@ func (_c *UserSubscriptionCreate) createSpec() (*UserSubscription, *sqlgraph.Cre
 	if value, ok := _c.mutation.FiveHourUsageUsd(); ok {
 		_spec.SetField(usersubscription.FieldFiveHourUsageUsd, field.TypeFloat64, value)
 		_node.FiveHourUsageUsd = value
+	}
+	if value, ok := _c.mutation.QuotaFollowResetEventID(); ok {
+		_spec.SetField(usersubscription.FieldQuotaFollowResetEventID, field.TypeInt64, value)
+		_node.QuotaFollowResetEventID = value
 	}
 	if value, ok := _c.mutation.AssignedAt(); ok {
 		_spec.SetField(usersubscription.FieldAssignedAt, field.TypeTime, value)
@@ -874,6 +899,24 @@ func (u *UserSubscriptionUpsert) UpdateFiveHourUsageUsd() *UserSubscriptionUpser
 // AddFiveHourUsageUsd adds v to the "five_hour_usage_usd" field.
 func (u *UserSubscriptionUpsert) AddFiveHourUsageUsd(v float64) *UserSubscriptionUpsert {
 	u.Add(usersubscription.FieldFiveHourUsageUsd, v)
+	return u
+}
+
+// SetQuotaFollowResetEventID sets the "quota_follow_reset_event_id" field.
+func (u *UserSubscriptionUpsert) SetQuotaFollowResetEventID(v int64) *UserSubscriptionUpsert {
+	u.Set(usersubscription.FieldQuotaFollowResetEventID, v)
+	return u
+}
+
+// UpdateQuotaFollowResetEventID sets the "quota_follow_reset_event_id" field to the value that was provided on create.
+func (u *UserSubscriptionUpsert) UpdateQuotaFollowResetEventID() *UserSubscriptionUpsert {
+	u.SetExcluded(usersubscription.FieldQuotaFollowResetEventID)
+	return u
+}
+
+// AddQuotaFollowResetEventID adds v to the "quota_follow_reset_event_id" field.
+func (u *UserSubscriptionUpsert) AddQuotaFollowResetEventID(v int64) *UserSubscriptionUpsert {
+	u.Add(usersubscription.FieldQuotaFollowResetEventID, v)
 	return u
 }
 
@@ -1240,6 +1283,27 @@ func (u *UserSubscriptionUpsertOne) AddFiveHourUsageUsd(v float64) *UserSubscrip
 func (u *UserSubscriptionUpsertOne) UpdateFiveHourUsageUsd() *UserSubscriptionUpsertOne {
 	return u.Update(func(s *UserSubscriptionUpsert) {
 		s.UpdateFiveHourUsageUsd()
+	})
+}
+
+// SetQuotaFollowResetEventID sets the "quota_follow_reset_event_id" field.
+func (u *UserSubscriptionUpsertOne) SetQuotaFollowResetEventID(v int64) *UserSubscriptionUpsertOne {
+	return u.Update(func(s *UserSubscriptionUpsert) {
+		s.SetQuotaFollowResetEventID(v)
+	})
+}
+
+// AddQuotaFollowResetEventID adds v to the "quota_follow_reset_event_id" field.
+func (u *UserSubscriptionUpsertOne) AddQuotaFollowResetEventID(v int64) *UserSubscriptionUpsertOne {
+	return u.Update(func(s *UserSubscriptionUpsert) {
+		s.AddQuotaFollowResetEventID(v)
+	})
+}
+
+// UpdateQuotaFollowResetEventID sets the "quota_follow_reset_event_id" field to the value that was provided on create.
+func (u *UserSubscriptionUpsertOne) UpdateQuotaFollowResetEventID() *UserSubscriptionUpsertOne {
+	return u.Update(func(s *UserSubscriptionUpsert) {
+		s.UpdateQuotaFollowResetEventID()
 	})
 }
 
@@ -1780,6 +1844,27 @@ func (u *UserSubscriptionUpsertBulk) AddFiveHourUsageUsd(v float64) *UserSubscri
 func (u *UserSubscriptionUpsertBulk) UpdateFiveHourUsageUsd() *UserSubscriptionUpsertBulk {
 	return u.Update(func(s *UserSubscriptionUpsert) {
 		s.UpdateFiveHourUsageUsd()
+	})
+}
+
+// SetQuotaFollowResetEventID sets the "quota_follow_reset_event_id" field.
+func (u *UserSubscriptionUpsertBulk) SetQuotaFollowResetEventID(v int64) *UserSubscriptionUpsertBulk {
+	return u.Update(func(s *UserSubscriptionUpsert) {
+		s.SetQuotaFollowResetEventID(v)
+	})
+}
+
+// AddQuotaFollowResetEventID adds v to the "quota_follow_reset_event_id" field.
+func (u *UserSubscriptionUpsertBulk) AddQuotaFollowResetEventID(v int64) *UserSubscriptionUpsertBulk {
+	return u.Update(func(s *UserSubscriptionUpsert) {
+		s.AddQuotaFollowResetEventID(v)
+	})
+}
+
+// UpdateQuotaFollowResetEventID sets the "quota_follow_reset_event_id" field to the value that was provided on create.
+func (u *UserSubscriptionUpsertBulk) UpdateQuotaFollowResetEventID() *UserSubscriptionUpsertBulk {
+	return u.Update(func(s *UserSubscriptionUpsert) {
+		s.UpdateQuotaFollowResetEventID()
 	})
 }
 

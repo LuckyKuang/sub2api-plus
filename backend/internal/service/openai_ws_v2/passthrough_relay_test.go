@@ -1257,7 +1257,7 @@ func TestRelay_NoSemanticOutputTerminalSequence_FirstTokenMsNil(t *testing.T) {
 	}
 }
 
-func TestRelay_NoDeltaOutputDoneEvent_RecordsFirstTokenBeforeTerminal(t *testing.T) {
+func TestRelay_NoDeltaOutputDoneEvent_DoesNotFabricateTokenTiming(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -1303,10 +1303,11 @@ func TestRelay_NoDeltaOutputDoneEvent_RecordsFirstTokenBeforeTerminal(t *testing
 			)
 
 			require.Nil(t, relayExit)
-			require.NotNil(t, turn.FirstTokenMs)
-			require.Less(t, int64(*turn.FirstTokenMs), turn.Duration.Milliseconds())
-			require.NotNil(t, result.FirstTokenMs)
-			require.Less(t, int64(*result.FirstTokenMs), result.Duration.Milliseconds())
+			require.Nil(t, turn.FirstTokenMs)
+			require.Nil(t, turn.LastTokenMs)
+			require.Nil(t, result.FirstTokenMs)
+			require.Nil(t, result.LastTokenMs)
+			require.NotNil(t, turn.FirstOutputMs)
 		})
 	}
 }

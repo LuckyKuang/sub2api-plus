@@ -19,7 +19,7 @@ vi.mock('@/api/admin', () => ({
       toggleSchedulable: vi.fn()
     },
     proxies: { getAll: vi.fn().mockResolvedValue([]) },
-    groups: { getAll: vi.fn().mockResolvedValue([]) }
+    groups: { getAllIncludingInactive: vi.fn().mockResolvedValue([]) }
   }
 }))
 

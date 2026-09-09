@@ -32,7 +32,7 @@ vi.mock('@/api/admin', () => ({
       getAll: getAllProxies
     },
     groups: {
-      getAll: getAllGroups
+      getAllIncludingInactive: getAllGroups
     }
   }
 }))
@@ -156,7 +156,10 @@ describe('admin AccountsView usage windows hint', () => {
 
   it('keeps groups available when loading proxies fails', async () => {
     getAllProxies.mockRejectedValue(new Error('proxy service unavailable'))
-    getAllGroups.mockResolvedValue([{ id: 7, name: 'production' }])
+    getAllGroups.mockResolvedValue([
+      { id: 7, name: 'production', status: 'active' },
+      { id: 8, name: 'retired', status: 'inactive' },
+    ])
 
     const wrapper = mountView()
     await flushPromises()

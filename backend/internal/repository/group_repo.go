@@ -8,9 +8,11 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	dbent "github.com/LuckyKuang/sub2api-plus/ent"
 	"github.com/LuckyKuang/sub2api-plus/ent/group"
+	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/logger"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/pagination"
 	"github.com/LuckyKuang/sub2api-plus/internal/service"
@@ -43,7 +45,63 @@ func newGroupRepositoryWithSQL(client *dbent.Client, sqlq sqlExecutor) *groupRep
 	return &groupRepository{client: client, sql: sqlq}
 }
 
+// The caller owns a transaction. Lock the source before reading its observation
+// so a concurrent request is either part of this baseline or a later event.
+func prepareQuotaResetSource(ctx context.Context, client *dbent.Client, groupIn *service.Group) error {
+	if groupIn.QuotaResetSourceAccountID == nil {
+		return nil
+	}
+	if !groupIn.SupportsOpenAIQuotaFollowReset() {
+		return infraerrors.BadRequest("INVALID_QUOTA_RESET_SOURCE", "quota reset requires an OpenAI subscription group")
+	}
+	err := scanSingleRow(ctx, client, `
+		SELECT name FROM accounts
+		WHERE id = $1 AND deleted_at IS NULL AND platform = 'openai'
+		  AND type = 'oauth' AND parent_account_id IS NULL
+		FOR UPDATE
+	`, []any{*groupIn.QuotaResetSourceAccountID}, &groupIn.QuotaResetSourceAccountName)
+	if errors.Is(err, sql.ErrNoRows) {
+		return infraerrors.BadRequest("INVALID_QUOTA_RESET_SOURCE", "quota reset source is no longer an OpenAI OAuth account")
+	}
+	if err != nil {
+		return err
+	}
+	var baseline time.Time
+	err = scanSingleRow(ctx, client, `SELECT reset_at FROM openai_oauth_weekly_reset_observations WHERE account_id = $1`,
+		[]any{*groupIn.QuotaResetSourceAccountID}, &baseline)
+	groupIn.QuotaResetSourceResetAt = nil
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	groupIn.QuotaResetSourceResetAt = &baseline
+	return nil
+}
+
 func (r *groupRepository) Create(ctx context.Context, groupIn *service.Group) error {
+	if groupIn != nil && groupIn.QuotaResetSourceAccountID != nil {
+		client := clientFromContext(ctx, r.client)
+		tx, err := client.Tx(ctx)
+		if err != nil && !errors.Is(err, dbent.ErrTxStarted) {
+			return err
+		}
+		if tx != nil {
+			defer func() { _ = tx.Rollback() }()
+			client = tx.Client()
+		}
+		if err := createGroupRecord(ctx, client, groupIn); err != nil {
+			return err
+		}
+		if err := enqueueSchedulerOutbox(ctx, client, service.SchedulerOutboxEventGroupChanged, nil, &groupIn.ID, nil); err != nil {
+			return err
+		}
+		if tx != nil {
+			return tx.Commit()
+		}
+		return nil
+	}
 	if err := createGroupRecord(ctx, r.client, groupIn); err != nil {
 		return err
 	}
@@ -56,6 +114,9 @@ func (r *groupRepository) Create(ctx context.Context, groupIn *service.Group) er
 func createGroupRecord(ctx context.Context, client *dbent.Client, groupIn *service.Group) error {
 	if groupIn == nil {
 		return errors.New("group is nil")
+	}
+	if err := prepareQuotaResetSource(ctx, client, groupIn); err != nil {
+		return err
 	}
 	modelPricing, err := json.Marshal(groupIn.ModelPricing)
 	if err != nil {
@@ -74,6 +135,11 @@ func createGroupRecord(ctx context.Context, client *dbent.Client, groupIn *servi
 		SetNillableWeeklyLimitUsd(groupIn.WeeklyLimitUSD).
 		SetNillableMonthlyLimitUsd(groupIn.MonthlyLimitUSD).
 		SetNillableFiveHourLimitUsd(groupIn.FiveHourLimitUSD).
+		SetNillableQuotaResetSourceAccountID(groupIn.QuotaResetSourceAccountID).
+		SetQuotaResetSourceAccountName(groupIn.QuotaResetSourceAccountName).
+		SetNillableQuotaResetSourceResetAt(groupIn.QuotaResetSourceResetAt).
+		SetQuotaResetIncludeMonthly(groupIn.QuotaResetIncludeMonthly).
+		SetQuotaResetConfigVersion(groupIn.QuotaResetConfigVersion).
 		SetAllowImageGeneration(groupIn.AllowImageGeneration).
 		SetAllowBatchImageGeneration(groupIn.AllowBatchImageGeneration).
 		SetImageRateIndependent(groupIn.ImageRateIndependent).
@@ -242,15 +308,39 @@ func (r *groupRepository) GetByIDLite(ctx context.Context, id int64) (*service.G
 	if err != nil {
 		return nil, translatePersistenceError(err, service.ErrGroupNotFound, nil)
 	}
-	return groupEntityToService(m), nil
+	out := groupEntityToService(m)
+	groups := []service.Group{*out}
+	r.hydrateQuotaResetSourceValidity(ctx, groups)
+	return &groups[0], nil
 }
 
 func (r *groupRepository) Update(ctx context.Context, groupIn *service.Group) error {
+	client := clientFromContext(ctx, r.client)
+	var tx *dbent.Tx
+	if groupIn.QuotaResetSourceChanged {
+		var err error
+		tx, err = client.Tx(ctx)
+		if err != nil && !errors.Is(err, dbent.ErrTxStarted) {
+			return err
+		}
+		if tx != nil {
+			defer func() { _ = tx.Rollback() }()
+			client = tx.Client()
+		}
+		if err := prepareQuotaResetSource(ctx, client, groupIn); err != nil {
+			return err
+		}
+	}
 	modelPricing, err := json.Marshal(groupIn.ModelPricing)
 	if err != nil {
 		return fmt.Errorf("marshal group model pricing: %w", err)
 	}
-	builder := r.client.Group.UpdateOneID(groupIn.ID).
+	expectedVersion := groupIn.QuotaResetConfigVersion
+	if groupIn.QuotaResetSourceChanged {
+		expectedVersion--
+	}
+	builder := client.Group.UpdateOneID(groupIn.ID).
+		Where(group.QuotaResetConfigVersionEQ(expectedVersion)).
 		SetName(groupIn.Name).
 		SetDescription(groupIn.Description).
 		SetPlatform(groupIn.Platform).
@@ -262,6 +352,7 @@ func (r *groupRepository) Update(ctx context.Context, groupIn *service.Group) er
 		SetNillableWeeklyLimitUsd(groupIn.WeeklyLimitUSD).
 		SetNillableMonthlyLimitUsd(groupIn.MonthlyLimitUSD).
 		SetNillableFiveHourLimitUsd(groupIn.FiveHourLimitUSD).
+		SetQuotaResetIncludeMonthly(groupIn.QuotaResetIncludeMonthly).
 		SetAllowImageGeneration(groupIn.AllowImageGeneration).
 		SetAllowBatchImageGeneration(groupIn.AllowBatchImageGeneration).
 		SetImageRateIndependent(groupIn.ImageRateIndependent).
@@ -325,6 +416,20 @@ func (r *groupRepository) Update(ctx context.Context, groupIn *service.Group) er
 		builder = builder.SetFiveHourLimitUsd(*groupIn.FiveHourLimitUSD)
 	} else {
 		builder = builder.ClearFiveHourLimitUsd()
+	}
+	if groupIn.QuotaResetSourceChanged {
+		builder = builder.SetQuotaResetSourceAccountName(groupIn.QuotaResetSourceAccountName).
+			SetQuotaResetConfigVersion(groupIn.QuotaResetConfigVersion)
+		if groupIn.QuotaResetSourceAccountID != nil {
+			builder = builder.SetQuotaResetSourceAccountID(*groupIn.QuotaResetSourceAccountID)
+		} else {
+			builder = builder.ClearQuotaResetSourceAccountID()
+		}
+		if groupIn.QuotaResetSourceResetAt != nil {
+			builder = builder.SetQuotaResetSourceResetAt(*groupIn.QuotaResetSourceResetAt)
+		} else {
+			builder = builder.ClearQuotaResetSourceResetAt()
+		}
 	}
 	if groupIn.ImagePrice1K != nil {
 		builder = builder.SetImagePrice1k(*groupIn.ImagePrice1K)
@@ -406,10 +511,20 @@ func (r *groupRepository) Update(ctx context.Context, groupIn *service.Group) er
 	builder = builder.SetSupportedModelScopes(groupIn.SupportedModelScopes)
 
 	updated, err := builder.Save(ctx)
+	if dbent.IsNotFound(err) {
+		return infraerrors.Conflict("GROUP_CONFIGURATION_CHANGED", "group configuration changed; reload and retry")
+	}
 	if err != nil {
 		return translatePersistenceError(err, service.ErrGroupNotFound, service.ErrGroupExists)
 	}
 	groupIn.UpdatedAt = updated.UpdatedAt
+	groupIn.QuotaResetSourceResetAt = updated.QuotaResetSourceResetAt
+	if tx != nil {
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+	}
+	groupIn.QuotaResetSourceChanged = false
 	if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventGroupChanged, nil, &groupIn.ID, nil); err != nil {
 		logger.LegacyPrintf("repository.group", "[SchedulerOutbox] enqueue group update failed: group=%d err=%v", groupIn.ID, err)
 	}
@@ -488,6 +603,7 @@ func (r *groupRepository) ListWithFilters(ctx context.Context, params pagination
 			outGroups[i].RateLimitedAccountCount = c.RateLimited
 		}
 	}
+	r.hydrateQuotaResetSourceValidity(ctx, outGroups)
 
 	return outGroups, paginationResultFromTotal(int64(total), params), nil
 }
@@ -575,6 +691,7 @@ func (r *groupRepository) listWithAccountCountSort(ctx context.Context, q *dbent
 			outGroups[idx] = *g
 		}
 	}
+	r.hydrateQuotaResetSourceValidity(ctx, outGroups)
 
 	return outGroups, paginationResultFromTotal(int64(total), params), nil
 }
@@ -659,6 +776,7 @@ func (r *groupRepository) ListActive(ctx context.Context) ([]service.Group, erro
 			outGroups[i].RateLimitedAccountCount = c.RateLimited
 		}
 	}
+	r.hydrateQuotaResetSourceValidity(ctx, outGroups)
 
 	return outGroups, nil
 }
@@ -732,8 +850,45 @@ func (r *groupRepository) ListActiveByPlatform(ctx context.Context, platform str
 			outGroups[i].RateLimitedAccountCount = c.RateLimited
 		}
 	}
+	r.hydrateQuotaResetSourceValidity(ctx, outGroups)
 
 	return outGroups, nil
+}
+
+func (r *groupRepository) hydrateQuotaResetSourceValidity(ctx context.Context, groups []service.Group) {
+	if r == nil || r.sql == nil || len(groups) == 0 {
+		return
+	}
+	ids := make([]int64, 0, len(groups))
+	for i := range groups {
+		if groups[i].QuotaResetSourceAccountID != nil {
+			ids = append(ids, *groups[i].QuotaResetSourceAccountID)
+		}
+	}
+	if len(ids) == 0 {
+		return
+	}
+	rows, err := r.sql.QueryContext(ctx, `
+		SELECT id FROM accounts
+		WHERE id = ANY($1) AND deleted_at IS NULL
+		  AND platform = $2 AND type = $3 AND parent_account_id IS NULL
+	`, pq.Array(ids), service.PlatformOpenAI, service.AccountTypeOAuth)
+	if err != nil {
+		return
+	}
+	defer func() { _ = rows.Close() }()
+	valid := make(map[int64]struct{}, len(ids))
+	for rows.Next() {
+		var id int64
+		if rows.Scan(&id) == nil {
+			valid[id] = struct{}{}
+		}
+	}
+	for i := range groups {
+		if groups[i].QuotaResetSourceAccountID != nil {
+			_, groups[i].QuotaResetSourceValid = valid[*groups[i].QuotaResetSourceAccountID]
+		}
+	}
 }
 
 func (r *groupRepository) ExistsByName(ctx context.Context, name string) (bool, error) {
