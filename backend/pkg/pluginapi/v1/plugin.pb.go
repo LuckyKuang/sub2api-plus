@@ -1215,7 +1215,7 @@ const file_plugin_proto_rawDesc = "" +
 	"\vApplyConfig\x12%.sub2api.plugin.v1.ApplyConfigRequest\x1a&.sub2api.plugin.v1.ApplyConfigResponse\x12Y\n" +
 	"\n" +
 	"TestConfig\x12$.sub2api.plugin.v1.TestConfigRequest\x1a%.sub2api.plugin.v1.TestConfigResponse\x12T\n" +
-	"\aForward\x12!.sub2api.plugin.v1.ForwardRequest\x1a\".sub2api.plugin.v1.ForwardResponse(\x010\x01B7Z5github.com/Wei-Shaw/sub2api/pkg/pluginapi/v1;pluginv1b\x06proto3"
+	"\aForward\x12!.sub2api.plugin.v1.ForwardRequest\x1a\".sub2api.plugin.v1.ForwardResponse(\x010\x01B7Z5github.com/LuckyKuang/sub2api-plus/pkg/pluginapi/v1;pluginv1b\x06proto3"
 
 var (
 	file_plugin_proto_rawDescOnce sync.Once

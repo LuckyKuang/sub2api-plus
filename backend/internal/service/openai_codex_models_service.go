@@ -110,6 +110,11 @@ type CodexModelsManifest struct {
 	NotModified                  bool
 }
 
+// OpenAIModelsResponse is the shared model-list response shape. Codex manifests
+// retain their established name while ordinary OpenAI model listings use this
+// alias to share the cache and conditional-response metadata.
+type OpenAIModelsResponse = CodexModelsManifest
+
 // BuildGroupConfiguredCodexModelsManifest builds a Codex catalog exclusively
 // from the public model names configured on accounts in an OpenAI group. The
 // boolean result distinguishes "no explicit configuration" from a configured

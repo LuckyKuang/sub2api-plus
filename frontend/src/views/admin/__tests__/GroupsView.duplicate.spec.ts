@@ -4,51 +4,49 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { AdminGroup } from '@/types'
 import GroupsView from '@/views/admin/GroupsView.vue'
-import Select from '@/components/common/Select.vue'
+import { adminAPI } from '@/api/admin'
 
 const {
   listGroups,
   duplicateGroup,
-  createGroup,
   updateGroup,
-  getModelsListCandidates,
+  getModelAllowlistCandidates,
   getUsageSummary,
   getCapacitySummary,
   getLiveCapability,
-  listAccounts,
   showSuccess,
   showError
 } = vi.hoisted(() => ({
   listGroups: vi.fn(),
   duplicateGroup: vi.fn(),
-  createGroup: vi.fn(),
   updateGroup: vi.fn(),
-  getModelsListCandidates: vi.fn(),
+  getModelAllowlistCandidates: vi.fn(),
   getUsageSummary: vi.fn(),
   getCapacitySummary: vi.fn(),
   getLiveCapability: vi.fn(),
-  listAccounts: vi.fn(),
   showSuccess: vi.fn(),
   showError: vi.fn()
 }))
+
+const authState = vi.hoisted(() => ({ isSimpleMode: false }))
 
 vi.mock('@/api/admin', () => ({
   adminAPI: {
     groups: {
       list: listGroups,
       duplicate: duplicateGroup,
-      getModelsListCandidates,
+      getModelAllowlistCandidates,
       getUsageSummary,
       getCapacitySummary,
       getLiveCapability,
       getAll: vi.fn(),
-      create: createGroup,
+      create: vi.fn(),
       update: updateGroup,
       delete: vi.fn(),
       updateSortOrder: vi.fn()
     },
     accounts: {
-      list: listAccounts,
+      list: vi.fn(),
       getById: vi.fn()
     }
   }
@@ -56,6 +54,10 @@ vi.mock('@/api/admin', () => ({
 
 vi.mock('@/stores/app', () => ({
   useAppStore: () => ({ showSuccess, showError })
+}))
+
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: () => authState
 }))
 
 vi.mock('@/stores/onboarding', () => ({
@@ -122,7 +124,7 @@ const sourceGroup: AdminGroup = {
   account_count: 1,
   active_account_count: 1,
   rate_limited_account_count: 0,
-  models_list_config: undefined,
+  model_allowlist: undefined,
   sort_order: 10
 }
 
@@ -175,18 +177,17 @@ function mountView() {
 
 describe('GroupsView duplicate action', () => {
   beforeEach(() => {
+    authState.isSimpleMode = false
     localStorage.clear()
     vi.spyOn(console, 'error').mockImplementation(() => {})
     for (const fn of [
       listGroups,
       duplicateGroup,
-      createGroup,
       updateGroup,
-      getModelsListCandidates,
+      getModelAllowlistCandidates,
       getUsageSummary,
       getCapacitySummary,
       getLiveCapability,
-      listAccounts,
       showSuccess,
       showError
     ]) {
@@ -206,115 +207,14 @@ describe('GroupsView duplicate action', () => {
       name: 'Primary (Copy)',
       status: 'inactive'
     })
-    getModelsListCandidates.mockResolvedValue([])
+    getModelAllowlistCandidates.mockResolvedValue([])
     getUsageSummary.mockResolvedValue([])
     getCapacitySummary.mockResolvedValue([])
     getLiveCapability.mockResolvedValue({ supported: false })
-    listAccounts.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 100, pages: 0 })
-    createGroup.mockResolvedValue(sourceGroup)
   })
 
   afterEach(() => {
     vi.restoreAllMocks()
-  })
-
-  it('keeps the exclusive switch visible, defaults it on for subscriptions, and submits that value', async () => {
-    const wrapper = mountView()
-    await flushPromises()
-    const createButton = wrapper.findAll('button').find(button => button.text() === 'admin.groups.createGroup')
-    expect(createButton).toBeTruthy()
-    await createButton!.trigger('click')
-    const form = wrapper.get('#create-group-form')
-    const exclusive = () => form.get('[aria-label="admin.groups.form.exclusive"]')
-    expect(exclusive().attributes('aria-checked')).toBe('false')
-    const billing = wrapper.findAllComponents(Select).find(select =>
-      select.props('options').some(option => option.value === 'subscription'))
-    expect(billing).toBeTruthy()
-    billing!.vm.$emit('update:modelValue', 'subscription')
-    await flushPromises()
-    expect(exclusive().attributes('aria-checked')).toBe('true')
-    await form.get('input').setValue('Subscription default')
-    await form.trigger('submit')
-    await flushPromises()
-    expect(createGroup).toHaveBeenCalledWith(expect.objectContaining({
-      subscription_type: 'subscription', is_exclusive: true,
-    }))
-    wrapper.unmount()
-  })
-
-  it('preserves manual exclusivity after switching back to standard billing', async () => {
-    const wrapper = mountView()
-    await flushPromises()
-    await wrapper.findAll('button').find(button => button.text() === 'admin.groups.createGroup')!.trigger('click')
-    const billing = wrapper.findAllComponents(Select).find(select =>
-      select.props('options').some(option => option.value === 'subscription'))!
-    billing.vm.$emit('update:modelValue', 'subscription')
-    await flushPromises()
-    billing.vm.$emit('update:modelValue', 'standard')
-    await flushPromises()
-    const exclusive = wrapper.get('#create-group-form [aria-label="admin.groups.form.exclusive"]')
-    expect(exclusive.attributes('aria-checked')).toBe('true')
-    await exclusive.trigger('click')
-    expect(exclusive.attributes('aria-checked')).toBe('false')
-    wrapper.unmount()
-  })
-
-  it('offers only credential-owning OpenAI OAuth reset sources and submits the selected account', async () => {
-    listAccounts.mockResolvedValue({
-      items: [
-        { id: 501, name: 'Eligible OAuth', platform: 'openai', type: 'oauth', parent_account_id: null },
-        { id: 502, name: 'OpenAI API key', platform: 'openai', type: 'apikey', parent_account_id: null },
-        { id: 503, name: 'OAuth shadow', platform: 'openai', type: 'oauth', parent_account_id: 501 },
-      ],
-      total: 3,
-      page: 1,
-      page_size: 100,
-      pages: 1,
-    })
-    const wrapper = mountView()
-    await flushPromises()
-    await wrapper.findAll('button').find(button => button.text() === 'admin.groups.createGroup')!.trigger('click')
-    await flushPromises()
-
-    const vm = wrapper.vm as unknown as {
-      quotaResetSourceAccounts: Array<{ id: number }>
-      createForm: {
-        platform: string
-        subscription_type: string
-        quota_reset_source_account_id: number | null
-      }
-    }
-    expect(vm.quotaResetSourceAccounts.map(account => account.id)).toEqual([501])
-    vm.createForm.platform = 'openai'
-    vm.createForm.subscription_type = 'subscription'
-    vm.createForm.quota_reset_source_account_id = 501
-    await flushPromises()
-    await wrapper.get('#create-group-form input').setValue('Follow upstream reset')
-    await wrapper.get('#create-group-form').trigger('submit')
-    await flushPromises()
-
-    expect(listAccounts).toHaveBeenCalledWith(1, 100, { platform: 'openai', type: 'oauth' })
-    expect(createGroup).toHaveBeenCalledWith(expect.objectContaining({
-      platform: 'openai',
-      subscription_type: 'subscription',
-      quota_reset_source_account_id: 501,
-      quota_reset_include_monthly: false,
-    }))
-    wrapper.unmount()
-  })
-
-  it.each([true, false])('shows the saved exclusivity of an existing subscription: %s', async (isExclusive) => {
-    listGroups.mockResolvedValue({
-      items: [{ ...sourceGroup, subscription_type: 'subscription', is_exclusive: isExclusive }],
-      total: 1, page: 1, page_size: 20, pages: 1,
-    })
-    const wrapper = mountView()
-    await flushPromises()
-    await wrapper.findAll('button').find(button => button.text() === 'common.edit')!.trigger('click')
-    await flushPromises()
-    const exclusive = wrapper.get('#edit-group-form [aria-label="admin.groups.form.exclusive"]')
-    expect(exclusive.attributes('aria-checked')).toBe(String(isExclusive))
-    wrapper.unmount()
   })
 
   it('duplicates the selected group, reports success, and refreshes the list', async () => {
@@ -328,6 +228,20 @@ describe('GroupsView duplicate action', () => {
     expect(duplicateGroup).toHaveBeenCalledWith(42)
     expect(showSuccess).toHaveBeenCalledWith('admin.groups.duplicateSuccess')
     expect(listGroups).toHaveBeenCalledTimes(2)
+    wrapper.unmount()
+  })
+
+  it('hides advanced group actions in simple mode', async () => {
+    authState.isSimpleMode = true
+    const compositeGroup = { ...sourceGroup, platform: 'composite' }
+    listGroups.mockResolvedValueOnce({ items: [compositeGroup], total: 1, page: 1, page_size: 20, pages: 1 })
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="group-duplicate"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="group-composite-routes"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="group-rate-multipliers"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="group-rpm-overrides"]').exists()).toBe(false)
     wrapper.unmount()
   })
 
@@ -389,28 +303,6 @@ describe('GroupsView duplicate action', () => {
     wrapper.unmount()
   })
 
-  it('keeps OAuth and privacy switches independent and submits their selected values', async () => {
-    updateGroup.mockResolvedValue(sourceGroup)
-    const wrapper = mountView()
-    await flushPromises()
-    const editButton = wrapper.findAll('button').find(button => button.text() === 'common.edit')
-    await editButton!.trigger('click')
-    await flushPromises()
-    const oauth = wrapper.get('[aria-label="admin.groups.accountFilters.oauthOnly"]')
-    const privacy = wrapper.get('[aria-label="admin.groups.accountFilters.privacySetOnly"]')
-    await oauth.trigger('click')
-    expect(oauth.attributes('aria-checked')).toBe('true')
-    expect(privacy.attributes('aria-checked')).toBe('false')
-    await privacy.trigger('click')
-    await wrapper.get('#edit-group-form').trigger('submit')
-    await flushPromises()
-    expect(updateGroup).toHaveBeenCalledWith(42, expect.objectContaining({
-      require_oauth_only: true,
-      require_privacy_set: true,
-    }))
-    wrapper.unmount()
-  })
-
   it('shows the standardized API message when updating a group fails', async () => {
     updateGroup.mockRejectedValueOnce({
       status: 409,
@@ -432,4 +324,70 @@ describe('GroupsView duplicate action', () => {
     expect(showError).toHaveBeenCalledWith('group name already exists')
     wrapper.unmount()
   })
+
+  it('updates manifest controls immediately and submits the displayed selection', async () => {
+    vi.useFakeTimers()
+    vi.mocked(adminAPI.accounts.list).mockResolvedValue({
+      items: [{ id: 5, name: 'Manifest account' }]
+    } as never)
+    updateGroup.mockResolvedValue(sourceGroup)
+    const wrapper = mountView()
+    try {
+      await flushPromises()
+      const editButton = wrapper.findAll('button').find((button) => button.text() === 'common.edit')!
+      await editButton.trigger('click')
+      await flushPromises()
+
+      const toggle = wrapper.get('[data-testid="codex-manifest-toggle"]')
+      await toggle.trigger('click')
+      expect(toggle.attributes('aria-checked')).toBe('true')
+      const search = wrapper.get('[data-testid="codex-manifest-search"]')
+      await search.trigger('focus')
+      await vi.advanceTimersByTimeAsync(300)
+      await flushPromises()
+      expect(adminAPI.accounts.list).toHaveBeenCalledWith(
+        1, 20, { search: '', platform: 'openai', group: '42' }, expect.anything()
+      )
+      await wrapper.get('[data-testid="codex-manifest-dropdown"] button').trigger('click')
+      expect(wrapper.get('[data-testid="codex-manifest-selected-tags"]').text()).toContain('Manifest account')
+
+      await wrapper.get('[aria-label="remove account 5"]').trigger('click')
+      expect(wrapper.find('[data-testid="codex-manifest-selected-tags"]').exists()).toBe(false)
+      await wrapper.get('#edit-group-form').trigger('submit')
+      expect(updateGroup).not.toHaveBeenCalled()
+      expect(wrapper.find('[data-testid="codex-manifest-validation-error"]').exists()).toBe(true)
+
+      await search.trigger('focus')
+      await wrapper.get('[data-testid="codex-manifest-dropdown"] button').trigger('click')
+      expect(wrapper.get('[data-testid="codex-manifest-selected-tags"]').text()).toContain('Manifest account')
+      const fallback = wrapper.get('[data-testid="codex-manifest-fallback-toggle"]')
+      await fallback.trigger('click')
+      expect(fallback.attributes('aria-checked')).toBe('true')
+      await fallback.trigger('click')
+      expect(fallback.attributes('aria-checked')).toBe('false')
+      await fallback.trigger('click')
+
+      await toggle.trigger('click')
+      expect(wrapper.find('[data-testid="codex-manifest-search"]').exists()).toBe(false)
+      await toggle.trigger('click')
+      expect(wrapper.get('[data-testid="codex-manifest-selected-tags"]').text()).toContain('Manifest account')
+      await wrapper.get('#edit-group-form').trigger('submit')
+      await flushPromises()
+      expect(updateGroup).toHaveBeenCalledWith(42, expect.objectContaining({
+        codex_models_manifest_config: {
+          enabled: true, account_ids: [5], fallback_to_scheduler: true
+        }
+      }))
+
+      // Reopening reads the saved group afresh, without retaining the prior draft.
+      await editButton.trigger('click')
+      await flushPromises()
+      expect(wrapper.get('[data-testid="codex-manifest-toggle"]').attributes('aria-checked')).toBe('false')
+      expect(wrapper.find('[data-testid="codex-manifest-search"]').exists()).toBe(false)
+    } finally {
+      wrapper.unmount()
+      vi.useRealTimers()
+    }
+  })
+
 })
