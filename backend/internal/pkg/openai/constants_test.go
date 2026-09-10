@@ -35,3 +35,8 @@ func TestDefaultModelIDsAreUnique(t *testing.T) {
 		seen[model.ID] = struct{}{}
 	}
 }
+
+func TestDefaultModelsIncludeGPTImage25(t *testing.T) {
+	require.Contains(t, DefaultModelIDs(), "gpt-image-2.5-flare")
+	require.Contains(t, DefaultModelIDs(), "gpt-image-2.5-sunburst")
+}

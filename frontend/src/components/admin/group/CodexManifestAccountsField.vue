@@ -10,9 +10,10 @@
         </p>
       </div>
       <Toggle
-        :model-value="!!config.enabled" @update:model-value="emitUpdate({ enabled: !config.enabled })"
         data-testid="codex-manifest-toggle"
         :aria-label="t('admin.groups.codexModelsManifest.enable')"
+        :model-value="config.enabled"
+        @update:model-value="emitUpdate({ enabled: $event })"
       />
     </div>
 
@@ -102,9 +103,10 @@
           </p>
         </div>
         <Toggle
-          :model-value="!!config.fallback_to_scheduler" @update:model-value="emitUpdate({ fallback_to_scheduler: !config.fallback_to_scheduler, })"
           data-testid="codex-manifest-fallback-toggle"
           :aria-label="t('admin.groups.codexModelsManifest.fallback')"
+          :model-value="config.fallback_to_scheduler"
+          @update:model-value="emitUpdate({ fallback_to_scheduler: $event })"
         />
       </div>
 

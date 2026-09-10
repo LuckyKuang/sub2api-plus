@@ -266,22 +266,22 @@ the release workflow preserves the leading `v` and replaces only `+` with
 `-`. The current mapping is:
 
 ```text
-Git/GitHub:         v0.2.1+custom.003
-Application:        0.2.1+custom.003
-Apple/OCI image:    ghcr.io/luckykuang/sub2api-plus:v0.2.1-custom.003
+Git/GitHub:         v0.2.4+custom.001
+Application:        0.2.4+custom.001
+Apple/OCI image:    ghcr.io/luckykuang/sub2api-plus:v0.2.4-custom.001
 ```
 
 Use the following values when building or publishing this OCI image:
 
 ```bash
 docker build \
-  --build-arg VERSION=0.2.1+custom.003 \
-  --tag ghcr.io/luckykuang/sub2api-plus:v0.2.1-custom.003 \
+  --build-arg VERSION=0.2.4+custom.001 \
+  --tag ghcr.io/luckykuang/sub2api-plus:v0.2.4-custom.001 \
   .
 ```
 
 After that image is available to the Apple `container` runtime, set
-`APPLE_CONTAINER_SUB2API_IMAGE=ghcr.io/luckykuang/sub2api-plus:v0.2.1-custom.003`. Until then, keep
+`APPLE_CONTAINER_SUB2API_IMAGE=ghcr.io/luckykuang/sub2api-plus:v0.2.4-custom.001`. Until then, keep
 the published image as the runtime base and use `APPLE_CONTAINER_SUB2API_BINARY`
 for the custom binary.
 
@@ -450,3 +450,14 @@ container system start
 - Named volume backup and restore must be tested before using this workflow for important data.
 - The script targets native `linux/arm64` images. The normal Sub2API Plus release publishes an arm64 variant.
 - Runtime environment values, including credentials, are retained in Apple container configuration and are visible to users who can inspect the local runtime.
+
+### Image generation main model
+
+`SUB2API_IMAGES_MAIN_MODEL` in `.env` selects the Responses model used for image
+generation and defaults to `gpt-5.6-luna`. The Apple Container launcher passes
+the application environment file through, including this setting.
+
+`APPLE_CONTAINER_NETWORK_SUBNET` optionally selects the IPv4 subnet when creating
+the Apple Container network. A configured subnet must match an existing network;
+the launcher reports a mismatch with the migration command before starting the
+application. Keep this unset to use the runtime default.

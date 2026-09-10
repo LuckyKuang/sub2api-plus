@@ -1099,15 +1099,39 @@ func (a *BufferedResponseAccumulator) BuildOutput() []ResponsesOutput {
 	return out
 }
 
-// SupplementResponseOutput fills resp.Output from accumulated delta content
-// when the terminal event delivered an empty output array. If resp.Output is
-// already populated, this is a no-op (preserves backward compatibility).
+// SupplementResponseOutput restores empty terminal output and missing tool inputs
+// from already observed events while preserving populated terminal fields.
 func (a *BufferedResponseAccumulator) SupplementResponseOutput(resp *ResponsesResponse) {
-	if resp == nil || len(resp.Output) > 0 {
+	if resp == nil {
 		return
 	}
-	if !a.HasContent() {
+	if len(resp.Output) == 0 {
+		if a.HasContent() {
+			resp.Output = a.BuildOutput()
+		}
 		return
 	}
-	resp.Output = a.BuildOutput()
+
+	for outputIndex := range resp.Output {
+		item := &resp.Output[outputIndex]
+		if !isResponsesToolCall(item.Type) || responsesToolCallArguments(item) != "" {
+			continue
+		}
+		for funcIndex := range a.funcCalls {
+			call := &a.funcCalls[funcIndex]
+			matchesCallID := item.CallID != "" && item.CallID == call.CallID
+			mappedFuncIndex, hasOutputIndex := a.outputIndexToFuncIdx[outputIndex]
+			if (item.CallID != "" && !matchesCallID) || (item.CallID == "" && (!hasOutputIndex || mappedFuncIndex != funcIndex)) {
+				continue
+			}
+			if call.Args.Len() > 0 {
+				if item.Type == "custom_tool_call" {
+					item.Input = call.Args.String()
+				} else {
+					item.Arguments = call.Args.String()
+				}
+			}
+			break
+		}
+	}
 }
