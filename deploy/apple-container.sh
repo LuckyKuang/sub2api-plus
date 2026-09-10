@@ -43,6 +43,7 @@ POSTGRES_PASSWORD=""
 POSTGRES_DB=""
 REDIS_PASSWORD=""
 TZ_VALUE=""
+NETWORK_SUBNET=""
 POSTGRES_ADDRESS=""
 REDIS_ADDRESS=""
 MINIO_ENABLED=""
@@ -276,15 +277,28 @@ preflight_stack_ownership() {
 }
 
 ensure_network() {
+    local existing_subnet
+    local -a network_args
+
     if resource_exists network "${NETWORK_NAME}"; then
         assert_resource_owned network "${NETWORK_NAME}"
+        if [[ -n "${NETWORK_SUBNET}" ]]; then
+            existing_subnet="$(inspect_resource network "${NETWORK_NAME}" | \
+                json_extract 0.configuration.ipv4Subnet)" || \
+                die "Unable to read the IPv4 subnet for ${NETWORK_NAME}."
+            if [[ "${existing_subnet}" != "${NETWORK_SUBNET}" ]]; then
+                die "Existing network '${NETWORK_NAME}' uses subnet '${existing_subnet}', but APPLE_CONTAINER_NETWORK_SUBNET is '${NETWORK_SUBNET}'. Run './apple-container.sh destroy --yes' to recreate the network while preserving volumes, then run 'up' again."
+            fi
+        fi
         return
     fi
 
     info "Creating network ${NETWORK_NAME}..."
-    container network create \
-        --label "${STACK_LABEL_KEY}=${STACK_LABEL_VALUE}" \
-        "${NETWORK_NAME}" >/dev/null
+    network_args=(--label "${STACK_LABEL_KEY}=${STACK_LABEL_VALUE}")
+    if [[ -n "${NETWORK_SUBNET}" ]]; then
+        network_args+=(--subnet "${NETWORK_SUBNET}")
+    fi
+    container network create "${network_args[@]}" "${NETWORK_NAME}" >/dev/null
 }
 
 ensure_volume() {
@@ -621,6 +635,7 @@ prepare_environment() {
     MINIO_ROOT_PASSWORD="$(read_env_value MINIO_ROOT_PASSWORD)"
     MINIO_BUCKET="$(read_env_value MINIO_BUCKET sub2api-images)"
     MINIO_REGION="$(read_env_value MINIO_REGION us-east-1)"
+    NETWORK_SUBNET="$(read_env_value APPLE_CONTAINER_NETWORK_SUBNET)"
 
     [[ -n "${BIND_HOST}" ]] || die "BIND_HOST must not be empty."
     validate_ipv4_address "${BIND_HOST}"

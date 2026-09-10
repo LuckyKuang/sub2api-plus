@@ -20,6 +20,27 @@ func ordinaryModelsUpstreamResponse(body string) *http.Response {
 	return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body))}
 }
 
+func TestPublicModelsDiscoveryUsesAccountIdentityAfterOverrides(t *testing.T) {
+	parent := newCodexModelsAPIKeyTestAccount("https://models.example/v1")
+	parent.Credentials["user_agent"] = codexModelsCustomAccountUserAgent
+	parent.Credentials["header_override_enabled"] = true
+	parent.Credentials["header_overrides"] = map[string]any{
+		"User-Agent": "untrusted/1", "Originator": "untrusted", "Version": "1",
+	}
+	var calls int
+	svc := newCodexModelsAPIKeyTestService(&codexModelsHTTPUpstreamStub{do: func(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
+		calls++
+		require.Equal(t, codexModelsCustomAccountCurrentUserAgent, req.Header.Get("User-Agent"))
+		require.Empty(t, req.Header.Get("Originator"))
+		require.NotEqual(t, "1", req.Header.Get("Version"))
+		require.Equal(t, "Bearer sk-upstream", req.Header.Get("Authorization"))
+		return ordinaryModelsUpstreamResponse(`{"data":[{"id":"model"}]}`), nil
+	}})
+	_, err := svc.FetchOpenAIModelsList(context.Background(), parent)
+	require.NoError(t, err)
+	require.Equal(t, 1, calls)
+}
+
 func TestFetchOpenAIModelsListUsesStandardRequestAndIsolatesCodexCache(t *testing.T) {
 	var calls atomic.Int32
 	s := newCodexModelsAPIKeyTestService(&codexModelsHTTPUpstreamStub{do: func(req *http.Request, _ string, accountID int64, concurrency int) (*http.Response, error) {

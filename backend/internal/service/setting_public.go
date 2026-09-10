@@ -239,6 +239,7 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		SettingKeyPluginManagementEnabled,
 		SettingKeyAffiliateEnabled,
 		SettingKeyRiskControlEnabled,
+		SettingKeyGlobalIPAccessControlEnabled,
 		SettingKeyAllowUserViewErrorRequests,
 	}
 
@@ -322,7 +323,7 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		AliyunCaptchaSceneID:                settings[SettingKeyAliyunCaptchaSceneID],
 		AliyunCaptchaPrefix:                 settings[SettingKeyAliyunCaptchaPrefix],
 		AliyunCaptchaRegion:                 normalizeAliyunCaptchaRegion(settings[SettingKeyAliyunCaptchaRegion]),
-		SiteName:                            s.getStringOrDefault(settings, SettingKeySiteName, "Sub2API"),
+		SiteName:                            s.getStringOrDefault(settings, SettingKeySiteName, defaultSiteName),
 		SiteLogo:                            settings[SettingKeySiteLogo],
 		SiteSubtitle:                        s.getStringOrDefault(settings, SettingKeySiteSubtitle, "Subscription to API Conversion Platform"),
 		APIBaseURL:                          settings[SettingKeyAPIBaseURL],
@@ -364,12 +365,14 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		AvailableChannelsEnabled: settings[SettingKeyAvailableChannelsEnabled] == "true",
 
 		ModelPlazaEnabled:       settings[SettingKeyModelPlazaEnabled] == "true",
-		ModelPlazaRequireAuth:   settings[SettingKeyModelPlazaRequireAuth] == "true",
+		ModelPlazaRequireAuth:   settings[SettingKeyModelPlazaRequireAuth] != "false",
 		PluginManagementEnabled: settings[SettingKeyPluginManagementEnabled] == "true",
 
 		AffiliateEnabled: settings[SettingKeyAffiliateEnabled] == "true",
 
 		RiskControlEnabled: settings[SettingKeyRiskControlEnabled] == "true",
+
+		GlobalIPAccessControlEnabled: settings[SettingKeyGlobalIPAccessControlEnabled] == "true",
 
 		AllowUserViewErrorRequests: settings[SettingKeyAllowUserViewErrorRequests] == "true",
 	}, nil
@@ -433,7 +436,7 @@ type ChannelMonitorRuntime struct {
 	// Parsed fail-closed (only literal "true" enables). Admin always sees them.
 	ShowQuota bool
 	// HideUserRanking: when true, user-facing V2 views hide the user ranking tab
-	// and the /users payload. Parsed fail-open (only literal "true" hides it).
+	// and the /users payload. Absent/false remains visible; true/1/on/enabled hides it.
 	HideUserRanking bool
 }
 
@@ -524,8 +527,10 @@ func (s *SettingService) GetModelPlazaRuntime(ctx context.Context) ModelPlazaRun
 		return ModelPlazaRuntime{Enabled: false}
 	}
 	return ModelPlazaRuntime{
-		Enabled:     vals[SettingKeyModelPlazaEnabled] == "true",
-		RequireAuth: vals[SettingKeyModelPlazaRequireAuth] == "true",
+		Enabled: vals[SettingKeyModelPlazaEnabled] == "true",
+		// A missing setting is deliberately private. Anonymous exposure needs an
+		// administrator to persist an explicit false value.
+		RequireAuth: vals[SettingKeyModelPlazaRequireAuth] != "false",
 		Description: vals[SettingKeyModelPlazaDescription],
 	}
 }
@@ -636,6 +641,7 @@ type PublicSettingsInjectionPayload struct {
 	AffiliateEnabled              bool `json:"affiliate_enabled"`
 	RiskControlEnabled            bool `json:"risk_control_enabled"`
 	AllowUserViewErrorRequests    bool `json:"allow_user_view_error_requests"`
+	GlobalIPAccessControlEnabled  bool `json:"global_ip_access_control_enabled"`
 }
 
 // GetPublicSettingsForInjection returns public settings in a format suitable for HTML injection.
@@ -717,6 +723,7 @@ func (s *SettingService) GetPublicSettingsForInjection(ctx context.Context) (any
 		PluginManagementEnabled:              settings.PluginManagementEnabled,
 		AffiliateEnabled:                     settings.AffiliateEnabled,
 		RiskControlEnabled:                   settings.RiskControlEnabled,
+		GlobalIPAccessControlEnabled:         settings.GlobalIPAccessControlEnabled,
 		AllowUserViewErrorRequests:           settings.AllowUserViewErrorRequests,
 	}, nil
 }

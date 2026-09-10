@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -319,14 +320,29 @@ func kimiQuotaURL(baseURL string) string {
 	return base + "/v1/usages"
 }
 
-// minimaxQuotaURL 根据推理域名选择 Token Plan / Coding Plan 额度主机。
-// 官方 FAQ 写 www.minimax.io / www.minimaxi.com，实际以 Bearer Key 打 api.*。
-// 国际站 api.minimax.io；国内站 api.minimaxi.com（含 api.minimax.com 与自定义回落）。
-func minimaxQuotaURL(baseURL string) string {
-	if strings.Contains(strings.ToLower(baseURL), "minimax.io") {
-		return "https://api.minimax.io/v1/api/openplatform/coding_plan/remains"
+// miniMaxQuotaHost accepts only official HTTPS inference hosts. Never infer
+// credential ownership from userinfo, paths, queries, or a domain substring.
+func miniMaxQuotaHost(baseURL string) string {
+	u, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil || !strings.EqualFold(u.Scheme, "https") || u.User != nil || (u.Port() != "" && u.Port() != "443") {
+		return ""
 	}
-	return "https://api.minimaxi.com/v1/api/openplatform/coding_plan/remains"
+	switch strings.ToLower(u.Hostname()) {
+	case "api.minimax.io":
+		return "https://api.minimax.io"
+	case "api.minimaxi.com", "api.minimax.com":
+		return "https://api.minimaxi.com"
+	default:
+		return ""
+	}
+}
+
+func minimaxQuotaURL(baseURL string) string {
+	host := miniMaxQuotaHost(baseURL)
+	if host == "" {
+		return ""
+	}
+	return host + "/v1/api/openplatform/coding_plan/remains"
 }
 
 func zhipuQuotaHost(baseURL string) string {

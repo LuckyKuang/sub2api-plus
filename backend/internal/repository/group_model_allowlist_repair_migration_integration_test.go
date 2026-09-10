@@ -11,12 +11,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const groupModelAllowlistRepairMigration = "236_group_model_allowlist_repair.sql"
+const groupModelAllowlistRepairMigration = "260_group_model_allowlist_repair.sql"
 
-// 236 是可重放的修复迁移：235 的重命名一旦被记账就不会重跑，数据库若回到旧结构
+// 260 是可重放的修复迁移：259 的重命名一旦被记账就不会重跑，数据库若回到旧结构
 // （手工改回列名、按旧结构部分恢复）应用仍能启动，但所有关联 groups 的查询都会
 // 报 column groups.model_allowlist does not exist（issue #6780）。
-func TestMigration236RenamesLegacyModelsListConfigColumn(t *testing.T) {
+func TestMigration260RenamesLegacyModelsListConfigColumn(t *testing.T) {
 	tx := testTx(t)
 	ctx := context.Background()
 
@@ -26,7 +26,7 @@ func TestMigration236RenamesLegacyModelsListConfigColumn(t *testing.T) {
 	var groupID int64
 	require.NoError(t, tx.QueryRowContext(ctx, `
 INSERT INTO groups (name, platform, rate_multiplier, status, models_list_config)
-VALUES ('migration-236-rename', 'anthropic', 1, 'active', '{"enabled":true,"models":["claude-sonnet-5"]}'::jsonb)
+VALUES ('migration-260-rename', 'anthropic', 1, 'active', '{"enabled":true,"models":["claude-sonnet-5"]}'::jsonb)
 RETURNING id
 `).Scan(&groupID))
 
@@ -46,7 +46,7 @@ RETURNING id
 	require.JSONEq(t, `{"enabled":true,"models":["claude-sonnet-5"]}`, allowlist)
 }
 
-func TestMigration236BackfillsWhenBothColumnsExist(t *testing.T) {
+func TestMigration260BackfillsWhenBothColumnsExist(t *testing.T) {
 	tx := testTx(t)
 	ctx := context.Background()
 
@@ -58,7 +58,7 @@ func TestMigration236BackfillsWhenBothColumnsExist(t *testing.T) {
 	var staleID int64
 	require.NoError(t, tx.QueryRowContext(ctx, `
 INSERT INTO groups (name, platform, rate_multiplier, status, model_allowlist, models_list_config)
-VALUES ('migration-236-backfill', 'anthropic', 1, 'active', '{}'::jsonb, '{"enabled":true,"models":["legacy-model"]}'::jsonb)
+VALUES ('migration-260-backfill', 'anthropic', 1, 'active', '{}'::jsonb, '{"enabled":true,"models":["legacy-model"]}'::jsonb)
 RETURNING id
 `).Scan(&staleID))
 
@@ -66,7 +66,7 @@ RETURNING id
 	var currentID int64
 	require.NoError(t, tx.QueryRowContext(ctx, `
 INSERT INTO groups (name, platform, rate_multiplier, status, model_allowlist, models_list_config)
-VALUES ('migration-236-keep', 'anthropic', 1, 'active', '{"enabled":true,"models":["current-model"]}'::jsonb, '{"enabled":true,"models":["legacy-model"]}'::jsonb)
+VALUES ('migration-260-keep', 'anthropic', 1, 'active', '{"enabled":true,"models":["current-model"]}'::jsonb, '{"enabled":true,"models":["legacy-model"]}'::jsonb)
 RETURNING id
 `).Scan(&currentID))
 
@@ -81,7 +81,7 @@ RETURNING id
 	require.JSONEq(t, `{"enabled":true,"models":["current-model"]}`, kept)
 }
 
-func TestMigration236RecreatesMissingModelAllowlistColumn(t *testing.T) {
+func TestMigration260RecreatesMissingModelAllowlistColumn(t *testing.T) {
 	tx := testTx(t)
 	ctx := context.Background()
 
@@ -91,7 +91,7 @@ func TestMigration236RecreatesMissingModelAllowlistColumn(t *testing.T) {
 	var groupID int64
 	require.NoError(t, tx.QueryRowContext(ctx, `
 INSERT INTO groups (name, platform, rate_multiplier, status)
-VALUES ('migration-236-recreate', 'anthropic', 1, 'active')
+VALUES ('migration-260-recreate', 'anthropic', 1, 'active')
 RETURNING id
 `).Scan(&groupID))
 

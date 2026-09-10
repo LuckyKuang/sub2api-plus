@@ -25,6 +25,10 @@ import (
 	"golang.org/x/net/http2"
 )
 
+const codexModelsCustomAccountUserAgent = "codex-tui/9.9.9 (Mac OS X 14.0; arm64) iTerm (codex-tui; 9.9.9)"
+
+const codexModelsCustomAccountCurrentUserAgent = "codex-tui/" + codexCLIVersion + " (Mac OS X 14.0; arm64) iTerm (codex-tui; " + codexCLIVersion + ")"
+
 type codexModelsHTTPUpstreamStub struct {
 	do func(req *http.Request, proxyURL string, accountID int64, accountConcurrency int) (*http.Response, error)
 }
@@ -344,6 +348,40 @@ func TestNewConfiguredCodexModelDescriptorUsesProviderMetadataAndSafeFallback(t 
 	require.Equal(t, "low", *gpt56.DefaultVerbosity)
 	require.True(t, gpt56.SupportsReasoningSummaryParameter)
 	require.Equal(t, "none", gpt56.DefaultReasoningSummary)
+	require.Equal(t, configuredCodexModelPriority, gpt56.Priority)
+
+	astra := newConfiguredCodexModelDescriptor("gpt-6-astra")
+	require.Equal(t, "GPT-6 Astra", astra.DisplayName)
+	require.NotNil(t, astra.DefaultReasoningLevel)
+	require.Equal(t, "low", *astra.DefaultReasoningLevel)
+	require.Equal(t, 1, astra.Priority)
+	require.Equal(t, []string{"low", "medium", "high", "xhigh", "max", "ultra"}, effortsFromConfiguredCodexLevels(astra.SupportedReasoningLevels))
+	require.Equal(t, int64(272_000), astra.ContextWindow)
+	require.Equal(t, int64(872_000), astra.MaxContextWindow)
+	require.Equal(t, []string{"text", "image"}, astra.InputModalities)
+	require.True(t, astra.SupportsImageDetailOriginal)
+	require.Equal(t, "text_and_image", astra.WebSearchToolType)
+	require.NotNil(t, astra.ApplyPatchToolType)
+	require.Equal(t, "freeform", *astra.ApplyPatchToolType)
+	require.True(t, astra.SupportVerbosity)
+	require.NotNil(t, astra.DefaultVerbosity)
+	require.Equal(t, "low", *astra.DefaultVerbosity)
+	require.Equal(t, "none", astra.DefaultReasoningSummary)
+	require.Equal(t, configuredCodexTruncationPolicy{Mode: "tokens", Limit: 10_000}, astra.TruncationPolicy)
+	require.Equal(t, "code_mode_only", astra.ToolMode)
+	require.Equal(t, "v2", astra.MultiAgentVersion)
+	require.NotNil(t, astra.MultiAgentReasoningEffort)
+	require.Equal(t, "xhigh", *astra.MultiAgentReasoningEffort)
+	require.True(t, astra.PreferWebSockets)
+	require.Equal(t, "0.153.0", astra.MinimalClientVersion)
+	require.True(t, astra.NodeREPLAutoReviewRequired)
+	require.Equal(t, "3000", astra.CompHash)
+	require.Contains(t, astra.ModelMessages.InstructionsTemplate, "You are Codex, an agent based on GPT-6")
+	require.Equal(t, []configuredCodexServiceTier{{
+		ID:          "priority",
+		Name:        "Fast",
+		Description: "Priority processing for lower latency.",
+	}}, astra.ServiceTiers)
 
 	gpt56Luna := newConfiguredCodexModelDescriptor("gpt-5.6-luna")
 	require.Equal(t, []string{"low", "medium", "high", "xhigh", "max"}, effortsFromConfiguredCodexLevels(gpt56Luna.SupportedReasoningLevels))
@@ -353,11 +391,8 @@ func TestNewConfiguredCodexModelDescriptorUsesProviderMetadataAndSafeFallback(t 
 	require.Equal(t, "GPT-6 Astra", gpt6Astra.DisplayName)
 	require.True(t, strings.HasPrefix(strings.TrimSpace(gpt6Astra.ModelMessages.InstructionsTemplate), "You are Codex, an agent based on GPT-6."))
 	require.NotNil(t, gpt6Astra.DefaultReasoningLevel)
-	require.Equal(t, "medium", *gpt6Astra.DefaultReasoningLevel)
+	require.Equal(t, "low", *gpt6Astra.DefaultReasoningLevel)
 	require.Equal(t, []string{"low", "medium", "high", "xhigh", "max", "ultra"}, effortsFromConfiguredCodexLevels(gpt6Astra.SupportedReasoningLevels))
-	require.NotNil(t, gpt6Astra.MultiAgentReasoningEffort)
-	require.Equal(t, "xhigh", *gpt6Astra.MultiAgentReasoningEffort)
-	require.Equal(t, "v2", gpt6Astra.MultiAgentVersion)
 	require.NotContains(t, gpt6Astra.SupportedReasoningLevels, configuredCodexReasoningLevel{Effort: "none"})
 	require.True(t, configuredCodexSupportsPriorityServiceTier("gpt-6-astra"))
 	require.Equal(t, []configuredCodexServiceTier{{
@@ -367,17 +402,10 @@ func TestNewConfiguredCodexModelDescriptorUsesProviderMetadataAndSafeFallback(t 
 	}}, gpt6Astra.ServiceTiers)
 	require.True(t, isOpenAICodexImageInputModel("gpt-6-astra"))
 	require.True(t, isOpenAICodexReasoningGPTModel("openai/gpt-6-astra"))
-	require.True(t, isOpenAIGPT6AstraModel("gpt-6-astra-2026-09-01"))
+	require.False(t, isOpenAIGPT6AstraModel("gpt-6-astra-2026-09-01"))
 	require.False(t, isOpenAIGPT6AstraModel("gpt-6-other"))
-	require.Equal(t, int64(1_050_000), gpt6Astra.ContextWindow)
-	require.Equal(t, int64(1_050_000), gpt6Astra.MaxContextWindow)
-	gpt6 := newConfiguredCodexModelDescriptor("gpt-6")
-	require.Equal(t, "GPT-6 (Astra)", gpt6.DisplayName)
-	require.True(t, strings.HasPrefix(strings.TrimSpace(gpt6.ModelMessages.InstructionsTemplate), "You are Codex, an agent based on GPT-6."))
-	require.Equal(t, []string{"low", "medium", "high", "xhigh", "max", "ultra"}, effortsFromConfiguredCodexLevels(gpt6.SupportedReasoningLevels))
-	require.NotNil(t, gpt6.MultiAgentReasoningEffort)
-	require.Equal(t, "xhigh", *gpt6.MultiAgentReasoningEffort)
-	require.Equal(t, int64(1_050_000), gpt6.ContextWindow)
+	require.Equal(t, int64(272_000), gpt6Astra.ContextWindow)
+	require.Equal(t, int64(872_000), gpt6Astra.MaxContextWindow)
 
 	gpt55 := newConfiguredCodexModelDescriptor("gpt-5.5")
 	require.Equal(t, "GPT-5.5", gpt55.DisplayName)
@@ -1625,12 +1653,14 @@ func newCodexModelsTestAccount() *Account {
 func TestFetchCodexModelsManifestPassthrough(t *testing.T) {
 	manifestBody := `{"models":[{"slug":"gpt-5.5","display_name":"GPT-5.5"}]}`
 
-	var gotAuth, gotAccountID, gotOriginator, gotClientVersion string
+	var gotAuth, gotAccountID, gotOriginator, gotClientVersion, gotUserAgent, gotVersion string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotAuth = r.Header.Get("Authorization")
 		gotAccountID = r.Header.Get("chatgpt-account-id")
 		gotOriginator = r.Header.Get("Originator")
 		gotClientVersion = r.URL.Query().Get("client_version")
+		gotUserAgent = r.Header.Get("User-Agent")
+		gotVersion = r.Header.Get("Version")
 		w.Header().Set("ETag", `W/"abc123"`)
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(manifestBody))
@@ -1662,7 +1692,13 @@ func TestFetchCodexModelsManifestPassthrough(t *testing.T) {
 	if gotOriginator != openai.CodexDefaultOriginator {
 		t.Errorf("originator header: got %q", gotOriginator)
 	}
-	if gotClientVersion != "0.137.0" {
+	if gotUserAgent != DefaultOpenAICodexUserAgent {
+		t.Errorf("user-agent header: got %q", gotUserAgent)
+	}
+	if gotVersion != codexCLIVersion {
+		t.Errorf("version header: got %q", gotVersion)
+	}
+	if gotClientVersion != codexCLIVersion {
 		t.Errorf("client_version query: got %q", gotClientVersion)
 	}
 }
@@ -1813,8 +1849,8 @@ func TestFetchCodexModelsManifestDefaultClientVersion(t *testing.T) {
 	if _, err := s.FetchCodexModelsManifest(context.Background(), newCodexModelsTestAccount(), "", ""); err != nil {
 		t.Fatalf("FetchCodexModelsManifest returned error: %v", err)
 	}
-	if gotClientVersion != CodexCanonicalClientVersion() {
-		t.Errorf("default client_version: got %q, want %q", gotClientVersion, CodexCanonicalClientVersion())
+	if gotClientVersion != codexCLIVersion {
+		t.Errorf("default client_version: got %q, want %q", gotClientVersion, codexCLIVersion)
 	}
 }
 
@@ -1909,12 +1945,9 @@ func TestFetchCodexModelsManifestAPIKeyCustomUpstream(t *testing.T) {
 	}}
 
 	s := newCodexModelsAPIKeyTestService(upstream)
-	manifest, err := s.FetchCodexModelsManifest(
-		context.Background(),
-		newCodexModelsAPIKeyTestAccount("https://upstream.example/v1"),
-		"0.144.0",
-		"",
-	)
+	account := newCodexModelsAPIKeyTestAccount("https://upstream.example/v1")
+	account.Credentials["user_agent"] = codexModelsCustomAccountUserAgent
+	manifest, err := s.FetchCodexModelsManifest(context.Background(), account, "0.144.0", "")
 	if err != nil {
 		t.Fatalf("FetchCodexModelsManifest returned error: %v", err)
 	}
@@ -1925,19 +1958,19 @@ func TestFetchCodexModelsManifestAPIKeyCustomUpstream(t *testing.T) {
 	if gotRequest.Method != http.MethodGet {
 		t.Errorf("method: got %q", gotRequest.Method)
 	}
-	if gotRequest.URL.String() != "https://upstream.example/v1/models?client_version=0.144.0" {
+	if gotRequest.URL.String() != "https://upstream.example/v1/models?client_version="+codexCLIVersion {
 		t.Errorf("request URL: got %q", gotRequest.URL.String())
 	}
 	if gotRequest.Header.Get("Authorization") != "Bearer sk-upstream" {
 		t.Errorf("authorization header: got %q", gotRequest.Header.Get("Authorization"))
 	}
-	if gotRequest.Header.Get("Originator") != openai.CodexDefaultOriginator {
+	if gotRequest.Header.Get("Originator") != "" {
 		t.Errorf("originator header: got %q", gotRequest.Header.Get("Originator"))
 	}
-	if gotRequest.Header.Get("Version") != "0.144.0" {
-		t.Errorf("version header must match the client_version query param: got %q", gotRequest.Header.Get("Version"))
+	if gotRequest.Header.Get("Version") != "" {
+		t.Errorf("version header: got %q", gotRequest.Header.Get("Version"))
 	}
-	if gotRequest.Header.Get("User-Agent") != CodexCanonicalUserAgent() {
+	if gotRequest.Header.Get("User-Agent") != codexModelsCustomAccountCurrentUserAgent {
 		t.Errorf("user-agent header: got %q", gotRequest.Header.Get("User-Agent"))
 	}
 	if gotRequest.Header.Get("chatgpt-account-id") != "" {
@@ -2308,13 +2341,13 @@ func TestFetchCodexModelsManifestAPIKeyDisablesResponsesLiteForAffectedModels(t 
 	}}
 
 	s := newCodexModelsAPIKeyTestService(upstream)
-	manifest, err := s.FetchCodexModelsManifest(context.Background(), newCodexModelsAPIKeyTestAccount("https://upstream.example"), "0.145.0", "")
+	manifest, err := s.FetchCodexModelsManifest(context.Background(), newCodexModelsAPIKeyTestAccount("https://upstream.example"), codexCLIVersion, "")
 	require.NoError(t, err)
 	require.JSONEq(t, `{"models":[{"slug":"gpt-5.6-sol","use_responses_lite":false},{"slug":"gpt-5.6-codex","use_responses_lite":true}],"metadata":{"version":1}}`, string(manifest.Body))
 	require.Equal(t, codexModelsManifestBodyETag(manifest.Body), manifest.ETag)
 	require.Equal(t, `"upstream-strong"`, manifest.upstreamETag)
 
-	notModified, err := s.FetchCodexModelsManifest(context.Background(), newCodexModelsAPIKeyTestAccount("https://upstream.example"), "0.145.0", manifest.ETag)
+	notModified, err := s.FetchCodexModelsManifest(context.Background(), newCodexModelsAPIKeyTestAccount("https://upstream.example"), codexCLIVersion, manifest.ETag)
 	require.NoError(t, err)
 	require.True(t, notModified.NotModified)
 	require.Equal(t, manifest.ETag, notModified.ETag)
@@ -2331,7 +2364,7 @@ func TestFetchCodexModelsManifestOAuthPreservesResponsesLite(t *testing.T) {
 	defer func() { chatgptCodexModelsURL = original }()
 
 	s := &OpenAIGatewayService{}
-	manifest, err := s.FetchCodexModelsManifest(context.Background(), newCodexModelsTestAccount(), "0.145.0", "")
+	manifest, err := s.FetchCodexModelsManifest(context.Background(), newCodexModelsTestAccount(), codexCLIVersion, "")
 	require.NoError(t, err)
 	require.Equal(t, manifestBody, string(manifest.Body))
 }
@@ -2787,7 +2820,13 @@ func TestFetchCodexModelsManifestAPIKeyCacheKeyIsolatesRequestIdentity(t *testin
 
 	differentUpstream := newCodexModelsAPIKeyTestAccount("https://other-upstream.example")
 	fetch(differentUpstream, "0.144.0")
-	fetch(base, "0.145.0")
+	// The caller's client_version must not fragment cache entries: the final
+	// account/global/default identity determines the outgoing query version.
+	fetch(base, codexCLIVersion)
+
+	differentIdentity := newCodexModelsAPIKeyTestAccount("https://upstream.example")
+	differentIdentity.Credentials["user_agent"] = codexModelsCustomAccountUserAgent
+	fetch(differentIdentity, "0.144.0")
 
 	differentHeaders := newCodexModelsAPIKeyTestAccount("https://upstream.example")
 	differentHeaders.Credentials[credKeyHeaderOverrideEnabled] = true
@@ -3111,7 +3150,7 @@ func TestFetchCodexModelsManifestAPIKeyPreservesBaseURLQuery(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FetchCodexModelsManifest returned error: %v", err)
 	}
-	if gotURL != "https://upstream.example/v1/models?client_version=0.144.0&tenant=acme" {
+	if gotURL != "https://upstream.example/v1/models?client_version="+codexCLIVersion+"&tenant=acme" {
 		t.Errorf("request URL: got %q", gotURL)
 	}
 }
@@ -3347,7 +3386,7 @@ func TestFetchCodexModelsManifestAPIKeyUsesOfficialOpenAIModelsEndpoint(t *testi
 			require.NoError(t, parseErr)
 			require.Equal(t, "api.openai.com", strings.ToLower(parsedURL.Hostname()))
 			require.Equal(t, "/v1/models", parsedURL.Path)
-			require.Equal(t, "0.144.0", parsedURL.Query().Get("client_version"))
+			require.Equal(t, codexCLIVersion, parsedURL.Query().Get("client_version"))
 			models := decodeCodexManifestModels(t, manifest.Body)
 			require.Len(t, models, 1)
 			requireCompleteConfiguredCodexModel(t, models[0], "gpt-5.6-sol")

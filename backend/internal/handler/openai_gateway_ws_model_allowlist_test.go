@@ -156,12 +156,12 @@ func TestOpenAIResponsesWebSocket_DuplicateIdenticalModelKeysAllowed(t *testing.
 // 内）让帧内候选非空。实际生效模型（轮换后的会话模型）必须始终参与校验。
 func TestOpenAIResponsesWebSocket_SessionUpdateRotationBypassRejected(t *testing.T) {
 	runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
-		firstPayload:            `{"type":"response.create","model":"gpt-5.4","stream":false}`,
-		midPayload:              `{"type":"session.update","session":{"model":"gpt-4.1"}}`,
-		secondPayload:           `{"type":"response.create","session":{"model":"gpt-5.4"},"stream":false}`,
-		group:                   wsAllowlistGroup(true, "gpt-5.4"),
-		ingressMode:             service.OpenAIWSIngressModePassthrough,
-		secondTurnCloseExpected: true,
+		firstPayload:          `{"type":"response.create","model":"gpt-5.4","stream":false}`,
+		midPayload:            `{"type":"session.update","session":{"model":"gpt-4.1"}}`,
+		secondPayload:         `{"type":"response.create","session":{"model":"gpt-5.4"},"stream":false}`,
+		group:                 wsAllowlistGroup(true, "gpt-5.4"),
+		ingressMode:           service.OpenAIWSIngressModePassthrough,
+		midFrameCloseExpected: true,
 	})
 }
 

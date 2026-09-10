@@ -993,7 +993,16 @@ func (s *AccountTestService) buildOpenAIUpstreamModelsRequest(ctx context.Contex
 	if account.IsOpenAIOAuth() {
 		return s.buildOpenAIOAuthUpstreamModelsRequest(ctx, account)
 	}
-	return buildOpenAIAPIKeyModelsRequest(ctx, account, s.validateUpstreamBaseURL)
+	credentialAccount, err := resolveCredentialAccount(ctx, s.accountRepo, account)
+	if err != nil {
+		return nil, err
+	}
+	req, err := buildOpenAIAPIKeyModelsRequest(ctx, credentialAccount, s.validateUpstreamBaseURL)
+	if err != nil {
+		return nil, err
+	}
+	s.applyOpenAIOutboundIdentity(ctx, credentialAccount, req.Header, false)
+	return req, nil
 }
 
 // buildOpenAIAPIKeyModelsRequest is shared by admin discovery and public model
@@ -1028,7 +1037,6 @@ func buildOpenAIAPIKeyModelsRequest(ctx context.Context, account *Account, valid
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	// 模型同步使用与实际 OpenAI API Key 转发相同的最终身份。
 	account.applyOpenAIHeaderOverrides(req.Header)
-	s.applyOpenAIOutboundIdentity(ctx, account, req.Header, false)
 	return req, nil
 }
 

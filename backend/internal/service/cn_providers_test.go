@@ -239,8 +239,7 @@ func TestMiniMaxQuotaURL(t *testing.T) {
 		minimaxQuotaURL("https://api.minimaxi.com/v1"))
 	require.Equal(t, "https://api.minimaxi.com/v1/api/openplatform/coding_plan/remains",
 		minimaxQuotaURL("https://api.minimax.com/v1"))
-	require.Equal(t, "https://api.minimaxi.com/v1/api/openplatform/coding_plan/remains",
-		minimaxQuotaURL("https://custom.example.com"))
+	require.Empty(t, minimaxQuotaURL("https://custom.example.com"))
 }
 
 func TestParseMiniMaxUsageTiers(t *testing.T) {
@@ -837,4 +836,20 @@ func TestGetAnthropicAPIKeyAuthScheme_CNProvider(t *testing.T) {
 
 	zhipu.Extra = map[string]any{"anthropic_apikey_auth_scheme": "authorization_bearer"}
 	require.Equal(t, AnthropicAPIKeyAuthSchemeAuthorizationBearer, zhipu.GetAnthropicAPIKeyAuthScheme())
+}
+
+func TestMiniMaxQuotaRejectsUntrustedCredentialOrigins(t *testing.T) {
+	for _, origin := range []string{
+		"https://api.minimax.io.evil.example/v1", "https://evil.example/minimax.io",
+		"https://evil.example/?provider=minimaxi.com", "https://api.minimax.io@evil.example",
+		"https://user@api.minimax.io/v1", "http://api.minimax.io/v1",
+		"https://api.minimax.io:8443/v1", "not-a-url",
+	} {
+		t.Run(origin, func(t *testing.T) {
+			require.Empty(t, minimaxQuotaURL(origin))
+			account := &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey,
+				Credentials: map[string]any{"base_url": origin, "account_mode": AccountModeCoding}}
+			require.Empty(t, account.GetCodingPlanProvider())
+		})
+	}
 }

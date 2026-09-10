@@ -3,6 +3,24 @@
 This file maps Sub2API Plus releases to their official Sub2API baseline. Release
 procedures are documented in [`docs/RELEASING.md`](docs/RELEASING.md).
 
+## Integrated Baseline
+
+The current integration tree incorporates official `v0.2.4`, commit
+`5de5e2bed035d43591a2e10e51f420ef6a84eb98`, on top of Plus
+`6344b5db3d5bc819acb222a66c6884bccdb37369`. The release mapping below is the
+authoritative record of this baseline's publication status.
+The official tag's source VERSION contains `0.2.3`; the tag commit is the
+integration reference. Plus version/tag/image promotion remains a separate step.
+
+Plus retains credential-owner identity precedence, ingress content audit,
+session and quota accounting, asynchronous images, administrator export
+controls, IP access controls, and distribution/toolchain choices. Retired
+upstream billing probes remain removed. Grok cross-client rewriting stays
+opt-in, and inconclusive OAuth billing does not grant media eligibility.
+
+See [v0.2.4 integration and upgrade behavior](docs/UPSTREAM_V0_2_4_INTEGRATION.md)
+for public API changes, migrations, defaults, and validation boundaries.
+
 ## Release Mapping
 
 | Custom Release | Official Release | Official Commit | Status |
@@ -55,6 +73,7 @@ procedures are documented in [`docs/RELEASING.md`](docs/RELEASING.md).
 | `v0.2.1+custom.001` | `v0.2.1` | `578785ee7fb35030b094b69624efe25670a36f5f` | published |
 | `v0.2.1+custom.002` | `v0.2.1` | `578785ee7fb35030b094b69624efe25670a36f5f` | published |
 | `v0.2.1+custom.003` | `v0.2.1` | `578785ee7fb35030b094b69624efe25670a36f5f` | published |
+| `v0.2.4+custom.001` | `v0.2.4` | `5de5e2bed035d43591a2e10e51f420ef6a84eb98` | planned |
 
 `v0.1.166+custom.007` is marked invalid because its tag contains embedded and
 documented version `0.1.166+custom.006`. Remote Release and OCI artifact status
@@ -63,9 +82,9 @@ still require a maintainer audit. Do not reuse or retag `.007`.
 ## Current Version
 
 ```text
-Git/GitHub: v0.2.1+custom.003
-Application: 0.2.1+custom.003
-GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.1-custom.003
+Git/GitHub: v0.2.4+custom.001
+Application: 0.2.4+custom.001
+GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.4-custom.001
 ```
 
 ## Naming

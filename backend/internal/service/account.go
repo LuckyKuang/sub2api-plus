@@ -1598,9 +1598,7 @@ func (a *Account) GetCodingPlanProvider() string {
 		return PlatformKimi
 	case strings.Contains(baseURL, "bigmodel.cn"), strings.Contains(baseURL, "api.z.ai"):
 		return PlatformZhipu
-	case strings.Contains(baseURL, "minimax.io"),
-		strings.Contains(baseURL, "minimaxi.com"),
-		strings.Contains(baseURL, "minimax.com"):
+	case miniMaxQuotaHost(baseURL) != "":
 		return PlatformMiniMax
 	default:
 		return ""
@@ -1859,11 +1857,8 @@ func (a *Account) SupportsOpenAIEndpointCapability(capability OpenAIEndpointCapa
 	return configured[string(capability)]
 }
 
-// GrokMediaGenerationEligibility reports whether a Grok account may receive
-// new image/video generation requests. Explicit evidence of a forbidden or
-// free account blocks media, while an incomplete successful billing response
-// remains eligible for backwards compatibility. An explicit operator
-// override takes precedence over probe data.
+// GrokMediaGenerationEligibility requires authoritative billing evidence for
+// OAuth media generation. An explicit operator override takes precedence.
 func (a *Account) GrokMediaGenerationEligibility() (bool, string) {
 	if a == nil || !a.IsGrok() {
 		return false, "not_grok"
@@ -1889,12 +1884,8 @@ func (a *Account) GrokMediaGenerationEligibility() (bool, string) {
 		return false, "billing_free_tier"
 	}
 	if !grokBillingHasAuthoritativeQuota(billing) {
-		// Billing endpoints can return 200 with an account-specific schema that
-		// omits plan/quota fields (for example, some SuperGrok accounts). An
-		// incomplete observation is not proof of ineligibility; keep the account
-		// routable and expose the reason for diagnostics. Operators can still
-		// quarantine a known-bad account with grok_media_eligible=false.
-		return true, "billing_inconclusive"
+		// Incomplete billing evidence requires an explicit operator override.
+		return false, "billing_inconclusive"
 	}
 	return true, "eligible"
 }

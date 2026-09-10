@@ -363,7 +363,7 @@ describe('PaymentView recharge rate preview', () => {
   it('uses the selected payment method currency in both locale templates', async () => {
     translate.mockClear()
     routeState.path = '/purchase'
-    routeState.query = {}
+    routeState.query = { tab: 'recharge' }
     getCheckoutInfo.mockReset().mockResolvedValue(checkoutInfoFixture({
       balance_recharge_multiplier: 0.5,
       methods: {
@@ -802,5 +802,39 @@ describe('PaymentView WeChat JSAPI flow', () => {
     expect(showWarning).toHaveBeenCalledWith('payment.errors.mobilePaymentFallbackToQr')
     expect(showError).not.toHaveBeenCalled()
     expect(window.localStorage.getItem(PAYMENT_RECOVERY_STORAGE_KEY)).toContain('weixin://wxpay/bizpayurl?pr=fallback-native')
+  })
+})
+
+describe('PaymentView checkout tabs', () => {
+  it('shows subscription on the left and recharge on the right', async () => {
+    const wrapper = await mountSubscriptionPlanList(1)
+    const tabLabels = wrapper.findAll('button')
+      .map(button => button.text())
+      .filter(label => ['payment.tabSubscribe', 'payment.tabTopUp'].includes(label))
+
+    expect(tabLabels).toEqual(['payment.tabSubscribe', 'payment.tabTopUp'])
+  })
+
+  it('defaults to the subscription tab when no tab query is provided', async () => {
+    routeState.path = '/purchase'
+    routeState.query = {}
+    getCheckoutInfo.mockReset().mockResolvedValue(checkoutInfoFixture({
+      plans: checkoutInfoWithPlansFixture().data.plans,
+    }))
+    const wrapper = shallowMount(PaymentView, {
+      global: {
+        stubs: {
+          AppLayout: { template: '<div><slot /></div>' },
+          Teleport: true,
+          Transition: false,
+        },
+      },
+    })
+    await flushPromises()
+    await flushPromises()
+
+    const subscribeTab = wrapper.findAll('button').find(button => button.text() === 'payment.tabSubscribe')
+    expect(subscribeTab?.classes()).toContain('bg-white')
+    expect(wrapper.findAllComponents(SubscriptionPlanCard).length).toBeGreaterThan(0)
   })
 })

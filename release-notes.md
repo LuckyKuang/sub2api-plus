@@ -1,34 +1,37 @@
-Sub2API Plus v0.2.1+custom.002
+Sub2API Plus v0.2.4+custom.001
 
 ## Highlights
 
-Hardens client-disconnect risk control by tracking each logical session
-independently, and accepts current official Codex search client profiles.
+Integrates the official v0.2.4 baseline while preserving Plus security,
+identity, accounting, administration, and deployment behavior.
 
 ## Changed
 
-- Scopes disconnect counters, blocking decisions, and administrative event
-  views to the resolved session so unrelated sessions no longer affect one
-  another.
-- Preserves session identity throughout disconnect lifecycle cleanup and adds
-  migration-backed storage for the new scope.
-- Recognizes the official Codex search client profile while preserving the
-  credential-owned identity precedence rules.
-- Updates `docker/setup-buildx-action` to 4.3.0 and `google.golang.org/grpc` to
-  1.83.1.
+- Adds MiniMax account, routing, quota, monitoring, and composite-route support.
+- Adds Image 2.5 support, long-stream HTTP/2 keepalive, OpenAI weekly usage
+  estimates, and administrator controls imported from the official baseline.
+- Enforces model allowlists for both discovery and inference while preserving
+  Plus aliases, credential-owned Codex identity, and ingress audit ordering.
+- Preserves Plus asynchronous image paths, usage alerts, export controls,
+  payment flows, session accounting, and hardened deployment defaults.
+- Keeps Grok cross-client rewriting opt-in and requires conclusive or explicit
+  media eligibility before forwarding media requests.
 
 ## Compatibility and migration
 
-Database migration 256 runs automatically, preserves existing disconnect
-events under the `legacy` scope, advances the processing generation, and
-rebuilds risk state per session. The migration disables consecutive-disconnect
-banning so administrators can review the new scope before re-enabling it.
+Database migrations 259 through 263 run automatically. They rename and repair
+the group model policy, add MiniMax constraints, normalize legacy allowlists,
+and preserve explicit access-log persistence on existing installations. Back
+up the database before upgrading because replacing the binary alone cannot
+reverse the renamed schema. Management API clients must use `model_allowlist`
+instead of `models_list_config`.
 
 ## Known issues
 
-No release-specific known issues.
+The official v0.2.4 tag embeds source version `0.2.3`; this release intentionally
+uses the official tag commit as its upstream baseline.
 
 ## Upstream baseline
 
-Official release: v0.2.1
-Official commit: 578785ee7fb35030b094b69624efe25670a36f5f
+Official release: v0.2.4
+Official commit: 5de5e2bed035d43591a2e10e51f420ef6a84eb98

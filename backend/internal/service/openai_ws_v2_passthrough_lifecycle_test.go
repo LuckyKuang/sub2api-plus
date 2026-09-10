@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/LuckyKuang/sub2api-plus/internal/auditcontent"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -28,10 +29,11 @@ type stagedPassthroughFrame struct {
 }
 
 type stagedPassthroughConn struct {
-	frames    chan stagedPassthroughFrame
-	writes    chan []byte
-	closed    chan struct{}
-	closeOnce sync.Once
+	frames        chan stagedPassthroughFrame
+	writes        chan []byte
+	closed        chan struct{}
+	closeOnce     sync.Once
+	failNextWrite atomic.Bool
 }
 
 func newStagedPassthroughConn() *stagedPassthroughConn {
@@ -76,6 +78,9 @@ func (c *stagedPassthroughConn) ReadFrame(ctx context.Context) (coderws.MessageT
 func (c *stagedPassthroughConn) WriteFrame(ctx context.Context, _ coderws.MessageType, payload []byte) error {
 	if ctx == nil {
 		ctx = context.Background()
+	}
+	if c.failNextWrite.Swap(false) {
+		return errors.New("forced first write failure")
 	}
 	select {
 	case <-ctx.Done():
@@ -900,5 +905,109 @@ func TestPassthroughLifecycle_SecondTurnTimeoutIsNotFailoverSafe(t *testing.T) {
 		require.Equal(t, coderws.StatusGoingAway, closeErr.StatusCode())
 	case <-time.After(2500 * time.Millisecond):
 		t.Fatal("second turn first semantic output was left unbounded")
+	}
+}
+
+func TestPassthroughLifecycle_UnknownFramePassesAuditHookAndWritesUpstream(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	controlCtx, cancelControl := context.WithCancelCause(context.Background())
+	defer cancelControl(context.Canceled)
+	upstream := newStagedPassthroughConn()
+	upstream.Send(`{"type":"response.created","response":{"id":"resp_unknown","model":"gpt-5.1"}}`)
+	auditedPayload := make(chan []byte, 1)
+	hooks := &OpenAIWSIngressHooks{BeforeRequest: func(_ int, payload []byte, _ string) error {
+		document, err := auditcontent.Extract(ContentModerationProtocolOpenAIResponses, payload)
+		if err != nil {
+			return err
+		}
+		if !document.Incomplete {
+			return errors.New("expected unknown frame to produce incomplete extraction")
+		}
+		auditedPayload <- append([]byte(nil), payload...)
+		return nil
+	}}
+	server, serverErr := startPassthroughLifecycleServerWithHooks(
+		t, controlCtx, newPassthroughLifecycleService(passthroughLifecycleConfig(), upstream), passthroughLifecycleAccount(), func(*gin.Context) *OpenAIWSIngressHooks { return hooks },
+	)
+	defer server.Close()
+	clientConn := dialPassthroughLifecycleClient(t, server)
+	defer func() { _ = clientConn.CloseNow() }()
+	require.Equal(t, "response.create", gjson.GetBytes(requirePassthroughUpstreamWrite(t, upstream, time.Second), "type").String())
+
+	created, err := readPassthroughLifecycleFrame(t, clientConn, time.Second)
+	require.NoError(t, err)
+	require.Equal(t, "response.created", gjson.GetBytes(created, "type").String())
+	writeCtx, cancelWrite := context.WithTimeout(context.Background(), time.Second)
+	err = clientConn.Write(writeCtx, coderws.MessageText, []byte(`{"type":"future.client.event","payload":"unknown audit content"}`))
+	cancelWrite()
+	require.NoError(t, err)
+	forwarded := requirePassthroughUpstreamWrite(t, upstream, time.Second)
+	require.Equal(t, "future.client.event", gjson.GetBytes(forwarded, "type").String())
+	select {
+	case audited := <-auditedPayload:
+		require.Equal(t, "future.client.event", gjson.GetBytes(audited, "type").String())
+	case <-time.After(time.Second):
+		t.Fatal("unknown frame did not pass the audit hook")
+	}
+
+	require.NoError(t, clientConn.Close(coderws.StatusNormalClosure, "done"))
+	select {
+	case <-serverErr:
+	case <-time.After(3 * time.Second):
+		t.Fatal("passthrough unknown-frame test did not exit")
+	}
+}
+
+func TestPassthroughLifecycle_AuditRejectionPreventsUnknownFrameUpstreamWrite(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	controlCtx, cancelControl := context.WithCancelCause(context.Background())
+	defer cancelControl(context.Canceled)
+	upstream := newStagedPassthroughConn()
+	upstream.Send(`{"type":"response.created","response":{"id":"resp_block","model":"gpt-5.1"}}`)
+	hooks := &OpenAIWSIngressHooks{BeforeRequest: func(_ int, payload []byte, _ string) error {
+		document, err := auditcontent.Extract(ContentModerationProtocolOpenAIResponses, payload)
+		if err != nil {
+			return err
+		}
+		if !document.Incomplete {
+			return errors.New("expected policy fixture to remain an observable unknown frame")
+		}
+		for _, segment := range document.Segments {
+			if strings.Contains(segment.Text, "independent policy block") {
+				return NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "audit_blocked", nil)
+			}
+		}
+		return nil
+	}}
+	server, serverErr := startPassthroughLifecycleServerWithHooks(
+		t, controlCtx, newPassthroughLifecycleService(passthroughLifecycleConfig(), upstream), passthroughLifecycleAccount(), func(*gin.Context) *OpenAIWSIngressHooks { return hooks },
+	)
+	defer server.Close()
+	clientConn := dialPassthroughLifecycleClient(t, server)
+	defer func() { _ = clientConn.CloseNow() }()
+	require.Equal(t, "response.create", gjson.GetBytes(requirePassthroughUpstreamWrite(t, upstream, time.Second), "type").String())
+
+	created, err := readPassthroughLifecycleFrame(t, clientConn, time.Second)
+	require.NoError(t, err)
+	require.Equal(t, "response.created", gjson.GetBytes(created, "type").String())
+	writeCtx, cancelWrite := context.WithTimeout(context.Background(), time.Second)
+	err = clientConn.Write(writeCtx, coderws.MessageText, []byte(`{"type":"future.client.event","input":"independent policy block"}`))
+	cancelWrite()
+	require.NoError(t, err)
+
+	select {
+	case payload := <-upstream.writes:
+		t.Fatalf("audit-rejected frame reached upstream: %s", payload)
+	case <-time.After(100 * time.Millisecond):
+	}
+	_, err = readPassthroughLifecycleFrame(t, clientConn, time.Second)
+	var closeErr coderws.CloseError
+	require.ErrorAs(t, err, &closeErr)
+	require.Equal(t, coderws.StatusPolicyViolation, closeErr.Code)
+	select {
+	case err := <-serverErr:
+		require.Error(t, err)
+	case <-time.After(3 * time.Second):
+		t.Fatal("audit-rejection passthrough test did not exit")
 	}
 }

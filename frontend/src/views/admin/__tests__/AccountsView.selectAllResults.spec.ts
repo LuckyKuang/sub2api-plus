@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 
 import AccountsView from '../AccountsView.vue'
 
@@ -8,7 +8,6 @@ const {
   listWithEtag,
   batchRefresh,
   getBatchTodayStats,
-  getUpstreamBillingProbeSettings,
   getAllProxies,
   getAllGroups,
   showError
@@ -17,7 +16,6 @@ const {
   listWithEtag: vi.fn(),
   batchRefresh: vi.fn(),
   getBatchTodayStats: vi.fn(),
-  getUpstreamBillingProbeSettings: vi.fn(),
   getAllProxies: vi.fn(),
   getAllGroups: vi.fn(),
   showError: vi.fn()
@@ -29,7 +27,6 @@ vi.mock('@/api/admin', () => ({
       list: listAccounts,
       listWithEtag,
       getBatchTodayStats,
-      getUpstreamBillingProbeSettings,
       batchDelete: vi.fn(),
       batchClearError: vi.fn(),
       batchRefresh,
@@ -39,7 +36,7 @@ vi.mock('@/api/admin', () => ({
       getAll: getAllProxies
     },
     groups: {
-      getAll: getAllGroups
+      getAllIncludingInactive: getAllGroups
     }
   }
 }))
@@ -100,7 +97,8 @@ const AccountTableFiltersStub = {
   template: '<button data-test="change-filter" @click="$emit(\'change\')">change filter</button>'
 }
 
-const mountView = () => mount(AccountsView, {
+let mountedWrapper: VueWrapper | null = null
+const mountView = () => (mountedWrapper = mount(AccountsView, {
   global: {
     stubs: {
       AppLayout: { template: '<div><slot /></div>' },
@@ -138,7 +136,7 @@ const mountView = () => mount(AccountsView, {
       Icon: true
     }
   }
-})
+}))
 
 describe('admin AccountsView select all filtered results', () => {
   beforeEach(() => {
@@ -147,7 +145,6 @@ describe('admin AccountsView select all filtered results', () => {
     listWithEtag.mockReset()
     batchRefresh.mockReset()
     getBatchTodayStats.mockReset()
-    getUpstreamBillingProbeSettings.mockReset()
     getAllProxies.mockReset()
     getAllGroups.mockReset()
     showError.mockReset()
@@ -158,12 +155,13 @@ describe('admin AccountsView select all filtered results', () => {
       data: null
     })
     getBatchTodayStats.mockResolvedValue({ stats: {} })
-    getUpstreamBillingProbeSettings.mockResolvedValue({ enabled: true, interval_minutes: 30 })
     getAllProxies.mockResolvedValue([])
     getAllGroups.mockResolvedValue([])
   })
 
   afterEach(() => {
+    mountedWrapper?.unmount()
+    mountedWrapper = null
     vi.restoreAllMocks()
   })
 

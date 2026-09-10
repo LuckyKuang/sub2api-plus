@@ -217,7 +217,7 @@ func TestAdminServiceSimpleModeNormalizesAllUnsupportedCreateFieldsDirectly(t *t
 	input := &CreateGroupInput{
 		Name: "simple", Description: "allowed", Platform: PlatformAnthropic,
 		RateMultiplier: 9, IsExclusive: true, SubscriptionType: SubscriptionTypeSubscription,
-		DailyLimitUSD: &one, LongContextPricingEnabled: true,
+		DailyLimitUSD: &one, LongContextPricingEnabled: new(true),
 		ModelPricing:    []ChannelModelPricing{{Models: []string{"claude"}}},
 		PeakRateEnabled: true, PeakStart: "00:00", PeakEnd: "01:00", PeakRateMultiplier: &one,
 		ImageRateIndependent: true, ImageRateMultiplier: &one, VideoRateIndependent: true, VideoRateMultiplier: &one,
@@ -236,11 +236,12 @@ func TestAdminServiceSimpleModeNormalizesAllUnsupportedCreateFieldsDirectly(t *t
 	require.Same(t, repo.created, created)
 	require.Equal(t, CreateGroupInput{
 		Name: "simple", Description: "allowed", Platform: PlatformAnthropic,
-		RateMultiplier: 1, SubscriptionType: SubscriptionTypeStandard,
+		RateMultiplier: 1, SubscriptionType: SubscriptionTypeStandard, LongContextPricingEnabled: new(false),
 	}, *input)
 	require.Equal(t, 1.0, created.RateMultiplier)
 	require.Equal(t, SubscriptionTypeStandard, created.SubscriptionType)
 	require.False(t, created.IsExclusive)
+	require.False(t, created.LongContextPricingEnabled)
 	require.Nil(t, created.FallbackGroupID)
 	require.Empty(t, created.ModelPricing)
 	require.Zero(t, created.RPMLimit)
@@ -514,6 +515,38 @@ func TestAdminService_CreateGroup_WithImagePricing(t *testing.T) {
 	require.InDelta(t, 0.10, *repo.created.ImagePrice1K, 0.0001)
 	require.InDelta(t, 0.15, *repo.created.ImagePrice2K, 0.0001)
 	require.InDelta(t, 0.30, *repo.created.ImagePrice4K, 0.0001)
+}
+
+func TestAdminService_CreateGroup_LongContextPricingDefault(t *testing.T) {
+	disabled := false
+
+	tests := []struct {
+		name     string
+		input    *bool
+		expected bool
+	}{
+		{name: "omitted defaults enabled", expected: true},
+		{name: "explicit false is preserved", input: &disabled, expected: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &groupRepoStubForAdmin{}
+			svc := &adminServiceImpl{groupRepo: repo}
+
+			group, err := svc.CreateGroup(context.Background(), &CreateGroupInput{
+				Name:                      "long-context-pricing",
+				Platform:                  PlatformOpenAI,
+				RateMultiplier:            1,
+				LongContextPricingEnabled: tt.input,
+			})
+
+			require.NoError(t, err)
+			require.Equal(t, tt.expected, group.LongContextPricingEnabled)
+			require.NotNil(t, repo.created)
+			require.Equal(t, tt.expected, repo.created.LongContextPricingEnabled)
+		})
+	}
 }
 
 func TestAdminService_CreateGroup_WithVideoPricing(t *testing.T) {

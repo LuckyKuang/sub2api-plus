@@ -29,6 +29,12 @@ func (f *fakeCNQuotaProber) QueryUsage(ctx context.Context, accountID int64) (*C
 	return &CNProviderQuotaProbeResult{Success: true, Persisted: true}, nil
 }
 
+func (f *fakeCNQuotaProber) Probed() []int64 {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]int64(nil), f.probed...)
+}
+
 type fakeCNCheckRepo struct {
 	AccountRepository
 	byPlatform map[string][]Account
@@ -66,7 +72,7 @@ func TestCNProviderBalanceCheckRunOnceProbesCodingPlanQuota(t *testing.T) {
 
 	svc.runOnce()
 
-	require.ElementsMatch(t, []int64{1, 2, 4, 5}, prober.probed)
+	require.ElementsMatch(t, []int64{1, 2, 4, 5}, prober.Probed())
 }
 
 // runOnceZhipuQuota 在 quotaService 缺失时安全跳过（Start 门控不启动的老部署路径）。
