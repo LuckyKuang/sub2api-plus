@@ -18,15 +18,20 @@ different definition.
 - `duration_ms` retains its existing forwarding/turn duration. It is not a new
   measurement of the full client-perceived request, including scheduling.
 - TPS is `(output_tokens - image_output_tokens - audio_output_tokens) * 1000 /
-  (last_token_ms - first_token_ms)`. It is an estimate from upstream token usage.
-  It requires version 1, a complete streaming/WS request, at least 8 text-like
-  output tokens, and a sampling window of at least 300 ms. Invalid or missing
-  timestamps, incomplete streams, and aggregate-only results display `—`.
+  last_token_ms`, falling back to `duration_ms` when last-token time is missing.
+  `last_token_ms` uses the same forwarding/turn origin as first token, so thinking
+  wait is included and post-token flush is not. It is an estimate from billed
+  upstream token usage, not a visible decode-peak rate. Version-1 rows with billed
+  text tokens and a positive window still display a number for incomplete,
+  non-streaming, and short samples; those cases add a confidence note instead of
+  `—`. Live summaries, compaction-only results, invalid counts, and unverified
+  history remain `—`.
 
 Historical first-event values remain stored but are not presented as first
 token or used for TPS. Tooltips/export reasons distinguish unavailable history,
-non-streaming requests, incomplete requests, missing token output, and short
-sampling windows. Total duration remains available for these records.
+Live summaries, missing billed text tokens, invalid counts, and low-confidence
+incomplete/non-stream/short samples. Total duration remains available for these
+records.
 
 Gemini frames may contain multiple parts or candidates. The observer preserves
 the first meaningful output kind while scanning all parts for token-like output;
@@ -37,8 +42,9 @@ token counts and modality totals greater than the total output token count.
 Native Anthropic-to-Chat/Responses adapters distinguish a real upstream
 `message_stop` from a completion synthesized by converter finalization. Missing
 upstream completion or an upstream error marks usage incomplete, even when the
-existing converter still closes the downstream stream normally. Partial usage
-and observed first-token timing remain available, but TPS is unavailable.
+existing converter still closes the downstream stream normally. Partial usage,
+observed first-token timing, and estimated TPS remain available, with a
+confidence note on incomplete rows.
 Chat-to-Messages/Responses fallback streams retain their existing requirement
 for a real `[DONE]`. An upstream error followed by `[DONE]` is also marked as
 incomplete usage; the final sentinel does not erase a preceding failure.

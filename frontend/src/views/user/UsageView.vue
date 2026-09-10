@@ -219,7 +219,7 @@
 </template>
 
 <script setup lang="ts">
-import { strictFirstTokenMs, estimatedTps, tpsUnavailableReason } from '@/utils/usageTiming'
+import { strictFirstTokenMs, estimatedTps, tpsReason } from '@/utils/usageTiming'
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
@@ -629,6 +629,11 @@ const escapeCSVValue = (value: unknown): string => {
   return str
 }
 
+const formatTpsReason = (log: UsageLog): string => {
+  const reason = tpsReason(log)
+  return reason ? t(reason) : ''
+}
+
 const exportToCSV = async () => {
   if (pagination.total === 0) {
     appStore.showWarning(t('usage.noDataToExport'))
@@ -692,7 +697,7 @@ const exportToCSV = async () => {
       log.first_output_kind ?? '',
       log.duration_ms ?? '',
       estimatedTps(log) ?? '',
-      tpsUnavailableReason(log) ? t(tpsUnavailableReason(log)!) : '',
+      formatTpsReason(log),
     ].map(escapeCSVValue))
     const csvContent = [
       headers.map(escapeCSVValue).join(','),

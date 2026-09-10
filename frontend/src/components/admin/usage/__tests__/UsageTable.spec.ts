@@ -70,7 +70,16 @@ const messages: Record<string, string> = {
 	'usage.latencyNonTextFirstHint': 'First token-like output was reasoning or a tool call, not necessarily final answer text.',
 	'usage.latencyDuration': 'Total',
 	'usage.latencyTps': 'TPS',
-	'usage.latencyTpsHint': 'Estimated average text output rate: text output tokens ÷ (last token − first token). Complete stream/ws requests only. Sample too small (short window or few text tokens) shows "-". Values below 1 or above 1000 show as "< 1" / "> 1000".',
+		'usage.latencyLastToken': 'Last Token',
+		'usage.timingUnavailableHistorical': 'Verified first-token timing was not collected',
+		'usage.timingUnavailableLive': 'Live session summary has no token-generation timing',
+		'usage.timingUnavailableNonStream': 'Non-streaming request; TPS uses last-token time or total duration',
+		'usage.timingUnavailableIncomplete': 'Request did not complete; displayed TPS may be partial',
+		'usage.timingUnavailableCompaction': 'Compaction result has no observable token deltas',
+		'usage.timingUnavailableNoTokens': 'No billed text tokens or generation timing observed',
+		'usage.timingUnavailableInvalid': 'Invalid timing data',
+		'usage.timingUnavailableShort': 'Low-confidence sample: generation window below 300ms or output below 8 tokens',
+		'usage.latencyTpsHint': 'Average billed text-token rate: text output tokens ÷ last-token time (falls back to total duration). Includes thinking wait, excludes post-token flush. Incomplete, non-stream, and short samples still show a number, with a confidence note.',
 		'usage.incomplete': 'Incomplete',
 		'usage.incompleteHint': 'The request ended before a complete terminal result.',
 		'usage.clientDisconnected': 'Client disconnected',
@@ -360,7 +369,7 @@ describe('admin UsageTable tooltip', () => {
     expect(tooltip.get('[data-testid="tps-unavailable-reason"]').text()).toContain('TPS')
   })
 
-  it('shows estimated TPS from last-first token time, clamped outside [1, 1000]', () => {
+  it('shows estimated TPS from last-token wall time, including incomplete and short samples', () => {
     const rows = [
       {
         ...baseImageRow,
@@ -511,20 +520,20 @@ describe('admin UsageTable tooltip', () => {
         duration_ms: 1_100,
       },
       {
-        // generationMs = 250 < 300 → dash
+        // last_token_ms = 250 < 300 → still shown, low confidence
         ...baseImageRow,
         request_id: 'req-tps-short-generation',
         request_type: 'stream',
         stream: true,
         output_tokens: 100,
         first_token_ms: 100,
-        last_token_ms: 350,
+        last_token_ms: 250,
         first_output_ms: 100,
         first_output_kind: 'text',
-        duration_ms: 350,
+        duration_ms: 250,
       },
       {
-        // text tokens = 7 < 8 → dash
+        // text tokens = 7 < 8 → still shown, low confidence
         ...baseImageRow,
         request_id: 'req-tps-few-tokens',
         request_type: 'stream',
@@ -538,7 +547,7 @@ describe('admin UsageTable tooltip', () => {
         duration_ms: 1_100,
       },
       {
-        // 1000 tokens / 500ms = 2000 → > 1000
+        // 1000 tokens / 600ms last-token time = 1667
         ...baseImageRow,
         request_id: 'req-tps-unrealistically-high',
         request_type: 'stream',
@@ -552,7 +561,7 @@ describe('admin UsageTable tooltip', () => {
         duration_ms: 600,
       },
       {
-        // 8 tokens / 10000ms = 0.8 → < 1
+        // 8 tokens / 10100ms last-token time = 0.8
         ...baseImageRow,
         request_id: 'req-tps-below-one',
         request_type: 'stream',
@@ -566,7 +575,7 @@ describe('admin UsageTable tooltip', () => {
         duration_ms: 10_100,
       },
       {
-        // boundary: generationMs = 300, tokens = 8, TPS = 26.7
+        // 8 tokens / 400ms last-token time = 20
         ...baseImageRow,
         request_id: 'req-tps-min-gates-pass',
         request_type: 'stream',
@@ -580,7 +589,7 @@ describe('admin UsageTable tooltip', () => {
         duration_ms: 400,
       },
       {
-        // 150 * 1000 / 300 = 500
+        // 150 * 1000 / 400 = 375
         ...baseImageRow,
         request_id: 'req-tps-mid-band',
         request_type: 'stream',
@@ -594,7 +603,7 @@ describe('admin UsageTable tooltip', () => {
         duration_ms: 400,
       },
       {
-        // 300 * 1000 / 300 = 1000 → show 1000
+        // 300 * 1000 / 400 = 750
         ...baseImageRow,
         request_id: 'req-tps-max-boundary',
         request_type: 'stream',
@@ -622,27 +631,27 @@ describe('admin UsageTable tooltip', () => {
     })
 
     expect(wrapper.findAll('[data-testid="latency-tps"]').map((node) => node.text())).toEqual([
-      '37',
-      '50',
+      '34.5',
+      '25',
+      '90.9',
+      '90.9',
+      '90.9',
+      '90.9',
       '100',
-      '100',
       '-',
-      '-',
-      '-',
-      '-',
-      '-',
-      '-',
-      '-',
-      '-',
-      '-',
-      '> 1000',
-      '< 1',
-      '26.7',
-      '500',
       '1000',
+      '-',
+      '90.9',
+      '400',
+      '6.4',
+      '1667',
+      '0.8',
+      '20',
+      '375',
+      '750',
     ])
-    expect(wrapper.text()).toContain('First Token 721msTotal10.86sTPS37')
-    expect(wrapper.text()).toContain('First Token 100msTotal1.10sTPS100')
+    expect(wrapper.text()).toContain('First Token 721msTotal10.86sTPS34.5')
+    expect(wrapper.text()).toContain('First Token 100msTotal1.10sTPS90.9')
     expect(wrapper.text()).not.toContain('First Image Data')
     expect(wrapper.text()).not.toContain('First Audio Data')
   })
