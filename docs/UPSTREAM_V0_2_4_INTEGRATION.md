@@ -74,10 +74,10 @@ pending weekly reset events, and preservation of already applied checksums.
 
 ## Post-publication audit corrections
 
-The published `v0.2.4+custom.001` tag does not include the subsequent branch
-correction that moves WebSocket ingress lease acquisition after first-frame
-security audit. See [WebSocket ingress limits](protocols/OPENAI_RESPONSES.md#websocket-ingress-limits)
-for the corrected `1013` capacity-close behavior. This correction also covers a
-pre-existing ordering violation in `v0.2.1+custom.003`. Published tags and release
-artifacts remain immutable; a branch correction requires a later release before
-it is available in published binaries/images.
+The published `v0.2.4+custom.001` tag does not include the subsequent correction
+that moves WebSocket ingress lease acquisition after first-frame security audit.
+The correction is included in `v0.2.4+custom.002`. See
+[WebSocket ingress limits](protocols/OPENAI_RESPONSES.md#websocket-ingress-limits)
+for the corrected `1013` capacity-close behavior. It also covers a pre-existing
+ordering violation in `v0.2.1+custom.003`; published tags and artifacts remain
+immutable.
