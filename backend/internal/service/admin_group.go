@@ -9,6 +9,7 @@ import (
 	"time"
 
 	dbent "github.com/LuckyKuang/sub2api-plus/ent"
+	entaccount "github.com/LuckyKuang/sub2api-plus/ent/account"
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/antigravity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/claude"
@@ -688,15 +689,20 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 		group.AllowLive = false
 	}
 	sanitizeGroupReasoningEffortPolicy(group)
-	if err := s.groupRepo.Create(ctx, group); err != nil {
+	if err := s.withGroupMembershipWrite(ctx, len(accountIDsToCopy) > 0, accountIDsToCopy, func(opCtx context.Context) error {
+		if err := s.groupRepo.Create(opCtx, group); err != nil {
+			return err
+		}
+		if len(accountIDsToCopy) > 0 {
+			if err := s.groupRepo.BindAccountsToGroup(opCtx, group.ID, accountIDsToCopy); err != nil {
+				return fmt.Errorf("failed to bind accounts to new group: %w", err)
+			}
+		}
+		return nil
+	}); err != nil {
 		return nil, err
 	}
-
-	// 如果有需要复制的账号，绑定到新分组
 	if len(accountIDsToCopy) > 0 {
-		if err := s.groupRepo.BindAccountsToGroup(ctx, group.ID, accountIDsToCopy); err != nil {
-			return nil, fmt.Errorf("failed to bind accounts to new group: %w", err)
-		}
 		group.AccountCount = int64(len(accountIDsToCopy))
 	}
 
@@ -1155,7 +1161,22 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 		}
 	}
 
-	if err := s.groupRepo.Update(ctx, group); err != nil {
+	if err := s.withGroupMembershipWrite(ctx, len(input.CopyAccountsFromGroupIDs) > 0, accountIDsToCopy, func(opCtx context.Context) error {
+		if err := s.groupRepo.Update(opCtx, group); err != nil {
+			return err
+		}
+		if len(input.CopyAccountsFromGroupIDs) > 0 {
+			if _, err := s.groupRepo.DeleteAccountGroupsByGroupID(opCtx, id); err != nil {
+				return fmt.Errorf("failed to clear existing account bindings: %w", err)
+			}
+			if len(accountIDsToCopy) > 0 {
+				if err := s.groupRepo.BindAccountsToGroup(opCtx, id, accountIDsToCopy); err != nil {
+					return fmt.Errorf("failed to bind accounts to group: %w", err)
+				}
+			}
+		}
+		return nil
+	}); err != nil {
 		return nil, err
 	}
 
@@ -1170,22 +1191,33 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 		s.channelCacheInvalidator.InvalidateCache()
 	}
 
-	// 如果指定了复制账号的源分组，同步绑定（替换当前分组的账号）
-	if len(input.CopyAccountsFromGroupIDs) > 0 {
-		// 先清空当前分组的所有账号绑定
-		if _, err := s.groupRepo.DeleteAccountGroupsByGroupID(ctx, id); err != nil {
-			return nil, fmt.Errorf("failed to clear existing account bindings: %w", err)
-		}
+	return group, nil
+}
 
-		// 再绑定源分组的账号
-		if len(accountIDsToCopy) > 0 {
-			if err := s.groupRepo.BindAccountsToGroup(ctx, id, accountIDsToCopy); err != nil {
-				return nil, fmt.Errorf("failed to bind accounts to group: %w", err)
-			}
+// withGroupMembershipWrite commits group configuration, membership and outbox
+// changes together. Observers and reset workers see either complete membership
+// snapshot; a failed copy cannot leave the source unbound or a partial group.
+func (s *adminServiceImpl) withGroupMembershipWrite(ctx context.Context, copying bool, accountIDs []int64, write func(context.Context) error) error {
+	if !copying || s.entClient == nil || dbent.TxFromContext(ctx) != nil {
+		return write(ctx)
+	}
+	tx, err := s.entClient.Tx(ctx)
+	if err != nil {
+		return fmt.Errorf("begin group membership transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	// Observations lock accounts before groups. Prelock copied accounts in a
+	// stable order so inserting membership FKs cannot reverse that lock order.
+	if len(accountIDs) > 0 {
+		if _, err := tx.Client().Account.Query().Where(entaccount.IDIn(accountIDs...)).
+			Order(dbent.Asc(entaccount.FieldID)).ForUpdate().IDs(ctx); err != nil {
+			return err
 		}
 	}
-
-	return group, nil
+	if err := write(dbent.NewTxContext(ctx, tx)); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *adminServiceImpl) plannedCopiedAccountIDs(ctx context.Context, groupID int64, group *Group, input *UpdateGroupInput) ([]int64, error) {

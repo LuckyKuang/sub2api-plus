@@ -184,6 +184,20 @@ eligible bound source is selected.
 Source membership is checked when creating reset events and again when either
 billing or the background worker applies them. An unbound source neither advances
 the group's baseline nor clears usage through a previously pending event.
+Observation and worker paths acquire the group lock before rechecking membership
+in a fresh statement, so a lock wait cannot retain pre-edit membership. The worker
+also refreshes source eligibility before applying any reset.
+
+An accepted timestamp repeated by the source still reconciles groups whose
+baseline is missing or behind, subject to the same expiry and weekly-advance
+checks. An existing account observation must not cause a newly bound group's
+first baseline to be skipped. Synchronized groups do not create duplicate events.
+
+Creating or editing a group with copied accounts commits its configuration,
+membership and scheduler outbox entries together. A failed copy rolls back the
+entire write. Copying an unchanged source cannot temporarily expose an unbound
+source to reset workers. Copied accounts are locked before the group, in ID
+order, matching observation lock ordering and avoiding membership-FK deadlocks.
 
 Multiple workers process each group's pending events in order, preserving
 earlier monthly-reset decisions. Billing consumes eligible pending events

@@ -9,6 +9,7 @@ import (
 )
 
 func observeAnthropicSSEOutput(data []byte) apicompat.StreamOutputObservation {
+	var result apicompat.StreamOutputObservation
 	for _, line := range strings.Split(string(data), "\n") {
 		trimmed := strings.TrimSpace(line)
 		if !strings.HasPrefix(trimmed, "data:") {
@@ -22,11 +23,14 @@ func observeAnthropicSSEOutput(data []byte) apicompat.StreamOutputObservation {
 		if json.Unmarshal([]byte(payload), &event) != nil {
 			continue
 		}
-		if observation := apicompat.ObserveAnthropicOutput(&event); observation.MeaningfulOutput {
-			return observation
+		observation := apicompat.ObserveAnthropicOutput(&event)
+		if !result.MeaningfulOutput {
+			result = observation
+		} else {
+			result.TokenLikeDelta = result.TokenLikeDelta || observation.TokenLikeDelta
 		}
 	}
-	return apicompat.StreamOutputObservation{}
+	return result
 }
 
 type streamOutputTiming struct {

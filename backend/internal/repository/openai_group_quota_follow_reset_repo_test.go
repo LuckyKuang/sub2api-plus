@@ -35,15 +35,24 @@ func TestQuotaFollowResetObservationPropagatesDatabaseErrors(t *testing.T) {
 }
 
 func TestQuotaFollowResetWorkerDoesNotSkipOnDatabaseError(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = db.Close() })
-	failure := errors.New("database unavailable")
-	mock.ExpectBegin()
-	mock.ExpectQuery("SELECT e.id").WillReturnRows(sqlmock.NewRows([]string{"id", "group_id", "source_account_id", "config_version", "effective_at", "include_monthly"}).AddRow(1, 2, 42, 1, time.Now(), true))
-	mock.ExpectQuery("SELECT g.platform").WillReturnError(failure)
-	mock.ExpectRollback()
-	_, err = (&openAIGroupQuotaFollowResetRepository{db: db}).ProcessNextPending(context.Background())
-	require.ErrorIs(t, err, failure)
-	require.NoError(t, mock.ExpectationsWereMet())
+	for _, stage := range []string{"group lock", "source validation"} {
+		t.Run(stage, func(t *testing.T) {
+			db, mock, err := sqlmock.New()
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = db.Close() })
+			failure := errors.New("database unavailable")
+			mock.ExpectBegin()
+			mock.ExpectQuery("SELECT e.id").WillReturnRows(sqlmock.NewRows([]string{"id", "group_id", "source_account_id", "config_version", "effective_at", "include_monthly"}).AddRow(1, 2, 42, 1, time.Now(), true))
+			if stage == "group lock" {
+				mock.ExpectQuery("SELECT id FROM groups").WillReturnError(failure)
+			} else {
+				mock.ExpectQuery("SELECT id FROM groups").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(2))
+				mock.ExpectQuery("SELECT g.platform").WillReturnError(failure)
+			}
+			mock.ExpectRollback()
+			_, err = (&openAIGroupQuotaFollowResetRepository{db: db}).ProcessNextPending(context.Background())
+			require.ErrorIs(t, err, failure)
+			require.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
 }

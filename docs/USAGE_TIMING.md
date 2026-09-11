@@ -44,6 +44,18 @@ an image, audio part, signature, or execution result must not hide a subsequent
 text/reasoning/tool delta in the same frame. TPS rejects negative/non-finite
 token counts and modality totals greater than the total output token count.
 
+Antigravity's Gemini-to-Claude stream samples native Gemini output before
+conversion. Markdown synthesized from image bytes and text synthesized from
+grounding metadata cannot start or extend the token clock. A signature followed
+by text in the same converted SSE batch must retain both the first meaningful
+output kind and the later token observation; the generic Anthropic SSE observer
+scans the entire batch rather than stopping at its first meaningful event.
+
+The Gemini-to-Messages bridge extends the token window for each non-empty tool
+argument delta, including later chunks of an already open tool block. Repeated
+arguments, empty input, terminal metadata, and synthesized tool names do not
+start or extend that window.
+
 Native Anthropic-to-Chat/Responses adapters distinguish a real upstream
 `message_stop` from a completion synthesized by converter finalization. Missing
 upstream completion or an upstream error marks usage incomplete, even when the

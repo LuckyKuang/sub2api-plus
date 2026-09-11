@@ -394,3 +394,138 @@ func TestQuotaFollowReset_IncrementRespectsCallerTransaction(t *testing.T) {
 	require.NoError(t, integrationDB.QueryRow(`SELECT daily_usage_usd FROM user_subscriptions WHERE id=$1`, f.subscriptionID).Scan(&daily))
 	require.Equal(t, 11.0, daily, "both reset and charge must roll back together")
 }
+
+func TestQuotaFollowReset_RepeatedObservationEstablishesMissingGroupBaseline(t *testing.T) {
+	f := newQuotaFollowFixture(t)
+	// An observation can arrive between creating a source configuration and
+	// committing its membership, or before an existing binding is restored.
+	_, err := integrationDB.Exec(`UPDATE groups SET quota_reset_source_reset_at=NULL WHERE id=$1`, f.groupID)
+	require.NoError(t, err)
+	created, err := f.repo.ObserveWeeklyReset(context.Background(), f.accountID, f.baseline, f.now.Add(time.Minute))
+	require.NoError(t, err)
+	require.Zero(t, created, "a group's first baseline must not reset usage")
+	group, err := NewGroupRepository(integrationEntClient, integrationDB).GetByIDLite(context.Background(), f.groupID)
+	require.NoError(t, err)
+	require.NotNil(t, group.QuotaResetSourceResetAt)
+	require.Equal(t, f.baseline, *group.QuotaResetSourceResetAt)
+	f.observe(t, 1)
+	result, err := f.repo.ProcessNextPending(context.Background())
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 1, result.AffectedSubscriptions)
+}
+
+func TestQuotaFollowReset_CopiedMembershipRespectsCallerTransaction(t *testing.T) {
+	f := newQuotaFollowFixture(t)
+	f.observe(t, 1)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	tx, err := integrationEntClient.Tx(ctx)
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback() }()
+	opCtx := dbent.NewTxContext(ctx, tx)
+	repo := NewGroupRepository(integrationEntClient, integrationDB)
+	group, err := repo.GetByIDLite(ctx, f.groupID)
+	require.NoError(t, err)
+	group.Name += "-copied"
+	require.NoError(t, repo.Update(opCtx, group))
+	_, err = repo.DeleteAccountGroupsByGroupID(opCtx, f.groupID)
+	require.NoError(t, err)
+	require.NoError(t, repo.BindAccountsToGroup(opCtx, f.groupID, []int64{f.accountID}))
+	var visibleMembers int
+	require.NoError(t, integrationDB.QueryRow(`SELECT count(*) FROM account_groups WHERE group_id=$1`, f.groupID).Scan(&visibleMembers))
+	require.Equal(t, 1, visibleMembers, "workers must not see a temporary unbound source")
+	require.NoError(t, tx.Rollback())
+	group, err = repo.GetByIDLite(context.Background(), f.groupID)
+	require.NoError(t, err)
+	require.NotContains(t, group.Name, "-copied")
+	result, err := f.repo.ProcessNextPending(context.Background())
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.False(t, result.Skipped)
+	require.Equal(t, 1, result.AffectedSubscriptions)
+}
+
+func TestQuotaFollowReset_WorkerRechecksMembershipAfterWaitingForGroup(t *testing.T) {
+	f := newQuotaFollowFixture(t)
+	f.observe(t, 1)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	tx, err := integrationDB.BeginTx(ctx, nil)
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback() }()
+	_, err = tx.ExecContext(ctx, `UPDATE groups SET description='member edit' WHERE id=$1`, f.groupID)
+	require.NoError(t, err)
+	_, err = tx.ExecContext(ctx, `DELETE FROM account_groups WHERE group_id=$1`, f.groupID)
+	require.NoError(t, err)
+	type outcome struct {
+		result *service.GroupQuotaFollowResetResult
+		err    error
+	}
+	finished := make(chan outcome, 1)
+	go func() {
+		result, err := f.repo.ProcessNextPending(ctx)
+		finished <- outcome{result, err}
+	}()
+	require.Eventually(t, func() bool {
+		var waiting bool
+		err := integrationDB.QueryRowContext(ctx, `SELECT EXISTS (
+			SELECT 1 FROM pg_stat_activity WHERE datname=current_database()
+			AND wait_event_type='Lock' AND query LIKE '%FROM groups%'
+		)`).Scan(&waiting)
+		return err == nil && waiting
+	}, 3*time.Second, 10*time.Millisecond)
+	require.NoError(t, tx.Commit())
+	select {
+	case got := <-finished:
+		require.NoError(t, got.err)
+		require.NotNil(t, got.result)
+		require.True(t, got.result.Skipped, "membership must be read again after the group lock is acquired")
+	case <-ctx.Done():
+		t.Fatal("reset worker did not finish")
+	}
+	var daily float64
+	require.NoError(t, integrationDB.QueryRow(`SELECT daily_usage_usd FROM user_subscriptions WHERE id=$1`, f.subscriptionID).Scan(&daily))
+	require.Equal(t, 11.0, daily)
+}
+
+func TestQuotaFollowReset_ObservationRechecksMembershipAfterWaitingForGroup(t *testing.T) {
+	f := newQuotaFollowFixture(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	tx, err := integrationDB.BeginTx(ctx, nil)
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback() }()
+	_, err = tx.ExecContext(ctx, `UPDATE groups SET description='member edit' WHERE id=$1`, f.groupID)
+	require.NoError(t, err)
+	_, err = tx.ExecContext(ctx, `DELETE FROM account_groups WHERE group_id=$1`, f.groupID)
+	require.NoError(t, err)
+	type outcome struct {
+		created int
+		err     error
+	}
+	finished := make(chan outcome, 1)
+	go func() {
+		created, err := f.repo.ObserveWeeklyReset(ctx, f.accountID, f.baseline.Add(7*24*time.Hour), f.baseline)
+		finished <- outcome{created, err}
+	}()
+	require.Eventually(t, func() bool {
+		var waiting bool
+		err := integrationDB.QueryRowContext(ctx, `SELECT EXISTS (
+			SELECT 1 FROM pg_stat_activity WHERE datname=current_database()
+			AND wait_event_type='Lock' AND query LIKE '%FROM groups%'
+		)`).Scan(&waiting)
+		return err == nil && waiting
+	}, 3*time.Second, 10*time.Millisecond)
+	require.NoError(t, tx.Commit())
+	select {
+	case got := <-finished:
+		require.NoError(t, got.err)
+		require.Zero(t, got.created, "an observation must not advance an unbound group's baseline after waiting for its lock")
+	case <-ctx.Done():
+		t.Fatal("observation did not finish")
+	}
+	var baseline time.Time
+	require.NoError(t, integrationDB.QueryRow(`SELECT quota_reset_source_reset_at FROM groups WHERE id=$1`, f.groupID).Scan(&baseline))
+	require.Equal(t, f.baseline, baseline)
+}
