@@ -29,13 +29,25 @@ type quotaResetGroupRepoStub struct {
 
 func TestAdminServiceCreateGroupConfiguresOpenAIOAuthQuotaResetSource(t *testing.T) {
 	account := &Account{ID: 42, Name: "Primary OAuth", Platform: PlatformOpenAI, Type: AccountTypeOAuth}
-	groupRepo := &quotaResetGroupRepoStub{groupRepoStubForAdmin: &groupRepoStubForAdmin{createID: 7}}
+	groupRepo := &quotaResetGroupRepoStub{groupRepoStubForAdmin: &groupRepoStubForAdmin{
+		createID:    7,
+		getByIDByID: map[int64]*Group{99: {ID: 99, Platform: PlatformOpenAI}},
+		getAccountIDsByGroupIDsFn: func(groupIDs []int64) ([]int64, error) {
+			require.Equal(t, []int64{99}, groupIDs)
+			return []int64{account.ID}, nil
+		},
+		bindAccountsToGroupFn: func(_ int64, accountIDs []int64) error {
+			require.Equal(t, []int64{account.ID}, accountIDs)
+			return nil
+		},
+	}}
 	svc := &adminServiceImpl{groupRepo: groupRepo, accountRepo: &quotaResetAccountRepoStub{account: account}}
 	monthlyLimit := 100.0
 
 	group, err := svc.CreateGroup(context.Background(), &CreateGroupInput{
 		Name: "Follow upstream", Platform: PlatformOpenAI, SubscriptionType: SubscriptionTypeSubscription,
 		RateMultiplier: 1, MonthlyLimitUSD: &monthlyLimit,
+		CopyAccountsFromGroupIDs:  []int64{99},
 		QuotaResetSourceAccountID: &account.ID, QuotaResetIncludeMonthly: true,
 	})
 
@@ -47,6 +59,20 @@ func TestAdminServiceCreateGroupConfiguresOpenAIOAuthQuotaResetSource(t *testing
 	require.True(t, group.QuotaResetIncludeMonthly)
 }
 
+func TestAdminServiceCreateGroupRejectsUnboundQuotaResetSource(t *testing.T) {
+	account := &Account{ID: 42, Name: "Primary OAuth", Platform: PlatformOpenAI, Type: AccountTypeOAuth}
+	groupRepo := &quotaResetGroupRepoStub{groupRepoStubForAdmin: &groupRepoStubForAdmin{createID: 7}}
+	svc := &adminServiceImpl{groupRepo: groupRepo, accountRepo: &quotaResetAccountRepoStub{account: account}}
+
+	_, err := svc.CreateGroup(context.Background(), &CreateGroupInput{
+		Name: "Unbound source", Platform: PlatformOpenAI, SubscriptionType: SubscriptionTypeSubscription,
+		RateMultiplier: 1, QuotaResetSourceAccountID: &account.ID,
+	})
+
+	require.Error(t, err)
+	require.Equal(t, "INVALID_QUOTA_RESET_SOURCE", infraerrors.Reason(err))
+}
+
 func TestAdminServiceCreateGroupRejectsNonOAuthQuotaResetSource(t *testing.T) {
 	account := &Account{ID: 42, Name: "API Key", Platform: PlatformOpenAI, Type: AccountTypeAPIKey}
 	groupRepo := &quotaResetGroupRepoStub{groupRepoStubForAdmin: &groupRepoStubForAdmin{}}
@@ -55,6 +81,61 @@ func TestAdminServiceCreateGroupRejectsNonOAuthQuotaResetSource(t *testing.T) {
 	_, err := svc.CreateGroup(context.Background(), &CreateGroupInput{
 		Name: "Invalid source", Platform: PlatformOpenAI, SubscriptionType: SubscriptionTypeSubscription,
 		RateMultiplier: 1, QuotaResetSourceAccountID: &account.ID,
+	})
+
+	require.Error(t, err)
+	require.Equal(t, "INVALID_QUOTA_RESET_SOURCE", infraerrors.Reason(err))
+}
+
+func TestAdminServiceUpdateGroupRejectsUnboundQuotaResetSource(t *testing.T) {
+	account := &Account{ID: 42, Name: "Primary OAuth", Platform: PlatformOpenAI, Type: AccountTypeOAuth}
+	existing := &Group{
+		ID: 7, Name: "Follow upstream", Platform: PlatformOpenAI,
+		SubscriptionType: SubscriptionTypeSubscription, RateMultiplier: 1,
+	}
+	groupRepo := &groupRepoStubForAdmin{
+		getByID: existing,
+		getAccountIDsByGroupIDsFn: func(groupIDs []int64) ([]int64, error) {
+			require.Equal(t, []int64{existing.ID}, groupIDs)
+			return []int64{99}, nil
+		},
+	}
+	svc := &adminServiceImpl{groupRepo: groupRepo, accountRepo: &quotaResetAccountRepoStub{account: account}}
+
+	_, err := svc.UpdateGroup(context.Background(), existing.ID, &UpdateGroupInput{
+		QuotaResetSourceAccountIDSet: true,
+		QuotaResetSourceAccountID:    &account.ID,
+	})
+
+	require.Error(t, err)
+	require.Equal(t, "INVALID_QUOTA_RESET_SOURCE", infraerrors.Reason(err))
+}
+
+func TestAdminServiceUpdateGroupRejectsCopiedAccountsMissingQuotaResetSource(t *testing.T) {
+	account := &Account{ID: 42, Name: "Primary OAuth", Platform: PlatformOpenAI, Type: AccountTypeOAuth}
+	existing := &Group{
+		ID: 7, Name: "Follow upstream", Platform: PlatformOpenAI,
+		SubscriptionType: SubscriptionTypeSubscription, RateMultiplier: 1,
+		QuotaResetSourceAccountID: &account.ID, QuotaResetSourceAccountName: account.Name,
+		QuotaResetConfigVersion: 3, QuotaResetSourceValid: true,
+	}
+	groupRepo := &groupRepoStubForAdmin{
+		getByID: existing,
+		getByIDByID: map[int64]*Group{
+			7:  existing,
+			99: {ID: 99, Platform: PlatformOpenAI},
+		},
+		getAccountIDsByGroupIDsFn: func(groupIDs []int64) ([]int64, error) {
+			require.Equal(t, []int64{99}, groupIDs)
+			return []int64{100}, nil
+		},
+	}
+	svc := &adminServiceImpl{groupRepo: groupRepo, accountRepo: &quotaResetAccountRepoStub{account: account}}
+
+	_, err := svc.UpdateGroup(context.Background(), existing.ID, &UpdateGroupInput{
+		CopyAccountsFromGroupIDs:     []int64{99},
+		QuotaResetSourceAccountIDSet: true,
+		QuotaResetSourceAccountID:    &account.ID,
 	})
 
 	require.Error(t, err)

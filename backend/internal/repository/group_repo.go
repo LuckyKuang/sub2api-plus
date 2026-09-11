@@ -859,34 +859,41 @@ func (r *groupRepository) hydrateQuotaResetSourceValidity(ctx context.Context, g
 	if r == nil || r.sql == nil || len(groups) == 0 {
 		return
 	}
-	ids := make([]int64, 0, len(groups))
+	type sourceKey struct{ groupID, accountID int64 }
+	accountIDs := make([]int64, 0, len(groups))
+	groupIDs := make([]int64, 0, len(groups))
 	for i := range groups {
 		if groups[i].QuotaResetSourceAccountID != nil {
-			ids = append(ids, *groups[i].QuotaResetSourceAccountID)
+			accountIDs = append(accountIDs, *groups[i].QuotaResetSourceAccountID)
+			groupIDs = append(groupIDs, groups[i].ID)
 		}
 	}
-	if len(ids) == 0 {
+	if len(groupIDs) == 0 {
 		return
 	}
 	rows, err := r.sql.QueryContext(ctx, `
-		SELECT id FROM accounts
-		WHERE id = ANY($1) AND deleted_at IS NULL
-		  AND platform = $2 AND type = $3 AND parent_account_id IS NULL
-	`, pq.Array(ids), service.PlatformOpenAI, service.AccountTypeOAuth)
+		SELECT g.id, a.id
+		FROM groups g
+		JOIN account_groups ag ON ag.group_id = g.id AND ag.account_id = g.quota_reset_source_account_id
+		JOIN accounts a ON a.id = ag.account_id
+		WHERE g.id = ANY($1) AND g.deleted_at IS NULL
+		  AND a.id = ANY($2) AND a.deleted_at IS NULL
+		  AND a.platform = $3 AND a.type = $4 AND a.parent_account_id IS NULL
+	`, pq.Array(groupIDs), pq.Array(accountIDs), service.PlatformOpenAI, service.AccountTypeOAuth)
 	if err != nil {
 		return
 	}
 	defer func() { _ = rows.Close() }()
-	valid := make(map[int64]struct{}, len(ids))
+	valid := make(map[sourceKey]struct{}, len(groupIDs))
 	for rows.Next() {
-		var id int64
-		if rows.Scan(&id) == nil {
-			valid[id] = struct{}{}
+		var groupID, accountID int64
+		if rows.Scan(&groupID, &accountID) == nil {
+			valid[sourceKey{groupID, accountID}] = struct{}{}
 		}
 	}
 	for i := range groups {
 		if groups[i].QuotaResetSourceAccountID != nil {
-			_, groups[i].QuotaResetSourceValid = valid[*groups[i].QuotaResetSourceAccountID]
+			_, groups[i].QuotaResetSourceValid = valid[sourceKey{groups[i].ID, *groups[i].QuotaResetSourceAccountID}]
 		}
 	}
 }

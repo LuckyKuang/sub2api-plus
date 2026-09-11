@@ -4889,7 +4889,6 @@ const groups = ref<AdminGroup[]>([]);
 const loading = ref(false);
 const quotaResetSourceAccounts = ref<Account[]>([]);
 const quotaResetSourcesLoading = ref(false);
-let quotaResetSourcesRequest: Promise<void> | null = null;
 type GroupUsageSummary = {
   today_cost: number;
   yesterday_cost: number;
@@ -5501,14 +5500,21 @@ const editQuotaResetSourceOptions = computed(() => {
   return options;
 });
 
-const loadQuotaResetSourceAccounts = async () => {
-  if (quotaResetSourcesRequest) {
-    return quotaResetSourcesRequest;
+const oauthResetSourceFromAccount = (account: Account): boolean =>
+  account.platform === "openai" &&
+  account.type === "oauth" &&
+  !account.parent_account_id;
+
+const loadQuotaResetSourceAccountsForGroups = async (groupIDs: number[]) => {
+  const uniqueGroupIDs = [...new Set(groupIDs.filter((id) => id > 0))];
+  if (uniqueGroupIDs.length === 0) {
+    quotaResetSourceAccounts.value = [];
+    return;
   }
-  quotaResetSourcesRequest = (async () => {
-    quotaResetSourcesLoading.value = true;
-    try {
-      const accounts: Account[] = [];
+  quotaResetSourcesLoading.value = true;
+  try {
+    const accountsByID = new Map<number, Account>();
+    for (const groupID of uniqueGroupIDs) {
       const pageSize = 100;
       let page = 1;
       let total = 0;
@@ -5516,29 +5522,25 @@ const loadQuotaResetSourceAccounts = async () => {
         const response = await adminAPI.accounts.list(page, pageSize, {
           platform: "openai",
           type: "oauth",
+          group: String(groupID),
         });
-        accounts.push(
-          ...response.items.filter(
-            (account) =>
-              account.platform === "openai" &&
-              account.type === "oauth" &&
-              !account.parent_account_id,
-          ),
-        );
+        for (const account of response.items) {
+          if (oauthResetSourceFromAccount(account)) {
+            accountsByID.set(account.id, account);
+          }
+        }
         total = response.total;
         page += 1;
         if (response.items.length === 0) break;
       } while ((page - 1) * pageSize < total);
-      quotaResetSourceAccounts.value = accounts;
-    } catch (error) {
-      quotaResetSourceAccounts.value = [];
-      console.error("Error loading OpenAI OAuth quota reset sources:", error);
-    } finally {
-      quotaResetSourcesLoading.value = false;
-      quotaResetSourcesRequest = null;
     }
-  })();
-  return quotaResetSourcesRequest;
+    quotaResetSourceAccounts.value = [...accountsByID.values()];
+  } catch (error) {
+    quotaResetSourceAccounts.value = [];
+    console.error("Error loading OpenAI OAuth quota reset sources:", error);
+  } finally {
+    quotaResetSourcesLoading.value = false;
+  }
 };
 
 const canIncludeMonthlyReset = (form: {
@@ -5943,7 +5945,7 @@ const handleSort = (key: string, order: 'asc' | 'desc') => {
 
 const openCreateModal = () => {
   showCreateModal.value = true;
-  void loadQuotaResetSourceAccounts();
+  void loadQuotaResetSourceAccountsForGroups(createForm.copy_accounts_from_group_ids);
   loadModelsListCandidates("create", 0, createForm.platform);
 };
 
@@ -6345,7 +6347,7 @@ const handleEdit = async (group: AdminGroup) => {
     group.model_routing,
   );
   loadModelsListCandidates("edit", group.id, group.platform);
-  void loadQuotaResetSourceAccounts();
+  void loadQuotaResetSourceAccountsForGroups([group.id]);
   showEditModal.value = true;
 };
 
@@ -6885,6 +6887,16 @@ watch(
 );
 
 watch(
+  () => createForm.copy_accounts_from_group_ids,
+  (groupIDs) => {
+    if (showCreateModal.value) {
+      void loadQuotaResetSourceAccountsForGroups(groupIDs);
+    }
+  },
+  { deep: true },
+);
+
+watch(
   () => [
     editForm.platform,
     editForm.subscription_type,
@@ -6903,6 +6915,37 @@ watch(
     }
   },
 );
+
+watch(
+  () => editForm.copy_accounts_from_group_ids,
+  (groupIDs) => {
+    if (!showEditModal.value || !editingGroup.value) {
+      return;
+    }
+    void loadQuotaResetSourceAccountsForGroups(
+      groupIDs.length > 0 ? groupIDs : [editingGroup.value.id],
+    );
+  },
+  { deep: true },
+);
+
+watch(quotaResetSourceAccounts, (accounts) => {
+  const ids = new Set(accounts.map((account) => account.id));
+  if (
+    createForm.quota_reset_source_account_id &&
+    !ids.has(createForm.quota_reset_source_account_id)
+  ) {
+    createForm.quota_reset_source_account_id = null;
+  }
+  const currentSourceID = editingGroup.value?.quota_reset_source_account_id;
+  if (
+    editForm.quota_reset_source_account_id &&
+    !ids.has(editForm.quota_reset_source_account_id) &&
+    editForm.quota_reset_source_account_id !== currentSourceID
+  ) {
+    editForm.quota_reset_source_account_id = null;
+  }
+});
 
 watch(
   () => createForm.platform,

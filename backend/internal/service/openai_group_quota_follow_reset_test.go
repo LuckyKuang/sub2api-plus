@@ -56,6 +56,12 @@ func TestOpenAICodexUsageSnapshotWeeklyResetAt(t *testing.T) {
 	snapshot.PrimaryWindowMinutes = &fiveHourWindow
 	_, ok = snapshot.WeeklyResetAt()
 	require.False(t, ok, "5-hour windows must never drive group resets")
+
+	dailyWindow := 24 * 60
+	snapshot.PrimaryWindowMinutes = &dailyWindow
+	snapshot.PrimaryResetAtUnix = &weeklyReset
+	_, ok = snapshot.WeeklyResetAt()
+	require.False(t, ok, "daily windows must never drive group resets")
 }
 
 func TestObserveOpenAIWeeklyResetEventUsesRawDefaultWindow(t *testing.T) {
@@ -90,6 +96,12 @@ func TestObserveOpenAIWeeklyResetEventUsesRawDefaultWindow(t *testing.T) {
 		observeOpenAIWeeklyResetEvent(context.Background(), account, []byte(payload))
 	}
 	require.Equal(t, 1, recorder.calls, "malformed raw timestamps cannot poison the monotonic baseline")
+	observeOpenAIWeeklyResetEvent(
+		context.Background(),
+		account,
+		[]byte(`{"type":"codex.rate_limits","rate_limits":{"primary":{"window_minutes":1440,"reset_at":1780600001}}}`),
+	)
+	require.Equal(t, 1, recorder.calls, "daily windows must not drive group resets")
 	validPayload := []byte(`{"type":"codex.rate_limits","rate_limits":{"primary":{"window_minutes":300,"reset_at":1780600001},"secondary":{"window_minutes":10080,"reset_at":1780700001}}}`)
 	for _, ineligible := range []*Account{
 		{ID: 42, Platform: PlatformOpenAI, Type: AccountTypeAPIKey},

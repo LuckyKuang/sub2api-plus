@@ -54,7 +54,7 @@ func (r *openAIGroupQuotaFollowResetRepository) ObserveWeeklyReset(ctx context.C
 	if err != nil && !firstObservation {
 		return 0, err
 	}
-	if !firstObservation && !resetAt.After(previous) {
+	if !firstObservation && !openAIWeeklyResetAdvanced(previous, resetAt, observedAt) {
 		return 0, nil
 	}
 	_, err = tx.ExecContext(ctx, `
@@ -109,7 +109,7 @@ func (r *openAIGroupQuotaFollowResetRepository) ObserveWeeklyReset(ctx context.C
 			}
 			continue
 		}
-		if !resetAt.After(target.baseline.Time) {
+		if !openAIWeeklyResetAdvanced(target.baseline.Time, resetAt, observedAt) {
 			continue
 		}
 		result, err := tx.ExecContext(ctx, `
@@ -132,6 +132,17 @@ func (r *openAIGroupQuotaFollowResetRepository) ObserveWeeklyReset(ctx context.C
 		return 0, err
 	}
 	return created, nil
+}
+
+const openAIWeeklyResetMinAdvance = (7 * 24 * time.Hour) / 2
+
+func openAIWeeklyResetAdvanced(previous, next, observedAt time.Time) bool {
+	if previous.IsZero() || next.IsZero() || observedAt.IsZero() {
+		return false
+	}
+	// Require the previously announced window to have ended, and the new
+	// next-reset to look like another weekly window rather than clock skew.
+	return !observedAt.Before(previous) && next.Sub(previous) >= openAIWeeklyResetMinAdvance
 }
 
 func (r *openAIGroupQuotaFollowResetRepository) ProcessNextPending(ctx context.Context) (_ *service.GroupQuotaFollowResetResult, err error) {
@@ -175,7 +186,11 @@ func (r *openAIGroupQuotaFollowResetRepository) ProcessNextPending(ctx context.C
 		   AND g.quota_reset_config_version = $3
 		   AND a.platform = $4
 		   AND a.type = $6
-		   AND a.parent_account_id IS NULL,
+		   AND a.parent_account_id IS NULL
+		   AND EXISTS (
+		       SELECT 1 FROM account_groups ag
+		       WHERE ag.group_id = g.id AND ag.account_id = a.id
+		   ),
 		   g.monthly_limit_usd
 		FROM groups g
 		JOIN accounts a ON a.id = $2 AND a.deleted_at IS NULL

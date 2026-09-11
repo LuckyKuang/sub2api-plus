@@ -10,6 +10,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestOpenAIWeeklyResetAdvancedRequiresExpiredWindow(t *testing.T) {
+	previous := time.Date(2026, 9, 15, 0, 0, 0, 0, time.UTC)
+	next := previous.Add(7 * 24 * time.Hour)
+	require.False(t, openAIWeeklyResetAdvanced(previous, previous.Add(time.Minute), previous.Add(-time.Hour)), "clock skew before expiry must not reset groups")
+	require.False(t, openAIWeeklyResetAdvanced(previous, next, previous.Add(-time.Second)))
+	require.False(t, openAIWeeklyResetAdvanced(previous, previous.Add(time.Minute), previous), "clock skew after expiry must not reset groups")
+	require.False(t, openAIWeeklyResetAdvanced(previous, previous.Add(24*time.Hour), previous), "a one-day jump is not a weekly window")
+	require.True(t, openAIWeeklyResetAdvanced(previous, next, previous))
+	require.True(t, openAIWeeklyResetAdvanced(previous, next, previous.Add(time.Minute)))
+}
+
 func TestQuotaFollowResetObservationPropagatesDatabaseErrors(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)

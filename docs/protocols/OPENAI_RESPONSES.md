@@ -154,26 +154,30 @@ returns the API key subscription quota when the local setting is enabled and
 returns 404 otherwise; it does not select an account or proxy upstream quota.
 
 Administrators may optionally bind an OpenAI subscription group to one
-credential-owning OpenAI OAuth account as its quota-reset source. This binding
-does not change the group's routing pool. The gateway never polls an upstream
-quota endpoint for this feature. It passively observes the source account's raw
-default weekly-window `Reset-At` value on successful Responses traffic and the
-equivalent default `codex.rate_limits` WebSocket event before applying any
-client-facing local quota rewrite.
+credential-owning OpenAI OAuth account that is already bound to that group.
+This does not change the group's routing pool. The gateway never polls an
+upstream quota endpoint for this feature. It passively observes the source
+account's raw default weekly-window `Reset-At` value on successful Responses
+traffic and the equivalent default `codex.rate_limits` WebSocket event before
+applying any client-facing local quota rewrite. Daily and 5-hour windows never
+drive this feature.
 
 Saving a new or changed binding locks its source and establishes a baseline
 from the latest locally observed value in the same transaction. If no value
 exists yet, the first observation establishes the baseline without resetting
 subscriptions. Ordinary group edits preserve the current baseline; stale
-source-configuration saves are rejected for reload. A strictly later value creates one durable,
-idempotent reset event for every group bound to that source. Each event resets
-the active subscriptions' 5-hour, daily, and weekly usage; monthly usage is
-reset only when the group explicitly enables it and has a monthly limit. Event
-application and usage billing lock the group and subscription records in the
-same order, so a concurrent charge is deterministically ordered before or after
-the reset. Deleting the source account leaves its recorded name and ID on the
+source-configuration saves are rejected for reload. A later next-reset time
+creates a durable, idempotent reset event only after the previously announced
+window has expired, and only when the new timestamp is at least half a week
+later. Clock skew of a still-open or just-expired window does not reset groups.
+Each event resets the active subscriptions' 5-hour, daily, and weekly usage;
+monthly usage is reset only when the group explicitly enables it and has a
+monthly limit. Event application and usage billing lock the group and
+subscription records in the same order, so a concurrent charge is
+deterministically ordered before or after the reset. Deleting the source
+account, or removing it from the group, leaves its recorded name and ID on the
 group for diagnosis, but disables further automatic resets until another
-eligible source is selected.
+eligible bound source is selected.
 
 Multiple workers process each group's pending events in order, preserving
 earlier monthly-reset decisions. Billing consumes eligible pending events

@@ -53,6 +53,8 @@ func TestOpenAIGroupQuotaFollowResetRepository_EndToEnd(t *testing.T) {
 			config.includeMonthly,
 		).Scan(&groupID))
 		groupIDs = append(groupIDs, groupID)
+		_, err := integrationDB.ExecContext(ctx, `INSERT INTO account_groups (account_id, group_id) VALUES ($1, $2)`, accountID, groupID)
+		require.NoError(t, err)
 	}
 
 	var userID int64
@@ -96,8 +98,16 @@ func TestOpenAIGroupQuotaFollowResetRepository_EndToEnd(t *testing.T) {
 	require.NoError(t, err)
 	require.Zero(t, created, "the same upstream reset time must be idempotent")
 
+	created, err = repo.ObserveWeeklyReset(ctx, accountID, firstResetAt.Add(time.Minute), now.Add(time.Hour))
+	require.NoError(t, err)
+	require.Zero(t, created, "a later next-reset before the current window expires must not reset groups")
+
+	created, err = repo.ObserveWeeklyReset(ctx, accountID, firstResetAt.Add(time.Minute), firstResetAt)
+	require.NoError(t, err)
+	require.Zero(t, created, "clock skew after the current window expires must not reset groups")
+
 	secondResetAt := firstResetAt.Add(7 * 24 * time.Hour)
-	created, err = repo.ObserveWeeklyReset(ctx, accountID, secondResetAt, now.Add(time.Hour))
+	created, err = repo.ObserveWeeklyReset(ctx, accountID, secondResetAt, firstResetAt)
 	require.NoError(t, err)
 	require.Equal(t, 3, created, "one source observation must create one event per bound group")
 
@@ -135,7 +145,7 @@ func TestOpenAIGroupQuotaFollowResetRepository_EndToEnd(t *testing.T) {
 	require.Zero(t, created)
 
 	thirdResetAt := secondResetAt.Add(7 * 24 * time.Hour)
-	created, err = repo.ObserveWeeklyReset(ctx, accountID, thirdResetAt, now.Add(3*time.Hour))
+	created, err = repo.ObserveWeeklyReset(ctx, accountID, thirdResetAt, secondResetAt)
 	require.NoError(t, err)
 	require.Equal(t, 3, created)
 
@@ -187,6 +197,10 @@ func newQuotaFollowFixture(t *testing.T) quotaFollowFixture {
 	suffix := time.Now().UnixNano()
 	require.NoError(t, integrationDB.QueryRowContext(ctx, `INSERT INTO accounts(name, platform, type) VALUES ($1,'openai','oauth') RETURNING id`, fmt.Sprintf("quota-race-%d", suffix)).Scan(&f.accountID))
 	require.NoError(t, integrationDB.QueryRowContext(ctx, `INSERT INTO groups(name, platform, subscription_type, monthly_limit_usd, quota_reset_source_account_id, quota_reset_config_version, quota_reset_include_monthly) VALUES ($1,'openai','subscription',100,$2,1,true) RETURNING id`, fmt.Sprintf("quota-race-%d", suffix), f.accountID).Scan(&f.groupID))
+	require.NoError(t, func() error {
+		_, err := integrationDB.ExecContext(ctx, `INSERT INTO account_groups (account_id, group_id) VALUES ($1, $2)`, f.accountID, f.groupID)
+		return err
+	}())
 	require.NoError(t, integrationDB.QueryRowContext(ctx, `INSERT INTO users(email,password_hash) VALUES ($1,'test') RETURNING id`, fmt.Sprintf("quota-race-%d@example.test", suffix)).Scan(&userID))
 	require.NoError(t, integrationDB.QueryRowContext(ctx, `INSERT INTO user_subscriptions(user_id,group_id,starts_at,expires_at,status,daily_usage_usd,weekly_usage_usd,monthly_usage_usd,five_hour_usage_usd,five_hour_window_start) VALUES ($1,$2,$3,$4,'active',11,11,11,11,$5) RETURNING id`, userID, f.groupID, f.now.Add(-time.Hour), f.now.Add(30*24*time.Hour), f.now).Scan(&f.subscriptionID))
 	t.Cleanup(func() {
@@ -205,7 +219,8 @@ func newQuotaFollowFixture(t *testing.T) quotaFollowFixture {
 
 func (f quotaFollowFixture) observe(t *testing.T, window int) {
 	t.Helper()
-	created, err := f.repo.ObserveWeeklyReset(context.Background(), f.accountID, f.baseline.Add(time.Duration(window)*7*24*time.Hour), f.now.Add(time.Duration(window)*time.Minute))
+	next := f.baseline.Add(time.Duration(window) * 7 * 24 * time.Hour)
+	created, err := f.repo.ObserveWeeklyReset(context.Background(), f.accountID, next, f.baseline.Add(time.Duration(window-1)*7*24*time.Hour))
 	require.NoError(t, err)
 	require.Equal(t, 1, created)
 }

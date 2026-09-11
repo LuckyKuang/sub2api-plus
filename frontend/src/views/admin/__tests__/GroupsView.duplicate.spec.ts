@@ -259,17 +259,29 @@ describe('GroupsView duplicate action', () => {
     wrapper.unmount()
   })
 
-  it('offers only credential-owning OpenAI OAuth reset sources and submits the selected account', async () => {
-    listAccounts.mockResolvedValue({
-      items: [
-        { id: 501, name: 'Eligible OAuth', platform: 'openai', type: 'oauth', parent_account_id: null },
-        { id: 502, name: 'OpenAI API key', platform: 'openai', type: 'apikey', parent_account_id: null },
-        { id: 503, name: 'OAuth shadow', platform: 'openai', type: 'oauth', parent_account_id: 501 },
-      ],
-      total: 3,
-      page: 1,
-      page_size: 100,
-      pages: 1,
+  it('offers only bound OpenAI OAuth reset sources after copying accounts from another group', async () => {
+    listAccounts.mockImplementation(async (_page: number, _pageSize: number, filters?: { group?: string }) => {
+      if (filters?.group === '42') {
+        return {
+          items: [
+            { id: 501, name: 'Bound OAuth', platform: 'openai', type: 'oauth', parent_account_id: null },
+            { id: 503, name: 'OAuth shadow', platform: 'openai', type: 'oauth', parent_account_id: 501 },
+          ],
+          total: 2,
+          page: 1,
+          page_size: 100,
+          pages: 1,
+        }
+      }
+      return {
+        items: [
+          { id: 999, name: 'Unrelated OAuth', platform: 'openai', type: 'oauth', parent_account_id: null },
+        ],
+        total: 1,
+        page: 1,
+        page_size: 100,
+        pages: 1,
+      }
     })
     const wrapper = mountView()
     await flushPromises()
@@ -282,8 +294,13 @@ describe('GroupsView duplicate action', () => {
         platform: string
         subscription_type: string
         quota_reset_source_account_id: number | null
+        copy_accounts_from_group_ids: number[]
       }
     }
+    expect(vm.quotaResetSourceAccounts).toEqual([])
+    vm.createForm.copy_accounts_from_group_ids = [42]
+    await flushPromises()
+    expect(listAccounts).toHaveBeenCalledWith(1, 100, { platform: 'openai', type: 'oauth', group: '42' })
     expect(vm.quotaResetSourceAccounts.map(account => account.id)).toEqual([501])
     vm.createForm.platform = 'openai'
     vm.createForm.subscription_type = 'subscription'
@@ -293,7 +310,6 @@ describe('GroupsView duplicate action', () => {
     await wrapper.get('#create-group-form').trigger('submit')
     await flushPromises()
 
-    expect(listAccounts).toHaveBeenCalledWith(1, 100, { platform: 'openai', type: 'oauth' })
     expect(createGroup).toHaveBeenCalledWith(expect.objectContaining({
       platform: 'openai',
       subscription_type: 'subscription',
