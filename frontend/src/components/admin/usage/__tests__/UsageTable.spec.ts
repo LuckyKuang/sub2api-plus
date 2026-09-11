@@ -369,6 +369,20 @@ describe('admin UsageTable tooltip', () => {
     expect(tooltip.get('[data-testid="tps-unavailable-reason"]').text()).toContain('TPS')
   })
 
+  it('keeps very low positive TPS visible and excludes billed compaction-only results', () => {
+    const row = { ...baseImageRow, request_type: 'stream', stream: true, first_output_kind: 'text', first_token_ms: 100, last_token_ms: 120000, duration_ms: 120500, output_tokens: 1 }
+    const wrapper = mount(UsageTable, {
+      props: {
+        data: [row, { ...row, request_id: 'billed-compaction', first_output_kind: 'compaction', first_token_ms: null, last_token_ms: null, output_tokens: 100 }],
+        loading: false,
+        columns: [{ key: 'latency', label: 'Latency' }],
+      },
+      global: { stubs: { DataTable: DataTableStub, Pagination: true, EmptyState: true, Icon: true, Teleport: true } },
+    })
+    expect(wrapper.findAll('[data-testid="latency-tps"]').map(node => node.text())).toEqual(['0.0083', '-'])
+    wrapper.unmount()
+  })
+
   it('shows estimated TPS from last-token wall time, including incomplete and short samples', () => {
     const rows = [
       {

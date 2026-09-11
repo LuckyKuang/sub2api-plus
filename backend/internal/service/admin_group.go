@@ -856,6 +856,13 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 	if input.FiveHourLimitUSD != nil {
 		group.FiveHourLimitUSD = normalizeLimit(input.FiveHourLimitUSD)
 	}
+	var accountIDsToCopy []int64
+	if len(input.CopyAccountsFromGroupIDs) > 0 {
+		accountIDsToCopy, err = s.plannedCopiedAccountIDs(ctx, id, group, input)
+		if err != nil {
+			return nil, err
+		}
+	}
 	if input.QuotaResetSourceAccountIDSet {
 		if input.QuotaResetSourceAccountID == nil || *input.QuotaResetSourceAccountID <= 0 {
 			if group.QuotaResetSourceAccountID != nil {
@@ -869,19 +876,24 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 			// Preserve an unchanged source, including a deleted source, so other
 			// group settings remain editable while the UI reports the invalid binding.
 		} else {
-			boundAccountIDs, boundErr := s.plannedQuotaResetBoundAccountIDs(ctx, id, group, input)
-			if boundErr != nil {
-				return nil, boundErr
+			boundAccountIDs := accountIDsToCopy
+			if len(input.CopyAccountsFromGroupIDs) == 0 {
+				boundAccountIDs, err = s.groupRepo.GetAccountIDsByGroupIDs(ctx, []int64{id})
+				if err != nil {
+					return nil, err
+				}
 			}
 			account, resolveErr := s.resolveOpenAIQuotaResetSource(ctx, *input.QuotaResetSourceAccountID, boundAccountIDs)
 			if resolveErr != nil {
 				return nil, resolveErr
 			}
+			if group.QuotaResetSourceAccountID == nil || *group.QuotaResetSourceAccountID != account.ID {
+				group.QuotaResetConfigVersion++
+				group.QuotaResetSourceResetAt = nil // Established atomically by the repository.
+			}
 			group.QuotaResetSourceAccountID = &account.ID
 			group.QuotaResetSourceAccountName = account.Name
 			group.QuotaResetSourceValid = true
-			group.QuotaResetConfigVersion++
-			group.QuotaResetSourceResetAt = nil // Established atomically by the repository.
 		}
 	}
 	if input.QuotaResetIncludeMonthly != nil {
@@ -1160,62 +1172,9 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 
 	// 如果指定了复制账号的源分组，同步绑定（替换当前分组的账号）
 	if len(input.CopyAccountsFromGroupIDs) > 0 {
-		// 去重源分组 IDs
-		seen := make(map[int64]struct{})
-		uniqueSourceGroupIDs := make([]int64, 0, len(input.CopyAccountsFromGroupIDs))
-		for _, srcGroupID := range input.CopyAccountsFromGroupIDs {
-			// 校验：源分组不能是自身
-			if srcGroupID == id {
-				return nil, fmt.Errorf("cannot copy accounts from self")
-			}
-			// 去重
-			if _, exists := seen[srcGroupID]; !exists {
-				seen[srcGroupID] = struct{}{}
-				uniqueSourceGroupIDs = append(uniqueSourceGroupIDs, srcGroupID)
-			}
-		}
-
-		// 校验源分组的平台是否与当前分组一致
-		for _, srcGroupID := range uniqueSourceGroupIDs {
-			srcGroup, err := s.groupRepo.GetByIDLite(ctx, srcGroupID)
-			if err != nil {
-				return nil, fmt.Errorf("source group %d not found: %w", srcGroupID, err)
-			}
-			if !canCopyAccountsFromGroupPlatform(group.Platform, srcGroup.Platform) {
-				return nil, fmt.Errorf("source group %d platform mismatch: expected %s, got %s", srcGroupID, group.Platform, srcGroup.Platform)
-			}
-		}
-
-		// 获取所有源分组的账号（去重）
-		accountIDsToCopy, err := s.groupRepo.GetAccountIDsByGroupIDs(ctx, uniqueSourceGroupIDs)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get accounts from source groups: %w", err)
-		}
-
 		// 先清空当前分组的所有账号绑定
 		if _, err := s.groupRepo.DeleteAccountGroupsByGroupID(ctx, id); err != nil {
 			return nil, fmt.Errorf("failed to clear existing account bindings: %w", err)
-		}
-
-		// require_oauth_only: 过滤掉 apikey 类型账号
-		if group.RequireOAuthOnly && groupSupportsOAuthOnlyFilter(group.Platform) && len(accountIDsToCopy) > 0 {
-			accounts, err := s.accountRepo.GetByIDs(ctx, accountIDsToCopy)
-			if err != nil {
-				return nil, fmt.Errorf("failed to fetch accounts for oauth filter: %w", err)
-			}
-			oauthIDs := make(map[int64]struct{}, len(accounts))
-			for _, acc := range accounts {
-				if acc.Type != AccountTypeAPIKey {
-					oauthIDs[acc.ID] = struct{}{}
-				}
-			}
-			var filtered []int64
-			for _, aid := range accountIDsToCopy {
-				if _, ok := oauthIDs[aid]; ok {
-					filtered = append(filtered, aid)
-				}
-			}
-			accountIDsToCopy = filtered
 		}
 
 		// 再绑定源分组的账号
@@ -1229,10 +1188,7 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 	return group, nil
 }
 
-func (s *adminServiceImpl) plannedQuotaResetBoundAccountIDs(ctx context.Context, groupID int64, group *Group, input *UpdateGroupInput) ([]int64, error) {
-	if len(input.CopyAccountsFromGroupIDs) == 0 {
-		return s.groupRepo.GetAccountIDsByGroupIDs(ctx, []int64{groupID})
-	}
+func (s *adminServiceImpl) plannedCopiedAccountIDs(ctx context.Context, groupID int64, group *Group, input *UpdateGroupInput) ([]int64, error) {
 	seen := make(map[int64]struct{})
 	uniqueSourceGroupIDs := make([]int64, 0, len(input.CopyAccountsFromGroupIDs))
 	for _, srcGroupID := range input.CopyAccountsFromGroupIDs {
@@ -1258,7 +1214,11 @@ func (s *adminServiceImpl) plannedQuotaResetBoundAccountIDs(ctx context.Context,
 	if err != nil {
 		return nil, fmt.Errorf("failed to get accounts from source groups: %w", err)
 	}
-	return s.filterCopiedAccountsForOAuthOnly(ctx, group.RequireOAuthOnly, group.Platform, accountIDs)
+	requireOAuthOnly := group.RequireOAuthOnly
+	if input.RequireOAuthOnly != nil {
+		requireOAuthOnly = *input.RequireOAuthOnly
+	}
+	return s.filterCopiedAccountsForOAuthOnly(ctx, requireOAuthOnly, group.Platform, accountIDs)
 }
 
 func normalizeGroupModelPricing(platform string, pricing []ChannelModelPricing) ([]ChannelModelPricing, error) {

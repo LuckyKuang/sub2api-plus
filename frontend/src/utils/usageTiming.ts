@@ -29,6 +29,7 @@ export const tpsUnavailableReason = (row: TimingRow): string | null => {
   if (resolveUsageRequestType(row) === 'live') return 'usage.timingUnavailableLive'
   if (row.timing_version !== 1) return 'usage.timingUnavailableHistorical'
   if (invalidTokenCounts(row)) return 'usage.timingUnavailableInvalid'
+  if (row.first_output_kind === 'compaction' && strictFirstTokenMs(row) == null) return 'usage.timingUnavailableCompaction'
   const tokens = textOutputTokens(row)
   if (!Number.isFinite(tokens) || tokens <= 0) return noTokenTpsReason(row)
   if (tpsWindowMs(row) == null) return noTokenTpsReason(row)

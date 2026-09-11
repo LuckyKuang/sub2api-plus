@@ -260,6 +260,7 @@ func TestQuotaFollowReset_InvalidSourceDoesNotApplyPendingEvents(t *testing.T) {
 		{"apikey", `UPDATE accounts SET type='apikey' WHERE id=$1`},
 		{"other_platform", `UPDATE accounts SET platform='anthropic' WHERE id=$1`},
 		{"disabled", `UPDATE groups SET quota_reset_source_account_id=NULL WHERE quota_reset_source_account_id=$1`},
+		{"unbound", `DELETE FROM account_groups WHERE account_id=$1`},
 	} {
 		t.Run(change.name, func(t *testing.T) {
 			f := newQuotaFollowFixture(t)
@@ -333,7 +334,7 @@ func TestQuotaFollowReset_ConcurrentObservationBillingAndWorkers(t *testing.T) {
 	counts := make(chan int, 8)
 	for range 8 {
 		wg.Go(func() {
-			n, err := f.repo.ObserveWeeklyReset(ctx, f.accountID, f.baseline.Add(7*24*time.Hour), f.now.Add(time.Minute))
+			n, err := f.repo.ObserveWeeklyReset(ctx, f.accountID, f.baseline.Add(7*24*time.Hour), f.baseline)
 			errs <- err
 			counts <- n
 		})
@@ -363,6 +364,19 @@ func TestQuotaFollowReset_ConcurrentObservationBillingAndWorkers(t *testing.T) {
 	for _, usage := range []float64{daily, weekly, monthly, fiveHour} {
 		require.Equal(t, 30.0, usage, "worker must not erase charges that already consumed the event")
 	}
+}
+
+func TestQuotaFollowReset_UnboundSourceDoesNotAdvanceGroupBaseline(t *testing.T) {
+	f := newQuotaFollowFixture(t)
+	_, err := integrationDB.Exec(`DELETE FROM account_groups WHERE account_id=$1 AND group_id=$2`, f.accountID, f.groupID)
+	require.NoError(t, err)
+	created, err := f.repo.ObserveWeeklyReset(context.Background(), f.accountID, f.baseline.Add(7*24*time.Hour), f.baseline)
+	require.NoError(t, err)
+	require.Zero(t, created)
+	group, err := NewGroupRepository(integrationEntClient, integrationDB).GetByIDLite(context.Background(), f.groupID)
+	require.NoError(t, err)
+	require.False(t, group.QuotaResetSourceValid)
+	require.Equal(t, f.baseline, *group.QuotaResetSourceResetAt)
 }
 
 func TestQuotaFollowReset_IncrementRespectsCallerTransaction(t *testing.T) {

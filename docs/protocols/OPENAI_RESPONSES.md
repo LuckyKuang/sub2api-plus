@@ -159,13 +159,15 @@ This does not change the group's routing pool. The gateway never polls an
 upstream quota endpoint for this feature. It passively observes the source
 account's raw default weekly-window `Reset-At` value on successful Responses
 traffic and the equivalent default `codex.rate_limits` WebSocket event before
-applying any client-facing local quota rewrite. Daily and 5-hour windows never
-drive this feature.
+applying any client-facing local quota rewrite. Only an explicit 10,080-minute
+window is eligible; daily, 5-hour, monthly, and unknown windows never drive this
+feature.
 
 Saving a new or changed binding locks its source and establishes a baseline
 from the latest locally observed value in the same transaction. If no value
 exists yet, the first observation establishes the baseline without resetting
-subscriptions. Ordinary group edits preserve the current baseline; stale
+subscriptions. Ordinary group edits, including copying members while retaining
+the same reset source, preserve the current baseline and configuration generation; stale
 source-configuration saves are rejected for reload. A later next-reset time
 creates a durable, idempotent reset event only after the previously announced
 window has expired, and only when the new timestamp is at least half a week
@@ -178,6 +180,10 @@ deterministically ordered before or after the reset. Deleting the source
 account, or removing it from the group, leaves its recorded name and ID on the
 group for diagnosis, but disables further automatic resets until another
 eligible bound source is selected.
+
+Source membership is checked when creating reset events and again when either
+billing or the background worker applies them. An unbound source neither advances
+the group's baseline nor clears usage through a previously pending event.
 
 Multiple workers process each group's pending events in order, preserving
 earlier monthly-reset decisions. Billing consumes eligible pending events

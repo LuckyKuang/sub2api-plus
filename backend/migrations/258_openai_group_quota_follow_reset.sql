@@ -6,7 +6,7 @@ ALTER TABLE groups
     ADD COLUMN IF NOT EXISTS quota_reset_config_version BIGINT NOT NULL DEFAULT 0;
 
 COMMENT ON COLUMN groups.quota_reset_source_account_id IS 'OpenAI OAuth account whose raw weekly reset_at drives subscription quota resets; not an FK so deleted sources remain diagnosable';
-COMMENT ON COLUMN groups.quota_reset_source_reset_at IS 'Last accepted raw upstream weekly next-reset time; the first value is a non-resetting baseline, and later values reset only after that window expires';
+COMMENT ON COLUMN groups.quota_reset_source_reset_at IS 'Last accepted raw upstream weekly reset_at; the first value is a non-resetting baseline';
 COMMENT ON COLUMN groups.quota_reset_config_version IS 'Monotonic source configuration generation used to reject obsolete events';
 
 ALTER TABLE user_subscriptions

@@ -68,13 +68,17 @@ func (r *openAIGroupQuotaFollowResetRepository) ObserveWeeklyReset(ctx context.C
 	}
 
 	rows, err := tx.QueryContext(ctx, `
-		SELECT id, quota_reset_source_reset_at, quota_reset_config_version, quota_reset_include_monthly
-		FROM groups
-		WHERE quota_reset_source_account_id = $1
-		  AND platform = $2
-		  AND subscription_type = $3
-		  AND deleted_at IS NULL
-		ORDER BY id FOR UPDATE
+		SELECT g.id, g.quota_reset_source_reset_at, g.quota_reset_config_version, g.quota_reset_include_monthly
+		FROM groups g
+		WHERE g.quota_reset_source_account_id = $1
+		  AND g.platform = $2
+		  AND g.subscription_type = $3
+		  AND g.deleted_at IS NULL
+		  AND EXISTS (
+		      SELECT 1 FROM account_groups ag
+		      WHERE ag.group_id = g.id AND ag.account_id = $1
+		  )
+		ORDER BY g.id FOR UPDATE OF g
 	`, accountID, service.PlatformOpenAI, service.SubscriptionTypeSubscription)
 	if err != nil {
 		return 0, err

@@ -57,11 +57,12 @@ func TestOpenAICodexUsageSnapshotWeeklyResetAt(t *testing.T) {
 	_, ok = snapshot.WeeklyResetAt()
 	require.False(t, ok, "5-hour windows must never drive group resets")
 
-	dailyWindow := 24 * 60
-	snapshot.PrimaryWindowMinutes = &dailyWindow
-	snapshot.PrimaryResetAtUnix = &weeklyReset
-	_, ok = snapshot.WeeklyResetAt()
-	require.False(t, ok, "daily windows must never drive group resets")
+	for _, window := range []int{24 * 60, 4 * 24 * 60, 30 * 24 * 60} {
+		snapshot.PrimaryWindowMinutes = &window
+		snapshot.PrimaryResetAtUnix = &weeklyReset
+		_, ok = snapshot.WeeklyResetAt()
+		require.False(t, ok, "non-weekly window %d must never drive group resets", window)
+	}
 }
 
 func TestObserveOpenAIWeeklyResetEventUsesRawDefaultWindow(t *testing.T) {
@@ -92,6 +93,8 @@ func TestObserveOpenAIWeeklyResetEventUsesRawDefaultWindow(t *testing.T) {
 		`{"type":"codex.rate_limits","rate_limits":{"primary":{"window_minutes":10080,"reset_at":1780600001.5}}}`,
 		`{"type":"codex.rate_limits","rate_limits":{"primary":{"window_minutes":10080,"reset_at":999999999999999999}}}`,
 		`{"type":"codex.rate_limits","rate_limits":{"primary":{"window_minutes":10080,"reset_at":1780600001}}`,
+		`{"type":"codex.rate_limits","rate_limits":{"primary":{"window_minutes":5760,"reset_at":1780600001}}}`,
+		`{"type":"codex.rate_limits","rate_limits":{"primary":{"window_minutes":43200,"reset_at":1780600001}}}`,
 	} {
 		observeOpenAIWeeklyResetEvent(context.Background(), account, []byte(payload))
 	}

@@ -327,6 +327,64 @@ describe('GroupsView duplicate action', () => {
     wrapper.unmount()
   })
 
+  it.each(['resolve', 'reject', 'clear'] as const)('ignores an obsolete source lookup after %s', async (outcome) => {
+    let resolveOld!: (value: unknown) => void
+    let rejectOld!: (reason: Error) => void
+    listAccounts.mockImplementationOnce(() => new Promise((resolve, reject) => {
+      resolveOld = resolve
+      rejectOld = reject
+    }))
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.findAll('button').find(button => button.text() === 'admin.groups.createGroup')!.trigger('click')
+    const vm = wrapper.vm as unknown as {
+      quotaResetSourceAccounts: Array<{ id: number }>
+      quotaResetSourcesLoading: boolean
+      createForm: { platform: string, subscription_type: string, copy_accounts_from_group_ids: number[], quota_reset_source_account_id: number | null }
+    }
+    vm.createForm.platform = 'openai'
+    vm.createForm.subscription_type = 'subscription'
+    vm.createForm.copy_accounts_from_group_ids = [42]
+    await flushPromises()
+    expect(vm.quotaResetSourcesLoading).toBe(true)
+    const latest = [{ id: 502, name: 'Latest', platform: 'openai', type: 'oauth' }]
+    listAccounts.mockResolvedValue({ items: latest, total: 1 })
+    vm.createForm.copy_accounts_from_group_ids = outcome === 'clear' ? [] : [43]
+    await flushPromises()
+    expect(vm.quotaResetSourcesLoading).toBe(false)
+    if (outcome !== 'clear') vm.createForm.quota_reset_source_account_id = 502
+    if (outcome === 'reject') rejectOld(new Error('Old lookup failed'))
+    else resolveOld({ items: [{ ...latest[0], id: 501 }], total: 1 })
+    await flushPromises()
+    expect(vm.quotaResetSourceAccounts.map(account => account.id)).toEqual(outcome === 'clear' ? [] : [502])
+    expect(vm.createForm.quota_reset_source_account_id).toBe(outcome === 'clear' ? null : 502)
+    wrapper.unmount()
+  })
+
+  it('clears the saved reset source when replacement members exclude it', async () => {
+    listGroups.mockResolvedValue({ items: [{ ...sourceGroup, subscription_type: 'subscription', quota_reset_source_account_id: 501 }], total: 1 })
+    listAccounts.mockResolvedValue({ items: [{ id: 501, name: 'Original', platform: 'openai', type: 'oauth' }], total: 1 })
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.findAll('button').find(button => button.text() === 'common.edit')!.trigger('click')
+    await flushPromises()
+    const vm = wrapper.vm as unknown as {
+      editForm: { copy_accounts_from_group_ids: number[], quota_reset_source_account_id: number | null }
+      editQuotaResetSourceOptions: Array<{ value: number | null }>
+    }
+    expect(vm.editForm.quota_reset_source_account_id).toBe(501)
+    listAccounts.mockRejectedValueOnce(new Error('Lookup failed'))
+    vm.editForm.copy_accounts_from_group_ids = [44]
+    await flushPromises()
+    expect(vm.editForm.quota_reset_source_account_id).toBe(501)
+    listAccounts.mockResolvedValue({ items: [], total: 0 })
+    vm.editForm.copy_accounts_from_group_ids = [43]
+    await flushPromises()
+    expect(vm.editForm.quota_reset_source_account_id).toBeNull()
+    expect(vm.editQuotaResetSourceOptions.map(option => option.value)).not.toContain(501)
+    wrapper.unmount()
+  })
+
   it.each([true, false])('shows the saved exclusivity of an existing subscription: %s', async (isExclusive) => {
     listGroups.mockResolvedValue({
       items: [{ ...sourceGroup, subscription_type: 'subscription', is_exclusive: isExclusive }],

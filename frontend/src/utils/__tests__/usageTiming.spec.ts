@@ -14,6 +14,14 @@ describe('uniform usage timing', () => {
   it('explains aggregate compaction even on a non-streaming request', () => {
     expect(tpsUnavailableReason({ ...sample, request_type: 'sync', first_output_kind: 'compaction', first_token_ms: null, last_token_ms: null, duration_ms: null, output_tokens: 0 })).toBe('usage.timingUnavailableCompaction')
   })
+  it('excludes compaction-only billed tokens but accepts later text output', () => {
+    for (const request_type of ['sync', 'stream', 'ws_v2'] as const) {
+      const compact = { ...sample, request_type, first_output_kind: 'compaction' as const, first_token_ms: null, last_token_ms: null }
+      expect(estimatedTps(compact)).toBeNull()
+      expect(tpsUnavailableReason(compact)).toBe('usage.timingUnavailableCompaction')
+      expect(estimatedTps({ ...compact, first_token_ms: 100, last_token_ms: 1100 })).toBeCloseTo(100 * 1000 / 1100)
+    }
+  })
   it('rejects historical semantic timestamps even when output kind exists', () => {
     const old = { ...sample, timing_version: 0 }
     expect(strictFirstTokenMs(old)).toBeNull()

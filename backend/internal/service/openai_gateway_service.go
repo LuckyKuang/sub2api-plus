@@ -149,9 +149,8 @@ type OpenAICodexUsageSnapshot struct {
 const openAIWeeklyQuotaWindowMinutes = 7 * 24 * 60
 
 func isOpenAIWeeklyQuotaWindowMinutes(minutes int64) bool {
-	// Official weekly windows are 7 days. Reject 5-hour and daily (1440)
-	// windows so their next-reset timestamps cannot drive group resets.
-	return minutes >= openAIWeeklyQuotaWindowMinutes/2
+	// Only the explicit 7-day window can drive weekly group resets.
+	return minutes == openAIWeeklyQuotaWindowMinutes
 }
 
 func (s *OpenAICodexUsageSnapshot) WeeklyResetAt() (time.Time, bool) {

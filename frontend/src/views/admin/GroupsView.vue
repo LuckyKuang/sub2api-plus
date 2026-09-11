@@ -814,7 +814,7 @@
                   v-model="createForm.quota_reset_source_account_id"
                   data-testid="create-quota-reset-source"
                   :options="createQuotaResetSourceOptions"
-                  :loading="quotaResetSourcesLoading"
+                  :disabled="quotaResetSourcesLoading"
                   searchable
                   :search-placeholder="t('admin.groups.subscription.quotaFollowReset.searchSource')"
                   :empty-text="t('admin.groups.subscription.quotaFollowReset.noSources')"
@@ -2522,7 +2522,7 @@
                   v-model="editForm.quota_reset_source_account_id"
                   data-testid="edit-quota-reset-source"
                   :options="editQuotaResetSourceOptions"
-                  :loading="quotaResetSourcesLoading"
+                  :disabled="quotaResetSourcesLoading"
                   searchable
                   :search-placeholder="t('admin.groups.subscription.quotaFollowReset.searchSource')"
                   :empty-text="t('admin.groups.subscription.quotaFollowReset.noSources')"
@@ -4956,6 +4956,7 @@ const groups = ref<AdminGroup[]>([]);
 const loading = ref(false);
 const quotaResetSourceAccounts = ref<Account[]>([]);
 const quotaResetSourcesLoading = ref(false);
+let quotaResetSourcesRequestID = 0;
 type GroupUsageSummary = {
   today_cost: number;
   yesterday_cost: number;
@@ -5580,6 +5581,7 @@ const editQuotaResetSourceOptions = computed(() => {
   const sourceID = editingGroup.value?.quota_reset_source_account_id;
   if (
     sourceID &&
+    editForm.copy_accounts_from_group_ids.length === 0 &&
     !quotaResetSourceAccounts.value.some((account) => account.id === sourceID)
   ) {
     options.push({
@@ -5599,10 +5601,33 @@ const oauthResetSourceFromAccount = (account: Account): boolean =>
   account.type === "oauth" &&
   !account.parent_account_id;
 
+const acceptQuotaResetSourceAccounts = (accounts: Account[]) => {
+  quotaResetSourceAccounts.value = accounts;
+  const ids = new Set(accounts.map((account) => account.id));
+  if (
+    showCreateModal.value &&
+    createForm.quota_reset_source_account_id &&
+    !ids.has(createForm.quota_reset_source_account_id)
+  ) {
+    createForm.quota_reset_source_account_id = null;
+  }
+  if (
+    showEditModal.value &&
+    editForm.quota_reset_source_account_id &&
+    !ids.has(editForm.quota_reset_source_account_id) &&
+    (editForm.quota_reset_source_account_id !== editingGroup.value?.quota_reset_source_account_id ||
+      editForm.copy_accounts_from_group_ids.length > 0)
+  ) {
+    editForm.quota_reset_source_account_id = null;
+  }
+};
+
 const loadQuotaResetSourceAccountsForGroups = async (groupIDs: number[]) => {
+  const requestID = ++quotaResetSourcesRequestID;
   const uniqueGroupIDs = [...new Set(groupIDs.filter((id) => id > 0))];
   if (uniqueGroupIDs.length === 0) {
-    quotaResetSourceAccounts.value = [];
+    acceptQuotaResetSourceAccounts([]);
+    quotaResetSourcesLoading.value = false;
     return;
   }
   quotaResetSourcesLoading.value = true;
@@ -5618,6 +5643,7 @@ const loadQuotaResetSourceAccountsForGroups = async (groupIDs: number[]) => {
           type: "oauth",
           group: String(groupID),
         });
+        if (requestID !== quotaResetSourcesRequestID) return;
         for (const account of response.items) {
           if (oauthResetSourceFromAccount(account)) {
             accountsByID.set(account.id, account);
@@ -5628,12 +5654,15 @@ const loadQuotaResetSourceAccountsForGroups = async (groupIDs: number[]) => {
         if (response.items.length === 0) break;
       } while ((page - 1) * pageSize < total);
     }
-    quotaResetSourceAccounts.value = [...accountsByID.values()];
+    acceptQuotaResetSourceAccounts([...accountsByID.values()]);
   } catch (error) {
+    if (requestID !== quotaResetSourcesRequestID) return;
     quotaResetSourceAccounts.value = [];
     console.error("Error loading OpenAI OAuth quota reset sources:", error);
   } finally {
-    quotaResetSourcesLoading.value = false;
+    if (requestID === quotaResetSourcesRequestID) {
+      quotaResetSourcesLoading.value = false;
+    }
   }
 };
 
@@ -7051,24 +7080,6 @@ watch(
   },
   { deep: true },
 );
-
-watch(quotaResetSourceAccounts, (accounts) => {
-  const ids = new Set(accounts.map((account) => account.id));
-  if (
-    createForm.quota_reset_source_account_id &&
-    !ids.has(createForm.quota_reset_source_account_id)
-  ) {
-    createForm.quota_reset_source_account_id = null;
-  }
-  const currentSourceID = editingGroup.value?.quota_reset_source_account_id;
-  if (
-    editForm.quota_reset_source_account_id &&
-    !ids.has(editForm.quota_reset_source_account_id) &&
-    editForm.quota_reset_source_account_id !== currentSourceID
-  ) {
-    editForm.quota_reset_source_account_id = null;
-  }
-});
 
 watch(
   () => createForm.platform,

@@ -27,6 +27,11 @@ different definition.
   `—`. Live summaries, compaction-only results, invalid counts, and unverified
   history remain `—`.
 
+Compaction-only results remain excluded even when upstream reports billed output
+tokens and a total duration. A response that starts with compaction and later
+produces observable text-like tokens is eligible. Very low positive TPS values
+retain significant digits instead of rounding to zero in the table.
+
 Historical first-event values remain stored but are not presented as first
 token or used for TPS. Tooltips/export reasons distinguish unavailable history,
 Live summaries, missing billed text tokens, invalid counts, and low-confidence

@@ -166,3 +166,42 @@ func TestAdminServiceUpdateGroupClearsQuotaResetSourceAndAdvancesVersion(t *test
 	require.False(t, group.QuotaResetIncludeMonthly)
 	require.Equal(t, int64(4), group.QuotaResetConfigVersion)
 }
+
+func TestAdminServiceUpdateGroupCopyPreservesUnchangedQuotaResetSource(t *testing.T) {
+	account := &Account{ID: 42, Name: "Primary OAuth", Platform: PlatformOpenAI, Type: AccountTypeOAuth}
+	baseline := time.Date(2026, 9, 15, 0, 0, 0, 0, time.UTC)
+	existing := &Group{
+		ID: 7, Name: "Follow upstream", Platform: PlatformOpenAI,
+		SubscriptionType: SubscriptionTypeSubscription, RateMultiplier: 1,
+		QuotaResetSourceAccountID: &account.ID, QuotaResetSourceAccountName: account.Name,
+		QuotaResetSourceResetAt: &baseline, QuotaResetConfigVersion: 3, QuotaResetSourceValid: true,
+	}
+	lookups := 0
+	groupRepo := &groupRepoStubForAdmin{
+		deleteAccountGroupsByGroupIDFn: func(groupID int64) (int64, error) {
+			require.Equal(t, existing.ID, groupID)
+			return 1, nil
+		},
+		getByID:     existing,
+		getByIDByID: map[int64]*Group{7: existing, 99: {ID: 99, Platform: PlatformOpenAI}},
+		getAccountIDsByGroupIDsFn: func(groupIDs []int64) ([]int64, error) {
+			lookups++
+			require.Equal(t, []int64{99}, groupIDs)
+			return []int64{account.ID}, nil
+		},
+		bindAccountsToGroupFn: func(_ int64, accountIDs []int64) error {
+			require.Equal(t, []int64{account.ID}, accountIDs)
+			return nil
+		},
+	}
+	svc := &adminServiceImpl{groupRepo: groupRepo, accountRepo: &quotaResetAccountRepoStub{account: account}}
+	group, err := svc.UpdateGroup(context.Background(), existing.ID, &UpdateGroupInput{
+		CopyAccountsFromGroupIDs:     []int64{99},
+		QuotaResetSourceAccountIDSet: true, QuotaResetSourceAccountID: &account.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(3), group.QuotaResetConfigVersion, "copying members must not invalidate pending reset events")
+	require.False(t, group.QuotaResetSourceChanged)
+	require.Equal(t, baseline, *group.QuotaResetSourceResetAt)
+	require.Equal(t, 1, lookups, "validate and bind the same membership snapshot")
+}
