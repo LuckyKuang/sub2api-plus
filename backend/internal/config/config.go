@@ -1229,8 +1229,8 @@ type GatewayOpenAIWSConfig struct {
 	// IngressInterTurnIdleTimeoutSeconds bounds the time a client may remain idle
 	// between completed ingress turns. Zero disables this protection.
 	IngressInterTurnIdleTimeoutSeconds int `mapstructure:"ingress_inter_turn_idle_timeout_seconds"`
-	// MaxIngressConnectionsPerAPIKey bounds live client WebSocket ingress sessions
-	// per API key across all instances. Zero disables this protection.
+	// MaxIngressConnectionsPerAPIKey bounds audited client WebSocket sessions
+	// per API key across instances, starting after first-turn audit. Zero disables it.
 	MaxIngressConnectionsPerAPIKey int `mapstructure:"max_ingress_connections_per_api_key"`
 	// Enabled: 全局总开关（默认 true）
 	Enabled bool `mapstructure:"enabled"`

@@ -358,6 +358,7 @@ func applyPendingQuotaFollowResetForSubscription(ctx context.Context, tx sqlExec
 			JOIN accounts a ON a.id = e.source_account_id
 			  AND a.deleted_at IS NULL AND a.platform = $3
 			  AND a.type = $7 AND a.parent_account_id IS NULL
+			JOIN account_groups ag ON ag.group_id = g.id AND ag.account_id = a.id
 			WHERE e.group_id = $1
 			  AND e.id > $2
 			  AND e.status IN ('pending', 'completed')

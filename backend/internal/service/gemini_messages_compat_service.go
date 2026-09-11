@@ -2332,7 +2332,8 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 			if fc, ok := part["functionCall"].(map[string]any); ok && fc != nil {
 				name, _ := fc["name"].(string)
 				args := fc["args"]
-				if strings.TrimSpace(name) == "" {
+				hasUpstreamName := strings.TrimSpace(name) != ""
+				if !hasUpstreamName {
 					name = "tool"
 				}
 
@@ -2374,30 +2375,42 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 							"input": map[string]any{},
 						},
 					})
-					timing.Observe(startTime, apicompat.StreamOutputObservation{
-						MeaningfulOutput: true,
-						TokenLikeDelta:   true,
-						Kind:             apicompat.StreamOutputTool,
-					})
+					if hasUpstreamName {
+						timing.Observe(startTime, apicompat.StreamOutputObservation{
+							MeaningfulOutput: true,
+							TokenLikeDelta:   true,
+							Kind:             apicompat.StreamOutputTool,
+						})
+					}
 				}
 
 				argsJSONText := "{}"
+				hasArgsOutput := false
 				switch v := args.(type) {
 				case nil:
 					// keep default "{}"
 				case string:
 					if strings.TrimSpace(v) != "" {
 						argsJSONText = v
+						hasArgsOutput = true
 					}
 				default:
 					if b, err := json.Marshal(args); err == nil && len(b) > 0 {
 						argsJSONText = string(b)
+						hasArgsOutput = argsJSONText != "{}" && argsJSONText != "[]"
 					}
 				}
 
 				delta, newSeen := computeGeminiTextDelta(seenToolJSON, argsJSONText)
 				seenToolJSON = newSeen
 				if delta != "" {
+					if hasArgsOutput {
+						timing.Observe(startTime, apicompat.StreamOutputObservation{
+							MeaningfulOutput: true,
+							TokenLikeDelta:   true,
+							Kind:             apicompat.StreamOutputTool,
+						})
+					}
 					writeSSE(c.Writer, "content_block_delta", map[string]any{
 						"type":  "content_block_delta",
 						"index": openToolIndex,

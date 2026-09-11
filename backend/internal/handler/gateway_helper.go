@@ -242,7 +242,7 @@ func (h *ConcurrencyHelper) TryAcquireUserSlotForAPIKey(ctx context.Context, use
 	return h.withAPIKeySlot(ctx, apiKeyID, releaseFunc), true, nil
 }
 
-// AcquireOpenAIWSIngressLease bounds the whole client WebSocket lifecycle,
+// AcquireOpenAIWSIngressLease bounds the audited client WebSocket lifecycle,
 // independently from per-turn user and account slots.
 func (h *ConcurrencyHelper) AcquireOpenAIWSIngressLease(ctx context.Context, apiKeyID int64, maxConnections int) (*service.OpenAIWSIngressLease, bool, error) {
 	if h == nil || h.concurrencyService == nil {

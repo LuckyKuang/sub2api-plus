@@ -135,10 +135,11 @@ func (r *groupRepository) Create(ctx context.Context, groupIn *service.Group) er
 		}
 		return nil
 	}
-	if err := createGroupRecord(ctx, r.client, groupIn); err != nil {
+	client := clientFromContext(ctx, r.client)
+	if err := createGroupRecord(ctx, client, groupIn); err != nil {
 		return err
 	}
-	if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventGroupChanged, nil, &groupIn.ID, nil); err != nil {
+	if err := enqueueSchedulerOutbox(ctx, client, service.SchedulerOutboxEventGroupChanged, nil, &groupIn.ID, nil); err != nil {
 		logger.LegacyPrintf("repository.group", "[SchedulerOutbox] enqueue group create failed: group=%d err=%v", groupIn.ID, err)
 	}
 	return nil
@@ -558,7 +559,7 @@ func (r *groupRepository) Update(ctx context.Context, groupIn *service.Group) er
 		}
 	}
 	groupIn.QuotaResetSourceChanged = false
-	if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventGroupChanged, nil, &groupIn.ID, nil); err != nil {
+	if err := enqueueSchedulerOutbox(ctx, clientFromContext(ctx, r.client), service.SchedulerOutboxEventGroupChanged, nil, &groupIn.ID, nil); err != nil {
 		logger.LegacyPrintf("repository.group", "[SchedulerOutbox] enqueue group update failed: group=%d err=%v", groupIn.ID, err)
 	}
 	return nil
@@ -901,34 +902,41 @@ func (r *groupRepository) hydrateQuotaResetSourceValidity(ctx context.Context, g
 	if r == nil || r.sql == nil || len(groups) == 0 {
 		return
 	}
-	ids := make([]int64, 0, len(groups))
+	type sourceKey struct{ groupID, accountID int64 }
+	accountIDs := make([]int64, 0, len(groups))
+	groupIDs := make([]int64, 0, len(groups))
 	for i := range groups {
 		if groups[i].QuotaResetSourceAccountID != nil {
-			ids = append(ids, *groups[i].QuotaResetSourceAccountID)
+			accountIDs = append(accountIDs, *groups[i].QuotaResetSourceAccountID)
+			groupIDs = append(groupIDs, groups[i].ID)
 		}
 	}
-	if len(ids) == 0 {
+	if len(groupIDs) == 0 {
 		return
 	}
 	rows, err := r.sql.QueryContext(ctx, `
-		SELECT id FROM accounts
-		WHERE id = ANY($1) AND deleted_at IS NULL
-		  AND platform = $2 AND type = $3 AND parent_account_id IS NULL
-	`, pq.Array(ids), service.PlatformOpenAI, service.AccountTypeOAuth)
+		SELECT g.id, a.id
+		FROM groups g
+		JOIN account_groups ag ON ag.group_id = g.id AND ag.account_id = g.quota_reset_source_account_id
+		JOIN accounts a ON a.id = ag.account_id
+		WHERE g.id = ANY($1) AND g.deleted_at IS NULL
+		  AND a.id = ANY($2) AND a.deleted_at IS NULL
+		  AND a.platform = $3 AND a.type = $4 AND a.parent_account_id IS NULL
+	`, pq.Array(groupIDs), pq.Array(accountIDs), service.PlatformOpenAI, service.AccountTypeOAuth)
 	if err != nil {
 		return
 	}
 	defer func() { _ = rows.Close() }()
-	valid := make(map[int64]struct{}, len(ids))
+	valid := make(map[sourceKey]struct{}, len(groupIDs))
 	for rows.Next() {
-		var id int64
-		if rows.Scan(&id) == nil {
-			valid[id] = struct{}{}
+		var groupID, accountID int64
+		if rows.Scan(&groupID, &accountID) == nil {
+			valid[sourceKey{groupID, accountID}] = struct{}{}
 		}
 	}
 	for i := range groups {
 		if groups[i].QuotaResetSourceAccountID != nil {
-			_, groups[i].QuotaResetSourceValid = valid[*groups[i].QuotaResetSourceAccountID]
+			_, groups[i].QuotaResetSourceValid = valid[sourceKey{groups[i].ID, *groups[i].QuotaResetSourceAccountID}]
 		}
 	}
 }
@@ -999,13 +1007,30 @@ func (r *groupRepository) GetAccountCount(ctx context.Context, groupID int64) (t
 }
 
 func (r *groupRepository) DeleteAccountGroupsByGroupID(ctx context.Context, groupID int64) (int64, error) {
-	res, err := r.sql.ExecContext(ctx, "DELETE FROM account_groups WHERE group_id = $1", groupID)
+	client := clientFromContext(ctx, r.client)
+	tx, err := client.Tx(ctx)
+	if err != nil && !errors.Is(err, dbent.ErrTxStarted) {
+		return 0, err
+	}
+	if tx != nil {
+		defer func() { _ = tx.Rollback() }()
+		client = tx.Client()
+	}
+	if err := lockLiveGroups(ctx, client, []int64{groupID}); err != nil {
+		return 0, err
+	}
+	res, err := client.ExecContext(ctx, "DELETE FROM account_groups WHERE group_id = $1", groupID)
 	if err != nil {
 		return 0, err
 	}
 	affected, _ := res.RowsAffected()
-	if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventGroupChanged, nil, &groupID, nil); err != nil {
-		logger.LegacyPrintf("repository.group", "[SchedulerOutbox] enqueue group account clear failed: group=%d err=%v", groupID, err)
+	if err := enqueueSchedulerOutbox(ctx, client, service.SchedulerOutboxEventGroupChanged, nil, &groupID, nil); err != nil {
+		return 0, err
+	}
+	if tx != nil {
+		if err := tx.Commit(); err != nil {
+			return 0, err
+		}
 	}
 	return affected, nil
 }
@@ -1240,11 +1265,12 @@ func (r *groupRepository) BindAccountsToGroup(ctx context.Context, groupID int64
 		return nil
 	}
 
-	tx, err := r.client.Tx(ctx)
+	client := clientFromContext(ctx, r.client)
+	tx, err := client.Tx(ctx)
 	if err != nil && !errors.Is(err, dbent.ErrTxStarted) {
 		return err
 	}
-	exec := sqlExecutor(r.client)
+	exec := sqlExecutor(client)
 	if tx != nil {
 		defer func() { _ = tx.Rollback() }()
 		exec = tx.Client()
@@ -1265,15 +1291,13 @@ func (r *groupRepository) BindAccountsToGroup(ctx context.Context, groupID int64
 	if err != nil {
 		return err
 	}
+	if err := enqueueSchedulerOutbox(ctx, exec, service.SchedulerOutboxEventGroupChanged, nil, &groupID, nil); err != nil {
+		return err
+	}
 	if tx != nil {
 		if err := tx.Commit(); err != nil {
 			return err
 		}
-	}
-
-	// 发送调度器事件
-	if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventGroupChanged, nil, &groupID, nil); err != nil {
-		logger.LegacyPrintf("repository.group", "[SchedulerOutbox] enqueue bind accounts to group failed: group=%d err=%v", groupID, err)
 	}
 
 	return nil

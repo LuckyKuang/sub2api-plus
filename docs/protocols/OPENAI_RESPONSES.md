@@ -154,26 +154,50 @@ returns the API key subscription quota when the local setting is enabled and
 returns 404 otherwise; it does not select an account or proxy upstream quota.
 
 Administrators may optionally bind an OpenAI subscription group to one
-credential-owning OpenAI OAuth account as its quota-reset source. This binding
-does not change the group's routing pool. The gateway never polls an upstream
-quota endpoint for this feature. It passively observes the source account's raw
-default weekly-window `Reset-At` value on successful Responses traffic and the
-equivalent default `codex.rate_limits` WebSocket event before applying any
-client-facing local quota rewrite.
+credential-owning OpenAI OAuth account that is already bound to that group.
+This does not change the group's routing pool. The gateway never polls an
+upstream quota endpoint for this feature. It passively observes the source
+account's raw default weekly-window `Reset-At` value on successful Responses
+traffic and the equivalent default `codex.rate_limits` WebSocket event before
+applying any client-facing local quota rewrite. Only an explicit 10,080-minute
+window is eligible; daily, 5-hour, monthly, and unknown windows never drive this
+feature.
 
 Saving a new or changed binding locks its source and establishes a baseline
 from the latest locally observed value in the same transaction. If no value
 exists yet, the first observation establishes the baseline without resetting
-subscriptions. Ordinary group edits preserve the current baseline; stale
-source-configuration saves are rejected for reload. A strictly later value creates one durable,
-idempotent reset event for every group bound to that source. Each event resets
-the active subscriptions' 5-hour, daily, and weekly usage; monthly usage is
-reset only when the group explicitly enables it and has a monthly limit. Event
-application and usage billing lock the group and subscription records in the
-same order, so a concurrent charge is deterministically ordered before or after
-the reset. Deleting the source account leaves its recorded name and ID on the
+subscriptions. Ordinary group edits, including copying members while retaining
+the same reset source, preserve the current baseline and configuration generation; stale
+source-configuration saves are rejected for reload. A later next-reset time
+creates a durable, idempotent reset event only after the previously announced
+window has expired, and only when the new timestamp is at least half a week
+later. Clock skew of a still-open or just-expired window does not reset groups.
+Each event resets the active subscriptions' 5-hour, daily, and weekly usage;
+monthly usage is reset only when the group explicitly enables it and has a
+monthly limit. Event application and usage billing lock the group and
+subscription records in the same order, so a concurrent charge is
+deterministically ordered before or after the reset. Deleting the source
+account, or removing it from the group, leaves its recorded name and ID on the
 group for diagnosis, but disables further automatic resets until another
-eligible source is selected.
+eligible bound source is selected.
+
+Source membership is checked when creating reset events and again when either
+billing or the background worker applies them. An unbound source neither advances
+the group's baseline nor clears usage through a previously pending event.
+Observation and worker paths acquire the group lock before rechecking membership
+in a fresh statement, so a lock wait cannot retain pre-edit membership. The worker
+also refreshes source eligibility before applying any reset.
+
+An accepted timestamp repeated by the source still reconciles groups whose
+baseline is missing or behind, subject to the same expiry and weekly-advance
+checks. An existing account observation must not cause a newly bound group's
+first baseline to be skipped. Synchronized groups do not create duplicate events.
+
+Creating or editing a group with copied accounts commits its configuration,
+membership and scheduler outbox entries together. A failed copy rolls back the
+entire write. Copying an unchanged source cannot temporarily expose an unbound
+source to reset workers. Copied accounts are locked before the group, in ID
+order, matching observation lock ordering and avoiding membership-FK deadlocks.
 
 Multiple workers process each group's pending events in order, preserving
 earlier monthly-reset decisions. Billing consumes eligible pending events
@@ -328,6 +352,14 @@ gateway:
 - The inter-turn timeout closes idle sockets after a completed turn; `0`
   disables it.
 - The API-key connection cap is distributed through Redis; `0` disables it.
+
+The connection lease is acquired after the first frame passes basic validation
+and security audit, before user/account concurrency, billing and upstream work.
+An upgraded socket waiting for its first frame is bounded by the first-message
+timeout and does not yet consume a Redis lease. Capacity exhaustion or an
+unavailable lease backend closes the upgraded socket with code `1013` (try again
+later); clients should reconnect with backoff. Audit rejection retains its own
+error frame and close status and never consumes a connection lease.
 
 Large contexts or slow image-heavy requests may require a higher first-message
 timeout. The timeout expires before HTTP bridge routing and is not overridden

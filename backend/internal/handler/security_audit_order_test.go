@@ -26,6 +26,7 @@ func TestPromptAuditGatePrecedesAccountBillingAndUpstreamSideEffects(t *testing.
 		{file: "gemini_v1beta_handler.go", function: "GeminiV1BetaModels", auditToken: "checkSecurityAudit"},
 		{file: "openai_gateway_handler.go", function: "Responses", auditToken: "checkSecurityAudit"},
 		{file: "openai_gateway_handler.go", function: "Messages", auditToken: "checkSecurityAudit"},
+		{file: "openai_gateway_handler.go", function: "ResponsesWebSocket", auditToken: "checkSecurityAuditStage"},
 		{file: "openai_chat_completions.go", function: "ChatCompletions", auditToken: "checkSecurityAudit"},
 		{file: "openai_images.go", function: "Images", auditToken: "checkSecurityAudit"},
 		{file: "grok_media.go", function: "handleGrokMedia", auditToken: "checkSecurityAudit"},
@@ -40,6 +41,7 @@ func TestPromptAuditGatePrecedesAccountBillingAndUpstreamSideEffects(t *testing.
 		"AcquireUserSlot", "TryAcquireUserSlot", "acquireImageGenerationSlot(",
 		"h.tasks.Create(", "h.tasks.CreateWithMetadata(", "h.service.Submit(", "CreateLiveCall(",
 		"StartOpenAICompactSSEKeepalive(", "ResolveChannelMappingAndRestrict(",
+		"AcquireOpenAIWSIngressLease(",
 	}
 	for _, tt := range tests {
 		t.Run(tt.file+"/"+tt.function, func(t *testing.T) {

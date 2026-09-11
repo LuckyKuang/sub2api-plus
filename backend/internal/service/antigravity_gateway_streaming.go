@@ -1258,9 +1258,13 @@ func (s *AntigravityGatewayService) handleClaudeStreamingResponse(c *gin.Context
 			s.observeAntigravityGeminiSSELine(c, ev.line)
 
 			// 处理 SSE 行，转换为 Claude 格式
+			// Sample native output before conversion: image markdown and generated
+			// grounding text are not model text tokens, and a batched signature must
+			// not hide the next text/reasoning/tool delta.
+			payload := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(ev.line), "data:"))
+			timing.Observe(startTime, apicompat.ObserveGeminiOutput([]byte(payload)))
 			claudeEvents := processor.ProcessLine(strings.TrimRight(ev.line, "\r\n"))
 			if len(claudeEvents) > 0 {
-				timing.Observe(startTime, observeAnthropicSSEOutput(claudeEvents))
 				cw.Write(claudeEvents)
 			}
 
