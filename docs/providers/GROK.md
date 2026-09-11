@@ -85,6 +85,13 @@ scheduling according to their status. New OAuth media requests require positive
 paid-entitlement evidence; API-key accounts remain eligible. Administrators can
 override media eligibility with `extra.grok_media_eligible`.
 
+An HTTP 200 billing response without authoritative quota/entitlement fields is
+`billing_inconclusive` and does not authorize new OAuth image/video generation.
+An explicit administrator override still wins. Clearing the override restores
+automatic evaluation. This account eligibility decision is independent of
+content-audit extraction: unknown valid content keeps the audit pass-through
+contract.
+
 ## Models and Subscription Tiers
 
 The catalog includes `grok-4.6` (`grok-4.6-latest` maps to it). Unregistered

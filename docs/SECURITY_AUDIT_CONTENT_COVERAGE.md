@@ -289,3 +289,21 @@ the same change and provide all of the following evidence:
 
 Route-call presence or static source-order assertions alone do not prove
 content coverage.
+
+## Upstream v0.2.4 integration
+
+Group `model_allowlist` admission uses the client model before account/channel
+mapping and does not replace content audit. Root route aliases and Plus batch
+and asynchronous image endpoints retain the same audit ordering as `/v1`.
+WebSocket follow-up `response.create` calls invoke `BeforeRequest` for canonical
+audit before `BeforeTurn` acquires resources; each turn invokes that acquisition
+hook once. Unknown valid frames still reach the audit hook and pass extraction
+without an audit-derived rejection. A real policy rejection prevents upstream
+writes, including for successfully extracted content alongside unknown fields.
+
+Named function/custom-tool inputs, allowed-tools metadata and terminal `done`
+argument reconstruction do not introduce a separate extractor. If reconstructed
+output returns as a later request, it follows the same shared extraction matrix
+for both engines. Metadata that is not extractable content remains pass-through;
+known sibling inputs remain auditable. Extraction/evaluation/dependency exceptions
+retain the structured diagnostics and non-blocking behavior specified above.

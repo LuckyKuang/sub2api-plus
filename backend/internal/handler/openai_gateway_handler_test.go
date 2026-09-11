@@ -1956,7 +1956,10 @@ func newOpenAIWSHandlerTestServer(t *testing.T, h *OpenAIGatewayHandler, subject
 }
 
 type openAIResponsesWSUsageLogCase struct {
-	firstPayload              string
+	firstPayload string
+	// midPayload 在首个 turn 完成后发送（如 session.update），上游桩会为它
+	// 回一个 response.completed，客户端按普通事件读取。
+	midPayload                string
 	secondPayload             string
 	terminalEventType         string
 	userAgent                 *string
@@ -1965,6 +1968,13 @@ type openAIResponsesWSUsageLogCase struct {
 	billingModelSource        string
 	accountModelMapping       map[string]any
 	afterFirstUpstreamRequest func(channelSvc *service.ChannelService) error
+	// group 覆盖 apiKey.Group（分组级模型白名单测试用）；nil 保持原有无分组行为。
+	group *service.Group
+	// firstFrameCloseExpected：首帧即被拒（连接被 1008 关闭），不期待任何响应帧。
+	firstFrameCloseExpected bool
+	// secondTurnCloseExpected：第二个 turn 被拒（连接被 1008 关闭）。
+	secondTurnCloseExpected bool
+	midFrameCloseExpected   bool
 }
 
 type openAIResponsesWSUsageLogResult struct {
@@ -3231,8 +3241,11 @@ func runOpenAIResponsesWebSocketUsageLogCase(t *testing.T, tc openAIResponsesWSU
 	gin.SetMode(gin.TestMode)
 
 	turnCount := 1
+	if strings.TrimSpace(tc.midPayload) != "" {
+		turnCount++
+	}
 	if strings.TrimSpace(tc.secondPayload) != "" {
-		turnCount = 2
+		turnCount++
 	}
 	terminalEventType := tc.terminalEventType
 	if terminalEventType == "" {
@@ -3341,7 +3354,7 @@ func runOpenAIResponsesWebSocketUsageLogCase(t *testing.T, tc openAIResponsesWSU
 				BillingModelSource: tc.billingModelSource,
 			}},
 			groupPlatforms: map[int64]string{groupID: service.PlatformOpenAI},
-		}, nil, nil, nil)
+		}, nil, nil, nil, nil)
 	}
 
 	billingCacheSvc := service.NewBillingCacheService(nil, nil, nil, nil, nil, nil, cfg, nil)
@@ -3391,6 +3404,9 @@ func runOpenAIResponsesWebSocketUsageLogCase(t *testing.T, tc openAIResponsesWSU
 		GroupID: &groupID,
 		User:    &service.User{ID: 1701, Status: service.StatusActive},
 	}
+	if tc.group != nil {
+		apiKey.Group = tc.group
+	}
 	router := gin.New()
 	router.Use(func(c *gin.Context) {
 		c.Set(string(middleware.ContextKeyAPIKey), apiKey)
@@ -3422,6 +3438,19 @@ func runOpenAIResponsesWebSocketUsageLogCase(t *testing.T, tc openAIResponsesWSU
 	cancelWrite()
 	require.NoError(t, err)
 
+	if tc.firstFrameCloseExpected {
+		readCtx, cancelRead := context.WithTimeout(context.Background(), 3*time.Second)
+		_, _, readErr := clientConn.Read(readCtx)
+		cancelRead()
+		require.Error(t, readErr, "first frame should have been rejected with a close")
+		var closeErr coderws.CloseError
+		require.ErrorAs(t, readErr, &closeErr)
+		require.Equal(t, coderws.StatusPolicyViolation, closeErr.Code)
+		require.Contains(t, closeErr.Reason, "not available for this group")
+		_ = clientConn.CloseNow()
+		return openAIResponsesWSUsageLogResult{}
+	}
+
 	clientEvents := make([][]byte, 0, turnCount)
 	readTerminalEvent := func() {
 		readCtx, cancelRead := context.WithTimeout(context.Background(), 3*time.Second)
@@ -3432,11 +3461,40 @@ func runOpenAIResponsesWebSocketUsageLogCase(t *testing.T, tc openAIResponsesWSU
 		clientEvents = append(clientEvents, append([]byte(nil), event...))
 	}
 	readTerminalEvent()
-	if turnCount == 2 {
+	if tc.midPayload != "" {
+		writeCtx, cancelWrite = context.WithTimeout(context.Background(), 3*time.Second)
+		err = clientConn.Write(writeCtx, coderws.MessageText, []byte(tc.midPayload))
+		cancelWrite()
+		require.NoError(t, err)
+		if tc.midFrameCloseExpected {
+			readCtx, cancelRead := context.WithTimeout(context.Background(), 3*time.Second)
+			_, _, readErr := clientConn.Read(readCtx)
+			cancelRead()
+			var closeErr coderws.CloseError
+			require.ErrorAs(t, readErr, &closeErr)
+			require.Equal(t, coderws.StatusPolicyViolation, closeErr.Code)
+			require.Contains(t, closeErr.Reason, "not available for this group")
+			return openAIResponsesWSUsageLogResult{}
+		}
+		readTerminalEvent()
+	}
+	if strings.TrimSpace(tc.secondPayload) != "" && (turnCount >= 2) {
 		writeCtx, cancelWrite = context.WithTimeout(context.Background(), 3*time.Second)
 		err = clientConn.Write(writeCtx, coderws.MessageText, []byte(tc.secondPayload))
 		cancelWrite()
 		require.NoError(t, err)
+		if tc.secondTurnCloseExpected {
+			readCtx, cancelRead := context.WithTimeout(context.Background(), 3*time.Second)
+			_, _, readErr := clientConn.Read(readCtx)
+			cancelRead()
+			require.Error(t, readErr, "second turn should have been rejected with a close")
+			var closeErr coderws.CloseError
+			require.ErrorAs(t, readErr, &closeErr)
+			require.Equal(t, coderws.StatusPolicyViolation, closeErr.Code)
+			require.Contains(t, closeErr.Reason, "not available for this group")
+			_ = clientConn.CloseNow()
+			return openAIResponsesWSUsageLogResult{}
+		}
 		readTerminalEvent()
 	}
 	_ = clientConn.Close(coderws.StatusNormalClosure, "done")

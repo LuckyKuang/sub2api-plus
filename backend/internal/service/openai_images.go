@@ -14,6 +14,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
+	"os"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -42,7 +43,7 @@ const (
 	// OpenAIImageMaxUploadPartBytes is also used by the asynchronous image
 	// handler before it detaches a multipart request into a background task.
 	OpenAIImageMaxUploadPartBytes  int64 = 20 << 20 // 20 MiB per multipart upload part
-	openAIImagesResponsesMainModel       = "gpt-5.4-mini"
+	openAIImagesResponsesMainModel       = "gpt-5.6-luna"
 	// Keep the official multipart parser limit aligned with the Plus
 	// asynchronous-handler limit.
 	openAIImageMaxUploadPartSize           = OpenAIImageMaxUploadPartBytes
@@ -61,6 +62,15 @@ func (e *OpenAIImageUploadTooLargeError) Error() string {
 		return "image upload exceeds the allowed size"
 	}
 	return fmt.Sprintf("image upload exceeds the allowed size of %d bytes", e.Limit)
+}
+
+// openAIImagesResponsesMainModelValue lets operators recover from an upstream
+// driver-model retirement without rebuilding the gateway.
+func openAIImagesResponsesMainModelValue() string {
+	if model := strings.TrimSpace(os.Getenv("SUB2API_IMAGES_MAIN_MODEL")); model != "" {
+		return model
+	}
+	return openAIImagesResponsesMainModel
 }
 
 type OpenAIImagesCapability string
@@ -693,7 +703,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 		resp.Body = io.NopCloser(bytes.NewReader(respBody))
 		upstreamMsg := strings.TrimSpace(extractUpstreamErrorMessage(respBody))
 		upstreamMsg = sanitizeUpstreamErrorMessage(upstreamMsg)
-		if s.shouldFailoverOpenAIUpstreamResponse(resp.StatusCode, upstreamMsg, respBody) {
+		if s.shouldFailoverOpenAIUpstreamResponse(account, resp.StatusCode, upstreamMsg, respBody) {
 			appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 				ProxyID:            opsUpstreamProxyID(account),
 				ProxyName:          opsUpstreamProxyName(account),

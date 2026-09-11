@@ -281,22 +281,17 @@ async function mountSubscriptionPlanList(planCount: number) {
   return wrapper
 }
 
-describe('PaymentView checkout tabs', () => {
-  it('shows subscription on the left and recharge on the right', async () => {
-    const wrapper = await mountSubscriptionPlanList(1)
-    const tabLabels = wrapper.findAll('button')
-      .map(button => button.text())
-      .filter(label => ['payment.tabSubscribe', 'payment.tabTopUp'].includes(label))
-
-    expect(tabLabels).toEqual(['payment.tabSubscribe', 'payment.tabTopUp'])
-  })
-
-  it('defaults to the subscription tab when no tab query is provided', async () => {
+describe('PaymentView help text', () => {
+  beforeEach(() => {
+    vi.useRealTimers()
     routeState.path = '/purchase'
     routeState.query = {}
-    getCheckoutInfo.mockReset().mockResolvedValue(checkoutInfoFixture({
-      plans: checkoutInfoWithPlansFixture().data.plans,
-    }))
+    createOrder.mockReset()
+    window.localStorage.clear()
+  })
+
+  async function mountHelp(help_text: string, help_image_url = '') {
+    getCheckoutInfo.mockReset().mockResolvedValue(checkoutInfoFixture({ help_text, help_image_url }))
     const wrapper = shallowMount(PaymentView, {
       global: {
         stubs: {
@@ -307,11 +302,45 @@ describe('PaymentView checkout tabs', () => {
       },
     })
     await flushPromises()
-    await flushPromises()
+    return wrapper
+  }
 
-    const subscribeTab = wrapper.findAll('button').find(button => button.text() === 'payment.tabSubscribe')
-    expect(subscribeTab?.classes()).toContain('bg-white')
-    expect(wrapper.findAllComponents(SubscriptionPlanCard).length).toBeGreaterThan(0)
+  it('renders headings, emphasis, links, and lists in payment help without starting checkout', async () => {
+    const wrapper = await mountHelp('## Recharge help\n\n**Read first**\n\n- [Contact support](https://example.com/help)')
+    const help = wrapper.get('.markdown-body')
+    expect(help.get('h2').text()).toBe('Recharge help')
+    expect(help.get('strong').text()).toBe('Read first')
+    expect(help.get('li a').attributes('href')).toBe('https://example.com/help')
+    expect(createOrder).not.toHaveBeenCalled()
+  })
+
+  it('removes scripts, event handlers, and unsafe URLs from rendered help', async () => {
+    const wrapper = await mountHelp([
+      '<script>alert(1)</script>',
+      '<img src="https://example.com/help.png" onerror="alert(1)">',
+      '[Unsafe](javascript:alert%281%29)',
+      '[Support](https://example.com/help)',
+    ].join('\n\n'))
+    const help = wrapper.get('.markdown-body')
+    expect(help.find('script').exists()).toBe(false)
+    expect(help.get('img').attributes('onerror')).toBeUndefined()
+    expect(help.findAll('a').map(link => link.attributes('href'))).toEqual([undefined, 'https://example.com/help'])
+  })
+
+  it('keeps plain-text soft line breaks and the separate help image preview', async () => {
+    const wrapper = await mountHelp('First line\nSecond line', 'https://example.com/help.png')
+    const help = wrapper.get('.markdown-body')
+    expect(help.get('p').text()).toBe('First line\nSecond line')
+    expect(help.find('br').exists()).toBe(false)
+    await wrapper.get('img').trigger('click')
+    expect(wrapper.findAll('img')).toHaveLength(2)
+    expect(wrapper.findAll('img')[1].attributes('src')).toBe('https://example.com/help.png')
+  })
+
+  it('keeps image-only help without an empty Markdown container', async () => {
+    const wrapper = await mountHelp('', 'https://example.com/help.png')
+    expect(wrapper.find('.markdown-body').exists()).toBe(false)
+    expect(wrapper.get('img').attributes('src')).toBe('https://example.com/help.png')
   })
 })
 
@@ -773,5 +802,39 @@ describe('PaymentView WeChat JSAPI flow', () => {
     expect(showWarning).toHaveBeenCalledWith('payment.errors.mobilePaymentFallbackToQr')
     expect(showError).not.toHaveBeenCalled()
     expect(window.localStorage.getItem(PAYMENT_RECOVERY_STORAGE_KEY)).toContain('weixin://wxpay/bizpayurl?pr=fallback-native')
+  })
+})
+
+describe('PaymentView checkout tabs', () => {
+  it('shows subscription on the left and recharge on the right', async () => {
+    const wrapper = await mountSubscriptionPlanList(1)
+    const tabLabels = wrapper.findAll('button')
+      .map(button => button.text())
+      .filter(label => ['payment.tabSubscribe', 'payment.tabTopUp'].includes(label))
+
+    expect(tabLabels).toEqual(['payment.tabSubscribe', 'payment.tabTopUp'])
+  })
+
+  it('defaults to the subscription tab when no tab query is provided', async () => {
+    routeState.path = '/purchase'
+    routeState.query = {}
+    getCheckoutInfo.mockReset().mockResolvedValue(checkoutInfoFixture({
+      plans: checkoutInfoWithPlansFixture().data.plans,
+    }))
+    const wrapper = shallowMount(PaymentView, {
+      global: {
+        stubs: {
+          AppLayout: { template: '<div><slot /></div>' },
+          Teleport: true,
+          Transition: false,
+        },
+      },
+    })
+    await flushPromises()
+    await flushPromises()
+
+    const subscribeTab = wrapper.findAll('button').find(button => button.text() === 'payment.tabSubscribe')
+    expect(subscribeTab?.classes()).toContain('bg-white')
+    expect(wrapper.findAllComponents(SubscriptionPlanCard).length).toBeGreaterThan(0)
   })
 })

@@ -199,3 +199,16 @@ Use session identifiers, usage timing, rate/concurrency patterns, API-key
 scope, and account controls for sharing investigations. Treat the client
 profile decision as one signal that narrows supported access patterns, not as
 conclusive evidence about the person or binary behind a request.
+
+### Shared model discovery
+
+Public API-key model discovery and administrator discovery apply the credential
+owner’s final outbound identity. Supported OAuth shadows resolve to their parent;
+API-key discovery uses the selected account’s own credentials.
+Generic account header overrides run before this final identity step and cannot
+replace its source. API-key `/v1/models` omits OAuth-only Originator; Codex/OAuth
+manifest Version and client_version follow the selected identity. Shared raw
+catalog cache keys include the resolved request headers and credentials, so a
+source/credential change cannot reuse a different identity's cached response.
+The compiled default identity and source-priority matrix above remain the
+normative declarations for every discovery and forwarding path.
