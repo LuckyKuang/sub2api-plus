@@ -339,6 +339,14 @@ gateway:
   disables it.
 - The API-key connection cap is distributed through Redis; `0` disables it.
 
+The connection lease is acquired after the first frame passes basic validation
+and security audit, before user/account concurrency, billing and upstream work.
+An upgraded socket waiting for its first frame is bounded by the first-message
+timeout and does not yet consume a Redis lease. Capacity exhaustion or an
+unavailable lease backend closes the upgraded socket with code `1013` (try again
+later); clients should reconnect with backoff. Audit rejection retains its own
+error frame and close status and never consumes a connection lease.
+
 Large contexts or slow image-heavy requests may require a higher first-message
 timeout. The timeout expires before HTTP bridge routing and is not overridden
 by bridge mode.

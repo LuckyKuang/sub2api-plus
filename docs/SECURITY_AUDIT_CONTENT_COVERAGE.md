@@ -21,6 +21,13 @@ request validation, but before:
 3. routing, retry, probe, fingerprint, or protocol transformations; and
 4. any upstream request or frame write.
 
+Responses WebSocket connection leases also follow this ordering: upgrade and
+first-message syntax/model validation precede first-turn audit, and Redis ingress
+capacity is acquired only after audit permits the turn. Rejected or malformed
+first frames never reserve a lease. The first-message deadline bounds sockets
+awaiting content. After acquisition, renewal and release cover the remaining
+connection lifetime; subsequent frames still cross the canonical audit hook.
+
 Session affinity, account type, inbound role labels, envelope `type` values,
 and protocol adapters cannot bypass the audit hook. Extraction remains
 compatible with `v0.1.177+custom.003`: unsupported or unrecognized content may
