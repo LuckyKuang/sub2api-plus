@@ -18,14 +18,18 @@ different definition.
 - `duration_ms` retains its existing forwarding/turn duration. It is not a new
   measurement of the full client-perceived request, including scheduling.
 - TPS is `(output_tokens - image_output_tokens - audio_output_tokens) * 1000 /
-  last_token_ms`, falling back to `duration_ms` when last-token time is missing.
-  `last_token_ms` uses the same forwarding/turn origin as first token, so thinking
-  wait is included and post-token flush is not. It is an estimate from billed
-  upstream token usage, not a visible decode-peak rate. Version-1 rows with billed
-  text tokens and a positive window still display a number for incomplete,
-  non-streaming, and short samples; those cases add a confidence note instead of
-  `—`. Live summaries, compaction-only results, invalid counts, and unverified
-  history remain `—`.
+  (last_token_ms - first_token_ms)`. First-token and last-token times share the
+  same forwarding/turn origin, so thinking wait is excluded from the denominator
+  (it remains visible as first token) and post-token flush is not included. It is
+  an estimate from billed upstream token usage, including any reasoning tokens
+  folded into `output_tokens`; it is a decode-window rate, not a peak renderer
+  rate and not an effective rate that re-averages thinking wait. Version-1 rows
+  with billed text tokens and a positive decode window still display a number for
+  incomplete, non-streaming, and short samples; those cases add a confidence note
+  instead of `—`. A decode window is short when
+  `last_token_ms - first_token_ms < 300` or text tokens are below 8. Missing
+  first/last timestamps, a non-positive window, Live summaries, compaction-only
+  results, invalid counts, and unverified history remain `—`.
 
 Compaction-only results remain excluded even when upstream reports billed output
 tokens and a total duration. A response that starts with compaction and later
@@ -34,7 +38,8 @@ retain significant digits instead of rounding to zero in the table.
 
 Historical first-event values remain stored but are not presented as first
 token or used for TPS. Tooltips/export reasons distinguish unavailable history,
-Live summaries, missing billed text tokens, invalid counts, and low-confidence
+Live summaries, missing billed text tokens, missing first/last timestamps,
+non-positive decode windows, invalid counts, and low-confidence
 incomplete/non-stream/short samples. Total duration remains available for these
 records.
 

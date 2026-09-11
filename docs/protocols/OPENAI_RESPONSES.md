@@ -4,8 +4,9 @@ Sub2API Plus accepts OpenAI-compatible Responses requests over HTTP and
 client-facing WebSocket ingress. Account routing can use an upstream WebSocket
 or bridge the client WebSocket to an HTTP/SSE upstream.
 
-Usage timing follows the shared [first-token/total-duration/TPS contract](../USAGE_TIMING.md),
-including HTTP passthrough, individual WS turns, and remote compaction. Aggregate
+Usage timing follows the shared [first-token/total-duration/TPS contract](../USAGE_TIMING.md)
+(TPS is decode rate over last-token minus first-token), including HTTP
+passthrough, individual WS turns, and remote compaction. Aggregate
 compact output does not create a token clock. The obsolete `openai_ttft_mode`
 admin setting has been removed; `timing_version` identifies verified usage data.
 
