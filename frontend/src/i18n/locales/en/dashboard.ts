@@ -176,7 +176,7 @@ export default {
         configTomlHint:
           'Official path: ~/.grok/config.toml (or $GROK_HOME). Fill [endpoints] (models_base_url / models_list_url / xai_api_base_url / cli_chat_proxy_base_url), [auth] preferred_method=api_key, [models], [session], and [features] image/video overrides. Prefer env_key over api_key; every text model needs api_backend=responses. Back up before merge, then run grok inspect.',
         codexConfigTomlHint:
-          'Official Codex: wire_api = "responses" only; prefer env_key over experimental_bearer_token; supports_websockets = false for non-OpenAI gateways (Sub2API can still accept client WS and bridge to HTTP/SSE). Back up ~/.codex/config.toml before merge.',
+          'Official Codex: wire_api = "responses" only; prefer env_key over experimental_bearer_token; supports_websockets = false for non-OpenAI gateways (Sub2API Plus can still accept client WS and bridge to HTTP/SSE). Back up ~/.codex/config.toml before merge.',
         note:
           'Export GROK_MODELS_BASE_URL and XAI_API_KEY, save the full config.toml (endpoints/auth/models/session/features) as ~/.grok/config.toml, run grok inspect, then /model grok-4.5 (or grok-build-0.1 for coding).',
         noteWindows:
@@ -191,6 +191,12 @@ export default {
       deepseek: {
         description: 'Configure Claude Code, Codex, or OpenCode through the current DeepSeek group.',
         codexDescription: 'Configure Codex with API key authentication through the current DeepSeek group.',
+        codexConfigTomlHint: 'Download the model catalog below, save both files under the Codex config directory, and restart Codex.',
+        codexNote: 'Export SUB2API_API_KEY before starting Codex. The downloaded catalog contains model metadata only, not your API key.',
+      },
+      minimax: {
+        description: 'Configure Claude Code, Codex, or OpenCode through the current MiniMax group.',
+        codexDescription: 'Configure Codex with API key authentication through the current MiniMax group.',
         codexConfigTomlHint: 'Download the model catalog below, save both files under the Codex config directory, and restart Codex.',
         codexNote: 'Export SUB2API_API_KEY before starting Codex. The downloaded catalog contains model metadata only, not your API key.',
       },
@@ -348,11 +354,9 @@ export default {
     tokens: 'Tokens',
     cost: 'Cost',
 		firstToken: 'First Token',
-		firstTokenOrLegacyEvent: 'First Token / Legacy First Event',
     duration: 'Duration',
     latency: 'Latency',
 		latencyFirstToken: 'First Token',
-		latencyLegacyFirstEvent: 'First Event (Legacy)',
     latencyFirstOutput: 'First Output',
     latencyFirstOutputKind: 'First Output Kind',
     latencyOutputKindText: 'Text',
@@ -361,13 +365,23 @@ export default {
     latencyFirstReasoning: 'First Reasoning',
     latencyFirstTool: 'First Tool Output',
     latencyDetails: 'Latency Details',
-    latencyLegacyFirstEventHint: 'Legacy first event; not comparable to strict first-token TTFT.',
     latencyMediaOnlyHint: 'Media first output only; no strict first-token sample.',
     latencyMixedModalityHint: 'First output and first token differ; an earlier non-text or aggregate output arrived first.',
     latencyNonTextFirstHint: 'First token-like output was reasoning or a tool call, not necessarily final answer text.',
     latencyDuration: 'Total',
+    latencyLastToken: 'Last Token',
     latencyTps: 'TPS',
-    latencyTpsHint: 'Estimated average text output rate: text output tokens ÷ (last token − first token). Complete stream/ws requests only. Sample too small (short window or few text tokens) shows "-". Values below 1 or above 1000 show as "< 1" / "> 1000".',
+    latencyCompaction: 'Compaction result',
+    timingUnavailableHistorical: 'Verified first-token timing was not collected',
+    timingUnavailableLive: 'Live session summary has no token-generation timing',
+    timingUnavailableNonStream: 'Non-streaming request; TPS uses last-token time or total duration',
+    timingUnavailableIncomplete: 'Request did not complete; displayed TPS may be partial',
+    timingUnavailableCompaction: 'Compaction result has no observable token deltas',
+    timingUnavailableNoTokens: 'No billed text tokens or generation timing observed',
+    timingUnavailableInvalid: 'Invalid timing data',
+    timingUnavailableShort: 'Low-confidence sample: generation window below 300ms or output below 8 tokens',
+    timingUnavailableReason: 'Unavailable reason',
+    latencyTpsHint: 'Average billed text-token rate: text output tokens ÷ last-token time (falls back to total duration). Includes thinking wait, excludes post-token flush. Incomplete, non-stream, and short samples still show a number, with a confidence note.',
 	incomplete: 'Incomplete',
 	incompleteHint: 'The request ended before a complete terminal result. Displayed usage and cost may be partial.',
 	clientDisconnected: 'Client disconnected',
@@ -487,7 +501,8 @@ export default {
       antigravity: 'Antigravity',
       kimi: 'Kimi',
       zhipu: 'Zhipu GLM',
-      deepseek: 'DeepSeek'
+      deepseek: 'DeepSeek',
+      minimax: 'MiniMax'
     },
     // Check modes (how a monitor performs its checks)
     checkMode: {

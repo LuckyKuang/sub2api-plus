@@ -449,7 +449,6 @@ const baseSettingsResponse = {
   min_claude_code_version: "",
   max_claude_code_version: "",
   allow_ungrouped_key_scheduling: false,
-  openai_ttft_mode: "semantic",
   min_codex_version: "",
   max_codex_version: "",
   codex_cli_only_allow_app_server_clients: false,
@@ -1362,25 +1361,14 @@ describe("admin SettingsView payment visible method controls", () => {
     expect(payload.grok_cross_client_model_map_enabled).toBe(false);
   });
 
-  it("loads and saves the OpenAI Responses first-token metric mode", async () => {
-    getSettings.mockResolvedValueOnce({
-      ...baseSettingsResponse,
-      openai_ttft_mode: "visible",
-    });
+  it("does not offer the obsolete first-event timing mode", async () => {
     const wrapper = mountView();
-
     await flushPromises();
     await openGatewayTab(wrapper);
-
-    const modeSelect = wrapper.get('[data-testid="openai-ttft-mode"]');
-    expect((modeSelect.element as HTMLSelectElement).value).toBe("visible");
-
-    await modeSelect.setValue("semantic");
+    expect(wrapper.find('[data-testid="openai-ttft-mode"]').exists()).toBe(false);
     await wrapper.find("form").trigger("submit.prevent");
     await flushPromises();
-
-    const payload = updateSettings.mock.calls.at(-1)?.[0] as Record<string, unknown>;
-    expect(payload.openai_ttft_mode).toBe("semantic");
+    expect(updateSettings.mock.calls.at(-1)?.[0]).not.toHaveProperty("openai_ttft_mode");
   });
 
   it("loads fail-safe-off Ollama Cloud usage refresh settings and saves an explicit opt-in", async () => {

@@ -34,6 +34,9 @@ export default {
           showQuota: '向用户展示渠道用量/余额',
           showQuotaHint:
             '开启后，配额模式的渠道监控会在用户端渠道状态页展示关联账号的用量滚动窗口/余额。默认关闭；管理员始终可见。',
+          hideUserRanking: '对用户隐藏用户排行',
+          hideUserRankingHint:
+            '开启后，用户端渠道监控 V2 不再显示「用户排行」页，用户 API 也不返回排行数据。管理员仍可查看。',
         },
         availableChannels: {
           title: '可用渠道',
@@ -440,7 +443,7 @@ export default {
         allowUngroupedKey: '允许未分组 Key 调度',
         allowUngroupedKeyHint: '关闭后，未分配到任何分组的 API Key 将无法发起请求（返回 403）。建议保持关闭以确保所有 Key 都归属明确的分组。',
         accountSchedulingThresholdsTitle: '平台账号自动停调阈值',
-        accountSchedulingThresholdsDescription: '当账号当前原生用量窗口（OpenAI Codex/Anthropic 会话，或 Grok 请求/Token 利用率）达到该百分比时，Sub2API 会临时将其移出调度，直到窗口重置。填 100 表示禁用。',
+        accountSchedulingThresholdsDescription: '当账号当前原生用量窗口（OpenAI Codex/Anthropic 会话，或 Grok 请求/Token 利用率）达到该百分比时，Sub2API Plus 会临时将其移出调度，直到窗口重置。填 100 表示禁用。',
         accountSchedulingThresholdsGlobalHint: '系统级默认值，作用于该平台全部账号。可在账号编辑页对单个账号覆盖。',
         accountSchedulingThresholdsDisabledHint: '100 表示禁用该平台自动停调；1–99 表示达到该利用率后暂停调度。',
         accountSchedulingThresholdsRangeHint: '整数 1–100（百分比）。仅 OpenAI / Anthropic / Grok。'
@@ -471,10 +474,6 @@ export default {
         grokBaseURLModeUSEast1: '区域 API（us-east-1）',
         grokBaseURLModeUSWest2: '区域 API（us-west-2）',
         grokBaseURLModeEUWest1: '区域 API（eu-west-1）',
-        openaiTTFTMode: 'OpenAI Responses 首 token 统计口径',
-        openaiTTFTModeSemantic: '历史兼容（语义事件）',
-        openaiTTFTModeVisible: '真实可见输出',
-        openaiTTFTModeHint: '默认使用历史兼容口径，首个非预置语义事件即记录 first_token_ms。选择真实可见输出后，仅在首个非空文本、工具参数或图片内容到达时记录。',
         fingerprintUnification: '指纹统一化',
         fingerprintUnificationHint: '统一共享同一 OAuth 账号的用户的 X-Stainless-* 请求头。关闭后透传客户端原始请求头。',
         metadataPassthrough: 'Metadata 透传',

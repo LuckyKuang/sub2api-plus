@@ -19,6 +19,7 @@
 </template>
 
 <script setup lang="ts">
+import { useDocumentDarkMode } from '@/composables/useDocumentDarkMode'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
@@ -55,13 +56,11 @@ const props = defineProps<{
   loading?: boolean
 }>()
 
-const isDarkMode = computed(() => {
-  return document.documentElement.classList.contains('dark')
-})
+const isDarkMode = useDocumentDarkMode()
 
 const chartColors = computed(() => ({
-  text: isDarkMode.value ? '#e5e7eb' : '#374151',
-  grid: isDarkMode.value ? '#374151' : '#e5e7eb',
+  text: isDarkMode.value ? '#e5e5e5' : '#525252',
+  grid: isDarkMode.value ? '#404040' : '#e5e5e5',
   input: '#3b82f6',
   output: '#10b981',
   cacheCreation: '#f59e0b',

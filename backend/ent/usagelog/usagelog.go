@@ -82,6 +82,8 @@ const (
 	FieldStream = "stream"
 	// FieldDurationMs holds the string denoting the duration_ms field in the database.
 	FieldDurationMs = "duration_ms"
+	// FieldTimingVersion holds the string denoting the timing_version field in the database.
+	FieldTimingVersion = "timing_version"
 	// FieldFirstTokenMs holds the string denoting the first_token_ms field in the database.
 	FieldFirstTokenMs = "first_token_ms"
 	// FieldLastTokenMs holds the string denoting the last_token_ms field in the database.
@@ -208,6 +210,7 @@ var Columns = []string{
 	FieldBillingType,
 	FieldStream,
 	FieldDurationMs,
+	FieldTimingVersion,
 	FieldFirstTokenMs,
 	FieldLastTokenMs,
 	FieldFirstOutputMs,
@@ -291,6 +294,8 @@ var (
 	DefaultBillingType int8
 	// DefaultStream holds the default value on creation for the "stream" field.
 	DefaultStream bool
+	// DefaultTimingVersion holds the default value on creation for the "timing_version" field.
+	DefaultTimingVersion int
 	// FirstOutputKindValidator is a validator for the "first_output_kind" field. It is called by the builders before save.
 	FirstOutputKindValidator func(string) error
 	// DefaultCompletionStatus holds the default value on creation for the "completion_status" field.
@@ -501,6 +506,11 @@ func ByStream(opts ...sql.OrderTermOption) OrderOption {
 // ByDurationMs orders the results by the duration_ms field.
 func ByDurationMs(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldDurationMs, opts...).ToFunc()
+}
+
+// ByTimingVersion orders the results by the timing_version field.
+func ByTimingVersion(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTimingVersion, opts...).ToFunc()
 }
 
 // ByFirstTokenMs orders the results by the first_token_ms field.

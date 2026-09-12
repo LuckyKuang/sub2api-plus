@@ -288,7 +288,7 @@
             </div>
           </div>
 
-          <div class="overflow-x-auto">
+          <div class="table-container overflow-x-auto">
             <table class="min-w-full divide-y divide-gray-200 dark:divide-dark-700">
               <thead class="bg-gray-50 dark:bg-dark-800">
                 <tr>
@@ -1101,7 +1101,7 @@
               <input v-model.trim="sessionFilters.search" type="search" class="input" :placeholder="t('admin.riskControl.sessionBlockSearch')" @keyup.enter="reloadSessionBlocksFromFirstPage" />
               <button type="button" class="btn btn-secondary" :disabled="sessionBlocksLoading" @click="reloadSessionBlocksFromFirstPage">{{ t('admin.riskControl.refresh') }}</button>
             </div>
-            <div class="overflow-x-auto">
+            <div class="table-container overflow-x-auto">
               <table class="min-w-full divide-y divide-gray-200 dark:divide-dark-700">
                 <thead class="bg-gray-50 dark:bg-dark-800">
                   <tr>
@@ -1252,7 +1252,7 @@
               {{ t('admin.riskControl.policyHelp.current') }}{{ effectiveTextPolicyDescription }}
             </p>
           </div>
-          <div class="overflow-x-auto">
+          <div class="table-container overflow-x-auto">
             <table class="min-w-[900px] w-full text-left text-sm">
               <thead class="border-b border-gray-200 text-xs text-gray-500 dark:border-dark-700 dark:text-gray-400">
                 <tr>

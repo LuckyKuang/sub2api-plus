@@ -91,6 +91,8 @@ type UsageLog struct {
 	Stream bool `json:"stream,omitempty"`
 	// DurationMs holds the value of the "duration_ms" field.
 	DurationMs *int `json:"duration_ms,omitempty"`
+	// TimingVersion holds the value of the "timing_version" field.
+	TimingVersion int `json:"timing_version,omitempty"`
 	// FirstTokenMs holds the value of the "first_token_ms" field.
 	FirstTokenMs *int `json:"first_token_ms,omitempty"`
 	// Elapsed ms to the last token-like delta; NULL = historical or none observed
@@ -220,7 +222,7 @@ func (*UsageLog) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullBool)
 		case usagelog.FieldInputCost, usagelog.FieldOutputCost, usagelog.FieldCacheCreationCost, usagelog.FieldCacheReadCost, usagelog.FieldTotalCost, usagelog.FieldActualCost, usagelog.FieldRateMultiplier, usagelog.FieldAccountRateMultiplier:
 			values[i] = new(sql.NullFloat64)
-		case usagelog.FieldID, usagelog.FieldUserID, usagelog.FieldAPIKeyID, usagelog.FieldAccountID, usagelog.FieldChannelID, usagelog.FieldGroupID, usagelog.FieldSubscriptionID, usagelog.FieldInputTokens, usagelog.FieldOutputTokens, usagelog.FieldCacheCreationTokens, usagelog.FieldCacheReadTokens, usagelog.FieldCacheCreation5mTokens, usagelog.FieldCacheCreation1hTokens, usagelog.FieldAudioOutputTokens, usagelog.FieldBillingType, usagelog.FieldDurationMs, usagelog.FieldFirstTokenMs, usagelog.FieldLastTokenMs, usagelog.FieldFirstOutputMs, usagelog.FieldImageCount, usagelog.FieldVideoCount, usagelog.FieldVideoDurationSeconds:
+		case usagelog.FieldID, usagelog.FieldUserID, usagelog.FieldAPIKeyID, usagelog.FieldAccountID, usagelog.FieldChannelID, usagelog.FieldGroupID, usagelog.FieldSubscriptionID, usagelog.FieldInputTokens, usagelog.FieldOutputTokens, usagelog.FieldCacheCreationTokens, usagelog.FieldCacheReadTokens, usagelog.FieldCacheCreation5mTokens, usagelog.FieldCacheCreation1hTokens, usagelog.FieldAudioOutputTokens, usagelog.FieldBillingType, usagelog.FieldDurationMs, usagelog.FieldTimingVersion, usagelog.FieldFirstTokenMs, usagelog.FieldLastTokenMs, usagelog.FieldFirstOutputMs, usagelog.FieldImageCount, usagelog.FieldVideoCount, usagelog.FieldVideoDurationSeconds:
 			values[i] = new(sql.NullInt64)
 		case usagelog.FieldRequestID, usagelog.FieldModel, usagelog.FieldRequestedModel, usagelog.FieldUpstreamModel, usagelog.FieldUpstreamResponseModel, usagelog.FieldModelMappingChain, usagelog.FieldBillingTier, usagelog.FieldBillingMode, usagelog.FieldFirstOutputKind, usagelog.FieldCompletionStatus, usagelog.FieldUsageSource, usagelog.FieldUserAgent, usagelog.FieldIPAddress, usagelog.FieldImageSize, usagelog.FieldImageInputSize, usagelog.FieldImageOutputSize, usagelog.FieldImageSizeSource, usagelog.FieldVideoResolution:
 			values[i] = new(sql.NullString)
@@ -462,6 +464,12 @@ func (_m *UsageLog) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.DurationMs = new(int)
 				*_m.DurationMs = int(value.Int64)
+			}
+		case usagelog.FieldTimingVersion:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field timing_version", values[i])
+			} else if value.Valid {
+				_m.TimingVersion = int(value.Int64)
 			}
 		case usagelog.FieldFirstTokenMs:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -784,6 +792,9 @@ func (_m *UsageLog) String() string {
 		builder.WriteString("duration_ms=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
+	builder.WriteString(", ")
+	builder.WriteString("timing_version=")
+	builder.WriteString(fmt.Sprintf("%v", _m.TimingVersion))
 	builder.WriteString(", ")
 	if v := _m.FirstTokenMs; v != nil {
 		builder.WriteString("first_token_ms=")

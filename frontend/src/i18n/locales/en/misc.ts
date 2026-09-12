@@ -121,6 +121,7 @@ export default {
     status: {
       active: 'Active',
       expired: 'Expired',
+      suspended: 'Suspended',
       revoked: 'Revoked'
     },
     usage: 'Usage',

@@ -72,17 +72,9 @@
                 {{ t('admin.usageAlert.enabledHint') }}
               </div>
             </div>
-            <button
-              type="button"
-              class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
-              :class="rule.enabled ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'"
-              @click="rule.enabled = !rule.enabled"
-            >
-              <span
-                class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
-                :class="rule.enabled ? 'translate-x-5' : 'translate-x-0'"
-              />
-            </button>
+            <Toggle
+              v-model="rule.enabled"
+            />
           </div>
 
           <div>
@@ -146,17 +138,9 @@
                 {{ t('admin.usageAlert.thresholdEnabledHint') }}
               </div>
             </div>
-            <button
-              type="button"
-              class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
-              :class="rule.threshold_enabled ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'"
-              @click="rule.threshold_enabled = !rule.threshold_enabled"
-            >
-              <span
-                class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
-                :class="rule.threshold_enabled ? 'translate-x-5' : 'translate-x-0'"
-              />
-            </button>
+            <Toggle
+              v-model="rule.threshold_enabled"
+            />
           </div>
 
           <div v-if="rule.threshold_enabled" class="space-y-3 rounded-lg border border-amber-200/70 bg-amber-50/40 p-3 dark:border-amber-900/40 dark:bg-amber-950/20">
@@ -216,17 +200,9 @@
                 {{ t('admin.usageAlert.forceProbeHint') }}
               </div>
             </div>
-            <button
-              type="button"
-              class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
-              :class="rule.force_probe ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'"
-              @click="rule.force_probe = !rule.force_probe"
-            >
-              <span
-                class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
-                :class="rule.force_probe ? 'translate-x-5' : 'translate-x-0'"
-              />
-            </button>
+            <Toggle
+              v-model="rule.force_probe"
+            />
           </div>
 
           <div class="space-y-2">
@@ -322,6 +298,7 @@
 </template>
 
 <script setup lang="ts">
+import Toggle from '@/components/common/Toggle.vue'
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import BaseDialog from '@/components/common/BaseDialog.vue'

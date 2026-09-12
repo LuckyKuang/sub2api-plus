@@ -219,6 +219,7 @@
 </template>
 
 <script setup lang="ts">
+import { strictFirstTokenMs, estimatedTps, tpsReason } from '@/utils/usageTiming'
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
@@ -628,6 +629,11 @@ const escapeCSVValue = (value: unknown): string => {
   return str
 }
 
+const formatTpsReason = (log: UsageLog): string => {
+  const reason = tpsReason(log)
+  return reason ? t(reason) : ''
+}
+
 const exportToCSV = async () => {
   if (pagination.total === 0) {
     appStore.showWarning(t('usage.noDataToExport'))
@@ -663,10 +669,12 @@ const exportToCSV = async () => {
       'Rate Multiplier',
       'Billed Cost',
       'Original Cost',
-		'First Token / Legacy First Event (ms)',
+		'First Token (ms)',
       'First Output (ms)',
       'First Output Kind',
       'Duration (ms)',
+      'TPS',
+      'Unavailable reason',
     ]
     const rows = allLogs.map((log) => [
       log.created_at,
@@ -684,10 +692,12 @@ const exportToCSV = async () => {
       log.rate_multiplier,
       log.actual_cost.toFixed(8),
       log.total_cost.toFixed(8),
-      log.first_token_ms ?? '',
+      strictFirstTokenMs(log) ?? '',
       log.first_output_ms ?? '',
       log.first_output_kind ?? '',
       log.duration_ms ?? '',
+      estimatedTps(log) ?? '',
+      formatTpsReason(log),
     ].map(escapeCSVValue))
     const csvContent = [
       headers.map(escapeCSVValue).join(','),
@@ -815,13 +825,24 @@ const handleColumnClickOutside = (event: MouseEvent) => {
   }
 }
 
+const loadApiKeys = async () => {
+  const firstPage = await keysAPI.list(1, 100)
+  const keys = [...firstPage.items]
+  for (let page = 2; page <= firstPage.pages && keys.length > 0; page++) {
+    const response = await keysAPI.list(page, 100)
+    if (response.items.length === 0) break
+    keys.push(...response.items)
+  }
+  return keys
+}
+
 const loadFilterOptions = async () => {
   try {
     const [keys, availableGroups] = await Promise.all([
-      keysAPI.list(1, 100),
+      loadApiKeys(),
       userGroupsAPI.getAvailable(),
     ])
-    apiKeys.value = keys.items
+    apiKeys.value = keys
     groups.value = availableGroups
   } catch (error) {
     console.error('Failed to load usage filter options:', error)

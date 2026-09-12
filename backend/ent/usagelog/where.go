@@ -225,6 +225,11 @@ func DurationMs(v int) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldDurationMs, v))
 }
 
+// TimingVersion applies equality check predicate on the "timing_version" field. It's identical to TimingVersionEQ.
+func TimingVersion(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldTimingVersion, v))
+}
+
 // FirstTokenMs applies equality check predicate on the "first_token_ms" field. It's identical to FirstTokenMsEQ.
 func FirstTokenMs(v int) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldFirstTokenMs, v))
@@ -1808,6 +1813,46 @@ func DurationMsIsNil() predicate.UsageLog {
 // DurationMsNotNil applies the NotNil predicate on the "duration_ms" field.
 func DurationMsNotNil() predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldNotNull(FieldDurationMs))
+}
+
+// TimingVersionEQ applies the EQ predicate on the "timing_version" field.
+func TimingVersionEQ(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldTimingVersion, v))
+}
+
+// TimingVersionNEQ applies the NEQ predicate on the "timing_version" field.
+func TimingVersionNEQ(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNEQ(FieldTimingVersion, v))
+}
+
+// TimingVersionIn applies the In predicate on the "timing_version" field.
+func TimingVersionIn(vs ...int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIn(FieldTimingVersion, vs...))
+}
+
+// TimingVersionNotIn applies the NotIn predicate on the "timing_version" field.
+func TimingVersionNotIn(vs ...int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotIn(FieldTimingVersion, vs...))
+}
+
+// TimingVersionGT applies the GT predicate on the "timing_version" field.
+func TimingVersionGT(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGT(FieldTimingVersion, v))
+}
+
+// TimingVersionGTE applies the GTE predicate on the "timing_version" field.
+func TimingVersionGTE(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGTE(FieldTimingVersion, v))
+}
+
+// TimingVersionLT applies the LT predicate on the "timing_version" field.
+func TimingVersionLT(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLT(FieldTimingVersion, v))
+}
+
+// TimingVersionLTE applies the LTE predicate on the "timing_version" field.
+func TimingVersionLTE(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLTE(FieldTimingVersion, v))
 }
 
 // FirstTokenMsEQ applies the EQ predicate on the "first_token_ms" field.

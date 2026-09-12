@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useDocumentDarkMode } from '@/composables/useDocumentDarkMode'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Chart as ChartJS, ArcElement, Legend, Tooltip } from 'chart.js'
@@ -21,13 +22,13 @@ const emit = defineEmits<{
 }>()
 const { t } = useI18n()
 
-const isDarkMode = computed(() => document.documentElement.classList.contains('dark'))
+const isDarkMode = useDocumentDarkMode()
 const colors = computed(() => ({
   blue: '#3b82f6',
   red: '#ef4444',
   orange: '#f59e0b',
   gray: '#9ca3af',
-  text: isDarkMode.value ? '#9ca3af' : '#6b7280'
+  text: isDarkMode.value ? '#e5e5e5' : '#525252'
 }))
 
 const totalSlaErrors = computed(() =>

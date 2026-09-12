@@ -164,7 +164,7 @@ describe('UseKeyModal', () => {
 
     const parsed = JSON.parse(wrapper.find('pre code').text())
     expect(parsed.provider.grok.npm).toBe('@ai-sdk/openai-compatible')
-    expect(parsed.provider.grok.name).toBe('Grok via Sub2API')
+    expect(parsed.provider.grok.name).toBe('Grok via Sub2API Plus')
     expect(parsed.provider.grok.options).toEqual({
       baseURL: 'https://example.com/v1',
       apiKey: 'sk-grok-test'
@@ -791,7 +791,7 @@ describe('UseKeyModal', () => {
     )
   })
 
-  it.each(['anthropic', 'gemini', 'antigravity', 'kimi', 'zhipu'] as const)(
+  it.each(['anthropic', 'gemini', 'antigravity', 'kimi', 'zhipu', 'minimax'] as const)(
     'offers Codex catalog configuration for the %s routed group',
     async (platform) => {
       const wrapper = mount(UseKeyModal, {

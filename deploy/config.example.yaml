@@ -93,7 +93,7 @@ server:
 # 填写浏览器访问使用的完整 Origin。
 webauthn:
   enabled: false
-  rp_display_name: "Sub2API"
+  rp_display_name: "Sub2API Plus"
   # Example / 示例: "sub2api.example.com"
   rp_id: ""
   # Example / 示例: ["https://sub2api.example.com"]
@@ -158,6 +158,7 @@ security:
       - "api.moonshot.cn"
       - "open.bigmodel.cn"
       - "api.minimaxi.com"
+      - "api.minimax.io"
       - "generativelanguage.googleapis.com"
       - "cloudcode-pa.googleapis.com"
       - "*.openai.azure.com"
@@ -335,7 +336,8 @@ gateway:
     client_first_message_timeout_seconds: 30
     # Close a client WebSocket that stays idle between completed turns (seconds). Set 0 to disable.
     ingress_inter_turn_idle_timeout_seconds: 300
-    # Limit live client WebSocket ingress sessions per API key across all instances. Set 0 to disable.
+    # Limit audited client WebSocket sessions per API key across instances. Set 0 to disable.
+    # 首帧校验和审计通过后申请名额；容量不足时以 WebSocket 1013 关闭。
     max_ingress_connections_per_api_key: 64
     # 全局总开关，默认 true；关闭时所有请求保持原有 HTTP/SSE 路由
     enabled: true
@@ -898,9 +900,18 @@ ops:
   # 是否启用运维监控功能（后台任务和接口）
   # Set to false to hide ops menu in sidebar and disable all ops features
   # 设置为 false 可在左侧栏隐藏运维监控菜单并禁用所有运维监控功能
-  # Other detailed settings (cleanup, aggregation, etc.) are configured in ops settings dialog
-  # 其他详细设置（数据清理、预聚合等）在运维监控设置对话框中配置
+  # Runtime ops settings can override these cleanup defaults.
+  # 运维运行时设置可覆盖以下清理默认值。
   enabled: true
+  cleanup:
+    enabled: true
+    schedule: "0 2 * * *"
+    error_log_retention_days: 30
+    # Must be positive when cleanup is enabled; 0 cannot disable system-log cleanup.
+    # 启用清理时必须大于 0；不能通过 0 禁用系统日志清理。
+    system_log_retention_days: 30
+    minute_metrics_retention_days: 30
+    hourly_metrics_retention_days: 30
 
 # =============================================================================
 # JWT Configuration

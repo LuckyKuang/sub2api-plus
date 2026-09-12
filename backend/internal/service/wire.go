@@ -219,6 +219,17 @@ func ProvideOpenAIQuotaAutoResetService(
 	return service
 }
 
+// ProvideOpenAIGroupQuotaFollowResetService starts only the local durable-event
+// processor. Upstream reset timestamps are supplied passively by gateway traffic.
+func ProvideOpenAIGroupQuotaFollowResetService(
+	repo OpenAIGroupQuotaFollowResetRepository,
+	billingCache *BillingCacheService,
+) *OpenAIGroupQuotaFollowResetService {
+	service := NewOpenAIGroupQuotaFollowResetService(repo, billingCache)
+	service.Start()
+	return service
+}
+
 func ProvideAccountUsageService(
 	accountRepo AccountRepository,
 	usageLogRepo UsageLogRepository,
@@ -276,6 +287,7 @@ func ProvideAccountTestService(
 	)
 	service.agentIdentityWS = openAIGatewayService
 	service.openAIIdentityResolver = openAIGatewayService
+	service.SetOpenAIGatewayService(openAIGatewayService)
 	service.SetSettingService(settingService)
 	service.SetPluginManager(pluginManager)
 	return service
@@ -896,6 +908,7 @@ var ProviderSet = wire.NewSet(
 	ProvideOpenAITokenProvider,
 	ProvideOpenAIQuotaService,
 	ProvideOpenAIQuotaAutoResetService,
+	ProvideOpenAIGroupQuotaFollowResetService,
 	ProvideGrokQuotaService,
 	ProvideCNProviderQuotaService,
 	ProvideCNProviderBalanceService,

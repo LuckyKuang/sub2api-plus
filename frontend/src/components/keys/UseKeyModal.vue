@@ -469,6 +469,7 @@ const clientTabs = computed((): TabConfig[] => {
         { id: 'opencode', label: t('keys.useKeyModal.cliTabs.opencode'), icon: TerminalIcon }
       ]
     case 'deepseek':
+    case 'minimax':
     case 'composite':
       return [
         { id: 'claude', label: t('keys.useKeyModal.cliTabs.claudeCode'), icon: TerminalIcon },
@@ -517,6 +518,7 @@ const platformDescription = computed(() => {
     props.platform !== 'openai' &&
     props.platform !== 'grok' &&
     props.platform !== 'deepseek' &&
+    props.platform !== 'minimax' &&
     props.platform !== 'composite') {
     return t('keys.useKeyModal.routedCodex.description')
   }
@@ -542,6 +544,10 @@ const platformDescription = computed(() => {
       return activeClientTab.value === 'codex'
         ? t('keys.useKeyModal.deepseek.codexDescription')
         : t('keys.useKeyModal.deepseek.description')
+    case 'minimax':
+      return activeClientTab.value === 'codex'
+        ? t('keys.useKeyModal.minimax.codexDescription')
+        : t('keys.useKeyModal.minimax.description')
     case 'composite':
       return activeClientTab.value === 'codex'
         ? t('keys.useKeyModal.composite.codexDescription')
@@ -556,6 +562,7 @@ const platformNote = computed(() => {
     props.platform !== 'openai' &&
     props.platform !== 'grok' &&
     props.platform !== 'deepseek' &&
+    props.platform !== 'minimax' &&
     props.platform !== 'composite') {
     return t('keys.useKeyModal.routedCodex.note')
   }
@@ -593,6 +600,10 @@ const platformNote = computed(() => {
     case 'deepseek':
       return activeClientTab.value === 'codex'
         ? t('keys.useKeyModal.deepseek.codexNote')
+        : t('keys.useKeyModal.note')
+    case 'minimax':
+      return activeClientTab.value === 'codex'
+        ? t('keys.useKeyModal.minimax.codexNote')
         : t('keys.useKeyModal.note')
     case 'composite':
       return activeClientTab.value === 'codex'
@@ -755,6 +766,11 @@ const currentFiles = computed((): FileConfig[] => {
     case 'deepseek':
       if (activeClientTab.value === 'codex') {
         return generateRoutedCodexFiles(apiBase, apiKey, 'deepseek')
+      }
+      return generateAnthropicFiles(baseRoot, apiKey)
+    case 'minimax':
+      if (activeClientTab.value === 'codex') {
+        return generateRoutedCodexFiles(apiBase, apiKey, 'minimax')
       }
       return generateAnthropicFiles(baseRoot, apiKey)
     case 'composite':
@@ -1049,7 +1065,7 @@ preferred_method = "api_key"
 [model."grok-4.5"]
 model = "grok-4.5"                          # id sent to the API
 name = "Grok 4.5"                           # shown in /model picker
-description = "Grok 4.5 via Sub2API (Responses)"
+description = "Grok 4.5 via Sub2API Plus (Responses)"
 # base_url inherits from [endpoints].models_base_url; override only if needed:
 # base_url = "${baseUrl}"
 env_key = "XAI_API_KEY"                     # or: api_key = "${apiKey}"  (not recommended)
@@ -1219,6 +1235,7 @@ function generateRoutedCodexFiles(
     kimi: 'kimi-k2.5',
     zhipu: 'glm-4.7',
     deepseek: 'deepseek-v4-pro',
+    minimax: 'MiniMax-M3',
     composite: 'gpt-5.5'
   }
   const preferredModel = preferredModels[platform] || ''
@@ -1232,6 +1249,7 @@ function generateRoutedCodexFiles(
     kimi: 'Kimi',
     zhipu: 'Zhipu',
     deepseek: 'DeepSeek',
+    minimax: 'MiniMax',
     composite: 'Composite'
   }
   const label = labels[platform]
@@ -1247,7 +1265,7 @@ disable_response_storage = true
 model_catalog_json = "${escapeTomlBasicString(codexModelCatalogPath.value)}"
 
 [model_providers.sub2api]
-name = "Sub2API ${label}"
+name = "Sub2API Plus ${label}"
 base_url = "${baseUrl}"
 env_key = "SUB2API_API_KEY"
 wire_api = "responses"
@@ -1260,7 +1278,7 @@ supports_websockets = false`
       path: joinConfigPath(configDir, 'config.toml', isWindows),
       content: configContent,
       hint: t(
-        platform === 'deepseek' || platform === 'composite'
+        platform === 'deepseek' || platform === 'minimax' || platform === 'composite'
           ? `keys.useKeyModal.${platform}.codexConfigTomlHint`
           : 'keys.useKeyModal.routedCodex.configTomlHint'
       )
@@ -1835,7 +1853,7 @@ function generateOpenCodeConfig(platform: string, baseUrl: string, apiKey: strin
   } else if (platform === 'grok') {
     // Custom provider pointing at Sub2API OpenAI-compatible Responses/Chat endpoints.
     provider[platform].npm = '@ai-sdk/openai-compatible'
-    provider[platform].name = 'Grok via Sub2API'
+    provider[platform].name = 'Grok via Sub2API Plus'
     provider[platform].models = grokModels
   }
 

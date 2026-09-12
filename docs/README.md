@@ -9,6 +9,7 @@ below for detailed configuration and maintenance instructions.
 - [Sora status and reserved configuration](providers/SORA.md)
 - [Antigravity](providers/ANTIGRAVITY.md)
 - [Kimi / Moonshot](providers/KIMI.md)
+- [MiniMax coding-plan quota origins](providers/MINIMAX.md)
 
 ## Protocols and Tasks
 
@@ -30,6 +31,7 @@ below for detailed configuration and maintenance instructions.
 - [Contributing](../CONTRIBUTING.md)
 - [Release process](RELEASING.md)
 - [Upstream mapping](../UPSTREAM.md)
+- [Upstream v0.2.4 integration and upgrade behavior](UPSTREAM_V0_2_4_INTEGRATION.md)
 - [Database migrations](../backend/migrations/README.md)
 - [Authentication and Passkeys](AUTHENTICATION.md)
 - [Model Plaza visibility](MODEL_PLAZA.md)

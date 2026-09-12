@@ -89,6 +89,10 @@ func claudeCodeBodyMapFromParsedRequest(parsedReq *service.ParsedRequest) map[st
 	bodyMap := map[string]any{
 		"model": parsedReq.Model,
 	}
+	// 探测识别（max_tokens=1）需要看到该字段，复用已解析请求时一并带上。
+	if parsedReq.MaxTokens > 0 {
+		bodyMap["max_tokens"] = parsedReq.MaxTokens
+	}
 	if parsedReq.HasSystem {
 		if system, ok := parsedReq.SystemValue(); ok {
 			bodyMap["system"] = system
@@ -238,7 +242,7 @@ func (h *ConcurrencyHelper) TryAcquireUserSlotForAPIKey(ctx context.Context, use
 	return h.withAPIKeySlot(ctx, apiKeyID, releaseFunc), true, nil
 }
 
-// AcquireOpenAIWSIngressLease bounds the whole client WebSocket lifecycle,
+// AcquireOpenAIWSIngressLease bounds the audited client WebSocket lifecycle,
 // independently from per-turn user and account slots.
 func (h *ConcurrencyHelper) AcquireOpenAIWSIngressLease(ctx context.Context, apiKeyID int64, maxConnections int) (*service.OpenAIWSIngressLease, bool, error) {
 	if h == nil || h.concurrencyService == nil {

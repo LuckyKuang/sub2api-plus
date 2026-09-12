@@ -1,7 +1,7 @@
 <template>
   <div v-if="!isDesktopViewport" class="space-y-3">
     <template v-if="loading">
-      <div v-for="i in 5" :key="i" class="rounded-lg border border-gray-200 bg-white p-4 dark:border-dark-700 dark:bg-dark-900">
+      <div v-for="i in 5" :key="i" class="rounded-2xl border border-gray-200 bg-white p-4 dark:border-dark-700 dark:bg-dark-800">
         <div class="space-y-3">
           <div v-for="column in dataColumns" :key="column.key" class="flex justify-between">
             <div class="h-4 w-20 animate-pulse rounded bg-gray-200 dark:bg-dark-700"></div>
@@ -15,7 +15,7 @@
     </template>
 
     <template v-else-if="!data || data.length === 0">
-      <div class="rounded-lg border border-gray-200 bg-white p-12 text-center dark:border-dark-700 dark:bg-dark-900">
+      <div class="rounded-2xl border border-gray-200 bg-white p-12 text-center dark:border-dark-700 dark:bg-dark-800">
         <slot name="empty">
           <div class="flex flex-col items-center">
             <Icon
@@ -48,10 +48,10 @@
       <div
         v-for="(row, index) in sortedData"
         :key="resolveRowKey(row, index)"
-        class="rounded-lg border border-gray-200 bg-white p-4 dark:border-dark-700 dark:bg-dark-900"
+        class="rounded-2xl border border-gray-200 bg-white p-4 dark:border-dark-700 dark:bg-dark-800"
         :class="{
           'cursor-pointer': clickableRows,
-          'border-primary-300 bg-primary-50/40 dark:border-primary-700 dark:bg-primary-900/10': selectable && isRowSelected(row, index)
+          'table-row-selected': selectable && isRowSelected(row, index)
         }"
         @click="clickableRows && emit('rowClick', row)"
       >
@@ -93,7 +93,7 @@
   <div
     v-else
     ref="tableWrapperRef"
-    class="table-wrapper"
+    class="table-wrapper table-container"
     :class="{
       'actions-expanded': actionsExpanded,
       'is-scrollable': isScrollable
@@ -166,7 +166,7 @@
           </th>
         </tr>
       </thead>
-      <tbody class="table-body divide-y divide-gray-200 bg-white dark:divide-dark-700 dark:bg-dark-900">
+      <tbody class="table-body divide-y divide-gray-200 bg-white dark:divide-dark-700 dark:bg-dark-800">
         <!-- Loading skeleton -->
         <tr v-if="loading" v-for="i in 5" :key="i">
           <td v-if="selectable" class="w-11 min-w-11 px-3 py-4">
@@ -213,10 +213,10 @@
             :data-row-id="resolveRowKey(item.row, item.index)"
             :data-index="item.index"
             :ref="item.measure ? measureElement : undefined"
-            class="hover:bg-gray-50 dark:hover:bg-dark-800"
+            class="table-data-row"
             :class="{
               'cursor-pointer': clickableRows,
-              'bg-primary-50/40 dark:bg-primary-900/10': selectable && isRowSelected(item.row, item.index)
+              'table-row-selected': selectable && isRowSelected(item.row, item.index)
             }"
             @click="clickableRows && emit('rowClick', item.row)"
           >
@@ -967,12 +967,9 @@ defineExpose({
   position: sticky;
   top: 0;
   z-index: 200;
-  background-color: rgb(249 250 251);
+  background-color: var(--table-header-bg);
 }
 
-.dark .table-wrapper .table-header {
-  background-color: rgb(31 41 55);
-}
 
 /* 表体保持在表头下方 */
 .table-body {
@@ -985,12 +982,9 @@ defineExpose({
   position: sticky;
   top: 0;
   z-index: 210; /* 必须高于所有表体内容 */
-  background-color: rgb(249 250 251);
+  background-color: var(--table-header-bg);
 }
 
-.dark .sticky-header-cell {
-  background-color: rgb(31 41 55);
-}
 
 /* Sticky 列基础样式 */
 .sticky-col {
@@ -1025,20 +1019,25 @@ defineExpose({
 
 /* 表体 sticky 列背景 */
 tbody .sticky-col {
-  background-color: white;
+  background-color: var(--table-body-bg);
 }
 
-.dark tbody .sticky-col {
-  background-color: rgb(17 24 39);
-}
 
 /* hover 状态保持 */
 tbody tr:hover .sticky-col {
-  background-color: rgb(249 250 251);
+  background-color: var(--table-hover-bg);
 }
 
-.dark tbody tr:hover .sticky-col {
-  background-color: rgb(31 41 55);
+
+.table-data-row:hover {
+  background-color: var(--table-hover-bg);
+}
+
+.table-row-selected,
+.table-row-selected .sticky-col,
+.table-row-selected:hover,
+.table-row-selected:hover .sticky-col {
+  background-color: var(--table-selected-bg);
 }
 
 /* 阴影只在可滚动时显示 */
@@ -1122,31 +1121,31 @@ tbody tr:hover .sticky-col {
 
 /* 常驻、不透明的滑块，无视鼠标是否 hover 都在那！ */
 .table-wrapper::-webkit-scrollbar-thumb {
-  background-color: rgba(107, 114, 128, 0.75) !important; 
+  background-color: rgba(115, 115, 115, 0.75) !important;
   border-radius: 6px !important;
   border: 2px solid transparent !important;
   background-clip: padding-box !important;
   -webkit-appearance: none !important;
 }
 .table-wrapper::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(75, 85, 99, 0.9) !important;
+  background-color: rgba(82, 82, 82, 0.9) !important;
 }
 
 .dark .table-wrapper::-webkit-scrollbar-thumb {
-  background-color: rgba(156, 163, 175, 0.75) !important;
+  background-color: rgba(163, 163, 163, 0.75) !important;
 }
 .dark .table-wrapper::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(209, 213, 219, 0.9) !important;
+  background-color: rgba(212, 212, 212, 0.9) !important;
 }
 
 /* 3. 仅给真正的 Firefox 留的后路 */
 @supports (-moz-appearance:none) {
   .table-wrapper {
     scrollbar-width: thin !important;
-    scrollbar-color: rgba(156, 163, 175, 0.5) rgba(0, 0, 0, 0.03) !important;
+    scrollbar-color: rgba(163, 163, 163, 0.5) rgba(0, 0, 0, 0.03) !important;
   }
   .dark .table-wrapper {
-    scrollbar-color: rgba(75, 85, 99, 0.5) rgba(255, 255, 255, 0.05) !important;
+    scrollbar-color: rgba(82, 82, 82, 0.5) rgba(255, 255, 255, 0.05) !important;
   }
 }
 </style>

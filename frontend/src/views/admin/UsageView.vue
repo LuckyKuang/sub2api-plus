@@ -186,6 +186,7 @@
 </template>
 
 <script setup lang="ts">
+import { strictFirstTokenMs, estimatedTps, tpsReason } from '@/utils/usageTiming'
 import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { saveAs } from 'file-saver'
@@ -580,6 +581,11 @@ const getRequestTypeLabel = (log: AdminUsageLog): string => {
   return t('usage.unknown')
 }
 
+const formatTpsReason = (log: AdminUsageLog): string => {
+  const reason = tpsReason(log)
+  return reason ? t(reason) : ''
+}
+
 const exportToExcel = async () => {
   if (exporting.value) return; exporting.value = true; exportProgress.show = true
   const c = new AbortController(); exportAbortController = c
@@ -596,7 +602,7 @@ const exportToExcel = async () => {
       t('admin.usage.inputCost'), t('admin.usage.outputCost'),
       t('admin.usage.cacheReadCost'), t('admin.usage.cacheCreationCost'),
       t('usage.rate'), t('usage.accountMultiplier'), t('usage.original'), t('usage.userBilled'), t('usage.accountBilled'),
-		t('usage.firstTokenOrLegacyEvent'), t('usage.latencyFirstOutput'), t('usage.latencyFirstOutputKind'), t('usage.duration'),
+		t('usage.latencyFirstToken'), t('usage.latencyFirstOutput'), t('usage.latencyFirstOutputKind'), t('usage.duration'), t('usage.latencyTps'), t('usage.timingUnavailableReason'),
       t('admin.usage.requestId'), t('admin.usage.upstreamRequestId'), t('usage.sessionId'), t('usage.userAgent'), t('admin.usage.ipAddress')
     ]
     const ws = XLSX.utils.aoa_to_sheet([headers])
@@ -616,7 +622,7 @@ const exportToExcel = async () => {
         log.rate_multiplier?.toPrecision(4) || '1.00', (log.account_rate_multiplier ?? 1).toPrecision(4),
         log.total_cost?.toFixed(6) || '0.000000', log.actual_cost?.toFixed(6) || '0.000000',
         ((log.account_stats_cost ?? log.total_cost) * (log.account_rate_multiplier ?? 1)).toFixed(6),
-        log.first_token_ms ?? '', log.first_output_ms ?? '', log.first_output_kind ?? '', log.duration_ms ?? '',
+        strictFirstTokenMs(log) ?? '', log.first_output_ms ?? '', log.first_output_kind ?? '', log.duration_ms ?? '', estimatedTps(log) ?? '', formatTpsReason(log),
         log.request_id || '', log.upstream_request_id || '', log.session_id || '', log.user_agent || '', log.ip_address || ''
       ])
       if (rows.length) {

@@ -488,6 +488,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	usageLog.DurationMs = &durationMs
 	usageLog.FirstTokenMs = result.FirstTokenMs
 	usageLog.LastTokenMs = result.LastTokenMs
+	usageLog.TimingVersion = 1
 	usageLog.FirstOutputMs = result.FirstOutputMs
 	usageLog.FirstOutputKind = optionalTrimmedStringPtr(result.FirstOutputKind)
 	usageLog.CreatedAt = time.Now()
@@ -532,7 +533,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	if apiKey.GroupID != nil {
 		applyAccountStatsCost(ctx, usageLog, s.channelService, s.billingService,
 			account.ID, *apiKey.GroupID, result.UpstreamModel, result.Model,
-			tokens, cost.TotalCost,
+			tokens, cost.TotalCost, pricingAt,
 		)
 	}
 
@@ -1214,6 +1215,14 @@ func parseCodexRateLimitHeadersAt(headers http.Header, now time.Time) *OpenAICod
 		}
 		return nil
 	}
+	parseInt64 := func(key string) *int64 {
+		if v := strings.TrimSpace(headers.Get(key)); v != "" {
+			if parsed, err := strconv.ParseInt(v, 10, 64); err == nil && parsed > 0 {
+				return &parsed
+			}
+		}
+		return nil
+	}
 
 	// Reset-At is the current Codex protocol. Retain Reset-After-Seconds as a
 	// fallback for older upstreams and malformed absolute timestamps.
@@ -1233,6 +1242,7 @@ func parseCodexRateLimitHeadersAt(headers http.Header, now time.Time) *OpenAICod
 		snapshot.PrimaryResetAfterSeconds = v
 		hasData = true
 	}
+	snapshot.PrimaryResetAtUnix = parseInt64("x-codex-primary-reset-at")
 	if v := parseInt("x-codex-primary-window-minutes"); v != nil {
 		snapshot.PrimaryWindowMinutes = v
 		hasData = true
@@ -1247,6 +1257,7 @@ func parseCodexRateLimitHeadersAt(headers http.Header, now time.Time) *OpenAICod
 		snapshot.SecondaryResetAfterSeconds = v
 		hasData = true
 	}
+	snapshot.SecondaryResetAtUnix = parseInt64("x-codex-secondary-reset-at")
 	if v := parseInt("x-codex-secondary-window-minutes"); v != nil {
 		snapshot.SecondaryWindowMinutes = v
 		hasData = true
@@ -1420,6 +1431,9 @@ func (s *OpenAIGatewayService) updateCodexUsageSnapshot(ctx context.Context, acc
 	}
 	if s == nil || s.accountRepo == nil {
 		return
+	}
+	if weeklyResetAt, ok := snapshot.WeeklyResetAt(); ok {
+		ObserveOpenAIWeeklyResetAt(ctx, accountID, weeklyResetAt)
 	}
 
 	now := time.Now()

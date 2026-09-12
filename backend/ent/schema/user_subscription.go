@@ -75,6 +75,9 @@ func (UserSubscription) Fields() []ent.Field {
 		field.Float("five_hour_usage_usd").
 			SchemaType(map[string]string{dialect.Postgres: "decimal(20,10)"}).
 			Default(0),
+		field.Int64("quota_follow_reset_event_id").
+			Default(0).
+			Comment("Latest OpenAI OAuth source reset event applied to this subscription"),
 
 		field.Int64("assigned_by").
 			Optional().

@@ -180,7 +180,7 @@ export default {
         configTomlHint:
           '官方路径：~/.grok/config.toml（或 $GROK_HOME）。请填写 [endpoints]（models_base_url / models_list_url / xai_api_base_url / cli_chat_proxy_base_url）、[auth] preferred_method=api_key、[models]、[session]、[features] 图片/视频覆盖。优先 env_key，勿硬编码 api_key；文本模型必须 api_backend=responses。合并前备份，保存后运行 grok inspect。',
         codexConfigTomlHint:
-          'Codex 官方：wire_api 仅支持 "responses"；优先 env_key，勿与 experimental_bearer_token 混用；非 OpenAI 网关默认 supports_websockets = false（Sub2API 仍可接客户端 WS 并桥接到 HTTP/SSE）。合并前备份 ~/.codex/config.toml。',
+          'Codex 官方：wire_api 仅支持 "responses"；优先 env_key，勿与 experimental_bearer_token 混用；非 OpenAI 网关默认 supports_websockets = false（Sub2API Plus 仍可接客户端 WS 并桥接到 HTTP/SSE）。合并前备份 ~/.codex/config.toml。',
         note:
           '导出 GROK_MODELS_BASE_URL 与 XAI_API_KEY，将完整 config.toml（endpoints/auth/models/session/features）保存为 ~/.grok/config.toml，运行 grok inspect，再用 /model 选择 grok-4.5（编程场景可用 grok-build-0.1）。',
         noteWindows:
@@ -195,6 +195,12 @@ export default {
       deepseek: {
         description: '通过当前 DeepSeek 分组配置 Claude Code、Codex 或 OpenCode。',
         codexDescription: '使用 API Key 配置 Codex，并通过当前 DeepSeek 分组发送请求。',
+        codexConfigTomlHint: '下载下方模型目录，将两个文件保存到 Codex 配置目录后重启 Codex。',
+        codexNote: '启动 Codex 前先导出 SUB2API_API_KEY。下载的目录只包含模型元数据，不包含 API Key。'
+      },
+      minimax: {
+        description: '通过当前 MiniMax 分组配置 Claude Code、Codex 或 OpenCode。',
+        codexDescription: '使用 API Key 配置 Codex，并通过当前 MiniMax 分组发送请求。',
         codexConfigTomlHint: '下载下方模型目录，将两个文件保存到 Codex 配置目录后重启 Codex。',
         codexNote: '启动 Codex 前先导出 SUB2API_API_KEY。下载的目录只包含模型元数据，不包含 API Key。'
       },
@@ -353,11 +359,9 @@ export default {
     tokens: 'Token',
     cost: '费用',
 		firstToken: '首 Token',
-		firstTokenOrLegacyEvent: '首 Token / 旧版首事件',
     duration: '耗时',
     latency: '延迟',
 		latencyFirstToken: '首字',
-		latencyLegacyFirstEvent: '旧版首事件',
     latencyFirstOutput: '首输出',
     latencyFirstOutputKind: '首输出类型',
     latencyOutputKindText: '文本',
@@ -366,13 +370,23 @@ export default {
     latencyFirstReasoning: '首推理',
     latencyFirstTool: '首工具输出',
     latencyDetails: '延迟详情',
-    latencyLegacyFirstEventHint: '旧版首事件，不可与新口径严格首字直接对比。',
     latencyMediaOnlyHint: '仅有媒体首输出，无严格首字（token-like）样本。',
     latencyMixedModalityHint: '首输出与首字时间不同，存在更早的非文本或聚合输出。',
     latencyNonTextFirstHint: '首个 token-like 输出为推理或工具调用，不一定是正文。',
     latencyDuration: '总耗时',
+    latencyLastToken: '末 Token',
     latencyTps: 'TPS',
-    latencyTpsHint: '估算平均文本输出速率：文本输出 Token ÷（末 Token − 首 Token）；仅完整 stream/ws 请求。生成窗过短或文本 Token 过少时显示为 -；低于 1 或高于 1000 显示为 < 1 / > 1000。',
+    latencyCompaction: '压缩结果',
+    timingUnavailableHistorical: '未采集可确认口径的首字时序',
+    timingUnavailableLive: 'Live 会话汇总，无逐 Token 生成时序',
+    timingUnavailableNonStream: '非流式请求，TPS 使用末 Token 时刻或总耗时',
+    timingUnavailableIncomplete: '请求未完整结束，显示的 TPS 可能只是部分结果',
+    timingUnavailableCompaction: '压缩结果没有可观测的 Token 增量',
+    timingUnavailableNoTokens: '没有可计费的文本 Token 或生成时序',
+    timingUnavailableInvalid: '时序数据无效',
+    timingUnavailableShort: '低置信样本：生成窗不足 300ms 或输出不足 8 tokens',
+    timingUnavailableReason: '不可计算原因',
+    latencyTpsHint: '平均产出速率：计费文本 Token ÷ 末 Token 时刻（无末 Token 时回退总耗时）。含思考等待，不含末 Token 之后的收尾。未完成、非流式、短样本仍显示数字，并标明置信说明。',
 	incomplete: '未完成',
 	incompleteHint: '请求在完整终态前结束，当前显示的用量和费用可能只是部分结果。',
 	clientDisconnected: '客户端已断开',
@@ -492,7 +506,8 @@ export default {
       antigravity: 'Antigravity',
       kimi: 'Kimi',
       zhipu: '智谱 GLM',
-      deepseek: 'DeepSeek'
+      deepseek: 'DeepSeek',
+      minimax: 'MiniMax'
     },
     // 检查模式（监控条目的工作方式）
     checkMode: {

@@ -512,7 +512,7 @@
             class="input mb-2"
             :placeholder="t('admin.proxies.expiryDaysPlaceholder')"
           />
-          <input v-model="createForm.expires_at" type="date" class="input" />
+          <input v-model="createForm.expires_at" type="date" max="9999-12-31" class="input" />
         </div>
         <div>
           <label class="input-label">{{ t('admin.proxies.fallbackMode') }}</label>
@@ -745,7 +745,7 @@
             class="input mb-2"
             :placeholder="t('admin.proxies.expiryDaysPlaceholder')"
           />
-          <input v-model="editForm.expires_at" type="date" class="input" />
+          <input v-model="editForm.expires_at" type="date" max="9999-12-31" class="input" />
         </div>
         <div>
           <label class="input-label">{{ t('admin.proxies.fallbackMode') }}</label>
@@ -929,7 +929,7 @@
       <div v-else-if="proxyAccounts.length === 0" class="py-6 text-center text-sm text-gray-500">
         {{ t('admin.proxies.accountsEmpty') }}
       </div>
-      <div v-else class="max-h-80 overflow-auto">
+      <div v-else class="table-container max-h-80 overflow-auto">
         <table class="min-w-full divide-y divide-gray-200 text-sm dark:divide-dark-700">
           <thead class="bg-gray-50 text-xs uppercase text-gray-500 dark:bg-dark-800 dark:text-dark-400">
             <tr>
@@ -1784,6 +1784,14 @@ const qualityTargetLabel = (target: string) => {
       return 'Gemini'
     case 'grok':
       return 'Grok'
+    case 'kimi':
+      return 'Kimi'
+    case 'zhipu':
+      return 'Zhipu GLM'
+    case 'deepseek':
+      return 'DeepSeek'
+    case 'minimax':
+      return 'MiniMax'
     default:
       return target
   }

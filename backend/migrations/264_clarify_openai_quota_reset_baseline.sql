@@ -1,0 +1,1 @@
+COMMENT ON COLUMN groups.quota_reset_source_reset_at IS 'Last accepted raw upstream weekly next-reset time; the first value is a non-resetting baseline, and later values reset only after that window expires';

@@ -9,12 +9,13 @@ import (
 type StreamOutputKind string
 
 const (
-	StreamOutputNone      StreamOutputKind = ""
-	StreamOutputText      StreamOutputKind = "text"
-	StreamOutputReasoning StreamOutputKind = "reasoning"
-	StreamOutputTool      StreamOutputKind = "tool"
-	StreamOutputImage     StreamOutputKind = "image"
-	StreamOutputAudio     StreamOutputKind = "audio"
+	StreamOutputNone       StreamOutputKind = ""
+	StreamOutputText       StreamOutputKind = "text"
+	StreamOutputReasoning  StreamOutputKind = "reasoning"
+	StreamOutputTool       StreamOutputKind = "tool"
+	StreamOutputImage      StreamOutputKind = "image"
+	StreamOutputAudio      StreamOutputKind = "audio"
+	StreamOutputCompaction StreamOutputKind = "compaction"
 )
 
 // StreamOutputObservation separates any meaningful output from token-like
@@ -253,6 +254,14 @@ func ObserveGeminiOutput(payload []byte) StreamOutputObservation {
 	if response, ok := root["response"].(map[string]any); ok {
 		root = response
 	}
+	var result StreamOutputObservation
+	merge := func(observation StreamOutputObservation) {
+		if !result.MeaningfulOutput {
+			result = observation
+		} else {
+			result.TokenLikeDelta = result.TokenLikeDelta || observation.TokenLikeDelta
+		}
+	}
 	candidates, _ := root["candidates"].([]any)
 	for _, candidateRaw := range candidates {
 		candidate, _ := candidateRaw.(map[string]any)
@@ -260,58 +269,62 @@ func ObserveGeminiOutput(payload []byte) StreamOutputObservation {
 		parts, _ := content["parts"].([]any)
 		for _, partRaw := range parts {
 			part, _ := partRaw.(map[string]any)
-			if nonEmptyString(part["text"]) {
-				if thought, _ := part["thought"].(bool); thought {
-					return streamOutput(StreamOutputReasoning, true)
+			observation := func() StreamOutputObservation {
+				if nonEmptyString(part["text"]) {
+					if thought, _ := part["thought"].(bool); thought {
+						return streamOutput(StreamOutputReasoning, true)
+					}
+					return streamOutput(StreamOutputText, true)
 				}
-				return streamOutput(StreamOutputText, true)
-			}
-			if call, ok := part["functionCall"].(map[string]any); ok {
-				if nonEmptyString(call["name"]) || hasNonEmptyValue(call["args"]) {
-					return streamOutput(StreamOutputTool, true)
-				}
-			}
-			if call, ok := part["function_call"].(map[string]any); ok {
-				if nonEmptyString(call["name"]) || hasNonEmptyValue(call["args"]) {
-					return streamOutput(StreamOutputTool, true)
-				}
-			}
-			for _, key := range []string{"executableCode", "executable_code"} {
-				if code, ok := part[key].(map[string]any); ok && nonEmptyString(code["code"]) {
-					return streamOutput(StreamOutputTool, true)
-				}
-			}
-			for _, key := range []string{"codeExecutionResult", "code_execution_result"} {
-				if result, ok := part[key].(map[string]any); ok && hasNonEmptyValue(result["output"]) {
-					return streamOutput(StreamOutputTool, false)
-				}
-			}
-			for _, key := range []string{"inlineData", "inline_data"} {
-				if media, ok := part[key].(map[string]any); ok && nonBlankString(media["data"]) {
-					if obs := observeGeminiMedia(media); obs.MeaningfulOutput {
-						return obs
+				if call, ok := part["functionCall"].(map[string]any); ok {
+					if nonEmptyString(call["name"]) || hasNonEmptyValue(call["args"]) {
+						return streamOutput(StreamOutputTool, true)
 					}
 				}
-			}
-			for _, key := range []string{"fileData", "file_data"} {
-				if media, ok := part[key].(map[string]any); ok &&
-					(nonBlankString(media["fileUri"]) || nonBlankString(media["file_uri"])) {
-					if obs := observeGeminiMedia(media); obs.MeaningfulOutput {
-						return obs
+				if call, ok := part["function_call"].(map[string]any); ok {
+					if nonEmptyString(call["name"]) || hasNonEmptyValue(call["args"]) {
+						return streamOutput(StreamOutputTool, true)
 					}
 				}
-			}
-			if nonBlankString(part["thoughtSignature"]) || nonBlankString(part["thought_signature"]) {
-				return streamOutput(StreamOutputReasoning, false)
-			}
+				for _, key := range []string{"executableCode", "executable_code"} {
+					if code, ok := part[key].(map[string]any); ok && nonEmptyString(code["code"]) {
+						return streamOutput(StreamOutputTool, true)
+					}
+				}
+				for _, key := range []string{"codeExecutionResult", "code_execution_result"} {
+					if result, ok := part[key].(map[string]any); ok && hasNonEmptyValue(result["output"]) {
+						return streamOutput(StreamOutputTool, false)
+					}
+				}
+				for _, key := range []string{"inlineData", "inline_data"} {
+					if media, ok := part[key].(map[string]any); ok && nonBlankString(media["data"]) {
+						if obs := observeGeminiMedia(media); obs.MeaningfulOutput {
+							return obs
+						}
+					}
+				}
+				for _, key := range []string{"fileData", "file_data"} {
+					if media, ok := part[key].(map[string]any); ok &&
+						(nonBlankString(media["fileUri"]) || nonBlankString(media["file_uri"])) {
+						if obs := observeGeminiMedia(media); obs.MeaningfulOutput {
+							return obs
+						}
+					}
+				}
+				if nonBlankString(part["thoughtSignature"]) || nonBlankString(part["thought_signature"]) {
+					return streamOutput(StreamOutputReasoning, false)
+				}
+				return StreamOutputObservation{}
+			}()
+			merge(observation)
 		}
 		for _, key := range []string{"groundingMetadata", "grounding_metadata", "citationMetadata", "citation_metadata"} {
 			if hasSemanticMetadata(candidate[key]) {
-				return streamOutput(StreamOutputText, false)
+				merge(streamOutput(StreamOutputText, false))
 			}
 		}
 	}
-	return StreamOutputObservation{}
+	return result
 }
 
 func observeGeminiMedia(media map[string]any) StreamOutputObservation {
@@ -357,6 +370,10 @@ func observeOutputNode(node map[string]any, tokenLike bool) StreamOutputObservat
 	case kind == "refusal":
 		if nonEmptyString(node["refusal"]) || nonEmptyString(node["text"]) {
 			return streamOutput(StreamOutputText, tokenLike)
+		}
+	case kind == "compaction" || kind == "compaction_summary":
+		if nonBlankString(node["encrypted_content"]) || hasNonEmptyValue(node["summary"]) {
+			return streamOutput(StreamOutputCompaction, false)
 		}
 	case kind == "summary_text":
 		if nonEmptyString(node["text"]) {

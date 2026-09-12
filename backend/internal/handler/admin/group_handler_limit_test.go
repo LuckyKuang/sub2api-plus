@@ -31,3 +31,26 @@ func TestUpdateGroupRequestLimitFieldsTriState(t *testing.T) {
 		require.Equal(t, 42.5, *req.MonthlyLimitUSD.ToServiceInput())
 	})
 }
+
+func TestUpdateGroupRequestQuotaResetSourceTriState(t *testing.T) {
+	t.Run("omitted means unchanged", func(t *testing.T) {
+		var req UpdateGroupRequest
+		require.NoError(t, json.Unmarshal([]byte(`{}`), &req))
+		require.False(t, req.QuotaResetSourceAccountID.set)
+		require.Nil(t, req.QuotaResetSourceAccountID.value)
+	})
+
+	t.Run("null explicitly disables", func(t *testing.T) {
+		var req UpdateGroupRequest
+		require.NoError(t, json.Unmarshal([]byte(`{"quota_reset_source_account_id":null}`), &req))
+		require.True(t, req.QuotaResetSourceAccountID.set)
+		require.Nil(t, req.QuotaResetSourceAccountID.value)
+	})
+
+	t.Run("account id is preserved", func(t *testing.T) {
+		var req UpdateGroupRequest
+		require.NoError(t, json.Unmarshal([]byte(`{"quota_reset_source_account_id":42}`), &req))
+		require.True(t, req.QuotaResetSourceAccountID.set)
+		require.Equal(t, int64(42), *req.QuotaResetSourceAccountID.value)
+	})
+}

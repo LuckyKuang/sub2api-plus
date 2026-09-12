@@ -5,6 +5,11 @@ Moderation and Prompt Audit. The shared implementation is
 `backend/internal/auditcontent`; protocol handlers and account paths must not
 maintain alternate text extractors.
 
+Usage timing observers are separate from this ingress extraction contract.
+Classifying upstream `compaction`/`compaction_summary` output for timing does not
+add an ingress extraction rule, policy decision, or audit bypass. Encrypted
+compact output is not treated as a text-token delta; see [usage timing](USAGE_TIMING.md).
+
 ## Boundary And Ordering
 
 Every accepted HTTP request, WebSocket turn, and Live Sideband client frame
@@ -15,6 +20,13 @@ request validation, but before:
 2. billing, quota reservation, or concurrency acquisition;
 3. routing, retry, probe, fingerprint, or protocol transformations; and
 4. any upstream request or frame write.
+
+Responses WebSocket connection leases also follow this ordering: upgrade and
+first-message syntax/model validation precede first-turn audit, and Redis ingress
+capacity is acquired only after audit permits the turn. Rejected or malformed
+first frames never reserve a lease. The first-message deadline bounds sockets
+awaiting content. After acquisition, renewal and release cover the remaining
+connection lifetime; subsequent frames still cross the canonical audit hook.
 
 Session affinity, account type, inbound role labels, envelope `type` values,
 and protocol adapters cannot bypass the audit hook. Extraction remains
@@ -284,3 +296,21 @@ the same change and provide all of the following evidence:
 
 Route-call presence or static source-order assertions alone do not prove
 content coverage.
+
+## Upstream v0.2.4 integration
+
+Group `model_allowlist` admission uses the client model before account/channel
+mapping and does not replace content audit. Root route aliases and Plus batch
+and asynchronous image endpoints retain the same audit ordering as `/v1`.
+WebSocket follow-up `response.create` calls invoke `BeforeRequest` for canonical
+audit before `BeforeTurn` acquires resources; each turn invokes that acquisition
+hook once. Unknown valid frames still reach the audit hook and pass extraction
+without an audit-derived rejection. A real policy rejection prevents upstream
+writes, including for successfully extracted content alongside unknown fields.
+
+Named function/custom-tool inputs, allowed-tools metadata and terminal `done`
+argument reconstruction do not introduce a separate extractor. If reconstructed
+output returns as a later request, it follows the same shared extraction matrix
+for both engines. Metadata that is not extractable content remains pass-through;
+known sibling inputs remain auditable. Extraction/evaluation/dependency exceptions
+retain the structured diagnostics and non-blocking behavior specified above.

@@ -136,12 +136,39 @@ var codexCLIOnlyDebugHeaderWhitelist = []string{
 type OpenAICodexUsageSnapshot struct {
 	PrimaryUsedPercent          *float64 `json:"primary_used_percent,omitempty"`
 	PrimaryResetAfterSeconds    *int     `json:"primary_reset_after_seconds,omitempty"`
+	PrimaryResetAtUnix          *int64   `json:"primary_reset_at_unix,omitempty"`
 	PrimaryWindowMinutes        *int     `json:"primary_window_minutes,omitempty"`
 	SecondaryUsedPercent        *float64 `json:"secondary_used_percent,omitempty"`
 	SecondaryResetAfterSeconds  *int     `json:"secondary_reset_after_seconds,omitempty"`
+	SecondaryResetAtUnix        *int64   `json:"secondary_reset_at_unix,omitempty"`
 	SecondaryWindowMinutes      *int     `json:"secondary_window_minutes,omitempty"`
 	PrimaryOverSecondaryPercent *float64 `json:"primary_over_secondary_percent,omitempty"`
 	UpdatedAt                   string   `json:"updated_at,omitempty"`
+}
+
+const openAIWeeklyQuotaWindowMinutes = 7 * 24 * 60
+
+func isOpenAIWeeklyQuotaWindowMinutes(minutes int64) bool {
+	// Only the explicit 7-day window can drive weekly group resets.
+	return minutes == openAIWeeklyQuotaWindowMinutes
+}
+
+func (s *OpenAICodexUsageSnapshot) WeeklyResetAt() (time.Time, bool) {
+	if s == nil {
+		return time.Time{}, false
+	}
+	if s.PrimaryWindowMinutes != nil && isOpenAIWeeklyQuotaWindowMinutes(int64(*s.PrimaryWindowMinutes)) && s.PrimaryResetAtUnix != nil && validOpenAIQuotaResetUnix(*s.PrimaryResetAtUnix) {
+		return time.Unix(*s.PrimaryResetAtUnix, 0).UTC(), true
+	}
+	if s.SecondaryWindowMinutes != nil && isOpenAIWeeklyQuotaWindowMinutes(int64(*s.SecondaryWindowMinutes)) && s.SecondaryResetAtUnix != nil && validOpenAIQuotaResetUnix(*s.SecondaryResetAtUnix) {
+		return time.Unix(*s.SecondaryResetAtUnix, 0).UTC(), true
+	}
+	return time.Time{}, false
+}
+
+func validOpenAIQuotaResetUnix(value int64) bool {
+	// Keep raw upstream timestamps within the JSON/RFC3339 calendar range.
+	return value > 0 && value <= 253402300799
 }
 
 // NormalizedCodexLimits contains normalized 5h/7d rate limit data
@@ -282,14 +309,16 @@ type OpenAIForwardResult struct {
 	OpenAIWSMode             bool
 	// UpstreamTerminalEvent is the normalized terminal event observed on an
 	// upstream Responses WebSocket turn. Empty preserves legacy/non-WS success.
-	UpstreamTerminalEvent       string
-	ResponseHeaders             http.Header
-	Duration                    time.Duration
-	FirstTokenMs                *int
-	LastTokenMs                 *int
-	FirstOutputMs               *int
-	FirstOutputKind             string
-	ClientDisconnect            bool
+	UpstreamTerminalEvent string
+	ResponseHeaders       http.Header
+	Duration              time.Duration
+	FirstTokenMs          *int
+	LastTokenMs           *int
+	FirstOutputMs         *int
+	FirstOutputKind       string
+	ClientDisconnect      bool
+	// UsageIncomplete excludes synthesized completion after truncated/error upstream streams from TPS.
+	UsageIncomplete             bool
 	ClientDisconnectUsageSource string
 	ImageCount                  int
 	ImageSize                   string
@@ -334,7 +363,7 @@ func (r *OpenAIForwardResult) SucceededForScheduling() bool {
 // metrics. Billing may still record partial usage after an interrupted stream,
 // but those records must never drive TPS.
 func (r *OpenAIForwardResult) UsageComplete() bool {
-	if r == nil || r.ClientDisconnect {
+	if r == nil || r.ClientDisconnect || r.UsageIncomplete {
 		return false
 	}
 	if !r.Stream || !r.OpenAIWSMode {
@@ -512,7 +541,7 @@ type OpenAIGatewayService struct {
 	openaiWSRetryMetrics                openAIWSRetryMetrics
 	responseHeaderFilter                *responseheaders.CompiledHeaderFilter
 	codexSnapshotThrottle               *accountWriteThrottle
-	codexModelsManifestCache            codexModelsManifestCache
+	openAIModelsCache                   openAIModelsCache
 	openaiCompatSessionResponses        sync.Map
 	openaiCompatAnthropicDigestSessions sync.Map
 	// openaiCodexTurnStateOrigins: 下游会话 seed → openAICodexTurnStateOrigin，

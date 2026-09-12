@@ -366,6 +366,102 @@ func (_u *GroupUpdate) AddDefaultValidityDays(v int) *GroupUpdate {
 	return _u
 }
 
+// SetQuotaResetSourceAccountID sets the "quota_reset_source_account_id" field.
+func (_u *GroupUpdate) SetQuotaResetSourceAccountID(v int64) *GroupUpdate {
+	_u.mutation.ResetQuotaResetSourceAccountID()
+	_u.mutation.SetQuotaResetSourceAccountID(v)
+	return _u
+}
+
+// SetNillableQuotaResetSourceAccountID sets the "quota_reset_source_account_id" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableQuotaResetSourceAccountID(v *int64) *GroupUpdate {
+	if v != nil {
+		_u.SetQuotaResetSourceAccountID(*v)
+	}
+	return _u
+}
+
+// AddQuotaResetSourceAccountID adds value to the "quota_reset_source_account_id" field.
+func (_u *GroupUpdate) AddQuotaResetSourceAccountID(v int64) *GroupUpdate {
+	_u.mutation.AddQuotaResetSourceAccountID(v)
+	return _u
+}
+
+// ClearQuotaResetSourceAccountID clears the value of the "quota_reset_source_account_id" field.
+func (_u *GroupUpdate) ClearQuotaResetSourceAccountID() *GroupUpdate {
+	_u.mutation.ClearQuotaResetSourceAccountID()
+	return _u
+}
+
+// SetQuotaResetSourceAccountName sets the "quota_reset_source_account_name" field.
+func (_u *GroupUpdate) SetQuotaResetSourceAccountName(v string) *GroupUpdate {
+	_u.mutation.SetQuotaResetSourceAccountName(v)
+	return _u
+}
+
+// SetNillableQuotaResetSourceAccountName sets the "quota_reset_source_account_name" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableQuotaResetSourceAccountName(v *string) *GroupUpdate {
+	if v != nil {
+		_u.SetQuotaResetSourceAccountName(*v)
+	}
+	return _u
+}
+
+// SetQuotaResetSourceResetAt sets the "quota_reset_source_reset_at" field.
+func (_u *GroupUpdate) SetQuotaResetSourceResetAt(v time.Time) *GroupUpdate {
+	_u.mutation.SetQuotaResetSourceResetAt(v)
+	return _u
+}
+
+// SetNillableQuotaResetSourceResetAt sets the "quota_reset_source_reset_at" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableQuotaResetSourceResetAt(v *time.Time) *GroupUpdate {
+	if v != nil {
+		_u.SetQuotaResetSourceResetAt(*v)
+	}
+	return _u
+}
+
+// ClearQuotaResetSourceResetAt clears the value of the "quota_reset_source_reset_at" field.
+func (_u *GroupUpdate) ClearQuotaResetSourceResetAt() *GroupUpdate {
+	_u.mutation.ClearQuotaResetSourceResetAt()
+	return _u
+}
+
+// SetQuotaResetIncludeMonthly sets the "quota_reset_include_monthly" field.
+func (_u *GroupUpdate) SetQuotaResetIncludeMonthly(v bool) *GroupUpdate {
+	_u.mutation.SetQuotaResetIncludeMonthly(v)
+	return _u
+}
+
+// SetNillableQuotaResetIncludeMonthly sets the "quota_reset_include_monthly" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableQuotaResetIncludeMonthly(v *bool) *GroupUpdate {
+	if v != nil {
+		_u.SetQuotaResetIncludeMonthly(*v)
+	}
+	return _u
+}
+
+// SetQuotaResetConfigVersion sets the "quota_reset_config_version" field.
+func (_u *GroupUpdate) SetQuotaResetConfigVersion(v int64) *GroupUpdate {
+	_u.mutation.ResetQuotaResetConfigVersion()
+	_u.mutation.SetQuotaResetConfigVersion(v)
+	return _u
+}
+
+// SetNillableQuotaResetConfigVersion sets the "quota_reset_config_version" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableQuotaResetConfigVersion(v *int64) *GroupUpdate {
+	if v != nil {
+		_u.SetQuotaResetConfigVersion(*v)
+	}
+	return _u
+}
+
+// AddQuotaResetConfigVersion adds value to the "quota_reset_config_version" field.
+func (_u *GroupUpdate) AddQuotaResetConfigVersion(v int64) *GroupUpdate {
+	_u.mutation.AddQuotaResetConfigVersion(v)
+	return _u
+}
+
 // SetAllowImageGeneration sets the "allow_image_generation" field.
 func (_u *GroupUpdate) SetAllowImageGeneration(v bool) *GroupUpdate {
 	_u.mutation.SetAllowImageGeneration(v)
@@ -1100,16 +1196,16 @@ func (_u *GroupUpdate) SetNillableMessagesDispatchModelConfig(v *domain.OpenAIMe
 	return _u
 }
 
-// SetModelsListConfig sets the "models_list_config" field.
-func (_u *GroupUpdate) SetModelsListConfig(v domain.GroupModelsListConfig) *GroupUpdate {
-	_u.mutation.SetModelsListConfig(v)
+// SetModelAllowlist sets the "model_allowlist" field.
+func (_u *GroupUpdate) SetModelAllowlist(v domain.GroupModelAllowlist) *GroupUpdate {
+	_u.mutation.SetModelAllowlist(v)
 	return _u
 }
 
-// SetNillableModelsListConfig sets the "models_list_config" field if the given value is not nil.
-func (_u *GroupUpdate) SetNillableModelsListConfig(v *domain.GroupModelsListConfig) *GroupUpdate {
+// SetNillableModelAllowlist sets the "model_allowlist" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableModelAllowlist(v *domain.GroupModelAllowlist) *GroupUpdate {
 	if v != nil {
-		_u.SetModelsListConfig(*v)
+		_u.SetModelAllowlist(*v)
 	}
 	return _u
 }
@@ -1540,6 +1636,11 @@ func (_u *GroupUpdate) check() error {
 			return &ValidationError{Name: "subscription_type", err: fmt.Errorf(`ent: validator failed for field "Group.subscription_type": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.QuotaResetSourceAccountName(); ok {
+		if err := group.QuotaResetSourceAccountNameValidator(v); err != nil {
+			return &ValidationError{Name: "quota_reset_source_account_name", err: fmt.Errorf(`ent: validator failed for field "Group.quota_reset_source_account_name": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.SearchPricePer1k(); ok {
 		if err := group.SearchPricePer1kValidator(v); err != nil {
 			return &ValidationError{Name: "search_price_per_1k", err: fmt.Errorf(`ent: validator failed for field "Group.search_price_per_1k": %w`, err)}
@@ -1685,6 +1786,33 @@ func (_u *GroupUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.AddedDefaultValidityDays(); ok {
 		_spec.AddField(group.FieldDefaultValidityDays, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.QuotaResetSourceAccountID(); ok {
+		_spec.SetField(group.FieldQuotaResetSourceAccountID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedQuotaResetSourceAccountID(); ok {
+		_spec.AddField(group.FieldQuotaResetSourceAccountID, field.TypeInt64, value)
+	}
+	if _u.mutation.QuotaResetSourceAccountIDCleared() {
+		_spec.ClearField(group.FieldQuotaResetSourceAccountID, field.TypeInt64)
+	}
+	if value, ok := _u.mutation.QuotaResetSourceAccountName(); ok {
+		_spec.SetField(group.FieldQuotaResetSourceAccountName, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.QuotaResetSourceResetAt(); ok {
+		_spec.SetField(group.FieldQuotaResetSourceResetAt, field.TypeTime, value)
+	}
+	if _u.mutation.QuotaResetSourceResetAtCleared() {
+		_spec.ClearField(group.FieldQuotaResetSourceResetAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.QuotaResetIncludeMonthly(); ok {
+		_spec.SetField(group.FieldQuotaResetIncludeMonthly, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.QuotaResetConfigVersion(); ok {
+		_spec.SetField(group.FieldQuotaResetConfigVersion, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedQuotaResetConfigVersion(); ok {
+		_spec.AddField(group.FieldQuotaResetConfigVersion, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.AllowImageGeneration(); ok {
 		_spec.SetField(group.FieldAllowImageGeneration, field.TypeBool, value)
@@ -1912,8 +2040,8 @@ func (_u *GroupUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.MessagesDispatchModelConfig(); ok {
 		_spec.SetField(group.FieldMessagesDispatchModelConfig, field.TypeJSON, value)
 	}
-	if value, ok := _u.mutation.ModelsListConfig(); ok {
-		_spec.SetField(group.FieldModelsListConfig, field.TypeJSON, value)
+	if value, ok := _u.mutation.ModelAllowlist(); ok {
+		_spec.SetField(group.FieldModelAllowlist, field.TypeJSON, value)
 	}
 	if value, ok := _u.mutation.CodexModelsManifestConfig(); ok {
 		_spec.SetField(group.FieldCodexModelsManifestConfig, field.TypeJSON, value)
@@ -2593,6 +2721,102 @@ func (_u *GroupUpdateOne) SetNillableDefaultValidityDays(v *int) *GroupUpdateOne
 // AddDefaultValidityDays adds value to the "default_validity_days" field.
 func (_u *GroupUpdateOne) AddDefaultValidityDays(v int) *GroupUpdateOne {
 	_u.mutation.AddDefaultValidityDays(v)
+	return _u
+}
+
+// SetQuotaResetSourceAccountID sets the "quota_reset_source_account_id" field.
+func (_u *GroupUpdateOne) SetQuotaResetSourceAccountID(v int64) *GroupUpdateOne {
+	_u.mutation.ResetQuotaResetSourceAccountID()
+	_u.mutation.SetQuotaResetSourceAccountID(v)
+	return _u
+}
+
+// SetNillableQuotaResetSourceAccountID sets the "quota_reset_source_account_id" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableQuotaResetSourceAccountID(v *int64) *GroupUpdateOne {
+	if v != nil {
+		_u.SetQuotaResetSourceAccountID(*v)
+	}
+	return _u
+}
+
+// AddQuotaResetSourceAccountID adds value to the "quota_reset_source_account_id" field.
+func (_u *GroupUpdateOne) AddQuotaResetSourceAccountID(v int64) *GroupUpdateOne {
+	_u.mutation.AddQuotaResetSourceAccountID(v)
+	return _u
+}
+
+// ClearQuotaResetSourceAccountID clears the value of the "quota_reset_source_account_id" field.
+func (_u *GroupUpdateOne) ClearQuotaResetSourceAccountID() *GroupUpdateOne {
+	_u.mutation.ClearQuotaResetSourceAccountID()
+	return _u
+}
+
+// SetQuotaResetSourceAccountName sets the "quota_reset_source_account_name" field.
+func (_u *GroupUpdateOne) SetQuotaResetSourceAccountName(v string) *GroupUpdateOne {
+	_u.mutation.SetQuotaResetSourceAccountName(v)
+	return _u
+}
+
+// SetNillableQuotaResetSourceAccountName sets the "quota_reset_source_account_name" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableQuotaResetSourceAccountName(v *string) *GroupUpdateOne {
+	if v != nil {
+		_u.SetQuotaResetSourceAccountName(*v)
+	}
+	return _u
+}
+
+// SetQuotaResetSourceResetAt sets the "quota_reset_source_reset_at" field.
+func (_u *GroupUpdateOne) SetQuotaResetSourceResetAt(v time.Time) *GroupUpdateOne {
+	_u.mutation.SetQuotaResetSourceResetAt(v)
+	return _u
+}
+
+// SetNillableQuotaResetSourceResetAt sets the "quota_reset_source_reset_at" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableQuotaResetSourceResetAt(v *time.Time) *GroupUpdateOne {
+	if v != nil {
+		_u.SetQuotaResetSourceResetAt(*v)
+	}
+	return _u
+}
+
+// ClearQuotaResetSourceResetAt clears the value of the "quota_reset_source_reset_at" field.
+func (_u *GroupUpdateOne) ClearQuotaResetSourceResetAt() *GroupUpdateOne {
+	_u.mutation.ClearQuotaResetSourceResetAt()
+	return _u
+}
+
+// SetQuotaResetIncludeMonthly sets the "quota_reset_include_monthly" field.
+func (_u *GroupUpdateOne) SetQuotaResetIncludeMonthly(v bool) *GroupUpdateOne {
+	_u.mutation.SetQuotaResetIncludeMonthly(v)
+	return _u
+}
+
+// SetNillableQuotaResetIncludeMonthly sets the "quota_reset_include_monthly" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableQuotaResetIncludeMonthly(v *bool) *GroupUpdateOne {
+	if v != nil {
+		_u.SetQuotaResetIncludeMonthly(*v)
+	}
+	return _u
+}
+
+// SetQuotaResetConfigVersion sets the "quota_reset_config_version" field.
+func (_u *GroupUpdateOne) SetQuotaResetConfigVersion(v int64) *GroupUpdateOne {
+	_u.mutation.ResetQuotaResetConfigVersion()
+	_u.mutation.SetQuotaResetConfigVersion(v)
+	return _u
+}
+
+// SetNillableQuotaResetConfigVersion sets the "quota_reset_config_version" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableQuotaResetConfigVersion(v *int64) *GroupUpdateOne {
+	if v != nil {
+		_u.SetQuotaResetConfigVersion(*v)
+	}
+	return _u
+}
+
+// AddQuotaResetConfigVersion adds value to the "quota_reset_config_version" field.
+func (_u *GroupUpdateOne) AddQuotaResetConfigVersion(v int64) *GroupUpdateOne {
+	_u.mutation.AddQuotaResetConfigVersion(v)
 	return _u
 }
 
@@ -3330,16 +3554,16 @@ func (_u *GroupUpdateOne) SetNillableMessagesDispatchModelConfig(v *domain.OpenA
 	return _u
 }
 
-// SetModelsListConfig sets the "models_list_config" field.
-func (_u *GroupUpdateOne) SetModelsListConfig(v domain.GroupModelsListConfig) *GroupUpdateOne {
-	_u.mutation.SetModelsListConfig(v)
+// SetModelAllowlist sets the "model_allowlist" field.
+func (_u *GroupUpdateOne) SetModelAllowlist(v domain.GroupModelAllowlist) *GroupUpdateOne {
+	_u.mutation.SetModelAllowlist(v)
 	return _u
 }
 
-// SetNillableModelsListConfig sets the "models_list_config" field if the given value is not nil.
-func (_u *GroupUpdateOne) SetNillableModelsListConfig(v *domain.GroupModelsListConfig) *GroupUpdateOne {
+// SetNillableModelAllowlist sets the "model_allowlist" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableModelAllowlist(v *domain.GroupModelAllowlist) *GroupUpdateOne {
 	if v != nil {
-		_u.SetModelsListConfig(*v)
+		_u.SetModelAllowlist(*v)
 	}
 	return _u
 }
@@ -3783,6 +4007,11 @@ func (_u *GroupUpdateOne) check() error {
 			return &ValidationError{Name: "subscription_type", err: fmt.Errorf(`ent: validator failed for field "Group.subscription_type": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.QuotaResetSourceAccountName(); ok {
+		if err := group.QuotaResetSourceAccountNameValidator(v); err != nil {
+			return &ValidationError{Name: "quota_reset_source_account_name", err: fmt.Errorf(`ent: validator failed for field "Group.quota_reset_source_account_name": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.SearchPricePer1k(); ok {
 		if err := group.SearchPricePer1kValidator(v); err != nil {
 			return &ValidationError{Name: "search_price_per_1k", err: fmt.Errorf(`ent: validator failed for field "Group.search_price_per_1k": %w`, err)}
@@ -3945,6 +4174,33 @@ func (_u *GroupUpdateOne) sqlSave(ctx context.Context) (_node *Group, err error)
 	}
 	if value, ok := _u.mutation.AddedDefaultValidityDays(); ok {
 		_spec.AddField(group.FieldDefaultValidityDays, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.QuotaResetSourceAccountID(); ok {
+		_spec.SetField(group.FieldQuotaResetSourceAccountID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedQuotaResetSourceAccountID(); ok {
+		_spec.AddField(group.FieldQuotaResetSourceAccountID, field.TypeInt64, value)
+	}
+	if _u.mutation.QuotaResetSourceAccountIDCleared() {
+		_spec.ClearField(group.FieldQuotaResetSourceAccountID, field.TypeInt64)
+	}
+	if value, ok := _u.mutation.QuotaResetSourceAccountName(); ok {
+		_spec.SetField(group.FieldQuotaResetSourceAccountName, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.QuotaResetSourceResetAt(); ok {
+		_spec.SetField(group.FieldQuotaResetSourceResetAt, field.TypeTime, value)
+	}
+	if _u.mutation.QuotaResetSourceResetAtCleared() {
+		_spec.ClearField(group.FieldQuotaResetSourceResetAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.QuotaResetIncludeMonthly(); ok {
+		_spec.SetField(group.FieldQuotaResetIncludeMonthly, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.QuotaResetConfigVersion(); ok {
+		_spec.SetField(group.FieldQuotaResetConfigVersion, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedQuotaResetConfigVersion(); ok {
+		_spec.AddField(group.FieldQuotaResetConfigVersion, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.AllowImageGeneration(); ok {
 		_spec.SetField(group.FieldAllowImageGeneration, field.TypeBool, value)
@@ -4172,8 +4428,8 @@ func (_u *GroupUpdateOne) sqlSave(ctx context.Context) (_node *Group, err error)
 	if value, ok := _u.mutation.MessagesDispatchModelConfig(); ok {
 		_spec.SetField(group.FieldMessagesDispatchModelConfig, field.TypeJSON, value)
 	}
-	if value, ok := _u.mutation.ModelsListConfig(); ok {
-		_spec.SetField(group.FieldModelsListConfig, field.TypeJSON, value)
+	if value, ok := _u.mutation.ModelAllowlist(); ok {
+		_spec.SetField(group.FieldModelAllowlist, field.TypeJSON, value)
 	}
 	if value, ok := _u.mutation.CodexModelsManifestConfig(); ok {
 		_spec.SetField(group.FieldCodexModelsManifestConfig, field.TypeJSON, value)

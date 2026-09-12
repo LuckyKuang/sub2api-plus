@@ -4099,7 +4099,7 @@
                     {{ t("admin.settings.defaults.platformQuotaNotice") }}
                   </p>
                 </div>
-                <div class="overflow-x-auto">
+                <div class="table-container overflow-x-auto">
                   <table class="min-w-full text-sm">
                     <thead>
                       <tr class="text-left text-xs text-gray-500 dark:text-gray-400">
@@ -4434,7 +4434,7 @@
                           {{ t("admin.settings.authSourceDefaults.platformQuotasOverrideHint") }}
                         </p>
                       </div>
-                      <div class="overflow-x-auto">
+                      <div class="table-container overflow-x-auto">
                         <table class="min-w-full text-sm">
                           <thead>
                             <tr class="text-left text-xs text-gray-500 dark:text-gray-400">
@@ -5216,32 +5216,6 @@
                     {{ t("admin.settings.gatewayForwarding.grokDefaultBaseURLModeHint") }}
                   </p>
                 </div>
-
-              <!-- OpenAI Responses 首 token 统计 -->
-              <div class="border-b border-gray-100 pb-5 dark:border-dark-700 md:col-span-2">
-                <label
-                  for="openai-ttft-mode"
-                  class="text-sm font-medium text-gray-700 dark:text-gray-300"
-                >
-                  {{ t("admin.settings.gatewayForwarding.openaiTTFTMode") }}
-                </label>
-                <select
-                  id="openai-ttft-mode"
-                  v-model="form.openai_ttft_mode"
-                  class="input mt-2 w-full"
-                  data-testid="openai-ttft-mode"
-                >
-                  <option value="semantic">
-                    {{ t("admin.settings.gatewayForwarding.openaiTTFTModeSemantic") }}
-                  </option>
-                  <option value="visible">
-                    {{ t("admin.settings.gatewayForwarding.openaiTTFTModeVisible") }}
-                  </option>
-                </select>
-                <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
-                  {{ t("admin.settings.gatewayForwarding.openaiTTFTModeHint") }}
-                </p>
-              </div>
 
               <!-- Fingerprint Unification -->
               <div class="flex items-center justify-between">
@@ -6249,10 +6223,10 @@
                   {{ t('admin.settings.user_error_view.description') }}
                 </p>
               </div>
-              <label class="toggle">
-                <input v-model="form.allow_user_view_error_requests" type="checkbox" />
-                <span class="toggle-slider"></span>
-              </label>
+              <Toggle
+                v-model="form.allow_user_view_error_requests"
+                :aria-label="t('admin.settings.user_error_view.label')"
+              />
             </div>
           </div>
         </div>
@@ -7117,16 +7091,29 @@
                 </p>
               </div>
 
-              <div v-if="form.channel_monitor_mode === 'v2'" class="flex items-start justify-between gap-4">
-                <div class="min-w-0">
-                  <p class="text-sm font-medium text-gray-900 dark:text-white">
-                    {{ t('admin.settings.features.channelMonitor.hideThroughput') }}
-                  </p>
-                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    {{ t('admin.settings.features.channelMonitor.hideThroughputHint') }}
-                  </p>
+              <div v-if="form.channel_monitor_mode === 'v2'" class="space-y-4">
+                <div class="flex items-start justify-between gap-4">
+                  <div class="min-w-0">
+                    <p class="text-sm font-medium text-gray-900 dark:text-white">
+                      {{ t('admin.settings.features.channelMonitor.hideThroughput') }}
+                    </p>
+                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      {{ t('admin.settings.features.channelMonitor.hideThroughputHint') }}
+                    </p>
+                  </div>
+                  <Toggle v-model="form.channel_monitor_hide_throughput" />
                 </div>
-                <Toggle v-model="form.channel_monitor_hide_throughput" />
+                <div class="flex items-start justify-between gap-4">
+                  <div class="min-w-0">
+                    <p class="text-sm font-medium text-gray-900 dark:text-white">
+                      {{ t('admin.settings.features.channelMonitor.hideUserRanking') }}
+                    </p>
+                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      {{ t('admin.settings.features.channelMonitor.hideUserRankingHint') }}
+                    </p>
+                  </div>
+                  <Toggle v-model="form.channel_monitor_hide_user_ranking" />
+                </div>
               </div>
 
               <div v-if="form.channel_monitor_mode === 'v1'" class="flex items-start justify-between gap-4">
@@ -7564,7 +7551,7 @@
                   </table>
                 </div>
 
-                <div v-if="affiliateState.total > affiliateState.pageSize" class="mt-3 flex items-center justify-between text-sm">
+                <div v-if="affiliateState.total > affiliateState.pageSize" class="pagination-card card mt-3 flex items-center justify-between px-4 py-3 text-sm">
                   <span class="text-gray-500">
                     {{ t('admin.settings.features.affiliate.customUsers.totalLabel', { total: affiliateState.total }) }}
                   </span>
@@ -8069,28 +8056,9 @@
                       t("admin.settings.payment.cancelRateLimit")
                     }}</label>
                     <div class="flex items-center gap-2">
-                      <button
-                        type="button"
-                        :class="[
-                          'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
-                          form.payment_cancel_rate_limit_enabled
-                            ? 'bg-primary-500'
-                            : 'bg-gray-300 dark:bg-dark-600',
-                        ]"
-                        @click="
-                          form.payment_cancel_rate_limit_enabled =
-                            !form.payment_cancel_rate_limit_enabled
-                        "
-                      >
-                        <span
-                          :class="[
-                            'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
-                            form.payment_cancel_rate_limit_enabled
-                              ? 'translate-x-5'
-                              : 'translate-x-0',
-                          ]"
-                        />
-                      </button>
+                      <Toggle
+                        v-model="form.payment_cancel_rate_limit_enabled"
+                      />
                       <Select
                         v-model="form.payment_cancel_rate_limit_window_mode"
                         :options="cancelRateLimitModeOptions"
@@ -8159,28 +8127,10 @@
                       t("admin.settings.payment.alipayForceQRCode")
                     }}</label>
                     <div class="flex items-center gap-2">
-                      <button
-                        type="button"
-                        :class="[
-                          'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
-                          form.payment_alipay_force_qrcode
-                            ? 'bg-primary-500'
-                            : 'bg-gray-300 dark:bg-dark-600',
-                        ]"
-                        @click="
-                          form.payment_alipay_force_qrcode =
-                            !form.payment_alipay_force_qrcode
-                        "
-                      >
-                        <span
-                          :class="[
-                            'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
-                            form.payment_alipay_force_qrcode
-                              ? 'translate-x-5'
-                              : 'translate-x-0',
-                          ]"
-                        />
-                      </button>
+                      <Toggle
+                        :model-value="!!form.payment_alipay_force_qrcode"
+                        @update:model-value="form.payment_alipay_force_qrcode = $event"
+                      />
                       <span class="text-sm text-gray-500 dark:text-gray-400">{{
                         t("admin.settings.payment.alipayForceQRCodeHint")
                       }}</span>
@@ -8191,28 +8141,10 @@
                       t("admin.settings.payment.alipayMobilePrecreateDeepLink")
                     }}</label>
                     <div class="flex items-center gap-2">
-                      <button
-                        type="button"
-                        :class="[
-                          'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
-                          form.payment_alipay_mobile_precreate_deep_link
-                            ? 'bg-primary-500'
-                            : 'bg-gray-300 dark:bg-dark-600',
-                        ]"
-                        @click="
-                          form.payment_alipay_mobile_precreate_deep_link =
-                            !form.payment_alipay_mobile_precreate_deep_link
-                        "
-                      >
-                        <span
-                          :class="[
-                            'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
-                            form.payment_alipay_mobile_precreate_deep_link
-                              ? 'translate-x-5'
-                              : 'translate-x-0',
-                          ]"
-                        />
-                      </button>
+                      <Toggle
+                        :model-value="!!form.payment_alipay_mobile_precreate_deep_link"
+                        @update:model-value="form.payment_alipay_mobile_precreate_deep_link = $event"
+                      />
                       <span class="text-sm text-gray-500 dark:text-gray-400">{{
                         t("admin.settings.payment.alipayMobilePrecreateDeepLinkHint")
                       }}</span>
@@ -8692,19 +8624,7 @@
                     :key="index"
                     class="flex items-center gap-2"
                   >
-                    <label
-                      class="relative inline-flex items-center cursor-pointer shrink-0"
-                    >
-                      <input
-                        type="checkbox"
-                        :checked="!entry.disabled"
-                        @change="entry.disabled = !entry.disabled"
-                        class="sr-only peer"
-                      />
-                      <div
-                        class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:after:border-gray-500 peer-checked:bg-primary-600"
-                      ></div>
-                    </label>
+                    <Toggle :model-value="!entry.disabled" :aria-label="entry.email" @update:model-value="entry.disabled = !$event" />
                     <input
                       v-model="entry.email"
                       type="email"
@@ -9529,6 +9449,7 @@ type SettingsForm = Omit<
   /** Form always binds a concrete boolean (SystemSettings marks this optional). */
   channel_monitor_hide_throughput: boolean;
   channel_monitor_show_quota: boolean;
+  channel_monitor_hide_user_ranking: boolean;
   smtp_password: string;
   turnstile_secret_key: string;
   tencent_captcha_app_secret_key: string;
@@ -9811,7 +9732,6 @@ const form = reactive<SettingsForm>({
   openai_advanced_scheduler_weight_previous_response: "",
   openai_advanced_scheduler_weight_session_sticky: "",
   // Gateway forwarding behavior
-  openai_ttft_mode: "semantic",
   enable_fingerprint_unification: true,
   enable_metadata_passthrough: false,
   enable_cch_signing: false,
@@ -9853,6 +9773,7 @@ const form = reactive<SettingsForm>({
   channel_monitor_default_interval_seconds: 60,
   channel_monitor_hide_throughput: false,
   channel_monitor_show_quota: false,
+  channel_monitor_hide_user_ranking: false,
   // Available Channels feature switch
   available_channels_enabled: false,
   // Model Plaza feature switches + description
@@ -10958,6 +10879,9 @@ async function loadSettings() {
     form.channel_monitor_show_quota = Boolean(
       settings.channel_monitor_show_quota
     );
+    form.channel_monitor_hide_user_ranking = Boolean(
+      settings.channel_monitor_hide_user_ranking
+    );
     form.login_agreement_updated_at =
       settings.login_agreement_updated_at || "2026-03-31";
     form.login_agreement_documents =
@@ -11492,8 +11416,6 @@ async function saveSettings() {
       min_claude_code_version: form.min_claude_code_version,
       max_claude_code_version: form.max_claude_code_version,
       allow_ungrouped_key_scheduling: form.allow_ungrouped_key_scheduling,
-      openai_ttft_mode:
-        form.openai_ttft_mode === "visible" ? "visible" : "semantic",
       enable_fingerprint_unification: form.enable_fingerprint_unification,
       enable_metadata_passthrough: form.enable_metadata_passthrough,
       enable_cch_signing: form.enable_cch_signing,
@@ -11625,6 +11547,7 @@ async function saveSettings() {
         Number(form.channel_monitor_default_interval_seconds) || 60,
       channel_monitor_hide_throughput: Boolean(form.channel_monitor_hide_throughput),
       channel_monitor_show_quota: Boolean(form.channel_monitor_show_quota),
+      channel_monitor_hide_user_ranking: Boolean(form.channel_monitor_hide_user_ranking),
       // Available Channels feature switch
       available_channels_enabled: form.available_channels_enabled,
       // Model Plaza feature switches + description
@@ -13083,10 +13006,10 @@ watch(
 
 /* ============ 系统设置 Tab 导航 ============ */
 .settings-tabs-shell {
-  @apply sticky z-20 -mx-1 rounded-2xl border border-white/80 bg-white/90 p-1.5 backdrop-blur-xl;
+  @apply sticky z-20 -mx-1 rounded-2xl border border-gray-200 bg-white p-1.5;
   top: 4.75rem;
   box-shadow:
-    0 12px 28px rgb(15 23 42 / 0.07),
+    0 12px 28px rgb(0 0 0 / 0.07),
     0 1px 0 rgb(255 255 255 / 0.9) inset;
 }
 
@@ -13125,7 +13048,7 @@ watch(
 .settings-tab::before {
   @apply absolute inset-0 -z-10 rounded-xl opacity-0 transition-opacity duration-200;
   content: "";
-  background: linear-gradient(135deg, rgb(248 250 252 / 0.95), rgb(241 245 249 / 0.8));
+  background: theme('colors.gray.100');
 }
 
 .settings-tab:hover::before,
@@ -13140,7 +13063,7 @@ watch(
 .settings-tab-active {
   @apply border-primary-200/80 bg-white text-primary-700 shadow-sm dark:border-primary-400/30 dark:bg-dark-700/95 dark:text-primary-200;
   box-shadow:
-    0 8px 18px rgb(15 23 42 / 0.08),
+    0 8px 18px rgb(0 0 0 / 0.08),
     0 1px 0 rgb(255 255 255 / 0.92) inset;
 }
 
@@ -13156,7 +13079,7 @@ watch(
   height: 2px;
   border-radius: 9999px;
   content: "";
-  background: linear-gradient(90deg, #14b8a6, #0ea5e9);
+  background: linear-gradient(90deg, #14b8a6, #2dd4bf);
 }
 
 .settings-tab-icon {
@@ -13182,15 +13105,15 @@ watch(
    because Vue's scoped-CSS compiler was dropping the `:global(.dark) ...`
    rules in the production build, leaving inactive tabs unreadable on dark. */
 .dark .settings-tabs-shell {
-  border-color: rgb(51 65 85 / 0.65);
-  background: rgb(15 23 42 / 0.86);
+  border-color: theme('colors.dark.700');
+  background: theme('colors.dark.800');
   box-shadow:
     0 16px 36px rgb(0 0 0 / 0.28),
     0 1px 0 rgb(255 255 255 / 0.06) inset;
 }
 
 .dark .settings-tab::before {
-  background: linear-gradient(135deg, rgb(30 41 59 / 0.9), rgb(51 65 85 / 0.62));
+  background: theme('colors.dark.700');
 }
 
 .dark .settings-tab-active {

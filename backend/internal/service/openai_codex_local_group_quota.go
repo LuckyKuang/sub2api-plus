@@ -214,3 +214,24 @@ func isDefaultCodexRateLimitEvent(payload []byte) bool {
 	normalized := strings.ReplaceAll(strings.ToLower(limitName), "_", "-")
 	return normalized == "codex"
 }
+
+func observeOpenAIWeeklyResetEvent(ctx context.Context, account *Account, payload []byte) {
+	if account == nil || account.Platform != PlatformOpenAI || account.Type != AccountTypeOAuth || account.ParentAccountID != nil {
+		return
+	}
+	if !gjson.ValidBytes(payload) || strings.TrimSpace(gjson.GetBytes(payload, "type").String()) != "codex.rate_limits" || !isDefaultCodexRateLimitEvent(payload) {
+		return
+	}
+	for _, name := range []string{"primary", "secondary"} {
+		window := gjson.GetBytes(payload, "rate_limits."+name)
+		minutes := window.Get("window_minutes")
+		if minutes.Type != gjson.Number || minutes.Float() != float64(minutes.Int()) || !isOpenAIWeeklyQuotaWindowMinutes(minutes.Int()) {
+			continue
+		}
+		resetAt := window.Get("reset_at")
+		if resetAt.Type == gjson.Number && resetAt.Float() == float64(resetAt.Int()) && validOpenAIQuotaResetUnix(resetAt.Int()) {
+			ObserveOpenAIWeeklyResetAt(ctx, account.ID, time.Unix(resetAt.Int(), 0).UTC())
+			return
+		}
+	}
+}

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	dbent "github.com/LuckyKuang/sub2api-plus/ent"
@@ -504,51 +505,24 @@ func (r *userSubscriptionRepository) translateConditionalWindowReset(ctx context
 // 限额检查已在请求前由 BillingCacheService.CheckBillingEligibility 完成，
 // 此处仅负责记录实际消费，确保消费数据的完整性。
 func (r *userSubscriptionRepository) IncrementUsage(ctx context.Context, id int64, costUSD float64) error {
-	const updateSQL = `
-		UPDATE user_subscriptions us
-		SET
-			daily_usage_usd = us.daily_usage_usd + $1,
-			weekly_usage_usd = us.weekly_usage_usd + $1,
-			monthly_usage_usd = us.monthly_usage_usd + $1,
-			five_hour_usage_usd = CASE
-				WHEN $1 <= 0 THEN us.five_hour_usage_usd
-				WHEN us.five_hour_window_start IS NULL
-					OR us.five_hour_window_start + INTERVAL '5 hours' <= NOW() THEN $1
-				ELSE us.five_hour_usage_usd + $1
-			END,
-			five_hour_window_start = CASE
-				WHEN $1 <= 0 THEN us.five_hour_window_start
-				WHEN us.five_hour_window_start IS NULL
-					OR us.five_hour_window_start + INTERVAL '5 hours' <= NOW() THEN NOW()
-				ELSE us.five_hour_window_start
-			END,
-			-- Keep the cache version strictly monotonic for concurrent legacy-path
-			-- charges as well as the unified billing transaction.
-			updated_at = GREATEST(clock_timestamp(), us.updated_at + INTERVAL '1 microsecond')
-		FROM groups g
-		WHERE us.id = $2
-			AND us.deleted_at IS NULL
-			AND us.group_id = g.id
-			AND g.deleted_at IS NULL
-	`
-
 	client := clientFromContext(ctx, r.client)
-	result, err := client.ExecContext(ctx, updateSQL, costUSD, id)
-	if err != nil {
+	// Reuse caller-owned Ent transactions, including transaction-scoped
+	// repositories, so resets and charges always share the same atomic path.
+	tx, err := client.Tx(ctx)
+	if err != nil && !errors.Is(err, dbent.ErrTxStarted) {
 		return err
 	}
-
-	affected, err := result.RowsAffected()
-	if err != nil {
+	if tx != nil {
+		defer func() { _ = tx.Rollback() }()
+		client = tx.Client()
+	}
+	if err := incrementUsageBillingSubscription(ctx, client, id, costUSD); err != nil {
 		return err
 	}
-
-	if affected > 0 {
-		return nil
+	if tx != nil {
+		return tx.Commit()
 	}
-
-	// affected == 0：订阅不存在或已删除
-	return service.ErrSubscriptionNotFound
+	return nil
 }
 
 func (r *userSubscriptionRepository) BatchUpdateExpiredStatus(ctx context.Context) (int64, error) {

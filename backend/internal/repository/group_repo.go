@@ -8,9 +8,11 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	dbent "github.com/LuckyKuang/sub2api-plus/ent"
 	"github.com/LuckyKuang/sub2api-plus/ent/group"
+	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/logger"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/pagination"
 	"github.com/LuckyKuang/sub2api-plus/internal/service"
@@ -29,6 +31,39 @@ type groupRepository struct {
 	sql    sqlExecutor
 }
 
+// lockLiveGroups makes account-group inserts participate in the same row-lock
+// protocol as guarded group deletion. FOR SHARE conflicts with the deleter's
+// FOR UPDATE lock, and READ COMMITTED rechecks deleted_at after any wait.
+func lockLiveGroups(ctx context.Context, exec sqlExecutor, groupIDs []int64) error {
+	if len(groupIDs) == 0 {
+		return nil
+	}
+	unique := make(map[int64]struct{}, len(groupIDs))
+	for _, id := range groupIDs {
+		unique[id] = struct{}{}
+	}
+	rows, err := exec.QueryContext(ctx, `/* account_group_live_group_lock */
+		SELECT id FROM groups
+		WHERE id = ANY($1) AND deleted_at IS NULL
+		ORDER BY id
+		FOR SHARE`, pq.Array(groupIDs))
+	if err != nil {
+		return err
+	}
+	defer func() { _ = rows.Close() }()
+	locked := 0
+	for rows.Next() {
+		locked++
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if locked != len(unique) {
+		return service.ErrGroupNotFound
+	}
+	return nil
+}
+
 func NewGroupRepository(client *dbent.Client, sqlDB *sql.DB) service.GroupRepository {
 	return newGroupRepositoryWithSQL(client, sqlDB)
 }
@@ -43,11 +78,68 @@ func newGroupRepositoryWithSQL(client *dbent.Client, sqlq sqlExecutor) *groupRep
 	return &groupRepository{client: client, sql: sqlq}
 }
 
-func (r *groupRepository) Create(ctx context.Context, groupIn *service.Group) error {
-	if err := createGroupRecord(ctx, r.client, groupIn); err != nil {
+// The caller owns a transaction. Lock the source before reading its observation
+// so a concurrent request is either part of this baseline or a later event.
+func prepareQuotaResetSource(ctx context.Context, client *dbent.Client, groupIn *service.Group) error {
+	if groupIn.QuotaResetSourceAccountID == nil {
+		return nil
+	}
+	if !groupIn.SupportsOpenAIQuotaFollowReset() {
+		return infraerrors.BadRequest("INVALID_QUOTA_RESET_SOURCE", "quota reset requires an OpenAI subscription group")
+	}
+	err := scanSingleRow(ctx, client, `
+		SELECT name FROM accounts
+		WHERE id = $1 AND deleted_at IS NULL AND platform = 'openai'
+		  AND type = 'oauth' AND parent_account_id IS NULL
+		FOR UPDATE
+	`, []any{*groupIn.QuotaResetSourceAccountID}, &groupIn.QuotaResetSourceAccountName)
+	if errors.Is(err, sql.ErrNoRows) {
+		return infraerrors.BadRequest("INVALID_QUOTA_RESET_SOURCE", "quota reset source is no longer an OpenAI OAuth account")
+	}
+	if err != nil {
 		return err
 	}
-	if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventGroupChanged, nil, &groupIn.ID, nil); err != nil {
+	var baseline time.Time
+	err = scanSingleRow(ctx, client, `SELECT reset_at FROM openai_oauth_weekly_reset_observations WHERE account_id = $1`,
+		[]any{*groupIn.QuotaResetSourceAccountID}, &baseline)
+	groupIn.QuotaResetSourceResetAt = nil
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	groupIn.QuotaResetSourceResetAt = &baseline
+	return nil
+}
+
+func (r *groupRepository) Create(ctx context.Context, groupIn *service.Group) error {
+	if groupIn != nil && groupIn.QuotaResetSourceAccountID != nil {
+		client := clientFromContext(ctx, r.client)
+		tx, err := client.Tx(ctx)
+		if err != nil && !errors.Is(err, dbent.ErrTxStarted) {
+			return err
+		}
+		if tx != nil {
+			defer func() { _ = tx.Rollback() }()
+			client = tx.Client()
+		}
+		if err := createGroupRecord(ctx, client, groupIn); err != nil {
+			return err
+		}
+		if err := enqueueSchedulerOutbox(ctx, client, service.SchedulerOutboxEventGroupChanged, nil, &groupIn.ID, nil); err != nil {
+			return err
+		}
+		if tx != nil {
+			return tx.Commit()
+		}
+		return nil
+	}
+	client := clientFromContext(ctx, r.client)
+	if err := createGroupRecord(ctx, client, groupIn); err != nil {
+		return err
+	}
+	if err := enqueueSchedulerOutbox(ctx, client, service.SchedulerOutboxEventGroupChanged, nil, &groupIn.ID, nil); err != nil {
 		logger.LegacyPrintf("repository.group", "[SchedulerOutbox] enqueue group create failed: group=%d err=%v", groupIn.ID, err)
 	}
 	return nil
@@ -56,6 +148,9 @@ func (r *groupRepository) Create(ctx context.Context, groupIn *service.Group) er
 func createGroupRecord(ctx context.Context, client *dbent.Client, groupIn *service.Group) error {
 	if groupIn == nil {
 		return errors.New("group is nil")
+	}
+	if err := prepareQuotaResetSource(ctx, client, groupIn); err != nil {
+		return err
 	}
 	modelPricing, err := json.Marshal(groupIn.ModelPricing)
 	if err != nil {
@@ -74,6 +169,11 @@ func createGroupRecord(ctx context.Context, client *dbent.Client, groupIn *servi
 		SetNillableWeeklyLimitUsd(groupIn.WeeklyLimitUSD).
 		SetNillableMonthlyLimitUsd(groupIn.MonthlyLimitUSD).
 		SetNillableFiveHourLimitUsd(groupIn.FiveHourLimitUSD).
+		SetNillableQuotaResetSourceAccountID(groupIn.QuotaResetSourceAccountID).
+		SetQuotaResetSourceAccountName(groupIn.QuotaResetSourceAccountName).
+		SetNillableQuotaResetSourceResetAt(groupIn.QuotaResetSourceResetAt).
+		SetQuotaResetIncludeMonthly(groupIn.QuotaResetIncludeMonthly).
+		SetQuotaResetConfigVersion(groupIn.QuotaResetConfigVersion).
 		SetAllowImageGeneration(groupIn.AllowImageGeneration).
 		SetAllowBatchImageGeneration(groupIn.AllowBatchImageGeneration).
 		SetImageRateIndependent(groupIn.ImageRateIndependent).
@@ -110,7 +210,7 @@ func createGroupRecord(ctx context.Context, client *dbent.Client, groupIn *servi
 		SetRequirePrivacySet(groupIn.RequirePrivacySet).
 		SetDefaultMappedModel(groupIn.DefaultMappedModel).
 		SetMessagesDispatchModelConfig(groupIn.MessagesDispatchModelConfig).
-		SetModelsListConfig(groupIn.ModelsListConfig).
+		SetModelAllowlist(service.DomainGroupModelAllowlist(groupIn.ModelAllowlist)).
 		SetCodexModelsManifestConfig(groupIn.CodexModelsManifestConfig).
 		SetRpmLimit(groupIn.RPMLimit).
 		SetMaxReasoningEffort(groupIn.MaxReasoningEffort).
@@ -242,15 +342,39 @@ func (r *groupRepository) GetByIDLite(ctx context.Context, id int64) (*service.G
 	if err != nil {
 		return nil, translatePersistenceError(err, service.ErrGroupNotFound, nil)
 	}
-	return groupEntityToService(m), nil
+	out := groupEntityToService(m)
+	groups := []service.Group{*out}
+	r.hydrateQuotaResetSourceValidity(ctx, groups)
+	return &groups[0], nil
 }
 
 func (r *groupRepository) Update(ctx context.Context, groupIn *service.Group) error {
+	client := clientFromContext(ctx, r.client)
+	var tx *dbent.Tx
+	if groupIn.QuotaResetSourceChanged {
+		var err error
+		tx, err = client.Tx(ctx)
+		if err != nil && !errors.Is(err, dbent.ErrTxStarted) {
+			return err
+		}
+		if tx != nil {
+			defer func() { _ = tx.Rollback() }()
+			client = tx.Client()
+		}
+		if err := prepareQuotaResetSource(ctx, client, groupIn); err != nil {
+			return err
+		}
+	}
 	modelPricing, err := json.Marshal(groupIn.ModelPricing)
 	if err != nil {
 		return fmt.Errorf("marshal group model pricing: %w", err)
 	}
-	builder := r.client.Group.UpdateOneID(groupIn.ID).
+	expectedVersion := groupIn.QuotaResetConfigVersion
+	if groupIn.QuotaResetSourceChanged {
+		expectedVersion--
+	}
+	builder := client.Group.UpdateOneID(groupIn.ID).
+		Where(group.QuotaResetConfigVersionEQ(expectedVersion)).
 		SetName(groupIn.Name).
 		SetDescription(groupIn.Description).
 		SetPlatform(groupIn.Platform).
@@ -262,6 +386,7 @@ func (r *groupRepository) Update(ctx context.Context, groupIn *service.Group) er
 		SetNillableWeeklyLimitUsd(groupIn.WeeklyLimitUSD).
 		SetNillableMonthlyLimitUsd(groupIn.MonthlyLimitUSD).
 		SetNillableFiveHourLimitUsd(groupIn.FiveHourLimitUSD).
+		SetQuotaResetIncludeMonthly(groupIn.QuotaResetIncludeMonthly).
 		SetAllowImageGeneration(groupIn.AllowImageGeneration).
 		SetAllowBatchImageGeneration(groupIn.AllowBatchImageGeneration).
 		SetImageRateIndependent(groupIn.ImageRateIndependent).
@@ -291,7 +416,7 @@ func (r *groupRepository) Update(ctx context.Context, groupIn *service.Group) er
 		SetRequirePrivacySet(groupIn.RequirePrivacySet).
 		SetDefaultMappedModel(groupIn.DefaultMappedModel).
 		SetMessagesDispatchModelConfig(groupIn.MessagesDispatchModelConfig).
-		SetModelsListConfig(groupIn.ModelsListConfig).
+		SetModelAllowlist(service.DomainGroupModelAllowlist(groupIn.ModelAllowlist)).
 		SetCodexModelsManifestConfig(groupIn.CodexModelsManifestConfig).
 		SetRpmLimit(groupIn.RPMLimit).
 		SetMaxReasoningEffort(groupIn.MaxReasoningEffort).
@@ -325,6 +450,20 @@ func (r *groupRepository) Update(ctx context.Context, groupIn *service.Group) er
 		builder = builder.SetFiveHourLimitUsd(*groupIn.FiveHourLimitUSD)
 	} else {
 		builder = builder.ClearFiveHourLimitUsd()
+	}
+	if groupIn.QuotaResetSourceChanged {
+		builder = builder.SetQuotaResetSourceAccountName(groupIn.QuotaResetSourceAccountName).
+			SetQuotaResetConfigVersion(groupIn.QuotaResetConfigVersion)
+		if groupIn.QuotaResetSourceAccountID != nil {
+			builder = builder.SetQuotaResetSourceAccountID(*groupIn.QuotaResetSourceAccountID)
+		} else {
+			builder = builder.ClearQuotaResetSourceAccountID()
+		}
+		if groupIn.QuotaResetSourceResetAt != nil {
+			builder = builder.SetQuotaResetSourceResetAt(*groupIn.QuotaResetSourceResetAt)
+		} else {
+			builder = builder.ClearQuotaResetSourceResetAt()
+		}
 	}
 	if groupIn.ImagePrice1K != nil {
 		builder = builder.SetImagePrice1k(*groupIn.ImagePrice1K)
@@ -406,11 +545,21 @@ func (r *groupRepository) Update(ctx context.Context, groupIn *service.Group) er
 	builder = builder.SetSupportedModelScopes(groupIn.SupportedModelScopes)
 
 	updated, err := builder.Save(ctx)
+	if dbent.IsNotFound(err) {
+		return infraerrors.Conflict("GROUP_CONFIGURATION_CHANGED", "group configuration changed; reload and retry")
+	}
 	if err != nil {
 		return translatePersistenceError(err, service.ErrGroupNotFound, service.ErrGroupExists)
 	}
 	groupIn.UpdatedAt = updated.UpdatedAt
-	if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventGroupChanged, nil, &groupIn.ID, nil); err != nil {
+	groupIn.QuotaResetSourceResetAt = updated.QuotaResetSourceResetAt
+	if tx != nil {
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+	}
+	groupIn.QuotaResetSourceChanged = false
+	if err := enqueueSchedulerOutbox(ctx, clientFromContext(ctx, r.client), service.SchedulerOutboxEventGroupChanged, nil, &groupIn.ID, nil); err != nil {
 		logger.LegacyPrintf("repository.group", "[SchedulerOutbox] enqueue group update failed: group=%d err=%v", groupIn.ID, err)
 	}
 	return nil
@@ -433,6 +582,15 @@ func (r *groupRepository) List(ctx context.Context, params pagination.Pagination
 
 func (r *groupRepository) ListWithFilters(ctx context.Context, params pagination.PaginationParams, platform, status, search string, isExclusive *bool) ([]service.Group, *pagination.PaginationResult, error) {
 	q := r.client.Group.Query()
+	return r.listWithFiltersQuery(ctx, q, params, platform, status, search, isExclusive)
+}
+
+func (r *groupRepository) ListBindableWithFilters(ctx context.Context, params pagination.PaginationParams, platform, status, search string, isExclusive *bool) ([]service.Group, *pagination.PaginationResult, error) {
+	q := r.client.Group.Query().Where(group.PlatformNEQ(service.PlatformComposite))
+	return r.listWithFiltersQuery(ctx, q, params, platform, status, search, isExclusive)
+}
+
+func (r *groupRepository) listWithFiltersQuery(ctx context.Context, q *dbent.GroupQuery, params pagination.PaginationParams, platform, status, search string, isExclusive *bool) ([]service.Group, *pagination.PaginationResult, error) {
 
 	if platform != "" {
 		q = q.Where(group.PlatformEQ(platform))
@@ -488,6 +646,7 @@ func (r *groupRepository) ListWithFilters(ctx context.Context, params pagination
 			outGroups[i].RateLimitedAccountCount = c.RateLimited
 		}
 	}
+	r.hydrateQuotaResetSourceValidity(ctx, outGroups)
 
 	return outGroups, paginationResultFromTotal(int64(total), params), nil
 }
@@ -575,6 +734,7 @@ func (r *groupRepository) listWithAccountCountSort(ctx context.Context, q *dbent
 			outGroups[idx] = *g
 		}
 	}
+	r.hydrateQuotaResetSourceValidity(ctx, outGroups)
 
 	return outGroups, paginationResultFromTotal(int64(total), params), nil
 }
@@ -659,6 +819,7 @@ func (r *groupRepository) ListActive(ctx context.Context) ([]service.Group, erro
 			outGroups[i].RateLimitedAccountCount = c.RateLimited
 		}
 	}
+	r.hydrateQuotaResetSourceValidity(ctx, outGroups)
 
 	return outGroups, nil
 }
@@ -732,8 +893,52 @@ func (r *groupRepository) ListActiveByPlatform(ctx context.Context, platform str
 			outGroups[i].RateLimitedAccountCount = c.RateLimited
 		}
 	}
+	r.hydrateQuotaResetSourceValidity(ctx, outGroups)
 
 	return outGroups, nil
+}
+
+func (r *groupRepository) hydrateQuotaResetSourceValidity(ctx context.Context, groups []service.Group) {
+	if r == nil || r.sql == nil || len(groups) == 0 {
+		return
+	}
+	type sourceKey struct{ groupID, accountID int64 }
+	accountIDs := make([]int64, 0, len(groups))
+	groupIDs := make([]int64, 0, len(groups))
+	for i := range groups {
+		if groups[i].QuotaResetSourceAccountID != nil {
+			accountIDs = append(accountIDs, *groups[i].QuotaResetSourceAccountID)
+			groupIDs = append(groupIDs, groups[i].ID)
+		}
+	}
+	if len(groupIDs) == 0 {
+		return
+	}
+	rows, err := r.sql.QueryContext(ctx, `
+		SELECT g.id, a.id
+		FROM groups g
+		JOIN account_groups ag ON ag.group_id = g.id AND ag.account_id = g.quota_reset_source_account_id
+		JOIN accounts a ON a.id = ag.account_id
+		WHERE g.id = ANY($1) AND g.deleted_at IS NULL
+		  AND a.id = ANY($2) AND a.deleted_at IS NULL
+		  AND a.platform = $3 AND a.type = $4 AND a.parent_account_id IS NULL
+	`, pq.Array(groupIDs), pq.Array(accountIDs), service.PlatformOpenAI, service.AccountTypeOAuth)
+	if err != nil {
+		return
+	}
+	defer func() { _ = rows.Close() }()
+	valid := make(map[sourceKey]struct{}, len(groupIDs))
+	for rows.Next() {
+		var groupID, accountID int64
+		if rows.Scan(&groupID, &accountID) == nil {
+			valid[sourceKey{groupID, accountID}] = struct{}{}
+		}
+	}
+	for i := range groups {
+		if groups[i].QuotaResetSourceAccountID != nil {
+			_, groups[i].QuotaResetSourceValid = valid[sourceKey{groups[i].ID, *groups[i].QuotaResetSourceAccountID}]
+		}
+	}
 }
 
 func (r *groupRepository) ExistsByName(ctx context.Context, name string) (bool, error) {
@@ -802,24 +1007,43 @@ func (r *groupRepository) GetAccountCount(ctx context.Context, groupID int64) (t
 }
 
 func (r *groupRepository) DeleteAccountGroupsByGroupID(ctx context.Context, groupID int64) (int64, error) {
-	res, err := r.sql.ExecContext(ctx, "DELETE FROM account_groups WHERE group_id = $1", groupID)
+	client := clientFromContext(ctx, r.client)
+	tx, err := client.Tx(ctx)
+	if err != nil && !errors.Is(err, dbent.ErrTxStarted) {
+		return 0, err
+	}
+	if tx != nil {
+		defer func() { _ = tx.Rollback() }()
+		client = tx.Client()
+	}
+	if err := lockLiveGroups(ctx, client, []int64{groupID}); err != nil {
+		return 0, err
+	}
+	res, err := client.ExecContext(ctx, "DELETE FROM account_groups WHERE group_id = $1", groupID)
 	if err != nil {
 		return 0, err
 	}
 	affected, _ := res.RowsAffected()
-	if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventGroupChanged, nil, &groupID, nil); err != nil {
-		logger.LegacyPrintf("repository.group", "[SchedulerOutbox] enqueue group account clear failed: group=%d err=%v", groupID, err)
+	if err := enqueueSchedulerOutbox(ctx, client, service.SchedulerOutboxEventGroupChanged, nil, &groupID, nil); err != nil {
+		return 0, err
+	}
+	if tx != nil {
+		if err := tx.Commit(); err != nil {
+			return 0, err
+		}
 	}
 	return affected, nil
 }
 
 func (r *groupRepository) DeleteCascade(ctx context.Context, id int64) ([]int64, error) {
-	g, err := r.client.Group.Query().Where(group.IDEQ(id)).Only(ctx)
-	if err != nil {
-		return nil, translatePersistenceError(err, service.ErrGroupNotFound, nil)
-	}
-	groupSvc := groupEntityToService(g)
+	return r.deleteCascade(ctx, id, false)
+}
 
+func (r *groupRepository) DeleteCascadeIfEmpty(ctx context.Context, id int64) ([]int64, error) {
+	return r.deleteCascade(ctx, id, true)
+}
+
+func (r *groupRepository) deleteCascade(ctx context.Context, id int64, requireEmpty bool) ([]int64, error) {
 	// 使用 ent 事务统一包裹：避免手工基于 *sql.Tx 构造 ent client 带来的驱动断言问题，
 	// 同时保证级联删除的原子性。
 	tx, err := r.client.Tx(ctx)
@@ -837,13 +1061,14 @@ func (r *groupRepository) DeleteCascade(ctx context.Context, id int64) ([]int64,
 
 	// Lock the group row to avoid concurrent writes while we cascade.
 	// 这里使用 exec.QueryContext 手动扫描，确保同一事务内加锁并能区分"未找到"与其他错误。
-	rows, err := exec.QueryContext(ctx, "SELECT id FROM groups WHERE id = $1 AND deleted_at IS NULL FOR UPDATE", id)
+	rows, err := exec.QueryContext(ctx, "SELECT id, subscription_type FROM groups WHERE id = $1 AND deleted_at IS NULL FOR UPDATE", id)
 	if err != nil {
 		return nil, err
 	}
 	var lockedID int64
+	var subscriptionType string
 	if rows.Next() {
-		if err := rows.Scan(&lockedID); err != nil {
+		if err := rows.Scan(&lockedID, &subscriptionType); err != nil {
 			_ = rows.Close()
 			return nil, err
 		}
@@ -857,9 +1082,22 @@ func (r *groupRepository) DeleteCascade(ctx context.Context, id int64) ([]int64,
 	if lockedID == 0 {
 		return nil, service.ErrGroupNotFound
 	}
+	if requireEmpty {
+		var hasAccount bool
+		if err := scanSingleRow(ctx, exec, `SELECT EXISTS (
+			SELECT 1 FROM account_groups ag
+			JOIN accounts a ON a.id = ag.account_id
+			WHERE ag.group_id = $1 AND a.deleted_at IS NULL
+		)`, []any{id}, &hasAccount); err != nil {
+			return nil, err
+		}
+		if hasAccount {
+			return nil, service.ErrGroupNotEmpty
+		}
+	}
 
 	var affectedUserIDs []int64
-	if groupSvc.IsSubscriptionType() {
+	if subscriptionType == service.SubscriptionTypeSubscription {
 		// 只查询未软删除的订阅，避免通知已取消订阅的用户
 		rows, err := exec.QueryContext(ctx, "SELECT user_id FROM user_subscriptions WHERE group_id = $1 AND deleted_at IS NULL", id)
 		if err != nil {
@@ -1027,8 +1265,22 @@ func (r *groupRepository) BindAccountsToGroup(ctx context.Context, groupID int64
 		return nil
 	}
 
+	client := clientFromContext(ctx, r.client)
+	tx, err := client.Tx(ctx)
+	if err != nil && !errors.Is(err, dbent.ErrTxStarted) {
+		return err
+	}
+	exec := sqlExecutor(client)
+	if tx != nil {
+		defer func() { _ = tx.Rollback() }()
+		exec = tx.Client()
+	}
+	if err := lockLiveGroups(ctx, exec, []int64{groupID}); err != nil {
+		return err
+	}
+
 	// 使用 INSERT ... ON CONFLICT DO NOTHING 忽略已存在的绑定
-	_, err := r.sql.ExecContext(
+	_, err = exec.ExecContext(
 		ctx,
 		`INSERT INTO account_groups (account_id, group_id, priority, created_at)
 		 SELECT unnest($1::bigint[]), $2, 50, NOW()
@@ -1039,10 +1291,13 @@ func (r *groupRepository) BindAccountsToGroup(ctx context.Context, groupID int64
 	if err != nil {
 		return err
 	}
-
-	// 发送调度器事件
-	if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventGroupChanged, nil, &groupID, nil); err != nil {
-		logger.LegacyPrintf("repository.group", "[SchedulerOutbox] enqueue bind accounts to group failed: group=%d err=%v", groupID, err)
+	if err := enqueueSchedulerOutbox(ctx, exec, service.SchedulerOutboxEventGroupChanged, nil, &groupID, nil); err != nil {
+		return err
+	}
+	if tx != nil {
+		if err := tx.Commit(); err != nil {
+			return err
+		}
 	}
 
 	return nil

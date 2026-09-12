@@ -12,7 +12,6 @@ import (
 )
 
 type OpenAIMessagesDispatchModelConfig = domain.OpenAIMessagesDispatchModelConfig
-type GroupModelsListConfig = domain.GroupModelsListConfig
 type GroupCodexModelsManifestConfig = domain.GroupCodexModelsManifestConfig
 type ReasoningEffortMapping = domain.ReasoningEffortMapping
 
@@ -35,12 +34,20 @@ type Group struct {
 	// an already committed one-click copy. It must never be mapped to API DTOs.
 	DuplicateOperationID string
 
-	SubscriptionType    string
-	DailyLimitUSD       *float64
-	WeeklyLimitUSD      *float64
-	MonthlyLimitUSD     *float64
-	FiveHourLimitUSD    *float64
-	DefaultValidityDays int
+	SubscriptionType            string
+	DailyLimitUSD               *float64
+	WeeklyLimitUSD              *float64
+	MonthlyLimitUSD             *float64
+	FiveHourLimitUSD            *float64
+	DefaultValidityDays         int
+	QuotaResetSourceAccountID   *int64
+	QuotaResetSourceAccountName string
+	QuotaResetSourceResetAt     *time.Time
+	QuotaResetIncludeMonthly    bool
+	QuotaResetConfigVersion     int64
+	QuotaResetSourceValid       bool
+	// QuotaResetSourceChanged is persistence intent, never exposed by the API.
+	QuotaResetSourceChanged bool
 
 	// 图片生成计费配置（antigravity 和 gemini 平台使用）
 	AllowImageGeneration         bool
@@ -108,8 +115,8 @@ type Group struct {
 	RequirePrivacySet           bool // 调度时仅允许 privacy 已成功设置的账号（OpenAI/Antigravity/Anthropic/Gemini）
 	DefaultMappedModel          string
 	MessagesDispatchModelConfig OpenAIMessagesDispatchModelConfig
-	ModelsListConfig            GroupModelsListConfig
-	// CodexModelsManifestConfig 开启后，该分组的 Codex /models manifest 请求只用
+	ModelAllowlist              GroupModelAllowlist
+	// CodexModelsManifestConfig 开启后，普通模型列表与 Codex manifest 优先使用
 	// 固定账号列表拉取并合并，不经过调度器（仅 openai 平台）。
 	CodexModelsManifestConfig GroupCodexModelsManifestConfig
 
@@ -143,6 +150,12 @@ type Group struct {
 	RateLimitedAccountCount int64
 }
 
+// IsGroupBindableInSimpleMode is the shared policy for groups that may be
+// surfaced and bound to accounts while running in simple mode.
+func IsGroupBindableInSimpleMode(group *Group) bool {
+	return group != nil && group.Platform != PlatformComposite
+}
+
 func (g *Group) IsActive() bool {
 	return g.Status == StatusActive
 }
@@ -165,6 +178,10 @@ func (g *Group) HasMonthlyLimit() bool {
 
 func (g *Group) HasFiveHourLimit() bool {
 	return g.FiveHourLimitUSD != nil && *g.FiveHourLimitUSD > 0
+}
+
+func (g *Group) SupportsOpenAIQuotaFollowReset() bool {
+	return g != nil && g.Platform == PlatformOpenAI && g.SubscriptionType == SubscriptionTypeSubscription
 }
 
 // GetImagePrice 根据 image_size 返回对应的图片生成价格

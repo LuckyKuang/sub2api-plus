@@ -34,6 +34,9 @@ export default {
           showQuota: 'Show channel usage/balance to users',
           showQuotaHint:
             'When on, quota-mode channel monitors expose the linked account usage windows/balance on the user Channel Status page. Disabled by default; admins always see it.',
+          hideUserRanking: 'Hide user ranking from users',
+          hideUserRankingHint:
+            'When on, the user Channel Monitor V2 page hides the user ranking tab and the user API returns no ranking rows. Admins still see the ranking.',
         },
         availableChannels: {
           title: 'Available Channels',
@@ -447,7 +450,7 @@ export default {
         allowUngroupedKey: 'Allow Ungrouped Key Scheduling',
         allowUngroupedKeyHint: 'When disabled, API Keys not assigned to any group cannot make requests (403 Forbidden). Keep disabled to ensure all Keys belong to a specific group.',
         accountSchedulingThresholdsTitle: 'Platform Account Auto-Pause Thresholds',
-        accountSchedulingThresholdsDescription: 'When an account\'s current native usage window (OpenAI Codex/Anthropic session, or Grok request/token utilization) reaches this percent, Sub2API temporarily removes it from scheduling until the window resets. Use 100 to disable.',
+        accountSchedulingThresholdsDescription: 'When an account\'s current native usage window (OpenAI Codex/Anthropic session, or Grok request/token utilization) reaches this percent, Sub2API Plus temporarily removes it from scheduling until the window resets. Use 100 to disable.',
         accountSchedulingThresholdsGlobalHint: 'System-wide default for every account on that platform. Individual accounts can still override this in the account editor.',
         accountSchedulingThresholdsDisabledHint: '100 disables platform auto-pause. Values 1–99 pause scheduling once utilization reaches that percent.',
         accountSchedulingThresholdsRangeHint: 'Integer 1–100 (percent). OpenAI/Anthropic/Grok only.'
@@ -478,10 +481,6 @@ export default {
         grokBaseURLModeUSEast1: 'Regional API (us-east-1)',
         grokBaseURLModeUSWest2: 'Regional API (us-west-2)',
         grokBaseURLModeEUWest1: 'Regional API (eu-west-1)',
-        openaiTTFTMode: 'OpenAI Responses first-token metric',
-        openaiTTFTModeSemantic: 'Legacy-compatible (semantic event)',
-        openaiTTFTModeVisible: 'Actual visible output',
-        openaiTTFTModeHint: 'The default records first_token_ms at the first non-preamble semantic event. Actual visible output records it only when non-empty text, tool arguments, or image content arrives.',
         fingerprintUnification: 'Fingerprint Unification',
         fingerprintUnificationHint: 'Unify X-Stainless-* headers across users sharing the same OAuth account. Disabling passes through each client\'s original headers.',
         metadataPassthrough: 'Metadata Passthrough',

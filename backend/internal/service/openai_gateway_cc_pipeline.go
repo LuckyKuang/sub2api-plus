@@ -16,6 +16,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/logger"
 	"github.com/LuckyKuang/sub2api-plus/internal/util/responseheaders"
 	"github.com/gin-gonic/gin"
+	"github.com/tidwall/gjson"
 	"go.uber.org/zap"
 )
 
@@ -89,7 +90,7 @@ func (s *OpenAIGatewayService) failoverOpenAIUpstreamHTTPError(
 	upstreamMsg string,
 	upstreamModel string,
 ) *UpstreamFailoverError {
-	shouldFailover := s.shouldFailoverOpenAIUpstreamResponse(resp.StatusCode, upstreamMsg, respBody)
+	shouldFailover := s.shouldFailoverOpenAIUpstreamResponse(account, resp.StatusCode, upstreamMsg, respBody)
 	tempUnscheduled := false
 	if c != nil && account != nil && account.Platform != PlatformGrok && !shouldFailover && !IsResponseCommitted(c) && s.rateLimitService != nil {
 		tempUnscheduled = s.rateLimitService.CheckErrorPolicy(ctx, account, resp.StatusCode, respBody, upstreamModel) == ErrorPolicyTempUnscheduled
@@ -265,12 +266,17 @@ type ccStreamScanState struct {
 	// 总是保留最新值）；终态事件中的用量由调用方在 finalize 阶段自行覆盖。
 	Usage OpenAIUsage
 	// SawDone 表示上游发出了 [DONE] 哨兵。
-	SawDone bool
+	SawDone  bool
+	SawError bool
 	// Err 为 scanner 读错误（客户端 context 取消不属于此类，会原样带出）。
 	// 非 nil 时调用方必须跳过 finalize 并返回 usage-incomplete 错误，避免
 	// 把上游截断伪装成正常收尾。
 	Err          error
 	FirstTokenMs *int
+}
+
+func (s ccStreamScanState) usageIncomplete() bool {
+	return s.Err != nil || s.SawError || !s.SawDone
 }
 
 // scanCCStream 驱动两条 CC 回退路径共享的 SSE 读循环：提取 data 行、在 [DONE]
@@ -301,6 +307,9 @@ func (s *OpenAIGatewayService) scanCCStream(
 		if payload == "[DONE]" {
 			st.SawDone = true
 			break
+		}
+		if gjson.Get(payload, "error").IsObject() {
+			st.SawError = true
 		}
 		// 观察上游 CC chunk 回显的 model / service_tier（计费以回显为准）。
 		// CC chunk 无 type 字段，按 untyped payload 观察（上游约束：只有终止

@@ -60,6 +60,16 @@ type Group struct {
 	FiveHourLimitUsd *float64 `json:"five_hour_limit_usd,omitempty"`
 	// DefaultValidityDays holds the value of the "default_validity_days" field.
 	DefaultValidityDays int `json:"default_validity_days,omitempty"`
+	// OpenAI subscription quota reset source account; intentionally not an FK so deleted source identity remains diagnosable
+	QuotaResetSourceAccountID *int64 `json:"quota_reset_source_account_id,omitempty"`
+	// Source account name snapshot retained when the source account is deleted
+	QuotaResetSourceAccountName string `json:"quota_reset_source_account_name,omitempty"`
+	// Last accepted raw upstream weekly reset_at; first value is baseline only
+	QuotaResetSourceResetAt *time.Time `json:"quota_reset_source_reset_at,omitempty"`
+	// Whether a source reset also clears monthly subscription usage when the group has a monthly limit
+	QuotaResetIncludeMonthly bool `json:"quota_reset_include_monthly,omitempty"`
+	// Monotonic generation used to reject events from an obsolete source configuration
+	QuotaResetConfigVersion int64 `json:"quota_reset_config_version,omitempty"`
 	// 是否允许该分组使用图片生成能力
 	AllowImageGeneration bool `json:"allow_image_generation,omitempty"`
 	// 是否允许该分组使用批量图片生成能力
@@ -136,8 +146,8 @@ type Group struct {
 	DefaultMappedModel string `json:"default_mapped_model,omitempty"`
 	// OpenAI Messages 调度模型配置：按 Claude 系列/精确模型映射到目标 GPT 模型
 	MessagesDispatchModelConfig domain.OpenAIMessagesDispatchModelConfig `json:"messages_dispatch_model_config,omitempty"`
-	// 自定义 /v1/models 展示列表配置；仅影响模型列表响应，不影响调度
-	ModelsListConfig domain.GroupModelsListConfig `json:"models_list_config,omitempty"`
+	// 分组模型白名单：同时约束模型列表接口与请求准入
+	ModelAllowlist domain.GroupModelAllowlist `json:"model_allowlist,omitempty"`
 	// 固定账号获取 Codex Model Manifest 配置；开启后 /models 请求只用选定账号拉取（仅 openai 平台）
 	CodexModelsManifestConfig domain.GroupCodexModelsManifestConfig `json:"codex_models_manifest_config,omitempty"`
 	// 分组 RPM 上限，0 表示不限制；设置后接管该分组用户的限流
@@ -260,17 +270,17 @@ func (*Group) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case group.FieldVideoModelPrices, group.FieldModelPricing, group.FieldModelRouting, group.FieldSupportedModelScopes, group.FieldMessagesDispatchModelConfig, group.FieldModelsListConfig, group.FieldCodexModelsManifestConfig, group.FieldReasoningEffortMappings:
+		case group.FieldVideoModelPrices, group.FieldModelPricing, group.FieldModelRouting, group.FieldSupportedModelScopes, group.FieldMessagesDispatchModelConfig, group.FieldModelAllowlist, group.FieldCodexModelsManifestConfig, group.FieldReasoningEffortMappings:
 			values[i] = new([]byte)
-		case group.FieldPeakRateEnabled, group.FieldIsExclusive, group.FieldAllowImageGeneration, group.FieldAllowBatchImageGeneration, group.FieldImageRateIndependent, group.FieldVideoRateIndependent, group.FieldLongContextPricingEnabled, group.FieldClaudeCodeOnly, group.FieldModelRoutingEnabled, group.FieldMcpXMLInject, group.FieldAllowMessagesDispatch, group.FieldAllowLive, group.FieldForceOpenaiFast, group.FieldFreeOpenaiFast, group.FieldRequireOauthOnly, group.FieldRequirePrivacySet, group.FieldProfitControlEnabled:
+		case group.FieldPeakRateEnabled, group.FieldIsExclusive, group.FieldQuotaResetIncludeMonthly, group.FieldAllowImageGeneration, group.FieldAllowBatchImageGeneration, group.FieldImageRateIndependent, group.FieldVideoRateIndependent, group.FieldLongContextPricingEnabled, group.FieldClaudeCodeOnly, group.FieldModelRoutingEnabled, group.FieldMcpXMLInject, group.FieldAllowMessagesDispatch, group.FieldAllowLive, group.FieldForceOpenaiFast, group.FieldFreeOpenaiFast, group.FieldRequireOauthOnly, group.FieldRequirePrivacySet, group.FieldProfitControlEnabled:
 			values[i] = new(sql.NullBool)
 		case group.FieldRateMultiplier, group.FieldPeakRateMultiplier, group.FieldDailyLimitUsd, group.FieldWeeklyLimitUsd, group.FieldMonthlyLimitUsd, group.FieldFiveHourLimitUsd, group.FieldImageRateMultiplier, group.FieldImagePrice1k, group.FieldImagePrice2k, group.FieldImagePrice4k, group.FieldBatchImageDiscountMultiplier, group.FieldBatchImageHoldMultiplier, group.FieldVideoRateMultiplier, group.FieldVideoPrice480p, group.FieldVideoPrice720p, group.FieldVideoPrice1080p, group.FieldWebSearchPricePerCall, group.FieldSearchPricePer1k, group.FieldAudioRealtimePricePerMin, group.FieldAudioTtsPricePerMillionChars, group.FieldAudioSttPricePerHour, group.FieldProfitMinMargin, group.FieldProfitSafetyBuffer:
 			values[i] = new(sql.NullFloat64)
-		case group.FieldID, group.FieldDefaultValidityDays, group.FieldFallbackGroupID, group.FieldFallbackGroupIDOnInvalidRequest, group.FieldSortOrder, group.FieldRpmLimit:
+		case group.FieldID, group.FieldDefaultValidityDays, group.FieldQuotaResetSourceAccountID, group.FieldQuotaResetConfigVersion, group.FieldFallbackGroupID, group.FieldFallbackGroupIDOnInvalidRequest, group.FieldSortOrder, group.FieldRpmLimit:
 			values[i] = new(sql.NullInt64)
-		case group.FieldName, group.FieldDescription, group.FieldPeakStart, group.FieldPeakEnd, group.FieldStatus, group.FieldDuplicateOperationID, group.FieldPlatform, group.FieldSubscriptionType, group.FieldDefaultMappedModel, group.FieldMaxReasoningEffort, group.FieldMaxReasoningEffortOverLimit:
+		case group.FieldName, group.FieldDescription, group.FieldPeakStart, group.FieldPeakEnd, group.FieldStatus, group.FieldDuplicateOperationID, group.FieldPlatform, group.FieldSubscriptionType, group.FieldQuotaResetSourceAccountName, group.FieldDefaultMappedModel, group.FieldMaxReasoningEffort, group.FieldMaxReasoningEffortOverLimit:
 			values[i] = new(sql.NullString)
-		case group.FieldCreatedAt, group.FieldUpdatedAt, group.FieldDeletedAt:
+		case group.FieldCreatedAt, group.FieldUpdatedAt, group.FieldDeletedAt, group.FieldQuotaResetSourceResetAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -419,6 +429,38 @@ func (_m *Group) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field default_validity_days", values[i])
 			} else if value.Valid {
 				_m.DefaultValidityDays = int(value.Int64)
+			}
+		case group.FieldQuotaResetSourceAccountID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field quota_reset_source_account_id", values[i])
+			} else if value.Valid {
+				_m.QuotaResetSourceAccountID = new(int64)
+				*_m.QuotaResetSourceAccountID = value.Int64
+			}
+		case group.FieldQuotaResetSourceAccountName:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field quota_reset_source_account_name", values[i])
+			} else if value.Valid {
+				_m.QuotaResetSourceAccountName = value.String
+			}
+		case group.FieldQuotaResetSourceResetAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field quota_reset_source_reset_at", values[i])
+			} else if value.Valid {
+				_m.QuotaResetSourceResetAt = new(time.Time)
+				*_m.QuotaResetSourceResetAt = value.Time
+			}
+		case group.FieldQuotaResetIncludeMonthly:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field quota_reset_include_monthly", values[i])
+			} else if value.Valid {
+				_m.QuotaResetIncludeMonthly = value.Bool
+			}
+		case group.FieldQuotaResetConfigVersion:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field quota_reset_config_version", values[i])
+			} else if value.Valid {
+				_m.QuotaResetConfigVersion = value.Int64
 			}
 		case group.FieldAllowImageGeneration:
 			if value, ok := values[i].(*sql.NullBool); !ok {
@@ -671,12 +713,12 @@ func (_m *Group) assignValues(columns []string, values []any) error {
 					return fmt.Errorf("unmarshal field messages_dispatch_model_config: %w", err)
 				}
 			}
-		case group.FieldModelsListConfig:
+		case group.FieldModelAllowlist:
 			if value, ok := values[i].(*[]byte); !ok {
-				return fmt.Errorf("unexpected type %T for field models_list_config", values[i])
+				return fmt.Errorf("unexpected type %T for field model_allowlist", values[i])
 			} else if value != nil && len(*value) > 0 {
-				if err := json.Unmarshal(*value, &_m.ModelsListConfig); err != nil {
-					return fmt.Errorf("unmarshal field models_list_config: %w", err)
+				if err := json.Unmarshal(*value, &_m.ModelAllowlist); err != nil {
+					return fmt.Errorf("unmarshal field model_allowlist: %w", err)
 				}
 			}
 		case group.FieldCodexModelsManifestConfig:
@@ -881,6 +923,25 @@ func (_m *Group) String() string {
 	builder.WriteString("default_validity_days=")
 	builder.WriteString(fmt.Sprintf("%v", _m.DefaultValidityDays))
 	builder.WriteString(", ")
+	if v := _m.QuotaResetSourceAccountID; v != nil {
+		builder.WriteString("quota_reset_source_account_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	builder.WriteString("quota_reset_source_account_name=")
+	builder.WriteString(_m.QuotaResetSourceAccountName)
+	builder.WriteString(", ")
+	if v := _m.QuotaResetSourceResetAt; v != nil {
+		builder.WriteString("quota_reset_source_reset_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	builder.WriteString("quota_reset_include_monthly=")
+	builder.WriteString(fmt.Sprintf("%v", _m.QuotaResetIncludeMonthly))
+	builder.WriteString(", ")
+	builder.WriteString("quota_reset_config_version=")
+	builder.WriteString(fmt.Sprintf("%v", _m.QuotaResetConfigVersion))
+	builder.WriteString(", ")
 	builder.WriteString("allow_image_generation=")
 	builder.WriteString(fmt.Sprintf("%v", _m.AllowImageGeneration))
 	builder.WriteString(", ")
@@ -1021,8 +1082,8 @@ func (_m *Group) String() string {
 	builder.WriteString("messages_dispatch_model_config=")
 	builder.WriteString(fmt.Sprintf("%v", _m.MessagesDispatchModelConfig))
 	builder.WriteString(", ")
-	builder.WriteString("models_list_config=")
-	builder.WriteString(fmt.Sprintf("%v", _m.ModelsListConfig))
+	builder.WriteString("model_allowlist=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ModelAllowlist))
 	builder.WriteString(", ")
 	builder.WriteString("codex_models_manifest_config=")
 	builder.WriteString(fmt.Sprintf("%v", _m.CodexModelsManifestConfig))

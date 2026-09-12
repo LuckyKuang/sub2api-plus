@@ -868,9 +868,13 @@ func (s *UserSubscriptionRepoSuite) TestUpdate_NilInput() {
 // --- 并发用量更新测试 ---
 
 func (s *UserSubscriptionRepoSuite) TestIncrementUsage_Concurrent() {
-	user := s.mustCreateUser("concurrent@test.com", service.RoleUser)
-	group := s.mustCreateGroup("g-concurrent")
-	sub := s.mustCreateSubscription(user.ID, group.ID, nil)
+	// Concurrent requests require committed fixtures and separate transactions.
+	// Sharing the suite's single PostgreSQL transaction cannot model row-lock
+	// contention and does not support interleaving open query result sets.
+	fixture := newQuotaFollowFixture(s.T())
+	repo := NewUserSubscriptionRepository(integrationEntClient)
+	_, err := integrationDB.Exec(`UPDATE user_subscriptions SET daily_usage_usd=0, weekly_usage_usd=0, monthly_usage_usd=0, five_hour_usage_usd=0 WHERE id=$1`, fixture.subscriptionID)
+	s.Require().NoError(err)
 
 	const numGoroutines = 10
 	const incrementPerGoroutine = 1.5
@@ -879,18 +883,21 @@ func (s *UserSubscriptionRepoSuite) TestIncrementUsage_Concurrent() {
 	errCh := make(chan error, numGoroutines)
 	for i := 0; i < numGoroutines; i++ {
 		go func() {
-			errCh <- s.repo.IncrementUsage(s.ctx, sub.ID, incrementPerGoroutine)
+			errCh <- repo.IncrementUsage(s.ctx, fixture.subscriptionID, incrementPerGoroutine)
 		}()
 	}
 
 	// 等待所有 goroutine 完成
+	var errs []error
 	for i := 0; i < numGoroutines; i++ {
-		err := <-errCh
+		errs = append(errs, <-errCh)
+	}
+	for _, err := range errs {
 		s.Require().NoError(err, "IncrementUsage should succeed")
 	}
 
 	// 验证累加结果正确
-	got, err := s.repo.GetByID(s.ctx, sub.ID)
+	got, err := repo.GetByID(s.ctx, fixture.subscriptionID)
 	s.Require().NoError(err)
 	expectedUsage := float64(numGoroutines) * incrementPerGoroutine
 	s.Require().InDelta(expectedUsage, got.DailyUsageUSD, 1e-6, "daily usage should be correctly accumulated")

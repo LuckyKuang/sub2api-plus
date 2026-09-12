@@ -87,6 +87,9 @@ func (s *OpenAIGatewayService) forwardResponsesViaRawChatCompletions(
 		}
 		return nil, err
 	}
+	// /v1/responses 降级到 raw CC 的出站与 forwardAsRawChatCompletions 共用同一个
+	// 独立 Ollama Cloud token 钩子；chatReq.Model 已是模型映射后的 upstreamModel。
+	chatBody = clampOllamaCloudUpstreamMaxTokens(account, chatBody)
 	// Keep the final outbound tier for usage-time reconciliation. A policy
 	// filter that removes the field therefore leaves this nil.
 	serviceTier := extractOpenAIServiceTierFromBody(chatBody)
@@ -242,6 +245,7 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsResponses(
 			UpstreamResponseServiceTier: observedUpstreamResponseServiceTier(c),
 			ServiceTier:                 resolvedOpenAIUpstreamServiceTier(c, serviceTier),
 			Stream:                      true,
+			UsageIncomplete:             scan.usageIncomplete(),
 			Duration:                    time.Since(startTime),
 			FirstTokenMs:                scan.FirstTokenMs,
 			ClientDisconnect:            clientDisconnected,
@@ -250,7 +254,7 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsResponses(
 		return result, fmt.Errorf("stream usage incomplete: %w", scan.Err)
 	}
 	if err := state.ValidateToolCallArguments(); err != nil {
-		return &OpenAIForwardResult{
+		result := &OpenAIForwardResult{
 			RequestID:                   requestID,
 			UpstreamHeaders:             resp.Header,
 			Usage:                       scan.Usage,
@@ -261,9 +265,11 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsResponses(
 			UpstreamResponseServiceTier: observedUpstreamResponseServiceTier(c),
 			ServiceTier:                 resolvedOpenAIUpstreamServiceTier(c, serviceTier),
 			Stream:                      true,
+			UsageIncomplete:             scan.usageIncomplete(),
 			Duration:                    time.Since(startTime),
-			FirstTokenMs:                scan.FirstTokenMs,
-		}, fmt.Errorf("invalid tool call arguments from upstream: %w", err)
+		}
+		timing.ApplyOpenAIResult(result)
+		return result, fmt.Errorf("invalid tool call arguments from upstream: %w", err)
 	}
 
 	finalEvents := apicompat.FinalizeChatCompletionsResponsesStream(state)
@@ -290,6 +296,7 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsResponses(
 			UpstreamResponseServiceTier: observedUpstreamResponseServiceTier(c),
 			ServiceTier:                 resolvedOpenAIUpstreamServiceTier(c, serviceTier),
 			Stream:                      true,
+			UsageIncomplete:             scan.usageIncomplete(),
 			Duration:                    time.Since(startTime),
 			FirstTokenMs:                scan.FirstTokenMs,
 			ClientDisconnect:            clientDisconnected,
@@ -309,6 +316,7 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsResponses(
 		UpstreamResponseServiceTier: observedUpstreamResponseServiceTier(c),
 		ServiceTier:                 resolvedOpenAIUpstreamServiceTier(c, serviceTier),
 		Stream:                      true,
+		UsageIncomplete:             scan.usageIncomplete(),
 		Duration:                    time.Since(startTime),
 		FirstTokenMs:                scan.FirstTokenMs,
 		ClientDisconnect:            clientDisconnected,

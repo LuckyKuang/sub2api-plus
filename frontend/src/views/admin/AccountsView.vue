@@ -291,9 +291,11 @@
             </div>
           </template>
           <template #cell-schedulable="{ row }">
-            <button @click="handleToggleSchedulable(row)" :disabled="togglingSchedulable === row.id" class="relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus:ring-offset-dark-800" :class="[row.schedulable ? 'bg-primary-500 hover:bg-primary-600' : 'bg-gray-200 hover:bg-gray-300 dark:bg-dark-600 dark:hover:bg-dark-500']" :title="row.schedulable ? t('admin.accounts.schedulableEnabled') : t('admin.accounts.schedulableDisabled')">
-              <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out" :class="[row.schedulable ? 'translate-x-4' : 'translate-x-0']" />
-            </button>
+            <Toggle
+              :model-value="!!row.schedulable" @update:model-value="handleToggleSchedulable(row)"
+              :disabled="togglingSchedulable === row.id"
+              :title="row.schedulable ? t('admin.accounts.schedulableEnabled') : t('admin.accounts.schedulableDisabled')"
+            />
           </template>
           <template #cell-today_stats="{ row }">
             <AccountTodayStatsCell
@@ -303,7 +305,7 @@
             />
           </template>
           <template #cell-groups="{ row }">
-            <AccountGroupsCell :groups="row.groups" :max-display="4" />
+            <AccountGroupsCell :groups="resolveAccountGroups(row)" :max-display="4" />
           </template>
           <template #header-usage="{ column }">
             <div class="flex items-center">
@@ -430,7 +432,7 @@
     <AccountStatsModal :show="showStats" :account="statsAcc" @close="closeStatsModal" />
     <ScheduledTestsPanel :show="showSchedulePanel" :account-id="scheduleAcc?.id ?? null" :model-options="scheduleModelOptions" @close="closeSchedulePanel" />
     <UsageAlertPanel :show="showUsageAlertPanel" :account-id="usageAlertAcc?.id ?? null" @close="closeUsageAlertPanel" />
-    <AccountActionMenu :show="menu.show" :account="menu.acc" :position="menu.pos" @close="menu.show = false" @test="handleTest" @stats="handleViewStats" @schedule="handleSchedule" @usage-alert="handleUsageAlert" @duplicate="handleDuplicateAccount" @reauth="handleReAuth" @refresh-token="handleRefresh" @recover-state="handleRecoverState" @reset-quota="handleResetQuota" @set-privacy="handleSetPrivacy" @create-spark-shadow="handleCreateSparkShadow" />
+    <AccountActionMenu :show="menu.show" :account="menu.acc" :anchor-rect="menu.anchorRect" @close="menu.show = false" @test="handleTest" @stats="handleViewStats" @schedule="handleSchedule" @usage-alert="handleUsageAlert" @duplicate="handleDuplicateAccount" @reauth="handleReAuth" @refresh-token="handleRefresh" @recover-state="handleRecoverState" @reset-quota="handleResetQuota" @set-privacy="handleSetPrivacy" @create-spark-shadow="handleCreateSparkShadow" />
     <SyncFromCrsModal :show="showSync" @close="showSync = false" @synced="reload" />
     <ImportDataModal :show="showImportData" @close="showImportData = false" @imported="handleDataImported" />
     <BulkEditAccountModal
@@ -476,6 +478,7 @@
 </template>
 
 <script setup lang="ts">
+import Toggle from '@/components/common/Toggle.vue'
 import { ref, reactive, computed, onMounted, onUnmounted, toRaw, watch } from 'vue'
 import { useIntervalFn } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
@@ -529,6 +532,13 @@ const authStore = useAuthStore()
 
 const proxies = ref<AccountProxy[]>([])
 const groups = ref<AdminGroup[]>([])
+const accountGroupCatalog = ref<AdminGroup[]>([])
+const groupsById = computed(() => new Map(accountGroupCatalog.value.map(group => [group.id, group])))
+const resolveAccountGroups = (account: Account) => account.groups ??
+  (account.group_ids ?? []).flatMap(id => {
+    const group = groupsById.value.get(id)
+    return group ? [group] : []
+  })
 const accountTableRef = ref<HTMLElement | null>(null)
 const dataTableRef = ref<InstanceType<typeof DataTable> | null>(null)
 type AccountBulkEditTarget =
@@ -603,7 +613,7 @@ const scheduleModelOptions = ref<SelectOption[]>([])
 const showUsageAlertPanel = ref(false)
 const usageAlertAcc = ref<Account | null>(null)
 const togglingSchedulable = ref<number | null>(null)
-const menu = reactive<{show:boolean, acc:Account|null, pos:{top:number, left:number}|null}>({ show: false, acc: null, pos: null })
+const menu = reactive<{show:boolean, acc:Account|null, anchorRect:DOMRect|null}>({ show: false, acc: null, anchorRect: null })
 const exportingData = ref(false)
 
 // Account tools dropdown
@@ -1045,6 +1055,7 @@ const syncAccountListDerivedParams = () => {
   // Keep every load path, including auto-refresh and sorting, aligned with the current column visibility.
   const requestParams = params as any
   requestParams.include_scheduler_score = shouldIncludeSchedulerScore() ? '1' : '0'
+  requestParams.lite = '1'
 }
 
 const {
@@ -1060,6 +1071,7 @@ const {
 } = useTableLoader<Account, any>({
   fetchFn: adminAPI.accounts.list,
   initialParams: {
+    lite: '1',
     platform: '',
     type: '',
     status: '',
@@ -1128,22 +1140,13 @@ const resetAutoRefreshCache = () => {
   autoRefreshETag.value = null
 }
 
-const isFirstLoad = ref(true)
 
 const load = async () => {
-  const requestParams = params as any
   syncAccountListDerivedParams()
   hasPendingListSync.value = false
   resetAutoRefreshCache()
   pendingTodayStatsRefresh.value = false
-  if (isFirstLoad.value) {
-    requestParams.lite = '1'
-  }
   await baseLoad()
-  if (isFirstLoad.value) {
-    isFirstLoad.value = false
-    delete requestParams.lite
-  }
   await refreshTodayStatsBatch()
 }
 
@@ -1677,56 +1680,30 @@ const cols = computed(() =>
   )
 )
 
-const handleEdit = (a: Account) => { edAcc.value = a; showEdit.value = true }
+const accountDetailLoading = new Set<number>()
+const loadAccountDetails = async (account: Pick<Account, 'id'>): Promise<Account | null> => {
+  if (accountDetailLoading.has(account.id)) return null
+  accountDetailLoading.add(account.id)
+  try {
+    return await adminAPI.accounts.getById(account.id)
+  } catch (error) {
+    console.error('Failed to load account details:', error)
+    appStore.showError(extractApiErrorMessage(error, t('common.error')))
+    return null
+  } finally {
+    accountDetailLoading.delete(account.id)
+  }
+}
+const handleEdit = async (a: Account) => {
+  const account = await loadAccountDetails(a)
+  if (!account) return
+  edAcc.value = account
+  showEdit.value = true
+}
 const openMenu = (a: Account, e: MouseEvent) => {
   menu.acc = a
-
   const target = e.currentTarget as HTMLElement
-  if (target) {
-    const rect = target.getBoundingClientRect()
-    const menuWidth = 200
-    const menuHeight = 240
-    const padding = 8
-    const viewportWidth = window.innerWidth
-    const viewportHeight = window.innerHeight
-
-    let left: number
-    let top: number
-
-    if (viewportWidth < 768) {
-      // 居中显示,水平位置
-      left = Math.max(padding, Math.min(
-        rect.left + rect.width / 2 - menuWidth / 2,
-        viewportWidth - menuWidth - padding
-      ))
-
-      // 优先显示在按钮下方
-      top = rect.bottom + 4
-
-      // 如果下方空间不够,显示在上方
-      if (top + menuHeight > viewportHeight - padding) {
-        top = rect.top - menuHeight - 4
-        // 如果上方也不够,就贴在视口顶部
-        if (top < padding) {
-          top = padding
-        }
-      }
-    } else {
-      left = Math.max(padding, Math.min(
-        e.clientX - menuWidth,
-        viewportWidth - menuWidth - padding
-      ))
-      top = e.clientY
-      if (top + menuHeight > viewportHeight - padding) {
-        top = viewportHeight - menuHeight - padding
-      }
-    }
-
-    menu.pos = { top, left }
-  } else {
-    menu.pos = { top: e.clientY, left: e.clientX - 200 }
-  }
-
+  menu.anchorRect = target.getBoundingClientRect()
   menu.show = true
 }
 const toggleSelectAllVisible = (event: Event) => {
@@ -1772,10 +1749,13 @@ const handleBulkResetStatus = async () => {
 }
 const handleBulkRefreshToken = async () => {
   if (!confirm(t('common.confirm'))) return
+  const accountIds = [...selIds.value]
   try {
-    const result = await adminAPI.accounts.batchRefresh(selIds.value)
+    const result = await adminAPI.accounts.batchRefresh(accountIds)
     if (result.failed > 0) {
       appStore.showError(t('admin.accounts.bulkActions.partialSuccess', { success: result.success, failed: result.failed }))
+      const failedIds = result.errors?.map(error => error.account_id) ?? []
+      setSelectedIds(failedIds.length > 0 ? failedIds : accountIds)
     } else {
       appStore.showSuccess(t('admin.accounts.bulkActions.refreshTokenSuccess', { count: result.success }))
       clearSelection()
@@ -2133,8 +2113,18 @@ const handleExportData = async () => {
 const closeTestModal = () => { showTest.value = false; testingAcc.value = null }
 const closeStatsModal = () => { showStats.value = false; statsAcc.value = null }
 const closeReAuthModal = () => { showReAuth.value = false; reAuthAcc.value = null }
-const handleTest = (a: Account) => { testingAcc.value = a; showTest.value = true }
-const handleViewStats = (a: Account) => { statsAcc.value = a; showStats.value = true }
+const handleTest = async (a: Account) => {
+  const account = await loadAccountDetails(a)
+  if (!account) return
+  testingAcc.value = account
+  showTest.value = true
+}
+const handleViewStats = async (a: Account) => {
+  const account = await loadAccountDetails(a)
+  if (!account) return
+  statsAcc.value = account
+  showStats.value = true
+}
 const handleSchedule = async (a: Account) => {
   scheduleAcc.value = a
   scheduleModelOptions.value = []
@@ -2156,7 +2146,12 @@ const closeUsageAlertPanel = () => {
   showUsageAlertPanel.value = false
   usageAlertAcc.value = null
 }
-const handleReAuth = (a: Account) => { reAuthAcc.value = a; showReAuth.value = true }
+const handleReAuth = async (a: Account) => {
+  const account = await loadAccountDetails(a)
+  if (!account) return
+  reAuthAcc.value = account
+  showReAuth.value = true
+}
 const duplicatingAccountIDs = new Set<number>()
 const handleDuplicateAccount = async (a: Account) => {
   if (duplicatingAccountIDs.has(a.id)) return
@@ -2318,7 +2313,8 @@ const proxyExpiryText = (p: AccountProxy): string => {
 }
 
 // 表格滚动时关闭行操作菜单，并让顶部工具菜单继续贴紧触发按钮。
-const handleScroll = () => {
+const handleScroll = (event: Event) => {
+  if (event.target instanceof Element && event.target.closest('.action-menu-content')) return
   menu.show = false
   if (showAccountToolsDropdown.value) updateAccountToolsDropdownPosition()
 }
@@ -2355,7 +2351,7 @@ onMounted(async () => {
   load()
   const [proxiesResult, groupsResult] = await Promise.allSettled([
     adminAPI.proxies.getAll(),
-    adminAPI.groups.getAll()
+    adminAPI.groups.getAllIncludingInactive()
   ])
   if (proxiesResult.status === 'fulfilled') {
     proxies.value = proxiesResult.value
@@ -2363,7 +2359,8 @@ onMounted(async () => {
     console.error('Failed to load proxies:', proxiesResult.reason)
   }
   if (groupsResult.status === 'fulfilled') {
-    groups.value = groupsResult.value
+    accountGroupCatalog.value = groupsResult.value
+    groups.value = groupsResult.value.filter(group => group.status === 'active')
   } else {
     console.error('Failed to load groups:', groupsResult.reason)
   }
