@@ -2501,11 +2501,13 @@ func (r *accountRepository) UpdateExtra(ctx context.Context, id int64, updates m
 	}
 
 	durableSchedulerChange := shouldEnqueueSchedulerOutboxForExtraUpdates(updates)
+	snapshotTime, _ := updates["codex_usage_updated_at"].(string)
+	snapshotAt, snapshotTimeErr := time.Parse(time.RFC3339Nano, snapshotTime)
 	baseCtx := ctx
 	contextTx := dbent.TxFromContext(ctx)
 	client := clientFromContext(ctx, r.client)
 	var tx *dbent.Tx
-	if durableSchedulerChange && contextTx == nil {
+	if (durableSchedulerChange || snapshotTimeErr == nil) && contextTx == nil {
 		var txErr error
 		tx, txErr = r.client.Tx(ctx)
 		if txErr != nil && !errors.Is(txErr, dbent.ErrTxStarted) {
@@ -2515,6 +2517,36 @@ func (r *accountRepository) UpdateExtra(ctx context.Context, id int64, updates m
 			defer func() { _ = tx.Rollback() }()
 			ctx = dbent.NewTxContext(ctx, tx)
 			client = tx.Client()
+		}
+	}
+	if snapshotTimeErr == nil {
+		// The compare and merge share the row lock across replicas. Otherwise a
+		// delayed quota query or asynchronous header write can undo a newer reset
+		// on the account page even though the reset observer rejects that sample.
+		var savedTime sql.NullString
+		err := scanSingleRow(ctx, client, `SELECT extra->>'codex_usage_updated_at' FROM accounts WHERE id=$1 AND deleted_at IS NULL FOR UPDATE`, []any{id}, &savedTime)
+		if errors.Is(err, sql.ErrNoRows) {
+			return service.ErrAccountNotFound
+		}
+		if err != nil {
+			return err
+		}
+		if savedAt, err := time.Parse(time.RFC3339Nano, savedTime.String); err == nil && !snapshotAt.After(savedAt) {
+			freshFields := make(map[string]any, len(updates))
+			for key, value := range updates {
+				if key == "codex_usage_updated_at" || strings.HasPrefix(key, "codex_primary_") ||
+					strings.HasPrefix(key, "codex_secondary_") || strings.HasPrefix(key, "codex_5h_") || strings.HasPrefix(key, "codex_7d_") {
+					continue
+				}
+				freshFields[key] = value
+			}
+			if len(freshFields) == 0 {
+				return nil
+			}
+			payload, err = json.Marshal(freshFields)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	extraExpression := "COALESCE(extra, '{}'::jsonb) || $1::jsonb"
@@ -2539,21 +2571,16 @@ func (r *accountRepository) UpdateExtra(ctx context.Context, id int64, updates m
 		if err := enqueueSchedulerOutbox(ctx, client, service.SchedulerOutboxEventAccountChanged, &id, nil, nil); err != nil {
 			return err
 		}
-		if tx != nil {
-			if err := tx.Commit(); err != nil {
-				return err
-			}
+	}
+	if tx != nil {
+		if err := tx.Commit(); err != nil {
+			return err
 		}
-		if contextTx == nil {
-			r.syncSchedulerAccountSnapshot(baseCtx, id)
-		}
-	} else {
-		// 观测型 extra 字段不需要触发 bucket 重建，但仍同步单账号快照，
-		// 让 sticky session / GetAccount 命中缓存时也能读到最新数据，
-		// 同时避免缓存局部 patch 覆盖掉并发写入的其它账号字段。
-		if dbent.TxFromContext(ctx) == nil {
-			r.syncSchedulerAccountSnapshot(ctx, id)
-		}
+	}
+	// Observation-only updates skip bucket rebuilds but still refresh the account
+	// snapshot after commit, including when this method opened a snapshot lock.
+	if contextTx == nil {
+		r.syncSchedulerAccountSnapshot(baseCtx, id)
 	}
 	return nil
 }

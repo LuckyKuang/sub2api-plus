@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
 
 	dbent "github.com/LuckyKuang/sub2api-plus/ent"
 	"github.com/LuckyKuang/sub2api-plus/ent/group"
@@ -78,10 +77,12 @@ func newGroupRepositoryWithSQL(client *dbent.Client, sqlq sqlExecutor) *groupRep
 	return &groupRepository{client: client, sql: sqlq}
 }
 
-// The caller owns a transaction. Lock the source before reading its observation
-// so a concurrent request is either part of this baseline or a later event.
+// New bindings deliberately wait for a fresh confirmed observation. Old account
+// observations and a previous activation's baseline must never reset on enable.
 func prepareQuotaResetSource(ctx context.Context, client *dbent.Client, groupIn *service.Group) error {
+	groupIn.QuotaResetSourceResetAt = nil
 	if groupIn.QuotaResetSourceAccountID == nil {
+		groupIn.QuotaResetSourceAccountName = ""
 		return nil
 	}
 	if !groupIn.SupportsOpenAIQuotaFollowReset() {
@@ -99,17 +100,6 @@ func prepareQuotaResetSource(ctx context.Context, client *dbent.Client, groupIn 
 	if err != nil {
 		return err
 	}
-	var baseline time.Time
-	err = scanSingleRow(ctx, client, `SELECT reset_at FROM openai_oauth_weekly_reset_observations WHERE account_id = $1`,
-		[]any{*groupIn.QuotaResetSourceAccountID}, &baseline)
-	groupIn.QuotaResetSourceResetAt = nil
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	groupIn.QuotaResetSourceResetAt = &baseline
 	return nil
 }
 

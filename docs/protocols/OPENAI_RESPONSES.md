@@ -156,26 +156,64 @@ returns 404 otherwise; it does not select an account or proxy upstream quota.
 
 Administrators may optionally bind an OpenAI subscription group to one
 credential-owning OpenAI OAuth account that is already bound to that group.
-This does not change the group's routing pool. The gateway never polls an
-upstream quota endpoint for this feature. It passively observes the source
-account's raw default weekly-window `Reset-At` value on successful Responses
-traffic and the equivalent default `codex.rate_limits` WebSocket event before
-applying any client-facing local quota rewrite. Only an explicit 10,080-minute
-window is eligible; daily, 5-hour, monthly, and unknown windows never drive this
-feature.
+This does not change the group's routing pool. Raw default weekly observations
+from HTTP traffic (including compatible endpoints), `codex.rate_limits`
+WebSocket events, account usage probes, quota queries and post-reset refreshes
+share one observation path, before client-facing local quota rewrites. Only an
+explicit 10,080-minute / 604,800-second default window with a raw absolute reset
+time is eligible. Daily, 5-hour, monthly, unknown and model-specific/Spark windows
+never drive this feature. Display countdowns, expired-cache synthetic zeroes,
+reset-credit expiration dates and local account A/U costs are not reset signals.
 
-Saving a new or changed binding locks its source and establishes a baseline
-from the latest locally observed value in the same transaction. If no value
-exists yet, the first observation establishes the baseline without resetting
-subscriptions. Ordinary group edits, including copying members while retaining
+A background worker refreshes only eligible accounts currently selected by a
+bound OpenAI subscription group. Database leases space each account's attempts
+by at least two minutes across replicas; batches contain at most four accounts
+and run sequentially, with a 25-second per-account bound and 15-second scheduling
+ticks. Large source sets or upstream failures can delay observations. These reads
+reuse the existing OAuth quota client and trusted identity triple, and skip the
+separate reset-credit-details request. They never consume a reset credit.
+
+Saving a new binding, re-enabling a disabled binding or changing its source locks
+the source and clears the group's old baseline. Its first fresh confirmed window
+only establishes a baseline; it never clears subscriptions, even if the account
+retains an old deadline or pending reset evidence from an earlier activation.
+Only an official quota query started after activation establishes that baseline;
+traffic headers alone do not carry sufficient request-start evidence. An in-flight
+query started before activation cannot establish it.
+While an off-schedule window is awaiting confirmation, new bindings keep waiting.
+Disabling clears the baseline and advances the configuration generation, making
+old pending events inapplicable. Upgrades preserve continuously enabled bindings
+and existing subscription counters; the migration performs no quota resets.
+Migration `265_openai_weekly_reset_observations.sql` changes the event uniqueness
+key to include the reset sequence. Deploy it together with the updated backend;
+backend instances sharing this database must not mix old and new event writers.
+Ordinary group edits, including copying members while retaining
 the same reset source, preserve the current baseline and configuration generation; stale
-source-configuration saves are rejected for reload. A later next-reset time
-creates a durable, idempotent reset event only after the previously announced
-window has expired, and only when the new timestamp is at least half a week
-later. Clock skew of a still-open or just-expired window does not reset groups.
+source-configuration saves are rejected for reload. Natural rollover can be
+accepted when the prior deadline has expired and the next deadline advances by
+more than five minutes. Early deadline changes in either direction, and usage
+drops of at least one percentage point with an unchanged deadline, first persist
+pending evidence. A separate official quota query sampled at least one second
+later and within ten minutes must corroborate it. Deadline changes within five
+minutes are treated as clock drift. Stale/out-of-order samples are ignored;
+repeated traffic cannot confirm or postpone its own pending evidence. The query
+start time is preserved through cache writes to prevent a cached sample from
+confirming itself. Account usage-cache writes also compare sample times under
+the account row lock, retaining subsecond precision: older or duplicate samples
+cannot replace newer usage percentages or deadlines. Unrelated account settings
+in the same update still merge; missing or invalid historical timestamps do not
+prevent fresh snapshots from being stored. No zero-percent observation is required: the first observed
+post-reset usage may already be 7% or higher. A first-ever same-deadline reset
+cannot be inferred without a prior utilization sample.
+
+Confirmed resets have a durable monotonic sequence, so two real resets with
+the same announced deadline remain distinguishable while refreshes are idempotent.
 Each event resets the active subscriptions' 5-hour, daily, and weekly usage;
 monthly usage is reset only when the group explicitly enables it and has a
-monthly limit. Event application and usage billing lock the group and
+monthly limit. The local confirmation time starts the new subscription windows;
+quota limits are unchanged. Historical consumption is not replayed or backfilled
+from account A/U statistics, and account usage logs remain intact. New charges
+after the reset accumulate normally. Event application and usage billing lock the group and
 subscription records in the same order, so a concurrent charge is
 deterministically ordered before or after the reset. Deleting the source
 account, or removing it from the group, leaves its recorded name and ID on the
@@ -189,10 +227,15 @@ Observation and worker paths acquire the group lock before rechecking membership
 in a fresh statement, so a lock wait cannot retain pre-edit membership. The worker
 also refreshes source eligibility before applying any reset.
 
-An accepted timestamp repeated by the source still reconciles groups whose
-baseline is missing or behind, subject to the same expiry and weekly-advance
-checks. An existing account observation must not cause a newly bound group's
-first baseline to be skipped. Synchronized groups do not create duplicate events.
+An accepted window repeated by the source still establishes missing group
+baselines without resetting them. A behind baseline on a continuously enabled
+group can be reconciled after natural rollover. Synchronized groups do not create
+duplicate events. Opening the group editor reloads its current server detail,
+including the baseline, rather than reusing an older list-row snapshot.
+While the editor remains open, its baseline/status refresh every 15 seconds
+without changing unsaved settings; refreshes stop when it closes.
+Async editor detail, routing and manifest-name results are discarded after a
+new edit selection, closing the editor or leaving the page.
 
 Creating or editing a group with copied accounts commits its configuration,
 membership and scheduler outbox entries together. A failed copy rolls back the

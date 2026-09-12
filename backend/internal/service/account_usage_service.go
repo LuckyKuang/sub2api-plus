@@ -904,17 +904,23 @@ func (s *AccountUsageService) probeOpenAICodexSnapshot(ctx context.Context, acco
 	if err != nil {
 		return nil, fmt.Errorf("build openai probe client: %w", err)
 	}
+	probeStartedAt := time.Now()
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("openai codex probe request failed: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	return s.recordOpenAICodexProbeResponse(ctx, account, resp, probeStartedAt)
+}
+
+func (s *AccountUsageService) recordOpenAICodexProbeResponse(ctx context.Context, account *Account, resp *http.Response, probeStartedAt time.Time) (map[string]any, error) {
 	updates, err := extractOpenAICodexProbeUpdates(resp)
 	if err != nil {
 		return nil, err
 	}
 	if len(updates) > 0 {
+		observeOpenAIWeeklyUsageSnapshot(ctx, account.ID, parseCodexRateLimitHeadersAt(resp.Header, probeStartedAt), false)
 		s.persistOpenAICodexProbeSnapshot(account.ID, updates)
 		return updates, nil
 	}

@@ -1273,7 +1273,7 @@ func parseCodexRateLimitHeadersAt(headers http.Header, now time.Time) *OpenAICod
 		return nil
 	}
 
-	snapshot.UpdatedAt = now.Format(time.RFC3339)
+	snapshot.UpdatedAt = now.Format(time.RFC3339Nano)
 	return snapshot
 }
 
@@ -1387,7 +1387,7 @@ func buildCodexUsageExtraUpdates(snapshot *OpenAICodexUsageSnapshot, fallbackNow
 	if snapshot.PrimaryOverSecondaryPercent != nil {
 		updates["codex_primary_over_secondary_percent"] = *snapshot.PrimaryOverSecondaryPercent
 	}
-	updates["codex_usage_updated_at"] = baseTime.Format(time.RFC3339)
+	updates["codex_usage_updated_at"] = baseTime.UTC().Format(time.RFC3339Nano)
 
 	// 归一化到 5h/7d 规范字段
 	if normalized := snapshot.Normalize(); normalized != nil {
@@ -1416,6 +1416,29 @@ func buildCodexUsageExtraUpdates(snapshot *OpenAICodexUsageSnapshot, fallbackNow
 			updates["codex_7d_reset_at"] = *reset7dAt
 		}
 	}
+	// Keep the official absolute deadline exact. Reconstructing it from a
+	// clamped/rounded countdown changes the window seen by the account page.
+	for _, window := range []struct {
+		minutes *int
+		reset   *int64
+	}{
+		{snapshot.PrimaryWindowMinutes, snapshot.PrimaryResetAtUnix},
+		{snapshot.SecondaryWindowMinutes, snapshot.SecondaryResetAtUnix},
+	} {
+		if window.minutes == nil || window.reset == nil || !validOpenAIQuotaResetUnix(*window.reset) {
+			continue
+		}
+		var key string
+		switch *window.minutes {
+		case 300:
+			key = "codex_5h_reset_at"
+		case openAIWeeklyQuotaWindowMinutes:
+			key = "codex_7d_reset_at"
+		default:
+			continue
+		}
+		updates[key] = time.Unix(*window.reset, 0).UTC().Format(time.RFC3339)
+	}
 
 	return updates
 }
@@ -1432,9 +1455,7 @@ func (s *OpenAIGatewayService) updateCodexUsageSnapshot(ctx context.Context, acc
 	if s == nil || s.accountRepo == nil {
 		return
 	}
-	if weeklyResetAt, ok := snapshot.WeeklyResetAt(); ok {
-		ObserveOpenAIWeeklyResetAt(ctx, accountID, weeklyResetAt)
-	}
+	observeOpenAIWeeklyUsageSnapshot(ctx, accountID, snapshot, false)
 
 	now := time.Now()
 	updates := buildCodexUsageExtraUpdates(snapshot, now)
