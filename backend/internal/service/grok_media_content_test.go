@@ -211,11 +211,11 @@ func TestForwardGrokMediaContentFetchesValidatedSignedURLWithoutCredentials(t *t
 	require.Len(t, upstream.requests, 2)
 	require.Equal(t, "https://relay.example/v1/videos/task-1", upstream.requests[0].URL.String())
 	require.Equal(t, "Bearer upstream-key", upstream.requests[0].Header.Get("Authorization"))
-	require.Equal(t, "private-agent", upstream.requests[0].Header.Get("User-Agent"))
+	require.Equal(t, defaultGrokUpstreamUserAgent(), upstream.requests[0].Header.Get("User-Agent"))
 	require.True(t, HTTPUpstreamRedirectsDisabled(upstream.requests[0].Context()))
 	require.Equal(t, "https://vidgen.x.ai/signed-token/xai-video-task-1.mp4", upstream.requests[1].URL.String())
 	require.Empty(t, upstream.requests[1].Header.Get("Authorization"))
-	require.Empty(t, upstream.requests[1].Header.Get("User-Agent"))
+	require.Equal(t, defaultGrokUpstreamUserAgent(), upstream.requests[1].Header.Get("User-Agent"))
 	require.Equal(t, "bytes=0-12", upstream.requests[1].Header.Get("Range"))
 	require.True(t, HTTPUpstreamRedirectsDisabled(upstream.requests[1].Context()))
 }

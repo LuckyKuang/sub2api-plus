@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/config"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
@@ -554,15 +555,17 @@ func (c *grokRealtimeTestConn) Ping(context.Context) error { return nil }
 func (c *grokRealtimeTestConn) Close() error               { return nil }
 
 type grokRealtimeTestDialer struct {
-	lastURL   string
-	lastAuth  string
-	lastProxy string
-	conn      openAIWSClientConn
-	err       error
-	status    int
+	lastURL     string
+	lastHeaders http.Header
+	lastAuth    string
+	lastProxy   string
+	conn        openAIWSClientConn
+	err         error
+	status      int
 }
 
 func (d *grokRealtimeTestDialer) Dial(_ context.Context, wsURL string, headers http.Header, proxyURL string) (openAIWSClientConn, int, http.Header, error) {
+	d.lastHeaders = headers.Clone()
 	d.lastURL = wsURL
 	d.lastAuth = headers.Get("Authorization")
 	d.lastProxy = proxyURL
@@ -573,6 +576,28 @@ func (d *grokRealtimeTestDialer) Dial(_ context.Context, wsURL string, headers h
 		d.conn = &grokRealtimeTestConn{}
 	}
 	return d.conn, 0, nil, nil
+}
+
+func TestOutboundIdentityGrokRealtimeProbeAndForward(t *testing.T) {
+	for _, accountType := range []string{AccountTypeOAuth, AccountTypeAPIKey} {
+		t.Run(accountType, func(t *testing.T) {
+			dialer := &grokRealtimeTestDialer{}
+			svc := &OpenAIGatewayService{cfg: &config.Config{}, openaiWSPassthroughDialer: dialer}
+			account := &Account{ID: 42, Platform: PlatformGrok, Type: accountType, Credentials: map[string]any{
+				outboundIdentityCredential:   OutboundIdentitySelection{Preset: "grok", Version: "3.9.1"},
+				credKeyHeaderOverrideEnabled: true, credKeyHeaderOverrides: map[string]any{"user-agent": "untrusted-override", "x-grok-client-version": "9.9.9"},
+			}}
+			require.NoError(t, svc.ProbeGrokRealtime(context.Background(), account, "test-token", "grok-voice-latest"))
+			probeHeaders := dialer.lastHeaders.Clone()
+			upstream, err := svc.OpenGrokRealtime(context.Background(), account, "test-token", "grok-voice-latest")
+			require.NoError(t, err)
+			require.NoError(t, upstream.Close())
+			require.Equal(t, probeHeaders, dialer.lastHeaders)
+			require.Equal(t, "xai-grok-workspace/3.9.1", dialer.lastHeaders.Get("User-Agent"))
+			require.Equal(t, "3.9.1", dialer.lastHeaders.Get("X-Grok-Client-Version"))
+			require.Equal(t, "Bearer test-token", dialer.lastHeaders.Get("Authorization"))
+		})
+	}
 }
 
 func TestAccountTestService_GrokRealtimeModeDialsWS(t *testing.T) {

@@ -520,7 +520,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_GroupForceOpenAIFastInjectsMissin
 	require.Equal(t, OpenAIFastTierPriority, *result.ServiceTier)
 }
 
-// 「自动透传（仅替换认证）」的默认行为必须真的只替换认证：namespace 声明、
+// HTTP 自动透传仍由网关管理认证与出站身份；正文中的 namespace 声明、
 // namespace 形态的 tool_choice、历史调用项上的 namespace 都原样转发，只清掉
 // 非调用项上的残留 namespace（Codex 协议里只有调用项会带该字段）。
 func TestOpenAIGatewayService_OAuthPassthrough_PreservesNamespaceRequest(t *testing.T) {

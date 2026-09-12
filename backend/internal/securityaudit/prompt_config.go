@@ -67,17 +67,17 @@ type storageConfig struct {
 	Enabled         bool              `json:"enabled"`
 	BlockingEnabled bool              `json:"blocking_enabled"`
 	StorePassEvents bool              `json:"store_pass_events"`
-	Strategy               string            `json:"strategy"`
-	WorkerCount            int               `json:"worker_count"`
-	QueueCapacity          int               `json:"queue_capacity"`
-	Scanners               []string          `json:"scanners"`
-	AllGroups              bool              `json:"all_groups"`
-	GroupIDs               []int64           `json:"group_ids"`
-	Endpoints              []StorageEndpoint `json:"endpoints"`
-	ConfigVersion          int64             `json:"config_version"`
-	UpdatedAt              time.Time         `json:"updated_at"`
-	UpdatedBy              int64             `json:"updated_by"`
-	ChangeSummary          string            `json:"change_summary"`
+	Strategy        string            `json:"strategy"`
+	WorkerCount     int               `json:"worker_count"`
+	QueueCapacity   int               `json:"queue_capacity"`
+	Scanners        []string          `json:"scanners"`
+	AllGroups       bool              `json:"all_groups"`
+	GroupIDs        []int64           `json:"group_ids"`
+	Endpoints       []StorageEndpoint `json:"endpoints"`
+	ConfigVersion   int64             `json:"config_version"`
+	UpdatedAt       time.Time         `json:"updated_at"`
+	UpdatedBy       int64             `json:"updated_by"`
+	ChangeSummary   string            `json:"change_summary"`
 }
 
 type ActiveEndpoint struct {
@@ -99,20 +99,20 @@ type ActiveEndpoint struct {
 
 type ActiveConfig struct {
 	RiskControlEnabled bool
-	Enabled         bool
-	BlockingEnabled bool
-	StorePassEvents bool
-	Strategy               string
-	WorkerCount            int
-	QueueCapacity          int
-	Scanners               []string
-	AllGroups              bool
-	GroupIDs               []int64
-	Endpoints              []ActiveEndpoint
-	ConfigVersion          int64
-	UpdatedAt              time.Time
-	UpdatedBy              int64
-	ChangeSummary          string
+	Enabled            bool
+	BlockingEnabled    bool
+	StorePassEvents    bool
+	Strategy           string
+	WorkerCount        int
+	QueueCapacity      int
+	Scanners           []string
+	AllGroups          bool
+	GroupIDs           []int64
+	Endpoints          []ActiveEndpoint
+	ConfigVersion      int64
+	UpdatedAt          time.Time
+	UpdatedBy          int64
+	ChangeSummary      string
 }
 
 type PublicEndpoint struct {
@@ -132,18 +132,18 @@ type PublicConfig struct {
 	Enabled         bool             `json:"enabled"`
 	BlockingEnabled bool             `json:"blocking_enabled"`
 	StorePassEvents bool             `json:"store_pass_events"`
-	EffectiveMode          Mode             `json:"effective_mode"`
-	Strategy               string           `json:"strategy"`
-	WorkerCount            int              `json:"worker_count"`
-	QueueCapacity          int              `json:"queue_capacity"`
-	Scanners               []string         `json:"scanners"`
-	AllGroups              bool             `json:"all_groups"`
-	GroupIDs               []int64          `json:"group_ids"`
-	Endpoints              []PublicEndpoint `json:"endpoints"`
-	ConfigVersion          int64            `json:"config_version"`
-	UpdatedAt              time.Time        `json:"updated_at"`
-	UpdatedBy              int64            `json:"updated_by"`
-	ChangeSummary          string           `json:"change_summary"`
+	EffectiveMode   Mode             `json:"effective_mode"`
+	Strategy        string           `json:"strategy"`
+	WorkerCount     int              `json:"worker_count"`
+	QueueCapacity   int              `json:"queue_capacity"`
+	Scanners        []string         `json:"scanners"`
+	AllGroups       bool             `json:"all_groups"`
+	GroupIDs        []int64          `json:"group_ids"`
+	Endpoints       []PublicEndpoint `json:"endpoints"`
+	ConfigVersion   int64            `json:"config_version"`
+	UpdatedAt       time.Time        `json:"updated_at"`
+	UpdatedBy       int64            `json:"updated_by"`
+	ChangeSummary   string           `json:"change_summary"`
 }
 
 type UpdateEndpoint struct {
@@ -164,13 +164,13 @@ type UpdateConfigRequest struct {
 	Enabled               bool             `json:"enabled"`
 	BlockingEnabled       bool             `json:"blocking_enabled"`
 	StorePassEvents       bool             `json:"store_pass_events"`
-	Strategy               string           `json:"strategy"`
-	WorkerCount            int              `json:"worker_count"`
-	QueueCapacity          int              `json:"queue_capacity"`
-	Scanners               []string         `json:"scanners"`
-	AllGroups              bool             `json:"all_groups"`
-	GroupIDs               []int64          `json:"group_ids"`
-	Endpoints              []UpdateEndpoint `json:"endpoints"`
+	Strategy              string           `json:"strategy"`
+	WorkerCount           int              `json:"worker_count"`
+	QueueCapacity         int              `json:"queue_capacity"`
+	Scanners              []string         `json:"scanners"`
+	AllGroups             bool             `json:"all_groups"`
+	GroupIDs              []int64          `json:"group_ids"`
+	Endpoints             []UpdateEndpoint `json:"endpoints"`
 }
 
 func DefaultStorageConfig() storageConfig {
@@ -178,14 +178,14 @@ func DefaultStorageConfig() storageConfig {
 		Enabled:         false,
 		BlockingEnabled: false,
 		StorePassEvents: false,
-		Strategy:               "priority",
-		WorkerCount:            DefaultWorkerCount,
-		QueueCapacity:          DefaultQueueCapacity,
-		Scanners:               append([]string(nil), AllScannerIDs...),
-		AllGroups:              true,
-		GroupIDs:               []int64{},
-		Endpoints:              []StorageEndpoint{},
-		ConfigVersion:          1,
+		Strategy:        "priority",
+		WorkerCount:     DefaultWorkerCount,
+		QueueCapacity:   DefaultQueueCapacity,
+		Scanners:        append([]string(nil), AllScannerIDs...),
+		AllGroups:       true,
+		GroupIDs:        []int64{},
+		Endpoints:       []StorageEndpoint{},
+		ConfigVersion:   1,
 	}
 }
 

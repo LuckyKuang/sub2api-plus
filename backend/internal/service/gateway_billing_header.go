@@ -2,29 +2,16 @@ package service
 
 import (
 	"fmt"
-	"regexp"
-	"strings"
-
-	"github.com/LuckyKuang/sub2api-plus/internal/pkg/claude"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
+	"regexp"
+	"strings"
 )
 
 // ccVersionInBillingRe matches the semver part of cc_version (X.Y.Z).
 var ccVersionInBillingRe = regexp.MustCompile(`cc_version=\d+\.\d+\.\d+`)
 
 var ccVersionWithFingerprintInBillingRe = regexp.MustCompile(`cc_version=\d+\.\d+\.\d+\.[0-9a-fA-F]{3}\b`)
-
-// OAuth mimicry forces the built-in User-Agent after applying account fingerprints.
-func effectiveBillingUserAgent(tokenType string, mimicClaudeCode bool, fingerprint *Fingerprint) string {
-	if tokenType == "oauth" && mimicClaudeCode {
-		return claude.DefaultHeaders["User-Agent"]
-	}
-	if fingerprint == nil {
-		return ""
-	}
-	return fingerprint.UserAgent
-}
 
 // syncBillingHeaderVersion rewrites cc_version in x-anthropic-billing-header
 // system text blocks to match the version extracted from userAgent.

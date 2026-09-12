@@ -115,7 +115,7 @@ func (s *GrokQuotaService) syncGrokObservedModels(ctx context.Context, account *
 	if s.httpUpstream == nil {
 		return nil
 	}
-	resp, err := s.httpUpstream.Do(req, proxyURL, account.ID, account.Concurrency)
+	resp, err := s.httpUpstream.Do(prepareAccountOutboundRequest(req, account), proxyURL, account.ID, account.Concurrency)
 	if err != nil {
 		return err
 	}

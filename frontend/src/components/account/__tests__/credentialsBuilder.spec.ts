@@ -228,11 +228,25 @@ describe('GROK_BASE_URL_PRESETS', () => {
 })
 
 describe('validateHeaderOverrideRows', () => {
+  it.each([
+    'User-Agent', 'Originator', 'Version', 'X-App', 'X-Goog-Api-Client',
+    'X-Grok-Client-Version', 'X-Grok-Client-Identifier', 'X-Stainless-Lang',
+    'X-Stainless-Package-Version', 'X-Stainless-OS', 'X-Stainless-Arch',
+    'X-Stainless-Runtime', 'X-Stainless-Runtime-Version'
+  ])('rejects managed identity %s, including legacy JSON imports', (name) => {
+    for (const variant of [name, name.toLowerCase(), name.toUpperCase()]) {
+      for (const value of ['', 'injected/999.0.0']) {
+        const rows = parseHeaderOverridesJson(JSON.stringify({ [variant]: value }))!
+        expect(validateHeaderOverrideRows(rows)).toBe('blockedName')
+      }
+    }
+  })
+
   it('accepts valid rows and empty placeholder rows', () => {
     expect(
       validateHeaderOverrideRows([
-        { name: 'user-agent', value: 'my-agent/1.0' },
-        { name: 'x-app', value: '' },
+        { name: 'x-route', value: 'primary' },
+        { name: 'x-custom', value: '' },
         { name: '', value: '' }
       ])
     ).toBeNull()
@@ -261,8 +275,8 @@ describe('validateHeaderOverrideRows', () => {
   it('rejects duplicate names case-insensitively', () => {
     expect(
       validateHeaderOverrideRows([
-        { name: 'User-Agent', value: 'a' },
-        { name: 'user-agent', value: 'b' }
+        { name: 'X-Route', value: 'a' },
+        { name: 'x-route', value: 'b' }
       ])
     ).toBe('duplicateName')
   })
@@ -345,21 +359,21 @@ describe('validateHeaderOverrideRows value/entry limits', () => {
   })
 
   it('rejects control characters in values', () => {
-    expect(validateHeaderOverrideRows([{ name: 'x-app', value: 'a\x0bb' }])).toBe('invalidValue')
+    expect(validateHeaderOverrideRows([{ name: 'x-custom', value: 'a\x0bb' }])).toBe('invalidValue')
   })
 
   it('rejects oversized values', () => {
-    expect(validateHeaderOverrideRows([{ name: 'x-app', value: 'a'.repeat(8193) }])).toBe(
+    expect(validateHeaderOverrideRows([{ name: 'x-custom', value: 'a'.repeat(8193) }])).toBe(
       'invalidValue'
     )
   })
 
   it('measures value length in UTF-8 bytes to match backend', () => {
     // 3000 个 CJK 字符 = 3000 UTF-16 code units，但 9000 UTF-8 字节 > 8192
-    expect(validateHeaderOverrideRows([{ name: 'x-app', value: '测'.repeat(3000) }])).toBe(
+    expect(validateHeaderOverrideRows([{ name: 'x-custom', value: '测'.repeat(3000) }])).toBe(
       'invalidValue'
     )
-    expect(validateHeaderOverrideRows([{ name: 'x-app', value: '测'.repeat(2000) }])).toBeNull()
+    expect(validateHeaderOverrideRows([{ name: 'x-custom', value: '测'.repeat(2000) }])).toBeNull()
   })
 
   it('rejects too many entries', () => {
@@ -384,7 +398,7 @@ describe('validateHeaderOverrideRows session isolation headers', () => {
   })
 
   it('allows tab inside value', () => {
-    expect(validateHeaderOverrideRows([{ name: 'x-app', value: 'a\tb' }])).toBeNull()
+    expect(validateHeaderOverrideRows([{ name: 'x-custom', value: 'a\tb' }])).toBeNull()
   })
 
   it('rejects oversized names', () => {

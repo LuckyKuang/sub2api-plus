@@ -3,6 +3,11 @@
 Sub2API Plus supports authorized Antigravity accounts for Claude and Gemini
 traffic.
 
+Outbound UA and client versions are managed in **System Settings → Outbound
+identity**. Native OAuth retains the Antigravity preset; upstream accounts may
+select another preset. See [outbound identity](../OUTBOUND_IDENTITY.md) for
+inheritance, existing-setting defaults, and OAuth/probe coverage.
+
 ## Dedicated Endpoints
 
 | Endpoint | Models |

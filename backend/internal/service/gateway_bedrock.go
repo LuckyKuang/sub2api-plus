@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/logger"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 
 	"github.com/gin-gonic/gin"
 )
@@ -60,6 +61,7 @@ func (s *GatewayService) forwardBedrock(
 	parsed *ParsedRequest,
 	startTime time.Time,
 ) (*ForwardResult, error) {
+	ctx = WithAccountOutboundIdentity(ctx, account)
 	reqModel := parsed.Model
 	reqStream := parsed.Stream
 	body := parsed.Body.Bytes()
@@ -207,7 +209,7 @@ func (s *GatewayService) executeBedrockUpstream(
 			return nil, err
 		}
 
-		resp, err = s.httpUpstream.DoWithTLS(upstreamReq, proxyURL, account.ID, account.Concurrency, nil)
+		resp, err = s.httpUpstream.DoWithTLS(prepareAccountOutboundRequest(upstreamReq, account), proxyURL, account.ID, account.Concurrency, nil)
 		if err != nil {
 			if resp != nil && resp.Body != nil {
 				_ = resp.Body.Close()
@@ -354,6 +356,7 @@ func (s *GatewayService) buildUpstreamRequestBedrock(
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 
+	outboundidentity.ApplyContext(req)
 	// SigV4 签名
 	if err := signer.SignRequest(ctx, req, body); err != nil {
 		return nil, fmt.Errorf("sign bedrock request: %w", err)
@@ -381,6 +384,7 @@ func (s *GatewayService) buildUpstreamRequestBedrockAPIKey(
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
+	outboundidentity.ApplyContext(req)
 
 	return req, nil
 }

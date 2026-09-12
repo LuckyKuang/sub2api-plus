@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"net/url"
 	"time"
 
@@ -62,6 +63,7 @@ func (c *geminiOAuthClient) ExchangeCode(ctx context.Context, oauthType, code, c
 	var tokenResp geminicli.TokenResponse
 	resp, err := client.R().
 		SetContext(ctx).
+		SetHeaders(outboundidentity.Headers(ctx, "gemini", nil)).
 		SetFormDataFromValues(formData).
 		SetSuccessResult(&tokenResp).
 		Post(c.tokenURL)
@@ -105,6 +107,7 @@ func (c *geminiOAuthClient) RefreshToken(ctx context.Context, oauthType, refresh
 	var tokenResp geminicli.TokenResponse
 	resp, err := client.R().
 		SetContext(ctx).
+		SetHeaders(outboundidentity.Headers(ctx, "gemini", nil)).
 		SetFormDataFromValues(formData).
 		SetSuccessResult(&tokenResp).
 		Post(c.tokenURL)

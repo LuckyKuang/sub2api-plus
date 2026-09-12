@@ -7,6 +7,20 @@ import enSettings from "@/i18n/locales/en/admin/settings";
 import zhCommon from "@/i18n/locales/zh/common";
 import zhSettings from "@/i18n/locales/zh/admin/settings";
 import SettingsView from "../SettingsView.vue";
+import { identityPresets, type OutboundIdentityView } from "@/api/admin/outboundIdentity";
+
+const { getOutboundIdentity, updateOutboundIdentity } = vi.hoisted(() => ({
+  getOutboundIdentity: vi.fn(), updateOutboundIdentity: vi.fn(),
+}));
+vi.mock("@/api/admin/outboundIdentity", async (original) => ({
+  ...await original<typeof import("@/api/admin/outboundIdentity")>(),
+  getOutboundIdentity, updateOutboundIdentity,
+}));
+
+function outboundIdentityFixture(): OutboundIdentityView {
+  const identities = identityPresets.map(preset => ({ preset, user_agent: `${preset}/3.9.0`, originator: preset, version: "3.9.0", source: "compiled_default", headers: {} }));
+  return { settings: { profiles: {}, defaults: {} }, presets: identities, effective: identities };
+}
 
 const {
   getSettings,
@@ -585,6 +599,18 @@ async function openGatewayTab(wrapper: ReturnType<typeof mountView>) {
   await flushPromises();
 }
 
+async function openIdentityTab(wrapper: ReturnType<typeof mountView>) {
+  const button = wrapper.findAll("button").find(node => node.text().includes("admin.settings.tabs.identity"));
+  expect(button).toBeDefined();
+  await button!.trigger("click");
+  await flushPromises();
+}
+
+async function editClaudeIdentityVersion(wrapper: ReturnType<typeof mountView>, version: string) {
+  const editor = wrapper.get('[data-testid="outbound-identity-settings"]');
+  await editor.findAll("section")[1].findAll("input")[0].setValue(version);
+}
+
 async function openUsersTab(wrapper: ReturnType<typeof mountView>) {
   const usersTabButton = wrapper
     .findAll("button")
@@ -619,6 +645,14 @@ describe("admin SettingsView email domain quota copy", () => {
 
 describe("admin SettingsView payment visible method controls", () => {
   beforeEach(() => {
+    getOutboundIdentity.mockReset();
+    updateOutboundIdentity.mockReset();
+    let identityResponse = outboundIdentityFixture();
+    getOutboundIdentity.mockImplementation(async () => identityResponse);
+    updateOutboundIdentity.mockImplementation(async settings => {
+      identityResponse = { ...identityResponse, settings };
+      return identityResponse;
+    });
     getSettings.mockReset();
     updateSettings.mockReset();
     getWebSearchEmulationConfig.mockReset();
@@ -702,6 +736,57 @@ describe("admin SettingsView payment visible method controls", () => {
     });
     fetchPublicSettings.mockResolvedValue(undefined);
     adminSettingsFetch.mockResolvedValue(undefined);
+  });
+
+  it("saves pending identity edits after switching settings tabs", async () => {
+    const wrapper = mountView();
+    try {
+      await flushPromises();
+      await openIdentityTab(wrapper);
+      await editClaudeIdentityVersion(wrapper, "3.9.1");
+      await openGatewayTab(wrapper);
+      await wrapper.find("form").trigger("submit.prevent");
+      await flushPromises();
+      expect(updateOutboundIdentity).toHaveBeenCalledWith(expect.objectContaining({ profiles: expect.objectContaining({ claude: expect.objectContaining({ version: "3.9.1" }) }) }));
+      expect(updateSettings).toHaveBeenCalledTimes(1);
+      expect(showSuccess).toHaveBeenCalled();
+    } finally { wrapper.unmount(); }
+  });
+
+  it("keeps pending identity edits after a failed cross-tab save and retries them", async () => {
+    const wrapper = mountView();
+    try {
+      await flushPromises();
+      await openIdentityTab(wrapper);
+      await editClaudeIdentityVersion(wrapper, "3.9.1");
+      await openGatewayTab(wrapper);
+      updateOutboundIdentity.mockRejectedValueOnce(new Error("identity save failed"));
+      await wrapper.find("form").trigger("submit.prevent");
+      await flushPromises();
+      expect(showSuccess).not.toHaveBeenCalled();
+      expect(showError).toHaveBeenCalled();
+      expect(updateSettings).not.toHaveBeenCalled();
+      await wrapper.find("form").trigger("submit.prevent");
+      await flushPromises();
+      expect(updateOutboundIdentity).toHaveBeenCalledTimes(2);
+      expect(updateOutboundIdentity.mock.calls[1][0].profiles.claude.version).toBe("3.9.1");
+      expect(updateSettings).toHaveBeenCalledTimes(1);
+      expect(showSuccess).toHaveBeenCalled();
+    } finally { wrapper.unmount(); }
+  });
+
+  it("does not rewrite unchanged identity settings after visiting the identity tab", async () => {
+    const wrapper = mountView();
+    try {
+      await flushPromises();
+      await openIdentityTab(wrapper);
+      await openGatewayTab(wrapper);
+      await wrapper.find("form").trigger("submit.prevent");
+      await flushPromises();
+      expect(updateSettings).toHaveBeenCalledTimes(1);
+      expect(updateOutboundIdentity).not.toHaveBeenCalled();
+      expect(showSuccess).toHaveBeenCalled();
+    } finally { wrapper.unmount(); }
   });
 
   it("submits the compact home page toggle", async () => {

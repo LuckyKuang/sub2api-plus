@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"io"
 	"net/http"
 	"regexp"
@@ -731,6 +732,7 @@ func isNonRetryableGeminiOAuthError(err error) bool {
 }
 
 func (s *GeminiOAuthService) RefreshAccountToken(ctx context.Context, account *Account) (*GeminiTokenInfo, error) {
+	ctx = WithAccountOutboundIdentity(ctx, account)
 	if account.Platform != PlatformGemini || account.Type != AccountTypeOAuth {
 		return nil, fmt.Errorf("account is not a Gemini OAuth account")
 	}
@@ -1048,6 +1050,7 @@ func fetchProjectIDFromResourceManager(ctx context.Context, accessToken, proxyUR
 		return "", fmt.Errorf("create http client failed: %w", err)
 	}
 
+	outboundidentity.ApplyDefault(req, "gemini")
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("resource manager request failed: %w", err)

@@ -136,6 +136,28 @@ func TestResolveOpenAIOAuthIdentity_LegacyRequiresExplicitResolvedOriginator(t *
 	require.Equal(t, "0.150.0", version)
 }
 
+func (s *OpenAIOAuthServiceSuite) TestIdentityRetainsConfiguredOutboundVersionSyntax() {
+	requests := make(chan [3]string, 1)
+	s.setupServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests <- [3]string{r.Header.Get("User-Agent"), r.Header.Get("Originator"), r.Header.Get("Version")}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"access_token":"at","refresh_token":"rt","expires_in":3600}`)
+	}))
+	for _, family := range []string{"codex_cli_rs", "codex_exec"} {
+		for _, version := range []string{"0.200", "0.2000"} {
+			ua := family + "/" + version + " (Ubuntu 24.04; x86_64) terminal"
+			_, err := s.svc.ExchangeCodeWithIdentity(s.ctx, "code", "verifier", openai.DefaultRedirectURI, "", "", ua, family, version)
+			require.NoError(s.T(), err)
+			require.Equal(s.T(), [3]string{ua, family, version}, <-requests)
+			_, err = s.svc.RefreshTokenWithClientIDAndIdentity(s.ctx, "refresh", "", "", ua, family, version)
+			require.NoError(s.T(), err)
+			require.Equal(s.T(), [3]string{ua, family, version}, <-requests)
+			got, _, _ := resolveOpenAIOAuthIdentity(ua, "", version)
+			require.Equal(s.T(), service.DefaultOpenAICodexUserAgent, got, "UA-only callers cannot supply a policy-approved historical version")
+		}
+	}
+}
+
 func (s *OpenAIOAuthServiceSuite) TestRefreshToken_FormFields() {
 	errCh := make(chan string, 1)
 	s.setupServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

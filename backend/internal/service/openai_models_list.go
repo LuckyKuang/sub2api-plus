@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 )
 
 // FetchOpenAIModelsList discovers a single account's raw public model catalog.
@@ -43,6 +44,8 @@ func (s *OpenAIGatewayService) FetchOpenAIModelsList(ctx context.Context, accoun
 		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_MODELS_REQUEST_INVALID", "cannot build upstream model list request: %v", err)
 	}
 	s.applyOpenAIOutboundIdentity(ctx, credentialAccount, req.Header, false)
+	ApplyAccountOutboundIdentity(ctx, credentialAccount, req)
+	ctx = req.Context()
 	request := openAIModelsRequest{
 		url: req.URL.String(), headers: req.Header,
 		proxyURL: upstreamModelsProxyURL(account), accountID: account.ID,
@@ -51,6 +54,9 @@ func (s *OpenAIGatewayService) FetchOpenAIModelsList(ctx context.Context, accoun
 		standardModelsList: true,
 	}
 	response, err := s.fetchCachedOpenAIModels(ctx, request, func(fetchCtx context.Context, etag string) (*OpenAIModelsResponse, error) {
+		if identity, ok := outboundidentity.FromContext(ctx); ok {
+			fetchCtx = outboundidentity.WithIdentity(fetchCtx, identity)
+		}
 		response, err := s.fetchOpenAIModelsUpstream(fetchCtx, request, etag)
 		if err != nil || response.NotModified {
 			return response, err

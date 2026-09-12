@@ -130,6 +130,7 @@ func (s *OpenAIGatewayService) CreateLiveCall(
 	if err := ValidateLiveCallRequest(request); err != nil {
 		return nil, err
 	}
+	ctx = WithOutboundIdentityScope(ctx, nil)
 	store, err := s.liveStore()
 	if err != nil {
 		return nil, err
@@ -264,6 +265,7 @@ func (s *OpenAIGatewayService) createUpstreamLiveCall(
 	request *LiveCallRequest,
 	attestation string,
 ) (*LiveCallCreated, error) {
+	ctx = WithOutboundIdentityScope(ctx, nil)
 	token, _, err := s.GetAccessToken(ctx, account)
 	if err != nil {
 		logLiveCreateStageFailure(ctx, account.ID, "access_token", err)
@@ -419,6 +421,7 @@ func (s *OpenAIGatewayService) liveSidebandHeaders(
 	account *Account,
 	record *LiveCallRecord,
 ) (http.Header, error) {
+	ctx = WithOutboundIdentityScope(ctx, nil)
 	token, _, err := s.GetAccessToken(ctx, account)
 	if err != nil {
 		return nil, err
@@ -697,6 +700,7 @@ func (s *OpenAIGatewayService) observeLiveCall(record *LiveCallRecord) {
 	if record == nil {
 		return
 	}
+	ctx := WithOutboundIdentityScope(context.Background(), nil)
 	store, err := s.liveStore()
 	if err != nil {
 		return
@@ -740,7 +744,7 @@ func (s *OpenAIGatewayService) observeLiveCall(record *LiveCallRecord) {
 			s.finalizeLiveCall(record)
 			return
 		}
-		upstream, dialErr := s.dialLiveSideband(context.Background(), record)
+		upstream, dialErr := s.dialLiveSideband(ctx, record)
 		if dialErr != nil {
 			if !s.waitForLiveObserverRetry(record) {
 				return

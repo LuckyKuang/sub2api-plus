@@ -126,6 +126,60 @@ class CompressCliTest(unittest.TestCase):
         errors = self.validate_text(changed)
         self.assert_error_contains(errors, "credentials.user_agent")
 
+    def test_missing_outbound_identity_category_fails(self) -> None:
+        changed = "\n".join(
+            line
+            for line in self.valid_document.splitlines()
+            if not line.startswith("|Outbound Identity:")
+        )
+        self.assert_error_contains(
+            self.validate_text(changed), "missing required category 'Outbound Identity'"
+        )
+
+    def test_outbound_identity_contract_cannot_be_weakened(self) -> None:
+        regressions = (
+            ("trusted User-Agent/client identifier/version triple", "a User-Agent"),
+            ("new account types have no bypass", "new account types may bypass"),
+            ("Preserve the Codex Identity contract unchanged", "Use a new Codex source chain"),
+            (
+                "valid credential-owning account > configured global preset/type default > valid environment/compiled default",
+                "SDK defaults > inbound headers > account settings",
+            ),
+            ("empty/invalid candidates fall through atomically", "mix candidate fields"),
+            ("must not select or overwrite identity", "may overwrite identity"),
+            ("Reuse the same-account snapshot", "Resolve again on every send"),
+            ("HTTP/WS, retries, probes, discovery, usage, OAuth, and batch paths", "HTTP inference only"),
+            ("failover resolves the new credential owner", "failover retains the previous owner"),
+            ("Apply before signing and preserve signed declarations at send time", "Apply identity after signing"),
+            ("Render only provider-defined identity headers", "Send Codex headers to every provider"),
+            ("keep companion/body declarations coherent", "preserve caller body versions"),
+            (
+                "Version-only updates preserve source, client family, identifier, OS, architecture, terminal, and SDK fingerprint",
+                "Version updates may replace the client fingerprint",
+            ),
+            (
+                "New types/paths, version/dependency upgrades, and upstream merges must preserve this contract",
+                "Upstream upgrades may bypass this contract",
+            ),
+            (
+                "pass source/default, header/body, transport-path, signing, failover, and fingerprint regressions",
+                "pass a smoke test",
+            ),
+            ("synchronize owning docs and tests before merge", "update documentation later"),
+            (
+                "Do not weaken identity rules or checks to accommodate upstream behavior",
+                "Disable failing identity checks during upstream merges",
+            ),
+        )
+        for original, replacement in regressions:
+            with self.subTest(regression=original):
+                self.assertIn(original, self.valid_document)
+                changed = self.valid_document.replace(original, replacement)
+                self.assert_error_contains(
+                    self.validate_text(changed),
+                    "category 'Outbound Identity' is missing protected content",
+                )
+
     def test_codex_version_sync_cannot_change_identity_fingerprint(self) -> None:
         changed = self.valid_document.replace(
             "Version sync may update only selected identity version declarations and must not change source, client family, Originator, OS, architecture, or terminal fingerprint",

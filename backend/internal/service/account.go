@@ -2041,7 +2041,8 @@ func (a *Account) IsOveragesEnabled() bool {
 	return false
 }
 
-// IsOpenAIPassthroughEnabled 返回 OpenAI 账号是否启用"自动透传（仅替换认证）"。
+// IsOpenAIPassthroughEnabled 返回 OpenAI 账号是否启用 HTTP 自动透传。
+// 认证和出站身份仍由网关管理，不改变 WebSocket 模式。
 //
 // 新字段：accounts.extra.openai_passthrough。
 // 兼容字段：accounts.extra.openai_oauth_passthrough（历史 OAuth 开关）。

@@ -95,11 +95,14 @@ func TestBuildOAuthRequest_BillingMatchesWireUserAgent(t *testing.T) {
 			mimic     bool
 			identity  bool
 			disableFP bool
+			version   string
 		}{
-			{name: "mimic_overrides_cached_version", mimic: true, identity: true},
+			{name: "mimic_uses_trusted_version", mimic: true, identity: true},
 			{name: "mimic_without_identity", mimic: true},
 			{name: "mimic_with_fingerprint_disabled", mimic: true, identity: true, disableFP: true},
-			{name: "passthrough_uses_cached_version", identity: true},
+			{name: "passthrough_ignores_cached_version", identity: true},
+			{name: "account_version_with_mimic", mimic: true, identity: true, version: "3.9.1"},
+			{name: "account_version_without_mimic", identity: true, version: "3.9.1"},
 		} {
 			t.Run(endpoint+"/"+tc.name, func(t *testing.T) {
 				resetGatewayForwardingSettingsCacheForTest(t)
@@ -125,6 +128,9 @@ func TestBuildOAuthRequest_BillingMatchesWireUserAgent(t *testing.T) {
 					}}, cfg)
 				}
 				account := &Account{ID: 1, Platform: PlatformAnthropic, Type: AccountTypeOAuth}
+				if tc.version != "" {
+					account.Credentials = map[string]any{outboundIdentityCredential: OutboundIdentitySelection{Preset: "claude", Version: tc.version}}
+				}
 				var req *http.Request
 				var wireBody []byte
 				if endpoint == "messages" {
@@ -136,9 +142,9 @@ func TestBuildOAuthRequest_BillingMatchesWireUserAgent(t *testing.T) {
 				}
 				require.NoError(t, err)
 				defer func() { require.NoError(t, req.Body.Close()) }()
-				wantUA := cachedUA
-				if tc.mimic {
-					wantUA = claude.DefaultHeaders["User-Agent"]
+				wantUA := claude.DefaultHeaders["User-Agent"]
+				if tc.version != "" {
+					wantUA = "claude-cli/" + tc.version + " (external, cli)"
 				}
 				require.Equal(t, wantUA, getHeaderRaw(req.Header, "User-Agent"))
 				version := ExtractCLIVersion(wantUA)

@@ -3,6 +3,7 @@ package xai
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"math"
 	"net/http"
 	"strconv"
@@ -149,6 +150,7 @@ func ApplyCLIBillingHeaders(req *http.Request, accessToken string) {
 	req.Header.Set(CLITokenAuthHeader, CLITokenAuthValue)
 	req.Header.Set(CLIClientVersionHeader, CLIClientVersion)
 	req.Header.Set("User-Agent", billingCLIUserAgent)
+	outboundidentity.ApplyDefault(req, "grok")
 }
 
 // ParseBillingPayload unmarshals a billing API response body.

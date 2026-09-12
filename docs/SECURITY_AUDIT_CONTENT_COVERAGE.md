@@ -12,6 +12,25 @@ compact output is not treated as a text-token delta; see [usage timing](USAGE_TI
 
 ## Boundary And Ordering
 
+Outbound identity presets are resolved after this boundary and account
+selection. UA/SDK declarations are never audit inputs or an audit bypass.
+Claude billing-header version rewriting uses the selected outbound identity;
+the canonical inbound content shared by both audit engines stays unchanged.
+OAuth, API-key, Bedrock, Vertex and compatible adapters retain the same ordering.
+Token-count forwarding captures its identity only after ingress audit and
+account selection, before token acquisition or request construction. Signature
+retries reuse that snapshot; they do not re-extract or change the audited input.
+Responses WS allocates its outbound identity scope after the first-turn audit
+and before credential refresh or the upstream handshake. The scope only retains
+resolver results; it does not evaluate content, select an account or perform I/O.
+Reusing a scope on retry or reconnection never skips subsequent-turn audit.
+Standalone search preserves `X-Codex-Turn-Metadata` for OAuth and API keys,
+including opaque `mcp_request_meta` / `openai/search_context` metadata. This
+protocol header is not a content-extraction input or an audit decision. The
+canonical Alpha Search body (`commands`, `settings`, `input`) still enters both
+engines before account selection and outbound header construction; retaining
+metadata or changing the passthrough switch cannot skip that boundary.
+
 Every accepted HTTP request, WebSocket turn, and Live Sideband client frame
 must cross the same security-audit boundary after authentication and basic
 request validation, but before:

@@ -19,6 +19,7 @@ import (
 )
 
 func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Context, account *Account, body []byte, token, tokenType, modelID string, reqStream bool, mimicClaudeCode bool) (*http.Request, []byte, error) {
+	ctx = WithAccountOutboundIdentity(ctx, account)
 	body = stripDeferredToolCacheControl(body)
 	if account.Platform == PlatformAnthropic && account.Type == AccountTypeServiceAccount {
 		req, err := s.buildUpstreamRequestAnthropicVertex(ctx, c, account, body, token, modelID, reqStream)
@@ -85,7 +86,7 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
 	}
 
 	// Mimicry may override the cached User-Agent later, even without a fingerprint.
-	if billingUA := effectiveBillingUserAgent(tokenType, mimicClaudeCode, fingerprint); billingUA != "" {
+	if billingUA := accountOutboundUserAgent(ctx, account); billingUA != "" {
 		body = syncBillingHeaderVersion(body, billingUA)
 	}
 
@@ -195,6 +196,7 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
 	// 账号级请求头覆写（仅 anthropic/openai api_key 账号启用时生效；OAuth 路径 no-op）。
 	// 放在所有 header 逻辑之后，确保配置值对同名头拥有最终决定权。
 	account.ApplyHeaderOverrides(req.Header)
+	ApplyAccountOutboundIdentity(ctx, account, req)
 
 	// === DEBUG: 打印上游转发请求（headers + body 摘要），与 CLIENT_ORIGINAL 对比 ===
 	s.debugLogGatewaySnapshot("UPSTREAM_FORWARD", req.Header, body, map[string]string{
@@ -269,6 +271,7 @@ func (s *GatewayService) buildUpstreamRequestAnthropicVertex(
 	modelID string,
 	reqStream bool,
 ) (*http.Request, error) {
+	ctx = WithAccountOutboundIdentity(ctx, account)
 	vertexBody, err := buildVertexAnthropicRequestBody(body)
 	if err != nil {
 		return nil, err
@@ -333,6 +336,7 @@ func (s *GatewayService) buildUpstreamRequestAnthropicVertex(
 		setHeaderRaw(req.Header, "anthropic-beta", finalBeta)
 	}
 
+	ApplyAccountOutboundIdentity(ctx, account, req)
 	s.debugLogGatewaySnapshot("UPSTREAM_FORWARD_VERTEX_ANTHROPIC", req.Header, vertexBody, map[string]string{
 		"url":        req.URL.String(),
 		"token_type": "service_account",

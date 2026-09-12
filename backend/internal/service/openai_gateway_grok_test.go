@@ -944,7 +944,7 @@ func TestBuildGrokResponsesRequestHonorsOAuthOfficialEndpointSwitch(t *testing.T
 	require.Equal(t, xai.DefaultBaseURL+"/responses", req.URL.String())
 }
 
-func TestBuildGrokResponsesRequestAppliesHeaderOverridesLast(t *testing.T) {
+func TestBuildGrokResponsesRequestAppliesOnlyOrdinaryHeaderOverrides(t *testing.T) {
 	t.Parallel()
 
 	account := &Account{
@@ -964,11 +964,11 @@ func TestBuildGrokResponsesRequestAppliesHeaderOverridesLast(t *testing.T) {
 	req, err := buildGrokResponsesRequest(context.Background(), nil, account, []byte(`{"model":"grok-4.3"}`), "access-token", "conv-1", nil)
 	require.NoError(t, err)
 	require.Equal(t, "https://relay.example.test/v1/responses", req.URL.String())
-	// 覆写值优先于内置 CLI 身份头。名字不在 wire casing 映射中的覆写头
-	// 以小写键直写（HTTP/2 线上语义），需按写入形态断言。
-	require.Equal(t, "relay-client/2.0", req.Header.Get("User-Agent"))
-	require.Equal(t, []string{"9.9.9"}, req.Header["x-grok-client-version"])
-	require.Empty(t, req.Header.Get("X-Grok-Client-Version"))
+	// 历史身份覆写不能覆盖可信 CLI 声明；普通中转头仍按原 wire casing 写入。
+	require.Equal(t, defaultGrokUpstreamUserAgent(), req.Header.Get("User-Agent"))
+	require.Equal(t, xai.ResolveCLIVersion(), req.Header.Get("X-Grok-Client-Version"))
+	require.Equal(t, xai.CLIClientIdentifier, req.Header.Get("X-Grok-Client-Identifier"))
+	require.NotContains(t, req.Header, "x-grok-client-version")
 	require.Equal(t, []string{"relay-secret"}, req.Header["x-relay-token"])
 	// 会话路由头与认证头不受覆写影响。
 	require.Equal(t, "conv-1", req.Header.Get(grokConversationIDHeader))
@@ -1228,8 +1228,8 @@ func TestForwardGrokMediaImagesGenerationNormalizesImagineAlias(t *testing.T) {
 	require.Equal(t, http.MethodPost, upstream.lastReq.Method)
 	require.Equal(t, "Bearer api-key", upstream.lastReq.Header.Get("Authorization"))
 	require.Equal(t, "application/json", upstream.lastReq.Header.Get("Content-Type"))
-	require.Empty(t, upstream.lastReq.Header.Get("X-Grok-Client-Version"))
-	require.NotEqual(t, defaultGrokUpstreamUserAgent(), upstream.lastReq.Header.Get("User-Agent"))
+	require.Equal(t, xai.ResolveCLIVersion(), upstream.lastReq.Header.Get("X-Grok-Client-Version"))
+	require.Equal(t, defaultGrokUpstreamUserAgent(), upstream.lastReq.Header.Get("User-Agent"))
 	require.JSONEq(t, `{"model":"grok-imagine-image-quality","prompt":"draw a cat"}`, string(upstream.lastBody))
 	require.Equal(t, http.StatusOK, recorder.Code)
 	require.JSONEq(t, `{"data":[{"url":"https://images.test/cat.png"}]}`, recorder.Body.String())
@@ -1703,7 +1703,7 @@ func TestForwardGrokMediaOAuthImageToVideoUsesOfficialAPIForLargeBody(t *testing
 	require.NoError(t, err)
 	require.Equal(t, xai.DefaultBaseURL+"/videos/generations", upstream.lastReq.URL.String())
 	require.Empty(t, upstream.lastReq.Header.Get("X-XAI-Token-Auth"))
-	require.Empty(t, upstream.lastReq.Header.Get("x-grok-client-version"))
+	require.Equal(t, xai.ResolveCLIVersion(), upstream.lastReq.Header.Get("x-grok-client-version"))
 	require.Equal(t, "data:image/png;base64,"+imageData, gjson.GetBytes(upstream.lastBody, "image.url").String())
 	require.False(t, gjson.GetBytes(upstream.lastBody, "image.image_url").Exists())
 }
@@ -1742,8 +1742,8 @@ func TestForwardGrokMediaVideoStatusUsesGETWithoutBody(t *testing.T) {
 	require.Equal(t, "https://xai.test/v1/videos/request-123", upstream.lastReq.URL.String())
 	require.Equal(t, http.MethodGet, upstream.lastReq.Method)
 	require.Equal(t, "Bearer api-key", upstream.lastReq.Header.Get("Authorization"))
-	require.Empty(t, upstream.lastReq.Header.Get("X-Grok-Client-Version"))
-	require.NotEqual(t, defaultGrokUpstreamUserAgent(), upstream.lastReq.Header.Get("User-Agent"))
+	require.Equal(t, xai.ResolveCLIVersion(), upstream.lastReq.Header.Get("X-Grok-Client-Version"))
+	require.Equal(t, defaultGrokUpstreamUserAgent(), upstream.lastReq.Header.Get("User-Agent"))
 	require.Empty(t, upstream.lastReq.Header.Get("Content-Type"))
 	require.Empty(t, upstream.lastBody)
 	require.Equal(t, http.StatusOK, recorder.Code)
@@ -2078,8 +2078,8 @@ func TestForwardGrokResponsesAPIKeyUsesXAIResponses(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "https://api.x.ai/v1/responses", upstream.lastReq.URL.String())
 	require.Equal(t, "Bearer xai-test-key", upstream.lastReq.Header.Get("Authorization"))
-	require.Empty(t, upstream.lastReq.Header.Get("X-Grok-Client-Version"))
-	require.NotEqual(t, defaultGrokUpstreamUserAgent(), upstream.lastReq.Header.Get("User-Agent"))
+	require.Equal(t, xai.ResolveCLIVersion(), upstream.lastReq.Header.Get("X-Grok-Client-Version"))
+	require.Equal(t, defaultGrokUpstreamUserAgent(), upstream.lastReq.Header.Get("User-Agent"))
 	require.Equal(t, "grok-4.6", gjson.GetBytes(upstream.lastBody, "model").String())
 	require.False(t, gjson.GetBytes(upstream.lastBody, "metadata").Exists())
 	require.Equal(t, "resp_grok_api_key", result.ResponseID)
@@ -2407,8 +2407,8 @@ func TestForwardAsChatCompletionsForGrokAPIKeyUsesConfiguredRawEndpointWithoutOA
 	require.NoError(t, err)
 	require.Equal(t, "https://grok.example.test/v1/chat/completions", upstream.lastReq.URL.String())
 	require.Equal(t, "Bearer third-party-key", upstream.lastReq.Header.Get("Authorization"))
-	require.Empty(t, upstream.lastReq.Header.Get("X-Grok-Client-Version"))
-	require.NotEqual(t, defaultGrokUpstreamUserAgent(), upstream.lastReq.Header.Get("User-Agent"))
+	require.Equal(t, xai.ResolveCLIVersion(), upstream.lastReq.Header.Get("X-Grok-Client-Version"))
+	require.Equal(t, defaultGrokUpstreamUserAgent(), upstream.lastReq.Header.Get("User-Agent"))
 }
 
 func TestForwardAsChatCompletionsForGrokAPIKeyRejectsNonStreamingResponseWithoutUsage(t *testing.T) {
@@ -2513,7 +2513,7 @@ func TestAccountTestServiceGrokAPIKeyAllowsConfiguredHTTPWhenGlobalPolicyDoes(t 
 	require.NoError(t, err)
 	require.Equal(t, "http://grok.example.test/v1/responses", upstream.lastReq.URL.String())
 	require.Equal(t, "Bearer third-party-key", upstream.lastReq.Header.Get("Authorization"))
-	require.Empty(t, upstream.lastReq.Header.Get("X-Grok-Client-Version"))
+	require.Equal(t, xai.ResolveCLIVersion(), upstream.lastReq.Header.Get("X-Grok-Client-Version"))
 	require.Contains(t, recorder.Body.String(), `"type":"test_complete"`)
 }
 

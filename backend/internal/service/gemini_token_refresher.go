@@ -34,6 +34,7 @@ func (r *GeminiTokenRefresher) NeedsRefresh(account *Account, refreshWindow time
 }
 
 func (r *GeminiTokenRefresher) Refresh(ctx context.Context, account *Account) (map[string]any, error) {
+	ctx = WithAccountOutboundIdentity(ctx, account)
 	tokenInfo, err := r.geminiOAuthService.RefreshAccountToken(ctx, account)
 	if err != nil {
 		return nil, err

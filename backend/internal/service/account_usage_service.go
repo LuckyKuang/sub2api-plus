@@ -278,7 +278,6 @@ type ClaudeUsageFetchOptions struct {
 	ProxyURL    string                  // 代理 URL（可选）
 	AccountID   int64                   // 账号 ID（用于连接池隔离）
 	TLSProfile  *tlsfingerprint.Profile // TLS 指纹 Profile（nil 表示不启用）
-	Fingerprint *Fingerprint            // 缓存的指纹信息（User-Agent 等）
 }
 
 // ClaudeUsageFetcher fetches usage data from Anthropic OAuth API
@@ -848,6 +847,7 @@ func (s *AccountUsageService) shouldProbeOpenAICodexSnapshot(accountID int64, no
 }
 
 func (s *AccountUsageService) probeOpenAICodexSnapshot(ctx context.Context, account *Account) (map[string]any, error) {
+	ctx = WithOutboundIdentityScope(ctx, nil)
 	if account == nil || !account.IsOAuth() {
 		return nil, nil
 	}
@@ -1571,8 +1571,9 @@ func (s *AccountUsageService) GetAccountUsageStats(ctx context.Context, accountI
 
 // fetchOAuthUsageRaw 从 Anthropic API 获取原始响应（不构建 UsageInfo）
 // 如果账号开启了 TLS 指纹，则使用 TLS 指纹伪装
-// 如果有缓存的 Fingerprint，则使用缓存的 User-Agent 等信息
+// 出站身份来自账号和全局设置，旧 Fingerprint 缓存不再参与 UA 选择。
 func (s *AccountUsageService) fetchOAuthUsageRaw(ctx context.Context, account *Account) (*ClaudeUsageResponse, error) {
+	ctx = WithAccountOutboundIdentity(ctx, account)
 	accessToken := account.GetCredential("access_token")
 	if accessToken == "" {
 		return nil, fmt.Errorf("no access token available")
@@ -1589,13 +1590,6 @@ func (s *AccountUsageService) fetchOAuthUsageRaw(ctx context.Context, account *A
 		ProxyURL:    proxyURL,
 		AccountID:   account.ID,
 		TLSProfile:  s.tlsFPProfileService.ResolveTLSProfile(account),
-	}
-
-	// 尝试获取缓存的 Fingerprint（包含 User-Agent 等信息）
-	if s.identityCache != nil {
-		if fp, err := s.identityCache.GetFingerprint(ctx, account.ID); err == nil && fp != nil {
-			opts.Fingerprint = fp
-		}
 	}
 
 	return s.usageFetcher.FetchUsageWithOptions(ctx, opts)

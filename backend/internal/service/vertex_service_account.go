@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"io"
 	"log/slog"
 	"net/http"
@@ -148,6 +149,7 @@ func vertexServiceAccountCacheKey(account *Account, key *vertexServiceAccountKey
 // getVertexServiceAccountAccessToken obtains an access token for a Vertex service account,
 // using the shared cache and distributed lock to avoid redundant exchanges.
 func getVertexServiceAccountAccessToken(ctx context.Context, cache GeminiTokenCache, account *Account) (string, error) {
+	ctx = WithAccountOutboundIdentity(ctx, account)
 	key, err := parseVertexServiceAccountKey(account)
 	if err != nil {
 		return "", err
@@ -251,6 +253,7 @@ func exchangeVertexServiceAccountToken(ctx context.Context, key *vertexServiceAc
 	if err != nil {
 		return "", 0, fmt.Errorf("configure service account token proxy: %w", err)
 	}
+	outboundidentity.ApplyDefault(req, "gemini")
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", 0, fmt.Errorf("service account token request failed: %w", err)

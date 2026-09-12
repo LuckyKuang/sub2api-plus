@@ -147,6 +147,18 @@ func resolveOpenAIOAuthIdentity(userAgent, requestedOriginator, version string) 
 	// byte-for-byte; old user-agent-only APIs therefore remain strict current
 	// official-only and cannot accidentally reopen the migration set.
 	profile, pairedUserAgent, ok := openai.PairConfiguredCodexClientIdentity(strings.TrimSpace(userAgent), true)
+	if !ok && strings.TrimSpace(requestedOriginator) != "" {
+		// Identity-aware callers already selected the client family. Outbound
+		// versions may use the historical two-part syntax supported by the
+		// settings resolver, which is deliberately separate from ingress SemVer.
+		uaVersion := service.NormalizeCodexClientVersion(openai.CodexUserAgentVersion(userAgent))
+		if uaVersion != "" && uaVersion == service.NormalizeCodexClientVersion(version) && service.CompareVersions(uaVersion, service.OpenAICodexUpstreamMinVersion) >= 0 {
+			familyUA := openai.SetCodexUserAgentVersion(userAgent, service.DefaultOpenAICodexVersion)
+			if candidate, _, valid := openai.PairConfiguredCodexClientIdentity(familyUA, true); valid && candidate.Originator == strings.TrimSpace(requestedOriginator) {
+				profile, pairedUserAgent, ok = candidate, strings.TrimSpace(userAgent), true
+			}
+		}
+	}
 	if ok && (profile.Profile != openai.CodexClientProfileLegacyCompatibility || strings.TrimSpace(requestedOriginator) == profile.Originator) {
 		pairedOriginator := profile.Originator
 		resolvedVersion := service.NormalizeCodexClientVersion(version)

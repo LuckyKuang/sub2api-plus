@@ -276,6 +276,7 @@ func isNonRetryableAntigravityOAuthError(err error) bool {
 
 // RefreshAccountToken 刷新账户的 token
 func (s *AntigravityOAuthService) RefreshAccountToken(ctx context.Context, account *Account) (*AntigravityTokenInfo, error) {
+	ctx = WithAccountOutboundIdentity(ctx, account)
 	if account.Platform != PlatformAntigravity || account.Type != AccountTypeOAuth {
 		return nil, fmt.Errorf("非 Antigravity OAuth 账户")
 	}
@@ -441,6 +442,7 @@ func resolveDefaultTierID(loadRaw map[string]any) string {
 
 // FillProjectID 仅获取 project_id，不刷新 OAuth token
 func (s *AntigravityOAuthService) FillProjectID(ctx context.Context, account *Account, accessToken string) (string, error) {
+	ctx = WithAccountOutboundIdentity(ctx, account)
 	var proxyURL string
 	if account.ProxyID != nil {
 		proxy, err := s.proxyRepo.GetByID(ctx, *account.ProxyID)

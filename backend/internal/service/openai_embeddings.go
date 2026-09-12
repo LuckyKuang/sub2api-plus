@@ -24,6 +24,8 @@ func (s *OpenAIGatewayService) ForwardEmbeddings(
 	body []byte,
 	defaultMappedModel string,
 ) (result *OpenAIForwardResult, err error) {
+	ctx = WithOutboundIdentityScope(ctx, c)
+	ctx = WithAccountOutboundIdentity(ctx, account)
 	defer func() { finalizeClientDisconnectForwardResult(ctx, c, result, err) }()
 	startTime := time.Now()
 

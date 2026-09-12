@@ -620,9 +620,9 @@ export default {
       openai: {
         baseUrlHint: '留空使用官方 OpenAI API',
         apiKeyHint: '您的 OpenAI API Key',
-        oauthPassthrough: '自动透传（仅替换认证）',
+        oauthPassthrough: 'HTTP 自动透传',
         oauthPassthroughDesc:
-          '开启后，该 OpenAI 账号将自动透传请求与响应，仅替换认证并保留计费/并发/审计及必要安全过滤；如遇兼容性问题可随时关闭回滚。',
+          '开启后，该 OpenAI 账号使用 HTTP 自动透传。认证和出站客户端身份仍由网关统一设置，并保留必要的协议处理、安全过滤、审计、计费与并发控制。关闭后恢复常规 HTTP 转发；此开关不改变 WebSocket 模式。',
         accountUserAgent: '账号级 Codex User-Agent',
         accountUserAgentPlaceholder: '留空：继承全局 Codex User-Agent',
         accountUserAgentDesc: '可选。为当前账号覆盖全局 Codex 身份；必须是受支持的 Codex User-Agent，清空后恢复继承。旧版身份需先在全局设置开启「旧版 Codex 客户端档案兼容模式」。',
@@ -848,8 +848,8 @@ export default {
       headerOverride: {
         title: '请求头覆写',
         hint: '转发时用配置值覆盖同名请求头（不区分大小写）',
-        info: '仅对本账号的出站请求生效：配置的请求头会在转发前覆盖客户端/网关生成的同名头。认证头（authorization、x-api-key）与连接控制头不允许覆写。',
-        namePlaceholder: '请求头名称（如 user-agent）',
+        info: '仅对本账号的出站请求生效：配置值覆盖同名普通请求头。User-Agent、客户端标识、客户端版本和 SDK 身份头由「出站身份」统一管理，不允许在此覆写；历史身份覆写会被忽略。认证头（authorization、x-api-key）与连接控制头不允许覆写。',
+        namePlaceholder: '请求头名称（如 x-custom-header）',
         valuePlaceholder: '覆写值（留空表示不覆写）',
         addRow: '添加请求头',
         importJson: 'JSON 导入',
@@ -863,7 +863,7 @@ export default {
         bulkReplaceHint: '保存后将用下方配置整体替换所选账号已有的请求头覆写配置。',
         bulkEmptyRows: '请至少添加一行请求头再保存；如需清空已有配置，请关闭上方开关。',
         invalidName: '请求头名称格式不正确（仅允许字母、数字和 !#$%&\'*+-.^_`|~ 字符）',
-        blockedName: '该请求头不允许覆写（认证头与连接控制头由系统管理）',
+        blockedName: '该请求头不允许覆写（客户端身份、认证与连接控制头由系统管理）',
         duplicateName: '存在重复的请求头名称（匹配不区分大小写）',
         invalidValue: '请求头值不合法（不允许控制字符，长度不超过 8192）',
         tooManyEntries: '请求头覆写条目过多（最多 64 条）'

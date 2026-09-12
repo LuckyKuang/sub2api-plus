@@ -823,6 +823,7 @@ func ProvideSettingService(settingRepo SettingRepository, groupRepo GroupReposit
 		logger.LegacyPrintf("service.setting", "Warning: migrate Grok default text model failed: %v", err)
 	}
 	antigravity.SetUserAgentVersionResolver(svc.GetAntigravityUserAgentVersion)
+	svc.installOutboundIdentityResolver()
 	return svc
 }
 
