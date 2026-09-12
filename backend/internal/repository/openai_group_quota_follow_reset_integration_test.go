@@ -215,11 +215,18 @@ func newQuotaFollowFixture(t *testing.T) quotaFollowFixture {
 		_, _ = integrationDB.Exec(`DELETE FROM accounts WHERE id=$1`, f.accountID)
 		_, _ = integrationDB.Exec(`DELETE FROM users WHERE id=$1`, userID)
 	})
-	f.now = time.Now().UTC().Truncate(time.Microsecond)
+	// Use the database clock that owns groups.updated_at. Separate validation
+	// VMs can have small clock offsets; the baseline must be strictly newer
+	// than activation even then, just like a fresh post-activation quota query.
+	require.NoError(t, integrationDB.QueryRowContext(ctx, `SELECT clock_timestamp()`).Scan(&f.now))
+	f.now = f.now.UTC()
 	f.baseline = f.now.Add(7 * 24 * time.Hour)
 	created, err := observeWeeklyResetAt(f.repo, ctx, f.accountID, f.baseline, f.now)
 	require.NoError(t, err)
 	require.Zero(t, created)
+	var baseline time.Time
+	require.NoError(t, integrationDB.QueryRowContext(ctx, `SELECT quota_reset_source_reset_at FROM groups WHERE id=$1`, f.groupID).Scan(&baseline))
+	require.Equal(t, f.baseline, baseline, "fixture must establish the post-activation baseline")
 	return f
 }
 

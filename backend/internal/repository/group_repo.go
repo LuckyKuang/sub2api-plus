@@ -30,6 +30,27 @@ type groupRepository struct {
 	sql    sqlExecutor
 }
 
+// Membership writes must acquire account locks before any group lock, just as
+// weekly-reset observations do. Otherwise the membership FK's implicit account
+// KEY SHARE lock can deadlock with an observer holding account FOR UPDATE.
+// Callers that already own group locks must prelock all accounts at transaction
+// entry, in this same sorted order.
+func lockMembershipAccounts(ctx context.Context, exec sqlExecutor, accountIDs []int64) error {
+	if len(accountIDs) == 0 {
+		return nil
+	}
+	rows, err := exec.QueryContext(ctx, `/* account_group_account_lock */
+		SELECT id FROM accounts WHERE id = ANY($1) ORDER BY id FOR UPDATE`, pq.Array(accountIDs))
+	if err != nil {
+		return err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		// Drain the sorted result so every matching account is locked.
+	}
+	return rows.Err()
+}
+
 // lockLiveGroups makes account-group inserts participate in the same row-lock
 // protocol as guarded group deletion. FOR SHARE conflicts with the deleter's
 // FOR UPDATE lock, and READ COMMITTED rechecks deleted_at after any wait.
@@ -1264,6 +1285,9 @@ func (r *groupRepository) BindAccountsToGroup(ctx context.Context, groupID int64
 	if tx != nil {
 		defer func() { _ = tx.Rollback() }()
 		exec = tx.Client()
+	}
+	if err := lockMembershipAccounts(ctx, exec, accountIDs); err != nil {
+		return err
 	}
 	if err := lockLiveGroups(ctx, exec, []int64{groupID}); err != nil {
 		return err

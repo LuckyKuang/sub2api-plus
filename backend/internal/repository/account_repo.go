@@ -260,6 +260,13 @@ func (r *accountRepository) CreateWithAccountGroups(ctx context.Context, account
 	for i := range groups {
 		groupIDs = append(groupIDs, groups[i].GroupID)
 	}
+	// A newly inserted shadow is invisible to observers, but its parent FK
+	// locks an existing credential owner. Acquire that lock before group locks.
+	if account.ParentAccountID != nil {
+		if err := lockMembershipAccounts(ctx, txClient, []int64{*account.ParentAccountID}); err != nil {
+			return err
+		}
+	}
 	if err := lockLiveGroups(ctx, txClient, groupIDs); err != nil {
 		return err
 	}
@@ -1683,6 +1690,9 @@ func (r *accountRepository) AddToGroup(ctx context.Context, accountID, groupID i
 		defer func() { _ = tx.Rollback() }()
 		client = tx.Client()
 	}
+	if err := lockMembershipAccounts(ctx, client, []int64{accountID}); err != nil {
+		return err
+	}
 	if err := lockLiveGroups(ctx, client, []int64{groupID}); err != nil {
 		return err
 	}
@@ -1758,6 +1768,9 @@ func (r *accountRepository) BindGroups(ctx context.Context, accountID int64, gro
 	} else {
 		// 已处于外部事务中（ErrTxStarted），复用当前 client
 		txClient = r.client
+	}
+	if err := lockMembershipAccounts(ctx, txClient, []int64{accountID}); err != nil {
+		return err
 	}
 	if err := lockLiveGroups(ctx, txClient, groupIDs); err != nil {
 		return err
