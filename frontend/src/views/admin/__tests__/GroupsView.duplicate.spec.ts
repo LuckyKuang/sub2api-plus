@@ -17,6 +17,8 @@ const {
   getCapacitySummary,
   getLiveCapability,
   listAccounts,
+  getGroupById,
+  getAccountById,
   showSuccess,
   showError
 } = vi.hoisted(() => ({
@@ -29,6 +31,8 @@ const {
   getCapacitySummary: vi.fn(),
   getLiveCapability: vi.fn(),
   listAccounts: vi.fn(),
+  getGroupById: vi.fn(),
+  getAccountById: vi.fn(),
   showSuccess: vi.fn(),
   showError: vi.fn()
 }))
@@ -39,7 +43,7 @@ vi.mock('@/api/admin', () => ({
   adminAPI: {
     groups: {
       list: listGroups,
-      getById: vi.fn(async () => (await listGroups.mock.results[listGroups.mock.results.length - 1].value).items[0]),
+      getById: getGroupById,
       duplicate: duplicateGroup,
       getModelAllowlistCandidates,
       getUsageSummary,
@@ -53,7 +57,7 @@ vi.mock('@/api/admin', () => ({
     },
     accounts: {
       list: listAccounts,
-      getById: vi.fn()
+      getById: getAccountById
     }
   }
 }))
@@ -196,6 +200,8 @@ describe('GroupsView duplicate action', () => {
       getCapacitySummary,
       getLiveCapability,
       listAccounts,
+      getGroupById,
+      getAccountById,
       showSuccess,
       showError
     ]) {
@@ -209,6 +215,9 @@ describe('GroupsView duplicate action', () => {
       page_size: 20,
       pages: 1
     })
+    getGroupById.mockImplementation(async () => (
+      await listGroups.mock.results[listGroups.mock.results.length - 1].value
+    ).items[0])
     duplicateGroup.mockResolvedValue({
       ...sourceGroup,
       id: 43,
