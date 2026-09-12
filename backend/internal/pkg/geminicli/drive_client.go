@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/httpclient"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 )
 
 // DriveStorageInfo represents Google Drive storage quota information
@@ -23,11 +24,13 @@ type DriveClient interface {
 	GetStorageQuota(ctx context.Context, accessToken, proxyURL string) (*DriveStorageInfo, error)
 }
 
-type driveClient struct{}
+type driveClient struct {
+	clientFactory func(httpclient.Options) (*http.Client, error)
+}
 
 // NewDriveClient creates a new Drive API client
 func NewDriveClient() DriveClient {
-	return &driveClient{}
+	return &driveClient{clientFactory: httpclient.GetClient}
 }
 
 // GetStorageQuota fetches storage quota from Google Drive API
@@ -40,9 +43,11 @@ func (c *driveClient) GetStorageQuota(ctx context.Context, accessToken, proxyURL
 	}
 
 	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("User-Agent", GeminiCLIUserAgent)
+	outboundidentity.ApplyDefault(req, "gemini")
 
 	// Get HTTP client with proxy support
-	client, err := httpclient.GetClient(httpclient.Options{
+	client, err := c.clientFactory(httpclient.Options{
 		ProxyURL: proxyURL,
 		Timeout:  10 * time.Second,
 	})

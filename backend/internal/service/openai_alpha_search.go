@@ -27,6 +27,8 @@ const (
 // *OpenAIForwardResult（WebSearchCalls=1，供按次计费）；上游错误被原样透传
 // 给客户端时返回 (nil, nil)，不产生计费。
 func (s *OpenAIGatewayService) ForwardAlphaSearch(ctx context.Context, c *gin.Context, account *Account, body []byte) (result *OpenAIForwardResult, err error) {
+	ctx = WithOutboundIdentityScope(ctx, c)
+	ctx = WithAccountOutboundIdentity(ctx, account)
 	defer func() { finalizeClientDisconnectForwardResult(ctx, c, result, err) }()
 	if s == nil || c == nil || account == nil {
 		return nil, fmt.Errorf("service, context, and account are required")
@@ -397,31 +399,31 @@ func (s *OpenAIGatewayService) buildOpenAIAlphaSearchRequest(ctx context.Context
 		if err := resolveAndSetOpenAIChatGPTAccountHeaders(ctx, s.accountRepo, req.Header, account); err != nil {
 			return nil, fmt.Errorf("resolve chatgpt account headers: %w", err)
 		}
-
-		if turnMetadata := openAIAlphaSearchInboundHeader(c, "X-Codex-Turn-Metadata"); turnMetadata != "" {
-			req.Header.Set("X-Codex-Turn-Metadata", turnMetadata)
-		}
-		applyCodexAccountIdentityHeaders(req.Header, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c))
 	}
+	// SearchClient sends turn metadata with every provider, including API keys.
+	// Keep its opaque search context while retaining existing account ID isolation.
+	if turnMetadata := openAIAlphaSearchInboundHeader(c, "X-Codex-Turn-Metadata"); turnMetadata != "" {
+		req.Header.Set("X-Codex-Turn-Metadata", turnMetadata)
+	}
+	applyCodexAccountIdentityHeaders(req.Header, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c))
 
 	account.ApplyHeaderOverrides(req.Header)
 	stripOpenAIAlphaSearchResponsesHeaders(req.Header)
-	if account.UsesOpenAICodexProtocol() {
-		identity := s.applyOpenAIOutboundIdentity(ctx, account, req.Header, true)
-		SetOpsRoutingDiagnostics(c, &OpsRoutingDiagnostics{OutboundIdentitySource: identity.Source})
-	}
+	identity := s.applyOpenAIOutboundIdentity(ctx, account, req.Header, account.UsesOpenAICodexProtocol())
+	SetOpsRoutingDiagnostics(c, &OpsRoutingDiagnostics{OutboundIdentitySource: identity.Source})
 	return req, nil
 }
 
 // stripOpenAIAlphaSearchResponsesHeaders 让独立搜索请求与官方 Codex
 // SearchClient 的线协议保持一致。alpha/search 不是 /responses 的子请求：官方
-// 客户端仅在 Provider/Auth 基础头之外附加 x-codex-turn-metadata，不发送
+// 客户端在 Provider/Auth 基础头之外附加 x-codex-turn-metadata 和可选的
+// thread originator；项目的 originator 仍由可信身份快照决定。不发送
 // OpenAI-Beta、会话隔离或 Responses Lite 状态头。originator 与 User-Agent
 // 属于官方默认客户端头，必须保留。
 //
 // alpha/search 使用专用构造器生成官方 SearchClient 的最小线协议形态；
 // 该函数作为最后一道防线，避免账号 header 覆写或后续改动重新带入
-// Responses 专用头，使 PAT 的 alpha/search 被上游按错误认证路径处理。
+// Responses 专用头，使独立搜索被上游按错误协议处理。
 func stripOpenAIAlphaSearchResponsesHeaders(headers http.Header) {
 	if headers == nil {
 		return
@@ -434,7 +436,11 @@ func stripOpenAIAlphaSearchResponsesHeaders(headers http.Header) {
 		"X-Codex-Turn-State",
 		responsesLiteHeaderKey,
 	} {
-		headers.Del(key)
+		for name := range headers {
+			if strings.EqualFold(name, key) {
+				delete(headers, name)
+			}
+		}
 	}
 }
 

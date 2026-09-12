@@ -48,6 +48,7 @@ func (f *AntigravityQuotaFetcher) CanFetch(account *Account) bool {
 
 // FetchQuota 获取 Antigravity 账户额度信息
 func (f *AntigravityQuotaFetcher) FetchQuota(ctx context.Context, account *Account, proxyURL string) (*QuotaResult, error) {
+	ctx = WithAccountOutboundIdentity(ctx, account)
 	accessToken := account.GetCredential("access_token")
 	projectID := account.GetCredential("project_id")
 

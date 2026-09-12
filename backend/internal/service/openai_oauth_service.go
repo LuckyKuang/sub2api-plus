@@ -167,6 +167,7 @@ type OpenAITokenInfo struct {
 
 // ExchangeCode exchanges authorization code for tokens
 func (s *OpenAIOAuthService) ExchangeCode(ctx context.Context, input *OpenAIExchangeCodeInput) (*OpenAITokenInfo, error) {
+	ctx = WithOutboundIdentityScope(ctx, nil)
 	// Get session
 	session, ok := s.sessionStore.Get(input.SessionID)
 	if !ok {
@@ -259,6 +260,7 @@ func (s *OpenAIOAuthService) RefreshTokenWithClientID(ctx context.Context, refre
 }
 
 func (s *OpenAIOAuthService) refreshTokenWithClientIDAndIdentity(ctx context.Context, refreshToken string, proxyURL string, clientID string, account *Account) (*OpenAITokenInfo, error) {
+	ctx = WithOutboundIdentityScope(ctx, nil)
 	identity := s.resolveOpenAIOutboundIdentity(ctx, account)
 	tokenResp, err := s.oauthClient.RefreshTokenWithClientIDAndIdentity(ctx, refreshToken, proxyURL, clientID, identity.UserAgent, identity.Originator, identity.Version)
 	if err != nil {

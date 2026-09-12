@@ -246,6 +246,20 @@ func asyncRequest() Request {
 	return Request{RequestID: "request-async", Protocol: "openai_chat_completions", Body: []byte(`{"messages":[{"role":"user","content":"payload canary text"}]}`)}
 }
 
+func TestEnqueuerStoresCurrentUserTextOnly(t *testing.T) {
+	repo := &fakeJobRepository{createJob: &Job{ID: 41}}
+	payload := &fakePayloadStore{values: map[int64]string{}}
+	req := Request{
+		RequestID: "request-async", Protocol: "openai_chat_completions",
+		Body: []byte(`{"messages":[{"role":"system","content":"system instruction"},{"role":"user","content":"older user input"},{"role":"assistant","content":"previous output"},{"role":"user","content":"latest user input"}]}`),
+	}
+	require.NoError(t, NewEnqueuer(&fakeConfigStore{cfg: asyncConfig(), active: true}, repo, payload).Enqueue(context.Background(), req))
+	require.Equal(t, "latest user input", payload.values[41])
+	require.NotContains(t, payload.values[41], "system instruction")
+	require.NotContains(t, payload.values[41], "older user input")
+	require.NotContains(t, payload.values[41], "previous output")
+}
+
 func TestEnqueuerStagingPayloadPublishProtocolAndFailureCleanup(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		trace := []string{}

@@ -82,6 +82,9 @@ type openAIWSAcquireRequest struct {
 type openAIWSHandshakeCompatibilityKey struct {
 	betaFeatures        string
 	sessionIdentity     string
+	userAgent           string
+	originator          string
+	version             string
 	codexInstallationID string
 	threadID            string
 	clientRequestID     string
@@ -2035,6 +2038,9 @@ func normalizeOpenAIWSHandshakeCompatibility(headers http.Header) openAIWSHandsh
 	key := openAIWSHandshakeCompatibilityKey{
 		betaFeatures:    normalizeOpenAIWSBetaFeatures(headers),
 		sessionIdentity: normalizeOpenAIWSSessionIdentity(headers),
+		userAgent:       firstOpenAIWSHeaderValue(headers, "User-Agent"),
+		originator:      firstOpenAIWSHeaderValue(headers, "Originator"),
+		version:         firstOpenAIWSHeaderValue(headers, "Version"),
 	}
 	// Compare stable values from the final handshake. In off/device mode the
 	// remaining values are client-owned, but a pooled connection still cannot

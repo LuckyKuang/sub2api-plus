@@ -207,6 +207,7 @@ func (s *AccountTestService) FetchUpstreamSupportedModels(ctx context.Context, a
 // snapshot. When no model is complete, the existing account snapshot is left
 // untouched.
 func (s *AccountTestService) SyncUpstreamModelCatalog(ctx context.Context, account *Account) (*UpstreamModelCatalog, error) {
+	ctx = WithAccountOutboundIdentity(ctx, account)
 	models, body, err := s.fetchUpstreamModelList(ctx, account)
 	liveListAvailable := err == nil
 	if err != nil {
@@ -776,7 +777,13 @@ func (s *AccountTestService) fetchUpstreamModelList(ctx context.Context, account
 	return models, body, nil
 }
 
-func (s *AccountTestService) buildUpstreamModelsRequest(ctx context.Context, account *Account) (*http.Request, error) {
+func (s *AccountTestService) buildUpstreamModelsRequest(ctx context.Context, account *Account) (request *http.Request, err error) {
+	ctx = WithAccountOutboundIdentity(ctx, account)
+	defer func() {
+		if err == nil {
+			prepareAccountOutboundRequest(request, account)
+		}
+	}()
 	switch {
 	case account.Platform == PlatformAntigravity:
 		return s.buildAntigravityAPIKeyModelsRequest(ctx, account)
@@ -1002,6 +1009,7 @@ func (s *AccountTestService) buildOpenAIUpstreamModelsRequest(ctx context.Contex
 		return nil, err
 	}
 	s.applyOpenAIOutboundIdentity(ctx, credentialAccount, req.Header, false)
+	ApplyAccountOutboundIdentity(ctx, credentialAccount, req)
 	return req, nil
 }
 
@@ -1044,6 +1052,7 @@ func buildOpenAIAPIKeyModelsRequest(ctx context.Context, account *Account, valid
 // OAuth subscriptions do not expose the public Platform API /v1/models endpoint,
 // so treating them like API-key accounts makes the admin sync button fail locally.
 func (s *AccountTestService) buildOpenAIOAuthUpstreamModelsRequest(ctx context.Context, account *Account) (*http.Request, error) {
+	ctx = WithOutboundIdentityScope(ctx, nil)
 	credentialAccount, err := resolveCredentialAccount(ctx, s.accountRepo, account)
 	if err != nil {
 		return nil, newUpstreamModelSyncConfigError("Failed to resolve OpenAI account credentials", err)
@@ -1188,9 +1197,9 @@ func (s *AccountTestService) fetchAntigravityOAuthUpstreamModels(ctx context.Con
 
 func (s *AccountTestService) doUpstreamModelsRequest(req *http.Request, proxyURL string, account *Account) (*http.Response, error) {
 	if s.tlsFPProfileService == nil {
-		return s.httpUpstream.DoWithTLS(req, proxyURL, account.ID, account.Concurrency, nil)
+		return s.httpUpstream.DoWithTLS(prepareAccountOutboundRequest(req, account), proxyURL, account.ID, account.Concurrency, nil)
 	}
-	return s.httpUpstream.DoWithTLS(req, proxyURL, account.ID, account.Concurrency, s.tlsFPProfileService.ResolveTLSProfile(account))
+	return s.httpUpstream.DoWithTLS(prepareAccountOutboundRequest(req, account), proxyURL, account.ID, account.Concurrency, s.tlsFPProfileService.ResolveTLSProfile(account))
 }
 
 func upstreamModelsProxyURL(account *Account) string {

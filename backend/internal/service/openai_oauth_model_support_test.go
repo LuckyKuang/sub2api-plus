@@ -84,7 +84,7 @@ func TestIsModelSupported_OpenAIOAuthPassthroughAllowsAll(t *testing.T) {
 	account := newOpenAIOAuthAccountForModelTest()
 	account.Extra = map[string]any{"openai_passthrough": true}
 
-	// 透传模式仅替换认证，模型语义由上游决定，保持"允许所有"。
+	// HTTP 透传仍管理认证与身份，模型语义由上游决定，保持"允许所有"。
 	require.True(t, account.IsModelSupported("deepseek-v4"))
 }
 

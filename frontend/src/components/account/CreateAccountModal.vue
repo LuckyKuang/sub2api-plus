@@ -45,6 +45,7 @@
       @submit.prevent="handleSubmit"
       class="space-y-5"
     >
+      <OutboundIdentityEditor v-model="outboundIdentitySelection" :platform="form.platform" :account-type="form.type" :codex-user-agent="openaiAccountUserAgent" />
       <div>
         <label class="input-label">{{ t('admin.accounts.accountName') }}</label>
         <input
@@ -3521,6 +3522,8 @@
 </template>
 
 <script setup lang="ts">
+import OutboundIdentityEditor from './OutboundIdentityEditor.vue'
+import type { IdentitySelection } from '@/api/admin/outboundIdentity'
 import Toggle from '@/components/common/Toggle.vue'
 import { ref, reactive, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -3994,6 +3997,7 @@ const interceptWarmupRequests = ref(false)
 const autoPauseOnExpired = ref(true)
 const openaiPassthroughEnabled = ref(false)
 const openaiAccountUserAgent = ref('')
+const outboundIdentitySelection = ref<IdentitySelection | null>(null)
 const openaiOAuthSessionSharingEnabled = ref(false)
 // OpenAI Codex namespace 工具摊平兼容开关（仅 OAuth），缺省关闭即原样保留
 const openaiFlattenNamespacesEnabled = ref(false)
@@ -4805,10 +4809,15 @@ const ensureAntigravityMixedChannelConfirmed = async (onConfirm: () => Promise<v
   }
 }
 
+const createAccountWithOutboundIdentity = (payload: CreateAccountRequest) => adminAPI.accounts.create({
+  ...payload,
+  credentials: { ...payload.credentials, ...(outboundIdentitySelection.value ? { outbound_identity: outboundIdentitySelection.value } : {}) }
+})
+
 const submitCreateAccount = async (payload: CreateAccountRequest) => {
   submitting.value = true
   try {
-    const account = await adminAPI.accounts.create(withAntigravityConfirmFlag(payload))
+    const account = await createAccountWithOutboundIdentity(withAntigravityConfirmFlag(payload))
     const modelMapping = payload.credentials.model_mapping
     const hasConcreteMappedTarget = payload.type === 'apikey' &&
       typeof modelMapping === 'object' &&
@@ -4905,6 +4914,7 @@ const resetForm = () => {
   autoPauseOnExpired.value = true
   openaiPassthroughEnabled.value = false
   openaiAccountUserAgent.value = ''
+  outboundIdentitySelection.value = null
   openaiOAuthSessionSharingEnabled.value = false
   openaiFlattenNamespacesEnabled.value = false
   openAILongContextBillingEnabled.value = false
@@ -5622,7 +5632,7 @@ const handleGrokValidateRT = async (refreshTokenInput: string) => {
           return
         }
 
-        await adminAPI.accounts.create({
+        await createAccountWithOutboundIdentity({
           name: accountName,
           notes: form.notes,
           platform: 'grok',
@@ -5799,7 +5809,7 @@ const handleGrokAuthorizePassword = async (emailPasswordInput: string) => {
           return
         }
 
-        await adminAPI.accounts.create({
+        await createAccountWithOutboundIdentity({
           name: accountName,
           notes: form.notes,
           platform: 'grok',
@@ -5899,7 +5909,7 @@ const handleOpenAIExchange = async (authCode: string) => {
     }
 
     if (shouldCreateOpenAI) {
-      await adminAPI.accounts.create({
+      await createAccountWithOutboundIdentity({
         name: form.name,
         notes: form.notes,
         platform: 'openai',
@@ -6182,7 +6192,7 @@ const handleOpenAIBatchRT = async (refreshTokenInput: string, clientId?: string)
         const accountName = refreshTokens.length > 1 ? `${baseName} #${i + 1}` : baseName
 
         if (shouldCreateOpenAI) {
-          await adminAPI.accounts.create({
+          await createAccountWithOutboundIdentity({
             name: accountName,
             notes: form.notes,
             platform: 'openai',
@@ -6297,7 +6307,7 @@ const handleAntigravityValidateRT = async (refreshTokenInput: string) => {
           expires_at: form.expires_at,
           auto_pause_on_expired: autoPauseOnExpired.value
         })
-        await adminAPI.accounts.create(createPayload)
+        await createAccountWithOutboundIdentity(createPayload)
         successCount++
       } catch (error: any) {
         failedCount++
@@ -6662,7 +6672,7 @@ const handleCookieAuth = async (sessionKey: string) => {
           credentials.temp_unschedulable_rules = tempUnschedPayload
         }
 
-        await adminAPI.accounts.create({
+        await createAccountWithOutboundIdentity({
           name: accountName,
           notes: form.notes,
           platform: form.platform,

@@ -5580,65 +5580,6 @@
                 />
               </div>
 
-              <!-- Antigravity UA 版本 -->
-              <div>
-                <label
-                  class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
-                >
-                  {{
-                    t(
-                      "admin.settings.gatewayForwarding.antigravityUserAgentVersion",
-                    )
-                  }}
-                </label>
-                <input
-                  v-model="form.antigravity_user_agent_version"
-                  type="text"
-                  class="input max-w-xs font-mono text-sm"
-                  :placeholder="
-                    t(
-                      'admin.settings.gatewayForwarding.antigravityUserAgentVersionPlaceholder',
-                    )
-                  "
-                />
-                <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
-                  {{
-                    t(
-                      "admin.settings.gatewayForwarding.antigravityUserAgentVersionHint",
-                    )
-                  }}
-                </p>
-              </div>
-
-              <!-- OpenAI Codex UA -->
-              <div>
-                <label
-                  class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
-                >
-                  {{
-                    t(
-                      "admin.settings.gatewayForwarding.openaiCodexUserAgent",
-                    )
-                  }}
-                </label>
-                <input
-                  v-model="form.openai_codex_user_agent"
-                  type="text"
-                  class="input w-full font-mono text-sm"
-                  :placeholder="
-                    t(
-                      'admin.settings.gatewayForwarding.openaiCodexUserAgentPlaceholder',
-                    )
-                  "
-                />
-                <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
-                  {{
-                    t(
-                      "admin.settings.gatewayForwarding.openaiCodexUserAgentHint",
-                    )
-                  }}
-                </p>
-              </div>
 
               <!-- Codex 历史客户端档案兼容模式 -->
               <div class="flex items-center justify-between gap-4 border-t border-gray-100 pt-4 dark:border-dark-700">
@@ -5668,100 +5609,6 @@
                 <Toggle v-model="form.openai_codex_local_group_quota_enabled" />
               </div>
 
-              <!-- Codex 客户端版本号 -->
-              <div>
-                <label
-                  class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
-                >
-                  {{
-                    t(
-                      "admin.settings.gatewayForwarding.openaiCodexClientVersion",
-                    )
-                  }}
-                </label>
-                <input
-                  v-model="form.openai_codex_client_version"
-                  type="text"
-                  class="input w-full font-mono text-sm"
-                  :placeholder="
-                    t(
-                      'admin.settings.gatewayForwarding.openaiCodexClientVersionPlaceholder',
-                    )
-                  "
-                />
-                <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
-                  {{
-                    t(
-                      "admin.settings.gatewayForwarding.openaiCodexClientVersionHint",
-                    )
-                  }}
-                </p>
-              </div>
-
-              <!-- Codex 版本号自动同步 -->
-              <div class="flex items-start justify-between gap-4">
-                <div class="min-w-0 flex-1">
-                  <label
-                    class="text-sm font-medium text-gray-700 dark:text-gray-300"
-                  >
-                    {{
-                      t(
-                        "admin.settings.gatewayForwarding.openaiCodexVersionAutoSync",
-                      )
-                    }}
-                  </label>
-                  <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                    {{
-                      t(
-                        "admin.settings.gatewayForwarding.openaiCodexVersionAutoSyncHint",
-                      )
-                    }}
-                  </p>
-                  <p
-                    v-if="codexEffectiveVersionLabel"
-                    class="mt-1 text-xs font-medium text-gray-700 dark:text-gray-300"
-                  >
-                    {{ codexEffectiveVersionLabel }}
-                  </p>
-                  <p
-                    v-if="codexSyncedVersionLabel"
-                    class="mt-0.5 text-xs text-gray-500 dark:text-gray-400"
-                  >
-                    {{ codexSyncedVersionLabel }}
-                  </p>
-                  <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                    {{ codexCheckedAtLabel }}
-                  </p>
-                  <p
-                    v-if="form.openai_codex_client_version_sync_error"
-                    class="mt-0.5 text-xs text-red-600 dark:text-red-400"
-                  >
-                    {{
-                      t(
-                        "admin.settings.gatewayForwarding.openaiCodexVersionSyncFailed",
-                        { error: form.openai_codex_client_version_sync_error },
-                      )
-                    }}
-                  </p>
-                </div>
-                <div class="flex shrink-0 items-center gap-3">
-                  <button
-                    type="button"
-                    class="btn btn-secondary whitespace-nowrap px-3 py-1.5 text-xs"
-                    :disabled="codexVersionSyncing"
-                    @click="syncCodexVersionNow()"
-                  >
-                    {{
-                      t(
-                        codexVersionSyncing
-                          ? "admin.settings.gatewayForwarding.openaiCodexVersionSyncing"
-                          : "admin.settings.gatewayForwarding.openaiCodexVersionSyncNow",
-                      )
-                    }}
-                  </button>
-                  <Toggle v-model="form.openai_codex_version_auto_sync_enabled" />
-                </div>
-              </div>
 
             </div>
           </div>
@@ -8659,6 +8506,136 @@
         <!-- /Tab: Email -->
 
         <!-- Tab: Backup -->
+        <div v-show="activeTab === 'identity'">
+          <OutboundIdentitySettings v-if="identityTabVisited" ref="outboundIdentitySettings">
+            <template #codex>
+              <!-- OpenAI Codex UA -->
+              <div>
+                <label
+                  class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                >
+                  {{
+                    t(
+                      "admin.settings.gatewayForwarding.openaiCodexUserAgent",
+                    )
+                  }}
+                </label>
+                <input
+                  v-model="form.openai_codex_user_agent"
+                  type="text"
+                  class="input w-full font-mono text-sm"
+                  :placeholder="
+                    t(
+                      'admin.settings.gatewayForwarding.openaiCodexUserAgentPlaceholder',
+                    )
+                  "
+                />
+                <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                  {{
+                    t(
+                      "admin.settings.gatewayForwarding.openaiCodexUserAgentHint",
+                    )
+                  }}
+                </p>
+              </div>
+
+              <!-- Codex 客户端版本号 -->
+              <div>
+                <label
+                  class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                >
+                  {{
+                    t(
+                      "admin.settings.gatewayForwarding.openaiCodexClientVersion",
+                    )
+                  }}
+                </label>
+                <input
+                  v-model="form.openai_codex_client_version"
+                  type="text"
+                  class="input w-full font-mono text-sm"
+                  :placeholder="
+                    t(
+                      'admin.settings.gatewayForwarding.openaiCodexClientVersionPlaceholder',
+                    )
+                  "
+                />
+                <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                  {{
+                    t(
+                      "admin.settings.gatewayForwarding.openaiCodexClientVersionHint",
+                    )
+                  }}
+                </p>
+              </div>
+
+              <!-- Codex 版本号自动同步 -->
+              <div class="flex items-start justify-between gap-4">
+                <div class="min-w-0 flex-1">
+                  <label
+                    class="text-sm font-medium text-gray-700 dark:text-gray-300"
+                  >
+                    {{
+                      t(
+                        "admin.settings.gatewayForwarding.openaiCodexVersionAutoSync",
+                      )
+                    }}
+                  </label>
+                  <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                    {{
+                      t(
+                        "admin.settings.gatewayForwarding.openaiCodexVersionAutoSyncHint",
+                      )
+                    }}
+                  </p>
+                  <p
+                    v-if="codexEffectiveVersionLabel"
+                    class="mt-1 text-xs font-medium text-gray-700 dark:text-gray-300"
+                  >
+                    {{ codexEffectiveVersionLabel }}
+                  </p>
+                  <p
+                    v-if="codexSyncedVersionLabel"
+                    class="mt-0.5 text-xs text-gray-500 dark:text-gray-400"
+                  >
+                    {{ codexSyncedVersionLabel }}
+                  </p>
+                  <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                    {{ codexCheckedAtLabel }}
+                  </p>
+                  <p
+                    v-if="form.openai_codex_client_version_sync_error"
+                    class="mt-0.5 text-xs text-red-600 dark:text-red-400"
+                  >
+                    {{
+                      t(
+                        "admin.settings.gatewayForwarding.openaiCodexVersionSyncFailed",
+                        { error: form.openai_codex_client_version_sync_error },
+                      )
+                    }}
+                  </p>
+                </div>
+                <div class="flex shrink-0 items-center gap-3">
+                  <button
+                    type="button"
+                    class="btn btn-secondary whitespace-nowrap px-3 py-1.5 text-xs"
+                    :disabled="codexVersionSyncing"
+                    @click="syncCodexVersionNow()"
+                  >
+                    {{
+                      t(
+                        codexVersionSyncing
+                          ? "admin.settings.gatewayForwarding.openaiCodexVersionSyncing"
+                          : "admin.settings.gatewayForwarding.openaiCodexVersionSyncNow",
+                      )
+                    }}
+                  </button>
+                  <Toggle v-model="form.openai_codex_version_auto_sync_enabled" />
+                </div>
+              </div>
+            </template>
+          </OutboundIdentitySettings>
+        </div>
         <div v-show="activeTab === 'backup'">
           <BackupSettings />
         </div>
@@ -8786,6 +8763,7 @@ import ProxySelector from "@/components/common/ProxySelector.vue";
 import ImageUpload from "@/components/common/ImageUpload.vue";
 import BackupSettings from "@/views/admin/BackupView.vue";
 import EmailTemplateEditor from "@/views/admin/settings/EmailTemplateEditor.vue";
+import OutboundIdentitySettings from "@/views/admin/settings/OutboundIdentitySettings.vue";
 import OpenAIFastPolicyUserSelector from "@/views/admin/settings/OpenAIFastPolicyUserSelector.vue";
 import { useClipboard } from "@/composables/useClipboard";
 import {
@@ -8843,10 +8821,14 @@ type SettingsTab =
   | "security"
   | "users"
   | "gateway"
+  | "identity"
   | "payment"
   | "email"
   | "backup";
 const activeTab = ref<SettingsTab>("general");
+const outboundIdentitySettings = ref<InstanceType<typeof OutboundIdentitySettings>>();
+const identityTabVisited = ref(false);
+watch(activeTab, (tab) => { if (tab === 'identity') identityTabVisited.value = true; }, { immediate: true });
 const settingsTabs = [
   { key: "general" as SettingsTab, icon: "home" as const },
   { key: "agreement" as SettingsTab, icon: "document" as const },
@@ -8854,6 +8836,7 @@ const settingsTabs = [
   { key: "security" as SettingsTab, icon: "shield" as const },
   { key: "users" as SettingsTab, icon: "user" as const },
   { key: "gateway" as SettingsTab, icon: "server" as const },
+  { key: "identity" as SettingsTab, icon: "shield" as const },
   { key: "payment" as SettingsTab, icon: "creditCard" as const },
   { key: "email" as SettingsTab, icon: "mail" as const },
   { key: "backup" as SettingsTab, icon: "database" as const },
@@ -11598,6 +11581,9 @@ async function saveSettings() {
     );
     appendAuthSourceDefaultsToUpdateRequest(payload, authSourceDefaults);
 
+    if (activeTab.value === 'identity' || outboundIdentitySettings.value?.isDirty) {
+      await outboundIdentitySettings.value?.save();
+    }
     const updated = await settingsStepUp.run(() =>
       adminAPI.settings.updateSettings(payload),
     );
@@ -11608,6 +11594,7 @@ async function saveSettings() {
       }
     }
     Object.assign(authSourceDefaults, buildAuthSourceDefaultsState(updated));
+    await outboundIdentitySettings.value?.refresh();
     form.default_platform_quotas = normalizePlatformQuotasMap(updated.default_platform_quotas);
     form.account_scheduling_thresholds = normalizeAccountSchedulingThresholdsMap(
       updated.account_scheduling_thresholds,

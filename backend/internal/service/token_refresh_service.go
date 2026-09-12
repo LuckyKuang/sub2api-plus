@@ -315,6 +315,7 @@ type rateLimitedOAuthRefreshExecutor struct {
 }
 
 func (e *rateLimitedOAuthRefreshExecutor) Refresh(ctx context.Context, account *Account) (map[string]any, error) {
+	ctx = WithAccountOutboundIdentity(ctx, account)
 	if e == nil || e.OAuthRefreshExecutor == nil {
 		return nil, errors.New("OAuth refresh executor is not configured")
 	}
@@ -848,6 +849,7 @@ func (s *TokenRefreshService) refreshWithRetryWithRateGate(
 	refreshWindow time.Duration,
 	gate refreshAttemptGate,
 ) error {
+	ctx = WithAccountOutboundIdentity(ctx, account)
 	var lastErr error
 	maxRetries := s.maxRetries()
 

@@ -68,7 +68,7 @@ func (g *GuardEvaluator) Evaluate(ctx context.Context, cfg ActiveConfig, snapsho
 	if timeout <= 0 {
 		timeout = DefaultTimeoutMS * time.Millisecond
 	}
-	evalCtx, cancel := context.WithTimeout(ctx, timeout)
+	evalCtx, cancel := context.WithTimeout(withPromptIdentityScope(ctx), timeout)
 	defer cancel()
 	inputLimit := minimumInputLimit(endpoints)
 	chunks := SplitRunes(snapshot.ScanText, inputLimit)

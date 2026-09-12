@@ -19,6 +19,7 @@ below for detailed configuration and maintenance instructions.
 
 ## Deployment and Operations
 
+- [Outbound client identity and account inheritance](OUTBOUND_IDENTITY.md)
 - [Deployment guide](../deploy/README.md)
 - [Docker](../deploy/DOCKER.md)
 - [Apple container](../deploy/APPLE_CONTAINER.md)

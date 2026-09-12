@@ -125,10 +125,13 @@ func TestApplyResolvedOpenAIOutboundIdentity(t *testing.T) {
 		require.Empty(t, headers.Get("Version"))
 	})
 
-	t.Run("API Key compact 请求同步既有协议版本", func(t *testing.T) {
-		headers := http.Header{"Version": {"0.1.0"}}
+	t.Run("API Key compact 不因已有头启用 Codex 协议身份", func(t *testing.T) {
+		headers := http.Header{"Version": {"0.1.0"}, "Accept": {"application/json"}}
 		applyResolvedOpenAIOutboundIdentity(headers, identity, false)
-		require.Equal(t, "0.144.1", headers.Get("Version"))
+		require.Equal(t, testCodexCLIUserAgent, headers.Get("User-Agent"))
+		require.Empty(t, headers.Get("Version"))
+		require.Empty(t, headers.Get("Originator"))
+		require.Equal(t, "application/json", headers.Get("Accept"))
 	})
 }
 

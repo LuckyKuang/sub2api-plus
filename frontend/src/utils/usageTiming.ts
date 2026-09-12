@@ -2,17 +2,17 @@ import type { UsageLog } from '@/types'
 import { textOutputTokens } from './imageUsage'
 import { resolveUsageRequestType } from './usageRequestType'
 
-type TimingRow = Pick<UsageLog, 'timing_version' | 'first_token_ms' | 'last_token_ms' | 'first_output_kind' | 'is_complete' | 'output_tokens' | 'image_output_tokens' | 'audio_output_tokens' | 'stream' | 'openai_ws_mode' | 'request_type' | 'duration_ms'>
+type TimingRow = Pick<UsageLog, 'timing_version' | 'first_token_ms' | 'last_token_ms' | 'first_output_kind' | 'is_complete' | 'output_tokens' | 'image_output_tokens' | 'audio_output_tokens' | 'stream' | 'openai_ws_mode' | 'request_type'>
 
 export const strictFirstTokenMs = (row: TimingRow): number | null =>
   resolveUsageRequestType(row) !== 'live' && row.timing_version === 1 && row.first_token_ms != null && Number.isFinite(row.first_token_ms) && row.first_token_ms >= 0
     ? row.first_token_ms : null
 
 const tpsWindowMs = (row: TimingRow): number | null => {
-  for (const candidate of [row.last_token_ms, row.duration_ms]) {
-    if (candidate != null && Number.isFinite(candidate) && candidate > 0) return candidate
-  }
-  return null
+  const first = strictFirstTokenMs(row)
+  if (first == null || row.last_token_ms == null || !Number.isFinite(row.last_token_ms)) return null
+  const window = row.last_token_ms - first
+  return Number.isFinite(window) && window > 0 ? window : null
 }
 
 const invalidTokenCounts = (row: TimingRow): boolean => {
@@ -32,7 +32,12 @@ export const tpsUnavailableReason = (row: TimingRow): string | null => {
   if (row.first_output_kind === 'compaction' && strictFirstTokenMs(row) == null) return 'usage.timingUnavailableCompaction'
   const tokens = textOutputTokens(row)
   if (!Number.isFinite(tokens) || tokens <= 0) return noTokenTpsReason(row)
-  if (tpsWindowMs(row) == null) return noTokenTpsReason(row)
+  const first = strictFirstTokenMs(row)
+  if (first == null || row.last_token_ms == null || !Number.isFinite(row.last_token_ms)) {
+    return noTokenTpsReason(row)
+  }
+  const window = row.last_token_ms - first
+  if (!Number.isFinite(window) || window <= 0) return 'usage.timingUnavailableInvalid'
   return null
 }
 

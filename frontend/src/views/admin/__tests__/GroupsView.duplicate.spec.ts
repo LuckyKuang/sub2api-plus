@@ -17,6 +17,8 @@ const {
   getCapacitySummary,
   getLiveCapability,
   listAccounts,
+  getGroupById,
+  getAccountById,
   showSuccess,
   showError
 } = vi.hoisted(() => ({
@@ -29,6 +31,8 @@ const {
   getCapacitySummary: vi.fn(),
   getLiveCapability: vi.fn(),
   listAccounts: vi.fn(),
+  getGroupById: vi.fn(),
+  getAccountById: vi.fn(),
   showSuccess: vi.fn(),
   showError: vi.fn()
 }))
@@ -39,6 +43,7 @@ vi.mock('@/api/admin', () => ({
   adminAPI: {
     groups: {
       list: listGroups,
+      getById: getGroupById,
       duplicate: duplicateGroup,
       getModelAllowlistCandidates,
       getUsageSummary,
@@ -52,7 +57,7 @@ vi.mock('@/api/admin', () => ({
     },
     accounts: {
       list: listAccounts,
-      getById: vi.fn()
+      getById: getAccountById
     }
   }
 }))
@@ -195,6 +200,8 @@ describe('GroupsView duplicate action', () => {
       getCapacitySummary,
       getLiveCapability,
       listAccounts,
+      getGroupById,
+      getAccountById,
       showSuccess,
       showError
     ]) {
@@ -208,6 +215,9 @@ describe('GroupsView duplicate action', () => {
       page_size: 20,
       pages: 1
     })
+    getGroupById.mockImplementation(async () => (
+      await listGroups.mock.results[listGroups.mock.results.length - 1].value
+    ).items[0])
     duplicateGroup.mockResolvedValue({
       ...sourceGroup,
       id: 43,
@@ -383,6 +393,88 @@ describe('GroupsView duplicate action', () => {
     expect(vm.editForm.quota_reset_source_account_id).toBeNull()
     expect(vm.editQuotaResetSourceOptions.map(option => option.value)).not.toContain(501)
     wrapper.unmount()
+  })
+
+  it('loads the current weekly baseline before opening the editor', async () => {
+    const fresh = { ...sourceGroup, subscription_type: 'subscription' as const,
+      quota_reset_source_account_id: 501, quota_reset_source_status: 'active' as const,
+      quota_reset_source_reset_at: '2026-09-19T06:00:00Z' }
+    vi.mocked(adminAPI.groups.getById).mockResolvedValueOnce(fresh)
+    listAccounts.mockResolvedValue({ items: [{ id: 501, name: 'Source', platform: 'openai', type: 'oauth' }], total: 1 })
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.findAll('button').find(button => button.text() === 'common.edit')!.trigger('click')
+    await flushPromises()
+    const vm = wrapper.vm as unknown as { editingGroup: AdminGroup; editForm: { quota_reset_source_account_id: number | null } }
+    expect(vm.editingGroup.quota_reset_source_reset_at).toBe(fresh.quota_reset_source_reset_at)
+    expect(vm.editForm.quota_reset_source_account_id).toBe(501)
+    wrapper.unmount()
+  })
+
+  it.each(['switch', 'close', 'unmount'] as const)('ignores old routing loads after editor %s', async (action) => {
+    const first = { ...sourceGroup, model_routing: { 'gpt-*': [501] } }
+    const second = { ...sourceGroup, id: 43, name: 'Second' }
+    vi.mocked(adminAPI.groups.getById).mockResolvedValueOnce(first).mockResolvedValueOnce(second)
+    let resolveAccount!: (value: Awaited<ReturnType<typeof adminAPI.accounts.getById>>) => void
+    vi.mocked(adminAPI.accounts.getById).mockImplementationOnce(() => new Promise(resolve => { resolveAccount = resolve }))
+    const wrapper = mountView()
+    await flushPromises()
+    const vm = wrapper.vm as unknown as {
+      handleEdit: (group: AdminGroup) => Promise<void>
+      closeEditModal: () => void
+      editingGroup: AdminGroup | null
+      showEditModal: boolean
+      editModelRoutingRules: unknown[]
+    }
+    const firstLoad = vm.handleEdit(first)
+    await flushPromises()
+    if (action === 'switch') await vm.handleEdit(second)
+    else if (action === 'close') vm.closeEditModal()
+    else wrapper.unmount()
+    resolveAccount({ id: 501, name: 'Old routing account' } as Awaited<ReturnType<typeof adminAPI.accounts.getById>>)
+    await firstLoad
+    await flushPromises()
+    expect(vm.editModelRoutingRules).toEqual([])
+    expect(vm.showEditModal).toBe(action === 'switch')
+    if (action === 'switch') expect(vm.editingGroup?.id).toBe(second.id)
+    if (action !== 'unmount') wrapper.unmount()
+  })
+
+  it('does not open a stale editor when loading current group detail fails', async () => {
+    vi.mocked(adminAPI.groups.getById).mockRejectedValueOnce(new Error('Unavailable'))
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.findAll('button').find(button => button.text() === 'common.edit')!.trigger('click')
+    await flushPromises()
+    expect((wrapper.vm as unknown as { showEditModal: boolean }).showEditModal).toBe(false)
+    expect(showError).toHaveBeenCalledWith('admin.groups.failedToLoad')
+    wrapper.unmount()
+  })
+
+  it('refreshes the open baseline without overwriting unsaved group settings', async () => {
+    const initial = { ...sourceGroup, subscription_type: 'subscription' as const,
+      quota_reset_source_account_id: 501, quota_reset_source_status: 'waiting' as const,
+      quota_reset_source_reset_at: null }
+    vi.mocked(adminAPI.groups.getById).mockResolvedValueOnce(initial)
+    listAccounts.mockResolvedValue({ items: [{ id: 501, name: 'Source', platform: 'openai', type: 'oauth' }], total: 1 })
+    const wrapper = mountView()
+    await flushPromises()
+    vi.useFakeTimers()
+    try {
+      await wrapper.findAll('button').find(button => button.text() === 'common.edit')!.trigger('click')
+      await flushPromises()
+      const vm = wrapper.vm as unknown as { editingGroup: AdminGroup; editForm: { name: string } }
+      vm.editForm.name = 'Unsaved name'
+      const baseline = '2026-09-19T06:00:00Z'
+      vi.mocked(adminAPI.groups.getById).mockResolvedValueOnce({ ...initial, quota_reset_source_status: 'active', quota_reset_source_reset_at: baseline })
+      await vi.advanceTimersByTimeAsync(15_000)
+      await flushPromises()
+      expect(vm.editingGroup.quota_reset_source_reset_at).toBe(baseline)
+      expect(vm.editForm.name).toBe('Unsaved name')
+    } finally {
+      wrapper.unmount()
+      vi.useRealTimers()
+    }
   })
 
   it.each([true, false])('shows the saved exclusivity of an existing subscription: %s', async (isExclusive) => {

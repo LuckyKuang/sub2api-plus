@@ -20,6 +20,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/tlsfingerprint"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/http2"
@@ -1761,10 +1762,15 @@ func TestFetchCodexModelsManifestAgentIdentityRecoversInvalidTaskOnce(t *testing
 		},
 	}
 	repo := &stubQuotaAccountRepo{accounts: map[int64]*Account{account.ID: account}}
+	settingRepo := &agentIdentitySettingRepoStub{values: map[string]string{SettingKeyOpenAICodexClientVersion: "0.200.1"}}
+	settings := &SettingService{settingRepo: settingRepo}
 	modelsCalls := 0
 	registerCalls := 0
 	var assertions []string
+	var identities [][3]string
+	var queryVersions []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		identities = append(identities, [3]string{r.Header.Get("User-Agent"), r.Header.Get("Originator"), r.Header.Get("Version")})
 		w.Header().Set("content-type", "application/json")
 		if strings.Contains(r.URL.Path, "/task/register") {
 			registerCalls++
@@ -1772,8 +1778,13 @@ func TestFetchCodexModelsManifestAgentIdentityRecoversInvalidTaskOnce(t *testing
 			return
 		}
 		modelsCalls++
+		queryVersions = append(queryVersions, r.URL.Query().Get("client_version"))
 		assertions = append(assertions, r.Header.Get("Authorization"))
 		if modelsCalls == 1 {
+			settingRepo.mu.Lock()
+			settingRepo.values[SettingKeyOpenAICodexClientVersion] = "0.200.2"
+			settingRepo.mu.Unlock()
+			settings.InvalidateOpenAICodexClientVersionCache()
 			w.WriteHeader(http.StatusUnauthorized)
 			_, _ = w.Write([]byte(`{"error":{"code":"invalid_task_id"}}`))
 			return
@@ -1789,7 +1800,7 @@ func TestFetchCodexModelsManifestAgentIdentityRecoversInvalidTaskOnce(t *testing
 	openAIAgentIdentityAuthAPIBaseURL = server.URL
 	t.Cleanup(func() { openAIAgentIdentityAuthAPIBaseURL = originalAuthBase })
 
-	s := &OpenAIGatewayService{accountRepo: repo}
+	s := &OpenAIGatewayService{accountRepo: repo, settingService: settings}
 	manifest, err := s.FetchCodexModelsManifest(context.Background(), account, "0.137.0", "")
 	require.NoError(t, err)
 	require.Equal(t, `{"models":[]}`, string(manifest.Body))
@@ -1798,6 +1809,12 @@ func TestFetchCodexModelsManifestAgentIdentityRecoversInvalidTaskOnce(t *testing
 	require.Len(t, assertions, 2)
 	require.Equal(t, "task-models-old", decodeAgentAssertionTask(t, assertions[0]))
 	require.Equal(t, "task-models-new", decodeAgentAssertionTask(t, assertions[1]))
+	require.Len(t, identities, 3, "models, task registration and models retry share one snapshot")
+	want := [3]string{openai.SetCodexUserAgentVersion(DefaultOpenAICodexUserAgent, "0.200.1"), openai.CodexDefaultOriginator, "0.200.1"}
+	for _, identity := range identities {
+		require.Equal(t, want, identity)
+	}
+	require.Equal(t, []string{"0.200.1", "0.200.1"}, queryVersions)
 }
 
 func TestFetchCodexModelsManifestAgentIdentityRedactsUpstreamErrors(t *testing.T) {
@@ -1922,6 +1939,95 @@ func TestFetchCodexModelsManifestMissingToken(t *testing.T) {
 	if _, err := s.FetchCodexModelsManifest(context.Background(), account, "0.137.0", ""); err == nil {
 		t.Fatal("expected error for missing access token, got nil")
 	}
+}
+
+func TestFetchCodexModelsManifestAPIKeySelectedIdentity(t *testing.T) {
+	for _, source := range []string{"account", "global"} {
+		for _, preset := range []string{"claude", "gemini", "grok", "antigravity"} {
+			t.Run(source+"/"+preset, func(t *testing.T) {
+				settings := emptyOutboundIdentitySettings()
+				settings.Profiles[preset] = OutboundIdentitySelection{Preset: preset, Version: "3.9.1"}
+				settings.Defaults["openai:apikey"] = preset
+				settingService, ctx := outboundIdentityTestSettings(t, settings)
+				account := newCodexModelsAPIKeyTestAccount("https://upstream.example/v1")
+				account.Credentials[credKeyHeaderOverrideEnabled] = true
+				account.Credentials[credKeyHeaderOverrides] = map[string]any{"User-Agent": "caller/9.9.9", "Originator": "caller", "Version": "9.9.9", "X-Grok-Client-Version": "9.9.9"}
+				var selection *OutboundIdentitySelection
+				if source == "account" {
+					selection = &OutboundIdentitySelection{Preset: preset, Version: "3.9.2"}
+					account.Credentials[outboundIdentityCredential] = *selection
+				}
+				want, err := settingService.PreviewOutboundIdentity(ctx, account, selection)
+				require.NoError(t, err)
+				var requests []*http.Request
+				upstream := &codexModelsHTTPUpstreamStub{do: func(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
+					requests = append(requests, req)
+					return &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{"models":[{"slug":"custom-model"}]}`))}, nil
+				}}
+				svc := newCodexModelsAPIKeyTestService(upstream)
+				for range 2 {
+					_, err = svc.FetchCodexModelsManifest(ctx, account, "9.9.9", "")
+					require.NoError(t, err)
+				}
+				require.Len(t, requests, 1, "identical effective identities reuse the catalog cache")
+				req := requests[0]
+				require.Equal(t, want.UserAgent, req.Header.Get("User-Agent"))
+				require.Equal(t, want.Version, req.URL.Query().Get("client_version"))
+				for name, value := range want.Headers {
+					require.Equal(t, value, req.Header.Get(name), name)
+				}
+				require.Empty(t, req.Header.Get("Originator"))
+				require.Empty(t, req.Header.Get("Version"))
+				require.Equal(t, "Bearer sk-upstream", req.Header.Get("Authorization"))
+				captured, ok := outboundidentity.FromContext(req.Context())
+				require.True(t, ok, "background refresh must carry the selected snapshot")
+				require.Equal(t, want.UserAgent, captured.UserAgent)
+				if source == "account" {
+					account.Credentials[outboundIdentityCredential] = OutboundIdentitySelection{Preset: preset, Version: "3.9.3"}
+				} else {
+					settings.Profiles[preset] = OutboundIdentitySelection{Preset: preset, Version: "3.9.3"}
+					require.NoError(t, settingService.SetOutboundIdentitySettings(ctx, settings))
+				}
+				_, err = svc.FetchCodexModelsManifest(ctx, account, "9.9.9", "")
+				require.NoError(t, err)
+				require.Len(t, requests, 2, "a different identity must not reuse the earlier cache entry")
+				require.Equal(t, "3.9.3", requests[1].URL.Query().Get("client_version"))
+				require.Contains(t, requests[1].Header.Get("User-Agent"), "/3.9.3")
+			})
+		}
+	}
+}
+
+func TestFetchCodexModelsManifestRefreshRetainsIdentitySnapshot(t *testing.T) {
+	settings := emptyOutboundIdentitySettings()
+	settings.Profiles["grok"] = OutboundIdentitySelection{Preset: "grok", Version: "3.9.1"}
+	settings.Defaults["openai:apikey"] = "grok"
+	settingService, ctx := outboundIdentityTestSettings(t, settings)
+	account := newCodexModelsAPIKeyTestAccount("https://upstream.example/v1")
+	ctx = WithAccountOutboundIdentity(ctx, account)
+	identity, ok := outboundidentity.FromContext(ctx)
+	require.True(t, ok)
+	headers := http.Header{"Authorization": {"Bearer sk-upstream"}}
+	identity.Apply(headers)
+	var captured *http.Request
+	upstream := &codexModelsHTTPUpstreamStub{do: func(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
+		captured = req
+		return &http.Response{StatusCode: http.StatusNotModified, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(""))}, nil
+	}}
+	svc := newCodexModelsAPIKeyTestService(upstream)
+	request := openAIModelsRequest{url: "https://upstream.example/v1/models?client_version=3.9.1", headers: headers, credentialAccount: account, useAPIKeyUpstream: true}
+	fetch := svc.fetchCodexModelsManifestUpstreamForRequest(ctx, request)
+	settings.Profiles["grok"] = OutboundIdentitySelection{Preset: "grok", Version: "3.9.2"}
+	require.NoError(t, settingService.SetOutboundIdentitySettings(ctx, settings))
+	_, err := fetch(context.Background(), "catalog-etag")
+	require.NoError(t, err)
+	selected, ok := outboundidentity.FromContext(captured.Context())
+	require.True(t, ok)
+	require.Equal(t, identity.UserAgent, selected.UserAgent)
+	require.Equal(t, identity.UserAgent, captured.Header.Get("User-Agent"))
+	require.Equal(t, identity.Version, captured.Header.Get("X-Grok-Client-Version"))
+	require.Equal(t, identity.Version, captured.URL.Query().Get("client_version"))
+	require.Equal(t, "catalog-etag", captured.Header.Get("If-None-Match"))
 }
 
 func TestFetchCodexModelsManifestAPIKeyCustomUpstream(t *testing.T) {

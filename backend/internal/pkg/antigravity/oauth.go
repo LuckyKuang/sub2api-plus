@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"net/http"
 	"net/url"
 	"os"
@@ -109,6 +110,10 @@ func GetUserAgentVersionForContext(ctx context.Context) string {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	// Protocol body declarations must follow the same snapshot as the UA.
+	if identity, ok := outboundidentity.FromContext(ctx); ok && identity.Preset == "antigravity" {
+		return identity.Version
+	}
 	userAgentVersionMu.RLock()
 	resolver := userAgentVersionResolver
 	userAgentVersionMu.RUnlock()
@@ -130,7 +135,7 @@ func BuildUserAgent(version string) string {
 
 // GetUserAgentForContext 返回当前请求应使用的 User-Agent。
 func GetUserAgentForContext(ctx context.Context) string {
-	return BuildUserAgent(GetUserAgentVersionForContext(ctx))
+	return outboundidentity.UserAgent(ctx, "antigravity", BuildUserAgent(GetUserAgentVersionForContext(ctx)))
 }
 
 // GetUserAgent 返回当前配置的 User-Agent。

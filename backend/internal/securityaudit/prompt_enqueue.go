@@ -46,7 +46,7 @@ func (e *Enqueuer) Enqueue(ctx context.Context, req Request) error {
 		LogWarn(EventEnqueueDropped, mergeLogFields(baseFields, map[string]any{"status": "dropped", "error_code": "no_enabled_endpoint"}))
 		return nil
 	}
-	snapshot, diagnostic, err := extractPromptSnapshotWithDiagnostics(req, false)
+	snapshot, diagnostic, err := extractPromptSnapshotWithDiagnostics(req)
 	if diagnostic.Failed {
 		e.recordExtraction(ExtractionFailed)
 		logPromptExtractionFailure(req, diagnostic)

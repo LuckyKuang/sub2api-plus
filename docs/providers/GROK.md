@@ -4,6 +4,18 @@ Sub2API Plus supports Grok OAuth subscription accounts and standard xAI API-key
 accounts. Both account types expose OpenAI-compatible traffic through the
 gateway.
 
+Manage the UA and paired client declarations in **System Settings → Outbound
+identity**. Native OAuth retains the Grok family; API-key accounts can choose
+another preset. Forwarding, quota probes and Realtime handshakes consume the
+same trusted account identity. See [outbound identity](../OUTBOUND_IDENTITY.md).
+
+The HTTP/TLS transport adds the subscription proxy's `X-XAI-Token-Auth` hint
+without selecting a client identity from the hostname. When a replayable
+request falls back from the CLI proxy to the official API after access denied,
+it keeps the selected UA and companion identity headers and removes the proxy
+authentication hint. Compatible accounts using a Codex or other preset retain
+that selection on both hosts.
+
 ## Supported Interfaces
 
 - Responses: `/v1/responses`, `/responses`, `/backend-api/codex/responses`
@@ -48,7 +60,7 @@ The OAuth flow uses PKCE. Default public client values can be overridden:
 | `XAI_OAUTH_AUTHORIZE_URL` | Authorization endpoint |
 | `XAI_OAUTH_TOKEN_URL` | Token endpoint |
 | `XAI_BASE_URL` | Runtime diagnostics base URL |
-| `XAI_GROK_CLI_VERSION` | Optional client identity override |
+| `XAI_GROK_CLI_VERSION` | Grok preset version fallback below account/global settings; does not affect other presets or select an identity by host |
 
 Do not commit OAuth credentials. Account credentials reuse the encrypted account
 fields for access token, refresh token, expiry, base URL, email, subscription

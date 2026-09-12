@@ -2,7 +2,7 @@
 name: compress-cli
 description: >-
   Compress and validate the Sub2API Plus root AGENTS.md without weakening its
-  repository sources of truth or its protected security-audit, Codex identity,
+  repository sources of truth or its protected security-audit, outbound/Codex identity,
   pull-request, and release invariants. Use when a request creates, compresses,
   validates, or updates AGENTS.md repository rules in this project. Do not
   import generic npm, Maven, or Spring Boot contributor templates here.
@@ -18,8 +18,8 @@ line count.
 
 1. Read the current `AGENTS.md` and the linked sources of truth before editing.
 2. Preserve every existing rule unless the user's current requirement replaces
-   it. Never weaken the `Security Audit` or `Codex Identity` categories during
-   compression.
+   it. Never weaken the `Security Audit`, `Outbound Identity` or `Codex Identity`
+   categories during compression.
 3. Verify every added path and command against the repository. Commands must
    exist in repository scripts or Make targets.
 4. Keep the first line exactly `# AGENTS.md`. Every later non-empty line must

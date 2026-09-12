@@ -120,6 +120,7 @@ func (s *AntigravityOAuthService) ExchangeCode(ctx context.Context, input *Antig
 	}
 
 	// 交换 token
+	ctx = withNativeOAuthOutboundIdentity(ctx, PlatformAntigravity)
 	tokenResp, err := client.ExchangeCode(ctx, input.Code, session.CodeVerifier)
 	if err != nil {
 		return nil, fmt.Errorf("token 交换失败: %w", err)
@@ -222,6 +223,7 @@ func (s *AntigravityOAuthService) ValidateRefreshToken(ctx context.Context, refr
 	}
 
 	// 刷新 token
+	ctx = withNativeOAuthOutboundIdentity(ctx, PlatformAntigravity)
 	tokenInfo, err := s.RefreshToken(ctx, refreshToken, proxyURL)
 	if err != nil {
 		return nil, err
@@ -276,6 +278,7 @@ func isNonRetryableAntigravityOAuthError(err error) bool {
 
 // RefreshAccountToken 刷新账户的 token
 func (s *AntigravityOAuthService) RefreshAccountToken(ctx context.Context, account *Account) (*AntigravityTokenInfo, error) {
+	ctx = WithAccountOutboundIdentity(ctx, account)
 	if account.Platform != PlatformAntigravity || account.Type != AccountTypeOAuth {
 		return nil, fmt.Errorf("非 Antigravity OAuth 账户")
 	}
@@ -441,6 +444,7 @@ func resolveDefaultTierID(loadRaw map[string]any) string {
 
 // FillProjectID 仅获取 project_id，不刷新 OAuth token
 func (s *AntigravityOAuthService) FillProjectID(ctx context.Context, account *Account, accessToken string) (string, error) {
+	ctx = WithAccountOutboundIdentity(ctx, account)
 	var proxyURL string
 	if account.ProxyID != nil {
 		proxy, err := s.proxyRepo.GetByID(ctx, *account.ProxyID)

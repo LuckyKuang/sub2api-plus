@@ -8,15 +8,14 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/claude"
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/httpclient"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"github.com/LuckyKuang/sub2api-plus/internal/service"
 )
 
 const defaultClaudeUsageURL = "https://api.anthropic.com/api/oauth/usage"
-
-// 默认 User-Agent，与用户抓包的请求一致
-const defaultUsageUserAgent = "claude-code/2.1.7"
 
 type claudeUsageService struct {
 	usageURL          string
@@ -59,12 +58,8 @@ func (s *claudeUsageService) FetchUsageWithOptions(ctx context.Context, opts *se
 	req.Header.Set("Authorization", "Bearer "+opts.AccessToken)
 	req.Header.Set("anthropic-beta", "oauth-2025-04-20")
 
-	// 设置 User-Agent（优先使用缓存的 Fingerprint，否则使用默认值）
-	userAgent := defaultUsageUserAgent
-	if opts.Fingerprint != nil && opts.Fingerprint.UserAgent != "" {
-		userAgent = opts.Fingerprint.UserAgent
-	}
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("User-Agent", claude.DefaultHeaders["User-Agent"])
+	outboundidentity.ApplyDefault(req, "claude")
 
 	var resp *http.Response
 

@@ -8,6 +8,8 @@ const { updateAccountMock, checkMixedChannelRiskMock, authIsSimpleMode } = vi.ho
   authIsSimpleMode: { value: true }
 }))
 
+vi.mock('@/components/account/OutboundIdentityEditor.vue', () => ({ default: { template: '<div />' } }))
+
 vi.mock('@/stores/app', () => ({
   useAppStore: () => ({
     showError: vi.fn(),
@@ -324,6 +326,30 @@ function mountModal(account = buildAccount(), renderGroupSelector = false) {
 }
 
 describe('EditAccountModal', () => {
+  it.each(['oauth', 'apikey'])('uses backend passthrough precedence and clears legacy fields for %s', async (type) => {
+    for (const [extra, enabled] of [
+      [{ openai_passthrough: false, openai_oauth_passthrough: true }, false],
+      [{ openai_passthrough: true, openai_oauth_passthrough: false }, true],
+      [{ openai_oauth_passthrough: true }, true],
+      [{ openai_passthrough: 'invalid', openai_oauth_passthrough: true }, true],
+      [{ openai_passthrough: false }, false],
+      [{ openai_oauth_passthrough: 'true' }, false],
+      [{}, false]
+    ] as const) {
+      const account = type === 'oauth' ? buildOpenAIOAuthParentAccount() : buildAccount()
+      account.extra = { ...extra }
+      updateAccountMock.mockReset().mockResolvedValue(account)
+      checkMixedChannelRiskMock.mockReset().mockResolvedValue({ has_risk: false })
+      const wrapper = mountModal(account)
+      await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+      await vi.waitFor(() => expect(updateAccountMock).toHaveBeenCalledTimes(1))
+      const saved = updateAccountMock.mock.calls[0]?.[1]?.extra
+      expect(saved.openai_passthrough === true).toBe(enabled)
+      expect(saved).not.toHaveProperty('openai_oauth_passthrough')
+      wrapper.unmount()
+    }
+  })
+
   beforeEach(() => {
     authIsSimpleMode.value = true
   })

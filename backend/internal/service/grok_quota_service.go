@@ -174,7 +174,7 @@ func (s *GrokQuotaService) probeUsage(ctx context.Context, accountID int64) (*Gr
 	// 探测请求与真实转发保持同一套账号级请求头覆写，避免探测通过但转发失败。
 	account.ApplyHeaderOverrides(req.Header)
 
-	resp, err := s.httpUpstream.Do(req, proxyURL, account.ID, maxInt(account.Concurrency, 1))
+	resp, err := s.httpUpstream.Do(prepareAccountOutboundRequest(req, account), proxyURL, account.ID, maxInt(account.Concurrency, 1))
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "GROK_QUOTA_PROBE_REQUEST_FAILED", "upstream probe failed: %v", err)
 	}
@@ -392,7 +392,7 @@ func (s *GrokQuotaService) fetchBilling(
 		xai.ApplyCLIBillingHeaders(req, token)
 		// billing 探测与真实转发保持同一套账号级请求头覆写。
 		account.ApplyHeaderOverrides(req.Header)
-		resp, requestErr := s.httpUpstream.Do(req, proxyURL, account.ID, maxInt(account.Concurrency, 2))
+		resp, requestErr := s.httpUpstream.Do(prepareAccountOutboundRequest(req, account), proxyURL, account.ID, maxInt(account.Concurrency, 2))
 
 		statusCode := 0
 		var bodyBytes []byte

@@ -54,7 +54,7 @@ func TestAdminServiceCreateGroupConfiguresOpenAIOAuthQuotaResetSource(t *testing
 	require.NoError(t, err)
 	require.Equal(t, account.ID, *group.QuotaResetSourceAccountID)
 	require.Equal(t, account.Name, group.QuotaResetSourceAccountName)
-	require.Nil(t, group.QuotaResetSourceResetAt, "baseline is established by the persistence transaction")
+	require.Nil(t, group.QuotaResetSourceResetAt, "a fresh post-activation observation establishes the baseline")
 	require.Equal(t, int64(1), group.QuotaResetConfigVersion)
 	require.True(t, group.QuotaResetIncludeMonthly)
 }

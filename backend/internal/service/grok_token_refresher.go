@@ -83,6 +83,7 @@ func grokTokenRefreshWindowWithJitter(accountID int64, refreshWindow time.Durati
 }
 
 func (r *GrokTokenRefresher) Refresh(ctx context.Context, account *Account) (map[string]any, error) {
+	ctx = WithAccountOutboundIdentity(ctx, account)
 	if r == nil || r.grokOAuthService == nil {
 		return nil, errors.New("grok oauth service is not configured")
 	}

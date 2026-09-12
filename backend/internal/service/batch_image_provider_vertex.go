@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"io"
 	"net/http"
 	"net/url"
@@ -175,6 +176,7 @@ func (p *VertexBatchImageProvider) SupportsAccount(account *Account) bool {
 }
 
 func (p *VertexBatchImageProvider) Submit(ctx context.Context, job *BatchImageJob, account *Account, input BatchImageInput) (*BatchProviderJob, error) {
+	ctx = WithAccountOutboundIdentity(ctx, account)
 	if err := p.validateAccount(account); err != nil {
 		return nil, err
 	}
@@ -242,6 +244,7 @@ func (p *VertexBatchImageProvider) Submit(ctx context.Context, job *BatchImageJo
 }
 
 func (p *VertexBatchImageProvider) Get(ctx context.Context, job *BatchImageJob, account *Account) (*BatchProviderStatus, error) {
+	ctx = WithAccountOutboundIdentity(ctx, account)
 	if err := p.validateAccount(account); err != nil {
 		return nil, err
 	}
@@ -273,6 +276,7 @@ func (p *VertexBatchImageProvider) Get(ctx context.Context, job *BatchImageJob, 
 }
 
 func (p *VertexBatchImageProvider) Cancel(ctx context.Context, job *BatchImageJob, account *Account) error {
+	ctx = WithAccountOutboundIdentity(ctx, account)
 	if err := p.validateAccount(account); err != nil {
 		return err
 	}
@@ -288,6 +292,7 @@ func (p *VertexBatchImageProvider) Cancel(ctx context.Context, job *BatchImageJo
 }
 
 func (p *VertexBatchImageProvider) OpenResult(ctx context.Context, job *BatchImageJob, account *Account) (io.ReadCloser, string, error) {
+	ctx = WithAccountOutboundIdentity(ctx, account)
 	if err := p.validateAccount(account); err != nil {
 		return nil, "", err
 	}
@@ -319,6 +324,7 @@ func (p *VertexBatchImageProvider) OpenResult(ctx context.Context, job *BatchIma
 }
 
 func (p *VertexBatchImageProvider) Cleanup(ctx context.Context, job *BatchImageJob, account *Account, target CleanupTarget) error {
+	ctx = WithAccountOutboundIdentity(ctx, account)
 	if err := p.validateAccount(account); err != nil {
 		return err
 	}
@@ -363,6 +369,7 @@ func (p *VertexBatchImageProvider) validateAccount(account *Account) error {
 }
 
 func (p *VertexBatchImageProvider) accessToken(ctx context.Context, account *Account) (string, error) {
+	ctx = WithAccountOutboundIdentity(ctx, account)
 	return getVertexServiceAccountAccessToken(ctx, p.tokenCache, account)
 }
 
@@ -871,6 +878,7 @@ func (s *VertexGCSObjectStore) OpenObject(ctx context.Context, accessToken strin
 		return nil, "", err
 	}
 	req.Header.Set("Authorization", "Bearer "+accessToken)
+	outboundidentity.ApplyDefault(req, "gemini")
 	resp, err := s.client.Do(req)
 	if err != nil {
 		return nil, "", err
@@ -951,6 +959,7 @@ func doVertexJSON[T any](client *http.Client, req *http.Request) (*T, error) {
 }
 
 func doVertexDecodeJSON(client *http.Client, req *http.Request, out any) error {
+	outboundidentity.ApplyDefault(req, "gemini")
 	resp, err := client.Do(req)
 	if err != nil {
 		return err
@@ -963,6 +972,7 @@ func doVertexDecodeJSON(client *http.Client, req *http.Request, out any) error {
 }
 
 func doVertexNoBody(client *http.Client, req *http.Request) error {
+	outboundidentity.ApplyDefault(req, "gemini")
 	resp, err := client.Do(req)
 	if err != nil {
 		return err

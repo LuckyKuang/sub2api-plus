@@ -1552,7 +1552,13 @@ func (s *AccountRepoSuite) TestUpdateExtra_SchedulerNeutralSkipsOutboxAndSyncsFr
 	s.Require().Equal(0.42, got.Extra["session_window_utilization"])
 
 	var outboxCount int
-	s.Require().NoError(scanSingleRow(s.ctx, s.repo.sql, "SELECT COUNT(*) FROM scheduler_outbox", nil, &outboxCount))
+	s.Require().NoError(scanSingleRow(
+		s.ctx,
+		s.repo.sql,
+		"SELECT COUNT(*) FROM scheduler_outbox WHERE account_id = $1",
+		[]any{account.ID},
+		&outboxCount,
+	))
 	s.Require().Zero(outboxCount)
 	s.Require().Len(cacheRecorder.setAccounts, 1)
 	s.Require().NotNil(cacheRecorder.accounts[account.ID])
@@ -1569,8 +1575,6 @@ func (s *AccountRepoSuite) TestUpdateExtra_ExhaustedCodexSnapshotSyncsSchedulerC
 	})
 	cacheRecorder := &schedulerCacheRecorder{}
 	s.repo.schedulerCache = cacheRecorder
-	_, err := s.repo.sql.ExecContext(s.ctx, "TRUNCATE scheduler_outbox")
-	s.Require().NoError(err)
 
 	s.Require().NoError(s.repo.UpdateExtra(s.ctx, account.ID, map[string]any{
 		"codex_7d_used_percent":        100.0,
@@ -1579,7 +1583,13 @@ func (s *AccountRepoSuite) TestUpdateExtra_ExhaustedCodexSnapshotSyncsSchedulerC
 	}))
 
 	var count int
-	err = scanSingleRow(s.ctx, s.repo.sql, "SELECT COUNT(*) FROM scheduler_outbox", nil, &count)
+	err := scanSingleRow(
+		s.ctx,
+		s.repo.sql,
+		"SELECT COUNT(*) FROM scheduler_outbox WHERE account_id = $1",
+		[]any{account.ID},
+		&count,
+	)
 	s.Require().NoError(err)
 	s.Require().Equal(0, count)
 	s.Require().Len(cacheRecorder.setAccounts, 1)
@@ -1594,8 +1604,6 @@ func (s *AccountRepoSuite) TestUpdateExtra_SchedulerRelevantStillEnqueuesOutbox(
 		Platform: service.PlatformAntigravity,
 		Extra:    map[string]any{},
 	})
-	_, err := s.repo.sql.ExecContext(s.ctx, "TRUNCATE scheduler_outbox")
-	s.Require().NoError(err)
 
 	s.Require().NoError(s.repo.UpdateExtra(s.ctx, account.ID, map[string]any{
 		"mixed_scheduling":       true,
@@ -1603,7 +1611,13 @@ func (s *AccountRepoSuite) TestUpdateExtra_SchedulerRelevantStillEnqueuesOutbox(
 	}))
 
 	var count int
-	err = scanSingleRow(s.ctx, s.repo.sql, "SELECT COUNT(*) FROM scheduler_outbox", nil, &count)
+	err := scanSingleRow(
+		s.ctx,
+		s.repo.sql,
+		"SELECT COUNT(*) FROM scheduler_outbox WHERE account_id = $1",
+		[]any{account.ID},
+		&count,
+	)
 	s.Require().NoError(err)
 	s.Require().Equal(1, count)
 }

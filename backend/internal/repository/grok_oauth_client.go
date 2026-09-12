@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"net/http"
 	"net/url"
 	"strings"
@@ -52,7 +53,7 @@ func (c *grokOAuthClient) ExchangeCode(ctx context.Context, code, codeVerifier, 
 	var tokenResp xai.TokenResponse
 	resp, err := client.R().
 		SetContext(ctx).
-		SetHeader("User-Agent", xai.CLIUserAgent(xai.ResolveCLIVersion())).
+		SetHeaders(outboundidentity.Headers(ctx, "grok", nil)).
 		SetFormDataFromValues(formData).
 		SetSuccessResult(&tokenResp).
 		Post(c.tokenURL)
@@ -84,7 +85,7 @@ func (c *grokOAuthClient) RefreshToken(ctx context.Context, refreshToken, proxyU
 	var tokenResp xai.TokenResponse
 	resp, err := client.R().
 		SetContext(ctx).
-		SetHeader("User-Agent", xai.CLIUserAgent(xai.ResolveCLIVersion())).
+		SetHeaders(outboundidentity.Headers(ctx, "grok", nil)).
 		SetFormDataFromValues(formData).
 		SetSuccessResult(&tokenResp).
 		Post(c.tokenURL)

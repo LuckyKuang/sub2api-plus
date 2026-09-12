@@ -144,6 +144,7 @@ deploy/docker-compose.override.yml
 .gocache/
 vite.config.js
 docs/*
+!docs/OUTBOUND_IDENTITY.md
 !docs/README.md
 !docs/RELEASING.md
 !docs/UPSTREAM_V0_2_4_INTEGRATION.md

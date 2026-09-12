@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
@@ -267,6 +268,7 @@ func (f *ssoDeviceFlow) do(ctx context.Context, method, endpoint string, form ur
 			request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		}
 
+		outboundidentity.ApplyDefault(request, "grok")
 		response, err := f.client.Do(request)
 		if err != nil {
 			return 0, currentURL, nil, err

@@ -2,15 +2,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
 import { mount } from '@vue/test-utils'
 
-const { updateAccountMock, checkMixedChannelRiskMock, authIsSimpleMode } = vi.hoisted(() => ({
+const { updateAccountMock, checkMixedChannelRiskMock, authIsSimpleMode, showErrorMock } = vi.hoisted(() => ({
   updateAccountMock: vi.fn(),
+  showErrorMock: vi.fn(),
   checkMixedChannelRiskMock: vi.fn(),
   authIsSimpleMode: { value: true }
 }))
 
+vi.mock('@/components/account/OutboundIdentityEditor.vue', () => ({ default: { template: '<div />' } }))
+
 vi.mock('@/stores/app', () => ({
   useAppStore: () => ({
-    showError: vi.fn(),
+    showError: showErrorMock,
     showSuccess: vi.fn(),
     showInfo: vi.fn()
   })
@@ -120,6 +123,7 @@ describe('EditAccountModal Grok OAuth upstream config', () => {
   beforeEach(() => {
     authIsSimpleMode.value = true
     updateAccountMock.mockReset()
+    showErrorMock.mockReset()
     checkMixedChannelRiskMock.mockReset()
     checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
   })
@@ -206,9 +210,7 @@ describe('EditAccountModal Grok OAuth upstream config', () => {
     const account = buildGrokOAuthAccount({
       header_override_enabled: true,
       header_overrides: {
-        'user-agent': 'grok-pager/0.2.93',
-        'x-grok-client-identifier': 'grok-pager',
-        'x-grok-client-version': '0.2.93',
+        'x-route': 'primary',
         'x-xai-token-auth': 'xai-grok-cli'
       }
     })
@@ -222,11 +224,28 @@ describe('EditAccountModal Grok OAuth upstream config', () => {
     const payload = updateAccountMock.mock.calls[0]?.[1]
     expect(payload?.credentials?.header_override_enabled).toBe(true)
     expect(payload?.credentials?.header_overrides).toEqual({
-      'user-agent': 'grok-pager/0.2.93',
-      'x-grok-client-identifier': 'grok-pager',
-      'x-grok-client-version': '0.2.93',
+      'x-route': 'primary',
       'x-xai-token-auth': 'xai-grok-cli'
     })
+  })
+
+  it('requires removal of legacy identity overrides before saving and preserves ordinary headers', async () => {
+    const account = buildGrokOAuthAccount({
+      header_override_enabled: true,
+      header_overrides: { 'X-Stainless-Package-Version': '999.0.0', 'x-route': 'primary' }
+    })
+    updateAccountMock.mockResolvedValue(account)
+    const wrapper = mountModal(account)
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await vi.waitFor(() => expect(showErrorMock).toHaveBeenCalledWith('admin.accounts.headerOverride.blockedName'))
+    expect(updateAccountMock).not.toHaveBeenCalled()
+
+    wrapper.findComponent({ name: 'HeaderOverrideEditor' }).vm.$emit('update:rows', [
+      { name: 'x-route', value: 'primary' }
+    ])
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await vi.waitFor(() => expect(updateAccountMock).toHaveBeenCalledTimes(1))
+    expect(updateAccountMock.mock.calls[0]?.[1]?.credentials?.header_overrides).toEqual({ 'x-route': 'primary' })
   })
 
   it('shows the client-tool cache switch only for Grok OAuth accounts', () => {
