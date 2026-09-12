@@ -1057,14 +1057,20 @@ func TestOpenAIResponsesWebSocket_IngressCapacityRejected(t *testing.T) {
 	dialCtx, cancelDial := context.WithTimeout(context.Background(), 3*time.Second)
 	clientConn, response, err := coderws.Dial(dialCtx, "ws"+strings.TrimPrefix(wsServer.URL, "http")+"/openai/v1/responses", nil)
 	cancelDial()
-	require.Error(t, err)
-	require.Nil(t, clientConn)
-	require.NotNil(t, response)
-	require.Equal(t, http.StatusTooManyRequests, response.StatusCode)
-	_ = response.Body.Close()
+	require.NoError(t, err)
+	defer func() { _ = clientConn.CloseNow() }()
+	require.Equal(t, http.StatusSwitchingProtocols, response.StatusCode)
+	require.Zero(t, atomic.LoadInt32(&cache.acquireIngressCalled))
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	require.NoError(t, clientConn.Write(ctx, coderws.MessageText, []byte(`{"type":"response.create","model":"gpt-5.5","input":"hello"}`)))
+	_, _, err = clientConn.Read(ctx)
+	require.Equal(t, coderws.StatusTryAgainLater, coderws.CloseStatus(err))
+	require.Contains(t, err.Error(), "Too many open WebSocket connections")
+	require.Equal(t, int32(1), atomic.LoadInt32(&cache.acquireIngressCalled))
 }
 
-func TestOpenAIResponsesWebSocket_IngressLeaseBackendUnavailableBeforeUpgrade(t *testing.T) {
+func TestOpenAIResponsesWebSocket_IngressLeaseBackendUnavailableAfterFirstFrame(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cache := &concurrencyCacheMock{
 		acquireIngressLeaseFn: func(context.Context, int64, int, string) (bool, error) {
@@ -1080,11 +1086,17 @@ func TestOpenAIResponsesWebSocket_IngressLeaseBackendUnavailableBeforeUpgrade(t 
 	dialCtx, cancelDial := context.WithTimeout(context.Background(), 3*time.Second)
 	clientConn, response, err := coderws.Dial(dialCtx, "ws"+strings.TrimPrefix(wsServer.URL, "http")+"/openai/v1/responses", nil)
 	cancelDial()
-	require.Error(t, err)
-	require.Nil(t, clientConn)
-	require.NotNil(t, response)
-	require.Equal(t, http.StatusServiceUnavailable, response.StatusCode)
-	_ = response.Body.Close()
+	require.NoError(t, err)
+	defer func() { _ = clientConn.CloseNow() }()
+	require.Equal(t, http.StatusSwitchingProtocols, response.StatusCode)
+	require.Zero(t, atomic.LoadInt32(&cache.acquireIngressCalled))
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	require.NoError(t, clientConn.Write(ctx, coderws.MessageText, []byte(`{"type":"response.create","model":"gpt-5.5","input":"hello"}`)))
+	_, _, err = clientConn.Read(ctx)
+	require.Equal(t, coderws.StatusTryAgainLater, coderws.CloseStatus(err))
+	require.Contains(t, err.Error(), "capacity is temporarily unavailable")
+	require.Equal(t, int32(1), atomic.LoadInt32(&cache.acquireIngressCalled))
 }
 
 func TestOpenAIResponsesWebSocket_FirstMessageTimeoutUsesConfig(t *testing.T) {
@@ -1121,7 +1133,7 @@ func TestOpenAIResponsesWebSocket_FirstMessageTimeoutUsesConfig(t *testing.T) {
 	}, time.Second, 10*time.Millisecond)
 }
 
-func TestOpenAIResponsesWebSocket_IngressLeaseReleasedOnEarlyReturn(t *testing.T) {
+func TestOpenAIResponsesWebSocket_InvalidFirstFrameDoesNotAcquireIngressLease(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cache := &concurrencyCacheMock{
 		acquireIngressLeaseFn: func(context.Context, int64, int, string) (bool, error) {
@@ -1151,12 +1163,11 @@ func TestOpenAIResponsesWebSocket_IngressLeaseReleasedOnEarlyReturn(t *testing.T
 	var closeErr coderws.CloseError
 	require.ErrorAs(t, err, &closeErr)
 	require.Equal(t, coderws.StatusPolicyViolation, closeErr.Code)
-	require.Eventually(t, func() bool {
-		return atomic.LoadInt32(&cache.releaseIngressCalled) == 1
-	}, time.Second, 10*time.Millisecond)
+	require.Zero(t, atomic.LoadInt32(&cache.acquireIngressCalled))
+	require.Zero(t, atomic.LoadInt32(&cache.releaseIngressCalled))
 }
 
-func TestOpenAIResponsesWebSocket_IngressLeaseReleasedWhenUpgradeFails(t *testing.T) {
+func TestOpenAIResponsesWebSocket_FailedUpgradeDoesNotAcquireIngressLease(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cache := &concurrencyCacheMock{
 		acquireIngressLeaseFn: func(context.Context, int64, int, string) (bool, error) {
@@ -1178,9 +1189,8 @@ func TestOpenAIResponsesWebSocket_IngressLeaseReleasedWhenUpgradeFails(t *testin
 	require.NoError(t, err)
 	_ = resp.Body.Close()
 	require.NotEqual(t, http.StatusSwitchingProtocols, resp.StatusCode)
-	require.Eventually(t, func() bool {
-		return atomic.LoadInt32(&cache.releaseIngressCalled) == 1
-	}, time.Second, 10*time.Millisecond)
+	require.Zero(t, atomic.LoadInt32(&cache.acquireIngressCalled))
+	require.Zero(t, atomic.LoadInt32(&cache.releaseIngressCalled))
 }
 
 func TestOpenAIResponsesWebSocket_RejectsMessageIDAsPreviousResponseID(t *testing.T) {
@@ -1426,13 +1436,16 @@ func TestOpenAIResponsesWebSocket_ContentModerationBlocksFirstFrame(t *testing.T
 		return len(repo.logSnapshot()) == 1
 	}, time.Second, 10*time.Millisecond)
 	repo.resetLogs()
+	cache := &concurrencyCacheMock{}
 	h := &OpenAIGatewayHandler{
 		gatewayService:           &service.OpenAIGatewayService{},
 		billingCacheService:      &service.BillingCacheService{},
 		apiKeyService:            &service.APIKeyService{},
 		contentModerationService: moderationSvc,
-		concurrencyHelper:        NewConcurrencyHelper(service.NewConcurrencyService(&concurrencyCacheMock{}), SSEPingFormatNone, time.Second),
+		concurrencyHelper:        NewConcurrencyHelper(service.NewConcurrencyService(cache), SSEPingFormatNone, time.Second),
 	}
+	h.cfg = &config.Config{}
+	h.cfg.Gateway.OpenAIWS.MaxIngressConnectionsPerAPIKey = 1
 	wsServer := newOpenAIWSHandlerTestServer(t, h, middleware.AuthSubject{UserID: 1, Concurrency: 1})
 	defer wsServer.Close()
 
@@ -1473,6 +1486,7 @@ func TestOpenAIResponsesWebSocket_ContentModerationBlocksFirstFrame(t *testing.T
 	require.True(t, logs[0].Flagged)
 	require.Equal(t, service.ContentModerationActionBlock, logs[0].Action)
 	require.Equal(t, "bad prompt", logs[0].InputExcerpt)
+	require.Zero(t, atomic.LoadInt32(&cache.acquireIngressCalled), "moderation must block before reserving connection capacity")
 }
 
 func TestOpenAIResponsesWebSocket_PassthroughUsageLogPersistsUserAgentAndReasoningEffort(t *testing.T) {

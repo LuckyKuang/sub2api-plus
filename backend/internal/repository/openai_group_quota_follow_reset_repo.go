@@ -54,28 +54,39 @@ func (r *openAIGroupQuotaFollowResetRepository) ObserveWeeklyReset(ctx context.C
 	if err != nil && !firstObservation {
 		return 0, err
 	}
-	if !firstObservation && !resetAt.After(previous) {
+	repeatedObservation := !firstObservation && resetAt.Equal(previous)
+	if !firstObservation && !repeatedObservation && !openAIWeeklyResetAdvanced(previous, resetAt, observedAt) {
 		return 0, nil
 	}
-	_, err = tx.ExecContext(ctx, `
+	if !repeatedObservation {
+		_, err = tx.ExecContext(ctx, `
 		INSERT INTO openai_oauth_weekly_reset_observations (account_id, reset_at, observed_at)
 		VALUES ($1, $2, $3)
 		ON CONFLICT (account_id) DO UPDATE
 		SET reset_at = EXCLUDED.reset_at, observed_at = EXCLUDED.observed_at, updated_at = NOW()
 	`, accountID, resetAt, observedAt)
-	if err != nil {
-		return 0, err
+		if err != nil {
+			return 0, err
+		}
 	}
 
+	// An account observation may predate a group's membership or configuration.
+	// Reconcile groups even for a repeated accepted timestamp, without rewriting
+	// the account observation or relocking already synchronized group rows.
 	rows, err := tx.QueryContext(ctx, `
-		SELECT id, quota_reset_source_reset_at, quota_reset_config_version, quota_reset_include_monthly
-		FROM groups
-		WHERE quota_reset_source_account_id = $1
-		  AND platform = $2
-		  AND subscription_type = $3
-		  AND deleted_at IS NULL
-		ORDER BY id FOR UPDATE
-	`, accountID, service.PlatformOpenAI, service.SubscriptionTypeSubscription)
+		SELECT g.id, g.quota_reset_source_reset_at, g.quota_reset_config_version, g.quota_reset_include_monthly
+		FROM groups g
+		WHERE g.quota_reset_source_account_id = $1
+		  AND g.platform = $2
+		  AND g.subscription_type = $3
+		  AND g.deleted_at IS NULL
+		  AND g.quota_reset_source_reset_at IS DISTINCT FROM $4
+		  AND EXISTS (
+		      SELECT 1 FROM account_groups ag
+		      WHERE ag.group_id = g.id AND ag.account_id = $1
+		  )
+		ORDER BY g.id FOR UPDATE OF g
+	`, accountID, service.PlatformOpenAI, service.SubscriptionTypeSubscription, resetAt)
 	if err != nil {
 		return 0, err
 	}
@@ -103,13 +114,24 @@ func (r *openAIGroupQuotaFollowResetRepository) ObserveWeeklyReset(ctx context.C
 
 	created := 0
 	for _, target := range targets {
+		// Refresh membership after acquiring the group lock: the locking query
+		// may have started before a concurrent membership removal committed.
+		var bound bool
+		if err := tx.QueryRowContext(ctx, `
+			SELECT EXISTS (SELECT 1 FROM account_groups WHERE group_id = $1 AND account_id = $2)
+		`, target.id, accountID).Scan(&bound); err != nil {
+			return 0, err
+		}
+		if !bound {
+			continue
+		}
 		if !target.baseline.Valid {
 			if _, err := tx.ExecContext(ctx, `UPDATE groups SET quota_reset_source_reset_at = $2, updated_at = NOW() WHERE id = $1`, target.id, resetAt); err != nil {
 				return 0, err
 			}
 			continue
 		}
-		if !resetAt.After(target.baseline.Time) {
+		if !openAIWeeklyResetAdvanced(target.baseline.Time, resetAt, observedAt) {
 			continue
 		}
 		result, err := tx.ExecContext(ctx, `
@@ -132,6 +154,17 @@ func (r *openAIGroupQuotaFollowResetRepository) ObserveWeeklyReset(ctx context.C
 		return 0, err
 	}
 	return created, nil
+}
+
+const openAIWeeklyResetMinAdvance = (7 * 24 * time.Hour) / 2
+
+func openAIWeeklyResetAdvanced(previous, next, observedAt time.Time) bool {
+	if previous.IsZero() || next.IsZero() || observedAt.IsZero() {
+		return false
+	}
+	// Require the previously announced window to have ended, and the new
+	// next-reset to look like another weekly window rather than clock skew.
+	return !observedAt.Before(previous) && next.Sub(previous) >= openAIWeeklyResetMinAdvance
 }
 
 func (r *openAIGroupQuotaFollowResetRepository) ProcessNextPending(ctx context.Context) (_ *service.GroupQuotaFollowResetResult, err error) {
@@ -168,20 +201,32 @@ func (r *openAIGroupQuotaFollowResetRepository) ProcessNextPending(ctx context.C
 
 	var groupMonthlyLimit sql.NullFloat64
 	var valid bool
+	// Membership edits hold the group lock. Acquire it in a separate statement
+	// so validation uses a fresh READ COMMITTED snapshot after any lock wait;
+	// a join/EXISTS in the locking statement can still see pre-edit membership.
+	var lockedGroupID int64
 	err = tx.QueryRowContext(ctx, `
+		SELECT id FROM groups WHERE id = $1 AND deleted_at IS NULL FOR UPDATE
+	`, groupID).Scan(&lockedGroupID)
+	if err == nil {
+		err = tx.QueryRowContext(ctx, `
 		SELECT g.platform = $4
 		   AND g.subscription_type = $5
 		   AND g.quota_reset_source_account_id IS NOT DISTINCT FROM $2
 		   AND g.quota_reset_config_version = $3
 		   AND a.platform = $4
 		   AND a.type = $6
-		   AND a.parent_account_id IS NULL,
+		   AND a.parent_account_id IS NULL
+		   AND EXISTS (
+		       SELECT 1 FROM account_groups ag
+		       WHERE ag.group_id = g.id AND ag.account_id = a.id
+		   ),
 		   g.monthly_limit_usd
 		FROM groups g
 		JOIN accounts a ON a.id = $2 AND a.deleted_at IS NULL
 		WHERE g.id = $1 AND g.deleted_at IS NULL
-		FOR UPDATE OF g
 	`, groupID, sourceID, configVersion, service.PlatformOpenAI, service.SubscriptionTypeSubscription, service.AccountTypeOAuth).Scan(&valid, &groupMonthlyLimit)
+	}
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
 	}
@@ -194,9 +239,6 @@ func (r *openAIGroupQuotaFollowResetRepository) ProcessNextPending(ctx context.C
 			return nil, err
 		}
 		return &service.GroupQuotaFollowResetResult{EventID: eventID, GroupID: groupID, Skipped: true}, nil
-	}
-	if err != nil {
-		return nil, err
 	}
 	resetMonthly := includeMonthly && groupMonthlyLimit.Valid && groupMonthlyLimit.Float64 > 0
 	rows, err := tx.QueryContext(ctx, `

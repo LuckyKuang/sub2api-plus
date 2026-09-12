@@ -267,17 +267,29 @@ describe('GroupsView duplicate action', () => {
     wrapper.unmount()
   })
 
-  it('offers only credential-owning OpenAI OAuth reset sources and submits the selected account', async () => {
-    listAccounts.mockResolvedValue({
-      items: [
-        { id: 501, name: 'Eligible OAuth', platform: 'openai', type: 'oauth', parent_account_id: null },
-        { id: 502, name: 'OpenAI API key', platform: 'openai', type: 'apikey', parent_account_id: null },
-        { id: 503, name: 'OAuth shadow', platform: 'openai', type: 'oauth', parent_account_id: 501 },
-      ],
-      total: 3,
-      page: 1,
-      page_size: 100,
-      pages: 1,
+  it('offers only bound OpenAI OAuth reset sources after copying accounts from another group', async () => {
+    listAccounts.mockImplementation(async (_page: number, _pageSize: number, filters?: { group?: string }) => {
+      if (filters?.group === '42') {
+        return {
+          items: [
+            { id: 501, name: 'Bound OAuth', platform: 'openai', type: 'oauth', parent_account_id: null },
+            { id: 503, name: 'OAuth shadow', platform: 'openai', type: 'oauth', parent_account_id: 501 },
+          ],
+          total: 2,
+          page: 1,
+          page_size: 100,
+          pages: 1,
+        }
+      }
+      return {
+        items: [
+          { id: 999, name: 'Unrelated OAuth', platform: 'openai', type: 'oauth', parent_account_id: null },
+        ],
+        total: 1,
+        page: 1,
+        page_size: 100,
+        pages: 1,
+      }
     })
     const wrapper = mountView()
     await flushPromises()
@@ -290,8 +302,13 @@ describe('GroupsView duplicate action', () => {
         platform: string
         subscription_type: string
         quota_reset_source_account_id: number | null
+        copy_accounts_from_group_ids: number[]
       }
     }
+    expect(vm.quotaResetSourceAccounts).toEqual([])
+    vm.createForm.copy_accounts_from_group_ids = [42]
+    await flushPromises()
+    expect(listAccounts).toHaveBeenCalledWith(1, 100, { platform: 'openai', type: 'oauth', group: '42' })
     expect(vm.quotaResetSourceAccounts.map(account => account.id)).toEqual([501])
     vm.createForm.platform = 'openai'
     vm.createForm.subscription_type = 'subscription'
@@ -301,13 +318,70 @@ describe('GroupsView duplicate action', () => {
     await wrapper.get('#create-group-form').trigger('submit')
     await flushPromises()
 
-    expect(listAccounts).toHaveBeenCalledWith(1, 100, { platform: 'openai', type: 'oauth' })
     expect(createGroup).toHaveBeenCalledWith(expect.objectContaining({
       platform: 'openai',
       subscription_type: 'subscription',
       quota_reset_source_account_id: 501,
       quota_reset_include_monthly: false,
     }))
+    wrapper.unmount()
+  })
+
+  it.each(['resolve', 'reject', 'clear'] as const)('ignores an obsolete source lookup after %s', async (outcome) => {
+    let resolveOld!: (value: unknown) => void
+    let rejectOld!: (reason: Error) => void
+    listAccounts.mockImplementationOnce(() => new Promise((resolve, reject) => {
+      resolveOld = resolve
+      rejectOld = reject
+    }))
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.findAll('button').find(button => button.text() === 'admin.groups.createGroup')!.trigger('click')
+    const vm = wrapper.vm as unknown as {
+      quotaResetSourceAccounts: Array<{ id: number }>
+      quotaResetSourcesLoading: boolean
+      createForm: { platform: string, subscription_type: string, copy_accounts_from_group_ids: number[], quota_reset_source_account_id: number | null }
+    }
+    vm.createForm.platform = 'openai'
+    vm.createForm.subscription_type = 'subscription'
+    vm.createForm.copy_accounts_from_group_ids = [42]
+    await flushPromises()
+    expect(vm.quotaResetSourcesLoading).toBe(true)
+    const latest = [{ id: 502, name: 'Latest', platform: 'openai', type: 'oauth' }]
+    listAccounts.mockResolvedValue({ items: latest, total: 1 })
+    vm.createForm.copy_accounts_from_group_ids = outcome === 'clear' ? [] : [43]
+    await flushPromises()
+    expect(vm.quotaResetSourcesLoading).toBe(false)
+    if (outcome !== 'clear') vm.createForm.quota_reset_source_account_id = 502
+    if (outcome === 'reject') rejectOld(new Error('Old lookup failed'))
+    else resolveOld({ items: [{ ...latest[0], id: 501 }], total: 1 })
+    await flushPromises()
+    expect(vm.quotaResetSourceAccounts.map(account => account.id)).toEqual(outcome === 'clear' ? [] : [502])
+    expect(vm.createForm.quota_reset_source_account_id).toBe(outcome === 'clear' ? null : 502)
+    wrapper.unmount()
+  })
+
+  it('clears the saved reset source when replacement members exclude it', async () => {
+    listGroups.mockResolvedValue({ items: [{ ...sourceGroup, subscription_type: 'subscription', quota_reset_source_account_id: 501 }], total: 1 })
+    listAccounts.mockResolvedValue({ items: [{ id: 501, name: 'Original', platform: 'openai', type: 'oauth' }], total: 1 })
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.findAll('button').find(button => button.text() === 'common.edit')!.trigger('click')
+    await flushPromises()
+    const vm = wrapper.vm as unknown as {
+      editForm: { copy_accounts_from_group_ids: number[], quota_reset_source_account_id: number | null }
+      editQuotaResetSourceOptions: Array<{ value: number | null }>
+    }
+    expect(vm.editForm.quota_reset_source_account_id).toBe(501)
+    listAccounts.mockRejectedValueOnce(new Error('Lookup failed'))
+    vm.editForm.copy_accounts_from_group_ids = [44]
+    await flushPromises()
+    expect(vm.editForm.quota_reset_source_account_id).toBe(501)
+    listAccounts.mockResolvedValue({ items: [], total: 0 })
+    vm.editForm.copy_accounts_from_group_ids = [43]
+    await flushPromises()
+    expect(vm.editForm.quota_reset_source_account_id).toBeNull()
+    expect(vm.editQuotaResetSourceOptions.map(option => option.value)).not.toContain(501)
     wrapper.unmount()
   })
 

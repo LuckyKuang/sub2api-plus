@@ -225,7 +225,7 @@ func observeOpenAIWeeklyResetEvent(ctx context.Context, account *Account, payloa
 	for _, name := range []string{"primary", "secondary"} {
 		window := gjson.GetBytes(payload, "rate_limits."+name)
 		minutes := window.Get("window_minutes")
-		if minutes.Type != gjson.Number || minutes.Float() != float64(minutes.Int()) || minutes.Int() <= 360 {
+		if minutes.Type != gjson.Number || minutes.Float() != float64(minutes.Int()) || !isOpenAIWeeklyQuotaWindowMinutes(minutes.Int()) {
 			continue
 		}
 		resetAt := window.Get("reset_at")
