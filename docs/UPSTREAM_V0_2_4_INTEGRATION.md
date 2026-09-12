@@ -30,6 +30,13 @@ Existing unrelated runtime-log fields are preserved. Malformed runtime-log
 configuration must be repaired before upgrading. Ordinary access-log persistence
 does not control required security-audit exception logging.
 
+When using an explicit upstream URL allowlist, add `api.minimax.io` for the
+MiniMax international site; `api.minimaxi.com` covers the China site. Existing
+explicit lists are not merged with new defaults. The system-log cleanup fallback
+is `ops.cleanup.system_log_retention_days: 30`; it must be positive when cleanup
+is enabled. Runtime ops settings may override the fallback. Both defaults are
+shown in [the deployment example](../deploy/config.example.yaml).
+
 Back up the database before deploying this schema change. Replacing the binary
 with an older version alone cannot reverse renamed columns. Recovery requires
 the matching pre-upgrade database backup or a reviewed forward compensation;
@@ -51,9 +58,26 @@ never edit applied migration checksums.
 
 ## Validation boundary
 
-All local generation and validation runs in Apple Containers with the pinned
-repository toolchain. Relevant backend suites, frontend lint/typechecking and
+All local generation and validation runs with the pinned repository toolchain
+in Apple Containers on macOS, Docker inside WSL2 Debian/Ubuntu on Windows, or
+Docker on Linux. Host-side validation is forbidden. Relevant backend suites, frontend lint/typechecking and
 Vitest, real PostgreSQL/Redis repository integration, and deployment/migration
 checks are required for this integration. PR submission additionally requires
 the official full local matrix through the repository submission CLI. Local
 test success is not evidence of a published release or a production upgrade.
+
+The upgrade regression builds the immutable migration baseline through 258,
+seeds an existing Plus installation, and applies the current migrations twice.
+It checks model-policy conversion, access-log persistence, user balances,
+credential identity settings, subscriptions and quota usage, source bindings,
+pending weekly reset events, and preservation of already applied checksums.
+
+## Post-publication audit corrections
+
+The published `v0.2.4+custom.001` tag does not include the subsequent correction
+that moves WebSocket ingress lease acquisition after first-frame security audit.
+The correction is included in `v0.2.4+custom.002`. See
+[WebSocket ingress limits](protocols/OPENAI_RESPONSES.md#websocket-ingress-limits)
+for the corrected `1013` capacity-close behavior. It also covers a pre-existing
+ordering violation in `v0.2.1+custom.003`; published tags and artifacts remain
+immutable.

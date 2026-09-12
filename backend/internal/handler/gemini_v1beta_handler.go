@@ -622,7 +622,7 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 			// ForwardNative already wrote the response
 			reqLog.Error("gemini.forward_failed", zap.Int64("account_id", account.ID), zap.Error(err))
 			// Preserve partial stream usage for billing below. It is explicitly
-			// marked incomplete and therefore excluded from TPS.
+			// marked incomplete; TPS still displays with a confidence note.
 			if result == nil {
 				return
 			}

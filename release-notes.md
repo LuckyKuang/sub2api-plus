@@ -1,35 +1,44 @@
-Sub2API Plus v0.2.4+custom.001
+Sub2API Plus v0.2.4+custom.002
 
 ## Highlights
 
-Integrates the official v0.2.4 baseline while preserving Plus security,
-identity, accounting, administration, and deployment behavior.
+Corrects usage timing and OpenAI OAuth weekly quota reset behavior across
+streaming adapters, group membership changes, and concurrent reset processing.
 
 ## Changed
 
-- Adds MiniMax account, routing, quota, monitoring, and composite-route support.
-- Adds Image 2.5 support, long-stream HTTP/2 keepalive, OpenAI weekly usage
-  estimates, and administrator controls imported from the official baseline.
-- Enforces model allowlists for both discovery and inference while preserving
-  Plus aliases, credential-owned Codex identity, and ingress audit ordering.
-- Preserves Plus asynchronous image paths, usage alerts, export controls,
-  payment flows, session accounting, and hardened deployment defaults.
-- Keeps Grok cross-client rewriting opt-in and requires conclusive or explicit
-  media eligibility before forwarding media requests.
+- Defines one verified first-token, total-duration, and estimated-TPS contract
+  across supported account and protocol variants.
+- Follows explicit 10,080-minute OpenAI OAuth windows for group quota resets and
+  preserves source membership and baseline state when groups are copied.
+- Acquires client WebSocket connection leases only after first-frame validation
+  and security audit.
+- Synchronizes MiniMax localization and deployment defaults introduced by the
+  official v0.2.4 baseline.
+
+## Fixed
+
+- Prevents image, signature, grounding, compaction-only, empty-tool, and repeated
+  metadata output from being counted as generated text tokens.
+- Extends Gemini tool-call timing through later non-empty argument deltas and
+  keeps low positive TPS values visible without rounding them to zero.
+- Reconciles missing group reset baselines on repeated accepted observations and
+  rechecks source membership after database lock waits.
+- Commits copied group configuration, account membership, and scheduler outbox
+  entries atomically so reset workers never observe a partial copy.
 
 ## Compatibility and migration
 
-Database migrations 259 through 263 run automatically. They rename and repair
-the group model policy, add MiniMax constraints, normalize legacy allowlists,
-and preserve explicit access-log persistence on existing installations. Back
-up the database before upgrading because replacing the binary alone cannot
-reverse the renamed schema. Management API clients must use `model_allowlist`
-instead of `models_list_config`.
+No new database migration or configuration field is introduced by this release.
+Existing usage rows keep their historical timing provenance; only newly verified
+rows participate in strict first-token and TPS reporting. Existing weekly quota
+usage is reset only after an eligible bound OpenAI OAuth source reports an
+accepted later weekly window.
 
 ## Known issues
 
-The official v0.2.4 tag embeds source version `0.2.3`; this release intentionally
-uses the official tag commit as its upstream baseline.
+The official v0.2.4 tag embeds source version `0.2.3`; this release continues to
+use the official tag commit as its upstream baseline.
 
 ## Upstream baseline
 

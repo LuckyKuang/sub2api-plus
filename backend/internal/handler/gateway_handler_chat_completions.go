@@ -324,7 +324,7 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 				zap.Error(err),
 			)
 			// Preserve partial stream usage for billing below. It is explicitly
-			// marked incomplete and therefore excluded from TPS.
+			// marked incomplete; TPS still displays with a confidence note.
 			if result == nil {
 				return
 			}

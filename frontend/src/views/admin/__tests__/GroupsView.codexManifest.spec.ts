@@ -12,12 +12,14 @@ const {
   getUsageSummary,
   getCapacitySummary,
   getLiveCapability,
+  listAccounts,
 } = vi.hoisted(() => ({
   listGroups: vi.fn(),
   getModelAllowlistCandidates: vi.fn(),
   getUsageSummary: vi.fn(),
   getCapacitySummary: vi.fn(),
   getLiveCapability: vi.fn(),
+  listAccounts: vi.fn(),
 }));
 
 vi.mock("@/api/admin", () => ({
@@ -36,7 +38,7 @@ vi.mock("@/api/admin", () => ({
       updateSortOrder: vi.fn(),
     },
     accounts: {
-      list: vi.fn(),
+      list: listAccounts,
       getById: vi.fn(),
     },
   },
@@ -47,6 +49,10 @@ vi.mock("@/stores/app", () => ({
     showError: vi.fn(),
     showSuccess: vi.fn(),
   }),
+}));
+
+vi.mock("@/stores/auth", () => ({
+  useAuthStore: () => ({ isSimpleMode: false }),
 }));
 
 vi.mock("@/stores/onboarding", () => ({
@@ -123,7 +129,7 @@ const sourceGroup = {
   account_count: 1,
   active_account_count: 1,
   rate_limited_account_count: 0,
-  models_list_config: undefined,
+  model_allowlist: undefined,
   codex_models_manifest_config: {
     enabled: false,
     account_ids: [],
@@ -236,6 +242,7 @@ describe("GroupsView Codex manifest binding", () => {
     getUsageSummary.mockReset();
     getCapacitySummary.mockReset();
     getLiveCapability.mockReset();
+    listAccounts.mockReset();
 
     listGroups.mockResolvedValue({
       items: [sourceGroup],
@@ -248,6 +255,7 @@ describe("GroupsView Codex manifest binding", () => {
     getUsageSummary.mockResolvedValue([]);
     getCapacitySummary.mockResolvedValue([]);
     getLiveCapability.mockResolvedValue({ supported: false });
+    listAccounts.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 100, pages: 0 });
   });
 
   it("preserves consecutive child updates on the reactive edit config", async () => {
