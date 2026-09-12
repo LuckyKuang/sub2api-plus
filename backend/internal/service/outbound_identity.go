@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/antigravity"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/claude"
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/geminicli"
@@ -107,11 +108,7 @@ func builtInOutboundIdentity(preset string) outboundidentity.Identity {
 		i.Headers["x-grok-client-identifier"] = i.Originator
 		i.Headers["x-grok-client-version"] = i.Version
 	case "antigravity":
-		i.Version, i.Originator = antigravity.GetDefaultUserAgentVersion(), "antigravity"
-		if antigravity.NormalizeUserAgentVersion(os.Getenv(antigravity.AntigravityUserAgentVersionEnv)) != "" {
-			i.Source = "environment"
-		}
-		i.UserAgent = antigravity.BuildUserAgent(i.Version)
+		return antigravity.DefaultIdentity()
 	default:
 		return outboundidentity.Identity{}
 	}
@@ -143,6 +140,9 @@ func buildOutboundIdentity(selection OutboundIdentitySelection) (outboundidentit
 		}
 		i.UserAgent, i.Originator, i.Version = resolved.UserAgent, resolved.Originator, resolved.Version
 	} else {
+		if brandidentity.ContainsBrand(ua) {
+			return i, fmt.Errorf("User-Agent must not contain the project brand")
+		}
 		prefix := map[string]string{"claude": "claude-cli/", "gemini": "GeminiCLI/", "grok": "xai-grok-workspace/", "antigravity": "antigravity/"}[selection.Preset]
 		if !strings.HasPrefix(ua, prefix) {
 			return i, fmt.Errorf("User-Agent must match the selected preset")
@@ -329,6 +329,41 @@ func ApplyAccountOutboundHeaders(ctx context.Context, account *Account, headers 
 	if i, ok := outboundidentity.FromContext(WithAccountOutboundIdentity(ctx, account)); ok {
 		i.Apply(headers)
 	}
+}
+
+// WithStandaloneOutboundIdentity starts an operation using independently owned
+// provider credentials (monitor or audit endpoint). It must not inherit the
+// forwarding account's identity. Nested requests reuse the returned snapshot;
+// a new endpoint operation resolves its own API-key type default.
+func WithStandaloneOutboundIdentity(ctx context.Context, platform string) context.Context {
+	// A nil-account Codex cache in the forwarding scope is a different owner.
+	ctx = context.WithValue(ctx, outboundIdentityScopeKey{}, &outboundIdentityScope{})
+	ctx = outboundidentity.WithIdentity(ctx, outboundidentity.Identity{})
+	key := platform + ":" + AccountTypeAPIKey
+	identity, ok := outboundidentity.Default(ctx, key)
+	if !ok {
+		identity = (*SettingService)(nil).resolveOutboundIdentityKey(ctx, key)
+	}
+	if platform == PlatformOpenAI && identity.Preset == "codex" {
+		// Match native Platform API-key requests: the UA carries the triple,
+		// while OAuth-only Originator/Version declarations remain omitted.
+		identity.Headers = maps.Clone(identity.Headers)
+		for name := range identity.Headers {
+			if strings.EqualFold(name, "Originator") || strings.EqualFold(name, "Version") {
+				delete(identity.Headers, name)
+			}
+		}
+	}
+	return outboundidentity.WithIdentity(ctx, identity)
+}
+
+// withNativeOAuthOutboundIdentity starts a pre-account authorization operation.
+// Its native family and snapshot belong to these credentials, independently of
+// a caller's account snapshot, compatible API-key default, or cached scope.
+func withNativeOAuthOutboundIdentity(ctx context.Context, platform string) context.Context {
+	ctx = context.WithValue(ctx, outboundIdentityScopeKey{}, &outboundIdentityScope{})
+	ctx = outboundidentity.WithIdentity(ctx, outboundidentity.Identity{})
+	return outboundidentity.WithIdentity(ctx, outboundDefaultIdentity(ctx, nativeOutboundPreset(platform)))
 }
 
 func outboundDefaultIdentity(ctx context.Context, preset string) outboundidentity.Identity {

@@ -12,8 +12,8 @@ compact output is not treated as a text-token delta; see [usage timing](USAGE_TI
 
 ## Boundary And Ordering
 
-Outbound identity presets are resolved after this boundary and account
-selection. UA/SDK declarations are never audit inputs or an audit bypass.
+Forwarding-account outbound identity presets are resolved after this boundary
+and account selection. UA/SDK declarations are never audit inputs or an audit bypass.
 Claude billing-header version rewriting uses the selected outbound identity;
 the canonical inbound content shared by both audit engines stays unchanged.
 OAuth, API-key, Bedrock, Vertex and compatible adapters retain the same ordering.
@@ -24,6 +24,14 @@ Responses WS allocates its outbound identity scope after the first-turn audit
 and before credential refresh or the upstream handshake. The scope only retains
 resolver results; it does not evaluate content, select an account or perform I/O.
 Reusing a scope on retry or reconnection never skips subsequent-turn audit.
+Prompt Audit inference/model probes and Content Moderation calls use their own
+configured supplier credentials and a separate trusted outbound identity under
+[Outbound Identity](OUTBOUND_IDENTITY.md). They resolve the `openai:apikey`
+type default without selecting or inheriting a forwarding account. Prompt
+chunks and same-credential retries retain a supplier snapshot; failover resolves
+the new owner. These headers do not change canonical extraction, scan payloads,
+audit decisions or exception/pass-through semantics. Forwarding still waits for
+the required ingress audit result.
 Standalone search preserves `X-Codex-Turn-Metadata` for OAuth and API keys,
 including opaque `mcp_request_meta` / `openai/search_context` metadata. This
 protocol header is not a content-extraction input or an audit decision. The

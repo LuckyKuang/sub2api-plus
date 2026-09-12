@@ -671,6 +671,7 @@ func (s *AccountTestService) testBedrockAccountConnection(c *gin.Context, ctx co
 	req.Header.Set("Content-Type", "application/json")
 
 	// Sign or set auth based on account type
+	ApplyAccountOutboundIdentity(ctx, account, req)
 	if account.IsBedrockAPIKey() {
 		apiKey := account.GetCredential("api_key")
 		if apiKey == "" {

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/servertiming"
 	"github.com/tidwall/gjson"
 )
@@ -140,6 +141,7 @@ func pingEndpointOrigin(ctx context.Context, endpoint string) *int {
 	if err != nil {
 		return nil
 	}
+	outboundidentity.ApplyContext(req)
 	start := time.Now()
 	resp, err := monitorPingHTTPClient.Do(req)
 	if err != nil {
@@ -286,6 +288,9 @@ func providerAdapterFor(provider, apiMode string) (providerAdapter, string, bool
 //   - status: HTTP 状态码
 //   - err: 网络 / 序列化错误
 func callProvider(ctx context.Context, provider, endpoint, apiKey, model, prompt string, opts *CheckOptions) (extractedText, rawBody string, status int, err error) {
+	if _, ok := outboundidentity.FromContext(ctx); !ok {
+		ctx = WithStandaloneOutboundIdentity(ctx, provider)
+	}
 	requestedAPIMode := checkAPIMode(opts)
 	if err := validateAPIMode(provider, requestedAPIMode); err != nil {
 		return "", "", 0, err
@@ -380,7 +385,7 @@ func extractOpenAIResponsesText(respBytes []byte) string {
 }
 
 // mergeHeaders 把用户自定义 headers 合并到 adapter 默认 headers 上。
-// 用户值覆盖默认；命中黑名单（hop-by-hop / 由 http.Client 自管的）的 key 静默丢弃。
+// 普通用户值覆盖默认；托管身份、hop-by-hop、客户端自管字段静默丢弃。
 func mergeHeaders(base map[string]string, opts *CheckOptions) map[string]string {
 	if opts == nil || len(opts.ExtraHeaders) == 0 {
 		return base
@@ -544,6 +549,7 @@ func postRawJSON(ctx context.Context, fullURL string, payload []byte, headers ma
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
+	outboundidentity.ApplyContext(req)
 
 	resp, err := monitorHTTPClient.Do(req)
 	if err != nil {

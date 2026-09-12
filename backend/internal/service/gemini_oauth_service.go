@@ -417,6 +417,7 @@ func (s *GeminiOAuthService) RefreshAccountGoogleOneTier(
 	}
 
 	// 调用 Drive API
+	ctx = WithAccountOutboundIdentity(ctx, account)
 	tierID, storageInfo, err := s.FetchGoogleOneTier(ctx, accessToken, proxyURL)
 	if err != nil {
 		return "", nil, nil, err
@@ -497,6 +498,7 @@ func (s *GeminiOAuthService) ExchangeCode(ctx context.Context, input *GeminiExch
 		redirectURI = geminicli.GeminiCLIRedirectURI
 	}
 
+	ctx = withNativeOAuthOutboundIdentity(ctx, PlatformGemini)
 	tokenResp, err := s.oauthClient.ExchangeCode(ctx, oauthType, input.Code, session.CodeVerifier, redirectURI, proxyURL)
 	if err != nil {
 		logger.LegacyPrintf("service.gemini_oauth", "[GeminiOAuth] ERROR: Failed to exchange code: %v", err)

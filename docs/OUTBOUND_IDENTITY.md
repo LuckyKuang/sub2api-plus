@@ -18,7 +18,7 @@ versions are distinct from the CLI version.
 | Claude Code | Anthropic OAuth/setup-token/API key, Claude on Bedrock or Vertex | `claude-cli` UA, `X-App: cli`, project-owned `X-Stainless-*` SDK/runtime declarations |
 | Gemini CLI | Gemini OAuth/API key, Gemini on Vertex | `GeminiCLI` UA |
 | Grok | Grok OAuth/API key | `xai-grok-workspace` UA, `x-grok-client-identifier`, `x-grok-client-version` |
-| Antigravity | Antigravity OAuth/upstream | `antigravity` UA |
+| Antigravity | Antigravity OAuth/upstream | `antigravity` UA; the two privacy endpoints also declare the pinned `X-Goog-Api-Client` SDK |
 
 Native OAuth and setup-token accounts retain their native client family.
 API-key, upstream, Bedrock and service-account accounts can explicitly select
@@ -31,6 +31,23 @@ Built-in declarations reuse existing pins in `internal/pkg/claude`,
 `internal/pkg/geminicli`, `internal/pkg/xai`, `internal/pkg/antigravity` and
 `internal/service/openai_codex_identity.go`. This feature does not upgrade
 those pins. The settings page displays the exact current effective identity.
+
+The exact compiled Antigravity identity is
+`antigravity/2.9.1 windows/amd64`, with identifier `antigravity` and client
+version `2.9.1` encoded in the UA. Only `setUserSettings` and `fetchUserInfo`
+also send `X-Goog-Api-Client: gl-node/22.21.1`. This SDK declaration belongs to
+those endpoints and remains fixed during client version updates. The base
+preset preview describes the shared UA; these endpoint declarations are added
+to a copy of the trusted request snapshot, without changing the parent snapshot.
+
+| Antigravity operation | Identity source priority | Privacy SDK declaration |
+| --- | --- | --- |
+| Existing credential-owning account | Valid account candidate → configured global preset → valid environment / compiled default | Fixed `gl-node/22.21.1` for the two privacy endpoints |
+| Pre-account OAuth exchange / refresh-token validation | Global native Antigravity preset → valid environment / compiled default | Same fixed declaration; no API-key type-default mapping |
+| Privacy client without a settings resolver or account snapshot | Valid environment / compiled default | Same fixed declaration |
+
+Invalid candidates fall through atomically. An explicit account version retains
+its selected source and OS/architecture, and does not update the privacy SDK.
 
 ## Selection and persistence
 
@@ -46,6 +63,11 @@ global identity. Explicit `user_agent`/`version` fields form an account candidat
 omitted fields in that candidate use the preset's built-in declarations. An
 invalid candidate falls through as a whole. Invalid input through the management
 API is rejected before saving. Empty or null account selection means inherit.
+Non-Codex User-Agent candidates containing the project brand token (case
+insensitive) are invalid. Rejecting them during selection ensures the final
+brand filter cannot remove an accepted UA while leaving companion declarations
+behind. Previously stored invalid account/global candidates follow the same
+atomic fallback chain; the transport never substitutes an SDK default for them.
 
 Account creation, single-account updates and bulk updates use the same identity
 validation. Bulk updates validate the selection against every target account's
@@ -72,6 +94,10 @@ covers User-Agent, client identifiers/versions and SDK declarations such as
 identity overrides are ignored at runtime; ordinary overrides remain effective.
 Move intended identity customization to the account/global identity controls and
 remove identity entries from the generic override editor before saving it.
+Channel-monitor and request-template `extra_headers` enforce the same managed
+header registry at save time and ignore previously stored identity overrides at
+runtime. Ordinary custom, authentication and protocol headers retain their
+existing behavior.
 
 Other global settings live in the existing settings store under
 `outbound_identity`; account selections use the existing credentials JSON.
@@ -114,8 +140,8 @@ flight remain pending for the next save.
 
 ## Outbound paths and invariants
 
-Resolve after ingress authentication, basic validation, audit and account
-selection. Carry a snapshot for forwarding and retries; failover resolves the
+For forwarding, resolve after ingress authentication, basic validation, audit
+and account selection. Carry a snapshot for forwarding and retries; failover resolves the
 new credential owner. Apply reserved identity declarations after generic
 header overrides and again at the final HTTP transport boundary. Header
 matching is case-insensitive, including duplicate noncanonical Go map keys.
@@ -138,12 +164,53 @@ request between Codex and another preset. Failover uses the other credential
 owner's snapshot; a fresh request observes new settings. OAuth exchange/refresh
 and its account, subscription and privacy requests retain one identity as well.
 
+Pre-account Antigravity code exchange / refresh-token validation and Gemini
+code exchange start an independent native OAuth scope before the first provider
+request. Token exchange, user/project discovery, privacy set/verify and Google
+One Drive tier discovery reuse that operation's base snapshot, even when global
+settings change between calls. The next operation sees the new settings.
+Inherited account identities and API-key type defaults do not select the native
+OAuth family. Existing-account refreshes continue to use the credential owner's
+account identity. Antigravity `loadCodeAssist` body `metadata.ideVersion` follows
+the same selected Antigravity version as its UA.
+
+Privacy SDK declarations are carried in the two requests' own snapshots so final
+identity reapplication preserves them. `X-Goog-Api-Client` remains a managed
+header: inbound headers and generic overrides cannot supply it. Other Antigravity
+endpoints, Gemini/Drive requests and compatible non-Antigravity presets do not
+acquire this privacy SDK declaration.
+
 The integration covers inference/streaming, token counting, model discovery,
 account tests, quota/usage probes, OAuth exchange and refresh, Grok Realtime
 handshakes and probes, OpenAI-compatible WebSocket handshakes, and Gemini/Vertex
 batch requests and result retrieval. Before an account exists, authorization
 requests use the global native preset. Bedrock applies the selected identity
 before SigV4 signing and reuses the same declarations at send time.
+This includes the non-streaming Bedrock account connection test, for both IAM
+credentials and bearer API keys. IAM signatures include the selected companion
+declarations; the send-time finalizer must not introduce a new signed header.
+
+Google One tier refresh resolves the credential-owning Gemini account before
+calling Drive `about?fields=storageQuota`. Drive sends that snapshot on every
+retry. A pre-account Google One OAuth exchange uses the global Gemini identity,
+with the compiled Gemini CLI UA available when no settings resolver is wired.
+
+Auxiliary services with independently configured credentials resolve a separate
+operation snapshot. They never inherit a forwarding account's identity or its
+nil-account Codex cache:
+
+| Credential owner / path | Source and snapshot lifetime |
+| --- | --- |
+| Channel-monitor endpoint API key | `<provider>:apikey` type default, configured global preset, then existing environment/compiled fallback; one snapshot for the origin HEAD and all concurrent model POSTs in one check |
+| Prompt Audit endpoint token | `openai:apikey` type default and its global/default chain; one snapshot per endpoint credential across an evaluation/job's chunks and failover returns; a `/models` probe and its inference fallback share a snapshot |
+| Content Moderation endpoint API key | `openai:apikey` type default and its global/default chain; same-key retries share a snapshot, key rotation or endpoint failover resolves the new owner; administrative key tests start independent operations |
+
+These credentials have no account-level identity field. Their type default can
+select another compatible preset. Native OpenAI API-key Codex requests preserve
+the existing Originator/Version header omissions; other presets render their
+defined companions. Fresh monitor checks, audit evaluations/jobs, probes and
+key tests observe current settings. Supplier identity resolution does not select
+a forwarding account or move inference ahead of the ingress audit boundary.
 
 Model discovery includes both standard model lists and the Codex-style manifest
 requested from a compatible API-key upstream. Explicit account or type-default

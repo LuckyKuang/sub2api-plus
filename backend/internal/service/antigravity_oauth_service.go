@@ -120,6 +120,7 @@ func (s *AntigravityOAuthService) ExchangeCode(ctx context.Context, input *Antig
 	}
 
 	// 交换 token
+	ctx = withNativeOAuthOutboundIdentity(ctx, PlatformAntigravity)
 	tokenResp, err := client.ExchangeCode(ctx, input.Code, session.CodeVerifier)
 	if err != nil {
 		return nil, fmt.Errorf("token 交换失败: %w", err)
@@ -222,6 +223,7 @@ func (s *AntigravityOAuthService) ValidateRefreshToken(ctx context.Context, refr
 	}
 
 	// 刷新 token
+	ctx = withNativeOAuthOutboundIdentity(ctx, PlatformAntigravity)
 	tokenInfo, err := s.RefreshToken(ctx, refreshToken, proxyURL)
 	if err != nil {
 		return nil, err

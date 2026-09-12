@@ -242,6 +242,16 @@ membership and scheduler outbox entries together. A failed copy rolls back the
 entire write. Copying an unchanged source cannot temporarily expose an unbound
 source to reset workers. Copied accounts are locked before the group, in ID
 order, matching observation lock ordering and avoiding membership-FK deadlocks.
+The same account-before-group order applies to single-account additions,
+replacement of an account's group bindings, and batch membership inserts.
+Creating a Spark shadow with group bindings also locks the existing credential
+parent before groups, since the new account's parent foreign key locks that row.
+Membership writers lock all affected existing accounts in ascending ID order
+before acquiring live-group locks or inserting membership foreign keys. This
+also applies inside a caller-owned transaction; callers that edit groups before
+binding members must prelock the complete account set at transaction entry.
+Weekly observations and membership writes can wait for one another without
+reversing that order, and a rollback retains the original group bindings.
 
 Multiple workers process each group's pending events in order, preserving
 earlier monthly-reset decisions. Billing consumes eligible pending events

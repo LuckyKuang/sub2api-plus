@@ -110,6 +110,10 @@ func GetUserAgentVersionForContext(ctx context.Context) string {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	// Protocol body declarations must follow the same snapshot as the UA.
+	if identity, ok := outboundidentity.FromContext(ctx); ok && identity.Preset == "antigravity" {
+		return identity.Version
+	}
 	userAgentVersionMu.RLock()
 	resolver := userAgentVersionResolver
 	userAgentVersionMu.RUnlock()

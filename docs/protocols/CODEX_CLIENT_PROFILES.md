@@ -185,6 +185,14 @@ the next independently resolved request.
 | Empty or invalid | Empty or invalid | `compiled_default` |
 | Credential shadow | Any | Resolve the credential-owning parent and apply the same matrix; a shadow does not supply a UA |
 | Legacy candidate with compatibility disabled | Any | Treat that candidate as invalid and proceed to the next source |
+| Independent monitor/audit supplier token, with no account UA candidate | Valid, otherwise empty/invalid | `global`, otherwise `compiled_default`; never inherit a forwarding account or its cached identity |
+
+The independent-supplier row applies when its API-key type default selects
+Codex. OpenAI monitor checks, Prompt Audit scans/model probes and Content
+Moderation requests retain the native Platform API-key Originator/Version
+omissions below. Other selected presets follow [Outbound Identity](../OUTBOUND_IDENTITY.md).
+Each independent operation resolves its own supplier snapshot; discovery and
+inference within one probe, chunks and same-credential retries reuse it.
 
 Account and global candidates share the same configured-UA validation, including
 the 512-character limit. Create, single update and bulk update reject invalid
