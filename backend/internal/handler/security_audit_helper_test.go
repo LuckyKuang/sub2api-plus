@@ -219,10 +219,8 @@ func TestRunSecurityAuditExcludesHarnessAcrossHTTPAndWebSocketStages(t *testing.
 			require.NotNil(t, decision)
 			require.True(t, decision.AllowNextStage)
 			require.Contains(t, engine.capturedScanText(), "hi")
-			if test.mode == securityaudit.ModeAsync {
-				require.Contains(t, engine.capturedScanText(), "You are Codex")
-				require.Contains(t, engine.capturedScanText(), "Run JavaScript in the sandbox")
-			}
+			require.NotContains(t, engine.capturedScanText(), "You are Codex")
+			require.NotContains(t, engine.capturedScanText(), "Run JavaScript in the sandbox")
 		})
 	}
 }
@@ -392,7 +390,7 @@ func (e *turnCountingEngine) Enqueue(_ context.Context, req securityaudit.Reques
 func (e *turnCountingEngine) Evaluate(_ context.Context, req securityaudit.Request) (*securityaudit.PromptDecision, error) {
 	call := e.evaluates.Add(1)
 	if e.captureSnapshot {
-		if snapshot, err := securityaudit.ExtractBlockingPromptSnapshot(req, true); err == nil {
+		if snapshot, err := securityaudit.ExtractPromptSnapshot(req); err == nil {
 			e.lastScanText.Store(snapshot.ScanText)
 		}
 	}

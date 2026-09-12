@@ -269,12 +269,12 @@ current direct-user message text and images. It excludes `instructions`, tool
 definitions, reusable prompt variables, assistant/model messages, reasoning,
 tool calls/results, approval responses, and tool-produced screenshots. This
 prevents platform context or external tool content from being reported as a
-user policy violation. Prompt Audit also consumes that canonical result, but
-its selection follows `v0.1.177+custom.003`: conversation text such as
-`instructions`, message text, and reusable prompt variables is scanned, while
-static `tools` schemas and structured tool-call arguments/results are not
-treated as prompt text. Latest-turn blocking scans the latest user text plus
-the nearest preceding assistant/model output.
+user policy violation. Prompt Audit consumes the same current direct-user text
+and does not scan images. It excludes `instructions`, tool definitions,
+reusable prompt variables, assistant/model messages, reasoning, and tool
+calls/results. Client harness XML inside user text may be stripped before the
+Guard scan. A turn with no current user text is an empty Prompt Audit
+selection.
 A supported WebSocket control frame may produce no audit input. Unknown sibling
 keys, unsupported event/item types, and valid-JSON unrecognized structures pass
 through without an audit-derived block. When the canonical extractor recognizes

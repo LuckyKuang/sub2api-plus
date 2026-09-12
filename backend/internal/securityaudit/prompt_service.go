@@ -186,7 +186,7 @@ func (s *PromptService) Evaluate(ctx context.Context, req Request) (*PromptDecis
 	if cfg.EffectiveMode() != ModeBlocking || !cfg.IncludesGroup(req.GroupID) {
 		return &PromptDecision{Kind: DecisionAllow, AllowNextStage: true}, nil
 	}
-	snapshot, diagnostic, err := extractPromptSnapshotWithDiagnostics(req, cfg.BlockingLatestTurnOnly)
+	snapshot, diagnostic, err := extractPromptSnapshotWithDiagnostics(req)
 	if diagnostic.Failed {
 		if s.metrics != nil {
 			s.metrics.ObserveExtraction(ExtractionFailed)
