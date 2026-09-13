@@ -12,6 +12,7 @@ Sub2API Plus v0.2.4+custom.004
 - Clarifies repository-wide agent rules, Windows WSL2 Docker validation, and the deployed-instance scope of the Sub2API admin skill.
 - Makes stale validation image cleanup deterministic without pruning unrelated runtime resources.
 - Forwards configured standard proxy variables into validation containers without exposing their values in commands or logs.
+- Reads exact pull-request base and head SHAs from the GitHub API so release promotion does not depend on unsupported `gh pr view` fields.
 
 ## Fixed
 

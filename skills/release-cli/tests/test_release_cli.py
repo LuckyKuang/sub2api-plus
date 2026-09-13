@@ -147,6 +147,36 @@ def pull_request(
 
 
 class ValidationProofTest(unittest.TestCase):
+    def test_pull_request_details_uses_rest_base_and_head_shas(self) -> None:
+        payload = {
+            "number": 17,
+            "state": "closed",
+            "merged_at": "2026-09-13T10:00:00Z",
+            "draft": False,
+            "base": {"ref": "main", "sha": BASE},
+            "head": {
+                "ref": "release/candidate",
+                "sha": HEAD,
+                "repo": {"owner": {"login": "LuckyKuang"}},
+            },
+            "mergeable_state": "clean",
+            "merge_commit_sha": MERGE,
+            "auto_merge": {"merge_method": "merge"},
+            "body": marker(),
+            "html_url": "https://github.com/LuckyKuang/sub2api-plus/pull/17",
+        }
+        with mock.patch.object(release_cli, "json_capture", return_value=payload) as capture_json:
+            pr = release_cli.pull_request_details(REPOSITORY, 17)
+        capture_json.assert_called_once_with(
+            ["gh", "api", f"repos/{REPOSITORY}/pulls/17"],
+            description="GitHub pull-request API",
+        )
+        self.assertEqual("MERGED", pr.state)
+        self.assertEqual(BASE, pr.base_oid)
+        self.assertEqual(HEAD, pr.head_oid)
+        self.assertEqual(MERGE, pr.merge_commit)
+        self.assertTrue(pr.auto_merge_enabled)
+
     def test_marker_requires_exact_base_and_head(self) -> None:
         proof = release_cli.parse_validation_proof(marker())
         self.assertEqual(release_cli.ValidationProof(BASE, HEAD), proof)

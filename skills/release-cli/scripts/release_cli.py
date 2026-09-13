@@ -728,42 +728,37 @@ def parse_validation_proof(body: str) -> ValidationProof:
 
 def pull_request_details(repository: str, number: int) -> PullRequest:
     data = json_capture(
-        [
-            "gh",
-            "pr",
-            "view",
-            str(number),
-            "--repo",
-            repository,
-            "--json",
-            "number,state,isDraft,baseRefName,baseRefOid,headRefName,headRefOid,headRepositoryOwner,mergeStateStatus,mergeCommit,autoMergeRequest,body,url",
-        ],
-        description="gh pr view",
+        ["gh", "api", f"repos/{repository}/pulls/{number}"],
+        description="GitHub pull-request API",
     )
     if not isinstance(data, dict):
-        raise ReleaseCliError("gh pr view returned an unexpected value")
-    owner = data.get("headRepositoryOwner")
-    head_owner = str(owner.get("login", "")) if isinstance(owner, dict) else ""
-    merge = data.get("mergeCommit")
-    merge_commit = str(merge.get("oid")) if isinstance(merge, dict) and merge.get("oid") else None
+        raise ReleaseCliError("GitHub pull-request API returned an unexpected value")
     try:
+        base = data["base"]
+        head = data["head"]
+        if not isinstance(base, dict) or not isinstance(head, dict):
+            raise TypeError("base/head metadata is not an object")
+        head_repo = head.get("repo")
+        head_repo_owner = head_repo.get("owner") if isinstance(head_repo, dict) else None
+        head_owner = str(head_repo_owner.get("login", "")) if isinstance(head_repo_owner, dict) else ""
+        state = "MERGED" if data.get("merged_at") else str(data["state"]).upper()
         return PullRequest(
             number=int(data["number"]),
-            state=str(data["state"]),
-            is_draft=bool(data["isDraft"]),
-            base_branch=str(data["baseRefName"]),
-            base_oid=str(data["baseRefOid"]),
-            head_branch=str(data["headRefName"]),
-            head_oid=str(data["headRefOid"]),
+            state=state,
+            is_draft=bool(data["draft"]),
+            base_branch=str(base["ref"]),
+            base_oid=str(base["sha"]),
+            head_branch=str(head["ref"]),
+            head_oid=str(head["sha"]),
             head_owner=head_owner,
-            merge_state=str(data.get("mergeStateStatus") or "UNKNOWN"),
-            merge_commit=merge_commit,
-            auto_merge_enabled=data.get("autoMergeRequest") is not None,
+            merge_state=str(data.get("mergeable_state") or "unknown").upper(),
+            merge_commit=str(data["merge_commit_sha"]) if data.get("merge_commit_sha") else None,
+            auto_merge_enabled=data.get("auto_merge") is not None,
             body=str(data.get("body") or ""),
-            url=str(data.get("url") or number),
+            url=str(data.get("html_url") or number),
         )
     except (KeyError, TypeError, ValueError) as error:
-        raise ReleaseCliError("gh pr view returned incomplete metadata") from error
+        raise ReleaseCliError("GitHub pull-request API returned incomplete metadata") from error
 
 
 def require_local_validation_status(
