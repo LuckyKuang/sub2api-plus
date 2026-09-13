@@ -247,6 +247,50 @@ class ReleaseContainerTests(unittest.TestCase):
         check.assert_called_once()
         mutate.assert_not_called()
 
+    def test_successful_preflight_verifies_tag_against_release_notes(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            notes_file = Path(temp) / "notes.md"
+            notes = valid_notes()
+            notes_file.write_text(notes, encoding="utf-8")
+            commit = "a" * 40
+            tree = "b" * 40
+            with (
+                mock.patch.object(
+                    sys,
+                    "argv",
+                    [
+                        "release_preflight.py",
+                        "--tag",
+                        TAG,
+                        "--notes-file",
+                        str(notes_file),
+                        "--create-tag",
+                    ],
+                ),
+                mock.patch.object(release_preflight, "ensure_clean"),
+                mock.patch.object(release_preflight, "ensure_tag_absent"),
+                mock.patch.object(
+                    release_preflight,
+                    "git_output",
+                    side_effect=[commit, tree, tree, tree],
+                ),
+                mock.patch.object(release_preflight, "run_metadata_check"),
+                mock.patch.object(
+                    release_preflight,
+                    "run",
+                    return_value=subprocess.CompletedProcess([], 0, ""),
+                ),
+                mock.patch.object(release_preflight, "verify_created_tag") as verify,
+            ):
+                self.assertEqual(release_preflight.main(), 0)
+
+        verify.assert_called_once_with(
+            TAG,
+            commit,
+            f"Sub2API Plus {TAG}",
+            notes,
+        )
+
 
 class ReleaseBaselineTests(unittest.TestCase):
     def test_finalization_regenerates_exact_tree_and_removes_temporary_worktree(self) -> None:
