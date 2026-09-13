@@ -18,6 +18,8 @@ const {
   authIsSimpleMode: { value: true },
 }))
 
+vi.mock('@/components/account/OutboundIdentityEditor.vue', () => ({ default: { template: '<div />' } }))
+
 vi.mock('@/stores/app', () => ({
   useAppStore: () => ({
     showError: vi.fn(),

@@ -32,6 +32,7 @@ var supportedGrokVoiceHTTPEndpoints = map[string]struct{}{
 // The response is intentionally passed through because TTS returns audio bytes
 // while STT returns JSON and xAI may add format-specific headers.
 func (s *OpenAIGatewayService) ForwardGrokVoice(ctx context.Context, c *gin.Context, account *Account, endpoint string, body []byte, contentType string) (result *OpenAIForwardResult, err error) {
+	ctx = WithAccountOutboundIdentity(ctx, account)
 	defer func() { finalizeClientDisconnectForwardResult(ctx, c, result, err) }()
 	if s == nil || account == nil {
 		return nil, fmt.Errorf("grok voice service/account is required")
@@ -94,7 +95,7 @@ func (s *OpenAIGatewayService) ForwardGrokVoice(ctx context.Context, c *gin.Cont
 		proxyURL = account.Proxy.URL()
 	}
 	started := time.Now()
-	resp, err := s.httpUpstream.Do(req, proxyURL, account.ID, account.Concurrency)
+	resp, err := s.httpUpstream.Do(prepareAccountOutboundRequest(req, account), proxyURL, account.ID, account.Concurrency)
 	SetOpsLatencyMs(c, OpsUpstreamLatencyMsKey, time.Since(started).Milliseconds())
 	if err != nil {
 		return nil, s.handleOpenAIUpstreamTransportError(ctx, c, account, err, false)
@@ -166,6 +167,7 @@ func (u *GrokRealtimeUpstream) Close() error {
 }
 
 func (s *OpenAIGatewayService) OpenGrokRealtime(ctx context.Context, account *Account, token, model string) (*GrokRealtimeUpstream, error) {
+	ctx = WithAccountOutboundIdentity(ctx, account)
 	if s == nil || account == nil || account.Platform != PlatformGrok {
 		return nil, fmt.Errorf("grok realtime account is required")
 	}
@@ -186,6 +188,7 @@ func (s *OpenAIGatewayService) OpenGrokRealtime(ctx context.Context, account *Ac
 		applyGrokCLIHeaders(headers)
 	}
 	account.ApplyHeaderOverrides(headers)
+	ApplyAccountOutboundHeaders(ctx, account, headers)
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {
 		proxyURL = account.Proxy.URL()
@@ -307,6 +310,7 @@ func observeGrokRealtimeUpstreamTurn(msg []byte, observer *GrokRealtimeTurnObser
 // any client-visible events. Handlers use it before accepting the downstream
 // upgrade so authentication and endpoint failures remain ordinary HTTP errors.
 func (s *OpenAIGatewayService) ProbeGrokRealtime(ctx context.Context, account *Account, token, model string) error {
+	ctx = WithAccountOutboundIdentity(ctx, account)
 	if s == nil || account == nil {
 		return fmt.Errorf("realtime service and account are required")
 	}
@@ -330,6 +334,7 @@ func (s *OpenAIGatewayService) ProbeGrokRealtime(ctx context.Context, account *A
 		applyGrokCLIHeaders(headers)
 	}
 	account.ApplyHeaderOverrides(headers)
+	ApplyAccountOutboundHeaders(ctx, account, headers)
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {
 		proxyURL = account.Proxy.URL()

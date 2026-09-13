@@ -176,7 +176,133 @@ Agent Identity task registration and its immediately retried upstream request
 reuse one resolved snapshot; a concurrent settings update takes effect only on
 the next independently resolved request.
 
+### Mandatory source-priority matrix and exact default
+
+| Credential-owner account candidate | Global candidate | Selected source |
+| --- | --- | --- |
+| Valid | Any | `account`; retain that account's client family and fingerprint |
+| Empty or invalid | Valid | `global`; retain the configured global family and fingerprint |
+| Empty or invalid | Empty or invalid | `compiled_default` |
+| Credential shadow | Any | Resolve the credential-owning parent and apply the same matrix; a shadow does not supply a UA |
+| Legacy candidate with compatibility disabled | Any | Treat that candidate as invalid and proceed to the next source |
+| Independent monitor/audit supplier token, with no account UA candidate | Valid, otherwise empty/invalid | `global`, otherwise `compiled_default`; never inherit a forwarding account or its cached identity |
+
+The independent-supplier row applies when its API-key type default selects
+Codex. OpenAI monitor checks, Prompt Audit scans/model probes and Content
+Moderation requests retain the native Platform API-key Originator/Version
+omissions below. Other selected presets follow [Outbound Identity](../OUTBOUND_IDENTITY.md).
+Each independent operation resolves its own supplier snapshot; discovery and
+inference within one probe, chunks and same-credential retries reuse it.
+
+Account and global candidates share the same configured-UA validation, including
+the 512-character limit. Create, single update and bulk update reject invalid
+Codex UA candidates. Bulk updates validate all OpenAI targets before any write;
+omitting `credentials.user_agent` preserves its value, while null or a blank
+string clears it through an explicit null in the JSONB update.
+
+The exact compiled identity is:
+
+```text
+User-Agent: codex-tui/0.147.0 (Ubuntu 24.04; x86_64) xterm-256color
+Originator: codex-tui
+Version: 0.147.0
+```
+
+The version resolver runs after source selection: a valid administrator version
+override, then an eligible synchronized stable version, then the compiled
+version. This may change only the selected version declarations. The configured
+UA parser follows the client-profile policy; the outbound version field retains
+its historical normalization and minimum-version checks, including accepted
+two-part versions. Four-part versions still fall back under the existing version
+comparison rules; this change does not broaden the accepted version set.
+OAuth and metadata adapters must preserve an already approved complete identity
+and must not turn this version distinction into a client-family fallback.
+
+One operation retains the first resolved triple for each credential owner.
+HTTP forwarding, Messages and Chat Completions bridges, token counting, image/embedding requests,
+WebSocket handshakes/reconnection, Live creation/Sideband credential operations,
+Agent Identity registration/recovery, model
+discovery, account probes, and token refresh/enrichment share this contract.
+Handler-level retries reuse the request scope; another owner gets its own
+snapshot. A fresh request or WS connection observes updated settings. Detached
+manifest refreshes retain the scope that produced their headers and cache key.
+Pooled WS reuse and prewarm targets compare all three identity declarations;
+an updated triple cannot reuse an idle connection with the old handshake.
+Background prewarm retains the originating request scope during Agent Identity
+header renewal.
+One Live observer retains its scope across connection retries; a newly started
+controller or observer resolves a fresh scope.
+
+Final header application removes every case variant and duplicate of managed
+identity headers, including foreign SDK declarations, before rendering the
+selected identity. Native Codex OAuth/ChatGPT protocol requests send Originator
+and Version with the selected UA. Native Codex Platform API-key requests omit
+both Originator and Version, including `responses/compact`. Header presence is
+determined by the endpoint protocol, never by an inbound or generic override
+value. Explicit compatible presets retain their own protocol header mappings.
+Generic override saves reject managed identity headers with
+`INVALID_HEADER_OVERRIDE`; runtime filtering ignores previously stored entries.
+Authentication, session, routing and protocol-capability fields keep their own
+ownership. The superseded ForceCodexCLI UA staging and disable-enforcement
+branch have been removed; classification does not select an outbound identity.
+The OpenAI HTTP passthrough switch, enabled or disabled, retains this same source
+matrix and header contract. Authentication and identity remain gateway-managed;
+protocol handling, safety filtering, audit, billing and concurrency remain in
+effect. The switch does not change the WebSocket mode.
+The existing CI identity check guards the HTTP/WS finalizers, OAuth and detached
+manifest scopes and the shared override/SDK filter, rejects the retired override
+functions and header-presence inference, and compares this exact
+default block with the compiled declarations. Behavioral regressions exercise
+source selection, HTTP passthrough on/off for OAuth and API keys, WS headers,
+compatible presets and same-owner retry/refresh stability alongside those checks.
+The five-entry forwarding matrix includes Responses, Messages, Chat Completions,
+image generation and standalone search. The Chat Completions entry retains its
+snapshot across both handler retries and automatic Responses-to-Chat fallback.
+Shared HTTP/TLS transports cannot select a Grok identity based on a base URL or
+discard the chosen identity on Grok's access-denied fallback.
+
+## Standalone search
+
+`/v1/alpha/search` has its own request builder and protocol-header policy. The
+reviewed official Codex source at commit
+`c4017a87aacc7558002b7cb510025e967c1d765e`
+uses [`SearchClient`](https://github.com/openai/codex/blob/c4017a87aacc7558002b7cb510025e967c1d765e/codex-rs/codex-api/src/endpoint/search.rs)
+to POST JSON to `alpha/search` through the provider/auth session. Its
+[`search_request_headers`](https://github.com/openai/codex/blob/c4017a87aacc7558002b7cb510025e967c1d765e/codex-rs/ext/web-search/src/tool.rs)
+adds turn metadata and an optional thread originator. In this gateway, inbound
+thread originator never replaces the credential owner's selected identity.
+The official `chatgpt_cca` fixture is a thread originator, not a mandatory
+constant for the search endpoint. The shared client provides UA/originator,
+the provider may provide Version, and authentication supplies bearer/account
+headers; the search tool's extra headers must be reviewed with those layers.
+
+| Account/protocol | Upstream path | Identity declarations |
+| --- | --- | --- |
+| Normal OAuth | ChatGPT `/backend-api/codex/alpha/search` | Selected UA, Originator and Version |
+| Native Codex API key | Configured base URL + `/alpha/search` | Selected UA; Originator and Version omitted under the Platform API-key contract |
+| API key with a compatible preset | Configured base URL + `/alpha/search` | Selected preset's own protocol header mapping |
+| OAuth using PAT | Existing Plus adapter to ChatGPT `/backend-api/codex/responses` with `web_search` | Selected UA, Originator and Version; Responses transport headers |
+
+Direct search uses JSON and strips `OpenAI-Beta`, `Session_ID`,
+`Conversation_ID`, `X-Codex-Beta-Features`, `X-Codex-Turn-State` and the Responses
+Lite header, including noncanonical duplicates from legacy custom headers.
+`X-Codex-Turn-Metadata` is forwarded for both OAuth and API-key search, including
+its opaque `mcp_request_meta` and nested `openai/search_context` search context.
+OAuth turn/session IDs retain existing credential isolation; other metadata
+fields remain intact. The PAT adapter also retains this metadata. These
+protocol differences do not create a new identity source or a passthrough
+exception. PAT's Responses adapter is existing Plus behavior; it is not a
+claim that official Codex always implements PAT search this way. Whether a
+custom API-key upstream implements standalone search remains that provider's
+capability; choosing an identity preset does not add the endpoint.
+
 ## Maintaining the profile registry
+
+The Codex identity controls now live in **System Settings → Outbound identity**.
+The default identity and source-priority matrix above are unchanged. Explicit
+non-Codex identity selections for compatible API-key/upstream accounts use the
+separate [outbound identity](../OUTBOUND_IDENTITY.md) preset mechanism. This does
+not change native Codex account selection, client classification or version sync.
 
 Do not add a profile based only on a UI/product name or a community report.
 For every registry addition or change:
@@ -206,9 +332,13 @@ Public API-key model discovery and administrator discovery apply the credential
 owner’s final outbound identity. Supported OAuth shadows resolve to their parent;
 API-key discovery uses the selected account’s own credentials.
 Generic account header overrides run before this final identity step and cannot
-replace its source. API-key `/v1/models` omits OAuth-only Originator; Codex/OAuth
-manifest Version and client_version follow the selected identity. Shared raw
-catalog cache keys include the resolved request headers and credentials, so a
-source/credential change cannot reuse a different identity's cached response.
+replace its source. With the Codex preset, API-key `/v1/models` omits OAuth-only
+Originator; Codex/OAuth manifest Version and client_version follow the selected
+identity. A compatible API-key account explicitly selecting another preset uses
+that preset's wire headers and version for the Codex-style manifest's
+client_version query. Shared raw catalog cache keys include the resolved URL,
+request headers and credentials, so an identity/credential change cannot reuse
+a different identity's cached response. Detached manifest cache refreshes retain
+the identity snapshot used to build their request and cache key.
 The compiled default identity and source-priority matrix above remain the
 normative declarations for every discovery and forwarding path.

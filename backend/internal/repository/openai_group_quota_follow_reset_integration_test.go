@@ -15,6 +15,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func observeWeeklyResetAt(repo service.OpenAIGroupQuotaFollowResetRepository, ctx context.Context, accountID int64, resetAt, observedAt time.Time) (int, error) {
+	return repo.ObserveWeeklyReset(ctx, accountID, service.OpenAIWeeklyQuotaObservation{ResetAt: resetAt, ObservedAt: observedAt, QuotaQuery: true})
+}
+
 func TestOpenAIGroupQuotaFollowResetRepository_EndToEnd(t *testing.T) {
 	ctx := context.Background()
 	suffix := time.Now().UnixNano()
@@ -64,7 +68,7 @@ func TestOpenAIGroupQuotaFollowResetRepository_EndToEnd(t *testing.T) {
 		RETURNING id
 	`, fmt.Sprintf("quota-follow-%d@example.test", suffix)).Scan(&userID))
 
-	now := time.Now().UTC().Truncate(time.Second)
+	now := time.Now().UTC().Truncate(time.Microsecond)
 	subscriptionIDs := make([]int64, 0, len(groupIDs))
 	for _, groupID := range groupIDs {
 		var subscriptionID int64
@@ -90,24 +94,24 @@ func TestOpenAIGroupQuotaFollowResetRepository_EndToEnd(t *testing.T) {
 
 	repo := NewOpenAIGroupQuotaFollowResetRepository(integrationEntClient, integrationDB)
 	firstResetAt := now.Add(7 * 24 * time.Hour)
-	created, err := repo.ObserveWeeklyReset(ctx, accountID, firstResetAt, now)
+	created, err := observeWeeklyResetAt(repo, ctx, accountID, firstResetAt, now)
 	require.NoError(t, err)
 	require.Zero(t, created, "the first observation only establishes a baseline")
 
-	created, err = repo.ObserveWeeklyReset(ctx, accountID, firstResetAt, now.Add(time.Minute))
+	created, err = observeWeeklyResetAt(repo, ctx, accountID, firstResetAt, now.Add(time.Minute))
 	require.NoError(t, err)
 	require.Zero(t, created, "the same upstream reset time must be idempotent")
 
-	created, err = repo.ObserveWeeklyReset(ctx, accountID, firstResetAt.Add(time.Minute), now.Add(time.Hour))
+	created, err = observeWeeklyResetAt(repo, ctx, accountID, firstResetAt.Add(time.Minute), now.Add(time.Hour))
 	require.NoError(t, err)
 	require.Zero(t, created, "a later next-reset before the current window expires must not reset groups")
 
-	created, err = repo.ObserveWeeklyReset(ctx, accountID, firstResetAt.Add(time.Minute), firstResetAt)
+	created, err = observeWeeklyResetAt(repo, ctx, accountID, firstResetAt.Add(time.Minute), firstResetAt)
 	require.NoError(t, err)
 	require.Zero(t, created, "clock skew after the current window expires must not reset groups")
 
 	secondResetAt := firstResetAt.Add(7 * 24 * time.Hour)
-	created, err = repo.ObserveWeeklyReset(ctx, accountID, secondResetAt, firstResetAt)
+	created, err = observeWeeklyResetAt(repo, ctx, accountID, secondResetAt, firstResetAt.Add(time.Second))
 	require.NoError(t, err)
 	require.Equal(t, 3, created, "one source observation must create one event per bound group")
 
@@ -140,12 +144,12 @@ func TestOpenAIGroupQuotaFollowResetRepository_EndToEnd(t *testing.T) {
 		}
 	}
 
-	created, err = repo.ObserveWeeklyReset(ctx, accountID, secondResetAt, now.Add(2*time.Hour))
+	created, err = observeWeeklyResetAt(repo, ctx, accountID, secondResetAt, now.Add(2*time.Hour))
 	require.NoError(t, err)
 	require.Zero(t, created)
 
 	thirdResetAt := secondResetAt.Add(7 * 24 * time.Hour)
-	created, err = repo.ObserveWeeklyReset(ctx, accountID, thirdResetAt, secondResetAt)
+	created, err = observeWeeklyResetAt(repo, ctx, accountID, thirdResetAt, secondResetAt)
 	require.NoError(t, err)
 	require.Equal(t, 3, created)
 
@@ -170,7 +174,7 @@ func TestOpenAIGroupQuotaFollowResetRepository_EndToEnd(t *testing.T) {
 
 	_, err = integrationDB.ExecContext(ctx, `UPDATE accounts SET deleted_at = NOW() WHERE id = $1`, accountID)
 	require.NoError(t, err)
-	created, err = repo.ObserveWeeklyReset(ctx, accountID, thirdResetAt.Add(7*24*time.Hour), now.Add(4*time.Hour))
+	created, err = observeWeeklyResetAt(repo, ctx, accountID, thirdResetAt.Add(7*24*time.Hour), now.Add(4*time.Hour))
 	require.NoError(t, err)
 	require.Zero(t, created, "a deleted source cannot emit reset events")
 
@@ -211,16 +215,25 @@ func newQuotaFollowFixture(t *testing.T) quotaFollowFixture {
 		_, _ = integrationDB.Exec(`DELETE FROM accounts WHERE id=$1`, f.accountID)
 		_, _ = integrationDB.Exec(`DELETE FROM users WHERE id=$1`, userID)
 	})
-	created, err := f.repo.ObserveWeeklyReset(ctx, f.accountID, f.baseline, f.now)
+	// Use the database clock that owns groups.updated_at. Separate validation
+	// VMs can have small clock offsets; the baseline must be strictly newer
+	// than activation even then, just like a fresh post-activation quota query.
+	require.NoError(t, integrationDB.QueryRowContext(ctx, `SELECT clock_timestamp()`).Scan(&f.now))
+	f.now = f.now.UTC()
+	f.baseline = f.now.Add(7 * 24 * time.Hour)
+	created, err := observeWeeklyResetAt(f.repo, ctx, f.accountID, f.baseline, f.now)
 	require.NoError(t, err)
 	require.Zero(t, created)
+	var baseline time.Time
+	require.NoError(t, integrationDB.QueryRowContext(ctx, `SELECT quota_reset_source_reset_at FROM groups WHERE id=$1`, f.groupID).Scan(&baseline))
+	require.Equal(t, f.baseline, baseline, "fixture must establish the post-activation baseline")
 	return f
 }
 
 func (f quotaFollowFixture) observe(t *testing.T, window int) {
 	t.Helper()
 	next := f.baseline.Add(time.Duration(window) * 7 * 24 * time.Hour)
-	created, err := f.repo.ObserveWeeklyReset(context.Background(), f.accountID, next, f.baseline.Add(time.Duration(window-1)*7*24*time.Hour))
+	created, err := observeWeeklyResetAt(f.repo, context.Background(), f.accountID, next, f.baseline.Add(time.Duration(window-1)*7*24*time.Hour))
 	require.NoError(t, err)
 	require.Equal(t, 1, created)
 }
@@ -235,17 +248,17 @@ func TestQuotaFollowReset_SavePreservesCurrentBaseline(t *testing.T) {
 	stale.Description = "ordinary edit from an older snapshot"
 	require.NoError(t, repo.Update(ctx, stale))
 	require.Equal(t, f.baseline.Add(7*24*time.Hour), *stale.QuotaResetSourceResetAt)
-	created, err := f.repo.ObserveWeeklyReset(ctx, f.accountID, f.baseline.Add(7*24*time.Hour), f.now.Add(time.Hour))
+	created, err := observeWeeklyResetAt(f.repo, ctx, f.accountID, f.baseline.Add(7*24*time.Hour), f.now.Add(time.Hour))
 	require.NoError(t, err)
 	require.Zero(t, created)
 
-	// The new binding must refresh its baseline inside the save transaction,
-	// even if the service previously read an older value or no observation.
+	// The new activation must wait for a fresh window, even when old account
+	// observations or a pending event from the earlier binding still exist.
 	stale.QuotaResetSourceChanged = true
 	stale.QuotaResetConfigVersion++
 	stale.QuotaResetSourceResetAt = nil
 	require.NoError(t, repo.Update(ctx, stale))
-	require.Equal(t, f.baseline.Add(7*24*time.Hour), *stale.QuotaResetSourceResetAt)
+	require.Nil(t, stale.QuotaResetSourceResetAt, "a new activation must wait for a fresh baseline")
 	result, err := f.repo.ProcessNextPending(ctx)
 	require.NoError(t, err)
 	require.True(t, result.Skipped, "old-configuration events must not apply after rebinding")
@@ -280,7 +293,7 @@ func TestQuotaFollowReset_InvalidSourceDoesNotApplyPendingEvents(t *testing.T) {
 	}
 }
 
-func TestQuotaFollowReset_CreateUsesLatestBaselineWithoutResetting(t *testing.T) {
+func TestQuotaFollowReset_CreateWaitsForFreshBaselineWithoutResetting(t *testing.T) {
 	f := newQuotaFollowFixture(t)
 	f.observe(t, 1)
 	ctx := context.Background()
@@ -292,7 +305,7 @@ func TestQuotaFollowReset_CreateUsesLatestBaselineWithoutResetting(t *testing.T)
 	copy.QuotaResetSourceResetAt = &f.baseline // A stale pre-save snapshot.
 	require.NoError(t, repo.Create(ctx, copy))
 	t.Cleanup(func() { _, _ = integrationDB.Exec(`DELETE FROM groups WHERE id=$1`, copy.ID) })
-	require.Equal(t, f.baseline.Add(7*24*time.Hour), *copy.QuotaResetSourceResetAt)
+	require.Nil(t, copy.QuotaResetSourceResetAt, "a new binding cannot inherit old observations")
 	var events int
 	require.NoError(t, integrationDB.QueryRow(`SELECT count(*) FROM group_quota_follow_reset_events WHERE group_id=$1`, copy.ID).Scan(&events))
 	require.Zero(t, events)
@@ -334,7 +347,7 @@ func TestQuotaFollowReset_ConcurrentObservationBillingAndWorkers(t *testing.T) {
 	counts := make(chan int, 8)
 	for range 8 {
 		wg.Go(func() {
-			n, err := f.repo.ObserveWeeklyReset(ctx, f.accountID, f.baseline.Add(7*24*time.Hour), f.baseline)
+			n, err := observeWeeklyResetAt(f.repo, ctx, f.accountID, f.baseline.Add(7*24*time.Hour), f.baseline)
 			errs <- err
 			counts <- n
 		})
@@ -370,7 +383,7 @@ func TestQuotaFollowReset_UnboundSourceDoesNotAdvanceGroupBaseline(t *testing.T)
 	f := newQuotaFollowFixture(t)
 	_, err := integrationDB.Exec(`DELETE FROM account_groups WHERE account_id=$1 AND group_id=$2`, f.accountID, f.groupID)
 	require.NoError(t, err)
-	created, err := f.repo.ObserveWeeklyReset(context.Background(), f.accountID, f.baseline.Add(7*24*time.Hour), f.baseline)
+	created, err := observeWeeklyResetAt(f.repo, context.Background(), f.accountID, f.baseline.Add(7*24*time.Hour), f.baseline)
 	require.NoError(t, err)
 	require.Zero(t, created)
 	group, err := NewGroupRepository(integrationEntClient, integrationDB).GetByIDLite(context.Background(), f.groupID)
@@ -401,7 +414,7 @@ func TestQuotaFollowReset_RepeatedObservationEstablishesMissingGroupBaseline(t *
 	// committing its membership, or before an existing binding is restored.
 	_, err := integrationDB.Exec(`UPDATE groups SET quota_reset_source_reset_at=NULL WHERE id=$1`, f.groupID)
 	require.NoError(t, err)
-	created, err := f.repo.ObserveWeeklyReset(context.Background(), f.accountID, f.baseline, f.now.Add(time.Minute))
+	created, err := observeWeeklyResetAt(f.repo, context.Background(), f.accountID, f.baseline, f.now.Add(time.Minute))
 	require.NoError(t, err)
 	require.Zero(t, created, "a group's first baseline must not reset usage")
 	group, err := NewGroupRepository(integrationEntClient, integrationDB).GetByIDLite(context.Background(), f.groupID)
@@ -506,7 +519,7 @@ func TestQuotaFollowReset_ObservationRechecksMembershipAfterWaitingForGroup(t *t
 	}
 	finished := make(chan outcome, 1)
 	go func() {
-		created, err := f.repo.ObserveWeeklyReset(ctx, f.accountID, f.baseline.Add(7*24*time.Hour), f.baseline)
+		created, err := observeWeeklyResetAt(f.repo, ctx, f.accountID, f.baseline.Add(7*24*time.Hour), f.baseline)
 		finished <- outcome{created, err}
 	}()
 	require.Eventually(t, func() bool {

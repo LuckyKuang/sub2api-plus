@@ -86,6 +86,7 @@ func clearAntigravityForceTokenRefreshExtra() map[string]any {
 
 // Refresh 执行 token 刷新
 func (r *AntigravityTokenRefresher) Refresh(ctx context.Context, account *Account) (map[string]any, error) {
+	ctx = WithAccountOutboundIdentity(ctx, account)
 	tokenInfo, err := r.antigravityOAuthService.RefreshAccountToken(ctx, account)
 	if err != nil {
 		return nil, err

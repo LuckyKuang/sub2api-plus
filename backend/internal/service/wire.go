@@ -219,13 +219,15 @@ func ProvideOpenAIQuotaAutoResetService(
 	return service
 }
 
-// ProvideOpenAIGroupQuotaFollowResetService starts only the local durable-event
-// processor. Upstream reset timestamps are supplied passively by gateway traffic.
+// ProvideOpenAIGroupQuotaFollowResetService starts event application and bounded
+// refreshes of configured sources through the existing trusted quota client.
 func ProvideOpenAIGroupQuotaFollowResetService(
 	repo OpenAIGroupQuotaFollowResetRepository,
 	billingCache *BillingCacheService,
+	quota *OpenAIQuotaService,
 ) *OpenAIGroupQuotaFollowResetService {
 	service := NewOpenAIGroupQuotaFollowResetService(repo, billingCache)
+	service.quota = quota
 	service.Start()
 	return service
 }
@@ -823,6 +825,7 @@ func ProvideSettingService(settingRepo SettingRepository, groupRepo GroupReposit
 		logger.LegacyPrintf("service.setting", "Warning: migrate Grok default text model failed: %v", err)
 	}
 	antigravity.SetUserAgentVersionResolver(svc.GetAntigravityUserAgentVersion)
+	svc.installOutboundIdentityResolver()
 	return svc
 }
 

@@ -6362,7 +6362,16 @@ const handleCreateGroup = async () => {
   }
 };
 
+let editLoadSequence = 0;
 const handleEdit = async (group: AdminGroup) => {
+  const sequence = ++editLoadSequence;
+  try {
+    group = await adminAPI.groups.getById(group.id);
+  } catch {
+    if (sequence === editLoadSequence) appStore.showError(t("admin.groups.failedToLoad"));
+    return;
+  }
+  if (sequence !== editLoadSequence) return;
   editingGroup.value = group;
   editForm.name = group.name;
   editForm.description = group.description || "";
@@ -6471,6 +6480,7 @@ const handleEdit = async (group: AdminGroup) => {
     adminAPI.accounts
       .getById(id)
       .then((account) => {
+        if (sequence !== editLoadSequence) return;
         editCodexManifestAccountNames.value = {
           ...editCodexManifestAccountNames.value,
           [id]: account.name,
@@ -6481,15 +6491,48 @@ const handleEdit = async (group: AdminGroup) => {
       });
   }
   // 加载模型路由规则（异步加载账号名称）
-  editModelRoutingRules.value = await convertApiFormatToRoutingRules(
+  const routingRules = await convertApiFormatToRoutingRules(
     group.model_routing,
   );
+  if (sequence !== editLoadSequence) return;
+  editModelRoutingRules.value = routingRules;
   loadModelAllowlistCandidates("edit", group.id, group.platform);
   void loadQuotaResetSourceAccountsForGroups([group.id]);
   showEditModal.value = true;
 };
 
+watch(showEditModal, (open, _previous, onCleanup) => {
+  if (!open) return;
+  let active = true;
+  let refreshing = false;
+  const timer = setInterval(async () => {
+    const current = editingGroup.value;
+    if (refreshing || !current?.quota_reset_source_account_id) return;
+    refreshing = true;
+    try {
+      const fresh = await adminAPI.groups.getById(current.id);
+      if (!active || editingGroup.value?.id !== current.id ||
+          fresh.quota_reset_source_account_id !== current.quota_reset_source_account_id) return;
+      editingGroup.value = {
+        ...editingGroup.value,
+        quota_reset_source_reset_at: fresh.quota_reset_source_reset_at,
+        quota_reset_source_status: fresh.quota_reset_source_status,
+        quota_reset_source_account_name: fresh.quota_reset_source_account_name,
+      };
+    } catch {
+      // Keep the last known baseline and retry; never overwrite unsaved fields.
+    } finally {
+      refreshing = false;
+    }
+  }, 15_000);
+  onCleanup(() => {
+    active = false;
+    clearInterval(timer);
+  });
+});
+
 const closeEditModal = () => {
+  editLoadSequence++;
   editModelRoutingRules.value.forEach((rule) => {
     accountSearchRunner.clearKey(getEditRuleSearchKey(rule));
   });
@@ -7281,6 +7324,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  editLoadSequence++;
   document.removeEventListener("click", handleClickOutside);
   accountSearchRunner.clearAll();
   clearAllAccountSearchState();

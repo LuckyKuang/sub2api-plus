@@ -10,6 +10,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
+	"github.com/LuckyKuang/sub2api-plus/internal/service"
 )
 
 type PromptService struct {
@@ -186,7 +189,7 @@ func (s *PromptService) Evaluate(ctx context.Context, req Request) (*PromptDecis
 	if cfg.EffectiveMode() != ModeBlocking || !cfg.IncludesGroup(req.GroupID) {
 		return &PromptDecision{Kind: DecisionAllow, AllowNextStage: true}, nil
 	}
-	snapshot, diagnostic, err := extractPromptSnapshotWithDiagnostics(req, cfg.BlockingLatestTurnOnly)
+	snapshot, diagnostic, err := extractPromptSnapshotWithDiagnostics(req)
 	if diagnostic.Failed {
 		if s.metrics != nil {
 			s.metrics.ObserveExtraction(ExtractionFailed)
@@ -316,6 +319,7 @@ func (s *PromptService) Probe(ctx context.Context, request ProbeRequest) ProbeRe
 		return s.finishProbe(endpoint.ID, started, ProbeResult{Status: "failed", ErrorCode: "endpoint_unsafe", Message: "审计节点地址不在允许范围", TokenApplied: tokenApplied})
 	}
 	modelsURL, _ := ModelsURL(endpoint.BaseURL)
+	ctx = service.WithStandaloneOutboundIdentity(ctx, service.PlatformOpenAI)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, modelsURL, nil)
 	if err != nil {
 		return s.finishProbe(endpoint.ID, started, ProbeResult{Status: "failed", ErrorCode: "probe_request_invalid", Message: "无法创建探测请求", TokenApplied: tokenApplied})
@@ -323,6 +327,7 @@ func (s *PromptService) Probe(ctx context.Context, request ProbeRequest) ProbeRe
 	if endpoint.Token != "" {
 		req.Header.Set("Authorization", "Bearer "+endpoint.Token)
 	}
+	outboundidentity.ApplyContext(req)
 	resp, err := client.Do(req)
 	if err != nil {
 		code := "connection_failed"
@@ -344,7 +349,7 @@ func (s *PromptService) Probe(ctx context.Context, request ProbeRequest) ProbeRe
 		return s.finishProbe(endpoint.ID, started, ProbeResult{OK: true, Status: "healthy", Message: "审计节点连接正常", HTTPStatus: resp.StatusCode, TokenApplied: tokenApplied})
 	}
 	if (resp.StatusCode >= 200 && resp.StatusCode < 300) || resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusMethodNotAllowed {
-		result, scanErr := s.scanner.Scan(ctx, endpoint, "Hello", AllScannerIDs)
+		result, scanErr := s.scanner.scan(ctx, endpoint, "Hello", AllScannerIDs)
 		if scanErr == nil && result != nil {
 			return s.finishProbe(endpoint.ID, started, ProbeResult{OK: true, Status: "healthy", Message: "审计节点模型调用正常", HTTPStatus: http.StatusOK, TokenApplied: tokenApplied})
 		}

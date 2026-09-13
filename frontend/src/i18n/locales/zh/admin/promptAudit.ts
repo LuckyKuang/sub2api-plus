@@ -48,7 +48,7 @@ export default {
       probeProgress: '配置校验 ✓ · 请求已发送 · 等待服务响应…', probeResult: '配置校验 ✓ · 请求 ✓ · HTTP {http} · {status} · {latency} ms',
       name: '节点名称', id: '稳定节点 ID', baseUrl: 'Base URL', apiKey: 'API Key', keepSecret: '留空以保留已保存的 API Key', reenterSecret: '已保存的 API Key 无法解密（加密密钥已变更），请重新输入',
       secretHint: '明文只在本次编辑内存中存在；保存成功后会立即清除。', clearSecret: '显式清除已保存的 API Key', timeout: '总超时（毫秒）', inputLimit: '单片 Unicode 字符上限',
-      timeoutRange: '支持范围：{min}–{max} 毫秒。', inputLimitRange: '支持范围：{min}–{max} 个 Unicode 字符。', inputLimitBehavior: '单个优先片段超过该值时会继续分片；最新输入会与历史片段分开送检。若希望单消息完整送检，请把上限设为不小于实际字符数，并确认模型上下文足够。多个启用节点同时存在时，以其中最小值为准。',
+      timeoutRange: '支持范围：{min}–{max} 毫秒。', inputLimitRange: '支持范围：{min}–{max} 个 Unicode 字符。', inputLimitBehavior: '当前用户文本超过该值时会继续分片。若希望单消息完整送检，请把上限设为不小于实际字符数，并确认模型上下文足够。多个启用节点同时存在时，以其中最小值为准。',
       toggleNode: '切换节点 {name}', deleteConfirm: '从草稿中删除节点“{name}”？保存配置后生效。',
     },
     policy: {
@@ -56,7 +56,7 @@ export default {
       searchGroups: '搜索分组', noGroups: '没有匹配分组', missingGroups: '配置中包含已删除的分组 ID', selectedCount: '已选择 {count} 个分组',
       scanners: 'Qwen3Guard 输入风险分类', workerCount: 'Worker 数量', queueCapacity: '持久队列容量', strategy: '节点策略', strategyHint: '按配置顺序优先尝试，必要时故障切换。',
     },
-    saveBar: { enabled: '启用提示词审计', blocking: '同步阻止', blockingLatestTurnOnly: '同步阻止仅审最新用户输入', storePass: '保存安全事件', dirty: '有未保存的更改', synced: '配置已同步' },
+    saveBar: { enabled: '启用提示词审计', blocking: '同步阻止', storePass: '保存安全事件', dirty: '有未保存的更改', synced: '配置已同步' },
     blockingConfirm: {
       title: '开启同步阻止？',
       message: '适用请求会在账号选择、计费和访问上游之前等待 Guard。命中 Block、Guard 不可用或响应非法时，请求都不会访问上游。',

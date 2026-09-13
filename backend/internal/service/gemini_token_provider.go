@@ -50,6 +50,7 @@ func (p *GeminiTokenProvider) SetRefreshPolicy(policy ProviderRefreshPolicy) {
 }
 
 func (p *GeminiTokenProvider) GetAccessToken(ctx context.Context, account *Account) (string, error) {
+	ctx = WithAccountOutboundIdentity(ctx, account)
 	if account == nil {
 		return "", errors.New("account is nil")
 	}

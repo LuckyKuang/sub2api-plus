@@ -23,6 +23,7 @@ REQUIRED_CATEGORIES = (
     "README",
     "Locales",
     "Codex Identity",
+    "Outbound Identity",
     "Security Audit",
     "OpenSpec",
     "Secrets",
@@ -57,12 +58,26 @@ REQUIRED_PATHS = (
     "README_CN.md",
     "README_JA.md",
     "docs/SECURITY_AUDIT_CONTENT_COVERAGE.md",
+    "docs/OUTBOUND_IDENTITY.md",
     "skills/compress-cli",
     "skills/push-cli",
     "skills/release-cli",
 )
 
 PROTECTED_FRAGMENTS = {
+    "Outbound Identity": (
+        "Every provider-bound request must use a trusted User-Agent/client identifier/version triple under docs/OUTBOUND_IDENTITY.md",
+        "OAuth, setup-token, API Key, upstream, Bedrock, Vertex/service_account, compatible suppliers, and new account types have no bypass",
+        "Preserve the Codex Identity contract unchanged",
+        "Non-Codex precedence: valid credential-owning account > configured global preset/type default > valid environment/compiled default; empty/invalid candidates fall through atomically as documented",
+        "Inbound headers, generic overrides, cached fingerprints, SDK defaults, classification, and adapters must not select or overwrite identity",
+        "Reuse the same-account snapshot across HTTP/WS, retries, probes, discovery, usage, OAuth, and batch paths; failover resolves the new credential owner",
+        "Apply before signing and preserve signed declarations at send time",
+        "Render only provider-defined identity headers and keep companion/body declarations coherent",
+        "Version-only updates preserve source, client family, identifier, OS, architecture, terminal, and SDK fingerprint",
+        "New types/paths, version/dependency upgrades, and upstream merges must preserve this contract and pass source/default, header/body, transport-path, signing, failover, and fingerprint regressions; synchronize owning docs and tests before merge",
+        "Do not weaken identity rules or checks to accommodate upstream behavior",
+    ),
     "Codex Identity": (
         "credentials.user_agent > valid global openai_codex_user_agent > compiled default",
         "Empty/invalid candidates fall through only to the next source",

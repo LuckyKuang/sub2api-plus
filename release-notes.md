@@ -1,44 +1,29 @@
-Sub2API Plus v0.2.4+custom.002
+Sub2API Plus v0.2.4+custom.003
 
 ## Highlights
 
-Corrects usage timing and OpenAI OAuth weekly quota reset behavior across
-streaming adapters, group membership changes, and concurrent reset processing.
+- Enforces trusted, credential-owner outbound identity consistently across provider, OAuth, probe, audit, monitoring, and auxiliary request paths.
+- Follows confirmed OpenAI weekly quota resets safely with consistent lock ordering and repeated-reset evidence.
+- Audits only current user prompt content while preserving the documented pass-through extraction contract, and reports TPS from the decode window.
 
 ## Changed
 
-- Defines one verified first-token, total-duration, and estimated-TPS contract
-  across supported account and protocol variants.
-- Follows explicit 10,080-minute OpenAI OAuth windows for group quota resets and
-  preserves source membership and baseline state when groups are copied.
-- Acquires client WebSocket connection leases only after first-frame validation
-  and security audit.
-- Synchronizes MiniMax localization and deployment defaults introduced by the
-  official v0.2.4 baseline.
+- Upgrades Vitest to 4.1.11, gRPC to 1.83.2, and pnpm/action-setup to 6.1.0.
+- Adds provider-specific outbound identity configuration and synchronized English/Chinese administration controls.
 
 ## Fixed
 
-- Prevents image, signature, grounding, compaction-only, empty-tool, and repeated
-  metadata output from being counted as generated text tokens.
-- Extends Gemini tool-call timing through later non-empty argument deltas and
-  keeps low positive TPS values visible without rounding them to zero.
-- Reconciles missing group reset baselines on repeated accepted observations and
-  rechecks source membership after database lock waits.
-- Commits copied group configuration, account membership, and scheduler outbox
-  entries atomically so reset workers never observe a partial copy.
+- Applies Bedrock identity before IAM signing and preserves Antigravity companion headers.
+- Prevents account/group lock-order inversion during weekly reset observation.
+- Uses isolated trusted identity snapshots for monitoring, Prompt Audit, Content Moderation, Google Drive discovery, OAuth, probes, and related auxiliary traffic.
 
 ## Compatibility and migration
 
-No new database migration or configuration field is introduced by this release.
-Existing usage rows keep their historical timing provenance; only newly verified
-rows participate in strict first-token and TPS reporting. Existing weekly quota
-usage is reset only after an eligible bound OpenAI OAuth source reports an
-accepted later weekly window.
+Database migration 265 is applied through the normal forward-only migration flow. It extends OpenAI weekly reset observations with pending confirmation, reset sequence, usage evidence, and poll scheduling fields; no manual data migration is required.
 
 ## Known issues
 
-The official v0.2.4 tag embeds source version `0.2.3`; this release continues to
-use the official tag commit as its upstream baseline.
+None.
 
 ## Upstream baseline
 

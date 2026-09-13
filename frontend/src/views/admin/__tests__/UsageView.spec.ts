@@ -901,7 +901,7 @@ describe('admin UsageView Excel export latency fields', () => {
     expect(tpsIndex).toBe(durationIndex + 1)
     expect(unavailableReasonIndex).toBe(tpsIndex + 1)
     expect(rows).toHaveLength(2)
-    expect(rows[0].slice(firstTokenIndex, unavailableReasonIndex + 1)).toEqual([120, 100, 'text', 345, 20 * 1000 / 1120, ''])
+    expect(rows[0].slice(firstTokenIndex, unavailableReasonIndex + 1)).toEqual([120, 100, 'text', 345, 20, ''])
     expect(rows[1].slice(firstTokenIndex, unavailableReasonIndex + 1)).toEqual(['', 220, 'image', 500, '', 'usage.timingUnavailableHistorical'])
     expect(sessionIDIndex).toBeGreaterThan(-1)
     expect(rows[0][sessionIDIndex]).toBe('=audit-session-001')

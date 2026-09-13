@@ -3,6 +3,7 @@
 package service
 
 import (
+	"context"
 	"net/http"
 	"testing"
 
@@ -25,7 +26,7 @@ func TestEnsureCodexIdentityHeaders(t *testing.T) {
 		headers := make(http.Header)
 
 		ensureCodexIdentityHeaders(headers)
-		enforceCodexIdentityHeadersWithUA(headers, "")
+		(&OpenAIGatewayService{}).applyOpenAIOutboundIdentity(context.Background(), nil, headers, true)
 
 		requireCanonicalCodexIdentity(t, headers)
 		require.Equal(t, "responses=experimental", headers.Get("OpenAI-Beta"))
@@ -38,13 +39,13 @@ func TestEnsureCodexIdentityHeaders(t *testing.T) {
 		headers.Set("version", "0.150.0")
 
 		ensureCodexIdentityHeaders(headers)
-		enforceCodexIdentityHeadersWithUA(headers, "")
+		(&OpenAIGatewayService{}).applyOpenAIOutboundIdentity(context.Background(), nil, headers, true)
 
 		requireCanonicalCodexIdentity(t, headers)
 	})
 }
 
-func TestEnforceCodexIdentityHeaders(t *testing.T) {
+func TestFinalizeCodexIdentityHeaders(t *testing.T) {
 	for _, userAgent := range []string{
 		"codex-tui/0.140.2 (Mac OS X 14.0; arm64) iTerm",
 		"codex_vscode/0.150.0 (Ubuntu 24.04; x86_64) vscode",
@@ -56,18 +57,19 @@ func TestEnforceCodexIdentityHeaders(t *testing.T) {
 			headers.Set("user-agent", userAgent)
 			headers.Set("version", "0.1.0")
 
-			enforceCodexIdentityHeadersWithUA(headers, "")
+			(&OpenAIGatewayService{}).applyOpenAIOutboundIdentity(context.Background(), nil, headers, true)
 
 			requireCanonicalCodexIdentity(t, headers)
 		})
 	}
 }
 
-func TestEnforceCodexIdentityHeadersWithAccountOverrideKeepsOnlyFingerprint(t *testing.T) {
+func TestFinalizeCodexIdentityHeadersWithAccountOverrideKeepsOnlyFingerprint(t *testing.T) {
 	headers := make(http.Header)
 	headers.Set("originator", "codex_cli_rs")
 
-	enforceCodexIdentityHeadersWithUA(headers, "codex_vscode/0.125.0 (Ubuntu 24.04; x86_64) vscode")
+	account := &Account{Platform: PlatformOpenAI, Credentials: map[string]any{"user_agent": "codex_vscode/0.125.0 (Ubuntu 24.04; x86_64) vscode"}}
+	(&OpenAIGatewayService{}).applyOpenAIOutboundIdentity(context.Background(), account, headers, true)
 
 	require.Equal(t, "codex_vscode", headers.Get("originator"))
 	require.Equal(t, "codex_vscode/"+DefaultOpenAICodexVersion+" (Ubuntu 24.04; x86_64) vscode", headers.Get("user-agent"))
@@ -75,15 +77,15 @@ func TestEnforceCodexIdentityHeadersWithAccountOverrideKeepsOnlyFingerprint(t *t
 	require.NotContains(t, headers.Get("user-agent"), "0.125.0")
 }
 
-func TestEnforceCodexIdentityHeadersFollowsCanonicalResolver(t *testing.T) {
-	SetCodexCanonicalUserAgentResolver(func() string {
-		return "codex_cli_rs/0.200.1 (Ubuntu 24.04; x86_64) xterm-256color"
-	})
-	t.Cleanup(func() { SetCodexCanonicalUserAgentResolver(nil) })
+func TestFinalizeCodexIdentityHeadersFollowsSettingsResolver(t *testing.T) {
+	svc := &OpenAIGatewayService{settingService: &SettingService{settingRepo: &openAIIdentitySettingRepoStub{values: map[string]string{
+		SettingKeyOpenAICodexUserAgent:     "codex_cli_rs/0.200.1 (Ubuntu 24.04; x86_64) xterm-256color",
+		SettingKeyOpenAICodexClientVersion: "0.200.1",
+	}}}}
 
 	headers := make(http.Header)
 	headers.Set("originator", "codex-tui")
-	enforceCodexIdentityHeadersWithUA(headers, "")
+	svc.applyOpenAIOutboundIdentity(context.Background(), nil, headers, true)
 
 	require.Equal(t, "codex_cli_rs", headers.Get("originator"))
 	require.Equal(t, "codex_cli_rs/0.200.1 (Ubuntu 24.04; x86_64) xterm-256color", headers.Get("user-agent"))

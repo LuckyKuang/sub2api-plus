@@ -63,6 +63,15 @@ python3 skills/compress-cli/tests/test_compress_cli.py
 
 Run the focused tests for the changed package or component inside the same
 platform validation container while iterating.
+
+Provider/account changes, outbound paths, client versions, dependency upgrades
+and upstream merges must preserve the trusted identity triple. Follow the
+[mandatory outbound identity maintenance contract](docs/OUTBOUND_IDENTITY.md#mandatory-maintenance-contract)
+and provide its applicable regression evidence before merging. Backend identity
+changes also require the complete existing Codex identity regressions. Do not
+weaken identity checks to accept upstream behavior. The repository AGENTS.md
+validator protects these rules as well as the existing Codex and audit rules.
+
 Intermediate branch pushes use the fast path and do not run local tests:
 
 ```bash

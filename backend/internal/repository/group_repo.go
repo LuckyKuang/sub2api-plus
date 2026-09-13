@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
 
 	dbent "github.com/LuckyKuang/sub2api-plus/ent"
 	"github.com/LuckyKuang/sub2api-plus/ent/group"
@@ -29,6 +28,27 @@ type sqlExecutor interface {
 type groupRepository struct {
 	client *dbent.Client
 	sql    sqlExecutor
+}
+
+// Membership writes must acquire account locks before any group lock, just as
+// weekly-reset observations do. Otherwise the membership FK's implicit account
+// KEY SHARE lock can deadlock with an observer holding account FOR UPDATE.
+// Callers that already own group locks must prelock all accounts at transaction
+// entry, in this same sorted order.
+func lockMembershipAccounts(ctx context.Context, exec sqlExecutor, accountIDs []int64) error {
+	if len(accountIDs) == 0 {
+		return nil
+	}
+	rows, err := exec.QueryContext(ctx, `/* account_group_account_lock */
+		SELECT id FROM accounts WHERE id = ANY($1) ORDER BY id FOR UPDATE`, pq.Array(accountIDs))
+	if err != nil {
+		return err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		// Drain the sorted result so every matching account is locked.
+	}
+	return rows.Err()
 }
 
 // lockLiveGroups makes account-group inserts participate in the same row-lock
@@ -78,10 +98,12 @@ func newGroupRepositoryWithSQL(client *dbent.Client, sqlq sqlExecutor) *groupRep
 	return &groupRepository{client: client, sql: sqlq}
 }
 
-// The caller owns a transaction. Lock the source before reading its observation
-// so a concurrent request is either part of this baseline or a later event.
+// New bindings deliberately wait for a fresh confirmed observation. Old account
+// observations and a previous activation's baseline must never reset on enable.
 func prepareQuotaResetSource(ctx context.Context, client *dbent.Client, groupIn *service.Group) error {
+	groupIn.QuotaResetSourceResetAt = nil
 	if groupIn.QuotaResetSourceAccountID == nil {
+		groupIn.QuotaResetSourceAccountName = ""
 		return nil
 	}
 	if !groupIn.SupportsOpenAIQuotaFollowReset() {
@@ -99,17 +121,6 @@ func prepareQuotaResetSource(ctx context.Context, client *dbent.Client, groupIn 
 	if err != nil {
 		return err
 	}
-	var baseline time.Time
-	err = scanSingleRow(ctx, client, `SELECT reset_at FROM openai_oauth_weekly_reset_observations WHERE account_id = $1`,
-		[]any{*groupIn.QuotaResetSourceAccountID}, &baseline)
-	groupIn.QuotaResetSourceResetAt = nil
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	groupIn.QuotaResetSourceResetAt = &baseline
 	return nil
 }
 
@@ -1274,6 +1285,9 @@ func (r *groupRepository) BindAccountsToGroup(ctx context.Context, groupID int64
 	if tx != nil {
 		defer func() { _ = tx.Rollback() }()
 		exec = tx.Client()
+	}
+	if err := lockMembershipAccounts(ctx, exec, accountIDs); err != nil {
+		return err
 	}
 	if err := lockLiveGroups(ctx, exec, []int64{groupID}); err != nil {
 		return err

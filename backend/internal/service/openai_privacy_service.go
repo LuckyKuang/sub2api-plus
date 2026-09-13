@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
 	"github.com/imroc/req/v3"
 )
 
@@ -282,6 +283,21 @@ func fetchChatGPTSubscriptionExpiresAt(ctx context.Context, clientFactory Privac
 }
 
 func normalizeOpenAIPrivacyIdentity(identity openAIOutboundIdentity) openAIOutboundIdentity {
+	// A policy-approved snapshot already carries its source and compatibility
+	// decision. Reclassifying it with the default policy changes legacy families
+	// and incorrectly relabels global identities as account identities.
+	trustedSource := identity.Source == openAIOutboundIdentitySourceAccount || identity.Source == openAIOutboundIdentitySourceGlobal || identity.Source == openAIOutboundIdentitySourceDefault
+	if trustedSource {
+		allowLegacy := identity.Source != openAIOutboundIdentitySourceDefault
+		// Version synchronization can enlarge a maximum-length configured UA,
+		// and outbound version syntax retains its historical normalization rules.
+		// Validate the selected family independently of those version declarations.
+		familyUA := openai.SetCodexUserAgentVersion(identity.UserAgent, DefaultOpenAICodexVersion)
+		parsed, _, validFamily := openai.PairConfiguredCodexClientIdentity(familyUA, allowLegacy)
+		if validFamily && parsed.Originator == identity.Originator && NormalizeCodexClientVersion(identity.Version) != "" && openAIOutboundIdentityVersion(identity.UserAgent) == identity.Version {
+			return identity
+		}
+	}
 	return resolveOpenAIOutboundIdentityWithVersion(identity.UserAgent, "", identity.Version)
 }
 

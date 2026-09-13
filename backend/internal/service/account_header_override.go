@@ -6,6 +6,7 @@ import (
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 
 	"golang.org/x/net/http/httpguts"
 )
@@ -69,7 +70,8 @@ var headerOverrideBlockedNames = map[string]struct{}{
 
 func isHeaderOverrideBlockedName(lowerName string) bool {
 	_, blocked := headerOverrideBlockedNames[lowerName]
-	return blocked
+	// The same guard protects new saves and legacy stored overrides at runtime.
+	return blocked || outboundidentity.IsIdentityHeader(lowerName)
 }
 
 // IsHeaderOverrideEligible 报告账号类型是否支持请求头覆写。

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 )
 
 // ChannelMonitorRequestTemplateRepository 模板数据访问接口。
@@ -257,6 +258,7 @@ var forbiddenHeaderNames = map[string]bool{
 // IsForbiddenHeaderName 对外暴露，checker 运行时也会再过滤一次做兜底。
 func IsForbiddenHeaderName(name string) bool {
 	return forbiddenHeaderNames[strings.ToLower(strings.TrimSpace(name))] ||
+		outboundidentity.IsIdentityHeader(name) ||
 		brandidentity.IsReservedHeaderName(name) ||
 		brandidentity.IsLocalControlHeaderName(name)
 }

@@ -24,6 +24,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/auditcontent"
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/httpclient"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/pagination"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/servertiming"
 )
@@ -2206,18 +2207,24 @@ func (s *ContentModerationService) callModerationEndpoint(ctx context.Context, b
 	}
 	var lastErr error
 	lastHTTPStatus := 0
+	identities := make(map[string]context.Context)
 	for attempt := 0; attempt < attempts; attempt++ {
 		key, ok := s.nextUsableAPIKey(cfg)
 		if !ok {
 			lastErr = errors.New("no moderation api key available")
 			break
 		}
+		identityCtx, exists := identities[key]
+		if !exists {
+			identityCtx = WithStandaloneOutboundIdentity(ctx, PlatformOpenAI)
+			identities[key] = identityCtx
+		}
 		if trackLoad {
 			s.beginModerationAPIKeyCall(key)
 		}
 		start := time.Now()
 		httpStatus := 0
-		result, err := s.callModerationOnceWithInput(ctx, cfg, key, input, &httpStatus)
+		result, err := s.callModerationOnceWithIdentity(identityCtx, cfg, key, input, &httpStatus)
 		lastHTTPStatus = httpStatus
 		latency := int(time.Since(start).Milliseconds())
 		if err == nil {
@@ -2365,6 +2372,10 @@ func (s *ContentModerationService) markModerationEndpointFailure(ctx context.Con
 }
 
 func (s *ContentModerationService) callModerationOnceWithInput(ctx context.Context, cfg *ContentModerationConfig, apiKey string, input any, httpStatus *int) (*moderationAPIResult, error) {
+	return s.callModerationOnceWithIdentity(WithStandaloneOutboundIdentity(ctx, PlatformOpenAI), cfg, apiKey, input, httpStatus)
+}
+
+func (s *ContentModerationService) callModerationOnceWithIdentity(ctx context.Context, cfg *ContentModerationConfig, apiKey string, input any, httpStatus *int) (*moderationAPIResult, error) {
 	base := strings.TrimRight(cfg.BaseURL, "/")
 	endpoint, err := url.JoinPath(base, "/v1/moderations")
 	if err != nil {
@@ -2388,6 +2399,7 @@ func (s *ContentModerationService) callModerationOnceWithInput(ctx context.Conte
 	}
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("Content-Type", "application/json")
+	outboundidentity.ApplyContext(req)
 
 	client, err := s.moderationHTTPClient(ctx, cfg)
 	if err != nil {

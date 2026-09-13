@@ -895,7 +895,7 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 			}
 			if group.QuotaResetSourceAccountID == nil || *group.QuotaResetSourceAccountID != account.ID {
 				group.QuotaResetConfigVersion++
-				group.QuotaResetSourceResetAt = nil // Established atomically by the repository.
+				group.QuotaResetSourceResetAt = nil // Wait for a fresh post-activation observation.
 			}
 			group.QuotaResetSourceAccountID = &account.ID
 			group.QuotaResetSourceAccountName = account.Name

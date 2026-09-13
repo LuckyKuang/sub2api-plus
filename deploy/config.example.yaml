@@ -5,6 +5,9 @@
 # 复制此文件到 /etc/sub2api/config.yaml 并根据需要修改
 #
 # Documentation / 文档: https://github.com/luckykuang/sub2api-plus
+# Outbound identities / 出站身份：System Settings → Outbound identity.
+# Stored in the database (default: empty profiles/default mappings), not YAML.
+# 数据库存储，默认继承项目预设；详见 docs/OUTBOUND_IDENTITY.md。
 
 # =============================================================================
 # Server Configuration

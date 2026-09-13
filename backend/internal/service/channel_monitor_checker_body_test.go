@@ -392,8 +392,8 @@ func TestRunCheckForModel_MergeMode_UserFieldsWinButDenyListProtects(t *testing.
 		t.Error("messages should be protected by deny list (kept default, non-empty)")
 	}
 	// header 合并
-	if h.lastHeaders.Get("User-Agent") != "claude-cli/1.0" {
-		t.Errorf("extra User-Agent should override, got %q", h.lastHeaders.Get("User-Agent"))
+	if h.lastHeaders.Get("User-Agent") != builtInOutboundIdentity("claude").UserAgent {
+		t.Errorf("extra User-Agent must not override trusted identity, got %q", h.lastHeaders.Get("User-Agent"))
 	}
 	if h.lastHeaders.Get("x-custom") != "ok" {
 		t.Errorf("extra custom header should be present, got %q", h.lastHeaders.Get("x-custom"))

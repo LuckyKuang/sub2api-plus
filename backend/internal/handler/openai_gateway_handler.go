@@ -2178,6 +2178,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		return
 	}
 
+	ctx = service.WithOutboundIdentityScope(ctx, c)
 	// Connection capacity is a side effect too: only an authenticated, validated,
 	// audited first turn may reserve it. The first-message deadline bounds clients
 	// that upgrade without sending content. Keep the IP-policy context as parent.

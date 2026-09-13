@@ -73,13 +73,13 @@ const messages: Record<string, string> = {
 		'usage.latencyLastToken': 'Last Token',
 		'usage.timingUnavailableHistorical': 'Verified first-token timing was not collected',
 		'usage.timingUnavailableLive': 'Live session summary has no token-generation timing',
-		'usage.timingUnavailableNonStream': 'Non-streaming request; TPS uses last-token time or total duration',
+		'usage.timingUnavailableNonStream': 'Non-streaming request; TPS uses the decode window (last token − first token)',
 		'usage.timingUnavailableIncomplete': 'Request did not complete; displayed TPS may be partial',
 		'usage.timingUnavailableCompaction': 'Compaction result has no observable token deltas',
 		'usage.timingUnavailableNoTokens': 'No billed text tokens or generation timing observed',
 		'usage.timingUnavailableInvalid': 'Invalid timing data',
-		'usage.timingUnavailableShort': 'Low-confidence sample: generation window below 300ms or output below 8 tokens',
-		'usage.latencyTpsHint': 'Average billed text-token rate: text output tokens ÷ last-token time (falls back to total duration). Includes thinking wait, excludes post-token flush. Incomplete, non-stream, and short samples still show a number, with a confidence note.',
+		'usage.timingUnavailableShort': 'Low-confidence sample: decode window below 300ms or output below 8 tokens',
+		'usage.latencyTpsHint': 'Decode rate: billed text tokens ÷ (last-token time − first-token time). Excludes thinking wait (already shown as First Token) and post-token flush. Incomplete, non-stream, and short decode windows still show a number, with a confidence note.',
 		'usage.incomplete': 'Incomplete',
 		'usage.incompleteHint': 'The request ended before a complete terminal result.',
 		'usage.clientDisconnected': 'Client disconnected',
@@ -383,7 +383,7 @@ describe('admin UsageTable tooltip', () => {
     wrapper.unmount()
   })
 
-  it('shows estimated TPS from last-token wall time, including incomplete and short samples', () => {
+  it('shows estimated TPS from the decode window, including incomplete and short samples', () => {
     const rows = [
       {
         ...baseImageRow,
@@ -534,7 +534,7 @@ describe('admin UsageTable tooltip', () => {
         duration_ms: 1_100,
       },
       {
-        // last_token_ms = 250 < 300 → still shown, low confidence
+        // decode window 150ms < 300 → still shown, low confidence
         ...baseImageRow,
         request_id: 'req-tps-short-generation',
         request_type: 'stream',
@@ -561,7 +561,7 @@ describe('admin UsageTable tooltip', () => {
         duration_ms: 1_100,
       },
       {
-        // 1000 tokens / 600ms last-token time = 1667
+        // 1000 tokens / 500ms decode window = 2000
         ...baseImageRow,
         request_id: 'req-tps-unrealistically-high',
         request_type: 'stream',
@@ -575,7 +575,7 @@ describe('admin UsageTable tooltip', () => {
         duration_ms: 600,
       },
       {
-        // 8 tokens / 10100ms last-token time = 0.8
+        // 8 tokens / 10000ms decode window = 0.8
         ...baseImageRow,
         request_id: 'req-tps-below-one',
         request_type: 'stream',
@@ -589,7 +589,7 @@ describe('admin UsageTable tooltip', () => {
         duration_ms: 10_100,
       },
       {
-        // 8 tokens / 400ms last-token time = 20
+        // 8 tokens / 300ms decode window = 26.7
         ...baseImageRow,
         request_id: 'req-tps-min-gates-pass',
         request_type: 'stream',
@@ -603,7 +603,7 @@ describe('admin UsageTable tooltip', () => {
         duration_ms: 400,
       },
       {
-        // 150 * 1000 / 400 = 375
+        // 150 * 1000 / 300 = 500
         ...baseImageRow,
         request_id: 'req-tps-mid-band',
         request_type: 'stream',
@@ -617,7 +617,7 @@ describe('admin UsageTable tooltip', () => {
         duration_ms: 400,
       },
       {
-        // 300 * 1000 / 400 = 750
+        // 300 * 1000 / 300 = 1000
         ...baseImageRow,
         request_id: 'req-tps-max-boundary',
         request_type: 'stream',
@@ -644,28 +644,49 @@ describe('admin UsageTable tooltip', () => {
       },
     })
 
-    expect(wrapper.findAll('[data-testid="latency-tps"]').map((node) => node.text())).toEqual([
-      '34.5',
-      '25',
-      '90.9',
-      '90.9',
-      '90.9',
-      '90.9',
+    const tpsNodes = wrapper.findAll('[data-testid="latency-tps"]')
+    expect(tpsNodes.map((node) => node.text())).toEqual([
+      '37',
+      '50',
       '100',
+      '100',
+      '100',
+      '100',
+      '111',
       '-',
-      '1000',
       '-',
-      '90.9',
-      '400',
-      '6.4',
-      '1667',
+      '-',
+      '-',
+      '667',
+      '7',
+      '2000',
       '0.8',
-      '20',
-      '375',
-      '750',
+      '26.7',
+      '500',
+      '1000',
     ])
-    expect(wrapper.text()).toContain('First Token 721msTotal10.86sTPS34.5')
-    expect(wrapper.text()).toContain('First Token 100msTotal1.10sTPS90.9')
+    expect(tpsNodes.map((node) => node.attributes('title'))).toEqual([
+      messages['usage.latencyTpsHint'],
+      messages['usage.latencyTpsHint'],
+      messages['usage.latencyTpsHint'],
+      messages['usage.latencyTpsHint'],
+      messages['usage.timingUnavailableIncomplete'],
+      messages['usage.timingUnavailableIncomplete'],
+      messages['usage.timingUnavailableNonStream'],
+      messages['usage.timingUnavailableHistorical'],
+      messages['usage.timingUnavailableInvalid'],
+      messages['usage.timingUnavailableNoTokens'],
+      messages['usage.timingUnavailableNoTokens'],
+      messages['usage.timingUnavailableShort'],
+      messages['usage.timingUnavailableShort'],
+      messages['usage.latencyTpsHint'],
+      messages['usage.latencyTpsHint'],
+      messages['usage.latencyTpsHint'],
+      messages['usage.latencyTpsHint'],
+      messages['usage.latencyTpsHint'],
+    ])
+    expect(wrapper.text()).toContain('First Token 721msTotal10.86sTPS37')
+    expect(wrapper.text()).toContain('First Token 100msTotal1.10sTPS100')
     expect(wrapper.text()).not.toContain('First Image Data')
     expect(wrapper.text()).not.toContain('First Audio Data')
   })

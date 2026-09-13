@@ -26,6 +26,7 @@ vi.mock("@/api/admin", () => ({
   adminAPI: {
     groups: {
       list: listGroups,
+      getById: vi.fn(async () => (await listGroups.mock.results[listGroups.mock.results.length - 1].value).items[0]),
       getAll: vi.fn(),
       getModelAllowlistCandidates,
       getUsageSummary,

@@ -9,16 +9,18 @@ import (
 )
 
 type quotaFollowObservationRecorder struct {
-	accountID  int64
-	resetAt    time.Time
-	calls      int
-	contextErr error
+	accountID   int64
+	resetAt     time.Time
+	calls       int
+	contextErr  error
+	observation OpenAIWeeklyQuotaObservation
 }
 
-func (r *quotaFollowObservationRecorder) ObserveWeeklyReset(ctx context.Context, accountID int64, resetAt, _ time.Time) (int, error) {
+func (r *quotaFollowObservationRecorder) ObserveWeeklyReset(ctx context.Context, accountID int64, observation OpenAIWeeklyQuotaObservation) (int, error) {
 	r.contextErr = ctx.Err()
 	r.accountID = accountID
-	r.resetAt = resetAt
+	r.resetAt = observation.ResetAt
+	r.observation = observation
 	r.calls++
 	return 0, nil
 }
@@ -28,12 +30,16 @@ func TestQuotaFollowResetObservationSurvivesDownstreamCancellation(t *testing.T)
 	observer := &OpenAIGroupQuotaFollowResetService{repo: recorder}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	observer.Observe(ctx, 42, time.Now().Add(7*24*time.Hour))
+	observer.Observe(ctx, 42, OpenAIWeeklyQuotaObservation{ResetAt: time.Now().Add(7 * 24 * time.Hour), ObservedAt: time.Now()})
 	require.Equal(t, 1, recorder.calls)
 	require.NoError(t, recorder.contextErr)
 }
 
 func (r *quotaFollowObservationRecorder) ProcessNextPending(context.Context) (*GroupQuotaFollowResetResult, error) {
+	return nil, nil
+}
+
+func (r *quotaFollowObservationRecorder) ClaimWeeklyResetSources(context.Context, int) ([]int64, error) {
 	return nil, nil
 }
 

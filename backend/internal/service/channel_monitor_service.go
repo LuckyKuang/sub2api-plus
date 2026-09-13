@@ -702,6 +702,7 @@ func (s *ChannelMonitorService) persistCheckResults(ctx context.Context, m *Chan
 // runChecksConcurrent 对 primary + extra 模型并发执行检测。
 // errgroup 仅用于等待，不传播错误（每个 model 失败都已打包进 CheckResult）。
 func (s *ChannelMonitorService) runChecksConcurrent(ctx context.Context, m *ChannelMonitor) []*CheckResult {
+	ctx = WithStandaloneOutboundIdentity(ctx, m.Provider)
 	models := append([]string{m.PrimaryModel}, m.ExtraModels...)
 	results := make([]*CheckResult, len(models))
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"math"
 	"sync"
 	"time"
 )
@@ -19,16 +20,31 @@ type GroupQuotaFollowResetResult struct {
 }
 
 type OpenAIGroupQuotaFollowResetRepository interface {
-	ObserveWeeklyReset(ctx context.Context, accountID int64, resetAt, observedAt time.Time) (int, error)
+	ObserveWeeklyReset(ctx context.Context, accountID int64, observation OpenAIWeeklyQuotaObservation) (int, error)
+	ClaimWeeklyResetSources(ctx context.Context, limit int) ([]int64, error)
 	ProcessNextPending(ctx context.Context) (*GroupQuotaFollowResetResult, error)
 }
 
-// OpenAIGroupQuotaFollowResetService processes only locally persisted events.
-// It never queries upstream quota endpoints; observations come from successful
-// gateway traffic through ObserveOpenAIWeeklyResetAt.
+// OpenAIWeeklyQuotaObservation contains only raw, default weekly upstream data.
+// A quota query can confirm earlier evidence; cached/display values cannot.
+type OpenAIWeeklyQuotaObservation struct {
+	ResetAt     time.Time
+	ObservedAt  time.Time
+	ReceivedAt  time.Time
+	UsedPercent *float64
+	QuotaQuery  bool
+}
+
+func validOpenAIWeeklyUsedPercent(value *float64) bool {
+	return value != nil && !math.IsNaN(*value) && !math.IsInf(*value, 0) && *value >= 0 && *value <= 100
+}
+
+// OpenAIGroupQuotaFollowResetService applies durable events and refreshes only
+// eligible configured source accounts using the existing quota transport.
 type OpenAIGroupQuotaFollowResetService struct {
 	repo         OpenAIGroupQuotaFollowResetRepository
 	billingCache *BillingCacheService
+	quota        *OpenAIQuotaService
 	ctx          context.Context
 	cancel       context.CancelFunc
 	wake         chan struct{}
@@ -52,6 +68,10 @@ func (s *OpenAIGroupQuotaFollowResetService) Start() {
 		setOpenAIGroupQuotaFollowResetObserver(s)
 		s.wg.Add(1)
 		go s.run()
+		if s.quota != nil {
+			s.wg.Add(1)
+			go s.runSourceRefresh()
+		}
 		s.Notify()
 	})
 }
@@ -77,21 +97,59 @@ func (s *OpenAIGroupQuotaFollowResetService) Notify() {
 	}
 }
 
-func (s *OpenAIGroupQuotaFollowResetService) Observe(ctx context.Context, accountID int64, resetAt time.Time) {
-	if s == nil || s.repo == nil || accountID <= 0 || resetAt.IsZero() {
+func (s *OpenAIGroupQuotaFollowResetService) Observe(ctx context.Context, accountID int64, observation OpenAIWeeklyQuotaObservation) {
+	if s == nil || s.repo == nil || accountID <= 0 || observation.ResetAt.IsZero() || observation.ObservedAt.IsZero() {
 		return
 	}
+	observation.ReceivedAt = time.Now().UTC()
 	// The upstream observation remains valid if the downstream client has
 	// disconnected. Persist it synchronously before billing, with a bounded wait.
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
-	created, err := s.repo.ObserveWeeklyReset(ctx, accountID, resetAt.UTC(), time.Now().UTC())
+	created, err := s.repo.ObserveWeeklyReset(ctx, accountID, observation)
 	if err != nil {
-		slog.Warn("openai_group_quota_follow_observe_failed", "account_id", accountID, "reset_at", resetAt.UTC(), "error", err)
+		slog.Warn("openai_group_quota_follow_observe_failed", "account_id", accountID, "reset_at", observation.ResetAt.UTC(), "error", err)
 		return
 	}
 	if created > 0 {
 		s.Notify()
+	}
+}
+
+func (s *OpenAIGroupQuotaFollowResetService) runSourceRefresh() {
+	defer s.wg.Done()
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+	for {
+		s.refreshSources()
+		select {
+		case <-s.ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+func (s *OpenAIGroupQuotaFollowResetService) refreshSources() {
+	ctx, cancel := context.WithTimeout(s.ctx, 5*time.Second)
+	ids, err := s.repo.ClaimWeeklyResetSources(ctx, 4)
+	cancel()
+	if err != nil {
+		if s.ctx.Err() == nil {
+			slog.Warn("openai_group_quota_follow_sources_failed", "error", err)
+		}
+		return
+	}
+	for _, id := range ids {
+		if s.ctx.Err() != nil {
+			return
+		}
+		ctx, cancel := context.WithTimeout(s.ctx, 25*time.Second)
+		_, err := s.quota.queryUsage(ctx, id, false)
+		cancel()
+		if err != nil && s.ctx.Err() == nil {
+			slog.Warn("openai_group_quota_follow_refresh_failed", "account_id", id, "error", err)
+		}
 	}
 }
 
@@ -163,11 +221,31 @@ func clearOpenAIGroupQuotaFollowResetObserver(service *OpenAIGroupQuotaFollowRes
 	openAIGroupQuotaFollowResetObserver.Unlock()
 }
 
-func ObserveOpenAIWeeklyResetAt(ctx context.Context, accountID int64, resetAt time.Time) {
+func ObserveOpenAIWeeklyQuota(ctx context.Context, accountID int64, observation OpenAIWeeklyQuotaObservation) {
 	openAIGroupQuotaFollowResetObserver.RLock()
 	service := openAIGroupQuotaFollowResetObserver.service
 	openAIGroupQuotaFollowResetObserver.RUnlock()
 	if service != nil {
-		service.Observe(ctx, accountID, resetAt)
+		service.Observe(ctx, accountID, observation)
 	}
+}
+
+func observeOpenAIWeeklyUsageSnapshot(ctx context.Context, accountID int64, snapshot *OpenAICodexUsageSnapshot, quotaQuery bool) {
+	resetAt, ok := snapshot.WeeklyResetAt()
+	if !ok {
+		return
+	}
+	var used *float64
+	if snapshot.PrimaryWindowMinutes != nil && isOpenAIWeeklyQuotaWindowMinutes(int64(*snapshot.PrimaryWindowMinutes)) && snapshot.PrimaryResetAtUnix != nil && *snapshot.PrimaryResetAtUnix == resetAt.Unix() {
+		used = snapshot.PrimaryUsedPercent
+	} else {
+		used = snapshot.SecondaryUsedPercent
+	}
+	if !validOpenAIWeeklyUsedPercent(used) {
+		used = nil
+	}
+	ObserveOpenAIWeeklyQuota(ctx, accountID, OpenAIWeeklyQuotaObservation{
+		ResetAt: resetAt, ObservedAt: codexSnapshotBaseTime(snapshot, time.Now()),
+		UsedPercent: used, QuotaQuery: quotaQuery,
+	})
 }

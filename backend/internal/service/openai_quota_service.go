@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -44,6 +45,24 @@ type OpenAIRateLimitWindow struct {
 	LimitWindowSeconds int64   `json:"limit_window_seconds"`
 	ResetAfterSeconds  int64   `json:"reset_after_seconds"`
 	ResetAt            int64   `json:"reset_at"`
+	missingUsedPercent bool
+}
+
+func (w *OpenAIRateLimitWindow) UnmarshalJSON(data []byte) error {
+	type windowAlias OpenAIRateLimitWindow
+	var raw struct {
+		windowAlias
+		UsedPercent *float64 `json:"used_percent"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*w = OpenAIRateLimitWindow(raw.windowAlias)
+	w.missingUsedPercent = raw.UsedPercent == nil
+	if raw.UsedPercent != nil {
+		w.UsedPercent = *raw.UsedPercent
+	}
+	return nil
 }
 
 // OpenAIRateLimit is a rate-limit envelope (primary + optional secondary window).
@@ -87,6 +106,7 @@ type OpenAIQuotaUsage struct {
 	RateLimitResetCredits *OpenAIRateLimitResetCredits `json:"rate_limit_reset_credits,omitempty"`
 	FetchedAt             int64                        `json:"fetched_at"`
 	autoResetCandidates   []openAIAutoResetCreditCandidate
+	weeklyObservedAt      time.Time
 }
 
 // OpenAIQuotaResetCredit captures the redeemed credit metadata returned by the
@@ -177,6 +197,10 @@ func NewOpenAIQuotaService(
 // OAuth account. Returns infraerrors so the handler layer can map them to
 // stable error codes / HTTP statuses.
 func (s *OpenAIQuotaService) QueryUsage(ctx context.Context, accountID int64) (*OpenAIQuotaUsage, error) {
+	return s.queryUsage(ctx, accountID, true)
+}
+
+func (s *OpenAIQuotaService) queryUsage(ctx context.Context, accountID int64, includeCredits bool) (*OpenAIQuotaUsage, error) {
 	accessToken, chatGPTAccountID, proxyURL, fedRAMP, err := s.prepareUpstreamCall(ctx, accountID)
 	if err != nil {
 		return nil, err
@@ -197,6 +221,7 @@ func (s *OpenAIQuotaService) QueryUsage(ctx context.Context, accountID int64) (*
 		if headerErr != nil {
 			return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_QUOTA_AUTH_FAILED", "failed to build upstream authentication: %v", headerErr)
 		}
+		payload.weeklyObservedAt = time.Now().UTC()
 		resp, err := client.R().
 			SetContext(callCtx).
 			SetHeaders(quotaHeaders).
@@ -226,6 +251,20 @@ func (s *OpenAIQuotaService) QueryUsage(ctx context.Context, accountID int64) (*
 	}
 
 	payload.FetchedAt = time.Now().Unix()
+	// Use the request start to reject old in-flight queries arriving late. The
+	// same sample retains this timestamp through post-reset cache writes.
+	snapshot := openAIQuotaUsageSnapshot(&payload, time.Now())
+	if account, err := s.accountRepo.GetByID(ctx, accountID); err == nil && account != nil && account.Platform == PlatformOpenAI && account.Type == AccountTypeOAuth && !account.IsShadow() {
+		observeOpenAIWeeklyUsageSnapshot(ctx, accountID, snapshot, true)
+		if updates := buildCodexUsageExtraUpdates(snapshot, time.Now()); len(updates) > 0 {
+			if err := s.accountRepo.UpdateExtra(ctx, accountID, updates); err != nil {
+				slog.Warn("openai_quota_usage_cache_failed", "account_id", accountID, "error", err)
+			}
+		}
+	}
+	if !includeCredits {
+		return &payload, nil
+	}
 	details := s.queryResetCreditDetails(callCtx, client, accessToken, chatGPTAccountID, fedRAMP, accountID)
 	if details != nil {
 		payload.autoResetCandidates = details.AutoResetCandidates
@@ -266,6 +305,7 @@ func (s *OpenAIQuotaService) CachePostResetSnapshot(ctx context.Context, account
 	if usage == nil {
 		return s.cacheResetCreditsSnapshot(ctx, accountID, nil, nil)
 	}
+	observeOpenAIWeeklyUsageSnapshot(ctx, accountID, openAIQuotaUsageSnapshot(usage, time.Now()), true)
 	return s.cacheResetCreditsSnapshot(
 		ctx,
 		accountID,

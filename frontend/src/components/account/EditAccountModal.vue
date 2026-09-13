@@ -11,6 +11,7 @@
       @submit.prevent="handleSubmit"
       class="space-y-5"
     >
+      <OutboundIdentityEditor v-model="outboundIdentitySelection" :platform="props.account?.platform || ''" :account-type="props.account?.type || ''" :codex-user-agent="openaiAccountUserAgent" />
       <div>
         <label class="input-label">{{ t('common.name') }}</label>
         <input v-model="form.name" type="text" required class="input" data-tour="edit-account-form-name" />
@@ -2630,6 +2631,8 @@
 </template>
 
 <script setup lang="ts">
+import OutboundIdentityEditor from './OutboundIdentityEditor.vue'
+import type { IdentitySelection } from '@/api/admin/outboundIdentity'
 import { ref, reactive, computed, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
@@ -3076,6 +3079,7 @@ const customBaseUrl = ref('')
 // OpenAI 自动透传开关（OAuth/API Key）
 const openaiPassthroughEnabled = ref(false)
 const openaiAccountUserAgent = ref('')
+const outboundIdentitySelection = ref<IdentitySelection | null>(null)
 const openaiOAuthSessionSharingEnabled = ref(false)
 // OpenAI Codex namespace 工具摊平兼容开关（仅 OAuth），缺省关闭即原样保留
 const openaiFlattenNamespacesEnabled = ref(false)
@@ -3509,6 +3513,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   mixedChannelWarningRawMessage.value = ''
   mixedChannelWarningAction.value = null
   form.name = newAccount.name
+  outboundIdentitySelection.value = (newAccount.credentials?.outbound_identity as IdentitySelection | undefined) || null
   form.notes = newAccount.notes || ''
   form.proxy_id = newAccount.proxy_id
   form.concurrency = newAccount.concurrency
@@ -3574,7 +3579,9 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   anthropicAPIKeyAuthScheme.value = 'x_api_key'
   webSearchEmulationMode.value = 'default'
   if (newAccount.platform === 'openai' && (newAccount.type === 'oauth' || newAccount.type === 'setup-token' || newAccount.type === 'apikey')) {
-    openaiPassthroughEnabled.value = extra?.openai_passthrough === true || extra?.openai_oauth_passthrough === true
+    openaiPassthroughEnabled.value = typeof extra?.openai_passthrough === 'boolean'
+      ? extra.openai_passthrough
+      : extra?.openai_oauth_passthrough === true
     const sessionPolicy = extra?.openai_oauth_session_policy as Record<string, unknown> | undefined
     openaiOAuthSessionSharingEnabled.value = newAccount.type === 'oauth' && !isSparkShadow.value && sessionPolicy?.enabled === true
     openaiFlattenNamespacesEnabled.value =
@@ -4470,6 +4477,11 @@ const persistGrokMediaEligibility = async (accountID: number, updatedAccount: Ac
 }
 
 const submitUpdateAccount = async (accountID: number, updatePayload: Record<string, unknown>) => {
+  if (props.account && (outboundIdentitySelection.value || props.account.credentials?.outbound_identity)) {
+    const credentials = (updatePayload.credentials || { ...props.account.credentials }) as Record<string, unknown>
+    credentials.outbound_identity = outboundIdentitySelection.value || null
+    updatePayload.credentials = credentials
+  }
   submitting.value = true
   try {
     let updatedAccount = await adminAPI.accounts.update(accountID, withAntigravityConfirmFlag(updatePayload))
@@ -5029,11 +5041,11 @@ const handleSubmit = async () => {
       }
       delete newExtra.responses_websockets_v2_enabled
       delete newExtra.openai_ws_enabled
+      delete newExtra.openai_oauth_passthrough
       if (openaiPassthroughEnabled.value) {
         newExtra.openai_passthrough = true
       } else {
         delete newExtra.openai_passthrough
-        delete newExtra.openai_oauth_passthrough
       }
       if (!isSparkShadow.value && props.account.type === 'oauth' && openaiOAuthSessionSharingEnabled.value) {
         newExtra.openai_oauth_session_policy = {

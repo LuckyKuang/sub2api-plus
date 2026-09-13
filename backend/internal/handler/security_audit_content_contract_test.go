@@ -113,119 +113,105 @@ func TestContentModerationUsesLatestUserTextWithoutInstructionContext(t *testing
 	}
 }
 
-func TestPromptAuditUsesConversationTextWithoutToolSchema(t *testing.T) {
+func TestPromptAuditUsesCurrentUserTextLikeContentModeration(t *testing.T) {
 	tests := []struct {
 		name     string
 		protocol string
 		body     string
-		full     []string
-		latest   string
+		want     string
+		contains []string
 		omit     []string
-		noFull   bool
-		noLatest bool
+		empty    bool
 	}{
 		{
-			name: "assistant text and tool schema are included", protocol: service.ContentModerationProtocolOpenAIResponses,
+			name: "assistant turn is empty", protocol: service.ContentModerationProtocolOpenAIResponses,
 			body: `{"instructions":"audit instruction","tools":[{"type":"function","name":"lookup","description":"audit tool definition"}],` +
 				`"input":[{"type":"message","role":"user","content":"older prompt"},{"type":"message","role":"assistant","content":"current assistant payload"}]}`,
-			full:   []string{"older prompt", "current assistant payload", "audit instruction", "audit tool definition"},
-			latest: "older prompt",
+			empty: true,
+			omit:  []string{"older prompt", "current assistant payload", "audit instruction", "audit tool definition"},
 		},
 		{
-			name: "responses function result is prompt-audit conversation text", protocol: service.ContentModerationProtocolOpenAIResponses,
-			body:   `{"input":[{"type":"message","role":"user","content":"older prompt"},{"type":"function_call_output","call_id":"call_1","output":"current tool result"}]}`,
-			full:   []string{"older prompt", "current tool result"},
-			latest: "older prompt",
+			name: "responses function result is skipped", protocol: service.ContentModerationProtocolOpenAIResponses,
+			body:  `{"input":[{"type":"message","role":"user","content":"older prompt"},{"type":"function_call_output","call_id":"call_1","output":"current tool result"}]}`,
+			empty: true,
 		},
 		{
-			name: "responses automation bootstrap is prompt text", protocol: service.ContentModerationProtocolOpenAIResponses,
-			body:   `{"model":"gpt-5","input":[{"type":"function_call_output","namespace":"codex_app","name":"automation_update","output":"Automation: Scheduled review\nAutomation ID: wiki\nAutomation memory: $CODEX_HOME/automations/wiki/memory.md\nLast run: never\n\nReview security"}]}`,
-			full:   []string{"Automation: Scheduled review", "Review security"},
-			latest: "Automation: Scheduled review\nAutomation ID: wiki\nAutomation memory: $CODEX_HOME/automations/wiki/memory.md\nLast run: never\n\nReview security",
+			name: "responses automation bootstrap is current user text", protocol: service.ContentModerationProtocolOpenAIResponses,
+			body:     `{"model":"gpt-5","input":[{"type":"function_call_output","namespace":"codex_app","name":"automation_update","output":"Automation: Scheduled review\nAutomation ID: wiki\nAutomation memory: $CODEX_HOME/automations/wiki/memory.md\nLast run: never\n\nReview security"}]}`,
+			contains: []string{"Automation: Scheduled review", "Review security"},
 		},
 		{
-			name: "responses delegation bootstrap is prompt text", protocol: service.ContentModerationProtocolOpenAIResponses,
-			body:   `{"model":"gpt-5","input":[{"type":"function_call_output","namespace":"codex_tui","name":"send_message_to_thread","output":"<codex_delegation><source_thread_id>thread-1</source_thread_id><input>review security</input></codex_delegation>"}]}`,
-			full:   []string{"<codex_delegation>", "review security"},
-			latest: "<codex_delegation><source_thread_id>thread-1</source_thread_id><input>review security</input></codex_delegation>",
+			name: "responses delegation bootstrap is current user text", protocol: service.ContentModerationProtocolOpenAIResponses,
+			body:     `{"model":"gpt-5","input":[{"type":"function_call_output","namespace":"codex_tui","name":"send_message_to_thread","output":"<codex_delegation><source_thread_id>thread-1</source_thread_id><input>review security</input></codex_delegation>"}]}`,
+			contains: []string{"<codex_delegation>", "review security"},
 		},
 		{
 			name: "responses legacy messages and prompt aliases", protocol: service.ContentModerationProtocolOpenAIResponses,
-			body:   `{"messages":[{"role":"user","content":"legacy prompt text"}],"prompt":"lower priority alias"}`,
-			full:   []string{"legacy prompt text"},
-			latest: "legacy prompt text",
-			omit:   []string{"lower priority alias"},
+			body: `{"messages":[{"role":"user","content":"legacy prompt text"}],"prompt":"lower priority alias"}`,
+			want: "legacy prompt text",
+			omit: []string{"lower priority alias"},
 		},
 		{
-			name: "chat user reasoning is prompt text", protocol: service.ContentModerationProtocolOpenAIChat,
-			body:   `{"messages":[{"role":"assistant","reasoning_content":"assistant private"},{"role":"user","content":"question","reasoning_content":"user reasoning"}]}`,
-			full:   []string{"question", "user reasoning", "assistant private"},
-			latest: "question\n\nuser reasoning",
+			name: "chat user reasoning is current user text", protocol: service.ContentModerationProtocolOpenAIChat,
+			body:     `{"messages":[{"role":"assistant","reasoning_content":"assistant private"},{"role":"user","content":"question","reasoning_content":"user reasoning"}]}`,
+			contains: []string{"question", "user reasoning"},
+			omit:     []string{"assistant private"},
+		},
+		{
+			name: "chat system-reminder markup is stripped from current user text", protocol: service.ContentModerationProtocolOpenAIChat,
+			body:     `{"messages":[{"role":"assistant","reasoning_content":"assistant private"},{"role":"user","content":"<system-reminder>untrusted</system-reminder> question","reasoning_content":"user reasoning"}]}`,
+			contains: []string{"question", "user reasoning"},
+			omit:     []string{"system-reminder", "untrusted", "assistant private"},
 		},
 		{
 			name: "alpha search semantic fields", protocol: "openai_alpha_search",
-			body:   `{"commands":{"search_query":[{"q":"security query"}],"mode":"deep"},"settings":{"region":"global"},"input":[{"type":"message","role":"user","content":"recent context"}]}`,
-			full:   []string{"security query", "deep", "global", "recent context"},
-			latest: "{\"mode\":\"deep\",\"search_query\":[{\"q\":\"security query\"}]}\n\n{\"region\":\"global\"}\n\n[{\"content\":\"recent context\",\"role\":\"user\",\"type\":\"message\"}]",
+			body:     `{"commands":{"search_query":[{"q":"security query"}],"mode":"deep"},"settings":{"region":"global"},"input":[{"type":"message","role":"user","content":"recent context"}]}`,
+			contains: []string{"security query", "deep", "global", "recent context"},
 		},
 		{
-			name: "responses reusable prompt variables are included", protocol: service.ContentModerationProtocolOpenAIResponses,
-			body:   `{"prompt":{"id":"pmpt_1","variables":{"plain":"reusable variable","typed":{"type":"input_text","text":"typed variable"}}}}`,
-			full:   []string{"reusable variable", "typed variable"},
-			latest: "reusable variable",
+			name: "responses reusable prompt variables are excluded", protocol: service.ContentModerationProtocolOpenAIResponses,
+			body:  `{"prompt":{"id":"pmpt_1","variables":{"plain":"reusable variable","typed":{"type":"input_text","text":"typed variable"}}}}`,
+			empty: true,
 		},
 		{
-			name: "live session instructions and transcription context are included", protocol: service.ContentModerationProtocolOpenAILive,
+			name: "live session instructions are excluded", protocol: service.ContentModerationProtocolOpenAILive,
 			body: `{"model":"gpt-live-test","instructions":"live instructions",` +
 				`"input_audio_transcription":{"model":"gpt-4o-transcribe","prompt":"legacy transcription context"},` +
 				`"audio":{"input":{"transcription":{"model":"gpt-live-transcribe","prompt":"current transcription context","keywords":["premium plan","AC-42"]}}}}`,
-			full:   []string{"live instructions", "legacy transcription context", "current transcription context", "premium plan", "AC-42"},
-			latest: "live instructions",
+			empty: true,
 		},
 		{
-			name: "client environment xml is stripped from user text", protocol: service.ContentModerationProtocolOpenAIResponses,
-			body:   `{"input":[{"type":"message","role":"user","content":"继续"},{"type":"message","role":"user","content":"<environment_context><cwd>/Users/pontus</cwd><permission_profile type=\"managed\"></permission_profile></environment_context>"},{"type":"message","role":"user","content":"你能做什么？"}]}`,
-			full:   []string{"继续", "你能做什么？"},
-			latest: "继续\n\n你能做什么？",
-			omit:   []string{"environment_context", "permission_profile", "/Users/pontus"},
+			name: "client environment xml is stripped from current user text", protocol: service.ContentModerationProtocolOpenAIResponses,
+			body: `{"input":[{"type":"message","role":"user","content":"继续"},{"type":"message","role":"user","content":"<environment_context><cwd>/Users/pontus</cwd><permission_profile type=\"managed\"></permission_profile></environment_context>"},{"type":"message","role":"user","content":"你能做什么？"}]}`,
+			want: "你能做什么？",
+			omit: []string{"继续", "environment_context", "permission_profile", "/Users/pontus"},
 		},
 		{
-			name: "chat tool-role and tool-call arguments are included", protocol: service.ContentModerationProtocolOpenAIChat,
-			body:   `{"messages":[{"role":"system","content":"chat system context"},{"role":"user","content":"older"},{"role":"assistant","tool_calls":[{"function":{"arguments":"{\"secret\":true}"}}]},{"role":"tool","content":{"first":true}},{"role":"function","content":{"second":false}}]}`,
-			full:   []string{"older", "chat system context", `"secret":true`, `{"first":true}`},
-			latest: "older",
+			name: "chat tool-loop is skipped", protocol: service.ContentModerationProtocolOpenAIChat,
+			body:  `{"messages":[{"role":"system","content":"chat system context"},{"role":"user","content":"older"},{"role":"assistant","tool_calls":[{"function":{"arguments":"{\"secret\":true}"}}]},{"role":"tool","content":{"first":true}},{"role":"function","content":{"second":false}}]}`,
+			empty: true,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			full, err := securityaudit.ExtractPromptSnapshot(securityaudit.Request{
+			snapshot, err := securityaudit.ExtractPromptSnapshot(securityaudit.Request{
 				Protocol: test.protocol,
 				Body:     []byte(test.body),
 			})
-			if test.noFull {
+			if test.empty {
 				require.ErrorIs(t, err, securityaudit.ErrNoPromptText)
-			} else {
-				require.NoError(t, err)
-				for _, expected := range test.full {
-					require.Contains(t, full.ScanText, expected)
-				}
-				for _, omitted := range test.omit {
-					require.NotContains(t, full.ScanText, omitted)
-				}
+				return
 			}
-			latest, err := securityaudit.ExtractBlockingPromptSnapshot(securityaudit.Request{
-				Protocol: test.protocol,
-				Body:     []byte(test.body),
-			}, true)
-			if test.noLatest {
-				require.ErrorIs(t, err, securityaudit.ErrNoPromptText)
-			} else {
-				require.NoError(t, err)
-				require.Contains(t, latest.ScanText, test.latest)
-				for _, omitted := range test.omit {
-					require.NotContains(t, latest.ScanText, omitted)
-				}
+			require.NoError(t, err)
+			if test.want != "" {
+				require.Equal(t, test.want, snapshot.ScanText)
+			}
+			for _, expected := range test.contains {
+				require.Contains(t, snapshot.ScanText, expected)
+			}
+			for _, omitted := range test.omit {
+				require.NotContains(t, snapshot.ScanText, omitted)
 			}
 		})
 	}

@@ -321,7 +321,7 @@ func (s *adminServiceImpl) DuplicateAccount(ctx context.Context, id int64, actor
 	if err := NormalizeHeaderOverrideCredentials(input.Credentials); err != nil {
 		return nil, err
 	}
-	if err := s.normalizeOpenAIAccountUserAgent(ctx, source.Platform, input.Credentials); err != nil {
+	if err := s.normalizeOpenAIAccountUserAgent(ctx, source.Platform, source.Type, input.Credentials); err != nil {
 		return nil, err
 	}
 	duplicate, err := buildAccountForCreate(input, accountExtra)
@@ -514,7 +514,7 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 	}
 	// Never persist ephemeral SSO/password secrets after OAuth conversion.
 	input.Credentials = SanitizeStoredCredentials(input.Platform, input.Credentials)
-	if err := s.normalizeOpenAIAccountUserAgent(ctx, input.Platform, input.Credentials); err != nil {
+	if err := s.normalizeOpenAIAccountUserAgent(ctx, input.Platform, input.Type, input.Credentials); err != nil {
 		return nil, err
 	}
 
@@ -684,7 +684,7 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 		}
 		// Strip SSO/password residue that must never sit next to OAuth tokens.
 		account.Credentials = SanitizeStoredCredentials(account.Platform, account.Credentials)
-		if err := s.normalizeOpenAIAccountUserAgent(ctx, account.Platform, account.Credentials); err != nil {
+		if err := s.normalizeOpenAIAccountUserAgent(ctx, account.Platform, account.Type, account.Credentials); err != nil {
 			return nil, err
 		}
 	}
@@ -906,7 +906,10 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 
 // normalizeOpenAIAccountUserAgent makes account validation observe the same
 // global policy snapshot used later by outbound identity resolution.
-func (s *adminServiceImpl) normalizeOpenAIAccountUserAgent(ctx context.Context, platform string, credentials map[string]any) error {
+func (s *adminServiceImpl) normalizeOpenAIAccountUserAgent(ctx context.Context, platform, accountType string, credentials map[string]any) error {
+	if err := NormalizeAccountOutboundIdentity(platform, accountType, credentials); err != nil {
+		return err
+	}
 	allowLegacyCompatibility := false
 	if s != nil && s.settingService != nil {
 		_, allowLegacyCompatibility = s.settingService.GetOpenAICodexOutboundProfile(ctx)
@@ -1106,6 +1109,35 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 	// only when platform is known Grok — empty platform still strips password/*).
 	if input.Credentials != nil {
 		input.Credentials = SanitizeStoredCredentials("", input.Credentials)
+	}
+	if raw, supplied := input.Credentials[outboundIdentityCredential]; supplied {
+		var normalized any
+		for _, account := range cachedTargets {
+			if account == nil {
+				continue
+			}
+			candidate := map[string]any{outboundIdentityCredential: raw}
+			if err := NormalizeAccountOutboundIdentity(account.Platform, account.Type, candidate); err != nil {
+				return nil, err
+			}
+			normalized = candidate[outboundIdentityCredential]
+		}
+		// Bulk persistence merges top-level JSONB keys. An explicit null must
+		// replace the stored candidate so clearing restores inheritance.
+		input.Credentials[outboundIdentityCredential] = normalized
+	}
+	if raw, supplied := input.Credentials["user_agent"]; supplied {
+		for _, account := range cachedTargets {
+			if account == nil || account.Platform != PlatformOpenAI {
+				continue
+			}
+			candidate := map[string]any{"user_agent": raw}
+			if err := s.normalizeOpenAIAccountUserAgent(ctx, account.Platform, account.Type, candidate); err != nil {
+				return nil, err
+			}
+			// Keep null in the JSONB delta when the administrator clears the UA.
+			input.Credentials["user_agent"] = candidate["user_agent"]
+		}
 	}
 
 	// Prepare bulk updates for columns and JSONB fields.

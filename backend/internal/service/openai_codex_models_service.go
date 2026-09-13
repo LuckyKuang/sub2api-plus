@@ -20,6 +20,7 @@ import (
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/httpclient"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/xai"
 	"golang.org/x/net/http2"
 	"golang.org/x/sync/singleflight"
@@ -1637,6 +1638,7 @@ func (c *openAIModelsCache) set(key string, manifest *OpenAIModelsResponse, now 
 // passed through verbatim. Custom API key manifests receive only the narrowly
 // scoped compatibility adjustments required by custom-provider Codex clients.
 func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, account *Account, _ string, ifNoneMatch string) (*OpenAIModelsResponse, error) {
+	ctx = WithOutboundIdentityScope(ctx, nil)
 	if account == nil {
 		return nil, infraerrors.New(http.StatusInternalServerError, "OPENAI_CODEX_MODELS_ACCOUNT_REQUIRED", "account is required")
 	}
@@ -1677,6 +1679,12 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 	// API-key upstreams. Do not let the caller's client_version split it from
 	// the final User-Agent: account identity is authoritative everywhere.
 	clientVersion := identity.Version
+	if useAPIKeyUpstream {
+		ctx = WithAccountOutboundIdentity(ctx, credAccount)
+		if selected, ok := outboundidentity.FromContext(ctx); ok {
+			clientVersion = selected.Version
+		}
+	}
 	requestURL, err := buildCodexModelsManifestURL(requestEndpoint, appendModelsPath, clientVersion)
 	if err != nil {
 		if useAPIKeyUpstream {
@@ -1706,6 +1714,11 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 		headers.Set("Version", clientVersion)
 	}
 	applyResolvedOpenAIOutboundIdentity(headers, identity, !useAPIKeyUpstream)
+	if useAPIKeyUpstream {
+		if selected, ok := outboundidentity.FromContext(ctx); ok {
+			selected.Apply(headers)
+		}
+	}
 
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {
@@ -1723,11 +1736,12 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 		useAPIKeyUpstream:   useAPIKeyUpstream,
 	}
 	if useAPIKeyUpstream {
-		return s.fetchCachedOpenAIModels(ctx, request, s.fetchCodexModelsManifestUpstreamForRequest(request), ifNoneMatch)
+		return s.fetchCachedOpenAIModels(ctx, request, s.fetchCodexModelsManifestUpstreamForRequest(ctx, request), ifNoneMatch)
 	}
 	// OAuth 账号同样经过账号级缓存；闭包保留 agent identity 任务恢复逻辑，
 	// 错误时仍交给 handleCodexModelsManifestAccountAuthError 处理账号状态。
 	oauthFetch := func(fetchCtx context.Context, ifNoneMatch string) (*OpenAIModelsResponse, error) {
+		fetchCtx = carryOutboundIdentityScope(fetchCtx, ctx)
 		manifest, fetchErr := s.fetchCodexModelsManifestUpstream(fetchCtx, request, ifNoneMatch)
 		if !credAccount.IsOpenAIAgentIdentity() || !isAgentIdentityTaskInvalidCodexModelsError(fetchErr) {
 			s.handleCodexModelsManifestAccountAuthError(fetchCtx, account, credAccount, fetchErr)
@@ -1843,8 +1857,15 @@ func (s *OpenAIGatewayService) refreshCachedOpenAIModels(cacheKey string, reques
 	})
 }
 
-func (s *OpenAIGatewayService) fetchCodexModelsManifestUpstreamForRequest(request openAIModelsRequest) func(ctx context.Context, ifNoneMatch string) (*OpenAIModelsResponse, error) {
+func (s *OpenAIGatewayService) fetchCodexModelsManifestUpstreamForRequest(sourceCtx context.Context, request openAIModelsRequest) func(ctx context.Context, ifNoneMatch string) (*OpenAIModelsResponse, error) {
+	// Background refresh has its own lifetime but must send the identity used
+	// to construct this request's headers, URL and cache key.
+	identity, hasIdentity := outboundidentity.FromContext(sourceCtx)
 	return func(ctx context.Context, ifNoneMatch string) (*OpenAIModelsResponse, error) {
+		ctx = carryOutboundIdentityScope(ctx, sourceCtx)
+		if hasIdentity {
+			ctx = outboundidentity.WithIdentity(ctx, identity)
+		}
 		return s.fetchCodexModelsManifestUpstream(ctx, request, ifNoneMatch)
 	}
 }

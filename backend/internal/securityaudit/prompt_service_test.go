@@ -122,7 +122,7 @@ func TestPromptServiceBlockingAlwaysUsesLatestUserOnly(t *testing.T) {
 	}), nil, NewAtomicMetrics(), 2, 2)
 	service := &PromptService{
 		config: &fakeConfigStore{active: true, cfg: ActiveConfig{
-			RiskControlEnabled: true, Enabled: true, BlockingEnabled: true, BlockingLatestTurnOnly: false, AllGroups: true,
+			RiskControlEnabled: true, Enabled: true, BlockingEnabled: true, AllGroups: true,
 			Scanners: AllScannerIDs, Endpoints: []ActiveEndpoint{{ID: "guard-1", Enabled: true, TimeoutMS: 1000, InputLimit: 4096}},
 		}},
 		evaluator: evaluator,
@@ -130,7 +130,7 @@ func TestPromptServiceBlockingAlwaysUsesLatestUserOnly(t *testing.T) {
 	decision, err := service.Evaluate(context.Background(), Request{Protocol: "openai_chat_completions", Body: []byte(`{"messages":[{"role":"system","content":"system instruction"},{"role":"user","content":"older user input"},{"role":"assistant","content":"previous output"},{"role":"user","content":"latest user input"}]}`)})
 	require.NoError(t, err)
 	require.Equal(t, DecisionAllow, decision.Kind)
-	require.Equal(t, []string{"latest user input", "previous output\n\nolder user input\n\nsystem instruction"}, seen)
+	require.Equal(t, []string{"latest user input"}, seen)
 }
 
 func TestPromptServiceBlockingIgnoresCodexInstructionsAndBlocksJailbreakInLatestUser(t *testing.T) {
@@ -146,7 +146,7 @@ func TestPromptServiceBlockingIgnoresCodexInstructionsAndBlocksJailbreakInLatest
 	}), nil, NewAtomicMetrics(), 2, 2)
 	passService := &PromptService{
 		config: &fakeConfigStore{active: true, cfg: ActiveConfig{
-			RiskControlEnabled: true, Enabled: true, BlockingEnabled: true, BlockingLatestTurnOnly: false, AllGroups: true,
+			RiskControlEnabled: true, Enabled: true, BlockingEnabled: true, AllGroups: true,
 			Scanners: AllScannerIDs, Endpoints: []ActiveEndpoint{{ID: "guard-1", Enabled: true, TimeoutMS: 1000, InputLimit: 8}},
 		}},
 		evaluator: passEvaluator,
@@ -154,10 +154,9 @@ func TestPromptServiceBlockingIgnoresCodexInstructionsAndBlocksJailbreakInLatest
 	decision, err := passService.Evaluate(context.Background(), Request{Protocol: "openai_responses", Body: codexBody})
 	require.NoError(t, err)
 	require.Equal(t, DecisionAllow, decision.Kind)
-	require.GreaterOrEqual(t, len(seen), 1)
-	require.Contains(t, strings.Join(seen, "\n"), "hi")
-	require.Contains(t, strings.Join(seen, "\n"), "You")
-	require.Greater(t, decision.Result.ChunkTotal, 1)
+	require.Equal(t, []string{"hi"}, seen)
+	require.NotContains(t, strings.Join(seen, "\n"), "You are Codex")
+	require.Equal(t, 1, decision.Result.ChunkTotal)
 
 	jailbreakBody := []byte(`{
 		"instructions":"You are Codex. sandbox require_escalated jailbreak",
@@ -172,7 +171,7 @@ func TestPromptServiceBlockingIgnoresCodexInstructionsAndBlocksJailbreakInLatest
 	}), nil, NewAtomicMetrics(), 2, 2)
 	blockService := &PromptService{
 		config: &fakeConfigStore{active: true, cfg: ActiveConfig{
-			RiskControlEnabled: true, Enabled: true, BlockingEnabled: true, BlockingLatestTurnOnly: false, AllGroups: true,
+			RiskControlEnabled: true, Enabled: true, BlockingEnabled: true, AllGroups: true,
 			Scanners: AllScannerIDs, Endpoints: []ActiveEndpoint{{ID: "guard-1", Enabled: true, TimeoutMS: 1000, InputLimit: 4096}},
 		}},
 		evaluator: blockEvaluator,

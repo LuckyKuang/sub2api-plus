@@ -70,7 +70,7 @@ const { copyToClipboard } = useClipboard()
 
 // JSON 示例语言中立，且花括号会被 vue-i18n 消息编译器当作插值占位符解析
 // 导致渲染时抛 SyntaxError，因此不走 i18n。
-const IMPORT_JSON_PLACEHOLDER = '{"user-agent": "my-client/1.0", "x-relay-token": "..."}'
+const IMPORT_JSON_PLACEHOLDER = '{"x-route": "primary", "x-relay-token": "..."}'
 
 const showImportPanel = ref(false)
 const importText = ref('')

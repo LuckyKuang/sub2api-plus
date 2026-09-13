@@ -55,6 +55,20 @@ export function isHeaderOverrideCapable(platform: string, type: string): boolean
 
 /** 禁止覆写的请求头（与后端 headerOverrideBlockedNames 保持一致） */
 const HEADER_OVERRIDE_BLOCKED_NAMES = new Set([
+  // Managed declarations: backend/internal/pkg/outboundidentity.IsIdentityHeader.
+  'user-agent',
+  'originator',
+  'version',
+  'x-app',
+  'x-goog-api-client',
+  'x-grok-client-version',
+  'x-grok-client-identifier',
+  'x-stainless-lang',
+  'x-stainless-package-version',
+  'x-stainless-os',
+  'x-stainless-arch',
+  'x-stainless-runtime',
+  'x-stainless-runtime-version',
   'host',
   'content-length',
   'content-type',

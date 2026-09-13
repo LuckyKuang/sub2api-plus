@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"net/http"
 	"net/url"
 	"strings"
@@ -49,6 +50,7 @@ func (s *claudeOAuthService) GetOrganizationUUID(ctx context.Context, sessionKey
 
 	resp, err := client.R().
 		SetContext(ctx).
+		SetHeaders(outboundidentity.Headers(ctx, "claude", nil)).
 		SetCookies(&http.Cookie{
 			Name:  "sessionKey",
 			Value: sessionKey,
@@ -120,6 +122,7 @@ func (s *claudeOAuthService) GetAuthorizationCode(ctx context.Context, sessionKe
 
 	resp, err := client.R().
 		SetContext(ctx).
+		SetHeaders(outboundidentity.Headers(ctx, "claude", nil)).
 		SetCookies(&http.Cookie{
 			Name:  "sessionKey",
 			Value: sessionKey,
@@ -205,9 +208,9 @@ func (s *claudeOAuthService) ExchangeCodeForToken(ctx context.Context, code, cod
 
 	resp, err := client.R().
 		SetContext(ctx).
+		SetHeaders(outboundidentity.Headers(ctx, "claude", nil)).
 		SetHeader("Accept", "application/json, text/plain, */*").
 		SetHeader("Content-Type", "application/json").
-		SetHeader("User-Agent", "axios/1.13.6").
 		SetBody(reqBody).
 		SetSuccessResult(&tokenResp).
 		Post(s.tokenURL)
@@ -243,9 +246,9 @@ func (s *claudeOAuthService) RefreshToken(ctx context.Context, refreshToken, pro
 
 	resp, err := client.R().
 		SetContext(ctx).
+		SetHeaders(outboundidentity.Headers(ctx, "claude", nil)).
 		SetHeader("Accept", "application/json, text/plain, */*").
 		SetHeader("Content-Type", "application/json").
-		SetHeader("User-Agent", "axios/1.13.6").
 		SetBody(reqBody).
 		SetSuccessResult(&tokenResp).
 		Post(s.tokenURL)

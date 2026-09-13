@@ -554,34 +554,56 @@ func joinOpenAIAutoResetWindows(fiveHour, sevenDay bool) string {
 }
 
 func buildOpenAIAutoResetUsageUpdates(usage *OpenAIQuotaUsage, now time.Time) map[string]any {
+	return buildCodexUsageExtraUpdates(openAIQuotaUsageSnapshot(usage, now), now)
+}
+
+func openAIQuotaUsageSnapshot(usage *OpenAIQuotaUsage, now time.Time) *OpenAICodexUsageSnapshot {
 	if usage == nil || usage.RateLimit == nil {
 		return nil
 	}
 	rateLimit := usage.RateLimit
-	snapshot := &OpenAICodexUsageSnapshot{UpdatedAt: now.UTC().Format(time.RFC3339)}
+	if !usage.weeklyObservedAt.IsZero() {
+		now = usage.weeklyObservedAt
+	} else if usage.FetchedAt > 0 {
+		now = time.Unix(usage.FetchedAt, 0)
+	}
+	snapshot := &OpenAICodexUsageSnapshot{UpdatedAt: now.UTC().Format(time.RFC3339Nano)}
 	applyWindow := func(window *OpenAIRateLimitWindow, primary bool) {
 		if window == nil {
 			return
 		}
 		used := window.UsedPercent
 		resetAfter := int(window.ResetAfterSeconds)
+		if validOpenAIQuotaResetUnix(window.ResetAt) {
+			resetAfter = max(0, int(time.Unix(window.ResetAt, 0).Sub(now).Seconds()))
+		}
 		windowMinutes := int(window.LimitWindowSeconds / 60)
+		if window.LimitWindowSeconds%60 != 0 {
+			windowMinutes = 0
+		}
 		if primary {
-			snapshot.PrimaryUsedPercent = &used
+			if !window.missingUsedPercent {
+				snapshot.PrimaryUsedPercent = &used
+			}
 			snapshot.PrimaryResetAfterSeconds = &resetAfter
 			snapshot.PrimaryWindowMinutes = &windowMinutes
+			snapshot.PrimaryResetAtUnix = &window.ResetAt
 		} else {
-			snapshot.SecondaryUsedPercent = &used
+			if !window.missingUsedPercent {
+				snapshot.SecondaryUsedPercent = &used
+			}
 			snapshot.SecondaryResetAfterSeconds = &resetAfter
 			snapshot.SecondaryWindowMinutes = &windowMinutes
+			snapshot.SecondaryResetAtUnix = &window.ResetAt
 		}
 	}
 	applyWindow(rateLimit.PrimaryWindow, true)
 	applyWindow(rateLimit.SecondaryWindow, false)
-	return buildCodexUsageExtraUpdates(snapshot, now)
+	return snapshot
 }
 
 func (s *OpenAIQuotaAutoResetService) persistFreshUsage(ctx context.Context, accountID int64, usage *OpenAIQuotaUsage, now time.Time) error {
+	observeOpenAIWeeklyUsageSnapshot(ctx, accountID, openAIQuotaUsageSnapshot(usage, now), true)
 	updates := buildOpenAIAutoResetUsageUpdates(usage, now)
 	if len(updates) > 0 {
 		if err := s.accountRepo.UpdateExtra(ctx, accountID, updates); err != nil {

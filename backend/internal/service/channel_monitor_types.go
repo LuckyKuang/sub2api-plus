@@ -56,7 +56,7 @@ type ChannelMonitor struct {
 
 	// 请求自定义快照（来自模板拷贝 or 用户手填，运行时直接读取）
 	TemplateID       *int64            // 仅用于 UI 分组 + 一键应用，运行时不用
-	ExtraHeaders     map[string]string // 与 adapter 默认 headers 合并，用户优先
+	ExtraHeaders     map[string]string // 普通 headers 与 adapter 默认值合并；托管身份字段禁止覆盖
 	BodyOverrideMode string            // off / merge / replace
 	BodyOverride     map[string]any    // 仅 mode != off 时使用
 

@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"time"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/geminicli"
@@ -32,9 +33,9 @@ func (c *geminiCliCodeAssistClient) LoadCodeAssist(ctx context.Context, accessTo
 	}
 	resp, err := client.R().
 		SetContext(ctx).
+		SetHeaders(outboundidentity.Headers(ctx, "gemini", nil)).
 		SetHeader("Authorization", "Bearer "+accessToken).
 		SetHeader("Content-Type", "application/json").
-		SetHeader("User-Agent", geminicli.GeminiCLIUserAgent).
 		SetBody(reqBody).
 		SetSuccessResult(&out).
 		Post(c.baseURL + "/v1internal:loadCodeAssist")
@@ -76,9 +77,9 @@ func (c *geminiCliCodeAssistClient) OnboardUser(ctx context.Context, accessToken
 	}
 	resp, err := client.R().
 		SetContext(ctx).
+		SetHeaders(outboundidentity.Headers(ctx, "gemini", nil)).
 		SetHeader("Authorization", "Bearer "+accessToken).
 		SetHeader("Content-Type", "application/json").
-		SetHeader("User-Agent", geminicli.GeminiCLIUserAgent).
 		SetBody(reqBody).
 		SetSuccessResult(&out).
 		Post(c.baseURL + "/v1internal:onboardUser")

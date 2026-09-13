@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/pagination"
 	"github.com/stretchr/testify/require"
 )
@@ -143,6 +144,72 @@ func (s *accountRepoStubForBulkUpdate) ListWithFilters(_ context.Context, params
 		return s.listData, s.listResult, nil
 	}
 	return s.listData, &pagination.PaginationResult{Total: int64(len(s.listData))}, nil
+}
+
+func TestAdminServiceBulkUpdateAccounts_RejectsInvalidOutboundIdentity(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		selection any
+		target    *Account
+	}{
+		{"invalid version", map[string]any{"preset": "claude", "version": "invalid"}, &Account{ID: 2, Platform: PlatformAnthropic, Type: AccountTypeOAuth}},
+		{"mixed native families", map[string]any{"preset": "claude"}, &Account{ID: 2, Platform: PlatformGemini, Type: AccountTypeOAuth}},
+		{"invalid shape", []string{"claude"}, &Account{ID: 2, Platform: PlatformAnthropic, Type: AccountTypeAPIKey}},
+		{"duplicate Codex declarations", map[string]any{"preset": "codex", "version": "3.9.1"}, &Account{ID: 2, Platform: PlatformOpenAI, Type: AccountTypeAPIKey}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &accountRepoStubForBulkUpdate{getByIDsAccounts: []*Account{{ID: 1, Platform: PlatformAnthropic, Type: AccountTypeAPIKey}, tc.target}}
+			svc := &adminServiceImpl{accountRepo: repo}
+			result, err := svc.BulkUpdateAccounts(context.Background(), &BulkUpdateAccountsInput{AccountIDs: []int64{1, 2}, Credentials: map[string]any{outboundIdentityCredential: tc.selection}})
+			require.Nil(t, result)
+			requireApplicationErrorReason(t, err, "OUTBOUND_IDENTITY_INVALID")
+			require.Zero(t, repo.bulkUpdateCalls, "validate the whole batch before the first write")
+		})
+	}
+}
+
+func TestAdminServiceBulkUpdateAccounts_NormalizesOutboundIdentityAndClearing(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		raw  any
+		want any
+	}{
+		{"preset", map[string]any{"preset": " grok ", "version": " 3.9.1 "}, OutboundIdentitySelection{Preset: "grok", Version: "3.9.1"}},
+		{"null", nil, nil},
+		{"empty", map[string]any{}, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			targets := []*Account{
+				{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeAPIKey},
+				{ID: 2, Platform: PlatformGemini, Type: AccountTypeServiceAccount},
+				{ID: 3, Platform: PlatformAnthropic, Type: AccountTypeBedrock},
+			}
+			repo := &accountRepoStubForBulkUpdate{getByIDsAccounts: targets}
+			svc := &adminServiceImpl{accountRepo: repo}
+			result, err := svc.BulkUpdateAccounts(context.Background(), &BulkUpdateAccountsInput{AccountIDs: []int64{1, 2, 3}, Credentials: map[string]any{outboundIdentityCredential: tc.raw, "custom_field": "retained"}})
+			require.NoError(t, err)
+			require.Equal(t, 3, result.Success)
+			require.Equal(t, 1, repo.bulkUpdateCalls)
+			require.Contains(t, repo.lastBulkUpdate.Credentials, outboundIdentityCredential, "JSONB merge needs an explicit null to clear the stored candidate")
+			require.Equal(t, tc.want, repo.lastBulkUpdate.Credentials[outboundIdentityCredential])
+			require.Equal(t, "retained", repo.lastBulkUpdate.Credentials["custom_field"])
+			if tc.want == nil {
+				_, ctx := outboundIdentityTestSettings(t, emptyOutboundIdentitySettings())
+				targets[1].Credentials = repo.lastBulkUpdate.Credentials
+				identity, ok := outboundidentity.FromContext(WithAccountOutboundIdentity(ctx, targets[1]))
+				require.True(t, ok)
+				require.Equal(t, "gemini", identity.Preset, "explicit null restores the platform default")
+			}
+		})
+	}
+}
+
+func TestAdminServiceBulkUpdateAccounts_OmittedOutboundIdentityIsPreserved(t *testing.T) {
+	repo := &accountRepoStubForBulkUpdate{getByIDsAccounts: []*Account{{ID: 1, Platform: PlatformAnthropic, Type: AccountTypeAPIKey}}}
+	svc := &adminServiceImpl{accountRepo: repo}
+	_, err := svc.BulkUpdateAccounts(context.Background(), &BulkUpdateAccountsInput{AccountIDs: []int64{1}, Credentials: map[string]any{"custom_field": "retained"}})
+	require.NoError(t, err)
+	require.NotContains(t, repo.lastBulkUpdate.Credentials, outboundIdentityCredential)
 }
 
 // TestAdminService_BulkUpdateAccounts_AllSuccessIDs 验证批量更新成功时返回 success_ids/failed_ids。

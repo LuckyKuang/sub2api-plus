@@ -141,6 +141,7 @@ func (r *Runner) processSafely(ctx context.Context, workerID int, cfg ActiveConf
 }
 
 func (r *Runner) processJob(ctx context.Context, workerID int, cfg ActiveConfig, job *Job) error {
+	ctx = withPromptIdentityScope(ctx)
 	baseFields := jobLogFields(job)
 	LogInfo(EventAuditStarted, mergeLogFields(baseFields, map[string]any{"worker_id": workerID, "attempts": job.Attempts, "status": "processing"}))
 	scanText, err := r.payload.Get(ctx, job.ID)
