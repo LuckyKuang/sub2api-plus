@@ -622,11 +622,67 @@ class ReleaseMonitoringTest(unittest.TestCase):
                     "url": run.url,
                 },
             ),
+            mock.patch.object(
+                release_cli,
+                "require_automated_release_policy",
+                side_effect=release_cli.ReleaseCliError(
+                    "release environment is not automatic"
+                ),
+            ),
         ):
             with self.assertRaisesRegex(
-                release_cli.ReleaseCliError, "policy drifted"
+                release_cli.ReleaseCliError, "not automatic"
             ):
                 release_cli.watch_release(REPOSITORY, TAG, MERGE)
+
+    def test_transient_waiting_environment_continues_when_policy_is_automatic(
+        self,
+    ) -> None:
+        run = release_cli.WorkflowRun(
+            database_id=123,
+            url="https://github.com/LuckyKuang/sub2api-plus/actions/runs/123",
+            status="waiting",
+            conclusion=None,
+        )
+        watched = subprocess.CompletedProcess([], 0, "")
+        with (
+            mock.patch.object(release_cli, "find_release_run", return_value=run),
+            mock.patch.object(
+                release_cli,
+                "workflow_state",
+                side_effect=[
+                    {
+                        "status": "waiting",
+                        "conclusion": None,
+                        "jobs": [
+                            {"name": "Build and publish", "status": "waiting"}
+                        ],
+                        "url": run.url,
+                    },
+                    {
+                        "status": "completed",
+                        "conclusion": "success",
+                        "jobs": [
+                            {
+                                "name": "Build and publish",
+                                "status": "completed",
+                            }
+                        ],
+                        "url": run.url,
+                    },
+                ],
+            ),
+            mock.patch.object(
+                release_cli, "require_automated_release_policy"
+            ) as release_policy,
+            mock.patch.object(
+                release_cli, "run_command", return_value=watched
+            ) as run_command,
+        ):
+            release_cli.watch_release(REPOSITORY, TAG, MERGE)
+
+        release_policy.assert_called_once_with(REPOSITORY)
+        run_command.assert_called_once()
 
 
 class FinalizationTest(unittest.TestCase):

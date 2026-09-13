@@ -1178,10 +1178,10 @@ def watch_release(repository: str, tag: str, sha: str) -> None:
         conclusion = state.get("conclusion")
         url = str(state.get("url") or run.url or "")
         if waiting_for_release_gate(state):
-            raise ReleaseCliError(
-                "Release workflow unexpectedly reached a waiting environment gate; "
-                "the automated release policy drifted after tag publication. Restore "
-                f"the release environment policy and rerun monitor: {url or run.database_id}"
+            require_automated_release_policy(repository)
+            print(
+                "Release workflow is temporarily waiting while the automated "
+                "environment policy remains valid; continuing to monitor."
             )
         if status == "completed":
             if conclusion == "success":
@@ -1209,11 +1209,8 @@ def watch_release(repository: str, tag: str, sha: str) -> None:
         if watched.returncode != 0:
             after = workflow_state(repository, run.database_id)
             if waiting_for_release_gate(after):
-                raise ReleaseCliError(
-                    "Release workflow unexpectedly reached a waiting environment gate; "
-                    "restore the automated release policy and rerun monitor: "
-                    f"{after.get('url') or url or run.database_id}"
-                )
+                require_automated_release_policy(repository)
+                continue
             if after.get("status") == "completed":
                 continue
             raise ReleaseCliError(
