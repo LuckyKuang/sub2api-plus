@@ -1449,13 +1449,17 @@ func buildCodexUsageExtraUpdates(snapshot *OpenAICodexUsageSnapshot, fallbackNow
 // (/wham/usage bengalfox 道)更新,不能被全局头口径污染(外审第7轮 P1)。本函数仅持 accountID,
 // 无法在此自检影子,故守卫前置到各调用点。
 func (s *OpenAIGatewayService) updateCodexUsageSnapshot(ctx context.Context, accountID int64, snapshot *OpenAICodexUsageSnapshot) {
+	s.writeCodexUsageSnapshot(ctx, accountID, snapshot, true)
+}
+
+func (s *OpenAIGatewayService) writeCodexUsageSnapshot(ctx context.Context, accountID int64, snapshot *OpenAICodexUsageSnapshot, fromSession bool) {
 	if snapshot == nil {
 		return
 	}
 	if s == nil || s.accountRepo == nil {
 		return
 	}
-	observeOpenAIWeeklyUsageSnapshot(ctx, accountID, snapshot, false)
+	observeOpenAIWeeklyUsageSnapshot(ctx, accountID, snapshot, fromSession)
 
 	now := time.Now()
 	updates := buildCodexUsageExtraUpdates(snapshot, now)
@@ -1476,10 +1480,21 @@ func (s *OpenAIGatewayService) updateCodexUsageSnapshot(ctx context.Context, acc
 }
 
 func (s *OpenAIGatewayService) UpdateCodexUsageSnapshotFromHeaders(ctx context.Context, accountID int64, headers http.Header) {
+	s.writeCodexUsageSnapshotFromHeaders(ctx, accountID, headers, true)
+}
+
+func (s *OpenAIGatewayService) ApplyCodexUsageSnapshotFromResult(ctx context.Context, accountID int64, result *OpenAIForwardResult) {
+	if result == nil {
+		return
+	}
+	s.writeCodexUsageSnapshotFromHeaders(ctx, accountID, result.ResponseHeaders, !result.ResponseHeadersFromHandshake)
+}
+
+func (s *OpenAIGatewayService) writeCodexUsageSnapshotFromHeaders(ctx context.Context, accountID int64, headers http.Header, fromSession bool) {
 	if accountID <= 0 || headers == nil {
 		return
 	}
 	if snapshot := ParseCodexRateLimitHeaders(headers); snapshot != nil {
-		s.updateCodexUsageSnapshot(ctx, accountID, snapshot)
+		s.writeCodexUsageSnapshot(ctx, accountID, snapshot, fromSession)
 	}
 }

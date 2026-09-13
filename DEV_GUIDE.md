@@ -28,6 +28,10 @@ machine paths, passwords, or production data to tracked documentation.
 
 ## Install and Build
 
+Run these commands inside the platform validation container described in
+[`CONTRIBUTING.md`](CONTRIBUTING.md#development-checks). On Windows, that means
+a Docker validation container inside a WSL2 Debian or Ubuntu distribution.
+
 ```bash
 pnpm --dir frontend install --frozen-lockfile
 pnpm --dir frontend run build
@@ -43,7 +47,8 @@ make build
 make test
 ```
 
-On Windows without GNU Make, run the underlying Go and pnpm commands directly.
+Run these Make targets or their underlying Go and pnpm commands inside the
+same validation container.
 
 ## Run in Development
 
@@ -64,6 +69,17 @@ Copy configuration examples to ignored local files before editing them. See
 [`deploy/README.md`](deploy/README.md) for service configuration.
 
 ## Verification
+
+All validation, including focused tests, lint, typechecking, builds, and policy
+checks, must run inside the platform validation container. On Windows, use
+Docker inside WSL2 Debian or Ubuntu; running checks directly on Windows or
+directly in the WSL2 distribution outside Docker is forbidden. On macOS, use
+Apple Containers; on Linux, use Docker.
+
+Follow [`CONTRIBUTING.md`](CONTRIBUTING.md#development-checks) for the pinned
+toolchain, check selection, and validation-container cleanup requirements. Run
+the relevant checks while iterating; final PR submission uses the required
+complete matrix. The commands below run inside that container.
 
 Backend:
 
@@ -115,9 +131,10 @@ test stubs/mocks before running the broader test suite.
 
 ### Configuration ignored from the environment
 
-New config fields need a registered default or explicit binding so Viper can
-reach them through environment variables. Update the config tests and deployment
-examples together.
+For configuration sourced from YAML or environment variables, register a
+default or explicit binding so Viper can reach the field. Update relevant tests
+and deployment examples. Database-backed settings follow their own defaults,
+persistence, and documentation contract.
 
 ### Database migration failure
 

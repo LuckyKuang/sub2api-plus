@@ -43,24 +43,20 @@ func TestWeeklyQuotaQueryObservesAndCachesRawWindow(t *testing.T) {
 	usage, err := service.queryUsage(context.Background(), account.ID, false)
 	require.NoError(t, err)
 	require.Equal(t, 1, calls)
-	require.Equal(t, 1, recorder.calls)
-	require.Equal(t, time.Unix(resetAt, 0).UTC(), recorder.resetAt)
-	require.Equal(t, 7.0, *recorder.observation.UsedPercent)
-	require.True(t, recorder.observation.QuotaQuery)
-	require.Equal(t, usage.weeklyObservedAt, recorder.observation.ObservedAt)
+	// Standalone /wham/usage queries update the account snapshot but never drive
+	// group follow-reset decisions.
+	require.Zero(t, recorder.calls)
 	require.Equal(t, usage.weeklyObservedAt.Format(time.RFC3339Nano), repo.extraUpdates[account.ID]["codex_usage_updated_at"], "cache ordering must retain subsecond sample precision")
 	require.Equal(t, time.Unix(resetAt, 0).UTC().Format(time.RFC3339), repo.extraUpdates[account.ID]["codex_7d_reset_at"])
-	// Post-reset cache handling must retain the same observation identity even
-	// when the separate credit-details endpoint has failed.
-	before := recorder.observation.ObservedAt
+	// Post-reset cache handling also remains excluded from group observations.
 	require.Error(t, service.CachePostResetSnapshot(context.Background(), account.ID, usage))
-	require.Equal(t, before, recorder.observation.ObservedAt)
+	require.Zero(t, recorder.calls)
 }
 
 func TestWeeklyQuotaSnapshotEntryPoints(t *testing.T) {
 	now := time.Now().UTC()
 	resetAt := now.Add(7 * 24 * time.Hour).Unix()
-	for _, path := range []string{"gateway", "rate_limit", "account_probe", "post_reset", "auto_reset"} {
+	for _, path := range []string{"gateway", "rate_limit", "handshake", "account_probe", "post_reset", "auto_reset"} {
 		t.Run(path, func(t *testing.T) {
 			account := &Account{ID: 42, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
 			repo := &autoResetTestAccountRepo{account: account}
@@ -80,6 +76,11 @@ func TestWeeklyQuotaSnapshotEntryPoints(t *testing.T) {
 				(&OpenAIGatewayService{accountRepo: repo}).UpdateCodexUsageSnapshotFromHeaders(context.Background(), account.ID, headers)
 			case "rate_limit":
 				(&RateLimitService{accountRepo: repo}).persistOpenAICodexSnapshot(context.Background(), account, headers)
+			case "handshake":
+				(&OpenAIGatewayService{accountRepo: repo}).ApplyCodexUsageSnapshotFromResult(context.Background(), account.ID, &OpenAIForwardResult{
+					ResponseHeaders:              headers,
+					ResponseHeadersFromHandshake: true,
+				})
 			case "account_probe":
 				updates, err := (&AccountUsageService{accountRepo: repo}).recordOpenAICodexProbeResponse(context.Background(), account, &http.Response{StatusCode: 429, Header: headers}, now)
 				require.NoError(t, err)
@@ -89,9 +90,14 @@ func TestWeeklyQuotaSnapshotEntryPoints(t *testing.T) {
 			case "auto_reset":
 				require.NoError(t, (&OpenAIQuotaAutoResetService{accountRepo: repo, quota: &autoResetTestQuota{}}).persistFreshUsage(context.Background(), account.ID, usage, now))
 			}
-			require.Equal(t, 1, recorder.calls)
-			require.Equal(t, time.Unix(resetAt, 0).UTC(), recorder.resetAt)
-			require.Equal(t, 7.0, *recorder.observation.UsedPercent)
+			if path == "gateway" || path == "rate_limit" {
+				require.Equal(t, 1, recorder.calls)
+				require.Equal(t, time.Unix(resetAt, 0).UTC(), recorder.resetAt)
+				require.Equal(t, 7.0, *recorder.observation.UsedPercent)
+				require.True(t, recorder.observation.FromSession)
+			} else {
+				require.Zero(t, recorder.calls)
+			}
 		})
 	}
 }

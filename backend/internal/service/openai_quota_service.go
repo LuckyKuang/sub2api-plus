@@ -255,7 +255,7 @@ func (s *OpenAIQuotaService) queryUsage(ctx context.Context, accountID int64, in
 	// same sample retains this timestamp through post-reset cache writes.
 	snapshot := openAIQuotaUsageSnapshot(&payload, time.Now())
 	if account, err := s.accountRepo.GetByID(ctx, accountID); err == nil && account != nil && account.Platform == PlatformOpenAI && account.Type == AccountTypeOAuth && !account.IsShadow() {
-		observeOpenAIWeeklyUsageSnapshot(ctx, accountID, snapshot, true)
+		observeOpenAIWeeklyUsageSnapshot(ctx, accountID, snapshot, false)
 		if updates := buildCodexUsageExtraUpdates(snapshot, time.Now()); len(updates) > 0 {
 			if err := s.accountRepo.UpdateExtra(ctx, accountID, updates); err != nil {
 				slog.Warn("openai_quota_usage_cache_failed", "account_id", accountID, "error", err)
@@ -305,7 +305,7 @@ func (s *OpenAIQuotaService) CachePostResetSnapshot(ctx context.Context, account
 	if usage == nil {
 		return s.cacheResetCreditsSnapshot(ctx, accountID, nil, nil)
 	}
-	observeOpenAIWeeklyUsageSnapshot(ctx, accountID, openAIQuotaUsageSnapshot(usage, time.Now()), true)
+	observeOpenAIWeeklyUsageSnapshot(ctx, accountID, openAIQuotaUsageSnapshot(usage, time.Now()), false)
 	return s.cacheResetCreditsSnapshot(
 		ctx,
 		accountID,

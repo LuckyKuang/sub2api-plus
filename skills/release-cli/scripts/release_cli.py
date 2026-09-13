@@ -17,6 +17,11 @@ from typing import Sequence
 
 
 ROOT = Path(__file__).resolve().parents[3]
+TOOLS = ROOT / "tools"
+if str(TOOLS) not in sys.path:
+    sys.path.insert(0, str(TOOLS))
+import release_validation
+
 DEFAULT_REMOTE = "origin"
 EXPECTED_REPOSITORY = "LuckyKuang/sub2api-plus"
 LOCAL_VALIDATION_CONTEXT = "sub2api/local-validation"
@@ -171,6 +176,15 @@ def run_step(
 def require_command(command: str) -> None:
     if shutil.which(command) is None:
         raise ReleaseCliError(f"required command is unavailable: {command}")
+
+
+def run_release_check(name: str, command: Sequence[str]) -> None:
+    print(f"\n[{name}]")
+    result = release_validation.run(command, root=ROOT)
+    if result.stdout:
+        print(result.stdout)
+    if result.returncode:
+        raise ReleaseCliError(f"{name} failed with exit code {result.returncode}")
 
 
 def repo_from_remote(url: str) -> str:
@@ -983,11 +997,11 @@ def promote_pull_request(
         published_tag = require_published_remote_tag(repository, tag)
         require_release_workflow_success(repository, tag, published_tag.target)
         verify_release(repository, tag)
-        run_step(
+        run_release_check(
             "Validate finalized release metadata",
             finalization_metadata_command(tag),
         )
-        run_step(
+        run_release_check(
             "Validate deterministic finalization tree",
             finalization_tree_command(proof, pr.head_branch),
         )
@@ -1332,9 +1346,9 @@ def finalize(repository: str, tag: str, remote: str) -> None:
             f"UPSTREAM.md has {replacements} planned mapping rows for {tag}; expected one"
         )
     path.write_text(updated, encoding="utf-8")
-    validation = run_command(
+    validation = release_validation.run(
         finalization_metadata_command(tag),
-        capture=True,
+        root=ROOT,
     )
     if validation.returncode != 0:
         path.write_text(content, encoding="utf-8")

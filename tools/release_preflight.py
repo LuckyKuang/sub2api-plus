@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 
 import release_docs
+import release_validation
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -173,7 +174,9 @@ def run_metadata_check(tag: str, notes_file: Path) -> None:
     )
     print("\n[Release metadata and notes]")
     print(f"$ {display_command(command)}")
-    result = run(command)
+    result = release_validation.run(command, root=ROOT)
+    if result.stdout:
+        print(result.stdout)
     if result.returncode != 0:
         raise RuntimeError(
             f"release metadata validation failed with exit code {result.returncode}"
@@ -198,11 +201,7 @@ def main() -> int:
     notes_file = args.notes_file.expanduser().resolve()
     if not notes_file.is_file():
         parser.error(f"release notes file does not exist: {notes_file}")
-    notes = notes_file.read_text(encoding="utf-8")
-    first_line = next((line.strip() for line in notes.splitlines() if line.strip()), "")
     expected_subject = f"{REQUIRED_SUBJECT_PREFIX}{args.tag}"
-    if first_line != expected_subject:
-        parser.error(f"first non-empty release-notes line must be {expected_subject!r}")
 
     initial_digest = notes_digest(notes_file)
     try:

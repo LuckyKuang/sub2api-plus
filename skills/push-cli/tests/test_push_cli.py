@@ -1039,7 +1039,7 @@ class ValidationCleanupTest(unittest.TestCase):
         commands: list[tuple[str, list[str]]] = []
 
         def capture(command: list[str]) -> str:
-            if command == [*prefix, "docker", "image", "list"]:
+            if command == [*prefix, "docker", "image", "list", "--format", "table {{.Repository}}\t{{.Tag}}"]:
                 return (
                     "REPOSITORY TAG IMAGE ID\n"
                     "sub2api-validation 1111111111111111 current\n"
@@ -1077,6 +1077,19 @@ class ValidationCleanupTest(unittest.TestCase):
 
 
 class MainFlowTest(unittest.TestCase):
+    def test_finalization_container_failure_stops_before_release_verification(self) -> None:
+        proof = push_cli.ValidationProof(
+            "a" * 40, "b" * 40, push_cli.FINALIZATION_PROFILE, "v1.2.3+custom.009"
+        )
+        with (
+            mock.patch.object(push_cli.release_validation, "run", return_value=subprocess.CompletedProcess([], 1, "container unavailable")) as check,
+            mock.patch.object(push_cli, "run_step") as step,
+        ):
+            with self.assertRaisesRegex(push_cli.PushCliError, "container validation failed"):
+                push_cli.run_release_finalization_checks(proof, "release/finalize-1.2.3-custom.009", "origin")
+        check.assert_called_once()
+        step.assert_not_called()
+
     @staticmethod
     def args(
         action: str,

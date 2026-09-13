@@ -44,7 +44,8 @@ the default branch.
 release-finalization --tag <tag>`. That path requires the deterministic branch,
 regenerates the complete expected tree from the recorded base, and verifies the
 already published Release and immutable assets. It does not start the full
-application container matrix. Treat the profile and tag as implementation
+application matrix; the focused tree validation still runs in the platform
+validation container. Treat the profile and tag as implementation
 inputs; do not use them to accelerate an ordinary or release-candidate PR.
 
 `check` runs the same full local matrix without pushing or creating a PR. It
@@ -76,8 +77,9 @@ Only `check`, `submit-pr`, and `ensure` access the validation runtime.
 
 Every full-profile Go, frontend, Python policy, installer, and lifecycle check
 runs inside `deploy/Dockerfile.validation`. Host processes may only perform
-GitHub/Git gates, runtime probes, image management, Compose parsing, container
-launch, or the deterministic finalization checks owned by release-cli.
+GitHub/Git gates, runtime probes, image management, Compose parsing, or container
+launch. Focused release metadata and deterministic finalization checks use the
+same container environment; there is no host-validation exception.
 After every container validation attempt, push-cli relies on `--rm` to remove
 the one-shot container and its writable snapshot. It retains only the current
 deterministic project validation image and dependency-cache generation, and

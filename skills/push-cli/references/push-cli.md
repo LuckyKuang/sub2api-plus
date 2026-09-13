@@ -54,6 +54,12 @@ requires the deterministic branch, regenerates its complete expected tree from
 the recorded base, and verifies the published Release and immutable assets. No
 other caller or branch may use this profile.
 
+The tree check runs through `tools/release_validation.py` in the same platform
+container as the full profile. Published-tag, workflow, and asset queries stay
+with the authenticated host CLI. Runtime or tree-check failure stops submission
+before the branch push, commit status, or PR mutation. The profile runs only its
+focused checks, not the full application matrix.
+
 ## In-Container Matrix
 
 The full matrix includes every existing command and runs three bounded lanes:

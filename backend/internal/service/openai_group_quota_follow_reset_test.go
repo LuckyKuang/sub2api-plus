@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"net/http"
+	"strconv"
 	"testing"
 	"time"
 
@@ -30,16 +32,22 @@ func TestQuotaFollowResetObservationSurvivesDownstreamCancellation(t *testing.T)
 	observer := &OpenAIGroupQuotaFollowResetService{repo: recorder}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	observer.Observe(ctx, 42, OpenAIWeeklyQuotaObservation{ResetAt: time.Now().Add(7 * 24 * time.Hour), ObservedAt: time.Now()})
+	observer.Observe(ctx, 42, OpenAIWeeklyQuotaObservation{ResetAt: time.Now().Add(7 * 24 * time.Hour), ObservedAt: time.Now(), FromSession: true})
 	require.Equal(t, 1, recorder.calls)
 	require.NoError(t, recorder.contextErr)
 }
 
-func (r *quotaFollowObservationRecorder) ProcessNextPending(context.Context) (*GroupQuotaFollowResetResult, error) {
-	return nil, nil
+func TestQuotaFollowResetIgnoresStandaloneQuotaQueries(t *testing.T) {
+	recorder := &quotaFollowObservationRecorder{}
+	observer := &OpenAIGroupQuotaFollowResetService{repo: recorder}
+	observer.Observe(context.Background(), 42, OpenAIWeeklyQuotaObservation{
+		ResetAt:    time.Now().Add(7 * 24 * time.Hour),
+		ObservedAt: time.Now(),
+	})
+	require.Zero(t, recorder.calls)
 }
 
-func (r *quotaFollowObservationRecorder) ClaimWeeklyResetSources(context.Context, int) ([]int64, error) {
+func (r *quotaFollowObservationRecorder) ProcessNextPending(context.Context) (*GroupQuotaFollowResetResult, error) {
 	return nil, nil
 }
 
@@ -123,4 +131,40 @@ func TestObserveOpenAIWeeklyResetEventUsesRawDefaultWindow(t *testing.T) {
 	observeOpenAIWeeklyResetEvent(context.Background(), account, validPayload)
 	require.Equal(t, 2, recorder.calls)
 	require.Equal(t, time.Unix(1780700001, 0).UTC(), recorder.resetAt)
+}
+
+func TestWeeklyQuotaHandshakeHeadersDoNotObserveAfterRateLimits(t *testing.T) {
+	recorder := &quotaFollowObservationRecorder{}
+	observer := &OpenAIGroupQuotaFollowResetService{repo: recorder}
+	setOpenAIGroupQuotaFollowResetObserver(observer)
+	t.Cleanup(func() { clearOpenAIGroupQuotaFollowResetObserver(observer) })
+
+	account := &Account{ID: 42, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
+	resetAt := time.Now().Add(6*24*time.Hour + 22*time.Hour).Unix()
+	observeOpenAIWeeklyResetEvent(
+		context.Background(),
+		account,
+		[]byte(`{"type":"codex.rate_limits","rate_limits":{"primary":{"used_percent":7,"window_minutes":10080,"reset_at":`+strconv.FormatInt(resetAt, 10)+`}}}`),
+	)
+	require.Equal(t, 1, recorder.calls)
+	require.True(t, recorder.observation.FromSession)
+
+	headers := make(http.Header)
+	headers.Set("X-Codex-Primary-Reset-At", strconv.FormatInt(resetAt, 10))
+	headers.Set("X-Codex-Primary-Window-Minutes", "10080")
+	headers.Set("X-Codex-Primary-Used-Percent", "7")
+	(&OpenAIGatewayService{accountRepo: &autoResetTestAccountRepo{account: account}}).ApplyCodexUsageSnapshotFromResult(
+		context.Background(),
+		account.ID,
+		&OpenAIForwardResult{ResponseHeaders: headers, ResponseHeadersFromHandshake: true},
+	)
+	require.Equal(t, 1, recorder.calls, "reused handshake headers must not count as a later session")
+
+	(&OpenAIGatewayService{accountRepo: &autoResetTestAccountRepo{account: account}}).ApplyCodexUsageSnapshotFromResult(
+		context.Background(),
+		account.ID,
+		&OpenAIForwardResult{ResponseHeaders: headers},
+	)
+	require.Equal(t, 2, recorder.calls)
+	require.True(t, recorder.observation.FromSession)
 }

@@ -454,6 +454,8 @@ def validation_run_command(
         "--env",
         f"{IN_VALIDATION_ENV}=1",
         "--env",
+        "PYTHONDONTWRITEBYTECODE=1",
+        "--env",
         f"HOME={CONTAINER_HOME}",
         "--env",
         f"GOPATH={CONTAINER_HOME}/go",
@@ -618,7 +620,10 @@ def cleanup_validation_runtime(
     current_tag = image.rsplit(":", 1)[-1]
     if not VALIDATION_GENERATION_RE.fullmatch(current_tag):
         raise ValidationRuntimeError(f"invalid validation image reference: {image!r}")
-    image_list = capture([*engine, "image", "list"])
+    image_list_command = [*engine, "image", "list"]
+    if runtime.name != "apple-containers":
+        image_list_command.extend(["--format", "table {{.Repository}}\t{{.Tag}}"])
+    image_list = capture(image_list_command)
     for line in image_list.splitlines()[1:]:
         fields = line.split()
         if len(fields) < 2:

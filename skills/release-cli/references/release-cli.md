@@ -67,6 +67,20 @@ file, validates that the checked-out tree equals the requested merge-commit
 tree, checks release metadata and notes with `tools/check_release.py`, verifies
 local/remote tag absence, and optionally creates the annotated tag.
 
+`tools/release_validation.py` routes local metadata and deterministic-tree
+checks through the existing platform validation runtime. It runs only the
+requested check, reuses an existing validation container when already inside
+one, and otherwise requires Apple Containers on macOS, Docker inside WSL2
+Debian/Ubuntu on Windows, or Docker on Linux. Git/GitHub gates and publication
+remain host operations; a failed or unavailable container never permits a host
+metadata check. Notes outside the repository are staged as one temporary file
+and removed after validation. Current deterministic images/caches are retained
+and stale validation generations are cleaned on success and failure.
+
+The same runner protects finalized mapping checks before commit and tree checks
+before promotion or `submit-pr`. Failed mapping validation restores the original
+`UPSTREAM.md` before any commit or submission.
+
 The tag message is the validated release notes verbatim. The tag target is the
 merged PR commit, even when local HEAD remains the PR head with an identical
 tree.

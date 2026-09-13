@@ -39,11 +39,19 @@ application matrix.
 
 ## Tag and Publication
 
+Local metadata and deterministic tree checks use `tools/release_validation.py`
+and the container environment defined in `CONTRIBUTING.md`: Apple Containers on
+macOS, Docker inside WSL2 Debian/Ubuntu on Windows, and Docker on Linux. The
+launcher handles Git/GitHub operations and container management. Missing runtime
+or failed checks stop the operation without a host-validation fallback.
+
 `validate` and `tag` require the merged PR number. They run only the focused
 release metadata/notes/tag-absence gate; the complete application matrix was
 already performed by `submit-pr` and GitHub Actions. The checked-out tree must
 match the merged commit tree. `tag` creates one verified annotated local tag at
-the PR's merge commit and never pushes it.
+the PR's merge commit and never pushes it. External notes are staged temporarily
+for container access and removed after the check. Container cleanup runs on
+success and failure and preserves only current validation generations.
 
 `publish` verifies that exact annotated tag is contained by the fetched default
 branch and absent remotely. Before transfer it requires an automatic `release`
