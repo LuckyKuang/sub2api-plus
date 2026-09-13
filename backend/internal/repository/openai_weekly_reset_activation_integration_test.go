@@ -253,7 +253,7 @@ func TestQuotaFollowReset_NewSourceRejectsPreActivationSample(t *testing.T) {
 	require.NoError(t, err)
 	require.Zero(t, created)
 	require.NoError(t, integrationDB.QueryRow(`SELECT quota_reset_source_reset_at IS NULL FROM groups WHERE id=$1`, f.groupID).Scan(&empty))
-	require.False(t, empty, "a real session sampled after activation establishes the baseline")
+	require.True(t, empty, "the first post-activation session starts confirmation without restoring the old baseline")
 	for i := 3; i <= 4; i++ {
 		created, err = f.repo.ObserveWeeklyReset(ctx, f.accountID, weeklyObservation(f.baseline, f.now.Add(time.Duration(i)*time.Minute), 7))
 		require.NoError(t, err)
