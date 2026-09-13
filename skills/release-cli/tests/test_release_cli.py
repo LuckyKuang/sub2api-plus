@@ -9,6 +9,7 @@ import json
 import re
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -146,6 +147,36 @@ def pull_request(
 
 
 class ValidationProofTest(unittest.TestCase):
+    def test_pull_request_details_uses_rest_base_and_head_shas(self) -> None:
+        payload = {
+            "number": 17,
+            "state": "closed",
+            "merged_at": "2026-09-13T10:00:00Z",
+            "draft": False,
+            "base": {"ref": "main", "sha": BASE},
+            "head": {
+                "ref": "release/candidate",
+                "sha": HEAD,
+                "repo": {"owner": {"login": "LuckyKuang"}},
+            },
+            "mergeable_state": "clean",
+            "merge_commit_sha": MERGE,
+            "auto_merge": {"merge_method": "merge"},
+            "body": marker(),
+            "html_url": "https://github.com/LuckyKuang/sub2api-plus/pull/17",
+        }
+        with mock.patch.object(release_cli, "json_capture", return_value=payload) as capture_json:
+            pr = release_cli.pull_request_details(REPOSITORY, 17)
+        capture_json.assert_called_once_with(
+            ["gh", "api", f"repos/{REPOSITORY}/pulls/17"],
+            description="GitHub pull-request API",
+        )
+        self.assertEqual("MERGED", pr.state)
+        self.assertEqual(BASE, pr.base_oid)
+        self.assertEqual(HEAD, pr.head_oid)
+        self.assertEqual(MERGE, pr.merge_commit)
+        self.assertTrue(pr.auto_merge_enabled)
+
     def test_marker_requires_exact_base_and_head(self) -> None:
         proof = release_cli.parse_validation_proof(marker())
         self.assertEqual(release_cli.ValidationProof(BASE, HEAD), proof)
@@ -404,6 +435,36 @@ class RemoteTagTest(unittest.TestCase):
 
 
 class PromotionTest(unittest.TestCase):
+    def test_finalization_check_failures_prevent_auto_merge(self) -> None:
+        branch = release_cli.finalization_branch(TAG)
+        candidate = release_cli.PullRequest(**{**pull_request().__dict__, "head_branch": branch})
+        proof = release_cli.ValidationProof(BASE, HEAD, release_cli.FINALIZATION_PROFILE, TAG)
+        for failure_at in (0, 1):
+            results = [subprocess.CompletedProcess([], 0, "passed")] * failure_at
+            results.append(subprocess.CompletedProcess([], 1, "container check failed"))
+            with (
+                self.subTest(failure_at=failure_at),
+                mock.patch.object(release_cli, "require_clean_worktree"),
+                mock.patch.object(release_cli, "repository_default_branch", return_value="main"),
+                mock.patch.object(release_cli, "require_protected_auto_merge"),
+                mock.patch.object(release_cli, "pull_request_details", return_value=candidate),
+                mock.patch.object(release_cli, "require_promotable_pr", return_value=proof),
+                mock.patch.object(release_cli, "current_head", return_value=HEAD),
+                mock.patch.object(release_cli, "fetch_default_branch", return_value=BASE),
+                mock.patch.object(release_cli, "setup_git_transport"),
+                mock.patch.object(release_cli, "require_published_remote_tag", return_value=mock.Mock(target=MERGE)),
+                mock.patch.object(release_cli, "require_release_workflow_success"),
+                mock.patch.object(release_cli, "verify_release"),
+                mock.patch.object(release_cli.release_validation, "run", side_effect=results) as checks,
+                mock.patch.object(release_cli, "run_step") as step,
+                mock.patch.object(release_cli, "require_required_pr_checks") as required,
+            ):
+                with self.assertRaisesRegex(release_cli.ReleaseCliError, "failed with exit code 1"):
+                    release_cli.promote_pull_request(REPOSITORY, 17, TAG, None, "origin")
+                self.assertEqual(checks.call_count, failure_at + 1)
+                required.assert_not_called()
+                step.assert_not_called()
+
     def test_promote_uses_native_auto_merge_and_waits_for_merge_sha(self) -> None:
         candidate = pull_request()
         merged = pull_request(state="MERGED", merge=MERGE, auto_merge=True)
@@ -686,6 +747,29 @@ class ReleaseMonitoringTest(unittest.TestCase):
 
 
 class FinalizationTest(unittest.TestCase):
+    def test_container_failure_restores_mapping_before_commit_or_submit(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            path = root / "UPSTREAM.md"
+            original = f"| `{TAG}` | `v1.2.3` | `{'a' * 40}` | planned |\n"
+            path.write_text(original, encoding="utf-8")
+            with (
+                mock.patch.object(release_cli, "ROOT", root),
+                mock.patch.object(release_cli, "require_published_remote_tag", return_value=mock.Mock(target=MERGE)),
+                mock.patch.object(release_cli, "require_release_workflow_success"),
+                mock.patch.object(release_cli, "verify_release"),
+                mock.patch.object(release_cli, "require_clean_worktree"),
+                mock.patch.object(release_cli, "repository_default_branch", return_value="main"),
+                mock.patch.object(release_cli, "fetch_default_branch", return_value=BASE),
+                mock.patch.object(release_cli, "run_command", return_value=subprocess.CompletedProcess([], 1, "")),
+                mock.patch.object(release_cli, "run_step") as step,
+                mock.patch.object(release_cli.release_validation, "run", return_value=subprocess.CompletedProcess([], 1, "Docker unavailable")),
+            ):
+                with self.assertRaisesRegex(release_cli.ReleaseCliError, "restored UPSTREAM.md"):
+                    release_cli.finalize(REPOSITORY, TAG, "origin")
+            self.assertEqual(path.read_text(encoding="utf-8"), original)
+            self.assertEqual([call.args[0] for call in step.call_args_list], ["Create release-finalization branch"])
+
     def test_branch_name_is_deterministic_and_oci_safe(self) -> None:
         self.assertEqual(
             "release/finalize-1.2.3-custom.009",

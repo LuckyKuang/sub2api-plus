@@ -7,6 +7,19 @@ Release-cli then relies on that exact commit proof plus protected GitHub Actions
 before merging and tagging; post-publication finalization uses a separate,
 strictly deterministic proof profile.
 
+Local release metadata and deterministic finalization checks run in the same
+platform validation container required by `CONTRIBUTING.md`: Apple Containers
+on macOS, Docker inside WSL2 Debian or Ubuntu on Windows, and Docker on Linux.
+These are focused checks and do not repeat the application matrix. The host
+launcher performs Git/GitHub operations and runtime management. A missing
+container runtime is a blocking error, never a host-validation fallback.
+
+Release consistency applies to each release artifact and its own version
+mapping. Historical finalization does not reset the current embedded version.
+Release tags, Releases, and publication images require explicit publication
+authorization; local validation image builds and scoped cleanup follow the
+validation rules and require no publication request.
+
 ## Version Format
 
 | Surface | Format |
@@ -165,6 +178,12 @@ matrices. Those ran in `submit-pr`, PR Actions, and merged-main Actions. It
 validates release metadata, notes, synchronized examples, exact tree identity,
 and local/remote tag absence. `tag` targets the PR's actual merge commit and
 preserves the notes verbatim. It never pushes.
+
+The metadata check uses `tools/release_validation.py`. If the notes file is
+outside the checkout, the launcher stages only that file for container access
+and removes it afterwards. Each container attempt removes its temporary
+resources and writable snapshot, retaining only current validation images and
+dependency caches. Failed checks stop before tag creation.
 
 Review the local tag, then explicitly publish only that tag:
 

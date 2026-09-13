@@ -16,6 +16,7 @@ import (
 // newAliyunCaptchaTestTarget 起一个假的阿里云端点，让真实 SDK 走完整的签名/序列化链路。
 func newAliyunCaptchaTestTarget(t *testing.T, handler http.HandlerFunc) (*aliyunCaptchaVerifier, service.AliyunCaptchaCredentials) {
 	t.Helper()
+	disableProxyForLocalAliyunTest(t)
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
 
@@ -27,6 +28,13 @@ func newAliyunCaptchaTestTarget(t *testing.T, handler http.HandlerFunc) (*aliyun
 		Endpoint:        strings.TrimPrefix(server.URL, "http://"),
 	}
 	return verifier, cred
+}
+
+func disableProxyForLocalAliyunTest(t *testing.T) {
+	t.Helper()
+	for _, name := range []string{"HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy"} {
+		t.Setenv(name, "")
+	}
 }
 
 func TestAliyunCaptchaVerifier_VerifySuccess(t *testing.T) {
@@ -74,6 +82,7 @@ func TestAliyunCaptchaVerifier_APIErrorNormalized(t *testing.T) {
 }
 
 func TestAliyunCaptchaVerifier_TransportError(t *testing.T) {
+	disableProxyForLocalAliyunTest(t)
 	server := httptest.NewServer(http.NotFoundHandler())
 	endpoint := strings.TrimPrefix(server.URL, "http://")
 	server.Close() // 立即关闭，制造连接失败

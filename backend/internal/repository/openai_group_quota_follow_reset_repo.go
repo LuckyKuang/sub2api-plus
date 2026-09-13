@@ -23,6 +23,9 @@ func (r *openAIGroupQuotaFollowResetRepository) ObserveWeeklyReset(ctx context.C
 	if r == nil || r.db == nil {
 		return 0, errors.New("openai group quota follow reset repository db is nil")
 	}
+	if !observation.FromSession {
+		return 0, nil
+	}
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
@@ -142,9 +145,9 @@ func (r *openAIGroupQuotaFollowResetRepository) ObserveWeeklyReset(ctx context.C
 			continue
 		}
 		if !target.baseline.Valid {
-			if !observation.QuotaQuery || !observedAt.After(target.updatedAt) {
-				// Traffic headers do not carry their request start time. Only a
-				// quota query started after activation can establish its baseline.
+			if !observedAt.After(target.updatedAt) {
+				// Only a real session sampled after activation can establish the
+				// baseline for a newly bound source.
 				continue
 			}
 			if _, err := tx.ExecContext(ctx, `UPDATE groups SET quota_reset_source_reset_at = $2, updated_at = NOW() WHERE id = $1`, target.id, resetAt); err != nil {
@@ -197,6 +200,7 @@ type openAIWeeklyObservationState struct {
 
 func advanceOpenAIWeeklyObservation(previous openAIWeeklyObservationState, observation service.OpenAIWeeklyQuotaObservation) (openAIWeeklyObservationState, bool, bool) {
 	next := previous
+	fromSession := observation.FromSession
 	resetAt, observedAt := observation.ResetAt.UTC(), observation.ObservedAt.UTC()
 	if resetAt.IsZero() || observedAt.IsZero() || !resetAt.After(observedAt) || resetAt.Sub(observedAt) > 7*24*time.Hour+openAIWeeklyResetClockTolerance {
 		return previous, false, false
@@ -218,10 +222,10 @@ func advanceOpenAIWeeklyObservation(previous openAIWeeklyObservationState, obser
 	droppedUsage := used.Valid && previous.usedPercent.Valid && previous.usedPercent.Float64-used.Float64 >= 1
 	reset := openAIWeeklyResetAdvanced(previous.resetAt.Time, resetAt, observedAt)
 	if !reset && (changedDeadline || droppedUsage) {
-		// A separate, later GET /wham/usage must corroborate off-schedule
-		// evidence. A repeated cached snapshot cannot confirm itself.
+		// A separate, later real session must corroborate off-schedule evidence.
+		// A repeated cached snapshot cannot confirm itself.
 		pendingDelta := resetAt.Sub(previous.pendingResetAt.Time)
-		reset = observation.QuotaQuery && previous.pendingResetAt.Valid && previous.pendingObservedAt.Valid &&
+		reset = fromSession && previous.pendingResetAt.Valid && previous.pendingObservedAt.Valid &&
 			observedAt.Sub(previous.pendingObservedAt.Time) >= time.Second &&
 			observedAt.Sub(previous.pendingObservedAt.Time) <= 10*time.Minute &&
 			pendingDelta <= openAIWeeklyResetClockTolerance && pendingDelta >= -openAIWeeklyResetClockTolerance
@@ -237,8 +241,8 @@ func advanceOpenAIWeeklyObservation(previous openAIWeeklyObservationState, obser
 			return next, true, false
 		}
 	}
-	if !reset && !observation.QuotaQuery && previous.pendingResetAt.Valid {
-		return previous, true, false // Only a fresh query can dismiss pending evidence.
+	if !reset && !fromSession && previous.pendingResetAt.Valid {
+		return previous, true, false // Non-session samples cannot confirm pending evidence.
 	}
 	if reset {
 		if changedDeadline {
@@ -246,53 +250,17 @@ func advanceOpenAIWeeklyObservation(previous openAIWeeklyObservationState, obser
 		}
 		next.sequence++
 		next.usedPercent = used
-	} else if observation.QuotaQuery || !previous.usedPercent.Valid {
-		// Late traffic responses must not restore a pre-reset high watermark.
+	} else if fromSession || !previous.usedPercent.Valid {
+		// Late non-session samples must not restore a pre-reset high watermark.
 		if used.Valid {
 			next.usedPercent = used
 		}
 	}
-	if reset || observation.QuotaQuery {
+	if reset || fromSession {
 		next.observedAt = observedAt
 	}
 	next.pendingResetAt, next.pendingObservedAt = sql.NullTime{}, sql.NullTime{}
 	return next, true, reset
-}
-
-// ClaimWeeklyResetSources uses a database lease so replicas do not all poll the
-// same source. It never selects unbound, API-key, shadow or deleted accounts.
-func (r *openAIGroupQuotaFollowResetRepository) ClaimWeeklyResetSources(ctx context.Context, limit int) ([]int64, error) {
-	rows, err := r.db.QueryContext(ctx, `
-		INSERT INTO openai_oauth_weekly_reset_observations (account_id, observed_at, next_poll_at)
-		SELECT a.id, NOW(), NOW() + INTERVAL '2 minutes'
-		FROM accounts a
-		LEFT JOIN openai_oauth_weekly_reset_observations o ON o.account_id = a.id
-		WHERE a.platform = 'openai' AND a.type = 'oauth' AND a.parent_account_id IS NULL AND a.deleted_at IS NULL
-		  AND (o.next_poll_at IS NULL OR o.next_poll_at <= NOW())
-		  AND EXISTS (
-		      SELECT 1 FROM groups g JOIN account_groups ag ON ag.group_id = g.id AND ag.account_id = a.id
-		      WHERE g.quota_reset_source_account_id = a.id AND g.platform = 'openai'
-		        AND g.subscription_type = 'subscription' AND g.deleted_at IS NULL
-		  )
-		ORDER BY COALESCE(o.next_poll_at, '-infinity'::timestamptz), a.id
-		LIMIT $1
-		ON CONFLICT (account_id) DO UPDATE SET next_poll_at = EXCLUDED.next_poll_at
-		WHERE openai_oauth_weekly_reset_observations.next_poll_at <= NOW()
-		RETURNING account_id
-	`, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-	var ids []int64
-	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		ids = append(ids, id)
-	}
-	return ids, rows.Err()
 }
 
 func (r *openAIGroupQuotaFollowResetRepository) ProcessNextPending(ctx context.Context) (_ *service.GroupQuotaFollowResetResult, err error) {

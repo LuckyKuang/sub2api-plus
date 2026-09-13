@@ -20,6 +20,14 @@ from typing import Callable, Sequence
 
 
 IN_VALIDATION_ENV = "SUB2API_IN_VALIDATION"
+PROXY_ENV_NAMES = (
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "NO_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "no_proxy",
+)
 HOST_CHECKED_REMOTE_TAG_ENV = "SUB2API_HOST_CHECKED_REMOTE_TAG"
 VALIDATION_MARKER = Path("/etc/sub2api-validation")
 IMAGE_NAME = "sub2api-validation"
@@ -454,6 +462,8 @@ def validation_run_command(
         "--env",
         f"{IN_VALIDATION_ENV}=1",
         "--env",
+        "PYTHONDONTWRITEBYTECODE=1",
+        "--env",
         f"HOME={CONTAINER_HOME}",
         "--env",
         f"GOPATH={CONTAINER_HOME}/go",
@@ -500,6 +510,11 @@ def validation_run_command(
     ]
     if user:
         command.extend(["--user", user])
+    for name in PROXY_ENV_NAMES:
+        if os.environ.get(name):
+            # The engine inherits the value without placing it in the command
+            # line, process list, or validation logs.
+            command.extend(["--env", name])
     for source, destination in caches:
         command.extend(bind_mount_args(runtime, source, destination))
     command.append(image)
@@ -618,7 +633,10 @@ def cleanup_validation_runtime(
     current_tag = image.rsplit(":", 1)[-1]
     if not VALIDATION_GENERATION_RE.fullmatch(current_tag):
         raise ValidationRuntimeError(f"invalid validation image reference: {image!r}")
-    image_list = capture([*engine, "image", "list"])
+    image_list_command = [*engine, "image", "list"]
+    if runtime.name != "apple-containers":
+        image_list_command.extend(["--format", "table {{.Repository}}\t{{.Tag}}"])
+    image_list = capture(image_list_command)
     for line in image_list.splitlines()[1:]:
         fields = line.split()
         if len(fields) < 2:

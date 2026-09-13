@@ -1,25 +1,28 @@
-Sub2API Plus v0.2.4+custom.003
+Sub2API Plus v0.2.4+custom.004
 
 ## Highlights
 
-- Enforces trusted, credential-owner outbound identity consistently across provider, OAuth, probe, audit, monitoring, and auxiliary request paths.
-- Follows confirmed OpenAI weekly quota resets safely with consistent lock ordering and repeated-reset evidence.
-- Audits only current user prompt content while preserving the documented pass-through extraction contract, and reports TPS from the decode window.
+- Restricts OpenAI group quota follow-reset evidence to fresh weekly-window observations from real inference sessions.
+- Prevents WebSocket handshake headers and standalone quota refreshes from establishing or confirming group reset events.
+- Runs release metadata and finalization-tree validation only in the repository's supported platform containers.
 
 ## Changed
 
-- Upgrades Vitest to 4.1.11, gRPC to 1.83.2, and pnpm/action-setup to 6.1.0.
-- Adds provider-specific outbound identity configuration and synchronized English/Chinese administration controls.
+- Updates the English and Chinese administration guidance to describe the inference-session baseline requirement.
+- Clarifies repository-wide agent rules, Windows WSL2 Docker validation, and the deployed-instance scope of the Sub2API admin skill.
+- Makes stale validation image cleanup deterministic without pruning unrelated runtime resources.
+- Forwards configured standard proxy variables into validation containers without exposing their values in commands or logs.
+- Reads exact pull-request base and head SHAs from the GitHub API so release promotion does not depend on unsupported `gh pr view` fields.
 
 ## Fixed
 
-- Applies Bedrock identity before IAM signing and preserves Antigravity companion headers.
-- Prevents account/group lock-order inversion during weekly reset observation.
-- Uses isolated trusted identity snapshots for monitoring, Prompt Audit, Content Moderation, Google Drive discovery, OAuth, probes, and related auxiliary traffic.
+- Removes the background quota polling path that could drive group reset state without user inference traffic.
+- Keeps WebSocket connection-time usage headers available for account cache refresh while excluding them from later turn reset evidence.
+- Preserves fresh HTTP and in-band WebSocket rate-limit observations across retries and pass-through adapters.
 
 ## Compatibility and migration
 
-Database migration 265 is applied through the normal forward-only migration flow. It extends OpenAI weekly reset observations with pending confirmation, reset sequence, usage evidence, and poll scheduling fields; no manual data migration is required.
+No new database migration is required. Existing group follow-reset bindings wait for a real inference session on their configured OpenAI OAuth source before establishing a missing baseline or confirming off-schedule evidence. Standalone quota refreshes no longer advance that state.
 
 ## Known issues
 

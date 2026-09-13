@@ -16,7 +16,7 @@ import (
 )
 
 func observeWeeklyResetAt(repo service.OpenAIGroupQuotaFollowResetRepository, ctx context.Context, accountID int64, resetAt, observedAt time.Time) (int, error) {
-	return repo.ObserveWeeklyReset(ctx, accountID, service.OpenAIWeeklyQuotaObservation{ResetAt: resetAt, ObservedAt: observedAt, QuotaQuery: true})
+	return repo.ObserveWeeklyReset(ctx, accountID, service.OpenAIWeeklyQuotaObservation{ResetAt: resetAt, ObservedAt: observedAt, FromSession: true})
 }
 
 func TestOpenAIGroupQuotaFollowResetRepository_EndToEnd(t *testing.T) {
@@ -217,7 +217,7 @@ func newQuotaFollowFixture(t *testing.T) quotaFollowFixture {
 	})
 	// Use the database clock that owns groups.updated_at. Separate validation
 	// VMs can have small clock offsets; the baseline must be strictly newer
-	// than activation even then, just like a fresh post-activation quota query.
+	// than activation even then, just like a fresh post-activation session.
 	require.NoError(t, integrationDB.QueryRowContext(ctx, `SELECT clock_timestamp()`).Scan(&f.now))
 	f.now = f.now.UTC()
 	f.baseline = f.now.Add(7 * 24 * time.Hour)

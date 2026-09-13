@@ -17,6 +17,11 @@ from typing import Sequence
 
 
 ROOT = Path(__file__).resolve().parents[3]
+TOOLS = ROOT / "tools"
+if str(TOOLS) not in sys.path:
+    sys.path.insert(0, str(TOOLS))
+import release_validation
+
 DEFAULT_REMOTE = "origin"
 EXPECTED_REPOSITORY = "LuckyKuang/sub2api-plus"
 LOCAL_VALIDATION_CONTEXT = "sub2api/local-validation"
@@ -171,6 +176,15 @@ def run_step(
 def require_command(command: str) -> None:
     if shutil.which(command) is None:
         raise ReleaseCliError(f"required command is unavailable: {command}")
+
+
+def run_release_check(name: str, command: Sequence[str]) -> None:
+    print(f"\n[{name}]")
+    result = release_validation.run(command, root=ROOT)
+    if result.stdout:
+        print(result.stdout)
+    if result.returncode:
+        raise ReleaseCliError(f"{name} failed with exit code {result.returncode}")
 
 
 def repo_from_remote(url: str) -> str:
@@ -714,42 +728,37 @@ def parse_validation_proof(body: str) -> ValidationProof:
 
 def pull_request_details(repository: str, number: int) -> PullRequest:
     data = json_capture(
-        [
-            "gh",
-            "pr",
-            "view",
-            str(number),
-            "--repo",
-            repository,
-            "--json",
-            "number,state,isDraft,baseRefName,baseRefOid,headRefName,headRefOid,headRepositoryOwner,mergeStateStatus,mergeCommit,autoMergeRequest,body,url",
-        ],
-        description="gh pr view",
+        ["gh", "api", f"repos/{repository}/pulls/{number}"],
+        description="GitHub pull-request API",
     )
     if not isinstance(data, dict):
-        raise ReleaseCliError("gh pr view returned an unexpected value")
-    owner = data.get("headRepositoryOwner")
-    head_owner = str(owner.get("login", "")) if isinstance(owner, dict) else ""
-    merge = data.get("mergeCommit")
-    merge_commit = str(merge.get("oid")) if isinstance(merge, dict) and merge.get("oid") else None
+        raise ReleaseCliError("GitHub pull-request API returned an unexpected value")
     try:
+        base = data["base"]
+        head = data["head"]
+        if not isinstance(base, dict) or not isinstance(head, dict):
+            raise TypeError("base/head metadata is not an object")
+        head_repo = head.get("repo")
+        head_repo_owner = head_repo.get("owner") if isinstance(head_repo, dict) else None
+        head_owner = str(head_repo_owner.get("login", "")) if isinstance(head_repo_owner, dict) else ""
+        state = "MERGED" if data.get("merged_at") else str(data["state"]).upper()
         return PullRequest(
             number=int(data["number"]),
-            state=str(data["state"]),
-            is_draft=bool(data["isDraft"]),
-            base_branch=str(data["baseRefName"]),
-            base_oid=str(data["baseRefOid"]),
-            head_branch=str(data["headRefName"]),
-            head_oid=str(data["headRefOid"]),
+            state=state,
+            is_draft=bool(data["draft"]),
+            base_branch=str(base["ref"]),
+            base_oid=str(base["sha"]),
+            head_branch=str(head["ref"]),
+            head_oid=str(head["sha"]),
             head_owner=head_owner,
-            merge_state=str(data.get("mergeStateStatus") or "UNKNOWN"),
-            merge_commit=merge_commit,
-            auto_merge_enabled=data.get("autoMergeRequest") is not None,
+            merge_state=str(data.get("mergeable_state") or "unknown").upper(),
+            merge_commit=str(data["merge_commit_sha"]) if data.get("merge_commit_sha") else None,
+            auto_merge_enabled=data.get("auto_merge") is not None,
             body=str(data.get("body") or ""),
-            url=str(data.get("url") or number),
+            url=str(data.get("html_url") or number),
         )
     except (KeyError, TypeError, ValueError) as error:
-        raise ReleaseCliError("gh pr view returned incomplete metadata") from error
+        raise ReleaseCliError("GitHub pull-request API returned incomplete metadata") from error
 
 
 def require_local_validation_status(
@@ -983,11 +992,11 @@ def promote_pull_request(
         published_tag = require_published_remote_tag(repository, tag)
         require_release_workflow_success(repository, tag, published_tag.target)
         verify_release(repository, tag)
-        run_step(
+        run_release_check(
             "Validate finalized release metadata",
             finalization_metadata_command(tag),
         )
-        run_step(
+        run_release_check(
             "Validate deterministic finalization tree",
             finalization_tree_command(proof, pr.head_branch),
         )
@@ -1332,9 +1341,9 @@ def finalize(repository: str, tag: str, remote: str) -> None:
             f"UPSTREAM.md has {replacements} planned mapping rows for {tag}; expected one"
         )
     path.write_text(updated, encoding="utf-8")
-    validation = run_command(
+    validation = release_validation.run(
         finalization_metadata_command(tag),
-        capture=True,
+        root=ROOT,
     )
     if validation.returncode != 0:
         path.write_text(content, encoding="utf-8")

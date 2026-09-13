@@ -230,7 +230,7 @@ func observeOpenAIWeeklyResetEvent(ctx context.Context, account *Account, payloa
 		}
 		resetAt := window.Get("reset_at")
 		if resetAt.Type == gjson.Number && resetAt.Float() == float64(resetAt.Int()) && validOpenAIQuotaResetUnix(resetAt.Int()) {
-			observation := OpenAIWeeklyQuotaObservation{ResetAt: time.Unix(resetAt.Int(), 0).UTC(), ObservedAt: time.Now().UTC()}
+			observation := OpenAIWeeklyQuotaObservation{ResetAt: time.Unix(resetAt.Int(), 0).UTC(), ObservedAt: time.Now().UTC(), FromSession: true}
 			if used := window.Get("used_percent"); used.Type == gjson.Number {
 				value := used.Float()
 				if validOpenAIWeeklyUsedPercent(&value) {

@@ -1,9 +1,16 @@
 ---
 name: sub2api-admin
-description: Manage Sub2API admin APIs for accounts, redeem codes, groups, proxies, error passthrough rules, TLS fingerprint profiles, imports, exports, batch updates, and raw administrator API calls. Use when the user mentions Sub2API, admin API keys, account management, redeem code management, recharge codes, invitation codes, bulk account import/export, keeping or deleting accounts, refreshing accounts, clearing errors, CRS sync, or managing Sub2API backend settings through the admin API.
+description: >-
+  Query and manage a specified Sub2API instance through its admin API. Use for
+  requested instance operations such as account maintenance or redeem-code
+  management, not ordinary repository development or documentation review.
 ---
 
 # Sub2API Admin
+
+Use this skill when the task calls for operating a deployed instance. Mentioning
+Sub2API, editing account-management code, or reviewing API documentation does
+not authorize an instance request.
 
 Use the bundled CLI instead of ad hoc `curl`. Run examples from this skill directory.
 
@@ -15,14 +22,15 @@ export SUB2API_ADMIN_API_KEY='<admin api key>'
 node scripts/sub2api-admin.js accounts list
 ```
 
-For all commands and payload examples, read [references/admin-cli.md](references/admin-cli.md).
+Read the relevant section of [references/admin-cli.md](references/admin-cli.md)
+for the requested command and payload examples.
 
 ## Workflow
 
-1. Reuse `SUB2API_BASE_URL` and either `SUB2API_ADMIN_API_KEY` or `SUB2API_JWT` from the environment.
+1. Resolve the intended instance from the task and `SUB2API_BASE_URL`; reuse either `SUB2API_ADMIN_API_KEY` or `SUB2API_JWT` from the environment. Ask only when the instance is missing or ambiguous.
 2. Run read-only commands first: `accounts list`, `accounts get <id>`, `groups all`, or `proxies all`.
 3. Before destructive or bulk writes, print the target account names and IDs.
-4. Execute the write command only after the target set is clear.
+4. Execute a write only when the user has authorized that operation on the identified targets. Reuse authorization already given in the conversation; otherwise present the concrete operation and targets for approval before writing. Clear targets or available credentials alone do not authorize a write.
 5. Run a follow-up read command to verify the result.
 
 ## Common Commands

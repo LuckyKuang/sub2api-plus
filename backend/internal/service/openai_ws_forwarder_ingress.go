@@ -1324,6 +1324,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 					OpenAIWSMode:                  true,
 					UpstreamTerminalEvent:         terminalEvent,
 					ResponseHeaders:               lease.HandshakeHeaders(),
+					ResponseHeadersFromHandshake:  true,
 					Duration:                      time.Since(turnStart),
 				}
 				timing.ApplyOpenAIResult(result)

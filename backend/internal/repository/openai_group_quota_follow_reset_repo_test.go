@@ -12,8 +12,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func weeklyObservation(resetAt, observedAt time.Time, used float64, query bool) service.OpenAIWeeklyQuotaObservation {
-	return service.OpenAIWeeklyQuotaObservation{ResetAt: resetAt, ObservedAt: observedAt, UsedPercent: &used, QuotaQuery: query}
+func weeklyObservation(resetAt, observedAt time.Time, used float64) service.OpenAIWeeklyQuotaObservation {
+	return service.OpenAIWeeklyQuotaObservation{ResetAt: resetAt, ObservedAt: observedAt, UsedPercent: &used, FromSession: true}
+}
+
+func standaloneWeeklyObservation(resetAt, observedAt time.Time, used float64) service.OpenAIWeeklyQuotaObservation {
+	return service.OpenAIWeeklyQuotaObservation{ResetAt: resetAt, ObservedAt: observedAt, UsedPercent: &used}
 }
 
 func TestQuotaFollowResetConfirmsEarlyAndSameDeadlineResets(t *testing.T) {
@@ -29,61 +33,91 @@ func TestQuotaFollowResetConfirmsEarlyAndSameDeadlineResets(t *testing.T) {
 		{"same deadline already used", now.Add(6 * 24 * time.Hour), now.Add(6 * 24 * time.Hour), 7},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			state, accepted, reset := advanceOpenAIWeeklyObservation(openAIWeeklyObservationState{}, weeklyObservation(tc.previous, now.Add(-time.Minute), 80, true))
+			state, accepted, reset := advanceOpenAIWeeklyObservation(openAIWeeklyObservationState{}, weeklyObservation(tc.previous, now.Add(-time.Minute), 80))
 			require.True(t, accepted)
 			require.False(t, reset)
-			state, accepted, reset = advanceOpenAIWeeklyObservation(state, weeklyObservation(tc.next, now, tc.used, false))
+			state, accepted, reset = advanceOpenAIWeeklyObservation(state, weeklyObservation(tc.next, now, tc.used))
 			require.True(t, accepted)
-			require.False(t, reset, "one traffic response cannot confirm an early reset")
-			for i := 1; i < 5; i++ {
-				state, _, reset = advanceOpenAIWeeklyObservation(state, weeklyObservation(tc.next, now.Add(time.Duration(i)*time.Second), tc.used, false))
-				require.False(t, reset)
-			}
-			state, accepted, reset = advanceOpenAIWeeklyObservation(state, weeklyObservation(tc.next, now.Add(time.Minute), tc.used+1, true))
+			require.False(t, reset, "the first session cannot confirm an early reset")
+			state, _, reset = advanceOpenAIWeeklyObservation(state, weeklyObservation(tc.next, now.Add(500*time.Millisecond), tc.used))
+			require.False(t, reset, "a sample under one second later cannot confirm pending evidence")
+			state, _, reset = advanceOpenAIWeeklyObservation(state, standaloneWeeklyObservation(tc.next, now.Add(2*time.Second), tc.used))
+			require.False(t, reset, "a standalone quota query cannot confirm pending evidence")
+			state, accepted, reset = advanceOpenAIWeeklyObservation(state, weeklyObservation(tc.next, now.Add(time.Minute), tc.used+1))
 			require.True(t, accepted)
-			require.True(t, reset, "a later query confirms the new window without observing zero")
+			require.True(t, reset, "a later real session confirms the new window without observing zero")
 			require.Equal(t, int64(1), state.sequence)
 			require.Equal(t, tc.next, state.resetAt.Time)
-			state, _, reset = advanceOpenAIWeeklyObservation(state, weeklyObservation(tc.next, now.Add(2*time.Minute), tc.used+2, true))
+			state, _, reset = advanceOpenAIWeeklyObservation(state, weeklyObservation(tc.next, now.Add(2*time.Minute), tc.used+2))
 			require.False(t, reset)
 			require.Equal(t, int64(1), state.sequence)
-			_, accepted, reset = advanceOpenAIWeeklyObservation(state, weeklyObservation(tc.previous, now.Add(-time.Minute), 80, true))
-			require.False(t, accepted, "a delayed older query must be ignored")
+			_, accepted, reset = advanceOpenAIWeeklyObservation(state, weeklyObservation(tc.previous, now.Add(-time.Minute), 80))
+			require.False(t, accepted, "a delayed older sample must be ignored")
 			require.False(t, reset)
 		})
 	}
 }
 
-func TestQuotaFollowResetRejectsClockDriftAndUnconfirmedDrops(t *testing.T) {
+func TestQuotaFollowResetRejectsClockDriftAndRequiresConfirmedDrops(t *testing.T) {
 	now := time.Now().UTC()
 	deadline := now.Add(6 * 24 * time.Hour)
-	state, _, _ := advanceOpenAIWeeklyObservation(openAIWeeklyObservationState{}, weeklyObservation(deadline, now, 80, true))
-	state, _, reset := advanceOpenAIWeeklyObservation(state, weeklyObservation(deadline.Add(time.Minute), now.Add(time.Minute), 80, true))
+	state, _, _ := advanceOpenAIWeeklyObservation(openAIWeeklyObservationState{}, weeklyObservation(deadline, now, 80))
+	state, _, reset := advanceOpenAIWeeklyObservation(state, weeklyObservation(deadline.Add(time.Minute), now.Add(time.Minute), 80))
 	require.False(t, reset)
 	require.Equal(t, deadline, state.resetAt.Time, "clock corrections do not move the canonical deadline")
-	state, _, reset = advanceOpenAIWeeklyObservation(state, weeklyObservation(deadline, now.Add(2*time.Minute), 0, false))
+	state, _, reset = advanceOpenAIWeeklyObservation(state, weeklyObservation(deadline, now.Add(2*time.Minute), 0))
 	require.False(t, reset)
-	state, _, reset = advanceOpenAIWeeklyObservation(state, weeklyObservation(deadline, now.Add(3*time.Minute), 81, true))
-	require.False(t, reset, "the fresh query disproves a stale zero response")
+	state, _, reset = advanceOpenAIWeeklyObservation(state, weeklyObservation(deadline, now.Add(3*time.Minute), 81))
+	require.False(t, reset, "a later session with high usage disproves a stale zero response")
 	require.False(t, state.pendingResetAt.Valid)
-	state, _, _ = advanceOpenAIWeeklyObservation(state, weeklyObservation(deadline, now.Add(4*time.Minute), 0, true))
-	state, _, reset = advanceOpenAIWeeklyObservation(state, weeklyObservation(deadline, now.Add(5*time.Minute), 0, true))
+	state, _, _ = advanceOpenAIWeeklyObservation(state, weeklyObservation(deadline, now.Add(4*time.Minute), 0))
+	state, _, reset = advanceOpenAIWeeklyObservation(state, weeklyObservation(deadline, now.Add(5*time.Minute), 0))
 	require.True(t, reset)
-	state, _, _ = advanceOpenAIWeeklyObservation(state, weeklyObservation(deadline, now.Add(6*time.Minute), 81, false))
-	state, _, reset = advanceOpenAIWeeklyObservation(state, weeklyObservation(deadline, now.Add(7*time.Minute), 1, true))
-	require.False(t, reset, "late high traffic usage cannot restore a pre-reset watermark")
-	require.False(t, state.pendingResetAt.Valid)
+	state, _, _ = advanceOpenAIWeeklyObservation(state, weeklyObservation(deadline, now.Add(6*time.Minute), 81))
+	state, _, reset = advanceOpenAIWeeklyObservation(state, weeklyObservation(deadline, now.Add(7*time.Minute), 1))
+	require.False(t, reset, "the first session cannot confirm another same-deadline reset")
+	require.True(t, state.pendingResetAt.Valid)
+	state, _, reset = advanceOpenAIWeeklyObservation(state, weeklyObservation(deadline, now.Add(8*time.Minute), 2))
+	require.True(t, reset, "a later session confirms another real same-deadline reset")
+	require.Equal(t, int64(2), state.sequence)
+}
+
+func TestQuotaFollowResetHandshakeHeadersDoNotConfirmPending(t *testing.T) {
+	now := time.Date(2026, 9, 12, 12, 0, 0, 0, time.UTC)
+	previous := now.Add(7 * 24 * time.Hour)
+	next := now.Add(6*24*time.Hour + 22*time.Hour)
+	state, accepted, reset := advanceOpenAIWeeklyObservation(openAIWeeklyObservationState{}, weeklyObservation(previous, now.Add(-time.Minute), 80))
+	require.True(t, accepted)
+	require.False(t, reset)
+	state, accepted, reset = advanceOpenAIWeeklyObservation(state, weeklyObservation(next, now, 7))
+	require.True(t, accepted)
+	require.False(t, reset)
+	require.True(t, state.pendingResetAt.Valid)
+
+	state, accepted, reset = advanceOpenAIWeeklyObservation(state, standaloneWeeklyObservation(next, now.Add(2*time.Second), 7))
+	require.True(t, accepted)
+	require.False(t, reset, "handshake leftovers with the new window must not confirm pending evidence")
+	require.True(t, state.pendingResetAt.Valid)
+
+	state, accepted, reset = advanceOpenAIWeeklyObservation(state, standaloneWeeklyObservation(previous, now.Add(3*time.Second), 80))
+	require.True(t, accepted)
+	require.False(t, reset, "handshake leftovers with the pre-drop watermark must not dismiss pending evidence")
+	require.True(t, state.pendingResetAt.Valid)
+
+	state, accepted, reset = advanceOpenAIWeeklyObservation(state, weeklyObservation(next, now.Add(time.Minute), 8))
+	require.True(t, accepted)
+	require.True(t, reset)
 }
 
 func TestQuotaFollowResetNaturalWindowAndInvalidObservations(t *testing.T) {
 	now := time.Now().UTC()
 	state := openAIWeeklyObservationState{resetAt: sql.NullTime{Time: now, Valid: true}, observedAt: now.Add(-time.Hour)}
-	next, accepted, reset := advanceOpenAIWeeklyObservation(state, weeklyObservation(now.Add(7*24*time.Hour), now, 7, false))
+	next, accepted, reset := advanceOpenAIWeeklyObservation(state, weeklyObservation(now.Add(7*24*time.Hour), now, 7))
 	require.True(t, accepted)
 	require.True(t, reset)
 	require.Equal(t, int64(1), next.sequence)
 	for _, deadline := range []time.Time{time.Time{}, now.Add(-time.Second), now.Add(8 * 24 * time.Hour)} {
-		_, accepted, reset := advanceOpenAIWeeklyObservation(state, weeklyObservation(deadline, now, 0, true))
+		_, accepted, reset := advanceOpenAIWeeklyObservation(state, weeklyObservation(deadline, now, 0))
 		require.False(t, accepted)
 		require.False(t, reset)
 	}
@@ -108,8 +142,22 @@ func TestQuotaFollowResetObservationPropagatesDatabaseErrors(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT platform").WillReturnError(failure)
 	mock.ExpectRollback()
-	_, err = (&openAIGroupQuotaFollowResetRepository{db: db}).ObserveWeeklyReset(context.Background(), 42, service.OpenAIWeeklyQuotaObservation{ResetAt: time.Now(), ObservedAt: time.Now()})
+	_, err = (&openAIGroupQuotaFollowResetRepository{db: db}).ObserveWeeklyReset(context.Background(), 42, service.OpenAIWeeklyQuotaObservation{ResetAt: time.Now(), ObservedAt: time.Now(), FromSession: true})
 	require.ErrorIs(t, err, failure)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestQuotaFollowResetIgnoresStandaloneRepositoryObservations(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	created, err := (&openAIGroupQuotaFollowResetRepository{db: db}).ObserveWeeklyReset(
+		context.Background(),
+		42,
+		standaloneWeeklyObservation(time.Now().Add(7*24*time.Hour), time.Now(), 7),
+	)
+	require.NoError(t, err)
+	require.Zero(t, created)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 

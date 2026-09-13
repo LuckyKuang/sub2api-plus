@@ -219,15 +219,12 @@ func ProvideOpenAIQuotaAutoResetService(
 	return service
 }
 
-// ProvideOpenAIGroupQuotaFollowResetService starts event application and bounded
-// refreshes of configured sources through the existing trusted quota client.
+// ProvideOpenAIGroupQuotaFollowResetService starts local event application.
 func ProvideOpenAIGroupQuotaFollowResetService(
 	repo OpenAIGroupQuotaFollowResetRepository,
 	billingCache *BillingCacheService,
-	quota *OpenAIQuotaService,
 ) *OpenAIGroupQuotaFollowResetService {
 	service := NewOpenAIGroupQuotaFollowResetService(repo, billingCache)
-	service.quota = quota
 	service.Start()
 	return service
 }

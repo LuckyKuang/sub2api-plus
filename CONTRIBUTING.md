@@ -13,7 +13,11 @@ Use the versions declared by the repository:
 - Application release: `backend/cmd/server/VERSION`
 - Release and lint tools: `.tool-versions`
 
-Install frontend dependencies with pnpm only:
+Install frontend dependencies with pnpm only and synchronize
+`frontend/pnpm-lock.yaml` when they change. Go dependency changes synchronize
+`backend/go.mod` and `backend/go.sum`.
+
+Inside the validation container:
 
 ```bash
 pnpm --dir frontend install --frozen-lockfile
@@ -41,7 +45,9 @@ the root:
 make test
 ```
 
-The equivalent focused commands are:
+The available check commands are listed below. The `./...` Go commands and
+frontend `test:run` cover their full suites; select the affected packages or
+components while iterating, and use `submit-pr` for the complete final matrix.
 
 ```bash
 # Backend
@@ -97,6 +103,10 @@ The `release-finalization` profile is not a general fast option. Only
 that can be regenerated exactly from its recorded base. Both profiles bind the
 exact base/head SHAs, and finalization also binds the tag. Release PR merging
 and publication use `skills/release-cli` after GitHub required checks pass.
+Focused release metadata and deterministic finalization checks use the same
+platform validation container; they never fall back to the host or repeat the
+application matrix. Git/GitHub operations and runtime management remain with
+the host launcher.
 
 ## Generated Code
 
@@ -122,6 +132,12 @@ numeric prefix and create a forward-only migration.
 - Keep the three README core section IDs aligned.
 - Put detailed operational content in `docs/` or `deploy/`.
 - Add user-visible changes to the release notes.
+- Configuration changes need defaults, storage or environment bindings,
+  relevant tests, and owning documentation appropriate to their source. Update
+  `deploy/` examples when deployment configuration changes.
+- Prefer maintained repository scripts and Make targets when documenting
+  workflows. Verify native tool syntax, supported versions, and execution
+  environments before documenting additional commands.
 
 ## Specifications
 

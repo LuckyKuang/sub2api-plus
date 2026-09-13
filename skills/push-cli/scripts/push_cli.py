@@ -25,6 +25,7 @@ TOOLS = ROOT / "tools"
 if str(TOOLS) not in sys.path:
     sys.path.insert(0, str(TOOLS))
 import validation_runtime
+import release_validation
 
 DEFAULT_REMOTE = "origin"
 EXPECTED_REPOSITORY = "LuckyKuang/sub2api-plus"
@@ -772,8 +773,7 @@ def run_release_finalization_checks(
 ) -> None:
     if proof.profile != FINALIZATION_PROFILE or proof.tag is None:
         raise PushCliError("release-finalization checks require a typed tag proof")
-    run_step(
-        "Validate deterministic release finalization",
+    result = release_validation.run(
         [
             sys.executable,
             "tools/release_finalization.py",
@@ -787,7 +787,12 @@ def run_release_finalization_checks(
             "--branch",
             branch,
         ],
+        root=ROOT,
     )
+    if result.stdout:
+        print(result.stdout)
+    if result.returncode:
+        raise PushCliError("deterministic release finalization container validation failed")
     run_step(
         "Verify published release",
         [

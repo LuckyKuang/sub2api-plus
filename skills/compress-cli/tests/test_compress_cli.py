@@ -40,6 +40,25 @@ class CompressCliTest(unittest.TestCase):
     def test_current_agents_document_passes(self) -> None:
         self.assertEqual([], self.validate_text(self.valid_document))
 
+    def test_clarified_rules_preserve_publication_and_validation_boundaries(self) -> None:
+        regressions = (
+            ("release tags, Releases, or publication images", "public images only"),
+            ("without explicit publication request", "when convenient"),
+            ("Local validation image builds, reuse, and scoped cleanup follow Verification", "Local validation images are unregulated"),
+            ("Verification container environment", "any available environment"),
+            ("focused checks use the same container environment", "focused checks may run on the host"),
+            ("independently of the current embedded version", "by resetting the current version to the old tag"),
+            ("Use compress-cli at skills/compress-cli", "Use an arbitrary compression tool"),
+            ("when a request creates, compresses, validates, or updates AGENTS.md repository rules", "for any repository task"),
+        )
+        for original, replacement in regressions:
+            with self.subTest(original=original):
+                self.assertIn(original, self.valid_document)
+                self.assert_error_contains(
+                    self.validate_text(self.valid_document.replace(original, replacement)),
+                    "missing protected content",
+                )
+
     def test_cli_check_is_read_only_and_passes_current_document(self) -> None:
         before = ROOT.joinpath("AGENTS.md").read_bytes()
         result = subprocess.run(

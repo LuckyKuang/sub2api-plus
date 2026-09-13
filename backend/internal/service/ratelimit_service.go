@@ -1717,7 +1717,7 @@ func (s *RateLimitService) persistOpenAICodexSnapshot(ctx context.Context, accou
 	if snapshot == nil {
 		return
 	}
-	observeOpenAIWeeklyUsageSnapshot(ctx, account.ID, snapshot, false)
+	observeOpenAIWeeklyUsageSnapshot(ctx, account.ID, snapshot, true)
 	updates := buildCodexUsageExtraUpdates(snapshot, time.Now())
 	if len(updates) == 0 {
 		return

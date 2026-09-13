@@ -40,7 +40,6 @@ REQUIRED_CATEGORIES = (
     "Publication Safety",
     "Upstream Merge",
     "Local Skill",
-    "Skill Trigger",
 )
 
 REQUIRED_PATHS = (
@@ -120,6 +119,7 @@ PROTECTED_FRAGMENTS = {
     ),
     "Documented Commands": (
         "repository scripts or Make targets",
+        "verify syntax, supported version, and execution environment",
     ),
     "Verification": (
         "All validation must run in Apple Containers on macOS",
@@ -139,7 +139,8 @@ PROTECTED_FRAGMENTS = {
         "full profile",
         "deterministic finalization tree",
         "release-finalization",
-        "Host-side execution of the full matrix is forbidden",
+        "Verification container environment",
+        "focused checks use the same container environment",
     ),
     "Release Promotion": (
         "skills/release-cli",
@@ -156,10 +157,19 @@ PROTECTED_FRAGMENTS = {
         "separate and resumable",
     ),
     "Publication Safety": (
+        "release tags, Releases, or publication images",
         "without explicit publication request",
+        "Local validation image builds, reuse, and scoped cleanup follow Verification",
     ),
-    "Local Skill": ("skills/compress-cli",),
-    "Skill Trigger": ("Use compress-cli", "AGENTS.md"),
+    "Release Consistency": (
+        "For each release artifact",
+        "independently of the current embedded version",
+        "Never reuse or retag a published version",
+    ),
+    "Local Skill": (
+        "Use compress-cli at skills/compress-cli",
+        "when a request creates, compresses, validates, or updates AGENTS.md repository rules",
+    ),
 }
 
 CATEGORY_RE = re.compile(r"^\|([^:|]+):(.+)$")
@@ -256,9 +266,6 @@ def validate_agents(path: Path, *, repo_root: Path = ROOT) -> list[str]:
     source_value = categories.get("Sources")
     if source_value is not None:
         validate_source_paths(source_value, repo_root=repo_root, errors=errors)
-
-    if categories.get("Local Skill") not in (None, "skills/compress-cli"):
-        errors.append("category 'Local Skill' must be exactly 'skills/compress-cli'")
 
     return errors
 

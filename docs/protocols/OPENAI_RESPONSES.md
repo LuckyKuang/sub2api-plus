@@ -157,30 +157,31 @@ returns 404 otherwise; it does not select an account or proxy upstream quota.
 Administrators may optionally bind an OpenAI subscription group to one
 credential-owning OpenAI OAuth account that is already bound to that group.
 This does not change the group's routing pool. Raw default weekly observations
-from HTTP traffic (including compatible endpoints), `codex.rate_limits`
-WebSocket events, account usage probes, quota queries and post-reset refreshes
-share one observation path, before client-facing local quota rewrites. Only an
+from real inference HTTP traffic (including compatible endpoints) and
+`codex.rate_limits` WebSocket events share one observation path, before
+client-facing local quota rewrites. WebSocket connection handshake headers
+may refresh the account usage cache, but they are a connection-time snapshot
+and never drive this feature. Account usage probes, standalone quota
+queries and reset-credit workflows never drive this feature. Only an
 explicit 10,080-minute / 604,800-second default window with a raw absolute reset
 time is eligible. Daily, 5-hour, monthly, unknown and model-specific/Spark windows
 never drive this feature. Display countdowns, expired-cache synthetic zeroes,
 reset-credit expiration dates and local account A/U costs are not reset signals.
 
-A background worker refreshes only eligible accounts currently selected by a
-bound OpenAI subscription group. Database leases space each account's attempts
-by at least two minutes across replicas; batches contain at most four accounts
-and run sequentially, with a 25-second per-account bound and 15-second scheduling
-ticks. Large source sets or upstream failures can delay observations. These reads
-reuse the existing OAuth quota client and trusted identity triple, and skip the
-separate reset-credit-details request. They never consume a reset credit.
+No background worker queries OpenAI for this feature. A reset is evaluated only
+when an eligible source account returns a fresh official weekly window during a
+real inference session. Local pending events are still processed in the
+database, but processing them never performs an upstream request.
 
 Saving a new binding, re-enabling a disabled binding or changing its source locks
 the source and clears the group's old baseline. Its first fresh confirmed window
 only establishes a baseline; it never clears subscriptions, even if the account
 retains an old deadline or pending reset evidence from an earlier activation.
-Only an official quota query started after activation establishes that baseline;
-traffic headers alone do not carry sufficient request-start evidence. An in-flight
-query started before activation cannot establish it.
-While an off-schedule window is awaiting confirmation, new bindings keep waiting.
+Only a real inference session sampled after activation establishes that baseline;
+standalone quota queries and samples observed at or before activation cannot
+establish it. Sample time is the HTTP response or WebSocket event time, so a
+request that started before activation and completed after it can establish the
+baseline. While an off-schedule window is awaiting confirmation, new bindings keep waiting.
 Disabling clears the baseline and advances the configuration generation, making
 old pending events inapplicable. Upgrades preserve continuously enabled bindings
 and existing subscription counters; the migration performs no quota resets.
@@ -193,12 +194,14 @@ source-configuration saves are rejected for reload. Natural rollover can be
 accepted when the prior deadline has expired and the next deadline advances by
 more than five minutes. Early deadline changes in either direction, and usage
 drops of at least one percentage point with an unchanged deadline, first persist
-pending evidence. A separate official quota query sampled at least one second
+pending evidence. A separate real inference session sampled at least one second
 later and within ten minutes must corroborate it. Deadline changes within five
-minutes are treated as clock drift. Stale/out-of-order samples are ignored;
-repeated traffic cannot confirm or postpone its own pending evidence. The query
-start time is preserved through cache writes to prevent a cached sample from
-confirming itself. Account usage-cache writes also compare sample times under
+minutes are treated as clock drift. Stale/out-of-order samples are ignored.
+A sample cannot confirm or postpone its own pending evidence. Confirmation
+requires two real inference samples: live HTTP `/responses` (and compatible)
+headers, or in-band `codex.rate_limits` events. Reparsing the same WebSocket
+handshake headers at a later turn cannot corroborate or dismiss pending
+evidence. Account usage-cache writes also compare sample times under
 the account row lock, retaining subsecond precision: older or duplicate samples
 cannot replace newer usage percentages or deadlines. Unrelated account settings
 in the same update still merge; missing or invalid historical timestamps do not
@@ -221,11 +224,11 @@ group for diagnosis, but disables further automatic resets until another
 eligible bound source is selected.
 
 Source membership is checked when creating reset events and again when either
-billing or the background worker applies them. An unbound source neither advances
+billing or the local event applier applies them. An unbound source neither advances
 the group's baseline nor clears usage through a previously pending event.
-Observation and worker paths acquire the group lock before rechecking membership
-in a fresh statement, so a lock wait cannot retain pre-edit membership. The worker
-also refreshes source eligibility before applying any reset.
+Observation and event-application paths acquire the group lock before rechecking
+membership in a fresh statement, so a lock wait cannot retain pre-edit membership.
+Event application also refreshes source eligibility before applying any reset.
 
 An accepted window repeated by the source still establishes missing group
 baselines without resetting them. A behind baseline on a continuously enabled

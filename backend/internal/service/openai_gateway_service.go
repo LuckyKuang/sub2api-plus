@@ -311,12 +311,16 @@ type OpenAIForwardResult struct {
 	// upstream Responses WebSocket turn. Empty preserves legacy/non-WS success.
 	UpstreamTerminalEvent string
 	ResponseHeaders       http.Header
-	Duration              time.Duration
-	FirstTokenMs          *int
-	LastTokenMs           *int
-	FirstOutputMs         *int
-	FirstOutputKind       string
-	ClientDisconnect      bool
+	// ResponseHeadersFromHandshake marks WebSocket connection-time leftovers.
+	// Those headers may refresh the account usage cache but must not drive
+	// group follow-reset as a later inference session.
+	ResponseHeadersFromHandshake bool
+	Duration                     time.Duration
+	FirstTokenMs                 *int
+	LastTokenMs                  *int
+	FirstOutputMs                *int
+	FirstOutputKind              string
+	ClientDisconnect             bool
 	// UsageIncomplete excludes synthesized completion after truncated/error upstream streams from TPS.
 	UsageIncomplete             bool
 	ClientDisconnectUsageSource string
