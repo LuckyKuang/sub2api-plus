@@ -103,6 +103,33 @@ class ReleaseNotesTests(unittest.TestCase):
 class ReleaseContainerTests(unittest.TestCase):
     command = [sys.executable, "tools/check_release.py", "--tag", TAG]
 
+    def test_validation_container_forwards_proxy_names_without_values(self) -> None:
+        runtime = validation_runtime.Runtime("linux-docker", (), None)
+        with mock.patch.dict(
+            os.environ,
+            {
+                "HTTP_PROXY": "http://proxy-user:proxy-secret@example.invalid:8080",
+                "https_proxy": "http://lowercase.example.invalid:8080",
+                "HTTPS_PROXY": "",
+                "NO_PROXY": "",
+                "http_proxy": "",
+                "no_proxy": "",
+            },
+            clear=True,
+        ):
+            argv = validation_runtime.validation_run_command(
+                runtime,
+                self.command,
+                root=ROOT,
+                image="sub2api-validation:test",
+                user=None,
+                caches=[],
+            )
+        self.assertIn("HTTP_PROXY", argv)
+        self.assertIn("https_proxy", argv)
+        self.assertNotIn("HTTPS_PROXY", argv)
+        self.assertNotIn("proxy-secret", " ".join(argv))
+
     def test_unavailable_runtime_never_runs_check_on_host(self) -> None:
         with (
             mock.patch.dict(os.environ, {validation_runtime.IN_VALIDATION_ENV: ""}),

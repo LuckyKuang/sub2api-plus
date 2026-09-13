@@ -11,6 +11,7 @@ Sub2API Plus v0.2.4+custom.004
 - Updates the English and Chinese administration guidance to describe the inference-session baseline requirement.
 - Clarifies repository-wide agent rules, Windows WSL2 Docker validation, and the deployed-instance scope of the Sub2API admin skill.
 - Makes stale validation image cleanup deterministic without pruning unrelated runtime resources.
+- Forwards configured standard proxy variables into validation containers without exposing their values in commands or logs.
 
 ## Fixed
 

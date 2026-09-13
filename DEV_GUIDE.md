@@ -124,6 +124,15 @@ the resulting `pnpm-lock.yaml`.
 Remove only the repository's `frontend/node_modules` after confirming the path,
 then reinstall with pnpm. Do not use npm or yarn for this project.
 
+### WSL2 proxy is unavailable in Docker
+
+When WSL2 uses a proxy, configure the standard `HTTP_PROXY`, `HTTPS_PROXY`, and
+`NO_PROXY` variables with an address reachable from the Docker bridge before
+invoking `push_cli.py`. A proxy bound to WSL2 loopback is not reachable from a
+normal validation container; use an accessible Windows host-interface address.
+The validation launcher forwards configured proxy variable names without
+printing their values.
+
 ### Interface compilation failure
 
 When a Go interface gains a method, update all production implementations and
