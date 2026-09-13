@@ -251,7 +251,7 @@ class ReleaseContainerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             notes_file = Path(temp) / "notes.md"
             notes = valid_notes()
-            notes_file.write_text(notes, encoding="utf-8")
+            notes_file.write_bytes(notes.replace("\n", "\r\n").encode("utf-8"))
             commit = "a" * 40
             tree = "b" * 40
             with (
@@ -279,11 +279,15 @@ class ReleaseContainerTests(unittest.TestCase):
                     release_preflight,
                     "run",
                     return_value=subprocess.CompletedProcess([], 0, ""),
-                ),
+                ) as create_tag,
                 mock.patch.object(release_preflight, "verify_created_tag") as verify,
             ):
                 self.assertEqual(release_preflight.main(), 0)
 
+        create_tag.assert_called_once_with(
+            release_preflight.tag_creation_command(TAG, commit, notes),
+            capture=True,
+        )
         verify.assert_called_once_with(
             TAG,
             commit,
@@ -687,7 +691,7 @@ class ReleaseTagTests(unittest.TestCase):
                 ("git", "config", "user.name", "Release Policy Test"),
                 ("git", "config", "user.email", "release-policy@example.invalid"),
                 ("git", "commit", "--allow-empty", "--quiet", "-m", "initial"),
-                release_preflight.tag_creation_command(TAG, "HEAD", notes_file),
+                release_preflight.tag_creation_command(TAG, "HEAD", notes),
             )
             for command in commands:
                 result = release_preflight.run(command, cwd=root, capture=True)
@@ -711,6 +715,25 @@ class ReleaseTagTests(unittest.TestCase):
             self.assertEqual(result.stdout.strip(), notes.strip())
             self.assertIn("## Highlights", result.stdout)
             self.assertIn("## Upstream baseline", result.stdout)
+            commit = release_preflight.run(
+                ("git", "rev-parse", "HEAD"), cwd=root, capture=True
+            ).stdout.strip()
+            original_run = release_preflight.run
+            with mock.patch.object(
+                release_preflight,
+                "run",
+                side_effect=lambda command, **options: original_run(
+                    command,
+                    cwd=root,
+                    capture=options.get("capture", False),
+                ),
+            ):
+                release_preflight.verify_created_tag(
+                    TAG,
+                    commit,
+                    f"Sub2API Plus {TAG}",
+                    notes,
+                )
 
 
 class ReleaseDocumentTests(unittest.TestCase):

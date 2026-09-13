@@ -123,7 +123,7 @@ def notes_digest(notes_file: Path) -> str:
     return hashlib.sha256(notes_file.read_bytes()).hexdigest()
 
 
-def tag_creation_command(tag: str, commit: str, notes_file: Path) -> tuple[str, ...]:
+def tag_creation_command(tag: str, commit: str, notes: str) -> tuple[str, ...]:
     return (
         "git",
         "tag",
@@ -131,8 +131,8 @@ def tag_creation_command(tag: str, commit: str, notes_file: Path) -> tuple[str, 
         tag,
         commit,
         "--cleanup=verbatim",
-        "-F",
-        str(notes_file),
+        "-m",
+        notes,
     )
 
 
@@ -205,7 +205,11 @@ def main() -> int:
 
     notes_bytes = notes_file.read_bytes()
     try:
-        notes = notes_bytes.decode("utf-8")
+        notes = (
+            notes_bytes.decode("utf-8")
+            .replace("\r\n", "\n")
+            .replace("\r", "\n")
+        )
     except UnicodeDecodeError as error:
         parser.error(f"release notes file must be UTF-8: {error}")
     initial_digest = hashlib.sha256(notes_bytes).hexdigest()
@@ -235,7 +239,7 @@ def main() -> int:
         print(f"Release metadata is ready for {args.tag} at {commit}. No tag was created.")
         return 0
 
-    command = tag_creation_command(args.tag, commit, notes_file)
+    command = tag_creation_command(args.tag, commit, notes)
     result = run(command, capture=True)
     if result.returncode != 0:
         detail = (result.stderr or result.stdout or "").strip()
