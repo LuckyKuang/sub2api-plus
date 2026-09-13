@@ -249,7 +249,7 @@ func TestQuotaFollowReset_NewSourceRejectsPreActivationSample(t *testing.T) {
 	require.Zero(t, created)
 	require.NoError(t, integrationDB.QueryRow(`SELECT quota_reset_source_reset_at IS NULL FROM groups WHERE id=$1`, f.groupID).Scan(&empty))
 	require.True(t, empty, "a standalone quota query cannot initialize a new activation")
-	created, err = f.repo.ObserveWeeklyReset(ctx, f.accountID, weeklyObservation(f.baseline, activation.Add(time.Second), 80))
+	created, err = f.repo.ObserveWeeklyReset(ctx, f.accountID, weeklyObservation(f.baseline, activation.Add(time.Second), 7))
 	require.NoError(t, err)
 	require.Zero(t, created)
 	require.NoError(t, integrationDB.QueryRow(`SELECT quota_reset_source_reset_at IS NULL FROM groups WHERE id=$1`, f.groupID).Scan(&empty))
