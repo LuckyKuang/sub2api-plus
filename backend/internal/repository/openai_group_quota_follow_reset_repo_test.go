@@ -58,7 +58,7 @@ func TestQuotaFollowResetConfirmsEarlyAndSameDeadlineResets(t *testing.T) {
 	}
 }
 
-func TestQuotaFollowResetRejectsClockDriftAndUnconfirmedDrops(t *testing.T) {
+func TestQuotaFollowResetRejectsClockDriftAndRequiresConfirmedDrops(t *testing.T) {
 	now := time.Now().UTC()
 	deadline := now.Add(6 * 24 * time.Hour)
 	state, _, _ := advanceOpenAIWeeklyObservation(openAIWeeklyObservationState{}, weeklyObservation(deadline, now, 80))
@@ -75,8 +75,11 @@ func TestQuotaFollowResetRejectsClockDriftAndUnconfirmedDrops(t *testing.T) {
 	require.True(t, reset)
 	state, _, _ = advanceOpenAIWeeklyObservation(state, weeklyObservation(deadline, now.Add(6*time.Minute), 81))
 	state, _, reset = advanceOpenAIWeeklyObservation(state, weeklyObservation(deadline, now.Add(7*time.Minute), 1))
-	require.False(t, reset, "late high usage cannot restore a pre-reset watermark")
-	require.False(t, state.pendingResetAt.Valid)
+	require.False(t, reset, "the first session cannot confirm another same-deadline reset")
+	require.True(t, state.pendingResetAt.Valid)
+	state, _, reset = advanceOpenAIWeeklyObservation(state, weeklyObservation(deadline, now.Add(8*time.Minute), 2))
+	require.True(t, reset, "a later session confirms another real same-deadline reset")
+	require.Equal(t, int64(2), state.sequence)
 }
 
 func TestQuotaFollowResetHandshakeHeadersDoNotConfirmPending(t *testing.T) {
