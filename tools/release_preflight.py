@@ -203,7 +203,12 @@ def main() -> int:
         parser.error(f"release notes file does not exist: {notes_file}")
     expected_subject = f"{REQUIRED_SUBJECT_PREFIX}{args.tag}"
 
-    initial_digest = notes_digest(notes_file)
+    notes_bytes = notes_file.read_bytes()
+    try:
+        notes = notes_bytes.decode("utf-8")
+    except UnicodeDecodeError as error:
+        parser.error(f"release notes file must be UTF-8: {error}")
+    initial_digest = hashlib.sha256(notes_bytes).hexdigest()
     try:
         ensure_clean(notes_file)
         commit = git_output("rev-parse", f"{args.commit}^{{commit}}")
