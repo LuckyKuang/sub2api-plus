@@ -116,7 +116,7 @@ class ReleaseContainerTests(unittest.TestCase):
                 "no_proxy": "",
             },
             clear=True,
-        ):
+        ), mock.patch.object(Path, "home", side_effect=RuntimeError):
             argv = validation_runtime.validation_run_command(
                 runtime,
                 self.command,
