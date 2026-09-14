@@ -17,7 +17,6 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/LuckyKuang/sub2api-plus/internal/config"
 	pluginv1 "github.com/LuckyKuang/sub2api-plus/pkg/pluginapi/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -146,17 +145,6 @@ func TestPluginPackageInstallerEnforcesActualExtractionLimit(t *testing.T) {
 	err = installer.extractArchive(context.Background(), archive, testPluginManifest(nil), t.TempDir())
 
 	require.ErrorContains(t, err, "实际解压体积超过限制")
-}
-
-func testPluginConfig(root string, allowUnsigned bool) *config.Config {
-	return &config.Config{Plugins: config.PluginConfig{
-		DataDir:              root,
-		AllowUnsigned:        allowUnsigned,
-		TrustedPublishers:    map[string]string{},
-		MaxUploadBytes:       64 * 1024 * 1024,
-		MaxUncompressedBytes: 128 * 1024 * 1024,
-		StartTimeoutSeconds:  5,
-	}}
 }
 
 func testPluginManifest(files map[string][]byte) PluginManifest {
