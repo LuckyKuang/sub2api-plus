@@ -1,3 +1,5 @@
+//go:build integration
+
 package securityaudit
 
 import (
@@ -79,27 +81,6 @@ func integrationSnapshot(seed string) PromptSnapshot {
 		Protocol: "openai_chat", Model: "gpt-test", PromptHash: strings.Repeat(seed[:1], 64),
 		RedactedPreview: "redacted-" + seed, PromptLength: len([]rune(seed)), MessageCount: 1,
 	}
-}
-
-func integrationResult(decision EventDecision) *NormalizedResult {
-	result := &NormalizedResult{
-		Decision: decision, RiskLevel: RiskLow, Action: ActionAllow, Safety: "Safe",
-		Categories: []string{}, MatchedScanners: []string{}, ScannerScores: map[string]float64{},
-		ScannerEvidence: map[string]string{}, ScannerBackend: "qwen3guard-openai",
-		ScannerVersion: "test", GuardEndpointID: "guard-1", PolicyID: "priority",
-		PolicyVersion: 1, ChunkTotal: 1, InputLimit: 100000, LatencyMS: 2,
-	}
-	if decision != EventPass {
-		result.RiskLevel = RiskCritical
-		result.Action = ActionBlock
-		result.Safety = "Unsafe"
-		result.Categories = []string{"pii"}
-		result.MatchedScanners = []string{"pii"}
-		result.ScannerScores["pii"] = 1
-		result.ScannerEvidence["pii"] = "redacted evidence"
-		result.MatchedChunkIndex = 1
-	}
-	return result
 }
 
 func TestPromptAuditMigrationSchemaAndLeakageGate(t *testing.T) {

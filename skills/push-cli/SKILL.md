@@ -52,8 +52,8 @@ inputs; do not use them to accelerate an ordinary or release-candidate PR.
 uses bounded parallel lanes by default; `check --serial` preserves the original
 ordering for diagnosis and same-commit timing comparisons. Both modes run the
 same command and test set. `ensure` only prepares the platform runtime and
-validation image. `watch` observes push-triggered Actions for the current
-branch and SHA.
+validation image. `watch` observes pull-request Actions for the current branch and SHA when a
+PR exists, otherwise the push-triggered runs (used on `main`).
 
 ## Mandatory GitHub CLI Gate
 

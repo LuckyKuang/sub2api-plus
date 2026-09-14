@@ -1,3 +1,5 @@
+//go:build unit || !integration
+
 package service
 
 // 国产供应商 Anthropic 协议转换路径的上游读间隔超时回归测试（B3）：

@@ -51,3 +51,5 @@ test-docs:
 	@$(PYTHON) tools/check_readme_sync.py
 	@$(PYTHON) tools/check_release.py
 	@$(PYTHON) tools/check_new_migrations.py
+	@$(PYTHON) tools/test_test_build_tags.py
+	@$(PYTHON) tools/check_test_build_tags.py

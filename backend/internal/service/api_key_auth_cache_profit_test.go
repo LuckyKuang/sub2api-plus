@@ -1,3 +1,5 @@
+//go:build unit || !integration
+
 package service
 
 // 投影漏列回归（service 半程）：认证快照 build → L2 JSON 序列化

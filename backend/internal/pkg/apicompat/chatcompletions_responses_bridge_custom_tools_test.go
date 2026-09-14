@@ -1,3 +1,5 @@
+//go:build unit || !integration
+
 package apicompat
 
 // custom/freeform 工具（如 Codex 0.14x 的 exec）在 responses→chat 桥上的双向转换。

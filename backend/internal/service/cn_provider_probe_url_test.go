@@ -1,3 +1,5 @@
+//go:build unit || !integration
+
 package service
 
 // CN 供应商探测端点 URL 安全策略回归测试（review B4）：

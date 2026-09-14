@@ -1,3 +1,5 @@
+//go:build unit || !integration
+
 package service
 
 // 利润控制请求路径矩阵测试：证明所有文本调度路径都经过利润准入过滤，

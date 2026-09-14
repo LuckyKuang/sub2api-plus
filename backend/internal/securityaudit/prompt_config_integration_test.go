@@ -1,3 +1,5 @@
+//go:build integration
+
 package securityaudit
 
 import (
@@ -113,18 +115,6 @@ func promptAuditTestEncryptor(t *testing.T) service.SecretEncryptor {
 	encryptor, err := repository.NewAESEncryptor(&config.Config{Totp: config.TotpConfig{EncryptionKey: strings.Repeat("42", 32)}})
 	require.NoError(t, err)
 	return encryptor
-}
-
-func promptAuditUpdateRequest(version int64, workerCount int, token string) UpdateConfigRequest {
-	return UpdateConfigRequest{
-		ExpectedConfigVersion: version, Enabled: true, BlockingEnabled: false, StorePassEvents: false,
-		Strategy: "priority", WorkerCount: workerCount, QueueCapacity: 64, Scanners: []string{"pii", "jailbreak"},
-		AllGroups: true, Endpoints: []UpdateEndpoint{{
-			ID: "guard-one", Name: "Guard One", Protocol: "openai_compatible",
-			BaseURL: "http://127.0.0.1:18080", Model: "", Token: token,
-			TimeoutMS: 1000, InputLimit: 1024, Enabled: true,
-		}},
-	}
 }
 
 func waitForConfigVersion(t *testing.T, manager *ConfigManager, version int64, timeout time.Duration) {

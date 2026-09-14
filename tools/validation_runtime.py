@@ -49,6 +49,13 @@ class ValidationRuntimeError(RuntimeError):
     """A hard failure that must stop validation."""
 
 
+def home_directory() -> Path:
+    try:
+        return Path.home()
+    except RuntimeError:
+        return Path(CONTAINER_HOME)
+
+
 @dataclass(frozen=True)
 class Runtime:
     name: str
@@ -370,7 +377,7 @@ def cache_mounts(
             (f"{base}/go", f"{CONTAINER_HOME}/go"),
             (f"{base}/pnpm", f"{CONTAINER_HOME}/pnpm"),
         ]
-    base = Path.home() / ".cache" / "sub2api-validation" / generation
+    base = home_directory() / ".cache" / "sub2api-validation" / generation
     (base / "go").mkdir(parents=True, exist_ok=True)
     (base / "pnpm").mkdir(parents=True, exist_ok=True)
     (base / "go" / "golangci-lint").mkdir(parents=True, exist_ok=True)
@@ -394,7 +401,7 @@ def node_modules_overlay(
         source = f"/tmp/sub2api-validation-cache/{generation}/frontend-node-modules"
     else:
         source = str(
-            Path.home()
+            home_directory()
             / ".cache"
             / "sub2api-validation"
             / generation
@@ -683,7 +690,7 @@ def cleanup_validation_runtime(
                     [*runtime.prefix, "rm", "-rf", f"{cache_root}/{generation}"],
                 )
     else:
-        cache_root = Path.home() / ".cache" / "sub2api-validation"
+        cache_root = home_directory() / ".cache" / "sub2api-validation"
         if cache_root.exists():
             for path in cache_root.iterdir():
                 if path.name == cache_generation:

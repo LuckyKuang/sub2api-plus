@@ -90,6 +90,10 @@ go test -tags=integration ./...
 golangci-lint run ./...
 ```
 
+`unit` is in-process. `integration` uses Docker or a real DSN. GitHub `CI` and
+`Security Scan` run on pull requests and `main` pushes; they do not run on every
+feature-branch push.
+
 Frontend:
 
 ```bash

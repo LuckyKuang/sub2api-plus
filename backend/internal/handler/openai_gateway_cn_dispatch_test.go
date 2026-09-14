@@ -1,3 +1,5 @@
+//go:build unit || !integration
+
 package handler
 
 // CN 分组 /v1/messages 调度闸门回归（修复:正常途径创建的 CN 分组曾恒 403）：

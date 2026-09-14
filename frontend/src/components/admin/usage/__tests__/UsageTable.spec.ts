@@ -73,13 +73,9 @@ const messages: Record<string, string> = {
 		'usage.latencyLastToken': 'Last Token',
 		'usage.timingUnavailableHistorical': 'Verified first-token timing was not collected',
 		'usage.timingUnavailableLive': 'Live session summary has no token-generation timing',
-		'usage.timingUnavailableNonStream': 'Non-streaming request; TPS uses the decode window (last token − first token)',
-		'usage.timingUnavailableIncomplete': 'Request did not complete; displayed TPS may be partial',
 		'usage.timingUnavailableCompaction': 'Compaction result has no observable token deltas',
 		'usage.timingUnavailableNoTokens': 'No billed text tokens or generation timing observed',
-		'usage.timingUnavailableInvalid': 'Invalid timing data',
-		'usage.timingUnavailableShort': 'Low-confidence sample: decode window below 300ms or output below 8 tokens',
-		'usage.latencyTpsHint': 'Decode rate: billed text tokens ÷ (last-token time − first-token time). Excludes thinking wait (already shown as First Token) and post-token flush. Incomplete, non-stream, and short decode windows still show a number, with a confidence note.',
+		'usage.latencyTpsHint': 'Output tokens per second. Streaming requests exclude first-token latency; non-streaming requests use total duration.',
 		'usage.incomplete': 'Incomplete',
 		'usage.incompleteHint': 'The request ended before a complete terminal result.',
 		'usage.clientDisconnected': 'Client disconnected',
@@ -352,9 +348,8 @@ describe('admin UsageTable tooltip', () => {
     expect(values[1].text()).toBe('-')
     expect(values[7].text()).toBe('-')
 
-    // Missing TPS metadata also makes details available for plain text.
     const triggers = wrapper.findAll('[data-testid="latency-details-trigger"]')
-    expect(triggers).toHaveLength(9)
+    expect(triggers).toHaveLength(8)
 
     await triggers[0].trigger('mouseenter')
     await nextTick()
@@ -366,10 +361,9 @@ describe('admin UsageTable tooltip', () => {
     expect(tooltip.text()).toContain('First Token')
     expect(tooltip.text()).toContain('120ms')
     expect(tooltip.text()).toContain('First output and first token differ')
-    expect(tooltip.get('[data-testid="tps-unavailable-reason"]').text()).toContain('TPS')
   })
 
-  it('keeps very low positive TPS visible and excludes billed compaction-only results', () => {
+  it('keeps very low positive TPS visible and uses total duration when first-token timing is absent', () => {
     const row = { ...baseImageRow, request_type: 'stream', stream: true, first_output_kind: 'text', first_token_ms: 100, last_token_ms: 120000, duration_ms: 120500, output_tokens: 1 }
     const wrapper = mount(UsageTable, {
       props: {
@@ -379,11 +373,11 @@ describe('admin UsageTable tooltip', () => {
       },
       global: { stubs: { DataTable: DataTableStub, Pagination: true, EmptyState: true, Icon: true, Teleport: true } },
     })
-    expect(wrapper.findAll('[data-testid="latency-tps"]').map(node => node.text())).toEqual(['0.0083', '-'])
+    expect(wrapper.findAll('[data-testid="latency-tps"]').map(node => node.text())).toEqual(['0.0083 tok/s', '0.8 tok/s'])
     wrapper.unmount()
   })
 
-  it('shows estimated TPS from the decode window, including incomplete and short samples', () => {
+  it('shows TPS from the streaming generation window or the non-streaming total duration', () => {
     const rows = [
       {
         ...baseImageRow,
@@ -534,7 +528,7 @@ describe('admin UsageTable tooltip', () => {
         duration_ms: 1_100,
       },
       {
-        // decode window 150ms < 300 → still shown, low confidence
+        // 100 output tokens / (250ms - 100ms) = 666.7
         ...baseImageRow,
         request_id: 'req-tps-short-generation',
         request_type: 'stream',
@@ -547,7 +541,7 @@ describe('admin UsageTable tooltip', () => {
         duration_ms: 250,
       },
       {
-        // text tokens = 7 < 8 → still shown, low confidence
+        // 7 output tokens / (1100ms - 100ms) = 7
         ...baseImageRow,
         request_id: 'req-tps-few-tokens',
         request_type: 'stream',
@@ -646,47 +640,28 @@ describe('admin UsageTable tooltip', () => {
 
     const tpsNodes = wrapper.findAll('[data-testid="latency-tps"]')
     expect(tpsNodes.map((node) => node.text())).toEqual([
-      '37',
-      '50',
-      '100',
-      '100',
-      '100',
-      '100',
-      '111',
+      '37 tok/s',
+      '50 tok/s',
+      '105 tok/s',
+      '150 tok/s',
+      '100 tok/s',
+      '100 tok/s',
+      '100 tok/s',
+      '111 tok/s',
       '-',
-      '-',
-      '-',
-      '-',
-      '667',
-      '7',
-      '2000',
-      '0.8',
-      '26.7',
-      '500',
-      '1000',
+      '5.6 tok/s',
+      '100 tok/s',
+      '667 tok/s',
+      '7 tok/s',
+      '2000 tok/s',
+      '0.8 tok/s',
+      '26.7 tok/s',
+      '500 tok/s',
+      '1000 tok/s',
     ])
-    expect(tpsNodes.map((node) => node.attributes('title'))).toEqual([
-      messages['usage.latencyTpsHint'],
-      messages['usage.latencyTpsHint'],
-      messages['usage.latencyTpsHint'],
-      messages['usage.latencyTpsHint'],
-      messages['usage.timingUnavailableIncomplete'],
-      messages['usage.timingUnavailableIncomplete'],
-      messages['usage.timingUnavailableNonStream'],
-      messages['usage.timingUnavailableHistorical'],
-      messages['usage.timingUnavailableInvalid'],
-      messages['usage.timingUnavailableNoTokens'],
-      messages['usage.timingUnavailableNoTokens'],
-      messages['usage.timingUnavailableShort'],
-      messages['usage.timingUnavailableShort'],
-      messages['usage.latencyTpsHint'],
-      messages['usage.latencyTpsHint'],
-      messages['usage.latencyTpsHint'],
-      messages['usage.latencyTpsHint'],
-      messages['usage.latencyTpsHint'],
-    ])
-    expect(wrapper.text()).toContain('First Token 721msTotal10.86sTPS37')
-    expect(wrapper.text()).toContain('First Token 100msTotal1.10sTPS100')
+    expect(tpsNodes.every((node) => node.attributes('title') === messages['usage.latencyTpsHint'])).toBe(true)
+    expect(wrapper.text()).toContain('First Token 721msTotal10.86sTPS37 tok/s')
+    expect(wrapper.text()).toContain('First Token 100msTotal1.10sTPS105 tok/s')
     expect(wrapper.text()).not.toContain('First Image Data')
     expect(wrapper.text()).not.toContain('First Audio Data')
   })
