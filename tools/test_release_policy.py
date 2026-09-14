@@ -129,6 +129,10 @@ class ReleaseContainerTests(unittest.TestCase):
         self.assertIn("https_proxy", argv)
         self.assertNotIn("HTTPS_PROXY", argv)
         self.assertNotIn("proxy-secret", " ".join(argv))
+        self.assertIn(
+            f"{validation_runtime.CONTAINER_HOME}/.cache/sub2api-validation/",
+            " ".join(argv),
+        )
 
     def test_unavailable_runtime_never_runs_check_on_host(self) -> None:
         with (
