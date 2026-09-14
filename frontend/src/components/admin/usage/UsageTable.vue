@@ -280,7 +280,7 @@
               <span class="text-gray-400 dark:text-gray-500">{{ t('usage.latencyDuration') }}</span>
               <span data-testid="latency-duration" class="font-medium tabular-nums" :class="durationTextClass(row)">{{ formatDuration(row.duration_ms) }}</span>
               <span class="cursor-help text-gray-400 dark:text-gray-500" :title="t('usage.latencyTpsHint')">{{ t('usage.latencyTps') }}</span>
-              <span data-testid="latency-tps" class="cursor-help font-medium tabular-nums" :class="estimatedTps(row) == null ? 'text-gray-400 dark:text-gray-500' : 'text-cyan-600 dark:text-cyan-400'" :title="t(tpsReason(row) ?? 'usage.latencyTpsHint')">{{ formatTpsDisplay(estimatedTps(row)) }}</span>
+              <span data-testid="latency-tps" class="cursor-help whitespace-nowrap font-medium tabular-nums" :class="estimatedTps(row) == null ? 'text-gray-400 dark:text-gray-500' : 'text-cyan-600 dark:text-cyan-400'" :title="t('usage.latencyTpsHint')">{{ formatTpsDisplay(estimatedTps(row)) }}</span>
             </div>
           </div>
         </template>
@@ -489,9 +489,6 @@
           <div v-if="latencyTooltipNote(latencyTooltipData)" class="border-t border-gray-700 pt-1.5 text-[11px] leading-relaxed text-gray-400">
             {{ latencyTooltipNote(latencyTooltipData) }}
           </div>
-          <div v-if="latencyTooltipData && tpsReason(latencyTooltipData)" data-testid="tps-unavailable-reason" class="text-[11px] leading-relaxed text-gray-400">
-            {{ t('usage.latencyTps') }}: {{ t(tpsReason(latencyTooltipData)!) }}
-          </div>
         </div>
         <div class="absolute right-full top-1/2 h-0 w-0 -translate-y-1/2 border-b-[6px] border-r-[6px] border-t-[6px] border-b-transparent border-r-gray-900 border-t-transparent dark:border-r-gray-800"></div>
       </div>
@@ -698,7 +695,7 @@ import IpGeoCell from '@/components/common/IpGeoCell.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { fetchBatch, getEntry } from '@/utils/ipGeoLookup'
 import type { AdminUsageLog } from '@/types'
-import { strictFirstTokenMs, estimatedTps, firstTokenUnavailableReason, tpsReason } from '@/utils/usageTiming'
+import { strictFirstTokenMs, estimatedTps, firstTokenUnavailableReason } from '@/utils/usageTiming'
 import type { Column } from '@/components/common/types'
 
 interface Props {
@@ -888,7 +885,7 @@ const primaryFirstTokenTextClass = (row: AdminUsageLog): string => {
 
 const hasLatencyDetails = (row: AdminUsageLog): boolean => {
   // Legacy first-event needs explanation so it is not mistaken for strict TTFT.
-  if (firstTokenUnavailableReason(row) || tpsReason(row)) return true
+  if (firstTokenUnavailableReason(row)) return true
   // Non-text first output always deserves a detail popover.
   if (row.first_output_kind !== 'text') return true
   // Pure text with matching first output/token is fully represented by the primary column.
@@ -986,7 +983,7 @@ const formatTpsNumber = (value: number): string => {
 
 const formatTpsDisplay = (value: number | null): string => {
   if (value == null) return '-'
-  return formatTpsNumber(value)
+  return `${formatTpsNumber(value)} tok/s`
 }
 
 // Cost tooltip functions
