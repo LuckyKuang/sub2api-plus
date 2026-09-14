@@ -13,12 +13,16 @@ on:
         type: string
   push:
     branches:
-      - "**"
+      - main
   pull_request:
 
 permissions:
   actions: read
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.ref != format('refs/heads/{0}', github.event.repository.default_branch) }}
 
 jobs:
   deployment-config:
@@ -48,7 +52,7 @@ jobs:
           /bin/sh deploy/tests/docker-runtime-resources-test.sh
           /bin/sh deploy/test-caddyfile-cache.sh
 
-  test:
+  test-unit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -85,10 +89,51 @@ jobs:
         if: steps.validation-profile.outputs.profile == 'full'
         working-directory: backend
         run: make test-unit
+
+  test-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ inputs.ref || github.ref }}
+      - name: Classify validation profile
+        id: validation-profile
+        uses: ./.github/actions/classify-release-finalization
+        with:
+          base: ${{ github.event.pull_request.base.sha || github.event.before }}
+          head: ${{ github.event.pull_request.head.sha || github.sha }}
+          branch: ${{ github.head_ref || github.ref_name }}
+          default-branch: ${{ github.event.repository.default_branch }}
+          event: ${{ github.event_name }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        if: steps.validation-profile.outputs.profile == 'full'
+        with:
+          go-version-file: backend/go.mod
+          check-latest: false
+          cache: true
+          cache-dependency-path: backend/go.sum
+      - name: Verify Go version
+        if: steps.validation-profile.outputs.profile == 'full'
+        working-directory: backend
+        run: |
+          test "$(go env GOVERSION)" = "go$(awk '/^go / { print $2 }' go.mod)"
       - name: Integration tests
         if: steps.validation-profile.outputs.profile == 'full'
         working-directory: backend
         run: make test-integration
+
+  test:
+    runs-on: ubuntu-latest
+    needs: [test-unit, test-integration]
+    if: always()
+    steps:
+      - name: Require backend test lanes
+        run: |
+          set -euo pipefail
+          test "${{ needs.test-unit.result }}" = success
+          test "${{ needs.test-integration.result }}" = success
 
   frontend:
     runs-on: ubuntu-latest
@@ -248,7 +293,9 @@ jobs:
           -color
       - name: Test release policy
         if: steps.validation-profile.outputs.profile == 'full'
-        run: python tools/test_release_policy.py
+        run: |
+          python tools/test_release_policy.py
+          python tools/test_test_build_tags.py
       - name: Test repository CLIs
         if: steps.validation-profile.outputs.profile == 'full'
         run: |
@@ -261,6 +308,9 @@ jobs:
       - name: Check README synchronization
         if: steps.validation-profile.outputs.profile == 'full'
         run: python tools/check_readme_sync.py
+      - name: Check Go test build tags
+        if: steps.validation-profile.outputs.profile == 'full'
+        run: python tools/check_test_build_tags.py
       - name: Check release metadata sources
         if: steps.validation-profile.outputs.profile == 'full'
         run: python tools/check_release.py

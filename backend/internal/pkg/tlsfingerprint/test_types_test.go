@@ -1,3 +1,5 @@
+//go:build !e2e
+
 package tlsfingerprint
 
 // FingerprintResponse represents the response from tls.peet.ws/api/all.

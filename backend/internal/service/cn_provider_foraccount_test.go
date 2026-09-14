@@ -1,3 +1,5 @@
+//go:build unit || !integration
+
 package service
 
 // ForAccount 直传入口（P2-6）的校验回归测试：

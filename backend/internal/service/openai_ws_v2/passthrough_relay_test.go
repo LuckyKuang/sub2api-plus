@@ -1,3 +1,5 @@
+//go:build unit || !integration
+
 package openai_ws_v2
 
 import (

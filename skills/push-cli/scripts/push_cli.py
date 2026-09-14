@@ -638,6 +638,12 @@ def run_local_checks(
             "backend-lint-policy",
         ),
         ValidationStep(
+            "Go test build tags",
+            [python, "tools/check_test_build_tags.py"],
+            ROOT,
+            "backend-lint-policy",
+        ),
+        ValidationStep(
             "Release metadata sources",
             [python, "tools/check_release.py"],
             ROOT,
@@ -1033,10 +1039,40 @@ def create_or_update_pull_request(
     return url
 
 
+def actions_watch_event(repository: str, branch: str, default_branch: str) -> str:
+    output = capture(
+        [
+            "gh",
+            "pr",
+            "list",
+            "--repo",
+            repository,
+            "--state",
+            "open",
+            "--head",
+            branch,
+            "--base",
+            default_branch,
+            "--json",
+            "number",
+        ]
+    )
+    try:
+        prs = json.loads(output)
+    except json.JSONDecodeError as error:
+        raise PushCliError("gh pr list returned invalid JSON") from error
+    if not isinstance(prs, list):
+        raise PushCliError("gh pr list returned an unexpected JSON value")
+    if prs:
+        return "pull_request"
+    return "push"
+
+
 def find_actions_runs(
     repository: str,
     branch: str,
     sha: str,
+    event: str,
 ) -> list[dict[str, object]]:
     for _ in range(10):
         output = capture(
@@ -1049,7 +1085,7 @@ def find_actions_runs(
                 "--branch",
                 branch,
                 "--event",
-                "push",
+                event,
                 "--limit",
                 "50",
                 "--json",
@@ -1069,13 +1105,18 @@ def find_actions_runs(
             return matches
         time.sleep(3)
     raise PushCliError(
-        f"no GitHub Actions push run for {branch} at {sha} appeared within 30 seconds"
+        f"no GitHub Actions {event} run for {branch} at {sha} appeared within 30 seconds"
     )
 
 
 def watch_actions(repository: str, branch: str) -> None:
     sha = pushed_sha()
-    runs = find_actions_runs(repository, branch, sha)
+    event = actions_watch_event(
+        repository,
+        branch,
+        repository_default_branch(repository),
+    )
+    runs = find_actions_runs(repository, branch, sha, event)
     for run in runs:
         run_id = str(run["databaseId"])
         print(

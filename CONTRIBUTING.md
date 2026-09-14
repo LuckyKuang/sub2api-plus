@@ -65,6 +65,7 @@ pnpm --dir frontend run test:run
 # Repository AGENTS.md contract
 python3 skills/compress-cli/scripts/compress_cli.py check AGENTS.md
 python3 skills/compress-cli/tests/test_compress_cli.py
+python3 tools/check_test_build_tags.py
 ```
 
 Run the focused tests for the changed package or component inside the same
@@ -78,7 +79,17 @@ changes also require the complete existing Codex identity regressions. Do not
 weaken identity checks to accept upstream behavior. The repository AGENTS.md
 validator protects these rules as well as the existing Codex and audit rules.
 
-Intermediate branch pushes use the fast path and do not run local tests:
+Backend `unit` tests stay in-process (mocks, memory SQLite, miniredis,
+httptest). `integration` tests require Docker Postgres/Redis or an explicit
+external DSN. Every `backend/**/*_test.go` file must declare one of those
+build tags (or `e2e` / `embed` / a documented exception). In-process tests that
+must remain visible to default `golangci-lint` use `unit || !integration`.
+Helpers shared by unit, integration, and default `golangci-lint` use `!e2e`.
+
+Intermediate branch pushes use the fast path and do not run local tests.
+Remote `CI` and `Security Scan` run on pull requests and on `main` pushes, not
+on every feature-branch push. `watch` follows the pull-request runs when a PR
+exists, otherwise the `main` push runs:
 
 ```bash
 python3 skills/push-cli/scripts/push_cli.py push

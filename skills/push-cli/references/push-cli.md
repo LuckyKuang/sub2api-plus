@@ -8,7 +8,7 @@
 | `submit-pr` | Full platform-container matrix by default; deterministic published-release gate only for release-cli finalization | Exact push, typed commit status, PR create/update | Final candidate with exact typed proof. |
 | `check` | Complete platform-container matrix | None | Read-only validation result. |
 | `ensure` | Image preparation only | None | Runtime and validation image ready. |
-| `watch` | None | None | Watches branch push runs at current HEAD. |
+| `watch` | None | None | Watches PR Actions at current HEAD, or push Actions on `main`. |
 
 All actions run the GitHub CLI repository gate. `push` and `submit-pr` also
 resolve and reject the default branch and require a clean worktree with no
@@ -21,8 +21,10 @@ The only branch transfer is:
     git push origin HEAD:<current-branch>
 
 Ordinary push returns after Git accepts the ref. It does not run the local
-matrix and does not wait for Actions. Use `watch` when remote observation is
-needed. Use `submit-pr`, never ordinary push, for the final PR candidate.
+matrix and does not wait for Actions. Feature-branch pushes do not start remote
+`CI` or `Security Scan`; those workflows run on pull requests and on `main`.
+Use `watch` when remote observation is needed. Use `submit-pr`, never ordinary
+push, for the final PR candidate.
 
 ## Validated Submission
 
@@ -95,7 +97,8 @@ system prune.
 ## Recovery
 
 - If ordinary push succeeds but remote Actions fail, fix on the branch and push
-  again; no local proof was issued.
+  again; no local proof was issued. Feature branches only have remote runs after
+  a pull request exists.
 - If `submit-pr` validation fails, no push/status/PR mutation occurs.
 - If the default branch changes during validation, rerun `submit-pr` after
   updating the branch.

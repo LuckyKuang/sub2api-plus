@@ -1,3 +1,5 @@
+//go:build unit || !integration
+
 package service
 
 // 请求级定价与利润门回归：请求级 pricingAt 定价上下文、门复用（failover 阈值稳定）、

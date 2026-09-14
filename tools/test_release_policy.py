@@ -590,7 +590,8 @@ class WorkflowPolicyTests(unittest.TestCase):
         expected_jobs = {
             "backend-ci.yml": {
                 "deployment-config",
-                "test",
+                "test-unit",
+                "test-integration",
                 "frontend",
                 "golangci-lint",
                 "goreleaser-config",
@@ -633,7 +634,36 @@ class WorkflowPolicyTests(unittest.TestCase):
         workflow = ROOT.joinpath(".github/workflows/security-scan.yml").read_text(
             encoding="utf-8"
         )
-        self.assertRegex(workflow, r"push:\n\s+branches:\n\s+- \"\*\*\"")
+        self.assertRegex(workflow, r"push:\n\s+branches:\n\s+- main\n")
+        self.assertNotIn("tags:", workflow)
+
+    def test_ci_and_security_scan_run_on_main_push_and_pull_request(self) -> None:
+        for name in ("backend-ci.yml", "security-scan.yml"):
+            workflow = ROOT.joinpath(".github", "workflows", name).read_text(
+                encoding="utf-8"
+            )
+            with self.subTest(workflow=name):
+                self.assertRegex(workflow, r"push:\n\s+branches:\n\s+- main\n")
+                self.assertIn("pull_request:", workflow)
+                self.assertNotRegex(workflow, r'branches:\n\s+- "\*\*"')
+                self.assertIn("cancel-in-progress:", workflow)
+
+    def test_backend_test_aggregator_requires_unit_and_integration_lanes(self) -> None:
+        workflow = ROOT.joinpath(".github/workflows/backend-ci.yml").read_text(
+            encoding="utf-8"
+        )
+        job_re = re.compile(
+            r"^  (?P<job>[a-z0-9-]+):\n(?P<body>.*?)(?=^  [a-z0-9-]+:\n|\Z)",
+            re.MULTILINE | re.DOTALL,
+        )
+        jobs = {match.group("job"): match.group("body") for match in job_re.finditer(workflow)}
+        body = jobs["test"]
+        self.assertIn("needs: [test-unit, test-integration]", body)
+        self.assertIn("if: always()", body)
+        self.assertNotIn(
+            "uses: ./.github/actions/classify-release-finalization",
+            body,
+        )
 
     def test_actionlint_container_is_pinned_to_a_digest(self) -> None:
         workflow = ROOT.joinpath(".github/workflows/backend-ci.yml").read_text(
@@ -676,6 +706,7 @@ class WorkflowPolicyTests(unittest.TestCase):
             "python skills/release-cli/tests/test_release_cli.py",
             workflow,
         )
+        self.assertIn("python tools/check_test_build_tags.py", workflow)
 
 
 class ReleaseTagTests(unittest.TestCase):

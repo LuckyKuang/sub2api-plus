@@ -1,3 +1,5 @@
+//go:build unit || !integration
+
 package securityaudit
 
 import (
@@ -9,7 +11,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/LuckyKuang/sub2api-plus/internal/config"
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -22,12 +23,6 @@ func (prefixEncryptor) Decrypt(value string) (string, error) {
 		return "", errors.New("cipher: message authentication failed")
 	}
 	return value[4:], nil
-}
-
-// testTotpKeyConfig mirrors a deployment with a fixed TOTP_ENCRYPTION_KEY so
-// unit tests may persist endpoint tokens.
-func testTotpKeyConfig() *config.Config {
-	return &config.Config{Totp: config.TotpConfig{EncryptionKeyConfigured: true}}
 }
 
 func TestDefaultConfigIsOff(t *testing.T) {
