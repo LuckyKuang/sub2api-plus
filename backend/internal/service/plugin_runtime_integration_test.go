@@ -35,7 +35,7 @@ func TestPluginRuntimeIntegration(t *testing.T) {
 	defer func() { _ = packageFile.Close() }()
 
 	root := t.TempDir()
-	cfg := testPluginConfig(root, false)
+	cfg := integrationPluginConfig(root, false)
 	installer := NewPluginPackageInstaller(cfg, PluginHostInfo{Version: "0.1.179", BuildType: "release"})
 	installation, err := installer.Install(context.Background(), packageFile, nil)
 	require.NoError(t, err)

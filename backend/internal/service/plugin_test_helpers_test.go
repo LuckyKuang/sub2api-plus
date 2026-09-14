@@ -1,10 +1,10 @@
-//go:build integration && !unit
+//go:build integration
 
 package service
 
 import "github.com/LuckyKuang/sub2api-plus/internal/config"
 
-func testPluginConfig(root string, allowUnsigned bool) *config.Config {
+func integrationPluginConfig(root string, allowUnsigned bool) *config.Config {
 	return &config.Config{Plugins: config.PluginConfig{
 		DataDir:              root,
 		AllowUnsigned:        allowUnsigned,
