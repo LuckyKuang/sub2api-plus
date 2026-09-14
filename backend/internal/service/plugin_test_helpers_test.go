@@ -1,3 +1,5 @@
+//go:build integration && !unit
+
 package service
 
 import "github.com/LuckyKuang/sub2api-plus/internal/config"
