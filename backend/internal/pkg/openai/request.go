@@ -3,6 +3,8 @@ package openai
 import (
 	"regexp"
 	"strings"
+
+	"golang.org/x/net/http/httpguts"
 )
 
 // CodexCLIUserAgentPrefixes matches Codex CLI User-Agent patterns
@@ -103,11 +105,24 @@ func matchCodexClientHeaderPrefixes(value string, prefixes []string) bool {
 // strict-current-only; new code must use PairConfiguredCodexClientIdentity and
 // explicitly pass the legacy compatibility policy.
 func PairCodexClientIdentity(userAgent string) (originator string, pairedUA string, ok bool) {
+	// Validate before trimming so control bytes cannot become a valid identity.
+	if !validCodexUserAgentValue(userAgent) {
+		return "", "", false
+	}
 	profile, ua, ok := PairConfiguredCodexClientIdentity(userAgent, false)
 	if !ok {
 		return "", "", false
 	}
 	return profile.Originator, ua, true
+}
+
+func validCodexUserAgentValue(value string) bool {
+	if !httpguts.ValidHeaderFieldValue(value) {
+		return false
+	}
+	// httpguts follows the legacy field-value grammar and permits obs-fold.
+	// User-Agent is not an obs-folded header; reject CR/LF before forwarding.
+	return !strings.ContainsAny(value, "\r\n")
 }
 
 // codexOriginatorMaxLen 官方 clientInfo.name 均为短 ASCII 标识，远低于此上限。

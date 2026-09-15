@@ -18,7 +18,7 @@ import (
 type reqClientOptions struct {
 	ProxyURL    string        // 代理 URL（支持 http/https/socks5）
 	Timeout     time.Duration // 请求超时时间
-	Impersonate bool          // 是否模拟 Chrome 浏览器指纹
+	Impersonate bool          // privacy-probe TLS fingerprint only; request identity headers still override UA
 	ForceHTTP2  bool          // 是否强制使用 HTTP/2
 }
 
@@ -51,7 +51,10 @@ func getSharedReqClient(opts reqClientOptions) (*req.Client, error) {
 		client = client.EnableForceHTTP2()
 	}
 	if opts.Impersonate {
-		client = client.ImpersonateChrome()
+		// Privacy probes only. ImpersonateFirefox is a TLS/HTTP2 fingerprint for
+		// chatgpt.com Cloudflare challenges. Outbound identity headers on the
+		// request still come from the trusted triple and override this UA.
+		client = client.ImpersonateFirefox()
 	}
 	trimmed, _, err := proxyurl.Parse(opts.ProxyURL)
 	if err != nil {
@@ -96,6 +99,6 @@ func CreatePrivacyReqClient(proxyURL string) (*req.Client, error) {
 	return getSharedReqClient(reqClientOptions{
 		ProxyURL:    proxyURL,
 		Timeout:     30 * time.Second,
-		Impersonate: true, // Enable Chrome TLS fingerprint impersonation
+		Impersonate: true, // privacy-probe fingerprint only; identity headers are set per request
 	})
 }
