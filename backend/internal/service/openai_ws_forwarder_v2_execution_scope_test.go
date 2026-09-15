@@ -1,3 +1,5 @@
+//go:build unit || !integration
+
 package service
 
 import (
@@ -155,8 +157,7 @@ func TestOpenAIGatewayService_Forward_WSv2_ExecutionScopeUsesOriginalIdentity(t 
 		Credentials: map[string]any{"access_token": "oauth-token-1"},
 		Extra: map[string]any{
 			"responses_websockets_v2_enabled": true,
-			codexFingerprintModeExtraKey:      "full",
-			codexFingerprintSeedExtraKey:      "11111111-1111-4111-8111-aaaaaaaaaaaa",
+			CodexFingerprintModeExtraKey:      "full",
 		},
 	}
 

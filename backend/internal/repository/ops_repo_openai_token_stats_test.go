@@ -60,9 +60,9 @@ func TestOpsRepositoryGetOpenAITokenStats_PlatformScope(t *testing.T) {
 				args = append(args, tt.platform)
 			}
 			queryPrefix := regexp.QuoteMeta(where) + `\s+GROUP BY ul.model\s+\)`
-			mock.ExpectQuery(queryPrefix + `\s+SELECT COUNT\(\*\) FROM stats`).
+			mock.ExpectQuery(queryPrefix + `\s+SELECT COUNT\(\*\), COALESCE\(SUM\(total_output_tokens\), 0\) FROM stats`).
 				WithArgs(args...).
-				WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(len(tt.models)))
+				WillReturnRows(sqlmock.NewRows([]string{"count", "total_output_tokens"}).AddRow(len(tt.models), int64(len(tt.models)*20)))
 
 			rows := sqlmock.NewRows([]string{
 				"model", "request_count", "avg_tokens_per_sec", "avg_first_token_ms",

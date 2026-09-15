@@ -543,7 +543,7 @@ export default {
       upstreamRequestIdHeader: 'Upstream ID',
       upstreamRequestIdHeaderPlaceholder: 'Leave empty to record nothing',
       upstreamRequestIdHeaderHelp: {
-        intro: 'Name of the response header in which the direct upstream declares its request ID. The value is recorded in the "Upstream ID" column of the usage log; leave empty to record nothing.',
+        intro: 'Name of the response header in which the direct upstream declares its request ID. The value is recorded in usage details for operations and diagnostics; leave empty to record nothing.',
         examplesTitle: 'Common values',
         sub2apiNote: 'Matches the request ID column of its usage log',
         official: '{platform} official API'

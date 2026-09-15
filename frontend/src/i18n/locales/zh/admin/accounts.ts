@@ -630,7 +630,7 @@ export default {
       upstreamRequestIdHeader: '上游ID',
       upstreamRequestIdHeaderPlaceholder: '留空不记录',
       upstreamRequestIdHeaderHelp: {
-        intro: '填写直接上游在响应头中声明请求标识的头名，记录到用量明细的“上游ID”列；留空则不记录。',
+        intro: '填写直接上游在响应头中声明请求标识的头名，记录到用量明细数据供运维和诊断使用；留空则不记录。',
         examplesTitle: '常见取值',
         sub2apiNote: '对应对方用量明细的请求ID列',
         official: '{platform} 官方 API'

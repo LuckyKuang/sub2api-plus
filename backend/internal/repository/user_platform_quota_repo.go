@@ -10,7 +10,6 @@ import (
 	dbent "github.com/LuckyKuang/sub2api-plus/ent"
 	"github.com/LuckyKuang/sub2api-plus/ent/userplatformquota"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/timezone"
-	"github.com/lib/pq"
 )
 
 // UserPlatformQuotaRecord 是 repository 层的传输结构体，
