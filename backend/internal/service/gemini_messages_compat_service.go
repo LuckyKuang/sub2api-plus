@@ -1647,12 +1647,11 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 
 	if stream {
 		streamRes, err := s.handleNativeStreamingResponse(c, resp, startTime, isOAuth, account, requestID)
-		if err != nil {
-			if streamRes == nil {
+		if streamRes == nil {
+			if err != nil {
 				return nil, err
 			}
-		} else if streamRes == nil {
-			return nil, err
+			return nil, errors.New("gemini native stream result missing")
 		}
 		usage = streamRes.usage
 		firstTokenMs = streamRes.firstTokenMs

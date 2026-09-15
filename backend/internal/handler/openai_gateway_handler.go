@@ -1782,7 +1782,6 @@ func validCodexAutomationHeartbeat(value string) bool {
 	return openaiwire.ValidCodexAutomationHeartbeat(value)
 }
 
-
 func (h *OpenAIGatewayHandler) acquireResponsesUserSlot(
 	c *gin.Context,
 	userID int64,

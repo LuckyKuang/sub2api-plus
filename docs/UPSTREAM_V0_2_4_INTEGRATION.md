@@ -109,5 +109,5 @@ at `badfad8b7248b8aac0e6b503a06e392aa31cb294` and ships as Plus
 | Billing probes | Retired generic upstream billing probes stay deleted. |
 | Grok | Cross-client rewriting stays disabled. Inconclusive OAuth entitlement does not authorize media. Abandoned media slots are released. |
 | Images | Official Codex Images direct path is overlaid on Plus account-aware streaming, first-output timing, and async/batch storage gates. |
-| OpenCode | Platform, protocol rules, session headers, and local count_tokens estimates are included. Identity still applies after header overrides. |
+| OpenCode | Platform, protocol rules, session headers, local count_tokens estimates, and channel-monitor probe/quota support are included. Identity still applies after header overrides. |
 | Defaults | Compact model examples follow official `gpt-5.5`. Image main model remains `gpt-5.6-luna` in Plus deployment examples. |

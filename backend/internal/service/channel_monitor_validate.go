@@ -9,7 +9,7 @@ import (
 // 渠道监控参数校验与归一化辅助函数。
 // 校验失败一律返回 channel_monitor_const.go 中预定义的 Err* 错误，错误信息不含具体 IP/hostname，避免泄露内网拓扑。
 
-// monitorProviders 渠道监控支持的全部 provider（与迁移 226 的 CHECK 约束一致）。
+// monitorProviders 渠道监控支持的全部 provider（与迁移 266 的 CHECK 约束一致）。
 // 不再以 adapter 表为唯一来源：antigravity 没有探活 adapter，但支持配额模式。
 //
 //nolint:gochecknoglobals // 静态查表，初始化后不变。
@@ -23,6 +23,7 @@ var monitorProviders = map[string]struct{}{
 	MonitorProviderZhipu:       {},
 	MonitorProviderDeepseek:    {},
 	MonitorProviderMiniMax:     {},
+	MonitorProviderOpenCodeGo:  {},
 }
 
 // probeCapableProviders 支持探活（probe / quota_probe）的 provider。
@@ -38,6 +39,7 @@ var probeCapableProviders = map[string]struct{}{
 	MonitorProviderZhipu:     {},
 	MonitorProviderDeepseek:  {},
 	MonitorProviderMiniMax:   {},
+	MonitorProviderOpenCodeGo: {},
 }
 
 // validateProvider 校验 provider 字符串。
