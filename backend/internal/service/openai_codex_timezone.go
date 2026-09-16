@@ -35,7 +35,6 @@ func (s *OpenAIGatewayService) resolveOpenAICodexEnvironmentTimezone(
 		return "", "", false
 	}
 
-	timezoneName = ""
 	if account.Proxy != nil && account.Proxy.ID > 0 {
 		timezoneName = openAICodexProxyTimezoneForID(
 			s.cfg.Gateway.OpenAICodexProxyTimezones,

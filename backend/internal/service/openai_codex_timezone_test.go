@@ -1,3 +1,5 @@
+//go:build unit
+
 package service
 
 import (
@@ -188,9 +190,17 @@ func TestBuildOpenAIWSCreatePayloadRewritesTimezone(t *testing.T) {
 	}
 
 	payload := svc.buildOpenAIWSCreatePayload(reqBody, account)
-	input := payload["input"].([]any)
-	item := input[0].(map[string]any)
-	content := item["content"].([]any)
-	part := content[0].(map[string]any)
-	require.Contains(t, part["text"].(string), "<timezone>America/New_York</timezone>")
+	input, ok := payload["input"].([]any)
+	require.True(t, ok)
+	require.Len(t, input, 1)
+	item, ok := input[0].(map[string]any)
+	require.True(t, ok)
+	content, ok := item["content"].([]any)
+	require.True(t, ok)
+	require.Len(t, content, 1)
+	part, ok := content[0].(map[string]any)
+	require.True(t, ok)
+	text, ok := part["text"].(string)
+	require.True(t, ok)
+	require.Contains(t, text, "<timezone>America/New_York</timezone>")
 }
