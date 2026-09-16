@@ -34,6 +34,7 @@ No new SQL migrations ship in this import.
 | Ingress audit | Security-audit order and extraction pass-through remain the Plus contract. |
 | DeepSeek | Official empty-mapping whitelist is included. Passthrough accounts still skip mapping admission. |
 | Quota / session | Canonical 5h/7d window reads are included. Plus session affinity, local quota views, and pause thresholds remain authoritative. |
+| Capacity shed | OpenAI overloaded / `slow_down`, Anthropic `overloaded_error` / 529, Grok shared model capacity, and Antigravity `MODEL_CAPACITY_EXHAUSTED` return immediately. Same-account retry and account failover stay for transport, 401/403, and account-scoped 429. |
 | API keys | Provider filter is included. Plus IP restriction, quota, rate-limit, and expiration fields on the same form remain. |
 | Billing probes | Retired upstream billing probes remain removed. |
 

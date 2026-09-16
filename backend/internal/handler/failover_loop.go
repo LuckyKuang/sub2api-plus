@@ -280,6 +280,10 @@ func (s *FailoverState) HandleSelectionExhausted(ctx context.Context) FailoverAc
 		return FailoverCanceled
 	}
 
+	if s.LastFailoverErr != nil && !s.LastFailoverErr.ShouldRetryNextAccount() {
+		return FailoverExhausted
+	}
+
 	if s.LastFailoverErr != nil &&
 		s.LastFailoverErr.StatusCode == http.StatusServiceUnavailable &&
 		s.SwitchCount <= s.MaxSwitches {

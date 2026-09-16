@@ -126,6 +126,27 @@ is never assumed to be the 7-day window. Reset scoring prefers the canonical
 time does not slide the countdown forward on each score. Scheduler weights,
 pause thresholds, and Plus session/quota accounting are unchanged.
 
+## Upstream Capacity Shed
+
+OpenAI capacity-shed signals (`server_is_overloaded`, `slow_down`, and messages
+such as `Our servers are currently overloaded` or `Selected model is at
+capacity`) are request-scoped. The gateway does not retry the same account and
+does not switch accounts. The first upstream response is returned to the
+client as HTTP 503. Account health, scheduling, and pause state are unchanged.
+
+When the error is forwarded, `server_is_overloaded` / `slow_down` are rewritten
+to `server_error` so Codex CLI does not treat them as a fatal session-ending
+code. The original message is preserved. Rate-limit codes are not rewritten.
+Codex WebSocket HTTP-bridge and native WS turns deliver that rewritten event
+on the current connection instead of switching accounts or closing with a
+generic proxy failure.
+
+Anthropic `overloaded_error` / HTTP 529 and Grok shared model-capacity errors
+follow the same no-retry rule for the current request.
+
+Transport failures, account-scoped 401/403/429, and OAuth 429 windows keep
+their existing retry and failover behavior.
+
 ## Responses Stream Sequence Numbers
 
 Gateway-synthesized and re-emitted Responses SSE frames always write

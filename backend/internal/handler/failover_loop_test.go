@@ -88,6 +88,43 @@ func TestSameAccountRetryAllowedRequiresOptInAndDefaultsToCountLimit(t *testing.
 	require.False(t, sameAccountRetryAllowed(err, maxSameAccountRetries, maxSameAccountRetries))
 }
 
+func TestHandleSelectionExhaustedCapacityShedDoesNotBackoff(t *testing.T) {
+	fs := NewFailoverState(10, false)
+	fs.LastFailoverErr = &service.UpstreamFailoverError{
+		StatusCode:        http.StatusServiceUnavailable,
+		NextAccountAction: service.NextAccountStop,
+	}
+	fs.SwitchCount = 1
+	fs.FailedAccountIDs[100] = struct{}{}
+
+	action := fs.HandleSelectionExhausted(context.Background())
+
+	require.Equal(t, FailoverExhausted, action)
+	require.Contains(t, fs.FailedAccountIDs, int64(100))
+}
+
+func TestHandleFailoverErrorCapacityShedStopsImmediately(t *testing.T) {
+	mock := &mockTempUnscheduler{}
+	fs := NewFailoverState(10, false)
+	err := &service.UpstreamFailoverError{
+		StatusCode:             http.StatusBadRequest,
+		RetryableOnSameAccount: false,
+		RequestScopedTransient: true,
+		NextAccountAction:      service.NextAccountStop,
+		ClientStatusCode:       http.StatusServiceUnavailable,
+		ClientMessage:          "Our servers are currently overloaded. Please try again later.",
+	}
+
+	action := fs.HandleFailoverError(context.Background(), mock, 100, "openai", maxSameAccountRetries, err)
+
+	require.Equal(t, FailoverExhausted, action)
+	require.Zero(t, fs.SwitchCount)
+	require.Zero(t, fs.SameAccountRetryCount[100])
+	require.Empty(t, mock.calls)
+	require.NotContains(t, fs.FailedAccountIDs, int64(100))
+	require.Equal(t, err, fs.LastFailoverErr)
+}
+
 func TestSameAccountRetryAllowedHonorsErrorMaxBeforeDeadline(t *testing.T) {
 	err := &service.UpstreamFailoverError{
 		RetryableOnSameAccount:   true,

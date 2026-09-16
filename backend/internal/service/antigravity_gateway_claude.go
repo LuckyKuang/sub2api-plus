@@ -408,7 +408,7 @@ func (s *AntigravityGatewayService) Forward(ctx context.Context, c *gin.Context,
 						Message:            upstreamMsg,
 						Detail:             upstreamDetail,
 					})
-					return nil, &UpstreamFailoverError{StatusCode: resp.StatusCode, ResponseBody: respBody, RetryableOnSameAccount: true}
+					return nil, newAntigravityUpstreamFailoverError(resp.StatusCode, respBody, true)
 				}
 			}
 
@@ -428,7 +428,7 @@ func (s *AntigravityGatewayService) Forward(ctx context.Context, c *gin.Context,
 					Message:            upstreamMsg,
 					Detail:             upstreamDetail,
 				})
-				return nil, &UpstreamFailoverError{StatusCode: resp.StatusCode, ResponseBody: respBody}
+				return nil, newAntigravityUpstreamFailoverError(resp.StatusCode, respBody, false)
 			}
 
 			return nil, s.writeMappedClaudeError(c, account, resp.StatusCode, resp.Header.Get("x-request-id"), respBody)

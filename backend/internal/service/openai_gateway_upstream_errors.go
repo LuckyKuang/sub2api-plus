@@ -363,7 +363,7 @@ func newOpenAIUpstreamFailoverError(
 		StatusCode:             statusCode,
 		ResponseBody:           responseBody,
 		ResponseHeaders:        responseHeaders.Clone(),
-		RetryableOnSameAccount: retryableOnSameAccount || requestScopedCapacity,
+		RetryableOnSameAccount: retryableOnSameAccount && !requestScopedCapacity,
 		RequestScopedTransient: requestScopedCapacity,
 	}
 	if isOpenAIRequestBodyTooLargeError(statusCode, upstreamMsg, responseBody) {
@@ -385,6 +385,10 @@ func newOpenAIUpstreamFailoverError(
 		failoverErr.ClientStatusCode = http.StatusBadGateway
 		failoverErr.ClientMessage = openAIUpstreamAccessUnavailableClientMessage
 	} else if requestScopedCapacity {
+		failoverErr.RetryableOnSameAccount = false
+		failoverErr.Scope = GatewayFailureScopeRequest
+		failoverErr.Reason = openAICapacityShedReason
+		failoverErr.NextAccountAction = NextAccountStop
 		failoverErr.ClientStatusCode = http.StatusServiceUnavailable
 		failoverErr.ClientMessage = openAICapacityShedClientMessage(upstreamMsg, responseBody)
 	}
@@ -962,7 +966,8 @@ func isOpenAICapacityShedMessage(text string) bool {
 	lower := strings.ToLower(strings.TrimSpace(text))
 	return strings.Contains(lower, "server is overloaded") ||
 		strings.Contains(lower, "servers are overloaded") ||
-		strings.Contains(lower, "servers are currently overloaded")
+		strings.Contains(lower, "servers are currently overloaded") ||
+		strings.Contains(lower, "selected model is at capacity")
 }
 
 func isOpenAIRequestScopedCapacityShed(upstreamMsg string, upstreamBody []byte) bool {
@@ -1025,4 +1030,5 @@ const (
 	openAIUpstreamAccessUnavailableClientMessage = "Upstream access is temporarily unavailable, please retry later"
 	OpenAIUpstreamAccessStateReason              = GatewayFailureReason("openai_upstream_access_state")
 	OpenAIHTTPContinuationUnsupportedReason      = GatewayFailureReason("openai_http_continuation_unsupported")
+	openAICapacityShedReason                     = GatewayFailureReason("openai_capacity_shed")
 )

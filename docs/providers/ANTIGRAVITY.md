@@ -56,3 +56,8 @@ routes can also select Antigravity accounts.
 
 Anthropic Claude and Antigravity Claude must not be mixed in the same
 conversation context. Use separate groups to isolate them.
+
+`MODEL_CAPACITY_EXHAUSTED` is shared across accounts for the same model. The
+gateway returns the upstream 503 immediately: it does not retry the same
+account, switch accounts, or mark the model rate-limited. Ordinary
+`RATE_LIMIT_EXCEEDED` waits or account switches are unchanged.

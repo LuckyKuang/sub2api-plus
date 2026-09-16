@@ -149,7 +149,7 @@ func classifyGrokUpstreamFailure(statusCode int, responseBody []byte, requestedM
 			Model:          model,
 			Cooldown:       time.Minute,
 			ShouldCooldown: true,
-			ShouldFailover: true,
+			ShouldFailover: false,
 			BlockModel:     false,
 			Reason:         firstNonEmpty(text, "model capacity"),
 		}
@@ -383,25 +383,18 @@ func isGrokBillingQuotaText(low string) bool {
 	return false
 }
 
-// grokRetryableOnSameAccount marks transient 429 classes for the shared
-// failover loop. Capacity and ordinary throttles are request/model pressure,
-// not evidence that the credential is invalid, so a bounded retry on the same
-// account is preferable before switching accounts. Free-usage and billing
-// exhaustion deliberately skip same-account retry and fail over immediately.
+// grokRetryableOnSameAccount marks pool-mode throttles for the shared failover
+// loop. Shared model capacity, free-usage, billing, and compatibility errors
+// skip same-account retry.
 func grokRetryableOnSameAccount(account *Account, statusCode int, responseBody []byte) bool {
 	if account == nil || !account.IsGrok() {
 		return false
 	}
 	decision := classifyGrokUpstreamFailure(statusCode, responseBody, "")
 	switch decision.Class {
-	case GrokFailureFreeUsage, GrokFailureBilling, GrokFailureCompatibility:
-		// Quota/entitlement exhaustion is account state, not transient
-		// pressure. Retrying the same account only repeats the failure.
+	case GrokFailureFreeUsage, GrokFailureBilling, GrokFailureCompatibility, GrokFailureModelCapacity:
+		// Quota exhaustion and shared model capacity both repeat on retry.
 		return false
-	case GrokFailureModelCapacity:
-		if statusCode == http.StatusTooManyRequests {
-			return true
-		}
 	}
 	return account.IsPoolMode() && account.IsPoolModeRetryableStatus(statusCode)
 }
@@ -414,18 +407,12 @@ func grokSameAccountRetryMetadata(account *Account, statusCode int, responseBody
 	if decision.Class != GrokFailureModelCapacity {
 		return true, 0, time.Time{}, 0
 	}
-	// The error is reconstructed after every upstream attempt, so a deadline
-	// stored on the error cannot provide a request-wide window. Cap capacity
-	// retries explicitly to one replay; this remains effective even when the
-	// first attempt itself takes longer than the nominal 30-second window.
 	return true, 500 * time.Millisecond, time.Now().Add(30 * time.Second), 1
 }
 
 // shouldMarkGrokTeamModelRateLimit controls the process-local sibling-account
-// overlay. Model-capacity responses are request pressure, not a team quota;
-// marking them would hide healthy sibling credentials while the bounded
-// same-account retry is still in progress. Ordinary 429s and free-usage
-// exhaustion retain the existing quota/team isolation behavior.
+// overlay. Model-capacity responses are shared request pressure, not a team
+// quota. Ordinary 429s and free-usage exhaustion retain quota/team isolation.
 func shouldMarkGrokTeamModelRateLimit(statusCode int, responseBody []byte) bool {
 	decision := classifyGrokUpstreamFailure(statusCode, responseBody, "")
 	if decision.Class == GrokFailureModelCapacity {
@@ -588,9 +575,8 @@ func (s *OpenAIGatewayService) applyGrokUpstreamFailureDecision(
 	case GrokFailureEmptyUpstream:
 		reason = "grok empty model output"
 	case GrokFailureModelCapacity:
-		// Capacity is scoped to the requested model. Never persist an account-wide
-		// unschedulable state for this transient class; the failover loop performs
-		// a bounded same-account retry before selecting another account.
+		// Capacity is shared request pressure. Cool the model snapshot only;
+		// do not unschedulable the account or retry this request.
 		_ = persistGrokTransientModelCooldown(account, decision)
 		return true
 	case GrokFailureRateLimit:

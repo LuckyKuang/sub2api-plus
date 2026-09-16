@@ -3748,6 +3748,33 @@ func openAIWSNextAttemptMessage(current, retryPayload []byte, retryCurrentTurn b
 }
 
 func closeOpenAIWSFailoverExhausted(c *gin.Context, conn *coderws.Conn, failoverErr *service.UpstreamFailoverError) {
+	if failoverErr != nil && failoverErr.IsOpenAICapacityShed() {
+		message := strings.TrimSpace(failoverErr.ClientMessage)
+		if message == "" {
+			message = "upstream service temporarily overloaded"
+		}
+		payload, err := json.Marshal(gin.H{
+			"type":            "error",
+			"sequence_number": 0,
+			"error": gin.H{
+				"type":    "server_error",
+				"code":    "server_error",
+				"message": message,
+			},
+		})
+		if err != nil {
+			payload = []byte(`{"type":"error","sequence_number":0,"error":{"type":"server_error","code":"server_error","message":"upstream service temporarily overloaded"}}`)
+		}
+		service.MarkOpsStreamFailure(c, "server_error", string(failoverErr.Reason), message, http.StatusServiceUnavailable)
+		if conn != nil {
+			writeCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			_ = conn.Write(writeCtx, coderws.MessageText, payload)
+			cancel()
+		}
+		closeOpenAIClientWS(conn, coderws.StatusTryAgainLater, message)
+		return
+	}
+
 	intendedStatus := http.StatusBadGateway
 	errorType := "upstream_error"
 	errorCode := "upstream_ws_failover_exhausted"

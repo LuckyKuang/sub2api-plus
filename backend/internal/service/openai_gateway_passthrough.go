@@ -1647,12 +1647,10 @@ func openAIStreamFailedEventRetryableOnSameAccount(account *Account, payload []b
 	if account == nil {
 		return false
 	}
-	// 容量降载是请求级信号，不是账号级故障：上游只是让本次请求稍后再试。
-	// 换账号并不改变被降载的因素（客户端身份、模型容量都与账号无关），
-	// 只会让单个请求把整池账号逐个消耗掉，最终仍以同一个错误告终。
-	// 因此先在同一账号上做有界重试，用尽后才按常规流程切号。
-	if isOpenAIUpstreamCapacityShedEvent(payload) {
-		return true
+	// 容量降载是请求级、全池共享的信号。同账号重试和换号都打同一容量池，
+	// 只拉长延迟并放大上游压力。分类器会把这类错误标成 NextAccountStop。
+	if isOpenAIUpstreamCapacityShedEvent(payload) || isOpenAICapacityShedMessage(message) {
+		return false
 	}
 	if !account.IsPoolMode() {
 		return false

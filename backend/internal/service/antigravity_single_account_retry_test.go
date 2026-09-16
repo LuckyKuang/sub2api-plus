@@ -88,16 +88,17 @@ func TestHandleSmartRetry_503_LongDelay_SingleAccountRetry_RetryInPlace(t *testi
 		Concurrency: 1,
 	}
 
-	// 503 + 39s >= 7s 阈值 + MODEL_CAPACITY_EXHAUSTED
+	// HTTP 503 + Google RPC RESOURCE_EXHAUSTED / RATE_LIMIT_EXCEEDED + 39s：
+	// 账号级限流走 shouldRateLimitModel，单账号分组改为原地重试。
 	respBody := []byte(`{
 		"error": {
 			"code": 503,
-			"status": "UNAVAILABLE",
+			"status": "RESOURCE_EXHAUSTED",
 			"details": [
-				{"@type": "type.googleapis.com/google.rpc.ErrorInfo", "metadata": {"model": "gemini-3-pro-high"}, "reason": "MODEL_CAPACITY_EXHAUSTED"},
+				{"@type": "type.googleapis.com/google.rpc.ErrorInfo", "metadata": {"model": "gemini-3-pro-high"}, "reason": "RATE_LIMIT_EXCEEDED"},
 				{"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "39s"}
 			],
-			"message": "No capacity available for model gemini-3-pro-high on the server"
+			"message": "Resource has been exhausted"
 		}
 	}`)
 	resp := &http.Response{
@@ -262,7 +263,7 @@ func TestHandleSmartRetry_429_LongDelay_SingleAccountRetry_StillSwitches(t *test
 
 // TestHandleSmartRetry_503_ShortDelay_SingleAccountRetry_NoRateLimit
 // 503 + retryDelay < 7s + SingleAccountRetry → 智能重试耗尽后直接返回 503，不设限流
-// 使用 RATE_LIMIT_EXCEEDED（走 1 次智能重试），避免 MODEL_CAPACITY_EXHAUSTED 的 60 次重试导致测试超时
+// 使用 RATE_LIMIT_EXCEEDED（走 1 次智能重试），MODEL_CAPACITY_EXHAUSTED 不再进入智能重试
 func TestHandleSmartRetry_503_ShortDelay_SingleAccountRetry_NoRateLimit(t *testing.T) {
 	// 智能重试也返回 503
 	failRespBody := `{
@@ -344,7 +345,7 @@ func TestHandleSmartRetry_503_ShortDelay_SingleAccountRetry_NoRateLimit(t *testi
 
 // TestHandleSmartRetry_503_ShortDelay_NoSingleAccountRetry_SetsRateLimit
 // 对照组：503 + retryDelay < 7s + 无 SingleAccountRetry → 智能重试耗尽后照常设限流
-// 使用 RATE_LIMIT_EXCEEDED 而非 MODEL_CAPACITY_EXHAUSTED，因为后者走独立的 60 次重试路径
+// 使用 RATE_LIMIT_EXCEEDED 而非 MODEL_CAPACITY_EXHAUSTED，因为后者立刻回上游错误
 func TestHandleSmartRetry_503_ShortDelay_NoSingleAccountRetry_SetsRateLimit(t *testing.T) {
 	failRespBody := `{
 		"error": {
@@ -484,7 +485,7 @@ func TestHandleSingleAccountRetryInPlace_AllRetriesFail(t *testing.T) {
 					"code": 503,
 					"status": "UNAVAILABLE",
 					"details": [
-						{"@type": "type.googleapis.com/google.rpc.ErrorInfo", "metadata": {"model": "gemini-3-pro"}, "reason": "MODEL_CAPACITY_EXHAUSTED"},
+						{"@type": "type.googleapis.com/google.rpc.ErrorInfo", "metadata": {"model": "gemini-3-pro"}, "reason": "RATE_LIMIT_EXCEEDED"},
 						{"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "0.1s"}
 					]
 				}
@@ -784,7 +785,7 @@ func TestHandleSmartRetry_503_SingleAccount_RetryInPlace_ThenSuccess_E2E(t *test
 			"code": 503,
 			"status": "UNAVAILABLE",
 			"details": [
-				{"@type": "type.googleapis.com/google.rpc.ErrorInfo", "metadata": {"model": "gemini-3-pro"}, "reason": "MODEL_CAPACITY_EXHAUSTED"},
+				{"@type": "type.googleapis.com/google.rpc.ErrorInfo", "metadata": {"model": "gemini-3-pro"}, "reason": "RATE_LIMIT_EXCEEDED"},
 				{"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "0.1s"}
 			]
 		}
@@ -846,12 +847,12 @@ func TestAntigravityRetryLoop_503_SingleAccount_InPlaceRetryUsed_E2E(t *testing.
 	initial503Body := []byte(`{
 		"error": {
 			"code": 503,
-			"status": "UNAVAILABLE",
+			"status": "RESOURCE_EXHAUSTED",
 			"details": [
-				{"@type": "type.googleapis.com/google.rpc.ErrorInfo", "metadata": {"model": "gemini-3-pro"}, "reason": "MODEL_CAPACITY_EXHAUSTED"},
+				{"@type": "type.googleapis.com/google.rpc.ErrorInfo", "metadata": {"model": "gemini-3-pro"}, "reason": "RATE_LIMIT_EXCEEDED"},
 				{"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "10s"}
 			],
-			"message": "No capacity available"
+			"message": "Resource has been exhausted"
 		}
 	}`)
 	initial503Resp := &http.Response{

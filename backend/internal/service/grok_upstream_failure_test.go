@@ -60,6 +60,7 @@ func TestClassifyGrokUpstreamFailure_ModelCapacityUsesShortCooldown(t *testing.T
 	require.Equal(t, GrokFailureModelCapacity, d.Class)
 	require.Equal(t, time.Minute, d.Cooldown)
 	require.False(t, d.BlockModel)
+	require.False(t, d.ShouldFailover)
 }
 
 func TestClassifyGrokUpstreamFailure_Billing(t *testing.T) {
@@ -79,7 +80,7 @@ func TestClassifyGrokUpstreamFailure_GrokSubscriptionRequiredIsBilling(t *testin
 
 func TestGrokRetryableOnSameAccount_CapacityAndRateLimit(t *testing.T) {
 	account := &Account{ID: 9105, Platform: PlatformGrok, Type: AccountTypeOAuth}
-	require.True(t, grokRetryableOnSameAccount(account, http.StatusTooManyRequests,
+	require.False(t, grokRetryableOnSameAccount(account, http.StatusTooManyRequests,
 		[]byte(`{"error":{"message":"The model is currently at capacity due to high demand"}}`)))
 	require.False(t, grokRetryableOnSameAccount(account, http.StatusTooManyRequests,
 		[]byte(`{"error":{"message":"rate limit exceeded"}}`)))
@@ -112,10 +113,10 @@ func TestGrokSameAccountRetryMetadata_CapacityDeadline(t *testing.T) {
 	account := &Account{ID: 9107, Platform: PlatformGrok, Type: AccountTypeOAuth}
 	retryable, delay, deadline, retryMax := grokSameAccountRetryMetadata(account, http.StatusTooManyRequests,
 		[]byte(`{"error":{"message":"model capacity exceeded"}}`))
-	require.True(t, retryable)
-	require.Equal(t, 500*time.Millisecond, delay)
-	require.WithinDuration(t, time.Now().Add(30*time.Second), deadline, 2*time.Second)
-	require.Equal(t, 1, retryMax)
+	require.False(t, retryable)
+	require.Zero(t, delay)
+	require.True(t, deadline.IsZero())
+	require.Zero(t, retryMax)
 
 	retryable, delay, deadline, retryMax = grokSameAccountRetryMetadata(account, http.StatusTooManyRequests,
 		[]byte(`{"error":{"message":"rate limit exceeded"}}`))
@@ -167,6 +168,12 @@ func TestClassifyGrokUpstreamFailure_GenericShapeErrorDoesNotFailover(t *testing
 		[]byte(`{"error":{"message":"data did not match any variant of the untagged enum content"}}`), "grok-4.6")
 	require.NotEqual(t, GrokFailureCompatibility, d.Class)
 	require.False(t, d.ShouldFailover)
+}
+
+func TestShouldFailoverGrokUpstreamError_CapacityDoesNotFailover(t *testing.T) {
+	svc := &OpenAIGatewayService{}
+	body := []byte(`{"error":{"message":"The model is currently at capacity due to high demand"}}`)
+	require.False(t, svc.shouldFailoverGrokUpstreamError(http.StatusTooManyRequests, body))
 }
 
 func TestShouldFailoverGrokUpstreamError_FreeUsageBody(t *testing.T) {

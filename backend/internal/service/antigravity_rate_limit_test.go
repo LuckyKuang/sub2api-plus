@@ -226,13 +226,26 @@ func TestHandleUpstreamError_429_NonModelRateLimit_UsesMappedModelKey(t *testing
 }
 
 // TestHandleUpstreamError_503_ModelCapacityExhausted 测试 503 模型容量不足场景
-// MODEL_CAPACITY_EXHAUSTED 时应等待重试，不切换账号
+// MODEL_CAPACITY_EXHAUSTED 应立刻回上游错误，不切换账号
+func TestNewAntigravityUpstreamFailoverErrorStopsOnModelCapacity(t *testing.T) {
+	body := []byte(`{"error":{"status":"UNAVAILABLE","details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"MODEL_CAPACITY_EXHAUSTED","metadata":{"model":"gemini-3-pro-high"}}]}}`)
+	err := newAntigravityUpstreamFailoverError(http.StatusServiceUnavailable, body, true)
+	require.False(t, err.RetryableOnSameAccount)
+	require.False(t, err.ShouldRetryNextAccount())
+	require.True(t, err.RequestScopedTransient)
+	require.Equal(t, http.StatusServiceUnavailable, err.ClientStatusCode)
+
+	other := newAntigravityUpstreamFailoverError(http.StatusBadGateway, []byte(`{"error":{"message":"boom"}}`), true)
+	require.True(t, other.RetryableOnSameAccount)
+	require.True(t, other.ShouldRetryNextAccount())
+}
+
 func TestHandleUpstreamError_503_ModelCapacityExhausted(t *testing.T) {
 	repo := &stubAntigravityAccountRepo{}
 	svc := &AntigravityGatewayService{accountRepo: repo}
 	account := &Account{ID: 3, Name: "acc-3", Platform: PlatformAntigravity}
 
-	// 503 + MODEL_CAPACITY_EXHAUSTED → 等待重试，不切换账号
+	// 503 + MODEL_CAPACITY_EXHAUSTED → 立刻回上游错误，不切换账号
 	body := []byte(`{
 		"error": {
 			"status": "UNAVAILABLE",
@@ -655,14 +668,14 @@ func TestShouldTriggerAntigravitySmartRetry(t *testing.T) {
 					]
 				}
 			}`,
-			expectedShouldRetry:              true,
+			expectedShouldRetry:              false,
 			expectedShouldRateLimit:          false,
 			expectedIsModelCapacityExhausted: true,
-			minWait:                          1 * time.Second,
+			minWait:                          0,
 			modelName:                        "gemini-3-pro-high",
 		},
 		{
-			name:    "503 UNAVAILABLE with MODEL_CAPACITY_EXHAUSTED - no retryDelay - use fixed wait",
+			name:    "503 UNAVAILABLE with MODEL_CAPACITY_EXHAUSTED - no retryDelay - no retry",
 			account: oauthAccount,
 			body: `{
 				"error": {
@@ -674,10 +687,10 @@ func TestShouldTriggerAntigravitySmartRetry(t *testing.T) {
 					"message": "No capacity available for model gemini-2.5-flash on the server"
 				}
 			}`,
-			expectedShouldRetry:              true,
+			expectedShouldRetry:              false,
 			expectedShouldRateLimit:          false,
 			expectedIsModelCapacityExhausted: true,
-			minWait:                          1 * time.Second,
+			minWait:                          0,
 			modelName:                        "gemini-2.5-flash",
 		},
 		{
