@@ -117,11 +117,11 @@ func (s *OpenAIOAuthServiceSuite) TestExchangeCodeWithIdentityPairsAndFallsBackU
 	const validUA = "codex-tui/0.150.0 (Ubuntu 22.4.0; x86_64) xterm-256color (codex-tui; 0.150.0)"
 	_, err := s.svc.ExchangeCodeWithIdentity(s.ctx, "code", "ver", openai.DefaultRedirectURI, "", "", validUA, "client-controlled", "0.150.0")
 	require.NoError(s.T(), err)
-	require.Equal(s.T(), [3]string{validUA, "codex-tui", "0.150.0"}, <-requests)
+	require.Equal(s.T(), [3]string{validUA, "codex-tui", ""}, <-requests)
 
 	_, err = s.svc.ExchangeCodeWithIdentity(s.ctx, "code", "ver", openai.DefaultRedirectURI, "", "", "Mozilla/5.0", "client-controlled", "9.9.9")
 	require.NoError(s.T(), err)
-	require.Equal(s.T(), [3]string{service.DefaultOpenAICodexUserAgent, openai.CodexDefaultOriginator, service.DefaultOpenAICodexVersion}, <-requests)
+	require.Equal(s.T(), [3]string{service.DefaultOpenAICodexUserAgent, openai.CodexDefaultOriginator, ""}, <-requests)
 }
 
 func TestResolveOpenAIOAuthIdentity_LegacyRequiresExplicitResolvedOriginator(t *testing.T) {
@@ -150,10 +150,10 @@ func (s *OpenAIOAuthServiceSuite) TestIdentityRetainsConfiguredOutboundVersionSy
 			ua := family + "/" + version + " (Ubuntu 24.04; x86_64) terminal"
 			_, err := s.svc.ExchangeCodeWithIdentity(s.ctx, "code", "verifier", openai.DefaultRedirectURI, "", "", ua, family, version)
 			require.NoError(s.T(), err)
-			require.Equal(s.T(), [3]string{ua, family, version}, <-requests)
+			require.Equal(s.T(), [3]string{ua, family, ""}, <-requests)
 			_, err = s.svc.RefreshTokenWithClientIDAndIdentity(s.ctx, "refresh", "", "", ua, family, version)
 			require.NoError(s.T(), err)
-			require.Equal(s.T(), [3]string{ua, family, version}, <-requests)
+			require.Equal(s.T(), [3]string{ua, family, ""}, <-requests)
 			got, _, _ := resolveOpenAIOAuthIdentity(ua, "", version)
 			require.Equal(s.T(), service.DefaultOpenAICodexUserAgent, got, "UA-only callers cannot supply a policy-approved historical version")
 		}

@@ -240,6 +240,9 @@ and Version with the selected UA. Native Codex Platform API-key requests omit
 both Originator and Version, including `responses/compact`. Header presence is
 determined by the endpoint protocol, never by an inbound or generic override
 value. Explicit compatible presets retain their own protocol header mappings.
+The OAuth credential endpoint (`auth.openai.com` token exchange and refresh)
+follows the official Codex auth client and sends only the selected User-Agent
+and Originator; it must not receive the inference-only `Version` header.
 Generic override saves reject managed identity headers with
 `INVALID_HEADER_OVERRIDE`; runtime filtering ignores previously stored entries.
 Authentication, session, routing and protocol-capability fields keep their own

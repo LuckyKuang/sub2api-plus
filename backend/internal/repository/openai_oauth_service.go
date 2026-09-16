@@ -63,7 +63,6 @@ func (s *openaiOAuthService) exchangeCode(ctx context.Context, code, codeVerifie
 		SetContext(ctx).
 		SetHeader("User-Agent", userAgent).
 		SetHeader("Originator", originator).
-		SetHeader("Version", version).
 		SetFormDataFromValues(formData).
 		SetSuccessResult(&tokenResp).
 		Post(s.tokenURL)
@@ -122,7 +121,6 @@ func (s *openaiOAuthService) refreshTokenWithClientID(ctx context.Context, refre
 		SetContext(ctx).
 		SetHeader("User-Agent", userAgent).
 		SetHeader("Originator", originator).
-		SetHeader("Version", version).
 		SetFormDataFromValues(formData).
 		SetSuccessResult(&tokenResp).
 		Post(s.tokenURL)
