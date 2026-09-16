@@ -631,6 +631,14 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 	// DeepSeek / Kimi 原生 Responses 端点为无状态实现（见 normalizeDeepSeekResponsesRequestBody）。
 	body = normalizeDeepSeekResponsesRequestBody(account, body)
 
+	// 最终 HTTP 兜底：普通透传与 WS->HTTP bridge 都会调用该 builder，
+	// 因此即使 Forward() 已覆盖常规路径，这里仍需执行同一幂等改写。
+	if rewrittenBody, _, rewriteErr := s.rewriteOpenAICodexEnvironmentTimezoneForAccount(body, account); rewriteErr != nil {
+		return nil, fmt.Errorf("rewrite OpenAI Codex passthrough timezone: %w", rewriteErr)
+	} else {
+		body = rewrittenBody
+	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(body))
 	if err != nil {
 		return nil, err

@@ -324,6 +324,12 @@ gateway:
   # Use this to avoid compact failures when newer models are not yet supported by the compact endpoint.
   # 当 compact 端点暂未支持更新模型时，可通过这里降级规避失败。
   openai_compact_model: "gpt-5.4"
+  # ChatGPT/Codex 使用服务器直连出口时的模型可见时区。
+  # 不改变应用全局 TZ 或面板时间语义；空值表示保留客户端原始 environment_context 时区。
+  openai_codex_direct_timezone: ""
+  # 代理 ID -> IANA 时区；共享代理 ID 的多个账号自动共享同一模型可见时区。
+  # 示例："12=America/New_York,27=America/Los_Angeles"；可选通配兜底："*=America/Los_Angeles"
+  openai_codex_proxy_timezones: ""
   # ChatGPT Frameless Live 单会话硬上限（秒）。
   live:
     max_session_duration_seconds: 3600

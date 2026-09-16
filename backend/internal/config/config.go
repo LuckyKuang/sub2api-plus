@@ -1000,6 +1000,12 @@ type GatewayConfig struct {
 	// OpenAICompactModel: /responses/compact 上游使用的模型。
 	// compact 端点支持模型滞后于普通 /responses 时，可用该配置降级规避上游错误。
 	OpenAICompactModel string `mapstructure:"openai_compact_model"`
+	// OpenAICodexDirectTimezone 控制服务器直连出口对应的模型可见 IANA 时区。
+	// 空值表示不改写直连请求；该配置刻意与应用全局 TZ/timezone 解耦。
+	OpenAICodexDirectTimezone string `mapstructure:"openai_codex_direct_timezone"`
+	// OpenAICodexProxyTimezones 将代理 ID 映射到模型可见 IANA 时区。
+	// 格式："12=America/New_York,27=America/Los_Angeles"；"*" 可作为未匹配代理的兜底。
+	OpenAICodexProxyTimezones string `mapstructure:"openai_codex_proxy_timezones"`
 	// OpenAIWS: OpenAI Responses WebSocket 配置（默认开启，可按需回滚到 HTTP）
 	OpenAIWS GatewayOpenAIWSConfig `mapstructure:"openai_ws"`
 	// Live: ChatGPT Frameless Live 会话配置。
@@ -2372,6 +2378,8 @@ func setDefaults() {
 	viper.SetDefault("gateway.codex_image_generation_bridge_enabled", false)
 	viper.SetDefault("gateway.openai_passthrough_allow_timeout_headers", false)
 	viper.SetDefault("gateway.openai_compact_model", "gpt-5.4")
+	viper.SetDefault("gateway.openai_codex_direct_timezone", "")
+	viper.SetDefault("gateway.openai_codex_proxy_timezones", "")
 	viper.SetDefault("gateway.live.max_session_duration_seconds", 3600)
 	// OpenAI Responses WebSocket（默认开启；可通过 force_http 紧急回滚）
 	viper.SetDefault("gateway.openai_ws.enabled", true)

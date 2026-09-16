@@ -237,6 +237,10 @@ func (s *OpenAIGatewayService) buildOpenAIWSCreatePayload(reqBody map[string]any
 	if account != nil && account.UsesOpenAICodexProtocol() && !s.isOpenAIWSStoreRecoveryAllowed(account) {
 		payload["store"] = false
 	}
+	// 单个下游 WS 连接可承载多轮 response.create；每轮都重新应用出口时区策略。
+	if timezoneName, currentDate, ok := s.resolveOpenAICodexEnvironmentTimezone(account); ok {
+		rewriteOpenAICodexEnvironmentTimezoneMap(payload, timezoneName, currentDate)
+	}
 	return payload
 }
 

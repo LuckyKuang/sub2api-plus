@@ -774,6 +774,11 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 	} else if compatibilityChanged {
 		firstClientMessage = normalized
 	}
+	if rewritten, _, rewriteErr := s.rewriteOpenAICodexEnvironmentTimezoneForAccount(firstClientMessage, account); rewriteErr != nil {
+		return NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "invalid Codex environment context", rewriteErr)
+	} else {
+		firstClientMessage = rewritten
+	}
 	if account.IsOpenAIOAuthLike() {
 		aliasedBody, reverse, aliased, aliasErr := aliasOpenAIOAuthReservedToolNamesBody(firstClientMessage)
 		if aliasErr != nil {
@@ -1076,6 +1081,11 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 					return payload, nil, NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "invalid websocket request payload", normalizeErr)
 				} else if compatibilityChanged {
 					payload = normalized
+				}
+				if rewritten, _, rewriteErr := s.rewriteOpenAICodexEnvironmentTimezoneForAccount(payload, account); rewriteErr != nil {
+					return payload, nil, NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "invalid Codex environment context", rewriteErr)
+				} else {
+					payload = rewritten
 				}
 			}
 			if account.IsOpenAIOAuthLike() && (isResponseCreate || eventType == "session.update") {

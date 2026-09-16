@@ -39,6 +39,13 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	if _, err := s.prepareCodexAccountIdentitySource(ctx, c, account); err != nil {
 		return nil, err
 	}
+	// Codex 会把本机 IANA 时区放进模型可见的 <environment_context>。
+	// 在 HTTP/WS 分流前先按实际出口改写；各原生 WS 路径也会在每轮发送前复用同一规则。
+	if rewrittenBody, _, rewriteErr := s.rewriteOpenAICodexEnvironmentTimezoneForAccount(body, account); rewriteErr != nil {
+		return nil, fmt.Errorf("rewrite OpenAI Codex environment timezone: %w", rewriteErr)
+	} else {
+		body = rewrittenBody
+	}
 	startTime := time.Now()
 	// 固定渠道映射后的请求级 canonical body；账号 normalize/strip 不得改写跨 failover hint。
 	canonicalImageIntentBody := body
