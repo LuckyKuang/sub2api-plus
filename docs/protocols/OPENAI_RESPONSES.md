@@ -115,6 +115,27 @@ counters.
 Canonical nested usage details take priority by field presence, including an
 explicit zero, before known top-level compatibility aliases are considered.
 
+## Codex Scheduler Quota Windows
+
+OpenAI account scoring reads canonical `codex_5h_*` and `codex_7d_*` usage
+fields first. Historical `codex_primary_*` / `codex_secondary_*` snapshots reuse
+the same Normalize window classification used when writing extras, so `primary`
+is never assumed to be the 7-day window. Reset scoring prefers the canonical
+5-hour reset time and falls back to the session window. Relative
+`reset_after_seconds` is anchored at `codex_usage_updated_at`; a missing sample
+time does not slide the countdown forward on each score. Scheduler weights,
+pause thresholds, and Plus session/quota accounting are unchanged.
+
+## Responses Stream Sequence Numbers
+
+Gateway-synthesized and re-emitted Responses SSE frames always write
+`sequence_number`, including `0`. Compact HTTP/SSE bridges number events
+monotonically from `0`. Synthetic `response.failed` frames and WebSocket-to-HTTP
+bridge error/`response.failed` events emit `0` when the previous sequence is
+unknown. Strict clients such as Grok Build treat the field as required and abort
+the turn when it is omitted. The OpenAI spec marks it optional; Plus still emits
+it so those clients can deserialize the stream.
+
 ## Codex Rate-Limit Response Headers
 
 For Codex Responses requests, successful HTTP and SSE responses can include

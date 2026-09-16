@@ -160,6 +160,7 @@ Details:
 
 - [Grok / xAI](docs/providers/GROK.md)
 - [Antigravity](docs/providers/ANTIGRAVITY.md)
+- [DeepSeek](docs/providers/DEEPSEEK.md)
 - [Sora status](docs/providers/SORA.md)
 - [OpenAI Responses and WebSocket ingress](docs/protocols/OPENAI_RESPONSES.md)
 - [Asynchronous image tasks](docs/ASYNC_IMAGE_TASKS.md)

@@ -8,6 +8,7 @@ below for detailed configuration and maintenance instructions.
 - [Grok / xAI](providers/GROK.md)
 - [Sora status and reserved configuration](providers/SORA.md)
 - [Antigravity](providers/ANTIGRAVITY.md)
+- [DeepSeek empty-mapping whitelist](providers/DEEPSEEK.md)
 - [Kimi / Moonshot](providers/KIMI.md)
 - [MiniMax coding-plan quota origins](providers/MINIMAX.md)
 
@@ -33,6 +34,7 @@ below for detailed configuration and maintenance instructions.
 - [Release process](RELEASING.md)
 - [Upstream mapping](../UPSTREAM.md)
 - [Upstream v0.2.4 integration and upgrade behavior](UPSTREAM_V0_2_4_INTEGRATION.md)
+- [Upstream v0.2.5 integration](UPSTREAM_V0_2_5_INTEGRATION.md)
 - [Database migrations](../backend/migrations/README.md)
 - [Authentication and Passkeys](AUTHENTICATION.md)
 - [Model Plaza visibility](MODEL_PLAZA.md)

@@ -177,6 +177,7 @@ sudo systemctl reload nginx
 
 - [Grok / xAI](docs/providers/GROK.md)
 - [Antigravity](docs/providers/ANTIGRAVITY.md)
+- [DeepSeek](docs/providers/DEEPSEEK.md)
 - [Sora 状态](docs/providers/SORA.md)
 - [OpenAI Responses 与 WebSocket 入口](docs/protocols/OPENAI_RESPONSES.md)
 - [异步图片任务](docs/ASYNC_IMAGE_TASKS.md)
