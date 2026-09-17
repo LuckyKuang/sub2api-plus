@@ -126,8 +126,9 @@ type OpenAIQuotaResetResult struct {
 }
 
 // OpenAIQuotaService queries and consumes ChatGPT/Codex rate-limit reset credits
-// for OpenAI OAuth accounts. It reuses the privacy client factory so all calls
-// flow through the impersonated HTTP client (Cloudflare-friendly TLS fingerprint).
+// for OpenAI OAuth accounts. It reuses the backend-api client factory; identity
+// headers follow the official backend-client surface and no browser TLS
+// fingerprint is applied.
 type OpenAIQuotaService struct {
 	accountRepo            AccountRepository
 	proxyRepo              ProxyRepository

@@ -4,13 +4,11 @@ package service
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/imroc/req/v3"
 	"github.com/stretchr/testify/require"
 )
 
@@ -66,31 +64,4 @@ func TestAccountTestServiceSkipsShadow(t *testing.T) {
 	err := svc.TestAccountConnection(c, 200, "", "", "")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "resolve spark shadow parent")
-}
-
-// --- 3. EnsureOpenAIPrivacy 守卫 ---
-
-// TestEnsureOpenAIPrivacySkipsShadow 验证影子账号跳过隐私设置（不调用 privacyClientFactory）。
-// 影子账号透传母账号凭据，但 Extra 通常为空，需给它一个 access_token 才能让
-// 现有的 token=="" 提前返回路径失效，从而真实验证 IsCredentialShadow 守卫。
-func TestEnsureOpenAIPrivacySkipsShadow(t *testing.T) {
-	pid := int64(100)
-	shadow := &Account{
-		ID:              200,
-		Platform:        PlatformOpenAI,
-		Type:            AccountTypeOAuth,
-		ParentAccountID: &pid,
-		// 提供 access_token：没有影子守卫时会进入 factory 调用
-		Credentials: map[string]any{"access_token": "shadow-passthrough-token"},
-	}
-	privacyCalled := false
-	svc := &adminServiceImpl{
-		privacyClientFactory: func(proxyURL string) (*req.Client, error) {
-			privacyCalled = true
-			return nil, errors.New("should not reach factory for shadow account")
-		},
-	}
-	got := svc.EnsureOpenAIPrivacy(context.Background(), shadow)
-	require.Equal(t, "", got)
-	require.False(t, privacyCalled, "privacyClientFactory 不应被影子账号触发")
 }

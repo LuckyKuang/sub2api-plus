@@ -143,13 +143,8 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 			}
 			setOpenAIUpstreamSessionIdentityForAccount(headers, account, upstreamSessionID)
 		}
-		if sessionResolution.ConversationID != "" && accountEmitsCodexConvergedSessionAliases(account) {
-			upstreamConversationID, err := s.resolveOpenAIUpstreamSessionID(c, account, sessionResolution.ConversationID)
-			if err != nil {
-				return nil, openAIWSSessionHeaderResolution{}, err
-			}
-			headers.Set("conversation_id", upstreamConversationID)
-		}
+		// conversation_id is not an official Codex header; the final alias
+		// cleanup below drops any client-provided value for Codex accounts.
 	} else {
 		if sessionResolution.SessionID != "" {
 			upstreamSessionID, err := s.resolveOpenAIUpstreamPromptCacheHeaderIdentity(c, account, sessionResolution.SessionID)

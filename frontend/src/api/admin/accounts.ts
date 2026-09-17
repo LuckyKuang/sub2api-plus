@@ -434,7 +434,7 @@ export async function generateAuthUrl(
  */
 export async function startOpenAIDeviceCode(
   endpoint: string,
-  config: { proxy_id?: number } = {}
+  config: { proxy_id?: number; account_id?: number } = {}
 ): Promise<{ session_id: string; user_code: string; verification_url: string; interval_seconds: number }> {
   const { data } = await apiClient.post<{
     session_id: string

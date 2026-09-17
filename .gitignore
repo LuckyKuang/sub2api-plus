@@ -187,3 +187,4 @@ __pycache__/
 
 # 本地闭源插件开发目录及构建产物不进入 Sub2API Plus 仓库
 /plugins/
+.codebuddy/

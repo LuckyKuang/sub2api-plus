@@ -1210,8 +1210,6 @@ func (s *TokenRefreshService) postRefreshActions(ctx context.Context, account *A
 		}
 	}
 	s.postRefreshStateSync(ctx, account)
-	// OpenAI OAuth: 刷新成功后，检查是否已设置 privacy_mode，未设置则尝试关闭训练数据共享
-	s.ensureOpenAIPrivacy(ctx, account)
 	// Antigravity OAuth: 刷新成功后，检查是否已设置 privacy_mode，未设置则调用 setUserSettings
 	s.ensureAntigravityPrivacy(ctx, account)
 	// Grok: clear soft reauth flag after a successful credential refresh.
@@ -1452,13 +1450,6 @@ func isNonRetryableRefreshError(err error) bool {
 		}
 	}
 	return false
-}
-
-// ensureOpenAIPrivacy is a no-op. Official Codex does not PATCH ChatGPT
-// training settings during token refresh.
-func (s *TokenRefreshService) ensureOpenAIPrivacy(ctx context.Context, account *Account) {
-	_ = ctx
-	_ = account
 }
 
 // ensureAntigravityPrivacy 后台刷新中检查 Antigravity OAuth 账号隐私状态。

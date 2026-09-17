@@ -18,7 +18,7 @@ type OpenAIOAuthService struct {
 	proxyRepo            ProxyRepository
 	accountRepo          AccountRepository
 	oauthClient          OpenAIOAuthClient
-	privacyClientFactory PrivacyClientFactory // 用于调用 chatgpt.com/backend-api（ImpersonateChrome）
+	privacyClientFactory PrivacyClientFactory // 用于调用 chatgpt.com/backend-api 辅助面（账号信息/订阅 enrich 等）
 	settingService       *SettingService
 }
 
@@ -31,8 +31,8 @@ func NewOpenAIOAuthService(proxyRepo ProxyRepository, oauthClient OpenAIOAuthCli
 	}
 }
 
-// SetPrivacyClientFactory 注入 ImpersonateChrome 客户端工厂，
-// 用于调用 chatgpt.com/backend-api 获取账号信息（plan_type 等）。
+// SetPrivacyClientFactory 注入 chatgpt.com/backend-api 辅助面 HTTP 客户端工厂，
+// 用于获取账号信息（plan_type 等）。官方 backend-client 不做浏览器 TLS 伪装。
 func (s *OpenAIOAuthService) SetPrivacyClientFactory(factory PrivacyClientFactory) {
 	s.privacyClientFactory = factory
 }
@@ -461,10 +461,13 @@ func isOpenAIOAuthCredentialOwner(account *Account) bool {
 	return account != nil && account.IsOpenAIOAuth() && !account.IsCredentialShadow()
 }
 
-// BuildAccountCredentials builds credentials map from token info
+// BuildAccountCredentials builds credentials map from token info.
+// Official Codex merges refresh responses field-by-field: only fields present
+// in the response update stored credentials, so empty values never overwrite.
 func (s *OpenAIOAuthService) BuildAccountCredentials(tokenInfo *OpenAITokenInfo) map[string]any {
-	creds := map[string]any{
-		"access_token": tokenInfo.AccessToken,
+	creds := map[string]any{}
+	if strings.TrimSpace(tokenInfo.AccessToken) != "" {
+		creds["access_token"] = tokenInfo.AccessToken
 	}
 	if tokenInfo.ExpiresAt > 0 {
 		creds["expires_at"] = time.Unix(tokenInfo.ExpiresAt, 0).Format(time.RFC3339)
@@ -519,9 +522,18 @@ type OpenAIDeviceCodeResult struct {
 }
 
 // StartDeviceCode begins the official Codex device-code flow.
-func (s *OpenAIOAuthService) StartDeviceCode(ctx context.Context, proxyID *int64, platform string) (*OpenAIDeviceCodeResult, error) {
+// accountID is set only for re-authorization: the association stays in the
+// server-side session so the exchange cannot be redirected to a different
+// account, and the exchange reuses the account's outbound identity.
+func (s *OpenAIOAuthService) StartDeviceCode(ctx context.Context, proxyID *int64, platform string, accountID *int64) (*OpenAIDeviceCodeResult, error) {
 	if s == nil || s.oauthClient == nil {
 		return nil, infraerrors.New(http.StatusInternalServerError, "OPENAI_OAUTH_CLIENT_UNAVAILABLE", "openai oauth client is not configured")
+	}
+	if accountID != nil && s.accountRepo != nil {
+		acc, err := s.accountRepo.GetByID(ctx, *accountID)
+		if err != nil || !isOpenAIOAuthCredentialOwner(acc) {
+			return nil, infraerrors.New(http.StatusBadRequest, "OPENAI_OAUTH_REAUTH_ACCOUNT_INVALID", "re-authorization requires an existing non-shadow OpenAI OAuth account")
+		}
 	}
 	var proxyURL string
 	if proxyID != nil && s.proxyRepo != nil {
@@ -550,6 +562,7 @@ func (s *OpenAIOAuthService) StartDeviceCode(ctx context.Context, proxyID *int64
 	s.sessionStore.Set(sessionID, &openai.OAuthSession{
 		State:          state,
 		ClientID:       clientID,
+		AccountID:      accountID,
 		ProxyURL:       proxyURL,
 		RedirectURI:    openai.DeviceCodeRedirectURI,
 		CreatedAt:      time.Now(),

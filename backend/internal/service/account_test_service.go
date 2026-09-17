@@ -2240,7 +2240,6 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
 	req.Header.Set(codexSessionIDHeader, probeSessionID)
 	if accountEmitsCodexConvergedSessionAliases(credentialAccount) {
 		req.Header.Set("session_id", probeSessionID)
-		req.Header.Set("conversation_id", probeSessionID)
 	}
 
 	if isOAuth {

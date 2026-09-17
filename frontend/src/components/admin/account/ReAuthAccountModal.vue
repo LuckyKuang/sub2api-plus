@@ -389,7 +389,7 @@ const handleStartOpenAIDeviceCode = async () => {
   if (!props.account) return
   const generation = ++openaiDeviceCodeGeneration
   openaiDeviceCodePolling.value = false
-  const started = await openaiOAuth.startDeviceCode(props.account.proxy_id)
+  const started = await openaiOAuth.startDeviceCode(props.account.proxy_id, props.account.id)
   if (!started || generation !== openaiDeviceCodeGeneration) return
   openaiDeviceCode.value = started
   openaiDeviceCodePolling.value = true

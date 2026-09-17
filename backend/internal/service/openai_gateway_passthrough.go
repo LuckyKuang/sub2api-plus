@@ -685,8 +685,6 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 		if clientSessionID == "" {
 			clientSessionID = strings.TrimSpace(req.Header.Get("session_id"))
 		}
-		originalClientConversationID := strings.TrimSpace(req.Header.Get("conversation_id"))
-		clientConversationID := originalClientConversationID
 		if isOpenAIResponsesCompactPath(c) {
 			req.Header.Set("accept", "application/json")
 			if req.Header.Get("version") == "" {
@@ -705,9 +703,6 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 		if promptCacheKey != "" {
 			clientSessionID = promptCacheKey
 		}
-		if originalClientConversationID == "" && accountEmitsCodexConvergedSessionAliases(account) {
-			clientConversationID = promptCacheKey
-		}
 		if clientSessionID != "" {
 			upstreamSessionID, resolveErr := s.resolveOpenAIUpstreamPromptCacheHeaderIdentity(c, account, clientSessionID)
 			if resolveErr != nil {
@@ -715,15 +710,9 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 			}
 			setOpenAIUpstreamSessionIdentityForAccount(req.Header, account, upstreamSessionID)
 		}
-		if clientConversationID != "" && accountEmitsCodexConvergedSessionAliases(account) {
-			upstreamConversationID, resolveErr := s.resolveOpenAIPromptCacheIdentity(c, account, clientConversationID)
-			if resolveErr != nil {
-				return nil, resolveErr
-			}
-			req.Header.Set("conversation_id", upstreamConversationID)
-		} else {
-			req.Header.Del("conversation_id")
-		}
+		// conversation_id 不是官方 Codex 头：客户端透传值一律剥离，终态别名
+		// 清理（clearOpenAICodexLegacySessionAliases）保证 Codex 账号不出站。
+		req.Header.Del("conversation_id")
 	} else if isOpenAIResponsesCompactPath(c) {
 		// 透传白名单会放行客户端的 Accept: text/event-stream；compact 上游是
 		// unary JSON 协议，API-key 账号同样强制 Accept，避免上游按 SSE 返回

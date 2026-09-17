@@ -182,7 +182,7 @@ func ProvideOpenAITokenProvider(
 
 // ProvideOpenAIQuotaService wires the OpenAI quota query/reset service.
 // It depends on the OpenAI token provider for refreshed access tokens and the
-// privacy client factory for the impersonated upstream HTTP client.
+// backend-api client factory for the auxiliary HTTP client.
 func ProvideOpenAIQuotaService(
 	accountRepo AccountRepository,
 	proxyRepo ProxyRepository,

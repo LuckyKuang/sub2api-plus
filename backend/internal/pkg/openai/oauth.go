@@ -308,7 +308,6 @@ func parseFlexibleInt64(raw json.RawMessage) int64 {
 // DeviceTokenPollResponse is the official /deviceauth/token success payload.
 type DeviceTokenPollResponse struct {
 	AuthorizationCode string `json:"authorization_code"`
-	CodeChallenge     string `json:"code_challenge"`
 	CodeVerifier      string `json:"code_verifier"`
 }
 
@@ -316,15 +315,6 @@ type DeviceTokenPollResponse struct {
 type DeviceTokenPollRequest struct {
 	DeviceAuthID string `json:"device_auth_id"`
 	UserCode     string `json:"user_code"`
-}
-
-// TokenRequest represents the token exchange request body
-type TokenRequest struct {
-	GrantType    string `json:"grant_type"`
-	ClientID     string `json:"client_id"`
-	Code         string `json:"code"`
-	RedirectURI  string `json:"redirect_uri"`
-	CodeVerifier string `json:"code_verifier"`
 }
 
 // TokenResponse represents the token response from OpenAI OAuth
@@ -386,29 +376,6 @@ type OrganizationClaim struct {
 	IsDefault bool   `json:"is_default"`
 }
 
-// BuildTokenRequest creates a token exchange request for OpenAI
-func BuildTokenRequest(code, codeVerifier, redirectURI string) *TokenRequest {
-	if redirectURI == "" {
-		redirectURI = DefaultRedirectURI
-	}
-	return &TokenRequest{
-		GrantType:    "authorization_code",
-		ClientID:     ClientID,
-		Code:         code,
-		RedirectURI:  redirectURI,
-		CodeVerifier: codeVerifier,
-	}
-}
-
-// BuildRefreshTokenRequest creates a refresh token request for OpenAI
-func BuildRefreshTokenRequest(refreshToken string) *RefreshTokenRequest {
-	return &RefreshTokenRequest{
-		ClientID:     ClientID,
-		GrantType:    "refresh_token",
-		RefreshToken: refreshToken,
-	}
-}
-
 // EncodeAuthorizationCodeTokenBody matches official Codex token exchange:
 // grant_type, code, redirect_uri, client_id, code_verifier with urlencoding %20.
 func EncodeAuthorizationCodeTokenBody(code, redirectURI, clientID, codeVerifier string) string {
@@ -419,16 +386,6 @@ func EncodeAuthorizationCodeTokenBody(code, redirectURI, clientID, codeVerifier 
 		{"client_id", clientID},
 		{"code_verifier", codeVerifier},
 	})
-}
-
-// ToFormData converts TokenRequest to the official Codex form body.
-func (r *TokenRequest) ToFormData() string {
-	return EncodeAuthorizationCodeTokenBody(r.Code, r.RedirectURI, r.ClientID, r.CodeVerifier)
-}
-
-// ToJSON converts RefreshTokenRequest to the official Codex JSON body.
-func (r *RefreshTokenRequest) ToJSON() ([]byte, error) {
-	return json.Marshal(r)
 }
 
 // DecodeIDToken decodes the ID Token JWT payload without validating expiration.

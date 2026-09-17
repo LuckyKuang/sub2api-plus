@@ -249,13 +249,25 @@ Originator, or Version; refresh uses the default client and sends only the
 selected User-Agent and Originator. Neither request receives the inference-only
 `Version` header.
 Device-code start/poll uses the same raw client (no User-Agent, Originator, or
-Version) and then exchanges the returned authorization code. `/oauth/revoke`
+Version) and then exchanges the returned authorization code. Re-authorization
+device-code sessions may bind an account server-side like browser re-auth.
+`/oauth/revoke`
 uses the refresh-style client (User-Agent + Originator, no Version); `client_id`
 is sent only when revoking a refresh token. Login no longer PATCHes
 ChatGPT `training_allowed`; administrators can still force privacy later.
-OAuth `session`/`full` fingerprint modes emit the legacy `session_id` and
-auto `conversation_id` aliases; `off`/`device` keep official `session-id` +
-`thread-id` spelling.
+Official Codex never sends a `conversation_id` header, so Codex-protocol
+outbound requests never carry one. The legacy `session_id` alias is a Plus
+compatibility header: OAuth accounts emit it only when the fingerprint mode
+converges session identity (`session`/`full`), API-key accounts keep emitting
+it, and `off`/`device` OAuth accounts keep the official `session-id` +
+`thread-id` spelling only. The chatgpt.com backend-api auxiliary surface
+(accounts check, subscription enrich, settings PATCH, WHAM usage and credit
+endpoints) uses the regular HTTP client without browser TLS impersonation and
+the official backend-client header surface: selected User-Agent,
+Authorization, optional `chatgpt-account-id`, and optional `x-openai-fedramp`;
+it omits Originator and Version. `/backend-api/subscriptions` is a Plus-only
+enrichment endpoint with no official equivalent; official expiration data comes
+from `accounts/check` entitlements.
 ChatGPT WHAM `/backend-api/wham/usage` and rate-limit credit endpoints follow
 official backend-client headers: selected User-Agent, Authorization,
 `chatgpt-account-id`, and optional `x-openai-fedramp`. They omit Originator and

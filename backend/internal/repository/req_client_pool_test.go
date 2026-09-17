@@ -76,18 +76,17 @@ func TestGetSharedReqClient_IgnoresNonClientCache(t *testing.T) {
 	require.IsType(t, "invalid", loaded)
 }
 
-func TestGetSharedReqClient_ImpersonateAndProxy(t *testing.T) {
+func TestGetSharedReqClient_ProxyCacheKey(t *testing.T) {
 	sharedReqClients = sync.Map{}
 	opts := reqClientOptions{
-		ProxyURL:    "  http://proxy.local:8080  ",
-		Timeout:     4 * time.Second,
-		Impersonate: true,
+		ProxyURL: "  http://proxy.local:8080  ",
+		Timeout:  4 * time.Second,
 	}
 	client, err := getSharedReqClient(opts)
 	require.NoError(t, err)
 
 	require.NotNil(t, client)
-	require.Equal(t, "http://proxy.local:8080|4s|true|false", buildReqClientKey(opts))
+	require.Equal(t, "http://proxy.local:8080|4s|false", buildReqClientKey(opts))
 }
 
 func TestGetSharedReqClient_InvalidProxyURL(t *testing.T) {
@@ -141,13 +140,4 @@ func TestInstrumentReqClientRecordsDependency(t *testing.T) {
 
 	header := collector.HeaderValue(time.Now(), "bypass")
 	require.True(t, strings.Contains(header, "dep_http;dur="), header)
-}
-
-func TestGetSharedReqClient_ImpersonateUsesFirefoxFingerprint(t *testing.T) {
-	sharedReqClients = sync.Map{}
-	client, err := getSharedReqClient(reqClientOptions{Timeout: time.Second, Impersonate: true})
-	require.NoError(t, err)
-	// chatgpt.com 的 Cloudflare 会质询 req 内置的 Chrome/120 伪装，必须保持 Firefox 指纹。
-	require.Contains(t, client.Headers.Get("User-Agent"), "Firefox/")
-	require.NotContains(t, client.Headers.Get("User-Agent"), "Chrome/")
 }

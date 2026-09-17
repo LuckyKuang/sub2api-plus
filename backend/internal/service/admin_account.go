@@ -560,29 +560,17 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 		}
 	}
 
-	// OAuth 账号：创建后异步设置隐私。
-	// 使用 Ensure（幂等）而非 Force：新建账号 Extra 为空时效果相同，但更安全。
-	if account.Type == AccountTypeOAuth {
-		switch account.Platform {
-		case PlatformOpenAI:
-			go func() {
-				defer func() {
-					if r := recover(); r != nil {
-						slog.Error("create_account_openai_privacy_panic", "account_id", account.ID, "recover", r)
-					}
-				}()
-				s.EnsureOpenAIPrivacy(context.Background(), account)
+	// OAuth 账号：创建后异步设置隐私（仅 Antigravity；官方 Codex 不在登录期
+	// PATCH 训练开关，OpenAI 账号的隐私由管理员经 set-privacy 手动设置）。
+	if account.Type == AccountTypeOAuth && account.Platform == PlatformAntigravity {
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					slog.Error("create_account_antigravity_privacy_panic", "account_id", account.ID, "recover", r)
+				}
 			}()
-		case PlatformAntigravity:
-			go func() {
-				defer func() {
-					if r := recover(); r != nil {
-						slog.Error("create_account_antigravity_privacy_panic", "account_id", account.ID, "recover", r)
-					}
-				}()
-				s.EnsureAntigravityPrivacy(context.Background(), account)
-			}()
-		}
+			s.EnsureAntigravityPrivacy(context.Background(), account)
+		}()
 	}
 
 	return account, nil
@@ -1770,15 +1758,8 @@ func (s *adminServiceImpl) resolveOpenAIOutboundIdentity(ctx context.Context, ac
 	return resolveOpenAIOutboundIdentityFromSettings(ctx, account, settingService)
 }
 
-// EnsureOpenAIPrivacy is a no-op for OpenAI OAuth. Official Codex does not
-// PATCH ChatGPT training settings during login or token refresh.
-func (s *adminServiceImpl) EnsureOpenAIPrivacy(ctx context.Context, account *Account) string {
-	_ = ctx
-	_ = account
-	return ""
-}
-
 // ForceOpenAIPrivacy 强制重新设置 OpenAI OAuth 账号隐私，无论当前状态。
+// 这是管理员手动入口；官方 Codex 不会在登录/刷新时 PATCH 训练开关。
 func (s *adminServiceImpl) ForceOpenAIPrivacy(ctx context.Context, account *Account) string {
 	if account.IsCredentialShadow() {
 		return ""
@@ -1802,7 +1783,8 @@ func (s *adminServiceImpl) ForceOpenAIPrivacy(ctx context.Context, account *Acco
 		}
 	}
 
-	mode := disableOpenAITraining(ctx, s.privacyClientFactory, token, proxyURL, s.resolveOpenAIOutboundIdentity(ctx, account))
+	chatGPTAccountID, _ := account.Credentials["chatgpt_account_id"].(string)
+	mode := disableOpenAITraining(ctx, s.privacyClientFactory, token, proxyURL, chatGPTAccountID, s.resolveOpenAIOutboundIdentity(ctx, account))
 	if mode == "" {
 		return ""
 	}

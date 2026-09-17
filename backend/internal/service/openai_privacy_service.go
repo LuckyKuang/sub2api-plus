@@ -23,22 +23,9 @@ const (
 	PrivacyModeCFBlocked   = "training_set_cf_blocked"
 )
 
-func shouldSkipOpenAIPrivacyEnsure(extra map[string]any) bool {
-	if extra == nil {
-		return false
-	}
-	raw, ok := extra["privacy_mode"]
-	if !ok {
-		return false
-	}
-	mode, _ := raw.(string)
-	mode = strings.TrimSpace(mode)
-	return mode != PrivacyModeFailed && mode != PrivacyModeCFBlocked
-}
-
 // disableOpenAITraining calls ChatGPT settings API to turn off "Improve the model for everyone".
 // Returns privacy_mode value: "training_off" on success, "cf_blocked" / "failed" on failure.
-func disableOpenAITraining(ctx context.Context, clientFactory PrivacyClientFactory, accessToken, proxyURL string, identity openAIOutboundIdentity) string {
+func disableOpenAITraining(ctx context.Context, clientFactory PrivacyClientFactory, accessToken, proxyURL, chatGPTAccountID string, identity openAIOutboundIdentity) string {
 	if accessToken == "" || clientFactory == nil {
 		return ""
 	}
@@ -53,12 +40,17 @@ func disableOpenAITraining(ctx context.Context, clientFactory PrivacyClientFacto
 	}
 
 	identity = normalizeOpenAIPrivacyIdentity(identity)
-	resp, err := client.R().
+	request := client.R().
 		SetContext(ctx).
 		SetHeader("Authorization", "Bearer "+accessToken).
 		SetHeader("User-Agent", identity.UserAgent).
-		SetHeader("Originator", identity.Originator).
-		SetHeader("Accept", "application/json").
+		SetHeader("Accept", "application/json")
+	// Official backend-client sends ChatGPT-Account-Id when it is known and
+	// never sends Originator/Version on the chatgpt.com backend surface.
+	if chatGPTAccountID = strings.TrimSpace(chatGPTAccountID); chatGPTAccountID != "" {
+		request = request.SetHeader("ChatGPT-Account-Id", chatGPTAccountID)
+	}
+	resp, err := request.
 		SetQueryParam("feature", "training_allowed").
 		SetQueryParam("value", "false").
 		Patch(openAISettingsURL)
@@ -250,7 +242,6 @@ func fetchChatGPTSubscriptionExpiresAt(ctx context.Context, clientFactory Privac
 		SetContext(ctx).
 		SetHeader("Authorization", "Bearer "+accessToken).
 		SetHeader("User-Agent", identity.UserAgent).
-		SetHeader("Originator", identity.Originator).
 		SetHeader("Accept", "application/json").
 		SetSuccessResult(&result).
 		SetQueryParam("account_id", accountID).

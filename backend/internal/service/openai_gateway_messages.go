@@ -382,7 +382,9 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 			return nil, fmt.Errorf("resolve messages cache session identity: %w", identityErr)
 		}
 		setOpenAIUpstreamSessionIdentityForAccount(upstreamReq.Header, account, cacheSessionIdentity)
-		if upstreamReq.Header.Get("conversation_id") != "" {
+		// conversation_id 不是官方 Codex 头：Codex 账号由下方别名清理统一剥离，
+		// 仅非 Codex（API-key）账号保留既有改写行为。
+		if !account.UsesOpenAICodexProtocol() && upstreamReq.Header.Get("conversation_id") != "" {
 			upstreamReq.Header.Set("conversation_id", cacheSessionIdentity)
 		}
 	}
@@ -400,9 +402,6 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 			zap.String("upstream_model", upstreamModel),
 			zap.Bool("compat_identity_restored", true),
 		)
-	}
-	if account.UsesOpenAICodexProtocol() && promptCacheKey != "" && strings.TrimSpace(c.GetHeader("conversation_id")) == "" {
-		upstreamReq.Header.Del("conversation_id")
 	}
 	if compatTurnState != "" && upstreamReq.Header.Get("x-codex-turn-state") == "" {
 		upstreamReq.Header.Set("x-codex-turn-state", compatTurnState)

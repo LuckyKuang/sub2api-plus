@@ -1008,7 +1008,9 @@ func TestOpenAIGatewayService_Forward_WSv2_OAuthStoreFalseByDefault(t *testing.T
 	require.NoError(t, resolveErr)
 	require.Equal(t, expectedSessionIdentity, captureDialer.lastHeaders.Get(codexSessionIDHeader))
 	require.Equal(t, expectedSessionIdentity, captureDialer.lastHeaders.Get("session_id"))
-	require.Equal(t, isolateOpenAISessionID(0, "conv-oauth-1"), captureDialer.lastHeaders.Get("conversation_id"))
+	// conversation_id is never an official Codex header; session/full keeps only
+	// the Plus session_id alias.
+	require.Empty(t, captureDialer.lastHeaders.Get("conversation_id"))
 }
 
 func TestOpenAIGatewayService_Forward_WSv2_OAuthSanitizesInvalidNativeToolItemID(t *testing.T) {

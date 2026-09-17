@@ -1519,9 +1519,6 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 				return nil, err
 			}
 			setOpenAIUpstreamSessionIdentityForAccount(req.Header, account, isolated)
-			if accountEmitsCodexConvergedSessionAliases(account) {
-				req.Header.Set("conversation_id", isolated)
-			}
 		}
 	} else if isOpenAIResponsesCompactPath(c) {
 		// compact 上游是 unary JSON 协议：API-key 账号也显式声明 Accept，
