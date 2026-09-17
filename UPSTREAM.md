@@ -80,7 +80,10 @@ for the official tag import on that tree.
 | `v0.2.4+custom.003` | `v0.2.4` | `5de5e2bed035d43591a2e10e51f420ef6a84eb98` | published |
 | `v0.2.4+custom.004` | `v0.2.4` | `5de5e2bed035d43591a2e10e51f420ef6a84eb98` | published |
 | `v0.2.4+custom.005` | `v0.2.4` | `5de5e2bed035d43591a2e10e51f420ef6a84eb98` | published |
-| `v0.2.4+custom.006` | `v0.2.4` | `badfad8b7248b8aac0e6b503a06e392aa31cb294` | planned |
+| `v0.2.4+custom.006` | `v0.2.4` | `badfad8b7248b8aac0e6b503a06e392aa31cb294` | withdrawn |
+| `v0.2.5+custom.001` | `v0.2.5` | `86f93c28ee34cc74b629dafb748bd5ac5ca8c5ea` | planned |
+
+`v0.2.4+custom.006` is marked withdrawn because official `v0.2.5` was imported before that snapshot overlay was published. Do not reuse or retag `.006`.
 
 `v0.1.166+custom.007` is marked invalid because its tag contains embedded and
 documented version `0.1.166+custom.006`. Remote Release and OCI artifact status
@@ -89,9 +92,9 @@ still require a maintainer audit. Do not reuse or retag `.007`.
 ## Current Version
 
 ```text
-Git/GitHub: v0.2.4+custom.006
-Application: 0.2.4+custom.006
-GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.4-custom.006
+Git/GitHub: v0.2.5+custom.001
+Application: 0.2.5+custom.001
+GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.5-custom.001
 ```
 
 ## Naming

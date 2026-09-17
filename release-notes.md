@@ -1,27 +1,27 @@
-Sub2API Plus v0.2.4+custom.006
+Sub2API Plus v0.2.5+custom.001
 
 ## Highlights
 
-Plus now includes the pinned official `main` snapshot after `v0.2.4`: OpenCode as a first-class platform, native Codex Images for OAuth, subscription-surface controls, and bulk admin actions, while keeping Plus identity, ingress audit, async images, and retired billing probes.
+First Plus release on official `v0.2.5`. It keeps Plus identity, ingress audit, session/quota accounting, and retired billing probes, while aligning Codex OAuth outbound with the official CLI and importing the official DeepSeek, quota-window, Responses sequence_number, Antigravity SSE, and API-key provider-filter fixes.
 
 ## Changed
 
-- OpenCode Zen/GO accounts, session headers, and local Anthropic count_tokens estimates.
-- OAuth image requests can use native Codex Images; Grok abandoned media slots are released.
-- WebSocket pooling uses execution-scope keys, idle ping, and peer-close eviction after ingress audit.
-- Admin bulk API-key edit, bulk subscription actions, selected-user delete, and registration password confirmation.
-- Site billing/subscription switch hides user-facing subscription entry points when disabled.
-- Antigravity Gemini 3.7/3.8 Flash, Ollama Cloud async rate-limit reset, and ops token stats across platforms.
+- Default Codex originator is `codex_cli_rs`. Inference still sends the Plus User-Agent, Originator, and Version triple with the Ubuntu fingerprint.
+- OAuth authorize, raw token exchange, JSON refresh, device-code, and revoke follow official Codex clients. Login no longer PATCHes ChatGPT training.
+- `off`/`device` fingerprint modes emit official `session-id` and `thread-id` only; `session`/`full` still emit legacy aliases.
+- Shared upstream capacity shed (OpenAI overloaded/slow_down, Anthropic 529, Grok model capacity, Antigravity MODEL_CAPACITY_EXHAUSTED) returns immediately without same-account retry or failover. Codex-fatal `server_is_overloaded` is still rewritten to `server_error`.
+- Official v0.2.5 DeepSeek empty-mapping whitelist, canonical Codex 5h/7d quota reads, Responses `sequence_number` emission, Antigravity Gemini SSE separator fix, and API-key provider filtering.
+- OpenCode Zen/GO accounts, native Codex Images for OAuth, WebSocket execution-scope pooling, and bulk admin actions from the unpublished 0.2.4 overlay.
 
 ## Compatibility and migration
 
-Migrations 266 and 267 add OpenCode platform constraints and delete unlimited (all-NULL) user platform quota rows. Back up the database before upgrade. Official still has no `v0.2.5` tag; this release stays in the `0.2.4+custom.NNN` family on snapshot `badfad8b7248b8aac0e6b503a06e392aa31cb294`.
+Migrations 266 and 267 add OpenCode platform constraints and delete unlimited (all-NULL) user platform quota rows. Back up the database before upgrade. Rollback image is `v0.2.4+custom.005`.
 
 ## Known issues
 
-Official `main` remains untagged. A later official release may require another overlay.
+None.
 
 ## Upstream baseline
 
-Official release: v0.2.4
-Official commit: badfad8b7248b8aac0e6b503a06e392aa31cb294
+Official release: v0.2.5
+Official commit: 86f93c28ee34cc74b629dafb748bd5ac5ca8c5ea
