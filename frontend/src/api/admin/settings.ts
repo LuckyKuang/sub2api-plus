@@ -636,6 +636,7 @@ export interface SystemSettings {
   enable_client_dateline_normalization: boolean;
   antigravity_user_agent_version: string;
   openai_codex_user_agent: string;
+  openai_codex_environment_timezone: string;
   codex_legacy_client_profile_compatibility_enabled: boolean;
   openai_codex_local_group_quota_enabled: boolean;
   openai_codex_client_version: string;
@@ -965,6 +966,7 @@ export interface UpdateSettingsRequest {
   enable_client_dateline_normalization?: boolean;
   antigravity_user_agent_version?: string;
   openai_codex_user_agent?: string;
+  openai_codex_environment_timezone?: string;
   codex_legacy_client_profile_compatibility_enabled?: boolean;
   openai_codex_local_group_quota_enabled?: boolean;
   openai_codex_client_version?: string;

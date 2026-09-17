@@ -3052,6 +3052,21 @@
             <Select v-model="codexFingerprintMode" data-testid="create-codex-fingerprint-mode-select" :options="codexFingerprintModeOptions" />
           </div>
         </div>
+        <div class="mt-4 space-y-2">
+          <div>
+            <label class="input-label mb-0">{{ t('admin.accounts.openai.codexEnvironmentTimezone') }}</label>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ t('admin.accounts.openai.codexEnvironmentTimezoneDesc') }}
+            </p>
+          </div>
+          <input
+            v-model="codexEnvironmentTimezone"
+            data-testid="create-codex-environment-timezone-input"
+            type="text"
+            :placeholder="t('admin.accounts.openai.codexEnvironmentTimezonePlaceholder')"
+            class="input w-full"
+          />
+        </div>
       </div>
 
       <!-- OpenAI Compact 能力配置 -->
@@ -4154,6 +4169,7 @@ const openaiAPIKeyResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OF
 const codexCLIOnlyEnabled = ref(false)
 type CodexFingerprintMode = 'off' | 'device' | 'session' | 'full'
 const codexFingerprintMode = ref<CodexFingerprintMode>('device')
+const codexEnvironmentTimezone = ref('')
 const codexFingerprintModeOptions = computed(() => [
   { value: 'off' as CodexFingerprintMode, label: t('admin.accounts.openai.codexFingerprintOff') },
   { value: 'device' as CodexFingerprintMode, label: t('admin.accounts.openai.codexFingerprintDevice') },
@@ -5071,6 +5087,7 @@ const resetForm = () => {
   openaiAPIKeyResponsesWebSocketV2Mode.value = OPENAI_WS_MODE_OFF
   codexCLIOnlyEnabled.value = false
   codexFingerprintMode.value = 'device'
+  codexEnvironmentTimezone.value = ''
   anthropicPassthroughEnabled.value = false
   anthropicAPIKeyAuthScheme.value = 'x_api_key'
   webSearchEmulationMode.value = 'default'
@@ -5176,8 +5193,16 @@ const buildOpenAIExtra = (base?: Record<string, unknown>): Record<string, unknow
   delete extra.codex_cli_only_allow_app_server
   if (form.type === 'oauth') {
     extra.codex_fingerprint_mode = codexFingerprintMode.value
+    const envTz = codexEnvironmentTimezone.value.trim()
+    if (envTz) {
+      extra.codex_environment_timezone = envTz
+    } else {
+      // Empty means "follow the global default"; do not persist the key.
+      delete extra.codex_environment_timezone
+    }
   } else {
     delete extra.codex_fingerprint_mode
+    delete extra.codex_environment_timezone
   }
   if (openAICompactMode.value !== 'auto') {
     extra.openai_compact_mode = openAICompactMode.value

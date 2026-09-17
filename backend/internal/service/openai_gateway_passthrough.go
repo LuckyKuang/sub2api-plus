@@ -605,6 +605,9 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 	body []byte,
 	token string,
 ) (*http.Request, error) {
+	// Codex 可见时区对齐：与 buildUpstreamRequest 同一改写语义（幂等，
+	// 失败保留原始自洽内容），覆盖普通透传与 WS→HTTP bridge。
+	body = s.rewriteOpenAICodexEnvironmentContextBytes(ctx, account, body)
 	targetURL := openaiPlatformAPIURL
 	switch account.Type {
 	case AccountTypeOAuth:

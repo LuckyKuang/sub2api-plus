@@ -693,6 +693,9 @@ const (
 	// 当客户端 UA 被识别为浏览器（Chrome/Firefox/Safari/Edge 等）时，转发给 OpenAI 上游前会替换为此值，
 	// 用于避免 Cloudflare 对浏览器型 UA 的质询拦截。
 	SettingKeyOpenAICodexUserAgent = "openai_codex_user_agent"
+	// SettingKeyOpenAICodexEnvironmentTimezone 模型可见 environment_context 的
+	// 目标 IANA 时区（全局默认；账号级 extra 优先）。空值 = 功能关闭，不改写。
+	SettingKeyOpenAICodexEnvironmentTimezone = "openai_codex_environment_timezone"
 	// SettingKeyCodexLegacyClientProfileCompatibilityEnabled temporarily allows
 	// only the reviewed historical Codex wire identities. It is disabled by
 	// default and never changes their status to an official profile.

@@ -225,6 +225,9 @@ func (s *OpenAIGatewayService) buildOpenAIWSCreatePayload(reqBody map[string]any
 	for k, v := range reqBody {
 		payload[k] = v
 	}
+	// Codex 可见时区对齐：每轮 response.create 重新应用，与 HTTP 出站保持
+	// 同一账号/全局配置语义（幂等；失败保留原始自洽内容）。
+	payload = s.rewriteOpenAICodexEnvironmentContextMap(nil, account, payload)
 
 	delete(payload, "background")
 	if _, exists := payload["stream"]; !exists {

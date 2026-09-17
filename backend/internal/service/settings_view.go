@@ -251,6 +251,7 @@ type SystemSettings struct {
 	RewriteMessageCacheControl                   bool   // 是否改写 messages[*].content[*].cache_control（默认 false）
 	AntigravityUserAgentVersion                  string // Antigravity 上游 User-Agent 版本号；空值使用配置/默认值
 	OpenAICodexUserAgent                         string // OpenAI Codex 上游完整 User-Agent；空值由客户端版本号拼出标准 CLI UA
+	OpenAICodexEnvironmentTimezone               string // 模型可见 environment_context 的目标 IANA 时区（全局默认）；空值 = 不改写
 	CodexLegacyClientProfileCompatibilityEnabled bool   // 是否临时允许封闭旧版 Codex 客户端档案（默认 false）
 	OpenAICodexLocalGroupQuotaEnabled            bool   // Codex 客户端显示本地订阅 5 小时/7 天额度（默认 false）
 	OpenAICodexClientVersion                     string // 出站声明的 Codex 客户端版本号（管理员覆写）；空值跟随自动同步值

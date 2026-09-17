@@ -774,6 +774,9 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 	} else if compatibilityChanged {
 		firstClientMessage = normalized
 	}
+	// Codex 可见时区对齐：首帧与后续帧同一账号/全局配置语义（幂等；失败
+	// 保留原始自洽内容）。
+	firstClientMessage = s.rewriteOpenAICodexEnvironmentContextBytes(ctx, account, firstClientMessage)
 	if account.IsOpenAIOAuthLike() {
 		aliasedBody, reverse, aliased, aliasErr := aliasOpenAIOAuthReservedToolNamesBody(firstClientMessage)
 		if aliasErr != nil {
@@ -1096,6 +1099,11 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 				if accountScoped {
 					payload = accountScopedPayload
 				}
+			}
+			// Codex 可见时区对齐：后续 response.create / 携带 input 的帧与首帧
+			// 同一改写语义（幂等；失败保留原始自洽内容，绝不关闭连接）。
+			if account.UsesOpenAICodexProtocol() {
+				payload = s.rewriteOpenAICodexEnvironmentContextBytes(ctx, account, payload)
 			}
 			if isResponseCreate {
 				if responsesLite {

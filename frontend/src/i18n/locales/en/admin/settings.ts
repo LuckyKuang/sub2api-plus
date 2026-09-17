@@ -553,6 +553,10 @@ export default {
         openaiCodexUserAgent: 'OpenAI Codex UA',
         openaiCodexUserAgentPlaceholder: 'codex_cli_rs/0.147.0 (Ubuntu 24.04; x86_64) xterm-256color',
         openaiCodexUserAgentHint: 'The global fallback Codex User-Agent, used when the credential-owning account has no valid account-level identity. Use it to customize the OS / arch / terminal fingerprint. Leave empty to build the standard official CLI identity (codex_cli_rs) from the version below (recommended). If set, its leading version and any coherent trailing version declaration are synchronized to the version below, so the UA never stays pinned to the release entered here — under capacity pressure the upstream sheds load by client identity and drops stale or non-official identities first with server_is_overloaded.',
+        openaiCodexEnvironmentTimezone: 'Codex environment_context timezone (global default)',
+        openaiCodexEnvironmentTimezonePlaceholder: 'e.g. America/New_York (leave empty to disable)',
+        openaiCodexEnvironmentTimezoneHint:
+          'Rewrites the model-visible <timezone> and <current_date> pair inside the <environment_context> block of Codex requests to this IANA timezone, so the visible time matches the egress location. Account-level codex_environment_timezone takes precedence; leave empty to disable. The pair is always written together and never contradicts itself.',
         codexLegacyClientProfileCompatibility: 'Legacy Codex Client Profile Compatibility',
         codexLegacyClientProfileCompatibilityHint: 'Default off. Temporarily allows only codex_app, codex_exec, codex_sdk_ts, and codex_vscode_copilot for configured outbound identities and “Codex official client profiles only” accounts. They remain legacy-compatible profiles, not official profiles; exact User-Agent, originator, semantic version, and known Codex evidence are still required.',
         openaiCodexLocalGroupQuota: 'Codex Local Group Quota',

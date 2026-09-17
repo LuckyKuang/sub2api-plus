@@ -8581,6 +8581,36 @@
                 </p>
               </div>
 
+              <!-- Codex 可见时区对齐 -->
+              <div>
+                <label
+                  class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                >
+                  {{
+                    t(
+                      "admin.settings.gatewayForwarding.openaiCodexEnvironmentTimezone",
+                    )
+                  }}
+                </label>
+                <input
+                  v-model="form.openai_codex_environment_timezone"
+                  type="text"
+                  class="input w-full font-mono text-sm"
+                  :placeholder="
+                    t(
+                      'admin.settings.gatewayForwarding.openaiCodexEnvironmentTimezonePlaceholder',
+                    )
+                  "
+                />
+                <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                  {{
+                    t(
+                      "admin.settings.gatewayForwarding.openaiCodexEnvironmentTimezoneHint",
+                    )
+                  }}
+                </p>
+              </div>
+
               <!-- Codex 客户端版本号 -->
               <div>
                 <label
@@ -9776,6 +9806,7 @@ const form = reactive<SettingsForm>({
   enable_client_dateline_normalization: true,
   antigravity_user_agent_version: "",
   openai_codex_user_agent: "",
+  openai_codex_environment_timezone: "",
   codex_legacy_client_profile_compatibility_enabled: false,
   openai_codex_local_group_quota_enabled: false,
   openai_codex_client_version: "",
@@ -11487,6 +11518,8 @@ async function saveSettings() {
         form.antigravity_user_agent_version?.trim() || "",
       openai_codex_user_agent:
         form.openai_codex_user_agent?.trim() || "",
+      openai_codex_environment_timezone:
+        form.openai_codex_environment_timezone?.trim() || "",
       codex_legacy_client_profile_compatibility_enabled:
         form.codex_legacy_client_profile_compatibility_enabled,
       openai_codex_local_group_quota_enabled:

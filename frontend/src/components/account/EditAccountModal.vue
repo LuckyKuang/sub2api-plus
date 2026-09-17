@@ -2070,6 +2070,28 @@
         </div>
       </div>
 
+      <!-- Codex 可见时区对齐（仅 OpenAI OAuth） -->
+      <div
+        v-if="account?.platform === 'openai' && account?.type === 'oauth' && !isSparkShadow"
+        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+      >
+        <div class="space-y-2">
+          <div>
+            <label class="input-label mb-0">{{ t('admin.accounts.openai.codexEnvironmentTimezone') }}</label>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ t('admin.accounts.openai.codexEnvironmentTimezoneDesc') }}
+            </p>
+          </div>
+          <input
+            v-model="codexEnvironmentTimezone"
+            data-testid="edit-codex-environment-timezone-input"
+            type="text"
+            :placeholder="t('admin.accounts.openai.codexEnvironmentTimezonePlaceholder')"
+            class="input w-full"
+          />
+        </div>
+      </div>
+
       <!-- OpenAI 订阅档位手动覆盖（Plus/Pro/Free），仅 OAuth 非影子账号 -->
       <div
         v-if="account?.platform === 'openai' && account?.type === 'oauth' && !isSparkShadow"
@@ -3193,6 +3215,7 @@ const openaiAPIKeyResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OF
 const codexCLIOnlyEnabled = ref(false)
 type CodexFingerprintMode = 'off' | 'device' | 'session' | 'full'
 const codexFingerprintMode = ref<CodexFingerprintMode>('device')
+const codexEnvironmentTimezone = ref('')
 type CodexImageToolMode = 'inherit' | 'enabled' | 'disabled' | 'block'
 const codexImageToolMode = ref<CodexImageToolMode>('inherit')
 type AnthropicAPIKeyAuthScheme = 'x_api_key' | 'authorization_bearer'
@@ -3731,6 +3754,8 @@ const syncFormFromAccount = (newAccount: Account | null) => {
       codexFingerprintMode.value = (['off', 'device', 'session', 'full'].includes(fpMode || '')
         ? fpMode as CodexFingerprintMode
         : 'device')
+      const envTz = extra?.codex_environment_timezone as string | undefined
+      codexEnvironmentTimezone.value = typeof envTz === 'string' ? envTz.trim() : ''
     }
     const credentials = newAccount.credentials as Record<string, unknown> | undefined
 		openaiAccountUserAgent.value = !isSparkShadow.value && typeof credentials?.user_agent === 'string'
@@ -5264,8 +5289,16 @@ const handleSubmit = async () => {
       // Every mode is persisted explicitly so account behavior is version-independent.
       if (props.account.type === 'oauth' && !isSparkShadow.value) {
         newExtra.codex_fingerprint_mode = codexFingerprintMode.value
+        const envTz = codexEnvironmentTimezone.value.trim()
+        if (envTz) {
+          newExtra.codex_environment_timezone = envTz
+        } else {
+          // Empty means "follow the global default"; drop the stale key.
+          delete newExtra.codex_environment_timezone
+        }
       } else {
         delete newExtra.codex_fingerprint_mode
+        delete newExtra.codex_environment_timezone
       }
 
       updatePayload.extra = newExtra

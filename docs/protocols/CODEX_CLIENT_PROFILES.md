@@ -255,6 +255,33 @@ device-code sessions may bind an account server-side like browser re-auth.
 uses the refresh-style client (User-Agent + Originator, no Version); `client_id`
 is sent only when revoking a refresh token. Login no longer PATCHes
 ChatGPT `training_allowed`; administrators can still force privacy later.
+
+## Environment-context timezone alignment
+
+Official Codex renders a model-visible `<environment_context>` block
+(cwd, shell, `<current_date>`, `<timezone>`) from the user's machine, so a
+gateway-forwarded request can carry a visible timezone that contradicts the
+egress location. Plus can rewrite that pair at the outbound build stage:
+
+- Resolution order: account `extra.codex_environment_timezone`, then the
+  global `openai_codex_environment_timezone` setting, then off. Misconfigured
+  values degrade to the next source and never block traffic. Only
+  Codex-protocol accounts participate.
+- The pair is always written together and never contradicts itself: both tags
+  are replaced with the configured IANA timezone and that timezone's current
+  date (`YYYY-MM-DD`); a missing tag of an existing pair is injected before the
+  closing tag in the official layout. A block without either tag is untouched.
+- Only `role=user` messages whose content (string or `input_text` part) is
+  exactly one `<environment_context>` block are touched; quoted logs, mixed
+  prose, and other message roles stay unchanged.
+- Applied at the final outbound construction on every transport (HTTP forward,
+  HTTP passthrough plus WS→HTTP bridge, WS `response.create` payloads, WS v2
+  passthrough frames), so failover to another account rewrites the pair to the
+  new account's timezone. Rewrites are idempotent.
+- Any parse or mutation failure keeps the original block — the client's own
+  timezone/date pair is self-consistent — and never fails or closes a request.
+  The rewrite runs after ingress security audit consumed the original body and
+  never on the audit path itself.
 Official Codex never sends a `conversation_id` header, so Codex-protocol
 outbound requests never carry one. The legacy `session_id` alias is a Plus
 compatibility header: OAuth accounts emit it only when the fingerprint mode

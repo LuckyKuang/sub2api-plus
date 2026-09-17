@@ -1411,6 +1411,9 @@ func shouldForwardOpenAIResponsesViaRawChatCompletions(account *Account) bool {
 }
 
 func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Context, account *Account, body []byte, token string, isStream bool, promptCacheKey string, isCodexCLI bool) (*http.Request, error) {
+	// Codex 可见时区对齐：按账号/全局配置改写 environment_context 的
+	// timezone 与 current_date（成对写入，幂等；失败保留原始自洽内容）。
+	body = s.rewriteOpenAICodexEnvironmentContextBytes(ctx, account, body)
 	// Determine target URL based on account type
 	var targetURL string
 	switch account.Type {

@@ -476,6 +476,9 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	if before.OpenAICodexUserAgent != after.OpenAICodexUserAgent {
 		changed = append(changed, "openai_codex_user_agent")
 	}
+	if before.OpenAICodexEnvironmentTimezone != after.OpenAICodexEnvironmentTimezone {
+		changed = append(changed, "openai_codex_environment_timezone")
+	}
 	if before.CodexLegacyClientProfileCompatibilityEnabled != after.CodexLegacyClientProfileCompatibilityEnabled {
 		changed = append(changed, "codex_legacy_client_profile_compatibility_enabled")
 	}

@@ -546,6 +546,10 @@ export default {
         openaiCodexUserAgent: 'OpenAI Codex UA',
         openaiCodexUserAgentPlaceholder: 'codex_cli_rs/0.147.0 (Ubuntu 24.04; x86_64) xterm-256color',
         openaiCodexUserAgentHint: '全局兜底的完整 Codex User-Agent：仅当凭据所属账号没有有效的账号级身份时使用，可用于自定义 OS / 架构 / 终端指纹。留空则按下方版本号拼出标准官方 CLI 形态（codex_cli_rs）（推荐）。填写后首段版本号以及一致的尾部版本声明仍会被下方版本号同步覆盖，避免这条 UA 停在填写时的旧版本——上游在容量紧张时按客户端身份分优先级降载，陈旧或非官方形态的身份会被优先丢弃并回 server_is_overloaded。',
+        openaiCodexEnvironmentTimezone: 'Codex environment_context 时区（全局默认）',
+        openaiCodexEnvironmentTimezonePlaceholder: '如 America/New_York（留空关闭）',
+        openaiCodexEnvironmentTimezoneHint:
+          '将 Codex 请求中 <environment_context> 块内模型可见的 <timezone> 与 <current_date> 成对改写为该 IANA 时区及其当前日期，使可见时间与出口位置一致。账号级 codex_environment_timezone 优先；留空关闭。两个值始终成对写入，不会自相矛盾。',
         codexLegacyClientProfileCompatibility: '旧版 Codex 客户端档案兼容模式',
         codexLegacyClientProfileCompatibilityHint: '默认关闭。仅临时允许 codex_app、codex_exec、codex_sdk_ts、codex_vscode_copilot 用于配置的出站身份及开启「仅允许 Codex 官方客户端档案」的账号；它们始终是旧版兼容档案，不会被标记为官方档案，仍必须精确匹配 User-Agent、originator、语义化版本和已知 Codex 证据请求头。',
         openaiCodexLocalGroupQuota: 'Codex 本地分组额度',

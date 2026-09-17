@@ -214,6 +214,7 @@ type SystemSettings struct {
 	EnableClientDatelineNormalization            bool   `json:"enable_client_dateline_normalization"`
 	AntigravityUserAgentVersion                  string `json:"antigravity_user_agent_version"`
 	OpenAICodexUserAgent                         string `json:"openai_codex_user_agent"`
+	OpenAICodexEnvironmentTimezone               string `json:"openai_codex_environment_timezone"`
 	CodexLegacyClientProfileCompatibilityEnabled bool   `json:"codex_legacy_client_profile_compatibility_enabled"`
 	OpenAICodexLocalGroupQuotaEnabled            bool   `json:"openai_codex_local_group_quota_enabled"`
 	OpenAICodexClientVersion                     string `json:"openai_codex_client_version"`
