@@ -324,6 +324,13 @@ snapshot across both handler retries and automatic Responses-to-Chat fallback.
 Shared HTTP/TLS transports cannot select a Grok identity based on a base URL or
 discard the chosen identity on Grok's access-denied fallback.
 
+## Explicitly deferred for v0.2.5+custom.001
+
+- `x-openai-internal-codex-residency`: the official client sends `us` as a
+  process-level default header. Plus intentionally does not emit it this
+  release; if US-residency accounts ever require it, derive the value from the
+  bound proxy's `egress_country` annotation instead of hardcoding it.
+
 ## Standalone search
 
 `/v1/alpha/search` has its own request builder and protocol-header policy. The
