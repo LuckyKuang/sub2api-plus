@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
 	"github.com/stretchr/testify/require"
 )
 
@@ -256,7 +257,7 @@ func TestBuildOpenAIOAuthUpstreamModelsRequestIdentityFallbacks(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, codexCLIVersion, req.URL.Query().Get("client_version"))
 		require.Equal(t, DefaultOpenAICodexUserAgent, req.Header.Get("User-Agent"))
-		require.Equal(t, "codex-tui", req.Header.Get("Originator"))
+		require.Equal(t, openai.CodexDefaultOriginator, req.Header.Get("Originator"))
 		require.Equal(t, codexCLIVersion, req.Header.Get("Version"))
 	})
 

@@ -12,10 +12,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestAdminService_EnsureOpenAIPrivacy_RetriesNonSuccessModes(t *testing.T) {
+func TestAdminService_EnsureOpenAIPrivacy_DoesNotDisableTrainingOnLogin(t *testing.T) {
 	t.Parallel()
 
-	for _, mode := range []string{PrivacyModeFailed, PrivacyModeCFBlocked} {
+	for _, mode := range []string{"", PrivacyModeFailed, PrivacyModeCFBlocked} {
 		t.Run(mode, func(t *testing.T) {
 			t.Parallel()
 
@@ -42,13 +42,13 @@ func TestAdminService_EnsureOpenAIPrivacy_RetriesNonSuccessModes(t *testing.T) {
 
 			got := svc.EnsureOpenAIPrivacy(context.Background(), account)
 
-			require.Equal(t, PrivacyModeFailed, got)
-			require.Equal(t, 1, privacyCalls)
+			require.Empty(t, got)
+			require.Zero(t, privacyCalls)
 		})
 	}
 }
 
-func TestTokenRefreshService_ensureOpenAIPrivacy_RetriesNonSuccessModes(t *testing.T) {
+func TestTokenRefreshService_ensureOpenAIPrivacy_DoesNotDisableTrainingOnRefresh(t *testing.T) {
 	t.Parallel()
 
 	cfg := &config.Config{
@@ -83,7 +83,7 @@ func TestTokenRefreshService_ensureOpenAIPrivacy_RetriesNonSuccessModes(t *testi
 
 			service.ensureOpenAIPrivacy(context.Background(), account)
 
-			require.Equal(t, 1, privacyCalls)
+			require.Zero(t, privacyCalls)
 		})
 	}
 }

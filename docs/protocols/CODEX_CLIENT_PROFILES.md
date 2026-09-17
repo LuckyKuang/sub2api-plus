@@ -203,8 +203,8 @@ string clears it through an explicit null in the JSONB update.
 The exact compiled identity is:
 
 ```text
-User-Agent: codex-tui/0.147.0 (Ubuntu 24.04; x86_64) xterm-256color
-Originator: codex-tui
+User-Agent: codex_cli_rs/0.147.0 (Ubuntu 24.04; x86_64) xterm-256color
+Originator: codex_cli_rs
 Version: 0.147.0
 ```
 
@@ -240,9 +240,27 @@ and Version with the selected UA. Native Codex Platform API-key requests omit
 both Originator and Version, including `responses/compact`. Header presence is
 determined by the endpoint protocol, never by an inbound or generic override
 value. Explicit compatible presets retain their own protocol header mappings.
-The OAuth credential endpoint (`auth.openai.com` token exchange and refresh)
-follows the official Codex auth client and sends only the selected User-Agent
-and Originator; it must not receive the inference-only `Version` header.
+When proxying an official Codex client, a reviewed inbound thread originator
+(`chatgpt_cca` and `codex_work_*`) may replace only the Originator header.
+User-Agent and Version stay on the credential-owning snapshot.
+The OAuth credential endpoint follows official Codex auth clients:
+authorization-code exchange uses the raw client and sends no User-Agent,
+Originator, or Version; refresh uses the default client and sends only the
+selected User-Agent and Originator. Neither request receives the inference-only
+`Version` header.
+Device-code start/poll uses the same raw client (no User-Agent, Originator, or
+Version) and then exchanges the returned authorization code. `/oauth/revoke`
+uses the refresh-style client (User-Agent + Originator, no Version); `client_id`
+is sent only when revoking a refresh token. Login no longer PATCHes
+ChatGPT `training_allowed`; administrators can still force privacy later.
+OAuth `session`/`full` fingerprint modes emit the legacy `session_id` and
+auto `conversation_id` aliases; `off`/`device` keep official `session-id` +
+`thread-id` spelling.
+ChatGPT WHAM `/backend-api/wham/usage` and rate-limit credit endpoints follow
+official backend-client headers: selected User-Agent, Authorization,
+`chatgpt-account-id`, and optional `x-openai-fedramp`. They omit Originator and
+Version. `/backend-api/wham/accounts/check` uses the same backend-client
+surface during login enrich (Bearer + User-Agent, no Originator/Version).
 Generic override saves reject managed identity headers with
 `INVALID_HEADER_OVERRIDE`; runtime filtering ignores previously stored entries.
 Authentication, session, routing and protocol-capability fields keep their own

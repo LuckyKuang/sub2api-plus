@@ -1430,8 +1430,10 @@ func isNonRetryableRefreshError(err error) bool {
 		"invalid_refresh_token",     // refresh_token 无效, team 账号工作区被删除会出现
 		"token_expired",             // OpenAI refresh_token 已过期，需要重新授权
 		"app_session_terminated",    // refresh_token team 账号工作区被删除
+		"refresh_token_expired",
 		"refresh_token_reused",      // OpenAI refresh_token 已被使用，必须重新授权
 		"refresh_token_invalidated", // OpenAI session ended; refresh token invalidated
+		"openai_oauth_refresh_permanent",
 		"invalid_client",            // 客户端配置错误
 		"unauthorized_client",       // 客户端未授权
 		"access_denied",             // 访问被拒绝
@@ -1452,47 +1454,11 @@ func isNonRetryableRefreshError(err error) bool {
 	return false
 }
 
-// ensureOpenAIPrivacy 检查 OpenAI OAuth 账号是否已设置 privacy_mode，
-// 未设置则调用 disableOpenAITraining 并持久化结果到 Extra。
+// ensureOpenAIPrivacy is a no-op. Official Codex does not PATCH ChatGPT
+// training settings during token refresh.
 func (s *TokenRefreshService) ensureOpenAIPrivacy(ctx context.Context, account *Account) {
-	if account.Platform != PlatformOpenAI || account.Type != AccountTypeOAuth {
-		return
-	}
-	if s.privacyClientFactory == nil {
-		return
-	}
-	if shouldSkipOpenAIPrivacyEnsure(account.Extra) {
-		return
-	}
-
-	token, _ := account.Credentials["access_token"].(string)
-	if token == "" {
-		return
-	}
-
-	var proxyURL string
-	if account.ProxyID != nil && s.proxyRepo != nil {
-		if p, err := s.proxyRepo.GetByID(ctx, *account.ProxyID); err == nil && p != nil {
-			proxyURL = p.URL()
-		}
-	}
-
-	mode := disableOpenAITraining(ctx, s.privacyClientFactory, token, proxyURL, s.resolveOpenAIOutboundIdentity(ctx, account))
-	if mode == "" {
-		return
-	}
-
-	if err := s.accountRepo.UpdateExtra(ctx, account.ID, map[string]any{"privacy_mode": mode}); err != nil {
-		slog.Warn("token_refresh.update_privacy_mode_failed",
-			"account_id", account.ID,
-			"error", err,
-		)
-	} else {
-		slog.Info("token_refresh.privacy_mode_set",
-			"account_id", account.ID,
-			"privacy_mode", mode,
-		)
-	}
+	_ = ctx
+	_ = account
 }
 
 // ensureAntigravityPrivacy 后台刷新中检查 Antigravity OAuth 账号隐私状态。

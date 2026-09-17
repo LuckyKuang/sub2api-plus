@@ -142,11 +142,14 @@ func isSaneCodexOriginator(name string) bool {
 	return true
 }
 
-// CodexCLIOriginator 是 codex-rs 客户端的历史默认 originator，保留用于兼容识别。
+// CodexCLIOriginator 是官方 Codex CLI 的默认 originator。
 const CodexCLIOriginator = "codex_cli_rs"
 
-// CodexDefaultOriginator 是网关默认使用的 Codex TUI originator。
-const CodexDefaultOriginator = "codex-tui"
+// CodexTUIOriginator 是官方第一方 TUI originator，仅用于识别，不是编译期默认。
+const CodexTUIOriginator = "codex-tui"
+
+// CodexDefaultOriginator 是网关未配置账号/全局 UA 时使用的官方 CLI originator。
+const CodexDefaultOriginator = CodexCLIOriginator
 
 // CodexUserAgentVersion 提取 Codex UA 的完整版本段，即 `{client}/{version} (...` 中的 version。
 // 与 ParseCodexEngineVersion 的区别：后者只取三段数字用于引擎版本比较（会丢掉 -alpha.4

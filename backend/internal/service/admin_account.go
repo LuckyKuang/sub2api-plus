@@ -1762,8 +1762,6 @@ func (s *adminServiceImpl) ResetAccountQuota(ctx context.Context, id int64) erro
 	return s.accountRepo.ResetQuotaUsedAndClearRateLimitCooldown(ctx, id)
 }
 
-// EnsureOpenAIPrivacy 检查 OpenAI OAuth 账号是否已设置 privacy_mode，
-// 未设置则调用 disableOpenAITraining 并持久化到 Extra，返回设置的 mode 值。
 func (s *adminServiceImpl) resolveOpenAIOutboundIdentity(ctx context.Context, account *Account) openAIOutboundIdentity {
 	var settingService *SettingService
 	if s != nil {
@@ -1772,45 +1770,16 @@ func (s *adminServiceImpl) resolveOpenAIOutboundIdentity(ctx context.Context, ac
 	return resolveOpenAIOutboundIdentityFromSettings(ctx, account, settingService)
 }
 
+// EnsureOpenAIPrivacy is a no-op for OpenAI OAuth. Official Codex does not
+// PATCH ChatGPT training settings during login or token refresh.
 func (s *adminServiceImpl) EnsureOpenAIPrivacy(ctx context.Context, account *Account) string {
-	// 影子账号不持凭据，隐私设置由母账号管理，直接跳过。
-	if account.IsCredentialShadow() {
-		return ""
-	}
-	if account.Platform != PlatformOpenAI || account.Type != AccountTypeOAuth {
-		return ""
-	}
-	if s.privacyClientFactory == nil {
-		return ""
-	}
-	if shouldSkipOpenAIPrivacyEnsure(account.Extra) {
-		return ""
-	}
-
-	token, _ := account.Credentials["access_token"].(string)
-	if token == "" {
-		return ""
-	}
-
-	var proxyURL string
-	if account.ProxyID != nil {
-		if p, err := s.proxyRepo.GetByID(ctx, *account.ProxyID); err == nil && p != nil {
-			proxyURL = p.URL()
-		}
-	}
-
-	mode := disableOpenAITraining(ctx, s.privacyClientFactory, token, proxyURL, s.resolveOpenAIOutboundIdentity(ctx, account))
-	if mode == "" {
-		return ""
-	}
-
-	_ = s.accountRepo.UpdateExtra(ctx, account.ID, map[string]any{"privacy_mode": mode})
-	return mode
+	_ = ctx
+	_ = account
+	return ""
 }
 
 // ForceOpenAIPrivacy 强制重新设置 OpenAI OAuth 账号隐私，无论当前状态。
 func (s *adminServiceImpl) ForceOpenAIPrivacy(ctx context.Context, account *Account) string {
-	// 影子账号不持凭据,隐私由母账号管理,直接跳过(与 EnsureOpenAIPrivacy 一致——外审第4轮)。
 	if account.IsCredentialShadow() {
 		return ""
 	}

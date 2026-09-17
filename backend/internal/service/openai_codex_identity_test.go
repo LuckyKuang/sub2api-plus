@@ -29,7 +29,7 @@ func TestEnsureCodexIdentityHeaders(t *testing.T) {
 		(&OpenAIGatewayService{}).applyOpenAIOutboundIdentity(context.Background(), nil, headers, true)
 
 		requireCanonicalCodexIdentity(t, headers)
-		require.Equal(t, "responses=experimental", headers.Get("OpenAI-Beta"))
+		require.Empty(t, headers.Get("OpenAI-Beta"))
 	})
 
 	t.Run("enforcement replaces inbound identity", func(t *testing.T) {

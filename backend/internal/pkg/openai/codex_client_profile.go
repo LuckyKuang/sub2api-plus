@@ -166,10 +166,15 @@ func isOfficialCodexIngressOriginator(transportOriginator, originator string) bo
 	if originator == transportOriginator {
 		return true
 	}
-	if _, ok := codexOfficialThreadOriginators[originator]; ok {
-		return true
-	}
-	return false
+	return IsOfficialCodexThreadOriginator(originator)
+}
+
+// IsOfficialCodexThreadOriginator reports whether originator is a reviewed
+// product-service override that official Codex may send without rewriting the
+// process-level User-Agent.
+func IsOfficialCodexThreadOriginator(originator string) bool {
+	_, ok := codexOfficialThreadOriginators[strings.TrimSpace(originator)]
+	return ok
 }
 
 func isStrictCodexClientProfileVersion(version string) bool {

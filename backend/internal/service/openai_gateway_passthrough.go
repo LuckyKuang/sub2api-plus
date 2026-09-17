@@ -685,7 +685,8 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 		if clientSessionID == "" {
 			clientSessionID = strings.TrimSpace(req.Header.Get("session_id"))
 		}
-		clientConversationID := strings.TrimSpace(req.Header.Get("conversation_id"))
+		originalClientConversationID := strings.TrimSpace(req.Header.Get("conversation_id"))
+		clientConversationID := originalClientConversationID
 		if isOpenAIResponsesCompactPath(c) {
 			req.Header.Set("accept", "application/json")
 			if req.Header.Get("version") == "" {
@@ -704,7 +705,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 		if promptCacheKey != "" {
 			clientSessionID = promptCacheKey
 		}
-		if clientConversationID == "" {
+		if originalClientConversationID == "" && accountEmitsCodexConvergedSessionAliases(account) {
 			clientConversationID = promptCacheKey
 		}
 		if clientSessionID != "" {
@@ -712,14 +713,16 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 			if resolveErr != nil {
 				return nil, resolveErr
 			}
-			setOpenAIUpstreamSessionIdentity(req.Header, upstreamSessionID)
+			setOpenAIUpstreamSessionIdentityForAccount(req.Header, account, upstreamSessionID)
 		}
-		if clientConversationID != "" {
+		if clientConversationID != "" && accountEmitsCodexConvergedSessionAliases(account) {
 			upstreamConversationID, resolveErr := s.resolveOpenAIPromptCacheIdentity(c, account, clientConversationID)
 			if resolveErr != nil {
 				return nil, resolveErr
 			}
 			req.Header.Set("conversation_id", upstreamConversationID)
+		} else {
+			req.Header.Del("conversation_id")
 		}
 	} else if isOpenAIResponsesCompactPath(c) {
 		// 透传白名单会放行客户端的 Accept: text/event-stream；compact 上游是
@@ -751,6 +754,10 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 	// 保证不被覆盖丢失）。
 	applyOpenAICodexBetaFeatures(c, account, req.Header)
 	identity := s.applyOpenAIOutboundIdentity(ctx, account, req.Header, account.UsesOpenAICodexProtocol())
+	if account.UsesOpenAICodexProtocol() {
+		preserveOpenAIThreadOriginator(c, req.Header)
+	}
+	clearOpenAICodexLegacySessionAliases(req.Header, account)
 	SetOpsRoutingDiagnostics(c, &OpsRoutingDiagnostics{OutboundIdentitySource: identity.Source})
 	setOpenAICodexRoutingHintFromBody(req.Header, account, body)
 	logOpenAIRoutingDiagnosticsFromBody(ctx, account, "http_passthrough", req.Header, body, "not_applicable")

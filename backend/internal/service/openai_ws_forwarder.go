@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	openAIWSBetaV1Value = "responses_websockets=2026-02-04"
+	openAIWSBetaV1Value = "responses_websockets=2026-02-06"
 	openAIWSBetaV2Value = "responses_websockets=2026-02-06"
 
 	openAIWSTurnStateHeader    = "x-codex-turn-state"

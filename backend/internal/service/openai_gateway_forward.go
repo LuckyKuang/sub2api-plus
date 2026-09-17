@@ -1489,7 +1489,6 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 	if account.UsesOpenAICodexProtocol() {
 		compatMessagesBridge := isOpenAICompatMessagesBridgeContext(c) || isOpenAICompatMessagesBridgeBody(body)
 		// 清除客户端透传的 session 头，后续用隔离后的值重新设置，防止跨用户会话碰撞。
-		clientConversationID := strings.TrimSpace(req.Header.Get("conversation_id"))
 		req.Header.Del("conversation_id")
 		req.Header.Del(codexSessionIDHeader)
 		req.Header.Del("session_id")
@@ -1510,7 +1509,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 			if err != nil {
 				return nil, err
 			}
-			setOpenAIUpstreamSessionIdentity(req.Header, upstreamSessionID)
+			setOpenAIUpstreamSessionIdentityForAccount(req.Header, account, upstreamSessionID)
 		} else {
 			req.Header.Set("accept", "text/event-stream")
 		}
@@ -1519,8 +1518,8 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 			if err != nil {
 				return nil, err
 			}
-			setOpenAIUpstreamSessionIdentity(req.Header, isolated)
-			if !compatMessagesBridge || clientConversationID != "" {
+			setOpenAIUpstreamSessionIdentityForAccount(req.Header, account, isolated)
+			if accountEmitsCodexConvergedSessionAliases(account) {
 				req.Header.Set("conversation_id", isolated)
 			}
 		}
@@ -1563,6 +1562,10 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 	// 保证不被覆盖丢失）。
 	applyOpenAICodexBetaFeatures(c, account, req.Header)
 	identity := s.applyOpenAIOutboundIdentity(ctx, account, req.Header, account.UsesOpenAICodexProtocol())
+	if account.UsesOpenAICodexProtocol() {
+		preserveOpenAIThreadOriginator(c, req.Header)
+	}
+	clearOpenAICodexLegacySessionAliases(req.Header, account)
 	SetOpsRoutingDiagnostics(c, &OpsRoutingDiagnostics{OutboundIdentitySource: identity.Source})
 	setOpenAICodexRoutingHintFromBody(req.Header, account, body)
 	logOpenAIRoutingDiagnosticsFromBody(ctx, account, "http", req.Header, body, "not_applicable")

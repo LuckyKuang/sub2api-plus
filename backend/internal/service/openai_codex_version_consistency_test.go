@@ -10,7 +10,7 @@ import (
 )
 
 func TestCodexVersionConstants_Consistency(t *testing.T) {
-	const expectedDefaultUserAgent = "codex-tui/0.147.0 (Ubuntu 24.04; x86_64) xterm-256color"
+	const expectedDefaultUserAgent = "codex_cli_rs/0.147.0 (Ubuntu 24.04; x86_64) xterm-256color"
 
 	require.Equal(t, codexCLIVersion, DefaultOpenAICodexVersion,
 		"the compiled-in Codex identity version must have one source of truth")

@@ -887,7 +887,7 @@ func (s *AccountUsageService) probeOpenAICodexSnapshot(ctx context.Context, acco
 		req.Header.Set("Authorization", "Bearer "+accessToken)
 	}
 	req.Header.Set("Accept", "text/event-stream")
-	req.Header.Set("OpenAI-Beta", "responses=experimental")
+
 	req.Header.Set("Version", openAICodexProbeVersion)
 	setOpenAIChatGPTAccountHeaders(req.Header, account)
 	s.applyOpenAIOutboundIdentity(reqCtx, account, req.Header, true)

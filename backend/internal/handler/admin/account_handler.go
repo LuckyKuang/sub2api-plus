@@ -1220,6 +1220,11 @@ func (h *AccountHandler) Delete(c *gin.Context) {
 		return
 	}
 
+	if account, getErr := h.adminService.GetAccount(c.Request.Context(), accountID); getErr == nil && account != nil && h.openaiOAuthService != nil {
+		if revokeErr := h.openaiOAuthService.RevokeAccountTokens(c.Request.Context(), account); revokeErr != nil {
+			slog.Warn("openai_oauth_revoke_on_delete_failed", "account_id", accountID, "error", revokeErr)
+		}
+	}
 	err = h.adminService.DeleteAccount(c.Request.Context(), accountID)
 	if err != nil {
 		response.ErrorFrom(c, err)
@@ -1839,6 +1844,11 @@ func (h *AccountHandler) BatchDelete(c *gin.Context) {
 	for _, id := range rootIDs {
 		accountID := id
 		g.Go(func() error {
+			if account, getErr := h.adminService.GetAccount(gctx, accountID); getErr == nil && account != nil && h.openaiOAuthService != nil {
+				if revokeErr := h.openaiOAuthService.RevokeAccountTokens(gctx, account); revokeErr != nil {
+					slog.Warn("openai_oauth_revoke_on_delete_failed", "account_id", accountID, "error", revokeErr)
+				}
+			}
 			err := h.adminService.DeleteAccount(gctx, accountID)
 
 			mu.Lock()

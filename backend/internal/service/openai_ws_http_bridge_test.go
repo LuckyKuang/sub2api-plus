@@ -1580,7 +1580,11 @@ func TestProxyOpenAIWSHTTPBridgeTurnFinalizesPromptCacheIdentity(t *testing.T) {
 			cacheIdentity := gjson.GetBytes(upstream.lastBody, "prompt_cache_key").String()
 			require.NotEmpty(t, cacheIdentity)
 			require.Equal(t, cacheIdentity, upstream.lastReq.Header.Get(codexSessionIDHeader))
-			require.Equal(t, cacheIdentity, upstream.lastReq.Header.Get("session_id"))
+			if accountEmitsCodexConvergedSessionAliases(tt.account) {
+				require.Equal(t, cacheIdentity, upstream.lastReq.Header.Get("session_id"))
+			} else {
+				require.Empty(t, upstream.lastReq.Header.Get("session_id"))
+			}
 			require.Equal(t, "thread-cache-bridge", upstream.lastReq.Header.Get("x-client-request-id"))
 			require.Equal(t, tt.wantOptions, gjson.GetBytes(upstream.lastBody, "prompt_cache_options").Exists())
 			if tt.wantOriginalKeyGone {

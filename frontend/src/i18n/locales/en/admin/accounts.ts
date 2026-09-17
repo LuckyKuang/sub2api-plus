@@ -1091,6 +1091,16 @@ export default {
           authCodeHint:
             'You can copy the entire URL or just the code parameter value, the system will auto-detect',
           failedToGenerateUrl: 'Failed to generate OpenAI auth URL',
+          failedToStartDeviceCode: 'Failed to start OpenAI device-code login',
+          failedToPollDeviceCode: 'Failed to complete OpenAI device-code login',
+          deviceCodeAuth: 'Device code',
+          deviceCodeHint: 'Open the verification URL and enter the one-time code. This matches official Codex device-code login.',
+          startDeviceCode: 'Start device-code login',
+          deviceCodeUserCode: 'One-time code',
+          deviceCodeVerificationUrl: 'Verification URL',
+          deviceCodePolling: 'Waiting for authorization…',
+          deviceCodeRestart: 'Restart device-code login',
+          deviceCodeTimeout: 'Device-code login timed out after 15 minutes',
           failedToExchangeCode: 'Failed to exchange OpenAI auth code',
           failedToValidateRT: 'Failed to validate refresh token',
           errors: {

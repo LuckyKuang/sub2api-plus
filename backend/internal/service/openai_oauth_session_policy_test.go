@@ -451,15 +451,15 @@ func TestOpenAIOAuthSessionPolicyIsAppliedByAllOutboundBuilders(t *testing.T) {
 	namespacedExpected, err := service.resolveOpenAIUpstreamSessionID(ordinaryContext, &account, "shared-session")
 	require.NoError(t, err)
 	expected := generateSessionUUID(namespacedExpected)
-	require.Equal(t, expected, ordinary.Header.Get("session_id"))
+	require.Empty(t, ordinary.Header.Get("session_id"))
 	require.Equal(t, expected, ordinary.Header.Get(codexSessionIDHeader))
-	require.Equal(t, expected, ordinary.Header.Get("conversation_id"))
-	require.Equal(t, expected, passthrough.Header.Get("session_id"))
+	require.Empty(t, ordinary.Header.Get("conversation_id"))
+	require.Empty(t, passthrough.Header.Get("session_id"))
 	require.Equal(t, expected, passthrough.Header.Get(codexSessionIDHeader))
-	require.Equal(t, expected, passthrough.Header.Get("conversation_id"))
-	require.Equal(t, expected, wsHeaders.Get("session_id"))
+	require.Empty(t, passthrough.Header.Get("conversation_id"))
+	require.Empty(t, wsHeaders.Get("session_id"))
 	require.Equal(t, expected, wsHeaders.Get(codexSessionIDHeader))
-	require.Equal(t, namespacedExpected, wsHeaders.Get("conversation_id"))
+	require.Empty(t, wsHeaders.Get("conversation_id"), "off/device OAuth keeps official session-id spelling only")
 }
 
 func TestOpenAIOAuthSessionPolicyOutboundBuildersRejectUnauthorizedGroup(t *testing.T) {

@@ -1144,6 +1144,7 @@ func TestBuildUpstreamRequestOpenAIPassthrough_OffModeKeepsIsolatedSession(t *te
 
 	c := newFingerprintStageTestContext(t)
 	c.Request.Header.Set("session_id", "real-client-session")
+	c.Request.Header.Set("conversation_id", "client-conversation")
 	c.Request.Header.Set("originator", "codex_cli_rs")
 
 	ids := resolveCodexFingerprintIDsFromRequest(account, c.Request.Header)
@@ -1154,8 +1155,10 @@ func TestBuildUpstreamRequestOpenAIPassthrough_OffModeKeepsIsolatedSession(t *te
 	req, err := svc.buildUpstreamRequestOpenAIPassthrough(context.Background(), c, account, body, "test-token")
 	require.NoError(t, err)
 
-	assert.NotEmpty(t, req.Header.Get("session_id"))
-	assert.NotEqual(t, resolveConvergedSessionID(account), req.Header.Get("session_id"), "off 模式不得收敛 session_id")
+	assert.Empty(t, req.Header.Get("session_id"), "off/device OAuth must not emit the legacy session_id alias")
+	assert.Empty(t, req.Header.Get("conversation_id"), "off/device OAuth must not emit auto or client conversation_id")
+	assert.NotEmpty(t, req.Header.Get("session-id"))
+	assert.NotEqual(t, resolveConvergedSessionID(account), req.Header.Get("session-id"), "off 模式不得收敛 session-id")
 	assert.Empty(t, req.Header.Get("x-codex-window-id"))
 }
 

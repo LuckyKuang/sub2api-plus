@@ -72,8 +72,10 @@ For OpenAI Responses and Compact requests, the gateway resolves one opaque,
 tenant-isolated cache identity from an explicit `prompt_cache_key`, a supported
 session header, or a stable content prefix with a meaningful user/input anchor.
 It writes the finalized UUID to both the upstream `prompt_cache_key` and the
-canonical `session-id` header; the legacy `session_id` alias carries the same
-value. A model-only request does not receive a content-derived key. API-key
+canonical `session-id` header. The legacy `session_id` / `conversation_id`
+aliases are emitted only when the OAuth account fingerprint mode converges
+session identity (`session` or `full`). `off` and `device` keep the official
+`session-id` + `thread-id` spelling. A model-only request does not receive a content-derived key. API-key
 Chat Completions requests converted to Responses use the same behavior, while
 raw Chat Completions forwarding does not receive Responses-only cache fields.
 

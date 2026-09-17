@@ -3264,10 +3264,15 @@
         :show-sso-option="form.platform === 'grok'"
         :show-email-password-option="false"
         :show-manual-option="true"
+        :show-device-code-option="form.platform === 'openai'"
+        :device-user-code="openaiDeviceCode?.user_code || ''"
+        :device-verification-url="openaiDeviceCode?.verification_url || ''"
+        :device-code-polling="openaiDeviceCodePolling"
         :initial-input-method="'manual'"
         :platform="form.platform"
         :show-project-id="geminiOAuthType === 'code_assist'"
         @generate-url="handleGenerateUrl"
+        @start-device-code="handleStartOpenAIDeviceCode"
         @cookie-auth="handleCookieAuth"
         @validate-refresh-token="handleValidateRefreshToken"
         @validate-mobile-refresh-token="handleOpenAIValidateMobileRT"
@@ -3616,7 +3621,7 @@ import {
   type AddMethod,
   type AuthInputMethod
 } from '@/composables/useAccountOAuth'
-import { useOpenAIOAuth } from '@/composables/useOpenAIOAuth'
+import { useOpenAIOAuth, type OpenAITokenInfo } from '@/composables/useOpenAIOAuth'
 import { useGeminiOAuth } from '@/composables/useGeminiOAuth'
 import { useAntigravityOAuth } from '@/composables/useAntigravityOAuth'
 import { useGrokOAuth } from '@/composables/useGrokOAuth'
@@ -3830,6 +3835,14 @@ const currentOAuthError = computed(() => {
 
 // Refs
 const oauthFlowRef = ref<OAuthFlowExposed | null>(null)
+const openaiDeviceCode = ref<{
+  session_id: string
+  user_code: string
+  verification_url: string
+  interval_seconds: number
+} | null>(null)
+const openaiDeviceCodePolling = ref(false)
+let openaiDeviceCodeGeneration = 0
 
 // Model mapping type
 interface ModelMapping {
@@ -5107,6 +5120,9 @@ const resetForm = () => {
 }
 
 const handleClose = () => {
+  openaiDeviceCodeGeneration += 1
+  openaiDeviceCode.value = null
+  openaiDeviceCodePolling.value = false
   antigravityMixedChannelConfirmed.value = false
   clearMixedChannelDialog()
   emit('close')
@@ -5997,31 +6013,13 @@ const handleGrokAuthorizePassword = async (emailPasswordInput: string) => {
 }
 
 // OpenAI OAuth 授权码兑换
-const handleOpenAIExchange = async (authCode: string) => {
+const createOpenAIAccountFromTokenInfo = async (tokenInfo: OpenAITokenInfo) => {
   const oauthClient = openaiOAuth
-  if (!authCode.trim() || !oauthClient.sessionId.value) return
-
   oauthClient.loading.value = true
   oauthClient.error.value = ''
-
   try {
-    const stateToUse = (oauthFlowRef.value?.oauthState || oauthClient.oauthState.value || '').trim()
-    if (!stateToUse) {
-      oauthClient.error.value = t('admin.accounts.oauth.authFailed')
-      appStore.showError(oauthClient.error.value)
-      return
-    }
-
-    const tokenInfo = await oauthClient.exchangeAuthCode(
-      authCode.trim(),
-      oauthClient.sessionId.value,
-      stateToUse,
-      form.proxy_id
-    )
-    if (!tokenInfo) return
-
     const credentials = oauthClient.buildCredentials(tokenInfo)
-		applyOpenAIAccountUserAgent(credentials)
+    applyOpenAIAccountUserAgent(credentials)
     const oauthExtra = oauthClient.buildExtraInfo(tokenInfo) as Record<string, unknown> | undefined
     const extra = buildOpenAIExtra(oauthExtra)
     const shouldCreateOpenAI = form.platform === 'openai'
@@ -6072,6 +6070,57 @@ const handleOpenAIExchange = async (authCode: string) => {
     appStore.showError(oauthClient.error.value)
   } finally {
     oauthClient.loading.value = false
+  }
+}
+
+const handleOpenAIExchange = async (authCode: string) => {
+  const oauthClient = openaiOAuth
+  if (!authCode.trim() || !oauthClient.sessionId.value) return
+  const stateToUse = (oauthFlowRef.value?.oauthState || oauthClient.oauthState.value || '').trim()
+  if (!stateToUse) {
+    oauthClient.error.value = t('admin.accounts.oauth.authFailed')
+    appStore.showError(oauthClient.error.value)
+    return
+  }
+  const tokenInfo = await oauthClient.exchangeAuthCode(
+    authCode.trim(),
+    oauthClient.sessionId.value,
+    stateToUse,
+    form.proxy_id
+  )
+  if (!tokenInfo) return
+  await createOpenAIAccountFromTokenInfo(tokenInfo)
+}
+
+const handleStartOpenAIDeviceCode = async () => {
+  const generation = ++openaiDeviceCodeGeneration
+  openaiDeviceCodePolling.value = false
+  const started = await openaiOAuth.startDeviceCode(form.proxy_id)
+  if (!started || generation !== openaiDeviceCodeGeneration) return
+  openaiDeviceCode.value = started
+  openaiDeviceCodePolling.value = true
+  const intervalMs = Math.max(1, started.interval_seconds || 5) * 1000
+  const startedAt = Date.now()
+  const timeoutMs = 15 * 60 * 1000
+  while (generation === openaiDeviceCodeGeneration) {
+    const result = await openaiOAuth.pollDeviceCode(started.session_id)
+    if (generation !== openaiDeviceCodeGeneration) return
+    if (!result) {
+      openaiDeviceCodePolling.value = false
+      return
+    }
+    if ('pending' in result && result.pending) {
+      if (Date.now() - startedAt >= timeoutMs) {
+        openaiDeviceCodePolling.value = false
+        appStore.showError(t('admin.accounts.oauth.openai.deviceCodeTimeout'))
+        return
+      }
+      await new Promise((resolve) => setTimeout(resolve, intervalMs))
+      continue
+    }
+    openaiDeviceCodePolling.value = false
+    await createOpenAIAccountFromTokenInfo(result as OpenAITokenInfo)
+    return
   }
 }
 

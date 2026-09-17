@@ -141,9 +141,9 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 			if err != nil {
 				return nil, openAIWSSessionHeaderResolution{}, err
 			}
-			setOpenAIUpstreamSessionIdentity(headers, upstreamSessionID)
+			setOpenAIUpstreamSessionIdentityForAccount(headers, account, upstreamSessionID)
 		}
-		if sessionResolution.ConversationID != "" {
+		if sessionResolution.ConversationID != "" && accountEmitsCodexConvergedSessionAliases(account) {
 			upstreamConversationID, err := s.resolveOpenAIUpstreamSessionID(c, account, sessionResolution.ConversationID)
 			if err != nil {
 				return nil, openAIWSSessionHeaderResolution{}, err
@@ -196,12 +196,16 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	// The request/body stage owns installation and thread metadata. Preserve the
 	// already isolated cache session and restore it after fingerprint mutation.
 	if cacheSessionIdentity != "" {
-		setOpenAIUpstreamSessionIdentity(headers, cacheSessionIdentity)
+		setOpenAIUpstreamSessionIdentityForAccount(headers, account, cacheSessionIdentity)
 	}
 	if strings.TrimSpace(headers.Get("x-client-request-id")) == "" {
 		alignOpenAICodexThreadHeaders(headers)
 	}
 	identity := s.applyOpenAIOutboundIdentity(ctx, account, headers, account != nil && account.UsesOpenAICodexProtocol())
+	if account != nil && account.UsesOpenAICodexProtocol() {
+		preserveOpenAIThreadOriginator(c, headers)
+	}
+	clearOpenAICodexLegacySessionAliases(headers, account)
 	ApplyAccountOutboundHeaders(ctx, account, headers)
 	SetOpsRoutingDiagnostics(c, &OpsRoutingDiagnostics{OutboundIdentitySource: identity.Source})
 	setOpenAICodexRoutingHint(headers, account, routingModel, routingServiceTier)

@@ -908,7 +908,7 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 	if isOAuth {
 		req.Host = "chatgpt.com"
 		req.Header.Set("accept", "text/event-stream")
-		req.Header.Set("OpenAI-Beta", "responses=experimental")
+
 		setOpenAIChatGPTAccountHeaders(req.Header, credentialAccount)
 	}
 
@@ -2237,12 +2237,15 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
 		req.Header.Set("Authorization", "Bearer "+authToken)
 	}
 	probeSessionID := compactProbeSessionID(account.ID)
-	req.Header.Set("Session_ID", probeSessionID)
-	req.Header.Set("Conversation_ID", probeSessionID)
+	req.Header.Set(codexSessionIDHeader, probeSessionID)
+	if accountEmitsCodexConvergedSessionAliases(credentialAccount) {
+		req.Header.Set("session_id", probeSessionID)
+		req.Header.Set("conversation_id", probeSessionID)
+	}
 
 	if isOAuth {
 		req.Host = "chatgpt.com"
-		req.Header.Set("OpenAI-Beta", "responses=experimental")
+
 		req.Header.Set("Version", codexCLIVersion)
 		setOpenAIChatGPTAccountHeaders(req.Header, credentialAccount)
 		// Native compact probe 与真实 /responses 转发使用同一指纹策略。
@@ -2257,7 +2260,8 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
 	// Native compact probes follow the same layered contract as live traffic:
 	// fingerprinting owns installation/thread carriers, while the probe cache
 	// identity is final for both upstream session aliases.
-	setOpenAIUpstreamSessionIdentity(req.Header, probeSessionID)
+	setOpenAIUpstreamSessionIdentityForAccount(req.Header, credentialAccount, probeSessionID)
+	clearOpenAICodexLegacySessionAliases(req.Header, credentialAccount)
 	s.applyOpenAIOutboundIdentity(ctx, credentialAccount, req.Header, isOAuth)
 
 	proxyURL := ""
@@ -3157,9 +3161,7 @@ func (s *AccountTestService) testOpenAIImageOAuth(c *gin.Context, ctx context.Co
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "text/event-stream")
-	req.Header.Set("OpenAI-Beta", "responses=experimental")
 	if direct {
-		req.Header.Del("OpenAI-Beta")
 		req.Header.Set("Accept", "application/json")
 	}
 	setOpenAIChatGPTAccountHeaders(req.Header, credentialAccount)

@@ -381,7 +381,7 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 		if identityErr != nil {
 			return nil, fmt.Errorf("resolve messages cache session identity: %w", identityErr)
 		}
-		setOpenAIUpstreamSessionIdentity(upstreamReq.Header, cacheSessionIdentity)
+		setOpenAIUpstreamSessionIdentityForAccount(upstreamReq.Header, account, cacheSessionIdentity)
 		if upstreamReq.Header.Get("conversation_id") != "" {
 			upstreamReq.Header.Set("conversation_id", cacheSessionIdentity)
 		}
@@ -392,6 +392,8 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 		// originator/OpenAI-Beta 返回 404（issue #3901）。
 		ensureCodexIdentityHeaders(upstreamReq.Header)
 		identity := s.applyOpenAIOutboundIdentity(ctx, account, upstreamReq.Header, true)
+		preserveOpenAIThreadOriginator(c, upstreamReq.Header)
+		clearOpenAICodexLegacySessionAliases(upstreamReq.Header, account)
 		SetOpsRoutingDiagnostics(c, &OpsRoutingDiagnostics{OutboundIdentitySource: identity.Source})
 		logger.L().Debug("openai messages: upstream identity restored",
 			zap.Int64("account_id", account.ID),
