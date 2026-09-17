@@ -973,6 +973,8 @@ export interface Proxy {
   fallback_mode: 'none' | 'proxy' | 'direct'
   backup_proxy_id?: number | null
   expiry_warn_days: number
+  egress_timezone?: string
+  egress_country?: string
   created_at: string
   updated_at: string
 }
@@ -1502,6 +1504,8 @@ export interface CreateProxyRequest {
   fallback_mode?: 'none' | 'proxy' | 'direct'
   backup_proxy_id?: number | null
   expiry_warn_days?: number
+  egress_timezone?: string
+  egress_country?: string
 }
 
 export interface UpdateProxyRequest {
@@ -1516,6 +1520,8 @@ export interface UpdateProxyRequest {
   fallback_mode?: 'none' | 'proxy' | 'direct'
   backup_proxy_id?: number | null
   expiry_warn_days?: number
+  egress_timezone?: string
+  egress_country?: string
 }
 
 export interface AdminDataPayload {

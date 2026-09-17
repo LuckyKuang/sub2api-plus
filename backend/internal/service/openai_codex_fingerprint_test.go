@@ -1263,8 +1263,12 @@ func TestPrepareCodexFingerprintRaw_OffKeepsWebSocketBodyAndPlusSessionPolicy(t 
 		"",
 	)
 	require.NoError(t, err)
+	// off 模式走纯官方拼写：session-id 必须存在，Plus 兼容别名 session_id
+	// 与 conversation_id 一律不出现（与 openai_oauth_session_policy_test 的
+	// off/device 口径一致）。
 	require.NotEmpty(t, headers.Get("session-id"))
-	require.Equal(t, headers.Get("session-id"), headers.Get("session_id"))
+	require.Empty(t, headers.Get("session_id"))
+	require.Empty(t, headers.Get("conversation_id"))
 	require.Empty(t, headers.Get("x-codex-installation-id"))
 }
 

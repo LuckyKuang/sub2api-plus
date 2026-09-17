@@ -43,6 +43,10 @@ const (
 	FieldBackupProxyID = "backup_proxy_id"
 	// FieldExpiryWarnDays holds the string denoting the expiry_warn_days field in the database.
 	FieldExpiryWarnDays = "expiry_warn_days"
+	// FieldEgressTimezone holds the string denoting the egress_timezone field in the database.
+	FieldEgressTimezone = "egress_timezone"
+	// FieldEgressCountry holds the string denoting the egress_country field in the database.
+	FieldEgressCountry = "egress_country"
 	// EdgeAccounts holds the string denoting the accounts edge name in mutations.
 	EdgeAccounts = "accounts"
 	// EdgePrimaryProxies holds the string denoting the primary_proxies edge name in mutations.
@@ -85,6 +89,8 @@ var Columns = []string{
 	FieldFallbackMode,
 	FieldBackupProxyID,
 	FieldExpiryWarnDays,
+	FieldEgressTimezone,
+	FieldEgressCountry,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -131,6 +137,14 @@ var (
 	FallbackModeValidator func(string) error
 	// DefaultExpiryWarnDays holds the default value on creation for the "expiry_warn_days" field.
 	DefaultExpiryWarnDays int
+	// DefaultEgressTimezone holds the default value on creation for the "egress_timezone" field.
+	DefaultEgressTimezone string
+	// EgressTimezoneValidator is a validator for the "egress_timezone" field. It is called by the builders before save.
+	EgressTimezoneValidator func(string) error
+	// DefaultEgressCountry holds the default value on creation for the "egress_country" field.
+	DefaultEgressCountry string
+	// EgressCountryValidator is a validator for the "egress_country" field. It is called by the builders before save.
+	EgressCountryValidator func(string) error
 )
 
 // OrderOption defines the ordering options for the Proxy queries.
@@ -209,6 +223,16 @@ func ByBackupProxyID(opts ...sql.OrderTermOption) OrderOption {
 // ByExpiryWarnDays orders the results by the expiry_warn_days field.
 func ByExpiryWarnDays(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldExpiryWarnDays, opts...).ToFunc()
+}
+
+// ByEgressTimezone orders the results by the egress_timezone field.
+func ByEgressTimezone(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldEgressTimezone, opts...).ToFunc()
+}
+
+// ByEgressCountry orders the results by the egress_country field.
+func ByEgressCountry(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldEgressCountry, opts...).ToFunc()
 }
 
 // ByAccountsCount orders the results by accounts count.

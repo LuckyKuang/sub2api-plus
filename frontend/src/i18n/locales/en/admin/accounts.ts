@@ -629,8 +629,8 @@ export default {
         codexFingerprintModeDesc: 'For OpenAI OAuth Responses sessions, converge fingerprint-owned client identifiers to account-level stable values. Device-only is the default. Native Compact v2 follows the selected mode; the ChatGPT Codex OAuth legacy compact compatibility path uses only the stable installation identifier. Off disables fingerprint mutation but does not disable Plus cache, security, or session policy.',
         codexEnvironmentTimezone: 'Codex environment_context timezone',
         codexEnvironmentTimezoneDesc:
-          'Overrides the model-visible <timezone> / <current_date> pair inside <environment_context> with this IANA timezone and its current date, so the visible time matches the egress location. Takes precedence over the global default; leave empty to follow it.',
-        codexEnvironmentTimezonePlaceholder: 'e.g. America/New_York (empty = follow global default)',
+          'Overrides the model-visible <timezone> / <current_date> pair inside <environment_context> with this IANA timezone and its current date, so the visible time matches the egress location. Takes precedence over the proxy annotation and the global default; leave empty to follow them.',
+        codexEnvironmentTimezonePlaceholder: 'e.g. America/New_York (empty = follow proxy/global default)',
         codexFingerprintOff: 'Off (no fingerprint rewrite)',
         codexFingerprintDevice: 'Device only (default)',
         codexFingerprintSession: 'Device + Session',

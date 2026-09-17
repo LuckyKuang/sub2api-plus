@@ -1,15 +1,17 @@
 package service
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/tidwall/gjson"
-	"github.com/tidwall/sjson"
 )
 
 // CodexEnvironmentTimezoneExtraKey is the account-level extra key holding the
@@ -38,12 +40,14 @@ func NormalizeOpenAICodexEnvironmentTimezone(value string) (string, error) {
 }
 
 // resolveOpenAICodexEnvironmentTimezone resolves the target location for the
-// environment_context rewrite. Account extra wins, then the global setting.
-// Misconfigured values never block traffic: they degrade to the next source,
-// and "no valid value on either level" disables the rewrite. Nil ctx is
-// treated as Background because the setting getter is cache-backed.
+// environment_context rewrite. Account extra wins, then the egress proxy's
+// annotated timezone (the account is bound to that proxy, so the visible time
+// follows the actual exit), then the global setting. Misconfigured values
+// never block traffic: they degrade to the next source, and "no valid value on
+// any level" disables the rewrite. Nil ctx is treated as Background because
+// the setting getter is cache-backed.
 func resolveOpenAICodexEnvironmentTimezone(ctx context.Context, account *Account, settingService *SettingService) *time.Location {
-	if account == nil || !account.UsesOpenAICodexProtocol() {
+	if account == nil || !account.IsOpenAI() || !account.UsesOpenAICodexProtocol() {
 		return nil
 	}
 	if ctx == nil {
@@ -51,6 +55,14 @@ func resolveOpenAICodexEnvironmentTimezone(ctx context.Context, account *Account
 	}
 	if loc := parseOpenAICodexEnvironmentTimezone(account.getExtraString(CodexEnvironmentTimezoneExtraKey)); loc != nil {
 		return loc
+	}
+	// Egress proxy annotation: the hot path preloads account.Proxy, so this is
+	// a field read, not a query. A missing edge or an unannotated/invalid
+	// timezone falls through to the global default.
+	if account.Proxy != nil {
+		if loc := parseOpenAICodexEnvironmentTimezone(account.Proxy.EgressTimezone); loc != nil {
+			return loc
+		}
 	}
 	if settingService == nil {
 		return nil
@@ -142,43 +154,80 @@ func (s *OpenAIGatewayService) rewriteOpenAICodexEnvironmentContextBytes(ctx con
 	if !inputResult.IsArray() {
 		return body
 	}
-	updated := body
+
+	// 收集补丁：gjson 在完整 body 上按全路径查询，Result.Index 即原始字节偏移。
+	// 替换字面量用 json.Encoder(SetEscapeHTML=false) 生成，保持 `<`/`>` 原始
+	// 字节形态，避免 sjson 默认转义把整个 body 的 XML 标签变成 \u003c 漂移。
+	type environmentContextPatch struct {
+		start   int
+		raw     string
+		newText string
+	}
+	var patches []environmentContextPatch
+	appendPatch := func(path, value string) {
+		res := gjson.GetBytes(body, path)
+		if !res.Exists() || res.Index < 0 {
+			return
+		}
+		newText, changed := rewriteOpenAICodexEnvironmentContextText(value, loc)
+		if !changed {
+			return
+		}
+		patches = append(patches, environmentContextPatch{start: res.Index, raw: res.Raw, newText: newText})
+	}
 	for i, item := range inputResult.Array() {
 		if item.Get("role").String() != "user" {
 			continue
 		}
 		content := item.Get("content")
-		switch {
-		case content.Type == gjson.String:
-			newText, changedOne := rewriteOpenAICodexEnvironmentContextText(content.String(), loc)
-			if !changedOne {
-				continue
-			}
-			next, err := sjson.SetBytes(updated, fmt.Sprintf("input.%d.content", i), newText)
-			if err != nil {
-				slog.Debug("openai_codex_environment_context_rewrite_failed", "error", err)
-				return body
-			}
-			updated = next
-		case content.IsArray():
+		if content.Type == gjson.String {
+			appendPatch(fmt.Sprintf("input.%d.content", i), content.String())
+		} else if content.IsArray() {
 			for j, part := range content.Array() {
 				if part.Get("type").String() != "input_text" {
 					continue
 				}
-				newText, changedOne := rewriteOpenAICodexEnvironmentContextText(part.Get("text").String(), loc)
-				if !changedOne {
-					continue
-				}
-				next, err := sjson.SetBytes(updated, fmt.Sprintf("input.%d.content.%d.text", i, j), newText)
-				if err != nil {
-					slog.Debug("openai_codex_environment_context_rewrite_failed", "error", err)
-					return body
-				}
-				updated = next
+				appendPatch(fmt.Sprintf("input.%d.content.%d.text", i, j), part.Get("text").String())
 			}
 		}
 	}
+	if len(patches) == 0 {
+		return body
+	}
+	sort.Slice(patches, func(a, b int) bool { return patches[a].start > patches[b].start })
+
+	updated := body
+	for _, patch := range patches {
+		literal, err := marshalEnvironmentContextJSONString(patch.newText)
+		if err != nil {
+			slog.Debug("openai_codex_environment_context_rewrite_failed", "error", err)
+			return body
+		}
+		start := patch.start
+		end := start + len(patch.raw)
+		if end > len(updated) || string(updated[start:end]) != patch.raw {
+			slog.Debug("openai_codex_environment_context_rewrite_span_mismatch")
+			return body
+		}
+		next := make([]byte, 0, len(updated)-(end-start)+len(literal))
+		next = append(next, updated[:start]...)
+		next = append(next, literal...)
+		next = append(next, updated[end:]...)
+		updated = next
+	}
 	return updated
+}
+
+// marshalEnvironmentContextJSONString encodes text as a JSON string literal
+// with HTML escaping disabled, so `<`/`>` keep their raw byte form.
+func marshalEnvironmentContextJSONString(text string) ([]byte, error) {
+	var buf bytes.Buffer
+	encoder := json.NewEncoder(&buf)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(text); err != nil {
+		return nil, err
+	}
+	return bytes.TrimRight(buf.Bytes(), "\n"), nil
 }
 
 // rewriteOpenAICodexEnvironmentContextMap is the map form of the rewrite used

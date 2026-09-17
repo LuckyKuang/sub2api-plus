@@ -533,6 +533,8 @@ type CreateProxyInput struct {
 	FallbackMode   string
 	BackupProxyID  *int64
 	ExpiryWarnDays int
+	EgressTimezone string
+	EgressCountry  string
 }
 
 // UpdateProxyInput preserves omitted expiry/backup values; Clear flags explicitly
@@ -551,6 +553,8 @@ type UpdateProxyInput struct {
 	BackupProxyID  *int64
 	ClearBackupID  bool
 	ExpiryWarnDays *int
+	EgressTimezone *string
+	EgressCountry  *string
 }
 
 type GenerateRedeemCodesInput struct {

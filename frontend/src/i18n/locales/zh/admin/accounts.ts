@@ -708,8 +708,8 @@ export default {
         codexFingerprintModeDesc: '对 OpenAI OAuth Responses 会话，将指纹层拥有的客户端标识收敛为账号级恒定值，默认仅收敛设备标识。Native Compact v2 遵循所选模式；ChatGPT Codex OAuth 的 legacy compact 兼容路径仅使用稳定 installation 标识。关闭只停用指纹改写，不会停用 Plus 缓存、安全或会话策略。',
         codexEnvironmentTimezone: 'Codex environment_context 时区',
         codexEnvironmentTimezoneDesc:
-          '将 <environment_context> 内模型可见的 <timezone> / <current_date> 成对改写为该 IANA 时区及其当前日期，使可见时间与出口位置一致。优先于全局默认；留空跟随全局。',
-        codexEnvironmentTimezonePlaceholder: '如 America/New_York（留空跟随全局默认）',
+          '将 <environment_context> 内模型可见的 <timezone> / <current_date> 成对改写为该 IANA 时区及其当前日期，使可见时间与出口位置一致。优先于代理标注与全局默认；留空依次跟随。',
+        codexEnvironmentTimezonePlaceholder: '如 America/New_York（留空跟随代理/全局默认）',
         codexFingerprintOff: '关闭（不改写指纹）',
         codexFingerprintDevice: '仅设备（默认）',
         codexFingerprintSession: '设备+会话',

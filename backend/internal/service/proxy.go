@@ -28,6 +28,8 @@ type Proxy struct {
 	FallbackMode   string
 	BackupProxyID  *int64
 	ExpiryWarnDays int
+	EgressTimezone string
+	EgressCountry  string
 }
 
 func (p *Proxy) IsActive() bool {

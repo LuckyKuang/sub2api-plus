@@ -288,6 +288,14 @@ export default {
       fallbackProxy: '指定备用代理',
       fallbackDirect: '回退直连',
       backupProxy: '备用代理',
+      egressTimezone: '出口时区（IANA）',
+      egressTimezonePlaceholder: '如 America/New_York（留空关闭）',
+      egressTimezoneHint:
+        '手工标注的出口时区。经该代理出站的 Codex 请求，其可见 <timezone>/<current_date> 会成对对齐到此时区（账号级配置优先）。',
+      egressCountry: '出口国家代码',
+      egressCountryPlaceholder: '如 US（两位字母，可选）',
+      egressCountryHint:
+        '手工标注的出口国家（ISO 3166-1 alpha-2），用于展示与后续 residency 功能。可先运行代理质量检查查看探测到的出口国家作参考。',
     },
 
     // Redeem Codes Management

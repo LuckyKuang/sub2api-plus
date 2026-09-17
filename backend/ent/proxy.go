@@ -45,6 +45,10 @@ type Proxy struct {
 	BackupProxyID *int64 `json:"backup_proxy_id,omitempty"`
 	// Days before expiry to flag as expiring-soon (per proxy).
 	ExpiryWarnDays int `json:"expiry_warn_days,omitempty"`
+	// Egress IANA timezone manually annotated by the administrator; empty means unannotated. Drives the Codex environment_context timezone alignment for bound accounts.
+	EgressTimezone string `json:"egress_timezone,omitempty"`
+	// Egress country code (ISO 3166-1 alpha-2) manually annotated by the administrator; empty means unannotated. Distinct from the probe-snapshot country fields.
+	EgressCountry string `json:"egress_country,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the ProxyQuery when eager-loading is set.
 	Edges        ProxyEdges `json:"edges"`
@@ -100,7 +104,7 @@ func (*Proxy) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case proxy.FieldID, proxy.FieldPort, proxy.FieldBackupProxyID, proxy.FieldExpiryWarnDays:
 			values[i] = new(sql.NullInt64)
-		case proxy.FieldName, proxy.FieldProtocol, proxy.FieldHost, proxy.FieldUsername, proxy.FieldPassword, proxy.FieldStatus, proxy.FieldFallbackMode:
+		case proxy.FieldName, proxy.FieldProtocol, proxy.FieldHost, proxy.FieldUsername, proxy.FieldPassword, proxy.FieldStatus, proxy.FieldFallbackMode, proxy.FieldEgressTimezone, proxy.FieldEgressCountry:
 			values[i] = new(sql.NullString)
 		case proxy.FieldCreatedAt, proxy.FieldUpdatedAt, proxy.FieldDeletedAt, proxy.FieldExpiresAt:
 			values[i] = new(sql.NullTime)
@@ -214,6 +218,18 @@ func (_m *Proxy) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.ExpiryWarnDays = int(value.Int64)
 			}
+		case proxy.FieldEgressTimezone:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field egress_timezone", values[i])
+			} else if value.Valid {
+				_m.EgressTimezone = value.String
+			}
+		case proxy.FieldEgressCountry:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field egress_country", values[i])
+			} else if value.Valid {
+				_m.EgressCountry = value.String
+			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
 		}
@@ -316,6 +332,12 @@ func (_m *Proxy) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("expiry_warn_days=")
 	builder.WriteString(fmt.Sprintf("%v", _m.ExpiryWarnDays))
+	builder.WriteString(", ")
+	builder.WriteString("egress_timezone=")
+	builder.WriteString(_m.EgressTimezone)
+	builder.WriteString(", ")
+	builder.WriteString("egress_country=")
+	builder.WriteString(_m.EgressCountry)
 	builder.WriteByte(')')
 	return builder.String()
 }

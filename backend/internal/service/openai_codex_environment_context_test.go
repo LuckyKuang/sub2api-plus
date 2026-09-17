@@ -1,4 +1,4 @@
-//go:build unit || !integration
+//go:build unit
 
 package service
 
@@ -182,9 +182,93 @@ func TestRewriteOpenAICodexEnvironmentContextMap(t *testing.T) {
 	second := updated["input"].([]any)[1].(map[string]any)["content"].([]any)[0].(map[string]any)["text"].(string)
 	require.Contains(t, second, "<timezone>America/New_York</timezone>")
 
-	// 未配置时原样返回
+	// 未配置时原样返回（注意：map 改写会原地变更嵌套 content，必须用全新 payload）
 	plain := newEnvironmentTimezoneTestAccount("")
-	untouched := svc.rewriteOpenAICodexEnvironmentContextMap(nil, plain, payload)
+	fresh := map[string]any{
+		"type": "response.create",
+		"input": []any{
+			map[string]any{"type": "message", "role": "user", "content": "<environment_context><timezone>Asia/Shanghai</timezone></environment_context>"},
+		},
+	}
+	untouched := svc.rewriteOpenAICodexEnvironmentContextMap(nil, plain, fresh)
 	firstUntouched := untouched["input"].([]any)[0].(map[string]any)["content"].(string)
 	require.Contains(t, firstUntouched, "<timezone>Asia/Shanghai</timezone>")
+}
+
+func TestResolveOpenAICodexEnvironmentTimezoneProxyLayer(t *testing.T) {
+	svc := &OpenAIGatewayService{}
+	proxyNY := &Proxy{EgressTimezone: "America/New_York", EgressCountry: "US"}
+
+	t.Run("代理标注生效", func(t *testing.T) {
+		account := newEnvironmentTimezoneTestAccount("")
+		account.Proxy = proxyNY
+		loc := resolveOpenAICodexEnvironmentTimezone(nil, account, svc.settingService)
+		require.NotNil(t, loc)
+		require.Equal(t, "America/New_York", loc.String())
+	})
+
+	t.Run("账号 extra 覆盖代理标注", func(t *testing.T) {
+		account := newEnvironmentTimezoneTestAccount("Europe/Berlin")
+		account.Proxy = proxyNY
+		loc := resolveOpenAICodexEnvironmentTimezone(nil, account, svc.settingService)
+		require.NotNil(t, loc)
+		require.Equal(t, "Europe/Berlin", loc.String())
+	})
+
+	t.Run("代理未标注跳过到全局", func(t *testing.T) {
+		withGlobal := newEnvironmentTimezoneGlobalService("Europe/Berlin")
+		account := newEnvironmentTimezoneTestAccount("")
+		account.Proxy = &Proxy{EgressCountry: "US"}
+		loc := resolveOpenAICodexEnvironmentTimezone(nil, account, withGlobal.settingService)
+		require.NotNil(t, loc)
+		require.Equal(t, "Europe/Berlin", loc.String())
+	})
+
+	t.Run("Proxy 未加载跳过到全局", func(t *testing.T) {
+		withGlobal := newEnvironmentTimezoneGlobalService("Europe/Berlin")
+		account := newEnvironmentTimezoneTestAccount("")
+		loc := resolveOpenAICodexEnvironmentTimezone(nil, account, withGlobal.settingService)
+		require.NotNil(t, loc)
+		require.Equal(t, "Europe/Berlin", loc.String())
+	})
+
+	t.Run("代理标注非法跳过到全局", func(t *testing.T) {
+		withGlobal := newEnvironmentTimezoneGlobalService("Europe/Berlin")
+		account := newEnvironmentTimezoneTestAccount("")
+		account.Proxy = &Proxy{EgressTimezone: "Not/AZone"}
+		loc := resolveOpenAICodexEnvironmentTimezone(nil, account, withGlobal.settingService)
+		require.NotNil(t, loc)
+		require.Equal(t, "Europe/Berlin", loc.String())
+	})
+
+	t.Run("无任何来源则关闭", func(t *testing.T) {
+		account := newEnvironmentTimezoneTestAccount("")
+		require.Nil(t, resolveOpenAICodexEnvironmentTimezone(nil, account, svc.settingService))
+	})
+}
+
+func TestNormalizeProxyTimezoneCountry(t *testing.T) {
+	t.Run("两者为空合法", func(t *testing.T) {
+		tz, country, err := normalizeProxyTimezoneCountry("", "")
+		require.NoError(t, err)
+		require.Empty(t, tz)
+		require.Empty(t, country)
+	})
+
+	t.Run("合法值", func(t *testing.T) {
+		tz, country, err := normalizeProxyTimezoneCountry(" America/New_York ", "us")
+		require.NoError(t, err)
+		require.Equal(t, "America/New_York", tz)
+		require.Equal(t, "US", country)
+	})
+
+	t.Run("非法时区", func(t *testing.T) {
+		_, _, err := normalizeProxyTimezoneCountry("Not/AZone", "")
+		require.Error(t, err)
+	})
+
+	t.Run("非法国家代码", func(t *testing.T) {
+		_, _, err := normalizeProxyTimezoneCountry("", "USA")
+		require.Error(t, err)
+	})
 }
