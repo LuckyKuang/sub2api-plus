@@ -189,6 +189,27 @@ func openAIPromptCacheIdentityScope(c *gin.Context, account *Account) string {
 }
 
 func setOpenAIUpstreamSessionIdentity(headers http.Header, identity string) {
+	setOpenAIUpstreamSessionIdentityForAccount(headers, nil, identity)
+}
+
+func accountEmitsCodexConvergedSessionAliases(account *Account) bool {
+	// Non-Codex/API-key paths keep the legacy session_id alias. OAuth Codex
+	// accounts follow fingerprint mode: session/full emit aliases, off/device do not.
+	if account == nil || !account.UsesOpenAICodexProtocol() {
+		return true
+	}
+	var raw any
+	if account.Extra != nil {
+		raw = account.Extra[CodexFingerprintModeExtraKey]
+	}
+	mode, err := normalizeCodexFingerprintMode(raw)
+	if err != nil {
+		return false
+	}
+	return mode == codexFingerprintSession || mode == codexFingerprintFull
+}
+
+func setOpenAIUpstreamSessionIdentityForAccount(headers http.Header, account *Account, identity string) {
 	if headers == nil {
 		return
 	}
@@ -196,10 +217,27 @@ func setOpenAIUpstreamSessionIdentity(headers http.Header, identity string) {
 	if identity == "" {
 		return
 	}
-	// session-id is the current Codex spelling. Keep the underscore alias for
-	// older ChatGPT-compatible relays while both carry the same value.
 	headers.Set(codexSessionIDHeader, identity)
-	headers.Set("session_id", identity)
+	if accountEmitsCodexConvergedSessionAliases(account) {
+		headers.Set("session_id", identity)
+	} else {
+		clearOpenAICodexLegacySessionAliases(headers, account)
+	}
+}
+
+// clearOpenAICodexLegacySessionAliases drops unofficial session header aliases
+// on Codex-protocol paths. `conversation_id` is never an official Codex header,
+// so it is removed for every Codex account regardless of fingerprint mode. The
+// legacy `session_id` alias is a Plus compatibility header that stays only for
+// fingerprint modes converging session identity (session/full).
+func clearOpenAICodexLegacySessionAliases(headers http.Header, account *Account) {
+	if headers == nil || account == nil || !account.UsesOpenAICodexProtocol() {
+		return
+	}
+	headers.Del("conversation_id")
+	if !accountEmitsCodexConvergedSessionAliases(account) {
+		headers.Del("session_id")
+	}
 }
 
 // alignOpenAIUpstreamSessionIdentityFromBody makes the finalized Responses
@@ -220,14 +258,14 @@ func (s *OpenAIGatewayService) alignOpenAIUpstreamSessionIdentityFromBody( //nol
 		// The compact endpoint owns its session namespace and the Plus contract
 		// keeps the client key opaque. Do not hash or rewrite it through the
 		// ordinary Responses cache identity layer.
-		setOpenAIUpstreamSessionIdentity(headers, promptCacheKey)
+		setOpenAIUpstreamSessionIdentityForAccount(headers, account, promptCacheKey)
 		return nil
 	}
 	identity, err := s.resolveOpenAIUpstreamPromptCacheHeaderIdentity(c, account, promptCacheKey)
 	if err != nil {
 		return fmt.Errorf("resolve prompt cache header identity: %w", err)
 	}
-	setOpenAIUpstreamSessionIdentity(headers, identity)
+	setOpenAIUpstreamSessionIdentityForAccount(headers, account, identity)
 	return nil
 }
 

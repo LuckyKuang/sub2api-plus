@@ -72,8 +72,12 @@ For OpenAI Responses and Compact requests, the gateway resolves one opaque,
 tenant-isolated cache identity from an explicit `prompt_cache_key`, a supported
 session header, or a stable content prefix with a meaningful user/input anchor.
 It writes the finalized UUID to both the upstream `prompt_cache_key` and the
-canonical `session-id` header; the legacy `session_id` alias carries the same
-value. A model-only request does not receive a content-derived key. API-key
+canonical `session-id` header. Official Codex never sends a `conversation_id`
+header, so Codex-protocol outbound requests never carry one. The legacy
+`session_id` alias is a Plus compatibility header: OAuth accounts emit it only
+when the fingerprint mode converges session identity (`session` or `full`),
+while API-key accounts keep emitting it. `off` and `device` OAuth accounts keep
+the official `session-id` + `thread-id` spelling. A model-only request does not receive a content-derived key. API-key
 Chat Completions requests converted to Responses use the same behavior, while
 raw Chat Completions forwarding does not receive Responses-only cache fields.
 
@@ -114,6 +118,48 @@ share of total tokens, but do not derive a prompt-cache hit rate from these
 counters.
 Canonical nested usage details take priority by field presence, including an
 explicit zero, before known top-level compatibility aliases are considered.
+
+## Codex Scheduler Quota Windows
+
+OpenAI account scoring reads canonical `codex_5h_*` and `codex_7d_*` usage
+fields first. Historical `codex_primary_*` / `codex_secondary_*` snapshots reuse
+the same Normalize window classification used when writing extras, so `primary`
+is never assumed to be the 7-day window. Reset scoring prefers the canonical
+5-hour reset time and falls back to the session window. Relative
+`reset_after_seconds` is anchored at `codex_usage_updated_at`; a missing sample
+time does not slide the countdown forward on each score. Scheduler weights,
+pause thresholds, and Plus session/quota accounting are unchanged.
+
+## Upstream Capacity Shed
+
+OpenAI capacity-shed signals (`server_is_overloaded`, `slow_down`, and messages
+such as `Our servers are currently overloaded` or `Selected model is at
+capacity`) are request-scoped. The gateway does not retry the same account and
+does not switch accounts. The first upstream response is returned to the
+client as HTTP 503. Account health, scheduling, and pause state are unchanged.
+
+When the error is forwarded, `server_is_overloaded` / `slow_down` are rewritten
+to `server_error` so Codex CLI does not treat them as a fatal session-ending
+code. The original message is preserved. Rate-limit codes are not rewritten.
+Codex WebSocket HTTP-bridge and native WS turns deliver that rewritten event
+on the current connection instead of switching accounts or closing with a
+generic proxy failure.
+
+Anthropic `overloaded_error` / HTTP 529 and Grok shared model-capacity errors
+follow the same no-retry rule for the current request.
+
+Transport failures, account-scoped 401/403/429, and OAuth 429 windows keep
+their existing retry and failover behavior.
+
+## Responses Stream Sequence Numbers
+
+Gateway-synthesized and re-emitted Responses SSE frames always write
+`sequence_number`, including `0`. Compact HTTP/SSE bridges number events
+monotonically from `0`. Synthetic `response.failed` frames and WebSocket-to-HTTP
+bridge error/`response.failed` events emit `0` when the previous sequence is
+unknown. Strict clients such as Grok Build treat the field as required and abort
+the turn when it is omitted. The OpenAI spec marks it optional; Plus still emits
+it so those clients can deserialize the stream.
 
 ## Codex Rate-Limit Response Headers
 

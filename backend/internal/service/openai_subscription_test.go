@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
 	"github.com/imroc/req/v3"
 	"github.com/stretchr/testify/require"
 )
@@ -23,8 +22,8 @@ func TestFetchChatGPTSubscriptionExpiresAt(t *testing.T) {
 		require.Equal(t, "acc_123", r.URL.Query().Get("account_id"))
 		require.Equal(t, "Bearer access-token", r.Header.Get("Authorization"))
 		require.Equal(t, DefaultOpenAICodexUserAgent, r.Header.Get("User-Agent"))
-		require.Equal(t, openai.CodexDefaultOriginator, r.Header.Get("Originator"))
-		require.Equal(t, DefaultOpenAICodexVersion, r.Header.Get("Version"))
+		require.Empty(t, r.Header.Get("Originator"), "auxiliary API keeps UA + Bearer + chatgpt-account-id only")
+		require.Empty(t, r.Header.Get("Version"))
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -51,11 +50,11 @@ func TestFetchChatGPTAccountInfo_SkipsExpiredWorkspaceCandidate(t *testing.T) {
 	expiredAt := time.Now().Add(-24 * time.Hour).UTC().Format(time.RFC3339)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, "/backend-api/accounts/check/v4-2023-04-27", r.URL.Path)
+		require.Equal(t, "/backend-api/wham/accounts/check", r.URL.Path)
 		require.Equal(t, "Bearer access-token", r.Header.Get("Authorization"))
 		require.Equal(t, DefaultOpenAICodexUserAgent, r.Header.Get("User-Agent"))
-		require.Equal(t, openai.CodexDefaultOriginator, r.Header.Get("Originator"))
-		require.Equal(t, DefaultOpenAICodexVersion, r.Header.Get("Version"))
+		require.Empty(t, r.Header.Get("Originator"))
+		require.Empty(t, r.Header.Get("Version"))
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -80,7 +79,7 @@ func TestFetchChatGPTAccountInfo_SkipsExpiredWorkspaceCandidate(t *testing.T) {
 	defer server.Close()
 
 	oldURL := chatGPTAccountsCheckURL
-	chatGPTAccountsCheckURL = server.URL + "/backend-api/accounts/check/v4-2023-04-27"
+	chatGPTAccountsCheckURL = server.URL + "/backend-api/wham/accounts/check"
 	t.Cleanup(func() { chatGPTAccountsCheckURL = oldURL })
 
 	got := fetchChatGPTAccountInfo(context.Background(), func(proxyURL string) (*req.Client, error) {
@@ -94,7 +93,7 @@ func TestFetchChatGPTAccountInfo_SkipsExpiredWorkspaceCandidate(t *testing.T) {
 
 func TestFetchChatGPTAccountInfo_SkipsDeactivatedWorkspaceCandidate(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, "/backend-api/accounts/check/v4-2023-04-27", r.URL.Path)
+		require.Equal(t, "/backend-api/wham/accounts/check", r.URL.Path)
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -117,7 +116,7 @@ func TestFetchChatGPTAccountInfo_SkipsDeactivatedWorkspaceCandidate(t *testing.T
 	defer server.Close()
 
 	oldURL := chatGPTAccountsCheckURL
-	chatGPTAccountsCheckURL = server.URL + "/backend-api/accounts/check/v4-2023-04-27"
+	chatGPTAccountsCheckURL = server.URL + "/backend-api/wham/accounts/check"
 	t.Cleanup(func() { chatGPTAccountsCheckURL = oldURL })
 
 	got := fetchChatGPTAccountInfo(context.Background(), func(proxyURL string) (*req.Client, error) {
@@ -181,7 +180,7 @@ func TestFetchChatGPTAccountInfo_ReportsAccountID(t *testing.T) {
 	defer server.Close()
 
 	oldURL := chatGPTAccountsCheckURL
-	chatGPTAccountsCheckURL = server.URL + "/backend-api/accounts/check/v4-2023-04-27"
+	chatGPTAccountsCheckURL = server.URL + "/backend-api/wham/accounts/check"
 	t.Cleanup(func() { chatGPTAccountsCheckURL = oldURL })
 
 	got := fetchChatGPTAccountInfo(context.Background(), newTestPrivacyClientFactory(), "access-token", "", "", openAIOutboundIdentity{})
@@ -335,7 +334,7 @@ func newChatGPTBackendTestServer(t *testing.T, cfg chatGPTBackendTestServerConfi
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/backend-api/accounts/check/v4-2023-04-27":
+		case "/backend-api/wham/accounts/check":
 			_ = json.NewEncoder(w).Encode(cfg.accountsCheck)
 		case "/backend-api/subscriptions":
 			body := map[string]any{}
@@ -349,7 +348,7 @@ func newChatGPTBackendTestServer(t *testing.T, cfg chatGPTBackendTestServerConfi
 	}))
 
 	oldAccounts, oldSubscriptions := chatGPTAccountsCheckURL, chatGPTSubscriptionsURL
-	chatGPTAccountsCheckURL = server.URL + "/backend-api/accounts/check/v4-2023-04-27"
+	chatGPTAccountsCheckURL = server.URL + "/backend-api/wham/accounts/check"
 	chatGPTSubscriptionsURL = server.URL + "/backend-api/subscriptions"
 	t.Cleanup(func() {
 		chatGPTAccountsCheckURL, chatGPTSubscriptionsURL = oldAccounts, oldSubscriptions
@@ -357,9 +356,9 @@ func newChatGPTBackendTestServer(t *testing.T, cfg chatGPTBackendTestServerConfi
 	return server
 }
 
-// enrichTokenInfo 收尾还会调用 disableOpenAITraining，它的 URL 是常量、指向真实
-// chatgpt.com，测试无法接管。给客户端一个短超时让它快速失败——该调用只写
-// PrivacyMode，不影响本组用例的断言。
+// Official Codex does not PATCH ChatGPT training during login. The privacy
+// client factory is unused by enrichTokenInfo and kept only so older call
+// sites compile without changing this suite's account-info assertions.
 func newTestPrivacyClientFactory() PrivacyClientFactory {
 	return func(string) (*req.Client, error) {
 		return req.C().SetTimeout(time.Second), nil

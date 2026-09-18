@@ -166,10 +166,15 @@ func isOfficialCodexIngressOriginator(transportOriginator, originator string) bo
 	if originator == transportOriginator {
 		return true
 	}
-	if _, ok := codexOfficialThreadOriginators[originator]; ok {
-		return true
-	}
-	return false
+	return IsOfficialCodexThreadOriginator(originator)
+}
+
+// IsOfficialCodexThreadOriginator reports whether originator is a reviewed
+// product-service override that official Codex may send without rewriting the
+// process-level User-Agent.
+func IsOfficialCodexThreadOriginator(originator string) bool {
+	_, ok := codexOfficialThreadOriginators[strings.TrimSpace(originator)]
+	return ok
 }
 
 func isStrictCodexClientProfileVersion(version string) bool {
@@ -195,6 +200,9 @@ func ClassifyOfficialCodexClientProfile(userAgent, originator string) (CodexClie
 // case folding, substring matching, or legacy trailer recovery: a configured
 // identity must already be coherent in its leading token.
 func PairConfiguredCodexClientIdentity(userAgent string, allowLegacyCompatibility bool) (CodexClientProfileMatch, string, bool) {
+	if !validCodexUserAgentValue(userAgent) {
+		return CodexClientProfileMatch{}, "", false
+	}
 	ua := strings.TrimSpace(userAgent)
 	slash := strings.IndexByte(ua, '/')
 	if slash <= 0 {

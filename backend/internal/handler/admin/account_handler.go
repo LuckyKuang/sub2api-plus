@@ -1220,6 +1220,11 @@ func (h *AccountHandler) Delete(c *gin.Context) {
 		return
 	}
 
+	if account, getErr := h.adminService.GetAccount(c.Request.Context(), accountID); getErr == nil && account != nil && h.openaiOAuthService != nil {
+		if revokeErr := h.openaiOAuthService.RevokeAccountTokens(c.Request.Context(), account); revokeErr != nil {
+			slog.Warn("openai_oauth_revoke_on_delete_failed", "account_id", accountID, "error", revokeErr)
+		}
+	}
 	err = h.adminService.DeleteAccount(c.Request.Context(), accountID)
 	if err != nil {
 		response.ErrorFrom(c, err)
@@ -1386,8 +1391,6 @@ func (h *AccountHandler) refreshSingleAccount(ctx context.Context, account *serv
 	if account.IsOpenAI() {
 		tokenInfo, err := h.openaiOAuthService.RefreshAccountToken(ctx, account)
 		if err != nil {
-			// 刷新失败但 access_token 可能仍有效，尝试设置隐私
-			h.adminService.EnsureOpenAIPrivacy(ctx, account)
 			return nil, "", err
 		}
 
@@ -1502,8 +1505,6 @@ func (h *AccountHandler) refreshSingleAccount(ctx context.Context, account *serv
 		}
 	}
 
-	// OpenAI OAuth: 刷新成功后检查并设置 privacy_mode
-	h.adminService.EnsureOpenAIPrivacy(ctx, updatedAccount)
 	// Antigravity OAuth: 刷新成功后检查并设置 privacy_mode
 	h.adminService.EnsureAntigravityPrivacy(ctx, updatedAccount)
 
@@ -1534,6 +1535,7 @@ func (h *AccountHandler) Refresh(c *gin.Context) {
 
 	if warning == "missing_project_id_temporary" {
 		response.Success(c, gin.H{
+			"account": h.buildAccountResponseWithRuntime(c.Request.Context(), updatedAccount),
 			"message": "Token refreshed successfully, but project_id could not be retrieved (will retry automatically)",
 			"warning": "missing_project_id_temporary",
 		})
@@ -1838,6 +1840,11 @@ func (h *AccountHandler) BatchDelete(c *gin.Context) {
 	for _, id := range rootIDs {
 		accountID := id
 		g.Go(func() error {
+			if account, getErr := h.adminService.GetAccount(gctx, accountID); getErr == nil && account != nil && h.openaiOAuthService != nil {
+				if revokeErr := h.openaiOAuthService.RevokeAccountTokens(gctx, account); revokeErr != nil {
+					slog.Warn("openai_oauth_revoke_on_delete_failed", "account_id", accountID, "error", revokeErr)
+				}
+			}
 			err := h.adminService.DeleteAccount(gctx, accountID)
 
 			mu.Lock()

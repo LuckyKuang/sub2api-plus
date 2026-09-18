@@ -63,3 +63,31 @@ func TestUpdateSettings_OpenAICodexClientVersionRejectsBelowUpstreamMin(t *testi
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
 	require.Contains(t, recorder.Body.String(), "at least")
 }
+
+func TestUpdateSettings_OpenAICodexEnvironmentTimezoneValidation(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	update := func(t *testing.T, payload map[string]any) *httptest.ResponseRecorder {
+		t.Helper()
+		repo := &settingHandlerRepoStub{values: map[string]string{}}
+		handler := NewSettingHandler(service.NewSettingService(repo, &config.Config{Default: config.DefaultConfig{UserConcurrency: 5}}), nil, nil, nil, nil, nil, nil)
+		body, err := json.Marshal(payload)
+		require.NoError(t, err)
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		c.Request = httptest.NewRequest(http.MethodPut, "/api/v1/admin/settings", bytes.NewReader(body))
+		c.Request.Header.Set("Content-Type", "application/json")
+		handler.UpdateSettings(c)
+		return recorder
+	}
+
+	invalid := update(t, map[string]any{"openai_codex_environment_timezone": "Not/AZone"})
+	require.Equal(t, http.StatusBadRequest, invalid.Code)
+	require.Contains(t, invalid.Body.String(), "valid IANA timezone")
+
+	empty := update(t, map[string]any{"openai_codex_environment_timezone": ""})
+	require.Equal(t, http.StatusOK, empty.Code)
+
+	valid := update(t, map[string]any{"openai_codex_environment_timezone": " America/New_York "})
+	require.Equal(t, http.StatusOK, valid.Code)
+}

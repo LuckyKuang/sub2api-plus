@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -21,14 +22,20 @@ const (
 	// OAuth endpoints
 	AuthorizeURL = "https://auth.openai.com/oauth/authorize"
 	TokenURL     = "https://auth.openai.com/oauth/token"
+	RevokeURL    = "https://auth.openai.com/oauth/revoke"
+
+	// Device-code login (codex-rs login/src/device_code_auth.rs)
+	DeviceAuthAPIBase      = "https://auth.openai.com/api/accounts"
+	DeviceVerificationURL  = "https://auth.openai.com/codex/device"
+	DeviceCodeRedirectURI  = "https://auth.openai.com/deviceauth/callback"
+	DeviceAuthUserCodePath = "/deviceauth/usercode"
+	DeviceAuthTokenPath    = "/deviceauth/token"
 
 	// Default redirect URI (can be customized)
 	DefaultRedirectURI = "http://localhost:1455/auth/callback"
 
-	// Scopes
-	DefaultScopes = "openid profile email offline_access"
-	// RefreshScopes - scope for token refresh (without offline_access, aligned with CRS project)
-	RefreshScopes = "openid profile email"
+	// Scopes match official Codex CLI authorize URL.
+	DefaultScopes = "openid profile email offline_access api.connectors.read api.connectors.invoke"
 
 	// Session TTL
 	SessionTTL = 30 * time.Minute
@@ -47,10 +54,12 @@ type OAuthSession struct {
 	// AccountID is set only for a re-authorization flow. It is intentionally
 	// server-side session state so the code exchange cannot be redirected to a
 	// different account by a browser request.
-	AccountID   *int64    `json:"account_id,omitempty"`
-	ProxyURL    string    `json:"proxy_url,omitempty"`
-	RedirectURI string    `json:"redirect_uri"`
-	CreatedAt   time.Time `json:"created_at"`
+	AccountID      *int64    `json:"account_id,omitempty"`
+	ProxyURL       string    `json:"proxy_url,omitempty"`
+	RedirectURI    string    `json:"redirect_uri"`
+	CreatedAt      time.Time `json:"created_at"`
+	DeviceAuthID   string    `json:"device_auth_id,omitempty"`
+	DeviceUserCode string    `json:"device_user_code,omitempty"`
 }
 
 // SessionStore manages OAuth sessions in memory
@@ -138,13 +147,14 @@ func GenerateRandomBytes(n int) ([]byte, error) {
 	return b, nil
 }
 
-// GenerateState generates a random state string for OAuth
+// GenerateState generates a random state string for OAuth.
+// Official Codex encodes 32 random bytes as base64url without padding.
 func GenerateState() (string, error) {
 	bytes, err := GenerateRandomBytes(32)
 	if err != nil {
 		return "", err
 	}
-	return hex.EncodeToString(bytes), nil
+	return base64.RawURLEncoding.EncodeToString(bytes), nil
 }
 
 // GenerateSessionID generates a unique session ID
@@ -156,14 +166,14 @@ func GenerateSessionID() (string, error) {
 	return hex.EncodeToString(bytes), nil
 }
 
-// GenerateCodeVerifier generates a PKCE code verifier (64 bytes -> hex for OpenAI)
-// OpenAI uses hex encoding instead of base64url
+// GenerateCodeVerifier generates a PKCE code verifier.
+// Official Codex encodes 64 random bytes as base64url without padding.
 func GenerateCodeVerifier() (string, error) {
 	bytes, err := GenerateRandomBytes(64)
 	if err != nil {
 		return "", err
 	}
-	return hex.EncodeToString(bytes), nil
+	return base64.RawURLEncoding.EncodeToString(bytes), nil
 }
 
 // GenerateCodeChallenge generates a PKCE code challenge using S256 method
@@ -187,27 +197,52 @@ func BuildAuthorizationURL(state, codeChallenge, redirectURI string) string {
 
 // BuildAuthorizationURLForPlatform builds authorization URL by platform.
 func BuildAuthorizationURLForPlatform(state, codeChallenge, redirectURI, platform string) string {
+	return BuildAuthorizationURLWithOriginator(state, codeChallenge, redirectURI, platform, CodexDefaultOriginator)
+}
+
+// BuildAuthorizationURLWithOriginator builds the authorize URL with the official
+// query shape, including the process originator Codex sends today.
+func BuildAuthorizationURLWithOriginator(state, codeChallenge, redirectURI, platform, originator string) string {
 	if redirectURI == "" {
 		redirectURI = DefaultRedirectURI
 	}
 
 	clientID, codexFlow := OAuthClientConfigByPlatform(platform)
-
-	params := url.Values{}
-	params.Set("response_type", "code")
-	params.Set("client_id", clientID)
-	params.Set("redirect_uri", redirectURI)
-	params.Set("scope", DefaultScopes)
-	params.Set("state", state)
-	params.Set("code_challenge", codeChallenge)
-	params.Set("code_challenge_method", "S256")
-	// OpenAI specific parameters
-	params.Set("id_token_add_organizations", "true")
-	if codexFlow {
-		params.Set("codex_cli_simplified_flow", "true")
+	if originator = strings.TrimSpace(originator); originator == "" {
+		originator = CodexDefaultOriginator
 	}
 
-	return fmt.Sprintf("%s?%s", AuthorizeURL, params.Encode())
+	pairs := [][2]string{
+		{"response_type", "code"},
+		{"client_id", clientID},
+		{"redirect_uri", redirectURI},
+		{"scope", DefaultScopes},
+		{"code_challenge", codeChallenge},
+		{"code_challenge_method", "S256"},
+		{"id_token_add_organizations", "true"},
+	}
+	if codexFlow {
+		pairs = append(pairs, [2]string{"codex_cli_simplified_flow", "true"})
+	}
+	pairs = append(pairs,
+		[2]string{"state", state},
+		[2]string{"originator", originator},
+	)
+	return AuthorizeURL + "?" + encodeOfficialOAuthQuery(pairs)
+}
+
+// encodeOfficialOAuthQuery matches official Codex urlencoding: space is %20, not +.
+func encodeOfficialOAuthQuery(pairs [][2]string) string {
+	var b strings.Builder
+	for i, pair := range pairs {
+		if i > 0 {
+			_, _ = b.WriteString("&")
+		}
+		_, _ = b.WriteString(url.QueryEscape(pair[0]))
+		_, _ = b.WriteString("=")
+		_, _ = b.WriteString(strings.ReplaceAll(url.QueryEscape(pair[1]), "+", "%20"))
+	}
+	return b.String()
 }
 
 // OAuthClientConfigByPlatform returns oauth client_id and whether codex simplified flow should be enabled.
@@ -215,13 +250,71 @@ func OAuthClientConfigByPlatform(platform string) (clientID string, codexFlow bo
 	return ClientID, true
 }
 
-// TokenRequest represents the token exchange request body
-type TokenRequest struct {
-	GrantType    string `json:"grant_type"`
-	ClientID     string `json:"client_id"`
-	Code         string `json:"code"`
-	RedirectURI  string `json:"redirect_uri"`
-	CodeVerifier string `json:"code_verifier"`
+// DeviceUserCodeRequest is the official /deviceauth/usercode JSON body.
+type DeviceUserCodeRequest struct {
+	ClientID string `json:"client_id"`
+}
+
+// DeviceUserCodeResponse is the official /deviceauth/usercode payload.
+type DeviceUserCodeResponse struct {
+	DeviceAuthID string `json:"device_auth_id"`
+	UserCode     string `json:"user_code"`
+	Interval     int64  `json:"interval"`
+}
+
+// UnmarshalJSON accepts official string or numeric interval, and user_code/usercode aliases.
+func (r *DeviceUserCodeResponse) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		DeviceAuthID string          `json:"device_auth_id"`
+		UserCode     string          `json:"user_code"`
+		Usercode     string          `json:"usercode"`
+		Interval     json.RawMessage `json:"interval"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	r.DeviceAuthID = strings.TrimSpace(raw.DeviceAuthID)
+	r.UserCode = strings.TrimSpace(raw.UserCode)
+	if r.UserCode == "" {
+		r.UserCode = strings.TrimSpace(raw.Usercode)
+	}
+	r.Interval = parseFlexibleInt64(raw.Interval)
+	return nil
+}
+
+func parseFlexibleInt64(raw json.RawMessage) int64 {
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" || trimmed == "null" {
+		return 0
+	}
+	if strings.HasPrefix(trimmed, "\"") {
+		var s string
+		if err := json.Unmarshal(raw, &s); err != nil {
+			return 0
+		}
+		n, err := strconv.ParseInt(strings.TrimSpace(s), 10, 64)
+		if err != nil {
+			return 0
+		}
+		return n
+	}
+	var n int64
+	if err := json.Unmarshal(raw, &n); err != nil {
+		return 0
+	}
+	return n
+}
+
+// DeviceTokenPollResponse is the official /deviceauth/token success payload.
+type DeviceTokenPollResponse struct {
+	AuthorizationCode string `json:"authorization_code"`
+	CodeVerifier      string `json:"code_verifier"`
+}
+
+// DeviceTokenPollRequest is the official /deviceauth/token JSON body.
+type DeviceTokenPollRequest struct {
+	DeviceAuthID string `json:"device_auth_id"`
+	UserCode     string `json:"user_code"`
 }
 
 // TokenResponse represents the token response from OpenAI OAuth
@@ -234,12 +327,20 @@ type TokenResponse struct {
 	Scope        string `json:"scope,omitempty"`
 }
 
-// RefreshTokenRequest represents the refresh token request
+// RefreshTokenRequest represents the refresh token request.
+// Official Codex sends JSON {client_id, grant_type, refresh_token} with no scope.
 type RefreshTokenRequest struct {
+	ClientID     string `json:"client_id"`
 	GrantType    string `json:"grant_type"`
 	RefreshToken string `json:"refresh_token"`
-	ClientID     string `json:"client_id"`
-	Scope        string `json:"scope"`
+}
+
+// RevokeTokenRequest matches official Codex logout JSON: token, token_type_hint,
+// and client_id only when revoking a refresh token.
+type RevokeTokenRequest struct {
+	Token         string `json:"token"`
+	TokenTypeHint string `json:"token_type_hint"`
+	ClientID      string `json:"client_id,omitempty"`
 }
 
 // IDTokenClaims represents the claims from OpenAI ID Token
@@ -275,49 +376,16 @@ type OrganizationClaim struct {
 	IsDefault bool   `json:"is_default"`
 }
 
-// BuildTokenRequest creates a token exchange request for OpenAI
-func BuildTokenRequest(code, codeVerifier, redirectURI string) *TokenRequest {
-	if redirectURI == "" {
-		redirectURI = DefaultRedirectURI
-	}
-	return &TokenRequest{
-		GrantType:    "authorization_code",
-		ClientID:     ClientID,
-		Code:         code,
-		RedirectURI:  redirectURI,
-		CodeVerifier: codeVerifier,
-	}
-}
-
-// BuildRefreshTokenRequest creates a refresh token request for OpenAI
-func BuildRefreshTokenRequest(refreshToken string) *RefreshTokenRequest {
-	return &RefreshTokenRequest{
-		GrantType:    "refresh_token",
-		RefreshToken: refreshToken,
-		ClientID:     ClientID,
-		Scope:        RefreshScopes,
-	}
-}
-
-// ToFormData converts TokenRequest to URL-encoded form data
-func (r *TokenRequest) ToFormData() string {
-	params := url.Values{}
-	params.Set("grant_type", r.GrantType)
-	params.Set("client_id", r.ClientID)
-	params.Set("code", r.Code)
-	params.Set("redirect_uri", r.RedirectURI)
-	params.Set("code_verifier", r.CodeVerifier)
-	return params.Encode()
-}
-
-// ToFormData converts RefreshTokenRequest to URL-encoded form data
-func (r *RefreshTokenRequest) ToFormData() string {
-	params := url.Values{}
-	params.Set("grant_type", r.GrantType)
-	params.Set("client_id", r.ClientID)
-	params.Set("refresh_token", r.RefreshToken)
-	params.Set("scope", r.Scope)
-	return params.Encode()
+// EncodeAuthorizationCodeTokenBody matches official Codex token exchange:
+// grant_type, code, redirect_uri, client_id, code_verifier with urlencoding %20.
+func EncodeAuthorizationCodeTokenBody(code, redirectURI, clientID, codeVerifier string) string {
+	return encodeOfficialOAuthQuery([][2]string{
+		{"grant_type", "authorization_code"},
+		{"code", code},
+		{"redirect_uri", redirectURI},
+		{"client_id", clientID},
+		{"code_verifier", codeVerifier},
+	})
 }
 
 // DecodeIDToken decodes the ID Token JWT payload without validating expiration.

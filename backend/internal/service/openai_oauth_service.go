@@ -18,7 +18,7 @@ type OpenAIOAuthService struct {
 	proxyRepo            ProxyRepository
 	accountRepo          AccountRepository
 	oauthClient          OpenAIOAuthClient
-	privacyClientFactory PrivacyClientFactory // 用于调用 chatgpt.com/backend-api（ImpersonateChrome）
+	privacyClientFactory PrivacyClientFactory // 用于调用 chatgpt.com/backend-api 辅助面（账号信息/订阅 enrich 等）
 	settingService       *SettingService
 }
 
@@ -31,8 +31,8 @@ func NewOpenAIOAuthService(proxyRepo ProxyRepository, oauthClient OpenAIOAuthCli
 	}
 }
 
-// SetPrivacyClientFactory 注入 ImpersonateChrome 客户端工厂，
-// 用于调用 chatgpt.com/backend-api 获取账号信息（plan_type 等）。
+// SetPrivacyClientFactory 注入 chatgpt.com/backend-api 辅助面 HTTP 客户端工厂，
+// 用于获取账号信息（plan_type 等）。官方 backend-client 不做浏览器 TLS 伪装。
 func (s *OpenAIOAuthService) SetPrivacyClientFactory(factory PrivacyClientFactory) {
 	s.privacyClientFactory = factory
 }
@@ -128,8 +128,14 @@ func (s *OpenAIOAuthService) generateAuthURL(ctx context.Context, accountID *int
 	}
 	s.sessionStore.Set(sessionID, session)
 
-	// Build authorization URL
-	authURL := openai.BuildAuthorizationURLForPlatform(state, codeChallenge, redirectURI, normalizedPlatform)
+	var identityAccount *Account
+	if accountID != nil && s.accountRepo != nil {
+		if acc, err := s.accountRepo.GetByID(ctx, *accountID); err == nil {
+			identityAccount = acc
+		}
+	}
+	originator := s.resolveOpenAIOutboundIdentity(ctx, identityAccount).Originator
+	authURL := openai.BuildAuthorizationURLWithOriginator(state, codeChallenge, redirectURI, normalizedPlatform, originator)
 
 	return &OpenAIAuthURLResult{
 		AuthURL:   authURL,
@@ -349,8 +355,7 @@ func (s *OpenAIOAuthService) enrichTokenInfoWithAccount(ctx context.Context, tok
 		}
 	}
 
-	// 尝试设置隐私（关闭训练数据共享），best-effort
-	tokenInfo.PrivacyMode = disableOpenAITraining(ctx, s.privacyClientFactory, tokenInfo.AccessToken, proxyURL, identity)
+	// Official Codex does not PATCH ChatGPT training_allowed during login.
 }
 
 func shouldApplyChatGPTAccountInfoPlanType(current, candidate string) bool {
@@ -456,10 +461,13 @@ func isOpenAIOAuthCredentialOwner(account *Account) bool {
 	return account != nil && account.IsOpenAIOAuth() && !account.IsCredentialShadow()
 }
 
-// BuildAccountCredentials builds credentials map from token info
+// BuildAccountCredentials builds credentials map from token info.
+// Official Codex merges refresh responses field-by-field: only fields present
+// in the response update stored credentials, so empty values never overwrite.
 func (s *OpenAIOAuthService) BuildAccountCredentials(tokenInfo *OpenAITokenInfo) map[string]any {
-	creds := map[string]any{
-		"access_token": tokenInfo.AccessToken,
+	creds := map[string]any{}
+	if strings.TrimSpace(tokenInfo.AccessToken) != "" {
+		creds["access_token"] = tokenInfo.AccessToken
 	}
 	if tokenInfo.ExpiresAt > 0 {
 		creds["expires_at"] = time.Unix(tokenInfo.ExpiresAt, 0).Format(time.RFC3339)
@@ -503,6 +511,128 @@ func (s *OpenAIOAuthService) BuildAccountCredentials(tokenInfo *OpenAITokenInfo)
 	}
 
 	return NormalizeOpenAIPersonalAccessTokenCredentials(nil, tokenInfo, creds)
+}
+
+// OpenAIDeviceCodeResult is returned to the admin panel for official device-code login.
+type OpenAIDeviceCodeResult struct {
+	SessionID       string `json:"session_id"`
+	UserCode        string `json:"user_code"`
+	VerificationURL string `json:"verification_url"`
+	IntervalSeconds int64  `json:"interval_seconds"`
+}
+
+// StartDeviceCode begins the official Codex device-code flow.
+// accountID is set only for re-authorization: the association stays in the
+// server-side session so the exchange cannot be redirected to a different
+// account, and the exchange reuses the account's outbound identity.
+func (s *OpenAIOAuthService) StartDeviceCode(ctx context.Context, proxyID *int64, platform string, accountID *int64) (*OpenAIDeviceCodeResult, error) {
+	if s == nil || s.oauthClient == nil {
+		return nil, infraerrors.New(http.StatusInternalServerError, "OPENAI_OAUTH_CLIENT_UNAVAILABLE", "openai oauth client is not configured")
+	}
+	if accountID != nil && s.accountRepo != nil {
+		acc, err := s.accountRepo.GetByID(ctx, *accountID)
+		if err != nil || !isOpenAIOAuthCredentialOwner(acc) {
+			return nil, infraerrors.New(http.StatusBadRequest, "OPENAI_OAUTH_REAUTH_ACCOUNT_INVALID", "re-authorization requires an existing non-shadow OpenAI OAuth account")
+		}
+	}
+	var proxyURL string
+	if proxyID != nil && s.proxyRepo != nil {
+		proxy, err := s.proxyRepo.GetByID(ctx, *proxyID)
+		if err != nil {
+			return nil, infraerrors.Newf(http.StatusBadRequest, "OPENAI_OAUTH_PROXY_NOT_FOUND", "proxy not found: %v", err)
+		}
+		if proxy != nil {
+			proxyURL = proxy.URL()
+		}
+	}
+	normalizedPlatform := normalizeOpenAIOAuthPlatform(platform)
+	clientID, _ := openai.OAuthClientConfigByPlatform(normalizedPlatform)
+	started, err := s.oauthClient.StartDeviceCode(ctx, proxyURL, clientID)
+	if err != nil {
+		return nil, err
+	}
+	sessionID, err := openai.GenerateSessionID()
+	if err != nil {
+		return nil, infraerrors.Newf(http.StatusInternalServerError, "OPENAI_OAUTH_SESSION_FAILED", "failed to generate session ID: %v", err)
+	}
+	state, err := openai.GenerateState()
+	if err != nil {
+		return nil, infraerrors.Newf(http.StatusInternalServerError, "OPENAI_OAUTH_STATE_FAILED", "failed to generate state: %v", err)
+	}
+	s.sessionStore.Set(sessionID, &openai.OAuthSession{
+		State:          state,
+		ClientID:       clientID,
+		AccountID:      accountID,
+		ProxyURL:       proxyURL,
+		RedirectURI:    openai.DeviceCodeRedirectURI,
+		CreatedAt:      time.Now(),
+		DeviceAuthID:   started.DeviceAuthID,
+		DeviceUserCode: started.UserCode,
+	})
+	return &OpenAIDeviceCodeResult{
+		SessionID:       sessionID,
+		UserCode:        started.UserCode,
+		VerificationURL: openai.DeviceVerificationURL,
+		IntervalSeconds: started.Interval,
+	}, nil
+}
+
+// PollDeviceCode performs one official device-code poll. pending=true means the user has not finished.
+func (s *OpenAIOAuthService) PollDeviceCode(ctx context.Context, sessionID string) (*OpenAITokenInfo, bool, error) {
+	if s == nil || s.oauthClient == nil {
+		return nil, false, infraerrors.New(http.StatusInternalServerError, "OPENAI_OAUTH_CLIENT_UNAVAILABLE", "openai oauth client is not configured")
+	}
+	session, ok := s.sessionStore.Get(sessionID)
+	if !ok || session == nil || strings.TrimSpace(session.DeviceAuthID) == "" {
+		return nil, false, infraerrors.New(http.StatusBadRequest, "OPENAI_OAUTH_SESSION_INVALID", "invalid or expired device-code session")
+	}
+	polled, pending, err := s.oauthClient.PollDeviceCode(ctx, session.ProxyURL, session.DeviceAuthID, session.DeviceUserCode)
+	if err != nil {
+		return nil, false, err
+	}
+	if pending {
+		return nil, true, nil
+	}
+	session.CodeVerifier = polled.CodeVerifier
+	s.sessionStore.Set(sessionID, session)
+	tokenInfo, err := s.ExchangeCode(ctx, &OpenAIExchangeCodeInput{
+		SessionID:   sessionID,
+		Code:        polled.AuthorizationCode,
+		State:       session.State,
+		RedirectURI: openai.DeviceCodeRedirectURI,
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	s.sessionStore.Delete(sessionID)
+	return tokenInfo, false, nil
+}
+
+// RevokeAccountTokens best-effort revokes the ChatGPT refresh (or access) token.
+func (s *OpenAIOAuthService) RevokeAccountTokens(ctx context.Context, account *Account) error {
+	if s == nil || s.oauthClient == nil || account == nil || !account.IsOpenAIOAuth() || account.IsCredentialShadow() {
+		return nil
+	}
+	refresh := strings.TrimSpace(account.GetOpenAIRefreshToken())
+	access := strings.TrimSpace(account.GetOpenAIAccessToken())
+	token, hint := refresh, "refresh_token"
+	if token == "" {
+		token, hint = access, "access_token"
+	}
+	if token == "" {
+		return nil
+	}
+	var proxyURL string
+	if account.ProxyID != nil && account.Proxy != nil {
+		proxyURL = account.Proxy.URL()
+	} else if account.ProxyID != nil && s.proxyRepo != nil {
+		if proxy, err := s.proxyRepo.GetByID(ctx, *account.ProxyID); err == nil && proxy != nil {
+			proxyURL = proxy.URL()
+		}
+	}
+	identity := s.resolveOpenAIOutboundIdentity(ctx, account)
+	clientID := strings.TrimSpace(account.GetCredential("client_id"))
+	return s.oauthClient.RevokeToken(ctx, token, hint, clientID, proxyURL, identity.UserAgent, identity.Originator)
 }
 
 // Stop stops the session store cleanup goroutine

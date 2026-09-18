@@ -163,6 +163,15 @@ schema is an empty Prompt Audit selection. Incomplete canonical extraction is
 observable but does not override either engine's selection policy: extracted
 content is still evaluated, while an empty selection passes through.
 
+The optional Codex environment-timezone alignment rewrites the model-visible
+`<timezone>` / `<current_date>` pair inside the stripped `<environment_context>`
+wrapper block at the outbound build stage — after ingress security audit has
+already consumed the original body, and never on the audit path itself. The
+rewrite is cosmetic (IANA timezone name and that timezone's current date),
+never injects new user text, keeps failures silent by preserving the original
+self-consistent block, and therefore does not create an audit-vs-upstream
+content divergence for either engine.
+
 Content Moderation list rows keep a 240-rune redacted `input_excerpt`. The
 admin detail view stores `input_content` as the same current-user scan window
 sent to the external Moderation API: at most 12,000 runes after secret

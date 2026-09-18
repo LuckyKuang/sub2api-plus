@@ -201,6 +201,8 @@ func TestOpenAICapacityFailoverCarriesSafeTerminalResponse(t *testing.T) {
 	err := newOpenAIUpstreamFailoverError(http.StatusBadRequest, nil, body, message, false)
 
 	require.True(t, err.IsOpenAICapacityShed())
+	require.False(t, err.RetryableOnSameAccount)
+	require.False(t, err.ShouldRetryNextAccount())
 	require.Equal(t, http.StatusServiceUnavailable, err.ClientStatusCode)
 	require.Equal(t, message, err.ClientMessage)
 	require.NotContains(t, err.ClientMessage, "server_is_overloaded")

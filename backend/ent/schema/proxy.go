@@ -64,6 +64,14 @@ func (Proxy) Fields() []ent.Field {
 		field.Int("expiry_warn_days").
 			Default(7).
 			Comment("Days before expiry to flag as expiring-soon (per proxy)."),
+		field.String("egress_timezone").
+			MaxLen(64).
+			Default("").
+			Comment("Egress IANA timezone manually annotated by the administrator; empty means unannotated. Drives the Codex environment_context timezone alignment for bound accounts."),
+		field.String("egress_country").
+			MaxLen(2).
+			Default("").
+			Comment("Egress country code (ISO 3166-1 alpha-2) manually annotated by the administrator; empty means unannotated. Distinct from the probe-snapshot country fields."),
 	}
 }
 

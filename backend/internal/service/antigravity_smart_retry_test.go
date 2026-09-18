@@ -335,9 +335,7 @@ func TestHandleSmartRetry_ShortDelay_SmartRetryFailed_ReturnsSwitchError(t *test
 	require.Len(t, upstream.calls, 1, "should have made one retry call (max attempts)")
 }
 
-// TestHandleSmartRetry_503_ModelCapacityExhausted_RetrySuccess 测试 503 MODEL_CAPACITY_EXHAUSTED 重试成功
-// MODEL_CAPACITY_EXHAUSTED 使用固定 1s 间隔重试，不切换账号
-func TestHandleSmartRetry_503_ModelCapacityExhausted_RetrySuccess(t *testing.T) {
+func TestHandleSmartRetry_503_ModelCapacityExhausted_ReturnsImmediately(t *testing.T) {
 	repo := &stubAntigravityAccountRepo{}
 	account := &Account{
 		ID:       3,
@@ -346,7 +344,6 @@ func TestHandleSmartRetry_503_ModelCapacityExhausted_RetrySuccess(t *testing.T) 
 		Platform: PlatformAntigravity,
 	}
 
-	// 503 + MODEL_CAPACITY_EXHAUSTED + 39s（上游 retryDelay 应被忽略，使用固定 1s）
 	respBody := []byte(`{
 		"error": {
 			"code": 503,
@@ -364,7 +361,6 @@ func TestHandleSmartRetry_503_ModelCapacityExhausted_RetrySuccess(t *testing.T) 
 		Body:       io.NopCloser(bytes.NewReader(respBody)),
 	}
 
-	// mock: 第 1 次重试返回 200 成功
 	upstream := &mockSmartRetryUpstream{
 		responses: []*http.Response{
 			{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{"ok":true}`))},
@@ -387,21 +383,17 @@ func TestHandleSmartRetry_503_ModelCapacityExhausted_RetrySuccess(t *testing.T) 
 		},
 	}
 
-	availableURLs := []string{"https://ag-1.test"}
-
 	svc := &AntigravityGatewayService{}
-	result := svc.handleSmartRetry(params, resp, respBody, "https://ag-1.test", 0, availableURLs)
+	result := svc.handleSmartRetry(params, resp, respBody, "https://ag-1.test", 0, []string{"https://ag-1.test"})
 
 	require.NotNil(t, result)
 	require.Equal(t, smartRetryActionBreakWithResp, result.action)
-	require.NotNil(t, result.resp, "should return successful response")
-	require.Equal(t, http.StatusOK, result.resp.StatusCode)
+	require.NotNil(t, result.resp)
+	require.Equal(t, http.StatusServiceUnavailable, result.resp.StatusCode)
 	require.Nil(t, result.err)
 	require.Nil(t, result.switchError, "MODEL_CAPACITY_EXHAUSTED should not return switchError")
-
-	// 不应设置模型限流
 	require.Empty(t, repo.modelRateLimitCalls, "MODEL_CAPACITY_EXHAUSTED should not set model rate limit")
-	require.Len(t, upstream.calls, 1, "should have made one retry call before success")
+	require.Empty(t, upstream.calls, "MODEL_CAPACITY_EXHAUSTED must not retry the upstream")
 }
 
 // TestHandleSmartRetry_503_ModelCapacityExhausted_ContextCancel 测试 MODEL_CAPACITY_EXHAUSTED 上下文取消
@@ -452,9 +444,11 @@ func TestHandleSmartRetry_503_ModelCapacityExhausted_ContextCancel(t *testing.T)
 
 	require.NotNil(t, result)
 	require.Equal(t, smartRetryActionBreakWithResp, result.action)
-	require.Error(t, result.err, "should return context error")
-	require.Nil(t, result.switchError, "should not return switchError on context cancel")
-	require.Empty(t, repo.modelRateLimitCalls, "should not set model rate limit on context cancel")
+	require.Nil(t, result.err, "capacity shed returns immediately without waiting on context")
+	require.NotNil(t, result.resp)
+	require.Equal(t, http.StatusServiceUnavailable, result.resp.StatusCode)
+	require.Nil(t, result.switchError, "should not return switchError on capacity shed")
+	require.Empty(t, repo.modelRateLimitCalls, "should not set model rate limit on capacity shed")
 }
 
 // TestHandleSmartRetry_NonAntigravityAccount_ContinuesDefaultLogic 测试非 Antigravity 平台账号走默认逻辑

@@ -256,6 +256,7 @@ type UpdateSettingsRequest struct {
 	EnableClientDatelineNormalization            *bool   `json:"enable_client_dateline_normalization"`
 	AntigravityUserAgentVersion                  *string `json:"antigravity_user_agent_version"`
 	OpenAICodexUserAgent                         *string `json:"openai_codex_user_agent"`
+	OpenAICodexEnvironmentTimezone               *string `json:"openai_codex_environment_timezone"`
 	CodexLegacyClientProfileCompatibilityEnabled *bool   `json:"codex_legacy_client_profile_compatibility_enabled"`
 	OpenAICodexLocalGroupQuotaEnabled            *bool   `json:"openai_codex_local_group_quota_enabled"`
 	OpenAICodexClientVersion                     *string `json:"openai_codex_client_version"`
@@ -346,6 +347,9 @@ type UpdateSettingsRequest struct {
 
 	// Available Channels feature switch (user-facing)
 	AvailableChannelsEnabled *bool `json:"available_channels_enabled"`
+
+	// Subscription feature switch (user-facing subscription surface; see SettingKeySubscriptionEnabled)
+	SubscriptionEnabled *bool `json:"subscription_enabled"`
 
 	// Model Plaza feature switches + description
 	ModelPlazaEnabled     *bool   `json:"model_plaza_enabled"`
@@ -1493,6 +1497,14 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 		}
 	}
+	if req.OpenAICodexEnvironmentTimezone != nil {
+		normalized, err := service.NormalizeOpenAICodexEnvironmentTimezone(*req.OpenAICodexEnvironmentTimezone)
+		if err != nil {
+			response.Error(c, http.StatusBadRequest, "openai_codex_environment_timezone "+err.Error())
+			return
+		}
+		req.OpenAICodexEnvironmentTimezone = &normalized
+	}
 	if req.OpenAICodexClientVersion != nil {
 		// 该值会被拼进出站 User-Agent 与 version 头，必须是合法版本号；空串表示跟随自动同步。
 		normalized := strings.TrimSpace(*req.OpenAICodexClientVersion)
@@ -1818,6 +1830,12 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.OpenAICodexUserAgent
 		}(),
+		OpenAICodexEnvironmentTimezone: func() string {
+			if req.OpenAICodexEnvironmentTimezone != nil {
+				return *req.OpenAICodexEnvironmentTimezone
+			}
+			return previousSettings.OpenAICodexEnvironmentTimezone
+		}(),
 		CodexLegacyClientProfileCompatibilityEnabled: func() bool {
 			if req.CodexLegacyClientProfileCompatibilityEnabled != nil {
 				return *req.CodexLegacyClientProfileCompatibilityEnabled
@@ -2020,6 +2038,12 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 				return *req.AvailableChannelsEnabled
 			}
 			return previousSettings.AvailableChannelsEnabled
+		}(),
+		SubscriptionEnabled: func() bool {
+			if req.SubscriptionEnabled != nil {
+				return *req.SubscriptionEnabled
+			}
+			return previousSettings.SubscriptionEnabled
 		}(),
 		ModelPlazaEnabled: func() bool {
 			if req.ModelPlazaEnabled != nil {
@@ -2400,6 +2424,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		EnableClientDatelineNormalization:                      updatedSettings.EnableClientDatelineNormalization,
 		AntigravityUserAgentVersion:                            updatedSettings.AntigravityUserAgentVersion,
 		OpenAICodexUserAgent:                                   updatedSettings.OpenAICodexUserAgent,
+		OpenAICodexEnvironmentTimezone:                         updatedSettings.OpenAICodexEnvironmentTimezone,
 		CodexLegacyClientProfileCompatibilityEnabled:           updatedSettings.CodexLegacyClientProfileCompatibilityEnabled,
 		OpenAICodexLocalGroupQuotaEnabled:                      updatedSettings.OpenAICodexLocalGroupQuotaEnabled,
 		OpenAICodexClientVersion:                               updatedSettings.OpenAICodexClientVersion,
@@ -2484,6 +2509,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		GrokDefaultBaseURLMode:         updatedSettings.GrokDefaultBaseURLMode,
 
 		AvailableChannelsEnabled: updatedSettings.AvailableChannelsEnabled,
+		SubscriptionEnabled:      updatedSettings.SubscriptionEnabled,
 
 		ModelPlazaEnabled:       updatedSettings.ModelPlazaEnabled,
 		ModelPlazaRequireAuth:   updatedSettings.ModelPlazaRequireAuth,

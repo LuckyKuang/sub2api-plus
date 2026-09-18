@@ -172,6 +172,57 @@ func (h *OpenAIOAuthHandler) ExchangeCode(c *gin.Context) {
 	response.Success(c, tokenInfo)
 }
 
+type openAIDeviceCodeStartRequest struct {
+	ProxyID   *int64 `json:"proxy_id"`
+	AccountID *int64 `json:"account_id"`
+}
+
+type openAIDeviceCodePollRequest struct {
+	SessionID string `json:"session_id" binding:"required"`
+}
+
+// StartDeviceCode starts official Codex device-code login.
+// POST /api/v1/admin/openai/device-code/start
+func (h *OpenAIOAuthHandler) StartDeviceCode(c *gin.Context) {
+	var req openAIDeviceCodeStartRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		req = openAIDeviceCodeStartRequest{}
+	}
+	if req.AccountID != nil {
+		account, getErr := h.adminService.GetAccount(c.Request.Context(), *req.AccountID)
+		if getErr != nil || !account.IsOpenAIOAuth() || account.IsCredentialShadow() {
+			response.BadRequest(c, "OpenAI re-authorization requires an existing non-shadow OAuth account")
+			return
+		}
+	}
+	result, err := h.openaiOAuthService.StartDeviceCode(c.Request.Context(), req.ProxyID, oauthPlatformFromPath(c), req.AccountID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, result)
+}
+
+// PollDeviceCode polls one official device-code authorization attempt.
+// POST /api/v1/admin/openai/device-code/poll
+func (h *OpenAIOAuthHandler) PollDeviceCode(c *gin.Context) {
+	var req openAIDeviceCodePollRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	tokenInfo, pending, err := h.openaiOAuthService.PollDeviceCode(c.Request.Context(), req.SessionID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	if pending {
+		response.Success(c, gin.H{"pending": true})
+		return
+	}
+	response.Success(c, tokenInfo)
+}
+
 // OpenAIRefreshTokenRequest represents the request for refreshing OpenAI token
 type OpenAIRefreshTokenRequest struct {
 	RefreshToken string `json:"refresh_token"`

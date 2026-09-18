@@ -42,6 +42,18 @@ func (s *openaiOAuthClientRefreshStub) RefreshTokenWithClientIDAndIdentity(ctx c
 	return s.RefreshTokenWithClientID(ctx, refreshToken, proxyURL, clientID)
 }
 
+func (s *openaiOAuthClientRefreshStub) RevokeToken(context.Context, string, string, string, string, string, string) error {
+	return nil
+}
+
+func (s *openaiOAuthClientRefreshStub) StartDeviceCode(context.Context, string, string) (*openai.DeviceUserCodeResponse, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (s *openaiOAuthClientRefreshStub) PollDeviceCode(context.Context, string, string, string) (*openai.DeviceTokenPollResponse, bool, error) {
+	return nil, false, errors.New("not implemented")
+}
+
 func TestOpenAIOAuthService_RefreshAccountToken_NoRefreshTokenUsesExistingAccessToken(t *testing.T) {
 	client := &openaiOAuthClientRefreshStub{}
 	svc := NewOpenAIOAuthService(nil, client)

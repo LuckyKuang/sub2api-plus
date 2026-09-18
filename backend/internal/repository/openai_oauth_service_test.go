@@ -4,10 +4,12 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
@@ -39,7 +41,11 @@ func (s *OpenAIOAuthServiceSuite) TearDownTest() {
 
 func (s *OpenAIOAuthServiceSuite) setupServer(handler http.HandlerFunc) {
 	s.srv = newLocalTestServer(s.T(), handler)
-	s.svc = &openaiOAuthService{tokenURL: s.srv.URL}
+	s.svc = &openaiOAuthService{
+		tokenURL:          s.srv.URL,
+		revokeURL:         s.srv.URL,
+		deviceAuthAPIBase: s.srv.URL,
+	}
 }
 
 func (s *OpenAIOAuthServiceSuite) TestExchangeCode_DefaultRedirectURI() {
@@ -50,43 +56,35 @@ func (s *OpenAIOAuthServiceSuite) TestExchangeCode_DefaultRedirectURI() {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		if err := r.ParseForm(); err != nil {
-			errCh <- "ParseForm failed"
+		raw, err := io.ReadAll(r.Body)
+		if err != nil {
+			errCh <- "read body failed"
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		if got := r.PostForm.Get("grant_type"); got != "authorization_code" {
-			errCh <- "grant_type mismatch"
+		wantBody := openai.EncodeAuthorizationCodeTokenBody("code", openai.DefaultRedirectURI, openai.ClientID, "ver")
+		if string(raw) != wantBody {
+			errCh <- "form body mismatch"
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		if got := r.PostForm.Get("client_id"); got != openai.ClientID {
-			errCh <- "client_id mismatch"
+		if ct := r.Header.Get("Content-Type"); !strings.HasPrefix(ct, "application/x-www-form-urlencoded") {
+			errCh <- "content-type mismatch"
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		if got := r.PostForm.Get("code"); got != "code" {
-			errCh <- "code mismatch"
+		if got := r.Header.Get("User-Agent"); got != "" {
+			errCh <- "user-agent must be empty on token exchange"
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		if got := r.PostForm.Get("redirect_uri"); got != openai.DefaultRedirectURI {
-			errCh <- "redirect_uri mismatch"
+		if got := r.Header.Get("originator"); got != "" {
+			errCh <- "originator must be empty on token exchange"
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		if got := r.PostForm.Get("code_verifier"); got != "ver" {
-			errCh <- "code_verifier mismatch"
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		if got := r.Header.Get("User-Agent"); got != service.DefaultOpenAICodexUserAgent {
-			errCh <- "user-agent mismatch"
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		if got := r.Header.Get("originator"); got != openai.CodexDefaultOriginator {
-			errCh <- "originator mismatch"
+		if got := r.Header.Get("Version"); got != "" {
+			errCh <- "version must be empty on token exchange"
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -117,11 +115,11 @@ func (s *OpenAIOAuthServiceSuite) TestExchangeCodeWithIdentityPairsAndFallsBackU
 	const validUA = "codex-tui/0.150.0 (Ubuntu 22.4.0; x86_64) xterm-256color (codex-tui; 0.150.0)"
 	_, err := s.svc.ExchangeCodeWithIdentity(s.ctx, "code", "ver", openai.DefaultRedirectURI, "", "", validUA, "client-controlled", "0.150.0")
 	require.NoError(s.T(), err)
-	require.Equal(s.T(), [3]string{validUA, "codex-tui", "0.150.0"}, <-requests)
+	require.Equal(s.T(), [3]string{"", "", ""}, <-requests)
 
 	_, err = s.svc.ExchangeCodeWithIdentity(s.ctx, "code", "ver", openai.DefaultRedirectURI, "", "", "Mozilla/5.0", "client-controlled", "9.9.9")
 	require.NoError(s.T(), err)
-	require.Equal(s.T(), [3]string{service.DefaultOpenAICodexUserAgent, openai.CodexDefaultOriginator, service.DefaultOpenAICodexVersion}, <-requests)
+	require.Equal(s.T(), [3]string{"", "", ""}, <-requests)
 }
 
 func TestResolveOpenAIOAuthIdentity_LegacyRequiresExplicitResolvedOriginator(t *testing.T) {
@@ -150,10 +148,10 @@ func (s *OpenAIOAuthServiceSuite) TestIdentityRetainsConfiguredOutboundVersionSy
 			ua := family + "/" + version + " (Ubuntu 24.04; x86_64) terminal"
 			_, err := s.svc.ExchangeCodeWithIdentity(s.ctx, "code", "verifier", openai.DefaultRedirectURI, "", "", ua, family, version)
 			require.NoError(s.T(), err)
-			require.Equal(s.T(), [3]string{ua, family, version}, <-requests)
+			require.Equal(s.T(), [3]string{"", "", ""}, <-requests)
 			_, err = s.svc.RefreshTokenWithClientIDAndIdentity(s.ctx, "refresh", "", "", ua, family, version)
 			require.NoError(s.T(), err)
-			require.Equal(s.T(), [3]string{ua, family, version}, <-requests)
+			require.Equal(s.T(), [3]string{ua, family, ""}, <-requests)
 			got, _, _ := resolveOpenAIOAuthIdentity(ua, "", version)
 			require.Equal(s.T(), service.DefaultOpenAICodexUserAgent, got, "UA-only callers cannot supply a policy-approved historical version")
 		}
@@ -163,28 +161,34 @@ func (s *OpenAIOAuthServiceSuite) TestIdentityRetainsConfiguredOutboundVersionSy
 func (s *OpenAIOAuthServiceSuite) TestRefreshToken_FormFields() {
 	errCh := make(chan string, 1)
 	s.setupServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := r.ParseForm(); err != nil {
-			errCh <- "ParseForm failed"
+		if ct := r.Header.Get("Content-Type"); !strings.Contains(ct, "application/json") {
+			errCh <- "content-type mismatch"
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		if got := r.PostForm.Get("grant_type"); got != "refresh_token" {
+		var payload map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			errCh <- "json decode failed"
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if got := payload["grant_type"]; got != "refresh_token" {
 			errCh <- "grant_type mismatch"
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		if got := r.PostForm.Get("refresh_token"); got != "rt" {
+		if got := payload["refresh_token"]; got != "rt" {
 			errCh <- "refresh_token mismatch"
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		if got := r.PostForm.Get("client_id"); got != openai.ClientID {
+		if got := payload["client_id"]; got != openai.ClientID {
 			errCh <- "client_id mismatch"
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		if got := r.PostForm.Get("scope"); got != openai.RefreshScopes {
-			errCh <- "scope mismatch"
+		if _, ok := payload["scope"]; ok {
+			errCh <- "scope must be omitted"
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -219,11 +223,12 @@ func (s *OpenAIOAuthServiceSuite) TestRefreshToken_FormFields() {
 func (s *OpenAIOAuthServiceSuite) TestRefreshToken_DefaultsToOpenAIClientID() {
 	var seenClientIDs []string
 	s.setupServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := r.ParseForm(); err != nil {
+		var payload map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		clientID := r.PostForm.Get("client_id")
+		clientID := payload["client_id"]
 		seenClientIDs = append(seenClientIDs, clientID)
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, `{"access_token":"at","refresh_token":"rt","token_type":"bearer","expires_in":3600}`)
@@ -240,11 +245,12 @@ func (s *OpenAIOAuthServiceSuite) TestRefreshToken_UseProvidedClientID() {
 	const customClientID = "custom-client-id"
 	var seenClientIDs []string
 	s.setupServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := r.ParseForm(); err != nil {
+		var payload map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		clientID := r.PostForm.Get("client_id")
+		clientID := payload["client_id"]
 		seenClientIDs = append(seenClientIDs, clientID)
 		if clientID != customClientID {
 			w.WriteHeader(http.StatusBadRequest)
@@ -401,6 +407,18 @@ func (s *OpenAIOAuthServiceSuite) TestRefreshToken_NonSuccessStatus() {
 	_, err := s.svc.RefreshToken(s.ctx, "rt", "")
 	require.Error(s.T(), err, "expected error for non-2xx status")
 	require.ErrorContains(s.T(), err, "status 401")
+	require.Equal(s.T(), "OPENAI_OAUTH_REFRESH_PERMANENT", infraerrors.Reason(err))
+}
+
+func (s *OpenAIOAuthServiceSuite) TestRefreshToken_ExpiredRefreshIsPermanent() {
+	s.setupServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = io.WriteString(w, `{"error":{"code":"refresh_token_expired"}}`)
+	}))
+
+	_, err := s.svc.RefreshToken(s.ctx, "rt", "")
+	require.Error(s.T(), err)
+	require.Equal(s.T(), "OPENAI_OAUTH_REFRESH_PERMANENT", infraerrors.Reason(err))
 }
 
 func TestNewOpenAIOAuthClient_DefaultTokenURL(t *testing.T) {
@@ -408,6 +426,131 @@ func TestNewOpenAIOAuthClient_DefaultTokenURL(t *testing.T) {
 	svc, ok := client.(*openaiOAuthService)
 	require.True(t, ok)
 	require.Equal(t, openai.TokenURL, svc.tokenURL)
+	require.Equal(t, openai.RevokeURL, svc.revokeURL)
+	require.Equal(t, openai.DeviceAuthAPIBase, svc.deviceAuthAPIBase)
+}
+
+func (s *OpenAIOAuthServiceSuite) TestRevokeToken_JSONBodyAndIdentityHeaders() {
+	errCh := make(chan string, 1)
+	s.setupServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			errCh <- "method mismatch"
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if ct := r.Header.Get("Content-Type"); !strings.Contains(ct, "application/json") {
+			errCh <- "content-type mismatch"
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if got := r.Header.Get("User-Agent"); got != service.DefaultOpenAICodexUserAgent {
+			errCh <- "user-agent mismatch"
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if got := r.Header.Get("originator"); got != openai.CodexDefaultOriginator {
+			errCh <- "originator mismatch"
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if got := r.Header.Get("Version"); got != "" {
+			errCh <- "version must be empty"
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		var payload map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			errCh <- "json decode failed"
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if payload["token"] != "rt" || payload["token_type_hint"] != "refresh_token" || payload["client_id"] != openai.ClientID {
+			errCh <- "body mismatch"
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	err := s.svc.RevokeToken(s.ctx, "rt", "refresh_token", "", "", "", "")
+	require.NoError(s.T(), err)
+	select {
+	case msg := <-errCh:
+		require.Fail(s.T(), msg)
+	default:
+	}
+}
+
+func (s *OpenAIOAuthServiceSuite) TestRevokeToken_AccessTokenOmitsClientID() {
+	errCh := make(chan string, 1)
+	s.setupServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			errCh <- "json decode failed"
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if payload["token"] != "at" || payload["token_type_hint"] != "access_token" {
+			errCh <- "body mismatch"
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if _, ok := payload["client_id"]; ok {
+			errCh <- "client_id must be omitted for access_token revoke"
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	err := s.svc.RevokeToken(s.ctx, "at", "access_token", openai.ClientID, "", "", "")
+	require.NoError(s.T(), err)
+	select {
+	case msg := <-errCh:
+		require.Fail(s.T(), msg)
+	default:
+	}
+}
+
+func (s *OpenAIOAuthServiceSuite) TestStartAndPollDeviceCode() {
+	errCh := make(chan string, 2)
+	s.setupServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("User-Agent"); got != "" {
+			errCh <- "user-agent must be empty on device-code " + r.URL.Path
+		}
+		if got := r.Header.Get("originator"); got != "" {
+			errCh <- "originator must be empty on device-code " + r.URL.Path
+		}
+		if got := r.Header.Get("Version"); got != "" {
+			errCh <- "version must be empty on device-code " + r.URL.Path
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.HasSuffix(r.URL.Path, openai.DeviceAuthUserCodePath):
+			_, _ = io.WriteString(w, `{"device_auth_id":"dev-1","user_code":"WXYZ-9876","interval":"7"}`)
+		case strings.HasSuffix(r.URL.Path, openai.DeviceAuthTokenPath):
+			_, _ = io.WriteString(w, `{"authorization_code":"auth-code","code_challenge":"chal","code_verifier":"ver"}`)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+
+	started, err := s.svc.StartDeviceCode(s.ctx, "", "")
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), "dev-1", started.DeviceAuthID)
+	require.Equal(s.T(), "WXYZ-9876", started.UserCode)
+	require.Equal(s.T(), int64(7), started.Interval)
+
+	polled, pending, err := s.svc.PollDeviceCode(s.ctx, "", started.DeviceAuthID, started.UserCode)
+	require.NoError(s.T(), err)
+	require.False(s.T(), pending)
+	require.Equal(s.T(), "auth-code", polled.AuthorizationCode)
+	require.Equal(s.T(), "ver", polled.CodeVerifier)
+	select {
+	case msg := <-errCh:
+		require.Fail(s.T(), msg)
+	default:
+	}
 }
 
 func TestOpenAIOAuthServiceSuite(t *testing.T) {

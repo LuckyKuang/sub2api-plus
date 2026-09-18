@@ -1,0 +1,69 @@
+#!/bin/bash
+
+set -eu
+
+# Minimal plutil replacement for the Apple container lifecycle test fixtures.
+# macOS ships plutil(1) with the system; the Linux validation container does
+# not, so this stub implements the subset used by deploy/apple-container.sh:
+#
+#   plutil -extract <keypath> raw -o - -
+#
+# The keypath uses the plutil dotted form where numeric components index into
+# JSON arrays ("0.id"). Input is read from stdin; Apple plutil accepts JSON
+# bodies as well as plists, and the fake `container` fixture emits JSON.
+
+keypath=""
+output="-"
+extra=()
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -extract)
+            keypath=$2
+            shift 2
+            ;;
+        -o)
+            output=$2
+            shift 2
+            ;;
+        raw|-)
+            shift
+            ;;
+        *)
+            extra+=("$1")
+            shift
+            ;;
+    esac
+done
+
+if [[ -z "${keypath}" || ${#extra[@]} -gt 0 ]]; then
+    printf 'Unsupported fake plutil invocation: %s\n' "${extra[*]:-}" >&2
+    exit 1
+fi
+
+result="$(python3 -c '
+import json, sys
+
+keypath = sys.argv[1]
+data = json.load(sys.stdin)
+value = data
+for part in keypath.split("."):
+    if isinstance(value, list):
+        value = value[int(part)]
+    elif isinstance(value, dict):
+        value = value[part]
+    else:
+        raise KeyError(keypath)
+if isinstance(value, str):
+    print(value)
+elif isinstance(value, bool):
+    print("true" if value else "false")
+else:
+    print(json.dumps(value))
+' "${keypath}")"
+
+if [[ "${output}" == "-" ]]; then
+    printf '%s\n' "${result}"
+else
+    printf '%s\n' "${result}" >"${output}"
+fi

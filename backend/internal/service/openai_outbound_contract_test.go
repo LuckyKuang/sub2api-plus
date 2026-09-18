@@ -144,7 +144,7 @@ func TestOpenAIIdentityContractHTTPRetrySnapshot(t *testing.T) {
 		{"account", testOpenAIAccountUserAgent, globalUA, testOpenAIAccountUserAgent, "codex_cli_rs", false},
 		{"global", "", globalUA, globalUA, "codex_vscode", false},
 		{"invalid-account", "curl/8.0", globalUA, globalUA, "codex_vscode", false},
-		{"compiled-default", "invalid", "invalid", DefaultOpenAICodexUserAgent, "codex-tui", false},
+		{"compiled-default", "invalid", "invalid", DefaultOpenAICodexUserAgent, openai.CodexDefaultOriginator, false},
 		{"legacy-disabled", legacyUA, globalUA, globalUA, "codex_vscode", false},
 		{"legacy-enabled", legacyUA, globalUA, legacyUA, "codex_exec", true},
 	}
@@ -381,9 +381,13 @@ func TestOpenAIIdentityContractOAuthMetadataUsesExchangeSnapshot(t *testing.T) {
 				repo.values[SettingKeyOpenAICodexClientVersion] = "0.200.2"
 				settings.InvalidateOpenAICodexClientVersionCache()
 			}}
-			captured := make(chan http.Header, 3)
+			type capturedEnrichment struct {
+				path   string
+				header http.Header
+			}
+			captured := make(chan capturedEnrichment, 3)
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				captured <- r.Header.Clone()
+				captured <- capturedEnrichment{path: r.URL.Path, header: r.Header.Clone()}
 				w.Header().Set("Content-Type", "application/json")
 				_, _ = w.Write([]byte(`{"accounts":{}}`))
 			}))
@@ -405,13 +409,22 @@ func TestOpenAIIdentityContractOAuthMetadataUsesExchangeSnapshot(t *testing.T) {
 				require.NoError(t, err)
 				require.Equal(t, want.UserAgent, client.refreshUserAgent)
 			}
-			require.Len(t, captured, 3, "account, subscription and privacy requests must all use the selected identity")
-			for range 3 {
-				header := <-captured
-				require.Equal(t, want.UserAgent, header.Get("User-Agent"))
-				require.Equal(t, want.Originator, header.Get("Originator"))
-				require.Equal(t, want.Version, header.Get("Version"))
+			require.Len(t, captured, 2, "login enrich uses accounts/check plus subscriptions; it does not PATCH training")
+			seen := make(map[string]http.Header, 2)
+			for range 2 {
+				item := <-captured
+				seen[item.path] = item.header
 			}
+			require.Contains(t, seen, "/backend-api/wham/accounts/check")
+			require.Contains(t, seen, "/backend-api/subscriptions")
+			accountHeader := seen["/backend-api/wham/accounts/check"]
+			require.Equal(t, want.UserAgent, accountHeader.Get("User-Agent"))
+			require.Empty(t, accountHeader.Get("Originator"))
+			require.Empty(t, accountHeader.Get("Version"))
+			subscriptionHeader := seen["/backend-api/subscriptions"]
+			require.Equal(t, want.UserAgent, subscriptionHeader.Get("User-Agent"))
+			require.Empty(t, subscriptionHeader.Get("Originator"), "auxiliary API keeps UA + Bearer + chatgpt-account-id only")
+			require.Empty(t, subscriptionHeader.Get("Version"))
 		})
 	}
 }

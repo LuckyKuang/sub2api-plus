@@ -37866,6 +37866,8 @@ type ProxyMutation struct {
 	fallback_mode          *string
 	expiry_warn_days       *int
 	addexpiry_warn_days    *int
+	egress_timezone        *string
+	egress_country         *string
 	clearedFields          map[string]struct{}
 	accounts               map[int64]struct{}
 	removedaccounts        map[int64]struct{}
@@ -38587,6 +38589,78 @@ func (m *ProxyMutation) ResetExpiryWarnDays() {
 	m.addexpiry_warn_days = nil
 }
 
+// SetEgressTimezone sets the "egress_timezone" field.
+func (m *ProxyMutation) SetEgressTimezone(s string) {
+	m.egress_timezone = &s
+}
+
+// EgressTimezone returns the value of the "egress_timezone" field in the mutation.
+func (m *ProxyMutation) EgressTimezone() (r string, exists bool) {
+	v := m.egress_timezone
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEgressTimezone returns the old "egress_timezone" field's value of the Proxy entity.
+// If the Proxy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ProxyMutation) OldEgressTimezone(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEgressTimezone is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEgressTimezone requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEgressTimezone: %w", err)
+	}
+	return oldValue.EgressTimezone, nil
+}
+
+// ResetEgressTimezone resets all changes to the "egress_timezone" field.
+func (m *ProxyMutation) ResetEgressTimezone() {
+	m.egress_timezone = nil
+}
+
+// SetEgressCountry sets the "egress_country" field.
+func (m *ProxyMutation) SetEgressCountry(s string) {
+	m.egress_country = &s
+}
+
+// EgressCountry returns the value of the "egress_country" field in the mutation.
+func (m *ProxyMutation) EgressCountry() (r string, exists bool) {
+	v := m.egress_country
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEgressCountry returns the old "egress_country" field's value of the Proxy entity.
+// If the Proxy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ProxyMutation) OldEgressCountry(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEgressCountry is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEgressCountry requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEgressCountry: %w", err)
+	}
+	return oldValue.EgressCountry, nil
+}
+
+// ResetEgressCountry resets all changes to the "egress_country" field.
+func (m *ProxyMutation) ResetEgressCountry() {
+	m.egress_country = nil
+}
+
 // AddAccountIDs adds the "accounts" edge to the Account entity by ids.
 func (m *ProxyMutation) AddAccountIDs(ids ...int64) {
 	if m.accounts == nil {
@@ -38756,7 +38830,7 @@ func (m *ProxyMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ProxyMutation) Fields() []string {
-	fields := make([]string, 0, 14)
+	fields := make([]string, 0, 16)
 	if m.created_at != nil {
 		fields = append(fields, proxy.FieldCreatedAt)
 	}
@@ -38799,6 +38873,12 @@ func (m *ProxyMutation) Fields() []string {
 	if m.expiry_warn_days != nil {
 		fields = append(fields, proxy.FieldExpiryWarnDays)
 	}
+	if m.egress_timezone != nil {
+		fields = append(fields, proxy.FieldEgressTimezone)
+	}
+	if m.egress_country != nil {
+		fields = append(fields, proxy.FieldEgressCountry)
+	}
 	return fields
 }
 
@@ -38835,6 +38915,10 @@ func (m *ProxyMutation) Field(name string) (ent.Value, bool) {
 		return m.BackupProxyID()
 	case proxy.FieldExpiryWarnDays:
 		return m.ExpiryWarnDays()
+	case proxy.FieldEgressTimezone:
+		return m.EgressTimezone()
+	case proxy.FieldEgressCountry:
+		return m.EgressCountry()
 	}
 	return nil, false
 }
@@ -38872,6 +38956,10 @@ func (m *ProxyMutation) OldField(ctx context.Context, name string) (ent.Value, e
 		return m.OldBackupProxyID(ctx)
 	case proxy.FieldExpiryWarnDays:
 		return m.OldExpiryWarnDays(ctx)
+	case proxy.FieldEgressTimezone:
+		return m.OldEgressTimezone(ctx)
+	case proxy.FieldEgressCountry:
+		return m.OldEgressCountry(ctx)
 	}
 	return nil, fmt.Errorf("unknown Proxy field %s", name)
 }
@@ -38978,6 +39066,20 @@ func (m *ProxyMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetExpiryWarnDays(v)
+		return nil
+	case proxy.FieldEgressTimezone:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEgressTimezone(v)
+		return nil
+	case proxy.FieldEgressCountry:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEgressCountry(v)
 		return nil
 	}
 	return fmt.Errorf("unknown Proxy field %s", name)
@@ -39129,6 +39231,12 @@ func (m *ProxyMutation) ResetField(name string) error {
 		return nil
 	case proxy.FieldExpiryWarnDays:
 		m.ResetExpiryWarnDays()
+		return nil
+	case proxy.FieldEgressTimezone:
+		m.ResetEgressTimezone()
+		return nil
+	case proxy.FieldEgressCountry:
+		m.ResetEgressCountry()
 		return nil
 	}
 	return fmt.Errorf("unknown Proxy field %s", name)

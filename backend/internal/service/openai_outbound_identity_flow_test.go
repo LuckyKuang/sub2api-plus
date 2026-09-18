@@ -91,6 +91,18 @@ func (s *openAIIdentityOAuthClientStub) RefreshTokenWithClientIDAndIdentity(_ co
 	return &openai.TokenResponse{AccessToken: "new-access", RefreshToken: "new-refresh", ExpiresIn: 3600}, nil
 }
 
+func (s *openAIIdentityOAuthClientStub) RevokeToken(context.Context, string, string, string, string, string, string) error {
+	return nil
+}
+
+func (s *openAIIdentityOAuthClientStub) StartDeviceCode(context.Context, string, string) (*openai.DeviceUserCodeResponse, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (s *openAIIdentityOAuthClientStub) PollDeviceCode(context.Context, string, string, string) (*openai.DeviceTokenPollResponse, bool, error) {
+	return nil, false, errors.New("not implemented")
+}
+
 func TestNormalizeOpenAIAccountUserAgent(t *testing.T) {
 	t.Run("keeps exact current official identity", func(t *testing.T) {
 		credentials := map[string]any{"user_agent": testOpenAIAccountUserAgent}

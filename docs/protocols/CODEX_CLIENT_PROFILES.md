@@ -203,8 +203,8 @@ string clears it through an explicit null in the JSONB update.
 The exact compiled identity is:
 
 ```text
-User-Agent: codex-tui/0.147.0 (Ubuntu 24.04; x86_64) xterm-256color
-Originator: codex-tui
+User-Agent: codex_cli_rs/0.147.0 (Ubuntu 24.04; x86_64) xterm-256color
+Originator: codex_cli_rs
 Version: 0.147.0
 ```
 
@@ -240,6 +240,69 @@ and Version with the selected UA. Native Codex Platform API-key requests omit
 both Originator and Version, including `responses/compact`. Header presence is
 determined by the endpoint protocol, never by an inbound or generic override
 value. Explicit compatible presets retain their own protocol header mappings.
+When proxying an official Codex client, a reviewed inbound thread originator
+(`chatgpt_cca` and `codex_work_*`) may replace only the Originator header.
+User-Agent and Version stay on the credential-owning snapshot.
+The OAuth credential endpoint follows official Codex auth clients:
+authorization-code exchange uses the raw client and sends no User-Agent,
+Originator, or Version; refresh uses the default client and sends only the
+selected User-Agent and Originator. Neither request receives the inference-only
+`Version` header.
+Device-code start/poll uses the same raw client (no User-Agent, Originator, or
+Version) and then exchanges the returned authorization code. Re-authorization
+device-code sessions may bind an account server-side like browser re-auth.
+`/oauth/revoke`
+uses the refresh-style client (User-Agent + Originator, no Version); `client_id`
+is sent only when revoking a refresh token. Login no longer PATCHes
+ChatGPT `training_allowed`; administrators can still force privacy later.
+
+## Environment-context timezone alignment
+
+Official Codex renders a model-visible `<environment_context>` block
+(cwd, shell, `<current_date>`, `<timezone>`) from the user's machine, so a
+gateway-forwarded request can carry a visible timezone that contradicts the
+egress location. Plus can rewrite that pair at the outbound build stage:
+
+- Resolution order: account `extra.codex_environment_timezone`, then the
+  bound proxy's `egress_timezone` annotation (admin-maintained in the proxy
+  management UI, so the visible time follows the actual egress location and
+  automatically tracks proxy rebinding / failover), then the global
+  `openai_codex_environment_timezone` setting, then off. Misconfigured values
+  degrade to the next source and never block traffic. Only Codex-protocol
+  OpenAI accounts participate.
+- The pair is always written together and never contradicts itself: both tags
+  are replaced with the configured IANA timezone and that timezone's current
+  date (`YYYY-MM-DD`); a missing tag of an existing pair is injected before the
+  closing tag in the official layout. A block without either tag is untouched.
+- Only `role=user` messages whose content (string or `input_text` part) is
+  exactly one `<environment_context>` block are touched; quoted logs, mixed
+  prose, and other message roles stay unchanged.
+- Applied at the final outbound construction on every transport (HTTP forward,
+  HTTP passthrough plus WS→HTTP bridge, WS `response.create` payloads, WS v2
+  passthrough frames), so failover to another account rewrites the pair to the
+  new account's timezone. Rewrites are idempotent.
+- Any parse or mutation failure keeps the original block — the client's own
+  timezone/date pair is self-consistent — and never fails or closes a request.
+  The rewrite runs after ingress security audit consumed the original body and
+  never on the audit path itself.
+Official Codex never sends a `conversation_id` header, so Codex-protocol
+outbound requests never carry one. The legacy `session_id` alias is a Plus
+compatibility header: OAuth accounts emit it only when the fingerprint mode
+converges session identity (`session`/`full`), API-key accounts keep emitting
+it, and `off`/`device` OAuth accounts keep the official `session-id` +
+`thread-id` spelling only. The chatgpt.com backend-api auxiliary surface
+(accounts check, subscription enrich, settings PATCH, WHAM usage and credit
+endpoints) uses the regular HTTP client without browser TLS impersonation and
+the official backend-client header surface: selected User-Agent,
+Authorization, optional `chatgpt-account-id`, and optional `x-openai-fedramp`;
+it omits Originator and Version. `/backend-api/subscriptions` is a Plus-only
+enrichment endpoint with no official equivalent; official expiration data comes
+from `accounts/check` entitlements.
+ChatGPT WHAM `/backend-api/wham/usage` and rate-limit credit endpoints follow
+official backend-client headers: selected User-Agent, Authorization,
+`chatgpt-account-id`, and optional `x-openai-fedramp`. They omit Originator and
+Version. `/backend-api/wham/accounts/check` uses the same backend-client
+surface during login enrich (Bearer + User-Agent, no Originator/Version).
 Generic override saves reject managed identity headers with
 `INVALID_HEADER_OVERRIDE`; runtime filtering ignores previously stored entries.
 Authentication, session, routing and protocol-capability fields keep their own
@@ -260,6 +323,13 @@ image generation and standalone search. The Chat Completions entry retains its
 snapshot across both handler retries and automatic Responses-to-Chat fallback.
 Shared HTTP/TLS transports cannot select a Grok identity based on a base URL or
 discard the chosen identity on Grok's access-denied fallback.
+
+## Explicitly deferred for v0.2.5+custom.001
+
+- `x-openai-internal-codex-residency`: the official client sends `us` as a
+  process-level default header. Plus intentionally does not emit it this
+  release; if US-residency accounts ever require it, derive the value from the
+  bound proxy's `egress_country` annotation instead of hardcoding it.
 
 ## Standalone search
 

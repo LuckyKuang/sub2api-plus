@@ -566,7 +566,7 @@ func TestGeminiHandleNativeNonStreamingResponse_DebugDisabledDoesNotEmitHeaderLo
 		Body: io.NopCloser(strings.NewReader(`{"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":2}}`)),
 	}
 
-	usage, err := svc.handleNativeNonStreamingResponse(c, resp, false)
+	usage, err := svc.handleNativeNonStreamingResponse(c, resp, false, nil, "")
 	require.NoError(t, err)
 	require.NotNil(t, usage)
 	require.False(t, logSink.ContainsMessage("[GeminiAPI]"), "debug 关闭时不应输出 Gemini 响应头日志")
@@ -1246,7 +1246,7 @@ func TestGeminiNativeStreaming_MediaAndMetadataTiming(t *testing.T) {
 			rec := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(rec)
 
-			result, err := (&GeminiMessagesCompatService{}).handleNativeStreamingResponse(c, resp, time.Now(), false)
+			result, err := (&GeminiMessagesCompatService{}).handleNativeStreamingResponse(c, resp, time.Now(), false, nil, "")
 			require.NoError(t, err)
 			require.NotNil(t, result)
 			if tt.wantOutput {
@@ -1277,7 +1277,7 @@ func TestGeminiStreaming_MissingTerminalReturnsIncompleteUsage(t *testing.T) {
 		{
 			name: "native",
 			run: func(svc *GeminiMessagesCompatService, c *gin.Context, resp *http.Response) (any, error) {
-				return svc.handleNativeStreamingResponse(c, resp, time.Now(), false)
+				return svc.handleNativeStreamingResponse(c, resp, time.Now(), false, nil, "")
 			},
 		},
 	}

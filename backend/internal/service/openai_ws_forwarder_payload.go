@@ -141,15 +141,10 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 			if err != nil {
 				return nil, openAIWSSessionHeaderResolution{}, err
 			}
-			setOpenAIUpstreamSessionIdentity(headers, upstreamSessionID)
+			setOpenAIUpstreamSessionIdentityForAccount(headers, account, upstreamSessionID)
 		}
-		if sessionResolution.ConversationID != "" {
-			upstreamConversationID, err := s.resolveOpenAIUpstreamSessionID(c, account, sessionResolution.ConversationID)
-			if err != nil {
-				return nil, openAIWSSessionHeaderResolution{}, err
-			}
-			headers.Set("conversation_id", upstreamConversationID)
-		}
+		// conversation_id is not an official Codex header; the final alias
+		// cleanup below drops any client-provided value for Codex accounts.
 	} else {
 		if sessionResolution.SessionID != "" {
 			upstreamSessionID, err := s.resolveOpenAIUpstreamPromptCacheHeaderIdentity(c, account, sessionResolution.SessionID)
@@ -196,12 +191,16 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	// The request/body stage owns installation and thread metadata. Preserve the
 	// already isolated cache session and restore it after fingerprint mutation.
 	if cacheSessionIdentity != "" {
-		setOpenAIUpstreamSessionIdentity(headers, cacheSessionIdentity)
+		setOpenAIUpstreamSessionIdentityForAccount(headers, account, cacheSessionIdentity)
 	}
 	if strings.TrimSpace(headers.Get("x-client-request-id")) == "" {
 		alignOpenAICodexThreadHeaders(headers)
 	}
 	identity := s.applyOpenAIOutboundIdentity(ctx, account, headers, account != nil && account.UsesOpenAICodexProtocol())
+	if account != nil && account.UsesOpenAICodexProtocol() {
+		preserveOpenAIThreadOriginator(c, headers)
+	}
+	clearOpenAICodexLegacySessionAliases(headers, account)
 	ApplyAccountOutboundHeaders(ctx, account, headers)
 	SetOpsRoutingDiagnostics(c, &OpsRoutingDiagnostics{OutboundIdentitySource: identity.Source})
 	setOpenAICodexRoutingHint(headers, account, routingModel, routingServiceTier)
@@ -226,6 +225,9 @@ func (s *OpenAIGatewayService) buildOpenAIWSCreatePayload(reqBody map[string]any
 	for k, v := range reqBody {
 		payload[k] = v
 	}
+	// Codex 可见时区对齐：每轮 response.create 重新应用，与 HTTP 出站保持
+	// 同一账号/全局配置语义（幂等；失败保留原始自洽内容）。
+	payload = s.rewriteOpenAICodexEnvironmentContextMap(context.TODO(), account, payload)
 
 	delete(payload, "background")
 	if _, exists := payload["stream"]; !exists {

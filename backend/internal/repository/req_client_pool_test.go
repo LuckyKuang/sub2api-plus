@@ -76,18 +76,17 @@ func TestGetSharedReqClient_IgnoresNonClientCache(t *testing.T) {
 	require.IsType(t, "invalid", loaded)
 }
 
-func TestGetSharedReqClient_ImpersonateAndProxy(t *testing.T) {
+func TestGetSharedReqClient_ProxyCacheKey(t *testing.T) {
 	sharedReqClients = sync.Map{}
 	opts := reqClientOptions{
-		ProxyURL:    "  http://proxy.local:8080  ",
-		Timeout:     4 * time.Second,
-		Impersonate: true,
+		ProxyURL: "  http://proxy.local:8080  ",
+		Timeout:  4 * time.Second,
 	}
 	client, err := getSharedReqClient(opts)
 	require.NoError(t, err)
 
 	require.NotNil(t, client)
-	require.Equal(t, "http://proxy.local:8080|4s|true|false", buildReqClientKey(opts))
+	require.Equal(t, "http://proxy.local:8080|4s|false", buildReqClientKey(opts))
 }
 
 func TestGetSharedReqClient_InvalidProxyURL(t *testing.T) {

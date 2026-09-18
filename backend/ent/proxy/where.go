@@ -125,6 +125,16 @@ func ExpiryWarnDays(v int) predicate.Proxy {
 	return predicate.Proxy(sql.FieldEQ(FieldExpiryWarnDays, v))
 }
 
+// EgressTimezone applies equality check predicate on the "egress_timezone" field. It's identical to EgressTimezoneEQ.
+func EgressTimezone(v string) predicate.Proxy {
+	return predicate.Proxy(sql.FieldEQ(FieldEgressTimezone, v))
+}
+
+// EgressCountry applies equality check predicate on the "egress_country" field. It's identical to EgressCountryEQ.
+func EgressCountry(v string) predicate.Proxy {
+	return predicate.Proxy(sql.FieldEQ(FieldEgressCountry, v))
+}
+
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
 func CreatedAtEQ(v time.Time) predicate.Proxy {
 	return predicate.Proxy(sql.FieldEQ(FieldCreatedAt, v))
@@ -888,6 +898,136 @@ func ExpiryWarnDaysLT(v int) predicate.Proxy {
 // ExpiryWarnDaysLTE applies the LTE predicate on the "expiry_warn_days" field.
 func ExpiryWarnDaysLTE(v int) predicate.Proxy {
 	return predicate.Proxy(sql.FieldLTE(FieldExpiryWarnDays, v))
+}
+
+// EgressTimezoneEQ applies the EQ predicate on the "egress_timezone" field.
+func EgressTimezoneEQ(v string) predicate.Proxy {
+	return predicate.Proxy(sql.FieldEQ(FieldEgressTimezone, v))
+}
+
+// EgressTimezoneNEQ applies the NEQ predicate on the "egress_timezone" field.
+func EgressTimezoneNEQ(v string) predicate.Proxy {
+	return predicate.Proxy(sql.FieldNEQ(FieldEgressTimezone, v))
+}
+
+// EgressTimezoneIn applies the In predicate on the "egress_timezone" field.
+func EgressTimezoneIn(vs ...string) predicate.Proxy {
+	return predicate.Proxy(sql.FieldIn(FieldEgressTimezone, vs...))
+}
+
+// EgressTimezoneNotIn applies the NotIn predicate on the "egress_timezone" field.
+func EgressTimezoneNotIn(vs ...string) predicate.Proxy {
+	return predicate.Proxy(sql.FieldNotIn(FieldEgressTimezone, vs...))
+}
+
+// EgressTimezoneGT applies the GT predicate on the "egress_timezone" field.
+func EgressTimezoneGT(v string) predicate.Proxy {
+	return predicate.Proxy(sql.FieldGT(FieldEgressTimezone, v))
+}
+
+// EgressTimezoneGTE applies the GTE predicate on the "egress_timezone" field.
+func EgressTimezoneGTE(v string) predicate.Proxy {
+	return predicate.Proxy(sql.FieldGTE(FieldEgressTimezone, v))
+}
+
+// EgressTimezoneLT applies the LT predicate on the "egress_timezone" field.
+func EgressTimezoneLT(v string) predicate.Proxy {
+	return predicate.Proxy(sql.FieldLT(FieldEgressTimezone, v))
+}
+
+// EgressTimezoneLTE applies the LTE predicate on the "egress_timezone" field.
+func EgressTimezoneLTE(v string) predicate.Proxy {
+	return predicate.Proxy(sql.FieldLTE(FieldEgressTimezone, v))
+}
+
+// EgressTimezoneContains applies the Contains predicate on the "egress_timezone" field.
+func EgressTimezoneContains(v string) predicate.Proxy {
+	return predicate.Proxy(sql.FieldContains(FieldEgressTimezone, v))
+}
+
+// EgressTimezoneHasPrefix applies the HasPrefix predicate on the "egress_timezone" field.
+func EgressTimezoneHasPrefix(v string) predicate.Proxy {
+	return predicate.Proxy(sql.FieldHasPrefix(FieldEgressTimezone, v))
+}
+
+// EgressTimezoneHasSuffix applies the HasSuffix predicate on the "egress_timezone" field.
+func EgressTimezoneHasSuffix(v string) predicate.Proxy {
+	return predicate.Proxy(sql.FieldHasSuffix(FieldEgressTimezone, v))
+}
+
+// EgressTimezoneEqualFold applies the EqualFold predicate on the "egress_timezone" field.
+func EgressTimezoneEqualFold(v string) predicate.Proxy {
+	return predicate.Proxy(sql.FieldEqualFold(FieldEgressTimezone, v))
+}
+
+// EgressTimezoneContainsFold applies the ContainsFold predicate on the "egress_timezone" field.
+func EgressTimezoneContainsFold(v string) predicate.Proxy {
+	return predicate.Proxy(sql.FieldContainsFold(FieldEgressTimezone, v))
+}
+
+// EgressCountryEQ applies the EQ predicate on the "egress_country" field.
+func EgressCountryEQ(v string) predicate.Proxy {
+	return predicate.Proxy(sql.FieldEQ(FieldEgressCountry, v))
+}
+
+// EgressCountryNEQ applies the NEQ predicate on the "egress_country" field.
+func EgressCountryNEQ(v string) predicate.Proxy {
+	return predicate.Proxy(sql.FieldNEQ(FieldEgressCountry, v))
+}
+
+// EgressCountryIn applies the In predicate on the "egress_country" field.
+func EgressCountryIn(vs ...string) predicate.Proxy {
+	return predicate.Proxy(sql.FieldIn(FieldEgressCountry, vs...))
+}
+
+// EgressCountryNotIn applies the NotIn predicate on the "egress_country" field.
+func EgressCountryNotIn(vs ...string) predicate.Proxy {
+	return predicate.Proxy(sql.FieldNotIn(FieldEgressCountry, vs...))
+}
+
+// EgressCountryGT applies the GT predicate on the "egress_country" field.
+func EgressCountryGT(v string) predicate.Proxy {
+	return predicate.Proxy(sql.FieldGT(FieldEgressCountry, v))
+}
+
+// EgressCountryGTE applies the GTE predicate on the "egress_country" field.
+func EgressCountryGTE(v string) predicate.Proxy {
+	return predicate.Proxy(sql.FieldGTE(FieldEgressCountry, v))
+}
+
+// EgressCountryLT applies the LT predicate on the "egress_country" field.
+func EgressCountryLT(v string) predicate.Proxy {
+	return predicate.Proxy(sql.FieldLT(FieldEgressCountry, v))
+}
+
+// EgressCountryLTE applies the LTE predicate on the "egress_country" field.
+func EgressCountryLTE(v string) predicate.Proxy {
+	return predicate.Proxy(sql.FieldLTE(FieldEgressCountry, v))
+}
+
+// EgressCountryContains applies the Contains predicate on the "egress_country" field.
+func EgressCountryContains(v string) predicate.Proxy {
+	return predicate.Proxy(sql.FieldContains(FieldEgressCountry, v))
+}
+
+// EgressCountryHasPrefix applies the HasPrefix predicate on the "egress_country" field.
+func EgressCountryHasPrefix(v string) predicate.Proxy {
+	return predicate.Proxy(sql.FieldHasPrefix(FieldEgressCountry, v))
+}
+
+// EgressCountryHasSuffix applies the HasSuffix predicate on the "egress_country" field.
+func EgressCountryHasSuffix(v string) predicate.Proxy {
+	return predicate.Proxy(sql.FieldHasSuffix(FieldEgressCountry, v))
+}
+
+// EgressCountryEqualFold applies the EqualFold predicate on the "egress_country" field.
+func EgressCountryEqualFold(v string) predicate.Proxy {
+	return predicate.Proxy(sql.FieldEqualFold(FieldEgressCountry, v))
+}
+
+// EgressCountryContainsFold applies the ContainsFold predicate on the "egress_country" field.
+func EgressCountryContainsFold(v string) predicate.Proxy {
+	return predicate.Proxy(sql.FieldContainsFold(FieldEgressCountry, v))
 }
 
 // HasAccounts applies the HasEdge predicate on the "accounts" edge.

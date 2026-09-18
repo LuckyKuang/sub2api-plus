@@ -26,6 +26,17 @@
                 t('admin.accounts.oauth.manualAuth')
               }}</span>
             </label>
+            <label v-if="showDeviceCodeOption" class="flex cursor-pointer items-center gap-2">
+              <input
+                v-model="inputMethod"
+                type="radio"
+                value="device_code"
+                class="text-blue-600 focus:ring-blue-500"
+              />
+              <span class="text-sm text-blue-900 dark:text-blue-200">{{
+                t('admin.accounts.oauth.openai.deviceCodeAuth')
+              }}</span>
+            </label>
             <label v-if="showCookieOption" class="flex cursor-pointer items-center gap-2">
               <input
                 v-model="inputMethod"
@@ -655,6 +666,71 @@
           </div>
         </div>
 
+        <div v-if="inputMethod === 'device_code'" class="space-y-4">
+          <p class="mb-4 text-sm text-blue-800 dark:text-blue-300">
+            {{ t('admin.accounts.oauth.openai.deviceCodeHint') }}
+          </p>
+          <div
+            class="rounded-lg border border-blue-300 bg-white/80 p-4 dark:border-blue-600 dark:bg-gray-800/80"
+          >
+            <button
+              v-if="!deviceUserCode"
+              type="button"
+              :disabled="loading"
+              class="btn btn-primary text-sm"
+              @click="handleStartDeviceCode"
+            >
+              {{ loading ? t('admin.accounts.oauth.generating') : t('admin.accounts.oauth.openai.startDeviceCode') }}
+            </button>
+            <div v-else class="space-y-3">
+              <div>
+                <p class="mb-1 text-xs font-medium text-blue-800 dark:text-blue-300">
+                  {{ t('admin.accounts.oauth.openai.deviceCodeVerificationUrl') }}
+                </p>
+                <a
+                  :href="deviceVerificationUrl"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="break-all text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400"
+                >
+                  {{ deviceVerificationUrl }}
+                </a>
+              </div>
+              <div>
+                <p class="mb-1 text-xs font-medium text-blue-800 dark:text-blue-300">
+                  {{ t('admin.accounts.oauth.openai.deviceCodeUserCode') }}
+                </p>
+                <div class="flex items-center gap-2">
+                  <input
+                    :value="deviceUserCode"
+                    readonly
+                    type="text"
+                    class="input flex-1 bg-gray-50 font-mono text-lg tracking-widest dark:bg-gray-700"
+                  />
+                  <button
+                    type="button"
+                    class="btn btn-secondary p-2"
+                    @click="copyToClipboard(deviceUserCode, t('admin.accounts.oauth.openai.deviceCodeUserCode'))"
+                  >
+                    <Icon name="check" v-if="copied" size="sm" class="text-green-500" :stroke-width="2" />
+                    <Icon name="link" v-else size="sm" />
+                  </button>
+                </div>
+              </div>
+              <p v-if="deviceCodePolling" class="text-sm text-blue-700 dark:text-blue-300">
+                {{ t('admin.accounts.oauth.openai.deviceCodePolling') }}
+              </p>
+              <button
+                type="button"
+                class="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400"
+                @click="handleStartDeviceCode"
+              >
+                {{ t('admin.accounts.oauth.openai.deviceCodeRestart') }}
+              </button>
+            </div>
+          </div>
+        </div>
+
         <!-- Manual Authorization Flow -->
         <div v-if="inputMethod === 'manual'" class="space-y-4">
           <p class="mb-4 text-sm text-blue-800 dark:text-blue-300">
@@ -924,6 +1000,10 @@ interface Props {
   /** Grok email----password login (admin; password never persisted). */
   showEmailPasswordOption?: boolean
   showManualOption?: boolean
+  showDeviceCodeOption?: boolean
+  deviceUserCode?: string
+  deviceVerificationUrl?: string
+  deviceCodePolling?: boolean
   initialInputMethod?: AuthInputMethod
   /**
    * Prefill for Grok email----password reauth. Password is never stored;
@@ -954,6 +1034,10 @@ const props = withDefaults(defineProps<Props>(), {
   showSsoOption: false,
   showEmailPasswordOption: false,
   showManualOption: true,
+  showDeviceCodeOption: false,
+  deviceUserCode: '',
+  deviceVerificationUrl: '',
+  deviceCodePolling: false,
   initialInputMethod: 'manual',
   initialEmailPassword: '',
   platform: 'anthropic',
@@ -972,6 +1056,7 @@ const emit = defineEmits<{
   'import-codex-pat': [accessToken: string]
   'import-sso': [content: string]
   'authorize-password': [emailPasswordInput: string]
+  'start-device-code': []
   'update:inputMethod': [method: AuthInputMethod]
 }>()
 
@@ -1048,6 +1133,7 @@ watch(emailPasswordOptionEnabled, (enabled) => {
 // Computed: show method selection only when there is something to choose.
 const methodOptionCount = computed(() => [
   props.showManualOption,
+  props.showDeviceCodeOption,
   props.showCookieOption,
   props.showRefreshTokenOption,
   props.showMobileRefreshTokenOption,
@@ -1166,6 +1252,10 @@ watch(authCodeInput, (newVal) => {
 // Methods
 const handleGenerateUrl = () => {
   emit('generate-url')
+}
+
+const handleStartDeviceCode = () => {
+  emit('start-device-code')
 }
 
 const handleCopyUrl = () => {

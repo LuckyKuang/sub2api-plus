@@ -216,6 +216,21 @@ func TestGatewayService_Forward_FailoverErrorKeepsNilResult(t *testing.T) {
 	require.Nil(t, result, "failover 错误必须保持 result=nil，防止重试成功后双重计费")
 }
 
+func TestNewAnthropicUpstreamFailoverErrorStopsOnOverloaded(t *testing.T) {
+	body := []byte(`{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}`)
+	err := newAnthropicUpstreamFailoverError(http.StatusOK, body, true)
+	require.False(t, err.RetryableOnSameAccount)
+	require.False(t, err.ShouldRetryNextAccount())
+	require.Equal(t, http.StatusServiceUnavailable, err.ClientStatusCode)
+
+	http529 := newAnthropicUpstreamFailoverError(529, []byte(`{"error":{"message":"busy"}}`), true)
+	require.False(t, http529.ShouldRetryNextAccount())
+
+	other := newAnthropicUpstreamFailoverError(http.StatusForbidden, []byte(`{"error":{"type":"permission_error"}}`), true)
+	require.True(t, other.RetryableOnSameAccount)
+	require.True(t, other.ShouldRetryNextAccount())
+}
+
 func TestGatewayService_Forward_PreOutputSSEOverloadedErrorUsesSemantic529(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -258,9 +273,11 @@ func TestGatewayService_Forward_PreOutputSSEOverloadedErrorUsesSemantic529(t *te
 	require.ErrorAs(t, err, &failoverErr)
 	require.Equal(t, 529, failoverErr.StatusCode)
 	require.JSONEq(t, errorJSON, string(failoverErr.ResponseBody))
+	require.False(t, failoverErr.RetryableOnSameAccount)
+	require.False(t, failoverErr.ShouldRetryNextAccount())
 	require.Equal(t, 1, repo.overloadCalls, "synthetic 529 must apply global overload cooldown")
 	require.Empty(t, repo.modelRateLimitCalls, "global 529 cooldown must take precedence over custom model rules")
-	require.Empty(t, rec.Body.String(), "pre-output overload must remain eligible for account failover")
+	require.Empty(t, rec.Body.String(), "pre-output overload must return without writing a client body")
 }
 
 func TestGatewayService_Forward_PostOutputSSEOverloadedErrorKeepsExistingStatus(t *testing.T) {

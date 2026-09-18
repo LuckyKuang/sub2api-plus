@@ -270,9 +270,13 @@ export async function testAccount(id: number): Promise<{
  * @param id - Account ID
  * @returns Updated account
  */
-export async function refreshCredentials(id: number): Promise<Account> {
-  const { data } = await apiClient.post<Account>(`/admin/accounts/${id}/refresh`)
-  return data
+export type RefreshCredentialsResult =
+  | { account: Account; message: string; warning: 'missing_project_id_temporary' }
+  | { account: Account; message?: never; warning?: never }
+
+export async function refreshCredentials(id: number): Promise<RefreshCredentialsResult> {
+  const { data } = await apiClient.post<Account | RefreshCredentialsResult>(`/admin/accounts/${id}/refresh`)
+  return 'account' in data ? data : { account: data }
 }
 
 /**
@@ -428,6 +432,27 @@ export async function generateAuthUrl(
  * @param exchangeData - Session ID, code, and optional proxy config
  * @returns Token information
  */
+export async function startOpenAIDeviceCode(
+  endpoint: string,
+  config: { proxy_id?: number; account_id?: number } = {}
+): Promise<{ session_id: string; user_code: string; verification_url: string; interval_seconds: number }> {
+  const { data } = await apiClient.post<{
+    session_id: string
+    user_code: string
+    verification_url: string
+    interval_seconds: number
+  }>(endpoint, config)
+  return data
+}
+
+export async function pollOpenAIDeviceCode(
+  endpoint: string,
+  sessionId: string
+): Promise<Record<string, unknown>> {
+  const { data } = await apiClient.post<Record<string, unknown>>(endpoint, { session_id: sessionId })
+  return data
+}
+
 export async function exchangeCode(
   endpoint: string,
   exchangeData: { session_id: string; code: string; state?: string; proxy_id?: number }
@@ -579,6 +604,7 @@ export interface UpstreamModelMetadata {
   supported_reasoning_levels?: string[]
   input_modalities?: string[]
   context_window?: number
+  max_context_window?: number
   max_output_tokens?: number
 }
 
@@ -1092,6 +1118,8 @@ export const accountsAPI = {
   syncUpstreamModels,
   syncUpstreamModelsPreview,
   generateAuthUrl,
+  startOpenAIDeviceCode,
+  pollOpenAIDeviceCode,
   exchangeCode,
   refreshOpenAIToken,
   batchCreate,

@@ -247,6 +247,34 @@ func (_u *ProxyUpdate) AddExpiryWarnDays(v int) *ProxyUpdate {
 	return _u
 }
 
+// SetEgressTimezone sets the "egress_timezone" field.
+func (_u *ProxyUpdate) SetEgressTimezone(v string) *ProxyUpdate {
+	_u.mutation.SetEgressTimezone(v)
+	return _u
+}
+
+// SetNillableEgressTimezone sets the "egress_timezone" field if the given value is not nil.
+func (_u *ProxyUpdate) SetNillableEgressTimezone(v *string) *ProxyUpdate {
+	if v != nil {
+		_u.SetEgressTimezone(*v)
+	}
+	return _u
+}
+
+// SetEgressCountry sets the "egress_country" field.
+func (_u *ProxyUpdate) SetEgressCountry(v string) *ProxyUpdate {
+	_u.mutation.SetEgressCountry(v)
+	return _u
+}
+
+// SetNillableEgressCountry sets the "egress_country" field if the given value is not nil.
+func (_u *ProxyUpdate) SetNillableEgressCountry(v *string) *ProxyUpdate {
+	if v != nil {
+		_u.SetEgressCountry(*v)
+	}
+	return _u
+}
+
 // AddAccountIDs adds the "accounts" edge to the Account entity by IDs.
 func (_u *ProxyUpdate) AddAccountIDs(ids ...int64) *ProxyUpdate {
 	_u.mutation.AddAccountIDs(ids...)
@@ -414,6 +442,16 @@ func (_u *ProxyUpdate) check() error {
 			return &ValidationError{Name: "fallback_mode", err: fmt.Errorf(`ent: validator failed for field "Proxy.fallback_mode": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.EgressTimezone(); ok {
+		if err := proxy.EgressTimezoneValidator(v); err != nil {
+			return &ValidationError{Name: "egress_timezone", err: fmt.Errorf(`ent: validator failed for field "Proxy.egress_timezone": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.EgressCountry(); ok {
+		if err := proxy.EgressCountryValidator(v); err != nil {
+			return &ValidationError{Name: "egress_country", err: fmt.Errorf(`ent: validator failed for field "Proxy.egress_country": %w`, err)}
+		}
+	}
 	return nil
 }
 
@@ -482,6 +520,12 @@ func (_u *ProxyUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.AddedExpiryWarnDays(); ok {
 		_spec.AddField(proxy.FieldExpiryWarnDays, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.EgressTimezone(); ok {
+		_spec.SetField(proxy.FieldEgressTimezone, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.EgressCountry(); ok {
+		_spec.SetField(proxy.FieldEgressCountry, field.TypeString, value)
 	}
 	if _u.mutation.AccountsCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -840,6 +884,34 @@ func (_u *ProxyUpdateOne) AddExpiryWarnDays(v int) *ProxyUpdateOne {
 	return _u
 }
 
+// SetEgressTimezone sets the "egress_timezone" field.
+func (_u *ProxyUpdateOne) SetEgressTimezone(v string) *ProxyUpdateOne {
+	_u.mutation.SetEgressTimezone(v)
+	return _u
+}
+
+// SetNillableEgressTimezone sets the "egress_timezone" field if the given value is not nil.
+func (_u *ProxyUpdateOne) SetNillableEgressTimezone(v *string) *ProxyUpdateOne {
+	if v != nil {
+		_u.SetEgressTimezone(*v)
+	}
+	return _u
+}
+
+// SetEgressCountry sets the "egress_country" field.
+func (_u *ProxyUpdateOne) SetEgressCountry(v string) *ProxyUpdateOne {
+	_u.mutation.SetEgressCountry(v)
+	return _u
+}
+
+// SetNillableEgressCountry sets the "egress_country" field if the given value is not nil.
+func (_u *ProxyUpdateOne) SetNillableEgressCountry(v *string) *ProxyUpdateOne {
+	if v != nil {
+		_u.SetEgressCountry(*v)
+	}
+	return _u
+}
+
 // AddAccountIDs adds the "accounts" edge to the Account entity by IDs.
 func (_u *ProxyUpdateOne) AddAccountIDs(ids ...int64) *ProxyUpdateOne {
 	_u.mutation.AddAccountIDs(ids...)
@@ -1020,6 +1092,16 @@ func (_u *ProxyUpdateOne) check() error {
 			return &ValidationError{Name: "fallback_mode", err: fmt.Errorf(`ent: validator failed for field "Proxy.fallback_mode": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.EgressTimezone(); ok {
+		if err := proxy.EgressTimezoneValidator(v); err != nil {
+			return &ValidationError{Name: "egress_timezone", err: fmt.Errorf(`ent: validator failed for field "Proxy.egress_timezone": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.EgressCountry(); ok {
+		if err := proxy.EgressCountryValidator(v); err != nil {
+			return &ValidationError{Name: "egress_country", err: fmt.Errorf(`ent: validator failed for field "Proxy.egress_country": %w`, err)}
+		}
+	}
 	return nil
 }
 
@@ -1105,6 +1187,12 @@ func (_u *ProxyUpdateOne) sqlSave(ctx context.Context) (_node *Proxy, err error)
 	}
 	if value, ok := _u.mutation.AddedExpiryWarnDays(); ok {
 		_spec.AddField(proxy.FieldExpiryWarnDays, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.EgressTimezone(); ok {
+		_spec.SetField(proxy.FieldEgressTimezone, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.EgressCountry(); ok {
+		_spec.SetField(proxy.FieldEgressCountry, field.TypeString, value)
 	}
 	if _u.mutation.AccountsCleared() {
 		edge := &sqlgraph.EdgeSpec{

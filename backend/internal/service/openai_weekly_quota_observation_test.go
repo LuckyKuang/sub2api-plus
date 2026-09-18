@@ -27,10 +27,10 @@ func TestWeeklyQuotaQueryObservesAndCachesRawWindow(t *testing.T) {
 		require.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
 		identity := resolveOpenAIOutboundIdentityFromSettings(context.Background(), account, nil)
 		expected := make(http.Header)
-		applyResolvedOpenAIOutboundIdentity(expected, identity, true)
-		for _, key := range []string{"User-Agent", "Originator", "Version"} {
-			require.Equal(t, expected.Get(key), r.Header.Get(key), key)
-		}
+		applyResolvedOpenAIOutboundIdentity(expected, identity, false)
+		require.Equal(t, expected.Get("User-Agent"), r.Header.Get("User-Agent"))
+		require.Empty(t, r.Header.Get("Originator"))
+		require.Empty(t, r.Header.Get("Version"))
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(OpenAIQuotaUsage{RateLimit: &OpenAIRateLimit{SecondaryWindow: &OpenAIRateLimitWindow{
 			UsedPercent: 7, LimitWindowSeconds: 604800, ResetAt: resetAt, ResetAfterSeconds: 1,

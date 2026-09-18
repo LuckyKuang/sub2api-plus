@@ -131,6 +131,10 @@
         :show-proxy-warning="isAnthropic"
         :show-cookie-option="isAnthropic"
         :show-refresh-token-option="isOpenAI || isAntigravity || isGrok"
+        :show-device-code-option="isOpenAI"
+        :device-user-code="openaiDeviceCode?.user_code || ''"
+        :device-verification-url="openaiDeviceCode?.verification_url || ''"
+        :device-code-polling="openaiDeviceCodePolling"
         :show-sso-option="isGrok"
         :show-email-password-option="false"
         :allow-multiple="false"
@@ -139,6 +143,7 @@
         :show-project-id="isGemini && geminiOAuthType === 'code_assist'"
         :initial-input-method="grokInitialInputMethod"
         @generate-url="handleGenerateUrl"
+        @start-device-code="handleStartOpenAIDeviceCode"
         @cookie-auth="handleCookieAuth"
         @validate-refresh-token="handleValidateRefreshToken"
         @import-sso="handleGrokImportSSO"
@@ -199,7 +204,7 @@ import {
   type AddMethod,
   type AuthInputMethod
 } from '@/composables/useAccountOAuth'
-import { useOpenAIOAuth } from '@/composables/useOpenAIOAuth'
+import { useOpenAIOAuth, type OpenAITokenInfo } from '@/composables/useOpenAIOAuth'
 import { useGeminiOAuth } from '@/composables/useGeminiOAuth'
 import { useAntigravityOAuth } from '@/composables/useAntigravityOAuth'
 import { useGrokOAuth } from '@/composables/useGrokOAuth'
@@ -242,6 +247,14 @@ const grokOAuth = useGrokOAuth()
 
 // Refs
 const oauthFlowRef = ref<OAuthFlowExposed | null>(null)
+const openaiDeviceCode = ref<{
+  session_id: string
+  user_code: string
+  verification_url: string
+  interval_seconds: number
+} | null>(null)
+const openaiDeviceCodePolling = ref(false)
+let openaiDeviceCodeGeneration = 0
 
 // State
 const addMethod = ref<AddMethod>('oauth')
@@ -354,6 +367,9 @@ watch(
 const resetState = () => {
   addMethod.value = 'oauth'
   geminiOAuthType.value = 'code_assist'
+  openaiDeviceCodeGeneration += 1
+  openaiDeviceCode.value = null
+  openaiDeviceCodePolling.value = false
   claudeOAuth.resetState()
   openaiOAuth.resetState()
   geminiOAuth.resetState()
@@ -363,7 +379,58 @@ const resetState = () => {
 }
 
 const handleClose = () => {
+  openaiDeviceCodeGeneration += 1
+  openaiDeviceCode.value = null
+  openaiDeviceCodePolling.value = false
   emit('close')
+}
+
+const handleStartOpenAIDeviceCode = async () => {
+  if (!props.account) return
+  const generation = ++openaiDeviceCodeGeneration
+  openaiDeviceCodePolling.value = false
+  const started = await openaiOAuth.startDeviceCode(props.account.proxy_id, props.account.id)
+  if (!started || generation !== openaiDeviceCodeGeneration) return
+  openaiDeviceCode.value = started
+  openaiDeviceCodePolling.value = true
+  const intervalMs = Math.max(1, started.interval_seconds || 5) * 1000
+  const startedAt = Date.now()
+  const timeoutMs = 15 * 60 * 1000
+  while (generation === openaiDeviceCodeGeneration) {
+    const result = await openaiOAuth.pollDeviceCode(started.session_id)
+    if (generation !== openaiDeviceCodeGeneration) return
+    if (!result) {
+      openaiDeviceCodePolling.value = false
+      return
+    }
+    if ('pending' in result && result.pending) {
+      if (Date.now() - startedAt >= timeoutMs) {
+        openaiDeviceCodePolling.value = false
+        appStore.showError(t('admin.accounts.oauth.openai.deviceCodeTimeout'))
+        return
+      }
+      await new Promise((resolve) => setTimeout(resolve, intervalMs))
+      continue
+    }
+    openaiDeviceCodePolling.value = false
+    const tokenInfo = result as OpenAITokenInfo
+    const credentials = openaiOAuth.buildCredentials(tokenInfo)
+    const extra = openaiOAuth.buildExtraInfo(tokenInfo)
+    try {
+      const updatedAccount = await adminAPI.accounts.applyOAuthCredentials(props.account.id, {
+        type: 'oauth',
+        credentials,
+        extra
+      })
+      appStore.showSuccess(t('admin.accounts.reAuthorizedSuccess'))
+      emit('reauthorized', updatedAccount)
+      handleClose()
+    } catch (error: any) {
+      openaiOAuth.error.value = error.response?.data?.detail || t('admin.accounts.oauth.authFailed')
+      appStore.showError(openaiOAuth.error.value)
+    }
+    return
+  }
 }
 
 const handleGenerateUrl = async () => {

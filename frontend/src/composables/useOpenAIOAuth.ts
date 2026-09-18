@@ -94,6 +94,58 @@ export function useOpenAIOAuth() {
     }
   }
 
+  const startDeviceCode = async (
+    proxyId?: number | null,
+    accountId?: number | null
+  ): Promise<{ session_id: string; user_code: string; verification_url: string; interval_seconds: number } | null> => {
+    loading.value = true
+    error.value = ''
+    try {
+      const payload: { proxy_id?: number; account_id?: number } = {}
+      if (proxyId) {
+        payload.proxy_id = proxyId
+      }
+      if (accountId) {
+        payload.account_id = accountId
+      }
+      const result = await adminAPI.accounts.startOpenAIDeviceCode(
+        `${endpointPrefix}/device-code/start`,
+        payload
+      )
+      sessionId.value = result.session_id
+      return result
+    } catch (err: any) {
+      error.value = extractApiErrorMessage(err, t('admin.accounts.oauth.openai.failedToStartDeviceCode'))
+      appStore.showError(error.value)
+      return null
+    } finally {
+      loading.value = false
+    }
+  }
+
+  const pollDeviceCode = async (currentSessionId: string): Promise<OpenAITokenInfo | { pending: true } | null> => {
+    error.value = ''
+    try {
+      const result = await adminAPI.accounts.pollOpenAIDeviceCode(
+        `${endpointPrefix}/device-code/poll`,
+        currentSessionId
+      )
+      if (result && result.pending === true) {
+        return { pending: true }
+      }
+      return result as OpenAITokenInfo
+    } catch (err: any) {
+      error.value = extractI18nErrorMessage(
+        err,
+        t,
+        'admin.accounts.oauth.openai.errors',
+        t('admin.accounts.oauth.openai.failedToPollDeviceCode')
+      )
+      appStore.showError(error.value)
+      return null
+    }
+  }
+
   // Exchange auth code for tokens
   const exchangeAuthCode = async (
     code: string,
@@ -237,6 +289,8 @@ export function useOpenAIOAuth() {
     // Methods
     resetState,
     generateAuthUrl,
+    startDeviceCode,
+    pollDeviceCode,
     exchangeAuthCode,
     validateRefreshToken,
     buildCredentials,

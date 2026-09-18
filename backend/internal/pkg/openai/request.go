@@ -3,6 +3,8 @@ package openai
 import (
 	"regexp"
 	"strings"
+
+	"golang.org/x/net/http/httpguts"
 )
 
 // CodexCLIUserAgentPrefixes matches Codex CLI User-Agent patterns
@@ -103,11 +105,24 @@ func matchCodexClientHeaderPrefixes(value string, prefixes []string) bool {
 // strict-current-only; new code must use PairConfiguredCodexClientIdentity and
 // explicitly pass the legacy compatibility policy.
 func PairCodexClientIdentity(userAgent string) (originator string, pairedUA string, ok bool) {
+	// Validate before trimming so control bytes cannot become a valid identity.
+	if !validCodexUserAgentValue(userAgent) {
+		return "", "", false
+	}
 	profile, ua, ok := PairConfiguredCodexClientIdentity(userAgent, false)
 	if !ok {
 		return "", "", false
 	}
 	return profile.Originator, ua, true
+}
+
+func validCodexUserAgentValue(value string) bool {
+	if !httpguts.ValidHeaderFieldValue(value) {
+		return false
+	}
+	// httpguts follows the legacy field-value grammar and permits obs-fold.
+	// User-Agent is not an obs-folded header; reject CR/LF before forwarding.
+	return !strings.ContainsAny(value, "\r\n")
 }
 
 // codexOriginatorMaxLen 官方 clientInfo.name 均为短 ASCII 标识，远低于此上限。
@@ -127,11 +142,16 @@ func isSaneCodexOriginator(name string) bool {
 	return true
 }
 
-// CodexCLIOriginator 是 codex-rs 客户端的历史默认 originator，保留用于兼容识别。
+// CodexCLIOriginator 是官方 Codex CLI 的默认 originator。
 const CodexCLIOriginator = "codex_cli_rs"
 
-// CodexDefaultOriginator 是网关默认使用的 Codex TUI originator。
-const CodexDefaultOriginator = "codex-tui"
+// CodexTUIOriginator 是官方第一方 TUI originator，仅用于识别，不是编译期默认。
+const CodexTUIOriginator = "codex-tui"
+
+// CodexDefaultOriginator 是网关未配置账号/全局 UA 时使用的官方 CLI originator。
+// 与 CodexCLIOriginator 同值；保持字面量声明以供 check_openai_codex_identity.py
+// 的编译期默认锚点比对（两个声明必须一起改）。
+const CodexDefaultOriginator = "codex_cli_rs"
 
 // CodexUserAgentVersion 提取 Codex UA 的完整版本段，即 `{client}/{version} (...` 中的 version。
 // 与 ParseCodexEngineVersion 的区别：后者只取三段数字用于引擎版本比较（会丢掉 -alpha.4

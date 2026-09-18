@@ -162,7 +162,14 @@ when a handler re-enters forwarding for a retry. This includes the choice to use
 the native Codex resolver: changing a type default cannot switch an in-flight
 request between Codex and another preset. Failover uses the other credential
 owner's snapshot; a fresh request observes new settings. OAuth exchange/refresh
-and its account, subscription and privacy requests retain one identity as well.
+and its account/subscription enrich requests retain one identity as well.
+Authorization-code exchange and device-code start/poll omit identity headers.
+Refresh and revoke send User-Agent and Originator only. The chatgpt.com
+backend-api auxiliary surface (login enrich `/backend-api/wham/accounts/check`,
+Plus-only subscription enrich, the settings PATCH behind `set-privacy`, WHAM
+usage and credit APIs) uses the regular HTTP client without browser TLS
+impersonation and sends the selected User-Agent while omitting
+Originator/Version. Login no longer PATCHes ChatGPT training settings.
 
 Pre-account Antigravity code exchange / refresh-token validation and Gemini
 code exchange start an independent native OAuth scope before the first provider

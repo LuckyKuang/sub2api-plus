@@ -605,6 +605,9 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 	body []byte,
 	token string,
 ) (*http.Request, error) {
+	// Codex 可见时区对齐：与 buildUpstreamRequest 同一改写语义（幂等，
+	// 失败保留原始自洽内容），覆盖普通透传与 WS→HTTP bridge。
+	body = s.rewriteOpenAICodexEnvironmentContextBytes(ctx, account, body)
 	targetURL := openaiPlatformAPIURL
 	switch account.Type {
 	case AccountTypeOAuth:
@@ -685,7 +688,6 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 		if clientSessionID == "" {
 			clientSessionID = strings.TrimSpace(req.Header.Get("session_id"))
 		}
-		clientConversationID := strings.TrimSpace(req.Header.Get("conversation_id"))
 		if isOpenAIResponsesCompactPath(c) {
 			req.Header.Set("accept", "application/json")
 			if req.Header.Get("version") == "" {
@@ -704,23 +706,16 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 		if promptCacheKey != "" {
 			clientSessionID = promptCacheKey
 		}
-		if clientConversationID == "" {
-			clientConversationID = promptCacheKey
-		}
 		if clientSessionID != "" {
 			upstreamSessionID, resolveErr := s.resolveOpenAIUpstreamPromptCacheHeaderIdentity(c, account, clientSessionID)
 			if resolveErr != nil {
 				return nil, resolveErr
 			}
-			setOpenAIUpstreamSessionIdentity(req.Header, upstreamSessionID)
+			setOpenAIUpstreamSessionIdentityForAccount(req.Header, account, upstreamSessionID)
 		}
-		if clientConversationID != "" {
-			upstreamConversationID, resolveErr := s.resolveOpenAIPromptCacheIdentity(c, account, clientConversationID)
-			if resolveErr != nil {
-				return nil, resolveErr
-			}
-			req.Header.Set("conversation_id", upstreamConversationID)
-		}
+		// conversation_id 不是官方 Codex 头：客户端透传值一律剥离，终态别名
+		// 清理（clearOpenAICodexLegacySessionAliases）保证 Codex 账号不出站。
+		req.Header.Del("conversation_id")
 	} else if isOpenAIResponsesCompactPath(c) {
 		// 透传白名单会放行客户端的 Accept: text/event-stream；compact 上游是
 		// unary JSON 协议，API-key 账号同样强制 Accept，避免上游按 SSE 返回
@@ -746,11 +741,15 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 		return nil, err
 	}
 	alignOpenAICodexThreadHeaders(req.Header)
-	applyOpenCodeSessionHeader(c, account, targetURL, req.Header)
+	applyOpenCodeSessionHeader(c, account, targetURL, req.Header, body)
 	// x-codex-beta-features：按真实 Codex 的会话级行为补注（在账号级覆写之后，
 	// 保证不被覆盖丢失）。
 	applyOpenAICodexBetaFeatures(c, account, req.Header)
 	identity := s.applyOpenAIOutboundIdentity(ctx, account, req.Header, account.UsesOpenAICodexProtocol())
+	if account.UsesOpenAICodexProtocol() {
+		preserveOpenAIThreadOriginator(c, req.Header)
+	}
+	clearOpenAICodexLegacySessionAliases(req.Header, account)
 	SetOpsRoutingDiagnostics(c, &OpsRoutingDiagnostics{OutboundIdentitySource: identity.Source})
 	setOpenAICodexRoutingHintFromBody(req.Header, account, body)
 	logOpenAIRoutingDiagnosticsFromBody(ctx, account, "http_passthrough", req.Header, body, "not_applicable")
@@ -1647,12 +1646,10 @@ func openAIStreamFailedEventRetryableOnSameAccount(account *Account, payload []b
 	if account == nil {
 		return false
 	}
-	// 容量降载是请求级信号，不是账号级故障：上游只是让本次请求稍后再试。
-	// 换账号并不改变被降载的因素（客户端身份、模型容量都与账号无关），
-	// 只会让单个请求把整池账号逐个消耗掉，最终仍以同一个错误告终。
-	// 因此先在同一账号上做有界重试，用尽后才按常规流程切号。
-	if isOpenAIUpstreamCapacityShedEvent(payload) {
-		return true
+	// 容量降载是请求级、全池共享的信号。同账号重试和换号都打同一容量池，
+	// 只拉长延迟并放大上游压力。分类器会把这类错误标成 NextAccountStop。
+	if isOpenAIUpstreamCapacityShedEvent(payload) || isOpenAICapacityShedMessage(message) {
+		return false
 	}
 	if !account.IsPoolMode() {
 		return false

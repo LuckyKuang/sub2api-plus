@@ -148,6 +148,7 @@ docs/*
 !docs/README.md
 !docs/RELEASING.md
 !docs/UPSTREAM_V0_2_4_INTEGRATION.md
+!docs/UPSTREAM_V0_2_5_INTEGRATION.md
 !docs/PAYMENT.md
 !docs/PAYMENT_CN.md
 !docs/ADMIN_PAYMENT_INTEGRATION_API.md
@@ -186,3 +187,4 @@ __pycache__/
 
 # 本地闭源插件开发目录及构建产物不进入 Sub2API Plus 仓库
 /plugins/
+.codebuddy/

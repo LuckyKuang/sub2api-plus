@@ -192,6 +192,11 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 		return nil, err
 	}
 	settings.OpenAICodexUserAgent = normalizedOpenAICodexUserAgent
+	normalizedOpenAICodexEnvironmentTimezone, err := NormalizeOpenAICodexEnvironmentTimezone(settings.OpenAICodexEnvironmentTimezone)
+	if err != nil {
+		return nil, err
+	}
+	settings.OpenAICodexEnvironmentTimezone = normalizedOpenAICodexEnvironmentTimezone
 	settings.PaymentVisibleMethodAlipaySource = alipaySource
 	settings.PaymentVisibleMethodWxpaySource = wxpaySource
 	settings.WeChatConnectAppID = strings.TrimSpace(settings.WeChatConnectAppID)
@@ -502,6 +507,9 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	// Available channels feature switch
 	updates[SettingKeyAvailableChannelsEnabled] = strconv.FormatBool(settings.AvailableChannelsEnabled)
 
+	// Subscription feature switch
+	updates[SettingKeySubscriptionEnabled] = strconv.FormatBool(settings.SubscriptionEnabled)
+
 	// Model plaza feature switches + description
 	updates[SettingKeyModelPlazaEnabled] = strconv.FormatBool(settings.ModelPlazaEnabled)
 	updates[SettingKeyModelPlazaRequireAuth] = strconv.FormatBool(settings.ModelPlazaRequireAuth)
@@ -554,6 +562,7 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeyEnableClientDatelineNormalization] = strconv.FormatBool(settings.EnableClientDatelineNormalization)
 	updates[SettingKeyAntigravityUserAgentVersion] = antigravity.NormalizeUserAgentVersion(settings.AntigravityUserAgentVersion)
 	updates[SettingKeyOpenAICodexUserAgent] = strings.TrimSpace(settings.OpenAICodexUserAgent)
+	updates[SettingKeyOpenAICodexEnvironmentTimezone] = strings.TrimSpace(settings.OpenAICodexEnvironmentTimezone)
 	updates[SettingKeyCodexLegacyClientProfileCompatibilityEnabled] = strconv.FormatBool(settings.CodexLegacyClientProfileCompatibilityEnabled)
 	updates[SettingKeyOpenAICodexLocalGroupQuotaEnabled] = strconv.FormatBool(settings.OpenAICodexLocalGroupQuotaEnabled)
 	updates[SettingKeyOpenAICodexClientVersion] = NormalizeCodexClientVersion(settings.OpenAICodexClientVersion)
@@ -808,6 +817,11 @@ func (s *SettingService) refreshCachedSettings(settings *SystemSettings) {
 		value:                      codexUA,
 		legacyCompatibilityEnabled: settings.CodexLegacyClientProfileCompatibilityEnabled,
 		expiresAt:                  time.Now().Add(openAICodexUserAgentCacheTTL).UnixNano(),
+	})
+	s.openAICodexEnvironmentTimezoneSF.Forget("openai_codex_environment_timezone")
+	s.openAICodexEnvironmentTimezoneCache.Store(&cachedOpenAICodexEnvironmentTimezone{
+		value:     strings.TrimSpace(settings.OpenAICodexEnvironmentTimezone),
+		expiresAt: time.Now().Add(openAICodexEnvironmentTimezoneCacheTTL).UnixNano(),
 	})
 	s.openAICodexLocalQuotaSF.Forget("openai_codex_local_group_quota")
 	s.openAICodexLocalQuotaCache.Store(&cachedOpenAICodexLocalGroupQuota{

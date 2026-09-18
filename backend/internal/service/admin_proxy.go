@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
+	"strings"
 	"time"
 
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
@@ -13,6 +15,31 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/pagination"
 	"github.com/LuckyKuang/sub2api-plus/internal/util/httputil"
 )
+
+// proxyCountryPattern 校验手工标注的出口国家代码（ISO 3166-1 alpha-2 大写）。
+var proxyCountryPattern = regexp.MustCompile(`^[A-Z]{2}$`)
+
+// normalizeProxyTimezoneCountry 校验并归一化代理手工标注的出口时区与国家。
+// 两者都允许为空（= 未标注）；timezone 必须是合法 IANA 名，country 必须是
+// 两位大写字母。错误以 400 语义返回，不触碰请求热路径。
+func normalizeProxyTimezoneCountry(timezone, country string) (string, string, error) {
+	normalizedTimezone, err := NormalizeOpenAICodexEnvironmentTimezone(timezone)
+	if err != nil {
+		return "", "", infraerrors.BadRequest("PROXY_TIMEZONE_INVALID", "proxy timezone "+err.Error())
+	}
+	country = strings.ToUpper(strings.TrimSpace(country))
+	if country != "" && !proxyCountryPattern.MatchString(country) {
+		return "", "", infraerrors.BadRequest("PROXY_COUNTRY_INVALID", "proxy country must be a two-letter ISO 3166-1 alpha-2 code (e.g. US)")
+	}
+	return normalizedTimezone, country, nil
+}
+
+func derefOrProxyString(value *string, fallback string) string {
+	if value == nil {
+		return fallback
+	}
+	return *value
+}
 
 // Proxy management implementations
 func (s *adminServiceImpl) ListProxies(ctx context.Context, page, pageSize int, protocol, status, search string, sortBy, sortOrder string) ([]Proxy, int64, error) {
@@ -71,6 +98,10 @@ func (s *adminServiceImpl) CreateProxy(ctx context.Context, input *CreateProxyIn
 	if input.ExpiryWarnDays < 0 {
 		return nil, infraerrors.BadRequest("PROXY_WARN_DAYS_INVALID", "expiry_warn_days must be >= 0")
 	}
+	timezone, country, err := normalizeProxyTimezoneCountry(input.EgressTimezone, input.EgressCountry)
+	if err != nil {
+		return nil, err
+	}
 
 	proxy := &Proxy{
 		Name:           input.Name,
@@ -84,6 +115,8 @@ func (s *adminServiceImpl) CreateProxy(ctx context.Context, input *CreateProxyIn
 		FallbackMode:   mode,
 		BackupProxyID:  input.BackupProxyID,
 		ExpiryWarnDays: input.ExpiryWarnDays,
+		EgressTimezone: timezone,
+		EgressCountry:  country,
 	}
 	if err := s.proxyRepo.Create(ctx, proxy); err != nil {
 		return nil, err
@@ -121,6 +154,16 @@ func (s *adminServiceImpl) UpdateProxy(ctx context.Context, id int64, input *Upd
 	if input.ExpiryWarnDays != nil && *input.ExpiryWarnDays < 0 {
 		return nil, infraerrors.BadRequest("PROXY_WARN_DAYS_INVALID", "expiry_warn_days must be >= 0")
 	}
+	var timezone, country string
+	if input.EgressTimezone != nil || input.EgressCountry != nil {
+		timezone, country, err = normalizeProxyTimezoneCountry(
+			derefOrProxyString(input.EgressTimezone, proxy.EgressTimezone),
+			derefOrProxyString(input.EgressCountry, proxy.EgressCountry),
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	if input.Name != "" {
 		proxy.Name = input.Name
@@ -134,11 +177,11 @@ func (s *adminServiceImpl) UpdateProxy(ctx context.Context, id int64, input *Upd
 	if input.Port != 0 {
 		proxy.Port = input.Port
 	}
-	if input.Username != "" {
-		proxy.Username = input.Username
+	if input.Username != nil {
+		proxy.Username = *input.Username
 	}
-	if input.Password != "" {
-		proxy.Password = input.Password
+	if input.Password != nil {
+		proxy.Password = *input.Password
 	}
 	if input.Status != "" {
 		proxy.Status = input.Status
@@ -150,6 +193,12 @@ func (s *adminServiceImpl) UpdateProxy(ctx context.Context, id int64, input *Upd
 	proxy.BackupProxyID = backupID
 	if input.ExpiryWarnDays != nil {
 		proxy.ExpiryWarnDays = *input.ExpiryWarnDays
+	}
+	if input.EgressTimezone != nil {
+		proxy.EgressTimezone = timezone
+	}
+	if input.EgressCountry != nil {
+		proxy.EgressCountry = country
 	}
 
 	if err := s.proxyRepo.Update(ctx, proxy); err != nil {

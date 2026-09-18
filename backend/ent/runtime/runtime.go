@@ -1731,6 +1731,18 @@ func init() {
 	proxyDescExpiryWarnDays := proxyFields[10].Descriptor()
 	// proxy.DefaultExpiryWarnDays holds the default value on creation for the expiry_warn_days field.
 	proxy.DefaultExpiryWarnDays = proxyDescExpiryWarnDays.Default.(int)
+	// proxyDescEgressTimezone is the schema descriptor for egress_timezone field.
+	proxyDescEgressTimezone := proxyFields[11].Descriptor()
+	// proxy.DefaultEgressTimezone holds the default value on creation for the egress_timezone field.
+	proxy.DefaultEgressTimezone = proxyDescEgressTimezone.Default.(string)
+	// proxy.EgressTimezoneValidator is a validator for the "egress_timezone" field. It is called by the builders before save.
+	proxy.EgressTimezoneValidator = proxyDescEgressTimezone.Validators[0].(func(string) error)
+	// proxyDescEgressCountry is the schema descriptor for egress_country field.
+	proxyDescEgressCountry := proxyFields[12].Descriptor()
+	// proxy.DefaultEgressCountry holds the default value on creation for the egress_country field.
+	proxy.DefaultEgressCountry = proxyDescEgressCountry.Default.(string)
+	// proxy.EgressCountryValidator is a validator for the "egress_country" field. It is called by the builders before save.
+	proxy.EgressCountryValidator = proxyDescEgressCountry.Validators[0].(func(string) error)
 	redeemcodeFields := schema.RedeemCode{}.Fields()
 	_ = redeemcodeFields
 	// redeemcodeDescCode is the schema descriptor for code field.

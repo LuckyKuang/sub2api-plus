@@ -57,7 +57,7 @@ func TestOpenAIIdentityContractEndpointMatrix(t *testing.T) {
 						}
 						account.Extra["openai_passthrough"] = passthrough
 						repo := &openAIIdentitySettingRepoStub{values: map[string]string{SettingKeyOpenAICodexClientVersion: "0.200.1"}}
-						family, fingerprint := "codex-tui", " (Ubuntu 24.04; x86_64) xterm-256color"
+						family, fingerprint := "codex_cli_rs", " (Ubuntu 24.04; x86_64) xterm-256color"
 						switch source {
 						case "account":
 							account.Credentials["user_agent"] = "codex_cli_rs/0.180.0 (Ubuntu 22.4.0; x86_64) terminal"
@@ -118,7 +118,11 @@ func TestOpenAIIdentityContractEndpointMatrix(t *testing.T) {
 							}
 							want := http.Header{"User-Agent": {family + "/" + version + fingerprint}}
 							if accountType != AccountTypeAPIKey {
-								want.Set("Originator", family)
+								originator := family
+								if endpoint != "/v1/alpha/search" && endpoint != "/v1/images/generations" {
+									originator = "chatgpt_cca"
+								}
+								want.Set("Originator", originator)
 								want.Set("Version", version)
 							}
 							if compatible {
@@ -228,13 +232,11 @@ func openAIEndpointIdentitySuccessResponse(endpoint, accountType string) *http.R
 	if endpoint == "/v1/alpha/search" && accountType != "pat" {
 		return newOpenAIRejectedFieldTestResponse(http.StatusOK, `{"encrypted_output":"ciphertext","output":"search result"}`)
 	}
-	if endpoint == "/v1/images/generations" && accountType == AccountTypeAPIKey {
+	if endpoint == "/v1/images/generations" {
 		return newOpenAIRejectedFieldTestResponse(http.StatusOK, `{"created":1710000007,"data":[{"b64_json":"aGVsbG8=","revised_prompt":"draw a cat"}]}`)
 	}
 	response := openAIIdentityContractSuccessResponse()
-	if endpoint == "/v1/images/generations" {
-		response = newOpenAIRejectedFieldTestResponse(http.StatusOK, "data: "+`{"type":"response.completed","response":{"id":"resp_image","output":[{"type":"image_generation_call","result":"aW1hZ2U=","output_format":"png","size":"1024x1024"}],"usage":{"input_tokens":1,"output_tokens":1}}}`+"\n\ndata: [DONE]\n\n")
-	} else if accountType == "pat" {
+	if accountType == "pat" {
 		response = newOpenAIRejectedFieldTestResponse(http.StatusOK, alphaSearchResponsesSSE("search result"))
 	}
 	response.Header.Set("Content-Type", "text/event-stream")

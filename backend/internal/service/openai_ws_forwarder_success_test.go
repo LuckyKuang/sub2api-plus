@@ -662,7 +662,7 @@ func TestOpenAIGatewayService_BuildOpenAIWSHeadersDeviceModePreservesNamespacedC
 	)
 	require.NoError(t, resolveErr)
 	require.Equal(t, expectedSessionIdentity, headers.Get("session-id"))
-	require.Equal(t, expectedSessionIdentity, headers.Get("session_id"))
+	require.Empty(t, headers.Get("session_id"), "device mode keeps official session-id spelling only")
 	require.Equal(t, scopeCodexAccountIdentityValue(account, 0, "thread", "client-thread"), headers.Get("thread-id"))
 	require.Equal(t, scopeCodexAccountIdentityValue(account, 0, "request", "client-request"), headers.Get("x-client-request-id"))
 }
@@ -1008,7 +1008,9 @@ func TestOpenAIGatewayService_Forward_WSv2_OAuthStoreFalseByDefault(t *testing.T
 	require.NoError(t, resolveErr)
 	require.Equal(t, expectedSessionIdentity, captureDialer.lastHeaders.Get(codexSessionIDHeader))
 	require.Equal(t, expectedSessionIdentity, captureDialer.lastHeaders.Get("session_id"))
-	require.Equal(t, isolateOpenAISessionID(0, "conv-oauth-1"), captureDialer.lastHeaders.Get("conversation_id"))
+	// conversation_id is never an official Codex header; session/full keeps only
+	// the Plus session_id alias.
+	require.Empty(t, captureDialer.lastHeaders.Get("conversation_id"))
 }
 
 func TestOpenAIGatewayService_Forward_WSv2_OAuthSanitizesInvalidNativeToolItemID(t *testing.T) {
@@ -1300,7 +1302,7 @@ func TestOpenAIGatewayService_Forward_WSv2_HeaderSessionFallbackFromPromptCacheK
 	expectedCacheIdentity, resolveErr := svc.resolveOpenAIUpstreamPromptCacheHeaderIdentity(c, account, "pcache_123")
 	require.NoError(t, resolveErr)
 	require.Equal(t, expectedCacheIdentity, captureDialer.lastHeaders.Get(codexSessionIDHeader))
-	require.Equal(t, expectedCacheIdentity, captureDialer.lastHeaders.Get("session_id"))
+	require.Empty(t, captureDialer.lastHeaders.Get("session_id"))
 	require.Empty(t, captureDialer.lastHeaders.Get("conversation_id"))
 	require.NotNil(t, captureConn.lastWrite)
 	require.True(t, gjson.Get(requestToJSONString(captureConn.lastWrite), "stream").Exists())
@@ -1522,7 +1524,9 @@ func TestOpenAIGatewayService_Forward_WSv2_TurnStateAndMetadataReplayOnReconnect
 	require.NoError(t, err)
 	require.NotNil(t, result1)
 
-	sessionHash := svc.GenerateSessionHash(c1, reqBody)
+	// 会话级状态按执行作用域取键（显式 session_id 也在其中），不再是原会话哈希。
+	sessionHash, _ := resolveOpenAIWSExecutionScope(c1, reqBody, getAPIKeyIDFromContext(c1))
+	require.NotEmpty(t, sessionHash)
 	store := svc.getOpenAIWSStateStore()
 	turnState, ok := store.GetSessionTurnState(0, sessionHash)
 	require.True(t, ok)
@@ -2057,6 +2061,11 @@ func (d *openAIWSCaptureDialer) Dial(
 	d.dialCount++
 	respHeaders := cloneHeader(d.handshake)
 	d.mu.Unlock()
+	// 桩在连接池关闭旧连接后会复用同一实例：新 dial 语义上是一条新
+	// 连接，重置 closed 标记并保留剩余事件供后续请求消费。
+	if d.conn != nil {
+		d.conn.reopen()
+	}
 	return d.conn, 0, respHeaders, nil
 }
 
@@ -2157,6 +2166,12 @@ func (c *openAIWSCaptureConn) Close() error {
 	defer c.mu.Unlock()
 	c.closed = true
 	return nil
+}
+
+func (c *openAIWSCaptureConn) reopen() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.closed = false
 }
 
 func cloneMapStringAny(src map[string]any) map[string]any {

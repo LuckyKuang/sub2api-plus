@@ -88,6 +88,7 @@ func TestChannelMonitorDefaultIdentityForProviders(t *testing.T) {
 		{"openai", "codex", MonitorAPIModeChatCompletions}, {"openai", "codex", MonitorAPIModeResponses},
 		{"anthropic", "claude", ""}, {"gemini", "gemini", ""}, {"grok", "grok", ""},
 		{"kimi", "codex", ""}, {"zhipu", "codex", ""}, {"deepseek", "codex", ""}, {"minimax", "codex", ""},
+		{"opencode_go", "codex", ""},
 	} {
 		t.Run(test.provider+"/"+test.mode, func(t *testing.T) {
 			captured := make(chan http.Header, 1)

@@ -789,10 +789,6 @@ func (s *stubAdminService) ResetAccountQuota(ctx context.Context, id int64) erro
 	return nil
 }
 
-func (s *stubAdminService) EnsureOpenAIPrivacy(ctx context.Context, account *service.Account) string {
-	return ""
-}
-
 func (s *stubAdminService) EnsureAntigravityPrivacy(ctx context.Context, account *service.Account) string {
 	return ""
 }

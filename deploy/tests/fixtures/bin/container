@@ -13,6 +13,8 @@ mkdir -p \
     "${STATE_DIR}/networks" \
     "${STATE_DIR}/network-subnets" \
     "${STATE_DIR}/volumes" \
+    "${STATE_DIR}/create-arguments" \
+    "${STATE_DIR}/env-files" \
     "${STATE_DIR}/unowned/container" \
     "${STATE_DIR}/unowned/network" \
     "${STATE_DIR}/unowned/volume"
@@ -164,7 +166,7 @@ case "${command}" in
         case "${subcommand}" in
             inspect)
                 digest="$(image_digest "${1}")" || exit 1
-                printf '[{"configuration":{"descriptor":{"digest":"%s"}}}]\n' "${digest}"
+                printf '[{"id":"fake-image-id","configuration":{"descriptor":{"digest":"%s"}}}]\n' "${digest}"
                 ;;
             pull)
                 image="$(last_argument "$@")"
@@ -194,8 +196,10 @@ case "${command}" in
         esac
         ;;
     create)
+        create_arguments=("$@")
         name=""
         image=""
+        env_file=""
         mount_source=""
         mount_destination=""
         printf '%s\n' "$*" >>"${STATE_DIR}/create-args.log"
@@ -203,6 +207,10 @@ case "${command}" in
             case "$1" in
                 --name)
                     name=$2
+                    shift 2
+                    ;;
+                --env-file)
+                    env_file=$2
                     shift 2
                     ;;
                 --mount)
@@ -218,7 +226,7 @@ case "${command}" in
                     mount_destination=${mount_destination%%:*}
                     shift 2
                     ;;
-                --label|--network|--platform|--ulimit|--env-file|--entrypoint|--publish)
+                --label|--network|--platform|--ulimit|--entrypoint|--publish)
                     shift 2
                     ;;
                 --*)
@@ -233,6 +241,10 @@ case "${command}" in
             esac
         done
         [[ -n "${name}" ]]
+        printf '%s\n' "${create_arguments[@]}" >"${STATE_DIR}/create-arguments/${name}"
+        if [[ -n "${env_file}" ]]; then
+            cp "${env_file}" "${STATE_DIR}/env-files/${name}"
+        fi
         touch "${STATE_DIR}/containers/${name}"
         printf '%s\n' "${image}" >"${STATE_DIR}/container-images/${name}"
         if [[ -n "${mount_source}" ]]; then

@@ -24,7 +24,7 @@
               v-model="filters.protocol"
               :options="protocolOptions"
               :placeholder="t('admin.proxies.allProtocols')"
-              @change="loadProxies"
+              @change="handleFilterChange"
             />
           </div>
           <div class="w-full sm:w-36">
@@ -32,7 +32,7 @@
               v-model="filters.status"
               :options="statusOptions"
               :placeholder="t('admin.proxies.allStatus')"
-              @change="loadProxies"
+              @change="handleFilterChange"
             />
           </div>
 
@@ -526,6 +526,29 @@
           <label class="input-label">{{ t('admin.proxies.backupProxy') }}</label>
           <Select v-model="createForm.backup_proxy_id" :options="backupProxyOptions()" />
         </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="input-label">{{ t('admin.proxies.egressTimezone') }}</label>
+            <input
+              v-model="createForm.egress_timezone"
+              type="text"
+              class="input"
+              :placeholder="t('admin.proxies.egressTimezonePlaceholder')"
+            />
+            <p class="input-hint mt-1">{{ t('admin.proxies.egressTimezoneHint') }}</p>
+          </div>
+          <div>
+            <label class="input-label">{{ t('admin.proxies.egressCountry') }}</label>
+            <input
+              v-model="createForm.egress_country"
+              type="text"
+              class="input uppercase"
+              maxlength="2"
+              :placeholder="t('admin.proxies.egressCountryPlaceholder')"
+            />
+            <p class="input-hint mt-1">{{ t('admin.proxies.egressCountryHint') }}</p>
+          </div>
+        </div>
 
       </form>
 
@@ -758,6 +781,29 @@
         <div v-if="editForm.fallback_mode === 'proxy'">
           <label class="input-label">{{ t('admin.proxies.backupProxy') }}</label>
           <Select v-model="editForm.backup_proxy_id" :options="backupProxyOptions(editingProxy?.id)" />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="input-label">{{ t('admin.proxies.egressTimezone') }}</label>
+            <input
+              v-model="editForm.egress_timezone"
+              type="text"
+              class="input"
+              :placeholder="t('admin.proxies.egressTimezonePlaceholder')"
+            />
+            <p class="input-hint mt-1">{{ t('admin.proxies.egressTimezoneHint') }}</p>
+          </div>
+          <div>
+            <label class="input-label">{{ t('admin.proxies.egressCountry') }}</label>
+            <input
+              v-model="editForm.egress_country"
+              type="text"
+              class="input uppercase"
+              maxlength="2"
+              :placeholder="t('admin.proxies.egressCountryPlaceholder')"
+            />
+            <p class="input-hint mt-1">{{ t('admin.proxies.egressCountryHint') }}</p>
+          </div>
         </div>
 
       </form>
@@ -1130,6 +1176,8 @@ const createForm = reactive({
   fallback_mode: 'none' as 'none' | 'proxy' | 'direct',
   backup_proxy_id: null as number | null,
   expiry_warn_days: 7 as number,
+  egress_timezone: '',
+  egress_country: '',
 })
 
 const editForm = reactive({
@@ -1144,6 +1192,8 @@ const editForm = reactive({
   fallback_mode: 'none' as 'none' | 'proxy' | 'direct',
   backup_proxy_id: null as number | null,
   expiry_warn_days: 7 as number,
+  egress_timezone: '',
+  egress_country: '',
 })
 
 const allProxiesForBackup = ref<Proxy[]>([])
@@ -1219,6 +1269,11 @@ const loadProxies = async () => {
   }
 }
 
+const handleFilterChange = () => {
+  pagination.page = 1
+  loadProxies()
+}
+
 let searchTimeout: ReturnType<typeof setTimeout>
 const handleSearch = () => {
   clearTimeout(searchTimeout)
@@ -1257,6 +1312,8 @@ const closeCreateModal = () => {
   createForm.password = ''
   createForm.expires_at = ''
   createForm.fallback_mode = 'none'
+  createForm.egress_timezone = ''
+  createForm.egress_country = ''
   createForm.backup_proxy_id = null
   createForm.expiry_warn_days = 7
   createPasswordVisible.value = false
@@ -1395,6 +1452,8 @@ const handleCreateProxy = async () => {
       fallback_mode: createForm.fallback_mode,
       backup_proxy_id: createForm.fallback_mode === 'proxy' ? createForm.backup_proxy_id : null,
       expiry_warn_days: createForm.expiry_warn_days,
+      egress_timezone: createForm.egress_timezone.trim(),
+      egress_country: createForm.egress_country.trim().toUpperCase(),
     })
     appStore.showSuccess(t('admin.proxies.proxyCreated'))
     closeCreateModal()
@@ -1420,6 +1479,8 @@ const handleEdit = (proxy: Proxy) => {
   editForm.fallback_mode = proxy.fallback_mode || 'none'
   editForm.backup_proxy_id = proxy.backup_proxy_id ?? null
   editForm.expiry_warn_days = proxy.expiry_warn_days ?? 7
+  editForm.egress_timezone = proxy.egress_timezone || ''
+  editForm.egress_country = proxy.egress_country || ''
   editPasswordVisible.value = false
   editPasswordDirty.value = false
   showEditModal.value = true
@@ -1454,17 +1515,19 @@ const handleUpdateProxy = async () => {
       protocol: editForm.protocol,
       host: editForm.host.trim(),
       port: editForm.port,
-      username: editForm.username.trim() || null,
+      username: editForm.username.trim(),
       status: editForm.status,
       expires_at: editForm.expires_at ? Math.floor(new Date(editForm.expires_at).getTime() / 1000) : null,
       fallback_mode: editForm.fallback_mode,
       backup_proxy_id: editForm.fallback_mode === 'proxy' ? editForm.backup_proxy_id : null,
       expiry_warn_days: editForm.expiry_warn_days,
+      egress_timezone: editForm.egress_timezone.trim(),
+      egress_country: editForm.egress_country.trim().toUpperCase(),
     }
 
     // Only include password if user actually modified the field
     if (editPasswordDirty.value) {
-      updateData.password = editForm.password.trim() || null
+      updateData.password = editForm.password.trim()
     }
 
     await adminAPI.proxies.update(editingProxy.value.id, updateData)

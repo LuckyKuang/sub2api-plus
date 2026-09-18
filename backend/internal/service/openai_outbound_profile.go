@@ -8,6 +8,7 @@ import (
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
+	"github.com/gin-gonic/gin"
 )
 
 const maxOpenAIAccountUserAgentLength = 512
@@ -259,6 +260,16 @@ func applyResolvedOpenAIOutboundIdentity(headers http.Header, identity openAIOut
 	if useCodexIdentity {
 		headers.Set("Version", identity.Version)
 		headers.Set("Originator", identity.Originator)
+	}
+}
+
+func preserveOpenAIThreadOriginator(c *gin.Context, headers http.Header) {
+	if c == nil || c.Request == nil || headers == nil {
+		return
+	}
+	inbound := strings.TrimSpace(c.GetHeader("originator"))
+	if openai.IsOfficialCodexThreadOriginator(inbound) {
+		headers.Set("Originator", inbound)
 	}
 }
 

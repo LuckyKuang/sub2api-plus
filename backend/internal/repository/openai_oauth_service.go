@@ -2,9 +2,9 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -16,11 +16,17 @@ import (
 
 // NewOpenAIOAuthClient creates a new OpenAI OAuth client
 func NewOpenAIOAuthClient() service.OpenAIOAuthClient {
-	return &openaiOAuthService{tokenURL: openai.TokenURL}
+	return &openaiOAuthService{
+		tokenURL:          openai.TokenURL,
+		revokeURL:         openai.RevokeURL,
+		deviceAuthAPIBase: openai.DeviceAuthAPIBase,
+	}
 }
 
 type openaiOAuthService struct {
-	tokenURL string
+	tokenURL          string
+	revokeURL         string
+	deviceAuthAPIBase string
 }
 
 func (s *openaiOAuthService) ExchangeCode(ctx context.Context, code, codeVerifier, redirectURI, proxyURL, clientID string) (*openai.TokenResponse, error) {
@@ -49,22 +55,18 @@ func (s *openaiOAuthService) exchangeCode(ctx context.Context, code, codeVerifie
 		clientID = openai.ClientID
 	}
 
-	formData := url.Values{}
-	formData.Set("grant_type", "authorization_code")
-	formData.Set("client_id", clientID)
-	formData.Set("code", code)
-	formData.Set("redirect_uri", redirectURI)
-	formData.Set("code_verifier", codeVerifier)
+	body := openai.EncodeAuthorizationCodeTokenBody(code, redirectURI, clientID, codeVerifier)
 
 	var tokenResp openai.TokenResponse
 
-	userAgent, originator, version = resolveOpenAIOAuthIdentity(userAgent, originator, version)
-	resp, err := client.R().
+	_, _, _ = userAgent, originator, version
+	// Official Codex uses create_raw_auth_client for authorization-code
+	// exchange: form five fields in official order, no User-Agent /
+	// Originator / Version headers.
+	resp, err := omitOpenAIRawAuthUserAgent(client.R()).
 		SetContext(ctx).
-		SetHeader("User-Agent", userAgent).
-		SetHeader("Originator", originator).
-		SetHeader("Version", version).
-		SetFormDataFromValues(formData).
+		SetHeader("Content-Type", "application/x-www-form-urlencoded").
+		SetBody(body).
 		SetSuccessResult(&tokenResp).
 		Post(s.tokenURL)
 
@@ -109,21 +111,22 @@ func (s *openaiOAuthService) refreshTokenWithClientID(ctx context.Context, refre
 		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_OAUTH_CLIENT_INIT_FAILED", "create HTTP client: %v", err)
 	}
 
-	formData := url.Values{}
-	formData.Set("grant_type", "refresh_token")
-	formData.Set("refresh_token", refreshToken)
-	formData.Set("client_id", clientID)
-	formData.Set("scope", openai.RefreshScopes)
+	refreshReq := openai.RefreshTokenRequest{
+		ClientID:     clientID,
+		GrantType:    "refresh_token",
+		RefreshToken: refreshToken,
+	}
 
 	var tokenResp openai.TokenResponse
 
 	userAgent, originator, version = resolveOpenAIOAuthIdentity(userAgent, originator, version)
+	_ = version
 	resp, err := client.R().
 		SetContext(ctx).
 		SetHeader("User-Agent", userAgent).
 		SetHeader("Originator", originator).
-		SetHeader("Version", version).
-		SetFormDataFromValues(formData).
+		SetHeader("Content-Type", "application/json").
+		SetBodyJsonMarshal(refreshReq).
 		SetSuccessResult(&tokenResp).
 		Post(s.tokenURL)
 
@@ -135,7 +138,7 @@ func (s *openaiOAuthService) refreshTokenWithClientID(ctx context.Context, refre
 	}
 
 	if !resp.IsSuccessState() {
-		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_OAUTH_TOKEN_REFRESH_FAILED", "token refresh failed: status %d, body: %s", resp.StatusCode, resp.String())
+		return nil, classifyOpenAIRefreshTokenFailure(resp.StatusCode, resp.String())
 	}
 
 	return &tokenResp, nil
@@ -186,6 +189,11 @@ func createOpenAIReqClient(proxyURL string) (*req.Client, error) {
 	})
 }
 
+func omitOpenAIRawAuthUserAgent(r *req.Request) *req.Request {
+	// req/v3 injects "req/v3 (...)" unless User-Agent is present and empty.
+	return r.SetHeader("User-Agent", "")
+}
+
 func shouldReturnOpenAINoProxyHint(ctx context.Context, proxyURL string, err error) bool {
 	if strings.TrimSpace(proxyURL) != "" || err == nil {
 		return false
@@ -202,4 +210,175 @@ func newOpenAINoProxyHintError(cause error) error {
 		"OPENAI_OAUTH_PROXY_REQUIRED",
 		"OpenAI OAuth request failed: no proxy is configured and this server could not reach OpenAI directly. Select a proxy that can access OpenAI, then retry; if the authorization code has expired, regenerate the authorization URL.",
 	).WithCause(cause)
+}
+
+func classifyOpenAIRefreshTokenFailure(status int, body string) error {
+	code := extractOpenAIRefreshTokenErrorCode(body)
+	isInvalidGrant := status == http.StatusBadRequest && strings.EqualFold(code, "invalid_grant")
+	permanent := status == http.StatusUnauthorized || isPermanentOpenAIRefreshCode(code) || isInvalidGrant
+	if permanent {
+		return infraerrors.Newf(
+			http.StatusUnauthorized,
+			"OPENAI_OAUTH_REFRESH_PERMANENT",
+			"token refresh permanently failed: status %d, code %s, body: %s",
+			status,
+			strings.TrimSpace(code),
+			body,
+		)
+	}
+	return infraerrors.Newf(http.StatusBadGateway, "OPENAI_OAUTH_TOKEN_REFRESH_FAILED", "token refresh failed: status %d, body: %s", status, body)
+}
+
+func isPermanentOpenAIRefreshCode(code string) bool {
+	switch strings.ToLower(strings.TrimSpace(code)) {
+	case "refresh_token_expired", "refresh_token_reused", "refresh_token_invalidated":
+		return true
+	default:
+		return false
+	}
+}
+
+func extractOpenAIRefreshTokenErrorCode(body string) string {
+	body = strings.TrimSpace(body)
+	if body == "" {
+		return ""
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(body), &payload); err != nil {
+		return ""
+	}
+	if errVal, ok := payload["error"]; ok {
+		switch typed := errVal.(type) {
+		case string:
+			return strings.TrimSpace(typed)
+		case map[string]any:
+			if code, _ := typed["code"].(string); strings.TrimSpace(code) != "" {
+				return strings.TrimSpace(code)
+			}
+		}
+	}
+	if code, _ := payload["code"].(string); strings.TrimSpace(code) != "" {
+		return strings.TrimSpace(code)
+	}
+	return ""
+}
+
+func (s *openaiOAuthService) RevokeToken(ctx context.Context, token, tokenTypeHint, clientID, proxyURL, userAgent, originator string) error {
+	if strings.TrimSpace(token) == "" {
+		return nil
+	}
+	revokeURL := strings.TrimSpace(s.revokeURL)
+	if revokeURL == "" {
+		revokeURL = openai.RevokeURL
+	}
+	client, err := createOpenAIReqClient(proxyURL)
+	if err != nil {
+		return infraerrors.Newf(http.StatusBadGateway, "OPENAI_OAUTH_CLIENT_INIT_FAILED", "create HTTP client: %v", err)
+	}
+	hint := strings.TrimSpace(tokenTypeHint)
+	if hint == "" {
+		hint = "refresh_token"
+	}
+	body := openai.RevokeTokenRequest{
+		Token:         token,
+		TokenTypeHint: hint,
+	}
+	if hint == "refresh_token" {
+		if clientID = strings.TrimSpace(clientID); clientID == "" {
+			clientID = openai.ClientID
+		}
+		body.ClientID = clientID
+	}
+	userAgent, originator, _ = resolveOpenAIOAuthIdentity(userAgent, originator, "")
+	resp, err := client.R().
+		SetContext(ctx).
+		SetHeader("User-Agent", userAgent).
+		SetHeader("Originator", originator).
+		SetHeader("Content-Type", "application/json").
+		SetBodyJsonMarshal(body).
+		Post(revokeURL)
+	if err != nil {
+		return infraerrors.Newf(http.StatusBadGateway, "OPENAI_OAUTH_REVOKE_FAILED", "revoke request failed: %v", err)
+	}
+	if resp != nil && !resp.IsSuccessState() {
+		return infraerrors.Newf(http.StatusBadGateway, "OPENAI_OAUTH_REVOKE_FAILED", "revoke failed: status %d, body: %s", resp.StatusCode, resp.String())
+	}
+	return nil
+}
+
+func (s *openaiOAuthService) StartDeviceCode(ctx context.Context, proxyURL, clientID string) (*openai.DeviceUserCodeResponse, error) {
+	if clientID = strings.TrimSpace(clientID); clientID == "" {
+		clientID = openai.ClientID
+	}
+	deviceAuthAPIBase := strings.TrimSpace(s.deviceAuthAPIBase)
+	if deviceAuthAPIBase == "" {
+		deviceAuthAPIBase = openai.DeviceAuthAPIBase
+	}
+	client, err := createOpenAIReqClient(proxyURL)
+	if err != nil {
+		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_OAUTH_CLIENT_INIT_FAILED", "create HTTP client: %v", err)
+	}
+	var result openai.DeviceUserCodeResponse
+	resp, err := omitOpenAIRawAuthUserAgent(client.R()).
+		SetContext(ctx).
+		SetHeader("Content-Type", "application/json").
+		SetBodyJsonMarshal(openai.DeviceUserCodeRequest{ClientID: clientID}).
+		SetSuccessResult(&result).
+		Post(deviceAuthAPIBase + openai.DeviceAuthUserCodePath)
+	if err != nil {
+		if shouldReturnOpenAINoProxyHint(ctx, proxyURL, err) {
+			return nil, newOpenAINoProxyHintError(err)
+		}
+		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_OAUTH_REQUEST_FAILED", "device code request failed: %v", err)
+	}
+	if resp != nil && resp.StatusCode == http.StatusNotFound {
+		return nil, infraerrors.New(http.StatusBadGateway, "OPENAI_OAUTH_DEVICE_CODE_DISABLED", "device code login is not enabled for this OpenAI auth server")
+	}
+	if resp != nil && !resp.IsSuccessState() {
+		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_OAUTH_DEVICE_CODE_FAILED", "device code request failed: status %d, body: %s", resp.StatusCode, resp.String())
+	}
+	if strings.TrimSpace(result.DeviceAuthID) == "" || strings.TrimSpace(result.UserCode) == "" {
+		return nil, infraerrors.New(http.StatusBadGateway, "OPENAI_OAUTH_DEVICE_CODE_FAILED", "device code response missing device_auth_id or user_code")
+	}
+	if result.Interval <= 0 {
+		result.Interval = 5
+	}
+	return &result, nil
+}
+
+func (s *openaiOAuthService) PollDeviceCode(ctx context.Context, proxyURL, deviceAuthID, userCode string) (*openai.DeviceTokenPollResponse, bool, error) {
+	deviceAuthAPIBase := strings.TrimSpace(s.deviceAuthAPIBase)
+	if deviceAuthAPIBase == "" {
+		deviceAuthAPIBase = openai.DeviceAuthAPIBase
+	}
+	client, err := createOpenAIReqClient(proxyURL)
+	if err != nil {
+		return nil, false, infraerrors.Newf(http.StatusBadGateway, "OPENAI_OAUTH_CLIENT_INIT_FAILED", "create HTTP client: %v", err)
+	}
+	var result openai.DeviceTokenPollResponse
+	resp, err := omitOpenAIRawAuthUserAgent(client.R()).
+		SetContext(ctx).
+		SetHeader("Content-Type", "application/json").
+		SetBodyJsonMarshal(openai.DeviceTokenPollRequest{
+			DeviceAuthID: deviceAuthID,
+			UserCode:     userCode,
+		}).
+		SetSuccessResult(&result).
+		Post(deviceAuthAPIBase + openai.DeviceAuthTokenPath)
+	if err != nil {
+		if shouldReturnOpenAINoProxyHint(ctx, proxyURL, err) {
+			return nil, false, newOpenAINoProxyHintError(err)
+		}
+		return nil, false, infraerrors.Newf(http.StatusBadGateway, "OPENAI_OAUTH_REQUEST_FAILED", "device code poll failed: %v", err)
+	}
+	if resp != nil && (resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusNotFound) {
+		return nil, true, nil
+	}
+	if resp != nil && !resp.IsSuccessState() {
+		return nil, false, infraerrors.Newf(http.StatusBadGateway, "OPENAI_OAUTH_DEVICE_CODE_FAILED", "device code poll failed: status %d, body: %s", resp.StatusCode, resp.String())
+	}
+	if strings.TrimSpace(result.AuthorizationCode) == "" || strings.TrimSpace(result.CodeVerifier) == "" {
+		return nil, false, infraerrors.New(http.StatusBadGateway, "OPENAI_OAUTH_DEVICE_CODE_FAILED", "device code poll response missing authorization_code or code_verifier")
+	}
+	return &result, false, nil
 }

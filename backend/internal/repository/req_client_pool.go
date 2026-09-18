@@ -16,10 +16,9 @@ import (
 
 // reqClientOptions 定义 req 客户端的构建参数
 type reqClientOptions struct {
-	ProxyURL    string        // 代理 URL（支持 http/https/socks5）
-	Timeout     time.Duration // 请求超时时间
-	Impersonate bool          // 是否模拟 Chrome 浏览器指纹
-	ForceHTTP2  bool          // 是否强制使用 HTTP/2
+	ProxyURL   string        // 代理 URL（支持 http/https/socks5）
+	Timeout    time.Duration // 请求超时时间
+	ForceHTTP2 bool          // 是否强制使用 HTTP/2
 }
 
 // sharedReqClients 存储按配置参数缓存的 req 客户端实例
@@ -50,9 +49,6 @@ func getSharedReqClient(opts reqClientOptions) (*req.Client, error) {
 	if opts.ForceHTTP2 {
 		client = client.EnableForceHTTP2()
 	}
-	if opts.Impersonate {
-		client = client.ImpersonateChrome()
-	}
 	trimmed, _, err := proxyurl.Parse(opts.ProxyURL)
 	if err != nil {
 		return nil, err
@@ -81,21 +77,21 @@ func instrumentReqClient(client *req.Client) *req.Client {
 }
 
 func buildReqClientKey(opts reqClientOptions) string {
-	return fmt.Sprintf("%s|%s|%t|%t",
+	return fmt.Sprintf("%s|%s|%t",
 		strings.TrimSpace(opts.ProxyURL),
 		opts.Timeout.String(),
-		opts.Impersonate,
 		opts.ForceHTTP2,
 	)
 }
 
-// CreatePrivacyReqClient creates an HTTP client for OpenAI privacy settings API
-// This is exported for use by OpenAIPrivacyService
-// Uses Chrome TLS fingerprint impersonation to bypass Cloudflare checks
+// CreatePrivacyReqClient creates the shared HTTP client for ChatGPT
+// backend-api auxiliary calls (accounts check, subscription enrich, privacy
+// settings, WHAM usage/credits). Official Codex talks to these endpoints with
+// its regular HTTP client, so no browser TLS fingerprint is applied; identity
+// headers come from the resolved outbound snapshot per request.
 func CreatePrivacyReqClient(proxyURL string) (*req.Client, error) {
 	return getSharedReqClient(reqClientOptions{
-		ProxyURL:    proxyURL,
-		Timeout:     30 * time.Second,
-		Impersonate: true, // Enable Chrome TLS fingerprint impersonation
+		ProxyURL: proxyURL,
+		Timeout:  30 * time.Second,
 	})
 }

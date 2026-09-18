@@ -68,6 +68,12 @@ declare module 'vue-router' {
      */
     requiresAsyncImageAccess?: boolean
 
+    /**
+     * 是否要求订阅功能开关（subscription_enabled，opt-out）未被显式关闭
+     * @default false
+     */
+    requiresSubscription?: boolean
+
     /** Read-only administrator support resource for an explicit target user. */
     adminSupportResource?:
       | 'overview'

@@ -93,7 +93,9 @@ usable upstream observation, quota remains unknown while local usage is still
 shown.
 
 Authentication, entitlement, and rate-limit failures temporarily affect account
-scheduling according to their status. New OAuth media requests require positive
+scheduling according to their status. Shared model-capacity / high-demand
+errors fail the current request immediately without same-account retry or
+account failover. New OAuth media requests require positive
 paid-entitlement evidence; API-key accounts remain eligible. Administrators can
 override media eligibility with `extra.grok_media_eligible`.
 

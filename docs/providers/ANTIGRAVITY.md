@@ -36,6 +36,12 @@ for account, global and environment/compiled fallback behavior.
 | `/antigravity/v1/messages` | Claude |
 | `/antigravity/v1beta/` | Gemini |
 
+Gemini native SSE passthrough rewrites each upstream `data:` line as a complete
+event (`data: ...\n\n`) and does not forward the following blank separator line.
+Forwarding that extra newline produced `\n\n\n` between events. The Antigravity
+CLI's google-genai Go SDK splits on `\n\n`, so the extra newline stuck to the
+next event as a `\ndata` prefix and failed with `invalid stream chunk`.
+
 For Claude Code-style clients:
 
 ```bash
@@ -50,3 +56,8 @@ routes can also select Antigravity accounts.
 
 Anthropic Claude and Antigravity Claude must not be mixed in the same
 conversation context. Use separate groups to isolate them.
+
+`MODEL_CAPACITY_EXHAUSTED` is shared across accounts for the same model. The
+gateway returns the upstream 503 immediately: it does not retry the same
+account, switch accounts, or mark the model rate-limited. Ordinary
+`RATE_LIMIT_EXCEEDED` waits or account switches are unchanged.

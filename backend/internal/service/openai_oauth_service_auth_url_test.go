@@ -34,6 +34,18 @@ func (s *openaiOAuthClientAuthURLStub) RefreshTokenWithClientIDAndIdentity(ctx c
 	return nil, errors.New("not implemented")
 }
 
+func (s *openaiOAuthClientAuthURLStub) RevokeToken(context.Context, string, string, string, string, string, string) error {
+	return nil
+}
+
+func (s *openaiOAuthClientAuthURLStub) StartDeviceCode(context.Context, string, string) (*openai.DeviceUserCodeResponse, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (s *openaiOAuthClientAuthURLStub) PollDeviceCode(context.Context, string, string, string) (*openai.DeviceTokenPollResponse, bool, error) {
+	return nil, false, errors.New("not implemented")
+}
+
 func TestOpenAIOAuthService_GenerateAuthURL_OpenAIKeepsCodexFlow(t *testing.T) {
 	svc := NewOpenAIOAuthService(nil, &openaiOAuthClientAuthURLStub{})
 	defer svc.Stop()
@@ -48,6 +60,8 @@ func TestOpenAIOAuthService_GenerateAuthURL_OpenAIKeepsCodexFlow(t *testing.T) {
 	q := parsed.Query()
 	require.Equal(t, openai.ClientID, q.Get("client_id"))
 	require.Equal(t, "true", q.Get("codex_cli_simplified_flow"))
+	require.Equal(t, openai.DefaultScopes, q.Get("scope"))
+	require.Equal(t, openai.CodexDefaultOriginator, q.Get("originator"))
 
 	session, ok := svc.sessionStore.Get(result.SessionID)
 	require.True(t, ok)

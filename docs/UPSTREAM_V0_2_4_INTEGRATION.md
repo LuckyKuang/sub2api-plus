@@ -81,3 +81,33 @@ The correction is included in `v0.2.4+custom.002`. See
 for the corrected `1013` capacity-close behavior. It also covers a pre-existing
 ordering violation in `v0.2.1+custom.003`; published tags and artifacts remain
 immutable.
+
+## Official main snapshot overlay (`v0.2.4+custom.006`)
+
+Official has not published `v0.2.5`. This overlay is pinned to official `main`
+at `badfad8b7248b8aac0e6b503a06e392aa31cb294` and ships as Plus
+`0.2.4+custom.006`.
+
+- OpenCode is a first-class platform (`opencode_go`, account types Zen / GO).
+- Subscription surfaces can be hidden with the site billing / subscription
+  switch. An explicit false disables user-facing subscription entry points.
+- API keys support bulk edit; subscriptions support bulk actions; selected
+  users can be deleted; registration requires password confirmation.
+- OAuth image traffic can use native Codex Images. Plus synchronous, batch,
+  and asynchronous image paths remain.
+- WebSocket pooling uses execution-scope keys, idle ping, and peer-close
+  eviction. Ingress audit still runs before side effects.
+- Migrations 266 and 267 add OpenCode platform constraints and delete
+  `user_platform_quotas` rows whose daily, weekly, and monthly limits are all
+  NULL. Those rows become unlimited. Official numbered both files `238`; Plus
+  reassigned them after existing `265`.
+
+| Area | Overlay behavior |
+| --- | --- |
+| Identity | Credential-owner precedence is unchanged. Codex UA validation rejects control bytes before pairing. Privacy probes may use Firefox TLS impersonation; request identity headers still override the impersonated UA. Shared non-privacy clients are not switched to Firefox. |
+| Security audit | Accepted HTTP/WS turns still enter audit after auth/basic validation and before account selection, billing, concurrency, or upstream writes. |
+| Billing probes | Retired generic upstream billing probes stay deleted. |
+| Grok | Cross-client rewriting stays disabled. Inconclusive OAuth entitlement does not authorize media. Abandoned media slots are released. |
+| Images | Official Codex Images direct path is overlaid on Plus account-aware streaming, first-output timing, and async/batch storage gates. |
+| OpenCode | Platform, protocol rules, session headers, local count_tokens estimates, and channel-monitor probe/quota support are included. Identity still applies after header overrides. |
+| Defaults | Compact model examples follow official `gpt-5.5`. Image main model remains `gpt-5.6-luna` in Plus deployment examples. |
