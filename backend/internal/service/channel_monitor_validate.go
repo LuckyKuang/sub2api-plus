@@ -31,14 +31,14 @@ var monitorProviders = map[string]struct{}{
 //
 //nolint:gochecknoglobals // 静态查表，初始化后不变。
 var probeCapableProviders = map[string]struct{}{
-	MonitorProviderOpenAI:    {},
-	MonitorProviderAnthropic: {},
-	MonitorProviderGemini:    {},
-	MonitorProviderGrok:      {},
-	MonitorProviderKimi:      {},
-	MonitorProviderZhipu:     {},
-	MonitorProviderDeepseek:  {},
-	MonitorProviderMiniMax:   {},
+	MonitorProviderOpenAI:     {},
+	MonitorProviderAnthropic:  {},
+	MonitorProviderGemini:     {},
+	MonitorProviderGrok:       {},
+	MonitorProviderKimi:       {},
+	MonitorProviderZhipu:      {},
+	MonitorProviderDeepseek:   {},
+	MonitorProviderMiniMax:    {},
 	MonitorProviderOpenCodeGo: {},
 }
 

@@ -25,9 +25,9 @@ var ErrSparkShadowResetNotSupported = infraerrors.New(http.StatusConflict, "SPAR
 
 // Endpoints used by the OpenAI/ChatGPT/Codex quota query and reset feature.
 const (
-	chatGPTUsageURL             = "https://chatgpt.com/backend-api/wham/usage"
-	chatGPTRateLimitCreditsURL  = "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits"
-	chatGPTRateLimitResetURL    = "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits/consume"
+	chatGPTUsageURL            = "https://chatgpt.com/backend-api/wham/usage"
+	chatGPTRateLimitCreditsURL = "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits"
+	chatGPTRateLimitResetURL   = "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits/consume"
 	openaiQuotaUpstreamTimeout = 20 * time.Second
 	openaiQuotaResetCreditsKey = "codex_reset_credit_snapshot"
 )

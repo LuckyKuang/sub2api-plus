@@ -3159,7 +3159,7 @@ func TestOpenAIBuildUpstreamRequestOpenAIPassthroughPreservesCompactPath(t *test
 	require.Equal(t, codexCLIVersion, req.Header.Get("Version"))
 	require.Empty(t, req.Header.Get("OpenAI-Beta"), "Codex OAuth HTTP must not synthesize the legacy responses beta header")
 	require.NotEmpty(t, req.Header.Get("Session-Id"))
-	require.Equal(t, req.Header.Get("Session-Id"), req.Header.Get("Session_Id"))
+	require.Empty(t, req.Header.Get("Session_Id"), "off/device OAuth keeps the official session-id spelling only")
 	require.Equal(t, HTTPUpstreamProfileOpenAI, HTTPUpstreamProfileFromContext(req.Context()))
 }
 
@@ -3201,7 +3201,7 @@ func TestOpenAIBuildUpstreamRequestCompactForcesJSONAcceptForOAuth(t *testing.T)
 	require.Equal(t, codexCLIVersion, req.Header.Get("Version"))
 	require.Empty(t, req.Header.Get("OpenAI-Beta"), "Codex OAuth HTTP must not synthesize the legacy responses beta header")
 	require.NotEmpty(t, req.Header.Get("Session-Id"))
-	require.Equal(t, req.Header.Get("Session-Id"), req.Header.Get("Session_Id"))
+	require.Empty(t, req.Header.Get("Session_Id"), "off/device OAuth keeps the official session-id spelling only")
 	require.Equal(t, HTTPUpstreamProfileOpenAI, HTTPUpstreamProfileFromContext(req.Context()))
 }
 
@@ -3222,7 +3222,8 @@ func TestOpenAIBuildUpstreamRequestOAuthMessagesBridgeUsesSessionOnly(t *testing
 
 	req, err := svc.buildUpstreamRequest(c.Request.Context(), c, account, body, "token", true, "anthropic-metadata-session-1", false)
 	require.NoError(t, err)
-	require.NotEmpty(t, req.Header.Get("Session_Id"))
+	require.NotEmpty(t, req.Header.Get(codexSessionIDHeader))
+	require.Empty(t, req.Header.Get("Session_Id"), "off/device OAuth keeps the official session-id spelling only")
 	require.Empty(t, req.Header.Get("Conversation_Id"))
 	require.Empty(t, req.Header.Get("OpenAI-Beta"))
 	require.Equal(t, DefaultOpenAICodexUserAgent, req.Header.Get("User-Agent"))

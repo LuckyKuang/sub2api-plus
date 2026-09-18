@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
 	"github.com/imroc/req/v3"
 	"github.com/stretchr/testify/require"
 )
@@ -23,7 +22,7 @@ func TestFetchChatGPTSubscriptionExpiresAt(t *testing.T) {
 		require.Equal(t, "acc_123", r.URL.Query().Get("account_id"))
 		require.Equal(t, "Bearer access-token", r.Header.Get("Authorization"))
 		require.Equal(t, DefaultOpenAICodexUserAgent, r.Header.Get("User-Agent"))
-		require.Equal(t, openai.CodexDefaultOriginator, r.Header.Get("Originator"))
+		require.Empty(t, r.Header.Get("Originator"), "auxiliary API keeps UA + Bearer + chatgpt-account-id only")
 		require.Empty(t, r.Header.Get("Version"))
 
 		w.Header().Set("Content-Type", "application/json")

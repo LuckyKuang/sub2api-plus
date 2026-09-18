@@ -176,11 +176,11 @@ var providerAdapters = map[string]providerAdapter{
 	MonitorProviderGrok:   providerGrokChatAdapter,
 	// 国产 3 家（配额模式引入）：均为 OpenAI 兼容 Chat Completions，
 	// 仅智谱路径前缀不同（/api/paas/v4/chat/completions）。
-	MonitorProviderKimi:     providerKimiChatAdapter,
-	MonitorProviderZhipu:    providerZhipuChatAdapter,
-	MonitorProviderDeepseek: providerDeepseekChatAdapter,
-	MonitorProviderMiniMax:     providerMiniMaxChatAdapter,
-	MonitorProviderOpenCodeGo:  providerOpenCodeGoChatAdapter,
+	MonitorProviderKimi:       providerKimiChatAdapter,
+	MonitorProviderZhipu:      providerZhipuChatAdapter,
+	MonitorProviderDeepseek:   providerDeepseekChatAdapter,
+	MonitorProviderMiniMax:    providerMiniMaxChatAdapter,
+	MonitorProviderOpenCodeGo: providerOpenCodeGoChatAdapter,
 	MonitorProviderAnthropic: {
 		buildPath: func(string) string { return providerAnthropicPath },
 		buildBody: func(model, prompt string) ([]byte, error) {
@@ -470,11 +470,11 @@ var bodyMergeKeyDenyList = map[string]map[string]bool{
 	MonitorProviderAnthropic: {"model": true, "messages": true},
 	MonitorProviderGemini:    {"contents": true},
 	// 国产 3 家与 OpenAI Chat Completions 同构。
-	MonitorProviderKimi:     {"model": true, "messages": true, "stream": true},
-	MonitorProviderZhipu:    {"model": true, "messages": true, "stream": true},
-	MonitorProviderDeepseek: {"model": true, "messages": true, "stream": true},
-	MonitorProviderMiniMax:     {"model": true, "messages": true, "stream": true},
-	MonitorProviderOpenCodeGo:  {"model": true, "messages": true, "stream": true},
+	MonitorProviderKimi:       {"model": true, "messages": true, "stream": true},
+	MonitorProviderZhipu:      {"model": true, "messages": true, "stream": true},
+	MonitorProviderDeepseek:   {"model": true, "messages": true, "stream": true},
+	MonitorProviderMiniMax:    {"model": true, "messages": true, "stream": true},
+	MonitorProviderOpenCodeGo: {"model": true, "messages": true, "stream": true},
 }
 
 func checkAPIMode(opts *CheckOptions) string {

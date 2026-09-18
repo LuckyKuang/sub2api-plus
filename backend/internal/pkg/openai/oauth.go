@@ -25,11 +25,11 @@ const (
 	RevokeURL    = "https://auth.openai.com/oauth/revoke"
 
 	// Device-code login (codex-rs login/src/device_code_auth.rs)
-	DeviceAuthAPIBase       = "https://auth.openai.com/api/accounts"
-	DeviceVerificationURL   = "https://auth.openai.com/codex/device"
-	DeviceCodeRedirectURI   = "https://auth.openai.com/deviceauth/callback"
-	DeviceAuthUserCodePath  = "/deviceauth/usercode"
-	DeviceAuthTokenPath     = "/deviceauth/token"
+	DeviceAuthAPIBase      = "https://auth.openai.com/api/accounts"
+	DeviceVerificationURL  = "https://auth.openai.com/codex/device"
+	DeviceCodeRedirectURI  = "https://auth.openai.com/deviceauth/callback"
+	DeviceAuthUserCodePath = "/deviceauth/usercode"
+	DeviceAuthTokenPath    = "/deviceauth/token"
 
 	// Default redirect URI (can be customized)
 	DefaultRedirectURI = "http://localhost:1455/auth/callback"
@@ -54,12 +54,12 @@ type OAuthSession struct {
 	// AccountID is set only for a re-authorization flow. It is intentionally
 	// server-side session state so the code exchange cannot be redirected to a
 	// different account by a browser request.
-	AccountID     *int64    `json:"account_id,omitempty"`
-	ProxyURL      string    `json:"proxy_url,omitempty"`
-	RedirectURI   string    `json:"redirect_uri"`
-	CreatedAt     time.Time `json:"created_at"`
-	DeviceAuthID  string    `json:"device_auth_id,omitempty"`
-	DeviceUserCode string   `json:"device_user_code,omitempty"`
+	AccountID      *int64    `json:"account_id,omitempty"`
+	ProxyURL       string    `json:"proxy_url,omitempty"`
+	RedirectURI    string    `json:"redirect_uri"`
+	CreatedAt      time.Time `json:"created_at"`
+	DeviceAuthID   string    `json:"device_auth_id,omitempty"`
+	DeviceUserCode string    `json:"device_user_code,omitempty"`
 }
 
 // SessionStore manages OAuth sessions in memory
@@ -236,11 +236,11 @@ func encodeOfficialOAuthQuery(pairs [][2]string) string {
 	var b strings.Builder
 	for i, pair := range pairs {
 		if i > 0 {
-			b.WriteByte('&')
+			_, _ = b.WriteString("&")
 		}
-		b.WriteString(url.QueryEscape(pair[0]))
-		b.WriteByte('=')
-		b.WriteString(strings.ReplaceAll(url.QueryEscape(pair[1]), "+", "%20"))
+		_, _ = b.WriteString(url.QueryEscape(pair[0]))
+		_, _ = b.WriteString("=")
+		_, _ = b.WriteString(strings.ReplaceAll(url.QueryEscape(pair[1]), "+", "%20"))
 	}
 	return b.String()
 }

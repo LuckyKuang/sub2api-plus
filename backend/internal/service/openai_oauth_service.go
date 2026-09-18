@@ -515,10 +515,10 @@ func (s *OpenAIOAuthService) BuildAccountCredentials(tokenInfo *OpenAITokenInfo)
 
 // OpenAIDeviceCodeResult is returned to the admin panel for official device-code login.
 type OpenAIDeviceCodeResult struct {
-	SessionID        string `json:"session_id"`
-	UserCode         string `json:"user_code"`
-	VerificationURL  string `json:"verification_url"`
-	IntervalSeconds  int64  `json:"interval_seconds"`
+	SessionID       string `json:"session_id"`
+	UserCode        string `json:"user_code"`
+	VerificationURL string `json:"verification_url"`
+	IntervalSeconds int64  `json:"interval_seconds"`
 }
 
 // StartDeviceCode begins the official Codex device-code flow.

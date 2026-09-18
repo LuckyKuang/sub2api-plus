@@ -423,7 +423,7 @@ func TestOpenAIIdentityContractOAuthMetadataUsesExchangeSnapshot(t *testing.T) {
 			require.Empty(t, accountHeader.Get("Version"))
 			subscriptionHeader := seen["/backend-api/subscriptions"]
 			require.Equal(t, want.UserAgent, subscriptionHeader.Get("User-Agent"))
-			require.Equal(t, want.Originator, subscriptionHeader.Get("Originator"))
+			require.Empty(t, subscriptionHeader.Get("Originator"), "auxiliary API keeps UA + Bearer + chatgpt-account-id only")
 			require.Empty(t, subscriptionHeader.Get("Version"))
 		})
 	}

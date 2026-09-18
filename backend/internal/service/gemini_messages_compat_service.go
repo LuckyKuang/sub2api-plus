@@ -3055,8 +3055,12 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
 			}, fmt.Errorf("stream usage incomplete: %w", err)
 		}
 	}
-	if !terminalSeen {
-		s.finalizeGeminiSSESignal(c, account, true, upstreamRequestID, best, sawDataEvent, fallback)
+	// Native 透传的「缺失终止事件」判定只针对被截断的正常流：有数据事件、
+	// 无终止、且没有任何带内信号（错误信封/内容策略/空响应）时按流不完整
+	// 报错。带内信号与空/非 SSE 兜底体由 finalizeGeminiSSESignal 按其自身
+	// 语义登记，调用方 ForwardNative 不返回 error。
+	s.finalizeGeminiSSESignal(c, account, true, upstreamRequestID, best, sawDataEvent, fallback)
+	if !terminalSeen && sawDataEvent && best.Kind == geminiSignalNone {
 		return &geminiNativeStreamResult{
 			usage:            usage,
 			firstTokenMs:     timing.firstTokenMs,
@@ -3066,8 +3070,6 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
 			clientDisconnect: streamWriter.disconnected,
 		}, errors.New("stream usage incomplete: missing terminal event")
 	}
-
-	s.finalizeGeminiSSESignal(c, account, true, upstreamRequestID, best, sawDataEvent, fallback)
 
 	return &geminiNativeStreamResult{
 		usage:            usage,

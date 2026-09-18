@@ -530,7 +530,7 @@ func (s *SettingService) SetOutboundIdentitySettings(ctx context.Context, settin
 
 func validOutboundAccountKey(platform, accountType string) bool {
 	switch platform {
-	case PlatformOpenAI, PlatformAnthropic, PlatformGemini, PlatformGrok, PlatformAntigravity, PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax:
+	case PlatformOpenAI, PlatformAnthropic, PlatformGemini, PlatformGrok, PlatformAntigravity, PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax, PlatformOpenCodeGo:
 	default:
 		return false
 	}

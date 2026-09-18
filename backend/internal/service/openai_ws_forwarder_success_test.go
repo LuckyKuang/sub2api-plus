@@ -2061,6 +2061,11 @@ func (d *openAIWSCaptureDialer) Dial(
 	d.dialCount++
 	respHeaders := cloneHeader(d.handshake)
 	d.mu.Unlock()
+	// 桩在连接池关闭旧连接后会复用同一实例：新 dial 语义上是一条新
+	// 连接，重置 closed 标记并保留剩余事件供后续请求消费。
+	if d.conn != nil {
+		d.conn.reopen()
+	}
 	return d.conn, 0, respHeaders, nil
 }
 
@@ -2161,6 +2166,12 @@ func (c *openAIWSCaptureConn) Close() error {
 	defer c.mu.Unlock()
 	c.closed = true
 	return nil
+}
+
+func (c *openAIWSCaptureConn) reopen() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.closed = false
 }
 
 func cloneMapStringAny(src map[string]any) map[string]any {

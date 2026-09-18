@@ -117,29 +117,29 @@ type WebSearchManagerBuilder func(cfg *WebSearchEmulationConfig, proxyURLs map[i
 
 // SettingService 系统设置服务
 type SettingService struct {
-	outboundIdentityCache       atomic.Value // *cachedOutboundIdentitySettings
-	outboundIdentityMu          sync.Mutex
-	settingRepo                 SettingRepository
-	defaultSubGroupReader       DefaultSubscriptionGroupReader
-	proxyRepo                   ProxyRepository // for resolving websearch provider proxy URLs
-	cfg                         *config.Config
-	onUpdate                    func() // Callback when settings are updated (for cache invalidation)
-	version                     string // Application version
-	webSearchManagerBuilder     WebSearchManagerBuilder
-	antigravityUAVersionCache   atomic.Value // *cachedAntigravityUserAgentVersion
-	antigravityUAVersionSF      singleflight.Group
-	openAICodexUACache          atomic.Value // *cachedOpenAICodexUserAgent
-	openAICodexUASF             singleflight.Group
+	outboundIdentityCache     atomic.Value // *cachedOutboundIdentitySettings
+	outboundIdentityMu        sync.Mutex
+	settingRepo               SettingRepository
+	defaultSubGroupReader     DefaultSubscriptionGroupReader
+	proxyRepo                 ProxyRepository // for resolving websearch provider proxy URLs
+	cfg                       *config.Config
+	onUpdate                  func() // Callback when settings are updated (for cache invalidation)
+	version                   string // Application version
+	webSearchManagerBuilder   WebSearchManagerBuilder
+	antigravityUAVersionCache atomic.Value // *cachedAntigravityUserAgentVersion
+	antigravityUAVersionSF    singleflight.Group
+	openAICodexUACache        atomic.Value // *cachedOpenAICodexUserAgent
+	openAICodexUASF           singleflight.Group
 
 	// openAICodexEnvironmentTimezoneCache 全局 environment_context 时区设置缓存。
 	openAICodexEnvironmentTimezoneCache atomic.Value // *cachedOpenAICodexEnvironmentTimezone
 	openAICodexEnvironmentTimezoneSF    singleflight.Group
-	openAICodexLocalQuotaCache  atomic.Value // *cachedOpenAICodexLocalGroupQuota
-	openAICodexLocalQuotaSF     singleflight.Group
-	openAICodexVersionCache     atomic.Value // *cachedOpenAICodexClientVersion
-	openAICodexVersionSF        singleflight.Group
-	codexRestrictionPolicyCache atomic.Value // *cachedCodexRestrictionPolicy
-	codexRestrictionPolicySF    singleflight.Group
+	openAICodexLocalQuotaCache          atomic.Value // *cachedOpenAICodexLocalGroupQuota
+	openAICodexLocalQuotaSF             singleflight.Group
+	openAICodexVersionCache             atomic.Value // *cachedOpenAICodexClientVersion
+	openAICodexVersionSF                singleflight.Group
+	codexRestrictionPolicyCache         atomic.Value // *cachedCodexRestrictionPolicy
+	codexRestrictionPolicySF            singleflight.Group
 
 	cyberSessionBlockRuntimeCache atomic.Value // *cachedCyberSessionBlockRuntime
 	cyberSessionBlockRuntimeSF    singleflight.Group
