@@ -3236,7 +3236,7 @@ const codexTimezoneOptions = computed(() => [
 ])
 const codexEgressCountryOptions = computed(() => [
   { label: t('admin.accounts.openai.codexEgressCountryNone'), value: '' },
-  ...getCountryOptions(locale.value),
+  ...getCountryOptions(locale?.value || 'en'),
 ])
 type CodexImageToolMode = 'inherit' | 'enabled' | 'disabled' | 'block'
 const codexImageToolMode = ref<CodexImageToolMode>('inherit')

@@ -1038,7 +1038,7 @@ const egressTimezoneOptions = computed(() => [
 ])
 const egressCountryOptions = computed(() => [
   { label: t('admin.proxies.egressCountryNone'), value: '' },
-  ...getCountryOptions(locale.value),
+  ...getCountryOptions(locale?.value || 'en'),
 ])
 const appStore = useAppStore()
 const { copyToClipboard } = useClipboard()

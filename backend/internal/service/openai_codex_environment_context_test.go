@@ -175,6 +175,12 @@ func TestNormalizeOpenAICodexEgressCountry(t *testing.T) {
 
 	_, err = NormalizeOpenAICodexEgressCountry("U")
 	require.Error(t, err)
+
+	for _, unassigned := range []string{"AA", "XX", "ZZ"} {
+		_, err = NormalizeOpenAICodexEgressCountry(unassigned)
+		require.Error(t, err, unassigned)
+	}
+	require.Len(t, assignedISO3166Alpha2Codes, 249)
 }
 
 func TestRewriteOpenAICodexEnvironmentContextText(t *testing.T) {
@@ -365,6 +371,11 @@ func TestNormalizeProxyTimezoneCountry(t *testing.T) {
 
 	t.Run("非法国家代码", func(t *testing.T) {
 		_, _, err := normalizeProxyTimezoneCountry("", "USA")
+		require.Error(t, err)
+	})
+
+	t.Run("未分配国家代码", func(t *testing.T) {
+		_, _, err := normalizeProxyTimezoneCountry("", "ZZ")
 		require.Error(t, err)
 	})
 }

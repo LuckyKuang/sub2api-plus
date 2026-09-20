@@ -483,6 +483,9 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 	if err := ValidateUpstreamRequestIDHeaderExtra(accountExtra); err != nil {
 		return nil, err
 	}
+	if err := ValidateEgressCountryExtra(accountExtra); err != nil {
+		return nil, err
+	}
 
 	// 绑定分组
 	groupIDs := input.GroupIDs
@@ -610,6 +613,9 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 			return nil, err
 		}
 		if err := ValidateUpstreamRequestIDHeaderExtra(normalizedExtra); err != nil {
+			return nil, err
+		}
+		if err := ValidateEgressCountryExtra(normalizedExtra); err != nil {
 			return nil, err
 		}
 	} else {
@@ -931,6 +937,9 @@ func (s *adminServiceImpl) UpdateAccountExtra(ctx context.Context, id int64, upd
 	if err := normalizeCodexFingerprintModeUpdateExtra(updates); err != nil {
 		return err
 	}
+	if err := ValidateEgressCountryExtra(updates); err != nil {
+		return err
+	}
 	if _, exists := updates[openAILongContextBillingEnabledKey]; exists {
 		account, err := s.accountRepo.GetByID(ctx, id)
 		if err != nil {
@@ -962,6 +971,9 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 	delete(input.Extra, OllamaCloudUsageAutoRefreshExtraKey)
 	delete(input.Extra, OllamaCloudUsageSnapshotExtraKey)
 	if err := normalizeCodexFingerprintModeUpdateExtra(input.Extra); err != nil {
+		return nil, err
+	}
+	if err := ValidateEgressCountryExtra(input.Extra); err != nil {
 		return nil, err
 	}
 

@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"regexp"
-	"strings"
 	"time"
 
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
@@ -16,22 +14,19 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/util/httputil"
 )
 
-// proxyCountryPattern 校验手工标注的出口国家代码（ISO 3166-1 alpha-2 大写）。
-var proxyCountryPattern = regexp.MustCompile(`^[A-Z]{2}$`)
-
 // normalizeProxyTimezoneCountry 校验并归一化代理手工标注的出口时区与国家。
 // 两者都允许为空（= 未标注）；timezone 必须是合法 IANA 名，country 必须是
-// 两位大写字母。错误以 400 语义返回，不触碰请求热路径。
+// 已分配的 ISO 3166-1 alpha-2 代码。错误以 400 语义返回，不触碰请求热路径。
 func normalizeProxyTimezoneCountry(timezone, country string) (string, string, error) {
 	normalizedTimezone, err := NormalizeOpenAICodexEnvironmentTimezone(timezone)
 	if err != nil {
 		return "", "", infraerrors.BadRequest("PROXY_TIMEZONE_INVALID", "proxy timezone "+err.Error())
 	}
-	country = strings.ToUpper(strings.TrimSpace(country))
-	if country != "" && !proxyCountryPattern.MatchString(country) {
-		return "", "", infraerrors.BadRequest("PROXY_COUNTRY_INVALID", "proxy country must be a two-letter ISO 3166-1 alpha-2 code (e.g. US)")
+	normalizedCountry, err := NormalizeOpenAICodexEgressCountry(country)
+	if err != nil {
+		return "", "", infraerrors.BadRequest("PROXY_COUNTRY_INVALID", "proxy country "+err.Error())
 	}
-	return normalizedTimezone, country, nil
+	return normalizedTimezone, normalizedCountry, nil
 }
 
 func derefOrProxyString(value *string, fallback string) string {

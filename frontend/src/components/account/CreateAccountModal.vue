@@ -4190,7 +4190,7 @@ const codexTimezoneOptions = computed(() => [
 ])
 const codexEgressCountryOptions = computed(() => [
   { label: t('admin.accounts.openai.codexEgressCountryNone'), value: '' },
-  ...getCountryOptions(locale.value),
+  ...getCountryOptions(locale?.value || 'en'),
 ])
 const codexFingerprintModeOptions = computed(() => [
   { value: 'off' as CodexFingerprintMode, label: t('admin.accounts.openai.codexFingerprintOff') },
