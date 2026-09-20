@@ -1110,21 +1110,8 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 	if input.Credentials != nil {
 		input.Credentials = SanitizeStoredCredentials("", input.Credentials)
 	}
-	if raw, supplied := input.Credentials[outboundIdentityCredential]; supplied {
-		var normalized any
-		for _, account := range cachedTargets {
-			if account == nil {
-				continue
-			}
-			candidate := map[string]any{outboundIdentityCredential: raw}
-			if err := NormalizeAccountOutboundIdentity(account.Platform, account.Type, candidate); err != nil {
-				return nil, err
-			}
-			normalized = candidate[outboundIdentityCredential]
-		}
-		// Bulk persistence merges top-level JSONB keys. An explicit null must
-		// replace the stored candidate so clearing restores inheritance.
-		input.Credentials[outboundIdentityCredential] = normalized
+	if err := normalizeBulkAccountOutboundIdentity(input.Credentials, cachedTargets); err != nil {
+		return nil, err
 	}
 	if raw, supplied := input.Credentials["user_agent"]; supplied {
 		for _, account := range cachedTargets {

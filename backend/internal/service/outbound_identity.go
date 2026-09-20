@@ -497,6 +497,40 @@ func NormalizeAccountOutboundIdentity(platform, accountType string, credentials 
 	return nil
 }
 
+// normalizeBulkAccountOutboundIdentity validates a shared JSONB credential
+// update against every credential owner before the repository writes any row.
+// A null/empty selection stays null because bulk updates merge JSONB keys;
+// runtime resolution treats that value as an explicit request to inherit.
+func normalizeBulkAccountOutboundIdentity(credentials map[string]any, accounts []*Account) error {
+	raw, ok := credentials[outboundIdentityCredential]
+	if !ok {
+		return nil
+	}
+
+	var normalized any
+	validated := false
+	for _, account := range accounts {
+		if account == nil {
+			continue
+		}
+		candidate := map[string]any{outboundIdentityCredential: raw}
+		if err := NormalizeAccountOutboundIdentity(account.Platform, account.Type, candidate); err != nil {
+			return err
+		}
+		normalized = candidate[outboundIdentityCredential]
+		validated = true
+	}
+	if !validated {
+		candidate := map[string]any{outboundIdentityCredential: raw}
+		if err := NormalizeAccountOutboundIdentity("", "", candidate); err != nil {
+			return err
+		}
+		normalized = candidate[outboundIdentityCredential]
+	}
+	credentials[outboundIdentityCredential] = normalized
+	return nil
+}
+
 func (s *SettingService) SetOutboundIdentitySettings(ctx context.Context, settings OutboundIdentitySettings) error {
 	settings = cloneOutboundIdentitySettings(settings)
 	for preset, selection := range settings.Profiles {
@@ -504,16 +538,20 @@ func (s *SettingService) SetOutboundIdentitySettings(ctx context.Context, settin
 			return infraerrors.BadRequest("OUTBOUND_IDENTITY_INVALID", "Codex uses its existing settings")
 		}
 		selection.Preset = preset
+		selection.UserAgent = strings.TrimSpace(selection.UserAgent)
+		selection.Version = strings.TrimSpace(selection.Version)
 		if _, err := buildOutboundIdentity(selection); err != nil {
 			return infraerrors.BadRequest("OUTBOUND_IDENTITY_INVALID", err.Error())
 		}
 		settings.Profiles[preset] = selection
 	}
 	for key, preset := range settings.Defaults {
+		preset = strings.TrimSpace(preset)
 		parts := strings.Split(key, ":")
 		if len(parts) != 2 || !validOutboundAccountKey(parts[0], parts[1]) || validateAccountIdentityPreset(&Account{Platform: parts[0], Type: parts[1]}, preset) != nil {
 			return infraerrors.BadRequest("OUTBOUND_IDENTITY_INVALID", "invalid account default mapping")
 		}
+		settings.Defaults[key] = preset
 	}
 	data, err := json.Marshal(settings)
 	if err != nil {
