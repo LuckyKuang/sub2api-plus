@@ -91,3 +91,35 @@ func TestUpdateSettings_OpenAICodexEnvironmentTimezoneValidation(t *testing.T) {
 	valid := update(t, map[string]any{"openai_codex_environment_timezone": " America/New_York "})
 	require.Equal(t, http.StatusOK, valid.Code)
 }
+
+func TestUpdateSettings_OpenAICodexEgressCountryValidation(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	update := func(t *testing.T, payload map[string]any) *httptest.ResponseRecorder {
+		t.Helper()
+		repo := &settingHandlerRepoStub{values: map[string]string{}}
+		handler := NewSettingHandler(service.NewSettingService(repo, &config.Config{Default: config.DefaultConfig{UserConcurrency: 5}}), nil, nil, nil, nil, nil, nil)
+		body, err := json.Marshal(payload)
+		require.NoError(t, err)
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		c.Request = httptest.NewRequest(http.MethodPut, "/api/v1/admin/settings", bytes.NewReader(body))
+		c.Request.Header.Set("Content-Type", "application/json")
+		handler.UpdateSettings(c)
+		return recorder
+	}
+
+	// 三位码不是合法的 alpha-2 国家代码。
+	invalid := update(t, map[string]any{"openai_codex_egress_country": "USA"})
+	require.Equal(t, http.StatusBadRequest, invalid.Code)
+	require.Contains(t, invalid.Body.String(), "openai_codex_egress_country")
+
+	// 小写输入自动大写归一化。
+	lower := update(t, map[string]any{"openai_codex_egress_country": " us "})
+	require.Equal(t, http.StatusOK, lower.Code)
+	require.Contains(t, lower.Body.String(), `"openai_codex_egress_country":"US"`)
+
+	// 显式留空 = 不声明，仍然合法。
+	empty := update(t, map[string]any{"openai_codex_egress_country": ""})
+	require.Equal(t, http.StatusOK, empty.Code)
+}

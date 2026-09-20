@@ -291,11 +291,11 @@ export default {
       fallbackDirect: 'Direct connection',
       backupProxy: 'Backup proxy',
       egressTimezone: 'Egress timezone (IANA)',
-      egressTimezonePlaceholder: 'e.g. America/New_York (leave empty to disable)',
+      egressTimezoneNone: 'Not set (inherit)',
       egressTimezoneHint:
         'Manually annotated egress timezone. Codex requests egressing through this proxy get their visible <timezone>/<current_date> pair aligned to it (account-level override wins).',
       egressCountry: 'Egress country code',
-      egressCountryPlaceholder: 'e.g. US (two letters, optional)',
+      egressCountryNone: 'Not set (inherit)',
       egressCountryHint:
         'Manually annotated egress country (ISO 3166-1 alpha-2), for display and future residency features. You can run the proxy quality check to see the probed exit country.',
     },

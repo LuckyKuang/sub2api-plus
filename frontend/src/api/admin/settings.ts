@@ -637,6 +637,7 @@ export interface SystemSettings {
   antigravity_user_agent_version: string;
   openai_codex_user_agent: string;
   openai_codex_environment_timezone: string;
+  openai_codex_egress_country: string;
   codex_legacy_client_profile_compatibility_enabled: boolean;
   openai_codex_local_group_quota_enabled: boolean;
   openai_codex_client_version: string;
@@ -967,6 +968,7 @@ export interface UpdateSettingsRequest {
   antigravity_user_agent_version?: string;
   openai_codex_user_agent?: string;
   openai_codex_environment_timezone?: string;
+  openai_codex_egress_country?: string;
   codex_legacy_client_profile_compatibility_enabled?: boolean;
   openai_codex_local_group_quota_enabled?: boolean;
   openai_codex_client_version?: string;

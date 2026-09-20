@@ -81,6 +81,102 @@ func TestResolveOpenAICodexEnvironmentTimezone(t *testing.T) {
 	})
 }
 
+func newEgressCountryTestAccount(country string) *Account {
+	extra := map[string]any{}
+	if country != "" {
+		extra[CodexEgressCountryExtraKey] = country
+	}
+	return &Account{
+		ID:       1,
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+		Extra:    extra,
+	}
+}
+
+func newEgressCountryGlobalService(country string) *OpenAIGatewayService {
+	repo := &forwardedIPMigrationRepoStub{values: map[string]string{
+		SettingKeyOpenAICodexEgressCountry: country,
+	}}
+	return &OpenAIGatewayService{settingService: NewSettingService(repo, &config.Config{})}
+}
+
+func TestResolveOpenAICodexEgressCountry(t *testing.T) {
+	svc := &OpenAIGatewayService{}
+
+	t.Run("nil 或非 Codex 协议账号不声明", func(t *testing.T) {
+		require.Equal(t, "", resolveOpenAICodexEgressCountry(nil, nil, svc.settingService))
+		apiKey := &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Extra: map[string]any{CodexEgressCountryExtraKey: "US"}}
+		require.Equal(t, "", resolveOpenAICodexEgressCountry(nil, apiKey, svc.settingService))
+	})
+
+	t.Run("账号级国家代码优先", func(t *testing.T) {
+		require.Equal(t, "DE", resolveOpenAICodexEgressCountry(nil, newEgressCountryTestAccount("de"), svc.settingService))
+	})
+
+	t.Run("未配置账号时回落全局", func(t *testing.T) {
+		withGlobal := newEgressCountryGlobalService("JP")
+		require.Equal(t, "JP", resolveOpenAICodexEgressCountry(nil, newEgressCountryTestAccount(""), withGlobal.settingService))
+	})
+
+	t.Run("非法账号值回落全局", func(t *testing.T) {
+		withGlobal := newEgressCountryGlobalService("JP")
+		require.Equal(t, "JP", resolveOpenAICodexEgressCountry(nil, newEgressCountryTestAccount("USA"), withGlobal.settingService))
+	})
+
+	t.Run("账号级绑定代理时回落代理标注", func(t *testing.T) {
+		account := newEgressCountryTestAccount("")
+		account.Proxy = &Proxy{EgressCountry: "SG"}
+		require.Equal(t, "SG", resolveOpenAICodexEgressCountry(nil, account, svc.settingService))
+	})
+
+	t.Run("两级都无效则不声明", func(t *testing.T) {
+		require.Equal(t, "", resolveOpenAICodexEgressCountry(nil, newEgressCountryTestAccount("USA"), svc.settingService))
+	})
+}
+
+func TestGetOpenAICodexEgressCountryDefaults(t *testing.T) {
+	t.Run("key 缺失回落默认 US", func(t *testing.T) {
+		repo := &forwardedIPMigrationRepoStub{values: map[string]string{}}
+		svc := NewSettingService(repo, &config.Config{})
+		require.Equal(t, DefaultOpenAICodexEgressCountry, svc.GetOpenAICodexEgressCountry(nil))
+	})
+
+	t.Run("显式空值表示不声明", func(t *testing.T) {
+		repo := &forwardedIPMigrationRepoStub{values: map[string]string{SettingKeyOpenAICodexEgressCountry: ""}}
+		svc := NewSettingService(repo, &config.Config{})
+		require.Equal(t, "", svc.GetOpenAICodexEgressCountry(nil))
+	})
+
+	t.Run("key 缺失时时区回落默认 America/Los_Angeles", func(t *testing.T) {
+		repo := &forwardedIPMigrationRepoStub{values: map[string]string{}}
+		svc := NewSettingService(repo, &config.Config{})
+		require.Equal(t, DefaultOpenAICodexEnvironmentTimezone, svc.GetOpenAICodexEnvironmentTimezone(nil))
+	})
+
+	t.Run("显式空值时区关闭", func(t *testing.T) {
+		repo := &forwardedIPMigrationRepoStub{values: map[string]string{SettingKeyOpenAICodexEnvironmentTimezone: ""}}
+		svc := NewSettingService(repo, &config.Config{})
+		require.Equal(t, "", svc.GetOpenAICodexEnvironmentTimezone(nil))
+	})
+}
+
+func TestNormalizeOpenAICodexEgressCountry(t *testing.T) {
+	normalized, err := NormalizeOpenAICodexEgressCountry(" us ")
+	require.NoError(t, err)
+	require.Equal(t, "US", normalized)
+
+	normalized, err = NormalizeOpenAICodexEgressCountry("")
+	require.NoError(t, err)
+	require.Equal(t, "", normalized)
+
+	_, err = NormalizeOpenAICodexEgressCountry("USA")
+	require.Error(t, err)
+
+	_, err = NormalizeOpenAICodexEgressCountry("U")
+	require.Error(t, err)
+}
+
 func TestRewriteOpenAICodexEnvironmentContextText(t *testing.T) {
 	nyc := loadEnvironmentTimezoneForTest(t, "America/New_York")
 

@@ -134,6 +134,8 @@ type SettingService struct {
 	// openAICodexEnvironmentTimezoneCache 全局 environment_context 时区设置缓存。
 	openAICodexEnvironmentTimezoneCache atomic.Value // *cachedOpenAICodexEnvironmentTimezone
 	openAICodexEnvironmentTimezoneSF    singleflight.Group
+	openAICodexEgressCountryCache       atomic.Value // *cachedOpenAICodexEgressCountry
+	openAICodexEgressCountrySF          singleflight.Group
 	openAICodexLocalQuotaCache          atomic.Value // *cachedOpenAICodexLocalGroupQuota
 	openAICodexLocalQuotaSF             singleflight.Group
 	openAICodexVersionCache             atomic.Value // *cachedOpenAICodexClientVersion

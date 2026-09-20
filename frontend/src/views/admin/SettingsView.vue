@@ -8592,15 +8592,10 @@
                     )
                   }}
                 </label>
-                <input
+                <Select
                   v-model="form.openai_codex_environment_timezone"
-                  type="text"
-                  class="input w-full font-mono text-sm"
-                  :placeholder="
-                    t(
-                      'admin.settings.gatewayForwarding.openaiCodexEnvironmentTimezonePlaceholder',
-                    )
-                  "
+                  :options="codexTimezoneOptions"
+                  searchable
                 />
                 <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
                   {{
@@ -8608,6 +8603,23 @@
                       "admin.settings.gatewayForwarding.openaiCodexEnvironmentTimezoneHint",
                     )
                   }}
+                </p>
+              </div>
+
+              <!-- Codex 出口国家代码 -->
+              <div>
+                <label
+                  class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                >
+                  {{ t("admin.settings.gatewayForwarding.openaiCodexEgressCountry") }}
+                </label>
+                <Select
+                  v-model="form.openai_codex_egress_country"
+                  :options="codexEgressCountryOptions"
+                  searchable
+                />
+                <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t("admin.settings.gatewayForwarding.openaiCodexEgressCountryHint") }}
                 </p>
               </div>
 
@@ -8825,6 +8837,8 @@ import type { ProviderInstance } from "@/types/payment";
 import AppLayout from "@/components/layout/AppLayout.vue";
 import Icon from "@/components/icons/Icon.vue";
 import Select, { type SelectOption } from "@/components/common/Select.vue";
+import { getTimezoneOptions } from "@/utils/timezones";
+import { getCountryOptions } from "@/utils/countries";
 import {
   SITE_BILLING_MODES,
   SITE_BILLING_MODE_I18N_KEYS,
@@ -8876,6 +8890,16 @@ const appStore = useAppStore();
 const settingsStepUp = useStepUp();
 const adminSettingsStore = useAdminSettingsStore();
 const isZhLocale = computed(() => locale.value.startsWith("zh"));
+
+// Codex 全局出口时区/国家下拉选项：首项为空值（关闭/不声明）。
+const codexTimezoneOptions = computed(() => [
+  { label: t("admin.settings.gatewayForwarding.openaiCodexEnvironmentTimezoneNone"), value: "" },
+  ...getTimezoneOptions(),
+]);
+const codexEgressCountryOptions = computed(() => [
+  { label: t("admin.settings.gatewayForwarding.openaiCodexEgressCountryNone"), value: "" },
+  ...getCountryOptions(locale.value),
+]);
 
 function localText(zh: string, en: string): string {
   return isZhLocale.value ? zh : en;
@@ -9807,6 +9831,7 @@ const form = reactive<SettingsForm>({
   antigravity_user_agent_version: "",
   openai_codex_user_agent: "",
   openai_codex_environment_timezone: "",
+  openai_codex_egress_country: "",
   codex_legacy_client_profile_compatibility_enabled: false,
   openai_codex_local_group_quota_enabled: false,
   openai_codex_client_version: "",
@@ -11520,6 +11545,8 @@ async function saveSettings() {
         form.openai_codex_user_agent?.trim() || "",
       openai_codex_environment_timezone:
         form.openai_codex_environment_timezone?.trim() || "",
+      openai_codex_egress_country:
+        form.openai_codex_egress_country?.trim() || "",
       codex_legacy_client_profile_compatibility_enabled:
         form.codex_legacy_client_profile_compatibility_enabled,
       openai_codex_local_group_quota_enabled:

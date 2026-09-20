@@ -2082,12 +2082,23 @@
               {{ t('admin.accounts.openai.codexEnvironmentTimezoneDesc') }}
             </p>
           </div>
-          <input
+          <Select
             v-model="codexEnvironmentTimezone"
             data-testid="edit-codex-environment-timezone-input"
-            type="text"
-            :placeholder="t('admin.accounts.openai.codexEnvironmentTimezonePlaceholder')"
-            class="input w-full"
+            :options="codexTimezoneOptions"
+            searchable
+          />
+          <div>
+            <label class="input-label mb-0">{{ t('admin.accounts.openai.codexEgressCountry') }}</label>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ t('admin.accounts.openai.codexEgressCountryDesc') }}
+            </p>
+          </div>
+          <Select
+            v-model="codexEgressCountry"
+            data-testid="edit-codex-egress-country-input"
+            :options="codexEgressCountryOptions"
+            searchable
           />
         </div>
       </div>
@@ -2734,6 +2745,8 @@ import type {
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import Select from '@/components/common/Select.vue'
+import { getTimezoneOptions } from '@/utils/timezones'
+import { getCountryOptions } from '@/utils/countries'
 import HelpTooltip from '@/components/common/HelpTooltip.vue'
 import UpstreamRequestIdHeaderField from '@/components/account/UpstreamRequestIdHeaderField.vue'
 import Toggle from '@/components/common/Toggle.vue'
@@ -2818,7 +2831,7 @@ const emit = defineEmits<{
   updated: [account: Account]
 }>()
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const appStore = useAppStore()
 const browserTimeZone = getBrowserTimeZone()
 
@@ -3216,6 +3229,15 @@ const codexCLIOnlyEnabled = ref(false)
 type CodexFingerprintMode = 'off' | 'device' | 'session' | 'full'
 const codexFingerprintMode = ref<CodexFingerprintMode>('device')
 const codexEnvironmentTimezone = ref('')
+const codexEgressCountry = ref('')
+const codexTimezoneOptions = computed(() => [
+  { label: t('admin.accounts.openai.codexEnvironmentTimezoneNone'), value: '' },
+  ...getTimezoneOptions(),
+])
+const codexEgressCountryOptions = computed(() => [
+  { label: t('admin.accounts.openai.codexEgressCountryNone'), value: '' },
+  ...getCountryOptions(locale.value),
+])
 type CodexImageToolMode = 'inherit' | 'enabled' | 'disabled' | 'block'
 const codexImageToolMode = ref<CodexImageToolMode>('inherit')
 type AnthropicAPIKeyAuthScheme = 'x_api_key' | 'authorization_bearer'
@@ -3756,6 +3778,8 @@ const syncFormFromAccount = (newAccount: Account | null) => {
         : 'device')
       const envTz = extra?.codex_environment_timezone as string | undefined
       codexEnvironmentTimezone.value = typeof envTz === 'string' ? envTz.trim() : ''
+      const egressCountry = extra?.egress_country as string | undefined
+      codexEgressCountry.value = typeof egressCountry === 'string' ? egressCountry.trim() : ''
     }
     const credentials = newAccount.credentials as Record<string, unknown> | undefined
 		openaiAccountUserAgent.value = !isSparkShadow.value && typeof credentials?.user_agent === 'string'
@@ -5296,9 +5320,17 @@ const handleSubmit = async () => {
           // Empty means "follow the global default"; drop the stale key.
           delete newExtra.codex_environment_timezone
         }
+        const egressCountry = codexEgressCountry.value.trim().toUpperCase()
+        if (egressCountry) {
+          newExtra.egress_country = egressCountry
+        } else {
+          // Empty means "follow the global default"; drop the stale key.
+          delete newExtra.egress_country
+        }
       } else {
         delete newExtra.codex_fingerprint_mode
         delete newExtra.codex_environment_timezone
+        delete newExtra.egress_country
       }
 
       updatePayload.extra = newExtra

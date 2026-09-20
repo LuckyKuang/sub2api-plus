@@ -197,6 +197,11 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 		return nil, err
 	}
 	settings.OpenAICodexEnvironmentTimezone = normalizedOpenAICodexEnvironmentTimezone
+	normalizedOpenAICodexEgressCountry, err := NormalizeOpenAICodexEgressCountry(settings.OpenAICodexEgressCountry)
+	if err != nil {
+		return nil, err
+	}
+	settings.OpenAICodexEgressCountry = normalizedOpenAICodexEgressCountry
 	settings.PaymentVisibleMethodAlipaySource = alipaySource
 	settings.PaymentVisibleMethodWxpaySource = wxpaySource
 	settings.WeChatConnectAppID = strings.TrimSpace(settings.WeChatConnectAppID)
@@ -563,6 +568,7 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeyAntigravityUserAgentVersion] = antigravity.NormalizeUserAgentVersion(settings.AntigravityUserAgentVersion)
 	updates[SettingKeyOpenAICodexUserAgent] = strings.TrimSpace(settings.OpenAICodexUserAgent)
 	updates[SettingKeyOpenAICodexEnvironmentTimezone] = strings.TrimSpace(settings.OpenAICodexEnvironmentTimezone)
+	updates[SettingKeyOpenAICodexEgressCountry] = strings.TrimSpace(settings.OpenAICodexEgressCountry)
 	updates[SettingKeyCodexLegacyClientProfileCompatibilityEnabled] = strconv.FormatBool(settings.CodexLegacyClientProfileCompatibilityEnabled)
 	updates[SettingKeyOpenAICodexLocalGroupQuotaEnabled] = strconv.FormatBool(settings.OpenAICodexLocalGroupQuotaEnabled)
 	updates[SettingKeyOpenAICodexClientVersion] = NormalizeCodexClientVersion(settings.OpenAICodexClientVersion)
@@ -822,6 +828,11 @@ func (s *SettingService) refreshCachedSettings(settings *SystemSettings) {
 	s.openAICodexEnvironmentTimezoneCache.Store(&cachedOpenAICodexEnvironmentTimezone{
 		value:     strings.TrimSpace(settings.OpenAICodexEnvironmentTimezone),
 		expiresAt: time.Now().Add(openAICodexEnvironmentTimezoneCacheTTL).UnixNano(),
+	})
+	s.openAICodexEgressCountrySF.Forget("openai_codex_egress_country")
+	s.openAICodexEgressCountryCache.Store(&cachedOpenAICodexEgressCountry{
+		value:     strings.TrimSpace(settings.OpenAICodexEgressCountry),
+		expiresAt: time.Now().Add(openAICodexEgressCountryCacheTTL).UnixNano(),
 	})
 	s.openAICodexLocalQuotaSF.Forget("openai_codex_local_group_quota")
 	s.openAICodexLocalQuotaCache.Store(&cachedOpenAICodexLocalGroupQuota{

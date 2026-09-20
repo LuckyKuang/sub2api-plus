@@ -253,7 +253,8 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyEnableClientDatelineNormalization:                  "true",
 		SettingKeyAntigravityUserAgentVersion:                        "",
 		SettingKeyOpenAICodexUserAgent:                               "",
-		SettingKeyOpenAICodexEnvironmentTimezone:                     "",
+		SettingKeyOpenAICodexEnvironmentTimezone:                     DefaultOpenAICodexEnvironmentTimezone,
+		SettingKeyOpenAICodexEgressCountry:                           DefaultOpenAICodexEgressCountry,
 		SettingKeyCodexLegacyClientProfileCompatibilityEnabled:       "false",
 		SettingKeyOpenAICodexLocalGroupQuotaEnabled:                  "false",
 		SettingKeyOpenAICodexClientVersion:                           "",
@@ -916,6 +917,7 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	result.AntigravityUserAgentVersion = antigravity.NormalizeUserAgentVersion(settings[SettingKeyAntigravityUserAgentVersion])
 	result.OpenAICodexUserAgent = strings.TrimSpace(settings[SettingKeyOpenAICodexUserAgent])
 	result.OpenAICodexEnvironmentTimezone = strings.TrimSpace(settings[SettingKeyOpenAICodexEnvironmentTimezone])
+	result.OpenAICodexEgressCountry = strings.TrimSpace(settings[SettingKeyOpenAICodexEgressCountry])
 	result.CodexLegacyClientProfileCompatibilityEnabled = settings[SettingKeyCodexLegacyClientProfileCompatibilityEnabled] == "true"
 	result.OpenAICodexLocalGroupQuotaEnabled = settings[SettingKeyOpenAICodexLocalGroupQuotaEnabled] == "true"
 	result.OpenAICodexClientVersion = NormalizeCodexClientVersion(settings[SettingKeyOpenAICodexClientVersion])

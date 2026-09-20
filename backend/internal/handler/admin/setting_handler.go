@@ -332,6 +332,7 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		AntigravityUserAgentVersion:                            settings.AntigravityUserAgentVersion,
 		OpenAICodexUserAgent:                                   settings.OpenAICodexUserAgent,
 		OpenAICodexEnvironmentTimezone:                         settings.OpenAICodexEnvironmentTimezone,
+		OpenAICodexEgressCountry:                               settings.OpenAICodexEgressCountry,
 		CodexLegacyClientProfileCompatibilityEnabled:           settings.CodexLegacyClientProfileCompatibilityEnabled,
 		OpenAICodexLocalGroupQuotaEnabled:                      settings.OpenAICodexLocalGroupQuotaEnabled,
 		OpenAICodexClientVersion:                               settings.OpenAICodexClientVersion,

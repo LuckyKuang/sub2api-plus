@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/tidwall/gjson"
 )
 
@@ -20,6 +21,22 @@ import (
 // an empty value means "follow the global default", and no valid value on
 // either level disables the rewrite.
 const CodexEnvironmentTimezoneExtraKey = "codex_environment_timezone"
+
+// CodexEgressCountryExtraKey is the account-level extra key holding the
+// annotated egress country (ISO 3166-1 alpha-2). It takes precedence over the
+// egress proxy annotation and the global openai_codex_egress_country setting;
+// an empty value means "follow the next source".
+const CodexEgressCountryExtraKey = "egress_country"
+
+// Default global values applied on fresh installs and when the setting key is
+// absent from the store (never-saved deployments). An explicitly stored empty
+// value still means "feature off / not declared".
+const (
+	DefaultOpenAICodexEnvironmentTimezone = "America/Los_Angeles"
+	DefaultOpenAICodexEgressCountry       = "US"
+)
+
+var openAICodexEgressCountryPattern = regexp.MustCompile(`^[A-Z]{2}$`)
 
 var (
 	openAICodexEnvironmentTimezoneTagPattern = regexp.MustCompile(`(?s)<timezone>[^<]*</timezone>`)
@@ -37,6 +54,84 @@ func NormalizeOpenAICodexEnvironmentTimezone(value string) (string, error) {
 		return "", fmt.Errorf("must be a valid IANA timezone (e.g. America/New_York): %w", err)
 	}
 	return trimmed, nil
+}
+
+// NormalizeOpenAICodexEgressCountry validates and trims the configured egress
+// country code. The value is upper-cased and must be a two-letter ISO 3166-1
+// alpha-2 code; an empty value is valid and means "not declared".
+func NormalizeOpenAICodexEgressCountry(value string) (string, error) {
+	trimmed := strings.ToUpper(strings.TrimSpace(value))
+	if trimmed == "" {
+		return "", nil
+	}
+	if !openAICodexEgressCountryPattern.MatchString(trimmed) {
+		return "", fmt.Errorf("must be a two-letter ISO 3166-1 alpha-2 country code (e.g. US)")
+	}
+	return trimmed, nil
+}
+
+// resolveOpenAICodexEgressCountry resolves the annotated egress country for a
+// Codex account. Account extra wins, then the egress proxy's annotation, then
+// the global setting. Misconfigured values never block traffic: they degrade
+// to the next source, and "no valid value on any level" means "not declared".
+// Nil ctx is treated as Background because the setting getter is cache-backed.
+func resolveOpenAICodexEgressCountry(ctx context.Context, account *Account, settingService *SettingService) string {
+	if account == nil || !account.IsOpenAI() || !account.UsesOpenAICodexProtocol() {
+		return ""
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if country := parseOpenAICodexEgressCountry(account.getExtraString(CodexEgressCountryExtraKey)); country != "" {
+		return country
+	}
+	if account.Proxy != nil {
+		if country := parseOpenAICodexEgressCountry(account.Proxy.EgressCountry); country != "" {
+			return country
+		}
+	}
+	if settingService == nil {
+		return ""
+	}
+	return parseOpenAICodexEgressCountry(settingService.GetOpenAICodexEgressCountry(ctx))
+}
+
+func parseOpenAICodexEgressCountry(value string) string {
+	normalized, err := NormalizeOpenAICodexEgressCountry(value)
+	if err != nil {
+		slog.Debug("openai_codex_egress_country_invalid", "value", strings.TrimSpace(value), "error", err)
+		return ""
+	}
+	return normalized
+}
+
+// ValidateEgressCountryExtra validates and normalizes the account-level
+// egress country extra key: it must be a two-letter ISO 3166-1 alpha-2 code;
+// an empty value is removed from extra (meaning "follow the next source").
+func ValidateEgressCountryExtra(extra map[string]any) error {
+	if extra == nil {
+		return nil
+	}
+	raw, ok := extra[CodexEgressCountryExtraKey]
+	if !ok || raw == nil {
+		return nil
+	}
+	value, ok := raw.(string)
+	if !ok {
+		return errors.BadRequest("INVALID_EGRESS_COUNTRY",
+			"egress_country must be a two-letter ISO 3166-1 alpha-2 country code")
+	}
+	normalized, err := NormalizeOpenAICodexEgressCountry(value)
+	if err != nil {
+		return errors.BadRequest("INVALID_EGRESS_COUNTRY",
+			"egress_country "+err.Error())
+	}
+	if normalized == "" {
+		delete(extra, CodexEgressCountryExtraKey)
+		return nil
+	}
+	extra[CodexEgressCountryExtraKey] = normalized
+	return nil
 }
 
 // resolveOpenAICodexEnvironmentTimezone resolves the target location for the
