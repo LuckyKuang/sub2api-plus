@@ -44,10 +44,10 @@ func TestAccountAdminBoundariesValidateEgressCountryExtra(t *testing.T) {
 			expectStatus: http.StatusBadRequest,
 		},
 		{
-			name:         "bulk update",
-			method:       http.MethodPost,
-			path:         "/accounts/bulk-update",
-			body:         `{"account_ids":[1],"extra":{"egress_country":"USA"}}`,
+			name:   "bulk update",
+			method: http.MethodPost,
+			path:   "/accounts/bulk-update",
+			body:   `{"account_ids":[1],"extra":{"egress_country":"USA"}}`,
 			mount: func(router *gin.Engine, handler *AccountHandler) {
 				router.POST("/accounts/bulk-update", handler.BulkUpdate)
 			},

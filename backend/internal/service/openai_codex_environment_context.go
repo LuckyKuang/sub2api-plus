@@ -82,6 +82,8 @@ func NormalizeOpenAICodexEgressCountry(value string) (string, error) {
 // the global setting. Misconfigured values never block traffic: they degrade
 // to the next source, and "no valid value on any level" means "not declared".
 // Nil ctx is treated as Background because the setting getter is cache-backed.
+//
+//nolint:unused // retained for the egress country resolution chain; consumed by unit-tagged tests pending request-path wiring
 func resolveOpenAICodexEgressCountry(ctx context.Context, account *Account, settingService *SettingService) string {
 	if account == nil || !account.IsOpenAI() || !account.UsesOpenAICodexProtocol() {
 		return ""
@@ -103,6 +105,7 @@ func resolveOpenAICodexEgressCountry(ctx context.Context, account *Account, sett
 	return parseOpenAICodexEgressCountry(settingService.GetOpenAICodexEgressCountry(ctx))
 }
 
+//nolint:unused // retained for the egress country resolution chain; consumed by unit-tagged tests pending request-path wiring
 func parseOpenAICodexEgressCountry(value string) string {
 	normalized, err := NormalizeOpenAICodexEgressCountry(value)
 	if err != nil {
