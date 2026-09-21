@@ -529,3 +529,35 @@ func TestImportDataRemovesInstanceLocalOpenAIOAuthSessionPolicy(t *testing.T) {
 	require.Len(t, response.Data.Warnings, 1)
 	require.Contains(t, response.Data.Warnings[0].Message, "session-sharing policy was removed")
 }
+
+func TestImportDataRejectsUnassignedEgressCountry(t *testing.T) {
+	router, adminSvc, _ := setupAccountDataRouter(t)
+	payload := map[string]any{
+		"data": map[string]any{
+			"type": dataType, "version": dataVersion,
+			"proxies": []map[string]any{},
+			"accounts": []map[string]any{{
+				"name": "invalid-country", "platform": service.PlatformOpenAI,
+				"type": service.AccountTypeOAuth, "credentials": map[string]any{"access_token": "secret"},
+				"extra": map[string]any{"egress_country": "ZZ"}, "concurrency": 1, "priority": 1,
+			}},
+		},
+		"skip_default_group_bind": true,
+	}
+	body, err := json.Marshal(payload)
+	require.NoError(t, err)
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/admin/accounts/data", bytes.NewReader(body))
+	request.Header.Set("Content-Type", "application/json")
+
+	router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Empty(t, adminSvc.createdAccounts)
+	var response struct {
+		Data DataImportResult `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+	require.Equal(t, 1, response.Data.AccountFailed)
+	require.Contains(t, response.Data.Errors[0].Message, "ISO 3166-1")
+}

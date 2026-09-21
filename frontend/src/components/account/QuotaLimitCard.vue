@@ -3,6 +3,7 @@ import Toggle from '@/components/common/Toggle.vue'
 import { ref, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import QuotaDimensionRow from './QuotaDimensionRow.vue'
+import { getTimezoneOptions } from '@/utils/timezones'
 import type { QuotaThresholdType, QuotaResetMode } from '@/constants/account'
 
 const { t } = useI18n()
@@ -91,13 +92,8 @@ watch(localEnabled, (val) => {
   }
 })
 
-// Common timezone options
-const timezoneOptions = [
-  'UTC', 'Asia/Shanghai', 'Asia/Tokyo', 'Asia/Seoul', 'Asia/Singapore', 'Asia/Kolkata',
-  'Asia/Dubai', 'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'Europe/Moscow',
-  'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
-  'America/Sao_Paulo', 'Australia/Sydney', 'Pacific/Auckland',
-]
+// Common timezone options（完整 IANA 列表，与出口时区下拉共用数据源）
+const timezoneOptions = getTimezoneOptions().map((opt) => opt.value)
 
 // Hours for dropdown (0-23)
 const hourOptions = Array.from({ length: 24 }, (_, i) => i)

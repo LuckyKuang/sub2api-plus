@@ -696,6 +696,9 @@ const (
 	// SettingKeyOpenAICodexEnvironmentTimezone 模型可见 environment_context 的
 	// 目标 IANA 时区（全局默认；账号级 extra 优先）。空值 = 功能关闭，不改写。
 	SettingKeyOpenAICodexEnvironmentTimezone = "openai_codex_environment_timezone"
+	// SettingKeyOpenAICodexEgressCountry 出口国家代码（ISO 3166-1 alpha-2，
+	// 全局默认；账号级 extra 优先）。空值 = 不声明。
+	SettingKeyOpenAICodexEgressCountry = "openai_codex_egress_country"
 	// SettingKeyCodexLegacyClientProfileCompatibilityEnabled temporarily allows
 	// only the reviewed historical Codex wire identities. It is disabled by
 	// default and never changes their status to an official profile.

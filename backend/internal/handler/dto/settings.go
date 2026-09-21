@@ -215,6 +215,7 @@ type SystemSettings struct {
 	AntigravityUserAgentVersion                  string `json:"antigravity_user_agent_version"`
 	OpenAICodexUserAgent                         string `json:"openai_codex_user_agent"`
 	OpenAICodexEnvironmentTimezone               string `json:"openai_codex_environment_timezone"`
+	OpenAICodexEgressCountry                     string `json:"openai_codex_egress_country"`
 	CodexLegacyClientProfileCompatibilityEnabled bool   `json:"codex_legacy_client_profile_compatibility_enabled"`
 	OpenAICodexLocalGroupQuotaEnabled            bool   `json:"openai_codex_local_group_quota_enabled"`
 	OpenAICodexClientVersion                     string `json:"openai_codex_client_version"`

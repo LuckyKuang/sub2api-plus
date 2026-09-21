@@ -3059,12 +3059,23 @@
               {{ t('admin.accounts.openai.codexEnvironmentTimezoneDesc') }}
             </p>
           </div>
-          <input
+          <Select
             v-model="codexEnvironmentTimezone"
             data-testid="create-codex-environment-timezone-input"
-            type="text"
-            :placeholder="t('admin.accounts.openai.codexEnvironmentTimezonePlaceholder')"
-            class="input w-full"
+            :options="codexTimezoneOptions"
+            searchable
+          />
+          <div>
+            <label class="input-label mb-0">{{ t('admin.accounts.openai.codexEgressCountry') }}</label>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ t('admin.accounts.openai.codexEgressCountryDesc') }}
+            </p>
+          </div>
+          <Select
+            v-model="codexEgressCountry"
+            data-testid="create-codex-egress-country-input"
+            :options="codexEgressCountryOptions"
+            searchable
           />
         </div>
       </div>
@@ -3655,6 +3666,8 @@ import type {
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import Select from '@/components/common/Select.vue'
+import { getTimezoneOptions } from '@/utils/timezones'
+import { getCountryOptions } from '@/utils/countries'
 import HelpTooltip from '@/components/common/HelpTooltip.vue'
 import UpstreamRequestIdHeaderField from '@/components/account/UpstreamRequestIdHeaderField.vue'
 import PlatformIcon from '@/components/common/PlatformIcon.vue'
@@ -3724,7 +3737,7 @@ interface OAuthFlowExposed {
   reset: () => void
 }
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const browserTimeZone = getBrowserTimeZone()
 
 const oauthStepTitle = computed(() => {
@@ -4170,6 +4183,15 @@ const codexCLIOnlyEnabled = ref(false)
 type CodexFingerprintMode = 'off' | 'device' | 'session' | 'full'
 const codexFingerprintMode = ref<CodexFingerprintMode>('device')
 const codexEnvironmentTimezone = ref('')
+const codexEgressCountry = ref('')
+const codexTimezoneOptions = computed(() => [
+  { label: t('admin.accounts.openai.codexEnvironmentTimezoneNone'), value: '' },
+  ...getTimezoneOptions(),
+])
+const codexEgressCountryOptions = computed(() => [
+  { label: t('admin.accounts.openai.codexEgressCountryNone'), value: '' },
+  ...getCountryOptions(locale?.value || 'en'),
+])
 const codexFingerprintModeOptions = computed(() => [
   { value: 'off' as CodexFingerprintMode, label: t('admin.accounts.openai.codexFingerprintOff') },
   { value: 'device' as CodexFingerprintMode, label: t('admin.accounts.openai.codexFingerprintDevice') },
@@ -4254,16 +4276,17 @@ const openAITextEndpointCapabilityLabel = computed(() => {
 })
 const openAIEndpointCapabilityOptions = computed<{ value: OpenAIEndpointCapability; label: string }[]>(() => [
   { value: 'chat_completions', label: openAITextEndpointCapabilityLabel.value },
-  { value: 'embeddings', label: t('admin.accounts.openai.capabilityEmbeddings') }
+  { value: 'embeddings', label: t('admin.accounts.openai.capabilityEmbeddings') },
+  { value: 'seedance', label: 'Seedance (Ark)' }
 ])
 const openAITextGenerationCapabilityEnabled = computed(() =>
   openAIEndpointCapabilities.value.includes('chat_completions')
 )
 
 const normalizeOpenAIEndpointCapabilities = (values: OpenAIEndpointCapability[]) => {
-  const allowed: OpenAIEndpointCapability[] = ['chat_completions', 'embeddings']
+  const allowed: OpenAIEndpointCapability[] = ['chat_completions', 'embeddings', 'seedance']
   const selected = allowed.filter((value) => values.includes(value))
-  return selected.length > 0 ? selected : allowed
+  return selected.length > 0 ? selected : ['chat_completions', 'embeddings'] as OpenAIEndpointCapability[]
 }
 
 const toggleOpenAIEndpointCapability = (capability: OpenAIEndpointCapability, event?: Event) => {
@@ -4289,7 +4312,7 @@ const toggleOpenAIEndpointCapability = (capability: OpenAIEndpointCapability, ev
 
 const applyOpenAIEndpointCapabilities = (credentials: Record<string, unknown>) => {
   const capabilities = normalizeOpenAIEndpointCapabilities(openAIEndpointCapabilities.value)
-  if (capabilities.length === 2) {
+  if (capabilities.length === 2 && !capabilities.includes('seedance')) {
     delete credentials.openai_capabilities
     return
   }
@@ -5088,6 +5111,7 @@ const resetForm = () => {
   codexCLIOnlyEnabled.value = false
   codexFingerprintMode.value = 'device'
   codexEnvironmentTimezone.value = ''
+  codexEgressCountry.value = ''
   anthropicPassthroughEnabled.value = false
   anthropicAPIKeyAuthScheme.value = 'x_api_key'
   webSearchEmulationMode.value = 'default'
@@ -5200,9 +5224,17 @@ const buildOpenAIExtra = (base?: Record<string, unknown>): Record<string, unknow
       // Empty means "follow the global default"; do not persist the key.
       delete extra.codex_environment_timezone
     }
+    const egressCountry = codexEgressCountry.value.trim().toUpperCase()
+    if (egressCountry) {
+      extra.egress_country = egressCountry
+    } else {
+      // Empty means "follow the global default"; do not persist the key.
+      delete extra.egress_country
+    }
   } else {
     delete extra.codex_fingerprint_mode
     delete extra.codex_environment_timezone
+    delete extra.egress_country
   }
   if (openAICompactMode.value !== 'auto') {
     extra.openai_compact_mode = openAICompactMode.value

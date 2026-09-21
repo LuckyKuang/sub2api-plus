@@ -285,6 +285,15 @@ egress location. Plus can rewrite that pair at the outbound build stage:
   timezone/date pair is self-consistent — and never fails or closes a request.
   The rewrite runs after ingress security audit consumed the original body and
   never on the audit path itself.
+
+The related egress-country declaration resolves account `extra.egress_country`,
+then the bound proxy's `egress_country`, then the global
+`openai_codex_egress_country`. Fresh or never-saved installations default the
+global value to `US`; an explicitly saved empty value disables the declaration.
+Saved values are normalized to upper-case and must be an assigned ISO 3166-1
+alpha-2 code. Invalid stored values fall through to the next source and never
+block forwarding.
+
 Official Codex never sends a `conversation_id` header, so Codex-protocol
 outbound requests never carry one. The legacy `session_id` alias is a Plus
 compatibility header: OAuth accounts emit it only when the fingerprint mode

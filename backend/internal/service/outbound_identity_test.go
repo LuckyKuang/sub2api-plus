@@ -165,11 +165,15 @@ func TestOutboundIdentitySettingsPersistAndDoNotExposeMutableCache(t *testing.T)
 	config := emptyOutboundIdentitySettings()
 	config.Defaults["anthropic:oauth"] = "grok"
 	require.Error(t, svc.SetOutboundIdentitySettings(ctx, config))
-	config.Defaults = map[string]string{"gemini:service_account": "grok"}
+	config.Profiles["grok"] = OutboundIdentitySelection{
+		Preset: "ignored", UserAgent: "  ", Version: " 3.9.1 ",
+	}
+	config.Defaults = map[string]string{"gemini:service_account": " grok "}
 	require.NoError(t, svc.SetOutboundIdentitySettings(ctx, config))
 	config.Defaults["gemini:service_account"] = "claude"
 	view := svc.GetOutboundIdentitySettings(ctx)
 	require.Equal(t, "grok", view.Defaults["gemini:service_account"])
+	require.Equal(t, OutboundIdentitySelection{Preset: "grok", Version: "3.9.1"}, view.Profiles["grok"])
 	view.Defaults["gemini:service_account"] = "claude"
 	require.Equal(t, "grok", svc.GetOutboundIdentitySettings(ctx).Defaults["gemini:service_account"])
 	raw, err := svc.settingRepo.GetValue(ctx, SettingKeyOutboundIdentity)
@@ -177,6 +181,7 @@ func TestOutboundIdentitySettingsPersistAndDoNotExposeMutableCache(t *testing.T)
 	var persisted OutboundIdentitySettings
 	require.NoError(t, json.Unmarshal([]byte(raw), &persisted))
 	require.Equal(t, "grok", persisted.Defaults["gemini:service_account"])
+	require.Equal(t, OutboundIdentitySelection{Preset: "grok", Version: "3.9.1"}, persisted.Profiles["grok"])
 }
 
 func TestOutboundIdentityImportsLegacyAntigravitySettingOnlyUntilFirstSave(t *testing.T) {

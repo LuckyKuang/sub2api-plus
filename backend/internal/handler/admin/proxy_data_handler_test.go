@@ -52,14 +52,16 @@ func TestProxyExportDataRespectsFilters(t *testing.T) {
 			Status:   service.StatusActive,
 		},
 		{
-			ID:       2,
-			Name:     "proxy-b",
-			Protocol: "https",
-			Host:     "10.0.0.2",
-			Port:     443,
-			Username: "u",
-			Password: "p",
-			Status:   service.StatusDisabled,
+			ID:             2,
+			Name:           "proxy-b",
+			Protocol:       "https",
+			Host:           "10.0.0.2",
+			Port:           443,
+			Username:       "u",
+			Password:       "p",
+			Status:         service.StatusDisabled,
+			EgressTimezone: "Asia/Tokyo",
+			EgressCountry:  "JP",
 		},
 	}
 
@@ -76,6 +78,8 @@ func TestProxyExportDataRespectsFilters(t *testing.T) {
 	require.Len(t, resp.Data.Proxies, 1)
 	require.Len(t, resp.Data.Accounts, 0)
 	require.Equal(t, "https", resp.Data.Proxies[0].Protocol)
+	require.Equal(t, "Asia/Tokyo", resp.Data.Proxies[0].EgressTimezone)
+	require.Equal(t, "JP", resp.Data.Proxies[0].EgressCountry)
 	require.Equal(t, 1, adminSvc.lastListProxies.calls)
 	require.Equal(t, "https", adminSvc.lastListProxies.protocol)
 	require.Equal(t, "id", adminSvc.lastListProxies.sortBy)
@@ -233,24 +237,28 @@ func TestProxyImportDataReusesAndTriggersLatencyProbe(t *testing.T) {
 			"version": dataVersion,
 			"proxies": []map[string]any{
 				{
-					"proxy_key": "http|127.0.0.1|8080|user|pass",
-					"name":      "proxy-a",
-					"protocol":  "http",
-					"host":      "127.0.0.1",
-					"port":      8080,
-					"username":  "user",
-					"password":  "pass",
-					"status":    "inactive",
+					"proxy_key":       "http|127.0.0.1|8080|user|pass",
+					"name":            "proxy-a",
+					"protocol":        "http",
+					"host":            "127.0.0.1",
+					"port":            8080,
+					"username":        "user",
+					"password":        "pass",
+					"status":          "inactive",
+					"egress_timezone": "America/New_York",
+					"egress_country":  "US",
 				},
 				{
-					"proxy_key": "https|10.0.0.2|443|u|p",
-					"name":      "proxy-b",
-					"protocol":  "https",
-					"host":      "10.0.0.2",
-					"port":      443,
-					"username":  "u",
-					"password":  "p",
-					"status":    "active",
+					"proxy_key":       "https|10.0.0.2|443|u|p",
+					"name":            "proxy-b",
+					"protocol":        "https",
+					"host":            "10.0.0.2",
+					"port":            443,
+					"username":        "u",
+					"password":        "p",
+					"status":          "active",
+					"egress_timezone": "Asia/Tokyo",
+					"egress_country":  "JP",
 				},
 			},
 			"accounts": []map[string]any{},
@@ -275,10 +283,78 @@ func TestProxyImportDataReusesAndTriggersLatencyProbe(t *testing.T) {
 	updatedIDs := append([]int64(nil), adminSvc.updatedProxyIDs...)
 	adminSvc.mu.Unlock()
 	require.Contains(t, updatedIDs, int64(1))
+	require.NotEmpty(t, adminSvc.updatedProxies)
+	require.Equal(t, "America/New_York", *adminSvc.updatedProxies[0].EgressTimezone)
+	require.Equal(t, "US", *adminSvc.updatedProxies[0].EgressCountry)
+	require.NotEmpty(t, adminSvc.createdProxies)
+	require.Equal(t, "Asia/Tokyo", adminSvc.createdProxies[0].EgressTimezone)
+	require.Equal(t, "JP", adminSvc.createdProxies[0].EgressCountry)
 
 	require.Eventually(t, func() bool {
 		adminSvc.mu.Lock()
 		defer adminSvc.mu.Unlock()
 		return len(adminSvc.testedProxyIDs) == 1
 	}, time.Second, 10*time.Millisecond)
+}
+
+func TestProxyImportDataAnnotationOnlyUpdatePreservesExistingOptionalFields(t *testing.T) {
+	router, adminSvc := setupProxyDataRouter()
+	expiresAt := time.Now().Add(24 * time.Hour).UTC()
+	backupID := int64(9)
+	adminSvc.proxies = []service.Proxy{{
+		ID: 1, Name: "proxy-a", Protocol: "http", Host: "127.0.0.1", Port: 8080,
+		Status: service.StatusActive, ExpiresAt: &expiresAt, FallbackMode: service.FallbackModeProxy,
+		BackupProxyID: &backupID, ExpiryWarnDays: 7,
+	}}
+	payload := map[string]any{"data": map[string]any{
+		"type": dataType, "version": dataVersion, "accounts": []map[string]any{},
+		"proxies": []map[string]any{{
+			"name": "proxy-a", "protocol": "http", "host": "127.0.0.1", "port": 8080,
+			"status": "active", "egress_timezone": "Asia/Tokyo", "egress_country": "JP",
+		}},
+	}}
+	body, err := json.Marshal(payload)
+	require.NoError(t, err)
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/admin/proxies/data", bytes.NewReader(body))
+	request.Header.Set("Content-Type", "application/json")
+
+	router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Len(t, adminSvc.updatedProxies, 1)
+	update := adminSvc.updatedProxies[0]
+	require.False(t, update.ClearExpiresAt)
+	require.Nil(t, update.ExpiresAt)
+	require.Empty(t, update.FallbackMode)
+	require.False(t, update.ClearBackupID)
+	require.Nil(t, update.BackupProxyID)
+	require.Nil(t, update.ExpiryWarnDays)
+	require.Equal(t, "Asia/Tokyo", *update.EgressTimezone)
+	require.Equal(t, "JP", *update.EgressCountry)
+}
+
+func TestProxyImportDataRejectsUnassignedCountry(t *testing.T) {
+	router, adminSvc := setupProxyDataRouter()
+	payload := map[string]any{"data": map[string]any{
+		"type": dataType, "version": dataVersion, "accounts": []map[string]any{},
+		"proxies": []map[string]any{{
+			"name": "proxy-a", "protocol": "http", "host": "127.0.0.1", "port": 8080,
+			"egress_country": "ZZ",
+		}},
+	}}
+	body, err := json.Marshal(payload)
+	require.NoError(t, err)
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/admin/proxies/data", bytes.NewReader(body))
+	request.Header.Set("Content-Type", "application/json")
+
+	router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Empty(t, adminSvc.createdProxies)
+	var response proxyImportResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+	require.Equal(t, 1, response.Data.ProxyFailed)
+	require.Contains(t, response.Data.Errors[0].Message, "ISO 3166-1")
 }

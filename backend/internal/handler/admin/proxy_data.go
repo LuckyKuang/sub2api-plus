@@ -79,6 +79,8 @@ func (h *ProxyHandler) ExportData(c *gin.Context) {
 			FallbackMode:    p.FallbackMode,
 			BackupProxyName: backupProxyName,
 			ExpiryWarnDays:  p.ExpiryWarnDays,
+			EgressTimezone:  p.EgressTimezone,
+			EgressCountry:   p.EgressCountry,
 		})
 	}
 
@@ -151,39 +153,55 @@ func (h *ProxyHandler) ImportData(c *gin.Context) {
 		normalizedStatus := normalizeProxyStatus(item.Status)
 		if existing, ok := proxyByKey[key]; ok {
 			result.ProxyReused++
-			if normalizedStatus != "" && normalizedStatus != existing.Status {
-				// 已存在代理同步 status 时，同时保留/覆盖导入 item 的完整字段，
-				// 避免 UpdateProxy 零值覆盖有效期/fallback 配置。
+			if (normalizedStatus != "" && normalizedStatus != existing.Status) ||
+				(item.EgressTimezone != "" && item.EgressTimezone != existing.EgressTimezone) ||
+				(item.EgressCountry != "" && item.EgressCountry != existing.EgressCountry) {
+				statusChanged := normalizedStatus != "" && normalizedStatus != existing.Status
 				var existingExpiresAt *time.Time
-				if item.ExpiresAt != nil {
+				if statusChanged && item.ExpiresAt != nil {
 					t := time.Unix(*item.ExpiresAt, 0).UTC()
 					existingExpiresAt = &t
 				}
-				existingFallbackMode := item.FallbackMode
-				if existingFallbackMode == "" {
-					existingFallbackMode = service.FallbackModeNone
-				}
 				var existingBackupProxyID *int64
-				if item.BackupProxyName != "" {
+				if statusChanged && item.BackupProxyName != "" {
 					if bid, ok := proxyNameToID[item.BackupProxyName]; ok {
 						existingBackupProxyID = &bid
 					}
 				}
+				var egressTimezone, egressCountry *string
+				if item.EgressTimezone != "" {
+					egressTimezone = &item.EgressTimezone
+				}
+				if item.EgressCountry != "" {
+					egressCountry = &item.EgressCountry
+				}
+				statusToApply := normalizedStatus
+				if statusToApply == "" {
+					statusToApply = existing.Status
+				}
 				updateInput := &service.UpdateProxyInput{
-					Status:         normalizedStatus,
-					ExpiresAt:      existingExpiresAt,
-					ClearExpiresAt: existingExpiresAt == nil,
-					FallbackMode:   existingFallbackMode,
-					BackupProxyID:  existingBackupProxyID,
-					ClearBackupID:  existingBackupProxyID == nil,
-					ExpiryWarnDays: &item.ExpiryWarnDays,
+					Status: statusToApply,
 					// 保留已存在代理的网络配置字段
-					Name:     existing.Name,
-					Protocol: existing.Protocol,
-					Host:     existing.Host,
-					Port:     existing.Port,
-					Username: &existing.Username,
-					Password: &existing.Password,
+					Name:           existing.Name,
+					Protocol:       existing.Protocol,
+					Host:           existing.Host,
+					Port:           existing.Port,
+					Username:       &existing.Username,
+					Password:       &existing.Password,
+					EgressTimezone: egressTimezone,
+					EgressCountry:  egressCountry,
+				}
+				if statusChanged {
+					fallbackMode := item.FallbackMode
+					if fallbackMode == "" {
+						fallbackMode = service.FallbackModeNone
+					}
+					updateInput.ExpiresAt = existingExpiresAt
+					updateInput.ClearExpiresAt = existingExpiresAt == nil
+					updateInput.FallbackMode = fallbackMode
+					updateInput.BackupProxyID = existingBackupProxyID
+					updateInput.ClearBackupID = existingBackupProxyID == nil
+					updateInput.ExpiryWarnDays = &item.ExpiryWarnDays
 				}
 				if _, err := h.adminService.UpdateProxy(ctx, existing.ID, updateInput); err != nil {
 					result.Errors = append(result.Errors, DataImportError{
@@ -234,6 +252,8 @@ func (h *ProxyHandler) ImportData(c *gin.Context) {
 			FallbackMode:   fallbackMode,
 			BackupProxyID:  backupProxyID,
 			ExpiryWarnDays: item.ExpiryWarnDays,
+			EgressTimezone: item.EgressTimezone,
+			EgressCountry:  item.EgressCountry,
 		})
 		if err != nil {
 			result.ProxyFailed++

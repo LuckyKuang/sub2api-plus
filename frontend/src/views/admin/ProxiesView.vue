@@ -529,22 +529,19 @@
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="input-label">{{ t('admin.proxies.egressTimezone') }}</label>
-            <input
+            <Select
               v-model="createForm.egress_timezone"
-              type="text"
-              class="input"
-              :placeholder="t('admin.proxies.egressTimezonePlaceholder')"
+              :options="egressTimezoneOptions"
+              searchable
             />
             <p class="input-hint mt-1">{{ t('admin.proxies.egressTimezoneHint') }}</p>
           </div>
           <div>
             <label class="input-label">{{ t('admin.proxies.egressCountry') }}</label>
-            <input
+            <Select
               v-model="createForm.egress_country"
-              type="text"
-              class="input uppercase"
-              maxlength="2"
-              :placeholder="t('admin.proxies.egressCountryPlaceholder')"
+              :options="egressCountryOptions"
+              searchable
             />
             <p class="input-hint mt-1">{{ t('admin.proxies.egressCountryHint') }}</p>
           </div>
@@ -785,22 +782,19 @@
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="input-label">{{ t('admin.proxies.egressTimezone') }}</label>
-            <input
+            <Select
               v-model="editForm.egress_timezone"
-              type="text"
-              class="input"
-              :placeholder="t('admin.proxies.egressTimezonePlaceholder')"
+              :options="egressTimezoneOptions"
+              searchable
             />
             <p class="input-hint mt-1">{{ t('admin.proxies.egressTimezoneHint') }}</p>
           </div>
           <div>
             <label class="input-label">{{ t('admin.proxies.egressCountry') }}</label>
-            <input
+            <Select
               v-model="editForm.egress_country"
-              type="text"
-              class="input uppercase"
-              maxlength="2"
-              :placeholder="t('admin.proxies.egressCountryPlaceholder')"
+              :options="egressCountryOptions"
+              searchable
             />
             <p class="input-hint mt-1">{{ t('admin.proxies.egressCountryHint') }}</p>
           </div>
@@ -1024,6 +1018,8 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import ImportDataModal from '@/components/admin/proxy/ImportDataModal.vue'
 import Select from '@/components/common/Select.vue'
+import { getTimezoneOptions } from '@/utils/timezones'
+import { getCountryOptions } from '@/utils/countries'
 import Icon from '@/components/icons/Icon.vue'
 import PlatformTypeBadge from '@/components/common/PlatformTypeBadge.vue'
 import { useClipboard } from '@/composables/useClipboard'
@@ -1033,7 +1029,17 @@ import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 import { formatDateTime } from '@/utils/format'
 import { proxyExpiryBadgeClass, proxyExpiryLabelKey } from '@/utils/proxyExpiry'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
+
+// 出口时区/国家下拉选项：首项为空值（跟随上级），其余来自 IANA/ISO 全量数据。
+const egressTimezoneOptions = computed(() => [
+  { label: t('admin.proxies.egressTimezoneNone'), value: '' },
+  ...getTimezoneOptions(),
+])
+const egressCountryOptions = computed(() => [
+  { label: t('admin.proxies.egressCountryNone'), value: '' },
+  ...getCountryOptions(locale?.value || 'en'),
+])
 const appStore = useAppStore()
 const { copyToClipboard } = useClipboard()
 

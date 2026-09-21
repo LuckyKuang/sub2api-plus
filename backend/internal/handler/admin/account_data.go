@@ -51,6 +51,8 @@ type DataProxy struct {
 	FallbackMode    string `json:"fallback_mode,omitempty"`     // none/direct/proxy
 	BackupProxyName string `json:"backup_proxy_name,omitempty"` // 备用代理 name（跨实例按 name 反查）
 	ExpiryWarnDays  int    `json:"expiry_warn_days,omitempty"`
+	EgressTimezone  string `json:"egress_timezone,omitempty"`
+	EgressCountry   string `json:"egress_country,omitempty"`
 }
 
 // DataAccount 是管理员显式备份导出使用的账号结构，故意不走 dto.Account 的脱敏路径，
@@ -310,6 +312,8 @@ func (h *AccountHandler) ExportData(c *gin.Context) {
 			FallbackMode:    p.FallbackMode,
 			BackupProxyName: backupProxyName,
 			ExpiryWarnDays:  p.ExpiryWarnDays,
+			EgressTimezone:  p.EgressTimezone,
+			EgressCountry:   p.EgressCountry,
 		})
 	}
 
@@ -503,39 +507,63 @@ func (h *AccountHandler) importData(ctx context.Context, req DataImportRequest) 
 		if existingID, ok := proxyKeyToID[key]; ok {
 			proxyKeyToID[key] = existingID
 			result.ProxyReused++
-			if normalizedStatus != "" {
-				if proxy, getErr := h.adminService.GetProxy(ctx, existingID); getErr == nil && proxy != nil && proxy.Status != normalizedStatus {
-					// 同步 status 时传入完整字段，避免零值覆盖已存在代理的有效期/fallback 配置。
+			if normalizedStatus != "" || item.EgressTimezone != "" || item.EgressCountry != "" {
+				if proxy, getErr := h.adminService.GetProxy(ctx, existingID); getErr == nil && proxy != nil &&
+					((normalizedStatus != "" && proxy.Status != normalizedStatus) ||
+						(item.EgressTimezone != "" && proxy.EgressTimezone != item.EgressTimezone) ||
+						(item.EgressCountry != "" && proxy.EgressCountry != item.EgressCountry)) {
+					statusChanged := normalizedStatus != "" && proxy.Status != normalizedStatus
 					var existingExpiresAt *time.Time
-					if item.ExpiresAt != nil {
+					if statusChanged && item.ExpiresAt != nil {
 						t := time.Unix(*item.ExpiresAt, 0).UTC()
 						existingExpiresAt = &t
 					}
-					existingFallbackMode := item.FallbackMode
-					if existingFallbackMode == "" {
-						existingFallbackMode = service.FallbackModeNone
-					}
 					var existingBackupProxyID *int64
-					if item.BackupProxyName != "" {
+					if statusChanged && item.BackupProxyName != "" {
 						if bid, ok := proxyNameToID[item.BackupProxyName]; ok {
 							existingBackupProxyID = &bid
 						}
 					}
-					_, _ = h.adminService.UpdateProxy(ctx, existingID, &service.UpdateProxyInput{
-						Status:         normalizedStatus,
-						ExpiresAt:      existingExpiresAt,
-						ClearExpiresAt: existingExpiresAt == nil,
-						FallbackMode:   existingFallbackMode,
-						BackupProxyID:  existingBackupProxyID,
-						ClearBackupID:  existingBackupProxyID == nil,
-						ExpiryWarnDays: &item.ExpiryWarnDays,
+					var egressTimezone, egressCountry *string
+					if item.EgressTimezone != "" {
+						egressTimezone = &item.EgressTimezone
+					}
+					if item.EgressCountry != "" {
+						egressCountry = &item.EgressCountry
+					}
+					statusToApply := normalizedStatus
+					if statusToApply == "" {
+						statusToApply = proxy.Status
+					}
+					updateInput := &service.UpdateProxyInput{
+						Status:         statusToApply,
 						Name:           proxy.Name,
 						Protocol:       proxy.Protocol,
 						Host:           proxy.Host,
 						Port:           proxy.Port,
 						Username:       &proxy.Username,
 						Password:       &proxy.Password,
-					})
+						EgressTimezone: egressTimezone,
+						EgressCountry:  egressCountry,
+					}
+					if statusChanged {
+						fallbackMode := item.FallbackMode
+						if fallbackMode == "" {
+							fallbackMode = service.FallbackModeNone
+						}
+						updateInput.ExpiresAt = existingExpiresAt
+						updateInput.ClearExpiresAt = existingExpiresAt == nil
+						updateInput.FallbackMode = fallbackMode
+						updateInput.BackupProxyID = existingBackupProxyID
+						updateInput.ClearBackupID = existingBackupProxyID == nil
+						updateInput.ExpiryWarnDays = &item.ExpiryWarnDays
+					}
+					if _, updateErr := h.adminService.UpdateProxy(ctx, existingID, updateInput); updateErr != nil {
+						result.Errors = append(result.Errors, DataImportError{
+							Kind: "proxy", Name: item.Name, ProxyKey: key,
+							Message: "update proxy failed: " + updateErr.Error(),
+						})
+					}
 				}
 			}
 			continue
@@ -577,6 +605,8 @@ func (h *AccountHandler) importData(ctx context.Context, req DataImportRequest) 
 			FallbackMode:   fallbackMode,
 			BackupProxyID:  backupProxyID,
 			ExpiryWarnDays: item.ExpiryWarnDays,
+			EgressTimezone: item.EgressTimezone,
+			EgressCountry:  item.EgressCountry,
 		})
 		if createErr != nil {
 			result.ProxyFailed++
@@ -896,6 +926,12 @@ func validateDataProxy(item DataProxy) error {
 			return fmt.Errorf("proxy status is invalid: %s", item.Status)
 		}
 	}
+	if _, err := service.NormalizeOpenAICodexEnvironmentTimezone(item.EgressTimezone); err != nil {
+		return fmt.Errorf("proxy timezone %w", err)
+	}
+	if _, err := service.NormalizeOpenAICodexEgressCountry(item.EgressCountry); err != nil {
+		return fmt.Errorf("proxy country %w", err)
+	}
 	return nil
 }
 
@@ -925,6 +961,9 @@ func validateDataAccount(item DataAccount) error {
 	}
 	if item.Priority < 0 {
 		return errors.New("priority must be >= 0")
+	}
+	if err := service.ValidateEgressCountryExtra(item.Extra); err != nil {
+		return err
 	}
 	return nil
 }

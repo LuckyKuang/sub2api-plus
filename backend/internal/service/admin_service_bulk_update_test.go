@@ -408,6 +408,46 @@ func TestAdminServiceBulkUpdateAccounts_NormalizesOpenAISettings(t *testing.T) {
 	require.Nil(t, repo.lastBulkUpdate.Extra["openai_responses_mode"])
 }
 
+func TestAdminServiceBulkUpdateAccounts_ValidatesOutboundIdentityForEveryTarget(t *testing.T) {
+	repo := &accountRepoStubForBulkUpdate{getByIDsAccounts: []*Account{
+		{ID: 1, Platform: PlatformGrok, Type: AccountTypeOAuth},
+		{ID: 2, Platform: PlatformGemini, Type: AccountTypeOAuth},
+	}}
+	svc := &adminServiceImpl{accountRepo: repo}
+
+	result, err := svc.BulkUpdateAccounts(context.Background(), &BulkUpdateAccountsInput{
+		AccountIDs: []int64{1, 2},
+		Credentials: map[string]any{
+			outboundIdentityCredential: map[string]any{"preset": "grok"},
+		},
+	})
+
+	require.Nil(t, result)
+	requireApplicationErrorReason(t, err, "OUTBOUND_IDENTITY_INVALID")
+	require.Zero(t, repo.bulkUpdateCalls)
+}
+
+func TestAdminServiceBulkUpdateAccounts_NormalizesOutboundIdentityBeforeWrite(t *testing.T) {
+	repo := &accountRepoStubForBulkUpdate{getByIDsAccounts: []*Account{
+		{ID: 1, Platform: PlatformGemini, Type: AccountTypeServiceAccount},
+		{ID: 2, Platform: PlatformAnthropic, Type: AccountTypeAPIKey},
+	}}
+	svc := &adminServiceImpl{accountRepo: repo}
+
+	result, err := svc.BulkUpdateAccounts(context.Background(), &BulkUpdateAccountsInput{
+		AccountIDs: []int64{1, 2},
+		Credentials: map[string]any{
+			outboundIdentityCredential: map[string]any{
+				"preset": " grok ", "version": " 3.9.1 ",
+			},
+		},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, 2, result.Success)
+	require.Equal(t, OutboundIdentitySelection{Preset: "grok", Version: "3.9.1"}, repo.lastBulkUpdate.Credentials[outboundIdentityCredential])
+}
+
 func TestAdminServiceBulkUpdateAccounts_AcceptsLongContextAccountTypes(t *testing.T) {
 	for _, accountType := range []string{AccountTypeOAuth, AccountTypeSetupToken, AccountTypeAPIKey} {
 		t.Run(accountType, func(t *testing.T) {
