@@ -5,23 +5,26 @@ procedures are documented in [`docs/RELEASING.md`](docs/RELEASING.md).
 
 ## Integrated Baseline
 
-The current integration tree incorporates the official `v0.2.5` tag at commit
-`86f93c28ee34cc74b629dafb748bd5ac5ca8c5ea`, layered onto the Plus history.
+The current integration tree incorporates the official `v0.2.7` tag at commit
+`aea725f2ea644d5592d0bbb1d63b607efa7e200a`, layered onto the Plus history.
 The release mapping below remains the authoritative record of publication
 status; importing an upstream tag does not publish a Plus release or change the
 embedded application version by itself.
 Plus version/tag/image promotion remains a separate step.
 
 Plus retains credential-owner identity precedence, ingress content audit,
-session and quota accounting, asynchronous images, administrator export
-controls, IP access controls, and distribution/toolchain choices. Retired
-upstream billing probes remain removed. Grok cross-client rewriting stays
-opt-in, and inconclusive OAuth billing does not grant media eligibility.
+session and quota accounting, proxy egress metadata annotations, asynchronous
+images, administrator export controls, IP access controls, and
+distribution/toolchain choices. Retired upstream billing probes remain removed.
+Grok cross-client rewriting stays opt-in, and inconclusive OAuth billing does
+not grant media eligibility.
 
 See [v0.2.4 integration and upgrade behavior](docs/UPSTREAM_V0_2_4_INTEGRATION.md)
 for the previous overlay's public API changes, migrations, defaults, and
 validation boundaries. See [v0.2.5 integration](docs/UPSTREAM_V0_2_5_INTEGRATION.md)
-for the official tag import on that tree.
+for the official tag import on that tree. See
+[v0.2.7 integration](docs/UPSTREAM_V0_2_7_INTEGRATION.md) for the latest
+official tag import.
 
 ## Release Mapping
 
@@ -82,6 +85,7 @@ for the official tag import on that tree.
 | `v0.2.4+custom.005` | `v0.2.4` | `5de5e2bed035d43591a2e10e51f420ef6a84eb98` | published |
 | `v0.2.4+custom.006` | `v0.2.4` | `badfad8b7248b8aac0e6b503a06e392aa31cb294` | withdrawn |
 | `v0.2.5+custom.001` | `v0.2.5` | `86f93c28ee34cc74b629dafb748bd5ac5ca8c5ea` | published |
+| `v0.2.7+custom.001` | `v0.2.7` | `aea725f2ea644d5592d0bbb1d63b607efa7e200a` | planned |
 
 `v0.2.4+custom.006` is marked withdrawn because official `v0.2.5` was imported before that snapshot overlay was published. Do not reuse or retag `.006`.
 
@@ -92,9 +96,9 @@ still require a maintainer audit. Do not reuse or retag `.007`.
 ## Current Version
 
 ```text
-Git/GitHub: v0.2.5+custom.001
-Application: 0.2.5+custom.001
-GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.5-custom.001
+Git/GitHub: v0.2.7+custom.001
+Application: 0.2.7+custom.001
+GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.7-custom.001
 ```
 
 ## Naming
