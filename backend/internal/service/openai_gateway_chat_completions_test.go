@@ -534,7 +534,7 @@ func TestForwardAsChatCompletions_OAuthConvergesFingerprintBeforePlusCacheAuthor
 	cacheIdentity := strings.TrimSpace(gjson.GetBytes(upstream.lastBody, "prompt_cache_key").String())
 	require.NotEmpty(t, cacheIdentity)
 	require.Equal(t, cacheIdentity, upstream.lastReq.Header.Get("session-id"))
-	require.Equal(t, cacheIdentity, upstream.lastReq.Header.Get("session_id"))
+	require.Empty(t, upstream.lastReq.Header.Get("session_id"))
 	require.Equal(t, "chat-owner-installation", upstream.lastReq.Header.Get("x-codex-installation-id"))
 	require.Equal(t, "chat-owner-installation", gjson.GetBytes(upstream.lastBody, "client_metadata.x-codex-installation-id").String())
 	require.Equal(t, resolveConvergedSessionID(account), gjson.GetBytes(upstream.lastBody, "client_metadata.session_id").String())

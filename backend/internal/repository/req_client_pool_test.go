@@ -6,6 +6,8 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"sync"
@@ -86,7 +88,8 @@ func TestGetSharedReqClient_ProxyCacheKey(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NotNil(t, client)
-	require.Equal(t, "http://proxy.local:8080|4s|false", buildReqClientKey(opts))
+	loadCustomCA()
+	require.Equal(t, "http://proxy.local:8080|4s|false|false|false|"+customCAResolved.sourceEnv+"|"+customCAResolved.path, buildReqClientKey(opts))
 }
 
 func TestGetSharedReqClient_InvalidProxyURL(t *testing.T) {
@@ -111,11 +114,66 @@ func TestGetSharedReqClient_ProxyURLMissingHost(t *testing.T) {
 	require.Contains(t, err.Error(), "proxy URL missing host")
 }
 
-func TestCreateOpenAIReqClient_Timeout120Seconds(t *testing.T) {
+func TestGetSharedReqClient_CustomCAScopedToOpenAICodexClients(t *testing.T) {
 	sharedReqClients = sync.Map{}
-	client, err := createOpenAIReqClient("http://proxy.local:8080")
+
+	notPEM := filepath.Join(t.TempDir(), "not-a-bundle.pem")
+	require.NoError(t, os.WriteFile(notPEM, []byte("this is not a PEM bundle"), 0o600))
+
+	t.Setenv("CODEX_CA_CERTIFICATE", notPEM)
+	t.Setenv("SSL_CERT_FILE", "")
+
+	// A configured but unusable bundle must fail fast for OpenAI Codex clients,
+	// which is the official custom_ca.rs contract.
+	_, err := getSharedReqClient(reqClientOptions{ProxyURL: "http://proxy.local:8080", Timeout: time.Second, OpenAICodexClient: true})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "CODEX_CA_CERTIFICATE")
+
+	// Other providers must never consult the Codex CA env: a generic
+	// SSL_CERT_FILE cannot take down Gemini / Grok / GeminiCLI clients.
+	sharedReqClients = sync.Map{}
+	client, err := getSharedReqClient(reqClientOptions{ProxyURL: "http://proxy.local:8080", Timeout: time.Second})
 	require.NoError(t, err)
-	require.Equal(t, 120*time.Second, client.GetClient().Timeout)
+	require.NotNil(t, client)
+
+	// The two client kinds must not share a pool entry.
+	require.NotEqual(t,
+		buildReqClientKey(reqClientOptions{ProxyURL: "http://proxy.local:8080", Timeout: time.Second, OpenAICodexClient: true}),
+		buildReqClientKey(reqClientOptions{ProxyURL: "http://proxy.local:8080", Timeout: time.Second}),
+	)
+}
+
+func TestGetSharedReqClient_NonOpenAIClientIgnoresConfiguredCustomCA(t *testing.T) {
+	sharedReqClients = sync.Map{}
+
+	bundle := writeTestCAPEM(t, "CERTIFICATE")
+	t.Setenv(customCAEnvPrimary, bundle)
+	t.Setenv(customCAEnvFallback, "")
+
+	pool, err := resolveCustomCABundle(reqClientOptions{OpenAICodexClient: true})
+	require.NoError(t, err)
+	require.NotNil(t, pool.pool, "OpenAI Codex clients pick up the configured bundle")
+	require.Equal(t, customCAEnvPrimary, pool.sourceEnv)
+	require.Equal(t, bundle, pool.path)
+
+	pool, err = resolveCustomCABundle(reqClientOptions{})
+	require.NoError(t, err)
+	require.Nil(t, pool.pool, "non-Codex clients never read the Codex CA env")
+	require.Empty(t, pool.sourceEnv)
+	require.Empty(t, pool.path)
+}
+
+func TestCreateOpenAIRawAndCredentialReqClients_Timeout120Seconds(t *testing.T) {
+	sharedReqClients = sync.Map{}
+	raw, err := createOpenAIRawReqClient("http://proxy.local:8080")
+	require.NoError(t, err)
+	require.Equal(t, 120*time.Second, raw.GetClient().Timeout)
+
+	sharedReqClients = sync.Map{}
+	credential, err := createOpenAICredentialReqClient("http://proxy.local:8080")
+	require.NoError(t, err)
+	require.Equal(t, 120*time.Second, credential.GetClient().Timeout)
+	require.NotSame(t, raw, credential, "raw and credential clients must not share a cookie jar")
 }
 
 func TestCreateGeminiReqClient_ForceHTTP2Disabled(t *testing.T) {

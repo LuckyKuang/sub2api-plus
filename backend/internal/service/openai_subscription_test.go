@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
 	"github.com/imroc/req/v3"
 	"github.com/stretchr/testify/require"
 )
@@ -24,6 +25,7 @@ func TestFetchChatGPTSubscriptionExpiresAt(t *testing.T) {
 		require.Equal(t, DefaultOpenAICodexUserAgent, r.Header.Get("User-Agent"))
 		require.Empty(t, r.Header.Get("Originator"), "auxiliary API keeps UA + Bearer + chatgpt-account-id only")
 		require.Empty(t, r.Header.Get("Version"))
+		require.Empty(t, r.Header.Get(openai.CodexResidencyHeader))
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -44,6 +46,26 @@ func TestFetchChatGPTSubscriptionExpiresAt(t *testing.T) {
 	}, "access-token", "", "acc_123", resolveOpenAIOutboundIdentityCandidates("", ""))
 
 	require.Equal(t, wantExpiresAt, got)
+}
+
+func TestFetchChatGPTSubscriptionExpiresAt_SendsManagedResidency(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, openai.CodexResidencyUS, r.Header.Get(openai.CodexResidencyHeader))
+		require.Empty(t, r.Header.Get("Originator"))
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"active_until": "2026-06-10T02:52:15Z"})
+	}))
+	defer server.Close()
+
+	oldURL := chatGPTSubscriptionsURL
+	chatGPTSubscriptionsURL = server.URL
+	t.Cleanup(func() { chatGPTSubscriptionsURL = oldURL })
+
+	ctx := openai.WithCodexResidency(context.Background(), openai.CodexResidencyUS)
+	got := fetchChatGPTSubscriptionExpiresAt(ctx, func(string) (*req.Client, error) {
+		return req.C().SetTimeout(5 * time.Second), nil
+	}, "access-token", "", "acc_123", resolveOpenAIOutboundIdentityCandidates("", ""))
+	require.Equal(t, "2026-06-10T02:52:15Z", got)
 }
 
 func TestFetchChatGPTAccountInfo_SkipsExpiredWorkspaceCandidate(t *testing.T) {

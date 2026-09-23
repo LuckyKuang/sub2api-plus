@@ -91,6 +91,14 @@ func (UsageLog) Fields() []ent.Field {
 		field.Int("audio_output_tokens").
 			Default(0),
 
+		// codex_rollout_budget_units: 官方 Codex response.completed usage 自报的
+		// rollout 预算消耗（JSON number，可为小数）。仅记录，计费维度备用；
+		// NULL 表示上游未上报。
+		field.Float("codex_rollout_budget_units").
+			Optional().
+			Nillable().
+			SchemaType(map[string]string{dialect.Postgres: "decimal(20,10)"}),
+
 		// 成本字段
 		field.Float("input_cost").
 			Default(0).

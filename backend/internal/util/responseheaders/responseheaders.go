@@ -36,6 +36,11 @@ var defaultAllowed = map[string]struct{}{
 	// Codex uses this response header to avoid estimating reasoning tokens a
 	// second time when upstream usage already includes them.
 	"x-reasoning-included": {},
+	// Official Codex display-only declarations: a promo banner message and the
+	// rate-limit reached classification. The gateway relays them verbatim and
+	// never derives gateway decisions from them.
+	"x-codex-promo-message":           {},
+	"x-codex-rate-limit-reached-type": {},
 }
 
 // hopByHopHeaders 是跳过的 hop-by-hop 头部，这些头部由 HTTP 库自动处理

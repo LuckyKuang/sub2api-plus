@@ -197,3 +197,47 @@ func containsRune(s string, r rune) bool {
 	}
 	return false
 }
+
+func TestSessionStore_DeviceSessionExpiresAfter15Minutes(t *testing.T) {
+	store := NewSessionStore()
+	defer store.Stop()
+
+	store.Set("device-1", &OAuthSession{
+		State:        "state-1",
+		DeviceAuthID: "dev-1",
+		CreatedAt:    time.Now().Add(-16 * time.Minute),
+	})
+	if _, ok := store.Get("device-1"); ok {
+		t.Fatal("device session older than 15 minutes must expire")
+	}
+
+	store.Set("device-2", &OAuthSession{
+		State:        "state-2",
+		DeviceAuthID: "dev-2",
+		CreatedAt:    time.Now().Add(-14 * time.Minute),
+	})
+	if _, ok := store.Get("device-2"); !ok {
+		t.Fatal("device session younger than 15 minutes must stay valid")
+	}
+}
+
+func TestSessionStore_NonDeviceSessionKeeps30MinuteTTL(t *testing.T) {
+	store := NewSessionStore()
+	defer store.Stop()
+
+	store.Set("browser-1", &OAuthSession{
+		State:     "state-1",
+		CreatedAt: time.Now().Add(-16 * time.Minute),
+	})
+	if _, ok := store.Get("browser-1"); !ok {
+		t.Fatal("non-device session must keep the 30 minute TTL")
+	}
+
+	store.Set("browser-2", &OAuthSession{
+		State:     "state-2",
+		CreatedAt: time.Now().Add(-31 * time.Minute),
+	})
+	if _, ok := store.Get("browser-2"); ok {
+		t.Fatal("non-device session older than 30 minutes must expire")
+	}
+}

@@ -295,6 +295,20 @@ func (_c *UsageLogCreate) SetNillableAudioOutputTokens(v *int) *UsageLogCreate {
 	return _c
 }
 
+// SetCodexRolloutBudgetUnits sets the "codex_rollout_budget_units" field.
+func (_c *UsageLogCreate) SetCodexRolloutBudgetUnits(v float64) *UsageLogCreate {
+	_c.mutation.SetCodexRolloutBudgetUnits(v)
+	return _c
+}
+
+// SetNillableCodexRolloutBudgetUnits sets the "codex_rollout_budget_units" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableCodexRolloutBudgetUnits(v *float64) *UsageLogCreate {
+	if v != nil {
+		_c.SetCodexRolloutBudgetUnits(*v)
+	}
+	return _c
+}
+
 // SetInputCost sets the "input_cost" field.
 func (_c *UsageLogCreate) SetInputCost(v float64) *UsageLogCreate {
 	_c.mutation.SetInputCost(v)
@@ -1190,6 +1204,10 @@ func (_c *UsageLogCreate) createSpec() (*UsageLog, *sqlgraph.CreateSpec) {
 		_spec.SetField(usagelog.FieldAudioOutputTokens, field.TypeInt, value)
 		_node.AudioOutputTokens = value
 	}
+	if value, ok := _c.mutation.CodexRolloutBudgetUnits(); ok {
+		_spec.SetField(usagelog.FieldCodexRolloutBudgetUnits, field.TypeFloat64, value)
+		_node.CodexRolloutBudgetUnits = &value
+	}
 	if value, ok := _c.mutation.InputCost(); ok {
 		_spec.SetField(usagelog.FieldInputCost, field.TypeFloat64, value)
 		_node.InputCost = value
@@ -1828,6 +1846,30 @@ func (u *UsageLogUpsert) UpdateAudioOutputTokens() *UsageLogUpsert {
 // AddAudioOutputTokens adds v to the "audio_output_tokens" field.
 func (u *UsageLogUpsert) AddAudioOutputTokens(v int) *UsageLogUpsert {
 	u.Add(usagelog.FieldAudioOutputTokens, v)
+	return u
+}
+
+// SetCodexRolloutBudgetUnits sets the "codex_rollout_budget_units" field.
+func (u *UsageLogUpsert) SetCodexRolloutBudgetUnits(v float64) *UsageLogUpsert {
+	u.Set(usagelog.FieldCodexRolloutBudgetUnits, v)
+	return u
+}
+
+// UpdateCodexRolloutBudgetUnits sets the "codex_rollout_budget_units" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateCodexRolloutBudgetUnits() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldCodexRolloutBudgetUnits)
+	return u
+}
+
+// AddCodexRolloutBudgetUnits adds v to the "codex_rollout_budget_units" field.
+func (u *UsageLogUpsert) AddCodexRolloutBudgetUnits(v float64) *UsageLogUpsert {
+	u.Add(usagelog.FieldCodexRolloutBudgetUnits, v)
+	return u
+}
+
+// ClearCodexRolloutBudgetUnits clears the value of the "codex_rollout_budget_units" field.
+func (u *UsageLogUpsert) ClearCodexRolloutBudgetUnits() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldCodexRolloutBudgetUnits)
 	return u
 }
 
@@ -2889,6 +2931,34 @@ func (u *UsageLogUpsertOne) AddAudioOutputTokens(v int) *UsageLogUpsertOne {
 func (u *UsageLogUpsertOne) UpdateAudioOutputTokens() *UsageLogUpsertOne {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.UpdateAudioOutputTokens()
+	})
+}
+
+// SetCodexRolloutBudgetUnits sets the "codex_rollout_budget_units" field.
+func (u *UsageLogUpsertOne) SetCodexRolloutBudgetUnits(v float64) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetCodexRolloutBudgetUnits(v)
+	})
+}
+
+// AddCodexRolloutBudgetUnits adds v to the "codex_rollout_budget_units" field.
+func (u *UsageLogUpsertOne) AddCodexRolloutBudgetUnits(v float64) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddCodexRolloutBudgetUnits(v)
+	})
+}
+
+// UpdateCodexRolloutBudgetUnits sets the "codex_rollout_budget_units" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateCodexRolloutBudgetUnits() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateCodexRolloutBudgetUnits()
+	})
+}
+
+// ClearCodexRolloutBudgetUnits clears the value of the "codex_rollout_budget_units" field.
+func (u *UsageLogUpsertOne) ClearCodexRolloutBudgetUnits() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearCodexRolloutBudgetUnits()
 	})
 }
 
@@ -4213,6 +4283,34 @@ func (u *UsageLogUpsertBulk) AddAudioOutputTokens(v int) *UsageLogUpsertBulk {
 func (u *UsageLogUpsertBulk) UpdateAudioOutputTokens() *UsageLogUpsertBulk {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.UpdateAudioOutputTokens()
+	})
+}
+
+// SetCodexRolloutBudgetUnits sets the "codex_rollout_budget_units" field.
+func (u *UsageLogUpsertBulk) SetCodexRolloutBudgetUnits(v float64) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetCodexRolloutBudgetUnits(v)
+	})
+}
+
+// AddCodexRolloutBudgetUnits adds v to the "codex_rollout_budget_units" field.
+func (u *UsageLogUpsertBulk) AddCodexRolloutBudgetUnits(v float64) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddCodexRolloutBudgetUnits(v)
+	})
+}
+
+// UpdateCodexRolloutBudgetUnits sets the "codex_rollout_budget_units" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateCodexRolloutBudgetUnits() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateCodexRolloutBudgetUnits()
+	})
+}
+
+// ClearCodexRolloutBudgetUnits clears the value of the "codex_rollout_budget_units" field.
+func (u *UsageLogUpsertBulk) ClearCodexRolloutBudgetUnits() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearCodexRolloutBudgetUnits()
 	})
 }
 

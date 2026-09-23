@@ -202,6 +202,11 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 		return nil, err
 	}
 	settings.OpenAICodexEgressCountry = normalizedOpenAICodexEgressCountry
+	normalizedOpenAICodexResidency, err := NormalizeOpenAICodexResidency(settings.OpenAICodexResidency)
+	if err != nil {
+		return nil, err
+	}
+	settings.OpenAICodexResidency = normalizedOpenAICodexResidency
 	settings.PaymentVisibleMethodAlipaySource = alipaySource
 	settings.PaymentVisibleMethodWxpaySource = wxpaySource
 	settings.WeChatConnectAppID = strings.TrimSpace(settings.WeChatConnectAppID)
@@ -569,6 +574,7 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeyOpenAICodexUserAgent] = strings.TrimSpace(settings.OpenAICodexUserAgent)
 	updates[SettingKeyOpenAICodexEnvironmentTimezone] = strings.TrimSpace(settings.OpenAICodexEnvironmentTimezone)
 	updates[SettingKeyOpenAICodexEgressCountry] = strings.TrimSpace(settings.OpenAICodexEgressCountry)
+	updates[SettingKeyOpenAICodexResidency] = settings.OpenAICodexResidency
 	updates[SettingKeyCodexLegacyClientProfileCompatibilityEnabled] = strconv.FormatBool(settings.CodexLegacyClientProfileCompatibilityEnabled)
 	updates[SettingKeyOpenAICodexLocalGroupQuotaEnabled] = strconv.FormatBool(settings.OpenAICodexLocalGroupQuotaEnabled)
 	updates[SettingKeyOpenAICodexClientVersion] = NormalizeCodexClientVersion(settings.OpenAICodexClientVersion)
@@ -833,6 +839,11 @@ func (s *SettingService) refreshCachedSettings(settings *SystemSettings) {
 	s.openAICodexEgressCountryCache.Store(&cachedOpenAICodexEgressCountry{
 		value:     strings.TrimSpace(settings.OpenAICodexEgressCountry),
 		expiresAt: time.Now().Add(openAICodexEgressCountryCacheTTL).UnixNano(),
+	})
+	s.openAICodexResidencySF.Forget("codex_residency")
+	s.openAICodexResidencyCache.Store(&cachedOpenAICodexResidency{
+		value:     settings.OpenAICodexResidency,
+		expiresAt: time.Now().Add(openAICodexResidencyCacheTTL).UnixNano(),
 	})
 	s.openAICodexLocalQuotaSF.Forget("openai_codex_local_group_quota")
 	s.openAICodexLocalQuotaCache.Store(&cachedOpenAICodexLocalGroupQuota{

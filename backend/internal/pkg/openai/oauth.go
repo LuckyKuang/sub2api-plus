@@ -39,6 +39,10 @@ const (
 
 	// Session TTL
 	SessionTTL = 30 * time.Minute
+
+	// DeviceSessionTTL 是 device-code 会话的存活上限（对齐官方 device flow
+	// 15 分钟）：device 授权码短寿命，会话超时后轮询返回过期错误。
+	DeviceSessionTTL = 15 * time.Minute
 )
 
 const (
@@ -88,6 +92,14 @@ func (s *SessionStore) Set(sessionID string, session *OAuthSession) {
 	s.sessions[sessionID] = session
 }
 
+// sessionTTL 返回会话的有效 TTL：device-code 会话 15 分钟，其余 30 分钟。
+func sessionTTL(session *OAuthSession) time.Duration {
+	if session != nil && strings.TrimSpace(session.DeviceAuthID) != "" {
+		return DeviceSessionTTL
+	}
+	return SessionTTL
+}
+
 // Get retrieves a session
 func (s *SessionStore) Get(sessionID string) (*OAuthSession, bool) {
 	s.mu.RLock()
@@ -97,7 +109,7 @@ func (s *SessionStore) Get(sessionID string) (*OAuthSession, bool) {
 		return nil, false
 	}
 	// Check if expired
-	if time.Since(session.CreatedAt) > SessionTTL {
+	if time.Since(session.CreatedAt) > sessionTTL(session) {
 		return nil, false
 	}
 	return session, true
@@ -128,7 +140,7 @@ func (s *SessionStore) cleanup() {
 		case <-ticker.C:
 			s.mu.Lock()
 			for id, session := range s.sessions {
-				if time.Since(session.CreatedAt) > SessionTTL {
+				if time.Since(session.CreatedAt) > sessionTTL(session) {
 					delete(s.sessions, id)
 				}
 			}

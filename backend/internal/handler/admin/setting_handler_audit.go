@@ -482,6 +482,9 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	if before.OpenAICodexEgressCountry != after.OpenAICodexEgressCountry {
 		changed = append(changed, "openai_codex_egress_country")
 	}
+	if before.OpenAICodexResidency != after.OpenAICodexResidency {
+		changed = append(changed, "codex_residency")
+	}
 	if before.CodexLegacyClientProfileCompatibilityEnabled != after.CodexLegacyClientProfileCompatibilityEnabled {
 		changed = append(changed, "codex_legacy_client_profile_compatibility_enabled")
 	}

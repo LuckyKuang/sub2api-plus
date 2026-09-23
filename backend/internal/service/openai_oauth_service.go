@@ -267,6 +267,11 @@ func (s *OpenAIOAuthService) RefreshTokenWithClientID(ctx context.Context, refre
 
 func (s *OpenAIOAuthService) refreshTokenWithClientIDAndIdentity(ctx context.Context, refreshToken string, proxyURL string, clientID string, account *Account) (*OpenAITokenInfo, error) {
 	ctx = WithOutboundIdentityScope(ctx, nil)
+	var settings *SettingService
+	if s != nil {
+		settings = s.settingService
+	}
+	ctx = withManagedOpenAICodexResidency(ctx, settings)
 	identity := s.resolveOpenAIOutboundIdentity(ctx, account)
 	tokenResp, err := s.oauthClient.RefreshTokenWithClientIDAndIdentity(ctx, refreshToken, proxyURL, clientID, identity.UserAgent, identity.Originator, identity.Version)
 	if err != nil {
@@ -321,6 +326,11 @@ func (s *OpenAIOAuthService) enrichTokenInfoWithAccount(ctx context.Context, tok
 		}
 	}
 	identity := s.resolveOpenAIOutboundIdentity(ctx, account)
+	var settings *SettingService
+	if s != nil {
+		settings = s.settingService
+	}
+	ctx = withManagedOpenAICodexResidency(ctx, settings)
 	// accounts/check 命中的记录不属于个人账号时，必须改用个人订阅端点拿到期时间，
 	// 否则会把 workspace 权益的 expires_at 当成个人订阅到期日展示。
 	forcePersonalSubscriptionLookup := false
@@ -522,18 +532,11 @@ type OpenAIDeviceCodeResult struct {
 }
 
 // StartDeviceCode begins the official Codex device-code flow.
-// accountID is set only for re-authorization: the association stays in the
-// server-side session so the exchange cannot be redirected to a different
-// account, and the exchange reuses the account's outbound identity.
-func (s *OpenAIOAuthService) StartDeviceCode(ctx context.Context, proxyID *int64, platform string, accountID *int64) (*OpenAIDeviceCodeResult, error) {
+// 与官方一致：device-code 会话不在服务端预绑定账号，换票时出站身份走
+// 全局/默认链，凭据事后按 chatgpt_account_id 匹配账号。
+func (s *OpenAIOAuthService) StartDeviceCode(ctx context.Context, proxyID *int64, platform string) (*OpenAIDeviceCodeResult, error) {
 	if s == nil || s.oauthClient == nil {
 		return nil, infraerrors.New(http.StatusInternalServerError, "OPENAI_OAUTH_CLIENT_UNAVAILABLE", "openai oauth client is not configured")
-	}
-	if accountID != nil && s.accountRepo != nil {
-		acc, err := s.accountRepo.GetByID(ctx, *accountID)
-		if err != nil || !isOpenAIOAuthCredentialOwner(acc) {
-			return nil, infraerrors.New(http.StatusBadRequest, "OPENAI_OAUTH_REAUTH_ACCOUNT_INVALID", "re-authorization requires an existing non-shadow OpenAI OAuth account")
-		}
 	}
 	var proxyURL string
 	if proxyID != nil && s.proxyRepo != nil {
@@ -562,7 +565,6 @@ func (s *OpenAIOAuthService) StartDeviceCode(ctx context.Context, proxyID *int64
 	s.sessionStore.Set(sessionID, &openai.OAuthSession{
 		State:          state,
 		ClientID:       clientID,
-		AccountID:      accountID,
 		ProxyURL:       proxyURL,
 		RedirectURI:    openai.DeviceCodeRedirectURI,
 		CreatedAt:      time.Now(),
@@ -631,6 +633,11 @@ func (s *OpenAIOAuthService) RevokeAccountTokens(ctx context.Context, account *A
 		}
 	}
 	identity := s.resolveOpenAIOutboundIdentity(ctx, account)
+	var settings *SettingService
+	if s != nil {
+		settings = s.settingService
+	}
+	ctx = withManagedOpenAICodexResidency(ctx, settings)
 	clientID := strings.TrimSpace(account.GetCredential("client_id"))
 	return s.oauthClient.RevokeToken(ctx, token, hint, clientID, proxyURL, identity.UserAgent, identity.Originator)
 }

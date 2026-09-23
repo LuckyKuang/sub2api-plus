@@ -554,6 +554,11 @@ export default {
         openaiCodexEgressCountryNone: '未设置（不声明）',
         openaiCodexEgressCountryHint:
           '全局默认的出口国家（ISO 3166-1 alpha-2，如 US）。账号级 egress_country 与代理出口国家标注优先；留空不声明。',
+        codexResidency: 'Codex residency',
+        codexResidencyOff: '关闭（不发送）',
+        codexResidencyUS: 'US',
+        codexResidencyHint:
+          '仅全局设置。关闭时不发送。选择 US 后，Codex 推理（HTTP 与 WebSocket）、刷新、吊销和 ChatGPT backend-api 请求会带上 x-openai-internal-codex-residency: us。授权码换票和 device-code 不发送。账号覆写和入站请求头不能设置这个头。',
         codexLegacyClientProfileCompatibility: '旧版 Codex 客户端档案兼容模式',
         codexLegacyClientProfileCompatibilityHint: '默认关闭。仅临时允许 codex_app、codex_exec、codex_sdk_ts、codex_vscode_copilot 用于配置的出站身份及开启「仅允许 Codex 官方客户端档案」的账号；它们始终是旧版兼容档案，不会被标记为官方档案，仍必须精确匹配 User-Agent、originator、语义化版本和已知 Codex 证据请求头。',
         openaiCodexLocalGroupQuota: 'Codex 本地分组额度',

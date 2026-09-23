@@ -58,6 +58,8 @@ const (
 	FieldCacheCreation1hTokens = "cache_creation_1h_tokens"
 	// FieldAudioOutputTokens holds the string denoting the audio_output_tokens field in the database.
 	FieldAudioOutputTokens = "audio_output_tokens"
+	// FieldCodexRolloutBudgetUnits holds the string denoting the codex_rollout_budget_units field in the database.
+	FieldCodexRolloutBudgetUnits = "codex_rollout_budget_units"
 	// FieldInputCost holds the string denoting the input_cost field in the database.
 	FieldInputCost = "input_cost"
 	// FieldOutputCost holds the string denoting the output_cost field in the database.
@@ -198,6 +200,7 @@ var Columns = []string{
 	FieldCacheCreation5mTokens,
 	FieldCacheCreation1hTokens,
 	FieldAudioOutputTokens,
+	FieldCodexRolloutBudgetUnits,
 	FieldInputCost,
 	FieldOutputCost,
 	FieldCacheCreationCost,
@@ -446,6 +449,11 @@ func ByCacheCreation1hTokens(opts ...sql.OrderTermOption) OrderOption {
 // ByAudioOutputTokens orders the results by the audio_output_tokens field.
 func ByAudioOutputTokens(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldAudioOutputTokens, opts...).ToFunc()
+}
+
+// ByCodexRolloutBudgetUnits orders the results by the codex_rollout_budget_units field.
+func ByCodexRolloutBudgetUnits(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCodexRolloutBudgetUnits, opts...).ToFunc()
 }
 
 // ByInputCost orders the results by the input_cost field.

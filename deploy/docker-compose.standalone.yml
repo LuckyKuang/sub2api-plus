@@ -47,6 +47,14 @@ services:
       - SECURITY_TRUST_FORWARDED_IP_FOR_API_KEY_ACL=${SECURITY_TRUST_FORWARDED_IP_FOR_API_KEY_ACL:-false}
       - UPDATE_GITHUB_TOKEN=${UPDATE_GITHUB_TOKEN:-}
 
+      # OpenAI OAuth credential-plane overrides (optional, official-aligned).
+      # CODEX_CA_CERTIFICATE takes precedence over SSL_CERT_FILE. Only OpenAI
+      # outbound clients read these names; other providers use system roots.
+      - CODEX_CA_CERTIFICATE=${CODEX_CA_CERTIFICATE:-}
+      - SSL_CERT_FILE=${SSL_CERT_FILE:-}
+      - CODEX_REFRESH_TOKEN_URL_OVERRIDE=${CODEX_REFRESH_TOKEN_URL_OVERRIDE:-}
+      - CODEX_REVOKE_TOKEN_URL_OVERRIDE=${CODEX_REVOKE_TOKEN_URL_OVERRIDE:-}
+
       # WebAuthn deployment boundary. The administrator must still enable
       # Passkey in system settings after these values pass validation.
       - WEBAUTHN_ENABLED=${WEBAUTHN_ENABLED:-false}

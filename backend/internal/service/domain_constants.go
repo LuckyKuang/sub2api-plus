@@ -699,6 +699,9 @@ const (
 	// SettingKeyOpenAICodexEgressCountry 出口国家代码（ISO 3166-1 alpha-2，
 	// 全局默认；账号级 extra 优先）。空值 = 不声明。
 	SettingKeyOpenAICodexEgressCountry = "openai_codex_egress_country"
+	// SettingKeyOpenAICodexResidency 全局 Codex residency（off / us）。
+	// 仅 us 时出站附加 x-openai-internal-codex-residency。无账号级覆盖。
+	SettingKeyOpenAICodexResidency = "codex_residency"
 	// SettingKeyCodexLegacyClientProfileCompatibilityEnabled temporarily allows
 	// only the reviewed historical Codex wire identities. It is disabled by
 	// default and never changes their status to an official profile.

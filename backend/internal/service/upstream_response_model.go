@@ -1,10 +1,13 @@
 package service
 
 import (
+	"net/http"
 	"strings"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/logger"
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
+	"go.uber.org/zap"
 )
 
 const (
@@ -238,6 +241,31 @@ func observeOpenAISSEBody(observer *upstreamResponseModelObserver, body string) 
 	forEachOpenAISSEFrame(body, func(eventType string, payload []byte) {
 		observer.ObserveOpenAI(payload, eventType)
 	})
+}
+
+// observeOpenAICodexServerResponseHeaders records the server declarations that
+// arrive as response headers before any body event: `openai-model` (and the
+// `x-openai-model` spelling) names the model that actually served the request
+// (server-side model override signal), and `x-models-etag` marks the upstream
+// model-catalog revision. The model joins the regular observer precedence
+// (terminal body events still win and a disagreement raises the conflict flag);
+// the etag is logged as a catalog invalidation signal for the future
+// pinned-models integration.
+func observeOpenAICodexServerResponseHeaders(observer *upstreamResponseModelObserver, headers http.Header) {
+	if observer == nil || headers == nil {
+		return
+	}
+	model := strings.TrimSpace(headers.Get("openai-model"))
+	if model == "" {
+		// Official codex-api accepts both spellings of the server-model header.
+		model = strings.TrimSpace(headers.Get("x-openai-model"))
+	}
+	if model != "" {
+		observer.Observe(model, false)
+	}
+	if etag := strings.TrimSpace(headers.Get("x-models-etag")); etag != "" {
+		logger.L().Debug("codex_models_etag_observed", zap.String("component", "service.openai_gateway"), zap.String("etag", etag))
+	}
 }
 
 func firstValidTrimmedGJSONString(payload []byte, paths ...string) string {

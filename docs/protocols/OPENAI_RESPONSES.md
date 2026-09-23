@@ -73,13 +73,27 @@ tenant-isolated cache identity from an explicit `prompt_cache_key`, a supported
 session header, or a stable content prefix with a meaningful user/input anchor.
 It writes the finalized UUID to both the upstream `prompt_cache_key` and the
 canonical `session-id` header. Official Codex never sends a `conversation_id`
-header, so Codex-protocol outbound requests never carry one. The legacy
-`session_id` alias is a Plus compatibility header: OAuth accounts emit it only
-when the fingerprint mode converges session identity (`session` or `full`),
-while API-key accounts keep emitting it. `off` and `device` OAuth accounts keep
-the official `session-id` + `thread-id` spelling. A model-only request does not receive a content-derived key. API-key
+header, so Codex-protocol outbound requests never carry one, and the official
+wire format spells the session header `session-id` only: every Codex-protocol
+outbound path (HTTP forward, passthrough, Messages bridge, WebSocket
+handshake, compact probe, alpha search) drops the legacy `session_id` alias
+regardless of fingerprint mode, matching the official `build_session_headers`.
+Non-Codex compatible-supplier paths (OpenAI API-key accounts) keep the Plus
+`session-id` + `session_id` dual spelling, and inbound `session_id` remains
+accepted for sticky routing. A model-only request does not receive a content-derived key. API-key
 Chat Completions requests converted to Responses use the same behavior, while
 raw Chat Completions forwarding does not receive Responses-only cache fields.
+
+Codex-protocol outbound request bodies always carry
+`include: ["reasoning.encrypted_content"]`, matching the official client's
+unconditional declaration: the gateway merges and deduplicates the item with
+any client-provided `include` values and preserves other client-declared
+items. The only exception is the remote Compact v2 endpoint (`compaction_trigger`),
+whose request shape differs and is handled separately. Client-owned
+`client_metadata` keys — `turn_id`, `parent_turn_id`,
+`root_turn_id`, `mcp_attribution`, and unknown future keys — pass through the
+proxy verbatim; `mcp_attribution` is the official client's own responsibility
+and the gateway never generates, parses, or trims it.
 
 Under the default hard-affinity mode, account priority changes do not replace a
 valid active session route. The optional sticky-weighted scheduler mode remains
@@ -195,6 +209,38 @@ the default `codex` event family: replace it with local subscription windows,
 pass it through for an automatic-passthrough account, or suppress it. Named
 model-specific limit families remain independent. HTTP and SSE headers are
 finalized before their response bodies are written.
+
+Beyond the default `codex` family, the gateway parses the official
+supplementary declarations on every successful response:
+
+- `X-Codex-Limit-Name` names the default metered limit (typically the metered
+  model slug).
+- `X-Codex-Credits-Has-Credits`, `X-Codex-Credits-Unlimited`, and
+  `X-Codex-Credits-Balance` form a realtime credits snapshot supplement; the
+  WHAM usage/credit pull remains the authoritative source.
+- Additional metered limit families are discovered by scanning the
+  `x-{limit}-primary-used-percent` suffix the way the official client does:
+  `x-codex-secondary-primary-*` belongs to the `codex_secondary` family (not
+  the default 5-hour window), together with its `x-{limit}-limit-name` and
+  secondary-window variants. Additional families are recorded on the account
+  usage snapshot for diagnostics; the default 5h/7d quota windows and the
+  auto-pause thresholds continue to come from the default family only.
+- `x-codex-promo-message` and `x-codex-rate-limit-reached-type` are official
+  display-only declarations and are relayed to the downstream client verbatim
+  after generic response-header filtering; the gateway never derives quota or
+  billing decisions from them.
+- `openai-model` names the model that actually served the request. It joins
+  the response-model observer before body events (terminal body declarations
+  still win, and a disagreement raises the conflict flag). For Codex-protocol
+  accounts a server-declared model that differs from the baseline billing
+  model and has identified pricing corrects the recorded billing model; the
+  downstream response body is never rewritten.
+- `x-models-etag` marks the upstream model-catalog revision and is recorded
+  as a structured log signal for the future pinned-models integration.
+- The `codex_rollout_budget_units` declaration in `response.completed` usage
+  is a fractional JSON number; the gateway parses and records it per usage
+  log as a reserved billing dimension and does not use it in cost calculation
+  yet.
 
 The dedicated `/backend-api/wham/usage` route remains a local-only view. It
 returns the API key subscription quota when the local setting is enabled and
@@ -314,6 +360,15 @@ This response-header compatibility does not make Codex App API-key calls to
 `account/rateLimits/read` available; that App Server authentication behavior is
 outside this gateway's request path.
 
+## Codex Residency
+
+The global setting `codex_residency` is `off` or `us`. `us` adds
+`x-openai-internal-codex-residency: us` to Codex-protocol Responses forwarding,
+including HTTP passthrough and the Responses WebSocket handshake, and to
+refresh, revoke, and chatgpt.com backend-api calls. `off` sends nothing and
+strips a client-supplied copy. Authorization-code exchange and device-code do
+not send the header. See `docs/OUTBOUND_IDENTITY.md` for the source rule.
+
 ## Codex Fingerprint Convergence
 
 OpenAI OAuth accounts may rewrite outbound Codex installation, session, and
@@ -334,9 +389,10 @@ cancel, and other non-create subpaths are not session turns and receive no
 fingerprint mutation.
 
 Fingerprint preparation runs before final request construction. Plus
-prompt-cache/session isolation is authoritative for the final `session-id` and
-`session_id` headers, while fingerprint convergence remains authoritative for
-installation and thread/turn metadata. `off` disables only fingerprint-owned
+prompt-cache/session isolation is authoritative for the final `session-id`
+header on Codex-protocol outbound (the legacy `session_id` alias is removed
+for every Codex account), while fingerprint convergence remains authoritative
+for installation and thread/turn metadata. `off` disables only fingerprint-owned
 header and body mutation; it does not disable Plus cache isolation, security,
 session sharing, or compact policy. WebSocket connection reuse compares final
 stable handshake carriers even when `off` or `device` leaves those values

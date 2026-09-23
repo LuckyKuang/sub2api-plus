@@ -111,13 +111,19 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 		// explicit: it preserves official client context without turning the
 		// gateway into an arbitrary X-Codex-* header proxy. Routing hints are
 		// intentionally excluded because setOpenAICodexRoutingHint derives one
-		// from the selected account and final mapped model below.
+		// from the selected account and final mapped model below. The official
+		// client reuses the Responses header builder for the WS handshake, so
+		// its turn-context headers (subagent label, memgen marker, timing
+		// metrics opt-in) are copied verbatim without gateway rewrites.
 		for _, name := range [...]string{
 			"thread-id",
 			"x-client-request-id",
 			"x-codex-window-id",
 			"x-codex-installation-id",
 			"x-codex-parent-thread-id",
+			"x-openai-memgen-request",
+			"x-openai-subagent",
+			"x-responsesapi-include-timing-metrics",
 		} {
 			if value := c.Request.Header.Get(name); strings.TrimSpace(value) != "" {
 				headers.Set(name, value)

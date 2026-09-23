@@ -173,8 +173,7 @@ func (h *OpenAIOAuthHandler) ExchangeCode(c *gin.Context) {
 }
 
 type openAIDeviceCodeStartRequest struct {
-	ProxyID   *int64 `json:"proxy_id"`
-	AccountID *int64 `json:"account_id"`
+	ProxyID *int64 `json:"proxy_id"`
 }
 
 type openAIDeviceCodePollRequest struct {
@@ -188,14 +187,7 @@ func (h *OpenAIOAuthHandler) StartDeviceCode(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		req = openAIDeviceCodeStartRequest{}
 	}
-	if req.AccountID != nil {
-		account, getErr := h.adminService.GetAccount(c.Request.Context(), *req.AccountID)
-		if getErr != nil || !account.IsOpenAIOAuth() || account.IsCredentialShadow() {
-			response.BadRequest(c, "OpenAI re-authorization requires an existing non-shadow OAuth account")
-			return
-		}
-	}
-	result, err := h.openaiOAuthService.StartDeviceCode(c.Request.Context(), req.ProxyID, oauthPlatformFromPath(c), req.AccountID)
+	result, err := h.openaiOAuthService.StartDeviceCode(c.Request.Context(), req.ProxyID, oauthPlatformFromPath(c))
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return

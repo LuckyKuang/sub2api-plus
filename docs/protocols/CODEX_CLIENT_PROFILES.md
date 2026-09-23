@@ -112,6 +112,25 @@ fingerprint rules, and fingerprint-bypass option do not affect authorization.
 `gateway.force_codex_cli` is not an identity source and cannot bypass inbound
 access control or replace the selected outbound identity.
 
+## Official client turn-context headers
+
+The official Codex client emits bounded per-turn context headers on Responses
+requests. Because the public WebSocket handshake reuses the Responses header
+builder, the same context can also appear on the Responses WebSocket handshake:
+
+- `x-openai-subagent` labels a subagent turn with `review`, `compact`,
+  `memory_consolidation`, `collab_spawn`, or a configured label.
+- `x-openai-memgen-request` marks a memory-generation request.
+- `x-responsesapi-include-timing-metrics` opts a turn into timing metrics;
+  the official default is off, so the gateway only forwards it when the
+  client explicitly sends it.
+
+The gateway forwards these headers verbatim to the upstream on the Responses
+HTTP path and the WebSocket handshake copy list, in both passthrough and
+non-passthrough modes. It never rewrites, synthesizes, or drops them for
+recognized clients, and account-level header overrides cannot replace them
+with static values: they must reflect the live client turn state.
+
 ## Outbound fingerprint convergence
 
 Every credential-owning OpenAI OAuth account stores an explicit
@@ -153,11 +172,12 @@ their credential-owning parent; the shadow never creates an independent
 fingerprint identity.
 
 Fingerprint body/header staging happens before the final cache and outbound
-identity stages. The finalized Plus cache key owns both `session-id` aliases;
-fingerprinting owns installation and thread/turn carriers. Malformed, null,
-array, or scalar embedded `x-codex-turn-metadata` values are rebuilt as JSON
-objects when that carrier is present, while valid unrelated fields are kept.
-Missing carriers are not synthesized solely for embedded metadata.
+identity stages. The finalized Plus cache key owns the official `session-id`
+header, and every Codex-protocol outbound path drops the legacy `session_id`
+alias; fingerprinting owns installation and thread/turn carriers. Malformed,
+null, array, or scalar embedded `x-codex-turn-metadata` values are rebuilt as
+JSON objects when that carrier is present, while valid unrelated fields are
+kept. Missing carriers are not synthesized solely for embedded metadata.
 WebSocket pool reuse compares every final stable handshake carrier in all four
 modes, including client-owned values preserved by `off` and `device`.
 
@@ -245,14 +265,19 @@ When proxying an official Codex client, a reviewed inbound thread originator
 User-Agent and Version stay on the credential-owning snapshot.
 The OAuth credential endpoint follows official Codex auth clients:
 authorization-code exchange uses the raw client and sends no User-Agent,
-Originator, or Version; refresh uses the default client and sends only the
+Originator, or Version; refresh uses the default client and sends the
 selected User-Agent and Originator. Neither request receives the inference-only
-`Version` header.
+`Version` header. Refresh and revoke also send
+`x-openai-internal-codex-residency` when the global `codex_residency` setting
+is `us`.
 Device-code start/poll uses the same raw client (no User-Agent, Originator, or
-Version) and then exchanges the returned authorization code. Re-authorization
-device-code sessions may bind an account server-side like browser re-auth.
+Version) and then exchanges the returned authorization code. Device-code
+sessions do not pre-bind an account; the credential is matched afterwards.
+Browser authorization-code re-authorization still stores the account on the
+session.
 `/oauth/revoke`
-uses the refresh-style client (User-Agent + Originator, no Version); `client_id`
+uses the refresh-style client (User-Agent + Originator, no Version, plus
+managed residency when enabled); `client_id`
 is sent only when revoking a refresh token. Login no longer PATCHes
 ChatGPT `training_allowed`; administrators can still force privacy later.
 
@@ -295,11 +320,12 @@ alpha-2 code. Invalid stored values fall through to the next source and never
 block forwarding.
 
 Official Codex never sends a `conversation_id` header, so Codex-protocol
-outbound requests never carry one. The legacy `session_id` alias is a Plus
-compatibility header: OAuth accounts emit it only when the fingerprint mode
-converges session identity (`session`/`full`), API-key accounts keep emitting
-it, and `off`/`device` OAuth accounts keep the official `session-id` +
-`thread-id` spelling only. The chatgpt.com backend-api auxiliary surface
+outbound requests never carry one. The official wire format spells the
+session header `session-id` only: every Codex-protocol outbound path drops
+the legacy `session_id` alias regardless of fingerprint mode, while non-Codex
+compatible-supplier paths (OpenAI API-key accounts) keep the Plus
+`session-id` + `session_id` dual spelling and inbound `session_id` remains
+accepted for sticky routing. The chatgpt.com backend-api auxiliary surface
 (accounts check, subscription enrich, settings PATCH, WHAM usage and credit
 endpoints) uses the regular HTTP client without browser TLS impersonation and
 the official backend-client header surface: selected User-Agent,
@@ -333,12 +359,23 @@ snapshot across both handler retries and automatic Responses-to-Chat fallback.
 Shared HTTP/TLS transports cannot select a Grok identity based on a base URL or
 discard the chosen identity on Grok's access-denied fallback.
 
-## Explicitly deferred for v0.2.5+custom.001
+## Managed residency
 
-- `x-openai-internal-codex-residency`: the official client sends `us` as a
-  process-level default header. Plus intentionally does not emit it this
-  release; if US-residency accounts ever require it, derive the value from the
-  bound proxy's `egress_country` annotation instead of hardcoding it.
+`x-openai-internal-codex-residency` follows the official managed-residency
+header. The only source is the global setting `codex_residency` (`off` by
+default, or `us`). There is no account-level value. When the setting is `us`,
+Codex-protocol inference (HTTP and WebSocket), token refresh, token revoke,
+and the chatgpt.com backend-api auxiliary surface (accounts check, WHAM usage
+and credits, and the settings call) send `us`. Authorization-code exchange and
+device-code start/poll stay on the raw client and do not send it. Inbound
+headers and generic account header overrides cannot set or clear it.
+
+## User-Agent suffix
+
+An administrator User-Agent may end with the official ` ({suffix})` group, for
+example `codex_cli_rs/0.147.0 (Ubuntu 24.04; x86_64) xterm-256color (mcp: server-a)`.
+Pairing, validation, and version synchronization accept that form and keep the
+suffix unchanged. The gateway does not generate a suffix.
 
 ## Standalone search
 

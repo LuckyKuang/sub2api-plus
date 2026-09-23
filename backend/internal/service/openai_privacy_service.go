@@ -40,7 +40,7 @@ func disableOpenAITraining(ctx context.Context, clientFactory PrivacyClientFacto
 	}
 
 	identity = normalizeOpenAIPrivacyIdentity(identity)
-	request := client.R().
+	request := applyReqCodexResidency(ctx, client.R()).
 		SetContext(ctx).
 		SetHeader("Authorization", "Bearer "+accessToken).
 		SetHeader("User-Agent", identity.UserAgent).
@@ -75,6 +75,16 @@ func disableOpenAITraining(ctx context.Context, clientFactory PrivacyClientFacto
 
 	slog.Info("openai_privacy_training_disabled")
 	return PrivacyModeTrainingOff
+}
+
+func applyReqCodexResidency(ctx context.Context, request *req.Request) *req.Request {
+	if request == nil {
+		return nil
+	}
+	if value := openai.CodexResidencyFromContext(ctx); value != "" {
+		return request.SetHeader(openai.CodexResidencyHeader, value)
+	}
+	return request
 }
 
 // isCloudflareChallengeResponse 判断 chatgpt.com 返回的是否为 Cloudflare 质询/拦截页。
@@ -122,7 +132,7 @@ func fetchChatGPTAccountInfo(ctx context.Context, clientFactory PrivacyClientFac
 
 	identity = normalizeOpenAIPrivacyIdentity(identity)
 	var result map[string]any
-	resp, err := client.R().
+	resp, err := applyReqCodexResidency(ctx, client.R()).
 		SetContext(ctx).
 		SetHeader("Authorization", "Bearer "+accessToken).
 		SetHeader("User-Agent", identity.UserAgent).
@@ -238,7 +248,7 @@ func fetchChatGPTSubscriptionExpiresAt(ctx context.Context, clientFactory Privac
 		WillRenew   bool   `json:"will_renew"`
 		ID          string `json:"id"`
 	}
-	resp, err := client.R().
+	resp, err := applyReqCodexResidency(ctx, client.R()).
 		SetContext(ctx).
 		SetHeader("Authorization", "Bearer "+accessToken).
 		SetHeader("User-Agent", identity.UserAgent).

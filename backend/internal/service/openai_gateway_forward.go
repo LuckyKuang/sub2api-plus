@@ -1061,6 +1061,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	httpInvalidEncryptedContentRetryTried := false
 	compactModelFallbackRetried := false
 	agentTaskRecoveryTried := false
+	authRecoveryTried := false
 	rejectedFieldRetryState := openAIResponsesRejectedFieldRetryStateForRequest(c, body)
 	for {
 		// Build upstream request
@@ -1188,6 +1189,32 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 					account.Name, fromModel, fallbackModel, upstreamCode,
 				)
 				continue
+			}
+			// 401 同账号恢复：OAuth-like Bearer 账号先强制刷新凭据并同账号重试一次，
+			// 仍失败才进入 failover（仅 401，不含 403）。刷新失败时静默落入下方
+			// 常规错误处理，由 failover 决策接管。
+			if !authRecoveryTried && isOpenAIUnauthorizedRecoverableStatus(resp.StatusCode) && s.canForceRefreshOpenAIAuthOnUnauthorized(account) {
+				authRecoveryTried = true
+				refreshedToken, refreshErr := s.recoverOpenAIAuthAfterUnauthorized(ctx, account)
+				if refreshErr != nil {
+					logger.LegacyPrintf("service.openai_gateway", "[OpenAI] 401 same-account recovery skipped after refresh failure (account: %s): %v", account.Name, refreshErr)
+				} else {
+					appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+						ProxyID:            opsUpstreamProxyID(account),
+						ProxyName:          opsUpstreamProxyName(account),
+						Platform:           account.Platform,
+						AccountID:          account.ID,
+						AccountName:        account.Name,
+						UpstreamStatusCode: resp.StatusCode,
+						UpstreamRequestID:  resp.Header.Get("x-request-id"),
+						Kind:               "retry",
+						Reason:             openAIAuthRecoveryRetryReason,
+						Message:            upstreamMsg,
+					})
+					token = refreshedToken
+					logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Retrying same account once after 401 credential refresh (account: %s)", account.Name)
+					continue
+				}
 			}
 			if s.shouldFailoverOpenAIUpstreamResponse(account, resp.StatusCode, upstreamMsg, respBody) {
 				upstreamDetail := ""

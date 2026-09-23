@@ -73,7 +73,7 @@ func TestAccountTestService_TestAccountConnection_OpenAICompactOAuthSuccessPersi
 	require.Contains(t, upstream.lastReq.Header.Get("x-codex-beta-features"), "remote_compaction_v2")
 	probeSessionID := compactProbeSessionID(account.ID)
 	require.Equal(t, probeSessionID, upstream.lastReq.Header.Get("session-id"))
-	require.Equal(t, probeSessionID, upstream.lastReq.Header.Get("session_id"))
+	require.Empty(t, upstream.lastReq.Header.Get("session_id"))
 	require.Equal(t, "probe-owner-installation", upstream.lastReq.Header.Get("x-codex-installation-id"))
 	require.NotEmpty(t, upstream.lastReq.Header.Get("x-codex-window-id"))
 	require.NotEmpty(t, upstream.lastReq.Header.Get("thread-id"))
@@ -172,8 +172,8 @@ func TestAccountTestService_TestAccountConnection_OpenAICompactSetupTokenSkipsFi
 	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/admin/accounts/9/test", bytes.NewReader(nil))
 
 	require.NoError(t, svc.TestAccountConnection(c, account.ID, "gpt-5.4", "", AccountTestModeCompact))
-	require.Equal(t, compactProbeSessionID(account.ID), upstream.lastReq.Header.Get("session_id"))
 	require.Equal(t, compactProbeSessionID(account.ID), upstream.lastReq.Header.Get("session-id"))
+	require.Empty(t, upstream.lastReq.Header.Get("session_id"))
 	require.Empty(t, upstream.lastReq.Header.Get("x-codex-installation-id"))
 	<-updateCalls
 }
@@ -400,10 +400,10 @@ func TestAccountTestService_TestAccountConnection_OpenAICompactProbeComposesFing
 	require.NoError(t, svc.TestAccountConnection(c, account.ID, "gpt-5.4", "", AccountTestModeCompact))
 
 	// Fingerprinting owns installation/thread carriers; the Plus probe cache
-	// identity remains final for both session aliases.
+	// identity remains final for the official session-id header.
 	probeSessionID := compactProbeSessionID(account.ID)
 	require.Equal(t, probeSessionID, upstream.lastReq.Header.Get("session-id"))
-	require.Equal(t, probeSessionID, upstream.lastReq.Header.Get("session_id"))
+	require.Empty(t, upstream.lastReq.Header.Get("session_id"))
 	require.NotEqual(t, resolveConvergedSessionID(&account), upstream.lastReq.Header.Get("session-id"))
 	require.Equal(t, resolveConvergedInstallationID(&account), upstream.lastReq.Header.Get("x-codex-installation-id"),
 		"真实 Codex 每个请求必带 installation-id，探测不得缺失")
@@ -464,7 +464,7 @@ func TestAccountTestService_TestAccountConnection_OpenAICompactShadowUsesOwnerFi
 
 	probeSessionID := compactProbeSessionID(shadow.ID)
 	require.Equal(t, probeSessionID, upstream.lastReq.Header.Get("session-id"))
-	require.Equal(t, probeSessionID, upstream.lastReq.Header.Get("session_id"))
+	require.Empty(t, upstream.lastReq.Header.Get("session_id"))
 	require.NotEqual(t, resolveConvergedSessionID(&owner), upstream.lastReq.Header.Get("session-id"))
 	require.Equal(t, resolveConvergedInstallationID(&owner), upstream.lastReq.Header.Get("x-codex-installation-id"))
 	wantThreadID := resolveConvergedThreadID(&owner, probeSessionID)

@@ -21,6 +21,10 @@ No new SQL migrations ship in this import.
   [Codex scheduler quota windows](protocols/OPENAI_RESPONSES.md#codex-scheduler-quota-windows).
 - Antigravity Gemini SSE passthrough no longer inserts a blank line between
   already-terminated events. See [Antigravity](providers/ANTIGRAVITY.md).
+- An upstream `401` on an OpenAI OAuth credential owner force-refreshes the
+  credential and retries the same account once before failover; the attempt is
+  recorded as an `auth_refresh_401` retry event. See the capacity-shed row
+  below.
 - The user API-key create form can filter available groups by provider
   family. Classification uses the group's configured platform, not its
   display name.
@@ -34,7 +38,7 @@ No new SQL migrations ship in this import.
 | Ingress audit | Security-audit order and extraction pass-through remain the Plus contract. |
 | DeepSeek | Official empty-mapping whitelist is included. Passthrough accounts still skip mapping admission. |
 | Quota / session | Canonical 5h/7d window reads are included. Plus session affinity, local quota views, and pause thresholds remain authoritative. |
-| Capacity shed | OpenAI overloaded / `slow_down`, Anthropic `overloaded_error` / 529, Grok shared model capacity, and Antigravity `MODEL_CAPACITY_EXHAUSTED` return immediately. Same-account retry and account failover stay for transport, 401/403, and account-scoped 429. |
+| Capacity shed | OpenAI overloaded / `slow_down`, Anthropic `overloaded_error` / 529, Grok shared model capacity, and Antigravity `MODEL_CAPACITY_EXHAUSTED` return immediately. Same-account retry and account failover stay for transport, 401/403, and account-scoped 429. An upstream 401 on an OpenAI OAuth credential owner first force-refreshes the credential and retries the same account once (recorded as an `auth_refresh_401` retry event); only a still-failing retry fails over. 403 keeps the direct failover behavior. |
 | API keys | Provider filter is included. Plus IP restriction, quota, rate-limit, and expiration fields on the same form remain. |
 | Billing probes | Retired upstream billing probes remain removed. |
 

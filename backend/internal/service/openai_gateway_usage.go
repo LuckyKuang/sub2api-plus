@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -238,6 +239,31 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	if protectedMismatch {
 		billingModels = []string{codexAutoReviewModel}
 	}
+	// Codex 协议账号：服务端经 openai-model 响应头 / terminal 事件自报实际服务
+	// 模型（服务端模型覆盖信号）。与基线计费模型不一致时以自报模型校正计费
+	// 记录（仅校正记录，不改写下游事件）；自报模型无可识别定价、观测冲突或
+	// 媒体计费时保持基线候选链。
+	if account.UsesOpenAICodexProtocol() && !protectedMismatch &&
+		!result.UpstreamResponseModelConflict &&
+		result.ImageCount == 0 && result.VideoCount == 0 && result.WebSearchCalls == 0 &&
+		result.AudioUsage == nil && result.SearchCount == 0 {
+		if serverModel := strings.TrimSpace(result.UpstreamResponseModel); serverModel != "" &&
+			!strings.EqualFold(serverModel, firstUsageBillingModel(billingModels)) {
+			if identified, _ := s.hasIdentifiedOpenAIResponsePricing(ctx, serverModel, apiKey); identified {
+				logger.L().Info("codex_server_model_billing_correction",
+					zap.String("component", "service.openai_gateway"),
+					zap.String("event", "billing.codex_server_model_correction"),
+					zap.String("request_id", result.RequestID),
+					zap.String("baseline_billing_model", firstUsageBillingModel(billingModels)),
+					zap.String("server_model", serverModel),
+					zap.Int64("account_id", account.ID),
+				)
+				serverModels := s.filterCNProviderBillingModelCandidates(
+					ctx, account, apiKey, usageBillingModelCandidates(serverModel))
+				billingModels = append(serverModels, billingModels...)
+			}
+		}
+	}
 	serviceTier := ""
 	if result.ServiceTier != nil {
 		serviceTier = strings.TrimSpace(*result.ServiceTier)
@@ -439,6 +465,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		ImageInputTokens:         result.Usage.ImageInputTokens,
 		ImageOutputTokens:        result.Usage.ImageOutputTokens,
 		AudioOutputTokens:        result.Usage.AudioOutputTokens,
+		CodexRolloutBudgetUnits:  result.Usage.CodexRolloutBudgetUnits,
 		IsComplete:               usageCompletionPtr(input.IsComplete, result.UsageComplete()),
 		ImageCount:               result.ImageCount,
 		ImageSize:                optionalTrimmedStringPtr(result.ImageSize),
@@ -1275,6 +1302,80 @@ func parseCodexRateLimitHeadersAt(headers http.Header, now time.Time) *OpenAICod
 	// Overflow ratio
 	if v := parseFloat("x-codex-primary-over-secondary-limit-percent"); v != nil {
 		snapshot.PrimaryOverSecondaryPercent = v
+		hasData = true
+	}
+
+	// Server-declared limit name of the default codex family（计量模型 slug）。
+	if name := strings.TrimSpace(headers.Get("x-codex-limit-name")); name != "" {
+		snapshot.LimitName = name
+	}
+
+	// Credits snapshot（x-codex-credits-* 头族）：实时补充；WHAM API 拉取路径
+	// 仍是权威来源。对齐官方 parse_credits_snapshot：has-credits 与 unlimited
+	// 必须同时可解析才构成快照。
+	parseBool := func(key string) *bool {
+		switch strings.TrimSpace(headers.Get(key)) {
+		case "true", "1":
+			value := true
+			return &value
+		case "false", "0":
+			value := false
+			return &value
+		default:
+			return nil
+		}
+	}
+	if hasCredits, unlimited := parseBool("x-codex-credits-has-credits"), parseBool("x-codex-credits-unlimited"); hasCredits != nil && unlimited != nil {
+		snapshot.CreditsHasCredits = hasCredits
+		snapshot.CreditsUnlimited = unlimited
+		snapshot.CreditsBalance = strings.TrimSpace(headers.Get("x-codex-credits-balance"))
+		hasData = true
+	}
+
+	// 对齐官方 rate_limits.rs：扫描 `x-{limit}-primary-used-percent` 后缀发现
+	// 默认 codex 族之外的计量族（如 x-codex-secondary-primary-* 属于
+	// codex_secondary 族，而非默认 5h 窗口），并解析 `x-{limit}-limit-name`。
+	// 附加族仅作诊断记录，不参与 5h/7d 配额判定。
+	familyLimits := make([]string, 0, 2)
+	for name := range headers {
+		lower := strings.ToLower(name)
+		if !strings.HasSuffix(lower, "-primary-used-percent") {
+			continue
+		}
+		limit := strings.TrimSuffix(strings.TrimPrefix(lower, "x-"), "-primary-used-percent")
+		if limit == "" || limit == "codex" {
+			continue
+		}
+		familyLimits = append(familyLimits, limit)
+	}
+	sort.Strings(familyLimits)
+	for _, limit := range familyLimits {
+		family := OpenAICodexRateLimitFamily{
+			LimitID:   strings.ReplaceAll(limit, "-", "_"),
+			LimitName: strings.TrimSpace(headers.Get("x-" + limit + "-limit-name")),
+		}
+		if v := parseFloat("x-" + limit + "-primary-used-percent"); v != nil {
+			family.PrimaryUsedPercent = v
+		}
+		if v := parseInt("x-" + limit + "-primary-window-minutes"); v != nil {
+			family.PrimaryWindowMinutes = v
+		}
+		if v := parseInt64("x-" + limit + "-primary-reset-at"); v != nil {
+			family.PrimaryResetAtUnix = v
+		}
+		if v := parseFloat("x-" + limit + "-secondary-used-percent"); v != nil {
+			family.SecondaryUsedPercent = v
+		}
+		if v := parseInt("x-" + limit + "-secondary-window-minutes"); v != nil {
+			family.SecondaryWindowMinutes = v
+		}
+		if v := parseInt64("x-" + limit + "-secondary-reset-at"); v != nil {
+			family.SecondaryResetAtUnix = v
+		}
+		if family.PrimaryUsedPercent == nil && family.SecondaryUsedPercent == nil && family.LimitName == "" {
+			continue
+		}
+		snapshot.Families = append(snapshot.Families, family)
 		hasData = true
 	}
 

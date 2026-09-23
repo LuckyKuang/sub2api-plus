@@ -58,6 +58,22 @@ services:
       - UPDATE_GITHUB_TOKEN=${UPDATE_GITHUB_TOKEN:-}
       - ALIPAY_MOBILE_PRECREATE_DEEP_LINK=${ALIPAY_MOBILE_PRECREATE_DEEP_LINK:-}
 
+      # =======================================================================
+      # OpenAI OAuth credential-plane overrides (optional, official-aligned)
+      # =======================================================================
+      # PEM bundle appended to the system roots for the OpenAI OAuth
+      # credential-plane HTTP clients (refresh/revoke/enrich/WHAM). Official
+      # names: CODEX_CA_CERTIFICATE takes precedence over SSL_CERT_FILE, and a
+      # misconfigured bundle fails startup traffic with a precise error.
+      # These names are Codex-specific: only OpenAI outbound clients read them,
+      # so other providers keep using the system roots.
+      - CODEX_CA_CERTIFICATE=${CODEX_CA_CERTIFICATE:-}
+      - SSL_CERT_FILE=${SSL_CERT_FILE:-}
+      # Override the token refresh / revoke endpoints (empty or invalid falls
+      # back to the official auth.openai.com defaults with a warning log).
+      - CODEX_REFRESH_TOKEN_URL_OVERRIDE=${CODEX_REFRESH_TOKEN_URL_OVERRIDE:-}
+      - CODEX_REVOKE_TOKEN_URL_OVERRIDE=${CODEX_REVOKE_TOKEN_URL_OVERRIDE:-}
+
       # WebAuthn deployment boundary. The administrator must still enable
       # Passkey in system settings after these values pass validation.
       - WEBAUTHN_ENABLED=${WEBAUTHN_ENABLED:-false}

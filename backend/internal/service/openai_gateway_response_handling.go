@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"sort"
 	"strconv"
@@ -57,6 +58,7 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 	if observer == nil {
 		observer = beginUpstreamResponseModelObservation(c)
 	}
+	observeOpenAICodexServerResponseHeaders(observer, resp.Header)
 	firstOutputTimeout := time.Duration(0)
 	if account != nil && account.Platform == PlatformOpenAI {
 		firstOutputTimeout = s.openAIFirstOutputTimeout(reasoningEffort)
@@ -1552,6 +1554,13 @@ func openAIUsageFromGJSON(value gjson.Result) (OpenAIUsage, bool) {
 		value.Get("input_tokens_details.image_tokens"),
 		value.Get("prompt_tokens_details.image_tokens"),
 	)
+	// 官方 Codex rollout 预算消耗自报（JSON number，可为小数）；仅记录。
+	var rolloutBudgetUnits *float64
+	if budget := value.Get("codex_rollout_budget_units"); budget.Exists() && budget.Type == gjson.Number {
+		if parsed := budget.Float(); !math.IsNaN(parsed) && !math.IsInf(parsed, 0) {
+			rolloutBudgetUnits = &parsed
+		}
+	}
 	return OpenAIUsage{
 		InputTokens:              int(inputTokens),
 		ImageInputTokens:         imageInputTokens,
@@ -1560,6 +1569,7 @@ func openAIUsageFromGJSON(value gjson.Result) (OpenAIUsage, bool) {
 		CacheReadInputTokens:     cacheReadTokens,
 		ImageOutputTokens:        int(imageOutputTokens),
 		AudioOutputTokens:        int(audioOutputTokens),
+		CodexRolloutBudgetUnits:  rolloutBudgetUnits,
 	}, true
 }
 
@@ -1618,6 +1628,7 @@ func (s *OpenAIGatewayService) handleNonStreamingResponse(ctx context.Context, r
 	if observer == nil {
 		observer = beginUpstreamResponseModelObservation(c)
 	}
+	observeOpenAICodexServerResponseHeaders(observer, resp.Header)
 	if bodyHasSSEFraming(body) {
 		observeOpenAISSEBody(observer, string(body))
 	} else {

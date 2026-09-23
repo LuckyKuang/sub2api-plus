@@ -220,7 +220,7 @@ func applyCodexOAuthTransformWithOptions(reqBody map[string]any, opts codexOAuth
 		}
 	}
 
-	// 请求带 reasoning 时补齐 include:["reasoning.encrypted_content"]，与真实 Codex 对齐
+	// 恒补 include:["reasoning.encrypted_content"]，与真实 Codex 对齐
 	// （compact 端点形态不同，单独处理，此处跳过）。
 	if !opts.IsCompact && ensureCodexReasoningInclude(reqBody) {
 		result.Modified = true
@@ -1417,15 +1417,13 @@ func defaultCodexSynthInstructions(model string) string {
 	return "You are a helpful coding assistant."
 }
 
-// ensureCodexReasoningInclude 在请求带 reasoning 时补齐 include:["reasoning.encrypted_content"]。
+// ensureCodexReasoningInclude 恒补 include:["reasoning.encrypted_content"]。
 //
-// 真实 Codex 在 reasoning 存在时总会请求加密推理内容（ChatGPT/store=false 场景下用于上下文回放）。
-// 该函数为加法式、幂等：仅在 include 缺失或未包含该项时追加；对非数组的异常 include 不做破坏性改写。
+// 真实 Codex 出站请求总是携带该项（client.rs: include = vec!["reasoning.encrypted_content"]，
+// ChatGPT/store=false 场景下用于上下文回放），与请求是否声明 reasoning 无关。
+// 该函数为加法式、幂等：仅在 include 缺失或未包含该项时追加，客户端显式
+// 携带的其他 include 项保留；对非数组的异常 include 不做破坏性改写。
 func ensureCodexReasoningInclude(reqBody map[string]any) bool {
-	reasoning, ok := reqBody["reasoning"].(map[string]any)
-	if !ok || len(reasoning) == 0 {
-		return false
-	}
 	const encrypted = "reasoning.encrypted_content"
 	switch existing := reqBody["include"].(type) {
 	case nil:

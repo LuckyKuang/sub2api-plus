@@ -13,6 +13,7 @@ import (
 	"time"
 
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
 	"github.com/imroc/req/v3"
 )
 
@@ -149,17 +150,27 @@ func (s *OpenAIQuotaService) applyOpenAIOutboundIdentity(ctx context.Context, ac
 	}
 	// Official backend-client WHAM headers are User-Agent + auth + account id.
 	// Originator/Version belong on inference, not /wham/usage or credit APIs.
+	var settings *SettingService
 	if s != nil && s.openAIIdentityResolver != nil {
 		s.openAIIdentityResolver.applyOpenAIOutboundIdentity(ctx, account, h, false)
+		settings = s.openAIIdentityResolver.settingService
 	} else {
 		applyResolvedOpenAIOutboundIdentity(h, resolveOpenAIOutboundIdentityFromSettings(ctx, account, nil), false)
 	}
+	// WHAM omits Originator/Version. Residency is still a managed Codex header.
+	applyOpenAICodexResidencyFromSettings(ctx, settings, h, true)
 	for key := range headers {
 		delete(headers, key)
 	}
 	for key, values := range h {
 		if len(values) > 0 {
 			headers[key] = values[0]
+		}
+	}
+	for key := range headers {
+		if strings.EqualFold(key, openai.CodexResidencyHeader) && key != openai.CodexResidencyHeader {
+			headers[openai.CodexResidencyHeader] = headers[key]
+			delete(headers, key)
 		}
 	}
 }

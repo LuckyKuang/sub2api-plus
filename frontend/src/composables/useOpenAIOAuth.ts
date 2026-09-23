@@ -95,18 +95,14 @@ export function useOpenAIOAuth() {
   }
 
   const startDeviceCode = async (
-    proxyId?: number | null,
-    accountId?: number | null
+    proxyId?: number | null
   ): Promise<{ session_id: string; user_code: string; verification_url: string; interval_seconds: number } | null> => {
     loading.value = true
     error.value = ''
     try {
-      const payload: { proxy_id?: number; account_id?: number } = {}
+      const payload: { proxy_id?: number } = {}
       if (proxyId) {
         payload.proxy_id = proxyId
-      }
-      if (accountId) {
-        payload.account_id = accountId
       }
       const result = await adminAPI.accounts.startOpenAIDeviceCode(
         `${endpointPrefix}/device-code/start`,

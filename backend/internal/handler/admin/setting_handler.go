@@ -333,6 +333,7 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		OpenAICodexUserAgent:                                   settings.OpenAICodexUserAgent,
 		OpenAICodexEnvironmentTimezone:                         settings.OpenAICodexEnvironmentTimezone,
 		OpenAICodexEgressCountry:                               settings.OpenAICodexEgressCountry,
+		OpenAICodexResidency:                                   settings.OpenAICodexResidency,
 		CodexLegacyClientProfileCompatibilityEnabled:           settings.CodexLegacyClientProfileCompatibilityEnabled,
 		OpenAICodexLocalGroupQuotaEnabled:                      settings.OpenAICodexLocalGroupQuotaEnabled,
 		OpenAICodexClientVersion:                               settings.OpenAICodexClientVersion,

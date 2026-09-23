@@ -1783,6 +1783,11 @@ func (s *adminServiceImpl) ForceOpenAIPrivacy(ctx context.Context, account *Acco
 	}
 
 	chatGPTAccountID, _ := account.Credentials["chatgpt_account_id"].(string)
+	var settings *SettingService
+	if s != nil {
+		settings = s.settingService
+	}
+	ctx = withManagedOpenAICodexResidency(ctx, settings)
 	mode := disableOpenAITraining(ctx, s.privacyClientFactory, token, proxyURL, chatGPTAccountID, s.resolveOpenAIOutboundIdentity(ctx, account))
 	if mode == "" {
 		return ""

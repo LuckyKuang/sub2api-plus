@@ -1007,7 +1007,7 @@ func TestOpenAIGatewayService_Forward_WSv2_OAuthStoreFalseByDefault(t *testing.T
 	expectedSessionIdentity, resolveErr := svc.resolveOpenAIUpstreamPromptCacheHeaderIdentity(c, account, "sess-oauth-1")
 	require.NoError(t, resolveErr)
 	require.Equal(t, expectedSessionIdentity, captureDialer.lastHeaders.Get(codexSessionIDHeader))
-	require.Equal(t, expectedSessionIdentity, captureDialer.lastHeaders.Get("session_id"))
+	require.Empty(t, captureDialer.lastHeaders.Get("session_id"))
 	// conversation_id is never an official Codex header; session/full keeps only
 	// the Plus session_id alias.
 	require.Empty(t, captureDialer.lastHeaders.Get("conversation_id"))

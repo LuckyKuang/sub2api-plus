@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// ensureCodexReasoningInclude：带 reasoning 时补齐 include，幂等且保留既有项。
+// ensureCodexReasoningInclude：恒补 include，幂等且保留既有项（与请求是否带 reasoning 无关）。
 func TestEnsureCodexReasoningInclude(t *testing.T) {
 	// reasoning 存在、include 缺失 → 注入
 	body := map[string]any{"reasoning": map[string]any{"effort": "medium"}}
@@ -18,11 +18,10 @@ func TestEnsureCodexReasoningInclude(t *testing.T) {
 	// 幂等：再次调用不重复
 	require.False(t, ensureCodexReasoningInclude(body))
 
-	// 无 reasoning → 不动
+	// 无 reasoning → 同样注入（官方出站恒带该项）
 	body2 := map[string]any{}
-	require.False(t, ensureCodexReasoningInclude(body2))
-	_, ok := body2["include"]
-	require.False(t, ok)
+	require.True(t, ensureCodexReasoningInclude(body2))
+	require.Equal(t, []any{"reasoning.encrypted_content"}, body2["include"])
 
 	// 既有 include 保留并追加
 	body3 := map[string]any{
