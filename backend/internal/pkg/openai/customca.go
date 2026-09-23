@@ -5,6 +5,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -39,17 +40,38 @@ var (
 	codexCAErr       error
 )
 
+// codexCABundleSignature 标识「哪份文件、什么状态」。只按 env 路径做键不够：
+// 运维修好或轮换 PEM 文件但没改 env 时，缓存的错误/池会一直用到进程重启，而 PAT
+// 校验与 agent task 注册现在共用这份缓存。纳入文件大小与 mtime 后，换文件会被
+// 看见；缓存为错误时总是重读，修好即生效。
+func codexCABundleSignature() string {
+	signature := strings.TrimSpace(os.Getenv(CodexCAEnvPrimary)) + "\x00" + strings.TrimSpace(os.Getenv(CodexCAEnvFallback))
+	for _, env := range []string{CodexCAEnvPrimary, CodexCAEnvFallback} {
+		path := strings.TrimSpace(os.Getenv(env))
+		if path == "" {
+			continue
+		}
+		size, mtime := int64(0), int64(0)
+		//nolint:gosec // G703: operator-supplied path, same trust boundary as buildCodexCARootPool.
+		if info, err := os.Stat(path); err == nil {
+			size, mtime = info.Size(), info.ModTime().UnixNano()
+		}
+		signature += "\x00" + path + "\x00" + strconv.FormatInt(size, 10) + "\x00" + strconv.FormatInt(mtime, 10)
+	}
+	return signature
+}
+
 // CodexCARootPool resolves the custom-CA bundle selected by
 // CODEX_CA_CERTIFICATE / SSL_CERT_FILE and returns an error when a configured
 // bundle is unusable. Only callers that build an official Codex HTTP client
 // consult this; a bad generic SSL_CERT_FILE must not take down unrelated
-// providers. The resolved bundle is cached by environment signature.
+// providers. The resolved bundle is cached by environment and file identity.
 func CodexCARootPool() (CodexCABundle, error) {
-	signature := strings.TrimSpace(os.Getenv(CodexCAEnvPrimary)) + "\x00" + strings.TrimSpace(os.Getenv(CodexCAEnvFallback))
+	signature := codexCABundleSignature()
 	codexCAMu.Lock()
 	defer codexCAMu.Unlock()
-	if signature == codexCASignature {
-		return codexCAResolved, codexCAErr
+	if signature == codexCASignature && codexCAErr == nil {
+		return codexCAResolved, nil
 	}
 	codexCASignature = signature
 	codexCAResolved = CodexCABundle{}

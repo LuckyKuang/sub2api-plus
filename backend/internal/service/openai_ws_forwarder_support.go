@@ -849,8 +849,10 @@ func openAIWSErrorHTTPStatus(message []byte) int {
 // isOpenAIWSTransportUnsupportedReason 标识「上游拒绝/不支持 WS 传输」这类
 // 原因。官方 client.rs 对这种结果走 FallbackToHttp（会话级永久改走 HTTP），
 // 因此 Plus 也必须让当前请求继续走 HTTP，而不是把 426 硬错误返回客户端。
+// prewarm_ 前缀与另外两个分类函数一致剥离：预热生成会把回退原因包装成
+// prewarm_<reason>，不剥离会让这类请求漏判成硬错误。
 func isOpenAIWSTransportUnsupportedReason(reason string) bool {
-	switch reason {
+	switch strings.TrimPrefix(strings.TrimSpace(reason), "prewarm_") {
 	case "upgrade_required", "ws_unsupported":
 		return true
 	default:

@@ -1364,6 +1364,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 					return payload, true, nil
 				}
 				observeOpenAIWeeklyResetEvent(ctx, account, payload)
+				s.observeOpenAICodexRateLimitEventSnapshot(ctx, account, payload)
 				finalized, emit := s.finalizeCodexClientQuotaEvent(payload, c, account)
 				return finalized, emit, nil
 			},

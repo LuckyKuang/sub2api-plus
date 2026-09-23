@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestCodexSnapshotBaseTime(t *testing.T) {
@@ -508,4 +510,29 @@ func TestOpenAIUsageParsesCodexRolloutBudgetUnits(t *testing.T) {
 	if invalid.CodexRolloutBudgetUnits != nil {
 		t.Fatalf("rollout budget units = %v, want nil for non-numeric value", invalid.CodexRolloutBudgetUnits)
 	}
+}
+
+// 官方 response_model()（sse/responses.rs:203-217）优先读事件体内嵌套的
+// response.headers.openai-model / x-openai-model：上游做流中重路由时只写那里。
+// 只看 response.model 会漏掉这次改名，计费校正与 model_mismatch 审计都会记错。
+func TestObserveOpenAIInBandServerModelHeaderSource(t *testing.T) {
+	for _, spelling := range []string{"openai-model", "x-openai-model", "Openai-Model", "X-OpenAI-Model"} {
+		t.Run(spelling, func(t *testing.T) {
+			observer := beginUpstreamResponseModelObservation(nil)
+			observer.ObserveOpenAI([]byte(`{"type":"response.output_text.delta","response":{"headers":{"`+spelling+`":"gpt-5.6-rerouted"},"model":"gpt-5.6-original"}}`), "response.output_text.delta")
+			require.Equal(t, "gpt-5.6-rerouted", observer.Model(),
+				"the in-band header must win over response.model")
+		})
+	}
+
+	// Without the in-band header the body model is still used.
+	observer := beginUpstreamResponseModelObservation(nil)
+	observer.ObserveOpenAI([]byte(`{"type":"response.completed","response":{"model":"gpt-5.6-original"}}`), "response.completed")
+	require.Equal(t, "gpt-5.6-original", observer.Model())
+
+	// A terminal body model still wins over a non-terminal header declaration.
+	observer = beginUpstreamResponseModelObservation(nil)
+	observer.ObserveOpenAI([]byte(`{"type":"response.created","response":{"headers":{"openai-model":"gpt-5.6-first"},"model":"gpt-5.6-first"}}`), "response.created")
+	observer.ObserveOpenAI([]byte(`{"type":"response.completed","response":{"headers":{"openai-model":"gpt-5.6-second"},"model":"gpt-5.6-second"}}`), "response.completed")
+	require.Equal(t, "gpt-5.6-second", observer.Model())
 }

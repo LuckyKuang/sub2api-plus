@@ -71,8 +71,35 @@ func normalizeObservedUpstreamResponseModel(model string) string {
 	return model
 }
 
+// openAIInBandServerModelHeader 在 response.headers 里大小写不敏感地匹配
+// openai-model / x-openai-model，对齐官方 header_openai_model_value_from_json
+// 的 eq_ignore_ascii_case。带内 headers 才是官方认定的服务端模型信号——上游做
+// 流中重路由时只写在那里；只看 response.model 会漏掉这次改名。
+func openAIInBandServerModelHeader(payload []byte) string {
+	headers := gjson.GetBytes(payload, "response.headers")
+	if !headers.IsObject() {
+		return ""
+	}
+	found := ""
+	headers.ForEach(func(key, value gjson.Result) bool {
+		name := strings.ToLower(strings.TrimSpace(key.String()))
+		if name != "openai-model" && name != "x-openai-model" {
+			return true
+		}
+		if model := strings.TrimSpace(value.String()); model != "" {
+			found = model
+			return false
+		}
+		return true
+	})
+	return normalizeObservedUpstreamResponseModel(found)
+}
+
 func (o *upstreamResponseModelObserver) ObserveOpenAI(payload []byte, eventType string) {
-	model := firstValidTrimmedGJSONString(payload, "response.model", "model")
+	model := openAIInBandServerModelHeader(payload)
+	if model == "" {
+		model = firstValidTrimmedGJSONString(payload, "response.model", "model")
+	}
 	terminal := isUpstreamResponseModelTerminalEvent(eventType)
 	o.Observe(model, terminal)
 	// Every payload that declares a service tier also declares a model, so

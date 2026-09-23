@@ -4,6 +4,7 @@ package service
 
 import (
 	"net/http"
+	"strconv"
 	"testing"
 	"time"
 
@@ -63,7 +64,7 @@ func TestClassifyOpenAIOAuth429_ActiveLimitFamilyDrivesDisposition(t *testing.T)
 	headers.Set("x-codex-secondary-window-minutes", "10080")
 	// ...while the named family is exhausted.
 	headers.Set("x-codex-other-primary-used-percent", "100")
-	headers.Set("x-codex-other-primary-window-minutes", "1440")
+	headers.Set("x-codex-other-primary-window-minutes", "300")
 	headers.Set("x-codex-other-primary-reset-at", "1790000000")
 
 	disposition, resetAt := classifyOpenAIOAuth429(headers, nil)
@@ -131,4 +132,86 @@ func TestIsOpenAITerminalQuotaErrorType(t *testing.T) {
 	} {
 		require.False(t, isOpenAITerminalQuotaErrorType(value), "%q must not be terminal", value)
 	}
+}
+
+// A malformed or absurdly large family reset timestamp must never reach
+// BlockAccountScheduling: it only clamps past/zero times, and the Spark
+// model-level path persists the value, so one bad header could park an account
+// or model across restarts.
+func TestClassifyOpenAIOAuth429_FamilyResetBounds(t *testing.T) {
+	build := func(resetAt string) http.Header {
+		headers := http.Header{}
+		headers.Set("x-codex-active-limit", "codex_other")
+		headers.Set("x-codex-other-primary-used-percent", "100")
+		headers.Set("x-codex-other-primary-window-minutes", "300")
+		headers.Set("x-codex-other-primary-reset-at", resetAt)
+		return headers
+	}
+
+	// In-range timestamps keep driving the disposition.
+	for _, resetAt := range []string{"1790000000", "253402300799"} {
+		disposition, at := classifyOpenAIOAuth429(build(resetAt), nil)
+		require.Equal(t, openAIOAuth429Quota5h, disposition)
+		require.NotNil(t, at, "%s must produce a reset time", resetAt)
+	}
+
+	// Out-of-range values fall back to a window-only quota decision.
+	for _, resetAt := range []string{"0", "-1", "9223372036854775807", "253402300800"} {
+		disposition, at := classifyOpenAIOAuth429(build(resetAt), nil)
+		require.Equal(t, openAIOAuth429Quota5h, disposition)
+		require.Nil(t, at, "%s must not produce a reset time", resetAt)
+	}
+}
+
+// 上游并不保证 primary 是长窗。窗口朝向必须像默认族 Normalize() 那样按
+// window-minutes 推导，否则两个窗口会被贴反。
+func TestClassifyOpenAIOAuth429_FamilyWindowOrientation(t *testing.T) {
+	cases := []struct {
+		name           string
+		primaryMinutes *int
+		want           openAIOAuth429Disposition
+	}{
+		{"primary 300min is the 5h window", ptrInt429Window(300), openAIOAuth429Quota5h},
+		{"primary 360min is still 5h", ptrInt429Window(360), openAIOAuth429Quota5h},
+		{"primary 1440min is the 7d bucket", ptrInt429Window(1440), openAIOAuth429Quota7d},
+		{"primary 10080min is the 7d bucket", ptrInt429Window(10080), openAIOAuth429Quota7d},
+		{"no window minutes falls back to primary=7d", nil, openAIOAuth429Quota7d},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			headers := http.Header{}
+			headers.Set("x-codex-active-limit", "codex_other")
+			headers.Set("x-codex-other-primary-used-percent", "100")
+			if tc.primaryMinutes != nil {
+				headers.Set("x-codex-other-primary-window-minutes", strconv.Itoa(*tc.primaryMinutes))
+			}
+			disposition, _ := classifyOpenAIOAuth429(headers, nil)
+			require.Equal(t, tc.want, disposition)
+		})
+	}
+
+	// Official discovers a metered family only from a `-primary-used-percent`
+	// header (rate_limits.rs header_name_to_limit_id), so a family that reports
+	// only a secondary window is invisible on both sides and falls through to
+	// the default-family path.
+	headers := http.Header{}
+	headers.Set("x-codex-active-limit", "codex_other")
+	headers.Set("x-codex-other-secondary-used-percent", "100")
+	disposition, _ := classifyOpenAIOAuth429(headers, nil)
+	require.Equal(t, openAIOAuth429Transient, disposition,
+		"a family without a primary-used-percent header is not discovered")
+
+	// With both exhausted, the short window (the one the user feels first) wins.
+	headers = http.Header{}
+	headers.Set("x-codex-active-limit", "codex_other")
+	headers.Set("x-codex-other-primary-used-percent", "100")
+	headers.Set("x-codex-other-primary-window-minutes", "10080")
+	headers.Set("x-codex-other-secondary-used-percent", "100")
+	headers.Set("x-codex-other-secondary-window-minutes", "300")
+	disposition, _ = classifyOpenAIOAuth429(headers, nil)
+	require.Equal(t, openAIOAuth429Quota5h, disposition)
+}
+
+func ptrInt429Window(value int) *int {
+	return &value
 }

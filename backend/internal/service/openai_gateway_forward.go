@@ -812,7 +812,14 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	SetOpsUpstreamModel(c, upstreamModel)
 
 	// 命中 WS 时仅走 WebSocket Mode；不再自动回退 HTTP。
-	if wsDecision.Transport == OpenAIUpstreamTransportResponsesWebsocketV2 {
+	// 账号刚被上游拒绝 WS 升级时处在 fallback 冷却期：官方 client.rs 把这种结果
+	// 作为会话级永久回退 HTTP，Plus 用冷却窗表达同一意图——窗内不再重复 WS 拨号，
+	// 否则冷却窗里的每个请求都会各自再撞一次 426。
+	wsFallbackCooling := s.isOpenAIWSFallbackCooling(account.ID)
+	if wsFallbackCooling {
+		logOpenAIWSModeInfo("fallback_cooling_skip_ws account_id=%d", account.ID)
+	}
+	if wsDecision.Transport == OpenAIUpstreamTransportResponsesWebsocketV2 && !wsFallbackCooling {
 		// WS 分支需要结构化 payload 与重连恢复，命中后再触发 full-map decode。
 		wsReqBody, err := ensureReqBody()
 		if err != nil {
@@ -1049,6 +1056,23 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		clientBytesWritten := c != nil && c.Writer != nil && c.Writer.Written()
 		if !clientBytesWritten && isOpenAIWSTransportUnsupportedReason(wsLastFailureReason) {
 			s.markOpenAIWSFallbackCooling(account.ID, wsLastFailureReason)
+			// 上游拒绝 WS 传输是运维要看见的信号：与硬错误路径一样记一条 ops
+			// upstream-error 事件，否则 426 型故障在事件流里完全不可见。
+			wsFallbackMessage := ""
+			if wsErr != nil {
+				wsFallbackMessage = truncateOpenAIWSLogValue(wsErr.Error(), openAIWSIDValueMaxLen)
+			}
+			appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+				ProxyID:            opsUpstreamProxyID(account),
+				ProxyName:          opsUpstreamProxyName(account),
+				Platform:           account.Platform,
+				AccountID:          account.ID,
+				AccountName:        account.Name,
+				UpstreamStatusCode: http.StatusUpgradeRequired,
+				Kind:               "ws_fallback",
+				Reason:             wsLastFailureReason,
+				Message:            wsFallbackMessage,
+			})
 			logOpenAIWSModeInfo(
 				"fallback_to_http account_id=%d reason=%s",
 				account.ID,

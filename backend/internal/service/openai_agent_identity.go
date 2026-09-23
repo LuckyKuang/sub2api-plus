@@ -216,10 +216,12 @@ func registerAgentIdentityTaskWithIdentity(ctx context.Context, account *Account
 		if !isRetryableAgentIdentityTaskRegistrationError(lastErr) || attempt == openAIAgentIdentityTaskRegisterAttempts {
 			return "", lastErr
 		}
+		timer := time.NewTimer(agentIdentityTaskRegisterRetryBackoff * time.Duration(attempt))
 		select {
 		case <-ctx.Done():
+			timer.Stop()
 			return "", ctx.Err()
-		case <-time.After(agentIdentityTaskRegisterRetryBackoff * time.Duration(attempt)):
+		case <-timer.C:
 		}
 	}
 	if taskID := strings.TrimSpace(result.TaskID); taskID != "" {
