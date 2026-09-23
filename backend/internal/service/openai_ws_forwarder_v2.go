@@ -64,7 +64,6 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 	)
 
 	payload := s.buildOpenAIWSCreatePayload(reqBody, account)
-	payloadStrategy, removedKeys := applyOpenAIWSRetryPayloadStrategy(payload, attempt)
 	turnState := ""
 	turnMetadata := ""
 	if c != nil && c.Request != nil {
@@ -100,7 +99,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 	}
 	if s.shouldEmitOpenAIWSPayloadSchema(attempt) {
 		logOpenAIWSModeInfo(
-			"[debug] payload_schema account_id=%d attempt=%d event=%s payload_keys=%s payload_bytes=%d payload_key_sizes=%s input_summary=%s stream=%s payload_strategy=%s removed_keys=%s has_previous_response_id=%v has_prompt_cache_key=%v has_tools=%v",
+			"[debug] payload_schema account_id=%d attempt=%d event=%s payload_keys=%s payload_bytes=%d payload_key_sizes=%s input_summary=%s stream=%s has_previous_response_id=%v has_prompt_cache_key=%v has_tools=%v",
 			account.ID,
 			attempt,
 			payloadEventType,
@@ -109,8 +108,6 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 			normalizeOpenAIWSLogValue(summarizeOpenAIWSPayloadKeySizes(payload, openAIWSPayloadKeySizeTopN)),
 			normalizeOpenAIWSLogValue(summarizeOpenAIWSInput(payload["input"])),
 			streamValue,
-			normalizeOpenAIWSLogValue(payloadStrategy),
-			normalizeOpenAIWSLogValue(strings.Join(removedKeys, ",")),
 			previousResponseID != "",
 			promptCacheKey != "",
 			hasTools,

@@ -187,7 +187,8 @@ func TestOpenAIOAuthService_RefreshAndPATUseAccountIdentity(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, testOpenAIAccountCurrentUserAgent, r.Header.Get("User-Agent"))
 		require.Equal(t, "codex_cli_rs", r.Header.Get("Originator"))
-		require.Equal(t, codexCLIVersion, r.Header.Get("Version"))
+		// 官方 auth 面（personal_access_token.rs）不发独立的 version 头。
+		require.Empty(t, r.Header.Get("Version"))
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"email":"user@example.com","chatgpt_user_id":"user","chatgpt_account_id":"account","chatgpt_plan_type":"plus","chatgpt_account_is_fedramp":false}`))
 	}))

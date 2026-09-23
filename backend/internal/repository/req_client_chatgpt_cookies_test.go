@@ -6,11 +6,14 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"math/big"
+	"net"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -18,6 +21,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
 )
 
 func mustParseURL(t *testing.T, raw string) *url.URL {
@@ -154,7 +159,70 @@ func TestNewOpenAIOAuthClient_AppliesURLOverrides(t *testing.T) {
 	}
 }
 
-func writeTestCAPEM(t *testing.T, blockType string) string {
+// Official revoke.rs derives the revoke endpoint from a configured refresh
+// override when no revoke override is set, so a deployment that only overrides
+// refresh does not revoke against the production host.
+func TestNewOpenAIOAuthClient_DerivesRevokeURLFromRefreshOverride(t *testing.T) {
+	t.Setenv("CODEX_REFRESH_TOKEN_URL_OVERRIDE", "https://mirror.example/auth/oauth/token?tenant=acme")
+	t.Setenv("CODEX_REVOKE_TOKEN_URL_OVERRIDE", "")
+
+	client, ok := NewOpenAIOAuthClient().(*openaiOAuthService)
+	if !ok {
+		t.Fatal("unexpected client type")
+	}
+	if client.tokenURL != "https://mirror.example/auth/oauth/token?tenant=acme" {
+		t.Fatalf("tokenURL = %q", client.tokenURL)
+	}
+	if want := "https://mirror.example/oauth/revoke"; client.revokeURL != want {
+		t.Fatalf("revokeURL = %q, want %q (path rewritten, query dropped)", client.revokeURL, want)
+	}
+}
+
+func TestNewOpenAIOAuthClient_NoOverrideKeepsDefaultHosts(t *testing.T) {
+	t.Setenv("CODEX_REFRESH_TOKEN_URL_OVERRIDE", "")
+	t.Setenv("CODEX_REVOKE_TOKEN_URL_OVERRIDE", "")
+
+	client, ok := NewOpenAIOAuthClient().(*openaiOAuthService)
+	if !ok {
+		t.Fatal("unexpected client type")
+	}
+	if client.tokenURL != "https://auth.openai.com/oauth/token" {
+		t.Fatalf("tokenURL = %q", client.tokenURL)
+	}
+	if client.revokeURL != "https://auth.openai.com/oauth/revoke" {
+		t.Fatalf("revokeURL = %q", client.revokeURL)
+	}
+}
+
+func TestDeriveOpenAIOAuthRevokeURL(t *testing.T) {
+	if got := deriveOpenAIOAuthRevokeURL(""); got != "" {
+		t.Fatalf("empty refresh URL must not derive, got %q", got)
+	}
+	if got := deriveOpenAIOAuthRevokeURL("not-a-url"); got != "" {
+		t.Fatalf("invalid refresh URL must not derive, got %q", got)
+	}
+	if got := deriveOpenAIOAuthRevokeURL("/relative/token"); got != "" {
+		t.Fatalf("relative refresh URL must not derive, got %q", got)
+	}
+	if got := deriveOpenAIOAuthRevokeURL("https://auth.openai.com/oauth/token"); got != "" {
+		t.Fatalf("the official default refresh URL must not derive, got %q", got)
+	}
+	if got, want := deriveOpenAIOAuthRevokeURL("https://gw.internal/oauth/token"), "https://gw.internal/oauth/revoke"; got != want {
+		t.Fatalf("derived = %q, want %q", got, want)
+	}
+	if got, want := deriveOpenAIOAuthRevokeURL("http://127.0.0.1:9/token"), "http://127.0.0.1:9/oauth/revoke"; got != want {
+		t.Fatalf("derived = %q, want %q", got, want)
+	}
+}
+
+// The custom-CA policy now lives in pkg/openai so both the credential-plane
+// pool and the official auth-plane clients share one implementation. These
+// tests pin the exported contract: standard and OpenSSL labels are accepted,
+// a bundle without certificates fails, and a misconfigured bundle fails client
+// creation early for Codex clients only.
+
+// codexTestCAPEMPath 写一份单证书 PEM bundle 到临时目录并返回路径。
+func codexTestCAPEMPath(t *testing.T, blockType string) string {
 	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -179,90 +247,181 @@ func writeTestCAPEM(t *testing.T, blockType string) string {
 	return path
 }
 
-func TestBuildCustomCARootPool_AppendsCertificateToSystemRoots(t *testing.T) {
-	pool, err := buildCustomCARootPool(writeTestCAPEM(t, "CERTIFICATE"))
+// codexTestCA 生成一张自签 CA 与由它签发的 localhost 服务端证书，用于功能性
+// 验证自定义根证书确实进入了 pool（替代已废弃的 CertPool.Subjects()）。
+type codexTestCA struct {
+	CertPEM []byte
+	KeyPEM  []byte
+	Leaf    tls.Certificate
+}
+
+func newCodexTestCA(t *testing.T) codexTestCA {
+	t.Helper()
+	caKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		t.Fatalf("buildCustomCARootPool: %v", err)
+		t.Fatalf("generate ca key: %v", err)
 	}
-	if pool == nil {
-		t.Fatal("expected non-nil pool")
+	caTemplate := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "sub2api-test-ca"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(24 * time.Hour),
+		IsCA:                  true,
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature,
+		BasicConstraintsValid: true,
 	}
-	// The custom CA must be present while system roots stay available.
-	found := false
-	for _, subject := range pool.Subjects() {
-		if strings.Contains(string(subject), "sub2api-test-ca") {
-			found = true
-		}
+	caDER, err := x509.CreateCertificate(rand.Reader, caTemplate, caTemplate, caKey.Public(), caKey)
+	if err != nil {
+		t.Fatalf("create ca certificate: %v", err)
 	}
-	if !found {
-		t.Fatal("custom CA must be appended to the root pool")
+	caCert, err := x509.ParseCertificate(caDER)
+	if err != nil {
+		t.Fatalf("parse ca certificate: %v", err)
 	}
+
+	leafKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generate leaf key: %v", err)
+	}
+	leafTemplate := &x509.Certificate{
+		SerialNumber: big.NewInt(2),
+		Subject:      pkix.Name{CommonName: "127.0.0.1"},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(24 * time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		DNSNames:     []string{"localhost"},
+		IPAddresses:  []net.IP{net.ParseIP("127.0.0.1")},
+	}
+	leafDER, err := x509.CreateCertificate(rand.Reader, leafTemplate, caCert, leafKey.Public(), caKey)
+	if err != nil {
+		t.Fatalf("create leaf certificate: %v", err)
+	}
+	leafKeyDER, err := x509.MarshalECPrivateKey(leafKey)
+	if err != nil {
+		t.Fatalf("marshal leaf key: %v", err)
+	}
+	return codexTestCA{
+		CertPEM: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caDER}),
+		KeyPEM:  pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: leafKeyDER}),
+		Leaf: tls.Certificate{
+			Certificate: [][]byte{leafDER, caDER},
+			PrivateKey:  leafKey,
+		},
+	}
+}
+
+// requirePoolTrustsTestCA 用一个由测试 CA 签发的 TLS 服务端验证 pool：只有
+// 该 CA 真的在 pool 里，握手才会成功。ca 必须与写入 pool 的那份 bundle 同一张。
+func requirePoolTrustsTestCA(t *testing.T, pool *x509.CertPool, ca codexTestCA) {
+	t.Helper()
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("ok"))
+	}))
+	server.TLS = &tls.Config{Certificates: []tls.Certificate{ca.Leaf}, MinVersion: tls.VersionTLS12}
+	server.StartTLS()
+	defer server.Close()
+
+	client := &http.Client{Transport: &http.Transport{
+		TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12},
+	}}
+	resp, err := client.Get(server.URL)
+	if err != nil {
+		t.Fatalf("a pool containing the custom CA must complete the handshake: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+}
+
+func TestCodexCARootPool_AppendsCertificateToSystemRoots(t *testing.T) {
+	ca := newCodexTestCA(t)
+	path := filepath.Join(t.TempDir(), "ca.pem")
+	if err := os.WriteFile(path, ca.CertPEM, 0o600); err != nil {
+		t.Fatalf("write pem: %v", err)
+	}
+	t.Setenv(openai.CodexCAEnvPrimary, path)
+	t.Setenv(openai.CodexCAEnvFallback, "")
+
+	bundle, err := openai.CodexCARootPool()
+	if err != nil {
+		t.Fatalf("CodexCARootPool: %v", err)
+	}
+	if bundle.SourceEnv != openai.CodexCAEnvPrimary || bundle.Path != path {
+		t.Fatalf("resolved = %+v, want primary %s", bundle, path)
+	}
+	requirePoolTrustsTestCA(t, bundle.Pool, ca)
+
+	// System roots stay available: a bundle pool must still be non-nil and usable
+	// by the TLS stack for unrelated hosts (verified structurally, without
+	// network access).
 	systemPool, sysErr := x509.SystemCertPool()
-	if sysErr == nil && systemPool != nil && len(systemPool.Subjects()) > 0 {
-		if len(pool.Subjects()) < len(systemPool.Subjects()) {
-			t.Fatal("system roots must be preserved alongside the custom CA")
+	if sysErr == nil && systemPool != nil {
+		if bundle.Pool == systemPool {
+			t.Fatal("the custom bundle must be a copy, not the shared system pool")
 		}
 	}
 }
 
-// Official normalizes OpenSSL-style TRUSTED CERTIFICATE labels and skips
-// non-certificate blocks such as CRLs.
-func TestBuildCustomCARootPool_AcceptsTrustedCertificateLabel(t *testing.T) {
-	pool, err := buildCustomCARootPool(writeTestCAPEM(t, "TRUSTED CERTIFICATE"))
+func TestCodexCARootPool_AcceptsTrustedCertificateLabel(t *testing.T) {
+	ca := newCodexTestCA(t)
+	// Wrap the same DER in the OpenSSL TRUSTED CERTIFICATE label the official
+	// normalizer accepts.
+	path := filepath.Join(t.TempDir(), "trusted.pem")
+	if err := os.WriteFile(path, pem.EncodeToMemory(&pem.Block{Type: "TRUSTED CERTIFICATE", Bytes: ca.Leaf.Certificate[1]}), 0o600); err != nil {
+		t.Fatalf("write pem: %v", err)
+	}
+	t.Setenv(openai.CodexCAEnvPrimary, path)
+	t.Setenv(openai.CodexCAEnvFallback, "")
+
+	bundle, err := openai.CodexCARootPool()
 	if err != nil {
-		t.Fatalf("buildCustomCARootPool: %v", err)
+		t.Fatalf("CodexCARootPool: %v", err)
 	}
-	found := false
-	for _, subject := range pool.Subjects() {
-		if strings.Contains(string(subject), "sub2api-test-ca") {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatal("TRUSTED CERTIFICATE label must be accepted")
-	}
+	requirePoolTrustsTestCA(t, bundle.Pool, ca)
 }
 
-func TestBuildCustomCARootPool_RejectsBundleWithoutCertificates(t *testing.T) {
+func TestCodexCARootPool_RejectsBundleWithoutCertificates(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "empty.pem")
 	if err := os.WriteFile(path, []byte("-----BEGIN X509 CRL-----\nnot-a-certificate\n-----END X509 CRL-----\n"), 0o600); err != nil {
 		t.Fatalf("write pem: %v", err)
 	}
-	if _, err := buildCustomCARootPool(path); err == nil {
+	t.Setenv(openai.CodexCAEnvPrimary, path)
+	t.Setenv(openai.CodexCAEnvFallback, "")
+
+	if _, err := openai.CodexCARootPool(); err == nil {
 		t.Fatal("bundle without CERTIFICATE blocks must fail")
 	}
 }
 
 // CODEX_CA_CERTIFICATE takes precedence over SSL_CERT_FILE, and empty values
 // are treated as unset (official custom_ca.rs contract).
-func TestLoadCustomCA_EnvPrecedenceAndEmptyUnset(t *testing.T) {
-	primary := writeTestCAPEM(t, "CERTIFICATE")
-	fallback := writeTestCAPEM(t, "CERTIFICATE")
+func TestCodexCARootPool_EnvPrecedenceAndEmptyUnset(t *testing.T) {
+	primary := codexTestCAPEMPath(t, "CERTIFICATE")
+	fallback := codexTestCAPEMPath(t, "CERTIFICATE")
 
-	t.Setenv(customCAEnvPrimary, primary)
-	t.Setenv(customCAEnvFallback, fallback)
-	loadCustomCA()
-	if customCAErr != nil {
-		t.Fatalf("unexpected error: %v", customCAErr)
+	t.Setenv(openai.CodexCAEnvPrimary, primary)
+	t.Setenv(openai.CodexCAEnvFallback, fallback)
+	bundle, err := openai.CodexCARootPool()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if customCAResolved.sourceEnv != customCAEnvPrimary || customCAResolved.path != primary {
-		t.Fatalf("resolved = %+v, want primary %s", customCAResolved, primary)
-	}
-
-	t.Setenv(customCAEnvPrimary, "  ")
-	loadCustomCA()
-	if customCAErr != nil {
-		t.Fatalf("unexpected error: %v", customCAErr)
-	}
-	if customCAResolved.sourceEnv != customCAEnvFallback || customCAResolved.path != fallback {
-		t.Fatalf("resolved = %+v, want fallback %s", customCAResolved, fallback)
+	if bundle.SourceEnv != openai.CodexCAEnvPrimary || bundle.Path != primary {
+		t.Fatalf("resolved = %+v, want primary %s", bundle, primary)
 	}
 
-	t.Setenv(customCAEnvPrimary, "")
-	t.Setenv(customCAEnvFallback, "")
-	loadCustomCA()
-	if customCAErr != nil || customCAResolved.pool != nil {
-		t.Fatalf("unset env must disable the custom CA: err=%v resolved=%+v", customCAErr, customCAResolved)
+	t.Setenv(openai.CodexCAEnvPrimary, "  ")
+	bundle, err = openai.CodexCARootPool()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if bundle.SourceEnv != openai.CodexCAEnvFallback || bundle.Path != fallback {
+		t.Fatalf("resolved = %+v, want fallback %s", bundle, fallback)
+	}
+
+	t.Setenv(openai.CodexCAEnvPrimary, "")
+	t.Setenv(openai.CodexCAEnvFallback, "")
+	bundle, err = openai.CodexCARootPool()
+	if err != nil || bundle.Pool != nil {
+		t.Fatalf("unset env must disable the custom CA: err=%v resolved=%+v", err, bundle)
 	}
 }
 
@@ -272,16 +431,16 @@ func TestLoadCustomCA_EnvPrecedenceAndEmptyUnset(t *testing.T) {
 func TestGetSharedReqClient_MisconfiguredCAFailsEarly(t *testing.T) {
 	sharedReqClients = sync.Map{}
 	missing := filepath.Join(t.TempDir(), "missing.pem")
-	t.Setenv(customCAEnvPrimary, missing)
-	loadCustomCA()
-	if customCAErr == nil {
+	t.Setenv(openai.CodexCAEnvPrimary, missing)
+	t.Setenv(openai.CodexCAEnvFallback, "")
+	if _, err := openai.CodexCARootPool(); err == nil {
 		t.Fatal("missing CA file must record an error")
 	}
 	_, err := getSharedReqClient(reqClientOptions{Timeout: time.Second, OpenAICodexClient: true})
 	if err == nil {
 		t.Fatal("OpenAI Codex client creation must fail early on a misconfigured CA bundle")
 	}
-	if !strings.Contains(err.Error(), customCAEnvPrimary) {
+	if !strings.Contains(err.Error(), openai.CodexCAEnvPrimary) {
 		t.Fatalf("error must name the source env, got %v", err)
 	}
 

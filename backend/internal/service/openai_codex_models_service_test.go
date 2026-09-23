@@ -1888,7 +1888,15 @@ func TestFetchCodexModelsManifestAgentIdentityRecoversInvalidTaskOnce(t *testing
 	require.Equal(t, "task-models-new", decodeAgentAssertionTask(t, assertions[1]))
 	require.Len(t, identities, 3, "models, task registration and models retry share one snapshot")
 	want := [3]string{openai.SetCodexUserAgentVersion(DefaultOpenAICodexUserAgent, "0.200.1"), openai.CodexDefaultOriginator, "0.200.1"}
-	for _, identity := range identities {
+	for i, identity := range identities {
+		// The task registration is an official auth-surface request: it shares the
+		// same identity snapshot but sends no independent Version header.
+		if i == 1 {
+			require.Equal(t, want[0], identity[0])
+			require.Equal(t, want[1], identity[1])
+			require.Empty(t, identity[2])
+			continue
+		}
 		require.Equal(t, want, identity)
 	}
 	require.Equal(t, []string{"0.200.1", "0.200.1"}, queryVersions)

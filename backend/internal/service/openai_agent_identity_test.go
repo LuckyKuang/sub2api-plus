@@ -218,7 +218,8 @@ func TestRefreshOpenAIAgentIdentityHeadersUsesOneIdentitySnapshot(t *testing.T) 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, "codex-tui/0.200.1 (Ubuntu 22.4.0; x86_64) xterm-256color (codex-tui; 0.200.1)", r.Header.Get("User-Agent"))
 		require.Equal(t, "codex-tui", r.Header.Get("Originator"))
-		require.Equal(t, "0.200.1", r.Header.Get("Version"))
+		// 官方 auth 面默认头没有独立的 version 头（default_client.rs）。
+		require.Empty(t, r.Header.Get("Version"))
 		settingsRepo.setValue(SettingKeyOpenAICodexClientVersion, "0.201.0")
 		settings.InvalidateOpenAICodexClientVersionCache()
 		_, _ = w.Write([]byte(`{"task_id":"task-refreshed"}`))

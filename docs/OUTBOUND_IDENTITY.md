@@ -190,9 +190,24 @@ appended to the system roots (including OpenSSL-style `TRUSTED CERTIFICATE`
 labels), and a misconfigured bundle fails client creation early with a precise
 error instead of silently using system roots. Both names are Codex-specific, so
 only OpenAI outbound clients consult them and a bad bundle cannot take down
-other providers. `CODEX_REFRESH_TOKEN_URL_OVERRIDE`
+other providers. This covers the credential plane (shared pool) and the official
+auth surface (personal access token validation and agent task registration).
+`CODEX_REFRESH_TOKEN_URL_OVERRIDE`
 and `CODEX_REVOKE_TOKEN_URL_OVERRIDE` override the token/revoke endpoints at
 startup; empty or invalid values fall back to the defaults with a warning log.
+When no revoke override is set but a refresh override is, the revoke endpoint is
+derived from it by rewriting the path to `/oauth/revoke`, matching the official
+`derive_revoke_token_endpoint`. Revoke is bounded by the official 10s request
+timeout instead of the 120s credential-plane timeout, so a stuck revoke cannot
+block a logout or account deletion.
+
+The official authentication surface (personal access token validation, agent
+identity task registration, token refresh, revoke) sends the selected User-Agent
+and Originator only. Plus does not add an independent `version` header there,
+matching the official `create_default_auth_client` default headers; `version`
+remains an inference-plane declaration only. The ChatGPT accounts check sends
+`ChatGPT-Account-Id` when the poid is known, matching the official
+backend-client header surface.
 
 `x-openai-internal-codex-residency` is not an identity source. Its only source
 is the global setting `codex_residency` (`off` default, `us` sends the value

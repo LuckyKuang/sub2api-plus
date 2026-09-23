@@ -846,6 +846,18 @@ func openAIWSErrorHTTPStatus(message []byte) int {
 	return openAIWSErrorHTTPStatusFromRaw(codeRaw, errTypeRaw)
 }
 
+// isOpenAIWSTransportUnsupportedReason 标识「上游拒绝/不支持 WS 传输」这类
+// 原因。官方 client.rs 对这种结果走 FallbackToHttp（会话级永久改走 HTTP），
+// 因此 Plus 也必须让当前请求继续走 HTTP，而不是把 426 硬错误返回客户端。
+func isOpenAIWSTransportUnsupportedReason(reason string) bool {
+	switch reason {
+	case "upgrade_required", "ws_unsupported":
+		return true
+	default:
+		return false
+	}
+}
+
 func (s *OpenAIGatewayService) openAIWSFallbackCooldown() time.Duration {
 	if s == nil || s.cfg == nil {
 		return 30 * time.Second

@@ -20,9 +20,10 @@ import (
 
 // NewOpenAIOAuthClient creates a new OpenAI OAuth client
 func NewOpenAIOAuthClient() service.OpenAIOAuthClient {
+	tokenURL := resolveOpenAIOAuthURLOverride("CODEX_REFRESH_TOKEN_URL_OVERRIDE", openai.TokenURL)
 	return &openaiOAuthService{
-		tokenURL:          resolveOpenAIOAuthURLOverride("CODEX_REFRESH_TOKEN_URL_OVERRIDE", openai.TokenURL),
-		revokeURL:         resolveOpenAIOAuthURLOverride("CODEX_REVOKE_TOKEN_URL_OVERRIDE", openai.RevokeURL),
+		tokenURL:          tokenURL,
+		revokeURL:         resolveOpenAIOAuthRevokeURL(tokenURL),
 		deviceAuthAPIBase: openai.DeviceAuthAPIBase,
 	}
 }
@@ -43,6 +44,51 @@ func resolveOpenAIOAuthURLOverride(env, fallback string) string {
 		return fallback
 	}
 	return raw
+}
+
+// codexRevokeTokenPath 是官方 revoke 端点的固定路径（官方 revoke.rs
+// derive_revoke_token_endpoint 同样只改 path、清空 query）。
+const codexRevokeTokenPath = "/oauth/revoke"
+
+// openAICodexRevokeTimeout 对齐官方 auth/revoke.rs 的 REVOKE_HTTP_TIMEOUT：
+// 吊销是登出/删号路径上的同步步骤，不该占用凭据面的 120s 预算。
+const openAICodexRevokeTimeout = 10 * time.Second
+
+// resolveOpenAIOAuthRevokeURL 按官方 revoke.rs 的三级解析得出吊销端点：显式
+// CODEX_REVOKE_TOKEN_URL_OVERRIDE 优先；否则从已解析的 refresh 端点把 path
+// 改写为 /oauth/revoke（同一台覆盖主机上的官方派生规则）；都没有则回退默认
+// 主机。企业/测试环境只配了 refresh override 时，吊销必须打到同一主机。
+func resolveOpenAIOAuthRevokeURL(refreshURL string) string {
+	if raw := strings.TrimSpace(os.Getenv("CODEX_REVOKE_TOKEN_URL_OVERRIDE")); raw != "" {
+		return resolveOpenAIOAuthURLOverride("CODEX_REVOKE_TOKEN_URL_OVERRIDE", openai.RevokeURL)
+	}
+	if derived := deriveOpenAIOAuthRevokeURL(refreshURL); derived != "" {
+		logger.L().Info("openai_oauth_revoke_url_derived_from_refresh_override",
+			zap.String("component", "repository.openai_oauth"),
+			zap.String("refresh_url", refreshURL),
+			zap.String("revoke_url", derived))
+		return derived
+	}
+	return openai.RevokeURL
+}
+
+// deriveOpenAIOAuthRevokeURL 把 refresh 端点改写为官方 revoke 端点；refresh
+// 端点仍是官方默认地址时返回空串，让调用方回退默认 revoke 主机。
+func deriveOpenAIOAuthRevokeURL(refreshURL string) string {
+	trimmed := strings.TrimSpace(refreshURL)
+	if trimmed == "" || trimmed == openai.TokenURL {
+		return ""
+	}
+	parsed, err := url.Parse(trimmed)
+	if err != nil || !parsed.IsAbs() || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+		return ""
+	}
+	parsed.Path = codexRevokeTokenPath
+	parsed.RawPath = ""
+	parsed.RawQuery = ""
+	parsed.ForceQuery = false
+	parsed.Fragment = ""
+	return parsed.String()
 }
 
 type openaiOAuthService struct {
@@ -332,8 +378,12 @@ func (s *openaiOAuthService) RevokeToken(ctx context.Context, token, tokenTypeHi
 		body.ClientID = clientID
 	}
 	userAgent, originator, _ = resolveOpenAIOAuthIdentity(userAgent, originator, "")
+	// 官方 auth/revoke.rs 用 REVOKE_HTTP_TIMEOUT = 10s 单独约束吊销请求，
+	// 避免卡死的吊销把登出/删号阻塞到凭据面的 120s。
+	revokeCtx, cancelRevoke := context.WithTimeout(ctx, openAICodexRevokeTimeout)
+	defer cancelRevoke()
 	request := client.R().
-		SetContext(ctx).
+		SetContext(revokeCtx).
 		SetHeader("User-Agent", userAgent).
 		SetHeader("Originator", originator).
 		SetHeader("Content-Type", "application/json")

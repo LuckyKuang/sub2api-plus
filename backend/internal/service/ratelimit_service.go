@@ -1761,6 +1761,55 @@ func (s *RateLimitService) persistOpenAICodexSnapshot(ctx context.Context, accou
 //	    "resets_in_seconds": 133107
 //	  }
 //	}
+//
+// openAITerminalQuotaErrorTypes 是官方终态配额/额度错误类（api_bridge.rs 的
+// QuotaExceeded / UsageNotIncluded）：账号预算或额度已经用尽，同账号重试与窗口内
+// 换号都只是放大无收益请求，官方客户端同样视为终态。
+var openAITerminalQuotaErrorTypes = map[string]struct{}{
+	"insufficient_quota":       {},
+	"credit_balance_exhausted": {},
+	"usage_not_included":       {},
+	"spend_limit_exceeded":     {},
+}
+
+// isOpenAITerminalQuotaErrorType 识别终态配额错误类；接受 `*_spend_limit_exceeded`
+// 变体（例如 daily_spend_limit_exceeded），type 与 code 两种字段位置都覆盖。
+func isOpenAITerminalQuotaErrorType(errType string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(errType))
+	normalized = strings.ReplaceAll(normalized, "-", "_")
+	if normalized == "" {
+		return false
+	}
+	if _, ok := openAITerminalQuotaErrorTypes[normalized]; ok {
+		return true
+	}
+	return strings.HasSuffix(normalized, "_spend_limit_exceeded")
+}
+
+// isOpenAITerminalQuotaErrorBody  reports whether an upstream 429 body declares a
+// terminal account-quota or credit condition rather than a rate window.
+func isOpenAITerminalQuotaErrorBody(body []byte) bool {
+	if len(body) == 0 {
+		return false
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return false
+	}
+	errObj, ok := parsed["error"].(map[string]any)
+	if !ok {
+		return false
+	}
+	if errType, _ := errObj["type"].(string); isOpenAITerminalQuotaErrorType(errType) {
+		return true
+	}
+	// 部分上游把错误类放在 code 而不是 type。
+	if code, _ := errObj["code"].(string); isOpenAITerminalQuotaErrorType(code) {
+		return true
+	}
+	return false
+}
+
 func parseOpenAIRateLimitResetTime(body []byte) *int64 {
 	var parsed map[string]any
 	if err := json.Unmarshal(body, &parsed); err != nil {

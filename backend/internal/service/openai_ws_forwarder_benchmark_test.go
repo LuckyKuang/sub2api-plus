@@ -27,7 +27,6 @@ func BenchmarkOpenAIWSForwarderHotPath(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		payload := svc.buildOpenAIWSCreatePayload(reqBody, account)
-		_, _ = applyOpenAIWSRetryPayloadStrategy(payload, 2)
 		setOpenAIWSTurnMetadata(payload, `{"trace":"bench","turn":"1"}`)
 
 		benchmarkOpenAIWSStringSink = openAIWSPayloadString(payload, "previous_response_id")

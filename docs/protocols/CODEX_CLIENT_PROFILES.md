@@ -295,6 +295,13 @@ egress location. Plus can rewrite that pair at the outbound build stage:
   `openai_codex_environment_timezone` setting, then off. Misconfigured values
   degrade to the next source and never block traffic. Only Codex-protocol
   OpenAI accounts participate.
+- **The alignment defaults to off.** With no effective timezone at any level the
+  client's own `<timezone>` / `<current_date>` pair reaches the upstream
+  unchanged, exactly as the official client renders it. A compiled non-empty
+  default would rewrite the model-visible time on every Codex request with no
+  administrator decision, so the global default is empty; a deployment that
+  already stored a value keeps it. Administrators opt in at the global, proxy,
+  or account level.
 - The pair is always written together and never contradicts itself: both tags
   are replaced with the configured IANA timezone and that timezone's current
   date (`YYYY-MM-DD`); a missing tag of an existing pair is injected before the

@@ -1042,8 +1042,22 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			}
 			return wsResult, nil
 		}
-		s.writeOpenAIWSFallbackErrorResponse(c, account, wsErr)
-		return nil, wsErr
+		// 官方语义（client.rs FallbackToHttp）：上游拒绝 WS 升级（426）或声明不
+		// 支持 WebSocket 时，当前请求静默改走 HTTP，而不是把硬错误暴露给客户端。
+		// 同时标记 fallback cooling，让后续请求在冷却窗内直接选 HTTP 传输。
+		// 已经向下游写出字节时不回退——那会写出两份响应。
+		clientBytesWritten := c != nil && c.Writer != nil && c.Writer.Written()
+		if !clientBytesWritten && isOpenAIWSTransportUnsupportedReason(wsLastFailureReason) {
+			s.markOpenAIWSFallbackCooling(account.ID, wsLastFailureReason)
+			logOpenAIWSModeInfo(
+				"fallback_to_http account_id=%d reason=%s",
+				account.ID,
+				normalizeOpenAIWSLogValue(wsLastFailureReason),
+			)
+		} else {
+			s.writeOpenAIWSFallbackErrorResponse(c, account, wsErr)
+			return nil, wsErr
+		}
 	}
 
 	reasoningEffort := extractOpenAIReasoningEffortFromBody(body, upstreamModel, billingModel, originalModel)

@@ -15,6 +15,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/servertiming"
 	"github.com/imroc/req/v3"
 	"github.com/stretchr/testify/require"
@@ -88,8 +89,7 @@ func TestGetSharedReqClient_ProxyCacheKey(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NotNil(t, client)
-	loadCustomCA()
-	require.Equal(t, "http://proxy.local:8080|4s|false|false|false|"+customCAResolved.sourceEnv+"|"+customCAResolved.path, buildReqClientKey(opts))
+	require.Equal(t, "http://proxy.local:8080|4s|false|false|false||", buildReqClientKey(opts))
 }
 
 func TestGetSharedReqClient_InvalidProxyURL(t *testing.T) {
@@ -146,21 +146,21 @@ func TestGetSharedReqClient_CustomCAScopedToOpenAICodexClients(t *testing.T) {
 func TestGetSharedReqClient_NonOpenAIClientIgnoresConfiguredCustomCA(t *testing.T) {
 	sharedReqClients = sync.Map{}
 
-	bundle := writeTestCAPEM(t, "CERTIFICATE")
-	t.Setenv(customCAEnvPrimary, bundle)
-	t.Setenv(customCAEnvFallback, "")
+	bundle := codexTestCAPEMPath(t, "CERTIFICATE")
+	t.Setenv(openai.CodexCAEnvPrimary, bundle)
+	t.Setenv(openai.CodexCAEnvFallback, "")
 
 	pool, err := resolveCustomCABundle(reqClientOptions{OpenAICodexClient: true})
 	require.NoError(t, err)
-	require.NotNil(t, pool.pool, "OpenAI Codex clients pick up the configured bundle")
-	require.Equal(t, customCAEnvPrimary, pool.sourceEnv)
-	require.Equal(t, bundle, pool.path)
+	require.NotNil(t, pool.Pool, "OpenAI Codex clients pick up the configured bundle")
+	require.Equal(t, openai.CodexCAEnvPrimary, pool.SourceEnv)
+	require.Equal(t, bundle, pool.Path)
 
 	pool, err = resolveCustomCABundle(reqClientOptions{})
 	require.NoError(t, err)
-	require.Nil(t, pool.pool, "non-Codex clients never read the Codex CA env")
-	require.Empty(t, pool.sourceEnv)
-	require.Empty(t, pool.path)
+	require.Nil(t, pool.Pool, "non-Codex clients never read the Codex CA env")
+	require.Empty(t, pool.SourceEnv)
+	require.Empty(t, pool.Path)
 }
 
 func TestCreateOpenAIRawAndCredentialReqClients_Timeout120Seconds(t *testing.T) {

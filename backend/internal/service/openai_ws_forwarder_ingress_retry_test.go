@@ -320,3 +320,19 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_TurnRetryForcesF
 	fresh.mu.Unlock()
 	require.Equal(t, 1, freshWrites)
 }
+
+// 默认 WS 读/idle 超时对齐官方统一 stream_idle_timeout = 300s：上游 WS 静默
+// 掐断时 5 分钟回收，而不是原来的 15 分钟。
+func TestOpenAIWSReadTimeoutDefaultMatchesOfficialStreamIdleTimeout(t *testing.T) {
+	svc := &OpenAIGatewayService{cfg: &config.Config{}}
+	require.Equal(t, 300*time.Second, svc.openAIWSReadTimeout())
+	require.Equal(t, time.Duration(svc.openAIWSReadTimeout()), svc.openAIWSPassthroughIdleTimeout())
+
+	configured := &OpenAIGatewayService{cfg: func() *config.Config {
+		cfg := &config.Config{}
+		cfg.Gateway.OpenAIWS.ReadTimeoutSeconds = 42
+		return cfg
+	}()}
+	require.Equal(t, 42*time.Second, configured.openAIWSReadTimeout(),
+		"an explicit configuration still wins")
+}

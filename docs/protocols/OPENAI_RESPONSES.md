@@ -95,6 +95,20 @@ whose request shape differs and is handled separately. Client-owned
 proxy verbatim; `mcp_attribution` is the official client's own responsibility
 and the gateway never generates, parses, or trims it.
 
+The declaration never depends on the transport or the attempt number: WebSocket
+reconnects replay the request payload unchanged, so a retried turn still carries
+`include: ["reasoning.encrypted_content"]`.
+
+Codex-protocol requests are normalized with one unsupported-field set across the
+HTTP forward, HTTP passthrough, Messages bridge, and WebSocket compatibility
+paths: `max_output_tokens`, `max_completion_tokens`, `temperature`, `top_p`,
+`frequency_penalty`, `presence_penalty`, `chat_template_kwargs`, `user`,
+`metadata`, `prompt_cache_options`, `prompt_cache_retention`,
+`safety_identifier`, `stream_options`, `truncation`, and `stop_sequences` are
+removed before the upstream request. A passthrough account therefore produces
+the same body as a non-passthrough account instead of relying on a rejected-field
+retry to recover from a first-request 400.
+
 Under the default hard-affinity mode, account priority changes do not replace a
 valid active session route. The optional sticky-weighted scheduler mode remains
 score-based by design. If the configured health/concurrency sticky escape
@@ -229,12 +243,27 @@ supplementary declarations on every successful response:
   display-only declarations and are relayed to the downstream client verbatim
   after generic response-header filtering; the gateway never derives quota or
   billing decisions from them.
+
+On an upstream `429`, the gateway classifies the condition before deciding how
+to schedule:
+
+- `x-codex-active-limit` names the metered family the upstream actually hit. When
+  it names a family other than the default `codex` family, that family's window
+  and reset time drive the cooldown; the default family's healthy 5h/7d windows
+  cannot override the named family's exhausted window.
+- A 429 whose error type declares an exhausted account quota or credit —
+  `insufficient_quota`, `credit_balance_exhausted`, any
+  `*_spend_limit_exceeded` variant, or `usage_not_included` — is terminal. The
+  gateway opens no same-account retry window for it and parks the account so
+  scheduling selects a different one, instead of re-firing a request that cannot
+  succeed.
 - `openai-model` names the model that actually served the request. It joins
   the response-model observer before body events (terminal body declarations
   still win, and a disagreement raises the conflict flag). For Codex-protocol
   accounts a server-declared model that differs from the baseline billing
   model and has identified pricing corrects the recorded billing model; the
-  downstream response body is never rewritten.
+  downstream response body is never rewritten. The `x-openai-model` spelling is
+  accepted as well.
 - `x-models-etag` marks the upstream model-catalog revision and is recorded
   as a structured log signal for the future pinned-models integration.
 - The `codex_rollout_budget_units` declaration in `response.completed` usage

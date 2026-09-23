@@ -9,12 +9,15 @@ import (
 	"time"
 
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
-	"github.com/LuckyKuang/sub2api-plus/internal/pkg/httpclient"
 )
 
 const openAICodexPATWhoamiURLDefault = "https://auth.openai.com/api/accounts/v1/user-auth-credential/whoami"
 
 var openAICodexPATWhoamiURL = openAICodexPATWhoamiURLDefault
+
+// openAICodexPATWhoamiTimeout 是官方 PAT 校验（personal_access_token.rs）的
+// 请求超时。
+const openAICodexPATWhoamiTimeout = 20 * time.Second
 
 var openAIPersonalAccessTokenOAuthCredentialKeys = [...]string{
 	"refresh_token",
@@ -50,11 +53,10 @@ func (s *OpenAIOAuthService) validateCodexPersonalAccessTokenWithAccount(ctx con
 		return nil, infraerrors.New(http.StatusBadRequest, "OPENAI_CODEX_PAT_INVALID_PREFIX", "Codex personal access token must start with at-")
 	}
 
-	client, err := httpclient.GetClient(httpclient.Options{
-		ProxyURL:              proxyURL,
-		Timeout:               20 * time.Second,
-		ResponseHeaderTimeout: 15 * time.Second,
-	})
+	// whoami 是官方 auth 面请求（personal_access_token.rs 走 create_default_auth_client）：
+	// 默认头只有 originator / User-Agent / residency，没有独立的 version 头；同时要走
+	// Codex 自定义 CA 策略，否则设了企业 CA 时校验会被 TLS 拦截挡下。
+	client, err := codexAuthPlaneHTTPClient(proxyURL, openAICodexPATWhoamiTimeout)
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadRequest, "OPENAI_CODEX_PAT_PROXY_INVALID", "invalid proxy configuration: %v", err)
 	}
@@ -68,7 +70,7 @@ func (s *OpenAIOAuthService) validateCodexPersonalAccessTokenWithAccount(ctx con
 	identity := s.resolveOpenAIOutboundIdentity(ctx, account)
 	req.Header.Set("originator", identity.Originator)
 	req.Header.Set("user-agent", identity.UserAgent)
-	req.Header.Set("version", identity.Version)
+	applyCodexResidencyHeader(ctx, req.Header)
 
 	resp, err := client.Do(req)
 	if err != nil {

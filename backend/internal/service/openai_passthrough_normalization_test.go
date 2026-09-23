@@ -377,3 +377,42 @@ func TestDetectOpenAIPassthroughInstructionsRejectReason(t *testing.T) {
 		})
 	}
 }
+
+// The passthrough path must strip the same Codex-unsupported field set as the
+// non-passthrough transform. Stripping only the internal set left the six
+// sampling/token-limit fields on the wire, which produced a guaranteed
+// first-request 400 that only a rejected-field retry recovered from.
+func TestNormalizeOpenAIPassthroughOAuthBody_StripsFullCodexUnsupportedSet(t *testing.T) {
+	body := []byte(`{"model":"gpt-5.4","input":"hello","max_output_tokens":1024,"max_completion_tokens":1024,"temperature":0.2,"top_p":0.9,"frequency_penalty":0.1,"presence_penalty":0.1}`)
+
+	normalized, changed, err := normalizeOpenAIPassthroughOAuthBody(body, false)
+	require.NoError(t, err)
+	require.True(t, changed)
+	for _, field := range openAICodexOAuthUnsupportedFields {
+		require.False(t, gjson.GetBytes(normalized, field).Exists(), "%s should be stripped", field)
+	}
+	// The passthrough and non-passthrough paths must agree on the field set.
+	require.Equal(t, len(openAICodexOAuthUnsupportedFields), len(openAIChatGPTInternalUnsupportedFields)+6,
+		"the Codex OAuth set is the internal set plus six sampling/token-limit fields")
+}
+
+// The WebSocket compatibility body applies the same full field set for OAuth
+// accounts, and still leaves API-key accounts untouched.
+func TestNormalizeOpenAIResponsesWebSocketCompatibilityBody_StripsFullCodexSetForOAuth(t *testing.T) {
+	oauth := &Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
+	body := []byte(`{"model":"gpt-5.4","input":"hello","max_output_tokens":1024,"temperature":0.2,"top_p":0.9}`)
+
+	normalized, changed, err := normalizeOpenAIResponsesWebSocketCompatibilityBody(body, oauth, false)
+	require.NoError(t, err)
+	require.True(t, changed)
+	for _, field := range []string{"max_output_tokens", "temperature", "top_p"} {
+		require.False(t, gjson.GetBytes(normalized, field).Exists(), "%s should be stripped for Codex OAuth", field)
+	}
+
+	apiKey := &Account{ID: 2, Platform: PlatformOpenAI, Type: AccountTypeAPIKey}
+	normalized, changed, err = normalizeOpenAIResponsesWebSocketCompatibilityBody(body, apiKey, false)
+	require.NoError(t, err)
+	require.True(t, gjson.GetBytes(normalized, "max_output_tokens").Exists(),
+		"API-key accounts keep their own field handling")
+	_ = changed
+}

@@ -568,9 +568,12 @@ func TestOpenAIIdentityContractLiveRegistrationSnapshot(t *testing.T) {
 			}
 			require.Len(t, registered, 1)
 			registration := <-registered
-			for _, name := range []string{"User-Agent", "Originator", "Version"} {
+			// The registration shares the inference identity snapshot but is an
+			// official auth-surface request, so it carries no Version header.
+			for _, name := range []string{"User-Agent", "Originator"} {
 				require.Equal(t, registration.Get(name), headers.Get(name), name)
 			}
+			require.Empty(t, registration.Get("Version"))
 			require.Equal(t, "0.200.1", headers.Get("Version"))
 			require.Equal(t, "quicksilver=v2", headers.Get("OpenAI-Alpha"))
 			require.Empty(t, headers.Get("OpenAI-Beta"))

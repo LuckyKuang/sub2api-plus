@@ -1272,7 +1272,9 @@ func normalizeOpenAIResponsesWebSocketCompatibilityBody(body []byte, account *Ac
 		}
 		normalized = oauthBody
 		changed = changed || oauthChanged
-		for _, field := range openAIChatGPTInternalUnsupportedFields {
+		// 与透传/非透传的 Codex OAuth 归一使用同一套字段集：只用 internal 集会把
+		// max_output_tokens / temperature 等 6 个字段漏到上游并触发首次 400。
+		for _, field := range openAICodexOAuthUnsupportedFields {
 			if !gjson.GetBytes(normalized, field).Exists() {
 				continue
 			}
@@ -1371,7 +1373,10 @@ func normalizeOpenAIPassthroughOAuthBody(body []byte, compact bool) ([]byte, boo
 		changed = true
 	}
 
-	for _, field := range openAIChatGPTInternalUnsupportedFields {
+	// 与非透传路径（applyCodexOAuthTransformWithOptions）使用同一套字段集：
+	// 只用 internal 集会把 max_output_tokens / temperature 等 6 个字段漏到上游，
+	// 触发必然的首次 400，只能靠 rejected-field 重试补救。
+	for _, field := range openAICodexOAuthUnsupportedFields {
 		if value := gjson.GetBytes(normalized, field); !value.Exists() {
 			continue
 		}

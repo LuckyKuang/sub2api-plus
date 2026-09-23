@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strings"
 	"time"
 
@@ -87,6 +88,15 @@ func applyReqCodexResidency(ctx context.Context, request *req.Request) *req.Requ
 	return request
 }
 
+// applyCodexResidencyHeader 是 applyReqCodexResidency 的 net/http 版本，供非
+// req 客户端（PAT whoami 等官方 auth 面请求）复用同一套 residency 语义。
+func applyCodexResidencyHeader(ctx context.Context, headers http.Header) {
+	if headers == nil {
+		return
+	}
+	openai.ApplyCodexResidencyHeader(headers, openai.CodexResidencyFromContext(ctx))
+}
+
 // isCloudflareChallengeResponse 判断 chatgpt.com 返回的是否为 Cloudflare 质询/拦截页。
 // 优先看 cf-mitigated 响应头（质询时为 "challenge"），再回退到正文关键字。
 func isCloudflareChallengeResponse(cfMitigated, body string) bool {
@@ -132,11 +142,18 @@ func fetchChatGPTAccountInfo(ctx context.Context, clientFactory PrivacyClientFac
 
 	identity = normalizeOpenAIPrivacyIdentity(identity)
 	var result map[string]any
-	resp, err := applyReqCodexResidency(ctx, client.R()).
+	request := applyReqCodexResidency(ctx, client.R()).
 		SetContext(ctx).
 		SetHeader("Authorization", "Bearer "+accessToken).
 		SetHeader("User-Agent", identity.UserAgent).
-		SetHeader("Accept", "application/json").
+		SetHeader("Accept", "application/json")
+	// 官方 backend-client/src/client.rs:269-288 在已知账号时发
+	// ChatGPT-Account-Id，用于在多账号/工作区里精确定位；orgID（access_token
+	// JWT 的 poid）正是 accounts map 的键。
+	if accountID := strings.TrimSpace(orgID); accountID != "" {
+		request = request.SetHeader("ChatGPT-Account-Id", accountID)
+	}
+	resp, err := request.
 		SetSuccessResult(&result).
 		Get(chatGPTAccountsCheckURL)
 
