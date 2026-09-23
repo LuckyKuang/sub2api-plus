@@ -68,6 +68,14 @@ func TestParseCodexRateLimitEventSnapshot_CreditsRequireBothFlags(t *testing.T) 
 	require.NotNil(t, snapshot)
 	require.Nil(t, snapshot.CreditsHasCredits, "official parse_credits_snapshot requires both flags")
 	require.Empty(t, snapshot.CreditsBalance)
+
+	snapshot = parseCodexRateLimitEventSnapshot([]byte(`{
+		"type":"codex.rate_limits",
+		"rate_limits":{"primary":{"used_percent":10}},
+		"credits":{"has_credits":"true","unlimited":"false"}
+	}`))
+	require.NotNil(t, snapshot)
+	require.Nil(t, snapshot.CreditsHasCredits, "event credits must be JSON bools, matching official serde")
 }
 
 func TestParseCodexRateLimitEventSnapshot_OutOfRangeResetDropped(t *testing.T) {
@@ -92,6 +100,23 @@ func TestParseCodexRateLimitEventSnapshot_NonDefaultFamilyAndNoise(t *testing.T)
 
 	require.Nil(t, parseCodexRateLimitEventSnapshot([]byte(`not json`)))
 	require.Nil(t, parseCodexRateLimitEventSnapshot([]byte(`{"type":"response.completed"}`)))
+	require.Nil(t, parseCodexRateLimitEventSnapshot([]byte(`{"type":"response.completed","credits":{"has_credits":true,"unlimited":false}}`)),
+		"official parse_rate_limit_event requires type=codex.rate_limits")
 	require.Nil(t, parseCodexRateLimitEventSnapshot([]byte(`{"type":"codex.rate_limits"}`)),
 		"an event without rate_limits or credits carries no snapshot")
+}
+
+func TestParseCodexRateLimitEventSnapshot_CreditsOnly(t *testing.T) {
+	snapshot := parseCodexRateLimitEventSnapshot([]byte(`{
+		"type":"codex.rate_limits",
+		"credits":{"has_credits":true,"unlimited":false,"balance":"4.50"}
+	}`))
+	require.NotNil(t, snapshot, "official parse_rate_limit_event accepts credits-only events")
+	require.Nil(t, snapshot.PrimaryUsedPercent)
+	require.Nil(t, snapshot.SecondaryUsedPercent)
+	require.NotNil(t, snapshot.CreditsHasCredits)
+	require.True(t, *snapshot.CreditsHasCredits)
+	require.NotNil(t, snapshot.CreditsUnlimited)
+	require.False(t, *snapshot.CreditsUnlimited)
+	require.Equal(t, "4.50", snapshot.CreditsBalance)
 }

@@ -25,3 +25,17 @@ func TestShouldEnqueueSchedulerOutboxForExtraUpdates_OpenAIResponsesCapabilityKe
 		t.Fatalf("expected responses capability updates to enqueue scheduler outbox")
 	}
 }
+
+func TestShouldEnqueueSchedulerOutboxForExtraUpdates_CodexCreditsSnapshotKeysAreNeutral(t *testing.T) {
+	updates := map[string]any{
+		"codex_credits_has_credits": true,
+		"codex_credits_unlimited":   false,
+		"codex_credits_balance":     "12.75",
+		"codex_limit_name":          "gpt-5.2-codex-sonic",
+		"codex_rate_limit_families": []any{},
+		"codex_usage_updated_at":    "2026-09-22T08:00:00Z",
+	}
+	if shouldEnqueueSchedulerOutboxForExtraUpdates(updates) {
+		t.Fatalf("credits/limit/family snapshot keys must stay scheduler-neutral")
+	}
+}

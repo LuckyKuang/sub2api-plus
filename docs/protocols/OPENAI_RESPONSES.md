@@ -88,8 +88,11 @@ Codex-protocol outbound request bodies always carry
 `include: ["reasoning.encrypted_content"]`, matching the official client's
 unconditional declaration: the gateway merges and deduplicates the item with
 any client-provided `include` values and preserves other client-declared
-items. The only exception is the remote Compact v2 endpoint (`compaction_trigger`),
-whose request shape differs and is handled separately. Client-owned
+items. HTTP passthrough and WebSocket compatibility bodies receive the same
+merge. The only exception is the HTTP `/responses/compact` endpoint, whose
+request shape differs and is handled separately. Remote Compact v2
+(`compaction_trigger` on `/responses`) still carries the include declaration,
+matching the official Responses client. Client-owned
 `client_metadata` keys — `turn_id`, `parent_turn_id`,
 `root_turn_id`, `mcp_attribution`, and unknown future keys — pass through the
 proxy verbatim; `mcp_attribution` is the official client's own responsibility
@@ -230,15 +233,19 @@ supplementary declarations on every successful response:
 - `X-Codex-Limit-Name` names the default metered limit (typically the metered
   model slug).
 - `X-Codex-Credits-Has-Credits`, `X-Codex-Credits-Unlimited`, and
-  `X-Codex-Credits-Balance` form a realtime credits snapshot supplement; the
-  WHAM usage/credit pull remains the authoritative source.
+  `X-Codex-Credits-Balance` form a realtime credits snapshot supplement and
+  are persisted on the account Extra (`codex_credits_*`); the WHAM
+  usage/credit pull remains the authoritative source. In-band
+  `codex.rate_limits` events may carry credits without windows and still
+  refresh that snapshot.
 - Additional metered limit families are discovered by scanning the
   `x-{limit}-primary-used-percent` suffix the way the official client does:
   `x-codex-secondary-primary-*` belongs to the `codex_secondary` family (not
   the default 5-hour window), together with its `x-{limit}-limit-name` and
-  secondary-window variants. Additional families are recorded on the account
-  usage snapshot for diagnostics; the default 5h/7d quota windows and the
-  auto-pause thresholds continue to come from the default family only.
+  secondary-window variants. Additional families and the default
+  `X-Codex-Limit-Name` are persisted on the account Extra for diagnostics;
+  the default 5h/7d quota windows and the auto-pause thresholds continue to
+  come from the default family only.
 - `x-codex-promo-message` and `x-codex-rate-limit-reached-type` are official
   display-only declarations and are relayed to the downstream client verbatim
   after generic response-header filtering; the gateway never derives quota or
@@ -259,7 +266,10 @@ to schedule:
   succeed.
 - `openai-model` names the model that actually served the request. It joins
   the response-model observer before body events (terminal body declarations
-  still win, and a disagreement raises the conflict flag). For Codex-protocol
+  still win, and a disagreement raises the conflict flag). In-band events
+  follow the official `response_model()` order: nested `response.headers`,
+  then top-level `headers` on WebSocket metadata events; `response.model` is
+  a Plus fallback when neither header is present. For Codex-protocol
   accounts a server-declared model that differs from the baseline billing
   model and has identified pricing corrects the recorded billing model; the
   downstream response body is never rewritten. The `x-openai-model` spelling is

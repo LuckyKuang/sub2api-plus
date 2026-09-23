@@ -342,6 +342,83 @@ func TestBuildCodexUsageExtraUpdates_WithoutNormalizedWindowFields(t *testing.T)
 	}
 }
 
+func TestBuildCodexUsageExtraUpdates_PersistsCreditsLimitNameAndFamilies(t *testing.T) {
+	trueVal := true
+	falseVal := false
+	used := 80.0
+	minutes := 1440
+	resetAt := int64(1790000000)
+	snapshot := &OpenAICodexUsageSnapshot{
+		LimitName:         "gpt-5.2-codex-sonic",
+		CreditsHasCredits: &trueVal,
+		CreditsUnlimited:  &falseVal,
+		CreditsBalance:    "12.75",
+		Families: []OpenAICodexRateLimitFamily{{
+			LimitID:              "codex_secondary",
+			PrimaryUsedPercent:   &used,
+			PrimaryWindowMinutes: &minutes,
+			PrimaryResetAtUnix:   &resetAt,
+		}},
+	}
+	updates := buildCodexUsageExtraUpdates(snapshot, time.Date(2026, 9, 22, 8, 0, 0, 0, time.UTC))
+	if updates["codex_limit_name"] != "gpt-5.2-codex-sonic" {
+		t.Fatalf("limit name = %v", updates["codex_limit_name"])
+	}
+	if updates["codex_credits_has_credits"] != true {
+		t.Fatalf("has_credits = %v", updates["codex_credits_has_credits"])
+	}
+	if updates["codex_credits_unlimited"] != false {
+		t.Fatalf("unlimited = %v", updates["codex_credits_unlimited"])
+	}
+	if updates["codex_credits_balance"] != "12.75" {
+		t.Fatalf("balance = %v", updates["codex_credits_balance"])
+	}
+	families, ok := updates["codex_rate_limit_families"].([]OpenAICodexRateLimitFamily)
+	if !ok || len(families) != 1 || families[0].LimitID != "codex_secondary" {
+		t.Fatalf("families = %#v", updates["codex_rate_limit_families"])
+	}
+}
+
+func TestParseCodexRateLimitHeaders_LimitNameOnlyProducesSnapshot(t *testing.T) {
+	headers := http.Header{}
+	headers.Set("x-codex-limit-name", "gpt-5.2-codex-sonic")
+	snapshot := parseCodexRateLimitHeadersAt(headers, time.Now())
+	if snapshot == nil {
+		t.Fatal("expected snapshot from limit-name-only headers")
+	}
+	if snapshot.LimitName != "gpt-5.2-codex-sonic" {
+		t.Fatalf("limit name = %q", snapshot.LimitName)
+	}
+}
+
+func TestParseCodexRateLimitHeaders_CreditsFlagsAreCaseInsensitive(t *testing.T) {
+	headers := http.Header{}
+	headers.Set("x-codex-credits-has-credits", "TRUE")
+	headers.Set("x-codex-credits-unlimited", "False")
+	snapshot := parseCodexRateLimitHeadersAt(headers, time.Now())
+	if snapshot == nil {
+		t.Fatal("expected snapshot from case-insensitive credits flags")
+	}
+	if snapshot.CreditsHasCredits == nil || !*snapshot.CreditsHasCredits {
+		t.Fatalf("has_credits = %v", snapshot.CreditsHasCredits)
+	}
+	if snapshot.CreditsUnlimited == nil || *snapshot.CreditsUnlimited {
+		t.Fatalf("unlimited = %v", snapshot.CreditsUnlimited)
+	}
+}
+
+func TestParseCodexRateLimitHeaders_NonFiniteUsedPercentIgnored(t *testing.T) {
+	headers := http.Header{}
+	headers.Set("x-codex-primary-used-percent", "NaN")
+	if snapshot := parseCodexRateLimitHeadersAt(headers, time.Now()); snapshot != nil {
+		t.Fatalf("NaN used-percent must not produce a snapshot, got %+v", snapshot)
+	}
+	headers.Set("x-codex-primary-used-percent", "Inf")
+	if snapshot := parseCodexRateLimitHeadersAt(headers, time.Now()); snapshot != nil {
+		t.Fatalf("Inf used-percent must not produce a snapshot, got %+v", snapshot)
+	}
+}
+
 // TestParseCodexRateLimitHeadersFamiliesAndCredits verifies the official-aligned
 // additions: the credits header family, the default limit name, and the
 // prefix-scanned non-default rate-limit families.
@@ -525,8 +602,29 @@ func TestObserveOpenAIInBandServerModelHeaderSource(t *testing.T) {
 		})
 	}
 
-	// Without the in-band header the body model is still used.
+	// Official response_model() also reads top-level headers on websocket
+	// metadata events. A mid-stream re-route announced only there must win.
 	observer := beginUpstreamResponseModelObservation(nil)
+	observer.ObserveOpenAI([]byte(`{"type":"response.metadata","headers":{"openai-model":"gpt-5.6-metadata"},"response":{"model":"gpt-5.6-original"}}`), "response.metadata")
+	require.Equal(t, "gpt-5.6-metadata", observer.Model())
+
+	// Nested response.headers still beat top-level headers.
+	observer = beginUpstreamResponseModelObservation(nil)
+	observer.ObserveOpenAI([]byte(`{"type":"response.created","headers":{"openai-model":"top-level-model"},"response":{"headers":{"openai-model":"gpt-5.6-nested"},"model":"gpt-5.6-original"}}`), "response.created")
+	require.Equal(t, "gpt-5.6-nested", observer.Model())
+
+	// Official json_value_as_string accepts a JSON string or the first array
+	// element. A numeric header is not a model declaration.
+	observer = beginUpstreamResponseModelObservation(nil)
+	observer.ObserveOpenAI([]byte(`{"type":"response.metadata","headers":{"openai-model":["gpt-5.6-array"]}}`), "response.metadata")
+	require.Equal(t, "gpt-5.6-array", observer.Model())
+
+	observer = beginUpstreamResponseModelObservation(nil)
+	observer.ObserveOpenAI([]byte(`{"type":"response.metadata","headers":{"openai-model":12},"response":{"model":"gpt-5.6-original"}}`), "response.metadata")
+	require.Equal(t, "gpt-5.6-original", observer.Model(), "numeric openai-model must not override the body model")
+
+	// Without the in-band header the body model is still used.
+	observer = beginUpstreamResponseModelObservation(nil)
 	observer.ObserveOpenAI([]byte(`{"type":"response.completed","response":{"model":"gpt-5.6-original"}}`), "response.completed")
 	require.Equal(t, "gpt-5.6-original", observer.Model())
 

@@ -65,9 +65,9 @@ func TestNormalizeOpenAIResponsesWebSocketCompatibilityBody_OnlyStripsOAuthField
 		require.False(t, gjson.GetBytes(oauthBody, field).Exists(), field)
 	}
 
-	apiKeyBody, changed, err := normalizeOpenAIResponsesWebSocketCompatibilityBody(body, &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}, false)
+	apiKeyBody, apiKeyChanged, err := normalizeOpenAIResponsesWebSocketCompatibilityBody(body, &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}, false)
 	require.NoError(t, err)
-	require.False(t, changed)
+	require.False(t, apiKeyChanged)
 	require.JSONEq(t, string(body), string(apiKeyBody))
 }
 
@@ -415,4 +415,36 @@ func TestNormalizeOpenAIResponsesWebSocketCompatibilityBody_StripsFullCodexSetFo
 	require.True(t, gjson.GetBytes(normalized, "max_output_tokens").Exists(),
 		"API-key accounts keep their own field handling")
 	_ = changed
+}
+
+func TestNormalizeOpenAIPassthroughOAuthBody_EnsuresReasoningInclude(t *testing.T) {
+	body := []byte(`{"model":"gpt-5.4","input":"hello","include":["foo"]}`)
+	normalized, changed, err := normalizeOpenAIPassthroughOAuthBody(body, false)
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.Equal(t, "foo", gjson.GetBytes(normalized, "include.0").String())
+	require.Equal(t, "reasoning.encrypted_content", gjson.GetBytes(normalized, "include.1").String())
+
+	compact, _, err := normalizeOpenAIPassthroughOAuthBody([]byte(`{"model":"gpt-5.4","input":"hello"}`), true)
+	require.NoError(t, err)
+	require.False(t, gjson.GetBytes(compact, "include").Exists(), "compact v2 keeps its own request shape")
+
+	nullInclude, changed, err := normalizeOpenAIPassthroughOAuthBody([]byte(`{"model":"gpt-5.4","input":"hello","include":null}`), false)
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.Equal(t, "reasoning.encrypted_content", gjson.GetBytes(nullInclude, "include.0").String())
+}
+
+func TestNormalizeOpenAIResponsesWebSocketCompatibilityBody_EnsuresReasoningInclude(t *testing.T) {
+	body := []byte(`{"type":"response.create","model":"gpt-5.4","include":["foo"]}`)
+	oauthBody, changed, err := normalizeOpenAIResponsesWebSocketCompatibilityBody(body, &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth}, false)
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.Equal(t, "foo", gjson.GetBytes(oauthBody, "include.0").String())
+	require.Equal(t, "reasoning.encrypted_content", gjson.GetBytes(oauthBody, "include.1").String())
+
+	apiKeyBody, _, err := normalizeOpenAIResponsesWebSocketCompatibilityBody(body, &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}, false)
+	require.NoError(t, err)
+	require.False(t, gjson.GetBytes(apiKeyBody, "include.1").Exists(), "API-key WS bodies keep client include unchanged")
+	require.Equal(t, "foo", gjson.GetBytes(apiKeyBody, "include.0").String())
 }

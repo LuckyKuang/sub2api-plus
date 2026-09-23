@@ -71,12 +71,20 @@ func normalizeObservedUpstreamResponseModel(model string) string {
 	return model
 }
 
-// openAIInBandServerModelHeader 在 response.headers 里大小写不敏感地匹配
-// openai-model / x-openai-model，对齐官方 header_openai_model_value_from_json
-// 的 eq_ignore_ascii_case。带内 headers 才是官方认定的服务端模型信号——上游做
-// 流中重路由时只写在那里；只看 response.model 会漏掉这次改名。
+// openAIInBandServerModelHeader 对齐官方 response_model() 的优先级：
+// 1. response.headers（标准 Responses 流事件）
+// 2. 顶层 headers（WebSocket response.metadata 事件）
+// 大小写不敏感地匹配 openai-model / x-openai-model。带内 headers 才是官方认定
+// 的服务端模型信号——上游做流中重路由时只写在那里；只看 response.model 会漏掉
+// 这次改名。
 func openAIInBandServerModelHeader(payload []byte) string {
-	headers := gjson.GetBytes(payload, "response.headers")
+	if model := openAIJSONHeaderModel(gjson.GetBytes(payload, "response.headers")); model != "" {
+		return model
+	}
+	return openAIJSONHeaderModel(gjson.GetBytes(payload, "headers"))
+}
+
+func openAIJSONHeaderModel(headers gjson.Result) string {
 	if !headers.IsObject() {
 		return ""
 	}
@@ -86,13 +94,31 @@ func openAIInBandServerModelHeader(payload []byte) string {
 		if name != "openai-model" && name != "x-openai-model" {
 			return true
 		}
-		if model := strings.TrimSpace(value.String()); model != "" {
+		if model := openAIJSONHeaderModelValue(value); model != "" {
 			found = model
 			return false
 		}
 		return true
 	})
 	return normalizeObservedUpstreamResponseModel(found)
+}
+
+// openAIJSONHeaderModelValue mirrors official json_value_as_string: a JSON
+// string, or the first element of a JSON array (recursively). Numbers, bools,
+// and objects are not server-model declarations.
+func openAIJSONHeaderModelValue(value gjson.Result) string {
+	switch {
+	case value.Type == gjson.String:
+		return strings.TrimSpace(value.String())
+	case value.IsArray():
+		items := value.Array()
+		if len(items) == 0 {
+			return ""
+		}
+		return openAIJSONHeaderModelValue(items[0])
+	default:
+		return ""
+	}
 }
 
 func (o *upstreamResponseModelObserver) ObserveOpenAI(payload []byte, eventType string) {

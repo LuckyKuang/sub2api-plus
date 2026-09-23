@@ -61,6 +61,7 @@ var schedulerNeutralExtraKeyPrefixes = []string{
 	"codex_5h_",
 	"codex_7d_",
 	"codex_reset_credit_",
+	"codex_credits_",
 	"passive_usage_",
 	"ollama_cloud_usage",
 	"wecom_usage_alert",
@@ -69,6 +70,8 @@ var schedulerNeutralExtraKeyPrefixes = []string{
 
 var schedulerNeutralExtraKeys = map[string]struct{}{
 	"codex_usage_updated_at":     {},
+	"codex_limit_name":           {},
+	"codex_rate_limit_families":  {},
 	"grok_billing_snapshot":      {},
 	"session_window_utilization": {},
 }

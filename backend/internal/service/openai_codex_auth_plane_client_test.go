@@ -3,10 +3,20 @@
 package service
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
+	"math/big"
 	"net/http"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
 	"github.com/stretchr/testify/require"
 )
 
@@ -42,4 +52,39 @@ func TestCodexAuthPlaneHTTPClient_NormalizedProxySharesClient(t *testing.T) {
 	other, err := codexAuthPlaneHTTPClient("http://127.0.0.1:8080", 0)
 	require.NoError(t, err)
 	require.NotSame(t, first, other, "different proxies must not share a client")
+}
+
+func TestCodexAuthPlaneHTTPClient_RotatedCAUsesNewClient(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ca.pem")
+	require.NoError(t, os.WriteFile(path, authPlaneTestCAPEM(t), 0o600))
+	t.Setenv(openai.CodexCAEnvPrimary, path)
+	t.Setenv(openai.CodexCAEnvFallback, "")
+
+	first, err := codexAuthPlaneHTTPClient("", 0)
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(path, authPlaneTestCAPEM(t), 0o600))
+	future := time.Now().Add(2 * time.Second)
+	require.NoError(t, os.Chtimes(path, future, future))
+
+	second, err := codexAuthPlaneHTTPClient("", 0)
+	require.NoError(t, err)
+	require.NotSame(t, first, second, "a rotated CA bundle must not reuse the previous auth-plane client")
+}
+
+func authPlaneTestCAPEM(t *testing.T) []byte {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject:      pkix.Name{CommonName: "sub2api-auth-plane-ca-test"},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(24 * time.Hour),
+		IsCA:         true,
+		KeyUsage:     x509.KeyUsageCertSign,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, key.Public(), key)
+	require.NoError(t, err)
+	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 }

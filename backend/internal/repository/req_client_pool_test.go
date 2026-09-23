@@ -89,7 +89,7 @@ func TestGetSharedReqClient_ProxyCacheKey(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NotNil(t, client)
-	require.Equal(t, "http://proxy.local:8080|4s|false|false|false||", buildReqClientKey(opts))
+	require.Equal(t, "http://proxy.local:8080|4s|false|false|false|||", buildReqClientKey(opts))
 }
 
 func TestGetSharedReqClient_InvalidProxyURL(t *testing.T) {
@@ -141,6 +141,30 @@ func TestGetSharedReqClient_CustomCAScopedToOpenAICodexClients(t *testing.T) {
 		buildReqClientKey(reqClientOptions{ProxyURL: "http://proxy.local:8080", Timeout: time.Second, OpenAICodexClient: true}),
 		buildReqClientKey(reqClientOptions{ProxyURL: "http://proxy.local:8080", Timeout: time.Second}),
 	)
+}
+
+func TestGetSharedReqClient_RotatedCAUsesNewClient(t *testing.T) {
+	sharedReqClients = sync.Map{}
+	path := filepath.Join(t.TempDir(), "ca.pem")
+	firstPEM, err := os.ReadFile(codexTestCAPEMPath(t, "CERTIFICATE"))
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(path, firstPEM, 0o600))
+	t.Setenv(openai.CodexCAEnvPrimary, path)
+	t.Setenv(openai.CodexCAEnvFallback, "")
+
+	opts := reqClientOptions{ProxyURL: "http://proxy.local:8080", Timeout: time.Second, OpenAICodexClient: true}
+	first, err := getSharedReqClient(opts)
+	require.NoError(t, err)
+
+	rotatedPEM, err := os.ReadFile(codexTestCAPEMPath(t, "CERTIFICATE"))
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(path, rotatedPEM, 0o600))
+	future := time.Now().Add(2 * time.Second)
+	require.NoError(t, os.Chtimes(path, future, future))
+
+	second, err := getSharedReqClient(opts)
+	require.NoError(t, err)
+	require.NotSame(t, first, second, "a rotated CA bundle must not reuse the previous pooled client")
 }
 
 func TestGetSharedReqClient_NonOpenAIClientIgnoresConfiguredCustomCA(t *testing.T) {

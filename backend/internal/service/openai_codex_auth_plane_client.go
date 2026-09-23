@@ -48,7 +48,7 @@ func codexAuthPlaneHTTPClient(proxyURL string, timeout time.Duration) (*http.Cli
 	if parseErr != nil {
 		return nil, parseErr
 	}
-	key := trimmed + "\x00" + timeout.String() + "\x00" + bundle.SourceEnv + "\x00" + bundle.Path
+	key := trimmed + "\x00" + timeout.String() + "\x00" + bundle.SourceEnv + "\x00" + bundle.Path + "\x00" + bundle.Identity
 	if cached, ok := codexAuthPlaneClients.Load(key); ok {
 		if client, ok := cached.(*http.Client); ok {
 			return client, nil

@@ -31,6 +31,9 @@ type CodexCABundle struct {
 	SourceEnv string
 	Path      string
 	Pool      *x509.CertPool
+	// Identity distinguishes two bundles at the same path after a repair or
+	// rotation (size + mtime). Empty when no custom bundle is configured.
+	Identity string
 }
 
 var (
@@ -81,7 +84,7 @@ func CodexCARootPool() (CodexCABundle, error) {
 		if path == "" {
 			continue
 		}
-		codexCAResolved = CodexCABundle{SourceEnv: env, Path: path}
+		codexCAResolved = CodexCABundle{SourceEnv: env, Path: path, Identity: codexCAFileIdentity(path)}
 		pool, err := buildCodexCARootPool(path)
 		if err != nil {
 			codexCAErr = err
@@ -91,6 +94,15 @@ func CodexCARootPool() (CodexCABundle, error) {
 		return codexCAResolved, nil
 	}
 	return codexCAResolved, nil
+}
+
+func codexCAFileIdentity(path string) string {
+	//nolint:gosec // G703: operator-supplied path, same trust boundary as buildCodexCARootPool.
+	info, err := os.Stat(path)
+	if err != nil {
+		return ""
+	}
+	return strconv.FormatInt(info.Size(), 10) + ":" + strconv.FormatInt(info.ModTime().UnixNano(), 10)
 }
 
 // buildCodexCARootPool appends every parseable certificate block of the bundle

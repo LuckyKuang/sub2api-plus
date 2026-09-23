@@ -123,13 +123,13 @@ func instrumentReqClient(client *req.Client) *req.Client {
 func buildReqClientKey(opts reqClientOptions) string {
 	// OpenAI Codex 客户端按生效的 CA bundle 分池（非 Codex 客户端不读 env，
 	// 固定为空），避免同一份配置在不同 bundle 下复用同一客户端。
-	caSource, caPath := "", ""
+	caSource, caPath, caIdentity := "", "", ""
 	if opts.OpenAICodexClient {
 		if bundle, err := openai.CodexCARootPool(); err == nil {
-			caSource, caPath = bundle.SourceEnv, bundle.Path
+			caSource, caPath, caIdentity = bundle.SourceEnv, bundle.Path, bundle.Identity
 		}
 	}
-	return fmt.Sprintf("%s|%s|%t|%t|%t|%s|%s",
+	return fmt.Sprintf("%s|%s|%t|%t|%t|%s|%s|%s",
 		strings.TrimSpace(opts.ProxyURL),
 		opts.Timeout.String(),
 		opts.ForceHTTP2,
@@ -137,6 +137,7 @@ func buildReqClientKey(opts reqClientOptions) string {
 		opts.OpenAICodexClient,
 		caSource,
 		caPath,
+		caIdentity,
 	)
 }
 

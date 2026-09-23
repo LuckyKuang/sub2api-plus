@@ -1285,6 +1285,12 @@ func normalizeOpenAIResponsesWebSocketCompatibilityBody(body []byte, account *Ac
 			normalized = next
 			changed = true
 		}
+		if includeBody, includeChanged, includeErr := ensureCodexReasoningIncludeBytes(normalized); includeErr != nil {
+			return body, false, includeErr
+		} else if includeChanged {
+			normalized = includeBody
+			changed = true
+		}
 	}
 	needsOrphanCleanup := account != nil && account.IsOpenAIOAuthLike() &&
 		gjson.GetBytes(normalized, "input").IsArray()
@@ -1352,6 +1358,37 @@ func normalizeOpenAIResponsesWebSocketCompatibilityBody(body []byte, account *Ac
 		changed = true
 	}
 	return normalized, changed, nil
+}
+
+// ensureCodexReasoningIncludeBytes 是 ensureCodexReasoningInclude 的 JSON 字节
+// 形态：透传与 WebSocket 兼容路径不走 map transform，但仍必须恒补官方
+// include:["reasoning.encrypted_content"]。compact 由调用方跳过。
+func ensureCodexReasoningIncludeBytes(body []byte) ([]byte, bool, error) {
+	const encrypted = "reasoning.encrypted_content"
+	if len(body) == 0 || !gjson.ValidBytes(body) {
+		return body, false, nil
+	}
+	include := gjson.GetBytes(body, "include")
+	if !include.Exists() || include.Type == gjson.Null {
+		next, err := sjson.SetBytes(body, "include", []any{encrypted})
+		if err != nil {
+			return body, false, fmt.Errorf("ensure reasoning include: %w", err)
+		}
+		return next, true, nil
+	}
+	if !include.IsArray() {
+		return body, false, nil
+	}
+	for _, item := range include.Array() {
+		if item.String() == encrypted {
+			return body, false, nil
+		}
+	}
+	next, err := sjson.SetBytes(body, "include.-1", encrypted)
+	if err != nil {
+		return body, false, fmt.Errorf("append reasoning include: %w", err)
+	}
+	return next, true, nil
 }
 
 // normalizeOpenAIPassthroughOAuthBody 将透传 OAuth 请求体收敛为旧链路关键行为：
@@ -1454,6 +1491,15 @@ func normalizeOpenAIPassthroughOAuthBody(body []byte, compact bool) ([]byte, boo
 				return body, false, fmt.Errorf("normalize passthrough body stream=true: %w", err)
 			}
 			normalized = next
+			changed = true
+		}
+	}
+
+	if !compact {
+		if includeBody, includeChanged, includeErr := ensureCodexReasoningIncludeBytes(normalized); includeErr != nil {
+			return body, false, includeErr
+		} else if includeChanged {
+			normalized = includeBody
 			changed = true
 		}
 	}

@@ -54,10 +54,12 @@ func TestCodexCARootPool_CachesUnchangedFile(t *testing.T) {
 	first, err := CodexCARootPool()
 	require.NoError(t, err)
 	require.NotNil(t, first.Pool)
+	require.NotEmpty(t, first.Identity, "a resolved bundle must carry file identity for HTTP client cache keys")
 
 	second, err := CodexCARootPool()
 	require.NoError(t, err)
 	require.Equal(t, first.Path, second.Path)
+	require.Equal(t, first.Identity, second.Identity)
 	require.NotNil(t, second.Pool)
 }
 

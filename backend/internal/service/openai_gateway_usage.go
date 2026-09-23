@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"sort"
 	"strconv"
@@ -1218,6 +1219,19 @@ func (s *OpenAIGatewayService) resolveOpenAIChannelPricing(ctx context.Context, 
 	return nil
 }
 
+func parseCodexHeaderBool(raw string) *bool {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "true", "1":
+		value := true
+		return &value
+	case "false", "0":
+		value := false
+		return &value
+	default:
+		return nil
+	}
+}
+
 // ParseCodexRateLimitHeaders extracts Codex usage limits from response headers.
 // Exported for use in ratelimit_service when handling OpenAI 429 responses.
 func ParseCodexRateLimitHeaders(headers http.Header) *OpenAICodexUsageSnapshot {
@@ -1235,7 +1249,7 @@ func parseCodexRateLimitHeadersAt(headers http.Header, now time.Time) *OpenAICod
 	// Helper to parse float64 from header
 	parseFloat := func(key string) *float64 {
 		if v := headers.Get(key); v != "" {
-			if f, err := strconv.ParseFloat(v, 64); err == nil {
+			if f, err := strconv.ParseFloat(v, 64); err == nil && !math.IsNaN(f) && !math.IsInf(f, 0) {
 				return &f
 			}
 		}
@@ -1253,7 +1267,7 @@ func parseCodexRateLimitHeadersAt(headers http.Header, now time.Time) *OpenAICod
 	}
 	parseInt64 := func(key string) *int64 {
 		if v := strings.TrimSpace(headers.Get(key)); v != "" {
-			if parsed, err := strconv.ParseInt(v, 10, 64); err == nil && parsed > 0 {
+			if parsed, err := strconv.ParseInt(v, 10, 64); err == nil && validOpenAIQuotaResetUnix(parsed) {
 				return &parsed
 			}
 		}
@@ -1308,22 +1322,14 @@ func parseCodexRateLimitHeadersAt(headers http.Header, now time.Time) *OpenAICod
 	// Server-declared limit name of the default codex family（计量模型 slug）。
 	if name := strings.TrimSpace(headers.Get("x-codex-limit-name")); name != "" {
 		snapshot.LimitName = name
+		hasData = true
 	}
 
 	// Credits snapshot（x-codex-credits-* 头族）：实时补充；WHAM API 拉取路径
 	// 仍是权威来源。对齐官方 parse_credits_snapshot：has-credits 与 unlimited
 	// 必须同时可解析才构成快照。
 	parseBool := func(key string) *bool {
-		switch strings.TrimSpace(headers.Get(key)) {
-		case "true", "1":
-			value := true
-			return &value
-		case "false", "0":
-			value := false
-			return &value
-		default:
-			return nil
-		}
+		return parseCodexHeaderBool(headers.Get(key))
 	}
 	if hasCredits, unlimited := parseBool("x-codex-credits-has-credits"), parseBool("x-codex-credits-unlimited"); hasCredits != nil && unlimited != nil {
 		snapshot.CreditsHasCredits = hasCredits
@@ -1496,6 +1502,17 @@ func buildCodexUsageExtraUpdates(snapshot *OpenAICodexUsageSnapshot, fallbackNow
 	}
 	if snapshot.PrimaryOverSecondaryPercent != nil {
 		updates["codex_primary_over_secondary_percent"] = *snapshot.PrimaryOverSecondaryPercent
+	}
+	if name := strings.TrimSpace(snapshot.LimitName); name != "" {
+		updates["codex_limit_name"] = name
+	}
+	if snapshot.CreditsHasCredits != nil && snapshot.CreditsUnlimited != nil {
+		updates["codex_credits_has_credits"] = *snapshot.CreditsHasCredits
+		updates["codex_credits_unlimited"] = *snapshot.CreditsUnlimited
+		updates["codex_credits_balance"] = snapshot.CreditsBalance
+	}
+	if len(snapshot.Families) > 0 {
+		updates["codex_rate_limit_families"] = snapshot.Families
 	}
 	updates["codex_usage_updated_at"] = baseTime.UTC().Format(time.RFC3339Nano)
 

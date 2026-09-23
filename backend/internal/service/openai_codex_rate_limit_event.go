@@ -19,34 +19,40 @@ import (
 // 只处理默认 `codex` 族：附加族由本地分组配额合成单独处理，避免把模型级信号写进
 // 账号级 5h/7d 视图。
 func parseCodexRateLimitEventSnapshot(payload []byte) *OpenAICodexUsageSnapshot {
-	if !gjson.ValidBytes(payload) || !isDefaultCodexRateLimitEvent(payload) {
+	if !gjson.ValidBytes(payload) {
 		return nil
 	}
-	rateLimits := gjson.GetBytes(payload, "rate_limits")
-	if !rateLimits.Exists() {
+	if strings.TrimSpace(gjson.GetBytes(payload, "type").String()) != "codex.rate_limits" {
 		return nil
 	}
-
+	if !isDefaultCodexRateLimitEvent(payload) {
+		return nil
+	}
 	snapshot := &OpenAICodexUsageSnapshot{}
 	hasData := false
 
-	// Official RateLimitEventWindow: used_percent (required), window_minutes,
-	// reset_at. A window with no parseable used_percent is dropped, matching
-	// parse_rate_limit_window's `used_percent.and_then(...)`.
-	if window := rateLimits.Get("primary"); window.Exists() {
-		if used := eventWindowUsedPercent(window); used != nil {
-			snapshot.PrimaryUsedPercent = used
-			snapshot.PrimaryWindowMinutes = eventWindowMinutes(window)
-			snapshot.PrimaryResetAtUnix = eventWindowResetAt(window)
-			hasData = true
+	// Official parse_rate_limit_event accepts credits-only events: rate_limits
+	// is optional. A missing object just leaves both windows empty.
+	rateLimits := gjson.GetBytes(payload, "rate_limits")
+	if rateLimits.Exists() {
+		// Official RateLimitEventWindow: used_percent (required), window_minutes,
+		// reset_at. A window with no parseable used_percent is dropped, matching
+		// parse_rate_limit_window's `used_percent.and_then(...)`.
+		if window := rateLimits.Get("primary"); window.Exists() {
+			if used := eventWindowUsedPercent(window); used != nil {
+				snapshot.PrimaryUsedPercent = used
+				snapshot.PrimaryWindowMinutes = eventWindowMinutes(window)
+				snapshot.PrimaryResetAtUnix = eventWindowResetAt(window)
+				hasData = true
+			}
 		}
-	}
-	if window := rateLimits.Get("secondary"); window.Exists() {
-		if used := eventWindowUsedPercent(window); used != nil {
-			snapshot.SecondaryUsedPercent = used
-			snapshot.SecondaryWindowMinutes = eventWindowMinutes(window)
-			snapshot.SecondaryResetAtUnix = eventWindowResetAt(window)
-			hasData = true
+		if window := rateLimits.Get("secondary"); window.Exists() {
+			if used := eventWindowUsedPercent(window); used != nil {
+				snapshot.SecondaryUsedPercent = used
+				snapshot.SecondaryWindowMinutes = eventWindowMinutes(window)
+				snapshot.SecondaryResetAtUnix = eventWindowResetAt(window)
+				hasData = true
+			}
 		}
 	}
 
@@ -108,13 +114,14 @@ func eventWindowResetAt(window gjson.Result) *int64 {
 }
 
 func eventWindowBool(value gjson.Result) *bool {
-	switch strings.ToLower(strings.TrimSpace(value.String())) {
-	case "true", "1":
-		result := true
-		return &result
-	case "false", "0":
-		result := false
-		return &result
+	// Official RateLimitEventCredits deserializes JSON bools, not header strings.
+	switch value.Type {
+	case gjson.True:
+		parsed := true
+		return &parsed
+	case gjson.False:
+		parsed := false
+		return &parsed
 	default:
 		return nil
 	}
