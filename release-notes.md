@@ -28,7 +28,7 @@ this baseline.
 
 ## Compatibility and migration
 
-Migrations 269 and 270 add per-usage `codex_rollout_budget_units` and the idempotent affiliate withdrawal `operation_id`. Back up the database before upgrade. Rollback image is `v0.2.7+custom.001`.
+Migrations 269 and 270 add per-usage `codex_rollout_budget_units` and the idempotent affiliate withdrawal `operation_id`. Back up the database before upgrade. Rollback image is `v0.2.5+custom.001`.
 
 ## Known issues
 
