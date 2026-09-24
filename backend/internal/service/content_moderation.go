@@ -244,43 +244,43 @@ type ContentModerationEndpointRuntime struct {
 }
 
 type ContentModerationConfigView struct {
-	Enabled                        bool                                    `json:"enabled"`
-	Mode                           string                                  `json:"mode"`
-	BaseURL                        string                                  `json:"base_url"`
-	Model                          string                                  `json:"model"`
-	ProxyID                        *int64                                  `json:"proxy_id"`
-	APIKeyConfigured               bool                                    `json:"api_key_configured"`
-	APIKeyMasked                   string                                  `json:"api_key_masked"`
-	APIKeyCount                    int                                     `json:"api_key_count"`
-	APIKeyMasks                    []string                                `json:"api_key_masks"`
-	APIKeyStatuses                 []ContentModerationAPIKeyStatus         `json:"api_key_statuses"`
-	Endpoints                      []ContentModerationEndpointView         `json:"endpoints"`
-	TimeoutMS                      int                                     `json:"timeout_ms"`
-	SampleRate                     int                                     `json:"sample_rate"`
-	AllGroups                      bool                                    `json:"all_groups"`
-	GroupIDs                       []int64                                 `json:"group_ids"`
-	RecordNonHits                  bool                                    `json:"record_non_hits"`
-	Thresholds                     map[string]float64                      `json:"thresholds"`
-	WorkerCount                    int                                     `json:"worker_count"`
-	QueueSize                      int                                     `json:"queue_size"`
-	BlockStatus                    int                                     `json:"block_status"`
-	BlockMessage                   string                                  `json:"block_message"`
-	EmailOnHit                     bool                                    `json:"email_on_hit"`
-	AutoBanEnabled                 bool                                    `json:"auto_ban_enabled"`
-	BanThreshold                   int                                     `json:"ban_threshold"`
-	ViolationWindowHours           int                                     `json:"violation_window_hours"`
-	RetryCount                     int                                     `json:"retry_count"`
-	HitRetentionDays               int                                     `json:"hit_retention_days"`
-	NonHitRetentionDays            int                                     `json:"non_hit_retention_days"`
-	PreHashCheckEnabled            bool                                    `json:"pre_hash_check_enabled"`
-	BlockedKeywords                []string                                `json:"blocked_keywords"`
-	KeywordBlockingMode            string                                  `json:"keyword_blocking_mode"`
-	TextAPIMode                    string                                  `json:"text_api_mode"`
-	ModelFilter                    ContentModerationModelFilter            `json:"model_filter"`
-	CyberPolicyExcludeFromBanCount bool                                    `json:"cyber_policy_exclude_from_ban_count"`
-	CyberPolicyAutoBanEnabled      bool                                    `json:"cyber_policy_auto_ban_enabled"`
-	SessionBlockEnabled            bool                                    `json:"session_block_enabled"`
-	SessionBlockTTLSeconds         int                                     `json:"session_block_ttl_seconds"`
+	Enabled                        bool                            `json:"enabled"`
+	Mode                           string                          `json:"mode"`
+	BaseURL                        string                          `json:"base_url"`
+	Model                          string                          `json:"model"`
+	ProxyID                        *int64                          `json:"proxy_id"`
+	APIKeyConfigured               bool                            `json:"api_key_configured"`
+	APIKeyMasked                   string                          `json:"api_key_masked"`
+	APIKeyCount                    int                             `json:"api_key_count"`
+	APIKeyMasks                    []string                        `json:"api_key_masks"`
+	APIKeyStatuses                 []ContentModerationAPIKeyStatus `json:"api_key_statuses"`
+	Endpoints                      []ContentModerationEndpointView `json:"endpoints"`
+	TimeoutMS                      int                             `json:"timeout_ms"`
+	SampleRate                     int                             `json:"sample_rate"`
+	AllGroups                      bool                            `json:"all_groups"`
+	GroupIDs                       []int64                         `json:"group_ids"`
+	RecordNonHits                  bool                            `json:"record_non_hits"`
+	Thresholds                     map[string]float64              `json:"thresholds"`
+	WorkerCount                    int                             `json:"worker_count"`
+	QueueSize                      int                             `json:"queue_size"`
+	BlockStatus                    int                             `json:"block_status"`
+	BlockMessage                   string                          `json:"block_message"`
+	EmailOnHit                     bool                            `json:"email_on_hit"`
+	AutoBanEnabled                 bool                            `json:"auto_ban_enabled"`
+	BanThreshold                   int                             `json:"ban_threshold"`
+	ViolationWindowHours           int                             `json:"violation_window_hours"`
+	RetryCount                     int                             `json:"retry_count"`
+	HitRetentionDays               int                             `json:"hit_retention_days"`
+	NonHitRetentionDays            int                             `json:"non_hit_retention_days"`
+	PreHashCheckEnabled            bool                            `json:"pre_hash_check_enabled"`
+	BlockedKeywords                []string                        `json:"blocked_keywords"`
+	KeywordBlockingMode            string                          `json:"keyword_blocking_mode"`
+	TextAPIMode                    string                          `json:"text_api_mode"`
+	ModelFilter                    ContentModerationModelFilter    `json:"model_filter"`
+	CyberPolicyExcludeFromBanCount bool                            `json:"cyber_policy_exclude_from_ban_count"`
+	CyberPolicyAutoBanEnabled      bool                            `json:"cyber_policy_auto_ban_enabled"`
+	SessionBlockEnabled            bool                            `json:"session_block_enabled"`
+	SessionBlockTTLSeconds         int                             `json:"session_block_ttl_seconds"`
 }
 
 type ContentModerationAPIKeyStatus struct {
@@ -3539,10 +3539,10 @@ type moderationAPIResponse struct {
 }
 
 type moderationAPIResult struct {
-	Flagged        bool                         `json:"flagged"`
-	CategoryScores map[string]float64           `json:"category_scores"`
-	EndpointID     string                       `json:"-"`
-	EndpointName   string                       `json:"-"`
+	Flagged        bool               `json:"flagged"`
+	CategoryScores map[string]float64 `json:"category_scores"`
+	EndpointID     string             `json:"-"`
+	EndpointName   string             `json:"-"`
 }
 
 func evaluateModerationScores(scores map[string]float64, thresholds map[string]float64) (bool, string, float64) {
