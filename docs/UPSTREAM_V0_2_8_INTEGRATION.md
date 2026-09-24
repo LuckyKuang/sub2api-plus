@@ -6,9 +6,8 @@ already incorporated the official `v0.2.7` tag documented in
 [v0.2.7 integration](UPSTREAM_V0_2_7_INTEGRATION.md). Importing the tag does
 not publish a Plus release or change the embedded application version.
 
-Migrations 238b, 240, and 269 ship in this import: `engine_meta` on
-`content_moderation_logs`, the idempotent `operation_id` on
-`user_affiliate_ledger`, and `codex_rollout_budget_units` on `usage_logs`.
+Migrations 240 and 269 ship in this import: the idempotent `operation_id` on
+`user_affiliate_ledger` and `codex_rollout_budget_units` on `usage_logs`.
 Back up the database before upgrade.
 
 ## Public API and scheduling
@@ -29,9 +28,7 @@ Back up the database before upgrade.
 - Affiliate offline withdrawals are registered idempotently by
   `Idempotency-Key`; payment callback base URLs lose their trailing slash.
 - Rolling log retention policy is configurable.
-- Codex credits are displayed and referral invitations managed; content audit
-  gains independent TypeSafe engine configuration profiles; plugin HostService
-  account directories return structured read-only metadata.
+- Codex credits are displayed and referral invitations managed; plugin HostService account directories return structured read-only metadata.
 - Tool-call schemas strip illegal null `required` entries and
   `prefixItems`/tuple arrays to avoid upstream 400s.
 - Antigravity resolves bare Gemini model names to thinking variants at every
@@ -51,7 +48,7 @@ Back up the database before upgrade.
 | --- | --- |
 | README / sponsors | Keep Plus README structure, distribution links, and section IDs. Official sponsor-table churn is not imported. |
 | Identity | Credential-owner identity precedence is unchanged. Plus closes the remaining Codex OAuth outbound divergences against the official `codex-rs` client: custom-CA rotation on the HTTP and auth-plane client pools, WebSocket in-band model headers, credits-only rate-limit events, the official `include:["reasoning.encrypted_content"]` merge, transport-refusal handling, and rollout budget units. |
-| Ingress audit | Security-audit order and extraction pass-through remain the Plus contract; the independent TypeSafe engine profiles are included. |
+| Ingress audit | Security-audit order and extraction pass-through remain the Plus contract. The upstream TypeSafe engine profile split is not imported: Plus keeps a single audit pipeline with its own keyword, session-block, and cyber-policy behavior, so the engine profile config surface and files stay out of this tree. |
 | Usage / quota | Plus session affinity, local quota views, pause thresholds, and the five-level quota reads remain authoritative; OpenCode Go usage-window parity follows the official API. |
 | Billing | Plus billing, quota, and scheduling hooks apply unchanged to imported model and multiplier pricing; the rollout budget units column stays a reserved dimension. |
 | Backup / affiliate | Official monthly archive and offline withdrawal flows are included; Plus refund, balance, and concurrency fields remain. |

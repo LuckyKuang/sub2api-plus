@@ -156,11 +156,8 @@ func ContentModerationCategories() []string {
 type ContentModerationConfig struct {
 	Enabled bool   `json:"enabled"`
 	Mode    string `json:"mode"`
-	Engine  string `json:"engine,omitempty"`
-	// TypeSafe 是 typesafe 引擎的独立 profile（BaseURL/Model/ProxyID/APIKeys/Timeout/Retry/Thresholds）。
-	TypeSafe *ContentModerationEngineConfig `json:"typesafe,omitempty"`
-	BaseURL  string                         `json:"base_url"`
-	Model    string                         `json:"model"`
+	BaseURL string `json:"base_url"`
+	Model   string `json:"model"`
 	// ProxyID 指定审计请求使用的代理服务器（IP管理-代理服务器），nil 表示直连。
 	ProxyID              *int64                       `json:"proxy_id,omitempty"`
 	APIKey               string                       `json:"api_key,omitempty"`
@@ -249,8 +246,6 @@ type ContentModerationEndpointRuntime struct {
 type ContentModerationConfigView struct {
 	Enabled                        bool                                    `json:"enabled"`
 	Mode                           string                                  `json:"mode"`
-	Engine                         string                                  `json:"engine"`
-	EngineConfigs                  map[string]*ContentModerationConfigView `json:"engine_configs,omitempty"`
 	BaseURL                        string                                  `json:"base_url"`
 	Model                          string                                  `json:"model"`
 	ProxyID                        *int64                                  `json:"proxy_id"`
@@ -3183,7 +3178,6 @@ func (s *ContentModerationService) configView(cfg *ContentModerationConfig) *Con
 	return &ContentModerationConfigView{
 		Enabled:                        cfg.Enabled,
 		Mode:                           cfg.Mode,
-		Engine:                         moderationEngine(cfg.Engine),
 		BaseURL:                        cfg.BaseURL,
 		Model:                          cfg.Model,
 		ProxyID:                        cloneInt64Ptr(cfg.ProxyID),
@@ -3549,7 +3543,6 @@ type moderationAPIResult struct {
 	CategoryScores map[string]float64           `json:"category_scores"`
 	EndpointID     string                       `json:"-"`
 	EndpointName   string                       `json:"-"`
-	EngineMeta     *ContentModerationEngineMeta `json:"-"`
 }
 
 func evaluateModerationScores(scores map[string]float64, thresholds map[string]float64) (bool, string, float64) {

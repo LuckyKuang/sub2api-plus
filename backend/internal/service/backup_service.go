@@ -1384,14 +1384,6 @@ func (s *BackupService) getOrCreateStore(ctx context.Context, cfg *BackupS3Confi
 	return store, nil
 }
 
-func (s *BackupService) buildS3Key(cfg *BackupS3Config, fileName string) string {
-	prefix := strings.TrimRight(cfg.Prefix, "/")
-	if prefix == "" {
-		prefix = "backups"
-	}
-	return fmt.Sprintf("%s/%s/%s", prefix, time.Now().Format("2006/01/02"), fileName)
-}
-
 func (s *BackupService) buildS3KeyAt(cfg *BackupS3Config, fileName string, at time.Time) string {
 	return buildObjectStorageKey(cfg.Prefix, "backups", cfg.AppendDatePath, at, fileName)
 }
