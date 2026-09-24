@@ -23,7 +23,9 @@ See [v0.2.4 integration and upgrade behavior](docs/UPSTREAM_V0_2_4_INTEGRATION.m
 for the previous overlay's public API changes, migrations, defaults, and
 validation boundaries. See [v0.2.5 integration](docs/UPSTREAM_V0_2_5_INTEGRATION.md)
 for the official tag import on that tree. See
-[v0.2.7 integration](docs/UPSTREAM_V0_2_7_INTEGRATION.md) for the latest
+[v0.2.7 integration](docs/UPSTREAM_V0_2_7_INTEGRATION.md) for the previous
+official tag import. See
+[v0.2.8 integration](docs/UPSTREAM_V0_2_8_INTEGRATION.md) for the latest
 official tag import.
 
 ## Release Mapping
@@ -85,7 +87,7 @@ official tag import.
 | `v0.2.4+custom.005` | `v0.2.4` | `5de5e2bed035d43591a2e10e51f420ef6a84eb98` | published |
 | `v0.2.4+custom.006` | `v0.2.4` | `badfad8b7248b8aac0e6b503a06e392aa31cb294` | withdrawn |
 | `v0.2.5+custom.001` | `v0.2.5` | `86f93c28ee34cc74b629dafb748bd5ac5ca8c5ea` | published |
-| `v0.2.7+custom.001` | `v0.2.7` | `aea725f2ea644d5592d0bbb1d63b607efa7e200a` | planned |
+| `v0.2.7+custom.001` | `v0.2.7` | `aea725f2ea644d5592d0bbb1d63b607efa7e200a` | published |
 | `v0.2.8+custom.001` | `v0.2.8` | `fd80b08c90b55edcad5b00171b53f08721d30da1` | planned |
 
 `v0.2.4+custom.006` is marked withdrawn because official `v0.2.5` was imported before that snapshot overlay was published. Do not reuse or retag `.006`.
@@ -97,9 +99,9 @@ still require a maintainer audit. Do not reuse or retag `.007`.
 ## Current Version
 
 ```text
-Git/GitHub: v0.2.7+custom.001
-Application: 0.2.7+custom.001
-GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.7-custom.001
+Git/GitHub: v0.2.8+custom.001
+Application: 0.2.8+custom.001
+GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.8-custom.001
 ```
 
 ## Naming

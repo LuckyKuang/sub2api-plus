@@ -1,24 +1,34 @@
-Sub2API Plus v0.2.7+custom.001
+Sub2API Plus v0.2.8+custom.001
 
 ## Highlights
 
-First Plus release on official `v0.2.7`. It keeps Plus identity, ingress audit, session/quota accounting, and retired billing probes, while importing the official Seedance native video task API, generic plugin host services, redeem history pagination, DeepSeek reasoning and tool-output fixes, Antigravity Gemini thinking-variant and SSE keepalive handling, CN coding-plan quota pause, and the group usage rollup that no longer full-scans `usage_logs`. Plus adds egress metadata validation and outbound identity gap fixes on top of the v0.2.5 baseline.
+Second Plus release on the official `v0.2.8` baseline. It keeps Plus identity,
+ingress audit, session/quota accounting, proxy egress metadata, and retired
+billing probes, while importing the official GPT-6 Sol/Luna, Claude Opus 5.5,
+and Grok 4.7 model support, the OpenCode Go official usage window with
+automatic refresh, configurable reasoning-effort billing multipliers, automatic
+Claude Code client version synchronization, simple-mode API key consumption
+windows, monthly backup archives, offline affiliate withdrawal registration,
+rolling log retention, Codex credits display, and independent TypeSafe content
+audit profiles. Plus adds three rounds of Codex OAuth outbound alignment with
+the official `codex-rs` client on top of this baseline.
 
 ## Changed
 
-- Official v0.2.7 Seedance Ark native video task API with dedicated routes and service.
-- Generic plugin host services with a read-only status bridge channel; plugin `status_json` test results surface to the config UI.
-- User redemption history is paginated with stable ordering and per-user isolation.
-- DeepSeek chat fallback passes thinking-mode `reasoning_content`; Responses tool output images are lifted and parallel tool outputs stay contiguous.
-- Antigravity Gemini native requests resolve bare model names to `-low`/`-medium`/`-high` thinking variants, suppress SSE comment heartbeats for go-genai/python-genai clients, and strip Claude attribution metadata from system prompts.
-- CN coding-plan accounts pause on quota-exhausted `403`; group usage rollups stop full-scanning `usage_logs`.
-- OpenAI gateway persists response affinity after client cancel, normalizes developer roles for strict Chat upstreams, and keeps manifest key validation without duplicate parsing.
-- OAuth tokens keep refreshing for paused accounts.
-- Plus egress metadata (timezone/country) is validated and preserved across account, proxy, and global setting levels; outbound identity validation gaps are closed.
+- New model support: GPT-6 Sol, GPT-6 Luna, Claude Opus 5.5, and Grok 4.7.
+- OpenCode Go usage window: official quota query, automatic refresh, same-key group sharing, manual query, and account list/usage-cell balance badges (7d/1m); the `/zen/go` base-variant quota endpoint is normalized and usage state survives account updates.
+- Billing: per-channel reasoning-effort multipliers, final reasoning effort preserved across forwarding paths, and scientific notation at token boundaries parsed.
+- Claude Code client version numbers are synchronized automatically.
+- Simple mode can enable API key consumption window limits; first-start default group creation is now optional.
+- Backups support monthly archive with an independent retention policy.
+- Affiliate offline withdrawals are registered idempotently via Idempotency-Key.
+- Rolling log retention is configurable; content audit gains independent TypeSafe engine configuration profiles.
+- Official tool-schema cleaning strips illegal null `required` and `prefixItems`/tuple arrays; Antigravity resolves bare Gemini model names to thinking variants at every forwarding entry; streaming ends on the terminal event without waiting for upstream EOF.
+- Plus closes Codex OAuth outbound divergences across custom-CA rotation on the HTTP and auth-plane client pools, WebSocket metadata header handling, credits-only rate-limit events, `include:["reasoning.encrypted_content"]` merges, transport-refusal handling, and rollout budget unit recording.
 
 ## Compatibility and migration
 
-No new SQL migrations ship in this import. Back up the database before upgrade. Rollback image is `v0.2.5+custom.001`.
+Migrations 238b, 240, and 269 add `content_moderation_logs.engine_meta`, the idempotent affiliate withdrawal `operation_id`, and per-usage `codex_rollout_budget_units`. Back up the database before upgrade. Rollback image is `v0.2.7+custom.001`.
 
 ## Known issues
 
@@ -26,5 +36,5 @@ None.
 
 ## Upstream baseline
 
-Official release: v0.2.7
-Official commit: aea725f2ea644d5592d0bbb1d63b607efa7e200a
+Official release: v0.2.8
+Official commit: fd80b08c90b55edcad5b00171b53f08721d30da1
