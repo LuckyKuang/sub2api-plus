@@ -6,8 +6,8 @@ already incorporated the official `v0.2.7` tag documented in
 [v0.2.7 integration](UPSTREAM_V0_2_7_INTEGRATION.md). Importing the tag does
 not publish a Plus release or change the embedded application version.
 
-Migrations 240 and 269 ship in this import: the idempotent `operation_id` on
-`user_affiliate_ledger` and `codex_rollout_budget_units` on `usage_logs`.
+Migrations 269 and 270 ship in this import: `codex_rollout_budget_units` on
+`usage_logs` and the idempotent `operation_id` on `user_affiliate_ledger`.
 Back up the database before upgrade.
 
 ## Public API and scheduling
