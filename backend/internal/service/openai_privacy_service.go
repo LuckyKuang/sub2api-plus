@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strings"
 	"time"
 
@@ -40,7 +41,7 @@ func disableOpenAITraining(ctx context.Context, clientFactory PrivacyClientFacto
 	}
 
 	identity = normalizeOpenAIPrivacyIdentity(identity)
-	request := client.R().
+	request := applyReqCodexResidency(ctx, client.R()).
 		SetContext(ctx).
 		SetHeader("Authorization", "Bearer "+accessToken).
 		SetHeader("User-Agent", identity.UserAgent).
@@ -75,6 +76,25 @@ func disableOpenAITraining(ctx context.Context, clientFactory PrivacyClientFacto
 
 	slog.Info("openai_privacy_training_disabled")
 	return PrivacyModeTrainingOff
+}
+
+func applyReqCodexResidency(ctx context.Context, request *req.Request) *req.Request {
+	if request == nil {
+		return nil
+	}
+	if value := openai.CodexResidencyFromContext(ctx); value != "" {
+		return request.SetHeader(openai.CodexResidencyHeader, value)
+	}
+	return request
+}
+
+// applyCodexResidencyHeader 是 applyReqCodexResidency 的 net/http 版本，供非
+// req 客户端（PAT whoami 等官方 auth 面请求）复用同一套 residency 语义。
+func applyCodexResidencyHeader(ctx context.Context, headers http.Header) {
+	if headers == nil {
+		return
+	}
+	openai.ApplyCodexResidencyHeader(headers, openai.CodexResidencyFromContext(ctx))
 }
 
 // isCloudflareChallengeResponse 判断 chatgpt.com 返回的是否为 Cloudflare 质询/拦截页。
@@ -122,11 +142,18 @@ func fetchChatGPTAccountInfo(ctx context.Context, clientFactory PrivacyClientFac
 
 	identity = normalizeOpenAIPrivacyIdentity(identity)
 	var result map[string]any
-	resp, err := client.R().
+	request := applyReqCodexResidency(ctx, client.R()).
 		SetContext(ctx).
 		SetHeader("Authorization", "Bearer "+accessToken).
 		SetHeader("User-Agent", identity.UserAgent).
-		SetHeader("Accept", "application/json").
+		SetHeader("Accept", "application/json")
+	// 官方 backend-client/src/client.rs:269-288 在已知账号时发
+	// ChatGPT-Account-Id，用于在多账号/工作区里精确定位；orgID（access_token
+	// JWT 的 poid）正是 accounts map 的键。
+	if accountID := strings.TrimSpace(orgID); accountID != "" {
+		request = request.SetHeader("ChatGPT-Account-Id", accountID)
+	}
+	resp, err := request.
 		SetSuccessResult(&result).
 		Get(chatGPTAccountsCheckURL)
 
@@ -238,7 +265,7 @@ func fetchChatGPTSubscriptionExpiresAt(ctx context.Context, clientFactory Privac
 		WillRenew   bool   `json:"will_renew"`
 		ID          string `json:"id"`
 	}
-	resp, err := client.R().
+	resp, err := applyReqCodexResidency(ctx, client.R()).
 		SetContext(ctx).
 		SetHeader("Authorization", "Bearer "+accessToken).
 		SetHeader("User-Agent", identity.UserAgent).

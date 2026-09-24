@@ -136,10 +136,14 @@ type SettingService struct {
 	openAICodexEnvironmentTimezoneSF    singleflight.Group
 	openAICodexEgressCountryCache       atomic.Value // *cachedOpenAICodexEgressCountry
 	openAICodexEgressCountrySF          singleflight.Group
+	openAICodexResidencyCache           atomic.Value // *cachedOpenAICodexResidency
+	openAICodexResidencySF              singleflight.Group
 	openAICodexLocalQuotaCache          atomic.Value // *cachedOpenAICodexLocalGroupQuota
 	openAICodexLocalQuotaSF             singleflight.Group
 	openAICodexVersionCache             atomic.Value // *cachedOpenAICodexClientVersion
 	openAICodexVersionSF                singleflight.Group
+	claudeCodeVersionCache              atomic.Value // *cachedClaudeCodeClientVersion
+	claudeCodeVersionSF                 singleflight.Group
 	codexRestrictionPolicyCache         atomic.Value // *cachedCodexRestrictionPolicy
 	codexRestrictionPolicySF            singleflight.Group
 

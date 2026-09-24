@@ -160,6 +160,10 @@ type UsageLog struct {
 	ImageOutputTokens int
 	ImageOutputCost   float64
 	AudioOutputTokens int
+	// CodexRolloutBudgetUnits records the official `codex_rollout_budget_units`
+	// declaration from the response.completed usage payload. Reserved billing
+	// dimension; nil means the upstream did not report it.
+	CodexRolloutBudgetUnits *float64
 
 	InputCost                 float64
 	OutputCost                float64

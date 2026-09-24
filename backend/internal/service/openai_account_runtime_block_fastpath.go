@@ -35,12 +35,31 @@ const (
 	openAIOAuth429Quota5h
 	openAIOAuth429Quota7d
 	openAIOAuth429QuotaReset
+	// openAIOAuth429QuotaExhausted 是官方终态配额/额度错误（insufficient_quota /
+	// credit_balance_exhausted / *_spend_limit_exceeded / usage_not_included）：
+	// 账号预算已用尽，不开同账号重试窗，直接停车换号。
+	openAIOAuth429QuotaExhausted
 )
 
+// openAIOAuth429QuotaExhaustedCooldown 是终态配额错误的停车下限。通用 429
+// fallback cooldown 默认只有 5 秒，对不会自愈的终态配额太短。
+const openAIOAuth429QuotaExhaustedCooldown = 2 * time.Minute
+
+// openAI429ActiveLimitHeader 是官方在 429 上指明的命中计量族
+// （api_bridge.rs ACTIVE_LIMIT_HEADER）。默认 codex 族之外还有 codex_other /
+// codex_secondary 等族，只看默认族会把非默认族的耗尽误判成普通限流。
+const openAI429ActiveLimitHeader = "x-codex-active-limit"
+
 // classifyOpenAIOAuth429 区分账号配额耗尽信号与普通瞬时 429。只有窗口达到
-// 100% 或响应体明确给出 reset 时间时，才视为配额限流信号。
+// 100% 或响应体明确给出 reset 时间（或官方终态配额类）时，才视为配额限流信号。
 func classifyOpenAIOAuth429(headers http.Header, responseBody []byte) (openAIOAuth429Disposition, *time.Time) {
 	if snapshot := ParseCodexRateLimitHeaders(headers); snapshot != nil {
+		// 上游点名的计量族优先：它才是这次 429 实际命中的窗口。
+		if family := openAIOAuth429ActiveLimitFamily(snapshot, headers.Get(openAI429ActiveLimitHeader)); family != nil {
+			if disposition, resetAt := openAIOAuth429FamilyDisposition(family); disposition != openAIOAuth429Transient {
+				return disposition, resetAt
+			}
+		}
 		if normalized := snapshot.Normalize(); normalized != nil {
 			if normalized.Used7dPercent != nil && *normalized.Used7dPercent >= 100 {
 				if normalized.Reset7dSeconds != nil {
@@ -67,7 +86,84 @@ func classifyOpenAIOAuth429(headers http.Header, responseBody []byte) (openAIOAu
 		resetAt := time.Unix(*resetUnix, 0)
 		return openAIOAuth429QuotaReset, &resetAt
 	}
+	// 官方终态配额类没有 reset 语义：绝不开同账号重试窗。
+	if isOpenAITerminalQuotaErrorBody(responseBody) {
+		return openAIOAuth429QuotaExhausted, nil
+	}
 	return openAIOAuth429Transient, nil
+}
+
+// normalizeOpenAICodexLimitID 把头里的 limit id 归一成 Families 使用的下划线形态。
+func normalizeOpenAICodexLimitID(value string) string {
+	return strings.ReplaceAll(strings.ToLower(strings.TrimSpace(value)), "-", "_")
+}
+
+// openAIOAuth429ActiveLimitFamily 从快照里找出 x-codex-active-limit 指名的计量族；
+// 默认 codex 族由 Normalize() 处理，这里只解析附加族。
+func openAIOAuth429ActiveLimitFamily(snapshot *OpenAICodexUsageSnapshot, activeLimit string) *OpenAICodexRateLimitFamily {
+	if snapshot == nil {
+		return nil
+	}
+	limit := normalizeOpenAICodexLimitID(activeLimit)
+	if limit == "" || limit == "codex" {
+		return nil
+	}
+	for i := range snapshot.Families {
+		if normalizeOpenAICodexLimitID(snapshot.Families[i].LimitID) == limit {
+			return &snapshot.Families[i]
+		}
+	}
+	return nil
+}
+
+// openAI429FiveHourWindowMinutesThreshold 与默认族 Normalize() 的单窗阈值一致：
+// <= 360 分钟视作 5h 窗口，否则视作 7d 窗口。
+const openAI429FiveHourWindowMinutesThreshold = 360
+
+// openAIOAuth429FamilyWindowOrientation 判定一个窗口属于 5h 还是 7d 口径，
+// 规则与默认族 Normalize() 相同：单窗按 360 分钟阈值分类；没有 window-minutes
+// 时按遗留假设（primary=7d / secondary=5h）处理。上游并不保证 primary 一定是
+// 长窗，硬编码朝向会把两个窗口贴反。
+func openAIOAuth429FamilyWindowOrientation(window string, minutes *int) openAIOAuth429Disposition {
+	if minutes == nil {
+		if window == "secondary" {
+			return openAIOAuth429Quota5h
+		}
+		return openAIOAuth429Quota7d
+	}
+	if *minutes <= openAI429FiveHourWindowMinutesThreshold {
+		return openAIOAuth429Quota5h
+	}
+	return openAIOAuth429Quota7d
+}
+
+// openAIOAuth429FamilyDisposition 用附加族的窗口判定配额信号：分别按各自
+// window-minutes 归到 5h/7d 口径。两个窗口都耗尽时返回先到期的那一个（通常是
+// 5h 短窗），更接近用户可感知的限制。
+func openAIOAuth429FamilyDisposition(family *OpenAICodexRateLimitFamily) (openAIOAuth429Disposition, *time.Time) {
+	if family == nil {
+		return openAIOAuth429Transient, nil
+	}
+	if pct := family.SecondaryUsedPercent; pct != nil && *pct >= 100 {
+		return openAIOAuth429FamilyWindowOrientation("secondary", family.SecondaryWindowMinutes),
+			openAIOAuth429FamilyResetAt(family.SecondaryResetAtUnix)
+	}
+	if pct := family.PrimaryUsedPercent; pct != nil && *pct >= 100 {
+		return openAIOAuth429FamilyWindowOrientation("primary", family.PrimaryWindowMinutes),
+			openAIOAuth429FamilyResetAt(family.PrimaryResetAtUnix)
+	}
+	return openAIOAuth429Transient, nil
+}
+
+func openAIOAuth429FamilyResetAt(resetAtUnix *int64) *time.Time {
+	if resetAtUnix == nil || !validOpenAIQuotaResetUnix(*resetAtUnix) {
+		// 0 / 负值 / 超出 JSON-RFC3339 日历范围（含 MaxInt64 之类的畸形头）都丢弃：
+		// BlockAccountScheduling 只夹过去/零值，不夹遥远未来，而 Spark 模型级限流
+		// 会把 resetAt 落库——一个畸形头足以让账号/模型跨重启永久停车。
+		return nil
+	}
+	resetAt := time.Unix(*resetAtUnix, 0)
+	return &resetAt
 }
 
 func openAIAccountStateContext(ctx context.Context) (context.Context, context.CancelFunc) {
@@ -99,6 +195,7 @@ func (s *OpenAIGatewayService) handleOpenAIAccountUpstreamError(ctx context.Cont
 	// Any non-2xx upstream HTTP response means the model request was actually sent.
 	if s != nil {
 		scheduleOllamaCloudUsageActivity(s.deferredService, account)
+		scheduleOpenCodeGoUsageActivity(s.deferredService, account)
 	}
 	// Capacity shedding describes this request, not account health. Keep the
 	// account schedulable; the request itself is not retried or failed over.
@@ -231,6 +328,17 @@ func (s *OpenAIGatewayService) markOpenAIOAuth429RateLimited(ctx context.Context
 	cooldownUntil := now.Add(openAIOAuth429FallbackCooldown)
 	if resetAt != nil && resetAt.After(now) {
 		cooldownUntil = *resetAt
+	} else if disposition == openAIOAuth429QuotaExhausted {
+		// 终态配额错误不会自愈：直接用 get429FallbackCooldown 的默认 5 秒停车，
+		// 账号会立刻重新被选中、再 429、再换号，纯粹放大无收益请求。这里给一个
+		// 更长的下限（仍远短于一次真实账单调速），但足够打断 churn；运维显式配了
+		// 更长的 429 cooldown 时以配置为准。
+		cooldownUntil = now.Add(openAIOAuth429QuotaExhaustedCooldown)
+		if s.rateLimitService != nil {
+			if cooldown, ok := s.rateLimitService.get429FallbackCooldown(ctx, account); ok && cooldown > openAIOAuth429QuotaExhaustedCooldown {
+				cooldownUntil = now.Add(cooldown)
+			}
+		}
 	} else if s.rateLimitService != nil {
 		cooldown, ok := s.rateLimitService.get429FallbackCooldown(ctx, account)
 		if !ok || cooldown <= 0 {

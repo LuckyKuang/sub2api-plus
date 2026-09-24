@@ -148,10 +148,10 @@ func TestGetOpenAICodexEgressCountryDefaults(t *testing.T) {
 		require.Equal(t, "", svc.GetOpenAICodexEgressCountry(nil))
 	})
 
-	t.Run("key 缺失时时区回落默认 America/Los_Angeles", func(t *testing.T) {
+	t.Run("key 缺失时时区默认关闭（官方按客户端本机渲染，网关不改写）", func(t *testing.T) {
 		repo := &forwardedIPMigrationRepoStub{values: map[string]string{}}
 		svc := NewSettingService(repo, &config.Config{})
-		require.Equal(t, DefaultOpenAICodexEnvironmentTimezone, svc.GetOpenAICodexEnvironmentTimezone(nil))
+		require.Equal(t, "", svc.GetOpenAICodexEnvironmentTimezone(nil))
 	})
 
 	t.Run("显式空值时区关闭", func(t *testing.T) {

@@ -681,6 +681,15 @@ func runUpstreamToClient(
 		if beforeClientWrite != nil {
 			beforeClientWrite(msgType, payload)
 		}
+		// Record the turn's downstream write before the transport call. Storing
+		// it after WriteFrame returns lets a fast next turn's reset (which runs
+		// on the client-to-upstream goroutine) be overwritten by this turn's
+		// completion flag landing late, so the next turn would wrongly inherit
+		// this turn's downstream write. A failed write exits the relay, so no
+		// later callback observes the flag set here.
+		if state != nil {
+			state.turnWroteDownstream.Store(true)
+		}
 		writeErr := writeClient(msgType, payload)
 		if afterClientWrite != nil {
 			afterClientWrite(msgType, payload, writeErr)
@@ -698,9 +707,6 @@ func runUpstreamToClient(
 			return
 		}
 		wroteDownstream = true
-		if state != nil {
-			state.turnWroteDownstream.Store(true)
-		}
 		if afterWriteClient != nil {
 			afterWriteClient(msgType, payload)
 		}

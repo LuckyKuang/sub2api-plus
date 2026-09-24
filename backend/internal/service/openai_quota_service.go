@@ -13,6 +13,7 @@ import (
 	"time"
 
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
 	"github.com/imroc/req/v3"
 )
 
@@ -30,6 +31,7 @@ const (
 	chatGPTRateLimitResetURL   = "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits/consume"
 	openaiQuotaUpstreamTimeout = 20 * time.Second
 	openaiQuotaResetCreditsKey = "codex_reset_credit_snapshot"
+	openaiQuotaCreditsKey      = "codex_credits_snapshot"
 )
 
 // OpenAIRateLimitWindow describes a single rate-limit window returned by
@@ -99,9 +101,35 @@ type OpenAIQuotaUsage struct {
 	RateLimit             *OpenAIRateLimit             `json:"rate_limit,omitempty"`
 	AdditionalRateLimits  []OpenAIAdditionalRateLimit  `json:"additional_rate_limits,omitempty"`
 	RateLimitResetCredits *OpenAIRateLimitResetCredits `json:"rate_limit_reset_credits,omitempty"`
+	Credits               *OpenAICredits               `json:"credits,omitempty"`
 	FetchedAt             int64                        `json:"fetched_at"`
 	autoResetCandidates   []openAIAutoResetCreditCandidate
 	weeklyObservedAt      time.Time
+}
+
+// OpenAICredits Codex 账户额度（/wham/usage 的 credits 投影）。
+type OpenAICredits struct {
+	HasCredits bool    `json:"has_credits"`
+	Unlimited  bool    `json:"unlimited"`
+	Balance    *string `json:"balance"`
+}
+
+type openAICreditsSnapshot struct {
+	Credits   *OpenAICredits `json:"credits"`
+	FetchedAt int64          `json:"fetched_at"`
+}
+
+// CacheCreditsSnapshot 将本轮用量观测到的 Codex 额度写入账号 extra 缓存。
+func (s *OpenAIQuotaService) CacheCreditsSnapshot(ctx context.Context, accountID int64, usage *OpenAIQuotaUsage) error {
+	if usage == nil {
+		return infraerrors.New(http.StatusBadGateway, "OPENAI_QUOTA_EMPTY_USAGE", "openai quota query returned an empty result")
+	}
+	if err := s.accountRepo.UpdateExtra(ctx, accountID, map[string]any{
+		openaiQuotaCreditsKey: openAICreditsSnapshot{Credits: usage.Credits, FetchedAt: usage.FetchedAt},
+	}); err != nil {
+		return infraerrors.New(http.StatusInternalServerError, "OPENAI_QUOTA_CACHE_WRITE_FAILED", "failed to cache Codex credits").WithCause(err)
+	}
+	return nil
 }
 
 // OpenAIQuotaResetCredit captures the redeemed credit metadata returned by the
@@ -134,6 +162,7 @@ type OpenAIQuotaService struct {
 	proxyRepo              ProxyRepository
 	tokenProvider          *OpenAITokenProvider
 	privacyClientFactory   PrivacyClientFactory
+	referralClient         OpenAIReferralClient
 	agentIdentityTaskMu    sync.Mutex
 	agentIdentityWS        agentIdentityWSConnectionInvalidator
 	openAIIdentityResolver *OpenAIGatewayService
@@ -149,17 +178,27 @@ func (s *OpenAIQuotaService) applyOpenAIOutboundIdentity(ctx context.Context, ac
 	}
 	// Official backend-client WHAM headers are User-Agent + auth + account id.
 	// Originator/Version belong on inference, not /wham/usage or credit APIs.
+	var settings *SettingService
 	if s != nil && s.openAIIdentityResolver != nil {
 		s.openAIIdentityResolver.applyOpenAIOutboundIdentity(ctx, account, h, false)
+		settings = s.openAIIdentityResolver.settingService
 	} else {
 		applyResolvedOpenAIOutboundIdentity(h, resolveOpenAIOutboundIdentityFromSettings(ctx, account, nil), false)
 	}
+	// WHAM omits Originator/Version. Residency is still a managed Codex header.
+	applyOpenAICodexResidencyFromSettings(ctx, settings, h, true)
 	for key := range headers {
 		delete(headers, key)
 	}
 	for key, values := range h {
 		if len(values) > 0 {
 			headers[key] = values[0]
+		}
+	}
+	for key := range headers {
+		if strings.EqualFold(key, openai.CodexResidencyHeader) && key != openai.CodexResidencyHeader {
+			headers[openai.CodexResidencyHeader] = headers[key]
+			delete(headers, key)
 		}
 	}
 }

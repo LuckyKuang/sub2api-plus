@@ -1114,40 +1114,6 @@ func TestBuildCodexModelsManifestForGroupOmitsDedicatedMediaTargetAlias(t *testi
 	require.Empty(t, decodeCodexManifestModels(t, body))
 }
 
-func TestBuildCodexModelsManifestForGroupLoadsAccountsOnce(t *testing.T) {
-	t.Parallel()
-
-	const groupID int64 = 732
-	repo := &countingCodexModelsAccountRepo{accounts: []Account{{
-		ID:       22,
-		Platform: PlatformGrok,
-		Type:     AccountTypeOAuth,
-		Credentials: map[string]any{
-			"model_mapping": map[string]any{
-				"vision-alias-a": "grok-4.5",
-				"vision-alias-b": "grok-4.6",
-			},
-		},
-	}}}
-	svc := &GatewayService{accountRepo: repo}
-	_, err := svc.BuildCodexModelsManifestForGroup(
-		context.Background(),
-		&Group{ID: groupID, Platform: PlatformComposite},
-		"",
-		[]string{"vision-alias-a", "vision-alias-b", "deepseek-v4-pro"},
-	)
-	require.NoError(t, err)
-	require.Equal(t, int32(1), repo.calls.Load())
-	require.NotNil(t, repo.groupID)
-	require.Equal(t, groupID, *repo.groupID)
-	require.False(t, repo.includeGrouped)
-	require.Contains(t, repo.platforms, PlatformOpenAI)
-	require.Contains(t, repo.platforms, PlatformGrok)
-	require.Contains(t, repo.platforms, PlatformDeepseek)
-	require.Contains(t, repo.platforms, PlatformMiniMax)
-	require.NotContains(t, repo.platforms, PlatformComposite)
-}
-
 func TestBuildCodexModelsManifestForGroupUsesFallbackWhenTextOnlyPlatformHasNoSnapshot(t *testing.T) {
 	t.Parallel()
 
@@ -1888,7 +1854,15 @@ func TestFetchCodexModelsManifestAgentIdentityRecoversInvalidTaskOnce(t *testing
 	require.Equal(t, "task-models-new", decodeAgentAssertionTask(t, assertions[1]))
 	require.Len(t, identities, 3, "models, task registration and models retry share one snapshot")
 	want := [3]string{openai.SetCodexUserAgentVersion(DefaultOpenAICodexUserAgent, "0.200.1"), openai.CodexDefaultOriginator, "0.200.1"}
-	for _, identity := range identities {
+	for i, identity := range identities {
+		// The task registration is an official auth-surface request: it shares the
+		// same identity snapshot but sends no independent Version header.
+		if i == 1 {
+			require.Equal(t, want[0], identity[0])
+			require.Equal(t, want[1], identity[1])
+			require.Empty(t, identity[2])
+			continue
+		}
 		require.Equal(t, want, identity)
 	}
 	require.Equal(t, []string{"0.200.1", "0.200.1"}, queryVersions)
@@ -3849,4 +3823,61 @@ func TestFetchCodexModelsManifestOAuthSharedAcrossGroupsWithIndependentFiltering
 	require.Equal(t, []string{"model-a"}, got[91])
 	require.Equal(t, []string{"model-b"}, got[92])
 	require.EqualValues(t, 1, calls.Load(), "同一账号两个分组同时请求时只发一次上游请求")
+}
+
+// Scenario: 非 OpenAI GPT 模型的 Codex 提示词不声称自己是 GPT。
+// Antigravity(Google) 对「Codex 提示词 + GPT-5 身份」直接回 429 RESOURCE_EXHAUSTED。
+// Scenario: OpenAI GPT 模型的 Codex 提示词保持原样。
+func TestGPT6SolLunaCatalogKeepsAuthoritativeCapabilities(t *testing.T) {
+	for _, id := range []string{"gpt-6-sol", "gpt-6-luna"} {
+		svc := &OpenAIGatewayService{}
+		manifest := &OpenAIModelsResponse{Body: []byte(`{"models":[{"slug":"` + id + `","supported_reasoning_levels":[{"effort":"ultra"}],"default_reasoning_level":"ultra","multi_agent_reasoning_effort":"xhigh","service_tiers":[{"id":"ultrafast"}],"context_window":300000,"max_context_window":900000,"supports_search_tool":false,"apply_patch_tool_type":null}]}`)}
+		account := newCodexModelsAPIKeyTestAccount("https://api.openai.com/v1")
+		require.NoError(t, svc.CompleteAPIKeyCodexModelsManifestForClient(manifest, account))
+		models := decodeCodexManifestModels(t, manifest.Body)
+		require.Len(t, models, 1)
+		require.Equal(t, []string{"ultra"}, effortsFromManifestModel(t, models[0]))
+		require.Equal(t, "ultra", models[0]["default_reasoning_level"])
+		require.Equal(t, "xhigh", models[0]["multi_agent_reasoning_effort"])
+		require.Equal(t, float64(300000), models[0]["context_window"])
+		require.Equal(t, float64(900000), models[0]["max_context_window"])
+		require.Equal(t, []any{map[string]any{"id": "ultrafast"}}, models[0]["service_tiers"])
+		require.Equal(t, false, models[0]["supports_search_tool"])
+		require.Contains(t, models[0], "apply_patch_tool_type")
+		require.Nil(t, models[0]["apply_patch_tool_type"])
+	}
+}
+
+func TestBuildCodexModelsManifestForGroupLoadsAccountsOnce(t *testing.T) {
+	t.Parallel()
+
+	const groupID int64 = 732
+	repo := &countingCodexModelsAccountRepo{accounts: []Account{{
+		ID:       22,
+		Platform: PlatformGrok,
+		Type:     AccountTypeOAuth,
+		Credentials: map[string]any{
+			"model_mapping": map[string]any{
+				"vision-alias-a": "grok-4.5",
+				"vision-alias-b": "grok-4.6",
+			},
+		},
+	}}}
+	svc := &GatewayService{accountRepo: repo}
+	_, err := svc.BuildCodexModelsManifestForGroup(
+		context.Background(),
+		&Group{ID: groupID, Platform: PlatformComposite},
+		"",
+		[]string{"vision-alias-a", "vision-alias-b", "deepseek-v4-pro"},
+	)
+	require.NoError(t, err)
+	require.Equal(t, int32(1), repo.calls.Load())
+	require.NotNil(t, repo.groupID)
+	require.Equal(t, groupID, *repo.groupID)
+	require.False(t, repo.includeGrouped)
+	require.Contains(t, repo.platforms, PlatformOpenAI)
+	require.Contains(t, repo.platforms, PlatformGrok)
+	require.Contains(t, repo.platforms, PlatformDeepseek)
+	require.Contains(t, repo.platforms, PlatformMiniMax)
+	require.NotContains(t, repo.platforms, PlatformComposite)
 }

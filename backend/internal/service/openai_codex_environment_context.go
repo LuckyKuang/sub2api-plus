@@ -31,8 +31,16 @@ const CodexEgressCountryExtraKey = "egress_country"
 // Default global values applied on fresh installs and when the setting key is
 // absent from the store (never-saved deployments). An explicitly stored empty
 // value still means "feature off / not declared".
+//
+// The environment-context timezone alignment defaults to off: the official
+// client renders `<timezone>` / `<current_date>` from the user's own machine, so
+// the gateway passes the client's pair through unchanged unless an administrator
+// configured a timezone at the account, proxy, or global level. A compiled
+// non-empty default would silently rewrite the model-visible time on every Codex
+// request with no administrator decision, contradicting the documented
+// resolution order ("then off").
 const (
-	DefaultOpenAICodexEnvironmentTimezone = "America/Los_Angeles"
+	DefaultOpenAICodexEnvironmentTimezone = ""
 	DefaultOpenAICodexEgressCountry       = "US"
 )
 

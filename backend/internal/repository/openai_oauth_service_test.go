@@ -202,6 +202,11 @@ func (s *OpenAIOAuthServiceSuite) TestRefreshToken_FormFields() {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
+		if got := r.Header.Get(openai.CodexResidencyHeader); got != "" {
+			errCh <- "residency must be absent unless the caller stamps us"
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
 
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, `{"access_token":"at2","refresh_token":"rt2","token_type":"bearer","expires_in":3600}`)
@@ -216,6 +221,31 @@ func (s *OpenAIOAuthServiceSuite) TestRefreshToken_FormFields() {
 	}
 	require.Equal(s.T(), "at2", resp.AccessToken)
 	require.Equal(s.T(), "rt2", resp.RefreshToken)
+}
+
+func (s *OpenAIOAuthServiceSuite) TestRefreshToken_SendsManagedResidency() {
+	seen := ""
+	s.setupServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = r.Header.Get(openai.CodexResidencyHeader)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"access_token":"at2","refresh_token":"rt2","token_type":"bearer","expires_in":3600}`)
+	}))
+
+	ctx := openai.WithCodexResidency(s.ctx, openai.CodexResidencyUS)
+	_, err := s.svc.RefreshTokenWithClientIDAndIdentity(ctx, "rt", "", "", service.DefaultOpenAICodexUserAgent, openai.CodexDefaultOriginator, service.DefaultOpenAICodexVersion)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), openai.CodexResidencyUS, seen)
+
+	exchangeSeen := ""
+	s.srv.Close()
+	s.setupServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		exchangeSeen = r.Header.Get(openai.CodexResidencyHeader)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"access_token":"at","refresh_token":"rt","token_type":"bearer","expires_in":3600}`)
+	}))
+	_, err = s.svc.ExchangeCode(ctx, "code", "ver", openai.DefaultRedirectURI, "", openai.ClientID)
+	require.NoError(s.T(), err)
+	require.Empty(s.T(), exchangeSeen, "authorization-code exchange stays on the raw client")
 }
 
 // TestRefreshToken_DefaultsToOpenAIClientID 验证未指定 client_id 时默认使用 OpenAI ClientID，

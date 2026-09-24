@@ -561,6 +561,11 @@ export default {
         openaiCodexEgressCountryNone: 'Not set (no declaration)',
         openaiCodexEgressCountryHint:
           'Global default egress country (ISO 3166-1 alpha-2, e.g. US). Account-level egress_country and the egress proxy annotation take precedence; leave empty to declare nothing.',
+        codexResidency: 'Codex residency',
+        codexResidencyOff: 'Off (do not send)',
+        codexResidencyUS: 'US',
+        codexResidencyHint:
+          'Global only. Off sends nothing. US adds x-openai-internal-codex-residency: us on Codex inference (HTTP and WebSocket), token refresh, revoke, and ChatGPT backend-api calls. Authorization-code exchange and device-code stay without it. Account overrides and inbound headers cannot set this header.',
         codexLegacyClientProfileCompatibility: 'Legacy Codex Client Profile Compatibility',
         codexLegacyClientProfileCompatibilityHint: 'Default off. Temporarily allows only codex_app, codex_exec, codex_sdk_ts, and codex_vscode_copilot for configured outbound identities and “Codex official client profiles only” accounts. They remain legacy-compatible profiles, not official profiles; exact User-Agent, originator, semantic version, and known Codex evidence are still required.',
         openaiCodexLocalGroupQuota: 'Codex Local Group Quota',

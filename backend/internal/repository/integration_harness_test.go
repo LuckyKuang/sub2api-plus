@@ -267,6 +267,18 @@ func testEntClient(t *testing.T) *dbent.Client {
 
 // testEntTx 返回一个 ent 事务，用于需要事务隔离的测试。
 // 测试结束后会自动回滚，不会影响数据库状态。
+// truncateIntegrationTables clears the given application tables (RESTART IDENTITY
+// CASCADE) so a suite starts from a clean dataset, removing committed rows leaked
+// by async writers / committed-setup suites that bypass per-test tx rollback.
+func truncateIntegrationTables(t *testing.T, tables ...string) {
+	t.Helper()
+	if len(tables) == 0 {
+		return
+	}
+	_, err := integrationDB.ExecContext(context.Background(), "TRUNCATE "+strings.Join(tables, ", ")+" RESTART IDENTITY CASCADE")
+	require.NoError(t, err, "truncate integration tables")
+}
+
 func testEntTx(t *testing.T) *dbent.Tx {
 	t.Helper()
 

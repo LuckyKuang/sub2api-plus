@@ -527,9 +527,8 @@ func applyCodexFingerprintHeaders(h http.Header, ids *codexFingerprintIDs) {
 	// session / full 模式：改写所有相关头
 	h.Set("x-codex-window-id", ids.windowID)
 	h.Set("x-client-request-id", ids.threadID)
-	// 连字符形式和下划线形式都改写，保证一致
+	// 出站只携带官方 session-id；下划线别名不写（终态清理统一移除）。
 	h.Set("session-id", ids.sessionID)
-	h.Set("session_id", ids.sessionID)
 	h.Set("thread-id", ids.threadID)
 
 	rewriteCodexTurnMetadataFields(h, map[string]any{
@@ -557,7 +556,7 @@ func rewriteCodexTurnMetadataFields(h http.Header, fields map[string]any) {
 	for k, v := range fields {
 		metadata[k] = v
 	}
-	rebuilt, err := json.Marshal(metadata)
+	rebuilt, err := marshalCodexTurnMetadata(metadata)
 	if err != nil {
 		return
 	}
@@ -686,7 +685,7 @@ func rewriteClientMetadataEmbeddedTurnMetadata(clientMetadata map[string]any, fi
 	for k, v := range fields {
 		metadata[k] = v
 	}
-	if rebuilt, err := json.Marshal(metadata); err == nil {
+	if rebuilt, err := marshalCodexTurnMetadata(metadata); err == nil {
 		clientMetadata["x-codex-turn-metadata"] = string(rebuilt)
 	}
 }

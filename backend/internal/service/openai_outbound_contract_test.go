@@ -17,6 +17,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
 )
 
 func TestOpenAIIdentityContractDuplicateHeaders(t *testing.T) {
@@ -298,6 +299,102 @@ func TestOpenAIIdentityContractHTTPPassthroughCompatiblePresets(t *testing.T) {
 	}
 }
 
+// The official Codex client tags subagent turns, memory-generation requests,
+// and timing-metric opt-ins with dedicated request headers. They are bounded
+// client turn context, not identity declarations: the gateway must forward
+// them verbatim on the Responses HTTP path and the WS handshake, in both
+// passthrough modes, and account-level header overrides must never rewrite
+// them with static values.
+func TestOpenAIIdentityContractOfficialClientTurnContextHeaders(t *testing.T) {
+	const subagentLabel = "review"
+	for _, accountType := range []string{AccountTypeOAuth, AccountTypeAPIKey} {
+		for _, passthrough := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/passthrough=%t", accountType, passthrough), func(t *testing.T) {
+				repo := &openAIIdentitySettingRepoStub{values: map[string]string{SettingKeyOpenAICodexClientVersion: "0.200.1"}}
+				settings := &SettingService{settingRepo: repo}
+				account := newOpenAIOAuthNamespaceTestAccount()
+				if accountType == AccountTypeAPIKey {
+					account = newOpenAIRejectedFieldTestAccount()
+				}
+				if account.Extra == nil {
+					account.Extra = map[string]any{}
+				}
+				account.Extra["openai_passthrough"] = passthrough
+				// Legacy stored overrides for the official turn-context headers
+				// must be dropped by the blocked-name guard instead of clobbering
+				// the live client values.
+				account.Credentials[credKeyHeaderOverrideEnabled] = true
+				account.Credentials[credKeyHeaderOverrides] = map[string]any{
+					"x-openai-subagent":                     "overridden",
+					"x-openai-memgen-request":               "overridden",
+					"x-responsesapi-include-timing-metrics": "overridden",
+				}
+				var headers http.Header
+				svc := newOpenAIRejectedFieldTestService(nil)
+				svc.httpUpstream = &codexModelsHTTPUpstreamStub{do: func(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
+					headers = req.Header.Clone()
+					return openAIIdentityContractSuccessResponse(), nil
+				}}
+				svc.settingService = settings
+				body := []byte(`{"model":"gpt-5.5","stream":true,"instructions":"test","input":"hello"}`)
+				c := newOpenAIRejectedFieldTestContext(body)
+				c.Request.Header.Set("x-openai-subagent", subagentLabel)
+				c.Request.Header.Set("x-openai-memgen-request", "true")
+				c.Request.Header.Set("x-responsesapi-include-timing-metrics", "true")
+				c.Request.Header.Set("x-noise-unknown-header", "dropped")
+				_, err := svc.Forward(context.Background(), c, account, body)
+				require.NoError(t, err)
+				require.Equal(t, subagentLabel, headers.Get("x-openai-subagent"))
+				require.Equal(t, "true", headers.Get("x-openai-memgen-request"))
+				require.Equal(t, "true", headers.Get("x-responsesapi-include-timing-metrics"))
+				require.Empty(t, headers.Get("x-noise-unknown-header"), "unknown headers stay outside the whitelist")
+
+				wsHeaders, _, err := svc.buildOpenAIWSHeaders(context.Background(), c, account, "token", OpenAIWSProtocolDecision{Transport: OpenAIUpstreamTransportResponsesWebsocketV2}, false, "", "", "", "gpt-5.5", "")
+				require.NoError(t, err)
+				require.Equal(t, subagentLabel, wsHeaders.Get("x-openai-subagent"))
+				require.Equal(t, "true", wsHeaders.Get("x-openai-memgen-request"))
+				require.Equal(t, "true", wsHeaders.Get("x-responsesapi-include-timing-metrics"))
+			})
+		}
+	}
+}
+
+// Official Codex clients embed per-turn context in the request body's
+// client_metadata (turn lineage and MCP attribution). Proxying must preserve
+// every client-owned key verbatim through account namespacing and fingerprint
+// convergence; only the gateway-converged identity carriers may be rewritten.
+// mcp_attribution is the official client's own responsibility: the gateway
+// passes it through without generating, parsing, or trimming it.
+func TestOpenAIIdentityContractClientMetadataClientKeysSurviveProxy(t *testing.T) {
+	const mcpAttribution = `{"tool_name":"official-mcp-server","server_url":"https://mcp.example/sse","future_field":{"nested":true}}`
+	for _, mode := range []string{"off", "device", "session", "full"} {
+		t.Run(mode, func(t *testing.T) {
+			repo := &openAIIdentitySettingRepoStub{values: map[string]string{SettingKeyOpenAICodexClientVersion: "0.200.1"}}
+			settings := &SettingService{settingRepo: repo}
+			account := newOpenAIOAuthNamespaceTestAccount()
+			account.Extra = map[string]any{CodexFingerprintModeExtraKey: mode}
+			upstream := &httpUpstreamRecorder{resp: openAIIdentityContractSuccessResponse()}
+			svc := newOpenAIRejectedFieldTestService(upstream)
+			svc.settingService = settings
+			body := []byte(`{"model":"gpt-5.5","stream":true,"instructions":"test","input":"hello","prompt_cache_key":"client-session","client_metadata":{"x-codex-installation-id":"client-installation","session_id":"client-session","thread_id":"client-thread","turn_id":"client-turn","parent_turn_id":"client-parent-turn","root_turn_id":"client-root-turn","mcp_attribution":` + mcpAttribution + `,"future_client_field":"keep"}}`)
+			c := newOpenAIRejectedFieldTestContext(body)
+			_, err := svc.Forward(context.Background(), c, account, body)
+			require.NoError(t, err)
+			require.NotNil(t, upstream.lastBody)
+
+			// Client-owned turn lineage and MCP attribution pass through verbatim.
+			require.Equal(t, "client-parent-turn", gjson.GetBytes(upstream.lastBody, "client_metadata.parent_turn_id").String())
+			require.Equal(t, "client-root-turn", gjson.GetBytes(upstream.lastBody, "client_metadata.root_turn_id").String())
+			require.Equal(t, "keep", gjson.GetBytes(upstream.lastBody, "client_metadata.future_client_field").String())
+			require.JSONEq(t, mcpAttribution, gjson.GetBytes(upstream.lastBody, "client_metadata.mcp_attribution").Raw)
+			// The gateway namespaces identity carriers; the turn id stays present.
+			require.NotEmpty(t, gjson.GetBytes(upstream.lastBody, "client_metadata.turn_id").String())
+			require.NotEqual(t, "client-installation", gjson.GetBytes(upstream.lastBody, "client_metadata.x-codex-installation-id").String())
+			require.NotEqual(t, "client-session", gjson.GetBytes(upstream.lastBody, "client_metadata.session_id").String())
+		})
+	}
+}
+
 func TestOpenAIIdentityContractShadowAndWSRetrySnapshot(t *testing.T) {
 	repo := &openAIIdentitySettingRepoStub{values: map[string]string{SettingKeyOpenAICodexClientVersion: "0.200.1"}}
 	settings := &SettingService{settingRepo: repo}
@@ -471,9 +568,12 @@ func TestOpenAIIdentityContractLiveRegistrationSnapshot(t *testing.T) {
 			}
 			require.Len(t, registered, 1)
 			registration := <-registered
-			for _, name := range []string{"User-Agent", "Originator", "Version"} {
+			// The registration shares the inference identity snapshot but is an
+			// official auth-surface request, so it carries no Version header.
+			for _, name := range []string{"User-Agent", "Originator"} {
 				require.Equal(t, registration.Get(name), headers.Get(name), name)
 			}
+			require.Empty(t, registration.Get("Version"))
 			require.Equal(t, "0.200.1", headers.Get("Version"))
 			require.Equal(t, "quicksilver=v2", headers.Get("OpenAI-Alpha"))
 			require.Empty(t, headers.Get("OpenAI-Beta"))
@@ -513,5 +613,59 @@ func TestOpenAIIdentityContractPoolDoesNotReuseAnotherTriple(t *testing.T) {
 			next.Release()
 			require.Equal(t, 2, dialer.DialCount())
 		})
+	}
+}
+
+// Batch 7: managed residency is a global setting, not an identity source. When
+// codex_residency is us, Codex-protocol inference (HTTP forward and the WS
+// handshake) must carry x-openai-internal-codex-residency: us; when it is off,
+// neither an inbound client header nor a stored account override may make the
+// gateway send it.
+func TestOpenAIIdentityContractManagedResidencyOnInferencePlane(t *testing.T) {
+	for _, residency := range []string{openai.CodexResidencyUS, DefaultOpenAICodexResidency} {
+		for _, passthrough := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/passthrough=%t", residency, passthrough), func(t *testing.T) {
+				repo := &openAIIdentitySettingRepoStub{values: map[string]string{
+					SettingKeyOpenAICodexClientVersion: "0.200.1",
+					SettingKeyOpenAICodexResidency:     residency,
+				}}
+				settings := &SettingService{settingRepo: repo}
+				account := newOpenAIOAuthNamespaceTestAccount()
+				if account.Extra == nil {
+					account.Extra = map[string]any{}
+				}
+				account.Extra["openai_passthrough"] = passthrough
+				// A stored generic header override must not be able to set or
+				// clear the managed residency header.
+				account.Credentials[credKeyHeaderOverrideEnabled] = true
+				account.Credentials[credKeyHeaderOverrides] = map[string]any{
+					"x-openai-internal-codex-residency": "eu-override",
+				}
+
+				var headers http.Header
+				svc := newOpenAIRejectedFieldTestService(nil)
+				svc.httpUpstream = &codexModelsHTTPUpstreamStub{do: func(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
+					headers = req.Header.Clone()
+					return openAIIdentityContractSuccessResponse(), nil
+				}}
+				svc.settingService = settings
+				body := []byte(`{"model":"gpt-5.5","stream":true,"instructions":"test","input":"hello"}`)
+				c := newOpenAIRejectedFieldTestContext(body)
+				c.Request.Header.Set("x-openai-internal-codex-residency", "eu-inbound")
+
+				_, err := svc.Forward(context.Background(), c, account, body)
+				require.NoError(t, err)
+
+				wsHeaders, _, err := svc.buildOpenAIWSHeaders(context.Background(), c, account, "token", OpenAIWSProtocolDecision{Transport: OpenAIUpstreamTransportResponsesWebsocketV2}, false, "", "", "", "gpt-5.5", "")
+				require.NoError(t, err)
+
+				want := ""
+				if residency == openai.CodexResidencyUS {
+					want = openai.CodexResidencyUS
+				}
+				require.Equal(t, want, headers.Get(openai.CodexResidencyHeader), "HTTP forward residency")
+				require.Equal(t, want, wsHeaders.Get(openai.CodexResidencyHeader), "WS handshake residency")
+			})
+		}
 	}
 }

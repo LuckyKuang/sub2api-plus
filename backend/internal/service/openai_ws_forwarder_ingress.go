@@ -1095,6 +1095,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 				upstreamMessage = normalized
 			}
 			observeOpenAIWeeklyResetEvent(ctx, account, upstreamMessage)
+			s.observeOpenAICodexRateLimitEventSnapshot(ctx, account, upstreamMessage)
 			var emitQuotaEvent bool
 			upstreamMessage, emitQuotaEvent = s.finalizeCodexClientQuotaEvent(upstreamMessage, c, account)
 			if !emitQuotaEvent {

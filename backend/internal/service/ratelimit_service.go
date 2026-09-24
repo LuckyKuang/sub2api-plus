@@ -1039,6 +1039,15 @@ func (s *RateLimitService) handleOpenAI403(ctx context.Context, account *Account
 		)
 		return false
 	}
+	if isCloudflareBotBlockResponse(responseBody) {
+		slog.Warn(
+			"openai_403_cloudflare_bot_block_skips_account_penalty",
+			"account_id", account.ID,
+			"platform", account.Platform,
+			"upstream_message", upstreamMsg,
+		)
+		return false
+	}
 
 	msg := buildForbiddenErrorMessage(
 		"Access forbidden (403):",
@@ -1082,6 +1091,14 @@ func (s *RateLimitService) handleOpenAI403(ctx context.Context, account *Account
 		"threshold", openAI403DisableThreshold,
 	)
 	return true
+}
+
+// isCloudflareBotBlockResponse reports Cloudflare's WAF bot-signature response
+// (error code 1010). The upstream never reached the account API, so this is a
+// request/edge-level failure and must not consume the account 403 strike budget.
+func isCloudflareBotBlockResponse(body []byte) bool {
+	normalized := strings.ToLower(strings.TrimSpace(string(body)))
+	return strings.Contains(normalized, "error code: 1010")
 }
 
 // handleAntigravity403 处理 Antigravity 平台的 403 错误
@@ -1761,6 +1778,55 @@ func (s *RateLimitService) persistOpenAICodexSnapshot(ctx context.Context, accou
 //	    "resets_in_seconds": 133107
 //	  }
 //	}
+//
+// openAITerminalQuotaErrorTypes 是官方终态配额/额度错误类（api_bridge.rs 的
+// QuotaExceeded / UsageNotIncluded）：账号预算或额度已经用尽，同账号重试与窗口内
+// 换号都只是放大无收益请求，官方客户端同样视为终态。
+var openAITerminalQuotaErrorTypes = map[string]struct{}{
+	"insufficient_quota":       {},
+	"credit_balance_exhausted": {},
+	"usage_not_included":       {},
+	"spend_limit_exceeded":     {},
+}
+
+// isOpenAITerminalQuotaErrorType 识别终态配额错误类；接受 `*_spend_limit_exceeded`
+// 变体（例如 daily_spend_limit_exceeded），type 与 code 两种字段位置都覆盖。
+func isOpenAITerminalQuotaErrorType(errType string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(errType))
+	normalized = strings.ReplaceAll(normalized, "-", "_")
+	if normalized == "" {
+		return false
+	}
+	if _, ok := openAITerminalQuotaErrorTypes[normalized]; ok {
+		return true
+	}
+	return strings.HasSuffix(normalized, "_spend_limit_exceeded")
+}
+
+// isOpenAITerminalQuotaErrorBody  reports whether an upstream 429 body declares a
+// terminal account-quota or credit condition rather than a rate window.
+func isOpenAITerminalQuotaErrorBody(body []byte) bool {
+	if len(body) == 0 {
+		return false
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return false
+	}
+	errObj, ok := parsed["error"].(map[string]any)
+	if !ok {
+		return false
+	}
+	if errType, _ := errObj["type"].(string); isOpenAITerminalQuotaErrorType(errType) {
+		return true
+	}
+	// 部分上游把错误类放在 code 而不是 type。
+	if code, _ := errObj["code"].(string); isOpenAITerminalQuotaErrorType(code) {
+		return true
+	}
+	return false
+}
+
 func parseOpenAIRateLimitResetTime(body []byte) *int64 {
 	var parsed map[string]any
 	if err := json.Unmarshal(body, &parsed); err != nil {
@@ -2456,6 +2522,7 @@ func parseOpenAIImageTryAgainCooldown(body []byte) time.Duration {
 
 const upstreamModelNotFoundCooldown = 30 * time.Minute
 const upstreamModelNotFoundReason = "upstream_404_model_not_found"
+const upstreamModelNotFound401Reason = "upstream_401_model_not_found"
 const upstreamCodexPlanGatedModelCooldown = 30 * time.Minute
 const upstreamCodexPlanGatedModelReason = "upstream_400_codex_plan_gated_model"
 const tempUnschedBodyMaxBytes = 64 << 10
@@ -2481,6 +2548,8 @@ func (s *RateLimitService) HandleUpstreamModelNotFound(ctx context.Context, acco
 	switch {
 	case isUpstreamModelNotFoundError(statusCode, responseBody):
 		cooldown, reason = upstreamModelNotFoundCooldown, upstreamModelNotFoundReason
+	case statusCode == http.StatusUnauthorized && account.Type == AccountTypeAPIKey && account.IsOpenAICompatible() && isOpenAICompatibleModelNotFoundBody(responseBody):
+		cooldown, reason = upstreamModelNotFoundCooldown, upstreamModelNotFound401Reason
 	case isOpenAIOAuthAccount(account) && isOpenAICodexPlanGatedModelError(statusCode, responseBody):
 		cooldown, reason = upstreamCodexPlanGatedModelCooldown, upstreamCodexPlanGatedModelReason
 	default:

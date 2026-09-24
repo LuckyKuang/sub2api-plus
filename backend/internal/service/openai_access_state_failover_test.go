@@ -230,6 +230,18 @@ func TestOpenAIStreamSemanticStatusesPreservedAcrossTerminalShapes(t *testing.T)
 	}
 }
 
+// 不少 OpenAI 兼容上游在流内错误对象里用 status 而不是 status_code 报告状态码。
+// 只认 status_code 会把它们降级成通用 502，账号健康与 failover 判定随之失效。
+// 上游把 status 报成 5xx 时仍然是通用上游故障：既不改账号状态，也不冒充认证/限流。
+func TestOpenAIStreamErrorStatusAliasKeepsGeneric5xxUnclassified(t *testing.T) {
+	payload := []byte(`{"type":"response.failed","response":{"error":{"code":"server_error","status":500,"type":"server_error","message":"rv_shape_invalid: temporary response validation failure after partial output; retry your request if your client can recover partial output."},"id":"resp_0","object":"response","status":"failed"},"sequence_number":80}`)
+	message := extractOpenAISSEErrorMessage(payload)
+
+	require.Equal(t, http.StatusBadGateway, openAIStreamFailureStatus(payload, message))
+	require.False(t, openAIStreamCredentialAuthFailure(payload))
+	require.True(t, openAIStreamFailedEventShouldFailover(payload, message))
+}
+
 func TestOpenAIStreamBareErrorUsesSemanticFailover(t *testing.T) {
 	payload := []byte(`{"error":{"type":"rate_limit_error","code":"rate_limit_exceeded","message":"slow down"}}`)
 	require.True(t, openAIStreamErrorEventShouldFailover(payload, "slow down"))

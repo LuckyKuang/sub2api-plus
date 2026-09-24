@@ -165,6 +165,11 @@ func AudioOutputTokens(v int) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldAudioOutputTokens, v))
 }
 
+// CodexRolloutBudgetUnits applies equality check predicate on the "codex_rollout_budget_units" field. It's identical to CodexRolloutBudgetUnitsEQ.
+func CodexRolloutBudgetUnits(v float64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldCodexRolloutBudgetUnits, v))
+}
+
 // InputCost applies equality check predicate on the "input_cost" field. It's identical to InputCostEQ.
 func InputCost(v float64) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldInputCost, v))
@@ -1373,6 +1378,56 @@ func AudioOutputTokensLT(v int) predicate.UsageLog {
 // AudioOutputTokensLTE applies the LTE predicate on the "audio_output_tokens" field.
 func AudioOutputTokensLTE(v int) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldLTE(FieldAudioOutputTokens, v))
+}
+
+// CodexRolloutBudgetUnitsEQ applies the EQ predicate on the "codex_rollout_budget_units" field.
+func CodexRolloutBudgetUnitsEQ(v float64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldCodexRolloutBudgetUnits, v))
+}
+
+// CodexRolloutBudgetUnitsNEQ applies the NEQ predicate on the "codex_rollout_budget_units" field.
+func CodexRolloutBudgetUnitsNEQ(v float64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNEQ(FieldCodexRolloutBudgetUnits, v))
+}
+
+// CodexRolloutBudgetUnitsIn applies the In predicate on the "codex_rollout_budget_units" field.
+func CodexRolloutBudgetUnitsIn(vs ...float64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIn(FieldCodexRolloutBudgetUnits, vs...))
+}
+
+// CodexRolloutBudgetUnitsNotIn applies the NotIn predicate on the "codex_rollout_budget_units" field.
+func CodexRolloutBudgetUnitsNotIn(vs ...float64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotIn(FieldCodexRolloutBudgetUnits, vs...))
+}
+
+// CodexRolloutBudgetUnitsGT applies the GT predicate on the "codex_rollout_budget_units" field.
+func CodexRolloutBudgetUnitsGT(v float64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGT(FieldCodexRolloutBudgetUnits, v))
+}
+
+// CodexRolloutBudgetUnitsGTE applies the GTE predicate on the "codex_rollout_budget_units" field.
+func CodexRolloutBudgetUnitsGTE(v float64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGTE(FieldCodexRolloutBudgetUnits, v))
+}
+
+// CodexRolloutBudgetUnitsLT applies the LT predicate on the "codex_rollout_budget_units" field.
+func CodexRolloutBudgetUnitsLT(v float64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLT(FieldCodexRolloutBudgetUnits, v))
+}
+
+// CodexRolloutBudgetUnitsLTE applies the LTE predicate on the "codex_rollout_budget_units" field.
+func CodexRolloutBudgetUnitsLTE(v float64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLTE(FieldCodexRolloutBudgetUnits, v))
+}
+
+// CodexRolloutBudgetUnitsIsNil applies the IsNil predicate on the "codex_rollout_budget_units" field.
+func CodexRolloutBudgetUnitsIsNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIsNull(FieldCodexRolloutBudgetUnits))
+}
+
+// CodexRolloutBudgetUnitsNotNil applies the NotNil predicate on the "codex_rollout_budget_units" field.
+func CodexRolloutBudgetUnitsNotNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotNull(FieldCodexRolloutBudgetUnits))
 }
 
 // InputCostEQ applies the EQ predicate on the "input_cost" field.

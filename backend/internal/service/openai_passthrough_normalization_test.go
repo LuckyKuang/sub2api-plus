@@ -65,9 +65,9 @@ func TestNormalizeOpenAIResponsesWebSocketCompatibilityBody_OnlyStripsOAuthField
 		require.False(t, gjson.GetBytes(oauthBody, field).Exists(), field)
 	}
 
-	apiKeyBody, changed, err := normalizeOpenAIResponsesWebSocketCompatibilityBody(body, &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}, false)
+	apiKeyBody, apiKeyChanged, err := normalizeOpenAIResponsesWebSocketCompatibilityBody(body, &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}, false)
 	require.NoError(t, err)
-	require.False(t, changed)
+	require.False(t, apiKeyChanged)
 	require.JSONEq(t, string(body), string(apiKeyBody))
 }
 
@@ -131,7 +131,7 @@ func TestNormalizeOpenAIResponsesReasoningMode(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			normalized, changed, err := normalizeOpenAIResponsesReasoningMode([]byte(tt.body))
+			normalized, changed, err := normalizeOpenAIResponsesReasoningMode([]byte(tt.body), "")
 			require.NoError(t, err)
 			require.True(t, changed)
 			require.False(t, gjson.GetBytes(normalized, "reasoning.mode").Exists())
@@ -155,7 +155,7 @@ func TestNormalizeOpenAIResponsesReasoningMode_AstraPreservesBody(t *testing.T) 
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			normalized, changed, err := normalizeOpenAIResponsesReasoningMode([]byte(tt.body))
+			normalized, changed, err := normalizeOpenAIResponsesReasoningMode([]byte(tt.body), "")
 			require.NoError(t, err)
 			require.False(t, changed)
 			require.JSONEq(t, tt.body, string(normalized))
@@ -175,7 +175,7 @@ func TestNormalizeOpenAIResponsesReasoningMode_NonAstraKeepsLegacyBehavior(t *te
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			normalized, changed, err := normalizeOpenAIResponsesReasoningMode([]byte(tt.body))
+			normalized, changed, err := normalizeOpenAIResponsesReasoningMode([]byte(tt.body), "")
 			require.NoError(t, err)
 			require.True(t, changed)
 			require.False(t, gjson.GetBytes(normalized, "reasoning.mode").Exists())
@@ -376,4 +376,75 @@ func TestDetectOpenAIPassthroughInstructionsRejectReason(t *testing.T) {
 			require.Equal(t, tt.want, detectOpenAIPassthroughInstructionsRejectReason("gpt-5.1-codex", []byte(tt.body)))
 		})
 	}
+}
+
+// The passthrough path must strip the same Codex-unsupported field set as the
+// non-passthrough transform. Stripping only the internal set left the six
+// sampling/token-limit fields on the wire, which produced a guaranteed
+// first-request 400 that only a rejected-field retry recovered from.
+func TestNormalizeOpenAIPassthroughOAuthBody_StripsFullCodexUnsupportedSet(t *testing.T) {
+	body := []byte(`{"model":"gpt-5.4","input":"hello","max_output_tokens":1024,"max_completion_tokens":1024,"temperature":0.2,"top_p":0.9,"frequency_penalty":0.1,"presence_penalty":0.1}`)
+
+	normalized, changed, err := normalizeOpenAIPassthroughOAuthBody(body, false)
+	require.NoError(t, err)
+	require.True(t, changed)
+	for _, field := range openAICodexOAuthUnsupportedFields {
+		require.False(t, gjson.GetBytes(normalized, field).Exists(), "%s should be stripped", field)
+	}
+	// The passthrough and non-passthrough paths must agree on the field set.
+	require.Equal(t, len(openAICodexOAuthUnsupportedFields), len(openAIChatGPTInternalUnsupportedFields)+6,
+		"the Codex OAuth set is the internal set plus six sampling/token-limit fields")
+}
+
+// The WebSocket compatibility body applies the same full field set for OAuth
+// accounts, and still leaves API-key accounts untouched.
+func TestNormalizeOpenAIResponsesWebSocketCompatibilityBody_StripsFullCodexSetForOAuth(t *testing.T) {
+	oauth := &Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
+	body := []byte(`{"model":"gpt-5.4","input":"hello","max_output_tokens":1024,"temperature":0.2,"top_p":0.9}`)
+
+	normalized, changed, err := normalizeOpenAIResponsesWebSocketCompatibilityBody(body, oauth, false)
+	require.NoError(t, err)
+	require.True(t, changed)
+	for _, field := range []string{"max_output_tokens", "temperature", "top_p"} {
+		require.False(t, gjson.GetBytes(normalized, field).Exists(), "%s should be stripped for Codex OAuth", field)
+	}
+
+	apiKey := &Account{ID: 2, Platform: PlatformOpenAI, Type: AccountTypeAPIKey}
+	normalized, changed, err = normalizeOpenAIResponsesWebSocketCompatibilityBody(body, apiKey, false)
+	require.NoError(t, err)
+	require.True(t, gjson.GetBytes(normalized, "max_output_tokens").Exists(),
+		"API-key accounts keep their own field handling")
+	_ = changed
+}
+
+func TestNormalizeOpenAIPassthroughOAuthBody_EnsuresReasoningInclude(t *testing.T) {
+	body := []byte(`{"model":"gpt-5.4","input":"hello","include":["foo"]}`)
+	normalized, changed, err := normalizeOpenAIPassthroughOAuthBody(body, false)
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.Equal(t, "foo", gjson.GetBytes(normalized, "include.0").String())
+	require.Equal(t, "reasoning.encrypted_content", gjson.GetBytes(normalized, "include.1").String())
+
+	compact, _, err := normalizeOpenAIPassthroughOAuthBody([]byte(`{"model":"gpt-5.4","input":"hello"}`), true)
+	require.NoError(t, err)
+	require.False(t, gjson.GetBytes(compact, "include").Exists(), "compact v2 keeps its own request shape")
+
+	nullInclude, changed, err := normalizeOpenAIPassthroughOAuthBody([]byte(`{"model":"gpt-5.4","input":"hello","include":null}`), false)
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.Equal(t, "reasoning.encrypted_content", gjson.GetBytes(nullInclude, "include.0").String())
+}
+
+func TestNormalizeOpenAIResponsesWebSocketCompatibilityBody_EnsuresReasoningInclude(t *testing.T) {
+	body := []byte(`{"type":"response.create","model":"gpt-5.4","include":["foo"]}`)
+	oauthBody, changed, err := normalizeOpenAIResponsesWebSocketCompatibilityBody(body, &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth}, false)
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.Equal(t, "foo", gjson.GetBytes(oauthBody, "include.0").String())
+	require.Equal(t, "reasoning.encrypted_content", gjson.GetBytes(oauthBody, "include.1").String())
+
+	apiKeyBody, _, err := normalizeOpenAIResponsesWebSocketCompatibilityBody(body, &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}, false)
+	require.NoError(t, err)
+	require.False(t, gjson.GetBytes(apiKeyBody, "include.1").Exists(), "API-key WS bodies keep client include unchanged")
+	require.Equal(t, "foo", gjson.GetBytes(apiKeyBody, "include.0").String())
 }

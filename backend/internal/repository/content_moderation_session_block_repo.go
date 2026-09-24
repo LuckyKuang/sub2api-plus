@@ -46,8 +46,8 @@ ON CONFLICT (block_key) DO UPDATE SET
 RETURNING id, created_at, expires_at`,
 		block.BlockKey,
 		block.SessionID,
-		nullableInt64Ptr(block.UserID),
-		nullableInt64Ptr(block.APIKeyID),
+		contentModerationNullableInt64(block.UserID),
+		contentModerationNullableInt64(block.APIKeyID),
 		block.RequestID,
 		block.Endpoint,
 		block.Protocol,
@@ -223,7 +223,7 @@ func (r *contentModerationRepository) DeleteExpiredSessionBlocks(ctx context.Con
 	return deleted, nil
 }
 
-func nullableInt64Ptr(value *int64) any {
+func contentModerationNullableInt64(value *int64) any {
 	if value == nil {
 		return nil
 	}

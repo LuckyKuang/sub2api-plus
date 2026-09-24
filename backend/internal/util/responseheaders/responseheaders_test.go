@@ -107,3 +107,31 @@ func TestFilterHeadersCannotAllowReservedProjectHeader(t *testing.T) {
 		t.Fatalf("expected standard rate-limit header preservation, got %q", got)
 	}
 }
+
+// Batch 3.4: the official Codex display-only declarations are relayed verbatim
+// to the downstream client by default. An administrator can still force-remove
+// them, but the gateway never needs a configuration change to pass them through.
+func TestFilterHeadersRelaysCodexDisplayOnlyDeclarations(t *testing.T) {
+	src := http.Header{}
+	src.Set("X-Codex-Promo-Message", "your plan renews soon")
+	src.Set("X-Codex-Rate-Limit-Reached-Type", "primary_5h")
+
+	filtered := FilterHeaders(src, CompileHeaderFilter(config.ResponseHeaderConfig{}))
+	if got := filtered.Get("X-Codex-Promo-Message"); got != "your plan renews soon" {
+		t.Fatalf("expected X-Codex-Promo-Message passthrough, got %q", got)
+	}
+	if got := filtered.Get("X-Codex-Rate-Limit-Reached-Type"); got != "primary_5h" {
+		t.Fatalf("expected X-Codex-Rate-Limit-Reached-Type passthrough, got %q", got)
+	}
+
+	forced := FilterHeaders(src, CompileHeaderFilter(config.ResponseHeaderConfig{
+		Enabled:     true,
+		ForceRemove: []string{"x-codex-promo-message", "x-codex-rate-limit-reached-type"},
+	}))
+	if got := forced.Get("X-Codex-Promo-Message"); got != "" {
+		t.Fatalf("expected X-Codex-Promo-Message removal, got %q", got)
+	}
+	if got := forced.Get("X-Codex-Rate-Limit-Reached-Type"); got != "" {
+		t.Fatalf("expected X-Codex-Rate-Limit-Reached-Type removal, got %q", got)
+	}
+}

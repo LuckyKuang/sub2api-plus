@@ -75,45 +75,51 @@ const (
 
 // OpenAI allowed headers whitelist (for non-passthrough).
 var openaiAllowedHeaders = map[string]bool{
-	"accept-language":          true,
-	"content-type":             true,
-	"conversation_id":          true,
-	"session-id":               true,
-	"session_id":               true,
-	"thread-id":                true,
-	"x-client-request-id":      true,
-	"x-codex-beta-features":    true,
-	"x-codex-installation-id":  true,
-	"x-codex-parent-thread-id": true,
-	"x-codex-routing-hint":     true,
-	"x-codex-turn-state":       true,
-	"x-codex-turn-metadata":    true,
-	"x-codex-window-id":        true,
-	responsesLiteHeaderKey:     true,
+	"accept-language":                       true,
+	"content-type":                          true,
+	"conversation_id":                       true,
+	"session-id":                            true,
+	"session_id":                            true,
+	"thread-id":                             true,
+	"x-client-request-id":                   true,
+	"x-codex-beta-features":                 true,
+	"x-codex-installation-id":               true,
+	"x-codex-parent-thread-id":              true,
+	"x-codex-routing-hint":                  true,
+	"x-codex-turn-state":                    true,
+	"x-codex-turn-metadata":                 true,
+	"x-codex-window-id":                     true,
+	"x-openai-memgen-request":               true,
+	"x-openai-subagent":                     true,
+	"x-responsesapi-include-timing-metrics": true,
+	responsesLiteHeaderKey:                  true,
 }
 
 // OpenAI passthrough allowed headers whitelist.
 // 透传模式下仅放行这些低风险请求头，避免将非标准/环境噪声头传给上游触发风控。
 var openaiPassthroughAllowedHeaders = map[string]bool{
-	"accept":                   true,
-	"accept-language":          true,
-	"content-type":             true,
-	"conversation_id":          true,
-	"openai-beta":              true,
-	"user-agent":               true,
-	"originator":               true,
-	"session-id":               true,
-	"session_id":               true,
-	"thread-id":                true,
-	"x-client-request-id":      true,
-	"x-codex-beta-features":    true,
-	"x-codex-installation-id":  true,
-	"x-codex-parent-thread-id": true,
-	"x-codex-routing-hint":     true,
-	"x-codex-turn-state":       true,
-	"x-codex-turn-metadata":    true,
-	"x-codex-window-id":        true,
-	responsesLiteHeaderKey:     true,
+	"accept":                                true,
+	"accept-language":                       true,
+	"content-type":                          true,
+	"conversation_id":                       true,
+	"openai-beta":                           true,
+	"user-agent":                            true,
+	"originator":                            true,
+	"session-id":                            true,
+	"session_id":                            true,
+	"thread-id":                             true,
+	"x-client-request-id":                   true,
+	"x-codex-beta-features":                 true,
+	"x-codex-installation-id":               true,
+	"x-codex-parent-thread-id":              true,
+	"x-codex-routing-hint":                  true,
+	"x-codex-turn-state":                    true,
+	"x-codex-turn-metadata":                 true,
+	"x-codex-window-id":                     true,
+	"x-openai-memgen-request":               true,
+	"x-openai-subagent":                     true,
+	"x-responsesapi-include-timing-metrics": true,
+	responsesLiteHeaderKey:                  true,
 }
 
 // codex_cli_only 拒绝时记录的请求头白名单（仅用于诊断日志，不参与上游透传）
@@ -143,7 +149,34 @@ type OpenAICodexUsageSnapshot struct {
 	SecondaryResetAtUnix        *int64   `json:"secondary_reset_at_unix,omitempty"`
 	SecondaryWindowMinutes      *int     `json:"secondary_window_minutes,omitempty"`
 	PrimaryOverSecondaryPercent *float64 `json:"primary_over_secondary_percent,omitempty"`
-	UpdatedAt                   string   `json:"updated_at,omitempty"`
+	// LimitName is the server-declared name of the default `codex` limit family
+	// (`x-codex-limit-name`), typically the metered model slug.
+	LimitName string `json:"limit_name,omitempty"`
+	// Credits snapshot from the x-codex-credits-* header family. The WHAM API
+	// pull path remains the authoritative source; these headers are a realtime
+	// supplement observed on ordinary responses.
+	CreditsHasCredits *bool  `json:"credits_has_credits,omitempty"`
+	CreditsUnlimited  *bool  `json:"credits_unlimited,omitempty"`
+	CreditsBalance    string `json:"credits_balance,omitempty"`
+	// Families carries rate-limit families beyond the default `codex` family,
+	// discovered by scanning the `x-{limit}-primary-used-percent` prefix the
+	// way the official client does (e.g. `x-codex-secondary-primary-*` belongs
+	// to the `codex_secondary` family, not the default 5h window).
+	Families  []OpenAICodexRateLimitFamily `json:"families,omitempty"`
+	UpdatedAt string                       `json:"updated_at,omitempty"`
+}
+
+// OpenAICodexRateLimitFamily is one non-default metered limit family parsed
+// from the `x-{limit}-*` response headers.
+type OpenAICodexRateLimitFamily struct {
+	LimitID                string   `json:"limit_id,omitempty"`
+	LimitName              string   `json:"limit_name,omitempty"`
+	PrimaryUsedPercent     *float64 `json:"primary_used_percent,omitempty"`
+	PrimaryWindowMinutes   *int     `json:"primary_window_minutes,omitempty"`
+	PrimaryResetAtUnix     *int64   `json:"primary_reset_at_unix,omitempty"`
+	SecondaryUsedPercent   *float64 `json:"secondary_used_percent,omitempty"`
+	SecondaryWindowMinutes *int     `json:"secondary_window_minutes,omitempty"`
+	SecondaryResetAtUnix   *int64   `json:"secondary_reset_at_unix,omitempty"`
 }
 
 const openAIWeeklyQuotaWindowMinutes = 7 * 24 * 60
@@ -267,6 +300,11 @@ type OpenAIUsage struct {
 	CacheReadInputTokens     int `json:"cache_read_input_tokens,omitempty"`
 	ImageOutputTokens        int `json:"image_output_tokens,omitempty"`
 	AudioOutputTokens        int `json:"audio_output_tokens,omitempty"`
+	// CodexRolloutBudgetUnits carries the official `codex_rollout_budget_units`
+	// declaration from the response.completed usage payload (JSON number,
+	// fractional allowed). Parsed and recorded as a reserved billing dimension;
+	// nil means the upstream did not report it.
+	CodexRolloutBudgetUnits *float64 `json:"codex_rollout_budget_units,omitempty"`
 }
 
 // OpenAIForwardResult represents the result of forwarding

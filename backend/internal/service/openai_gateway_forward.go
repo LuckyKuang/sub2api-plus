@@ -84,7 +84,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		body = sanitizedToolBody
 	}
 	if account.IsOpenAIOAuthLike() {
-		reasoningBody, reasoningChanged, reasoningErr := normalizeOpenAIResponsesReasoningMode(body)
+		reasoningBody, reasoningChanged, reasoningErr := normalizeOpenAIResponsesReasoningMode(body, account.GetMappedModel(gjson.GetBytes(body, "model").String()))
 		if reasoningErr != nil {
 			return nil, fmt.Errorf("normalize OpenAI Responses reasoning.mode: %w", reasoningErr)
 		}
@@ -812,7 +812,14 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	SetOpsUpstreamModel(c, upstreamModel)
 
 	// 命中 WS 时仅走 WebSocket Mode；不再自动回退 HTTP。
-	if wsDecision.Transport == OpenAIUpstreamTransportResponsesWebsocketV2 {
+	// 账号刚被上游拒绝 WS 升级时处在 fallback 冷却期：官方 client.rs 把这种结果
+	// 作为会话级永久回退 HTTP，Plus 用冷却窗表达同一意图——窗内不再重复 WS 拨号，
+	// 否则冷却窗里的每个请求都会各自再撞一次 426。
+	wsFallbackCooling := s.isOpenAIWSFallbackCooling(account.ID)
+	if wsFallbackCooling {
+		logOpenAIWSModeInfo("fallback_cooling_skip_ws account_id=%d", account.ID)
+	}
+	if wsDecision.Transport == OpenAIUpstreamTransportResponsesWebsocketV2 && !wsFallbackCooling {
 		// WS 分支需要结构化 payload 与重连恢复，命中后再触发 full-map decode。
 		wsReqBody, err := ensureReqBody()
 		if err != nil {
@@ -1042,8 +1049,39 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			}
 			return wsResult, nil
 		}
-		s.writeOpenAIWSFallbackErrorResponse(c, account, wsErr)
-		return nil, wsErr
+		// 官方语义（client.rs FallbackToHttp）：上游拒绝 WS 升级（426）或声明不
+		// 支持 WebSocket 时，当前请求静默改走 HTTP，而不是把硬错误暴露给客户端。
+		// 同时标记 fallback cooling，让后续请求在冷却窗内直接选 HTTP 传输。
+		// 已经向下游写出字节时不回退——那会写出两份响应。
+		clientBytesWritten := c != nil && c.Writer != nil && c.Writer.Written()
+		if !clientBytesWritten && isOpenAIWSTransportUnsupportedReason(wsLastFailureReason) {
+			s.markOpenAIWSFallbackCooling(account.ID, wsLastFailureReason)
+			// 上游拒绝 WS 传输是运维要看见的信号：与硬错误路径一样记一条 ops
+			// upstream-error 事件，否则 426 型故障在事件流里完全不可见。
+			wsFallbackMessage := ""
+			if wsErr != nil {
+				wsFallbackMessage = truncateOpenAIWSLogValue(wsErr.Error(), openAIWSIDValueMaxLen)
+			}
+			appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+				ProxyID:            opsUpstreamProxyID(account),
+				ProxyName:          opsUpstreamProxyName(account),
+				Platform:           account.Platform,
+				AccountID:          account.ID,
+				AccountName:        account.Name,
+				UpstreamStatusCode: http.StatusUpgradeRequired,
+				Kind:               "ws_fallback",
+				Reason:             wsLastFailureReason,
+				Message:            wsFallbackMessage,
+			})
+			logOpenAIWSModeInfo(
+				"fallback_to_http account_id=%d reason=%s",
+				account.ID,
+				normalizeOpenAIWSLogValue(wsLastFailureReason),
+			)
+		} else {
+			s.writeOpenAIWSFallbackErrorResponse(c, account, wsErr)
+			return nil, wsErr
+		}
 	}
 
 	reasoningEffort := extractOpenAIReasoningEffortFromBody(body, upstreamModel, billingModel, originalModel)
@@ -1061,6 +1099,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	httpInvalidEncryptedContentRetryTried := false
 	compactModelFallbackRetried := false
 	agentTaskRecoveryTried := false
+	authRecoveryTried := false
 	rejectedFieldRetryState := openAIResponsesRejectedFieldRetryStateForRequest(c, body)
 	for {
 		// Build upstream request
@@ -1188,6 +1227,32 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 					account.Name, fromModel, fallbackModel, upstreamCode,
 				)
 				continue
+			}
+			// 401 同账号恢复：OAuth-like Bearer 账号先强制刷新凭据并同账号重试一次，
+			// 仍失败才进入 failover（仅 401，不含 403）。刷新失败时静默落入下方
+			// 常规错误处理，由 failover 决策接管。
+			if !authRecoveryTried && isOpenAIUnauthorizedRecoverableStatus(resp.StatusCode) && s.canForceRefreshOpenAIAuthOnUnauthorized(account) {
+				authRecoveryTried = true
+				refreshedToken, refreshErr := s.recoverOpenAIAuthAfterUnauthorized(ctx, account)
+				if refreshErr != nil {
+					logger.LegacyPrintf("service.openai_gateway", "[OpenAI] 401 same-account recovery skipped after refresh failure (account: %s): %v", account.Name, refreshErr)
+				} else {
+					appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+						ProxyID:            opsUpstreamProxyID(account),
+						ProxyName:          opsUpstreamProxyName(account),
+						Platform:           account.Platform,
+						AccountID:          account.ID,
+						AccountName:        account.Name,
+						UpstreamStatusCode: resp.StatusCode,
+						UpstreamRequestID:  resp.Header.Get("x-request-id"),
+						Kind:               "retry",
+						Reason:             openAIAuthRecoveryRetryReason,
+						Message:            upstreamMsg,
+					})
+					token = refreshedToken
+					logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Retrying same account once after 401 credential refresh (account: %s)", account.Name)
+					continue
+				}
 			}
 			if s.shouldFailoverOpenAIUpstreamResponse(account, resp.StatusCode, upstreamMsg, respBody) {
 				upstreamDetail := ""
@@ -1551,6 +1616,10 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 		req.Header.Set("content-type", "application/json")
 	}
 
+	// 官方 OpenCode / Command Code 上游收敛为规范客户端 UA：客户端透传的编程库
+	// UA 会命中其前置 Cloudflare bot 拦截（CF 1010/403），并被计入账号 403 strike。
+	applyOpenCodeUpstreamUserAgent(account, targetURL, req.Header)
+
 	// 账号级请求头覆写（仅 openai api_key 账号启用时生效；OAuth 路径 no-op）
 	account.ApplyHeaderOverrides(req.Header)
 	if err := s.alignOpenAIUpstreamSessionIdentityFromBody(c, account, req.Header, body); err != nil {
@@ -1570,5 +1639,8 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 	setOpenAICodexRoutingHintFromBody(req.Header, account, body)
 	logOpenAIRoutingDiagnosticsFromBody(ctx, account, "http", req.Header, body, "not_applicable")
 
+	if err := applyMappedGPT55LiteCompatibility(req, account, body); err != nil {
+		return nil, err
+	}
 	return req, nil
 }

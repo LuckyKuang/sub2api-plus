@@ -47,6 +47,19 @@ func TestUpdateSettings_OpenAICodexUserAgentValidation(t *testing.T) {
 		"codex_legacy_client_profile_compatibility_enabled": true,
 	})
 	require.Equal(t, http.StatusOK, legacyWithMode.Code)
+
+	withSuffix := update(t, map[string]any{
+		"openai_codex_user_agent": "codex_cli_rs/0.147.0 (Ubuntu 24.04; x86_64) xterm-256color (mcp: server-a)",
+	})
+	require.Equal(t, http.StatusOK, withSuffix.Code)
+
+	invalidResidency := update(t, map[string]any{"codex_residency": "eu"})
+	require.Equal(t, http.StatusBadRequest, invalidResidency.Code)
+	require.Contains(t, invalidResidency.Body.String(), "codex_residency")
+
+	usResidency := update(t, map[string]any{"codex_residency": " US "})
+	require.Equal(t, http.StatusOK, usResidency.Code)
+	require.Contains(t, usResidency.Body.String(), `"codex_residency":"us"`)
 }
 
 func TestUpdateSettings_OpenAICodexClientVersionRejectsBelowUpstreamMin(t *testing.T) {

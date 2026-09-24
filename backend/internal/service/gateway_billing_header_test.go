@@ -144,7 +144,7 @@ func TestBuildOAuthRequest_BillingMatchesWireUserAgent(t *testing.T) {
 				}
 				require.NoError(t, err)
 				defer func() { require.NoError(t, req.Body.Close()) }()
-				wantUA := claude.DefaultHeaders["User-Agent"]
+				wantUA := claude.DefaultHeaders()["User-Agent"]
 				if tc.version != "" {
 					wantUA = "claude-cli/" + tc.version + " (external, cli)"
 				}

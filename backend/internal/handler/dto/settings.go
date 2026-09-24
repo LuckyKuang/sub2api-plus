@@ -216,6 +216,7 @@ type SystemSettings struct {
 	OpenAICodexUserAgent                         string `json:"openai_codex_user_agent"`
 	OpenAICodexEnvironmentTimezone               string `json:"openai_codex_environment_timezone"`
 	OpenAICodexEgressCountry                     string `json:"openai_codex_egress_country"`
+	OpenAICodexResidency                         string `json:"codex_residency"`
 	CodexLegacyClientProfileCompatibilityEnabled bool   `json:"codex_legacy_client_profile_compatibility_enabled"`
 	OpenAICodexLocalGroupQuotaEnabled            bool   `json:"openai_codex_local_group_quota_enabled"`
 	OpenAICodexClientVersion                     string `json:"openai_codex_client_version"`
@@ -225,6 +226,9 @@ type SystemSettings struct {
 	OpenAICodexClientVersionEffective            string `json:"openai_codex_client_version_effective"`
 	OpenAICodexClientVersionSource               string `json:"openai_codex_client_version_source"`
 	OpenAICodexVersionAutoSyncEnabled            bool   `json:"openai_codex_version_auto_sync_enabled"`
+	ClaudeCodeClientVersion                      string `json:"claude_code_client_version"`
+	ClaudeCodeClientVersionSynced                string `json:"claude_code_client_version_synced"`
+	ClaudeCodeVersionAutoSyncEnabled             bool   `json:"claude_code_version_auto_sync_enabled"`
 
 	// codex_cli_only profile policy
 	MinCodexVersion                      string `json:"min_codex_version"`

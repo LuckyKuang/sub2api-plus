@@ -39,6 +39,10 @@ const (
 
 	// Session TTL
 	SessionTTL = 30 * time.Minute
+
+	// DeviceSessionTTL 是 device-code 会话的存活上限（对齐官方 device flow
+	// 15 分钟）：device 授权码短寿命，会话超时后轮询返回过期错误。
+	DeviceSessionTTL = 15 * time.Minute
 )
 
 const (
@@ -88,6 +92,14 @@ func (s *SessionStore) Set(sessionID string, session *OAuthSession) {
 	s.sessions[sessionID] = session
 }
 
+// sessionTTL 返回会话的有效 TTL：device-code 会话 15 分钟，其余 30 分钟。
+func sessionTTL(session *OAuthSession) time.Duration {
+	if session != nil && strings.TrimSpace(session.DeviceAuthID) != "" {
+		return DeviceSessionTTL
+	}
+	return SessionTTL
+}
+
 // Get retrieves a session
 func (s *SessionStore) Get(sessionID string) (*OAuthSession, bool) {
 	s.mu.RLock()
@@ -97,7 +109,7 @@ func (s *SessionStore) Get(sessionID string) (*OAuthSession, bool) {
 		return nil, false
 	}
 	// Check if expired
-	if time.Since(session.CreatedAt) > SessionTTL {
+	if time.Since(session.CreatedAt) > sessionTTL(session) {
 		return nil, false
 	}
 	return session, true
@@ -128,7 +140,7 @@ func (s *SessionStore) cleanup() {
 		case <-ticker.C:
 			s.mu.Lock()
 			for id, session := range s.sessions {
-				if time.Since(session.CreatedAt) > SessionTTL {
+				if time.Since(session.CreatedAt) > sessionTTL(session) {
 					delete(s.sessions, id)
 				}
 			}
@@ -212,22 +224,23 @@ func BuildAuthorizationURLWithOriginator(state, codeChallenge, redirectURI, plat
 		originator = CodexDefaultOriginator
 	}
 
+	// 官方顺序（login/src/oauth/authorization.rs）：response_type, client_id,
+	// redirect_uri, code_challenge, code_challenge_method, state, scope, 然后才是
+	// id_token_add_organizations / codex_cli_simplified_flow / originator 等附加项。
 	pairs := [][2]string{
 		{"response_type", "code"},
 		{"client_id", clientID},
 		{"redirect_uri", redirectURI},
-		{"scope", DefaultScopes},
 		{"code_challenge", codeChallenge},
 		{"code_challenge_method", "S256"},
+		{"state", state},
+		{"scope", DefaultScopes},
 		{"id_token_add_organizations", "true"},
 	}
 	if codexFlow {
 		pairs = append(pairs, [2]string{"codex_cli_simplified_flow", "true"})
 	}
-	pairs = append(pairs,
-		[2]string{"state", state},
-		[2]string{"originator", originator},
-	)
+	pairs = append(pairs, [2]string{"originator", originator})
 	return AuthorizeURL + "?" + encodeOfficialOAuthQuery(pairs)
 }
 
@@ -376,14 +389,15 @@ type OrganizationClaim struct {
 	IsDefault bool   `json:"is_default"`
 }
 
-// EncodeAuthorizationCodeTokenBody matches official Codex token exchange:
-// grant_type, code, redirect_uri, client_id, code_verifier with urlencoding %20.
+// EncodeAuthorizationCodeTokenBody matches official Codex token exchange
+// (login/src/oauth/client.rs): the form declares grant_type, client_id, code,
+// redirect_uri, code_verifier, in that order, with urlencoding %20.
 func EncodeAuthorizationCodeTokenBody(code, redirectURI, clientID, codeVerifier string) string {
 	return encodeOfficialOAuthQuery([][2]string{
 		{"grant_type", "authorization_code"},
+		{"client_id", clientID},
 		{"code", code},
 		{"redirect_uri", redirectURI},
-		{"client_id", clientID},
 		{"code_verifier", codeVerifier},
 	})
 }

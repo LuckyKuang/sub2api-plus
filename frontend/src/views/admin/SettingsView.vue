@@ -8623,6 +8623,22 @@
                 </p>
               </div>
 
+              <!-- Codex residency -->
+              <div>
+                <label
+                  class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                >
+                  {{ t("admin.settings.gatewayForwarding.codexResidency") }}
+                </label>
+                <Select
+                  v-model="form.codex_residency"
+                  :options="codexResidencyOptions"
+                />
+                <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t("admin.settings.gatewayForwarding.codexResidencyHint") }}
+                </p>
+              </div>
+
               <!-- Codex 客户端版本号 -->
               <div>
                 <label
@@ -8899,6 +8915,10 @@ const codexTimezoneOptions = computed(() => [
 const codexEgressCountryOptions = computed(() => [
   { label: t("admin.settings.gatewayForwarding.openaiCodexEgressCountryNone"), value: "" },
   ...getCountryOptions(locale.value),
+]);
+const codexResidencyOptions = computed(() => [
+  { label: t("admin.settings.gatewayForwarding.codexResidencyOff"), value: "off" },
+  { label: t("admin.settings.gatewayForwarding.codexResidencyUS"), value: "us" },
 ]);
 
 function localText(zh: string, en: string): string {
@@ -9832,6 +9852,7 @@ const form = reactive<SettingsForm>({
   openai_codex_user_agent: "",
   openai_codex_environment_timezone: "",
   openai_codex_egress_country: "",
+  codex_residency: "off",
   codex_legacy_client_profile_compatibility_enabled: false,
   openai_codex_local_group_quota_enabled: false,
   openai_codex_client_version: "",
@@ -11547,6 +11568,7 @@ async function saveSettings() {
         form.openai_codex_environment_timezone?.trim() || "",
       openai_codex_egress_country:
         form.openai_codex_egress_country?.trim() || "",
+      codex_residency: form.codex_residency === "us" ? "us" : "off",
       codex_legacy_client_profile_compatibility_enabled:
         form.codex_legacy_client_profile_compatibility_enabled,
       openai_codex_local_group_quota_enabled:

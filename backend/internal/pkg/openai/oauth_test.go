@@ -83,16 +83,20 @@ func TestBuildAuthorizationURL_OfficialQueryOrder(t *testing.T) {
 	}
 	wantRedirect := strings.ReplaceAll(url.QueryEscape(DefaultRedirectURI), "+", "%20")
 	wantScope := strings.ReplaceAll(url.QueryEscape(DefaultScopes), "+", "%20")
+	// Official login/src/oauth/authorization.rs + login/src/server.rs:
+	// response_type, client_id, redirect_uri, code_challenge,
+	// code_challenge_method, state, scope, then the extra parameters
+	// id_token_add_organizations, codex_cli_simplified_flow, originator.
 	want := strings.Join([]string{
 		"response_type=code",
 		"client_id=" + ClientID,
 		"redirect_uri=" + wantRedirect,
-		"scope=" + wantScope,
 		"code_challenge=challenge-1",
 		"code_challenge_method=S256",
+		"state=state-1",
+		"scope=" + wantScope,
 		"id_token_add_organizations=true",
 		"codex_cli_simplified_flow=true",
-		"state=state-1",
 		"originator=" + CodexDefaultOriginator,
 	}, "&")
 	if parsed.RawQuery != want {
@@ -103,7 +107,9 @@ func TestBuildAuthorizationURL_OfficialQueryOrder(t *testing.T) {
 func TestEncodeAuthorizationCodeTokenBody_OfficialFieldOrder(t *testing.T) {
 	got := EncodeAuthorizationCodeTokenBody("code/1", "http://localhost:1455/auth/callback", ClientID, "verifier")
 	wantRedirect := strings.ReplaceAll(url.QueryEscape("http://localhost:1455/auth/callback"), "+", "%20")
-	want := "grant_type=authorization_code&code=" + url.QueryEscape("code/1") + "&redirect_uri=" + wantRedirect + "&client_id=" + ClientID + "&code_verifier=verifier"
+	// Official login/src/oauth/client.rs: grant_type, client_id, code,
+	// redirect_uri, code_verifier.
+	want := "grant_type=authorization_code&client_id=" + ClientID + "&code=" + url.QueryEscape("code/1") + "&redirect_uri=" + wantRedirect + "&code_verifier=verifier"
 	if got != want {
 		t.Fatalf("token body mismatch\n got=%q\nwant=%q", got, want)
 	}
@@ -196,4 +202,48 @@ func containsRune(s string, r rune) bool {
 		}
 	}
 	return false
+}
+
+func TestSessionStore_DeviceSessionExpiresAfter15Minutes(t *testing.T) {
+	store := NewSessionStore()
+	defer store.Stop()
+
+	store.Set("device-1", &OAuthSession{
+		State:        "state-1",
+		DeviceAuthID: "dev-1",
+		CreatedAt:    time.Now().Add(-16 * time.Minute),
+	})
+	if _, ok := store.Get("device-1"); ok {
+		t.Fatal("device session older than 15 minutes must expire")
+	}
+
+	store.Set("device-2", &OAuthSession{
+		State:        "state-2",
+		DeviceAuthID: "dev-2",
+		CreatedAt:    time.Now().Add(-14 * time.Minute),
+	})
+	if _, ok := store.Get("device-2"); !ok {
+		t.Fatal("device session younger than 15 minutes must stay valid")
+	}
+}
+
+func TestSessionStore_NonDeviceSessionKeeps30MinuteTTL(t *testing.T) {
+	store := NewSessionStore()
+	defer store.Stop()
+
+	store.Set("browser-1", &OAuthSession{
+		State:     "state-1",
+		CreatedAt: time.Now().Add(-16 * time.Minute),
+	})
+	if _, ok := store.Get("browser-1"); !ok {
+		t.Fatal("non-device session must keep the 30 minute TTL")
+	}
+
+	store.Set("browser-2", &OAuthSession{
+		State:     "state-2",
+		CreatedAt: time.Now().Add(-31 * time.Minute),
+	})
+	if _, ok := store.Get("browser-2"); ok {
+		t.Fatal("non-device session older than 30 minutes must expire")
+	}
 }

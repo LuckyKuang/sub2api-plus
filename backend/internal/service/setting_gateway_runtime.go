@@ -159,6 +159,16 @@ const openAICodexEnvironmentTimezoneDBTimeout = 5 * time.Second
 const openAICodexEgressCountryCacheTTL = 60 * time.Second
 const openAICodexEgressCountryErrorTTL = 5 * time.Second
 const openAICodexEgressCountryDBTimeout = 5 * time.Second
+
+const openAICodexResidencyCacheTTL = 60 * time.Second
+const openAICodexResidencyErrorTTL = 5 * time.Second
+const openAICodexResidencyDBTimeout = 5 * time.Second
+
+type cachedOpenAICodexResidency struct {
+	value     string
+	expiresAt int64
+}
+
 const openAICodexLocalGroupQuotaCacheTTL = 60 * time.Second
 const openAICodexLocalGroupQuotaErrorTTL = 5 * time.Second
 const openAICodexLocalGroupQuotaDBTimeout = 5 * time.Second
@@ -446,6 +456,59 @@ func (s *SettingService) GetOpenAICodexEgressCountry(ctx context.Context) string
 		}
 	}
 	return ""
+}
+
+// GetOpenAICodexResidency returns the global Codex residency, "off" or "us".
+// A missing key and any invalid stored value fail closed to off.
+func (s *SettingService) GetOpenAICodexResidency(ctx context.Context) string {
+	if s == nil || s.settingRepo == nil {
+		return DefaultOpenAICodexResidency
+	}
+	if cached, ok := s.openAICodexResidencyCache.Load().(*cachedOpenAICodexResidency); ok && cached != nil && time.Now().UnixNano() < cached.expiresAt {
+		return cached.value
+	}
+	result, _, _ := s.openAICodexResidencySF.Do("codex_residency", func() (any, error) {
+		if cached, ok := s.openAICodexResidencyCache.Load().(*cachedOpenAICodexResidency); ok && cached != nil && time.Now().UnixNano() < cached.expiresAt {
+			return cached, nil
+		}
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		dbCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), openAICodexResidencyDBTimeout)
+		defer cancel()
+		value, err := s.settingRepo.GetValue(dbCtx, SettingKeyOpenAICodexResidency)
+		if errors.Is(err, ErrSettingNotFound) {
+			value = DefaultOpenAICodexResidency
+		} else if err != nil {
+			slog.Warn("failed to get openai codex residency setting", "error", err)
+			entry := &cachedOpenAICodexResidency{value: DefaultOpenAICodexResidency, expiresAt: time.Now().Add(openAICodexResidencyErrorTTL).UnixNano()}
+			if cached, ok := s.openAICodexResidencyCache.Load().(*cachedOpenAICodexResidency); ok && cached != nil && cached.value != "" {
+				entry.value = cached.value
+			}
+			s.openAICodexResidencyCache.Store(entry)
+			return entry, nil
+		}
+		normalized, normErr := NormalizeOpenAICodexResidency(value)
+		if normErr != nil {
+			normalized = DefaultOpenAICodexResidency
+		}
+		entry := &cachedOpenAICodexResidency{
+			value:     normalized,
+			expiresAt: time.Now().Add(openAICodexResidencyCacheTTL).UnixNano(),
+		}
+		s.openAICodexResidencyCache.Store(entry)
+		return entry, nil
+	})
+	if entry, ok := result.(*cachedOpenAICodexResidency); ok && entry != nil && entry.value != "" {
+		return entry.value
+	}
+	return DefaultOpenAICodexResidency
+}
+
+// OpenAICodexResidencyUS reports whether Codex-protocol outbound requests
+// should send x-openai-internal-codex-residency: us.
+func (s *SettingService) OpenAICodexResidencyUS(ctx context.Context) bool {
+	return s.GetOpenAICodexResidency(ctx) == openai.CodexResidencyUS
 }
 
 // IsOpenAICodexLocalGroupQuotaEnabled reports whether Codex clients should

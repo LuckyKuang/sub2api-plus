@@ -16,7 +16,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/LuckyKuang/sub2api-plus/internal/pkg/httpclient"
 	"golang.org/x/crypto/curve25519"
 	"golang.org/x/crypto/nacl/box"
 )
@@ -185,40 +184,45 @@ func registerAgentIdentityTaskWithIdentity(ctx context.Context, account *Account
 	if account.ProxyID != nil && account.Proxy != nil {
 		proxyURL = account.Proxy.URL()
 	}
-	client, err := httpclient.GetClient(httpclient.Options{
-		ProxyURL:              proxyURL,
-		Timeout:               agentIdentityTaskRegistrationTimeout,
-		ResponseHeaderTimeout: 15 * time.Second,
-	})
+	// agent task 注册是官方 auth 面请求：默认头只有 originator / User-Agent /
+	// residency，没有独立的 version 头；同时应用 Codex 自定义 CA。
+	client, err := codexAuthPlaneHTTPClient(proxyURL, agentIdentityTaskRegistrationTimeout)
 	if err != nil {
 		return "", errors.New("invalid proxy configuration for agent task registration")
 	}
-	body, err := json.Marshal(map[string]string{
-		"timestamp": timestamp,
-		"signature": signature,
+	// 官方 RegisterTaskRequest { timestamp, signature }：用结构体固定字段顺序，
+	// 不依赖 map 的字典序序列化。
+	body, err := json.Marshal(agentIdentityTaskRegistrationRequest{
+		Timestamp: timestamp,
+		Signature: signature,
 	})
 	if err != nil {
 		return "", errors.New("failed to serialize agent task registration")
 	}
 	url := strings.TrimRight(strings.TrimSpace(openAIAgentIdentityAuthAPIBaseURL), "/") + "/v1/agent/" + key.runtimeID + "/task/register"
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(string(body)))
-	if err != nil {
-		return "", errors.New("failed to build agent task registration request")
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-	applyResolvedOpenAIOutboundIdentity(req.Header, identity, true)
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", errors.New("agent task registration request failed")
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return "", fmt.Errorf("agent task registration returned status %d", resp.StatusCode)
-	}
-	var result agentIdentityTaskRegistrationResponse
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 64*1024)).Decode(&result); err != nil {
-		return "", errors.New("agent task registration response is invalid")
+
+	// 官方 login/auth/agent_identity.rs 最多重试
+	// MAX_AGENT_IDENTITY_BOOTSTRAP_ATTEMPTS 次：瞬时 5xx/429/网络错误必须重试，
+	// 而不是一次抖动就让整个 agent 会话起不来。
+	var (
+		lastErr error
+		result  agentIdentityTaskRegistrationResponse
+	)
+	for attempt := 1; attempt <= openAIAgentIdentityTaskRegisterAttempts; attempt++ {
+		result, lastErr = postAgentIdentityTaskRegistration(ctx, client, url, body, identity)
+		if lastErr == nil {
+			break
+		}
+		if !isRetryableAgentIdentityTaskRegistrationError(lastErr) || attempt == openAIAgentIdentityTaskRegisterAttempts {
+			return "", lastErr
+		}
+		timer := time.NewTimer(agentIdentityTaskRegisterRetryBackoff * time.Duration(attempt))
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return "", ctx.Err()
+		case <-timer.C:
+		}
 	}
 	if taskID := strings.TrimSpace(result.TaskID); taskID != "" {
 		return taskID, nil
@@ -234,6 +238,75 @@ func registerAgentIdentityTaskWithIdentity(ctx context.Context, account *Account
 		return "", errors.New("agent task registration response omitted task id")
 	}
 	return decryptAgentTaskID(key, encrypted)
+}
+
+// agentIdentityTaskRegistrationRequest 固定官方 body 的字段顺序。
+type agentIdentityTaskRegistrationRequest struct {
+	Timestamp string `json:"timestamp"`
+	Signature string `json:"signature"`
+}
+
+// openAIAgentIdentityTaskRegisterAttempts 对齐官方
+// MAX_AGENT_IDENTITY_BOOTSTRAP_ATTEMPTS。
+const openAIAgentIdentityTaskRegisterAttempts = 3
+
+// agentIdentityTaskRegisterRetryBackoff 是官方 bootstrap 重试的起步退避。
+const agentIdentityTaskRegisterRetryBackoff = 200 * time.Millisecond
+
+// postAgentIdentityTaskRegistration 发起一次 task 注册请求并解出响应。
+func postAgentIdentityTaskRegistration(ctx context.Context, client *http.Client, url string, body []byte, identity openAIOutboundIdentity) (agentIdentityTaskRegistrationResponse, error) {
+	var empty agentIdentityTaskRegistrationResponse
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(string(body)))
+	if err != nil {
+		return empty, errors.New("failed to build agent task registration request")
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Originator", identity.Originator)
+	req.Header.Set("User-Agent", identity.UserAgent)
+	applyCodexResidencyHeader(ctx, req.Header)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return empty, fmt.Errorf("agent task registration request failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return empty, &agentIdentityTaskRegistrationStatusError{statusCode: resp.StatusCode}
+	}
+	var result agentIdentityTaskRegistrationResponse
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 64*1024)).Decode(&result); err != nil {
+		return empty, errors.New("agent task registration response is invalid")
+	}
+	return result, nil
+}
+
+// agentIdentityTaskRegistrationStatusError 保留状态码，供重试判定使用。
+type agentIdentityTaskRegistrationStatusError struct {
+	statusCode int
+}
+
+func (e *agentIdentityTaskRegistrationStatusError) Error() string {
+	return fmt.Sprintf("agent task registration returned status %d", e.statusCode)
+}
+
+// isRetryableAgentIdentityTaskRegistrationError 只对瞬时故障重试：网络错误、
+// 5xx 与 429。4xx 是确定性问题（签名、runtime、权限），重试无意义。
+func isRetryableAgentIdentityTaskRegistrationError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	var statusErr *agentIdentityTaskRegistrationStatusError
+	if errors.As(err, &statusErr) {
+		return statusErr.statusCode >= http.StatusInternalServerError ||
+			statusErr.statusCode == http.StatusTooManyRequests ||
+			statusErr.statusCode == http.StatusRequestTimeout
+	}
+	// 其余（构造/解码/业务）错误视为确定性问题。
+	return false
 }
 
 func ensureAgentIdentityTaskForAccountWithIdentity(ctx context.Context, repo AccountRepository, wsInvalidator agentIdentityWSConnectionInvalidator, taskMu *sync.Mutex, account *Account, expectedTaskID string, identity openAIOutboundIdentity) error {

@@ -534,7 +534,7 @@ func TestForwardAsChatCompletions_OAuthConvergesFingerprintBeforePlusCacheAuthor
 	cacheIdentity := strings.TrimSpace(gjson.GetBytes(upstream.lastBody, "prompt_cache_key").String())
 	require.NotEmpty(t, cacheIdentity)
 	require.Equal(t, cacheIdentity, upstream.lastReq.Header.Get("session-id"))
-	require.Equal(t, cacheIdentity, upstream.lastReq.Header.Get("session_id"))
+	require.Empty(t, upstream.lastReq.Header.Get("session_id"))
 	require.Equal(t, "chat-owner-installation", upstream.lastReq.Header.Get("x-codex-installation-id"))
 	require.Equal(t, "chat-owner-installation", gjson.GetBytes(upstream.lastBody, "client_metadata.x-codex-installation-id").String())
 	require.Equal(t, resolveConvergedSessionID(account), gjson.GetBytes(upstream.lastBody, "client_metadata.session_id").String())
@@ -1350,4 +1350,43 @@ func TestBuildChatStreamErrorSSE(t *testing.T) {
 	require.Equal(t, "invalid_request_error", gjson.Get(payload, "error.type").String())
 	require.Equal(t, "cyber_policy", gjson.Get(payload, "error.code").String())
 	require.Equal(t, "blocked by policy", gjson.Get(payload, "error.message").String())
+}
+
+func TestGPT6RawChatNoneToolsAreForwarded(t *testing.T) {
+	for _, model := range []string{"gpt-6-sol", "gpt-6-luna"} {
+		rec := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(rec)
+		body := []byte(`{"model":"` + model + `","reasoning_effort":"none","messages":[{"role":"user","content":"hello"}],"tools":[{"type":"function","function":{"name":"lookup","parameters":{"type":"object"}}}]}`)
+		c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
+		upstream := &httpUpstreamRecorder{resp: &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"id":"chat_1","choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1000,"completion_tokens":10,"prompt_tokens_details":{"cached_tokens":200,"cache_write_tokens":300}}}`))}}
+		svc := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream}
+		account := &Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Concurrency: 1, Credentials: map[string]any{"api_key": "fixture-key", "base_url": "https://api.openai.com"}}
+		result, err := svc.forwardAsRawChatCompletions(context.Background(), c, account, body, "")
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Equal(t, "none", gjson.GetBytes(upstream.lastBody, "reasoning_effort").String())
+		require.Len(t, gjson.GetBytes(upstream.lastBody, "tools").Array(), 1)
+		require.Equal(t, 1000, result.Usage.InputTokens)
+		require.Equal(t, 300, result.Usage.CacheCreationInputTokens)
+	}
+}
+
+func TestGPT6UsageHTTPAndWSHaveSameCacheBreakdown(t *testing.T) {
+	response := []byte(`{"model":"gpt-6-sol","usage":{"input_tokens":1000,"output_tokens":10,"input_tokens_details":{"cached_tokens":200,"cache_write_tokens":300}}}`)
+	httpUsage, ok := extractOpenAIUsageFromJSONBytes(response)
+	require.True(t, ok)
+	var wsUsage OpenAIUsage
+	parseOpenAIWSResponseUsageFromCompletedEvent(append(append([]byte(`{"type":"response.completed","response":`), response...), '}'), &wsUsage)
+	require.Equal(t, httpUsage, wsUsage)
+	require.Equal(t, 500, httpUsage.InputTokens-httpUsage.CacheReadInputTokens-httpUsage.CacheCreationInputTokens)
+}
+
+func TestGPT6ReasoningModeUsesMappedUpstream(t *testing.T) {
+	body := []byte(`{"model":"public-model","reasoning":{"mode":"pro","effort":"max"},"temperature":0.5}`)
+	out, _, err := normalizeOpenAIResponsesReasoningMode(body, "gpt-6-sol")
+	require.NoError(t, err)
+	require.Equal(t, "public-model", gjson.GetBytes(out, "model").String())
+	require.Equal(t, "pro", gjson.GetBytes(out, "reasoning.mode").String())
+	require.Equal(t, "max", gjson.GetBytes(out, "reasoning.effort").String())
+	require.False(t, gjson.GetBytes(out, "temperature").Exists())
 }

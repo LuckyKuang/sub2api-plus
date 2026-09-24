@@ -150,6 +150,11 @@ var duplicateAccountDiscardedExtraKeys = map[string]struct{}{
 	"codex_7d_reset_after_seconds":           {},
 	"codex_7d_window_minutes":                {},
 	"codex_7d_reset_at":                      {},
+	"codex_limit_name":                       {},
+	"codex_credits_has_credits":              {},
+	"codex_credits_unlimited":                {},
+	"codex_credits_balance":                  {},
+	"codex_rate_limit_families":              {},
 }
 
 func duplicateAccountExtra(value map[string]any) (map[string]any, error) {
@@ -1783,6 +1788,11 @@ func (s *adminServiceImpl) ForceOpenAIPrivacy(ctx context.Context, account *Acco
 	}
 
 	chatGPTAccountID, _ := account.Credentials["chatgpt_account_id"].(string)
+	var settings *SettingService
+	if s != nil {
+		settings = s.settingService
+	}
+	ctx = withManagedOpenAICodexResidency(ctx, settings)
 	mode := disableOpenAITraining(ctx, s.privacyClientFactory, token, proxyURL, chatGPTAccountID, s.resolveOpenAIOutboundIdentity(ctx, account))
 	if mode == "" {
 		return ""

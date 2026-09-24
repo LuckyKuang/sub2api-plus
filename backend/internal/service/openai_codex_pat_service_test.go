@@ -45,7 +45,9 @@ func TestOpenAIOAuthService_ValidateCodexPersonalAccessToken(t *testing.T) {
 	require.Equal(t, "Bearer at-test-token", gotAuthorization)
 	require.Equal(t, openai.CodexDefaultOriginator, gotOriginator)
 	require.Equal(t, DefaultOpenAICodexUserAgent, gotUserAgent)
-	require.Equal(t, DefaultOpenAICodexVersion, gotVersion)
+	// 官方 auth 面（personal_access_token.rs 走 create_default_auth_client）不发
+	// 独立的 version 头，Plus 也不再发。
+	require.Empty(t, gotVersion, "the official auth surface sends no version header")
 	require.Equal(t, OpenAIAuthModePersonalAccessToken, info.AuthMode)
 	require.Equal(t, "user@example.com", info.Email)
 	require.Equal(t, "user-123", info.ChatGPTUserID)

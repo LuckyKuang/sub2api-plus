@@ -468,13 +468,19 @@ func TestOpenAIGatewayService_Forward_WSv2Dial426FallbackHTTP(t *testing.T) {
 	}
 
 	body := []byte(`{"model":"gpt-5.1","stream":false,"previous_response_id":"resp_426","input":[{"type":"input_text","text":"hello"}]}`)
+	// Official client.rs maps a refused WebSocket upgrade to FallbackToHttp: the
+	// current request silently continues over HTTP instead of surfacing 426.
 	result, err := svc.Forward(context.Background(), c, account, body)
-	require.Error(t, err)
-	require.Nil(t, result)
-	require.Contains(t, err.Error(), "upgrade_required")
-	require.Nil(t, upstream.lastReq, "WS 模式下不应再回退 HTTP")
-	require.Equal(t, http.StatusUpgradeRequired, rec.Code)
-	require.Contains(t, rec.Body.String(), "426")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, upstream.lastReq, "a refused WS upgrade must fall back to HTTP for this request")
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.NotContains(t, rec.Body.String(), "426")
+
+	// The account is marked as falling back so later attempts skip WebSocket
+	// during the cooldown instead of re-hitting 426.
+	require.True(t, svc.isOpenAIWSFallbackCooling(account.ID),
+		"a refused WS upgrade must mark fallback cooling")
 }
 
 func TestOpenAIGatewayService_Forward_WSv2FallbackCoolingSkipWS(t *testing.T) {
@@ -531,13 +537,12 @@ func TestOpenAIGatewayService_Forward_WSv2FallbackCoolingSkipWS(t *testing.T) {
 
 	svc.markOpenAIWSFallbackCooling(account.ID, "upgrade_required")
 	body := []byte(`{"model":"gpt-5.1","stream":false,"previous_response_id":"resp_cooling","input":[{"type":"input_text","text":"hello"}]}`)
+	// 冷却窗内不再尝试 WS 拨号（官方 client.rs 对升级拒绝是会话级永久回退），
+	// 请求直接走 HTTP 转发而不是每个请求各自再撞一次 426。
 	result, err := svc.Forward(context.Background(), c, account, body)
-	require.Error(t, err)
-	require.Nil(t, result)
-	require.Nil(t, upstream.lastReq, "WS 模式下不应再回退 HTTP")
-
-	_, ok := c.Get("openai_ws_fallback_cooling")
-	require.False(t, ok, "已移除 fallback cooling 快捷回退路径")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, upstream.lastReq, "冷却窗内必须跳过 WS，直接走 HTTP")
 }
 
 func TestOpenAIGatewayService_Forward_ReturnErrorWhenOnlyWSv1Enabled(t *testing.T) {
@@ -1896,4 +1901,149 @@ func TestOpenAIGatewayService_Forward_WSv2InvalidEncryptedContentKeepsPreviousRe
 	require.Equal(t, "call_123", gjson.GetBytes(requests[1], `input.0.call_id`).String())
 	require.Equal(t, "ok", gjson.GetBytes(requests[1], `input.0.output`).String())
 	require.Equal(t, "resp_prev_function_call", gjson.GetBytes(requests[1], "previous_response_id").String())
+}
+
+// A WebSocket failure that is NOT a transport refusal must still surface the
+// hard error, so the fallback is scoped to upgrade refusals only.
+func TestOpenAIGatewayService_Forward_WSv2NonTransportErrorStillFailsHard(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	wsServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`unauthorized`))
+	}))
+	defer wsServer.Close()
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/openai/v1/responses", nil)
+	c.Request.Header.Set("User-Agent", "custom-client/1.0")
+
+	upstream := &httpUpstreamRecorder{
+		resp: &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"usage":{"input_tokens":1,"output_tokens":1}}`)),
+		},
+	}
+
+	cfg := &config.Config{}
+	cfg.Security.URLAllowlist.Enabled = false
+	cfg.Security.URLAllowlist.AllowInsecureHTTP = true
+	cfg.Gateway.OpenAIWS.Enabled = true
+	cfg.Gateway.OpenAIWS.OAuthEnabled = true
+	cfg.Gateway.OpenAIWS.APIKeyEnabled = true
+	cfg.Gateway.OpenAIWS.ResponsesWebsocketsV2 = true
+	cfg.Gateway.OpenAIWS.FallbackCooldownSeconds = 1
+
+	svc := &OpenAIGatewayService{
+		cfg:              cfg,
+		httpUpstream:     upstream,
+		openaiWSResolver: NewOpenAIWSProtocolResolver(cfg),
+	}
+	account := &Account{
+		ID:          13,
+		Name:        "openai-apikey-auth-fail",
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeAPIKey,
+		Concurrency: 1,
+		Credentials: map[string]any{"api_key": "sk-test", "base_url": wsServer.URL},
+		Extra:       map[string]any{"responses_websockets_v2_enabled": true},
+	}
+
+	body := []byte(`{"model":"gpt-5.1","stream":false,"input":[{"type":"input_text","text":"hello"}]}`)
+	result, err := svc.Forward(context.Background(), c, account, body)
+	require.Error(t, err)
+	require.Nil(t, result)
+	require.Contains(t, err.Error(), "auth_failed")
+	require.Nil(t, upstream.lastReq, "an auth failure must not fall back to HTTP")
+	require.False(t, svc.isOpenAIWSFallbackCooling(account.ID),
+		"a non-transport failure must not mark fallback cooling")
+}
+
+// prewarm 生成会把回退原因包装成 prewarm_<reason>；不剥离前缀会让预热路径上的
+// 升级拒绝漏判成硬 426，官方 FallbackToHttp 因此失效。
+func TestIsOpenAIWSTransportUnsupportedReason(t *testing.T) {
+	for _, reason := range []string{
+		"upgrade_required", "ws_unsupported",
+		"prewarm_upgrade_required", "prewarm_ws_unsupported",
+		"  prewarm_upgrade_required  ",
+	} {
+		require.True(t, isOpenAIWSTransportUnsupportedReason(reason), "%q must count as a transport refusal", reason)
+	}
+	for _, reason := range []string{
+		"", "auth_failed", "upstream_5xx", "prewarm_auth_failed", "prewarm_",
+		"ws_connection_limit_reached", "previous_response_not_found",
+	} {
+		require.False(t, isOpenAIWSTransportUnsupportedReason(reason), "%q must not count as a transport refusal", reason)
+	}
+}
+
+// 一次被拒绝的升级必须记录 ops upstream-error 事件并让账号进入冷却窗，
+// 使后续请求改走 HTTP。
+func TestOpenAIGatewayService_Forward_WSv2UpgradeRefusalRecordsOpsAndCools(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ws426Server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUpgradeRequired)
+		_, _ = w.Write([]byte(`upgrade required`))
+	}))
+	defer ws426Server.Close()
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/openai/v1/responses", nil)
+	c.Request.Header.Set("User-Agent", "custom-client/1.0")
+
+	upstream := &httpUpstreamRecorder{
+		resp: &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body: io.NopCloser(strings.NewReader(
+				`{"usage":{"input_tokens":1,"output_tokens":1,"input_tokens_details":{"cached_tokens":0}}}`,
+			)),
+		},
+	}
+
+	cfg := &config.Config{}
+	cfg.Security.URLAllowlist.Enabled = false
+	cfg.Security.URLAllowlist.AllowInsecureHTTP = true
+	cfg.Gateway.OpenAIWS.Enabled = true
+	cfg.Gateway.OpenAIWS.OAuthEnabled = true
+	cfg.Gateway.OpenAIWS.APIKeyEnabled = true
+	cfg.Gateway.OpenAIWS.ResponsesWebsocketsV2 = true
+	cfg.Gateway.OpenAIWS.FallbackCooldownSeconds = 30
+
+	svc := &OpenAIGatewayService{
+		cfg:              cfg,
+		httpUpstream:     upstream,
+		openaiWSResolver: NewOpenAIWSProtocolResolver(cfg),
+	}
+	account := &Account{
+		ID:          31,
+		Name:        "openai-apikey-426-ops",
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeAPIKey,
+		Concurrency: 1,
+		Credentials: map[string]any{"api_key": "sk-test", "base_url": ws426Server.URL},
+		Extra:       map[string]any{"responses_websockets_v2_enabled": true},
+	}
+
+	body := []byte(`{"model":"gpt-5.1","stream":false,"input":[{"type":"input_text","text":"hello"}]}`)
+	result, err := svc.Forward(context.Background(), c, account, body)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, upstream.lastReq, "a refused WS upgrade must fall back to HTTP")
+
+	// The fallback is observable in the ops upstream-error stream.
+	rawEvents, ok := c.Get(OpsUpstreamErrorsKey)
+	require.True(t, ok, "the WS→HTTP fallback must record an ops event")
+	events, ok := rawEvents.([]*OpsUpstreamErrorEvent)
+	require.True(t, ok)
+	require.Len(t, events, 1)
+	require.Equal(t, "ws_fallback", events[0].Kind)
+	require.Equal(t, http.StatusUpgradeRequired, events[0].UpstreamStatusCode)
+	require.Equal(t, "upgrade_required", events[0].Reason)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	// The account is now cooling, so a follow-up request skips WebSocket entirely.
+	require.True(t, svc.isOpenAIWSFallbackCooling(account.ID))
 }

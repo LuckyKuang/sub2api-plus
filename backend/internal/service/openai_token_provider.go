@@ -18,6 +18,10 @@ const (
 	openAILockMaxAttempts     = 5
 	openAILockJitterRatio     = 0.2
 	openAILockWarnThresholdMs = 250
+	// openAITokenForceRefreshWindow is far beyond any token lifetime, so the
+	// shared refresh path's NeedsRefresh check becomes unconditional. Used by
+	// the upstream-401 same-account recovery.
+	openAITokenForceRefreshWindow = 100 * 365 * 24 * time.Hour
 )
 
 // OpenAITokenRuntimeMetrics is a snapshot of refresh and lock contention metrics.
@@ -268,6 +272,80 @@ func (p *OpenAITokenProvider) GetAccessToken(ctx context.Context, account *Accou
 	}
 
 	return accessToken, nil
+}
+
+// ForceRefreshToken performs a same-account credential recovery for the
+// upstream-401 path: it drops the cached access token and refreshes the
+// credential even when the stored token is not near expiry (the upstream
+// rejected it, e.g. after server-side revocation). Returns the new access
+// token. When another worker holds the refresh lock, the token it commits is
+// awaited from the cache instead. When the shared refresh path decides that no
+// refresh is necessary, the recovery fails instead of replaying the credential
+// the upstream just rejected.
+func (p *OpenAITokenProvider) ForceRefreshToken(ctx context.Context, account *Account) (string, error) {
+	p.ensureMetrics()
+	if p == nil {
+		return "", errors.New("openai token provider is nil")
+	}
+	if account == nil {
+		return "", errors.New("account is nil")
+	}
+	if account.Platform != PlatformOpenAI || account.Type != AccountTypeOAuth {
+		return "", errors.New("not an openai oauth account")
+	}
+	if account.IsOpenAIPersonalAccessToken() {
+		return "", errors.New("personal access tokens have no refresh lifecycle")
+	}
+	if strings.TrimSpace(account.GetOpenAIRefreshToken()) == "" {
+		return "", errors.New("no refresh token available")
+	}
+	if p.refreshAPI == nil || p.executor == nil {
+		return "", errors.New("token refresh is not configured")
+	}
+	cacheKey := OpenAITokenCacheKey(account)
+	// The upstream rejected the cached credential; never replay it.
+	if p.tokenCache != nil {
+		if err := p.tokenCache.DeleteAccessToken(ctx, cacheKey); err != nil {
+			slog.Warn("openai_token_force_refresh_cache_delete_failed", "account_id", account.ID, "error", err)
+		}
+	}
+	p.metrics.refreshRequests.Add(1)
+	p.metrics.touchNow()
+	// A window far beyond any token lifetime makes NeedsRefresh unconditional,
+	// turning the shared refresh path into a force refresh.
+	result, err := p.refreshAPI.RefreshIfNeeded(ctx, account, p.executor, openAITokenForceRefreshWindow)
+	if err != nil {
+		p.metrics.refreshFailure.Add(1)
+		return "", err
+	}
+	if result != nil && result.LockHeld {
+		token, waitErr := p.waitForTokenAfterLockRace(ctx, cacheKey)
+		if waitErr != nil {
+			return "", waitErr
+		}
+		if strings.TrimSpace(token) == "" {
+			return "", errors.New("concurrent refresh committed no token")
+		}
+		p.metrics.refreshSuccess.Add(1)
+		return token, nil
+	}
+	if result == nil || result.Account == nil {
+		return "", errors.New("token refresh returned no account")
+	}
+	if !result.Refreshed && !result.LockHeld {
+		// The shared refresh path decided no refresh was necessary (e.g. the
+		// account carries no expires_at, so the window comparison is skipped).
+		// Retrying with that token would replay the credential the upstream
+		// just rejected, so report the recovery as failed and let the caller
+		// fail over instead.
+		return "", errors.New("credential was not refreshed; refusing to retry with the rejected token")
+	}
+	token := strings.TrimSpace(result.Account.GetOpenAIAccessToken())
+	if token == "" {
+		return "", errors.New("refreshed account has no access token")
+	}
+	p.metrics.refreshSuccess.Add(1)
+	return token, nil
 }
 
 // disableAccountMissingRefreshToken 在请求路径上发现 OpenAI OAuth 账号

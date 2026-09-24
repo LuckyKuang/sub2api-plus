@@ -202,6 +202,11 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 		return nil, err
 	}
 	settings.OpenAICodexEgressCountry = normalizedOpenAICodexEgressCountry
+	normalizedOpenAICodexResidency, err := NormalizeOpenAICodexResidency(settings.OpenAICodexResidency)
+	if err != nil {
+		return nil, err
+	}
+	settings.OpenAICodexResidency = normalizedOpenAICodexResidency
 	settings.PaymentVisibleMethodAlipaySource = alipaySource
 	settings.PaymentVisibleMethodWxpaySource = wxpaySource
 	settings.WeChatConnectAppID = strings.TrimSpace(settings.WeChatConnectAppID)
@@ -569,10 +574,14 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeyOpenAICodexUserAgent] = strings.TrimSpace(settings.OpenAICodexUserAgent)
 	updates[SettingKeyOpenAICodexEnvironmentTimezone] = strings.TrimSpace(settings.OpenAICodexEnvironmentTimezone)
 	updates[SettingKeyOpenAICodexEgressCountry] = strings.TrimSpace(settings.OpenAICodexEgressCountry)
+	updates[SettingKeyOpenAICodexResidency] = settings.OpenAICodexResidency
 	updates[SettingKeyCodexLegacyClientProfileCompatibilityEnabled] = strconv.FormatBool(settings.CodexLegacyClientProfileCompatibilityEnabled)
 	updates[SettingKeyOpenAICodexLocalGroupQuotaEnabled] = strconv.FormatBool(settings.OpenAICodexLocalGroupQuotaEnabled)
 	updates[SettingKeyOpenAICodexClientVersion] = NormalizeCodexClientVersion(settings.OpenAICodexClientVersion)
 	updates[SettingKeyOpenAICodexVersionAutoSyncEnabled] = strconv.FormatBool(settings.OpenAICodexVersionAutoSyncEnabled)
+	updates[SettingKeyClaudeCodeClientVersion] = NormalizeClaudeCodeClientVersion(settings.ClaudeCodeClientVersion)
+	updates[SettingKeyClaudeCodeVersionAutoSyncEnabled] = strconv.FormatBool(settings.ClaudeCodeVersionAutoSyncEnabled)
+	// SettingKeyClaudeCodeClientVersionSynced 由同步任务独占写入。
 	// SettingKeyOpenAICodexClientVersionSynced、CheckedAt、SyncError 由同步任务独占写入，
 	// 此处不得覆盖，否则面板保存会把同步结果和时间清空。
 	// codex_cli_only profile policy
@@ -834,6 +843,11 @@ func (s *SettingService) refreshCachedSettings(settings *SystemSettings) {
 		value:     strings.TrimSpace(settings.OpenAICodexEgressCountry),
 		expiresAt: time.Now().Add(openAICodexEgressCountryCacheTTL).UnixNano(),
 	})
+	s.openAICodexResidencySF.Forget("codex_residency")
+	s.openAICodexResidencyCache.Store(&cachedOpenAICodexResidency{
+		value:     settings.OpenAICodexResidency,
+		expiresAt: time.Now().Add(openAICodexResidencyCacheTTL).UnixNano(),
+	})
 	s.openAICodexLocalQuotaSF.Forget("openai_codex_local_group_quota")
 	s.openAICodexLocalQuotaCache.Store(&cachedOpenAICodexLocalGroupQuota{
 		enabled:       settings.OpenAICodexLocalGroupQuotaEnabled,
@@ -843,6 +857,7 @@ func (s *SettingService) refreshCachedSettings(settings *SystemSettings) {
 	// 版本号缓存只做失效，不在此重算：生效值还取决于自动同步写入的 synced 键，
 	// 这里没有它的最新值，重算会把同步结果覆盖成陈旧值。
 	s.InvalidateOpenAICodexClientVersionCache()
+	s.InvalidateClaudeCodeClientVersionCache()
 	openAIAdvancedSchedulerSettingSF.Forget(openAIAdvancedSchedulerSettingKey)
 	openAIAdvancedSchedulerSettingCache.Store(&cachedOpenAIAdvancedSchedulerSetting{
 		lowUpstreamRatePriorityEnabled: settings.OpenAILowUpstreamRatePriorityEnabled,

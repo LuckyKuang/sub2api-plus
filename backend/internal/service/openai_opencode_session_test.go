@@ -309,6 +309,139 @@ func (u *openCodeSessionHTTPUpstream) DoWithTLS(req *http.Request, proxyURL stri
 	return u.Do(req, proxyURL, accountID, concurrency)
 }
 
+func TestApplyOpenCodeUpstreamUserAgent(t *testing.T) {
+	tests := []struct {
+		name      string
+		account   *Account
+		targetURL string
+		seed      string
+		want      string
+	}{
+		{
+			name:      "opencode go account canonicalizes passthrough UA",
+			account:   &Account{Platform: PlatformOpenCodeGo, Type: AccountTypeAPIKey},
+			targetURL: "https://opencode.ai/zen/go/v1/chat/completions",
+			seed:      "Python-urllib/3.13",
+			want:      openCodeUpstreamUserAgent,
+		},
+		{
+			name:      "opencode go account canonicalizes on custom relay too",
+			account:   &Account{Platform: PlatformOpenCodeGo, Type: AccountTypeAPIKey},
+			targetURL: "https://relay.example.com/v1/chat/completions",
+			seed:      "Python-urllib/3.13",
+			want:      openCodeUpstreamUserAgent,
+		},
+		{
+			name:      "non-opencode account targeting official host",
+			account:   &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey},
+			targetURL: "https://opencode.ai/zen/go/v1/responses",
+			seed:      "Python-urllib/3.13",
+			want:      openCodeUpstreamUserAgent,
+		},
+		{
+			name:      "official command code host uses canonical Codex UA",
+			account:   &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey},
+			targetURL: "https://api.commandcode.ai/provider/v1/responses",
+			seed:      "Python-urllib/3.13",
+			want:      CodexCanonicalUserAgent(),
+		},
+		{
+			name:      "command code lookalike host keeps client UA",
+			account:   &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey},
+			targetURL: "https://api.commandcode.ai.evil.example/provider/v1/responses",
+			seed:      "Python-urllib/3.13",
+			want:      "Python-urllib/3.13",
+		},
+		{
+			name:      "command code subdomain keeps client UA",
+			account:   &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey},
+			targetURL: "https://proxy.api.commandcode.ai/provider/v1/responses",
+			seed:      "Python-urllib/3.13",
+			want:      "Python-urllib/3.13",
+		},
+		{
+			name:      "insecure command code host keeps client UA",
+			account:   &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey},
+			targetURL: "http://api.commandcode.ai/provider/v1/responses",
+			seed:      "Python-urllib/3.13",
+			want:      "Python-urllib/3.13",
+		},
+		{
+			name:      "non-official account and host keeps client UA",
+			account:   &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey},
+			targetURL: "https://api.openai.com/v1/chat/completions",
+			seed:      "Python-urllib/3.13",
+			want:      "Python-urllib/3.13",
+		},
+		{
+			name:      "lookalike host does not count as official",
+			account:   &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey},
+			targetURL: "https://opencode.ai.evil.example/v1/chat/completions",
+			seed:      "Python-urllib/3.13",
+			want:      "Python-urllib/3.13",
+		},
+		{
+			name:      "missing UA is filled for opencode account",
+			account:   &Account{Platform: PlatformOpenCodeGo, Type: AccountTypeAPIKey},
+			targetURL: "https://opencode.ai/zen/go/v1/messages",
+			want:      openCodeUpstreamUserAgent,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			headers := make(http.Header)
+			if tt.seed != "" {
+				headers.Set("User-Agent", tt.seed)
+			}
+			applyOpenCodeUpstreamUserAgent(tt.account, tt.targetURL, headers)
+			require.Equal(t, tt.want, headers.Get("User-Agent"))
+		})
+	}
+}
+
+func TestApplyOpenCodeUpstreamUserAgentDropsNonCanonicalKeyVariants(t *testing.T) {
+	headers := http.Header{"user-agent": []string{"Python-urllib/3.13"}}
+	applyOpenCodeUpstreamUserAgent(&Account{Platform: PlatformOpenCodeGo, Type: AccountTypeAPIKey},
+		"https://opencode.ai/zen/go/v1/chat/completions", headers)
+
+	count := 0
+	for key, values := range headers {
+		if strings.EqualFold(key, "User-Agent") {
+			count += len(values)
+			require.Equal(t, []string{openCodeUpstreamUserAgent}, values)
+		}
+	}
+	require.Equal(t, 1, count)
+}
+
+func TestApplyOpenCodeUpstreamUserAgentNilSafe(t *testing.T) {
+	applyOpenCodeUpstreamUserAgent(&Account{Platform: PlatformOpenCodeGo, Type: AccountTypeAPIKey},
+		"https://opencode.ai/zen/go/v1/chat/completions", nil)
+}
+
+func TestCommandCodeUpstreamUserAgentCanonicalizedAfterPassthrough(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	svc := openCodeSessionTestService()
+	account := &Account{
+		ID:       2,
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeAPIKey,
+		Credentials: map[string]any{
+			"base_url": "https://api.commandcode.ai/provider/v1",
+		},
+	}
+	c := newOpenCodeSessionTestContext(t, "")
+	c.Request.Header.Set("User-Agent", "Python-urllib/3.13")
+
+	req, err := svc.buildUpstreamRequest(
+		context.Background(), c, account,
+		[]byte(`{"model":"gpt-5","input":"hello"}`), "token", false, "", false,
+	)
+	require.NoError(t, err)
+	require.Equal(t, CodexCanonicalUserAgent(), req.Header.Get("User-Agent"))
+}
+
 func TestOpenCodeSessionForwardedByRawChatCompletionsAfterAccountOverride(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	upstream := &openCodeSessionHTTPUpstream{}

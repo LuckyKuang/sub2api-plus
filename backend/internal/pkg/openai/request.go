@@ -171,12 +171,13 @@ func CodexUserAgentVersion(userAgent string) string {
 }
 
 // SetCodexUserAgentVersion 用 version 重建 Codex 形态 UA 中的版本声明，其余部分
-// （客户端名、OS / 架构 / 终端指纹）原样保留；UA 不是 `{client}/{version}` 形态时返回空串，
-// 由调用方决定整体回退。
+// （客户端名、OS / 架构 / 终端指纹、官方 ` ({suffix})` 后缀）原样保留；UA 不是
+// `{client}/{version}` 形态时返回空串，由调用方决定整体回退。网关不生成后缀。
 //
-// 当尾部 `(name; version)` 声明与首段为同一个已认可客户端身份时，版本同步会一并更新；
-// 这包括显式启用的旧版兼容身份。尾部绝不会用于恢复或改变首段身份，且不一致的尾部保持
-// 原样，避免误伤 OS 组（如 `(Ubuntu 22.4.0; x86_64)`）。
+// 当 `(name; version)` 声明与首段为同一个已认可客户端身份时，版本同步会一并更新；
+// 这包括显式启用的旧版兼容身份。该组后面的官方后缀（如 `(mcp: server-a)`）保持原样。
+// 尾部绝不会用于恢复或改变首段身份，且不一致的括号组保持原样，避免误伤 OS 组
+// （如 `(Ubuntu 22.4.0; x86_64)`）。
 func SetCodexUserAgentVersion(userAgent, version string) string {
 	ua := strings.TrimSpace(userAgent)
 	version = strings.TrimSpace(version)
@@ -202,32 +203,51 @@ func SetCodexUserAgentVersion(userAgent, version string) string {
 	return rewriteCodexUATrailerVersion(client+"/"+version+tail, version)
 }
 
-// rewriteCodexUATrailerVersion updates a trailing identity declaration only
-// when it exactly agrees with the leading configured profile. It never uses a
-// trailer to recover, change, or bless the leading identity.
+// rewriteCodexUATrailerVersion updates an identity declaration only when it
+// exactly agrees with the leading configured profile. It never uses a trailer
+// to recover, change, or bless the leading identity. A trailing official
+// suffix group such as `(mcp: server-a)` is not an identity declaration and
+// stays byte-for-byte; the identity group before it is still updated.
 func rewriteCodexUATrailerVersion(ua, version string) string {
-	open := strings.LastIndex(ua, "(")
-	if open < 0 {
-		return ua
-	}
-	closeIdx := strings.Index(ua[open+1:], ")")
-	if closeIdx < 0 {
-		return ua
-	}
-	inner := ua[open+1 : open+1+closeIdx]
-	semi := strings.Index(inner, ";")
-	if semi < 0 {
-		return ua
-	}
-	name := strings.TrimSpace(inner[:semi])
 	slash := strings.IndexByte(ua, '/')
-	if slash <= 0 || name == "" || name != strings.TrimSpace(ua[:slash]) {
+	if slash <= 0 {
 		return ua
 	}
-	if _, _, ok := PairConfiguredCodexClientIdentity(name+"/"+version, true); !ok {
+	client := strings.TrimSpace(ua[:slash])
+	if client == "" {
 		return ua
 	}
-	return ua[:open+1] + name + "; " + version + ua[open+1+closeIdx:]
+	type parenSpan struct{ open, close int }
+	var groups []parenSpan
+	for i := 0; i < len(ua); i++ {
+		if ua[i] != '(' {
+			continue
+		}
+		rel := strings.IndexByte(ua[i+1:], ')')
+		if rel < 0 {
+			break
+		}
+		closeIdx := i + 1 + rel
+		groups = append(groups, parenSpan{open: i, close: closeIdx})
+		i = closeIdx
+	}
+	for gi := len(groups) - 1; gi >= 0; gi-- {
+		group := groups[gi]
+		inner := ua[group.open+1 : group.close]
+		semi := strings.Index(inner, ";")
+		if semi < 0 {
+			continue
+		}
+		name := strings.TrimSpace(inner[:semi])
+		if name == "" || name != client {
+			continue
+		}
+		if _, _, ok := PairConfiguredCodexClientIdentity(name+"/"+version, true); !ok {
+			return ua
+		}
+		return ua[:group.open+1] + name + "; " + version + ua[group.close:]
+	}
+	return ua
 }
 
 // codexEngineVersionPattern 提取版本段开头的三段数字 X.Y.Z（忽略 -alpha 等后缀）。

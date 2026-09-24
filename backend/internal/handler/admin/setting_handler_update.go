@@ -258,6 +258,7 @@ type UpdateSettingsRequest struct {
 	OpenAICodexUserAgent                         *string `json:"openai_codex_user_agent"`
 	OpenAICodexEnvironmentTimezone               *string `json:"openai_codex_environment_timezone"`
 	OpenAICodexEgressCountry                     *string `json:"openai_codex_egress_country"`
+	OpenAICodexResidency                         *string `json:"codex_residency"`
 	CodexLegacyClientProfileCompatibilityEnabled *bool   `json:"codex_legacy_client_profile_compatibility_enabled"`
 	OpenAICodexLocalGroupQuotaEnabled            *bool   `json:"openai_codex_local_group_quota_enabled"`
 	OpenAICodexClientVersion                     *string `json:"openai_codex_client_version"`
@@ -1514,6 +1515,14 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		}
 		req.OpenAICodexEgressCountry = &normalized
 	}
+	if req.OpenAICodexResidency != nil {
+		normalized, err := service.NormalizeOpenAICodexResidency(*req.OpenAICodexResidency)
+		if err != nil {
+			response.Error(c, http.StatusBadRequest, "codex_residency "+err.Error())
+			return
+		}
+		req.OpenAICodexResidency = &normalized
+	}
 	if req.OpenAICodexClientVersion != nil {
 		// 该值会被拼进出站 User-Agent 与 version 头，必须是合法版本号；空串表示跟随自动同步。
 		normalized := strings.TrimSpace(*req.OpenAICodexClientVersion)
@@ -1850,6 +1859,12 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 				return *req.OpenAICodexEgressCountry
 			}
 			return previousSettings.OpenAICodexEgressCountry
+		}(),
+		OpenAICodexResidency: func() string {
+			if req.OpenAICodexResidency != nil {
+				return *req.OpenAICodexResidency
+			}
+			return previousSettings.OpenAICodexResidency
 		}(),
 		CodexLegacyClientProfileCompatibilityEnabled: func() bool {
 			if req.CodexLegacyClientProfileCompatibilityEnabled != nil {
@@ -2441,6 +2456,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		OpenAICodexUserAgent:                                   updatedSettings.OpenAICodexUserAgent,
 		OpenAICodexEnvironmentTimezone:                         updatedSettings.OpenAICodexEnvironmentTimezone,
 		OpenAICodexEgressCountry:                               updatedSettings.OpenAICodexEgressCountry,
+		OpenAICodexResidency:                                   updatedSettings.OpenAICodexResidency,
 		CodexLegacyClientProfileCompatibilityEnabled:           updatedSettings.CodexLegacyClientProfileCompatibilityEnabled,
 		OpenAICodexLocalGroupQuotaEnabled:                      updatedSettings.OpenAICodexLocalGroupQuotaEnabled,
 		OpenAICodexClientVersion:                               updatedSettings.OpenAICodexClientVersion,

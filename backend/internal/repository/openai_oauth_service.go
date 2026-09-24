@@ -5,22 +5,90 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/url"
+	"os"
 	"strings"
 	"time"
 
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/logger"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
 	"github.com/LuckyKuang/sub2api-plus/internal/service"
 	"github.com/imroc/req/v3"
+	"go.uber.org/zap"
 )
 
 // NewOpenAIOAuthClient creates a new OpenAI OAuth client
 func NewOpenAIOAuthClient() service.OpenAIOAuthClient {
+	tokenURL := resolveOpenAIOAuthURLOverride("CODEX_REFRESH_TOKEN_URL_OVERRIDE", openai.TokenURL)
 	return &openaiOAuthService{
-		tokenURL:          openai.TokenURL,
-		revokeURL:         openai.RevokeURL,
+		tokenURL:          tokenURL,
+		revokeURL:         resolveOpenAIOAuthRevokeURL(tokenURL),
 		deviceAuthAPIBase: openai.DeviceAuthAPIBase,
 	}
+}
+
+// resolveOpenAIOAuthURLOverride 读取官方 env 覆盖名；空值或非法值回退默认并告警。
+func resolveOpenAIOAuthURLOverride(env, fallback string) string {
+	raw := strings.TrimSpace(os.Getenv(env))
+	if raw == "" {
+		return fallback
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || !parsed.IsAbs() || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+		logger.L().Warn("openai_oauth_url_override_invalid",
+			zap.String("component", "repository.openai_oauth"),
+			zap.String("env", env),
+			zap.String("value", raw),
+			zap.String("fallback", fallback))
+		return fallback
+	}
+	return raw
+}
+
+// codexRevokeTokenPath 是官方 revoke 端点的固定路径（官方 revoke.rs
+// derive_revoke_token_endpoint 同样只改 path、清空 query）。
+const codexRevokeTokenPath = "/oauth/revoke"
+
+// openAICodexRevokeTimeout 对齐官方 auth/revoke.rs 的 REVOKE_HTTP_TIMEOUT：
+// 吊销是登出/删号路径上的同步步骤，不该占用凭据面的 120s 预算。
+const openAICodexRevokeTimeout = 10 * time.Second
+
+// resolveOpenAIOAuthRevokeURL 按官方 revoke.rs 的三级解析得出吊销端点：显式
+// CODEX_REVOKE_TOKEN_URL_OVERRIDE 优先；否则从已解析的 refresh 端点把 path
+// 改写为 /oauth/revoke（同一台覆盖主机上的官方派生规则）；都没有则回退默认
+// 主机。企业/测试环境只配了 refresh override 时，吊销必须打到同一主机。
+func resolveOpenAIOAuthRevokeURL(refreshURL string) string {
+	if raw := strings.TrimSpace(os.Getenv("CODEX_REVOKE_TOKEN_URL_OVERRIDE")); raw != "" {
+		return resolveOpenAIOAuthURLOverride("CODEX_REVOKE_TOKEN_URL_OVERRIDE", openai.RevokeURL)
+	}
+	if derived := deriveOpenAIOAuthRevokeURL(refreshURL); derived != "" {
+		logger.L().Info("openai_oauth_revoke_url_derived_from_refresh_override",
+			zap.String("component", "repository.openai_oauth"),
+			zap.String("refresh_url", refreshURL),
+			zap.String("revoke_url", derived))
+		return derived
+	}
+	return openai.RevokeURL
+}
+
+// deriveOpenAIOAuthRevokeURL 把 refresh 端点改写为官方 revoke 端点；refresh
+// 端点仍是官方默认地址时返回空串，让调用方回退默认 revoke 主机。
+func deriveOpenAIOAuthRevokeURL(refreshURL string) string {
+	trimmed := strings.TrimSpace(refreshURL)
+	if trimmed == "" || trimmed == openai.TokenURL {
+		return ""
+	}
+	parsed, err := url.Parse(trimmed)
+	if err != nil || !parsed.IsAbs() || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+		return ""
+	}
+	parsed.Path = codexRevokeTokenPath
+	parsed.RawPath = ""
+	parsed.RawQuery = ""
+	parsed.ForceQuery = false
+	parsed.Fragment = ""
+	return parsed.String()
 }
 
 type openaiOAuthService struct {
@@ -42,7 +110,8 @@ func (s *openaiOAuthService) ExchangeCodeWithIdentity(ctx context.Context, code,
 }
 
 func (s *openaiOAuthService) exchangeCode(ctx context.Context, code, codeVerifier, redirectURI, proxyURL, clientID, userAgent, originator, version string) (*openai.TokenResponse, error) {
-	client, err := createOpenAIReqClient(proxyURL)
+	// 换票走 raw client（无 cookie jar，官方 raw client 同样无 cookie）。
+	client, err := createOpenAIRawReqClient(proxyURL)
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_OAUTH_CLIENT_INIT_FAILED", "create HTTP client: %v", err)
 	}
@@ -106,7 +175,7 @@ func (s *openaiOAuthService) refreshTokenWithClientID(ctx context.Context, refre
 	if clientID == "" {
 		clientID = openai.ClientID
 	}
-	client, err := createOpenAIReqClient(proxyURL)
+	client, err := createOpenAICredentialReqClient(proxyURL)
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_OAUTH_CLIENT_INIT_FAILED", "create HTTP client: %v", err)
 	}
@@ -121,11 +190,15 @@ func (s *openaiOAuthService) refreshTokenWithClientID(ctx context.Context, refre
 
 	userAgent, originator, version = resolveOpenAIOAuthIdentity(userAgent, originator, version)
 	_ = version
-	resp, err := client.R().
+	request := client.R().
 		SetContext(ctx).
 		SetHeader("User-Agent", userAgent).
 		SetHeader("Originator", originator).
-		SetHeader("Content-Type", "application/json").
+		SetHeader("Content-Type", "application/json")
+	if value := openai.CodexResidencyFromContext(ctx); value != "" {
+		request = request.SetHeader(openai.CodexResidencyHeader, value)
+	}
+	resp, err := request.
 		SetBodyJsonMarshal(refreshReq).
 		SetSuccessResult(&tokenResp).
 		Post(s.tokenURL)
@@ -182,10 +255,25 @@ func resolveOpenAIOAuthIdentity(userAgent, requestedOriginator, version string) 
 	return defaultUserAgent, defaultProfile.Originator, service.DefaultOpenAICodexVersion
 }
 
-func createOpenAIReqClient(proxyURL string) (*req.Client, error) {
+// createOpenAICredentialReqClient 是 OAuth 凭据面共享客户端（刷新/吊销/enrich/wham）：
+// 启用对齐官方的 ChatGPT Cloudflare 基础设施 cookie jar（按代理隔离）。
+func createOpenAICredentialReqClient(proxyURL string) (*req.Client, error) {
 	return getSharedReqClient(reqClientOptions{
-		ProxyURL: proxyURL,
-		Timeout:  120 * time.Second,
+		ProxyURL:          proxyURL,
+		Timeout:           120 * time.Second,
+		ChatGPTCookieJar:  true,
+		OpenAICodexClient: true,
+	})
+}
+
+// createOpenAIRawReqClient 是换票/device 等 raw 客户端：不启用 cookie jar
+// （官方 raw client 同样无 cookie），保持干净的授权会话；官方 raw auth client
+// 同样走自定义 CA 策略，因此仍标记为 Codex 客户端。
+func createOpenAIRawReqClient(proxyURL string) (*req.Client, error) {
+	return getSharedReqClient(reqClientOptions{
+		ProxyURL:          proxyURL,
+		Timeout:           120 * time.Second,
+		OpenAICodexClient: true,
 	})
 }
 
@@ -271,7 +359,7 @@ func (s *openaiOAuthService) RevokeToken(ctx context.Context, token, tokenTypeHi
 	if revokeURL == "" {
 		revokeURL = openai.RevokeURL
 	}
-	client, err := createOpenAIReqClient(proxyURL)
+	client, err := createOpenAICredentialReqClient(proxyURL)
 	if err != nil {
 		return infraerrors.Newf(http.StatusBadGateway, "OPENAI_OAUTH_CLIENT_INIT_FAILED", "create HTTP client: %v", err)
 	}
@@ -290,11 +378,19 @@ func (s *openaiOAuthService) RevokeToken(ctx context.Context, token, tokenTypeHi
 		body.ClientID = clientID
 	}
 	userAgent, originator, _ = resolveOpenAIOAuthIdentity(userAgent, originator, "")
-	resp, err := client.R().
-		SetContext(ctx).
+	// 官方 auth/revoke.rs 用 REVOKE_HTTP_TIMEOUT = 10s 单独约束吊销请求，
+	// 避免卡死的吊销把登出/删号阻塞到凭据面的 120s。
+	revokeCtx, cancelRevoke := context.WithTimeout(ctx, openAICodexRevokeTimeout)
+	defer cancelRevoke()
+	request := client.R().
+		SetContext(revokeCtx).
 		SetHeader("User-Agent", userAgent).
 		SetHeader("Originator", originator).
-		SetHeader("Content-Type", "application/json").
+		SetHeader("Content-Type", "application/json")
+	if value := openai.CodexResidencyFromContext(ctx); value != "" {
+		request = request.SetHeader(openai.CodexResidencyHeader, value)
+	}
+	resp, err := request.
 		SetBodyJsonMarshal(body).
 		Post(revokeURL)
 	if err != nil {
@@ -314,7 +410,8 @@ func (s *openaiOAuthService) StartDeviceCode(ctx context.Context, proxyURL, clie
 	if deviceAuthAPIBase == "" {
 		deviceAuthAPIBase = openai.DeviceAuthAPIBase
 	}
-	client, err := createOpenAIReqClient(proxyURL)
+	// device 流程走 raw client（无 cookie jar）。
+	client, err := createOpenAIRawReqClient(proxyURL)
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_OAUTH_CLIENT_INIT_FAILED", "create HTTP client: %v", err)
 	}
@@ -351,7 +448,8 @@ func (s *openaiOAuthService) PollDeviceCode(ctx context.Context, proxyURL, devic
 	if deviceAuthAPIBase == "" {
 		deviceAuthAPIBase = openai.DeviceAuthAPIBase
 	}
-	client, err := createOpenAIReqClient(proxyURL)
+	// device 轮询走 raw client（无 cookie jar）。
+	client, err := createOpenAIRawReqClient(proxyURL)
 	if err != nil {
 		return nil, false, infraerrors.Newf(http.StatusBadGateway, "OPENAI_OAUTH_CLIENT_INIT_FAILED", "create HTTP client: %v", err)
 	}

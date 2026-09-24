@@ -173,7 +173,7 @@ func (s *OpenAIGatewayService) forwardAlphaSearchViaResponsesWebSearch(
 	if err != nil {
 		return nil, err
 	}
-	req, err := s.buildOpenAIAlphaSearchResponsesWebSearchRequest(ctx, c, account, alphaBody, responsesBody, token)
+	req, err := s.buildOpenAIAlphaSearchResponsesWebSearchRequest(ctx, c, account, responsesBody, token)
 	if err != nil {
 		return nil, err
 	}
@@ -251,7 +251,7 @@ func openAIAlphaSearchSchedulingModel(account *Account, requestedModel string) s
 	return canonicalOpenAIAccountSchedulingModel(account, requestedModel)
 }
 
-func (s *OpenAIGatewayService) buildOpenAIAlphaSearchResponsesWebSearchRequest(ctx context.Context, c *gin.Context, account *Account, alphaBody []byte, body []byte, token string) (*http.Request, error) {
+func (s *OpenAIGatewayService) buildOpenAIAlphaSearchResponsesWebSearchRequest(ctx context.Context, c *gin.Context, account *Account, body []byte, token string) (*http.Request, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, chatgptCodexURL, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
@@ -279,14 +279,9 @@ func (s *OpenAIGatewayService) buildOpenAIAlphaSearchResponsesWebSearchRequest(c
 		req.Header.Set("X-Codex-Turn-Metadata", turnMetadata)
 	}
 	apiKeyID := getAPIKeyIDFromContext(c)
-	if sessionID := strings.TrimSpace(gjson.GetBytes(alphaBody, "id").String()); sessionID != "" {
-		isolated := isolateOpenAIUpstreamSessionID(apiKeyID, codexAccountIdentitySource(c, account), sessionID)
-		// conversation_id 不是官方 Codex 头，一律不发；session_id 别名仅指纹
-		// 收敛（session/full）账号保留，与 /responses 转发路径同一门禁。
-		if accountEmitsCodexConvergedSessionAliases(account) {
-			req.Header.Set("Session_ID", isolated)
-		}
-	}
+	// Official standalone search sends only turn-metadata and originator on the
+	// request; it carries no session headers, so the gateway does not synthesize
+	// any session alias here.
 	applyCodexAccountIdentityHeaders(req.Header, codexAccountIdentitySource(c, account), apiKeyID)
 	account.ApplyHeaderOverrides(req.Header)
 	identity := s.applyOpenAIOutboundIdentity(ctx, account, req.Header, true)

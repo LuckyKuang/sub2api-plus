@@ -192,23 +192,6 @@ func setOpenAIUpstreamSessionIdentity(headers http.Header, identity string) {
 	setOpenAIUpstreamSessionIdentityForAccount(headers, nil, identity)
 }
 
-func accountEmitsCodexConvergedSessionAliases(account *Account) bool {
-	// Non-Codex/API-key paths keep the legacy session_id alias. OAuth Codex
-	// accounts follow fingerprint mode: session/full emit aliases, off/device do not.
-	if account == nil || !account.UsesOpenAICodexProtocol() {
-		return true
-	}
-	var raw any
-	if account.Extra != nil {
-		raw = account.Extra[CodexFingerprintModeExtraKey]
-	}
-	mode, err := normalizeCodexFingerprintMode(raw)
-	if err != nil {
-		return false
-	}
-	return mode == codexFingerprintSession || mode == codexFingerprintFull
-}
-
 func setOpenAIUpstreamSessionIdentityForAccount(headers http.Header, account *Account, identity string) {
 	if headers == nil {
 		return
@@ -218,26 +201,26 @@ func setOpenAIUpstreamSessionIdentityForAccount(headers http.Header, account *Ac
 		return
 	}
 	headers.Set(codexSessionIDHeader, identity)
-	if accountEmitsCodexConvergedSessionAliases(account) {
-		headers.Set("session_id", identity)
-	} else {
+	if account != nil && account.UsesOpenAICodexProtocol() {
+		// Codex 协议出站只携带官方 session-id（官方 build_session_headers 仅有
+		// hyphen 形态）；下划线别名与 conversation_id 由统一清理移除。
 		clearOpenAICodexLegacySessionAliases(headers, account)
+		return
 	}
+	// 非 Codex 兼容供应商路径保留 Plus 双写约定（session-id + session_id）。
+	headers.Set("session_id", identity)
 }
 
 // clearOpenAICodexLegacySessionAliases drops unofficial session header aliases
-// on Codex-protocol paths. `conversation_id` is never an official Codex header,
-// so it is removed for every Codex account regardless of fingerprint mode. The
-// legacy `session_id` alias is a Plus compatibility header that stays only for
-// fingerprint modes converging session identity (session/full).
+// on Codex-protocol paths. `conversation_id` is never an official Codex header
+// and the legacy `session_id` alias is not part of the official wire format,
+// so both are removed for every Codex account regardless of fingerprint mode.
 func clearOpenAICodexLegacySessionAliases(headers http.Header, account *Account) {
 	if headers == nil || account == nil || !account.UsesOpenAICodexProtocol() {
 		return
 	}
 	headers.Del("conversation_id")
-	if !accountEmitsCodexConvergedSessionAliases(account) {
-		headers.Del("session_id")
-	}
+	headers.Del("session_id")
 }
 
 // alignOpenAIUpstreamSessionIdentityFromBody makes the finalized Responses

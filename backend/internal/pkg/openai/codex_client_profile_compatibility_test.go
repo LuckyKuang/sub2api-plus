@@ -115,6 +115,15 @@ func TestClassifyOfficialCodexIngressProfile_RejectsUnknownOrInvalidIdentity(t *
 	}
 }
 
+func TestPairConfiguredCodexClientIdentity_PreservesOfficialSuffix(t *testing.T) {
+	ua := "codex_cli_rs/0.147.0 (Ubuntu 24.04; x86_64) xterm-256color (mcp: server-a)"
+	match, pairedUA, ok := PairConfiguredCodexClientIdentity(ua, false)
+	require.True(t, ok)
+	require.Equal(t, ua, pairedUA)
+	require.Equal(t, "codex_cli_rs", match.Originator)
+	require.Equal(t, "0.147.0", match.Version)
+}
+
 func TestPairConfiguredCodexClientIdentity_PreservesExactConfiguredUA(t *testing.T) {
 	ua := "codex_exec/0.147.0 (Mac OS X 15.0; arm64) iTerm.app"
 	_, _, ok := PairConfiguredCodexClientIdentity(ua, false)

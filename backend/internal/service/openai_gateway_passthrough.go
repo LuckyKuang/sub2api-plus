@@ -350,6 +350,7 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 	}
 
 	agentTaskRecoveryTried := false
+	authRecoveryTried := false
 	compactModelFallbackRetried := false
 	rejectedFieldRetryState := openAIResponsesRejectedFieldRetryStateForRequest(c, body)
 	var resp *http.Response
@@ -421,6 +422,30 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 					account.Name, fromModel, fallbackModel, extractUpstreamErrorCode(probeBody),
 				)
 				continue
+			}
+			// 401 同账号恢复：与非透传路径相同，仅 OAuth-like Bearer 且仅 401。
+			if !authRecoveryTried && isOpenAIUnauthorizedRecoverableStatus(resp.StatusCode) && s.canForceRefreshOpenAIAuthOnUnauthorized(account) {
+				authRecoveryTried = true
+				refreshedToken, refreshErr := s.recoverOpenAIAuthAfterUnauthorized(ctx, account)
+				if refreshErr != nil {
+					logger.LegacyPrintf("service.openai_gateway", "[OpenAI passthrough] 401 same-account recovery skipped after refresh failure (account: %s): %v", account.Name, refreshErr)
+				} else {
+					appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+						ProxyID:            opsUpstreamProxyID(account),
+						ProxyName:          opsUpstreamProxyName(account),
+						Platform:           account.Platform,
+						AccountID:          account.ID,
+						AccountName:        account.Name,
+						UpstreamStatusCode: resp.StatusCode,
+						UpstreamRequestID:  resp.Header.Get("x-request-id"),
+						Kind:               "retry",
+						Reason:             openAIAuthRecoveryRetryReason,
+						Message:            upstreamMsg,
+					})
+					token = refreshedToken
+					logger.LegacyPrintf("service.openai_gateway", "[OpenAI passthrough] Retrying same account once after 401 credential refresh (account: %s)", account.Name)
+					continue
+				}
 			}
 
 			// 透传模式默认保持原样代理；容量错误以及 API-key 上游的瞬时
@@ -1839,6 +1864,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 	if observer == nil {
 		observer = beginUpstreamResponseModelObservation(c)
 	}
+	observeOpenAICodexServerResponseHeaders(observer, resp.Header)
 	writeOpenAIPassthroughResponseHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
 	s.finalizeCodexClientQuotaHeaders(c.Writer.Header(), c, account)
 
@@ -2290,6 +2316,7 @@ func (s *OpenAIGatewayService) handleNonStreamingResponsePassthrough(
 	if observer == nil {
 		observer = beginUpstreamResponseModelObservation(c)
 	}
+	observeOpenAICodexServerResponseHeaders(observer, resp.Header)
 	if bodyHasSSEFraming(body) {
 		observeOpenAISSEBody(observer, string(body))
 	} else {

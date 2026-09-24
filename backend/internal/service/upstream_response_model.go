@@ -1,10 +1,13 @@
 package service
 
 import (
+	"net/http"
 	"strings"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/logger"
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
+	"go.uber.org/zap"
 )
 
 const (
@@ -68,8 +71,61 @@ func normalizeObservedUpstreamResponseModel(model string) string {
 	return model
 }
 
+// openAIInBandServerModelHeader 对齐官方 response_model() 的优先级：
+// 1. response.headers（标准 Responses 流事件）
+// 2. 顶层 headers（WebSocket response.metadata 事件）
+// 大小写不敏感地匹配 openai-model / x-openai-model。带内 headers 才是官方认定
+// 的服务端模型信号——上游做流中重路由时只写在那里；只看 response.model 会漏掉
+// 这次改名。
+func openAIInBandServerModelHeader(payload []byte) string {
+	if model := openAIJSONHeaderModel(gjson.GetBytes(payload, "response.headers")); model != "" {
+		return model
+	}
+	return openAIJSONHeaderModel(gjson.GetBytes(payload, "headers"))
+}
+
+func openAIJSONHeaderModel(headers gjson.Result) string {
+	if !headers.IsObject() {
+		return ""
+	}
+	found := ""
+	headers.ForEach(func(key, value gjson.Result) bool {
+		name := strings.ToLower(strings.TrimSpace(key.String()))
+		if name != "openai-model" && name != "x-openai-model" {
+			return true
+		}
+		if model := openAIJSONHeaderModelValue(value); model != "" {
+			found = model
+			return false
+		}
+		return true
+	})
+	return normalizeObservedUpstreamResponseModel(found)
+}
+
+// openAIJSONHeaderModelValue mirrors official json_value_as_string: a JSON
+// string, or the first element of a JSON array (recursively). Numbers, bools,
+// and objects are not server-model declarations.
+func openAIJSONHeaderModelValue(value gjson.Result) string {
+	switch {
+	case value.Type == gjson.String:
+		return strings.TrimSpace(value.String())
+	case value.IsArray():
+		items := value.Array()
+		if len(items) == 0 {
+			return ""
+		}
+		return openAIJSONHeaderModelValue(items[0])
+	default:
+		return ""
+	}
+}
+
 func (o *upstreamResponseModelObserver) ObserveOpenAI(payload []byte, eventType string) {
-	model := firstValidTrimmedGJSONString(payload, "response.model", "model")
+	model := openAIInBandServerModelHeader(payload)
+	if model == "" {
+		model = firstValidTrimmedGJSONString(payload, "response.model", "model")
+	}
 	terminal := isUpstreamResponseModelTerminalEvent(eventType)
 	o.Observe(model, terminal)
 	// Every payload that declares a service tier also declares a model, so
@@ -240,6 +296,31 @@ func observeOpenAISSEBody(observer *upstreamResponseModelObserver, body string) 
 	})
 }
 
+// observeOpenAICodexServerResponseHeaders records the server declarations that
+// arrive as response headers before any body event: `openai-model` (and the
+// `x-openai-model` spelling) names the model that actually served the request
+// (server-side model override signal), and `x-models-etag` marks the upstream
+// model-catalog revision. The model joins the regular observer precedence
+// (terminal body events still win and a disagreement raises the conflict flag);
+// the etag is logged as a catalog invalidation signal for the future
+// pinned-models integration.
+func observeOpenAICodexServerResponseHeaders(observer *upstreamResponseModelObserver, headers http.Header) {
+	if observer == nil || headers == nil {
+		return
+	}
+	model := strings.TrimSpace(headers.Get("openai-model"))
+	if model == "" {
+		// Official codex-api accepts both spellings of the server-model header.
+		model = strings.TrimSpace(headers.Get("x-openai-model"))
+	}
+	if model != "" {
+		observer.Observe(model, false)
+	}
+	if etag := strings.TrimSpace(headers.Get("x-models-etag")); etag != "" {
+		logger.L().Debug("codex_models_etag_observed", zap.String("component", "service.openai_gateway"), zap.String("etag", etag))
+	}
+}
+
 func firstValidTrimmedGJSONString(payload []byte, paths ...string) string {
 	if len(payload) == 0 {
 		return ""
@@ -299,6 +380,8 @@ func canonicalGrokBuildRuntimeModel(model string) string {
 		return "grok-4.5-build"
 	case "grok-4.6", "grok-4.6-latest", "grok-4.6-build":
 		return "grok-4.6-build"
+	case "grok-4.7", "grok-4.7-latest", "grok-4.7-build":
+		return "grok-4.7-build"
 	default:
 		return ""
 	}

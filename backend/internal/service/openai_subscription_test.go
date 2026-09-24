@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
 	"github.com/imroc/req/v3"
 	"github.com/stretchr/testify/require"
 )
@@ -24,6 +25,7 @@ func TestFetchChatGPTSubscriptionExpiresAt(t *testing.T) {
 		require.Equal(t, DefaultOpenAICodexUserAgent, r.Header.Get("User-Agent"))
 		require.Empty(t, r.Header.Get("Originator"), "auxiliary API keeps UA + Bearer + chatgpt-account-id only")
 		require.Empty(t, r.Header.Get("Version"))
+		require.Empty(t, r.Header.Get(openai.CodexResidencyHeader))
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -44,6 +46,26 @@ func TestFetchChatGPTSubscriptionExpiresAt(t *testing.T) {
 	}, "access-token", "", "acc_123", resolveOpenAIOutboundIdentityCandidates("", ""))
 
 	require.Equal(t, wantExpiresAt, got)
+}
+
+func TestFetchChatGPTSubscriptionExpiresAt_SendsManagedResidency(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, openai.CodexResidencyUS, r.Header.Get(openai.CodexResidencyHeader))
+		require.Empty(t, r.Header.Get("Originator"))
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"active_until": "2026-06-10T02:52:15Z"})
+	}))
+	defer server.Close()
+
+	oldURL := chatGPTSubscriptionsURL
+	chatGPTSubscriptionsURL = server.URL
+	t.Cleanup(func() { chatGPTSubscriptionsURL = oldURL })
+
+	ctx := openai.WithCodexResidency(context.Background(), openai.CodexResidencyUS)
+	got := fetchChatGPTSubscriptionExpiresAt(ctx, func(string) (*req.Client, error) {
+		return req.C().SetTimeout(5 * time.Second), nil
+	}, "access-token", "", "acc_123", resolveOpenAIOutboundIdentityCandidates("", ""))
+	require.Equal(t, "2026-06-10T02:52:15Z", got)
 }
 
 func TestFetchChatGPTAccountInfo_SkipsExpiredWorkspaceCandidate(t *testing.T) {
@@ -363,4 +385,60 @@ func newTestPrivacyClientFactory() PrivacyClientFactory {
 	return func(string) (*req.Client, error) {
 		return req.C().SetTimeout(time.Second), nil
 	}
+}
+
+// 官方 backend-client/src/client.rs:269-288 在已知账号时发 ChatGPT-Account-Id，
+// 用于在多账号/工作区里精确定位；orgID（poid）就是 accounts map 的键。
+func TestFetchChatGPTAccountInfo_SendsChatGPTAccountID(t *testing.T) {
+	var seenAccountID string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/backend-api/wham/accounts/check", r.URL.Path)
+		seenAccountID = r.Header.Get("ChatGPT-Account-Id")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"accounts": map[string]any{
+				"org-known": map[string]any{
+					"account": map[string]any{"plan_type": "plus", "is_default": true},
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	oldURL := chatGPTAccountsCheckURL
+	chatGPTAccountsCheckURL = server.URL + "/backend-api/wham/accounts/check"
+	t.Cleanup(func() { chatGPTAccountsCheckURL = oldURL })
+
+	got := fetchChatGPTAccountInfo(context.Background(), func(proxyURL string) (*req.Client, error) {
+		return req.C().SetTimeout(5 * time.Second), nil
+	}, "access-token", "", "org-known", resolveOpenAIOutboundIdentityCandidates("", ""))
+	require.NotNil(t, got)
+	require.Equal(t, "org-known", seenAccountID)
+}
+
+// 没有 poid 时不发该头：官方同样只在已知账号时发送。
+func TestFetchChatGPTAccountInfo_OmitsChatGPTAccountIDWithoutPoid(t *testing.T) {
+	var headerPresent bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, headerPresent = r.Header["Chatgpt-Account-Id"]
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"accounts": map[string]any{
+				"personal": map[string]any{
+					"account": map[string]any{"plan_type": "free", "is_default": true},
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	oldURL := chatGPTAccountsCheckURL
+	chatGPTAccountsCheckURL = server.URL + "/backend-api/wham/accounts/check"
+	t.Cleanup(func() { chatGPTAccountsCheckURL = oldURL })
+
+	got := fetchChatGPTAccountInfo(context.Background(), func(proxyURL string) (*req.Client, error) {
+		return req.C().SetTimeout(5 * time.Second), nil
+	}, "access-token", "", "", resolveOpenAIOutboundIdentityCandidates("", ""))
+	require.NotNil(t, got)
+	require.False(t, headerPresent, "no poid means no ChatGPT-Account-Id header")
 }

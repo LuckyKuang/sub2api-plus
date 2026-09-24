@@ -255,6 +255,7 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyOpenAICodexUserAgent:                               "",
 		SettingKeyOpenAICodexEnvironmentTimezone:                     DefaultOpenAICodexEnvironmentTimezone,
 		SettingKeyOpenAICodexEgressCountry:                           DefaultOpenAICodexEgressCountry,
+		SettingKeyOpenAICodexResidency:                               DefaultOpenAICodexResidency,
 		SettingKeyCodexLegacyClientProfileCompatibilityEnabled:       "false",
 		SettingKeyOpenAICodexLocalGroupQuotaEnabled:                  "false",
 		SettingKeyOpenAICodexClientVersion:                           "",
@@ -918,6 +919,11 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	result.OpenAICodexUserAgent = strings.TrimSpace(settings[SettingKeyOpenAICodexUserAgent])
 	result.OpenAICodexEnvironmentTimezone = strings.TrimSpace(settings[SettingKeyOpenAICodexEnvironmentTimezone])
 	result.OpenAICodexEgressCountry = strings.TrimSpace(settings[SettingKeyOpenAICodexEgressCountry])
+	if residency, err := NormalizeOpenAICodexResidency(settings[SettingKeyOpenAICodexResidency]); err == nil {
+		result.OpenAICodexResidency = residency
+	} else {
+		result.OpenAICodexResidency = DefaultOpenAICodexResidency
+	}
 	result.CodexLegacyClientProfileCompatibilityEnabled = settings[SettingKeyCodexLegacyClientProfileCompatibilityEnabled] == "true"
 	result.OpenAICodexLocalGroupQuotaEnabled = settings[SettingKeyOpenAICodexLocalGroupQuotaEnabled] == "true"
 	result.OpenAICodexClientVersion = NormalizeCodexClientVersion(settings[SettingKeyOpenAICodexClientVersion])
@@ -933,6 +939,13 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 		result.OpenAICodexVersionAutoSyncEnabled = v == "true"
 	} else {
 		result.OpenAICodexVersionAutoSyncEnabled = true
+	}
+	result.ClaudeCodeClientVersion = NormalizeClaudeCodeClientVersion(settings[SettingKeyClaudeCodeClientVersion])
+	result.ClaudeCodeClientVersionSynced = NormalizeClaudeCodeClientVersion(settings[SettingKeyClaudeCodeClientVersionSynced])
+	if v, ok := settings[SettingKeyClaudeCodeVersionAutoSyncEnabled]; ok && v != "" {
+		result.ClaudeCodeVersionAutoSyncEnabled = v == "true"
+	} else {
+		result.ClaudeCodeVersionAutoSyncEnabled = true
 	}
 	// codex_cli_only profile policy
 	result.MinCodexVersion = settings[SettingKeyMinCodexVersion]

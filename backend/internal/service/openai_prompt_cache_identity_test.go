@@ -61,7 +61,7 @@ func TestEnsureOpenAIResponsesPromptCacheIdentityAlignsExplicitBodyKey(t *testin
 	require.LessOrEqual(t, len(identity), 64)
 }
 
-func TestSetOpenAIUpstreamSessionIdentityFollowsOAuthFingerprint(t *testing.T) {
+func TestSetOpenAIUpstreamSessionIdentityUsesOfficialHeaderForCodexAccounts(t *testing.T) {
 	oauthDefault := &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth}
 	headers := http.Header{}
 	headers.Set("conversation_id", "stale-conversation")
@@ -82,7 +82,7 @@ func TestSetOpenAIUpstreamSessionIdentityFollowsOAuthFingerprint(t *testing.T) {
 	headers = http.Header{}
 	setOpenAIUpstreamSessionIdentityForAccount(headers, oauthSession, "id-session")
 	require.Equal(t, "id-session", headers.Get(codexSessionIDHeader))
-	require.Equal(t, "id-session", headers.Get("session_id"))
+	require.Empty(t, headers.Get("session_id"), "Codex protocol accounts never emit the legacy alias, regardless of fingerprint mode")
 
 	apiKey := &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}
 	headers = http.Header{}
@@ -91,15 +91,16 @@ func TestSetOpenAIUpstreamSessionIdentityFollowsOAuthFingerprint(t *testing.T) {
 	require.Equal(t, "id-apikey", headers.Get("session_id"))
 }
 
-// conversation_id is never an official Codex header: every Codex account drops
-// it, while the Plus session_id alias survives for session/full convergence.
-func TestClearOpenAICodexLegacySessionAliasesDropsConversationForAllCodexAccounts(t *testing.T) {
+// conversation_id is never an official Codex header and the legacy session_id
+// alias is not part of the official wire format: every Codex account drops
+// both, while non-Codex (API-key) accounts keep their existing alias behavior.
+func TestClearOpenAICodexLegacySessionAliasesDropsLegacyAliasesForAllCodexAccounts(t *testing.T) {
 	oauthSession := &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth, Extra: map[string]any{CodexFingerprintModeExtraKey: "session"}}
 	headers := http.Header{}
 	headers.Set("session_id", "alias-session")
 	headers.Set("conversation_id", "client-conversation")
 	clearOpenAICodexLegacySessionAliases(headers, oauthSession)
-	require.Equal(t, "alias-session", headers.Get("session_id"))
+	require.Empty(t, headers.Get("session_id"))
 	require.Empty(t, headers.Get("conversation_id"))
 
 	oauthDevice := &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth, Extra: map[string]any{CodexFingerprintModeExtraKey: "device"}}
@@ -381,10 +382,10 @@ func TestOpenAIResponsesCompactPromptCacheFinalization(t *testing.T) {
 			identity := gjson.GetBytes(upstream.lastBody, "prompt_cache_key").String()
 			require.NotEmpty(t, identity)
 			require.Equal(t, identity, upstream.lastReq.Header.Get(codexSessionIDHeader))
-			if accountEmitsCodexConvergedSessionAliases(&tt.account) {
-				require.Equal(t, identity, upstream.lastReq.Header.Get("session_id"))
-			} else {
+			if tt.account.UsesOpenAICodexProtocol() {
 				require.Empty(t, upstream.lastReq.Header.Get("session_id"))
+			} else {
+				require.Equal(t, identity, upstream.lastReq.Header.Get("session_id"))
 			}
 			expectedThreadID := "thread-compact-1"
 			if tt.account.UsesOpenAICodexProtocol() {

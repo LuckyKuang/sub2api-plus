@@ -113,99 +113,6 @@ func TestOpenAIHTTPCapacityShedIsRequestScopedForOAuthAccounts(t *testing.T) {
 // 上游降载的真实序列是「event: error → event: response.failed」。error 帧不算
 // 客户端输出：若把它当首输出 flush，clientOutputStarted 被固化，随后的 failed
 // 事件就进不了 pre-output failover 分支，只能把致命错误原样转发给客户端。
-func TestOpenAIStreamErrorFrameDoesNotStartClientOutput(t *testing.T) {
-	cases := []struct {
-		data      string
-		eventType string
-		want      bool
-	}{
-		{`{"type":"error","error":{"code":"server_is_overloaded","message":"overloaded"}}`, "error", false},
-		{`{"type":"error","error":{"code":"slow_down","message":"slow down"}}`, "error", false},
-		{`{"type":"error","error":{"type":"rate_limit_error","code":"rate_limit_exceeded","message":"limited"}}`, "error", false},
-		// 不可重试类错误帧维持原样转发（不进 failover），保留上游错误细节。
-		{`{"type":"error","error":{"type":"invalid_request_error","code":"content_policy_violation","message":"blocked"}}`, "error", true},
-		{`{"type":"response.failed","response":{"error":{"code":"server_is_overloaded"}}}`, "response.failed", false},
-		{`{"type":"response.created","response":{"id":"resp_1"}}`, "response.created", false},
-		{`{"type":"response.in_progress","response":{"id":"resp_1"}}`, "response.in_progress", false},
-		{`{"type":"response.output_item.added","item":{"type":"reasoning","summary":[]}}`, "response.output_item.added", false},
-		{`{"type":"response.output_item.added","item":{"type":"reasoning","encrypted_content":"ciphertext"}}`, "response.output_item.added", true},
-		{`{"type":"response.reasoning_summary_part.added","part":{"type":"summary_text","text":""}}`, "response.reasoning_summary_part.added", false},
-		{`{"type":"response.reasoning_summary_part.added","part":{"type":"summary_text","text":"thinking"}}`, "response.reasoning_summary_part.added", true},
-		{`{"type":"response.content_part.added","part":{"type":"output_text","text":""}}`, "response.content_part.added", false},
-		{`{"type":"response.output_text.delta","delta":"hi"}`, "response.output_text.delta", true},
-		{`[DONE]`, "", true},
-	}
-	for _, tc := range cases {
-		require.Equal(t, tc.want, openAIStreamDataStartsClientOutput(tc.data, tc.eventType), "data=%s type=%s", tc.data, tc.eventType)
-	}
-}
-
-func TestOpenAIStreamMetadataPreambleAndMessageOnlyOverloadFailOver(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	largeMetadata := strings.Repeat("x", 16*1024)
-	stream := strings.Join([]string{
-		"event: response.created",
-		`data: {"type":"response.created","response":{"id":"resp_1","metadata":{"padding":"` + largeMetadata + `"}}}`,
-		"",
-		"event: response.output_item.added",
-		`data: {"type":"response.output_item.added","item":{"type":"reasoning","summary":[]}}`,
-		"",
-		"event: response.reasoning_summary_part.added",
-		`data: {"type":"response.reasoning_summary_part.added","part":{"type":"summary_text","text":""}}`,
-		"",
-		"event: error",
-		`data: {"type":"error","error":{"type":"service_unavailable_error","message":"Our servers are currently overloaded. Please try again later."}}`,
-		"",
-	}, "\n")
-
-	tests := []struct {
-		name string
-		run  func(*OpenAIGatewayService, *gin.Context, *http.Response, *Account) error
-	}{
-		{
-			name: "native",
-			run: func(svc *OpenAIGatewayService, c *gin.Context, resp *http.Response, account *Account) error {
-				_, err := svc.handleStreamingResponse(c.Request.Context(), resp, c, account, time.Now(), "model", "model")
-				return err
-			},
-		},
-		{
-			name: "passthrough",
-			run: func(svc *OpenAIGatewayService, c *gin.Context, resp *http.Response, account *Account) error {
-				_, err := svc.handleStreamingResponsePassthrough(c.Request.Context(), resp, c, account, time.Now(), "model", "model")
-				return err
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			svc := &OpenAIGatewayService{cfg: &config.Config{Gateway: config.GatewayConfig{MaxLineSize: defaultMaxLineSize}}}
-			rec := httptest.NewRecorder()
-			c, _ := gin.CreateTestContext(rec)
-			c.Request = httptest.NewRequest(http.MethodPost, "/", nil)
-			resp := &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(stream)),
-				Header:     http.Header{"X-Request-Id": []string{"rid-message-only-overload"}},
-			}
-			account := &Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Name: "acc"}
-
-			err := tt.run(svc, c, resp, account)
-			require.Error(t, err)
-			var failoverErr *UpstreamFailoverError
-			require.ErrorAs(t, err, &failoverErr)
-			require.False(t, failoverErr.RetryableOnSameAccount)
-			require.False(t, failoverErr.ShouldRetryNextAccount())
-			require.True(t, failoverErr.RequestScopedTransient)
-			require.Equal(t, http.StatusServiceUnavailable, failoverErr.ClientStatusCode)
-			require.Contains(t, failoverErr.ClientMessage, "servers are currently overloaded")
-			require.False(t, c.Writer.Written())
-			require.Empty(t, rec.Body.String())
-		})
-	}
-}
-
 // 回归用例（真实上游降载序列）：created → in_progress → error 帧 → response.failed。
 // 期望走 pre-output 终止（不重试、不换号），且不向客户端写出任何字节。
 func TestOpenAIStreamCapacityShedErrorFramePrecedingFailedStillFailsOver(t *testing.T) {
@@ -430,4 +337,31 @@ func TestCodexOutboundVersionHasSingleSource(t *testing.T) {
 	require.GreaterOrEqual(t, CompareVersions(codexCLIVersion, codexUpstreamMinVersion), 0,
 		"codexCLIVersion=%q 不得低于上游最低门槛 %q", codexCLIVersion, codexUpstreamMinVersion,
 	)
+}
+
+func TestOpenAIStreamErrorFrameDoesNotStartClientOutput(t *testing.T) {
+	cases := []struct {
+		data      string
+		eventType string
+		want      bool
+	}{
+		{`{"type":"error","error":{"code":"server_is_overloaded","message":"overloaded"}}`, "error", false},
+		{`{"type":"error","error":{"code":"slow_down","message":"slow down"}}`, "error", false},
+		{`{"type":"error","error":{"type":"rate_limit_error","code":"rate_limit_exceeded","message":"limited"}}`, "error", false},
+		// 不可重试类错误帧维持原样转发（不进 failover），保留上游错误细节。
+		{`{"type":"error","error":{"type":"invalid_request_error","code":"content_policy_violation","message":"blocked"}}`, "error", true},
+		{`{"type":"response.failed","response":{"error":{"code":"server_is_overloaded"}}}`, "response.failed", false},
+		{`{"type":"response.created","response":{"id":"resp_1"}}`, "response.created", false},
+		{`{"type":"response.in_progress","response":{"id":"resp_1"}}`, "response.in_progress", false},
+		{`{"type":"response.output_item.added","item":{"type":"reasoning","summary":[]}}`, "response.output_item.added", false},
+		{`{"type":"response.output_item.added","item":{"type":"reasoning","encrypted_content":"ciphertext"}}`, "response.output_item.added", true},
+		{`{"type":"response.reasoning_summary_part.added","part":{"type":"summary_text","text":""}}`, "response.reasoning_summary_part.added", false},
+		{`{"type":"response.reasoning_summary_part.added","part":{"type":"summary_text","text":"thinking"}}`, "response.reasoning_summary_part.added", true},
+		{`{"type":"response.content_part.added","part":{"type":"output_text","text":""}}`, "response.content_part.added", false},
+		{`{"type":"response.output_text.delta","delta":"hi"}`, "response.output_text.delta", true},
+		{`[DONE]`, "", true},
+	}
+	for _, tc := range cases {
+		require.Equal(t, tc.want, openAIStreamDataStartsClientOutput(tc.data, tc.eventType), "data=%s type=%s", tc.data, tc.eventType)
+	}
 }

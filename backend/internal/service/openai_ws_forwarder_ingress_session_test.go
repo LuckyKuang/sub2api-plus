@@ -1479,7 +1479,7 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_PassthroughHeade
 	expectedCacheIdentity := firstNonEmptyString(upstreamConn.writes[0]["prompt_cache_key"])
 	require.NotEmpty(t, expectedCacheIdentity)
 	require.Equal(t, expectedCacheIdentity, captureDialer.lastHeaders.Get(codexSessionIDHeader))
-	require.Equal(t, expectedCacheIdentity, captureDialer.lastHeaders.Get("session_id"))
+	require.Empty(t, captureDialer.lastHeaders.Get("session_id"))
 	require.Equal(t, "passthrough-owner-installation", captureDialer.lastHeaders.Get("x-codex-installation-id"))
 	require.Equal(t, resolveConvergedSessionID(account), captureDialer.lastHeaders.Get("thread-id"))
 	require.Equal(t, captureDialer.lastHeaders.Get("thread-id"), captureDialer.lastHeaders.Get("x-client-request-id"))
