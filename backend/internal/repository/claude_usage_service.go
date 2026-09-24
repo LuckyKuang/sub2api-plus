@@ -58,7 +58,7 @@ func (s *claudeUsageService) FetchUsageWithOptions(ctx context.Context, opts *se
 	req.Header.Set("Authorization", "Bearer "+opts.AccessToken)
 	req.Header.Set("anthropic-beta", "oauth-2025-04-20")
 
-	req.Header.Set("User-Agent", claude.DefaultHeaders["User-Agent"])
+	req.Header.Set("User-Agent", claude.DefaultHeaders()["User-Agent"])
 	outboundidentity.ApplyDefault(req, "claude")
 
 	var resp *http.Response

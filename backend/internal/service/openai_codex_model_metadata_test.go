@@ -194,6 +194,32 @@ func TestBuildCodexModelsManifestForGroupUsesSyncedAccountMetadata(t *testing.T)
 	require.EqualValues(t, 1_000_000, models[0]["context_window"])
 }
 
+type openCodeGoCodexCatalogRepo struct {
+	AccountRepository
+	groupID   int64
+	accounts  []Account
+	platforms []string
+}
+
+func (r *openCodeGoCodexCatalogRepo) ListSchedulableByGroupID(_ context.Context, _ int64) ([]Account, error) {
+	return nil, nil
+}
+
+func (r *openCodeGoCodexCatalogRepo) ListModelAvailabilityCandidates(_ context.Context, groupID *int64, platforms []string, _ bool) ([]Account, error) {
+	r.platforms = append([]string(nil), platforms...)
+	if groupID == nil || *groupID != r.groupID {
+		return nil, nil
+	}
+	for _, platform := range platforms {
+		if platform == PlatformOpenCodeGo {
+			return append([]Account(nil), r.accounts...), nil
+		}
+	}
+	return nil, nil
+}
+
+// Scenario: OpenCode Go accounts contribute synced capabilities to a Composite
+// manifest only when they are selected by the catalog candidate query.
 // Scenario: an explicitly non-reasoning model remains directly selectable in Codex.
 func TestBuildCodexModelsManifestForGroupUsesNoneForExplicitNonReasoningMetadata(t *testing.T) {
 	t.Parallel()

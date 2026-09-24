@@ -82,7 +82,7 @@ func TestConvertResponsesInputToAnthropic_DeveloperRole(t *testing.T) {
 			{"role":"user","content":"review this code"}
 		]`
 
-		system, messages, err := convertResponsesInputToAnthropic("", json.RawMessage(input))
+		system, messages, err := convertResponsesInputToAnthropic("", json.RawMessage(input), false)
 		require.NoError(t, err)
 
 		var systemText string
@@ -99,7 +99,7 @@ func TestConvertResponsesInputToAnthropic_DeveloperRole(t *testing.T) {
 			{"role":"user","content":"hi"}
 		]`
 
-		_, messages, err := convertResponsesInputToAnthropic("", json.RawMessage(input))
+		_, messages, err := convertResponsesInputToAnthropic("", json.RawMessage(input), false)
 		require.NoError(t, err)
 
 		for _, m := range messages {
@@ -118,7 +118,7 @@ func TestConvertResponsesInputToAnthropic_DeveloperRole(t *testing.T) {
 			{"role":"user","content":"hello"}
 		]`
 
-		system, _, err := convertResponsesInputToAnthropic("Main instruction.", json.RawMessage(input))
+		system, _, err := convertResponsesInputToAnthropic("Main instruction.", json.RawMessage(input), false)
 		require.NoError(t, err)
 
 		var systemText string

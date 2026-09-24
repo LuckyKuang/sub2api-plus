@@ -87,11 +87,11 @@ func builtInOutboundIdentity(preset string) outboundidentity.Identity {
 		i.UserAgent, i.Originator, i.Version = DefaultOpenAICodexUserAgent, openai.CodexDefaultOriginator, DefaultOpenAICodexVersion
 		i.Headers["Originator"], i.Headers["Version"] = i.Originator, i.Version
 	case "claude":
-		i.UserAgent, i.Originator, i.Version = claude.DefaultHeaders["User-Agent"], "claude-cli", claude.CLIVersion()
+		i.UserAgent, i.Originator, i.Version = claude.DefaultHeaders()["User-Agent"], "claude-cli", claude.CLIVersion()
 		if claude.IsSupportedCLIVersion(strings.TrimSpace(os.Getenv(claude.CLIVersionEnv))) {
 			i.Source = "environment"
 		}
-		for k, v := range claude.DefaultHeaders {
+		for k, v := range claude.DefaultHeaders() {
 			if outboundidentity.IsIdentityHeader(k) {
 				i.Headers[k] = v
 			}
