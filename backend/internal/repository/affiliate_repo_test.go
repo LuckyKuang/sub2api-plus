@@ -70,7 +70,7 @@ func TestAffiliateWithdrawClaimsOperationBeforeDeducting(t *testing.T) {
 	require.Positive(t, claimAt)
 	require.Greater(t, deductAt, claimAt, "operation claim must precede the quota deduction")
 
-	migration, err := os.ReadFile("../../migrations/240_affiliate_ledger_operation_id.sql")
+	migration, err := os.ReadFile("../../migrations/270_affiliate_ledger_operation_id.sql")
 	require.NoError(t, err)
 	require.Contains(t, string(migration), "CREATE UNIQUE INDEX IF NOT EXISTS idx_user_affiliate_ledger_operation_id")
 	require.Contains(t, string(migration), "WHERE operation_id IS NOT NULL")
