@@ -137,7 +137,11 @@ func (s *schedulerCacheRecorder) SetOutboxWatermark(ctx context.Context, id int6
 
 func (s *AccountRepoSuite) SetupTest() {
 	s.ctx = context.Background()
-	truncateIntegrationTables(s.T(), "accounts")
+	// scheduler_outbox has no FK to accounts, so the accounts truncate cannot
+	// cascade into it. Its rows are committed outside the per-test tx, and
+	// account IDs restart at 1 every test, so stale rows would collide with the
+	// recycled ID of the next test.
+	truncateIntegrationTables(s.T(), "accounts", "scheduler_outbox")
 	tx := testEntTx(s.T())
 	s.client = tx.Client()
 	s.repo = newAccountRepositoryWithSQL(s.client, tx, nil)
@@ -1415,6 +1419,10 @@ func TestGrokOAuthConditionalMutationRollsBackWhenOutboxInsertFails(t *testing.T
 		_, _ = integrationDB.ExecContext(context.Background(), "DELETE FROM scheduler_outbox WHERE account_id = $1", account.ID)
 		_ = client.Account.DeleteOneID(account.ID).Exec(context.Background())
 	})
+	// This test runs after AccountRepoSuite and account IDs keep advancing, so a
+	// stale row for the same ID would already satisfy the zero-count assertion.
+	_, err := integrationDB.ExecContext(context.Background(), "DELETE FROM scheduler_outbox WHERE account_id = $1", account.ID)
+	require.NoError(t, err)
 	repo := newAccountRepositoryWithSQL(client, &failAtomicSchedulerOutboxSQLExecutor{sqlExecutor: integrationDB}, nil)
 
 	applied, err := repo.SetGrokOAuthErrorIfCredentialsUnchanged(
