@@ -1,34 +1,36 @@
-Sub2API Plus v0.2.8+custom.001
+Sub2API Plus v0.2.8+custom.002
 
 ## Highlights
 
-Second Plus release on the official `v0.2.8` baseline. It keeps Plus identity,
-ingress audit, session/quota accounting, proxy egress metadata, and retired
-billing probes, while importing the official GPT-6 Sol/Luna, Claude Opus 5.5,
-and Grok 4.7 model support, the OpenCode Go official usage window with
-automatic refresh, configurable reasoning-effort billing multipliers, automatic
-Claude Code client version synchronization, simple-mode API key consumption
-windows, monthly backup archives, offline affiliate withdrawal registration,
-rolling log retention, and Codex credits display. Plus adds three rounds of
-Codex OAuth outbound alignment with the official `codex-rs` client on top of
-this baseline.
+Second iteration on the official `v0.2.8` baseline. Channel, group, and
+account-statistics pricing now accepts a billing multiplier per reasoning
+effort level, so none/minimal/low/medium/high/xhigh/max are priced
+independently and no model bills above 1x unless an operator configures it.
+Billing follows the effort that is actually forwarded upstream across token,
+per-request, image, audio, and video paths.
 
 ## Changed
 
-- New model support: GPT-6 Sol, GPT-6 Luna, Claude Opus 5.5, and Grok 4.7.
-- OpenCode Go usage window: official quota query, automatic refresh, same-key group sharing, manual query, and account list/usage-cell balance badges (7d/1m); the `/zen/go` base-variant quota endpoint is normalized and usage state survives account updates.
-- Billing: per-channel reasoning-effort multipliers, final reasoning effort preserved across forwarding paths, and scientific notation at token boundaries parsed.
-- Claude Code client version numbers are synchronized automatically.
-- Simple mode can enable API key consumption window limits; first-start default group creation is now optional.
-- Backups support monthly archive with an independent retention policy.
-- Affiliate offline withdrawals are registered idempotently via Idempotency-Key.
-- Rolling log retention is configurable.
-- Official tool-schema cleaning strips illegal null `required` and `prefixItems`/tuple arrays; Antigravity resolves bare Gemini model names to thinking variants at every forwarding entry; streaming ends on the terminal event without waiting for upstream EOF.
-- Plus closes Codex OAuth outbound divergences across custom-CA rotation on the HTTP and auth-plane client pools, WebSocket metadata header handling, credits-only rate-limit events, `include:["reasoning.encrypted_content"]` merges, transport-refusal handling, and rollout budget unit recording.
+- Pricing entries replace the single `max_reasoning_effort_multiplier` with a
+  per-effort `reasoning_effort_multipliers` map on channel pricing, account
+  statistics pricing rules, and group pricing.
+- The built-in 3x Claude Fable 5.1 max-effort default is removed; configure the
+  multiplier explicitly to keep the previous cost.
+- The Chat Completions, Responses, and OpenAI-native Anthropic paths bill and
+  record the forwarded effort (for example OpenAI `xhigh` is forwarded to
+  Anthropic as `output_config.effort=max`), and audio, image, and video
+  requests now honor the configured level.
+- Admin pricing and model plaza surfaces expose one input and one badge per
+  effort level, in both English and Chinese.
 
 ## Compatibility and migration
 
-Migrations 269 and 270 add per-usage `codex_rollout_budget_units` and the idempotent affiliate withdrawal `operation_id`. Back up the database before upgrade. Rollback image is `v0.2.5+custom.001`.
+Migration 271 is forward-only: it adds the `reasoning_effort_multipliers`
+JSONB columns, backfills a configured max multiplier into the `max` entry,
+and rewrites group `model_pricing`. It is replay-safe and preserves maps that
+were deliberately cleared. Back up the database before upgrade. The legacy
+`max_reasoning_effort_multiplier` column is retained as migration input and no
+longer read by billing.
 
 ## Known issues
 
