@@ -834,9 +834,6 @@ func (s *OpenAIGatewayService) calculateOpenAIRecordUsageTokenCost(
 		serviceTier,
 		longContextBillingGate == nil || *longContextBillingGate,
 	)
-	if err == nil {
-		applyCostBreakdownMultiplier(breakdown, maxReasoningEffortBillingMultiplier(billingModel, reasoningEffort, nil))
-	}
 	return breakdown, err
 }
 
@@ -1016,7 +1013,8 @@ func (s *OpenAIGatewayService) calculateOpenAIImageCost(
 		cost, err := s.billingService.CalculateCostUnified(CostInput{
 			Ctx: ctx, Model: billingModel, GroupID: &gid, Group: apiKey.Group,
 			RequestCount: result.ImageCount, SizeTier: sizeTier,
-			RateMultiplier: multiplier, Resolver: s.resolver, Resolved: resolved,
+			ReasoningEffort: optionalStringValue(result.ReasoningEffort),
+			RateMultiplier:  multiplier, Resolver: s.resolver, Resolved: resolved,
 		})
 		if err == nil {
 			return cost
@@ -1037,15 +1035,16 @@ func (s *OpenAIGatewayService) calculateOpenAIImageCost(
 		(resolved.Mode == BillingModePerRequest || resolved.Mode == BillingModeImage) {
 		gid := apiKey.Group.ID
 		cost, err := s.billingService.CalculateCostUnified(CostInput{
-			Ctx:            ctx,
-			Model:          billingModel,
-			GroupID:        &gid,
-			Group:          apiKey.Group,
-			RequestCount:   result.ImageCount,
-			SizeTier:       sizeTier,
-			RateMultiplier: multiplier,
-			Resolver:       s.resolver,
-			Resolved:       resolved,
+			Ctx:             ctx,
+			Model:           billingModel,
+			GroupID:         &gid,
+			Group:           apiKey.Group,
+			RequestCount:    result.ImageCount,
+			SizeTier:        sizeTier,
+			ReasoningEffort: optionalStringValue(result.ReasoningEffort),
+			RateMultiplier:  multiplier,
+			Resolver:        s.resolver,
+			Resolved:        resolved,
 		})
 		if err == nil {
 			return cost
