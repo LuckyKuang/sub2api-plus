@@ -66,6 +66,7 @@ const HEADER_OVERRIDE_BLOCKED_NAMES = new Set([
   'x-goog-api-client',
   'x-grok-client-version',
   'x-grok-client-identifier',
+  'x-grok-client-mode',
   'x-stainless-lang',
   'x-stainless-package-version',
   'x-stainless-os',

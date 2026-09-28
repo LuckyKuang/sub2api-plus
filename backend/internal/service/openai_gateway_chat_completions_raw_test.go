@@ -134,8 +134,13 @@ func TestSendCCUpstreamRequestUsesGrokTransportProfile(t *testing.T) {
 	account := &Account{ID: 77, Platform: PlatformGrok, Type: AccountTypeAPIKey, Credentials: map[string]any{"api_key": "key"}}
 	body := []byte(`{"model":"grok-4.7","messages":[{"role":"user","content":"hello"}]}`)
 
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
+
 	resp, err := svc.sendCCUpstreamRequest(
-		context.Background(), nil, account, xai.DefaultBaseURL+"/chat/completions",
+		context.Background(), c, account, xai.DefaultBaseURL+"/chat/completions",
 		body, false, "key", xai.CLIUserAgent(xai.CLIClientVersion), "session-77",
 	)
 	require.NoError(t, err)

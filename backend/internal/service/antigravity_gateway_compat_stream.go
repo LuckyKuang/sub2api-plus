@@ -140,23 +140,31 @@ func (s *antigravityCompatStreamSession) consume(line string) {
 	s.consumeClaudeEvents(claudeEvents)
 }
 
+// hasMeaningfulData reports whether substantive downstream output was produced.
+// Upstream v0.2.9 treats a stream that only carried signatures, heartbeats,
+// usage or synthesized end events as empty so it can be retried; Plus keeps its
+// stricter responseCommitted observer so signature-only content never counts as
+// body success, a first token, or TPS input.
 func (s *antigravityCompatStreamSession) hasMeaningfulData() bool {
-	return s.responseCommitted
+	return s.responseCommitted || s.processor.HasContent()
 }
 
 func (s *antigravityCompatStreamSession) hasUpstreamTerminal() bool {
 	return s.processor.MessageStopSent()
 }
 
-func (s *antigravityCompatStreamSession) finish() *antigravityStreamResult {
+func (s *antigravityCompatStreamSession) finish() (*antigravityStreamResult, error) {
 	if !s.hasUpstreamTerminal() {
-		return s.collectResult(s.writer.Disconnected())
+		return s.collectResult(s.writer.Disconnected()), nil
 	}
 	finalEvents, usage := s.processor.Finish()
 	mergeAntigravityCompatUsage(s.usage, usage)
 	s.consumeClaudeEvents(finalEvents)
+	if !s.hasMeaningfulData() && !s.writer.Disconnected() {
+		return nil, antigravityCompatEmptyStreamError()
+	}
 	s.adapter.Finalize(s.writer)
-	return s.result(s.writer.Disconnected())
+	return s.result(s.writer.Disconnected()), nil
 }
 
 func (s *antigravityCompatStreamSession) collectResult(clientDisconnect bool) *antigravityStreamResult {
@@ -324,7 +332,7 @@ func (s *AntigravityGatewayService) handleAntigravityCompatStream(
 					writeAntigravityCompatStreamError(c, adapter, writer, "stream_incomplete")
 					return session.collectResult(false), errors.New("stream usage incomplete: missing terminal event")
 				}
-				return session.finish(), nil
+				return session.finish()
 			}
 			if event.err != nil {
 				return s.handleAntigravityCompatReadError(c, session, event.err, maxLineSize, prefix)

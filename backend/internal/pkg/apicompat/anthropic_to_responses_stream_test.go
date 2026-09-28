@@ -25,6 +25,15 @@ func TestAnthropicEventToResponses_ContentBlockStartPreservesInlinePayload(t *te
 				Index:        &idx,
 				ContentBlock: &tt.block,
 			}, state)
+			// A tool_use inline input is now held as a seed and, when no
+			// input_json_delta follows, emitted once on content_block_stop (deltas
+			// win over the seed to avoid duplicated arguments). Text and thinking
+			// still emit their delta on content_block_start, so feed the stop event
+			// and search the combined stream for every case.
+			events = append(events, AnthropicEventToResponsesEvents(&AnthropicStreamEvent{
+				Type:  "content_block_stop",
+				Index: &idx,
+			}, state)...)
 
 			for _, event := range events {
 				if event.Type == tt.wantType {

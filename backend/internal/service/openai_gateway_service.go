@@ -74,10 +74,13 @@ const (
 )
 
 // OpenAI allowed headers whitelist (for non-passthrough).
+// 出站身份头（user-agent/originator/version）由受信任身份解析生成，不在此放行，
+// 避免入站字段选源覆盖身份合同，见 docs/OUTBOUND_IDENTITY.md。
 var openaiAllowedHeaders = map[string]bool{
 	"accept-language":                       true,
 	"content-type":                          true,
 	"conversation_id":                       true,
+	"openai-beta":                           true,
 	"session-id":                            true,
 	"session_id":                            true,
 	"thread-id":                             true,
