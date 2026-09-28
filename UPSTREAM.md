@@ -5,8 +5,8 @@ procedures are documented in [`docs/RELEASING.md`](docs/RELEASING.md).
 
 ## Integrated Baseline
 
-The current integration tree incorporates the official `v0.2.8` tag at commit
-`fd80b08c90b55edcad5b00171b53f08721d30da1`, layered onto the Plus history.
+The current integration tree incorporates the official `v0.2.9` tag at commit
+`4c00df2e0183e2c70b7fa8ba45914205e36aad0c`, layered onto the Plus history.
 The release mapping below remains the authoritative record of publication
 status; importing an upstream tag does not publish a Plus release or change the
 embedded application version by itself.
@@ -25,7 +25,9 @@ validation boundaries. See [v0.2.5 integration](docs/UPSTREAM_V0_2_5_INTEGRATION
 for the official tag import on that tree. See
 [v0.2.7 integration](docs/UPSTREAM_V0_2_7_INTEGRATION.md) for the previous
 official tag import. See
-[v0.2.8 integration](docs/UPSTREAM_V0_2_8_INTEGRATION.md) for the latest
+[v0.2.8 integration](docs/UPSTREAM_V0_2_8_INTEGRATION.md) for the previous
+official tag import. See
+[v0.2.9 integration](docs/UPSTREAM_V0_2_9_INTEGRATION.md) for the latest
 official tag import.
 
 ## Release Mapping
