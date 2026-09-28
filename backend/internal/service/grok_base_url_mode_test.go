@@ -67,6 +67,17 @@ func TestSettingServiceResolveGrokBaseURLHonorsModeAndExplicitPins(t *testing.T)
 	require.Equal(t, xai.DefaultEUWest1BaseURL, svc.ResolveGrokBaseURL(context.Background(), account))
 }
 
+func TestSettingServiceResolveGrokBaseURLKeepsImplicitAPIKeyOnPublicAPI(t *testing.T) {
+	repo := &grokBaseURLSettingRepoStub{values: map[string]string{SettingKeyGrokDefaultBaseURLMode: GrokDefaultBaseURLModeCLI}}
+	svc := NewSettingService(repo, nil)
+	account := &Account{Platform: PlatformGrok, Type: AccountTypeAPIKey, Credentials: map[string]any{}}
+
+	require.Equal(t, xai.DefaultBaseURL, svc.ResolveGrokBaseURL(context.Background(), account))
+
+	account.Credentials["base_url"] = "https://relay.example.test/v1"
+	require.Equal(t, "https://relay.example.test/v1", svc.ResolveGrokBaseURL(context.Background(), account))
+}
+
 func TestAccountGetGrokBaseURLOrPreservesCustomOAuthURLForPolicyValidation(t *testing.T) {
 	account := &Account{Platform: PlatformGrok, Type: AccountTypeOAuth, Credentials: map[string]any{
 		"base_url": "https://attacker.invalid/v1",

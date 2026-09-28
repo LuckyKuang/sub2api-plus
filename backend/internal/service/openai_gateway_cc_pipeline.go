@@ -215,7 +215,11 @@ func (s *OpenAIGatewayService) sendCCUpstreamRequest(
 	// OpenAIForwardResult（例如 503/传输失败）时使用。每次发送都覆盖，
 	// 避免 Gin context 在账号 failover 尝试之间残留旧端点。
 	SetActualOpenAIUpstreamEndpoint(c, "/v1/chat/completions")
-	upstreamReq = upstreamReq.WithContext(WithHTTPUpstreamProfile(upstreamReq.Context(), HTTPUpstreamProfileOpenAI))
+	profile := HTTPUpstreamProfileOpenAI
+	if account != nil && account.Platform == PlatformGrok {
+		profile = HTTPUpstreamProfileGrok
+	}
+	upstreamReq = upstreamReq.WithContext(WithHTTPUpstreamProfile(upstreamReq.Context(), profile))
 	upstreamReq.Header.Set("Content-Type", "application/json")
 	upstreamReq.Header.Set("Authorization", "Bearer "+bearerToken)
 	if stream {
@@ -241,7 +245,7 @@ func (s *OpenAIGatewayService) sendCCUpstreamRequest(
 		if account.IsGrokOAuth() {
 			applyGrokCLIHeaders(upstreamReq.Header)
 		}
-		applyGrokCacheHeaders(upstreamReq.Header, grokCacheIdentity)
+		applyGrokRequestMetadata(upstreamReq.Header, body, grokCacheIdentity, account.GetCredential("sub"))
 	}
 	// OpenAI identity is always the final stage. Other providers retain their
 	// existing generic override behavior.

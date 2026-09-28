@@ -107,6 +107,7 @@ func builtInOutboundIdentity(preset string) outboundidentity.Identity {
 		i.UserAgent = xai.CLIUserAgent(i.Version)
 		i.Headers["x-grok-client-identifier"] = i.Originator
 		i.Headers["x-grok-client-version"] = i.Version
+		i.Headers["x-grok-client-mode"] = xai.CLIClientMode
 	case "antigravity":
 		return antigravity.DefaultIdentity()
 	default:
@@ -143,7 +144,7 @@ func buildOutboundIdentity(selection OutboundIdentitySelection) (outboundidentit
 		if brandidentity.ContainsBrand(ua) {
 			return i, fmt.Errorf("User-Agent must not contain the project brand")
 		}
-		prefix := map[string]string{"claude": "claude-cli/", "gemini": "GeminiCLI/", "grok": "xai-grok-workspace/", "antigravity": "antigravity/"}[selection.Preset]
+		prefix := map[string]string{"claude": "claude-cli/", "gemini": "GeminiCLI/", "grok": "grok-shell/", "antigravity": "antigravity/"}[selection.Preset]
 		if !strings.HasPrefix(ua, prefix) {
 			return i, fmt.Errorf("User-Agent must match the selected preset")
 		}
@@ -398,6 +399,9 @@ func resolveAccountIdentitySelection(ctx context.Context, account *Account, sele
 
 func prepareAccountOutboundRequest(req *http.Request, account *Account) *http.Request {
 	if req != nil {
+		if account != nil && account.Platform == PlatformGrok && HTTPUpstreamProfileFromContext(req.Context()) == HTTPUpstreamProfileDefault {
+			*req = *req.WithContext(WithHTTPUpstreamProfile(req.Context(), HTTPUpstreamProfileGrok))
+		}
 		ApplyAccountOutboundIdentity(req.Context(), account, req)
 	}
 	return req

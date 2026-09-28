@@ -128,6 +128,7 @@ type GrokTokenInfo struct {
 }
 
 func (s *GrokOAuthService) ExchangeCode(ctx context.Context, input *GrokExchangeCodeInput) (*GrokTokenInfo, error) {
+	ctx = withNativeOAuthOutboundIdentity(ctx, PlatformGrok)
 	if input == nil {
 		return nil, infraerrors.New(http.StatusBadRequest, "GROK_OAUTH_INVALID_INPUT", "input is required")
 	}
@@ -211,6 +212,7 @@ func (s *GrokOAuthService) RefreshToken(ctx context.Context, refreshToken, proxy
 }
 
 func (s *GrokOAuthService) ValidateRefreshToken(ctx context.Context, refreshToken string, proxyID *int64) (*GrokTokenInfo, error) {
+	ctx = withNativeOAuthOutboundIdentity(ctx, PlatformGrok)
 	proxyURL, err := s.proxyURL(ctx, proxyID)
 	if err != nil {
 		return nil, err
@@ -221,6 +223,7 @@ func (s *GrokOAuthService) ValidateRefreshToken(ctx context.Context, refreshToke
 // ValidateSSOToken converts a Web SSO cookie into Build OAuth tokens.
 // The raw sso_token is never stored on GrokTokenInfo or account credentials.
 func (s *GrokOAuthService) ValidateSSOToken(ctx context.Context, ssoToken string, proxyID *int64) (*GrokTokenInfo, error) {
+	ctx = withNativeOAuthOutboundIdentity(ctx, PlatformGrok)
 	ssoToken = strings.TrimSpace(ssoToken)
 	if ssoToken == "" {
 		return nil, infraerrors.New(http.StatusBadRequest, "GROK_OAUTH_NO_SSO_TOKEN", "sso_token is required")

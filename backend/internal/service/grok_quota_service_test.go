@@ -17,6 +17,7 @@ import (
 
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/usagestats"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/xai"
 	"github.com/stretchr/testify/require"
@@ -136,7 +137,7 @@ func TestSyncGrokObservedModelsUsesCLIIdentityAndAccountHeaders(t *testing.T) {
 	require.Equal(t, xai.CLIClientVersion, upstream.lastReq.Header.Get("x-grok-client-version"))
 	require.Equal(t, xai.CLIClientIdentifier, upstream.lastReq.Header.Get("x-grok-client-identifier"))
 	require.Equal(t, xai.CLIUserAgent(xai.CLIClientVersion), upstream.lastReq.Header.Get("User-Agent"))
-	require.Equal(t, "interactive", upstream.lastReq.Header.Get("X-Grok-Client-Mode"))
+	require.Equal(t, xai.CLIClientMode, upstream.lastReq.Header.Get("X-Grok-Client-Mode"))
 	require.Equal(t, "user-902", upstream.lastReq.Header.Get("X-UserID"))
 	require.Equal(t, "user902@example.test", upstream.lastReq.Header.Get("X-Email"))
 	require.Contains(t, repo.updates[account.ID], grokObservedModelsExtraKey)
@@ -510,6 +511,10 @@ func TestGrokQuotaServiceProbeUsageStoresHeaders(t *testing.T) {
 	require.Equal(t, "https://cli-chat-proxy.grok.com/v1/responses", upstream.lastReq.URL.String())
 	require.Equal(t, "Bearer access-token", upstream.lastReq.Header.Get("Authorization"))
 	require.Equal(t, grokCLIVersion, upstream.lastReq.Header.Get("X-Grok-Client-Version"))
+	require.NotEmpty(t, upstream.lastReq.Header.Get("x-grok-req-id"))
+	require.NotEmpty(t, upstream.lastReq.Header.Get("x-grok-agent-id"))
+	require.Equal(t, "grok-4.5", upstream.lastReq.Header.Get("x-grok-model-override"))
+	require.Equal(t, HTTPUpstreamProfileGrok, HTTPUpstreamProfileFromContext(upstream.lastReq.Context()))
 	require.Equal(t, "application/json, text/event-stream", upstream.lastReq.Header.Get("Accept"))
 	require.Equal(t, "grok-4.5", gjson.GetBytes(upstream.lastBody, "model").String())
 	require.Equal(t, grokQuotaProbeInput, gjson.GetBytes(upstream.lastBody, "input").String())
@@ -799,6 +804,33 @@ func TestGrokQuotaServiceQueryQuotaPaidBillingSkipsActiveProbe(t *testing.T) {
 	require.Nil(t, result.LocalUsage24h)
 
 	requireGrokBillingProbeSkippedActiveUsage(t, upstream)
+}
+
+func TestGrokQuotaServiceBillingRequestsShareAccountIdentitySnapshot(t *testing.T) {
+	account := healthyGrokQuotaOAuthAccount(58)
+	account.Credentials["sub"] = "user-58"
+	repo := &grokQuotaAccountRepo{mockAccountRepoForPlatform: &mockAccountRepoForPlatform{
+		accountsByID: map[int64]*Account{account.ID: account},
+	}}
+	upstream := &grokHybridUpstream{}
+	settings := emptyOutboundIdentitySettings()
+	settings.Profiles["grok"] = OutboundIdentitySelection{Preset: "grok", Version: "3.9.1"}
+	settingService, ctx := outboundIdentityTestSettings(t, settings)
+	svc := NewGrokQuotaService(repo, nil, NewGrokTokenProvider(repo, nil), upstream, nil)
+	svc.SetSettingService(settingService)
+
+	_, err := svc.ProbeBilling(ctx, account.ID)
+	require.NoError(t, err)
+	requests, _ := upstream.quotaSnapshot()
+	require.Len(t, requests, 2)
+	for _, req := range requests {
+		identity, ok := outboundidentity.FromContext(req.Context())
+		require.True(t, ok)
+		require.Equal(t, account.ID, identity.AccountID)
+		require.Equal(t, "3.9.1", identity.Version)
+		require.Equal(t, xai.CLIUserAgent("3.9.1"), req.UserAgent())
+		require.Equal(t, "user-58", req.Header.Get("x-userid"))
+	}
 }
 
 func TestGrokQuotaServiceQueryQuotaCustomPaidMonthlyLimitSkipsActiveProbe(t *testing.T) {

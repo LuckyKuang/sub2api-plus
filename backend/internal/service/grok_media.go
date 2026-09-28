@@ -716,6 +716,12 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 		applyGrokCLIHeaders(upstreamReq.Header)
 	}
 	if endpoint.RequiresRequestBody() {
+		applyGrokRequestMetadata(upstreamReq.Header, body, "", account.GetCredential("sub"))
+		if model := strings.TrimSpace(upstreamModel); model != "" {
+			upstreamReq.Header.Set("x-grok-model-override", model)
+		}
+	}
+	if endpoint.RequiresRequestBody() {
 		contentType = strings.TrimSpace(contentType)
 		if contentType == "" {
 			contentType = "application/json"

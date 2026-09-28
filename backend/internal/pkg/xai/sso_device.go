@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	SSOBuildScope        = "openid profile email offline_access grok-cli:access api:access conversations:read conversations:write"
+	SSOBuildScope        = "openid profile email offline_access grok-cli:access api:access conversations:read conversations:write workspaces:read workspaces:write"
 	SSOAccountsURL       = "https://accounts.x.ai/"
 	SSODeviceURL         = OAuthIssuer + "/oauth2/device/code"
 	SSOVerifyURL         = OAuthIssuer + "/oauth2/device/verify"
@@ -113,6 +113,7 @@ func (f *ssoDeviceFlow) convert(ctx context.Context) (*TokenResponse, error) {
 	status, _, body, err := f.do(ctx, http.MethodPost, SSODeviceURL, url.Values{
 		"client_id": {DefaultClientID},
 		"scope":     {SSOBuildScope},
+		"referrer":  {"grok-build"},
 	})
 	if err != nil {
 		return nil, err
@@ -269,6 +270,9 @@ func (f *ssoDeviceFlow) do(ctx context.Context, method, endpoint string, form ur
 		}
 
 		outboundidentity.ApplyDefault(request, "grok")
+		if currentURL == SSODeviceURL || currentURL == SSOTokenURL {
+			request.Header.Set("x-grok-client-surface", "headless")
+		}
 		response, err := f.client.Do(request)
 		if err != nil {
 			return 0, currentURL, nil, err

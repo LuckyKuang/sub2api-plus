@@ -3,6 +3,7 @@ package xai
 import (
 	"net/http"
 	"os"
+	"runtime"
 	"strings"
 
 	"golang.org/x/mod/semver"
@@ -15,20 +16,22 @@ const (
 	// CLIProxyHost is the hostname that requires the official CLI identity headers.
 	CLIProxyHost = "cli-chat-proxy.grok.com"
 
-	// CLIStableVersion is the known-good minimum client version accepted by cli-chat-proxy.
-	CLIStableVersion = "0.2.93"
+	// CLIStableVersion is the oldest official client identity this build advertises.
+	CLIStableVersion = "1.0.41"
 
 	// CLIVersionEnv is the optional operator override for CLIStableVersion.
 	CLIVersionEnv = "XAI_GROK_CLI_VERSION"
 
 	// CLITokenAuth is required by cli-chat-proxy for Grok Build OAuth tokens.
 	CLITokenAuth = "xai-grok-cli"
+	// CLIAuthenticateResponse is required by the CLI proxy auth middleware.
+	CLIAuthenticateResponse = "authenticate-response"
 
 	// CLIClientIdentifier is the x-grok-client-identifier value used by Grok shell/CLI.
 	CLIClientIdentifier = "grok-shell"
 
-	// CLIClientMode is used by billing / quota probes on the CLI surface.
-	CLIClientMode = "cli"
+	// CLIClientMode identifies this unattended gateway as a headless client.
+	CLIClientMode = "headless"
 )
 
 // ResolveCLIVersion returns a supported CLI client version.
@@ -54,12 +57,32 @@ func IsSupportedCLIVersion(version string) bool {
 		semver.Compare(canonical, minimum) >= 0
 }
 
-// CLIUserAgent builds the workspace-style User-Agent for a CLI client version.
+// CLIUserAgent builds the official generic Grok shell User-Agent.
 func CLIUserAgent(version string) string {
 	if strings.TrimSpace(version) == "" {
 		version = CLIClientVersion
 	}
-	return "xai-grok-workspace/" + version
+	return "grok-shell/" + version + " (" + cliPlatformOS() + "; " + cliPlatformArch() + ")"
+}
+
+func cliPlatformOS() string {
+	if runtime.GOOS == "darwin" {
+		return "macos"
+	}
+	return runtime.GOOS
+}
+
+func cliPlatformArch() string {
+	switch runtime.GOARCH {
+	case "amd64":
+		return "x86_64"
+	case "386":
+		return "x86"
+	case "arm64":
+		return "aarch64"
+	default:
+		return runtime.GOARCH
+	}
 }
 
 // ApplyCLIProxyHeaders stamps the fixed Grok CLI identity when the request
@@ -73,7 +96,9 @@ func ApplyCLIProxyHeaders(req *http.Request) {
 	}
 	version := ResolveCLIVersion()
 	req.Header.Set("X-XAI-Token-Auth", CLITokenAuth)
+	req.Header.Set("x-authenticateresponse", CLIAuthenticateResponse)
 	req.Header.Set("x-grok-client-version", version)
 	req.Header.Set("x-grok-client-identifier", CLIClientIdentifier)
+	req.Header.Set("x-grok-client-mode", CLIClientMode)
 	req.Header.Set("User-Agent", CLIUserAgent(version))
 }

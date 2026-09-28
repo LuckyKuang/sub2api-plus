@@ -10,18 +10,25 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/xai"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 )
 
 const (
 	grokConversationIDHeader         = "X-Grok-Conv-Id"
+	grokConversationGroupNamespace  = "xai:grok-build:conversation-group:"
 	claudeCodeSessionHeader          = "X-Claude-Code-Session-Id"
 	grokClientToolCacheOptInHeader   = brandidentity.GrokClientToolCacheHeader
 	grokFreeCacheNativeToolsJSON     = `[{"type":"web_search"},{"type":"x_search"}]`
 	grokFreeCacheDisabledToolChoice  = "none"
 	grokClientToolCacheOptInExtraKey = "grok_client_tool_cache_enabled"
 )
+
+// grokAgentID is the process-level bucketing key used by the official shell.
+// Keep it stable for the lifetime of this process, but do not share one fixed
+// value across every deployment.
+var grokAgentID = uuid.NewString()
 
 // Claude Code metadata.user_id often ends with _session_<uuid>.
 var claudeCodeSessionSuffixPattern = regexp.MustCompile(`_session_([a-f0-9-]+)$`)
@@ -547,6 +554,36 @@ func applyGrokCacheHeaders(headers http.Header, identity string) {
 		return
 	}
 	headers.Set(grokConversationIDHeader, identity)
+}
+
+// applyGrokRequestMetadata renders the request-owned subset of the official
+// sampler envelope. Values come from the final request body and the trusted,
+// tenant-isolated cache identity; callers cannot pin them through overrides.
+func applyGrokRequestMetadata(headers http.Header, body []byte, identity, userID string) {
+	if headers == nil {
+		return
+	}
+	headers.Set("x-grok-req-id", uuid.NewString())
+	headers.Set("x-grok-agent-id", grokAgentID)
+	if model := strings.TrimSpace(gjson.GetBytes(body, "model").String()); model != "" {
+		headers.Set("x-grok-model-override", model)
+	} else {
+		headers.Del("x-grok-model-override")
+	}
+	if userID = strings.TrimSpace(userID); userID != "" {
+		headers.Set("x-grok-user-id", userID)
+	} else {
+		headers.Del("x-grok-user-id")
+	}
+	applyGrokCacheHeaders(headers, identity)
+	identity = strings.TrimSpace(identity)
+	if identity == "" {
+		headers.Del("x-grok-session-id")
+		headers.Del("x-grok-conv-group-id")
+		return
+	}
+	headers.Set("x-grok-session-id", identity)
+	headers.Set("x-grok-conv-group-id", uuid.NewSHA1(uuid.NameSpaceOID, []byte(grokConversationGroupNamespace+identity)).String())
 }
 
 // stripGrokChatPromptCacheKey removes the Responses-only body field after it

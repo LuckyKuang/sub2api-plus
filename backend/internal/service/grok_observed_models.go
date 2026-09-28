@@ -31,7 +31,7 @@ var grokObservedModelsFlight sync.Map // accountID -> *singleflight-ish in-fligh
 // scheduleGrokObservedModelsSync best-effort fetches upstream /v1/models for a
 // Grok OAuth account and stores IDs in Extra. Never blocks request path long;
 // callers should fire-and-forget after successful auth/probe.
-func (s *GrokQuotaService) scheduleGrokObservedModelsSync(account *Account) {
+func (s *GrokQuotaService) scheduleGrokObservedModelsSync(ctx context.Context, account *Account) {
 	if s == nil || account == nil || !account.IsGrokOAuth() || s.accountRepo == nil {
 		return
 	}
@@ -41,9 +41,10 @@ func (s *GrokQuotaService) scheduleGrokObservedModelsSync(account *Account) {
 	}
 	// Copy credentials for background use.
 	acc := *account
+	snapshotCtx := WithAccountOutboundIdentity(WithOutboundIdentityScope(ctx, nil), &acc)
 	go func() {
 		defer grokObservedModelsFlight.Delete(id)
-		ctx, cancel := context.WithTimeout(context.Background(), grokObservedModelsTimeout)
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(snapshotCtx), grokObservedModelsTimeout)
 		defer cancel()
 		if err := s.syncGrokObservedModels(ctx, &acc); err != nil {
 			slog.Debug("grok_observed_models_sync_failed", "account_id", id, "error", err)

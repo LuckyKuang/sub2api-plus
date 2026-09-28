@@ -87,7 +87,7 @@ func TestPrivacyIdentityIsEndpointLocalAndFiltersOverrides(t *testing.T) {
 
 	// A compatible selected family still owns its declarations. Privacy's SDK
 	// pin cannot be attached to an unrelated identity by the protocol adapter.
-	foreign := outboundidentity.Identity{Preset: "grok", UserAgent: "xai-grok-workspace/1.2.3", Headers: map[string]string{"X-Grok-Client-Version": "1.2.3"}}
+	foreign := outboundidentity.Identity{Preset: "grok", UserAgent: "grok-shell/1.2.3 (linux; x86_64)", Headers: map[string]string{"X-Grok-Client-Version": "1.2.3"}}
 	req = req.WithContext(outboundidentity.WithIdentity(ctx, foreign))
 	applyPrivacyIdentity(req)
 	require.Equal(t, foreign.UserAgent, req.UserAgent())

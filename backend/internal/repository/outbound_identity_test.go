@@ -12,6 +12,7 @@ import (
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/tlsfingerprint"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/xai"
 	"github.com/LuckyKuang/sub2api-plus/internal/service"
 	"github.com/imroc/req/v3"
 	"github.com/stretchr/testify/require"
@@ -40,7 +41,8 @@ func TestHTTPUpstreamTrustedIdentitySurvivesGrokHostAndFallback(t *testing.T) {
 						captured = append(captured, req.Clone(req.Context()))
 						status, body := http.StatusOK, `{"id":"response-ok"}`
 						if len(captured) == 1 {
-							status, body = http.StatusForbidden, `{"error":"Access denied"}`
+							status = http.StatusForbidden
+							body = `{"code":"permission_denied","error":"Access to the chat endpoint is denied. Please ensure you're using the correct credentials. If you believe this is a mistake, please contact support."}`
 						}
 						return &http.Response{StatusCode: status, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body)), Request: req}, nil
 					})},
@@ -75,7 +77,9 @@ func TestHTTPUpstreamTrustedIdentitySurvivesGrokHostAndFallback(t *testing.T) {
 				require.Equal(t, grokCLIProxyHost, captured[0].URL.Hostname())
 				require.Equal(t, grokOfficialAPIHost, captured[1].URL.Hostname())
 				require.Equal(t, "xai-grok-cli", captured[0].Header.Get("X-XAI-Token-Auth"))
+				require.Equal(t, xai.CLIAuthenticateResponse, captured[0].Header.Get("x-authenticateresponse"))
 				require.Empty(t, captured[1].Header.Get("X-XAI-Token-Auth"))
+				require.Empty(t, captured[1].Header.Get("x-authenticateresponse"))
 				for _, sent := range captured {
 					require.Equal(t, want, identityHeadersForTransportTest(sent.Header))
 					require.Equal(t, "Bearer test-key", sent.Header.Get("Authorization"))
@@ -117,7 +121,7 @@ func TestClaudeOAuthRefreshUsesSelectedIdentity(t *testing.T) {
 }
 
 func TestGrokFallbackRetainsTrustedIdentityWithoutProxyAuthenticationHints(t *testing.T) {
-	i := outboundidentity.Identity{Preset: "grok", UserAgent: "xai-grok-workspace/3.9.1", Originator: "grok-shell", Version: "3.9.1", Headers: map[string]string{"x-grok-client-version": "3.9.1", "x-grok-client-identifier": "grok-shell"}}
+	i := outboundidentity.Identity{Preset: "grok", UserAgent: "grok-shell/3.9.1 (linux; x86_64)", Originator: "grok-shell", Version: "3.9.1", Headers: map[string]string{"x-grok-client-version": "3.9.1", "x-grok-client-identifier": "grok-shell", "x-grok-client-mode": "headless"}}
 	req, err := http.NewRequestWithContext(outboundidentity.WithIdentity(context.Background(), i), http.MethodPost, "https://cli-chat-proxy.grok.com/v1/responses", strings.NewReader(`{"input":"hello"}`))
 	require.NoError(t, err)
 	req.Header.Set("Authorization", "Bearer test-token")

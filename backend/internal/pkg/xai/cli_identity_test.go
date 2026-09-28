@@ -4,10 +4,27 @@ package xai
 
 import (
 	"net/http"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
+
+func TestCLIUserAgentUsesOfficialPlatformNames(t *testing.T) {
+	expectedOS := runtime.GOOS
+	if expectedOS == "darwin" {
+		expectedOS = "macos"
+	}
+	expectedArch := map[string]string{
+		"amd64": "x86_64",
+		"386":   "x86",
+		"arm64": "aarch64",
+	}[runtime.GOARCH]
+	if expectedArch == "" {
+		expectedArch = runtime.GOARCH
+	}
+	require.Equal(t, "grok-shell/1.0.41 ("+expectedOS+"; "+expectedArch+")", CLIUserAgent("1.0.41"))
+}
 
 func TestResolveCLIVersionDefaultsToPinnedClientVersion(t *testing.T) {
 	t.Setenv(CLIVersionEnv, "")
@@ -18,15 +35,15 @@ func TestResolveCLIVersionDefaultsToPinnedClientVersion(t *testing.T) {
 }
 
 func TestResolveCLIVersionAcceptsValidOverride(t *testing.T) {
-	t.Setenv(CLIVersionEnv, "0.2.95-alpha.1")
-	require.Equal(t, "0.2.95-alpha.1", ResolveCLIVersion())
+	t.Setenv(CLIVersionEnv, "1.0.42-alpha.1")
+	require.Equal(t, "1.0.42-alpha.1", ResolveCLIVersion())
 }
 
 func TestResolveCLIVersionRejectsUnsafeOrTooOld(t *testing.T) {
 	for _, version := range []string{
-		"0.2.92",
-		"0.2.93-beta.1",
-		"0.2.95\r\nX-Injected: true",
+		"1.0.40",
+		"1.0.41-beta.1",
+		"1.0.42\r\nX-Injected: true",
 		"0.2.093",
 		"0.3",
 		"1",
@@ -50,11 +67,13 @@ func TestApplyCLIProxyHeaders(t *testing.T) {
 	require.Equal(t, CLIClientVersion, req.Header.Get("x-grok-client-version"))
 	require.Equal(t, CLIClientIdentifier, req.Header.Get("x-grok-client-identifier"))
 	require.Equal(t, CLITokenAuth, req.Header.Get("X-XAI-Token-Auth"))
+	require.Equal(t, CLIAuthenticateResponse, req.Header.Get("x-authenticateresponse"))
+	require.Equal(t, CLIClientMode, req.Header.Get("x-grok-client-mode"))
 	require.Equal(t, CLIUserAgent(CLIClientVersion), req.Header.Get("User-Agent"))
 }
 
 func TestApplyCLIProxyHeadersLeavesAPIHostUnchanged(t *testing.T) {
-	t.Setenv(CLIVersionEnv, "0.2.95")
+	t.Setenv(CLIVersionEnv, "1.0.42")
 
 	req, err := http.NewRequest(http.MethodPost, "https://api.x.ai/v1/responses", nil)
 	require.NoError(t, err)

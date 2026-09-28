@@ -20,7 +20,7 @@ func promptIdentityTestContext(t *testing.T, version *atomic.Int64) context.Cont
 	ctx := outboundidentity.WithResolver(context.Background(), func(_ context.Context, key string) outboundidentity.Identity {
 		require.Equal(t, "openai:apikey", key)
 		v := fmt.Sprintf("3.9.%d", version.Load())
-		return outboundidentity.Identity{Preset: "grok", UserAgent: "xai-grok-workspace/" + v, Originator: "grok", Version: v,
+		return outboundidentity.Identity{Preset: "grok", UserAgent: "grok-shell/" + v + " (linux; x86_64)", Originator: "grok-shell", Version: v,
 			Headers: map[string]string{"x-grok-client-identifier": "grok", "x-grok-client-version": v}}
 	})
 	return outboundidentity.WithIdentity(ctx, outboundidentity.Identity{AccountID: 9, Preset: "claude", UserAgent: "claude-cli/9.9.9", Headers: map[string]string{"X-App": "cli"}})
@@ -28,7 +28,7 @@ func promptIdentityTestContext(t *testing.T, version *atomic.Int64) context.Cont
 
 func assertPromptSupplierHeaders(t *testing.T, h http.Header, version, token string) {
 	t.Helper()
-	require.Equal(t, "xai-grok-workspace/"+version, h.Get("User-Agent"))
+	require.Equal(t, "grok-shell/"+version+" (linux; x86_64)", h.Get("User-Agent"))
 	require.Equal(t, version, h.Get("x-grok-client-version"))
 	require.Equal(t, "grok", h.Get("x-grok-client-identifier"))
 	require.Equal(t, "Bearer "+token, h.Get("Authorization"))

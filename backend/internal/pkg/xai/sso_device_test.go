@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"github.com/stretchr/testify/require"
 )
 
@@ -19,10 +20,17 @@ type ssoDeviceFakeClient struct {
 	t             *testing.T
 	tokenCalls    int
 	cookieHeaders []string
+	identities    []string
 }
 
 func (c *ssoDeviceFakeClient) Do(req *http.Request) (*http.Response, error) {
 	c.cookieHeaders = append(c.cookieHeaders, req.Header.Get("Cookie"))
+	c.identities = append(c.identities, strings.Join([]string{
+		req.UserAgent(),
+		req.Header.Get("x-grok-client-identifier"),
+		req.Header.Get("x-grok-client-version"),
+		req.Header.Get("x-grok-client-mode"),
+	}, "|"))
 	switch req.URL.String() {
 	case SSOAccountsURL:
 		require.Equal(c.t, http.MethodGet, req.Method)
@@ -32,6 +40,8 @@ func (c *ssoDeviceFakeClient) Do(req *http.Request) (*http.Response, error) {
 		values := readSSODeviceForm(c.t, req)
 		require.Equal(c.t, DefaultClientID, values.Get("client_id"))
 		require.Equal(c.t, SSOBuildScope, values.Get("scope"))
+		require.Equal(c.t, "grok-build", values.Get("referrer"))
+		require.Equal(c.t, "headless", req.Header.Get("x-grok-client-surface"))
 		return ssoDeviceResponse(http.StatusOK, http.Header{"Set-Cookie": {"csrf=csrf-token; Path=/"}}, `{"device_code":"device-1","user_code":"USER-1","verification_uri_complete":"https://auth.x.ai/oauth2/device/complete","interval":1,"expires_in":60}`), nil
 	case "https://auth.x.ai/oauth2/device/complete":
 		require.Equal(c.t, http.MethodGet, req.Method)
@@ -60,6 +70,7 @@ func (c *ssoDeviceFakeClient) Do(req *http.Request) (*http.Response, error) {
 		values := readSSODeviceForm(c.t, req)
 		require.Equal(c.t, "urn:ietf:params:oauth:grant-type:device_code", values.Get("grant_type"))
 		require.Equal(c.t, "device-1", values.Get("device_code"))
+		require.Equal(c.t, "headless", req.Header.Get("x-grok-client-surface"))
 		return ssoDeviceResponse(http.StatusOK, nil, `{"access_token":"access-token","refresh_token":"refresh-token","id_token":"id-token","token_type":"Bearer","expires_in":3600,"scope":"`+SSOBuildScope+`"}`), nil
 	default:
 		c.t.Fatalf("unexpected request: %s %s", req.Method, req.URL.String())
@@ -70,7 +81,12 @@ func (c *ssoDeviceFakeClient) Do(req *http.Request) (*http.Response, error) {
 func TestConvertSSOToBuildCompletesDeviceFlow(t *testing.T) {
 	t.Setenv(EnvClientID, "")
 	client := &ssoDeviceFakeClient{t: t}
-	token, err := ConvertSSOToBuild(context.Background(), "sso=sso-token; ignored=1", &SSODeviceOptions{
+	identity := outboundidentity.Identity{
+		Preset: "grok", UserAgent: "grok-shell/3.9.1 (linux; x86_64)", Originator: "grok-shell", Version: "3.9.1",
+		Headers: map[string]string{"User-Agent": "grok-shell/3.9.1 (linux; x86_64)", "x-grok-client-identifier": "grok-shell", "x-grok-client-version": "3.9.1", "x-grok-client-mode": "headless"},
+	}
+	ctx := outboundidentity.WithIdentity(context.Background(), identity)
+	token, err := ConvertSSOToBuild(ctx, "sso=sso-token; ignored=1", &SSODeviceOptions{
 		HTTPClient: client,
 		Sleep: func(context.Context, time.Duration) error {
 			return nil
@@ -87,6 +103,9 @@ func TestConvertSSOToBuildCompletesDeviceFlow(t *testing.T) {
 	require.Contains(t, client.cookieHeaders[0], "sso-rw=sso-token")
 	require.Contains(t, client.cookieHeaders[len(client.cookieHeaders)-1], "session=web-session")
 	require.Contains(t, client.cookieHeaders[len(client.cookieHeaders)-1], "csrf=csrf-token")
+	for _, captured := range client.identities {
+		require.Equal(t, "grok-shell/3.9.1 (linux; x86_64)|grok-shell|3.9.1|headless", captured)
+	}
 }
 
 func TestNormalizeSSOTokenAcceptsCookieHeader(t *testing.T) {
