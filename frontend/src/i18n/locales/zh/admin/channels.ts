@@ -228,7 +228,18 @@ export default {
         syncingModels: '同步中...',
         syncModelsSuccess: '已同步 {count} 个新模型',
         syncModelsAlreadyUpToDate: '模型列表已是最新',
-        syncModelsError: '同步模型失败'
+        syncModelsError: '同步模型失败',
+        syncModelsPartial: '已添加 {count} 个模型：{priced} 个已自动填价，{needsPricing} 个需手动填价',
+        syncModelsStaleCatalog: '价格目录刷新失败，当前使用的是上一次可用的快照',
+        pricingLookupLoading: '正在查询官方参考价...',
+        pricingLookupManualRequired: '该模型暂无官方参考价，请手动填写价格',
+        pricingLookupUnsupportedUnit: '该模型的计费单位（音频/字符/秒等）无法用当前计价表单表达，请手动配置',
+        pricingLookupError: '参考价查询失败，请重试或手动填写价格',
+        pricingLookupRetry: '重试',
+        pricingLookupSourceCatalog: '来源：受信任价格目录',
+        pricingLookupSourceFallback: '来源：项目内置同型号价',
+        pricingLookupSourceProxy: '来源：代理参考价（非供应商公开价）',
+        pricingLookupSourceNone: '无可用参考价'
       }
     },
 

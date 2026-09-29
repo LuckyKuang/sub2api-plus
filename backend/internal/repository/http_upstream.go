@@ -394,6 +394,9 @@ func httpClientWithGrokAccessDeniedFallback(client *http.Client) *http.Client {
 }
 
 func (t *grokAccessDeniedFallbackTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	applyGrokCLIProxyAuthentication(req)
+	outboundidentity.ApplyContext(req)
+	brandidentity.FilterOutboundRequest(req)
 	resp, err := t.base.RoundTrip(req)
 	if err != nil || !isGrokCLIAccessDeniedFallbackCandidate(req, resp) {
 		return resp, err
@@ -429,24 +432,36 @@ func (t *grokAccessDeniedFallbackTransport) RoundTrip(req *http.Request) (*http.
 
 func isGrokCLICompatibilityAccessDenied(body []byte) bool {
 	lower := bytes.ToLower(body)
-	if bytes.Contains(lower, []byte("access denied")) {
-		return true
+	for _, phrase := range [][]byte{
+		[]byte("subscription required"),
+		[]byte("no active subscription"),
+		[]byte("entitlement denied"),
+		[]byte("spending limit"),
+		[]byte("out of credits"),
+		[]byte("run out of credits"),
+	} {
+		if bytes.Contains(lower, phrase) {
+			return false
+		}
 	}
 	var payload struct {
-		Code  string `json:"code"`
-		Error string `json:"error"`
+		Code    string `json:"code"`
+		Error   string `json:"error"`
+		Message string `json:"message"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil || !strings.EqualFold(strings.TrimSpace(payload.Code), "permission_denied") {
 		return false
 	}
 	const chatEndpointDeniedPrefix = "access to the chat endpoint is denied. please ensure you're using the correct credentials. if you believe this is a mistake, please"
-	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(payload.Error)), chatEndpointDeniedPrefix)
+	detail := firstNonEmptyString(payload.Error, payload.Message)
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(detail)), chatEndpointDeniedPrefix)
 }
 
 func isGrokCLIAccessDeniedFallbackCandidate(req *http.Request, resp *http.Response) bool {
 	return req != nil && req.URL != nil && req.GetBody != nil && resp != nil &&
 		resp.StatusCode == http.StatusForbidden &&
 		strings.EqualFold(strings.TrimSpace(req.URL.Hostname()), grokCLIProxyHost) &&
+		isGrokCLIProxyResponseAuthenticatedRequest(req) &&
 		strings.EqualFold(strings.TrimSpace(req.Header.Get("X-XAI-Token-Auth")), "xai-grok-cli") &&
 		strings.HasPrefix(strings.ToLower(strings.TrimSpace(req.Header.Get("Authorization"))), "bearer ")
 }
@@ -466,6 +481,7 @@ func newGrokOfficialAPIFallbackRequest(req *http.Request) (*http.Request, error)
 	fallbackReq.Header = req.Header.Clone()
 	for _, header := range []string{
 		"X-XAI-Token-Auth",
+		"x-authenticateresponse",
 		"X-Grok-Client-Surface",
 		"X-UserID",
 		"X-Email",
@@ -473,6 +489,7 @@ func newGrokOfficialAPIFallbackRequest(req *http.Request) (*http.Request, error)
 		fallbackReq.Header.Del(header)
 	}
 	outboundidentity.ApplyContext(fallbackReq)
+	brandidentity.FilterOutboundRequest(fallbackReq)
 	return fallbackReq, nil
 }
 
@@ -508,16 +525,53 @@ type prefixedReadCloser struct {
 	io.Closer
 }
 
-// The destination owns its authentication hint, never the client's identity.
-// Identity resolution and version validation belong to the account/preset layer.
+// The destination owns its authentication hints, never the client's identity.
+// Reconcile on every RoundTrip so redirects cannot carry CLI-only declarations
+// to another host. Identity resolution belongs to the account/preset layer.
 func applyGrokCLIProxyAuthentication(req *http.Request) {
-	if req == nil || req.URL == nil || !strings.EqualFold(strings.TrimSpace(req.URL.Hostname()), grokCLIProxyHost) {
+	if req == nil || req.URL == nil {
 		return
 	}
 	if req.Header == nil {
 		req.Header = make(http.Header)
 	}
+	if !strings.EqualFold(strings.TrimSpace(req.URL.Hostname()), grokCLIProxyHost) {
+		req.Header.Del("X-XAI-Token-Auth")
+		req.Header.Del("x-authenticateresponse")
+		return
+	}
 	req.Header.Set("X-XAI-Token-Auth", xai.CLITokenAuth)
+	if isGrokCLIProxyResponseAuthenticatedRequest(req) {
+		req.Header.Set("x-authenticateresponse", xai.CLIAuthenticateResponse)
+	} else {
+		req.Header.Del("x-authenticateresponse")
+	}
+}
+
+func isGrokCLIProxyResponseAuthenticatedRequest(req *http.Request) bool {
+	if req == nil || req.URL == nil {
+		return false
+	}
+	path := strings.ToLower(strings.TrimRight(req.URL.EscapedPath(), "/"))
+	for _, suffix := range []string{
+		"/responses", "/chat/completions", "/messages",
+		"/images/generations", "/images/edits",
+		"/videos/generations", "/videos/edits", "/videos/extensions",
+	} {
+		if strings.HasSuffix(path, suffix) {
+			return true
+		}
+	}
+	return false
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 // acquireClientWithTLS 获取或创建带 TLS 指纹的客户端

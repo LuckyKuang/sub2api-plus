@@ -45,7 +45,7 @@ func TestDispatchCodexModelsGatewayKeepsOpenAIAndCompositeOnLiveManifestHandler(
 		t.Run(tt.platform, func(t *testing.T) {
 			rec := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(rec)
-			c.Request = httptest.NewRequest(http.MethodGet, "/models?client_version=0.147.0", nil)
+			c.Request = httptest.NewRequest(http.MethodGet, "/models?client_version=0.158.0", nil)
 			c.Set(string(middleware.ContextKeyAPIKey), &service.APIKey{
 				Group: &service.Group{Platform: tt.platform},
 			})

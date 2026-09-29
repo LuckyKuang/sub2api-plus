@@ -61,7 +61,7 @@ const (
 	// 陈旧版本会被优先丢弃（HTTP 200 + 流内 server_is_overloaded）；非官方客户端配不出
 	// 官方身份时整体回退到本常量，因此它必须跟随官方 CLI 的当前发布版本，
 	// 落后多个版本会让这些请求稳定落在被优先丢弃的一侧。
-	codexCLIVersion = "0.147.0"
+	codexCLIVersion = "0.158.0"
 	// openAICodexProbeVersion is kept as an explicit alias for probe callers
 	// and version-consistency tests; both declarations must remain identical.
 	openAICodexProbeVersion = codexCLIVersion
@@ -74,10 +74,13 @@ const (
 )
 
 // OpenAI allowed headers whitelist (for non-passthrough).
+// 出站身份头（user-agent/originator/version）由受信任身份解析生成，不在此放行，
+// 避免入站字段选源覆盖身份合同，见 docs/OUTBOUND_IDENTITY.md。
 var openaiAllowedHeaders = map[string]bool{
 	"accept-language":                       true,
 	"content-type":                          true,
 	"conversation_id":                       true,
+	"openai-beta":                           true,
 	"session-id":                            true,
 	"session_id":                            true,
 	"thread-id":                             true,

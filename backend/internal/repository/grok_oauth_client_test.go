@@ -10,13 +10,28 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/xai"
 	"github.com/stretchr/testify/require"
 )
 
 func TestGrokOAuthClientExchangeAndRefreshUseFormFields(t *testing.T) {
+	identity := outboundidentity.Identity{
+		Preset: "grok", UserAgent: xai.CLIUserAgent(xai.CLIClientVersion), Originator: xai.CLIClientIdentifier, Version: xai.CLIClientVersion,
+		Headers: map[string]string{
+			"User-Agent":               xai.CLIUserAgent(xai.CLIClientVersion),
+			"x-grok-client-identifier": xai.CLIClientIdentifier,
+			"x-grok-client-version":    xai.CLIClientVersion,
+			"x-grok-client-mode":       xai.CLIClientMode,
+		},
+	}
+	ctx := outboundidentity.WithIdentity(context.Background(), identity)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, http.MethodPost, r.Method)
+		require.Equal(t, identity.UserAgent, r.Header.Get("User-Agent"))
+		require.Equal(t, identity.Originator, r.Header.Get("x-grok-client-identifier"))
+		require.Equal(t, identity.Version, r.Header.Get("x-grok-client-version"))
+		require.Equal(t, xai.CLIClientMode, r.Header.Get("x-grok-client-mode"))
 		require.NoError(t, r.ParseForm())
 		require.Equal(t, "client-id", r.Form.Get("client_id"))
 
@@ -52,14 +67,14 @@ func TestGrokOAuthClientExchangeAndRefreshUseFormFields(t *testing.T) {
 	t.Setenv(xai.EnvTokenURL, server.URL)
 
 	client := NewGrokOAuthClient()
-	exchanged, err := client.ExchangeCode(context.Background(), "auth-code", "verifier", "http://127.0.0.1:56121/callback", "", "client-id")
+	exchanged, err := client.ExchangeCode(ctx, "auth-code", "verifier", "http://127.0.0.1:56121/callback", "", "client-id")
 	require.NoError(t, err)
 	require.Equal(t, "exchange-access", exchanged.AccessToken)
 	require.Equal(t, "exchange-refresh", exchanged.RefreshToken)
 	require.Equal(t, int64(3600), exchanged.ExpiresIn)
 	require.Equal(t, "openid api:access", exchanged.Scope)
 
-	refreshed, err := client.RefreshToken(context.Background(), "refresh-token", "", "client-id")
+	refreshed, err := client.RefreshToken(ctx, "refresh-token", "", "client-id")
 	require.NoError(t, err)
 	require.Equal(t, "refresh-access", refreshed.AccessToken)
 	require.Equal(t, "refresh-rotated", refreshed.RefreshToken)

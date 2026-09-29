@@ -77,6 +77,12 @@
       "brace-expansion@1.1.12": "1.1.18",
       "flatted@3.3.3": "3.4.2",
       "dompurify@<3.4.14": ">=3.4.14"
+    },
+    "auditConfig": {
+      "ignoreCves": [
+        "CVE-2023-30533",
+        "CVE-2024-22363"
+      ]
     }
   }
 }

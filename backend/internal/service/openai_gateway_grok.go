@@ -1605,7 +1605,7 @@ func buildGrokResponsesRequest(ctx context.Context, c *gin.Context, account *Acc
 	if account.IsGrokOAuth() {
 		applyGrokCLIHeaders(req.Header)
 	}
-	applyGrokCacheHeaders(req.Header, cacheIdentity)
+	applyGrokRequestMetadata(req.Header, body, cacheIdentity, account.GetCredential("sub"))
 	if c != nil {
 		if v := c.GetHeader("OpenAI-Beta"); strings.TrimSpace(v) != "" {
 			req.Header.Set("OpenAI-Beta", v)
@@ -1630,8 +1630,7 @@ func applyGrokCLIHeaders(headers http.Header) {
 	headers.Set("X-Grok-Client-Version", version)
 	headers.Set("x-grok-client-version", version)
 	headers.Set("x-grok-client-identifier", xai.CLIClientIdentifier)
-	// Historical mode value expected by some unit tests / older CLI probes.
-	headers.Set("X-Grok-Client-Mode", "interactive")
+	headers.Set("X-Grok-Client-Mode", xai.CLIClientMode)
 }
 
 func (s *OpenAIGatewayService) updateGrokUsageSnapshot(ctx context.Context, account *Account, snapshot *xai.QuotaSnapshot) {

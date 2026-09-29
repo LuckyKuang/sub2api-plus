@@ -99,6 +99,36 @@
           </div>
         </div>
 
+        <!-- 参考价查价状态：manual / unsupported / 失败必须可见，不能静默吞掉 -->
+        <div
+          v-if="displayStatus.state !== 'idle' && displayStatus.state !== 'priced'"
+          class="mt-2 flex flex-wrap items-center gap-2 rounded border border-dashed px-2 py-1.5 text-xs"
+          :class="displayStatus.state === 'loading'
+            ? 'border-gray-300 text-gray-500 dark:border-dark-500 dark:text-gray-400'
+            : 'border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-300'"
+          data-testid="pricing-lookup-status"
+        >
+          <span>{{ lookupMessage }}</span>
+          <button
+            type="button"
+            class="text-primary-600 underline hover:text-primary-700"
+            data-testid="pricing-lookup-retry"
+            @click="completeEmptyFields()"
+          >
+            {{ t('admin.channels.form.pricingLookupRetry') }}
+          </button>
+        </div>
+
+        <!-- 参考价来源：priced 时标明价从哪来；proxy_reference 必须明示
+             「非供应商公开价」，避免运营者把代理价当成官方价背书。 -->
+        <div
+          v-if="lookupSourceMessage"
+          class="mt-1 text-xs text-gray-500 dark:text-gray-400"
+          data-testid="pricing-lookup-source"
+        >
+          {{ lookupSourceMessage }}
+        </div>
+
         <!-- Token mode -->
         <div v-if="entry.billing_mode === 'token'">
           <!-- Default prices (fallback when no interval matches) -->
@@ -307,9 +337,14 @@ import IntervalRow from './IntervalRow.vue'
 import ModelTagInput from './ModelTagInput.vue'
 import TimePricingSection from './TimePricingSection.vue'
 import type { PricingFormEntry, IntervalFormEntry } from './types'
-import { perTokenToMTok, getPlatformTagClass, isValidPositiveMultiplier, validateReasoningEffortMultipliers } from './types'
+import {
+  getPlatformTagClass,
+  isValidPositiveMultiplier,
+  referenceToPricingRule,
+  validateReasoningEffortMultipliers,
+} from './types'
 import { REASONING_EFFORT_LEVELS, type ReasoningEffortLevel } from '@/constants/channel'
-import type { BillingMode } from '@/api/admin/channels'
+import type { BillingMode, ModelPricingReference, ModelPricingSource } from '@/api/admin/channels'
 import channelsAPI from '@/api/admin/channels'
 
 const { t } = useI18n()
@@ -329,6 +364,8 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   update: [entry: PricingFormEntry]
   remove: []
+  /** 多模型粘贴时，需要拆成独立规则的模型（父级追加新条目）。 */
+  split: [models: string[]]
 }>()
 
 // Collapse state: entries with existing models default to collapsed
@@ -407,41 +444,206 @@ function removeInterval(idx: number) {
   emit('update', { ...props.entry, intervals })
 }
 
-async function onModelsUpdate(newModels: string[]) {
-  const oldModels = props.entry.models
-  emit('update', { ...props.entry, models: newModels })
+// ── 参考价自动填充 ──────────────────────────────────────────
 
-  // 只在新增模型且当前无价格时自动填充
-  const addedModels = newModels.filter(m => !oldModels.includes(m))
-  if (addedModels.length === 0) return
+/** 每条规则的查价请求序号：晚到的旧响应必须被丢弃，不能覆盖用户后续输入。 */
+const lookupRequestId = ref(0)
 
-  // 检查是否所有价格字段都为空
-  const e = props.entry
-  const hasPrice = e.input_price != null || e.output_price != null ||
-                   e.cache_write_price != null || e.cache_write_1h_price != null || e.cache_read_price != null
-  if (hasPrice) return
+export type LookupStatus =
+  | { state: 'idle' }
+  | { state: 'loading' }
+  | { state: 'priced'; source: ModelPricingSource; matchedModel: string }
+  | { state: 'manual_required'; reasonCode: string }
+  | { state: 'unsupported_unit'; reasonCode: string }
+  | { state: 'error' }
 
-  // 查询第一个新增模型的默认价格
-  try {
-    const result = await channelsAPI.getModelDefaultPricing(addedModels[0])
-    if (result.found) {
-      emit('update', {
-        ...props.entry,
-        models: newModels,
-        input_price: perTokenToMTok(result.input_price ?? null),
-        output_price: perTokenToMTok(result.output_price ?? null),
-        cache_write_price: perTokenToMTok(result.cache_write_price ?? null),
-        cache_write_1h_price: perTokenToMTok(result.cache_write_1h_price ?? null),
-        cache_read_price: perTokenToMTok(result.cache_read_price ?? null),
-        image_input_price: perTokenToMTok(result.image_input_price ?? null),
-        image_output_price: perTokenToMTok(result.image_output_price ?? null),
-        reasoning_effort_multipliers: props.entry.reasoning_effort_multipliers ?? result.reasoning_effort_multipliers ?? null,
-      })
-    }
-  } catch {
-    // 查询失败不影响用户操作
+/**
+ * 非 priced 的参考价状态收窄：调用方已排除 priced，这里把联合类型收敛成
+ * 具体字面量，未知状态按 error 处理（宁可多重试一次，不静默显示成功）。
+ */
+function nonPricedLookupStatus(reference: ModelPricingReference): LookupStatus {
+  switch (reference.status) {
+    case 'manual_required':
+      return { state: 'manual_required', reasonCode: reference.reason_code }
+    case 'unsupported_unit':
+      return { state: 'unsupported_unit', reasonCode: reference.reason_code }
+    default:
+      return { state: 'error' }
   }
 }
+
+const lookupStatus = ref<LookupStatus>({ state: 'idle' })
+
+/** 用户是否已经填过任何价格。显式 0 视为「已填」，自动填充与补齐都不得覆盖。 */
+function hasAnyPricingValue(entry: PricingFormEntry): boolean {
+  const fields: Array<keyof PricingFormEntry> = [
+    'input_price', 'output_price', 'cache_write_price', 'cache_write_1h_price',
+    'cache_read_price', 'image_input_price', 'image_output_price', 'per_request_price',
+    'fast_multiplier', 'flex_multiplier',
+  ]
+  return fields.some(field => entry[field] !== null && entry[field] !== undefined && entry[field] !== '')
+    || !!entry.reasoning_effort_multipliers
+    || (entry.intervals || []).length > 0
+}
+
+async function onModelsUpdate(newModels: string[]) {
+  const oldModels = props.entry.models
+  const addedModels = newModels.filter(m => !oldModels.includes(m))
+
+  // 目标模型列表：有新增时保留第一个新增（其余按既有策略拆分为独立规则）；
+  // 仅删除时直接采用新列表（删除不再被丢弃，×/退格可移除误加的模型）。
+  let nextModels: string[]
+  if (addedModels.length > 0) {
+    nextModels = [...oldModels, addedModels[0]]
+    const splitModels = addedModels.slice(1)
+    if (splitModels.length > 0) emit('split', splitModels)
+  } else if (newModels.length !== oldModels.length) {
+    nextModels = newModels
+  } else {
+    return
+  }
+
+  // 主模型切换判定：只有"原本已有主模型（oldModels 非空）且被移除/替换"才算切换。
+  // 只有切换才需要把旧主模型自动填充的价格/区间/倍率一并清空——否则残留（尤其
+  // fast/flex 倍率）会被 hasAnyPricingValue 当成"已填"，挡住新模型的重新查价。
+  // 向"空规则"添加首个模型不算切换：那里的倍率是用户手填的配置，必须保留，auto-fill
+  // 不得覆盖（见既有 keeps custom effort multipliers 契约测试）。
+  const oldPrimary = (oldModels[0] ?? '').trim()
+  const newPrimary = (nextModels[0] ?? '').trim()
+  const primaryChanged = newPrimary !== oldPrimary
+  const clearingStaleReference = primaryChanged && oldModels.length > 0
+  let nextEntry: PricingFormEntry = { ...props.entry, models: nextModels }
+  if (clearingStaleReference) {
+    const target = nextEntry as unknown as Record<string, unknown>
+    for (const f of [
+      'input_price', 'output_price', 'cache_write_price', 'cache_write_1h_price',
+      'cache_read_price', 'image_input_price', 'image_output_price', 'per_request_price',
+      'fast_multiplier', 'flex_multiplier',
+    ]) {
+      target[f] = null
+    }
+    target.intervals = []
+    target.reasoning_effort_multipliers = null
+  }
+  emit('update', nextEntry)
+
+  // 仅在“新增模型”时触发参考价自动填充。
+  const model = addedModels[0]?.trim()
+  if (!model || !props.platform) return
+
+  // 已有用户填写的价格/倍率时不覆盖（界面另有显式「补齐空字段」）。换模型时价格已
+  // 在上面清空，这里自然放行、为新主模型重新查价；未换模型则维持既有保护。
+  if (hasAnyPricingValue(nextEntry)) {
+    lookupStatus.value = { state: 'idle' }
+    return
+  }
+
+  const requestId = ++lookupRequestId.value
+  lookupStatus.value = { state: 'loading' }
+  try {
+    const reference = await channelsAPI.getModelDefaultPricing(props.platform, model)
+    if (requestId !== lookupRequestId.value) return
+
+    if (reference.status !== 'priced' || !reference.pricing) {
+      lookupStatus.value = nonPricedLookupStatus(reference)
+      return
+    }
+    lookupStatus.value = {
+      state: 'priced',
+      source: reference.source,
+      matchedModel: reference.matched_model,
+    }
+    const { entry } = referenceToPricingRule(reference)
+    emit('update', { ...entry, models: nextModels })
+  } catch {
+    if (requestId !== lookupRequestId.value) return
+    lookupStatus.value = { state: 'error' }
+  }
+}
+
+/** 显式「补齐空字段」：只填回仍然为空的字段，已经填过（含 0）的不动。 */
+async function completeEmptyFields() {
+  const model = props.entry.models[0]?.trim()
+  if (!model || !props.platform) return
+  const requestId = ++lookupRequestId.value
+  lookupStatus.value = { state: 'loading' }
+  try {
+    const reference = await channelsAPI.getModelDefaultPricing(props.platform, model)
+    if (requestId !== lookupRequestId.value) return
+    if (reference.status !== 'priced' || !reference.pricing) {
+      lookupStatus.value = nonPricedLookupStatus(reference)
+      return
+    }
+    lookupStatus.value = {
+      state: 'priced',
+      source: reference.source,
+      matchedModel: reference.matched_model,
+    }
+    const { entry } = referenceToPricingRule(reference)
+    const current = props.entry
+    const filled = { ...current } as PricingFormEntry
+    const target = filled as unknown as Record<string, unknown>
+    for (const field of ['input_price', 'output_price', 'cache_write_price', 'cache_write_1h_price',
+      'cache_read_price', 'image_input_price', 'image_output_price', 'per_request_price',
+      'fast_multiplier', 'flex_multiplier']) {
+      if (target[field] === null || target[field] === undefined || target[field] === '') {
+        target[field] = (entry as unknown as Record<string, unknown>)[field]
+      }
+    }
+    if (!current.intervals?.length && entry.intervals.length) filled.intervals = entry.intervals
+    if (!current.reasoning_effort_multipliers && entry.reasoning_effort_multipliers) {
+      filled.reasoning_effort_multipliers = entry.reasoning_effort_multipliers
+    }
+    emit('update', filled)
+  } catch {
+    if (requestId !== lookupRequestId.value) return
+    lookupStatus.value = { state: 'error' }
+  }
+}
+
+const lookupMessage = computed(() => {
+  switch (displayStatus.value.state) {
+    case 'loading': return t('admin.channels.form.pricingLookupLoading')
+    case 'priced': return ''
+    case 'manual_required': return t('admin.channels.form.pricingLookupManualRequired')
+    case 'unsupported_unit': return t('admin.channels.form.pricingLookupUnsupportedUnit')
+    case 'error': return t('admin.channels.form.pricingLookupError')
+    default: return ''
+  }
+})
+
+// 展示用状态：本次会话的查价结果优先；没有进行中的查价时，回落到条目自带的
+// 参考价元数据——同步创建出来的 manual/unsupported 规则也必须把原因显示出来，
+// 不能静默摆一条空规则。运营者已经填过价（含显式 0）时提示让位。
+const displayStatus = computed<LookupStatus>(() => {
+  if (lookupStatus.value.state !== 'idle') return lookupStatus.value
+  const reference = props.entry.reference
+  if (!reference) return { state: 'idle' }
+  if (reference.status === 'priced') {
+    return { state: 'priced', source: reference.source, matchedModel: reference.matched_model }
+  }
+  if (hasAnyPricingValue(props.entry)) return { state: 'idle' }
+  return nonPricedLookupStatus(reference)
+})
+
+// 参考价来源说明：design 要求 UI 显示来源，proxy_reference 必须明示
+// 「非供应商公开价」。matched 与请求型号不同时一并展示，避免运营者
+// 以为价就是自己输入的那个型号的价。
+const lookupSourceMessage = computed(() => {
+  const status = displayStatus.value
+  if (status.state !== 'priced') return ''
+  const sourceKey = {
+    release_catalog: 'pricingLookupSourceCatalog',
+    builtin_fallback: 'pricingLookupSourceFallback',
+    proxy_reference: 'pricingLookupSourceProxy',
+    none: 'pricingLookupSourceNone',
+  }[status.source] ?? 'pricingLookupSourceNone'
+  const source = t(`admin.channels.form.${sourceKey}`)
+  const requested = props.entry.models[0]
+  return status.matchedModel && status.matchedModel !== requested
+    ? `${source}（${status.matchedModel}）`
+    : source
+})
 </script>
 
 <style scoped>

@@ -74,7 +74,9 @@ func (s *SettingService) GetGrokDefaultBaseURL(ctx context.Context) string {
 
 func (s *SettingService) ResolveGrokBaseURL(ctx context.Context, account *Account) string {
 	def := xai.DefaultCLIBaseURL
-	if s != nil {
+	if account != nil && account.Type == AccountTypeAPIKey {
+		def = xai.DefaultBaseURL
+	} else if s != nil {
 		def = s.GetGrokDefaultBaseURL(ctx)
 	}
 	if account == nil {

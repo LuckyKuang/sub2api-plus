@@ -1028,7 +1028,11 @@ class ValidationCleanupTest(unittest.TestCase):
                     runtime,
                     image="sub2api-validation:1111111111111111",
                     cache_generation="aaaaaaaaaaaaaaaa",
-                    capture=lambda command: "REPOSITORY TAG IMAGE ID\nsub2api-validation 1111111111111111 current\n",
+                    capture=lambda command: (
+                        "REPOSITORY TAG IMAGE ID\nsub2api-validation 1111111111111111 current\n"
+                        if command[:2] == ["docker", "image"]
+                        else ""
+                    ),
                     run_step=lambda name, command: commands.append((name, list(command))),
                 )
 
@@ -1048,6 +1052,8 @@ class ValidationCleanupTest(unittest.TestCase):
                 )
             if command[: len(prefix) + 1] == [*prefix, "find"]:
                 return "aaaaaaaaaaaaaaaa\nbbbbbbbbbbbbbbbb\ngo\n"
+            if command[: len(prefix) + 2] == [*prefix, "docker", "container"]:
+                return ""
             self.fail(f"unexpected command: {command}")
 
         push_cli.validation_runtime.cleanup_validation_runtime(
@@ -1076,6 +1082,45 @@ class ValidationCleanupTest(unittest.TestCase):
             commands,
         )
 
+    def test_docker_cleanup_removes_only_stopped_validation_containers(self) -> None:
+        runtime = push_cli.Runtime("docker")
+        commands: list[tuple[str, list[str]]] = []
+        stopped = {"exited": "cexited123", "created": "ccreated456"}
+
+        def capture(command: list[str]) -> str:
+            if command[:2] == ["docker", "image"]:
+                return "REPOSITORY TAG IMAGE ID\n"
+            for token in command:
+                if token.startswith("status="):
+                    return stopped[token.split("=", 1)[1]] + "\n"
+            return ""
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with mock.patch.object(
+                push_cli.validation_runtime.Path, "home", return_value=Path(temp_dir)
+            ):
+                push_cli.validation_runtime.cleanup_validation_runtime(
+                    runtime,
+                    image="sub2api-validation:aaaaaaaaaaaaaaaa",
+                    cache_generation="aaaaaaaaaaaaaaaa",
+                    capture=capture,
+                    run_step=lambda name, command: commands.append((name, list(command))),
+                )
+
+        self.assertEqual(
+            [
+                (
+                    "Remove orphan validation container",
+                    ["docker", "container", "rm", "cexited123"],
+                ),
+                (
+                    "Remove orphan validation container",
+                    ["docker", "container", "rm", "ccreated456"],
+                ),
+            ],
+            commands,
+        )
+
 
 class MainFlowTest(unittest.TestCase):
     def test_finalization_container_failure_stops_before_release_verification(self) -> None:
@@ -1099,6 +1144,7 @@ class MainFlowTest(unittest.TestCase):
         profile: str = push_cli.FULL_PROFILE,
         tag: str | None = None,
         serial: bool = False,
+        want_yes: bool = False,
     ) -> argparse.Namespace:
         return argparse.Namespace(
             action=action,
@@ -1111,6 +1157,7 @@ class MainFlowTest(unittest.TestCase):
             profile=profile,
             tag=tag,
             serial=serial,
+            yes=want_yes,
         )
 
     def test_check_rejects_dirty_worktree_before_runtime_start(self) -> None:
@@ -1183,6 +1230,7 @@ class MainFlowTest(unittest.TestCase):
                 return_value=push_cli.Runtime("apple-containers", compose_required=False),
             ) as probe,
             mock.patch.object(push_cli, "ensure_validation_image") as ensure_image,
+            mock.patch.object(push_cli.validation_runtime, "cleanup_validation_runtime"),
             mock.patch.object(push_cli, "require_clean_worktree") as clean,
             mock.patch.object(push_cli, "launch_in_validation") as launch,
             mock.patch.object(push_cli, "run_local_checks") as local_checks,
@@ -1197,6 +1245,37 @@ class MainFlowTest(unittest.TestCase):
         launch.assert_not_called()
         local_checks.assert_not_called()
 
+    def test_clean_requires_explicit_yes(self) -> None:
+        args = self.args("clean")
+        with (
+            mock.patch.object(push_cli, "parse_args", return_value=args),
+            mock.patch.object(push_cli, "github_gate") as gate,
+            mock.patch.object(
+                push_cli.validation_runtime, "purge_validation_resources"
+            ) as purge,
+        ):
+            self.assertEqual(1, push_cli.main())
+
+        gate.assert_not_called()
+        purge.assert_not_called()
+
+    def test_clean_purges_local_validation_resources(self) -> None:
+        args = self.args("clean", want_yes=True)
+        with (
+            mock.patch.object(push_cli, "parse_args", return_value=args),
+            mock.patch.object(push_cli, "github_gate") as gate,
+            mock.patch.object(
+                push_cli, "probe_runtime", return_value=push_cli.Runtime("docker")
+            ),
+            mock.patch.object(
+                push_cli.validation_runtime, "purge_validation_resources"
+            ) as purge,
+        ):
+            self.assertEqual(0, push_cli.main())
+
+        gate.assert_not_called()
+        purge.assert_called_once()
+
     def test_host_check_launches_container_instead_of_host_matrix(self) -> None:
         runtime = push_cli.Runtime("docker")
         args = self.args("check")
@@ -1210,6 +1289,7 @@ class MainFlowTest(unittest.TestCase):
             mock.patch.object(push_cli, "require_clean_worktree"),
             mock.patch.object(push_cli, "launch_in_validation") as launch,
             mock.patch.object(push_cli, "run_runtime_final_gate") as final_gate,
+            mock.patch.object(push_cli.validation_runtime, "cleanup_validation_runtime"),
             mock.patch.object(push_cli, "ensure_clean_after_checks"),
             mock.patch.object(push_cli, "run_local_checks") as local_checks,
             mock.patch.object(push_cli, "check_toolchains") as check,
@@ -1304,6 +1384,7 @@ class MainFlowTest(unittest.TestCase):
             mock.patch.object(push_cli, "push_branch", side_effect=record("push")),
             mock.patch.object(push_cli, "publish_validation_status", side_effect=record("status")),
             mock.patch.object(push_cli, "create_or_update_pull_request", side_effect=record("pr")),
+            mock.patch.object(push_cli.validation_runtime, "cleanup_validation_runtime"),
         ):
             self.assertEqual(0, push_cli.main())
 

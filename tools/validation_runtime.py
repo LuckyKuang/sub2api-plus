@@ -459,6 +459,8 @@ def validation_run_command(
         "4",
         "--memory",
         "8G",
+        "--label",
+        f"sub2api-validation={image.rsplit(':', 1)[-1]}",
         *bind_mount_args(runtime, repo, repo),
         *bind_mount_args(
             runtime,
@@ -619,8 +621,9 @@ def launch_in_validation(
 def cleanup_validation_runtime(
     runtime: Runtime,
     *,
-    image: str,
-    cache_generation: str,
+    image: str | None = None,
+    cache_generation: str | None = None,
+    root: Path | None = None,
     capture: Capture,
     run_step: Callable[[str, Sequence[str]], None],
 ) -> None:
@@ -629,7 +632,21 @@ def cleanup_validation_runtime(
     Validation containers use --rm, so their writable snapshots are already
     removed. Cleanup is scoped to deterministic Sub2API validation images and
     cache directories and never invokes a global runtime prune.
+
+    `image` and `cache_generation` may be omitted and derived from `root`; this
+    keeps the push_cli pre-run cleanup cheap to call without eagerly computing
+    the digests (and reading the validation Dockerfile) at the call site.
     """
+    if image is None or cache_generation is None:
+        if root is None:
+            raise ValidationRuntimeError(
+                "cleanup_validation_runtime requires root when image or "
+                "cache_generation is omitted"
+            )
+        if image is None:
+            image = validation_image_ref(root)
+        if cache_generation is None:
+            cache_generation = validation_cache_digest(root)
 
     if not VALIDATION_GENERATION_RE.fullmatch(cache_generation):
         raise ValidationRuntimeError(
@@ -699,3 +716,98 @@ def cleanup_validation_runtime(
                     path.unlink()
                 elif path.is_dir():
                     shutil.rmtree(path)
+
+    # `--rm` only removes a container on graceful exit; SIGKILL/crash leaves a
+    # stopped, unlabeled-by-nothing container behind. The sub2api-validation
+    # label makes them individually addressable without a forbidden global
+    # prune. Scope to stopped project containers; running and unrelated
+    # containers are never touched. Apple Containers CLI has no label filter
+    # here, so it is skipped and still relies on --rm.
+    if runtime.name != "apple-containers":
+        for status in ("exited", "created"):
+            listed = capture(
+                [
+                    *engine,
+                    "container",
+                    "ls",
+                    "--all",
+                    "--quiet",
+                    "--filter",
+                    "label=sub2api-validation",
+                    "--filter",
+                    f"status={status}",
+                ]
+            )
+            for container_id in listed.split():
+                run_step(
+                    "Remove orphan validation container",
+                    [*engine, "container", "rm", container_id],
+                )
+
+
+def purge_validation_resources(
+    runtime: Runtime,
+    *,
+    root: Path,
+    capture: Capture,
+    run_step: Callable[[str, Sequence[str]], None],
+    assume_yes: bool = False,
+) -> None:
+    """Manually remove every Sub2API validation image, cache generation, and
+    project container.
+
+    Only the explicit `push-cli clean --yes` action calls this: deleting the
+    current generation forces the next run to rebuild the whole toolchain and
+    re-download every dependency, so it is never automatic. Scope stays inside
+    sub2api-validation resources; no global prune (container/image/builder/
+    volume/system) is ever invoked. Apple Containers only clears images and the
+    cache use --rm for containers.
+    """
+
+    engine = engine_command(runtime)
+    image_delete = "delete" if runtime.name == "apple-containers" else "rm"
+    list_command = [*engine, "image", "list"]
+    if runtime.name != "apple-containers":
+        list_command.extend(["--format", "table {{.Repository}}\t{{.Tag}}"])
+    for line in capture(list_command).splitlines()[1:]:
+        fields = line.split()
+        if len(fields) < 2:
+            continue
+        repository, tag = fields[:2]
+        if repository not in {IMAGE_NAME, f"localhost/{IMAGE_NAME}"}:
+            continue
+        run_step(
+            "Remove validation image",
+            [*engine, "image", image_delete, f"{repository}:{tag}"],
+        )
+    if runtime.name != "apple-containers":
+        listed = capture(
+            [
+                *engine,
+                "container",
+                "ls",
+                "--all",
+                "--quiet",
+                "--filter",
+                "label=sub2api-validation",
+            ]
+        )
+        for container_id in listed.split():
+            run_step(
+                "Stop validation container",
+                [*engine, "container", "stop", container_id],
+            )
+            run_step(
+                "Remove validation container",
+                [*engine, "container", "rm", container_id],
+            )
+    if runtime.name == "wsl2-docker":
+        run_step(
+            "Remove validation cache",
+            [*runtime.prefix, "rm", "-rf", "/tmp/sub2api-validation-cache"],
+        )
+    else:
+        shutil.rmtree(
+            home_directory() / ".cache" / "sub2api-validation",
+            ignore_errors=True,
+        )

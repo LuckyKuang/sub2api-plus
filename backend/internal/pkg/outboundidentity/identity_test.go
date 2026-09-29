@@ -11,7 +11,7 @@ import (
 )
 
 func TestIdentitySnapshotRemovesUntrustedDeclarationsAndPreservesProtocol(t *testing.T) {
-	i := Identity{Preset: "grok", UserAgent: "xai-grok-workspace/1.2.3", Originator: "grok-shell", Version: "1.2.3", Headers: map[string]string{"x-grok-client-identifier": "grok-shell", "x-grok-client-version": "1.2.3"}}
+	i := Identity{Preset: "grok", UserAgent: "grok-shell/1.2.3 (linux; x86_64)", Originator: "grok-shell", Version: "1.2.3", Headers: map[string]string{"x-grok-client-identifier": "grok-shell", "x-grok-client-version": "1.2.3", "x-grok-client-mode": "headless"}}
 	ctx := WithIdentity(context.Background(), i)
 	i.Headers["x-grok-client-version"] = "untrusted"
 	copy, _ := FromContext(ctx)
@@ -20,8 +20,10 @@ func TestIdentitySnapshotRemovesUntrustedDeclarationsAndPreservesProtocol(t *tes
 	require.NoError(t, err)
 	req.Header = http.Header{"user-agent": {"caller"}, "User-Agent": {"override"}, "originator": {"caller"}, "Version": {"999"}, "X-Stainless-Os": {"inbound"}, "X-Goog-Api-Client": {"inbound"}, "Authorization": {"Bearer credential"}, "Anthropic-Version": {"2023-06-01"}, "X-Stainless-Retry-Count": {"2"}, "X-Session-Id": {"session"}}
 	ApplyContext(req)
-	require.Equal(t, "xai-grok-workspace/1.2.3", req.Header.Get("User-Agent"))
+	require.Equal(t, "grok-shell/1.2.3 (linux; x86_64)", req.Header.Get("User-Agent"))
 	require.Equal(t, "1.2.3", req.Header.Get("X-Grok-Client-Version"))
+	require.Equal(t, "grok-shell", req.Header.Get("X-Grok-Client-Identifier"))
+	require.Equal(t, "headless", req.Header.Get("X-Grok-Client-Mode"))
 	for _, key := range []string{"user-agent", "originator", "Version", "X-Stainless-Os", "X-Goog-Api-Client"} {
 		require.NotContains(t, req.Header, key)
 	}

@@ -65,7 +65,7 @@ func TestContentModerationSupplierIdentityAcrossRetriesAndKeyRotation(t *testing
 			fresh := <-captured
 			require.Equal(t, "3.9.2", fresh.Get("x-grok-client-version"))
 			for _, headers := range []http.Header{first, retry, fresh} {
-				require.Contains(t, headers.Get("User-Agent"), "xai-grok-workspace/")
+				require.Contains(t, headers.Get("User-Agent"), "grok-shell/")
 				require.NotEmpty(t, headers.Get("x-grok-client-identifier"))
 				require.Empty(t, headers.Get("X-App"))
 				require.Empty(t, headers.Get("Originator"))

@@ -3,14 +3,18 @@
 package service
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/xai"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
 )
@@ -421,6 +425,61 @@ func TestApplyGrokCacheIdentityWritesResponsesBodyAndHeader(t *testing.T) {
 	require.False(t, gjson.GetBytes(unscopedBody, "prompt_cache_key").Exists())
 	require.False(t, gjson.GetBytes(unscopedBody, "tools").Exists())
 	require.False(t, gjson.GetBytes(unscopedBody, "tool_choice").Exists())
+}
+
+func TestApplyGrokRequestMetadataUsesTrustedRequestValues(t *testing.T) {
+	headers := http.Header{
+		"X-Grok-Req-Id":         {"pinned"},
+		"X-Grok-Model-Override": {"wrong-model"},
+		"X-Grok-Session-Id":     {"wrong-session"},
+	}
+	applyGrokRequestMetadata(headers, []byte(`{"model":"grok-4.7"}`), "trusted-session", " user-42 ")
+
+	require.NotEmpty(t, headers.Get("x-grok-req-id"))
+	require.NotEqual(t, "pinned", headers.Get("x-grok-req-id"))
+	requestID, err := uuid.Parse(headers.Get("x-grok-req-id"))
+	require.NoError(t, err)
+	require.Equal(t, uuid.Version(4), requestID.Version())
+	require.Equal(t, "grok-4.7", headers.Get("x-grok-model-override"))
+	require.Equal(t, "trusted-session", headers.Get("x-grok-conv-id"))
+	require.Equal(t, "trusted-session", headers.Get("x-grok-session-id"))
+	require.Equal(t, "user-42", headers.Get("x-grok-user-id"))
+	agentID, err := uuid.Parse(headers.Get("x-grok-agent-id"))
+	require.NoError(t, err)
+	require.Equal(t, uuid.Version(4), agentID.Version())
+	require.Equal(t, grokAgentID, agentID.String())
+	require.Equal(t,
+		uuid.NewSHA1(uuid.NameSpaceOID, []byte(grokConversationGroupNamespace+"trusted-session")).String(),
+		headers.Get("x-grok-conv-group-id"),
+	)
+
+	previousRequestID := headers.Get("x-grok-req-id")
+	applyGrokRequestMetadata(headers, []byte(`{}`), "", "")
+	require.NotEqual(t, previousRequestID, headers.Get("x-grok-req-id"))
+	require.Equal(t, grokAgentID, headers.Get("x-grok-agent-id"))
+	for _, name := range []string{"x-grok-model-override", "x-grok-conv-id", "x-grok-session-id", "x-grok-conv-group-id", "x-grok-user-id"} {
+		require.Empty(t, headers.Get(name), name)
+	}
+}
+
+func TestDoGrokNativeResponsesJSONAppliesSamplerMetadata(t *testing.T) {
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     make(http.Header),
+		Body:       io.NopCloser(strings.NewReader(`{"output":[]}`)),
+	}}
+	svc := &GatewayService{httpUpstream: upstream}
+	account := &Account{
+		ID: 73, Platform: PlatformGrok, Type: AccountTypeAPIKey, Concurrency: 1,
+		Credentials: map[string]any{"api_key": "key"},
+	}
+
+	_, err := svc.DoGrokNativeResponsesJSON(context.Background(), account, []byte(`{"model":"grok-4.7","input":"search"}`))
+	require.NoError(t, err)
+	require.NotEmpty(t, upstream.lastReq.Header.Get("x-grok-req-id"))
+	require.NotEmpty(t, upstream.lastReq.Header.Get("x-grok-agent-id"))
+	require.Equal(t, "grok-4.7", upstream.lastReq.Header.Get("x-grok-model-override"))
+	require.Equal(t, HTTPUpstreamProfileGrok, HTTPUpstreamProfileFromContext(upstream.lastReq.Context()))
 }
 
 func TestGrokFreeMessagesClientToolCacheDefaultsOnForKnownFree(t *testing.T) {

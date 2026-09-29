@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/xai"
 	"github.com/stretchr/testify/require"
 )
@@ -18,20 +19,56 @@ type grokOAuthClientStub struct {
 	ssoResponse         *xai.TokenResponse
 	exchangeCalls       int
 	exchangeRedirectURI string
+	identities          []outboundidentity.Identity
 }
 
-func (s *grokOAuthClientStub) ExchangeCode(_ context.Context, _, _, redirectURI, _, _ string) (*xai.TokenResponse, error) {
+func (s *grokOAuthClientStub) captureIdentity(ctx context.Context) {
+	if identity, ok := outboundidentity.FromContext(ctx); ok {
+		s.identities = append(s.identities, identity)
+	}
+}
+
+func (s *grokOAuthClientStub) ExchangeCode(ctx context.Context, _, _, redirectURI, _, _ string) (*xai.TokenResponse, error) {
+	s.captureIdentity(ctx)
 	s.exchangeCalls++
 	s.exchangeRedirectURI = redirectURI
 	return &xai.TokenResponse{AccessToken: "access-token"}, nil
 }
 
-func (s *grokOAuthClientStub) RefreshToken(context.Context, string, string, string) (*xai.TokenResponse, error) {
+func (s *grokOAuthClientStub) RefreshToken(ctx context.Context, _ string, _ string, _ string) (*xai.TokenResponse, error) {
+	s.captureIdentity(ctx)
 	return s.refreshResponse, nil
 }
 
-func (s *grokOAuthClientStub) ConvertSSOToBuild(context.Context, string, string) (*xai.TokenResponse, error) {
+func (s *grokOAuthClientStub) ConvertSSOToBuild(ctx context.Context, _ string, _ string) (*xai.TokenResponse, error) {
+	s.captureIdentity(ctx)
 	return s.ssoResponse, nil
+}
+
+func TestGrokOAuthPreAccountFlowsUseNativeIdentity(t *testing.T) {
+	settings := emptyOutboundIdentitySettings()
+	settings.Profiles["grok"] = OutboundIdentitySelection{Preset: "grok", Version: "3.9.1"}
+	_, ctx := outboundIdentityTestSettings(t, settings)
+	ctx = outboundidentity.WithIdentity(ctx, outboundidentity.Identity{Preset: "claude", UserAgent: "claude-cli/9.9.9"})
+	client := &grokOAuthClientStub{
+		refreshResponse: &xai.TokenResponse{AccessToken: "access", ExpiresIn: 3600},
+		ssoResponse:     &xai.TokenResponse{AccessToken: "access", ExpiresIn: 3600},
+	}
+	svc := NewGrokOAuthService(nil, client)
+	defer svc.Stop()
+
+	_, err := svc.ValidateRefreshToken(ctx, "refresh", nil)
+	require.NoError(t, err)
+	_, err = svc.ValidateSSOToken(ctx, "sso", nil)
+	require.NoError(t, err)
+
+	require.Len(t, client.identities, 2)
+	for _, identity := range client.identities {
+		require.Equal(t, "grok", identity.Preset)
+		require.Equal(t, "3.9.1", identity.Version)
+		require.Equal(t, xai.CLIUserAgent("3.9.1"), identity.UserAgent)
+		require.Zero(t, identity.AccountID)
+	}
 }
 
 func TestGrokOAuthServiceRefreshTokenPreservesOriginalRefreshTokenWhenNotRotated(t *testing.T) {

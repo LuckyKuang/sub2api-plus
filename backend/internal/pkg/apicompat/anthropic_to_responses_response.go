@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/claude"
@@ -197,6 +198,12 @@ type AnthropicEventToResponsesState struct {
 	CurrentSummary             string                 // reasoning
 	CurrentThinking            AnthropicContentBlock
 	PreserveThinkingSignatures bool
+
+	// PendingToolInput holds tool arguments that arrived complete on
+	// content_block_start instead of as input_json_delta. It is only consumed at
+	// content_block_stop, and only when no delta ever arrived, so a canonical
+	// Anthropic stream keeps its exact event sequence.
+	PendingToolInput string
 
 	// Outputs accumulates every closed output item so that response.completed
 	// can carry the full output list. The OpenAI SDK's get_final_response()
@@ -399,6 +406,12 @@ func anthToResHandleContentBlockStart(evt *AnthropicStreamEvent, state *Anthropi
 		state.CurrentItemType = "function_call"
 		state.CurrentCallID = toResponsesCallID(evt.ContentBlock.ID)
 		state.CurrentName = evt.ContentBlock.Name
+		// The canonical Anthropic stream leaves input empty here and streams the
+		// arguments as input_json_delta, but Anthropic-compatible relays may put
+		// the complete arguments on this event and never send a delta. Keep them
+		// as a seed rather than emitting now: a delta, if one follows, is
+		// authoritative and must not be concatenated onto this JSON.
+		state.PendingToolInput = seedToolArguments(evt.ContentBlock.Input)
 
 		events = append(events, makeResponsesEvent(state, "response.output_item.added", &ResponsesStreamEvent{
 			OutputIndex: state.OutputIndex,
@@ -410,16 +423,9 @@ func anthToResHandleContentBlockStart(evt *AnthropicStreamEvent, state *Anthropi
 				Status: "in_progress",
 			},
 		}))
-		if hasNonEmptyJSON(evt.ContentBlock.Input) && string(evt.ContentBlock.Input) != "{}" {
-			state.CurrentArgs = string(evt.ContentBlock.Input)
-			events = append(events, makeResponsesEvent(state, "response.function_call_arguments.delta", &ResponsesStreamEvent{
-				OutputIndex: state.OutputIndex,
-				Delta:       state.CurrentArgs,
-				ItemID:      state.CurrentItemID,
-				CallID:      state.CurrentCallID,
-				Name:        state.CurrentName,
-			}))
-		}
+		// A seed in PendingToolInput is intentionally NOT emitted here: a following
+		// delta supersedes it (deltas win); otherwise it is emitted once on
+		// content_block_stop. Emitting here would splice a duplicate copy of the JSON.
 	}
 
 	return events
@@ -459,6 +465,9 @@ func anthToResHandleContentBlockDelta(evt *AnthropicStreamEvent, state *Anthropi
 		if evt.Delta.PartialJSON == "" {
 			return nil
 		}
+		// A real delta supersedes whatever content_block_start carried; keeping
+		// both would splice two complete JSON documents together.
+		state.PendingToolInput = ""
 		state.CurrentArgs += evt.Delta.PartialJSON
 		return []ResponsesStreamEvent{makeResponsesEvent(state, "response.function_call_arguments.delta", &ResponsesStreamEvent{
 			OutputIndex: state.OutputIndex,
@@ -494,21 +503,35 @@ func anthToResHandleContentBlockStop(evt *AnthropicStreamEvent, state *Anthropic
 		return events
 
 	case "function_call":
+		var events []ResponsesStreamEvent
+		// No delta ever arrived, so the arguments the upstream put on
+		// content_block_start are all there is. Emit them as one delta here so
+		// the done event below still repeats exactly what the deltas streamed.
+		if state.CurrentArgs == "" && state.PendingToolInput != "" {
+			state.CurrentArgs = state.PendingToolInput
+			events = append(events, makeResponsesEvent(state, "response.function_call_arguments.delta", &ResponsesStreamEvent{
+				OutputIndex: state.OutputIndex,
+				Delta:       state.PendingToolInput,
+				ItemID:      state.CurrentItemID,
+				CallID:      state.CurrentCallID,
+				Name:        state.CurrentName,
+			}))
+		}
+		state.PendingToolInput = ""
+
 		// Emit function_call_arguments.done + output item done.
 		// arguments must repeat exactly what the deltas already streamed for this
 		// item: clients reconcile the done event against the accumulated
 		// function_call_arguments.delta payloads and reject the call as
 		// inconsistent_tool_call when the two disagree. Omitting the field left it
 		// empty while the deltas carried the whole JSON.
-		events := []ResponsesStreamEvent{
-			makeResponsesEvent(state, "response.function_call_arguments.done", &ResponsesStreamEvent{
-				OutputIndex: state.OutputIndex,
-				ItemID:      state.CurrentItemID,
-				CallID:      state.CurrentCallID,
-				Name:        state.CurrentName,
-				Arguments:   state.CurrentArgs,
-			}),
-		}
+		events = append(events, makeResponsesEvent(state, "response.function_call_arguments.done", &ResponsesStreamEvent{
+			OutputIndex: state.OutputIndex,
+			ItemID:      state.CurrentItemID,
+			CallID:      state.CurrentCallID,
+			Name:        state.CurrentName,
+			Arguments:   state.CurrentArgs,
+		}))
 		events = append(events, closeCurrentResponsesItem(state)...)
 		return events
 
@@ -589,6 +612,19 @@ func anthropicResponsesStreamTerminalState(stopReason string) (string, *Response
 	return "completed", nil
 }
 
+// seedToolArguments normalizes a tool_use content block's inline input into a
+// seed for the streaming converter. Empty, absent and no-argument payloads
+// return "" so the existing "{}" fallback still applies and no empty delta is
+// synthesized.
+func seedToolArguments(input json.RawMessage) string {
+	trimmed := strings.TrimSpace(string(input))
+	switch trimmed {
+	case "", "{}", "null":
+		return ""
+	}
+	return trimmed
+}
+
 func closeCurrentResponsesItem(state *AnthropicEventToResponsesState) []ResponsesStreamEvent {
 	if state.CurrentItemType == "" {
 		return nil
@@ -632,6 +668,7 @@ func closeCurrentResponsesItem(state *AnthropicEventToResponsesState) []Response
 	state.CurrentName = ""
 	state.CurrentContent = nil
 	state.CurrentArgs = ""
+	state.PendingToolInput = ""
 	state.CurrentSummary = ""
 	state.CurrentThinking = AnthropicContentBlock{}
 	state.TextAccum = ""

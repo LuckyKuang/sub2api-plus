@@ -2,22 +2,15 @@ package service
 
 import (
 	"net/http"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/tlsfingerprint"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/xai"
 )
 
-// Fixed CLI identity aliases — single source of truth is internal/pkg/xai.
-const (
-	grokClientVersionHeader    = xai.CLIStableVersion
-	grokClientIdentifierHeader = xai.CLIClientIdentifier
-	grokClientModeHeader       = xai.CLIClientMode
-)
-
-// defaultGrokUpstreamUserAgent is the pinned Grok CLI / workspace UA.
+// defaultGrokUpstreamUserAgent is the pinned generic Grok shell UA.
 // Grok upstream must not forward Claude Code / Codex / browser client UAs.
 func defaultGrokUpstreamUserAgent() string {
 	return xai.CLIUserAgent(xai.ResolveCLIVersion())
@@ -27,15 +20,17 @@ func applyDefaultGrokUpstreamHeaders(req *http.Request) {
 	if req == nil {
 		return
 	}
-	// Always stamp CLI identity. Do not preserve inbound client UA (Claude Code,
-	// Codex, curl, etc.) — xAI chat/CLI surfaces fingerprint the client string.
-	req.Header.Set("User-Agent", defaultGrokUpstreamUserAgent())
-	req.Header.Set("x-grok-client-version", xai.ResolveCLIVersion())
-	req.Header.Set("x-grok-client-identifier", grokClientIdentifierHeader)
+	// Render the trusted request/global snapshot. Inbound client declarations
+	// (Claude Code, Codex, curl, etc.) are never an identity source.
+	identity, ok := outboundidentity.Default(req.Context(), "grok")
+	if !ok {
+		identity = builtInOutboundIdentity("grok")
+	}
+	identity.Apply(req.Header)
 }
 
 func applyGrokTLSProfileHeaders(req *http.Request, profile *tlsfingerprint.Profile) {
-	// HEAD Profile is TLS-only (no HTTP UserAgent/Originator fields). Always stamp CLI identity.
+	// The TLS profile owns no HTTP identity fields; render the trusted snapshot here.
 	applyDefaultGrokUpstreamHeaders(req)
 	_ = profile
 }
@@ -50,17 +45,8 @@ type openAITLSFingerprintRuntime struct {
 	Matched            bool
 }
 
-func applyGrokRuntimeHeaders(req *http.Request, runtime openAITLSFingerprintRuntime) {
+func applyGrokRuntimeHeaders(req *http.Request, _ openAITLSFingerprintRuntime) {
 	applyDefaultGrokUpstreamHeaders(req)
-	if req == nil {
-		return
-	}
-	// Apply Originator only; force CLI UA after so router overrides cannot
-	// leak Codex/Claude Code identity onto Grok upstream.
-	if originator := strings.TrimSpace(runtime.UpstreamOriginator); originator != "" {
-		req.Header.Set("Originator", originator)
-	}
-	req.Header.Set("User-Agent", defaultGrokUpstreamUserAgent())
 }
 
 // resolveGrokUpstreamUserAgent always returns the pinned Grok CLI User-Agent.

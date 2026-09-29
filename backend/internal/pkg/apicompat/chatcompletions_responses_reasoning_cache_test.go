@@ -97,7 +97,7 @@ func TestResponsesToChat_ReasoningCacheLookup_PlaintextPreferred(t *testing.T) {
 // (reasoning → call A → output A → call B) have no reasoning item before call
 // B. The turn's reasoning must be replayed on B's assistant message, otherwise
 // DeepSeek thinking mode 400s the history ("reasoning_content ... must be
-// passed back"). Reproduced from a real codex 0.147.0 resume history.
+// passed back"). Reproduced from a real codex 0.158.0 resume history.
 func TestResponsesToChat_ChainedToolCallsReplayTurnReasoning(t *testing.T) {
 	req := &ResponsesRequest{
 		Model: "deepseek-reasoner",

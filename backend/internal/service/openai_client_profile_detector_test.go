@@ -30,7 +30,7 @@ func codexProfileOnlyAccount() *Account {
 
 func officialCodexProfileHeaders(originator string) map[string]string {
 	return map[string]string{
-		"User-Agent":              originator + "/0.147.0 (Mac OS 26.0; arm64) terminal (" + originator + "; 0.147.0)",
+		"User-Agent":              originator + "/0.158.0 (Mac OS 26.0; arm64) terminal (" + originator + "; 0.158.0)",
 		"originator":              originator,
 		"x-codex-installation-id": "installation-1",
 	}
@@ -46,7 +46,7 @@ func TestDetectCodexClientProfile(t *testing.T) {
 		require.True(t, result.Matched)
 		require.Equal(t, CodexClientRestrictionReasonMatchedOfficialProfile, result.Reason)
 		require.Equal(t, string(openai.CodexClientProfileCLI), result.Profile)
-		require.Equal(t, "0.147.0", result.DetectedVersion)
+		require.Equal(t, "0.158.0", result.DetectedVersion)
 	})
 
 	t.Run("official CLI, TUI, VS Code, and desktop aliases are accepted", func(t *testing.T) {
@@ -158,7 +158,7 @@ func TestDetectCodexClientProfile(t *testing.T) {
 
 	t.Run("UA trailer and case-insensitive Codex family cannot bypass", func(t *testing.T) {
 		trailer := officialCodexProfileHeaders("codex_cli_rs")
-		trailer["User-Agent"] = "curl/8.0 (codex_cli_rs; 0.147.0)"
+		trailer["User-Agent"] = "curl/8.0 (codex_cli_rs; 0.158.0)"
 		require.False(t, detector.Detect(newCodexProfileDetectorContext(trailer), account, CodexRestrictionPolicy{}, nil).Matched)
 
 		family := officialCodexProfileHeaders("Codex Desktop")

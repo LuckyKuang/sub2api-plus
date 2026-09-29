@@ -22,7 +22,12 @@ func headerOverrideTestAccount(platform, accountType string, credentials map[str
 // require corresponding save/runtime and outbound-path regression coverage.
 var managedIdentityOverrideTestNames = []string{
 	"User-Agent", "Originator", "Version", "X-App", "X-Goog-Api-Client",
-	"X-Grok-Client-Version", "X-Grok-Client-Identifier", "X-Stainless-Lang",
+	"X-Grok-Client-Version", "X-Grok-Client-Identifier", "X-Grok-Client-Mode",
+	"X-Grok-Client-Surface", "X-XAI-Token-Auth", "X-AuthenticateResponse", "X-Grok-Req-Id",
+	"X-Grok-Session-Id", "X-Grok-Agent-Id", "X-Grok-Conv-Group-Id",
+	"X-Grok-Model-Override", "X-Grok-User-Id", "X-Grok-Deployment-Id",
+	"X-Grok-Turn-Idx", "X-Grok-Transient-Retry", "X-UserID", "X-Email",
+	"X-Stainless-Lang",
 	"X-Stainless-Package-Version", "X-Stainless-OS", "X-Stainless-Arch",
 	"X-Stainless-Runtime", "X-Stainless-Runtime-Version",
 }

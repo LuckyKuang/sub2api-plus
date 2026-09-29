@@ -17,7 +17,7 @@ versions are distinct from the CLI version.
 | Codex | OpenAI OAuth/setup-token, OpenAI-compatible API keys, Chinese compatible providers | Existing Codex UA/Originator/Version rules, including endpoint-specific omissions |
 | Claude Code | Anthropic OAuth/setup-token/API key, Claude on Bedrock or Vertex | `claude-cli` UA, `X-App: cli`, project-owned `X-Stainless-*` SDK/runtime declarations |
 | Gemini CLI | Gemini OAuth/API key, Gemini on Vertex | `GeminiCLI` UA |
-| Grok | Grok OAuth/API key | `xai-grok-workspace` UA, `x-grok-client-identifier`, `x-grok-client-version` |
+| Grok | Grok OAuth/API key | `grok-shell` UA, `x-grok-client-identifier`, `x-grok-client-version`, `x-grok-client-mode: headless` |
 | Antigravity | Antigravity OAuth/upstream | `antigravity` UA; the two privacy endpoints also declare the pinned `X-Goog-Api-Client` SDK |
 
 Native OAuth and setup-token accounts retain their native client family.
@@ -31,6 +31,13 @@ Built-in declarations reuse existing pins in `internal/pkg/claude`,
 `internal/pkg/geminicli`, `internal/pkg/xai`, `internal/pkg/antigravity` and
 `internal/service/openai_codex_identity.go`. This feature does not upgrade
 those pins. The settings page displays the exact current effective identity.
+
+The exact compiled Grok identity is `grok-shell/1.0.41 (<os>; <arch>)`, with
+identifier `grok-shell`, client version `1.0.41`, and mode `headless`. Runtime
+OS and architecture use the official spellings (`darwin` renders as `macos`
+and Go's `amd64`, `386`, and `arm64` render as `x86_64`, `x86`, and `aarch64`).
+`XAI_GROK_CLI_VERSION` may select a supported newer version while retaining
+that family, platform fingerprint, identifier and mode.
 
 The exact compiled Antigravity identity is
 `antigravity/2.9.1 windows/amd64`, with identifier `antigravity` and client
@@ -96,8 +103,10 @@ Move intended identity customization to the account/global identity controls and
 remove identity entries from the generic override editor before saving it.
 Channel-monitor and request-template `extra_headers` enforce the same managed
 header registry at save time and ignore previously stored identity overrides at
-runtime. Ordinary custom, authentication and protocol headers retain their
-existing behavior.
+runtime. Ordinary custom headers retain their existing behavior. Authentication,
+request/session fields, and destination-owned Grok protocol declarations are
+also reserved where their owning adapter must derive them from credentials,
+request state, or the final target.
 
 Other global settings live in the existing settings store under
 `outbound_identity`; account selections use the existing credentials JSON.
@@ -374,9 +383,28 @@ the existing PAT Responses web-search adapter; see
 
 The shared HTTP and TLS transports may add Grok's destination-specific
 authentication hint, but may not select an identity from the destination host.
-The Grok access-denied fallback retains the selected UA and companion headers
-when changing hosts. Repository tests capture both actual transport methods and
-the fallback with inherited/explicit Codex, Grok and Claude identities.
+Every final send, including redirects, adds `X-XAI-Token-Auth: xai-grok-cli`
+only for `cli-chat-proxy.grok.com`; sampling and media-mutation paths on that
+host also add `x-authenticateresponse: authenticate-response`. Both
+declarations are removed from other destinations. The narrowly matched Grok
+access-denied compatibility
+fallback retains the selected UA and companion headers when changing hosts and
+removes proxy authentication declarations. Repository tests capture both actual
+transport methods and the fallback with inherited/explicit Codex, Grok and
+Claude identities. Every account-owned Grok HTTP path also receives the Grok
+transport profile at the shared final preparation boundary unless the owning
+operation explicitly selected a more specialized profile.
+
+Grok inference and media-mutation builders own the sampler declarations
+separately from the identity triple. They issue a fresh `x-grok-req-id`, retain
+one random process-level `x-grok-agent-id`, declare the final model, attach the
+OAuth credential owner's `sub` when available, and reuse the tenant-isolated
+conversation snapshot for conversation/session headers and the official UUIDv5
+conversation-group derivation. Generic overrides cannot set these fields. The
+gateway omits sampler and response-authentication declarations on model,
+billing and media-status lookups, and omits optional turn, retry, deployment,
+and tracing declarations when it does not possess the corresponding
+authoritative value.
 
 The account editor uses the backend's passthrough precedence: a boolean
 `extra.openai_passthrough` wins, including `false`; only when it is absent or

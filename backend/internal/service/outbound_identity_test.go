@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/xai"
 	"github.com/stretchr/testify/require"
 )
 
@@ -43,6 +44,40 @@ func outboundIdentityTestSettings(t *testing.T, config OutboundIdentitySettings)
 	svc := NewSettingService(&outboundIdentityTestRepo{values: map[string]string{}}, nil)
 	require.NoError(t, svc.SetOutboundIdentitySettings(context.Background(), config))
 	return svc, outboundidentity.WithResolver(context.Background(), svc.resolveOutboundIdentityKey)
+}
+
+func TestBuiltInGrokOutboundIdentityMatchesOfficialShell(t *testing.T) {
+	t.Setenv(xai.CLIVersionEnv, "")
+
+	require.Equal(t, outboundidentity.Identity{
+		Preset:     "grok",
+		Source:     "compiled_default",
+		UserAgent:  xai.CLIUserAgent(xai.CLIClientVersion),
+		Originator: xai.CLIClientIdentifier,
+		Version:    xai.CLIClientVersion,
+		Headers: map[string]string{
+			"User-Agent":               xai.CLIUserAgent(xai.CLIClientVersion),
+			"x-grok-client-identifier": xai.CLIClientIdentifier,
+			"x-grok-client-version":    xai.CLIClientVersion,
+			"x-grok-client-mode":       xai.CLIClientMode,
+		},
+	}, builtInOutboundIdentity("grok"))
+}
+
+func TestPrepareGrokAccountOutboundRequestUsesGrokTransportProfile(t *testing.T) {
+	account := &Account{ID: 42, Platform: PlatformGrok, Type: AccountTypeAPIKey, Credentials: map[string]any{}}
+	req, err := http.NewRequest(http.MethodPost, "https://api.x.ai/v1/images/generations", nil)
+	require.NoError(t, err)
+
+	prepared := prepareAccountOutboundRequest(req, account)
+
+	require.Same(t, req, prepared)
+	require.Equal(t, HTTPUpstreamProfileGrok, HTTPUpstreamProfileFromContext(prepared.Context()))
+	require.Equal(t, builtInOutboundIdentity("grok").UserAgent, prepared.UserAgent())
+
+	explicit := req.WithContext(WithHTTPUpstreamProfile(req.Context(), HTTPUpstreamProfileLongStream))
+	prepareAccountOutboundRequest(explicit, account)
+	require.Equal(t, HTTPUpstreamProfileLongStream, HTTPUpstreamProfileFromContext(explicit.Context()))
 }
 
 func TestOutboundIdentitySourcePriorityAndAccountTypes(t *testing.T) {

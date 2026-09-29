@@ -1808,6 +1808,7 @@ func TestGatewayService_AnthropicAPIKeyPassthrough_Non2xxRecordsOllamaActivity(t
 func TestOpus55ThinkingDefaultPreservesSignedHistory(t *testing.T) {
 	body := []byte(`{"model":"claude-opus-5-5","messages":[{"role":"assistant","content":[{"type":"thinking","thinking":"","signature":"signed"},{"type":"redacted_thinking","data":"encrypted"},{"type":"tool_use","id":"toolu_1","name":"lookup","input":{}}]},{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"ok"}]}],"tool_choice":{"type":"none"},"thinking":{"type":"adaptive","display":"omitted"}}`)
 	require.Equal(t, string(body), string(FilterThinkingBlocks(body, "claude-opus-5-5")))
+	require.Equal(t, string(body), string(FilterThinkingBlocks(body, "anthropic/claude-opus-5.5")))
 	withoutThinking, _ := deleteJSONPathBytes(body, "thinking")
 	require.Equal(t, string(withoutThinking), string(FilterThinkingBlocks(withoutThinking, "claude-opus-5-5")))
 	out, _ := normalizeClaudeOAuthRequestBody(body, "claude-opus-5-5", claudeOAuthNormalizeOptions{})

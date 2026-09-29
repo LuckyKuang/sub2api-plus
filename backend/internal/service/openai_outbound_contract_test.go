@@ -95,7 +95,7 @@ func TestOpenAIIdentityContractPrivacyPreservesSelectedIdentity(t *testing.T) {
 }
 
 func TestOpenAIIdentityContractPrivacyPreservesSynchronizedVersionForms(t *testing.T) {
-	base := "codex_cli_rs/0.147.0 "
+	base := "codex_cli_rs/0.158.0 "
 	maximumUA := base + strings.Repeat("x", maxOpenAIAccountUserAgentLength-len(base))
 	for _, version := range []string{"0.200", "0.2000.1"} {
 		t.Run(version, func(t *testing.T) {

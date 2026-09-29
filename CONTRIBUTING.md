@@ -36,7 +36,14 @@ matches the current resolved Go, Node, pnpm, golangci-lint, and GoReleaser pins.
 Retain dependency caches only for the generation matching that image and the
 current Go and pnpm lock inputs. Remove stale Sub2API validation generations;
 never prune unrelated projects or global runtime, builder, image, volume, or
-system resources.
+system resources. The launcher cleans up automatically before each run and
+sweeps stopped project containers by the `sub2api-validation` label (a hard
+kill that `--rm` cannot reclaim is still removed); on macOS the cross-project
+Apple Builder cache stays under `deploy/APPLE_CONTAINER.md` manual guidance and
+is never touched. To reclaim everything at once, run
+`python3 skills/push-cli/scripts/push_cli.py clean --yes`; it is manual only,
+and it deletes the current generation, so the next validation rebuilds the
+toolchain and redownloads dependencies.
 
 Inside that container, with GNU Make available, run the repository checks from
 the root:

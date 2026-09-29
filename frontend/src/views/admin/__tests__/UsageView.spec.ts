@@ -1,3 +1,7 @@
+import { readFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { defineComponent, ref } from 'vue'
@@ -899,5 +903,35 @@ describe('admin UsageView Excel export latency fields', () => {
     expect(saveAs).toHaveBeenCalledOnce()
 
     wrapper.unmount()
+  })
+})
+
+// xlsx@0.18.5 的两条高危(CVE-2023-30533/GHSA-4r6h-8v6p-xvw6 原型污染、
+// CVE-2024-22363/GHSA-5pgg-2g8v-p4x9 ReDoS,见 SECURITY.md《Dependency Audit Exceptions》)
+// 仅在"解析不可信 xlsx 输入"时触发。
+// UsageView 只把应用自有统计导出为 xlsx;此测试守护"不解析外部输入"这一例外前提,
+// 并固定 package.json 的 ignoreCves 例外清单。改动任一侧都需重新评估该依赖。
+describe('UsageView xlsx audit exception', () => {
+  const viewPath = resolve(
+    dirname(fileURLToPath(import.meta.url)),
+    '../UsageView.vue'
+  )
+  const packageJsonPath = resolve(
+    dirname(fileURLToPath(import.meta.url)),
+    '../../../../package.json'
+  )
+
+  it('exports spreadsheets without parsing untrusted xlsx input', () => {
+    const source = readFileSync(viewPath, 'utf8')
+    expect(source).not.toMatch(/XLSX\.read(File|FileSync)?\s*\(/)
+    expect(source).not.toMatch(/XLSX\.utils\.sheet_to_(json|csv|html|formulae)/)
+  })
+
+  it('pins the documented xlsx audit exceptions', () => {
+    const pkg = JSON.parse(readFileSync(packageJsonPath, 'utf8'))
+    expect(pkg.pnpm?.auditConfig?.ignoreCves).toEqual([
+      'CVE-2023-30533',
+      'CVE-2024-22363',
+    ])
   })
 })
