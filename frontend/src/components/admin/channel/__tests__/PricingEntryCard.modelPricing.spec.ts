@@ -113,16 +113,16 @@ describe('PricingEntryCard deleting a model', () => {
 
     const update = lastUpdate(wrapper)
     expect(update.models).toEqual([])
-    // 之前按 alpha 自动填充的 token 价与上下文区间必须清空，不能把一组悬空价格
-    // 留在空规则上造成误解。
+    // 移除一个真实主模型时，其自动填充的 token 价 / 区间 / 倍率必须一并清空；
+    // 残留（尤其 fast 倍率）会让 hasAnyPricingValue 为真，导致换入的新模型不再
+    // 自动查价（gpt-6-sol → gpt-6-luna 不带价）。
     expect(update.input_price).toBeNull()
     expect(update.output_price).toBeNull()
     expect(update.cache_write_price).toBeNull()
     expect(update.intervals).toEqual([])
-    // 但推理/档位倍率属于用户配置，auto-fill 契约（见既有测试）要求原样保留。
-    expect(update.fast_multiplier).toBe(2)
-    expect(update.flex_multiplier).toBe(0.5)
-    expect(update.reasoning_effort_multipliers).toEqual({ high: 0.5 })
+    expect(update.fast_multiplier).toBeNull()
+    expect(update.flex_multiplier).toBeNull()
+    expect(update.reasoning_effort_multipliers).toBeNull()
     expect(getModelDefaultPricing).not.toHaveBeenCalled()
   })
 })
@@ -211,5 +211,53 @@ describe('PricingEntryCard switching the primary model', () => {
     // alpha 的旧区间被清掉，换成 beta 参考价里的新区间。
     expect(update.intervals).toHaveLength(1)
     expect(update.intervals![0].input_price).toBe(3)
+  })
+})
+
+// 与上面"切换"相对：向"空规则"添加首个模型不算主模型切换——用户先配好的
+// effort 倍率是手填配置，必须保留，auto-fill 不得覆盖。这道契约由旧实现保护，
+// 新增用例显式固化"切换才清倍率 / 首加不碰倍率"的边界。
+describe('PricingEntryCard manual multipliers on an empty rule', () => {
+  it('keeps them when adding the first model and skips auto-fill', async () => {
+    getModelDefaultPricing.mockResolvedValue({
+      model: 'example-model',
+      matched_model: 'example-model',
+      platform: 'openai',
+      status: 'priced',
+      source: 'release_catalog',
+      reason_code: '',
+      pricing: {
+        platform: 'openai',
+        models: ['example-model'],
+        billing_mode: 'token',
+        input_price: 3e-6,
+        output_price: 15e-6,
+        cache_write_price: null,
+        cache_write_1h_price: null,
+        cache_read_price: null,
+        fast_multiplier: null,
+        flex_multiplier: null,
+        reasoning_effort_multipliers: null,
+        image_input_price: null,
+        image_output_price: null,
+        per_request_price: null,
+        intervals: [],
+      },
+    })
+    const wrapper = shallowMount(PricingEntryCard, {
+      props: {
+        entry: { ...createEntry(), reasoning_effort_multipliers: { high: 0.5 } },
+        platform: 'openai',
+      },
+    })
+
+    modelsTagInput(wrapper).vm.$emit('update:models', ['example-model'])
+    await flushPromises()
+
+    const update = lastUpdate(wrapper)
+    expect(update.models).toEqual(['example-model'])
+    expect(update.reasoning_effort_multipliers).toEqual({ high: 0.5 })
+    expect(update.input_price).toBeNull()
+    expect(getModelDefaultPricing).not.toHaveBeenCalled()
   })
 })

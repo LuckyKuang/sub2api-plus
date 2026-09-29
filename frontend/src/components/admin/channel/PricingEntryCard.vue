@@ -503,22 +503,27 @@ async function onModelsUpdate(newModels: string[]) {
     return
   }
 
-  // 主模型（第一个）变化时，之前按旧主模型自动填充的 token 价与区间已过期：
-  // 清空这些字段，让新主模型重新查价，避免把 gpt-6-sol 的价格显示到 gpt-6-luna 上。
-  // 注意：推理/档位倍率（reasoning_effort_multipliers、fast/flex_multiplier）属于
-  // 用户配置，hasAnyPricingValue 会据此阻止自动查价覆盖，必须原样保留，不得顺手清空。
+  // 主模型切换判定：只有"原本已有主模型（oldModels 非空）且被移除/替换"才算切换。
+  // 只有切换才需要把旧主模型自动填充的价格/区间/倍率一并清空——否则残留（尤其
+  // fast/flex 倍率）会被 hasAnyPricingValue 当成"已填"，挡住新模型的重新查价。
+  // 向"空规则"添加首个模型不算切换：那里的倍率是用户手填的配置，必须保留，auto-fill
+  // 不得覆盖（见既有 keeps custom effort multipliers 契约测试）。
   const oldPrimary = (oldModels[0] ?? '').trim()
   const newPrimary = (nextModels[0] ?? '').trim()
   const primaryChanged = newPrimary !== oldPrimary
+  const clearingStaleReference = primaryChanged && oldModels.length > 0
   let nextEntry: PricingFormEntry = { ...props.entry, models: nextModels }
-  if (primaryChanged) {
+  if (clearingStaleReference) {
+    const target = nextEntry as unknown as Record<string, unknown>
     for (const f of [
       'input_price', 'output_price', 'cache_write_price', 'cache_write_1h_price',
       'cache_read_price', 'image_input_price', 'image_output_price', 'per_request_price',
+      'fast_multiplier', 'flex_multiplier',
     ]) {
-      (nextEntry as unknown as Record<string, unknown>)[f] = null
+      target[f] = null
     }
-    (nextEntry as unknown as Record<string, unknown>).intervals = []
+    target.intervals = []
+    target.reasoning_effort_multipliers = null
   }
   emit('update', nextEntry)
 

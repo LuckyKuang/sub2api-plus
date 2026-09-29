@@ -275,6 +275,18 @@ Two consequences worth calling out:
   only the fields that are still empty.
 - Numeric zero counts as an edited value. Neither automatic fill nor the
   explicit completion action replaces it.
+- Deleting a model writes the change back (the removal is never silently
+  dropped). Removing a non-first model keeps the rule's prices; removing the
+  only/first model empties the rule.
+- Switching the primary (first) model — a rule that already had a model and is
+  now replaced by a different one — clears the previous model's auto-filled
+  token price, context intervals, and Fast/Flex/reasoning multipliers, then
+  re-resolves the new primary model's reference price. Otherwise a stale price
+  or a leftover Fast multiplier from the old model would survive and be read as
+  "already filled", blocking the re-lookup (e.g. gpt-6-sol → gpt-6-luna).
+- Adding the first model to an empty rule is not a switch: effort and tier
+  multipliers configured there are user input and are preserved, and auto-fill
+  does not overwrite them.
 - Every lookup is bound to the rule identity, a request sequence number, and the
   model snapshot. A response is discarded when the model or rule was removed,
   when a newer lookup was started, or when the target field was edited.
