@@ -640,12 +640,12 @@ func (s *BillingService) initFallbackPricing() {
 	// 有专属价卡；裸 "gpt-6" 家族基名也需静态兜底，否则 GetModelPricing("gpt-6")
 	// 会 fail-closed。
 	s.fallbackPrices["gpt-6"] = &ModelPricing{
-		InputPricePerToken:         10e-6, // $10 per MTok
-		InputPricePerTokenPriority: 20e-6,
-		OutputPricePerToken:        50e-6, // $50 per MTok
+		InputPricePerToken:          10e-6, // $10 per MTok
+		InputPricePerTokenPriority:  20e-6,
+		OutputPricePerToken:         50e-6, // $50 per MTok
 		OutputPricePerTokenPriority: 100e-6,
-		LongContextInputThreshold:  272_000,
-		LongContextInputMultiplier: 2,
+		LongContextInputThreshold:   272_000,
+		LongContextInputMultiplier:  2,
 		LongContextOutputMultiplier: 1.5,
 	}
 

@@ -19,10 +19,10 @@ func TestGrokOAuthClientExchangeAndRefreshUseFormFields(t *testing.T) {
 	identity := outboundidentity.Identity{
 		Preset: "grok", UserAgent: xai.CLIUserAgent(xai.CLIClientVersion), Originator: xai.CLIClientIdentifier, Version: xai.CLIClientVersion,
 		Headers: map[string]string{
-			"User-Agent": xai.CLIUserAgent(xai.CLIClientVersion),
+			"User-Agent":               xai.CLIUserAgent(xai.CLIClientVersion),
 			"x-grok-client-identifier": xai.CLIClientIdentifier,
-			"x-grok-client-version": xai.CLIClientVersion,
-			"x-grok-client-mode": xai.CLIClientMode,
+			"x-grok-client-version":    xai.CLIClientVersion,
+			"x-grok-client-mode":       xai.CLIClientMode,
 		},
 	}
 	ctx := outboundidentity.WithIdentity(context.Background(), identity)

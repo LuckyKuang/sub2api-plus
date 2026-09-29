@@ -431,7 +431,7 @@ func TestApplyGrokRequestMetadataUsesTrustedRequestValues(t *testing.T) {
 	headers := http.Header{
 		"X-Grok-Req-Id":         {"pinned"},
 		"X-Grok-Model-Override": {"wrong-model"},
-		"X-Grok-Session-Id":      {"wrong-session"},
+		"X-Grok-Session-Id":     {"wrong-session"},
 	}
 	applyGrokRequestMetadata(headers, []byte(`{"model":"grok-4.7"}`), "trusted-session", " user-42 ")
 

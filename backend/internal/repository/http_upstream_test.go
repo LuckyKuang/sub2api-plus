@@ -285,7 +285,7 @@ func TestHTTPUpstreamDoFallsBackToOfficialGrokAPIOnCLIAccessDenied(t *testing.T)
 					Body: io.NopCloser(strings.NewReader(
 						`{"code":"permission_denied","error":"Access to the chat endpoint is denied. Please ensure you're using the correct credentials. If you believe this is a mistake, please contact support."}`,
 					)),
-					Request:    req,
+					Request: req,
 				}, nil
 			}
 

@@ -17,7 +17,7 @@ import (
 
 const (
 	grokConversationIDHeader         = "X-Grok-Conv-Id"
-	grokConversationGroupNamespace  = "xai:grok-build:conversation-group:"
+	grokConversationGroupNamespace   = "xai:grok-build:conversation-group:"
 	claudeCodeSessionHeader          = "X-Claude-Code-Session-Id"
 	grokClientToolCacheOptInHeader   = brandidentity.GrokClientToolCacheHeader
 	grokFreeCacheNativeToolsJSON     = `[{"type":"web_search"},{"type":"x_search"}]`
