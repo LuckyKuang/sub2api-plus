@@ -173,6 +173,7 @@ type SystemSettings struct {
 	ClientDisconnectConsecutiveBanGeneration int64
 	GlobalIPAccessControlEnabled             bool
 	CyberSessionBlockEnabled                 bool
+	CyberPolicyUserAllowlist                 string
 	CyberSessionBlockTTLSeconds              int
 	AffiliateEnabled                         bool
 	AffiliateRebateRate                      float64

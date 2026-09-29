@@ -112,6 +112,7 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
 	if beta, ok := account.HeaderOverrideValue("anthropic-beta"); ok {
 		finalBetaHeader, finalBetaShouldSet = beta, true
 	}
+	finalBetaHeader = filterSonnet55ToolsetBeta(finalBetaHeader, body, modelID)
 
 	// 能力维度 body sanitize：与最终 anthropic-beta header 对称
 	if sanitized, changed := sanitizeAnthropicBodyForBetaTokens(body, finalBetaHeader); changed {
@@ -197,6 +198,10 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
 	// 放在所有 header 逻辑之后，确保配置值对同名头拥有最终决定权。
 	account.ApplyHeaderOverrides(req.Header)
 	ApplyAccountOutboundIdentity(ctx, account, req)
+
+	// Sonnet 5.5 工具集 beta 过滤：放在 Plus 身份应用与 anthropic-beta 终决逻辑之后，
+	// 只裁剪工具集相关 beta，不改动身份 triple，也不绕过 drop 策略。
+	filterSonnet55ToolsetBetaHeader(req.Header, body, modelID)
 
 	// === DEBUG: 打印上游转发请求（headers + body 摘要），与 CLIENT_ORIGINAL 对比 ===
 	s.debugLogGatewaySnapshot("UPSTREAM_FORWARD", req.Header, body, map[string]string{
@@ -292,7 +297,7 @@ func (s *GatewayService) buildUpstreamRequestAnthropicVertex(
 	if policy.blockErr != nil {
 		return nil, policy.blockErr
 	}
-	finalBeta := filterVertexBetaTokens(clientBeta, mergeDropSets(policy.filterSet))
+	finalBeta := filterSonnet55ToolsetBeta(filterVertexBetaTokens(clientBeta, mergeDropSets(policy.filterSet)), vertexBody, modelID)
 
 	// 能力维度 sanitize：基于最终 beta（而非原始 client 值）决定是否保留 body 中的
 	// context_management，与 Anthropic 直连 / Bedrock 路径对称。
@@ -414,6 +419,39 @@ func defaultAPIKeyBetaHeader(body []byte) string {
 	return claude.APIKeyBetaHeader
 }
 
+// The legacy streaming beta is incompatible with the stable computer and
+// browser toolsets. The per-tool eager_input_streaming field remains available.
+func filterSonnet55ToolsetBeta(header string, body []byte, modelID string) string {
+	if at := strings.IndexByte(modelID, '@'); at >= 0 {
+		modelID = modelID[:at] // Vertex's dated model ID
+	}
+	if !claude.IsSonnet55(modelID) {
+		return header
+	}
+	for _, tool := range gjson.GetBytes(body, "tools").Array() {
+		switch tool.Get("type").String() {
+		case "computer_toolset_20260801", "browser_toolset_20260801":
+			if !containsBetaToken(header, claude.BetaFineGrainedToolStreaming) {
+				return header
+			}
+			return stripBetaTokensWithSet(header, map[string]struct{}{claude.BetaFineGrainedToolStreaming: {}})
+		}
+	}
+	return header
+}
+
+func filterSonnet55ToolsetBetaHeader(headers http.Header, body []byte, modelID string) {
+	header := getHeaderRaw(headers, "anthropic-beta")
+	filtered := filterSonnet55ToolsetBeta(header, body, modelID)
+	if filtered == header {
+		return
+	}
+	deleteHeaderAllForms(headers, "anthropic-beta")
+	if filtered != "" {
+		setHeaderRaw(headers, "anthropic-beta", filtered)
+	}
+}
+
 func applyClaudeOAuthHeaderDefaults(req *http.Request) {
 	if req == nil {
 		return
@@ -500,7 +538,8 @@ func (s *GatewayService) computeFinalAnthropicBeta(
 	clientHeaders http.Header,
 	body []byte,
 	effectiveDropSet map[string]struct{},
-) (string, bool) {
+) (beta string, shouldSet bool) {
+	defer func() { beta = filterSonnet55ToolsetBeta(beta, body, modelID) }()
 	clientBeta := ""
 	if clientHeaders != nil {
 		clientBeta = getHeaderRaw(clientHeaders, "anthropic-beta")
@@ -552,7 +591,8 @@ func (s *GatewayService) computeFinalCountTokensAnthropicBeta(
 	clientHeaders http.Header,
 	body []byte,
 	effectiveDropSet map[string]struct{},
-) (string, bool) {
+) (beta string, shouldSet bool) {
+	defer func() { beta = filterSonnet55ToolsetBeta(beta, body, modelID) }()
 	clientBeta := ""
 	if clientHeaders != nil {
 		clientBeta = getHeaderRaw(clientHeaders, "anthropic-beta")
