@@ -565,7 +565,7 @@ export default {
         codexResidencyOff: 'Off (do not send)',
         codexResidencyUS: 'US',
         codexResidencyHint:
-          'Global only. Off sends nothing. US adds x-openai-internal-codex-residency: us on Codex inference (HTTP and WebSocket), token refresh, revoke, and ChatGPT backend-api calls. Authorization-code exchange and device-code stay without it. Account overrides and inbound headers cannot set this header.',
+          'Global only, with no account-level switch; off (default) sends nothing. With US, outbound requests from Codex-protocol (OAuth/ChatGPT) accounts carry x-openai-internal-codex-residency: us on the inference plane (HTTP forwarding, WebSocket handshake, live, Messages bridge, alpha search) and on chatgpt.com auxiliary calls (token refresh/revoke, account check, WHAM usage and credits, privacy toggle, and similar). Model list and model discovery, embeddings, authorization-code exchange, and device-code do not send it, and neither do non-Codex-protocol accounts such as API Key; account overrides and inbound headers cannot set or clear this header.',
         codexLegacyClientProfileCompatibility: 'Legacy Codex Client Profile Compatibility',
         codexLegacyClientProfileCompatibilityHint: 'Default off. Temporarily allows only codex_app, codex_exec, codex_sdk_ts, and codex_vscode_copilot for configured outbound identities and “Codex official client profiles only” accounts. They remain legacy-compatible profiles, not official profiles; exact User-Agent, originator, semantic version, and known Codex evidence are still required.',
         openaiCodexLocalGroupQuota: 'Codex Local Group Quota',
