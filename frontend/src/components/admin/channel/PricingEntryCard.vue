@@ -503,8 +503,10 @@ async function onModelsUpdate(newModels: string[]) {
     return
   }
 
-  // 主模型（第一个）变化时，之前按旧主模型自动填充的价格已过期：清空这些字段，
-  // 让新主模型重新查价，避免把 gpt-6-sol 的价格显示到 gpt-6-luna 上。
+  // 主模型（第一个）变化时，之前按旧主模型自动填充的 token 价与区间已过期：
+  // 清空这些字段，让新主模型重新查价，避免把 gpt-6-sol 的价格显示到 gpt-6-luna 上。
+  // 注意：推理/档位倍率（reasoning_effort_multipliers、fast/flex_multiplier）属于
+  // 用户配置，hasAnyPricingValue 会据此阻止自动查价覆盖，必须原样保留，不得顺手清空。
   const oldPrimary = (oldModels[0] ?? '').trim()
   const newPrimary = (nextModels[0] ?? '').trim()
   const primaryChanged = newPrimary !== oldPrimary
@@ -513,14 +515,10 @@ async function onModelsUpdate(newModels: string[]) {
     for (const f of [
       'input_price', 'output_price', 'cache_write_price', 'cache_write_1h_price',
       'cache_read_price', 'image_input_price', 'image_output_price', 'per_request_price',
-      'fast_multiplier', 'flex_multiplier',
     ]) {
-      ;(nextEntry as unknown as Record<string, unknown>)[f] = null
+      (nextEntry as unknown as Record<string, unknown>)[f] = null
     }
-    // 上下文区间定价（min,max]）与按推理等级倍率同样来自旧模型参考价，一并清空，
-    // 否则换模型后残留旧模型区间/倍率会造成误解；新模型会重新查价填充。
-    ;(nextEntry as unknown as Record<string, unknown>).intervals = []
-    ;(nextEntry as unknown as Record<string, unknown>).reasoning_effort_multipliers = null
+    (nextEntry as unknown as Record<string, unknown>).intervals = []
   }
   emit('update', nextEntry)
 
@@ -528,9 +526,9 @@ async function onModelsUpdate(newModels: string[]) {
   const model = addedModels[0]?.trim()
   if (!model || !props.platform) return
 
-  // 已手动填过价格、且主模型未变时不覆盖（界面另有显式「补齐空字段」）；
-  // 主模型刚变化时价格已清空，应重新为新模型查价。
-  if (!primaryChanged && hasAnyPricingValue(nextEntry)) {
+  // 已有用户填写的价格/倍率时不覆盖（界面另有显式「补齐空字段」）。换模型时价格已
+  // 在上面清空，这里自然放行、为新主模型重新查价；未换模型则维持既有保护。
+  if (hasAnyPricingValue(nextEntry)) {
     lookupStatus.value = { state: 'idle' }
     return
   }
