@@ -451,6 +451,7 @@
                   enable-tier-multipliers
                   @update="updatePricingEntry(sIdx, idx, $event)"
                   @remove="removePricingEntry(sIdx, idx)"
+                  @split="splitPricingEntry(sIdx, idx, $event)"
                 />
               </div>
             </div>
@@ -581,6 +582,7 @@
                       :platform="section.platform"
                       @update="rule.pricing.splice(pIdx, 1, $event)"
                       @remove="removeRulePricingEntry(sIdx, ruleIndex, pIdx)"
+                      @split="splitRulePricingEntry(section.platform, rule, pIdx, $event)"
                     />
                   </div>
                 </div>
@@ -632,9 +634,10 @@ import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
 import { adminAPI } from '@/api/admin'
+import channelsAPI from '@/api/admin/channels'
 import type { Channel, ChannelModelPricing, CreateChannelRequest, UpdateChannelRequest, AccountStatsPricingRule } from '@/api/admin/channels'
 import type { PricingFormEntry } from '@/components/admin/channel/types'
-import { apiIntervalsToForm, apiTimePricingToForm, createDefaultTimePricingForm, findModelConflict, formIntervalsToAPI, formReasoningEffortMultipliersToAPI, formTimePricingToAPI, isValidPositiveMultiplier, mTokToPerToken, perTokenToMTok, validateIntervals, validateReasoningEffortMultipliers, validateTimePricing } from '@/components/admin/channel/types'
+import { apiIntervalsToForm, apiTimePricingToForm, buildSyncedPricingEntries, createDefaultTimePricingForm, filterAlreadyCoveredModels, findModelConflict, formIntervalsToAPI, formReasoningEffortMultipliersToAPI, formTimePricingToAPI, isValidPositiveMultiplier, mTokToPerToken, perTokenToMTok, referenceToPricingRule, validateIntervals, validateReasoningEffortMultipliers, validateTimePricing } from '@/components/admin/channel/types'
 import type { AdminGroup, GroupPlatform } from '@/types'
 import type { Column } from '@/components/common/types'
 import { platformTextClass, platformBadgeLightClass } from '@/utils/platformColors'
@@ -854,8 +857,8 @@ function toggleGroupInSection(sectionIdx: number, groupId: number) {
 }
 
 // ── Pricing helpers ──
-function addPricingEntry(sectionIdx: number) {
-  form.platforms[sectionIdx].model_pricing.push({
+function emptyPricingEntry(): PricingFormEntry {
+  return {
     models: [],
     billing_mode: 'token',
     input_price: null,
@@ -870,8 +873,12 @@ function addPricingEntry(sectionIdx: number) {
     image_output_price: null,
     per_request_price: null,
     intervals: [],
-    time_pricing: createDefaultTimePricingForm()
-  })
+    time_pricing: createDefaultTimePricingForm(),
+  }
+}
+
+function addPricingEntry(sectionIdx: number) {
+  form.platforms[sectionIdx].model_pricing.push(emptyPricingEntry())
 }
 
 const syncingPlatform = ref<string | null>(null)
@@ -882,35 +889,38 @@ async function syncLatestModels(sectionIdx: number) {
   syncingPlatform.value = platform
   try {
     const result = await adminAPI.channels.syncPricingModels(platform)
-    // Collect all model names already present in this platform's pricing entries
-    const existingModels = new Set<string>()
-    for (const entry of form.platforms[sectionIdx].model_pricing) {
-      for (const m of entry.models) existingModels.add(m)
-    }
-    const newModels = result.models.filter(m => !existingModels.has(m))
+    // 只新建本平台还没有覆盖的型号：精确匹配与通配符规则都要算，否则重复同步
+    // 或已有 `claude-*` 规则时会建出重复条目。
+    const newModels = filterAlreadyCoveredModels(
+      result.models.map(ref => ref.model),
+      form.platforms[sectionIdx].model_pricing,
+    )
     if (newModels.length === 0) {
       appStore.showSuccess(t('admin.channels.form.syncModelsAlreadyUpToDate'))
       return
     }
-    // Add new models as a single new pricing entry (user fills in prices)
-    form.platforms[sectionIdx].model_pricing.push({
-      models: newModels,
-      billing_mode: 'token',
-      input_price: null,
-      output_price: null,
-      cache_write_price: null,
-      cache_write_1h_price: null,
-      cache_read_price: null,
-      fast_multiplier: null,
-      flex_multiplier: null,
-      reasoning_effort_multipliers: null,
-      image_input_price: null,
-      image_output_price: null,
-      per_request_price: null,
-      intervals: [],
-      time_pricing: createDefaultTimePricingForm()
-    })
-    appStore.showSuccess(t('admin.channels.form.syncModelsSuccess', { count: newModels.length }))
+
+    const newModelSet = new Set(newModels)
+    // 每个模型一条独立规则，各自带自己的官方价（同步每次都会新鲜返回）。
+    const rules = buildSyncedPricingEntries(
+      result.models.filter(ref => newModelSet.has(ref.model)),
+    )
+    for (const rule of rules) {
+      form.platforms[sectionIdx].model_pricing.push(rule.entry)
+    }
+
+    const priced = rules.filter(rule => rule.reference.status === 'priced').length
+    const needsPricing = rules.length - priced
+    if (needsPricing > 0) {
+      appStore.showSuccess(
+        t('admin.channels.form.syncModelsPartial', { count: newModels.length, priced, needsPricing })
+      )
+    } else {
+      appStore.showSuccess(t('admin.channels.form.syncModelsSuccess', { count: newModels.length }))
+    }
+    if (result.refresh_status === 'stale' || result.warning_code) {
+      appStore.showWarning(t('admin.channels.form.syncModelsStaleCatalog'))
+    }
   } catch (error) {
     appStore.showError(extractApiErrorMessage(error, t('admin.channels.form.syncModelsError')))
   } finally {
@@ -924,6 +934,46 @@ function updatePricingEntry(sectionIdx: number, idx: number, updated: PricingFor
 
 function removePricingEntry(sectionIdx: number, idx: number) {
   form.platforms[sectionIdx].model_pricing.splice(idx, 1)
+}
+
+/**
+ * 一次粘贴多个模型时，把多出来的模型拆成独立规则。
+ * 不拆分就只能给它们填同一套价（一条规则本来就是一套价）。
+ * 拆分出的每个模型都要独立查一次参考价：早期实现只查第一个型号，
+ * 其余型号拿到的是第一条规则的空价或第一个型号的价。
+ */
+async function splitPricingEntry(sectionIdx: number, idx: number, models: string[]) {
+  const entries = form.platforms[sectionIdx].model_pricing
+  const source = entries[idx]
+  if (!source || !models.length) return
+  const platform = form.platforms[sectionIdx].platform
+  const additions = await Promise.all(models.map(model => resolveSplitEntry(platform, model)))
+  entries.splice(idx + 1, 0, ...additions)
+}
+
+async function splitRulePricingEntry(platform: string, rule: { pricing: PricingFormEntry[] }, pIdx: number, models: string[]) {
+  const source = rule.pricing[pIdx]
+  if (!source || !models.length) return
+  const additions = await Promise.all(models.map(model => resolveSplitEntry(platform, model)))
+  rule.pricing.splice(pIdx + 1, 0, ...additions)
+}
+
+/**
+ * 为拆分出来的单个模型查参考价并生成独立规则。
+ * manual/unsupported：保留空规则但带上参考价元数据，卡片上显示原因；
+ * 查询失败：同样留空，由运营者手填（不阻断拆分本身）。
+ */
+async function resolveSplitEntry(platform: string, model: string): Promise<PricingFormEntry> {
+  const base = emptyPricingEntry()
+  base.models = [model]
+  if (!platform) return base
+  try {
+    const reference = await channelsAPI.getModelDefaultPricing(platform, model)
+    const { entry } = referenceToPricingRule(reference)
+    return entry
+  } catch {
+    return base
+  }
 }
 
 // ── Model Mapping helpers ──
@@ -963,20 +1013,7 @@ function addAccountStatsRule(sectionIdx: number) {
 }
 
 function addRulePricingEntry(sectionIdx: number, ruleIndex: number) {
-  form.platforms[sectionIdx].account_stats_pricing_rules[ruleIndex].pricing.push({
-    models: [],
-    billing_mode: 'token',
-    input_price: null,
-    output_price: null,
-    cache_write_price: null,
-    cache_write_1h_price: null,
-    cache_read_price: null,
-    image_input_price: null,
-    image_output_price: null,
-    per_request_price: null,
-    intervals: [],
-    time_pricing: createDefaultTimePricingForm()
-  })
+  form.platforms[sectionIdx].account_stats_pricing_rules[ruleIndex].pricing.push(emptyPricingEntry())
 }
 
 function removeAccountStatsRule(sectionIdx: number, ruleIndex: number) {

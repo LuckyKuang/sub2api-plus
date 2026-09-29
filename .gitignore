@@ -161,6 +161,7 @@ docs/*
 !docs/SECURITY_AUDIT_CONTENT_COVERAGE.md
 !docs/CLIENT_DISCONNECT_RISK_CONTROL.md
 !docs/BATCH_IMAGE_MVP.md
+!docs/CHANNEL_PRICING.md
 !docs/COMPOSITE_GROUPS.md
 !docs/PLUGIN_DEVELOPMENT.md
 !docs/channel-monitor-v2-safe-defaults.md

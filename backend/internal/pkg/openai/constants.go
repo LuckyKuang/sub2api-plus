@@ -159,21 +159,30 @@ func CodexBaseInstructionsForModel(model string) string {
 	return latestCodexInstructions()
 }
 
-// IsGPT6SolOrLunaModelSpelling recognizes official gpt-6-sol/luna IDs and
-// their existing local effort/compact suffixes.
-func IsGPT6SolOrLunaModelSpelling(model string) bool {
+// GPT6SolOrLunaBaseModel returns the canonical "gpt-6-sol" / "gpt-6-luna" base
+// model ID for an official GPT-6 Sol/Luna spelling (including its registered
+// effort and compact suffixes), or "" when the model is not one of them.
+// Callers that need the concrete card must use this instead of HasPrefix("gpt-6-sol")
+// so an unregistered gpt-6-* spelling cannot silently inherit Sol or Luna pricing.
+func GPT6SolOrLunaBaseModel(model string) string {
 	canonical := CanonicalizeOpenAIModelAliasSpelling(model)
 	for _, base := range []string{"gpt-6-sol", "gpt-6-luna"} {
 		if canonical == base {
-			return true
+			return base
 		}
 		suffix, ok := strings.CutPrefix(canonical, base+"-")
 		if ok {
 			switch suffix {
 			case "none", "low", "medium", "high", "xhigh", "max", "openai-compact":
-				return true
+				return base
 			}
 		}
 	}
-	return false
+	return ""
+}
+
+// IsGPT6SolOrLunaModelSpelling recognizes official gpt-6-sol/luna IDs and
+// their existing local effort/compact suffixes.
+func IsGPT6SolOrLunaModelSpelling(model string) bool {
+	return GPT6SolOrLunaBaseModel(model) != ""
 }

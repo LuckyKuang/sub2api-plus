@@ -6,9 +6,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/config"
 	"github.com/LuckyKuang/sub2api-plus/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -534,99 +537,397 @@ func TestPricingRequestAndResponse_ReasoningEffortMultipliers(t *testing.T) {
 func setupSyncPricingModelsRouter(pricingSvc *service.PricingService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	h := &ChannelHandler{pricingService: pricingSvc}
-	router.GET("/channels/pricing/sync-models", h.SyncPricingModels)
-	return router
-}
-
-func TestSyncPricingModels_MissingPlatform(t *testing.T) {
-	svc := service.NewPricingService(nil, nil)
-	router := setupSyncPricingModelsRouter(svc)
-
-	req := httptest.NewRequest(http.MethodGet, "/channels/pricing/sync-models", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	require.Equal(t, http.StatusBadRequest, w.Code)
-}
-
-func TestSyncPricingModels_UnsupportedPlatform(t *testing.T) {
-	svc := service.NewPricingService(nil, nil)
-	router := setupSyncPricingModelsRouter(svc)
-
-	req := httptest.NewRequest(http.MethodGet, "/channels/pricing/sync-models?platform=unknown", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	require.Equal(t, http.StatusBadRequest, w.Code)
-}
-
-func TestSyncPricingModels_ValidPlatform_EmptyService(t *testing.T) {
-	svc := service.NewPricingService(nil, nil)
-	router := setupSyncPricingModelsRouter(svc)
-
-	for _, platform := range []string{"anthropic", "openai", "gemini", "antigravity", "grok", "kimi", "zhipu", "deepseek", "minimax"} {
-		req := httptest.NewRequest(http.MethodGet, "/channels/pricing/sync-models?platform="+platform, nil)
-		w := httptest.NewRecorder()
-		router.ServeHTTP(w, req)
-
-		require.Equal(t, http.StatusOK, w.Code, "platform=%s", platform)
-
-		var body struct {
-			Data struct {
-				Models []string `json:"models"`
-			} `json:"data"`
-		}
-		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
-		require.NotNil(t, body.Data.Models, "models must not be null for platform=%s", platform)
-	}
-}
-
-func setupModelDefaultPricingRouter() *gin.Engine {
-	gin.SetMode(gin.TestMode)
-	router := gin.New()
-	h := &ChannelHandler{billingService: service.NewBillingService(nil, nil)}
+	h := &ChannelHandler{pricingService: pricingSvc, billingService: service.NewBillingService(nil, pricingSvc)}
+	router.POST("/channels/pricing/sync-models", h.SyncPricingModels)
 	router.GET("/channels/model-pricing", h.GetModelDefaultPricing)
 	return router
 }
 
-func TestGetModelDefaultPricing_ReturnsFable51CacheTTLs(t *testing.T) {
-	router := setupModelDefaultPricingRouter()
-	req := httptest.NewRequest(http.MethodGet, "/channels/model-pricing?model=claude-fable-5-1", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	require.Equal(t, http.StatusOK, w.Code)
-	var body struct {
-		Data struct {
-			Found                      bool               `json:"found"`
-			CacheWritePrice            float64            `json:"cache_write_price"`
-			CacheWrite1hPrice          *float64           `json:"cache_write_1h_price"`
-			ReasoningEffortMultipliers map[string]float64 `json:"reasoning_effort_multipliers"`
-		} `json:"data"`
-	}
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
-	require.True(t, body.Data.Found)
-	require.InDelta(t, 12.5e-6, body.Data.CacheWritePrice, 1e-12)
-	require.NotNil(t, body.Data.CacheWrite1hPrice)
-	require.InDelta(t, 20e-6, *body.Data.CacheWrite1hPrice, 1e-12)
-	require.Empty(t, body.Data.ReasoningEffortMultipliers)
+// newCatalogBackedPricingService loads the bundled LiteLLM catalog so tests
+// exercise the same model/pricing data the deployed service starts from.
+func newCatalogBackedPricingService(t *testing.T) *service.PricingService {
+	t.Helper()
+	dataDir := t.TempDir()
+	svc := service.NewPricingService(&config.Config{
+		Pricing: config.PricingConfig{
+			DataDir:      dataDir,
+			FallbackFile: filepath.Join("..", "..", "..", "resources", "model-pricing", "model_prices_and_context_window.json"),
+		},
+	}, nil)
+	t.Cleanup(svc.Stop)
+	require.NoError(t, svc.Initialize())
+	return svc
 }
 
-func TestGetModelDefaultPricing_OmitsUnsupportedCache1hPrice(t *testing.T) {
-	router := setupModelDefaultPricingRouter()
-	req := httptest.NewRequest(http.MethodGet, "/channels/model-pricing?model=claude-sonnet-4", nil)
+// referencePayload 是同步/单模型查询返回的单个模型参考价载荷。
+type referencePayload struct {
+	Model        string                 `json:"model"`
+	MatchedModel string                 `json:"matched_model"`
+	Platform     string                 `json:"platform"`
+	Status       string                 `json:"status"`
+	Source       string                 `json:"source"`
+	ReasonCode   string                 `json:"reason_code"`
+	Pricing      map[string]interface{} `json:"pricing"`
+}
+
+func (r *referencePayload) price(key string) (*float64, bool) {
+	if r == nil || r.Pricing == nil {
+		return nil, false
+	}
+	raw, ok := r.Pricing[key]
+	if !ok {
+		return nil, false
+	}
+	value, ok := raw.(float64)
+	if !ok {
+		return nil, false
+	}
+	return &value, true
+}
+
+type syncPricingModelsPayload struct {
+	Platform       string             `json:"platform"`
+	RefreshStatus  string             `json:"refresh_status"`
+	CatalogVersion string             `json:"catalog_version"`
+	WarningCode    string             `json:"warning_code"`
+	Models         []referencePayload `json:"models"`
+}
+
+func (p *syncPricingModelsPayload) reference(model string) *referencePayload {
+	if p == nil {
+		return nil
+	}
+	for i := range p.Models {
+		if p.Models[i].Model == model {
+			return &p.Models[i]
+		}
+	}
+	return nil
+}
+
+func syncPricingModels(t *testing.T, router *gin.Engine, payload string) (*httptest.ResponseRecorder, *syncPricingModelsPayload) {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "/channels/pricing/sync-models", strings.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-
-	require.Equal(t, http.StatusOK, w.Code)
 	var body struct {
-		Data struct {
-			Found             bool     `json:"found"`
-			CacheWrite1hPrice *float64 `json:"cache_write_1h_price"`
-		} `json:"data"`
+		Data *syncPricingModelsPayload `json:"data"`
+	}
+	if w.Code != http.StatusOK {
+		return w, nil
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
-	require.True(t, body.Data.Found)
-	require.Nil(t, body.Data.CacheWrite1hPrice)
+	return w, body.Data
+}
+
+// getModelPricing 走单模型查询，返回原始 recorder 供调用方断言。
+func getModelPricing(t *testing.T, router *gin.Engine, query string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/channels/model-pricing"+query, nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	return w
+}
+
+func TestSyncPricingModels_MissingPlatform(t *testing.T) {
+	router := setupSyncPricingModelsRouter(service.NewPricingService(nil, nil))
+
+	w, _ := syncPricingModels(t, router, `{}`)
+	require.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestSyncPricingModels_UnsupportedPlatform(t *testing.T) {
+	router := setupSyncPricingModelsRouter(service.NewPricingService(nil, nil))
+
+	w, _ := syncPricingModels(t, router, `{"platform":"unknown"}`)
+	require.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestSyncPricingModels_ValidPlatform_EmptyService(t *testing.T) {
+	router := setupSyncPricingModelsRouter(service.NewPricingService(nil, nil))
+
+	for _, platform := range []string{
+		"anthropic", "openai", "gemini", "antigravity", "grok",
+		"kimi", "zhipu", "deepseek", "minimax", "opencode_go",
+	} {
+		w, data := syncPricingModels(t, router, `{"platform":"`+platform+`"}`)
+		require.Equalf(t, http.StatusOK, w.Code, "platform=%s", platform)
+		require.NotNilf(t, data, "platform=%s", platform)
+		require.Equalf(t, platform, data.Platform, "platform=%s", platform)
+		require.NotEmptyf(t, data.Models, "platform=%s must still list its supported models", platform)
+		for _, ref := range data.Models {
+			require.Equal(t, platform, ref.Platform)
+			require.NotEmpty(t, ref.Status, "model=%s", ref.Model)
+			switch ref.Status {
+			case "priced":
+				require.NotNilf(t, ref.Pricing, "model=%s must carry a price card", ref.Model)
+				require.NotEmptyf(t, ref.Source, "model=%s", ref.Model)
+			case "manual_required", "unsupported_unit":
+				require.Nilf(t, ref.Pricing, "model=%s must not carry a zero price card", ref.Model)
+				require.NotEmptyf(t, ref.ReasonCode, "model=%s", ref.Model)
+			default:
+				t.Fatalf("platform=%s model=%s unexpected status=%s", platform, ref.Model, ref.Status)
+			}
+		}
+	}
+}
+
+// TestSyncPricingModels_ReturnsDefaultPricingPerModel 锁定回归：
+// 「同步最新模型」必须连同官方默认价一起返回，否则前端只能建出没有价格的计价条目，
+// 运营者得逐个模型手抄价（gpt-6-sol / gpt-6-luna / claude-opus-5-5 都踩过这个坑）。
+func TestSyncPricingModels_ReturnsDefaultPricingPerModel(t *testing.T) {
+	router := setupSyncPricingModelsRouter(newCatalogBackedPricingService(t))
+
+	_, data := syncPricingModels(t, router, `{"platform":"openai"}`)
+	require.NotNil(t, data)
+	require.Equal(t, "openai", data.Platform)
+	require.NotEmpty(t, data.CatalogVersion, "sync must report the catalog version")
+
+	sol := data.reference("gpt-6-sol")
+	require.NotNil(t, sol, "gpt-6-sol must be listed for platform=openai")
+	luna := data.reference("gpt-6-luna")
+	require.NotNil(t, luna, "gpt-6-luna must be listed for platform=openai")
+
+	for _, ref := range []*referencePayload{sol, luna} {
+		require.Equal(t, "priced", ref.Status, "model=%s", ref.Model)
+		require.Equal(t, ref.Model, ref.MatchedModel, "model=%s", ref.Model)
+		require.Equal(t, "openai", ref.Platform, "model=%s", ref.Model)
+		require.Equal(t, "release_catalog", ref.Source, "model=%s", ref.Model)
+		require.Empty(t, ref.ReasonCode, "model=%s", ref.Model)
+		require.NotNil(t, ref.Pricing, "model=%s", ref.Model)
+		require.Equal(t, "token", ref.Pricing["billing_mode"], "model=%s", ref.Model)
+		require.Equal(t, []interface{}{ref.Model}, ref.Pricing["models"], "model=%s", ref.Model)
+		for _, key := range []string{"input_price", "output_price", "cache_write_price", "cache_read_price"} {
+			price, ok := ref.price(key)
+			require.Truef(t, ok, "model=%s must carry %s", ref.Model, key)
+			require.Positivef(t, *price, "model=%s %s", ref.Model, key)
+		}
+	}
+
+	// Sol 与 Luna 价差 20 倍，串价会立刻在金额上暴露。
+	for key, want := range map[string]float64{
+		"input_price":       2e-6,
+		"output_price":      10e-6,
+		"cache_write_price": 2.5e-6,
+		"cache_read_price":  0.2e-6,
+	} {
+		price, _ := sol.price(key)
+		require.InDeltaf(t, want, *price, 1e-12, "gpt-6-sol %s", key)
+	}
+	for key, want := range map[string]float64{
+		"input_price":       0.1e-6,
+		"output_price":      0.5e-6,
+		"cache_write_price": 0.125e-6,
+		"cache_read_price":  0.01e-6,
+	} {
+		price, _ := luna.price(key)
+		require.InDeltaf(t, want, *price, 1e-12, "gpt-6-luna %s", key)
+	}
+	fast, ok := sol.price("fast_multiplier")
+	require.True(t, ok, "gpt-6-sol must report its Fast multiplier")
+	require.InDelta(t, 2, *fast, 1e-12)
+
+	// 272000 长上下文档位必须折算成区间，只给基础价不算完成。
+	// 渠道区间左开右闭：min=272000 才能让 272000 走基础档、272001 进高档。
+	raw, ok := sol.Pricing["intervals"].([]interface{})
+	require.True(t, ok, "gpt-6-sol must expose long-context intervals")
+	require.Len(t, raw, 1)
+	interval := raw[0].(map[string]interface{})
+	require.Equal(t, float64(272000), interval["min_tokens"])
+	require.Equal(t, ">272000", interval["tier_label"])
+	require.InDelta(t, 4e-6, interval["input_price"], 1e-12)
+	require.InDelta(t, 15e-6, interval["output_price"], 1e-12)
+	require.InDelta(t, 4e-7, interval["cache_read_price"], 1e-12)
+
+	// Anthropic 平台同样要带回 claude-opus-5-5 的官方价。
+	_, anthropic := syncPricingModels(t, router, `{"platform":"anthropic"}`)
+	opus := anthropic.reference("claude-opus-5-5")
+	require.NotNil(t, opus, "claude-opus-5-5 must be listed for platform=anthropic")
+	require.Equal(t, "priced", opus.Status)
+	for key, want := range map[string]float64{
+		"input_price":          4e-6,
+		"output_price":         20e-6,
+		"cache_write_price":    5e-6,
+		"cache_write_1h_price": 8e-6,
+		"cache_read_price":     0.2e-6,
+	} {
+		price, ok := opus.price(key)
+		require.Truef(t, ok, "claude-opus-5-5 must carry %s", key)
+		require.InDeltaf(t, want, *price, 1e-12, "claude-opus-5-5 %s", key)
+	}
+}
+
+// 目录里没有对应 provider 行的平台（Kimi/智谱/MiniMax/OpenCode Go）不得整平台
+// 消失；没有精确价的型号必须保持可见且是 manual_required，而不是消失或全零假成功。
+func TestSyncPricingModels_PlatformCoverageWithoutCatalogRows(t *testing.T) {
+	router := setupSyncPricingModelsRouter(service.NewPricingService(nil, nil))
+
+	_, data := syncPricingModels(t, router, `{"platform":"opencode_go"}`)
+	require.NotNil(t, data)
+	for _, model := range []string{
+		"kimi-k2.7-code", "longcat-2.0", "mimo-v2.5", "mimo-v2.5-pro",
+		"muse-spark-1.3-contributor", "muse-spark-1.2-contributor",
+		"qwen3.8-max", "qwen3.8-flash", "qwen3.7-max", "qwen3.7-plus",
+		"qwen3.6-plus", "hy4-preview", "hy3", "omen-alpha",
+	} {
+		ref := data.reference(model)
+		require.NotNilf(t, ref, "opencode-go must keep unknown-price model %s visible", model)
+		require.Equalf(t, "manual_required", ref.Status, "model=%s", model)
+		require.Nilf(t, ref.Pricing, "model=%s must not carry a zero price card", model)
+		require.Equalf(t, "exact_price_unavailable", ref.ReasonCode, "model=%s", model)
+	}
+
+	// 其它型号来自内置 fallback，必须是 priced 且带正价。
+	_, data = syncPricingModels(t, router, `{"platform":"kimi"}`)
+	kimi := data.reference("kimi-k2.6")
+	require.NotNil(t, kimi)
+	require.Equal(t, "priced", kimi.Status)
+	require.Equal(t, "builtin_fallback", kimi.Source)
+	price, ok := kimi.price("input_price")
+	require.True(t, ok)
+	require.InDelta(t, 0.95e-6, *price, 1e-12)
+}
+
+// TestSyncPricingModels_PricingMatchesSingleModelLookup 保证批量同步与单模型
+// 查询共用同一份判定——否则两条路径会给出不同价格。
+func TestSyncPricingModels_PricingMatchesSingleModelLookup(t *testing.T) {
+	router := setupSyncPricingModelsRouter(newCatalogBackedPricingService(t))
+
+	for _, platform := range []string{"openai", "anthropic"} {
+		_, data := syncPricingModels(t, router, `{"platform":"`+platform+`"}`)
+		require.NotNil(t, data)
+		require.NotEmpty(t, data.Models)
+
+		w := getModelPricing(t, router, "?platform="+platform+"&model="+data.Models[0].Model)
+		require.Equal(t, http.StatusOK, w.Code)
+		var envelope struct {
+			Data referencePayload `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &envelope))
+
+		require.Equal(t, data.Models[0].Status, envelope.Data.Status, "model=%s", data.Models[0].Model)
+		require.Equal(t, data.Models[0].Source, envelope.Data.Source, "model=%s", data.Models[0].Model)
+		require.Equal(t, data.Models[0].MatchedModel, envelope.Data.MatchedModel, "model=%s", data.Models[0].Model)
+		require.Equal(t, data.Models[0].Pricing, envelope.Data.Pricing, "model=%s", data.Models[0].Model)
+	}
+}
+
+// 平台与型号都是必填项：缺任一字段都是 400，而不是静默返回 found=false。
+func TestGetModelDefaultPricing_RequiresPlatformAndModel(t *testing.T) {
+	router := setupSyncPricingModelsRouter(newCatalogBackedPricingService(t))
+
+	for _, query := range []string{
+		"",
+		"?model=gpt-6-sol",
+		"?platform=openai",
+		"?platform=unknown&model=gpt-6-sol",
+	} {
+		w := getModelPricing(t, router, query)
+		require.Equalf(t, http.StatusBadRequest, w.Code, "query=%s", query)
+	}
+}
+
+// 没有安全参考价不是错误：200 + manual_required + pricing=null + 稳定 reason code。
+func TestGetModelDefaultPricing_ManualRequiredIsExplicit(t *testing.T) {
+	router := setupSyncPricingModelsRouter(newCatalogBackedPricingService(t))
+	for _, model := range []string{"kimi-k2.7-code", "omen-alpha", "no-such-model-anywhere"} {
+		w := getModelPricing(t, router, "?platform=opencode_go&model="+model)
+		require.Equalf(t, http.StatusOK, w.Code, "model=%s", model)
+
+		var envelope struct {
+			Data referencePayload `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &envelope))
+		require.Equalf(t, "manual_required", envelope.Data.Status, "model=%s", model)
+		require.Nilf(t, envelope.Data.Pricing, "model=%s must not carry a zero price card", model)
+		require.Equalf(t, "none", envelope.Data.Source, "model=%s", model)
+		require.Equalf(t, "exact_price_unavailable", envelope.Data.ReasonCode, "model=%s", model)
+	}
+}
+
+// 跨平台不得串价：anthropic 的目录价不能返回给 openai 渠道，反之亦然。
+func TestGetModelDefaultPricing_DoesNotCrossPlatforms(t *testing.T) {
+	router := setupSyncPricingModelsRouter(newCatalogBackedPricingService(t))
+
+	w := getModelPricing(t, router, "?platform=openai&model=claude-opus-5-5")
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var envelope struct {
+		Data referencePayload `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &envelope))
+	require.Equal(t, "manual_required", envelope.Data.Status,
+		"an Anthropic card must not be served to an OpenAI channel")
+	require.Nil(t, envelope.Data.Pricing)
+
+	w = getModelPricing(t, router, "?platform=anthropic&model=gpt-6-sol")
+	require.Equal(t, http.StatusOK, w.Code)
+	envelope.Data = referencePayload{}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &envelope))
+	require.Equal(t, "manual_required", envelope.Data.Status,
+		"an OpenAI card must not be served to an Anthropic channel")
+}
+
+func TestGetModelDefaultPricing_ReturnsFable51CacheTTLs(t *testing.T) {
+	router := setupSyncPricingModelsRouter(newCatalogBackedPricingService(t))
+	w := getModelPricing(t, router, "?platform=anthropic&model=claude-fable-5-1")
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var envelope struct {
+		Data referencePayload `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &envelope))
+	require.Equal(t, "priced", envelope.Data.Status)
+	require.Equal(t, "claude-fable-5-1", envelope.Data.MatchedModel)
+	require.Equal(t, "token", envelope.Data.Pricing["billing_mode"])
+	cacheWrite, ok := envelope.Data.price("cache_write_price")
+	require.True(t, ok)
+	require.InDelta(t, 12.5e-6, *cacheWrite, 1e-12)
+	cacheWrite1h, ok := envelope.Data.price("cache_write_1h_price")
+	require.True(t, ok, "claude-fable-5-1 must carry its 1h cache-write tier")
+	require.InDelta(t, 20e-6, *cacheWrite1h, 1e-12)
+}
+
+// 缺字段必须编码成 null，显式免费必须编码成 0——两者混同会让前端把「没有该
+// 字段」显示成免费。kimi-k2.5 只有 input/output/cache-read 三档。
+func TestGetModelDefaultPricing_PreservesFieldPresence(t *testing.T) {
+	router := setupSyncPricingModelsRouter(newCatalogBackedPricingService(t))
+	w := getModelPricing(t, router, "?platform=kimi&model=kimi-k2.5")
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var envelope struct {
+		Data referencePayload `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &envelope))
+	require.Equal(t, "priced", envelope.Data.Status)
+	require.Contains(t, envelope.Data.Pricing, "cache_write_1h_price")
+	require.Nil(t, envelope.Data.Pricing["cache_write_1h_price"])
+	require.Nil(t, envelope.Data.Pricing["image_input_price"])
+	require.Nil(t, envelope.Data.Pricing["image_output_price"])
+	require.Nil(t, envelope.Data.Pricing["per_request_price"])
+	require.Empty(t, envelope.Data.Pricing["intervals"])
+	price, ok := envelope.Data.price("input_price")
+	require.True(t, ok)
+	require.InDelta(t, 0.60e-6, *price, 1e-12)
+}
+
+// 供应商明确免费的条目（GLM-4.5-Flash / GLM-4.7-Flash）必须保留显式 0，
+// 不能被当成「缺字段」补成 null。
+func TestGetModelDefaultPricing_PreservesExplicitZero(t *testing.T) {
+	router := setupSyncPricingModelsRouter(newCatalogBackedPricingService(t))
+	w := getModelPricing(t, router, "?platform=zhipu&model=glm-4.5-flash")
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var envelope struct {
+		Data referencePayload `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &envelope))
+	require.Equal(t, "priced", envelope.Data.Status)
+	input, ok := envelope.Data.price("input_price")
+	require.True(t, ok, "an explicit free field must still be present as 0")
+	require.Zero(t, *input)
+	output, ok := envelope.Data.price("output_price")
+	require.True(t, ok, "an explicit free field must still be present as 0")
+	require.Zero(t, *output)
 }

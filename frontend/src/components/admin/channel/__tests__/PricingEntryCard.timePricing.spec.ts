@@ -144,18 +144,115 @@ describe('PricingEntryCard request multipliers', () => {
       .toBe('admin.channels.form.reasoningEffortMultiplierDefault')
   })
 
+  // 用户已经填了倍率字段时，异步查价不得改写该规则；拆分出去的模型也不会
+  // 共用该规则的价。
   it('keeps custom effort multipliers when auto-filling model token prices', async () => {
     vi.mocked(channelsAPI.getModelDefaultPricing).mockResolvedValue({
-      found: true, input_price: 3e-6, output_price: 15e-6,
+      model: 'example-model',
+      matched_model: 'example-model',
+      platform: 'openai',
+      status: 'priced',
+      source: 'release_catalog',
+      reason_code: '',
+      pricing: {
+        platform: 'openai',
+        models: ['example-model'],
+        billing_mode: 'token',
+        input_price: 3e-6,
+        output_price: 15e-6,
+        cache_write_price: null,
+        cache_write_1h_price: null,
+        cache_read_price: null,
+        fast_multiplier: null,
+        flex_multiplier: null,
+        reasoning_effort_multipliers: null,
+        image_input_price: null,
+        image_output_price: null,
+        per_request_price: null,
+        intervals: [],
+      },
     })
     const wrapper = shallowMount(PricingEntryCard, {
-      props: { entry: { ...createEntry(), reasoning_effort_multipliers: { high: 0.5 } } },
+      props: {
+        entry: { ...createEntry(), reasoning_effort_multipliers: { high: 0.5 } },
+        platform: 'openai',
+      },
     })
     wrapper.findComponent({ name: 'ModelTagInput' }).vm.$emit('update:models', ['example-model'])
     await flushPromises()
     expect(wrapper.emitted('update')!.at(-1)![0]).toMatchObject({
-      models: ['example-model'], input_price: 3, output_price: 15,
+      models: ['example-model'],
+      input_price: null,
+      output_price: null,
       reasoning_effort_multipliers: { high: 0.5 },
     })
+  })
+
+  it('fills the reference price for an untouched rule and splits extra models', async () => {
+    vi.mocked(channelsAPI.getModelDefaultPricing).mockResolvedValue({
+      model: 'example-model',
+      matched_model: 'example-model',
+      platform: 'openai',
+      status: 'priced',
+      source: 'builtin_fallback',
+      reason_code: '',
+      pricing: {
+        platform: 'openai',
+        models: ['example-model'],
+        billing_mode: 'token',
+        input_price: 3e-6,
+        output_price: 15e-6,
+        cache_write_price: null,
+        cache_write_1h_price: null,
+        cache_read_price: null,
+        fast_multiplier: null,
+        flex_multiplier: null,
+        reasoning_effort_multipliers: null,
+        image_input_price: null,
+        image_output_price: null,
+        per_request_price: null,
+        intervals: [],
+      },
+    })
+    const wrapper = shallowMount(PricingEntryCard, {
+      props: { entry: createEntry(), platform: 'openai' },
+    })
+    wrapper
+      .findComponent({ name: 'ModelTagInput' })
+      .vm.$emit('update:models', ['example-model', 'other-model'])
+    await flushPromises()
+
+    // 一次输入两个模型：第一个留在本规则并拿到官方价，第二个必须拆出去，
+    // 否则它会共用第一个模型的价格。
+    expect(wrapper.emitted('update')!.at(-1)![0]).toMatchObject({
+      models: ['example-model'],
+      input_price: 3,
+      output_price: 15,
+    })
+    expect(wrapper.emitted('split')?.at(-1)?.[0]).toEqual(['other-model'])
+  })
+
+  it('surfaces manual_required instead of staying silent', async () => {
+    vi.mocked(channelsAPI.getModelDefaultPricing).mockResolvedValue({
+      model: 'unknown-model',
+      matched_model: 'unknown-model',
+      platform: 'opencode_go',
+      status: 'manual_required',
+      source: 'none',
+      reason_code: 'exact_price_unavailable',
+      pricing: null,
+    })
+    const wrapper = shallowMount(PricingEntryCard, {
+      props: { entry: createEntry(), platform: 'opencode_go' },
+    })
+    wrapper.findComponent({ name: 'ModelTagInput' }).vm.$emit('update:models', ['unknown-model'])
+    await flushPromises()
+
+    const status = wrapper.find('[data-testid="pricing-lookup-status"]')
+    expect(status.exists()).toBe(true)
+    expect(status.text()).toContain('admin.channels.form.pricingLookupManualRequired')
+    const last = wrapper.emitted('update')!.at(-1)![0] as PricingFormEntry
+    expect(last.input_price).toBeNull()
+    expect(last.output_price).toBeNull()
   })
 })

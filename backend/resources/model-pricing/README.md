@@ -77,3 +77,22 @@ The file contains JSON data with model pricing information including:
 - Input/output token costs
 - Context window sizes
 - Model capabilities
+
+## Admin Reference Prices
+
+The admin channel editor resolves reference prices from this catalog, but with a
+stricter match rule than request billing:
+
+- A catalog row must belong to the requested platform's provider label before it
+  can be used. An `anthropic` row never prices an `openai` channel.
+- Models without an exact catalog entry, a registered same-SKU alias, or a
+  same-model built-in fallback are reported as `manual_required`. A missing
+  price is never rendered as zero.
+- Remote mirrors can lag a model release. `gpt-6-sol`, `gpt-6-luna` and
+  `claude-opus-5-5` carry same-model built-in fallbacks in
+  `internal/service/` so an absent or stale catalog cannot silently bill them as
+  a different model. If the JSON is only being byte-identical to upstream, those
+  fallbacks stay as the sole net-new protection — see `docs/CHANNEL_PRICING.md`.
+
+Any change to a bundled JSON must keep its `.sha256` in sync and let the release
+workflow recompute the digest.
