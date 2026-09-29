@@ -94,6 +94,23 @@ inputs. Cleanup removes only stale Sub2API validation image and cache
 generations and does not run a global container, image, builder, volume, or
 system prune.
 
+Every validation container is launched with the label `sub2api-validation=<generation>`.
+Before `check`, `submit-pr`, and `ensure` build or ensure the platform image,
+the launcher runs an idempotent cleanup so a run always starts clean after a
+previous crash. Automatic cleanup also removes stopped project containers
+(`status=exited` and `status=created`) matching that label, which is how a
+hard-killed `--rm` container is reclaimed without a forbidden global prune.
+Apple Containers has no label-filtered container listing here, so it is not
+swept automatically and keeps relying on `--rm`.
+
+`push-cli clean --yes` is the explicit, manual full purge: it deletes every
+`sub2api-validation` image, every dependency-cache generation, and all project
+containers, on macOS only images and caches (containers rely on `--rm`) and
+never touching the cross-project Apple Builder cache (`deploy/APPLE_CONTAINER.md`).
+It is never run automatically because deleting the current generation forces
+the next validation to rebuild the whole toolchain and re-download every
+dependency.
+
 ## Recovery
 
 - If ordinary push succeeds but remote Actions fail, fix on the branch and push

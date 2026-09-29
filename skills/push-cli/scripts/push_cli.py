@@ -1147,8 +1147,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "action",
-        choices=("check", "push", "submit-pr", "watch", "ensure"),
-        help="prepare the runtime, check locally, push quickly, submit a validated PR, or watch branch Actions",
+        choices=("check", "push", "submit-pr", "watch", "ensure", "clean"),
+        help="prepare the runtime, check locally, push quickly, submit a validated PR, watch branch Actions, or manually purge all local validation resources",
     )
     parser.add_argument(
         "--in-validation",
@@ -1179,6 +1179,11 @@ def parse_args() -> argparse.Namespace:
         "--serial",
         action="store_true",
         help="run the full validation matrix serially for diagnostics or benchmarking",
+    )
+    parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="confirm deleting all local Sub2API validation images, caches, and containers (only for clean)",
     )
     return parser.parse_args()
 
@@ -1213,6 +1218,24 @@ def main() -> int:
             print("\nIn-container push checks passed.")
             return 0
 
+        if args.action == "clean":
+            if not args.yes:
+                print(
+                    "push-cli clean 需要 --yes 确认;该操作会删除本机所有 "
+                    "Sub2API 验证镜像、缓存与容器。",
+                    file=sys.stderr,
+                )
+                return 1
+            runtime = probe_runtime()
+            validation_runtime.purge_validation_resources(
+                runtime,
+                root=ROOT,
+                capture=capture,
+                run_step=run_step,
+            )
+            print("\n已删除本机所有 Sub2API 验证镜像、缓存与容器。")
+            return 0
+
         repository = github_gate(args.remote)
         if args.action != "submit-pr" and (
             args.profile != FULL_PROFILE or args.tag is not None
@@ -1228,6 +1251,12 @@ def main() -> int:
             raise PushCliError("release-finalization does not run the full serial matrix")
         if args.action == "ensure":
             runtime = probe_runtime()
+            validation_runtime.cleanup_validation_runtime(
+                runtime,
+                root=ROOT,
+                capture=capture,
+                run_step=run_step,
+            )
             ensure_validation_image(runtime)
             print("\nValidation runtime and image are ready. No checks were run.")
             return 0
@@ -1267,6 +1296,12 @@ def main() -> int:
             run_release_finalization_checks(proof, branch, args.remote)
         else:
             runtime = probe_runtime()
+            validation_runtime.cleanup_validation_runtime(
+                runtime,
+                root=ROOT,
+                capture=capture,
+                run_step=run_step,
+            )
             ensure_validation_image(runtime)
             launch_in_validation(
                 runtime,

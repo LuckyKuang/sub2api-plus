@@ -24,6 +24,12 @@ Run commands from the repository root:
     python3 skills/push-cli/scripts/push_cli.py check --serial
     python3 skills/push-cli/scripts/push_cli.py ensure
     python3 skills/push-cli/scripts/push_cli.py watch
+    python3 skills/push-cli/scripts/push_cli.py clean --yes
+
+`clean --yes` manually deletes all local Sub2API validation images, caches, and
+containers (no `--yes` rejects). It is never automatic and deletes the current
+generation, forcing the next validation to rebuild the toolchain and re-download
+dependencies.
 
 `push` performs an authenticated exact-ref push of the clean current working
 branch. It does not probe a container runtime, run local tests, create a pull
@@ -69,7 +75,7 @@ Git transfers only `HEAD:<current-branch>`. Never use `--force`, `--all`,
 
 ## Validation Runtime
 
-Only `check`, `submit-pr`, and `ensure` access the validation runtime.
+Only `check`, `submit-pr`, `ensure`, and `clean` access the validation runtime.
 
 - macOS: Apple Containers only; no Docker, Colima, or host-toolchain fallback.
 - Windows: Docker inside a running WSL2 Debian or Ubuntu distribution only.
@@ -85,7 +91,11 @@ the one-shot container and its writable snapshot. It retains only the current
 deterministic project validation image and dependency-cache generation, and
 removes stale Sub2API validation generations. Cleanup is mandatory on success
 and failure and never invokes a global prune that could affect unrelated
-projects or runtime resources.
+projects or runtime resources. Validation containers carry the label
+`sub2api-validation=<generation>`; `check`/`submit-pr`/`ensure` run an idempotent
+cleanup before ensuring the image, and stopped project containers (including
+ones left by a hard kill that `--rm` could not reclaim) are removed by label
+and status. Use `clean --yes` to remove everything on demand.
 
 ## Pull-Request Proof
 
