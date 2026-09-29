@@ -104,7 +104,7 @@ func TestRiskControlAllowlistAuditsWithoutLocalPenalties(t *testing.T) {
 				svc.persistContentModerationLog(context.Background(), task.config, task.log, task.inputHash, task.recordHash, task.applySideEffects)
 			} else {
 				delay := 1
-				svc.checkSync(context.Background(), task.input, svc.runtimeSnapshot.Load().config, task.content, task.inputHash, &delay, false)
+				svc.checkSync(context.Background(), task.input, svc.runtimeSnapshot.Load().config, task.content, task.inputHash, &delay, false, false)
 			}
 			logs := repo.snapshotLogs()
 			require.Len(t, logs, 1)
