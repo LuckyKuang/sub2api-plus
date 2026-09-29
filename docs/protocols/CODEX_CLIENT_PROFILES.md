@@ -69,7 +69,7 @@ Codex version bounds apply to built-in profiles. Policy versions use strict
 SemVer 2.0: they require a complete `MAJOR.MINOR.PATCH` core without a `v`
 prefix or leading zeroes.
 Valid prerelease and build metadata are accepted, with normal SemVer
-precedence (`0.147.0-alpha.4` is lower than `0.147.0`, and build metadata does
+precedence (`0.158.0-alpha.4` is lower than `0.158.0`, and build metadata does
 not change precedence). Historical outbound version normalization remains a
 separate compatibility concern and does not relax these policy bounds.
 
@@ -223,9 +223,9 @@ string clears it through an explicit null in the JSONB update.
 The exact compiled identity is:
 
 ```text
-User-Agent: codex_cli_rs/0.147.0 (Ubuntu 24.04; x86_64) xterm-256color
+User-Agent: codex_cli_rs/0.158.0 (Ubuntu 24.04; x86_64) xterm-256color
 Originator: codex_cli_rs
-Version: 0.147.0
+Version: 0.158.0
 ```
 
 The version resolver runs after source selection: a valid administrator version
@@ -380,7 +380,7 @@ headers and generic account header overrides cannot set or clear it.
 ## User-Agent suffix
 
 An administrator User-Agent may end with the official ` ({suffix})` group, for
-example `codex_cli_rs/0.147.0 (Ubuntu 24.04; x86_64) xterm-256color (mcp: server-a)`.
+example `codex_cli_rs/0.158.0 (Ubuntu 24.04; x86_64) xterm-256color (mcp: server-a)`.
 Pairing, validation, and version synchronization accept that form and keep the
 suffix unchanged. The gateway does not generate a suffix.
 

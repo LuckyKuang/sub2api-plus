@@ -10,7 +10,7 @@ import (
 
 func TestNormalizeCodexClientVersion(t *testing.T) {
 	require.Equal(t, "0.146.0", NormalizeCodexClientVersion(" 0.146.0 "))
-	require.Equal(t, "0.147.0-alpha.4", NormalizeCodexClientVersion("0.147.0-alpha.4"))
+	require.Equal(t, "0.158.0-alpha.4", NormalizeCodexClientVersion("0.158.0-alpha.4"))
 	require.Equal(t, "1.2", NormalizeCodexClientVersion("1.2"))
 	require.Empty(t, NormalizeCodexClientVersion(""))
 	require.Empty(t, NormalizeCodexClientVersion("v0.146.0"))
@@ -20,8 +20,8 @@ func TestNormalizeCodexClientVersion(t *testing.T) {
 }
 
 func TestNormalizeStableCodexClientVersion(t *testing.T) {
-	require.Equal(t, "0.147.0", normalizeStableCodexClientVersion(" 0.147.0 "))
+	require.Equal(t, "0.158.0", normalizeStableCodexClientVersion(" 0.158.0 "))
 	require.Equal(t, "1.2", normalizeStableCodexClientVersion("1.2"))
-	require.Empty(t, normalizeStableCodexClientVersion("0.147.0-alpha.4"))
+	require.Empty(t, normalizeStableCodexClientVersion("0.158.0-alpha.4"))
 	require.Empty(t, normalizeStableCodexClientVersion("latest"))
 }

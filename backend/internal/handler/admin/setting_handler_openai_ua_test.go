@@ -49,7 +49,7 @@ func TestUpdateSettings_OpenAICodexUserAgentValidation(t *testing.T) {
 	require.Equal(t, http.StatusOK, legacyWithMode.Code)
 
 	withSuffix := update(t, map[string]any{
-		"openai_codex_user_agent": "codex_cli_rs/0.147.0 (Ubuntu 24.04; x86_64) xterm-256color (mcp: server-a)",
+		"openai_codex_user_agent": "codex_cli_rs/0.158.0 (Ubuntu 24.04; x86_64) xterm-256color (mcp: server-a)",
 	})
 	require.Equal(t, http.StatusOK, withSuffix.Code)
 

@@ -563,9 +563,9 @@ func TestCompareVersions(t *testing.T) {
 		{"0.0.1", "0.0.0", 1},              // patch 差异
 		{"", "1.0.0", -1},                  // 空字符串 vs 正常版本
 		{"v2.1.0", "2.1.0", 0},             // v 前缀处理
-		{"0.147.0-alpha.4", "0.147.0", -1}, // prerelease never satisfies the release bound
-		{"0.147.0-alpha.10", "0.147.0-alpha.4", 1},
-		{"0.147.0+build.2", "0.147.0+build.1", 0}, // build metadata has no precedence
+		{"0.158.0-alpha.4", "0.158.0", -1}, // prerelease never satisfies the release bound
+		{"0.158.0-alpha.10", "0.158.0-alpha.4", 1},
+		{"0.158.0+build.2", "0.158.0+build.1", 0}, // build metadata has no precedence
 	}
 	for _, tt := range tests {
 		got := CompareVersions(tt.a, tt.b)
@@ -574,10 +574,10 @@ func TestCompareVersions(t *testing.T) {
 }
 
 func TestIsStrictSemanticVersion(t *testing.T) {
-	for _, version := range []string{"0.147.0", "0.147.0-alpha.4", "0.147.0+build.9"} {
+	for _, version := range []string{"0.158.0", "0.158.0-alpha.4", "0.158.0+build.9"} {
 		require.True(t, IsStrictSemanticVersion(version), version)
 	}
-	for _, version := range []string{"1.2", "v0.147.0", "01.2.3", "1.2.3-01", "1.2.3-alpha..1", ""} {
+	for _, version := range []string{"1.2", "v0.158.0", "01.2.3", "1.2.3-01", "1.2.3-alpha..1", ""} {
 		require.False(t, IsStrictSemanticVersion(version), version)
 	}
 }

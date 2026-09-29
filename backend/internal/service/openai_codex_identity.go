@@ -21,7 +21,7 @@ const OpenAICodexUpstreamMinVersion = codexUpstreamMinVersion
 // codexClientVersionMaxLen 官方版本号均为短 ASCII 串，远低于此上限。
 const codexClientVersionMaxLen = 64
 
-// codexClientVersionPattern 允许 0.146.0 与 0.147.0-alpha.4 两类官方形态。
+// codexClientVersionPattern 允许 0.146.0 与 0.158.0-alpha.4 两类官方形态。
 var codexClientVersionPattern = regexp.MustCompile(`^[0-9]+(\.[0-9]+){1,3}(-[0-9A-Za-z.]+)?$`)
 
 // NormalizeCodexClientVersion 校验并归一化 Codex 客户端版本号，非法值返回空串。

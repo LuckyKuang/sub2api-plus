@@ -35,8 +35,8 @@ func TestUpdateSettings_VersionBoundsValidateEffectivePartialState(t *testing.T)
 		h, _ := newStepUpSwitchTestHandler(t, map[string]string{})
 
 		rec := doUpdateSettings(t, h, map[string]any{
-			"min_claude_code_version": "0.147.0",
-			"max_claude_code_version": "0.147.0-alpha.4",
+			"min_claude_code_version": "0.158.0",
+			"max_claude_code_version": "0.158.0-alpha.4",
 		}, nil)
 		require.Equal(t, http.StatusBadRequest, rec.Code)
 	})

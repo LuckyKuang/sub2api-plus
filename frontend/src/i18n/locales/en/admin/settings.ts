@@ -551,7 +551,7 @@ export default {
         antigravityUserAgentVersionPlaceholder: '1.23.2',
         antigravityUserAgentVersionHint: 'Leave empty to use ANTIGRAVITY_USER_AGENT_VERSION or the built-in default 1.23.2; when set, the admin setting takes precedence.',
         openaiCodexUserAgent: 'OpenAI Codex UA',
-        openaiCodexUserAgentPlaceholder: 'codex_cli_rs/0.147.0 (Ubuntu 24.04; x86_64) xterm-256color',
+        openaiCodexUserAgentPlaceholder: 'codex_cli_rs/0.158.0 (Ubuntu 24.04; x86_64) xterm-256color',
         openaiCodexUserAgentHint: 'The global fallback Codex User-Agent, used when the credential-owning account has no valid account-level identity. Use it to customize the OS / arch / terminal fingerprint. Leave empty to build the standard official CLI identity (codex_cli_rs) from the version below (recommended). If set, its leading version and any coherent trailing version declaration are synchronized to the version below, so the UA never stays pinned to the release entered here — under capacity pressure the upstream sheds load by client identity and drops stale or non-official identities first with server_is_overloaded.',
         openaiCodexEnvironmentTimezone: 'Codex environment_context timezone (global default)',
         openaiCodexEnvironmentTimezoneNone: 'Not set (rewrite disabled)',
