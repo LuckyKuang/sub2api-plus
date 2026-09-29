@@ -13175,11 +13175,11 @@ watch(
 
 @media (min-width: 768px) {
   .settings-tabs {
-    @apply min-w-full;
+    @apply min-w-max;
   }
 
   .settings-tab {
-    @apply min-w-0 flex-1 basis-0 overflow-hidden px-2 text-[13px];
+    @apply shrink-0 px-2 text-[13px];
   }
 
   .settings-tab-icon {

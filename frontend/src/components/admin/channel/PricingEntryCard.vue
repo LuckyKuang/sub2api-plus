@@ -489,21 +489,48 @@ function hasAnyPricingValue(entry: PricingFormEntry): boolean {
 async function onModelsUpdate(newModels: string[]) {
   const oldModels = props.entry.models
   const addedModels = newModels.filter(m => !oldModels.includes(m))
-  if (addedModels.length === 0) return
 
-  // 一次输入多个模型时，除第一个外的模型拆成独立规则：一条规则只能有一套价，
-  // 早期实现把整批塞进同一条（或只查第一个模型的价格）等于给后面的模型标错价。
-  const keptModels = [...oldModels, addedModels[0]]
-  const splitModels = addedModels.slice(1)
-  if (splitModels.length > 0) emit('split', splitModels)
-  emit('update', { ...props.entry, models: keptModels })
+  // 目标模型列表：有新增时保留第一个新增（其余按既有策略拆分为独立规则）；
+  // 仅删除时直接采用新列表（删除不再被丢弃，×/退格可移除误加的模型）。
+  let nextModels: string[]
+  if (addedModels.length > 0) {
+    nextModels = [...oldModels, addedModels[0]]
+    const splitModels = addedModels.slice(1)
+    if (splitModels.length > 0) emit('split', splitModels)
+  } else if (newModels.length !== oldModels.length) {
+    nextModels = newModels
+  } else {
+    return
+  }
 
-  // 空模型名或没有平台时无从查价。
-  const model = addedModels[0].trim()
+  // 主模型（第一个）变化时，之前按旧主模型自动填充的价格已过期：清空这些字段，
+  // 让新主模型重新查价，避免把 gpt-6-sol 的价格显示到 gpt-6-luna 上。
+  const oldPrimary = (oldModels[0] ?? '').trim()
+  const newPrimary = (nextModels[0] ?? '').trim()
+  const primaryChanged = newPrimary !== oldPrimary
+  let nextEntry: PricingFormEntry = { ...props.entry, models: nextModels }
+  if (primaryChanged) {
+    for (const f of [
+      'input_price', 'output_price', 'cache_write_price', 'cache_write_1h_price',
+      'cache_read_price', 'image_input_price', 'image_output_price', 'per_request_price',
+      'fast_multiplier', 'flex_multiplier',
+    ]) {
+      ;(nextEntry as unknown as Record<string, unknown>)[f] = null
+    }
+    // 上下文区间定价（min,max]）与按推理等级倍率同样来自旧模型参考价，一并清空，
+    // 否则换模型后残留旧模型区间/倍率会造成误解；新模型会重新查价填充。
+    ;(nextEntry as unknown as Record<string, unknown>).intervals = []
+    ;(nextEntry as unknown as Record<string, unknown>).reasoning_effort_multipliers = null
+  }
+  emit('update', nextEntry)
+
+  // 仅在“新增模型”时触发参考价自动填充。
+  const model = addedModels[0]?.trim()
   if (!model || !props.platform) return
 
-  // 已有用户填写的价格时，异步结果一律不得覆盖；界面上提供显式「补齐空字段」。
-  if (hasAnyPricingValue(props.entry)) {
+  // 已手动填过价格、且主模型未变时不覆盖（界面另有显式「补齐空字段」）；
+  // 主模型刚变化时价格已清空，应重新为新模型查价。
+  if (!primaryChanged && hasAnyPricingValue(nextEntry)) {
     lookupStatus.value = { state: 'idle' }
     return
   }
@@ -512,7 +539,6 @@ async function onModelsUpdate(newModels: string[]) {
   lookupStatus.value = { state: 'loading' }
   try {
     const reference = await channelsAPI.getModelDefaultPricing(props.platform, model)
-    // 序号变化说明已经发出更新的请求，旧响应作废。
     if (requestId !== lookupRequestId.value) return
 
     if (reference.status !== 'priced' || !reference.pricing) {
@@ -525,7 +551,7 @@ async function onModelsUpdate(newModels: string[]) {
       matchedModel: reference.matched_model,
     }
     const { entry } = referenceToPricingRule(reference)
-    emit('update', { ...entry, models: keptModels })
+    emit('update', { ...entry, models: nextModels })
   } catch {
     if (requestId !== lookupRequestId.value) return
     lookupStatus.value = { state: 'error' }
