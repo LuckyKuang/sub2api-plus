@@ -74,7 +74,9 @@ Docker on Linux. Host-side validation is forbidden.
 `gofmt` is clean and every touched file parses. Type-checking, `go vet`,
 backend unit tests, frontend lint/typecheck/Vitest, the local real integration
 suite, and the full push-cli matrix were **not** completed for this integration:
-the Apple Container runtime on the integrating host hung while fetching the
-init image for new containers. Those checks remain pending and must be run
-before this tree is treated as validated; the previously running deployment
-stack on that host was not disturbed.
+the Apple Container runtime on the integrating host hung for every
+volume-mounted run, and the stuck validation container could not be reclaimed
+through the CLI (the host's unrelated deployment stack kept running normally).
+Those checks remain pending and must be run before this tree is treated as
+validated; per repository policy no Go or pnpm command was executed on the host
+as a fallback.
