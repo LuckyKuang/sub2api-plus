@@ -140,6 +140,45 @@ var (
 		Mode:                    "chat",
 		SupportsPromptCaching:   true,
 	}
+	// GPT-6 Sol 官方价（USD/token）。远端镜像可能还没有这两个型号；缺条目时
+	// matchOpenAIModel 原本会一路回退到 DefaultTestModel，把 Sol 按 gpt-5.1-codex
+	// 计费（10 倍少收）。这里补同型号静态价，长上下文口径与 GPT-5.6/Astra 一致：
+	// 总输入严格大于 272000 token 时输入与缓存 ×2、输出 ×1.5。
+	openAIGPT6SolFallbackPricing = &LiteLLMModelPricing{
+		InputCostPerToken:                   2e-06, // $2 per MTok
+		InputCostPerTokenPriority:           4e-06, // Fast：标准价 2 倍
+		OutputCostPerToken:                  1e-05, // $10 per MTok
+		OutputCostPerTokenPriority:          2e-05,
+		CacheCreationInputTokenCost:         2.5e-06, // $2.5 per MTok
+		CacheCreationInputTokenCostPriority: 5e-06,
+		CacheReadInputTokenCost:             2e-07, // $0.20 per MTok
+		CacheReadInputTokenCostPriority:     4e-07,
+		LongContextInputTokenThreshold:      272_000,
+		LongContextInputCostMultiplier:      2,
+		LongContextOutputCostMultiplier:     1.5,
+		SupportsServiceTier:                 true,
+		LiteLLMProvider:                     "openai",
+		Mode:                                "chat",
+		SupportsPromptCaching:               true,
+	}
+	// GPT-6 Luna 官方价（USD/token），同型号静态兜底，语义与 Luna 5.6 无关。
+	openAIGPT6LunaFallbackPricing = &LiteLLMModelPricing{
+		InputCostPerToken:                   1e-07, // $0.10 per MTok
+		InputCostPerTokenPriority:           2e-07,
+		OutputCostPerToken:                  5e-07, // $0.50 per MTok
+		OutputCostPerTokenPriority:          1e-06,
+		CacheCreationInputTokenCost:         1.25e-07, // $0.125 per MTok
+		CacheCreationInputTokenCostPriority: 2.5e-07,
+		CacheReadInputTokenCost:             1e-08, // $0.01 per MTok
+		CacheReadInputTokenCostPriority:     2e-08,
+		LongContextInputTokenThreshold:      272_000,
+		LongContextInputCostMultiplier:      2,
+		LongContextOutputCostMultiplier:     1.5,
+		SupportsServiceTier:                 true,
+		LiteLLMProvider:                     "openai",
+		Mode:                                "chat",
+		SupportsPromptCaching:               true,
+	}
 )
 
 // LiteLLMModelPricing LiteLLM价格数据结构
@@ -1371,6 +1410,33 @@ func (s *PricingService) GetIdentifiedModelPricing(modelName string) *LiteLLMMod
 	return s.lookupIdentifiedModelPricingLocked(s.buildModelLookupCandidates(modelLower))
 }
 
+// LookupExactCatalogEntry 按归一化后的 key 精确取目录条目：不做别名归一、
+// 不做子串/家族匹配。管理端参考价需要「命中即登记该 key」——若复用
+// GetIdentifiedModelPricing，内部那层归一会让 matched_model 退化成请求名，
+// 运营者看不出价格实际来自哪个 SKU（例如 gemini-3.6-flash-high 的价
+// 实际来自 gemini-3.6-flash）。
+func (s *PricingService) LookupExactCatalogEntry(model string) *LiteLLMModelPricing {
+	if s == nil {
+		return nil
+	}
+	key := strings.ToLower(strings.TrimSpace(model))
+	if key == "" {
+		return nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if entry, ok := s.pricingData[key]; ok {
+		return entry
+	}
+	// 目录 key 惯例全小写；这里防御历史大小写变体，避免静默漏价。
+	for name, entry := range s.pricingData {
+		if strings.EqualFold(name, key) {
+			return entry
+		}
+	}
+	return nil
+}
+
 func (s *PricingService) buildModelLookupCandidates(modelLower string) []string {
 	rawCandidates := []string{
 		modelLower,
@@ -1488,15 +1554,24 @@ func (s *PricingService) extractBaseName(model string) string {
 func (s *PricingService) matchByModelFamily(model string) *LiteLLMModelPricing {
 	// modelFamily 定义一个模型系列的匹配和定价查找规则。
 	type modelFamily struct {
-		name    string   // 系列名称
-		match   []string // 用于将模型归类到此系列的模式（strings.Contains 匹配）
-		pricing []string // 用于在定价数据中查找价格的模式（nil 则复用 match；可包含低版本 fallback）
+		name  string   // 系列名称
+		match []string // 用于将模型归类到此系列的模式（strings.Contains 匹配）
+		// pricing 用于在定价数据中查找价格的模式（nil 则复用 match；可包含低版本 fallback）
+		pricing []string
+		// exact 为 true 时 pricing 必须与目录 key 全等，不再按子串匹配。
+		// 用于「有独立价卡且不得被相似 SKU 顶替」的型号：claude-opus-5-5-preview
+		// 之类的相似条目不能反过来说成 Opus 5.5 的价格。
+		exact bool
 	}
 
 	// 按特异性降序排列：高版本号在前，避免 "claude-opus-4"（opus-4 系列）
 	// 因子串关系误匹配 "claude-opus-4-7"（opus-4.7 系列）。
 	// 注意：原 map 实现存在 Go map 迭代随机性导致的同类 bug，此处改为有序切片修复。
 	families := []modelFamily{
+		// Opus 5.5 必须排在 opus-5 之前：claude-opus-5-5 同时含有 "claude-opus-5"
+		// 子串，顺序反了会被归到 opus-5 档（$5/$25），造成 1.25 倍超收。
+		// 该型号 pricing 只允许自身 key，不向任何其它 Opus 档回退。
+		{name: "opus-5.5", match: []string{"claude-opus-5-5", "claude-opus-5.5"}, exact: true},
 		// Opus 5 与 Opus 4.8 同价（$5/$25 per MTok）。定价数据缺失 claude-opus-5 时
 		// 必须回退到 4.8，否则会掉进 "opus-4" 系列按 $15/$75 计费（3 倍超收）。
 		{name: "opus-5", match: []string{"claude-opus-5"}, pricing: []string{"claude-opus-5", "claude-opus-4-8"}},
@@ -1534,6 +1609,9 @@ func (s *PricingService) matchByModelFamily(model string) *LiteLLMModelPricing {
 		case strings.Contains(model, "opus"):
 			switch {
 			// "opus-5" 必须先判：不能用裸 "5" 匹配，否则 claude-opus-4-5 会被误判。
+			// 同理 "opus-5-5" 必须先于 "opus-5" 判，否则 Opus 5.5 会被误判成 Opus 5。
+			case strings.Contains(model, "opus-5-5") || strings.Contains(model, "opus-5.5"):
+				fallbackName = "opus-5.5"
 			case strings.Contains(model, "opus-5") || strings.Contains(model, "opus5"):
 				fallbackName = "opus-5"
 			case strings.Contains(model, "4.8") || strings.Contains(model, "4-8"):
@@ -1586,6 +1664,14 @@ func (s *PricingService) matchByModelFamily(model string) *LiteLLMModelPricing {
 	for _, pattern := range lookups {
 		for key, pricing := range s.pricingData {
 			keyLower := strings.ToLower(key)
+			if matched.exact {
+				// exact 系列只认同型号 key：相似但不相同 SKU 不能顶替。
+				if keyLower != pattern {
+					continue
+				}
+				logger.LegacyPrintf("service.pricing", "[Pricing] Exact family matched %s -> %s", model, key)
+				return pricing
+			}
 			if strings.Contains(keyLower, pattern) {
 				logger.LegacyPrintf("service.pricing", "[Pricing] Fuzzy matched %s -> %s", model, key)
 				return pricing
@@ -1637,6 +1723,21 @@ func (s *PricingService) matchOpenAIModel(model string) *LiteLLMModelPricing {
 		logger.With(zap.String("component", "service.pricing")).
 			Info(fmt.Sprintf("[Pricing] OpenAI fallback matched %s -> %s", model, "gpt-6-astra(static)"))
 		return openAIGPT6AstraFallbackPricing
+	}
+
+	// GPT-6 Sol/Luna：远端镜像领先发布时这两个型号没有目录条目。必须按同型号
+	// 静态价兜底；若继续往下走到 DefaultTestModel，Sol 会按 gpt-5.1-codex 计费。
+	// 判定用 IsGPT6SolOrLunaModelSpelling（已规范化大小写/路径/openai-compact 后缀），
+	// 避免把 gpt-6 或 gpt-6-solace 之类未登记型号也认成 Sol。
+	switch openai.GPT6SolOrLunaBaseModel(model) {
+	case "gpt-6-sol":
+		logger.With(zap.String("component", "service.pricing")).
+			Info(fmt.Sprintf("[Pricing] OpenAI fallback matched %s -> %s", model, "gpt-6-sol(static)"))
+		return openAIGPT6SolFallbackPricing
+	case "gpt-6-luna":
+		logger.With(zap.String("component", "service.pricing")).
+			Info(fmt.Sprintf("[Pricing] OpenAI fallback matched %s -> %s", model, "gpt-6-luna(static)"))
+		return openAIGPT6LunaFallbackPricing
 	}
 
 	if strings.HasPrefix(model, "gpt-5.6-sol") {

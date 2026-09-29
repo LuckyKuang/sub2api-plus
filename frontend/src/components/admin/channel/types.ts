@@ -1,4 +1,9 @@
-import type { BillingMode, ChannelTimePricing, PricingInterval } from '@/api/admin/channels'
+import type {
+  BillingMode,
+  ChannelTimePricing,
+  ModelPricingReference,
+  PricingInterval,
+} from '@/api/admin/channels'
 import { REASONING_EFFORT_LEVELS } from '@/constants/channel'
 
 type TranslateFn = (key: string, params?: Record<string, unknown>) => string
@@ -36,6 +41,12 @@ export interface PricingFormEntry {
   per_request_price: number | string | null
   intervals: IntervalFormEntry[]
   time_pricing: TimePricingFormEntry
+  /**
+   * 表单专用元数据：本规则创建时使用的参考价（同步或手动查询结果）。
+   * 仅用于展示来源与 manual/unsupported 原因，提交时由 formToAPI 逐字段
+   * 重建，不会泄露到请求体；从 API 读回的既有规则没有该字段。
+   */
+  reference?: ModelPricingReference
 }
 
 export interface TimePricingPeriodFormEntry {
@@ -220,6 +231,90 @@ export function perTokenToMTok(val: number | null | undefined): number | null {
   return parseFloat((val * MTOK).toPrecision(10))
 }
 
+/** 一张参考价卡对应的表单条目，连同原始状态一起返回。 */
+export interface PricedModelRule {
+  /** 只含一个模型：多个模型共用一条规则就等于给它们标同一套价。 */
+  entry: PricingFormEntry
+  /** 触发本次填充的参考价，用于展示 manual/unsupported 原因和来源。 */
+  reference: ModelPricingReference
+}
+
+/** per-token → $/MTok；null 保持 null（缺字段不是免费）。 */
+function toMTokOrNull(value: number | null | undefined): number | null {
+  return value === null || value === undefined ? null : perTokenToMTok(value)
+}
+
+function emptyPricingFormEntry(model: string): PricingFormEntry {
+  return {
+    models: [model],
+    billing_mode: 'token',
+    input_price: null,
+    output_price: null,
+    cache_write_price: null,
+    cache_write_1h_price: null,
+    cache_read_price: null,
+    fast_multiplier: null,
+    flex_multiplier: null,
+    reasoning_effort_multipliers: null,
+    image_input_price: null,
+    image_output_price: null,
+    per_request_price: null,
+    intervals: [],
+    time_pricing: createDefaultTimePricingForm(),
+  }
+}
+
+/**
+ * 把一份参考价转换成一条只含该模型的计价规则。
+ *
+ * 单模型查询、批量同步和批量粘贴共用这一份换算口径，避免三处各写一规则后
+ * 出现「同步有价、手动添加没价」的割裂。
+ *
+ * - status=priced：套用完整价卡（token/缓存/倍率/长上下文区间/图片/按次）。
+ * - status!=priced：保留空表单，让运营者看到待填状态和原因，绝不用 0 冒充免费。
+ */
+export function referenceToPricingRule(reference: ModelPricingReference): PricedModelRule {
+  const entry = emptyPricingFormEntry(reference.model)
+  const card = reference.pricing
+
+  if (reference.status !== 'priced' || !card) {
+    // manual/unsupported：保留空表单，但把原因挂在条目上，让规则卡片能把
+    // 「需要手填/单位不支持」显示出来，而不是静默摆一条空规则。
+    return { entry: { ...entry, reference }, reference }
+  }
+
+  entry.billing_mode = card.billing_mode || 'token'
+  entry.input_price = toMTokOrNull(card.input_price)
+  entry.output_price = toMTokOrNull(card.output_price)
+  entry.cache_write_price = toMTokOrNull(card.cache_write_price)
+  entry.cache_write_1h_price = toMTokOrNull(card.cache_write_1h_price)
+  entry.cache_read_price = toMTokOrNull(card.cache_read_price)
+  entry.image_input_price = toMTokOrNull(card.image_input_price)
+  entry.image_output_price = toMTokOrNull(card.image_output_price)
+  entry.fast_multiplier = card.fast_multiplier ?? null
+  entry.flex_multiplier = card.flex_multiplier ?? null
+  entry.reasoning_effort_multipliers = card.reasoning_effort_multipliers
+    ? { ...card.reasoning_effort_multipliers }
+    : null
+  // per_request_price 本身就是绝对美元价，不做 per-token 换算。
+  entry.per_request_price = card.per_request_price ?? null
+  entry.intervals = apiIntervalsToForm(card.intervals || [])
+  return { entry: { ...entry, reference }, reference }
+}
+
+/**
+ * 把同步/查询得到的参考价列表转换成计价规则：**每个模型一条独立规则**。
+ *
+ * 早期实现把所有模型塞进同一条空价规则，或者按价签名把多个模型合并到一条规则，
+ * 两者都会让一部分模型拿到另一部分模型的价格。这里一个模型一条，即使两个模型
+ * 恰好同价也不合并。
+ */
+export function buildSyncedPricingEntries(
+  references: ModelPricingReference[],
+): PricedModelRule[] {
+  return references.map(reference => referenceToPricingRule(reference))
+}
+
 export function apiIntervalsToForm(intervals: PricingInterval[]): IntervalFormEntry[] {
   return (intervals || []).map(iv => ({
     min_tokens: iv.min_tokens,
@@ -295,6 +390,33 @@ export function findModelConflict(models: string[]): [string, string] | null {
     }
   }
   return null
+}
+
+/**
+ * 从候选模型里剔除已经被本平台条目覆盖的型号，返回需要新建的型号。
+ *
+ * 用大小写不敏感的精确匹配 + 已有通配符规则，和「新建条目时的冲突校验」同一套
+ * 语义：否则 `claude-*` 规则已经覆盖 Sonnet 时，同步又会建一条重复规则。
+ * 幂等：同步两次不会产生新规则。
+ */
+export function filterAlreadyCoveredModels(
+  candidates: string[],
+  existingRules: Array<{ models: string[] }>,
+): string[] {
+  const existingPatterns = existingRules
+    .flatMap(rule => rule.models || [])
+    .map(toModelPattern)
+  const covered = new Set<string>()
+  for (const pattern of existingPatterns) {
+    if (pattern.wildcard) {
+      for (const candidate of candidates) {
+        if (candidate.toLowerCase().startsWith(pattern.prefix)) covered.add(candidate)
+      }
+      continue
+    }
+    covered.add(pattern.prefix)
+  }
+  return candidates.filter(model => !covered.has(model.toLowerCase()))
 }
 
 // ── 区间校验 ──────────────────────────────────────────────

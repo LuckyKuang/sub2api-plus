@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -593,77 +594,79 @@ func (h *ChannelHandler) Delete(c *gin.Context) {
 	response.Success(c, gin.H{"message": "Channel deleted successfully"})
 }
 
-// GetModelDefaultPricing 获取模型的默认定价（用于前端自动填充）
-// GET /api/v1/admin/channels/model-pricing?model=claude-sonnet-4
+// GetModelDefaultPricing 返回单个模型的渠道参考价。
+// platform 与 model 均为必填：没有平台就无法判断「这个价格是否属于该平台」，
+// 曾经因此把 Anthropic 的目录价返回给 OpenAI 渠道。
+// GET /api/v1/admin/channels/model-pricing?platform=openai&model=gpt-6-sol
 func (h *ChannelHandler) GetModelDefaultPricing(c *gin.Context) {
+	platform := strings.ToLower(strings.TrimSpace(c.Query("platform")))
 	model := strings.TrimSpace(c.Query("model"))
+	if platform == "" {
+		response.ErrorFrom(c, infraerrors.BadRequest("MISSING_PARAMETER", "platform parameter is required").
+			WithMetadata(map[string]string{"param": "platform"}))
+		return
+	}
 	if model == "" {
 		response.ErrorFrom(c, infraerrors.BadRequest("MISSING_PARAMETER", "model parameter is required").
 			WithMetadata(map[string]string{"param": "model"}))
 		return
 	}
 
-	pricing, err := h.billingService.GetModelPricing(model)
+	reference, err := h.pricingReferences().Resolve(c.Request.Context(), platform, model)
 	if err != nil {
-		// 模型不在定价列表中
-		response.Success(c, gin.H{"found": false})
+		h.respondPricingReferenceError(c, err)
 		return
 	}
-	cacheWritePrice := pricing.CacheCreationPricePerToken
-	var cacheWrite1hPrice *float64
-	if pricing.SupportsCacheBreakdown {
-		if pricing.CacheCreation5mPrice > 0 {
-			cacheWritePrice = pricing.CacheCreation5mPrice
-		}
-		cacheWrite1hPrice = &pricing.CacheCreation1hPrice
-	}
 
-	response.Success(c, gin.H{
-		"found":                        true,
-		"input_price":                  pricing.InputPricePerToken,
-		"output_price":                 pricing.OutputPricePerToken,
-		"cache_write_price":            cacheWritePrice,
-		"cache_write_1h_price":         cacheWrite1hPrice,
-		"cache_read_price":             pricing.CacheReadPricePerToken,
-		"reasoning_effort_multipliers": pricing.ReasoningEffortMultipliers,
-		"image_input_price":            pricing.ImageInputPricePerToken,
-		"image_output_price":           pricing.ImageOutputPricePerToken,
-	})
+	response.Success(c, reference)
 }
 
-// platformToLiteLLMProvider maps a channel platform name to the corresponding
-// LiteLLM provider string used as the key in the pricing catalog.
-var platformToLiteLLMProvider = map[string]string{
-	service.PlatformAnthropic:   "anthropic",
-	service.PlatformOpenAI:      "openai",
-	service.PlatformGemini:      "gemini",
-	service.PlatformAntigravity: "anthropic",
-	service.PlatformGrok:        "xai",
-	service.PlatformKimi:        "moonshot",
-	service.PlatformZhipu:       "zhipu",
-	service.PlatformDeepseek:    "deepseek",
-	service.PlatformMiniMax:     "minimax",
-	service.PlatformOpenCodeGo:  "opencode-go",
-}
-
-// SyncPricingModels 返回 LiteLLM 定价目录中指定平台的最新模型列表
-// GET /api/v1/admin/channels/pricing/sync-models?platform=anthropic
+// SyncPricingModels 刷新受信任的价格 Release，并返回该平台支持模型及其参考价。
+//
+// 改为 POST 语义：读一次远端 manifest + 校验 + 原子换装不是幂等的 GET，
+// 且响应要携带 refresh_status/catalog_version，前端需要据此区分
+// 「已是最新」「目录刷新失败但沿用旧快照」和「目录不可用」。
+// POST /api/v1/admin/channels/pricing/sync-models  body: {"platform":"openai"}
 func (h *ChannelHandler) SyncPricingModels(c *gin.Context) {
-	platform := strings.ToLower(strings.TrimSpace(c.Query("platform")))
+	var req struct {
+		Platform string `json:"platform"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		// 允许不带 body 的形式回退到 query，方便手工排障；缺 platform 仍算 400。
+		req.Platform = strings.TrimSpace(c.Query("platform"))
+	}
+	platform := strings.ToLower(strings.TrimSpace(req.Platform))
 	if platform == "" {
 		response.ErrorFrom(c, infraerrors.BadRequest("MISSING_PARAMETER", "platform parameter is required").
 			WithMetadata(map[string]string{"param": "platform"}))
 		return
 	}
 
-	provider, ok := platformToLiteLLMProvider[platform]
-	if !ok {
-		response.ErrorFrom(c, infraerrors.BadRequest("UNSUPPORTED_PLATFORM",
-			fmt.Sprintf("unsupported platform: %s", platform)).
-			WithMetadata(map[string]string{"param": "platform"}))
+	snapshot, err := h.pricingReferences().RefreshAndList(c.Request.Context(), platform)
+	if err != nil {
+		h.respondPricingReferenceError(c, err)
 		return
 	}
 
-	models := h.pricingService.ListModelNamesByProvider(provider)
-	response.Success(c, gin.H{"models": models})
+	response.Success(c, snapshot)
+}
+
+// respondPricingReferenceError 区分「平台不支持」（调用方写错参数，400）和
+// 「确实没有可用价格快照」（依赖不可用，503）。两者混成一个错误码会让前端把
+// 参数错误当成服务故障，或把服务故障静默当成空列表。
+func (h *ChannelHandler) respondPricingReferenceError(c *gin.Context, err error) {
+	if errors.Is(err, service.ErrUnsupportedPlatform) {
+		response.ErrorFrom(c, infraerrors.BadRequest("UNSUPPORTED_PLATFORM", err.Error()).
+			WithMetadata(map[string]string{"param": "platform"}))
+		return
+	}
+	response.ErrorFrom(c, infraerrors.ServiceUnavailable("PRICING_CATALOG_UNAVAILABLE",
+		"pricing catalog is unavailable for this platform").
+		WithMetadata(map[string]string{"reason": err.Error()}))
+}
+
+// pricingReferences 构造参考价服务。平台规则只由服务持有，handler 不再自己
+// 维护 platform → provider 映射（那会让单模型查询和批量同步两套语义漂移）。
+func (h *ChannelHandler) pricingReferences() *service.ChannelPricingReferenceService {
+	return service.NewChannelPricingReferenceService(h.pricingService, h.billingService)
 }

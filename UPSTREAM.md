@@ -105,6 +105,28 @@ Application: 0.2.8+custom.002
 GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.8-custom.002
 ```
 
+## Restored Upstream Pricing Branches
+
+The upstream commit that introduced GPT-6 Sol/Luna and Claude Opus 5.5 also
+carried dedicated pricing cards, cache-field presence handling, service-tier
+rules, and model isolation. The Plus tree kept the model IDs and the catalog
+JSON rows but missed those companion branches. This is recorded here so the next
+upstream merge does not drop them again:
+
+- `gpt-6-sol` / `gpt-6-luna` same-model built-in fallback cards in
+  `PricingService` and `BillingService`. Without them an absent catalog entry
+  fell through to the OpenAI default test model.
+- `claude-opus-5-5` built-in card plus `opus-5.5` family isolation in
+  `matchByModelFamily` and `getFallbackPricing`. Without them the `opus-5`
+  substring priced Opus 5.5 as Opus 5 and lost the 5m/1h cache split.
+- `cache_creation_input_token_cost` field presence: an explicit `0` stays `0`;
+  a derived 1.25x rule applies only when the field is absent.
+- GPT-6 Sol/Luna Fast 2x, Flex 0.5x, and the strict `>272000` long-context tier
+  (input/cache 2x, output 1.5x), with channel/group explicit prices still first.
+- Claude Opus 5.5 Fast 2x and 5m/1h cache prices.
+
+See `docs/CHANNEL_PRICING.md` for the operator-facing contract.
+
 ## Naming
 
 - Git tags and GitHub Releases: `vX.Y.Z+custom.NNN`

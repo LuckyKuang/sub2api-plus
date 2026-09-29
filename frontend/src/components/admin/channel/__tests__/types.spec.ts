@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   apiIntervalsToForm,
   apiTimePricingToForm,
+  buildSyncedPricingEntries,
   createDefaultTimePricingForm,
   formIntervalsToAPI,
   formReasoningEffortMultipliersToAPI,
@@ -14,6 +15,7 @@ import {
   type TimePricingFormEntry,
   type TimePricingPeriodFormEntry,
 } from '../types'
+import type { ModelPricingReference, ReferencePricingCard } from '@/api/admin/channels'
 
 describe('reasoning effort multipliers', () => {
   it('serializes independent overrides without altering their values', () => {
@@ -67,6 +69,188 @@ describe('interval multiplier conversion', () => {
       cache_write_multiplier: 2,
       cache_read_multiplier: 2,
     })
+  })
+})
+
+// 「同步最新模型」/手动添加回归：同步回来的模型必须每个都带着自己的官方价进入
+// 独立计价条目。曾经的实现把所有模型塞进同一条空价条目，运营者读到的是
+// 「没有相应价格」；后来改成按价签名合并，又让一部分模型拿到另一部分模型的价。
+describe('buildSyncedPricingEntries', () => {
+  const card = (over: Partial<ReferencePricingCard> = {}): ReferencePricingCard => ({
+    platform: 'openai',
+    models: [],
+    billing_mode: 'token',
+    input_price: 2e-6,
+    output_price: 10e-6,
+    cache_write_price: 2.5e-6,
+    cache_write_1h_price: null,
+    cache_read_price: 2e-7,
+    fast_multiplier: 2,
+    flex_multiplier: 0.5,
+    reasoning_effort_multipliers: null,
+    image_input_price: null,
+    image_output_price: null,
+    per_request_price: null,
+    intervals: [],
+    ...over,
+  })
+
+  const priced = (model: string, over: Partial<ModelPricingReference> = {}): ModelPricingReference => ({
+    model,
+    matched_model: model,
+    platform: 'openai',
+    status: 'priced',
+    source: 'release_catalog',
+    reason_code: '',
+    pricing: card({ models: [model], ...over }),
+    ...over,
+  })
+
+  const manual = (model: string): ModelPricingReference => ({
+    model,
+    matched_model: model,
+    platform: 'opencode_go',
+    status: 'manual_required',
+    source: 'none',
+    reason_code: 'exact_price_unavailable',
+    pricing: null,
+  })
+
+  const ruleFor = (model: string, refs: ModelPricingReference[]) =>
+    buildSyncedPricingEntries(refs).find(rule => rule.entry.models[0] === model)
+
+  it('prefills the default prices as $/MTok for each synced model', () => {
+    const [rule] = buildSyncedPricingEntries([priced('gpt-6-sol')])
+
+    expect(rule.entry.models).toEqual(['gpt-6-sol'])
+    expect(rule.entry.billing_mode).toBe('token')
+    expect(rule.entry.input_price).toBe(2)
+    expect(rule.entry.output_price).toBe(10)
+    expect(rule.entry.cache_write_price).toBe(2.5)
+    expect(rule.entry.cache_read_price).toBe(0.2)
+    expect(rule.entry.fast_multiplier).toBe(2)
+    expect(rule.entry.flex_multiplier).toBe(0.5)
+    expect(rule.entry.intervals).toEqual([])
+    expect(rule.reference.matched_model).toBe('gpt-6-sol')
+  })
+
+  it('creates one rule per model even when two models share the same price', () => {
+    const rules = buildSyncedPricingEntries([priced('gpt-6-sol'), priced('gpt-5.6-sol')])
+
+    expect(rules).toHaveLength(2)
+    expect(rules.map(r => r.entry.models)).toEqual([['gpt-6-sol'], ['gpt-5.6-sol']])
+    expect(rules.every(r => r.entry.input_price === 2)).toBe(true)
+  })
+
+  it('keeps each model own price instead of sharing the first model price', () => {
+    const rules = buildSyncedPricingEntries([
+      priced('gpt-6-sol'),
+      priced('gpt-6-luna', { input_price: 1e-7, output_price: 5e-7 }),
+    ])
+
+    expect(rules[0].entry.models).toEqual(['gpt-6-sol'])
+    expect(rules[0].entry.input_price).toBe(2)
+    expect(rules[0].entry.output_price).toBe(10)
+    expect(rules[1].entry.models).toEqual(['gpt-6-luna'])
+    expect(rules[1].entry.input_price).toBe(0.1)
+    expect(rules[1].entry.output_price).toBe(0.5)
+  })
+
+  it('keeps the 1h cache-write price when the model supports the breakdown', () => {
+    const [rule] = buildSyncedPricingEntries([
+      priced('claude-opus-5-5', { cache_write_1h_price: 8e-6 }),
+    ])
+
+    expect(rule.entry.cache_write_1h_price).toBe(8)
+  })
+
+  it('converts the long-context tier into a form interval', () => {
+    const [rule] = buildSyncedPricingEntries([priced('gpt-6-sol', {
+      intervals: [{
+        min_tokens: 272001,
+        max_tokens: null,
+        tier_label: '>272000',
+        input_price: 4e-6,
+        output_price: 15e-6,
+        cache_write_price: 5e-6,
+        cache_write_1h_price: null,
+        cache_read_price: 4e-7,
+        input_multiplier: null,
+        output_multiplier: null,
+        cache_write_multiplier: null,
+        cache_read_multiplier: null,
+        per_request_price: null,
+        sort_order: 0,
+      }],
+    })])
+
+    expect(rule.entry.intervals).toHaveLength(1)
+    expect(rule.entry.intervals[0].min_tokens).toBe(272001)
+    expect(rule.entry.intervals[0].input_price).toBe(4)
+    expect(rule.entry.intervals[0].output_price).toBe(15)
+    // 长上下文档位同样要带上缓存价，只填 input/output 会让该档少计费。
+    expect(rule.entry.intervals[0].cache_read_price).toBe(0.4)
+  })
+
+  it('keeps an unpriced model as its own incomplete rule and never claims a price', () => {
+    const rules = buildSyncedPricingEntries([priced('gpt-6-sol'), manual('unknown-model')])
+
+    expect(rules).toHaveLength(2)
+    const unpriced = ruleFor('unknown-model', [priced('gpt-6-sol'), manual('unknown-model')])
+    expect(unpriced?.entry.models).toEqual(['unknown-model'])
+    expect(unpriced?.entry.input_price).toBeNull()
+    expect(unpriced?.entry.output_price).toBeNull()
+    expect(unpriced?.reference.status).toBe('manual_required')
+    expect(unpriced?.reference.reason_code).toBe('exact_price_unavailable')
+    expect(rules[0].entry.input_price).toBe(2)
+  })
+
+  it('falls back to one unpriced rule per model when no pricing is available', () => {
+    const rules = buildSyncedPricingEntries([manual('a-model'), manual('another-model')])
+
+    expect(rules).toHaveLength(2)
+    expect(rules.map(r => r.entry.models)).toEqual([['a-model'], ['another-model']])
+    expect(rules.every(r => r.entry.input_price === null)).toBe(true)
+  })
+
+  it('carries reasoning-effort multipliers without sharing the source object', () => {
+    const multipliers = { none: 0.5, high: 1.5 }
+    const [rule] = buildSyncedPricingEntries([
+      priced('gpt-6-sol', { reasoning_effort_multipliers: multipliers }),
+    ])
+
+    expect(rule.entry.reasoning_effort_multipliers).toEqual(multipliers)
+    expect(rule.entry.reasoning_effort_multipliers).not.toBe(multipliers)
+  })
+
+  it('maps a per-image card to image billing without converting it into a token price', () => {
+    const [rule] = buildSyncedPricingEntries([priced('gpt-image-2', {
+      billing_mode: 'image',
+      input_price: null,
+      output_price: null,
+      per_request_price: 0.04,
+    })])
+
+    expect(rule.entry.billing_mode).toBe('image')
+    expect(rule.entry.per_request_price).toBe(0.04)
+    expect(rule.entry.input_price).toBeNull()
+  })
+
+  it('never turns an unsupported billing unit into a zero price card', () => {
+    const [rule] = buildSyncedPricingEntries([{
+      model: 'some-tts-model',
+      matched_model: 'some-tts-model',
+      platform: 'openai',
+      status: 'unsupported_unit',
+      source: 'none',
+      reason_code: 'unsupported_billing_dimension',
+      pricing: null,
+    }])
+
+    expect(rule.entry.input_price).toBeNull()
+    expect(rule.entry.output_price).toBeNull()
+    expect(rule.reference.status).toBe('unsupported_unit')
+    expect(rule.reference.reason_code).toBe('unsupported_billing_dimension')
   })
 })
 

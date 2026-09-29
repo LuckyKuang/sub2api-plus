@@ -228,7 +228,18 @@ export default {
          syncingModels: 'Syncing...',
          syncModelsSuccess: 'Synced {count} new model(s)',
          syncModelsAlreadyUpToDate: 'Models already up to date',
-         syncModelsError: 'Failed to sync models'
+         syncModelsError: 'Failed to sync models',
+         syncModelsPartial: 'Added {count} model(s): {priced} auto-filled, {needsPricing} need manual pricing',
+         syncModelsStaleCatalog: 'Pricing catalog refresh failed; showing the last usable snapshot',
+         pricingLookupLoading: 'Looking up the official reference price...',
+         pricingLookupManualRequired: 'No official reference price for this model — enter the price manually',
+         pricingLookupUnsupportedUnit: 'This model is billed per audio/character/second, which the pricing form cannot express — configure it manually',
+         pricingLookupError: 'Reference price lookup failed — retry or enter the price manually',
+         pricingLookupRetry: 'Retry',
+         pricingLookupSourceCatalog: 'Source: trusted pricing catalog',
+         pricingLookupSourceFallback: 'Source: built-in same-model price',
+         pricingLookupSourceProxy: 'Source: proxy reference (not a vendor-published price)',
+         pricingLookupSourceNone: 'No reference price available'
        }
      },
 

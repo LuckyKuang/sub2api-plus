@@ -231,6 +231,46 @@ func isClaudeFable51Model(model string) bool {
 	return false
 }
 
+// isClaudeOpus55Model 只识别 Opus 5.5 自身拼写（含日期/供应商后缀），
+// 拒绝 claude-opus-5 以及任何不含 5.5 的 Opus 家族成员：Opus 5.5 有独立价卡
+// 和 5m/1h 缓存拆分，与 Opus 5 不同价，不能按 "opus" 子串归到同一档。
+func isClaudeOpus55Model(model string) bool {
+	native := strings.ToLower(strings.TrimSpace(model))
+	if idx := strings.LastIndex(native, "/"); idx >= 0 {
+		native = native[idx+1:]
+	}
+	if idx := strings.Index(native, "claude-opus"); idx >= 0 {
+		native = native[idx:]
+	}
+	// 去掉日期版本后缀（-20260922）。
+	if parts := strings.Split(native, "-"); len(parts) > 0 {
+		if last := parts[len(parts)-1]; len(last) == 8 && isAllDigits(last) {
+			native = strings.Join(parts[:len(parts)-1], "-")
+		}
+	}
+	for _, marker := range []string{"claude-opus-5-5", "claude-opus-5.5", "claude-opus55"} {
+		if at := strings.Index(native, marker); at >= 0 {
+			after := at + len(marker)
+			if after == len(native) || native[after] < '0' || native[after] > '9' {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func isAllDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 // reasoningEffortBillingMultiplier 返回最终转发推理等级对应的计费倍率；
 // 未配置的等级（或非法值）按 1 倍计费。
 func reasoningEffortBillingMultiplier(effort string, multipliers map[string]float64) float64 {
@@ -350,6 +390,16 @@ func NewBillingService(cfg *config.Config, pricingService *PricingService) *Bill
 	// 初始化硬编码回退价格（当动态价格不可用时使用）
 	s.initFallbackPricing()
 
+	// 让参考价服务能枚举内置兜底型号（Kimi/智谱/MiniMax 等平台目录行不全，
+	// 同步时必须按内置表列出，否则这些平台在管理端是空的）。
+	billingReferenceFallbackIDs = func() map[string]struct{} {
+		ids := make(map[string]struct{}, len(s.fallbackPrices))
+		for id := range s.fallbackPrices {
+			ids[id] = struct{}{}
+		}
+		return ids
+	}
+
 	return s
 }
 
@@ -420,6 +470,25 @@ func (s *BillingService) initFallbackPricing() {
 	// 缺少这两条时 getFallbackPricing 会掉到 claude-3-opus（$15/$75），造成 3 倍超收。
 	s.fallbackPrices["claude-opus-4.8"] = pricingWithPriorityMultiplier(s.fallbackPrices["claude-opus-4.7"], 2)
 	s.fallbackPrices["claude-opus-5"] = pricingWithPriorityMultiplier(s.fallbackPrices["claude-opus-4.8"], 2)
+
+	// Claude Opus 5.5 独立价卡（$4/$20 per MTok，Fast $8/$40，cache write
+	// 5m $5 / 1h $8，cache read $0.20）。
+	// 它绝不能复用 claude-opus-5（$5/$25）：claude-opus-5-5 含有 "opus-5" 子串，
+	// 没有本条目时 getFallbackPricing 会按 Opus 5 档计费（1.25 倍超收），并且
+	// 会丢掉 Opus 5.5 独有的 5m/1h 缓存拆分。
+	s.fallbackPrices["claude-opus-5-5"] = &ModelPricing{
+		InputPricePerToken:                 4e-6,  // $4 per MTok
+		InputPricePerTokenPriority:         8e-6,  // Fast：标准价 2 倍
+		OutputPricePerToken:                20e-6, // $20 per MTok
+		OutputPricePerTokenPriority:        40e-6, // Fast：标准价 2 倍
+		CacheCreationPricePerToken:         5e-6,  // 5 分钟缓存写入 $5 per MTok
+		CacheCreation5mPrice:               5e-6,  // $5 per MTok
+		CacheCreation1hPrice:               8e-6,  // 1 小时缓存写入 $8 per MTok
+		CacheCreationPricePerTokenPriority: 10e-6,
+		CacheReadPricePerToken:             2e-7, // $0.20 per MTok
+		CacheReadPricePerTokenPriority:     4e-7,
+		SupportsCacheBreakdown:             true,
+	}
 
 	// Claude Fable 5.x uses the same input/output and cache-write prices, while
 	// Fable 5.1 reduces cache reads from $1 to $0.25 per MTok.
@@ -528,6 +597,40 @@ func (s *BillingService) initFallbackPricing() {
 		CacheCreationPricePerTokenPriority: 25e-6,
 		CacheReadPricePerToken:             1e-6,
 		CacheReadPricePerTokenPriority:     2e-6,
+		LongContextInputThreshold:          272_000,
+		LongContextInputMultiplier:         2,
+		LongContextOutputMultiplier:        1.5,
+	}
+
+	// OpenAI GPT-6 Sol（$2/$10 per MTok，Fast $4/$20）。远端镜像可能还没有
+	// 该型号目录；没有本条时 normalizeKnownOpenAICodexModel 认得 gpt-6-sol 但
+	// getFallbackPricing 没有对应 case，会 fail-closed 成 ErrModelPricingUnavailable，
+	// 整个请求计不到费（见 openAIGPT6SolFallbackPricing 的 PricingService 侧兜底）。
+	// Flex 档沿用 serviceTierCostMultiplier 的 0.5 倍，无需单独字段。
+	s.fallbackPrices["gpt-6-sol"] = &ModelPricing{
+		InputPricePerToken:                 2e-6, // $2 per MTok
+		InputPricePerTokenPriority:         4e-6, // Fast：标准价 2 倍
+		OutputPricePerToken:                10e-6,
+		OutputPricePerTokenPriority:        20e-6,
+		CacheCreationPricePerToken:         2.5e-6, // $2.5 per MTok
+		CacheCreationPricePerTokenPriority: 5e-6,
+		CacheReadPricePerToken:             0.2e-6, // $0.20 per MTok
+		CacheReadPricePerTokenPriority:     0.4e-6,
+		LongContextInputThreshold:          272_000,
+		LongContextInputMultiplier:         2,
+		LongContextOutputMultiplier:        1.5,
+	}
+
+	// OpenAI GPT-6 Luna（$0.10/$0.50 per MTok，Fast $0.20/$1）。
+	s.fallbackPrices["gpt-6-luna"] = &ModelPricing{
+		InputPricePerToken:                 0.1e-6, // $0.10 per MTok
+		InputPricePerTokenPriority:         0.2e-6,
+		OutputPricePerToken:                0.5e-6,
+		OutputPricePerTokenPriority:        1e-6,
+		CacheCreationPricePerToken:         0.125e-6, // $0.125 per MTok
+		CacheCreationPricePerTokenPriority: 0.25e-6,
+		CacheReadPricePerToken:             0.01e-6, // $0.01 per MTok
+		CacheReadPricePerTokenPriority:     0.02e-6,
 		LongContextInputThreshold:          272_000,
 		LongContextInputMultiplier:         2,
 		LongContextOutputMultiplier:        1.5,
@@ -924,6 +1027,13 @@ func (s *BillingService) initFallbackPricing() {
 func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 	modelLower := strings.ToLower(model)
 
+	// Claude Opus 5.5 必须在下面的裸 "opus" 分支之前判定：claude-opus-5-5 含有
+	// "opus-5" 子串，继续往下会命中 claude-opus-5（$5/$25）而不是 Opus 5.5 的
+	// $4/$20，并且丢掉 5m/1h 缓存拆分。只接受同型号拼写，不按家族猜价。
+	if isClaudeOpus55Model(modelLower) {
+		return s.fallbackPrices["claude-opus-5-5"]
+	}
+
 	// 按模型系列匹配
 	if isClaudeFable51Model(modelLower) {
 		return s.fallbackPrices["claude-fable-5-1"]
@@ -1114,6 +1224,10 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 	// OpenAI（GPT-5 / Codex 族）：仅匹配已知型号，避免未知 OpenAI 型号误计价。
 	if normalized := normalizeKnownOpenAICodexModel(modelLower); normalized != "" {
 		switch normalized {
+		case "gpt-6-sol":
+			return s.fallbackPrices["gpt-6-sol"]
+		case "gpt-6-luna":
+			return s.fallbackPrices["gpt-6-luna"]
 		case "gpt-6-astra":
 			return s.fallbackPrices["gpt-6-astra"]
 		case "gpt-5.6-sol":
@@ -1895,7 +2009,8 @@ func (s *BillingService) applyModelSpecificPricingPolicyEx(model string, pricing
 // 档的模型（如 gpt-5.5-pro、gpt-5.4-mini/nano）返回 0。
 func openAIModelFastPricingRatio(normalized string) float64 {
 	switch normalized {
-	case "gpt-5.4", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-6-astra":
+	case "gpt-5.4", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-6-astra",
+		"gpt-6-sol", "gpt-6-luna":
 		return 2.0
 	case "gpt-5.5":
 		return 2.5
