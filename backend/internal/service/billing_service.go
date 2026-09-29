@@ -636,6 +636,19 @@ func (s *BillingService) initFallbackPricing() {
 		LongContextOutputMultiplier:        1.5,
 	}
 
+	// OpenAI GPT-6 基座卡（$10/$50 per MTok，Fast 2×）。gpt-6-sol/luna/astra 都
+	// 有专属价卡；裸 "gpt-6" 家族基名也需静态兜底，否则 GetModelPricing("gpt-6")
+	// 会 fail-closed。
+	s.fallbackPrices["gpt-6"] = &ModelPricing{
+		InputPricePerToken:         10e-6, // $10 per MTok
+		InputPricePerTokenPriority: 20e-6,
+		OutputPricePerToken:        50e-6, // $50 per MTok
+		OutputPricePerTokenPriority: 100e-6,
+		LongContextInputThreshold:  272_000,
+		LongContextInputMultiplier: 2,
+		LongContextOutputMultiplier: 1.5,
+	}
+
 	// OpenAI GPT-5.6 官方价格（USD/token）。缓存写入为输入价的 1.25 倍。
 	s.fallbackPrices["gpt-5.6-sol"] = &ModelPricing{
 		InputPricePerToken:                 5e-6,
@@ -1221,6 +1234,11 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 		return s.fallbackPrices["codex-auto-review"]
 	}
 
+	// 裸 "gpt-6" 家族基名：normalizeKnownOpenAICodexModel 不识别它（它不代表
+	// sol/luna/astra），单独判定返回静态兜底，避免 GetModelPricing("gpt-6") fail-closed。
+	if modelLower == "gpt-6" {
+		return s.fallbackPrices["gpt-6"]
+	}
 	// OpenAI（GPT-5 / Codex 族）：仅匹配已知型号，避免未知 OpenAI 型号误计价。
 	if normalized := normalizeKnownOpenAICodexModel(modelLower); normalized != "" {
 		switch normalized {
@@ -1683,6 +1701,7 @@ func (s *BillingService) computeTokenBreakdown(
 	cacheCreationPrice := pricing.CacheCreationPricePerToken
 	cacheCreationMultiplier := 1.0
 	tierMultiplier := 1.0
+	cacheBreakdownTierFactor := 1.0
 
 	if usePriorityServiceTierPricing(serviceTier, pricing) {
 		if pricing.InputPricePerTokenPriority > 0 {
@@ -1696,6 +1715,16 @@ func (s *BillingService) computeTokenBreakdown(
 		}
 		if pricing.CacheCreationPricePerTokenPriority > 0 {
 			cacheCreationPrice = pricing.CacheCreationPricePerTokenPriority
+		}
+		// 5m/1h 缓存分档没有专属 priority 价字段；显式用 priority 价卡的缓存倍率
+		// （或缺省回退 input 倍率）缩放分档价，使 priority/fast 档的缓存写入不被按
+		// 标准价计费，与无显式优先级价、走 tierMultiplier 统一放大的路径保持一致。
+		if pricing.SupportsCacheBreakdown && (pricing.CacheCreation5mPrice > 0 || pricing.CacheCreation1hPrice > 0) {
+			if pricing.CacheCreationPricePerToken > 0 && pricing.CacheCreationPricePerTokenPriority > 0 {
+				cacheBreakdownTierFactor = pricing.CacheCreationPricePerTokenPriority / pricing.CacheCreationPricePerToken
+			} else if pricing.InputPricePerToken > 0 && pricing.InputPricePerTokenPriority > 0 {
+				cacheBreakdownTierFactor = pricing.InputPricePerTokenPriority / pricing.InputPricePerToken
+			}
 		}
 	} else {
 		tierMultiplier = configuredServiceTierMultiplier(serviceTier, pricing)
@@ -1758,7 +1787,7 @@ func (s *BillingService) computeTokenBreakdown(
 	}
 
 	// 缓存创建费用
-	bd.CacheCreationCost = s.computeCacheCreationCost(pricing, tokens, cacheCreationPrice, cacheCreationMultiplier)
+	bd.CacheCreationCost = s.computeCacheCreationCost(pricing, tokens, cacheCreationPrice, cacheCreationMultiplier, cacheBreakdownTierFactor)
 
 	bd.CacheReadCost = float64(tokens.CacheReadTokens) * cacheReadPrice
 	if imageCached := min(max(tokens.ImageCacheReadTokens, 0), max(tokens.CacheReadTokens, 0)); imageCached > 0 && pricing.ImageCacheReadPricePerToken > 0 {
@@ -1784,15 +1813,17 @@ func (s *BillingService) computeTokenBreakdown(
 
 // computeCacheCreationCost 计算缓存创建费用（支持 5m/1h 分类或标准计费）。
 // multiplier 用于长上下文等场景下的整体价格缩放（普通调用传 1.0 即可）。
-func (s *BillingService) computeCacheCreationCost(pricing *ModelPricing, tokens UsageTokens, price, multiplier float64) float64 {
+// breakdownTierFactor 只作用于 5m/1h 分档：该分档没有专属的 priority 价字段，
+// priority/fast 档需按模型优先级倍率单独缩放（标准档价已含长上下文 multiplier）。
+func (s *BillingService) computeCacheCreationCost(pricing *ModelPricing, tokens UsageTokens, price, multiplier, breakdownTierFactor float64) float64 {
 	if pricing.SupportsCacheBreakdown && (pricing.CacheCreation5mPrice > 0 || pricing.CacheCreation1hPrice > 0) {
 		cacheCreation5mTokens, cacheCreation1hTokens := normalizeCacheCreationBreakdown(tokens)
 		if cacheCreation5mTokens == 0 && cacheCreation1hTokens == 0 && tokens.CacheCreationTokens > 0 {
 			// API 未返回 ephemeral 明细，回退到全部按 5m 单价计费
-			return float64(tokens.CacheCreationTokens) * pricing.CacheCreation5mPrice * multiplier
+			return float64(tokens.CacheCreationTokens) * pricing.CacheCreation5mPrice * multiplier * breakdownTierFactor
 		}
-		return float64(cacheCreation5mTokens)*pricing.CacheCreation5mPrice*multiplier +
-			float64(cacheCreation1hTokens)*pricing.CacheCreation1hPrice*multiplier
+		return (float64(cacheCreation5mTokens)*pricing.CacheCreation5mPrice +
+			float64(cacheCreation1hTokens)*pricing.CacheCreation1hPrice) * multiplier * breakdownTierFactor
 	}
 	return float64(tokens.CacheCreationTokens) * price * multiplier
 }

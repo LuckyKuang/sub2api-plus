@@ -1700,6 +1700,21 @@ func (s *PricingService) matchOpenAIModel(model string) *LiteLLMModelPricing {
 		}
 	}
 
+	// GPT-6 Sol/Luna：远端镜像领先发布时这两个型号可能没有精确目录条目，但绝不能
+	// 被下面 variants 的 base-name 变体跨匹配到 gpt-6（目录里若有 gpt-6 会被误用）。
+	// 必须在 variants 兜底前按同型号静态价返回；exact 目录命中已在 GetModelPricing
+	// 的前置识别步骤完成，能走到这里说明没有精确条目。
+	switch openai.GPT6SolOrLunaBaseModel(model) {
+	case "gpt-6-sol":
+		logger.With(zap.String("component", "service.pricing")).
+			Info(fmt.Sprintf("[Pricing] OpenAI fallback matched %s -> %s", model, "gpt-6-sol(static)"))
+		return openAIGPT6SolFallbackPricing
+	case "gpt-6-luna":
+		logger.With(zap.String("component", "service.pricing")).
+			Info(fmt.Sprintf("[Pricing] OpenAI fallback matched %s -> %s", model, "gpt-6-luna(static)"))
+		return openAIGPT6LunaFallbackPricing
+	}
+
 	// 尝试的回退变体
 	variants := s.generateOpenAIModelVariants(model, openAIModelDatePattern)
 
@@ -1723,21 +1738,6 @@ func (s *PricingService) matchOpenAIModel(model string) *LiteLLMModelPricing {
 		logger.With(zap.String("component", "service.pricing")).
 			Info(fmt.Sprintf("[Pricing] OpenAI fallback matched %s -> %s", model, "gpt-6-astra(static)"))
 		return openAIGPT6AstraFallbackPricing
-	}
-
-	// GPT-6 Sol/Luna：远端镜像领先发布时这两个型号没有目录条目。必须按同型号
-	// 静态价兜底；若继续往下走到 DefaultTestModel，Sol 会按 gpt-5.1-codex 计费。
-	// 判定用 IsGPT6SolOrLunaModelSpelling（已规范化大小写/路径/openai-compact 后缀），
-	// 避免把 gpt-6 或 gpt-6-solace 之类未登记型号也认成 Sol。
-	switch openai.GPT6SolOrLunaBaseModel(model) {
-	case "gpt-6-sol":
-		logger.With(zap.String("component", "service.pricing")).
-			Info(fmt.Sprintf("[Pricing] OpenAI fallback matched %s -> %s", model, "gpt-6-sol(static)"))
-		return openAIGPT6SolFallbackPricing
-	case "gpt-6-luna":
-		logger.With(zap.String("component", "service.pricing")).
-			Info(fmt.Sprintf("[Pricing] OpenAI fallback matched %s -> %s", model, "gpt-6-luna(static)"))
-		return openAIGPT6LunaFallbackPricing
 	}
 
 	if strings.HasPrefix(model, "gpt-5.6-sol") {
