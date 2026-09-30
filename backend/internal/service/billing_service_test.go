@@ -2256,10 +2256,27 @@ func TestGPT61SolExplicitZeroCacheWriteAcrossTiers(t *testing.T) {
 	var err error
 	pricing.pricingData, err = pricing.parsePricingData([]byte(`{"gpt-6.1-sol":{"litellm_provider":"openai","input_cost_per_token":0.000002,"output_cost_per_token":0.00001,"input_cost_per_token_flex":0.000001,"cache_creation_input_token_cost":0,"cache_creation_input_token_cost_priority":0.000005}}`))
 	require.NoError(t, err)
+	require.True(t, pricing.pricingData["gpt-6.1-sol"].CacheCreationInputTokenCostExplicit)
 	svc := NewBillingService(&config.Config{}, pricing)
 	for _, tier := range []string{"", "fast", "priority", "flex"} {
 		cost, err := svc.CalculateCostWithServiceTier("openai/gpt-6.1-sol-max", UsageTokens{CacheCreationTokens: 300000}, 1, tier)
 		require.NoError(t, err)
 		require.Zero(t, cost.CacheCreationCost)
+	}
+}
+
+func TestGPT6CacheWriteMissingAndNullStillDerivePremium(t *testing.T) {
+	for _, model := range []string{"gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna"} {
+		for _, field := range []string{"", `,"cache_creation_input_token_cost":null`} {
+			pricing := &PricingService{}
+			var err error
+			pricing.pricingData, err = pricing.parsePricingData([]byte(`{"` + model + `":{"litellm_provider":"openai","input_cost_per_token":0.000002,"output_cost_per_token":0.00001` + field + `}}`))
+			require.NoError(t, err)
+			require.False(t, pricing.pricingData[model].CacheCreationInputTokenCostExplicit)
+			svc := NewBillingService(&config.Config{}, pricing)
+			cost, err := svc.CalculateCostWithServiceTier(model, UsageTokens{CacheCreationTokens: 1000}, 1, "")
+			require.NoError(t, err)
+			require.InDelta(t, 0.0025, cost.CacheCreationCost, 1e-12)
+		}
 	}
 }

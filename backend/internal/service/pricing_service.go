@@ -251,6 +251,10 @@ type LiteLLMModelPricing struct {
 	// 此类条目只可用于图片计费，token 计费必须回退到 fallback 或 fail-closed，
 	// 否则 token 流量会被按 $0 计费。零值（false）表示条目具备 token 价格。
 	TokenPricingAbsent bool `json:"-"`
+
+	// CacheCreationInputTokenCostExplicit preserves source field presence so
+	// an explicit zero is not replaced by a derived cache-write premium.
+	CacheCreationInputTokenCostExplicit bool `json:"-"`
 }
 
 // PricingRemoteClient 远程价格数据获取接口
@@ -705,6 +709,7 @@ func (s *PricingService) parsePricingData(body []byte) (map[string]*LiteLLMModel
 		}
 		if entry.CacheCreationInputTokenCost != nil {
 			pricing.CacheCreationInputTokenCost = *entry.CacheCreationInputTokenCost
+			pricing.CacheCreationInputTokenCostExplicit = true
 		}
 		if entry.CacheCreationInputTokenCostPriority != nil {
 			pricing.CacheCreationInputTokenCostPriority = *entry.CacheCreationInputTokenCostPriority

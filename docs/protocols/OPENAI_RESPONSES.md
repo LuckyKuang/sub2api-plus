@@ -72,6 +72,10 @@ and before protocol conversion. Tool calls require Responses; Chat-only
 fallbacks return a client error before sending upstream. GPT-6 Sol/Luna allow
 Chat tool calls only with `reasoning_effort=none`. With reasoning enabled, these
 families drop incompatible sampling and logprob fields in Responses conversion.
+Chat Completions and Messages bridges use the final mapped upstream model for
+model-specific conversion, including removal of unsupported sampling fields.
+The inbound model and content remain available for cache identity and the
+pre-conversion canonical audit.
 
 All three families share the supported Responses prompt-cache contract. The
 fallback Standard input/output/cache-write/cache-read prices per million tokens

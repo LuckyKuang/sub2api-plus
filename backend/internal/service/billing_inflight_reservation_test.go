@@ -38,13 +38,25 @@ func TestEstimateInflightReservationCost(t *testing.T) {
 	require.True(t, ok)
 	require.InDelta(t, 1000*pricing.InputPricePerToken+64000*pricing.OutputPricePerToken, cost, 1e-12)
 
-	// free group / missing billing → fail open
-	_, ok = EstimateInflightReservationCost(billing, cfg, "claude-sonnet-4-5", 10, 10, 0)
-	require.False(t, ok)
+	// A known model in a free group is priced successfully and needs no reserve.
+	cost, ok = EstimateInflightReservationCost(billing, cfg, "claude-sonnet-4-5", 10, 10, 0)
+	require.True(t, ok)
+	require.Zero(t, cost)
+	// Missing dependencies/model/pricing and invalid rates remain unpriced.
 	_, ok = EstimateInflightReservationCost(nil, cfg, "claude-sonnet-4-5", 10, 10, 1)
 	require.False(t, ok)
 	_, ok = EstimateInflightReservationCost(billing, cfg, "", 10, 10, 1)
 	require.False(t, ok)
+	for _, rate := range []float64{0, 1} {
+		cost, ok = EstimateInflightReservationCost(billing, cfg, "unknown-unpriced-model", 10, 10, rate)
+		require.False(t, ok)
+		require.Zero(t, cost)
+	}
+	for _, rate := range []float64{-1, math.NaN(), math.Inf(1), math.Inf(-1)} {
+		cost, ok = EstimateInflightReservationCost(billing, cfg, "claude-sonnet-4-5", 10, 10, rate)
+		require.False(t, ok)
+		require.Zero(t, cost)
+	}
 }
 
 func TestReserveInflightBalance_NoReservationCacheFailsOpen(t *testing.T) {

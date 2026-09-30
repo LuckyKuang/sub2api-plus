@@ -11,7 +11,7 @@ import (
 )
 
 func TestClaudeSonnet5ReferenceFallbackAndCatalogAgree(t *testing.T) {
-	for _, svc := range []*ChannelPricingReferenceService{newReferenceService(t, `{}`), newBundledCatalogReferenceService(t)} {
+	for _, svc := range []*ChannelPricingReferenceService{newReferenceService(t, `{"gpt-5.4":{"litellm_provider":"openai","input_cost_per_token":0.0000025,"output_cost_per_token":0.000015}}`), newBundledCatalogReferenceService(t)} {
 		refs, err := svc.List(context.Background(), PlatformAnthropic)
 		require.NoError(t, err)
 		listed := referencesByModel(t, refs)["claude-sonnet-5"]

@@ -3924,7 +3924,7 @@ func TestGPT6SolLunaOfflineCatalogReasoningAndImageCapabilities(t *testing.T) {
 		descriptor := newConfiguredCodexModelDescriptor(model)
 		require.NotNil(t, descriptor.DefaultReasoningLevel, model)
 		require.Equal(t, "medium", *descriptor.DefaultReasoningLevel, model)
-		require.Equal(t, configuredCodexGPT56MaxContext, descriptor.MaxContextWindow, model)
+		require.Equal(t, int64(configuredCodexGPT56MaxContext), descriptor.MaxContextWindow, model)
 		require.True(t, isOpenAICodexImageInputModel(model), model)
 		var efforts []string
 		for _, level := range descriptor.SupportedReasoningLevels {
