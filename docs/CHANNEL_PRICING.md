@@ -306,6 +306,7 @@ a different model. Values are USD per token.
 | `gpt-6-sol` | `2e-6` | `10e-6` | `2.5e-6` | `0.2e-6` |
 | `gpt-6-luna` | `0.1e-6` | `0.5e-6` | `0.125e-6` | `0.01e-6` |
 | `claude-opus-5-5` | `4e-6` | `20e-6` | `5e-6` (5m) / `8e-6` (1h) | `0.2e-6` |
+| `claude-sonnet-5-5` | `2e-6` | `10e-6` | `2.5e-6` (5m) / `4e-6` (1h) | `0.2e-6` |
 
 - Without `gpt-6-sol` / `gpt-6-luna` fallbacks, an absent catalog entry fell
   through to the OpenAI default test model and billed Sol as `gpt-5.1-codex`.
@@ -321,6 +322,11 @@ uses an input/cache multiplier of 2 and an output multiplier of 1.5. At exactly
 272000 tokens the base tier applies. Flex uses the generic 0.5 service-tier
 multiplier; Fast/priority is 2x. These semantics are identical in reference
 pricing and actual billing.
+
+Sonnet 5.5 uses the same fallback rates throughout its 1,000,000-token context
+window; it does not inherit the GPT-6 long-context threshold. Opus 5.5 retains
+its Fast/priority 2x pricing. Explicit channel prices, context intervals and
+tier multipliers retain their existing precedence over model defaults.
 
 Explicit `cache_creation_input_token_cost: 0` stays zero. Derived cache-write
 rules only apply when the catalog field is absent, and the derived value is

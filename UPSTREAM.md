@@ -5,8 +5,8 @@ procedures are documented in [`docs/RELEASING.md`](docs/RELEASING.md).
 
 ## Integrated Baseline
 
-The current integration tree incorporates the official `v0.2.9` tag at commit
-`4c00df2e0183e2c70b7fa8ba45914205e36aad0c`, layered onto the Plus history.
+The current integration tree incorporates the official `v0.2.10` tag at commit
+`2f3fed2fdb0787141294cec81487a5df30426f7f`, layered onto the Plus history.
 The release mapping below remains the authoritative record of publication
 status; importing an upstream tag does not publish a Plus release or change the
 embedded application version by itself.
@@ -19,6 +19,12 @@ distribution/toolchain choices. Retired upstream billing probes remain removed.
 Grok cross-client rewriting stays opt-in, and inconclusive OAuth billing does
 not grant media eligibility.
 
+The v0.2.10 reset-credit query preserves the Anthropic credential owner's
+identity across token acquisition and terminal transport. Allowlisted
+cyber-policy events retain audit evidence and skip both synchronous and
+deferred Plus automatic bans. Stable Sonnet 5.5 toolsets share the canonical
+two-engine content extractor, including unknown-sibling pass-through.
+
 See [v0.2.4 integration and upgrade behavior](docs/UPSTREAM_V0_2_4_INTEGRATION.md)
 for the previous overlay's public API changes, migrations, defaults, and
 validation boundaries. See [v0.2.5 integration](docs/UPSTREAM_V0_2_5_INTEGRATION.md)
@@ -27,7 +33,9 @@ for the official tag import on that tree. See
 official tag import. See
 [v0.2.8 integration](docs/UPSTREAM_V0_2_8_INTEGRATION.md) for the previous
 official tag import. See
-[v0.2.9 integration](docs/UPSTREAM_V0_2_9_INTEGRATION.md) for the latest
+[v0.2.9 integration](docs/UPSTREAM_V0_2_9_INTEGRATION.md) for the previous
+official tag import. See
+[v0.2.10 integration](docs/UPSTREAM_V0_2_10_INTEGRATION.md) for the latest
 official tag import.
 
 ## Release Mapping
@@ -93,6 +101,7 @@ official tag import.
 | `v0.2.8+custom.001` | `v0.2.8` | `fd80b08c90b55edcad5b00171b53f08721d30da1` | published |
 | `v0.2.8+custom.002` | `v0.2.8` | `fd80b08c90b55edcad5b00171b53f08721d30da1` | published |
 | `v0.2.9+custom.001` | `v0.2.9` | `4c00df2e0183e2c70b7fa8ba45914205e36aad0c` | published |
+| `v0.2.10+custom.001` | `v0.2.10` | `2f3fed2fdb0787141294cec81487a5df30426f7f` | planned |
 
 `v0.2.4+custom.006` is marked withdrawn because official `v0.2.5` was imported before that snapshot overlay was published. Do not reuse or retag `.006`.
 
@@ -103,9 +112,9 @@ still require a maintainer audit. Do not reuse or retag `.007`.
 ## Current Version
 
 ```text
-Git/GitHub: v0.2.9+custom.001
-Application: 0.2.9+custom.001
-GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.9-custom.001
+Git/GitHub: v0.2.10+custom.001
+Application: 0.2.10+custom.001
+GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.10-custom.001
 ```
 
 ## Restored Upstream Pricing Branches

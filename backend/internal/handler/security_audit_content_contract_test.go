@@ -3,12 +3,30 @@
 package handler
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/securityaudit"
 	"github.com/LuckyKuang/sub2api-plus/internal/service"
 	"github.com/stretchr/testify/require"
 )
+
+func TestSonnet55StableToolsetsRetainCanonicalAuditContent(t *testing.T) {
+	for _, toolType := range []string{"computer_toolset_20260801", "browser_toolset_20260801"} {
+		t.Run(toolType, func(t *testing.T) {
+			// Real Messages shape: new provider toolsets and unknown sibling data
+			// must not hide the successfully extracted current user message.
+			body := []byte(fmt.Sprintf(`{"model":"claude-sonnet-5-5","max_tokens":128,"thinking":{"type":"adaptive"},"tools":[{"type":%q,"name":"toolset"}],"messages":[{"role":"user","content":[{"type":"text","text":"review this browser task"},{"type":"future_toolset_state","state":{"opaque":true}}]}],"future_provider_options":{"enabled":true}}`, toolType))
+			moderation := service.ExtractContentModerationInput(service.ContentModerationProtocolAnthropicMessages, body)
+			require.Equal(t, "review this browser task", moderation.Text)
+			prompt, err := securityaudit.ExtractPromptSnapshot(securityaudit.Request{
+				Protocol: service.ContentModerationProtocolAnthropicMessages, Body: body,
+			})
+			require.NoError(t, err)
+			require.Equal(t, moderation.Text, prompt.ScanText)
+		})
+	}
+}
 
 func TestContentModerationUsesLatestUserTextWithoutInstructionContext(t *testing.T) {
 	tests := []struct {

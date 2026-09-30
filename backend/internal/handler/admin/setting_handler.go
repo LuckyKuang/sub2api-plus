@@ -296,6 +296,7 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		ClientDisconnectConsecutiveBanThreshold:                settings.ClientDisconnectConsecutiveBanThreshold,
 		GlobalIPAccessControlEnabled:                           settings.GlobalIPAccessControlEnabled,
 		CyberSessionBlockEnabled:                               settings.CyberSessionBlockEnabled,
+		CyberPolicyUserAllowlist:                               settings.CyberPolicyUserAllowlist,
 		CyberSessionBlockTTLSeconds:                            settings.CyberSessionBlockTTLSeconds,
 		AffiliateRebateRate:                                    settings.AffiliateRebateRate,
 		AffiliateRebateFreezeHours:                             settings.AffiliateRebateFreezeHours,

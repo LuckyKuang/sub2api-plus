@@ -373,8 +373,9 @@ type UpdateSettingsRequest struct {
 	GlobalIPAccessControlEnabled *bool `json:"global_ip_access_control_enabled"`
 
 	// cyber 会话屏蔽开关 + TTL
-	CyberSessionBlockEnabled    *bool `json:"cyber_session_block_enabled"`
-	CyberSessionBlockTTLSeconds *int  `json:"cyber_session_block_ttl_seconds"`
+	CyberSessionBlockEnabled    *bool   `json:"cyber_session_block_enabled"`
+	CyberPolicyUserAllowlist    *string `json:"cyber_policy_user_allowlist"`
+	CyberSessionBlockTTLSeconds *int    `json:"cyber_session_block_ttl_seconds"`
 
 	// OpenAI fast/flex policy (optional, only updated when provided)
 	OpenAIFastPolicySettings *dto.OpenAIFastPolicySettings `json:"openai_fast_policy_settings,omitempty"`
@@ -1586,6 +1587,14 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			return
 		}
 	}
+
+	// 风控用户白名单：提供时必须可解析（官方 v0.2.10 新增，Plus 侧同样先校验再落盘）。
+	if req.CyberPolicyUserAllowlist != nil {
+		if _, err := service.ParseCyberPolicyUserAllowlist(*req.CyberPolicyUserAllowlist); err != nil {
+			response.BadRequest(c, err.Error())
+			return
+		}
+	}
 	// cyber 会话屏蔽 TTL 校验：提供时必须 > 0
 	if req.CyberSessionBlockTTLSeconds != nil && *req.CyberSessionBlockTTLSeconds <= 0 {
 		response.BadRequest(c, "cyber_session_block_ttl_seconds must be > 0")
@@ -2130,6 +2139,12 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.GlobalIPAccessControlEnabled
 		}(),
+		CyberPolicyUserAllowlist: func() string {
+			if req.CyberPolicyUserAllowlist != nil {
+				return *req.CyberPolicyUserAllowlist
+			}
+			return previousSettings.CyberPolicyUserAllowlist
+		}(),
 		CyberSessionBlockEnabled: func() bool {
 			if req.CyberSessionBlockEnabled != nil {
 				return *req.CyberSessionBlockEnabled
@@ -2555,6 +2570,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		ClientDisconnectConsecutiveBanThreshold: updatedSettings.ClientDisconnectConsecutiveBanThreshold,
 		GlobalIPAccessControlEnabled:            updatedSettings.GlobalIPAccessControlEnabled,
 		CyberSessionBlockEnabled:                updatedSettings.CyberSessionBlockEnabled,
+		CyberPolicyUserAllowlist:                updatedSettings.CyberPolicyUserAllowlist,
 		CyberSessionBlockTTLSeconds:             updatedSettings.CyberSessionBlockTTLSeconds,
 		AccountSchedulingThresholds:             updatedSettings.AccountSchedulingThresholds,
 		AllowUserViewErrorRequests:              updatedSettings.AllowUserViewErrorRequests,

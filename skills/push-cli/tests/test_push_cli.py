@@ -1051,7 +1051,19 @@ class ValidationCleanupTest(unittest.TestCase):
                     "sub2api-validation 2222222222222222 stale\n"
                 )
             if command[: len(prefix) + 1] == [*prefix, "find"]:
-                return "aaaaaaaaaaaaaaaa\nbbbbbbbbbbbbbbbb\ngo\n"
+                self.assertIn(
+                    ("Initialize validation cache root", [*prefix, "mkdir", "-p", "/tmp/sub2api-validation-cache"]),
+                    commands,
+                )
+                self.assertNotIn("-printf", command)
+                self.assertTrue(all("\n" not in arg for arg in command))
+                return (
+                    "/tmp/sub2api-validation-cache/aaaaaaaaaaaaaaaa\n"
+                    "/tmp/sub2api-validation-cache/bbbbbbbbbbbbbbbb\n"
+                    "/tmp/sub2api-validation-cache/go\n"
+                    "/tmp/unrelated/bbbbbbbbbbbbbbbb\n"
+                    "/tmp/sub2api-validation-cache/../../bbbbbbbbbbbbbbbb\n"
+                )
             if command[: len(prefix) + 2] == [*prefix, "docker", "container"]:
                 return ""
             self.fail(f"unexpected command: {command}")
@@ -1069,6 +1081,10 @@ class ValidationCleanupTest(unittest.TestCase):
                 (
                     "Remove stale validation image",
                     [*prefix, "docker", "image", "rm", "sub2api-validation:2222222222222222"],
+                ),
+                (
+                    "Initialize validation cache root",
+                    [*prefix, "mkdir", "-p", "/tmp/sub2api-validation-cache"],
                 ),
                 (
                     "Remove stale validation cache",

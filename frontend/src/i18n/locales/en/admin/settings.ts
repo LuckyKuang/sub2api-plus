@@ -105,6 +105,8 @@ export default {
           disconnectBanThresholdHint: 'Allowed range: 1-1000. Default: 10.',
           cyberSessionBlock: 'Cyber session auto-block',
           cyberSessionBlockHint: 'When enabled, sessions hit by upstream cyber_policy are blocked locally for the TTL and no longer forwarded. Only the offending session is blocked; other sessions on the same key are unaffected.',
+          riskControlUserAllowlist: 'Risk control allowlist',
+          riskControlUserAllowlistHint: 'Enter any email keyword to search for matching users. Allowlisted users will not trigger account bans or local blocking, but upstream restrictions still apply. This feature is typically used for trusted downstream relays.',
           cyberSessionBlockTTL: 'Block TTL (seconds)',
         },
         affiliate: {

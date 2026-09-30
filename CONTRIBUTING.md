@@ -36,7 +36,10 @@ matches the current resolved Go, Node, pnpm, golangci-lint, and GoReleaser pins.
 Retain dependency caches only for the generation matching that image and the
 current Go and pnpm lock inputs. Remove stale Sub2API validation generations;
 never prune unrelated projects or global runtime, builder, image, volume, or
-system resources. The launcher cleans up automatically before each run and
+system resources. On Windows the launcher initializes the WSL cache root and enumerates direct
+child paths without newline-valued command arguments, so cleanup also works
+on a fresh installation and across the Windows/WSL command boundary.
+The launcher cleans up automatically before each run and
 sweeps stopped project containers by the `sub2api-validation` label (a hard
 kill that `--rm` cannot reclaim is still removed); on macOS the cross-project
 Apple Builder cache stays under `deploy/APPLE_CONTAINER.md` manual guidance and

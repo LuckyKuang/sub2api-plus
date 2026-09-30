@@ -11,6 +11,17 @@ func ExtractContentModerationText(protocol string, body []byte) string {
 	return ExtractContentModerationInput(protocol, body).Text
 }
 
+// extractContentModerationKeywordText is the keyword-scan view of the canonical
+// extraction. Plus routes both moderation engines through the single
+// auditcontent extraction contract (AGENTS.md security-audit boundary), so the
+// keyword scan deliberately reuses ExtractContentModerationText instead of the
+// official filterReminders variant, which has no analogue in the Plus
+// extractor. It exists so upstream call sites keep compiling without
+// reintroducing a second extraction path.
+func extractContentModerationKeywordText(protocol string, body []byte) string {
+	return ExtractContentModerationText(protocol, body)
+}
+
 func ExtractContentModerationInput(protocol string, body []byte) ContentModerationInput {
 	input, _, _, _ := extractContentModerationInput(protocol, body)
 	return input
