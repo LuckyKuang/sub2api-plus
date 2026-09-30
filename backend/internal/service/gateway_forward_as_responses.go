@@ -59,16 +59,6 @@ func (s *GatewayService) ForwardAsResponses(
 	originalModel := responsesReq.Model
 	clientStream := responsesReq.Stream
 
-	// 3. Convert Responses → Anthropic
-	anthropicReq, err := apicompat.ResponsesToAnthropicRequest(&responsesReq)
-	if err != nil {
-		return nil, fmt.Errorf("convert responses to anthropic: %w", err)
-	}
-
-	// 3. Force upstream streaming (Anthropic works best with streaming)
-	anthropicReq.Stream = true
-	reqStream := true
-
 	// 4. Model mapping
 	mappedModel := originalModel
 	if account.Type == AccountTypeAPIKey || account.Type == AccountTypeServiceAccount {
@@ -85,7 +75,7 @@ func (s *GatewayService) ForwardAsResponses(
 			mappedModel = normalized
 		}
 	}
-	// Claude 5.5 校验跑在映射后的上游模型上；随后把映射模型写回 responsesReq 并重新
+	// Claude 5.5 校验跑在映射后的上游模型上；随后把映射模型写回 responsesReq 并
 	// 转换，使 Responses → Anthropic 的协议选择（signed thinking / 工具集 beta）
 	// 看到的是最终上游模型。Plus 的账号模型映射与归一化逻辑保持不变。
 	if err := validateClaude55Request(body, mappedModel); err != nil {
@@ -93,7 +83,7 @@ func (s *GatewayService) ForwardAsResponses(
 		return nil, err
 	}
 	responsesReq.Model = mappedModel
-	anthropicReq, err = apicompat.ResponsesToAnthropicRequest(&responsesReq)
+	anthropicReq, err := apicompat.ResponsesToAnthropicRequest(&responsesReq)
 	if err != nil {
 		if isClaude55SignedThinkingModel(mappedModel) {
 			writeResponsesError(c, http.StatusBadRequest, "invalid_request_error", err.Error())
@@ -101,9 +91,9 @@ func (s *GatewayService) ForwardAsResponses(
 		return nil, fmt.Errorf("convert responses to anthropic: %w", err)
 	}
 	anthropicReq.Model = mappedModel
-	// 3. Force upstream streaming (重新转换后 Stream 被重置，需要再次强制)
+	// Force upstream streaming after the final model's conversion.
 	anthropicReq.Stream = true
-	reqStream = true
+	reqStream := true
 
 	logger.L().Debug("gateway forward_as_responses: model mapping applied",
 		zap.Int64("account_id", account.ID),

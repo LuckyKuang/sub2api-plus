@@ -2149,6 +2149,17 @@ func TestNewModelPricingCatalogFallbackAndContext(t *testing.T) {
 				require.InDelta(t, 1000*0.2e-6, cost.CacheReadCost, 1e-10)
 				require.InDelta(t, 500*10e-6, cost.OutputCost, 1e-10)
 				require.False(t, cost.LongContextBillingApplied)
+				// Sonnet's full context window must not inherit GPT-6's >272000 tier.
+				for _, input := range []int{272_000, 272_001, 1_000_000} {
+					tokens.InputTokens = input - tokens.CacheReadTokens - tokens.CacheCreationTokens
+					cost, err := svc.CalculateCost(model, tokens, 1)
+					require.NoError(t, err)
+					require.InDelta(t, float64(tokens.InputTokens)*2e-6, cost.InputCost, 1e-10)
+					require.InDelta(t, 400*2.5e-6+600*4e-6, cost.CacheCreationCost, 1e-10)
+					require.InDelta(t, 1000*0.2e-6, cost.CacheReadCost, 1e-10)
+					require.InDelta(t, 500*10e-6, cost.OutputCost, 1e-10)
+					require.False(t, cost.LongContextBillingApplied)
+				}
 			})
 		}
 	}

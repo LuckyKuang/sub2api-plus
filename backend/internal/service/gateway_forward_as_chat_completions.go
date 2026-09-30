@@ -43,20 +43,11 @@ func (s *GatewayService) ForwardAsChatCompletions(
 	originalModel := ccReq.Model
 	clientStream := ccReq.Stream
 
-	// 2. Convert CC → Responses → Anthropic (chained conversion)
+	// 2. Convert CC → Responses; resolve the upstream model before Anthropic conversion.
 	responsesReq, err := apicompat.ChatCompletionsToResponses(&ccReq)
 	if err != nil {
 		return nil, fmt.Errorf("convert chat completions to responses: %w", err)
 	}
-
-	anthropicReq, err := apicompat.ResponsesToAnthropicRequest(responsesReq)
-	if err != nil {
-		return nil, fmt.Errorf("convert responses to anthropic: %w", err)
-	}
-
-	// 3. Force upstream streaming
-	anthropicReq.Stream = true
-	reqStream := true
 
 	// 4. Model mapping
 	mappedModel := originalModel
@@ -79,11 +70,11 @@ func (s *GatewayService) ForwardAsChatCompletions(
 		writeChatCompletionsError(c, http.StatusBadRequest, "invalid_request_error", err.Error())
 		return nil, err
 	}
-	// 6. 将映射后的模型写回 responsesReq 后重新转换，使 Responses → Anthropic 的协议
+	// 6. 将映射后的模型写回 responsesReq 后转换，使 Responses → Anthropic 的协议
 	// 选择（Claude 5.5 signed thinking / 工具集 beta）看到的是最终上游模型，而不是
 	// 客户端原始模型。Plus 的账号模型映射与归一化逻辑保持不变。
 	responsesReq.Model = mappedModel
-	anthropicReq, err = apicompat.ResponsesToAnthropicRequest(responsesReq)
+	anthropicReq, err := apicompat.ResponsesToAnthropicRequest(responsesReq)
 	if err != nil {
 		if isClaude55SignedThinkingModel(mappedModel) {
 			writeChatCompletionsError(c, http.StatusBadRequest, "invalid_request_error", err.Error())
@@ -91,9 +82,9 @@ func (s *GatewayService) ForwardAsChatCompletions(
 		return nil, fmt.Errorf("convert responses to anthropic: %w", err)
 	}
 	anthropicReq.Model = mappedModel
-	// 3. Force upstream streaming（重新转换后 Stream 被重置，需要再次强制）
+	// Force upstream streaming after the final model's conversion.
 	anthropicReq.Stream = true
-	reqStream = true
+	reqStream := true
 
 	logger.L().Debug("gateway forward_as_chat_completions: model mapping applied",
 		zap.Int64("account_id", account.ID),

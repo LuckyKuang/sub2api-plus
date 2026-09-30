@@ -597,6 +597,36 @@ func TestClaude55ResponsesSignedThinkingBufferedAndStreamed(t *testing.T) {
 	}
 }
 
+func TestClaude55BridgeMapsBeforeModelSpecificInputValidation(t *testing.T) {
+	for _, original := range []string{"claude-opus-5-5", "claude-sonnet-5-5"} {
+		for _, chat := range []bool{false, true} {
+			rec := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(rec)
+			body := `{"model":"` + original + `","input":"hello","temperature":0.7,"tool_choice":"required","tools":[{"type":"function","name":"lookup","function":{"name":"lookup"}}]}`
+			if chat {
+				body = strings.Replace(body, `"input":"hello"`, `"messages":[{"role":"user","content":"hello"}]`, 1)
+			}
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(body))
+			upstream := &anthropicHTTPUpstreamRecorder{resp: &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(namespaceToolAnthropicStream()))}}
+			svc := &GatewayService{cfg: &config.Config{}, httpUpstream: upstream}
+			const mapped = "claude-sonnet-4-5-20250929"
+			account := &Account{ID: 1, Platform: PlatformAnthropic, Type: AccountTypeAPIKey, Credentials: map[string]any{"api_key": "fixture-key", "model_mapping": map[string]any{original: mapped}}}
+			var err error
+			if chat {
+				_, err = svc.ForwardAsChatCompletions(context.Background(), c, account, []byte(body), nil)
+			} else {
+				_, err = svc.ForwardAsResponses(context.Background(), c, account, []byte(body), nil)
+			}
+			require.NoError(t, err)
+			require.NotNil(t, upstream.lastReq)
+			require.Equal(t, mapped, gjson.GetBytes(upstream.lastBody, "model").String())
+			require.Equal(t, "any", gjson.GetBytes(upstream.lastBody, "tool_choice.type").String())
+			require.InDelta(t, 0.7, gjson.GetBytes(upstream.lastBody, "temperature").Float(), 1e-12)
+			require.True(t, gjson.GetBytes(upstream.lastBody, "stream").Bool())
+		}
+	}
+}
+
 func TestClaude55BridgeUsesMappedModelBeforeThinkingConversion(t *testing.T) {
 	for _, model := range []string{"claude-opus-5-5", "claude-sonnet-5-5"} {
 		for _, chat := range []bool{false, true} {

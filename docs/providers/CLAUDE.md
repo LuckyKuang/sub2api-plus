@@ -1,5 +1,16 @@
 # Claude / Anthropic
 
+## Model mappings and protocol conversion
+
+Chat Completions and Responses bridges resolve the account's final upstream
+model before Anthropic conversion and model-specific input validation. A
+public alias mapped to Claude 5.5 receives that model's signed-thinking and
+parameter rules. A Claude 5.5 client model mapped to an older Claude model
+uses the destination model's rules; the original name cannot prematurely
+reject temperature or forced tool use supported by that destination. The
+gateway forces upstream streaming after this single conversion and retains
+the original client model for downstream protocol behavior and accounting.
+
 ## Native reset-credit status
 
 Administrators can query an account's native Claude reset-credit availability

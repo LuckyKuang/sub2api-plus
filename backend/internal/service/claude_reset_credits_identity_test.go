@@ -19,6 +19,12 @@ type resetIdentityTokenStub struct {
 	acquire func(context.Context, *Account)
 }
 
+type resetIdentityAccountStub struct{ account *Account }
+
+func (s resetIdentityAccountStub) GetByID(context.Context, int64) (*Account, error) {
+	return s.account, nil
+}
+
 func (s resetIdentityTokenStub) GetAccessToken(ctx context.Context, account *Account) (string, error) {
 	s.acquire(ctx, account)
 	return "synthetic-token", nil
@@ -51,7 +57,8 @@ func TestClaudeResetCreditsOutboundIdentityPriorityAndTransport(t *testing.T) {
 				account.Credentials[outboundIdentityCredential] = OutboundIdentitySelection{Preset: "claude", UserAgent: "inbound/999", Version: "3.9.2"}
 			case "invalid-global":
 				config.Profiles["claude"] = OutboundIdentitySelection{Preset: "claude", UserAgent: "inbound/999", Version: "3.9.1"}
-				repo := svc.settingRepo.(*outboundIdentityTestRepo)
+				repo, ok := svc.settingRepo.(*outboundIdentityTestRepo)
+				require.True(t, ok)
 				repo.values[SettingKeyOutboundIdentity] = `{"profiles":{"claude":{"preset":"claude","user_agent":"inbound/999","version":"3.9.1"}}}`
 				svc.outboundIdentityCache.Store(&cachedOutboundIdentitySettings{settings: config})
 			}
@@ -76,7 +83,7 @@ func TestClaudeResetCreditsOutboundIdentityPriorityAndTransport(t *testing.T) {
 				require.Equal(t, "oauth-2025-04-20", req.Header.Get("Anthropic-Beta"))
 				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{}`))}, nil
 			}))}}
-			s := &ClaudeResetCreditService{accounts: resetAccountStub{account}, tokens: tokens, now: time.Now}
+			s := &ClaudeResetCreditService{accounts: resetIdentityAccountStub{account}, tokens: tokens, now: time.Now}
 			s.do = func(req *http.Request, proxy string) (*http.Response, error) {
 				require.Empty(t, proxy)
 				selected, ok := outboundidentity.FromContext(req.Context())
