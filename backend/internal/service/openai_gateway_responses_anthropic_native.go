@@ -255,6 +255,10 @@ func (s *OpenAIGatewayService) handleResponsesBufferedFromNativeAnthropic(
 					finalResp.Content[idx].Text += event.Delta.Text
 				case "thinking_delta":
 					finalResp.Content[idx].Thinking += event.Delta.Thinking
+				case "signature_delta":
+					// 上游 v0.2.10 新增：与 handleResponsesBufferedStreamingResponse
+					// 同款，缓冲路径必须累积签名分片。
+					finalResp.Content[idx].Signature += event.Delta.Signature
 				case "input_json_delta":
 					finalResp.Content[idx].Input = appendRawJSON(finalResp.Content[idx].Input, event.Delta.PartialJSON)
 				}

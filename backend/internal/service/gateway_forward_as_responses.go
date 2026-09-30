@@ -457,6 +457,11 @@ func (s *GatewayService) handleResponsesBufferedStreamingResponse(
 					finalResp.Content[idx].Text += event.Delta.Text
 				case "thinking_delta":
 					finalResp.Content[idx].Thinking += event.Delta.Thinking
+				case "signature_delta":
+					// 上游 v0.2.10 新增：Claude 5.5 signed-thinking 的签名分片必须在
+					// 缓冲路径也累积，否则 AnthropicToResponsesResponse 看不到
+					// signature，reasoning item 会被降级成普通 summary。
+					finalResp.Content[idx].Signature += event.Delta.Signature
 				case "input_json_delta":
 					finalResp.Content[idx].Input = appendRawJSON(finalResp.Content[idx].Input, event.Delta.PartialJSON)
 				}

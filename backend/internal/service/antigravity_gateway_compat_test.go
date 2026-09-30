@@ -1003,11 +1003,14 @@ func TestAntigravityCompatPreContentKeepalive(t *testing.T) {
 			require.Empty(t, recorder.Body.String())
 			session.writePreContentKeepalive(start.Add(15 * time.Second))
 			require.Equal(t, ": ping\n\n", recorder.Body.String())
-			require.Nil(t, session.firstTokenMs)
+			require.Nil(t, session.timing.firstTokenMs)
 			session.consumeClaudeData("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"hello"}}`)
 			require.True(t, session.hasMeaningfulData())
-			require.NotNil(t, session.firstTokenMs)
-			require.GreaterOrEqual(t, *session.firstTokenMs, 20000)
+			// Plus 的合同：first token 由 responseCommitted 之后的 streamOutputTiming
+			// 记录，提交前刻意不记（见 hasMeaningfulData 的说明），因此这里断言的
+			// 是 timing 而非上游实现里的裸 firstTokenMs 字段。
+			require.NotNil(t, session.timing.firstTokenMs)
+			require.GreaterOrEqual(t, *session.timing.firstTokenMs, 20000)
 			require.Contains(t, recorder.Body.String(), tt.want)
 			require.Greater(t, strings.Index(recorder.Body.String(), tt.want), strings.Index(recorder.Body.String(), ": ping"))
 			before := recorder.Body.String()

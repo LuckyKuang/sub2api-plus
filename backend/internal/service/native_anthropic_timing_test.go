@@ -45,7 +45,7 @@ func TestNativeAnthropicTimingAcrossPlatformsAndAdapters(t *testing.T) {
 				case "messages":
 					result, err = svc.handleNativeAnthropicStreamingResponse(context.Background(), resp, c, account, "model", "model", "model", nil, start)
 				case "chat/completions":
-					result, err = svc.handleCCStreamingFromNativeAnthropic(resp, c, "model", "model", "model", nil, start, true)
+					result, err = svc.handleCCStreamingFromNativeAnthropic(resp, c, "model", "model", "model", nil, start)
 				case "responses":
 					result, err = svc.handleResponsesStreamingFromNativeAnthropic(resp, c, "model", "model", "model", nil, start, apicompat.ResponsesClientToolMapping{})
 				}
@@ -83,7 +83,7 @@ func TestNativeAnthropicAdaptersRequireActualUpstreamCompletion(t *testing.T) {
 				if endpoint == "responses" {
 					result, err = svc.handleResponsesStreamingFromNativeAnthropic(resp, c, "model", "model", "model", nil, time.Now(), apicompat.ResponsesClientToolMapping{})
 				} else {
-					result, err = svc.handleCCStreamingFromNativeAnthropic(resp, c, "model", "model", "model", nil, time.Now(), true)
+					result, err = svc.handleCCStreamingFromNativeAnthropic(resp, c, "model", "model", "model", nil, time.Now())
 				}
 				require.NoError(t, err)
 				require.NotNil(t, result)

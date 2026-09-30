@@ -112,10 +112,8 @@ type antigravityCompatStreamSession struct {
 	writer                      *antigravityClientWriter
 	usage                       *ClaudeUsage
 	pendingEvents               []apicompat.AnthropicStreamEvent
-	firstTokenMs                *int
 	timing                      streamOutputTiming
 	startTime                   time.Time
-	meaningfulData              bool
 	preContentKeepaliveSent     bool
 	preContentKeepaliveInterval time.Duration
 	responseCommitted           bool

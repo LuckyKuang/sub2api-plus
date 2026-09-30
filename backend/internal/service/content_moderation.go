@@ -2323,6 +2323,12 @@ func (s *ContentModerationService) claimModerationEndpoint(ctx context.Context, 
 	now := time.Now()
 	s.endpointHealthMu.Lock()
 	defer s.endpointHealthMu.Unlock()
+	// 直接按值构造 ContentModerationService 的调用方（测试、内部装配路径）不会经过
+	// NewContentModerationService，map 仍为 nil。读 nil map 安全，写入会 panic，
+	// 因此这里惰性补齐。
+	if s.endpointHealth == nil {
+		s.endpointHealth = make(map[string]*contentModerationEndpointHealth)
+	}
 	state := s.endpointHealth[endpoint.ID]
 	if state == nil {
 		state = &contentModerationEndpointHealth{}
