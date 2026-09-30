@@ -12,9 +12,9 @@ admin setting has been removed; `timing_version` identifies verified usage data.
 
 ## GPT-6 Astra
 
-The gateway uses OpenAI's canonical `gpt-6-astra` model ID. For Plus client
-compatibility, the legacy `gpt-6` spelling is accepted only as an alias and is
-canonicalized to `gpt-6-astra`; it is not a separate model or billing identity.
+The gateway uses OpenAI's canonical `gpt-6-astra` model ID. Bare `gpt-6`
+remains an independent, unknown model spelling and does not inherit Astra
+compatibility, catalog capabilities, cache identity, or billing policy.
 Reasoning-level suffixes are never treated as model IDs.
 Astra accepts `low`, `medium`, `high`, `xhigh`, and `max` reasoning effort;
 it does not accept `none` or `minimal`. Configured Codex catalogs default it
@@ -34,7 +34,11 @@ catalog presentation order does not silently change the connectivity probe.
 
 Default API cost accounting uses $10 input, $1 cached input, $12.50 cache
 write, and $50 output per million tokens. Flex is half of Standard and Fast is
-twice Standard. OpenAI publishes Batch at half of Standard through its separate
+twice Standard. Astra Ultrafast costs six times Standard independently of a
+channel's Fast multiplier. Official Platform API-key catalogs advertise it;
+OAuth catalogs require an explicit upstream account capability rather than a
+subscription-plan label. Native account-provided service tiers remain authoritative.
+OpenAI publishes Batch at half of Standard through its separate
 Batch API; this Responses gateway does not infer Batch from `service_tier`.
 When total input is 272,001 tokens or more, the whole-request long-context
 policy multiplies all ordinary input, cache-read input, and cache-write input
@@ -51,6 +55,31 @@ not available with EU data residency and does not carry a latency SLA.
 Responses features such as async tool calls, `configuration_update`, and
 mid-turn WebSocket steering pass through the gateway without Astra-specific
 rewriting.
+
+## GPT-6.1 Sol and GPT-6 Sol/Luna
+
+`gpt-6.1-sol`, `gpt-6-sol`, and `gpt-6-luna` retain separate model and billing
+identities. Registered effort suffixes and provider-qualified spellings resolve
+to the same SKU; preview names and unknown suffixes do not inherit these rules.
+Live account metadata remains authoritative. Offline Sol/Luna catalogs use the
+existing GPT-5.6 context template; GPT-6.1 Sol uses its bundled Codex metadata,
+with a 272,000 active context and 872,000 maximum configuration override.
+
+GPT-6.1 Sol defaults to `low` and accepts `max` separately from `xhigh`.
+Its catalog `ultra` level delegates with `xhigh` and is not an upstream effort.
+Explicit `none`/`minimal` or disabled thinking is rejected after model mapping
+and before protocol conversion. Tool calls require Responses; Chat-only
+fallbacks return a client error before sending upstream. GPT-6 Sol/Luna allow
+Chat tool calls only with `reasoning_effort=none`. With reasoning enabled, these
+families drop incompatible sampling and logprob fields in Responses conversion.
+
+All three families share the supported Responses prompt-cache contract. The
+fallback Standard input/output/cache-write/cache-read prices per million tokens
+are respectively $2/$10/$2.50/$0.10 for GPT-6.1 Sol, $2/$10/$2.50/$0.20 for
+GPT-6 Sol, and $0.10/$0.50/$0.125/$0.01 for GPT-6 Luna. Fast is 2x and Flex is
+0.5x. At more than 272,000 total input tokens, whole-request input/cache rates
+are 2x and output rates 1.5x. Explicit channel prices, including zero cache
+write, retain precedence; one SKU cannot fall back to another family's card.
 
 ## Prompt Cache Identity and Usage
 
@@ -136,7 +165,8 @@ over to another account and removes the old account's response ID before
 forwarding. Tool-output continuations without complete call context remain on
 the response owner and keep the existing fail-closed OAuth ownership checks.
 
-`prompt_cache_options` is forwarded only for GPT-6 Astra and GPT-5.6-family
+`prompt_cache_options` is forwarded only for GPT-6 Astra, GPT-6.1 Sol,
+GPT-6 Sol/Luna, and GPT-5.6-family
 OpenAI Platform API-key Responses/Compact traffic. ChatGPT OAuth and older or
 unknown model families have that field removed. Deprecated
 `prompt_cache_retention` is removed on every path. Current callers should use

@@ -54,3 +54,73 @@ counts of redeemable grants. Percent-used values outside 0–100 are omitted.
 
 Invalid account IDs and repository lookup errors use the existing admin error
 handling. Error messages do not include raw upstream payloads or tokens.
+
+## Native reset-credit redemption
+
+Administrators redeem the next available credit with
+`POST /api/v1/admin/accounts/:id/claude/reset-credits/redeem`. The route uses
+the same admin authentication, audit logging and compliance guard as the
+Codex reset-quota route. The request has no payload; the server selects the
+grant from a fresh eligibility query. An `Idempotency-Key` is required for
+each operator confirmation. Reusing a key replays its stored result without
+sending another claim. A new confirmation requires a new key.
+
+The same Anthropic OAuth and `user:profile` requirements apply. After acquiring
+an account lease, the service reads `/api/oauth/profile` to resolve a validated
+organization UUID, acquires an organization lease shared by duplicate local
+accounts, then reads fresh reset-credit availability. It sends a single
+`POST /api/organizations/:organization/reset_rate_limits` with the server-selected
+grant, program `cedar_ember`, and a deterministic operation identifier. A
+successful known outcome triggers a fresh status query for the updated credits.
+
+Token acquisition, OAuth refresh, profile lookup, eligibility query, claim and
+status refresh retain the credential-owning account's first trusted identity
+snapshot. Account or global settings changes during the operation take effect
+on a subsequent operation. Inbound identity headers and SDK defaults cannot
+replace that snapshot. All requests render only Claude identity declarations,
+including `X-App: cli` and the fixed Stainless fingerprint, through the same
+redirect-disabled transport. No cookies or caller session headers are forwarded.
+
+The result contains `outcome`, optional sanitized `reason`, `cleared`,
+`cooldown_until`, updated `credits`, and `replayed`. Known outcomes are `reset`,
+`already_used`, `not_limited`, `cooldown`, `ineligible` and `unknown`. Only known
+reason codes and cleared-window names are returned; grant, organization and
+upstream operation IDs and OAuth credentials never appear in the result or
+durable result records.
+
+Both durable idempotency storage and account/organization locks are mandatory.
+Before sending a claim, the service persists an unknown-outcome organization
+fence. Transport errors, unexpected statuses or malformed/unknown results leave
+that fence in place: the same confirmation never resends and new confirmations
+are blocked for 24 hours. An explicit well-formed `unavailable` outcome fences
+the organization for 15 minutes. After the fence expires, a fresh eligibility
+query is authoritative. Result-persistence failure returns `unknown` with
+`result_persistence_failed`; the pre-send fence remains conservative.
+Malformed stored fences, unknown stored outcomes/reasons and missing timestamps
+require reconciliation and never authorize a new claim or an unsafe replay.
+Accepted operations continue under a 60-second execution deadline independently
+of caller cancellation; outcome persistence uses a separate short deadline.
+Both deadlines fit within the 90-second account/organization leases.
+
+| HTTP status | Error code | Meaning |
+| --- | --- | --- |
+| 400 | `IDEMPOTENCY_KEY_REQUIRED` / `IDEMPOTENCY_KEY_INVALID` | Missing or invalid confirmation key. |
+| 503 | `IDEMPOTENCY_STORE_UNAVAILABLE` | Durable coordination is unavailable. |
+| 503 | `CLAUDE_RESET_LOCK_UNAVAILABLE` | Lock storage is unavailable. |
+| 409 | `CLAUDE_RESET_BUSY` | Another claim holds the account or organization lease. |
+| 503 / 502 | `CLAUDE_RESET_PROFILE_FAILED` | Profile transport fails or its status/payload is invalid. |
+| 502 | `CLAUDE_RESET_ORGANIZATION_INVALID` | Profile contains no valid organization UUID. |
+| 409 | `CLAUDE_RESET_NOT_AVAILABLE` | No eligible next grant exists at claim time. |
+| 409 | `CLAUDE_RESET_UNRESOLVED` | Previous claim is unconfirmed or its fence needs reconciliation. |
+| 409 | `CLAUDE_RESET_UPSTREAM_UNAVAILABLE` | Explicit upstream unavailability is still fenced. |
+
+Query, account-validation and idempotency errors retain their existing typed
+responses. A sent claim with an uncertain result returns an `unknown` outcome
+instead of encouraging an automatic retry of the irreversible operation.
+
+The admin cell invalidates its previous availability snapshot after a claim.
+Unknown outcomes and explicit pre-claim refusals require the operator to query
+the count again before opening a new confirmation; the server's durable fence
+still decides whether a subsequent redemption is permitted. Transport and
+idempotency-in-progress failures retain the confirmation key so a retry replays
+the same operation instead of creating another claim.

@@ -106,6 +106,37 @@ describe('AccountUsageCell', () => {
     })
   })
 
+  it('discards an old account usage response triggered by Claude redemption', async () => {
+    const initialUsage = { source: 'passive', five_hour: { utilization: 12 } }
+    let resolve!: (value: { source: string; five_hour: { utilization: number } }) => void
+    getUsage.mockResolvedValueOnce(initialUsage)
+    const wrapper = mount(AccountUsageCell, {
+      props: {
+        account: makeAccount({ id: 9901, platform: 'anthropic', type: 'oauth', extra: {} })
+      },
+      global: {
+        stubs: {
+          ClaudeResetCreditsCell: {
+            emits: ['redeemed'],
+            template: '<button data-test="redeemed" @click="$emit(\'redeemed\')">reset</button>'
+          },
+          UsageProgressBar: true,
+          AccountQuotaInfo: true
+        }
+      }
+    })
+    await flushPromises()
+    getUsage.mockReturnValueOnce(new Promise(r => { resolve = r }))
+    await wrapper.get('[data-test="redeemed"]').trigger('click')
+    expect(getUsage).toHaveBeenLastCalledWith(9901, 'active', true)
+    const countBefore = wrapper.emitted('usage-loaded')?.length ?? 0
+
+    await wrapper.setProps({ account: makeAccount({ id: 9902, platform: 'anthropic', type: 'oauth', extra: {} }) })
+    resolve({ source: 'active', five_hour: { utilization: 99 } })
+    await flushPromises()
+    expect(wrapper.emitted('usage-loaded')?.length ?? 0).toBe(countBefore)
+  })
+
   it('renders eligible Ollama Cloud state and forwards query updates', async () => {
     const wrapper = mount(AccountUsageCell, {
       props: {

@@ -144,11 +144,18 @@ func TestPlatformCoverage_Anthropic(t *testing.T) {
 	require.InDelta(t, 25e-6, *opus5.Pricing.OutputPrice, 1e-15)
 	require.InDelta(t, 6.25e-6, *opus5.Pricing.CacheWritePrice, 1e-15)
 
-	// 目录里没有 claude-sonnet-5：保持可见且 manual，不得套 sonnet-4 家族价。
+	// Sonnet 5 has its own published card; sync and add share exact SKU prices.
 	sonnet5 := byModel["claude-sonnet-5"]
-	require.Equal(t, ChannelPricingStatusManualRequired, sonnet5.Status)
-	require.Equal(t, ReasonExactPriceUnavailable, sonnet5.ReasonCode)
-	require.Nil(t, sonnet5.Pricing)
+	require.Equal(t, ChannelPricingStatusPriced, sonnet5.Status)
+	require.Equal(t, ChannelPricingSourceReleaseCatalog, sonnet5.Source)
+	require.Empty(t, sonnet5.ReasonCode)
+	require.InDelta(t, 2e-6, *sonnet5.Pricing.InputPrice, 1e-15)
+	require.InDelta(t, 10e-6, *sonnet5.Pricing.OutputPrice, 1e-15)
+	require.InDelta(t, 2.5e-6, *sonnet5.Pricing.CacheWritePrice, 1e-15)
+	require.InDelta(t, 4e-6, *sonnet5.Pricing.CacheWrite1hPrice, 1e-15)
+	require.InDelta(t, 0.2e-6, *sonnet5.Pricing.CacheReadPrice, 1e-15)
+	single := mustResolve(t, svc, PlatformAnthropic, "claude-sonnet-5")
+	require.Equal(t, sonnet5, single)
 }
 
 // Gemini：同一 SKU 可以只存在于 Vertex 标签下，不能因 provider 标签不同被排除；

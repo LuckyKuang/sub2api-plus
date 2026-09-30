@@ -1,16 +1,17 @@
-//go:build unit
+//go:build unit || !integration
 
 package service
 
 import (
 	"context"
 	"encoding/json"
-	"github.com/stretchr/testify/require"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 type resetAccountStub struct{ account *Account }

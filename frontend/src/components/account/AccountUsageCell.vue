@@ -88,7 +88,7 @@
         while usage is still loading survives the usage response. The local query
         button shares its row once usage data exists.
       -->
-      <ClaudeResetCreditsCell :account="account" class="mt-1">
+      <ClaudeResetCreditsCell :account="account" class="mt-1" @redeemed="loadActiveUsage">
         <template v-if="usageInfo" #pre-actions>
           <span
             v-if="usageInfo.source === 'passive'"
@@ -1478,14 +1478,23 @@ const attachVisibilityObserver = () => {
   visibilityObserver.observe(rootRef.value)
 }
 
+let activeUsageRequestID = 0
+watch(() => [props.account.id, props.account.platform, props.account.type], () => {
+  activeUsageRequestID++
+  activeQueryLoading.value = false
+})
+
 const loadActiveUsage = async () => {
+  const requestID = ++activeUsageRequestID
+  const accountID = props.account.id
   activeQueryLoading.value = true
   try {
-    usageInfo.value = await adminAPI.accounts.getUsage(props.account.id, 'active', true)
+    const result = await adminAPI.accounts.getUsage(accountID, 'active', true)
+    if (!unmounted.value && requestID === activeUsageRequestID) usageInfo.value = result
   } catch (e: any) {
-    console.error('Failed to load active usage:', e)
+    if (!unmounted.value && requestID === activeUsageRequestID) console.error('Failed to load active usage:', e)
   } finally {
-    activeQueryLoading.value = false
+    if (!unmounted.value && requestID === activeUsageRequestID) activeQueryLoading.value = false
   }
 }
 

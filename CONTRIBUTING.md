@@ -119,6 +119,26 @@ bounded concurrency and report step/lane wall-clock durations; no check is
 removed. Host-side execution of any validation is forbidden. For diagnosis or a
 same-commit timing baseline, pass `--serial` to `check`.
 
+Linked worktrees use the same launcher. It also mounts their shared Git
+metadata so base/head and policy checks can inspect the actual branch. On
+Windows, use relative Git worktree metadata pointers with forward slashes so
+both Git for Windows and Git inside WSL resolve them. Other working trees and
+live Compose deployments are not mounted by this additional Git mount.
+
+If a Windows loopback proxy works from WSL but cannot be reached reliably
+through Docker's bridge, set `SUB2API_VALIDATION_WSL_NETWORK=host` for the
+validation launcher process. This explicit WSL2-only option shares WSL's
+network namespace, allowing its existing loopback proxy; all checks still run
+inside the pinned Docker container. It does not start or reconfigure Compose
+services. Leave it unset to use the default Docker network.
+
+For repository integration tests without a nested Docker API, the launcher
+forwards `SUB2API_TEST_POSTGRES_DSN`, `SUB2API_TEST_REDIS_ADDR`, and optional
+`SUB2API_TEST_REDIS_PASSWORD` by environment name, keeping credentials out of
+command logs. Supply disposable, isolated services reachable from the
+validation container; the integration suite applies migrations and writes
+fixtures. Remove these services and their data after the validation attempt.
+
 The `release-finalization` profile is not a general fast option. Only
 `release-cli finalize` may request it for a verified published tag and a tree
 that can be regenerated exactly from its recorded base. Both profiles bind the

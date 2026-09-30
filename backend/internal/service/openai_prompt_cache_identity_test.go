@@ -397,3 +397,18 @@ func TestOpenAIResponsesCompactPromptCacheFinalization(t *testing.T) {
 		})
 	}
 }
+
+func TestGPT6CanonicalFamiliesPreservePlatformPromptCacheOptions(t *testing.T) {
+	for _, model := range []string{"gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna"} {
+		body := []byte(`{"model":"` + model + `","prompt_cache_options":{"ttl":"30m"}}`)
+		apiKey := &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}
+		normalized, _, err := normalizeOpenAIPromptCacheControlsForAccount(body, apiKey, model)
+		require.NoError(t, err)
+		require.Equal(t, "30m", gjson.GetBytes(normalized, "prompt_cache_options.ttl").String())
+		oauth := &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth}
+		normalized, _, err = normalizeOpenAIPromptCacheControlsForAccount(body, oauth, model)
+		require.NoError(t, err)
+		require.False(t, gjson.GetBytes(normalized, "prompt_cache_options").Exists())
+	}
+	require.False(t, shouldPreserveOpenAIPromptCacheOptions(&Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}, "gpt-6"))
+}

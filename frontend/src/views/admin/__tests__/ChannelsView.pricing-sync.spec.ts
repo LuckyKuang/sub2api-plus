@@ -151,6 +151,37 @@ const lunaCard = priced('gpt-6-luna', {
   fast_multiplier: 2,
 })
 
+const sonnet5Card: ModelPricingReference = {
+  model: 'claude-sonnet-5',
+  matched_model: 'claude-sonnet-5',
+  platform: 'anthropic',
+  status: 'priced',
+  source: 'release_catalog',
+  reason_code: '',
+  pricing: card({
+    platform: 'anthropic',
+    models: ['claude-sonnet-5'],
+    input_price: 2e-6,
+    output_price: 10e-6,
+    cache_write_price: 2.5e-6,
+    cache_write_1h_price: 4e-6,
+    cache_read_price: 0.2e-6,
+  }),
+}
+
+function expectSonnet5Prices(wrapper: VueWrapper) {
+  expect(wrapper.props('entry').models).toEqual(['claude-sonnet-5'])
+  for (const [label, value] of [
+    ['inputPrice', '2'],
+    ['outputPrice', '10'],
+    ['cacheWrite5mPrice', '2.5'],
+    ['cacheWrite1hPrice', '4'],
+    ['cacheReadPrice', '0.2'],
+  ]) {
+    expect(priceInput(wrapper, `admin.channels.form.${label}`).value).toBe(value)
+  }
+}
+
 function mountView() {
   return mount(ChannelsView, {
     global: {
@@ -190,6 +221,11 @@ async function enableOpenAI(wrapper: VueWrapper) {
   await flushPromises()
 }
 
+async function enableAnthropic(wrapper: VueWrapper) {
+  await wrapper.findAll('input[type="checkbox"]')[0]!.setValue(true)
+  await flushPromises()
+}
+
 function syncButton(wrapper: VueWrapper) {
   return wrapper.findAll('button').find(b => b.text().includes('admin.channels.form.syncLatestModels'))!
 }
@@ -214,6 +250,68 @@ beforeEach(() => {
 })
 
 describe('ChannelsView pricing sync', () => {
+  it.each(['add', 'sync'] as const)('fills exact Sonnet 5 reference prices via %s without borrowing Sonnet 5.5', async (path) => {
+    // Deliberately different synthetic reference prices expose any accidental
+    // reuse across model rows; these are not assertions of Sonnet 5.5's tariff.
+    const sonnet55: ModelPricingReference = {
+      ...sonnet5Card,
+      model: 'claude-sonnet-5-5',
+      matched_model: 'claude-sonnet-5-5',
+      pricing: card({ platform: 'anthropic', models: ['claude-sonnet-5-5'], input_price: 3e-6, output_price: 15e-6 }),
+    }
+    channelsSync.mockResolvedValue(snapshot([sonnet5Card, sonnet55], { platform: 'anthropic' }))
+    modelDefaultPricing.mockResolvedValue(sonnet5Card)
+    const wrapper = mountView()
+    await flushPromises()
+    await openCreateDialog(wrapper)
+    await enableAnthropic(wrapper)
+
+    if (path === 'sync') {
+      await syncButton(wrapper).trigger('click')
+      await flushPromises()
+      expect(channelsSync).toHaveBeenCalledWith('anthropic')
+      const cards = cardWrappers(wrapper)
+      expect(cards).toHaveLength(2)
+      expectSonnet5Prices(cards.find(c => c.props('entry').models[0] === 'claude-sonnet-5')!)
+      const newer = cards.find(c => c.props('entry').models[0] === 'claude-sonnet-5-5')!
+      expect(priceInput(newer, 'admin.channels.form.inputPrice').value).toBe('3')
+      expect(priceInput(newer, 'admin.channels.form.outputPrice').value).toBe('15')
+    } else {
+      await addPricingRuleButton(wrapper).trigger('click')
+      await flushPromises()
+      await cardWrappers(wrapper)[0]!.findComponent({ name: 'ModelTagInput' }).vm.$emit('update:models', ['claude-sonnet-5'])
+      await flushPromises()
+      expect(modelDefaultPricing).toHaveBeenCalledWith('anthropic', 'claude-sonnet-5')
+      expectSonnet5Prices(cardWrappers(wrapper)[0]!)
+    }
+    expect(cardWrappers(wrapper).some(c => c.props('entry').models.includes('claude-connect-5'))).toBe(false)
+  })
+
+  it('keeps manual Sonnet 5 overrides including explicit zero when syncing the exact model', async () => {
+    channelsSync.mockResolvedValue(snapshot([sonnet5Card], { platform: 'anthropic' }))
+    const wrapper = mountView()
+    await flushPromises()
+    await openCreateDialog(wrapper)
+    await enableAnthropic(wrapper)
+    await addPricingRuleButton(wrapper).trigger('click')
+    await flushPromises()
+    const manual = cardWrappers(wrapper)[0]!
+    manual.vm.$emit('update', { ...manual.props('entry'), input_price: '0', output_price: '7', cache_write_1h_price: '9' })
+    await flushPromises()
+    await cardWrappers(wrapper)[0]!.findComponent({ name: 'ModelTagInput' }).vm.$emit('update:models', ['claude-sonnet-5'])
+    await flushPromises()
+    expect(modelDefaultPricing).not.toHaveBeenCalled()
+
+    await syncButton(wrapper).trigger('click')
+    await flushPromises()
+    expect(channelsSync).toHaveBeenCalledWith('anthropic')
+    expect(cardWrappers(wrapper)).toHaveLength(1)
+    expect(priceInput(cardWrappers(wrapper)[0]!, 'admin.channels.form.inputPrice').value).toBe('0')
+    expect(priceInput(cardWrappers(wrapper)[0]!, 'admin.channels.form.outputPrice').value).toBe('7')
+    expect(priceInput(cardWrappers(wrapper)[0]!, 'admin.channels.form.cacheWrite1hPrice').value).toBe('9')
+    expect(showSuccess).toHaveBeenLastCalledWith('admin.channels.form.syncModelsAlreadyUpToDate')
+  })
+
   it('creates one independently priced rule per synced model', async () => {
     channelsSync.mockResolvedValue(snapshot([solCard, lunaCard]))
     const wrapper = mountView()

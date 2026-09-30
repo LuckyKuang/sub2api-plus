@@ -76,6 +76,10 @@ type ClaudeResetCreditService struct {
 	proxies  ProxyRepository
 	do       func(*http.Request, string) (*http.Response, error)
 	now      func() time.Time
+
+	// Redemption only; both are mandatory and never fail open.
+	idempotency *IdempotencyCoordinator
+	locks       LeaderLockCache
 }
 
 type claudeResetCreditTransport struct{ base http.RoundTripper }
@@ -152,6 +156,17 @@ func (s *ClaudeResetCreditService) query(ctx context.Context, id int64) (*Claude
 	if err != nil {
 		return nil, err
 	}
+	ctx = WithAccountOutboundIdentity(ctx, account)
+	block, err := s.fetchBlock(ctx, account, token, proxy)
+	if err != nil {
+		return nil, err
+	}
+	return projectClaudeResetCredits(block, s.now()), nil
+}
+
+// fetchBlock returns the raw cedar_ember block (nil when absent). It carries grant
+// IDs, so it must never leave the service.
+func (s *ClaudeResetCreditService) fetchBlock(ctx context.Context, account *Account, token, proxy string) (*claudeResetBlock, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, claudeResetUsageURL, nil)
 	if err != nil {
 		return nil, err
@@ -166,7 +181,7 @@ func (s *ClaudeResetCreditService) query(ctx context.Context, id int64) (*Claude
 		return nil, infraerrors.New(http.StatusBadGateway, "CLAUDE_RESET_QUERY_FAILED", fmt.Sprintf("reset status upstream HTTP %d", resp.StatusCode))
 	}
 	var envelope map[string]json.RawMessage
-	if err = json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&envelope); err != nil || envelope == nil {
+	if err = decodeClaudeResetResponse(resp.Body, &envelope); err != nil || envelope == nil {
 		return nil, infraerrors.New(http.StatusBadGateway, "CLAUDE_RESET_STATUS_INVALID", "invalid reset status")
 	}
 	if _, ok := envelope["error"]; ok {
@@ -179,7 +194,22 @@ func (s *ClaudeResetCreditService) query(ctx context.Context, id int64) (*Claude
 			return nil, infraerrors.New(http.StatusBadGateway, "CLAUDE_RESET_STATUS_INVALID", "invalid reset grants")
 		}
 	}
-	return projectClaudeResetCredits(block, s.now()), nil
+	return block, nil
+}
+
+// A successful status or claim must be one complete bounded JSON document.
+// In particular, a valid prefix followed by malformed data cannot confirm an
+// irreversible claim and release its organization fence.
+func decodeClaudeResetResponse(body io.Reader, target any) error {
+	const maxBytes = 1 << 20
+	raw, err := io.ReadAll(io.LimitReader(body, maxBytes+1))
+	if err != nil {
+		return err
+	}
+	if len(raw) > maxBytes {
+		return fmt.Errorf("reset response exceeds size limit")
+	}
+	return json.Unmarshal(raw, target)
 }
 
 func (s *ClaudeResetCreditService) Query(ctx context.Context, id int64) (*ClaudeResetCredits, error) {
@@ -197,11 +227,11 @@ func projectClaudeResetCredits(b *claudeResetBlock, now time.Time) *ClaudeResetC
 	}
 	r.WeeklyResetsAt = b.WeeklyResetsAt
 	for _, g := range b.Grants {
-		if !claudeResetGrantIDPattern.MatchString(g.ID) || len(g.Clears) == 0 || g.ResetsLeft <= 0 || g.Paused || (g.StartsAt != nil && now.Before(*g.StartsAt)) || (g.EndsAt != nil && !now.Before(*g.EndsAt)) {
+		if !claudeResetGrantHeld(g, now) {
 			continue
 		}
 		requires := g.UseRequiresLimit == nil || *g.UseRequiresLimit
-		usable := b.Eligible && g.UsableNow && g.ID == b.NextGrantID && (!requires || b.AtLimit) && len(g.Blocking) == 0 && (b.CooldownUntil == nil || !now.Before(*b.CooldownUntil))
+		usable := claudeResetGrantRedeemable(b, g, now)
 		used := map[string]float64{}
 		for k, v := range g.PercentUsed {
 			if v >= 0 && v <= 100 {
@@ -214,4 +244,22 @@ func projectClaudeResetCredits(b *claudeResetBlock, now time.Time) *ClaudeResetC
 		}
 	}
 	return r
+}
+
+// claudeResetGrantHeld reports whether a grant is a live, well-formed credit.
+func claudeResetGrantHeld(g claudeResetGrant, now time.Time) bool {
+	return claudeResetGrantIDPattern.MatchString(g.ID) && len(g.Clears) > 0 && g.ResetsLeft > 0 && !g.Paused &&
+		(g.StartsAt == nil || !now.Before(*g.StartsAt)) && (g.EndsAt == nil || now.Before(*g.EndsAt))
+}
+
+// claudeResetGrantRedeemable is the single gate shared by the query projection and
+// redemption: only the upstream next grant, usable now, unblocked, outside cooldown,
+// and with its at-limit requirement satisfied.
+func claudeResetGrantRedeemable(b *claudeResetBlock, g claudeResetGrant, now time.Time) bool {
+	if b == nil || !claudeResetGrantHeld(g, now) {
+		return false
+	}
+	requires := g.UseRequiresLimit == nil || *g.UseRequiresLimit
+	return b.Eligible && g.UsableNow && g.ID == b.NextGrantID && (!requires || b.AtLimit) && len(g.Blocking) == 0 &&
+		(b.CooldownUntil == nil || !now.Before(*b.CooldownUntil))
 }

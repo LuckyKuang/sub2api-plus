@@ -36,6 +36,7 @@ below for detailed configuration and maintenance instructions.
 - [Upstream mapping](../UPSTREAM.md)
 - [Upstream v0.2.4 integration and upgrade behavior](UPSTREAM_V0_2_4_INTEGRATION.md)
 - [Upstream v0.2.5 integration](UPSTREAM_V0_2_5_INTEGRATION.md)
+- [Upstream v0.2.11 integration](UPSTREAM_V0_2_11_INTEGRATION.md)
 - [Database migrations](../backend/migrations/README.md)
 - [Authentication and Passkeys](AUTHENTICATION.md)
 - [Model Plaza visibility](MODEL_PLAZA.md)

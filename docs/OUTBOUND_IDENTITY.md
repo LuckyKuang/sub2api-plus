@@ -56,13 +56,15 @@ to a copy of the trusted request snapshot, without changing the parent snapshot.
 Invalid candidates fall through atomically. An explicit account version retains
 its selected source and OS/architecture, and does not update the privacy SDK.
 
-Claude reset-credit status queries use the same identity resolver and snapshot
+Claude reset-credit status queries and manual redemption use the same identity resolver and snapshot
 as the owning Anthropic OAuth account. The snapshot is captured before token
-acquisition, so refresh and the subsequent usage GET cannot select different
-versions. The query renders only the Claude preset declarations, preserving
+acquisition, so refresh, OAuth profile, pre-claim usage, redemption POST and
+fresh post-claim usage cannot select different versions. Retries and account
+revalidation within one operation reuse that owner snapshot even if settings
+change. These requests render only the Claude preset declarations, preserving
 the fixed Stainless SDK/runtime fingerprint and `X-App: cli`.
 
-| Claude reset-credit query | Identity source priority |
+| Claude reset-credit status / redemption | Identity source priority |
 | --- | --- |
 | Valid explicit account candidate | Account candidate → configured global Claude preset → valid environment / compiled default |
 | Empty or invalid account candidate | Configured global Claude preset → valid environment / compiled default |
@@ -71,7 +73,7 @@ the fixed Stainless SDK/runtime fingerprint and `X-App: cli`.
 Its compiled UA remains `claude-cli/2.1.258 (external, cli)`, with client
 identifier `claude-cli` and version `2.1.258`. The identifier/version are
 encoded in the UA; this path does not add Codex `Originator`/`Version` headers.
-The reset-credit transport regressions check source priority, exact defaults,
+The reset-credit status and full redemption transport regressions check source priority, exact defaults,
 companion headers, the token-acquisition snapshot and final-send replacement
 of foreign SDK headers. This integration does not upgrade identity pins.
 

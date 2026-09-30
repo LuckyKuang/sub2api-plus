@@ -44,7 +44,27 @@ The following are **never** used for an admin reference price:
 - a similar but different version, e.g. `kimi-k2.7-code` priced as `kimi-k2`;
   `claude-opus-5-5-preview` priced as `claude-opus-5-5`.
 
+GPT-6.1 Sol, GPT-6 Sol, GPT-6 Luna, and GPT-6 Astra are separate SKUs. Registered
+provider-qualified spellings and effort suffixes may use the same SKU's card;
+bare `gpt-6` and preview names never inherit Astra pricing. GPT-6.1 Sol's
+built-in Standard input/output/cache-write/cache-read reference rates per
+million tokens are $2/$10/$2.50/$0.10; GPT-6 Sol's are $2/$10/$2.50/$0.20 and
+GPT-6 Luna's are $0.10/$0.50/$0.125/$0.01. Saved selling prices remain explicit
+overrides, including zero cache-write values across Standard, Fast, and Flex.
+Astra Ultrafast uses six times the selected Standard token prices independently
+of the operator's Fast multiplier; it does not grant upstream capability.
+
 ## 3. Status and reason codes
+
+`claude-sonnet-5` has a separate exact catalog entry and same-model built-in
+fallback. Its Standard input/output/cache-write-5m/cache-write-1h/cache-read
+prices are $2/$10/$2.50/$4/$0.20 per million tokens, from
+[Anthropic's official pricing](https://platform.claude.com/docs/en/about-claude/pricing).
+Single-model add and platform synchronization resolve the same complete card,
+even before a remote catalog includes the SKU. Provider-qualified spellings and
+the registered `-thinking` variant use this card. Sonnet 5.5 remains a separate
+SKU, and `claude-connect-5`, unknown suffixes, and preview names receive no Sonnet
+5 reference price. Saved channel prices remain operator overrides.
 
 | `status` | Meaning |
 | --- | --- |
@@ -331,6 +351,29 @@ tier multipliers retain their existing precedence over model defaults.
 Explicit `cache_creation_input_token_cost: 0` stays zero. Derived cache-write
 rules only apply when the catalog field is absent, and the derived value is
 never presented as an operator override.
+
+## Inflight balance reservations
+
+When `billing.inflight_reservation.enabled` is enabled, admission estimates the
+same billing-model candidates and channel/group selling prices used by billing.
+Reservations run only after authentication, basic validation, security audit,
+and billing eligibility. Simple mode and subscription billing retain their
+existing behavior. Unknown pricing normally admits without a reservation;
+`fail_closed_on_unpriced` controls whether an unpriced estimate rejects instead.
+An explicit zero selling price is a successful pricing result and requires no
+reservation, even when rejection of unpriced requests is enabled. Explicit free
+token/image/video/audio cards do not fall back to paid model or account defaults.
+
+The handler owns one reference and each accepted billing task acquires its own
+reference. A dropped task returns its reference immediately. Handler completion
+stops renewal; release waits for all billing references, with the remaining TTL
+bounding stuck tasks. Successful billing synchronously updates the balance cache
+before returning the task's reference. Plus invalidates exhausted/below-reserve
+balances first, preserving the minimum-balance admission policy. A cache error
+falls back to the existing queued deduction, so cache failures remain fail-open
+and may briefly permit admission using stale balance after a reservation expires
+or releases. Reservations are an admission estimate, not a replacement for
+final usage billing or an absolute overdraft guarantee.
 
 ## 8. Verifying
 
