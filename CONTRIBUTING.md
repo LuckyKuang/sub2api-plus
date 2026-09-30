@@ -36,7 +36,10 @@ matches the current resolved Go, Node, pnpm, golangci-lint, and GoReleaser pins.
 Retain dependency caches only for the generation matching that image and the
 current Go and pnpm lock inputs. Remove stale Sub2API validation generations;
 never prune unrelated projects or global runtime, builder, image, volume, or
-system resources. On Windows the launcher initializes the WSL cache root and enumerates direct
+system resources. Cache removal restores owner write permission on directories
+inside the discarded generation so Go's read-only module cache can be removed;
+it never follows cache symlinks or changes permissions in retained generations.
+On Windows the launcher initializes the WSL cache root and enumerates direct
 child paths without newline-valued command arguments, so cleanup also works
 on a fresh installation and across the Windows/WSL command boundary.
 The launcher cleans up automatically before each run and

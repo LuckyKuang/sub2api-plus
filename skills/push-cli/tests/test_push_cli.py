@@ -1043,6 +1043,39 @@ class ValidationLaunchTest(unittest.TestCase):
 
 
 class ValidationCleanupTest(unittest.TestCase):
+    def test_cleanup_removes_read_only_go_modules_without_touching_other_trees(self) -> None:
+        runtime = push_cli.Runtime("apple-containers", compose_required=False)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            home = Path(temp_dir)
+            cache = home / ".cache" / "sub2api-validation"
+            current = cache / "aaaaaaaaaaaaaaaa" / "go/pkg/mod/example@v1"
+            stale = cache / "bbbbbbbbbbbbbbbb" / "go/pkg/mod/example@v0"
+            unrelated = home / "unrelated"
+            for directory in (current, stale, unrelated):
+                directory.mkdir(parents=True)
+                (directory / "module.go").write_text("package fixture\n")
+                (directory / "module.go").chmod(0o444)
+                directory.chmod(0o555)
+            (stale.parent / "external").symlink_to(unrelated, target_is_directory=True)
+            try:
+                with mock.patch.object(push_cli.validation_runtime.Path, "home", return_value=home):
+                    push_cli.validation_runtime.cleanup_validation_runtime(
+                        runtime,
+                        image="sub2api-validation:1111111111111111",
+                        cache_generation="aaaaaaaaaaaaaaaa",
+                        capture=lambda command: "NAME TAG DIGEST\n",
+                        run_step=lambda name, command: self.fail("no image deletion expected"),
+                    )
+                self.assertFalse((cache / "bbbbbbbbbbbbbbbb").exists())
+                for directory in (current, unrelated):
+                    self.assertEqual(0o555, directory.stat().st_mode & 0o777)
+                    self.assertEqual("package fixture\n", (directory / "module.go").read_text())
+            finally:
+                # TemporaryDirectory cleanup must also work as a non-root user.
+                for directory in (current, stale, unrelated):
+                    if directory.exists():
+                        directory.chmod(0o755)
+
     def test_apple_cleanup_retains_current_generation_and_deletes_stale_resources(self) -> None:
         runtime = push_cli.Runtime("apple-containers", compose_required=False)
         commands: list[tuple[str, list[str]]] = []

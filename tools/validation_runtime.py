@@ -15,6 +15,7 @@ import posixpath
 import re
 import shlex
 import shutil
+import stat
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Sequence
@@ -666,6 +667,21 @@ def launch_in_validation(
         )
 
 
+def remove_validation_cache(path: Path) -> None:
+    """Remove an owned cache tree, including Go's read-only module directories."""
+    if path.is_symlink():
+        path.unlink()
+        return
+    if not path.exists():
+        return
+    # Only directory entries need write access for deletion. Do not follow
+    # symlinks or change the modes of reusable caches outside this tree.
+    for directory, _, _ in os.walk(path, followlinks=False):
+        entry = Path(directory)
+        entry.chmod(entry.stat().st_mode | stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
+    shutil.rmtree(path)
+
+
 def cleanup_validation_runtime(
     runtime: Runtime,
     *,
@@ -771,7 +787,7 @@ def cleanup_validation_runtime(
                 if path.is_symlink():
                     path.unlink()
                 elif path.is_dir():
-                    shutil.rmtree(path)
+                    remove_validation_cache(path)
 
     # `--rm` only removes a container on graceful exit; SIGKILL/crash leaves a
     # stopped, unlabeled-by-nothing container behind. The sub2api-validation
@@ -863,7 +879,4 @@ def purge_validation_resources(
             [*runtime.prefix, "rm", "-rf", "/tmp/sub2api-validation-cache"],
         )
     else:
-        shutil.rmtree(
-            home_directory() / ".cache" / "sub2api-validation",
-            ignore_errors=True,
-        )
+        remove_validation_cache(home_directory() / ".cache" / "sub2api-validation")
