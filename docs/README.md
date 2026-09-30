@@ -5,6 +5,7 @@ below for detailed configuration and maintenance instructions.
 
 ## Providers
 
+- [Claude / Anthropic reset-credit status](providers/CLAUDE.md)
 - [Grok / xAI](providers/GROK.md)
 - [Sora status and reserved configuration](providers/SORA.md)
 - [Antigravity](providers/ANTIGRAVITY.md)

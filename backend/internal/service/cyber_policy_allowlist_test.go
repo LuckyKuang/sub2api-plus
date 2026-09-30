@@ -4,6 +4,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -22,6 +23,48 @@ func TestParseCyberPolicyUserAllowlist(t *testing.T) {
 	ids, err = ParseCyberPolicyUserAllowlist("")
 	require.NoError(t, err)
 	require.Empty(t, ids)
+}
+
+type cyberAllowlistUserRepo struct {
+	UserRepository
+	t *testing.T
+}
+
+func (r cyberAllowlistUserRepo) GetByID(context.Context, int64) (*User, error) {
+	r.t.Fatal("log-only cyber events must not enter the user/API-key penalty path")
+	return nil, nil
+}
+
+func TestCyberPolicyLogOnlySkipsImmediateAndDeferredAutoBan(t *testing.T) {
+	for _, autoBan := range []bool{false, true} {
+		for _, exclude := range []bool{false, true} {
+			cfg := defaultContentModerationConfig()
+			cfg.AutoBanEnabled = true
+			cfg.BanThreshold = 1
+			cfg.CyberPolicyAutoBanEnabled = autoBan
+			cfg.CyberPolicyExcludeFromBanCount = exclude
+			raw, err := json.Marshal(cfg)
+			require.NoError(t, err)
+			repo := &banCountArgsTestRepo{}
+			svc := &ContentModerationService{
+				settingRepo: &contentModerationTestSettingRepo{values: map[string]string{
+					SettingKeyRiskControlEnabled: "true", SettingKeyContentModerationConfig: string(raw),
+				}},
+				repo: repo, userRepo: cyberAllowlistUserRepo{t: t}, emailService: &EmailService{},
+			}
+			in := CyberPolicyRecordInput{LogOnly: true, UserID: 12, APIKeyID: 7, UserEmail: "trusted@example.com", Model: "gpt-5", UpstreamBody: `{"error":{"code":"cyber_policy"}}`}
+			svc.EnforceCyberPolicyAutoBan(context.Background(), in)
+			svc.RecordCyberPolicyEvent(context.Background(), in)
+			logs := repo.snapshotLogs()
+			require.Len(t, logs, 1)
+			require.Equal(t, ContentModerationModeCyberLogOnly, logs[0].Mode)
+			require.True(t, logs[0].Flagged)
+			require.False(t, logs[0].AutoBanned)
+			require.False(t, logs[0].EmailSent)
+			require.Zero(t, logs[0].ViolationCount)
+			require.Empty(t, repo.snapshotCountCalls())
+		}
+	}
 }
 
 func TestCyberPolicyAllowlistCoversAllUserKeysAndRefreshes(t *testing.T) {

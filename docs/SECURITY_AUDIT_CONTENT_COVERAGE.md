@@ -61,6 +61,37 @@ compatible with `v0.1.177+custom.003`: unsupported or unrecognized content may
 produce no audit input and pass through, while every successfully extracted
 sibling segment remains auditable.
 
+Sonnet 5.5 stable computer/browser toolsets (`computer_toolset_20260801` and
+`browser_toolset_20260801`) use this same Messages extraction contract. New
+toolset state and unknown provider options pass through; recognized sibling
+user text remains available to both engines. The stable-toolset semantic test
+in `security_audit_content_contract_test.go` covers that mixed payload.
+
+## Risk-Control User Allowlist
+
+The admin cyber-risk center stores `cyber_policy_user_allowlist` in the settings
+store, empty by default. It accepts positive platform user IDs separated by
+commas or whitespace, rejects invalid IDs, and deduplicates entries. Membership
+applies to all of that user's API keys. Refresh failures retain the last valid
+membership snapshot and retry; a successful edit replaces it.
+
+An allowlisted user still enters the canonical ingress audit before account
+selection, billing, concurrency acquisition or upstream writes. Content
+Moderation keyword, hash, pre-block and observation hits retain their evidence
+with mode `risk_control_log_only`. Network-policy hits retain the existing
+`cyber_policy` action with mode `cyber_log_only`. Both modes are excluded from
+violation counts alongside the existing action exclusions. A log-only network
+event skips both synchronous and deferred automatic bans, API-key disabling,
+session-block writes and notification email, including when the Plus immediate
+cyber-ban option is enabled.
+
+This setting changes Content Moderation and cyber-risk penalties. Prompt Audit
+retains its independently configured policy and shares the same extractor;
+membership does not bypass its audit hook or change extraction semantics.
+Unknown structures and extraction failures retain the pass-through and
+structured exception-log contract below. See the allowlist service tests and
+the HTTP/WS ingress side-effect ordering regressions for both engines.
+
 ## Canonical Result
 
 The shared extractor returns a protocol-independent document containing text

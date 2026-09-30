@@ -56,6 +56,33 @@ to a copy of the trusted request snapshot, without changing the parent snapshot.
 Invalid candidates fall through atomically. An explicit account version retains
 its selected source and OS/architecture, and does not update the privacy SDK.
 
+Claude reset-credit status queries use the same identity resolver and snapshot
+as the owning Anthropic OAuth account. The snapshot is captured before token
+acquisition, so refresh and the subsequent usage GET cannot select different
+versions. The query renders only the Claude preset declarations, preserving
+the fixed Stainless SDK/runtime fingerprint and `X-App: cli`.
+
+| Claude reset-credit query | Identity source priority |
+| --- | --- |
+| Valid explicit account candidate | Account candidate → configured global Claude preset → valid environment / compiled default |
+| Empty or invalid account candidate | Configured global Claude preset → valid environment / compiled default |
+| Empty or invalid global candidate | Valid environment / compiled default |
+
+Its compiled UA remains `claude-cli/2.1.258 (external, cli)`, with client
+identifier `claude-cli` and version `2.1.258`. The identifier/version are
+encoded in the UA; this path does not add Codex `Originator`/`Version` headers.
+The reset-credit transport regressions check source priority, exact defaults,
+companion headers, the token-acquisition snapshot and final-send replacement
+of foreign SDK headers. This integration does not upgrade identity pins.
+
+For Sonnet 5.5, gateway request construction filters
+`fine-grained-tool-streaming-2025-05-14` from `anthropic-beta` when the final
+request contains a stable computer/browser toolset. Filtering runs after trusted
+identity application and the existing beta/header-override decision. It cannot
+restore a beta dropped by policy or change the selected identity. The model
+family check also handles Vertex model suffixes; other models retain their
+existing beta behavior.
+
 ## Selection and persistence
 
 For non-Codex identities, selection is:

@@ -53,6 +53,15 @@ release does not itself perform the promotion step.
   the model whitelist catalog, restored the `signature_delta` accumulation so
   Responses keeps Claude 5.5 thinking signatures, and made the moderation
   endpoint map safe when the service is constructed by value.
+- Windows implementation review: Claude reset-credit queries now share the
+  credential-owner identity snapshot with token acquisition and enforce it at
+  send time. Cyber-policy log-only events skip Plus immediate and deferred
+  bans even when automatic cyber banning is enabled. The validation image now
+  includes GNU Make for the maintained Ent/Wire generation entrypoint.
+  The service provider set now includes OpenCode Go usage so Wire can
+  reproduce the integrated application graph.
+  Windows validation cleanup now handles a missing cache root and enumerates
+  stale generations safely across the WSL command boundary.
 
 ## Compatibility and migration
 

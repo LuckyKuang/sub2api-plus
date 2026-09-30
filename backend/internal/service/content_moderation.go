@@ -3995,13 +3995,13 @@ func (s *ContentModerationService) RecordCyberPolicyEvent(ctx context.Context, i
 	if in.LogOnly {
 		log.Mode = ContentModerationModeCyberLogOnly
 	}
-	if cfg.CyberPolicyAutoBanEnabled {
+	if !in.LogOnly && cfg.CyberPolicyAutoBanEnabled {
 		autoBanned = s.applyCyberPolicyAutoBan(ctx, log)
 	} else if !in.LogOnly && !cfg.CyberPolicyExcludeFromBanCount {
 		autoBanned = s.applyFlaggedAccountSideEffects(ctx, cfg, log)
 	}
 	sendAccountDisabledNotice := autoBanned
-	if !sendAccountDisabledNotice && cfg.CyberPolicyAutoBanEnabled && log.UserID != nil && s.userRepo != nil {
+	if !in.LogOnly && !sendAccountDisabledNotice && cfg.CyberPolicyAutoBanEnabled && log.UserID != nil && s.userRepo != nil {
 		if user, err := s.userRepo.GetByID(ctx, *log.UserID); err == nil && user != nil && !user.IsAdmin() && user.Status == StatusDisabled {
 			sendAccountDisabledNotice = true
 			log.AutoBanned = true
@@ -4070,11 +4070,11 @@ func (s *ContentModerationService) EnforceCyberPolicyAutoBan(ctx context.Context
 }
 
 func (in CyberPolicyRecordInput) CyberPolicyAutoBanRequested() bool {
-	return in.UserID > 0
+	return in.UserID > 0 && !in.LogOnly
 }
 
 func (s *ContentModerationService) applyCyberPolicyAutoBan(ctx context.Context, log *ContentModerationLog) bool {
-	if s == nil || log == nil || s.userRepo == nil || log.UserID == nil || *log.UserID <= 0 {
+	if s == nil || log == nil || log.Mode == ContentModerationModeCyberLogOnly || log.Mode == ContentModerationModeRiskControlLogOnly || s.userRepo == nil || log.UserID == nil || *log.UserID <= 0 {
 		return false
 	}
 	user, err := s.userRepo.GetByID(ctx, *log.UserID)

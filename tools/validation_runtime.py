@@ -680,6 +680,10 @@ def cleanup_validation_runtime(
 
     if runtime.name == "wsl2-docker":
         cache_root = "/tmp/sub2api-validation-cache"
+        run_step(
+            "Initialize validation cache root",
+            [*runtime.prefix, "mkdir", "-p", cache_root],
+        )
         generations = capture(
             [
                 *runtime.prefix,
@@ -691,11 +695,15 @@ def cleanup_validation_runtime(
                 "1",
                 "-type",
                 "d",
-                "-printf",
-                "%f\n",
             ]
         )
-        for generation in generations.splitlines():
+        # Default find output avoids a literal newline argument being changed
+        # by Windows/WSL command-line serialization. Only direct children of
+        # this project cache may be considered for removal.
+        for path in generations.splitlines():
+            if not path.startswith(cache_root + "/"):
+                continue
+            generation = path[len(cache_root) + 1:]
             if generation == cache_generation:
                 continue
             if (

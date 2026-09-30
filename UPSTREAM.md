@@ -19,6 +19,12 @@ distribution/toolchain choices. Retired upstream billing probes remain removed.
 Grok cross-client rewriting stays opt-in, and inconclusive OAuth billing does
 not grant media eligibility.
 
+The v0.2.10 reset-credit query preserves the Anthropic credential owner's
+identity across token acquisition and terminal transport. Allowlisted
+cyber-policy events retain audit evidence and skip both synchronous and
+deferred Plus automatic bans. Stable Sonnet 5.5 toolsets share the canonical
+two-engine content extractor, including unknown-sibling pass-through.
+
 See [v0.2.4 integration and upgrade behavior](docs/UPSTREAM_V0_2_4_INTEGRATION.md)
 for the previous overlay's public API changes, migrations, defaults, and
 validation boundaries. See [v0.2.5 integration](docs/UPSTREAM_V0_2_5_INTEGRATION.md)

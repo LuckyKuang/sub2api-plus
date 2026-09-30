@@ -23,6 +23,7 @@ RUN apt-get update \
         ca-certificates \
         curl \
         git \
+        make \
         python3 \
         python3-pip \
         xz-utils \

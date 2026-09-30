@@ -12,6 +12,7 @@ import (
 
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/httpclient"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 )
 
 var claudeResetGrantIDPattern = regexp.MustCompile(`^[a-z0-9_-]{1,40}$`)
@@ -73,13 +74,21 @@ type ClaudeResetCreditService struct {
 	accounts claudeResetAccounts
 	tokens   claudeResetTokens
 	proxies  ProxyRepository
-	settings *SettingService
 	do       func(*http.Request, string) (*http.Response, error)
 	now      func() time.Time
 }
 
-func NewClaudeResetCreditService(accounts AccountRepository, tokens *ClaudeTokenProvider, proxies ProxyRepository, settings *SettingService) *ClaudeResetCreditService {
-	s := &ClaudeResetCreditService{accounts: accounts, tokens: tokens, proxies: proxies, settings: settings, now: time.Now}
+type claudeResetCreditTransport struct{ base http.RoundTripper }
+
+func (t claudeResetCreditTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	// Render the trusted snapshot at send time without modifying caller headers.
+	req = req.Clone(req.Context())
+	outboundidentity.ApplyContext(req)
+	return t.base.RoundTrip(req)
+}
+
+func NewClaudeResetCreditService(accounts AccountRepository, tokens *ClaudeTokenProvider, proxies ProxyRepository) *ClaudeResetCreditService {
+	s := &ClaudeResetCreditService{accounts: accounts, tokens: tokens, proxies: proxies, now: time.Now}
 	s.do = func(req *http.Request, proxy string) (*http.Response, error) {
 		client, err := httpclient.GetClient(httpclient.Options{ProxyURL: proxy, Timeout: 25 * time.Second, ValidateResolvedIP: true})
 		if err != nil {
@@ -87,6 +96,7 @@ func NewClaudeResetCreditService(accounts AccountRepository, tokens *ClaudeToken
 		}
 		// Never forward OAuth credentials across redirects, even to another public host.
 		isolated := *client
+		isolated.Transport = claudeResetCreditTransport{base: client.Transport}
 		isolated.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 		return isolated.Do(req)
 	}
@@ -110,6 +120,8 @@ func (s *ClaudeResetCreditService) account(ctx context.Context, id int64) (*Acco
 	if !profile {
 		return nil, "", "", infraerrors.BadRequest("CLAUDE_RESET_PROFILE_SCOPE_REQUIRED", "user:profile scope required")
 	}
+	// Token refresh and the usage query share the credential owner's snapshot.
+	ctx = WithAccountOutboundIdentity(ctx, a)
 	proxy := ""
 	if a.ProxyID != nil {
 		p, e := s.proxies.GetByID(ctx, *a.ProxyID)
@@ -125,17 +137,18 @@ func (s *ClaudeResetCreditService) account(ctx context.Context, id int64) (*Acco
 	return a, token, proxy, nil
 }
 
-func (s *ClaudeResetCreditService) headers(ctx context.Context, req *http.Request, token string) {
+func (s *ClaudeResetCreditService) headers(req *http.Request, account *Account, token string) {
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("anthropic-beta", "oauth-2025-04-20")
 	req.Header.Set("x-app", "cli")
-	req.Header.Set("User-Agent", "claude-cli/"+s.settings.GetClaudeCodeClientVersion(ctx)+" (external, cli)")
+	ApplyAccountOutboundIdentity(req.Context(), account, req)
 }
 
 func (s *ClaudeResetCreditService) query(ctx context.Context, id int64) (*ClaudeResetCredits, error) {
-	_, token, proxy, err := s.account(ctx, id)
+	ctx = WithOutboundIdentityScope(ctx, nil)
+	account, token, proxy, err := s.account(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -143,7 +156,7 @@ func (s *ClaudeResetCreditService) query(ctx context.Context, id int64) (*Claude
 	if err != nil {
 		return nil, err
 	}
-	s.headers(ctx, req, token)
+	s.headers(req, account, token)
 	resp, err := s.do(req, proxy)
 	if err != nil {
 		return nil, infraerrors.ServiceUnavailable("CLAUDE_RESET_QUERY_FAILED", "reset status request failed")

@@ -38,9 +38,8 @@ This increment ships no schema migrations.
 
 ## Plus-preserved behavior (integration decisions)
 
-The authoritative adjudication record is the local OpenSpec change plan
-`openspec/changes/integrate-upstream-v0.2.10` (proposal/design/evidence/
-tasks/verification). The load-bearing decisions are:
+The owning provider, identity, audit and pricing documents and their regression
+tests record the durable integration contracts. The main decisions are:
 
 | Area | Integrated behavior |
 | --- | --- |
@@ -59,11 +58,14 @@ tasks/verification). The load-bearing decisions are:
 - `claude-sonnet-5-5` and `claude-opus-5-5` are now recognized end to end, with a
   1,000,000-token context window and adaptive thinking defaults (Sonnet 5.5
   defaults to `high` effort).
-- The admin cyber-risk center gains a user allowlist. A listed platform user
-  keeps audit evidence but is not blocked and is not counted toward bans.
+- The admin cyber-risk center gains a user allowlist. Content Moderation and
+  cyber-risk hits keep evidence without local blocking or ban counts; Prompt
+  Audit retains its independent policy.
 - The admin dashboard can switch the recent-usage trend between tokens and
   spending.
 - The account modal shows the Claude native reset-credit status on demand.
+  Queries preserve account identity precedence and the token-refresh snapshot;
+  see [Claude provider behavior](providers/CLAUDE.md).
 
 ## Validation boundary
 
@@ -71,12 +73,17 @@ All generation and validation runs with the pinned repository toolchain in
 Apple Containers on macOS, Docker inside WSL2 Debian/Ubuntu on Windows, or
 Docker on Linux. Host-side validation is forbidden.
 
-`gofmt` is clean and every touched file parses. Type-checking, `go vet`,
-backend unit tests, frontend lint/typecheck/Vitest, the local real integration
-suite, and the full push-cli matrix were **not** completed for this integration:
-the Apple Container runtime on the integrating host hung for every
-volume-mounted run, and the stuck validation container could not be reclaimed
-through the CLI (the host's unrelated deployment stack kept running normally).
-Those checks remain pending and must be run before this tree is treated as
-validated; per repository policy no Go or pnpm command was executed on the host
-as a fallback.
+The integration checks cover pricing and usage, identity source priority and
+transport declarations, canonical extraction and HTTP/WS audit ordering,
+allowlist side effects, composite routing, frontend components and locales.
+The maintained Ent/Wire generation entrypoint is `make -C backend generate`;
+the validation image includes GNU Make for this purpose.
+
+The complete local matrix uses
+`python3 skills/push-cli/scripts/push_cli.py check --base-ref origin/main --serial`.
+Run the repository and Prompt Audit PostgreSQL integration tests separately
+with explicit test DSNs and an isolated Redis service: the ordinary matrix
+container has no Docker socket and its testcontainers-dependent cases may
+skip. Use separate disposable test databases and remove their containers,
+network and writable data afterwards. See [Contributing](../CONTRIBUTING.md)
+for the mandatory environment, toolchain and cleanup requirements.
