@@ -49,9 +49,10 @@ func TestInflightEndpointsAuditBeforeBillingAndReservation(t *testing.T) {
 			apiKey := &service.APIKey{ID: 9, UserID: 42, User: &service.User{ID: 42}, GroupID: &groupID,
 				Group: &service.Group{ID: groupID, Platform: service.PlatformGrok}}
 			body, path := `{"query":"blocked search"}`, "/web_search"
-			if endpoint == "tts" {
+			switch endpoint {
+			case "tts":
 				body, path = `{"input":"blocked speech"}`, "/v1/audio/speech"
-			} else if endpoint == "responses" || endpoint == "chat" {
+			case "responses", "chat":
 				apiKey.Group.Platform = service.PlatformAnthropic
 				apiKey.Group.ClaudeCodeOnly = true
 				fallbackID := int64(4)
