@@ -66,14 +66,17 @@ data before upgrading. No migration is added by this increment.
 
 ## Validation and parallel release isolation
 
-The integration uses an independent linked worktree and branch; it never
-switches or resets the v0.2.10 release worktree. Upstream was fetched into a
-dedicated reference without writing shared `FETCH_HEAD` or release tags.
+Initial integration used an independent linked worktree and branch while
+v0.2.10 validation and publication were active. Upstream was fetched into a
+dedicated reference without writing shared `FETCH_HEAD` or release tags. After
+publication and its main finalization, the integration branch incorporated that
+main tree and moved into the primary workspace for continued review and checks.
 
-While v0.2.10 validation is active, this branch performs source work only.
-Container generation, formatting, tests and runtime/cache cleanup are deferred
-to avoid interference. Those steps must subsequently use WSL2 Debian/Ubuntu
-Docker on Windows, following [Contributing](../CONTRIBUTING.md).
+Source work during the parallel release deferred container generation,
+formatting, tests and runtime/cache cleanup to avoid interference. Subsequent
+checks use WSL2 Debian/Ubuntu Docker on Windows, following
+[Contributing](../CONTRIBUTING.md), and disposable integration services isolated
+from the existing Compose deployment.
 
 Required evidence includes Wire generation, relevant backend unit/integration
 tests, identity source/default/transport regressions, real-payload extraction
