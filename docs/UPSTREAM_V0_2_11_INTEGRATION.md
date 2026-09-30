@@ -11,7 +11,10 @@ Source import and release preparation are separate. The embedded application
 version remains `0.2.10+custom.001` until a separate preparation change updates
 the version, Docker arguments, examples and planned release mapping together.
 The v0.2.10 publication and finalization remain on their own branches. This
-integration introduces no SQL migration or dependency-lock change.
+integration introduces no SQL migration. Final validation also updates the
+frontend Axios dependency and pnpm lockfile to `1.20.0`, which fixes the Axios
+advisories reported by the production dependency audit. Backend dependencies
+and compiled outbound identity fingerprints are unchanged.
 
 ## Imported behavior
 
