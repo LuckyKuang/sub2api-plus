@@ -74,9 +74,11 @@ main tree and moved into the primary workspace for continued review and checks.
 
 Source work during the parallel release deferred container generation,
 formatting, tests and runtime/cache cleanup to avoid interference. Subsequent
-checks use WSL2 Debian/Ubuntu Docker on Windows, following
-[Contributing](../CONTRIBUTING.md), and disposable integration services isolated
-from the existing Compose deployment.
+checks use Apple Containers on macOS, WSL2 Debian/Ubuntu Docker on Windows,
+or Docker on Linux, following [Contributing](../CONTRIBUTING.md), and disposable
+integration services isolated from existing deployments. Apple Containers runs
+repository integration tests with explicit PostgreSQL and Redis endpoints for
+those disposable services, since it has no Docker API for Testcontainers.
 
 Required evidence includes Wire generation, relevant backend unit/integration
 tests, identity source/default/transport regressions, real-payload extraction

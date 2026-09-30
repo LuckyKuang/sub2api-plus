@@ -40,7 +40,7 @@ func TestInflightEndpointsAuditBeforeBillingAndReservation(t *testing.T) {
 			// blocked request must never reach selection or forwarding.
 			h := &GatewayHandler{securityAuditCoordinator: coordinator}
 			openAI := &OpenAIGatewayHandler{securityAuditCoordinator: coordinator,
-				gatewayService:      &service.GatewayService{},
+				gatewayService:      &service.OpenAIGatewayService{},
 				apiKeyService:       &service.APIKeyService{},
 				concurrencyHelper:   NewConcurrencyHelper(service.NewConcurrencyService(&auditInflightConcurrencyCache{}), SSEPingFormatNone, 0),
 				billingCacheService: service.NewBillingCacheService(nil, nil, nil, nil, nil, nil, &config.Config{}, nil)}
