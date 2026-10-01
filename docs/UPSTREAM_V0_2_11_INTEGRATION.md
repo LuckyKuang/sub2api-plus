@@ -7,10 +7,11 @@ integrated official `v0.2.10` commit. Plus behavior is authoritative when
 official changes overlap credential identity, ingress audit, pricing,
 session/quota accounting, asynchronous tasks or distribution choices.
 
-Source import and release preparation are separate. The embedded application
-version remains `0.2.10+custom.001` until a separate preparation change updates
-the version, Docker arguments, examples and planned release mapping together.
-The v0.2.10 publication and finalization remain on their own branches. This
+Source import initially preserved the published `0.2.10+custom.001` version.
+After v0.2.10 publication and finalization, this release candidate prepares
+`0.2.11+custom.001` by updating the embedded version, Docker arguments,
+examples and planned release mapping together. Publication status is finalized
+in a separate PR after the release is verified. This
 integration introduces no SQL migration. Final validation also updates the
 frontend Axios dependency and pnpm lockfile to `1.20.0`, which fixes the Axios
 advisories reported by the production dependency audit. Backend dependencies

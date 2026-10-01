@@ -104,6 +104,7 @@ official tag import.
 | `v0.2.8+custom.002` | `v0.2.8` | `fd80b08c90b55edcad5b00171b53f08721d30da1` | published |
 | `v0.2.9+custom.001` | `v0.2.9` | `4c00df2e0183e2c70b7fa8ba45914205e36aad0c` | published |
 | `v0.2.10+custom.001` | `v0.2.10` | `2f3fed2fdb0787141294cec81487a5df30426f7f` | published |
+| `v0.2.11+custom.001` | `v0.2.11` | `96f4c115c9749078f90cbf210a01d39baf3f53b6` | planned |
 
 `v0.2.4+custom.006` is marked withdrawn because official `v0.2.5` was imported before that snapshot overlay was published. Do not reuse or retag `.006`.
 
@@ -114,9 +115,9 @@ still require a maintainer audit. Do not reuse or retag `.007`.
 ## Current Version
 
 ```text
-Git/GitHub: v0.2.10+custom.001
-Application: 0.2.10+custom.001
-GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.10-custom.001
+Git/GitHub: v0.2.11+custom.001
+Application: 0.2.11+custom.001
+GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.11-custom.001
 ```
 
 ## Restored Upstream Pricing Branches
