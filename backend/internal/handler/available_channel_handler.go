@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"sort"
 	"strconv"
 
@@ -20,10 +21,20 @@ import (
 //     展开。这样既防止普通分组跨平台泄漏，也让 Composite 正确展示其多平台能力；
 //  4. 字段白名单：仅返回用户需要的字段（省略 BillingModelSource / RestrictModels
 //     / 内部 ID / Status 等管理字段）。
+type availableChannelAccess interface {
+	GetAvailableGroups(context.Context, int64) ([]service.Group, error)
+	GetUserGroupRates(context.Context, int64) (map[int64]float64, error)
+}
+
+type availableCatalogReader interface {
+	ListAvailableCatalog(context.Context, []service.Group) ([]service.CatalogGroup, error)
+}
+
 type AvailableChannelHandler struct {
 	channelService *service.ChannelService
-	apiKeyService  *service.APIKeyService
+	apiKeyService  availableChannelAccess
 	settingService *service.SettingService
+	plazaService   availableCatalogReader
 }
 
 // NewAvailableChannelHandler 创建用户侧可用渠道 handler。
@@ -31,11 +42,13 @@ func NewAvailableChannelHandler(
 	channelService *service.ChannelService,
 	apiKeyService *service.APIKeyService,
 	settingService *service.SettingService,
+	plazaService *service.ModelPlazaService,
 ) *AvailableChannelHandler {
 	return &AvailableChannelHandler{
 		channelService: channelService,
 		apiKeyService:  apiKeyService,
 		settingService: settingService,
+		plazaService:   plazaService,
 	}
 }
 
@@ -135,7 +148,15 @@ func (h *AvailableChannelHandler) List(c *gin.Context) {
 	// Feature 未启用时返回空数组（不暴露渠道信息）。检查放在认证之后，
 	// 保持与未开关前的 401 行为一致：未登录先 401，登录后再按开关决定。
 	if !h.featureEnabled(c) {
+		if catalogView(c) {
+			response.Success(c, emptyChannelCatalog())
+			return
+		}
 		response.Success(c, []userAvailableChannel{})
+		return
+	}
+	if catalogView(c) {
+		h.listCatalog(c, subject.UserID)
 		return
 	}
 

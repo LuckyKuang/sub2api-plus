@@ -40,6 +40,7 @@ below for detailed configuration and maintenance instructions.
 - [Database migrations](../backend/migrations/README.md)
 - [Authentication and Passkeys](AUTHENTICATION.md)
 - [Model Plaza visibility](MODEL_PLAZA.md)
+- [Available-channel model catalog](AVAILABLE_CHANNELS.md)
 
 ## Additional References
 

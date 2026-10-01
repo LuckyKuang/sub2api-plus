@@ -5,6 +5,8 @@
 
 import { apiClient } from './client'
 import type { BillingMode } from '@/constants/channel'
+import type { ModelPlazaGroup, PlazaModel } from './modelPlaza'
+import type { GroupPlatform } from '@/types'
 
 export interface UserAvailableGroup {
   id: number
@@ -83,6 +85,38 @@ export async function getAvailable(options?: { signal?: AbortSignal }): Promise<
   return data
 }
 
-export const userChannelsAPI = { getAvailable }
+export type CatalogBillingUnit = 'token' | 'image' | 'request' | 'video' | 'second' | 'unknown'
+
+export interface CatalogOffer extends PlazaModel {
+  platform: GroupPlatform
+  offer_key: string
+  billing_mode: BillingMode | null
+  billing_unit: CatalogBillingUnit
+  price_status: 'resolved' | 'unknown'
+  price_reason?: 'pricing_unavailable' | 'request_dependent' | 'unsupported_unit'
+  source: { name: string; description: string }
+  media_tiers?: { label: string; unit: CatalogBillingUnit; price: number | null }[]
+  service_tier_pricing?: { name: string; pricing: UserSupportedModelPricing }[]
+}
+
+export interface CatalogGroup extends Omit<ModelPlazaGroup, 'models'> {
+  peak_timezone: string
+  models: CatalogOffer[]
+}
+
+export interface ChannelCatalog {
+  groups: CatalogGroup[]
+  user_rate_status: 'loaded' | 'unavailable' | 'not_requested'
+}
+
+export async function getCatalog(options?: { signal?: AbortSignal }): Promise<ChannelCatalog> {
+  const { data } = await apiClient.get<ChannelCatalog>('/channels/available', {
+    params: { view: 'catalog' },
+    signal: options?.signal
+  })
+  return data
+}
+
+export const userChannelsAPI = { getAvailable, getCatalog }
 
 export default userChannelsAPI

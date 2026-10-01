@@ -10,6 +10,14 @@ Classifying upstream `compaction`/`compaction_summary` output for timing does no
 add an ingress extraction rule, policy decision, or audit bypass. Encrypted
 compact output is not treated as a text-token delta; see [usage timing](USAGE_TIMING.md).
 
+The authenticated [available-channel catalog](AVAILABLE_CHANNELS.md) is a
+configuration read. Its local price calculations do not accept inference
+content, select accounts, acquire inference concurrency, reserve balances or
+contact providers. Catalog search and price details stay in the browser. This
+view adds no inference endpoint, extraction input or alternative audit path;
+actual model requests still enter both audit engines through the existing
+HTTP/WS handlers before their side effects.
+
 ## Boundary And Ordering
 
 Forwarding-account outbound identity presets are resolved after this boundary
