@@ -790,6 +790,9 @@ func modelLookupCandidates(model string) []string {
 // composer 系列归到同一张价卡，参考价若另行一套就会两条路径两个价。
 func registeredSameSKUAliases(model string) []string {
 	out := make([]string, 0, 2)
+	if isClaudeSonnet5Model(model) && model != "claude-sonnet-5" {
+		out = append(out, "claude-sonnet-5")
+	}
 	// Claude 4.5 一代的 -thinking 变体与基名同 SKU 同价（扩展思考开关）。
 	if strings.HasPrefix(model, "claude-") && strings.HasSuffix(model, "-thinking") {
 		out = append(out, strings.TrimSuffix(model, "-thinking"))

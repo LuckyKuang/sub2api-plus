@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/apicompat"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
 )
 
 const compatPromptCacheKeyPrefix = "compat_cc_"
@@ -14,9 +15,8 @@ const compatPromptCacheKeyPrefix = "compat_cc_"
 func shouldAutoInjectPromptCacheKeyForCompat(model string) bool {
 	trimmed := strings.TrimSpace(strings.ToLower(model))
 	canonical := canonicalizeOpenAIModelAliasSpelling(trimmed)
-	// Only the canonical Plus identity inherits Astra Messages compatibility
-	// state; bare GPT-6 remains an independent, unknown model family.
-	if canonical == "gpt-6-astra" {
+	// Supported canonical families share Responses cache identity; bare GPT-6 stays unknown.
+	if canonical == "gpt-6-astra" || openai.IsGPT6SolOrLunaModelSpelling(canonical) || openai.IsGPT61SolModelSpelling(canonical) {
 		return true
 	}
 	// 仅对 Responses 兼容路径支持的 GPT-5 族开启自动注入，避免 normalizeCodexModel

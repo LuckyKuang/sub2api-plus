@@ -21,7 +21,11 @@ describe('useModelWhitelist', () => {
     expect(models).toContain('codex-auto-review')
     expect(models).toContain('gpt-5.6')
     expect(models).toContain('gpt-6-astra')
+    expect(models).toContain('gpt-6.1-sol')
+    expect(models).toContain('gpt-6-sol')
+    expect(models).toContain('gpt-6-luna')
     expect(models).not.toContain('gpt-6')
+    expect(new Set(models).size).toBe(models.length)
   })
 
   it('openai 预设映射将最新旗舰模型放在首位', () => {
@@ -31,8 +35,12 @@ describe('useModelWhitelist', () => {
       from: 'gpt-6-astra',
       to: 'gpt-6-astra'
     })
-    expect(presets.map(preset => preset.from).slice(0, 8)).toEqual([
+    expect(presets.some(preset => preset.from === 'gpt-6')).toBe(false)
+    expect(presets.map(preset => preset.from).slice(0, 11)).toEqual([
       'gpt-6-astra',
+      'gpt-6.1-sol',
+      'gpt-6-sol',
+      'gpt-6-luna',
       'gpt-5.6',
       'gpt-5.6-sol',
       'gpt-5.6-terra',
@@ -44,8 +52,11 @@ describe('useModelWhitelist', () => {
   })
 
   it('openai 模型列表按新系列优先排列', () => {
-    expect(getModelsByPlatform('openai').slice(0, 7)).toEqual([
+    expect(getModelsByPlatform('openai').slice(0, 10)).toEqual([
       'gpt-6-astra',
+      'gpt-6.1-sol',
+      'gpt-6-sol',
+      'gpt-6-luna',
       'gpt-5.6',
       'gpt-5.6-sol',
       'gpt-5.6-terra',

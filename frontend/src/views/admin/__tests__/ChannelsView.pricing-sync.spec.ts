@@ -151,6 +151,37 @@ const lunaCard = priced('gpt-6-luna', {
   fast_multiplier: 2,
 })
 
+const sonnet5Card: ModelPricingReference = {
+  model: 'claude-sonnet-5',
+  matched_model: 'claude-sonnet-5',
+  platform: 'anthropic',
+  status: 'priced',
+  source: 'release_catalog',
+  reason_code: '',
+  pricing: card({
+    platform: 'anthropic',
+    models: ['claude-sonnet-5'],
+    input_price: 2e-6,
+    output_price: 10e-6,
+    cache_write_price: 2.5e-6,
+    cache_write_1h_price: 4e-6,
+    cache_read_price: 0.2e-6,
+  }),
+}
+
+function expectSonnet5Prices(wrapper: VueWrapper) {
+  expect(wrapper.props('entry').models).toEqual(['claude-sonnet-5'])
+  for (const [label, value] of [
+    ['inputPrice', '2'],
+    ['outputPrice', '10'],
+    ['cacheWrite5mPrice', '2.5'],
+    ['cacheWrite1hPrice', '4'],
+    ['cacheReadPrice', '0.2'],
+  ]) {
+    expect(priceInput(wrapper, `admin.channels.form.${label}`).value).toBe(value)
+  }
+}
+
 function mountView() {
   return mount(ChannelsView, {
     global: {
@@ -184,9 +215,24 @@ async function openCreateDialog(wrapper: VueWrapper) {
 }
 
 async function enableOpenAI(wrapper: VueWrapper) {
-  // platformOrder: anthropic, openai, ... —— openai 是第二个平台勾选框。
-  const checkboxes = wrapper.findAll('input[type="checkbox"]')
-  await checkboxes[1]!.setValue(true)
+  await enablePlatform(wrapper, 'openai')
+}
+
+async function enableAnthropic(wrapper: VueWrapper) {
+  await enablePlatform(wrapper, 'anthropic')
+}
+
+async function enablePlatform(wrapper: VueWrapper, platform: string) {
+  // The basic form's first checkbox is restrict_models, before the platform
+  // controls. Select the platform by its label rather than its position.
+  const labelKey = `admin.groups.platforms.${platform}`
+  const platformLabel = wrapper.findAll('label').find(label => label.text() === labelKey)
+  expect(platformLabel, `${platform} platform checkbox must be present`).toBeDefined()
+  await platformLabel!.get('input[type="checkbox"]').setValue(true)
+  await flushPromises()
+  const platformTab = wrapper.findAll('button.channel-tab').find(button => button.text() === labelKey)
+  expect(platformTab, `enabled ${platform} pricing tab must be present`).toBeDefined()
+  await platformTab!.trigger('click')
   await flushPromises()
 }
 
@@ -214,6 +260,68 @@ beforeEach(() => {
 })
 
 describe('ChannelsView pricing sync', () => {
+  it.each(['add', 'sync'] as const)('fills exact Sonnet 5 reference prices via %s without borrowing Sonnet 5.5', async (path) => {
+    // Deliberately different synthetic reference prices expose any accidental
+    // reuse across model rows; these are not assertions of Sonnet 5.5's tariff.
+    const sonnet55: ModelPricingReference = {
+      ...sonnet5Card,
+      model: 'claude-sonnet-5-5',
+      matched_model: 'claude-sonnet-5-5',
+      pricing: card({ platform: 'anthropic', models: ['claude-sonnet-5-5'], input_price: 3e-6, output_price: 15e-6 }),
+    }
+    channelsSync.mockResolvedValue(snapshot([sonnet5Card, sonnet55], { platform: 'anthropic' }))
+    modelDefaultPricing.mockResolvedValue(sonnet5Card)
+    const wrapper = mountView()
+    await flushPromises()
+    await openCreateDialog(wrapper)
+    await enableAnthropic(wrapper)
+
+    if (path === 'sync') {
+      await syncButton(wrapper).trigger('click')
+      await flushPromises()
+      expect(channelsSync).toHaveBeenCalledWith('anthropic')
+      const cards = cardWrappers(wrapper)
+      expect(cards).toHaveLength(2)
+      expectSonnet5Prices(cards.find(c => c.props('entry').models[0] === 'claude-sonnet-5')!)
+      const newer = cards.find(c => c.props('entry').models[0] === 'claude-sonnet-5-5')!
+      expect(priceInput(newer, 'admin.channels.form.inputPrice').value).toBe('3')
+      expect(priceInput(newer, 'admin.channels.form.outputPrice').value).toBe('15')
+    } else {
+      await addPricingRuleButton(wrapper).trigger('click')
+      await flushPromises()
+      await cardWrappers(wrapper)[0]!.findComponent({ name: 'ModelTagInput' }).vm.$emit('update:models', ['claude-sonnet-5'])
+      await flushPromises()
+      expect(modelDefaultPricing).toHaveBeenCalledWith('anthropic', 'claude-sonnet-5')
+      expectSonnet5Prices(cardWrappers(wrapper)[0]!)
+    }
+    expect(cardWrappers(wrapper).some(c => c.props('entry').models.includes('claude-connect-5'))).toBe(false)
+  })
+
+  it('keeps manual Sonnet 5 overrides including explicit zero when syncing the exact model', async () => {
+    channelsSync.mockResolvedValue(snapshot([sonnet5Card], { platform: 'anthropic' }))
+    const wrapper = mountView()
+    await flushPromises()
+    await openCreateDialog(wrapper)
+    await enableAnthropic(wrapper)
+    await addPricingRuleButton(wrapper).trigger('click')
+    await flushPromises()
+    const manual = cardWrappers(wrapper)[0]!
+    manual.vm.$emit('update', { ...manual.props('entry'), input_price: '0', output_price: '7', cache_write_1h_price: '9' })
+    await flushPromises()
+    await cardWrappers(wrapper)[0]!.findComponent({ name: 'ModelTagInput' }).vm.$emit('update:models', ['claude-sonnet-5'])
+    await flushPromises()
+    expect(modelDefaultPricing).not.toHaveBeenCalled()
+
+    await syncButton(wrapper).trigger('click')
+    await flushPromises()
+    expect(channelsSync).toHaveBeenCalledWith('anthropic')
+    expect(cardWrappers(wrapper)).toHaveLength(1)
+    expect(priceInput(cardWrappers(wrapper)[0]!, 'admin.channels.form.inputPrice').value).toBe('0')
+    expect(priceInput(cardWrappers(wrapper)[0]!, 'admin.channels.form.outputPrice').value).toBe('7')
+    expect(priceInput(cardWrappers(wrapper)[0]!, 'admin.channels.form.cacheWrite1hPrice').value).toBe('9')
+    expect(showSuccess).toHaveBeenLastCalledWith('admin.channels.form.syncModelsAlreadyUpToDate')
+  })
+
   it('creates one independently priced rule per synced model', async () => {
     channelsSync.mockResolvedValue(snapshot([solCard, lunaCard]))
     const wrapper = mountView()
@@ -229,6 +337,7 @@ describe('ChannelsView pricing sync', () => {
     const cards = cardWrappers(wrapper)
     expect(cards).toHaveLength(2)
     // 每个模型一条规则，各自只含自己的型号。
+    expect(channelsSync).toHaveBeenCalledWith('openai')
     expect(cards[0]!.props('entry').models).toEqual(['gpt-6-sol'])
     expect(cards[1]!.props('entry').models).toEqual(['gpt-6-luna'])
 
@@ -258,6 +367,7 @@ describe('ChannelsView pricing sync', () => {
     await flushPromises()
     expect(cardWrappers(wrapper)).toHaveLength(2)
     expect(showSuccess).toHaveBeenLastCalledWith('admin.channels.form.syncModelsAlreadyUpToDate')
+    expect(channelsSync.mock.calls).toEqual([['openai'], ['openai']])
   })
 
   it('keeps manual_required models visible in their own incomplete rule', async () => {
@@ -271,19 +381,15 @@ describe('ChannelsView pricing sync', () => {
       pricing: null,
     }
     channelsSync.mockResolvedValue(
-      snapshot([solCard, manual], { platform: 'opencode_go' }),
+      snapshot([
+        { ...solCard, platform: 'opencode_go', pricing: { ...solCard.pricing!, platform: 'opencode_go' } },
+        manual,
+      ], { platform: 'opencode_go' }),
     )
     const wrapper = mountView()
     await flushPromises()
     await openCreateDialog(wrapper)
-    await enableOpenAI(wrapper)
-    // 该场景按 opencode_go 平台同步：切到 opencode_go 勾选框（第 10 个）。
-    const checkboxes = wrapper.findAll('input[type="checkbox"]')
-    await checkboxes[9]!.setValue(true)
-    await flushPromises()
-    // openai 勾选框取消，避免干扰断言。
-    await checkboxes[1]!.setValue(false)
-    await flushPromises()
+    await enablePlatform(wrapper, 'opencode_go')
 
     await syncButton(wrapper).trigger('click')
     await flushPromises()
@@ -298,6 +404,8 @@ describe('ChannelsView pricing sync', () => {
     expect(status.exists()).toBe(true)
     expect(status.text()).toContain('admin.channels.form.pricingLookupManualRequired')
     // 部分完成要单独报数，不能宣称全部自动填价。
+    expect(channelsSync).toHaveBeenCalledWith('opencode_go')
+    expect(cards.every(c => c.props('platform') === 'opencode_go')).toBe(true)
     expect(showSuccess).toHaveBeenCalledWith('admin.channels.form.syncModelsPartial')
   })
 
@@ -315,6 +423,7 @@ describe('ChannelsView pricing sync', () => {
 
     expect(cardWrappers(wrapper)).toHaveLength(1)
     expect(showWarning).toHaveBeenCalledWith('admin.channels.form.syncModelsStaleCatalog')
+    expect(channelsSync).toHaveBeenCalledWith('openai')
   })
 
   it('reports a failed sync without creating rules', async () => {
@@ -331,6 +440,7 @@ describe('ChannelsView pricing sync', () => {
     // 失败必须显式报错，不能静默吞掉；消息经 extractApiErrorMessage 提取。
     expect(showError).toHaveBeenCalled()
     expect(cardWrappers(wrapper)).toHaveLength(0)
+    expect(channelsSync).toHaveBeenCalledWith('openai')
   })
 
   it('editing an existing channel never rewrites existing rules', async () => {
@@ -395,6 +505,7 @@ describe('ChannelsView pricing sync', () => {
     expect(priceInput(after[0]!, 'admin.channels.form.inputPrice').value).toBe('2.5')
     expect(priceInput(after[0]!, 'admin.channels.form.outputPrice').value).toBe('15')
     expect(after.map(c => c.props('entry').models[0])).toEqual(['gpt-5.4', 'gpt-6-sol', 'gpt-6-luna'])
+    expect(channelsSync).toHaveBeenCalledWith('openai')
   })
 
   it('splits pasted models into independent rules', async () => {
@@ -437,6 +548,8 @@ describe('ChannelsView pricing sync', () => {
     expect(priceInput(cards[0]!, 'admin.channels.form.inputPrice').value).toBe('2')
     expect(cards[1]!.props('entry').models).toEqual(['gpt-6-luna'])
     expect(priceInput(cards[1]!, 'admin.channels.form.inputPrice').value).toBe('0.1')
+    expect(modelDefaultPricing).toHaveBeenCalledWith('openai', 'gpt-6-sol')
+    expect(modelDefaultPricing).toHaveBeenCalledWith('openai', 'gpt-6-luna')
   })
 
   it('shows the reference price source for a manually added model', async () => {
@@ -460,5 +573,6 @@ describe('ChannelsView pricing sync', () => {
     const source = single.find('[data-testid="pricing-lookup-source"]')
     expect(source.exists()).toBe(true)
     expect(source.text()).toContain('admin.channels.form.pricingLookupSourceCatalog')
+    expect(modelDefaultPricing).toHaveBeenCalledWith('openai', 'gpt-6-sol')
   })
 })

@@ -34,6 +34,7 @@ func TestPromptAuditGatePrecedesAccountBillingAndUpstreamSideEffects(t *testing.
 		{file: "grok_media.go", function: "handleGrokMedia", auditToken: "checkSecurityAudit"},
 		{file: "openai_embeddings.go", function: "Embeddings", auditToken: "checkSecurityAudit"},
 		{file: "openai_alpha_search.go", function: "AlphaSearch", auditToken: "checkSecurityAudit"},
+		{file: "gateway_web_search.go", function: "WebSearch", auditToken: "checkSecurityAudit"},
 		{file: "openai_live.go", function: "Live", auditToken: "checkSecurityAudit"},
 		{file: "image_task_handler.go", function: "Submit", auditToken: "checkSecurityAuditBeforeSubmit"},
 		{file: "batch_image_handler.go", function: "Submit", auditToken: "checkSecurityAuditBeforeSubmit"},
@@ -44,6 +45,7 @@ func TestPromptAuditGatePrecedesAccountBillingAndUpstreamSideEffects(t *testing.
 		"h.tasks.Create(", "h.tasks.CreateWithMetadata(", "h.service.Submit(", "CreateLiveCall(",
 		"StartOpenAICompactSSEKeepalive(", "ResolveChannelMappingAndRestrict(",
 		"AcquireOpenAIWSIngressLease(",
+		"reserveInflightBalance(", "reserveInflightBalanceCtx(",
 	}
 	for _, tt := range tests {
 		t.Run(tt.file+"/"+tt.function, func(t *testing.T) {

@@ -9,12 +9,62 @@ derives the OCI image tag by preserving the leading `v` and replacing only
 `+` with `-`.
 
 ```text
-Git/GitHub: v0.2.10+custom.001
-GHCR:       ghcr.io/luckykuang/sub2api-plus:v0.2.10-custom.001
+Git/GitHub: v0.2.11+custom.001
+GHCR:       ghcr.io/luckykuang/sub2api-plus:v0.2.11-custom.001
 ```
 
 Pin the GHCR version tag for reproducible deployments. See
 [`UPSTREAM.md`](../UPSTREAM.md) for iteration and upstream-baseline rules.
+
+## Balance reservations and API-key creation limits
+
+The v0.2.11 source integration adds the following configuration to
+`config.example.yaml`. Nested YAML keys also map to uppercase environment
+names with underscores, through the existing configuration loader. Supply
+those environment values to the application process/container when using
+environment configuration.
+
+| YAML key | Environment variable | Default |
+| --- | --- | --- |
+| `api_key_create.max_active_per_user` | `API_KEY_CREATE_MAX_ACTIVE_PER_USER` | `200` |
+| `api_key_create.max_per_user_per_hour` | `API_KEY_CREATE_MAX_PER_USER_PER_HOUR` | `60` |
+| `billing.inflight_reservation.enabled` | `BILLING_INFLIGHT_RESERVATION_ENABLED` | `true` |
+| `billing.inflight_reservation.ttl_seconds` | `BILLING_INFLIGHT_RESERVATION_TTL_SECONDS` | `900` |
+| `billing.inflight_reservation.default_max_tokens` | `BILLING_INFLIGHT_RESERVATION_DEFAULT_MAX_TOKENS` | `8192` |
+| `billing.inflight_reservation.max_output_tokens` | `BILLING_INFLIGHT_RESERVATION_MAX_OUTPUT_TOKENS` | `128000` |
+| `billing.inflight_reservation.max_input_tokens` | `BILLING_INFLIGHT_RESERVATION_MAX_INPUT_TOKENS` | `200000` |
+| `billing.inflight_reservation.max_reservation_usd` | `BILLING_INFLIGHT_RESERVATION_MAX_RESERVATION_USD` | `0` (no dollar cap) |
+| `billing.inflight_reservation.fail_closed_on_unpriced` | `BILLING_INFLIGHT_RESERVATION_FAIL_CLOSED_ON_UNPRICED` | `false` |
+
+Creation limits cover generated and custom keys. The active count includes
+non-deleted keys; deleting a key frees that slot, but never refunds the
+fixed-window creation counter. Zero disables each creation limit separately.
+Count exhaustion returns `API_KEY_COUNT_EXCEEDED` (403); frequency exhaustion
+returns `API_KEY_CREATE_RATE_LIMITED` (429). Redis failure does not block key
+creation through the frequency limit.
+
+Balance reservations are an admission estimate, not a billing charge or a
+guaranteed spending cap. The first in-flight request is admitted after the
+ordinary balance check; later concurrent requests compare estimated cost with
+cached balance minus reservations. Text estimates use input bytes and requested
+output tokens, with the configured caps. The default output estimate applies
+when no token limit is specified. Image, video, HTTP voice and search paths use
+their billing units. Redis failure and missing cache capabilities fail open;
+unpriced requests fail open unless explicitly configured otherwise.
+
+Reservations renew while the handler is active and remain referenced by queued
+billing tasks until the cached balance deduction completes. Process failure or
+abandoned work is bounded by the TTL. A failed synchronous cache deduction can
+fall back to deferred deduction and weakens the admission guarantee. Simple
+mode and subscription requests are excluded. Responses WebSocket sessions
+reserve after first-turn audit and retain per-turn audit/billing checks. Grok
+Realtime does not add the upstream pre-handshake reservation in this integration.
+
+To restore prior admission behavior, set
+`billing.inflight_reservation.enabled: false`. Existing API keys continue to
+authenticate; creation limits affect new creations. All numeric values must
+be non-negative, and the dollar cap must be finite. New tables or migrations
+are not required.
 
 ## Deployment Methods
 
@@ -545,13 +595,13 @@ Replace the immutable tag with another value reported by `list-versions` when
 needed:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- install --version 'v0.2.10+custom.001'
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- install --version 'v0.2.11+custom.001'
 ```
 
 Roll back an existing binary installation to an earlier published version:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- rollback 'v0.2.9+custom.001'
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- rollback 'v0.2.10+custom.001'
 ```
 
 Upgrade to the latest release:
@@ -575,13 +625,13 @@ curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/
 For a downloaded `install.sh`, invoke one operation at a time. For example:
 
 ```bash
-sudo ./install.sh install --version 'v0.2.10+custom.001'
+sudo ./install.sh install --version 'v0.2.11+custom.001'
 ```
 
 Roll back a downloaded-script installation one operation at a time:
 
 ```bash
-sudo ./install.sh rollback 'v0.2.9+custom.001'
+sudo ./install.sh rollback 'v0.2.10+custom.001'
 ```
 
 Or uninstall while preserving `/etc/sub2api`:

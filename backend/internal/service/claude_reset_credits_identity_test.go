@@ -11,12 +11,31 @@ import (
 	"time"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/claude"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"github.com/stretchr/testify/require"
 )
 
 type resetIdentityTokenStub struct {
 	acquire func(context.Context, *Account)
+}
+
+func TestClaudeResetCompiledIdentityAndFingerprint(t *testing.T) {
+	t.Setenv(claude.CLIVersionEnv, "")
+	require.Equal(t, outboundidentity.Identity{
+		Preset: "claude", Source: "compiled_default", Originator: "claude-cli",
+		UserAgent: "claude-cli/2.1.258 (external, cli)", Version: "2.1.258",
+		Headers: map[string]string{
+			"User-Agent":                  "claude-cli/2.1.258 (external, cli)",
+			"X-App":                       "cli",
+			"X-Stainless-Lang":            "js",
+			"X-Stainless-Package-Version": "0.94.0",
+			"X-Stainless-OS":              "Linux",
+			"X-Stainless-Arch":            "arm64",
+			"X-Stainless-Runtime":         "node",
+			"X-Stainless-Runtime-Version": "v24.3.0",
+		},
+	}, builtInOutboundIdentity("claude"))
 }
 
 type resetIdentityAccountStub struct{ account *Account }
@@ -96,6 +115,106 @@ func TestClaudeResetCreditsOutboundIdentityPriorityAndTransport(t *testing.T) {
 			}
 			_, err := s.Query(ctx, account.ID)
 			require.NoError(t, err)
+		})
+	}
+}
+
+func TestClaudeResetRedeemRetainsOwnerSnapshotAcrossAllOutboundPaths(t *testing.T) {
+	for _, name := range []string{"account", "global", "invalid-account", "empty-account", "default"} {
+		t.Run(name, func(t *testing.T) {
+			config := emptyOutboundIdentitySettings()
+			if name != "default" {
+				config.Profiles["claude"] = OutboundIdentitySelection{Preset: "claude", Version: "3.9.1"}
+			}
+			_, ctx := outboundIdentityTestSettings(t, config)
+			account := &Account{ID: 41, Platform: PlatformAnthropic, Type: AccountTypeOAuth, Credentials: map[string]any{"scope": "user:profile"}}
+			want := builtInOutboundIdentity("claude")
+			if name != "default" {
+				var err error
+				want, err = buildOutboundIdentity(config.Profiles["claude"])
+				require.NoError(t, err)
+				want.Source = "global"
+			}
+			switch name {
+			case "account":
+				selection := OutboundIdentitySelection{Preset: "claude", Version: "3.9.2"}
+				account.Credentials[outboundIdentityCredential] = selection
+				var err error
+				want, err = buildOutboundIdentity(selection)
+				require.NoError(t, err)
+				want.Source = "account"
+			case "invalid-account":
+				account.Credentials[outboundIdentityCredential] = OutboundIdentitySelection{Preset: "claude", UserAgent: "inbound/999"}
+			case "empty-account":
+				account.Credentials[outboundIdentityCredential] = nil
+			}
+			want.AccountID = account.ID
+			// An unrelated incoming operation cannot lend this credential owner its identity.
+			foreign := builtInOutboundIdentity("grok")
+			foreign.AccountID = 99
+			ctx = outboundidentity.WithIdentity(ctx, foreign)
+			f := &redeemFake{claim: `{"result":"reset"}`}
+			s, repo, _ := newRedeemService(t, f)
+			s.accounts = resetIdentityAccountStub{account}
+			acquisitions := 0
+			s.tokens = resetIdentityTokenStub{acquire: func(tokenCtx context.Context, owner *Account) {
+				acquisitions++
+				require.Same(t, account, owner)
+				selected, ok := outboundidentity.FromContext(tokenCtx)
+				require.True(t, ok)
+				require.Equal(t, want, selected)
+				// Account edits while obtaining a token cannot switch the ongoing operation.
+				account.Credentials[outboundIdentityCredential] = OutboundIdentitySelection{Preset: "claude", Version: "3.9.3"}
+			}}
+			paths := []string{}
+			upstream := s.do
+			client := &http.Client{Transport: claudeResetCreditTransport{base: brandidentity.WrapRoundTripper(roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				paths = append(paths, req.Method+" "+req.URL.String())
+				selected, ok := outboundidentity.FromContext(req.Context())
+				require.True(t, ok)
+				require.Equal(t, want, selected)
+				require.Equal(t, want.UserAgent, req.UserAgent())
+				for key, value := range want.Headers {
+					require.Equal(t, value, req.Header.Get(key), key)
+				}
+				require.Equal(t, "cli", req.Header.Get("X-App"))
+				require.Equal(t, "0.94.0", req.Header.Get("X-Stainless-Package-Version"))
+				require.Equal(t, "Linux", req.Header.Get("X-Stainless-OS"))
+				require.Equal(t, "arm64", req.Header.Get("X-Stainless-Arch"))
+				require.Equal(t, "node", req.Header.Get("X-Stainless-Runtime"))
+				require.Equal(t, "v24.3.0", req.Header.Get("X-Stainless-Runtime-Version"))
+				require.Empty(t, req.Header.Get("Originator"))
+				require.Empty(t, req.Header.Get("Version"))
+				require.Empty(t, req.Header.Get("X-Grok-Client-Identifier"))
+				require.Empty(t, req.Header.Get("Cookie"))
+				return upstream(req, "")
+			}))}}
+			s.do = func(req *http.Request, proxy string) (*http.Response, error) {
+				require.Empty(t, proxy)
+				req.Header.Set("User-Agent", "sdk/999")
+				req.Header.Set("X-Stainless-Package-Version", "999")
+				req.Header.Set("Originator", "inbound")
+				req.Header.Set("X-Grok-Client-Identifier", "foreign")
+				return client.Do(req)
+			}
+			out, err := s.Redeem(ctx, account.ID, "snapshot-operation")
+			require.NoError(t, err)
+			require.Equal(t, ClaudeResetOutcomeReset, out.Outcome)
+			require.Equal(t, 2, acquisitions)
+			require.Equal(t, []string{
+				"GET " + claudeResetProfileURL,
+				"GET " + claudeResetUsageURL,
+				"POST https://api.anthropic.com/api/organizations/" + redeemTestOrg + "/reset_rate_limits",
+				"GET " + claudeResetUsageURL,
+			}, paths)
+			require.Equal(t, 1, f.postCount())
+			// Persisted fences and operator replay results never store OAuth credentials.
+			for _, record := range repo.data {
+				if record.ResponseBody != nil {
+					require.NotContains(t, *record.ResponseBody, "synthetic-token")
+					require.NotContains(t, *record.ResponseBody, redeemTestOrg)
+				}
+			}
 		})
 	}
 }

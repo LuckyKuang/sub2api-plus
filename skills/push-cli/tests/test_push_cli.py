@@ -783,6 +783,71 @@ class ValidationGenerationTest(unittest.TestCase):
 
 
 class ValidationLaunchTest(unittest.TestCase):
+    def test_external_integration_configuration_is_forwarded_without_secret_values(self) -> None:
+        with mock.patch.dict(push_cli.validation_runtime.os.environ,
+                             {"SUB2API_TEST_POSTGRES_DSN": "postgres://private-value",
+                              "SUB2API_TEST_REDIS_ADDR": "isolated-redis:6379",
+                              "SUB2API_TEST_REDIS_PASSWORD": "private-password"}, clear=True):
+            command = push_cli.validation_runtime.validation_run_command(
+                push_cli.Runtime("docker"), ["python3", "check.py"],
+                root=Path("/unused"), image="sub2api-validation:1111111111111111",
+                user=None, caches=[], cache_generation="aaaaaaaaaaaaaaaa",
+            )
+        for name in push_cli.validation_runtime.INTEGRATION_ENV_NAMES:
+            index = command.index(name)
+            self.assertEqual("--env", command[index - 1])
+        self.assertNotIn("postgres://private-value", command)
+        self.assertNotIn("private-password", command)
+
+    def test_wsl_host_network_is_explicit_and_never_changes_other_runtimes(self) -> None:
+        with mock.patch.dict(push_cli.validation_runtime.os.environ, {}, clear=True):
+            self.assertEqual([], push_cli.validation_runtime.validation_network_args(
+                push_cli.Runtime("wsl2-docker")
+            ))
+        with mock.patch.dict(push_cli.validation_runtime.os.environ,
+                             {"SUB2API_VALIDATION_WSL_NETWORK": "host"}, clear=True):
+            self.assertEqual(["--network", "host"],
+                             push_cli.validation_runtime.validation_network_args(
+                                 push_cli.Runtime("wsl2-docker")
+                             ))
+            for name in ("docker", "apple-containers"):
+                with self.assertRaises(push_cli.validation_runtime.ValidationRuntimeError):
+                    push_cli.validation_runtime.validation_network_args(push_cli.Runtime(name))
+        with mock.patch.dict(push_cli.validation_runtime.os.environ,
+                             {"SUB2API_VALIDATION_WSL_NETWORK": "bridge"}, clear=True):
+            with self.assertRaises(push_cli.validation_runtime.ValidationRuntimeError):
+                push_cli.validation_runtime.validation_network_args(push_cli.Runtime("wsl2-docker"))
+
+    def test_linked_worktree_mounts_shared_metadata_at_its_relative_wsl_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            parent = Path(temp_dir)
+            common = parent / ".git"
+            git_dir = common / "worktrees" / "candidate"
+            git_dir.mkdir(parents=True)
+            worktree = parent / "tmp" / "candidate"
+            worktree.mkdir(parents=True)
+            (worktree / ".git").write_text(
+                "gitdir: ../../.git/worktrees/candidate\n", encoding="utf-8"
+            )
+            (git_dir / "commondir").write_text("../..\n", encoding="utf-8")
+            runtime = push_cli.Runtime(
+                "wsl2-docker", ("wsl", "-d", "Debian", "--"),
+                "/mnt/c/project/tmp/candidate",
+            )
+            mount = push_cli.validation_runtime.worktree_git_mount(runtime, worktree)
+            self.assertEqual(
+                ["--volume", "/mnt/c/project/.git:/mnt/c/project/.git"], mount
+            )
+            native_mount = push_cli.validation_runtime.worktree_git_mount(
+                push_cli.Runtime("docker"), worktree
+            )
+            self.assertEqual(["--volume", f"{common}:{common}"], native_mount)
+            (worktree / ".git").unlink()
+            (worktree / ".git").mkdir()
+            self.assertEqual(
+                [], push_cli.validation_runtime.worktree_git_mount(runtime, worktree)
+            )
+
     def test_macos_launch_uses_apple_container_run(self) -> None:
         runtime = push_cli.Runtime("apple-containers", compose_required=False)
         with (
@@ -978,6 +1043,39 @@ class ValidationLaunchTest(unittest.TestCase):
 
 
 class ValidationCleanupTest(unittest.TestCase):
+    def test_cleanup_removes_read_only_go_modules_without_touching_other_trees(self) -> None:
+        runtime = push_cli.Runtime("apple-containers", compose_required=False)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            home = Path(temp_dir)
+            cache = home / ".cache" / "sub2api-validation"
+            current = cache / "aaaaaaaaaaaaaaaa" / "go/pkg/mod/example@v1"
+            stale = cache / "bbbbbbbbbbbbbbbb" / "go/pkg/mod/example@v0"
+            unrelated = home / "unrelated"
+            for directory in (current, stale, unrelated):
+                directory.mkdir(parents=True)
+                (directory / "module.go").write_text("package fixture\n")
+                (directory / "module.go").chmod(0o444)
+                directory.chmod(0o555)
+            (stale.parent / "external").symlink_to(unrelated, target_is_directory=True)
+            try:
+                with mock.patch.object(push_cli.validation_runtime.Path, "home", return_value=home):
+                    push_cli.validation_runtime.cleanup_validation_runtime(
+                        runtime,
+                        image="sub2api-validation:1111111111111111",
+                        cache_generation="aaaaaaaaaaaaaaaa",
+                        capture=lambda command: "NAME TAG DIGEST\n",
+                        run_step=lambda name, command: self.fail("no image deletion expected"),
+                    )
+                self.assertFalse((cache / "bbbbbbbbbbbbbbbb").exists())
+                for directory in (current, unrelated):
+                    self.assertEqual(0o555, directory.stat().st_mode & 0o777)
+                    self.assertEqual("package fixture\n", (directory / "module.go").read_text())
+            finally:
+                # TemporaryDirectory cleanup must also work as a non-root user.
+                for directory in (current, stale, unrelated):
+                    if directory.exists():
+                        directory.chmod(0o755)
+
     def test_apple_cleanup_retains_current_generation_and_deletes_stale_resources(self) -> None:
         runtime = push_cli.Runtime("apple-containers", compose_required=False)
         commands: list[tuple[str, list[str]]] = []

@@ -61,7 +61,7 @@ func TestChannelPricingReferenceRejectsFuzzyFamilyPrice(t *testing.T) {
 		"claude-opus-5-5-preview":{"litellm_provider":"anthropic","input_cost_per_token":0.999}
 	}`)
 
-	for _, model := range []string{"gpt-6-sol", "gpt-6-luna"} {
+	for _, model := range []string{"gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna"} {
 		ref, err := svc.Resolve(context.Background(), PlatformOpenAI, model)
 		require.NoError(t, err)
 		// Sol/Luna 有自己的同型号内置兜底，这里给出的是 builtin 而非精确目录等价物。

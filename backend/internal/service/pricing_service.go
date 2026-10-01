@@ -83,6 +83,23 @@ var (
 		Mode:                                "chat",
 		SupportsPromptCaching:               true,
 	}
+	openAIGPT61SolFallbackPricing = &LiteLLMModelPricing{
+		InputCostPerToken:                   2e-6,
+		InputCostPerTokenPriority:           4e-6,
+		OutputCostPerToken:                  10e-6,
+		OutputCostPerTokenPriority:          20e-6,
+		CacheCreationInputTokenCost:         2.5e-6,
+		CacheCreationInputTokenCostPriority: 5e-6,
+		CacheReadInputTokenCost:             0.1e-6,
+		CacheReadInputTokenCostPriority:     0.2e-6,
+		LongContextInputTokenThreshold:      272_000,
+		LongContextInputCostMultiplier:      2,
+		LongContextOutputCostMultiplier:     1.5,
+		SupportsServiceTier:                 true,
+		LiteLLMProvider:                     "openai",
+		Mode:                                "chat",
+		SupportsPromptCaching:               true,
+	}
 	// 官方 v0.2.10 新增：Claude Opus/Sonnet 5.5 的内置兜底卡。
 	// GPT-6 Sol/Luna 兜底由 Plus 在下方独立维护（UPSTREAM.md
 	// "Restored Upstream Pricing Branches"），此处不重复声明。
@@ -93,6 +110,12 @@ var (
 		InputCostPerTokenPriority: 8e-6, OutputCostPerTokenPriority: 40e-6,
 		CacheCreationInputTokenCostPriority: 10e-6, CacheReadInputTokenCostPriority: 0.4e-6,
 		SupportsServiceTier: true, LiteLLMProvider: "anthropic", Mode: "chat", SupportsPromptCaching: true,
+	}
+	claudeSonnet5FallbackPricing = &LiteLLMModelPricing{
+		InputCostPerToken: 2e-6, OutputCostPerToken: 10e-6,
+		CacheCreationInputTokenCost: 2.5e-6, CacheCreationInputTokenCostAbove1hr: 4e-6,
+		CacheReadInputTokenCost: 0.2e-6,
+		LiteLLMProvider:         "anthropic", Mode: "chat", SupportsPromptCaching: true,
 	}
 	claudeSonnet55FallbackPricing = &LiteLLMModelPricing{
 		InputCostPerToken: 2e-6, OutputCostPerToken: 10e-6,
@@ -228,6 +251,10 @@ type LiteLLMModelPricing struct {
 	// 此类条目只可用于图片计费，token 计费必须回退到 fallback 或 fail-closed，
 	// 否则 token 流量会被按 $0 计费。零值（false）表示条目具备 token 价格。
 	TokenPricingAbsent bool `json:"-"`
+
+	// CacheCreationInputTokenCostExplicit preserves source field presence so
+	// an explicit zero is not replaced by a derived cache-write premium.
+	CacheCreationInputTokenCostExplicit bool `json:"-"`
 }
 
 // PricingRemoteClient 远程价格数据获取接口
@@ -682,6 +709,7 @@ func (s *PricingService) parsePricingData(body []byte) (map[string]*LiteLLMModel
 		}
 		if entry.CacheCreationInputTokenCost != nil {
 			pricing.CacheCreationInputTokenCost = *entry.CacheCreationInputTokenCost
+			pricing.CacheCreationInputTokenCostExplicit = true
 		}
 		if entry.CacheCreationInputTokenCostPriority != nil {
 			pricing.CacheCreationInputTokenCostPriority = *entry.CacheCreationInputTokenCostPriority
@@ -1513,7 +1541,16 @@ func normalizeModelNameForPricing(model string) string {
 	}
 
 	model = strings.TrimLeft(model, "/")
+	if isClaudeSonnet5Model(model) {
+		return "claude-sonnet-5"
+	}
 	if canonical := canonicalizeOpenAIModelAliasSpelling(model); canonical != "" {
+		if openai.IsGPT61SolModelSpelling(canonical) {
+			return "gpt-6.1-sol"
+		}
+		if base := openai.GPT6SolOrLunaBaseModel(canonical); base != "" {
+			return base
+		}
 		if isOpenAIGPT6AstraModel(canonical) {
 			return "gpt-6-astra"
 		}
@@ -1571,6 +1608,12 @@ func (s *PricingService) extractBaseName(model string) string {
 
 // matchByModelFamily 基于模型系列匹配
 func (s *PricingService) matchByModelFamily(model string) *LiteLLMModelPricing {
+	if isClaudeSonnet5Model(model) {
+		if pricing, ok := s.pricingData["claude-sonnet-5"]; ok {
+			return pricing
+		}
+		return claudeSonnet5FallbackPricing
+	}
 	// 官方 v0.2.10：Opus/Sonnet 5.5 走独立目录 key + 内置兜底卡，优先于下面的
 	// families 子串匹配。Plus 的 opus-5.5 exact 系列条目与 phase-2 fallbackName
 	// 规则保持原样，作为非 IsOpus55/IsSonnet55 命中路径（例如点号写法、preview 后缀）
@@ -1735,6 +1778,12 @@ func (s *PricingService) matchOpenAIModel(model string) *LiteLLMModelPricing {
 		}
 	}
 
+	if openai.IsGPT61SolModelSpelling(model) {
+		if pricing, ok := s.pricingData["gpt-6.1-sol"]; ok {
+			return pricing
+		}
+		return openAIGPT61SolFallbackPricing
+	}
 	// GPT-6 Sol/Luna：远端镜像领先发布时这两个型号可能没有精确目录条目，但绝不能
 	// 被下面 variants 的 base-name 变体跨匹配到 gpt-6（目录里若有 gpt-6 会被误用）。
 	// 必须在 variants 兜底前按同型号静态价返回；exact 目录命中已在 GetModelPricing

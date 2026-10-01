@@ -55,6 +55,16 @@ first frames never reserve a lease. The first-message deadline bounds sockets
 awaiting content. After acquisition, renewal and release cover the remaining
 connection lifetime; subsequent frames still cross the canonical audit hook.
 
+In-flight balance reservations follow the same boundary on HTTP and Responses
+WebSocket paths. First-turn audit precedes session reservation; later turns
+still enter both engines before billing eligibility, routing or upstream
+writes. Handler and asynchronous billing-task reservation ownership changes
+do not alter extraction. Standalone web/x search audits its normalized user
+query before billing or reservation. Grok TTS audits its normalized spoken
+text before those side effects. Claude Code fallback routing on Responses and
+Chat Completions remains behind canonical audit. Unknown siblings and
+unextractable content retain the existing pass-through contract.
+
 Session affinity, account type, inbound role labels, envelope `type` values,
 and protocol adapters cannot bypass the audit hook. Extraction remains
 compatible with `v0.1.177+custom.003`: unsupported or unrecognized content may
