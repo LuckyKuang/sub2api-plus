@@ -280,7 +280,7 @@
               <span class="text-gray-400 dark:text-gray-500">{{ t('usage.latencyDuration') }}</span>
               <span data-testid="latency-duration" class="font-medium tabular-nums" :class="durationTextClass(row)">{{ formatDuration(row.duration_ms) }}</span>
               <span class="cursor-help text-gray-400 dark:text-gray-500" :title="t('usage.latencyTpsHint')">{{ t('usage.latencyTps') }}</span>
-              <span data-testid="latency-tps" class="cursor-help whitespace-nowrap font-medium tabular-nums" :class="estimatedTps(row) == null ? 'text-gray-400 dark:text-gray-500' : 'text-cyan-600 dark:text-cyan-400'" :title="t('usage.latencyTpsHint')">{{ formatTpsDisplay(estimatedTps(row)) }}</span>
+              <span data-testid="latency-tps" class="cursor-help whitespace-nowrap font-medium tabular-nums" :class="averageTps(row) == null ? 'text-gray-400 dark:text-gray-500' : 'text-cyan-600 dark:text-cyan-400'" :title="averageTpsTitle(row)">{{ formatTpsDisplay(averageTps(row)) }}</span>
             </div>
           </div>
         </template>
@@ -464,9 +464,12 @@
             <span class="text-gray-400">{{ t('usage.latencyDuration') }}</span>
             <span class="font-medium text-white">{{ formatDuration(latencyTooltipData.duration_ms) }}</span>
           </div>
-          <div v-if="latencyTooltipData && estimatedTps(latencyTooltipData) != null" class="flex items-center justify-between gap-4">
+          <div v-if="latencyTooltipData && averageTps(latencyTooltipData) != null" class="flex items-center justify-between gap-4">
             <span class="text-gray-400">{{ t('usage.latencyTps') }}</span>
-            <span class="font-medium text-cyan-300">{{ formatTpsDisplay(estimatedTps(latencyTooltipData)) }}</span>
+            <span class="font-medium text-cyan-300">{{ formatTpsDisplay(averageTps(latencyTooltipData)) }}</span>
+          </div>
+          <div v-if="latencyTooltipData && tpsNote(latencyTooltipData)" data-testid="latency-tps-note" class="border-t border-gray-700 pt-1.5 text-[11px] leading-relaxed text-gray-400">
+            {{ t(tpsNote(latencyTooltipData)!) }}
           </div>
           <div v-if="latencyTooltipNote(latencyTooltipData)" class="border-t border-gray-700 pt-1.5 text-[11px] leading-relaxed text-gray-400">
             {{ latencyTooltipNote(latencyTooltipData) }}
@@ -677,7 +680,7 @@ import IpGeoCell from '@/components/common/IpGeoCell.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { fetchBatch, getEntry } from '@/utils/ipGeoLookup'
 import type { AdminUsageLog } from '@/types'
-import { strictFirstTokenMs, estimatedTps, firstTokenUnavailableReason } from '@/utils/usageTiming'
+import { strictFirstTokenMs, averageTps, tpsNote, firstTokenUnavailableReason } from '@/utils/usageTiming'
 import type { Column } from '@/components/common/types'
 
 interface Props {
@@ -853,6 +856,7 @@ const primaryFirstTokenTextClass = (row: AdminUsageLog): string => {
 }
 
 const hasLatencyDetails = (row: AdminUsageLog): boolean => {
+  if (tpsNote(row)) return true
   // Legacy first-event needs explanation so it is not mistaken for strict TTFT.
   if (firstTokenUnavailableReason(row)) return true
   // Non-text first output always deserves a detail popover.
@@ -860,6 +864,11 @@ const hasLatencyDetails = (row: AdminUsageLog): boolean => {
   // Pure text with matching first output/token is fully represented by the primary column.
   if (row.first_token_ms == null) return true
   return row.first_output_ms != null && row.first_output_ms !== row.first_token_ms
+}
+
+const averageTpsTitle = (row: AdminUsageLog): string => {
+  const note = tpsNote(row)
+  return note ? `${t('usage.latencyTpsHint')} ${t(note)}` : t('usage.latencyTpsHint')
 }
 
 // Shared modality labels for latency detail tooltip.

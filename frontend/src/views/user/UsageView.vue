@@ -219,7 +219,7 @@
 </template>
 
 <script setup lang="ts">
-import { strictFirstTokenMs, estimatedTps, tpsReason } from '@/utils/usageTiming'
+import { strictFirstTokenMs, averageTps, tpsNote } from '@/utils/usageTiming'
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
@@ -632,8 +632,8 @@ const escapeCSVValue = (value: unknown): string => {
   return str
 }
 
-const formatTpsReason = (log: UsageLog): string => {
-  const reason = tpsReason(log)
+const formatTpsNote = (log: UsageLog): string => {
+  const reason = tpsNote(log)
   return reason ? t(reason) : ''
 }
 
@@ -677,8 +677,8 @@ const exportToCSV = async () => {
       'First Output (ms)',
       'First Output Kind',
       'Duration (ms)',
-      'TPS',
-      'Unavailable reason',
+      'Average TPS',
+      'Average TPS note',
     ]
     const rows = allLogs.map((log) => [
       log.created_at,
@@ -700,8 +700,8 @@ const exportToCSV = async () => {
       log.first_output_ms ?? '',
       log.first_output_kind ?? '',
       log.duration_ms ?? '',
-      estimatedTps(log) ?? '',
-      formatTpsReason(log),
+      averageTps(log) ?? '',
+      formatTpsNote(log),
     ].map(escapeCSVValue))
     const csvContent = [
       headers.map(escapeCSVValue).join(','),
