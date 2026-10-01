@@ -1,219 +1,90 @@
-import { mount } from '@vue/test-utils'
+import { mount, enableAutoUnmount } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { nextTick } from 'vue'
-
 import Select from '../Select.vue'
 
-vi.mock('vue-i18n', async () => {
-  const actual = await vi.importActual<typeof import('vue-i18n')>('vue-i18n')
-  return {
-    ...actual,
-    useI18n: () => ({ t: (key: string) => key }),
-  }
-})
+vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
+enableAutoUnmount(afterEach)
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks() })
 
-const originalInnerWidth = window.innerWidth
-let unmountWrapper: (() => void) | undefined
+const options = [
+  { value: '', label: 'All' },
+  { value: 0, label: 'Zero' },
+  { value: 1, label: 'Numeric one' },
+  { value: '1', label: 'Text one' },
+  { value: false, label: 'False' },
+  { value: null, label: 'None' },
+]
 
-const setViewportWidth = (width: number) => {
-  Object.defineProperty(window, 'innerWidth', {
-    configurable: true,
-    value: width,
-  })
-}
-
-const mockTriggerRect = (left: number, width: number) => {
-  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
-    x: left,
-    y: 20,
-    top: 20,
-    right: left + width,
-    bottom: 60,
-    left,
-    width,
-    height: 40,
-    toJSON: () => ({}),
-  })
-}
-
-const openSelect = async () => {
-  const wrapper = mount(Select, {
-    props: {
-      modelValue: null,
-      options: [
-        {
-          value: 'example',
-          label: 'very-long-unbroken-option-value-that-must-not-overflow',
-        },
-      ],
-    },
-  })
-  unmountWrapper = () => wrapper.unmount()
-
-  await wrapper.get('button').trigger('click')
-  await nextTick()
-
-  return document.body.querySelector<HTMLElement>('.select-dropdown-portal')
-}
-
-afterEach(() => {
-  unmountWrapper?.()
-  unmountWrapper = undefined
-  document.body.innerHTML = ''
-  setViewportWidth(originalInnerWidth)
-  vi.useRealTimers()
-  vi.restoreAllMocks()
-})
-
-describe('Select dropdown viewport constraints', () => {
-  it('preserves the existing 200px minimum width when space is available', async () => {
-    setViewportWidth(1024)
-    mockTriggerRect(20, 80)
-
-    const dropdown = await openSelect()
-
-    expect(dropdown).not.toBeNull()
-    expect(dropdown?.style.left).toBe('20px')
-    expect(dropdown?.style.minWidth).toBe('200px')
-    expect(dropdown?.style.maxWidth).toBe('996px')
+describe('native Select', () => {
+  it('renders a native control with no custom popup and preserves typed values', async () => {
+    const wrapper = mount(Select, { props: { modelValue: '', options } })
+    const select = wrapper.get('select')
+    expect(wrapper.find('button').exists()).toBe(false)
+    expect(wrapper.find('[role="listbox"]').exists()).toBe(false)
+    for (const [key, value] of [['number:0', 0], ['number:1', 1], ['string:1', '1'], ['boolean:false', false], ['object:null', null], ['string:', '']] as const) {
+      await select.setValue(key)
+      expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([value])
+      expect(wrapper.emitted('change')?.at(-1)?.[1]).toEqual(options.find(option => option.value === value))
+    }
   })
 
-  it('shrinks the minimum width to fit near the right viewport edge', async () => {
-    setViewportWidth(320)
-    mockTriggerRect(220, 80)
-
-    const dropdown = await openSelect()
-
-    expect(dropdown).not.toBeNull()
-    expect(dropdown?.style.left).toBe('220px')
-    expect(dropdown?.style.minWidth).toBe('92px')
-    expect(dropdown?.style.maxWidth).toBe('92px')
+  it('supports custom value and label keys', async () => {
+    const wrapper = mount(Select, { props: { modelValue: null, options: [{ id: 7, display_name: 'Account seven' }], valueKey: 'id', labelKey: 'display_name' } })
+    await wrapper.get('select').setValue('number:7')
+    expect(wrapper.emitted('update:modelValue')).toEqual([[7]])
+    expect(wrapper.get('option[value="number:7"]').text()).toBe('Account seven')
   })
 
-  it('clamps a trigger left of the viewport to the safe padding', async () => {
-    setViewportWidth(320)
-    mockTriggerRect(-20, 80)
-
-    const dropdown = await openSelect()
-
-    expect(dropdown).not.toBeNull()
-    expect(dropdown?.style.left).toBe('8px')
-    expect(dropdown?.style.minWidth).toBe('200px')
-    expect(dropdown?.style.maxWidth).toBe('304px')
+  it('keeps disabled headers as native optgroups without disabling their children', async () => {
+    const wrapper = mount(Select, { props: { modelValue: null, options: [
+      { value: 'header', label: 'Provider', kind: 'group', disabled: true },
+      { value: 1, label: 'Available' }, { value: 2, label: 'Unavailable', disabled: true },
+    ] } })
+    expect(wrapper.get('optgroup').attributes('label')).toBe('Provider')
+    expect(wrapper.get('optgroup').attributes('disabled')).toBeUndefined()
+    await wrapper.get('select').setValue('number:1')
+    expect(wrapper.emitted('update:modelValue')).toEqual([[1]])
+    await wrapper.get('select').setValue('number:2')
+    expect(wrapper.emitted('update:modelValue')).toEqual([[1]])
   })
 
-  it('clamps an offscreen-right trigger position to the viewport boundary', async () => {
-    setViewportWidth(320)
-    mockTriggerRect(400, 80)
-
-    const dropdown = await openSelect()
-
-    expect(dropdown).not.toBeNull()
-    expect(dropdown?.style.left).toBe('312px')
-    expect(dropdown?.style.minWidth).toBe('0px')
-    expect(dropdown?.style.maxWidth).toBe('0px')
+  it('exposes disabled state, errors and labels on the native form control', async () => {
+    const wrapper = mount(Select, { props: { modelValue: 1, options, disabled: true, error: true, id: 'choice', ariaLabel: 'Choose platform', ariaDescribedby: 'hint' } })
+    const select = wrapper.get('select')
+    expect(select.attributes()).toMatchObject({ id: 'choice', disabled: '', 'aria-label': 'Choose platform', 'aria-describedby': 'hint', 'aria-invalid': 'true' })
+    await select.setValue('number:0')
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
   })
-})
 
-describe('Select remote search', () => {
-  const mountRemoteSelect = (props: Record<string, unknown> = {}) => {
+  it('provides a native clear choice and supports unavailable/loading options', async () => {
+    const wrapper = mount(Select, { props: { modelValue: 1, options, clearable: true } })
+    await wrapper.get('select').setValue('placeholder')
+    expect(wrapper.emitted('change')).toEqual([[null, null]])
+    await wrapper.setProps({ modelValue: null, options: [], loading: true })
+    expect(wrapper.get('option').text()).toBe('common.loading')
+    await wrapper.setProps({ loading: false, emptyText: 'No accounts' })
+    expect(wrapper.get('option').text()).toBe('No accounts')
+  })
+
+  it('shows selected details only after an option is selected', async () => {
     const wrapper = mount(Select, {
-      props: {
-        modelValue: null,
-        remote: true,
-        options: [
-          { value: 'alpha', label: 'Alpha account' },
-          { value: 'beta', label: 'Beta account' },
-        ],
-        ...props,
-      },
+      props: { modelValue: undefined, options },
+      slots: { details: '<template #details="{ option }"><span data-test="details">{{ option?.label || "Choose a group" }}</span></template>' },
     })
-    unmountWrapper = () => wrapper.unmount()
-    return wrapper
-  }
-
-  const openDropdown = async () => {
-    const dropdown = document.body.querySelector<HTMLElement>('.select-dropdown-portal')
-    expect(dropdown).not.toBeNull()
-    return dropdown as HTMLElement
-  }
-
-  const typeSearchQuery = async (query: string) => {
-    const dropdown = await openDropdown()
-    const input = dropdown.querySelector<HTMLInputElement>('.select-search-input')
-    expect(input).not.toBeNull()
-    input!.value = query
-    input!.dispatchEvent(new Event('input'))
-    await nextTick()
-  }
-
-  it('emits debounced search events and skips local filtering in remote mode', async () => {
-    vi.useFakeTimers()
-    const wrapper = mountRemoteSelect()
-    await wrapper.get('button').trigger('click')
-    await nextTick()
-
-    await typeSearchQuery('zzz')
-
-    // 防抖窗口内不触发。
-    expect(wrapper.emitted('search')).toBeUndefined()
-    await vi.advanceTimersByTimeAsync(300)
-
-    expect(wrapper.emitted('search')).toEqual([['zzz']])
-    // 远程模式不做本地过滤：无命中的 query 下选项仍完整展示（由父组件更新 options）。
-    const dropdown = await openDropdown()
-    const labels = [...dropdown.querySelectorAll('.select-option-label')].map((el) => el.textContent)
-    expect(labels).toContain('Alpha account')
-    expect(labels).toContain('Beta account')
+    expect(wrapper.find('[data-test="details"]').exists()).toBe(false)
+    await wrapper.setProps({ modelValue: 1 })
+    expect(wrapper.get('[data-test="details"]').text()).toBe('Numeric one')
+    await wrapper.setProps({ modelValue: undefined })
+    expect(wrapper.find('[data-test="details"]').exists()).toBe(false)
   })
 
-  it('does not emit search when the dropdown closes and the query resets', async () => {
-    vi.useFakeTimers()
-    const wrapper = mountRemoteSelect()
-    await wrapper.get('button').trigger('click')
-    await nextTick()
-
-    await typeSearchQuery('hidden')
-
-    // 关闭下拉：排队中的防抖定时器应被取消，也不应因 query 重置而尾随 emit。
-    await wrapper.get('button').trigger('click')
-    await nextTick()
-    await vi.advanceTimersByTimeAsync(300)
-
-    expect(wrapper.emitted('search')).toBeUndefined()
-  })
-
-  it('shows the loading text instead of empty text while loading with no options', async () => {
-    const wrapper = mountRemoteSelect({ options: [], loading: true })
-    await wrapper.get('button').trigger('click')
-    await nextTick()
-
-    const dropdown = await openDropdown()
-    expect(dropdown.querySelector('.select-empty')?.textContent).toContain('common.loading')
-  })
-
-  it('keeps local filtering and emits nothing when remote is not set', async () => {
-    vi.useFakeTimers()
-    const wrapper = mount(Select, {
-      props: {
-        modelValue: null,
-        searchable: true,
-        options: [
-          { value: 'alpha', label: 'Alpha account' },
-          { value: 'beta', label: 'Beta account' },
-        ],
-      },
-    })
-    unmountWrapper = () => wrapper.unmount()
-    await wrapper.get('button').trigger('click')
-    await nextTick()
-
-    await typeSearchQuery('alpha')
-    await vi.advanceTimersByTimeAsync(300)
-
-    expect(wrapper.emitted('search')).toBeUndefined()
-    const dropdown = await openDropdown()
-    const labels = [...dropdown.querySelectorAll('.select-option-label')].map((el) => el.textContent)
-    expect(labels).toEqual(['Alpha account'])
+  it('keeps search inside the original popup instead of splitting the field', async () => {
+    const wrapper = mount(Select, { props: { modelValue: 1, options, searchable: true } })
+    expect(wrapper.find('select').exists()).toBe(false)
+    expect(wrapper.find('input').exists()).toBe(false)
+    expect(wrapper.get('.select-trigger').text()).toContain('Numeric one')
+    await wrapper.get('.select-trigger').trigger('click')
+    expect(document.querySelector('.select-dropdown-portal .select-search-input')).not.toBeNull()
+    expect(wrapper.find('input').exists()).toBe(false)
   })
 })

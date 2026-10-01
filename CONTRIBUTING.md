@@ -25,6 +25,20 @@ pnpm --dir frontend install --frozen-lockfile
 
 ## Development Checks
 
+Ordinary selection dropdowns use native HTML `select` controls and shared styles in
+`frontend/src/style.css`. Reuse `frontend/src/components/common/Select.vue` for
+typed values, disabled options, option groups, clearable choices, and optional
+local or remote search. Searchable controls retain the existing single-field
+layout with search inside the dropdown. Do not expose a separate search input
+above or alongside a second selection field. The shared component delegates
+searchable choices to `SearchableSelect.vue`; keep existing search-result
+popovers and their styling for user, account, model, and proxy selectors.
+Keep selected-item details outside native options.
+For multi-selection, use a native dropdown to add or remove choices and show the
+selection summary separately. Native controls own keyboard navigation and focus.
+Keep horizontal padding and arrow placement in the shared styles; individual
+pages may adjust control width and height.
+
 All validation, including focused checks while iterating, must run in the
 platform validation container: Apple Containers on macOS, Docker inside WSL2
 Debian or Ubuntu on Windows, and Docker on Linux. Do not run tests, lint,

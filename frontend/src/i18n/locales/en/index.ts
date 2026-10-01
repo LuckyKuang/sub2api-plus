@@ -2,6 +2,7 @@ import landing from './landing'
 import common from './common'
 import dashboard from './dashboard'
 import channelMonitorV2 from './channelMonitorV2'
+import channelMonitorV3 from './channelMonitorV3'
 import batchImage from './batchImage'
 import asyncImage from './asyncImage'
 import admin from './admin'
@@ -12,6 +13,7 @@ export default {
   ...common,
   ...dashboard,
   ...channelMonitorV2,
+  ...channelMonitorV3,
   ...batchImage,
   ...asyncImage,
   admin,

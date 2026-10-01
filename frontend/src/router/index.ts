@@ -1066,6 +1066,17 @@ router.beforeEach(async (to, _from, next) => {
   }
 
 
+  if (to.path === '/monitor') {
+    if (!appStore.publicSettingsLoaded) {
+      try { await appStore.fetchPublicSettings() } catch { /* Backend guards remain authoritative. */ }
+    }
+    const settings = appStore.cachedPublicSettings
+    if (!settings?.channel_monitor_enabled || (settings.channel_monitor_mode === 'v2' && !authStore.isAdmin)) {
+      next(authStore.isAdmin ? '/admin/dashboard' : '/dashboard')
+      return
+    }
+  }
+
   // 公共设置可能尚未加载（App.vue 的 onMounted 异步拉取晚于首次导航，且纯静态部署
   // 无 __APP_CONFIG__ 注入）。此时 cachedPublicSettings 为空会把 payment/risk_control
   // 误判为“未启用”而错误拦截，故这里先确保设置加载完成。

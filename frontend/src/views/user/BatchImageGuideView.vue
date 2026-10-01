@@ -2686,8 +2686,6 @@ onBeforeUnmount(() => {
   min-height: 36px;
   padding-top: 0;
   padding-bottom: 0;
-  padding-left: 14px;
-  padding-right: 34px;
   line-height: 36px;
 }
 </style>

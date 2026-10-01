@@ -9,10 +9,49 @@ import (
 	"testing"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
+	"github.com/LuckyKuang/sub2api-plus/internal/server/middleware"
 	"github.com/LuckyKuang/sub2api-plus/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
+
+func TestChannelMonitorV3ModeGuard(t *testing.T) {
+	for _, tc := range []struct {
+		enabled bool
+		mode    string
+		status  int
+	}{
+		{true, "v3", 200}, {false, "v3", 403}, {true, "v2", 403}, {true, "v1", 403}, {true, "invalid", 403},
+	} {
+		gin.SetMode(gin.TestMode)
+		r := gin.New()
+		r.Use(channelMonitorModeV3Guard(newChannelMonitorModeSettings(tc.enabled, tc.mode)))
+		r.GET("/test", func(c *gin.Context) { c.Status(200) })
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/test", nil))
+		require.Equal(t, tc.status, rec.Code)
+	}
+}
+func TestChannelMonitorV2PrivateGuard(t *testing.T) {
+	for _, role := range []string{"", service.RoleUser, service.RoleAdmin} {
+		gin.SetMode(gin.TestMode)
+		r := gin.New()
+		r.Use(func(c *gin.Context) {
+			if role != "" {
+				c.Set(string(middleware.ContextKeyUserRole), role)
+			}
+		})
+		r.Use(channelMonitorV2PrivateGuard())
+		r.GET("/test", func(c *gin.Context) { c.Status(200) })
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/test", nil))
+		if role == service.RoleAdmin {
+			require.Equal(t, 200, rec.Code)
+		} else {
+			require.Equal(t, 403, rec.Code)
+		}
+	}
+}
 
 // channelMonitorRouteSettingRepoStub is a minimal SettingRepository for route guards.
 type channelMonitorRouteSettingRepoStub struct {

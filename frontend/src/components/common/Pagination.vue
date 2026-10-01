@@ -241,7 +241,7 @@ const submitJump = () => {
 </script>
 
 <style scoped>
-.page-size-select :deep(.select-trigger) {
-  @apply px-3 py-1.5 text-sm;
+.page-size-select :deep(select) {
+  @apply py-1.5 text-sm;
 }
 </style>

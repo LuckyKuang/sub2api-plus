@@ -17,49 +17,29 @@
             @create="showCreate = true"
           >
             <template #after>
-              <!-- Auto Refresh Dropdown -->
-              <div class="relative" ref="autoRefreshDropdownRef">
+              <div class="flex items-center gap-2">
                 <button
-                  @click="
-                    showAutoRefreshDropdown = !showAutoRefreshDropdown;
-                    showAccountToolsDropdown = false
-                  "
+                  type="button"
+                  @click="setAutoRefreshEnabled(!autoRefreshEnabled)"
                   class="btn btn-secondary px-2 md:px-3"
-                  :title="t('admin.accounts.autoRefresh')"
+                  :title="t('admin.accounts.enableAutoRefresh')"
+                  :aria-pressed="autoRefreshEnabled"
                 >
-                  <Icon name="refresh" size="sm" :class="[autoRefreshEnabled ? 'animate-spin' : '']" />
+                  <Icon name="refresh" size="sm" :class="autoRefreshEnabled ? 'animate-spin' : ''" />
                   <span class="hidden md:inline">
-                    {{
-                      autoRefreshEnabled
-                        ? t('admin.accounts.autoRefreshCountdown', { seconds: autoRefreshCountdown })
-                        : t('admin.accounts.autoRefresh')
-                    }}
+                    {{ autoRefreshEnabled
+                      ? t('admin.accounts.autoRefreshCountdown', { seconds: autoRefreshCountdown })
+                      : t('admin.accounts.autoRefresh') }}
                   </span>
                 </button>
-                <div
-                  v-if="showAutoRefreshDropdown"
-                  class="absolute right-0 z-50 mt-2 w-56 origin-top-right rounded-lg border border-gray-200 bg-white shadow-lg dark:border-dark-700 dark:bg-dark-800"
+                <select
+                  :value="autoRefreshIntervalSeconds"
+                  class="input w-auto"
+                  :aria-label="t('admin.accounts.autoRefresh')"
+                  @change="setAutoRefreshInterval(Number(($event.target as HTMLSelectElement).value) as (typeof autoRefreshIntervals)[number])"
                 >
-                  <div class="p-2">
-                    <button
-                      @click="setAutoRefreshEnabled(!autoRefreshEnabled)"
-                      class="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-dark-700"
-                    >
-                      <span>{{ t('admin.accounts.enableAutoRefresh') }}</span>
-                      <Icon v-if="autoRefreshEnabled" name="check" size="sm" class="text-primary-500" />
-                    </button>
-                    <div class="my-1 border-t border-gray-100 dark:border-dark-700"></div>
-                    <button
-                      v-for="sec in autoRefreshIntervals"
-                      :key="sec"
-                      @click="setAutoRefreshInterval(sec)"
-                      class="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-dark-700"
-                    >
-                      <span>{{ autoRefreshIntervalLabel(sec) }}</span>
-                      <Icon v-if="autoRefreshIntervalSeconds === sec" name="check" size="sm" class="text-primary-500" />
-                    </button>
-                  </div>
-                </div>
+                  <option v-for="sec in autoRefreshIntervals" :key="sec" :value="sec">{{ autoRefreshIntervalLabel(sec) }}</option>
+                </select>
               </div>
 
               <!-- More Tools Dropdown -->
@@ -677,8 +657,6 @@ const loadInitialAccountSortState = (): AccountSortState => {
 const sortState = reactive<AccountSortState>(loadInitialAccountSortState())
 
 // Auto refresh settings
-const showAutoRefreshDropdown = ref(false)
-const autoRefreshDropdownRef = ref<HTMLElement | null>(null)
 const AUTO_REFRESH_STORAGE_KEY = 'account-auto-refresh'
 const autoRefreshIntervals = [5, 10, 15, 30] as const
 const autoRefreshEnabled = ref(false)
@@ -1370,7 +1348,6 @@ const updateAccountToolsDropdownPosition = () => {
 
 const toggleAccountToolsDropdown = () => {
   const nextVisible = !showAccountToolsDropdown.value
-  showAutoRefreshDropdown.value = false
   if (nextVisible) updateAccountToolsDropdownPosition()
   showAccountToolsDropdown.value = nextVisible
 }
@@ -1413,7 +1390,7 @@ const { pause: pauseAutoRefresh, resume: resumeAutoRefresh } = useIntervalFn(
     if (document.hidden) return
     if (loading.value || autoRefreshFetching.value) return
     if (isAnyModalOpen.value) return
-    if (menu.show || showAccountToolsDropdown.value || showAutoRefreshDropdown.value) return
+    if (menu.show || showAccountToolsDropdown.value) return
     if (inAutoRefreshSilentWindow()) {
       autoRefreshCountdown.value = Math.max(
         0,
@@ -2329,9 +2306,6 @@ const handleClickOutside = (event: MouseEvent) => {
   const target = event.target as HTMLElement
   if (accountToolsDropdownRef.value && !accountToolsDropdownRef.value.contains(target)) {
     showAccountToolsDropdown.value = false
-  }
-  if (autoRefreshDropdownRef.value && !autoRefreshDropdownRef.value.contains(target)) {
-    showAutoRefreshDropdown.value = false
   }
 }
 

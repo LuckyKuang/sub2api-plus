@@ -37,8 +37,7 @@ describe('order status filtering', () => {
   it('loads the first page with the selected status', async () => {
     const wrapper = await openOrders()
     const select = wrapper.getComponent(Select)
-    await select.get('button').trigger('click')
-    await select.findAll('[role="option"]').find(option => option.text() === 'payment.status.pending')!.trigger('click')
+    await select.get('select').setValue('string:PENDING')
     await flushPromises()
     expect(api.getMyOrders).toHaveBeenLastCalledWith({ page: 1, page_size: 20, status: 'PENDING' })
     expect(wrapper.getComponent(Pagination).props('page')).toBe(1)

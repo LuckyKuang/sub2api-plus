@@ -28,6 +28,7 @@ below for detailed configuration and maintenance instructions.
 - [Edge and ingress security](../deploy/EDGE_SECURITY.md)
 - [datamanagementd](../deploy/DATAMANAGEMENTD_CN.md)
 - [Client disconnect risk control](CLIENT_DISCONNECT_RISK_CONTROL.md)
+- [Channel Monitor V3 service status](CHANNEL_MONITOR_V3.md)
 
 ## Development and Maintenance
 

@@ -2,6 +2,8 @@
 package routes
 
 import (
+	"net/http"
+
 	"github.com/LuckyKuang/sub2api-plus/internal/handler"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/response"
 	"github.com/LuckyKuang/sub2api-plus/internal/server/middleware"
@@ -124,6 +126,10 @@ func RegisterAdminRoutes(
 		// 渠道监控
 		registerChannelMonitorRoutes(admin, h, settingService)
 		registerChannelMonitorV2Routes(admin, h, settingService)
+		monitorV3 := admin.Group("/channel-monitor-v3")
+		monitorV3.Use(channelMonitorAdminFeatureGuard(settingService))
+		monitorV3.GET("/config", h.ChannelMonitorV3.GetConfig)
+		monitorV3.PUT("/config", h.ChannelMonitorV3.UpdateConfig)
 
 		// 风控中心
 		registerContentModerationRoutes(admin, h)
@@ -946,6 +952,40 @@ func channelMonitorModeV2Guard(settingService *service.SettingService) gin.Handl
 			return
 		}
 		if !rt.PassiveAggregationAllowed() {
+			response.ErrorFrom(c, service.ErrChannelMonitorModeMismatch)
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+
+func channelMonitorV2PrivateGuard() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		role, ok := middleware.GetUserRoleFromContext(c)
+		if !ok || role != service.RoleAdmin {
+			response.Error(c, http.StatusForbidden, "channel monitor analytics require administrator access")
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+
+func channelMonitorModeV3Guard(settings *service.SettingService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if settings == nil {
+			response.ErrorFrom(c, service.ErrChannelMonitorDisabled)
+			c.Abort()
+			return
+		}
+		rt := settings.GetChannelMonitorRuntime(c.Request.Context())
+		if !rt.Enabled {
+			response.ErrorFrom(c, service.ErrChannelMonitorDisabled)
+			c.Abort()
+			return
+		}
+		if rt.Mode != service.ChannelMonitorModeV3 {
 			response.ErrorFrom(c, service.ErrChannelMonitorModeMismatch)
 			c.Abort()
 			return

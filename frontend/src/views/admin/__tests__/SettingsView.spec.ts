@@ -738,6 +738,34 @@ describe("admin SettingsView payment visible method controls", () => {
     adminSettingsFetch.mockResolvedValue(undefined);
   });
 
+  it("loads and saves V3 monitor mode without converting it to V1 or V2", async () => {
+    getSettings.mockResolvedValue({ ...baseSettingsResponse, channel_monitor_enabled: true, channel_monitor_mode: "v3" });
+    const wrapper = mountView();
+    try {
+      await flushPromises();
+      const mode = wrapper.get('[data-testid="channel-monitor-mode"]');
+      expect((mode.element as HTMLSelectElement).value).toBe("v3");
+      await wrapper.find("form").trigger("submit.prevent");
+      await flushPromises();
+      expect(updateSettings).toHaveBeenCalledWith(expect.objectContaining({ channel_monitor_enabled: true, channel_monitor_mode: "v3" }));
+      expect((mode.element as HTMLSelectElement).value).toBe("v3");
+    } finally { wrapper.unmount(); }
+  });
+
+  it("allows switching an existing V2 configuration to V3", async () => {
+    getSettings.mockResolvedValue({ ...baseSettingsResponse, channel_monitor_enabled: true, channel_monitor_mode: "v2" });
+    const wrapper = mountView();
+    try {
+      await flushPromises();
+      const mode = wrapper.get('[data-testid="channel-monitor-mode"]');
+      expect((mode.element as HTMLSelectElement).value).toBe("v2");
+      await mode.setValue("v3");
+      await wrapper.find("form").trigger("submit.prevent");
+      await flushPromises();
+      expect(updateSettings).toHaveBeenCalledWith(expect.objectContaining({ channel_monitor_mode: "v3" }));
+    } finally { wrapper.unmount(); }
+  });
+
   it("saves pending identity edits after switching settings tabs", async () => {
     const wrapper = mountView();
     try {

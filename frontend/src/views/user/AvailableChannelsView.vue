@@ -26,11 +26,10 @@
           </label>
           <label class="relative">
             <span class="sr-only">{{ t('availableChannels.catalog.sort') }}</span>
-            <select v-model="filters.sort" class="input appearance-none pl-3 pr-9">
+            <select v-model="filters.sort" class="input">
               <option value="name">{{ t('availableChannels.catalog.sortName') }}</option>
               <option value="price">{{ t('availableChannels.catalog.sortPrice') }}</option>
             </select>
-            <Icon name="chevronDown" size="sm" class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 dark:text-dark-400" />
           </label>
           <button class="btn btn-secondary" @click="reset">{{ t('availableChannels.catalog.reset') }}</button>
         </div>

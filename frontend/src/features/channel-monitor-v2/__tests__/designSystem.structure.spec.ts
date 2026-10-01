@@ -77,12 +77,6 @@ describe('channel-monitor-v2 design system structure', () => {
     expect(src).toContain('min-h-[360px]')
   })
 
-  it('FilterMultiSelect uses rounded-xl input chrome and dropdown utility', () => {
-    const src = read('features/channel-monitor-v2/FilterMultiSelect.vue')
-    expect(src).toContain('rounded-xl')
-    expect(src).toContain('dropdown')
-    expect(src).toContain('dropdown-item')
-  })
 
   it('MonitorSettingsPanel uses page-header, card, btn-primary, tabs', () => {
     const src = read('features/channel-monitor-v2/MonitorSettingsPanel.vue')
