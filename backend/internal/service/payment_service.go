@@ -92,6 +92,7 @@ type CreateOrderResponse struct {
 	Amount                        float64                         `json:"amount"`
 	PayAmount                     float64                         `json:"pay_amount"`
 	FeeRate                       float64                         `json:"fee_rate"`
+	BonusAmount                   float64                         `json:"bonus_amount"`
 	Status                        string                          `json:"status"`
 	ResultType                    payment.CreatePaymentResultType `json:"result_type,omitempty"`
 	PaymentType                   string                          `json:"payment_type"`
@@ -122,17 +123,21 @@ type OrderListParams struct {
 }
 
 type RefundPlan struct {
-	OrderID         int64
-	Order           *dbent.PaymentOrder
-	RefundAmount    float64
-	GatewayAmount   float64
-	Reason          string
-	Force           bool
-	DeductBalance   bool
-	DeductionType   string
-	BalanceToDeduct float64
-	SubDaysToDeduct int
-	SubscriptionID  int64
+	OrderID      int64
+	Order        *dbent.PaymentOrder
+	RefundAmount float64
+	// CumulativeCredited is the credited balance clawed back after this refund
+	// (previous refunds plus RefundAmount). It drives the terminal status and the
+	// proportional cash repayment.
+	CumulativeCredited float64
+	GatewayAmount      float64
+	Reason             string
+	Force              bool
+	DeductBalance      bool
+	DeductionType      string
+	BalanceToDeduct    float64
+	SubDaysToDeduct    int
+	SubscriptionID     int64
 }
 
 type RefundResult struct {

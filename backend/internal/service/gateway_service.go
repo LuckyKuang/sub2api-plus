@@ -719,6 +719,9 @@ type UpstreamFailoverError struct {
 	NextAccountAction        NextAccountAction
 	ClientStatusCode         int
 	ClientMessage            string
+	// RedactClientBody 表示 ResponseBody 携带 Antigravity 账号池身份（项目号/邮箱/consumer id），
+	// handler 在命中透传规则并把 body 回写客户端前必须再次脱敏。默认 false 不影响其他平台。
+	RedactClientBody bool
 }
 
 func (e *UpstreamFailoverError) Error() string {
@@ -1365,7 +1368,9 @@ func (s *GatewayService) DoGrokNativeResponsesJSON(ctx context.Context, account 
 	}
 	upstreamReq.Header.Set("Authorization", "Bearer "+token)
 	upstreamReq.Header.Set("Content-Type", "application/json")
-	upstreamReq.Header.Set("Accept", "application/json")
+	// This auxiliary search call parses a plain JSON Responses body, so its
+	// Accept declares the JSON operation rather than SSE.
+	upstreamReq.Header.Set("Accept", grokSamplerAcceptHeader(false))
 	upstreamReq.Header.Set("User-Agent", defaultGrokUpstreamUserAgent())
 	applyGrokCLIHeaders(upstreamReq.Header)
 	applyGrokRequestMetadata(upstreamReq.Header, body, "", account.GetCredential("sub"))

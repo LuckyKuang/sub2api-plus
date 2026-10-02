@@ -88,7 +88,8 @@ on free text.
 Each platform list is the union of the platform supported-model source and the
 matching Release catalog provider rows. Scanning only catalog provider rows left
 OpenCode Go, Kimi, Zhipu, MiniMax and parts of DeepSeek empty, because those
-models only exist in the built-in fallback table.
+models only exist in the built-in fallback table. TypeSafe has no catalog row at
+all, so it lists only its registered built-in model.
 
 | Platform | Catalog provider labels | Supported-model source |
 | --- | --- | --- |
@@ -102,6 +103,7 @@ models only exist in the built-in fallback table.
 | `deepseek` | `deepseek` | built-in `deepseek-*` fallback ids |
 | `minimax` | `minimax` | built-in `minimax-*` fallback ids |
 | `opencode_go` | `openai`, `anthropic`, `gemini`, `vertex_ai-language-models`, `xai`, `moonshot`, `zhipu`, `deepseek`, `minimax`, `opencode-go` | `DefaultOpenCodeGoModelIDs()` |
+| `typesafe` | none (no Jev row exists) | built-in `jev-*` fallback ids (`jev-latest`) |
 
 Labels must match the values actually used by the bundled
 `model_prices_and_context_window.json`: Gemini SKUs live under `gemini` and the
@@ -130,6 +132,14 @@ Two exceptions to the plain union:
   `grok-build-0.1`) resolve to their base SKU: the suffix changes reasoning
   behavior, not the published rate. Unregistered suffixes such as `-preview`
   are never guessed; the response reports the matched SKU in `matched_model`.
+- **Exact-model-only platforms.** TypeSafe registers no catalog provider label
+  and has no published Release row, so every catalog lookup misses by
+  construction. `jev-latest` resolves through the verified same-model built-in
+  card (`$0.042`/M input, explicit `$0` output); unknown `jev-*` models and other
+  providers' model names stay `manual_required` instead of borrowing a family
+  price. Single-model lookup and sync share this one resolution path, and an
+  operator-saved price — including an explicit `0` — is never overwritten by a
+  later sync.
 
 ## 5. Admin API
 

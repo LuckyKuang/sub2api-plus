@@ -490,9 +490,10 @@ func (s *AntigravityGatewayService) handleAntigravityCompatHTTPError(
 		}
 		appendOpsUpstreamError(c, event)
 		return &UpstreamFailoverError{
-			StatusCode:      resp.StatusCode,
-			ResponseBody:    body,
-			ResponseHeaders: resp.Header.Clone(),
+			StatusCode:       resp.StatusCode,
+			ResponseBody:     body,
+			ResponseHeaders:  resp.Header.Clone(),
+			RedactClientBody: true,
 		}
 	}
 	return s.writeMappedAntigravityCompatError(c, account, resp.StatusCode, resp.Header.Get("x-request-id"), body)
@@ -519,15 +520,16 @@ func (s *AntigravityGatewayService) writeAntigravityCompatError(
 	message string,
 ) error {
 	MarkResponseCommitted(c)
+	clientMessage := sanitizeAntigravityErrorText(message)
 	c.JSON(status, gin.H{
 		"error": gin.H{
-			"message": message,
+			"message": clientMessage,
 			"type":    errType,
 			"param":   nil,
 			"code":    nil,
 		},
 	})
-	return errors.New(message)
+	return errors.New(clientMessage)
 }
 
 func (s *AntigravityGatewayService) writeMappedAntigravityCompatError(
@@ -551,15 +553,19 @@ func (s *AntigravityGatewayService) writeMappedAntigravityCompatError(
 		Kind:               "http_error",
 		Message:            message,
 	})
+	// 客户端文案与返回错误在既有分类（getPassthroughOrDefault）之后追加 Antigravity
+	// 身份脱敏，保持 status/type/分类不变；ops 事件仍使用未追加脱敏的 message。
+	sanitizedMessage := sanitizeAntigravityErrorText(message)
+	clientMessage := sanitizeAntigravityErrorText(getPassthroughOrDefault(message, "Upstream request failed"))
 	c.JSON(mapUpstreamStatusCode(upstreamStatus), gin.H{
 		"error": gin.H{
-			"message": getPassthroughOrDefault(message, "Upstream request failed"),
+			"message": clientMessage,
 			"type":    "upstream_error",
 			"param":   nil,
 			"code":    nil,
 		},
 	})
-	return fmt.Errorf("upstream error: %d %s", upstreamStatus, message)
+	return fmt.Errorf("upstream error: %d %s", upstreamStatus, sanitizedMessage)
 }
 
 func (s *AntigravityGatewayService) handleChatCompletionsNonStreamingFromAntigravity(

@@ -22,7 +22,7 @@ EXPECTED_SECTIONS = (
     "license",
 )
 EXPECTED_CAPABILITIES = (
-    "openai,anthropic,gemini,antigravity,grok,async-images,sora-unavailable"
+    "openai,anthropic,gemini,antigravity,grok,typesafe,async-images,sora-unavailable"
 )
 EXPECTED_RELEASE_FORMAT = "vX.Y.Z+custom.NNN|vX.Y.Z-custom.NNN"
 REQUIRED_LINKS = (
@@ -31,6 +31,7 @@ REQUIRED_LINKS = (
     "docs/providers/GROK.md",
     "docs/providers/SORA.md",
     "docs/providers/ANTIGRAVITY.md",
+    "docs/providers/TYPESAFE.md",
     "docs/protocols/OPENAI_RESPONSES.md",
     "docs/ASYNC_IMAGE_TASKS.md",
     "deploy/README.md",

@@ -160,7 +160,7 @@ sudo systemctl reload nginx
 [`deploy/config.example.yaml`](deploy/config.example.yaml)。
 
 <!-- readme-section:providers -->
-<!-- readme-capabilities:openai,anthropic,gemini,antigravity,grok,async-images,sora-unavailable -->
+<!-- readme-capabilities:openai,anthropic,gemini,antigravity,grok,typesafe,async-images,sora-unavailable -->
 ## 服务商与能力支持
 
 | 服务商或能力 | 说明 |
@@ -170,6 +170,7 @@ sudo systemctl reload nginx
 | Google Gemini | Gemini 兼容请求及支持的 OAuth/API Key 账户 |
 | Antigravity | Claude/Gemini 专用路由和可选混合调度 |
 | Grok / xAI | OAuth 订阅账户和 API Key 账户 |
+| TypeSafe / Jev | Jev 原生非流式 System One 协议的 API Key 账户：`POST /v1/systemone`、模型 `jev-latest`、`noul`/`choice`/`score` 问题类型、内置输入 `$0.042`/百万 tokens 与输出 `$0` 价格；其他网关协议返回 `404` |
 | 异步图片任务 | 提交和轮询长时间运行的图片生成/编辑任务 |
 | Sora | 暂不可用，请勿在生产环境依赖 |
 
@@ -178,6 +179,7 @@ sudo systemctl reload nginx
 - [Grok / xAI](docs/providers/GROK.md)
 - [Antigravity](docs/providers/ANTIGRAVITY.md)
 - [DeepSeek](docs/providers/DEEPSEEK.md)
+- [TypeSafe / Jev](docs/providers/TYPESAFE.md)
 - [Sora 状态](docs/providers/SORA.md)
 - [OpenAI Responses 与 WebSocket 入口](docs/protocols/OPENAI_RESPONSES.md)
 - [异步图片任务](docs/ASYNC_IMAGE_TASKS.md)

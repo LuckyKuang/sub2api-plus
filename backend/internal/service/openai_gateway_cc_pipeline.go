@@ -222,11 +222,7 @@ func (s *OpenAIGatewayService) sendCCUpstreamRequest(
 	upstreamReq = upstreamReq.WithContext(WithHTTPUpstreamProfile(upstreamReq.Context(), profile))
 	upstreamReq.Header.Set("Content-Type", "application/json")
 	upstreamReq.Header.Set("Authorization", "Bearer "+bearerToken)
-	if stream {
-		upstreamReq.Header.Set("Accept", "text/event-stream")
-	} else {
-		upstreamReq.Header.Set("Accept", "application/json")
-	}
+	upstreamReq.Header.Set("Accept", grokSamplerAcceptHeader(stream))
 
 	// 透传白名单中的客户端 header。详见 openaiCCRawAllowedHeaders 的设计说明。
 	for key, values := range c.Request.Header {
@@ -257,6 +253,15 @@ func (s *OpenAIGatewayService) sendCCUpstreamRequest(
 		account.ApplyHeaderOverrides(upstreamReq.Header)
 	}
 	applyOpenCodeSessionHeader(c, account, targetURL, upstreamReq.Header, body)
+	if account.Platform == PlatformGrok {
+		// Accept is a Grok request-owned operation declaration: it follows the
+		// streaming state of the final body and survives account header
+		// overrides.
+		upstreamReq.Header.Set("Accept", grokSamplerAcceptHeader(stream))
+		// Chat Completions sampler requests negotiate the same final-JSON
+		// compression as the Responses and Messages adapters.
+		s.applyGrokRequestCompression(upstreamReq, account, body, s.settingService)
+	}
 
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {

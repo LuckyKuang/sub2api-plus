@@ -14,7 +14,7 @@ versions are distinct from the CLI version.
 
 | Preset | Default accounts | Wire identity |
 | --- | --- | --- |
-| Codex | OpenAI OAuth/setup-token, OpenAI-compatible API keys, Chinese compatible providers | Existing Codex UA/Originator/Version rules, including endpoint-specific omissions |
+| Codex | OpenAI OAuth/setup-token, OpenAI-compatible API keys, Chinese compatible providers, TypeSafe API keys | Existing Codex UA/Originator/Version rules, including endpoint-specific omissions |
 | Claude Code | Anthropic OAuth/setup-token/API key, Claude on Bedrock or Vertex | `claude-cli` UA, `X-App: cli`, project-owned `X-Stainless-*` SDK/runtime declarations |
 | Gemini CLI | Gemini OAuth/API key, Gemini on Vertex | `GeminiCLI` UA |
 | Grok | Grok OAuth/API key | `grok-shell` UA, `x-grok-client-identifier`, `x-grok-client-version`, `x-grok-client-mode: headless` |
@@ -27,17 +27,30 @@ unless an administrator explicitly selects another preset through an account
 selection or a type default. Selecting a preset changes declarations only;
 it does not make the destination accept another authentication protocol.
 
+TypeSafe API-key accounts are an API-key compatible supplier with no
+provider-defined client family, version or identity header. They register the
+same configurable preset mapping as the other API-key compatible platforms
+(Codex by default) through `typesafe:apikey`, so preview, save, forwarding,
+account connection tests, proxy use, retries and failover all resolve the
+ordinary account/global/default chain. No TypeSafe CLI name, version or header
+is invented, and the native System One client renders only the selected
+snapshot's declarations.
+
 Built-in declarations reuse existing pins in `internal/pkg/claude`,
 `internal/pkg/geminicli`, `internal/pkg/xai`, `internal/pkg/antigravity` and
 `internal/service/openai_codex_identity.go`. This feature does not upgrade
 those pins. The settings page displays the exact current effective identity.
 
-The exact compiled Grok identity is `grok-shell/1.0.41 (<os>; <arch>)`, with
-identifier `grok-shell`, client version `1.0.41`, and mode `headless`. Runtime
+The exact compiled Grok identity is `grok-shell/1.0.45 (<os>; <arch>)`, with
+identifier `grok-shell`, client version `1.0.45`, and mode `headless`. Runtime
 OS and architecture use the official spellings (`darwin` renders as `macos`
 and Go's `amd64`, `386`, and `arm64` render as `x86_64`, `x86`, and `aarch64`).
-`XAI_GROK_CLI_VERSION` may select a supported newer version while retaining
-that family, platform fingerprint, identifier and mode.
+`XAI_GROK_CLI_VERSION` may select a supported version while retaining that
+family, platform fingerprint, identifier and mode; `1.0.41` remains the accepted
+version floor and an existing valid account, global or environment pin keeps
+selecting its own version instead of being forced to the compiled default. The
+compiled default follows the frozen local grok-build source and does not track a
+build-time network scrape or an ambient `GROK_VERSION`.
 
 The exact compiled Antigravity identity is
 `antigravity/2.9.1 windows/amd64`, with identifier `antigravity` and client
@@ -433,7 +446,39 @@ conversation-group derivation. Generic overrides cannot set these fields. The
 gateway omits sampler and response-authentication declarations on model,
 billing and media-status lookups, and omits optional turn, retry, deployment,
 and tracing declarations when it does not possess the corresponding
-authoritative value.
+authoritative value. One constructed sampler request keeps its request
+association snapshot across transport retries, redirects and the compatibility
+fallback; a newly constructed logical sampler call or a resubmit renders a new
+association instead.
+
+Grok sampler `Accept` is a request-owned operation declaration rather than an
+identity field: the JSON operation declares `application/json`, and a request
+whose final body streams upstream declares `text/event-stream` even when the
+downstream client is aggregated. Account header overrides and inbound headers
+cannot change it.
+
+Negotiated request encoding is owned by the gateway's compression layer and
+never by an identity candidate. When it is enabled
+(`gateway.grok.grok_request_compression_enabled`, environment
+`GATEWAY_GROK_REQUEST_COMPRESSION_ENABLED`, default true) the gateway may send
+level-3 zstd only after the exact `cli-chat-proxy.grok.com` target's
+`/v1/settings` advertises `zstd` for the normalized scheme/host/effective
+port/base path, credential owner and proxy configuration. The capability probe
+uses the same-owner snapshot, proxy, URL validation and audit ordering as the
+sampler send and never acquires sampler declarations. `Content-Encoding: zstd`
+appears only with the bytes it describes; a destination change (the `api.x.ai`
+compatibility fallback, a cross-origin redirect) rebuilds a plain body from the
+final JSON and drops the declaration. Audit, payload hashing, inflight
+estimation, cache/session keys and billing keep the uncompressed semantics.
+Generic header overrides cannot supply `Content-Encoding`.
+
+Agent-only native differences stay explicitly scoped rather than being
+approximated with surface declarations: the native media-tool user agent, the
+Rustls/HTTP2 transport parameters, doom-loop recovery headers, enterprise
+deployment authorization, and turn/resubmit/tracing declarations. The gateway
+keeps the selected account snapshot and its existing transport fingerprint, and
+emits no header without the matching authoritative state or recovery behavior.
+See [Grok / xAI](providers/GROK.md#agent-only-differences-and-follow-up-scope).
 
 The account editor uses the backend's passthrough precedence: a boolean
 `extra.openai_passthrough` wins, including `false`; only when it is absent or

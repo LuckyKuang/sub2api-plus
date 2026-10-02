@@ -367,6 +367,9 @@ docker compose down -v
 | `SERVER_TRUSTED_PROXIES` | No | *(empty)* | Comma-separated direct reverse-proxy/container CIDRs trusted for client IP recovery. Never use a public CDN range or `/0`. |
 | `SERVER_IP_ACCESS_EMERGENCY_ALLOWLIST` | No | *(empty)* | Fixed administrator egress CIDRs that can bypass global IP blocks during proxy recovery. |
 | `SECURITY_TRUST_FORWARDED_IP_FOR_API_KEY_ACL` | No | `false` | Legacy raw forwarded-header compatibility. Keep disabled with `SERVER_TRUSTED_PROXIES`; an existing database setting can override the initial environment value. |
+| `RECHARGE_BONUS_TIERS` | No | *(empty = disabled)* | Optional deployment override for the recharge-incentive tiers (JSON array of `min_amount`/`bonus_percent`). Blank keeps the Admin Settings value. |
+| `RECHARGE_BONUS_MODE` | No | `bonus` | Optional deployment override for the tier mode (`bonus` or `discount`). Blank keeps the Admin Settings value. |
+| `RECHARGE_BONUS_NOTICE` | No | *(empty)* | Optional deployment override for the Markdown promotion notice shown on the payment page. Blank keeps the Admin Settings value. |
 | `GATEWAY_OPENAI_PROXY_STREAM_CIRCUIT_DISABLED` | No | `false` | Disables the bounded OpenAI proxy stream/transport-failure circuit only for incident diagnosis. |
 | `GEMINI_OAUTH_CLIENT_ID` | No | *(builtin)* | Google OAuth client ID (Gemini OAuth). Leave empty to use the built-in Gemini CLI client. |
 | `GEMINI_OAUTH_CLIENT_SECRET` | No | *(builtin)* | Google OAuth client secret (Gemini OAuth). Leave empty to use the built-in Gemini CLI client. |

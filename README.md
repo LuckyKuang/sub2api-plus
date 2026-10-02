@@ -143,7 +143,7 @@ The full example configuration is
 [`deploy/config.example.yaml`](deploy/config.example.yaml).
 
 <!-- readme-section:providers -->
-<!-- readme-capabilities:openai,anthropic,gemini,antigravity,grok,async-images,sora-unavailable -->
+<!-- readme-capabilities:openai,anthropic,gemini,antigravity,grok,typesafe,async-images,sora-unavailable -->
 ## Provider Support
 
 | Provider or capability | Notes |
@@ -153,6 +153,7 @@ The full example configuration is
 | Google Gemini | Gemini-compatible traffic and supported OAuth/API-key accounts |
 | Antigravity | Dedicated and optional hybrid Claude/Gemini routing |
 | Grok / xAI | OAuth subscription and API-key accounts |
+| TypeSafe / Jev | API-key accounts for Jev's native non-streaming System One protocol: `POST /v1/systemone`, model `jev-latest`, `noul`/`choice`/`score` questions, built-in `$0.042`/M input and `$0` output pricing; other gateway protocols return `404` |
 | Asynchronous images | Submit and poll long-running image generation/edit tasks |
 | Sora | Temporarily unavailable; do not depend on it in production |
 
@@ -161,6 +162,7 @@ Details:
 - [Grok / xAI](docs/providers/GROK.md)
 - [Antigravity](docs/providers/ANTIGRAVITY.md)
 - [DeepSeek](docs/providers/DEEPSEEK.md)
+- [TypeSafe / Jev](docs/providers/TYPESAFE.md)
 - [Sora status](docs/providers/SORA.md)
 - [OpenAI Responses and WebSocket ingress](docs/protocols/OPENAI_RESPONSES.md)
 - [Asynchronous image tasks](docs/ASYNC_IMAGE_TASKS.md)

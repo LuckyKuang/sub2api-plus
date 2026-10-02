@@ -36,6 +36,7 @@ func TestPromptAuditGatePrecedesAccountBillingAndUpstreamSideEffects(t *testing.
 		{file: "openai_alpha_search.go", function: "AlphaSearch", auditToken: "checkSecurityAudit"},
 		{file: "gateway_web_search.go", function: "WebSearch", auditToken: "checkSecurityAudit"},
 		{file: "openai_live.go", function: "Live", auditToken: "checkSecurityAudit"},
+		{file: "gateway_systemone.go", function: "SystemOne", auditToken: "checkSecurityAudit"},
 		{file: "image_task_handler.go", function: "Submit", auditToken: "checkSecurityAuditBeforeSubmit"},
 		{file: "batch_image_handler.go", function: "Submit", auditToken: "checkSecurityAuditBeforeSubmit"},
 	}

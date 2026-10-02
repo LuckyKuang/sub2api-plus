@@ -78,6 +78,17 @@ describe('OutboundIdentitySettings', () => {
     wrapper.unmount()
   })
 
+  it('exposes the typesafe API-key type default mapping', async () => {
+    const wrapper = mount(OutboundIdentitySettings)
+    await flushPromises()
+    const row = wrapper.findAll('label').find(label => label.text().includes('TypeSafe / Jev · API Key'))
+    expect(row, 'the typesafe type-default row must be configurable').toBeDefined()
+    await row!.find('select').setValue('claude')
+    await wrapper.vm.save()
+    expect(vi.mocked(updateOutboundIdentity).mock.calls[0][0].defaults).toEqual({ 'typesafe:apikey': 'claude' })
+    wrapper.unmount()
+  })
+
   it('preserves valid mappings that are not shown as editable rows', async () => {
     const saved = fixture()
     saved.settings.defaults = { 'anthropic:oauth': 'claude' }

@@ -747,6 +747,7 @@ func newAntigravityUpstreamFailoverError(statusCode int, body []byte, retryableO
 		StatusCode:             statusCode,
 		ResponseBody:           body,
 		RetryableOnSameAccount: retryableOnSameAccount,
+		RedactClientBody:       true,
 	}
 	if info := parseAntigravitySmartRetryInfo(body); info != nil && info.IsModelCapacityExhausted {
 		err.RetryableOnSameAccount = false

@@ -233,6 +233,25 @@ func TestApplyHeaderOverrides(t *testing.T) {
 	require.Equal(t, 1, count)
 }
 
+// A legacy stored body-encoding override (saved before the header was reserved)
+// is filtered at runtime, so a generic override can never forge the
+// compression-owned declaration.
+func TestApplyHeaderOverridesIgnoresLegacyContentEncoding(t *testing.T) {
+	acc := headerOverrideTestAccount(PlatformGrok, AccountTypeOAuth, map[string]any{
+		credKeyHeaderOverrideEnabled: true,
+		credKeyHeaderOverrides: map[string]any{
+			"content-encoding": "gzip",
+			"x-custom":         "custom-value",
+		},
+	})
+
+	h := http.Header{}
+	acc.ApplyHeaderOverrides(h)
+
+	require.Empty(t, h.Get("Content-Encoding"))
+	require.Equal(t, "custom-value", getHeaderRaw(h, "x-custom"))
+}
+
 func TestApplyHeaderOverridesNoOpPaths(t *testing.T) {
 	baseline := func() http.Header {
 		h := http.Header{}
@@ -381,7 +400,7 @@ func TestNormalizeHeaderOverrideCredentials(t *testing.T) {
 	t.Run("rejects blocked headers", func(t *testing.T) {
 		for _, name := range []string{
 			"Authorization", "x-api-key", "Host", "content-length", "Transfer-Encoding",
-			"connection", "accept-encoding", "Sec-WebSocket-Key", "session-id", "session_id", "thread-id",
+			"connection", "accept-encoding", "content-encoding", "Sec-WebSocket-Key", "session-id", "session_id", "thread-id",
 			"conversation_id", "x-codex-turn-state", "chatgpt-account-id",
 			"Content-Type", "Cookie", "x-goog-api-key",
 			"X-Claude-Code-Session-Id", "x-client-request-id",

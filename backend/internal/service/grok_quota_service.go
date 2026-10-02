@@ -168,7 +168,9 @@ func (s *GrokQuotaService) probeUsage(ctx context.Context, accountID int64) (*Gr
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json, text/event-stream")
+	// The probe body asks for `stream: true`, so the Accept declaration follows
+	// the operation actually sent (same rule as the sampler builders).
+	req.Header.Set("Accept", grokSamplerAcceptHeader(grokBodyStreamsJSON(body)))
 	if account.IsGrokOAuth() {
 		applyGrokCLIHeaders(req.Header)
 	}

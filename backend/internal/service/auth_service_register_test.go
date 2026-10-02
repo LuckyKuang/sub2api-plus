@@ -180,8 +180,29 @@ func (s *emailCacheStub) SetVerificationCode(ctx context.Context, email string, 
 	return nil
 }
 
-func (s *emailCacheStub) DeleteVerificationCode(ctx context.Context, email string) error {
-	return nil
+func (s *emailCacheStub) ReserveVerificationCodeAttempt(_ context.Context, _ string, generation string) (int, error) {
+	if s.err != nil {
+		return 0, s.err
+	}
+	if s.data == nil || s.data.Generation != generation {
+		return 0, ErrVerifyCodeMissing
+	}
+	if s.data.Attempts >= MaxVerificationCodeAttempts {
+		return 0, ErrVerifyCodeExhausted
+	}
+	s.data.Attempts++
+	return s.data.Attempts, nil
+}
+
+func (s *emailCacheStub) ConsumeVerificationCode(_ context.Context, _ string, generation string) (bool, error) {
+	if s.err != nil {
+		return false, s.err
+	}
+	if s.data == nil || s.data.Generation != generation {
+		return false, nil
+	}
+	s.data = nil
+	return true, nil
 }
 
 func (s *emailCacheStub) GetNotifyVerifyCode(ctx context.Context, email string) (*VerificationCodeData, error) {
@@ -192,8 +213,12 @@ func (s *emailCacheStub) SetNotifyVerifyCode(ctx context.Context, email string, 
 	return nil
 }
 
-func (s *emailCacheStub) DeleteNotifyVerifyCode(ctx context.Context, email string) error {
-	return nil
+func (s *emailCacheStub) ReserveNotifyVerifyCodeAttempt(context.Context, string, string) (int, error) {
+	return 0, ErrVerifyCodeMissing
+}
+
+func (s *emailCacheStub) ConsumeNotifyVerifyCode(context.Context, string, string) (bool, error) {
+	return false, nil
 }
 
 func (s *emailCacheStub) GetPasswordResetToken(ctx context.Context, email string) (*PasswordResetTokenData, error) {
@@ -1009,4 +1034,8 @@ func TestCanBypassRegistrationDisabledForOAuth(t *testing.T) {
 			require.Equal(t, tc.want, got)
 		})
 	}
+}
+
+func (s *emailCacheStub) ConsumePasswordResetToken(context.Context, string, string) (bool, error) {
+	return false, nil
 }

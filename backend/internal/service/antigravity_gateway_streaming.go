@@ -749,11 +749,12 @@ const antigravityStatusClientClosed = 499
 
 func (s *AntigravityGatewayService) writeClaudeError(c *gin.Context, status int, errType, message string) error {
 	MarkResponseCommitted(c)
+	clientMessage := sanitizeAntigravityErrorText(message)
 	c.JSON(status, gin.H{
 		"type":  "error",
-		"error": gin.H{"type": errType, "message": message},
+		"error": gin.H{"type": errType, "message": clientMessage},
 	})
-	return fmt.Errorf("%s", message)
+	return fmt.Errorf("%s", clientMessage)
 }
 
 // WriteMappedClaudeError 导出版本，供 handler 层使用（如 fallback 错误处理）
@@ -765,6 +766,9 @@ func (s *AntigravityGatewayService) writeMappedClaudeError(c *gin.Context, accou
 	MarkResponseCommitted(c)
 	upstreamMsg := strings.TrimSpace(extractUpstreamErrorMessage(body))
 	upstreamMsg = sanitizeUpstreamErrorMessage(upstreamMsg)
+	// 返回给客户端的文案额外做一次 Antigravity 身份脱敏（项目号/邮箱/consumer id）。
+	// ops 事件仍保留既有 upstreamMsg/upstreamDetail，行为不变。
+	clientMsg := sanitizeAntigravityErrorText(upstreamMsg)
 	logBody, maxBytes := s.getLogConfig()
 	upstreamDetail := s.getUpstreamErrorDetail(body)
 	setOpsUpstreamError(c, upstreamStatus, upstreamMsg, upstreamDetail)
@@ -791,6 +795,7 @@ func (s *AntigravityGatewayService) writeMappedClaudeError(c *gin.Context, accou
 		c, account.Platform, upstreamStatus, body,
 		0, "", "",
 	); matched {
+		ptErrMsg = sanitizeAntigravityErrorText(ptErrMsg)
 		c.JSON(ptStatus, gin.H{
 			"type":  "error",
 			"error": gin.H{"type": ptErrType, "message": ptErrMsg},
@@ -798,7 +803,7 @@ func (s *AntigravityGatewayService) writeMappedClaudeError(c *gin.Context, accou
 		if upstreamMsg == "" {
 			return fmt.Errorf("upstream error: %d", upstreamStatus)
 		}
-		return fmt.Errorf("upstream error: %d message=%s", upstreamStatus, upstreamMsg)
+		return fmt.Errorf("upstream error: %d message=%s", upstreamStatus, clientMsg)
 	}
 
 	var statusCode int
@@ -808,7 +813,7 @@ func (s *AntigravityGatewayService) writeMappedClaudeError(c *gin.Context, accou
 	case 400:
 		statusCode = http.StatusBadRequest
 		errType = "invalid_request_error"
-		errMsg = getPassthroughOrDefault(upstreamMsg, "Invalid request")
+		errMsg = sanitizeAntigravityErrorText(getPassthroughOrDefault(upstreamMsg, "Invalid request"))
 	case 401:
 		statusCode = http.StatusBadGateway
 		errType = "authentication_error"
@@ -838,7 +843,7 @@ func (s *AntigravityGatewayService) writeMappedClaudeError(c *gin.Context, accou
 	if upstreamMsg == "" {
 		return fmt.Errorf("upstream error: %d", upstreamStatus)
 	}
-	return fmt.Errorf("upstream error: %d message=%s", upstreamStatus, upstreamMsg)
+	return fmt.Errorf("upstream error: %d message=%s", upstreamStatus, clientMsg)
 }
 
 func (s *AntigravityGatewayService) writeGoogleError(c *gin.Context, status int, message string) error {
@@ -859,14 +864,15 @@ func (s *AntigravityGatewayService) writeGoogleError(c *gin.Context, status int,
 		statusStr = "UNAVAILABLE"
 	}
 
+	clientMessage := sanitizeAntigravityErrorText(message)
 	c.JSON(status, gin.H{
 		"error": gin.H{
 			"code":    status,
-			"message": message,
+			"message": clientMessage,
 			"status":  statusStr,
 		},
 	})
-	return fmt.Errorf("%s", message)
+	return fmt.Errorf("%s", clientMessage)
 }
 
 // collectClaudeStreamResponse 收集上游流式响应，转换为 Claude 非流式格式返回

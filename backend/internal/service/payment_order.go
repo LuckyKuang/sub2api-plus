@@ -53,14 +53,6 @@ func (s *PaymentService) CreateOrder(ctx context.Context, req CreateOrderRequest
 	if s.notificationEmailService != nil {
 		s.notificationEmailService.RememberRecipientLocale(ctx, req.UserID, user.Email, req.Locale)
 	}
-	orderAmount := req.Amount
-	limitAmount := req.Amount
-	if plan != nil {
-		orderAmount = plan.Price
-		limitAmount = plan.Price
-	} else if req.OrderType == payment.OrderTypeBalance {
-		orderAmount = calculateCreditedBalance(req.Amount, cfg.BalanceRechargeMultiplier)
-	}
 	feeRate := cfg.RechargeFeeRate
 	methodCurrency := payment.DefaultPaymentCurrency
 	if s.configService != nil {
@@ -68,6 +60,19 @@ func (s *PaymentService) CreateOrder(ctx context.Context, req CreateOrderRequest
 		if err != nil {
 			return nil, err
 		}
+	}
+	orderAmount := req.Amount
+	limitAmount := req.Amount
+	bonusAmount := 0.0
+	if plan != nil {
+		orderAmount = plan.Price
+		limitAmount = plan.Price
+	} else if req.OrderType == payment.OrderTypeBalance {
+		// 阈值按支付金额命中。赠金模式：到账 = 基数 + 赠送；折扣模式：到账 = 基数，实付基数按折扣减少。
+		quote := quoteRechargeBonus(cfg, req.Amount, methodCurrency)
+		limitAmount = quote.PayBase
+		bonusAmount = quote.Bonus
+		orderAmount = quote.Credited
 	}
 	payAmountStr, payAmount, err := calculateCreateOrderPayAmountForOrderType(limitAmount, feeRate, methodCurrency, req.OrderType, cfg.SubscriptionUSDToCNYRate)
 	if err != nil {
@@ -100,7 +105,7 @@ func (s *PaymentService) CreateOrder(ctx context.Context, req CreateOrderRequest
 	if oauthResp != nil {
 		return oauthResp, nil
 	}
-	order, err := s.createOrderInTx(ctx, req, user, plan, cfg, orderAmount, limitAmount, feeRate, payAmount, sel)
+	order, err := s.createOrderInTx(ctx, req, user, plan, cfg, orderAmount, limitAmount, feeRate, payAmount, bonusAmount, sel)
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +154,7 @@ func (s *PaymentService) validateSubOrder(ctx context.Context, req CreateOrderRe
 	return plan, nil
 }
 
-func (s *PaymentService) createOrderInTx(ctx context.Context, req CreateOrderRequest, user *User, plan *dbent.SubscriptionPlan, cfg *PaymentConfig, orderAmount, limitAmount, feeRate, payAmount float64, sel *payment.InstanceSelection) (*dbent.PaymentOrder, error) {
+func (s *PaymentService) createOrderInTx(ctx context.Context, req CreateOrderRequest, user *User, plan *dbent.SubscriptionPlan, cfg *PaymentConfig, orderAmount, limitAmount, feeRate, payAmount, bonusAmount float64, sel *payment.InstanceSelection) (*dbent.PaymentOrder, error) {
 	tx, err := s.entClient.Tx(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin transaction: %w", err)
@@ -158,7 +163,20 @@ func (s *PaymentService) createOrderInTx(ctx context.Context, req CreateOrderReq
 	if err := s.checkPendingLimit(ctx, tx, req.UserID, cfg.MaxPendingOrders); err != nil {
 		return nil, err
 	}
-	if err := s.checkDailyLimit(ctx, tx, req.UserID, limitAmount, cfg.DailyLimit); err != nil {
+	// Daily limit basis:
+	//   - balance orders count the channel-collected amount including fees, in the
+	//     order's frozen payment currency;
+	//   - subscription orders keep their prior plan-price basis (documented in
+	//     docs/PAYMENT.md) and are not currency-normalized.
+	dailyLimitAmount := limitAmount
+	dailyLimitCurrency := payment.DefaultPaymentCurrency
+	if sel != nil {
+		dailyLimitCurrency = paymentProviderConfigCurrency(sel.ProviderKey, sel.Config)
+	}
+	if req.OrderType == payment.OrderTypeBalance {
+		dailyLimitAmount = payAmount
+	}
+	if err := s.checkDailyLimit(ctx, tx, req.UserID, dailyLimitAmount, cfg.DailyLimit, dailyLimitCurrency); err != nil {
 		return nil, err
 	}
 	tm := cfg.OrderTimeoutMin
@@ -185,6 +203,7 @@ func (s *PaymentService) createOrderInTx(ctx context.Context, req CreateOrderReq
 		SetAmount(orderAmount).
 		SetPayAmount(payAmount).
 		SetFeeRate(feeRate).
+		SetBonusAmount(bonusAmount).
 		SetRechargeCode("").
 		SetOutTradeNo(outTradeNo).
 		SetPaymentType(req.PaymentType).
@@ -322,7 +341,18 @@ func paymentOrderSnapshotWxpayAppID(sel *payment.InstanceSelection, req CreateOr
 	return strings.TrimSpace(sel.Config["appId"])
 }
 
-func (s *PaymentService) checkDailyLimit(ctx context.Context, tx *dbent.Tx, userID int64, amount, limit float64) error {
+// checkDailyLimit enforces the per-user daily recharge limit on a single
+// documented monetary basis.
+//
+// Balance orders are compared using the channel-collected amount including fees
+// (never the credited USD or the free bonus), in the order's frozen payment
+// currency. Historical balance orders are only summed when their frozen currency
+// equals the current basis; a mismatch has no reliable conversion evidence, so the
+// request fails with a stable configuration error instead of inventing a rate.
+//
+// Subscription orders retain their prior basis (plan price) and are documented
+// separately in docs/PAYMENT.md.
+func (s *PaymentService) checkDailyLimit(ctx context.Context, tx *dbent.Tx, userID int64, amount, limit float64, currency string) error {
 	if limit <= 0 {
 		return nil
 	}
@@ -333,11 +363,23 @@ func (s *PaymentService) checkDailyLimit(ctx context.Context, tx *dbent.Tx, user
 	}
 	var used float64
 	for _, o := range orders {
-		if o.OrderType == payment.OrderTypeBalance {
-			used += o.PayAmount
+		if o.OrderType != payment.OrderTypeBalance {
+			// Prior subscription semantics: the plan price, not the gateway amount.
+			used += o.Amount
 			continue
 		}
-		used += o.Amount
+		orderCurrency := PaymentOrderCurrency(o)
+		if !strings.EqualFold(orderCurrency, currency) {
+			return infraerrors.ServiceUnavailable(
+				"PAYMENT_DAILY_LIMIT_CURRENCY_MISMATCH",
+				"daily recharge limit cannot be evaluated: previously paid balance orders use a different currency and no reliable conversion is configured",
+			).WithMetadata(map[string]string{
+				"limit_currency": currency,
+				"order_currency": orderCurrency,
+				"order_id":       strconv.FormatInt(o.ID, 10),
+			})
+		}
+		used += o.PayAmount
 	}
 	if used+amount > limit {
 		return infraerrors.TooManyRequests("DAILY_LIMIT_EXCEEDED", "daily_limit_exceeded").
@@ -471,6 +513,7 @@ func (s *PaymentService) invokeProvider(ctx context.Context, order *dbent.Paymen
 	s.writeAuditLog(ctx, order.ID, "ORDER_CREATED", fmt.Sprintf("user:%d", req.UserID), map[string]any{
 		"paymentAmount":  req.Amount,
 		"creditedAmount": order.Amount,
+		"bonusAmount":    order.BonusAmount,
 		"payAmount":      order.PayAmount,
 		"paymentType":    req.PaymentType,
 		"orderType":      req.OrderType,
@@ -735,6 +778,7 @@ func buildCreateOrderResponse(order *dbent.PaymentOrder, req CreateOrderRequest,
 		Amount:       order.Amount,
 		PayAmount:    payAmount,
 		FeeRate:      order.FeeRate,
+		BonusAmount:  order.BonusAmount,
 		Status:       OrderStatusPending,
 		ResultType:   resultType,
 		PaymentType:  req.PaymentType,

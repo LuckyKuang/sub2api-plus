@@ -641,6 +641,54 @@ func TestExtractClassifiesResponsesAndGeminiModelOutput(t *testing.T) {
 	require.Empty(t, gemini.Segments[1].Role)
 }
 
+func TestExtractTypeSafeSystemOneCollectsClientText(t *testing.T) {
+	// Question IDs, every question field except the validated type, unknown
+	// question and top-level extension fields, and the evaluated state are
+	// client-controlled text. Keys are visited in sorted order, non-string
+	// scalars emit nothing, and the state is one final segment.
+	body := `{"model":"jev-latest","stream":false,` +
+		`"questions":{"q2":{"type":"noul","EXT":"ext value","instructions":"instr","criteria":{"z":"Z","a":"A"}},` +
+		`"q1":{"type":"score","criteria":["low",{"text":"high"},7]}},` +
+		`"state":{"title":"state title","n":1},"ext":"ext top"}`
+	document, err := Extract("typesafe_systemone", []byte(body))
+	require.NoError(t, err)
+	require.True(t, document.ContentBearing)
+	require.False(t, document.Incomplete)
+	require.Empty(t, document.Images)
+	require.Equal(t, []string{
+		"q1", "low", "text", "high",
+		"q2", "EXT", "ext value", "a", "A", "z", "Z", "instr",
+		"ext", "ext top",
+		"n\ntitle\nstate title",
+	}, segmentTexts(document.Segments))
+	for _, segment := range document.Segments {
+		require.Equal(t, "user", segment.Role)
+		require.Equal(t, SourceMessage, segment.Source)
+		require.True(t, segment.Current)
+		require.True(t, segment.ClientControlled)
+	}
+	for _, omitted := range []string{"noul", "score", "instructions", "criteria", "type", "jev-latest"} {
+		require.NotContains(t, strings.Join(segmentTexts(document.Segments), "\n"), omitted)
+	}
+	// The state stays the last canonical segment so Content Moderation keeps it
+	// as the trailing evaluated text and Prompt Audit can promote it.
+	require.Equal(t, "n\ntitle\nstate title", document.Segments[len(document.Segments)-1].Text)
+
+	// The protocol alias and a non-object questions value still pass through as
+	// auditable text instead of an extraction failure.
+	alias, err := Extract("systemone", []byte(`{"questions":"flat question","state":"flat state"}`))
+	require.NoError(t, err)
+	require.False(t, alias.Incomplete)
+	require.Equal(t, []string{"flat question", "flat state"}, segmentTexts(alias.Segments))
+
+	// Key-only payloads and numeric leaves stay auditable without marking the
+	// document incomplete.
+	keyOnly, err := Extract("typesafe_systemone", []byte(`{"state":{"hidden state key":1},"questions":{"hidden question id":{"type":"noul"}}}`))
+	require.NoError(t, err)
+	require.False(t, keyOnly.Incomplete)
+	require.Equal(t, []string{"hidden question id", "hidden state key"}, segmentTexts(keyOnly.Segments))
+}
+
 func TestExtractMediaTypeCannotSuppressPresentText(t *testing.T) {
 	document, err := Extract("openai_chat_completions", []byte(`{"messages":[{"role":"user","content":[{"type":"input_image","image_url":"https://example.test/a.png","text":"must still audit text"}]}]}`))
 	require.NoError(t, err)

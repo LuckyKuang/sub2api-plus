@@ -1157,6 +1157,12 @@ type GatewayGrokConfig struct {
 	// FreeQuotaStatsCacheSeconds is the soft-gate stats cache TTL. Hot path never
 	// waits on usage_logs; misses fail open and refresh asynchronously.
 	FreeQuotaStatsCacheSeconds int `mapstructure:"free_quota_stats_cache_seconds"`
+	// GrokRequestCompressionEnabled is the operator kill switch for negotiated
+	// zstd request compression toward the trusted Grok CLI proxy. true allows
+	// the gateway to negotiate; it never compresses without an exact-target
+	// `accept_request_encodings` advertisement from that proxy's `/v1/settings`.
+	// false always sends plain JSON.
+	GrokRequestCompressionEnabled bool `mapstructure:"grok_request_compression_enabled"`
 }
 
 // GatewayCNProvidersConfig 国产 OpenAI 兼容供应商（kimi/zhipu/deepseek）的余额检测配置。
@@ -2089,6 +2095,7 @@ func setDefaults() {
 		"api.minimaxi.com", // MiniMax CN quota + inference
 		"api.minimax.io",   // MiniMax intl; frozen allowlists must add this host to use the intl site
 		"opencode.ai",
+		"api.typesafe.ai", // TypeSafe native System One (Jev) endpoint
 		"generativelanguage.googleapis.com",
 		"cloudcode-pa.googleapis.com",
 		"*.openai.azure.com",
@@ -2506,6 +2513,12 @@ func setDefaults() {
 	viper.SetDefault("gateway.grok.free_quota_soft_gate_percent", 95)
 	viper.SetDefault("gateway.grok.free_quota_window_hours", 24)
 	viper.SetDefault("gateway.grok.free_quota_stats_cache_seconds", 60)
+	// Grok negotiated request compression (zstd). Enabled by default, but the
+	// gateway still requires an exact-target `accept_request_encodings`
+	// advertisement from the trusted CLI proxy before it compresses anything.
+	// Operators bind this with GATEWAY_GROK_REQUEST_COMPRESSION_ENABLED.
+	viper.SetDefault("gateway.grok.grok_request_compression_enabled", true)
+	_ = viper.BindEnv("gateway.grok.grok_request_compression_enabled", "GATEWAY_GROK_REQUEST_COMPRESSION_ENABLED")
 	// 国产供应商余额检测（kimi/deepseek payg；zhipu 无余额端点，仅靠响应式 429/402）。
 	viper.SetDefault("gateway.cn_providers.balance_check_enabled", true)
 	viper.SetDefault("gateway.cn_providers.balance_threshold", 0.5)

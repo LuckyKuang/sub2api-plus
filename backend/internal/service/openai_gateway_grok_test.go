@@ -833,19 +833,70 @@ func TestBuildGrokResponsesRequestUsesAccountBaseURLAndBearerToken(t *testing.T)
 		},
 	}
 
-	req, err := buildGrokResponsesRequest(context.Background(), nil, account, []byte(`{"model":"grok-4.3"}`), "access-token", "isolated-cache-id", nil)
+	req, err := (&OpenAIGatewayService{}).buildGrokResponsesRequest(context.Background(), nil, account, []byte(`{"model":"grok-4.3"}`), "access-token", "isolated-cache-id", nil)
 	require.NoError(t, err)
 	require.Equal(t, http.MethodPost, req.Method)
 	require.Equal(t, "https://xai.test/v1/responses", req.URL.String())
 	require.Equal(t, "Bearer access-token", req.Header.Get("Authorization"))
 	require.Equal(t, "application/json", req.Header.Get("Content-Type"))
-	require.Contains(t, req.Header.Get("Accept"), "text/event-stream")
+	// A body without `stream` is the plain JSON operation, so Accept declares
+	// application/json rather than SSE.
+	require.Equal(t, "application/json", req.Header.Get("Accept"))
 	require.Equal(t, grokCLIVersion, req.Header.Get("X-Grok-Client-Version"))
 	require.Equal(t, "isolated-cache-id", req.Header.Get(grokConversationIDHeader))
 
 	data, err := io.ReadAll(req.Body)
 	require.NoError(t, err)
 	require.Equal(t, `{"model":"grok-4.3"}`, strings.TrimSpace(string(data)))
+}
+
+// A streaming sampler body declares SSE for the upstream operation, matching
+// the frozen sampler's streaming routes. The downstream response format does
+// not select this value: the gateway aggregates SSE for non-streaming clients
+// while still declaring text/event-stream upstream.
+func TestBuildGrokResponsesRequestStreamingBodyDeclaresSSEAccept(t *testing.T) {
+	t.Setenv(xai.EnvAllowUnsafeURLOverrides, "true")
+
+	account := &Account{
+		Platform: PlatformGrok,
+		Type:     AccountTypeOAuth,
+		Credentials: map[string]any{
+			"base_url": "https://xai.test/v1/",
+		},
+	}
+
+	req, err := (&OpenAIGatewayService{}).buildGrokResponsesRequest(
+		context.Background(), nil, account,
+		[]byte(`{"model":"grok-4.3","input":"hi","stream":true}`),
+		"access-token", "", nil,
+	)
+	require.NoError(t, err)
+	require.Equal(t, "application/json", req.Header.Get("Content-Type"))
+	require.Equal(t, "text/event-stream", req.Header.Get("Accept"))
+}
+
+// The Accept value follows the final body even when an account header override
+// is stored, so a relay override cannot keep declaring SSE for a JSON call.
+func TestBuildGrokResponsesRequestAcceptIgnoresHeaderOverrides(t *testing.T) {
+	t.Parallel()
+
+	account := &Account{
+		Platform: PlatformGrok,
+		Type:     AccountTypeAPIKey,
+		Credentials: map[string]any{
+			"base_url":                "https://relay.example.test/v1",
+			"header_override_enabled": true,
+			"header_overrides": map[string]any{
+				"Accept": "application/json, text/event-stream",
+			},
+		},
+	}
+
+	req, err := (&OpenAIGatewayService{}).buildGrokResponsesRequest(
+		context.Background(), nil, account, []byte(`{"model":"grok-4.3"}`), "api-key", "", nil,
+	)
+	require.NoError(t, err)
+	require.Equal(t, "application/json", req.Header.Get("Accept"))
 }
 
 func TestBuildGrokCompactRequestBodyUsesResponsesCompactionTurn(t *testing.T) {
@@ -920,7 +971,7 @@ func TestBuildGrokResponsesRequestAllowsPublicAPIKeyBaseURLByDefault(t *testing.
 		},
 	}
 
-	req, err := buildGrokResponsesRequest(context.Background(), nil, account, []byte(`{"model":"grok-4.3"}`), "api-key", "", nil)
+	req, err := (&OpenAIGatewayService{}).buildGrokResponsesRequest(context.Background(), nil, account, []byte(`{"model":"grok-4.3"}`), "api-key", "", nil)
 	require.NoError(t, err)
 	require.Equal(t, "https://grok.example.test/v1/responses", req.URL.String())
 	require.Equal(t, "Bearer api-key", req.Header.Get("Authorization"))
@@ -939,7 +990,7 @@ func TestBuildGrokResponsesRequestHonorsOAuthOfficialEndpointSwitch(t *testing.T
 		},
 	}
 
-	req, err := buildGrokResponsesRequest(context.Background(), nil, account, []byte(`{"model":"grok-4.3"}`), "access-token", "", nil)
+	req, err := (&OpenAIGatewayService{}).buildGrokResponsesRequest(context.Background(), nil, account, []byte(`{"model":"grok-4.3"}`), "access-token", "", nil)
 	require.NoError(t, err)
 	require.Equal(t, xai.DefaultBaseURL+"/responses", req.URL.String())
 }
@@ -961,7 +1012,7 @@ func TestBuildGrokResponsesRequestAppliesOnlyOrdinaryHeaderOverrides(t *testing.
 		},
 	}
 
-	req, err := buildGrokResponsesRequest(context.Background(), nil, account, []byte(`{"model":"grok-4.3"}`), "access-token", "conv-1", nil)
+	req, err := (&OpenAIGatewayService{}).buildGrokResponsesRequest(context.Background(), nil, account, []byte(`{"model":"grok-4.3"}`), "access-token", "conv-1", nil)
 	require.NoError(t, err)
 	require.Equal(t, "https://relay.example.test/v1/responses", req.URL.String())
 	// 历史身份覆写不能覆盖可信 CLI 声明；普通中转头仍按原 wire casing 写入。
@@ -990,7 +1041,7 @@ func TestBuildGrokResponsesRequestIgnoresBlockedHeaderOverrides(t *testing.T) {
 		},
 	}
 
-	req, err := buildGrokResponsesRequest(context.Background(), nil, account, []byte(`{"model":"grok-4.3"}`), "api-key", "conv-2", nil)
+	req, err := (&OpenAIGatewayService{}).buildGrokResponsesRequest(context.Background(), nil, account, []byte(`{"model":"grok-4.3"}`), "api-key", "conv-2", nil)
 	require.NoError(t, err)
 	require.Equal(t, "Bearer api-key", req.Header.Get("Authorization"))
 	require.Equal(t, "conv-2", req.Header.Get(grokConversationIDHeader))

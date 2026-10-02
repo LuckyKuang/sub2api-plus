@@ -5,11 +5,13 @@ procedures are documented in [`docs/RELEASING.md`](docs/RELEASING.md).
 
 ## Integrated Baseline
 
-The current integration tree incorporates the official `v0.2.11` tag at commit
-`96f4c115c9749078f90cbf210a01d39baf3f53b6`, layered onto the Plus history.
-The release mapping below remains the authoritative record of publication
-status; importing an upstream tag does not publish a Plus release or change the
-embedded application version by itself.
+The current integration tree incorporates the official `v0.2.12` tag (tag
+object `cbe9966432317e6757b47f598a103d2132ec27db`, peeled commit
+`5106065716e494204fc0e8db16f68f6e9d576be0`) layered onto the official
+`v0.2.11` commit `96f4c115c9749078f90cbf210a01d39baf3f53b6`, which is the exact
+merge base of this import. The release mapping below remains the authoritative
+record of publication status; importing an upstream tag does not publish a Plus
+release or change the embedded application version by itself.
 Plus version/tag/image promotion remains a separate step.
 
 Plus retains credential-owner identity precedence, ingress content audit,
@@ -17,7 +19,11 @@ session and quota accounting, proxy egress metadata annotations, asynchronous
 images, administrator export controls, IP access controls, and
 distribution/toolchain choices. Retired upstream billing probes remain removed.
 Grok cross-client rewriting stays opt-in, and inconclusive OAuth billing does
-not grant media eligibility.
+not grant media eligibility. The compiled Grok CLI identity pin follows the
+frozen local grok-build source (`1.0.45`) rather than upstream's interactive
+`grok-pager` capture, and TypeSafe System One is registered in the Plus
+canonical two-engine content extractor instead of upstream's per-protocol
+collectors.
 
 The v0.2.10 reset-credit query preserves the Anthropic credential owner's
 identity across token acquisition and terminal transport. Allowlisted
@@ -37,7 +43,9 @@ official tag import. See
 official tag import. See
 [v0.2.10 integration](docs/UPSTREAM_V0_2_10_INTEGRATION.md) for the previous
 official tag import. See
-[v0.2.11 integration](docs/UPSTREAM_V0_2_11_INTEGRATION.md) for the latest
+[v0.2.11 integration](docs/UPSTREAM_V0_2_11_INTEGRATION.md) for the previous
+official tag import. See
+[v0.2.12 integration](docs/UPSTREAM_V0_2_12_INTEGRATION.md) for the latest
 official tag import.
 
 ## Release Mapping

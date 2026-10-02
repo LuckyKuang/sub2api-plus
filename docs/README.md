@@ -12,6 +12,7 @@ below for detailed configuration and maintenance instructions.
 - [DeepSeek empty-mapping whitelist](providers/DEEPSEEK.md)
 - [Kimi / Moonshot](providers/KIMI.md)
 - [MiniMax coding-plan quota origins](providers/MINIMAX.md)
+- [TypeSafe / Jev native System One](providers/TYPESAFE.md)
 
 ## Protocols and Tasks
 
@@ -38,6 +39,7 @@ below for detailed configuration and maintenance instructions.
 - [Upstream v0.2.4 integration and upgrade behavior](UPSTREAM_V0_2_4_INTEGRATION.md)
 - [Upstream v0.2.5 integration](UPSTREAM_V0_2_5_INTEGRATION.md)
 - [Upstream v0.2.11 integration](UPSTREAM_V0_2_11_INTEGRATION.md)
+- [Upstream v0.2.12 integration](UPSTREAM_V0_2_12_INTEGRATION.md)
 - [Database migrations](../backend/migrations/README.md)
 - [Authentication and Passkeys](AUTHENTICATION.md)
 - [Model Plaza visibility](MODEL_PLAZA.md)

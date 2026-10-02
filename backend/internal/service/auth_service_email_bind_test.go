@@ -814,21 +814,28 @@ type emailBindCacheStub struct {
 	data      *service.VerificationCodeData
 	err       error
 	setEmails []string
+
+	mu       sync.Mutex
+	consumed map[string]bool
 }
 
-func (s *emailBindCacheStub) GetVerificationCode(context.Context, string) (*service.VerificationCodeData, error) {
+func (s *emailBindCacheStub) GetVerificationCode(_ context.Context, email string) (*service.VerificationCodeData, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.err != nil {
 		return nil, s.err
+	}
+	if s.consumed[email] {
+		return nil, nil
 	}
 	return s.data, nil
 }
 
 func (s *emailBindCacheStub) SetVerificationCode(_ context.Context, email string, _ *service.VerificationCodeData, _ time.Duration) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.setEmails = append(s.setEmails, email)
-	return nil
-}
-
-func (s *emailBindCacheStub) DeleteVerificationCode(context.Context, string) error {
+	delete(s.consumed, email)
 	return nil
 }
 
@@ -837,10 +844,6 @@ func (s *emailBindCacheStub) GetNotifyVerifyCode(context.Context, string) (*serv
 }
 
 func (s *emailBindCacheStub) SetNotifyVerifyCode(context.Context, string, *service.VerificationCodeData, time.Duration) error {
-	return nil
-}
-
-func (s *emailBindCacheStub) DeleteNotifyVerifyCode(context.Context, string) error {
 	return nil
 }
 
@@ -1164,4 +1167,48 @@ func cloneEmailBindUser(user *service.User) *service.User {
 	}
 	cloned := *user
 	return &cloned
+}
+
+func (s *emailBindCacheStub) ReserveVerificationCodeAttempt(_ context.Context, email, generation string) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.err != nil {
+		return 0, s.err
+	}
+	if s.data == nil || s.consumed[email] || s.data.Generation != generation {
+		return 0, service.ErrVerifyCodeMissing
+	}
+	if s.data.Attempts >= service.MaxVerificationCodeAttempts {
+		return 0, service.ErrVerifyCodeExhausted
+	}
+	s.data.Attempts++
+	return s.data.Attempts, nil
+}
+
+func (s *emailBindCacheStub) ConsumeVerificationCode(_ context.Context, email, generation string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.err != nil {
+		return false, s.err
+	}
+	if s.data == nil || s.consumed[email] || s.data.Generation != generation {
+		return false, nil
+	}
+	if s.consumed == nil {
+		s.consumed = map[string]bool{}
+	}
+	s.consumed[email] = true
+	return true, nil
+}
+
+func (s *emailBindCacheStub) ReserveNotifyVerifyCodeAttempt(context.Context, string, string) (int, error) {
+	return 0, service.ErrVerifyCodeMissing
+}
+
+func (s *emailBindCacheStub) ConsumeNotifyVerifyCode(context.Context, string, string) (bool, error) {
+	return false, nil
+}
+
+func (s *emailBindCacheStub) ConsumePasswordResetToken(context.Context, string, string) (bool, error) {
+	return false, nil
 }
