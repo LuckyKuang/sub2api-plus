@@ -382,7 +382,7 @@ the same change and provide all of the following evidence:
 Route-call presence or static source-order assertions alone do not prove
 content coverage.
 
-## Upstream v0.2.4 integration
+## Model admission, route aliases and follow-up turns
 
 Group `model_allowlist` admission uses the client model before account/channel
 mapping and does not replace content audit. Root route aliases and Plus batch

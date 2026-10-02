@@ -1,6 +1,11 @@
-# Asynchronous Image Tasks
+# Asynchronous and Batch Image Tasks
 
 Asynchronous image tasks let clients submit long-running OpenAI-compatible image requests without keeping one HTTP connection open. This avoids proxy/CDN response timeouts such as Cloudflare 524 while preserving the existing image routing, billing, moderation, concurrency, and failover behavior.
+
+OpenAI/Grok tasks use `/images/tasks` with S3-compatible output storage. Gemini
+and Vertex provider batches use `/images/batches`, described in
+[Gemini and Vertex batches](#gemini-and-vertex-batches) below, with separate
+feature gates, provider storage and billing settlement.
 
 ## Endpoints
 
@@ -197,3 +202,140 @@ Only `failed` tasks can be deleted. Deleting an owned `processing` or `completed
 The task-page API Key filter continues to show every non-disabled key, including expired and quota-exhausted keys and keys whose group or platform changed after task creation, so their owner-scoped history remains manageable. The new-task form remains stricter and offers only active OpenAI/Grok keys whose current group allows image generation.
 
 Deleting a task record never scans or deletes S3-compatible object storage. In particular, no object key is reconstructed from the active prefix. Object lifecycle and cleanup remain the responsibility of the configured bucket policy.
+
+## Gemini and Vertex batches
+
+Batch generation supports `gemini_api` (Gemini API-key accounts and JSONL file
+batches) and `vertex` (Gemini service-account accounts, Vertex
+`BatchPredictionJob` and managed GCS JSONL). PostgreSQL is authoritative;
+Redis supplies queue wakeups, retries, locks and download limits. Provider
+filenames, job names, storage paths, signed URLs and credentials are private.
+Image and ZIP downloads are proxied through Sub2API Plus.
+
+### Batch API
+
+```text
+POST   /v1/images/batches
+GET    /v1/images/batches
+GET    /v1/images/batches/models
+GET    /v1/images/batches/{id}
+GET    /v1/images/batches/{id}/items
+GET    /v1/images/batches/{id}/items/{custom_id}/content
+GET    /v1/images/batches/{id}/download
+POST   /v1/images/batches/{id}/cancel
+DELETE /v1/images/batches/{id}
+DELETE /v1/images/batches/{id}/outputs
+```
+
+Authenticate with a Sub2API Plus API key. Every job read, item, download,
+cancellation and deletion is scoped to both its user and submitting API key.
+The model list uses eligible accounts in the key's group, available pricing and
+the group model allowlist; listing a model does not reserve provider capacity.
+
+Submit JSON, optionally with `Idempotency-Key`:
+
+```json
+{
+  "model": "gemini-2.5-flash-image",
+  "provider": "gemini_api",
+  "items": [
+    {"custom_id": "cover", "prompt": "A winter lighthouse", "output_count": 2}
+  ],
+  "image_size": "1K",
+  "response_mime_type": "image/png"
+}
+```
+
+Submission returns the public batch object with HTTP 200. It includes `id`,
+`object: image.batch`, `status`, model/provider, item/success/failure counts,
+estimated/actual cost and lifecycle timestamps. Reusing an idempotency key with
+the same normalized payload returns its job; a changed payload is a conflict.
+Optional `task_name` labels the job; `parent_batch_id` links an owner-scoped
+retry to its original batch. Lists support `status`, `task_name`, `downloaded`,
+`from`, `to`, `limit` and `cursor`; item lists support `status`, `limit` and
+`cursor`. Item content accepts a zero-based `image_index`.
+
+`output_count` defaults to 1 and expands each item into separate provider JSONL
+requests with IDs such as `cover_01` and `cover_02`. These counts and limits are
+applied after expansion:
+
+| Limit | Current default |
+| --- | --- |
+| Outputs per original item / per batch | 4 / 200 |
+| Reference images per Flash / Pro image item | 3 / 14 |
+| Reference attachments per batch | 1,000, counting repeats |
+| Decoded inline reference bytes per batch | 128 MiB, counting repeats |
+| ZIP items / bytes per download | 200 / 512 MiB |
+| Download duration / concurrent downloads per user | 600 seconds / 1 |
+
+Split larger workloads before submission. Per-item optional `reference_images`
+entries accept `id`, `type`, `mime_type` and exactly one of `data` (base64
+without a data-URL prefix) or `file_uri` (an internal `gs://` reference).
+Supported MIME types are PNG, JPEG and WebP. Current request validation accepts
+only `1K`/default image size; `2K` and `4K` are rejected.
+
+Public states are `queued` (internal created/uploading/submitted), `running`,
+`processing_results` (indexing), `settling`, `completed`, `failed`, `cancelled`
+and `output_deleted`. Record deletion is allowed only after processing ends;
+it hides the record from the user view without replacing provider cleanup or
+billing. Output deletion is separate and requires completed results. Manual
+or TTL output cleanup changes completed jobs to `output_deleted`; later
+downloads return `410 BATCH_IMAGE_OUTPUT_DELETED`.
+
+### Enablement and configuration
+
+Enable Google-side APIs and billing/prepayment first. For Vertex, configure a
+fixed managed bucket and grant the runtime and Vertex service agent the required
+bucket permissions. Sub2API Plus switches do not grant Google-side access.
+
+Enable `batch_image.enabled` (`BATCH_IMAGE_ENABLED`), then image generation and
+`allow_batch_image_generation` on the intended **Gemini** group. Enable
+`batch_image.queue_enabled` for Redis workers to poll/index/settle accepted
+jobs. Both switches default to false. Workers reserve specific jobs from Redis;
+they do not scan PostgreSQL as a polling queue. Turning workers off is separate
+from turning admission off.
+
+The `batch_image` configuration also owns these defaults:
+
+| Settings | Defaults |
+| --- | --- |
+| `max_items_per_job_default` / `max_items_per_job_trial` | 200 / 50 |
+| `max_prompt_chars_per_item` | 8,000 |
+| `default_response_mime_type` / `default_image_size` | `image/png` / `1K` |
+| `input_retention_after_terminal_hours` | 24 |
+| `output_retention_after_terminal_hours` / `output_retention_max_days` | 72 hours / 7 days |
+| `cleanup_interval_minutes` / `cleanup_batch_size` | 30 / 100 |
+| `job_lock_ttl_seconds` / `stale_active_after_seconds` | 300 / 600 |
+| `default_requeue_delay_seconds` / `error_retry_delay_seconds` | 30 / 60 |
+| `vertex_enabled` / `vertex_location` | false / `global` |
+| `vertex_managed_gcs_prefix` | `batch-image/{env}/{batch_id}` |
+
+Set `vertex_project_id` and `vertex_managed_gcs_bucket` when using Vertex.
+Complete queue keys, limits, retention and provider defaults are maintained in
+[`BatchImageConfig` and its defaults](../backend/internal/config/config.go).
+Configure bucket lifecycle/soft delete deliberately to avoid storage retained
+after application cleanup. The compatibility `x-goog-api-key` header expects a
+Sub2API Plus key, not a plain Google key.
+
+### Billing and security
+
+Admission snapshots the output-image price and applicable multipliers, estimates
+cost and reserves a hold. Settlement follows indexing and charges only successful
+images against that snapshot. Reference-image input may incur provider costs,
+but there is no separate user-facing reference surcharge. Failed items are not
+charged. Settlement uses `batch_image_settlement:{batch_id}` and is idempotent;
+bounded settlement retries release the remaining hold through the idempotent
+release path on final failure. Pricing is operator-configured; example amounts
+are not a production price guarantee.
+
+Submission retains the canonical ingress audit before account selection,
+holds and provider writes. Provider requests retain the credential-owner
+identity and signing rules in [Outbound Identity](OUTBOUND_IDENTITY.md).
+Provider cleanup uses server-generated refs and prefix-safe deletion only.
+Public responses and logs never contain provider credentials, service-account
+JSON or image base64; PostgreSQL stores metadata, not image bytes.
+
+Official setup references: [Gemini API keys](https://ai.google.dev/gemini-api/docs/api-key),
+[Gemini Batch API](https://ai.google.dev/gemini-api/docs/batch-api),
+[Gemini image generation](https://ai.google.dev/gemini-api/docs/image-generation)
+and [Vertex batch inference](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/capabilities/batch-inference).

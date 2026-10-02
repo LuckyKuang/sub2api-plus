@@ -24,6 +24,10 @@ behavior must update this file in the same commit.
 6. A remote refresh failure keeps the last usable snapshot. No failure clears or
    rewrites a saved channel rule.
 
+For request billing, an unset channel image price inherits the catalog price.
+Set an explicit `0` to keep image output free. An explicit zero image-output
+price never falls back to text pricing.
+
 ## 2. Source priority
 
 For one model, the reference service resolves in this order:

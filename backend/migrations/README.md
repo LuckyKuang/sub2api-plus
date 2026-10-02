@@ -92,5 +92,46 @@ historical incidents and must not be used for routine development.
 - A failed regular migration rolls back its transaction.
 - A failed non-transactional migration requires operator review before retry.
 
+## Upgrade Prerequisites
+
+Back up PostgreSQL before upgrading. Replacing the application binary alone
+cannot reverse renamed columns or data cleanup; recovery requires the matching
+pre-upgrade backup or a reviewed forward compensation. Applied migration files
+and checksums remain immutable.
+
+- **Model policies (259–262):** `models_list_config` becomes `model_allowlist`
+  in storage and management JSON. Update management clients to the new field.
+  Migration 262 trims entries, removes case-insensitive duplicates in order,
+  and disables legacy enabled empty/blank lists. It never replaces them with
+  `*`. Malformed JSON, non-string entries and non-trailing wildcard patterns
+  stop this historical migration; repair the indicated group before retrying.
+  Diagnostics contain group IDs, without model names or credentials. Current
+  runtime policies support `*` at any position; that does not change migration
+  262's one-time validation. See [model admission](../../docs/protocols/OPENAI_RESPONSES.md).
+- **Access logs (263):** an installation with pre-existing user rows preserves
+  explicit `persist_access_logs` and receives `true` only when that field is
+  missing. Fresh databases keep the application default `false`. Unrelated
+  runtime-log fields are preserved; malformed configuration needs repair.
+  This switch does not disable required security-audit exception logs.
+- **Platforms and quotas (261, 266, 267, 273):** platform constraints retain the
+  full Plus platform set, including MiniMax, OpenCode and TypeSafe. Migration
+  267 removes quota rows whose daily, weekly and monthly limits are all NULL;
+  those rows are unlimited. Migration 273 expands both quota and composite
+  target constraints without removing existing platforms.
+- **Usage and payments (269, 270, 274):** rollout budget units remain a reserved
+  usage dimension; affiliate `operation_id` supports idempotent ledger writes.
+  Historical payment orders receive `bonus_amount=0`. See [payment behavior](../../docs/PAYMENT.md).
+- **Authentication caches:** password-reset links stored in the previous
+  plaintext form are rejected; users request new links. Verification codes
+  carry forward legacy attempt counters: four attempts permit at most one
+  more comparison; five or more permit none. See [authentication](../../docs/AUTHENTICATION.md).
+
+For explicit upstream URL allowlists, add `api.minimax.io` for the international
+MiniMax site (`api.minimaxi.com` for China); new defaults do not merge into
+existing explicit lists. The system-log cleanup fallback
+`ops.cleanup.system_log_retention_days` is 30 and must be positive when cleanup
+is enabled; runtime ops settings can override it. See the maintained
+[deployment configuration](../../deploy/config.example.yaml).
+
 Runner implementation:
 `backend/internal/repository/migrations_runner.go`.
