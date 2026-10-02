@@ -1,11 +1,11 @@
 import { createPinia, setActivePinia } from "pinia";
 import { defineComponent, h, type PropType } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
-import { createPinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AdminGroup, CodexModelsManifestConfig } from "@/types";
 import GroupsView from "@/views/admin/GroupsView.vue";
+import { getModelsByPlatform } from "@/composables/useModelWhitelist";
 
 const {
   listGroups,
@@ -162,6 +162,13 @@ const BaseDialogStub = defineComponent({
   template: '<div v-if="show"><slot /><slot name="footer" /></div>',
 });
 
+const ReasoningEffortPolicyFieldsStub = defineComponent({
+  setup(_props, { expose }) {
+    expose({ validate: () => true, resetValidation: () => undefined });
+    return () => h("div");
+  },
+});
+
 const CodexManifestAccountsFieldStub = defineComponent({
   name: "CodexManifestAccountsField",
   props: {
@@ -228,7 +235,7 @@ const mountView = () =>
         GroupCapacityBadge: true,
         GroupRateMultipliersModal: true,
         GroupRPMOverridesModal: true,
-        ReasoningEffortPolicyFields: true,
+        ReasoningEffortPolicyFields: ReasoningEffortPolicyFieldsStub,
         CodexManifestAccountsField: CodexManifestAccountsFieldStub,
         PricingEntryCard: true,
         VueDraggable: true,
@@ -236,9 +243,9 @@ const mountView = () =>
     },
   });
 
-describe("GroupsView Codex manifest binding", () => {
+describe("GroupsView model settings", () => {
   beforeEach(() => {
- setActivePinia(createPinia());
+    setActivePinia(createPinia());
     localStorage.clear();
     listGroups.mockReset();
     getModelAllowlistCandidates.mockReset();
@@ -260,6 +267,44 @@ describe("GroupsView Codex manifest binding", () => {
     getLiveCapability.mockResolvedValue({ supported: false });
     listAccounts.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 100, pages: 0 });
   });
+
+  for (const mode of ["create", "edit"] as const) {
+    it.each(["deepseek", "kimi", "zhipu", "minimax"])(
+      `shows the selected provider's whitelist candidates in ${mode}: %s`,
+      async (platform) => {
+        if (mode === "edit") {
+          listGroups.mockResolvedValue({ items: [{ ...sourceGroup, platform }], total: 1, page: 1, page_size: 20, pages: 1 });
+        }
+        getModelAllowlistCandidates.mockImplementation((_id, selectedPlatform) =>
+          Promise.resolve(getModelsByPlatform(selectedPlatform)));
+        const wrapper = mountView();
+        try {
+          await flushPromises();
+          const open = wrapper.findAll("button").find(button =>
+            button.text() === (mode === "create" ? "admin.groups.createGroup" : "common.edit"));
+          expect(open).toBeTruthy();
+          await open!.trigger("click");
+          await flushPromises();
+          if (mode === "create") {
+            wrapper.getComponent('[data-tour="group-form-platform"]').vm.$emit("update:modelValue", platform);
+            await flushPromises();
+          }
+          expect(getModelAllowlistCandidates).toHaveBeenLastCalledWith(mode === "create" ? 0 : sourceGroup.id, platform);
+          const form = wrapper.get(`#${mode}-group-form`);
+          const allowlist = form.findAll('[role="switch"]').find(button =>
+            button.element.parentElement?.textContent?.includes("admin.groups.modelAllowlist.title"));
+          expect(allowlist).toBeTruthy();
+          await allowlist!.trigger("click");
+          const section = allowlist!.element.parentElement!.parentElement!;
+          for (const model of getModelsByPlatform(platform)) expect(section.textContent).toContain(model);
+          expect(section.textContent).not.toContain("claude-opus-");
+          expect(section.textContent).not.toContain("claude-sonnet-");
+        } finally {
+          wrapper.unmount();
+        }
+      },
+    );
+  }
 
   it("preserves consecutive child updates on the reactive edit config", async () => {
     const wrapper = mountView();

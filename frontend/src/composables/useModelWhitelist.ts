@@ -1,5 +1,7 @@
+import cnProviderModels from '../../../backend/internal/pkg/cnmodels/models.json'
+
 // =====================
-// 模型列表（硬编码，与 new-api 一致）
+// 模型预设；DeepSeek、Kimi、Zhipu、MiniMax 共用官方目录
 // =====================
 
 // OpenAI
@@ -93,17 +95,7 @@ const antigravityModels = [
 ]
 
 // 智谱 GLM
-const zhipuModels = [
-  'glm-4', 'glm-4v', 'glm-4-plus', 'glm-4-0520',
-  'glm-4-air', 'glm-4-airx', 'glm-4-long', 'glm-4-flash',
-  'glm-4v-plus', 'glm-4.5', 'glm-4.5-x', 'glm-4.5-air', 'glm-4.5-flash',
-  'glm-4.6', 'glm-4.7', 'glm-4.7-flash', 'glm-4.7-flashx',
-  'glm-5', 'glm-5-turbo', 'glm-5.1', 'glm-5.2',
-  'glm-5.3', 'glm-5.3-flash',
-  'glm-3-turbo', 'glm-4-alltools',
-  'chatglm_turbo', 'chatglm_pro', 'chatglm_std', 'chatglm_lite',
-  'cogview-3', 'cogvideo'
-]
+const zhipuModels = cnProviderModels.zhipu
 
 // 阿里 通义千问
 const qwenModels = [
@@ -117,14 +109,7 @@ const qwenModels = [
 ]
 
 // DeepSeek
-const deepseekModels = [
-  'deepseek-v4-pro', 'deepseek-v4-flash', 'deepseek-v4-flash-vision-exp', 'deepseek-flash',
-  'deepseek-coder',
-  'deepseek-v3', 'deepseek-v3-0324',
-  'deepseek-r1', 'deepseek-r1-0528',
-  'deepseek-r1-distill-qwen-32b', 'deepseek-r1-distill-qwen-14b', 'deepseek-r1-distill-qwen-7b',
-  'deepseek-r1-distill-llama-70b', 'deepseek-r1-distill-llama-8b'
-]
+const deepseekModels = cnProviderModels.deepseek
 
 // Mistral
 const mistralModels = [
@@ -190,12 +175,7 @@ const yiModels = [
 ]
 
 // Moonshot/Kimi
-const moonshotModels = [
-  'moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k',
-  'kimi-latest',
-  'kimi-for-coding',
-  'kimi-k2'
-]
+const moonshotModels = cnProviderModels.kimi
 
 // 字节跳动 豆包
 const doubaoModels = [
@@ -207,19 +187,7 @@ const doubaoModels = [
 ]
 
 // MiniMax
-const minimaxModels = [
-  'MiniMax-M3',
-  'MiniMax-M2.7',
-  'MiniMax-M2.7-highspeed',
-  'MiniMax-M2.5',
-  'MiniMax-M2.5-highspeed',
-  'MiniMax-M2.1',
-  'MiniMax-M2.1-highspeed',
-  'MiniMax-M2',
-  'abab6.5-chat', 'abab6.5s-chat', 'abab6.5s-chat-pro',
-  'abab6-chat',
-  'abab5.5-chat', 'abab5.5s-chat'
-]
+const minimaxModels = cnProviderModels.minimax
 
 // 百度 文心
 const baiduModels = [

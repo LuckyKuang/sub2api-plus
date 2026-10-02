@@ -13,6 +13,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/antigravity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/claude"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/cnmodels"
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/geminicli"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/logger"
@@ -95,6 +96,9 @@ func (s *adminServiceImpl) GetGroupModelsListCandidates(ctx context.Context, id 
 	}
 	if platform == "" {
 		platform = PlatformAnthropic
+	}
+	if platform != PlatformComposite && !isConcreteRequestPlatform(platform) {
+		return nil, infraerrors.BadRequest("INVALID_GROUP_PLATFORM", "unsupported group platform")
 	}
 
 	candidates := defaultModelsListCandidateIDs(platform)
@@ -279,6 +283,8 @@ func compositeRouteFromInput(groupID int64, input CompositeRouteInput) (*Composi
 
 func defaultModelsListCandidateIDs(platform string) []string {
 	switch platform {
+	case PlatformDeepseek, PlatformKimi, PlatformZhipu, PlatformMiniMax:
+		return cnmodels.DefaultModelIDs(platform)
 	case PlatformOpenAI:
 		return openai.DefaultModelIDs()
 	case PlatformGemini:
@@ -302,12 +308,14 @@ func defaultModelsListCandidateIDs(platform string) []string {
 		return []string{typesafe.JevLatestModel}
 	case PlatformComposite:
 		return compositeDefaultModelsListCandidateIDs()
-	default:
+	case PlatformAnthropic:
 		ids := make([]string, 0, len(claude.DefaultModels))
 		for _, model := range claude.DefaultModels {
 			ids = append(ids, model.ID)
 		}
 		return ids
+	default:
+		return []string{}
 	}
 }
 

@@ -2,11 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   addCustomModelAllowlistItem,
-  createModelAllowlistState,
   type ModelAllowlistAddError,
-} from "../groupModelAllowlist";
-
-import {
   buildModelAllowlistConfig,
   createModelAllowlistState,
   hydrateModelAllowlistState,
@@ -18,6 +14,18 @@ import {
 } from "../groupModelAllowlist";
 
 describe("groupModelAllowlist", () => {
+  it("retains saved aliases, wildcards and retired IDs when official candidates change", () => {
+    const state = hydrateModelAllowlistState({
+      enabled: true,
+      models: ["deepseek-v4-flash", "claude-*", "custom-alias"],
+    }, ["deepseek-flash", "deepseek-v4-pro"]);
+    expect(buildModelAllowlistConfig(state)).toEqual({
+      enabled: true,
+      models: ["deepseek-v4-flash", "claude-*", "custom-alias"],
+    });
+    expect(state.items.find(item => item.id === "deepseek-flash")?.selected).toBe(false);
+  });
+
   it("selects all default candidates for a new disabled config", () => {
     const state = createModelAllowlistState();
 

@@ -17,6 +17,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/domain"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/antigravity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/claude"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/cnmodels"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/ctxkey"
 	pkgerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/geminicli"
@@ -1467,10 +1468,8 @@ func modelListingSource(platform string, availableModels, fallbackModels []strin
 
 func defaultCodexModelIDsForPlatform(platform string) []string {
 	switch platform {
-	case service.PlatformDeepseek:
-		return []string{"deepseek-v4-pro", "deepseek-v4-flash", "deepseek-flash"}
-	case service.PlatformMiniMax:
-		return []string{"MiniMax-M3", "MiniMax-M2.7", "MiniMax-M2.5"}
+	case service.PlatformDeepseek, service.PlatformMiniMax:
+		return cnmodels.DefaultModelIDs(platform)
 	default:
 		return defaultModelIDsForPlatform(platform)
 	}

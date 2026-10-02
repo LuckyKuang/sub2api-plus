@@ -164,6 +164,7 @@ docs/*
 !docs/AVAILABLE_CHANNELS.md
 !docs/USER_SUPPORT_VIEW.md
 !docs/COMPOSITE_GROUPS.md
+!docs/CN_PROVIDER_MODELS.md
 !docs/PLUGIN_DEVELOPMENT.md
 !docs/providers/
 !docs/providers/*.md

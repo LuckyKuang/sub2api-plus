@@ -393,6 +393,14 @@ hook once. Unknown valid frames still reach the audit hook and pass extraction
 without an audit-derived rejection. A real policy rejection prevents upstream
 writes, including for successfully extracted content alongside unknown fields.
 
+The [official CN provider catalog](CN_PROVIDER_MODELS.md) supplies management
+allowlist candidates and the existing DeepSeek/MiniMax native Codex model
+fallback lists. Updating those IDs does not add an ingress path or change the
+allowlist matching rules, extraction, mapping, or side-effect boundaries above.
+The DeepSeek empty-mapping admission list also accepts `deepseek-v4.1-flash`;
+Flash request names are forwarded unchanged without an automatic alias mapping.
+This additional name uses the same extraction and audit ordering as existing names.
+
 Named function/custom-tool inputs, allowed-tools metadata and terminal `done`
 argument reconstruction do not introduce a separate extractor. If reconstructed
 output returns as a later request, it follows the same shared extraction matrix

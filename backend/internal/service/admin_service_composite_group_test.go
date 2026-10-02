@@ -6,7 +6,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/LuckyKuang/sub2api-plus/internal/pkg/claude"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/cnmodels"
 	"github.com/stretchr/testify/require"
 )
 
@@ -204,16 +204,55 @@ func TestAdminService_CompositeModelsListCandidatesIncludeConcreteAccountMapping
 	require.Contains(t, candidates, "kimi-custom")
 	require.Contains(t, candidates, "gpt-5.5")
 	require.Contains(t, candidates, "gemini-2.5-flash")
+	for _, model := range []string{"deepseek-flash", "kimi-k3", "glm-5.3-flashx", "MiniMax-M3.1-Flash-Preview"} {
+		require.Contains(t, candidates, model)
+	}
 }
 
-// 独立 CN 分组的模型列表候选沿用 default 分支的 Claude 默认列表；
-// composite 支持不得改变独立分组的候选语义。
-func TestAdminService_CNProviderModelsListCandidatesKeepClaudeDefaults(t *testing.T) {
-	want := make([]string, 0, len(claude.DefaultModels))
-	for _, model := range claude.DefaultModels {
-		want = append(want, model.ID)
-	}
+func TestAdminService_CNProviderModelsListCandidatesUseSelectedPlatform(t *testing.T) {
 	for _, platform := range []string{PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax} {
-		require.Equal(t, want, defaultModelsListCandidateIDs(platform), "platform=%s", platform)
+		t.Run(platform, func(t *testing.T) {
+			defaults := cnmodels.DefaultModelIDs(platform)
+			svc := &adminServiceImpl{
+				groupRepo: &groupRepoStubForAdmin{getByIDByID: map[int64]*Group{
+					99:  {ID: 99, Platform: PlatformAnthropic},
+					100: {ID: 100, Platform: platform},
+				}},
+				accountRepo: &accountRepoStubForCompositeModelsList{accounts: []Account{
+					{Platform: platform, Credentials: map[string]any{"model_mapping": map[string]any{
+						defaults[0]: defaults[0], "custom-native": defaults[0], "claude-compatible-alias": defaults[0],
+					}}},
+					{Platform: PlatformAnthropic, Credentials: map[string]any{"model_mapping": map[string]any{"unrelated-provider-model": "claude-opus-4-6"}}},
+				}},
+			}
+			created, err := svc.GetGroupModelsListCandidates(context.Background(), 0, platform)
+			require.NoError(t, err)
+			require.Equal(t, defaults, created)
+			for _, model := range created {
+				require.NotContains(t, model, "claude")
+			}
+			// Editing uses the selected platform even when the stored platform
+			// is Anthropic; account mappings from other platforms are excluded.
+			edited, err := svc.GetGroupModelsListCandidates(context.Background(), 99, platform)
+			require.NoError(t, err)
+			require.Equal(t, defaults, edited[:len(defaults)])
+			require.Contains(t, edited, "custom-native")
+			require.Contains(t, edited, "claude-compatible-alias")
+			require.NotContains(t, edited, "unrelated-provider-model")
+			require.Len(t, edited, len(defaults)+2)
+			inferred, err := svc.GetGroupModelsListCandidates(context.Background(), 100, "")
+			require.NoError(t, err)
+			require.ElementsMatch(t, edited, inferred)
+		})
 	}
+}
+
+func TestAdminService_ModelsListCandidatesRejectUnknownPlatform(t *testing.T) {
+	svc := &adminServiceImpl{}
+	_, err := svc.GetGroupModelsListCandidates(context.Background(), 0, "unknown")
+	require.Error(t, err)
+	require.Empty(t, defaultModelsListCandidateIDs("unknown"))
+	defaults, err := svc.GetGroupModelsListCandidates(context.Background(), 0, "")
+	require.NoError(t, err)
+	require.Contains(t, defaults, "claude-opus-4-6")
 }

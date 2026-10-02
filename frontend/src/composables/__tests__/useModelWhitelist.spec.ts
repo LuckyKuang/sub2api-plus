@@ -5,6 +5,7 @@ vi.mock('@/api/admin/accounts', () => ({
 }))
 
 import {
+  allModels,
   buildModelMappingObject,
   getModelsByPlatform,
   getPresetMappingsByPlatform,
@@ -12,6 +13,22 @@ import {
 } from '../useModelWhitelist'
 
 describe('useModelWhitelist', () => {
+  it.each([
+    ['deepseek', ['deepseek-flash', 'deepseek-v4.1-flash', 'deepseek-v4-flash-vision-exp', 'deepseek-v4-flash', 'deepseek-v4-pro'], ['deepseek-r1']],
+    ['kimi', ['kimi-k3', 'kimi-k2.7-code-highspeed', 'kimi-for-coding-highspeed'], ['moonshot-v1-8k', 'kimi-latest', 'kimi-k2']],
+    ['zhipu', ['glm-5.3-flashx', 'glm-5.2', 'glm-4.6v'], ['chatglm_turbo', 'cogvideo']],
+    ['minimax', ['MiniMax-M3.1-Flash-Preview', 'MiniMax-M3', 'MiniMax-M2.7-highspeed'], ['abab6.5-chat', 'abab5.5-chat']],
+  ])('uses current official %s models in both platform and combined options', (platform, current, removed) => {
+    const models = getModelsByPlatform(platform as string)
+    expect(new Set(models).size).toBe(models.length)
+    expect(models.some(model => model.startsWith('claude-'))).toBe(false)
+    for (const model of current) {
+      expect(models).toContain(model)
+      expect(allModels.some(option => option.value === model)).toBe(true)
+    }
+    for (const model of removed) expect(models).not.toContain(model)
+  })
+
   it('openai 模型列表包含 GPT-5.4 官方快照', () => {
     const models = getModelsByPlatform('openai')
 

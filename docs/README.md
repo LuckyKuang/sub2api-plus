@@ -9,6 +9,7 @@ belong in GitHub Release notes.
 
 ## Providers
 
+- [DeepSeek, Kimi, Zhipu and MiniMax official model catalog](CN_PROVIDER_MODELS.md)
 - [Claude / Anthropic reset-credit status](providers/CLAUDE.md)
 - [Grok / xAI](providers/GROK.md)
 - [Sora status and reserved configuration](providers/SORA.md)
