@@ -2,8 +2,6 @@
 package routes
 
 import (
-	"net/http"
-
 	"github.com/LuckyKuang/sub2api-plus/internal/handler"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/response"
 	"github.com/LuckyKuang/sub2api-plus/internal/server/middleware"
@@ -953,18 +951,6 @@ func channelMonitorModeV2Guard(settingService *service.SettingService) gin.Handl
 		}
 		if !rt.PassiveAggregationAllowed() {
 			response.ErrorFrom(c, service.ErrChannelMonitorModeMismatch)
-			c.Abort()
-			return
-		}
-		c.Next()
-	}
-}
-
-func channelMonitorV2PrivateGuard() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		role, ok := middleware.GetUserRoleFromContext(c)
-		if !ok || role != service.RoleAdmin {
-			response.Error(c, http.StatusForbidden, "channel monitor analytics require administrator access")
 			c.Abort()
 			return
 		}

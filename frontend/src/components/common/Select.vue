@@ -1,22 +1,20 @@
 <template>
   <SearchableSelect
-    v-if="isSearchable"
+    v-if="isSearchable || clearable || $slots.selected || $slots.option"
     v-bind="props"
-    :searchable="true"
+    :searchable="isSearchable"
     @update:model-value="emit('update:modelValue', $event)"
     @change="(value, option) => emit('change', value, option)"
     @search="emit('search', $event)"
   >
-    <template v-if="$slots.selected || $slots.details" #selected="{ option }">
-      <slot v-if="$slots.selected" name="selected" :option="option" />
-      <slot v-else-if="option" name="details" :option="option" />
-      <template v-else>{{ placeholderText }}</template>
+    <template v-if="$slots.selected" #selected="{ option }">
+      <slot name="selected" :option="option" />
     </template>
     <template v-if="$slots.option" #option="{ option, selected }">
       <slot name="option" :option="option" :selected="selected" />
     </template>
   </SearchableSelect>
-  <div v-else class="native-select space-y-2">
+  <div v-else class="native-select">
     <select
       :id="id"
       :value="selectedKey"
@@ -28,7 +26,7 @@
       :aria-invalid="error || undefined"
       @change="selectOption"
     >
-      <option v-if="showPlaceholder" :value="placeholderKey" :disabled="!clearable">
+      <option v-if="showPlaceholder" :value="placeholderKey" disabled>
         {{ loading ? t('common.loading') : options.length === 0 ? emptyTextDisplay : placeholderText }}
       </option>
       <template v-for="(entry, index) in entries" :key="index">
@@ -44,9 +42,6 @@
         </template>
       </template>
     </select>
-    <slot v-if="selectedOption" name="details" :option="selectedOption">
-      <slot name="selected" :option="selectedOption" />
-    </slot>
   </div>
 </template>
 
@@ -84,7 +79,7 @@ interface Props {
   loading?: boolean
 }
 const props = withDefaults(defineProps<Props>(), {
-  disabled: false, error: false, searchable: false, creatable: false,
+  disabled: false, error: false, searchable: 'auto', creatable: false,
   creatablePrefix: '', clearable: false, valueKey: 'value', labelKey: 'label',
   remote: false, loading: false,
 })
@@ -104,7 +99,7 @@ const encodeValue = (value: Value | undefined): string => `${typeof value}:${Str
 const optionKey = (option: Option): string => encodeValue(getOptionValue(option))
 const selectedOption = computed(() => props.options.find(option => option.kind !== 'group' && getOptionValue(option) === props.modelValue))
 const selectedKey = computed(() => selectedOption.value ? encodeValue(props.modelValue) : placeholderKey)
-const showPlaceholder = computed(() => props.clearable || !selectedOption.value)
+const showPlaceholder = computed(() => !selectedOption.value)
 const entries = computed(() => {
   const result: { header?: Option; options: Option[] }[] = []
   let group: typeof result[number] | undefined
@@ -124,10 +119,9 @@ function selectOption(event: Event): void {
   if (props.disabled) return
   const key = (event.target as HTMLSelectElement).value
   const option = props.options.find(option => option.kind !== 'group' && optionKey(option) === key)
-  if (!option && !(key === placeholderKey && props.clearable)) return
-  if (option?.disabled) return
-  const value = option ? getOptionValue(option) : null
+  if (!option || option.disabled) return
+  const value = getOptionValue(option)
   emit('update:modelValue', value)
-  emit('change', value, option ?? null)
+  emit('change', value, option)
 }
 </script>

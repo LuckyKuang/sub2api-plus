@@ -145,7 +145,6 @@ func RegisterUserRoutes(
 		// V2 passive views require feature on + mode=v2.
 		monitorV2 := authenticated.Group("/channel-monitor-v2")
 		monitorV2.Use(panelRateLimiter.Heavy())
-		monitorV2.Use(channelMonitorV2PrivateGuard())
 		monitorV2.Use(channelMonitorModeV2Guard(settingService))
 		{
 			monitorV2.GET("/dimensions", h.ChannelMonitorV2.Dimensions)

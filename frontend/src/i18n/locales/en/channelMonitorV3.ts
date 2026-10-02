@@ -30,8 +30,8 @@ export default {
       detected: 'An issue was detected across consecutive observations with new requests. The affected service may be disrupted.', ongoing: 'Subsequent requests continue to show issues. Monitoring continues.',
       recovering: 'Recent requests have improved. Subsequent requests are being monitored for sustained stability.', awaiting_data: 'There are insufficient new requests to confirm recovery. The incident remains unresolved.', resolved: 'Consecutive observations with new requests have remained stable. Recovery is confirmed.',
     },
-    modeV3: 'V3 Service status', modeV2: 'V2 Internal monitoring', modeHint: 'V1 actively probes. V2 is administrator-only. V3 shows users service status from real requests.',
-    modeV3Hint: 'Observe platforms and incidents automatically from real user requests, without sending active probes.', modeV2Hint: 'Internal monitoring for administrators. Ordinary users cannot access it.',
+    modeV3: 'V3 Service status', modeV2: 'V2 Passive monitoring', modeHint: 'V1 actively probes. V2 uses passive aggregation. V3 shows service status from real requests. Logged-in users can view the selected mode when enabled.',
+    modeV3Hint: 'Observe platforms and incidents automatically from real user requests, without sending active probes.', modeV2Hint: 'Aggregates health metrics from real gateway traffic. Users can view monitoring data for authorized groups.',
     settings: {
       title: 'V3 service status configuration', description: 'Current status uses requests from the last 5 minutes. Consecutive confirmations require new request evidence. Silence or insufficient samples cannot confirm recovery. History accumulates after enablement.',
       minimum_samples: 'Minimum request samples', warning_error_rate: 'Issue error rate (0–1, default 0.05)', outage_error_rate: 'Outage error rate (0–1, default 0.9)',

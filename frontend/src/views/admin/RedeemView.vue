@@ -320,13 +320,26 @@
                   :options="subscriptionGroupOptions"
                   :placeholder="t('admin.redeem.selectGroupPlaceholder')"
                 >
-                  <template #details="{ option }">
+                  <template #selected="{ option }">
                     <GroupBadge
                       v-if="option"
                       :name="(option as unknown as GroupOption).label"
                       :platform="(option as unknown as GroupOption).platform"
                       :subscription-type="(option as unknown as GroupOption).subscriptionType"
                       :rate-multiplier="(option as unknown as GroupOption).rate"
+                    />
+                    <span v-else class="text-gray-400">{{
+                      t('admin.redeem.selectGroupPlaceholder')
+                    }}</span>
+                  </template>
+                  <template #option="{ option, selected }">
+                    <GroupOptionItem
+                      :name="(option as unknown as GroupOption).label"
+                      :platform="(option as unknown as GroupOption).platform"
+                      :subscription-type="(option as unknown as GroupOption).subscriptionType"
+                      :rate-multiplier="(option as unknown as GroupOption).rate"
+                      :description="(option as unknown as GroupOption).description"
+                      :selected="selected"
                     />
                   </template>
                 </Select>
@@ -626,6 +639,7 @@ import Pagination from '@/components/common/Pagination.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import Select from '@/components/common/Select.vue'
 import GroupBadge from '@/components/common/GroupBadge.vue'
+import GroupOptionItem from '@/components/common/GroupOptionItem.vue'
 import Icon from '@/components/icons/Icon.vue'
 
 const { t } = useI18n()

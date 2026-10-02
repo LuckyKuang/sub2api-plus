@@ -185,7 +185,7 @@ export function isChannelMonitorRouteEnabled(): boolean {
 
 export type ChannelMonitorMode = 'v1' | 'v2' | 'v3'
 
-/** Exclusive channel-monitor implementation. Invalid/missing → v1. V2 is private; V3 observes real requests. */
+/** Exclusive channel-monitor implementation. Invalid/missing → v1. V3 observes real requests. */
 export function getChannelMonitorMode(): ChannelMonitorMode {
   const appStore = useAppStore()
   const mode = appStore.cachedPublicSettings?.channel_monitor_mode

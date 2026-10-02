@@ -25,17 +25,22 @@ pnpm --dir frontend install --frozen-lockfile
 
 ## Development Checks
 
-Ordinary selection dropdowns use native HTML `select` controls and shared styles in
+Plain selection dropdowns use native HTML `select` controls and shared styles in
 `frontend/src/style.css`. Reuse `frontend/src/components/common/Select.vue` for
-typed values, disabled options, option groups, clearable choices, and optional
-local or remote search. Searchable controls retain the existing single-field
-layout with search inside the dropdown. Do not expose a separate search input
-above or alongside a second selection field. The shared component delegates
-searchable choices to `SearchableSelect.vue`; keep existing search-result
-popovers and their styling for user, account, model, and proxy selectors.
-Keep selected-item details outside native options.
-For multi-selection, use a native dropdown to add or remove choices and show the
-selection summary separately. Native controls own keyboard navigation and focus.
+typed values, disabled options, and option groups. Its default `searchable: 'auto'`
+preserves local search when there are more than five options; explicit
+`searchable: false` keeps a plain dropdown native. Searchable, clearable, and
+custom `selected`/`option` slot controls use the existing popover in
+`SearchableSelect.vue`, preserving integrated selected content and rich options.
+Keep existing search-result popovers and their styling for user, account, model,
+and proxy selectors. Search remains inside the dropdown; do not expose a
+separate search input above or alongside a second selection field.
+Checkbox/multi-selection and other composite controls retain their existing
+dropdown layouts and interactions. Keep checkboxes inside the dropdown and
+allow repeated selection without reopening it. Keep combined auto-refresh
+enable/interval actions in their original menu. Do not replace composite
+controls with plain native selects or split them into separate visible fields.
+Native controls own keyboard navigation and focus for plain dropdowns.
 Keep horizontal padding and arrow placement in the shared styles; individual
 pages may adjust control width and height.
 

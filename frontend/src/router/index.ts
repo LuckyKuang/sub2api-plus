@@ -1067,11 +1067,10 @@ router.beforeEach(async (to, _from, next) => {
 
 
   if (to.path === '/monitor') {
-    if (!appStore.publicSettingsLoaded) {
-      try { await appStore.fetchPublicSettings() } catch { /* Backend guards remain authoritative. */ }
-    }
+    // The mode may have changed in another tab since the cached settings loaded.
+    try { await appStore.fetchPublicSettings(true) } catch { /* Backend guards remain authoritative. */ }
     const settings = appStore.cachedPublicSettings
-    if (!settings?.channel_monitor_enabled || (settings.channel_monitor_mode === 'v2' && !authStore.isAdmin)) {
+    if (!settings?.channel_monitor_enabled) {
       next(authStore.isAdmin ? '/admin/dashboard' : '/dashboard')
       return
     }

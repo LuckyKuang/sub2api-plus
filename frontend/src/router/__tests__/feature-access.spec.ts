@@ -136,7 +136,8 @@ describe('feature route guard', () => {
   })
 
   it.each([
-    ['v2', false, '/dashboard'], ['v2', true, undefined], ['v3', false, undefined], ['v1', false, undefined],
+    ['v1', false, undefined], ['v1', true, undefined], ['v2', false, undefined],
+    ['v2', true, undefined], ['v3', false, undefined], ['v3', true, undefined],
   ])('guards the actual monitor route for mode %s and admin %s', async (mode, admin, target) => {
     authStore.isAdmin = admin
     appStore.fetchPublicSettings.mockImplementation(async () => {
@@ -155,6 +156,18 @@ describe('feature route guard', () => {
     const { navigation, next } = runGuard({}, '/monitor')
     await navigation
     expect(next).toHaveBeenCalledWith('/dashboard')
+  })
+
+  it('refreshes an already cached mode before entering the monitor route', async () => {
+    appStore.publicSettingsLoaded = true
+    appStore.cachedPublicSettings = { channel_monitor_enabled: true, channel_monitor_mode: 'v3' }
+    appStore.fetchPublicSettings.mockImplementation(async () => {
+      appStore.cachedPublicSettings = { channel_monitor_enabled: true, channel_monitor_mode: 'v2' }
+    })
+    const { navigation, next } = runGuard({}, '/monitor')
+    await navigation
+    expect(appStore.fetchPublicSettings).toHaveBeenCalledWith(true)
+    expect(next).toHaveBeenCalledWith()
   })
 
   it('waits for the first public-settings request before deciding payment access', async () => {

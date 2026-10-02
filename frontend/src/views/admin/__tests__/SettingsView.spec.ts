@@ -45,6 +45,7 @@ const {
   createProvider,
   deleteProvider,
   fetchPublicSettings,
+  clearPublicSettingsCache,
   adminSettingsFetch,
   showError,
   showSuccess,
@@ -81,6 +82,7 @@ const {
   createProvider: vi.fn(),
   deleteProvider: vi.fn(),
   fetchPublicSettings: vi.fn(),
+  clearPublicSettingsCache: vi.fn(),
   adminSettingsFetch: vi.fn(),
   showError: vi.fn(),
   showSuccess: vi.fn(),
@@ -131,6 +133,7 @@ vi.mock("@/stores", () => ({
     showWarning: vi.fn(),
     showInfo: vi.fn(),
     fetchPublicSettings,
+    clearPublicSettingsCache,
   }),
 }));
 
@@ -673,6 +676,7 @@ describe("admin SettingsView payment visible method controls", () => {
     createProvider.mockReset();
     deleteProvider.mockReset();
     fetchPublicSettings.mockReset();
+    clearPublicSettingsCache.mockReset();
     adminSettingsFetch.mockReset();
     showError.mockReset();
     showSuccess.mockReset();
@@ -738,17 +742,37 @@ describe("admin SettingsView payment visible method controls", () => {
     adminSettingsFetch.mockResolvedValue(undefined);
   });
 
+  it.each(["v1", "v2", "v3"])("saves monitor mode %s and invalidates old public settings before refreshing", async (savedMode) => {
+    getSettings.mockResolvedValue({ ...baseSettingsResponse, channel_monitor_enabled: true, channel_monitor_mode: "v1" });
+    const wrapper = mountView();
+    try {
+      await flushPromises();
+      const mode = wrapper.get('[data-testid="channel-monitor-mode"]');
+      expect(mode.find('select').exists()).toBe(false);
+      expect(mode.findAll('button')).toHaveLength(3);
+      await mode.get(`[data-mode="${savedMode}"]`).trigger('click');
+      expect(mode.get(`[data-mode="${savedMode}"]`).attributes('aria-pressed')).toBe('true');
+      expect(mode.findAll('[aria-pressed="true"]')).toHaveLength(1);
+      await wrapper.find("form").trigger("submit.prevent");
+      await flushPromises();
+      expect(updateSettings).toHaveBeenCalledWith(expect.objectContaining({ channel_monitor_enabled: true, channel_monitor_mode: savedMode }));
+      expect(clearPublicSettingsCache).toHaveBeenCalledOnce();
+      expect(fetchPublicSettings).toHaveBeenCalledWith(true);
+      expect(clearPublicSettingsCache.mock.invocationCallOrder[0]).toBeLessThan(fetchPublicSettings.mock.invocationCallOrder[0]);
+    } finally { wrapper.unmount(); }
+  });
+
   it("loads and saves V3 monitor mode without converting it to V1 or V2", async () => {
     getSettings.mockResolvedValue({ ...baseSettingsResponse, channel_monitor_enabled: true, channel_monitor_mode: "v3" });
     const wrapper = mountView();
     try {
       await flushPromises();
       const mode = wrapper.get('[data-testid="channel-monitor-mode"]');
-      expect((mode.element as HTMLSelectElement).value).toBe("v3");
+      expect(mode.get('[data-mode="v3"]').attributes('aria-pressed')).toBe('true');
       await wrapper.find("form").trigger("submit.prevent");
       await flushPromises();
       expect(updateSettings).toHaveBeenCalledWith(expect.objectContaining({ channel_monitor_enabled: true, channel_monitor_mode: "v3" }));
-      expect((mode.element as HTMLSelectElement).value).toBe("v3");
+      expect(mode.get('[data-mode="v3"]').attributes('aria-pressed')).toBe('true');
     } finally { wrapper.unmount(); }
   });
 
@@ -758,8 +782,8 @@ describe("admin SettingsView payment visible method controls", () => {
     try {
       await flushPromises();
       const mode = wrapper.get('[data-testid="channel-monitor-mode"]');
-      expect((mode.element as HTMLSelectElement).value).toBe("v2");
-      await mode.setValue("v3");
+      expect(mode.get('[data-mode="v2"]').attributes('aria-pressed')).toBe('true');
+      await mode.get('[data-mode="v3"]').trigger('click');
       await wrapper.find("form").trigger("submit.prevent");
       await flushPromises();
       expect(updateSettings).toHaveBeenCalledWith(expect.objectContaining({ channel_monitor_mode: "v3" }));
@@ -1699,6 +1723,7 @@ describe("admin SettingsView wechat connect controls", () => {
     createProvider.mockReset();
     deleteProvider.mockReset();
     fetchPublicSettings.mockReset();
+    clearPublicSettingsCache.mockReset();
     adminSettingsFetch.mockReset();
     showError.mockReset();
     showSuccess.mockReset();
@@ -1945,6 +1970,7 @@ describe("admin SettingsView platform quota matrix", () => {
     createProvider.mockReset();
     deleteProvider.mockReset();
     fetchPublicSettings.mockReset();
+    clearPublicSettingsCache.mockReset();
     adminSettingsFetch.mockReset();
     showError.mockReset();
     showSuccess.mockReset();

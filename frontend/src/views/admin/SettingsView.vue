@@ -3998,7 +3998,7 @@
                           t('admin.settings.defaults.subscriptionGroup')
                         "
                       >
-                        <template #details="{ option }">
+                        <template #selected="{ option }">
                           <GroupBadge
                             v-if="option"
                             :name="
@@ -4021,6 +4021,39 @@
                                 option as unknown as DefaultSubscriptionGroupOption
                               ).rate
                             "
+                          />
+                          <span v-else class="text-gray-400">
+                            {{ t("admin.settings.defaults.subscriptionGroup") }}
+                          </span>
+                        </template>
+                        <template #option="{ option, selected }">
+                          <GroupOptionItem
+                            :name="
+                              (
+                                option as unknown as DefaultSubscriptionGroupOption
+                              ).label
+                            "
+                            :platform="
+                              (
+                                option as unknown as DefaultSubscriptionGroupOption
+                              ).platform
+                            "
+                            :subscription-type="
+                              (
+                                option as unknown as DefaultSubscriptionGroupOption
+                              ).subscriptionType
+                            "
+                            :rate-multiplier="
+                              (
+                                option as unknown as DefaultSubscriptionGroupOption
+                              ).rate
+                            "
+                            :description="
+                              (
+                                option as unknown as DefaultSubscriptionGroupOption
+                              ).description
+                            "
+                            :selected="selected"
                           />
                         </template>
                       </Select>
@@ -4295,7 +4328,7 @@
                               t('admin.settings.defaults.subscriptionGroup')
                             "
                           >
-                            <template #details="{ option }">
+                            <template #selected="{ option }">
                               <GroupBadge
                                 v-if="option"
                                 :name="
@@ -4318,6 +4351,41 @@
                                     option as unknown as DefaultSubscriptionGroupOption
                                   ).rate
                                 "
+                              />
+                              <span v-else class="text-gray-400">
+                                {{
+                                  t("admin.settings.defaults.subscriptionGroup")
+                                }}
+                              </span>
+                            </template>
+                            <template #option="{ option, selected }">
+                              <GroupOptionItem
+                                :name="
+                                  (
+                                    option as unknown as DefaultSubscriptionGroupOption
+                                  ).label
+                                "
+                                :platform="
+                                  (
+                                    option as unknown as DefaultSubscriptionGroupOption
+                                  ).platform
+                                "
+                                :subscription-type="
+                                  (
+                                    option as unknown as DefaultSubscriptionGroupOption
+                                  ).subscriptionType
+                                "
+                                :rate-multiplier="
+                                  (
+                                    option as unknown as DefaultSubscriptionGroupOption
+                                  ).rate
+                                "
+                                :description="
+                                  (
+                                    option as unknown as DefaultSubscriptionGroupOption
+                                  ).description
+                                "
+                                :selected="selected"
                               />
                             </template>
                           </Select>
@@ -6827,16 +6895,27 @@
                 <label class="input-label">
                   {{ t('admin.settings.features.channelMonitor.mode') }}
                 </label>
-                <select
-                  v-model="form.channel_monitor_mode"
-                  class="input mt-1.5 max-w-md"
+                <div
+                  class="mt-1.5 inline-flex w-full max-w-lg rounded-lg border border-gray-200 bg-gray-50 p-1 dark:border-dark-600 dark:bg-dark-900/40"
+                  role="group"
                   :aria-label="t('admin.settings.features.channelMonitor.mode')"
                   data-testid="channel-monitor-mode"
                 >
-                  <option value="v1">{{ t('admin.settings.features.channelMonitor.modeV1') }}</option>
-                  <option value="v2">{{ t('admin.settings.features.channelMonitor.modeV2') }}</option>
-                  <option value="v3">{{ t('admin.settings.features.channelMonitor.modeV3') }}</option>
-                </select>
+                  <button
+                    v-for="mode in channelMonitorModes"
+                    :key="mode"
+                    type="button"
+                    class="inline-flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition"
+                    :class="form.channel_monitor_mode === mode
+                      ? 'bg-white text-primary-700 shadow-sm dark:bg-dark-800 dark:text-primary-300'
+                      : 'text-gray-600 hover:text-gray-900 dark:text-dark-300 dark:hover:text-white'"
+                    :data-mode="mode"
+                    :aria-pressed="form.channel_monitor_mode === mode"
+                    @click="form.channel_monitor_mode = mode"
+                  >
+                    {{ t(`admin.settings.features.channelMonitor.mode${mode.toUpperCase()}`) }}
+                  </button>
+                </div>
                 <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
                   {{ form.channel_monitor_mode === 'v3'
                     ? t('admin.settings.features.channelMonitor.modeV3Hint')
@@ -8794,6 +8873,7 @@ import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
 import PaymentProviderList from "@/components/payment/PaymentProviderList.vue";
 import PaymentProviderDialog from "@/components/payment/PaymentProviderDialog.vue";
 import GroupBadge from "@/components/common/GroupBadge.vue";
+import GroupOptionItem from "@/components/common/GroupOptionItem.vue";
 import Toggle from "@/components/common/Toggle.vue";
 import ProxySelector from "@/components/common/ProxySelector.vue";
 import ImageUpload from "@/components/common/ImageUpload.vue";
@@ -8832,6 +8912,7 @@ const appStore = useAppStore();
 // 关闭 step-up 开关是敏感操作：后端返回 STEP_UP_REQUIRED 时弹 TOTP 码重试
 const settingsStepUp = useStepUp();
 const adminSettingsStore = useAdminSettingsStore();
+const channelMonitorModes = ['v1', 'v2', 'v3'] as const;
 const isZhLocale = computed(() => locale.value.startsWith("zh"));
 
 // Codex 全局出口时区/国家下拉选项：首项为空值（关闭/不声明）。
@@ -11767,6 +11848,7 @@ async function saveSettings() {
       await syncCodexVersionNow({ silentSuccess: true });
     }
     // Refresh cached settings so sidebar/header update immediately
+    appStore.clearPublicSettingsCache();
     await appStore.fetchPublicSettings(true);
     await adminSettingsStore.fetch(true);
     if (wsOk) {
@@ -13081,7 +13163,7 @@ watch(
 </script>
 
 <style scoped>
-.default-sub-group-select :deep(select) {
+.default-sub-group-select :deep(.select-trigger) {
   @apply h-[42px];
 }
 
