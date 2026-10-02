@@ -235,13 +235,6 @@ func TestImageTaskPublicViewDerivesLegacyCompletedImageCount(t *testing.T) {
 	require.Equal(t, 2, task.ActualImages)
 }
 
-func mustImageTaskJSON(t *testing.T, value any) []byte {
-	t.Helper()
-	data, err := json.Marshal(value)
-	require.NoError(t, err)
-	return data
-}
-
 func TestImageTaskServiceDeleteRemovesOwnedFailedTask(t *testing.T) {
 	owner := ImageTaskOwner{UserID: 7, APIKeyID: 9}
 	task := &ImageTaskRecord{ID: "imgtask_failed", UserID: owner.UserID, APIKeyID: owner.APIKeyID, Status: ImageTaskStatusFailed}
