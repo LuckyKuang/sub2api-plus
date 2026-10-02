@@ -173,7 +173,6 @@ func TestChannelMonitorV3SnapshotScopeStalenessAndSeverity(t *testing.T) {
 
 type channelMonitorV3RepoStub struct {
 	cfg       ChannelMonitorV3Config
-	reads     []int64
 	refreshes atomic.Int32
 	data      *ChannelMonitorV3Data
 }
@@ -190,8 +189,7 @@ func (s *channelMonitorV3RepoStub) Refresh(context.Context, time.Time, ChannelMo
 	s.refreshes.Add(1)
 	return nil
 }
-func (s *channelMonitorV3RepoStub) Read(_ context.Context, g []int64, _ time.Time, _ time.Duration) (*ChannelMonitorV3Data, error) {
-	s.reads = g
+func (s *channelMonitorV3RepoStub) Read(_ context.Context, _ time.Time, _ time.Duration) (*ChannelMonitorV3Data, error) {
 	return s.data, nil
 }
 func TestChannelMonitorV3WorkerModesAndStop(t *testing.T) {

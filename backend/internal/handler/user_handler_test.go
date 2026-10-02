@@ -467,19 +467,11 @@ func (s *userHandlerEmailCacheStub) SetVerificationCode(context.Context, string,
 	return nil
 }
 
-func (s *userHandlerEmailCacheStub) DeleteVerificationCode(context.Context, string) error {
-	return nil
-}
-
 func (s *userHandlerEmailCacheStub) GetNotifyVerifyCode(context.Context, string) (*service.VerificationCodeData, error) {
 	return nil, nil
 }
 
 func (s *userHandlerEmailCacheStub) SetNotifyVerifyCode(context.Context, string, *service.VerificationCodeData, time.Duration) error {
-	return nil
-}
-
-func (s *userHandlerEmailCacheStub) DeleteNotifyVerifyCode(context.Context, string) error {
 	return nil
 }
 
@@ -810,4 +802,35 @@ func TestUserHandlerStartIdentityBindingReturnsAuthorizeURL(t *testing.T) {
 	require.Contains(t, resp.Data.AuthorizeURL, "/api/v1/auth/oauth/wechat/bind/start")
 	require.Contains(t, resp.Data.AuthorizeURL, "intent=bind_current_user")
 	require.Contains(t, resp.Data.AuthorizeURL, "redirect=%2Fsettings%2Fprofile")
+}
+
+func (s *userHandlerEmailCacheStub) ReserveVerificationCodeAttempt(_ context.Context, _ string, generation string) (int, error) {
+	if s.data == nil || s.data.Generation != generation {
+		return 0, service.ErrVerifyCodeMissing
+	}
+	if s.data.Attempts >= service.MaxVerificationCodeAttempts {
+		return 0, service.ErrVerifyCodeExhausted
+	}
+	s.data.Attempts++
+	return s.data.Attempts, nil
+}
+
+func (s *userHandlerEmailCacheStub) ConsumeVerificationCode(_ context.Context, _ string, generation string) (bool, error) {
+	if s.data == nil || s.data.Generation != generation {
+		return false, nil
+	}
+	s.data = nil
+	return true, nil
+}
+
+func (s *userHandlerEmailCacheStub) ReserveNotifyVerifyCodeAttempt(context.Context, string, string) (int, error) {
+	return 0, service.ErrVerifyCodeMissing
+}
+
+func (s *userHandlerEmailCacheStub) ConsumeNotifyVerifyCode(context.Context, string, string) (bool, error) {
+	return false, nil
+}
+
+func (s *userHandlerEmailCacheStub) ConsumePasswordResetToken(context.Context, string, string) (bool, error) {
+	return false, nil
 }

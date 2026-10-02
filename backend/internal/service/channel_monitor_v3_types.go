@@ -166,7 +166,7 @@ type ChannelMonitorV3Repository interface {
 	GetConfig(context.Context) (*ChannelMonitorV3Config, error)
 	UpdateConfig(context.Context, ChannelMonitorV3Config) (*ChannelMonitorV3Config, error)
 	Refresh(context.Context, time.Time, ChannelMonitorV3Config) error
-	Read(context.Context, []int64, time.Time, time.Duration) (*ChannelMonitorV3Data, error)
+	Read(context.Context, time.Time, time.Duration) (*ChannelMonitorV3Data, error)
 }
 
 type ChannelMonitorV3Timeline struct {

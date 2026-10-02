@@ -354,20 +354,45 @@ func (s *httpUpstreamService) httpClientForUpstreamRequest(client *http.Client, 
 		return client
 	}
 	ctx := req.Context()
-	switch {
-	case service.HTTPUpstreamRedirectsDisabled(ctx):
+	if service.HTTPUpstreamRedirectsDisabled(ctx) {
 		clone := *client
 		clone.CheckRedirect = func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse
 		}
 		return &clone
-	case service.HTTPUpstreamPublicHostsOnly(ctx) && client.CheckRedirect == nil:
-		clone := *client
-		clone.CheckRedirect = s.redirectChecker
-		return &clone
-	default:
+	}
+	publicHostsOnly := service.HTTPUpstreamPublicHostsOnly(ctx) && client.CheckRedirect == nil
+	// A redirect leaves the origin that advertised the negotiated request
+	// encoding. Cross-origin hops rebuild a plain body from the final JSON and
+	// drop Content-Encoding; same-origin hops replay the encoded bytes. An
+	// unrebuildable compressed body fails the request instead of sending a
+	// wrong encoding. The same-owner identity snapshot travels in the inherited
+	// request context.
+	compressionRebuild := service.GrokRequestCompressionOwned(req)
+	if !publicHostsOnly && !compressionRebuild {
 		return client
 	}
+	previous := client.CheckRedirect
+	if publicHostsOnly {
+		previous = s.redirectChecker
+	}
+	clone := *client
+	clone.CheckRedirect = func(next *http.Request, via []*http.Request) error {
+		if previous != nil {
+			if err := previous(next, via); err != nil {
+				return err
+			}
+		} else if len(via) >= 10 {
+			return errors.New("stopped after 10 redirects")
+		}
+		if compressionRebuild && len(via) > 0 && service.GrokRequestOriginChanged(via[len(via)-1], next) {
+			if err := service.RebuildGrokPlainRequest(next); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	return &clone
 }
 
 // grokAccessDeniedFallbackTransport preserves the subscription CLI proxy as
@@ -487,6 +512,13 @@ func newGrokOfficialAPIFallbackRequest(req *http.Request) (*http.Request, error)
 		"X-Email",
 	} {
 		fallbackReq.Header.Del(header)
+	}
+	// api.x.ai never advertised the negotiated request encoding, so a compressed
+	// body must be rebuilt from the final JSON with the declaration dropped. If
+	// the plain body is unavailable, report the error and keep the original
+	// proxy response instead of sending bytes this host cannot decode.
+	if err := service.RebuildGrokPlainRequest(fallbackReq); err != nil {
+		return nil, err
 	}
 	outboundidentity.ApplyContext(fallbackReq)
 	brandidentity.FilterOutboundRequest(fallbackReq)

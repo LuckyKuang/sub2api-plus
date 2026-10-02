@@ -83,23 +83,41 @@ func extractPromptSnapshotWithDiagnostics(req Request) (PromptSnapshot, promptEx
 }
 
 func promptAuditCurrentUserTexts(document auditcontent.Document, protocol string) []string {
+	systemOne := isSystemOnePromptProtocol(protocol)
 	texts := make([]string, 0, len(document.Segments))
 	for _, segment := range document.Segments {
 		if !isPromptAuditDirectUser(protocol, segment.Role, segment.Source, segment.Current) {
 			continue
 		}
-		text := stripPromptAuditClientWrapperBlocks(strings.TrimSpace(segment.Text))
+		text := strings.TrimSpace(segment.Text)
+		if !systemOne {
+			text = stripPromptAuditClientWrapperBlocks(text)
+		}
 		if text == "" {
 			continue
 		}
 		texts = append(texts, text)
 	}
+	if systemOne && len(texts) > 1 {
+		// The canonical extractor emits the evaluated state last. Prompt Audit
+		// prioritizes the first segment, so promote the state while keeping the
+		// remaining System One text in canonical order.
+		texts = append([]string{texts[len(texts)-1]}, texts[:len(texts)-1]...)
+	}
 	return texts
 }
 
+// isSystemOnePromptProtocol reports the native TypeSafe System One protocol.
+// System One carries no client-harness wrapper blocks, so a literal
+// <system-reminder> or <environment_context> in its evaluation text is ordinary
+// audited content, and its state is the prioritized segment.
+func isSystemOnePromptProtocol(protocol string) bool {
+	return strings.EqualFold(strings.TrimSpace(protocol), "typesafe_systemone")
+}
+
 // isPromptAuditDirectUser matches Content Moderation's current-user text
-// selection. Prompt Audit still strips client harness XML from those texts and
-// never scans images.
+// selection. Prompt Audit strips client harness XML from those texts, except
+// for native System One, and never scans images.
 func isPromptAuditDirectUser(protocol, role string, source auditcontent.Source, current bool) bool {
 	if !current {
 		return false

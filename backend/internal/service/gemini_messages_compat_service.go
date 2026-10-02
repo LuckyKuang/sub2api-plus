@@ -1873,7 +1873,13 @@ func (s *GeminiMessagesCompatService) writeGeminiNativeUpstreamError(c *gin.Cont
 		contentType = "application/json"
 	}
 	MarkResponseCommitted(c)
-	c.Data(resp.StatusCode, contentType, respBody)
+	// Antigravity APIKey 账号同样走 Gemini native 透传；回写客户端前对错误体做
+	// 账号池身份脱敏（项目号/服务账号邮箱/consumer id），状态码保持不变。
+	clientBody := respBody
+	if account != nil && account.Platform == PlatformAntigravity {
+		clientBody = sanitizeAntigravityErrorBody(respBody)
+	}
+	c.Data(resp.StatusCode, contentType, clientBody)
 	if upstreamMsg == "" {
 		return fmt.Errorf("gemini upstream error: %d", resp.StatusCode)
 	}
@@ -1947,6 +1953,9 @@ func (s *GeminiMessagesCompatService) writeGeminiMappedError(c *gin.Context, acc
 		"upstream_error",
 		"Upstream request failed",
 	); matched {
+		if account != nil && account.Platform == PlatformAntigravity {
+			errMsg = sanitizeAntigravityErrorText(errMsg)
+		}
 		c.JSON(status, gin.H{
 			"type":  "error",
 			"error": gin.H{"type": errType, "message": errMsg},
@@ -2065,6 +2074,12 @@ func (s *GeminiMessagesCompatService) writeGeminiMappedError(c *gin.Context, acc
 		if errMsg == "" {
 			errMsg = "Upstream request failed"
 		}
+	}
+
+	// Antigravity APIKey 账号经同一映射写入客户端：仅追加身份脱敏，
+	// status/errType/分类与 ops 事件保持不变。
+	if account != nil && account.Platform == PlatformAntigravity {
+		errMsg = sanitizeAntigravityErrorText(errMsg)
 	}
 
 	c.JSON(statusCode, gin.H{

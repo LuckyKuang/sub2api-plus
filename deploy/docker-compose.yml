@@ -57,6 +57,11 @@ services:
       - SECURITY_TRUST_FORWARDED_IP_FOR_API_KEY_ACL=${SECURITY_TRUST_FORWARDED_IP_FOR_API_KEY_ACL:-false}
       - UPDATE_GITHUB_TOKEN=${UPDATE_GITHUB_TOKEN:-}
       - ALIPAY_MOBILE_PRECREATE_DEEP_LINK=${ALIPAY_MOBILE_PRECREATE_DEEP_LINK:-}
+      # Optional recharge-incentive override. Unset/blank keeps the value saved in
+      # Admin Settings → Payment (defaults: no tiers, bonus mode, no notice).
+      - RECHARGE_BONUS_TIERS=${RECHARGE_BONUS_TIERS:-}
+      - RECHARGE_BONUS_MODE=${RECHARGE_BONUS_MODE:-}
+      - RECHARGE_BONUS_NOTICE=${RECHARGE_BONUS_NOTICE:-}
 
       # =======================================================================
       # OpenAI OAuth credential-plane overrides (optional, official-aligned)
@@ -204,6 +209,9 @@ services:
       - GATEWAY_OPENAI_PROXY_STREAM_CIRCUIT_FAILURE_THRESHOLD=${GATEWAY_OPENAI_PROXY_STREAM_CIRCUIT_FAILURE_THRESHOLD:-2}
       - GATEWAY_OPENAI_PROXY_STREAM_CIRCUIT_WINDOW_SECONDS=${GATEWAY_OPENAI_PROXY_STREAM_CIRCUIT_WINDOW_SECONDS:-60}
       - GATEWAY_OPENAI_PROXY_STREAM_CIRCUIT_TTL_SECONDS=${GATEWAY_OPENAI_PROXY_STREAM_CIRCUIT_TTL_SECONDS:-600}
+      # Grok negotiated zstd request compression (kill switch; requires an
+      # exact-target cli-chat-proxy /v1/settings capability advertisement).
+      - GATEWAY_GROK_REQUEST_COMPRESSION_ENABLED=${GATEWAY_GROK_REQUEST_COMPRESSION_ENABLED:-true}
       - GATEWAY_MAX_BODY_SIZE=${GATEWAY_MAX_BODY_SIZE:-268435456}
       - GATEWAY_MAX_CONNS_PER_HOST=${GATEWAY_MAX_CONNS_PER_HOST:-1024}
       - GATEWAY_MAX_IDLE_CONNS=${GATEWAY_MAX_IDLE_CONNS:-2560}

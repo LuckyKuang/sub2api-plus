@@ -68,6 +68,12 @@ func nativeOutboundPreset(platform string) string {
 		return "grok"
 	case PlatformAntigravity:
 		return "antigravity"
+	case PlatformTypeSafe:
+		// TypeSafe is an API-key compatible supplier with no provider-defined
+		// client family, version or identity header. It reuses the same
+		// configurable Codex preset mapping as the other API-key compatible
+		// platforms instead of inventing a TypeSafe CLI identity.
+		return "codex"
 	default:
 		return "codex"
 	}
@@ -572,7 +578,7 @@ func (s *SettingService) SetOutboundIdentitySettings(ctx context.Context, settin
 
 func validOutboundAccountKey(platform, accountType string) bool {
 	switch platform {
-	case PlatformOpenAI, PlatformAnthropic, PlatformGemini, PlatformGrok, PlatformAntigravity, PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax, PlatformOpenCodeGo:
+	case PlatformOpenAI, PlatformAnthropic, PlatformGemini, PlatformGrok, PlatformAntigravity, PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax, PlatformOpenCodeGo, PlatformTypeSafe:
 	default:
 		return false
 	}

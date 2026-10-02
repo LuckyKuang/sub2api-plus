@@ -20,6 +20,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/payment/provider"
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/servertiming"
+	"github.com/shopspring/decimal"
 )
 
 // --- Refund Flow ---
@@ -169,7 +170,9 @@ func (s *PaymentService) RequestRefund(ctx context.Context, oid, uid int64, reas
 	nr := strings.TrimSpace(reason)
 	now := time.Now()
 	by := fmt.Sprintf("%d", uid)
-	c, err := s.entClient.PaymentOrder.Update().Where(paymentorder.IDEQ(oid), paymentorder.UserIDEQ(uid), paymentorder.StatusEQ(OrderStatusCompleted), paymentorder.OrderTypeEQ(payment.OrderTypeBalance)).SetStatus(OrderStatusRefundRequested).SetRefundRequestedAt(now).SetRefundRequestReason(nr).SetRefundRequestedBy(by).SetRefundAmount(o.Amount).Save(ctx)
+	// refund_amount tracks actually-refunded (or in-flight) credited balance; a
+	// pending request must not consume the remaining refundable amount.
+	c, err := s.entClient.PaymentOrder.Update().Where(paymentorder.IDEQ(oid), paymentorder.UserIDEQ(uid), paymentorder.StatusEQ(OrderStatusCompleted), paymentorder.OrderTypeEQ(payment.OrderTypeBalance)).SetStatus(OrderStatusRefundRequested).SetRefundRequestedAt(now).SetRefundRequestReason(nr).SetRefundRequestedBy(by).Save(ctx)
 	if err != nil {
 		return fmt.Errorf("update: %w", err)
 	}
@@ -210,7 +213,7 @@ func (s *PaymentService) PrepareRefund(ctx context.Context, oid int64, amt float
 	if err != nil {
 		return nil, nil, infraerrors.NotFound("NOT_FOUND", "order not found")
 	}
-	ok := []string{OrderStatusCompleted, OrderStatusRefundRequested, OrderStatusRefundPending, OrderStatusRefundFailed}
+	ok := []string{OrderStatusCompleted, OrderStatusRefundRequested, OrderStatusRefundPending, OrderStatusRefundFailed, OrderStatusPartiallyRefunded}
 	if !psSliceContains(ok, o.Status) {
 		return nil, nil, infraerrors.BadRequest("INVALID_STATUS", "order status does not allow refund")
 	}
@@ -230,14 +233,27 @@ func (s *PaymentService) PrepareRefund(ctx context.Context, oid int64, amt float
 	if math.IsNaN(amt) || math.IsInf(amt, 0) {
 		return nil, nil, infraerrors.BadRequest("INVALID_AMOUNT", "invalid refund amount")
 	}
-	if amt <= 0 {
-		amt = o.Amount
-	}
 	orderCurrency := PaymentOrderCurrency(o)
-	if amt-o.Amount > paymentAmountToleranceForCurrency(orderCurrency) {
+	tolerance := paymentAmountToleranceForCurrency(orderCurrency)
+	alreadyRefunded := refundCreditedAlready(o)
+	remaining := decimalSubtract(o.Amount, alreadyRefunded)
+	if remaining <= tolerance {
+		return nil, nil, infraerrors.BadRequest("REFUND_AMOUNT_EXCEEDED", "refund amount exceeds remaining recharge")
+	}
+	if amt <= 0 {
+		amt = remaining
+	}
+	if amt-remaining > tolerance {
 		return nil, nil, infraerrors.BadRequest("REFUND_AMOUNT_EXCEEDED", "refund amount exceeds recharge")
 	}
-	ga := calculateGatewayRefundAmount(o.Amount, o.PayAmount, amt, orderCurrency)
+	cumulative := decimalAdd(alreadyRefunded, amt)
+	if cumulative > o.Amount {
+		cumulative = o.Amount
+	}
+	// Cash returned is always proportional to the credited balance being clawed
+	// back, computed on the cumulative totals so sequential partial refunds can
+	// never repay more cash than was collected.
+	ga := refundCashDelta(o, alreadyRefunded, cumulative, orderCurrency)
 	rr := strings.TrimSpace(reason)
 	if rr == "" && o.RefundRequestReason != nil {
 		rr = *o.RefundRequestReason
@@ -245,13 +261,63 @@ func (s *PaymentService) PrepareRefund(ctx context.Context, oid int64, amt float
 	if rr == "" {
 		rr = fmt.Sprintf("refund order:%d", o.ID)
 	}
-	p := &RefundPlan{OrderID: oid, Order: o, RefundAmount: amt, GatewayAmount: ga, Reason: rr, Force: force, DeductBalance: deduct, DeductionType: payment.DeductionTypeNone}
+	p := &RefundPlan{OrderID: oid, Order: o, RefundAmount: amt, CumulativeCredited: cumulative, GatewayAmount: ga, Reason: rr, Force: force, DeductBalance: deduct, DeductionType: payment.DeductionTypeNone}
 	if deduct {
 		if er := s.prepDeduct(ctx, o, p, force); er != nil {
 			return nil, er, nil
 		}
 	}
 	return p, nil, nil
+}
+
+// refundCreditedAlready returns the cumulative credited balance already refunded
+// (or refunded in-flight) for the order.
+func refundCreditedAlready(o *dbent.PaymentOrder) float64 {
+	if o == nil {
+		return 0
+	}
+	value := decimalRound2(o.RefundAmount)
+	if value < 0 {
+		return 0
+	}
+	if value > o.Amount {
+		return o.Amount
+	}
+	return value
+}
+
+// cumulativeRefundCash computes the total cash that corresponds to a cumulative
+// credited clawback, using the order's frozen pay/credit ratio and currency
+// precision.
+func cumulativeRefundCash(o *dbent.PaymentOrder, cumulativeCredited float64, currency string) float64 {
+	if o == nil || cumulativeCredited <= 0 {
+		return 0
+	}
+	return calculateGatewayRefundAmount(o.Amount, o.PayAmount, cumulativeCredited, currency)
+}
+
+// refundCashDelta returns the additional gateway amount for clawing back
+// cumulativeCredited when previousCredited has already been repaid. Both terms
+// already carry the order currency's precision, so the delta is not re-rounded.
+func refundCashDelta(o *dbent.PaymentOrder, previousCredited, cumulativeCredited float64, currency string) float64 {
+	delta := cumulativeRefundCash(o, cumulativeCredited, currency) -
+		cumulativeRefundCash(o, previousCredited, currency)
+	if delta < 0 {
+		return 0
+	}
+	return delta
+}
+
+func decimalRound2(value float64) float64 {
+	return decimal.NewFromFloat(value).Round(2).InexactFloat64()
+}
+
+func decimalSubtract(a, b float64) float64 {
+	return decimal.NewFromFloat(a).Sub(decimal.NewFromFloat(b)).Round(2).InexactFloat64()
+}
+
+func decimalAdd(a, b float64) float64 {
+	return decimal.NewFromFloat(a).Add(decimal.NewFromFloat(b)).Round(2).InexactFloat64()
 }
 
 func (s *PaymentService) prepDeduct(ctx context.Context, o *dbent.PaymentOrder, p *RefundPlan, force bool) *RefundResult {
@@ -296,7 +362,7 @@ func (s *PaymentService) deductAvailableBalance(ctx context.Context, userID int6
 }
 
 func (s *PaymentService) ExecuteRefund(ctx context.Context, p *RefundPlan) (*RefundResult, error) {
-	c, err := s.entClient.PaymentOrder.Update().Where(paymentorder.IDEQ(p.OrderID), paymentorder.StatusIn(OrderStatusCompleted, OrderStatusRefundRequested, OrderStatusRefundPending, OrderStatusRefundFailed)).SetStatus(OrderStatusRefunding).Save(ctx)
+	c, err := s.entClient.PaymentOrder.Update().Where(paymentorder.IDEQ(p.OrderID), paymentorder.StatusIn(OrderStatusCompleted, OrderStatusRefundRequested, OrderStatusRefundPending, OrderStatusRefundFailed, OrderStatusPartiallyRefunded)).SetStatus(OrderStatusRefunding).Save(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("lock: %w", err)
 	}
@@ -452,7 +518,7 @@ func (s *PaymentService) QueryAndFinalizeRefund(ctx context.Context, oid int64) 
 		return s.finalizeRefundFailed(ctx, o, err)
 	}
 
-	plan := s.refundFinalizePlan(o)
+	plan := s.refundFinalizePlan(ctx, o)
 	if !pendingDetail.DeductionRollbackOK {
 		plan.BalanceToDeduct = 0
 		plan.SubDaysToDeduct = 0
@@ -508,21 +574,37 @@ func (s *PaymentService) finalizePendingRefundSuccess(ctx context.Context, p *Re
 	return result, nil
 }
 
-func (s *PaymentService) refundFinalizePlan(o *dbent.PaymentOrder) *RefundPlan {
-	refundAmount := o.RefundAmount
+// refundFinalizePlan rebuilds the refund plan for an order waiting on a pending
+// gateway refund. Per-refund amounts come from the REFUND_PENDING audit entry so a
+// sequential partial refund keeps its own credited/cash share; orders created
+// before that detail existed fall back to the credited amount stored on the order.
+func (s *PaymentService) refundFinalizePlan(ctx context.Context, o *dbent.PaymentOrder) *RefundPlan {
+	detail := s.latestRefundPendingDetail(ctx, o.ID)
+	refundAmount := decimalRound2(detail.RefundAmount)
+	cumulative := decimalRound2(detail.CumulativeRefundAmount)
+	gateway := detail.GatewayAmount
+	if refundAmount <= 0 {
+		refundAmount = decimalRound2(o.RefundAmount)
+		cumulative = refundAmount
+		gateway = calculateGatewayRefundAmount(o.Amount, o.PayAmount, refundAmount, PaymentOrderCurrency(o))
+	}
+	if cumulative < refundAmount {
+		cumulative = refundAmount
+	}
 	reason := strings.TrimSpace(psStringValue(o.RefundReason))
 	if reason == "" {
 		reason = fmt.Sprintf("refund order:%d", o.ID)
 	}
 	return &RefundPlan{
-		OrderID:       o.ID,
-		Order:         o,
-		RefundAmount:  refundAmount,
-		GatewayAmount: calculateGatewayRefundAmount(o.Amount, o.PayAmount, refundAmount, PaymentOrderCurrency(o)),
-		Reason:        reason,
-		Force:         o.ForceRefund,
-		DeductBalance: true,
-		DeductionType: payment.DeductionTypeBalance,
+		OrderID:            o.ID,
+		Order:              o,
+		RefundAmount:       refundAmount,
+		CumulativeCredited: cumulative,
+		GatewayAmount:      gateway,
+		Reason:             reason,
+		Force:              o.ForceRefund,
+		DeductBalance:      true,
+		DeductionType:      payment.DeductionTypeBalance,
 		BalanceToDeduct: func() float64 {
 			if o.OrderType == payment.OrderTypeBalance {
 				return refundAmount
@@ -562,8 +644,11 @@ func (s *PaymentService) finalizeRefundFailed(ctx context.Context, o *dbent.Paym
 }
 
 type refundPendingAuditDetail struct {
-	RefundID            string `json:"refundID"`
-	DeductionRollbackOK bool   `json:"deductionRollbackOK"`
+	RefundID               string  `json:"refundID"`
+	DeductionRollbackOK    bool    `json:"deductionRollbackOK"`
+	RefundAmount           float64 `json:"refundAmount"`
+	CumulativeRefundAmount float64 `json:"cumulativeRefundAmount"`
+	GatewayAmount          float64 `json:"gatewayAmount"`
 }
 
 func (s *PaymentService) latestRefundPendingDetail(ctx context.Context, oid int64) refundPendingAuditDetail {
@@ -605,31 +690,50 @@ func (s *PaymentService) handleGwFail(ctx context.Context, p *RefundPlan, gErr e
 	return nil, infraerrors.InternalServer("REFUND_FAILED", psErrMsg(gErr))
 }
 
-func (s *PaymentService) markRefundOk(ctx context.Context, p *RefundPlan) (*RefundResult, error) {
-	fs := OrderStatusRefunded
-	if p.RefundAmount < p.Order.Amount {
-		fs = OrderStatusPartiallyRefunded
+// refundFinalStatus returns the terminal status for a plan clawing back
+// cumulativeCredited out of order.Amount.
+func refundFinalStatus(o *dbent.PaymentOrder, cumulativeCredited float64) string {
+	if o == nil {
+		return OrderStatusRefunded
 	}
+	tolerance := paymentAmountToleranceForCurrency(PaymentOrderCurrency(o))
+	if cumulativeCredited+tolerance < o.Amount {
+		return OrderStatusPartiallyRefunded
+	}
+	return OrderStatusRefunded
+}
+
+// planCumulativeCredited returns the cumulative credited clawback the plan
+// represents. Fallback to RefundAmount keeps single-refund callers coherent.
+func planCumulativeCredited(p *RefundPlan) float64 {
+	if p == nil {
+		return 0
+	}
+	if p.CumulativeCredited > p.RefundAmount {
+		return p.CumulativeCredited
+	}
+	return p.RefundAmount
+}
+
+func (s *PaymentService) markRefundOk(ctx context.Context, p *RefundPlan) (*RefundResult, error) {
+	fs := refundFinalStatus(p.Order, planCumulativeCredited(p))
 	now := time.Now()
-	_, err := s.entClient.PaymentOrder.UpdateOneID(p.OrderID).SetStatus(fs).SetRefundAmount(p.RefundAmount).SetRefundReason(p.Reason).SetRefundAt(now).SetForceRefund(p.Force).Save(ctx)
+	_, err := s.entClient.PaymentOrder.UpdateOneID(p.OrderID).SetStatus(fs).SetRefundAmount(planCumulativeCredited(p)).SetRefundReason(p.Reason).SetRefundAt(now).SetForceRefund(p.Force).Save(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("mark refund: %w", err)
 	}
-	s.writeAuditLog(ctx, p.OrderID, "REFUND_SUCCESS", "admin", map[string]any{"refundAmount": p.RefundAmount, "reason": p.Reason, "balanceDeducted": p.BalanceToDeduct, "force": p.Force})
+	s.writeAuditLog(ctx, p.OrderID, "REFUND_SUCCESS", "admin", map[string]any{"refundAmount": p.RefundAmount, "cumulativeRefundAmount": planCumulativeCredited(p), "gatewayAmount": p.GatewayAmount, "reason": p.Reason, "balanceDeducted": p.BalanceToDeduct, "force": p.Force})
 	return &RefundResult{Success: true, BalanceDeducted: p.BalanceToDeduct, SubDaysDeducted: p.SubDaysToDeduct}, nil
 }
 
 func (s *PaymentService) markRefundOkTx(ctx context.Context, client *dbent.Client, p *RefundPlan) (*RefundResult, error) {
-	fs := OrderStatusRefunded
-	if p.RefundAmount < p.Order.Amount {
-		fs = OrderStatusPartiallyRefunded
-	}
+	fs := refundFinalStatus(p.Order, planCumulativeCredited(p))
 	now := time.Now()
-	_, err := client.PaymentOrder.UpdateOneID(p.OrderID).SetStatus(fs).SetRefundAmount(p.RefundAmount).SetRefundReason(p.Reason).SetRefundAt(now).SetForceRefund(p.Force).Save(ctx)
+	_, err := client.PaymentOrder.UpdateOneID(p.OrderID).SetStatus(fs).SetRefundAmount(planCumulativeCredited(p)).SetRefundReason(p.Reason).SetRefundAt(now).SetForceRefund(p.Force).Save(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("mark refund: %w", err)
 	}
-	detail, err := json.Marshal(map[string]any{"refundAmount": p.RefundAmount, "reason": p.Reason, "balanceDeducted": p.BalanceToDeduct, "force": p.Force})
+	detail, err := json.Marshal(map[string]any{"refundAmount": p.RefundAmount, "cumulativeRefundAmount": planCumulativeCredited(p), "gatewayAmount": p.GatewayAmount, "reason": p.Reason, "balanceDeducted": p.BalanceToDeduct, "force": p.Force})
 	if err != nil {
 		return nil, fmt.Errorf("marshal refund audit: %w", err)
 	}
@@ -655,7 +759,7 @@ func (s *PaymentService) markRefundPending(ctx context.Context, p *RefundPlan, r
 
 	_, err := s.entClient.PaymentOrder.UpdateOneID(p.OrderID).
 		SetStatus(OrderStatusRefundPending).
-		SetRefundAmount(p.RefundAmount).
+		SetRefundAmount(planCumulativeCredited(p)).
 		SetRefundReason(p.Reason).
 		ClearRefundAt().
 		SetForceRefund(p.Force).
@@ -667,15 +771,17 @@ func (s *PaymentService) markRefundPending(ctx context.Context, p *RefundPlan, r
 	}
 
 	detail := map[string]any{
-		"refundID":            refundResponseID(resp),
-		"refundAmount":        p.RefundAmount,
-		"reason":              p.Reason,
-		"force":               p.Force,
-		"balanceDeducted":     p.BalanceToDeduct,
-		"subDaysDeducted":     p.SubDaysToDeduct,
-		"balanceRolledBack":   balanceDeducted,
-		"subDaysRolledBack":   subDaysDeducted,
-		"deductionRollbackOK": rollbackOK,
+		"refundID":               refundResponseID(resp),
+		"refundAmount":           p.RefundAmount,
+		"cumulativeRefundAmount": planCumulativeCredited(p),
+		"gatewayAmount":          p.GatewayAmount,
+		"reason":                 p.Reason,
+		"force":                  p.Force,
+		"balanceDeducted":        p.BalanceToDeduct,
+		"subDaysDeducted":        p.SubDaysToDeduct,
+		"balanceRolledBack":      balanceDeducted,
+		"subDaysRolledBack":      subDaysDeducted,
+		"deductionRollbackOK":    rollbackOK,
 	}
 	s.writeAuditLog(ctx, p.OrderID, "REFUND_PENDING", "admin", detail)
 
@@ -713,8 +819,11 @@ func (s *PaymentService) RollbackRefund(ctx context.Context, p *RefundPlan, gErr
 
 func (s *PaymentService) restoreStatus(ctx context.Context, p *RefundPlan) {
 	rs := OrderStatusCompleted
-	if p.Order.Status == OrderStatusRefundRequested {
+	switch p.Order.Status {
+	case OrderStatusRefundRequested:
 		rs = OrderStatusRefundRequested
+	case OrderStatusPartiallyRefunded:
+		rs = OrderStatusPartiallyRefunded
 	}
 	_, _ = s.entClient.PaymentOrder.UpdateOneID(p.OrderID).SetStatus(rs).Save(ctx)
 }

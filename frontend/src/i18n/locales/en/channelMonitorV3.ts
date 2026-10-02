@@ -1,6 +1,6 @@
 export default {
   channelMonitorV3: {
-    title: 'Service status', subtitle: 'Availability of your accessible services, observed from real requests on this site.', observed: 'Last observed',
+    title: 'Service status', subtitle: 'Site-wide service status and incidents, observed from real requests by all users.', observed: 'Last observed',
     platforms: 'Platforms', events: 'Incidents', viewEvents: 'View incidents', filter: 'Filter platforms', allPlatforms: 'All platforms', range: 'History range',
     ranges: { '24h': '24 hours', '7d': '7 days', '30d': '30 days' },
     activeEvents: '{count} unresolved incidents', counts: '{normal} normal · {affected} affected · {unknown} awaiting data · {recovering} recovering',
@@ -21,9 +21,9 @@ export default {
       recovering: 'Recent requests have improved. Sustained successful requests are required to confirm recovery.', unknown: 'Recent requests are insufficient or observations are delayed. Current status cannot be confirmed.', insufficient: 'Recent request samples are below the threshold for determining status.',
     },
     successRate: 'Request success in selected range', ttft: 'First token · P50', history: 'Status history', now: 'Now', lastRequest: 'Last request',
-    recent30Days: 'Last 30 days · up to 200 resolved incidents', autoDetected: 'Automatically detected', emptyPlatforms: 'No accessible platforms.', emptyEvents: 'No incidents in this scope.', emptyModels: 'No model request data.',
+    recent30Days: 'Last 30 days · up to 200 resolved incidents', autoDetected: 'Automatically detected', emptyPlatforms: 'No service platforms.', emptyEvents: 'No site-wide incidents match the current filter.', emptyModels: 'No model request data.',
     modelStatus: 'Group and model status', model: 'Model', group: 'Group', recentStatus: 'Last 5 minutes',
-    note: 'Status reflects accessible channels on this site. Historical success rates and current status use different time ranges. Gray means no data or insufficient samples. P50 is approximate.', loadFailed: 'Service status is temporarily unavailable. Please refresh later.',
+    note: 'Status and incidents aggregate all users’ requests across active channels on this site. Historical success rates and current status use different time ranges. Gray means no data or insufficient samples. P50 is approximate.', loadFailed: 'Service status is temporarily unavailable. Please refresh later.',
     eventTitle: { partial: '{platform} request errors', outage: '{platform} channel disruption', degraded: '{platform} increased response times', normal: '{platform} service incident', recovering: '{platform} service incident', unknown: '{platform} service incident', insufficient: '{platform} service incident' },
     phase: { detected: 'Issue detected', ongoing: 'Ongoing', recovering: 'Monitoring recovery', awaiting_data: 'Awaiting new requests', resolved: 'Resolved' },
     phaseDescription: {
@@ -31,7 +31,7 @@ export default {
       recovering: 'Recent requests have improved. Subsequent requests are being monitored for sustained stability.', awaiting_data: 'There are insufficient new requests to confirm recovery. The incident remains unresolved.', resolved: 'Consecutive observations with new requests have remained stable. Recovery is confirmed.',
     },
     modeV3: 'V3 Service status', modeV2: 'V2 Passive monitoring', modeHint: 'V1 actively probes. V2 uses passive aggregation. V3 shows service status from real requests. Logged-in users can view the selected mode when enabled.',
-    modeV3Hint: 'Observe platforms and incidents automatically from real user requests, without sending active probes.', modeV2Hint: 'Aggregates health metrics from real gateway traffic. Users can view monitoring data for authorized groups.',
+    modeV3Hint: 'Observe platforms and incidents automatically from all users’ real requests on this site, without sending active probes.', modeV2Hint: 'Aggregates health metrics from real gateway traffic. Users can view monitoring data for authorized groups.',
     settings: {
       title: 'V3 service status configuration', description: 'Current status uses requests from the last 5 minutes. Consecutive confirmations require new request evidence. Silence or insufficient samples cannot confirm recovery. History accumulates after enablement.',
       minimum_samples: 'Minimum request samples', warning_error_rate: 'Issue error rate (0–1, default 0.05)', outage_error_rate: 'Outage error rate (0–1, default 0.9)',

@@ -62,6 +62,55 @@ Configure the following in Admin Dashboard **Settings → Payment Settings**:
 | **Order Timeout** | Order timeout in minutes (minimum 1) | 30 |
 | **Max Pending Orders** | Maximum concurrent pending orders per user | 3 |
 | **Load Balance Strategy** | Strategy for selecting provider instances | Round Robin |
+| **Recharge Bonus Tiers** | Recharge incentive tiers (`RECHARGE_BONUS_TIERS`, JSON) | *(empty = incentive disabled)* |
+| **Recharge Bonus Mode** | Tier mode: `bonus` (extra credit) or `discount` (reduced payment) | `bonus` |
+| **Promotion Notice** | Markdown notice shown above the amount cards (`RECHARGE_BONUS_NOTICE`) | - |
+
+### Recharge Incentives (Bonus / Discount)
+
+Recharge incentives live in the `RECHARGE_BONUS_TIERS`, `RECHARGE_BONUS_MODE` and
+`RECHARGE_BONUS_NOTICE` settings. An empty tier list disables the incentive, which
+is the default for existing installations. The amount the user enters is matched
+against the largest tier whose `min_amount` does not exceed it. Subscription orders
+never participate. Amounts and percentages reuse the existing decimal and currency
+precision rules, and the promotion notice is sanitized with DOMPurify before it is
+rendered on the payment page.
+
+Each setting can also be provided as the same-named deployment environment variable
+(see `deploy/.env.example`); unset or blank keeps the value saved in Admin Settings.
+
+### Order Monetary Fields
+
+| Field | Meaning |
+|-------|---------|
+| `amount` | Total USD credited to the balance, including the free part |
+| `bonus_amount` | Free USD part included in `amount` (0 for historical and non-incentivized orders) |
+| `pay_amount` | Amount actually collected by the payment channel, including fees, in the order's frozen payment currency |
+| `fee_rate` | Fee percentage applied on top of the payment base |
+
+The quote is frozen when the order is created: later changes to the incentive
+settings or to the selected provider currency never rewrite an existing order.
+
+### Commission, Refund and Limit Policy
+
+- Affiliate commission accrues on the paid part (`amount - bonus_amount`). The free
+  portion never earns commission, and duplicate callbacks or fulfillment retries are
+  applied once under the existing idempotency controls.
+- Refunds are proportional to actual paid versus credited:
+  `gateway refund = pay_amount × credited clawback ÷ amount`, computed on cumulative
+  totals with the order currency's precision, so cumulative cash repayment never
+  exceeds the original `pay_amount`. Balance is clawed back in step, and a partial
+  refund may be followed by the remaining refund; the order only reaches `REFUNDED`
+  once the full credited amount has been clawed back.
+- Historical orders migrate with `bonus_amount = 0` and keep the previous refund
+  behavior; no promotion is applied retroactively.
+- Daily limit basis: balance orders are compared using the channel-collected amount
+  including fees (`pay_amount`) in the order's frozen payment currency. Credited USD
+  and the free bonus never enlarge the payment limit. Subscription orders keep the
+  prior plan-price basis. If previously paid balance orders use a different frozen
+  currency and no reliable conversion exists, order creation fails with the stable
+  `PAYMENT_DAILY_LIMIT_CURRENCY_MISMATCH` configuration error instead of summing
+  incompatible units.
 
 ### Frontend Visible Method Routing
 

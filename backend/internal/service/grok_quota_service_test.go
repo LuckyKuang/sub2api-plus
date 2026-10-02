@@ -515,7 +515,7 @@ func TestGrokQuotaServiceProbeUsageStoresHeaders(t *testing.T) {
 	require.NotEmpty(t, upstream.lastReq.Header.Get("x-grok-agent-id"))
 	require.Equal(t, "grok-4.5", upstream.lastReq.Header.Get("x-grok-model-override"))
 	require.Equal(t, HTTPUpstreamProfileGrok, HTTPUpstreamProfileFromContext(upstream.lastReq.Context()))
-	require.Equal(t, "application/json, text/event-stream", upstream.lastReq.Header.Get("Accept"))
+	require.Equal(t, "text/event-stream", upstream.lastReq.Header.Get("Accept"))
 	require.Equal(t, "grok-4.5", gjson.GetBytes(upstream.lastBody, "model").String())
 	require.Equal(t, grokQuotaProbeInput, gjson.GetBytes(upstream.lastBody, "input").String())
 	require.True(t, gjson.GetBytes(upstream.lastBody, "stream").Bool())
@@ -772,7 +772,7 @@ func TestGrokQuotaServiceQueryQuotaFreeFallsBackToGrok45(t *testing.T) {
 		}
 		responseCalls++
 		require.Equal(t, http.MethodPost, req.Method)
-		require.Equal(t, "application/json, text/event-stream", req.Header.Get("Accept"))
+		require.Equal(t, "text/event-stream", req.Header.Get("Accept"))
 		require.Equal(t, "grok-4.5", gjson.GetBytes(bodies[i], "model").String())
 		require.Equal(t, grokQuotaProbeInput, gjson.GetBytes(bodies[i], "input").String())
 		require.True(t, gjson.GetBytes(bodies[i], "stream").Bool())

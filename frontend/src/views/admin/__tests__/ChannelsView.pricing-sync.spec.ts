@@ -322,6 +322,76 @@ describe('ChannelsView pricing sync', () => {
     expect(showSuccess).toHaveBeenLastCalledWith('admin.channels.form.syncModelsAlreadyUpToDate')
   })
 
+  it.each(['add', 'sync'] as const)('resolves the exact Jev card on the typesafe platform via %s', async (path) => {
+    const jev: ModelPricingReference = {
+      model: 'jev-latest',
+      matched_model: 'jev-latest',
+      platform: 'typesafe',
+      status: 'priced',
+      source: 'builtin_fallback',
+      reason_code: '',
+      // USD per token: $0.042/MTok input and an explicit free output.
+      pricing: card({ platform: 'typesafe', models: ['jev-latest'], input_price: 0.042e-6, output_price: 0 }),
+    }
+    channelsSync.mockResolvedValue(snapshot([jev], { platform: 'typesafe' }))
+    modelDefaultPricing.mockResolvedValue(jev)
+    const wrapper = mountView()
+    await flushPromises()
+    await openCreateDialog(wrapper)
+    await enablePlatform(wrapper, 'typesafe')
+
+    if (path === 'sync') {
+      await syncButton(wrapper).trigger('click')
+      await flushPromises()
+      expect(channelsSync).toHaveBeenCalledWith('typesafe')
+    } else {
+      await addPricingRuleButton(wrapper).trigger('click')
+      await flushPromises()
+      await cardWrappers(wrapper)[0]!.findComponent({ name: 'ModelTagInput' }).vm.$emit('update:models', ['jev-latest'])
+      await flushPromises()
+      expect(modelDefaultPricing).toHaveBeenCalledWith('typesafe', 'jev-latest')
+    }
+
+    const cards = cardWrappers(wrapper)
+    expect(cards).toHaveLength(1)
+    expect(cards[0]!.props('entry').models).toEqual(['jev-latest'])
+    expect(priceInput(cards[0]!, 'admin.channels.form.inputPrice').value).toBe('0.042')
+    // Explicit zero output is a price, not a missing field.
+    expect(priceInput(cards[0]!, 'admin.channels.form.outputPrice').value).toBe('0')
+  })
+
+  it('keeps an explicit zero Jev operator price when syncing the exact model', async () => {
+    const jev: ModelPricingReference = {
+      model: 'jev-latest',
+      matched_model: 'jev-latest',
+      platform: 'typesafe',
+      status: 'priced',
+      source: 'builtin_fallback',
+      reason_code: '',
+      pricing: card({ platform: 'typesafe', models: ['jev-latest'], input_price: 0.042e-6, output_price: 0 }),
+    }
+    channelsSync.mockResolvedValue(snapshot([jev], { platform: 'typesafe' }))
+    const wrapper = mountView()
+    await flushPromises()
+    await openCreateDialog(wrapper)
+    await enablePlatform(wrapper, 'typesafe')
+    await addPricingRuleButton(wrapper).trigger('click')
+    await flushPromises()
+    const manual = cardWrappers(wrapper)[0]!
+    manual.vm.$emit('update', { ...manual.props('entry'), input_price: '0', output_price: '0' })
+    await flushPromises()
+    await cardWrappers(wrapper)[0]!.findComponent({ name: 'ModelTagInput' }).vm.$emit('update:models', ['jev-latest'])
+    await flushPromises()
+    expect(modelDefaultPricing).not.toHaveBeenCalled()
+
+    await syncButton(wrapper).trigger('click')
+    await flushPromises()
+    expect(channelsSync).toHaveBeenCalledWith('typesafe')
+    expect(cardWrappers(wrapper)).toHaveLength(1)
+    expect(priceInput(cardWrappers(wrapper)[0]!, 'admin.channels.form.inputPrice').value).toBe('0')
+    expect(priceInput(cardWrappers(wrapper)[0]!, 'admin.channels.form.outputPrice').value).toBe('0')
+  })
+
   it('creates one independently priced rule per synced model', async () => {
     channelsSync.mockResolvedValue(snapshot([solCard, lunaCard]))
     const wrapper = mountView()

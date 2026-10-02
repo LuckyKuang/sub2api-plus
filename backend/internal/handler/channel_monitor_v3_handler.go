@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"strings"
@@ -12,16 +11,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type channelMonitorV3GroupAuthorizer interface {
-	GetAvailableGroups(context.Context, int64) ([]service.Group, error)
-}
 type ChannelMonitorV3Handler struct {
 	service *service.ChannelMonitorV3Service
-	groups  channelMonitorV3GroupAuthorizer
 }
 
-func NewChannelMonitorV3Handler(svc *service.ChannelMonitorV3Service, keys *service.APIKeyService) *ChannelMonitorV3Handler {
-	return &ChannelMonitorV3Handler{service: svc, groups: keys}
+func NewChannelMonitorV3Handler(svc *service.ChannelMonitorV3Service) *ChannelMonitorV3Handler {
+	return &ChannelMonitorV3Handler{service: svc}
 }
 
 func (h *ChannelMonitorV3Handler) Snapshot(c *gin.Context) {
@@ -35,25 +30,12 @@ func (h *ChannelMonitorV3Handler) Snapshot(c *gin.Context) {
 		response.BadRequest(c, "invalid platform")
 		return
 	}
-	subject, ok := middleware.GetReadSubjectFromContext(c)
+	subject, ok := middleware.GetAuthSubjectFromContext(c)
 	if !ok || subject.UserID <= 0 {
 		response.Unauthorized(c, "authentication required")
 		return
 	}
-	if h.groups == nil {
-		response.Error(c, http.StatusInternalServerError, "service status authorization unavailable")
-		return
-	}
-	groups, err := h.groups.GetAvailableGroups(c.Request.Context(), subject.UserID)
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-	ids := make([]int64, 0, len(groups))
-	for _, group := range groups {
-		ids = append(ids, group.ID)
-	}
-	result, err := h.service.Snapshot(c.Request.Context(), ids, window, platform)
+	result, err := h.service.Snapshot(c.Request.Context(), window, platform)
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, "service status temporarily unavailable")
 		return

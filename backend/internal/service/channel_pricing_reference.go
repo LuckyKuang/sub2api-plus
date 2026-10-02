@@ -99,6 +99,10 @@ var channelPricingCatalogProviders = map[string][]string{
 	PlatformMiniMax:     {"minimax"},
 	PlatformOpenCodeGo: {"openai", "anthropic", "gemini", "vertex_ai-language-models",
 		"xai", "moonshot", "zhipu", "deepseek", "minimax", "opencode-go"},
+	// TypeSafe 的 System One 型号不在 Release 目录里，也不允许任何其它厂商的
+	// 目录行给它定价：参考价只认已登记的精确内置价卡（jev-latest）。空标签集
+	// 让目录精确匹配永远落空，解析必须走同型号内置兜底。
+	PlatformTypeSafe: {},
 }
 
 // ChannelPricingReference 是单个模型的参考价解析结果。
@@ -280,7 +284,8 @@ func (s *ChannelPricingReferenceService) catalogFingerprint() string {
 
 // platformModels 由「平台支持模型清单」与「目录 provider 行」取并集。
 // 只扫 provider 行会让 OpenCode Go（目录无 opencode-go 行）与 Kimi/智谱/MiniMax
-// （型号只存在于内置兜底）同步出空列表；只扫平台清单又会在目录新增 SKU 时漏掉。
+// /TypeSafe（型号只存在于内置兜底或根本没有目录行）同步出空列表；只扫平台清单
+// 又会在目录新增 SKU 时漏掉。
 //
 // 聚合平台例外：OpenCode Go 只服务自己发布的型号清单，上游目录行（openai /
 // anthropic / ... 的整个宇宙）可以给清单内型号查价，但不能把清单撑大，
@@ -848,7 +853,7 @@ func platformSupportedModels(platform string) []string {
 		return xai.DefaultModelIDs()
 	case PlatformOpenCodeGo:
 		return DefaultOpenCodeGoModelIDs()
-	case PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax:
+	case PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax, PlatformTypeSafe:
 		return builtinFallbackFamilyModelIDs(platform)
 	default: // PlatformAnthropic
 		ids := make([]string, 0, len(claude.DefaultModels))
@@ -873,6 +878,9 @@ var builtinFallbackFamilyPrefixes = map[string][]string{
 	PlatformZhipu:       {"glm-"},
 	PlatformDeepseek:    {"deepseek-"},
 	PlatformMiniMax:     {"minimax-"},
+	// TypeSafe 的 System One 型号是 jev-* 家族；内置表只登记了精确型号
+	// jev-latest，未知 jev-* 仍保持 manual_required，不借用其它厂商价卡。
+	PlatformTypeSafe: {"jev-"},
 	// OpenCode 是聚合网关：同时转发上面多家上游的型号，因此并集各家前缀，
 	// 再加上自身私有系列。
 	PlatformOpenCodeGo: {"claude-", "gpt-", "gemini-", "grok-", "codex",
@@ -907,8 +915,9 @@ func builtinFallbackBelongsToPlatform(platform, model string) bool {
 }
 
 // builtinFallbackFamilyModelIDs 返回平台在内置兜底表中维护的型号。
-// Kimi/智谱/MiniMax/DeepSeek 的动态目录行不全甚至为空，但这些型号项目里有
-// 精确内置价；同步时只扫 provider 行会让它们整个平台消失。
+// Kimi/智谱/MiniMax/DeepSeek 的动态目录行不全甚至为空，TypeSafe 则完全没有
+// 目录行，但这些型号项目里有精确内置价；同步时只扫 provider 行会让它们整个
+// 平台消失。
 func builtinFallbackFamilyModelIDs(platform string) []string {
 	ids := make([]string, 0)
 	if billingReferenceFallbackIDs == nil {

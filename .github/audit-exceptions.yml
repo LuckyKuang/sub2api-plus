@@ -1,16 +1,26 @@
 version: 1
-exceptions:
-  - package: xlsx
-    advisory: "GHSA-4r6h-8v6p-xvw6"
-    severity: high
-    reason: "Admin export only; switched to dynamic import to reduce exposure (CVE-2023-30533)"
-    mitigation: "Load only on export; restrict export permissions and data scope"
-    expires_on: "2026-10-06"
-    owner: "luckykuang@foxmail.com"
-  - package: xlsx
-    advisory: "GHSA-5pgg-2g8v-p4x9"
-    severity: high
-    reason: "Admin export only; switched to dynamic import to reduce exposure (CVE-2024-22363)"
-    mitigation: "Load only on export; restrict export permissions and data scope"
-    expires_on: "2026-10-06"
-    owner: "luckykuang@foxmail.com"
+# Audit exceptions for production dependency advisories at or above the
+# `pnpm audit --prod --audit-level=high` level.
+#
+# Every exception MUST be visible to tools/check_pnpm_audit_exceptions.py:
+# do not hide advisories with pnpm.auditConfig.ignoreCves, because the checker
+# consumes `pnpm audit --json` and cannot enforce what it cannot see.
+#
+# To add an exception:
+#   1. Confirm no patched version exists and that pnpm.overrides cannot pin one.
+#   2. Confirm the vulnerable code path is unreachable in this project.
+#   3. Add an entry below with package, advisory, severity, reason, mitigation,
+#      a dated expires_on (review date, keep it short), and an owner.
+#   4. Record the same acceptance and its re-evaluation triggers in SECURITY.md
+#      section "Dependency Audit Exceptions".
+#
+# Format:
+#   exceptions:
+#     - package: <dependency name>            # matched against the advisory module name
+#       advisory: "<GHSA/GHSA id>"            # matched against the reported advisory id
+#       severity: high                        # must match the report severity
+#       reason: "<why the risk is accepted>"
+#       mitigation: "<what keeps the risk unreachable or bounded>"
+#       expires_on: "YYYY-MM-DD"              # expiry here fails the check
+#       owner: "<accountable owner>"
+exceptions: []

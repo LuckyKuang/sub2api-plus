@@ -15,6 +15,11 @@ docker run -d \
 
 ## Docker Compose
 
+For local deployment and verification through `skills/deploy-cli`, follow the
+shared [deployment lifecycle](DEPLOYMENT_LIFECYCLE.md). It defines replacement,
+health checks, recovery, and scoped application-image retention for both Linux
+Docker and Docker inside WSL2 Debian/Ubuntu.
+
 ```yaml
 version: '3.8'
 
@@ -88,7 +93,7 @@ application container after changing these values.
 ## Tags
 
 - `latest` - Latest stable release
-- `vX.Y.Z-custom.NNN` - Immutable fork release, for example `v0.2.11-custom.002`
+- `vX.Y.Z-custom.NNN` - Immutable fork release, for example `v0.2.13-custom.001`
 - `x.y` - Latest patch of minor version
 - `x` - Latest minor of major version
 
@@ -97,8 +102,8 @@ preserves the leading `v` and replaces only `+` with `-` to produce the
 OCI-compatible image tag. For example:
 
 ```text
-Git/GitHub: v0.2.11+custom.002
-GHCR:       ghcr.io/luckykuang/sub2api-plus:v0.2.11-custom.002
+Git/GitHub: v0.2.13+custom.001
+GHCR:       ghcr.io/luckykuang/sub2api-plus:v0.2.13-custom.001
 ```
 
 Pin the immutable release tag in production. Use `latest` only when automatic

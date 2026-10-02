@@ -813,6 +813,9 @@ func (h *GatewayHandler) handleGeminiFailoverExhausted(c *gin.Context, failoverE
 			if !rule.PassthroughBody && rule.CustomMessage != nil {
 				msg = *rule.CustomMessage
 			}
+			// Antigravity 账号同样经 Gemini v1beta 端点 failover；回写客户端前
+			// 复用 service 层同一脱敏边界（项目号/服务账号邮箱/consumer id）。
+			msg = service.SanitizeFailoverClientMessage(failoverErr, msg)
 
 			if rule.SkipMonitoring {
 				c.Set(service.OpsSkipPassthroughKey, true)

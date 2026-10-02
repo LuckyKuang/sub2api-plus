@@ -70,6 +70,20 @@ func redactedGrokBaseURLValidator(validator xai.BaseURLValidator) xai.BaseURLVal
 	}
 }
 
+// grokValidatedSamplerBaseURL resolves and validates the account's effective
+// Grok sampler base URL — the exact value buildGrokResponsesURL appends
+// "/responses" to. Callers that must reason about the destination itself (for
+// example the request-compression capability probe) reuse it so they cannot
+// disagree with the forwarding path about the target, its validation policy or
+// its path normalization.
+func grokValidatedSamplerBaseURL(account *Account, cfg *config.Config, settings ...*SettingService) (string, error) {
+	responsesURL, err := buildGrokResponsesURL(account, cfg, settings...)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSuffix(responsesURL, "/responses"), nil
+}
+
 func buildGrokResponsesURL(account *Account, cfg *config.Config, settings ...*SettingService) (string, error) {
 	validator, err := grokBaseURLValidator(account, cfg)
 	if err != nil {

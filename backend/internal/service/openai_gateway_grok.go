@@ -110,7 +110,7 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
 	upstreamStart := time.Now()
 	var resp *http.Response
 	for attempt := 0; ; attempt++ {
-		upstreamReq, buildErr := buildGrokResponsesRequest(upstreamCtx, c, account, patchedBody, token, cacheIdentity, s.cfg, s.settingService)
+		upstreamReq, buildErr := s.buildGrokResponsesRequest(upstreamCtx, c, account, patchedBody, token, cacheIdentity, s.cfg, s.settingService)
 		if buildErr != nil {
 			return nil, buildErr
 		}
@@ -1411,7 +1411,7 @@ func (s *OpenAIGatewayService) describeGrokComposerImage(
 	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
 	// Image-description probes are auxiliary requests, not conversation turns.
 	// Do not bind them to the caller's Grok prompt-cache identity.
-	upstreamReq, err := buildGrokResponsesRequest(upstreamCtx, c, account, body, token, "", s.cfg, s.settingService)
+	upstreamReq, err := s.buildGrokResponsesRequest(upstreamCtx, c, account, body, token, "", s.cfg, s.settingService)
 	releaseUpstreamCtx()
 	if err != nil {
 		return "", OpenAIUsage{}, fmt.Errorf("build grok composer image bridge request: %w", err)
@@ -1589,7 +1589,7 @@ func addOpenAIUsage(dst *OpenAIUsage, usage OpenAIUsage) {
 	dst.AudioOutputTokens += usage.AudioOutputTokens
 }
 
-func buildGrokResponsesRequest(ctx context.Context, c *gin.Context, account *Account, body []byte, token, cacheIdentity string, cfg *config.Config, settings ...*SettingService) (*http.Request, error) {
+func (s *OpenAIGatewayService) buildGrokResponsesRequest(ctx context.Context, c *gin.Context, account *Account, body []byte, token, cacheIdentity string, cfg *config.Config, settings ...*SettingService) (*http.Request, error) {
 	targetURL, err := buildGrokResponsesURL(account, cfg, settings...)
 	if err != nil {
 		return nil, err
@@ -1601,7 +1601,6 @@ func buildGrokResponsesRequest(ctx context.Context, c *gin.Context, account *Acc
 	req = req.WithContext(WithHTTPUpstreamProfile(req.Context(), HTTPUpstreamProfileGrok))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json, text/event-stream")
 	if account.IsGrokOAuth() {
 		applyGrokCLIHeaders(req.Header)
 	}
@@ -1614,6 +1613,19 @@ func buildGrokResponsesRequest(ctx context.Context, c *gin.Context, account *Acc
 	// 账号级请求头覆写最后应用，使配置值优先于上面的内置默认头；
 	// 打到官方 CLI 网关时身份头仍由共享传输层最终强制。
 	account.ApplyHeaderOverrides(req.Header)
+	// Accept is a request-owned operation declaration: it follows the streaming
+	// state of the final body and survives account header overrides, so a stored
+	// relay header cannot make the gateway declare SSE for a plain JSON call or
+	// the reverse. The frozen sampler declares SSE only on its streaming routes
+	// (crates/codegen/xai-grok-sampler/src/client.rs:1099,1479,1812); the plain
+	// JSON operation declares application/json. Deriving it from the final body
+	// covers the Responses, Chat, Messages and WS-bridge adapters, including the
+	// downstream non-streaming aggregation case that still streams upstream.
+	req.Header.Set("Accept", grokSamplerAcceptHeader(grokBodyStreamsJSON(body)))
+	// Negotiated request compression owns Content-Encoding exclusively and runs
+	// on the final JSON, after every model/tool/session adaptation and after
+	// the account overrides that must not be able to forge it.
+	s.applyGrokRequestCompression(req, account, body, settings...)
 	return req, nil
 }
 

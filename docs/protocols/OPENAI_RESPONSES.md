@@ -4,6 +4,17 @@ Sub2API Plus accepts OpenAI-compatible Responses requests over HTTP and
 client-facing WebSocket ingress. Account routing can use an upstream WebSocket
 or bridge the client WebSocket to an HTTP/SSE upstream.
 
+The existing DeepSeek and MiniMax native Codex model fallback lists use the
+[shared official provider catalog](../CN_PROVIDER_MODELS.md). Group allowlist
+candidates use each provider's own models; saved client aliases and account
+model mappings retain their existing behavior. Catalog updates do not change
+request extraction, model admission order, routing, billing, or outbound identity.
+DeepSeek Flash aliases are separate candidates: with no explicit administrator
+mapping, `deepseek-flash`, `deepseek-v4.1-flash`, `deepseek-v4-flash-vision-exp`
+and `deepseek-v4-flash` retain their requested spelling in the upstream model field.
+The versioned IDs `deepseek-v4-flash-0731` and `deepseek-v4-pro-0813` follow the
+same rule and are included in both model candidates and empty-mapping admission.
+
 Usage timing follows the shared [first-token/total-duration/TPS contract](../USAGE_TIMING.md)
 (Average TPS uses non-media output tokens over total forwarding/turn duration),
 including HTTP passthrough, individual WS turns, and remote compaction. Aggregate

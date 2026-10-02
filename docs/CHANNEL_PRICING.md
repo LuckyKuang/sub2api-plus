@@ -24,6 +24,10 @@ behavior must update this file in the same commit.
 6. A remote refresh failure keeps the last usable snapshot. No failure clears or
    rewrites a saved channel rule.
 
+For request billing, an unset channel image price inherits the catalog price.
+Set an explicit `0` to keep image output free. An explicit zero image-output
+price never falls back to text pricing.
+
 ## 2. Source priority
 
 For one model, the reference service resolves in this order:
@@ -88,7 +92,8 @@ on free text.
 Each platform list is the union of the platform supported-model source and the
 matching Release catalog provider rows. Scanning only catalog provider rows left
 OpenCode Go, Kimi, Zhipu, MiniMax and parts of DeepSeek empty, because those
-models only exist in the built-in fallback table.
+models only exist in the built-in fallback table. TypeSafe has no catalog row at
+all, so it lists only its registered built-in model.
 
 | Platform | Catalog provider labels | Supported-model source |
 | --- | --- | --- |
@@ -102,6 +107,7 @@ models only exist in the built-in fallback table.
 | `deepseek` | `deepseek` | built-in `deepseek-*` fallback ids |
 | `minimax` | `minimax` | built-in `minimax-*` fallback ids |
 | `opencode_go` | `openai`, `anthropic`, `gemini`, `vertex_ai-language-models`, `xai`, `moonshot`, `zhipu`, `deepseek`, `minimax`, `opencode-go` | `DefaultOpenCodeGoModelIDs()` |
+| `typesafe` | none (no Jev row exists) | built-in `jev-*` fallback ids (`jev-latest`) |
 
 Labels must match the values actually used by the bundled
 `model_prices_and_context_window.json`: Gemini SKUs live under `gemini` and the
@@ -130,6 +136,14 @@ Two exceptions to the plain union:
   `grok-build-0.1`) resolve to their base SKU: the suffix changes reasoning
   behavior, not the published rate. Unregistered suffixes such as `-preview`
   are never guessed; the response reports the matched SKU in `matched_model`.
+- **Exact-model-only platforms.** TypeSafe registers no catalog provider label
+  and has no published Release row, so every catalog lookup misses by
+  construction. `jev-latest` resolves through the verified same-model built-in
+  card (`$0.042`/M input, explicit `$0` output); unknown `jev-*` models and other
+  providers' model names stay `manual_required` instead of borrowing a family
+  price. Single-model lookup and sync share this one resolution path, and an
+  operator-saved price — including an explicit `0` — is never overwritten by a
+  later sync.
 
 ## 5. Admin API
 
@@ -374,6 +388,15 @@ falls back to the existing queued deduction, so cache failures remain fail-open
 and may briefly permit admission using stale balance after a reservation expires
 or releases. Reservations are an admission estimate, not a replacement for
 final usage billing or an absolute overdraft guarantee.
+
+## Accepted usage after API-key deletion
+
+Deleting an API key stops future authenticated requests; it does not cancel
+settlement for usage already accepted. If the key is missing or soft-deleted at
+settlement, skip only its own quota and rate-window counters. User balance or
+subscription charges, account quota, usage persistence and request deduplication
+retain their existing transaction semantics. Retrying the same settlement must
+not charge twice. Other database errors still fail and roll back the transaction.
 
 ## 8. Verifying
 

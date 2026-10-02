@@ -148,6 +148,7 @@ classifications.
 | Alpha Search | Deterministically serialized, media-sanitized `commands`, `settings`, and top-level `input`, including `commands.search_query[].q` and Responses-shaped input items | Every extracted value is current; Responses-shaped input retains its item attribution. Successfully extracted siblings remain auditable when another field is incomplete. | Empty collections and media-only values; URLs, base64 payloads, and opaque media fields are omitted from structured text |
 | OpenAI Embeddings | String or string-array `input` | Every string input is current | Empty input and unsupported token-ID arrays produce no audit text and pass through |
 | Gemini | `systemInstruction`/`system_instruction`; tools; `contents`/`content`; batched `requests`; `instances[].prompt`; part text; `functionCall` arguments; `functionResponse.response` | Last content item is current; system and tools remain current audit context | `inlineData`/`fileData` media-only parts |
+| TypeSafe System One | Question IDs; every question field name and value except the validated `type`, including `instructions` and `criteria` values; unknown question and top-level extension fields; the evaluated `state` | Every extracted leaf is current, client-controlled direct-user text; keys are visited in sorted order so the canonical document and Prompt Audit hash stay stable, and the `state` is the final canonical segment | `model`, `stream`, and validated `type` enum values produce no text; non-string scalars emit nothing and do not mark the document incomplete; a literal `<system-reminder>` or `<environment_context>` is ordinary audited evaluation text rather than CLI harness metadata |
 | Images and media | Deterministic prompt-like keys such as prompt, description, query, lyrics, negative prompt, and input | Every extracted prompt is current; duplicate text is emitted once | HTTP(S) URLs, `data:image`/`data:video` values, and large base64-like media payloads |
 
 For unknown protocol labels, the fallback recognizes Chat-shaped `messages`,
@@ -199,7 +200,7 @@ Both engines consume the same canonical document:
 | Engine/mode | Segment selection |
 | --- | --- |
 | Content Moderation | Scans only current direct-user text and images. Chat and Anthropic require an explicit `user` role; Responses, Live, and Gemini also accept their protocol-defined roleless user forms. Direct Alpha Search queries, embedding strings, and media prompts remain eligible. Instructions, system/developer context, reusable prompt variables, assistant/model messages, reasoning, tool definitions/calls/results, approval responses, and tool-produced images are excluded so platform or external content is not attributed to the user. |
-| Prompt Audit blocking and async | Scans the same current direct-user text as Content Moderation. It does not scan images. Chat and Anthropic require an explicit `user` role; Responses, Live, and Gemini also accept their protocol-defined roleless user forms. Direct Alpha Search queries, embedding strings, and media prompts remain eligible. Instructions, system/developer context, reusable prompt variables, assistant/model messages, reasoning, tool definitions/calls/results, and approval responses are excluded. A turn with no current user text is an empty selection. Client harness XML blocks inside user text (`environment_context`, `permission_profile`, `system-reminder`, `filesystem`) are stripped; surrounding user sentences remain. |
+| Prompt Audit blocking and async | Scans the same current direct-user text as Content Moderation. It does not scan images. Chat and Anthropic require an explicit `user` role; Responses, Live, and Gemini also accept their protocol-defined roleless user forms. Direct Alpha Search queries, embedding strings, and media prompts remain eligible. Instructions, system/developer context, reusable prompt variables, assistant/model messages, reasoning, tool definitions/calls/results, and approval responses are excluded. A turn with no current user text is an empty selection. Client harness XML blocks inside user text (`environment_context`, `permission_profile`, `system-reminder`, `filesystem`) are stripped; surrounding user sentences remain. Native System One is the exception: its literal `<system-reminder>`/`<environment_context>` text is ordinary audited content that is never stripped, and its evaluated state is promoted to the priority segment. |
 
 Sharing a canonical document does not mean that the engines evaluate identical
 payloads. Content Moderation preserves the `v0.1.177+custom.003` attribution
@@ -381,7 +382,7 @@ the same change and provide all of the following evidence:
 Route-call presence or static source-order assertions alone do not prove
 content coverage.
 
-## Upstream v0.2.4 integration
+## Model admission, route aliases and follow-up turns
 
 Group `model_allowlist` admission uses the client model before account/channel
 mapping and does not replace content audit. Root route aliases and Plus batch
@@ -391,6 +392,16 @@ audit before `BeforeTurn` acquires resources; each turn invokes that acquisition
 hook once. Unknown valid frames still reach the audit hook and pass extraction
 without an audit-derived rejection. A real policy rejection prevents upstream
 writes, including for successfully extracted content alongside unknown fields.
+
+The [official CN provider catalog](CN_PROVIDER_MODELS.md) supplies management
+allowlist candidates and the existing DeepSeek/MiniMax native Codex model
+fallback lists. Updating those IDs does not add an ingress path or change the
+allowlist matching rules, extraction, mapping, or side-effect boundaries above.
+The DeepSeek empty-mapping admission list also accepts `deepseek-v4.1-flash`;
+Flash request names are forwarded unchanged without an automatic alias mapping.
+The versioned IDs `deepseek-v4-flash-0731` and `deepseek-v4-pro-0813` also use
+the shared catalog for candidates and empty-mapping admission. These names use
+the same extraction and audit ordering as existing names.
 
 Named function/custom-tool inputs, allowed-tools metadata and terminal `done`
 argument reconstruction do not introduce a separate extractor. If reconstructed

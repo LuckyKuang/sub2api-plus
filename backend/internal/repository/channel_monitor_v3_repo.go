@@ -179,7 +179,7 @@ func (r *channelMonitorV3Repository) Refresh(ctx context.Context, now time.Time,
 			return err
 		}
 	}
-	states, err := readV3States(ctx, tx, nil)
+	states, err := readV3States(ctx, tx)
 	if err != nil {
 		return err
 	}
@@ -244,14 +244,9 @@ type v3StoredState struct {
 	state service.ChannelMonitorV3State
 }
 
-func readV3States(ctx context.Context, db v3Queryer, groups []int64) (map[string]v3StoredState, error) {
+func readV3States(ctx context.Context, db v3Queryer) (map[string]v3StoredState, error) {
 	query := `SELECT platform,group_id,model,data FROM channel_monitor_v3_states`
-	var args []any
-	if groups != nil {
-		query += ` WHERE group_id=ANY($1)`
-		args = append(args, pq.Array(groups))
-	}
-	rows, err := db.QueryContext(ctx, query, args...)
+	rows, err := db.QueryContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -279,17 +274,17 @@ func v3AggregateColumns() string {
 	return `SUM(f.success_requests),SUM(f.failed_requests),MAX(f.last_request_at),ARRAY[` + strings.Join(parts, ",") + `]`
 }
 
-func (r *channelMonitorV3Repository) readFacts(ctx context.Context, db v3Queryer, groups []int64, start, end time.Time, bucket time.Duration, models bool) ([]service.ChannelMonitorV3Fact, error) {
+func (r *channelMonitorV3Repository) readFacts(ctx context.Context, db v3Queryer, start, end time.Time, bucket time.Duration, models bool) ([]service.ChannelMonitorV3Fact, error) {
 	groupExpr := "0::bigint,''::text,''::text"
 	groupBy := "1,2"
 	if models {
 		groupExpr = "f.group_id,COALESCE(g.name,''),f.model"
 		groupBy += ",3,4,5"
 	}
-	query := `SELECT date_bin($4::interval,f.bucket_start,$2::timestamptz),f.platform,` + groupExpr + `,` + v3AggregateColumns() + `
+	query := `SELECT date_bin($3::interval,f.bucket_start,$1::timestamptz),f.platform,` + groupExpr + `,` + v3AggregateColumns() + `
  FROM channel_monitor_v3_facts f JOIN groups g ON g.id=f.group_id AND g.deleted_at IS NULL AND g.status='active'
- WHERE f.group_id=ANY($1) AND f.bucket_start >= $2 AND f.bucket_start < $3 GROUP BY ` + groupBy + ` ORDER BY 1,2,3,5`
-	rows, err := db.QueryContext(ctx, query, pq.Array(groups), start, end, fmt.Sprintf("%d seconds", int64(bucket.Seconds())))
+ WHERE f.bucket_start >= $1 AND f.bucket_start < $2 GROUP BY ` + groupBy + ` ORDER BY 1,2,3,5`
+	rows, err := db.QueryContext(ctx, query, start, end, fmt.Sprintf("%d seconds", int64(bucket.Seconds())))
 	if err != nil {
 		return nil, err
 	}
@@ -307,11 +302,8 @@ func (r *channelMonitorV3Repository) readFacts(ctx context.Context, db v3Queryer
 	return result, rows.Err()
 }
 
-func (r *channelMonitorV3Repository) Read(ctx context.Context, groups []int64, now time.Time, window time.Duration) (*service.ChannelMonitorV3Data, error) {
+func (r *channelMonitorV3Repository) Read(ctx context.Context, now time.Time, window time.Duration) (*service.ChannelMonitorV3Data, error) {
 	data := &service.ChannelMonitorV3Data{States: map[string]service.ChannelMonitorV3State{}, Incidents: []service.ChannelMonitorV3Incident{}}
-	if len(groups) == 0 {
-		return data, nil
-	}
 	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
 	if err != nil {
 		return nil, err
@@ -321,11 +313,11 @@ func (r *channelMonitorV3Repository) Read(ctx context.Context, groups []int64, n
 	// Refresh commits all facts, states, events and the watermark atomically.
 	rows, err := tx.QueryContext(ctx, `SELECT DISTINCT lower(CASE WHEN g.platform='composite' THEN a.platform ELSE g.platform END),g.id,g.name
  FROM groups g LEFT JOIN account_groups ag ON ag.group_id=g.id LEFT JOIN accounts a ON a.id=ag.account_id AND a.deleted_at IS NULL
- WHERE g.id=ANY($1) AND g.deleted_at IS NULL AND g.status='active'
+ WHERE g.deleted_at IS NULL AND g.status='active'
  UNION SELECT DISTINCT f.platform,g.id,g.name FROM channel_monitor_v3_facts f JOIN groups g ON g.id=f.group_id
- WHERE g.id=ANY($1) AND g.deleted_at IS NULL AND g.status='active' AND f.bucket_start >= $2
+ WHERE g.deleted_at IS NULL AND g.status='active' AND f.bucket_start >= $1
  UNION SELECT DISTINCT i.platform,g.id,g.name FROM channel_monitor_v3_incidents i JOIN groups g ON g.id=i.group_id
- WHERE g.id=ANY($1) AND g.deleted_at IS NULL AND g.status='active' AND (i.resolved_at IS NULL OR i.resolved_at >= $2)`, pq.Array(groups), now.Add(-31*24*time.Hour))
+ WHERE g.deleted_at IS NULL AND g.status='active' AND (i.resolved_at IS NULL OR i.resolved_at >= $1)`, now.Add(-31*24*time.Hour))
 	if err != nil {
 		return nil, err
 	}
@@ -349,14 +341,14 @@ func (r *channelMonitorV3Repository) Read(ctx context.Context, groups []int64, n
 		return nil, err
 	}
 	end := now.UTC().Truncate(time.Minute)
-	if data.Current, err = r.readFacts(ctx, tx, groups, end.Add(-5*time.Minute), end, 5*time.Minute, true); err != nil {
+	if data.Current, err = r.readFacts(ctx, tx, end.Add(-5*time.Minute), end, 5*time.Minute, true); err != nil {
 		return nil, err
 	}
-	if data.History, err = r.readFacts(ctx, tx, groups, end.Add(-window), end, window/48, false); err != nil {
+	if data.History, err = r.readFacts(ctx, tx, end.Add(-window), end, window/48, false); err != nil {
 		return nil, err
 	}
 	data.Totals = data.History
-	states, err := readV3States(ctx, tx, groups)
+	states, err := readV3States(ctx, tx)
 	if err != nil {
 		return nil, err
 	}
@@ -379,11 +371,10 @@ func (r *channelMonitorV3Repository) Read(ctx context.Context, groups []int64, n
 	}
 	rows, err = tx.QueryContext(ctx, `WITH visible AS (
  SELECT i.*,g.name AS group_name FROM channel_monitor_v3_incidents i JOIN groups g ON g.id=i.group_id AND g.deleted_at IS NULL AND g.status='active'
- WHERE i.group_id=ANY($1)
  ), selected AS (
  SELECT * FROM visible WHERE resolved_at IS NULL
- UNION ALL (SELECT * FROM visible WHERE resolved_at >= $2 ORDER BY started_at DESC LIMIT 200)
- ) SELECT data,group_name FROM selected ORDER BY resolved_at IS NULL DESC,started_at DESC`, pq.Array(groups), now.Add(-30*24*time.Hour))
+ UNION ALL (SELECT * FROM visible WHERE resolved_at >= $1 ORDER BY started_at DESC LIMIT 200)
+ ) SELECT data,group_name FROM selected ORDER BY resolved_at IS NULL DESC,started_at DESC`, now.Add(-30*24*time.Hour))
 	if err != nil {
 		return nil, err
 	}

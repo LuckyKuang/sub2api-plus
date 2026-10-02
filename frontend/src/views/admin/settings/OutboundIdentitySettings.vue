@@ -78,6 +78,7 @@ const mappings = [
   { key: 'gemini:upstream', label: 'Gemini · Upstream' },
   { key: 'grok:upstream', label: 'Grok · Upstream' },
   { key: 'antigravity:upstream', label: 'Antigravity · Upstream' },
+  { key: 'typesafe:apikey', label: 'TypeSafe / Jev · API Key' },
   ...['kimi', 'zhipu', 'deepseek', 'minimax'].map(platform => ({ key: `${platform}:apikey`, label: `${platform} · API Key` }))
 ]
 const effective = (preset: IdentityPreset) => view.value?.effective.find(item => item.preset === preset)

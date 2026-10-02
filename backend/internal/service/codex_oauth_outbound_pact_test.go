@@ -12,13 +12,13 @@ import (
 )
 
 // PRI-0 golden guard — the Codex platform OAuth outbound MUST NOT change across
-// upstream merges. Contract per docs/CODEX_OAUTH_OUTBOUND_PACT.md, cross-checked
-// against the official Codex source (codex-rs @ ec4d27ae):
+// upstream merges. Contract per docs/protocols/CODEX_CLIENT_PROFILES.md:
 //   - DEFAULT_ORIGINATOR = "codex_cli_rs"; Authorization: Bearer on inference.
+//   - Inference declares the selected User-Agent, Originator and Version.
 //   - WHAM metering answers with User-Agent only — never Originator/Version.
 //
 // If this test fails after a merge, the Codex OAuth outbound identity regressed;
-// fix the merge, or consciously update the golden value AND the pact doc.
+// fix the merge without weakening the identity contract or its golden values.
 func TestPRI0CodexOAuthOutboundContractFrozen(t *testing.T) {
 	settingService := &SettingService{settingRepo: &openAIIdentitySettingRepoStub{values: map[string]string{}}}
 	svc := &OpenAIGatewayService{settingService: settingService}

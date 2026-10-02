@@ -2844,20 +2844,11 @@ func (s *oauthPendingFlowEmailCacheStub) SetVerificationCode(_ context.Context, 
 	return nil
 }
 
-func (s *oauthPendingFlowEmailCacheStub) DeleteVerificationCode(_ context.Context, email string) error {
-	delete(s.verificationCodes, email)
-	return nil
-}
-
 func (s *oauthPendingFlowEmailCacheStub) GetNotifyVerifyCode(context.Context, string) (*service.VerificationCodeData, error) {
 	return nil, nil
 }
 
 func (s *oauthPendingFlowEmailCacheStub) SetNotifyVerifyCode(context.Context, string, *service.VerificationCodeData, time.Duration) error {
-	return nil
-}
-
-func (s *oauthPendingFlowEmailCacheStub) DeleteNotifyVerifyCode(context.Context, string) error {
 	return nil
 }
 
@@ -3620,4 +3611,37 @@ func (oauthPendingFlowTotpEncryptorStub) Encrypt(plaintext string) (string, erro
 
 func (oauthPendingFlowTotpEncryptorStub) Decrypt(ciphertext string) (string, error) {
 	return ciphertext, nil
+}
+
+func (s *oauthPendingFlowEmailCacheStub) ReserveVerificationCodeAttempt(_ context.Context, email, generation string) (int, error) {
+	data := s.verificationCodes[email]
+	if data == nil || data.Generation != generation {
+		return 0, service.ErrVerifyCodeMissing
+	}
+	if data.Attempts >= service.MaxVerificationCodeAttempts {
+		return 0, service.ErrVerifyCodeExhausted
+	}
+	data.Attempts++
+	return data.Attempts, nil
+}
+
+func (s *oauthPendingFlowEmailCacheStub) ConsumeVerificationCode(_ context.Context, email, generation string) (bool, error) {
+	data := s.verificationCodes[email]
+	if data == nil || data.Generation != generation {
+		return false, nil
+	}
+	delete(s.verificationCodes, email)
+	return true, nil
+}
+
+func (s *oauthPendingFlowEmailCacheStub) ReserveNotifyVerifyCodeAttempt(context.Context, string, string) (int, error) {
+	return 0, service.ErrVerifyCodeMissing
+}
+
+func (s *oauthPendingFlowEmailCacheStub) ConsumeNotifyVerifyCode(context.Context, string, string) (bool, error) {
+	return false, nil
+}
+
+func (s *oauthPendingFlowEmailCacheStub) ConsumePasswordResetToken(context.Context, string, string) (bool, error) {
+	return false, nil
 }

@@ -35,6 +35,7 @@ RUN pnpm install --frozen-lockfile
 # Copy only that subtree to keep the build dependency minimal.
 COPY frontend/ ./
 COPY docs/legal/ /app/docs/legal/
+COPY backend/internal/pkg/cnmodels/models.json /app/backend/internal/pkg/cnmodels/models.json
 RUN pnpm run build
 
 # -----------------------------------------------------------------------------

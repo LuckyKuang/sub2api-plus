@@ -108,7 +108,7 @@ func TestInflightReservation_FirstRequestAlwaysAdmitted(t *testing.T) {
 }
 
 func TestInflightReservation_TTLExpiryFreesLeakedReservation(t *testing.T) {
-	_, cache, svc := newInflightTestEnv(t, true, 1)
+	mr, cache, svc := newInflightTestEnv(t, true, 1)
 	ctx := context.Background()
 	user := &service.User{ID: 9}
 	require.NoError(t, cache.SetUserBalance(ctx, user.ID, 1.0))
@@ -118,7 +118,10 @@ func TestInflightReservation_TTLExpiryFreesLeakedReservation(t *testing.T) {
 	_, err = svc.ReserveInflightBalance(ctx, user, nil, nil, 0.8)
 	require.ErrorIs(t, err, service.ErrInsufficientBalance)
 
-	time.Sleep(1100 * time.Millisecond)
+	// Advance Redis TTLs deterministically; wall-clock sleeps can diverge from
+	// expiration timestamps while the validation VM is under load.
+	mr.FastForward(time.Second)
+	require.Equal(t, int64(0), inflightCount(t, cache, user.ID))
 	release, err := svc.ReserveInflightBalance(ctx, user, nil, nil, 0.8)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), inflightCount(t, cache, user.ID))

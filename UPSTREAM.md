@@ -1,44 +1,33 @@
 # Upstream Mapping
 
-This file maps Sub2API Plus releases to their official Sub2API baseline. Release
-procedures are documented in [`docs/RELEASING.md`](docs/RELEASING.md).
+This file is the authoritative mapping of Plus tags to official baselines and
+publication status. Release naming and procedures live in
+[RELEASING.md](docs/RELEASING.md).
 
 ## Integrated Baseline
 
-The current integration tree incorporates the official `v0.2.11` tag at commit
-`96f4c115c9749078f90cbf210a01d39baf3f53b6`, layered onto the Plus history.
-The release mapping below remains the authoritative record of publication
-status; importing an upstream tag does not publish a Plus release or change the
-embedded application version by itself.
-Plus version/tag/image promotion remains a separate step.
+The current tree integrates official `v0.2.13`: tag object
+`7d0c0067f406c380f0a94cfc3879cdae7049b467`, peeled commit
+`3040209f205472038c1ba745a1bedd2edd9053b1`. The merge base is the previously
+integrated official `v0.2.12` commit
+`5106065716e494204fc0e8db16f68f6e9d576be0`. Importing source does not publish a
+Plus release or change its embedded version.
 
-Plus retains credential-owner identity precedence, ingress content audit,
-session and quota accounting, proxy egress metadata annotations, asynchronous
-images, administrator export controls, IP access controls, and
-distribution/toolchain choices. Retired upstream billing probes remain removed.
-Grok cross-client rewriting stays opt-in, and inconclusive OAuth billing does
-not grant media eligibility.
+Preserve intentional Plus behavior during every import. Current contracts live
+in [outbound identity](docs/OUTBOUND_IDENTITY.md),
+[ingress audit](docs/SECURITY_AUDIT_CONTENT_COVERAGE.md),
+[provider/protocol documentation](docs/README.md),
+[pricing](docs/CHANNEL_PRICING.md) and
+[upgrade prerequisites](backend/migrations/README.md#upgrade-prerequisites).
+Completed integration narratives remain in Git history.
 
-The v0.2.10 reset-credit query preserves the Anthropic credential owner's
-identity across token acquisition and terminal transport. Allowlisted
-cyber-policy events retain audit evidence and skip both synchronous and
-deferred Plus automatic bans. Stable Sonnet 5.5 toolsets share the canonical
-two-engine content extractor, including unknown-sibling pass-through.
+## Current Version
 
-See [v0.2.4 integration and upgrade behavior](docs/UPSTREAM_V0_2_4_INTEGRATION.md)
-for the previous overlay's public API changes, migrations, defaults, and
-validation boundaries. See [v0.2.5 integration](docs/UPSTREAM_V0_2_5_INTEGRATION.md)
-for the official tag import on that tree. See
-[v0.2.7 integration](docs/UPSTREAM_V0_2_7_INTEGRATION.md) for the previous
-official tag import. See
-[v0.2.8 integration](docs/UPSTREAM_V0_2_8_INTEGRATION.md) for the previous
-official tag import. See
-[v0.2.9 integration](docs/UPSTREAM_V0_2_9_INTEGRATION.md) for the previous
-official tag import. See
-[v0.2.10 integration](docs/UPSTREAM_V0_2_10_INTEGRATION.md) for the previous
-official tag import. See
-[v0.2.11 integration](docs/UPSTREAM_V0_2_11_INTEGRATION.md) for the latest
-official tag import.
+```text
+Git/GitHub: v0.2.13+custom.001
+Application: 0.2.13+custom.001
+GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.13-custom.001
+```
 
 ## Release Mapping
 
@@ -106,6 +95,7 @@ official tag import.
 | `v0.2.10+custom.001` | `v0.2.10` | `2f3fed2fdb0787141294cec81487a5df30426f7f` | published |
 | `v0.2.11+custom.001` | `v0.2.11` | `96f4c115c9749078f90cbf210a01d39baf3f53b6` | published |
 | `v0.2.11+custom.002` | `v0.2.11` | `96f4c115c9749078f90cbf210a01d39baf3f53b6` | published |
+| `v0.2.13+custom.001` | `v0.2.13` | `3040209f205472038c1ba745a1bedd2edd9053b1` | planned |
 
 `v0.2.4+custom.006` is marked withdrawn because official `v0.2.5` was imported before that snapshot overlay was published. Do not reuse or retag `.006`.
 
@@ -113,60 +103,13 @@ official tag import.
 documented version `0.1.166+custom.006`. Remote Release and OCI artifact status
 still require a maintainer audit. Do not reuse or retag `.007`.
 
-## Current Version
+## Repository Roles
 
-```text
-Git/GitHub: v0.2.11+custom.002
-Application: 0.2.11+custom.002
-GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.11-custom.002
-```
+- `origin`: [Sub2API Plus](https://github.com/LuckyKuang/sub2api-plus), the
+  installation, update, rollback and release source.
+- `upstream`: [official Sub2API](https://github.com/Wei-Shaw/sub2api), the source
+  input for imports.
 
-## Restored Upstream Pricing Branches
-
-The upstream commit that introduced GPT-6 Sol/Luna and Claude Opus 5.5 also
-carried dedicated pricing cards, cache-field presence handling, service-tier
-rules, and model isolation. The Plus tree kept the model IDs and the catalog
-JSON rows but missed those companion branches. This is recorded here so the next
-upstream merge does not drop them again:
-
-- `gpt-6-sol` / `gpt-6-luna` same-model built-in fallback cards in
-  `PricingService` and `BillingService`. Without them an absent catalog entry
-  fell through to the OpenAI default test model.
-- `claude-opus-5-5` built-in card plus `opus-5.5` family isolation in
-  `matchByModelFamily` and `getFallbackPricing`. Without them the `opus-5`
-  substring priced Opus 5.5 as Opus 5 and lost the 5m/1h cache split.
-- `cache_creation_input_token_cost` field presence: an explicit `0` stays `0`;
-  a derived 1.25x rule applies only when the field is absent.
-- GPT-6 Sol/Luna Fast 2x, Flex 0.5x, and the strict `>272000` long-context tier
-  (input/cache 2x, output 1.5x), with channel/group explicit prices still first.
-- Claude Opus 5.5 Fast 2x and 5m/1h cache prices.
-
-See `docs/CHANNEL_PRICING.md` for the operator-facing contract.
-
-## Naming
-
-- Git tags and GitHub Releases: `vX.Y.Z+custom.NNN`
-- Embedded application versions: `X.Y.Z+custom.NNN`
-- OCI tags: `vX.Y.Z-custom.NNN`
-- `NNN` is a three-digit iteration from `001` to `999`.
-
-Increment the iteration on the same official baseline and reset it to `001`
-after importing a newer official release.
-
-## Distribution and Repository Roles
-
-- `origin` is the custom repository:
-  `https://github.com/LuckyKuang/sub2api-plus.git`.
-- `upstream` is the official source:
-  `https://github.com/Wei-Shaw/sub2api.git`.
-- Installation, update, rollback, and release links use the custom repository.
-- The official repository is an input for maintainers, not a distribution
-  source for Sub2API Plus.
-
-Local clones may need to add the `upstream` remote before an upstream sync.
-Preserve intentional Plus changes during merges and update this mapping in the
-same release-preparation change.
-
-Historical `-custom.NNN` Git naming was migrated to the canonical
-`+custom.NNN` form. OCI tags continue to use `-custom.NNN` because OCI tags do
-not support `+`.
+Update this mapping in the same change as an upstream integration. Keep tag,
+embedded version and OCI naming synchronized through the release workflow;
+published tags and artifacts are immutable.

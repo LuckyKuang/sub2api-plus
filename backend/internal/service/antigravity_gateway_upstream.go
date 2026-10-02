@@ -96,10 +96,11 @@ func (s *AntigravityGatewayService) ForwardUpstream(ctx context.Context, c *gin.
 			s.handleUpstreamError(ctx, prefix, account, resp.StatusCode, resp.Header, respBody, originalModel, 0, "", false)
 		}
 
-		// 透传上游错误
+		// 透传上游错误：状态码与错误语义保持不变，仅对回写客户端的错误体做
+		// Antigravity 身份脱敏（项目号/服务账号邮箱/consumer id）。
 		c.Header("Content-Type", resp.Header.Get("Content-Type"))
 		c.Status(resp.StatusCode)
-		_, _ = c.Writer.Write(respBody)
+		_, _ = c.Writer.Write(sanitizeAntigravityErrorBody(respBody))
 
 		return &ForwardResult{
 			Model: originalModel,

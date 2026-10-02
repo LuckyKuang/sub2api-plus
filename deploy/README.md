@@ -9,8 +9,8 @@ derives the OCI image tag by preserving the leading `v` and replacing only
 `+` with `-`.
 
 ```text
-Git/GitHub: v0.2.11+custom.002
-GHCR:       ghcr.io/luckykuang/sub2api-plus:v0.2.11-custom.002
+Git/GitHub: v0.2.13+custom.001
+GHCR:       ghcr.io/luckykuang/sub2api-plus:v0.2.13-custom.001
 ```
 
 Pin the GHCR version tag for reproducible deployments. See
@@ -83,6 +83,7 @@ are not required.
 | `docker-deploy.sh` | **One-click Docker deployment script (recommended)** |
 | `apple-container.sh` | Native Apple `container` lifecycle script |
 | `APPLE_CONTAINER.md` | Apple `container` deployment and operations guide |
+| `DEPLOYMENT_LIFECYCLE.md` | Cross-platform local deployment, recovery, and image-retention contract |
 | `.env.example` | Container environment variables template |
 | `DOCKER.md` | Docker Hub documentation |
 | `install.sh` | One-click binary installation script |
@@ -367,6 +368,9 @@ docker compose down -v
 | `SERVER_TRUSTED_PROXIES` | No | *(empty)* | Comma-separated direct reverse-proxy/container CIDRs trusted for client IP recovery. Never use a public CDN range or `/0`. |
 | `SERVER_IP_ACCESS_EMERGENCY_ALLOWLIST` | No | *(empty)* | Fixed administrator egress CIDRs that can bypass global IP blocks during proxy recovery. |
 | `SECURITY_TRUST_FORWARDED_IP_FOR_API_KEY_ACL` | No | `false` | Legacy raw forwarded-header compatibility. Keep disabled with `SERVER_TRUSTED_PROXIES`; an existing database setting can override the initial environment value. |
+| `RECHARGE_BONUS_TIERS` | No | *(empty = disabled)* | Optional deployment override for the recharge-incentive tiers (JSON array of `min_amount`/`bonus_percent`). Blank keeps the Admin Settings value. |
+| `RECHARGE_BONUS_MODE` | No | `bonus` | Optional deployment override for the tier mode (`bonus` or `discount`). Blank keeps the Admin Settings value. |
+| `RECHARGE_BONUS_NOTICE` | No | *(empty)* | Optional deployment override for the Markdown promotion notice shown on the payment page. Blank keeps the Admin Settings value. |
 | `GATEWAY_OPENAI_PROXY_STREAM_CIRCUIT_DISABLED` | No | `false` | Disables the bounded OpenAI proxy stream/transport-failure circuit only for incident diagnosis. |
 | `GEMINI_OAUTH_CLIENT_ID` | No | *(builtin)* | Google OAuth client ID (Gemini OAuth). Leave empty to use the built-in Gemini CLI client. |
 | `GEMINI_OAUTH_CLIENT_SECRET` | No | *(builtin)* | Google OAuth client secret (Gemini OAuth). Leave empty to use the built-in Gemini CLI client. |
@@ -595,13 +599,13 @@ Replace the immutable tag with another value reported by `list-versions` when
 needed:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- install --version 'v0.2.11+custom.002'
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- install --version 'v0.2.13+custom.001'
 ```
 
 Roll back an existing binary installation to an earlier published version:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- rollback 'v0.2.11+custom.001'
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- rollback 'v0.2.11+custom.002'
 ```
 
 Upgrade to the latest release:
@@ -625,13 +629,13 @@ curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/
 For a downloaded `install.sh`, invoke one operation at a time. For example:
 
 ```bash
-sudo ./install.sh install --version 'v0.2.11+custom.002'
+sudo ./install.sh install --version 'v0.2.13+custom.001'
 ```
 
 Roll back a downloaded-script installation one operation at a time:
 
 ```bash
-sudo ./install.sh rollback 'v0.2.11+custom.001'
+sudo ./install.sh rollback 'v0.2.11+custom.002'
 ```
 
 Or uninstall while preserving `/etc/sub2api`:

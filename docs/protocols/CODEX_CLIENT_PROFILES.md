@@ -255,9 +255,11 @@ controller or observer resolves a fresh scope.
 
 Final header application removes every case variant and duplicate of managed
 identity headers, including foreign SDK declarations, before rendering the
-selected identity. Native Codex OAuth/ChatGPT protocol requests send Originator
-and Version with the selected UA. Native Codex Platform API-key requests omit
-both Originator and Version, including `responses/compact`. Header presence is
+selected identity. Native Codex OAuth/ChatGPT inference requests send Originator
+and Version with the selected UA, including the default `codex_cli_rs`
+Originator. WHAM usage/credits and backend auxiliary requests keep that UA but
+omit Originator and Version, as specified below. Native Codex Platform API-key
+requests omit both Originator and Version, including `responses/compact`. Header presence is
 determined by the endpoint protocol, never by an inbound or generic override
 value. Explicit compatible presets retain their own protocol header mappings.
 When proxying an official Codex client, a reviewed inbound thread originator

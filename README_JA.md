@@ -70,13 +70,13 @@ curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/
 が返す別のタグへ置き換えてください：
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- install --version 'v0.2.11+custom.002'
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- install --version 'v0.2.13+custom.001'
 ```
 
 既存のバイナリインストールを以前の公開済みバージョンへロールバックします：
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- rollback 'v0.2.11+custom.001'
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- rollback 'v0.2.11+custom.002'
 ```
 
 サービスとバイナリを削除し、`/etc/sub2api` は保持します：
@@ -144,7 +144,7 @@ sudo systemctl reload nginx
 [`deploy/config.example.yaml`](deploy/config.example.yaml) を参照してください。
 
 <!-- readme-section:providers -->
-<!-- readme-capabilities:openai,anthropic,gemini,antigravity,grok,async-images,sora-unavailable -->
+<!-- readme-capabilities:openai,anthropic,gemini,antigravity,grok,typesafe,async-images,sora-unavailable -->
 ## プロバイダーと機能
 
 | プロバイダー／機能 | 概要 |
@@ -154,6 +154,7 @@ sudo systemctl reload nginx
 | Google Gemini | Gemini 互換通信と対応 OAuth/API キーアカウント |
 | Antigravity | Claude/Gemini 専用ルートと任意のハイブリッドスケジューリング |
 | Grok / xAI | OAuth サブスクリプションおよび API キーアカウント |
+| TypeSafe / Jev | Jev ネイティブの非ストリーミング System One プロトコル向け API キーアカウント：`POST /v1/systemone`、モデル `jev-latest`、`noul`/`choice`/`score` 質問、組み込み入力 `$0.042`/百万トークン・出力 `$0` 価格；他のゲートウェイプロトコルは `404` |
 | 非同期画像タスク | 長時間の画像生成・編集を送信してポーリング |
 | Sora | 一時的に利用不可。本番環境では依存しないでください |
 
@@ -162,6 +163,7 @@ sudo systemctl reload nginx
 - [Grok / xAI](docs/providers/GROK.md)
 - [Antigravity](docs/providers/ANTIGRAVITY.md)
 - [DeepSeek](docs/providers/DEEPSEEK.md)
+- [TypeSafe / Jev](docs/providers/TYPESAFE.md)
 - [Sora ステータス](docs/providers/SORA.md)
 - [OpenAI Responses と WebSocket 入口](docs/protocols/OPENAI_RESPONSES.md)
 - [非同期画像タスク](docs/ASYNC_IMAGE_TASKS.md)

@@ -119,6 +119,8 @@ func Extract(protocol string, body []byte) (Document, error) {
 		extractEmbeddings(&document, root)
 	case "openai_images", "grok_media", "media", "images":
 		extractMediaPrompts(&document, root)
+	case "typesafe_systemone", "systemone":
+		extractSystemOne(&document, root)
 	default:
 		extractDefault(&document, root)
 	}
@@ -1458,6 +1460,105 @@ func extractMediaPrompts(document *Document, root map[string]any) {
 		}
 	}
 	walk(root, "")
+}
+
+// extractSystemOne collects every client-controlled text of a native TypeSafe
+// System One request: question IDs, every question field except the validated
+// type, unknown top-level extension fields, and the evaluated state. Object keys
+// are part of the JSON the provider evaluates, so they are collected with their
+// values. Keys are visited in sorted order so the canonical document, and the
+// Prompt Audit hash derived from it, stay stable across map iteration. The state
+// is emitted last: Content Moderation keeps that evaluated payload as the final
+// text, while Prompt Audit promotes it to the prioritized segment.
+func extractSystemOne(document *Document, root map[string]any) {
+	if document == nil || root == nil {
+		return
+	}
+	questions, isObject := root["questions"].(map[string]any)
+	if !isObject {
+		appendSystemOneValue(document, root["questions"])
+	}
+	for _, id := range sortedKeys(questions) {
+		appendSystemOneValue(document, id)
+		question, ok := questions[id].(map[string]any)
+		if !ok {
+			appendSystemOneValue(document, questions[id])
+			continue
+		}
+		for _, field := range sortedKeys(question) {
+			switch field {
+			case "type":
+				continue
+			case "instructions", "criteria":
+			default:
+				appendSystemOneValue(document, field)
+			}
+			appendSystemOneValue(document, question[field])
+		}
+	}
+	for _, field := range sortedKeys(root) {
+		switch field {
+		case "model", "stream", "state", "questions":
+			continue
+		}
+		appendSystemOneValue(document, field)
+		appendSystemOneValue(document, root[field])
+	}
+	appendSystemOneState(document, root["state"])
+}
+
+// appendSystemOneValue emits every string leaf of one System One field as its
+// own current direct-user segment. Non-string scalars carry no text and, like
+// upstream, do not mark the document incomplete.
+func appendSystemOneValue(document *Document, value any) {
+	for _, text := range systemOneStringLeaves(nil, value) {
+		markContentBearing(document, text)
+		appendText(document, text, "user", SourceMessage, true, true)
+	}
+}
+
+// appendSystemOneState emits the evaluated state as one segment. Content
+// Moderation joins segments with a newline and normalizes whitespace, so its
+// text is unchanged; Prompt Audit can promote the whole state to its priority
+// segment by moving the final segment first.
+func appendSystemOneState(document *Document, value any) {
+	leaves := systemOneStringLeaves(nil, value)
+	if len(leaves) == 0 {
+		return
+	}
+	text := strings.Join(leaves, "\n")
+	markContentBearing(document, text)
+	appendText(document, text, "user", SourceMessage, true, true)
+}
+
+// systemOneStringLeaves flattens a System One value into string leaves. Object
+// keys are text too because the raw JSON is what the provider evaluates.
+func systemOneStringLeaves(texts []string, value any) []string {
+	switch typed := value.(type) {
+	case string:
+		if text := strings.TrimSpace(typed); text != "" {
+			texts = append(texts, text)
+		}
+	case []any:
+		for _, item := range typed {
+			texts = systemOneStringLeaves(texts, item)
+		}
+	case map[string]any:
+		for _, key := range sortedKeys(typed) {
+			texts = systemOneStringLeaves(texts, key)
+			texts = systemOneStringLeaves(texts, typed[key])
+		}
+	}
+	return texts
+}
+
+func sortedKeys(values map[string]any) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func appendToolDefinitions(document *Document, value any) {

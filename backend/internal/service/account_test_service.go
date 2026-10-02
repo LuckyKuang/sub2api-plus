@@ -422,6 +422,10 @@ func (s *AccountTestService) TestAccountConnection(c *gin.Context, accountID int
 		return s.testOpenCodeGoAccountConnection(c, account, modelID, prompt)
 	}
 
+	if account.IsTypeSafe() {
+		return s.testTypeSafeAccountConnection(c, account, prompt)
+	}
+
 	return s.testClaudeAccountConnection(c, account, modelID)
 }
 
@@ -1243,7 +1247,7 @@ func (s *AccountTestService) testGrokResponsesConnection(c *gin.Context, ctx con
 	if err != nil {
 		return s.sendErrorAndEnd(c, "Failed to create Grok request")
 	}
-	s.applyGrokTestRequestHeaders(req, account, authToken, "application/json, text/event-stream")
+	s.applyGrokTestRequestHeaders(req, account, authToken, grokSamplerAcceptHeader(grokBodyStreamsJSON(payloadBytes)))
 	applyGrokRequestMetadata(req.Header, payloadBytes, "", account.GetCredential("sub"))
 
 	resp, err := s.httpUpstream.Do(prepareAccountOutboundRequest(req, account), s.grokTestProxyURL(account), account.ID, account.Concurrency)

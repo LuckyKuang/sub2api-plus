@@ -16,6 +16,11 @@ Apple `container` 1.1 does not provide restart policies, automatic startup, work
 - `openssl` for generating initial secrets
 - Local Network access for `container-runtime-linux` when macOS prompts during the first published-container startup
 
+Running `up` and `upgrade` uses the published image and needs nothing else.
+Building the application image locally with `container build` additionally needs
+an Apple Builder with at least 8 GiB of memory; the 2 GiB default is killed by
+the frontend production build. See [Disk Lifecycle](#disk-lifecycle).
+
 Install Apple `container` from its [official releases](https://github.com/apple/container/releases), then verify it:
 
 ```bash
@@ -197,6 +202,10 @@ After a host reboot or `container system stop`, run `./apple-container.sh up` ag
 
 ## Disk Lifecycle
 
+For local deployments operated through `skills/deploy-cli`, follow the shared
+[deployment lifecycle](DEPLOYMENT_LIFECYCLE.md), including single-Web-container
+replacement and bounded application-image retention after health checks.
+
 Apple Containers gives each running container a separate lightweight VM root
 filesystem. `container system df` therefore reports an active container size
 even when the files visible inside that container are small. Normal `up`
@@ -227,6 +236,21 @@ the builder can be stopped without deleting its cache:
 ```bash
 container builder stop
 ```
+
+Local image builds also need enough builder memory. The frontend stage runs
+`pnpm run build` with `NODE_OPTIONS=--max-old-space-size=3072`, and the default
+builder allocation (2 CPU / 2 GiB) is killed with `cannot allocate memory`
+(exit 137) while `vite build` runs. Start the builder with at least 8 GiB before
+`container build`:
+
+```bash
+container builder stop
+container builder start --cpus 6 --memory 8G
+```
+
+`container builder status` reports the active allocation. Raising it is not a
+cache change and needs no rebuild: the builder keeps its cached layers, and a
+build that a 2 GiB builder already killed simply resumes.
 
 Delete the builder and its reusable build cache only after confirming it is not
 shared by another project and a subsequent full rebuild is acceptable:
@@ -266,22 +290,22 @@ the release workflow preserves the leading `v` and replaces only `+` with
 `-`. The current mapping is:
 
 ```text
-Git/GitHub:         v0.2.11+custom.002
-Application:        0.2.11+custom.002
-Apple/OCI image:    ghcr.io/luckykuang/sub2api-plus:v0.2.11-custom.002
+Git/GitHub:         v0.2.13+custom.001
+Application:        0.2.13+custom.001
+Apple/OCI image:    ghcr.io/luckykuang/sub2api-plus:v0.2.13-custom.001
 ```
 
 Use the following values when building or publishing this OCI image:
 
 ```bash
 docker build \
-  --build-arg VERSION=0.2.11+custom.002 \
-  --tag ghcr.io/luckykuang/sub2api-plus:v0.2.11-custom.002 \
+  --build-arg VERSION=0.2.13+custom.001 \
+  --tag ghcr.io/luckykuang/sub2api-plus:v0.2.13-custom.001 \
   .
 ```
 
 After that image is available to the Apple `container` runtime, set
-`APPLE_CONTAINER_SUB2API_IMAGE=ghcr.io/luckykuang/sub2api-plus:v0.2.11-custom.002`. Until then, keep
+`APPLE_CONTAINER_SUB2API_IMAGE=ghcr.io/luckykuang/sub2api-plus:v0.2.13-custom.001`. Until then, keep
 the published image as the runtime base and use `APPLE_CONTAINER_SUB2API_BINARY`
 for the custom binary.
 

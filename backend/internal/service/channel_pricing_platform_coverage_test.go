@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/typesafe"
 	"github.com/stretchr/testify/require"
 )
 
@@ -50,6 +51,7 @@ func TestPlatformCoverage_AllPlatformsShapeAndConsistency(t *testing.T) {
 	for _, platform := range []string{
 		PlatformAnthropic, PlatformOpenAI, PlatformGemini, PlatformAntigravity, PlatformGrok,
 		PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax, PlatformOpenCodeGo,
+		PlatformTypeSafe,
 	} {
 		refs, err := svc.List(t.Context(), platform)
 		require.NoErrorf(t, err, "platform=%s", platform)
@@ -382,6 +384,51 @@ func TestPlatformCoverage_OpenCodeGo(t *testing.T) {
 		ref := byModel[model]
 		require.Equalf(t, ChannelPricingStatusPriced, ref.Status, "model=%s", model)
 		require.NotNilf(t, ref.Pricing, "model=%s", model)
+	}
+}
+
+// TypeSafe：Release 目录没有 jev 行，精确型号只走已确认的内置价卡
+// （input $0.042/M、output 显式 0）；未知型号不得借用任何厂商的家族价，
+// 该内置卡也不得反过来给其它平台定价。
+func TestPlatformCoverage_TypeSafe(t *testing.T) {
+	svc := newBundledCatalogReferenceService(t)
+
+	refs, err := svc.List(t.Context(), PlatformTypeSafe)
+	require.NoError(t, err)
+	require.Len(t, refs, 1)
+	byModel := referencesByModel(t, refs)
+	jev, ok := byModel[typesafe.JevLatestModel]
+	require.Truef(t, ok, "typesafe must list %s", typesafe.JevLatestModel)
+
+	require.Equal(t, ChannelPricingStatusPriced, jev.Status)
+	require.Equal(t, ChannelPricingSourceBuiltinFallback, jev.Source)
+	require.Equal(t, typesafe.JevLatestModel, jev.MatchedModel)
+	require.Equal(t, BillingModeToken, jev.Pricing.BillingMode)
+	require.NotNil(t, jev.Pricing.InputPrice)
+	require.InDelta(t, 0.042e-6, *jev.Pricing.InputPrice, 1e-18)
+	// 输出价是显式 0（免费），不是缺字段。
+	require.NotNil(t, jev.Pricing.OutputPrice)
+	require.InDelta(t, 0, *jev.Pricing.OutputPrice, 1e-18)
+	// 未维护的缓存字段保持 null——「没有该字段」不等于「0 元」。
+	require.Nil(t, jev.Pricing.CacheWritePrice)
+	require.Nil(t, jev.Pricing.CacheReadPrice)
+
+	// 手动查价与同步列表必须给出同一张精确型号卡。
+	require.Equal(t, jev, mustResolve(t, svc, PlatformTypeSafe, typesafe.JevLatestModel))
+
+	// 未知型号不得借其它厂商的家族价：目录与内置都落空必须 manual。
+	for _, model := range []string{"gpt-6-sol", "claude-opus-5-5", "grok-4.7", "jev-unknown"} {
+		ref := mustResolve(t, svc, PlatformTypeSafe, model)
+		require.Equalf(t, ChannelPricingStatusManualRequired, ref.Status, "model=%s", model)
+		require.Equalf(t, ReasonExactPriceUnavailable, ref.ReasonCode, "model=%s", model)
+		require.Nilf(t, ref.Pricing, "model=%s must not borrow another provider's family price", model)
+	}
+
+	// 反向：TypeSafe 的内置卡不得给其它平台定价。
+	for _, platform := range []string{PlatformOpenAI, PlatformAnthropic, PlatformGrok} {
+		other := mustResolve(t, svc, platform, typesafe.JevLatestModel)
+		require.Equalf(t, ChannelPricingStatusManualRequired, other.Status, "platform=%s", platform)
+		require.Nilf(t, other.Pricing, "platform=%s", platform)
 	}
 }
 

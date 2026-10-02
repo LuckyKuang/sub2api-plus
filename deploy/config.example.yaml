@@ -171,6 +171,7 @@ security:
       - "api.minimaxi.com"
       - "api.minimax.io"
       - "opencode.ai"
+      - "api.typesafe.ai"
       - "generativelanguage.googleapis.com"
       - "cloudcode-pa.googleapis.com"
       - "*.openai.azure.com"
@@ -474,6 +475,13 @@ gateway:
     # Stats cache for free-tier soft gate. Hot path never waits on DB: misses
     # fail open and refresh in the background. Prefer >= 60s in production.
     free_quota_stats_cache_seconds: 60
+    # Negotiated zstd request compression toward the trusted Grok CLI proxy
+    # (cli-chat-proxy.grok.com/v1). true only permits negotiation: the gateway
+    # still requires the exact target's `/v1/settings` `accept_request_encodings`
+    # to advertise "zstd" before it compresses a request body. false is the
+    # operator kill switch and always sends plain JSON.
+    # Environment binding: GATEWAY_GROK_REQUEST_COMPRESSION_ENABLED.
+    grok_request_compression_enabled: true
   # HTTP upstream connection pool settings (HTTP/2 + multi-proxy scenario defaults)
   # HTTP 上游连接池配置（HTTP/2 + 多代理场景默认值）
   # Max idle connections across all hosts

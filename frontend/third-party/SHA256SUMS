@@ -1,0 +1,25 @@
+8dc73fc3b00203e72d176e85b50938627c7b086e607c682e8d3c22c02bb99fe8  xlsx-0.20.3.tgz
+
+# Vendored third-party archives for the frontend build.
+# The line above is consumable directly: `shasum -a 256 -c SHA256SUMS`
+#
+# SheetJS Community Edition publishes no per-release checksum file on
+# cdn.sheetjs.com (xlsx-0.20.3.tgz.sha256, .sha512 and SHA256SUMS all return
+# 404), so the values below were recorded from the reviewed first download and
+# must be reproduced independently before a change to this file merges.
+#
+# Reproduce and verify:
+#   curl -fL -o xlsx-0.20.3.tgz https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz
+#   shasum -a 256 xlsx-0.20.3.tgz
+#   shasum -a 512 xlsx-0.20.3.tgz
+#   tar -xzOf xlsx-0.20.3.tgz package/package.json
+#
+# name: xlsx-0.20.3.tgz
+# version: 0.20.3
+# license: Apache-2.0
+# dependencies: {}
+# size_bytes: 2409319
+# sha256: 8dc73fc3b00203e72d176e85b50938627c7b086e607c682e8d3c22c02bb99fe8
+# sha512: a0b0eade3c3b01c2ea2961f60210a9553665f267fa5f661178ff8d7a1d12254cd5fc1759623b61f78b46e6da22301d4f3eb62dc4e09f6a850292fb6e1fedc024
+# source_url: https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz
+# fetch_date: 2026-10-02
