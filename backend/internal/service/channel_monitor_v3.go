@@ -106,13 +106,13 @@ func ChannelMonitorV3Window(value string) (time.Duration, bool) {
 	}
 }
 
-func (s *ChannelMonitorV3Service) Snapshot(ctx context.Context, groups []int64, window time.Duration, platform string) (*ChannelMonitorV3Snapshot, error) {
+func (s *ChannelMonitorV3Service) Snapshot(ctx context.Context, window time.Duration, platform string) (*ChannelMonitorV3Snapshot, error) {
 	now := s.now().UTC()
 	cfg, err := s.repo.GetConfig(ctx)
 	if err != nil {
 		return nil, err
 	}
-	data, err := s.repo.Read(ctx, groups, now, window)
+	data, err := s.repo.Read(ctx, now, window)
 	if err != nil {
 		return nil, err
 	}

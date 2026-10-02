@@ -50,6 +50,7 @@ export const useAnnouncementStore = defineStore('announcements', () => {
   }
 
   function enqueueNewPopups() {
+    if (adminSupportContext.value) return
     const newPopups = announcements.value.filter(
       (a) => a.notify_mode === 'popup' && !a.read_at && !shownPopupIds.has(a.id)
     )
@@ -67,7 +68,7 @@ export const useAnnouncementStore = defineStore('announcements', () => {
   }
 
   function showNextPopup() {
-    if (popupQueue.value.length === 0) {
+    if (adminSupportContext.value || popupQueue.value.length === 0) {
       currentPopup.value = null
       return
     }

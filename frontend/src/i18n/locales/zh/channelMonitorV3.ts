@@ -1,6 +1,6 @@
 export default {
   channelMonitorV3: {
-    title: '服务状态', subtitle: '基于本站真实请求，展示你可访问的服务。', observed: '最近观测',
+    title: '服务状态', subtitle: '基于全站所有用户的真实请求，展示全局服务状态与事件。', observed: '最近观测',
     platforms: '平台状态', events: '事件记录', viewEvents: '查看事件', filter: '筛选平台', allPlatforms: '全部平台', range: '历史统计范围',
     ranges: { '24h': '24 小时', '7d': '7 天', '30d': '30 天' },
     activeEvents: '{count} 个事件未结束', counts: '{normal} 个平台正常 · {affected} 个平台异常 · {unknown} 个平台待观测 · {recovering} 个平台恢复观察',
@@ -21,9 +21,9 @@ export default {
       recovering: '近期请求表现改善，仍需持续成功请求确认恢复。', unknown: '暂无足够近期请求或观测数据延迟，无法确认当前状态。', insufficient: '近期请求样本较少，暂未达到状态判断条件。',
     },
     successRate: '所选时段请求成功率', ttft: '首 Token · P50', history: '状态历史', now: '现在', lastRequest: '最后请求',
-    recent30Days: '最近 30 天 · 已恢复事件最多 200 条', autoDetected: '自动检测', emptyPlatforms: '暂无可访问的平台。', emptyEvents: '当前范围暂无服务事件。', emptyModels: '暂无模型请求数据。',
+    recent30Days: '最近 30 天 · 已恢复事件最多 200 条', autoDetected: '自动检测', emptyPlatforms: '暂无服务平台。', emptyEvents: '当前筛选下暂无全站服务事件。', emptyModels: '暂无模型请求数据。',
     modelStatus: '分组与模型状态', model: '模型', group: '分组', recentStatus: '近 5 分钟状态',
-    note: '状态仅反映本站可访问渠道。历史成功率与当前状态使用不同时间范围；灰色表示无数据或样本不足，P50 为近似值。', loadFailed: '暂时无法获取服务状态，请稍后刷新。',
+    note: '状态与事件汇总全站所有用户在有效渠道的请求。历史成功率与当前状态使用不同时间范围；灰色表示无数据或样本不足，P50 为近似值。', loadFailed: '暂时无法获取服务状态，请稍后刷新。',
     eventTitle: { partial: '{platform} 部分请求出现异常', outage: '{platform} 渠道服务中断', degraded: '{platform} 响应时间升高', normal: '{platform} 服务事件', recovering: '{platform} 服务事件', unknown: '{platform} 服务事件', insufficient: '{platform} 服务事件' },
     phase: { detected: '监控到故障', ongoing: '异常持续', recovering: '恢复观察', awaiting_data: '等待新请求', resolved: '已恢复' },
     phaseDescription: {
@@ -31,7 +31,7 @@ export default {
       recovering: '近期请求表现改善，仍在观察后续请求是否持续稳定。', awaiting_data: '暂无足够新请求，无法确认故障是否恢复，事件保持未结束。', resolved: '连续的新请求表现稳定，系统已确认恢复。',
     },
     modeV3: 'V3 服务状态', modeV2: 'V2 被动监控', modeHint: 'V1 主动探测；V2 被动聚合；V3 展示真实请求的服务状态。开启后，登录用户可查看所选模式。',
-    modeV3Hint: '基于真实用户请求自动观测平台状态和服务事件，不发送主动探测请求。', modeV2Hint: '基于真实网关流量聚合健康指标，用户可查看授权分组的监控数据。',
+    modeV3Hint: '基于全站所有用户的真实请求自动观测平台状态和服务事件，不发送主动探测请求。', modeV2Hint: '基于真实网关流量聚合健康指标，用户可查看授权分组的监控数据。',
     settings: {
       title: 'V3 服务状态配置', description: '当前状态使用最近 5 分钟的请求。连续确认必须有新的请求证据；无流量或样本不足不会确认恢复。开启后开始积累历史。',
       minimum_samples: '最少请求样本', warning_error_rate: '异常错误率（0–1，默认 0.05）', outage_error_rate: '中断错误率（0–1，默认 0.9）',
