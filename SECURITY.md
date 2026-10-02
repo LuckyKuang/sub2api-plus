@@ -7,9 +7,10 @@ custom release. Older releases may no longer receive fixes.
 
 ## Reporting a Vulnerability
 
-Use the repository's private GitHub vulnerability-reporting feature when it is
-available. Do not open a public issue containing credentials, production data,
-private endpoints, or exploit details.
+Use [Sub2API Plus private vulnerability reporting](https://github.com/LuckyKuang/sub2api-plus/security/advisories/new)
+when it is available. Do not post sensitive vulnerability details in public
+issues, pull requests or discussions, including credentials, production data,
+private endpoints or exploit details.
 
 If private reporting is unavailable, open a minimal issue requesting a private
 contact channel without including sensitive technical details.
@@ -17,6 +18,11 @@ contact channel without including sensitive technical details.
 Include the affected version, deployment type, impact, reproduction conditions,
 and any relevant logs with secrets removed. Maintainers will assess scope and
 coordinate disclosure based on severity and available fixes.
+
+Reports cover the Plus backend, frontend, distribution artifacts and deployment
+files. Keep technical details private while maintainers investigate and prepare
+a fix; disclosure follows the fix release. Reporters can request anonymous
+credit.
 
 ## Dependency Audit Exceptions
 

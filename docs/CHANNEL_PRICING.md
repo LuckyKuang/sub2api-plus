@@ -389,6 +389,15 @@ and may briefly permit admission using stale balance after a reservation expires
 or releases. Reservations are an admission estimate, not a replacement for
 final usage billing or an absolute overdraft guarantee.
 
+## Accepted usage after API-key deletion
+
+Deleting an API key stops future authenticated requests; it does not cancel
+settlement for usage already accepted. If the key is missing or soft-deleted at
+settlement, skip only its own quota and rate-window counters. User balance or
+subscription charges, account quota, usage persistence and request deduplication
+retain their existing transaction semantics. Retrying the same settlement must
+not charge twice. Other database errors still fail and roll back the transaction.
+
 ## 8. Verifying
 
 Run inside the platform validation container (Apple Containers on macOS, Docker
