@@ -929,7 +929,7 @@ func TestDefaultModelIDsForPlatform_CNProvidersKeepClaudeDefaults(t *testing.T) 
 }
 
 func TestDefaultCodexModelIDsForPlatform_DeepSeekUsesDeepSeekModels(t *testing.T) {
-	require.Equal(t, []string{"deepseek-flash", "deepseek-v4.1-flash", "deepseek-v4-flash-vision-exp", "deepseek-v4-flash", "deepseek-v4-pro"}, defaultCodexModelIDsForPlatform(service.PlatformDeepseek))
+	require.Equal(t, []string{"deepseek-flash", "deepseek-v4.1-flash", "deepseek-v4-flash-vision-exp", "deepseek-v4-flash", "deepseek-v4-flash-0731", "deepseek-v4-pro", "deepseek-v4-pro-0813"}, defaultCodexModelIDsForPlatform(service.PlatformDeepseek))
 	require.Contains(t, defaultCodexModelIDsForPlatform(service.PlatformMiniMax), "MiniMax-M3.1-Flash-Preview")
 	require.Contains(t, defaultCodexModelIDsForPlatform(service.PlatformMiniMax), "MiniMax-M2.7-highspeed")
 	require.NotContains(t, defaultCodexModelIDsForPlatform(service.PlatformMiniMax), "abab6.5-chat")
@@ -978,6 +978,8 @@ func TestGatewayCodexModels_DeepSeekWithoutMappingUsesDeepSeekDefaults(t *testin
 	require.Contains(t, slugs, "deepseek-v4.1-flash")
 	require.Contains(t, slugs, "deepseek-v4-flash-vision-exp")
 	require.Contains(t, slugs, "deepseek-v4-flash")
+	require.Contains(t, slugs, "deepseek-v4-flash-0731")
+	require.Contains(t, slugs, "deepseek-v4-pro-0813")
 	require.NotContains(t, slugs, "claude-sonnet-4-6")
 	require.NotContains(t, slugs, "claude-opus-4-6")
 }

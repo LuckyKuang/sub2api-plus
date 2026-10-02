@@ -14,7 +14,7 @@ import {
 
 describe('useModelWhitelist', () => {
   it.each([
-    ['deepseek', ['deepseek-flash', 'deepseek-v4.1-flash', 'deepseek-v4-flash-vision-exp', 'deepseek-v4-flash', 'deepseek-v4-pro'], ['deepseek-r1']],
+    ['deepseek', ['deepseek-flash', 'deepseek-v4.1-flash', 'deepseek-v4-flash-vision-exp', 'deepseek-v4-flash', 'deepseek-v4-flash-0731', 'deepseek-v4-pro', 'deepseek-v4-pro-0813'], ['deepseek-r1']],
     ['kimi', ['kimi-k3', 'kimi-k2.7-code-highspeed', 'kimi-for-coding-highspeed'], ['moonshot-v1-8k', 'kimi-latest', 'kimi-k2']],
     ['zhipu', ['glm-5.3-flashx', 'glm-5.2', 'glm-4.6v'], ['chatglm_turbo', 'cogvideo']],
     ['minimax', ['MiniMax-M3.1-Flash-Preview', 'MiniMax-M3', 'MiniMax-M2.7-highspeed'], ['abab6.5-chat', 'abab5.5-chat']],

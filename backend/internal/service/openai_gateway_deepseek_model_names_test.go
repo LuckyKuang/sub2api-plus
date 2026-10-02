@@ -15,7 +15,7 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-func TestDeepSeekFlashNamesForwardUnchanged(t *testing.T) {
+func TestDeepSeekModelNamesForwardUnchanged(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	chatReply := `{"id":"chat_1","object":"chat.completion","model":"deepseek-v4.1-flash","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1}}`
 	responsesReply := `{"id":"resp_1","object":"response","status":"completed","model":"deepseek-v4.1-flash","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"ok"}]}],"usage":{"input_tokens":1,"output_tokens":1}}`
@@ -35,7 +35,7 @@ func TestDeepSeekFlashNamesForwardUnchanged(t *testing.T) {
 		{"messages via chat", "/v1/messages", APIProtocolChatCompletions, `{"model":%q,"max_tokens":32,"messages":[{"role":"user","content":"hi"}],"stream":false}`, chatReply, "/v1/chat/completions"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			for _, model := range []string{"deepseek-flash", "deepseek-v4.1-flash", "deepseek-v4-flash-vision-exp", "deepseek-v4-flash"} {
+			for _, model := range []string{"deepseek-flash", "deepseek-v4.1-flash", "deepseek-v4-flash-vision-exp", "deepseek-v4-flash", "deepseek-v4-flash-0731", "deepseek-v4-pro", "deepseek-v4-pro-0813"} {
 				t.Run(model, func(t *testing.T) {
 					account := &Account{
 						ID:       101,

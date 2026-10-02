@@ -8,7 +8,7 @@
 
 | 平台 | 官方来源 | 当前目录与注意事项 |
 | --- | --- | --- |
-| DeepSeek | [模型与价格](https://api-docs.deepseek.com/quick_start/pricing) | 展示 `deepseek-flash`、`deepseek-v4.1-flash`、`deepseek-v4-flash-vision-exp`、`deepseek-v4-flash`、`deepseek-v4-pro`。`deepseek-flash` 当前指向 V4.1 Flash；官方接受两个 V4 Flash 旧名并由上游路由到新版 Flash。上述名称在项目中分别保留，不自动相互映射。开源权重、蒸馏模型和旧 R1/V3 名称不作为官方 API 当前预设。 |
+| DeepSeek | [模型与价格](https://api-docs.deepseek.com/quick_start/pricing) | 展示 `deepseek-flash`、`deepseek-v4.1-flash`、`deepseek-v4-flash-vision-exp`、`deepseek-v4-flash`、`deepseek-v4-flash-0731`、`deepseek-v4-pro`、`deepseek-v4-pro-0813`。`deepseek-flash` 当前指向 V4.1 Flash；官方接受两个 V4 Flash 旧名并由上游路由到新版 Flash。上述名称在项目中分别保留，不自动相互映射。开源权重、蒸馏模型和旧 R1/V3 名称不作为官方 API 当前预设。 |
 | Kimi | [模型列表](https://platform.kimi.ai/docs/models)、[Kimi Code 接入说明](https://www.kimi.com/code/docs/en/benefits.html) | K3、K2.7 Code／highspeed、K2.6；Coding 端点另有 `kimi-for-coding`、`kimi-for-coding-highspeed`，需要对应会员权限。旧 moonshot-v1、K2、K2.5、kimi-latest 已下线，不加入新预设。 |
 | Zhipu | [模型概览](https://docs.bigmodel.cn/cn/guide/start/model-overview)、[价格](https://docs.bigmodel.cn/cn/guide/start/pricing)、[GLM-5.3 Flash／FlashX](https://docs.bigmodel.cn/cn/guide/models/vlm/glm-5.3-flash) | 采用上述文档及对话补全接口仍列出的文本／视觉模型，最新系列为 `glm-5.3`、`glm-5.3-flash`、`glm-5.3-flashx`。仍在官方文档中的历史、免费型号继续提供；旧 chatglm 预设及独立图像生成、音频、视频生成、向量接口模型不加入本目录。 |
 | MiniMax | [模型概览](https://platform.minimaxi.com/docs/guides/models-intro)、[Chat Completions](https://platform.minimaxi.com/docs/api-reference/text-chat-openai)、[M Plan](https://platform.minimaxi.com/docs/m-plan/intro) | 按官方接口枚举维护 9 个模型 ID，保留 `MiniMax-` 大小写及 `highspeed` 后缀。最新 `MiniMax-M3.1-Flash-Preview` 暂时仅通过 M Plan 和 MiniMax Code 提供；M3、M2.7 及官方仍列出的 M2 历史型号继续提供。旧 abab 系列不加入新预设。 |
@@ -21,6 +21,8 @@ DeepSeek 的 `deepseek-v4.1-flash` 按维护者要求加入版本化候选；此
 明确推荐 `deepseek-flash`，未单独列出该版本化 API ID。项目允许并原样发送这个名称，
 是否支持、指向哪个版本由上游决定。`deepseek-flash` 也不在项目中固定为 V4.1，
 不预设它未来的版本绑定。以上规则不新增默认映射；管理员主动配置的映射仍按既有规则执行。
+版本化名称 `deepseek-v4-flash-0731`、`deepseek-v4-pro-0813` 同样独立展示并原样发送。
+DeepSeek 空映射账号的准入名单也读取本目录，保证候选列表与可调度模型一致。
 
 ## 分组模型白名单
 

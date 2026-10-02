@@ -12,10 +12,12 @@ supported request names (case-insensitive):
 - `deepseek-v4.1-flash` (versioned request name; upstream determines support)
 - `deepseek-v4-pro`
 - `deepseek-v4-flash` (compatibility alias; upstream still accepts it)
+- `deepseek-v4-flash-0731` (versioned flash name)
 - `deepseek-v4-flash-vision-exp` (compatibility alias)
 - `deepseek-v4-pro-0813` (versioned pro name)
 
-The [model catalog](../CN_PROVIDER_MODELS.md) displays the Flash names separately.
+The scheduler and model selectors share the [model catalog](../CN_PROVIDER_MODELS.md),
+which displays Flash aliases and versioned Flash/Pro names separately.
 With no explicit administrator mapping, their spelling is sent upstream unchanged;
 the project does not rewrite aliases to `deepseek-flash` or pin that name to V4.1.
 The current pricing page recommends `deepseek-flash` and confirms the two V4 Flash

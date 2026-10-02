@@ -1,6 +1,10 @@
 package service
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/cnmodels"
+)
 
 // resolveOpenAIForwardModel 解析 OpenAI 兼容转发使用的模型。
 // messagesDispatchMappedModel 是调用方已为 /v1/messages 解析的显式调度结果；
@@ -82,26 +86,16 @@ func isOpenAIOAuthServableModel(requestedModel string) bool {
 	return true
 }
 
-// deepseekServableModels 列出 DeepSeek 平台账号在「未配置 model_mapping」时
-// 可服务的模型名（精确匹配，小写比较）。deepseek-flash 与 deepseek-v4-pro
-// 为官方推荐名；deepseek-v4.1-flash 为可选的版本化请求名；
-// deepseek-v4-flash / deepseek-v4-flash-vision-exp 为处于兼容
-// 路由期的旧名（上游仍接受并按 flash 价计费）；deepseek-v4-pro-0813 为与
-// 计费 pro 档口径一致的版本化名。此列表仅决定准入，不改写出站模型名。
-var deepseekServableModels = []string{
-	"deepseek-flash",
-	"deepseek-v4.1-flash",
-	"deepseek-v4-pro",
-	"deepseek-v4-flash",
-	"deepseek-v4-flash-vision-exp",
-	"deepseek-v4-pro-0813",
-}
+// deepseekServableModels 与前端及管理端候选共用目录，包含 Flash／Pro
+// 版本化请求名，避免出现可选却无法调度的模型。只决定准入，不改写出站模型名。
+var deepseekServableModels = cnmodels.DefaultModelIDs(PlatformDeepseek)
 
 // isDeepseekServableModel 报告 DeepSeek 平台账号在「未配置 model_mapping」时
 // 可服务的模型名。deepseek-v4.1-flash 原样透传；官方推荐模型为
 // deepseek-flash 与 deepseek-v4-pro；旧名
 // deepseek-v4-flash / deepseek-v4-flash-vision-exp 处于兼容路由期（上游仍接受并
-// 按 flash 价计费），deepseek-v4-pro-0813 为版本化名。其余一律拒绝：既避免把
+// 按 flash 价计费）；deepseek-v4-flash-0731 与 deepseek-v4-pro-0813 保留
+// 版本化请求名。目录之外一律拒绝：既避免把
 // 未知模型透传给上游（上游 404/400 会触发 per-model 冷却并掩盖真实配置错误），
 // 也避免上游把不认识的模型名静默兜底成 deepseek-flash。
 // Source: https://api-docs.deepseek.com/quick_start/pricing

@@ -399,7 +399,9 @@ fallback lists. Updating those IDs does not add an ingress path or change the
 allowlist matching rules, extraction, mapping, or side-effect boundaries above.
 The DeepSeek empty-mapping admission list also accepts `deepseek-v4.1-flash`;
 Flash request names are forwarded unchanged without an automatic alias mapping.
-This additional name uses the same extraction and audit ordering as existing names.
+The versioned IDs `deepseek-v4-flash-0731` and `deepseek-v4-pro-0813` also use
+the shared catalog for candidates and empty-mapping admission. These names use
+the same extraction and audit ordering as existing names.
 
 Named function/custom-tool inputs, allowed-tools metadata and terminal `done`
 argument reconstruction do not introduce a separate extractor. If reconstructed
