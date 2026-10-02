@@ -29,6 +29,9 @@ ENV NODE_OPTIONS=--max-old-space-size=3072
 # Install pnpm (pinned to v9 to match CI and keep builds reproducible)
 RUN corepack enable && corepack prepare pnpm@9 --activate
 
+# Vendored third-party archives required by the `file:` dependency below.
+# Must be copied before the install layer, otherwise `xlsx` cannot resolve.
+COPY frontend/third-party/ ./third-party/
 # Install dependencies first (better caching)
 COPY frontend/package.json frontend/pnpm-lock.yaml ./
 RUN --mount=type=cache,id=sub2api-pnpm-store,target=/root/.local/share/pnpm/store \

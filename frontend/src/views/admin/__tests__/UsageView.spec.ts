@@ -1,5 +1,5 @@
-import { readFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
+import { readdirSync, readFileSync } from 'node:fs'
+import { dirname, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
@@ -906,32 +906,65 @@ describe('admin UsageView Excel export latency fields', () => {
   })
 })
 
-// xlsx@0.18.5 的两条高危(CVE-2023-30533/GHSA-4r6h-8v6p-xvw6 原型污染、
-// CVE-2024-22363/GHSA-5pgg-2g8v-p4x9 ReDoS,见 SECURITY.md《Dependency Audit Exceptions》)
-// 仅在"解析不可信 xlsx 输入"时触发。
-// UsageView 只把应用自有统计导出为 xlsx;此测试守护"不解析外部输入"这一例外前提,
-// 并固定 package.json 的 ignoreCves 例外清单。改动任一侧都需重新评估该依赖。
+// xlsx@0.20.3 由 frontend/third-party/xlsx-0.20.3.tgz 提供(Apache-2.0,
+// dependencies: {},见 SECURITY.md《Dependency Audit Exceptions》)。
+// 该版本已修复 CVE-2023-30533 / CVE-2024-22363,因此不再需要任何审计例外;
+// 例外现在只能通过 .github/audit-exceptions.yml 登记,并由
+// tools/check_pnpm_audit_exceptions.py 强制执行。
+// 本测试守护三条不变量:仓库源码只用 writer API、package.json 不再 pin 例外、
+// 例外清单里没有 xlsx。改动任一侧都需重新评估该依赖。
 describe('UsageView xlsx audit exception', () => {
-  const viewPath = resolve(
-    dirname(fileURLToPath(import.meta.url)),
-    '../UsageView.vue'
-  )
-  const packageJsonPath = resolve(
-    dirname(fileURLToPath(import.meta.url)),
-    '../../../../package.json'
-  )
+  const here = dirname(fileURLToPath(import.meta.url))
+  // spec lives at <frontend>/src/views/admin/__tests__/
+  const frontendRoot = resolve(here, '../../../..')
+  const srcRoot = resolve(frontendRoot, 'src')
+  const packageJsonPath = resolve(frontendRoot, 'package.json')
+  const auditExceptionsPath = resolve(frontendRoot, '../.github/audit-exceptions.yml')
+  // 守卫文件自身不参与扫描:否则它会命中自己的正则字面量。
+  const guardFile = resolve(here, 'UsageView.spec.ts')
 
-  it('exports spreadsheets without parsing untrusted xlsx input', () => {
-    const source = readFileSync(viewPath, 'utf8')
-    expect(source).not.toMatch(/XLSX\.read(File|FileSync)?\s*\(/)
-    expect(source).not.toMatch(/XLSX\.utils\.sheet_to_(json|csv|html|formulae)/)
+  // 6.1(a) 只允许 writer API。解析入口:模块导出的 read/readFile* 以及
+  // utils.sheet_to_*;动态 import('xlsx') 是导出路径,必须保留,故不在其中。
+  const XLSX_SPECIFIER = /['"]xlsx['"]/
+  const XLSX_PARSE_PATTERNS = [
+    /XLSX\s*\.\s*read[A-Za-z]*\s*\(/,
+    /\breadFile[A-Za-z]*\s*\(/,
+    /\bsheet_to_[A-Za-z0-9_]+\s*\(/,
+  ]
+
+  const collectSourceFiles = (dir: string): string[] =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+      const fullPath = resolve(dir, entry.name)
+      if (entry.isDirectory()) {
+        return entry.name === '__tests__' ? [] : collectSourceFiles(fullPath)
+      }
+      if (!entry.isFile() || !/\.(ts|vue)$/.test(entry.name)) return []
+      return fullPath === guardFile ? [] : [fullPath]
+    })
+
+  it('parses no spreadsheet input anywhere under frontend/src', () => {
+    const offenders: string[] = []
+    for (const file of collectSourceFiles(srcRoot)) {
+      const source = readFileSync(file, 'utf8')
+      if (!XLSX_SPECIFIER.test(source)) continue
+      for (const pattern of XLSX_PARSE_PATTERNS) {
+        if (pattern.test(source)) {
+          offenders.push(`${relative(frontendRoot, file)}: ${pattern.source}`)
+        }
+      }
+    }
+    expect(offenders).toEqual([])
   })
 
-  it('pins the documented xlsx audit exceptions', () => {
+  it('pins no audit exceptions in frontend/package.json', () => {
     const pkg = JSON.parse(readFileSync(packageJsonPath, 'utf8'))
-    expect(pkg.pnpm?.auditConfig?.ignoreCves).toEqual([
-      'CVE-2023-30533',
-      'CVE-2024-22363',
-    ])
+    expect(pkg.pnpm?.auditConfig?.ignoreCves ?? []).toEqual([])
+    expect(pkg.dependencies.xlsx).toBe('file:third-party/xlsx-0.20.3.tgz')
+  })
+
+  it('keeps xlsx out of the audit exception ledger', () => {
+    const ledger = readFileSync(auditExceptionsPath, 'utf8')
+    expect(ledger).toMatch(/^version:\s*1$/m)
+    expect(ledger).not.toMatch(/\bxlsx\b/i)
   })
 })

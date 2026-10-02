@@ -139,11 +139,15 @@ def parse_date(value: str) -> date | None:
         return None
 
 
-def main() -> int:
+def main(today: date | None = None, argv: list[str] | None = None) -> int:
+    # today 可注入，便于用固定日期测试过期分支；默认取当前日期。
+    if today is None:
+        today = date.today()
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--audit", required=True)
     parser.add_argument("--exceptions", required=True)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     with open(args.audit, "r", encoding="utf-8") as handle:
         audit = json.load(handle)
@@ -184,9 +188,9 @@ def main() -> int:
             "expires_on": exc_date,
         }
 
-    today = date.today()
     missing_exceptions = []
     expired_exceptions = []
+    matched_exception_keys = set()
 
     # 去重处理：同一包名 + advisory 可能在不同字段重复出现。
     seen = set()
@@ -208,6 +212,7 @@ def main() -> int:
         if exc is None:
             missing_exceptions.append((name, sev, advisory_id, title))
             continue
+        matched_exception_keys.add(key)
         if exc["severity"] and exc["severity"] != sev:
             errors.append(
                 "Exception severity mismatch: "
@@ -227,6 +232,21 @@ def main() -> int:
             if title:
                 label = f"{label}: {title}"
             errors.append(f"- {label}")
+
+    # 未被任何已报告 advisory 匹配的例外会导致清单腐化：要么 advisory 已修复
+    # （例外应删除），要么标识写错（例外永远不会生效），两种情况都必须失败。
+    unused_exceptions = [
+        exception_index[key] for key in exception_index if key not in matched_exception_keys
+    ]
+    if unused_exceptions:
+        errors.append("Exceptions that match no reported advisory:")
+        for exc in unused_exceptions:
+            raw = exc["raw"]
+            errors.append(
+                f"- {raw.get('package', '<unknown>')} "
+                f"[{raw.get('advisory', '<unknown>')}]: "
+                "no matching high/critical advisory was reported"
+            )
 
     if expired_exceptions:
         errors.append("Exceptions expired:")
