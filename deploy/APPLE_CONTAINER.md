@@ -16,6 +16,11 @@ Apple `container` 1.1 does not provide restart policies, automatic startup, work
 - `openssl` for generating initial secrets
 - Local Network access for `container-runtime-linux` when macOS prompts during the first published-container startup
 
+Running `up` and `upgrade` uses the published image and needs nothing else.
+Building the application image locally with `container build` additionally needs
+an Apple Builder with at least 8 GiB of memory; the 2 GiB default is killed by
+the frontend production build. See [Disk Lifecycle](#disk-lifecycle).
+
 Install Apple `container` from its [official releases](https://github.com/apple/container/releases), then verify it:
 
 ```bash
@@ -227,6 +232,21 @@ the builder can be stopped without deleting its cache:
 ```bash
 container builder stop
 ```
+
+Local image builds also need enough builder memory. The frontend stage runs
+`pnpm run build` with `NODE_OPTIONS=--max-old-space-size=3072`, and the default
+builder allocation (2 CPU / 2 GiB) is killed with `cannot allocate memory`
+(exit 137) while `vite build` runs. Start the builder with at least 8 GiB before
+`container build`:
+
+```bash
+container builder stop
+container builder start --cpus 6 --memory 8G
+```
+
+`container builder status` reports the active allocation. Raising it is not a
+cache change and needs no rebuild: the builder keeps its cached layers, and a
+build that a 2 GiB builder already killed simply resumes.
 
 Delete the builder and its reusable build cache only after confirming it is not
 shared by another project and a subsequent full rebuild is acceptable:
