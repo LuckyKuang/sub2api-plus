@@ -1,7 +1,7 @@
 # Usage timing
 
 The admin and user usage tables and exports use one timing contract: first
-token, total duration, and estimated TPS. Credential type does not select a
+token, total duration, and request-average TPS. Credential type does not select a
 different definition.
 
 ## Fields and display
@@ -17,31 +17,52 @@ different definition.
   response IDs retain separate windows, including interleaved turns.
 - `duration_ms` retains its existing forwarding/turn duration. It is not a new
   measurement of the full client-perceived request, including scheduling.
-- TPS is `(output_tokens - image_output_tokens - audio_output_tokens) * 1000 /
-  (last_token_ms - first_token_ms)`. First-token and last-token times share the
-  same forwarding/turn origin, so thinking wait is excluded from the denominator
-  (it remains visible as first token) and post-token flush is not included. It is
-  an estimate from billed upstream token usage, including any reasoning tokens
-  folded into `output_tokens`; it is a decode-window rate, not a peak renderer
-  rate and not an effective rate that re-averages thinking wait. Version-1 rows
-  with billed text tokens and a positive decode window still display a number for
-  incomplete, non-streaming, and short samples; those cases add a confidence note
-  instead of `—`. A decode window is short when
-  `last_token_ms - first_token_ms < 300` or text tokens are below 8. Missing
-  first/last timestamps, a non-positive window, Live summaries, compaction-only
-  results, invalid counts, and unverified history remain `—`.
+- Average TPS is `(output_tokens - image_output_tokens - audio_output_tokens) *
+  1000 / duration_ms`. It uses raw millisecond precision and includes first-token
+  waiting, pauses and stream cleanup within the existing forwarding/turn duration.
+  It does not measure full client elapsed time or pure model decode speed.
+  Billed output can include hidden reasoning/tool tokens; excluding media does
+  not turn the remainder into a count of visible answer text.
+- First/last-token timestamps and `timing_version` are not prerequisites for an
+  ordinary text request average. Historical records with valid counts/duration
+  are eligible while strict first-token display remains unavailable. Missing,
+  equal or inconsistent token-event timestamps cannot shrink the denominator.
+- Non-streaming and incomplete records with usable counts/duration remain
+  eligible. Incomplete records carry an explicit partial-result note. Very short
+  requests and small output counts are not suppressed by fixed duration/token
+  gates; no rate cap or artificial minimum denominator is applied.
+- Live summaries, compaction-only results, known image/audio-only results and
+  zero non-media output display `-`. A compaction/media first output followed by
+  a verified token-like delta can yield an average from the non-media count.
+  Invalid/non-finite or negative counts, modality totals exceeding output, and
+  non-positive/non-finite durations also display `-`. Absent legacy modality
+  counts default to zero; other invalid data is not repaired.
 
-Compaction-only results remain excluded even when upstream reports billed output
-tokens and a total duration. A response that starts with compaction and later
-produces observable text-like tokens is eligible. Very low positive TPS values
-retain significant digits instead of rounding to zero in the table.
+The main latency cell retains **首字 / 总耗时 / TPS** (First Token / Total / TPS
+in English). The rate hint explains that TPS is a request average. Hovering the
+rate explains its formula and, where applicable, the unavailable
+reason or incomplete-result note. Strict first-token unavailable reasons remain
+independent: a missing historical token clock does not invalidate the average.
+Very low positive values retain significant digits rather than rounding to zero.
 
-Historical first-event values remain stored but are not presented as first
-token or used for TPS. Tooltips/export reasons distinguish unavailable history,
-Live summaries, missing billed text tokens, missing first/last timestamps,
-non-positive decode windows, invalid counts, and low-confidence
-incomplete/non-stream/short samples. Total duration remains available for these
-records.
+User CSV headers are now `Average TPS` and `Average TPS note` instead of `TPS`
+and `Unavailable reason`. Admin Excel uses their localized equivalents. Both
+export the shared unrounded numeric average, an empty unavailable rate, and the
+same reason/partial-result note as the table. Consumers identifying columns by
+header must update their mappings; stored usage and API fields are unchanged.
+
+## Why the denominator is total duration
+
+A long wait followed by burst output can place all observed token events within
+milliseconds. Dividing the entire billed output by `duration_ms - first_token_ms`
+or `last_token_ms - first_token_ms` can yield enormous values. Event arrival
+spacing does not establish the upstream token generation timeline, especially
+with hidden reasoning, buffering and batched events. For example, a synthetic
+request with 500 output tokens over 10000ms and token events at 9990ms/9991ms
+has a request average of 50 tok/s. The other windows produce 50000/500000 tok/s.
+First/last-token fields remain available for diagnosis, but neither window is
+used for the displayed average. Streaming averages generally decrease on upgrade;
+this is a metric-definition change, not evidence that the model became slower.
 
 Gemini frames may contain multiple parts or candidates. The observer preserves
 the first meaningful output kind while scanning all parts for token-like output;
@@ -65,8 +86,8 @@ Native Anthropic-to-Chat/Responses adapters distinguish a real upstream
 `message_stop` from a completion synthesized by converter finalization. Missing
 upstream completion or an upstream error marks usage incomplete, even when the
 existing converter still closes the downstream stream normally. Partial usage,
-observed first-token timing, and estimated TPS remain available, with a
-confidence note on incomplete rows.
+observed first-token timing, and request-average TPS remain available, with an
+incomplete-result note.
 Chat-to-Messages/Responses fallback streams retain their existing requirement
 for a real `[DONE]`. An upstream error followed by `[DONE]` is also marked as
 incomplete usage; the final sentinel does not erase a preceding failure.

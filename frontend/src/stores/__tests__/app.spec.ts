@@ -363,6 +363,38 @@ describe('useAppStore', () => {
       expect(store.cachedPublicSettings?.payment_enabled).toBe(true)
     })
 
+    it.each(['before', 'after'])('invalidates a pre-save response resolving %s the new monitor mode', async (order) => {
+      const old = createDeferred<PublicSettings>()
+      const fresh = createDeferred<PublicSettings>()
+      vi.mocked(getPublicSettings).mockReturnValueOnce(old.promise).mockReturnValueOnce(fresh.promise)
+      const store = useAppStore()
+      const oldRequest = store.fetchPublicSettings()
+      store.clearPublicSettingsCache()
+      expect(window.__APP_CONFIG__).toBeUndefined()
+      const freshRequest = store.fetchPublicSettings(true)
+      expect(getPublicSettings).toHaveBeenCalledTimes(2)
+      const staleSettings = createPublicSettings({ channel_monitor_mode: 'v1' })
+      const savedSettings = createPublicSettings({ channel_monitor_mode: 'v3' })
+      if (order === 'before') {
+        old.resolve(staleSettings)
+        await expect(oldRequest).resolves.toBeNull()
+        expect(store.cachedPublicSettings).toBeNull()
+        const concurrentRefresh = store.fetchPublicSettings(true)
+        expect(getPublicSettings).toHaveBeenCalledTimes(2)
+        fresh.resolve(savedSettings)
+        await expect(concurrentRefresh).resolves.toEqual(savedSettings)
+      }
+      fresh.resolve(savedSettings)
+      await expect(freshRequest).resolves.toEqual(savedSettings)
+      if (order === 'after') {
+        old.resolve(staleSettings)
+        await expect(oldRequest).resolves.toBeNull()
+      }
+      expect(store.cachedPublicSettings?.channel_monitor_mode).toBe('v3')
+      expect(window.__APP_CONFIG__?.channel_monitor_mode).toBe('v3')
+      expect(store.publicSettingsLoaded).toBe(true)
+    })
+
     it('force 在无活动请求时绕过缓存，刷新期间的普通调用等待刷新结果', async () => {
       const initial = createPublicSettings({ site_name: 'Initial Site' })
       vi.mocked(getPublicSettings).mockResolvedValueOnce(initial)

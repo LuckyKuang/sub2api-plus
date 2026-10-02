@@ -9,10 +9,81 @@ import (
 	"testing"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
+	"github.com/LuckyKuang/sub2api-plus/internal/handler"
+	"github.com/LuckyKuang/sub2api-plus/internal/server/middleware"
 	"github.com/LuckyKuang/sub2api-plus/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
+
+func TestChannelMonitorV3ModeGuard(t *testing.T) {
+	for _, tc := range []struct {
+		enabled bool
+		mode    string
+		status  int
+	}{
+		{true, "v3", 200}, {false, "v3", 403}, {true, "v2", 403}, {true, "v1", 403}, {true, "invalid", 403},
+	} {
+		gin.SetMode(gin.TestMode)
+		r := gin.New()
+		r.Use(channelMonitorModeV3Guard(newChannelMonitorModeSettings(tc.enabled, tc.mode)))
+		r.GET("/test", func(c *gin.Context) { c.Status(200) })
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/test", nil))
+		require.Equal(t, tc.status, rec.Code)
+	}
+}
+func TestChannelMonitorV2UserRoutesPreserveAuthenticatedVisibility(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, tc := range []struct {
+		name    string
+		enabled bool
+		mode    string
+		status  int
+		code    string
+	}{
+		{"enabled V2 reaches user handler", true, service.ChannelMonitorModeV2, http.StatusBadRequest, "invalid group_id"},
+		{"disabled V2 remains blocked", false, service.ChannelMonitorModeV2, http.StatusForbidden, "CHANNEL_MONITOR_DISABLED"},
+		{"V1 does not expose V2", true, service.ChannelMonitorModeV1, http.StatusForbidden, "CHANNEL_MONITOR_MODE_MISMATCH"},
+		{"V3 does not expose V2", true, service.ChannelMonitorModeV3, http.StatusForbidden, "CHANNEL_MONITOR_MODE_MISMATCH"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			router := gin.New()
+			settings := newChannelMonitorModeSettings(tc.enabled, tc.mode)
+			handlers := &handler.Handlers{ChannelMonitorV2: handler.NewChannelMonitorV2Handler(nil, nil)}
+			auth := middleware.JWTAuthMiddleware(func(c *gin.Context) {
+				if c.GetHeader("Authorization") == "" {
+					c.AbortWithStatus(http.StatusUnauthorized)
+					return
+				}
+				c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{UserID: 42})
+				c.Set(string(middleware.ContextKeyUserRole), service.RoleUser)
+				c.Next()
+			})
+			audit := middleware.AuditLogMiddleware(func(c *gin.Context) { c.Next() })
+			RegisterUserRoutes(router.Group("/api/v1"), handlers, auth, audit, settings, nil)
+			for _, endpoint := range []string{"dimensions", "snapshot", "models", "matrix", "errors", "users"} {
+				// Invalid input stops before data dependencies; HTTP 400 proves that
+				// the real registered route passed the feature and access guards.
+				path := "/api/v1/channel-monitor-v2/" + endpoint + "?group_id=invalid"
+				for _, authenticated := range []bool{false, true} {
+					rec := httptest.NewRecorder()
+					req := httptest.NewRequest(http.MethodGet, path, nil)
+					if authenticated {
+						req.Header.Set("Authorization", "Bearer user-token")
+					}
+					router.ServeHTTP(rec, req)
+					if authenticated {
+						require.Equal(t, tc.status, rec.Code, endpoint)
+						require.Contains(t, rec.Body.String(), tc.code, endpoint)
+					} else {
+						require.Equal(t, http.StatusUnauthorized, rec.Code, endpoint)
+					}
+				}
+			}
+		})
+	}
+}
 
 // channelMonitorRouteSettingRepoStub is a minimal SettingRepository for route guards.
 type channelMonitorRouteSettingRepoStub struct {

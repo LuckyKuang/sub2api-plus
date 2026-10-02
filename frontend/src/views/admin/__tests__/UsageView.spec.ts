@@ -798,7 +798,7 @@ describe('admin UsageView Excel export latency fields', () => {
           timing_version: 1,
           request_type: 'stream',
           stream: true,
-          is_complete: true,
+          is_complete: false,
           first_token_ms: 120,
           last_token_ms: 1120,
           first_output_ms: 100,
@@ -872,8 +872,8 @@ describe('admin UsageView Excel export latency fields', () => {
     const firstOutputIndex = headers.indexOf('usage.latencyFirstOutput')
     const firstOutputKindIndex = headers.indexOf('usage.latencyFirstOutputKind')
     const durationIndex = headers.indexOf('usage.duration')
-    const tpsIndex = headers.indexOf('usage.latencyTps')
-    const unavailableReasonIndex = headers.indexOf('usage.timingUnavailableReason')
+    const tpsIndex = headers.indexOf('usage.averageTps')
+    const unavailableReasonIndex = headers.indexOf('usage.averageTpsNote')
     const sessionIDIndex = headers.indexOf('Session ID')
 
     expect(headers.slice(requestedModelIndex, requestedModelIndex + 4)).toEqual([
@@ -895,8 +895,8 @@ describe('admin UsageView Excel export latency fields', () => {
     expect(tpsIndex).toBe(durationIndex + 1)
     expect(unavailableReasonIndex).toBe(tpsIndex + 1)
     expect(rows).toHaveLength(2)
-    expect(rows[0].slice(firstTokenIndex, unavailableReasonIndex + 1)).toEqual([120, 100, 'text', 345, 88.88888888888889, ''])
-    expect(rows[1].slice(firstTokenIndex, unavailableReasonIndex + 1)).toEqual(['', 220, 'image', 500, 0, ''])
+    expect(rows[0].slice(firstTokenIndex, unavailableReasonIndex + 1)).toEqual([120, 100, 'text', 345, 57.971014492753625, 'usage.averageTpsIncomplete'])
+    expect(rows[1].slice(firstTokenIndex, unavailableReasonIndex + 1)).toEqual(['', 220, 'image', 500, '', 'usage.timingUnavailableNoTextTokens'])
     expect(sessionIDIndex).toBeGreaterThan(-1)
     expect(rows[0][sessionIDIndex]).toBe('=audit-session-001')
     expect(rows[1][sessionIDIndex]).toBe('')

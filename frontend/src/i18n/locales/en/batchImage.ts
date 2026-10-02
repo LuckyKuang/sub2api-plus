@@ -70,6 +70,8 @@ export default {
       copied: 'Prompt copied',
     },
     detail: {
+      customId: 'Custom ID',
+      prompt: 'Prompt',
       title: 'Job details',
       aggregatedResult: 'Combined results',
       result: 'Results',
@@ -104,6 +106,7 @@ export default {
       notice: 'This is a compressed thumbnail cached locally in your browser, so quality is reduced. Download the ZIP to view the original image.',
     },
     create: {
+      apiKey: 'API key',
       title: 'Create batch job',
       taskName: 'Task name',
       taskNamePlaceholder: 'Defaults to the current time if left empty',

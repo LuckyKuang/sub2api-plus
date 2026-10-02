@@ -154,5 +154,9 @@ func RegisterUserRoutes(
 			monitorV2.GET("/errors", h.ChannelMonitorV2.Errors)
 			monitorV2.GET("/users", h.ChannelMonitorV2.Users)
 		}
+
+		monitorV3 := authenticated.Group("/channel-monitor-v3")
+		monitorV3.Use(panelRateLimiter.Heavy(), channelMonitorModeV3Guard(settingService))
+		monitorV3.GET("/snapshot", h.ChannelMonitorV3.Snapshot)
 	}
 }

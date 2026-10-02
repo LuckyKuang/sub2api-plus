@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useAppStore } from '@/stores/app'
-import { FeatureFlags, isFeatureFlagEnabled, makeSidebarFlag, resolveFeatureFlag } from '@/utils/featureFlags'
+import { FeatureFlags, isFeatureFlagEnabled, makeSidebarFlag, resolveFeatureFlag, getChannelMonitorMode } from '@/utils/featureFlags'
 import type { PublicSettings } from '@/types'
 
 vi.mock('@/api/admin/system', () => ({
@@ -62,4 +62,13 @@ describe('resolveFeatureFlag', () => {
     useAppStore().cachedPublicSettings = { subscription_enabled: false } as PublicSettings
     expect(isFeatureFlagEnabled(FeatureFlags.subscription)).toBe(false)
   })
+})
+
+describe('channel monitor modes', () => {
+  beforeEach(() => setActivePinia(createPinia()))
+  it.each(['v1', 'v2', 'v3'])('preserves configured %s', (mode) => {
+    useAppStore().cachedPublicSettings = { channel_monitor_mode: mode } as PublicSettings
+    expect(getChannelMonitorMode()).toBe(mode)
+  })
+  it('defaults to v1 when settings are absent', () => expect(getChannelMonitorMode()).toBe('v1'))
 })

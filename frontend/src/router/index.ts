@@ -14,7 +14,10 @@ import { useAsyncImageAccess } from '@/composables/useAsyncImageAccess'
 import { getSetupStatus } from '@/api/setup'
 import { resolveCompletedSetupRedirectPath } from './setupRedirect'
 import { resolveRouteDocumentTitle } from './title'
-import { parseAdminSupportTargetId, selfPathForSupportResource, type AdminSupportResource } from '@/utils/adminSupport'
+import { adminSupportContext, setAdminSupportContext } from '@/utils/adminSupportContext'
+import { useAdminSupportViewStore } from '@/stores/adminSupportView'
+import { useSubscriptionStore } from '@/stores/subscriptions'
+import { parseAdminSupportTargetId, selfPathForSupportResource, type AdminSupportResource, selfPaths, supportPathForPersonalPath } from '@/utils/adminSupport'
 
 /**
  * Route definitions with lazy loading
@@ -417,114 +420,12 @@ const routes: RouteRecordRaw[] = [
     path: '/admin',
     redirect: '/admin/dashboard'
   },
-  {
-    path: '/admin/support/users/:user_id/overview',
-    name: 'AdminSupportOverview',
+  ...Object.keys(selfPaths).map((resource): RouteRecordRaw => ({
+    path: `/admin/support/users/:user_id/${resource}${resource === 'custom' ? '/:id' : ''}`,
+    name: `AdminSupport-${resource}`,
     component: () => import('@/views/admin/support/AdminSupportView.vue'),
-    meta: {
-      requiresAuth: true,
-      requiresAdmin: true,
-      adminSupportResource: 'overview',
-      title: 'User Support Overview',
-      titleKey: 'admin.support.overview'
-    }
-  },
-  {
-    path: '/admin/support/users/:user_id/api-keys',
-    name: 'AdminSupportAPIKeys',
-    component: () => import('@/views/admin/support/AdminSupportView.vue'),
-    meta: {
-      requiresAuth: true,
-      requiresAdmin: true,
-      adminSupportResource: 'api-keys',
-      title: 'User API Keys',
-      titleKey: 'admin.support.apiKeysTitle'
-    }
-  },
-  {
-    path: '/admin/support/users/:user_id/async-images',
-    name: 'AdminSupportAsyncImages',
-    component: () => import('@/views/admin/support/AdminSupportView.vue'),
-    meta: {
-      requiresAuth: true,
-      requiresAdmin: true,
-      adminSupportResource: 'async-images',
-      title: 'User Async Images',
-      titleKey: 'admin.support.asyncImagesTitle'
-    }
-  },
-  {
-    path: '/admin/support/users/:user_id/usage',
-    name: 'AdminSupportUsage',
-    component: () => import('@/views/admin/support/AdminSupportView.vue'),
-    meta: {
-      requiresAuth: true,
-      requiresAdmin: true,
-      adminSupportResource: 'usage',
-      title: 'User Usage',
-      titleKey: 'admin.support.usageTitle'
-    }
-  },
-  {
-    path: '/admin/support/users/:user_id/channels',
-    name: 'AdminSupportChannels',
-    component: () => import('@/views/admin/support/AdminSupportView.vue'),
-    meta: {
-      requiresAuth: true,
-      requiresAdmin: true,
-      adminSupportResource: 'channels',
-      title: 'User Available Channels',
-      titleKey: 'admin.support.channelsTitle'
-    }
-  },
-  {
-    path: '/admin/support/users/:user_id/channel-status',
-    name: 'AdminSupportChannelStatus',
-    component: () => import('@/views/admin/support/AdminSupportView.vue'),
-    meta: {
-      requiresAuth: true,
-      requiresAdmin: true,
-      adminSupportResource: 'channel-status',
-      title: 'Channel Status',
-      titleKey: 'admin.support.channelStatusTitle'
-    }
-  },
-  {
-    path: '/admin/support/users/:user_id/subscriptions',
-    name: 'AdminSupportSubscriptions',
-    component: () => import('@/views/admin/support/AdminSupportView.vue'),
-    meta: {
-      requiresAuth: true,
-      requiresAdmin: true,
-      adminSupportResource: 'subscriptions',
-      title: 'User Subscriptions',
-      titleKey: 'admin.support.subscriptionsTitle'
-    }
-  },
-  {
-    path: '/admin/support/users/:user_id/orders',
-    name: 'AdminSupportOrders',
-    component: () => import('@/views/admin/support/AdminSupportView.vue'),
-    meta: {
-      requiresAuth: true,
-      requiresAdmin: true,
-      adminSupportResource: 'orders',
-      title: 'User Orders',
-      titleKey: 'admin.support.ordersTitle'
-    }
-  },
-  {
-    path: '/admin/support/users/:user_id/profile',
-    name: 'AdminSupportProfile',
-    component: () => import('@/views/admin/support/AdminSupportView.vue'),
-    meta: {
-      requiresAuth: true,
-      requiresAdmin: true,
-      adminSupportResource: 'profile',
-      title: 'User Profile',
-      titleKey: 'admin.support.profileTitle'
-    }
-  },
+    meta: { requiresAuth: true, requiresAdmin: true, adminSupportResource: resource as AdminSupportResource }
+  })),
   {
     path: '/admin/dashboard',
     name: 'AdminDashboard',
@@ -865,6 +766,14 @@ const routes: RouteRecordRaw[] = [
 /**
  * Create router instance
  */
+for (const route of routes) {
+  const resource = route.meta?.adminSupportResource as AdminSupportResource | undefined
+  if (resource) {
+    const original = routes.find(item => item.path === selfPaths[resource])
+    route.meta = { ...original?.meta, ...route.meta }
+  }
+}
+
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes,
@@ -925,6 +834,12 @@ router.beforeEach(async (to, _from, next) => {
   if (!authInitialized) {
     authStore.checkAuth()
     authInitialized = true
+  }
+
+  const currentSupport = adminSupportContext.value
+  if (currentSupport && authStore.isAdmin && !to.meta.adminSupportResource) {
+    const destination = supportPathForPersonalPath(currentSupport.userId, to.path)
+    if (destination) { next({ path: destination, query: to.query, hash: to.hash }); return }
   }
 
   // Set page title
@@ -1042,6 +957,17 @@ router.beforeEach(async (to, _from, next) => {
     return
   }
 
+  const context = requiresAdmin && authStore.isAdmin && supportResource && supportTarget !== null
+    ? { userId: supportTarget, actorId: authStore.user!.id } : null
+  if (context?.userId !== adminSupportContext.value?.userId || context?.actorId !== adminSupportContext.value?.actorId) {
+    setAdminSupportContext(context)
+    useSubscriptionStore().clear()
+    useAdminSupportViewStore().clearTarget()
+  }
+  if (context && useAdminSupportViewStore().target?.id !== context.userId) {
+    try { await useAdminSupportViewStore().loadTarget(context.userId) } catch { /* The shared view renders the read error and retry. */ }
+  }
+
   if (requiresAdmin && authStore.isAdmin) {
     const adminComplianceStore = useAdminComplianceStore()
     if (!adminComplianceStore.initialized) {
@@ -1056,7 +982,7 @@ router.beforeEach(async (to, _from, next) => {
     }
   }
 
-  if (to.meta.requiresAsyncImageAccess && !authStore.isAdmin) {
+  if (to.meta.requiresAsyncImageAccess && (supportResource || !authStore.isAdmin)) {
     const { canUseAsyncImage, refreshAsyncImageAccess } = useAsyncImageAccess()
     await refreshAsyncImageAccess()
     if (!canUseAsyncImage.value) {
@@ -1065,6 +991,16 @@ router.beforeEach(async (to, _from, next) => {
     }
   }
 
+
+  if (to.path === '/monitor' || supportResource === 'channel-status') {
+    // The mode may have changed in another tab since the cached settings loaded.
+    try { await appStore.fetchPublicSettings(true) } catch { /* Backend guards remain authoritative. */ }
+    const settings = appStore.cachedPublicSettings
+    if (!settings?.channel_monitor_enabled) {
+      next(authStore.isAdmin ? '/admin/dashboard' : '/dashboard')
+      return
+    }
+  }
 
   // 公共设置可能尚未加载（App.vue 的 onMounted 异步拉取晚于首次导航，且纯静态部署
   // 无 __APP_CONFIG__ 注入）。此时 cachedPublicSettings 为空会把 payment/risk_control

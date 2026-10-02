@@ -1,5 +1,7 @@
 # Security Audit Content Coverage
 
+Administrator [read-only user assistance](USER_SUPPORT_VIEW.md) exposes explicitly registered panel GET reads, including existing image history, downloads and model catalogs. Model catalogs reuse the existing discovery handlers and trusted outbound identity contract. It does not expose inference, image submission, provider probes or other gateway write paths. The real administrator remains the management-audit actor, while the separately validated target scopes reads. No inference extraction, moderation ordering or outbound identity behavior changes in this flow.
+
 This document is the normative content-extraction matrix for Content
 Moderation and Prompt Audit. The shared implementation is
 `backend/internal/auditcontent`; protocol handlers and account paths must not
@@ -9,6 +11,14 @@ Usage timing observers are separate from this ingress extraction contract.
 Classifying upstream `compaction`/`compaction_summary` output for timing does not
 add an ingress extraction rule, policy decision, or audit bypass. Encrypted
 compact output is not treated as a text-token delta; see [usage timing](USAGE_TIMING.md).
+
+The authenticated [available-channel catalog](AVAILABLE_CHANNELS.md) is a
+configuration read. Its local price calculations do not accept inference
+content, select accounts, acquire inference concurrency, reserve balances or
+contact providers. Catalog search and price details stay in the browser. This
+view adds no inference endpoint, extraction input or alternative audit path;
+actual model requests still enter both audit engines through the existing
+HTTP/WS handlers before their side effects.
 
 ## Boundary And Ordering
 

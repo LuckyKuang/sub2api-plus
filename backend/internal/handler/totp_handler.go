@@ -30,7 +30,7 @@ type TotpStatusResponse struct {
 // GetStatus returns the TOTP status for the current user
 // GET /api/v1/user/totp/status
 func (h *TotpHandler) GetStatus(c *gin.Context) {
-	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	subject, ok := middleware2.GetReadSubjectFromContext(c)
 	if !ok {
 		response.Unauthorized(c, "User not authenticated")
 		return
@@ -159,7 +159,7 @@ func (h *TotpHandler) Disable(c *gin.Context) {
 // GetVerificationMethod returns the verification method for TOTP operations
 // GET /api/v1/user/totp/verification-method
 func (h *TotpHandler) GetVerificationMethod(c *gin.Context) {
-	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	subject, ok := middleware2.GetReadSubjectFromContext(c)
 	if !ok {
 		response.Unauthorized(c, "User not authenticated")
 		return

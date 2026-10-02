@@ -69,13 +69,8 @@ func RegisterGatewayRoutes(
 	codexModelsHandler := func(c *gin.Context) {
 		dispatchCodexModelsGateway(c, h.OpenAIGateway.CodexModels, h.Gateway.CodexModels)
 	}
-	modelsHandler := func(c *gin.Context) {
-		if c.Query("client_version") != "" {
-			codexModelsHandler(c)
-			return
-		}
-		h.Gateway.Models(c)
-	}
+	modelsHandler := func(c *gin.Context) { dispatchModelsGateway(c, h) }
+
 	isOpenAIOnlyEndpointGatewayPlatform := func(c *gin.Context) bool {
 		return getGroupPlatform(c) == service.PlatformOpenAI
 	}
@@ -527,6 +522,16 @@ func RegisterGatewayRoutes(
 		antigravityV1Beta.POST("/models/*modelAction", h.Gateway.GeminiV1BetaModels)
 	}
 
+}
+
+// dispatchModelsGateway is shared by gateway discovery and authenticated
+// support reads, preserving the original platform-specific model response.
+func dispatchModelsGateway(c *gin.Context, h *handler.Handlers) {
+	if c.Query("client_version") != "" {
+		dispatchCodexModelsGateway(c, h.OpenAIGateway.CodexModels, h.Gateway.CodexModels)
+		return
+	}
+	h.Gateway.Models(c)
 }
 
 func dispatchCodexModelsGateway(c *gin.Context, openAIHandler, generatedHandler gin.HandlerFunc) {

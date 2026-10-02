@@ -28,6 +28,7 @@ below for detailed configuration and maintenance instructions.
 - [Edge and ingress security](../deploy/EDGE_SECURITY.md)
 - [datamanagementd](../deploy/DATAMANAGEMENTD_CN.md)
 - [Client disconnect risk control](CLIENT_DISCONNECT_RISK_CONTROL.md)
+- [Channel Monitor V3 service status](CHANNEL_MONITOR_V3.md)
 
 ## Development and Maintenance
 
@@ -40,6 +41,7 @@ below for detailed configuration and maintenance instructions.
 - [Database migrations](../backend/migrations/README.md)
 - [Authentication and Passkeys](AUTHENTICATION.md)
 - [Model Plaza visibility](MODEL_PLAZA.md)
+- [Available-channel model catalog](AVAILABLE_CHANNELS.md)
 
 ## Additional References
 

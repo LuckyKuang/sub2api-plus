@@ -7,7 +7,7 @@
     :show-close-button="!submitting"
     @close="close"
   >
-    <form id="bulk-edit-keys-form" class="space-y-5" @submit.prevent="submit">
+    <form v-support-readonly id="bulk-edit-keys-form" class="space-y-5" @submit.prevent="submit">
       <div class="space-y-1 text-sm">
         <p class="font-medium text-gray-900 dark:text-white">
           {{ t('keys.bulkEdit.selectedCount', { count: pendingKeys.length }) }}
@@ -135,7 +135,7 @@
       <button type="button" class="btn btn-secondary" :disabled="submitting" @click="close">
         {{ t('common.cancel') }}
       </button>
-      <button
+      <button v-support-readonly
         type="submit"
         form="bulk-edit-keys-form"
         class="btn btn-primary"
@@ -149,6 +149,7 @@
 </template>
 
 <script setup lang="ts">
+import { supportReadonly as vSupportReadonly } from '@/directives/supportReadonly'
 import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { keysAPI } from '@/api'

@@ -100,7 +100,7 @@
                   :placeholder="t('profile.authBindings.emailPlaceholder')"
                   :disabled="isSendingEmailCode || isBindingEmail"
                 />
-                <button
+                <button v-support-readonly
                   data-testid="profile-binding-email-send-code"
                   type="button"
                   class="btn btn-secondary btn-sm"
@@ -131,7 +131,7 @@
                   :placeholder="emailPasswordPlaceholder"
                   :disabled="isBindingEmail"
                 />
-                <button
+                <button v-support-readonly
                   data-testid="profile-binding-email-submit"
                   type="button"
                   class="btn btn-primary btn-sm sm:col-span-2"
@@ -162,7 +162,7 @@
                   : t('profile.authBindings.manageEmailAction')
               }}
             </button>
-            <button
+            <button v-support-readonly
               v-if="item.canBind"
               :data-testid="`profile-binding-${item.provider}-action`"
               type="button"
@@ -171,7 +171,7 @@
             >
               {{ t('profile.authBindings.bindAction', { providerName: item.label }) }}
             </button>
-            <button
+            <button v-support-readonly
               v-if="item.canUnbind"
               :data-testid="`profile-binding-${item.provider}-unbind`"
               type="button"
@@ -193,6 +193,7 @@
 </template>
 
 <script setup lang="ts">
+import { supportReadonly as vSupportReadonly } from '@/directives/supportReadonly'
 import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
@@ -208,7 +209,8 @@ import {
   unbindAuthIdentity,
 } from '@/api/user'
 import Icon from '@/components/icons/Icon.vue'
-import { useAppStore, useAuthStore } from '@/stores'
+import { useAppStore } from '@/stores'
+import { useUserView as useAuthStore } from '@/composables/useUserView'
 import type { User, UserAuthBindingStatus, UserAuthProvider } from '@/types'
 
 type BindableProvider = Exclude<UserAuthProvider, 'email'>

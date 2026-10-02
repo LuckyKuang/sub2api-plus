@@ -151,14 +151,13 @@ describe('AsyncImageView task management', () => {
 
     const apiKeyFilter = wrapper.get('[data-testid="async-image-api-key-filter"]')
     const statusFilter = wrapper.get('[data-testid="async-image-status-filter"]')
-    const apiKeyTrigger = apiKeyFilter.get('.select-trigger')
-    const statusTrigger = statusFilter.get('.select-trigger')
+    const apiKeyTrigger = apiKeyFilter.get('select')
+    const statusTrigger = statusFilter.get('select')
 
-    expect(apiKeyTrigger.element.tagName).toBe('BUTTON')
-    expect(statusTrigger.element.tagName).toBe('BUTTON')
+    expect(apiKeyTrigger.element.tagName).toBe('SELECT')
+    expect(statusTrigger.element.tagName).toBe('SELECT')
     expect(apiKeyTrigger.classes()).toEqual(statusTrigger.classes())
-    expect(apiKeyTrigger.find('.select-value').classes()).toContain('select-value')
-    expect(statusTrigger.find('.select-icon').exists()).toBe(true)
+    expect(apiKeyTrigger.find('[role="listbox"]').exists()).toBe(false)
     expect(apiKeyTrigger.attributes('aria-label')).toBe('asyncImage.filters.apiKey')
     expect(statusTrigger.attributes('aria-label')).toBe('asyncImage.filters.allStatuses')
   })
@@ -178,7 +177,7 @@ describe('AsyncImageView task management', () => {
     await flushPromises()
 
     expect(listAsyncImageTasks).toHaveBeenCalledWith('sk-exhausted-key', expect.objectContaining({ offset: 0 }))
-    expect(wrapper.get('[data-testid="async-image-api-key-filter"] .select-trigger').text()).toContain('Exhausted image key')
+    expect(wrapper.get('[data-testid="async-image-api-key-filter"] select').text()).toContain('Exhausted image key')
 
     findButtonByText('asyncImage.actions.create')?.click()
     await flushPromises()
@@ -200,7 +199,7 @@ describe('AsyncImageView task management', () => {
     await flushPromises()
 
     expect(listAsyncImageTasks).toHaveBeenCalledWith('sk-reassigned-key', expect.objectContaining({ offset: 0 }))
-    expect(wrapper.get('[data-testid="async-image-api-key-filter"] .select-trigger').text()).toContain('Reassigned key')
+    expect(wrapper.get('[data-testid="async-image-api-key-filter"] select').text()).toContain('Reassigned key')
 
     findButtonByText('asyncImage.actions.create')?.click()
     await flushPromises()
@@ -282,7 +281,7 @@ describe('AsyncImageView task management', () => {
     expect(showError).toHaveBeenCalledWith('asyncImage.errors.deleteNotAllowed')
     expect(wrapper.find('[data-testid="delete-task-imgtask_failed"]').exists()).toBe(true)
     expect(listAsyncImageTasks).toHaveBeenCalledTimes(1)
-    expect(wrapper.get('[data-testid="async-image-status-filter"] .select-trigger').text()).toContain('asyncImage.filters.allStatuses')
+    expect(wrapper.get('[data-testid="async-image-status-filter"] select').text()).toContain('asyncImage.filters.allStatuses')
   })
 
   it('falls back to the preceding page when deletion empties a later page', async () => {
@@ -343,11 +342,10 @@ describe('AsyncImageView task management', () => {
     findButtonByText('common.delete')?.click()
     await flushPromises()
 
-    await wrapper.get('[data-testid="async-image-api-key-filter"] .select-trigger').trigger('click')
-    const otherKeyOption = Array.from(document.body.querySelectorAll<HTMLElement>('[role="option"]'))
-      .find(option => option.textContent?.includes('Secondary image key'))
+    const filter = wrapper.get('[data-testid="async-image-api-key-filter"] select')
+    const otherKeyOption = filter.findAll('option').find(option => option.text().includes('Secondary image key'))
     expect(otherKeyOption).toBeDefined()
-    otherKeyOption?.click()
+    await filter.setValue(otherKeyOption!.attributes('value'))
     await flushPromises()
 
     expect(listAsyncImageTasks).toHaveBeenLastCalledWith('sk-other-key', expect.objectContaining({ offset: 0 }))

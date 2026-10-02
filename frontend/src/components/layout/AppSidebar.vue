@@ -124,8 +124,11 @@
       </template>
 
       <!-- Regular User View -->
-      <template v-else-if="!appStore.backendModeEnabled">
+      <template v-else-if="!appStore.backendModeEnabled || isAdminSupportMode">
         <div class="sidebar-section">
+          <div v-if="isAdminSupportMode" class="mb-2" :class="sidebarCollapsed ? 'px-1' : 'px-2'">
+            <AdminSupportUserSelector :collapsed="sidebarCollapsed" />
+          </div>
           <router-link
             v-for="item in userNavItems"
             :key="item.path"
@@ -194,11 +197,14 @@ import AdminSupportUserSelector from '@/components/layout/AdminSupportUserSelect
 import Icon from '@/components/icons/Icon.vue'
 import { sanitizeSvg } from '@/utils/sanitize'
 import { sanitizeUrl } from '@/utils/url'
-import { FeatureFlags, makeSidebarFlag } from '@/utils/featureFlags'
+import { FeatureFlags, makeSidebarFlag, getChannelMonitorMode } from '@/utils/featureFlags'
 import { resolveSiteBillingMode } from '@/utils/siteBillingMode'
 import { useBatchImageAccess } from '@/composables/useBatchImageAccess'
 import { useAsyncImageAccess } from '@/composables/useAsyncImageAccess'
-import { adminSupportPath, parseAdminSupportTargetId } from '@/utils/adminSupport'
+import { parseAdminSupportTargetId } from '@/utils/adminSupport'
+
+import { adminSupportContext } from '@/utils/adminSupportContext'
+import { supportPathForPersonalPath } from '@/utils/adminSupport'
 
 interface NavItem {
   path: string
@@ -251,7 +257,7 @@ const { canUseAsyncImage, refreshAsyncImageAccess } = useAsyncImageAccess()
 
 const sidebarCollapsed = computed(() => appStore.sidebarCollapsed)
 const mobileOpen = computed(() => appStore.mobileOpen)
-const isAdmin = computed(() => authStore.isAdmin)
+const isAdmin = computed(() => authStore.isAdmin && !adminSupportContext.value)
 const sidebarNavRef = ref<HTMLElement | null>(null)
 const isDark = ref(document.documentElement.classList.contains('dark'))
 
@@ -732,7 +738,7 @@ function buildSelfNavItems(withDashboard: boolean): NavItem[] {
     { path: '/batch-image', label: t('nav.batchImage'), icon: BatchImageIcon, hideInSimpleMode: true, featureFlag: flagBatchImageAccess },
     { path: '/usage', label: t('nav.usage'), icon: ChartIcon, hideInSimpleMode: true },
     { path: '/available-channels', label: t('nav.availableChannels'), icon: ChannelIcon, hideInSimpleMode: true, featureFlag: flagAvailableChannels },
-    { path: '/monitor', label: t('nav.channelStatus'), icon: SignalIcon, featureFlag: flagChannelMonitor },
+    { path: '/monitor', label: t(getChannelMonitorMode() === 'v3' ? 'channelMonitorV3.title' : 'nav.channelStatus'), icon: SignalIcon, featureFlag: flagChannelMonitor },
     { path: '/subscriptions', label: t('nav.mySubscriptions'), icon: CreditCardIcon, hideInSimpleMode: true, featureFlag: flagSubscription },
     { path: '/purchase', label: purchaseNavLabel.value, icon: RechargeSubscriptionIcon, hideInSimpleMode: true, featureFlag: flagPayment },
     { path: '/orders', label: t('nav.myOrders'), icon: OrderListIcon, hideInSimpleMode: true, featureFlag: flagPayment },
@@ -756,7 +762,11 @@ function finalizeNav(items: NavItem[]): NavItem[] {
 }
 
 // User navigation items (for regular users)
-const userNavItems = computed((): NavItem[] => finalizeNav(buildSelfNavItems(true)))
+const userNavItems = computed((): NavItem[] => {
+  const items = finalizeNav(buildSelfNavItems(true))
+  const id = adminSupportContext.value?.userId
+  return id ? items.map(item => ({ ...item, path: supportPathForPersonalPath(id, item.path) || item.path })) : items
+})
 
 const supportTargetId = computed(() => {
   return parseAdminSupportTargetId(route.params.user_id)
@@ -766,29 +776,7 @@ const isAdminSupportMode = computed(() => {
   return supportTargetId.value !== null && supportTargetId.value !== authStore.user?.id
 })
 
-function buildSupportNavItems(userId: number): NavItem[] {
-  return [
-    { path: adminSupportPath(userId, 'overview'), label: t('admin.support.overview'), icon: DashboardIcon },
-    { path: adminSupportPath(userId, 'api-keys'), label: t('nav.apiKeys'), icon: KeyIcon },
-    { path: adminSupportPath(userId, 'async-images'), label: t('nav.asyncImage'), icon: BatchImageIcon },
-    { path: adminSupportPath(userId, 'usage'), label: t('nav.usage'), icon: ChartIcon },
-    { path: adminSupportPath(userId, 'channels'), label: t('nav.availableChannels'), icon: ChannelIcon },
-    { path: adminSupportPath(userId, 'channel-status'), label: t('nav.channelStatus'), icon: SignalIcon },
-    { path: adminSupportPath(userId, 'subscriptions'), label: t('nav.mySubscriptions'), icon: CreditCardIcon },
-    { path: adminSupportPath(userId, 'orders'), label: t('nav.myOrders'), icon: OrderListIcon },
-    { path: adminSupportPath(userId, 'profile'), label: t('nav.profile'), icon: UserIcon }
-  ]
-}
-
-// The authenticated administrator keeps the original personal navigation and
-// every existing operation. A different route target gets dedicated read-only
-// support links instead.
-const personalNavItems = computed((): NavItem[] => {
-  if (isAdminSupportMode.value && supportTargetId.value !== null) {
-    return buildSupportNavItems(supportTargetId.value)
-  }
-  return finalizeNav(buildSelfNavItems(false))
-})
+const personalNavItems = computed((): NavItem[] => finalizeNav(buildSelfNavItems(false)))
 
 // Custom menu items filtered by visibility
 const customMenuItemsForUser = computed(() => {

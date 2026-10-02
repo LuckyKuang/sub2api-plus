@@ -195,7 +195,7 @@ func (h *PasskeyHandler) FinishRegistration(c *gin.Context) {
 }
 
 func (h *PasskeyHandler) List(c *gin.Context) {
-	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	subject, ok := middleware2.GetReadSubjectFromContext(c)
 	if !ok {
 		response.Unauthorized(c, "User not authenticated")
 		return

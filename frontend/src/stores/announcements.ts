@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { announcementsAPI } from '@/api'
+import { adminSupportContext, supportRequestGeneration } from '@/utils/adminSupportContext'
 import type { UserAnnouncement } from '@/types'
 
 const THROTTLE_MS = 20 * 60 * 1000 // 20 minutes
@@ -23,6 +24,7 @@ export const useAnnouncementStore = defineStore('announcements', () => {
 
   // Actions
   async function fetchAnnouncements(force = false) {
+    const scope = supportRequestGeneration()
     const now = Date.now()
     if (!force && lastFetchTime.value > 0 && now - lastFetchTime.value < THROTTLE_MS) {
       return
@@ -34,14 +36,16 @@ export const useAnnouncementStore = defineStore('announcements', () => {
     try {
       loading.value = true
       const all = await announcementsAPI.list(false)
+      if (scope !== supportRequestGeneration()) return
       announcements.value = all.slice(0, 20)
       enqueueNewPopups()
     } catch (err: any) {
+      if (scope !== supportRequestGeneration()) return
       // Revert throttle timestamp on failure so retry is allowed
       lastFetchTime.value = 0
       console.error('Failed to fetch announcements:', err)
     } finally {
-      loading.value = false
+      if (scope === supportRequestGeneration()) loading.value = false
     }
   }
 
@@ -77,15 +81,17 @@ export const useAnnouncementStore = defineStore('announcements', () => {
     currentPopup.value = null
 
     // Mark as read (fire-and-forget, UI already updated)
-    markAsRead(id)
+    if (!adminSupportContext.value) void markAsRead(id)
 
     // Show next popup after a short delay
     if (popupQueue.value.length > 0) {
-      setTimeout(() => showNextPopup(), 300)
+      const scope = supportRequestGeneration()
+      setTimeout(() => { if (scope === supportRequestGeneration()) showNextPopup() }, 300)
     }
   }
 
   async function markAsRead(id: number) {
+    if (adminSupportContext.value) return
     try {
       await announcementsAPI.markRead(id)
       const ann = announcements.value.find((a) => a.id === id)
@@ -98,6 +104,7 @@ export const useAnnouncementStore = defineStore('announcements', () => {
   }
 
   async function markAllAsRead() {
+    if (adminSupportContext.value) return
     const unread = announcements.value.filter((a) => !a.read_at)
     if (unread.length === 0) return
 
@@ -125,6 +132,11 @@ export const useAnnouncementStore = defineStore('announcements', () => {
     currentPopup.value = null
     loading.value = false
   }
+
+  watch(adminSupportContext, (context) => {
+    reset()
+    if (context) void fetchAnnouncements(true)
+  }, { flush: 'sync' })
 
   return {
     // State

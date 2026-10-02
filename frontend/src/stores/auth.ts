@@ -6,6 +6,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, readonly, watch } from 'vue'
 import { authAPI, isTotp2FARequired, passkeyAPI, type LoginResponse } from '@/api'
+import { setAdminSupportContext } from '@/utils/adminSupportContext'
 import { useAppStore } from '@/stores/app'
 import type {
   User,
@@ -367,6 +368,7 @@ export const useAuthStore = defineStore('auth', () => {
     stopAutoRefresh()
     stopTokenRefresh()
     token.value = null
+    setAdminSupportContext(null)
     user.value = null
 
     token.value = newToken
@@ -478,6 +480,7 @@ export const useAuthStore = defineStore('auth', () => {
     token.value = null
     refreshTokenValue.value = null
     tokenExpiresAt.value = null
+    setAdminSupportContext(null)
     user.value = null
     localStorage.removeItem(AUTH_TOKEN_KEY)
     localStorage.removeItem(AUTH_USER_KEY)

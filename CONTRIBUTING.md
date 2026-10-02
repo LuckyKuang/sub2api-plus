@@ -25,6 +25,25 @@ pnpm --dir frontend install --frozen-lockfile
 
 ## Development Checks
 
+Plain selection dropdowns use native HTML `select` controls and shared styles in
+`frontend/src/style.css`. Reuse `frontend/src/components/common/Select.vue` for
+typed values, disabled options, and option groups. Its default `searchable: 'auto'`
+preserves local search when there are more than five options; explicit
+`searchable: false` keeps a plain dropdown native. Searchable, clearable, and
+custom `selected`/`option` slot controls use the existing popover in
+`SearchableSelect.vue`, preserving integrated selected content and rich options.
+Keep existing search-result popovers and their styling for user, account, model,
+and proxy selectors. Search remains inside the dropdown; do not expose a
+separate search input above or alongside a second selection field.
+Checkbox/multi-selection and other composite controls retain their existing
+dropdown layouts and interactions. Keep checkboxes inside the dropdown and
+allow repeated selection without reopening it. Keep combined auto-refresh
+enable/interval actions in their original menu. Do not replace composite
+controls with plain native selects or split them into separate visible fields.
+Native controls own keyboard navigation and focus for plain dropdowns.
+Keep horizontal padding and arrow placement in the shared styles; individual
+pages may adjust control width and height.
+
 All validation, including focused checks while iterating, must run in the
 platform validation container: Apple Containers on macOS, Docker inside WSL2
 Debian or Ubuntu on Windows, and Docker on Linux. Do not run tests, lint,
@@ -173,6 +192,9 @@ numeric prefix and create a forward-only migration.
 ## Documentation and Localization
 
 - Update English and Chinese frontend locales together.
+- Run `pnpm --dir frontend run check:i18n` in the validation container for locale
+  schemas, static keys, dynamic API enum labels, message compilation, and matching
+  interpolation parameters. The frontend build runs this check automatically.
 - Keep the three README core section IDs aligned.
 - Put detailed operational content in `docs/` or `deploy/`.
 - Add user-visible changes to the release notes.

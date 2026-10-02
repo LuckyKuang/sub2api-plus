@@ -50,7 +50,7 @@
                 <div class="flex items-center gap-2">
                   <button
                     v-if="unreadCount > 0"
-                    @click="markAllAsRead"
+                    v-support-readonly @click="markAllAsRead"
                     :disabled="loading"
                     class="rounded-lg bg-blue-600 px-4 py-2 text-xs font-medium text-white shadow-lg shadow-blue-500/30 transition-all hover:bg-blue-700 hover:shadow-xl disabled:opacity-50 dark:bg-blue-500 dark:hover:bg-blue-600"
                   >
@@ -312,6 +312,7 @@
 </template>
 
 <script setup lang="ts">
+import { supportReadonly as vSupportReadonly } from '@/directives/supportReadonly'
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'

@@ -41,7 +41,7 @@ func RegisterAdminRoutes(
 		registerUserManagementRoutes(admin, h)
 
 		// 用户支持视图（仅注册 GET 路由）
-		registerAdminSupportRoutes(admin, h)
+		registerAdminSupportRoutes(admin, h, settingService)
 
 		// 分组管理
 		registerGroupRoutes(admin, h)
@@ -124,6 +124,10 @@ func RegisterAdminRoutes(
 		// 渠道监控
 		registerChannelMonitorRoutes(admin, h, settingService)
 		registerChannelMonitorV2Routes(admin, h, settingService)
+		monitorV3 := admin.Group("/channel-monitor-v3")
+		monitorV3.Use(channelMonitorAdminFeatureGuard(settingService))
+		monitorV3.GET("/config", h.ChannelMonitorV3.GetConfig)
+		monitorV3.PUT("/config", h.ChannelMonitorV3.UpdateConfig)
 
 		// 风控中心
 		registerContentModerationRoutes(admin, h)
@@ -136,25 +140,6 @@ func RegisterAdminRoutes(
 
 		// 操作审计日志
 		registerAuditLogRoutes(admin, h, stepUpAuth)
-	}
-}
-
-func registerAdminSupportRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
-	support := admin.Group("/support/users/:user_id")
-	support.Use(h.Admin.User.RequireSupportTarget)
-	{
-		support.GET("", h.Admin.User.GetSupportProfile)
-		support.GET("/profile", h.Admin.User.GetSupportProfile)
-		support.GET("/api-keys", h.Admin.User.GetSupportAPIKeys)
-		support.GET("/usage", h.Usage.AdminSupportStats)
-		support.GET("/async-images", h.AsyncImage.AdminSupportList)
-		support.GET("/async-images/:task_id", h.AsyncImage.AdminSupportGet)
-		support.GET("/channels", h.AvailableChannel.AdminSupportList)
-		support.GET("/channel-status", h.ChannelMonitor.List)
-		support.GET("/channel-status/:id", h.ChannelMonitor.GetStatus)
-		support.GET("/subscriptions", h.Subscription.AdminSupportList)
-		support.GET("/orders", h.Payment.AdminSupportListOrders)
-		support.GET("/orders/:order_id", h.Payment.AdminSupportGetOrder)
 	}
 }
 
@@ -946,6 +931,28 @@ func channelMonitorModeV2Guard(settingService *service.SettingService) gin.Handl
 			return
 		}
 		if !rt.PassiveAggregationAllowed() {
+			response.ErrorFrom(c, service.ErrChannelMonitorModeMismatch)
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+
+func channelMonitorModeV3Guard(settings *service.SettingService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if settings == nil {
+			response.ErrorFrom(c, service.ErrChannelMonitorDisabled)
+			c.Abort()
+			return
+		}
+		rt := settings.GetChannelMonitorRuntime(c.Request.Context())
+		if !rt.Enabled {
+			response.ErrorFrom(c, service.ErrChannelMonitorDisabled)
+			c.Abort()
+			return
+		}
+		if rt.Mode != service.ChannelMonitorModeV3 {
 			response.ErrorFrom(c, service.ErrChannelMonitorModeMismatch)
 			c.Abort()
 			return

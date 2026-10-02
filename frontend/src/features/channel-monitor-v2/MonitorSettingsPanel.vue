@@ -299,7 +299,9 @@ const systemModeLabel = computed(() => {
   if (!appStore.cachedPublicSettings?.channel_monitor_enabled) {
     return t('channelMonitorV2.settings.modeClosed')
   }
-  return getChannelMonitorMode() === 'v1'
+  const mode = getChannelMonitorMode()
+  if (mode === 'v3') return t('channelMonitorV3.modeV3')
+  return mode === 'v1'
     ? t('channelMonitorV2.settings.modeV1')
     : t('channelMonitorV2.settings.modeV2')
 })

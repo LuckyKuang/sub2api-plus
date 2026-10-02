@@ -14,6 +14,7 @@ import {
 } from './adminUIRequest'
 import { refreshAuthTokens } from './tokenRefresh'
 import { getAPIBaseURL } from './url'
+import { adminSupportContext, supportReadURL, supportReadOnlyError, supportRequestGeneration, rememberSupportImageKeys } from '@/utils/adminSupportContext'
 export { buildApiUrl, buildGatewayUrl } from './url'
 
 // ==================== Axios Instance Configuration ====================
@@ -53,6 +54,26 @@ const getUserTimezone = (): string => {
 
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
+    const context = adminSupportContext.value
+    if (context) {
+      const url = String(config.url || '')
+      // This POST is a batch query; support exposes it as a GET read.
+      if (config.method === 'post' && url === '/usage/dashboard/api-keys-usage') {
+        const ids = typeof config.data === 'string' ? JSON.parse(config.data).api_key_ids : config.data?.api_key_ids
+        const query = new URLSearchParams()
+        for (const id of ids || []) query.append('api_key_ids', String(id))
+        config.url = `${url}?${query.toString()}`
+        config.method = 'get'
+        config.data = undefined
+      }
+      if (config.method !== 'get' && config.url !== '/auth/logout') throw supportReadOnlyError()
+      const scoped = supportReadURL(String(config.url || ''), context.userId)
+      if (scoped) config.url = scoped
+      else if (!/^(\/admin\/|\/auth\/(?:me|logout)$|\/settings\/public$|\/pages\/|\/model-plaza(?:\/|$))/.test(String(config.url || ''))) throw supportReadOnlyError()
+    }
+    const scopedConfig = config as InternalAxiosRequestConfig & { supportGeneration?: number }
+    scopedConfig.supportGeneration ??= supportRequestGeneration()
+
     // Attach token from localStorage
     const token = localStorage.getItem('auth_token')
     if (token && config.headers) {
@@ -93,6 +114,10 @@ apiClient.interceptors.request.use(
 
 apiClient.interceptors.response.use(
   (response: AxiosResponse) => {
+    const requestGeneration = (response.config as InternalAxiosRequestConfig & { supportGeneration?: number }).supportGeneration
+    if (requestGeneration !== undefined && requestGeneration !== supportRequestGeneration() && (String(response.config.url).includes('/admin/support/users/') || supportReadURL(String(response.config.url), 1) !== null)) {
+      return Promise.reject(new axios.CanceledError('Support target changed'))
+    }
     // Unwrap standard API response format { code, message, data }
     const apiResponse = response.data as ApiResponse<unknown>
     if (apiResponse && typeof apiResponse === 'object' && 'code' in apiResponse) {
@@ -111,9 +136,20 @@ apiClient.interceptors.response.use(
         })
       }
     }
+    if (/^\/admin\/support\/users\/\d+\/keys(?:\/\d+)?(?:\?|$)/.test(String(response.config.url))) {
+      const payload = response.data as { items?: Array<{ id: number; key: string }>; id?: number; key?: string }
+      if (payload.items) rememberSupportImageKeys(payload.items)
+      else if (payload.id && payload.key) rememberSupportImageKeys([{ id: payload.id, key: payload.key }])
+    }
     return response
   },
   async (error: AxiosError<ApiResponse<unknown>>) => {
+    const scopedConfig = error.config as (InternalAxiosRequestConfig & { supportGeneration?: number }) | undefined
+    if (scopedConfig?.supportGeneration !== undefined && scopedConfig.supportGeneration !== supportRequestGeneration() && (String(scopedConfig.url).includes('/admin/support/users/') || supportReadURL(String(scopedConfig.url), 1) !== null)) {
+      return Promise.reject(new axios.CanceledError('Support target changed'))
+    }
+    if (error.code === 'ADMIN_SUPPORT_READ_ONLY') return Promise.reject(error)
+
     // Request cancellation: keep the original axios cancellation error so callers can ignore it.
     // Otherwise we'd misclassify it as a generic "network error".
     if (error.code === 'ERR_CANCELED' || axios.isCancel(error)) {

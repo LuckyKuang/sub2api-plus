@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/server/middleware"
 	"github.com/LuckyKuang/sub2api-plus/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -35,9 +36,14 @@ func setupAdminRouter() (*gin.Engine, *stubAdminService) {
 	router.GET("/api/v1/admin/users/:id/usage", userHandler.GetUserUsage)
 	support := router.Group("/api/v1/admin/support/users/:user_id")
 	support.Use(userHandler.RequireSupportTarget)
-	support.GET("", userHandler.GetSupportProfile)
-	support.GET("/profile", userHandler.GetSupportProfile)
-	support.GET("/api-keys", userHandler.GetSupportAPIKeys)
+	support.GET("", func(c *gin.Context) {
+		value, ok := c.Get(middleware.SupportReadTargetKey)
+		if !ok {
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+		c.JSON(http.StatusOK, value)
+	})
 
 	router.GET("/api/v1/admin/groups", groupHandler.List)
 	router.GET("/api/v1/admin/groups/all", groupHandler.GetAll)
@@ -77,25 +83,16 @@ func setupAdminRouter() (*gin.Engine, *stubAdminService) {
 	return router, adminSvc
 }
 
-func TestUserSupportEndpointsAreCredentialFreeAndGetOnly(t *testing.T) {
+func TestUserSupportTargetHasIndependentReadIdentity(t *testing.T) {
 	router, _ := setupAdminRouter()
-
-	profile := httptest.NewRecorder()
-	router.ServeHTTP(profile, httptest.NewRequest(http.MethodGet, "/api/v1/admin/support/users/1", nil))
-	require.Equal(t, http.StatusOK, profile.Code)
-	require.Equal(t, "no-store", profile.Header().Get("Cache-Control"))
-	require.Contains(t, profile.Body.String(), "user@example.com")
-	require.NotContains(t, profile.Body.String(), "notes")
-
-	keys := httptest.NewRecorder()
-	router.ServeHTTP(keys, httptest.NewRequest(http.MethodGet, "/api/v1/admin/support/users/1/api-keys", nil))
-	require.Equal(t, http.StatusOK, keys.Code)
-	require.Contains(t, keys.Body.String(), `"name":"test"`)
-	require.NotContains(t, keys.Body.String(), `"key"`)
-	require.NotContains(t, keys.Body.String(), "sk-test")
-
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/admin/support/users/1", nil))
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "no-store", rec.Header().Get("Cache-Control"))
+	require.Contains(t, rec.Body.String(), `"UserID":1`)
+	require.NotContains(t, rec.Body.String(), "sk-test")
 	mutation := httptest.NewRecorder()
-	router.ServeHTTP(mutation, httptest.NewRequest(http.MethodDelete, "/api/v1/admin/support/users/1/api-keys", nil))
+	router.ServeHTTP(mutation, httptest.NewRequest(http.MethodDelete, "/api/v1/admin/support/users/1", nil))
 	require.Equal(t, http.StatusNotFound, mutation.Code)
 }
 
@@ -106,7 +103,7 @@ func TestUserSupportTargetAllowsDisabledAndRejectsMissingUsers(t *testing.T) {
 	disabled := httptest.NewRecorder()
 	router.ServeHTTP(disabled, httptest.NewRequest(http.MethodGet, "/api/v1/admin/support/users/1", nil))
 	require.Equal(t, http.StatusOK, disabled.Code)
-	require.Contains(t, disabled.Body.String(), `"status":"disabled"`)
+	require.Contains(t, disabled.Body.String(), `"UserID":1`)
 
 	adminSvc.getUserErr = service.ErrUserNotFound
 	missing := httptest.NewRecorder()

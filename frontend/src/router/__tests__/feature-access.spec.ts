@@ -23,6 +23,8 @@ const appStore = vi.hoisted(() => ({
   backendModeEnabled: false,
   publicSettingsLoaded: false,
   cachedPublicSettings: null as null | {
+    channel_monitor_enabled?: boolean
+    channel_monitor_mode?: string
     payment_enabled?: boolean
     risk_control_enabled?: boolean
     global_ip_access_control_enabled?: boolean
@@ -131,6 +133,41 @@ describe('feature route guard', () => {
     asyncImageAccess.canUseAsyncImage.value = false
     asyncImageAccess.refreshAsyncImageAccess.mockReset()
     asyncImageAccess.refreshAsyncImageAccess.mockResolvedValue(false)
+  })
+
+  it.each([
+    ['v1', false, undefined], ['v1', true, undefined], ['v2', false, undefined],
+    ['v2', true, undefined], ['v3', false, undefined], ['v3', true, undefined],
+  ])('guards the actual monitor route for mode %s and admin %s', async (mode, admin, target) => {
+    authStore.isAdmin = admin
+    appStore.fetchPublicSettings.mockImplementation(async () => {
+      appStore.cachedPublicSettings = { channel_monitor_enabled: true, channel_monitor_mode: mode }
+      appStore.publicSettingsLoaded = true
+    })
+    const { navigation, next } = runGuard({}, '/monitor')
+    await navigation
+    expect(appStore.fetchPublicSettings).toHaveBeenCalledOnce()
+    if (target) expect(next).toHaveBeenCalledWith(target)
+    else expect(next).toHaveBeenCalledWith()
+  })
+
+  it('blocks a monitor route when settings are disabled or unavailable', async () => {
+    appStore.fetchPublicSettings.mockResolvedValue(null)
+    const { navigation, next } = runGuard({}, '/monitor')
+    await navigation
+    expect(next).toHaveBeenCalledWith('/dashboard')
+  })
+
+  it('refreshes an already cached mode before entering the monitor route', async () => {
+    appStore.publicSettingsLoaded = true
+    appStore.cachedPublicSettings = { channel_monitor_enabled: true, channel_monitor_mode: 'v3' }
+    appStore.fetchPublicSettings.mockImplementation(async () => {
+      appStore.cachedPublicSettings = { channel_monitor_enabled: true, channel_monitor_mode: 'v2' }
+    })
+    const { navigation, next } = runGuard({}, '/monitor')
+    await navigation
+    expect(appStore.fetchPublicSettings).toHaveBeenCalledWith(true)
+    expect(next).toHaveBeenCalledWith()
   })
 
   it('waits for the first public-settings request before deciding payment access', async () => {

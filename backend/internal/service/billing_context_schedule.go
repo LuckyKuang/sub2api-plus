@@ -58,6 +58,12 @@ type ContextPricingSchedule struct {
 // ContextPricingScheduleInput 阶梯表查询输入。
 type ContextPricingScheduleInput struct {
 	Model string
+	// ServiceTier selects a billing service tier for display-only price probes.
+	// Empty preserves the standard-tier behavior used by the public plaza.
+	ServiceTier string
+	// PricingAt is optional; catalog callers can select a standard period for
+	// model-owned time pricing without modifying any billing rule.
+	PricingAt time.Time
 	// Group 为 nil 表示查官方参考价：无分组、无渠道定价，也不套用平台旧规则。
 	Group *Group
 	// Platform 为请求的具体平台（composite 分组传模型所属平台），
@@ -110,6 +116,8 @@ func (s *BillingService) ResolveContextPricingSchedule(ctx context.Context, reso
 		RateMultiplier: 1,
 		Resolver:       resolver,
 		Resolved:       resolved,
+		ServiceTier:    in.ServiceTier,
+		PricingAt:      in.PricingAt,
 	}
 	probe := func(tokens UsageTokens) (*CostBreakdown, error) {
 		r := req
@@ -224,8 +232,7 @@ func (s *BillingService) contextPricingBreakpoints(resolver *ModelPricingResolve
 	if pricing == nil {
 		return plan
 	}
-	// 该路径无既有计费时点（ContextPricingScheduleInput 无时间字段），显式传
-	// 当前时刻；此处 pricing 仅取 LongContextInputThreshold 等时间无关字段，
+	// 此处 pricing 仅取 LongContextInputThreshold 等时间无关字段，
 	// DeepSeek pro→Flash 切换不影响断点结果。
 	pricing = s.applyModelSpecificPricingPolicyEx(model, pricing, true, timezone.Now())
 	if pricing.LongContextInputThreshold <= 0 {

@@ -88,7 +88,7 @@
                 </p>
               </div>
             </div>
-            <button :class="['btn w-full py-3 text-base font-medium', paymentButtonClass]" :disabled="!canSubmit || submitting" @click="handleSubmitRecharge">
+            <button v-support-readonly :class="['btn w-full py-3 text-base font-medium', paymentButtonClass]" :disabled="!canSubmit || submitting" @click="handleSubmitRecharge">
               <span v-if="submitting" class="flex items-center justify-center gap-2">
                 <span class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
                 {{ t('common.processing') }}
@@ -180,7 +180,7 @@
                   </div>
                 </div>
               </div>
-              <button :class="['btn w-full py-3 text-base font-medium', paymentButtonClass]" :disabled="!canSubmitSubscription || submitting" @click="confirmSubscribe">
+              <button v-support-readonly :class="['btn w-full py-3 text-base font-medium', paymentButtonClass]" :disabled="!canSubmitSubscription || submitting" @click="confirmSubscribe">
                 <span v-if="submitting" class="flex items-center justify-center gap-2">
                   <span class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
                   {{ t('common.processing') }}
@@ -264,13 +264,15 @@
 </template>
 
 <script setup lang="ts">
+import { adminSupportContext } from '@/utils/adminSupportContext'
+import { supportReadonly as vSupportReadonly } from '@/directives/supportReadonly'
 import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import '@/styles/announcement-markdown.css'
 import { useRoute, useRouter } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
+import { useUserView as useAuthStore } from '@/composables/useUserView'
 import { usePaymentStore } from '@/stores/payment'
 import { useSubscriptionStore } from '@/stores/subscriptions'
 import { useAppStore } from '@/stores'
@@ -1139,7 +1141,7 @@ onMounted(async () => {
       })
       selectedMethod.value = sorted[0]
     }
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && !adminSupportContext.value) {
       if (hasWechatResumeQuery(route.query)) {
         removeRecoverySnapshot()
       }
@@ -1164,7 +1166,7 @@ onMounted(async () => {
         removeRecoverySnapshot()
       }
     }
-    await resumeWechatPaymentFromQuery()
+    if (!adminSupportContext.value) await resumeWechatPaymentFromQuery()
     if (checkout.value.balance_disabled && subscriptionEnabled.value) {
       activeTab.value = 'subscription'
     }

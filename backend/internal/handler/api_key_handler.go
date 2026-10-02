@@ -104,7 +104,7 @@ func validateAPIKeyUpdateRequest(req UpdateAPIKeyRequest) error {
 // List handles listing user's API keys with pagination
 // GET /api/v1/api-keys
 func (h *APIKeyHandler) List(c *gin.Context) {
-	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	subject, ok := middleware2.GetReadSubjectFromContext(c)
 	if !ok {
 		response.Unauthorized(c, "User not authenticated")
 		return
@@ -147,10 +147,30 @@ func (h *APIKeyHandler) List(c *gin.Context) {
 	response.Paginated(c, out, result.Total, page, pageSize)
 }
 
+// RequireSupportImageKey scopes image reads to a key owned by the validated
+// support target, without using its credential to authenticate as that user.
+func (h *APIKeyHandler) RequireSupportImageKey(c *gin.Context) {
+	target, ok := middleware2.GetSupportReadTarget(c)
+	keyID, err := strconv.ParseInt(c.Query("api_key_id"), 10, 64)
+	if !ok || err != nil || keyID <= 0 {
+		response.BadRequest(c, "Invalid support API key ID")
+		c.Abort()
+		return
+	}
+	key, err := h.apiKeyService.GetByID(c.Request.Context(), keyID)
+	if err != nil || key == nil || key.UserID != target.Subject.UserID {
+		response.NotFound(c, "API key not found")
+		c.Abort()
+		return
+	}
+	c.Set(string(middleware2.ContextKeyAPIKey), key)
+	c.Next()
+}
+
 // GetByID handles getting a single API key
 // GET /api/v1/api-keys/:id
 func (h *APIKeyHandler) GetByID(c *gin.Context) {
-	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	subject, ok := middleware2.GetReadSubjectFromContext(c)
 	if !ok {
 		response.Unauthorized(c, "User not authenticated")
 		return
@@ -320,7 +340,7 @@ func (h *APIKeyHandler) Delete(c *gin.Context) {
 // GetAvailableGroups 获取用户可以绑定的分组列表
 // GET /api/v1/groups/available
 func (h *APIKeyHandler) GetAvailableGroups(c *gin.Context) {
-	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	subject, ok := middleware2.GetReadSubjectFromContext(c)
 	if !ok {
 		response.Unauthorized(c, "User not authenticated")
 		return
@@ -342,7 +362,7 @@ func (h *APIKeyHandler) GetAvailableGroups(c *gin.Context) {
 // GetUserGroupRates 获取当前用户的专属分组倍率配置
 // GET /api/v1/groups/rates
 func (h *APIKeyHandler) GetUserGroupRates(c *gin.Context) {
-	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	subject, ok := middleware2.GetReadSubjectFromContext(c)
 	if !ok {
 		response.Unauthorized(c, "User not authenticated")
 		return

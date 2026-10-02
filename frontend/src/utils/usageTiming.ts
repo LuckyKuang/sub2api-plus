@@ -3,31 +3,43 @@ import { resolveUsageRequestType } from './usageRequestType'
 
 type RequestKindRow = Pick<UsageLog, 'stream' | 'openai_ws_mode' | 'request_type'>
 type FirstTokenTimingRow = RequestKindRow & Pick<UsageLog, 'timing_version' | 'first_token_ms' | 'first_output_kind'>
-type TpsTimingRow = RequestKindRow & Pick<UsageLog, 'duration_ms' | 'first_token_ms' | 'output_tokens'>
+type TpsTimingRow = FirstTokenTimingRow & Pick<UsageLog,
+  'duration_ms' | 'output_tokens' | 'image_output_tokens' | 'audio_output_tokens' | 'native_compaction_v2'
+>
+type TpsNoteRow = TpsTimingRow & Pick<UsageLog, 'is_complete'>
 
 export const strictFirstTokenMs = (row: FirstTokenTimingRow): number | null =>
   resolveUsageRequestType(row) !== 'live' && row.timing_version === 1 && row.first_token_ms != null && Number.isFinite(row.first_token_ms) && row.first_token_ms >= 0
     ? row.first_token_ms : null
 
-export const estimatedTps = (row: TpsTimingRow): number | null => {
-  if (!Number.isFinite(row.output_tokens) || row.output_tokens < 0) return null
-  if (row.duration_ms == null || !Number.isFinite(row.duration_ms) || row.duration_ms <= 0) return null
+const nonMediaOutputTokens = (row: TpsTimingRow): number =>
+  row.output_tokens - (row.image_output_tokens ?? 0) - (row.audio_output_tokens ?? 0)
 
-  const requestType = resolveUsageRequestType(row)
-  const firstTokenMs = row.first_token_ms
-  const hasFirstToken = firstTokenMs != null && Number.isFinite(firstTokenMs) && firstTokenMs >= 0
-  const isStreaming = requestType === 'stream' || requestType === 'ws_v2'
-  const generationMs = isStreaming && hasFirstToken
-    ? row.duration_ms - firstTokenMs
-    : row.duration_ms
+export const tpsReason = (row: TpsTimingRow): string | null => {
+  if (resolveUsageRequestType(row) === 'live') return 'usage.timingUnavailableLive'
+  const counts = [row.output_tokens, row.image_output_tokens ?? 0, row.audio_output_tokens ?? 0]
+  if (counts.some(value => !Number.isFinite(value) || value < 0) ||
+    row.duration_ms == null || !Number.isFinite(row.duration_ms) || row.duration_ms <= 0 ||
+    nonMediaOutputTokens(row) < 0) return 'usage.timingUnavailableInvalid'
 
-  if (!Number.isFinite(generationMs) || generationMs <= 0) return null
-  const value = row.output_tokens * 1000 / generationMs
-  return Number.isFinite(value) ? value : null
+  const hasObservedTokens = strictFirstTokenMs(row) != null
+  if ((row.first_output_kind === 'compaction' || row.native_compaction_v2) && !hasObservedTokens) {
+    return 'usage.timingUnavailableCompaction'
+  }
+  if (nonMediaOutputTokens(row) === 0 ||
+    ((row.first_output_kind === 'image' || row.first_output_kind === 'audio') && !hasObservedTokens)) {
+    return 'usage.timingUnavailableNoTextTokens'
+  }
+  return Number.isFinite(nonMediaOutputTokens(row) * 1000 / row.duration_ms)
+    ? null : 'usage.timingUnavailableInvalid'
 }
 
-export const tpsReason = (row: TpsTimingRow): string | null =>
-  estimatedTps(row) == null ? 'usage.timingUnavailableInvalid' : null
+// This is a forwarding/turn average, not a token-event decode-window rate.
+export const averageTps = (row: TpsTimingRow): number | null =>
+  tpsReason(row) == null ? nonMediaOutputTokens(row) * 1000 / row.duration_ms! : null
+
+export const tpsNote = (row: TpsNoteRow): string | null =>
+  tpsReason(row) ?? (row.is_complete === false ? 'usage.averageTpsIncomplete' : null)
 
 export const firstTokenUnavailableReason = (row: FirstTokenTimingRow): string | null => {
   if (resolveUsageRequestType(row) === 'live') return 'usage.timingUnavailableLive'

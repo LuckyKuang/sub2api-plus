@@ -85,6 +85,11 @@ declare module 'vue-router' {
       | 'subscriptions'
       | 'orders'
       | 'profile'
+      | 'batch-images'
+      | 'purchase'
+      | 'redeem'
+      | 'affiliate'
+      | 'custom'
 
     /**
      * i18n key for the page title

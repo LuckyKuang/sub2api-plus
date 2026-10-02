@@ -990,6 +990,7 @@ var ProviderSet = wire.NewSet(
 	ProvideChannelMonitorRunner,
 	NewChannelMonitorQuotaFetcher,
 	ProvideChannelMonitorV2Service,
+	ProvideChannelMonitorV3Service,
 	ProvideChannelMonitorV2Aggregator,
 	NewChannelMonitorRequestTemplateService,
 	ProvideUserPlatformQuotaUsageFlusher,
@@ -1071,6 +1072,12 @@ func ProvideChannelMonitorRunner(
 func ProvideChannelMonitorV2Service(repo ChannelMonitorV2Repository, settingService *SettingService) *ChannelMonitorV2Service {
 	svc := NewChannelMonitorV2Service(repo)
 	svc.SetRuntimeReader(settingService)
+	return svc
+}
+
+func ProvideChannelMonitorV3Service(repo ChannelMonitorV3Repository, settings *SettingService) *ChannelMonitorV3Service {
+	svc := NewChannelMonitorV3Service(repo, settings)
+	svc.Start()
 	return svc
 }
 

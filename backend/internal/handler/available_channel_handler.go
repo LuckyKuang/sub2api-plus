@@ -1,8 +1,8 @@
 package handler
 
 import (
+	"context"
 	"sort"
-	"strconv"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/response"
 	"github.com/LuckyKuang/sub2api-plus/internal/server/middleware"
@@ -20,10 +20,20 @@ import (
 //     展开。这样既防止普通分组跨平台泄漏，也让 Composite 正确展示其多平台能力；
 //  4. 字段白名单：仅返回用户需要的字段（省略 BillingModelSource / RestrictModels
 //     / 内部 ID / Status 等管理字段）。
+type availableChannelAccess interface {
+	GetAvailableGroups(context.Context, int64) ([]service.Group, error)
+	GetUserGroupRates(context.Context, int64) (map[int64]float64, error)
+}
+
+type availableCatalogReader interface {
+	ListAvailableCatalog(context.Context, []service.Group) ([]service.CatalogGroup, error)
+}
+
 type AvailableChannelHandler struct {
 	channelService *service.ChannelService
-	apiKeyService  *service.APIKeyService
+	apiKeyService  availableChannelAccess
 	settingService *service.SettingService
+	plazaService   availableCatalogReader
 }
 
 // NewAvailableChannelHandler 创建用户侧可用渠道 handler。
@@ -31,11 +41,13 @@ func NewAvailableChannelHandler(
 	channelService *service.ChannelService,
 	apiKeyService *service.APIKeyService,
 	settingService *service.SettingService,
+	plazaService *service.ModelPlazaService,
 ) *AvailableChannelHandler {
 	return &AvailableChannelHandler{
 		channelService: channelService,
 		apiKeyService:  apiKeyService,
 		settingService: settingService,
+		plazaService:   plazaService,
 	}
 }
 
@@ -126,7 +138,7 @@ type userAvailableChannel struct {
 // List 列出当前用户可见的「可用渠道」。
 // GET /api/v1/channels/available
 func (h *AvailableChannelHandler) List(c *gin.Context) {
-	subject, ok := middleware.GetAuthSubjectFromContext(c)
+	subject, ok := middleware.GetReadSubjectFromContext(c)
 	if !ok {
 		response.Unauthorized(c, "User not authenticated")
 		return
@@ -135,7 +147,15 @@ func (h *AvailableChannelHandler) List(c *gin.Context) {
 	// Feature 未启用时返回空数组（不暴露渠道信息）。检查放在认证之后，
 	// 保持与未开关前的 401 行为一致：未登录先 401，登录后再按开关决定。
 	if !h.featureEnabled(c) {
+		if catalogView(c) {
+			response.Success(c, emptyChannelCatalog())
+			return
+		}
 		response.Success(c, []userAvailableChannel{})
+		return
+	}
+	if catalogView(c) {
+		h.listCatalog(c, subject.UserID)
 		return
 	}
 
@@ -145,40 +165,6 @@ func (h *AvailableChannelHandler) List(c *gin.Context) {
 		return
 	}
 	response.Success(c, out)
-}
-
-// AdminSupportList returns the same user-visible channel model for an explicit
-// support target. The authenticated administrator remains the actor; the
-// target ID is never written into the authentication context.
-func (h *AvailableChannelHandler) AdminSupportList(c *gin.Context) {
-	userID, err := strconv.ParseInt(c.Param("user_id"), 10, 64)
-	if err != nil || userID <= 0 {
-		response.BadRequest(c, "Invalid user ID")
-		return
-	}
-
-	if !h.featureEnabled(c) {
-		response.Success(c, gin.H{
-			"items":       []userAvailableChannel{},
-			"group_rates": map[int64]float64{},
-		})
-		return
-	}
-
-	out, err := h.listForUser(c, userID)
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-	rates, err := h.apiKeyService.GetUserGroupRates(c.Request.Context(), userID)
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-	response.Success(c, gin.H{
-		"items":       out,
-		"group_rates": rates,
-	})
 }
 
 func (h *AvailableChannelHandler) listForUser(c *gin.Context, userID int64) ([]userAvailableChannel, error) {

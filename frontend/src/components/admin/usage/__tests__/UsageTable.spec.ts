@@ -75,7 +75,9 @@ const messages: Record<string, string> = {
 		'usage.timingUnavailableLive': 'Live session summary has no token-generation timing',
 		'usage.timingUnavailableCompaction': 'Compaction result has no observable token deltas',
 		'usage.timingUnavailableNoTokens': 'No billed text tokens or generation timing observed',
-		'usage.latencyTpsHint': 'Output tokens per second. Streaming requests exclude first-token latency; non-streaming requests use total duration.',
+		'usage.latencyTpsHint': 'Request-average output tokens per second includes first-token waiting and may include billed reasoning tokens.',
+		'usage.averageTpsIncomplete': 'Incomplete request; average uses the recorded partial output and duration',
+		'usage.timingUnavailableNoTextTokens': 'No applicable non-media output tokens',
 		'usage.incomplete': 'Incomplete',
 		'usage.incompleteHint': 'The request ended before a complete terminal result.',
 		'usage.clientDisconnected': 'Client disconnected',
@@ -347,7 +349,8 @@ describe('admin UsageTable tooltip', () => {
     expect(values[7].text()).toBe('-')
 
     const triggers = wrapper.findAll('[data-testid="latency-details-trigger"]')
-    expect(triggers).toHaveLength(8)
+    // The pure-text row also explains why its zero-output average is unavailable.
+    expect(triggers).toHaveLength(9)
 
     await triggers[0].trigger('mouseenter')
     await nextTick()
@@ -361,7 +364,7 @@ describe('admin UsageTable tooltip', () => {
     expect(tooltip.text()).toContain('First output and first token differ')
   })
 
-  it('keeps very low positive TPS visible and uses total duration when first-token timing is absent', () => {
+  it('keeps very low positive TPS visible and excludes compaction-only results', () => {
     const row = { ...baseImageRow, request_type: 'stream', stream: true, first_output_kind: 'text', first_token_ms: 100, last_token_ms: 120000, duration_ms: 120500, output_tokens: 1 }
     const wrapper = mount(UsageTable, {
       props: {
@@ -371,11 +374,23 @@ describe('admin UsageTable tooltip', () => {
       },
       global: { stubs: { DataTable: DataTableStub, Pagination: true, EmptyState: true, Icon: true, Teleport: true } },
     })
-    expect(wrapper.findAll('[data-testid="latency-tps"]').map(node => node.text())).toEqual(['0.0083 tok/s', '0.8 tok/s'])
+    expect(wrapper.findAll('[data-testid="latency-tps"]').map(node => node.text())).toEqual(['0.0083 tok/s', '-'])
     wrapper.unmount()
   })
 
-  it('shows TPS from the streaming generation window or the non-streaming total duration', () => {
+  it('explains incomplete averages in the main cell and detail tooltip', async () => {
+    const row = { ...baseImageRow, request_type: 'stream', stream: true, first_output_kind: 'text', first_output_ms: 100, first_token_ms: 100, duration_ms: 1_000, output_tokens: 20, is_complete: false }
+    const wrapper = mount(UsageTable, {
+      props: { data: [row], loading: false, columns: [{ key: 'latency', label: 'Latency' }] },
+      global: { stubs: { DataTable: DataTableStub, Pagination: true, EmptyState: true, Icon: true, Teleport: true } },
+    })
+    expect(wrapper.get('[data-testid="latency-tps"]').text()).toBe('20 tok/s')
+    await wrapper.get('[data-testid="latency-details-trigger"]').trigger('mouseenter')
+    expect(wrapper.get('[data-testid="latency-tps-note"]').text()).toBe(messages['usage.averageTpsIncomplete'])
+    wrapper.unmount()
+  })
+
+  it('shows the same request-average TPS definition across transports and modalities', () => {
     const rows = [
       {
         ...baseImageRow,
@@ -526,7 +541,7 @@ describe('admin UsageTable tooltip', () => {
         duration_ms: 1_100,
       },
       {
-        // 100 output tokens / (250ms - 100ms) = 666.7
+        // 100 output tokens / 250ms total duration = 400
         ...baseImageRow,
         request_id: 'req-tps-short-generation',
         request_type: 'stream',
@@ -539,7 +554,7 @@ describe('admin UsageTable tooltip', () => {
         duration_ms: 250,
       },
       {
-        // 7 output tokens / (1100ms - 100ms) = 7
+        // 7 output tokens / 1100ms total duration = 6.4
         ...baseImageRow,
         request_id: 'req-tps-few-tokens',
         request_type: 'stream',
@@ -553,7 +568,7 @@ describe('admin UsageTable tooltip', () => {
         duration_ms: 1_100,
       },
       {
-        // 1000 tokens / 500ms decode window = 2000
+        // 1000 tokens / 600ms total duration = 1666.7
         ...baseImageRow,
         request_id: 'req-tps-unrealistically-high',
         request_type: 'stream',
@@ -567,7 +582,7 @@ describe('admin UsageTable tooltip', () => {
         duration_ms: 600,
       },
       {
-        // 8 tokens / 10000ms decode window = 0.8
+        // 8 tokens / 10100ms total duration = 0.8
         ...baseImageRow,
         request_id: 'req-tps-below-one',
         request_type: 'stream',
@@ -581,7 +596,7 @@ describe('admin UsageTable tooltip', () => {
         duration_ms: 10_100,
       },
       {
-        // 8 tokens / 300ms decode window = 26.7
+        // 8 tokens / 400ms total duration = 20
         ...baseImageRow,
         request_id: 'req-tps-min-gates-pass',
         request_type: 'stream',
@@ -595,7 +610,7 @@ describe('admin UsageTable tooltip', () => {
         duration_ms: 400,
       },
       {
-        // 150 * 1000 / 300 = 500
+        // 150 * 1000 / 400 = 375
         ...baseImageRow,
         request_id: 'req-tps-mid-band',
         request_type: 'stream',
@@ -609,7 +624,7 @@ describe('admin UsageTable tooltip', () => {
         duration_ms: 400,
       },
       {
-        // 300 * 1000 / 300 = 1000
+        // 300 * 1000 / 400 = 750
         ...baseImageRow,
         request_id: 'req-tps-max-boundary',
         request_type: 'stream',
@@ -638,28 +653,30 @@ describe('admin UsageTable tooltip', () => {
 
     const tpsNodes = wrapper.findAll('[data-testid="latency-tps"]')
     expect(tpsNodes.map((node) => node.text())).toEqual([
-      '37 tok/s',
-      '50 tok/s',
-      '105 tok/s',
-      '150 tok/s',
+      '34.5 tok/s',
+      '25 tok/s',
+      '90.9 tok/s',
+      '90.9 tok/s',
+      '90.9 tok/s',
+      '90.9 tok/s',
       '100 tok/s',
       '100 tok/s',
-      '100 tok/s',
-      '111 tok/s',
-      '-',
-      '5.6 tok/s',
-      '100 tok/s',
-      '667 tok/s',
-      '7 tok/s',
-      '2000 tok/s',
-      '0.8 tok/s',
-      '26.7 tok/s',
-      '500 tok/s',
       '1000 tok/s',
+      '-',
+      '90.9 tok/s',
+      '400 tok/s',
+      '6.4 tok/s',
+      '1667 tok/s',
+      '0.8 tok/s',
+      '20 tok/s',
+      '375 tok/s',
+      '750 tok/s',
     ])
-    expect(tpsNodes.every((node) => node.attributes('title') === messages['usage.latencyTpsHint'])).toBe(true)
-    expect(wrapper.text()).toContain('First Token 721msTotal10.86sTPS37 tok/s')
-    expect(wrapper.text()).toContain('First Token 100msTotal1.10sTPS105 tok/s')
+    expect(tpsNodes.every((node) => node.attributes('title')?.startsWith(messages['usage.latencyTpsHint']))).toBe(true)
+    expect(tpsNodes[4].attributes('title')).toContain(messages['usage.averageTpsIncomplete'])
+    expect(tpsNodes[9].attributes('title')).toContain(messages['usage.timingUnavailableNoTextTokens'])
+    expect(wrapper.text()).toContain('First Token 721msTotal10.86sTPS34.5 tok/s')
+    expect(wrapper.text()).toContain('First Token 100msTotal1.10sTPS90.9 tok/s')
     expect(wrapper.text()).not.toContain('First Image Data')
     expect(wrapper.text()).not.toContain('First Audio Data')
   })
