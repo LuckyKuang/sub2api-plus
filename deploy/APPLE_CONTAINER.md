@@ -202,6 +202,10 @@ After a host reboot or `container system stop`, run `./apple-container.sh up` ag
 
 ## Disk Lifecycle
 
+For local deployments operated through `skills/deploy-cli`, follow the shared
+[deployment lifecycle](DEPLOYMENT_LIFECYCLE.md), including single-Web-container
+replacement and bounded application-image retention after health checks.
+
 Apple Containers gives each running container a separate lightweight VM root
 filesystem. `container system df` therefore reports an active container size
 even when the files visible inside that container are small. Normal `up`

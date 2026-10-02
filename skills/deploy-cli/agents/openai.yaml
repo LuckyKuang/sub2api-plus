@@ -1,0 +1,4 @@
+interface:
+  display_name: "Sub2API Deploy CLI"
+  short_description: "Deploy and verify Sub2API locally across platforms"
+  default_prompt: "Use $deploy-cli to deploy the requested Sub2API Plus version on this machine, verify its health, and retain one Web container and one application image after success."

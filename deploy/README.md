@@ -83,6 +83,7 @@ are not required.
 | `docker-deploy.sh` | **One-click Docker deployment script (recommended)** |
 | `apple-container.sh` | Native Apple `container` lifecycle script |
 | `APPLE_CONTAINER.md` | Apple `container` deployment and operations guide |
+| `DEPLOYMENT_LIFECYCLE.md` | Cross-platform local deployment, recovery, and image-retention contract |
 | `.env.example` | Container environment variables template |
 | `DOCKER.md` | Docker Hub documentation |
 | `install.sh` | One-click binary installation script |

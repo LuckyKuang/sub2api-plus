@@ -15,6 +15,11 @@ docker run -d \
 
 ## Docker Compose
 
+For local deployment and verification through `skills/deploy-cli`, follow the
+shared [deployment lifecycle](DEPLOYMENT_LIFECYCLE.md). It defines replacement,
+health checks, recovery, and scoped application-image retention for both Linux
+Docker and Docker inside WSL2 Debian/Ubuntu.
+
 ```yaml
 version: '3.8'
 
