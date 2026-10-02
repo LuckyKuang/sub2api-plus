@@ -27,6 +27,15 @@ import (
 
 func grokCompressionPtrInt64(value int64) *int64 { return &value }
 
+// resetGrokRequestCompressionCapabilityCacheForTest drops all cached capability
+// state. Tests that exercise negotiation call it to stay independent. It lives
+// in the test file so production code carries no test-only symbol.
+func resetGrokRequestCompressionCapabilityCacheForTest() {
+	grokRequestCompressionCapabilityCache.mu.Lock()
+	defer grokRequestCompressionCapabilityCache.mu.Unlock()
+	grokRequestCompressionCapabilityCache.entries = make(map[grokRequestCompressionCacheKey]grokRequestCompressionCacheEntry)
+}
+
 // grokCompressionUpstreamStub routes the capability probe (`/v1/settings`) and
 // the sampler send independently so a test can observe both.
 type grokCompressionUpstreamStub struct {

@@ -153,14 +153,6 @@ func grokRequestCompressionCacheStore(key grokRequestCompressionCacheKey, advert
 	}
 }
 
-// resetGrokRequestCompressionCapabilityCacheForTest drops all cached capability
-// state. Tests that exercise negotiation call it to stay independent.
-func resetGrokRequestCompressionCapabilityCacheForTest() {
-	grokRequestCompressionCapabilityCache.mu.Lock()
-	defer grokRequestCompressionCapabilityCache.mu.Unlock()
-	grokRequestCompressionCapabilityCache.entries = make(map[grokRequestCompressionCacheKey]grokRequestCompressionCacheEntry)
-}
-
 // normalizeGrokRequestCompressionTarget returns the exact capability identity
 // (scheme, host, effective port and base path) plus the `/v1/settings` URL for
 // that same target. The capability key always states the effective port so
