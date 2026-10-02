@@ -1,8 +1,6 @@
 package handler
 
 import (
-	"strconv"
-
 	"github.com/LuckyKuang/sub2api-plus/internal/handler/dto"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/response"
 	middleware2 "github.com/LuckyKuang/sub2api-plus/internal/server/middleware"
@@ -49,7 +47,7 @@ func NewSubscriptionHandler(subscriptionService *service.SubscriptionService) *S
 // List handles listing current user's subscriptions
 // GET /api/v1/subscriptions
 func (h *SubscriptionHandler) List(c *gin.Context) {
-	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	subject, ok := middleware2.GetReadSubjectFromContext(c)
 	if !ok {
 		response.Unauthorized(c, "User not found in context")
 		return
@@ -68,33 +66,10 @@ func (h *SubscriptionHandler) List(c *gin.Context) {
 	response.Success(c, out)
 }
 
-// AdminSupportList lists a validated target user's subscriptions using the
-// ordinary user DTO. Assignment metadata and administrator notes are not part
-// of the support read model.
-func (h *SubscriptionHandler) AdminSupportList(c *gin.Context) {
-	userID, err := strconv.ParseInt(c.Param("user_id"), 10, 64)
-	if err != nil || userID <= 0 {
-		response.BadRequest(c, "Invalid user ID")
-		return
-	}
-
-	subscriptions, err := h.subscriptionService.ListUserSubscriptions(c.Request.Context(), userID)
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-
-	out := make([]dto.UserSubscription, 0, len(subscriptions))
-	for i := range subscriptions {
-		out = append(out, *dto.UserSubscriptionFromService(&subscriptions[i]))
-	}
-	response.Success(c, out)
-}
-
 // GetActive handles getting current user's active subscriptions
 // GET /api/v1/subscriptions/active
 func (h *SubscriptionHandler) GetActive(c *gin.Context) {
-	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	subject, ok := middleware2.GetReadSubjectFromContext(c)
 	if !ok {
 		response.Unauthorized(c, "User not found in context")
 		return
@@ -116,7 +91,7 @@ func (h *SubscriptionHandler) GetActive(c *gin.Context) {
 // GetProgress handles getting subscription progress for current user
 // GET /api/v1/subscriptions/progress
 func (h *SubscriptionHandler) GetProgress(c *gin.Context) {
-	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	subject, ok := middleware2.GetReadSubjectFromContext(c)
 	if !ok {
 		response.Unauthorized(c, "User not found in context")
 		return
@@ -149,7 +124,7 @@ func (h *SubscriptionHandler) GetProgress(c *gin.Context) {
 // GetSummary handles getting a summary of current user's subscription status
 // GET /api/v1/subscriptions/summary
 func (h *SubscriptionHandler) GetSummary(c *gin.Context) {
-	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	subject, ok := middleware2.GetReadSubjectFromContext(c)
 	if !ok {
 		response.Unauthorized(c, "User not found in context")
 		return

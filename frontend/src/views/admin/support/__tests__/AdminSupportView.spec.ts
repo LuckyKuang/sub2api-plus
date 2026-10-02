@@ -1,39 +1,30 @@
-import { readFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
+const { store, route } = vi.hoisted(() => ({ store: { target: null as null | { id: number }, loadTarget: vi.fn() }, route: { params: { user_id: '42' }, meta: { adminSupportResource: 'api-keys' } } }))
+vi.mock('@/stores/adminSupportView', () => ({ useAdminSupportViewStore: () => store }))
+vi.mock('vue-router', () => ({ useRoute: () => route }))
+vi.mock('vue-i18n', async (original) => ({ ...await original<typeof import('vue-i18n')>(), useI18n: () => ({ t: (key: string) => key }) }))
+vi.mock('@/views/user/KeysView.vue', () => ({ __esModule: true, default: { template: '<div data-user-page="keys">original key page</div>' } }))
+vi.mock('@/views/user/ProfileView.vue', () => ({ __esModule: true, default: { template: '<div data-user-page="profile">original profile page</div>' } }))
+vi.mock('@/views/user/ChannelStatusView.vue', () => ({ __esModule: true, default: { template: '<div data-user-page="monitor">original mode selector</div>' } }))
+import AdminSupportView from '../AdminSupportView.vue'
 
-import { describe, expect, it } from 'vitest'
-
-const directory = dirname(fileURLToPath(import.meta.url))
-const viewSource = readFileSync(resolve(directory, '../AdminSupportView.vue'), 'utf8')
-const apiSource = readFileSync(resolve(directory, '../../../../api/admin/supportView.ts'), 'utf8')
-
-describe('administrator support view safety boundary', () => {
-  it('does not import owner mutation, credential-copy, or export capabilities', () => {
-    for (const forbidden of [
-      'useClipboard',
-      'file-saver',
-      'deleteAsyncImageTask',
-      'submitAsyncImage',
-      'cancelOrder',
-      'requestRefund',
-      'updateSubscription',
-    ]) {
-      expect(viewSource).not.toContain(forbidden)
-    }
+describe('assistance mounts original personal pages', () => {
+  beforeEach(() => { store.target = { id: 42 }; store.loadTarget.mockReset() })
+  it.each([['api-keys','keys'], ['profile','profile'], ['channel-status','monitor']])('reuses %s', async (resource, page) => {
+    route.meta.adminSupportResource = resource
+    const wrapper = mount(AdminSupportView, { global: { stubs: { AppLayout: { template: '<main><slot /></main>' }, LoadingSpinner: true } } })
+    await flushPromises()
+    expect(wrapper.find(`[data-user-page="${page}"]`).exists()).toBe(true)
+    wrapper.unmount()
   })
-
-  it('keeps the support client GET-only', () => {
-    expect(apiSource).toContain('apiClient.get')
-    expect(apiSource).not.toContain('apiClient.post')
-    expect(apiSource).not.toContain('apiClient.put')
-    expect(apiSource).not.toContain('apiClient.patch')
-    expect(apiSource).not.toContain('apiClient.delete')
-  })
-
-  it('guards async results against stale target navigation', () => {
-    expect(viewSource).toContain('isCurrentReadRequest')
-    expect(viewSource).toContain('request.userId')
-    expect(viewSource).not.toContain('Number(route.params.user_id)')
+  it('withholds the page if the target profile cannot be loaded', async () => {
+    store.target = null
+    store.loadTarget.mockRejectedValue(new Error('target not found'))
+    const wrapper = mount(AdminSupportView, { global: { stubs: { AppLayout: { template: '<main><slot /></main>' }, LoadingSpinner: true } } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('target not found')
+    expect(wrapper.find('[data-user-page]').exists()).toBe(false)
+    wrapper.unmount()
   })
 })

@@ -22,7 +22,7 @@
       <!-- Redeem Form -->
       <div class="card">
         <div class="p-6">
-          <form @submit.prevent="handleRedeem" class="space-y-5">
+          <form v-support-readonly @submit.prevent="handleRedeem" class="space-y-5">
             <div>
               <label for="code" class="input-label">
                 {{ t('redeem.redeemCodeLabel') }}
@@ -366,9 +366,10 @@
 </template>
 
 <script setup lang="ts">
+import { supportReadonly as vSupportReadonly } from '@/directives/supportReadonly'
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useAuthStore } from '@/stores/auth'
+import { useUserView as useAuthStore } from '@/composables/useUserView'
 import { useAppStore } from '@/stores/app'
 import { useSubscriptionStore } from '@/stores/subscriptions'
 import { redeemAPI, authAPI, type RedeemHistoryItem } from '@/api'

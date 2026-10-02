@@ -48,7 +48,7 @@
             </p>
           </div>
         </div>
-        <button
+        <button v-support-readonly
           type="button"
           class="btn btn-outline-danger"
           @click="showDisableDialog = true"
@@ -74,7 +74,7 @@
             </p>
           </div>
         </div>
-        <button
+        <button v-support-readonly
           type="button"
           class="btn btn-primary"
           @click="showSetupModal = true"
@@ -101,6 +101,7 @@
 </template>
 
 <script setup lang="ts">
+import { supportReadonly as vSupportReadonly } from '@/directives/supportReadonly'
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { totpAPI } from '@/api'

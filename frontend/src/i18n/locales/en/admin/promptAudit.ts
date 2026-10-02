@@ -37,6 +37,8 @@ export default {
       description: 'Shows the configuration currently active on the server. Unsaved draft changes do not affect these values.',
       process: 'Process status', mode: 'Effective mode', version: 'Active / expected version', workers: 'Active / total workers',
       queue: 'Active jobs / capacity', dependencies: 'Dependencies', guardMetrics: 'Synchronous Guard metrics', extractionMetrics: 'Content extraction coverage', latest: 'Latest activity', lastProcessed: 'Last successful processing', lastError: 'Last processing error',
+      dependencySummary: 'Database: {database} · Redis: {redis}',
+      dependencyStatus: { ok: 'Healthy', error: 'Error' },
       queueBreakdown: 'queued {queued} · processing {processing} · retry {retry} · done {done} · failed {failed}',
       deliveryTotals: 'Total enqueued {enqueued} · dropped {dropped} · processed {processed} · failed {failed}',
     },

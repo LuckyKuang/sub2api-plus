@@ -9,7 +9,7 @@
           {{ t('profile.passkey.description') }}
         </p>
       </div>
-      <button
+      <button v-support-readonly
         v-if="enabled && supported && !showAddForm"
         type="button"
         class="btn btn-primary"
@@ -28,7 +28,7 @@
         {{ t('profile.passkey.unsupported') }}
       </div>
       <div>
-        <form
+        <form v-support-readonly
           v-if="enabled && supported && showAddForm"
           class="mb-5 flex flex-col gap-3 rounded-lg border border-gray-200 p-4 dark:border-dark-700"
           @submit.prevent="addPasskey"
@@ -107,7 +107,7 @@
               </p>
             </div>
             <div class="flex shrink-0 gap-2">
-              <button
+              <button v-support-readonly
                 type="button"
                 class="btn btn-secondary btn-sm"
                 :disabled="busy"
@@ -115,7 +115,7 @@
               >
                 {{ t('common.edit') }}
               </button>
-              <button
+              <button v-support-readonly
                 type="button"
                 class="btn btn-ghost btn-sm text-red-600 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-950/30"
                 :disabled="busy"
@@ -142,7 +142,7 @@
           <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
             {{ t('profile.passkey.deleteConfirm', { name: deleteTarget.name }) }}
           </p>
-          <form class="mt-4 space-y-4" @submit.prevent="confirmDelete">
+          <form v-support-readonly class="mt-4 space-y-4" @submit.prevent="confirmDelete">
             <div>
               <label for="passkey-delete-password" class="input-label">{{
                 t('profile.currentPassword')
@@ -177,6 +177,7 @@
 </template>
 
 <script setup lang="ts">
+import { supportReadonly as vSupportReadonly } from '@/directives/supportReadonly'
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { passkeyAPI, type PasskeyCredentialSummary } from '@/api'

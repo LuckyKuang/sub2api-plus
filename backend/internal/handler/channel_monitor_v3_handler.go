@@ -35,7 +35,7 @@ func (h *ChannelMonitorV3Handler) Snapshot(c *gin.Context) {
 		response.BadRequest(c, "invalid platform")
 		return
 	}
-	subject, ok := middleware.GetAuthSubjectFromContext(c)
+	subject, ok := middleware.GetReadSubjectFromContext(c)
 	if !ok || subject.UserID <= 0 {
 		response.Unauthorized(c, "authentication required")
 		return

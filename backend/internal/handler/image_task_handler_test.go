@@ -154,43 +154,6 @@ func (h *asyncImageMemoryHistory) Get(_ context.Context, owner service.ImageTask
 	return &copy, nil
 }
 
-func (h *asyncImageMemoryHistory) ListByUser(_ context.Context, userID int64, filter service.ImageTaskHistoryFilter) ([]*service.ImageTaskRecord, bool, error) {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	if filter.Limit <= 0 {
-		filter.Limit = 20
-	}
-	matched := make([]*service.ImageTaskRecord, 0, len(h.order))
-	for i := len(h.order) - 1; i >= 0; i-- {
-		task := h.tasks[h.order[i]]
-		if task == nil || task.UserID != userID || (filter.Status != "" && task.Status != filter.Status) {
-			continue
-		}
-		copy := *task
-		matched = append(matched, &copy)
-	}
-	if filter.Offset >= len(matched) {
-		return nil, false, nil
-	}
-	matched = matched[filter.Offset:]
-	hasMore := len(matched) > filter.Limit
-	if hasMore {
-		matched = matched[:filter.Limit]
-	}
-	return matched, hasMore, nil
-}
-
-func (h *asyncImageMemoryHistory) GetByUser(_ context.Context, userID int64, id string) (*service.ImageTaskRecord, error) {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	task := h.tasks[id]
-	if task == nil || task.UserID != userID {
-		return nil, service.ErrImageTaskNotFound
-	}
-	copy := *task
-	return &copy, nil
-}
-
 func (h *asyncImageMemoryHistory) DeleteFailed(_ context.Context, owner service.ImageTaskOwner, id string) (bool, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -283,36 +246,30 @@ func TestAsyncImageHandlerSubmitAndPoll(t *testing.T) {
 	require.Equal(t, service.ImageTaskStatusCompleted, list.Data[0].Status)
 }
 
-func TestAsyncImageHandlerAdminSupportReadsTargetWithoutAPIKeyCredential(t *testing.T) {
+func TestAsyncImageHandlerSupportUsesSameKeyScopedRead(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	history := &asyncImageMemoryHistory{
-		tasks: map[string]*service.ImageTaskRecord{
-			"target": {
-				ID: "target", UserID: 7, APIKeyID: 99, Status: service.ImageTaskStatusCompleted,
-				Result: json.RawMessage(`{"data":[{"url":"https://example.test/target.png"}]}`), CreatedAt: 10,
-			},
-			"other": {ID: "other", UserID: 8, APIKeyID: 100, Status: service.ImageTaskStatusCompleted, CreatedAt: 20},
-		},
-		order: []string{"target", "other"},
-	}
-	tasks := service.NewImageTaskService(&asyncImageMemoryStore{tasks: make(map[string]*service.ImageTaskRecord)})
+	history := &asyncImageMemoryHistory{tasks: map[string]*service.ImageTaskRecord{
+		"target": {ID: "target", UserID: 7, APIKeyID: 99, Status: service.ImageTaskStatusCompleted, Result: json.RawMessage(`{"data":[{"url":"https://example.test/target.png"}]}`), CreatedAt: 10},
+		"other":  {ID: "other", UserID: 8, APIKeyID: 100, Status: service.ImageTaskStatusCompleted, CreatedAt: 20},
+	}, order: []string{"target", "other"}}
+	tasks := service.NewImageTaskService(&asyncImageMemoryStore{tasks: history.tasks})
 	tasks.SetHistoryRepository(history)
 	h := &AsyncImageHandler{tasks: tasks}
 	router := gin.New()
-	router.GET("/api/v1/admin/support/users/:user_id/async-images", h.AdminSupportList)
-	router.GET("/api/v1/admin/support/users/:user_id/async-images/:task_id", h.AdminSupportGet)
-
-	listWriter := httptest.NewRecorder()
-	router.ServeHTTP(listWriter, httptest.NewRequest(http.MethodGet, "/api/v1/admin/support/users/7/async-images", nil))
-	require.Equal(t, http.StatusOK, listWriter.Code)
-	require.Contains(t, listWriter.Body.String(), `"api_key_id":99`)
-	require.Contains(t, listWriter.Body.String(), "target.png")
-	require.NotContains(t, listWriter.Body.String(), "other")
-	require.NotContains(t, listWriter.Body.String(), "storage_keys")
-
-	detailWriter := httptest.NewRecorder()
-	router.ServeHTTP(detailWriter, httptest.NewRequest(http.MethodGet, "/api/v1/admin/support/users/8/async-images/target", nil))
-	require.Equal(t, http.StatusNotFound, detailWriter.Code)
+	router.Use(func(c *gin.Context) {
+		c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{ID: 99, UserID: 7})
+	})
+	router.GET("/support/images/tasks", h.List)
+	router.GET("/support/images/tasks/:task_id", h.Get)
+	list := httptest.NewRecorder()
+	router.ServeHTTP(list, httptest.NewRequest(http.MethodGet, "/support/images/tasks", nil))
+	require.Equal(t, http.StatusOK, list.Code)
+	require.Contains(t, list.Body.String(), "target.png")
+	require.NotContains(t, list.Body.String(), "other")
+	require.NotContains(t, list.Body.String(), "storage_keys")
+	forbidden := httptest.NewRecorder()
+	router.ServeHTTP(forbidden, httptest.NewRequest(http.MethodGet, "/support/images/tasks/other", nil))
+	require.Equal(t, http.StatusNotFound, forbidden.Code)
 	require.Len(t, history.tasks, 2)
 }
 

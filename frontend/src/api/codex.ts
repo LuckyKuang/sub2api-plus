@@ -1,3 +1,6 @@
+import { supportImageFetch } from '@/utils/adminSupportContext'
+import { buildApiUrl } from './url'
+
 export interface CodexModelsManifestResult {
   content: string
   modelCount: number
@@ -34,7 +37,9 @@ export async function fetchCodexModelsManifest(
   apiKey: string,
   signal?: AbortSignal
 ): Promise<CodexModelsManifestResult> {
-  const response = await fetch(buildCodexModelsManifestUrl(baseUrl), {
+  const manifestURL = buildCodexModelsManifestUrl(baseUrl)
+  const query = manifestURL.slice(manifestURL.indexOf('?'))
+  const response = await supportImageFetch(`/v1/models${query}`, apiKey, {
     method: 'GET',
     headers: {
       Accept: 'application/json',
@@ -42,7 +47,7 @@ export async function fetchCodexModelsManifest(
     },
     cache: 'no-store',
     signal
-  })
+  }, () => manifestURL, buildApiUrl)
 
   if (!response.ok) {
     throw new Error(`Codex models request failed with status ${response.status}`)

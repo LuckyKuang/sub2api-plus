@@ -70,6 +70,8 @@ export default {
       copied: 'Prompt 已复制',
     },
     detail: {
+      customId: '自定义 ID',
+      prompt: '提示词',
       title: '任务详情',
       aggregatedResult: '汇总结果',
       result: '结果',
@@ -104,6 +106,7 @@ export default {
       notice: '当前显示的是浏览器本地缓存的压缩缩略图，清晰度会有影响；需要查看原图请下载 ZIP。',
     },
     create: {
+      apiKey: 'API 密钥',
       title: '创建批量任务',
       taskName: '任务名称',
       taskNamePlaceholder: '不填写则默认使用当前时间',
@@ -118,7 +121,7 @@ export default {
       estimatedOutputValue: '{images} 张 / {prompts} 条',
       promptAdded: '已添加 {count} 条',
       promptPlaceholder: '粘贴 prompt，添加后进入下方列表',
-      customIdPlaceholder: 'Custom ID 可选',
+      customIdPlaceholder: '自定义 ID（可选）',
       outputCountPerPrompt: '每条生成张数',
       outputCountOption: '{n} 张',
       referenceImage: '参考图',

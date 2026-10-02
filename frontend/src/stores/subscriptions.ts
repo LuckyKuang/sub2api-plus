@@ -4,8 +4,9 @@
  */
 
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import subscriptionsAPI from '@/api/subscriptions'
+import { adminSupportContext } from '@/utils/adminSupportContext'
 import type { UserSubscription } from '@/types'
 
 // Cache TTL: 60 seconds
@@ -124,6 +125,8 @@ export const useSubscriptionStore = defineStore('subscriptions', () => {
   function invalidateCache() {
     lastFetchedAt.value = null
   }
+
+  watch(adminSupportContext, clear, { flush: 'sync' })
 
   return {
     // State

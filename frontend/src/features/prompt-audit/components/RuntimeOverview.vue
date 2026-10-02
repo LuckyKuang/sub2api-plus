@@ -97,6 +97,12 @@ const props = defineProps<{ runtime: PromptAuditRuntime | null; loading: boolean
 defineEmits<{ (event: 'refresh'): void }>()
 const { t, locale } = useI18n()
 
+function dependencyLabel(status: string): string {
+  if (status === 'ok') return t('admin.promptAudit.runtime.dependencyStatus.ok')
+  if (status === 'error') return t('admin.promptAudit.runtime.dependencyStatus.error')
+  return status
+}
+
 const statusItems = computed(() => {
   const runtime = props.runtime
   if (!runtime) return []
@@ -106,7 +112,9 @@ const statusItems = computed(() => {
     { label: t('admin.promptAudit.runtime.version'), value: `${runtime.active_config_version} / ${runtime.expected_config_version}` },
     { label: t('admin.promptAudit.runtime.workers'), value: `${runtime.worker_active} / ${runtime.worker_total}` },
     { label: t('admin.promptAudit.runtime.queue'), value: `${runtime.queue.active} / ${runtime.queue_capacity}` },
-    { label: t('admin.promptAudit.runtime.dependencies'), value: `DB ${runtime.database_status} · Redis ${runtime.redis_status}` },
+    { label: t('admin.promptAudit.runtime.dependencies'), value: t('admin.promptAudit.runtime.dependencySummary', {
+      database: dependencyLabel(runtime.database_status), redis: dependencyLabel(runtime.redis_status),
+    }) },
   ]
 })
 

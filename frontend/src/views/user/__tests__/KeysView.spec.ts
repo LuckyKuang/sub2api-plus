@@ -1,10 +1,15 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
 
+import { setAdminSupportContext } from '@/utils/adminSupportContext'
 import type { ApiKey } from '@/types'
 import { keysAPI } from '@/api'
 import KeysView from '../KeysView.vue'
+import en from '@/i18n/locales/en'
+import zh from '@/i18n/locales/zh'
+
+let statusLocale: 'en' | 'zh' = 'en'
 
 const {
   listKeys,
@@ -103,7 +108,9 @@ vi.mock('vue-i18n', async () => {
   return {
     ...actual,
     useI18n: () => ({
-      t: (key: string) => messages[key] ?? key,
+      t: (key: string) => key.startsWith('keys.status.')
+        ? { en, zh }[statusLocale].keys.status[key.slice('keys.status.'.length) as ApiKey['status']] ?? key
+        : messages[key] ?? key,
     }),
   }
 })
@@ -173,6 +180,8 @@ const DataTableStub = {
           <slot name="cell-id" :value="row.id" :row="row" />
         </div>
         <slot name="cell-name" :value="row.name" :row="row" />
+        <slot name="cell-key" :value="row.key" :row="row" />
+        <div data-test="key-status"><slot name="cell-status" :value="row.status" :row="row" /></div>
         <slot name="cell-actions" :row="row" />
         <div data-test="current-concurrency">
           <slot name="cell-current_concurrency" :value="row.current_concurrency" :row="row" />
@@ -266,7 +275,9 @@ const getButtonByText = (wrapper: VueWrapper, text: string) => {
 }
 
 describe('user KeysView column settings', () => {
+  afterEach(() => setAdminSupportContext(null))
   beforeEach(() => {
+    statusLocale = 'en'
     localStorage.clear()
 
     listKeys.mockReset()
@@ -294,6 +305,56 @@ describe('user KeysView column settings', () => {
     getAvailableGroups.mockResolvedValue([])
     getUserGroupRates.mockResolvedValue({})
     isCurrentStep.mockReturnValue(false)
+  })
+
+  it.each([
+    { locale: 'en', label: 'Disabled' },
+    { locale: 'zh', label: '已禁用' },
+  ] as const)('translates backend disabled status and filter in $locale', async ({ locale, label }) => {
+    statusLocale = locale
+    const key: ApiKey = { ...createApiKey(), group_id: 1, status: 'disabled' }
+    listKeys.mockResolvedValue({ items: [key], total: 1, page: 1, page_size: 20, pages: 1 })
+    const wrapper = await mountView()
+    expect(wrapper.get('[data-test="key-status"]').text()).toBe(label)
+    expect(wrapper.text()).not.toContain('keys.status.disabled')
+    const filter = wrapper.findAllComponents({ name: 'Select' })
+      .find(select => select.props('options').some((option: { value: string }) => option.value === 'disabled'))!
+    expect(filter.props('options')).toContainEqual({ value: 'disabled', label })
+    filter.vm.$emit('update:modelValue', 'disabled')
+    await flushPromises()
+    expect(listKeys).toHaveBeenLastCalledWith(1, 20, expect.objectContaining({ status: 'disabled' }), expect.any(Object))
+
+    await getButtonByText(wrapper, 'common.edit').trigger('click')
+    const status = wrapper.findAllComponents({ name: 'Select' })
+      .find(select => select.props('options').length === 2 && select.props('options')[0].value === 'active')!
+    expect(status.props('modelValue')).toBe('inactive')
+    await wrapper.get('#key-form').trigger('submit')
+    await flushPromises()
+    const updates = updateKey.mock.calls[0][1]
+    expect(updates).not.toHaveProperty('status')
+    wrapper.unmount()
+  })
+
+  it('keeps full key copying and configuration guides available in read-only assistance', async () => {
+    setAdminSupportContext({ actorId: 1, userId: 42 })
+    const wrapper = await mountView()
+    expect(wrapper.get('[data-tour="keys-create-btn"]').attributes()).toHaveProperty('disabled')
+    expect(getButtonByText(wrapper, 'keys.disable').attributes()).toHaveProperty('disabled')
+    expect(getButtonByText(wrapper, 'common.delete').attributes()).toHaveProperty('disabled')
+    await wrapper.get('button[title="keys.copyToClipboard"]').trigger('click')
+    expect(copyToClipboard).toHaveBeenCalledWith('sk-test-key', 'keys.copied')
+    await getButtonByText(wrapper, 'keys.useKey').trigger('click')
+    await flushPromises()
+    const guide = wrapper.findComponent({ name: 'UseKeyModal' })
+    expect(guide.props('show')).toBe(true)
+    expect(guide.props('apiKey')).toBe('sk-test-key')
+    await getButtonByText(wrapper, 'common.edit').trigger('click')
+    expect((wrapper.get('[data-tour="key-form-name"]').element as HTMLInputElement).value).toBe('test-key')
+    expect(wrapper.get('[data-tour="key-form-name"]').attributes()).toHaveProperty('readonly')
+    await wrapper.get('#key-form').trigger('submit')
+    expect(updateKey).not.toHaveBeenCalled()
+    expect(keysAPI.create).not.toHaveBeenCalled()
+    wrapper.unmount()
   })
 
   it.each([

@@ -35,6 +35,43 @@ func TestDeriveAuditAction(t *testing.T) {
 	}
 }
 
+func TestSupportReadsAuditRealActorAndTargetWithoutResponseSecrets(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repository := &auditCaptureRepository{}
+	audit := service.NewAuditLogService(repository, nil)
+	audit.Start()
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set(string(ContextKeyUser), AuthSubject{UserID: 1})
+		c.Set(string(ContextKeyUserRole), "admin")
+		c.Set(SupportReadTargetKey, SupportReadTarget{Subject: AuthSubject{UserID: 42}, Role: "user"})
+	})
+	router.Use(gin.HandlerFunc(NewAuditLogMiddleware(audit)))
+	for _, path := range []string{"/keys", "/user/profile", "/images/batches/:id/download"} {
+		router.GET("/api/v1/admin/support/users/:user_id"+path, func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{"key": "support-response-secret-fixture", "identity": "target-visible-identity"})
+		})
+	}
+	for _, path := range []string{"/keys", "/user/profile", "/images/batches/batch-1/download"} {
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/admin/support/users/42"+path+"?api_key_id=7&token=private-query-token", nil))
+		require.Equal(t, http.StatusOK, rec.Code)
+	}
+	audit.Stop()
+	repository.mu.Lock()
+	defer repository.mu.Unlock()
+	require.Len(t, repository.logs, 3)
+	for _, entry := range repository.logs {
+		require.Equal(t, "admin.support.read", entry.Action)
+		require.Equal(t, int64(1), *entry.ActorUserID)
+		require.Equal(t, "admin", entry.ActorRole)
+		require.Equal(t, "42", entry.Extra["params"].(map[string]string)["user_id"])
+		require.Empty(t, entry.RequestBody)
+		require.NotContains(t, entry.Extra["query"], "private-query-token")
+		require.NotContains(t, entry.Extra, "key")
+	}
+}
+
 func TestSetAuditExtraAllowsIPAccessResult(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())

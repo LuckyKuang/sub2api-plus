@@ -1,6 +1,7 @@
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { keysAPI } from '@/api/keys'
-import { useAuthStore } from '@/stores/auth'
+import { useUserView as useAuthStore } from '@/composables/useUserView'
+import { adminSupportContext, supportRequestGeneration } from '@/utils/adminSupportContext'
 import type { ApiKey } from '@/types'
 
 const loaded = ref(false)
@@ -37,11 +38,13 @@ async function loadAsyncImageAccess(force = false): Promise<boolean> {
   if (loaded.value && !force) return hasManageableAsyncImageKey.value
   if (pendingLoad && !force) return pendingLoad
 
+  const scope = supportRequestGeneration()
   loading.value = true
   pendingLoad = (async () => {
     let page = 1
     while (true) {
       const response = await keysAPI.list(page, pageSize, { sort_by: 'created_at', sort_order: 'desc' })
+      if (scope !== supportRequestGeneration()) return false
       if ((response.items || []).some(keyCanManageAsyncImage)) {
         hasManageableAsyncImageKey.value = true
         loaded.value = true
@@ -57,11 +60,13 @@ async function loadAsyncImageAccess(force = false): Promise<boolean> {
     }
   })()
     .catch(() => {
+      if (scope !== supportRequestGeneration()) return false
       hasManageableAsyncImageKey.value = false
       loaded.value = true
       return false
     })
     .finally(() => {
+      if (scope !== supportRequestGeneration()) return
       loading.value = false
       pendingLoad = null
     })
@@ -78,3 +83,10 @@ export function useAsyncImageAccess() {
     refreshAsyncImageAccess: loadAsyncImageAccess,
   }
 }
+
+watch(adminSupportContext, () => {
+  loaded.value = false
+  loading.value = false
+  pendingLoad = null
+  hasManageableAsyncImageKey.value = false
+}, { flush: 'sync' })

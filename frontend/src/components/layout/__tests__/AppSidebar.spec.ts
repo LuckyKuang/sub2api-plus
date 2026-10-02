@@ -75,10 +75,10 @@ describe('AppSidebar administrator account support mode', () => {
   it('mounts the account selector and keeps self and target navigation separate', () => {
     expect(componentSource).toContain('<AdminSupportUserSelector')
     expect(componentSource).toContain('buildSelfNavItems(false)')
-    expect(componentSource).toContain('buildSupportNavItems(supportTargetId.value)')
+    expect(componentSource).toContain('finalizeNav(buildSelfNavItems(true))')
     expect(componentSource).toContain('parseAdminSupportTargetId(route.params.user_id)')
-    expect(componentSource).toContain("adminSupportPath(userId, 'api-keys')")
-    expect(componentSource).toContain("adminSupportPath(userId, 'async-images')")
+    expect(componentSource).toContain('supportPathForPersonalPath(id, item.path)')
+    expect(componentSource).toContain('!adminSupportContext.value')
     expect(componentSource).not.toContain("label: t('nav.myAccount')")
   })
 })

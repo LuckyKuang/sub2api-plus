@@ -28,7 +28,7 @@
                 <Icon name="book" size="md" class="mr-2" />
                 {{ t('batchImage.actions.usageGuide') }}
               </button>
-              <button type="button" class="btn btn-primary" @click="openCreateModal">
+              <button v-support-readonly type="button" class="btn btn-primary" @click="openCreateModal">
                 <Icon name="plus" size="md" class="mr-2" />
                 {{ t('batchImage.actions.createJob') }}
               </button>
@@ -60,7 +60,7 @@
                 <Icon :name="bulkDownloading ? 'refresh' : 'download'" size="sm" class="mr-1.5" :class="bulkDownloading ? 'animate-spin' : ''" />
                 {{ t('batchImage.actions.downloadSelected') }}
               </button>
-              <button
+              <button v-support-readonly
                 type="button"
                 class="btn btn-secondary btn-sm text-red-600 hover:text-red-700 dark:text-red-400"
                 :disabled="bulkDeleting"
@@ -287,7 +287,7 @@
       >
         <template v-for="job in batchJobs" :key="job.id">
           <template v-if="job.id === openMoreJobId">
-            <button
+            <button v-support-readonly
               v-if="canRetry(job)"
               type="button"
               class="flex w-full items-center gap-2 px-3 py-2 text-left text-gray-700 transition-colors hover:bg-amber-50 hover:text-amber-700 disabled:opacity-60 dark:text-gray-200 dark:hover:bg-amber-900/20 dark:hover:text-amber-300"
@@ -297,7 +297,7 @@
               <Icon name="refresh" size="sm" :class="retryingBatchId === job.id ? 'animate-spin' : ''" />
               {{ t('batchImage.actions.retryFailedItems') }}
             </button>
-            <button
+            <button v-support-readonly
               v-if="canDeleteRecord(job)"
               type="button"
               class="flex w-full items-center gap-2 px-3 py-2 text-left text-red-600 transition-colors hover:bg-red-50 disabled:opacity-60 dark:text-red-400 dark:hover:bg-red-900/20"
@@ -388,8 +388,8 @@
             </colgroup>
             <thead class="bg-gray-50 dark:bg-dark-800/80">
               <tr>
-                <th class="px-3 py-3 text-center text-sm font-medium text-gray-500 dark:text-gray-400">Custom ID</th>
-                <th class="px-3 py-3 text-left text-sm font-medium text-gray-500 dark:text-gray-400">Prompt</th>
+                <th class="px-3 py-3 text-center text-sm font-medium text-gray-500 dark:text-gray-400">{{ t('batchImage.detail.customId') }}</th>
+                <th class="px-3 py-3 text-left text-sm font-medium text-gray-500 dark:text-gray-400">{{ t('batchImage.detail.prompt') }}</th>
                 <th class="px-3 py-3 text-center text-sm font-medium text-gray-500 dark:text-gray-400">{{ t('common.status') }}</th>
                 <th class="px-3 py-3 text-center text-sm font-medium text-gray-500 dark:text-gray-400">{{ t('batchImage.detail.preview') }}</th>
                 <th class="px-3 py-3 text-center text-sm font-medium text-gray-500 dark:text-gray-400">{{ t('batchImage.detail.result') }}</th>
@@ -489,11 +489,11 @@
 
       <template #footer>
         <div class="flex justify-end gap-3">
-	          <button type="button" class="btn btn-secondary" :disabled="!currentJob || !canCancel(currentJob) || cancelling" @click="cancelSelected">
+	          <button v-support-readonly type="button" class="btn btn-secondary" :disabled="!currentJob || !canCancel(currentJob) || cancelling" @click="cancelSelected">
 	            <Icon v-if="cancelling" name="refresh" size="sm" class="mr-2 animate-spin" />
 	            {{ t('batchImage.actions.cancelJob') }}
 	          </button>
-	          <button
+	          <button v-support-readonly
 	            v-if="currentJob && currentDisplayJob && canRetry(currentDisplayJob)"
 	            type="button"
 	            class="btn btn-secondary inline-flex min-w-[116px] items-center justify-center"
@@ -538,7 +538,7 @@
     </BaseDialog>
 
     <BaseDialog :show="showCreateModal" :title="t('batchImage.create.title')" width="wide" @close="closeCreateModal">
-      <form class="space-y-5" @submit.prevent="submitJob">
+      <form v-support-readonly class="space-y-5" @submit.prevent="submitJob">
         <div class="grid gap-4 md:grid-cols-2">
           <div class="md:col-span-2">
             <label class="input-label">{{ t('batchImage.create.taskName') }}</label>
@@ -552,7 +552,7 @@
           </div>
 
           <div class="md:col-span-2">
-            <label class="input-label">API Key</label>
+            <label class="input-label">{{ t('batchImage.create.apiKey') }}</label>
             <select v-model.number="form.apiKeyId" class="input" :disabled="loadingKeys">
               <option :value="0">{{ loadingKeys ? t('batchImage.create.loadingKeys') : t('batchImage.create.selectKeyPlaceholder') }}</option>
               <option v-for="key in geminiApiKeys" :key="key.id" :value="key.id">
@@ -608,7 +608,7 @@
 
         <div class="space-y-3">
           <div class="flex items-center justify-between gap-3">
-            <label class="input-label mb-0">Prompt</label>
+            <label class="input-label mb-0">{{ t('batchImage.detail.prompt') }}</label>
             <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('batchImage.create.promptAdded', { count: promptRows.length }) }}</span>
           </div>
           <div class="rounded-lg border border-gray-200 p-3 dark:border-dark-700">
@@ -707,7 +707,7 @@
       <template #footer>
         <div class="flex justify-end gap-3">
           <button type="button" class="btn btn-secondary" :disabled="submitting" @click="closeCreateModal">{{ t('common.cancel') }}</button>
-	          <button type="button" class="btn btn-primary inline-flex min-w-[120px] justify-center" :disabled="submitting || loadingModels || (parsedItems.length === 0 && !promptDraft.trim()) || !selectedApiKey || !form.model" @click="submitJob">
+	          <button v-support-readonly type="button" class="btn btn-primary inline-flex min-w-[120px] justify-center" :disabled="submitting || loadingModels || (parsedItems.length === 0 && !promptDraft.trim()) || !selectedApiKey || !form.model" @click="submitJob">
             <Icon v-if="submitting" name="refresh" size="sm" class="mr-2 animate-spin" />
             {{ submitting ? t('common.submitting') : t('batchImage.actions.submitJob') }}
           </button>
@@ -752,6 +752,7 @@
 </template>
 
 <script setup lang="ts">
+import { supportReadonly as vSupportReadonly } from '@/directives/supportReadonly'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'

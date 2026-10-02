@@ -46,46 +46,6 @@ type AdminAPIKeySummary struct {
 	Group *Group `json:"group,omitempty"`
 }
 
-// AdminSupportUser is the minimal target identity shown in the read-only
-// support view. Administrator-only notes, authentication identities, and
-// credential-bearing child objects are intentionally excluded.
-type AdminSupportUser struct {
-	ID            int64      `json:"id"`
-	Email         string     `json:"email"`
-	Username      string     `json:"username"`
-	Role          string     `json:"role"`
-	Balance       float64    `json:"balance"`
-	FrozenBalance float64    `json:"frozen_balance"`
-	Concurrency   int        `json:"concurrency"`
-	RPMLimit      int        `json:"rpm_limit"`
-	Status        string     `json:"status"`
-	AllowedGroups []int64    `json:"allowed_groups"`
-	LastActiveAt  *time.Time `json:"last_active_at,omitempty"`
-	CreatedAt     time.Time  `json:"created_at"`
-	UpdatedAt     time.Time  `json:"updated_at"`
-}
-
-func AdminSupportUserFromService(u *service.User) *AdminSupportUser {
-	if u == nil {
-		return nil
-	}
-	return &AdminSupportUser{
-		ID:            u.ID,
-		Email:         u.Email,
-		Username:      u.Username,
-		Role:          u.Role,
-		Balance:       u.Balance,
-		FrozenBalance: u.FrozenBalance,
-		Concurrency:   u.Concurrency,
-		RPMLimit:      u.RPMLimit,
-		Status:        u.Status,
-		AllowedGroups: append([]int64(nil), u.AllowedGroups...),
-		LastActiveAt:  u.LastActiveAt,
-		CreatedAt:     u.CreatedAt,
-		UpdatedAt:     u.UpdatedAt,
-	}
-}
-
 // AdminAPIKeySummaryFromService converts an API key without copying any
 // credential-bearing fields into the administrator response.
 func AdminAPIKeySummaryFromService(k *service.APIKey) *AdminAPIKeySummary {

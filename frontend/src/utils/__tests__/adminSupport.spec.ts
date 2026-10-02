@@ -7,6 +7,7 @@ import {
   selfPathForSupportResource,
   supportResourceForPersonalPath,
   supportResourceFromPath,
+  supportPathForPersonalPath,
   type AdminSupportResource,
 } from '@/utils/adminSupport'
 
@@ -23,6 +24,7 @@ describe('parseAdminSupportTargetId', () => {
 })
 
 const resourceCases: Array<[AdminSupportResource, string]> = [
+  ['overview', '/dashboard'],
   ['api-keys', '/keys'],
   ['async-images', '/async-image'],
   ['usage', '/usage'],
@@ -31,6 +33,10 @@ const resourceCases: Array<[AdminSupportResource, string]> = [
   ['subscriptions', '/subscriptions'],
   ['orders', '/orders'],
   ['profile', '/profile'],
+  ['batch-images', '/batch-image'],
+  ['purchase', '/purchase'],
+  ['redeem', '/redeem'],
+  ['affiliate', '/affiliate'],
 ]
 
 describe('administrator support route selection', () => {
@@ -53,5 +59,11 @@ describe('administrator support route selection', () => {
   it('uses strict ID comparison even when the other account may also be an administrator', () => {
     expect(accountSelectionDestination('/keys', 7, 8)).toBe('/admin/support/users/8/api-keys')
     expect(accountSelectionDestination('/admin/users', 7, 8)).toBe('/admin/support/users/8/overview')
+  })
+  it('keeps custom page IDs when switching targets or returning to the administrator', () => {
+    expect(supportPathForPersonalPath(42, '/custom/help')).toBe('/admin/support/users/42/custom/help')
+    expect(accountSelectionDestination('/admin/support/users/42/custom/help', 7, 43)).toBe('/admin/support/users/43/custom/help')
+    expect(accountSelectionDestination('/admin/support/users/42/custom/help', 7, 7)).toBe('/custom/help')
+    expect(supportPathForPersonalPath(42, '/admin/users')).toBeNull()
   })
 })

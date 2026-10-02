@@ -56,6 +56,7 @@ import { useRoute, useRouter } from 'vue-router'
 import Select from '@/components/common/Select.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { useAdminSupportViewStore, useAuthStore } from '@/stores'
+import { setAdminSupportContext } from '@/utils/adminSupportContext'
 import { accountSelectionDestination, parseAdminSupportTargetId } from '@/utils/adminSupport'
 
 interface Props {
@@ -131,6 +132,7 @@ function optionInitial(option?: AccountOption): string {
 function selectAccount(value: string | number | boolean | null): void {
   const targetUserId = Number(value)
   if (!Number.isSafeInteger(targetUserId) || targetUserId <= 0 || actorUserId.value <= 0) return
+  if (targetUserId === actorUserId.value) setAdminSupportContext(null)
   const destination = accountSelectionDestination(route.path, actorUserId.value, targetUserId)
   if (destination && destination !== route.path) void router.push(destination)
 }

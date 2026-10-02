@@ -4,10 +4,10 @@
  */
 
 import { apiClient } from '../client'
-import type { AdminSupportAPIKey } from './supportView'
+import type { AdminAPIKeySummary } from './apiKeySummary'
 
 export interface UpdateApiKeyGroupResult {
-  api_key: AdminSupportAPIKey
+  api_key: AdminAPIKeySummary
   auto_granted_group_access: boolean
   granted_group_id?: number
   granted_group_name?: string

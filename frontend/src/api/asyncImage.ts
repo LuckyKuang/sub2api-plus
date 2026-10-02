@@ -1,4 +1,5 @@
-import { buildGatewayUrl } from './client'
+import { buildGatewayUrl, buildApiUrl } from './client'
+import { supportImageFetch } from '@/utils/adminSupportContext'
 
 export type AsyncImageTaskStatus = 'processing' | 'completed' | 'failed' | string
 
@@ -88,7 +89,7 @@ export function preferredAsyncImageModel(models: string[]): string {
 }
 
 export async function listAsyncImageModels(apiKey: string): Promise<string[]> {
-  const response = await fetch(buildGatewayUrl('/v1/models'), { headers: authHeaders(apiKey) })
+  const response = await imageFetch('/v1/models', apiKey, { headers: authHeaders(apiKey) })
   if (!response.ok) throw await parseAsyncImageError(response)
 
   const body = await response.json() as { data?: Array<GatewayModel | string> }
@@ -106,7 +107,7 @@ export async function listAsyncImageModels(apiKey: string): Promise<string[]> {
 }
 
 export async function submitAsyncImageGeneration(apiKey: string, payload: AsyncImageGenerationRequest): Promise<AsyncImageTask> {
-  const response = await fetch(buildGatewayUrl('/v1/images/generations/async'), {
+  const response = await imageFetch('/v1/images/generations/async', apiKey, {
     method: 'POST',
     headers: authHeaders(apiKey, { 'Content-Type': 'application/json' }),
     body: JSON.stringify(payload),
@@ -126,7 +127,7 @@ export async function submitAsyncImageEdit(apiKey: string, payload: AsyncImageEd
   payload.images.forEach(image => form.append('image[]', image, image.name))
   if (payload.mask) form.append('mask', payload.mask, payload.mask.name)
 
-  const response = await fetch(buildGatewayUrl('/v1/images/edits/async'), {
+  const response = await imageFetch('/v1/images/edits/async', apiKey, {
     method: 'POST',
     // Do not set Content-Type here. The browser supplies the multipart boundary.
     headers: authHeaders(apiKey),
@@ -141,19 +142,19 @@ export async function listAsyncImageTasks(apiKey: string, options: AsyncImageLis
   query.set('limit', String(options.limit || 20))
   query.set('offset', String(options.offset || 0))
   if (options.status) query.set('status', options.status)
-  const response = await fetch(buildGatewayUrl(`/v1/images/tasks?${query.toString()}`), { headers: authHeaders(apiKey) })
+  const response = await imageFetch(`/v1/images/tasks?${query.toString()}`, apiKey, { headers: authHeaders(apiKey) })
   if (!response.ok) throw await parseAsyncImageError(response)
   return response.json()
 }
 
 export async function getAsyncImageTask(apiKey: string, taskID: string): Promise<AsyncImageTask> {
-  const response = await fetch(buildGatewayUrl(`/v1/images/tasks/${encodeURIComponent(taskID)}`), { headers: authHeaders(apiKey) })
+  const response = await imageFetch(`/v1/images/tasks/${encodeURIComponent(taskID)}`, apiKey, { headers: authHeaders(apiKey) })
   if (!response.ok) throw await parseAsyncImageError(response)
   return response.json()
 }
 
 export async function deleteAsyncImageTask(apiKey: string, taskID: string): Promise<void> {
-  const response = await fetch(buildGatewayUrl(`/v1/images/tasks/${encodeURIComponent(taskID)}`), {
+  const response = await imageFetch(`/v1/images/tasks/${encodeURIComponent(taskID)}`, apiKey, {
     method: 'DELETE',
     headers: authHeaders(apiKey),
   })
@@ -161,7 +162,7 @@ export async function deleteAsyncImageTask(apiKey: string, taskID: string): Prom
 }
 
 export async function downloadAsyncImageZip(apiKey: string, taskID: string): Promise<Blob> {
-  const response = await fetch(buildGatewayUrl(`/v1/images/tasks/${encodeURIComponent(taskID)}/download`), {
+  const response = await imageFetch(`/v1/images/tasks/${encodeURIComponent(taskID)}/download`, apiKey, {
     headers: authHeaders(apiKey),
   })
   if (!response.ok) throw await parseAsyncImageError(response)
@@ -203,4 +204,8 @@ function readBlobAsArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
     reader.onload = () => resolve(reader.result as ArrayBuffer)
     reader.readAsArrayBuffer(blob)
   })
+}
+
+function imageFetch(path: string, apiKey: string, init: RequestInit): Promise<Response> {
+  return supportImageFetch(path, apiKey, init, buildGatewayUrl, buildApiUrl)
 }

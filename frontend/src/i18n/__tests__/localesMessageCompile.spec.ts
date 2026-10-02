@@ -29,7 +29,33 @@ function collectCompileErrors(node: unknown, path: string, out: string[]): void 
   }
 }
 
+function parameters(message: string): string[] {
+  const values = new Set<string>()
+  function visit(node: unknown): void {
+    if (!node || typeof node !== 'object') return
+    const ast = node as Record<string, unknown>
+    if (ast.type === 4) values.add(`named:${ast.key}`)
+    if (ast.type === 5) values.add(`list:${ast.index}`)
+    Object.values(ast).forEach(value => Array.isArray(value) ? value.forEach(visit) : visit(value))
+  }
+  visit(baseCompile(message).ast)
+  return [...values].sort()
+}
+
+function parameterMismatches(english: unknown, chinese: unknown, path = ''): string[] {
+  if (typeof english === 'string' && typeof chinese === 'string') {
+    return JSON.stringify(parameters(english)) === JSON.stringify(parameters(chinese)) ? [] : [path]
+  }
+  if (!english || typeof english !== 'object' || !chinese || typeof chinese !== 'object') return []
+  return Object.entries(english).flatMap(([key, value]) =>
+    parameterMismatches(value, (chinese as Record<string, unknown>)[key], path ? `${path}.${key}` : key)
+  )
+}
+
 describe('locale messages compile', () => {
+  it('uses the same interpolation parameters in English and Chinese', () => {
+    expect(parameterMismatches(en, zh)).toEqual([])
+  })
   it.each([
     ['zh', zh],
     ['en', en]

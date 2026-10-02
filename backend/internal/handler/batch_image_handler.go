@@ -218,7 +218,11 @@ func (h *BatchImageHandler) ItemContent(c *gin.Context) {
 
 	c.Header("Content-Type", stream.ContentType)
 	c.Header("Content-Disposition", service.BatchImageContentDispositionAttachment(stream.Filename))
-	c.Header("Cache-Control", "private, max-age=300")
+	if _, supportRead := middleware.GetSupportReadTarget(c); supportRead {
+		c.Header("Cache-Control", "private, no-store")
+	} else {
+		c.Header("Cache-Control", "private, max-age=300")
+	}
 	c.Header("X-Content-Type-Options", "nosniff")
 	if stream.ContentLength != nil && *stream.ContentLength >= 0 {
 		c.Header("Content-Length", strconv.FormatInt(*stream.ContentLength, 10))
@@ -233,6 +237,9 @@ func (h *BatchImageHandler) ItemContent(c *gin.Context) {
 // markDownloadedBestEffort 在响应体已写出后标记下载状态；
 // 此时无法再向客户端返回错误，失败只能记日志（不能静默丢弃）。
 func (h *BatchImageHandler) markDownloadedBestEffort(c *gin.Context, owner service.BatchImageOwner) {
+	if _, supportRead := middleware.GetSupportReadTarget(c); supportRead {
+		return
+	}
 	if err := h.service.MarkDownloaded(c.Request.Context(), owner, c.Param("id")); err != nil {
 		logger.L().Warn("batch_image.mark_downloaded_failed",
 			zap.String("batch_id", c.Param("id")),

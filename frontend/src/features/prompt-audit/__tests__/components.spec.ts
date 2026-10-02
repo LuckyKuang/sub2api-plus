@@ -9,10 +9,23 @@ import FilterDeleteDialog from '../components/FilterDeleteDialog.vue'
 import RuntimeOverview from '../components/RuntimeOverview.vue'
 import type { PromptAuditDraft, PromptAuditEndpointDraft, PromptAuditEvent, PromptAuditRuntime, PromptEventFilters } from '../types'
 import { emptyEventFilters, resolveDeleteRangeFilters, SCANNER_CATALOG } from '../viewModel'
+import en from '@/i18n/locales/en'
+import zh from '@/i18n/locales/zh'
+
+let dependencyLocale: 'en' | 'zh' = 'en'
 
 vi.mock('vue-i18n', async () => {
   const actual = await vi.importActual<typeof import('vue-i18n')>('vue-i18n')
-  return { ...actual, useI18n: () => ({ locale: { value: 'en' }, t: (key: string, params?: Record<string, unknown>) => key.replace(/\{(\w+)\}/g, (_, token) => String(params?.[token] ?? `{${token}}`)) }) }
+  return { ...actual, useI18n: () => ({ locale: { value: dependencyLocale }, t: (key: string, params?: Record<string, unknown>) => {
+    let message = key
+    if (key.startsWith('admin.promptAudit.runtime.dependency')) {
+      const runtime = { en, zh }[dependencyLocale].admin.promptAudit.runtime
+      if (key.endsWith('.dependencySummary')) message = runtime.dependencySummary
+      if (key.endsWith('.ok')) message = runtime.dependencyStatus.ok
+      if (key.endsWith('.error')) message = runtime.dependencyStatus.error
+    }
+    return message.replace(/\{(\w+)\}/g, (_, token) => String(params?.[token] ?? `{${token}}`))
+  } }) }
 })
 
 const DialogStub = defineComponent({ props: ['show', 'title'], emits: ['close'], template: '<div v-if="show" data-test="dialog"><slot /><slot name="footer" /></div>' })
@@ -25,9 +38,16 @@ const endpoint = (): PromptAuditEndpointDraft => ({
 })
 
 describe('Prompt Audit components', () => {
-  beforeEach(() => vi.restoreAllMocks())
+  beforeEach(() => {
+    dependencyLocale = 'en'
+    vi.restoreAllMocks()
+  })
 
-  it('surfaces canonical content extraction outcomes and highlights failures', () => {
+  it.each([
+    { locale: 'en', database: 'ok', redis: 'error', label: 'Database: Healthy · Redis: Error' },
+    { locale: 'zh', database: 'error', redis: 'ok', label: '数据库：异常 · Redis：正常' },
+  ] as const)('surfaces extraction outcomes and translates dependency states in $locale', ({ locale, database, redis, label }) => {
+    dependencyLocale = locale
     const runtime: PromptAuditRuntime = {
       process_status: 'running', effective_mode: 'blocking', expected_config_version: 7, active_config_version: 7,
       worker_total: 4, worker_active: 1, queue_capacity: 100,
@@ -36,7 +56,7 @@ describe('Prompt Audit components', () => {
       extraction_attempted: 7, extraction_succeeded: 5, extraction_empty: 1, extraction_failed: 1,
       last_processed_at: '2026-07-16T00:05:00Z', last_error_at: '2026-07-16T00:01:00Z',
       last_error_code: 'prompt_guard_unavailable', last_error_message: 'Prompt Guard unavailable',
-      database_status: 'ok', redis_status: 'ok', endpoints: {},
+      database_status: database, redis_status: redis, endpoints: {},
       guard_metrics: { total: 1, allowed: 1, flagged: 0, blocked: 0, unavailable: 0, invalid: 0, timeouts: 0, failovers: 0, bulkhead_full: 0, record_failed: 0 },
     }
     const wrapper = mount(RuntimeOverview, { props: { runtime, loading: false, error: '' } })
@@ -50,6 +70,8 @@ describe('Prompt Audit components', () => {
     expect(wrapper.text()).toContain('admin.promptAudit.runtime.lastProcessed')
     expect(wrapper.text()).toContain('admin.promptAudit.runtime.lastError')
     expect(wrapper.text()).toContain('prompt_guard_unavailable')
+    expect(wrapper.text()).toContain(label)
+    expect(wrapper.text()).not.toContain('admin.promptAudit.runtime.dependencySummary')
   })
 
   it('edits a saved endpoint with blank-secret keep, explicit clear, replacement, and probe actions', async () => {

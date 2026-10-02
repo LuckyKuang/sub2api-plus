@@ -11,6 +11,7 @@ const { updateProfileMock, showErrorMock, authState } = vi.hoisted(() => ({
 vi.mock('@/api', () => ({
   userAPI: { updateProfile: updateProfileMock },
 }))
+vi.mock('@/stores/adminSupportView', () => ({ useAdminSupportViewStore: () => ({ target: null }) }))
 vi.mock('@/stores/auth', () => ({
   useAuthStore: () => authState,
 }))

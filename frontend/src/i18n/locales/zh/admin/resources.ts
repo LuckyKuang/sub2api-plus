@@ -387,6 +387,7 @@ export default {
       groupRequired: '请选择订阅分组',
       days: '天',
       status: {
+        active: '已启用',
         unused: '未使用',
         used: '已使用',
         expired: '已过期',

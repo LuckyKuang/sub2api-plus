@@ -396,6 +396,7 @@ export default {
       groupRequired: 'Please select a subscription group',
       days: ' days',
       status: {
+        active: 'Active',
         unused: 'Unused',
         used: 'Used',
         expired: 'Expired',

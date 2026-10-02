@@ -319,6 +319,7 @@ export default {
     status: {
       active: 'Active',
       inactive: 'Inactive',
+      disabled: 'Disabled',
       quota_exhausted: 'Quota Exhausted',
       expired: 'Expired',
     },

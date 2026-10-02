@@ -44,15 +44,6 @@ type userGroupStat struct {
 	ActualCost  float64 `json:"actual_cost"`
 }
 
-type adminSupportUsageStats struct {
-	Period            string  `json:"period"`
-	TotalRequests     int64   `json:"total_requests"`
-	TotalTokens       int64   `json:"total_tokens"`
-	TotalCost         float64 `json:"total_cost"`
-	TotalActualCost   float64 `json:"total_actual_cost"`
-	AverageDurationMs float64 `json:"avg_duration_ms"`
-}
-
 // UsageHandler handles usage-related requests
 type UsageHandler struct {
 	usageService   *service.UsageService
@@ -77,7 +68,7 @@ func NewUsageHandler(
 }
 
 func (h *UsageHandler) parseUserUsageFilters(c *gin.Context, requireRange bool) (*userUsageFilters, bool) {
-	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	subject, ok := middleware2.GetReadSubjectFromContext(c)
 	if !ok {
 		response.Unauthorized(c, "User not authenticated")
 		return nil, false
@@ -271,7 +262,7 @@ func (h *UsageHandler) List(c *gin.Context) {
 // ListErrors handles listing the current user's failed requests (redacted).
 // GET /api/v1/usage/errors
 func (h *UsageHandler) ListErrors(c *gin.Context) {
-	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	subject, ok := middleware2.GetReadSubjectFromContext(c)
 	if !ok {
 		response.Unauthorized(c, "User not authenticated")
 		return
@@ -356,7 +347,7 @@ func (h *UsageHandler) ListErrors(c *gin.Context) {
 // GetErrorDetail handles fetching one of the current user's failed-request details (redacted).
 // GET /api/v1/usage/errors/:id
 func (h *UsageHandler) GetErrorDetail(c *gin.Context) {
-	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	subject, ok := middleware2.GetReadSubjectFromContext(c)
 	if !ok {
 		response.Unauthorized(c, "User not authenticated")
 		return
@@ -385,7 +376,7 @@ func (h *UsageHandler) GetErrorDetail(c *gin.Context) {
 // GetByID handles getting a single usage record
 // GET /api/v1/usage/:id
 func (h *UsageHandler) GetByID(c *gin.Context) {
-	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	subject, ok := middleware2.GetReadSubjectFromContext(c)
 	if !ok {
 		response.Unauthorized(c, "User not authenticated")
 		return
@@ -432,56 +423,6 @@ func (h *UsageHandler) Stats(c *gin.Context) {
 	response.Success(c, stats)
 }
 
-// AdminSupportStats returns a credential-free usage summary for the explicit
-// support target. The authenticated administrator remains the actor; only the
-// query filter is scoped to the target user ID.
-func (h *UsageHandler) AdminSupportStats(c *gin.Context) {
-	userID, err := strconv.ParseInt(c.Param("user_id"), 10, 64)
-	if err != nil || userID <= 0 {
-		response.BadRequest(c, "Invalid user ID")
-		return
-	}
-
-	period := strings.TrimSpace(c.DefaultQuery("period", "month"))
-	userTZ := c.Query("timezone")
-	now := timezone.NowInUserLocation(userTZ)
-	var startTime time.Time
-	switch period {
-	case "today":
-		startTime = timezone.StartOfDayInUserLocation(now, userTZ)
-	case "week":
-		startOfDay := timezone.StartOfDayInUserLocation(now, userTZ)
-		daysSinceMonday := (int(startOfDay.Weekday()) + 6) % 7
-		startTime = startOfDay.AddDate(0, 0, -daysSinceMonday)
-	case "month":
-		startOfDay := timezone.StartOfDayInUserLocation(now, userTZ)
-		startTime = time.Date(startOfDay.Year(), startOfDay.Month(), 1, 0, 0, 0, 0, startOfDay.Location())
-	default:
-		response.BadRequest(c, "Invalid period, use today, week, or month")
-		return
-	}
-
-	stats, err := h.usageService.GetStatsWithFilters(c.Request.Context(), usagestats.UsageLogFilters{
-		UserID:            userID,
-		ModelFilterSource: usagestats.ModelSourceRequested,
-		StartTime:         &startTime,
-		EndTime:           &now,
-	})
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-
-	response.Success(c, adminSupportUsageStats{
-		Period:            period,
-		TotalRequests:     stats.TotalRequests,
-		TotalTokens:       stats.TotalTokens,
-		TotalCost:         stats.TotalCost,
-		TotalActualCost:   stats.TotalActualCost,
-		AverageDurationMs: stats.AverageDurationMs,
-	})
-}
-
 const (
 	defaultAPIKeyDailyUsageDays = 30
 	maxAPIKeyDailyUsageDays     = 90
@@ -508,7 +449,7 @@ func apiKeyDailyUsageRange(days int, userTZ string) (time.Time, time.Time) {
 // DashboardStats handles getting user dashboard statistics
 // GET /api/v1/usage/dashboard/stats
 func (h *UsageHandler) DashboardStats(c *gin.Context) {
-	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	subject, ok := middleware2.GetReadSubjectFromContext(c)
 	if !ok {
 		response.Unauthorized(c, "User not authenticated")
 		return
@@ -681,20 +622,26 @@ func parseBoolQueryWithDefault(c *gin.Context, key string, fallback bool) (bool,
 
 // BatchAPIKeysUsageRequest represents the request for batch API keys usage
 type BatchAPIKeysUsageRequest struct {
-	APIKeyIDs []int64 `json:"api_key_ids" binding:"required"`
+	APIKeyIDs []int64 `json:"api_key_ids" form:"api_key_ids" binding:"required"`
 }
 
 // DashboardAPIKeysUsage handles getting usage stats for user's own API keys
 // POST /api/v1/usage/dashboard/api-keys-usage
 func (h *UsageHandler) DashboardAPIKeysUsage(c *gin.Context) {
-	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	subject, ok := middleware2.GetReadSubjectFromContext(c)
 	if !ok {
 		response.Unauthorized(c, "User not authenticated")
 		return
 	}
 
 	var req BatchAPIKeysUsageRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	var bindErr error
+	if c.Request.Method == http.MethodGet {
+		bindErr = c.ShouldBindQuery(&req)
+	} else {
+		bindErr = c.ShouldBindJSON(&req)
+	}
+	if err := bindErr; err != nil {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
@@ -733,7 +680,7 @@ func (h *UsageHandler) DashboardAPIKeysUsage(c *gin.Context) {
 // GetMyAPIKeyDailyUsage handles getting daily usage details for the current user's API key.
 // GET /api/v1/user/api-keys/:id/usage/daily?days=30
 func (h *UsageHandler) GetMyAPIKeyDailyUsage(c *gin.Context) {
-	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	subject, ok := middleware2.GetReadSubjectFromContext(c)
 	if !ok {
 		response.Unauthorized(c, "User not authenticated")
 		return

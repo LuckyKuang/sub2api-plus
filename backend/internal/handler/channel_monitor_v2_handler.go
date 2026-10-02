@@ -29,7 +29,7 @@ func NewChannelMonitorV2Handler(svc *service.ChannelMonitorV2Service, apiKeyServ
 // channelMonitorV2IsAdmin is true when the request already passed admin auth
 // (shared Dimensions/Errors handlers serve both user and admin route groups).
 func channelMonitorV2IsAdmin(c *gin.Context) bool {
-	role, ok := middleware.GetUserRoleFromContext(c)
+	role, ok := middleware.GetReadUserRoleFromContext(c)
 	return ok && role == service.RoleAdmin
 }
 
@@ -174,7 +174,7 @@ func (h *ChannelMonitorV2Handler) users(c *gin.Context, admin bool) {
 	if !ok {
 		return
 	}
-	subject, exists := middleware.GetAuthSubjectFromContext(c)
+	subject, exists := middleware.GetReadSubjectFromContext(c)
 	if !exists {
 		response.Error(c, http.StatusUnauthorized, "user not found in context")
 		return
@@ -198,7 +198,7 @@ func (h *ChannelMonitorV2Handler) scopeFilter(c *gin.Context, filter *service.Ch
 		response.Error(c, http.StatusInternalServerError, "channel monitor group authorization unavailable")
 		return false
 	}
-	subject, ok := middleware.GetAuthSubjectFromContext(c)
+	subject, ok := middleware.GetReadSubjectFromContext(c)
 	if !ok || subject.UserID <= 0 {
 		response.Unauthorized(c, "user not found in context")
 		return false

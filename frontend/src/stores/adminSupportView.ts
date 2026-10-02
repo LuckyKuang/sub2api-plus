@@ -1,7 +1,8 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { adminAPI } from '@/api'
 import * as supportViewAPI from '@/api/admin/supportView'
+import { adminSupportContext } from '@/utils/adminSupportContext'
 import type { AdminUser } from '@/types'
 import type { AdminSupportUser } from '@/api/admin/supportView'
 
@@ -62,6 +63,8 @@ export const useAdminSupportViewStore = defineStore('adminSupportView', () => {
     targetRequestSequence += 1
     target.value = null
   }
+
+  watch(adminSupportContext, clearTarget, { flush: 'sync' })
 
   return {
     accounts,

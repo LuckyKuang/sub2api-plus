@@ -20,12 +20,12 @@ function collectStaticSourceKeys(source: string): string[] {
   const keys = new Set<string>()
 
   // Covers useI18n().t(), the global $t(), and direct i18n.t() calls in both
-  // TypeScript and Vue script/template source. Dynamic suffixes are checked by
-  // the runtime type of the value and cannot be proven from source text alone.
-  const translationCalls = /(?:\bi18n\.t|\$t|\bt)\s*\(\s*(['"])([^'"\r\n]+)\1/g
+  // TypeScript and Vue script/template source. Dynamic API enum suffixes are
+  // covered separately in localeDynamicKeys.spec.ts.
+  const translationCalls = /(?:\bi18n\.t|\$t|\bt)\s*\(\s*(['"`])([^'"`\r\n]+)\1/g
   for (const match of source.matchAll(translationCalls)) {
     const key = match[2]
-    if (!key.endsWith('.')) {
+    if (!key.endsWith('.') && !key.includes('${')) {
       keys.add(key)
     }
   }

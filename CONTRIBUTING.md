@@ -192,6 +192,9 @@ numeric prefix and create a forward-only migration.
 ## Documentation and Localization
 
 - Update English and Chinese frontend locales together.
+- Run `pnpm --dir frontend run check:i18n` in the validation container for locale
+  schemas, static keys, dynamic API enum labels, message compilation, and matching
+  interpolation parameters. The frontend build runs this check automatically.
 - Keep the three README core section IDs aligned.
 - Put detailed operational content in `docs/` or `deploy/`.
 - Add user-visible changes to the release notes.

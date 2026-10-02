@@ -66,7 +66,7 @@ import CatalogModelCard from '@/components/channels/CatalogModelCard.vue'
 import CatalogPriceDetails from '@/components/channels/CatalogPriceDetails.vue'
 import { catalogModels, defaultCatalogFilters, normalizeCatalogFilters, visibleModels, type CatalogModel } from '@/components/channels/catalog'
 import userChannelsAPI, { type ChannelCatalog } from '@/api/channels'
-import { useAuthStore } from '@/stores/auth'
+import { useUserView as useAuthStore } from '@/composables/useUserView'
 import { extractApiErrorMessage } from '@/utils/apiError'
 
 const { t } = useI18n()

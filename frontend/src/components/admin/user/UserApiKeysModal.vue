@@ -13,7 +13,7 @@
         <div v-for="key in apiKeys" :key="key.id" class="rounded-xl border border-gray-200 bg-white p-4 dark:border-dark-600 dark:bg-dark-800">
           <div class="flex items-start justify-between">
             <div class="min-w-0 flex-1">
-              <div class="mb-1 flex items-center gap-2"><span class="font-medium text-gray-900 dark:text-white">{{ key.name }}</span><span :class="['badge text-xs', key.status === 'active' ? 'badge-success' : 'badge-danger']">{{ key.status }}</span></div>
+              <div class="mb-1 flex items-center gap-2"><span class="font-medium text-gray-900 dark:text-white">{{ key.name }}</span><span :class="['badge text-xs', key.status === 'active' ? 'badge-success' : 'badge-danger']">{{ t('keys.status.' + key.status) }}</span></div>
               <p class="text-xs text-gray-500 dark:text-gray-400">#{{ key.id }} · {{ t('admin.support.apiKeyConfidentiality') }}</p>
             </div>
           </div>
@@ -112,7 +112,7 @@ import { useAppStore } from '@/stores/app'
 import { adminAPI } from '@/api/admin'
 import { formatDateTime } from '@/utils/format'
 import type { AdminUser, AdminGroup } from '@/types'
-import type { AdminSupportAPIKey } from '@/api/admin/supportView'
+import type { AdminAPIKeySummary } from '@/api/admin/apiKeySummary'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import GroupBadge from '@/components/common/GroupBadge.vue'
 import GroupOptionItem from '@/components/common/GroupOptionItem.vue'
@@ -122,7 +122,7 @@ const emit = defineEmits(['close'])
 const { t } = useI18n()
 const appStore = useAppStore()
 
-const apiKeys = ref<AdminSupportAPIKey[]>([])
+const apiKeys = ref<AdminAPIKeySummary[]>([])
 const allGroups = ref<AdminGroup[]>([])
 const loading = ref(false)
 const updatingKeyIds = ref(new Set<number>())
@@ -180,7 +180,7 @@ const loadGroups = async () => {
 const DROPDOWN_HEIGHT = 272 // max-h-64 = 16rem = 256px + padding
 const DROPDOWN_GAP = 4
 
-const openGroupSelector = (key: AdminSupportAPIKey) => {
+const openGroupSelector = (key: AdminAPIKeySummary) => {
   if (groupSelectorKeyId.value === key.id) {
     closeGroupSelector()
   } else {
@@ -203,7 +203,7 @@ const closeGroupSelector = () => {
   dropdownPosition.value = null
 }
 
-const changeGroup = async (key: AdminSupportAPIKey, newGroupId: number | null) => {
+const changeGroup = async (key: AdminAPIKeySummary, newGroupId: number | null) => {
   closeGroupSelector()
   if (updatingKeyIds.value.has(key.id) || key.group_id === newGroupId || (!key.group_id && newGroupId === null)) return
 

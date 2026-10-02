@@ -27,7 +27,7 @@ func NewAnnouncementHandler(announcementService *service.AnnouncementService) *A
 // List handles listing announcements visible to current user
 // GET /api/v1/announcements
 func (h *AnnouncementHandler) List(c *gin.Context) {
-	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	subject, ok := middleware2.GetReadSubjectFromContext(c)
 	if !ok {
 		response.Unauthorized(c, "User not found in context")
 		return

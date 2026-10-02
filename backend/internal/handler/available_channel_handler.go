@@ -3,7 +3,6 @@ package handler
 import (
 	"context"
 	"sort"
-	"strconv"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/response"
 	"github.com/LuckyKuang/sub2api-plus/internal/server/middleware"
@@ -139,7 +138,7 @@ type userAvailableChannel struct {
 // List 列出当前用户可见的「可用渠道」。
 // GET /api/v1/channels/available
 func (h *AvailableChannelHandler) List(c *gin.Context) {
-	subject, ok := middleware.GetAuthSubjectFromContext(c)
+	subject, ok := middleware.GetReadSubjectFromContext(c)
 	if !ok {
 		response.Unauthorized(c, "User not authenticated")
 		return
@@ -166,40 +165,6 @@ func (h *AvailableChannelHandler) List(c *gin.Context) {
 		return
 	}
 	response.Success(c, out)
-}
-
-// AdminSupportList returns the same user-visible channel model for an explicit
-// support target. The authenticated administrator remains the actor; the
-// target ID is never written into the authentication context.
-func (h *AvailableChannelHandler) AdminSupportList(c *gin.Context) {
-	userID, err := strconv.ParseInt(c.Param("user_id"), 10, 64)
-	if err != nil || userID <= 0 {
-		response.BadRequest(c, "Invalid user ID")
-		return
-	}
-
-	if !h.featureEnabled(c) {
-		response.Success(c, gin.H{
-			"items":       []userAvailableChannel{},
-			"group_rates": map[int64]float64{},
-		})
-		return
-	}
-
-	out, err := h.listForUser(c, userID)
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-	rates, err := h.apiKeyService.GetUserGroupRates(c.Request.Context(), userID)
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-	response.Success(c, gin.H{
-		"items":       out,
-		"group_rates": rates,
-	})
 }
 
 func (h *AvailableChannelHandler) listForUser(c *gin.Context, userID int64) ([]userAvailableChannel, error) {
