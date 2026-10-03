@@ -12,6 +12,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/antigravity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/logger"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/xai"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/zcode"
 	"github.com/google/wire"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -24,6 +25,27 @@ func ProvideGrokOAuthService(proxyRepo ProxyRepository, oauthClient GrokOAuthCli
 		svc = svc.WithSessionStore(xai.NewRedisSessionStore(redisClient))
 	}
 	return svc
+}
+
+// ProvideZhipuOAuthService creates the ZCode platform account-link service. The
+// session store is Redis-backed when a client is configured so a multi-instance
+// deployment can serve the follow-up poll and create calls from any replica.
+func ProvideZhipuOAuthService(proxyRepo ProxyRepository, oauthClient ZhipuOAuthClient, redisClient *redis.Client) *ZhipuOAuthService {
+	svc := NewZhipuOAuthService(oauthClient, proxyRepo)
+	// wire.go is depguard-exempt for redis; construct the Redis session store here.
+	if redisClient != nil {
+		svc = svc.WithSessionStore(zcode.NewRedisSessionStore(redisClient))
+	}
+	return svc
+}
+
+// ProvideZhipuOffPeakTicketManager creates the off-peak ticket manager and
+// registers it as the request-path ticket provider. Registration happens here so
+// the protocol builder never depends on the settings or account services.
+func ProvideZhipuOffPeakTicketManager(oauthClient ZhipuOffPeakClient) *ZhipuOffPeakTicketManager {
+	manager := NewZhipuOffPeakTicketManager(oauthClient)
+	SetZhipuOffPeakTicketProvider(manager)
+	return manager
 }
 
 // BuildInfo contains build information
@@ -897,6 +919,8 @@ var ProviderSet = wire.NewSet(
 	ProvideOpenAIOAuthService,
 	ProvideGrokOAuthService,
 	wire.Bind(new(GrokOAuthTokenService), new(*GrokOAuthService)),
+	ProvideZhipuOAuthService,
+	ProvideZhipuOffPeakTicketManager,
 	NewGeminiOAuthService,
 	NewGeminiQuotaService,
 	NewCompositeTokenCacheInvalidator,

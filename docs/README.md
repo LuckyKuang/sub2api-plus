@@ -17,6 +17,7 @@ belong in GitHub Release notes.
 - [DeepSeek empty-mapping whitelist](providers/DEEPSEEK.md)
 - [Kimi / Moonshot](providers/KIMI.md)
 - [MiniMax coding-plan quota origins](providers/MINIMAX.md)
+- [Zhipu / GLM ZCode account link](providers/ZHIPU.md)
 - [TypeSafe / Jev native System One](providers/TYPESAFE.md)
 
 ## Protocols and Tasks

@@ -143,6 +143,11 @@ services:
       # Gemini OAuth Configuration (for Gemini accounts)
       # =======================================================================
       - GEMINI_OAUTH_CLIENT_ID=${GEMINI_OAUTH_CLIENT_ID:-}
+      - ZHIPU_OAUTH_BASE_URL=${ZHIPU_OAUTH_BASE_URL:-}
+      - ZHIPU_OFFPEAK_BASE_URL=${ZHIPU_OFFPEAK_BASE_URL:-}
+      - ZHIPU_BIGMODEL_ORIGIN=${ZHIPU_BIGMODEL_ORIGIN:-}
+      - ZHIPU_ZAI_ORIGIN=${ZHIPU_ZAI_ORIGIN:-}
+      - SUB2API_ZCODE_VERSION=${SUB2API_ZCODE_VERSION:-}
       - GEMINI_OAUTH_CLIENT_SECRET=${GEMINI_OAUTH_CLIENT_SECRET:-}
       - GEMINI_OAUTH_SCOPES=${GEMINI_OAUTH_SCOPES:-}
       - GEMINI_QUOTA_POLICY=${GEMINI_QUOTA_POLICY:-}
