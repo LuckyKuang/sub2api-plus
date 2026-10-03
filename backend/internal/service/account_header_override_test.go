@@ -30,6 +30,11 @@ var managedIdentityOverrideTestNames = []string{
 	"X-Stainless-Lang",
 	"X-Stainless-Package-Version", "X-Stainless-OS", "X-Stainless-Arch",
 	"X-Stainless-Runtime", "X-Stainless-Runtime-Version",
+	// The Kimi Code declaration block. Its request-state companion
+	// (X-Msh-Tool-Call-Id) is deliberately absent: only the client identity
+	// block is a managed declaration.
+	"X-Msh-Platform", "X-Msh-Version", "X-Msh-Device-Name",
+	"X-Msh-Device-Model", "X-Msh-Os-Version", "X-Msh-Device-Id",
 }
 
 func TestHeaderOverrideRejectsManagedIdentity(t *testing.T) {

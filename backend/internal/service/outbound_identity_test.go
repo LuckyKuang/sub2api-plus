@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/deepseek"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/kimi"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/minimax"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/xai"
@@ -91,7 +92,7 @@ func TestOutboundIdentitySourcePriorityAndAccountTypes(t *testing.T) {
 		{PlatformGemini, AccountTypeAPIKey, "gemini"}, {PlatformGemini, AccountTypeServiceAccount, "gemini"},
 		{PlatformGrok, AccountTypeOAuth, "grok"}, {PlatformGrok, AccountTypeAPIKey, "grok"},
 		{PlatformAntigravity, AccountTypeOAuth, "antigravity"}, {PlatformAntigravity, AccountTypeUpstream, "antigravity"},
-		{PlatformKimi, AccountTypeAPIKey, "codex"}, {PlatformZhipu, AccountTypeAPIKey, "zcode"},
+		{PlatformKimi, AccountTypeAPIKey, "kimi"}, {PlatformZhipu, AccountTypeAPIKey, "zcode"},
 		{PlatformZhipu, AccountTypeOAuth, "zcode"},
 		{PlatformDeepseek, AccountTypeAPIKey, "deepseek"}, {PlatformMiniMax, AccountTypeAPIKey, "minimax"},
 	} {
@@ -193,8 +194,20 @@ func TestOutboundIdentityValidationAndVersionOnlyChange(t *testing.T) {
 		require.Equal(t, before.Originator, after.Originator)
 		require.Equal(t, strings.Replace(before.UserAgent, "/"+before.Version, "/3.9.1", 1), after.UserAgent)
 		for key, value := range before.Headers {
-			if key != "User-Agent" && key != "Version" && key != "x-grok-client-version" {
-				require.Equal(t, value, after.Headers[key], key)
+			if key == "User-Agent" || outboundHeaderClassName(preset, key) == outboundHeaderDerived {
+				// Derived declarations follow the resolved triple; the coherence
+				// assertions below own their exact post-change values.
+				continue
+			}
+			require.Equal(t, value, after.Headers[key], key)
+		}
+		if preset == "kimi" {
+			// The version companion must follow the resolved triple, while the
+			// platform token and the deployment-owned device set must not move.
+			require.Equal(t, "3.9.1", after.Headers[kimi.HeaderVersion], "X-Msh-Version")
+			require.Equal(t, kimi.PlatformToken, after.Headers[kimi.HeaderPlatform], "X-Msh-Platform")
+			for _, name := range kimi.DeviceHeaders() {
+				require.Equal(t, before.Headers[name], after.Headers[name], name)
 			}
 		}
 	}
@@ -579,4 +592,271 @@ func TestZCodeDefaultIdentityIsPinnedProduct(t *testing.T) {
 	got, ok = outboundidentity.FromContext(WithAccountOutboundIdentity(ctx, oauthOverride))
 	require.True(t, ok)
 	require.Equal(t, "zcode", got.Preset, "OAuth accounts must retain their native client family")
+}
+
+// Kimi Code publishes one product token plus a device description set on every
+// first-party provider request and declares no Originator and no standalone
+// Version header. This suite is the audit record for the pinned declaration
+// set, for the runtime device tier the settings own, and for the account tier
+// that overrides it.
+func TestBuiltInKimiOutboundIdentityMatchesOfficialClient(t *testing.T) {
+	t.Setenv(kimi.VersionEnv, "")
+
+	pinned := builtInOutboundIdentity("kimi")
+	require.Equal(t, "kimi", pinned.Preset)
+	require.Equal(t, "compiled_default", pinned.Source)
+	require.Equal(t, "kimi-code-cli/2.1.1", pinned.UserAgent)
+	require.Equal(t, kimi.ProductToken, pinned.Originator)
+	require.Equal(t, kimi.DefaultVersion, pinned.Version)
+	require.Equal(t, pinned, kimi.DefaultIdentity())
+
+	// The complete official declaration block, and nothing beyond it.
+	require.Len(t, pinned.Headers, 7)
+	require.Equal(t, pinned.UserAgent, pinned.Headers["User-Agent"])
+	require.Equal(t, kimi.PlatformToken, pinned.Headers[kimi.HeaderPlatform])
+	require.Equal(t, pinned.Version, pinned.Headers[kimi.HeaderVersion])
+	require.NotContains(t, pinned.Headers, "Originator")
+	require.NotContains(t, pinned.Headers, "Version")
+	for _, name := range kimi.DeviceHeaders() {
+		require.NotEmpty(t, pinned.Headers[name], name)
+	}
+}
+
+func TestKimiOutboundIdentityRendersTheOfficialHeaderSet(t *testing.T) {
+	_, ctx := outboundIdentityTestSettings(t, emptyOutboundIdentitySettings())
+	account := &Account{ID: 51, Platform: PlatformKimi, Type: AccountTypeAPIKey, Credentials: map[string]any{}}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.kimi.com/coding/v1/chat/completions", nil)
+	require.NoError(t, err)
+	// Request state a caller must never be able to select an identity with.
+	req.Header.Set("User-Agent", "caller/1.0")
+	req.Header.Set("Originator", "codex_cli_rs")
+	req.Header.Set("Version", "0.158.0")
+	req.Header.Set(kimi.HeaderDeviceID, "11111111-1111-4111-8111-111111111111")
+	req.Header.Set("X-Msh-Tool-Call-Id", "request-state")
+	req.Header.Set("Authorization", "Bearer credential")
+
+	prepareAccountOutboundRequest(req, account)
+
+	identity := builtInOutboundIdentity("kimi")
+	require.Equal(t, identity.UserAgent, req.Header.Get("User-Agent"))
+	for name, value := range identity.Headers {
+		if name == "User-Agent" {
+			continue
+		}
+		require.Equal(t, value, req.Header.Get(name), name)
+	}
+	require.Empty(t, req.Header.Get("Originator"), "the official client declares no Originator")
+	require.Empty(t, req.Header.Get("Version"), "the official client declares no standalone Version header")
+	require.Equal(t, "request-state", req.Header.Get("X-Msh-Tool-Call-Id"), "a tool-call id is request state, not identity")
+	require.Equal(t, "Bearer credential", req.Header.Get("Authorization"))
+}
+
+func TestKimiDefaultIdentityIsPinnedProduct(t *testing.T) {
+	require.Equal(t, "kimi", nativeOutboundPreset(PlatformKimi))
+
+	_, ctx := outboundIdentityTestSettings(t, emptyOutboundIdentitySettings())
+	account := &Account{ID: 52, Platform: PlatformKimi, Type: AccountTypeAPIKey, Credentials: map[string]any{}}
+	got, ok := outboundidentity.FromContext(WithAccountOutboundIdentity(ctx, account))
+	require.True(t, ok)
+	require.Equal(t, "kimi", got.Preset)
+	require.Equal(t, kimi.UserAgent(kimi.DefaultVersion), got.UserAgent)
+	require.Equal(t, kimi.ProductToken, got.Originator)
+	require.Equal(t, kimi.DefaultVersion, got.Version)
+
+	// The explicit type default is an equivalent, operator-visible pin.
+	config := emptyOutboundIdentitySettings()
+	config.Defaults["kimi:apikey"] = "kimi"
+	_, pinnedCtx := outboundIdentityTestSettings(t, config)
+	got, ok = outboundidentity.FromContext(WithAccountOutboundIdentity(pinnedCtx, account))
+	require.True(t, ok)
+	require.Equal(t, "kimi", got.Preset)
+
+	// An API-key account can still opt back into another compatible preset.
+	override := &Account{ID: 53, Platform: PlatformKimi, Type: AccountTypeAPIKey, Credentials: map[string]any{
+		outboundIdentityCredential: OutboundIdentitySelection{Preset: "codex"},
+	}}
+	got, ok = outboundidentity.FromContext(WithAccountOutboundIdentity(ctx, override))
+	require.True(t, ok)
+	require.Equal(t, "codex", got.Preset)
+	require.Equal(t, "account", got.Source)
+}
+
+func TestKimiVersionCandidateStaysInsideTheNamespace(t *testing.T) {
+	for _, version := range []string{"2.1", "2.0.9", "v2.1.1"} {
+		_, err := buildOutboundIdentity(OutboundIdentitySelection{Preset: "kimi", Version: version})
+		require.Error(t, err, version)
+	}
+	for _, userAgent := range []string{"kimi-code-cli", "Kimi/2.1.1", "kimi/2.1.1", "kimi-code-cli/2.1.1 (sub2api)", "kimi-code-cli/2.1.1/extra", "codex_cli_rs/0.158.0"} {
+		_, err := buildOutboundIdentity(OutboundIdentitySelection{Preset: "kimi", UserAgent: userAgent})
+		require.Error(t, err, userAgent)
+	}
+	identity, err := buildOutboundIdentity(OutboundIdentitySelection{Preset: "kimi", Version: "2.4.0"})
+	require.NoError(t, err)
+	require.Equal(t, "kimi-code-cli/2.4.0", identity.UserAgent)
+	require.Equal(t, "2.4.0", identity.Headers[kimi.HeaderVersion])
+	require.Equal(t, kimi.PlatformToken, identity.Headers[kimi.HeaderPlatform])
+}
+
+// The official client resolves the device set from the machine it runs on. A
+// gateway has no per-user device, so the deployment resolves it once from its
+// own host, persists it in the outbound identity settings, and lets an operator
+// or an account override every value.
+func TestKimiRuntimeDeclarationsAreMaterializedOnceAndStayStable(t *testing.T) {
+	svc, ctx := outboundIdentityTestSettings(t, emptyOutboundIdentitySettings())
+	require.Empty(t, svc.GetOutboundIdentitySettings(ctx).Runtime)
+
+	svc.ensureRuntimeOutboundHeaders(ctx)
+
+	persisted := svc.GetOutboundIdentitySettings(ctx).Runtime["kimi"]
+	require.Len(t, persisted, len(kimi.DeviceHeaders()))
+	for _, name := range kimi.DeviceHeaders() {
+		require.Equal(t, builtInOutboundIdentity("kimi").Headers[name], persisted[name], name)
+	}
+
+	// A second materialization is a no-op: the persisted identity must not churn.
+	svc.ensureRuntimeOutboundHeaders(ctx)
+	require.Equal(t, persisted, svc.GetOutboundIdentitySettings(ctx).Runtime["kimi"])
+
+	account := &Account{ID: 61, Platform: PlatformKimi, Type: AccountTypeAPIKey, Credentials: map[string]any{}}
+	got, ok := outboundidentity.FromContext(WithAccountOutboundIdentity(ctx, account))
+	require.True(t, ok)
+	require.Equal(t, "global", got.Source, "persisted runtime values are global settings, not the compiled default")
+	require.Equal(t, persisted[kimi.HeaderDeviceID], got.Headers[kimi.HeaderDeviceID])
+	require.Equal(t, kimi.PlatformToken, got.Headers[kimi.HeaderPlatform], "a pinned declaration never moves")
+}
+
+func TestKimiRuntimeDeclarationsAcceptOnlyRuntimeClassNames(t *testing.T) {
+	svc, ctx := outboundIdentityTestSettings(t, emptyOutboundIdentitySettings())
+	builtin := builtInOutboundIdentity("kimi")
+
+	config := emptyOutboundIdentitySettings()
+	config.Runtime = map[string]map[string]string{"kimi": {
+		kimi.HeaderDeviceName:  "kimi-gateway-1",
+		kimi.HeaderDeviceModel: "Linux 6.14.0 x64",
+		kimi.HeaderOSVersion:   "6.14.0",
+		kimi.HeaderDeviceID:    "22222222-2222-4222-8222-222222222222",
+	}}
+	require.NoError(t, svc.SetOutboundIdentitySettings(ctx, config))
+
+	resolved := svc.resolveDefaultOutboundIdentity(ctx, "kimi")
+	require.Equal(t, "global", resolved.Source)
+	require.Equal(t, "kimi-gateway-1", resolved.Headers[kimi.HeaderDeviceName])
+	require.Equal(t, "22222222-2222-4222-8222-222222222222", resolved.Headers[kimi.HeaderDeviceID])
+	require.Equal(t, builtin.Headers["User-Agent"], resolved.Headers["User-Agent"])
+
+	for name, value := range map[string]string{
+		kimi.HeaderPlatform:  "kimi_code_desktop",
+		kimi.HeaderVersion:   "9.9.9",
+		"X-Msh-Tool-Call-Id": "invented",
+		"User-Agent":         "kimi-code-cli/9.9.9",
+		kimi.HeaderDeviceID:  "not-a-uuid",
+		kimi.HeaderOSVersion: "line\r\nbreak",
+	} {
+		rejected := emptyOutboundIdentitySettings()
+		rejected.Runtime = map[string]map[string]string{"kimi": {name: value}}
+		require.Error(t, svc.SetOutboundIdentitySettings(ctx, rejected), name)
+	}
+
+	// An unknown preset cannot introduce a runtime tier either.
+	unknown := emptyOutboundIdentitySettings()
+	unknown.Runtime = map[string]map[string]string{"unknown": {kimi.HeaderDeviceName: "x"}}
+	require.Error(t, svc.SetOutboundIdentitySettings(ctx, unknown))
+}
+
+func TestKimiAccountDeclarationsOverrideTheGlobalTier(t *testing.T) {
+	config := emptyOutboundIdentitySettings()
+	config.Runtime = map[string]map[string]string{"kimi": {
+		kimi.HeaderDeviceName: "kimi-gateway-1",
+		kimi.HeaderDeviceID:   "33333333-3333-4333-8333-333333333333",
+	}}
+	svc, ctx := outboundIdentityTestSettings(t, config)
+
+	account := &Account{ID: 62, Platform: PlatformKimi, Type: AccountTypeAPIKey, Credentials: map[string]any{
+		outboundIdentityCredential: OutboundIdentitySelection{Preset: "kimi", Headers: map[string]string{
+			kimi.HeaderDeviceID: "44444444-4444-4444-8444-444444444444",
+		}},
+	}}
+	got, ok := outboundidentity.FromContext(WithAccountOutboundIdentity(ctx, account))
+	require.True(t, ok)
+	require.Equal(t, "account", got.Source)
+	require.Equal(t, "44444444-4444-4444-8444-444444444444", got.Headers[kimi.HeaderDeviceID])
+	require.Equal(t, "kimi-gateway-1", got.Headers[kimi.HeaderDeviceName], "an undeclared override keeps the global value")
+
+	// A complete account candidate still inherits the deployment-owned device
+	// set rather than falling back to the compiled default.
+	account.Credentials[outboundIdentityCredential] = OutboundIdentitySelection{Preset: "kimi", Version: "2.4.0", Headers: map[string]string{
+		kimi.HeaderOSVersion: "6.14.0-custom",
+	}}
+	got, ok = outboundidentity.FromContext(WithAccountOutboundIdentity(ctx, account))
+	require.True(t, ok)
+	require.Equal(t, "kimi-code-cli/2.4.0", got.UserAgent)
+	require.Equal(t, "2.4.0", got.Headers[kimi.HeaderVersion])
+	require.Equal(t, "kimi-gateway-1", got.Headers[kimi.HeaderDeviceName])
+	require.Equal(t, "6.14.0-custom", got.Headers[kimi.HeaderOSVersion])
+
+	preview, err := svc.PreviewOutboundIdentity(ctx, account, &OutboundIdentitySelection{Preset: "kimi", Version: "2.4.0", Headers: map[string]string{
+		kimi.HeaderOSVersion: "6.14.0-custom",
+	}})
+	require.NoError(t, err)
+	require.Equal(t, got.Headers, preview.Headers, "the preview must report the declarations that reach the wire")
+
+	// An invalid stored candidate falls through to the global tier instead of
+	// failing the request.
+	account.Credentials[outboundIdentityCredential] = OutboundIdentitySelection{Preset: "kimi", Headers: map[string]string{
+		kimi.HeaderDeviceID: "not-a-uuid",
+	}}
+	got, ok = outboundidentity.FromContext(WithAccountOutboundIdentity(ctx, account))
+	require.True(t, ok)
+	require.Equal(t, "33333333-3333-4333-8333-333333333333", got.Headers[kimi.HeaderDeviceID], "an invalid account candidate falls through to the global tier")
+}
+
+// The settings page never needs a preset's header block in advance: the view
+// reports the declared names, their class, and the built-in and effective
+// values for every preset.
+func TestOutboundIdentityDeclarationsCoverEveryBuiltInHeader(t *testing.T) {
+	svc, ctx := outboundIdentityTestSettings(t, emptyOutboundIdentitySettings())
+	view := svc.GetOutboundIdentityView(ctx)
+	require.Len(t, view.Declarations, len(outboundPresetNames))
+
+	for _, declarations := range view.Declarations {
+		builtin := builtInOutboundIdentity(declarations.Preset)
+		require.Len(t, declarations.Headers, len(builtin.Headers), declarations.Preset)
+		seen := map[string]bool{}
+		for _, header := range declarations.Headers {
+			require.NotEmpty(t, header.Name, declarations.Preset)
+			require.False(t, seen[header.Name], header.Name)
+			seen[header.Name] = true
+			require.Contains(t, builtin.Headers, header.Name, "the page must not claim an undeclared header")
+			require.NotEmpty(t, header.Builtin, header.Name)
+			require.Contains(t, []string{outboundHeaderDerived, outboundHeaderPinned, outboundHeaderRuntime}, header.Class, header.Name)
+			require.Equal(t, header.Class == outboundHeaderRuntime, header.Editable, header.Name)
+		}
+	}
+}
+
+func TestOutboundIdentityDeclarationsListTheKimiBlockInOfficialOrder(t *testing.T) {
+	declarations := declaredOutboundHeaders("kimi")
+	names := make([]string, 0, len(declarations))
+	for _, header := range declarations {
+		names = append(names, header.Name)
+	}
+	require.Equal(t, []string{
+		"User-Agent",
+		kimi.HeaderPlatform,
+		kimi.HeaderVersion,
+		kimi.HeaderDeviceName,
+		kimi.HeaderDeviceModel,
+		kimi.HeaderOSVersion,
+		kimi.HeaderDeviceID,
+	}, names)
+	require.Equal(t, outboundHeaderDerived, outboundHeaderClassName("kimi", kimi.HeaderVersion))
+	require.Equal(t, outboundHeaderPinned, outboundHeaderClassName("kimi", kimi.HeaderPlatform))
+	for _, name := range kimi.DeviceHeaders() {
+		require.Equal(t, outboundHeaderRuntime, outboundHeaderClassName("kimi", name), name)
+	}
+	// Every other preset keeps its declarations read-only.
+	require.Equal(t, outboundHeaderPinned, outboundHeaderClassName("claude", "X-App"))
+	require.Equal(t, outboundHeaderPinned, outboundHeaderClassName("claude", "X-Stainless-Lang"))
+	require.Equal(t, outboundHeaderDerived, outboundHeaderClassName("codex", "Version"))
+	require.Equal(t, outboundHeaderDerived, outboundHeaderClassName("grok", "x-grok-client-version"))
 }

@@ -845,6 +845,11 @@ func ProvideSettingService(settingRepo SettingRepository, groupRepo GroupReposit
 	}
 	antigravity.SetUserAgentVersionResolver(svc.GetAntigravityUserAgentVersion)
 	svc.installOutboundIdentityResolver()
+	// Materialize the runtime identity declarations a deployment derives from
+	// its own host (the Kimi device set) before the first request, so the
+	// advertised identity is stable across restarts and never depends on an
+	// admin page load. The forwarding path only reads these values.
+	svc.ensureRuntimeOutboundHeaders(context.Background())
 	return svc
 }
 

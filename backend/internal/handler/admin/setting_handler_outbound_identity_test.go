@@ -120,4 +120,45 @@ func TestOutboundIdentitySettingsAPI(t *testing.T) {
 	require.Equal(t, "ZCode/0.16.9", gjson.Get(zcodeSaved.Body.String(), `data.effective.#(preset=="zcode").user_agent`).String())
 	require.Contains(t, zcodeSaved.Body.String(), `"zhipu:apikey":"zcode"`)
 	require.Equal(t, http.StatusBadRequest, request(http.MethodPut, "/identity", `{"profiles":{"zcode":{"preset":"zcode","user_agent":"codex_cli_rs/0.158.0"}}}`).Code)
+	// Kimi Code declares one product token plus a device description set. The
+	// preview reports the complete declaration block, the settings view reports
+	// which declarations accept a configured value, and no configuration tier
+	// can supply a derived or pinned declaration.
+	kimiPreview := request(http.MethodPost, "/preview", `{"platform":"kimi","type":"apikey","selection":{"preset":"kimi"}}`)
+	require.Equal(t, http.StatusOK, kimiPreview.Code)
+	require.Equal(t, "kimi", gjson.Get(kimiPreview.Body.String(), "data.preset").String())
+	require.Equal(t, "kimi-code-cli/2.1.1", gjson.Get(kimiPreview.Body.String(), "data.user_agent").String())
+	require.Equal(t, "2.1.1", gjson.Get(kimiPreview.Body.String(), "data.version").String())
+	require.Equal(t, "kimi_code_cli", gjson.Get(kimiPreview.Body.String(), `data.headers.X-Msh-Platform`).String())
+	require.Equal(t, "2.1.1", gjson.Get(kimiPreview.Body.String(), `data.headers.X-Msh-Version`).String())
+	require.False(t, gjson.Get(kimiPreview.Body.String(), `data.headers.Originator`).Exists(), "Kimi Code declares no Originator header")
+	require.False(t, gjson.Get(kimiPreview.Body.String(), `data.headers.Version`).Exists(), "Kimi Code declares no standalone version header")
+	for _, name := range []string{"X-Msh-Device-Name", "X-Msh-Device-Model", "X-Msh-Os-Version", "X-Msh-Device-Id"} {
+		require.NotEmpty(t, gjson.Get(kimiPreview.Body.String(), "data.headers."+name).String(), name)
+	}
+	loadedKimi := request(http.MethodGet, "/identity", "")
+	kimiDeclarations := gjson.Get(loadedKimi.Body.String(), `data.declarations.#(preset=="kimi").headers`)
+	require.Len(t, kimiDeclarations.Array(), 7)
+	for _, header := range kimiDeclarations.Array() {
+		name := header.Get("name").String()
+		require.Equal(t, header.Get("class").String() == "runtime", header.Get("editable").Bool(), name)
+		require.NotEmpty(t, header.Get("builtin").String(), name)
+	}
+	kimiSaved := request(http.MethodPut, "/identity", `{"profiles":{"grok":{"version":"3.9.1"}},"runtime":{"kimi":{"X-Msh-Device-Name":"kimi-gateway-2","X-Msh-Device-Id":"22222222-2222-4222-8222-222222222222"}}}`)
+	require.Equal(t, http.StatusOK, kimiSaved.Code)
+	require.Equal(t, "kimi-gateway-2", gjson.Get(kimiSaved.Body.String(), `data.settings.runtime.kimi.X-Msh-Device-Name`).String())
+	require.Equal(t, "kimi-gateway-2", gjson.Get(kimiSaved.Body.String(), `data.effective.#(preset=="kimi").headers.X-Msh-Device-Name`).String())
+	require.Equal(t, "global", gjson.Get(kimiSaved.Body.String(), `data.effective.#(preset=="kimi").source`).String())
+	for _, body := range []string{
+		`{"runtime":{"kimi":{"X-Msh-Platform":"kimi_code_desktop"}}}`,
+		`{"runtime":{"kimi":{"X-Msh-Version":"9.9.9"}}}`,
+		`{"runtime":{"kimi":{"X-Msh-Device-Id":"not-a-uuid"}}}`,
+		`{"runtime":{"kimi":{"X-Msh-Tool-Call-Id":"request-state"}}}`,
+		`{"runtime":{"unknown":{"X-Msh-Device-Name":"x"}}}`,
+		`{"profiles":{"kimi":{"preset":"kimi","headers":{"X-Msh-Platform":"kimi_code_desktop"}}}}`,
+	} {
+		require.Equal(t, http.StatusBadRequest, request(http.MethodPut, "/identity", body).Code, body)
+	}
+	require.Equal(t, "22222222-2222-4222-8222-222222222222", gjson.Get(repo.values[service.SettingKeyOutboundIdentity], "runtime.kimi.X-Msh-Device-Id").String(), "rejected updates preserve the saved runtime declarations")
+	require.Equal(t, "kimi-gateway-2", gjson.Get(repo.values[service.SettingKeyOutboundIdentity], "runtime.kimi.X-Msh-Device-Name").String())
 }

@@ -25,6 +25,49 @@ disabled globally, so the hosts above are not an egress restriction. Enable the
 allowlist in production deployments that require a bounded upstream egress
 surface.
 
+## Outbound client identity
+
+Kimi and Moonshot accounts advertise the pinned Kimi Code client identity by
+default: `User-Agent: kimi-code-cli/2.1.1` plus the official companion
+declarations `X-Msh-Platform: kimi_code_cli`, `X-Msh-Version: 2.1.1` and the four
+device headers `X-Msh-Device-Name`, `X-Msh-Device-Model`, `X-Msh-Os-Version` and
+`X-Msh-Device-Id`. The official client declares no `Originator` and no standalone
+`Version` header, so neither is sent. `SUB2API_KIMI_CODE_VERSION` may select a
+supported version; `2.1.1` is the accepted floor.
+
+The device declarations are **runtime** values, not compile-time pins. The
+official client resolves them from the machine it runs on and persists the
+device id; this deployment resolves them once from the host it runs on, persists
+them in
+**System Settings → Outbound identity → Kimi Code → Runtime identity
+declarations**, and lets an operator override each value globally or per
+account (account overrides take priority). Opening that page or starting the
+server materializes any value this deployment has not generated yet. A fact the
+host does not expose falls back to the official `unknown` substitution, and the
+architecture token follows Node's spelling (`amd64` renders as `x64`).
+
+Because the gateway usually runs in a container, the resolved host name is the
+container hostname and the reported operating system is the container runtime's
+kernel, not the physical host's. Both are the faithful analog of the official
+`os.hostname()` / `os.release()` reads, and both are editable — set an explicit
+value when a container-runtime default (for example an opaque generated
+hostname) should not be advertised.
+
+Two consequences are deliberate:
+
+- One deployment presents one device identity to upstream, while the official
+  client presents one per end-user install. The declaration set matches; the
+  cardinality does not. Override the device headers per account if an upstream
+  rate-limits or risk-scores by device.
+- A host description is editable, but the client family (`X-Msh-Platform`), its
+  version companion (`X-Msh-Version`) and the User-Agent are derived
+  declarations. The management API rejects naming them, so no configuration tier
+  can send a platform token that disagrees with the selected family or a version
+  companion that disagrees with the User-Agent.
+
+The full precedence, validation and fallthrough contract lives in
+[Outbound Identity](../OUTBOUND_IDENTITY.md).
+
 ## Operations
 
 Use the configured account base URL supplied by the Kimi/Moonshot account.

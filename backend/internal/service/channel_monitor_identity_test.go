@@ -88,9 +88,9 @@ func TestChannelMonitorDefaultIdentityForProviders(t *testing.T) {
 		{"openai", "codex", MonitorAPIModeChatCompletions}, {"openai", "codex", MonitorAPIModeResponses},
 		{"anthropic", "claude", ""}, {"gemini", "gemini", ""}, {"grok", "grok", ""},
 		// Channel-monitor egress shares the platform default preset, so the
-		// DeepSeek and MiniMax providers send the same pinned identity as their
-		// platform accounts.
-		{"kimi", "codex", ""}, {"zhipu", "zcode", ""}, {"deepseek", "deepseek", ""}, {"minimax", "minimax", ""},
+		// Kimi, DeepSeek and MiniMax providers send the same pinned identity as
+		// their platform accounts.
+		{"kimi", "kimi", ""}, {"zhipu", "zcode", ""}, {"deepseek", "deepseek", ""}, {"minimax", "minimax", ""},
 		{"opencode_go", "codex", ""},
 	} {
 		t.Run(test.provider+"/"+test.mode, func(t *testing.T) {

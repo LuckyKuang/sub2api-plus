@@ -88,15 +88,29 @@ func UserAgent(ctx context.Context, preset, fallback string) string {
 	return fallback
 }
 
-// IsIdentityHeader covers client declarations, never authentication, capability
-// flags, request IDs or session/device state.
+// IsIdentityHeader covers client declarations the provider's own official
+// client renders, never authentication, capability flags, request IDs or
+// per-request session state. A host description qualifies when the provider
+// itself declares it inside the client identity block rather than per request.
+//
+// The `X-Msh-*` set is such a block, not request state: the Kimi Code client
+// renders the family token, its own client version and the host description as
+// the companion declarations of its User-Agent on every first-party provider
+// request. Listing them keeps the trusted snapshot authoritative — an inbound
+// caller or a generic header override can never select one — while the runtime
+// values themselves stay owned and overridable by the outbound identity
+// settings rather than by the request. The `X-Mavis-*` session headers and the
+// `X-Msh-Tool-Call-Id` request id are deliberately absent: those are
+// per-request state.
 func IsIdentityHeader(name string) bool {
 	name = strings.ToLower(strings.TrimSpace(name))
 	switch name {
 	case "user-agent", "originator", "version", "x-app", "x-goog-api-client",
 		"x-grok-client-version", "x-grok-client-identifier", "x-grok-client-mode",
 		"x-stainless-lang", "x-stainless-package-version", "x-stainless-os",
-		"x-stainless-arch", "x-stainless-runtime", "x-stainless-runtime-version":
+		"x-stainless-arch", "x-stainless-runtime", "x-stainless-runtime-version",
+		"x-msh-platform", "x-msh-version", "x-msh-device-name",
+		"x-msh-device-model", "x-msh-os-version", "x-msh-device-id":
 		return true
 	}
 	return false

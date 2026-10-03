@@ -73,6 +73,14 @@ const HEADER_OVERRIDE_BLOCKED_NAMES = new Set([
   'x-stainless-arch',
   'x-stainless-runtime',
   'x-stainless-runtime-version',
+  // Kimi Code declaration block. Its request-state companion
+  // (x-msh-tool-call-id) is deliberately absent.
+  'x-msh-platform',
+  'x-msh-version',
+  'x-msh-device-name',
+  'x-msh-device-model',
+  'x-msh-os-version',
+  'x-msh-device-id',
   'host',
   'content-length',
   'content-type',

@@ -14,17 +14,30 @@ version segment, so `Version` is intentionally empty for that preset only. The
 exception is registered per preset and never makes the client version optional
 for any other family.
 
+Every declaration a preset renders has a class that decides who may supply its
+value. A **derived** declaration is computed from the resolved triple (the
+User-Agent, and any version companion such as Codex's `Version`, Grok's
+`x-grok-client-version` or Kimi Code's `X-Msh-Version`). A **pinned**
+declaration is a fixed provider token (Claude's `X-App` and `X-Stainless-*`,
+Kimi Code's `X-Msh-Platform`, Antigravity's `X-Goog-Api-Client`). Neither class
+accepts a configured value: a candidate that names one is rejected before
+saving, so no configuration tier can desynchronize a companion declaration or
+rewrite a client-family token. A **runtime** declaration describes the host the
+official client runs on; the settings and an account selection may supply it.
+Kimi Code is the only preset with runtime declarations today.
+
 ## Presets and default mappings
 
 | Preset | Default accounts | Wire identity |
 | --- | --- | --- |
-| Codex | OpenAI OAuth/setup-token, OpenAI-compatible API keys, Kimi, TypeSafe API keys | Existing Codex UA/Originator/Version rules, including endpoint-specific omissions |
+| Codex | OpenAI OAuth/setup-token, OpenAI-compatible API keys, TypeSafe API keys | Existing Codex UA/Originator/Version rules, including endpoint-specific omissions |
 | Claude Code | Anthropic OAuth/setup-token/API key, Claude on Bedrock or Vertex | `claude-cli` UA, `X-App: cli`, project-owned `X-Stainless-*` SDK/runtime declarations |
 | Gemini CLI | Gemini OAuth/API key, Gemini on Vertex | `GeminiCLI` UA |
 | Grok | Grok OAuth/API key | `grok-shell` UA, `x-grok-client-identifier`, `x-grok-client-version`, `x-grok-client-mode: headless` |
 | Antigravity | Antigravity OAuth/upstream | `antigravity` UA; the two privacy endpoints also declare the pinned `X-Goog-Api-Client` SDK |
 | DeepSeek | DeepSeek API-key accounts | `deepseek-harness/<version> (+https://github.com/deepseek-ai/deepseek-harness)` UA; identifier and version are encoded in the UA, so no `Originator`/`Version` headers |
 | MiniMax | MiniMax API-key accounts | `MiniMaxAgent` UA; the official client declares no version segment, so there is no `Originator`/`Version` header and no client version |
+| Kimi Code | Kimi / Moonshot API-key accounts | `kimi-code-cli/<version>` UA, `X-Msh-Platform: kimi_code_cli`, `X-Msh-Version: <version>` and the four `X-Msh-Device-*` runtime declarations; the official client declares no `Originator` and no standalone `Version` header |
 | ZCode | Zhipu / GLM API-key and account-link OAuth accounts | `ZCode/<version>` UA; the official client declares no `Originator` and no standalone `Version` header, so only the User-Agent reaches the wire |
 
 Native OAuth and setup-token accounts retain their native client family.
@@ -45,7 +58,8 @@ snapshot's declarations.
 
 Built-in declarations reuse existing pins in `internal/pkg/claude`,
 `internal/pkg/geminicli`, `internal/pkg/xai`, `internal/pkg/antigravity`,
-`internal/pkg/deepseek`, `internal/pkg/minimax`, `internal/pkg/zcode` and
+`internal/pkg/deepseek`, `internal/pkg/minimax`, `internal/pkg/kimi`,
+`internal/pkg/zcode` and
 `internal/service/openai_codex_identity.go`. This
 feature does not upgrade those pins. The settings page displays the exact
 current effective identity.
@@ -109,6 +123,54 @@ opt a MiniMax account back into Codex or any other compatible preset. The
 managed MiniMax session headers (`X-Mavis-Session-Id`, `-Agent-Id`,
 `-Timezone-Offset`) are request state owned by the protocol layer, not identity
 declarations.
+
+The exact compiled Kimi Code identity is `kimi-code-cli/2.1.1`, with identifier
+`kimi-code-cli`, client version `2.1.1` and platform declaration
+`kimi_code_cli`. The official client renders one product token with dashes and
+one platform token with underscores; the two are not interchangeable. Its engine
+attaches the complete block — the User-Agent plus `X-Msh-Platform`,
+`X-Msh-Version` and the four device declarations — only to the first-party
+`kimi` provider, which is registered as a full-host-header provider for the
+Chat Completions, Anthropic and Responses protocols; every other provider
+receives only a User-Agent whose product token is rewritten to the declared
+agent slug. The official client declares no `Originator` and no standalone
+`Version` header, so neither reaches the wire.
+`SUB2API_KIMI_CODE_VERSION` may select a supported version; `2.1.1` is the
+accepted floor, because the CLI, the `kimi web` server and the native binaries
+share one released version line. The VS Code extension is a separate product
+(`kimi-code-vscode`, platform `kimi_code_vscode`) and can never select this
+preset, so the floor cannot reject a legitimate value from a second official
+line — the opposite of the ZCode situation above.
+
+The device declarations are this deployment's own **runtime** values, not
+compile-time pins: the official client resolves them from the machine it runs on
+and persists the device id. Sub2API Plus resolves them once from the host this
+deployment runs on, persists them under `runtime.kimi` in the outbound identity
+settings, and lets an operator or an account override each one. The derivations
+mirror the official client: the host name, the kernel release, a
+`<os type> <os version> <arch>` model string using Node's architecture token
+(`amd64` renders as `x64`, `386` as `ia32`, `mipsle` as `mipsel`, exactly as
+`os.arch()` reports), and a uuid v4 device id. A fact the host does not expose
+falls back to the official `unknown` substitution rather than an invented value.
+Two consequences are deliberate and operator-visible:
+
+- One deployment presents **one** device identity to upstream, while the
+  official client presents one per end-user install. The declaration set is
+  identical; the cardinality is not. Every runtime declaration is overridable
+  per account for exactly this reason, so an operator can split deployments or
+  accounts when an upstream rate-limits or risk-scores by device.
+- Opening the settings page materializes any declaration this deployment has not
+  generated yet, and startup does the same before the first request. The
+  forwarding path only reads, and a persisted value never churns on its own.
+  Materializing writes the same end state an administrator save would produce,
+  so concurrent first starts converge on the last persisted value and every
+  instance reads it once its settings cache expires.
+
+The request-state companion (`X-Msh-Tool-Call-Id`) is raised by the official
+tool-call path per request and is not an identity declaration, so it is neither
+rendered by this preset nor blocked from account header overrides. The
+identity-header allowlist is extended by the six declarations above; an inbound
+caller or a generic header override can never select one.
 
 The exact compiled Grok identity is `grok-shell/1.0.45 (<os>; <arch>)`, with
 identifier `grok-shell`, client version `1.0.45`, and mode `headless`. Runtime
@@ -178,7 +240,10 @@ For non-Codex identities, selection is:
 
 An account selection containing only `preset` inherits that preset's current
 global identity. Explicit `user_agent`/`version` fields form an account candidate;
-omitted fields in that candidate use the preset's built-in declarations. An
+omitted fields in that candidate use the preset's built-in declarations. Runtime
+declarations are deployment state rather than account identity, so even a
+complete candidate inherits them from the `runtime` map before its own `headers`
+entries are laid on top. An
 invalid candidate falls through as a whole. Invalid input through the management
 API is rejected before saving. Empty or null account selection means inherit.
 A versionless family rejects a candidate that supplies a client version, and it
@@ -212,8 +277,9 @@ cannot replace Codex configuration. See the exact default and source matrix in
 Generic `header_overrides` cannot select or modify a client identity. Saves reject
 managed identity names with `INVALID_HEADER_OVERRIDE` (HTTP 400), including empty
 values and disabled override configurations. The shared managed-header registry
-covers User-Agent, client identifiers/versions and SDK declarations such as
-`X-Stainless-Package-Version`. Matching is case-insensitive. Previously stored
+covers User-Agent, client identifiers/versions, the Kimi Code `X-Msh-*`
+declaration block and SDK declarations such as `X-Stainless-Package-Version`.
+Matching is case-insensitive. Previously stored
 identity overrides are ignored at runtime; ordinary overrides remain effective.
 Move intended identity customization to the account/global identity controls and
 remove identity entries from the generic override editor before saving it.
@@ -227,9 +293,11 @@ request state, or the final target.
 Other global settings live in the existing settings store under
 `outbound_identity`; account selections use the existing credentials JSON.
 No database schema migration or new YAML/environment binding is required.
-Defaults are empty `profiles` and `defaults` maps. Existing Antigravity
+Defaults are empty `profiles`, `defaults` and `runtime` maps. Existing Antigravity
 `antigravity_user_agent_version` is imported into the editable Antigravity
-profile before the unified configuration is first saved. After that save,
+profile before the unified configuration is first saved — either by an
+administrator save or by the runtime-declaration materialization described
+above, whichever happens first. After that save,
 clearing the profile restores the default without reviving the old setting. Existing environment
 defaults (`SUB2API_CLAUDE_CLI_VERSION`, `XAI_GROK_CLI_VERSION`,
 `ANTIGRAVITY_USER_AGENT_VERSION`) remain below explicit identity configuration.
@@ -237,9 +305,16 @@ defaults (`SUB2API_CLAUDE_CLI_VERSION`, `XAI_GROK_CLI_VERSION`,
 ```json
 {
   "profiles": { "claude": { "preset": "claude", "version": "2.9.1" } },
-  "defaults": { "gemini:service_account": "gemini", "openai:apikey": "codex" }
+  "defaults": { "gemini:service_account": "gemini", "openai:apikey": "codex" },
+  "runtime": { "kimi": { "X-Msh-Device-Name": "kimi-gateway-1" } }
 }
 ```
+
+`runtime` carries the persisted runtime declarations per preset and is the only
+place a runtime value can be written globally. A preset name or header name that
+does not declare a runtime value is rejected, an absent or cleared entry falls
+back to the resolved built-in value, and the map is materialized automatically
+for any declaration this deployment has not generated yet.
 
 The version above is an illustrative administrator selection, not a recommended
 or automatically discovered upstream release. Account type names are `oauth`,
@@ -249,9 +324,15 @@ Management API (administrator authentication required):
 
 | Method and path | Behavior |
 | --- | --- |
-| `GET /api/v1/admin/settings/outbound-identity` | Saved profiles/defaults, built-in presets, effective global identities and sources |
-| `PUT /api/v1/admin/settings/outbound-identity` | Validate and replace profiles/defaults, then return the effective view |
+| `GET /api/v1/admin/settings/outbound-identity` | Saved profiles/defaults/runtime declarations, built-in presets, effective global identities and sources, and the declared header block of every preset with its class, editable flag, built-in and effective value |
+| `PUT /api/v1/admin/settings/outbound-identity` | Validate and replace profiles/defaults/runtime declarations, then return the effective view |
 | `POST /api/v1/admin/settings/outbound-identity/preview` | Resolve `{platform, type, selection, user_agent?}` without tokens, secrets or an upstream request; optional `user_agent` is the existing Codex account declaration |
+
+An account candidate carries runtime values in the same `headers` map
+(`credentials.outbound_identity.headers`), validated against the same declared
+names. Account values take precedence over the `runtime` map, which takes
+precedence over the resolved built-in value; an invalid stored account candidate
+falls through to the global tier as a unit rather than failing the request.
 
 The preview describes managed identity headers. Authentication, request IDs,
 session fields, capabilities and endpoint protocol headers remain owned by
@@ -487,7 +568,7 @@ compatibility mode, or an upstream release.
 `openai_outbound_contract_test.go` captures real HTTP sends, rejected-field
 retries and WS handshake headers across OAuth/API-key accounts, both HTTP
 passthrough states, forced Codex classification and the account/global/default/
-legacy source cases. It also covers the six compatible non-Codex presets.
+legacy source cases. It also covers the seven compatible non-Codex presets.
 The header-override suites cover management rejection and filtering of legacy
 stored declarations, including SDK headers and case variants. These guards are
 required alongside the existing source-priority and exact-default assertions.
