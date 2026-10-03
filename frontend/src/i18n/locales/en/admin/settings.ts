@@ -29,6 +29,9 @@ export default {
         previewFailed: 'Invalid identity or preview unavailable. Check the preset, UA and version.',
         versionNotDeclared: 'Not declared by the official client',
         versionlessHint: 'The official MiniMax client declares the bare product token with no client version, so this identity exposes no version or User-Agent override. Accounts can still select another preset.',
+        runtimeHeaders: 'Runtime identity declarations',
+        runtimeHeadersHint: 'These headers describe the host the official client runs on. The project resolves them once from this deployment and persists the values here; leave a field blank to keep the resolved default. The client identifier and version companions are derived and cannot be edited.',
+        runtimeHeadersAccountHint: 'Overrides the global value for this account only. Blank fields inherit the global setting.',
         sources: { account: 'Account', global: 'Global settings', compiled_default: 'Project default', environment: 'Environment' },
       },
       features: {

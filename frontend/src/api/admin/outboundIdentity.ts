@@ -1,10 +1,12 @@
 import { apiClient } from '../client'
 
-export type IdentityPreset = 'codex' | 'claude' | 'gemini' | 'grok' | 'antigravity' | 'deepseek' | 'minimax' | 'zcode'
+export type IdentityPreset = 'codex' | 'claude' | 'gemini' | 'grok' | 'antigravity' | 'deepseek' | 'minimax' | 'kimi' | 'zcode'
 export interface IdentitySelection {
   preset: IdentityPreset | ''
   user_agent?: string
   version?: string
+  /** Configured values for the preset's `runtime` declarations only. */
+  headers?: Record<string, string>
 }
 export interface ResolvedIdentity {
   preset: IdentityPreset
@@ -14,18 +16,39 @@ export interface ResolvedIdentity {
   source: string
   headers: Record<string, string>
 }
+/**
+ * One provider-defined identity header a preset renders. `derived` follows the
+ * resolved client triple and `pinned` is a fixed provider declaration; neither
+ * accepts a configured value. `runtime` describes the host the official client
+ * resolves at run time, so the settings and an account selection may set it.
+ */
+export type IdentityDeclarationClass = 'derived' | 'pinned' | 'runtime'
+export interface IdentityDeclaration {
+  name: string
+  class: IdentityDeclarationClass
+  editable: boolean
+  builtin: string
+  value: string
+}
+export interface PresetDeclarations {
+  preset: IdentityPreset
+  headers: IdentityDeclaration[]
+}
 export interface OutboundIdentitySettings {
   profiles: Partial<Record<IdentityPreset, IdentitySelection>>
   defaults: Record<string, IdentityPreset>
+  /** Persisted runtime declarations per preset, keyed by header name. */
+  runtime?: Partial<Record<IdentityPreset, Record<string, string>>>
 }
 export interface OutboundIdentityView {
   settings: OutboundIdentitySettings
   presets: ResolvedIdentity[]
   effective: ResolvedIdentity[]
+  declarations: PresetDeclarations[]
 }
-export const identityPresets: IdentityPreset[] = ['codex', 'claude', 'gemini', 'grok', 'antigravity', 'deepseek', 'minimax', 'zcode']
+export const identityPresets: IdentityPreset[] = ['codex', 'claude', 'gemini', 'grok', 'antigravity', 'deepseek', 'minimax', 'kimi', 'zcode']
 export const identityNames: Record<IdentityPreset, string> = {
-  codex: 'Codex', claude: 'Claude Code', gemini: 'Gemini CLI', grok: 'Grok', antigravity: 'Antigravity', deepseek: 'DeepSeek', minimax: 'MiniMax', zcode: 'ZCode'
+  codex: 'Codex', claude: 'Claude Code', gemini: 'Gemini CLI', grok: 'Grok', antigravity: 'Antigravity', deepseek: 'DeepSeek', minimax: 'MiniMax', kimi: 'Kimi Code', zcode: 'ZCode'
 }
 // Mirrors the backend's enumerated versionless client families
 // (versionlessOutboundUserAgents in internal/service/outbound_identity.go). The

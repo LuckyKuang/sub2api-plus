@@ -29,6 +29,9 @@ export default {
         previewFailed: '身份无效或无法预览，请检查预设、UA 和版本。',
         versionNotDeclared: '官方客户端未声明版本',
         versionlessHint: '官方 MiniMax 客户端只声明产品标识、不含版本号，因此该身份不提供版本与 UA 覆盖；账号仍可改用其他预设。',
+        runtimeHeaders: '运行时身份声明',
+        runtimeHeadersHint: '这些请求头描述官方客户端所运行的主机。本项目会按当前部署解析一次并持久化在这里；留空表示沿用已解析的默认值。客户端标识与版本为派生声明，不可编辑。',
+        runtimeHeadersAccountHint: '仅对该账号覆盖全局值，留空表示继承全局设置。',
         sources: { account: '账号配置', global: '全局配置', compiled_default: '项目默认', environment: '环境变量' },
       },
       features: {

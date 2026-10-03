@@ -47,6 +47,22 @@
           </details>
           <p class="text-xs text-gray-500">{{ t('admin.settings.outboundIdentity.inheritHint') }}</p>
         </template>
+        <div v-if="runtimeHeaders(preset).length" class="space-y-3" data-testid="outbound-identity-runtime-headers">
+          <div>
+            <p class="text-sm">{{ t('admin.settings.outboundIdentity.runtimeHeaders') }}</p>
+            <p class="text-xs text-gray-500">{{ t('admin.settings.outboundIdentity.runtimeHeadersHint') }}</p>
+          </div>
+          <label v-for="header in runtimeHeaders(preset)" :key="header.name" class="block text-sm">
+            <span class="font-mono text-xs text-gray-500">{{ header.name }}</span>
+            <input
+              :value="runtime[preset][header.name]"
+              class="input mt-1 font-mono text-sm"
+              :placeholder="header.builtin"
+              :aria-label="header.name"
+              @input="setRuntime(preset, header.name, ($event.target as HTMLInputElement).value)"
+            />
+          </label>
+        </div>
       </section>
       <section class="card space-y-4 p-6">
         <h3 class="font-semibold">{{ t('admin.settings.outboundIdentity.defaults') }}</h3>
@@ -66,13 +82,16 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { getOutboundIdentity, updateOutboundIdentity, identityNames, identityPresets, versionlessIdentityPresets, type IdentityPreset, type IdentitySelection, type OutboundIdentityView } from '@/api/admin/outboundIdentity'
+import { getOutboundIdentity, updateOutboundIdentity, identityNames, identityPresets, versionlessIdentityPresets, type IdentityDeclaration, type IdentityPreset, type IdentitySelection, type OutboundIdentityView } from '@/api/admin/outboundIdentity'
 
 const { t } = useI18n()
 const view = ref<OutboundIdentityView>()
 const error = ref('')
 const loading = ref(false)
 const profiles = reactive(Object.fromEntries(identityPresets.map(preset => [preset, { preset, user_agent: '', version: '' }])) as Record<IdentityPreset, IdentitySelection>)
+// Operator values for each preset's runtime declarations. An empty entry means
+// "use the built-in value the official client's own host resolution produces".
+const runtime = reactive(Object.fromEntries(identityPresets.map(preset => [preset, {}])) as Record<IdentityPreset, Record<string, string>>)
 const defaults = reactive<Record<string, IdentityPreset | ''>>({})
 const savedForm = ref('')
 const mappings = [
@@ -95,6 +114,15 @@ const effective = (preset: IdentityPreset) => view.value?.effective.find(item =>
 const builtin = (preset: IdentityPreset) => view.value?.presets.find(item => item.preset === preset)
 const isVersionless = (preset: IdentityPreset) => versionlessIdentityPresets.includes(preset)
 const sourceLabel = (source?: string) => t(`admin.settings.outboundIdentity.sources.${source || 'compiled_default'}`)
+// The backend declares which headers a preset renders and which of them accept
+// a configured value, so this page never hard-codes a preset's header block.
+const runtimeHeaders = (preset: IdentityPreset): IdentityDeclaration[] =>
+  view.value?.declarations?.find(item => item.preset === preset)?.headers.filter(header => header.editable) ?? []
+function setRuntime(preset: IdentityPreset, name: string, value: string) {
+  const trimmed = value.trim()
+  if (trimmed) runtime[preset][name] = trimmed
+  else delete runtime[preset][name]
+}
 // A versionless family exposes no editable declaration, so a profile the
 // management API already persisted for it cannot be re-derived from user input.
 // Keep that profile through unrelated saves rather than silently dropping
@@ -105,7 +133,8 @@ function isPreservedProfile(preset: string) {
 function formSettings() {
   const selectedProfiles = Object.fromEntries(Object.entries(profiles).filter(([preset, selection]) => preset !== 'codex' && (selection.user_agent?.trim() || selection.version?.trim() || isPreservedProfile(preset))).map(([preset, selection]) => [preset, { ...selection }]))
   const selectedDefaults = Object.fromEntries(Object.entries(defaults).filter(([, preset]) => preset)) as Record<string, IdentityPreset>
-  return { profiles: selectedProfiles, defaults: selectedDefaults }
+  const selectedRuntime = Object.fromEntries(Object.entries(runtime).filter(([, values]) => Object.keys(values).length).map(([preset, values]) => [preset, { ...values }]))
+  return { profiles: selectedProfiles, defaults: selectedDefaults, runtime: selectedRuntime }
 }
 const isDirty = computed(() => !!view.value && JSON.stringify(formSettings()) !== savedForm.value)
 async function refresh() {
@@ -118,6 +147,10 @@ async function refresh() {
     const dirty = isDirty.value
     if (!dirty) {
       for (const preset of identityPresets) Object.assign(profiles[preset], { preset, user_agent: '', version: '' }, updated.settings.profiles?.[preset])
+      for (const preset of identityPresets) {
+        for (const name of Object.keys(runtime[preset])) delete runtime[preset][name]
+        Object.assign(runtime[preset], updated.settings.runtime?.[preset])
+      }
       for (const key of Object.keys(defaults)) delete defaults[key]
       Object.assign(defaults, updated.settings.defaults)
       for (const mapping of mappings) defaults[mapping.key] ||= ''

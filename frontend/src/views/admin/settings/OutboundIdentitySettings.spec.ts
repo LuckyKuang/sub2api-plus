@@ -1,19 +1,56 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import OutboundIdentitySettings from './OutboundIdentitySettings.vue'
-import { getOutboundIdentity, updateOutboundIdentity, identityPresets, versionlessIdentityPresets, type OutboundIdentityView } from '@/api/admin/outboundIdentity'
+import { getOutboundIdentity, updateOutboundIdentity, identityPresets, versionlessIdentityPresets, type IdentityDeclaration, type OutboundIdentityView, type PresetDeclarations } from '@/api/admin/outboundIdentity'
 
 vi.mock('vue-i18n', async (original) => ({ ...await original<typeof import('vue-i18n')>(), useI18n: () => ({ t: (key: string) => key }) }))
 vi.mock('@/api/admin/outboundIdentity', async (original) => ({
   ...await original<typeof import('@/api/admin/outboundIdentity')>(),
   getOutboundIdentity: vi.fn(), updateOutboundIdentity: vi.fn()
 }))
+const userAgentOf = (preset: string) => preset === 'minimax' ? 'MiniMaxAgent' : preset === 'kimi' ? 'kimi-code-cli/2.1.1' : `${preset}/1.2.3`
+const versionOf = (preset: string) => preset === 'minimax' ? '' : preset === 'kimi' ? '2.1.1' : '1.2.3'
+// The Kimi Code device set is the runtime tier: the official client resolves it
+// from its own host, so the settings page exposes an editable value per header
+// and the backend declares which headers those are.
+const kimiDeviceHeaders: IdentityDeclaration[] = [
+  { name: 'X-Msh-Device-Name', class: 'runtime', editable: true, builtin: 'kimi-gateway', value: 'kimi-gateway' },
+  { name: 'X-Msh-Device-Model', class: 'runtime', editable: true, builtin: 'Linux 6.14.0 x64', value: 'Linux 6.14.0 x64' },
+  { name: 'X-Msh-Os-Version', class: 'runtime', editable: true, builtin: '6.14.0', value: '6.14.0' },
+  { name: 'X-Msh-Device-Id', class: 'runtime', editable: true, builtin: '11111111-1111-4111-8111-111111111111', value: '11111111-1111-4111-8111-111111111111' }
+]
+const kimiHeaders = {
+  'User-Agent': 'kimi-code-cli/2.1.1',
+  'X-Msh-Platform': 'kimi_code_cli',
+  'X-Msh-Version': '2.1.1',
+  'X-Msh-Device-Name': 'kimi-gateway',
+  'X-Msh-Device-Model': 'Linux 6.14.0 x64',
+  'X-Msh-Os-Version': '6.14.0',
+  'X-Msh-Device-Id': '11111111-1111-4111-8111-111111111111'
+}
 const fixture = (): OutboundIdentityView => {
-  const identities = identityPresets.map(preset => preset === 'minimax'
-    // The versionless family declares the bare product token and no version.
-    ? { preset, user_agent: 'MiniMaxAgent', originator: 'MiniMaxAgent', version: '', source: 'compiled_default', headers: { 'User-Agent': 'MiniMaxAgent' } }
-    : { preset, user_agent: `${preset}/1.2.3`, originator: preset, version: '1.2.3', source: 'compiled_default', headers: { 'User-Agent': `${preset}/1.2.3` } })
-  return { settings: { profiles: {}, defaults: {} }, presets: identities, effective: identities }
+  const identities = identityPresets.map(preset => ({
+    preset,
+    user_agent: userAgentOf(preset),
+    originator: preset,
+    version: versionOf(preset),
+    source: 'compiled_default',
+    headers: preset === 'kimi' ? kimiHeaders : { 'User-Agent': userAgentOf(preset) }
+  }))
+  const declarations: PresetDeclarations[] = identityPresets.map(preset => ({
+    preset,
+    headers: [
+      { name: 'User-Agent', class: 'derived', editable: false, builtin: userAgentOf(preset), value: userAgentOf(preset) },
+      ...(preset === 'kimi'
+        ? [
+            { name: 'X-Msh-Platform', class: 'pinned' as const, editable: false, builtin: 'kimi_code_cli', value: 'kimi_code_cli' },
+            { name: 'X-Msh-Version', class: 'derived' as const, editable: false, builtin: '2.1.1', value: '2.1.1' },
+            ...kimiDeviceHeaders
+          ]
+        : [])
+    ]
+  }))
+  return { settings: { profiles: {}, defaults: {} }, presets: identities, effective: identities, declarations }
 }
 describe('OutboundIdentitySettings', () => {
   beforeEach(() => {
@@ -32,7 +69,7 @@ describe('OutboundIdentitySettings', () => {
     const defaults = wrapper.findAll('select')
     await defaults[0].setValue('grok')
     await wrapper.vm.save()
-    expect(updateOutboundIdentity).toHaveBeenCalledWith({ profiles: { claude: { preset: 'claude', user_agent: '', version: '2.9.1' } }, defaults: { 'openai:apikey': 'grok' } })
+    expect(updateOutboundIdentity).toHaveBeenCalledWith({ profiles: { claude: { preset: 'claude', user_agent: '', version: '2.9.1' } }, defaults: { 'openai:apikey': 'grok' }, runtime: {} })
     wrapper.unmount()
   })
 
@@ -153,6 +190,49 @@ describe('OutboundIdentitySettings', () => {
     await row!.find('select').setValue('zcode')
     await wrapper.vm.save()
     expect(vi.mocked(updateOutboundIdentity).mock.calls[0][0].defaults).toEqual({ 'zhipu:apikey': 'zcode' })
+    wrapper.unmount()
+  })
+
+  it('exposes the pinned Kimi Code preset and lets an operator manage its runtime declarations', async () => {
+    const wrapper = mount(OutboundIdentitySettings)
+    await flushPromises()
+    const kimiCard = wrapper.findAll('section')[identityPresets.indexOf('kimi')]
+    expect(kimiCard.text()).toContain('Kimi Code')
+    // The complete official declaration block reaches the saved identity view.
+    const headers = kimiCard.get('[data-testid="outbound-identity-headers"]')
+    expect(headers.text()).toContain('X-Msh-Platform')
+    expect(headers.text()).toContain('kimi_code_cli')
+    // Only the runtime device declarations are editable; the pinned family token
+    // and the derived version companion stay read-only.
+    const runtime = kimiCard.get('[data-testid="outbound-identity-runtime-headers"]')
+    const inputs = runtime.findAll('input')
+    expect(inputs).toHaveLength(4)
+    expect(inputs.map(input => input.attributes('aria-label'))).toEqual(['X-Msh-Device-Name', 'X-Msh-Device-Model', 'X-Msh-Os-Version', 'X-Msh-Device-Id'])
+    expect(inputs[0].attributes('placeholder')).toBe('kimi-gateway')
+    expect(kimiCard.findAll('input').length).toBeGreaterThan(inputs.length)
+
+    await inputs[0].setValue('kimi-gateway-2')
+    await wrapper.vm.save()
+    expect(vi.mocked(updateOutboundIdentity).mock.calls[0][0].runtime).toEqual({ kimi: { 'X-Msh-Device-Name': 'kimi-gateway-2' } })
+    wrapper.unmount()
+  })
+
+  it('persists runtime declarations and keeps them out of the profile map', async () => {
+    const saved = fixture()
+    saved.settings.runtime = { kimi: { 'X-Msh-Device-Name': 'kimi-gateway', 'X-Msh-Device-Id': '22222222-2222-4222-8222-222222222222' } }
+    vi.mocked(getOutboundIdentity).mockResolvedValueOnce(saved)
+    vi.mocked(updateOutboundIdentity).mockImplementationOnce(async settings => ({ ...saved, settings }))
+    const wrapper = mount(OutboundIdentitySettings)
+    await flushPromises()
+    // Loading persisted runtime values is not an unsaved edit on its own.
+    expect(wrapper.vm.isDirty).toBe(false)
+    const kimiCard = wrapper.findAll('section')[identityPresets.indexOf('kimi')]
+    const deviceID = kimiCard.get('[data-testid="outbound-identity-runtime-headers"]').findAll('input')[3]
+    expect((deviceID.element as HTMLInputElement).value).toBe('22222222-2222-4222-8222-222222222222')
+    await deviceID.setValue('')
+    await wrapper.vm.save()
+    expect(vi.mocked(updateOutboundIdentity).mock.calls[0][0].runtime).toEqual({ kimi: { 'X-Msh-Device-Name': 'kimi-gateway' } })
+    expect(vi.mocked(updateOutboundIdentity).mock.calls[0][0].profiles).toEqual({})
     wrapper.unmount()
   })
 

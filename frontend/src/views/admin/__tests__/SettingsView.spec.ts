@@ -19,7 +19,7 @@ vi.mock("@/api/admin/outboundIdentity", async (original) => ({
 
 function outboundIdentityFixture(): OutboundIdentityView {
   const identities = identityPresets.map(preset => ({ preset, user_agent: `${preset}/3.9.0`, originator: preset, version: "3.9.0", source: "compiled_default", headers: {} }));
-  return { settings: { profiles: {}, defaults: {} }, presets: identities, effective: identities };
+  return { settings: { profiles: {}, defaults: {} }, presets: identities, effective: identities, declarations: [] };
 }
 
 const {
