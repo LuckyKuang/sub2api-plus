@@ -38,11 +38,10 @@ func (h *ZhipuOAuthHandler) GetCapabilities(c *gin.Context) {
 	response.Success(c, h.zhipuOAuthService.Capabilities())
 }
 
-// ZhipuStartLinkRequest starts a link or re-link flow.
+// ZhipuStartLinkRequest starts a link flow.
 type ZhipuStartLinkRequest struct {
-	Provider  string `json:"provider"`
-	ProxyID   *int64 `json:"proxy_id"`
-	AccountID *int64 `json:"account_id"`
+	Provider string `json:"provider"`
+	ProxyID  *int64 `json:"proxy_id"`
 }
 
 // StartLink opens a handshake session and returns the authorization URL.
@@ -54,9 +53,8 @@ func (h *ZhipuOAuthHandler) StartLink(c *gin.Context) {
 		req = ZhipuStartLinkRequest{}
 	}
 	result, err := h.zhipuOAuthService.StartLink(c.Request.Context(), service.StartZhipuLinkInput{
-		Provider:  req.Provider,
-		ProxyID:   req.ProxyID,
-		AccountID: req.AccountID,
+		Provider: req.Provider,
+		ProxyID:  req.ProxyID,
 	})
 	if err != nil {
 		response.ErrorFrom(c, err)

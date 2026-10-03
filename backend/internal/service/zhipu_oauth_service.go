@@ -138,9 +138,8 @@ func (s *ZhipuOAuthService) Capabilities() ZhipuOAuthCapabilities {
 
 // StartZhipuLinkInput starts a link or re-link flow.
 type StartZhipuLinkInput struct {
-	Provider  string
-	ProxyID   *int64
-	AccountID *int64
+	Provider string
+	ProxyID  *int64
 }
 
 // ZhipuLinkSession is returned to the admin panel. The poll credential stays
@@ -196,7 +195,6 @@ func (s *ZhipuOAuthService) StartLink(ctx context.Context, input StartZhipuLinkI
 		ExpiresAt:       expiresAt,
 		PollIntervalSec: init.PollIntervalSec,
 		ProxyURL:        proxyURL,
-		AccountID:       input.AccountID,
 		CreatedAt:       time.Now(),
 	}
 	s.sessionStore.Set(sessionID, session)

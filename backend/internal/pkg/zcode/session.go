@@ -41,11 +41,7 @@ type OAuthSession struct {
 	// PollIntervalSec is the platform-requested poll cadence.
 	PollIntervalSec int64 `json:"poll_interval_sec"`
 	// ProxyURL is the egress proxy resolved when the flow started.
-	ProxyURL string `json:"proxy_url,omitempty"`
-	// AccountID is set only for a re-authorization flow. Keeping it in the
-	// server-side session means a code exchange can never be redirected at
-	// another account by a browser request.
-	AccountID *int64    `json:"account_id,omitempty"`
+	ProxyURL  string    `json:"proxy_url,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 
 	mu       sync.Mutex
@@ -78,7 +74,6 @@ type sessionDTO struct {
 	ExpiresAt       time.Time `json:"expires_at"`
 	PollIntervalSec int64     `json:"poll_interval_sec"`
 	ProxyURL        string    `json:"proxy_url,omitempty"`
-	AccountID       *int64    `json:"account_id,omitempty"`
 	CreatedAt       time.Time `json:"created_at"`
 }
 
@@ -92,7 +87,6 @@ func toSessionDTO(session *OAuthSession) sessionDTO {
 		ExpiresAt:       session.ExpiresAt,
 		PollIntervalSec: session.PollIntervalSec,
 		ProxyURL:        session.ProxyURL,
-		AccountID:       session.AccountID,
 		CreatedAt:       session.CreatedAt,
 	}
 }
@@ -107,7 +101,6 @@ func fromSessionDTO(id string, dto sessionDTO) *OAuthSession {
 		ExpiresAt:       dto.ExpiresAt,
 		PollIntervalSec: dto.PollIntervalSec,
 		ProxyURL:        dto.ProxyURL,
-		AccountID:       dto.AccountID,
 		CreatedAt:       dto.CreatedAt,
 	}
 }
