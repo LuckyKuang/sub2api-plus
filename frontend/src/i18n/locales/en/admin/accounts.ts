@@ -1129,6 +1129,42 @@ export default {
         batchPartialSuccess: 'Partial success: {success} succeeded, {failed} failed',
         batchFailed: 'Batch creation failed',
         // OpenAI specific
+        zhipu: {
+          title: 'Link a GLM subscription with ZCode',
+          desc:
+            "Authorize with the provider's official ZCode client. The server keeps the authorization session and polls it, so no callback address is required, and the linked account uses the same endpoints as a pasted key.",
+          unavailable: 'The ZCode link is not configured on this deployment.',
+          waiting: 'Waiting for authorization',
+          providerLabel: 'Provider',
+          providers: { bigmodel: 'BigModel (domestic)', zai: 'Z.ai (international)' },
+          planLabel: 'Subscription',
+          plans: {
+            'individual-coding-plan': 'Individual Coding Plan',
+            'team-coding-plan': 'Team Coding Plan',
+            'start-plan': 'Start Plan',
+            'off-peak': 'Off-peak Idle Plan'
+          },
+          unsupported: 'not supported yet',
+          teamOrganization: 'Organization ID',
+          teamProject: 'Project ID',
+          teamScopeHint: 'A team subscription can own several projects; enter the one this account should use.',
+          openAuthorize: 'Open authorization page',
+          checkNow: 'Check now',
+          cancel: 'Cancel',
+          browserHint: 'Authorize in the browser, then wait here. If the browser cannot return to this page, use the fallback below.',
+          showFallback: 'Authorization did not complete? Paste the callback URL',
+          hideFallback: 'Hide the manual code entry',
+          fallbackPlaceholder: 'Paste the full callback URL (recommended) or just the code',
+          fallbackSubmit: 'Submit code',
+          name: 'Account name',
+          namePlaceholder: 'Leave empty to derive it from the plan',
+          concurrency: 'Concurrency',
+          priority: 'Priority',
+          start: 'Generate authorization URL',
+          starting: 'Starting...',
+          create: 'Create account',
+          authorized: 'Authorized'
+        },
         openai: {
           title: 'OpenAI Account Authorization',
           followSteps: 'Follow these steps to complete OpenAI account authorization:',

@@ -1197,6 +1197,42 @@ export default {
         batchPartialSuccess: '部分成功：{success} 个成功，{failed} 个失败',
         batchFailed: '批量创建失败',
         // OpenAI specific
+        zhipu: {
+          title: '通过 ZCode 绑定 GLM 套餐',
+          desc:
+            '使用智谱官方 ZCode 客户端授权。服务端持有授权会话并轮询，因此不需要回调地址；绑定出来的账号与粘贴 API Key 使用完全相同的端点。',
+          unavailable: '当前部署未配置 ZCode 绑定。',
+          waiting: '等待授权',
+          providerLabel: '站点',
+          providers: { bigmodel: 'BigModel（国内站）', zai: 'Z.ai（国际站）' },
+          planLabel: '套餐',
+          plans: {
+            'individual-coding-plan': '个人 Coding Plan',
+            'team-coding-plan': '团队 Coding Plan',
+            'start-plan': 'Start Plan',
+            'off-peak': '闲时（Off-peak）套餐'
+          },
+          unsupported: '暂不支持',
+          teamOrganization: '组织 ID',
+          teamProject: '项目 ID',
+          teamScopeHint: '团队套餐可能包含多个项目，请填写本账号需要使用的那个。',
+          openAuthorize: '打开授权页面',
+          checkNow: '立即检查',
+          cancel: '取消',
+          browserHint: '在浏览器中完成授权后在此等待。若浏览器无法跳回本页，请使用下方的兜底方式。',
+          showFallback: '授权没有自动完成？粘贴回调 URL',
+          hideFallback: '收起手动输入',
+          fallbackPlaceholder: '粘贴完整回调 URL（推荐）或仅粘贴 code',
+          fallbackSubmit: '提交 code',
+          name: '账号名称',
+          namePlaceholder: '留空则按套餐自动生成',
+          concurrency: '并发',
+          priority: '优先级',
+          start: '生成授权链接',
+          starting: '正在生成...',
+          create: '创建账号',
+          authorized: '已授权'
+        },
         openai: {
           title: 'OpenAI 账户授权',
           followSteps: '请按照以下步骤完成 OpenAI 账户的授权：',

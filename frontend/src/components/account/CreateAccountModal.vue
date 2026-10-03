@@ -670,6 +670,11 @@
         <p class="input-hint mt-2">{{ t('admin.accounts.cnProviders.zhipuTeam.hint') }}</p>
       </div>
 
+      <!-- Zhipu / GLM：通过 ZCode 平台授权绑定套餐（服务端轮询，无需回调地址） -->
+      <div v-if="form.platform === 'zhipu'" class="mt-4">
+        <ZhipuLinkPanel :proxy-id="form.proxy_id ?? undefined" @created="handleZhipuLinkCreated" />
+      </div>
+
       <!-- Account Type Selection (Gemini) -->
       <div v-if="form.platform === 'gemini'">
         <div class="flex items-center justify-between">
@@ -3736,6 +3741,7 @@ import {
   type OpenAIWSMode
 } from '@/utils/openaiWsMode'
 import OAuthAuthorizationFlow from './OAuthAuthorizationFlow.vue'
+import ZhipuLinkPanel from './ZhipuLinkPanel.vue'
 
 // Type for exposed OAuthAuthorizationFlow component
 // Note: defineExpose automatically unwraps refs, so we use the unwrapped types
@@ -6165,6 +6171,14 @@ const createOpenAIAccountFromTokenInfo = async (tokenInfo: OpenAITokenInfo) => {
   } finally {
     oauthClient.loading.value = false
   }
+}
+
+// The link panel creates the account server-side, so the modal only reports
+// success and closes, matching every other created-account path.
+const handleZhipuLinkCreated = () => {
+  appStore.showSuccess(t('admin.accounts.accountCreated'))
+  emit('created')
+  handleClose()
 }
 
 const handleOpenAIExchange = async (authCode: string) => {
