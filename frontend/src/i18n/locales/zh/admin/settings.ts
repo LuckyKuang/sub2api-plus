@@ -27,6 +27,8 @@ export default {
         defaultsHint: '为兼容供应商、API Key、Bedrock 和 Vertex 选择默认身份。账号可以单独覆盖，认证与协议继续由对应上游处理。',
         loadFailed: '无法加载出站身份设置，请稍后重试。',
         previewFailed: '身份无效或无法预览，请检查预设、UA 和版本。',
+        versionNotDeclared: '官方客户端未声明版本',
+        versionlessHint: '官方 MiniMax 客户端只声明产品标识、不含版本号，因此该身份不提供版本与 UA 覆盖；账号仍可改用其他预设。',
         sources: { account: '账号配置', global: '全局配置', compiled_default: '项目默认', environment: '环境变量' },
       },
       features: {

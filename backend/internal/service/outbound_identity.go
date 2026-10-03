@@ -19,6 +19,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/deepseek"
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/geminicli"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/minimax"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/xai"
@@ -53,7 +54,18 @@ type cachedOutboundIdentitySettings struct {
 }
 
 var outboundClientVersionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.]+)?$`)
-var outboundPresetNames = []string{"codex", "claude", "gemini", "grok", "antigravity", "deepseek"}
+var outboundPresetNames = []string{"codex", "claude", "gemini", "grok", "antigravity", "deepseek", "minimax"}
+
+// versionlessOutboundUserAgents enumerates the client families whose official
+// client publishes no version segment. MiniMax renders the bare product token
+// `MiniMaxAgent` for every managed provider request and never puts its package
+// version on the wire. Membership is an explicit per-preset exception recorded
+// in docs/OUTBOUND_IDENTITY.md: it is not a general relaxation of the client
+// version requirement, and an unlisted preset can never select an empty version
+// or a versionless User-Agent.
+var versionlessOutboundUserAgents = map[string]string{
+	"minimax": minimax.ProductToken,
+}
 
 func emptyOutboundIdentitySettings() OutboundIdentitySettings {
 	return OutboundIdentitySettings{Profiles: map[string]OutboundIdentitySelection{}, Defaults: map[string]string{}}
@@ -75,6 +87,12 @@ func nativeOutboundPreset(platform string) string {
 		// not Codex; an account or type-default selection can still opt back
 		// into any compatible preset.
 		return "deepseek"
+	case PlatformMiniMax:
+		// MiniMax platform accounts advertise the pinned MiniMax Code product
+		// identity by default. The provider-defined client family is the
+		// official MiniMax client, not Codex; an account or type-default
+		// selection can still opt back into any compatible preset.
+		return "minimax"
 	case PlatformTypeSafe:
 		// TypeSafe is an API-key compatible supplier with no provider-defined
 		// client family, version or identity header. It reuses the same
@@ -125,6 +143,8 @@ func builtInOutboundIdentity(preset string) outboundidentity.Identity {
 		return antigravity.DefaultIdentity()
 	case "deepseek":
 		return deepseek.DefaultIdentity()
+	case "minimax":
+		return minimax.DefaultIdentity()
 	default:
 		return outboundidentity.Identity{}
 	}
@@ -155,6 +175,19 @@ func buildOutboundIdentity(selection OutboundIdentitySelection) (outboundidentit
 			return i, fmt.Errorf("unsupported Codex identity")
 		}
 		i.UserAgent, i.Originator, i.Version = resolved.UserAgent, resolved.Originator, resolved.Version
+	} else if versionlessToken, ok := versionlessOutboundUserAgents[selection.Preset]; ok {
+		// Enumerated versionless client family. The official client publishes no
+		// version segment, so the bare product token is the complete declaration.
+		// Requiring an exact match keeps the exemption narrow: an arbitrary
+		// User-Agent can never borrow it, and a caller-supplied version is
+		// rejected instead of being rendered into a family that has none.
+		if ua != versionlessToken {
+			return i, fmt.Errorf("User-Agent must match the selected preset")
+		}
+		if strings.TrimSpace(selection.Version) != "" {
+			return i, fmt.Errorf("selected preset does not declare a client version")
+		}
+		i.UserAgent, i.Version = ua, ""
 	} else {
 		if brandidentity.ContainsBrand(ua) {
 			return i, fmt.Errorf("User-Agent must not contain the project brand")

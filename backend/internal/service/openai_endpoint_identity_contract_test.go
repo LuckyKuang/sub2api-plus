@@ -37,7 +37,7 @@ func TestOpenAIIdentityContractEndpointMatrix(t *testing.T) {
 				continue
 			}
 			for _, passthrough := range []bool{false, true} {
-				for _, source := range []string{"account", "global", "default", "claude", "gemini", "grok", "antigravity"} {
+				for _, source := range []string{"account", "global", "default", "claude", "gemini", "grok", "antigravity", "deepseek", "minimax"} {
 					compatible := source != "account" && source != "global" && source != "default"
 					if compatible && accountType != AccountTypeAPIKey {
 						continue

@@ -8,18 +8,23 @@ The gateway resolves a trusted triple: User-Agent, client identifier and client
 version. A preset renders only its defined wire declarations. Gemini and
 Antigravity encode the identifier/version in User-Agent; they do not acquire
 invented OpenAI `Originator` or `Version` headers. SDK versions and protocol
-versions are distinct from the CLI version.
+versions are distinct from the CLI version. MiniMax is an enumerated versionless
+client family: its official client publishes the bare product token with no
+version segment, so `Version` is intentionally empty for that preset only. The
+exception is registered per preset and never makes the client version optional
+for any other family.
 
 ## Presets and default mappings
 
 | Preset | Default accounts | Wire identity |
 | --- | --- | --- |
-| Codex | OpenAI OAuth/setup-token, OpenAI-compatible API keys, Kimi, Zhipu, MiniMax, TypeSafe API keys | Existing Codex UA/Originator/Version rules, including endpoint-specific omissions |
+| Codex | OpenAI OAuth/setup-token, OpenAI-compatible API keys, Kimi, Zhipu, TypeSafe API keys | Existing Codex UA/Originator/Version rules, including endpoint-specific omissions |
 | Claude Code | Anthropic OAuth/setup-token/API key, Claude on Bedrock or Vertex | `claude-cli` UA, `X-App: cli`, project-owned `X-Stainless-*` SDK/runtime declarations |
 | Gemini CLI | Gemini OAuth/API key, Gemini on Vertex | `GeminiCLI` UA |
 | Grok | Grok OAuth/API key | `grok-shell` UA, `x-grok-client-identifier`, `x-grok-client-version`, `x-grok-client-mode: headless` |
 | Antigravity | Antigravity OAuth/upstream | `antigravity` UA; the two privacy endpoints also declare the pinned `X-Goog-Api-Client` SDK |
 | DeepSeek | DeepSeek API-key accounts | `deepseek-harness/<version> (+https://github.com/deepseek-ai/deepseek-harness)` UA; identifier and version are encoded in the UA, so no `Originator`/`Version` headers |
+| MiniMax | MiniMax API-key accounts | `MiniMaxAgent` UA; the official client declares no version segment, so there is no `Originator`/`Version` header and no client version |
 
 Native OAuth and setup-token accounts retain their native client family.
 API-key, upstream, Bedrock and service-account accounts can explicitly select
@@ -60,6 +65,24 @@ rather than a prerequisite. Enabling it replaces Codex's
 `Originator`/`Version` declarations on those accounts; an account selection or
 type default can still opt a DeepSeek account back into Codex or any other
 compatible preset.
+
+The exact compiled MiniMax identity is the bare product token `MiniMaxAgent`,
+with identifier `MiniMaxAgent` and no client version. The official MiniMax Code
+client renders that single declaration for managed provider requests and never
+puts its package version on the wire, so this preset is a registered versionless
+family: `Version` stays empty, no `Originator` or `Version` header is rendered,
+and only the User-Agent reaches the wire. The versionless exemption is an
+explicit per-preset enumeration; an unlisted preset still requires a client
+version, and a MiniMax candidate carrying a version — or any User-Agent other
+than the exact token — is rejected before saving. MiniMax API-key accounts
+resolve this preset by default through `nativeOutboundPreset`, so the
+`minimax:apikey` type default is an explicit, operator-visible equivalent rather
+than a prerequisite. Enabling it replaces Codex's `Originator`/`Version`
+declarations on those accounts; an account selection or type default can still
+opt a MiniMax account back into Codex or any other compatible preset. The
+managed MiniMax session headers (`X-Mavis-Session-Id`, `-Agent-Id`,
+`-Timezone-Offset`) are request state owned by the protocol layer, not identity
+declarations.
 
 The exact compiled Grok identity is `grok-shell/1.0.45 (<os>; <arch>)`, with
 identifier `grok-shell`, client version `1.0.45`, and mode `headless`. Runtime
@@ -132,6 +155,11 @@ global identity. Explicit `user_agent`/`version` fields form an account candidat
 omitted fields in that candidate use the preset's built-in declarations. An
 invalid candidate falls through as a whole. Invalid input through the management
 API is rejected before saving. Empty or null account selection means inherit.
+A versionless family rejects a candidate that supplies a client version, and it
+accepts only its exact compiled User-Agent token, so no other candidate can claim
+that family. The settings page exposes no version or User-Agent control for such
+a family; a profile the management API persisted for it is preserved by unrelated
+saves instead of being silently dropped.
 Non-Codex User-Agent candidates containing the project brand token (case
 insensitive) are invalid. Rejecting them during selection ensures the final
 brand filter cannot remove an accepted UA while leaving companion declarations
@@ -341,9 +369,12 @@ a forwarding account or move inference ahead of the ingress audit boundary.
 Model discovery includes both standard model lists and the Codex-style manifest
 requested from a compatible API-key upstream. Explicit account or type-default
 preset selections govern the manifest's final headers and `client_version`
-query together. Its cache key includes the final URL and headers, and detached
-cache refreshes carry the same resolved identity snapshot. Native Codex source
-precedence and endpoint-specific header omissions remain unchanged.
+query together. A versionless family declares no client version, so the manifest
+omits the `client_version` query instead of sending an empty declaration; the
+selected identity still owns the headers. Its cache key includes the final URL
+and headers, and detached cache refreshes carry the same resolved identity
+snapshot. Native Codex source precedence and endpoint-specific header omissions
+remain unchanged.
 
 Claude fingerprint caching now preserves the account's device identifier while
 refreshing client declarations from project configuration. Cached or inbound
@@ -358,7 +389,9 @@ Version-only updates replace the selected client version declaration and its
 paired version header. They preserve client family, Originator, OS,
 architecture, terminal and SDK fingerprint. Other presets currently expose
 manual version settings; automatic release synchronization remains the
-existing Codex feature.
+existing Codex feature. A versionless family has no version-only update: it
+rejects a client-version candidate and can only be changed through its preset
+selection.
 
 ## Mandatory maintenance contract
 
@@ -428,7 +461,7 @@ compatibility mode, or an upstream release.
 `openai_outbound_contract_test.go` captures real HTTP sends, rejected-field
 retries and WS handshake headers across OAuth/API-key accounts, both HTTP
 passthrough states, forced Codex classification and the account/global/default/
-legacy source cases. It also covers the five compatible non-Codex presets.
+legacy source cases. It also covers the six compatible non-Codex presets.
 The header-override suites cover management rejection and filtering of legacy
 stored declarations, including SDK headers and case variants. These guards are
 required alongside the existing source-priority and exact-default assertions.

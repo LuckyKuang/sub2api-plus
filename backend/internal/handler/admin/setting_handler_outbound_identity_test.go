@@ -73,6 +73,30 @@ func TestOutboundIdentitySettingsAPI(t *testing.T) {
 	for _, body := range []string{`{"platform":"unknown","type":"oauth"}`, `{"platform":"gemini","type":"oauth","selection":{"preset":"grok"}}`, `{"platform":"anthropic","type":"apikey","selection":{"preset":"claude","version":"invalid"}}`} {
 		require.Equal(t, http.StatusBadRequest, request(http.MethodPost, "/preview", body).Code)
 	}
+	// MiniMax is an enumerated versionless family: the preview reports the bare
+	// product token with no client version, and both an invented version and a
+	// foreign User-Agent are rejected before saving.
+	minimaxPreview := request(http.MethodPost, "/preview", `{"platform":"minimax","type":"apikey","selection":{"preset":"minimax"}}`)
+	require.Equal(t, http.StatusOK, minimaxPreview.Code)
+	require.Equal(t, "minimax", gjson.Get(minimaxPreview.Body.String(), "data.preset").String())
+	require.Equal(t, "MiniMaxAgent", gjson.Get(minimaxPreview.Body.String(), "data.user_agent").String())
+	require.True(t, gjson.Get(minimaxPreview.Body.String(), "data.version").Exists(), "the version key stays present and empty rather than being dropped")
+	require.Equal(t, "", gjson.Get(minimaxPreview.Body.String(), "data.version").String())
+	require.Equal(t, "MiniMaxAgent", gjson.Get(minimaxPreview.Body.String(), `data.headers.User-Agent`).String())
+	for _, body := range []string{
+		`{"platform":"minimax","type":"apikey","selection":{"preset":"minimax","version":"0.6.2"}}`,
+		`{"platform":"minimax","type":"apikey","selection":{"preset":"minimax","user_agent":"MiniMaxAgent/0.6.2"}}`,
+	} {
+		require.Equal(t, http.StatusBadRequest, request(http.MethodPost, "/preview", body).Code, body)
+	}
+	minimaxSaved := request(http.MethodPut, "/identity", `{"profiles":{"grok":{"version":"3.9.1"},"minimax":{"preset":"minimax"}},"defaults":{"gemini:service_account":"grok","minimax:apikey":"minimax"}}`)
+	require.Equal(t, http.StatusOK, minimaxSaved.Code)
+	require.Equal(t, "minimax", gjson.Get(minimaxSaved.Body.String(), `data.settings.profiles.minimax.preset`).String())
+	require.Equal(t, "MiniMaxAgent", gjson.Get(minimaxSaved.Body.String(), `data.effective.#(preset=="minimax").user_agent`).String())
+	require.Equal(t, "", gjson.Get(minimaxSaved.Body.String(), `data.effective.#(preset=="minimax").version`).String())
+	require.Contains(t, minimaxSaved.Body.String(), `"minimax:apikey":"minimax"`)
+	require.Equal(t, http.StatusBadRequest, request(http.MethodPut, "/identity", `{"profiles":{"minimax":{"preset":"minimax","version":"0.6.2"}}}`).Code)
 	require.Equal(t, http.StatusBadRequest, request(http.MethodPut, "/identity", `{"profiles":{"codex":{"version":"3.9.1"}}}`).Code)
 	require.Equal(t, "3.9.1", gjson.Get(repo.values[service.SettingKeyOutboundIdentity], "profiles.grok.version").String(), "rejected updates preserve the saved profile")
+	require.Equal(t, "minimax", gjson.Get(repo.values[service.SettingKeyOutboundIdentity], "profiles.minimax.preset").String())
 }

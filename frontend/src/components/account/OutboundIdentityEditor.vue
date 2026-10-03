@@ -5,7 +5,10 @@
       <option value="">{{ t('admin.settings.outboundIdentity.inherit') }}</option>
       <option v-for="preset in availablePresets" :key="preset" :value="preset">{{ identityNames[preset] }}</option>
     </select>
-    <template v-if="modelValue?.preset && !(platform === 'openai' && modelValue.preset === 'codex')">
+    <template v-if="isVersionlessSelection">
+      <p class="text-xs text-gray-500">{{ t('admin.settings.outboundIdentity.versionlessHint') }}</p>
+    </template>
+    <template v-else-if="modelValue?.preset && !(platform === 'openai' && modelValue.preset === 'codex')">
       <input :value="modelValue.version" class="input font-mono" :aria-label="t('admin.settings.outboundIdentity.version')" :placeholder="t('admin.settings.outboundIdentity.version')" @input="update('version', ($event.target as HTMLInputElement).value)" />
       <details>
         <summary class="cursor-pointer text-sm">{{ t('admin.settings.outboundIdentity.advanced') }}</summary>
@@ -15,9 +18,12 @@
     <p v-if="error" role="alert" class="text-xs text-red-600">{{ error }}</p>
     <div v-else-if="preview" class="space-y-1 text-xs text-gray-500">
       <p>{{ t('admin.settings.outboundIdentity.effectiveAccount') }} · {{ t(`admin.settings.outboundIdentity.sources.${preview.source}`) }}</p>
-      <p class="break-all font-mono">{{ preview.user_agent }}</p>
-      <p class="font-mono">{{ preview.originator }} / {{ preview.version }}</p>
-      <details><summary class="cursor-pointer">{{ t('admin.settings.outboundIdentity.headers') }}</summary><pre class="mt-2 overflow-auto">{{ JSON.stringify(preview.headers, null, 2) }}</pre></details>
+      <dl class="grid gap-1 sm:grid-cols-[auto_1fr]" data-testid="outbound-identity-account-headers">
+        <template v-for="(value, name) in preview.headers" :key="name">
+          <dt class="font-mono text-gray-500">{{ name }}</dt>
+          <dd class="break-all font-mono">{{ value }}</dd>
+        </template>
+      </dl>
     </div>
   </section>
 </template>
@@ -25,13 +31,14 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { identityNames, identityPresets, previewOutboundIdentity, type IdentityPreset, type IdentitySelection, type ResolvedIdentity } from '@/api/admin/outboundIdentity'
+import { identityNames, identityPresets, versionlessIdentityPresets, previewOutboundIdentity, type IdentityPreset, type IdentitySelection, type ResolvedIdentity } from '@/api/admin/outboundIdentity'
 const props = defineProps<{ platform: string; accountType: string; modelValue?: IdentitySelection | null; codexUserAgent?: string }>()
 const emit = defineEmits<{ 'update:modelValue': [value: IdentitySelection | null] }>()
 const { t } = useI18n()
 const preview = ref<ResolvedIdentity>()
 const error = ref('')
-const nativePresets: Record<string, IdentityPreset> = { anthropic: 'claude', gemini: 'gemini', grok: 'grok', antigravity: 'antigravity', deepseek: 'deepseek' }
+const nativePresets: Record<string, IdentityPreset> = { anthropic: 'claude', gemini: 'gemini', grok: 'grok', antigravity: 'antigravity', deepseek: 'deepseek', minimax: 'minimax' }
+const isVersionlessSelection = computed(() => !!props.modelValue?.preset && versionlessIdentityPresets.includes(props.modelValue.preset as IdentityPreset))
 const nativePreset = computed<IdentityPreset>(() => nativePresets[props.platform] || 'codex')
 const visible = computed(() => props.platform && props.platform !== 'composite' && (props.platform !== 'openai' || ['apikey', 'upstream'].includes(props.accountType)))
 const availablePresets = computed(() => ['oauth', 'setup-token'].includes(props.accountType) ? [nativePreset.value] : identityPresets)

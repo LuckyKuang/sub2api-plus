@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import OutboundIdentitySettings from './OutboundIdentitySettings.vue'
-import { getOutboundIdentity, updateOutboundIdentity, identityPresets, type OutboundIdentityView } from '@/api/admin/outboundIdentity'
+import { getOutboundIdentity, updateOutboundIdentity, identityPresets, versionlessIdentityPresets, type OutboundIdentityView } from '@/api/admin/outboundIdentity'
 
 vi.mock('vue-i18n', async (original) => ({ ...await original<typeof import('vue-i18n')>(), useI18n: () => ({ t: (key: string) => key }) }))
 vi.mock('@/api/admin/outboundIdentity', async (original) => ({
@@ -9,7 +9,10 @@ vi.mock('@/api/admin/outboundIdentity', async (original) => ({
   getOutboundIdentity: vi.fn(), updateOutboundIdentity: vi.fn()
 }))
 const fixture = (): OutboundIdentityView => {
-  const identities = identityPresets.map(preset => ({ preset, user_agent: `${preset}/1.2.3`, originator: preset, version: '1.2.3', source: 'compiled_default', headers: { 'User-Agent': `${preset}/1.2.3` } }))
+  const identities = identityPresets.map(preset => preset === 'minimax'
+    // The versionless family declares the bare product token and no version.
+    ? { preset, user_agent: 'MiniMaxAgent', originator: 'MiniMaxAgent', version: '', source: 'compiled_default', headers: { 'User-Agent': 'MiniMaxAgent' } }
+    : { preset, user_agent: `${preset}/1.2.3`, originator: preset, version: '1.2.3', source: 'compiled_default', headers: { 'User-Agent': `${preset}/1.2.3` } })
   return { settings: { profiles: {}, defaults: {} }, presets: identities, effective: identities }
 }
 describe('OutboundIdentitySettings', () => {
@@ -100,6 +103,54 @@ describe('OutboundIdentitySettings', () => {
     await row!.find('select').setValue('deepseek')
     await wrapper.vm.save()
     expect(vi.mocked(updateOutboundIdentity).mock.calls[0][0].defaults).toEqual({ 'deepseek:apikey': 'deepseek' })
+    wrapper.unmount()
+  })
+
+  it('shows the wire request headers and the versionless MiniMax declaration', async () => {
+    const wrapper = mount(OutboundIdentitySettings)
+    await flushPromises()
+    const minimaxCard = wrapper.findAll('section')[identityPresets.indexOf('minimax')]
+    expect(minimaxCard.text()).toContain('MiniMax')
+    // The saved global identity exposes the exact headers sent upstream.
+    const headers = minimaxCard.get('[data-testid="outbound-identity-headers"]')
+    expect(headers.text()).toContain('User-Agent')
+    expect(headers.text()).toContain('MiniMaxAgent')
+    // A family that publishes no version shows the explicit placeholder instead
+    // of a blank row, and offers no version or UA override control.
+    expect(minimaxCard.text()).toContain('versionNotDeclared')
+    expect(minimaxCard.text()).toContain('versionlessHint')
+    expect(minimaxCard.find('input').exists()).toBe(false)
+    const row = wrapper.findAll('label').find(label => label.text().includes('minimax · API Key'))
+    expect(row, 'the minimax type-default row must be configurable').toBeDefined()
+    await row!.find('select').setValue('minimax')
+    await wrapper.vm.save()
+    expect(vi.mocked(updateOutboundIdentity).mock.calls[0][0].defaults).toEqual({ 'minimax:apikey': 'minimax' })
+    wrapper.unmount()
+  })
+
+  it('mirrors the backend versionless client-family enumeration', () => {
+    // Keep this list in lockstep with versionlessOutboundUserAgents in
+    // backend/internal/service/outbound_identity.go.
+    expect(versionlessIdentityPresets).toEqual(['minimax'])
+    for (const preset of versionlessIdentityPresets) expect(identityPresets).toContain(preset)
+  })
+
+  it('preserves an already persisted versionless profile through an unrelated save', async () => {
+    const saved = fixture()
+    saved.settings.profiles = { minimax: { preset: 'minimax' } }
+    vi.mocked(getOutboundIdentity).mockResolvedValueOnce(saved)
+    vi.mocked(updateOutboundIdentity).mockImplementationOnce(async settings => ({ ...saved, settings }))
+    const wrapper = mount(OutboundIdentitySettings)
+    await flushPromises()
+    // Loading a preserved profile is not an unsaved edit on its own.
+    expect(wrapper.vm.isDirty).toBe(false)
+    await wrapper.findAll('section')[1].findAll('input')[0].setValue('3.9.1')
+    await wrapper.vm.save()
+    expect(vi.mocked(updateOutboundIdentity).mock.calls[0][0].profiles).toEqual({
+      claude: { preset: 'claude', user_agent: '', version: '3.9.1' },
+      minimax: { preset: 'minimax', user_agent: '', version: '' }
+    })
+    expect(wrapper.vm.isDirty).toBe(false)
     wrapper.unmount()
   })
 

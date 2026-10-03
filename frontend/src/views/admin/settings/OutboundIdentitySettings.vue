@@ -14,15 +14,25 @@
           <dl class="grid gap-2 sm:grid-cols-[auto_1fr]">
             <dt>User-Agent</dt><dd class="break-all font-mono">{{ effective(preset)?.user_agent }}</dd>
             <dt>{{ t('admin.settings.outboundIdentity.client') }}</dt><dd class="font-mono">{{ effective(preset)?.originator }}</dd>
-            <dt>{{ t('admin.settings.outboundIdentity.version') }}</dt><dd class="font-mono">{{ effective(preset)?.version }}</dd>
+            <dt>{{ t('admin.settings.outboundIdentity.version') }}</dt>
+            <dd class="font-mono">
+              <template v-if="effective(preset)?.version">{{ effective(preset)?.version }}</template>
+              <span v-else class="text-gray-500">{{ t('admin.settings.outboundIdentity.versionNotDeclared') }}</span>
+            </dd>
             <dt>{{ t('admin.settings.outboundIdentity.source') }}</dt><dd>{{ sourceLabel(effective(preset)?.source) }}</dd>
           </dl>
-          <details class="mt-3">
-            <summary class="cursor-pointer">{{ t('admin.settings.outboundIdentity.headers') }}</summary>
-            <pre class="mt-2 overflow-auto text-xs">{{ JSON.stringify(effective(preset)?.headers, null, 2) }}</pre>
-          </details>
+          <div class="mt-3">
+            <p class="mb-1 text-gray-500">{{ t('admin.settings.outboundIdentity.headers') }}</p>
+            <dl class="grid gap-1 sm:grid-cols-[auto_1fr]" data-testid="outbound-identity-headers">
+              <template v-for="(value, name) in effective(preset)?.headers" :key="name">
+                <dt class="font-mono text-xs text-gray-500">{{ name }}</dt>
+                <dd class="break-all font-mono text-xs">{{ value }}</dd>
+              </template>
+            </dl>
+          </div>
         </div>
         <slot v-if="preset === 'codex'" name="codex" />
+        <p v-else-if="isVersionless(preset)" class="text-xs text-gray-500">{{ t('admin.settings.outboundIdentity.versionlessHint') }}</p>
         <template v-else>
           <label class="block text-sm">
             {{ t('admin.settings.outboundIdentity.version') }}
@@ -56,7 +66,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { getOutboundIdentity, updateOutboundIdentity, identityNames, identityPresets, type IdentityPreset, type IdentitySelection, type OutboundIdentityView } from '@/api/admin/outboundIdentity'
+import { getOutboundIdentity, updateOutboundIdentity, identityNames, identityPresets, versionlessIdentityPresets, type IdentityPreset, type IdentitySelection, type OutboundIdentityView } from '@/api/admin/outboundIdentity'
 
 const { t } = useI18n()
 const view = ref<OutboundIdentityView>()
@@ -83,9 +93,17 @@ const mappings = [
 ]
 const effective = (preset: IdentityPreset) => view.value?.effective.find(item => item.preset === preset)
 const builtin = (preset: IdentityPreset) => view.value?.presets.find(item => item.preset === preset)
+const isVersionless = (preset: IdentityPreset) => versionlessIdentityPresets.includes(preset)
 const sourceLabel = (source?: string) => t(`admin.settings.outboundIdentity.sources.${source || 'compiled_default'}`)
+// A versionless family exposes no editable declaration, so a profile the
+// management API already persisted for it cannot be re-derived from user input.
+// Keep that profile through unrelated saves rather than silently dropping
+// configuration this page never presented a control for.
+function isPreservedProfile(preset: string) {
+  return isVersionless(preset as IdentityPreset) && Boolean(view.value?.settings.profiles?.[preset as IdentityPreset])
+}
 function formSettings() {
-  const selectedProfiles = Object.fromEntries(Object.entries(profiles).filter(([preset, selection]) => preset !== 'codex' && (selection.user_agent?.trim() || selection.version?.trim())).map(([preset, selection]) => [preset, { ...selection }]))
+  const selectedProfiles = Object.fromEntries(Object.entries(profiles).filter(([preset, selection]) => preset !== 'codex' && (selection.user_agent?.trim() || selection.version?.trim() || isPreservedProfile(preset))).map(([preset, selection]) => [preset, { ...selection }]))
   const selectedDefaults = Object.fromEntries(Object.entries(defaults).filter(([, preset]) => preset)) as Record<string, IdentityPreset>
   return { profiles: selectedProfiles, defaults: selectedDefaults }
 }
@@ -97,14 +115,17 @@ async function refresh() {
     const updated = await getOutboundIdentity()
     // A settings save also refreshes Codex's effective identity. Preserve any
     // edits made while that request was in flight.
-    if (!isDirty.value) {
+    const dirty = isDirty.value
+    if (!dirty) {
       for (const preset of identityPresets) Object.assign(profiles[preset], { preset, user_agent: '', version: '' }, updated.settings.profiles?.[preset])
       for (const key of Object.keys(defaults)) delete defaults[key]
       Object.assign(defaults, updated.settings.defaults)
       for (const mapping of mappings) defaults[mapping.key] ||= ''
-      savedForm.value = JSON.stringify(formSettings())
     }
     view.value = updated
+    // The saved baseline is computed against the freshly loaded view, because a
+    // preserved versionless profile is derived from the server's saved settings.
+    if (!dirty) savedForm.value = JSON.stringify(formSettings())
   } catch {
     error.value = t('admin.settings.outboundIdentity.loadFailed')
   } finally { loading.value = false }

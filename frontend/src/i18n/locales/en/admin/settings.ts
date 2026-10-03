@@ -27,6 +27,8 @@ export default {
         defaultsHint: 'Choose default identities for compatible providers, API keys, Bedrock and Vertex. Accounts may override these defaults while their upstream still controls authentication and protocol.',
         loadFailed: 'Unable to load outbound identity settings. Please retry.',
         previewFailed: 'Invalid identity or preview unavailable. Check the preset, UA and version.',
+        versionNotDeclared: 'Not declared by the official client',
+        versionlessHint: 'The official MiniMax client declares the bare product token with no client version, so this identity exposes no version or User-Agent override. Accounts can still select another preset.',
         sources: { account: 'Account', global: 'Global settings', compiled_default: 'Project default', environment: 'Environment' },
       },
       features: {

@@ -28,10 +28,10 @@ describe('OutboundIdentityEditor', () => {
   })
 
   it.each([
-    ['openai', 'apikey'], ['gemini', 'service_account'], ['anthropic', 'bedrock'], ['antigravity', 'upstream'], ['deepseek', 'apikey']
+    ['openai', 'apikey'], ['gemini', 'service_account'], ['anthropic', 'bedrock'], ['antigravity', 'upstream'], ['deepseek', 'apikey'], ['minimax', 'apikey']
   ])('lets compatible %s/%s accounts select an existing identity', async (platform, accountType) => {
     const wrapper = mount(OutboundIdentityEditor, { props: { platform, accountType, modelValue: null } })
-    expect(wrapper.findAll('option')).toHaveLength(7)
+    expect(wrapper.findAll('option')).toHaveLength(8)
     await wrapper.get('select').setValue('grok')
     expect(wrapper.emitted('update:modelValue')?.[0]).toEqual([{ preset: 'grok' }])
     await wrapper.setProps({ modelValue: { preset: 'grok', version: '3.9.1' } })
@@ -64,6 +64,29 @@ describe('OutboundIdentityEditor', () => {
     await vi.advanceTimersByTimeAsync(250)
     expect(wrapper.get('[role="alert"]').text()).toContain('previewFailed')
     expect(wrapper.text()).not.toContain('claude-cli/2.9.1')
+    wrapper.unmount()
+  })
+
+  it('renders the effective request headers and hides the version control for the versionless MiniMax family', async () => {
+    vi.mocked(previewOutboundIdentity).mockResolvedValue({ preset: 'minimax', user_agent: 'MiniMaxAgent', originator: 'MiniMaxAgent', version: '', source: 'account', headers: { 'User-Agent': 'MiniMaxAgent' } })
+    const wrapper = mount(OutboundIdentityEditor, { props: { platform: 'minimax', accountType: 'apikey', modelValue: { preset: 'minimax' } } })
+    await vi.advanceTimersByTimeAsync(250)
+    await flushPromises()
+    const headers = wrapper.get('[data-testid="outbound-identity-account-headers"]')
+    expect(headers.text()).toContain('User-Agent')
+    expect(headers.text()).toContain('MiniMaxAgent')
+    expect(wrapper.text()).toContain('versionlessHint')
+    // The versionless family rejects a client version, so no version or UA input is offered.
+    expect(wrapper.find('input').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('keeps the version control for a family that declares one', async () => {
+    const wrapper = mount(OutboundIdentityEditor, { props: { platform: 'deepseek', accountType: 'apikey', modelValue: { preset: 'deepseek' } } })
+    await vi.advanceTimersByTimeAsync(250)
+    await flushPromises()
+    expect(wrapper.find('input').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('versionlessHint')
     wrapper.unmount()
   })
 })

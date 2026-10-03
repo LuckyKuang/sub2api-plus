@@ -1,6 +1,6 @@
 import { apiClient } from '../client'
 
-export type IdentityPreset = 'codex' | 'claude' | 'gemini' | 'grok' | 'antigravity' | 'deepseek'
+export type IdentityPreset = 'codex' | 'claude' | 'gemini' | 'grok' | 'antigravity' | 'deepseek' | 'minimax'
 export interface IdentitySelection {
   preset: IdentityPreset | ''
   user_agent?: string
@@ -23,10 +23,15 @@ export interface OutboundIdentityView {
   presets: ResolvedIdentity[]
   effective: ResolvedIdentity[]
 }
-export const identityPresets: IdentityPreset[] = ['codex', 'claude', 'gemini', 'grok', 'antigravity', 'deepseek']
+export const identityPresets: IdentityPreset[] = ['codex', 'claude', 'gemini', 'grok', 'antigravity', 'deepseek', 'minimax']
 export const identityNames: Record<IdentityPreset, string> = {
-  codex: 'Codex', claude: 'Claude Code', gemini: 'Gemini CLI', grok: 'Grok', antigravity: 'Antigravity', deepseek: 'DeepSeek'
+  codex: 'Codex', claude: 'Claude Code', gemini: 'Gemini CLI', grok: 'Grok', antigravity: 'Antigravity', deepseek: 'DeepSeek', minimax: 'MiniMax'
 }
+// Mirrors the backend's enumerated versionless client families
+// (versionlessOutboundUserAgents in internal/service/outbound_identity.go). The
+// official MiniMax client publishes the bare product token with no version
+// segment, so these presets expose no client-version control and reject one.
+export const versionlessIdentityPresets: IdentityPreset[] = ['minimax']
 export async function getOutboundIdentity(): Promise<OutboundIdentityView> {
   return (await apiClient.get<OutboundIdentityView>('/admin/settings/outbound-identity')).data
 }
