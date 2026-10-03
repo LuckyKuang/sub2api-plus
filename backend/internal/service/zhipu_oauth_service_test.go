@@ -338,6 +338,27 @@ func TestZhipuOAuthBuildAccountMaterialForEachPlan(t *testing.T) {
 		require.Equal(t, "proj-team", overrides["bigmodel-project"])
 	})
 
+	// Start-plan and off-peak carry no estate-specific credential of their own,
+	// so both estates must produce the same plan gateway mapping.
+	t.Run("start plan and off-peak are estate independent", func(t *testing.T) {
+		for _, provider := range []string{zcode.ProviderBigModel, zcode.ProviderZai} {
+			start, err := svc.BuildAccountMaterial(context.Background(), ZhipuAccountMaterialInput{
+				Provider: provider, PlanKind: ZhipuPlanStartPlan, ZCodeJWT: "zcode-jwt",
+			})
+			require.NoError(t, err, provider)
+			require.Equal(t, map[string]any{APIProtocolAnthropic: zcodePlanAnthropicBaseURL}, start.Credentials[credentialAPIBaseURLs])
+
+			idle, err := svc.BuildAccountMaterial(context.Background(), ZhipuAccountMaterialInput{
+				Provider: provider, PlanKind: ZhipuPlanOffPeak,
+				AccessToken: provider + "-token", ZCodeJWT: "zcode-jwt",
+			})
+			require.NoError(t, err, provider)
+			require.Equal(t, map[string]any{APIProtocolAnthropic: zcodeOffPeakAnthropicBaseURL}, idle.Credentials[credentialAPIBaseURLs])
+			require.Equal(t, "ak.sk", idle.Credentials["off_peak_plan_key"])
+			require.Equal(t, AnthropicAPIKeyAuthSchemeAuthorizationBearer, idle.Credentials[anthropicAPIKeyAuthSchemeExtraKey])
+		}
+	})
+
 	t.Run("invalid inputs are rejected", func(t *testing.T) {
 		_, err := svc.BuildAccountMaterial(context.Background(), ZhipuAccountMaterialInput{
 			Provider: "openai", PlanKind: ZhipuPlanIndividualCodingPlan, AccessToken: "t",
