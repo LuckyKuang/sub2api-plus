@@ -37,7 +37,7 @@ const emit = defineEmits<{ 'update:modelValue': [value: IdentitySelection | null
 const { t } = useI18n()
 const preview = ref<ResolvedIdentity>()
 const error = ref('')
-const nativePresets: Record<string, IdentityPreset> = { anthropic: 'claude', gemini: 'gemini', grok: 'grok', antigravity: 'antigravity', deepseek: 'deepseek', minimax: 'minimax' }
+const nativePresets: Record<string, IdentityPreset> = { anthropic: 'claude', gemini: 'gemini', grok: 'grok', antigravity: 'antigravity', deepseek: 'deepseek', minimax: 'minimax', zhipu: 'zcode' }
 const isVersionlessSelection = computed(() => !!props.modelValue?.preset && versionlessIdentityPresets.includes(props.modelValue.preset as IdentityPreset))
 const nativePreset = computed<IdentityPreset>(() => nativePresets[props.platform] || 'codex')
 const visible = computed(() => props.platform && props.platform !== 'composite' && (props.platform !== 'openai' || ['apikey', 'upstream'].includes(props.accountType)))

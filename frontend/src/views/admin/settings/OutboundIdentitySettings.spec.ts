@@ -135,6 +135,27 @@ describe('OutboundIdentitySettings', () => {
     for (const preset of versionlessIdentityPresets) expect(identityPresets).toContain(preset)
   })
 
+  it('exposes the pinned ZCode preset and its API-key type default mapping', async () => {
+    const wrapper = mount(OutboundIdentitySettings)
+    await flushPromises()
+    const zcodeCard = wrapper.findAll('section')[identityPresets.indexOf('zcode')]
+    expect(zcodeCard.text()).toContain('ZCode')
+    // ZCode is a versioned family: it renders the product token with its client
+    // version, keeps the version control, and never shows the versionless hint.
+    const headers = zcodeCard.get('[data-testid="outbound-identity-headers"]')
+    expect(headers.text()).toContain('User-Agent')
+    expect(headers.text()).toContain('zcode/1.2.3')
+    expect(headers.text()).not.toContain('Originator')
+    expect(zcodeCard.text()).not.toContain('versionlessHint')
+    expect(zcodeCard.find('input').exists()).toBe(true)
+    const row = wrapper.findAll('label').find(label => label.text().includes('zhipu · API Key'))
+    expect(row, 'the zhipu type-default row must be configurable').toBeDefined()
+    await row!.find('select').setValue('zcode')
+    await wrapper.vm.save()
+    expect(vi.mocked(updateOutboundIdentity).mock.calls[0][0].defaults).toEqual({ 'zhipu:apikey': 'zcode' })
+    wrapper.unmount()
+  })
+
   it('preserves an already persisted versionless profile through an unrelated save', async () => {
     const saved = fixture()
     saved.settings.profiles = { minimax: { preset: 'minimax' } }

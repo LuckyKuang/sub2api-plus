@@ -14,6 +14,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/minimax"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/xai"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/zcode"
 	"github.com/stretchr/testify/require"
 )
 
@@ -90,7 +91,8 @@ func TestOutboundIdentitySourcePriorityAndAccountTypes(t *testing.T) {
 		{PlatformGemini, AccountTypeAPIKey, "gemini"}, {PlatformGemini, AccountTypeServiceAccount, "gemini"},
 		{PlatformGrok, AccountTypeOAuth, "grok"}, {PlatformGrok, AccountTypeAPIKey, "grok"},
 		{PlatformAntigravity, AccountTypeOAuth, "antigravity"}, {PlatformAntigravity, AccountTypeUpstream, "antigravity"},
-		{PlatformKimi, AccountTypeAPIKey, "codex"}, {PlatformZhipu, AccountTypeAPIKey, "codex"},
+		{PlatformKimi, AccountTypeAPIKey, "codex"}, {PlatformZhipu, AccountTypeAPIKey, "zcode"},
+		{PlatformZhipu, AccountTypeOAuth, "zcode"},
 		{PlatformDeepseek, AccountTypeAPIKey, "deepseek"}, {PlatformMiniMax, AccountTypeAPIKey, "minimax"},
 	} {
 		t.Run(entry.platform+"/"+entry.accountType, func(t *testing.T) {
@@ -196,7 +198,7 @@ func TestOutboundIdentityValidationAndVersionOnlyChange(t *testing.T) {
 			}
 		}
 	}
-	for _, selection := range []OutboundIdentitySelection{{Preset: "unknown"}, {Preset: "claude", UserAgent: "claude-cli/3.9.1\r\nAuthorization: secret"}, {Preset: "gemini", UserAgent: strings.Repeat("x", 513)}, {Preset: "grok", Version: "invalid"}, {Preset: "deepseek", UserAgent: "deepseek/0.2.0-rc.2"}, {Preset: "deepseek", UserAgent: "deepseek-harness/0.2.0-rc.2 (sub2api)"}, {Preset: "deepseek", Version: "0.0.1"}, {Preset: "minimax", UserAgent: "minimax/0.6.2"}, {Preset: "minimax", UserAgent: "MiniMaxAgent/0.6.2"}, {Preset: "minimax", UserAgent: "MiniMaxAgent (sub2api)"}, {Preset: "minimax", Version: "0.6.2"}} {
+	for _, selection := range []OutboundIdentitySelection{{Preset: "unknown"}, {Preset: "claude", UserAgent: "claude-cli/3.9.1\r\nAuthorization: secret"}, {Preset: "gemini", UserAgent: strings.Repeat("x", 513)}, {Preset: "grok", Version: "invalid"}, {Preset: "deepseek", UserAgent: "deepseek/0.2.0-rc.2"}, {Preset: "deepseek", UserAgent: "deepseek-harness/0.2.0-rc.2 (sub2api)"}, {Preset: "deepseek", Version: "0.0.1"}, {Preset: "minimax", UserAgent: "minimax/0.6.2"}, {Preset: "minimax", UserAgent: "MiniMaxAgent/0.6.2"}, {Preset: "minimax", UserAgent: "MiniMaxAgent (sub2api)"}, {Preset: "minimax", Version: "0.6.2"}, {Preset: "zcode", UserAgent: "zcode/3.14.3"}, {Preset: "zcode", UserAgent: "ZCode"}, {Preset: "zcode", UserAgent: "ZCode/3.14"}, {Preset: "zcode", UserAgent: "ZCode/3.14.3 (sub2api)"}, {Preset: "zcode", Version: "invalid"}} {
 		_, err := buildOutboundIdentity(selection)
 		require.Error(t, err)
 	}
@@ -464,4 +466,117 @@ func TestMiniMaxDefaultIdentityIsPinnedProduct(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "codex", got.Preset)
 	require.Equal(t, "account", got.Source)
+}
+
+func TestBuiltInZCodeOutboundIdentityPinsProductVersion(t *testing.T) {
+	t.Setenv(zcode.VersionEnv, "")
+
+	const pinnedUA = "ZCode/3.14.3"
+	require.Equal(t, outboundidentity.Identity{
+		Preset:     "zcode",
+		Source:     "compiled_default",
+		UserAgent:  pinnedUA,
+		Originator: "ZCode",
+		Version:    "3.14.3",
+		Headers:    map[string]string{"User-Agent": pinnedUA},
+	}, builtInOutboundIdentity("zcode"))
+	require.Equal(t, builtInOutboundIdentity("zcode"), zcode.DefaultIdentity())
+	require.Equal(t, pinnedUA, zcode.UserAgent(zcode.DefaultVersion))
+}
+
+// ZCode ships two parallel official version lines: the desktop / server product
+// version and the standalone CLI package version. The override therefore accepts
+// both and declares no monotonic version floor.
+func TestZCodeOutboundIdentityEnvironmentOverrideAcceptsBothOfficialLines(t *testing.T) {
+	for _, version := range []string{"3.14.3", "0.16.9", "3.15.0-rc.1"} {
+		t.Setenv(zcode.VersionEnv, version)
+		configured := builtInOutboundIdentity("zcode")
+		require.Equal(t, "environment", configured.Source, version)
+		require.Equal(t, version, configured.Version)
+		require.Equal(t, "ZCode/"+version, configured.UserAgent)
+		require.Equal(t, map[string]string{"User-Agent": configured.UserAgent}, configured.Headers)
+	}
+
+	for _, invalid := range []string{"", "not-a-version", "3.14", "3.14.3.1", "3.14.3 x"} {
+		t.Setenv(zcode.VersionEnv, invalid)
+		fallback := builtInOutboundIdentity("zcode")
+		require.Equal(t, "compiled_default", fallback.Source, invalid)
+		require.Equal(t, zcode.DefaultVersion, fallback.Version, invalid)
+	}
+}
+
+// A Zhipu account that selects the preset must render only the User-Agent
+// declaration, matching the official client which declares no Originator and no
+// standalone version header. Codex's declarations stay off the wire, while
+// protocol request state keeps its own ownership.
+func TestZCodeOutboundIdentityRendersOnlyUserAgent(t *testing.T) {
+	_, ctx := outboundIdentityTestSettings(t, emptyOutboundIdentitySettings())
+	account := &Account{ID: 13, Platform: PlatformZhipu, Type: AccountTypeAPIKey, Credentials: map[string]any{
+		outboundIdentityCredential: OutboundIdentitySelection{Preset: "zcode"},
+	}}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://open.bigmodel.cn/api/anthropic/v1/messages", nil)
+	require.NoError(t, err)
+	req.Header.Set("Originator", "codex_cli_rs")
+	req.Header.Set("Version", "0.158.0")
+	req.Header.Set("X-ZCode-App-Version", "request-state")
+	req.Header.Set("Anthropic-Version", "2023-06-01")
+
+	prepareAccountOutboundRequest(req, account)
+
+	require.Equal(t, zcode.UserAgent(zcode.DefaultVersion), req.Header.Get("User-Agent"))
+	require.Empty(t, req.Header.Get("Originator"))
+	require.Empty(t, req.Header.Get("Version"))
+	require.Equal(t, "request-state", req.Header.Get("X-ZCode-App-Version"), "platform attribution is not an identity declaration")
+	require.Equal(t, "2023-06-01", req.Header.Get("Anthropic-Version"), "protocol versions are not identity declarations")
+}
+
+// Zhipu / GLM platform accounts advertise the pinned ZCode identity by default,
+// for both API-key and account-link OAuth accounts. This test is the audit record
+// for that default, for the equivalent explicit `zhipu:apikey` type default, and
+// for the per-account opt-out.
+func TestZCodeDefaultIdentityIsPinnedProduct(t *testing.T) {
+	require.Equal(t, "zcode", nativeOutboundPreset(PlatformZhipu))
+
+	for _, accountType := range []string{AccountTypeAPIKey, AccountTypeOAuth} {
+		account := &Account{ID: 14, Platform: PlatformZhipu, Type: accountType, Credentials: map[string]any{}}
+		_, ctx := outboundIdentityTestSettings(t, emptyOutboundIdentitySettings())
+		got, ok := outboundidentity.FromContext(WithAccountOutboundIdentity(ctx, account))
+		require.True(t, ok, accountType)
+		require.Equal(t, "zcode", got.Preset, accountType)
+		require.Equal(t, "compiled_default", got.Source, accountType)
+		require.Equal(t, zcode.UserAgent(zcode.DefaultVersion), got.UserAgent, accountType)
+		require.Equal(t, zcode.ProductToken, got.Originator, accountType)
+		require.Equal(t, zcode.DefaultVersion, got.Version, accountType)
+		require.Equal(t, map[string]string{"User-Agent": got.UserAgent}, got.Headers, accountType)
+	}
+
+	// The explicit type default is an equivalent, operator-visible pin.
+	account := &Account{ID: 15, Platform: PlatformZhipu, Type: AccountTypeAPIKey, Credentials: map[string]any{}}
+	config := emptyOutboundIdentitySettings()
+	config.Defaults["zhipu:apikey"] = "zcode"
+	_, pinnedCtx := outboundIdentityTestSettings(t, config)
+	got, ok := outboundidentity.FromContext(WithAccountOutboundIdentity(pinnedCtx, account))
+	require.True(t, ok)
+	require.Equal(t, "zcode", got.Preset)
+	require.Equal(t, "compiled_default", got.Source)
+
+	// An API-key account selection can still opt back into another compatible
+	// preset.
+	_, ctx := outboundIdentityTestSettings(t, emptyOutboundIdentitySettings())
+	override := &Account{ID: 16, Platform: PlatformZhipu, Type: AccountTypeAPIKey, Credentials: map[string]any{
+		outboundIdentityCredential: OutboundIdentitySelection{Preset: "codex"},
+	}}
+	got, ok = outboundidentity.FromContext(WithAccountOutboundIdentity(ctx, override))
+	require.True(t, ok)
+	require.Equal(t, "codex", got.Preset)
+	require.Equal(t, "account", got.Source)
+
+	// An OAuth account is pinned to its native family and cannot opt out; the
+	// selection is rejected and the account keeps the ZCode identity.
+	oauthOverride := &Account{ID: 17, Platform: PlatformZhipu, Type: AccountTypeOAuth, Credentials: map[string]any{
+		outboundIdentityCredential: OutboundIdentitySelection{Preset: "codex"},
+	}}
+	got, ok = outboundidentity.FromContext(WithAccountOutboundIdentity(ctx, oauthOverride))
+	require.True(t, ok)
+	require.Equal(t, "zcode", got.Preset, "OAuth accounts must retain their native client family")
 }

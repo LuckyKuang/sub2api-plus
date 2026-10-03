@@ -90,7 +90,7 @@ func TestChannelMonitorDefaultIdentityForProviders(t *testing.T) {
 		// Channel-monitor egress shares the platform default preset, so the
 		// DeepSeek and MiniMax providers send the same pinned identity as their
 		// platform accounts.
-		{"kimi", "codex", ""}, {"zhipu", "codex", ""}, {"deepseek", "deepseek", ""}, {"minimax", "minimax", ""},
+		{"kimi", "codex", ""}, {"zhipu", "zcode", ""}, {"deepseek", "deepseek", ""}, {"minimax", "minimax", ""},
 		{"opencode_go", "codex", ""},
 	} {
 		t.Run(test.provider+"/"+test.mode, func(t *testing.T) {

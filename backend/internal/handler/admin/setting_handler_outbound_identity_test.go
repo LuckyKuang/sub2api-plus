@@ -99,4 +99,25 @@ func TestOutboundIdentitySettingsAPI(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, request(http.MethodPut, "/identity", `{"profiles":{"codex":{"version":"3.9.1"}}}`).Code)
 	require.Equal(t, "3.9.1", gjson.Get(repo.values[service.SettingKeyOutboundIdentity], "profiles.grok.version").String(), "rejected updates preserve the saved profile")
 	require.Equal(t, "minimax", gjson.Get(repo.values[service.SettingKeyOutboundIdentity], "profiles.minimax.preset").String())
+	// ZCode is a versioned client family: the preview reports the pinned product
+	// token with its client version, renders only the User-Agent declaration, and
+	// rejects a User-Agent from another family.
+	zcodePreview := request(http.MethodPost, "/preview", `{"platform":"zhipu","type":"apikey","selection":{"preset":"zcode"}}`)
+	require.Equal(t, http.StatusOK, zcodePreview.Code)
+	require.Equal(t, "zcode", gjson.Get(zcodePreview.Body.String(), "data.preset").String())
+	require.Equal(t, "ZCode/3.14.3", gjson.Get(zcodePreview.Body.String(), "data.user_agent").String())
+	require.Equal(t, "ZCode", gjson.Get(zcodePreview.Body.String(), "data.originator").String())
+	require.Equal(t, "3.14.3", gjson.Get(zcodePreview.Body.String(), "data.version").String())
+	require.Equal(t, "ZCode/3.14.3", gjson.Get(zcodePreview.Body.String(), `data.headers.User-Agent`).String())
+	require.False(t, gjson.Get(zcodePreview.Body.String(), `data.headers.Originator`).Exists(), "ZCode declares no Originator header")
+	require.False(t, gjson.Get(zcodePreview.Body.String(), `data.headers.Version`).Exists(), "ZCode declares no standalone version header")
+	zhipuOAuthPreview := request(http.MethodPost, "/preview", `{"platform":"zhipu","type":"oauth","selection":{"preset":"codex"}}`)
+	require.Equal(t, http.StatusBadRequest, zhipuOAuthPreview.Code, "OAuth accounts must retain their native client family")
+	require.Equal(t, http.StatusBadRequest, request(http.MethodPost, "/preview", `{"platform":"zhipu","type":"apikey","selection":{"preset":"zcode","user_agent":"codex_cli_rs/0.158.0"}}`).Code)
+	zcodeSaved := request(http.MethodPut, "/identity", `{"profiles":{"grok":{"version":"3.9.1"},"zcode":{"preset":"zcode","version":"0.16.9"}},"defaults":{"gemini:service_account":"grok","zhipu:apikey":"zcode"}}`)
+	require.Equal(t, http.StatusOK, zcodeSaved.Code)
+	require.Equal(t, "zcode", gjson.Get(zcodeSaved.Body.String(), `data.settings.profiles.zcode.preset`).String())
+	require.Equal(t, "ZCode/0.16.9", gjson.Get(zcodeSaved.Body.String(), `data.effective.#(preset=="zcode").user_agent`).String())
+	require.Contains(t, zcodeSaved.Body.String(), `"zhipu:apikey":"zcode"`)
+	require.Equal(t, http.StatusBadRequest, request(http.MethodPut, "/identity", `{"profiles":{"zcode":{"preset":"zcode","user_agent":"codex_cli_rs/0.158.0"}}}`).Code)
 }

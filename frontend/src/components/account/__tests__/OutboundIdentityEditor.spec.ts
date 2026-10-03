@@ -28,10 +28,10 @@ describe('OutboundIdentityEditor', () => {
   })
 
   it.each([
-    ['openai', 'apikey'], ['gemini', 'service_account'], ['anthropic', 'bedrock'], ['antigravity', 'upstream'], ['deepseek', 'apikey'], ['minimax', 'apikey']
+    ['openai', 'apikey'], ['gemini', 'service_account'], ['anthropic', 'bedrock'], ['antigravity', 'upstream'], ['deepseek', 'apikey'], ['minimax', 'apikey'], ['zhipu', 'apikey']
   ])('lets compatible %s/%s accounts select an existing identity', async (platform, accountType) => {
     const wrapper = mount(OutboundIdentityEditor, { props: { platform, accountType, modelValue: null } })
-    expect(wrapper.findAll('option')).toHaveLength(8)
+    expect(wrapper.findAll('option')).toHaveLength(9)
     await wrapper.get('select').setValue('grok')
     expect(wrapper.emitted('update:modelValue')?.[0]).toEqual([{ preset: 'grok' }])
     await wrapper.setProps({ modelValue: { preset: 'grok', version: '3.9.1' } })
@@ -78,6 +78,21 @@ describe('OutboundIdentityEditor', () => {
     expect(wrapper.text()).toContain('versionlessHint')
     // The versionless family rejects a client version, so no version or UA input is offered.
     expect(wrapper.find('input').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('renders the ZCode product declaration for a Zhipu account', async () => {
+    vi.mocked(previewOutboundIdentity).mockResolvedValue({ preset: 'zcode', user_agent: 'ZCode/3.14.3', originator: 'ZCode', version: '3.14.3', source: 'account', headers: { 'User-Agent': 'ZCode/3.14.3' } })
+    const wrapper = mount(OutboundIdentityEditor, { props: { platform: 'zhipu', accountType: 'apikey', modelValue: { preset: 'zcode' } } })
+    await vi.advanceTimersByTimeAsync(250)
+    await flushPromises()
+    const headers = wrapper.get('[data-testid="outbound-identity-account-headers"]')
+    expect(headers.text()).toContain('User-Agent')
+    expect(headers.text()).toContain('ZCode/3.14.3')
+    // ZCode declares no Originator and no standalone version header, so neither
+    // reaches the rendered header list.
+    expect(headers.text()).not.toContain('Originator')
+    expect(wrapper.text()).not.toContain('versionlessHint')
     wrapper.unmount()
   })
 

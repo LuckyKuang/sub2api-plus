@@ -18,13 +18,14 @@ for any other family.
 
 | Preset | Default accounts | Wire identity |
 | --- | --- | --- |
-| Codex | OpenAI OAuth/setup-token, OpenAI-compatible API keys, Kimi, Zhipu, TypeSafe API keys | Existing Codex UA/Originator/Version rules, including endpoint-specific omissions |
+| Codex | OpenAI OAuth/setup-token, OpenAI-compatible API keys, Kimi, TypeSafe API keys | Existing Codex UA/Originator/Version rules, including endpoint-specific omissions |
 | Claude Code | Anthropic OAuth/setup-token/API key, Claude on Bedrock or Vertex | `claude-cli` UA, `X-App: cli`, project-owned `X-Stainless-*` SDK/runtime declarations |
 | Gemini CLI | Gemini OAuth/API key, Gemini on Vertex | `GeminiCLI` UA |
 | Grok | Grok OAuth/API key | `grok-shell` UA, `x-grok-client-identifier`, `x-grok-client-version`, `x-grok-client-mode: headless` |
 | Antigravity | Antigravity OAuth/upstream | `antigravity` UA; the two privacy endpoints also declare the pinned `X-Goog-Api-Client` SDK |
 | DeepSeek | DeepSeek API-key accounts | `deepseek-harness/<version> (+https://github.com/deepseek-ai/deepseek-harness)` UA; identifier and version are encoded in the UA, so no `Originator`/`Version` headers |
 | MiniMax | MiniMax API-key accounts | `MiniMaxAgent` UA; the official client declares no version segment, so there is no `Originator`/`Version` header and no client version |
+| ZCode | Zhipu / GLM API-key and account-link OAuth accounts | `ZCode/<version>` UA; the official client declares no `Originator` and no standalone `Version` header, so only the User-Agent reaches the wire |
 
 Native OAuth and setup-token accounts retain their native client family.
 API-key, upstream, Bedrock and service-account accounts can explicitly select
@@ -44,7 +45,8 @@ snapshot's declarations.
 
 Built-in declarations reuse existing pins in `internal/pkg/claude`,
 `internal/pkg/geminicli`, `internal/pkg/xai`, `internal/pkg/antigravity`,
-`internal/pkg/deepseek` and `internal/service/openai_codex_identity.go`. This
+`internal/pkg/deepseek`, `internal/pkg/minimax`, `internal/pkg/zcode` and
+`internal/service/openai_codex_identity.go`. This
 feature does not upgrade those pins. The settings page displays the exact
 current effective identity.
 
@@ -65,6 +67,30 @@ rather than a prerequisite. Enabling it replaces Codex's
 `Originator`/`Version` declarations on those accounts; an account selection or
 type default can still opt a DeepSeek account back into Codex or any other
 compatible preset.
+
+The exact compiled ZCode identity is `ZCode/3.14.3`, with identifier `ZCode`
+and client version `3.14.3`. The official ZCode client builds exactly one client
+declaration, the versioned product token, in a single place
+(`apps/zcode-cli/packages/bootstrap/src/model-config.ts`), and declares neither
+an `Originator` nor a standalone version header, so only the User-Agent reaches
+the wire. The same upstream helper also attaches ZCode platform attribution and
+telemetry declarations (`HTTP-Referer`, `X-Title`, `X-Release-Channel`,
+`X-Client-Language`,
+`X-Client-Timezone`, `X-Platform`, `X-Os-Category`, `X-Os-Version`) and the
+Vercel AI SDK appends its own runtime fingerprint (`ai-sdk/<pkg>/<version>`,
+`runtime/node.js/<version>`) to the User-Agent. None of those are rendered here:
+the platform headers describe the ZCode product rather than the selected preset,
+and the SDK suffix would claim a JavaScript runtime this gateway does not run.
+`SUB2API_ZCODE_VERSION` may select another version. The official client ships two
+parallel version lines (the desktop/server product version and the standalone CLI
+package version), so this preset deliberately enforces only the shared client
+version shape and declares no monotonic floor: a floor drawn on one line would
+reject the other line's legitimate official value. Zhipu API-key and
+account-link OAuth accounts resolve this preset by default through
+`nativeOutboundPreset`, so the `zhipu:apikey` type default is an explicit,
+operator-visible equivalent rather than a prerequisite. OAuth accounts are
+additionally pinned to their native family, so they cannot opt back into Codex;
+an API-key account selection or type default still can.
 
 The exact compiled MiniMax identity is the bare product token `MiniMaxAgent`,
 with identifier `MiniMaxAgent` and no client version. The official MiniMax Code

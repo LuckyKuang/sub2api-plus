@@ -23,6 +23,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/xai"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/zcode"
 )
 
 const SettingKeyOutboundIdentity = "outbound_identity"
@@ -54,7 +55,7 @@ type cachedOutboundIdentitySettings struct {
 }
 
 var outboundClientVersionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.]+)?$`)
-var outboundPresetNames = []string{"codex", "claude", "gemini", "grok", "antigravity", "deepseek", "minimax"}
+var outboundPresetNames = []string{"codex", "claude", "gemini", "grok", "antigravity", "deepseek", "minimax", "zcode"}
 
 // versionlessOutboundUserAgents enumerates the client families whose official
 // client publishes no version segment. MiniMax renders the bare product token
@@ -93,6 +94,14 @@ func nativeOutboundPreset(platform string) string {
 		// official MiniMax client, not Codex; an account or type-default
 		// selection can still opt back into any compatible preset.
 		return "minimax"
+	case PlatformZhipu:
+		// Zhipu / GLM platform accounts advertise the pinned ZCode identity by
+		// default, for both API-key and account-link OAuth accounts. ZCode is the
+		// provider's own official client, so it is the provider-defined client
+		// family rather than Codex; an account or type-default selection can
+		// still opt back into any compatible preset. OAuth/setup-token accounts
+		// are pinned to this family by validateAccountIdentityPreset.
+		return "zcode"
 	case PlatformTypeSafe:
 		// TypeSafe is an API-key compatible supplier with no provider-defined
 		// client family, version or identity header. It reuses the same
@@ -145,6 +154,8 @@ func builtInOutboundIdentity(preset string) outboundidentity.Identity {
 		return deepseek.DefaultIdentity()
 	case "minimax":
 		return minimax.DefaultIdentity()
+	case "zcode":
+		return zcode.DefaultIdentity()
 	default:
 		return outboundidentity.Identity{}
 	}
@@ -192,7 +203,7 @@ func buildOutboundIdentity(selection OutboundIdentitySelection) (outboundidentit
 		if brandidentity.ContainsBrand(ua) {
 			return i, fmt.Errorf("User-Agent must not contain the project brand")
 		}
-		prefix := map[string]string{"claude": "claude-cli/", "gemini": "GeminiCLI/", "grok": "grok-shell/", "antigravity": "antigravity/", "deepseek": "deepseek-harness/"}[selection.Preset]
+		prefix := map[string]string{"claude": "claude-cli/", "gemini": "GeminiCLI/", "grok": "grok-shell/", "antigravity": "antigravity/", "deepseek": "deepseek-harness/", "zcode": "ZCode/"}[selection.Preset]
 		if !strings.HasPrefix(ua, prefix) {
 			return i, fmt.Errorf("User-Agent must match the selected preset")
 		}
@@ -225,6 +236,13 @@ func buildOutboundIdentity(selection OutboundIdentitySelection) (outboundidentit
 	}
 	if i.Preset == "deepseek" && !deepseek.IsSupportedVersion(i.Version) {
 		return i, fmt.Errorf("deepseek version is below the supported baseline")
+	}
+	// ZCode deliberately has no monotonic version floor: the official client
+	// ships two parallel version lines (desktop product and standalone CLI), so a
+	// floor drawn on one line would reject the other line's legitimate value.
+	// Only the shared client-version shape is enforced.
+	if i.Preset == "zcode" && !zcode.IsSupportedVersion(i.Version) {
+		return i, fmt.Errorf("invalid ZCode client version")
 	}
 	i.Headers["User-Agent"] = i.UserAgent
 	if i.Preset == "codex" {

@@ -1,6 +1,6 @@
 import { apiClient } from '../client'
 
-export type IdentityPreset = 'codex' | 'claude' | 'gemini' | 'grok' | 'antigravity' | 'deepseek' | 'minimax'
+export type IdentityPreset = 'codex' | 'claude' | 'gemini' | 'grok' | 'antigravity' | 'deepseek' | 'minimax' | 'zcode'
 export interface IdentitySelection {
   preset: IdentityPreset | ''
   user_agent?: string
@@ -23,9 +23,9 @@ export interface OutboundIdentityView {
   presets: ResolvedIdentity[]
   effective: ResolvedIdentity[]
 }
-export const identityPresets: IdentityPreset[] = ['codex', 'claude', 'gemini', 'grok', 'antigravity', 'deepseek', 'minimax']
+export const identityPresets: IdentityPreset[] = ['codex', 'claude', 'gemini', 'grok', 'antigravity', 'deepseek', 'minimax', 'zcode']
 export const identityNames: Record<IdentityPreset, string> = {
-  codex: 'Codex', claude: 'Claude Code', gemini: 'Gemini CLI', grok: 'Grok', antigravity: 'Antigravity', deepseek: 'DeepSeek', minimax: 'MiniMax'
+  codex: 'Codex', claude: 'Claude Code', gemini: 'Gemini CLI', grok: 'Grok', antigravity: 'Antigravity', deepseek: 'DeepSeek', minimax: 'MiniMax', zcode: 'ZCode'
 }
 // Mirrors the backend's enumerated versionless client families
 // (versionlessOutboundUserAgents in internal/service/outbound_identity.go). The
