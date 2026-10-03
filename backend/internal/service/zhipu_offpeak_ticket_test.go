@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/zcode"
 )
 
@@ -27,6 +28,7 @@ type zhipuOffPeakStub struct {
 	statusEr error
 	settleEr error
 
+	identities   []outboundidentity.Identity
 	takeCalls    int
 	statusCalls  int
 	settled      []string
@@ -38,9 +40,11 @@ func (s *zhipuOffPeakStub) Availability(context.Context, zcode.OffPeakAuth, stri
 	return s.availability, nil
 }
 
-func (s *zhipuOffPeakStub) TakeTicket(_ context.Context, _ string, auth zcode.OffPeakAuth, _ string) (*zcode.OffPeakTicket, error) {
+func (s *zhipuOffPeakStub) TakeTicket(ctx context.Context, _ string, auth zcode.OffPeakAuth, _ string) (*zcode.OffPeakTicket, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	identity, _ := outboundidentity.FromContext(ctx)
+	s.identities = append(s.identities, identity)
 	s.takeCalls++
 	s.lastAuth = auth
 	if s.takeErr != nil {
@@ -73,12 +77,14 @@ func (s *zhipuOffPeakStub) TicketStatus(_ context.Context, _ []string, _ zcode.O
 	return result, s.delay, nil
 }
 
-func (s *zhipuOffPeakStub) SettleTicket(_ context.Context, ticketID string, _ zcode.OffPeakAuth, _ string) error {
+func (s *zhipuOffPeakStub) SettleTicket(ctx context.Context, ticketID string, _ zcode.OffPeakAuth, _ string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.settleEr != nil {
 		return s.settleEr
 	}
+	identity, _ := outboundidentity.FromContext(ctx)
+	s.identities = append(s.identities, identity)
 	s.settled = append(s.settled, ticketID)
 	return nil
 }
@@ -306,4 +312,28 @@ func TestZhipuOffPeakTicketHeaderWithoutProvider(t *testing.T) {
 		Credentials: map[string]any{"plan_kind": ZhipuPlanOffPeak},
 	}, headers)
 	require.Empty(t, headers.Get("X-Off-Peak-Ticket-ID"))
+}
+
+func TestZhipuOffPeakSettlementRetainsCredentialOwnerIdentity(t *testing.T) {
+	config := emptyOutboundIdentitySettings()
+	config.Profiles["zcode"] = OutboundIdentitySelection{Preset: "zcode", Version: "4.1.0"}
+	svc, ctx := outboundIdentityTestSettings(t, config)
+	account := zhipuOffPeakTestAccount()
+	account.Credentials[outboundIdentityCredential] = OutboundIdentitySelection{Preset: "zcode", Version: "4.2.0", Headers: map[string]string{"X-Client-Timezone": "Asia/Shanghai"}}
+	client := &zhipuOffPeakStub{takes: []*zcode.OffPeakTicket{{TicketID: "identity-ticket", State: zcode.TicketReady}}}
+	manager := newZhipuOffPeakTestManager(t, client)
+	now := time.Now()
+	manager.now = func() time.Time { return now }
+	_, err := manager.Acquire(ctx, account, zhipuOffPeakTestAuth(), "")
+	require.NoError(t, err)
+	config.Profiles["zcode"] = OutboundIdentitySelection{Preset: "zcode", Version: "4.3.0"}
+	require.NoError(t, svc.SetOutboundIdentitySettings(ctx, config))
+	now = now.Add(DefaultOffPeakSettleIdle + time.Second)
+	manager.sweepOnce()
+	require.Equal(t, []string{"identity-ticket"}, client.settledTickets())
+	require.Len(t, client.identities, 2)
+	require.Equal(t, client.identities[0], client.identities[1])
+	require.Equal(t, account.ID, client.identities[1].AccountID)
+	require.Equal(t, "4.2.0", client.identities[1].Version)
+	require.Equal(t, "Asia/Shanghai", client.identities[1].Headers["X-Client-Timezone"])
 }

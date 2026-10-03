@@ -1,30 +1,13 @@
-// Package zcode pins the ZCode client identity that Zhipu / GLM platform
-// accounts can send upstream, and implements the ZCode platform handshake used
-// to link a GLM account.
-//
-// ZCode is the official open-source client for Zhipu GLM. Every model request it
-// makes carries exactly one client declaration built in a single place
-// (apps/zcode-cli/packages/bootstrap/src/model-config.ts):
-//
-//	"User-Agent": `ZCode/${appVersion ?? "unknown"}`
-//
-// The same helper also attaches ZCode platform attribution and telemetry
-// declarations (HTTP-Referer, X-Title, X-Release-Channel, X-Client-Language,
-// X-Client-Timezone, X-Platform, X-Os-Category, X-Os-Version) and the Vercel AI
-// SDK appends its own runtime fingerprint (`ai-sdk/<pkg>/<ver>`,
-// `runtime/node.js/<ver>`) to the User-Agent. None of those are part of this
-// identity: the platform attribution headers describe the ZCode product rather
-// than the selected preset, and the SDK suffix would claim a JavaScript runtime
-// this gateway does not run. Only the versioned product token reaches the wire,
-// mirroring the Gemini, Antigravity and DeepSeek rendering rule in
-// docs/OUTBOUND_IDENTITY.md.
-//
-// ZCode declares no Originator and no standalone Version header; the product
-// version lives in the User-Agent and in the platform's own
-// `X-ZCode-App-Version` declaration, which is likewise not rendered here.
+// Package zcode implements the ZCode client identity and GLM account-link protocol.
+// The declaration block follows the desktop host in ZCode's bootstrap/model-config.ts:
+// product attribution, a coherent app-version companion, and persisted host facts.
+// Authentication and per-request ticket/session headers remain protocol-owned.
 package zcode
 
 import (
+	"context"
+	"maps"
+	"net/http"
 	"os"
 	"strings"
 
@@ -126,14 +109,42 @@ func DefaultIdentity() outboundidentity.Identity {
 		source = "environment"
 	}
 	ua := UserAgent(version)
+	headers := map[string]string{
+		"User-Agent":        ua,
+		HeaderAppVersion:    version,
+		"HTTP-Referer":      "https://zcode.z.ai",
+		"X-Title":           "Z Code@electron",
+		"X-Release-Channel": "production",
+		"X-ZCode-Agent":     "glm",
+	}
+	maps.Copy(headers, RuntimeHeaders())
 	return outboundidentity.Identity{
 		Preset:     Preset,
 		UserAgent:  ua,
 		Originator: ProductToken,
 		Version:    version,
 		Source:     source,
-		// Only the User-Agent reaches the wire: ZCode declares no Originator and
-		// no standalone version header. See docs/OUTBOUND_IDENTITY.md.
-		Headers: map[string]string{"User-Agent": ua},
+		Headers:    headers,
 	}
+}
+
+// HeaderAppVersion must always follow the selected product version.
+const HeaderAppVersion = "X-ZCode-App-Version"
+
+// withIdentity captures the credential owner's snapshot before a multi-call
+// operation. Existing contexts win over settings; standalone clients resolve once.
+func withIdentity(ctx context.Context) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	identity, ok := outboundidentity.Default(ctx, Preset)
+	if !ok {
+		identity = DefaultIdentity()
+	}
+	return outboundidentity.WithIdentity(ctx, identity)
+}
+
+func prepareRequest(req *http.Request) {
+	*req = *req.WithContext(withIdentity(req.Context()))
+	outboundidentity.ApplyContext(req)
 }

@@ -8,8 +8,8 @@ vi.mock('@/api/admin/outboundIdentity', async (original) => ({
   ...await original<typeof import('@/api/admin/outboundIdentity')>(),
   getOutboundIdentity: vi.fn(), updateOutboundIdentity: vi.fn()
 }))
-const userAgentOf = (preset: string) => preset === 'minimax' ? 'MiniMaxAgent' : preset === 'kimi' ? 'kimi-code-cli/2.1.1' : `${preset}/1.2.3`
-const versionOf = (preset: string) => preset === 'minimax' ? '' : preset === 'kimi' ? '2.1.1' : '1.2.3'
+const userAgentOf = (preset: string) => preset === 'minimax' ? 'MiniMaxAgent' : preset === 'kimi' ? 'kimi-code-cli/2.1.1' : preset === 'zcode' ? 'ZCode/3.14.3' : `${preset}/1.2.3`
+const versionOf = (preset: string) => preset === 'minimax' ? '' : preset === 'kimi' ? '2.1.1' : preset === 'zcode' ? '3.14.3' : '1.2.3'
 // The Kimi Code device set is the runtime tier: the official client resolves it
 // from its own host, so the settings page exposes an editable value per header
 // and the backend declares which headers those are.
@@ -28,6 +28,20 @@ const kimiHeaders = {
   'X-Msh-Os-Version': '6.14.0',
   'X-Msh-Device-Id': '11111111-1111-4111-8111-111111111111'
 }
+const zcodeHeaders = {
+  'User-Agent': 'ZCode/3.14.3',
+  'X-ZCode-App-Version': '3.14.3',
+  'HTTP-Referer': 'https://zcode.z.ai',
+  'X-Title': 'Z Code@electron',
+  'X-Release-Channel': 'production',
+  'X-ZCode-Agent': 'glm',
+  'X-Client-Language': 'en-US',
+  'X-Client-Timezone': 'UTC',
+  'X-Platform': 'linux-arm64',
+  'X-Os-Category': 'linux',
+  'X-Os-Version': '6.8.0'
+}
+const zcodeRuntimeNames = ['X-Client-Language', 'X-Client-Timezone', 'X-Platform', 'X-Os-Category', 'X-Os-Version']
 const fixture = (): OutboundIdentityView => {
   const identities = identityPresets.map(preset => ({
     preset,
@@ -35,7 +49,7 @@ const fixture = (): OutboundIdentityView => {
     originator: preset,
     version: versionOf(preset),
     source: 'compiled_default',
-    headers: preset === 'kimi' ? kimiHeaders : { 'User-Agent': userAgentOf(preset) }
+    headers: preset === 'kimi' ? kimiHeaders : preset === 'zcode' ? zcodeHeaders : { 'User-Agent': userAgentOf(preset) }
   }))
   const declarations: PresetDeclarations[] = identityPresets.map(preset => ({
     preset,
@@ -47,7 +61,12 @@ const fixture = (): OutboundIdentityView => {
             { name: 'X-Msh-Version', class: 'derived' as const, editable: false, builtin: '2.1.1', value: '2.1.1' },
             ...kimiDeviceHeaders
           ]
-        : [])
+        : []),
+      ...(preset === 'zcode' ? Object.entries(zcodeHeaders).filter(([name]) => name !== 'User-Agent').map(([name, value]): IdentityDeclaration => ({
+        name, value, builtin: value,
+        class: zcodeRuntimeNames.includes(name) ? 'runtime' : name === 'X-ZCode-App-Version' ? 'derived' : 'pinned',
+        editable: zcodeRuntimeNames.includes(name)
+      })) : [])
     ]
   }))
   return { settings: { profiles: {}, defaults: {} }, presets: identities, effective: identities, declarations }
@@ -70,6 +89,45 @@ describe('OutboundIdentitySettings', () => {
     await defaults[0].setValue('grok')
     await wrapper.vm.save()
     expect(updateOutboundIdentity).toHaveBeenCalledWith({ profiles: { claude: { preset: 'claude', user_agent: '', version: '2.9.1' } }, defaults: { 'openai:apikey': 'grok' }, runtime: {} })
+    wrapper.unmount()
+  })
+
+  it('shows all four OAuth/API Key identities and saves only editable ZCode runtime headers', async () => {
+    const wrapper = mount(OutboundIdentitySettings)
+    await flushPromises()
+    expect(wrapper.findAll('[data-testid="outbound-identity-auth-scope"]')).toHaveLength(4)
+    const card = wrapper.findAll('section')[identityPresets.indexOf('zcode')]
+    expect(card.text()).toContain('GLM · ZCode')
+    const headers = card.get('[data-testid="outbound-identity-headers"]')
+    for (const [name, value] of Object.entries(zcodeHeaders)) {
+      expect(headers.text()).toContain(name)
+      expect(headers.text()).toContain(value)
+    }
+    expect(card.find('input[aria-label="X-ZCode-App-Version"]').exists()).toBe(false)
+    expect(card.find('input[aria-label="X-Title"]').exists()).toBe(false)
+    await card.get('input[aria-label="X-Client-Timezone"]').setValue('Asia/Shanghai')
+    await card.findAll('input')[0].setValue('4.1.0')
+    await wrapper.vm.save()
+    expect(updateOutboundIdentity).toHaveBeenCalledWith({
+      profiles: { zcode: { preset: 'zcode', user_agent: '', version: '4.1.0' } },
+      defaults: {}, runtime: { zcode: { 'X-Client-Timezone': 'Asia/Shanghai' } }
+    })
+    wrapper.unmount()
+  })
+
+  it('preserves header-only API profiles in the editable global runtime fields', async () => {
+    const view = fixture()
+    view.settings.profiles.zcode = { preset: 'zcode', headers: { 'X-Client-Timezone': 'Asia/Shanghai' } }
+    view.settings.runtime = { zcode: { 'X-Client-Timezone': 'UTC' } }
+    vi.mocked(getOutboundIdentity).mockResolvedValue(view)
+    const wrapper = mount(OutboundIdentitySettings)
+    await flushPromises()
+    const card = wrapper.findAll('section')[identityPresets.indexOf('zcode')]
+    expect((card.get('input[aria-label="X-Client-Timezone"]').element as HTMLInputElement).value).toBe('Asia/Shanghai')
+    expect(wrapper.vm.isDirty).toBe(false)
+    await card.get('input[aria-label="X-Client-Timezone"]').setValue('Europe/Amsterdam')
+    await wrapper.vm.save()
+    expect(updateOutboundIdentity).toHaveBeenCalledWith({ profiles: {}, defaults: {}, runtime: { zcode: { 'X-Client-Timezone': 'Europe/Amsterdam' } } })
     wrapper.unmount()
   })
 
@@ -181,7 +239,7 @@ describe('OutboundIdentitySettings', () => {
     // version, keeps the version control, and never shows the versionless hint.
     const headers = zcodeCard.get('[data-testid="outbound-identity-headers"]')
     expect(headers.text()).toContain('User-Agent')
-    expect(headers.text()).toContain('zcode/1.2.3')
+    expect(headers.text()).toContain('ZCode/3.14.3')
     expect(headers.text()).not.toContain('Originator')
     expect(zcodeCard.text()).not.toContain('versionlessHint')
     expect(zcodeCard.find('input').exists()).toBe(true)

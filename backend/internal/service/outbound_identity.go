@@ -238,6 +238,14 @@ type outboundDeclaredHeader struct {
 // becoming configurable by accident, so extending a preset cannot silently
 // widen the configurable surface.
 var outboundPresetHeaderClasses = map[string]map[string]string{
+	"zcode": {
+		zcode.HeaderAppVersion: outboundHeaderDerived,
+		"X-Client-Language":    outboundHeaderRuntime,
+		"X-Client-Timezone":    outboundHeaderRuntime,
+		"X-Platform":           outboundHeaderRuntime,
+		"X-Os-Category":        outboundHeaderRuntime,
+		"X-Os-Version":         outboundHeaderRuntime,
+	},
 	"codex": {
 		// The Codex Originator and Version declarations follow the resolved
 		// Codex triple exactly like its User-Agent. Only their class is recorded
@@ -259,6 +267,13 @@ var outboundPresetHeaderClasses = map[string]map[string]string{
 }
 
 var outboundPresetHeaderValidators = map[string]map[string]func(string) error{
+	"zcode": {
+		"X-Client-Language": validateOutboundIdentityDeviceFact,
+		"X-Client-Timezone": validateOutboundIdentityDeviceFact,
+		"X-Platform":        validateOutboundIdentityDeviceFact,
+		"X-Os-Category":     validateOutboundIdentityDeviceFact,
+		"X-Os-Version":      validateOutboundIdentityDeviceFact,
+	},
 	"kimi": {
 		kimi.HeaderDeviceName:  validateOutboundIdentityDeviceFact,
 		kimi.HeaderDeviceModel: validateOutboundIdentityDeviceFact,
@@ -399,7 +414,10 @@ func normalizeOutboundHeaderValues(preset string, values map[string]string) (map
 				return nil, fmt.Errorf("invalid %s: %w", header.Name, err)
 			}
 		}
-		normalized[http.CanonicalHeaderKey(header.Name)] = trimmed
+		if _, exists := normalized[header.Name]; exists {
+			return nil, fmt.Errorf("duplicate identity header %q", header.Name)
+		}
+		normalized[header.Name] = trimmed
 	}
 	if len(normalized) == 0 {
 		return nil, nil
@@ -458,6 +476,9 @@ func mergeOutboundRuntimeHeaders(identity, resolved outboundidentity.Identity) o
 
 func buildOutboundIdentity(selection OutboundIdentitySelection) (outboundidentity.Identity, error) {
 	i := builtInOutboundIdentity(selection.Preset)
+	if _, err := normalizeOutboundHeaderValues(selection.Preset, selection.Headers); err != nil {
+		return i, err
+	}
 	if i.UserAgent == "" {
 		return i, fmt.Errorf("unknown identity preset")
 	}
@@ -556,6 +577,10 @@ func buildOutboundIdentity(selection OutboundIdentitySelection) (outboundidentit
 		i.Headers[kimi.HeaderPlatform] = kimi.PlatformToken
 		i.Headers[kimi.HeaderVersion] = i.Version
 	}
+	if i.Preset == "zcode" {
+		i.Headers[zcode.HeaderAppVersion] = i.Version
+	}
+	i, _ = applyOutboundHeaderValues(i, selection.Preset, selection.Headers)
 	return i, nil
 }
 
@@ -620,7 +645,10 @@ func normalizeOutboundIdentitySettings(settings OutboundIdentitySettings) Outbou
 
 func cloneOutboundIdentitySettings(settings OutboundIdentitySettings) OutboundIdentitySettings {
 	result := emptyOutboundIdentitySettings()
-	maps.Copy(result.Profiles, settings.Profiles)
+	for preset, selection := range settings.Profiles {
+		selection.Headers = maps.Clone(selection.Headers)
+		result.Profiles[preset] = selection
+	}
 	maps.Copy(result.Defaults, settings.Defaults)
 	for preset, values := range settings.Runtime {
 		if len(values) == 0 {
@@ -709,9 +737,8 @@ func (s *SettingService) resolveDefaultOutboundIdentity(ctx context.Context, pre
 		selection.Preset = preset
 		if i, err := buildOutboundIdentity(selection); err == nil {
 			i.Source = "global"
-			if resolved, applied := applyOutboundHeaderValues(i, preset, settings.Runtime[preset]); applied {
-				return resolved
-			}
+			i, _ = applyOutboundHeaderValues(i, preset, settings.Runtime[preset])
+			i, _ = applyOutboundHeaderValues(i, preset, selection.Headers)
 			return i
 		}
 	}
@@ -873,6 +900,9 @@ func validateAccountIdentityPreset(account *Account, preset string) error {
 // declarations are laid on top.
 func resolveAccountIdentitySelection(ctx context.Context, account *Account, selection OutboundIdentitySelection, resolve func(context.Context, string) outboundidentity.Identity) (outboundidentity.Identity, error) {
 	if err := validateAccountIdentityPreset(account, selection.Preset); err != nil {
+		return outboundidentity.Identity{}, err
+	}
+	if _, err := normalizeOutboundHeaderValues(selection.Preset, selection.Headers); err != nil {
 		return outboundidentity.Identity{}, err
 	}
 	if selection.UserAgent == "" && selection.Version == "" {

@@ -48,7 +48,7 @@ export interface OutboundIdentityView {
 }
 export const identityPresets: IdentityPreset[] = ['codex', 'claude', 'gemini', 'grok', 'antigravity', 'deepseek', 'minimax', 'kimi', 'zcode']
 export const identityNames: Record<IdentityPreset, string> = {
-  codex: 'Codex', claude: 'Claude Code', gemini: 'Gemini CLI', grok: 'Grok', antigravity: 'Antigravity', deepseek: 'DeepSeek', minimax: 'MiniMax', kimi: 'Kimi Code', zcode: 'ZCode'
+  codex: 'Codex', claude: 'Claude Code', gemini: 'Gemini CLI', grok: 'Grok', antigravity: 'Antigravity', deepseek: 'DeepSeek · DSH Desktop', minimax: 'MiniMax Code', kimi: 'Kimi Code', zcode: 'GLM · ZCode'
 }
 // Mirrors the backend's enumerated versionless client families
 // (versionlessOutboundUserAgents in internal/service/outbound_identity.go). The

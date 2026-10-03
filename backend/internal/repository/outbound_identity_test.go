@@ -20,7 +20,7 @@ import (
 
 func TestHTTPUpstreamTrustedIdentitySurvivesGrokHostAndFallback(t *testing.T) {
 	for _, withTLS := range []bool{false, true} {
-		for _, preset := range []string{"", "codex", "grok", "claude"} {
+		for _, preset := range []string{"", "codex", "grok", "claude", "deepseek", "kimi", "minimax", "zcode"} {
 			t.Run(fmt.Sprintf("tls=%t/preset=%s", withTLS, preset), func(t *testing.T) {
 				svc, ok := NewHTTPUpstream(nil).(*httpUpstreamService)
 				require.True(t, ok)
@@ -64,6 +64,12 @@ func TestHTTPUpstreamTrustedIdentitySurvivesGrokHostAndFallback(t *testing.T) {
 				req.Header.Set("User-Agent", "codex_cli_rs/0.200.1 (Ubuntu 22.4.0; x86_64) terminal")
 				service.ApplyAccountOutboundIdentity(ctx, account, req)
 				want := identityHeadersForTransportTest(req.Header)
+				if preset == "deepseek" || preset == "kimi" || preset == "minimax" || preset == "zcode" {
+					req.Header.Set("User-Agent", "foreign-sdk/99.0.0")
+					req.Header.Set("X-ZCode-App-Version", "99.0.0")
+					req.Header.Set("X-Msh-Platform", "foreign")
+					req.Header.Set("X-Title", "foreign")
+				}
 				var resp *http.Response
 				if withTLS {
 					resp, err = svc.DoWithTLS(req, "", accountID, 1, &tlsfingerprint.Profile{Name: "test"})

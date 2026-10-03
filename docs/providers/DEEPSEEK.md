@@ -57,3 +57,10 @@ or any other compatible preset through an account selection. Protocol selection
 billing and the ingress audit order are unaffected: identity chooses outbound
 declarations only. Ingress audit order and Plus session/quota accounting are
 unchanged.
+
+The **DeepSeek · DSH Desktop** card in System Settings shows this exact UA.
+The desktop delegates both its account-token and API-key model requests to the
+same vendored Harness adapter; its shell package version does not select the
+identity version. The resolver applies the same native family to OAuth owners,
+with atomic account/global/default fallback and a stable per-operation snapshot.
+Source evidence and the shared matrix are in [Outbound identity](../OUTBOUND_IDENTITY.md).

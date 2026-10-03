@@ -94,6 +94,7 @@ func TestOutboundIdentitySourcePriorityAndAccountTypes(t *testing.T) {
 		{PlatformAntigravity, AccountTypeOAuth, "antigravity"}, {PlatformAntigravity, AccountTypeUpstream, "antigravity"},
 		{PlatformKimi, AccountTypeAPIKey, "kimi"}, {PlatformZhipu, AccountTypeAPIKey, "zcode"},
 		{PlatformZhipu, AccountTypeOAuth, "zcode"},
+		{PlatformDeepseek, AccountTypeOAuth, "deepseek"}, {PlatformKimi, AccountTypeOAuth, "kimi"}, {PlatformMiniMax, AccountTypeOAuth, "minimax"},
 		{PlatformDeepseek, AccountTypeAPIKey, "deepseek"}, {PlatformMiniMax, AccountTypeAPIKey, "minimax"},
 	} {
 		t.Run(entry.platform+"/"+entry.accountType, func(t *testing.T) {
@@ -483,18 +484,18 @@ func TestMiniMaxDefaultIdentityIsPinnedProduct(t *testing.T) {
 
 func TestBuiltInZCodeOutboundIdentityPinsProductVersion(t *testing.T) {
 	t.Setenv(zcode.VersionEnv, "")
-
-	const pinnedUA = "ZCode/3.14.3"
-	require.Equal(t, outboundidentity.Identity{
-		Preset:     "zcode",
-		Source:     "compiled_default",
-		UserAgent:  pinnedUA,
-		Originator: "ZCode",
-		Version:    "3.14.3",
-		Headers:    map[string]string{"User-Agent": pinnedUA},
-	}, builtInOutboundIdentity("zcode"))
-	require.Equal(t, builtInOutboundIdentity("zcode"), zcode.DefaultIdentity())
-	require.Equal(t, pinnedUA, zcode.UserAgent(zcode.DefaultVersion))
+	got := builtInOutboundIdentity("zcode")
+	require.Equal(t, "ZCode/3.14.3", got.UserAgent)
+	require.Equal(t, "ZCode", got.Originator)
+	require.Equal(t, "3.14.3", got.Version)
+	require.Equal(t, "compiled_default", got.Source)
+	require.Equal(t, got.Version, got.Headers[zcode.HeaderAppVersion])
+	require.Equal(t, "https://zcode.z.ai", got.Headers["HTTP-Referer"])
+	require.Equal(t, "Z Code@electron", got.Headers["X-Title"])
+	require.Equal(t, "production", got.Headers["X-Release-Channel"])
+	require.Equal(t, "glm", got.Headers["X-ZCode-Agent"])
+	require.Len(t, got.Headers, 11)
+	require.Equal(t, got, zcode.DefaultIdentity())
 }
 
 // ZCode ships two parallel official version lines: the desktop / server product
@@ -507,7 +508,7 @@ func TestZCodeOutboundIdentityEnvironmentOverrideAcceptsBothOfficialLines(t *tes
 		require.Equal(t, "environment", configured.Source, version)
 		require.Equal(t, version, configured.Version)
 		require.Equal(t, "ZCode/"+version, configured.UserAgent)
-		require.Equal(t, map[string]string{"User-Agent": configured.UserAgent}, configured.Headers)
+		require.Equal(t, configured.Version, configured.Headers[zcode.HeaderAppVersion])
 	}
 
 	for _, invalid := range []string{"", "not-a-version", "3.14", "3.14.3.1", "3.14.3 x"} {
@@ -518,11 +519,8 @@ func TestZCodeOutboundIdentityEnvironmentOverrideAcceptsBothOfficialLines(t *tes
 	}
 }
 
-// A Zhipu account that selects the preset must render only the User-Agent
-// declaration, matching the official client which declares no Originator and no
-// standalone version header. Codex's declarations stay off the wire, while
-// protocol request state keeps its own ownership.
-func TestZCodeOutboundIdentityRendersOnlyUserAgent(t *testing.T) {
+// ZCode companions replace foreign declarations while protocol versions survive.
+func TestZCodeOutboundIdentityRendersOfficialDeclarations(t *testing.T) {
 	_, ctx := outboundIdentityTestSettings(t, emptyOutboundIdentitySettings())
 	account := &Account{ID: 13, Platform: PlatformZhipu, Type: AccountTypeAPIKey, Credentials: map[string]any{
 		outboundIdentityCredential: OutboundIdentitySelection{Preset: "zcode"},
@@ -539,7 +537,7 @@ func TestZCodeOutboundIdentityRendersOnlyUserAgent(t *testing.T) {
 	require.Equal(t, zcode.UserAgent(zcode.DefaultVersion), req.Header.Get("User-Agent"))
 	require.Empty(t, req.Header.Get("Originator"))
 	require.Empty(t, req.Header.Get("Version"))
-	require.Equal(t, "request-state", req.Header.Get("X-ZCode-App-Version"), "platform attribution is not an identity declaration")
+	require.Equal(t, zcode.DefaultVersion, req.Header.Get("X-ZCode-App-Version"))
 	require.Equal(t, "2023-06-01", req.Header.Get("Anthropic-Version"), "protocol versions are not identity declarations")
 }
 
@@ -560,7 +558,7 @@ func TestZCodeDefaultIdentityIsPinnedProduct(t *testing.T) {
 		require.Equal(t, zcode.UserAgent(zcode.DefaultVersion), got.UserAgent, accountType)
 		require.Equal(t, zcode.ProductToken, got.Originator, accountType)
 		require.Equal(t, zcode.DefaultVersion, got.Version, accountType)
-		require.Equal(t, map[string]string{"User-Agent": got.UserAgent}, got.Headers, accountType)
+		require.Equal(t, zcode.DefaultIdentity().Headers, got.Headers, accountType)
 	}
 
 	// The explicit type default is an equivalent, operator-visible pin.

@@ -58,3 +58,10 @@ back into Codex or any other compatible preset. The managed MiniMax session
 headers (`X-Mavis-Session-Id`, `-Agent-Id`, `-Timezone-Offset`) are request state
 owned by the protocol layer and are not part of this identity, so the gateway
 does not fabricate them.
+
+The **MiniMax Code** settings card displays the same versionless declaration
+for API-key and OAuth identity resolution. OAuth identities retain the native
+family; compatible API-key mappings may choose another preset. `MiniMaxCode` in
+the official OpenCode-Go adapter and `MiniMax-Code` in the GitHub downloader are
+separate destinations, not alternative MiniMax inference fingerprints. See the
+[source evidence and priority matrix](../OUTBOUND_IDENTITY.md#domestic-provider-source-evidence-and-source-priority).

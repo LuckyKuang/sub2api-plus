@@ -9,6 +9,7 @@
     <template v-if="view">
       <section v-for="preset in identityPresets" :key="preset" class="card space-y-4 p-6">
         <h3 class="font-semibold">{{ identityNames[preset] }}</h3>
+        <p v-if="domesticPresets.includes(preset)" class="text-sm text-gray-500" data-testid="outbound-identity-auth-scope">{{ t('admin.settings.outboundIdentity.oauthApiKeyScope') }}</p>
         <div class="rounded-lg bg-gray-50 p-4 text-sm dark:bg-dark-800">
           <p class="mb-2 text-gray-500">{{ t('admin.settings.outboundIdentity.effectiveGlobal') }}</p>
           <dl class="grid gap-2 sm:grid-cols-[auto_1fr]">
@@ -85,6 +86,7 @@ import { useI18n } from 'vue-i18n'
 import { getOutboundIdentity, updateOutboundIdentity, identityNames, identityPresets, versionlessIdentityPresets, type IdentityDeclaration, type IdentityPreset, type IdentitySelection, type OutboundIdentityView } from '@/api/admin/outboundIdentity'
 
 const { t } = useI18n()
+const domesticPresets: IdentityPreset[] = ['deepseek', 'kimi', 'minimax', 'zcode']
 const view = ref<OutboundIdentityView>()
 const error = ref('')
 const loading = ref(false)
@@ -146,10 +148,13 @@ async function refresh() {
     // edits made while that request was in flight.
     const dirty = isDirty.value
     if (!dirty) {
-      for (const preset of identityPresets) Object.assign(profiles[preset], { preset, user_agent: '', version: '' }, updated.settings.profiles?.[preset])
       for (const preset of identityPresets) {
+        // API profiles may include runtime overrides. Present them in the same
+        // editable fields and save one global runtime map, preserving their value.
+        const { headers, ...profile } = updated.settings.profiles?.[preset] ?? {}
+        profiles[preset] = { preset, user_agent: '', version: '', ...profile }
         for (const name of Object.keys(runtime[preset])) delete runtime[preset][name]
-        Object.assign(runtime[preset], updated.settings.runtime?.[preset])
+        Object.assign(runtime[preset], updated.settings.runtime?.[preset], headers)
       }
       for (const key of Object.keys(defaults)) delete defaults[key]
       Object.assign(defaults, updated.settings.defaults)

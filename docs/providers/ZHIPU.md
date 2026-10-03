@@ -131,22 +131,20 @@ own task id per account and never resumes a previous run's queue position.
 
 Zhipu GLM accounts advertise the pinned ZCode client identity by default, for
 both API-key and linked accounts. ZCode is the provider's own official client and
-renders exactly one client declaration, so only the User-Agent reaches the wire.
+renders its product, version companion and runtime declaration block.
 OAuth accounts are pinned to that family; an API-key account can still select
 another preset.
 
-| | Before | After |
-| --- | --- | --- |
-| `User-Agent` | `codex_cli_rs/0.158.0 (Ubuntu 24.04; x86_64) xterm-256color` | `ZCode/3.14.3` |
-| `Originator` | `codex_cli_rs` | not sent |
-| `Version` | `0.158.0` | not sent |
-
-The ZCode platform attribution headers (`HTTP-Referer`, `X-Title`,
-`X-Release-Channel`, `X-Client-Language`, `X-Client-Timezone`, `X-Platform`,
-`X-Os-Category`, `X-Os-Version`) and the Vercel AI SDK runtime fingerprint are
-deliberately not rendered: they describe the ZCode product rather than the
-selected preset, and the SDK suffix would claim a JavaScript runtime this gateway
-does not run. See [Outbound identity](../OUTBOUND_IDENTITY.md).
+The preset sends `ZCode/3.14.3` together with `X-ZCode-App-Version: 3.14.3`,
+`HTTP-Referer: https://zcode.z.ai`, `X-Title: Z Code@electron`,
+`X-Release-Channel: production`, and `X-ZCode-Agent: glm`. Its five host
+facts (`X-Client-Language`, `X-Client-Timezone`, `X-Platform`, `X-Os-Category`,
+`X-Os-Version`) are generated once, persisted and editable in **System Settings
+→ Outbound identity → GLM · ZCode**, with per-account overrides. Version changes
+update UA and its companion together while preserving host and product facts.
+No Codex `Originator` or standalone `Version` header is sent. The existing SDK
+fingerprint stays unchanged. See [Outbound identity](../OUTBOUND_IDENTITY.md)
+for exact defaults, source evidence and the source-priority matrix.
 
 The account-link handshake and the credential-derivation calls are pre-account
 authorization operations, so they carry the same native Zhipu identity.

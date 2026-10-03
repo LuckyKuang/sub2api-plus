@@ -24,7 +24,7 @@ accepts a configured value: a candidate that names one is rejected before
 saving, so no configuration tier can desynchronize a companion declaration or
 rewrite a client-family token. A **runtime** declaration describes the host the
 official client runs on; the settings and an account selection may supply it.
-Kimi Code is the only preset with runtime declarations today.
+Kimi Code and ZCode persist runtime declarations.
 
 ## Presets and default mappings
 
@@ -35,10 +35,10 @@ Kimi Code is the only preset with runtime declarations today.
 | Gemini CLI | Gemini OAuth/API key, Gemini on Vertex | `GeminiCLI` UA |
 | Grok | Grok OAuth/API key | `grok-shell` UA, `x-grok-client-identifier`, `x-grok-client-version`, `x-grok-client-mode: headless` |
 | Antigravity | Antigravity OAuth/upstream | `antigravity` UA; the two privacy endpoints also declare the pinned `X-Goog-Api-Client` SDK |
-| DeepSeek | DeepSeek API-key accounts | `deepseek-harness/<version> (+https://github.com/deepseek-ai/deepseek-harness)` UA; identifier and version are encoded in the UA, so no `Originator`/`Version` headers |
-| MiniMax | MiniMax API-key accounts | `MiniMaxAgent` UA; the official client declares no version segment, so there is no `Originator`/`Version` header and no client version |
-| Kimi Code | Kimi / Moonshot API-key accounts | `kimi-code-cli/<version>` UA, `X-Msh-Platform: kimi_code_cli`, `X-Msh-Version: <version>` and the four `X-Msh-Device-*` runtime declarations; the official client declares no `Originator` and no standalone `Version` header |
-| ZCode | Zhipu / GLM API-key and account-link OAuth accounts | `ZCode/<version>` UA; the official client declares no `Originator` and no standalone `Version` header, so only the User-Agent reaches the wire |
+| DeepSeek / DSH Desktop | DeepSeek OAuth/API-key accounts | `deepseek-harness/<version> (+https://github.com/deepseek-ai/deepseek-harness)` UA; identifier and version are encoded in the UA, so no `Originator`/`Version` headers |
+| MiniMax Code | MiniMax OAuth/API-key accounts | `MiniMaxAgent` UA; the official client declares no version segment, so there is no `Originator`/`Version` header and no client version |
+| Kimi Code | Kimi / Moonshot OAuth/API-key accounts | `kimi-code-cli/<version>` UA, `X-Msh-Platform: kimi_code_cli`, `X-Msh-Version: <version>` and the four `X-Msh-Device-*` runtime declarations; the official client declares no `Originator` and no standalone `Version` header |
+| GLM / ZCode | Zhipu / GLM API-key and account-link OAuth accounts | `ZCode/<version>`, paired `X-ZCode-App-Version`, product attribution and five runtime declarations listed below |
 
 Native OAuth and setup-token accounts retain their native client family.
 API-key, upstream, Bedrock and service-account accounts can explicitly select
@@ -83,28 +83,44 @@ type default can still opt a DeepSeek account back into Codex or any other
 compatible preset.
 
 The exact compiled ZCode identity is `ZCode/3.14.3`, with identifier `ZCode`
-and client version `3.14.3`. The official ZCode client builds exactly one client
-declaration, the versioned product token, in a single place
-(`apps/zcode-cli/packages/bootstrap/src/model-config.ts`), and declares neither
-an `Originator` nor a standalone version header, so only the User-Agent reaches
-the wire. The same upstream helper also attaches ZCode platform attribution and
-telemetry declarations (`HTTP-Referer`, `X-Title`, `X-Release-Channel`,
-`X-Client-Language`,
-`X-Client-Timezone`, `X-Platform`, `X-Os-Category`, `X-Os-Version`) and the
-Vercel AI SDK appends its own runtime fingerprint (`ai-sdk/<pkg>/<version>`,
-`runtime/node.js/<version>`) to the User-Agent. None of those are rendered here:
-the platform headers describe the ZCode product rather than the selected preset,
-and the SDK suffix would claim a JavaScript runtime this gateway does not run.
-`SUB2API_ZCODE_VERSION` may select another version. The official client ships two
-parallel version lines (the desktop/server product version and the standalone CLI
-package version), so this preset deliberately enforces only the shared client
-version shape and declares no monotonic floor: a floor drawn on one line would
-reject the other line's legitimate official value. Zhipu API-key and
-account-link OAuth accounts resolve this preset by default through
-`nativeOutboundPreset`, so the `zhipu:apikey` type default is an explicit,
-operator-visible equivalent rather than a prerequisite. OAuth accounts are
-additionally pinned to their native family, so they cannot opt back into Codex;
-an API-key account selection or type default still can.
+and client version `3.14.3`. The desktop host's declaration block comes from
+`apps/zcode-cli/packages/bootstrap/src/model-config.ts` and
+`runtime-platform-headers.ts`:
+
+| Declaration | Default | Class |
+| --- | --- | --- |
+| `User-Agent` | `ZCode/3.14.3` | Derived |
+| `X-ZCode-App-Version` | `3.14.3`, always paired with UA | Derived |
+| `HTTP-Referer` | `https://zcode.z.ai` | Pinned |
+| `X-Title` | `Z Code@electron` | Pinned |
+| `X-Release-Channel` | `production` | Pinned |
+| `X-ZCode-Agent` | `glm` | Pinned |
+| `X-Client-Language` | Host locale, e.g. `en-US` | Runtime |
+| `X-Client-Timezone` | Host timezone, e.g. `UTC` | Runtime |
+| `X-Platform` | Node platform/architecture spelling, e.g. `linux-arm64` | Runtime |
+| `X-Os-Category` | `linux`, `macos` or `windows` | Runtime |
+| `X-Os-Version` | Host kernel release | Runtime |
+
+The five runtime facts are resolved once, persisted under `runtime.zcode`, shown
+in settings, and overridable globally or per account. The supported deployment
+runtime is Linux; the kernel release comes from `/proc/sys/kernel/osrelease`.
+Locale uses `LC_ALL`, `LC_MESSAGES`, then `LANG` (the Node default `en-US` for
+unset/C/POSIX), and timezone uses `TZ`/system timezone data. Missing or unsafe
+facts use `unknown`. Version-only changes retain these facts and all pinned
+product declarations. No standalone `Originator` or `Version` is rendered.
+`SUB2API_ZCODE_VERSION` selects a version without changing the desktop family;
+both upstream version lines remain accepted. This change leaves the preset's
+existing SDK fingerprint unchanged: it does not append a JavaScript SDK/runtime
+suffix to the gateway's UA. Such suffixes in the upstream SDK are distinct from
+the bootstrap-owned client declarations listed here.
+
+Account-link, business-key derivation and off-peak ticket clients apply the
+same snapshot at request construction, including when used without a gateway
+transport or settings resolver. A multi-call business-key operation captures
+its identity once. Deferred off-peak settlement retains the acquiring credential
+owner's identity alongside its authentication, even after settings change. Gateway transports reapply the trusted declarations at send
+time; stale SDK/inbound/generic overrides cannot rewrite them. API-key accounts
+can choose another compatible preset; native OAuth accounts retain ZCode.
 
 The exact compiled MiniMax identity is the bare product token `MiniMaxAgent`,
 with identifier `MiniMaxAgent` and no client version. The official MiniMax Code
@@ -171,6 +187,43 @@ tool-call path per request and is not an identity declaration, so it is neither
 rendered by this preset nor blocked from account header overrides. The
 identity-header allowlist is extended by the six declarations above; an inbound
 caller or a generic header override can never select one.
+
+### Domestic-provider source evidence and source priority
+
+The local client snapshots inspected for this implementation are:
+
+| Client | Commit | Declaration source |
+| --- | --- | --- |
+| dsh-desktop | `1030515b4358b39633c80d5857cab6114b9e3ba8` | Vendored `0.2.0-rc.2` `dsh-llm/lib/types/attribution.js`, `dsh-llm-deepseek`, `dsh-llm-deepseek-account`, `dsh-llm-deepseek-api-key` |
+| kimi-code | `21406fb4c805cc8c715e6d1f16ad3fb5f25f4fe3` | `packages/oauth/src/identity.ts`, `packages/agent-core-v2/src/llm-adapter/provider/provider-definition.ts` |
+| minimax-code | `564e9166d81f87b0b767b005e4779d4697b512be` | `packages/local-runtime-v2/src/service/model-system/resolution/model-resolver-helpers.ts` |
+| ZCode | `29628c9acdb81b703bbd4080c207a0e7ce5e276e` | `apps/zcode-cli/packages/bootstrap/src/model-config.ts`, `runtime-platform-headers.ts`, `packages/shared/src/zcodeEndpoint.ts` |
+
+DSH Desktop delegates inference to its vendored Harness adapter, so its shell
+package version is not the UA version. Both account (`x-dsh-auth-token`) and API
+key (`x-api-key`) providers share that adapter's attribution. Kimi uses the same
+host declarations for its first-party OAuth and API-key calls. MiniMax's managed
+client declares `MiniMaxAgent`; `MiniMaxCode` in its OpenCode-Go adapter and
+`MiniMax-Code` in its GitHub downloader identify other destinations and are not
+MiniMax inference presets. Session IDs, authentication and per-request metadata
+remain owned by the protocol.
+
+| Operation / candidate | Resolution |
+| --- | --- |
+| OAuth or API-key credential owner | Valid account candidate → global preset/type default → valid environment / compiled default |
+| Empty or invalid candidate, including invalid companion/runtime headers | Fall through atomically to the next tier |
+| API-key type mapping | May select a compatible preset; OAuth remains native |
+| Pre-account native authorization | Global native preset → valid environment / compiled default; ignore inherited owners and API-key mappings |
+| Retry or nested same-owner request | Reuse the selected snapshot, including all runtime values |
+| Failover to another credential owner | Resolve that owner's candidate and current defaults |
+
+MiniMax remains the only versionless exception. Settings and account header maps
+use each declaration's registered spelling, reject case-insensitive duplicates,
+and return deep copies; malformed stored header candidates cannot partially win.
+Global profile runtime headers override the deployment runtime map; explicit
+account runtime values override that resolved global state. Settings header
+blocks show the actual resolved declarations for all four families. This identity
+contract does not create a new login protocol or change authentication headers.
 
 The exact compiled Grok identity is `grok-shell/1.0.45 (<os>; <arch>)`, with
 identifier `grok-shell`, client version `1.0.45`, and mode `headless`. Runtime
@@ -278,7 +331,7 @@ Generic `header_overrides` cannot select or modify a client identity. Saves reje
 managed identity names with `INVALID_HEADER_OVERRIDE` (HTTP 400), including empty
 values and disabled override configurations. The shared managed-header registry
 covers User-Agent, client identifiers/versions, the Kimi Code `X-Msh-*`
-declaration block and SDK declarations such as `X-Stainless-Package-Version`.
+and ZCode product/runtime declaration blocks and SDK declarations such as `X-Stainless-Package-Version`.
 Matching is case-insensitive. Previously stored
 identity overrides are ignored at runtime; ordinary overrides remain effective.
 Move intended identity customization to the account/global identity controls and

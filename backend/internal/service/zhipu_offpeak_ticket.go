@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/zcode"
 )
 
@@ -60,6 +61,7 @@ type zhipuOffPeakHolder struct {
 	position *int
 	lastUsed time.Time
 	auth     zcode.OffPeakAuth
+	identity outboundidentity.Identity
 	proxyURL string
 	settled  bool
 }
@@ -130,6 +132,10 @@ func (m *ZhipuOffPeakTicketManager) Acquire(ctx context.Context, account *Accoun
 	if strings.TrimSpace(auth.JWT) == "" {
 		return nil, infraerrors.New(http.StatusBadRequest, "ZHIPU_OFFPEAK_CREDENTIAL_MISSING", "off-peak ticket acquisition requires the zcode token")
 	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ctx = WithAccountOutboundIdentity(ctx, account)
 	holder := m.holderFor(account.ID)
 	// One acquisition per account at a time: the platform issues a ticket to a
 	// plan, so concurrent takes would waste take-number quota and race the quota
@@ -137,6 +143,7 @@ func (m *ZhipuOffPeakTicketManager) Acquire(ctx context.Context, account *Accoun
 	holder.mu.Lock()
 	defer holder.mu.Unlock()
 	holder.auth = auth
+	holder.identity, _ = outboundidentity.FromContext(ctx)
 	holder.proxyURL = proxyURL
 	if holder.taskID == "" {
 		// The task id is stable across re-takes, matching the official client.
@@ -288,8 +295,11 @@ func (m *ZhipuOffPeakTicketManager) sweepOnce() {
 			continue
 		}
 		ticketID, auth, proxyURL := holder.ticketID, holder.auth, holder.proxyURL
+		// The detached settlement owns the same credentials and identity snapshot
+		// as the acquisition; background settings must not select a new fingerprint.
+		settleCtx := outboundidentity.WithIdentity(context.Background(), holder.identity)
 		holder.mu.Unlock()
-		if err := m.client.SettleTicket(context.Background(), ticketID, auth, proxyURL); err != nil {
+		if err := m.client.SettleTicket(settleCtx, ticketID, auth, proxyURL); err != nil {
 			continue
 		}
 		holder.mu.Lock()

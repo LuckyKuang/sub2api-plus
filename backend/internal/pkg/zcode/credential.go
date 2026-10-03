@@ -140,6 +140,7 @@ func bizAuthorization(provider, token string, bearer bool) string {
 // handshake into the business token every Z.ai business and model call expects.
 // BigModel needs no such exchange.
 func (c *CredentialClient) ExchangeZaiBusinessToken(ctx context.Context, oauthAccessToken string) (string, error) {
+	ctx = withIdentity(ctx)
 	oauthAccessToken = strings.TrimSpace(oauthAccessToken)
 	if oauthAccessToken == "" {
 		return "", fmt.Errorf("zai oauth access token is required")
@@ -183,6 +184,7 @@ func (c *CredentialClient) ExchangeZaiBusinessToken(ctx context.Context, oauthAc
 // select a non-team organization/project, find or create the published personal
 // key, then copy its secret and join both halves.
 func (c *CredentialClient) ResolveIndividualCodingPlanKey(ctx context.Context, provider, accessToken string) (*CodingPlanCredential, error) {
+	ctx = withIdentity(ctx)
 	provider = NormalizeProvider(provider)
 	if provider == "" {
 		return nil, fmt.Errorf("unsupported oauth provider")
@@ -231,6 +233,7 @@ func (c *CredentialClient) ResolveIndividualCodingPlanKey(ctx context.Context, p
 // team scope is supplied by the operator (or discovered at link time) because a
 // team account can own several projects, each with its own project key.
 func (c *CredentialClient) ResolveTeamPlanKey(ctx context.Context, provider, accessToken, organizationID, projectID string) (*CodingPlanCredential, error) {
+	ctx = withIdentity(ctx)
 	provider = NormalizeProvider(provider)
 	if provider == "" {
 		return nil, fmt.Errorf("unsupported oauth provider")
@@ -391,6 +394,7 @@ func (c *CredentialClient) doJSON(ctx context.Context, method, target string, he
 		req.Header.Set(name, value)
 	}
 	req.Header.Set("Accept", "application/json")
+	prepareRequest(req)
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return err

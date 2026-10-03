@@ -80,3 +80,10 @@ The canonical configuration example is
 full effective `upstream_hosts` list before enabling the allowlist in an
 existing deployment, because every configured provider endpoint must be
 represented there.
+
+The **Kimi Code** settings card shows the complete effective block for OAuth
+and API-key identity resolution. Both use the first-party host declarations from
+`packages/oauth/src/identity.ts`; runtime values remain stable across retries
+and version updates. An invalid account header candidate falls through as a
+whole, and generic overrides cannot replace device or version companions. See
+[source evidence and priority](../OUTBOUND_IDENTITY.md#domestic-provider-source-evidence-and-source-priority).

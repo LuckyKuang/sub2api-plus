@@ -110,7 +110,10 @@ func IsIdentityHeader(name string) bool {
 		"x-stainless-lang", "x-stainless-package-version", "x-stainless-os",
 		"x-stainless-arch", "x-stainless-runtime", "x-stainless-runtime-version",
 		"x-msh-platform", "x-msh-version", "x-msh-device-name",
-		"x-msh-device-model", "x-msh-os-version", "x-msh-device-id":
+		"x-msh-device-model", "x-msh-os-version", "x-msh-device-id",
+		"x-zcode-app-version", "x-zcode-agent", "http-referer", "x-title",
+		"x-release-channel", "x-client-language", "x-client-timezone",
+		"x-platform", "x-os-category", "x-os-version":
 		return true
 	}
 	return false

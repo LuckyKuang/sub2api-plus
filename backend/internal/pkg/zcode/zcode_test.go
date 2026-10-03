@@ -31,9 +31,10 @@ func TestIdentityPinsProductVersionAndAcceptsBothOfficialLines(t *testing.T) {
 	require.Equal(t, ProductToken, identity.Originator)
 	require.Equal(t, DefaultVersion, identity.Version)
 	require.Equal(t, "compiled_default", identity.Source)
-	// The official client declares no Originator and no standalone version
-	// header, so only the User-Agent may reach the wire.
-	require.Equal(t, map[string]string{"User-Agent": "ZCode/3.14.3"}, identity.Headers)
+	require.Equal(t, identity.Version, identity.Headers[HeaderAppVersion])
+	require.Equal(t, "Z Code@electron", identity.Headers["X-Title"])
+	require.Equal(t, "glm", identity.Headers["X-ZCode-Agent"])
+	require.Len(t, identity.Headers, 11)
 
 	// Both official version lines are selectable; the preset declares no floor.
 	for _, version := range []string{"3.14.3", "0.16.9"} {

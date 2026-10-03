@@ -288,7 +288,10 @@ describe('validateHeaderOverrideRows', () => {
     'User-Agent', 'Originator', 'Version', 'X-App', 'X-Goog-Api-Client',
     'X-Grok-Client-Version', 'X-Grok-Client-Identifier', 'X-Stainless-Lang',
     'X-Stainless-Package-Version', 'X-Stainless-OS', 'X-Stainless-Arch',
-    'X-Stainless-Runtime', 'X-Stainless-Runtime-Version'
+    'X-Stainless-Runtime', 'X-Stainless-Runtime-Version',
+    'X-ZCode-App-Version', 'X-ZCode-Agent', 'HTTP-Referer', 'X-Title',
+    'X-Release-Channel', 'X-Client-Language', 'X-Client-Timezone',
+    'X-Platform', 'X-Os-Category', 'X-Os-Version'
   ])('rejects managed identity %s, including legacy JSON imports', (name) => {
     for (const variant of [name, name.toLowerCase(), name.toUpperCase()]) {
       for (const value of ['', 'injected/999.0.0']) {
