@@ -22,21 +22,29 @@ type v3HandlerRepo struct {
 	window time.Duration
 	data   *service.ChannelMonitorV3Data
 	err    error
+	cfg    *service.ChannelMonitorV3Config
 }
 
 func (r *v3HandlerRepo) GetConfig(context.Context) (*service.ChannelMonitorV3Config, error) {
+	if r.cfg != nil {
+		return r.cfg, nil
+	}
 	c := service.DefaultChannelMonitorV3Config()
 	return &c, nil
 }
 func (r *v3HandlerRepo) UpdateConfig(_ context.Context, c service.ChannelMonitorV3Config) (*service.ChannelMonitorV3Config, error) {
 	return &c, nil
 }
-func (r *v3HandlerRepo) Refresh(context.Context, time.Time, service.ChannelMonitorV3Config) error {
+func (r *v3HandlerRepo) Refresh(context.Context, time.Time) error {
 	return nil
 }
-func (r *v3HandlerRepo) Read(_ context.Context, _ time.Time, window time.Duration) (*service.ChannelMonitorV3Data, error) {
+func (r *v3HandlerRepo) Read(_ context.Context, _ time.Time, window time.Duration, _ string) (*service.ChannelMonitorV3Data, error) {
 	r.reads++
 	r.window = window
+	if r.data != nil {
+		cfg, _ := r.GetConfig(context.Background())
+		r.data.Config = *cfg
+	}
 	return r.data, r.err
 }
 
@@ -93,9 +101,22 @@ func TestChannelMonitorV3HandlerGlobalStatusForAllReaders(t *testing.T) {
 			for _, sensitive := range []string{"user_id", "api_key_id", "account_id", "actual_cost", "request_id", "error_message"} {
 				require.NotContains(t, rec.Body.String(), sensitive)
 			}
+			cfg := service.DefaultChannelMonitorV3Config()
+			cfg.DisabledPlatforms = []string{"anthropic"}
+			repo.cfg = &cfg
+			rec = httptest.NewRecorder()
+			router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/snapshot?platform=anthropic", nil))
+			require.Equal(t, http.StatusOK, rec.Code)
+			require.NotContains(t, rec.Body.String(), "other-user-event")
+			require.NotContains(t, rec.Body.String(), "Exclusive")
+			body.Data = nil
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+			require.Empty(t, body.Data.Platforms)
+			require.Zero(t, body.Data.Summary.ActiveEvents)
+			repo.cfg = nil
 		})
 	}
-	require.Equal(t, 4, repo.reads)
+	require.Equal(t, 8, repo.reads)
 	// Platform filtering applies to both the status and its incident history.
 	router := gin.New()
 	router.Use(func(c *gin.Context) { c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{UserID: 42}) })

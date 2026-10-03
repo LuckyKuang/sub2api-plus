@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/domain"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -45,6 +47,62 @@ func TestChannelMonitorV3ConfigAndHealth(t *testing.T) {
 	}
 	_, ok := ChannelMonitorV3Window("90m")
 	require.False(t, ok)
+}
+
+func TestChannelMonitorV3PlatformConfig(t *testing.T) {
+	cfg := DefaultChannelMonitorV3Config()
+	require.Len(t, cfg.EnabledPlatforms(), 11)
+	for _, disabled := range [][]string{{"unknown"}, {"composite"}, {"openai", "openai"}, {"OPENAI"}} {
+		cfg.DisabledPlatforms = disabled
+		require.ErrorIs(t, cfg.Validate(), ErrChannelMonitorV3Config)
+	}
+	cfg.DisabledPlatforms = domain.ConcretePlatforms()
+	require.NoError(t, cfg.Validate())
+	require.Empty(t, cfg.EnabledPlatforms())
+	cfg.ObservationStarts = map[string]time.Time{"openai": time.Now()}
+	raw, err := json.Marshal(cfg)
+	require.NoError(t, err)
+	require.NotContains(t, string(raw), "observation_starts")
+}
+
+func TestChannelMonitorV3DisabledPlatformExcludedEverywhere(t *testing.T) {
+	now := time.Now().UTC()
+	cfg := DefaultChannelMonitorV3Config()
+	cfg.DisabledPlatforms = []string{"openai"}
+	fact := ChannelMonitorV3Fact{Platform: "openai", GroupID: 1, Model: "hidden", Failures: 10, LastRequest: now}
+	data := &ChannelMonitorV3Data{DataThrough: &now, Catalog: []ChannelMonitorV3Catalog{{Platform: "openai", GroupID: 1}, {Platform: "kimi", GroupID: 2}}, Current: []ChannelMonitorV3Fact{fact}, KnownModels: []ChannelMonitorV3Fact{fact}, History: []ChannelMonitorV3Fact{fact}, Totals: []ChannelMonitorV3Fact{fact}, Incidents: []ChannelMonitorV3Incident{{Platform: "openai", GroupID: 1, Model: "hidden"}}}
+	result := BuildChannelMonitorV3Snapshot(data, cfg, now, 24*time.Hour, "")
+	require.True(t, result.MonitoringEnabled)
+	require.Len(t, result.Platforms, 1)
+	require.Equal(t, "kimi", result.Platforms[0].Platform)
+	require.Empty(t, result.Incidents)
+	require.Zero(t, result.Summary.ActiveEvents)
+	require.Zero(t, result.Summary.Affected)
+	require.Empty(t, BuildChannelMonitorV3Snapshot(data, cfg, now, 24*time.Hour, "openai").Platforms)
+	cfg.DisabledPlatforms = domain.ConcretePlatforms()
+	result = BuildChannelMonitorV3Snapshot(data, cfg, now, 24*time.Hour, "")
+	require.False(t, result.MonitoringEnabled)
+	require.Empty(t, result.Platforms)
+	require.Equal(t, ChannelMonitorV3Summary{Status: "unknown"}, result.Summary)
+}
+
+func TestChannelMonitorV3ResumeRequiresNewConfirmation(t *testing.T) {
+	now := time.Now().UTC()
+	cfg := DefaultChannelMonitorV3Config()
+	previous := ChannelMonitorV3State{Pending: "normal", Streak: 2, LastRequest: now.Add(-time.Minute), Incident: &ChannelMonitorV3Incident{ID: "same", Phase: "recovering", Severity: "partial"}}
+	resumed := ResumeChannelMonitorV3State(previous, now)
+	require.Equal(t, 2, previous.Streak)
+	require.Equal(t, "recovering", previous.Incident.Phase)
+	require.Zero(t, resumed.Streak)
+	require.Empty(t, resumed.Pending)
+	require.Equal(t, "awaiting_data", resumed.Incident.Phase)
+	require.Nil(t, resumed.Incident.ResolvedAt)
+	fact := ChannelMonitorV3Fact{Success: 5, LastRequest: now.Add(time.Second)}
+	next, event := AdvanceChannelMonitorV3State(resumed, fact, now.Add(time.Minute), cfg)
+	require.Equal(t, 1, next.Streak)
+	require.Equal(t, "same", event.ID)
+	require.Equal(t, "recovering", event.Phase)
+	require.Nil(t, event.ResolvedAt)
 }
 
 func TestChannelMonitorV3EligibleErrors(t *testing.T) {
@@ -185,11 +243,12 @@ func (s *channelMonitorV3RepoStub) UpdateConfig(_ context.Context, c ChannelMoni
 	s.cfg = c
 	return &c, nil
 }
-func (s *channelMonitorV3RepoStub) Refresh(context.Context, time.Time, ChannelMonitorV3Config) error {
+func (s *channelMonitorV3RepoStub) Refresh(context.Context, time.Time) error {
 	s.refreshes.Add(1)
 	return nil
 }
-func (s *channelMonitorV3RepoStub) Read(_ context.Context, _ time.Time, _ time.Duration) (*ChannelMonitorV3Data, error) {
+func (s *channelMonitorV3RepoStub) Read(_ context.Context, _ time.Time, _ time.Duration, _ string) (*ChannelMonitorV3Data, error) {
+	s.data.Config = s.cfg
 	return s.data, nil
 }
 func TestChannelMonitorV3WorkerModesAndStop(t *testing.T) {

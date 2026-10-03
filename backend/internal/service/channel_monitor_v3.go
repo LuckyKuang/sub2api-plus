@@ -49,10 +49,7 @@ func (s *ChannelMonitorV3Service) Start() {
 					rt := s.settings.GetChannelMonitorRuntime(s.ctx)
 					if rt.Enabled && rt.Mode == ChannelMonitorModeV3 {
 						ctx, cancel := context.WithTimeout(s.ctx, 45*time.Second)
-						cfg, err := s.repo.GetConfig(ctx)
-						if err == nil {
-							err = s.repo.Refresh(ctx, s.now().UTC().Truncate(time.Minute), *cfg)
-						}
+						err := s.repo.Refresh(ctx, s.now().UTC().Truncate(time.Minute))
 						cancel()
 						if err != nil && s.ctx.Err() == nil {
 							slog.Warn("service_status_refresh_failed", "stage", "aggregation", "code", "channel_monitor_v3_refresh_failed")
@@ -90,7 +87,14 @@ func (s *ChannelMonitorV3Service) UpdateConfig(ctx context.Context, cfg ChannelM
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
-	return s.repo.UpdateConfig(ctx, cfg)
+	updated, err := s.repo.UpdateConfig(ctx, cfg)
+	if err == nil {
+		select {
+		case s.kick <- struct{}{}:
+		default:
+		}
+	}
+	return updated, err
 }
 
 func ChannelMonitorV3Window(value string) (time.Duration, bool) {
@@ -108,25 +112,22 @@ func ChannelMonitorV3Window(value string) (time.Duration, bool) {
 
 func (s *ChannelMonitorV3Service) Snapshot(ctx context.Context, window time.Duration, platform string) (*ChannelMonitorV3Snapshot, error) {
 	now := s.now().UTC()
-	cfg, err := s.repo.GetConfig(ctx)
+	data, err := s.repo.Read(ctx, now, window, platform)
 	if err != nil {
 		return nil, err
 	}
-	data, err := s.repo.Read(ctx, now, window)
-	if err != nil {
-		return nil, err
-	}
-	return BuildChannelMonitorV3Snapshot(data, *cfg, now, window, platform), nil
+	return BuildChannelMonitorV3Snapshot(data, data.Config, now, window, platform), nil
 }
 
 func BuildChannelMonitorV3Snapshot(data *ChannelMonitorV3Data, cfg ChannelMonitorV3Config, now time.Time, window time.Duration, filter string) *ChannelMonitorV3Snapshot {
 	result := &ChannelMonitorV3Snapshot{ComputedAt: now, DataThrough: data.DataThrough, Platforms: []ChannelMonitorV3Platform{}, Incidents: []ChannelMonitorV3Incident{}, Summary: ChannelMonitorV3Summary{Status: "unknown"}}
+	result.MonitoringEnabled = len(cfg.EnabledPlatforms()) > 0
 	current, totals := map[string]ChannelMonitorV3Fact{}, map[string]ChannelMonitorV3Fact{}
 	models := map[string]ChannelMonitorV3Fact{}
 	catalog := map[string]bool{}
 	scopes := map[string]bool{}
 	for _, item := range data.Catalog {
-		if filter == "" || item.Platform == filter {
+		if cfg.PlatformEnabled(item.Platform) && (filter == "" || item.Platform == filter) {
 			catalog[item.Platform] = true
 			scopes[ChannelMonitorV3Scope(item.Platform, item.GroupID, "")] = true
 		}

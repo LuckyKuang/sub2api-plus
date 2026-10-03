@@ -19,8 +19,8 @@
         <section class="overview flex gap-4 rounded-xl border p-5" :class="`status-${summary.status}`" aria-live="polite">
           <span class="status-ink mt-0.5"><Icon :name="summary.status === 'normal' ? 'check' : 'exclamationTriangle'" size="lg" /></span>
           <div class="min-w-0 flex-1">
-            <h2 class="text-base font-semibold text-gray-900 dark:text-white">{{ t(`channelMonitorV3.overview.${summary.status}`) }}</h2>
-            <p class="mt-1 text-xs leading-relaxed text-gray-600 dark:text-gray-400">{{ t(`channelMonitorV3.overviewDescription.${summary.status}`) }}</p>
+            <h2 class="text-base font-semibold text-gray-900 dark:text-white">{{ t(snapshot.monitoring_enabled ? `channelMonitorV3.overview.${summary.status}` : 'channelMonitorV3.monitoringDisabled') }}</h2>
+            <p class="mt-1 text-xs leading-relaxed text-gray-600 dark:text-gray-400">{{ t(snapshot.monitoring_enabled ? `channelMonitorV3.overviewDescription.${summary.status}` : 'channelMonitorV3.monitoringDisabledHint') }}</p>
             <div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-gray-500 dark:text-gray-400">
               <span class="status-ink font-medium">{{ t('channelMonitorV3.activeEvents', { count: summary.active_events }) }}</span>
               <span>{{ t('channelMonitorV3.counts', summary) }}</span>
@@ -67,7 +67,7 @@
               <div class="mt-4 flex items-center justify-between border-t border-gray-100 pt-3 text-xs text-gray-500 dark:border-dark-700 dark:text-gray-400"><span>{{ t('channelMonitorV3.lastRequest') }} {{ time(item.last_request_at) }}</span><Icon name="chevronRight" size="sm" /></div>
             </button>
           </div>
-          <p v-if="!platforms.length" class="py-12 text-center text-sm text-gray-500">{{ t('channelMonitorV3.emptyPlatforms') }}</p>
+          <p v-if="!platforms.length" class="py-12 text-center text-sm text-gray-500">{{ t(snapshot.monitoring_enabled ? 'channelMonitorV3.emptyPlatforms' : 'channelMonitorV3.monitoringDisabled') }}</p>
           <div class="mt-4 flex flex-wrap gap-4 text-[11px] text-gray-500 dark:text-gray-400">
             <span v-for="status in legend" :key="status" class="inline-flex items-center gap-1.5"><span class="legend-dot" :class="`status-${status}`" />{{ statusLabel(status) }}</span>
           </div>
@@ -173,6 +173,7 @@ async function load() {
     if (request.signal.aborted) return
     snapshot.value = value
     if (platform.value && !value.platforms.some(item => item.platform === platform.value)) platform.value = ''
+    if (detailPlatform.value && !value.platforms.some(item => item.platform === detailPlatform.value)) detailPlatform.value = ''
     error.value = ''
   } catch {
     if (!request.signal.aborted) {

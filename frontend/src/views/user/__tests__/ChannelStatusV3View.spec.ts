@@ -7,7 +7,7 @@ import { getStatusSnapshot, type StatusSnapshot } from '@/api/channelMonitorV3'
 vi.mock('@/api/channelMonitorV3', () => ({ getStatusSnapshot: vi.fn() }))
 vi.mock('@/composables/useAutoRefresh', () => ({ useAutoRefresh: () => ({ setEnabled: vi.fn() }) }))
 const fixture = (): StatusSnapshot => ({
-  computed_at: '2026-10-01T12:00:00Z', data_through: '2026-10-01T12:00:00Z',
+  monitoring_enabled: true, computed_at: '2026-10-01T12:00:00Z', data_through: '2026-10-01T12:00:00Z',
   summary: { status: 'partial', normal: 0, affected: 1, unknown: 1, recovering: 0, active_events: 1 },
   platforms: [
     { platform: 'openai', status: 'partial', success_rate: .99, ttft_p50_ms: 2000, last_request_at: '2026-10-01T11:59:00Z', timeline: [{ at: '2026-10-01T11:30:00Z', status: 'unknown' }], models: [{ group_id: 1, group_name: '标准分组', model: 'gpt-test', status: 'partial' }] },
@@ -74,5 +74,34 @@ describe('V3 service status', () => {
     await wrapper.find('[aria-label="刷新"]').trigger('click'); await flushPromises()
     expect(wrapper.find('[role="alert"]').text()).toContain('暂时无法获取服务状态')
     expect(wrapper.findAll('.platform-card')).toHaveLength(0)
+  })
+  it('clears a disabled selected platform and its open details after refresh', async () => {
+    await render()
+    await wrapper.find('select').setValue('openai')
+    await wrapper.find('.platform-card').trigger('click')
+    const value = fixture()
+    value.platforms = value.platforms.filter(item => item.platform !== 'openai')
+    value.incidents = []
+    value.summary = { status: 'unknown', normal: 0, affected: 0, unknown: 1, recovering: 0, active_events: 0 }
+    vi.mocked(getStatusSnapshot).mockResolvedValue(value)
+    await wrapper.find('[aria-label="刷新"]').trigger('click'); await flushPromises()
+    expect((wrapper.find('select').element as HTMLSelectElement).value).toBe('')
+    expect(wrapper.find('[data-testid="detail"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('gpt-test')
+    vi.mocked(getStatusSnapshot).mockResolvedValue(fixture())
+    await wrapper.find('[aria-label="刷新"]').trigger('click'); await flushPromises()
+    expect(wrapper.find('[data-testid="detail"]').exists()).toBe(false)
+  })
+  it('shows monitoring disabled when all platform switches are off', async () => {
+    const value = fixture()
+    value.monitoring_enabled = false
+    value.platforms = []
+    value.incidents = []
+    value.summary = { status: 'unknown', normal: 0, affected: 0, unknown: 0, recovering: 0, active_events: 0 }
+    vi.mocked(getStatusSnapshot).mockResolvedValue(value)
+    await render()
+    expect(wrapper.text()).toContain('暂无启用的监控平台')
+    expect(wrapper.findAll('.platform-card')).toHaveLength(0)
+    expect(wrapper.text()).not.toContain('已观测服务运行正常')
   })
 })

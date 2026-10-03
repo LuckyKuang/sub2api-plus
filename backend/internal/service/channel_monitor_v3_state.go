@@ -11,6 +11,22 @@ func ChannelMonitorV3Scope(platform string, groupID int64, model string) string 
 	return fmt.Sprintf("%s:%d:%s", platform, groupID, model)
 }
 
+// ResumeChannelMonitorV3State discards confirmation evidence across a pause.
+// Open incidents stay unresolved and wait for new observed requests.
+func ResumeChannelMonitorV3State(previous ChannelMonitorV3State, now time.Time) ChannelMonitorV3State {
+	next := previous
+	next.Pending, next.Streak, next.PendingSince = "", 0, time.Time{}
+	if previous.Incident != nil {
+		incident := *previous.Incident
+		incident.Updates = append([]ChannelMonitorV3Update(nil), incident.Updates...)
+		next.Incident = &incident
+		if incident.Phase != "awaiting_data" {
+			updateV3Incident(next.Incident, "awaiting_data", incident.Severity, now)
+		}
+	}
+	return next
+}
+
 // Advance requires new terminal requests, not merely a new timer tick. The same
 // rolling samples cannot confirm a failure twice or manufacture recovery.
 func AdvanceChannelMonitorV3State(previous ChannelMonitorV3State, fact ChannelMonitorV3Fact, now time.Time, cfg ChannelMonitorV3Config) (ChannelMonitorV3State, *ChannelMonitorV3Incident) {

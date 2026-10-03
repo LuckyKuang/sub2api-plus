@@ -1,5 +1,6 @@
 export default {
   channelMonitorV3: {
+    monitoringDisabled: 'No monitoring platforms enabled', monitoringDisabledHint: 'The administrator has disabled service status monitoring for all platforms.',
     title: 'Service status', subtitle: 'Site-wide service status and incidents, observed from real requests by all users.', observed: 'Last observed',
     platforms: 'Platforms', events: 'Incidents', viewEvents: 'View incidents', filter: 'Filter platforms', allPlatforms: 'All platforms', range: 'History range',
     ranges: { '24h': '24 hours', '7d': '7 days', '30d': '30 days' },
@@ -33,6 +34,7 @@ export default {
     modeV3: 'V3 Service status', modeV2: 'V2 Passive monitoring', modeHint: 'V1 actively probes. V2 uses passive aggregation. V3 shows service status from real requests. Logged-in users can view the selected mode when enabled.',
     modeV3Hint: 'Observe platforms and incidents automatically from all users’ real requests on this site, without sending active probes.', modeV2Hint: 'Aggregates health metrics from real gateway traffic. Users can view monitoring data for authorized groups.',
     settings: {
+      platformsTitle: 'Enable platform monitoring', platformsHint: 'Disabling a platform stops status observation and incident updates and removes it from service status. Existing history is retained. Re-enabling starts observation at the next full minute; consecutive confirmations require new requests.', platformToggle: 'Enable monitoring for {platform}',
       title: 'V3 service status configuration', description: 'Current status uses requests from the last 5 minutes. Consecutive confirmations require new request evidence. Silence or insufficient samples cannot confirm recovery. History accumulates after enablement.',
       minimum_samples: 'Minimum request samples', warning_error_rate: 'Issue error rate (0–1, default 0.05)', outage_error_rate: 'Outage error rate (0–1, default 0.9)',
       warning_ttft_ms: 'P50 first-token threshold (ms)', abnormal_windows: 'Consecutive issue confirmations', recovery_windows: 'Consecutive recovery confirmations',
