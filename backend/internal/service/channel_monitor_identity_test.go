@@ -87,7 +87,10 @@ func TestChannelMonitorDefaultIdentityForProviders(t *testing.T) {
 	for _, test := range []struct{ provider, preset, mode string }{
 		{"openai", "codex", MonitorAPIModeChatCompletions}, {"openai", "codex", MonitorAPIModeResponses},
 		{"anthropic", "claude", ""}, {"gemini", "gemini", ""}, {"grok", "grok", ""},
-		{"kimi", "codex", ""}, {"zhipu", "codex", ""}, {"deepseek", "codex", ""}, {"minimax", "codex", ""},
+		// Channel-monitor egress shares the platform default preset, so the
+		// DeepSeek provider sends the same pinned harness identity as DeepSeek
+		// accounts.
+		{"kimi", "codex", ""}, {"zhipu", "codex", ""}, {"deepseek", "deepseek", ""}, {"minimax", "codex", ""},
 		{"opencode_go", "codex", ""},
 	} {
 		t.Run(test.provider+"/"+test.mode, func(t *testing.T) {

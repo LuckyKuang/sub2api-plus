@@ -16,6 +16,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/antigravity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/claude"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/deepseek"
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/geminicli"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
@@ -52,7 +53,7 @@ type cachedOutboundIdentitySettings struct {
 }
 
 var outboundClientVersionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.]+)?$`)
-var outboundPresetNames = []string{"codex", "claude", "gemini", "grok", "antigravity"}
+var outboundPresetNames = []string{"codex", "claude", "gemini", "grok", "antigravity", "deepseek"}
 
 func emptyOutboundIdentitySettings() OutboundIdentitySettings {
 	return OutboundIdentitySettings{Profiles: map[string]OutboundIdentitySelection{}, Defaults: map[string]string{}}
@@ -68,6 +69,12 @@ func nativeOutboundPreset(platform string) string {
 		return "grok"
 	case PlatformAntigravity:
 		return "antigravity"
+	case PlatformDeepseek:
+		// DeepSeek platform accounts advertise the pinned harness identity by
+		// default. The provider-defined client family is the published harness,
+		// not Codex; an account or type-default selection can still opt back
+		// into any compatible preset.
+		return "deepseek"
 	case PlatformTypeSafe:
 		// TypeSafe is an API-key compatible supplier with no provider-defined
 		// client family, version or identity header. It reuses the same
@@ -116,6 +123,8 @@ func builtInOutboundIdentity(preset string) outboundidentity.Identity {
 		i.Headers["x-grok-client-mode"] = xai.CLIClientMode
 	case "antigravity":
 		return antigravity.DefaultIdentity()
+	case "deepseek":
+		return deepseek.DefaultIdentity()
 	default:
 		return outboundidentity.Identity{}
 	}
@@ -150,7 +159,7 @@ func buildOutboundIdentity(selection OutboundIdentitySelection) (outboundidentit
 		if brandidentity.ContainsBrand(ua) {
 			return i, fmt.Errorf("User-Agent must not contain the project brand")
 		}
-		prefix := map[string]string{"claude": "claude-cli/", "gemini": "GeminiCLI/", "grok": "grok-shell/", "antigravity": "antigravity/"}[selection.Preset]
+		prefix := map[string]string{"claude": "claude-cli/", "gemini": "GeminiCLI/", "grok": "grok-shell/", "antigravity": "antigravity/", "deepseek": "deepseek-harness/"}[selection.Preset]
 		if !strings.HasPrefix(ua, prefix) {
 			return i, fmt.Errorf("User-Agent must match the selected preset")
 		}
@@ -180,6 +189,9 @@ func buildOutboundIdentity(selection OutboundIdentitySelection) (outboundidentit
 	}
 	if i.Preset == "antigravity" && antigravity.NormalizeUserAgentVersion(i.Version) == "" {
 		return i, fmt.Errorf("invalid Antigravity version")
+	}
+	if i.Preset == "deepseek" && !deepseek.IsSupportedVersion(i.Version) {
+		return i, fmt.Errorf("deepseek version is below the supported baseline")
 	}
 	i.Headers["User-Agent"] = i.UserAgent
 	if i.Preset == "codex" {

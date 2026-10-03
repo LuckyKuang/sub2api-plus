@@ -1,6 +1,6 @@
 import { apiClient } from '../client'
 
-export type IdentityPreset = 'codex' | 'claude' | 'gemini' | 'grok' | 'antigravity'
+export type IdentityPreset = 'codex' | 'claude' | 'gemini' | 'grok' | 'antigravity' | 'deepseek'
 export interface IdentitySelection {
   preset: IdentityPreset | ''
   user_agent?: string
@@ -23,9 +23,9 @@ export interface OutboundIdentityView {
   presets: ResolvedIdentity[]
   effective: ResolvedIdentity[]
 }
-export const identityPresets: IdentityPreset[] = ['codex', 'claude', 'gemini', 'grok', 'antigravity']
+export const identityPresets: IdentityPreset[] = ['codex', 'claude', 'gemini', 'grok', 'antigravity', 'deepseek']
 export const identityNames: Record<IdentityPreset, string> = {
-  codex: 'Codex', claude: 'Claude Code', gemini: 'Gemini CLI', grok: 'Grok', antigravity: 'Antigravity'
+  codex: 'Codex', claude: 'Claude Code', gemini: 'Gemini CLI', grok: 'Grok', antigravity: 'Antigravity', deepseek: 'DeepSeek'
 }
 export async function getOutboundIdentity(): Promise<OutboundIdentityView> {
   return (await apiClient.get<OutboundIdentityView>('/admin/settings/outbound-identity')).data

@@ -31,7 +31,7 @@ const emit = defineEmits<{ 'update:modelValue': [value: IdentitySelection | null
 const { t } = useI18n()
 const preview = ref<ResolvedIdentity>()
 const error = ref('')
-const nativePresets: Record<string, IdentityPreset> = { anthropic: 'claude', gemini: 'gemini', grok: 'grok', antigravity: 'antigravity' }
+const nativePresets: Record<string, IdentityPreset> = { anthropic: 'claude', gemini: 'gemini', grok: 'grok', antigravity: 'antigravity', deepseek: 'deepseek' }
 const nativePreset = computed<IdentityPreset>(() => nativePresets[props.platform] || 'codex')
 const visible = computed(() => props.platform && props.platform !== 'composite' && (props.platform !== 'openai' || ['apikey', 'upstream'].includes(props.accountType)))
 const availablePresets = computed(() => ['oauth', 'setup-token'].includes(props.accountType) ? [nativePreset.value] : identityPresets)

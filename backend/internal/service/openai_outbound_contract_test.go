@@ -267,7 +267,7 @@ func requireOpenAIIdentityContractHeaders(t *testing.T, headers, want http.Heade
 
 func TestOpenAIIdentityContractHTTPPassthroughCompatiblePresets(t *testing.T) {
 	for _, passthrough := range []bool{false, true} {
-		for _, preset := range []string{"claude", "gemini", "grok", "antigravity"} {
+		for _, preset := range []string{"claude", "gemini", "grok", "antigravity", "deepseek"} {
 			t.Run(fmt.Sprintf("%s/passthrough=%t", preset, passthrough), func(t *testing.T) {
 				account := newOpenAIRejectedFieldTestAccount()
 				account.Extra["openai_passthrough"] = passthrough

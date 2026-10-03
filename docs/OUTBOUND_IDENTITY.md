@@ -14,11 +14,12 @@ versions are distinct from the CLI version.
 
 | Preset | Default accounts | Wire identity |
 | --- | --- | --- |
-| Codex | OpenAI OAuth/setup-token, OpenAI-compatible API keys, Chinese compatible providers, TypeSafe API keys | Existing Codex UA/Originator/Version rules, including endpoint-specific omissions |
+| Codex | OpenAI OAuth/setup-token, OpenAI-compatible API keys, Kimi, Zhipu, MiniMax, TypeSafe API keys | Existing Codex UA/Originator/Version rules, including endpoint-specific omissions |
 | Claude Code | Anthropic OAuth/setup-token/API key, Claude on Bedrock or Vertex | `claude-cli` UA, `X-App: cli`, project-owned `X-Stainless-*` SDK/runtime declarations |
 | Gemini CLI | Gemini OAuth/API key, Gemini on Vertex | `GeminiCLI` UA |
 | Grok | Grok OAuth/API key | `grok-shell` UA, `x-grok-client-identifier`, `x-grok-client-version`, `x-grok-client-mode: headless` |
 | Antigravity | Antigravity OAuth/upstream | `antigravity` UA; the two privacy endpoints also declare the pinned `X-Goog-Api-Client` SDK |
+| DeepSeek | DeepSeek API-key accounts | `deepseek-harness/<version> (+https://github.com/deepseek-ai/deepseek-harness)` UA; identifier and version are encoded in the UA, so no `Originator`/`Version` headers |
 
 Native OAuth and setup-token accounts retain their native client family.
 API-key, upstream, Bedrock and service-account accounts can explicitly select
@@ -37,9 +38,28 @@ is invented, and the native System One client renders only the selected
 snapshot's declarations.
 
 Built-in declarations reuse existing pins in `internal/pkg/claude`,
-`internal/pkg/geminicli`, `internal/pkg/xai`, `internal/pkg/antigravity` and
-`internal/service/openai_codex_identity.go`. This feature does not upgrade
-those pins. The settings page displays the exact current effective identity.
+`internal/pkg/geminicli`, `internal/pkg/xai`, `internal/pkg/antigravity`,
+`internal/pkg/deepseek` and `internal/service/openai_codex_identity.go`. This
+feature does not upgrade those pins. The settings page displays the exact
+current effective identity.
+
+The exact compiled DeepSeek identity is
+`deepseek-harness/0.2.0-rc.2 (+https://github.com/deepseek-ai/deepseek-harness)`,
+with identifier `deepseek-harness` and client version `0.2.0-rc.2`. The
+parenthesized product comment belongs to the same User-Agent value the
+published harness renders from its own package manifest; it is not a second
+declaration. Only the User-Agent reaches the wire, so the preset adds no
+`Originator`, `Version` or harness request-state header; per-request
+`x-deepseek-harness-user-id`, `-session-id` and `-compact` values stay owned by
+the protocol layer. `SUB2API_DEEPSEEK_HARNESS_VERSION` may select a supported
+version (`0.2.0-rc.2` remains the accepted floor) while the product token, the
+`(+url)` comment and the identifier stay fixed. DeepSeek API-key accounts
+resolve this preset by default through `nativeOutboundPreset`, so the
+`deepseek:apikey` type default is an explicit, operator-visible equivalent
+rather than a prerequisite. Enabling it replaces Codex's
+`Originator`/`Version` declarations on those accounts; an account selection or
+type default can still opt a DeepSeek account back into Codex or any other
+compatible preset.
 
 The exact compiled Grok identity is `grok-shell/1.0.45 (<os>; <arch>)`, with
 identifier `grok-shell`, client version `1.0.45`, and mode `headless`. Runtime
@@ -408,7 +428,7 @@ compatibility mode, or an upstream release.
 `openai_outbound_contract_test.go` captures real HTTP sends, rejected-field
 retries and WS handshake headers across OAuth/API-key accounts, both HTTP
 passthrough states, forced Codex classification and the account/global/default/
-legacy source cases. It also covers the four compatible non-Codex presets.
+legacy source cases. It also covers the five compatible non-Codex presets.
 The header-override suites cover management rejection and filtering of legacy
 stored declarations, including SDK headers and case variants. These guards are
 required alongside the existing source-priority and exact-default assertions.

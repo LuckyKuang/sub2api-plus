@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/deepseek"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/xai"
 	"github.com/stretchr/testify/require"
@@ -89,7 +90,7 @@ func TestOutboundIdentitySourcePriorityAndAccountTypes(t *testing.T) {
 		{PlatformGrok, AccountTypeOAuth, "grok"}, {PlatformGrok, AccountTypeAPIKey, "grok"},
 		{PlatformAntigravity, AccountTypeOAuth, "antigravity"}, {PlatformAntigravity, AccountTypeUpstream, "antigravity"},
 		{PlatformKimi, AccountTypeAPIKey, "codex"}, {PlatformZhipu, AccountTypeAPIKey, "codex"},
-		{PlatformDeepseek, AccountTypeAPIKey, "codex"}, {PlatformMiniMax, AccountTypeAPIKey, "codex"},
+		{PlatformDeepseek, AccountTypeAPIKey, "deepseek"}, {PlatformMiniMax, AccountTypeAPIKey, "codex"},
 	} {
 		t.Run(entry.platform+"/"+entry.accountType, func(t *testing.T) {
 			account := &Account{ID: 42, Platform: entry.platform, Type: entry.accountType, Credentials: map[string]any{}}
@@ -183,7 +184,7 @@ func TestOutboundIdentityValidationAndVersionOnlyChange(t *testing.T) {
 			}
 		}
 	}
-	for _, selection := range []OutboundIdentitySelection{{Preset: "unknown"}, {Preset: "claude", UserAgent: "claude-cli/3.9.1\r\nAuthorization: secret"}, {Preset: "gemini", UserAgent: strings.Repeat("x", 513)}, {Preset: "grok", Version: "invalid"}} {
+	for _, selection := range []OutboundIdentitySelection{{Preset: "unknown"}, {Preset: "claude", UserAgent: "claude-cli/3.9.1\r\nAuthorization: secret"}, {Preset: "gemini", UserAgent: strings.Repeat("x", 513)}, {Preset: "grok", Version: "invalid"}, {Preset: "deepseek", UserAgent: "deepseek/0.2.0-rc.2"}, {Preset: "deepseek", UserAgent: "deepseek-harness/0.2.0-rc.2 (sub2api)"}, {Preset: "deepseek", Version: "0.0.1"}} {
 		_, err := buildOutboundIdentity(selection)
 		require.Error(t, err)
 	}
@@ -255,4 +256,97 @@ func TestOutboundIdentityBedrockSigningRetainsSelectedDeclarations(t *testing.T)
 			require.Equal(t, before.Get("Authorization"), final.Header.Get("Authorization"))
 		})
 	}
+}
+
+// The DeepSeek preset pins the published harness fingerprint. The parenthesized
+// `+url` comment belongs to the same User-Agent value, so the exact string is
+// asserted rather than a prefix.
+func TestBuiltInDeepSeekOutboundIdentityPinsPublishedHarness(t *testing.T) {
+	t.Setenv(deepseek.VersionEnv, "")
+
+	const pinnedUA = "deepseek-harness/0.2.0-rc.2 (+https://github.com/deepseek-ai/deepseek-harness)"
+	require.Equal(t, outboundidentity.Identity{
+		Preset:     "deepseek",
+		Source:     "compiled_default",
+		UserAgent:  pinnedUA,
+		Originator: "deepseek-harness",
+		Version:    "0.2.0-rc.2",
+		Headers:    map[string]string{"User-Agent": pinnedUA},
+	}, builtInOutboundIdentity("deepseek"))
+	require.Equal(t, builtInOutboundIdentity("deepseek"), deepseek.DefaultIdentity())
+	require.Equal(t, pinnedUA, deepseek.UserAgent(deepseek.DefaultVersion))
+}
+
+func TestDeepSeekOutboundIdentityEnvironmentOverrideUsesSupportedVersionsOnly(t *testing.T) {
+	t.Setenv(deepseek.VersionEnv, "0.3.0")
+	configured := builtInOutboundIdentity("deepseek")
+	require.Equal(t, "environment", configured.Source)
+	require.Equal(t, "0.3.0", configured.Version)
+	require.Equal(t, "deepseek-harness/0.3.0 (+https://github.com/deepseek-ai/deepseek-harness)", configured.UserAgent)
+	require.Equal(t, map[string]string{"User-Agent": configured.UserAgent}, configured.Headers)
+
+	for _, invalid := range []string{"", "not-a-version", "0.0.1", "0.2"} {
+		t.Setenv(deepseek.VersionEnv, invalid)
+		fallback := builtInOutboundIdentity("deepseek")
+		require.Equal(t, "compiled_default", fallback.Source, invalid)
+		require.Equal(t, deepseek.DefaultVersion, fallback.Version, invalid)
+	}
+}
+
+// A DeepSeek account that selects the preset must render only the User-Agent
+// declaration. Codex's Originator/Version stay off the wire, while protocol
+// request state such as the harness session headers keeps its own ownership.
+func TestDeepSeekOutboundIdentityRendersOnlyUserAgent(t *testing.T) {
+	_, ctx := outboundIdentityTestSettings(t, emptyOutboundIdentitySettings())
+	account := &Account{ID: 7, Platform: PlatformDeepseek, Type: AccountTypeAPIKey, Credentials: map[string]any{
+		outboundIdentityCredential: OutboundIdentitySelection{Preset: "deepseek"},
+	}}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.deepseek.com/v1/chat/completions", nil)
+	require.NoError(t, err)
+	req.Header.Set("Originator", "codex_cli_rs")
+	req.Header.Set("Version", "0.158.0")
+	req.Header.Set("X-DeepSeek-Harness-User-Id", "request-state")
+
+	prepareAccountOutboundRequest(req, account)
+
+	require.Equal(t, deepseek.UserAgent(deepseek.DefaultVersion), req.Header.Get("User-Agent"))
+	require.Empty(t, req.Header.Get("Originator"))
+	require.Empty(t, req.Header.Get("Version"))
+	require.Equal(t, "request-state", req.Header.Get("X-DeepSeek-Harness-User-Id"), "request state is not an identity declaration")
+}
+
+// DeepSeek platform accounts advertise the pinned harness identity by default.
+// This test is the audit record for that default, for the equivalent explicit
+// `deepseek:apikey` type default, and for the per-account opt-out.
+func TestDeepSeekDefaultIdentityIsPinnedHarness(t *testing.T) {
+	require.Equal(t, "deepseek", nativeOutboundPreset(PlatformDeepseek))
+
+	account := &Account{ID: 9, Platform: PlatformDeepseek, Type: AccountTypeAPIKey, Credentials: map[string]any{}}
+	_, ctx := outboundIdentityTestSettings(t, emptyOutboundIdentitySettings())
+	got, ok := outboundidentity.FromContext(WithAccountOutboundIdentity(ctx, account))
+	require.True(t, ok)
+	require.Equal(t, "deepseek", got.Preset)
+	require.Equal(t, "compiled_default", got.Source)
+	require.Equal(t, deepseek.UserAgent(deepseek.DefaultVersion), got.UserAgent)
+	require.Equal(t, deepseek.ClientIdentifier, got.Originator)
+	require.Equal(t, deepseek.DefaultVersion, got.Version)
+	require.Equal(t, map[string]string{"User-Agent": got.UserAgent}, got.Headers)
+
+	// The explicit type default is an equivalent, operator-visible pin.
+	config := emptyOutboundIdentitySettings()
+	config.Defaults["deepseek:apikey"] = "deepseek"
+	_, pinnedCtx := outboundIdentityTestSettings(t, config)
+	got, ok = outboundidentity.FromContext(WithAccountOutboundIdentity(pinnedCtx, account))
+	require.True(t, ok)
+	require.Equal(t, "deepseek", got.Preset)
+	require.Equal(t, "compiled_default", got.Source)
+
+	// An account selection can still opt back into another compatible preset.
+	override := &Account{ID: 10, Platform: PlatformDeepseek, Type: AccountTypeAPIKey, Credentials: map[string]any{
+		outboundIdentityCredential: OutboundIdentitySelection{Preset: "codex"},
+	}}
+	got, ok = outboundidentity.FromContext(WithAccountOutboundIdentity(ctx, override))
+	require.True(t, ok)
+	require.Equal(t, "codex", got.Preset)
+	require.Equal(t, "account", got.Source)
 }

@@ -33,4 +33,27 @@ path only. Configured `model_mapping` keeps mapping-first semantics. OpenAI
 passthrough accounts still skip mapping admission and send the client model
 unchanged.
 
-Identity, ingress audit order, and Plus session/quota accounting are unchanged.
+## Outbound identity
+
+DeepSeek API-key accounts use the pinned **DeepSeek** preset by default
+(`nativeOutboundPreset`), so DeepSeek receives exactly one declaration:
+
+```
+User-Agent: deepseek-harness/0.2.0-rc.2 (+https://github.com/deepseek-ai/deepseek-harness)
+```
+
+The parenthesized product comment belongs to that same User-Agent value
+(published-harness attribution), so no `Originator` or `Version` header is sent.
+The preset replaced the earlier Codex default, which had sent
+`Originator: codex_cli_rs` and `Version: 0.158.0` alongside the Codex
+User-Agent; those two declarations are now absent on this platform. The harness
+`x-deepseek-harness-user-id`, `-session-id` and `-compact` request headers keep
+their protocol-layer ownership and are never rewritten by the identity layer.
+
+Administrators can pin the equivalent `deepseek:apikey` type default in **System
+Settings → Outbound identity**, and can opt an individual account back into Codex
+or any other compatible preset through an account selection. Protocol selection
+(`api_protocol` / adaptive routing), API-protocol conversion, model admission,
+billing and the ingress audit order are unaffected: identity chooses outbound
+declarations only. Ingress audit order and Plus session/quota accounting are
+unchanged.

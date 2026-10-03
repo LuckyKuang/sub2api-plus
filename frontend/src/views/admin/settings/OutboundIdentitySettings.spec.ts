@@ -89,6 +89,20 @@ describe('OutboundIdentitySettings', () => {
     wrapper.unmount()
   })
 
+  it('exposes the pinned DeepSeek preset and its API-key type default mapping', async () => {
+    const wrapper = mount(OutboundIdentitySettings)
+    await flushPromises()
+    const deepseekCard = wrapper.findAll('section')[identityPresets.indexOf('deepseek')]
+    expect(deepseekCard.text()).toContain('DeepSeek')
+    expect(deepseekCard.text()).toContain('deepseek/1.2.3')
+    const row = wrapper.findAll('label').find(label => label.text().includes('deepseek · API Key'))
+    expect(row, 'the deepseek type-default row must be configurable').toBeDefined()
+    await row!.find('select').setValue('deepseek')
+    await wrapper.vm.save()
+    expect(vi.mocked(updateOutboundIdentity).mock.calls[0][0].defaults).toEqual({ 'deepseek:apikey': 'deepseek' })
+    wrapper.unmount()
+  })
+
   it('preserves valid mappings that are not shown as editable rows', async () => {
     const saved = fixture()
     saved.settings.defaults = { 'anthropic:oauth': 'claude' }
