@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	"log"
 	"net/http"
 	"net/url"
@@ -636,7 +637,7 @@ func linuxDoExchangeCode(
 	redirectURI string,
 	codeVerifier string,
 ) (*linuxDoTokenResponse, error) {
-	client := req.C().SetTimeout(30 * time.Second)
+	client := brandidentity.WrapReqClient(req.C()).SetTimeout(30 * time.Second)
 
 	form := url.Values{}
 	form.Set("grant_type", "authorization_code")
@@ -694,7 +695,7 @@ func linuxDoFetchUserInfo(
 	cfg config.LinuxDoConnectConfig,
 	token *linuxDoTokenResponse,
 ) (email string, username string, subject string, displayName string, avatarURL string, err error) {
-	client := req.C().SetTimeout(30 * time.Second)
+	client := brandidentity.WrapReqClient(req.C()).SetTimeout(30 * time.Second)
 	authorization, err := buildBearerAuthorization(token.TokenType, token.AccessToken)
 	if err != nil {
 		return "", "", "", "", "", fmt.Errorf("invalid token for userinfo request: %w", err)

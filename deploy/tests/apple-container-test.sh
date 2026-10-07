@@ -229,6 +229,19 @@ assert_exists "${TEST_ROOT}/bind/app"
 assert_exists "${TEST_ROOT}/bind/postgres"
 assert_exists "${TEST_ROOT}/bind/redis"
 
+# New object-storage credentials must work under the outbound header privacy
+# requirement: the access ID is serialized verbatim in S3 Authorization.
+cat >>"${ENV_FILE}" <<EOF
+MINIO_ENABLED=true
+MINIO_ROOT_USER=
+MINIO_ROOT_PASSWORD=isolated-test-password
+EOF
+"${SCRIPT}" up
+assert_exists "${STATE_DIR}/containers/sub2api-apple-minio"
+grep -Fx 'MINIO_ROOT_USER=storage-admin' "${STATE_DIR}/env-files/sub2api-apple-minio" >/dev/null || fail "MinIO default access ID must be neutral"
+grep -Fx 'IMAGE_STORAGE_ACCESS_KEY_ID=storage-admin' "${STATE_DIR}/env-files/sub2api-apple" >/dev/null || fail "Web and MinIO credentials must agree"
+"${SCRIPT}" destroy --yes
+
 touch "${STATE_DIR}/system-running"
 touch "${STATE_DIR}/containers/sub2api-apple"
 touch "${STATE_DIR}/unowned/container/sub2api-apple"

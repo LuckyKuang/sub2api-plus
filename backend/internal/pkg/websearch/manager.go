@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	"log/slog"
 	"math/rand"
 	"net"
@@ -421,7 +422,7 @@ func newHTTPClient(proxyURL string) (*http.Client, error) {
 			return nil, fmt.Errorf("configure proxy: %w", err)
 		}
 	}
-	return &http.Client{Transport: transport, Timeout: searchRequestTimeout}, nil
+	return brandidentity.WrapClient(&http.Client{Transport: transport, Timeout: searchRequestTimeout}), nil
 }
 
 // GetUsage returns the current usage count for the given provider.

@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	"io"
 	"net/http"
 	"net/url"
@@ -62,7 +63,7 @@ func NewEasyPay(instanceID string, config map[string]string) (*EasyPay, error) {
 	return &EasyPay{
 		instanceID: instanceID,
 		config:     cfg,
-		httpClient: &http.Client{Timeout: easypayHTTPTimeout},
+		httpClient: brandidentity.WrapClient(&http.Client{Timeout: easypayHTTPTimeout}),
 	}, nil
 }
 
@@ -563,7 +564,7 @@ func (e *EasyPay) postRaw(ctx context.Context, endpoint string, params map[strin
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	client := e.httpClient
 	if client == nil {
-		client = &http.Client{Timeout: easypayHTTPTimeout}
+		client = brandidentity.WrapClient(&http.Client{Timeout: easypayHTTPTimeout})
 	}
 	resp, err := client.Do(req)
 	if err != nil {

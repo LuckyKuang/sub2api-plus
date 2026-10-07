@@ -300,9 +300,9 @@ func TestNewClient_无代理(t *testing.T) {
 	if client.httpClient.Timeout != clientTimeout {
 		t.Errorf("Timeout 不匹配: got %v, want %v", client.httpClient.Timeout, clientTimeout)
 	}
-	// 无代理时 Transport 应为 nil（使用默认）
-	if client.httpClient.Transport != nil {
-		t.Error("无代理时 Transport 应为 nil")
+	// 隐私检查包装后仍使用默认 Transport。
+	if client.httpClient.Transport.(interface{ Unwrap() http.RoundTripper }).Unwrap() != http.DefaultTransport {
+		t.Error("无代理时应包装默认 Transport")
 	}
 }
 
@@ -328,8 +328,8 @@ func TestNewClient_空格代理(t *testing.T) {
 		t.Fatal("NewClient 返回 nil")
 	}
 	// 空格代理应等同于无代理
-	if client.httpClient.Transport != nil {
-		t.Error("空格代理 Transport 应为 nil")
+	if client.httpClient.Transport.(interface{ Unwrap() http.RoundTripper }).Unwrap() != http.DefaultTransport {
+		t.Error("空格代理应包装默认 Transport")
 	}
 }
 

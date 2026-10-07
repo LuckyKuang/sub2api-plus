@@ -345,7 +345,7 @@ Apple-specific handling of shared settings:
 
 ### Local MinIO for Async Images
 
-Set `MINIO_ENABLED=true` in `deploy/.env` to run MinIO as part of this stack. On the first `up`, the script writes a default `MINIO_ROOT_USER` when needed and generates a random `MINIO_ROOT_PASSWORD` if it is empty. The env file must remain mode `0600`.
+Set `MINIO_ENABLED=true` in `deploy/.env` to run MinIO as part of this stack. On the first `up`, the script writes a default `MINIO_ROOT_USER` when needed and generates a random `MINIO_ROOT_PASSWORD` if it is empty. The env file must remain mode `0600`. The neutral default access ID `storage-admin` keeps the project name out of S3 Authorization headers. Existing installations using a branded access ID must update their private environment and recreate only the MinIO and Web containers with the existing data mounts; do not change the bucket or delete its data.
 
 ```dotenv
 MINIO_ENABLED=true
@@ -353,7 +353,7 @@ APPLE_CONTAINER_MINIO_IMAGE=pgsty/minio:RELEASE.2026-06-18T00-00-00Z
 MINIO_BIND_HOST=127.0.0.1
 MINIO_API_PORT=9000
 MINIO_CONSOLE_PORT=9001
-MINIO_ROOT_USER=sub2api-minio
+MINIO_ROOT_USER=storage-admin
 MINIO_ROOT_PASSWORD=
 MINIO_BUCKET=sub2api-images
 MINIO_REGION=us-east-1

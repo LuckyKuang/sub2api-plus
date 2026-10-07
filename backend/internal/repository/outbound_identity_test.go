@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -141,4 +142,53 @@ func TestGrokFallbackRetainsTrustedIdentityWithoutProxyAuthenticationHints(t *te
 	require.Empty(t, fallback.Header.Get("X-XAI-Token-Auth"))
 	require.Equal(t, i.UserAgent, fallback.Header.Get("User-Agent"))
 	require.Equal(t, i.Version, fallback.Header.Get("X-Grok-Client-Version"))
+}
+
+func TestEveryDomesticAccountTransportRemovesBrandedCustomHeaders(t *testing.T) {
+	// Real HTTP capture covers the repository transport and redirect machinery;
+	// the expected UAs below are independent official-client wire fixtures.
+	for _, test := range []struct{ platform, kind, ua string }{
+		{"deepseek", "oauth", "deepseek-harness/0.2.0-rc.2 (+https://github.com/deepseek-ai/deepseek-harness)"},
+		{"deepseek", "apikey", "deepseek-harness/0.2.0-rc.2 (+https://github.com/deepseek-ai/deepseek-harness)"},
+		{"kimi", "oauth", "kimi-code-cli/2.1.1"}, {"kimi", "apikey", "kimi-code-cli/2.1.1"},
+		{"minimax", "oauth", "MiniMaxAgent"}, {"minimax", "apikey", "Anthropic/JS 0.91.1"},
+		{"zhipu", "oauth", "ZCode/3.14.3 ai/6.0.193 ai-sdk/provider-utils/4.0.27 runtime/node.js/22"},
+		{"zhipu", "apikey", "ZCode/3.14.3 ai/6.0.193 ai-sdk/provider-utils/4.0.27 runtime/node.js/22"},
+	} {
+		t.Run(test.platform+"/"+test.kind, func(t *testing.T) {
+			seen := make(chan http.Header, 2)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				seen <- r.Header.Clone()
+				if strings.Contains(r.URL.Path, "sub2api") {
+					http.Redirect(w, r, "/v1/messages", http.StatusFound)
+					return
+				}
+				w.WriteHeader(204)
+			}))
+			defer server.Close()
+			account := &service.Account{ID: 99, Platform: test.platform, Type: test.kind}
+			ctx := service.WithAccountOutboundIdentity(context.Background(), account)
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL+"/sub2api/v1/messages", nil)
+			require.NoError(t, err)
+			service.ApplyAccountOutboundIdentity(ctx, account, req)
+			req.Header.Set("X-Device-Label", "workstation-SuB2ApI")
+			req.Header["Other-Sub2API-Name"] = []string{"value"}
+			req.Header["X-Multi"] = []string{"clean", "SUB2API"}
+			req.Header.Set("Authorization", "Bearer account-secret")
+			resp, err := NewHTTPUpstream(nil).Do(req, "", 99, 1)
+			require.NoError(t, err)
+			require.NoError(t, resp.Body.Close())
+			for n := 0; n < 2; n++ {
+				sent := <-seen
+				for name, values := range sent {
+					require.NotContains(t, strings.ToLower(name), "sub2api")
+					for _, value := range values {
+						require.NotContains(t, strings.ToLower(value), "sub2api")
+					}
+				}
+				require.Equal(t, test.ua, sent.Get("User-Agent"))
+				require.Equal(t, "Bearer account-secret", sent.Get("Authorization"))
+			}
+		})
+	}
 }

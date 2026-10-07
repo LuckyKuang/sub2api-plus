@@ -300,16 +300,16 @@ func TestSessionStoreLifecycleAndSingleUse(t *testing.T) {
 		ExpiresAt:       time.Now().Add(time.Minute),
 		PollIntervalSec: 2,
 	}
-	store.Set("s-1", session)
+	require.NoError(t, store.Set("s-1", session))
 	loaded, ok := store.Get("s-1")
 	require.True(t, ok)
 	require.Equal(t, "secret", loaded.PollToken)
-	require.True(t, loaded.TryConsume())
-	require.False(t, loaded.TryConsume(), "a session is single-use")
+	require.True(t, store.TryConsume("s-1"))
+	require.False(t, store.TryConsume("s-1"), "a session is single-use")
 
 	// Expired sessions are not served.
 	expired := &OAuthSession{Provider: ProviderZai, ExpiresAt: time.Now().Add(-time.Second)}
-	store.Set("s-2", expired)
+	require.NoError(t, store.Set("s-2", expired))
 	_, ok = store.Get("s-2")
 	require.False(t, ok)
 

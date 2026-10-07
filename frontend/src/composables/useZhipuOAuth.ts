@@ -45,90 +45,137 @@ export function useZhipuOAuth() {
   const error = ref('')
 
   let timer: ReturnType<typeof setTimeout> | undefined
+  let expiryTimer: ReturnType<typeof setTimeout> | undefined
   let generation = 0
+  let disposed = false
+  let pollRequest: Promise<ZhipuLinkPoll | undefined> | undefined
+  const expired = ref(false)
 
   function stopPolling() {
     generation += 1
     polling.value = false
-    if (timer) {
-      clearTimeout(timer)
-      timer = undefined
-    }
+    loading.value = false
+    pollRequest = undefined
+    if (timer) clearTimeout(timer)
+    timer = undefined
+  }
+
+  function cancelLink() {
+    stopPolling()
+    if (expiryTimer) clearTimeout(expiryTimer)
+    expiryTimer = undefined
+    session.value = undefined
+    ready.value = undefined
+    expired.value = false
+    error.value = ''
+  }
+
+  function expireSession(): boolean {
+    if (!session.value || Date.parse(session.value.expires_at) > Date.now()) return false
+    cancelLink()
+    expired.value = true
+    return true
+  }
+
+  function scheduleExpiry() {
+    if (expiryTimer) clearTimeout(expiryTimer)
+    if (session.value) expiryTimer = setTimeout(expireSession, Math.max(0, Date.parse(session.value.expires_at) - Date.now()))
   }
 
   async function loadCapabilities(): Promise<ZhipuOAuthCapabilities | undefined> {
     try {
-      capabilities.value = await getZhipuOAuthCapabilities()
-      return capabilities.value
+      const result = await getZhipuOAuthCapabilities()
+      if (disposed) return undefined
+      capabilities.value = result
+      return result
     } catch (err) {
-      error.value = describeError(err, 'Failed to load GLM link capabilities')
+      if (!disposed) error.value = describeError(err, 'Failed to load GLM link capabilities')
       return undefined
     }
   }
 
   async function startLink(provider: ZhipuProvider, proxyId?: number): Promise<boolean> {
-    stopPolling()
+    cancelLink()
+    const run = generation
     loading.value = true
-    error.value = ''
-    ready.value = undefined
-    session.value = undefined
     try {
-      session.value = await startZhipuLink({ provider, ...(proxyId ? { proxy_id: proxyId } : {}) })
+      const result = await startZhipuLink({ provider, ...(proxyId ? { proxy_id: proxyId } : {}) })
+      if (disposed || run !== generation) return false
+      session.value = result
+      if (!Number.isFinite(Date.parse(result.expires_at)) || expireSession()) {
+        cancelLink()
+        expired.value = true
+        return false
+      }
+      scheduleExpiry()
       schedulePoll()
       return true
     } catch (err) {
-      error.value = describeError(err, 'Failed to start the GLM authorization')
+      if (run === generation) error.value = describeError(err, 'Failed to start the GLM authorization')
       return false
     } finally {
-      loading.value = false
+      if (run === generation) loading.value = false
     }
   }
 
   function schedulePoll() {
+    if (timer) clearTimeout(timer)
     const current = session.value
-    if (!current) return
-    const intervalMs = Math.max(1, current.interval_seconds || 2) * 1000
-    const expected = ++generation
+    if (!current || ready.value || expireSession()) return
+    const run = generation
     polling.value = true
     timer = setTimeout(async () => {
-      if (expected !== generation) return
-      const result = await pollOnce()
-      if (expected !== generation) return
-      if (result && !result.pending) {
-        polling.value = false
-        return
-      }
-      // A failed poll keeps the session alive: a transient error must not cancel
-      // an authorization the operator may already have completed.
-      if (session.value) schedulePoll()
-    }, intervalMs)
+      if (run !== generation) return
+      await pollOnce()
+      if (run === generation && session.value && !ready.value) schedulePoll()
+    }, Math.max(1, current.interval_seconds || 2) * 1000)
   }
 
-  async function pollOnce(): Promise<ZhipuLinkPoll | undefined> {
+  function pollOnce(): Promise<ZhipuLinkPoll | undefined> {
     const current = session.value
-    if (!current) return undefined
-    try {
-      const result = await pollZhipuLink(current.session_id)
-      if (result.ready) ready.value = result.ready
-      error.value = ''
-      return result
-    } catch (err) {
-      error.value = describeError(err, 'Failed to check the GLM authorization')
-      return { pending: true }
-    }
+    if (!current || loading.value || expireSession()) return Promise.resolve(undefined)
+    if (ready.value) return Promise.resolve({ pending: false, ready: ready.value })
+    if (pollRequest) return pollRequest
+    const run = generation
+    pollRequest = (async () => {
+      try {
+        const result = await pollZhipuLink(current.session_id)
+        if (run !== generation || expireSession()) return undefined
+        if (result.ready) {
+          ready.value = result.ready
+          polling.value = false
+          if (timer) clearTimeout(timer)
+          timer = undefined
+        }
+        error.value = ''
+        return result
+      } catch (err) {
+        if (run !== generation || expireSession()) return undefined
+        // The server uses 400 for expired/denied sessions; 5xx is retryable.
+        if ((err as { response?: { status?: number } }).response?.status === 400) cancelLink()
+        error.value = describeError(err, 'Failed to check the GLM authorization')
+        return { pending: true }
+      } finally {
+        if (run === generation) pollRequest = undefined
+      }
+    })()
+    return pollRequest
   }
 
   async function exchangeLink(callback: string, proxyId?: number): Promise<boolean> {
     const current = session.value
+    if (loading.value || expireSession()) return false
     if (!current || !callback.trim()) {
       error.value = 'An authorization code or callback URL is required'
       return false
     }
     stopPolling()
+    const run = generation
     loading.value = true
     error.value = ''
     try {
       const result = await exchangeZhipuLink(current.session_id, callback.trim(), proxyId)
+      if (run !== generation || expireSession()) return false
       if (result.ready) {
         ready.value = result.ready
         return true
@@ -136,22 +183,32 @@ export function useZhipuOAuth() {
       error.value = 'The authorization did not return a usable credential'
       return false
     } catch (err) {
-      error.value = describeError(err, 'Failed to exchange the GLM authorization code')
+      if (run === generation) error.value = describeError(err, 'Failed to exchange the GLM authorization code')
       return false
     } finally {
-      loading.value = false
+      if (run === generation) {
+        loading.value = false
+        if (!ready.value) schedulePoll()
+      }
     }
   }
 
   async function createAccount(payload: Omit<ZhipuCreateAccountRequest, 'session_id' | 'provider'>): Promise<boolean> {
     const current = session.value
     const token = ready.value
+    if (loading.value || expireSession()) return false
     if (!current || !token) {
       error.value = 'Authorize the account before creating it'
       return false
     }
+    stopPolling()
+    const run = generation
     loading.value = true
     error.value = ''
+    // Once submitted, let the server decide whether consumption preceded expiry.
+    // A successful create must still be reported when its response arrives later.
+    if (expiryTimer) clearTimeout(expiryTimer)
+    expiryTimer = undefined
     try {
       await createZhipuAccountFromLink({
         ...payload,
@@ -161,18 +218,21 @@ export function useZhipuOAuth() {
         ...(token.refresh_token ? { refresh_token: token.refresh_token } : {}),
         ...(token.zcode_jwt_token ? { zcode_jwt_token: token.zcode_jwt_token } : {})
       })
-      session.value = undefined
-      ready.value = undefined
+      if (run !== generation) return false
+      cancelLink()
       return true
     } catch (err) {
-      error.value = describeError(err, 'Failed to create the GLM account')
+      if (run === generation) error.value = describeError(err, 'Failed to create the GLM account')
       return false
     } finally {
-      loading.value = false
+      if (run === generation) {
+        loading.value = false
+        if (!expireSession()) scheduleExpiry()
+      }
     }
   }
 
-  onScopeDispose(stopPolling)
+  onScopeDispose(() => { disposed = true; cancelLink() })
 
   return {
     capabilities,
@@ -186,7 +246,9 @@ export function useZhipuOAuth() {
     pollOnce,
     exchangeLink,
     createAccount,
-    stopPolling
+    stopPolling,
+    cancelLink,
+    expired
   }
 }
 

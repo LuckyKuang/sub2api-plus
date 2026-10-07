@@ -16,6 +16,7 @@ func TestControlIdentityLocaleTimezoneAndSnapshot(t *testing.T) {
 		{"zh-CN", "Asia/Shanghai", "zh_CN", "28800", "28800"},
 		{"en-US", "Europe/Amsterdam", "en_US", "3600", "7200"},
 		{"en-US", "America/New_York", "en_US", "-18000", "-14400"},
+		{"en-US", "America/Los_Angeles", "en_US", "-28800", "-25200"},
 	} {
 		t.Run(tc.zone, func(t *testing.T) {
 			identity := DefaultIdentity()

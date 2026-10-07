@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	"io"
 	"net/http"
 )
@@ -27,7 +28,7 @@ func NewTavilyProvider(apiKey string, httpClient *http.Client) *TavilyProvider {
 	if httpClient == nil {
 		httpClient = http.DefaultClient
 	}
-	return &TavilyProvider{apiKey: apiKey, httpClient: httpClient}
+	return &TavilyProvider{apiKey: apiKey, httpClient: brandidentity.WrapClient(httpClient)}
 }
 
 func (t *TavilyProvider) Name() string { return tavilyProviderName }

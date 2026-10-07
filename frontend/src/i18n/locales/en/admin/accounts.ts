@@ -1149,6 +1149,7 @@ export default {
         batchFailed: 'Batch creation failed',
         // OpenAI specific
         zhipu: {
+          expired: 'The authorization session expired. Start a new login.',
           title: 'Link a GLM subscription with ZCode',
           desc:
             "Authorize with the provider's official ZCode client. The server keeps the authorization session and polls it, so no callback address is required, and the linked account uses the same endpoints as a pasted key.",

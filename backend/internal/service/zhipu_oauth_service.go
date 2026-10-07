@@ -95,7 +95,8 @@ func NewZhipuOAuthService(client ZhipuOAuthClient, proxyRepo ProxyRepository) *Z
 // WithSessionStore replaces the session store, used to inject the Redis-backed
 // store when a Redis client is configured.
 func (s *ZhipuOAuthService) WithSessionStore(store *zcode.SessionStore) *ZhipuOAuthService {
-	if s != nil && store != nil {
+	if s != nil && store != nil && store != s.sessionStore {
+		s.sessionStore.Stop()
 		s.sessionStore = store
 	}
 	return s
@@ -200,7 +201,9 @@ func (s *ZhipuOAuthService) StartLink(ctx context.Context, input StartZhipuLinkI
 		ProxyURL:        proxyURL,
 		CreatedAt:       time.Now(),
 	}
-	s.sessionStore.Set(sessionID, session)
+	if err := s.sessionStore.Set(sessionID, session); err != nil {
+		return nil, infraerrors.New(http.StatusServiceUnavailable, "ZHIPU_OAUTH_SESSION_UNAVAILABLE", "authorization session could not be saved; start again")
+	}
 	return &ZhipuLinkSession{
 		SessionID:       sessionID,
 		Provider:        provider,
@@ -271,16 +274,19 @@ func (s *ZhipuOAuthService) ExchangeLink(ctx context.Context, sessionID, callbac
 	if code == "" {
 		return nil, infraerrors.New(http.StatusBadRequest, "ZHIPU_OAUTH_CODE_REQUIRED", "authorization code is required")
 	}
-	if state == "" {
-		state = session.State
+	if state != "" && state != session.State {
+		return nil, infraerrors.New(http.StatusBadRequest, "ZHIPU_OAUTH_STATE_MISMATCH", "authorization callback does not belong to this session")
 	}
+	state = session.State
 	proxyURL := session.ProxyURL
 	if proxyID != nil {
 		resolved, err := s.resolveProxyURL(ctx, proxyID)
 		if err != nil {
 			return nil, err
 		}
-		proxyURL = resolved
+		if resolved != proxyURL {
+			return nil, infraerrors.New(http.StatusBadRequest, "ZHIPU_OAUTH_PROXY_MISMATCH", "restart authorization after changing the proxy")
+		}
 	}
 	redirectURI := zhipuDesktopRedirectURI()
 	flowCtx := outboundidentity.WithIdentity(ctx, session.Identity)
@@ -294,14 +300,12 @@ func (s *ZhipuOAuthService) ExchangeLink(ctx context.Context, sessionID, callbac
 // ConsumeLinkSession consumes the session that authorized a create call, so one
 // authorization cannot mint two accounts.
 func (s *ZhipuOAuthService) ConsumeLinkSession(sessionID string) error {
-	session, err := s.loadSession(sessionID)
-	if err != nil {
+	if _, err := s.loadSession(sessionID); err != nil {
 		return err
 	}
-	if !session.TryConsume() {
+	if !s.sessionStore.TryConsume(sessionID) {
 		return infraerrors.New(http.StatusBadRequest, "ZHIPU_OAUTH_SESSION_CONSUMED", "this authorization was already used")
 	}
-	s.sessionStore.Delete(sessionID)
 	return nil
 }
 
@@ -360,6 +364,9 @@ func (s *ZhipuOAuthService) BuildAccountMaterial(ctx context.Context, input Zhip
 		}
 		if session.Provider != provider {
 			return nil, infraerrors.BadRequest("ZHIPU_OAUTH_PROVIDER_INVALID", "authorization provider does not match session")
+		}
+		if input.ProxyURL != session.ProxyURL {
+			return nil, infraerrors.BadRequest("ZHIPU_OAUTH_PROXY_MISMATCH", "restart authorization after changing the proxy")
 		}
 		flowCtx = outboundidentity.WithIdentity(ctx, session.Identity)
 	} else {
@@ -548,24 +555,20 @@ func (s *ZhipuOAuthService) loadSession(sessionID string) (*zcode.OAuthSession, 
 
 // ResolveProxyURL reports the proxy URL an egress call should use. The handler
 // resolves it once so the account material and the create call agree.
-func (s *ZhipuOAuthService) ResolveProxyURL(ctx context.Context, proxyID *int64) string {
-	proxyURL, err := s.resolveProxyURL(ctx, proxyID)
-	if err != nil {
-		return ""
-	}
-	return proxyURL
+func (s *ZhipuOAuthService) ResolveProxyURL(ctx context.Context, proxyID *int64) (string, error) {
+	return s.resolveProxyURL(ctx, proxyID)
 }
 
 func (s *ZhipuOAuthService) resolveProxyURL(ctx context.Context, proxyID *int64) (string, error) {
-	if proxyID == nil || s.proxyRepo == nil {
+	if proxyID == nil {
 		return "", nil
+	}
+	if *proxyID <= 0 || s.proxyRepo == nil {
+		return "", infraerrors.BadRequest("ZHIPU_OAUTH_PROXY_NOT_FOUND", "selected proxy is unavailable")
 	}
 	proxy, err := s.proxyRepo.GetByID(ctx, *proxyID)
-	if err != nil {
-		return "", infraerrors.Newf(http.StatusBadRequest, "ZHIPU_OAUTH_PROXY_NOT_FOUND", "proxy not found: %v", err)
-	}
-	if proxy == nil {
-		return "", nil
+	if err != nil || proxy == nil {
+		return "", infraerrors.BadRequest("ZHIPU_OAUTH_PROXY_NOT_FOUND", "selected proxy is unavailable")
 	}
 	return proxy.URL(), nil
 }

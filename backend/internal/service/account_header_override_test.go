@@ -3,6 +3,7 @@
 package service
 
 import (
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	"net/http"
 	"strings"
 	"testing"
@@ -306,7 +307,7 @@ func TestApplyHeaderOverridesNoOpPaths(t *testing.T) {
 	blocked.ApplyHeaderOverrides(nil)
 }
 
-func TestApplyHeaderOverridesAlwaysStripsOutboundIdentity(t *testing.T) {
+func TestApplyHeaderOverridesCannotAllowBrandedIdentityOnWire(t *testing.T) {
 	account := headerOverrideTestAccount(PlatformOpenAI, AccountTypeOAuth, nil)
 	header := http.Header{
 		"User-Agent":                   {"sub2api-client/1"},
@@ -317,7 +318,10 @@ func TestApplyHeaderOverridesAlwaysStripsOutboundIdentity(t *testing.T) {
 
 	account.ApplyHeaderOverrides(header)
 
-	require.Empty(t, header.Get("User-Agent"))
+	req, err := http.NewRequest(http.MethodGet, "https://example.com", nil)
+	require.NoError(t, err)
+	req.Header = header
+	require.ErrorIs(t, brandidentity.FilterOutboundRequest(req), brandidentity.ErrBrandedOutboundHeader, "must not strip UA then let the HTTP stack send its own identity")
 	require.Empty(t, header.Get("X-Sub2API-Trace"))
 	require.Empty(t, header.Get(grokClientToolCacheOptInHeader))
 	require.Equal(t, "conversation", header.Get("X-Grok-Conv-Id"))
@@ -437,12 +441,11 @@ func TestNormalizeHeaderOverrideCredentials(t *testing.T) {
 		require.Error(t, err)
 	})
 
-	t.Run("allows product name in ordinary value", func(t *testing.T) {
+	t.Run("rejects product name in ordinary value", func(t *testing.T) {
 		creds := map[string]any{
 			credKeyHeaderOverrides: map[string]any{"X-Organization": "Sub2API Plus"},
 		}
-		require.NoError(t, NormalizeHeaderOverrideCredentials(creds))
-		require.Equal(t, map[string]any{"x-organization": "Sub2API Plus"}, creds[credKeyHeaderOverrides])
+		require.Error(t, NormalizeHeaderOverrideCredentials(creds))
 	})
 
 	t.Run("allows tab inside value", func(t *testing.T) {

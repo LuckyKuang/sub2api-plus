@@ -2,6 +2,7 @@ package securityaudit
 
 import (
 	"crypto/tls"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	"net"
 	"net/http"
 	"net/url"
@@ -82,8 +83,8 @@ func NewSecureHTTPClient(endpoint ActiveEndpoint) (*http.Client, error) {
 	if timeout <= 0 {
 		timeout = DefaultTimeoutMS * time.Millisecond
 	}
-	return &http.Client{
+	return brandidentity.WrapClient(&http.Client{
 		Transport: transport,
 		Timeout:   timeout,
-	}, nil
+	}), nil
 }

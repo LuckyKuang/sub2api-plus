@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	"net/http"
 	"net/url"
 	"strings"
@@ -26,7 +27,7 @@ func NewTurnstileVerifier() service.TurnstileVerifier {
 		ValidateResolvedIP: true,
 	})
 	if err != nil {
-		sharedClient = &http.Client{Timeout: 10 * time.Second}
+		sharedClient = brandidentity.WrapClient(&http.Client{Timeout: 10 * time.Second})
 	}
 	return &turnstileVerifier{
 		httpClient: sharedClient,

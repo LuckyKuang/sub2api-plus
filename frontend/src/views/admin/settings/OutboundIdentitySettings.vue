@@ -47,6 +47,8 @@
         </div>
         <div v-if="controlIdentity(preset)" class="rounded-lg bg-gray-50 p-4 text-sm dark:bg-dark-800">
           <p class="mb-2 text-gray-500">{{ t('admin.settings.outboundIdentity.controlHeaders') }}</p>
+          <p v-if="preset === 'deepseek'" class="mb-3 text-xs text-gray-500" data-testid="deepseek-offset-hint">{{ t('admin.settings.outboundIdentity.deepseekOffsetHint') }}</p>
+          <p v-if="preset === 'zcode'" class="mb-3 text-xs text-gray-500" data-testid="zcode-kernel-hint">{{ t('admin.settings.outboundIdentity.zcodeKernelHint') }}</p>
           <dl class="grid gap-1 sm:grid-cols-[auto_1fr]" data-testid="outbound-identity-control-headers">
             <template v-for="(value, name) in controlIdentity(preset)?.headers" :key="name">
               <dt class="font-mono text-xs text-gray-500">{{ name }}</dt>

@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	"io"
 	"net/http"
 	"net/url"
@@ -80,7 +81,7 @@ func NewAirwallex(instanceID string, config map[string]string) (*Airwallex, erro
 	return &Airwallex{
 		instanceID: instanceID,
 		config:     cfg,
-		httpClient: &http.Client{Timeout: airwallexHTTPTimeout},
+		httpClient: brandidentity.WrapClient(&http.Client{Timeout: airwallexHTTPTimeout}),
 	}, nil
 }
 
@@ -456,7 +457,7 @@ func (a *Airwallex) doJSON(ctx context.Context, method, path, token string, payl
 func (a *Airwallex) do(req *http.Request) ([]byte, int, error) {
 	client := a.httpClient
 	if client == nil {
-		client = &http.Client{Timeout: airwallexHTTPTimeout}
+		client = brandidentity.WrapClient(&http.Client{Timeout: airwallexHTTPTimeout})
 	}
 	resp, err := client.Do(req)
 	if err != nil {

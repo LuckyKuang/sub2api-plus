@@ -317,6 +317,9 @@ func normalizeHeaderOverrideEntry(name, value string) (string, string, error) {
 		return "", "", infraerrors.New(http.StatusBadRequest, "INVALID_HEADER_OVERRIDE",
 			"header name uses a reserved protocol identifier")
 	}
+	if brandidentity.ContainsBrand(value) {
+		return "", "", infraerrors.BadRequest("INVALID_HEADER_OVERRIDE", "header value must not contain the project identifier")
+	}
 	if len(value) > maxHeaderOverrideValueLength {
 		return "", "", infraerrors.Newf(http.StatusBadRequest, "INVALID_HEADER_OVERRIDE",
 			"header %q value exceeds %d characters", lowerName, maxHeaderOverrideValueLength)

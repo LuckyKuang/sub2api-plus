@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	"io"
 	"net/http"
 	"net/url"
@@ -138,7 +139,9 @@ type OffPeakClient struct {
 // published root.
 func NewOffPeakClient(client HTTPDoer, baseURL string) *OffPeakClient {
 	if client == nil {
-		client = http.DefaultClient
+		client = brandidentity.WrapClient(nil)
+	} else if native, ok := client.(*http.Client); ok {
+		client = brandidentity.WrapClient(native)
 	}
 	return &OffPeakClient{
 		client:  client,

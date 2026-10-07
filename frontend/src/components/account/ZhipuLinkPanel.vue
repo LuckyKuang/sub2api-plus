@@ -26,6 +26,7 @@
     </p>
 
     <template v-else>
+      <p v-if="expired" role="alert" class="mt-3 text-sm text-red-600">{{ t('admin.accounts.oauth.zhipu.expired') }}</p>
       <div class="mt-3 grid gap-3 sm:grid-cols-2">
         <div>
           <label class="input-label">{{ t('admin.accounts.oauth.zhipu.providerLabel') }}</label>
@@ -154,7 +155,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useZhipuOAuth, zhipuPlanNeedsTeamScope } from '@/composables/useZhipuOAuth'
 import type { ZhipuPlanKind, ZhipuProvider } from '@/api/admin/zhipu'
@@ -175,7 +176,8 @@ const {
   pollOnce,
   exchangeLink,
   createAccount,
-  stopPolling
+  cancelLink,
+  expired
 } = useZhipuOAuth()
 
 const provider = ref<ZhipuProvider>('bigmodel')
@@ -191,6 +193,7 @@ const showFallback = ref(false)
 const needsTeamScope = computed(() => zhipuPlanNeedsTeamScope(planKind.value))
 
 onMounted(loadCapabilities)
+watch(() => props.proxyId, cancelLink)
 
 async function start() {
   // startLink schedules the poll loop from the platform's own interval.
@@ -206,7 +209,7 @@ async function submitCallback() {
 }
 
 function cancel() {
-  stopPolling()
+  cancelLink()
 }
 
 async function create() {

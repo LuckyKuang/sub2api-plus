@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	"io"
 	"net/http"
 	"net/url"
@@ -187,7 +188,9 @@ type HandshakeClient struct {
 // DefaultHandshakeBaseURL; a nil doer falls back to the default HTTP client.
 func NewHandshakeClient(client HTTPDoer, baseURL string) *HandshakeClient {
 	if client == nil {
-		client = http.DefaultClient
+		client = brandidentity.WrapClient(nil)
+	} else if native, ok := client.(*http.Client); ok {
+		client = brandidentity.WrapClient(native)
 	}
 	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	if baseURL == "" {

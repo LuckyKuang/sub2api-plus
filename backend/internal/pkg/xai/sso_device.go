@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"io"
 	"net/http"
@@ -74,6 +75,9 @@ func ConvertSSOToBuild(ctx context.Context, ssoToken string, opts *SSODeviceOpti
 				return http.ErrUseLastResponse
 			},
 		}
+	}
+	if httpClient, ok := client.(*http.Client); ok {
+		client = brandidentity.WrapClient(httpClient)
 	}
 	userAgent := strings.TrimSpace(opts.UserAgent)
 	if userAgent == "" {

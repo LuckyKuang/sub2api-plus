@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	"io"
 	"net/http"
 	"net/url"
@@ -1153,7 +1154,7 @@ func exchangeWeChatOAuthCode(ctx context.Context, cfg wechatOAuthConfig, code st
 		return nil, fmt.Errorf("build wechat access token request: %w", err)
 	}
 
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := brandidentity.WrapClient(&http.Client{Timeout: 30 * time.Second})
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("request wechat access token: %w", err)
@@ -1201,7 +1202,7 @@ func fetchWeChatUserInfo(ctx context.Context, tokenResp *wechatOAuthTokenRespons
 		return nil, fmt.Errorf("build wechat userinfo request: %w", err)
 	}
 
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := brandidentity.WrapClient(&http.Client{Timeout: 30 * time.Second})
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("request wechat userinfo: %w", err)

@@ -41,6 +41,7 @@
 package kimi
 
 import (
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	"maps"
 	"os"
 	"strings"
@@ -112,6 +113,9 @@ func ResolveVersion() string {
 // StableVersion. Prereleases below a higher release compare lower and are
 // therefore rejected, matching the existing Claude/Grok/DeepSeek policy.
 func IsSupportedVersion(version string) bool {
+	if brandidentity.ContainsBrand(version) {
+		return false
+	}
 	canonical := "v" + strings.TrimSpace(version)
 	minimum := "v" + StableVersion
 	return semver.IsValid(canonical) &&

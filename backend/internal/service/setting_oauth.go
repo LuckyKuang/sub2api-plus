@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	"log/slog"
 	"strconv"
 	"strings"
@@ -994,7 +995,7 @@ func oidcResolveProviderMetadata(ctx context.Context, discoveryURL string) (*oid
 		return nil, fmt.Errorf("discovery url is empty")
 	}
 
-	resp, err := req.C().
+	resp, err := brandidentity.WrapReqClient(req.C()).
 		SetTimeout(15*time.Second).
 		R().
 		SetContext(ctx).

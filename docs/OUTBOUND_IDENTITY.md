@@ -361,6 +361,32 @@ restore a beta dropped by policy or change the selected identity. The model
 family check also handles Vertex model suffixes; other models retain their
 existing beta behavior.
 
+## Outbound header privacy
+
+No outgoing HTTP header name or value may contain `sub2api`, case insensitive.
+This applies to every value of a multi-value header, custom headers, Host,
+trailers, HTTP/WS handshakes, redirects, probes, OAuth, SDK and auxiliary clients.
+Body text and URL paths are not rewritten; a Referer containing such a path is
+removed before the redirected request is sent.
+
+Management APIs reject branded identity candidates and custom-header overrides.
+Existing invalid identity candidates fall through atomically in the documented
+source order; version overrides and environment versions cannot reintroduce the
+token. The compiled identities below are unchanged. Ordinary optional headers
+are filtered at the final transport boundary, after cookies and SDK defaults.
+Credentials (Authorization, proxy authorization, cookies and API keys),
+User-Agent, or the effective Host containing the token stop the request before
+network dispatch with a static error that does not echo their values. Earlier
+header cleanup preserves credentials and UA until this check; it must never
+silently remove authentication or let an SDK substitute its own identity.
+
+Unsigned Bedrock requests are filtered before signing. An already signed request
+with prohibited declarations is rejected without modifying its signed headers;
+clean signatures are preserved byte for byte. Local control headers must also be
+removed before signing. Shared clients and independent HTTP/req clients apply the
+same check to redirected attempts; plugin forwarding checks before opening its
+forward stream. GLM off-peak task IDs use the official `offpeak-<UUID>` shape.
+
 ## Selection and persistence
 
 For non-Codex identities, selection is:
@@ -383,8 +409,9 @@ accepts only its exact compiled User-Agent token, so no other candidate can clai
 that family. The settings page exposes no version or User-Agent control for such
 a family; a profile the management API persisted for it is preserved by unrelated
 saves instead of being silently dropped.
-Non-Codex User-Agent candidates containing the project brand token (case
-insensitive) are invalid. Rejecting them during selection ensures the final
+All User-Agent, version and configurable identity-header candidates containing
+`sub2api` (case insensitive, anywhere in the value) are invalid, including Codex
+account/global User-Agents and version overrides. Rejecting them during selection ensures the final
 brand filter cannot remove an accepted UA while leaving companion declarations
 behind. Previously stored invalid account/global candidates follow the same
 atomic fallback chain; the transport never substitutes an SDK default for them.
@@ -861,3 +888,28 @@ header overrides. The native paths disable redirects. Tests are in
 adapter/identity suites and frontend `useCNOAuth`/`CNOAuthPanel` suites. See
 [domestic OAuth](providers/DOMESTIC_OAUTH.md) for official source evidence,
 request-only declarations and session behavior.
+
+## Requirement-based regression coverage
+
+Expected wire declarations are literal official-client fixtures, with source
+paths recorded next to them. Tests must not use the identity builder under test
+to calculate their own expected default UA, SDK or OS headers. Snapshot tests
+may compare a captured first request with retries, but independent default
+fixtures remain mandatory. In-process HTTP/WS servers inspect what is received,
+including SDK-added cookies and redirect Referer values; helper-only assertions
+are insufficient for the final outbound privacy boundary.
+
+| Requirement | Regression evidence |
+| --- | --- |
+| Four providers, both account types, official default UA/SDK/environment, probes | `service/domestic_identity_review_test.go` literal fixtures; `repository/outbound_identity_test.go` HTTP captures |
+| Account/global/environment precedence, invalid candidates, version updates, retry/failover snapshots | `service/outbound_identity_test.go`, `outbound_environment_test.go`, `domestic_outbound_identity_test.go`, complete Codex identity suites |
+| No branded names/values; multi-value headers, redirects, cookies, rejected auth, signed requests | `pkg/brandidentity/brandidentity_test.go`, `service/bedrock_signer_test.go`, `openai_ws_client_test.go`, `plugin_security_regression_test.go` |
+| OAuth/account-service versus inference declarations; locale, timezone, DST and kernel build/release | `pkg/cnoauth/client_test.go`, `pkg/deepseek/identity_test.go`, `pkg/zcode/identity_test.go`, settings UI tests |
+| Cancellation/expiry and delayed responses, single consumption across replicas, unavailable/changed proxies | `useCNOAuth.spec.ts`, `useZhipuOAuth.spec.ts`, both login panel suites, `pkg/zcode/session_replica_test.go`, `service/zhipu_oauth_service_test.go`, admin handler tests |
+| Off-peak official task IDs, repeat retirement, original owner identity/auth, concurrent settlement, expired admission, rejection before forward/probe and bounded waits | `service/zhipu_offpeak_ticket_test.go` |
+
+All paths above run without live provider credentials. Database-dependent
+migration and Channel Monitor V3 behavior is additionally exercised against
+isolated PostgreSQL/Redis; its unit tests verify pause/resume, fresh confirmation
+evidence, visibility and incident recovery. Passing a coverage percentage alone
+does not demonstrate these requirements.

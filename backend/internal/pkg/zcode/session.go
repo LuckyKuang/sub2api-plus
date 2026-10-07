@@ -3,6 +3,7 @@ package zcode
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/url"
 	"strings"
@@ -45,25 +46,6 @@ type OAuthSession struct {
 	// ProxyURL is the egress proxy resolved when the flow started.
 	ProxyURL  string    `json:"proxy_url,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
-
-	mu       sync.Mutex
-	consumed bool
-}
-
-// TryConsume marks the session single-use. It returns false when the session was
-// already consumed, so a replayed poll or create call cannot mint a second
-// account from one authorization.
-func (s *OAuthSession) TryConsume() bool {
-	if s == nil {
-		return false
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.consumed {
-		return false
-	}
-	s.consumed = true
-	return true
 }
 
 // sessionDTO is the Redis-serializable projection of OAuthSession.
@@ -110,37 +92,28 @@ func fromSessionDTO(id string, dto sessionDTO) *OAuthSession {
 	}
 }
 
-// SessionStore keeps account-link sessions with an optional Redis backend.
-//
-// The local map is always authoritative for the process that created the
-// session; Redis is used when configured so a multi-replica deployment can serve
-// the follow-up poll and create calls from any instance. A Redis failure
-// degrades that one session to process-local instead of failing the flow, which
-// mirrors the existing provider session stores.
+// SessionStore uses Redis as the authoritative store when configured. Redis
+// errors never degrade a shared authorization to a replayable local session.
 type SessionStore struct {
-	mu        sync.RWMutex
-	sessions  map[string]*OAuthSession
-	localOnly map[string]struct{}
-	stopOnce  sync.Once
-	stopCh    chan struct{}
-	remote    *redissession.Store
-	ttl       time.Duration
+	mu       sync.RWMutex
+	sessions map[string]*OAuthSession
+	stopOnce sync.Once
+	stopCh   chan struct{}
+	remote   *redissession.Store
 }
 
 // NewSessionStore creates a process-local session store.
 func NewSessionStore() *SessionStore {
 	store := &SessionStore{
-		sessions:  make(map[string]*OAuthSession),
-		localOnly: make(map[string]struct{}),
-		stopCh:    make(chan struct{}),
-		ttl:       SessionTTL,
+		sessions: make(map[string]*OAuthSession),
+		stopCh:   make(chan struct{}),
 	}
 	go store.cleanup()
 	return store
 }
 
 // NewRedisSessionStore creates a store backed by Redis when a client is given,
-// falling back to process-local sessions otherwise.
+// using process-local sessions only when no Redis client is configured.
 func NewRedisSessionStore(client *redis.Client) *SessionStore {
 	store := NewSessionStore()
 	if client != nil {
@@ -150,69 +123,93 @@ func NewRedisSessionStore(client *redis.Client) *SessionStore {
 }
 
 // Set stores session under sessionID.
-func (s *SessionStore) Set(sessionID string, session *OAuthSession) {
+func (s *SessionStore) Set(sessionID string, session *OAuthSession) error {
 	if s == nil || session == nil || sessionID == "" {
-		return
+		return errors.New("invalid zhipu authorization session")
 	}
-	var remoteErr error
 	if s.remote != nil {
-		remoteErr = s.remote.Set(context.Background(), sessionID, toSessionDTO(session))
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		return s.remote.Set(ctx, sessionID, toSessionDTO(session))
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.sessions[sessionID] = session
-	if remoteErr != nil {
-		s.localOnly[sessionID] = struct{}{}
-		slog.Warn("zhipu oauth session Redis write failed; using process-local fallback", "error", remoteErr)
-	}
+	return nil
 }
 
-// Get returns a live session. Expired sessions are rejected and dropped.
+// Get returns a live session. Shared sessions are never read from a local cache.
 func (s *SessionStore) Get(sessionID string) (*OAuthSession, bool) {
 	if s == nil || sessionID == "" {
 		return nil, false
 	}
-	s.mu.RLock()
-	session, ok := s.sessions[sessionID]
-	_, localOnly := s.localOnly[sessionID]
-	remote := s.remote
-	s.mu.RUnlock()
-
-	if !ok && remote != nil && !localOnly {
+	var session *OAuthSession
+	var ok bool
+	if s.remote != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
 		var dto sessionDTO
-		found, err := remote.Get(context.Background(), sessionID, &dto)
+		found, err := s.remote.Get(ctx, sessionID, &dto)
 		if err != nil {
 			slog.Warn("zhipu oauth session Redis read failed", "error", err)
-		} else if found {
-			session, ok = fromSessionDTO(sessionID, dto), true
-			s.mu.Lock()
-			s.sessions[sessionID] = session
-			s.mu.Unlock()
+			return nil, false
 		}
+		if found {
+			session, ok = fromSessionDTO(sessionID, dto), true
+		}
+	} else {
+		s.mu.RLock()
+		session, ok = s.sessions[sessionID]
+		s.mu.RUnlock()
 	}
 	if !ok || session == nil {
 		return nil, false
 	}
-	if !session.ExpiresAt.IsZero() && time.Now().After(session.ExpiresAt) {
+	if !session.ExpiresAt.IsZero() && !time.Now().Before(session.ExpiresAt) {
 		s.Delete(sessionID)
 		return nil, false
 	}
 	return session, true
 }
 
-// Delete drops a session from both tiers.
+// TryConsume claims an authorization once across all replicas. The Redis marker
+// remains until expiry, including after an ambiguous account-create response.
+func (s *SessionStore) TryConsume(sessionID string) bool {
+	if _, ok := s.Get(sessionID); !ok {
+		return false
+	}
+	if s.remote != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		consumed, err := s.remote.TryConsume(ctx, sessionID)
+		if err != nil {
+			slog.Warn("zhipu oauth session Redis consume failed", "error", err)
+		}
+		return err == nil && consumed
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.sessions[sessionID]; !ok {
+		return false
+	}
+	delete(s.sessions, sessionID)
+	return true
+}
+
+// Delete drops an unused or expired session.
 func (s *SessionStore) Delete(sessionID string) {
 	if s == nil || sessionID == "" {
 		return
 	}
+	if s.remote != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = s.remote.Delete(ctx, sessionID)
+		return
+	}
 	s.mu.Lock()
 	delete(s.sessions, sessionID)
-	delete(s.localOnly, sessionID)
-	remote := s.remote
 	s.mu.Unlock()
-	if remote != nil {
-		_ = remote.Delete(context.Background(), sessionID)
-	}
 }
 
 // Stop ends the cleanup goroutine. It is idempotent.
@@ -243,7 +240,6 @@ func (s *SessionStore) purgeExpired() {
 	for id, session := range s.sessions {
 		if session == nil || (!session.ExpiresAt.IsZero() && now.After(session.ExpiresAt)) {
 			delete(s.sessions, id)
-			delete(s.localOnly, id)
 		}
 	}
 }

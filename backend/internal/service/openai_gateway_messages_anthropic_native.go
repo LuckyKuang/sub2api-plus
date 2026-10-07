@@ -214,9 +214,6 @@ func (s *OpenAIGatewayService) buildNativeAnthropicUpstreamRequest(
 
 	// 账号级请求头覆写（最终生效，覆盖上面所有来源的同名头）
 	account.ApplyHeaderOverrides(req.Header)
-	// 闲时（off-peak）票据是请求级声明：票号由平台按账号下发，不能进账号凭据。
-	// 放在覆写之后，确保运营方无法用手工头覆盖准入票号。
-	applyZhipuOffPeakTicketHeader(ctx, account, req.Header)
 	filterSonnet55ToolsetBetaHeader(req.Header, body, gjson.GetBytes(body, "model").String())
 	payloads := append([][]byte{body}, sessionBodies...)
 	applyOpenCodeSessionHeader(c, account, targetURL, req.Header, payloads...)

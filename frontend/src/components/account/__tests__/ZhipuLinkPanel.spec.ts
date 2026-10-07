@@ -49,6 +49,7 @@ describe('ZhipuLinkPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-01-01T00:00:00Z'))
     vi.mocked(getZhipuOAuthCapabilities).mockResolvedValue({ ...capabilities })
     vi.mocked(startZhipuLink).mockResolvedValue(session)
     vi.mocked(pollZhipuLink).mockResolvedValue({ pending: true })
@@ -153,6 +154,29 @@ describe('ZhipuLinkPanel', () => {
 
     expect(exchangeZhipuLink).toHaveBeenCalledWith('s-1', 'https://zcode.z.ai/app/oauth/login?code=c&state=s', 5)
     expect(wrapper.find('[data-testid="zhipu-link-ready"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('clears the authorization on cancel and allows changing the provider', async () => {
+    const wrapper = await mountPanel()
+    await wrapper.get('[data-testid="zhipu-link-start"]').trigger('click')
+    await flushPromises()
+    await wrapper.findAll('button').find(button => button.text().endsWith('.cancel'))!.trigger('click')
+    expect(wrapper.find('[data-testid="zhipu-link-open"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="zhipu-link-provider"]').attributes('disabled')).toBeUndefined()
+    expect(wrapper.find('[data-testid="zhipu-link-start"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('cancels credentials when the selected proxy changes', async () => {
+    const wrapper = await mountPanel()
+    await wrapper.get('[data-testid="zhipu-link-start"]').trigger('click')
+    vi.mocked(pollZhipuLink).mockResolvedValue({ pending: false, ready })
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(wrapper.find('[data-testid="zhipu-link-ready"]').exists()).toBe(true)
+    await wrapper.setProps({ proxyId: 8 })
+    expect(wrapper.find('[data-testid="zhipu-link-ready"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="zhipu-link-start"]').exists()).toBe(true)
     wrapper.unmount()
   })
 

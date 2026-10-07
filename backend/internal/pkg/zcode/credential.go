@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	"io"
 	"net/http"
 	"net/url"
@@ -64,7 +65,9 @@ type CredentialClient struct {
 // the published defaults; a nil doer falls back to the default HTTP client.
 func NewCredentialClient(client HTTPDoer, bigModelOrigin, zaiOrigin string) *CredentialClient {
 	if client == nil {
-		client = http.DefaultClient
+		client = brandidentity.WrapClient(nil)
+	} else if native, ok := client.(*http.Client); ok {
+		client = brandidentity.WrapClient(native)
 	}
 	return &CredentialClient{
 		client:         client,

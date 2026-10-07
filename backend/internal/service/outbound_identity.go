@@ -360,6 +360,9 @@ func declaredOutboundHeaders(preset string) []outboundDeclaredHeader {
 }
 
 func validateOutboundIdentityHeaderValue(value string) error {
+	if brandidentity.ContainsBrand(value) {
+		return fmt.Errorf("identity header must not contain the project identifier")
+	}
 	if len(value) > outboundIdentityHeaderValueMaxLength {
 		return fmt.Errorf("header value exceeds %d characters", outboundIdentityHeaderValueMaxLength)
 	}
@@ -581,7 +584,7 @@ func buildOutboundIdentity(selection OutboundIdentitySelection) (outboundidentit
 		i.UserAgent, i.Version = ua, version[0]
 	}
 	if version := strings.TrimSpace(selection.Version); version != "" {
-		if len(version) > 64 || !outboundClientVersionPattern.MatchString(version) {
+		if brandidentity.ContainsBrand(version) || len(version) > 64 || !outboundClientVersionPattern.MatchString(version) {
 			return i, fmt.Errorf("invalid client version")
 		}
 		if i.Preset == "codex" {

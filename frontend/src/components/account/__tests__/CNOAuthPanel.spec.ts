@@ -8,12 +8,12 @@ const session = () => ({ session_id: 's', user_code: 'CODE', authorize_url: 'htt
 describe('CNOAuthPanel', () => {
   beforeEach(() => { vi.useFakeTimers(); vi.mocked(cnOAuthRequest).mockReset(); vi.mocked(cnOAuthRequest).mockResolvedValue(session()) })
   afterEach(() => vi.useRealTimers())
-  it('offers CN/global selection, shows user code and binds proxy and relink account', async () => {
-    const wrapper = mount(CNOAuthPanel, { props: { platform: 'kimi', accountId: 42, proxyId: 3 } })
+  it.each(['kimi', 'minimax'] as const)('%s offers CN/global selection, shows user code and binds proxy and relink account', async (platform) => {
+    const wrapper = mount(CNOAuthPanel, { props: { platform, accountId: 42, proxyId: 3 } })
     const globalOption = wrapper.findAll('option').find(option => option.text().includes('domestic.international'))!
     await wrapper.get('select').setValue(globalOption.element.value)
     await wrapper.get('button').trigger('click'); await flushPromises()
-    expect(cnOAuthRequest).toHaveBeenCalledWith('kimi', 'start', { region: 'global', account_id: 42, proxy_id: 3 })
+    expect(cnOAuthRequest).toHaveBeenCalledWith(platform, 'start', { region: 'global', account_id: 42, proxy_id: 3 })
     expect(wrapper.get('a').attributes('rel')).toBe('noopener noreferrer')
     expect(wrapper.get('[data-testid="cn-oauth-user-code"]').text()).toBe('CODE')
     wrapper.unmount()

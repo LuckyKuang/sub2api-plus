@@ -1,6 +1,7 @@
 package service
 
 import (
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	"net/http"
 	"regexp"
 	"strings"
@@ -29,7 +30,7 @@ var codexClientVersionPattern = regexp.MustCompile(`^[0-9]+(\.[0-9]+){1,3}(-[0-9
 // 自动同步拿到异常值时把不可控内容透给上游。
 func NormalizeCodexClientVersion(version string) string {
 	version = strings.TrimSpace(version)
-	if version == "" || len(version) > codexClientVersionMaxLen || !codexClientVersionPattern.MatchString(version) {
+	if brandidentity.ContainsBrand(version) || version == "" || len(version) > codexClientVersionMaxLen || !codexClientVersionPattern.MatchString(version) {
 		return ""
 	}
 	return version

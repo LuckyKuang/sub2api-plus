@@ -6,6 +6,7 @@ package zcode
 
 import (
 	"context"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	"maps"
 	"net/http"
 	"os"
@@ -56,6 +57,9 @@ func ResolveVersion() string {
 // `package.json` shape is accepted; the format is enforced here so an operator
 // override can never inject arbitrary bytes into the User-Agent.
 func IsSupportedVersion(version string) bool {
+	if brandidentity.ContainsBrand(version) {
+		return false
+	}
 	version = strings.TrimSpace(version)
 	if version == "" || len(version) > 64 {
 		return false

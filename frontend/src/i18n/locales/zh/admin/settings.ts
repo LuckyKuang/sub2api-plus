@@ -36,6 +36,8 @@ export default {
         runtimeHeadersHint: '设备名称默认 ubuntu，可配置的设备信息会持久化。系统环境及客户端标识、版本伴随声明不可单独编辑。',
         timezone: '时区',
         timezoneHint: '根据所选时区计算 UTC 偏移，包含夏令时。DeepSeek 在登录流程开始时固定该偏移；MiniMax 每次请求分别计算。',
+        deepseekOffsetHint: 'X-Client-Timezone-Offset 表示相对 UTC 的偏移秒数，包含夏令时；东为正、西为负。例如 -25200 = UTC−7，28800 = UTC+8。该值随所选时区计算，与 Ubuntu 版本无关。',
+        zcodeKernelHint: 'OAuth／账号服务的 X-Os-Version 是内核构建信息，日期为内核编译日期；推理请求使用内核版本号 6.8.0-31-generic。两者对应同一套 Ubuntu 24.04 环境。',
         language: '语言',
         emptyOfficialValue: '空值（官方默认）',
         environment: '客户端环境',

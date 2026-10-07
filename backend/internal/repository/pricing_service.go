@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	"io"
 	"log/slog"
 	"net/http"
@@ -56,7 +57,7 @@ func NewPricingRemoteClient(cfg *config.Config) service.PricingRemoteClient {
 			slog.Warn("proxy client init failed, all requests will fail", "service", "pricing", "error", err)
 			return &pricingRemoteClientError{err: fmt.Errorf("proxy client init failed and direct fallback is disabled; set security.proxy_fallback.allow_direct_on_error=true to allow fallback: %w", err)}
 		}
-		sharedClient = &http.Client{Timeout: 30 * time.Second}
+		sharedClient = brandidentity.WrapClient(&http.Client{Timeout: 30 * time.Second})
 	}
 	clientCopy := *sharedClient
 	clientCopy.CheckRedirect = pricingRedirectChecker(cfg)

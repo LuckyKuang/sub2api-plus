@@ -13,6 +13,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/cnoauth"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/minimax"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -43,10 +44,21 @@ func TestDomesticOAuthAndAPIKeyOutboundWireMatrix(t *testing.T) {
 						_, err = svc.doOpenAIUpstream(req, "", account)
 					}
 					require.NoError(t, err)
-					expected := builtInOutboundIdentity(nativeAccountOutboundPreset(platform, kind)).ForProtocol("anthropic")
-					require.Equal(t, expected.UserAgent, upstream.lastReq.UserAgent())
-					for name, value := range expected.Headers {
+					// Expected values come from the official-client contract below,
+					// never from the resolver under test.
+					expected := officialDomesticAnthropicHeaders(platform, kind)
+					for name, value := range expected {
 						require.Equal(t, value, upstream.lastReq.Header.Get(name), name)
+					}
+					for name := range upstream.lastReq.Header {
+						if outboundidentity.IsIdentityHeader(name) && !strings.EqualFold(name, "X-Msh-Device-Id") {
+							_, present := expected[http.CanonicalHeaderKey(name)]
+							require.True(t, present, "unexpected identity header: %s", name)
+						}
+					}
+					if platform == PlatformKimi {
+						_, err := uuid.Parse(upstream.lastReq.Header.Get("X-Msh-Device-Id"))
+						require.NoError(t, err, "official Kimi identity requires a persisted UUID")
 					}
 					require.Empty(t, upstream.lastReq.Header.Get("X-Client-Version"))
 					require.Empty(t, upstream.lastReq.Header.Get("X-Device-Mid"))
@@ -131,4 +143,39 @@ func TestDomesticIdentityRejectsUnofficialProductAndSDKFingerprint(t *testing.T)
 	require.True(t, ok)
 	require.Equal(t, "codex", identity.Preset, "invalid SDK candidate falls through atomically to the configured mapping")
 	require.NotContains(t, identity.Headers, "X-Stainless-Package-Version")
+}
+
+// Independent oracle: official dsh attribution; Kimi oauth/identity.ts and
+// Anthropic SDK 0.95.2; MiniMax model-resolver-helpers.ts and Anthropic SDK 0.91.1;
+// ZCode source headers + runner AI SDK 6.0.193. The fixed Ubuntu host is the
+// product requirement, not the OS that happens to run these tests.
+func officialDomesticAnthropicHeaders(platform, kind string) map[string]string {
+	headers := map[string]string{}
+	switch platform {
+	case PlatformDeepseek:
+		headers["User-Agent"] = "deepseek-harness/0.2.0-rc.2 (+https://github.com/deepseek-ai/deepseek-harness)"
+	case PlatformKimi:
+		headers = map[string]string{"User-Agent": "kimi-code-cli/2.1.1", "X-Msh-Platform": "kimi_code_cli", "X-Msh-Version": "2.1.1", "X-Msh-Device-Name": "ubuntu", "X-Msh-Device-Model": "Linux 6.8.0-31-generic x64", "X-Msh-Os-Version": "6.8.0-31-generic"}
+	case PlatformMiniMax:
+		headers["User-Agent"] = "MiniMaxAgent"
+		if kind == AccountTypeAPIKey {
+			headers["User-Agent"] = "Anthropic/JS 0.91.1"
+		}
+	case PlatformZhipu:
+		headers = map[string]string{"User-Agent": "ZCode/3.14.3 ai/6.0.193 ai-sdk/provider-utils/4.0.27 runtime/node.js/22", "X-ZCode-App-Version": "3.14.3", "X-ZCode-Agent": "glm", "HTTP-Referer": "https://zcode.z.ai", "X-Title": "Z Code@electron", "X-Release-Channel": "production", "X-Platform": "linux-x64", "X-Os-Category": "linux", "X-Os-Version": "6.8.0-31-generic", "X-Client-Language": "en-US", "X-Client-Timezone": "UTC"}
+	}
+	if platform == PlatformMiniMax || platform == PlatformKimi {
+		for key, value := range map[string]string{"X-Stainless-Lang": "js", "X-Stainless-OS": "Linux", "X-Stainless-Arch": "x64", "X-Stainless-Runtime": "node", "X-Stainless-Runtime-Version": "v22.19.0"} {
+			headers[key] = value
+		}
+		headers["X-Stainless-Package-Version"] = "0.91.1"
+		if platform == PlatformKimi {
+			headers["X-Stainless-Package-Version"] = "0.95.2"
+		}
+	}
+	normalized := map[string]string{}
+	for key, value := range headers {
+		normalized[http.CanonicalHeaderKey(key)] = value
+	}
+	return normalized
 }

@@ -36,6 +36,8 @@ export default {
         runtimeHeadersHint: 'The default device name is ubuntu. Configurable device information is persisted. Environment, client identifiers and version companions cannot be edited individually.',
         timezone: 'Timezone',
         timezoneHint: 'The UTC offset is calculated from the selected timezone, including daylight saving time. DeepSeek captures it for the login flow; MiniMax captures it per request.',
+        deepseekOffsetHint: 'X-Client-Timezone-Offset is the UTC offset in seconds, including daylight saving time: positive east, negative west. For example, -25200 = UTC−7 and 28800 = UTC+8. It follows the selected timezone, independently of the Ubuntu version.',
+        zcodeKernelHint: 'OAuth / account-service X-Os-Version contains kernel build information; its date is the kernel build date. Inference uses the kernel release 6.8.0-31-generic. Both describe the same Ubuntu 24.04 environment.',
         language: 'Language',
         emptyOfficialValue: 'Empty (official default)',
         environment: 'Client environment',

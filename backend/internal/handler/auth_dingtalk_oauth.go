@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -647,7 +648,7 @@ func (h *AuthHandler) dingTalkClient(cfg config.DingTalkConnectConfig) *DingTalk
 		h.dingTalkClientInstance = &DingTalkClient{
 			cfg: newCfg,
 			// 与 wechat OAuth client 对齐，避免上游网络抖动时请求悬挂。
-			httpClient: &http.Client{Timeout: 10 * time.Second},
+			httpClient: brandidentity.WrapClient(&http.Client{Timeout: 10 * time.Second}),
 		}
 	}
 	return h.dingTalkClientInstance

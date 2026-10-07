@@ -37,6 +37,7 @@ describe('useZhipuOAuth', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-01-01T00:00:00Z'))
     vi.mocked(getZhipuOAuthCapabilities).mockResolvedValue({
       enabled: true,
       providers: ['bigmodel', 'zai'],
@@ -165,6 +166,106 @@ describe('useZhipuOAuth', () => {
     vi.mocked(startZhipuLink).mockRejectedValue({ response: { data: { message: 'plan "off-peak" cannot be linked yet' } } })
     expect(await api.startLink('bigmodel')).toBe(false)
     expect(api.error.value).toBe('plan "off-peak" cannot be linked yet')
+    scope.stop()
+  })
+
+  it('ignores a late start after cancellation', async () => {
+    const scope = effectScope()
+    const api = scope.run(() => useZhipuOAuth())!
+    let resolve!: (value: typeof session) => void
+    vi.mocked(startZhipuLink).mockReturnValueOnce(new Promise(done => { resolve = done }))
+    const pending = api.startLink('bigmodel')
+    api.cancelLink()
+    resolve(session)
+    expect(await pending).toBe(false)
+    expect(api.session.value).toBeUndefined()
+    expect(api.loading.value).toBe(false)
+    scope.stop()
+  })
+
+  it('deduplicates polls and ignores their responses after cancellation', async () => {
+    const scope = effectScope()
+    const api = scope.run(() => useZhipuOAuth())!
+    await api.startLink('bigmodel')
+    let resolve!: (value: { pending: boolean; ready: typeof ready }) => void
+    vi.mocked(pollZhipuLink).mockReturnValueOnce(new Promise(done => { resolve = done }))
+    const first = api.pollOnce()
+    const second = api.pollOnce()
+    expect(pollZhipuLink).toHaveBeenCalledTimes(1)
+    api.cancelLink()
+    resolve({ pending: false, ready })
+    await Promise.all([first, second])
+    expect(api.ready.value).toBeUndefined()
+    expect(api.session.value).toBeUndefined()
+    scope.stop()
+  })
+
+  it('expires ready credentials and prevents their submission', async () => {
+    const scope = effectScope()
+    const api = scope.run(() => useZhipuOAuth())!
+    vi.mocked(pollZhipuLink).mockResolvedValue({ pending: false, ready })
+    await api.startLink('bigmodel')
+    await api.pollOnce()
+    await vi.advanceTimersByTimeAsync(600000)
+    expect(api.expired.value).toBe(true)
+    expect(api.ready.value).toBeUndefined()
+    expect(await api.createAccount({ plan_kind: 'start-plan' })).toBe(false)
+    expect(createZhipuAccountFromLink).not.toHaveBeenCalled()
+    scope.stop()
+  })
+
+  it('stops retrying a terminal poll rejection', async () => {
+    const scope = effectScope()
+    const api = scope.run(() => useZhipuOAuth())!
+    vi.mocked(pollZhipuLink).mockRejectedValue({ response: { status: 400, data: { message: 'Authorization denied' } } })
+    await api.startLink('bigmodel')
+    await vi.advanceTimersByTimeAsync(10000)
+    expect(pollZhipuLink).toHaveBeenCalledTimes(1)
+    expect(api.session.value).toBeUndefined()
+    expect(api.error.value).toBe('Authorization denied')
+    scope.stop()
+  })
+
+  it('resumes polling after a failed callback exchange', async () => {
+    const scope = effectScope()
+    const api = scope.run(() => useZhipuOAuth())!
+    await api.startLink('bigmodel')
+    vi.mocked(exchangeZhipuLink).mockRejectedValue(new Error('Invalid code'))
+    expect(await api.exchangeLink('bad-code')).toBe(false)
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(pollZhipuLink).toHaveBeenCalledTimes(1)
+    scope.stop()
+  })
+
+  it('ignores a late callback exchange from a cancelled authorization', async () => {
+    const scope = effectScope()
+    const api = scope.run(() => useZhipuOAuth())!
+    await api.startLink('bigmodel')
+    let resolve!: (value: { pending: boolean; ready: typeof ready }) => void
+    vi.mocked(exchangeZhipuLink).mockReturnValueOnce(new Promise(done => { resolve = done }))
+    const pending = api.exchangeLink('code')
+    api.cancelLink()
+    resolve({ pending: false, ready })
+    expect(await pending).toBe(false)
+    expect(api.ready.value).toBeUndefined()
+    scope.stop()
+  })
+
+  it('reports an accepted create even when the response arrives after session expiry', async () => {
+    const scope = effectScope()
+    const api = scope.run(() => useZhipuOAuth())!
+    vi.mocked(pollZhipuLink).mockResolvedValue({ pending: false, ready })
+    await api.startLink('bigmodel')
+    await api.pollOnce()
+    let resolve!: (value: Record<string, never>) => void
+    vi.mocked(createZhipuAccountFromLink).mockReturnValueOnce(new Promise(done => { resolve = done }))
+    const pending = api.createAccount({ plan_kind: 'start-plan' })
+    expect(await api.createAccount({ plan_kind: 'start-plan' })).toBe(false)
+    await vi.advanceTimersByTimeAsync(600000)
+    resolve({})
+    expect(await pending).toBe(true)
+    expect(createZhipuAccountFromLink).toHaveBeenCalledTimes(1)
+    expect(api.session.value).toBeUndefined()
     scope.stop()
   })
 

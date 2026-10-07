@@ -161,3 +161,10 @@ func TestZhipuOAuthHandlerCreateRequiresASession(t *testing.T) {
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &payload))
 	require.NotContains(t, recorder.Body.String(), "poll_token")
 }
+
+func TestZhipuOAuthCreateRejectsUnavailableProxyBeforeAccountSideEffects(t *testing.T) {
+	router := zhipuOAuthTestRouter(t)
+	response := zhipuRequest(t, router, http.MethodPost, "/oauth/create-from-oauth", `{"session_id":"session","provider":"bigmodel","access_token":"token","proxy_id":5}`)
+	require.Equal(t, http.StatusBadRequest, response.Code)
+	require.Contains(t, response.Body.String(), "selected proxy is unavailable")
+}

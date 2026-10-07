@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	"io"
 	"log/slog"
 	"net/http"
@@ -750,7 +751,7 @@ func NewContentModerationService(
 		proxyRepo:            proxyRepo,
 		authCacheInvalidator: authCacheInvalidator,
 		emailService:         emailService,
-		httpClient:           servertiming.InstrumentClient(nil),
+		httpClient:           servertiming.InstrumentClient(brandidentity.WrapClient(nil)),
 		workerCount:          maxContentModerationWorkerCount,
 		asyncQueue:           make(chan contentModerationTask, maxContentModerationQueueSize),
 		keyHealth:            make(map[string]*contentModerationKeyHealth),
@@ -2481,7 +2482,7 @@ const contentModerationProxyURLCacheTTL = time.Minute
 func (s *ContentModerationService) moderationHTTPClient(ctx context.Context, cfg *ContentModerationConfig) (*http.Client, error) {
 	if cfg == nil || cfg.ProxyID == nil {
 		if s.httpClient == nil {
-			return http.DefaultClient, nil
+			return brandidentity.WrapClient(nil), nil
 		}
 		return s.httpClient, nil
 	}

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"io"
 	"log"
@@ -281,7 +282,7 @@ func NewClient(proxyURL string) (*Client, error) {
 		client.Transport = transport
 	}
 	return &Client{
-		httpClient: client,
+		httpClient: brandidentity.WrapClient(client),
 	}, nil
 }
 

@@ -50,9 +50,16 @@ path requires the operator to copy the URL from the browser address bar.
 
 Link sessions live for 15 minutes or the platform's own expiry, whichever is
 shorter, and are **single-use**: one authorization cannot create two accounts.
-With Redis configured the session is shared across replicas; without it the
-session is process-local, so a multi-instance deployment should either configure
-Redis or keep the flow on one instance.
+With Redis configured, it is authoritative: reads, writes and the single-use
+claim must succeed there. A local cache never bypasses a Redis failure. The
+claim remains until expiry, including after an ambiguous create response, so
+concurrent replicas cannot create two accounts from one authorization. Without
+Redis the session is process-local; multi-instance deployments require Redis or
+instance affinity. The UI discards expired credentials, cancels the session when
+the proxy changes, ignores late responses after cancellation, and resumes polling
+after a failed callback exchange. A create accepted before expiry still reports
+its eventual result. Pasted callback state must match the original session, and
+exchange must retain the session's proxy.
 
 ## Plan kinds
 
@@ -100,7 +107,8 @@ A model request is admitted only while the ticket is `ready` or `active`; a
 `queued` request is rejected by the platform.
 
 **Plus bounds the wait instead of queueing forever.** An off-peak account holds at
-most one ticket; a request that finds it `ready` or `active` reuses it, and
+most one ticket; a request rechecks a cached `ready` or `active` ticket with the
+platform before reusing it, and
 otherwise the server takes a ticket and polls until the platform promotes it,
 within a configurable budget. When the budget expires the request fails with a
 retryable status that reports the current queue position. A ticket that expires
@@ -113,7 +121,7 @@ timeout anyway.
 | --- | --- | --- |
 | `3101` | no eligible coding plan | `403`, the account cannot use the idle queue |
 | `3103` | take-number quota exhausted | `429`, with the platform's reset time |
-| `3102` / `3001` | ticket unusable on the model endpoint | the ticket is discarded and re-taken |
+| `3102` / `3001` | ticket unusable on the model endpoint | the upstream error is returned; the next request rechecks admission and replaces expired/missing tickets |
 | `3105` | queue valve on the model endpoint | `429`, with `Retry-After` |
 
 Two documented deviations from the official client remain. The official client
@@ -125,7 +133,14 @@ retry budget; Plus fails fast after its budget so a user request cannot occupy a
 gateway slot indefinitely.
 
 **Not supported:** the off-peak `task_id` continuation semantics. Plus issues its
-own task id per account and never resumes a previous run's queue position.
+own `offpeak-<UUID>` task id per ticket lifetime and never resumes a previous
+run's queue position. Ticket settlement retains the acquiring credentials,
+identity and proxy even if settings change. A rotated grant/plan/proxy retires
+the old ticket before acquiring a new one. Every ticket generation is eligible
+for idle settlement. Forwarding and account probes require successful admission
+before any model dispatch; a missing provider or failed acquisition cannot send
+a caller-supplied ticket or a request without one. A request cannot reuse a ticket while it is being
+settled. The acquisition budget covers lock contention and upstream calls.
 
 ## Outbound identity
 

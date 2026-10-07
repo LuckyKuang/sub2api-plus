@@ -220,6 +220,16 @@ func TestZhipuOAuthExchangeLinkAcceptsCallbackURL(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestZhipuOAuthRejectsCallbackFromAnotherSession(t *testing.T) {
+	client := &zhipuOAuthStubClient{initFlow: zhipuTestFlowInit(), exchange: zhipuTestReady(zcode.ProviderZai)}
+	svc := newZhipuOAuthTestService(t, client)
+	session, err := svc.StartLink(context.Background(), StartZhipuLinkInput{Provider: zcode.ProviderZai})
+	require.NoError(t, err)
+	_, err = svc.ExchangeLink(context.Background(), session.SessionID, "https://zcode.z.ai/app/oauth/login?code=code&state=other-session", nil)
+	require.Error(t, err)
+	require.Empty(t, client.lastExchangeArgs, "must reject before sending credentials upstream")
+}
+
 func TestZhipuOAuthSessionIsSingleUse(t *testing.T) {
 	client := &zhipuOAuthStubClient{initFlow: zhipuTestFlowInit()}
 	svc := newZhipuOAuthTestService(t, client)
@@ -471,4 +481,46 @@ func TestZhipuOAuthIdentitySurvivesSettingsChangeAndMaterialCreation(t *testing.
 	require.True(t, ok)
 	require.Equal(t, "ZCode/3.14.3", resolved.UserAgent)
 	require.Equal(t, "derived-key", account.GetOpenAIProtocolAPIKey())
+}
+
+func TestZhipuOAuthSelectedProxyCannotFallBackToDirect(t *testing.T) {
+	for _, repo := range []ProxyRepository{nil, &zhipuOAuthProxyRepoStub{err: errors.New("unavailable")}, &zhipuOAuthProxyRepoStub{}} {
+		client := &zhipuOAuthStubClient{initFlow: zhipuTestFlowInit()}
+		svc := NewZhipuOAuthService(client, repo)
+		proxyID := int64(5)
+		_, err := svc.StartLink(context.Background(), StartZhipuLinkInput{Provider: zcode.ProviderZai, ProxyID: &proxyID})
+		require.Error(t, err)
+		require.Empty(t, client.identities, "no upstream request may run on the wrong egress")
+		_, err = svc.ResolveProxyURL(context.Background(), &proxyID)
+		require.Error(t, err)
+		svc.Stop()
+	}
+}
+func TestZhipuOAuthProxySnapshotCannotChangeAtExchangeOrCreate(t *testing.T) {
+	client := &zhipuOAuthStubClient{initFlow: zhipuTestFlowInit(), exchange: zhipuTestReady(zcode.ProviderZai)}
+	repo := &zhipuOAuthProxyRepoStub{proxy: &Proxy{Protocol: "http", Host: "first.example", Port: 8080}}
+	svc := NewZhipuOAuthService(client, repo)
+	defer svc.Stop()
+	proxyID := int64(5)
+	session, err := svc.StartLink(context.Background(), StartZhipuLinkInput{Provider: zcode.ProviderZai, ProxyID: &proxyID})
+	require.NoError(t, err)
+	repo.proxy = &Proxy{Protocol: "http", Host: "second.example", Port: 8080}
+	_, err = svc.ExchangeLink(context.Background(), session.SessionID, "code", &proxyID)
+	require.Error(t, err)
+	require.Empty(t, client.lastExchangeArgs)
+	_, err = svc.BuildAccountMaterial(context.Background(), ZhipuAccountMaterialInput{SessionID: session.SessionID, Provider: zcode.ProviderZai, AccessToken: "token", ProxyURL: repo.proxy.URL()})
+	require.Error(t, err)
+	require.Zero(t, client.businessCalls)
+	require.Zero(t, client.individualCalls)
+	require.NoError(t, svc.ConsumeLinkSession(session.SessionID), "a rejected proxy change must not spend the authorization")
+}
+
+type zhipuOAuthProxyRepoStub struct {
+	ProxyRepository
+	proxy *Proxy
+	err   error
+}
+
+func (r *zhipuOAuthProxyRepoStub) GetByID(context.Context, int64) (*Proxy, error) {
+	return r.proxy, r.err
 }

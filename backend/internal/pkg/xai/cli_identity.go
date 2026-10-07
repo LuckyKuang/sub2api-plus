@@ -1,6 +1,7 @@
 package xai
 
 import (
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	"net/http"
 	"os"
 	"strings"
@@ -49,6 +50,9 @@ func ResolveCLIVersion() string {
 // above CLIStableVersion (prereleases below a higher release are rejected when
 // they compare less than the stable pin).
 func IsSupportedCLIVersion(version string) bool {
+	if brandidentity.ContainsBrand(version) {
+		return false
+	}
 	canonical := "v" + version
 	minimum := "v" + CLIStableVersion
 	return semver.IsValid(canonical) &&

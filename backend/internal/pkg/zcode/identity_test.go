@@ -42,7 +42,21 @@ func TestAuxiliaryClientsSendIdentityWithoutTransportWiring(t *testing.T) {
 			seen++
 			require.Empty(t, r.Header.Get("X-ZCode-Agent"))
 			require.Empty(t, r.Header.Get("X-Device-Mid"))
-			for name, value := range ControlIdentity(expected).Headers {
+			// Official sourceHeaders.ts uses os.version() on OAuth/business
+			// calls; inference separately uses os.release(). Do not derive
+			// this expected block from ControlIdentity under test.
+			version, zone := "3.14.3", "UTC"
+			if configured {
+				version, zone = "4.1.0", "Asia/Shanghai"
+			}
+			for name, value := range map[string]string{
+				"User-Agent": "ZCode/" + version, "X-ZCode-App-Version": version,
+				"HTTP-Referer": "https://zcode.z.ai", "X-Title": "Z Code@electron",
+				"X-Release-Channel": "production", "X-Client-Language": "en-US",
+				"X-Client-Timezone": zone, "X-Platform": "linux-x64",
+				"X-Os-Category": "linux",
+				"X-Os-Version":  "#31-Ubuntu SMP PREEMPT_DYNAMIC Sat Apr 20 00:40:06 UTC 2024",
+			} {
 				if r.Header.Get(name) != value {
 					t.Errorf("%s: %s = %q, want %q", r.URL.Path, name, r.Header.Get(name), value)
 				}

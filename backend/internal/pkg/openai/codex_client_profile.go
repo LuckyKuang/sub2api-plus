@@ -200,7 +200,7 @@ func ClassifyOfficialCodexClientProfile(userAgent, originator string) (CodexClie
 // case folding, substring matching, or legacy trailer recovery: a configured
 // identity must already be coherent in its leading token.
 func PairConfiguredCodexClientIdentity(userAgent string, allowLegacyCompatibility bool) (CodexClientProfileMatch, string, bool) {
-	if !validCodexUserAgentValue(userAgent) {
+	if strings.Contains(strings.ToLower(userAgent), "sub2api") || !validCodexUserAgentValue(userAgent) {
 		return CodexClientProfileMatch{}, "", false
 	}
 	ua := strings.TrimSpace(userAgent)

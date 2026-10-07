@@ -2,6 +2,7 @@ package service
 
 import (
 	"crypto/tls"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	"net"
 	"net/http"
 	"sync"
@@ -72,7 +73,7 @@ func codexAuthPlaneHTTPClient(proxyURL string, timeout time.Duration) (*http.Cli
 	if trimmed != "" {
 		transport.Proxy = http.ProxyURL(parsed)
 	}
-	client := &http.Client{Transport: transport, Timeout: timeout}
+	client := brandidentity.WrapClient(&http.Client{Transport: transport, Timeout: timeout})
 
 	actual, _ := codexAuthPlaneClients.LoadOrStore(key, client)
 	if cached, ok := actual.(*http.Client); ok {

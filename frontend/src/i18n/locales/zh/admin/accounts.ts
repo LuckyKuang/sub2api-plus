@@ -1217,6 +1217,7 @@ export default {
         batchFailed: '批量创建失败',
         // OpenAI specific
         zhipu: {
+          expired: '授权会话已过期，请重新开始登录。',
           title: '通过 ZCode 绑定 GLM 套餐',
           desc:
             '使用智谱官方 ZCode 客户端授权。服务端持有授权会话并轮询，因此不需要回调地址；绑定出来的账号与粘贴 API Key 使用完全相同的端点。',

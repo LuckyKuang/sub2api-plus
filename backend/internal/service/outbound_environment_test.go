@@ -4,6 +4,10 @@ package service
 
 import (
 	"context"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/deepseek"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/kimi"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/xai"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/zcode"
 	"net/http"
 	"testing"
 
@@ -146,5 +150,36 @@ func TestDeepSeekLanguageTimezoneSourcePriorityAndPreview(t *testing.T) {
 				require.Equal(t, "28800", identity.Headers["X-Client-Timezone-Offset"])
 			}
 		}
+	}
+}
+
+func TestCodexBrandedAccountFingerprintFallsThroughWithoutChangingPriority(t *testing.T) {
+	account := "codex_cli_rs/0.158.0 (SuB2ApI; x86_64) xterm-256color"
+	global := "codex_cli_rs/0.158.0 (Ubuntu 24.04; x86_64) custom-terminal"
+	identity := resolveOpenAIOutboundIdentityCandidates(account, global)
+	require.Equal(t, "global", identity.Source)
+	require.Equal(t, global, identity.UserAgent)
+	require.Equal(t, "codex_cli_rs", identity.Originator)
+}
+
+func TestBrandedVersionsCannotEnterOutboundIdentity(t *testing.T) {
+	for _, version := range []string{"9.0.0-sub2api", "9.0.0-SuB2ApI"} {
+		require.False(t, deepseek.IsSupportedVersion(version))
+		require.False(t, kimi.IsSupportedVersion(version))
+		require.False(t, zcode.IsSupportedVersion(version))
+		require.False(t, xai.IsSupportedCLIVersion(version))
+		require.Empty(t, NormalizeCodexClientVersion(version))
+		for _, preset := range []string{"deepseek", "kimi", "zcode", "minimax_apikey", "gemini", "grok", "codex", "antigravity", "claude"} {
+			_, err := buildOutboundIdentity(OutboundIdentitySelection{Preset: preset, Version: version})
+			require.Error(t, err, preset)
+		}
+	}
+	for _, test := range []struct{ key, preset string }{{deepseek.VersionEnv, "deepseek"}, {kimi.VersionEnv, "kimi"}, {zcode.VersionEnv, "zcode"}, {xai.CLIVersionEnv, "grok"}} {
+		t.Run(test.preset, func(t *testing.T) {
+			t.Setenv(test.key, "9.0.0-SuB2ApI")
+			identity := builtInOutboundIdentity(test.preset)
+			require.Equal(t, "compiled_default", identity.Source)
+			require.NotContains(t, identity.UserAgent, "SuB2ApI")
+		})
 	}
 }

@@ -142,9 +142,10 @@ func (h *ZhipuOAuthHandler) CreateAccountFromLink(c *gin.Context) {
 	}
 	// The session is consumed only after the material resolves, so a rejected
 	// plan can be retried with the same authorization.
-	proxyURL := ""
-	if req.ProxyID != nil {
-		proxyURL = h.zhipuOAuthService.ResolveProxyURL(c.Request.Context(), req.ProxyID)
+	proxyURL, err := h.zhipuOAuthService.ResolveProxyURL(c.Request.Context(), req.ProxyID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
 	}
 	material, err := h.zhipuOAuthService.BuildAccountMaterial(c.Request.Context(), service.ZhipuAccountMaterialInput{
 		SessionID:    req.SessionID,

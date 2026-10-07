@@ -265,7 +265,10 @@ func IsForbiddenHeaderName(name string) bool {
 
 // validateExtraHeaders 校验 header 名字格式 + 黑名单。保存时就拒绝非法 header，早失败。
 func validateExtraHeaders(h map[string]string) error {
-	for k := range h {
+	for k, value := range h {
+		if brandidentity.ContainsBrand(value) {
+			return ErrChannelMonitorTemplateHeaderForbidden
+		}
 		if !headerNameRegex.MatchString(k) {
 			return ErrChannelMonitorTemplateHeaderInvalidName
 		}

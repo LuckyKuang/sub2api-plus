@@ -100,6 +100,24 @@ describe('OutboundIdentitySettings', () => {
     wrapper.unmount()
   })
 
+  it('explains DeepSeek offset seconds and the distinct GLM OAuth kernel build value', async () => {
+    const view = fixture()
+    const deepseek = view.effective.find(item => item.preset === 'deepseek')!
+    const zcode = view.effective.find(item => item.preset === 'zcode')!
+    view.control_plane = [
+      { ...deepseek, headers: { 'X-Client-Timezone-Offset': '-25200' } },
+      { ...zcode, headers: { 'X-Os-Version': '#31-Ubuntu SMP PREEMPT_DYNAMIC Sat Apr 20 00:40:06 UTC 2024' } }
+    ]
+    vi.mocked(getOutboundIdentity).mockResolvedValue(view)
+    const wrapper = mount(OutboundIdentitySettings)
+    await flushPromises()
+    expect(wrapper.get('[data-testid="deepseek-offset-hint"]').text()).toContain('deepseekOffsetHint')
+    expect(wrapper.get('[data-testid="zcode-kernel-hint"]').text()).toContain('zcodeKernelHint')
+    expect(wrapper.text()).toContain('-25200')
+    expect(wrapper.text()).toContain('#31-Ubuntu SMP PREEMPT_DYNAMIC Sat Apr 20 00:40:06 UTC 2024')
+    wrapper.unmount()
+  })
+
   it('shows effective identities and saves only configured presets and type defaults', async () => {
     const wrapper = mount(OutboundIdentitySettings, { slots: { codex: '<div data-testid="codex-existing-controls">Codex controls</div>' } })
     await flushPromises()
