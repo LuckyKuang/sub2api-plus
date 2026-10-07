@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/cnoauth"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/deepseek"
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 )
@@ -78,6 +79,10 @@ func (s *CNOAuthService) Start(ctx context.Context, owner int64, platform, regio
 	flowCtx := withNativeOAuthOutboundIdentity(ctx, platform)
 	if account != nil {
 		flowCtx = WithAccountOutboundIdentity(ctx, account)
+	}
+	if platform == PlatformDeepseek {
+		identity, _ := outboundidentity.FromContext(flowCtx)
+		flowCtx = outboundidentity.WithIdentity(flowCtx, deepseek.CaptureIdentity(identity, time.Now()))
 	}
 	flow, err := s.client.Start(flowCtx, platform, region, proxyURL)
 	if err != nil {

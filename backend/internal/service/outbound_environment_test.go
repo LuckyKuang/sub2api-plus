@@ -13,7 +13,7 @@ import (
 
 func TestUbuntuOutboundDefaultEnvironmentAndSourcePriority(t *testing.T) {
 	defaults := emptyOutboundIdentitySettings()
-	defaults.Runtime["kimi"] = map[string]string{"X-Msh-Device-Name": "custom-workstation", "X-Msh-Device-Model": "Linux 6.8.0-90-generic x64", "X-Msh-Os-Version": "6.8.0-90-generic"}
+	defaults.Runtime["kimi"] = map[string]string{"X-Msh-Device-Name": "custom-workstation"}
 	svc, ctx := outboundIdentityTestSettings(t, defaults)
 	require.Equal(t, "ubuntu", builtInOutboundIdentity("kimi").Headers["X-Msh-Device-Name"])
 	require.Equal(t, "Linux 6.8.0-31-generic x64", builtInOutboundIdentity("kimi").Headers["X-Msh-Device-Model"])
@@ -24,7 +24,7 @@ func TestUbuntuOutboundDefaultEnvironmentAndSourcePriority(t *testing.T) {
 		require.True(t, ok)
 		require.Equal(t, "account", identity.Source)
 		require.Equal(t, "account-workstation", identity.Headers["X-Msh-Device-Name"])
-		require.Equal(t, "6.8.0-90-generic", identity.Headers["X-Msh-Os-Version"])
+		require.Equal(t, "6.8.0-31-generic", identity.Headers["X-Msh-Os-Version"])
 	}
 	for _, preset := range []string{"claude", "minimax", "minimax_apikey", "kimi"} {
 		identity := builtInOutboundIdentity(preset).ForProtocol("anthropic")
@@ -45,6 +45,15 @@ func TestOutboundEnvironmentValidationIsAtomic(t *testing.T) {
 		{Preset: "zcode", Headers: map[string]string{"X-Client-Timezone": "Local"}},
 		{Preset: "minimax", Timezone: "invalid"},
 		{Preset: "kimi", Timezone: "UTC"},
+		{Preset: "deepseek", Language: "zh_CN"},
+		{Preset: "deepseek", Language: "ja-JP"},
+		{Preset: "deepseek", Timezone: "Local"},
+		{Preset: "kimi", Language: "en-US"},
+		{Preset: "kimi", Headers: map[string]string{"X-Msh-Device-Model": "Linux 6.8.0-31-generic x64"}},
+		{Preset: "kimi", Headers: map[string]string{"X-Msh-Os-Version": "6.8.0-31-generic"}},
+		{Preset: "zcode", Headers: map[string]string{"X-Platform": "linux-x64"}},
+		{Preset: "zcode", Headers: map[string]string{"X-Os-Category": "linux"}},
+		{Preset: "zcode", Headers: map[string]string{"X-Os-Version": "6.8.0-31-generic"}},
 	} {
 		config := emptyOutboundIdentitySettings()
 		config.Profiles[bad.Preset] = bad
@@ -92,4 +101,50 @@ func TestMiniMaxInvalidTimezoneFallsThroughAtomically(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "codex", identity.Preset)
 	require.Empty(t, identity.Timezone)
+}
+
+func TestDeepSeekLanguageTimezoneSourcePriorityAndPreview(t *testing.T) {
+	for _, accountType := range []string{AccountTypeOAuth, AccountTypeAPIKey} {
+		defaults := emptyOutboundIdentitySettings()
+		defaults.Profiles["deepseek"] = OutboundIdentitySelection{Preset: "deepseek", Language: "en-US", Timezone: "Asia/Shanghai"}
+		svc, ctx := outboundIdentityTestSettings(t, defaults)
+		global := svc.resolveDefaultOutboundIdentity(ctx, "deepseek")
+		require.Equal(t, "en-US", global.Language)
+		require.Equal(t, "Asia/Shanghai", global.Timezone)
+		for _, selection := range []OutboundIdentitySelection{
+			{Preset: "deepseek"},
+			{Preset: "deepseek", Version: "0.2.0-rc.2"},
+			{Preset: "deepseek", Language: "zh-CN", Timezone: "UTC"},
+			{Preset: "deepseek", Language: "ja-JP", Timezone: "UTC"},
+		} {
+			account := &Account{ID: 71, Platform: PlatformDeepseek, Type: accountType, Credentials: map[string]any{outboundIdentityCredential: selection}}
+			identity, ok := outboundidentity.FromContext(WithAccountOutboundIdentity(ctx, account))
+			require.True(t, ok)
+			if selection.Language == "zh-CN" {
+				require.Equal(t, "zh-CN", identity.Language)
+				require.Equal(t, "UTC", identity.Timezone)
+			} else {
+				require.Equal(t, "en-US", identity.Language)
+				require.Equal(t, "Asia/Shanghai", identity.Timezone)
+			}
+			preview, err := svc.PreviewOutboundIdentity(ctx, account, &selection)
+			if selection.Language == "ja-JP" {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, identity.Language, preview.Language)
+				require.Equal(t, identity.Timezone, preview.Timezone)
+			}
+			pinned := selectionFromIdentity(identity)
+			require.Equal(t, identity.Language, pinned.Language)
+			require.Equal(t, identity.Timezone, pinned.Timezone)
+		}
+		view := svc.GetOutboundIdentityView(ctx)
+		for _, identity := range view.ControlPlane {
+			if identity.Preset == "deepseek" {
+				require.Equal(t, "en_US", identity.Headers["X-Client-Locale"])
+				require.Equal(t, "28800", identity.Headers["X-Client-Timezone-Offset"])
+			}
+		}
+	}
 }

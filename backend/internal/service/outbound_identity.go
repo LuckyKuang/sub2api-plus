@@ -47,6 +47,7 @@ type OutboundIdentitySelection struct {
 	Version   string            `json:"version,omitempty"`
 	Headers   map[string]string `json:"headers,omitempty"`
 	Timezone  string            `json:"timezone,omitempty"`
+	Language  string            `json:"language,omitempty"`
 }
 
 type OutboundIdentitySettings struct {
@@ -258,9 +259,9 @@ var outboundPresetHeaderClasses = map[string]map[string]string{
 		zcode.HeaderAppVersion: outboundHeaderDerived,
 		"X-Client-Language":    outboundHeaderRuntime,
 		"X-Client-Timezone":    outboundHeaderRuntime,
-		"X-Platform":           outboundHeaderRuntime,
-		"X-Os-Category":        outboundHeaderRuntime,
-		"X-Os-Version":         outboundHeaderRuntime,
+		"X-Platform":           outboundHeaderPinned,
+		"X-Os-Category":        outboundHeaderPinned,
+		"X-Os-Version":         outboundHeaderPinned,
 	},
 	"codex": {
 		// The Codex Originator and Version declarations follow the resolved
@@ -276,8 +277,8 @@ var outboundPresetHeaderClasses = map[string]map[string]string{
 		kimi.HeaderPlatform:    outboundHeaderPinned,
 		kimi.HeaderVersion:     outboundHeaderDerived,
 		kimi.HeaderDeviceName:  outboundHeaderRuntime,
-		kimi.HeaderDeviceModel: outboundHeaderRuntime,
-		kimi.HeaderOSVersion:   outboundHeaderRuntime,
+		kimi.HeaderDeviceModel: outboundHeaderPinned,
+		kimi.HeaderOSVersion:   outboundHeaderPinned,
 		kimi.HeaderDeviceID:    outboundHeaderRuntime,
 	},
 }
@@ -286,15 +287,10 @@ var outboundPresetHeaderValidators = map[string]map[string]func(string) error{
 	"zcode": {
 		"X-Client-Language": outboundidentity.ValidateLanguage,
 		"X-Client-Timezone": outboundidentity.ValidateTimezone,
-		"X-Platform":        validateOutboundIdentityDeviceFact,
-		"X-Os-Category":     validateOutboundIdentityDeviceFact,
-		"X-Os-Version":      validateOutboundIdentityDeviceFact,
 	},
 	"kimi": {
-		kimi.HeaderDeviceName:  validateOutboundIdentityDeviceName,
-		kimi.HeaderDeviceModel: validateOutboundIdentityDeviceFact,
-		kimi.HeaderOSVersion:   validateOutboundIdentityDeviceFact,
-		kimi.HeaderDeviceID:    validateOutboundIdentityDeviceID,
+		kimi.HeaderDeviceName: validateOutboundIdentityDeviceName,
+		kimi.HeaderDeviceID:   validateOutboundIdentityDeviceID,
 	},
 }
 
@@ -375,9 +371,8 @@ func validateOutboundIdentityHeaderValue(value string) error {
 	return nil
 }
 
-// validateOutboundIdentityDeviceFact accepts a host description or kernel
-// release. The official sanitizer substitutes `unknown` for an empty fact, so
-// no configured value may be blank either.
+// validateOutboundIdentityDeviceFact accepts a nonempty device fact. The official
+// sanitizer substitutes `unknown` for an empty fact, so configured values cannot be blank.
 func validateOutboundIdentityDeviceFact(value string) error {
 	if err := validateOutboundIdentityHeaderValue(value); err != nil {
 		return err
@@ -402,10 +397,20 @@ func validateOutboundTimezone(preset, zone string) error {
 	if zone == "" {
 		return nil
 	}
-	if preset != minimax.Preset && preset != minimax.APIKeyPreset {
-		return fmt.Errorf("timezone configuration is only supported for MiniMax presets")
+	if preset != minimax.Preset && preset != minimax.APIKeyPreset && preset != "deepseek" {
+		return fmt.Errorf("timezone configuration is only supported for DeepSeek and MiniMax presets")
 	}
 	return outboundidentity.ValidateTimezone(zone)
+}
+
+func validateOutboundLanguage(preset, language string) error {
+	if language == "" {
+		return nil
+	}
+	if preset != "deepseek" || language != "zh-CN" && language != "en-US" {
+		return fmt.Errorf("DeepSeek language must be zh-CN or en-US")
+	}
+	return nil
 }
 
 func validateOutboundIdentityDeviceID(value string) error {
@@ -512,6 +517,12 @@ func mergeOutboundRuntimeHeaders(identity, resolved outboundidentity.Identity) o
 
 func buildOutboundIdentity(selection OutboundIdentitySelection) (outboundidentity.Identity, error) {
 	i := builtInOutboundIdentity(selection.Preset)
+	if err := validateOutboundLanguage(selection.Preset, selection.Language); err != nil {
+		return i, err
+	}
+	if selection.Language != "" {
+		i.Language = selection.Language
+	}
 	if err := validateOutboundTimezone(selection.Preset, selection.Timezone); err != nil {
 		return i, err
 	}
@@ -971,11 +982,17 @@ func resolveAccountIdentitySelection(ctx context.Context, account *Account, sele
 	if err := validateOutboundTimezone(selection.Preset, selection.Timezone); err != nil {
 		return outboundidentity.Identity{}, err
 	}
+	if err := validateOutboundLanguage(selection.Preset, selection.Language); err != nil {
+		return outboundidentity.Identity{}, err
+	}
 	if selection.UserAgent == "" && selection.Version == "" {
 		identity := resolve(ctx, selection.Preset)
 		resolved, _ := applyOutboundHeaderValues(identity, selection.Preset, selection.Headers)
 		if selection.Timezone != "" {
 			resolved.Timezone = selection.Timezone
+		}
+		if selection.Language != "" {
+			resolved.Language = selection.Language
 		}
 		return resolved, nil
 	}
@@ -987,6 +1004,9 @@ func resolveAccountIdentitySelection(ctx context.Context, account *Account, sele
 	identity = mergeOutboundRuntimeHeaders(identity, global)
 	if selection.Timezone == "" {
 		identity.Timezone = global.Timezone
+	}
+	if selection.Language == "" {
+		identity.Language = global.Language
 	}
 	resolved, _ := applyOutboundHeaderValues(identity, selection.Preset, selection.Headers)
 	return resolved, nil
@@ -1078,7 +1098,7 @@ func NormalizeAccountOutboundIdentity(platform, accountType string, credentials 
 		return infraerrors.BadRequest("OUTBOUND_IDENTITY_INVALID", "invalid outbound identity")
 	}
 	selection.Preset, selection.UserAgent, selection.Version = strings.TrimSpace(selection.Preset), strings.TrimSpace(selection.UserAgent), strings.TrimSpace(selection.Version)
-	if selection.Preset == "" && selection.UserAgent == "" && selection.Version == "" && selection.Timezone == "" && len(selection.Headers) == 0 {
+	if selection.Preset == "" && selection.UserAgent == "" && selection.Version == "" && selection.Timezone == "" && selection.Language == "" && len(selection.Headers) == 0 {
 		delete(credentials, outboundIdentityCredential)
 		return nil
 	}
@@ -1086,7 +1106,7 @@ func NormalizeAccountOutboundIdentity(platform, accountType string, credentials 
 		return infraerrors.BadRequest("OUTBOUND_IDENTITY_INVALID", err.Error())
 	}
 	if platform == PlatformOpenAI && selection.Preset == "codex" {
-		if selection.UserAgent != "" || selection.Version != "" || selection.Timezone != "" || len(selection.Headers) > 0 {
+		if selection.UserAgent != "" || selection.Version != "" || selection.Timezone != "" || selection.Language != "" || len(selection.Headers) > 0 {
 			return infraerrors.BadRequest("OUTBOUND_IDENTITY_INVALID", "Codex identity declarations use the existing user_agent setting")
 		}
 	}
@@ -1271,5 +1291,5 @@ func selectionFromIdentity(identity outboundidentity.Identity) OutboundIdentityS
 			headers[h.Name] = identity.Headers[h.Name]
 		}
 	}
-	return OutboundIdentitySelection{Preset: identity.Preset, UserAgent: identity.UserAgent, Version: identity.Version, Headers: headers, Timezone: identity.Timezone}
+	return OutboundIdentitySelection{Preset: identity.Preset, UserAgent: identity.UserAgent, Version: identity.Version, Headers: headers, Timezone: identity.Timezone, Language: identity.Language}
 }

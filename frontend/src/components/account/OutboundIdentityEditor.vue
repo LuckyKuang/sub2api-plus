@@ -16,15 +16,15 @@
         <input :value="modelValue.user_agent" class="input mt-2 font-mono text-sm" placeholder="User-Agent" @input="update('user_agent', ($event.target as HTMLInputElement).value)" />
       </details>
     </template>
+    <label v-if="effectivePreset === 'deepseek'" class="block text-xs">
+      {{ t('admin.settings.outboundIdentity.language') }}
+      <IdentityRuntimeField name="language" :model-value="modelValue?.language" :fallback="preview?.language || 'zh-CN'" @update:model-value="setLanguage" />
+    </label>
     <label v-if="hasIdentityTimezone(effectivePreset)" class="block text-xs">
       {{ t('admin.settings.outboundIdentity.timezone') }}
       <IdentityRuntimeField name="timezone" :model-value="modelValue?.timezone" :fallback="preview?.timezone || 'UTC'" @update:model-value="setTimezone" />
     </label>
-    <div v-if="environmentDifferences.length" class="text-xs" data-testid="identity-account-environment-differences">
-      <p>{{ t('admin.settings.outboundIdentity.environmentDifference') }}</p>
-      <p v-for="header in environmentDifferences" :key="header.name" class="break-all font-mono">{{ header.name }}: {{ modelValue?.headers?.[header.name] }} → {{ header.builtin }}</p>
-      <button type="button" class="btn btn-secondary mt-2" @click="resetEnvironment">{{ t('admin.settings.outboundIdentity.resetEnvironment') }}</button>
-    </div>
+    <IdentityEnvironmentSummary :declarations="presetDeclarations" />
     <div v-if="runtimeHeaders.length" class="space-y-2" data-testid="outbound-identity-account-runtime-headers">
       <div>
         <p class="text-xs text-gray-500">{{ t('admin.settings.outboundIdentity.runtimeHeaders') }}</p>
@@ -57,8 +57,9 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import IdentityEnvironmentSummary from './IdentityEnvironmentSummary.vue'
 import IdentityRuntimeField from './IdentityRuntimeField.vue'
-import { hasIdentityTimezone, identityEnvironmentHeaders, getOutboundIdentity, identityNames, identityPresets, versionlessIdentityPresets, previewOutboundIdentity, type IdentityDeclaration, type IdentityPreset, type IdentitySelection, type PresetDeclarations, type ResolvedIdentity } from '@/api/admin/outboundIdentity'
+import { hasIdentityTimezone, getOutboundIdentity, identityNames, identityPresets, versionlessIdentityPresets, previewOutboundIdentity, type IdentityDeclaration, type IdentityPreset, type IdentitySelection, type PresetDeclarations, type ResolvedIdentity } from '@/api/admin/outboundIdentity'
 const props = defineProps<{ platform: string; accountType: string; modelValue?: IdentitySelection | null; codexUserAgent?: string }>()
 const emit = defineEmits<{ 'update:modelValue': [value: IdentitySelection | null] }>()
 const { t } = useI18n()
@@ -73,18 +74,16 @@ const visible = computed(() => props.platform && props.platform !== 'composite' 
 const availablePresets = computed(() => ['oauth', 'setup-token'].includes(props.accountType) ? [nativePreset.value] : identityPresets)
 // The backend declares which headers each preset renders and which of them
 // accept an account value, so this editor never hard-codes a preset's block.
+const presetDeclarations = computed(() => declarations.value.find(item => item.preset === effectivePreset.value)?.headers ?? [])
 const runtimeHeaders = computed<IdentityDeclaration[]>(() => {
   if (!visible.value || (props.platform === 'openai' && effectivePreset.value === 'codex')) return []
-  return declarations.value.find(item => item.preset === effectivePreset.value)?.headers.filter(header => header.editable) ?? []
+  return presetDeclarations.value.filter(header => header.editable)
 })
-const environmentDifferences = computed(() => runtimeHeaders.value.filter(header => identityEnvironmentHeaders.includes(header.name) && props.modelValue?.headers?.[header.name] && props.modelValue.headers[header.name] !== header.builtin))
-function resetEnvironment() {
-  const current = props.modelValue ?? { preset: effectivePreset.value }
-  const headers = { ...current.headers }
-  for (const header of runtimeHeaders.value) {
-    if (identityEnvironmentHeaders.includes(header.name)) headers[header.name] = header.builtin
-  }
-  emit('update:modelValue', { ...current, headers })
+function setLanguage(value: string) {
+  const current = { ...(props.modelValue ?? { preset: effectivePreset.value }) }
+  if (value) current.language = value
+  else delete current.language
+  emit('update:modelValue', current)
 }
 function setTimezone(value: string) {
   const current = { ...(props.modelValue ?? { preset: effectivePreset.value }) }

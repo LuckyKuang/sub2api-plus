@@ -92,6 +92,13 @@ historical incidents and must not be used for routine development.
 - A failed regular migration rolls back its transaction.
 - A failed non-transactional migration requires operator review before retry.
 
+## Domestic identity environment
+
+Migration 276 deletes the superseded Kimi/ZCode OS, kernel and architecture
+overrides from global and account identities. They now use the pinned Ubuntu
+24.04 environment. Device name/UUID, locale, timezone and unrelated configuration
+are preserved. See [outbound identity](../../docs/OUTBOUND_IDENTITY.md).
+
 ## Upgrade Prerequisites
 
 Back up PostgreSQL before upgrading. Replacing the application binary alone

@@ -299,3 +299,49 @@ func TestCNOAuthUnexpiredSendDoesNotAcquireRefreshLock(t *testing.T) {
 		require.Error(t, svc.prepareRequest(req, a))
 	}
 }
+
+func TestDeepSeekOAuthPersistsSelectedEnvironmentAcrossSettingsChange(t *testing.T) {
+	config := emptyOutboundIdentitySettings()
+	config.Profiles["deepseek"] = OutboundIdentitySelection{Preset: "deepseek", Language: "en-US", Timezone: "Asia/Shanghai"}
+	settings, ctx := outboundIdentityTestSettings(t, config)
+	admin := &cnOAuthAdminStub{}
+	svc := NewCNOAuthService(nil, nil, admin)
+	calls := 0
+	state := ""
+	svc.client = &cnoauth.Client{HTTP: cnOAuthDoer(func(r *http.Request) (*http.Response, error) {
+		calls++
+		require.Equal(t, "en_US", r.Header.Get("X-Client-Locale"))
+		require.Equal(t, "28800", r.Header.Get("X-Client-Timezone-Offset"))
+		require.Equal(t, "web", r.Header.Get("X-Client-Platform"))
+		require.Contains(t, r.Header, "X-Client-Bundle-Id")
+		require.Empty(t, r.Header.Get("X-Client-Bundle-Id"))
+		var body map[string]any
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		value := `{"token":"grant"}`
+		if calls == 1 {
+			require.Equal(t, "en_US", body["locale"])
+			state = body["state"].(string)
+			value = `{"authorize_id":"authorization","authorize_url":"https://platform.deepseek.com/dsh/authorize?id=authorization","expires_in":300}`
+		}
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"code":0,"data":{"biz_code":0,"biz_data":` + value + `}}`))}, nil
+	})}
+	view, err := svc.Start(ctx, 7, PlatformDeepseek, "cn", nil, 0)
+	require.NoError(t, err)
+	require.NoError(t, svc.store.Update(ctx, view.SessionID, func(_ context.Context, session *cnoauth.Session) error {
+		require.Equal(t, "en-US", session.Identity.Language)
+		require.Equal(t, "Asia/Shanghai", session.Identity.Timezone)
+		require.Equal(t, "28800", session.Identity.ControlHeaders["X-Client-Timezone-Offset"])
+		return nil
+	}))
+	config.Profiles["deepseek"] = OutboundIdentitySelection{Preset: "deepseek", Language: "zh-CN", Timezone: "UTC"}
+	require.NoError(t, settings.SetOutboundIdentitySettings(ctx, config))
+	_, err = svc.Advance(ctx, 7, PlatformDeepseek, view.SessionID, cnoauth.DeepSeekRedirect+"?code=code&state="+state, false)
+	require.NoError(t, err)
+	_, err = svc.Complete(ctx, 7, PlatformDeepseek, view.SessionID, CNOAuthCompleteInput{Name: "selected"})
+	require.NoError(t, err)
+	require.Equal(t, 2, calls)
+	selection, ok := admin.input.Credentials[outboundIdentityCredential].(OutboundIdentitySelection)
+	require.True(t, ok)
+	require.Equal(t, "en-US", selection.Language)
+	require.Equal(t, "Asia/Shanghai", selection.Timezone)
+}

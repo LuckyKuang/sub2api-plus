@@ -300,6 +300,8 @@ func TestBuiltInDeepSeekOutboundIdentityPinsPublishedHarness(t *testing.T) {
 	const pinnedUA = "deepseek-harness/0.2.0-rc.2 (+https://github.com/deepseek-ai/deepseek-harness)"
 	require.Equal(t, outboundidentity.Identity{
 		Preset:     "deepseek",
+		Language:   "zh-CN",
+		Timezone:   "UTC",
 		Source:     "compiled_default",
 		UserAgent:  pinnedUA,
 		Originator: "deepseek-harness",
@@ -713,8 +715,8 @@ func TestKimiRuntimeDeclarationsAreMaterializedOnceAndStayStable(t *testing.T) {
 	svc.ensureRuntimeOutboundHeaders(ctx)
 
 	persisted := svc.GetOutboundIdentitySettings(ctx).Runtime["kimi"]
-	require.Len(t, persisted, len(kimi.DeviceHeaders()))
-	for _, name := range kimi.DeviceHeaders() {
+	require.Len(t, persisted, 2)
+	for _, name := range []string{kimi.HeaderDeviceName, kimi.HeaderDeviceID} {
 		require.Equal(t, builtInOutboundIdentity("kimi").Headers[name], persisted[name], name)
 	}
 
@@ -736,10 +738,8 @@ func TestKimiRuntimeDeclarationsAcceptOnlyRuntimeClassNames(t *testing.T) {
 
 	config := emptyOutboundIdentitySettings()
 	config.Runtime = map[string]map[string]string{"kimi": {
-		kimi.HeaderDeviceName:  "kimi-gateway-1",
-		kimi.HeaderDeviceModel: "Linux 6.14.0 x64",
-		kimi.HeaderOSVersion:   "6.14.0",
-		kimi.HeaderDeviceID:    "22222222-2222-4222-8222-222222222222",
+		kimi.HeaderDeviceName: "kimi-gateway-1",
+		kimi.HeaderDeviceID:   "22222222-2222-4222-8222-222222222222",
 	}}
 	require.NoError(t, svc.SetOutboundIdentitySettings(ctx, config))
 
@@ -790,17 +790,17 @@ func TestKimiAccountDeclarationsOverrideTheGlobalTier(t *testing.T) {
 	// A complete account candidate still inherits the deployment-owned device
 	// set rather than falling back to the compiled default.
 	account.Credentials[outboundIdentityCredential] = OutboundIdentitySelection{Preset: "kimi", Version: "2.4.0", Headers: map[string]string{
-		kimi.HeaderOSVersion: "6.14.0-custom",
+		kimi.HeaderDeviceID: "55555555-5555-4555-8555-555555555555",
 	}}
 	got, ok = outboundidentity.FromContext(WithAccountOutboundIdentity(ctx, account))
 	require.True(t, ok)
 	require.Equal(t, "kimi-code-cli/2.4.0", got.UserAgent)
 	require.Equal(t, "2.4.0", got.Headers[kimi.HeaderVersion])
 	require.Equal(t, "kimi-gateway-1", got.Headers[kimi.HeaderDeviceName])
-	require.Equal(t, "6.14.0-custom", got.Headers[kimi.HeaderOSVersion])
+	require.Equal(t, "6.8.0-31-generic", got.Headers[kimi.HeaderOSVersion])
 
 	preview, err := svc.PreviewOutboundIdentity(ctx, account, &OutboundIdentitySelection{Preset: "kimi", Version: "2.4.0", Headers: map[string]string{
-		kimi.HeaderOSVersion: "6.14.0-custom",
+		kimi.HeaderDeviceID: "55555555-5555-4555-8555-555555555555",
 	}})
 	require.NoError(t, err)
 	require.Equal(t, got.Headers, preview.Headers, "the preview must report the declarations that reach the wire")
@@ -856,8 +856,11 @@ func TestOutboundIdentityDeclarationsListTheKimiBlockInOfficialOrder(t *testing.
 	}, names)
 	require.Equal(t, outboundHeaderDerived, outboundHeaderClassName("kimi", kimi.HeaderVersion))
 	require.Equal(t, outboundHeaderPinned, outboundHeaderClassName("kimi", kimi.HeaderPlatform))
-	for _, name := range kimi.DeviceHeaders() {
+	for _, name := range []string{kimi.HeaderDeviceName, kimi.HeaderDeviceID} {
 		require.Equal(t, outboundHeaderRuntime, outboundHeaderClassName("kimi", name), name)
+	}
+	for _, name := range []string{kimi.HeaderDeviceModel, kimi.HeaderOSVersion} {
+		require.Equal(t, outboundHeaderPinned, outboundHeaderClassName("kimi", name), name)
 	}
 	// Every other preset keeps its declarations read-only.
 	require.Equal(t, outboundHeaderPinned, outboundHeaderClassName("claude", "X-App"))

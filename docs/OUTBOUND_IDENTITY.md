@@ -55,15 +55,15 @@ kernel details from leaking. Kimi retains its persisted UUID. Client names,
 version companions, authentication and protocol-specific SDK formats stay intact.
 
 Source priority remains valid account → global preset/type → environment/compiled
-default; Codex retains its separate immutable source contract. Explicit existing
-OS overrides remain valid and version-only updates preserve them. Migration
-`275_neutral_kimi_device_name.sql` changes only known Kimi gateway device names
-`sub2api` / `sub2api-apple` (case-insensitive), in global runtime/profile values
-and account selections, to `ubuntu`; it preserves device IDs and unrelated data.
-New branded device names are rejected. Historical OS values lack provenance and
-are not automatically overwritten: settings show the old/default differences and
-an explicit “Use Ubuntu 24.04 defaults” action. This changes environment fields
-only, preserving product versions, locale, timezone and UUID.
+default; Codex retains its separate immutable source contract. Kimi and ZCode
+OS, kernel and architecture fields are pinned and reject overrides at every
+configuration tier. Settings and account editors show this environment read-only.
+Migration `276_pin_domestic_identity_environment.sql` removes the superseded OS
+keys from global runtime/profile values and account selections; no runtime
+compatibility or repair path remains. Language, timezone, UUID and other settings
+are preserved. Migration `275_neutral_kimi_device_name.sql` replaces known Kimi
+gateway names with `ubuntu`; new branded names are rejected. Kimi device name
+and UUID remain configurable globally and per account.
 
 ZCode language and timezone use searchable dropdowns in settings and account
 editors. Defaults are `en-US` and `UTC`; explicit canonical BCP 47 language tags
@@ -80,6 +80,21 @@ the identity snapshot and OAuth account selection. The protocol layer computes
 owner's retries keep the captured offset and failover resolves the new owner.
 No synthetic timezone header is added to OAuth or other providers.
 
+DeepSeek stores `language` (`zh-CN` or `en-US`, default `zh-CN`) and `timezone`
+(default `UTC`) in global/account selections. Its official platform API supports
+only wire locales `zh_CN` and `en_US`; both the `auth_init` body and
+`X-Client-Locale` use the selected language. `X-Client-Timezone-Offset` is the
+selected zone's UTC offset in **seconds east of UTC**, including DST. The login
+session captures it once before authorization and serializes it with the identity;
+callback exchange reuses the snapshot even after global settings or DST change.
+`X-Client-Bundle-Id` is intentionally an empty header, shown as an official empty
+value. `X-Client-Platform: web` identifies the web authorization flow, independently
+of the pinned Ubuntu environment. These control headers never leak into inference.
+
+MiniMax OAuth and API Key appear in one settings group with two named modes.
+They keep separate profiles/timezones and their official distinct wire identities;
+combining their UA values would violate the official managed/BYOK behavior.
+
 ## Presets and default mappings
 
 | Preset | Default accounts | Wire identity |
@@ -92,8 +107,8 @@ No synthetic timezone header is added to OAuth or other providers.
 | DeepSeek / DSH Desktop | DeepSeek OAuth/API-key accounts | `deepseek-harness/<version> (+https://github.com/deepseek-ai/deepseek-harness)` UA; identifier and version are encoded in the UA, so no `Originator`/`Version` headers |
 | MiniMax Code | MiniMax OAuth accounts | `MiniMaxAgent` plus pinned Anthropic SDK declarations; no product version or `Originator`/`Version` headers |
 | MiniMax Code API Key | MiniMax API-key accounts | `Anthropic/JS 0.91.1` plus matching pinned SDK declarations; version is mandatory |
-| Kimi Code | Kimi / Moonshot OAuth/API-key accounts | `kimi-code-cli/<version>` UA, `X-Msh-Platform: kimi_code_cli`, `X-Msh-Version: <version>` and the four `X-Msh-Device-*` runtime declarations; the official client declares no `Originator` and no standalone `Version` header |
-| GLM / ZCode | Zhipu / GLM API-key and account-link OAuth accounts | `ZCode/<version>`, paired `X-ZCode-App-Version`, product attribution and five runtime declarations listed below |
+| Kimi Code | Kimi / Moonshot OAuth/API-key accounts | `kimi-code-cli/<version>` UA, `X-Msh-Platform: kimi_code_cli`, `X-Msh-Version: <version>` and four device declarations (two runtime, two pinned); the official client declares no `Originator` and no standalone `Version` header |
+| GLM / ZCode | Zhipu / GLM API-key and account-link OAuth accounts | `ZCode/<version>`, paired `X-ZCode-App-Version`, product attribution, two runtime and three pinned environment declarations listed below |
 
 Native OAuth and setup-token accounts retain their native client family.
 API-key, upstream, Bedrock and service-account accounts can explicitly select
@@ -152,13 +167,13 @@ and client version `3.14.3`. The desktop host's declaration block comes from
 | `X-ZCode-Agent` | `glm` | Pinned |
 | `X-Client-Language` | `en-US` | Runtime |
 | `X-Client-Timezone` | `UTC` | Runtime |
-| `X-Platform` | `linux-x64` | Runtime |
-| `X-Os-Category` | `linux` | Runtime |
-| `X-Os-Version` | `6.8.0-31-generic` | Runtime |
+| `X-Platform` | `linux-x64` | Pinned |
+| `X-Os-Category` | `linux` | Pinned |
+| `X-Os-Version` | `6.8.0-31-generic` | Pinned |
 
-The five configurable declarations default to the fixed environment above and
-are persisted under `runtime.zcode`, shown in settings, and overridable globally
-or per account. They do not read host locale, timezone or kernel files.
+Only language and timezone are configurable, persisted under `runtime.zcode`
+and overridable globally or per account. The OS declarations use the fixed
+environment above. No declaration reads host locale, timezone or kernel files.
 Version-only changes retain these facts and all pinned
 product declarations. No standalone `Originator` or `Version` is rendered.
 `SUB2API_ZCODE_VERSION` selects a version without changing the desktop family;
@@ -228,14 +243,14 @@ preset, so the floor cannot reject a legitimate value from a second official
 line — the opposite of the ZCode situation above.
 
 The official client derives device declarations from its host. The gateway uses
-the fixed Ubuntu defaults above and a persistent UUID instead, stored under
-`runtime.kimi`. Explicit global/account overrides remain supported. The default
+the fixed Ubuntu environment above and a persistent UUID instead. Device name
+and UUID are stored under `runtime.kimi` and support global/account overrides. The default
 hostname, kernel and architecture never depend on the deployment host.
 Two consequences are deliberate and operator-visible:
 
 - One deployment presents **one** device identity to upstream, while the
   official client presents one per end-user install. The declaration set is
-  identical; the cardinality is not. Every runtime declaration is overridable
+  identical; the cardinality is not. Device name and UUID are overridable
   per account for exactly this reason, so an operator can split deployments or
   accounts when an upstream rate-limits or risk-scores by device.
 - Opening the settings page materializes any declaration this deployment has not
@@ -409,7 +424,7 @@ request state, or the final target.
 
 Other global settings live in the existing settings store under
 `outbound_identity`; account selections use the existing credentials JSON.
-The hostname data migration requires no schema or YAML/environment changes.
+The hostname and pinned-environment data migrations require no schema or YAML/environment changes.
 Defaults are empty `profiles`, `defaults` and `runtime` maps. Existing Antigravity
 `antigravity_user_agent_version` is imported into the editable Antigravity
 profile before the unified configuration is first saved — either by an
@@ -835,8 +850,8 @@ native preset; relink sessions resolve the credential-owning account. Sessions
 retain that immutable snapshot across polling and publish it with the account.
 Kimi retains all device declarations. MiniMax OAuth uses the explicitly enumerated
 versionless family, while its API-key profile is versioned. DeepSeek's authorization-only `x-client-version` matches the
-selected identity; its platform/locale/UTC declarations are scoped to platform
-requests. No Codex source, family or default changes are introduced.
+selected identity; its web platform, selected locale and captured timezone offset
+are scoped to platform requests. No Codex source, family or default changes are introduced.
 
 Native OAuth destinations and authentication are fixed by provider/region before
 sending. Refresh and inference reuse the same owner snapshot, and failover

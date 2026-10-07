@@ -131,6 +131,9 @@ func snapshot(ctx context.Context, platform string) context.Context {
 			identity = minimax.DefaultIdentity()
 		}
 	}
+	if identity.Preset == "deepseek" {
+		identity = deepseek.CaptureIdentity(identity, time.Now())
+	}
 	return outboundidentity.WithIdentity(ctx, identity)
 }
 func (c *Client) request(ctx context.Context, proxy, target string, body io.Reader, contentType string) (map[string]any, int, error) {
@@ -217,7 +220,7 @@ func (c *Client) Start(ctx context.Context, platform, region, proxy string) (*Fl
 			return nil, err
 		}
 		f.DeviceID = uuid.NewString()
-		v, e := c.deepseek(ctx, proxy, "auth_init", map[string]any{"code_challenge": encoded, "code_challenge_method": "S256", "state": f.State, "redirect_uri": DeepSeekRedirect, "locale": "zh_CN", "login_source": "web"})
+		v, e := c.deepseek(ctx, proxy, "auth_init", map[string]any{"code_challenge": encoded, "code_challenge_method": "S256", "state": f.State, "redirect_uri": DeepSeekRedirect, "locale": deepseek.WireLocale(identityLanguage(ctx)), "login_source": "web"})
 		if e != nil {
 			return nil, e
 		}
@@ -457,4 +460,9 @@ func scopeValue(v any) string {
 		return strings.Join(parts, " ")
 	}
 	return ""
+}
+
+func identityLanguage(ctx context.Context) string {
+	identity, _ := outboundidentity.FromContext(ctx)
+	return identity.Language
 }

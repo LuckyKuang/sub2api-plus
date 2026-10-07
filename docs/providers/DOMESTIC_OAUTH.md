@@ -60,10 +60,14 @@ The selected [outbound identity](../OUTBOUND_IDENTITY.md) is snapshotted for the
 whole authorization session, then saved with the account. In particular Kimi's
 device identity is consistent across login, refresh and inference. Relinking uses
 the credential owner's account identity. DeepSeek's platform-only `x-client-*`
-headers describe a web login and use the selected version, `zh_CN` and UTC;
+headers describe a web login and use the selected version, language (`zh_CN` or
+`en_US`) and timezone offset in seconds east of UTC. The defaults are Chinese and
+UTC; language/timezone dropdowns configure them globally or per account. The
+`auth_init` body locale matches its header; the offset is captured before login
+and retained through callback exchange. The bundle ID is officially empty;
 inference retains its Harness UA. MiniMax inference retains the versionless
 `MiniMaxAgent` family and declares a gateway-generated per-request session
-UUID, the official default agent `main`, and the host UTC offset in seconds in its `X-Mavis-*` protocol headers. They are retained when
+UUID, the official default agent `main`, and the selected timezone UTC offset in seconds in its `X-Mavis-*` protocol headers. They are retained when
 the same request is retried and are never global identity settings.
 
 ## Admin API and session lifecycle

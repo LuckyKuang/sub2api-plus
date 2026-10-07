@@ -16,8 +16,8 @@ const versionOf = (preset: string) => preset === 'minimax' ? '' : preset === 'mi
 // and the backend declares which headers those are.
 const kimiDeviceHeaders: IdentityDeclaration[] = [
   { name: 'X-Msh-Device-Name', class: 'runtime', editable: true, builtin: 'kimi-gateway', value: 'kimi-gateway' },
-  { name: 'X-Msh-Device-Model', class: 'runtime', editable: true, builtin: 'Linux 6.14.0 x64', value: 'Linux 6.14.0 x64' },
-  { name: 'X-Msh-Os-Version', class: 'runtime', editable: true, builtin: '6.14.0', value: '6.14.0' },
+  { name: 'X-Msh-Device-Model', class: 'pinned', editable: false, builtin: 'Linux 6.8.0-31-generic x64', value: 'Linux 6.8.0-31-generic x64' },
+  { name: 'X-Msh-Os-Version', class: 'pinned', editable: false, builtin: '6.8.0-31-generic', value: '6.8.0-31-generic' },
   { name: 'X-Msh-Device-Id', class: 'runtime', editable: true, builtin: '11111111-1111-4111-8111-111111111111', value: '11111111-1111-4111-8111-111111111111' }
 ]
 const kimiHeaders = {
@@ -25,8 +25,8 @@ const kimiHeaders = {
   'X-Msh-Platform': 'kimi_code_cli',
   'X-Msh-Version': '2.1.1',
   'X-Msh-Device-Name': 'kimi-gateway',
-  'X-Msh-Device-Model': 'Linux 6.14.0 x64',
-  'X-Msh-Os-Version': '6.14.0',
+  'X-Msh-Device-Model': 'Linux 6.8.0-31-generic x64',
+  'X-Msh-Os-Version': '6.8.0-31-generic',
   'X-Msh-Device-Id': '11111111-1111-4111-8111-111111111111'
 }
 const zcodeHeaders = {
@@ -38,11 +38,11 @@ const zcodeHeaders = {
   'X-ZCode-Agent': 'glm',
   'X-Client-Language': 'en-US',
   'X-Client-Timezone': 'UTC',
-  'X-Platform': 'linux-arm64',
+  'X-Platform': 'linux-x64',
   'X-Os-Category': 'linux',
-  'X-Os-Version': '6.8.0'
+  'X-Os-Version': '6.8.0-31-generic'
 }
-const zcodeRuntimeNames = ['X-Client-Language', 'X-Client-Timezone', 'X-Platform', 'X-Os-Category', 'X-Os-Version']
+const zcodeRuntimeNames = ['X-Client-Language', 'X-Client-Timezone']
 const fixture = (): OutboundIdentityView => {
   const identities = identityPresets.map(preset => ({
     preset,
@@ -87,9 +87,10 @@ describe('OutboundIdentitySettings', () => {
     vi.mocked(getOutboundIdentity).mockResolvedValue(view)
     const wrapper = mount(OutboundIdentitySettings)
     await flushPromises()
-    const cards = wrapper.findAll('section')
-    expect(cards[identityPresets.indexOf('minimax')].text()).toContain('MiniMax Code · OAuth')
-    const byok = cards[identityPresets.indexOf('minimax_apikey')]
+    const group = wrapper.get('[data-identity-group="minimax"]')
+    expect(wrapper.findAll('[data-identity-group="minimax"]')).toHaveLength(1)
+    expect(group.get('[data-identity-preset="minimax"]').text()).toContain('OAuth')
+    const byok = group.get('[data-identity-preset="minimax_apikey"]')
     expect(byok.text()).toContain('Anthropic/JS 0.91.1')
     expect(byok.find('input').exists()).toBe(false)
     const control = wrapper.get('[data-testid="outbound-identity-control-headers"]')
@@ -104,9 +105,9 @@ describe('OutboundIdentitySettings', () => {
     await flushPromises()
     expect(wrapper.get('[data-testid="codex-existing-controls"]').text()).toBe('Codex controls')
     expect(wrapper.text()).toContain('sources.compiled_default')
-    const claude = wrapper.findAll('section')[1]
+    const claude = wrapper.get('[data-identity-preset="claude"]')
     await claude.findAll('input')[0].setValue('2.9.1')
-    const defaults = wrapper.findAll('select')
+    const defaults = wrapper.findAll('section').at(-1)!.findAll('select')
     await defaults[0].setValue('grok')
     await wrapper.vm.save()
     expect(updateOutboundIdentity).toHaveBeenCalledWith({ profiles: { claude: { preset: 'claude', user_agent: '', version: '2.9.1' } }, defaults: { 'openai:apikey': 'grok' }, runtime: {} })
@@ -117,8 +118,8 @@ describe('OutboundIdentitySettings', () => {
     const wrapper = mount(OutboundIdentitySettings)
     await flushPromises()
     expect(wrapper.findAll('[data-testid="outbound-identity-auth-scope"]')).toHaveLength(3)
-    const card = wrapper.findAll('section')[identityPresets.indexOf('zcode')]
-    expect(card.text()).toContain('GLM · ZCode')
+    const card = wrapper.get('[data-identity-preset="zcode"]')
+    expect(wrapper.get('[data-identity-group="zcode"]').text()).toContain('GLM · ZCode')
     const headers = card.get('[data-testid="outbound-identity-headers"]')
     for (const [name, value] of Object.entries(zcodeHeaders)) {
       expect(headers.text()).toContain(name)
@@ -143,7 +144,7 @@ describe('OutboundIdentitySettings', () => {
     vi.mocked(getOutboundIdentity).mockResolvedValue(view)
     const wrapper = mount(OutboundIdentitySettings)
     await flushPromises()
-    const card = wrapper.findAll('section')[identityPresets.indexOf('zcode')]
+    const card = wrapper.get('[data-identity-preset="zcode"]')
     expect(card.get('button[aria-label="X-Client-Timezone"]').text()).toContain('Asia/Shanghai')
     expect(wrapper.vm.isDirty).toBe(false)
     card.findAllComponents(IdentityRuntimeField).find(field => field.props('name') === 'X-Client-Timezone')!.vm.$emit('update:modelValue', 'Europe/Amsterdam')
@@ -152,32 +153,62 @@ describe('OutboundIdentitySettings', () => {
     wrapper.unmount()
   })
 
-  it('lists saved environment differences and resets only host declarations', async () => {
-    const view = fixture()
-    view.settings.runtime = { kimi: { 'X-Msh-Device-Name': 'old-host', 'X-Msh-Device-Id': '22222222-2222-4222-8222-222222222222' } }
-    vi.mocked(getOutboundIdentity).mockResolvedValue(view)
+  it('shows one read-only environment with no per-field OS overrides', async () => {
     const wrapper = mount(OutboundIdentitySettings)
     await flushPromises()
-    const card = wrapper.findAll('section')[identityPresets.indexOf('kimi')]
-    const differences = card.get('[data-testid="identity-environment-differences"]')
-    expect(differences.text()).toContain('old-host')
+    for (const preset of ['kimi', 'zcode']) {
+      const card = wrapper.get(`[data-identity-preset="${preset}"]`)
+      const environment = card.get('[data-testid="identity-environment-summary"]')
+      expect(environment.text()).toContain('Ubuntu 24.04')
+      expect(environment.find('input').exists()).toBe(false)
+      expect(environment.find('select').exists()).toBe(false)
+      expect(card.find('input[aria-label="X-Msh-Os-Version"]').exists()).toBe(false)
+      expect(card.find('input[aria-label="X-Platform"]').exists()).toBe(false)
+    }
     expect(wrapper.vm.isDirty).toBe(false)
-    await differences.get('button').trigger('click')
-    await wrapper.vm.save()
-    const saved = vi.mocked(updateOutboundIdentity).mock.calls[0][0]
-    expect(saved.runtime?.kimi?.['X-Msh-Device-Name']).toBe('kimi-gateway')
-    expect(saved.runtime?.kimi?.['X-Msh-Device-Id']).toBe('22222222-2222-4222-8222-222222222222')
     wrapper.unmount()
   })
 
   it('saves MiniMax timezone-only profiles without inventing a header', async () => {
     const wrapper = mount(OutboundIdentitySettings)
     await flushPromises()
-    const card = wrapper.findAll('section')[identityPresets.indexOf('minimax')]
+    const card = wrapper.get('[data-identity-preset="minimax"]')
     card.getComponent(IdentityRuntimeField).vm.$emit('update:modelValue', 'Europe/Amsterdam')
     await wrapper.vm.save()
     expect(vi.mocked(updateOutboundIdentity).mock.calls[0][0]).toEqual({
       profiles: { minimax: { preset: 'minimax', user_agent: '', version: '', timezone: 'Europe/Amsterdam' } }, defaults: {}, runtime: {}
+    })
+    wrapper.unmount()
+  })
+
+  it('selects DeepSeek locale and timezone and labels the official empty bundle', async () => {
+    const view = fixture()
+    view.control_plane = [{ ...view.effective.find(item => item.preset === 'deepseek')!, headers: { 'X-Client-Bundle-Id': '', 'X-Client-Locale': 'zh_CN' } }]
+    vi.mocked(getOutboundIdentity).mockResolvedValue(view)
+    const wrapper = mount(OutboundIdentitySettings)
+    await flushPromises()
+    const card = wrapper.get('[data-identity-preset="deepseek"]')
+    expect(card.get('[data-testid="outbound-identity-control-headers"]').text()).toContain('emptyOfficialValue')
+    const language = card.get('select[aria-label="language"]')
+    expect(language.findAll('option').map(option => option.attributes('value'))).toEqual(['string:', 'string:zh-CN', 'string:en-US'])
+    await language.setValue('string:en-US')
+    card.findAllComponents(IdentityRuntimeField).find(field => field.props('name') === 'timezone')!.vm.$emit('update:modelValue', 'Asia/Shanghai')
+    await wrapper.vm.save()
+    expect(vi.mocked(updateOutboundIdentity).mock.calls[0][0].profiles.deepseek).toEqual({ preset: 'deepseek', user_agent: '', version: '', language: 'en-US', timezone: 'Asia/Shanghai' })
+    wrapper.unmount()
+  })
+
+  it('saves both MiniMax modes from their shared group without merging identities', async () => {
+    const wrapper = mount(OutboundIdentitySettings)
+    await flushPromises()
+    const group = wrapper.get('[data-identity-group="minimax"]')
+    for (const preset of ['minimax', 'minimax_apikey']) {
+      group.get(`[data-identity-preset="${preset}"]`).getComponent(IdentityRuntimeField).vm.$emit('update:modelValue', preset === 'minimax' ? 'UTC' : 'Asia/Shanghai')
+    }
+    await wrapper.vm.save()
+    expect(vi.mocked(updateOutboundIdentity).mock.calls[0][0].profiles).toEqual({
+      minimax: { preset: 'minimax', user_agent: '', version: '', timezone: 'UTC' },
+      minimax_apikey: { preset: 'minimax_apikey', user_agent: '', version: '', timezone: 'Asia/Shanghai' }
     })
     wrapper.unmount()
   })
@@ -198,7 +229,7 @@ describe('OutboundIdentitySettings', () => {
     expect(wrapper.vm.isDirty).toBe(false)
     await wrapper.vm.save()
     expect(updateOutboundIdentity).not.toHaveBeenCalled()
-    const input = wrapper.findAll('section')[1].findAll('input')[0]
+    const input = wrapper.get('[data-identity-preset="claude"]').findAll('input')[0]
     await input.setValue('3.9.1')
     expect(wrapper.vm.isDirty).toBe(true)
     await input.setValue('')
@@ -209,7 +240,7 @@ describe('OutboundIdentitySettings', () => {
   it('retains edits made during saving and effective-identity refresh', async () => {
     const wrapper = mount(OutboundIdentitySettings)
     await flushPromises()
-    const input = wrapper.findAll('section')[1].findAll('input')[0]
+    const input = wrapper.get('[data-identity-preset="claude"]').findAll('input')[0]
     await input.setValue('3.9.1')
     let complete!: (value: OutboundIdentityView) => void
     vi.mocked(updateOutboundIdentity).mockReturnValueOnce(new Promise(resolve => { complete = resolve }))
@@ -241,8 +272,8 @@ describe('OutboundIdentitySettings', () => {
   it('exposes the pinned DeepSeek preset and its API-key type default mapping', async () => {
     const wrapper = mount(OutboundIdentitySettings)
     await flushPromises()
-    const deepseekCard = wrapper.findAll('section')[identityPresets.indexOf('deepseek')]
-    expect(deepseekCard.text()).toContain('DeepSeek')
+    const deepseekCard = wrapper.get('[data-identity-preset="deepseek"]')
+    expect(wrapper.get('[data-identity-group="deepseek"]').text()).toContain('DeepSeek')
     expect(deepseekCard.text()).toContain('deepseek/1.2.3')
     const row = wrapper.findAll('label').find(label => label.text().includes('deepseek · API Key'))
     expect(row, 'the deepseek type-default row must be configurable').toBeDefined()
@@ -255,7 +286,7 @@ describe('OutboundIdentitySettings', () => {
   it('shows the wire request headers and the versionless MiniMax declaration', async () => {
     const wrapper = mount(OutboundIdentitySettings)
     await flushPromises()
-    const minimaxCard = wrapper.findAll('section')[identityPresets.indexOf('minimax')]
+    const minimaxCard = wrapper.get('[data-identity-preset="minimax"]')
     expect(minimaxCard.text()).toContain('MiniMax')
     // The saved global identity exposes the exact headers sent upstream.
     const headers = minimaxCard.get('[data-testid="outbound-identity-headers"]')
@@ -284,7 +315,7 @@ describe('OutboundIdentitySettings', () => {
   it('exposes the pinned ZCode preset and its API-key type default mapping', async () => {
     const wrapper = mount(OutboundIdentitySettings)
     await flushPromises()
-    const zcodeCard = wrapper.findAll('section')[identityPresets.indexOf('zcode')]
+    const zcodeCard = wrapper.get('[data-identity-preset="zcode"]')
     expect(zcodeCard.text()).toContain('ZCode')
     // ZCode is a versioned family: it renders the product token with its client
     // version, keeps the version control, and never shows the versionless hint.
@@ -305,8 +336,8 @@ describe('OutboundIdentitySettings', () => {
   it('exposes the pinned Kimi Code preset and lets an operator manage its runtime declarations', async () => {
     const wrapper = mount(OutboundIdentitySettings)
     await flushPromises()
-    const kimiCard = wrapper.findAll('section')[identityPresets.indexOf('kimi')]
-    expect(kimiCard.text()).toContain('Kimi Code')
+    const kimiCard = wrapper.get('[data-identity-preset="kimi"]')
+    expect(wrapper.get('[data-identity-group="kimi"]').text()).toContain('Kimi Code')
     // The complete official declaration block reaches the saved identity view.
     const headers = kimiCard.get('[data-testid="outbound-identity-headers"]')
     expect(headers.text()).toContain('X-Msh-Platform')
@@ -315,8 +346,8 @@ describe('OutboundIdentitySettings', () => {
     // and the derived version companion stay read-only.
     const runtime = kimiCard.get('[data-testid="outbound-identity-runtime-headers"]')
     const inputs = runtime.findAll('input')
-    expect(inputs).toHaveLength(4)
-    expect(inputs.map(input => input.attributes('aria-label'))).toEqual(['X-Msh-Device-Name', 'X-Msh-Device-Model', 'X-Msh-Os-Version', 'X-Msh-Device-Id'])
+    expect(inputs).toHaveLength(2)
+    expect(inputs.map(input => input.attributes('aria-label'))).toEqual(['X-Msh-Device-Name', 'X-Msh-Device-Id'])
     expect(inputs[0].attributes('placeholder')).toBe('kimi-gateway')
     expect(kimiCard.findAll('input').length).toBeGreaterThan(inputs.length)
 
@@ -335,8 +366,8 @@ describe('OutboundIdentitySettings', () => {
     await flushPromises()
     // Loading persisted runtime values is not an unsaved edit on its own.
     expect(wrapper.vm.isDirty).toBe(false)
-    const kimiCard = wrapper.findAll('section')[identityPresets.indexOf('kimi')]
-    const deviceID = kimiCard.get('[data-testid="outbound-identity-runtime-headers"]').findAll('input')[3]
+    const kimiCard = wrapper.get('[data-identity-preset="kimi"]')
+    const deviceID = kimiCard.get('[data-testid="outbound-identity-runtime-headers"]').get('input[aria-label="X-Msh-Device-Id"]')
     expect((deviceID.element as HTMLInputElement).value).toBe('22222222-2222-4222-8222-222222222222')
     await deviceID.setValue('')
     await wrapper.vm.save()
@@ -354,7 +385,7 @@ describe('OutboundIdentitySettings', () => {
     await flushPromises()
     // Loading a preserved profile is not an unsaved edit on its own.
     expect(wrapper.vm.isDirty).toBe(false)
-    await wrapper.findAll('section')[1].findAll('input')[0].setValue('3.9.1')
+    await wrapper.get('[data-identity-preset="claude"]').findAll('input')[0].setValue('3.9.1')
     await wrapper.vm.save()
     expect(vi.mocked(updateOutboundIdentity).mock.calls[0][0].profiles).toEqual({
       claude: { preset: 'claude', user_agent: '', version: '3.9.1' },
@@ -370,7 +401,7 @@ describe('OutboundIdentitySettings', () => {
     vi.mocked(getOutboundIdentity).mockResolvedValueOnce(saved)
     const wrapper = mount(OutboundIdentitySettings)
     await flushPromises()
-    await wrapper.findAll('section')[1].findAll('input')[0].setValue('3.9.1')
+    await wrapper.get('[data-identity-preset="claude"]').findAll('input')[0].setValue('3.9.1')
     await wrapper.vm.save()
     expect(vi.mocked(updateOutboundIdentity).mock.calls[0][0].defaults).toEqual({ 'anthropic:oauth': 'claude' })
     wrapper.unmount()

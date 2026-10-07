@@ -13,7 +13,8 @@ import (
 )
 
 type Identity struct {
-	// Timezone is MiniMax request metadata configuration, never an extra wire header.
+	// Language and Timezone are snapshot metadata, never extra wire headers.
+	Language       string                 `json:"language,omitempty"`
 	Timezone       string                 `json:"timezone,omitempty"`
 	AccountID      int64                  `json:"-"`
 	Preset         string                 `json:"preset"`

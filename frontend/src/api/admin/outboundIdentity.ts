@@ -5,8 +5,10 @@ export interface IdentitySelection {
   preset: IdentityPreset | ''
   user_agent?: string
   version?: string
-  /** MiniMax request timezone; never an additional wire header. */
+  /** DeepSeek/MiniMax timezone metadata; never an additional wire header. */
   timezone?: string
+  /** DeepSeek UI language (zh-CN or en-US), rendered only on account-service calls. */
+  language?: string
   /** Configured values for the preset's `runtime` declarations only. */
   headers?: Record<string, string>
 }
@@ -17,6 +19,8 @@ export interface ResolvedIdentity {
   version: string
   source: string
   timezone?: string
+  /** DeepSeek UI language (zh-CN or en-US), rendered only on account-service calls. */
+  language?: string
   headers: Record<string, string>
 }
 /**
@@ -70,5 +74,5 @@ export async function previewOutboundIdentity(platform: string, type: string, se
   return (await apiClient.post<ResolvedIdentity>('/admin/settings/outbound-identity/preview', { platform, type, selection, user_agent: userAgent })).data
 }
 
-export const identityEnvironmentHeaders = ['X-Msh-Device-Name', 'X-Msh-Device-Model', 'X-Msh-Os-Version', 'X-Platform', 'X-Os-Category', 'X-Os-Version']
-export const hasIdentityTimezone = (preset: string) => preset === 'minimax' || preset === 'minimax_apikey'
+export const identityEnvironmentHeaders = ['X-Msh-Device-Model', 'X-Msh-Os-Version', 'X-Platform', 'X-Os-Category', 'X-Os-Version']
+export const hasIdentityTimezone = (preset: string) => preset === 'deepseek' || preset === 'minimax' || preset === 'minimax_apikey'

@@ -7,8 +7,12 @@
     <p v-if="error" role="alert" class="text-sm text-red-600">{{ error }}</p>
     <p v-if="loading" class="text-sm text-gray-500">{{ t('common.loading') }}</p>
     <template v-if="view">
-      <section v-for="preset in identityPresets" :key="preset" class="card space-y-4 p-6">
-        <h3 class="font-semibold">{{ identityNames[preset] }}</h3>
+      <section v-for="group in identityGroups" :key="group.key" class="card space-y-4 p-6" :data-identity-group="group.key">
+        <h3 class="font-semibold">{{ group.label }}</h3>
+        <p v-if="group.key === 'minimax'" class="text-sm text-gray-500">{{ t('admin.settings.outboundIdentity.minimaxModesHint') }}</p>
+        <div class="grid gap-6" :class="group.presets.length > 1 ? 'xl:grid-cols-2' : ''">
+        <div v-for="preset in group.presets" :key="preset" class="space-y-4" :data-identity-preset="preset">
+        <h4 v-if="group.presets.length > 1" class="font-medium">{{ preset === 'minimax' ? 'OAuth' : 'API Key' }}</h4>
         <p v-if="domesticPresets.includes(preset)" class="text-sm text-gray-500" data-testid="outbound-identity-auth-scope">{{ t('admin.settings.outboundIdentity.oauthApiKeyScope') }}</p>
         <div class="rounded-lg bg-gray-50 p-4 text-sm dark:bg-dark-800">
           <p class="mb-2 text-gray-500">{{ t('admin.settings.outboundIdentity.effectiveGlobal') }}</p>
@@ -27,7 +31,7 @@
             <dl class="grid gap-1 sm:grid-cols-[auto_1fr]" data-testid="outbound-identity-headers">
               <template v-for="(value, name) in effective(preset)?.headers" :key="name">
                 <dt class="font-mono text-xs text-gray-500">{{ name }}</dt>
-                <dd class="break-all font-mono text-xs">{{ value }}</dd>
+                <dd class="break-all font-mono text-xs">{{ value === '' ? t('admin.settings.outboundIdentity.emptyOfficialValue') : value }}</dd>
               </template>
             </dl>
           </div>
@@ -37,7 +41,7 @@
           <dl class="grid gap-1 sm:grid-cols-[auto_1fr]" data-testid="outbound-identity-wire-headers">
             <template v-for="(value, name) in wire.headers" :key="name">
               <dt class="font-mono text-xs text-gray-500">{{ name }}</dt>
-              <dd class="break-all font-mono text-xs">{{ value }}</dd>
+              <dd class="break-all font-mono text-xs">{{ value === '' ? t('admin.settings.outboundIdentity.emptyOfficialValue') : value }}</dd>
             </template>
           </dl>
         </div>
@@ -46,7 +50,7 @@
           <dl class="grid gap-1 sm:grid-cols-[auto_1fr]" data-testid="outbound-identity-control-headers">
             <template v-for="(value, name) in controlIdentity(preset)?.headers" :key="name">
               <dt class="font-mono text-xs text-gray-500">{{ name }}</dt>
-              <dd class="break-all font-mono text-xs">{{ value }}</dd>
+              <dd class="break-all font-mono text-xs">{{ value === '' ? t('admin.settings.outboundIdentity.emptyOfficialValue') : value }}</dd>
             </template>
           </dl>
         </div>
@@ -67,16 +71,16 @@
           </details>
           <p class="text-xs text-gray-500">{{ t('admin.settings.outboundIdentity.inheritHint') }}</p>
         </template>
+        <label v-if="preset === 'deepseek'" class="block text-sm">
+          {{ t('admin.settings.outboundIdentity.language') }}
+          <IdentityRuntimeField name="language" :model-value="profiles[preset].language" fallback="zh-CN" @update:model-value="setLanguage(preset, $event)" />
+        </label>
         <label v-if="hasIdentityTimezone(preset)" class="block text-sm">
           {{ t('admin.settings.outboundIdentity.timezone') }}
           <IdentityRuntimeField name="timezone" :model-value="profiles[preset].timezone" fallback="UTC" @update:model-value="setTimezone(preset, $event)" />
           <span class="text-xs text-gray-500">{{ t('admin.settings.outboundIdentity.timezoneHint') }}</span>
         </label>
-        <div v-if="environmentDifferences(preset).length" class="text-sm" data-testid="identity-environment-differences">
-          <p>{{ t('admin.settings.outboundIdentity.environmentDifference') }}</p>
-          <p v-for="header in environmentDifferences(preset)" :key="header.name" class="break-all font-mono text-xs">{{ header.name }}: {{ runtime[preset][header.name] || header.value }} → {{ header.builtin }}</p>
-          <button type="button" class="btn btn-secondary mt-2" @click="resetEnvironment(preset)">{{ t('admin.settings.outboundIdentity.resetEnvironment') }}</button>
-        </div>
+        <IdentityEnvironmentSummary :declarations="presetDeclarations(preset)" />
         <div v-if="runtimeHeaders(preset).length" class="space-y-3" data-testid="outbound-identity-runtime-headers">
           <div>
             <p class="text-sm">{{ t('admin.settings.outboundIdentity.runtimeHeaders') }}</p>
@@ -92,6 +96,8 @@
               @update:model-value="setRuntime(preset, header.name, $event)"
             />
           </label>
+        </div>
+        </div>
         </div>
       </section>
       <section class="card space-y-4 p-6">
@@ -112,10 +118,15 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import IdentityEnvironmentSummary from '@/components/account/IdentityEnvironmentSummary.vue'
 import IdentityRuntimeField from '@/components/account/IdentityRuntimeField.vue'
-import { hasIdentityTimezone, identityEnvironmentHeaders, getOutboundIdentity, updateOutboundIdentity, identityNames, identityPresets, versionlessIdentityPresets, type IdentityDeclaration, type IdentityPreset, type IdentitySelection, type OutboundIdentityView } from '@/api/admin/outboundIdentity'
+import { hasIdentityTimezone, getOutboundIdentity, updateOutboundIdentity, identityNames, identityPresets, versionlessIdentityPresets, type IdentityDeclaration, type IdentityPreset, type IdentitySelection, type OutboundIdentityView } from '@/api/admin/outboundIdentity'
 
 const { t } = useI18n()
+const identityGroups = identityPresets.filter(preset => preset !== 'minimax_apikey').map(preset => ({
+  key: preset, label: preset === 'minimax' ? 'MiniMax Code' : identityNames[preset],
+  presets: preset === 'minimax' ? ['minimax', 'minimax_apikey'] as IdentityPreset[] : [preset]
+}))
 const domesticPresets: IdentityPreset[] = ['deepseek', 'kimi', 'zcode']
 const view = ref<OutboundIdentityView>()
 const error = ref('')
@@ -150,17 +161,17 @@ const isVersionless = (preset: IdentityPreset) => versionlessIdentityPresets.inc
 const sourceLabel = (source?: string) => t(`admin.settings.outboundIdentity.sources.${source || 'compiled_default'}`)
 // The backend declares which headers a preset renders and which of them accept
 // a configured value, so this page never hard-codes a preset's header block.
+const presetDeclarations = (preset: IdentityPreset) => view.value?.declarations?.find(item => item.preset === preset)?.headers ?? []
 const runtimeHeaders = (preset: IdentityPreset): IdentityDeclaration[] =>
-  view.value?.declarations?.find(item => item.preset === preset)?.headers.filter(header => header.editable) ?? []
+  presetDeclarations(preset).filter(header => header.editable)
 function setTimezone(preset: IdentityPreset, value: string) {
   if (value) profiles[preset].timezone = value
   else delete profiles[preset].timezone
 }
-const environmentDifferences = (preset: IdentityPreset) => runtimeHeaders(preset).filter(header => identityEnvironmentHeaders.includes(header.name) && (runtime[preset][header.name] || header.builtin) !== header.builtin)
-function resetEnvironment(preset: IdentityPreset) {
-  for (const header of runtimeHeaders(preset)) {
-    if (identityEnvironmentHeaders.includes(header.name)) runtime[preset][header.name] = header.builtin
-  }
+
+function setLanguage(preset: IdentityPreset, value: string) {
+  if (value) profiles[preset].language = value
+  else delete profiles[preset].language
 }
 function setRuntime(preset: IdentityPreset, name: string, value: string) {
   const trimmed = value.trim()
@@ -175,7 +186,7 @@ function isPreservedProfile(preset: string) {
   return isVersionless(preset as IdentityPreset) && Boolean(view.value?.settings.profiles?.[preset as IdentityPreset])
 }
 function formSettings() {
-  const selectedProfiles = Object.fromEntries(Object.entries(profiles).filter(([preset, selection]) => preset !== 'codex' && (selection.user_agent?.trim() || selection.version?.trim() || selection.timezone || isPreservedProfile(preset))).map(([preset, selection]) => [preset, { ...selection }]))
+  const selectedProfiles = Object.fromEntries(Object.entries(profiles).filter(([preset, selection]) => preset !== 'codex' && (selection.user_agent?.trim() || selection.version?.trim() || selection.timezone || selection.language || isPreservedProfile(preset))).map(([preset, selection]) => [preset, { ...selection }]))
   const selectedDefaults = Object.fromEntries(Object.entries(defaults).filter(([, preset]) => preset)) as Record<string, IdentityPreset>
   const selectedRuntime = Object.fromEntries(Object.entries(runtime).filter(([, values]) => Object.keys(values).length).map(([preset, values]) => [preset, { ...values }]))
   return { profiles: selectedProfiles, defaults: selectedDefaults, runtime: selectedRuntime }

@@ -20,7 +20,9 @@ package deepseek
 import (
 	"maps"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 
 	"golang.org/x/mod/semver"
 
@@ -88,6 +90,8 @@ func DefaultIdentity() outboundidentity.Identity {
 	ua := UserAgent(version)
 	return outboundidentity.Identity{
 		Preset:     "deepseek",
+		Language:   "zh-CN",
+		Timezone:   outboundidentity.DefaultTimezone,
 		UserAgent:  ua,
 		Originator: ClientIdentifier,
 		Version:    version,
@@ -99,11 +103,33 @@ func DefaultIdentity() outboundidentity.Identity {
 // ControlIdentity mirrors platformClientHeaders(null, client): this server uses
 // the official web login flow, whose UI build version is the Harness version.
 func ControlIdentity(identity outboundidentity.Identity) outboundidentity.Identity {
+	identity = CaptureIdentity(identity, time.Now())
 	identity.Headers = maps.Clone(identity.Headers)
 	identity.Headers["X-Client-Bundle-Id"] = ""
 	identity.Headers["X-Client-Platform"] = "web"
 	identity.Headers["X-Client-Version"] = identity.Version
-	identity.Headers["X-Client-Locale"] = "zh_CN"
-	identity.Headers["X-Client-Timezone-Offset"] = "0"
+	identity.Headers["X-Client-Locale"] = WireLocale(identity.Language)
+	identity.Headers["X-Client-Timezone-Offset"] = identity.ControlHeaders["X-Client-Timezone-Offset"]
+	return identity
+}
+
+// WireLocale mirrors platformWireLocale: Chinese -> zh_CN, otherwise en_US.
+func WireLocale(language string) string {
+	if strings.EqualFold(strings.Split(strings.ReplaceAll(language, "_", "-"), "-")[0], "zh") {
+		return "zh_CN"
+	}
+	return "en_US"
+}
+
+// CaptureIdentity freezes the offset at operation start so a login resumed from
+// Redis, retry or refresh cannot adopt another environment midway through it.
+func CaptureIdentity(identity outboundidentity.Identity, at time.Time) outboundidentity.Identity {
+	if identity.ControlHeaders["X-Client-Timezone-Offset"] == "" {
+		identity.ControlHeaders = maps.Clone(identity.ControlHeaders)
+		if identity.ControlHeaders == nil {
+			identity.ControlHeaders = map[string]string{}
+		}
+		identity.ControlHeaders["X-Client-Timezone-Offset"] = strconv.Itoa(identity.TimezoneOffset(at))
+	}
 	return identity
 }
