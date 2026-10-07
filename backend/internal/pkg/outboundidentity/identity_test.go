@@ -35,3 +35,32 @@ func TestIdentitySnapshotRemovesUntrustedDeclarationsAndPreservesProtocol(t *tes
 	ApplyContext(req)
 	require.Equal(t, before, req.Header, "reapplication before transport is idempotent")
 }
+
+func TestProtocolIdentitySnapshotIsDeepCopiedAndIdempotent(t *testing.T) {
+	identity := Identity{Preset: "fixture", UserAgent: "client/1.0.0", Headers: map[string]string{"User-Agent": "client/1.0.0"}, ControlHeaders: map[string]string{"X-Os-Version": "host"}, Inference: map[string]WireProfile{"anthropic": {UserAgentSuffix: "ai/6.0.193", Headers: map[string]string{"X-Stainless-Package-Version": "0.95.2"}}}}
+	ctx := WithIdentity(context.Background(), identity)
+	identity.Inference["anthropic"].Headers["X-Stainless-Package-Version"] = "mutated"
+	identity.ControlHeaders["X-Os-Version"] = "mutated"
+	snapshot, _ := FromContext(ctx)
+	snapshot.Inference["anthropic"].Headers["X-Stainless-Package-Version"] = "also-mutated"
+	snapshot.ControlHeaders["X-Os-Version"] = "also-mutated"
+	for _, path := range []string{"/v1/messages", "/v1/messages/count_tokens"} {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://fixture.invalid"+path, nil)
+		require.NoError(t, err)
+		req.Header.Set("X-Client-Version", "caller")
+		req.Header.Set("X-Device-Mid", "caller")
+		ApplyContext(req)
+		ApplyContext(req)
+		require.Equal(t, "client/1.0.0 ai/6.0.193", req.UserAgent())
+		require.Equal(t, "0.95.2", req.Header.Get("X-Stainless-Package-Version"))
+		require.Empty(t, req.Header.Get("X-Client-Version"))
+		require.Empty(t, req.Header.Get("X-Device-Mid"))
+	}
+	snapshot, _ = FromContext(ctx)
+	require.Equal(t, "host", snapshot.ControlHeaders["X-Os-Version"])
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://fixture.invalid/oauth/token", nil)
+	require.NoError(t, err)
+	ApplyContext(req)
+	require.Equal(t, "client/1.0.0", req.UserAgent())
+	require.Empty(t, req.Header.Get("X-Stainless-Package-Version"))
+}

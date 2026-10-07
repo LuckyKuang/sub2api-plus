@@ -62,8 +62,8 @@ device identity is consistent across login, refresh and inference. Relinking use
 the credential owner's account identity. DeepSeek's platform-only `x-client-*`
 headers describe a web login and use the selected version, `zh_CN` and UTC;
 inference retains its Harness UA. MiniMax inference retains the versionless
-`MiniMaxAgent` family and declares gateway-generated per-request session/agent
-UUIDs and UTC offset in its `X-Mavis-*` protocol headers. They are retained when
+`MiniMaxAgent` family and declares a gateway-generated per-request session
+UUID, the official default agent `main`, and the host UTC offset in seconds in its `X-Mavis-*` protocol headers. They are retained when
 the same request is retried and are never global identity settings.
 
 ## Admin API and session lifecycle

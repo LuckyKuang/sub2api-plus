@@ -8,6 +8,7 @@
     <template v-if="isVersionlessSelection">
       <p class="text-xs text-gray-500">{{ t('admin.settings.outboundIdentity.versionlessHint') }}</p>
     </template>
+    <p v-else-if="modelValue?.preset === 'minimax_apikey'" class="text-xs text-gray-500">{{ t('admin.settings.outboundIdentity.pinnedSdkHint') }}</p>
     <template v-else-if="modelValue?.preset && !(platform === 'openai' && modelValue.preset === 'codex')">
       <input :value="modelValue.version" class="input font-mono" :aria-label="t('admin.settings.outboundIdentity.version')" :placeholder="t('admin.settings.outboundIdentity.version')" @input="update('version', ($event.target as HTMLInputElement).value)" />
       <details>
@@ -56,7 +57,7 @@ const error = ref('')
 const declarations = ref<PresetDeclarations[]>([])
 const nativePresets: Record<string, IdentityPreset> = { anthropic: 'claude', gemini: 'gemini', grok: 'grok', antigravity: 'antigravity', deepseek: 'deepseek', minimax: 'minimax', kimi: 'kimi', zhipu: 'zcode' }
 const isVersionlessSelection = computed(() => !!props.modelValue?.preset && versionlessIdentityPresets.includes(props.modelValue.preset as IdentityPreset))
-const nativePreset = computed<IdentityPreset>(() => nativePresets[props.platform] || 'codex')
+const nativePreset = computed<IdentityPreset>(() => props.platform === 'minimax' && props.accountType === 'apikey' ? 'minimax_apikey' : nativePresets[props.platform] || 'codex')
 const effectivePreset = computed<IdentityPreset>(() => (props.modelValue?.preset as IdentityPreset) || nativePreset.value)
 const visible = computed(() => props.platform && props.platform !== 'composite' && (props.platform !== 'openai' || ['apikey', 'upstream'].includes(props.accountType)))
 const availablePresets = computed(() => ['oauth', 'setup-token'].includes(props.accountType) ? [nativePreset.value] : identityPresets)

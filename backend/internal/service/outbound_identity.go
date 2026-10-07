@@ -75,9 +75,16 @@ type OutboundIdentityPresetDeclarations struct {
 	Headers []OutboundIdentityDeclaration `json:"headers"`
 }
 
+type OutboundIdentityWireView struct {
+	Protocol string `json:"protocol"`
+	outboundidentity.Identity
+}
+
 type OutboundIdentityView struct {
+	WireProfiles []OutboundIdentityWireView           `json:"wire_profiles"`
 	Settings     OutboundIdentitySettings             `json:"settings"`
 	Presets      []outboundidentity.Identity          `json:"presets"`
+	ControlPlane []outboundidentity.Identity          `json:"control_plane"`
 	Effective    []outboundidentity.Identity          `json:"effective"`
 	Declarations []OutboundIdentityPresetDeclarations `json:"declarations"`
 }
@@ -88,7 +95,7 @@ type cachedOutboundIdentitySettings struct {
 }
 
 var outboundClientVersionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.]+)?$`)
-var outboundPresetNames = []string{"codex", "claude", "gemini", "grok", "antigravity", "deepseek", "minimax", "kimi", "zcode"}
+var outboundPresetNames = []string{"codex", "claude", "gemini", "grok", "antigravity", "deepseek", "minimax", "minimax_apikey", "kimi", "zcode"}
 
 // versionlessOutboundUserAgents enumerates the client families whose official
 // client publishes no version segment. MiniMax renders the bare product token
@@ -158,6 +165,13 @@ func nativeOutboundPreset(platform string) string {
 	}
 }
 
+func nativeAccountOutboundPreset(platform, accountType string) string {
+	if platform == PlatformMiniMax && accountType == AccountTypeAPIKey {
+		return minimax.APIKeyPreset
+	}
+	return nativeOutboundPreset(platform)
+}
+
 func outboundDefaultKey(account *Account) string {
 	if account == nil {
 		return ""
@@ -199,6 +213,8 @@ func builtInOutboundIdentity(preset string) outboundidentity.Identity {
 		return deepseek.DefaultIdentity()
 	case "minimax":
 		return minimax.DefaultIdentity()
+	case minimax.APIKeyPreset:
+		return minimax.APIKeyIdentity()
 	case "kimi":
 		return kimi.DefaultIdentity()
 	case "zcode":
@@ -517,7 +533,7 @@ func buildOutboundIdentity(selection OutboundIdentitySelection) (outboundidentit
 		if brandidentity.ContainsBrand(ua) {
 			return i, fmt.Errorf("User-Agent must not contain the project brand")
 		}
-		prefix := map[string]string{"claude": "claude-cli/", "gemini": "GeminiCLI/", "grok": "grok-shell/", "antigravity": "antigravity/", "deepseek": "deepseek-harness/", "kimi": "kimi-code-cli/", "zcode": "ZCode/"}[selection.Preset]
+		prefix := map[string]string{"claude": "claude-cli/", "gemini": "GeminiCLI/", "grok": "grok-shell/", "antigravity": "antigravity/", "deepseek": "deepseek-harness/", "kimi": "kimi-code-cli/", "zcode": "ZCode/", "minimax_apikey": "Anthropic/JS "}[selection.Preset]
 		if !strings.HasPrefix(ua, prefix) {
 			return i, fmt.Errorf("User-Agent must match the selected preset")
 		}
@@ -535,7 +551,11 @@ func buildOutboundIdentity(selection OutboundIdentitySelection) (outboundidentit
 			resolved := resolveOpenAIOutboundIdentityWithVersion(i.UserAgent, "", version)
 			i.UserAgent, i.Version = resolved.UserAgent, resolved.Version
 		} else {
-			i.UserAgent = strings.Replace(i.UserAgent, "/"+i.Version, "/"+version, 1)
+			if i.Preset == minimax.APIKeyPreset {
+				i.UserAgent = strings.Replace(i.UserAgent, " "+i.Version, " "+version, 1)
+			} else {
+				i.UserAgent = strings.Replace(i.UserAgent, "/"+i.Version, "/"+version, 1)
+			}
 			i.Version = version
 		}
 	}
@@ -563,6 +583,23 @@ func buildOutboundIdentity(selection OutboundIdentitySelection) (outboundidentit
 	// Only the shared client-version shape is enforced.
 	if i.Preset == "zcode" && !zcode.IsSupportedVersion(i.Version) {
 		return i, fmt.Errorf("invalid ZCode client version")
+	}
+	if i.Preset == minimax.APIKeyPreset && (i.Version != minimax.SDKVersion || i.UserAgent != minimax.APIKeyIdentity().UserAgent) {
+		return i, fmt.Errorf("MiniMax API key SDK version is pinned to the reviewed dependency")
+	}
+	switch i.Preset {
+	case "deepseek":
+		if i.UserAgent != deepseek.UserAgent(i.Version) {
+			return i, fmt.Errorf("DeepSeek attribution must match the official Harness declaration")
+		}
+	case "kimi":
+		if i.UserAgent != kimi.UserAgent(i.Version) {
+			return i, fmt.Errorf("kimi User-Agent must match the selected product version")
+		}
+	case "zcode":
+		if i.UserAgent != zcode.UserAgent(i.Version) {
+			return i, fmt.Errorf("ZCode product User-Agent must not override the pinned SDK suffix")
+		}
 	}
 	i.Headers["User-Agent"] = i.UserAgent
 	if i.Preset == "codex" {
@@ -791,7 +828,7 @@ func resolveAccountOutboundIdentityContext(ctx context.Context, account *Account
 	if i, ok := outboundidentity.FromContext(ctx); ok && account.ID > 0 && i.AccountID == account.ID {
 		return ctx
 	}
-	preset := nativeOutboundPreset(account.Platform)
+	preset := nativeAccountOutboundPreset(account.Platform, account.Type)
 	if account.Type == AccountTypeBedrock {
 		preset = "claude"
 	}
@@ -925,6 +962,7 @@ func prepareAccountOutboundRequest(req *http.Request, account *Account) *http.Re
 			*req = *req.WithContext(WithHTTPUpstreamProfile(req.Context(), HTTPUpstreamProfileGrok))
 		}
 		ApplyAccountOutboundIdentity(req.Context(), account, req)
+		prepareMiniMaxRequestState(req, account)
 	}
 	return req
 }
@@ -978,7 +1016,7 @@ func (s *SettingService) PreviewOutboundIdentity(ctx context.Context, account *A
 func (s *SettingService) resolveOutboundIdentityKey(ctx context.Context, key string) outboundidentity.Identity {
 	preset := key
 	if platform, accountType, ok := strings.Cut(key, ":"); ok {
-		preset = nativeOutboundPreset(platform)
+		preset = nativeAccountOutboundPreset(platform, accountType)
 		if accountType == AccountTypeBedrock {
 			preset = "claude"
 		}
@@ -1149,8 +1187,21 @@ func (s *SettingService) GetOutboundIdentityView(ctx context.Context) OutboundId
 	for _, preset := range outboundPresetNames {
 		builtin := builtInOutboundIdentity(preset)
 		effective := s.resolveDefaultOutboundIdentity(ctx, preset)
+		for _, protocol := range []string{"anthropic", "chat_completions", "responses"} {
+			if _, ok := effective.Inference[protocol]; ok {
+				view.WireProfiles = append(view.WireProfiles, OutboundIdentityWireView{Protocol: protocol, Identity: effective.ForProtocol(protocol)})
+			}
+		}
 		view.Presets = append(view.Presets, builtin)
 		view.Effective = append(view.Effective, effective)
+		switch preset {
+		case "deepseek":
+			view.ControlPlane = append(view.ControlPlane, deepseek.ControlIdentity(effective))
+		case "minimax":
+			view.ControlPlane = append(view.ControlPlane, minimax.ControlIdentity(effective))
+		case "zcode":
+			view.ControlPlane = append(view.ControlPlane, zcode.ControlIdentity(effective))
+		}
 		view.Declarations = append(view.Declarations, outboundPresetDeclarations(preset, builtin, effective))
 	}
 	return view
@@ -1175,4 +1226,14 @@ func outboundPresetDeclarations(preset string, builtin, effective outboundidenti
 
 func (s *SettingService) installOutboundIdentityResolver() {
 	outboundidentity.SetDefaultResolver(s.resolveOutboundIdentityKey)
+}
+
+func selectionFromIdentity(identity outboundidentity.Identity) OutboundIdentitySelection {
+	headers := map[string]string{}
+	for _, h := range declaredOutboundHeaders(identity.Preset) {
+		if h.Class == outboundHeaderRuntime {
+			headers[h.Name] = identity.Headers[h.Name]
+		}
+	}
+	return OutboundIdentitySelection{Preset: identity.Preset, UserAgent: identity.UserAgent, Version: identity.Version, Headers: headers}
 }

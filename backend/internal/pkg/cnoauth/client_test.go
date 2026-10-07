@@ -39,6 +39,11 @@ func TestOfficialDeviceProtocols(t *testing.T) {
 					c := &Client{HTTP: doerFunc(func(r *http.Request) (*http.Response, error) {
 						require.Equal(t, origin(platform, region), r.URL.Scheme+"://"+r.URL.Host)
 						require.NotEmpty(t, r.UserAgent())
+						require.Empty(t, r.Header.Get("X-Stainless-Package-Version"), "OAuth does not use the inference SDK")
+						require.Empty(t, r.Header.Get("X-Mavis-Session-Id"))
+						if platform == "minimax" {
+							require.Equal(t, "MiniMaxAgent", r.UserAgent())
+						}
 						require.Empty(t, r.Header.Get("Authorization"))
 						require.NoError(t, r.ParseForm())
 						calls++
@@ -94,7 +99,11 @@ func TestDeepSeekPKCEAndState(t *testing.T) {
 	c := &Client{HTTP: doerFunc(func(r *http.Request) (*http.Response, error) {
 		calls++
 		require.Equal(t, "platform.deepseek.com", r.URL.Host)
-		require.NotEmpty(t, r.Header.Get("x-client-version"))
+		require.Equal(t, "0.2.0-rc.2", r.Header.Get("x-client-version"))
+		require.Equal(t, "web", r.Header.Get("x-client-platform"))
+		require.Equal(t, "zh_CN", r.Header.Get("x-client-locale"))
+		require.Equal(t, "0", r.Header.Get("x-client-timezone-offset"))
+		require.Contains(t, r.Header, "X-Client-Bundle-Id")
 		var body map[string]any
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
 		value := map[string]any{}

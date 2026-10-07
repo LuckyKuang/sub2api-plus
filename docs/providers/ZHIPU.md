@@ -142,12 +142,17 @@ facts (`X-Client-Language`, `X-Client-Timezone`, `X-Platform`, `X-Os-Category`,
 `X-Os-Version`) are generated once, persisted and editable in **System Settings
 → Outbound identity → GLM · ZCode**, with per-account overrides. Version changes
 update UA and its companion together while preserving host and product facts.
-No Codex `Originator` or standalone `Version` header is sent. The existing SDK
-fingerprint stays unchanged. See [Outbound identity](../OUTBOUND_IDENTITY.md)
+No Codex `Originator` or standalone `Version` header is sent. Inference adds the pinned per-protocol AI SDK UA suffixes; control-plane
+calls omit those suffixes and `X-ZCode-Agent`. Control OS version follows
+`os.version()`, while inference follows `os.release()`. No telemetry device ID
+is invented. See [Outbound identity](../OUTBOUND_IDENTITY.md)
 for exact defaults, source evidence and the source-priority matrix.
 
 The account-link handshake and the credential-derivation calls are pre-account
-authorization operations, so they carry the same native Zhipu identity.
+authorization operations. The session retains one native identity across start,
+poll, exchange and credential derivation, including Redis round trips. The
+created account pins that identity, and both OpenAI-compatible and Anthropic
+forwarding use the derived plan credential.
 
 ## Known limitations
 

@@ -2070,7 +2070,7 @@ func TestFetchCodexModelsManifestVersionlessIdentityOmitsClientVersion(t *testin
 	require.NoError(t, err)
 	require.Equal(t, "minimax", want.Preset)
 	require.Empty(t, want.Version)
-	require.Equal(t, map[string]string{"User-Agent": "MiniMaxAgent"}, want.Headers)
+	require.Equal(t, builtInOutboundIdentity("minimax").Headers, want.Headers)
 
 	var requests []*http.Request
 	upstream := &codexModelsHTTPUpstreamStub{do: func(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {

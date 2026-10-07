@@ -156,5 +156,20 @@ func DefaultIdentity() outboundidentity.Identity {
 		Version:    version,
 		Source:     source,
 		Headers:    headers,
+		Inference:  inferenceProfiles(),
 	}
+}
+
+// These SDK versions come from kimi-code/pnpm-lock.yaml. Product/device
+// declarations are shared with OAuth; the SDK block is inference-only.
+func inferenceProfiles() map[string]outboundidentity.WireProfile {
+	profiles := map[string]outboundidentity.WireProfile{}
+	for protocol, version := range map[string]string{"anthropic": "0.95.2", "chat_completions": "6.34.0", "responses": "6.34.0"} {
+		profiles[protocol] = outboundidentity.WireProfile{Headers: map[string]string{
+			"X-Stainless-Lang": "js", "X-Stainless-Package-Version": version,
+			"X-Stainless-OS": "Linux", "X-Stainless-Arch": "arm64",
+			"X-Stainless-Runtime": "node", "X-Stainless-Runtime-Version": "v22.19.0",
+		}}
+	}
+	return profiles
 }

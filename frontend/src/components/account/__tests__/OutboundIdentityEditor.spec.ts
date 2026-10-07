@@ -49,7 +49,7 @@ describe('OutboundIdentityEditor', () => {
     ['openai', 'apikey'], ['gemini', 'service_account'], ['anthropic', 'bedrock'], ['antigravity', 'upstream'], ['deepseek', 'apikey'], ['minimax', 'apikey'], ['zhipu', 'apikey'], ['kimi', 'apikey']
   ])('lets compatible %s/%s accounts select an existing identity', async (platform, accountType) => {
     const wrapper = mount(OutboundIdentityEditor, { props: { platform, accountType, modelValue: null } })
-    expect(wrapper.findAll('option')).toHaveLength(10)
+    expect(wrapper.findAll('option')).toHaveLength(11)
     await wrapper.get('select').setValue('grok')
     expect(wrapper.emitted('update:modelValue')?.[0]).toEqual([{ preset: 'grok' }])
     await wrapper.setProps({ modelValue: { preset: 'grok', version: '3.9.1' } })
@@ -57,6 +57,15 @@ describe('OutboundIdentityEditor', () => {
     expect(previewOutboundIdentity).toHaveBeenLastCalledWith(platform, accountType, { preset: 'grok', version: '3.9.1' })
     await wrapper.get('select').setValue('')
     expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([null])
+    wrapper.unmount()
+  })
+
+  it('keeps the MiniMax API Key SDK version read-only and OAuth native', async () => {
+    const wrapper = mount(OutboundIdentityEditor, { props: { platform: 'minimax', accountType: 'apikey', modelValue: { preset: 'minimax_apikey' } } })
+    expect(wrapper.find('input').exists()).toBe(false)
+    expect(wrapper.text()).toContain('pinnedSdkHint')
+    await wrapper.setProps({ accountType: 'oauth', modelValue: { preset: 'minimax' } })
+    expect(wrapper.findAll('option').map(option => option.attributes('value'))).toEqual(['', 'minimax'])
     wrapper.unmount()
   })
 

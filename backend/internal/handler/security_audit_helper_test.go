@@ -314,7 +314,7 @@ func (s blockingCompatibilityConfigStore) Decrypt(value string) (string, error) 
 
 func TestExtractionFailuresAllowAPIKeyAndOAuthDownstreamStages(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	for _, platform := range []string{service.PlatformOpenAI, service.PlatformDeepseek, service.PlatformKimi, service.PlatformMiniMax} {
+	for _, platform := range []string{service.PlatformOpenAI, service.PlatformDeepseek, service.PlatformKimi, service.PlatformMiniMax, service.PlatformZhipu} {
 		for _, accountType := range []string{service.AccountTypeAPIKey, service.AccountTypeOAuth} {
 			t.Run(platform+"/"+accountType, func(t *testing.T) {
 				account := &service.Account{
@@ -324,6 +324,9 @@ func TestExtractionFailuresAllowAPIKeyAndOAuthDownstreamStages(t *testing.T) {
 						"oauth_provider": platform,
 						"access_token":   "oauth-access-token",
 					},
+				}
+				if platform == service.PlatformZhipu {
+					account.Credentials["oauth_provider"] = "bigmodel"
 				}
 				metrics := securityaudit.NewAtomicMetrics()
 				prompt := securityaudit.NewPromptService(blockingCompatibilityConfigStore{cfg: securityaudit.ActiveConfig{
@@ -362,7 +365,7 @@ func TestExtractionFailuresAllowAPIKeyAndOAuthDownstreamStages(t *testing.T) {
 				require.Equal(t, 1, billingChecks, accountType)
 				require.Equal(t, 1, concurrencyAcquisitions, accountType)
 				require.Equal(t, 1, upstreamDispatches, accountType)
-				if accountType == service.AccountTypeOAuth {
+				if accountType == service.AccountTypeOAuth && platform != service.PlatformZhipu {
 					require.Equal(t, "oauth-access-token", selectedCredential)
 				} else {
 					require.Equal(t, "api-key-credential", selectedCredential)

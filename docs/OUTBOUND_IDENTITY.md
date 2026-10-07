@@ -36,7 +36,8 @@ Kimi Code and ZCode persist runtime declarations.
 | Grok | Grok OAuth/API key | `grok-shell` UA, `x-grok-client-identifier`, `x-grok-client-version`, `x-grok-client-mode: headless` |
 | Antigravity | Antigravity OAuth/upstream | `antigravity` UA; the two privacy endpoints also declare the pinned `X-Goog-Api-Client` SDK |
 | DeepSeek / DSH Desktop | DeepSeek OAuth/API-key accounts | `deepseek-harness/<version> (+https://github.com/deepseek-ai/deepseek-harness)` UA; identifier and version are encoded in the UA, so no `Originator`/`Version` headers |
-| MiniMax Code | MiniMax OAuth/API-key accounts | `MiniMaxAgent` UA; the official client declares no version segment, so there is no `Originator`/`Version` header and no client version |
+| MiniMax Code | MiniMax OAuth accounts | `MiniMaxAgent` plus pinned Anthropic SDK declarations; no product version or `Originator`/`Version` headers |
+| MiniMax Code API Key | MiniMax API-key accounts | `Anthropic/JS 0.91.1` plus matching pinned SDK declarations; version is mandatory |
 | Kimi Code | Kimi / Moonshot OAuth/API-key accounts | `kimi-code-cli/<version>` UA, `X-Msh-Platform: kimi_code_cli`, `X-Msh-Version: <version>` and the four `X-Msh-Device-*` runtime declarations; the official client declares no `Originator` and no standalone `Version` header |
 | GLM / ZCode | Zhipu / GLM API-key and account-link OAuth accounts | `ZCode/<version>`, paired `X-ZCode-App-Version`, product attribution and five runtime declarations listed below |
 
@@ -109,36 +110,53 @@ unset/C/POSIX), and timezone uses `TZ`/system timezone data. Missing or unsafe
 facts use `unknown`. Version-only changes retain these facts and all pinned
 product declarations. No standalone `Originator` or `Version` is rendered.
 `SUB2API_ZCODE_VERSION` selects a version without changing the desktop family;
-both upstream version lines remain accepted. This change leaves the preset's
-existing SDK fingerprint unchanged: it does not append a JavaScript SDK/runtime
-suffix to the gateway's UA. Such suffixes in the upstream SDK are distinct from
-the bootstrap-owned client declarations listed here.
+both upstream version lines remain accepted. The bootstrap declarations above
+are supplemented by the pinned per-protocol SDK wire profiles below. Product
+version changes preserve those profiles.
 
-Account-link, business-key derivation and off-peak ticket clients apply the
-same snapshot at request construction, including when used without a gateway
-transport or settings resolver. A multi-call business-key operation captures
-its identity once. Deferred off-peak settlement retains the acquiring credential
+Account-link, business-key derivation and off-peak ticket clients derive their
+control-plane headers from the same snapshot, including standalone clients.
+Following `packages/services/src/providers/sourceHeaders.ts`, control calls omit
+`X-ZCode-Agent` and inference SDK suffixes; their `X-Os-Version` is the captured
+Node `os.version()` equivalent (`/proc/sys/kernel/version` on the supported Linux
+deployment), not inference's `os.release()`. It is a read-only host fact carried
+in `control_headers` and serialized with login sessions. An absent telemetry
+`X-Device-Mid` is omitted, never fabricated. Start, poll, code exchange and key
+derivation retain one identity even across Redis instances/settings changes;
+account creation pins its product and configurable runtime declarations. Deferred off-peak settlement retains the acquiring credential
 owner's identity alongside its authentication, even after settings change. Gateway transports reapply the trusted declarations at send
 time; stale SDK/inbound/generic overrides cannot rewrite them. API-key accounts
 can choose another compatible preset; native OAuth accounts retain ZCode.
 
-The exact compiled MiniMax identity is the bare product token `MiniMaxAgent`,
-with identifier `MiniMaxAgent` and no client version. The official MiniMax Code
-client renders that single declaration for managed provider requests and never
-puts its package version on the wire, so this preset is a registered versionless
-family: `Version` stays empty, no `Originator` or `Version` header is rendered,
-and only the User-Agent reaches the wire. The versionless exemption is an
-explicit per-preset enumeration; an unlisted preset still requires a client
-version, and a MiniMax candidate carrying a version — or any User-Agent other
-than the exact token — is rejected before saving. MiniMax API-key accounts
-resolve this preset by default through `nativeOutboundPreset`, so the
-`minimax:apikey` type default is an explicit, operator-visible equivalent rather
-than a prerequisite. Enabling it replaces Codex's `Originator`/`Version`
-declarations on those accounts; an account selection or type default can still
-opt a MiniMax account back into Codex or any other compatible preset. The
-managed MiniMax session headers (`X-Mavis-Session-Id`, `-Agent-Id`,
-`-Timezone-Offset`) are request state owned by the protocol layer, not identity
-declarations.
+MiniMax has two distinct defaults:
+
+| Account type | Preset | UA / identifier / version |
+| --- | --- | --- |
+| OAuth | `minimax` | `MiniMaxAgent` / `MiniMaxAgent` / empty |
+| API Key | `minimax_apikey` | `Anthropic/JS 0.91.1` / `Anthropic` / `0.91.1` |
+
+Only `minimax` is the enumerated versionless exception. The official managed
+resolver overrides the SDK UA; its BYOK resolver does not. The latter uses the
+Anthropic SDK locked at `0.91.1` in `third_party/pi-mono/packages/ai` and
+`pnpm-lock.yaml`. Both inference profiles preserve these exact declarations:
+`X-Stainless-Lang: js`, `X-Stainless-Package-Version: 0.91.1`,
+`X-Stainless-OS: Linux`, `X-Stainless-Arch: arm64`,
+`X-Stainless-Runtime: node`, `X-Stainless-Runtime-Version: v22.19.0`.
+This is an explicitly pinned supported official Node host fingerprint, independent
+of the gateway's Go runtime. The API-key SDK UA/version are read-only; updating
+the SDK requires a source/wire regression review, not a product-version edit.
+`minimax:apikey` defaults to `minimax_apikey`; a valid explicit account or type
+mapping still wins. OAuth retains `minimax`.
+
+Messages requests for both native presets carry protocol-owned
+`X-Mavis-Session-Id` (gateway-generated), `X-Mavis-Agent-Id: main` (the official
+default agent) and `X-Mavis-Timezone-Offset` (host UTC offset in seconds). A
+request scope retains these across retries; failover resolves the new owner.
+They are not configurable identity declarations. Official OAuth uses fetch
+without a product UA. The gateway deliberately keeps its trusted `MiniMaxAgent`
+UA on authorization/refresh, without the inference SDK block, because every
+provider-bound call requires a trusted client declaration. This intentional
+policy difference is displayed under OAuth/account-service headers.
 
 The exact compiled Kimi Code identity is `kimi-code-cli/2.1.1`, with identifier
 `kimi-code-cli`, client version `2.1.1` and platform declaration
@@ -196,8 +214,8 @@ The local client snapshots inspected for this implementation are:
 | --- | --- | --- |
 | dsh-desktop | `1030515b4358b39633c80d5857cab6114b9e3ba8` | Vendored `0.2.0-rc.2` `dsh-llm/lib/types/attribution.js`, `dsh-llm-deepseek`, `dsh-llm-deepseek-account`, `dsh-llm-deepseek-api-key` |
 | kimi-code | `21406fb4c805cc8c715e6d1f16ad3fb5f25f4fe3` | `packages/oauth/src/identity.ts`, `packages/agent-core-v2/src/llm-adapter/provider/provider-definition.ts` |
-| minimax-code | `564e9166d81f87b0b767b005e4779d4697b512be` | `packages/local-runtime-v2/src/service/model-system/resolution/model-resolver-helpers.ts` |
-| ZCode | `29628c9acdb81b703bbd4080c207a0e7ce5e276e` | `apps/zcode-cli/packages/bootstrap/src/model-config.ts`, `runtime-platform-headers.ts`, `packages/shared/src/zcodeEndpoint.ts` |
+| minimax-code | `564e9166d81f87b0b767b005e4779d4697b512be` | `packages/local-runtime-v2/src/service/model-system/resolution/{model-resolver-helpers,local-model-resolver,model-resolver-byok}.ts`, `third_party/pi-mono/packages/ai/src/providers/anthropic.ts`, `pnpm-lock.yaml` |
+| ZCode | `29628c9acdb81b703bbd4080c207a0e7ce5e276e` | `apps/zcode-cli/packages/bootstrap/src/model-config.ts`, `runtime-platform-headers.ts`, `packages/shared/src/zcodeEndpoint.ts`, `packages/services/src/providers/sourceHeaders.ts`, adapter `model-execution.ts` / `runner-options.ts`, `pnpm-lock.yaml` |
 
 DSH Desktop delegates inference to its vendored Harness adapter, so its shell
 package version is not the UA version. Both account (`x-dsh-auth-token`) and API
@@ -217,7 +235,8 @@ remain owned by the protocol.
 | Retry or nested same-owner request | Reuse the selected snapshot, including all runtime values |
 | Failover to another credential owner | Resolve that owner's candidate and current defaults |
 
-MiniMax remains the only versionless exception. Settings and account header maps
+The managed `minimax` preset remains the only versionless exception;
+`minimax_apikey` is versioned. Settings and account header maps
 use each declaration's registered spelling, reject case-insensitive duplicates,
 and return deep copies; malformed stored header candidates cannot partially win.
 Global profile runtime headers override the deployment runtime map; explicit
@@ -713,6 +732,55 @@ the outbound behavior tests above remain required to verify implementation.
 These references explain adapter boundaries. They do not imply that a generic
 compatible supplier requires or recognizes every preset declaration.
 
+## Domestic SDK wire profiles
+
+The settings response includes `wire_profiles` (protocol-specific resolved
+inference headers) and `control_plane` (OAuth/account-service headers), alongside
+the common product declarations. These are read-only projections of the selected
+identity; URL protocol rendering never chooses another source or client family.
+Snapshots deep-copy the protocol maps, survive OAuth session serialization, and
+are reapplied at final transport send, including retries. Arbitrary header
+maps cannot supply SDK, device or control-plane declarations.
+
+Kimi's OAuth and API-key inference use the same `kimi-code-cli/2.1.1` UA and
+`X-Msh-*` declarations. Anthropic uses `X-Stainless-Package-Version: 0.95.2`;
+Chat Completions/Responses use `6.34.0` (the reviewed Anthropic/OpenAI JS lockfile
+versions). Both explicitly pin `X-Stainless-Lang: js`, `X-Stainless-OS: Linux`,
+`X-Stainless-Arch: arm64`, `X-Stainless-Runtime: node`, and
+`X-Stainless-Runtime-Version: v22.19.0`, a supported official Node host profile.
+OAuth/device/token requests carry the product/device declarations without SDK
+headers. Product-version edits preserve this SDK fingerprint.
+
+ZCode's exact default inference UAs (both account types) are:
+
+| Protocol | User-Agent |
+| --- | --- |
+| Anthropic | `ZCode/3.14.3 ai/6.0.193 ai-sdk/provider-utils/4.0.27 runtime/node.js/22` |
+| Chat Completions | `ZCode/3.14.3 ai/6.0.193 ai-sdk/provider-utils/4.0.39 runtime/node.js/22` |
+| Responses | `ZCode/3.14.3 ai/6.0.193 ai-sdk/provider-utils/4.0.27 runtime/node.js/22` |
+
+`runner-options.ts` supplies the bootstrap headers to `ai`, so its `ai/6.0.193`
+suffix replaces the provider factory's suffix; provider-utils appends its own
+version and runtime. Node 22's `navigator.userAgent` produces `runtime/node.js/22`
+(the desktop bundles Node v22.16.0). A container wire experiment using the exact
+locked SDKs, the same provider/options header layering, and a mock fetch verified
+these strings, plus both MiniMax UAs and their six Stainless declarations.
+The fixture uses no live provider credentials or requests. SDK pins are owned by
+these presets and cannot be changed by inbound headers or generic overrides.
+
+The gateway applies trusted ZCode product declarations to all account-service
+calls, including external business origins where official NodeApiClient only
+attaches the source block to its configured ZCode origin. This is an intentional
+extension required by the provider-bound identity contract. Optional telemetry
+IDs are not copied from another installation. DeepSeek uses the official web
+login branch (`platformClientHeaders(null, client)`); its UI bundle pins
+`DSH_CLIENT_VERSION` to `0.2.0-rc.2`, not the Electron shell version.
+
+Regression evidence: `domestic_identity_review_test.go`,
+`domestic_outbound_identity_test.go`, the complete Codex identity regressions,
+`pkg/outboundidentity`, `pkg/zcode`, OAuth session tests, settings/admin tests and
+frontend outbound-identity settings/editor tests.
+
 ## Native domestic OAuth login paths
 
 DeepSeek, Kimi and MiniMax browser/device login, callback exchange, token refresh,
@@ -720,8 +788,8 @@ account probes and Messages forwarding share the trusted identity resolution
 contract and exact defaults documented above. New-login sessions resolve the
 native preset; relink sessions resolve the credential-owning account. Sessions
 retain that immutable snapshot across polling and publish it with the account.
-Kimi retains all device declarations. MiniMax remains the explicitly enumerated
-versionless family. DeepSeek's authorization-only `x-client-version` matches the
+Kimi retains all device declarations. MiniMax OAuth uses the explicitly enumerated
+versionless family, while its API-key profile is versioned. DeepSeek's authorization-only `x-client-version` matches the
 selected identity; its platform/locale/UTC declarations are scoped to platform
 requests. No Codex source, family or default changes are introduced.
 

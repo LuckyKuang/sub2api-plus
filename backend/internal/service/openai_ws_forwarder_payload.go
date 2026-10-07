@@ -12,6 +12,7 @@ import (
 	"unsafe"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
@@ -207,7 +208,9 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 		preserveOpenAIThreadOriginator(c, headers)
 	}
 	clearOpenAICodexLegacySessionAliases(headers, account)
-	ApplyAccountOutboundHeaders(ctx, account, headers)
+	if selected, ok := outboundidentity.FromContext(WithAccountOutboundIdentity(ctx, account)); ok {
+		selected.ForProtocol(APIProtocolResponses).Apply(headers)
+	}
 	SetOpsRoutingDiagnostics(c, &OpsRoutingDiagnostics{OutboundIdentitySource: identity.Source})
 	setOpenAICodexRoutingHint(headers, account, routingModel, routingServiceTier)
 	brandidentity.StripOutboundHeaders(headers)

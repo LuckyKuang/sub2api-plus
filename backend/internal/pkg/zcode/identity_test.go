@@ -47,7 +47,9 @@ func TestAuxiliaryClientsSendIdentityWithoutTransportWiring(t *testing.T) {
 		seen := 0
 		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			seen++
-			for name, value := range expected.Headers {
+			require.Empty(t, r.Header.Get("X-ZCode-Agent"))
+			require.Empty(t, r.Header.Get("X-Device-Mid"))
+			for name, value := range ControlIdentity(expected).Headers {
 				if r.Header.Get(name) != value {
 					t.Errorf("%s: %s = %q, want %q", r.URL.Path, name, r.Header.Get(name), value)
 				}
@@ -103,4 +105,19 @@ func TestCredentialIdentityIsCapturedOnceAcrossBusinessCalls(t *testing.T) {
 	require.Equal(t, "ak-1.sk-1", got.APIKey)
 	require.Equal(t, 3, seen)
 	require.Equal(t, 1, resolutions)
+}
+
+func TestZCodeSDKWireProfilesMatchOfficialRunnerHeaderLayering(t *testing.T) {
+	identity := DefaultIdentity()
+	for _, tc := range []struct{ protocol, suffix string }{
+		{"anthropic", "ai/6.0.193 ai-sdk/provider-utils/4.0.27 runtime/node.js/22"},
+		{"chat_completions", "ai/6.0.193 ai-sdk/provider-utils/4.0.39 runtime/node.js/22"},
+		{"responses", "ai/6.0.193 ai-sdk/provider-utils/4.0.27 runtime/node.js/22"},
+	} {
+		projected := identity.ForProtocol(tc.protocol)
+		require.Equal(t, "ZCode/3.14.3 "+tc.suffix, projected.UserAgent)
+		require.Equal(t, "3.14.3", projected.Headers[HeaderAppVersion])
+		require.Equal(t, projected.UserAgent, projected.ForProtocol(tc.protocol).UserAgent)
+	}
+	require.Equal(t, "ZCode/3.14.3", identity.UserAgent)
 }

@@ -38,6 +38,7 @@ var managedIdentityOverrideTestNames = []string{
 	"X-ZCode-App-Version", "X-ZCode-Agent", "HTTP-Referer", "X-Title",
 	"X-Release-Channel", "X-Client-Language", "X-Client-Timezone",
 	"X-Platform", "X-Os-Category", "X-Os-Version",
+	"X-Device-Mid", "X-Client-Bundle-Id", "X-Client-Platform", "X-Client-Version", "X-Client-Locale", "X-Client-Timezone-Offset",
 }
 
 func TestHeaderOverrideRejectsManagedIdentity(t *testing.T) {

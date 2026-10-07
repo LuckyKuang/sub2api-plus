@@ -18,6 +18,7 @@ import (
 // the flow depends on (poll token reuse, bearer token exchange) and lets each
 // test fail one stage at a time.
 type zhipuOAuthStubClient struct {
+	identities  []outboundidentity.Identity
 	initFlow    *zcode.FlowInit
 	initErr     error
 	polls       []*zcode.FlowPoll
@@ -42,14 +43,18 @@ type zhipuOAuthStubClient struct {
 	lastExchangeArgs [3]string
 }
 
-func (s *zhipuOAuthStubClient) StartFlow(context.Context, string, string, string) (*zcode.FlowInit, error) {
+func (s *zhipuOAuthStubClient) StartFlow(ctx context.Context, _ string, _ string, _ string) (*zcode.FlowInit, error) {
+	identity, _ := outboundidentity.FromContext(ctx)
+	s.identities = append(s.identities, identity)
 	if s.initErr != nil {
 		return nil, s.initErr
 	}
 	return s.initFlow, nil
 }
 
-func (s *zhipuOAuthStubClient) PollFlow(_ context.Context, _ string, flowID, pollToken, _ string) (*zcode.FlowPoll, error) {
+func (s *zhipuOAuthStubClient) PollFlow(ctx context.Context, _ string, flowID, pollToken, _ string) (*zcode.FlowPoll, error) {
+	identity, _ := outboundidentity.FromContext(ctx)
+	s.identities = append(s.identities, identity)
 	s.pollCalls++
 	s.lastFlowID, s.lastPollToken = flowID, pollToken
 	if s.pollErr != nil {
@@ -65,7 +70,9 @@ func (s *zhipuOAuthStubClient) PollFlow(_ context.Context, _ string, flowID, pol
 	return result, nil
 }
 
-func (s *zhipuOAuthStubClient) ExchangeCode(_ context.Context, provider, code, redirectURI, state, _ string) (*zcode.FlowReady, error) {
+func (s *zhipuOAuthStubClient) ExchangeCode(ctx context.Context, provider, code, redirectURI, state, _ string) (*zcode.FlowReady, error) {
+	identity, _ := outboundidentity.FromContext(ctx)
+	s.identities = append(s.identities, identity)
 	s.lastExchangeArgs = [3]string{provider, code, state}
 	if s.exchangeErr != nil {
 		return nil, s.exchangeErr
@@ -81,7 +88,9 @@ func (s *zhipuOAuthStubClient) ExchangeZaiBusinessToken(context.Context, string,
 	return s.businessToken, nil
 }
 
-func (s *zhipuOAuthStubClient) ResolveIndividualCodingPlanKey(context.Context, string, string, string) (*zcode.CodingPlanCredential, error) {
+func (s *zhipuOAuthStubClient) ResolveIndividualCodingPlanKey(ctx context.Context, _ string, _ string, _ string) (*zcode.CodingPlanCredential, error) {
+	identity, _ := outboundidentity.FromContext(ctx)
+	s.identities = append(s.identities, identity)
 	s.individualCalls++
 	if s.individualErr != nil {
 		return nil, s.individualErr
@@ -432,4 +441,34 @@ func TestZhipuOAuthStartLinkPropagatesPlatformFailure(t *testing.T) {
 		Provider: zcode.ProviderBigModel, PlanKind: ZhipuPlanIndividualCodingPlan, AccessToken: "t",
 	})
 	require.Error(t, err)
+}
+
+func TestZhipuOAuthIdentitySurvivesSettingsChangeAndMaterialCreation(t *testing.T) {
+	client := &zhipuOAuthStubClient{initFlow: zhipuTestFlowInit(), exchange: zhipuTestReady(zcode.ProviderBigModel), individual: &zcode.CodingPlanCredential{APIKey: "derived-key"}}
+	svc := newZhipuOAuthTestService(t, client)
+	version := "3.14.3"
+	ctx := outboundidentity.WithResolver(context.Background(), func(context.Context, string) outboundidentity.Identity {
+		identity := zcode.DefaultIdentity()
+		identity.UserAgent, identity.Version = "ZCode/"+version, version
+		identity.Headers["User-Agent"], identity.Headers[zcode.HeaderAppVersion] = identity.UserAgent, version
+		return identity
+	})
+	link, err := svc.StartLink(ctx, StartZhipuLinkInput{Provider: zcode.ProviderBigModel})
+	require.NoError(t, err)
+	version = "9.9.9"
+	_, err = svc.PollLink(ctx, link.SessionID)
+	require.NoError(t, err)
+	_, err = svc.ExchangeLink(ctx, link.SessionID, "code", nil)
+	require.NoError(t, err)
+	material, err := svc.BuildAccountMaterial(ctx, ZhipuAccountMaterialInput{SessionID: link.SessionID, Provider: zcode.ProviderBigModel, AccessToken: "business-token"})
+	require.NoError(t, err)
+	require.Len(t, client.identities, 4)
+	for _, identity := range client.identities {
+		require.Equal(t, client.identities[0], identity)
+	}
+	account := &Account{ID: 99, Platform: PlatformZhipu, Type: AccountTypeOAuth, Credentials: material.Credentials}
+	resolved, ok := outboundidentity.FromContext(WithAccountOutboundIdentity(ctx, account))
+	require.True(t, ok)
+	require.Equal(t, "ZCode/3.14.3", resolved.UserAgent)
+	require.Equal(t, "derived-key", account.GetOpenAIProtocolAPIKey())
 }

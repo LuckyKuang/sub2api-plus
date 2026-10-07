@@ -19,10 +19,10 @@ func TestDomesticOutboundIdentityWireSnapshotAndFailover(t *testing.T) {
 	for _, platform := range []string{PlatformDeepseek, PlatformKimi, PlatformMiniMax, PlatformZhipu} {
 		for _, accountType := range []string{AccountTypeOAuth, AccountTypeAPIKey} {
 			t.Run(platform+"/"+accountType, func(t *testing.T) {
-				preset := nativeOutboundPreset(platform)
+				preset := nativeAccountOutboundPreset(platform, accountType)
 				config := emptyOutboundIdentitySettings()
 				selection := OutboundIdentitySelection{Preset: preset}
-				if preset != "minimax" {
+				if preset != "minimax" && preset != "minimax_apikey" {
 					selection.Version = "4.1.0"
 				}
 				config.Profiles[preset] = selection
@@ -42,7 +42,7 @@ func TestDomesticOutboundIdentityWireSnapshotAndFailover(t *testing.T) {
 				defer server.Close()
 				client := &http.Client{Transport: brandidentity.WrapRoundTripper(server.Client().Transport)}
 				// A setting change between attempts must not mutate the owner snapshot.
-				if preset != "minimax" {
+				if preset != "minimax" && preset != "minimax_apikey" {
 					selection.Version = "4.2.0"
 				}
 				config.Profiles[preset] = selection
@@ -62,7 +62,7 @@ func TestDomesticOutboundIdentityWireSnapshotAndFailover(t *testing.T) {
 					require.NoError(t, err)
 					require.NoError(t, resp.Body.Close())
 					got := <-captured
-					for name, value := range pinned.Headers {
+					for name, value := range pinned.ForProtocol(outboundidentity.RequestProtocol(req)).Headers {
 						require.Equal(t, value, got.Get(name), name)
 					}
 					require.Empty(t, got.Get("Originator"))
@@ -81,7 +81,7 @@ func TestDomesticOutboundIdentityWireSnapshotAndFailover(t *testing.T) {
 				switched, ok := outboundidentity.FromContext(WithAccountOutboundIdentity(ctx, next))
 				require.True(t, ok)
 				require.EqualValues(t, 102, switched.AccountID)
-				if preset != "minimax" {
+				if preset != "minimax" && preset != "minimax_apikey" {
 					require.Equal(t, "4.2.0", switched.Version)
 					require.Equal(t, "4.1.0", pinned.Version)
 				}
@@ -90,7 +90,7 @@ func TestDomesticOutboundIdentityWireSnapshotAndFailover(t *testing.T) {
 				require.NoError(t, svc.SetOutboundIdentitySettings(ctx, config))
 				bootstrap, ok := outboundidentity.FromContext(withNativeOAuthOutboundIdentity(ctx, platform))
 				require.True(t, ok)
-				require.Equal(t, preset, bootstrap.Preset)
+				require.Equal(t, nativeOutboundPreset(platform), bootstrap.Preset)
 				require.Zero(t, bootstrap.AccountID)
 			})
 		}
@@ -106,7 +106,7 @@ func TestDomesticIdentityInvalidHeaderCandidateFallsThroughAtomically(t *testing
 			}
 			config := emptyOutboundIdentitySettings()
 			global := OutboundIdentitySelection{Preset: preset}
-			if preset != "minimax" {
+			if preset != "minimax" && preset != "minimax_apikey" {
 				global.Version = "4.1.0"
 			}
 			config.Profiles[preset] = global

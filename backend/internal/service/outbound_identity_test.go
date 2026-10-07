@@ -95,7 +95,7 @@ func TestOutboundIdentitySourcePriorityAndAccountTypes(t *testing.T) {
 		{PlatformKimi, AccountTypeAPIKey, "kimi"}, {PlatformZhipu, AccountTypeAPIKey, "zcode"},
 		{PlatformZhipu, AccountTypeOAuth, "zcode"},
 		{PlatformDeepseek, AccountTypeOAuth, "deepseek"}, {PlatformKimi, AccountTypeOAuth, "kimi"}, {PlatformMiniMax, AccountTypeOAuth, "minimax"},
-		{PlatformDeepseek, AccountTypeAPIKey, "deepseek"}, {PlatformMiniMax, AccountTypeAPIKey, "minimax"},
+		{PlatformDeepseek, AccountTypeAPIKey, "deepseek"}, {PlatformMiniMax, AccountTypeAPIKey, "minimax_apikey"},
 	} {
 		t.Run(entry.platform+"/"+entry.accountType, func(t *testing.T) {
 			account := &Account{ID: 42, Platform: entry.platform, Type: entry.accountType, Credentials: map[string]any{}}
@@ -104,7 +104,7 @@ func TestOutboundIdentitySourcePriorityAndAccountTypes(t *testing.T) {
 			require.True(t, ok)
 			require.Equal(t, entry.preset, got.Preset)
 			require.Equal(t, builtInOutboundIdentity(entry.preset).UserAgent, got.UserAgent)
-			if entry.preset == "codex" {
+			if entry.preset == "codex" || entry.preset == minimax.APIKeyPreset {
 				return
 			} // Codex's existing source matrix has its own complete suite.
 			if _, versionless := versionlessOutboundUserAgents[entry.preset]; versionless {
@@ -183,6 +183,9 @@ func TestOutboundIdentityCodexUnchangedAndCompatibleOptIn(t *testing.T) {
 
 func TestOutboundIdentityValidationAndVersionOnlyChange(t *testing.T) {
 	for _, preset := range outboundPresetNames {
+		if preset == minimax.APIKeyPreset {
+			continue
+		} // SDK pin has a dedicated rejection regression.
 		if _, versionless := versionlessOutboundUserAgents[preset]; versionless {
 			// A versionless family publishes no client version, so there is no
 			// version-only change to assert; TestMiniMaxOutboundIdentity-
@@ -193,6 +196,8 @@ func TestOutboundIdentityValidationAndVersionOnlyChange(t *testing.T) {
 		after, err := buildOutboundIdentity(OutboundIdentitySelection{Preset: preset, UserAgent: before.UserAgent, Version: "3.9.1"})
 		require.NoError(t, err, preset)
 		require.Equal(t, before.Originator, after.Originator)
+		require.Equal(t, before.Inference, after.Inference, "version changes preserve protocol SDK fingerprints")
+		require.Equal(t, before.ControlHeaders, after.ControlHeaders, "version changes preserve control-plane host facts")
 		require.Equal(t, strings.Replace(before.UserAgent, "/"+before.Version, "/3.9.1", 1), after.UserAgent)
 		for key, value := range before.Headers {
 			if key == "User-Agent" || outboundHeaderClassName(preset, key) == outboundHeaderDerived {
@@ -391,7 +396,7 @@ func TestBuiltInMiniMaxOutboundIdentityPinsProductToken(t *testing.T) {
 		UserAgent:  pinnedUA,
 		Originator: pinnedUA,
 		Version:    "",
-		Headers:    map[string]string{"User-Agent": pinnedUA},
+		Headers:    map[string]string{"User-Agent": pinnedUA, "X-Stainless-Lang": "js", "X-Stainless-Package-Version": "0.91.1", "X-Stainless-OS": "Linux", "X-Stainless-Arch": "arm64", "X-Stainless-Runtime": "node", "X-Stainless-Runtime-Version": "v22.19.0"},
 	}, builtInOutboundIdentity("minimax"))
 	require.Equal(t, builtInOutboundIdentity("minimax"), minimax.DefaultIdentity())
 	require.Equal(t, pinnedUA, minimax.UserAgent())
@@ -425,7 +430,7 @@ func TestMiniMaxOutboundIdentityVersionlessExemptionIsNarrow(t *testing.T) {
 // A MiniMax account that selects the preset must render only the User-Agent
 // declaration. Codex's Originator/Version stay off the wire, while protocol
 // request state such as the MiniMax session headers keeps its own ownership.
-func TestMiniMaxOutboundIdentityRendersOnlyUserAgent(t *testing.T) {
+func TestMiniMaxOutboundIdentityRendersOfficialSDKAndSessionHeaders(t *testing.T) {
 	_, ctx := outboundIdentityTestSettings(t, emptyOutboundIdentitySettings())
 	account := &Account{ID: 8, Platform: PlatformMiniMax, Type: AccountTypeAPIKey, Credentials: map[string]any{
 		outboundIdentityCredential: OutboundIdentitySelection{Preset: "minimax"},
@@ -442,34 +447,35 @@ func TestMiniMaxOutboundIdentityRendersOnlyUserAgent(t *testing.T) {
 	require.Equal(t, minimax.ProductToken, req.Header.Get("User-Agent"))
 	require.Empty(t, req.Header.Get("Originator"))
 	require.Empty(t, req.Header.Get("Version"))
-	require.Equal(t, "request-state", req.Header.Get("X-Mavis-Session-Id"), "request state is not an identity declaration")
+	require.NotEmpty(t, req.Header.Get("X-Mavis-Session-Id"))
+	require.NotEqual(t, "request-state", req.Header.Get("X-Mavis-Session-Id"), "protocol layer owns session attribution")
 	require.Equal(t, "2023-06-01", req.Header.Get("Anthropic-Version"), "protocol versions are not identity declarations")
 }
 
 // MiniMax platform accounts advertise the pinned product identity by default.
 // This test is the audit record for that default, for the equivalent explicit
 // `minimax:apikey` type default, and for the per-account opt-out.
-func TestMiniMaxDefaultIdentityIsPinnedProduct(t *testing.T) {
+func TestMiniMaxAPIKeyDefaultIdentityIsPinnedSDK(t *testing.T) {
 	require.Equal(t, "minimax", nativeOutboundPreset(PlatformMiniMax))
 
 	account := &Account{ID: 11, Platform: PlatformMiniMax, Type: AccountTypeAPIKey, Credentials: map[string]any{}}
 	_, ctx := outboundIdentityTestSettings(t, emptyOutboundIdentitySettings())
 	got, ok := outboundidentity.FromContext(WithAccountOutboundIdentity(ctx, account))
 	require.True(t, ok)
-	require.Equal(t, "minimax", got.Preset)
+	require.Equal(t, "minimax_apikey", got.Preset)
 	require.Equal(t, "compiled_default", got.Source)
-	require.Equal(t, minimax.ProductToken, got.UserAgent)
-	require.Equal(t, minimax.ProductToken, got.Originator)
-	require.Empty(t, got.Version)
-	require.Equal(t, map[string]string{"User-Agent": got.UserAgent}, got.Headers)
+	require.Equal(t, "Anthropic/JS 0.91.1", got.UserAgent)
+	require.Equal(t, "Anthropic", got.Originator)
+	require.Equal(t, "0.91.1", got.Version)
+	require.Equal(t, minimax.APIKeyIdentity().Headers, got.Headers)
 
 	// The explicit type default is an equivalent, operator-visible pin.
 	config := emptyOutboundIdentitySettings()
-	config.Defaults["minimax:apikey"] = "minimax"
+	config.Defaults["minimax:apikey"] = "minimax_apikey"
 	_, pinnedCtx := outboundIdentityTestSettings(t, config)
 	got, ok = outboundidentity.FromContext(WithAccountOutboundIdentity(pinnedCtx, account))
 	require.True(t, ok)
-	require.Equal(t, "minimax", got.Preset)
+	require.Equal(t, "minimax_apikey", got.Preset)
 	require.Equal(t, "compiled_default", got.Source)
 
 	// An account selection can still opt back into another compatible preset.
@@ -534,7 +540,7 @@ func TestZCodeOutboundIdentityRendersOfficialDeclarations(t *testing.T) {
 
 	prepareAccountOutboundRequest(req, account)
 
-	require.Equal(t, zcode.UserAgent(zcode.DefaultVersion), req.Header.Get("User-Agent"))
+	require.Equal(t, zcode.DefaultIdentity().ForProtocol("anthropic").UserAgent, req.Header.Get("User-Agent"))
 	require.Empty(t, req.Header.Get("Originator"))
 	require.Empty(t, req.Header.Get("Version"))
 	require.Equal(t, zcode.DefaultVersion, req.Header.Get("X-ZCode-App-Version"))

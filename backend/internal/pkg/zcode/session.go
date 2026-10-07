@@ -11,6 +11,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/redissession"
 )
 
@@ -24,6 +25,7 @@ const RedisSessionPrefix = "oauth:session:zhipu"
 // The poll result itself is never stored here, which keeps credentials out of
 // both the Redis payload and the process-heap snapshot.
 type OAuthSession struct {
+	Identity outboundidentity.Identity `json:"identity"`
 	// State is the state value the platform embedded in the authorization URL.
 	// It is informational for the polling flow and required by the fallback
 	// code-exchange flow.
@@ -66,19 +68,21 @@ func (s *OAuthSession) TryConsume() bool {
 
 // sessionDTO is the Redis-serializable projection of OAuthSession.
 type sessionDTO struct {
-	State           string    `json:"state,omitempty"`
-	Provider        string    `json:"provider"`
-	PollToken       string    `json:"poll_token"`
-	FlowID          string    `json:"flow_id"`
-	AuthorizeURL    string    `json:"authorize_url"`
-	ExpiresAt       time.Time `json:"expires_at"`
-	PollIntervalSec int64     `json:"poll_interval_sec"`
-	ProxyURL        string    `json:"proxy_url,omitempty"`
-	CreatedAt       time.Time `json:"created_at"`
+	Identity        outboundidentity.Identity `json:"identity"`
+	State           string                    `json:"state,omitempty"`
+	Provider        string                    `json:"provider"`
+	PollToken       string                    `json:"poll_token"`
+	FlowID          string                    `json:"flow_id"`
+	AuthorizeURL    string                    `json:"authorize_url"`
+	ExpiresAt       time.Time                 `json:"expires_at"`
+	PollIntervalSec int64                     `json:"poll_interval_sec"`
+	ProxyURL        string                    `json:"proxy_url,omitempty"`
+	CreatedAt       time.Time                 `json:"created_at"`
 }
 
 func toSessionDTO(session *OAuthSession) sessionDTO {
 	return sessionDTO{
+		Identity:        session.Identity,
 		State:           session.State,
 		Provider:        session.Provider,
 		PollToken:       session.PollToken,
@@ -93,6 +97,7 @@ func toSessionDTO(session *OAuthSession) sessionDTO {
 
 func fromSessionDTO(id string, dto sessionDTO) *OAuthSession {
 	return &OAuthSession{
+		Identity:        dto.Identity,
 		State:           dto.State,
 		Provider:        dto.Provider,
 		PollToken:       dto.PollToken,

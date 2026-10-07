@@ -13,8 +13,9 @@ type outboundIdentityScopeKey struct{}
 // resolvers still select identities; the scope only retains their first result
 // for each credential owner across retries and nested credential operations.
 type outboundIdentityScope struct {
-	codex   sync.Map
-	presets sync.Map
+	codex        sync.Map
+	presets      sync.Map
+	minimaxTurns sync.Map
 }
 
 type outboundIdentityOwner struct {

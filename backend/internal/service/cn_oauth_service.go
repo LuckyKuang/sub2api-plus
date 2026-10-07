@@ -12,7 +12,6 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/cnoauth"
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
-	"github.com/google/uuid"
 )
 
 // CNOAuthService owns browser login sessions; credentials never transit the panel.
@@ -192,13 +191,7 @@ func (s *CNOAuthService) Complete(ctx context.Context, owner int64, platform, id
 	}
 	session := claimed
 	credentials := cnOAuthCredentials(session.Flow, session.Grant)
-	runtimeHeaders := map[string]string{}
-	for _, h := range declaredOutboundHeaders(session.Identity.Preset) {
-		if h.Class == outboundHeaderRuntime {
-			runtimeHeaders[h.Name] = session.Identity.Headers[h.Name]
-		}
-	}
-	credentials[outboundIdentityCredential] = OutboundIdentitySelection{Preset: session.Identity.Preset, UserAgent: session.Identity.UserAgent, Version: session.Identity.Version, Headers: runtimeHeaders}
+	credentials[outboundIdentityCredential] = selectionFromIdentity(session.Identity)
 	var account *Account
 	if session.AccountID > 0 {
 		existing, e := s.accountRepo.GetByID(ctx, session.AccountID)
@@ -365,22 +358,9 @@ func (s *CNOAuthService) prepareRequest(req *http.Request, a *Account) error {
 		q.Set("beta", "true")
 		req.URL.RawQuery = q.Encode()
 	}
-	if a.Platform == PlatformMiniMax {
-		state, ok := req.Context().Value(cnOAuthTurnKey{}).(cnOAuthTurn)
-		if !ok {
-			state = cnOAuthTurn{Session: uuid.NewString(), Agent: uuid.NewString()}
-			*req = *req.WithContext(context.WithValue(req.Context(), cnOAuthTurnKey{}, state))
-		}
-		req.Header.Set("X-Mavis-Session-Id", state.Session)
-		req.Header.Set("X-Mavis-Agent-Id", state.Agent)
-		req.Header.Set("X-Mavis-Timezone-Offset", "0")
-	}
 	if strings.TrimSpace(a.GetCredential("access_token")) == "" {
 		return errors.New("native OAuth access token is missing")
 	}
 	setAnthropicAPIKeyAuthHeader(req.Header, a, a.GetCredential("access_token"), a.GetAnthropicProtocolBaseURL())
 	return nil
 }
-
-type cnOAuthTurnKey struct{}
-type cnOAuthTurn struct{ Session, Agent string }

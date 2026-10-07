@@ -267,7 +267,7 @@ func requireOpenAIIdentityContractHeaders(t *testing.T, headers, want http.Heade
 
 func TestOpenAIIdentityContractHTTPPassthroughCompatiblePresets(t *testing.T) {
 	for _, passthrough := range []bool{false, true} {
-		for _, preset := range []string{"claude", "gemini", "grok", "antigravity", "deepseek", "minimax", "kimi", "zcode"} {
+		for _, preset := range []string{"claude", "gemini", "grok", "antigravity", "deepseek", "minimax", "minimax_apikey", "kimi", "zcode"} {
 			t.Run(fmt.Sprintf("%s/passthrough=%t", preset, passthrough), func(t *testing.T) {
 				account := newOpenAIRejectedFieldTestAccount()
 				account.Extra["openai_passthrough"] = passthrough
@@ -289,7 +289,7 @@ func TestOpenAIIdentityContractHTTPPassthroughCompatiblePresets(t *testing.T) {
 				_, err := svc.Forward(context.Background(), c, account, body)
 				require.NoError(t, err)
 				want := http.Header{}
-				builtInOutboundIdentity(preset).Apply(want)
+				builtInOutboundIdentity(preset).ForProtocol("responses").Apply(want)
 				requireOpenAIIdentityContractHeaders(t, headers, want, "Bearer sk-test")
 				wsHeaders, _, err := svc.buildOpenAIWSHeaders(context.Background(), c, account, "sk-test", OpenAIWSProtocolDecision{Transport: OpenAIUpstreamTransportResponsesWebsocketV2}, false, "", "", "", "gpt-5.5", "")
 				require.NoError(t, err)

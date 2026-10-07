@@ -1806,10 +1806,12 @@ func (a *Account) GetOpenAIProtocolAPIKey() string {
 		return ""
 	}
 	if a.IsMultiProtocolAPIKey() {
-		if a.Type != AccountTypeAPIKey {
-			return ""
+		linkedZhipu := a.Platform == PlatformZhipu && a.Type == AccountTypeOAuth &&
+			(a.GetCredential("oauth_provider") == "bigmodel" || a.GetCredential("oauth_provider") == "zai")
+		if a.Type == AccountTypeAPIKey || linkedZhipu {
+			return a.GetCredential("api_key")
 		}
-		return a.GetCredential("api_key")
+		return ""
 	}
 	return a.GetOpenAIApiKey()
 }

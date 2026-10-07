@@ -119,12 +119,14 @@ func DefaultIdentity() outboundidentity.Identity {
 	}
 	maps.Copy(headers, RuntimeHeaders())
 	return outboundidentity.Identity{
-		Preset:     Preset,
-		UserAgent:  ua,
-		Originator: ProductToken,
-		Version:    version,
-		Source:     source,
-		Headers:    headers,
+		Preset:         Preset,
+		UserAgent:      ua,
+		Originator:     ProductToken,
+		Version:        version,
+		Source:         source,
+		Headers:        headers,
+		ControlHeaders: controlRuntimeHeaders(),
+		Inference:      inferenceProfiles(),
 	}
 }
 
@@ -146,5 +148,29 @@ func withIdentity(ctx context.Context) context.Context {
 
 func prepareRequest(req *http.Request) {
 	*req = *req.WithContext(withIdentity(req.Context()))
+	identity, _ := outboundidentity.FromContext(req.Context())
+	*req = *req.WithContext(outboundidentity.WithIdentity(req.Context(), ControlIdentity(identity)))
 	outboundidentity.ApplyContext(req)
+}
+
+// ControlIdentity follows services/sourceHeaders.ts, not model-config.ts.
+// X-ZCode-Agent belongs only to inference; a missing telemetry device ID is
+// omitted rather than invented. Keep all chosen product/runtime declarations.
+func ControlIdentity(identity outboundidentity.Identity) outboundidentity.Identity {
+	identity.Headers = maps.Clone(identity.Headers)
+	delete(identity.Headers, "X-ZCode-Agent")
+	maps.Copy(identity.Headers, identity.ControlHeaders)
+	return identity
+}
+
+// runner-options passes bootstrap headers to ai, overriding the provider UA
+// suffix with ai/<version>; provider-utils then appends its transport suffix. Pin
+// the reviewed lockfile versions and bundled Node host (prepare-prebuilds.mjs).
+// Node 22 exposes navigator.userAgent=Node.js/22, preferred by provider-utils.
+func inferenceProfiles() map[string]outboundidentity.WireProfile {
+	return map[string]outboundidentity.WireProfile{
+		"anthropic":        {UserAgentSuffix: "ai/6.0.193 ai-sdk/provider-utils/4.0.27 runtime/node.js/22"},
+		"chat_completions": {UserAgentSuffix: "ai/6.0.193 ai-sdk/provider-utils/4.0.39 runtime/node.js/22"},
+		"responses":        {UserAgentSuffix: "ai/6.0.193 ai-sdk/provider-utils/4.0.27 runtime/node.js/22"},
+	}
 }

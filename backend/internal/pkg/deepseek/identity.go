@@ -18,6 +18,7 @@
 package deepseek
 
 import (
+	"maps"
 	"os"
 	"strings"
 
@@ -93,4 +94,16 @@ func DefaultIdentity() outboundidentity.Identity {
 		Source:     source,
 		Headers:    map[string]string{"User-Agent": ua},
 	}
+}
+
+// ControlIdentity mirrors platformClientHeaders(null, client): this server uses
+// the official web login flow, whose UI build version is the Harness version.
+func ControlIdentity(identity outboundidentity.Identity) outboundidentity.Identity {
+	identity.Headers = maps.Clone(identity.Headers)
+	identity.Headers["X-Client-Bundle-Id"] = ""
+	identity.Headers["X-Client-Platform"] = "web"
+	identity.Headers["X-Client-Version"] = identity.Version
+	identity.Headers["X-Client-Locale"] = "zh_CN"
+	identity.Headers["X-Client-Timezone-Offset"] = "0"
+	return identity
 }

@@ -92,6 +92,13 @@ const HEADER_OVERRIDE_BLOCKED_NAMES = new Set([
   'x-platform',
   'x-os-category',
   'x-os-version',
+  'x-device-mid',
+  // DeepSeek web-login client declarations are identity-owned.
+  'x-client-bundle-id',
+  'x-client-platform',
+  'x-client-version',
+  'x-client-locale',
+  'x-client-timezone-offset',
   'host',
   'content-length',
   'content-type',

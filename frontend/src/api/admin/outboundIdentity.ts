@@ -1,6 +1,6 @@
 import { apiClient } from '../client'
 
-export type IdentityPreset = 'codex' | 'claude' | 'gemini' | 'grok' | 'antigravity' | 'deepseek' | 'minimax' | 'kimi' | 'zcode'
+export type IdentityPreset = 'codex' | 'claude' | 'gemini' | 'grok' | 'antigravity' | 'deepseek' | 'minimax' | 'minimax_apikey' | 'kimi' | 'zcode'
 export interface IdentitySelection {
   preset: IdentityPreset | ''
   user_agent?: string
@@ -44,11 +44,13 @@ export interface OutboundIdentityView {
   settings: OutboundIdentitySettings
   presets: ResolvedIdentity[]
   effective: ResolvedIdentity[]
+  control_plane?: ResolvedIdentity[]
+  wire_profiles?: (ResolvedIdentity & { protocol: string })[]
   declarations: PresetDeclarations[]
 }
-export const identityPresets: IdentityPreset[] = ['codex', 'claude', 'gemini', 'grok', 'antigravity', 'deepseek', 'minimax', 'kimi', 'zcode']
+export const identityPresets: IdentityPreset[] = ['codex', 'claude', 'gemini', 'grok', 'antigravity', 'deepseek', 'minimax', 'minimax_apikey', 'kimi', 'zcode']
 export const identityNames: Record<IdentityPreset, string> = {
-  codex: 'Codex', claude: 'Claude Code', gemini: 'Gemini CLI', grok: 'Grok', antigravity: 'Antigravity', deepseek: 'DeepSeek · DSH Desktop', minimax: 'MiniMax Code', kimi: 'Kimi Code', zcode: 'GLM · ZCode'
+  codex: 'Codex', claude: 'Claude Code', gemini: 'Gemini CLI', grok: 'Grok', antigravity: 'Antigravity', deepseek: 'DeepSeek · DSH Desktop', minimax: 'MiniMax Code · OAuth', minimax_apikey: 'MiniMax Code · API Key', kimi: 'Kimi Code', zcode: 'GLM · ZCode'
 }
 // Mirrors the backend's enumerated versionless client families
 // (versionlessOutboundUserAgents in internal/service/outbound_identity.go). The

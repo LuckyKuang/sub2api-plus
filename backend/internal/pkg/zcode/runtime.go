@@ -89,3 +89,16 @@ func printableFact(value string) string {
 	}
 	return value
 }
+
+// Node os.version() uses uname.version; inference uses os.release() instead.
+// Capture this separately so changing a product version never changes the host.
+func controlRuntimeHeaders() map[string]string {
+	controlOnce.Do(func() {
+		value, _ := os.ReadFile("/proc/sys/kernel/version")
+		controlValues = map[string]string{"X-Os-Version": printableFact(string(value))}
+	})
+	return maps.Clone(controlValues)
+}
+
+var controlOnce sync.Once
+var controlValues map[string]string

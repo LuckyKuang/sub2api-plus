@@ -141,14 +141,14 @@ func (c *Client) request(ctx context.Context, proxy, target string, body io.Read
 	if err != nil {
 		return nil, 0, errors.New("invalid oauth request")
 	}
-	if strings.HasPrefix(target, origin("deepseek", "cn")+"/") {
-		identity, _ := outboundidentity.FromContext(ctx)
-		req.Header.Set("x-client-bundle-id", "")
-		req.Header.Set("x-client-platform", "web")
-		req.Header.Set("x-client-version", identity.Version)
-		req.Header.Set("x-client-locale", "zh_CN")
-		req.Header.Set("x-client-timezone-offset", "0")
+	identity, _ := outboundidentity.FromContext(ctx)
+	switch identity.Preset {
+	case "deepseek":
+		identity = deepseek.ControlIdentity(identity)
+	case minimax.Preset:
+		identity = minimax.ControlIdentity(identity)
 	}
+	*req = *req.WithContext(outboundidentity.WithIdentity(ctx, identity))
 	req.Header.Set("Content-Type", contentType)
 	req.Header.Set("Accept", "application/json")
 	outboundidentity.ApplyContext(req)

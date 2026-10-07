@@ -147,6 +147,7 @@ func (h *ZhipuOAuthHandler) CreateAccountFromLink(c *gin.Context) {
 		proxyURL = h.zhipuOAuthService.ResolveProxyURL(c.Request.Context(), req.ProxyID)
 	}
 	material, err := h.zhipuOAuthService.BuildAccountMaterial(c.Request.Context(), service.ZhipuAccountMaterialInput{
+		SessionID:    req.SessionID,
 		Provider:     req.Provider,
 		PlanKind:     req.PlanKind,
 		TeamOrg:      req.TeamOrg,

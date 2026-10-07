@@ -9,6 +9,7 @@ import (
 	"time"
 
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/zcode"
 )
 
@@ -186,7 +187,9 @@ func (s *ZhipuOAuthService) StartLink(ctx context.Context, input StartZhipuLinkI
 	if expiresAt.IsZero() || time.Until(expiresAt) > zcode.SessionTTL {
 		expiresAt = time.Now().Add(zcode.SessionTTL)
 	}
+	identity, _ := outboundidentity.FromContext(flowCtx)
 	session := &zcode.OAuthSession{
+		Identity:        identity,
 		State:           zcode.AuthorizeState(init.AuthorizeURL),
 		Provider:        provider,
 		PollToken:       pollToken,
@@ -238,7 +241,7 @@ func (s *ZhipuOAuthService) PollLink(ctx context.Context, sessionID string) (*Zh
 	if err != nil {
 		return nil, err
 	}
-	flowCtx := withNativeOAuthOutboundIdentity(ctx, PlatformZhipu)
+	flowCtx := outboundidentity.WithIdentity(ctx, session.Identity)
 	poll, err := s.client.PollFlow(flowCtx, session.Provider, session.FlowID, session.PollToken, session.ProxyURL)
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "ZHIPU_OAUTH_POLL_FAILED", "failed to poll zhipu oauth flow: %v", err)
@@ -280,7 +283,7 @@ func (s *ZhipuOAuthService) ExchangeLink(ctx context.Context, sessionID, callbac
 		proxyURL = resolved
 	}
 	redirectURI := zhipuDesktopRedirectURI()
-	flowCtx := withNativeOAuthOutboundIdentity(ctx, PlatformZhipu)
+	flowCtx := outboundidentity.WithIdentity(ctx, session.Identity)
 	ready, err := s.client.ExchangeCode(flowCtx, session.Provider, code, redirectURI, state, proxyURL)
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "ZHIPU_OAUTH_EXCHANGE_FAILED", "failed to exchange zhipu authorization code: %v", err)
@@ -304,6 +307,7 @@ func (s *ZhipuOAuthService) ConsumeLinkSession(sessionID string) error {
 
 // ZhipuAccountMaterialInput describes the plan an operator is linking.
 type ZhipuAccountMaterialInput struct {
+	SessionID    string
 	Provider     string
 	PlanKind     string
 	TeamOrg      string
@@ -348,12 +352,26 @@ func (s *ZhipuOAuthService) BuildAccountMaterial(ctx context.Context, input Zhip
 	if accessToken == "" && planKind != ZhipuPlanStartPlan {
 		return nil, infraerrors.New(http.StatusBadRequest, "ZHIPU_OAUTH_ACCESS_TOKEN_REQUIRED", "the linked token is required")
 	}
-	flowCtx := withNativeOAuthOutboundIdentity(ctx, PlatformZhipu)
+	var flowCtx context.Context
+	if input.SessionID != "" {
+		session, err := s.loadSession(input.SessionID)
+		if err != nil {
+			return nil, err
+		}
+		if session.Provider != provider {
+			return nil, infraerrors.BadRequest("ZHIPU_OAUTH_PROVIDER_INVALID", "authorization provider does not match session")
+		}
+		flowCtx = outboundidentity.WithIdentity(ctx, session.Identity)
+	} else {
+		flowCtx = withNativeOAuthOutboundIdentity(ctx, PlatformZhipu)
+	}
+	identity, _ := outboundidentity.FromContext(flowCtx)
 
 	credentials := map[string]any{
-		"account_mode":   AccountModeCoding,
-		"plan_kind":      planKind,
-		"oauth_provider": provider,
+		outboundIdentityCredential: selectionFromIdentity(identity),
+		"account_mode":             AccountModeCoding,
+		"plan_kind":                planKind,
+		"oauth_provider":           provider,
 		// Every linked plan is served through explicit per-protocol endpoints, so
 		// the account is adaptive and never falls back to a platform default.
 		"api_protocol": APIProtocolAdaptive,

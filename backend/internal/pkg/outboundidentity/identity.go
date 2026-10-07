@@ -13,13 +13,68 @@ import (
 )
 
 type Identity struct {
-	AccountID  int64             `json:"-"`
-	Preset     string            `json:"preset"`
-	UserAgent  string            `json:"user_agent"`
-	Originator string            `json:"originator"`
-	Version    string            `json:"version"`
-	Source     string            `json:"source"`
-	Headers    map[string]string `json:"headers"`
+	AccountID      int64                  `json:"-"`
+	Preset         string                 `json:"preset"`
+	UserAgent      string                 `json:"user_agent"`
+	Originator     string                 `json:"originator"`
+	Version        string                 `json:"version"`
+	Source         string                 `json:"source"`
+	Headers        map[string]string      `json:"headers"`
+	ControlHeaders map[string]string      `json:"control_headers,omitempty"`
+	Inference      map[string]WireProfile `json:"inference,omitempty"`
+}
+
+// WireProfile is part of the trusted snapshot, never read from request headers.
+// A protocol changes SDK declarations, not identity source or client family.
+type WireProfile struct {
+	UserAgentSuffix string            `json:"user_agent_suffix,omitempty"`
+	Headers         map[string]string `json:"headers,omitempty"`
+}
+
+func cloneProfiles(profiles map[string]WireProfile) map[string]WireProfile {
+	if profiles == nil {
+		return nil
+	}
+	result := make(map[string]WireProfile, len(profiles))
+	for key, profile := range profiles {
+		profile.Headers = maps.Clone(profile.Headers)
+		result[key] = profile
+	}
+	return result
+}
+
+// ForProtocol renders a snapshot-owned SDK profile without changing its source.
+func (i Identity) ForProtocol(protocol string) Identity {
+	if profile, ok := i.Inference[protocol]; ok {
+		i.Headers = maps.Clone(i.Headers)
+		if i.Headers == nil {
+			i.Headers = map[string]string{}
+		}
+		maps.Copy(i.Headers, profile.Headers)
+		if profile.UserAgentSuffix != "" {
+			i.UserAgent += " " + profile.UserAgentSuffix
+		}
+		i.Headers["User-Agent"] = i.UserAgent
+		i.Inference = nil
+	}
+	return i
+}
+
+// RequestProtocol identifies only the SDK wire format; it never selects a preset.
+func RequestProtocol(req *http.Request) string {
+	if req == nil || req.URL == nil {
+		return ""
+	}
+	path := strings.TrimRight(req.URL.Path, "/")
+	switch {
+	case strings.HasSuffix(path, "/messages"), strings.HasSuffix(path, "/messages/count_tokens"):
+		return "anthropic"
+	case strings.HasSuffix(path, "/chat/completions"):
+		return "chat_completions"
+	case strings.HasSuffix(path, "/responses"):
+		return "responses"
+	}
+	return ""
 }
 
 type contextKey struct{}
@@ -33,6 +88,8 @@ func WithResolver(ctx context.Context, resolve func(context.Context, string) Ide
 
 func WithIdentity(ctx context.Context, identity Identity) context.Context {
 	identity.Headers = maps.Clone(identity.Headers)
+	identity.ControlHeaders = maps.Clone(identity.ControlHeaders)
+	identity.Inference = cloneProfiles(identity.Inference)
 	return context.WithValue(ctx, contextKey{}, identity)
 }
 
@@ -42,6 +99,8 @@ func FromContext(ctx context.Context) (Identity, bool) {
 	}
 	i, ok := ctx.Value(contextKey{}).(Identity)
 	i.Headers = maps.Clone(i.Headers)
+	i.ControlHeaders = maps.Clone(i.ControlHeaders)
+	i.Inference = cloneProfiles(i.Inference)
 	return i, ok && i.UserAgent != ""
 }
 
@@ -113,7 +172,8 @@ func IsIdentityHeader(name string) bool {
 		"x-msh-device-model", "x-msh-os-version", "x-msh-device-id",
 		"x-zcode-app-version", "x-zcode-agent", "http-referer", "x-title",
 		"x-release-channel", "x-client-language", "x-client-timezone",
-		"x-platform", "x-os-category", "x-os-version":
+		"x-platform", "x-os-category", "x-os-version", "x-device-mid",
+		"x-client-bundle-id", "x-client-platform", "x-client-version", "x-client-locale", "x-client-timezone-offset":
 		return true
 	}
 	return false
@@ -141,7 +201,7 @@ func ApplyContext(req *http.Request) {
 		return
 	}
 	if i, ok := FromContext(req.Context()); ok {
-		i.Apply(req.Header)
+		i.ForProtocol(RequestProtocol(req)).Apply(req.Header)
 	}
 }
 
@@ -150,7 +210,7 @@ func ApplyDefault(req *http.Request, preset string) {
 		return
 	}
 	if i, ok := Default(req.Context(), preset); ok {
-		i.Apply(req.Header)
+		i.ForProtocol(RequestProtocol(req)).Apply(req.Header)
 	}
 }
 

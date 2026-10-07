@@ -35,37 +35,26 @@ claim an automatic official balance endpoint.
 
 ## Outbound identity
 
-MiniMax API-key accounts advertise the pinned MiniMax product identity by
-default. The official MiniMax Code client renders one declaration, the bare
-product token `MiniMaxAgent`, for managed provider requests and never puts its
-package version on the wire, so this preset is a registered versionless client
-family under [Outbound identity](../OUTBOUND_IDENTITY.md): `Version` is empty
-and only the User-Agent reaches the wire.
+MiniMax Code's managed-login and BYOK paths have different defaults:
 
-| | Before | After |
+| Account | Default preset | User-Agent |
 | --- | --- | --- |
-| `User-Agent` | `codex_cli_rs/0.158.0 (Ubuntu 24.04; x86_64) xterm-256color` | `MiniMaxAgent` |
-| `Originator` | `codex_cli_rs` | not sent |
-| `Version` | `0.158.0` | not sent |
+| OAuth | `minimax` | `MiniMaxAgent` |
+| API Key | `minimax_apikey` | `Anthropic/JS 0.91.1` |
 
-Only the client declarations change. Endpoint selection, the Chat Completions /
-Responses / Messages / adaptive protocol adapters, `x-api-key` or Bearer
-authentication, `anthropic-version`, beta handling, model discovery, coding-plan
-quota queries, billing, scheduling, proxying and the ingress security-audit
-boundary keep their existing behavior; identity is applied at account selection
-and again at the shared HTTP transport boundary. Count-token requests for
-CN providers remain a local estimate and send no upstream request, and WebSocket
-mode stays unavailable outside the OpenAI platform.
+Both inference identities include the pinned `X-Stainless-*` SDK block described
+in [Outbound identity](../OUTBOUND_IDENTITY.md). Only managed OAuth is
+versionless. API-key accounts can explicitly choose a compatible preset; the
+native OAuth family is fixed. SDK identity is pinned independently of product
+versions and cannot be changed through generic header overrides.
 
-An account selection or the `minimax` type default can opt a MiniMax account
-back into Codex or any other compatible preset. The managed MiniMax session
-headers (`X-Mavis-Session-Id`, `-Agent-Id`, `-Timezone-Offset`) are request state
-owned by the protocol layer and are not part of this identity, so the gateway
-does not fabricate them.
+Messages requests carry `X-Mavis-Session-Id`, `X-Mavis-Agent-Id: main` and the host
+UTC offset in seconds. The same request/owner retains these across retries;
+failover gets the next owner's state. OAuth/refresh uses the trusted managed UA
+without inference SDK headers. Upstream's fetch-only login has no explicit
+product UA; retaining the gateway's trusted UA there is an intentional identity
+policy difference, not a claim about an upstream SDK default.
 
-The **MiniMax Code** settings card displays the same versionless declaration
-for API-key and OAuth identity resolution. OAuth identities retain the native
-family; compatible API-key mappings may choose another preset. `MiniMaxCode` in
-the official OpenCode-Go adapter and `MiniMax-Code` in the GitHub downloader are
-separate destinations, not alternative MiniMax inference fingerprints. See the
-[source evidence and priority matrix](../OUTBOUND_IDENTITY.md#domestic-provider-source-evidence-and-source-priority).
+Settings show both presets separately. `MiniMaxCode` in OpenCode Go and
+`MiniMax-Code` in the GitHub downloader describe other destinations. See the
+[source and priority matrix](../OUTBOUND_IDENTITY.md#domestic-provider-source-evidence-and-source-priority).

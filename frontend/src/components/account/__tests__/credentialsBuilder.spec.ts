@@ -289,6 +289,8 @@ describe('validateHeaderOverrideRows', () => {
     'X-Grok-Client-Version', 'X-Grok-Client-Identifier', 'X-Stainless-Lang',
     'X-Stainless-Package-Version', 'X-Stainless-OS', 'X-Stainless-Arch',
     'X-Stainless-Runtime', 'X-Stainless-Runtime-Version',
+    'X-Device-Mid', 'X-Client-Bundle-Id', 'X-Client-Platform',
+    'X-Client-Version', 'X-Client-Locale', 'X-Client-Timezone-Offset',
     'X-ZCode-App-Version', 'X-ZCode-Agent', 'HTTP-Referer', 'X-Title',
     'X-Release-Channel', 'X-Client-Language', 'X-Client-Timezone',
     'X-Platform', 'X-Os-Category', 'X-Os-Version'

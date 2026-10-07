@@ -90,7 +90,7 @@ func TestChannelMonitorDefaultIdentityForProviders(t *testing.T) {
 		// Channel-monitor egress shares the platform default preset, so the
 		// Kimi, DeepSeek and MiniMax providers send the same pinned identity as
 		// their platform accounts.
-		{"kimi", "kimi", ""}, {"zhipu", "zcode", ""}, {"deepseek", "deepseek", ""}, {"minimax", "minimax", ""},
+		{"kimi", "kimi", ""}, {"zhipu", "zcode", ""}, {"deepseek", "deepseek", ""}, {"minimax", "minimax_apikey", ""},
 		{"opencode_go", "codex", ""},
 	} {
 		t.Run(test.provider+"/"+test.mode, func(t *testing.T) {
@@ -105,7 +105,7 @@ func TestChannelMonitorDefaultIdentityForProviders(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, http.StatusOK, status)
 			headers := <-captured
-			expected := builtInOutboundIdentity(test.preset)
+			expected := builtInOutboundIdentity(test.preset).ForProtocol("chat_completions")
 			require.Equal(t, expected.UserAgent, headers.Get("User-Agent"))
 			for name, value := range expected.Headers {
 				if test.provider == PlatformOpenAI && (name == "Originator" || name == "Version") {

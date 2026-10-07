@@ -32,8 +32,27 @@
             </dl>
           </div>
         </div>
+        <div v-for="wire in wireProfiles(preset)" :key="wire.protocol" class="rounded-lg bg-gray-50 p-4 text-sm dark:bg-dark-800">
+          <p class="mb-2 text-gray-500">{{ wire.protocol }} · {{ t('admin.settings.outboundIdentity.headers') }}</p>
+          <dl class="grid gap-1 sm:grid-cols-[auto_1fr]" data-testid="outbound-identity-wire-headers">
+            <template v-for="(value, name) in wire.headers" :key="name">
+              <dt class="font-mono text-xs text-gray-500">{{ name }}</dt>
+              <dd class="break-all font-mono text-xs">{{ value }}</dd>
+            </template>
+          </dl>
+        </div>
+        <div v-if="controlIdentity(preset)" class="rounded-lg bg-gray-50 p-4 text-sm dark:bg-dark-800">
+          <p class="mb-2 text-gray-500">{{ t('admin.settings.outboundIdentity.controlHeaders') }}</p>
+          <dl class="grid gap-1 sm:grid-cols-[auto_1fr]" data-testid="outbound-identity-control-headers">
+            <template v-for="(value, name) in controlIdentity(preset)?.headers" :key="name">
+              <dt class="font-mono text-xs text-gray-500">{{ name }}</dt>
+              <dd class="break-all font-mono text-xs">{{ value }}</dd>
+            </template>
+          </dl>
+        </div>
         <slot v-if="preset === 'codex'" name="codex" />
         <p v-else-if="isVersionless(preset)" class="text-xs text-gray-500">{{ t('admin.settings.outboundIdentity.versionlessHint') }}</p>
+        <p v-else-if="preset === 'minimax_apikey'" class="text-xs text-gray-500">{{ t('admin.settings.outboundIdentity.pinnedSdkHint') }}</p>
         <template v-else>
           <label class="block text-sm">
             {{ t('admin.settings.outboundIdentity.version') }}
@@ -86,7 +105,7 @@ import { useI18n } from 'vue-i18n'
 import { getOutboundIdentity, updateOutboundIdentity, identityNames, identityPresets, versionlessIdentityPresets, type IdentityDeclaration, type IdentityPreset, type IdentitySelection, type OutboundIdentityView } from '@/api/admin/outboundIdentity'
 
 const { t } = useI18n()
-const domesticPresets: IdentityPreset[] = ['deepseek', 'kimi', 'minimax', 'zcode']
+const domesticPresets: IdentityPreset[] = ['deepseek', 'kimi', 'zcode']
 const view = ref<OutboundIdentityView>()
 const error = ref('')
 const loading = ref(false)
@@ -113,6 +132,8 @@ const mappings = [
   ...['kimi', 'zhipu', 'deepseek', 'minimax'].map(platform => ({ key: `${platform}:apikey`, label: `${platform} · API Key` }))
 ]
 const effective = (preset: IdentityPreset) => view.value?.effective.find(item => item.preset === preset)
+const wireProfiles = (preset: IdentityPreset) => view.value?.wire_profiles?.filter(item => item.preset === preset) ?? []
+const controlIdentity = (preset: IdentityPreset) => view.value?.control_plane?.find(item => item.preset === preset)
 const builtin = (preset: IdentityPreset) => view.value?.presets.find(item => item.preset === preset)
 const isVersionless = (preset: IdentityPreset) => versionlessIdentityPresets.includes(preset)
 const sourceLabel = (source?: string) => t(`admin.settings.outboundIdentity.sources.${source || 'compiled_default'}`)

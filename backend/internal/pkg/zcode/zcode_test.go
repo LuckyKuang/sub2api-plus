@@ -800,3 +800,15 @@ func TestResolveOffPeakBaseURLFallsBackOnInvalidOverride(t *testing.T) {
 	t.Setenv(EnvOffPeakBaseURL, "https://offpeak.example/")
 	require.Equal(t, "https://offpeak.example", ResolveOffPeakBaseURL())
 }
+
+func TestOAuthSessionSerializationPreservesIdentityAndWireProfiles(t *testing.T) {
+	original := &OAuthSession{Provider: ProviderBigModel, Identity: DefaultIdentity(), ExpiresAt: time.Now().Add(time.Minute)}
+	raw, err := MarshalSession(original)
+	require.NoError(t, err)
+	var dto sessionDTO
+	require.NoError(t, json.Unmarshal(raw, &dto))
+	restored := fromSessionDTO("session", dto)
+	require.Equal(t, original.Identity, restored.Identity)
+	require.Equal(t, original.Identity.ForProtocol("anthropic"), restored.Identity.ForProtocol("anthropic"))
+	require.Equal(t, ControlIdentity(original.Identity), ControlIdentity(restored.Identity))
+}

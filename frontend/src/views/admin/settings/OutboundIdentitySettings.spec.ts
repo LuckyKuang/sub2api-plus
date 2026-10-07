@@ -8,8 +8,8 @@ vi.mock('@/api/admin/outboundIdentity', async (original) => ({
   ...await original<typeof import('@/api/admin/outboundIdentity')>(),
   getOutboundIdentity: vi.fn(), updateOutboundIdentity: vi.fn()
 }))
-const userAgentOf = (preset: string) => preset === 'minimax' ? 'MiniMaxAgent' : preset === 'kimi' ? 'kimi-code-cli/2.1.1' : preset === 'zcode' ? 'ZCode/3.14.3' : `${preset}/1.2.3`
-const versionOf = (preset: string) => preset === 'minimax' ? '' : preset === 'kimi' ? '2.1.1' : preset === 'zcode' ? '3.14.3' : '1.2.3'
+const userAgentOf = (preset: string) => preset === 'minimax' ? 'MiniMaxAgent' : preset === 'minimax_apikey' ? 'Anthropic/JS 0.91.1' : preset === 'kimi' ? 'kimi-code-cli/2.1.1' : preset === 'zcode' ? 'ZCode/3.14.3' : `${preset}/1.2.3`
+const versionOf = (preset: string) => preset === 'minimax' ? '' : preset === 'minimax_apikey' ? '0.91.1' : preset === 'kimi' ? '2.1.1' : preset === 'zcode' ? '3.14.3' : '1.2.3'
 // The Kimi Code device set is the runtime tier: the official client resolves it
 // from its own host, so the settings page exposes an editable value per header
 // and the backend declares which headers those are.
@@ -78,6 +78,26 @@ describe('OutboundIdentitySettings', () => {
     vi.mocked(updateOutboundIdentity).mockResolvedValue(fixture())
   })
 
+  it('separates MiniMax auth defaults and displays control and SDK wire headers', async () => {
+    const view = fixture()
+    const zcode = view.effective.find(item => item.preset === 'zcode')!
+    view.control_plane = [{ ...zcode, headers: { 'User-Agent': 'ZCode/3.14.3', 'X-Os-Version': '#1 SMP' } }]
+    view.wire_profiles = [{ ...zcode, protocol: 'anthropic', headers: { ...zcode.headers, 'User-Agent': 'ZCode/3.14.3 ai/6.0.193 ai-sdk/provider-utils/4.0.27 runtime/node.js/22' } }]
+    vi.mocked(getOutboundIdentity).mockResolvedValue(view)
+    const wrapper = mount(OutboundIdentitySettings)
+    await flushPromises()
+    const cards = wrapper.findAll('section')
+    expect(cards[identityPresets.indexOf('minimax')].text()).toContain('MiniMax Code · OAuth')
+    const byok = cards[identityPresets.indexOf('minimax_apikey')]
+    expect(byok.text()).toContain('Anthropic/JS 0.91.1')
+    expect(byok.find('input').exists()).toBe(false)
+    const control = wrapper.get('[data-testid="outbound-identity-control-headers"]')
+    expect(control.text()).toContain('#1 SMP')
+    expect(control.text()).not.toContain('X-ZCode-Agent')
+    expect(wrapper.get('[data-testid="outbound-identity-wire-headers"]').text()).toContain('ai/6.0.193')
+    wrapper.unmount()
+  })
+
   it('shows effective identities and saves only configured presets and type defaults', async () => {
     const wrapper = mount(OutboundIdentitySettings, { slots: { codex: '<div data-testid="codex-existing-controls">Codex controls</div>' } })
     await flushPromises()
@@ -95,7 +115,7 @@ describe('OutboundIdentitySettings', () => {
   it('shows all four OAuth/API Key identities and saves only editable ZCode runtime headers', async () => {
     const wrapper = mount(OutboundIdentitySettings)
     await flushPromises()
-    expect(wrapper.findAll('[data-testid="outbound-identity-auth-scope"]')).toHaveLength(4)
+    expect(wrapper.findAll('[data-testid="outbound-identity-auth-scope"]')).toHaveLength(3)
     const card = wrapper.findAll('section')[identityPresets.indexOf('zcode')]
     expect(card.text()).toContain('GLM · ZCode')
     const headers = card.get('[data-testid="outbound-identity-headers"]')

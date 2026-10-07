@@ -421,3 +421,10 @@ sibling content remains auditable. Domestic OAuth credentials introduce no new
 WebSocket ingress or direct WebSocket upstream capability. The account-type
 pass-through regression matrix includes all three native providers, alongside
 the existing HTTP/WS stage-order and canonical real-payload suites.
+
+The domestic identity source review also permits linked GLM OAuth accounts to
+use their already-derived plan API key on the OpenAI-compatible forwarding path.
+This changes credential retrieval only: canonical extraction and the accepted
+request's audit-before-selection boundary remain the existing CN adapter path.
+No new ingress endpoint, payload shape, audit exemption, or raw-content logging
+is introduced by protocol-specific outbound identity rendering.
