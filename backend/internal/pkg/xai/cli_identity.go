@@ -3,7 +3,6 @@ package xai
 import (
 	"net/http"
 	"os"
-	"runtime"
 	"strings"
 
 	"golang.org/x/mod/semver"
@@ -65,25 +64,8 @@ func CLIUserAgent(version string) string {
 	return "grok-shell/" + version + " (" + cliPlatformOS() + "; " + cliPlatformArch() + ")"
 }
 
-func cliPlatformOS() string {
-	if runtime.GOOS == "darwin" {
-		return "macos"
-	}
-	return runtime.GOOS
-}
-
-func cliPlatformArch() string {
-	switch runtime.GOARCH {
-	case "amd64":
-		return "x86_64"
-	case "386":
-		return "x86"
-	case "arm64":
-		return "aarch64"
-	default:
-		return runtime.GOARCH
-	}
-}
+func cliPlatformOS() string   { return "linux" }
+func cliPlatformArch() string { return "x86_64" }
 
 // ApplyCLIProxyHeaders stamps the fixed Grok CLI identity when the request
 // targets cli-chat-proxy. Direct api.x.ai traffic is left unchanged.

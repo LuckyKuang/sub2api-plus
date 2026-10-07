@@ -13,24 +13,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRuntimeHeadersUseOfficialPlatformNames(t *testing.T) {
-	for _, tc := range []struct{ goos, arch, platform, category string }{
-		{"linux", "amd64", "linux-x64", "linux"},
-		{"darwin", "arm64", "darwin-arm64", "macos"},
-		{"windows", "386", "win32-ia32", "windows"},
-	} {
-		got := runtimeHeaders(tc.goos, tc.arch, "6.8.0\n", "zh-CN", "Asia/Shanghai")
-		require.Equal(t, tc.platform, got["X-Platform"])
-		require.Equal(t, tc.category, got["X-Os-Category"])
-		require.Equal(t, "6.8.0", got["X-Os-Version"])
-		require.Equal(t, "zh-CN", got["X-Client-Language"])
-		require.Equal(t, "Asia/Shanghai", got["X-Client-Timezone"])
-	}
-	require.Equal(t, "unknown", printableFact("bad\r\nheader"))
-	require.Equal(t, "unknown", printableFact(""))
+func TestRuntimeHeadersUseFixedUbuntuDefaults(t *testing.T) {
+	t.Setenv("LANG", "fr_FR.UTF-8")
+	t.Setenv("TZ", "Europe/Paris")
+	require.Equal(t, map[string]string{
+		"X-Platform": "linux-x64", "X-Os-Category": "linux", "X-Os-Version": "6.8.0-31-generic",
+		"X-Client-Language": "en-US", "X-Client-Timezone": "UTC",
+	}, RuntimeHeaders())
 	first := RuntimeHeaders()
 	first["X-Platform"] = "mutated"
 	require.NotEqual(t, first, RuntimeHeaders())
+	require.Equal(t, "#31-Ubuntu SMP PREEMPT_DYNAMIC Sat Apr 20 00:40:06 UTC 2024", controlRuntimeHeaders()["X-Os-Version"])
 }
 
 func TestAuxiliaryClientsSendIdentityWithoutTransportWiring(t *testing.T) {

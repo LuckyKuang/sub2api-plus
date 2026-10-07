@@ -67,6 +67,16 @@
           </details>
           <p class="text-xs text-gray-500">{{ t('admin.settings.outboundIdentity.inheritHint') }}</p>
         </template>
+        <label v-if="hasIdentityTimezone(preset)" class="block text-sm">
+          {{ t('admin.settings.outboundIdentity.timezone') }}
+          <IdentityRuntimeField name="timezone" :model-value="profiles[preset].timezone" fallback="UTC" @update:model-value="setTimezone(preset, $event)" />
+          <span class="text-xs text-gray-500">{{ t('admin.settings.outboundIdentity.timezoneHint') }}</span>
+        </label>
+        <div v-if="environmentDifferences(preset).length" class="text-sm" data-testid="identity-environment-differences">
+          <p>{{ t('admin.settings.outboundIdentity.environmentDifference') }}</p>
+          <p v-for="header in environmentDifferences(preset)" :key="header.name" class="break-all font-mono text-xs">{{ header.name }}: {{ runtime[preset][header.name] || header.value }} → {{ header.builtin }}</p>
+          <button type="button" class="btn btn-secondary mt-2" @click="resetEnvironment(preset)">{{ t('admin.settings.outboundIdentity.resetEnvironment') }}</button>
+        </div>
         <div v-if="runtimeHeaders(preset).length" class="space-y-3" data-testid="outbound-identity-runtime-headers">
           <div>
             <p class="text-sm">{{ t('admin.settings.outboundIdentity.runtimeHeaders') }}</p>
@@ -74,12 +84,12 @@
           </div>
           <label v-for="header in runtimeHeaders(preset)" :key="header.name" class="block text-sm">
             <span class="font-mono text-xs text-gray-500">{{ header.name }}</span>
-            <input
-              :value="runtime[preset][header.name]"
-              class="input mt-1 font-mono text-sm"
-              :placeholder="header.builtin"
-              :aria-label="header.name"
-              @input="setRuntime(preset, header.name, ($event.target as HTMLInputElement).value)"
+            <IdentityRuntimeField
+              :model-value="runtime[preset][header.name]"
+              class="mt-1"
+              :fallback="header.builtin"
+              :name="header.name"
+              @update:model-value="setRuntime(preset, header.name, $event)"
             />
           </label>
         </div>
@@ -102,7 +112,8 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { getOutboundIdentity, updateOutboundIdentity, identityNames, identityPresets, versionlessIdentityPresets, type IdentityDeclaration, type IdentityPreset, type IdentitySelection, type OutboundIdentityView } from '@/api/admin/outboundIdentity'
+import IdentityRuntimeField from '@/components/account/IdentityRuntimeField.vue'
+import { hasIdentityTimezone, identityEnvironmentHeaders, getOutboundIdentity, updateOutboundIdentity, identityNames, identityPresets, versionlessIdentityPresets, type IdentityDeclaration, type IdentityPreset, type IdentitySelection, type OutboundIdentityView } from '@/api/admin/outboundIdentity'
 
 const { t } = useI18n()
 const domesticPresets: IdentityPreset[] = ['deepseek', 'kimi', 'zcode']
@@ -141,6 +152,16 @@ const sourceLabel = (source?: string) => t(`admin.settings.outboundIdentity.sour
 // a configured value, so this page never hard-codes a preset's header block.
 const runtimeHeaders = (preset: IdentityPreset): IdentityDeclaration[] =>
   view.value?.declarations?.find(item => item.preset === preset)?.headers.filter(header => header.editable) ?? []
+function setTimezone(preset: IdentityPreset, value: string) {
+  if (value) profiles[preset].timezone = value
+  else delete profiles[preset].timezone
+}
+const environmentDifferences = (preset: IdentityPreset) => runtimeHeaders(preset).filter(header => identityEnvironmentHeaders.includes(header.name) && (runtime[preset][header.name] || header.builtin) !== header.builtin)
+function resetEnvironment(preset: IdentityPreset) {
+  for (const header of runtimeHeaders(preset)) {
+    if (identityEnvironmentHeaders.includes(header.name)) runtime[preset][header.name] = header.builtin
+  }
+}
 function setRuntime(preset: IdentityPreset, name: string, value: string) {
   const trimmed = value.trim()
   if (trimmed) runtime[preset][name] = trimmed
@@ -154,7 +175,7 @@ function isPreservedProfile(preset: string) {
   return isVersionless(preset as IdentityPreset) && Boolean(view.value?.settings.profiles?.[preset as IdentityPreset])
 }
 function formSettings() {
-  const selectedProfiles = Object.fromEntries(Object.entries(profiles).filter(([preset, selection]) => preset !== 'codex' && (selection.user_agent?.trim() || selection.version?.trim() || isPreservedProfile(preset))).map(([preset, selection]) => [preset, { ...selection }]))
+  const selectedProfiles = Object.fromEntries(Object.entries(profiles).filter(([preset, selection]) => preset !== 'codex' && (selection.user_agent?.trim() || selection.version?.trim() || selection.timezone || isPreservedProfile(preset))).map(([preset, selection]) => [preset, { ...selection }]))
   const selectedDefaults = Object.fromEntries(Object.entries(defaults).filter(([, preset]) => preset)) as Record<string, IdentityPreset>
   const selectedRuntime = Object.fromEntries(Object.entries(runtime).filter(([, values]) => Object.keys(values).length).map(([preset, values]) => [preset, { ...values }]))
   return { profiles: selectedProfiles, defaults: selectedDefaults, runtime: selectedRuntime }

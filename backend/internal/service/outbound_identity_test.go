@@ -392,11 +392,12 @@ func TestBuiltInMiniMaxOutboundIdentityPinsProductToken(t *testing.T) {
 	const pinnedUA = "MiniMaxAgent"
 	require.Equal(t, outboundidentity.Identity{
 		Preset:     "minimax",
+		Timezone:   "UTC",
 		Source:     "compiled_default",
 		UserAgent:  pinnedUA,
 		Originator: pinnedUA,
 		Version:    "",
-		Headers:    map[string]string{"User-Agent": pinnedUA, "X-Stainless-Lang": "js", "X-Stainless-Package-Version": "0.91.1", "X-Stainless-OS": "Linux", "X-Stainless-Arch": "arm64", "X-Stainless-Runtime": "node", "X-Stainless-Runtime-Version": "v22.19.0"},
+		Headers:    map[string]string{"User-Agent": pinnedUA, "X-Stainless-Lang": "js", "X-Stainless-Package-Version": "0.91.1", "X-Stainless-OS": "Linux", "X-Stainless-Arch": "x64", "X-Stainless-Runtime": "node", "X-Stainless-Runtime-Version": "v22.19.0"},
 	}, builtInOutboundIdentity("minimax"))
 	require.Equal(t, builtInOutboundIdentity("minimax"), minimax.DefaultIdentity())
 	require.Equal(t, pinnedUA, minimax.UserAgent())

@@ -100,7 +100,7 @@ func TestAntigravityOAuthIdentityAcrossDiscoveryAndPrivacy(t *testing.T) {
 				var paths []string
 				http.DefaultTransport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
 					paths = append(paths, req.URL.Path)
-					require.Equal(t, "antigravity/"+version+" windows/amd64", req.UserAgent())
+					require.Equal(t, "antigravity/"+version+" linux/amd64", req.UserAgent())
 					identity, ok := outboundidentity.FromContext(req.Context())
 					require.True(t, ok)
 					require.Zero(t, identity.AccountID)

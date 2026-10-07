@@ -48,6 +48,7 @@ func DefaultIdentity() outboundidentity.Identity {
 	ua := UserAgent()
 	return outboundidentity.Identity{
 		Preset:     Preset,
+		Timezone:   outboundidentity.DefaultTimezone,
 		UserAgent:  ua,
 		Originator: ProductToken,
 		// Version is intentionally empty: the official client family publishes
@@ -64,7 +65,7 @@ const SDKVersion = "0.91.1"
 
 func APIKeyIdentity() outboundidentity.Identity {
 	ua := "Anthropic/JS " + SDKVersion
-	return outboundidentity.Identity{Preset: APIKeyPreset, UserAgent: ua, Originator: "Anthropic", Version: SDKVersion, Source: "compiled_default", Headers: sdkHeaders(ua)}
+	return outboundidentity.Identity{Preset: APIKeyPreset, Timezone: outboundidentity.DefaultTimezone, UserAgent: ua, Originator: "Anthropic", Version: SDKVersion, Source: "compiled_default", Headers: sdkHeaders(ua)}
 }
 
 // Pin a supported MiniMax Code Node host fingerprint, independently of the Go
@@ -72,7 +73,7 @@ func APIKeyIdentity() outboundidentity.Identity {
 func sdkHeaders(ua string) map[string]string {
 	return map[string]string{"User-Agent": ua,
 		"X-Stainless-Lang": "js", "X-Stainless-Package-Version": SDKVersion,
-		"X-Stainless-OS": "Linux", "X-Stainless-Arch": "arm64",
+		"X-Stainless-OS": "Linux", "X-Stainless-Arch": "x64",
 		"X-Stainless-Runtime": "node", "X-Stainless-Runtime-Version": "v22.19.0"}
 }
 

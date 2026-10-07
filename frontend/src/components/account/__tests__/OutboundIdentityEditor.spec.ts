@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import OutboundIdentityEditor from '../OutboundIdentityEditor.vue'
+import IdentityRuntimeField from '../IdentityRuntimeField.vue'
 import { getOutboundIdentity, previewOutboundIdentity, type OutboundIdentityView } from '@/api/admin/outboundIdentity'
 
 vi.mock('vue-i18n', async (original) => ({ ...await original<typeof import('vue-i18n')>(), useI18n: () => ({ t: (key: string) => key }) }))
@@ -66,6 +67,38 @@ describe('OutboundIdentityEditor', () => {
     expect(wrapper.text()).toContain('pinnedSdkHint')
     await wrapper.setProps({ accountType: 'oauth', modelValue: { preset: 'minimax' } })
     expect(wrapper.findAll('option').map(option => option.attributes('value'))).toEqual(['', 'minimax'])
+    wrapper.unmount()
+  })
+
+  it('uses the resolved type mapping when showing inherited timezone controls', async () => {
+    vi.mocked(previewOutboundIdentity).mockResolvedValue({ preset: 'minimax_apikey', user_agent: 'Anthropic/JS 0.91.1', originator: 'Anthropic', version: '0.91.1', source: 'global', headers: {}, timezone: 'Asia/Shanghai' })
+    const wrapper = mount(OutboundIdentityEditor, { props: { platform: 'kimi', accountType: 'apikey', modelValue: null } })
+    await vi.advanceTimersByTimeAsync(250)
+    await flushPromises()
+    expect(wrapper.getComponent(IdentityRuntimeField).props('name')).toBe('timezone')
+    expect(wrapper.getComponent(IdentityRuntimeField).props('fallback')).toBe('Asia/Shanghai')
+    wrapper.getComponent(IdentityRuntimeField).vm.$emit('update:modelValue', 'UTC')
+    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([{ preset: 'minimax_apikey', timezone: 'UTC' }])
+    wrapper.unmount()
+  })
+
+  it('sets and clears an account timezone while retaining its preset', async () => {
+    const wrapper = mount(OutboundIdentityEditor, { props: { platform: 'minimax', accountType: 'oauth', modelValue: null } })
+    wrapper.getComponent(IdentityRuntimeField).vm.$emit('update:modelValue', 'Asia/Shanghai')
+    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([{ preset: 'minimax', timezone: 'Asia/Shanghai' }])
+    await wrapper.setProps({ modelValue: { preset: 'minimax', timezone: 'Asia/Shanghai' } })
+    wrapper.getComponent(IdentityRuntimeField).vm.$emit('update:modelValue', '')
+    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([{ preset: 'minimax' }])
+    wrapper.unmount()
+  })
+
+  it('preserves an explicit device UUID when resetting an account environment', async () => {
+    const wrapper = mount(OutboundIdentityEditor, { props: { platform: 'kimi', accountType: 'oauth', modelValue: { preset: 'kimi', headers: { 'X-Msh-Device-Name': 'legacy-host', 'X-Msh-Device-Id': 'keep-id' } } } })
+    await flushPromises()
+    const differences = wrapper.get('[data-testid="identity-account-environment-differences"]')
+    expect(differences.text()).toContain('legacy-host')
+    await differences.get('button').trigger('click')
+    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([{ preset: 'kimi', headers: { 'X-Msh-Device-Name': 'kimi-gateway', 'X-Msh-Device-Model': 'Linux 6.14.0 x64', 'X-Msh-Os-Version': '6.14.0', 'X-Msh-Device-Id': 'keep-id' } }])
     wrapper.unmount()
   })
 

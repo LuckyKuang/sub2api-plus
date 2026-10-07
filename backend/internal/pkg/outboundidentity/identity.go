@@ -13,6 +13,8 @@ import (
 )
 
 type Identity struct {
+	// Timezone is MiniMax request metadata configuration, never an extra wire header.
+	Timezone       string                 `json:"timezone,omitempty"`
 	AccountID      int64                  `json:"-"`
 	Preset         string                 `json:"preset"`
 	UserAgent      string                 `json:"user_agent"`

@@ -5,6 +5,8 @@ export interface IdentitySelection {
   preset: IdentityPreset | ''
   user_agent?: string
   version?: string
+  /** MiniMax request timezone; never an additional wire header. */
+  timezone?: string
   /** Configured values for the preset's `runtime` declarations only. */
   headers?: Record<string, string>
 }
@@ -14,6 +16,7 @@ export interface ResolvedIdentity {
   originator: string
   version: string
   source: string
+  timezone?: string
   headers: Record<string, string>
 }
 /**
@@ -66,3 +69,6 @@ export async function updateOutboundIdentity(settings: OutboundIdentitySettings)
 export async function previewOutboundIdentity(platform: string, type: string, selection?: IdentitySelection, userAgent?: string): Promise<ResolvedIdentity> {
   return (await apiClient.post<ResolvedIdentity>('/admin/settings/outbound-identity/preview', { platform, type, selection, user_agent: userAgent })).data
 }
+
+export const identityEnvironmentHeaders = ['X-Msh-Device-Name', 'X-Msh-Device-Model', 'X-Msh-Os-Version', 'X-Platform', 'X-Os-Category', 'X-Os-Version']
+export const hasIdentityTimezone = (preset: string) => preset === 'minimax' || preset === 'minimax_apikey'

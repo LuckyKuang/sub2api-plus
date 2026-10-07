@@ -13,7 +13,6 @@ import (
 	"math"
 	"net/http"
 	"net/url"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -322,7 +321,7 @@ func (c *Client) Exchange(ctx context.Context, f *Flow, callback, proxy string) 
 		return nil, errors.New("invalid callback state or code")
 	}
 	ctx = snapshot(ctx, "deepseek")
-	v, err := c.deepseek(ctx, proxy, "auth_exchange", map[string]any{"code": q.Get("code"), "code_verifier": f.Verifier, "redirect_uri": DeepSeekRedirect, "device_id": f.DeviceID, "device_model": deviceModel(), "os_version": runtime.GOOS + " " + kimi.ResolveDeviceFacts().OSVersion})
+	v, err := c.deepseek(ctx, proxy, "auth_exchange", map[string]any{"code": q.Get("code"), "code_verifier": f.Verifier, "redirect_uri": DeepSeekRedirect, "device_id": f.DeviceID, "device_model": deviceModel(), "os_version": outboundidentity.DefaultOS + " " + outboundidentity.DefaultKernelRelease})
 	if err != nil {
 		return nil, err
 	}
@@ -443,13 +442,7 @@ func validToken(value string) bool {
 	return true
 }
 
-func deviceModel() string {
-	arch := runtime.GOARCH
-	if arch == "amd64" {
-		arch = "x64"
-	}
-	return runtime.GOOS + "-" + arch
-}
+func deviceModel() string { return outboundidentity.DefaultOS + "-" + outboundidentity.DefaultArch }
 func scopeValue(v any) string {
 	switch s := v.(type) {
 	case string:

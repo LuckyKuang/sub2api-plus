@@ -35,12 +35,9 @@
 // package pins the CLI family; the other hosts state their own platform
 // explicitly and are not inherited silently.
 //
-// The device set is runtime state, not a compile-time pin. Sub2API Plus
-// resolves it once from its own host, persists it through the outbound identity
-// settings, and lets an operator override every value (see
-// docs/OUTBOUND_IDENTITY.md). One deployment therefore presents one device
-// identity to upstream, which is the honest mapping for a shared gateway but a
-// different cardinality than one device per end user.
+// The gateway defaults to a fixed Ubuntu 24.04 x86_64 client named ubuntu.
+// The official header formats and persistent device UUID are preserved;
+// explicit global/account declarations remain configurable.
 package kimi
 
 import (
@@ -132,7 +129,7 @@ func UserAgent(version string) string {
 }
 
 // DefaultIdentity is the compiled declaration set: the trusted triple plus the
-// version companion and the device set resolved from this host. The service
+// version companion and the fixed Ubuntu device set. The service
 // layer overlays the persisted runtime values on top; this function stays free
 // of configuration state so settings resolution and protocol clients share one
 // fallback.
@@ -167,7 +164,7 @@ func inferenceProfiles() map[string]outboundidentity.WireProfile {
 	for protocol, version := range map[string]string{"anthropic": "0.95.2", "chat_completions": "6.34.0", "responses": "6.34.0"} {
 		profiles[protocol] = outboundidentity.WireProfile{Headers: map[string]string{
 			"X-Stainless-Lang": "js", "X-Stainless-Package-Version": version,
-			"X-Stainless-OS": "Linux", "X-Stainless-Arch": "arm64",
+			"X-Stainless-OS": "Linux", "X-Stainless-Arch": "x64",
 			"X-Stainless-Runtime": "node", "X-Stainless-Runtime-Version": "v22.19.0",
 		}}
 	}

@@ -16,6 +16,15 @@
         <input :value="modelValue.user_agent" class="input mt-2 font-mono text-sm" placeholder="User-Agent" @input="update('user_agent', ($event.target as HTMLInputElement).value)" />
       </details>
     </template>
+    <label v-if="hasIdentityTimezone(effectivePreset)" class="block text-xs">
+      {{ t('admin.settings.outboundIdentity.timezone') }}
+      <IdentityRuntimeField name="timezone" :model-value="modelValue?.timezone" :fallback="preview?.timezone || 'UTC'" @update:model-value="setTimezone" />
+    </label>
+    <div v-if="environmentDifferences.length" class="text-xs" data-testid="identity-account-environment-differences">
+      <p>{{ t('admin.settings.outboundIdentity.environmentDifference') }}</p>
+      <p v-for="header in environmentDifferences" :key="header.name" class="break-all font-mono">{{ header.name }}: {{ modelValue?.headers?.[header.name] }} → {{ header.builtin }}</p>
+      <button type="button" class="btn btn-secondary mt-2" @click="resetEnvironment">{{ t('admin.settings.outboundIdentity.resetEnvironment') }}</button>
+    </div>
     <div v-if="runtimeHeaders.length" class="space-y-2" data-testid="outbound-identity-account-runtime-headers">
       <div>
         <p class="text-xs text-gray-500">{{ t('admin.settings.outboundIdentity.runtimeHeaders') }}</p>
@@ -23,12 +32,12 @@
       </div>
       <label v-for="header in runtimeHeaders" :key="header.name" class="block text-xs">
         <span class="font-mono text-gray-500">{{ header.name }}</span>
-        <input
-          :value="modelValue?.headers?.[header.name]"
-          class="input mt-1 font-mono text-sm"
-          :placeholder="header.builtin"
-          :aria-label="header.name"
-          @input="setHeader(header.name, ($event.target as HTMLInputElement).value)"
+        <IdentityRuntimeField
+          :model-value="modelValue?.headers?.[header.name]"
+          class="mt-1"
+          :fallback="preview?.headers[header.name] || header.value || header.builtin"
+          :name="header.name"
+          @update:model-value="setHeader(header.name, $event)"
         />
       </label>
     </div>
@@ -48,7 +57,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { getOutboundIdentity, identityNames, identityPresets, versionlessIdentityPresets, previewOutboundIdentity, type IdentityDeclaration, type IdentityPreset, type IdentitySelection, type PresetDeclarations, type ResolvedIdentity } from '@/api/admin/outboundIdentity'
+import IdentityRuntimeField from './IdentityRuntimeField.vue'
+import { hasIdentityTimezone, identityEnvironmentHeaders, getOutboundIdentity, identityNames, identityPresets, versionlessIdentityPresets, previewOutboundIdentity, type IdentityDeclaration, type IdentityPreset, type IdentitySelection, type PresetDeclarations, type ResolvedIdentity } from '@/api/admin/outboundIdentity'
 const props = defineProps<{ platform: string; accountType: string; modelValue?: IdentitySelection | null; codexUserAgent?: string }>()
 const emit = defineEmits<{ 'update:modelValue': [value: IdentitySelection | null] }>()
 const { t } = useI18n()
@@ -58,7 +68,7 @@ const declarations = ref<PresetDeclarations[]>([])
 const nativePresets: Record<string, IdentityPreset> = { anthropic: 'claude', gemini: 'gemini', grok: 'grok', antigravity: 'antigravity', deepseek: 'deepseek', minimax: 'minimax', kimi: 'kimi', zhipu: 'zcode' }
 const isVersionlessSelection = computed(() => !!props.modelValue?.preset && versionlessIdentityPresets.includes(props.modelValue.preset as IdentityPreset))
 const nativePreset = computed<IdentityPreset>(() => props.platform === 'minimax' && props.accountType === 'apikey' ? 'minimax_apikey' : nativePresets[props.platform] || 'codex')
-const effectivePreset = computed<IdentityPreset>(() => (props.modelValue?.preset as IdentityPreset) || nativePreset.value)
+const effectivePreset = computed<IdentityPreset>(() => (props.modelValue?.preset as IdentityPreset) || preview.value?.preset || nativePreset.value)
 const visible = computed(() => props.platform && props.platform !== 'composite' && (props.platform !== 'openai' || ['apikey', 'upstream'].includes(props.accountType)))
 const availablePresets = computed(() => ['oauth', 'setup-token'].includes(props.accountType) ? [nativePreset.value] : identityPresets)
 // The backend declares which headers each preset renders and which of them
@@ -67,6 +77,21 @@ const runtimeHeaders = computed<IdentityDeclaration[]>(() => {
   if (!visible.value || (props.platform === 'openai' && effectivePreset.value === 'codex')) return []
   return declarations.value.find(item => item.preset === effectivePreset.value)?.headers.filter(header => header.editable) ?? []
 })
+const environmentDifferences = computed(() => runtimeHeaders.value.filter(header => identityEnvironmentHeaders.includes(header.name) && props.modelValue?.headers?.[header.name] && props.modelValue.headers[header.name] !== header.builtin))
+function resetEnvironment() {
+  const current = props.modelValue ?? { preset: effectivePreset.value }
+  const headers = { ...current.headers }
+  for (const header of runtimeHeaders.value) {
+    if (identityEnvironmentHeaders.includes(header.name)) headers[header.name] = header.builtin
+  }
+  emit('update:modelValue', { ...current, headers })
+}
+function setTimezone(value: string) {
+  const current = { ...(props.modelValue ?? { preset: effectivePreset.value }) }
+  if (value) current.timezone = value
+  else delete current.timezone
+  emit('update:modelValue', current)
+}
 function selectPreset(preset: string) { emit('update:modelValue', preset ? { preset: preset as IdentityPreset } : null) }
 function update(field: 'user_agent' | 'version', value: string) { if (props.modelValue) emit('update:modelValue', { ...props.modelValue, [field]: value }) }
 // Setting a runtime declaration makes the preset explicit, because the value is

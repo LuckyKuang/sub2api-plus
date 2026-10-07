@@ -117,7 +117,8 @@ func TestDeepSeekPKCEAndState(t *testing.T) {
 			require.Equal(t, challenge, base64.RawURLEncoding.EncodeToString(hash[:]))
 			require.Equal(t, "code", str(body, "code"))
 			require.NotEmpty(t, str(body, "device_id"))
-			require.Equal(t, deviceModel(), str(body, "device_model"))
+			require.Equal(t, "linux-x64", str(body, "device_model"))
+			require.Equal(t, "linux 6.8.0-31-generic", str(body, "os_version"))
 			value = map[string]any{"token": "opaque-grant"}
 		}
 		return reply(map[string]any{"code": 0, "data": map[string]any{"biz_code": 0, "biz_data": value}}), nil

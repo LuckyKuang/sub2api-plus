@@ -29,10 +29,10 @@ func TestPrivacyIdentityFallbackOnBothEndpoints(t *testing.T) {
 			expected := DefaultIdentity()
 			if env == "1.20.8" {
 				require.Equal(t, "environment", expected.Source)
-				require.Equal(t, "antigravity/1.20.8 windows/amd64", expected.UserAgent)
+				require.Equal(t, "antigravity/1.20.8 linux/amd64", expected.UserAgent)
 			} else {
 				require.Equal(t, "compiled_default", expected.Source)
-				require.Equal(t, "antigravity/2.9.1 windows/amd64", expected.UserAgent)
+				require.Equal(t, "antigravity/2.9.1 linux/amd64", expected.UserAgent)
 			}
 			var paths []string
 			client := &Client{httpClient: &http.Client{Transport: privacyIdentityTransport(func(req *http.Request) (*http.Response, error) {

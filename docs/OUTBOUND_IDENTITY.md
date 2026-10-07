@@ -26,6 +26,60 @@ rewrite a client-family token. A **runtime** declaration describes the host the
 official client runs on; the settings and an account selection may supply it.
 Kimi Code and ZCode persist runtime declarations.
 
+## Default client environment and privacy
+
+All built-in OS declarations describe one fixed **Ubuntu 24.04 x86_64** client,
+independent of the gateway/container host. Device name is `ubuntu`. The baseline
+is Ubuntu Noble GA `linux 6.8.0-31.31` (amd64): `os.release()` is
+`6.8.0-31-generic`; `os.version()` is
+`#31-Ubuntu SMP PREEMPT_DYNAMIC Sat Apr 20 00:40:06 UTC 2024`.
+These two strings describe the same Ubuntu kernel build. This is an advertised
+client environment, not a claim that the server runs that kernel. Product and
+SDK versions do not update this baseline.
+
+| Preset | Exact default OS/architecture declarations |
+| --- | --- |
+| Codex | Existing `codex_cli_rs/0.158.0 (Ubuntu 24.04; x86_64) xterm-256color`, unchanged |
+| Claude | `X-Stainless-OS: Linux`, `X-Stainless-Arch: x64` |
+| Gemini | `GeminiCLI/0.1.5 (Linux; x64)` |
+| Grok | `grok-shell/1.0.45 (linux; x86_64)` |
+| Antigravity | `antigravity/2.9.1 linux/amd64` |
+| DeepSeek | Product UA has no OS; OAuth exchange body uses `device_model: linux-x64`, `os_version: linux 6.8.0-31-generic` |
+| Kimi | `X-Msh-Device-Name: ubuntu`, `X-Msh-Device-Model: Linux 6.8.0-31-generic x64`, `X-Msh-Os-Version: 6.8.0-31-generic`; inference SDK uses `Linux` / `x64` |
+| MiniMax OAuth / API Key | SDK uses `Linux` / `x64`; UA has no OS segment |
+| ZCode | `X-Platform: linux-x64`, `X-Os-Category: linux`, inference kernel release and control-plane kernel version as above |
+
+Only provider-defined fields are rendered. Fixed defaults deliberately replace
+the official clients' ambient host detection, preventing container hostnames and
+kernel details from leaking. Kimi retains its persisted UUID. Client names,
+version companions, authentication and protocol-specific SDK formats stay intact.
+
+Source priority remains valid account → global preset/type → environment/compiled
+default; Codex retains its separate immutable source contract. Explicit existing
+OS overrides remain valid and version-only updates preserve them. Migration
+`275_neutral_kimi_device_name.sql` changes only known Kimi gateway device names
+`sub2api` / `sub2api-apple` (case-insensitive), in global runtime/profile values
+and account selections, to `ubuntu`; it preserves device IDs and unrelated data.
+New branded device names are rejected. Historical OS values lack provenance and
+are not automatically overwritten: settings show the old/default differences and
+an explicit “Use Ubuntu 24.04 defaults” action. This changes environment fields
+only, preserving product versions, locale, timezone and UUID.
+
+ZCode language and timezone use searchable dropdowns in settings and account
+editors. Defaults are `en-US` and `UTC`; explicit canonical BCP 47 language tags
+and loadable IANA timezones are accepted. `Local`, unknown zones and malformed
+language tags are rejected before saving; invalid stored candidates fall through
+atomically. Previously saved valid choices outside the common browser list remain
+visible. Blank account values inherit global settings. SDK `X-Stainless-Lang: js`
+is a programming language and is never a locale selector.
+
+MiniMax has a non-header `timezone` setting on each global/account preset
+selection (`minimax` and `minimax_apikey`), default `UTC`. It is serialized into
+the identity snapshot and OAuth account selection. The protocol layer computes
+`X-Mavis-Timezone-Offset` in seconds at request creation, respecting DST; the same
+owner's retries keep the captured offset and failover resolves the new owner.
+No synthetic timezone header is added to OAuth or other providers.
+
 ## Presets and default mappings
 
 | Preset | Default accounts | Wire identity |
@@ -96,18 +150,16 @@ and client version `3.14.3`. The desktop host's declaration block comes from
 | `X-Title` | `Z Code@electron` | Pinned |
 | `X-Release-Channel` | `production` | Pinned |
 | `X-ZCode-Agent` | `glm` | Pinned |
-| `X-Client-Language` | Host locale, e.g. `en-US` | Runtime |
-| `X-Client-Timezone` | Host timezone, e.g. `UTC` | Runtime |
-| `X-Platform` | Node platform/architecture spelling, e.g. `linux-arm64` | Runtime |
-| `X-Os-Category` | `linux`, `macos` or `windows` | Runtime |
-| `X-Os-Version` | Host kernel release | Runtime |
+| `X-Client-Language` | `en-US` | Runtime |
+| `X-Client-Timezone` | `UTC` | Runtime |
+| `X-Platform` | `linux-x64` | Runtime |
+| `X-Os-Category` | `linux` | Runtime |
+| `X-Os-Version` | `6.8.0-31-generic` | Runtime |
 
-The five runtime facts are resolved once, persisted under `runtime.zcode`, shown
-in settings, and overridable globally or per account. The supported deployment
-runtime is Linux; the kernel release comes from `/proc/sys/kernel/osrelease`.
-Locale uses `LC_ALL`, `LC_MESSAGES`, then `LANG` (the Node default `en-US` for
-unset/C/POSIX), and timezone uses `TZ`/system timezone data. Missing or unsafe
-facts use `unknown`. Version-only changes retain these facts and all pinned
+The five configurable declarations default to the fixed environment above and
+are persisted under `runtime.zcode`, shown in settings, and overridable globally
+or per account. They do not read host locale, timezone or kernel files.
+Version-only changes retain these facts and all pinned
 product declarations. No standalone `Originator` or `Version` is rendered.
 `SUB2API_ZCODE_VERSION` selects a version without changing the desktop family;
 both upstream version lines remain accepted. The bootstrap declarations above
@@ -117,9 +169,8 @@ version changes preserve those profiles.
 Account-link, business-key derivation and off-peak ticket clients derive their
 control-plane headers from the same snapshot, including standalone clients.
 Following `packages/services/src/providers/sourceHeaders.ts`, control calls omit
-`X-ZCode-Agent` and inference SDK suffixes; their `X-Os-Version` is the captured
-Node `os.version()` equivalent (`/proc/sys/kernel/version` on the supported Linux
-deployment), not inference's `os.release()`. It is a read-only host fact carried
+`X-ZCode-Agent` and inference SDK suffixes; their `X-Os-Version` is the pinned
+Ubuntu Node `os.version()` equivalent, not inference's `os.release()`. It is a read-only baseline declaration carried
 in `control_headers` and serialized with login sessions. An absent telemetry
 `X-Device-Mid` is omitted, never fabricated. Start, poll, code exchange and key
 derivation retain one identity even across Redis instances/settings changes;
@@ -140,7 +191,7 @@ resolver overrides the SDK UA; its BYOK resolver does not. The latter uses the
 Anthropic SDK locked at `0.91.1` in `third_party/pi-mono/packages/ai` and
 `pnpm-lock.yaml`. Both inference profiles preserve these exact declarations:
 `X-Stainless-Lang: js`, `X-Stainless-Package-Version: 0.91.1`,
-`X-Stainless-OS: Linux`, `X-Stainless-Arch: arm64`,
+`X-Stainless-OS: Linux`, `X-Stainless-Arch: x64`,
 `X-Stainless-Runtime: node`, `X-Stainless-Runtime-Version: v22.19.0`.
 This is an explicitly pinned supported official Node host fingerprint, independent
 of the gateway's Go runtime. The API-key SDK UA/version are read-only; updating
@@ -150,7 +201,7 @@ mapping still wins. OAuth retains `minimax`.
 
 Messages requests for both native presets carry protocol-owned
 `X-Mavis-Session-Id` (gateway-generated), `X-Mavis-Agent-Id: main` (the official
-default agent) and `X-Mavis-Timezone-Offset` (host UTC offset in seconds). A
+default agent) and `X-Mavis-Timezone-Offset` (selected timezone UTC offset in seconds). A
 request scope retains these across retries; failover resolves the new owner.
 They are not configurable identity declarations. Official OAuth uses fetch
 without a product UA. The gateway deliberately keeps its trusted `MiniMaxAgent`
@@ -176,16 +227,10 @@ share one released version line. The VS Code extension is a separate product
 preset, so the floor cannot reject a legitimate value from a second official
 line — the opposite of the ZCode situation above.
 
-The device declarations are this deployment's own **runtime** values, not
-compile-time pins: the official client resolves them from the machine it runs on
-and persists the device id. Sub2API Plus resolves them once from the host this
-deployment runs on, persists them under `runtime.kimi` in the outbound identity
-settings, and lets an operator or an account override each one. The derivations
-mirror the official client: the host name, the kernel release, a
-`<os type> <os version> <arch>` model string using Node's architecture token
-(`amd64` renders as `x64`, `386` as `ia32`, `mipsle` as `mipsel`, exactly as
-`os.arch()` reports), and a uuid v4 device id. A fact the host does not expose
-falls back to the official `unknown` substitution rather than an invented value.
+The official client derives device declarations from its host. The gateway uses
+the fixed Ubuntu defaults above and a persistent UUID instead, stored under
+`runtime.kimi`. Explicit global/account overrides remain supported. The default
+hostname, kernel and architecture never depend on the deployment host.
 Two consequences are deliberate and operator-visible:
 
 - One deployment presents **one** device identity to upstream, while the
@@ -244,10 +289,10 @@ account runtime values override that resolved global state. Settings header
 blocks show the actual resolved declarations for all four families. This identity
 contract does not create a new login protocol or change authentication headers.
 
-The exact compiled Grok identity is `grok-shell/1.0.45 (<os>; <arch>)`, with
-identifier `grok-shell`, client version `1.0.45`, and mode `headless`. Runtime
-OS and architecture use the official spellings (`darwin` renders as `macos`
-and Go's `amd64`, `386`, and `arm64` render as `x86_64`, `x86`, and `aarch64`).
+The exact compiled Grok identity is `grok-shell/1.0.45 (linux; x86_64)`, with
+identifier `grok-shell`, client version `1.0.45`, and mode `headless`.
+OS and architecture use the fixed Ubuntu baseline, in the official Linux/x86_64
+spellings, independently of Go's runtime platform.
 `XAI_GROK_CLI_VERSION` may select a supported version while retaining that
 family, platform fingerprint, identifier and mode; `1.0.41` remains the accepted
 version floor and an existing valid account, global or environment pin keeps
@@ -256,7 +301,7 @@ compiled default follows the frozen local grok-build source and does not track a
 build-time network scrape or an ambient `GROK_VERSION`.
 
 The exact compiled Antigravity identity is
-`antigravity/2.9.1 windows/amd64`, with identifier `antigravity` and client
+`antigravity/2.9.1 linux/amd64`, with identifier `antigravity` and client
 version `2.9.1` encoded in the UA. Only `setUserSettings` and `fetchUserInfo`
 also send `X-Goog-Api-Client: gl-node/22.21.1`. This SDK declaration belongs to
 those endpoints and remains fixed during client version updates. The base
@@ -364,7 +409,7 @@ request state, or the final target.
 
 Other global settings live in the existing settings store under
 `outbound_identity`; account selections use the existing credentials JSON.
-No database schema migration or new YAML/environment binding is required.
+The hostname data migration requires no schema or YAML/environment changes.
 Defaults are empty `profiles`, `defaults` and `runtime` maps. Existing Antigravity
 `antigravity_user_agent_version` is imported into the editable Antigravity
 profile before the unified configuration is first saved — either by an
@@ -746,7 +791,7 @@ Kimi's OAuth and API-key inference use the same `kimi-code-cli/2.1.1` UA and
 `X-Msh-*` declarations. Anthropic uses `X-Stainless-Package-Version: 0.95.2`;
 Chat Completions/Responses use `6.34.0` (the reviewed Anthropic/OpenAI JS lockfile
 versions). Both explicitly pin `X-Stainless-Lang: js`, `X-Stainless-OS: Linux`,
-`X-Stainless-Arch: arm64`, `X-Stainless-Runtime: node`, and
+`X-Stainless-Arch: x64`, `X-Stainless-Runtime: node`, and
 `X-Stainless-Runtime-Version: v22.19.0`, a supported official Node host profile.
 OAuth/device/token requests carry the product/device declarations without SDK
 headers. Product-version edits preserve this SDK fingerprint.

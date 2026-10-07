@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import OutboundIdentitySettings from './OutboundIdentitySettings.vue'
+import IdentityRuntimeField from '@/components/account/IdentityRuntimeField.vue'
 import { getOutboundIdentity, updateOutboundIdentity, identityPresets, versionlessIdentityPresets, type IdentityDeclaration, type OutboundIdentityView, type PresetDeclarations } from '@/api/admin/outboundIdentity'
 
 vi.mock('vue-i18n', async (original) => ({ ...await original<typeof import('vue-i18n')>(), useI18n: () => ({ t: (key: string) => key }) }))
@@ -125,7 +126,7 @@ describe('OutboundIdentitySettings', () => {
     }
     expect(card.find('input[aria-label="X-ZCode-App-Version"]').exists()).toBe(false)
     expect(card.find('input[aria-label="X-Title"]').exists()).toBe(false)
-    await card.get('input[aria-label="X-Client-Timezone"]').setValue('Asia/Shanghai')
+    card.findAllComponents(IdentityRuntimeField).find(field => field.props('name') === 'X-Client-Timezone')!.vm.$emit('update:modelValue', 'Asia/Shanghai')
     await card.findAll('input')[0].setValue('4.1.0')
     await wrapper.vm.save()
     expect(updateOutboundIdentity).toHaveBeenCalledWith({
@@ -143,11 +144,41 @@ describe('OutboundIdentitySettings', () => {
     const wrapper = mount(OutboundIdentitySettings)
     await flushPromises()
     const card = wrapper.findAll('section')[identityPresets.indexOf('zcode')]
-    expect((card.get('input[aria-label="X-Client-Timezone"]').element as HTMLInputElement).value).toBe('Asia/Shanghai')
+    expect(card.get('button[aria-label="X-Client-Timezone"]').text()).toContain('Asia/Shanghai')
     expect(wrapper.vm.isDirty).toBe(false)
-    await card.get('input[aria-label="X-Client-Timezone"]').setValue('Europe/Amsterdam')
+    card.findAllComponents(IdentityRuntimeField).find(field => field.props('name') === 'X-Client-Timezone')!.vm.$emit('update:modelValue', 'Europe/Amsterdam')
     await wrapper.vm.save()
     expect(updateOutboundIdentity).toHaveBeenCalledWith({ profiles: {}, defaults: {}, runtime: { zcode: { 'X-Client-Timezone': 'Europe/Amsterdam' } } })
+    wrapper.unmount()
+  })
+
+  it('lists saved environment differences and resets only host declarations', async () => {
+    const view = fixture()
+    view.settings.runtime = { kimi: { 'X-Msh-Device-Name': 'old-host', 'X-Msh-Device-Id': '22222222-2222-4222-8222-222222222222' } }
+    vi.mocked(getOutboundIdentity).mockResolvedValue(view)
+    const wrapper = mount(OutboundIdentitySettings)
+    await flushPromises()
+    const card = wrapper.findAll('section')[identityPresets.indexOf('kimi')]
+    const differences = card.get('[data-testid="identity-environment-differences"]')
+    expect(differences.text()).toContain('old-host')
+    expect(wrapper.vm.isDirty).toBe(false)
+    await differences.get('button').trigger('click')
+    await wrapper.vm.save()
+    const saved = vi.mocked(updateOutboundIdentity).mock.calls[0][0]
+    expect(saved.runtime?.kimi?.['X-Msh-Device-Name']).toBe('kimi-gateway')
+    expect(saved.runtime?.kimi?.['X-Msh-Device-Id']).toBe('22222222-2222-4222-8222-222222222222')
+    wrapper.unmount()
+  })
+
+  it('saves MiniMax timezone-only profiles without inventing a header', async () => {
+    const wrapper = mount(OutboundIdentitySettings)
+    await flushPromises()
+    const card = wrapper.findAll('section')[identityPresets.indexOf('minimax')]
+    card.getComponent(IdentityRuntimeField).vm.$emit('update:modelValue', 'Europe/Amsterdam')
+    await wrapper.vm.save()
+    expect(vi.mocked(updateOutboundIdentity).mock.calls[0][0]).toEqual({
+      profiles: { minimax: { preset: 'minimax', user_agent: '', version: '', timezone: 'Europe/Amsterdam' } }, defaults: {}, runtime: {}
+    })
     wrapper.unmount()
   })
 

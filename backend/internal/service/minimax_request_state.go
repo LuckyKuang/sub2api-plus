@@ -27,7 +27,7 @@ func prepareMiniMaxRequestState(req *http.Request, account *Account) {
 	key := outboundIdentityOwnerKey(account)
 	value, ok := scope.minimaxTurns.Load(key)
 	if !ok {
-		_, offset := time.Now().Zone()
+		offset := identity.TimezoneOffset(time.Now())
 		value, _ = scope.minimaxTurns.LoadOrStore(key, miniMaxRequestState{session: uuid.NewString(), offset: strconv.Itoa(offset)})
 	}
 	state, ok := value.(miniMaxRequestState)

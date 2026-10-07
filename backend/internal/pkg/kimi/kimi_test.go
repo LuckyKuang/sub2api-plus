@@ -3,7 +3,6 @@
 package kimi
 
 import (
-	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -15,8 +14,6 @@ import (
 // resetDeviceFacts clears the per-process memo so a test can observe a fresh
 // resolution.
 func resetDeviceFacts() {
-	deviceFactsOnce = sync.Once{}
-	deviceFactsValue = DeviceFacts{}
 	defaultDeviceIDOnce = sync.Once{}
 	defaultDeviceIDValue = ""
 }
@@ -78,22 +75,6 @@ func TestASCIIHeaderFallsBackToUnknown(t *testing.T) {
 	require.Equal(t, "ho st", asciiHeader(" ho st "))
 }
 
-func TestNodeArchReportsTheNodeToken(t *testing.T) {
-	require.Equal(t, "x64", nodeArchFor("amd64"))
-	require.Equal(t, "ia32", nodeArchFor("386"))
-	require.Equal(t, "mipsel", nodeArchFor("mipsle"))
-	require.Equal(t, "arm64", nodeArchFor("arm64"))
-	require.Equal(t, "riscv64", nodeArchFor("riscv64"))
-	require.Equal(t, nodeArchFor(runtime.GOARCH), nodeArch())
-}
-
-func TestJoinDeviceModelSkipsUnresolvedComponents(t *testing.T) {
-	require.Equal(t, "Linux 6.14.0 x64", joinDeviceModel("Linux", "6.14.0", "x64"))
-	require.Equal(t, "Linux x64", joinDeviceModel("Linux", "", "x64"))
-	require.Equal(t, "", joinDeviceModel("", "", ""))
-	require.Equal(t, "Darwin 24.3.0 arm64", joinDeviceModel("Darwin", "24.3.0", "arm64"))
-}
-
 func TestResolveVersionHonorsTheOverrideAndTheFloor(t *testing.T) {
 	t.Setenv(VersionEnv, "2.4.0")
 	require.Equal(t, "2.4.0", ResolveVersion())
@@ -117,16 +98,12 @@ func TestUserAgentFallsBackToThePinnedVersion(t *testing.T) {
 	require.True(t, strings.HasPrefix(UserAgent(""), ProductToken+"/"))
 }
 
-func TestResolveDeviceFactsReadsOncePerProcess(t *testing.T) {
+func TestResolveDeviceFactsUsesFixedUbuntuEnvironment(t *testing.T) {
 	resetDeviceFacts()
 	first := ResolveDeviceFacts()
 	require.Equal(t, first, ResolveDeviceFacts())
 	require.Equal(t, first.DeviceID, DefaultDeviceID())
-	if runtime.GOOS == "linux" {
-		// Linux is the platform every supported deployment and every validation
-		// container runs on, so the kernel release must resolve there.
-		require.NotEmpty(t, first.OSVersion)
-		require.Contains(t, first.Model, first.OSVersion)
-		require.NotEmpty(t, first.Name)
-	}
+	require.Equal(t, "ubuntu", first.Name)
+	require.Equal(t, "6.8.0-31-generic", first.OSVersion)
+	require.Equal(t, "Linux 6.8.0-31-generic x64", first.Model)
 }

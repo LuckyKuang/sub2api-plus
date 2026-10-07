@@ -31,7 +31,7 @@ func TestClaudeResetCompiledIdentityAndFingerprint(t *testing.T) {
 			"X-Stainless-Lang":            "js",
 			"X-Stainless-Package-Version": "0.94.0",
 			"X-Stainless-OS":              "Linux",
-			"X-Stainless-Arch":            "arm64",
+			"X-Stainless-Arch":            "x64",
 			"X-Stainless-Runtime":         "node",
 			"X-Stainless-Runtime-Version": "v24.3.0",
 		},
@@ -180,7 +180,7 @@ func TestClaudeResetRedeemRetainsOwnerSnapshotAcrossAllOutboundPaths(t *testing.
 				require.Equal(t, "cli", req.Header.Get("X-App"))
 				require.Equal(t, "0.94.0", req.Header.Get("X-Stainless-Package-Version"))
 				require.Equal(t, "Linux", req.Header.Get("X-Stainless-OS"))
-				require.Equal(t, "arm64", req.Header.Get("X-Stainless-Arch"))
+				require.Equal(t, "x64", req.Header.Get("X-Stainless-Arch"))
 				require.Equal(t, "node", req.Header.Get("X-Stainless-Runtime"))
 				require.Equal(t, "v24.3.0", req.Header.Get("X-Stainless-Runtime-Version"))
 				require.Empty(t, req.Header.Get("Originator"))

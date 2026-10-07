@@ -46,15 +46,15 @@ type OutboundIdentitySelection struct {
 	UserAgent string            `json:"user_agent,omitempty"`
 	Version   string            `json:"version,omitempty"`
 	Headers   map[string]string `json:"headers,omitempty"`
+	Timezone  string            `json:"timezone,omitempty"`
 }
 
 type OutboundIdentitySettings struct {
 	Profiles map[string]OutboundIdentitySelection `json:"profiles"`
 	Defaults map[string]string                    `json:"defaults"`
 	// Runtime holds the persisted runtime-class declarations per preset. The
-	// official client resolves those from the host it runs on; a deployment
-	// resolves them once from its own host, persists them here and lets an
-	// operator override them, so one deployment advertises one stable identity.
+	// official client reads these from its host. The gateway persists fixed
+	// Ubuntu defaults and allows explicit overrides, without collecting host facts.
 	Runtime map[string]map[string]string `json:"runtime,omitempty"`
 }
 
@@ -284,14 +284,14 @@ var outboundPresetHeaderClasses = map[string]map[string]string{
 
 var outboundPresetHeaderValidators = map[string]map[string]func(string) error{
 	"zcode": {
-		"X-Client-Language": validateOutboundIdentityDeviceFact,
-		"X-Client-Timezone": validateOutboundIdentityDeviceFact,
+		"X-Client-Language": outboundidentity.ValidateLanguage,
+		"X-Client-Timezone": outboundidentity.ValidateTimezone,
 		"X-Platform":        validateOutboundIdentityDeviceFact,
 		"X-Os-Category":     validateOutboundIdentityDeviceFact,
 		"X-Os-Version":      validateOutboundIdentityDeviceFact,
 	},
 	"kimi": {
-		kimi.HeaderDeviceName:  validateOutboundIdentityDeviceFact,
+		kimi.HeaderDeviceName:  validateOutboundIdentityDeviceName,
 		kimi.HeaderDeviceModel: validateOutboundIdentityDeviceFact,
 		kimi.HeaderOSVersion:   validateOutboundIdentityDeviceFact,
 		kimi.HeaderDeviceID:    validateOutboundIdentityDeviceID,
@@ -386,6 +386,26 @@ func validateOutboundIdentityDeviceFact(value string) error {
 		return fmt.Errorf("header value must not be empty")
 	}
 	return nil
+}
+
+func validateOutboundIdentityDeviceName(value string) error {
+	if err := validateOutboundIdentityDeviceFact(value); err != nil {
+		return err
+	}
+	if brandidentity.ContainsBrand(value) {
+		return fmt.Errorf("device name must not contain the project brand")
+	}
+	return nil
+}
+
+func validateOutboundTimezone(preset, zone string) error {
+	if zone == "" {
+		return nil
+	}
+	if preset != minimax.Preset && preset != minimax.APIKeyPreset {
+		return fmt.Errorf("timezone configuration is only supported for MiniMax presets")
+	}
+	return outboundidentity.ValidateTimezone(zone)
 }
 
 func validateOutboundIdentityDeviceID(value string) error {
@@ -492,6 +512,12 @@ func mergeOutboundRuntimeHeaders(identity, resolved outboundidentity.Identity) o
 
 func buildOutboundIdentity(selection OutboundIdentitySelection) (outboundidentity.Identity, error) {
 	i := builtInOutboundIdentity(selection.Preset)
+	if err := validateOutboundTimezone(selection.Preset, selection.Timezone); err != nil {
+		return i, err
+	}
+	if selection.Timezone != "" {
+		i.Timezone = selection.Timezone
+	}
 	if _, err := normalizeOutboundHeaderValues(selection.Preset, selection.Headers); err != nil {
 		return i, err
 	}
@@ -697,7 +723,7 @@ func cloneOutboundIdentitySettings(settings OutboundIdentitySettings) OutboundId
 }
 
 // ensureRuntimeOutboundHeaders materializes the runtime declarations a preset
-// derives from the host this deployment runs on, so the advertised identity is
+// takes from the fixed Ubuntu defaults, so the advertised identity is
 // stable across restarts and shared instances. It runs at startup and from the
 // admin settings view; the forwarding path only reads.
 func (s *SettingService) ensureRuntimeOutboundHeaders(ctx context.Context) {
@@ -942,16 +968,26 @@ func resolveAccountIdentitySelection(ctx context.Context, account *Account, sele
 	if _, err := normalizeOutboundHeaderValues(selection.Preset, selection.Headers); err != nil {
 		return outboundidentity.Identity{}, err
 	}
+	if err := validateOutboundTimezone(selection.Preset, selection.Timezone); err != nil {
+		return outboundidentity.Identity{}, err
+	}
 	if selection.UserAgent == "" && selection.Version == "" {
 		identity := resolve(ctx, selection.Preset)
 		resolved, _ := applyOutboundHeaderValues(identity, selection.Preset, selection.Headers)
+		if selection.Timezone != "" {
+			resolved.Timezone = selection.Timezone
+		}
 		return resolved, nil
 	}
 	identity, err := buildOutboundIdentity(selection)
 	if err != nil {
 		return identity, err
 	}
-	identity = mergeOutboundRuntimeHeaders(identity, resolve(ctx, selection.Preset))
+	global := resolve(ctx, selection.Preset)
+	identity = mergeOutboundRuntimeHeaders(identity, global)
+	if selection.Timezone == "" {
+		identity.Timezone = global.Timezone
+	}
 	resolved, _ := applyOutboundHeaderValues(identity, selection.Preset, selection.Headers)
 	return resolved, nil
 }
@@ -1042,7 +1078,7 @@ func NormalizeAccountOutboundIdentity(platform, accountType string, credentials 
 		return infraerrors.BadRequest("OUTBOUND_IDENTITY_INVALID", "invalid outbound identity")
 	}
 	selection.Preset, selection.UserAgent, selection.Version = strings.TrimSpace(selection.Preset), strings.TrimSpace(selection.UserAgent), strings.TrimSpace(selection.Version)
-	if selection.Preset == "" && selection.UserAgent == "" && selection.Version == "" && len(selection.Headers) == 0 {
+	if selection.Preset == "" && selection.UserAgent == "" && selection.Version == "" && selection.Timezone == "" && len(selection.Headers) == 0 {
 		delete(credentials, outboundIdentityCredential)
 		return nil
 	}
@@ -1050,7 +1086,7 @@ func NormalizeAccountOutboundIdentity(platform, accountType string, credentials 
 		return infraerrors.BadRequest("OUTBOUND_IDENTITY_INVALID", err.Error())
 	}
 	if platform == PlatformOpenAI && selection.Preset == "codex" {
-		if selection.UserAgent != "" || selection.Version != "" || len(selection.Headers) > 0 {
+		if selection.UserAgent != "" || selection.Version != "" || selection.Timezone != "" || len(selection.Headers) > 0 {
 			return infraerrors.BadRequest("OUTBOUND_IDENTITY_INVALID", "Codex identity declarations use the existing user_agent setting")
 		}
 	}
@@ -1235,5 +1271,5 @@ func selectionFromIdentity(identity outboundidentity.Identity) OutboundIdentityS
 			headers[h.Name] = identity.Headers[h.Name]
 		}
 	}
-	return OutboundIdentitySelection{Preset: identity.Preset, UserAgent: identity.UserAgent, Version: identity.Version, Headers: headers}
+	return OutboundIdentitySelection{Preset: identity.Preset, UserAgent: identity.UserAgent, Version: identity.Version, Headers: headers, Timezone: identity.Timezone}
 }
