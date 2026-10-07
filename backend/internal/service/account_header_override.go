@@ -52,6 +52,7 @@ var headerOverrideBlockedNames = map[string]struct{}{
 	"trailer":                               {},
 	"upgrade":                               {},
 	"authorization":                         {},
+	"x-dsh-auth-token":                      {},
 	"x-api-key":                             {},
 	"x-goog-api-key":                        {},
 	"cookie":                                {},

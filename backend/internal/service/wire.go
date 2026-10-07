@@ -10,6 +10,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
 	"github.com/LuckyKuang/sub2api-plus/internal/payment"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/antigravity"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/cnoauth"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/logger"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/xai"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/zcode"
@@ -925,6 +926,7 @@ var ProviderSet = wire.NewSet(
 	ProvideGrokOAuthService,
 	wire.Bind(new(GrokOAuthTokenService), new(*GrokOAuthService)),
 	ProvideZhipuOAuthService,
+	ProvideCNOAuthService,
 	ProvideZhipuOffPeakTicketManager,
 	NewGeminiOAuthService,
 	NewGeminiQuotaService,
@@ -1128,4 +1130,13 @@ func ProvideClaudeResetCreditService(accounts AccountRepository, tokens *ClaudeT
 	s := NewClaudeResetCreditService(accounts, tokens, proxies)
 	s.ConfigureRedemption(idem, locks)
 	return s
+}
+
+func ProvideCNOAuthService(proxyRepo ProxyRepository, accountRepo AccountRepository, admin AdminService, redisClient *redis.Client, refreshAPI *OAuthRefreshAPI, gateway *OpenAIGatewayService, tester *AccountTestService) *CNOAuthService {
+	svc := NewCNOAuthService(proxyRepo, accountRepo, admin)
+	svc.store = cnoauth.NewStore(redisClient)
+	svc.refreshAPI = refreshAPI
+	gateway.cnOAuthService = svc
+	tester.cnOAuthService = svc
+	return svc
 }

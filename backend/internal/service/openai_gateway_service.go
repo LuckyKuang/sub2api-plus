@@ -559,6 +559,7 @@ type OpenAIGatewayService struct {
 	billingCacheService   *BillingCacheService
 	userGroupRateResolver *userGroupRateResolver
 	httpUpstream          HTTPUpstream
+	cnOAuthService        *CNOAuthService
 	pluginManager         *PluginManager
 	deferredService       *DeferredService
 	openAITokenProvider   *OpenAITokenProvider
@@ -1310,6 +1311,9 @@ func (s *OpenAIGatewayService) GetAccessToken(ctx context.Context, account *Acco
 			return "", "", err
 		}
 		account = credAccount
+	}
+	if account.IsDomesticOAuth() {
+		return account.GetCredential("access_token"), "oauth", nil
 	}
 	switch account.Type {
 	case AccountTypeOAuth:

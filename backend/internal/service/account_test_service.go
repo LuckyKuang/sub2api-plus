@@ -150,6 +150,7 @@ type AccountTestService struct {
 	modelMetadataRegistryMu   sync.Mutex
 	modelMetadataRegistry     map[string]modelsDevProvider
 	modelMetadataRegistryAt   time.Time
+	cnOAuthService            *CNOAuthService
 	pluginManager             *PluginManager
 	openaiGatewayService      *OpenAIGatewayService
 	agentIdentityTaskMu       sync.Mutex

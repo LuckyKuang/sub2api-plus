@@ -66,6 +66,7 @@ func RegisterAdminRoutes(
 
 		// Zhipu / GLM OAuth（ZCode 平台账户绑定）
 		registerZhipuOAuthRoutes(admin, h)
+		admin.POST("/cn/oauth/:platform/:action", h.Admin.CNOAuth.Handle)
 
 		// 国产供应商（kimi/zhipu/deepseek）额度与余额
 		registerCNProviderRoutes(admin, h)

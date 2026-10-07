@@ -1,5 +1,8 @@
 # DeepSeek
 
+Native OAuth login is available in account creation and editing. See
+[login, refresh, endpoints and operational details](DOMESTIC_OAUTH.md).
+
 Sub2API Plus accepts DeepSeek accounts through the OpenAI-compatible gateway
 and Claude Code-style Anthropic entry points.
 

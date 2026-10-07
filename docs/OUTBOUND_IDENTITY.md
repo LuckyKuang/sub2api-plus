@@ -712,3 +712,24 @@ the outbound behavior tests above remain required to verify implementation.
 
 These references explain adapter boundaries. They do not imply that a generic
 compatible supplier requires or recognizes every preset declaration.
+
+## Native domestic OAuth login paths
+
+DeepSeek, Kimi and MiniMax browser/device login, callback exchange, token refresh,
+account probes and Messages forwarding share the trusted identity resolution
+contract and exact defaults documented above. New-login sessions resolve the
+native preset; relink sessions resolve the credential-owning account. Sessions
+retain that immutable snapshot across polling and publish it with the account.
+Kimi retains all device declarations. MiniMax remains the explicitly enumerated
+versionless family. DeepSeek's authorization-only `x-client-version` matches the
+selected identity; its platform/locale/UTC declarations are scoped to platform
+requests. No Codex source, family or default changes are introduced.
+
+Native OAuth destinations and authentication are fixed by provider/region before
+sending. Refresh and inference reuse the same owner snapshot, and failover
+resolves the next owner. DeepSeek's `x-dsh-auth-token` is reserved against generic
+header overrides. The native paths disable redirects. Tests are in
+`internal/pkg/cnoauth`, `cn_oauth_service_test.go`, existing native Anthropic
+adapter/identity suites and frontend `useCNOAuth`/`CNOAuthPanel` suites. See
+[domestic OAuth](providers/DOMESTIC_OAUTH.md) for official source evidence,
+request-only declarations and session behavior.

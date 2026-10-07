@@ -1,8 +1,12 @@
 # MiniMax
 
-MiniMax is an API-key provider integrated with account/group selection, model
+Native OAuth login is available in account creation and editing. See
+[login, refresh, endpoints and operational details](DOMESTIC_OAUTH.md).
+
+MiniMax supports API-key and native OAuth accounts integrated with account/group selection, model
 listing, platform quotas, channel monitoring and composite routing. It uses
-the OpenAI-compatible gateway rather than an OpenAI OAuth credential flow.
+the OpenAI-compatible gateway; native OAuth accounts use the official MiniMax
+Code login and managed Anthropic Messages endpoint.
 Account protocol selection follows the existing Chat Completions, Responses,
 Messages and adaptive protocol adapters; content audit occurs before forwarding
 or protocol transformation.

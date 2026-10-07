@@ -11,6 +11,14 @@
       @submit.prevent="handleSubmit"
       class="space-y-5"
     >
+      <CNOAuthPanel
+        v-if="account.type === 'oauth' && (account.platform === 'deepseek' || account.platform === 'kimi' || account.platform === 'minimax')"
+        :key="account.id"
+        :platform="account.platform"
+        :account-id="account.id"
+        :initial-region="String(account.credentials?.oauth_region || 'cn')"
+        @completed="handleCNOAuthCompleted"
+      />
       <OutboundIdentityEditor v-model="outboundIdentitySelection" :platform="props.account?.platform || ''" :account-type="props.account?.type || ''" :codex-user-agent="openaiAccountUserAgent" />
       <div>
         <label class="input-label">{{ t('common.name') }}</label>
@@ -2721,6 +2729,7 @@
 </template>
 
 <script setup lang="ts">
+import CNOAuthPanel from './CNOAuthPanel.vue'
 import OutboundIdentityEditor from './OutboundIdentityEditor.vue'
 import type { IdentitySelection } from '@/api/admin/outboundIdentity'
 import { ref, reactive, computed, watch, nextTick } from 'vue'
@@ -4635,6 +4644,18 @@ const persistGrokMediaEligibility = async (accountID: number, updatedAccount: Ac
     }
   }
   return updatedAccount
+}
+
+const handleCNOAuthCompleted = async (id: number) => {
+  try {
+    const updated = await adminAPI.accounts.getById(id)
+    emit('updated', updated)
+    appStore.showSuccess(t('admin.accounts.accountUpdated'))
+    handleClose()
+  } catch {
+    appStore.showError(t('admin.accounts.oauth.domestic.reload'))
+    handleClose()
+  }
 }
 
 const submitUpdateAccount = async (accountID: number, updatePayload: Record<string, unknown>) => {

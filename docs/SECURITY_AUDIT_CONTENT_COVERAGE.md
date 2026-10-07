@@ -409,3 +409,15 @@ output returns as a later request, it follows the same shared extraction matrix
 for both engines. Metadata that is not extractable content remains pass-through;
 known sibling inputs remain auditable. Extraction/evaluation/dependency exceptions
 retain the structured diagnostics and non-blocking behavior specified above.
+
+
+DeepSeek, Kimi and MiniMax native OAuth accounts use the existing Messages,
+Chat Completions and Responses ingress routes and canonical extraction. Their
+new management login endpoints carry authorization data, not inference content.
+Account selection, request-path credential refresh, protocol adaptation and
+provider writes remain after ingress audit. Unknown valid structures retain
+pass-through behavior for both API Key and native OAuth account types; known
+sibling content remains auditable. Domestic OAuth credentials introduce no new
+WebSocket ingress or direct WebSocket upstream capability. The account-type
+pass-through regression matrix includes all three native providers, alongside
+the existing HTTP/WS stage-order and canonical real-payload suites.

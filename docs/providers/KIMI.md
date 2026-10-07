@@ -1,5 +1,8 @@
 # Kimi / Moonshot
 
+Native OAuth login is available in account creation and editing. See
+[login, refresh, endpoints and operational details](DOMESTIC_OAUTH.md).
+
 Sub2API Plus accepts Kimi and Moonshot-compatible account endpoints through the
 normal OpenAI-compatible account and channel configuration. This release adds
 Kimi/Moonshot model, billing, and gateway compatibility updates from upstream
@@ -11,6 +14,7 @@ When `security.url_allowlist.enabled: true`, the built-in upstream-host allowlis
 now includes these additional outbound destinations:
 
 - `api.kimi.com`
+- `api.kimi.ai` (global managed OAuth inference)
 - `api.moonshot.ai`
 - `api.moonshot.cn`
 

@@ -129,9 +129,13 @@ func NewTokenRefreshService(
 	}
 	grokRefresher := NewGrokTokenRefresher(grokOAuthService)
 
+	kimiRefresher := NewCNTokenRefresher(PlatformKimi)
+	minimaxRefresher := NewCNTokenRefresher(PlatformMiniMax)
 	// Each provider is registered exactly once. The same registry supplies both
 	// execution and repository eligibility, preventing future platform drift.
 	s.registrations = []tokenRefreshRegistration{
+		{platform: PlatformKimi, refresher: kimiRefresher, executor: kimiRefresher},
+		{platform: PlatformMiniMax, refresher: minimaxRefresher, executor: minimaxRefresher},
 		{platform: PlatformAnthropic, refresher: claudeRefresher, executor: claudeRefresher},
 		{platform: PlatformOpenAI, refresher: openAIRefresher, executor: openAIRefresher},
 		{platform: PlatformGemini, refresher: geminiRefresher, executor: geminiRefresher},

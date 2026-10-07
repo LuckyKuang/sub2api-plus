@@ -670,6 +670,15 @@
         <p class="input-hint mt-2">{{ t('admin.accounts.cnProviders.zhipuTeam.hint') }}</p>
       </div>
 
+      <CNOAuthPanel
+        v-if="form.platform === 'deepseek' || form.platform === 'kimi' || form.platform === 'minimax'"
+        :key="form.platform"
+        :platform="form.platform"
+        :proxy-id="form.proxy_id ?? undefined"
+        :account-input="{ name: form.name, concurrency: form.concurrency, priority: form.priority, group_ids: form.group_ids }"
+        @completed="handleZhipuLinkCreated"
+      />
+
       <!-- Zhipu / GLM：通过 ZCode 平台授权绑定套餐（服务端轮询，无需回调地址） -->
       <div v-if="form.platform === 'zhipu'" class="mt-4">
         <ZhipuLinkPanel :proxy-id="form.proxy_id ?? undefined" @created="handleZhipuLinkCreated" />
@@ -3741,6 +3750,7 @@ import {
   type OpenAIWSMode
 } from '@/utils/openaiWsMode'
 import OAuthAuthorizationFlow from './OAuthAuthorizationFlow.vue'
+import CNOAuthPanel from './CNOAuthPanel.vue'
 import ZhipuLinkPanel from './ZhipuLinkPanel.vue'
 
 // Type for exposed OAuthAuthorizationFlow component

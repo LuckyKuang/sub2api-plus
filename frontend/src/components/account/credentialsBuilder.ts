@@ -106,6 +106,7 @@ const HEADER_OVERRIDE_BLOCKED_NAMES = new Set([
   'upgrade',
   'authorization',
   'x-api-key',
+  'x-dsh-auth-token',
   'x-goog-api-key',
   'cookie',
   'accept-encoding',

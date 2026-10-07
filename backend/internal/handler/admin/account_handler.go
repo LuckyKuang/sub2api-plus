@@ -49,6 +49,7 @@ func NewOAuthHandler(oauthService *service.OAuthService) *OAuthHandler {
 
 // AccountHandler handles admin account management
 type AccountHandler struct {
+	cnOAuthService          *service.CNOAuthService
 	claudeResetCredits      claudeResetReader
 	adminService            service.AdminService
 	oauthService            *service.OAuthService
@@ -1405,6 +1406,13 @@ func (h *AccountHandler) PreviewFromCRS(c *gin.Context) {
 // refreshSingleAccount refreshes credentials for a single OAuth account.
 // Returns (updatedAccount, warning, error) where warning is used for Antigravity ProjectIDMissing scenario.
 func (h *AccountHandler) refreshSingleAccount(ctx context.Context, account *service.Account) (*service.Account, string, error) {
+	if account.IsDomesticOAuth() {
+		if h.cnOAuthService == nil {
+			return nil, "", infraerrors.BadRequest("CN_OAUTH_UNAVAILABLE", "native OAuth unavailable")
+		}
+		updated, err := h.cnOAuthService.RefreshAccount(ctx, account, true)
+		return updated, "", err
+	}
 	if !account.IsOAuth() {
 		return nil, "", infraerrors.BadRequest("NOT_OAUTH", "cannot refresh non-OAuth account")
 	}
@@ -3374,3 +3382,5 @@ func sanitizeExtraBaseRPM(extra map[string]any) {
 	}
 	extra["base_rpm"] = v
 }
+
+func (h *AccountHandler) SetCNOAuthService(s *service.CNOAuthService) { h.cnOAuthService = s }

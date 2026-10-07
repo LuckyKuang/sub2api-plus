@@ -15,6 +15,7 @@ import (
 
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
 	"github.com/LuckyKuang/sub2api-plus/internal/domain"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/cnoauth"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/geminicli"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai_compat"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/typesafe"
@@ -1445,6 +1446,9 @@ func (a *Account) IsCodingPlan() bool {
 // （与既有行为完全一致）。responses 协议仅 deepseek / kimi / minimax 支持（官方原生
 // Responses 端点，适配 Codex）；zhipu 无此端点。
 func (a *Account) GetAPIProtocol() string {
+	if a.IsDomesticOAuth() {
+		return APIProtocolAnthropic
+	}
 	if a == nil || !a.IsMultiProtocolAPIKey() {
 		return APIProtocolChatCompletions
 	}
@@ -1573,6 +1577,9 @@ func (a *Account) IsAnthropicProtocol() bool {
 // （上游路径为 {base}/v1/messages）。优先取凭证 base_url，缺失时按
 // 供应商 × 接入模式返回默认端点。非 Anthropic 协议账号返回空串。
 func (a *Account) GetAnthropicProtocolBaseURL() string {
+	if a.IsDomesticOAuth() {
+		return cnoauth.ModelBase(a.Platform, a.GetCredential("oauth_region"))
+	}
 	if a == nil || (!a.IsAnthropicProtocol() && !a.IsAdaptiveAPIProtocol()) {
 		return ""
 	}
@@ -1650,6 +1657,9 @@ func (a *Account) GetCNAPIKey() string {
 // 用于路由到对应的额度查询端点。非 coding 模式或无法识别时返回空串。
 // 只认官方域名：自定义中转不得把第三方 Key 发往厂商官方额度端点。
 func (a *Account) GetCodingPlanProvider() string {
+	if a.IsDomesticOAuth() {
+		return ""
+	}
 	if a == nil {
 		return ""
 	}
@@ -1782,12 +1792,16 @@ func (a *Account) GetOpenAIApiKey() string {
 	return a.GetCredential("api_key")
 }
 
-// GetOpenAIProtocolAPIKey 返回 OpenAI 协议族 APIKey 账号的密钥。
+// GetOpenAIProtocolAPIKey 返回 OpenAI 协议族账号的请求凭据。
+// 原生 DeepSeek/Kimi/MiniMax OAuth 返回 access_token，发送层按官方协议注入并刷新。
 // 覆盖 openai 原生账号、国产 OpenAI 兼容供应商（kimi/zhipu/deepseek）
 // 以及 OpenCode Go 账号，供转发鉴权、模型列表同步等协议族共用路径使用。
 // 注意 IsOpenAIApiKey 语义上仅指 openai 平台账号，调度倍率/WS 能力门控
 // 继续以其为准，不受本方法影响。
 func (a *Account) GetOpenAIProtocolAPIKey() string {
+	if a.IsDomesticOAuth() {
+		return a.GetCredential("access_token")
+	}
 	if a == nil {
 		return ""
 	}
@@ -3302,4 +3316,9 @@ func (a *Account) QuotaDimensionOrDefault() string {
 		return QuotaDimensionGlobal
 	}
 	return a.QuotaDimension
+}
+
+// IsDomesticOAuth identifies native grants obtained through the official login.
+func (a *Account) IsDomesticOAuth() bool {
+	return a != nil && a.Type == AccountTypeOAuth && cnoauth.Supported(a.Platform) && a.GetCredential("oauth_provider") == a.Platform
 }
