@@ -241,10 +241,29 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
 
   afterEach(() => vi.useRealTimers())
 
+  it('shows StepFun model choices and restores them before entering credentials', async () => {
+    const wrapper = mountModal([], true)
+    await selectButtonByText(wrapper, 'StepFun')
+    const candidates = ['step-5-preview', 'step-3.7-flash', 'step-3.5-flash-2603', 'step-3.5-flash', 'step-router-v1']
+    const selector = wrapper.findComponent({ name: 'ModelWhitelistSelector' })
+    expect(selector.props('modelValue')).toEqual(candidates)
+    await selectButtonByText(wrapper, 'admin.accounts.clearAllModels')
+    expect(selector.props('modelValue')).toEqual([])
+    await selectButtonByText(wrapper, 'admin.accounts.fillRelatedModels')
+    expect(selector.props('modelValue')).toEqual(candidates)
+    await wrapper.get('div.cursor-pointer').trigger('click')
+    expect(wrapper.findAll('[data-testid="select-model"] > span.truncate').map(label => label.text())).toEqual(candidates)
+    expect(previewModelsMock).not.toHaveBeenCalled()
+    expect(cnOAuthModelsMock).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
   it.each(['apikey', 'oauth'] as const)('saves the actual StepFun %s checkbox selection during creation', async kind => {
     const wrapper = mountModal([], true)
     await selectButtonByText(wrapper, 'StepFun')
     await wrapper.get('form#create-account-form input[type="text"]').setValue('Restricted StepFun')
+    // Start with an empty whitelist, then explicitly select from the live catalog.
+    await selectButtonByText(wrapper, 'admin.accounts.clearAllModels')
     const catalog = { models: ['step-3.7-flash', 'step-other-chat'] }
     if (kind === 'apikey') {
       previewModelsMock.mockResolvedValue(catalog)

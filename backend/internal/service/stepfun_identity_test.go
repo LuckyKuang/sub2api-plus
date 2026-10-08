@@ -85,6 +85,11 @@ func TestStepFunPlatformCapabilitiesAndCredentialValidation(t *testing.T) {
 	for _, kind := range []string{"apikey", "oauth"} {
 		a := stepFunTestAccount(kind, "global")
 		require.NoError(t, validateStepFunCredentials(a.Platform, a.Type, a.Credentials))
+		if kind == "oauth" {
+			a.Credentials["account_mode"] = AccountModePayG
+			require.Error(t, validateStepFunCredentials(a.Platform, a.Type, a.Credentials), "Step Plan grants must not be saved as pay-as-you-go accounts")
+			a.Credentials["account_mode"] = AccountModeCoding
+		}
 		a.Credentials["api_protocol"] = "anthropic"
 		require.Error(t, validateStepFunCredentials(a.Platform, a.Type, a.Credentials))
 		a.Credentials["api_protocol"] = "chat_completions"

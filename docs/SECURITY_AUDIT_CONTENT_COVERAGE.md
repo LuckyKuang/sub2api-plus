@@ -445,3 +445,9 @@ accepts an owned ready session handle and reads a model catalog without creating
 an account. It carries no inference content and preserves the existing
 administrator authentication boundary. Completion stores model restrictions;
 neither operation changes the gateway extraction or audit ordering contract.
+
+StepFun response usage accepts the official flat `usage.cached_tokens` field
+and retains it through both response bridges. Client model catalogs also expose
+synced StepFun IDs and capabilities. These response/catalog changes introduce no
+new inference input fields or audit exemptions; both account types still use the
+same canonical extraction and pre-selection audit boundary above.

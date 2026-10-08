@@ -20,6 +20,7 @@ import (
 	"unsafe"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/cnmodels"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/logger"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/xai"
 	"github.com/LuckyKuang/sub2api-plus/internal/util/responseheaders"
@@ -1460,7 +1461,6 @@ func (s *GatewayService) GetAvailableModels(ctx context.Context, groupID *int64,
 
 	// Collect unique models from all accounts
 	modelSet := make(map[string]struct{})
-	hasAnyMapping := false
 
 	for _, acc := range accounts {
 		// Passthrough routing accepts models independently of model_mapping, so a
@@ -1473,6 +1473,20 @@ func (s *GatewayService) GetAvailableModels(ctx context.Context, groupID *int64,
 		}
 
 		mapping := acc.GetModelMapping()
+		if acc.Platform == PlatformStepFun && len(mapping) == 0 {
+			// Live discovery narrows the client catalog to this account's models.
+			// Without a snapshot use the maintained candidates, never Claude defaults.
+			ids := cnmodels.DefaultModelIDs(PlatformStepFun)
+			if snapshot := acc.GetUpstreamModelMetadataSnapshot(); snapshot != nil {
+				ids = make([]string, 0, len(snapshot.Models))
+				for id := range snapshot.Models {
+					ids = append(ids, id)
+				}
+			}
+			for _, id := range ids {
+				modelSet[id] = struct{}{}
+			}
+		}
 		for model := range mapping {
 			// Accounts pulled in through mixed scheduling only contribute the
 			// models that belong to the listing platform (e.g. an antigravity
@@ -1481,12 +1495,11 @@ func (s *GatewayService) GetAvailableModels(ctx context.Context, groupID *int64,
 				continue
 			}
 			modelSet[model] = struct{}{}
-			hasAnyMapping = true
 		}
 	}
 
-	// If no account has model_mapping, return nil (use default)
-	if !hasAnyMapping {
+	// Without configured or discovered candidates, let the handler use defaults.
+	if len(modelSet) == 0 {
 		if s.modelsListCache != nil {
 			s.modelsListCache.Set(cacheKey, []string(nil), s.modelsListCacheTTL)
 			modelsListCacheStoreTotal.Add(1)

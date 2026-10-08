@@ -6,6 +6,8 @@ import { cnOAuthRequest } from '@/api/admin/cnOAuth'
 import { cnSupportsNativeResponses, defaultCNBaseUrl } from '../credentialsBuilder'
 import { identityNames, versionlessIdentityPresets } from '@/api/admin/outboundIdentity'
 import { CONCRETE_PLATFORM_OPTIONS } from '@/constants/platforms'
+import { platformAccentColor } from '@/utils/platformColors'
+import { getPlatformTagClass, getPlatformTextClass } from '@/components/admin/channel/types'
 
 vi.mock('vue-i18n', async original => ({ ...await original<typeof import('vue-i18n')>(), useI18n: () => ({ t: (key: string) => key }) }))
 vi.mock('@/api/admin/cnOAuth', () => ({ cnOAuthRequest: vi.fn() }))
@@ -15,6 +17,12 @@ const pending = () => ({ session_id: 'session', authorize_url: 'https://platform
 describe('StepFun official access requirements', () => {
   beforeEach(() => { vi.useFakeTimers(); vi.mocked(cnOAuthRequest).mockReset(); vi.mocked(cnOAuthRequest).mockResolvedValue(pending()) })
   afterEach(() => vi.useRealTimers())
+
+  it('uses the same cyan platform identity in charts and channel pricing', () => {
+    expect(platformAccentColor('stepfun')).toBe('#06b6d4')
+    expect(getPlatformTagClass('stepfun')).toContain('bg-cyan-100')
+    expect(getPlatformTextClass('stepfun')).toContain('text-cyan-700')
+  })
 
   it('offers browser login in either region, requires explicit callback import and never device-polls', async () => {
     const wrapper = mount(CNOAuthPanel, { props: { platform: 'stepfun', accountInput: { name: 'Step Plan' } } })

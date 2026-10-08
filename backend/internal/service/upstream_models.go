@@ -247,7 +247,7 @@ func (s *AccountTestService) SyncUpstreamModelCatalog(ctx context.Context, accou
 	capabilityIDs := capabilitySyncModelIDs(enrichIDs)
 
 	source := "upstream"
-	if upstreamCatalogNeedsRegistry(capabilityIDs, catalog.Metadata) {
+	if account.Platform != PlatformStepFun && upstreamCatalogNeedsRegistry(capabilityIDs, catalog.Metadata) {
 		if registryMetadata, registryErr := s.fetchModelsDevMetadata(ctx, account, enrichIDs); registryErr == nil {
 			for modelID, fallback := range registryMetadata {
 				current := catalog.Metadata[modelID]
@@ -267,6 +267,15 @@ func (s *AccountTestService) SyncUpstreamModelCatalog(ctx context.Context, accou
 	}
 
 	completeMetadata := completeUpstreamModelMetadataSubset(capabilityIDs, catalog.Metadata)
+	if account.Platform == PlatformStepFun && liveListAvailable {
+		// Step-Code treats the authenticated catalog as authoritative, including
+		// ID-only rows. Preserve every discovered chat ID without inventing missing
+		// capabilities or replacing them with a third-party registry's guesses.
+		completeMetadata = make(map[string]UpstreamModelMetadata, len(catalog.Metadata))
+		for id, metadata := range catalog.Metadata {
+			completeMetadata[id] = metadata
+		}
+	}
 	persistedCapabilities := false
 	if len(completeMetadata) > 0 && account != nil && account.ID > 0 && s.accountRepo != nil {
 		// Retain known metadata only for models still listed or explicitly mapped.

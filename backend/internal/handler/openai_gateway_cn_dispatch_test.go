@@ -20,7 +20,7 @@ import (
 func TestAllowOpenAICompatibleMessagesDispatch_CNProvidersExempt(t *testing.T) {
 	require.True(t, allowOpenAICompatibleMessagesDispatch(nil, nil), "无 key 保持放行")
 
-	for _, platform := range []string{service.PlatformKimi, service.PlatformZhipu, service.PlatformDeepseek, service.PlatformMiniMax, service.PlatformOpenCodeGo, service.PlatformGrok} {
+	for _, platform := range []string{service.PlatformKimi, service.PlatformZhipu, service.PlatformDeepseek, service.PlatformMiniMax, service.PlatformStepFun, service.PlatformOpenCodeGo, service.PlatformGrok} {
 		apiKey := &service.APIKey{Group: &service.Group{Platform: platform, AllowMessagesDispatch: false}}
 		require.True(t, allowOpenAICompatibleMessagesDispatch(nil, apiKey),
 			"%s 分组必须豁免 allow_messages_dispatch 闸门", platform)
@@ -45,7 +45,7 @@ func TestAllowOpenAICompatibleMessagesDispatch_CompositeResolvedTargets(t *testi
 	}
 
 	// 解析到 grok/CN 目标：与对应独立分组同语义豁免。
-	for _, model := range []string{"grok-4.3", "kimi-k2-thinking", "glm-5.2", "deepseek-v3.2"} {
+	for _, model := range []string{"grok-4.3", "kimi-k2-thinking", "glm-5.2", "deepseek-v3.2", "step-5-preview"} {
 		c, apiKey := newCompositeCtx(model, false)
 		require.True(t, allowOpenAICompatibleMessagesDispatch(c, apiKey), "model=%s", model)
 	}
@@ -68,7 +68,7 @@ func TestAllowOpenAICompatibleMessagesDispatch_CompositeResolvedTargets(t *testi
 func TestResolveOpenAIMessagesDispatchMappedModel_CompositeCNTargetsSkipGroupMapping(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	for _, model := range []string{"kimi-k2-thinking", "glm-5.2", "deepseek-v3.2", "grok-4.3"} {
+	for _, model := range []string{"kimi-k2-thinking", "glm-5.2", "deepseek-v3.2", "grok-4.3", "step-5-preview"} {
 		c, _ := gin.CreateTestContext(httptest.NewRecorder())
 		c.Request = httptest.NewRequest("POST", "/v1/messages", nil)
 		apiKey := &service.APIKey{Group: &service.Group{Platform: service.PlatformComposite}}

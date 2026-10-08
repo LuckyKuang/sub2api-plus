@@ -770,7 +770,7 @@ func (s *BillingService) initFallbackPricing() {
 
 	// ============================================================
 	// 国产 LLM 兜底定价（数据源：各家官方定价页/USD 口径）
-	// 顺序：DeepSeek → 智谱 GLM → 月之暗面 Kimi → MiniMax
+	// 顺序：DeepSeek → 智谱 GLM → 月之暗面 Kimi → MiniMax → StepFun
 	// 覆盖逻辑见同文件 getFallbackPricing()
 	// ============================================================
 
@@ -996,6 +996,26 @@ func (s *BillingService) initFallbackPricing() {
 		SupportsCacheBreakdown: false,
 	}
 
+	// ---- StepFun ----
+	// Official international USD / 1M tokens, reviewed 2026-10-08:
+	// https://platform.stepfun.ai/docs/en/guides/pricing/details
+	// Cache misses include creation at the ordinary input rate. The router has
+	// variable underlying engines and no fixed rate; never give it a family price.
+	for model, rates := range map[string][3]float64{
+		"step-5-preview":       {1, .05, 2.70},
+		"step-3.7-flash":       {.20, .04, 1.15},
+		"step-3.5-flash":       {.10, .02, .30},
+		"step-3.5-flash-2603":  {.10, .02, .30},
+		"step-1o-turbo-vision": {.36, .07, 1.15},
+	} {
+		s.fallbackPrices[model] = &ModelPricing{
+			InputPricePerToken:         rates[0] / 1e6,
+			CacheCreationPricePerToken: rates[0] / 1e6,
+			CacheReadPricePerToken:     rates[1] / 1e6,
+			OutputPricePerToken:        rates[2] / 1e6,
+		}
+	}
+
 	// ---- 火山方舟 豆包 Embedding（多模态向量化）----
 	// doubao-embedding-vision 图文向量化：上游 usage 回传 prompt_tokens_details.{text_tokens,image_tokens}，
 	// 按量付费官方价 文本 ¥0.7/MTok、图片 ¥1.8/MTok；汇率口径 ÷7.14（与本表其他国产模型一致，¥1≈$0.14）。
@@ -1091,6 +1111,9 @@ func (s *BillingService) initFallbackPricing() {
 // getFallbackPricing 根据模型系列获取回退价格
 func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 	modelLower := strings.ToLower(model)
+	if native := lastPricingSegment(strings.TrimSpace(modelLower)); strings.HasPrefix(native, "step-") {
+		return s.fallbackPrices[native]
+	}
 	if modelLower == "jev-latest" {
 		return s.fallbackPrices["jev-latest"]
 	}

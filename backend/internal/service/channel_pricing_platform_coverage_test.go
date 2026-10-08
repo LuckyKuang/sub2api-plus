@@ -51,7 +51,7 @@ func TestPlatformCoverage_AllPlatformsShapeAndConsistency(t *testing.T) {
 	for _, platform := range []string{
 		PlatformAnthropic, PlatformOpenAI, PlatformGemini, PlatformAntigravity, PlatformGrok,
 		PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax, PlatformOpenCodeGo,
-		PlatformTypeSafe,
+		PlatformTypeSafe, PlatformStepFun,
 	} {
 		refs, err := svc.List(t.Context(), platform)
 		require.NoErrorf(t, err, "platform=%s", platform)

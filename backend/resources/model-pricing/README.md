@@ -96,3 +96,10 @@ stricter match rule than request billing:
 
 Any change to a bundled JSON must keep its `.sha256` in sync and let the release
 workflow recompute the digest.
+
+The StepFun chat entries are maintained from its official international USD
+price table, checked 2026-10-08. Model-specific rates, cache accounting, the
+unpriced Step Plan router, and regional/subscription distinctions are documented
+in [StepFun](../../../docs/providers/STEPFUN.md#default-prices). The same models
+have exact billing fallbacks for an unavailable catalog; no unknown StepFun
+model inherits a family price.

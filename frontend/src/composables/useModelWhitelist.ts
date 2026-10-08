@@ -1,7 +1,7 @@
 import cnProviderModels from '../../../backend/internal/pkg/cnmodels/models.json'
 
 // =====================
-// 模型预设；DeepSeek、Kimi、Zhipu、MiniMax 共用官方目录
+// 模型预设；国产平台共用官方来源的候选目录
 // =====================
 
 // OpenAI
@@ -110,6 +110,9 @@ const qwenModels = [
 
 // DeepSeek
 const deepseekModels = cnProviderModels.deepseek
+// Step-Code defaults.ts explicitly recognizes these native model IDs.
+// Candidates do not imply that every account or region can invoke them.
+const stepfunModels = cnProviderModels.stepfun
 
 // Mistral
 const mistralModels = [
@@ -227,6 +230,7 @@ const allModelsList: string[] = [
   ...zhipuModels,
   ...qwenModels,
   ...deepseekModels,
+  ...stepfunModels,
   ...mistralModels,
   ...metaModels,
   ...xaiModels,
@@ -441,7 +445,7 @@ export function getModelsByPlatform(platform: string): string[] {
     ]
     case 'typesafe': return ['jev-latest']
     case 'doubao': return doubaoModels
-    case 'stepfun': return []
+    case 'stepfun': return stepfunModels
     case 'minimax': return minimaxModels
     case 'baidu': return baiduModels
     case 'spark': return sparkModels

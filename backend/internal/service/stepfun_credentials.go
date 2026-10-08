@@ -29,7 +29,7 @@ func validateStepFunCredentials(platform, kind string, credentials map[string]an
 	regionKey, tokenKey := "region", "api_key"
 	if kind == AccountTypeOAuth {
 		regionKey, tokenKey = "oauth_region", "access_token"
-		if !account.IsDomesticOAuth() || account.GetCredential("refresh_token") != "" {
+		if !account.IsDomesticOAuth() || !account.IsCodingPlan() || account.GetCredential("refresh_token") != "" {
 			return invalid()
 		}
 		if raw := account.GetCredential("expires_at"); raw != "" {

@@ -48,18 +48,83 @@ Model sync calls `GET <base>/models` with the same account. Only entries tagged
 `大语言模型` or `路由模型` are exposed when type metadata is present; entirely
 untyped catalogs retain their IDs. Context, vision, reasoning and supported
 efforts use the reported metadata. No static model availability or free prices
-are inferred. Configure channel pricing or use an available matching pricing
-reference before serving paid traffic. Account connection tests require an
+are inferred. Account connection tests require an
 explicit model from that account's catalog.
 
-During account creation, enter an API key or finish the Step Plan browser
-authorization, then use **Sync upstream models** in Model restrictions. The
-returned IDs become searchable checkbox options; they remain available after
-deselection. Saved whitelist IDs also appear when editing an account. Catalog
+Successful StepFun sync saves every returned chat/router ID, including rows with
+incomplete metadata. Missing capabilities stay unknown and are not filled from
+a third-party registry. Removed IDs leave the snapshot on the next successful
+sync; failed discovery preserves the previous snapshot.
+
+Model restrictions show Step-Code's recognized native IDs immediately, including
+before credentials are entered: `step-5-preview`, `step-3.7-flash`,
+`step-3.5-flash-2603`, `step-3.5-flash`, and `step-router-v1`. They come from
+`STEP_MODEL_IDS` in `packages/coding-agent/src/step/defaults.ts` at the reference
+commit below; `step-5-preview` is that client's default. These are configuration
+candidates, not an assertion of entitlement in either region or account type.
+The shared [provider catalog](../CN_PROVIDER_MODELS.md) also supplies group
+restriction candidates. New account forms retain the shared default-selection
+behavior, and **Fill related models** (Chinese: 同步最新支持模型) remains visible
+before login; it fills the maintained candidates and any models already discovered.
+It does not make an unauthenticated upstream request.
+
+To discover the account's live catalog, enter an API key or finish the Step Plan
+browser authorization, then use **Sync upstream models** in Model restrictions.
+The returned IDs join the searchable checkbox options and remain available after
+deselection. Saved whitelist IDs also appear when editing an account. Discovered
 options are scoped to the credential source and late responses from a previous
 source are discarded. Manual model IDs and model mappings remain supported.
 An empty restriction allows all models; a nonempty whitelist/mapping restricts
 eligible request model IDs for both API Key and OAuth accounts.
+
+Client `/v1/models` (including single-model retrieval) and Codex catalogs use
+account model mappings when present. Unrestricted StepFun accounts contribute
+their synced catalog, or the maintained native candidates before the first sync;
+they never fall back to Claude models. Group allowlists filter these IDs as
+usual. Synced vision, reasoning and context metadata also reaches Codex manifests,
+including mapped public aliases. This applies to standalone and composite groups.
+
+### Default prices
+
+The bundled catalog and same-model billing fallback use the official international
+USD prices below (checked 2026-10-08). They also appear in channel reference-price
+lookup and model sync. An exact dynamic catalog entry takes precedence over the
+built-in fallback; saved channel pricing takes precedence over default prices.
+
+| Model | Input / 1M tokens (cache miss) | Cached input / 1M tokens | Output / 1M tokens |
+| --- | ---: | ---: | ---: |
+| `step-5-preview` | $1.00 | $0.05 | $2.70 |
+| `step-3.7-flash` | $0.20 | $0.04 | $1.15 |
+| `step-3.5-flash` | $0.10 | $0.02 | $0.30 |
+| `step-3.5-flash-2603` | $0.10 | $0.02 | $0.30 |
+| `step-1o-turbo-vision` | $0.36 | $0.07 | $1.15 |
+
+Sources: [international USD pricing](https://platform.stepfun.ai/docs/en/guides/pricing/details),
+[China CNY pricing](https://platform.stepfun.com/docs/zh/guides/pricing/details),
+and [official cache semantics](https://platform.stepfun.com/docs/zh/guides/developer/prompt-cache).
+Defaults are proxy billing in USD, shared by OAuth and API Key accounts. China's
+CNY settlement rates and Step Plan subscription Credits are different units;
+there is no automatic currency or subscription-credit conversion. Operators can
+set channel prices to reflect their own settlement and resale policy.
+
+Browser grants are saved only as Step Plan (`coding`) accounts; marking a native
+OAuth grant as pay-as-you-go is rejected rather than silently using the Plan URL.
+
+`usage.prompt_tokens` includes `usage.cached_tokens`: subtract the hits once
+before applying the ordinary input price. Cache misses include cache creation;
+there is no additional write surcharge. If usage separately counts cache writes,
+that disjoint bucket uses the ordinary input rate. Reasoning and final-answer
+tokens are both included in output. These semantics apply to streaming and
+non-streaming Chat Completions and the Responses/Messages bridges.
+
+[`step-router-v1`](https://platform.stepfun.com/docs/zh/guides/models/step-router)
+is a Step Plan router that charges according to the selected `deepseek-v4-pro`
+or `step-3.7-flash` engine, then consumes Plan Credits. It has no single fixed
+token price. It stays visible as `manual_required`: configure a channel billing
+rule before using it. Unknown IDs and unregistered date/suffix variants also
+remain unpriced; they never inherit another StepFun model's rate. Dedicated
+speech/image APIs and value-added charges are outside this Chat Completions
+integration's default token pricing.
 
 `POST /api/v1/admin/cn/oauth/stepfun/models` accepts only an owned, ready,
 unexpired `session_id`. It reads the authorized region's Step Plan catalog
@@ -81,6 +146,8 @@ The supplied Step-Code reference at commit
 - `packages/providers/src/step-provider/index.ts` and `callback-server.ts`:
   auth, static credentials, catalog and native protocol.
 - `packages/coding-agent/src/step/onboarding.ts`: regional endpoint profiles.
+- `packages/coding-agent/src/step/defaults.ts`: recognized native model IDs used
+  as management candidates; the provider's live catalog remains authoritative.
 - `packages/providers/src/api/openai-completions.ts` and
   `utils/pi-user-agent.ts`: actual model UA and SDK selection.
 - `packages/coding-agent/src/step/environment.ts`, `features/step.ts`, and

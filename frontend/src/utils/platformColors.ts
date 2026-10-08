@@ -103,7 +103,7 @@ const ACCENT: Record<Platform, string> = {
   zhipu: '#6366f1', // indigo-500
   deepseek: '#14b8a6', // teal-500
   minimax: '#f43f5e', // rose-500
-  stepfun: '#f43f5e', // cyan-500
+  stepfun: '#06b6d4', // cyan-500
   opencode_go: '#f59e0b', // amber-500
   typesafe: '#0ea5e9', // sky-500
   composite: '#06b6d4', // cyan-500

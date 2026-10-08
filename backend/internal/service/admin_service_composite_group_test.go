@@ -204,13 +204,13 @@ func TestAdminService_CompositeModelsListCandidatesIncludeConcreteAccountMapping
 	require.Contains(t, candidates, "kimi-custom")
 	require.Contains(t, candidates, "gpt-5.5")
 	require.Contains(t, candidates, "gemini-2.5-flash")
-	for _, model := range []string{"deepseek-flash", "kimi-k3", "glm-5.3-flashx", "MiniMax-M3.1-Flash-Preview"} {
+	for _, model := range []string{"deepseek-flash", "kimi-k3", "glm-5.3-flashx", "MiniMax-M3.1-Flash-Preview", "step-5-preview", "step-router-v1"} {
 		require.Contains(t, candidates, model)
 	}
 }
 
 func TestAdminService_CNProviderModelsListCandidatesUseSelectedPlatform(t *testing.T) {
-	for _, platform := range []string{PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax} {
+	for _, platform := range []string{PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax, PlatformStepFun} {
 		t.Run(platform, func(t *testing.T) {
 			defaults := cnmodels.DefaultModelIDs(platform)
 			svc := &adminServiceImpl{

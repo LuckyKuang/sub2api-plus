@@ -10,6 +10,7 @@ import (
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/antigravity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/claude"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/cnmodels"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/ctxkey"
 	geminicli "github.com/LuckyKuang/sub2api-plus/internal/pkg/gemini"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/logger"
@@ -854,7 +855,10 @@ func platformSupportedModels(platform string) []string {
 		return xai.DefaultModelIDs()
 	case PlatformOpenCodeGo:
 		return DefaultOpenCodeGoModelIDs()
-	case PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax, PlatformStepFun, PlatformTypeSafe:
+	case PlatformStepFun:
+		// Keep unpriced native IDs (notably the router) visible as manual_required.
+		return append(cnmodels.DefaultModelIDs(platform), builtinFallbackFamilyModelIDs(platform)...)
+	case PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax, PlatformTypeSafe:
 		return builtinFallbackFamilyModelIDs(platform)
 	default: // PlatformAnthropic
 		ids := make([]string, 0, len(claude.DefaultModels))

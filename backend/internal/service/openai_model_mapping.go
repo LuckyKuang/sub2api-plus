@@ -58,7 +58,6 @@ var openAIOAuthForeignModelPrefixes = []string{
 	"mixtral-",
 	"baichuan-",
 	"ernie-",
-	"step-",
 	"seed-",
 	"yi-",
 }

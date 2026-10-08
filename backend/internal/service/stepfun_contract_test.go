@@ -184,6 +184,33 @@ func TestStepFunModelCatalogOnlyAdvertisesDiscoveredChatCapabilities(t *testing.
 	require.Equal(t, []string{"future-model"}, ids)
 }
 
+func TestStepFunSyncPersistsIDOnlyModelsWithoutInventingCapabilities(t *testing.T) {
+	for _, kind := range []string{"oauth", "apikey"} {
+		t.Run(kind, func(t *testing.T) {
+			account := stepFunTestAccount(kind, "global")
+			account.SetUpstreamModelMetadataSnapshot(UpstreamModelMetadataSnapshot{Models: map[string]UpstreamModelMetadata{"removed": {ID: "removed"}}})
+			upstream := &httpUpstreamRecorder{resp: &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"data":[{"id":"step-future","model_type":"大语言模型"},{"id":"step-known","model_type":"大语言模型","max_input_tokens":256000,"enable_vision_input":true,"enable_reason":true,"reasoning_effort_support_list":["low","high"]},{"id":"step-image","model_type":"文生图"}]}`))}}
+			repo := &upstreamModelMetadataRepoStub{}
+			svc := &AccountTestService{accountRepo: repo, httpUpstream: upstream, cfg: upstreamModelSyncTestConfig()}
+			catalog, err := svc.SyncUpstreamModelCatalog(t.Context(), account)
+			require.NoError(t, err)
+			require.Equal(t, []string{"step-future", "step-known"}, catalog.Models)
+			require.Len(t, upstream.requests, 1, "official ID-only rows must not trigger unrelated registry requests")
+			require.Equal(t, account.ID, repo.accountID)
+			snapshot := account.GetUpstreamModelMetadataSnapshot()
+			require.NotNil(t, snapshot)
+			require.Len(t, snapshot.Models, 2)
+			require.Contains(t, snapshot.Models, "step-future")
+			require.Nil(t, snapshot.Models["step-future"].Reasoning)
+			require.Empty(t, snapshot.Models["step-future"].InputModalities)
+			require.Zero(t, snapshot.Models["step-future"].ContextWindow)
+			require.Equal(t, []string{"text", "image"}, snapshot.Models["step-known"].InputModalities)
+			require.Equal(t, "upstream", snapshot.Source)
+			requireStepFunWire(t, upstream.lastReq, false)
+		})
+	}
+}
+
 func TestStepFunStreamingToolsAndBillingAcrossInboundProtocols(t *testing.T) {
 	chunks := strings.Join([]string{
 		`data: {"id":"chat-1","object":"chat.completion.chunk","model":"step-3.7-flash","choices":[{"index":0,"delta":{"role":"assistant","tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"weather","arguments":""}}]},"finish_reason":null}]}`,
