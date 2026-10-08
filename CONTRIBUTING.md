@@ -23,6 +23,50 @@ Inside the validation container:
 pnpm --dir frontend install --frozen-lockfile
 ```
 
+## Requirement-based Test Design
+
+This is a mandatory repository-wide contract for unit, integration, UI, and
+tooling tests. Derive test scenarios and expected results independently from
+actual business requirements, acceptance criteria, and authoritative contracts.
+Reading implementation code to find entrypoints, dependencies, and test setup
+is allowed; treating its current output or branches as the definition of correct
+behavior is not.
+
+For each changed behavior:
+
+1. Identify the requirement and its source before choosing assertions. Record
+   the relevant requirement, documented rule, or official protocol/source
+   reference in the test or fixture so reviewers can check the expectation
+   independently. Resolve unclear requirements instead of silently declaring
+   current behavior correct.
+2. Use independent expected values or invariants. Do not call the code under
+   test, reuse its generated output, or copy its algorithm to calculate the
+   expected result. Protocol fixtures must have an authoritative source;
+   snapshots require review against that source or the business requirement.
+3. Cover applicable success, failure, boundary, and required/forbidden side
+   effects. Verify observable behavior at the boundary where the requirement
+   matters: for example, capture actual outbound requests for header privacy,
+   or check that a rejected payment leaves balances and orders unchanged.
+   Helper return values or mock call counts alone cannot prove those outcomes.
+   Mocks may isolate external dependencies but must not replace the behavior
+   the test claims to verify.
+4. When implementation conflicts with the requirement, fix the implementation.
+   Never weaken assertions, remove cases, or update expected values/snapshots
+   merely to make tests pass. A legitimate requirement change must update its
+   owning documentation and tests together.
+5. Defect regressions must detect the original incorrect behavior and pass with
+   the fix. Where feasible, demonstrate this against the pre-fix implementation
+   or by restoring the specific defect in isolation; otherwise document the
+   limitation and the evidence used. A failure caused only by a missing symbol
+   or broken setup does not demonstrate detection of the business defect.
+
+Passing tests and coverage percentages alone do not establish business
+correctness. Review the requirement-to-assertion mapping and any untested
+outcomes. The AGENTS.md validator protects this rule against removal or
+weakening; it cannot determine whether a test's expected behavior is correct.
+Provider identity tests additionally follow the
+[requirement-based outbound regressions](docs/OUTBOUND_IDENTITY.md#requirement-based-regression-coverage).
+
 ## Development Checks
 
 Plain selection dropdowns use native HTML `select` controls and shared styles in
