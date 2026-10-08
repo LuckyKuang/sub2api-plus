@@ -1401,6 +1401,16 @@ func (s *openAISelectionFilterStats) exclude(reason string) {
 	s.reasons[reason]++
 }
 
+func (s *openAISelectionFilterStats) excludeCount(reason string, count int) {
+	if count <= 0 {
+		return
+	}
+	if s.reasons == nil {
+		s.reasons = make(map[string]int, 4)
+	}
+	s.reasons[reason] += count
+}
+
 // summary renders deterministic exclusion statistics for scheduling error
 // messages, e.g. "pool=3, filtered: model_not_supported=2 quota_auto_pause_7d=1".
 // Reasons are sorted lexicographically so the output is stable for tests and
@@ -1434,7 +1444,7 @@ func (s openAISelectionFilterStats) diagnostics() *OpsRoutingDiagnostics {
 	diagnostics := &OpsRoutingDiagnostics{
 		SelectionDecision: "no_available_account",
 		SelectionLayer:    "load_balance",
-		CandidatePool:     s.pool,
+		CandidatePool:     opsKnownCandidatePool(s.pool),
 	}
 	if len(s.reasons) > 0 {
 		diagnostics.FilteredCandidates = make(map[string]int, len(s.reasons))
@@ -1457,25 +1467,28 @@ func (s *defaultOpenAIAccountScheduler) selectByLoadBalance(
 	if len(accounts) == 0 {
 		return nil, 0, 0, 0, noAvailableOpenAISelectionErrorWithStats(req.RequestedModel, false, openAISelectionFilterStats{}, "")
 	}
-	// Local free-tier soft gate on the Grok scheduling path only (not admin probe).
+	filterStats := openAISelectionFilterStats{pool: len(accounts)}
+	// Keep the observed pool before each real gate, including partial exclusions.
+	before := len(accounts)
 	accounts = s.filterGrokFreeQuotaAccounts(ctx, accounts)
+	filterStats.excludeCount("grok_free_quota_soft_gate", before-len(accounts))
 	if len(accounts) == 0 {
-		return nil, 0, 0, 0, noAvailableOpenAISelectionErrorWithStats(req.RequestedModel, false, openAISelectionFilterStats{}, "grok_free_quota_soft_gate")
+		return nil, 0, 0, 0, noAvailableOpenAISelectionErrorWithStats(req.RequestedModel, false, filterStats, "grok_free_quota_soft_gate")
 	}
-	// Team+model rate-limit cool: siblings of a 429'd team skip the hot model.
 	if req.Platform == PlatformGrok {
 		now := time.Now()
 		filtered := filterGrokTeamModelRateLimitedAccounts(accounts, req.RequestedModel, now)
+		filterStats.excludeCount("grok_team_model_rate_limit", len(accounts)-len(filtered))
 		if len(filtered) == 0 && len(accounts) > 0 {
-			return nil, 0, 0, 0, noAvailableOpenAISelectionErrorWithStats(req.RequestedModel, false, openAISelectionFilterStats{}, "grok_team_model_rate_limit")
+			return nil, 0, 0, 0, noAvailableOpenAISelectionErrorWithStats(req.RequestedModel, false, filterStats, "grok_team_model_rate_limit")
 		}
 		if filtered != nil {
 			accounts = filtered
 		}
-		// Per-account model free-usage soft-block (other models stay eligible).
 		modelFiltered := filterGrokModelQuotaBlockedAccounts(accounts, req.RequestedModel, now)
+		filterStats.excludeCount("grok_model_quota_block", len(accounts)-len(modelFiltered))
 		if len(modelFiltered) == 0 && len(accounts) > 0 {
-			return nil, 0, 0, 0, noAvailableOpenAISelectionErrorWithStats(req.RequestedModel, false, openAISelectionFilterStats{}, "grok_model_quota_block")
+			return nil, 0, 0, 0, noAvailableOpenAISelectionErrorWithStats(req.RequestedModel, false, filterStats, "grok_model_quota_block")
 		}
 		accounts = modelFiltered
 	}
@@ -1486,7 +1499,6 @@ func (s *defaultOpenAIAccountScheduler) selectByLoadBalance(
 		schedGroup, _ = s.service.schedulerSnapshot.GetGroupByID(ctx, *req.GroupID)
 	}
 
-	filterStats := openAISelectionFilterStats{pool: len(accounts)}
 	filtered := make([]*Account, 0, len(accounts))
 	loadReq := make([]AccountWithConcurrency, 0, len(accounts))
 	for i := range accounts {
@@ -1544,7 +1556,7 @@ func (s *defaultOpenAIAccountScheduler) selectByLoadBalance(
 	if req.SubscriptionPriority {
 		subscriptionAccounts, regularAccounts := partitionOpenAIChatGPTSubscriptionAccounts(filtered)
 		if len(subscriptionAccounts) > 0 {
-			attempt := s.trySelectByLoadBalancePool(ctx, req, subscriptionAccounts, loadMap, budget)
+			attempt := s.trySelectByLoadBalancePool(ctx, req, subscriptionAccounts, loadMap, budget, filterStats)
 			if attempt.err != nil && (!attempt.noCompactCandidates || len(regularAccounts) <= 0) {
 				return nil, attempt.candidateCount, attempt.topK, attempt.loadSkew, attempt.err
 			}
@@ -1552,7 +1564,7 @@ func (s *defaultOpenAIAccountScheduler) selectByLoadBalance(
 				return attempt.result, attempt.candidateCount, attempt.topK, attempt.loadSkew, nil
 			}
 			if len(regularAccounts) > 0 {
-				regularAttempt := s.trySelectByLoadBalancePool(ctx, req, regularAccounts, loadMap, budget)
+				regularAttempt := s.trySelectByLoadBalancePool(ctx, req, regularAccounts, loadMap, budget, filterStats)
 				if regularAttempt.err != nil && !regularAttempt.noCompactCandidates {
 					return nil, regularAttempt.candidateCount, regularAttempt.topK, regularAttempt.loadSkew, regularAttempt.err
 				}
@@ -1581,7 +1593,7 @@ func (s *defaultOpenAIAccountScheduler) selectByLoadBalance(
 		}
 	}
 
-	attempt := s.trySelectByLoadBalancePool(ctx, req, filtered, loadMap, budget)
+	attempt := s.trySelectByLoadBalancePool(ctx, req, filtered, loadMap, budget, filterStats)
 	if attempt.err != nil {
 		return nil, attempt.candidateCount, attempt.topK, attempt.loadSkew, attempt.err
 	}
@@ -1610,6 +1622,7 @@ func (s *defaultOpenAIAccountScheduler) trySelectByLoadBalancePool(
 	filtered []*Account,
 	loadMap map[int64]*AccountLoadInfo,
 	budget *openAISelectionProbeBudget,
+	filterStats openAISelectionFilterStats,
 ) openAIAccountLoadSelectionAttempt {
 	plan := s.buildOpenAIAccountLoadPlan(ctx, req, filtered, loadMap)
 	if openAICostOverflowExpanded(req, plan) {
@@ -1623,12 +1636,28 @@ func (s *defaultOpenAIAccountScheduler) trySelectByLoadBalancePool(
 	}
 	if req.RequireCompact && len(plan.candidates) == 0 && len(plan.staleSnapshotCompactRetry) == 0 {
 		attempt.noCompactCandidates = true
-		attempt.err = ErrNoAvailableCompactAccounts
+		diagnosis := filterStats.diagnostics()
+		diagnosis.SelectionReason = "selection_order_empty"
+		if unsupported := len(plan.staleSnapshotCompactRetry); unsupported > 0 {
+			if diagnosis.FilteredCandidates == nil {
+				diagnosis.FilteredCandidates = make(map[string]int)
+			}
+			diagnosis.FilteredCandidates["compact_unsupported"] = unsupported
+		}
+		attempt.err = noAvailableOpenAISelectionErrorWithDiagnostics(req.RequestedModel, true, "", diagnosis)
 		return attempt
 	}
 	if req.RequireCompact && len(attempt.selectionOrder) == 0 && s.service.schedulerSnapshot == nil {
 		attempt.noCompactCandidates = true
-		attempt.err = ErrNoAvailableCompactAccounts
+		diagnosis := filterStats.diagnostics()
+		diagnosis.SelectionReason = "selection_order_empty"
+		if unsupported := len(plan.staleSnapshotCompactRetry); unsupported > 0 {
+			if diagnosis.FilteredCandidates == nil {
+				diagnosis.FilteredCandidates = make(map[string]int)
+			}
+			diagnosis.FilteredCandidates["compact_unsupported"] = unsupported
+		}
+		attempt.err = noAvailableOpenAISelectionErrorWithDiagnostics(req.RequestedModel, true, "", diagnosis)
 		return attempt
 	}
 	if len(attempt.selectionOrder) == 0 {
@@ -2392,7 +2421,7 @@ func (s *OpenAIGatewayService) selectAccountWithSchedulerOnce(
 		decision.Layer = openAIAccountScheduleLayerLoadBalance
 		if guardianParentAccountID > 0 {
 			if s.checkChannelPricingRestriction(ctx, groupID, requestedModel) {
-				return nil, decision, fmt.Errorf("%w supporting model: %s (channel pricing restriction)", ErrNoAvailableAccounts, requestedModel)
+				return nil, decision, noAvailableOpenAIChannelPricingError(requestedModel)
 			}
 			fallbackScheduler := &defaultOpenAIAccountScheduler{service: s, stats: newOpenAIAccountRuntimeStats()}
 			selection, _, err := fallbackScheduler.selectBySessionHash(ctx, OpenAIAccountScheduleRequest{
@@ -2485,7 +2514,7 @@ func (s *OpenAIGatewayService) selectAccountWithSchedulerOnce(
 		slog.Warn("channel pricing restriction blocked request",
 			"group_id", derefGroupID(groupID),
 			"model", requestedModel)
-		return nil, decision, fmt.Errorf("%w supporting model: %s (channel pricing restriction)", ErrNoAvailableAccounts, requestedModel)
+		return nil, decision, noAvailableOpenAIChannelPricingError(requestedModel)
 	}
 
 	var stickyAccountID int64

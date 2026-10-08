@@ -323,7 +323,7 @@ const errorPhaseOptions = computed<SelectOption[]>(() => [
 ])
 
 // 分类码同用户端 /usage 错误筛选;"other" 无法反查为过滤条件,刻意不列
-const errorCategoryCodes = ['auth', 'rate_limit', 'quota', 'invalid_request', 'service_unavailable', 'upstream', 'internal', 'cyber']
+const errorCategoryCodes = ['auth', 'rate_limit', 'quota', 'invalid_request', 'service_unavailable', 'upstream', 'internal', 'cyber', 'security_audit']
 
 const errorCategoryOptions = computed<SelectOption[]>(() => [
   { value: null, label: t('usage.errors.allCategories') },

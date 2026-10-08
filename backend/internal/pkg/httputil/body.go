@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"compress/gzip"
 	"compress/zlib"
+	"context"
 	"errors"
-	"fmt"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/ctxkey"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/logger"
+	"go.uber.org/zap"
 	"io"
 	"net/http"
 	"strings"
@@ -85,6 +88,7 @@ func ReadRequestBodyWithPrealloc(req *http.Request) ([]byte, error) {
 
 	raw, err := readRequestBodyChunks(req.Body, capHint, req.ContentLength)
 	if err != nil {
+		logRequestBodyReadFailure(req, err)
 		return nil, err
 	}
 
@@ -95,7 +99,17 @@ func ReadRequestBodyWithPrealloc(req *http.Request) ([]byte, error) {
 
 	decoded, err := decompressRequestBody(enc, raw)
 	if err != nil {
-		return nil, fmt.Errorf("decode Content-Encoding %q: %w", enc, err)
+		reason := "invalid_compression"
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			reason = "body_too_large"
+		}
+		if enc != "gzip" && enc != "x-gzip" && enc != "deflate" && enc != "zstd" {
+			reason = "unsupported_encoding"
+		}
+		failure := &RequestBodyReadError{stage: "decode", reason: reason, read: int64(len(raw)), declared: req.ContentLength, cause: err}
+		logRequestBodyReadFailure(req, failure)
+		return nil, failure
 	}
 
 	req.Header.Del("Content-Encoding")
@@ -126,7 +140,7 @@ func readRequestBodyChunks(reader io.Reader, initialCapacity int, contentLength 
 			n += read
 		}
 		if err != nil && err != io.EOF {
-			return nil, err
+			return nil, &RequestBodyReadError{stage: "read", reason: requestBodyReadReason(err), read: int64(total + n), declared: contentLength, cause: err}
 		}
 		if n > 0 {
 			chunks = append(chunks, chunk[:n])
@@ -158,11 +172,65 @@ func readRequestBodyChunks(reader io.Reader, initialCapacity int, contentLength 
 // ReadLenientJSONRequestBodyWithPrealloc reads a request body and normalizes
 // JSON string control bytes before strict validation.
 func ReadLenientJSONRequestBodyWithPrealloc(req *http.Request, maxNormalizedBytes int64) ([]byte, error) {
+	declared := int64(-1)
+	if req != nil {
+		declared = req.ContentLength
+	}
 	body, err := ReadRequestBodyWithPrealloc(req)
 	if err != nil {
 		return nil, err
 	}
-	return NormalizeLenientJSONRequestBody(body, maxNormalizedBytes)
+	normalized, err := NormalizeLenientJSONRequestBody(body, maxNormalizedBytes)
+	if err != nil {
+		failure := &RequestBodyReadError{stage: "normalize", reason: requestBodyReadReason(err), read: int64(len(body)), declared: declared, cause: err}
+		logRequestBodyReadFailure(req, failure)
+		return nil, failure
+	}
+	return normalized, nil
+}
+
+func logRequestBodyReadFailure(req *http.Request, err error) {
+	if req == nil {
+		return
+	}
+	var failure *RequestBodyReadError
+	if !errors.As(err, &failure) {
+		return
+	}
+	if errors.Is(req.Context().Err(), context.Canceled) {
+		failure.reason = "client_cancelled"
+	}
+	endpoint, protocol := "unknown", "unknown"
+	if req.URL != nil {
+		path := req.URL.Path
+		for _, prefix := range []string{"/openai", "/anthropic", "/gemini", "/antigravity"} {
+			path = strings.TrimPrefix(path, prefix)
+		}
+		switch path {
+		case "/v1/responses", "/v1/responses/compact":
+			endpoint, protocol = path, "responses"
+		case "/v1/chat/completions":
+			endpoint, protocol = path, "chat_completions"
+		case "/v1/messages", "/v1/messages/count_tokens":
+			endpoint, protocol = path, "anthropic"
+		case "/v1/embeddings", "/v1/alpha/search", "/v1/images/generations", "/v1/images/edits":
+			endpoint, protocol = path, "openai"
+		default:
+			if strings.HasPrefix(path, "/v1beta/models/") {
+				if strings.HasSuffix(path, ":generateContent") {
+					endpoint, protocol = "/v1beta/models/:model:generateContent", "gemini"
+				}
+				if strings.HasSuffix(path, ":streamGenerateContent") {
+					endpoint, protocol = "/v1beta/models/:model:streamGenerateContent", "gemini"
+				}
+			}
+		}
+	}
+	requestID, _ := req.Context().Value(ctxkey.RequestID).(string)
+	logger.FromContext(req.Context()).Warn("gateway.request_body_read_failed",
+		zap.String("request_id", requestID), zap.String("endpoint", endpoint), zap.String("protocol", protocol),
+		zap.String("stage", failure.stage), zap.String("error_code", "request_body_read_failed"),
+		zap.String("reason", failure.reason), zap.Int64("body_bytes", failure.read), zap.Int64("declared_body_bytes", failure.declared))
 }
 
 func decompressRequestBody(encoding string, raw []byte) ([]byte, error) {
@@ -173,24 +241,35 @@ func decompressRequestBody(encoding string, raw []byte) ([]byte, error) {
 			return nil, err
 		}
 		defer dec.Close()
-		return io.ReadAll(io.LimitReader(dec, maxDecompressedBodySize))
+		return readDecompressedRequestBody(dec)
 	case "gzip", "x-gzip":
 		gr, err := gzip.NewReader(bytes.NewReader(raw))
 		if err != nil {
 			return nil, err
 		}
 		defer func() { _ = gr.Close() }()
-		return io.ReadAll(io.LimitReader(gr, maxDecompressedBodySize))
+		return readDecompressedRequestBody(gr)
 	case "deflate":
 		zr, err := zlib.NewReader(bytes.NewReader(raw))
 		if err != nil {
 			return nil, err
 		}
 		defer func() { _ = zr.Close() }()
-		return io.ReadAll(io.LimitReader(zr, maxDecompressedBodySize))
+		return readDecompressedRequestBody(zr)
 	default:
 		return nil, errors.New("unsupported Content-Encoding")
 	}
+}
+
+func readDecompressedRequestBody(reader io.Reader) ([]byte, error) {
+	body, err := io.ReadAll(io.LimitReader(reader, maxDecompressedBodySize+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(body) > maxDecompressedBodySize {
+		return nil, &http.MaxBytesError{Limit: maxDecompressedBodySize}
+	}
+	return body, nil
 }
 
 // NormalizeLenientJSONRequestBody escapes raw control bytes that broken

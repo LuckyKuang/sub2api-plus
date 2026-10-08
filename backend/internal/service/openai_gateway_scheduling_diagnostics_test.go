@@ -24,7 +24,8 @@ func TestOpsRoutingDiagnosticsFromSelectionErrorUsesTypedData(t *testing.T) {
 	require.NotNil(t, diagnostics)
 	require.Equal(t, "no_available_account", diagnostics.SelectionDecision)
 	require.Equal(t, "load_balance", diagnostics.SelectionLayer)
-	require.Equal(t, 4, diagnostics.CandidatePool)
+	require.NotNil(t, diagnostics.CandidatePool)
+	require.Equal(t, 4, *diagnostics.CandidatePool)
 	require.Equal(t, map[string]int{"runtime_blocked": 2, "model_not_supported": 1}, diagnostics.FilteredCandidates)
 
 	diagnostics.FilteredCandidates["runtime_blocked"] = 99

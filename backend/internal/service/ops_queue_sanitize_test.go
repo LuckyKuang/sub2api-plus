@@ -209,7 +209,7 @@ func TestSanitizeOpsRoutingDiagnosticsUsesOnlyBoundedVocabulary(t *testing.T) {
 		RoutingDiagnostics: &OpsRoutingDiagnostics{
 			SelectionDecision:      "no_available_account",
 			SelectionLayer:         "load_balance",
-			CandidatePool:          7,
+			CandidatePool:          opsKnownCandidatePool(7),
 			FilteredCandidates:     map[string]int{"runtime_blocked": 2},
 			TransportFailure:       "connection_reset",
 			TimeoutPhase:           "first_semantic_output_timeout",
@@ -238,7 +238,7 @@ func TestSanitizeOpsRoutingDiagnosticsDropsArbitraryValues(t *testing.T) {
 		RoutingDiagnostics: &OpsRoutingDiagnostics{
 			SelectionDecision:      "https://user:secret@example.test/very/not-safe",
 			SelectionLayer:         "too many words for a fixed diagnostic token",
-			CandidatePool:          -1,
+			CandidatePool:          opsKnownCandidatePool(-1),
 			FilteredCandidates:     map[string]int{"bad value with spaces": -3},
 			TransportFailure:       "Bearer secret",
 			TimeoutPhase:           "timeout phase with spaces",

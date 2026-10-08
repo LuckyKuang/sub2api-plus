@@ -1191,7 +1191,7 @@ func OpsErrorLoggerMiddleware(ops *service.OpsService) gin.HandlerFunc {
 			}
 		}
 
-		normalizedType := normalizeOpsErrorType(parsed.ErrorType, parsed.Code)
+		normalizedType := normalizeOpsErrorTypeForContext(c, parsed.ErrorType, parsed.Code)
 
 		phase, isBusinessLimited, errorOwner, errorSource := classifyOpsErrorLog(c, normalizedType, parsed.Message, parsed.Code, status)
 
@@ -1460,9 +1460,15 @@ func logOpsStreamErrorValue(c *gin.Context, ops *service.OpsService, wireStatus 
 		classifyStatus = wireStatus
 	}
 	normalizedType := normalizeOpsErrorType(streamErr.ErrType, streamErr.Code)
+	if streamErr.SecurityAuditCode != "" {
+		normalizedType = streamErr.SecurityAuditCode
+	}
 	var phase, errorOwner, errorSource string
 	var isBusinessLimited bool
-	if streamErr.RequestScoped {
+	if streamErr.SecurityAuditCode != "" {
+		phase, errorOwner, errorSource = "request", "client", "client_request"
+		isBusinessLimited = false
+	} else if streamErr.RequestScoped {
 		// 请求级带内结果只按错误类型分类，此前尝试残留的上游错误上下文不参与判定。
 		phase = classifyOpsPhase(normalizedType, streamErr.Message, streamErr.Code)
 		isBusinessLimited = true
@@ -1571,6 +1577,14 @@ func logOpsStreamErrorValue(c *gin.Context, ops *service.OpsService, wireStatus 
 	}
 	if streamErr.Turn > 0 && !streamErr.RequestScoped {
 		applyOpsStreamErrorSnapshot(entry, streamErr)
+		entry.TimeToFirstTokenMs = streamErr.TimeToFirstTokenMs
+	}
+	if streamErr.SecurityAuditCode != "" {
+		entry.AccountID = nil
+		entry.UpstreamEndpoint, entry.UpstreamModel = "", ""
+		entry.RoutingLatencyMs, entry.UpstreamLatencyMs, entry.ResponseLatencyMs, entry.TimeToFirstTokenMs = nil, nil, nil, nil
+		entry.RoutingDiagnostics = nil
+		entry.IsRoutingCapacityLimited = false
 	}
 
 	if apiKey != nil {
@@ -1675,6 +1689,9 @@ func applyOpsLatencyFieldsFromContext(c *gin.Context, entry *service.OpsInsertEr
 		return
 	}
 	entry.AuthLatencyMs = getContextLatencyMs(c, service.OpsAuthLatencyMsKey)
+	if opsSecurityAuditDenialCode(c) != "" {
+		return
+	}
 	entry.RoutingLatencyMs = getContextLatencyMs(c, service.OpsRoutingLatencyMsKey)
 	entry.UpstreamLatencyMs = getContextLatencyMs(c, service.OpsUpstreamLatencyMsKey)
 	entry.ResponseLatencyMs = getContextLatencyMs(c, service.OpsResponseLatencyMsKey)
@@ -1683,6 +1700,9 @@ func applyOpsLatencyFieldsFromContext(c *gin.Context, entry *service.OpsInsertEr
 
 func applyOpsRoutingFieldsFromContext(c *gin.Context, entry *service.OpsInsertErrorLogInput) {
 	if c == nil || entry == nil {
+		return
+	}
+	if opsSecurityAuditDenialCode(c) != "" {
 		return
 	}
 	entry.IsRoutingCapacityLimited = isOpsRoutingCapacityLimited(c)
@@ -1694,6 +1714,12 @@ func applyOpsRoutingFieldsFromContext(c *gin.Context, entry *service.OpsInsertEr
 // prior inference statuses remain available in UpstreamErrors.
 func applyOpsUpstreamFieldsFromContext(c *gin.Context, entry *service.OpsInsertErrorLogInput) {
 	if c == nil || entry == nil {
+		return
+	}
+	if opsSecurityAuditDenialCode(c) != "" {
+		entry.AccountID = nil
+		entry.UpstreamEndpoint = ""
+		entry.UpstreamModel = ""
 		return
 	}
 	if v, ok := c.Get(service.OpsUpstreamStatusCodeKey); ok {
@@ -2231,6 +2257,9 @@ func classifyOpsSeverity(errType string, status int) string {
 }
 
 func classifyOpsErrorLog(c *gin.Context, errType, message, code string, status int) (phase string, isBusinessLimited bool, errorOwner string, errorSource string) {
+	if opsSecurityAuditDenialCode(c) != "" {
+		return "request", false, "client", "client_request"
+	}
 	phase = classifyOpsPhase(errType, message, code)
 	routingCapacityLimited := isOpsRoutingCapacityLimited(c)
 	clientBusinessLimited := service.HasOpsClientBusinessLimited(c)

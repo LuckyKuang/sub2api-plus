@@ -97,6 +97,24 @@ describe('OpsErrorDetailModal routing diagnostics', () => {
   })
 })
 
+// Approved audit: a measured empty pool is different from missing telemetry.
+describe('OpsErrorDetailModal known versus unknown selection', () => {
+  it.each([0, undefined, null])('renders candidate pool %s without inventing zero', async (pool) => {
+    getRequestErrorDetail.mockResolvedValue(errorDetail({ routing_diagnostics: {
+      selection_decision: 'no_available_account', candidate_pool: pool,
+      selection_reason: 'channel_pricing_restricted'
+    } }))
+    listRequestErrorUpstreamErrors.mockResolvedValue({ items: [] })
+    const wrapper = mount(OpsErrorDetailModal, {
+      props: { show: true, errorId: 41, errorType: 'request' },
+      global: { stubs: { BaseDialog: { template: '<div><slot /></div>' }, Icon: true } }
+    })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="candidate-pool"]').text()).toBe(pool === 0 ? '0' : 'admin.ops.errorDetail.unknownDiagnostic')
+    expect(wrapper.get('[data-testid="selection-reason"]').text()).toBe('channel_pricing_restricted')
+  })
+})
+
 describe('OpsErrorDetailModal upstream diagnostics', () => {
   beforeEach(() => {
     vi.clearAllMocks()

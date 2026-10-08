@@ -152,6 +152,12 @@
            request headers, credentials, and arbitrary user-provided strings. -->
       <div v-if="detail.routing_diagnostics" class="rounded-xl bg-gray-50 p-6 dark:bg-dark-900">
         <h3 class="text-sm font-black uppercase tracking-wider text-gray-900 dark:text-white">{{ t('admin.ops.errorDetail.routingDiagnostics') }}</h3>
+        <dl v-if="detail.routing_diagnostics.selection_decision" class="mt-4 grid grid-cols-2 gap-2 text-sm">
+          <dt class="text-gray-500">{{ t('admin.ops.errorDetail.candidatePool') }}</dt>
+          <dd data-testid="candidate-pool">{{ detail.routing_diagnostics.candidate_pool ?? t('admin.ops.errorDetail.unknownDiagnostic') }}</dd>
+          <dt class="text-gray-500">{{ t('admin.ops.errorDetail.selectionReason') }}</dt>
+          <dd data-testid="selection-reason">{{ detail.routing_diagnostics.selection_reason || t('admin.ops.errorDetail.unknownDiagnostic') }}</dd>
+        </dl>
         <pre class="mt-4 max-h-[360px] overflow-auto rounded-xl border border-gray-200 bg-white p-4 text-xs text-gray-800 dark:border-dark-700 dark:bg-dark-800 dark:text-gray-100"><code>{{ prettyObject(detail.routing_diagnostics) }}</code></pre>
       </div>
 

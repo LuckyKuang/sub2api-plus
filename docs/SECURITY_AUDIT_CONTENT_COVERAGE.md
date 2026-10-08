@@ -451,3 +451,15 @@ and retains it through both response bridges. Client model catalogs also expose
 synced StepFun IDs and capabilities. These response/catalog changes introduce no
 new inference input fields or audit exemptions; both account types still use the
 same canonical extraction and pre-selection audit boundary above.
+
+### Error-record attribution
+
+Trusted local 403 denials from either engine are request refusals with the
+`security_audit` usage category and no selected-account/upstream attribution.
+The exact local decision, not a matching inbound/provider string, authorizes
+this classification. Dependency failures keep their existing classification;
+extraction failures continue to pass through under the table above. HTTP wire
+bodies, WebSocket errors/closes, SLA/business-limit flags and audit ordering are
+unchanged. WebSocket attribution is per turn. See
+[error request diagnostics](ERROR_REQUEST_DIAGNOSTICS.md) for filtering and the
+one-time historical correction.

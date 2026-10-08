@@ -145,3 +145,15 @@ Regression fixtures cover protocol observations, HTTP normal/passthrough,
 compaction, native Anthropic adapters, WS turn isolation, repository parameters,
 and frontend/export calculations. These fixtures are not evidence of live calls
 with every provider's real credentials.
+
+## Failed-request timing
+
+Error records retain strict TTFT from a failed partial OpenAI Responses/Messages
+result when a non-empty text, reasoning or tool token was actually observed.
+Failure does not erase an observation, and a metadata/keepalive/media-only
+attempt still has null TTFT. Timing is reset on a new forwarding attempt and
+snapshotted per WebSocket turn, so another account's failure cannot borrow it.
+Historical unobserved timing stays null. Upstream attempt diagnostics separately
+record whether semantic output was committed and why replay was suppressed;
+media/compaction commitment can prohibit replay without starting a token clock.
+This does not change the request-average TPS definition or partial-usage status.

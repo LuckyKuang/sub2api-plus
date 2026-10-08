@@ -309,6 +309,9 @@ export default {
       },
       // Error Detail Modal
       errorDetail: {
+        candidatePool: 'Candidate pool',
+        selectionReason: 'Selection reason',
+        unknownDiagnostic: 'Not observed',
         title: 'Error Detail',
         titleWithId: 'Error #{id}',
         noErrorSelected: 'No error selected.',

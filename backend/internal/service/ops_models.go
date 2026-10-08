@@ -114,7 +114,8 @@ type OpsErrorLogDetail struct {
 type OpsRoutingDiagnostics struct {
 	SelectionDecision      string         `json:"selection_decision,omitempty"`
 	SelectionLayer         string         `json:"selection_layer,omitempty"`
-	CandidatePool          int            `json:"candidate_pool,omitempty"`
+	SelectionReason        string         `json:"selection_reason,omitempty"`
+	CandidatePool          *int           `json:"candidate_pool,omitempty"`
 	FilteredCandidates     map[string]int `json:"filtered_candidates,omitempty"`
 	TransportFailure       string         `json:"transport_failure,omitempty"`
 	TimeoutPhase           string         `json:"timeout_phase,omitempty"`

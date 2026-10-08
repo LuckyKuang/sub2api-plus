@@ -351,6 +351,8 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 
 	agentTaskRecoveryTried := false
 	authRecoveryTried := false
+	encryptedRecoveryTried := false
+	encryptedEntryBody := append([]byte(nil), body...)
 	compactModelFallbackRetried := false
 	rejectedFieldRetryState := openAIResponsesRejectedFieldRetryStateForRequest(c, body)
 	var resp *http.Response
@@ -391,6 +393,19 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 			probeBody := s.readUpstreamErrorBody(resp)
 			_ = resp.Body.Close()
 			resp.Body = io.NopCloser(bytes.NewReader(probeBody))
+			if !encryptedRecoveryTried && account.Platform == PlatformOpenAI && resp.StatusCode == http.StatusBadRequest && extractUpstreamErrorCode(probeBody) == "invalid_encrypted_content" {
+				retryBody, retryErr := prepareOpenAIEncryptedRecoveryBody(body)
+				if retryErr != nil {
+					return nil, retryErr
+				}
+				if len(retryBody) > 0 {
+					s.recordOpenAIEncryptedRecovery(c, account, resp, encryptedEntryBody, true)
+					body = retryBody
+					encryptedRecoveryTried = true
+					rejectedFieldRetryState.remember(body)
+					continue
+				}
+			}
 			if retryBody, reason, changed, retryErr := normalizeOpenAIResponsesRejectedFieldRetryBody(resp.StatusCode, body, probeBody); retryErr != nil {
 				return nil, fmt.Errorf("normalize passthrough rejected Responses field retry body: %w", retryErr)
 			} else if changed && rejectedFieldRetryState.Allow(retryBody) {
@@ -472,9 +487,23 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 			s.noteOpenAICodexTurnStateProvenance(c, account)
 		}
 
+		retryBody, retryErr := prepareOpenAIEncryptedRecoveryBody(body)
+		if retryErr != nil {
+			return nil, retryErr
+		}
+		canRecoverEncrypted := account.Platform == PlatformOpenAI && !encryptedRecoveryTried && len(retryBody) > 0
 		if reqStream {
-			result, handleErr := s.handleStreamingResponsePassthrough(ctx, resp, c, account, startTime, reqModel, upstreamPassthroughModel)
+			result, handleErr := s.handleStreamingResponsePassthrough(ctx, resp, c, account, startTime, reqModel, upstreamPassthroughModel, canRecoverEncrypted)
 			if handleErr != nil {
+				var encryptedSignal *openAIEncryptedRecoverySignal
+				if errors.As(handleErr, &encryptedSignal) && canRecoverEncrypted {
+					_ = resp.Body.Close()
+					s.recordOpenAIEncryptedRecovery(c, account, resp, encryptedEntryBody, true)
+					body = retryBody
+					encryptedRecoveryTried = true
+					rejectedFieldRetryState.remember(body)
+					continue
+				}
 				if retryBody, fallbackModel, retry := s.applyOpenAIPassthroughCompactFallbackFromSignal(
 					c, account, requestedModel, body, handleErr, compactModelFallbackRetried, resp,
 				); retry {
@@ -516,8 +545,17 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 			imageCount = result.imageCount
 			imageOutputSizes = result.imageOutputSizes
 		} else {
-			result, handleErr := s.handleNonStreamingResponsePassthrough(ctx, resp, c, account, reqModel, upstreamPassthroughModel)
+			result, handleErr := s.handleNonStreamingResponsePassthrough(ctx, resp, c, account, reqModel, upstreamPassthroughModel, canRecoverEncrypted)
 			if handleErr != nil {
+				var encryptedSignal *openAIEncryptedRecoverySignal
+				if errors.As(handleErr, &encryptedSignal) && canRecoverEncrypted {
+					_ = resp.Body.Close()
+					s.recordOpenAIEncryptedRecovery(c, account, resp, encryptedEntryBody, true)
+					body = retryBody
+					encryptedRecoveryTried = true
+					rejectedFieldRetryState.remember(body)
+					continue
+				}
 				if retryBody, fallbackModel, retry := s.applyOpenAIPassthroughCompactFallbackFromSignal(
 					c, account, requestedModel, body, handleErr, compactModelFallbackRetried, resp,
 				); retry {
@@ -1724,6 +1762,7 @@ func (s *OpenAIGatewayService) recordOpenAIStreamUpstreamError(
 			event.AccountID = account.ID
 			event.AccountName = account.Name
 		}
+		snapshotOpsOpenAIStream(c, &event)
 		appendOpsUpstreamError(c, event)
 	}
 	return message
@@ -1859,7 +1898,9 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 	startTime time.Time,
 	originalModel string,
 	mappedModel string,
+	encryptedRecoveryAllowed ...bool,
 ) (*openaiStreamingResultPassthrough, error) {
+	resetOpsOpenAIStreamObservation(c)
 	observer := upstreamResponseModelObserverFromContext(c)
 	if observer == nil {
 		observer = beginUpstreamResponseModelObservation(c)
@@ -2000,6 +2041,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 
 	needModelReplace := strings.TrimSpace(originalModel) != "" && strings.TrimSpace(mappedModel) != "" && strings.TrimSpace(originalModel) != strings.TrimSpace(mappedModel)
 	resultWithUsage := func() *openaiStreamingResultPassthrough {
+		observeOpsOpenAIStream(c, timing.firstTokenMs, false)
 		return &openaiStreamingResultPassthrough{
 			usage:            usage,
 			firstTokenMs:     timing.firstTokenMs,
@@ -2098,6 +2140,9 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 				}
 				outputStarted := openAIStreamClientOutputStarted(c, clientOutputStarted)
 				if !outputStarted && !cyberHit {
+					if recoveryErr := openAIEncryptedStreamRecoverySignal(dataBytes, encryptedRecoveryAllowed); recoveryErr != nil {
+						return resultWithUsage(), recoveryErr
+					}
 					if compactErr := newOpenAICompactFallbackSignal(c, dataBytes, failedMessage); compactErr != nil {
 						return resultWithUsage(), compactErr
 					}
@@ -2218,6 +2263,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 				logger.LegacyPrintf("service.openai_gateway", "[OpenAI passthrough] Client disconnected during streaming, continue draining upstream for usage: account=%d", account.ID)
 			} else {
 				clientOutputStarted = true
+				observeOpsOpenAIStream(c, timing.firstTokenMs, semanticOutputSeen)
 				flushPending = true
 				if line == "" {
 					flushPendingOutput()
@@ -2260,6 +2306,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 			return resultWithUsage(), fmt.Errorf("stream usage incomplete after disconnect: %w", err)
 		}
 		s.recordOpenAIProxyStreamDisconnect(account, err, upstreamRequestID)
+		s.recordOpenAIStreamUpstreamError(c, account, true, upstreamRequestID, "stream_read_error", nil, "Upstream stream read failed")
 		logger.LegacyPrintf("service.openai_gateway",
 			"[OpenAI passthrough] 流读取异常中断: account=%d request_id=%s err=%v",
 			account.ID,
@@ -2307,6 +2354,7 @@ func (s *OpenAIGatewayService) handleNonStreamingResponsePassthrough(
 	account *Account,
 	originalModel string,
 	mappedModel string,
+	encryptedRecoveryAllowed ...bool,
 ) (*openaiNonStreamingResultPassthrough, error) {
 	body, err := ReadUpstreamResponseBody(resp.Body, s.cfg, c, openAITooLargeError)
 	if err != nil {
@@ -2328,7 +2376,7 @@ func (s *OpenAIGatewayService) handleNonStreamingResponsePassthrough(
 	// stream=false was requested. Without this conversion the client would
 	// receive raw SSE text or a terminal event with empty output.
 	if isEventStreamResponse(resp.Header) {
-		return s.handlePassthroughSSEToJSON(resp, c, account, body, originalModel, mappedModel)
+		return s.handlePassthroughSSEToJSON(resp, c, account, body, originalModel, mappedModel, encryptedRecoveryAllowed...)
 	}
 
 	usage := &OpenAIUsage{}
@@ -2380,13 +2428,18 @@ func (s *OpenAIGatewayService) handleNonStreamingResponsePassthrough(
 // response for the passthrough path. It mirrors handleSSEToJSON while
 // preserving passthrough payloads, except compact-only model remapping may
 // rewrite model fields back to the original requested model.
-func (s *OpenAIGatewayService) handlePassthroughSSEToJSON(resp *http.Response, c *gin.Context, account *Account, body []byte, originalModel string, mappedModel string) (*openaiNonStreamingResultPassthrough, error) {
+func (s *OpenAIGatewayService) handlePassthroughSSEToJSON(resp *http.Response, c *gin.Context, account *Account, body []byte, originalModel string, mappedModel string, encryptedRecoveryAllowed ...bool) (*openaiNonStreamingResultPassthrough, error) {
 	bodyText := string(body)
 	terminalType, terminalPayload, terminalOK := extractOpenAISSETerminalEvent(bodyText)
 	if terminalOK && (terminalType == "response.failed" || terminalType == "error") {
 		msg := extractOpenAISSEErrorMessage(terminalPayload)
 		if msg == "" {
 			msg = "Upstream compact response failed"
+		}
+		if !openAIStreamClientOutputStarted(c, false) {
+			if recoveryErr := openAIEncryptedStreamRecoverySignal(terminalPayload, encryptedRecoveryAllowed); recoveryErr != nil {
+				return nil, recoveryErr
+			}
 		}
 		if compactErr := newOpenAICompactFallbackSignal(c, terminalPayload, msg); compactErr != nil {
 			return nil, compactErr

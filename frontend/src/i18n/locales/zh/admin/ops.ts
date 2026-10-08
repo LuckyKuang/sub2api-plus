@@ -309,6 +309,9 @@ export default {
       },
       // Error Detail Modal
       errorDetail: {
+        candidatePool: '候选账号数',
+        selectionReason: '筛选原因',
+        unknownDiagnostic: '未获取',
         title: '错误详情',
         titleWithId: '错误 #{id}',
         noErrorSelected: '未选择错误。',

@@ -152,3 +152,12 @@ is enabled; runtime ops settings can override it. See the maintained
 
 Runner implementation:
 `backend/internal/repository/migrations_runner.go`.
+
+## Local security audit error attribution
+
+Migration 279 corrects reliably identifiable historical local 403 refusals to
+request/client attribution with their exact policy or prompt-guard code.
+Malformed, ambiguous and provider records remain unchanged. It preserves
+bodies, timestamps, business-limit flags and unknown timing and is safe to repeat.
+The runtime uses trusted decisions for new records. See
+[error diagnostics](../../docs/ERROR_REQUEST_DIAGNOSTICS.md).

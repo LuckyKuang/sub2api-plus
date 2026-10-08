@@ -615,6 +615,10 @@ func sanitizeOpsUpstreamErrors(entry *OpsInsertErrorLogInput) error {
 		out.Stage = truncateString(strings.TrimSpace(out.Stage), 64)
 		out.Scope = truncateString(strings.TrimSpace(out.Scope), 64)
 		out.Reason = truncateString(strings.TrimSpace(out.Reason), 128)
+		out.ReplaySuppressedReason = sanitizeOpsDiagnosticEnum(out.ReplaySuppressedReason, map[string]struct{}{"semantic_output_committed": {}})
+		if out.TimeToFirstTokenMs != nil && *out.TimeToFirstTokenMs < 0 {
+			out.TimeToFirstTokenMs = nil
+		}
 
 		if out.AccountID < 0 {
 			out.AccountID = 0
@@ -666,7 +670,12 @@ func sanitizeOpsRoutingDiagnostics(entry *OpsInsertErrorLogInput) error {
 		"no_available_account": {},
 	})
 	diagnostics.SelectionLayer = sanitizeOpsDiagnosticEnum(diagnostics.SelectionLayer, map[string]struct{}{
-		"load_balance": {},
+		"load_balance":    {},
+		"channel_pricing": {},
+	})
+	diagnostics.SelectionReason = sanitizeOpsDiagnosticEnum(diagnostics.SelectionReason, map[string]struct{}{
+		"channel_pricing_restricted": {}, "selection_order_empty": {}, "selection_order_exhausted": {},
+		"grok_free_quota_soft_gate": {}, "grok_team_model_rate_limit": {}, "grok_model_quota_block": {},
 	})
 	diagnostics.TransportFailure = sanitizeOpsDiagnosticEnum(diagnostics.TransportFailure, map[string]struct{}{
 		"connection_refused":          {},
@@ -688,11 +697,12 @@ func sanitizeOpsRoutingDiagnostics(entry *OpsInsertErrorLogInput) error {
 		openAIOutboundIdentitySourceGlobal:  {},
 		openAIOutboundIdentitySourceDefault: {},
 	})
-	if diagnostics.CandidatePool < 0 {
-		diagnostics.CandidatePool = 0
-	}
-	if diagnostics.CandidatePool > 100000 {
-		diagnostics.CandidatePool = 100000
+	if diagnostics.CandidatePool != nil {
+		if *diagnostics.CandidatePool < 0 {
+			diagnostics.CandidatePool = nil
+		} else {
+			diagnostics.CandidatePool = opsKnownCandidatePool(min(*diagnostics.CandidatePool, 100000))
+		}
 	}
 	if len(diagnostics.FilteredCandidates) > 0 {
 		filtered := make(map[string]int, min(len(diagnostics.FilteredCandidates), maxFilteredReasons))
@@ -712,8 +722,8 @@ func sanitizeOpsRoutingDiagnostics(entry *OpsInsertErrorLogInput) error {
 		diagnostics.FilteredCandidates = filtered
 	}
 
-	if diagnostics.SelectionDecision == "" && diagnostics.SelectionLayer == "" &&
-		diagnostics.CandidatePool == 0 && len(diagnostics.FilteredCandidates) == 0 &&
+	if diagnostics.SelectionDecision == "" && diagnostics.SelectionLayer == "" && diagnostics.SelectionReason == "" &&
+		diagnostics.CandidatePool == nil && len(diagnostics.FilteredCandidates) == 0 &&
 		diagnostics.TransportFailure == "" && diagnostics.TimeoutPhase == "" &&
 		diagnostics.OutboundIdentitySource == "" {
 		entry.RoutingDiagnostics = nil
@@ -751,6 +761,11 @@ func sanitizeOpsRoutingFilterReason(value string) string {
 		"account_nil":                 {},
 		"capability_mismatch":         {},
 		"channel_upstream_restricted": {},
+		"compact_unsupported":         {},
+		"ineligible":                  {},
+		"grok_free_quota_soft_gate":   {},
+		"grok_team_model_rate_limit":  {},
+		"grok_model_quota_block":      {},
 		"excluded":                    {},
 		"model_not_supported":         {},
 		"not_schedulable":             {},

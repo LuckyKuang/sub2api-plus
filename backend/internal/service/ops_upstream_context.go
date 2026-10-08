@@ -82,8 +82,8 @@ func SetOpsLatencyMs(c *gin.Context, key string, value int64) {
 }
 
 // SetOpsRoutingDiagnostics merges safe, typed diagnostics collected by
-// scheduling, upstream transport, and outbound identity code. Later producers
-// can fill independent fields without erasing the first root-cause signal.
+// scheduling, upstream transport, and outbound identity code. Selection fields
+// form one snapshot; independent transport/identity fields preserve each other.
 func SetOpsRoutingDiagnostics(c *gin.Context, next *OpsRoutingDiagnostics) {
 	if c == nil || next == nil {
 		return
@@ -100,19 +100,22 @@ func SetOpsRoutingDiagnostics(c *gin.Context, next *OpsRoutingDiagnostics) {
 			}
 		}
 	}
-	if value := strings.TrimSpace(next.SelectionDecision); value != "" {
-		merged.SelectionDecision = value
-	}
-	if value := strings.TrimSpace(next.SelectionLayer); value != "" {
-		merged.SelectionLayer = value
-	}
-	if next.CandidatePool > 0 {
-		merged.CandidatePool = next.CandidatePool
-	}
-	if next.FilteredCandidates != nil {
-		merged.FilteredCandidates = make(map[string]int, len(next.FilteredCandidates))
-		for key, value := range next.FilteredCandidates {
-			merged.FilteredCandidates[key] = value
+	// A new selection result is one snapshot. An unknown pool must not borrow
+	// an earlier result's count, layer, reasons or exclusions.
+	if decision := strings.TrimSpace(next.SelectionDecision); decision != "" {
+		merged.SelectionDecision = decision
+		merged.SelectionLayer = strings.TrimSpace(next.SelectionLayer)
+		merged.SelectionReason = strings.TrimSpace(next.SelectionReason)
+		merged.CandidatePool = nil
+		merged.FilteredCandidates = nil
+		if next.CandidatePool != nil {
+			merged.CandidatePool = opsKnownCandidatePool(*next.CandidatePool)
+		}
+		if next.FilteredCandidates != nil {
+			merged.FilteredCandidates = make(map[string]int, len(next.FilteredCandidates))
+			for key, value := range next.FilteredCandidates {
+				merged.FilteredCandidates[key] = value
+			}
 		}
 	}
 	if value := strings.TrimSpace(next.TransportFailure); value != "" {
@@ -199,6 +202,9 @@ func OpsClientBusinessLimitedReason(c *gin.Context) string {
 // 由于 HTTP 状态码停留在 2xx，ops_error_logger 中间件在 status<400 分支消费该标记并
 // 补记错误日志；标记方是 handler.handleStreamingAwareError 或各 service 的带内检测。
 type OpsStreamError struct {
+	// SecurityAuditCode is populated only from the trusted local audit decision.
+	SecurityAuditCode  string
+	TimeToFirstTokenMs *int64
 	// ErrType 是写入 SSE 帧的对客错误类型（如 rate_limit_error / upstream_error / api_error）。
 	ErrType string
 	// Code 是可选的稳定错误分类；用于既保留通用 OpenAI error.type，又向客户端和 Ops
@@ -238,6 +244,7 @@ func BeginOpsStreamTurn(c *gin.Context, turn int) {
 		return
 	}
 	c.Set(OpsStreamTurnKey, turn)
+	resetOpsOpenAIStreamObservation(c)
 	// Rule and attempt state is turn-scoped on a long-lived WS connection.
 	c.Set(OpsSkipPassthroughKey, false)
 	c.Set(OpsUpstreamErrorsKey, []*OpsUpstreamErrorEvent{})
@@ -318,6 +325,14 @@ func markOpsStreamError(c *gin.Context, streamErr OpsStreamError) {
 
 func snapshotOpsStreamErrorContext(c *gin.Context, streamErr *OpsStreamError) {
 	if c == nil || streamErr == nil {
+		return
+	}
+	if value, ok := c.Get(OpsTimeToFirstTokenMsKey); ok {
+		if ms, ok := value.(int64); ok && ms >= 0 {
+			streamErr.TimeToFirstTokenMs = &ms
+		}
+	}
+	if streamErr.SecurityAuditCode != "" {
 		return
 	}
 	if c.Request != nil {
@@ -437,7 +452,10 @@ func setOpsUpstreamError(c *gin.Context, upstreamStatusCode int, upstreamMessage
 // OpsUpstreamErrorEvent describes one upstream error attempt during a single gateway request.
 // It is stored in ops_error_logs.upstream_errors as a JSON array.
 type OpsUpstreamErrorEvent struct {
-	AtUnixMs int64 `json:"at_unix_ms,omitempty"`
+	SemanticOutputCommitted *bool  `json:"semantic_output_committed,omitempty"`
+	ReplaySuppressedReason  string `json:"replay_suppressed_reason,omitempty"`
+	TimeToFirstTokenMs      *int64 `json:"time_to_first_token_ms,omitempty"`
+	AtUnixMs                int64  `json:"at_unix_ms,omitempty"`
 
 	// Passthrough 表示本次请求是否命中“原样透传（仅替换认证）”分支。
 	// 该字段用于排障与灰度评估；存入 JSON，不涉及 DB schema 变更。

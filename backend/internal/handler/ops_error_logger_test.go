@@ -860,7 +860,7 @@ func TestApplyOpsRoutingFieldsPreservesCapacityMarkerSeparatelyFromSLAMarker(t *
 
 	markOpsRoutingCapacityLimited(c)
 	service.SetOpsRoutingDiagnostics(c, &service.OpsRoutingDiagnostics{
-		CandidatePool:          3,
+		CandidatePool:          func() *int { n := 3; return &n }(),
 		FilteredCandidates:     map[string]int{"runtime_blocked": 3},
 		OutboundIdentitySource: "global",
 	})
@@ -871,7 +871,8 @@ func TestApplyOpsRoutingFieldsPreservesCapacityMarkerSeparatelyFromSLAMarker(t *
 	require.True(t, entry.IsRoutingCapacityLimited)
 	require.NotNil(t, entry.RoutingDiagnostics)
 	require.Equal(t, "no_available_account", entry.RoutingDiagnostics.SelectionDecision)
-	require.Equal(t, 3, entry.RoutingDiagnostics.CandidatePool)
+	require.NotNil(t, entry.RoutingDiagnostics.CandidatePool)
+	require.Equal(t, 3, *entry.RoutingDiagnostics.CandidatePool)
 	require.Equal(t, "global", entry.RoutingDiagnostics.OutboundIdentitySource)
 }
 
