@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, h } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
 
@@ -9,6 +9,7 @@ import zhSettings from "@/i18n/locales/zh/admin/settings";
 import SettingsView from "../SettingsView.vue";
 import { identityPresets, type OutboundIdentityView } from "@/api/admin/outboundIdentity";
 import { identityPolicyFixture } from "@/components/account/__tests__/identityPolicyFixture";
+import { cssPixels, installAppStyles } from "@/__tests__/appStyles";
 
 const { getOutboundIdentity, updateOutboundIdentity } = vi.hoisted(() => ({
   getOutboundIdentity: vi.fn(), updateOutboundIdentity: vi.fn(),
@@ -2049,6 +2050,10 @@ describe("admin SettingsView wechat connect controls", () => {
 });
 
 describe("admin SettingsView platform quota matrix", () => {
+  let removeStyles: () => void;
+  beforeAll(async () => { removeStyles = await installAppStyles(); });
+  afterAll(() => removeStyles?.());
+
   beforeEach(() => {
     getSettings.mockReset();
     updateSettings.mockReset();
@@ -2107,6 +2112,69 @@ describe("admin SettingsView platform quota matrix", () => {
     expect(html).toContain("gemini");
     expect(html).toContain("antigravity");
     expect(html).toContain("typesafe");
+  });
+
+  it("全局及七种认证来源的限额表格保留一致的左右留白，并将平台名称与输入框垂直对齐", async () => {
+    // User audit: the default matrix and every signup source must have an
+    // inset of at least 12px; header and input cells share the same inset.
+    const wrapper = mountView();
+    document.body.appendChild(wrapper.element);
+    try {
+      await flushPromises();
+      await openUsersTab(wrapper);
+      for (const source of ["email", "linuxdo", "oidc", "wechat", "github", "google", "dingtalk"]) {
+        await wrapper.get(`[data-testid="auth-source-${source}-enabled"]`).setValue(true);
+      }
+      const tables = wrapper.findAll("table").filter(table => table.find("thead th").text() === "平台");
+      expect(tables).toHaveLength(8);
+      for (const table of tables) {
+        const headers = table.findAll("thead th");
+        expect(headers.map(cell => cell.text())).toEqual(["平台", "日限额 (USD)", "周限额 (USD)", "月限额 (USD, 30天滚动)"]);
+        for (const row of table.findAll("tbody tr")) {
+          expect(getComputedStyle(row.element).verticalAlign).toBe("middle");
+          const cells = row.findAll("td");
+          expect(cells).toHaveLength(4);
+          cells.forEach((cell, index) => {
+            const headerStyle = getComputedStyle(headers[index].element);
+            const cellStyle = getComputedStyle(cell.element);
+            for (const side of ["paddingLeft", "paddingRight"] as const) {
+              expect(cssPixels(cellStyle[side])).toBeGreaterThanOrEqual(12);
+              expect(cssPixels(headerStyle[side])).toBe(cssPixels(cellStyle[side]));
+            }
+          });
+        }
+      }
+    } finally { wrapper.unmount(); }
+  });
+
+  it("调整表格后七种认证来源仍分别保存日周月限额，0 与留空保持不同语义", async () => {
+    const sources = ["email", "linuxdo", "oidc", "wechat", "github", "google", "dingtalk"];
+    const wrapper = mountView();
+    try {
+      await flushPromises();
+      await openUsersTab(wrapper);
+      for (const [index, source] of sources.entries()) {
+        await wrapper.get(`[data-testid="auth-source-${source}-enabled"]`).setValue(true);
+        const table = wrapper.get(`[data-testid="auth-source-${source}-panel"] table`);
+        const row = table.findAll("tbody tr").find(row => row.get("td").text() === "openai");
+        expect(row).toBeDefined();
+        const inputs = row!.findAll('input[type="number"]');
+        expect(inputs).toHaveLength(3);
+        await inputs[0].setValue(String(index + 1.25));
+        await inputs[1].setValue("0");
+        await inputs[2].setValue("");
+      }
+      await wrapper.get("form").trigger("submit.prevent");
+      await flushPromises();
+      expect(updateSettings).toHaveBeenCalledTimes(1);
+      const payload = updateSettings.mock.calls[0][0];
+      sources.forEach((source, index) => {
+        expect(payload[`auth_source_default_${source}_platform_quotas`].openai).toEqual({
+          daily: index + 1.25, weekly: 0, monthly: null,
+        });
+      });
+      expect(payload.default_platform_quotas.openai).toEqual({ daily: null, weekly: 12.5, monthly: null });
+    } finally { wrapper.unmount(); }
   });
 
   it("保存时 updateSettings payload 应包含嵌套 default_platform_quotas 对象（含全 6 平台）", async () => {

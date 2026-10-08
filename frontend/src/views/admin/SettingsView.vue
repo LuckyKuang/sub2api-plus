@@ -4101,21 +4101,21 @@
                   </p>
                 </div>
                 <div class="table-container overflow-x-auto">
-                  <table class="min-w-full text-sm">
+                  <table class="table min-w-full">
                     <thead>
                       <tr class="text-left text-xs text-gray-500 dark:text-gray-400">
-                        <th class="pb-2 pr-4 font-medium">{{ t("admin.settings.platformQuota.platform") }}</th>
-                        <th class="pb-2 pr-4 font-medium">{{ t("admin.settings.platformQuota.daily") }}</th>
-                        <th class="pb-2 pr-4 font-medium">{{ t("admin.settings.platformQuota.weekly") }}</th>
-                        <th class="pb-2 font-medium">{{ t("admin.settings.platformQuota.monthly") }}</th>
+                        <th>{{ t("admin.settings.platformQuota.platform") }}</th>
+                        <th>{{ t("admin.settings.platformQuota.daily") }}</th>
+                        <th>{{ t("admin.settings.platformQuota.weekly") }}</th>
+                        <th>{{ t("admin.settings.platformQuota.monthly") }}</th>
                       </tr>
                     </thead>
-                    <tbody class="space-y-2">
-                      <tr v-for="p in (['anthropic', 'openai', 'gemini', 'antigravity', 'grok', 'typesafe'] as const)" :key="p" class="align-top">
-                        <td class="pr-4 py-1">
+                    <tbody>
+                      <tr v-for="p in (['anthropic', 'openai', 'gemini', 'antigravity', 'grok', 'typesafe'] as const)" :key="p" class="align-middle">
+                        <td>
                           <span class="font-mono text-xs text-gray-700 dark:text-gray-300">{{ p }}</span>
                         </td>
-                        <td class="pr-4 py-1">
+                        <td>
                           <input
                             v-model.number="form.default_platform_quotas[p]!.daily"
                             type="number"
@@ -4125,7 +4125,7 @@
                             :placeholder="t('admin.settings.platformQuota.placeholder')"
                           />
                         </td>
-                        <td class="pr-4 py-1">
+                        <td>
                           <input
                             v-model.number="form.default_platform_quotas[p]!.weekly"
                             type="number"
@@ -4135,7 +4135,7 @@
                             :placeholder="t('admin.settings.platformQuota.placeholder')"
                           />
                         </td>
-                        <td class="py-1">
+                        <td>
                           <input
                             v-model.number="form.default_platform_quotas[p]!.monthly"
                             type="number"
@@ -4436,21 +4436,21 @@
                         </p>
                       </div>
                       <div class="table-container overflow-x-auto">
-                        <table class="min-w-full text-sm">
+                        <table class="table min-w-full">
                           <thead>
                             <tr class="text-left text-xs text-gray-500 dark:text-gray-400">
-                              <th class="pb-2 pr-4 font-medium">{{ t("admin.settings.platformQuota.platform") }}</th>
-                              <th class="pb-2 pr-4 font-medium">{{ t("admin.settings.platformQuota.daily") }}</th>
-                              <th class="pb-2 pr-4 font-medium">{{ t("admin.settings.platformQuota.weekly") }}</th>
-                              <th class="pb-2 font-medium">{{ t("admin.settings.platformQuota.monthly") }}</th>
+                              <th>{{ t("admin.settings.platformQuota.platform") }}</th>
+                              <th>{{ t("admin.settings.platformQuota.daily") }}</th>
+                              <th>{{ t("admin.settings.platformQuota.weekly") }}</th>
+                              <th>{{ t("admin.settings.platformQuota.monthly") }}</th>
                             </tr>
                           </thead>
                           <tbody>
-                            <tr v-for="p in (['anthropic', 'openai', 'gemini', 'antigravity', 'grok', 'typesafe'] as const)" :key="`${authSource.source}-pq-${p}`" class="align-top">
-                              <td class="pr-4 py-1">
+                            <tr v-for="p in (['anthropic', 'openai', 'gemini', 'antigravity', 'grok', 'typesafe'] as const)" :key="`${authSource.source}-pq-${p}`" class="align-middle">
+                              <td>
                                 <span class="font-mono text-xs text-gray-700 dark:text-gray-300">{{ p }}</span>
                               </td>
-                              <td class="pr-4 py-1">
+                              <td>
                                 <input
                                   v-model.number="authSourceDefaults[authSource.source].platform_quotas[p]!.daily"
                                   type="number"
@@ -4460,7 +4460,7 @@
                                   :placeholder="t('admin.settings.platformQuota.placeholder')"
                                 />
                               </td>
-                              <td class="pr-4 py-1">
+                              <td>
                                 <input
                                   v-model.number="authSourceDefaults[authSource.source].platform_quotas[p]!.weekly"
                                   type="number"
@@ -4470,7 +4470,7 @@
                                   :placeholder="t('admin.settings.platformQuota.placeholder')"
                                 />
                               </td>
-                              <td class="py-1">
+                              <td>
                                 <input
                                   v-model.number="authSourceDefaults[authSource.source].platform_quotas[p]!.monthly"
                                   type="number"

@@ -4,6 +4,32 @@ This directory contains reusable Vue 3 components built with Composition API, Ty
 
 ## Components
 
+### Table alignment
+
+Bordered editable/detail tables use the shared `.table-container` and `.table`
+styles from `src/style.css`. Header and body cells share horizontal padding of
+at least 12 px; names must not touch the border. Quota rows vertically center
+platform names alongside their inputs. This applies to the global signup
+quota matrix and all seven authentication sources: email, Linux DO, OIDC,
+WeChat, GitHub, Google and DingTalk. Layout changes preserve each source's
+daily/weekly/monthly editing and the distinction between zero and an empty
+field.
+
+Center image result galleries with their column heading for both single and
+multiple images; `text-align` alone does not center a block grid.
+
+Expanded distribution details render `UserBreakdownRows` directly in the parent
+`tbody` so user values share the headers' column widths. Actual, account, and
+standard costs stay in their respective columns. The endpoint table omits
+account cost in both summary and detail rows. Loading and empty detail rows
+span the parent's five or six columns. Do not nest an independently sized
+table under the shared headers.
+
+Component regressions verify column/value correspondence and expansion states;
+layout regressions compile the real application stylesheet and inspect computed
+padding/alignment declarations. These jsdom checks do not measure browser pixel
+geometry.
+
 ### DataTable.vue
 
 A generic data table component with sorting, loading states, and custom cell rendering.

@@ -1,7 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 
 import AsyncImageView from '../AsyncImageView.vue'
+import { installAppStyles } from '@/__tests__/appStyles'
 
 enableAutoUnmount(afterEach)
 
@@ -102,14 +103,14 @@ const otherKeyTask = {
   task_id: 'imgtask_other_key',
 }
 
-function mountView() {
+function mountView(realTable = false) {
   return mount(AsyncImageView, {
     attachTo: document.body,
     global: {
       stubs: {
         AppLayout: appLayoutStub,
         TablePageLayout: pageLayoutStub,
-        DataTable: dataTableStub,
+        DataTable: realTable ? false : dataTableStub,
         BaseDialog: baseDialogStub,
         Icon: iconStub,
       },
@@ -124,6 +125,10 @@ async function clickButtonByText(wrapper: VueWrapper, text: string) {
 }
 
 describe('AsyncImageView task management', () => {
+  let removeStyles: () => void
+  beforeAll(async () => { removeStyles = await installAppStyles() })
+  afterAll(() => removeStyles?.())
+
   beforeEach(() => {
     keysList.mockReset()
     deleteAsyncImageTask.mockReset()
@@ -164,6 +169,27 @@ describe('AsyncImageView task management', () => {
     expect(apiKeyTrigger.find('[role="listbox"]').exists()).toBe(false)
     expect(apiKeyTrigger.attributes('aria-label')).toBe('asyncImage.filters.apiKey')
     expect(statusTrigger.attributes('aria-label')).toBe('asyncImage.filters.allStatuses')
+  })
+
+  it.each([1, 2, 3])('centers the actual result thumbnails for %i images under their heading', async count => {
+    const urls = Array.from({ length: count }, (_, index) => `https://images.example.test/${index}.png`)
+    listAsyncImageTasks.mockResolvedValue({ object: 'list', data: [{ ...completedTask, result: { data: urls.map(url => ({ url })) } }], has_more: false })
+    const wrapper = mountView(true)
+    await flushPromises()
+    const table = wrapper.get('table')
+    const headings = table.findAll('thead th')
+    const index = headings.findIndex(cell => cell.text() === 'asyncImage.columns.result')
+    expect(index).toBeGreaterThanOrEqual(0)
+    const cell = table.findAll('tbody tr')[0].findAll('td')[index]
+    expect(cell.findAll('img').map(image => image.attributes('src'))).toEqual(urls)
+    const gallery = cell.get('img').element.parentElement!.parentElement!
+    // The real result cell centers inline content; a block grid ignores that
+    // alignment. Use computed production CSS rather than utility-name checks.
+    expect(getComputedStyle(cell.element).textAlign).toBe('center')
+    expect(getComputedStyle(gallery).display).toBe('inline-grid')
+    const columns = getComputedStyle(gallery).gridTemplateColumns
+    expect(columns).toBe(count === 1 ? 'repeat(1, minmax(0, 1fr))' : 'repeat(2, minmax(0, 1fr))')
+    expect(getComputedStyle(headings[index].get('div').element).justifyContent).toBe('center')
   })
 
   it('keeps exhausted keys selectable for history management but not task creation', async () => {
