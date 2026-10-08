@@ -2089,11 +2089,17 @@ func setDefaults() {
 		"api.openai.com",
 		"api.anthropic.com",
 		"api.kimi.com",
+		"api.kimi.ai",
+		"api.deepseek.com",
+		"agent.minimax.cn",
+		"agent.minimax.io",
 		"api.moonshot.ai",
 		"api.moonshot.cn",
 		"open.bigmodel.cn",
 		"api.minimaxi.com", // MiniMax CN quota + inference
-		"api.minimax.io",   // MiniMax intl; frozen allowlists must add this host to use the intl site
+		"api.stepfun.com",
+		"api.stepfun.ai",
+		"api.minimax.io", // MiniMax intl; frozen allowlists must add this host to use the intl site
 		"opencode.ai",
 		"api.typesafe.ai", // TypeSafe native System One (Jev) endpoint
 		"generativelanguage.googleapis.com",

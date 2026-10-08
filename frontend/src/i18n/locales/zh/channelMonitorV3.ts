@@ -1,5 +1,6 @@
 export default {
   channelMonitorV3: {
+    monitoringDisabled: '暂无启用的监控平台', monitoringDisabledHint: '管理员已关闭所有平台的服务状态监控。',
     title: '服务状态', subtitle: '基于全站所有用户的真实请求，展示全局服务状态与事件。', observed: '最近观测',
     platforms: '平台状态', events: '事件记录', viewEvents: '查看事件', filter: '筛选平台', allPlatforms: '全部平台', range: '历史统计范围',
     ranges: { '24h': '24 小时', '7d': '7 天', '30d': '30 天' },
@@ -33,6 +34,7 @@ export default {
     modeV3: 'V3 服务状态', modeV2: 'V2 被动监控', modeHint: 'V1 主动探测；V2 被动聚合；V3 展示真实请求的服务状态。开启后，登录用户可查看所选模式。',
     modeV3Hint: '基于全站所有用户的真实请求自动观测平台状态和服务事件，不发送主动探测请求。', modeV2Hint: '基于真实网关流量聚合健康指标，用户可查看授权分组的监控数据。',
     settings: {
+      platformsTitle: '启用平台监控', platformsHint: '关闭后停止该平台的状态观测和事件更新，并从服务状态页面移除。已有历史保留；重新开启后从下一个完整分钟开始观测，连续确认需要新请求。', platformToggle: '启用 {platform} 平台监控',
       title: 'V3 服务状态配置', description: '当前状态使用最近 5 分钟的请求。连续确认必须有新的请求证据；无流量或样本不足不会确认恢复。开启后开始积累历史。',
       minimum_samples: '最少请求样本', warning_error_rate: '异常错误率（0–1，默认 0.05）', outage_error_rate: '中断错误率（0–1，默认 0.9）',
       warning_ttft_ms: 'P50 首 Token 延迟阈值（毫秒）', abnormal_windows: '故障连续确认次数', recovery_windows: '恢复连续确认次数',

@@ -256,6 +256,9 @@ func (s *AccountService) Create(ctx context.Context, req CreateAccountRequest) (
 	} else {
 		account.AutoPauseOnExpired = true
 	}
+	if err := validateStepFunCredentials(account.Platform, account.Type, account.Credentials); err != nil {
+		return nil, err
+	}
 	if err := account.NormalizeCodexFingerprintMode(); err != nil {
 		return nil, err
 	}
@@ -375,6 +378,9 @@ func (s *AccountService) Update(ctx context.Context, id int64, req UpdateAccount
 	}
 	if req.AutoPauseOnExpired != nil {
 		account.AutoPauseOnExpired = *req.AutoPauseOnExpired
+	}
+	if err := validateStepFunCredentials(account.Platform, account.Type, account.Credentials); err != nil {
+		return nil, err
 	}
 	if err := account.NormalizeCodexFingerprintMode(); err != nil {
 		return nil, err
@@ -531,7 +537,7 @@ func (s *AccountService) TestCredentials(ctx context.Context, id int64) error {
 	case PlatformTypeSafe:
 		// TypeSafe credentials are API keys; inference failures drive health and cooldown state.
 		return nil
-	case PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax, PlatformOpenCodeGo:
+	case PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax, PlatformStepFun, PlatformOpenCodeGo:
 		// 国产 OpenAI 兼容供应商与 OpenCode：凭证为 API Key，实际可用性经余额/额度探测与转发路径验证。
 		return nil
 	default:

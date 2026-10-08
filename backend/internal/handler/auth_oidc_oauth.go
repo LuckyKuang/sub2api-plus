@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	"log"
 	"math/big"
 	"net/http"
@@ -739,7 +740,7 @@ func oidcExchangeCode(
 	redirectURI string,
 	codeVerifier string,
 ) (*oidcTokenResponse, error) {
-	client := req.C().SetTimeout(30 * time.Second)
+	client := brandidentity.WrapReqClient(req.C()).SetTimeout(30 * time.Second)
 
 	form := url.Values{}
 	form.Set("grant_type", "authorization_code")
@@ -852,7 +853,7 @@ func oidcFetchUserInfo(
 		return nil, errors.New("missing access_token for userinfo request")
 	}
 
-	client := req.C().SetTimeout(30 * time.Second)
+	client := brandidentity.WrapReqClient(req.C()).SetTimeout(30 * time.Second)
 	authorization, err := buildBearerAuthorization(token.TokenType, token.AccessToken)
 	if err != nil {
 		return nil, fmt.Errorf("invalid token for userinfo request: %w", err)
@@ -1040,7 +1041,7 @@ func oidcFetchJWKSet(ctx context.Context, jwksURL string) (*oidcJWKSet, error) {
 	if jwksURL == "" {
 		return nil, errors.New("missing jwks_url")
 	}
-	resp, err := req.C().
+	resp, err := brandidentity.WrapReqClient(req.C()).
 		SetTimeout(30*time.Second).
 		R().
 		SetContext(ctx).

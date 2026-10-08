@@ -3,6 +3,9 @@ package repository
 import (
 	"context"
 	"fmt"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
+	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
+	"net/http"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
@@ -30,7 +33,9 @@ func newS3Client(ctx context.Context, p s3ClientParams) (*s3.Client, error) {
 		region = "auto" // Cloudflare R2 默认 region
 	}
 
+	transport := awshttp.NewBuildableClient()
 	awsCfg, err := awsconfig.LoadDefaultConfig(ctx,
+		awsconfig.WithHTTPClient(brandidentity.WrapClient(&http.Client{Transport: transport.GetTransport(), Timeout: transport.GetTimeout()})),
 		awsconfig.WithRegion(region),
 		awsconfig.WithCredentialsProvider(
 			credentials.NewStaticCredentialsProvider(p.AccessKeyID, p.SecretAccessKey, ""),

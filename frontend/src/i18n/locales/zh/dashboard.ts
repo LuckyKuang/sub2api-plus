@@ -513,6 +513,7 @@ export default {
       modelPlaceholder: '搜索模型', allCategories: '全部分类', allStatuses: '全部状态码',
       empty: '暂无错误请求', failedToLoad: '加载错误请求失败',
       categories: {
+        security_audit: '安全审计拒绝',
         auth: '认证失败', rate_limit: '限流', quota: '余额/订阅',
         invalid_request: '参数错误', service_unavailable: '服务暂时不可用',
         upstream: '上游错误', internal: '平台错误', other: '其他', cyber: '安全策略',
@@ -546,6 +547,7 @@ export default {
       zhipu: '智谱 GLM',
       deepseek: 'DeepSeek',
       minimax: 'MiniMax',
+      stepfun: 'StepFun',
       opencode_go: 'OpenCode'
     },
     // 检查模式（监控条目的工作方式）

@@ -66,7 +66,11 @@
           </template>
 
           <template #cell-result="{ row }">
-            <div v-if="taskImageUrls(row).length" class="grid w-[104px] grid-cols-2 gap-1">
+            <div
+              v-if="taskImageUrls(row).length"
+              class="inline-grid gap-1 align-middle"
+              :class="taskImageUrls(row).length === 1 ? 'grid-cols-1' : 'grid-cols-2'"
+            >
               <div
                 v-for="url in taskImageUrls(row)"
                 :key="url"

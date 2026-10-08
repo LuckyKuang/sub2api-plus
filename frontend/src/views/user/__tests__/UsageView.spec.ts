@@ -289,6 +289,22 @@ describe('user UsageView', () => {
     wrapper.unmount()
   })
 
+  it('filters local security audit refusals through the user usage API', async () => {
+    const wrapper = mountUsageView()
+    await flushPromises()
+    await wrapper.findAll('button').find((button) => button.text() === 'Error records')!.trigger('click')
+    await flushPromises()
+    const category = wrapper.findAllComponents(Select).find((select) =>
+      select.props('options').some((option: SelectOption) => option.value === 'security_audit'))!
+    expect(category).toBeDefined()
+    listMyErrorRequests.mockClear()
+    category.vm.$emit('update:modelValue', 'security_audit')
+    category.vm.$emit('change', 'security_audit')
+    await flushPromises()
+    expect(listMyErrorRequests).toHaveBeenCalledWith(expect.objectContaining({ category: 'security_audit', page: 1 }))
+    wrapper.unmount()
+  })
+
   it('does not request another API key page when the user has no keys', async () => {
     list.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 100, pages: 0 })
 

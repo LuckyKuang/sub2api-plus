@@ -200,7 +200,9 @@ func NewHTTPUpstream(cfg *config.Config) service.HTTPUpstream {
 func (s *httpUpstreamService) Do(req *http.Request, proxyURL string, accountID int64, accountConcurrency int) (*http.Response, error) {
 	applyGrokCLIProxyAuthentication(req)
 	outboundidentity.ApplyContext(req)
-	brandidentity.FilterOutboundRequest(req)
+	if err := brandidentity.FilterOutboundRequest(req); err != nil {
+		return nil, err
+	}
 	if err := s.validateRequestHost(req); err != nil {
 		return nil, err
 	}
@@ -253,7 +255,9 @@ func (s *httpUpstreamService) DoWithTLS(req *http.Request, proxyURL string, acco
 	}
 	applyGrokCLIProxyAuthentication(req)
 	outboundidentity.ApplyContext(req)
-	brandidentity.FilterOutboundRequest(req)
+	if err := brandidentity.FilterOutboundRequest(req); err != nil {
+		return nil, err
+	}
 	upstreamProfile := service.HTTPUpstreamProfileDefault
 	if req != nil {
 		upstreamProfile = service.HTTPUpstreamProfileFromContext(req.Context())
@@ -301,7 +305,7 @@ func (s *httpUpstreamService) DoWithTLS(req *http.Request, proxyURL string, acco
 // caller's context (which may be detached for billing or reused for retries).
 func doUpstreamRequest(client *http.Client, req *http.Request) (*http.Response, error) {
 	ctx, cancel := context.WithCancel(req.Context())
-	resp, err := servertiming.Do(client, req.WithContext(ctx))
+	resp, err := servertiming.Do(brandidentity.WrapClient(client), req.WithContext(ctx))
 	if err != nil {
 		cancel()
 		return resp, err
@@ -421,7 +425,9 @@ func httpClientWithGrokAccessDeniedFallback(client *http.Client) *http.Client {
 func (t *grokAccessDeniedFallbackTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	applyGrokCLIProxyAuthentication(req)
 	outboundidentity.ApplyContext(req)
-	brandidentity.FilterOutboundRequest(req)
+	if err := brandidentity.FilterOutboundRequest(req); err != nil {
+		return nil, err
+	}
 	resp, err := t.base.RoundTrip(req)
 	if err != nil || !isGrokCLIAccessDeniedFallbackCandidate(req, resp) {
 		return resp, err
@@ -521,7 +527,9 @@ func newGrokOfficialAPIFallbackRequest(req *http.Request) (*http.Request, error)
 		return nil, err
 	}
 	outboundidentity.ApplyContext(fallbackReq)
-	brandidentity.FilterOutboundRequest(fallbackReq)
+	if err := brandidentity.FilterOutboundRequest(fallbackReq); err != nil {
+		return nil, err
+	}
 	return fallbackReq, nil
 }
 

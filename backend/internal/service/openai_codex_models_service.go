@@ -263,6 +263,7 @@ func loadCodexGroupCatalogAccounts(ctx context.Context, repo AccountRepository, 
 			PlatformZhipu,
 			PlatformDeepseek,
 			PlatformMiniMax,
+			PlatformStepFun,
 		},
 		false,
 	)
@@ -2619,7 +2620,15 @@ func buildCodexModelsManifestURL(endpoint string, appendModelsPath bool, clientV
 			return nil, err
 		}
 	}
-	query.Set("client_version", clientVersion)
+	// The manifest's `client_version` and the selected identity's headers are one
+	// coherent declaration. A versionless client family declares no version, so
+	// the query is omitted rather than sent empty; an empty declaration would be
+	// a value the selected identity does not own.
+	if clientVersion = strings.TrimSpace(clientVersion); clientVersion == "" {
+		query.Del("client_version")
+	} else {
+		query.Set("client_version", clientVersion)
+	}
 	requestURL.RawQuery = query.Encode()
 	return requestURL, nil
 }

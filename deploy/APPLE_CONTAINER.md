@@ -46,7 +46,7 @@ nano .env
 ./apple-container.sh status
 ```
 
-Open `http://localhost:8080`. If `ADMIN_PASSWORD` is empty, retrieve the generated password with:
+Open `http://localhost:8080`. If `ADMIN_EMAIL` / `ADMIN_PASSWORD` are empty, retrieve the generated admin email (login username) and password with:
 
 ```bash
 ./apple-container.sh logs app
@@ -290,22 +290,22 @@ the release workflow preserves the leading `v` and replaces only `+` with
 `-`. The current mapping is:
 
 ```text
-Git/GitHub:         v0.2.13+custom.001
-Application:        0.2.13+custom.001
-Apple/OCI image:    ghcr.io/luckykuang/sub2api-plus:v0.2.13-custom.001
+Git/GitHub:         v0.2.14+custom.001
+Application:        0.2.14+custom.001
+Apple/OCI image:    ghcr.io/luckykuang/sub2api-plus:v0.2.14-custom.001
 ```
 
 Use the following values when building or publishing this OCI image:
 
 ```bash
 docker build \
-  --build-arg VERSION=0.2.13+custom.001 \
-  --tag ghcr.io/luckykuang/sub2api-plus:v0.2.13-custom.001 \
+  --build-arg VERSION=0.2.14+custom.001 \
+  --tag ghcr.io/luckykuang/sub2api-plus:v0.2.14-custom.001 \
   .
 ```
 
 After that image is available to the Apple `container` runtime, set
-`APPLE_CONTAINER_SUB2API_IMAGE=ghcr.io/luckykuang/sub2api-plus:v0.2.13-custom.001`. Until then, keep
+`APPLE_CONTAINER_SUB2API_IMAGE=ghcr.io/luckykuang/sub2api-plus:v0.2.14-custom.001`. Until then, keep
 the published image as the runtime base and use `APPLE_CONTAINER_SUB2API_BINARY`
 for the custom binary.
 
@@ -345,7 +345,7 @@ Apple-specific handling of shared settings:
 
 ### Local MinIO for Async Images
 
-Set `MINIO_ENABLED=true` in `deploy/.env` to run MinIO as part of this stack. On the first `up`, the script writes a default `MINIO_ROOT_USER` when needed and generates a random `MINIO_ROOT_PASSWORD` if it is empty. The env file must remain mode `0600`.
+Set `MINIO_ENABLED=true` in `deploy/.env` to run MinIO as part of this stack. On the first `up`, the script writes a default `MINIO_ROOT_USER` when needed and generates a random `MINIO_ROOT_PASSWORD` if it is empty. The env file must remain mode `0600`. The neutral default access ID `storage-admin` keeps the project name out of S3 Authorization headers. Existing installations using a branded access ID must update their private environment and recreate only the MinIO and Web containers with the existing data mounts; do not change the bucket or delete its data.
 
 ```dotenv
 MINIO_ENABLED=true
@@ -353,7 +353,7 @@ APPLE_CONTAINER_MINIO_IMAGE=pgsty/minio:RELEASE.2026-06-18T00-00-00Z
 MINIO_BIND_HOST=127.0.0.1
 MINIO_API_PORT=9000
 MINIO_CONSOLE_PORT=9001
-MINIO_ROOT_USER=sub2api-minio
+MINIO_ROOT_USER=storage-admin
 MINIO_ROOT_PASSWORD=
 MINIO_BUCKET=sub2api-images
 MINIO_REGION=us-east-1

@@ -2,9 +2,11 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import LoginView from '@/views/auth/LoginView.vue'
 
-const { getPublicSettingsMock, pushMock } = vi.hoisted(() => ({
+const { getPublicSettingsMock, pushMock, loginMock, showErrorMock } = vi.hoisted(() => ({
   getPublicSettingsMock: vi.fn(),
-  pushMock: vi.fn()
+  pushMock: vi.fn(),
+  loginMock: vi.fn(),
+  showErrorMock: vi.fn()
 }))
 
 const publicSettings = {
@@ -50,12 +52,12 @@ vi.mock('vue-i18n', () => ({
 
 vi.mock('@/stores', () => ({
   useAuthStore: () => ({
-    login: vi.fn(),
+    login: loginMock,
     loginWithPasskey: vi.fn(),
     login2FA: vi.fn()
   }),
   useAppStore: () => ({
-    showError: vi.fn(),
+    showError: showErrorMock,
     showSuccess: vi.fn(),
     showWarning: vi.fn()
   })
@@ -90,11 +92,44 @@ function mountLogin() {
   })
 }
 
-describe('LoginView registration entry', () => {
+describe('LoginView', () => {
   beforeEach(() => {
     getPublicSettingsMock.mockReset()
     pushMock.mockReset()
+    loginMock.mockReset().mockResolvedValue({})
+    showErrorMock.mockReset()
     getPublicSettingsMock.mockResolvedValue(publicSettings)
+  })
+
+  it.each(['中中中', '😀😀', 'a'.repeat(72)])('authenticates a valid setup password %s without character-count restrictions', async (password) => {
+    const wrapper = mountLogin()
+    try {
+      await flushPromises()
+      await wrapper.get('#email').setValue('owner@example.com')
+      await wrapper.get('#password').setValue(password)
+      await wrapper.get('form').trigger('submit')
+      await flushPromises()
+      expect(loginMock).toHaveBeenCalledWith(expect.objectContaining({ email: 'owner@example.com', password }))
+      expect(pushMock).toHaveBeenCalled()
+    } finally { wrapper.unmount() }
+  })
+
+  it('keeps empty passwords local and shows server rejection for an incorrect nonempty password', async () => {
+    const wrapper = mountLogin()
+    try {
+      await flushPromises()
+      await wrapper.get('#email').setValue('owner@example.com')
+      await wrapper.get('form').trigger('submit')
+      expect(loginMock).not.toHaveBeenCalled()
+      expect(wrapper.get('#password').classes()).toContain('input-error')
+      loginMock.mockRejectedValueOnce({ response: { data: { message: 'Invalid credentials' } } })
+      await wrapper.get('#password').setValue('wrong')
+      await wrapper.get('form').trigger('submit')
+      await flushPromises()
+      expect(loginMock).toHaveBeenCalledOnce()
+      expect(pushMock).not.toHaveBeenCalled()
+      expect(showErrorMock).toHaveBeenCalledWith('Invalid credentials')
+    } finally { wrapper.unmount() }
   })
 
   it('shows the registration entry when registration is enabled', async () => {

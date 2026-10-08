@@ -42,7 +42,7 @@ func TestNormalizeBaseURLAllowsAdministratorConfiguredDestinations(t *testing.T)
 func TestHTTPClientUsesDirectStandardDialer(t *testing.T) {
 	client, err := NewSecureHTTPClient(ActiveEndpoint{BaseURL: "https://guard.example.com", TimeoutMS: 1000})
 	require.NoError(t, err)
-	transport, ok := client.Transport.(*http.Transport)
+	transport, ok := client.Transport.(interface{ Unwrap() http.RoundTripper }).Unwrap().(*http.Transport)
 	require.True(t, ok)
 	require.Nil(t, transport.Proxy)
 	require.NotNil(t, transport.DialContext)

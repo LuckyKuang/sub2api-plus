@@ -19,6 +19,7 @@ func TestOfficialProviderCatalog(t *testing.T) {
 		{"kimi", []string{"kimi-k3", "kimi-k2.7-code-highspeed", "kimi-k2.6", "kimi-for-coding", "kimi-for-coding-highspeed"}, []string{"kimi-k2", "kimi-k2.5", "kimi-latest", "moonshot-v1-8k"}},
 		{"zhipu", []string{"glm-5.3", "glm-5.3-flashx", "glm-4.6v", "glm-4.7-flash"}, []string{"chatglm_turbo", "cogview-3", "cogvideo"}},
 		{"minimax", []string{"MiniMax-M3.1-Flash-Preview", "MiniMax-M3", "MiniMax-M2.7-highspeed", "MiniMax-M2.1"}, []string{"minimax-m3", "abab6.5-chat", "abab5.5-chat"}},
+		{"stepfun", []string{"step-5-preview", "step-3.7-flash", "step-3.5-flash-2603", "step-3.5-flash", "step-router-v1"}, []string{"step-image", "step-tts"}},
 	} {
 		t.Run(tc.platform, func(t *testing.T) {
 			models := DefaultModelIDs(tc.platform)

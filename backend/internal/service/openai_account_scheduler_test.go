@@ -850,6 +850,11 @@ func TestOpenAIGatewayService_SelectAccountWithScheduler_DefaultDisabled_LoadBat
 	require.Nil(t, selection)
 	require.Equal(t, openAIAccountScheduleLayerLoadBalance, decision.Layer)
 	require.EqualError(t, err, "no available OpenAI accounts supporting model: gpt-5.4-mini (pool=3, filtered: excluded=1 model_not_supported=1 quota_auto_pause_7d=1)")
+	diagnosis := OpsRoutingDiagnosticsFromSelectionError(err)
+	require.NotNil(t, diagnosis)
+	require.NotNil(t, diagnosis.CandidatePool)
+	require.Equal(t, 3, *diagnosis.CandidatePool)
+	require.Equal(t, map[string]int{"excluded": 1, "model_not_supported": 1, "quota_auto_pause_7d": 1}, diagnosis.FilteredCandidates)
 }
 
 func TestOpenAIGatewayService_SelectAccountWithScheduler_DefaultDisabled_RequiredWSV2_SkipsHTTPOnlyAccount(t *testing.T) {
@@ -1417,6 +1422,11 @@ func TestOpenAIGatewayService_SelectAccountWithScheduler_NoAvailableErrorAggrega
 	require.Nil(t, selection)
 	// Reasons are sorted lexicographically, so the message is deterministic.
 	require.EqualError(t, err, "no available OpenAI accounts supporting model: gpt-5.4-mini (pool=3, filtered: excluded=1 model_not_supported=1 quota_auto_pause_7d=1)")
+	diagnosis := OpsRoutingDiagnosticsFromSelectionError(err)
+	require.NotNil(t, diagnosis)
+	require.NotNil(t, diagnosis.CandidatePool)
+	require.Equal(t, 3, *diagnosis.CandidatePool)
+	require.Equal(t, map[string]int{"excluded": 1, "model_not_supported": 1, "quota_auto_pause_7d": 1}, diagnosis.FilteredCandidates)
 }
 
 func TestOpenAIGatewayService_SelectAccountWithScheduler_NoAvailableErrorReportsEmptyPool(t *testing.T) {
@@ -1439,6 +1449,10 @@ func TestOpenAIGatewayService_SelectAccountWithScheduler_NoAvailableErrorReports
 	require.ErrorIs(t, err, ErrNoAvailableAccounts)
 	require.Nil(t, selection)
 	require.EqualError(t, err, "no available OpenAI accounts supporting model: gpt-5.1 (pool=0)")
+	diagnosis := OpsRoutingDiagnosticsFromSelectionError(err)
+	require.NotNil(t, diagnosis)
+	require.NotNil(t, diagnosis.CandidatePool)
+	require.Zero(t, *diagnosis.CandidatePool)
 }
 
 func TestOpenAIGatewayService_SelectAccountWithScheduler_EnabledUsesAdvancedPreviousResponseRouting(t *testing.T) {

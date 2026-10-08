@@ -92,6 +92,22 @@ historical incidents and must not be used for routine development.
 - A failed regular migration rolls back its transaction.
 - A failed non-transactional migration requires operator review before retry.
 
+## Domestic identity environment
+
+Migration 276 deletes the superseded Kimi/ZCode OS, kernel and architecture
+overrides from global and account identities. They now use the pinned Ubuntu
+24.04 environment. Device name/UUID, locale, timezone and unrelated configuration
+are preserved. See [outbound identity](../../docs/OUTBOUND_IDENTITY.md).
+
+## Native client family selection
+
+Migration 278 removes retired default mappings and whole foreign identity
+candidates from native provider/cloud accounts. Compatible supplier mappings,
+correct-family candidates, global profiles/runtime declarations, credentials,
+model restrictions and billing settings remain intact. The cleanup is tested
+against isolated PostgreSQL, including repeated execution and empty settings.
+See [outbound identity](../../docs/OUTBOUND_IDENTITY.md#selection-and-persistence).
+
 ## Upgrade Prerequisites
 
 Back up PostgreSQL before upgrading. Replacing the application binary alone
@@ -113,11 +129,12 @@ and checksums remain immutable.
   missing. Fresh databases keep the application default `false`. Unrelated
   runtime-log fields are preserved; malformed configuration needs repair.
   This switch does not disable required security-audit exception logs.
-- **Platforms and quotas (261, 266, 267, 273):** platform constraints retain the
+- **Platforms and quotas (261, 266, 267, 273, 277):** platform constraints retain the
   full Plus platform set, including MiniMax, OpenCode and TypeSafe. Migration
   267 removes quota rows whose daily, weekly and monthly limits are all NULL;
   those rows are unlimited. Migration 273 expands both quota and composite
-  target constraints without removing existing platforms.
+  target constraints without removing existing platforms. Migration 277 adds
+  StepFun to those constraints and the legacy probe-provider constraints.
 - **Usage and payments (269, 270, 274):** rollout budget units remain a reserved
   usage dimension; affiliate `operation_id` supports idempotent ledger writes.
   Historical payment orders receive `bonus_amount=0`. See [payment behavior](../../docs/PAYMENT.md).
@@ -135,3 +152,12 @@ is enabled; runtime ops settings can override it. See the maintained
 
 Runner implementation:
 `backend/internal/repository/migrations_runner.go`.
+
+## Local security audit error attribution
+
+Migration 279 corrects reliably identifiable historical local 403 refusals to
+request/client attribution with their exact policy or prompt-guard code.
+Malformed, ambiguous and provider records remain unchanged. It preserves
+bodies, timestamps, business-limit flags and unknown timing and is safe to repeat.
+The runtime uses trusted decisions for new records. See
+[error diagnostics](../../docs/ERROR_REQUEST_DIAGNOSTICS.md).

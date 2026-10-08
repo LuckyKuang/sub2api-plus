@@ -946,8 +946,9 @@ export interface OpsErrorLog {
 
 export interface OpsRoutingDiagnostics {
   selection_decision?: string
+  selection_reason?: string
   selection_layer?: string
-  candidate_pool?: number
+  candidate_pool?: number | null
   filtered_candidates?: Record<string, number>
   transport_failure?: string
   timeout_phase?: string

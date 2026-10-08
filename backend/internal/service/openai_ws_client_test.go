@@ -3,8 +3,12 @@
 package service
 
 import (
+	"context"
 	"fmt"
+	"github.com/coder/websocket"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -115,4 +119,33 @@ func TestCoderOpenAIWSClientDialer_ProxyTransportTLSHandshakeTimeout(t *testing.
 
 func TestCoderOpenAIWSClientConn_DoesNotSupportIdlePingWithoutReader(t *testing.T) {
 	require.False(t, (&coderOpenAIWSClientConn{}).SupportsIdlePingWithoutReader())
+}
+
+func TestCoderWebSocketHandshakeFiltersAllBrandedHeaders(t *testing.T) {
+	observed := make(chan http.Header, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		observed <- r.Header.Clone()
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer func() { _ = conn.CloseNow() }()
+		_, _, _ = conn.Read(r.Context())
+	}))
+	defer server.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+	defer cancel()
+	headers := http.Header{"User-Agent": {"codex_cli_rs/0.158.0"}, "X-Device": {"prefix-SuB2ApI-suffix"}, "Other-Sub2API": {"secret"}, "X-Keep": {"allowed"}}
+	conn, _, _, err := newDefaultOpenAIWSClientDialer().Dial(ctx, "ws"+strings.TrimPrefix(server.URL, "http"), headers, "")
+	require.NoError(t, err)
+	defer func() { _ = conn.Close() }()
+	sent := <-observed
+	for name, values := range sent {
+		require.NotContains(t, strings.ToLower(name), "sub2api")
+		for _, value := range values {
+			require.NotContains(t, strings.ToLower(value), "sub2api")
+		}
+	}
+	require.Equal(t, "allowed", sent.Get("X-Keep"))
+	require.Equal(t, headers.Get("User-Agent"), sent.Get("User-Agent"))
 }

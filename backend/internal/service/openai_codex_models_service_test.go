@@ -2055,6 +2055,40 @@ func TestFetchCodexModelsManifestAPIKeySelectedIdentity(t *testing.T) {
 	}
 }
 
+// A versionless client family declares no client version, so the Codex manifest
+// must not carry an empty `client_version` declaration either: the query and the
+// headers stay coherent. The selected identity still owns the headers.
+func TestFetchCodexModelsManifestVersionlessIdentityOmitsClientVersion(t *testing.T) {
+	settings := emptyOutboundIdentitySettings()
+	settings.Profiles["minimax"] = OutboundIdentitySelection{Preset: "minimax"}
+	settings.Defaults["openai:apikey"] = "minimax"
+	settingService, ctx := outboundIdentityTestSettings(t, settings)
+	account := newCodexModelsAPIKeyTestAccount("https://upstream.example/v1")
+	account.Credentials[credKeyHeaderOverrideEnabled] = true
+	account.Credentials[credKeyHeaderOverrides] = map[string]any{"User-Agent": "caller/9.9.9", "Originator": "caller", "Version": "9.9.9"}
+	want, err := settingService.PreviewOutboundIdentity(ctx, account, nil)
+	require.NoError(t, err)
+	require.Equal(t, "minimax", want.Preset)
+	require.Empty(t, want.Version)
+	require.Equal(t, builtInOutboundIdentity("minimax").Headers, want.Headers)
+
+	var requests []*http.Request
+	upstream := &codexModelsHTTPUpstreamStub{do: func(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
+		requests = append(requests, req)
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{"models":[{"slug":"custom-model"}]}`))}, nil
+	}}
+	svc := newCodexModelsAPIKeyTestService(upstream)
+	_, err = svc.FetchCodexModelsManifest(ctx, account, "9.9.9", "")
+	require.NoError(t, err)
+	require.Len(t, requests, 1)
+	req := requests[0]
+	require.Equal(t, "MiniMaxAgent", req.Header.Get("User-Agent"))
+	require.Empty(t, req.Header.Get("Originator"))
+	require.Empty(t, req.Header.Get("Version"))
+	require.False(t, req.URL.Query().Has("client_version"), "a versionless family must not declare an empty client version")
+	require.Equal(t, "Bearer sk-upstream", req.Header.Get("Authorization"))
+}
+
 func TestFetchCodexModelsManifestRefreshRetainsIdentitySnapshot(t *testing.T) {
 	settings := emptyOutboundIdentitySettings()
 	settings.Profiles["grok"] = OutboundIdentitySelection{Preset: "grok", Version: "3.9.1"}

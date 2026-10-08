@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
+
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
@@ -37,7 +39,7 @@ func TestOpenAIIdentityContractEndpointMatrix(t *testing.T) {
 				continue
 			}
 			for _, passthrough := range []bool{false, true} {
-				for _, source := range []string{"account", "global", "default", "claude", "gemini", "grok", "antigravity"} {
+				for _, source := range []string{"account", "global", "default", "claude", "gemini", "grok", "antigravity", "deepseek", "minimax", "minimax_apikey", "kimi", "zcode"} {
 					compatible := source != "account" && source != "global" && source != "default"
 					if compatible && accountType != AccountTypeAPIKey {
 						continue
@@ -127,7 +129,7 @@ func TestOpenAIIdentityContractEndpointMatrix(t *testing.T) {
 							}
 							if compatible {
 								want = http.Header{}
-								builtInOutboundIdentity(source).Apply(want)
+								builtInOutboundIdentity(source).ForProtocol(outboundidentity.RequestProtocol(req)).Apply(want)
 							}
 							requireOpenAIIdentityContractHeaders(t, req.Header, want, wantAuth)
 							if endpoint == "/v1/alpha/search" {

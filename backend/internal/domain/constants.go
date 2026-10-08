@@ -27,6 +27,7 @@ const (
 	PlatformKimi     = "kimi"     // Kimi (月之暗面 / Moonshot)
 	PlatformZhipu    = "zhipu"    // 智谱 GLM (bigmodel)
 	PlatformDeepseek = "deepseek" // DeepSeek
+	PlatformStepFun  = "stepfun"  // StepFun / Step-Code
 	PlatformMiniMax  = "minimax"  // MiniMax (M 系列)
 	PlatformTypeSafe = "typesafe" // TypeSafe AI System One (Jev)
 	// PlatformOpenCodeGo 是 OpenCode 平台（账号类型 Zen 按量 / Go 订阅）。
@@ -34,6 +35,13 @@ const (
 	PlatformOpenCodeGo = "opencode_go"
 	PlatformComposite  = "composite"
 )
+
+// ConcretePlatforms lists credential-owning platforms, excluding composite groups.
+func ConcretePlatforms() []string {
+	return []string{PlatformAnthropic, PlatformOpenAI, PlatformGemini, PlatformAntigravity,
+		PlatformGrok, PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax, PlatformStepFun,
+		PlatformOpenCodeGo, PlatformTypeSafe}
+}
 
 // Account mode constants 区分国产供应商的「按量付费（余额）」与「Coding Plan」两种接入方式。
 // 存储于 credentials["account_mode"]，决定 base_url 预设与额度监控方式。

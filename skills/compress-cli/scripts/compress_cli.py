@@ -30,6 +30,7 @@ REQUIRED_CATEGORIES = (
     "Documented Commands",
     "Implementation",
     "Design",
+    "Test Design",
     "Verification",
     "Push",
     "Submit PR",
@@ -120,6 +121,15 @@ PROTECTED_FRAGMENTS = {
     "Documented Commands": (
         "repository scripts or Make targets",
         "verify syntax, supported version, and execution environment",
+    ),
+    "Test Design": (
+        "Derive test scenarios and expected results independently from business requirements, acceptance criteria, and authoritative contracts",
+        "Do not infer correctness from current implementation or compute expected results with the code under test",
+        "Cover applicable success, failure, boundary, and required/forbidden side effects",
+        "When implementation conflicts with requirements, fix the implementation; never weaken assertions or change expectations merely to make tests pass",
+        "Defect regressions must detect the original incorrect behavior",
+        "Passing tests or coverage percentages alone do not establish business correctness",
+        "Follow CONTRIBUTING.md#requirement-based-test-design",
     ),
     "Verification": (
         "All validation must run in Apple Containers on macOS",

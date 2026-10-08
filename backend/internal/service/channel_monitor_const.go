@@ -70,6 +70,7 @@ const (
 	MonitorProviderZhipu       = "zhipu"
 	MonitorProviderDeepseek    = "deepseek"
 	MonitorProviderMiniMax     = "minimax"
+	MonitorProviderStepFun     = "stepfun"
 	MonitorProviderOpenCodeGo  = "opencode_go"
 
 	// MonitorCheckMode 检测模式（channel_monitors.check_mode）。

@@ -1385,6 +1385,9 @@ func (s *PricingService) GetModelPricing(modelName string) *LiteLLMModelPricing 
 	if pricing := s.lookupIdentifiedModelPricingLocked(lookupCandidates); pricing != nil {
 		return pricing
 	}
+	if strings.HasPrefix(lastSegment(modelLower), "step-") {
+		return nil
+	}
 
 	// 4. 基于模型系列匹配（Claude）
 	if pricing := s.matchByModelFamily(lookupCandidates[0]); pricing != nil {
@@ -1416,6 +1419,12 @@ func (s *PricingService) lookupIdentifiedModelPricingLocked(lookupCandidates []s
 		if pricing, ok := s.pricingData[candidate]; ok {
 			return pricing
 		}
+	}
+
+	// StepFun only publishes prices for exact IDs. Date stripping and family
+	// matches must not turn an unregistered SKU into a different priced model.
+	if strings.HasPrefix(lastSegment(lookupCandidates[0]), "step-") {
+		return nil
 	}
 
 	// 2. 处理常见的模型名称变体

@@ -233,6 +233,10 @@ func (s *AccountTestService) SyncUpstreamModelCatalog(ctx context.Context, accou
 		}
 	}
 
+	if account.Platform == PlatformStepFun {
+		catalog.Metadata = extractStepFunMetadata(body)
+	}
+
 	// Capability enrichment also covers concrete model_mapping targets. Admins may
 	// whitelist models that the live /models list omitted; those still need registry
 	// metadata so Codex catalogs can advertise reasoning and modalities.
@@ -243,7 +247,7 @@ func (s *AccountTestService) SyncUpstreamModelCatalog(ctx context.Context, accou
 	capabilityIDs := capabilitySyncModelIDs(enrichIDs)
 
 	source := "upstream"
-	if upstreamCatalogNeedsRegistry(capabilityIDs, catalog.Metadata) {
+	if account.Platform != PlatformStepFun && upstreamCatalogNeedsRegistry(capabilityIDs, catalog.Metadata) {
 		if registryMetadata, registryErr := s.fetchModelsDevMetadata(ctx, account, enrichIDs); registryErr == nil {
 			for modelID, fallback := range registryMetadata {
 				current := catalog.Metadata[modelID]
@@ -263,6 +267,15 @@ func (s *AccountTestService) SyncUpstreamModelCatalog(ctx context.Context, accou
 	}
 
 	completeMetadata := completeUpstreamModelMetadataSubset(capabilityIDs, catalog.Metadata)
+	if account.Platform == PlatformStepFun && liveListAvailable {
+		// Step-Code treats the authenticated catalog as authoritative, including
+		// ID-only rows. Preserve every discovered chat ID without inventing missing
+		// capabilities or replacing them with a third-party registry's guesses.
+		completeMetadata = make(map[string]UpstreamModelMetadata, len(catalog.Metadata))
+		for id, metadata := range catalog.Metadata {
+			completeMetadata[id] = metadata
+		}
+	}
 	persistedCapabilities := false
 	if len(completeMetadata) > 0 && account != nil && account.ID > 0 && s.accountRepo != nil {
 		// Retain known metadata only for models still listed or explicitly mapped.
@@ -776,6 +789,9 @@ func (s *AccountTestService) fetchUpstreamModelList(ctx context.Context, account
 	if account.IsGrok() {
 		extractModels = extractGrokUpstreamModelIDs
 	}
+	if account.Platform == PlatformStepFun {
+		extractModels = extractStepFunModelIDs
+	}
 	models, err := extractModels(body)
 	if err != nil {
 		return nil, nil, newUpstreamModelSyncUpstreamError("Upstream model list response was not valid JSON", err)
@@ -1027,7 +1043,7 @@ func (s *AccountTestService) buildOpenAIUpstreamModelsRequest(ctx context.Contex
 // buildOpenAIAPIKeyModelsRequest is shared by admin discovery and public model
 // listing. Codex content negotiation is intentionally absent from this request.
 func buildOpenAIAPIKeyModelsRequest(ctx context.Context, account *Account, validateBaseURL func(string) (string, error)) (*http.Request, error) {
-	if account.Type != AccountTypeAPIKey {
+	if account.Type != AccountTypeAPIKey && (!account.IsDomesticOAuth() || account.Platform != PlatformStepFun) {
 		return nil, newUpstreamModelSyncUnsupportedError(
 			fmt.Sprintf("Unsupported OpenAI account type for upstream model sync: %s", account.Type), nil,
 		)
@@ -1207,6 +1223,11 @@ func (s *AccountTestService) fetchAntigravityOAuthUpstreamModels(ctx context.Con
 }
 
 func (s *AccountTestService) doUpstreamModelsRequest(req *http.Request, proxyURL string, account *Account) (*http.Response, error) {
+	if account.IsDomesticOAuth() && account.Platform == PlatformStepFun {
+		if err := prepareStepFunOAuthRequest(req, account); err != nil {
+			return nil, err
+		}
+	}
 	if s.tlsFPProfileService == nil {
 		return s.httpUpstream.DoWithTLS(prepareAccountOutboundRequest(req, account), proxyURL, account.ID, account.Concurrency, nil)
 	}

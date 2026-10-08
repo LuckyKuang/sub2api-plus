@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	"io"
 	"net/http"
 	"net/url"
@@ -31,7 +32,7 @@ func NewBraveProvider(apiKey string, httpClient *http.Client) *BraveProvider {
 	if httpClient == nil {
 		httpClient = http.DefaultClient
 	}
-	return &BraveProvider{apiKey: apiKey, httpClient: httpClient}
+	return &BraveProvider{apiKey: apiKey, httpClient: brandidentity.WrapClient(httpClient)}
 }
 
 func (b *BraveProvider) Name() string { return braveProviderName }

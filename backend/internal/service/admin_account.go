@@ -702,6 +702,13 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 			return nil, err
 		}
 	}
+	// Changing the auth type can change the required family (MiniMax OAuth vs
+	// API Key), even when the caller sends no credential patch.
+	if !account.IsCredentialShadow() && input.Type != "" && len(input.Credentials) == 0 {
+		if err := NormalizeAccountOutboundIdentity(account.Platform, account.Type, account.Credentials); err != nil {
+			return nil, err
+		}
+	}
 	// Extra 使用 map：需要区分“未提供(nil)”与“显式清空({})”。
 	// 关闭配额限制时前端会删除 quota_* 键并提交 extra:{}，此时也必须落库。
 	if input.Extra != nil {
@@ -921,6 +928,9 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 // normalizeOpenAIAccountUserAgent makes account validation observe the same
 // global policy snapshot used later by outbound identity resolution.
 func (s *adminServiceImpl) normalizeOpenAIAccountUserAgent(ctx context.Context, platform, accountType string, credentials map[string]any) error {
+	if err := validateStepFunCredentials(platform, accountType, credentials); err != nil {
+		return err
+	}
 	if err := NormalizeAccountOutboundIdentity(platform, accountType, credentials); err != nil {
 		return err
 	}

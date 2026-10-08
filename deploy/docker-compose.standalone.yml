@@ -91,7 +91,7 @@ services:
       # =======================================================================
       # Admin Account (auto-created on first run)
       # =======================================================================
-      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@sub2api.local}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
 
       # =======================================================================
@@ -114,6 +114,11 @@ services:
       # Gemini OAuth Configuration (optional)
       # =======================================================================
       - GEMINI_OAUTH_CLIENT_ID=${GEMINI_OAUTH_CLIENT_ID:-}
+      - ZHIPU_OAUTH_BASE_URL=${ZHIPU_OAUTH_BASE_URL:-}
+      - ZHIPU_OFFPEAK_BASE_URL=${ZHIPU_OFFPEAK_BASE_URL:-}
+      - ZHIPU_BIGMODEL_ORIGIN=${ZHIPU_BIGMODEL_ORIGIN:-}
+      - ZHIPU_ZAI_ORIGIN=${ZHIPU_ZAI_ORIGIN:-}
+      - SUB2API_ZCODE_VERSION=${SUB2API_ZCODE_VERSION:-}
       - GEMINI_OAUTH_CLIENT_SECRET=${GEMINI_OAUTH_CLIENT_SECRET:-}
       - GEMINI_OAUTH_SCOPES=${GEMINI_OAUTH_SCOPES:-}
       - GEMINI_QUOTA_POLICY=${GEMINI_QUOTA_POLICY:-}

@@ -26,7 +26,7 @@ import (
 func TestCodexAuthPlaneHTTPClient_TransportHasCompleteTimeouts(t *testing.T) {
 	client, err := codexAuthPlaneHTTPClient("", 0)
 	require.NoError(t, err)
-	transport, ok := client.Transport.(*http.Transport)
+	transport, ok := client.Transport.(interface{ Unwrap() http.RoundTripper }).Unwrap().(*http.Transport)
 	require.True(t, ok, "expected an *http.Transport")
 
 	require.NotNil(t, transport.DialContext, "a nil DialContext means no connect timeout")

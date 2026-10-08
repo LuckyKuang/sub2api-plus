@@ -152,16 +152,13 @@
                   ${{ formatCost(model.cost) }}
                 </td>
               </tr>
-              <tr v-if="expandedKey === `model-${model.model}`">
-                <td :colspan="distributionColspan" class="p-0">
-                  <UserBreakdownSubTable
-                    :items="breakdownItems"
-                    :loading="breakdownLoading"
-                    :show-account-cost="showAccountCost"
-                    :total-tokens="model.total_tokens"
-                  />
-                </td>
-              </tr>
+              <UserBreakdownRows
+                v-if="expandedKey === `model-${model.model}`"
+                :items="breakdownItems"
+                :loading="breakdownLoading"
+                :show-account-cost="showAccountCost"
+                :total-tokens="model.total_tokens"
+              />
             </template>
           </tbody>
         </table>
@@ -249,7 +246,7 @@ import { useI18n } from 'vue-i18n'
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js'
 import { Doughnut } from 'vue-chartjs'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
-import UserBreakdownSubTable from './UserBreakdownSubTable.vue'
+import UserBreakdownRows from './UserBreakdownRows.vue'
 import type { ModelStat, UserSpendingRankingItem, UserBreakdownItem } from '@/types'
 import { getUserBreakdown } from '@/api/admin/dashboard'
 import { formatTokenShare } from '@/utils/tokenShare'
@@ -338,7 +335,6 @@ const emit = defineEmits<{
 
 const enableRankingView = computed(() => props.enableRankingView)
 const showAccountCost = computed(() => props.showAccountCost)
-const distributionColspan = computed(() => showAccountCost.value ? 6 : 5)
 const activeView = ref<'model_distribution' | 'spending_ranking'>('model_distribution')
 
 const chartColors = [

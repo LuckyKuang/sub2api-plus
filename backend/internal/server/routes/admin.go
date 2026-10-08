@@ -64,6 +64,10 @@ func RegisterAdminRoutes(
 		// Grok OAuth
 		registerGrokOAuthRoutes(admin, h)
 
+		// Zhipu / GLM OAuth（ZCode 平台账户绑定）
+		registerZhipuOAuthRoutes(admin, h)
+		admin.POST("/cn/oauth/:platform/:action", h.Admin.CNOAuth.Handle)
+
 		// 国产供应商（kimi/zhipu/deepseek）额度与余额
 		registerCNProviderRoutes(admin, h)
 
@@ -958,5 +962,18 @@ func channelMonitorModeV3Guard(settings *service.SettingService) gin.HandlerFunc
 			return
 		}
 		c.Next()
+	}
+}
+
+// registerZhipuOAuthRoutes 注册智谱 GLM 的 ZCode 平台账户绑定路由。
+// 主链路是服务端轮询握手（无需回调地址），粘贴回调 URL 只作为兜底。
+func registerZhipuOAuthRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	zhipu := admin.Group("/zhipu")
+	{
+		zhipu.GET("/oauth/capabilities", h.Admin.ZhipuOAuth.GetCapabilities)
+		zhipu.POST("/oauth/start", h.Admin.ZhipuOAuth.StartLink)
+		zhipu.POST("/oauth/poll", h.Admin.ZhipuOAuth.PollLink)
+		zhipu.POST("/oauth/exchange-code", h.Admin.ZhipuOAuth.ExchangeLink)
+		zhipu.POST("/oauth/create-from-oauth", h.Admin.ZhipuOAuth.CreateAccountFromLink)
 	}
 }

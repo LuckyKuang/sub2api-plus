@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	"net/http"
 	"time"
 
@@ -56,6 +57,9 @@ func NewBedrockSignerFromAccount(account *Account) (*BedrockSigner, error) {
 // excludes User-Agent; other signed declarations must remain unchanged through
 // transport. Inbound protocol headers are never copied into this request.
 func (s *BedrockSigner) SignRequest(ctx context.Context, req *http.Request, body []byte) error {
+	if err := brandidentity.FilterOutboundRequest(req); err != nil {
+		return err
+	}
 	payloadHash := sha256Hash(body)
 	return s.signer.SignHTTP(ctx, s.credentials, req, payloadHash, "bedrock", s.region, time.Now())
 }

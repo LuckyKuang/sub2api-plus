@@ -18,6 +18,7 @@ describe('useModelWhitelist', () => {
     ['kimi', ['kimi-k3', 'kimi-k2.7-code-highspeed', 'kimi-for-coding-highspeed'], ['moonshot-v1-8k', 'kimi-latest', 'kimi-k2']],
     ['zhipu', ['glm-5.3-flashx', 'glm-5.2', 'glm-4.6v'], ['chatglm_turbo', 'cogvideo']],
     ['minimax', ['MiniMax-M3.1-Flash-Preview', 'MiniMax-M3', 'MiniMax-M2.7-highspeed'], ['abab6.5-chat', 'abab5.5-chat']],
+    ['stepfun', ['step-5-preview', 'step-3.7-flash', 'step-3.5-flash-2603', 'step-3.5-flash', 'step-router-v1'], ['step-image', 'step-tts']],
   ])('uses current official %s models in both platform and combined options', (platform, current, removed) => {
     const models = getModelsByPlatform(platform as string)
     expect(new Set(models).size).toBe(models.length)

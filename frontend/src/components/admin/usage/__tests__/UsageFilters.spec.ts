@@ -305,3 +305,22 @@ describe('UsageFilters — native compaction filter', () => {
     expect(wrapper.emitted('change')).toBeTruthy()
   })
 })
+
+// Approved audit: the admin usage filter must actually emit the dedicated
+// refusal category, not merely display a translated row label.
+describe('security audit error filter', () => {
+  it('offers the refusal category and forwards the selected filter', async () => {
+    const wrapper = mount(UsageFilters, {
+      props: { modelValue: defaultFilters(), mode: 'errors', exporting: false, startDate: '2026-10-07', endDate: '2026-10-08', modelOptions: [], showActions: false },
+      global: { stubs: { Select: true, Teleport: true } }
+    })
+    const select = wrapper.findAllComponents({ name: 'Select' }).find(component =>
+      component.props('options')?.some((option: { value: string }) => option.value === 'security_audit'))
+    expect(select).toBeDefined()
+    select!.vm.$emit('update:modelValue', 'security_audit')
+    select!.vm.$emit('change')
+    await wrapper.vm.$nextTick()
+    expect((wrapper.props('modelValue') as { error_category?: string }).error_category).toBe('security_audit')
+    expect(wrapper.emitted('change')).toHaveLength(1)
+  })
+})

@@ -157,7 +157,8 @@ func TestPluginRuntimeReturnsAndAppliesNormalizedConfig(t *testing.T) {
 
 func TestHeadersToPluginStripsGatewayIdentityAndLocalControls(t *testing.T) {
 	header := http.Header{
-		"User-Agent":                   {"sub2api-client/1"},
+		"User-Agent":                   {"official-client/1"},
+		"X-Device":                     {"SuB2ApI worker"},
 		"X-Sub2API-Trace":              {"internal"},
 		grokClientToolCacheOptInHeader: {"prefer-cache"},
 		"X-Grok-Conv-Id":               {"conversation"},
@@ -165,7 +166,8 @@ func TestHeadersToPluginStripsGatewayIdentityAndLocalControls(t *testing.T) {
 
 	encoded := headersToPlugin(header)
 
-	require.NotContains(t, encoded, "User-Agent")
+	require.Equal(t, []string{"official-client/1"}, encoded["User-Agent"].Values)
+	require.NotContains(t, encoded, "X-Device")
 	require.NotContains(t, encoded, "X-Sub2API-Trace")
 	require.NotContains(t, encoded, grokClientToolCacheOptInHeader)
 	require.Equal(t, []string{"conversation"}, encoded["X-Grok-Conv-Id"].Values)
@@ -254,4 +256,13 @@ func TestPluginStartingStateUsesBoundedCrashRecoveryWindow(t *testing.T) {
 
 	require.False(t, manager.startingStateExpired(&PluginInstallation{UpdatedAt: time.Now().Add(-30 * time.Second)}))
 	require.True(t, manager.startingStateExpired(&PluginInstallation{UpdatedAt: time.Now().Add(-2 * time.Minute)}))
+}
+
+func TestPluginRejectsBrandedCredentialsBeforeOpeningForwardStream(t *testing.T) {
+	runtime := &pluginRuntime{}
+	request, err := http.NewRequest(http.MethodGet, "https://example.com", nil)
+	require.NoError(t, err)
+	request.Header.Set("Authorization", "Bearer SuB2ApI-token")
+	_, err = runtime.roundTrip(context.Background(), request, "", &Account{ID: 1})
+	require.ErrorContains(t, err, "prohibited project identifier")
 }

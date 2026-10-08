@@ -73,6 +73,33 @@ const HEADER_OVERRIDE_BLOCKED_NAMES = new Set([
   'x-stainless-arch',
   'x-stainless-runtime',
   'x-stainless-runtime-version',
+  // Kimi Code declaration block. Its request-state companion
+  // (x-msh-tool-call-id) is deliberately absent.
+  'x-msh-platform',
+  'x-msh-version',
+  'x-msh-device-name',
+  'x-msh-device-model',
+  'x-msh-os-version',
+  'x-msh-device-id',
+  'x-step-client',
+  // ZCode product/version companions and persisted host facts.
+  'x-zcode-app-version',
+  'x-zcode-agent',
+  'http-referer',
+  'x-title',
+  'x-release-channel',
+  'x-client-language',
+  'x-client-timezone',
+  'x-platform',
+  'x-os-category',
+  'x-os-version',
+  'x-device-mid',
+  // DeepSeek web-login client declarations are identity-owned.
+  'x-client-bundle-id',
+  'x-client-platform',
+  'x-client-version',
+  'x-client-locale',
+  'x-client-timezone-offset',
   'host',
   'content-length',
   'content-type',
@@ -87,6 +114,7 @@ const HEADER_OVERRIDE_BLOCKED_NAMES = new Set([
   'upgrade',
   'authorization',
   'x-api-key',
+  'x-dsh-auth-token',
   'x-goog-api-key',
   'cookie',
   'accept-encoding',
@@ -275,14 +303,14 @@ export const GROK_BASE_URL_PRESETS: GrokBaseUrlPreset[] = [
 
 export type CnAccountMode = 'payg' | 'coding'
 export type OpenCodeAccountMode = 'zen' | 'go'
-export type CnProviderPlatform = 'kimi' | 'zhipu' | 'deepseek' | 'minimax'
+export type CnProviderPlatform = 'kimi' | 'zhipu' | 'deepseek' | 'minimax' | 'stepfun'
 
 /** deepseek / kimi / minimax 支持原生 responses；adaptive 会按入站协议选择原生端点。 */
 export type CnApiProtocol = 'adaptive' | 'chat_completions' | 'anthropic' | 'responses'
 export type CnNativeApiProtocol = Exclude<CnApiProtocol, 'adaptive'>
 
 export function isCNProviderPlatform(platform: string): platform is CnProviderPlatform {
-  return platform === 'kimi' || platform === 'zhipu' || platform === 'deepseek' || platform === 'minimax'
+  return platform === 'stepfun' || platform === 'kimi' || platform === 'zhipu' || platform === 'deepseek' || platform === 'minimax'
 }
 
 /** DeepSeek、Kimi 与 MiniMax 提供原生 Responses 端点。 */
@@ -373,7 +401,7 @@ export function applyOpenCodeGoProtocolRules(
 }
 
 export function isMultiProtocolApiKeyPlatform(platform: string): boolean {
-  return platform === 'kimi' || platform === 'zhipu' || platform === 'deepseek' || platform === 'minimax' || platform === 'opencode_go'
+  return platform === 'stepfun' || platform === 'kimi' || platform === 'zhipu' || platform === 'deepseek' || platform === 'minimax' || platform === 'opencode_go'
 }
 
 export interface CnBaseUrlPreset {
@@ -405,6 +433,12 @@ export const CN_BASE_URL_PRESETS: Record<CnProviderPlatform, CnBaseUrlPreset[]> 
     { mode: 'payg', protocol: 'anthropic', label: 'DeepSeek Anthropic', url: 'https://api.deepseek.com/anthropic' },
     { mode: 'payg', protocol: 'responses', label: 'DeepSeek Responses', url: 'https://api.deepseek.com' }
   ],
+  stepfun: [
+    { mode: 'payg', protocol: 'chat_completions', label: 'StepFun CN', url: 'https://api.stepfun.com/v1' },
+    { mode: 'payg', protocol: 'chat_completions', label: 'StepFun Intl', url: 'https://api.stepfun.ai/v1' },
+    { mode: 'coding', protocol: 'chat_completions', label: 'Step Plan CN', url: 'https://api.stepfun.com/step_plan/v1' },
+    { mode: 'coding', protocol: 'chat_completions', label: 'Step Plan Intl', url: 'https://api.stepfun.ai/step_plan/v1' }
+  ],
   minimax: [
     { mode: 'payg', protocol: 'chat_completions', label: 'MiniMax CN', url: 'https://api.minimaxi.com/v1' },
     { mode: 'payg', protocol: 'anthropic', label: 'MiniMax CN Anthropic', url: 'https://api.minimaxi.com/anthropic' },
@@ -427,6 +461,7 @@ export function defaultCNBaseUrl(
   mode: CnAccountMode | OpenCodeAccountMode,
   protocol: CnApiProtocol = 'chat_completions'
 ): string {
+  if (platform === 'stepfun') return mode === 'coding' ? 'https://api.stepfun.com/step_plan/v1' : 'https://api.stepfun.com/v1'
   if (protocol === 'anthropic') {
     switch (platform) {
       case 'kimi':

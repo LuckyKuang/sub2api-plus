@@ -276,7 +276,9 @@ func (r *pluginRuntime) roundTrip(ctx context.Context, request *http.Request, pr
 	if request == nil || request.URL == nil || account == nil {
 		return nil, errors.New("插件出站请求参数不完整")
 	}
-	brandidentity.FilterOutboundRequest(request)
+	if err := brandidentity.FilterOutboundRequest(request); err != nil {
+		return nil, err
+	}
 	streamCtx, cancel := context.WithCancel(ctx)
 	stream, err := r.api.Forward(streamCtx)
 	if err != nil {

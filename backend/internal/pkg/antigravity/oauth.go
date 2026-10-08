@@ -128,9 +128,9 @@ func GetUserAgentVersionForContext(ctx context.Context) string {
 // BuildUserAgent 使用指定版本号构造 User-Agent；版本为空或非法时回退默认值。
 func BuildUserAgent(version string) string {
 	if normalized := NormalizeUserAgentVersion(version); normalized != "" {
-		return fmt.Sprintf("antigravity/%s windows/amd64", normalized)
+		return fmt.Sprintf("antigravity/%s linux/amd64", normalized)
 	}
-	return fmt.Sprintf("antigravity/%s windows/amd64", defaultUserAgentVersion)
+	return fmt.Sprintf("antigravity/%s linux/amd64", defaultUserAgentVersion)
 }
 
 // GetUserAgentForContext 返回当前请求应使用的 User-Agent。

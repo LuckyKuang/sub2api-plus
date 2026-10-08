@@ -359,7 +359,7 @@ func (s *OpenAIGatewayService) SelectAccountForTokenCount(
 // handler 调度入口仍需导出，保持导出名。）
 func NormalizeOpenAICompatiblePlatform(platform string) string {
 	switch platform {
-	case PlatformGrok, PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax, PlatformOpenCodeGo:
+	case PlatformGrok, PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax, PlatformStepFun, PlatformOpenCodeGo:
 		return platform
 	default:
 		return PlatformOpenAI
@@ -371,25 +371,22 @@ func normalizeOpenAICompatiblePlatform(platform string) string {
 	return NormalizeOpenAICompatiblePlatform(platform)
 }
 
-// noAvailableOpenAISelectionError builds the standard "no account available" error
-// while preserving the legacy /responses/compact error when applicable.
-// details carries an optional machine-parseable exclusion summary (e.g.
-// "pool=2, filtered: quota_auto_pause_7d=1 runtime_blocked=1") appended in
-// parentheses. It is for server-side logs / ops diagnostics only: handlers
-// never forward this error text to OpenAI-platform clients (they respond with
-// the generic classification message). Callers that must preserve the legacy
-// message pass "".
-func noAvailableOpenAISelectionError(requestedModel string, compactBlocked bool, details string) error {
-	return noAvailableOpenAISelectionErrorWithDiagnostics(requestedModel, compactBlocked, details, nil)
+func noAvailableOpenAISelectionErrorWithStats(requestedModel string, compactBlocked bool, stats openAISelectionFilterStats, extra string) error {
+	d := stats.diagnostics()
+	d.SelectionReason = extra
+	return noAvailableOpenAISelectionErrorWithDiagnostics(requestedModel, compactBlocked, stats.summary(extra), d)
 }
 
-func noAvailableOpenAISelectionErrorWithStats(requestedModel string, compactBlocked bool, stats openAISelectionFilterStats, extra string) error {
-	return noAvailableOpenAISelectionErrorWithDiagnostics(requestedModel, compactBlocked, stats.summary(extra), stats.diagnostics())
+func noAvailableOpenAIChannelPricingError(requestedModel string) error {
+	return noAvailableOpenAISelectionErrorWithDiagnostics(requestedModel, false, "channel pricing restriction", &OpsRoutingDiagnostics{
+		SelectionDecision: "no_available_account", SelectionLayer: "channel_pricing", SelectionReason: "channel_pricing_restricted",
+	})
 }
 
 func noAvailableOpenAISelectionErrorWithDiagnostics(requestedModel string, compactBlocked bool, details string, diagnostics *OpsRoutingDiagnostics) error {
+	cause := ErrNoAvailableAccounts
 	if compactBlocked {
-		return ErrNoAvailableCompactAccounts
+		cause = ErrNoAvailableCompactAccounts
 	}
 	message := "no available OpenAI accounts"
 	if requestedModel != "" {
@@ -398,12 +395,16 @@ func noAvailableOpenAISelectionErrorWithDiagnostics(requestedModel string, compa
 	if details != "" {
 		message += " (" + details + ")"
 	}
-	return openAINoAvailableSelectionError{message: message, diagnostics: diagnostics}
+	if compactBlocked {
+		message = ErrNoAvailableCompactAccounts.Error()
+	}
+	return openAINoAvailableSelectionError{message: message, diagnostics: diagnostics, cause: cause}
 }
 
 type openAINoAvailableSelectionError struct {
 	message     string
 	diagnostics *OpsRoutingDiagnostics
+	cause       error
 }
 
 func (e openAINoAvailableSelectionError) Error() string {
@@ -411,8 +412,13 @@ func (e openAINoAvailableSelectionError) Error() string {
 }
 
 func (e openAINoAvailableSelectionError) Unwrap() error {
+	if e.cause != nil {
+		return e.cause
+	}
 	return ErrNoAvailableAccounts
 }
+
+func opsKnownCandidatePool(n int) *int { return &n }
 
 // OpsRoutingDiagnosticsFromSelectionError exposes the typed scheduler
 // diagnosis to request middleware without interpreting the human-readable
@@ -426,6 +432,9 @@ func OpsRoutingDiagnosticsFromSelectionError(err error) *OpsRoutingDiagnostics {
 		return nil
 	}
 	diagnostics := *selectionErr.diagnostics
+	if diagnostics.CandidatePool != nil {
+		diagnostics.CandidatePool = opsKnownCandidatePool(*diagnostics.CandidatePool)
+	}
 	if selectionErr.diagnostics.FilteredCandidates != nil {
 		diagnostics.FilteredCandidates = make(map[string]int, len(selectionErr.diagnostics.FilteredCandidates))
 		for reason, count := range selectionErr.diagnostics.FilteredCandidates {
@@ -1015,7 +1024,7 @@ func (s *OpenAIGatewayService) selectAccountForModelWithExclusionsStickyHit(ctx 
 		slog.Warn("channel pricing restriction blocked request",
 			"group_id", derefGroupID(groupID),
 			"model", requestedModel)
-		return nil, false, fmt.Errorf("%w supporting model: %s (channel pricing restriction)", ErrNoAvailableAccounts, requestedModel)
+		return nil, false, noAvailableOpenAIChannelPricingError(requestedModel)
 	}
 
 	// 1. 尝试粘性会话命中
@@ -1036,7 +1045,7 @@ func (s *OpenAIGatewayService) selectAccountForModelWithExclusionsStickyHit(ctx 
 	selected, compactBlocked, filterStats := s.selectBestAccount(ctx, groupID, platform, accounts, requestedModel, excludedIDs, requireCompact, requiredCapability, preferLowUpstreamRate)
 
 	if selected == nil {
-		return nil, false, noAvailableOpenAISelectionError(requestedModel, compactBlocked, filterStats.summary(""))
+		return nil, false, noAvailableOpenAISelectionErrorWithStats(requestedModel, compactBlocked, filterStats, "")
 	}
 
 	hydrated, err := s.hydrateSelectedAccount(ctx, selected)
@@ -1150,6 +1159,7 @@ func (s *OpenAIGatewayService) selectBestAccount(ctx context.Context, groupID *i
 		// lightweight rows do not always hydrate GroupIDs. Only the new OAuth
 		// policy can add another denial at this pre-filter stage.
 		if !openAIOAuthSessionPolicyAllowsSchedulingGroup(acc, groupID) {
+			filterStats.exclude("oauth_session_group_denied")
 			continue
 		}
 
@@ -1164,7 +1174,7 @@ func (s *OpenAIGatewayService) selectBestAccount(ctx context.Context, groupID *i
 			continue
 		}
 		if needsUpstreamCheck && s.isUpstreamModelRestrictedByChannel(ctx, *groupID, fresh, requestedModel, requireCompact) {
-			filterStats.exclude("channel_restricted")
+			filterStats.exclude("channel_upstream_restricted")
 			continue
 		}
 		if vetoed, reason := openAIProfitControlVetoReason(ctx, fresh); vetoed {
@@ -1254,7 +1264,7 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 		slog.Warn("channel pricing restriction blocked request",
 			"group_id", derefGroupID(groupID),
 			"model", requestedModel)
-		return nil, fmt.Errorf("%w supporting model: %s (channel pricing restriction)", ErrNoAvailableAccounts, requestedModel)
+		return nil, noAvailableOpenAIChannelPricingError(requestedModel)
 	}
 
 	cfg := s.schedulingConfig()
@@ -1302,7 +1312,7 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 		return nil, err
 	}
 	if len(accounts) == 0 {
-		return nil, noAvailableOpenAISelectionError(requestedModel, false, openAISelectionFilterStats{}.summary(""))
+		return nil, noAvailableOpenAISelectionErrorWithStats(requestedModel, false, openAISelectionFilterStats{}, "")
 	}
 
 	isExcluded := func(accountID int64) bool {
@@ -1393,6 +1403,7 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 			continue
 		}
 		if !openAIOAuthSessionPolicyAllowsSchedulingGroup(acc, groupID) {
+			filterStats.exclude("oauth_session_group_denied")
 			continue
 		}
 		// Scheduler snapshots can be temporarily stale (bucket rebuild is throttled);
@@ -1419,7 +1430,7 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 	}
 
 	if len(candidates) == 0 {
-		return nil, noAvailableOpenAISelectionError(requestedModel, false, filterStats.summary(""))
+		return nil, noAvailableOpenAISelectionErrorWithStats(requestedModel, false, filterStats, "")
 	}
 	rateOrder := openAILegacyUpstreamRateOrder{}
 	if preferLowUpstreamRate {
@@ -1607,10 +1618,7 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 		})
 	}
 
-	if requireCompact && baseCandidateCount > 0 {
-		return nil, ErrNoAvailableCompactAccounts
-	}
-	return nil, ErrNoAvailableAccounts
+	return nil, noAvailableOpenAISelectionErrorWithStats(requestedModel, requireCompact && baseCandidateCount > 0, filterStats, "selection_order_exhausted")
 }
 
 func (s *OpenAIGatewayService) listSchedulableAccounts(ctx context.Context, groupID *int64, platform string) ([]Account, error) {

@@ -44,6 +44,7 @@ var openAIOAuthForeignModelPrefixes = []string{
 	"qwen4-",
 	"qwq-",
 	"minimax-",
+	"step-",
 	"gemini-",
 	"gemma-",
 	"grok-",
@@ -57,7 +58,6 @@ var openAIOAuthForeignModelPrefixes = []string{
 	"mixtral-",
 	"baichuan-",
 	"ernie-",
-	"step-",
 	"seed-",
 	"yi-",
 }

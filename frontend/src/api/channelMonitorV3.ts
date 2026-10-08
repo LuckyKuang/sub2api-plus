@@ -11,6 +11,7 @@ export interface StatusConfig {
   warning_ttft_ms: number
   abnormal_windows: number
   recovery_windows: number
+  disabled_platforms: string[]
 }
 export interface StatusPlatform {
   platform: string
@@ -35,6 +36,7 @@ export interface StatusIncident {
   updates: Array<{ phase: IncidentPhase; severity: ServiceStatus; at: string }>
 }
 export interface StatusSnapshot {
+  monitoring_enabled: boolean
   computed_at: string
   data_through: string | null
   summary: { status: ServiceStatus; normal: number; affected: number; unknown: number; recovering: number; active_events: number }

@@ -87,6 +87,20 @@ change updates this reference, the validator, its tests, and the linked source:
   regressions with synchronized owning documentation and tests. Identity rules
   and checks must not be weakened to accommodate upstream behavior.
 
+`Test Design` is also a required protected category. Its source of truth is
+[CONTRIBUTING.md](../../../CONTRIBUTING.md#requirement-based-test-design).
+Tests derive scenarios and expectations independently from business
+requirements, acceptance criteria, and authoritative contracts; current
+implementation and the code under test cannot define their own correctness.
+Preserve applicable success, failure, boundary, and required/forbidden
+side-effect coverage. Fix implementations that violate requirements instead of
+weakening assertions or changing expectations merely to pass. Defect regressions
+must detect the original incorrect behavior. Passing tests or coverage alone
+cannot establish business correctness. The validator protects these policy
+anchors and their documentation link, not the semantic quality of every test.
+Its regression cases must independently model removal and weakening of each
+requirement rather than derive their expectations from validator constants.
+
 Also preserve the rule that cross-cutting OpenSpec plans stay local and
 untracked while durable behavior is committed to its owning documentation and
 tests. Preserve secret handling, generated-code, migration, pnpm,

@@ -51,6 +51,8 @@ func MapUserErrorCategory(phase, errType string) string {
 		return "internal"
 	case "request":
 		switch errType {
+		case "content_policy_violation", "session_blocked_by_content_policy", "prompt_guard_blocked":
+			return "security_audit"
 		case "rate_limit_error":
 			return "rate_limit"
 		case "billing_error", "subscription_error":
@@ -69,6 +71,8 @@ func MapUserErrorCategory(phase, errType string) string {
 // 注意："other" 与未知分类都走 default 返回空切片——"other" 无对应的 phase/type 组合，无法精确反查，因此等价于不过滤。
 func CategoryToFilter(category string) (phases []string, errorTypes []string) {
 	switch category {
+	case "security_audit":
+		return []string{"request"}, []string{"content_policy_violation", "session_blocked_by_content_policy", "prompt_guard_blocked"}
 	case "auth":
 		return []string{"auth"}, nil
 	case "service_unavailable":

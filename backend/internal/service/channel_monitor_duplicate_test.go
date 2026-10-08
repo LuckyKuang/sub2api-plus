@@ -239,6 +239,7 @@ func TestChannelMonitorDuplicateOperationMetadataKeyCannotBeSubmittedAsHeader(t 
 }
 
 func TestChannelMonitorReservedProjectHeaderCannotBeSubmitted(t *testing.T) {
+	require.Error(t, validateExtraHeaders(map[string]string{"X-Organization": "SuB2ApI Plus"}))
 	err := validateExtraHeaders(map[string]string{
 		"X-Sub2API-Monitor": "internal",
 	})
@@ -248,6 +249,6 @@ func TestChannelMonitorReservedProjectHeaderCannotBeSubmitted(t *testing.T) {
 	}))
 
 	require.NoError(t, validateExtraHeaders(map[string]string{
-		"X-Organization": "Sub2API Plus",
+		"X-Organization": "Example Org",
 	}))
 }

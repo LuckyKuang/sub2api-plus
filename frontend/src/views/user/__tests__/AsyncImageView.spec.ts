@@ -1,7 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { enableAutoUnmount, flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 
 import AsyncImageView from '../AsyncImageView.vue'
+import { installAppStyles } from '@/__tests__/appStyles'
+
+enableAutoUnmount(afterEach)
 
 const {
   keysList,
@@ -100,14 +103,14 @@ const otherKeyTask = {
   task_id: 'imgtask_other_key',
 }
 
-function mountView() {
+function mountView(realTable = false) {
   return mount(AsyncImageView, {
     attachTo: document.body,
     global: {
       stubs: {
         AppLayout: appLayoutStub,
         TablePageLayout: pageLayoutStub,
-        DataTable: dataTableStub,
+        DataTable: realTable ? false : dataTableStub,
         BaseDialog: baseDialogStub,
         Icon: iconStub,
       },
@@ -115,11 +118,17 @@ function mountView() {
   })
 }
 
-function findButtonByText(text: string) {
-  return Array.from(document.body.querySelectorAll('button')).find(button => button.textContent?.trim() === text)
+async function clickButtonByText(wrapper: VueWrapper, text: string) {
+  const button = wrapper.findAll('button').find(button => button.text() === text)
+  expect(button, `Expected button: ${text}`).toBeDefined()
+  await button!.trigger('click')
 }
 
 describe('AsyncImageView task management', () => {
+  let removeStyles: () => void
+  beforeAll(async () => { removeStyles = await installAppStyles() })
+  afterAll(() => removeStyles?.())
+
   beforeEach(() => {
     keysList.mockReset()
     deleteAsyncImageTask.mockReset()
@@ -162,6 +171,27 @@ describe('AsyncImageView task management', () => {
     expect(statusTrigger.attributes('aria-label')).toBe('asyncImage.filters.allStatuses')
   })
 
+  it.each([1, 2, 3])('centers the actual result thumbnails for %i images under their heading', async count => {
+    const urls = Array.from({ length: count }, (_, index) => `https://images.example.test/${index}.png`)
+    listAsyncImageTasks.mockResolvedValue({ object: 'list', data: [{ ...completedTask, result: { data: urls.map(url => ({ url })) } }], has_more: false })
+    const wrapper = mountView(true)
+    await flushPromises()
+    const table = wrapper.get('table')
+    const headings = table.findAll('thead th')
+    const index = headings.findIndex(cell => cell.text() === 'asyncImage.columns.result')
+    expect(index).toBeGreaterThanOrEqual(0)
+    const cell = table.findAll('tbody tr')[0].findAll('td')[index]
+    expect(cell.findAll('img').map(image => image.attributes('src'))).toEqual(urls)
+    const gallery = cell.get('img').element.parentElement!.parentElement!
+    // The real result cell centers inline content; a block grid ignores that
+    // alignment. Use computed production CSS rather than utility-name checks.
+    expect(getComputedStyle(cell.element).textAlign).toBe('center')
+    expect(getComputedStyle(gallery).display).toBe('inline-grid')
+    const columns = getComputedStyle(gallery).gridTemplateColumns
+    expect(columns).toBe(count === 1 ? 'repeat(1, minmax(0, 1fr))' : 'repeat(2, minmax(0, 1fr))')
+    expect(getComputedStyle(headings[index].get('div').element).justifyContent).toBe('center')
+  })
+
   it('keeps exhausted keys selectable for history management but not task creation', async () => {
     keysList.mockResolvedValue({
       items: [{
@@ -179,8 +209,8 @@ describe('AsyncImageView task management', () => {
     expect(listAsyncImageTasks).toHaveBeenCalledWith('sk-exhausted-key', expect.objectContaining({ offset: 0 }))
     expect(wrapper.get('[data-testid="async-image-api-key-filter"] select').text()).toContain('Exhausted image key')
 
-    findButtonByText('asyncImage.actions.create')?.click()
-    await flushPromises()
+    await clickButtonByText(wrapper, 'asyncImage.actions.create')
+    await vi.waitFor(() => expect(wrapper.find('.base-dialog').exists()).toBe(true))
     expect(wrapper.text()).toContain('asyncImage.create.noKeys')
   })
 
@@ -201,8 +231,8 @@ describe('AsyncImageView task management', () => {
     expect(listAsyncImageTasks).toHaveBeenCalledWith('sk-reassigned-key', expect.objectContaining({ offset: 0 }))
     expect(wrapper.get('[data-testid="async-image-api-key-filter"] select').text()).toContain('Reassigned key')
 
-    findButtonByText('asyncImage.actions.create')?.click()
-    await flushPromises()
+    await clickButtonByText(wrapper, 'asyncImage.actions.create')
+    await vi.waitFor(() => expect(wrapper.find('.base-dialog').exists()).toBe(true))
     expect(wrapper.text()).toContain('asyncImage.create.noKeys')
   })
 
@@ -215,7 +245,7 @@ describe('AsyncImageView task management', () => {
 
     await wrapper.get('[data-testid="delete-task-imgtask_failed"]').trigger('click')
     expect(document.body.textContent).toContain('asyncImage.delete.confirm:imgtask_failed')
-    findButtonByText('common.cancel')?.click()
+    await clickButtonByText(wrapper, 'common.cancel')
     await flushPromises()
 
     expect(deleteAsyncImageTask).not.toHaveBeenCalled()
@@ -254,7 +284,7 @@ describe('AsyncImageView task management', () => {
     await wrapper.get('[data-testid="view-task-imgtask_failed"]').trigger('click')
     expect(wrapper.text()).toContain('asyncImage.detail.taskId')
     await wrapper.get('[data-testid="delete-task-imgtask_failed"]').trigger('click')
-    findButtonByText('common.delete')?.click()
+    await clickButtonByText(wrapper, 'common.delete')
     await flushPromises()
 
     expect(deleteAsyncImageTask).toHaveBeenCalledWith('sk-selected-key', 'imgtask_failed')
@@ -275,7 +305,7 @@ describe('AsyncImageView task management', () => {
     await flushPromises()
 
     await wrapper.get('[data-testid="delete-task-imgtask_failed"]').trigger('click')
-    findButtonByText('common.delete')?.click()
+    await clickButtonByText(wrapper, 'common.delete')
     await flushPromises()
 
     expect(showError).toHaveBeenCalledWith('asyncImage.errors.deleteNotAllowed')
@@ -293,12 +323,12 @@ describe('AsyncImageView task management', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    findButtonByText('asyncImage.list.next')?.click()
+    await clickButtonByText(wrapper, 'asyncImage.list.next')
     await flushPromises()
     expect(wrapper.find('[data-testid="delete-task-imgtask_failed"]').exists()).toBe(true)
 
     await wrapper.get('[data-testid="delete-task-imgtask_failed"]').trigger('click')
-    findButtonByText('common.delete')?.click()
+    await clickButtonByText(wrapper, 'common.delete')
     await flushPromises()
 
     expect(listAsyncImageTasks).toHaveBeenCalledTimes(4)
@@ -339,7 +369,7 @@ describe('AsyncImageView task management', () => {
     await flushPromises()
 
     await wrapper.get('[data-testid="delete-task-imgtask_failed"]').trigger('click')
-    findButtonByText('common.delete')?.click()
+    await clickButtonByText(wrapper, 'common.delete')
     await flushPromises()
 
     const filter = wrapper.get('[data-testid="async-image-api-key-filter"] select')

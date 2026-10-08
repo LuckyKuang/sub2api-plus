@@ -116,6 +116,7 @@ func provideCleanup(
 	geminiOAuth *service.GeminiOAuthService,
 	antigravityOAuth *service.AntigravityOAuthService,
 	grokOAuth *service.GrokOAuthService,
+	zhipuOffPeakTickets *service.ZhipuOffPeakTicketManager,
 	openAIGateway *service.OpenAIGatewayService,
 	scheduledTestRunner *service.ScheduledTestRunnerService,
 	backupSvc *service.BackupService,
@@ -145,6 +146,12 @@ func provideCleanup(
 			{"OpenAIGroupQuotaFollowResetService", func() error {
 				if openAIGroupQuotaFollowReset != nil {
 					openAIGroupQuotaFollowReset.Stop()
+				}
+				return nil
+			}},
+			{"ZhipuOffPeakTicketManager", func() error {
+				if zhipuOffPeakTickets != nil {
+					zhipuOffPeakTickets.Stop()
 				}
 				return nil
 			}},

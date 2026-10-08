@@ -4,26 +4,13 @@ package xai
 
 import (
 	"net/http"
-	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
 func TestCLIUserAgentUsesOfficialPlatformNames(t *testing.T) {
-	expectedOS := runtime.GOOS
-	if expectedOS == "darwin" {
-		expectedOS = "macos"
-	}
-	expectedArch := map[string]string{
-		"amd64": "x86_64",
-		"386":   "x86",
-		"arm64": "aarch64",
-	}[runtime.GOARCH]
-	if expectedArch == "" {
-		expectedArch = runtime.GOARCH
-	}
-	require.Equal(t, "grok-shell/1.0.41 ("+expectedOS+"; "+expectedArch+")", CLIUserAgent("1.0.41"))
+	require.Equal(t, "grok-shell/1.0.41 (linux; x86_64)", CLIUserAgent("1.0.41"))
 }
 
 func TestResolveCLIVersionDefaultsToPinnedClientVersion(t *testing.T) {

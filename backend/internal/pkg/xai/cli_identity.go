@@ -1,9 +1,9 @@
 package xai
 
 import (
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	"net/http"
 	"os"
-	"runtime"
 	"strings"
 
 	"golang.org/x/mod/semver"
@@ -50,6 +50,9 @@ func ResolveCLIVersion() string {
 // above CLIStableVersion (prereleases below a higher release are rejected when
 // they compare less than the stable pin).
 func IsSupportedCLIVersion(version string) bool {
+	if brandidentity.ContainsBrand(version) {
+		return false
+	}
 	canonical := "v" + version
 	minimum := "v" + CLIStableVersion
 	return semver.IsValid(canonical) &&
@@ -65,25 +68,8 @@ func CLIUserAgent(version string) string {
 	return "grok-shell/" + version + " (" + cliPlatformOS() + "; " + cliPlatformArch() + ")"
 }
 
-func cliPlatformOS() string {
-	if runtime.GOOS == "darwin" {
-		return "macos"
-	}
-	return runtime.GOOS
-}
-
-func cliPlatformArch() string {
-	switch runtime.GOARCH {
-	case "amd64":
-		return "x86_64"
-	case "386":
-		return "x86"
-	case "arm64":
-		return "aarch64"
-	default:
-		return runtime.GOARCH
-	}
-}
+func cliPlatformOS() string   { return "linux" }
+func cliPlatformArch() string { return "x86_64" }
 
 // ApplyCLIProxyHeaders stamps the fixed Grok CLI identity when the request
 // targets cli-chat-proxy. Direct api.x.ai traffic is left unchanged.

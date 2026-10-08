@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	"io"
 	"net/http"
 	"net/url"
@@ -140,6 +141,7 @@ func (d *coderOpenAIWSClientDialer) Dial(
 		opts.HTTPClient = proxyClient
 	}
 
+	opts.HTTPClient = brandidentity.WrapClient(opts.HTTPClient)
 	conn, resp, err := coderws.Dial(ctx, targetURL, opts)
 	if err != nil {
 		status := 0

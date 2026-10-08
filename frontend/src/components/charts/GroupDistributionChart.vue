@@ -83,17 +83,13 @@
                   ${{ formatCost(group.cost) }}
                 </td>
               </tr>
-              <!-- User breakdown sub-rows -->
-              <tr v-if="expandedKey === `group-${group.group_id}`">
-                <td :colspan="distributionColspan" class="p-0">
-                  <UserBreakdownSubTable
-                    :items="breakdownItems"
-                    :loading="breakdownLoading"
-                    :show-account-cost="showAccountCost"
-                    :total-tokens="group.total_tokens"
-                  />
-                </td>
-              </tr>
+              <UserBreakdownRows
+                v-if="expandedKey === `group-${group.group_id}`"
+                :items="breakdownItems"
+                :loading="breakdownLoading"
+                :show-account-cost="showAccountCost"
+                :total-tokens="group.total_tokens"
+              />
             </template>
           </tbody>
         </table>
@@ -114,7 +110,7 @@ import { useI18n } from 'vue-i18n'
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js'
 import { Doughnut } from 'vue-chartjs'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
-import UserBreakdownSubTable from './UserBreakdownSubTable.vue'
+import UserBreakdownRows from './UserBreakdownRows.vue'
 import type { GroupStat, UserBreakdownItem } from '@/types'
 import { getUserBreakdown } from '@/api/admin/dashboard'
 import { formatTokenShare } from '@/utils/tokenShare'
@@ -151,7 +147,6 @@ const expandedKey = ref<string | null>(null)
 const breakdownItems = ref<UserBreakdownItem[]>([])
 const breakdownLoading = ref(false)
 const showAccountCost = computed(() => props.showAccountCost)
-const distributionColspan = computed(() => showAccountCost.value ? 6 : 5)
 
 const toggleBreakdown = async (type: string, id: number | string) => {
   const key = `${type}-${id}`

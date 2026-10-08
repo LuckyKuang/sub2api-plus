@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"io"
 	"mime/multipart"
@@ -480,7 +481,7 @@ func batchImageDefaultHTTPClient() *http.Client {
 		ResponseHeaderTimeout: 60 * time.Second,
 	})
 	if err != nil {
-		return http.DefaultClient
+		return brandidentity.WrapClient(nil)
 	}
 	return client
 }

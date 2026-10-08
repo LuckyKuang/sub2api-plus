@@ -4,6 +4,13 @@ Sub2API Plus accepts OpenAI-compatible Responses requests over HTTP and
 client-facing WebSocket ingress. Account routing can use an upstream WebSocket
 or bridge the client WebSocket to an HTTP/SSE upstream.
 
+The **Use Key** dialog enables `api_key_model_discovery = true` under `[features]`
+when generating a remote Codex model catalog configuration. This applies to
+OpenAI HTTP/WebSocket, Grok, and all routed Codex groups, including StepFun and
+Composite, on Unix and Windows. File catalog mode uses `model_catalog_json`
+without the remote discovery flag. Switching catalog mode preserves the
+selected authentication mode and the group's existing API base URL.
+
 The existing DeepSeek and MiniMax native Codex model fallback lists use the
 [shared official provider catalog](../CN_PROVIDER_MODELS.md). Group allowlist
 candidates use each provider's own models; saved client aliases and account
@@ -626,3 +633,27 @@ gateway:
 The environment equivalent is
 `GATEWAY_OPENAI_WS_MODE_ROUTER_V2_ENABLED=true`. Use `http_bridge` when the
 client keeps a WebSocket while the selected upstream uses HTTP/SSE.
+
+## Encrypted history recovery
+
+An explicit `invalid_encrypted_content` HTTP 400 or HTTP 200 SSE
+`response.failed`/`error` may recover once on the same credential owner before
+semantic output is committed. The HTTP and SSE paths share one request-local
+recovery budget. Metadata and gateway keepalive do not count as output; delivered
+text, reasoning, tool actions and media do. Generic error messages do not trigger
+cipher cleanup.
+
+The replacement body uses the existing encrypted-history sanitizer: remove
+rejected opaque encrypted fields/compaction while retaining readable reasoning
+summaries, ordinary input, tool calls/results, and required continuation IDs.
+Without usable input after cleanup (including an isolated reasoning ID with no
+readable summary/content), return the original failure without replay.
+Both regular forwarding and HTTP passthrough use the same rules and the same
+account identity snapshot. No account switch or unauthenticated identity source
+is introduced by this recovery.
+
+The recovered rejection is recorded as a `retry` upstream attempt with reason
+`invalid_encrypted_content`, and updates the existing session invalid-cipher
+lineage. Only the final response contributes the final usage result; no extra
+terminal event or duplicate final billing occurs. A repeated rejection is
+returned normally. See [error diagnostics](../ERROR_REQUEST_DIAGNOSTICS.md).

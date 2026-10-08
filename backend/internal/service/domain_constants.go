@@ -47,6 +47,7 @@ const (
 	PlatformKimi       = domain.PlatformKimi
 	PlatformZhipu      = domain.PlatformZhipu
 	PlatformDeepseek   = domain.PlatformDeepseek
+	PlatformStepFun    = domain.PlatformStepFun
 	PlatformMiniMax    = domain.PlatformMiniMax
 	PlatformTypeSafe   = domain.PlatformTypeSafe
 	PlatformOpenCodeGo = domain.PlatformOpenCodeGo
@@ -79,7 +80,10 @@ const (
 	DefaultKimiCodingBaseURL  = "https://api.kimi.com/coding/v1"
 	DefaultZhipuPayGBaseURL   = "https://open.bigmodel.cn/api/paas/v4"
 	DefaultZhipuCodingBaseURL = "https://open.bigmodel.cn/api/coding/paas/v4"
-	DefaultDeepseekBaseURL    = "https://api.deepseek.com"
+	// Z.ai 是智谱 GLM 的国际站，端点布局与国内站同构但域名不同。账户绑定流程会
+	// 显式写入这些地址，因此不需要为它们再引入一套平台默认值。
+	DefaultZaiCodingBaseURL = "https://api.z.ai/api/coding/paas/v4"
+	DefaultDeepseekBaseURL  = "https://api.deepseek.com"
 	// MiniMax 按量付费与 Coding/Token Plan 共用推理域名，靠 API Key 区分套餐。
 	DefaultMiniMaxBaseURL = "https://api.minimaxi.com/v1"
 	// OpenCode Go：Chat Completions / Responses / models 共用 /v1 基址。
@@ -94,6 +98,7 @@ const (
 	DefaultKimiPayGAnthropicBaseURL   = "https://api.moonshot.cn/anthropic"
 	DefaultKimiCodingAnthropicBaseURL = "https://api.kimi.com/coding"
 	DefaultZhipuAnthropicBaseURL      = "https://open.bigmodel.cn/api/anthropic"
+	DefaultZaiAnthropicBaseURL        = "https://api.z.ai/api/anthropic"
 	DefaultDeepseekAnthropicBaseURL   = "https://api.deepseek.com/anthropic"
 	DefaultMiniMaxAnthropicBaseURL    = "https://api.minimaxi.com/anthropic"
 	// OpenCode Go Anthropic 基址不含 /v1：nativeAnthropicTargetURL 会再拼 /v1/messages。
@@ -104,7 +109,7 @@ const (
 // IsCNProvider 报告 platform 是否为国产 OpenAI 兼容供应商（kimi/zhipu/deepseek/minimax）。
 func IsCNProvider(platform string) bool {
 	switch platform {
-	case PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax:
+	case PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax, PlatformStepFun:
 		return true
 	default:
 		return false
@@ -135,6 +140,7 @@ var AllowedQuotaPlatforms = []string{
 	PlatformZhipu,
 	PlatformDeepseek,
 	PlatformMiniMax,
+	PlatformStepFun,
 	PlatformOpenCodeGo,
 	PlatformTypeSafe,
 }

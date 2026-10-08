@@ -11,6 +11,14 @@
       @submit.prevent="handleSubmit"
       class="space-y-5"
     >
+      <CNOAuthPanel
+        v-if="account.type === 'oauth' && (account.platform === 'deepseek' || account.platform === 'kimi' || account.platform === 'minimax' || account.platform === 'stepfun')"
+        :key="account.id"
+        :platform="account.platform"
+        :account-id="account.id"
+        :initial-region="String(account.credentials?.oauth_region || 'cn')"
+        @completed="handleCNOAuthCompleted"
+      />
       <OutboundIdentityEditor v-model="outboundIdentitySelection" :platform="props.account?.platform || ''" :account-type="props.account?.type || ''" :codex-user-agent="openaiAccountUserAgent" />
       <div>
         <label class="input-label">{{ t('common.name') }}</label>
@@ -685,9 +693,9 @@
         </div>
       </div>
 
-      <!-- OpenAI/Grok OAuth Model Mapping (OAuth 类型没有 apikey 容器，需要独立的模型映射区域) -->
+      <!-- OAuth accounts need a model restriction editor outside the API-key fields. -->
       <div
-        v-if="(account.platform === 'openai' || account.platform === 'grok') && account.type === 'oauth'"
+        v-if="(account.platform === 'openai' || account.platform === 'grok' || account.platform === 'stepfun') && account.type === 'oauth'"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
       >
         <label class="input-label">{{ t('admin.accounts.modelRestriction') }}</label>
@@ -2721,6 +2729,7 @@
 </template>
 
 <script setup lang="ts">
+import CNOAuthPanel from './CNOAuthPanel.vue'
 import OutboundIdentityEditor from './OutboundIdentityEditor.vue'
 import type { IdentitySelection } from '@/api/admin/outboundIdentity'
 import { ref, reactive, computed, watch, nextTick } from 'vue'
@@ -2942,6 +2951,7 @@ const cnAccountModeOptions = computed<Array<{ value: CnAccountMode; labelKey: 'p
   }
 )
 const cnProtocolOptions = computed<Array<{ value: CnApiProtocol; labelKey: string }>>(() => {
+  if (props.account?.platform === 'stepfun') return [{ value: 'chat_completions', labelKey: 'chatCompletions' }]
   const opts: Array<{ value: CnApiProtocol; labelKey: string }> = [
     { value: 'adaptive', labelKey: 'adaptive' },
     { value: 'chat_completions', labelKey: 'chatCompletions' },
@@ -3000,7 +3010,9 @@ watch(editAccountMode, (mode, previousMode) => {
     editBaseUrl.value = editAdaptiveBaseUrls.value.chat_completions
     return
   }
+  const stepGlobal = props.account!.platform === 'stepfun' && editBaseUrl.value.startsWith('https://api.stepfun.ai/')
   editBaseUrl.value = defaultCNBaseUrl(props.account!.platform, mode, editApiProtocol.value)
+  if (stepGlobal) editBaseUrl.value = editBaseUrl.value.replace('api.stepfun.com', 'api.stepfun.ai')
 })
 watch(editOpenCodeAccountMode, (mode, previousMode) => {
   if (!isCNApiKeyAccount.value || props.account?.platform !== 'opencode_go' || syncingForm.value) return
@@ -4069,8 +4081,8 @@ const syncFormFromAccount = (newAccount: Account | null) => {
             : 'https://api.anthropic.com'
     editBaseUrl.value = platformDefaultUrl
 
-    // Load model mappings for OpenAI/Grok OAuth accounts
-    if ((newAccount.platform === 'openai' || newAccount.platform === 'grok') && newAccount.credentials) {
+    // Load model mappings for OAuth accounts with a restriction editor.
+    if ((newAccount.platform === 'openai' || newAccount.platform === 'grok' || newAccount.platform === 'stepfun') && newAccount.credentials) {
       const oauthCredentials = newAccount.credentials as Record<string, unknown>
       loadModelRestrictionFromMapping(oauthCredentials.model_mapping as Record<string, unknown> | undefined)
     } else {
@@ -4637,6 +4649,18 @@ const persistGrokMediaEligibility = async (accountID: number, updatedAccount: Ac
   return updatedAccount
 }
 
+const handleCNOAuthCompleted = async (id: number) => {
+  try {
+    const updated = await adminAPI.accounts.getById(id)
+    emit('updated', updated)
+    appStore.showSuccess(t('admin.accounts.accountUpdated'))
+    handleClose()
+  } catch {
+    appStore.showError(t('admin.accounts.oauth.domestic.reload'))
+    handleClose()
+  }
+}
+
 const submitUpdateAccount = async (accountID: number, updatePayload: Record<string, unknown>) => {
   if (props.account && (outboundIdentitySelection.value || props.account.credentials?.outbound_identity)) {
     const credentials = (updatePayload.credentials || { ...props.account.credentials }) as Record<string, unknown>
@@ -4714,6 +4738,7 @@ const handleSubmit = async () => {
       if (isCNApiKeyAccount.value) {
         newCredentials.account_mode = currentOpenCodeOrCNMode()
         newCredentials.api_protocol = editApiProtocol.value
+        if (props.account.platform === 'stepfun') newCredentials.region = editBaseUrl.value.startsWith('https://api.stepfun.ai/') ? 'global' : 'cn'
         if (editApiProtocol.value === 'adaptive') {
           const defaults = defaultCNAdaptiveBaseUrls(adaptivePresetPlatform.value, currentOpenCodeOrCNMode())
           const protocolBaseUrls: Record<string, string> = {}
@@ -4963,8 +4988,8 @@ const handleSubmit = async () => {
       updatePayload.credentials = newCredentials
     }
 
-    // OpenAI/Grok OAuth: persist model mapping to credentials
-    if ((props.account.platform === 'openai' || props.account.platform === 'grok') && props.account.type === 'oauth') {
+    // OAuth model restrictions use the same credential mapping as API keys.
+    if ((props.account.platform === 'openai' || props.account.platform === 'grok' || props.account.platform === 'stepfun') && props.account.type === 'oauth') {
       const currentCredentials = isSparkShadow.value
         ? {}
         : (updatePayload.credentials as Record<string, unknown>) ||

@@ -6,6 +6,8 @@ import (
 	"math"
 	"strings"
 	"time"
+
+	"github.com/LuckyKuang/sub2api-plus/internal/domain"
 )
 
 var ErrChannelMonitorV3Config = errors.New("invalid service status configuration")
@@ -14,24 +16,65 @@ var ErrChannelMonitorV3Conflict = errors.New("service status configuration chang
 var ChannelMonitorV3LatencyBounds = [...]int64{50, 100, 250, 500, 1000, 2000, 3000, 5000, 8000, 10000, 15000, 30000, 60000, 120000, 300000, 2147483647}
 
 type ChannelMonitorV3Config struct {
-	Version         int     `json:"version"`
-	MinimumSamples  int64   `json:"minimum_samples"`
-	WarningError    float64 `json:"warning_error_rate"`
-	OutageError     float64 `json:"outage_error_rate"`
-	WarningTTFTMs   int64   `json:"warning_ttft_ms"`
-	AbnormalWindows int     `json:"abnormal_windows"`
-	RecoveryWindows int     `json:"recovery_windows"`
+	Version           int      `json:"version"`
+	MinimumSamples    int64    `json:"minimum_samples"`
+	WarningError      float64  `json:"warning_error_rate"`
+	OutageError       float64  `json:"outage_error_rate"`
+	WarningTTFTMs     int64    `json:"warning_ttft_ms"`
+	AbnormalWindows   int      `json:"abnormal_windows"`
+	RecoveryWindows   int      `json:"recovery_windows"`
+	DisabledPlatforms []string `json:"disabled_platforms"`
+	// ObservationStarts is server-owned persisted metadata, never an API field.
+	ObservationStarts map[string]time.Time `json:"-"`
 }
 
 func DefaultChannelMonitorV3Config() ChannelMonitorV3Config {
-	return ChannelMonitorV3Config{Version: 1, MinimumSamples: 5, WarningError: .05, OutageError: .9, WarningTTFTMs: 5000, AbnormalWindows: 2, RecoveryWindows: 3}
+	return ChannelMonitorV3Config{Version: 1, MinimumSamples: 5, WarningError: .05, OutageError: .9, WarningTTFTMs: 5000, AbnormalWindows: 2, RecoveryWindows: 3, DisabledPlatforms: []string{}}
 }
 
 func (c ChannelMonitorV3Config) Validate() error {
 	if c.MinimumSamples < 1 || c.MinimumSamples > 10000 || math.IsNaN(c.WarningError) || math.IsNaN(c.OutageError) || c.WarningError <= 0 || c.WarningError >= 1 || c.OutageError < c.WarningError || c.OutageError > 1 || c.WarningTTFTMs < 100 || c.WarningTTFTMs > 300000 || c.AbnormalWindows < 1 || c.AbnormalWindows > 10 || c.RecoveryWindows < 1 || c.RecoveryWindows > 10 {
 		return ErrChannelMonitorV3Config
 	}
+	seen := map[string]bool{}
+	for _, platform := range c.DisabledPlatforms {
+		if seen[platform] || !containsChannelMonitorV3Platform(platform) {
+			return ErrChannelMonitorV3Config
+		}
+		seen[platform] = true
+	}
 	return nil
+}
+
+func containsChannelMonitorV3Platform(platform string) bool {
+	for _, name := range domain.ConcretePlatforms() {
+		if name == platform {
+			return true
+		}
+	}
+	return false
+}
+
+func (c ChannelMonitorV3Config) PlatformEnabled(platform string) bool {
+	if !containsChannelMonitorV3Platform(platform) {
+		return false
+	}
+	for _, disabled := range c.DisabledPlatforms {
+		if disabled == platform {
+			return false
+		}
+	}
+	return true
+}
+
+func (c ChannelMonitorV3Config) EnabledPlatforms() []string {
+	result := []string{}
+	for _, platform := range domain.ConcretePlatforms() {
+		if c.PlatformEnabled(platform) {
+			result = append(result, platform)
+		}
+	}
+	return result
 }
 
 // Facts are internal aggregates. They are never serialized in viewer responses.
@@ -152,6 +195,7 @@ type ChannelMonitorV3Catalog struct {
 	GroupName string
 }
 type ChannelMonitorV3Data struct {
+	Config      ChannelMonitorV3Config
 	Catalog     []ChannelMonitorV3Catalog
 	Current     []ChannelMonitorV3Fact
 	KnownModels []ChannelMonitorV3Fact
@@ -165,8 +209,8 @@ type ChannelMonitorV3Data struct {
 type ChannelMonitorV3Repository interface {
 	GetConfig(context.Context) (*ChannelMonitorV3Config, error)
 	UpdateConfig(context.Context, ChannelMonitorV3Config) (*ChannelMonitorV3Config, error)
-	Refresh(context.Context, time.Time, ChannelMonitorV3Config) error
-	Read(context.Context, time.Time, time.Duration) (*ChannelMonitorV3Data, error)
+	Refresh(context.Context, time.Time) error
+	Read(context.Context, time.Time, time.Duration, string) (*ChannelMonitorV3Data, error)
 }
 
 type ChannelMonitorV3Timeline struct {
@@ -197,9 +241,10 @@ type ChannelMonitorV3Summary struct {
 	ActiveEvents int    `json:"active_events"`
 }
 type ChannelMonitorV3Snapshot struct {
-	ComputedAt  time.Time                  `json:"computed_at"`
-	DataThrough *time.Time                 `json:"data_through"`
-	Platforms   []ChannelMonitorV3Platform `json:"platforms"`
-	Incidents   []ChannelMonitorV3Incident `json:"incidents"`
-	Summary     ChannelMonitorV3Summary    `json:"summary"`
+	MonitoringEnabled bool                       `json:"monitoring_enabled"`
+	ComputedAt        time.Time                  `json:"computed_at"`
+	DataThrough       *time.Time                 `json:"data_through"`
+	Platforms         []ChannelMonitorV3Platform `json:"platforms"`
+	Incidents         []ChannelMonitorV3Incident `json:"incidents"`
+	Summary           ChannelMonitorV3Summary    `json:"summary"`
 }

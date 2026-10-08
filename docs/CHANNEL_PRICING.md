@@ -400,6 +400,12 @@ not charge twice. Other database errors still fail and roll back the transaction
 
 ## 8. Verifying
 
+StepFun uses exact official international USD cards for five chat models; see
+[StepFun default prices](providers/STEPFUN.md#default-prices). The Step Plan
+router remains visible with `manual_required`, since its underlying engine and
+Credit charge vary per request. Unknown StepFun suffix/date variants never
+inherit a family price. Saved channel prices remain authoritative.
+
 Run inside the platform validation container (Apple Containers on macOS, Docker
 inside WSL2 Debian/Ubuntu on Windows, Docker on Linux); host-side validation is
 forbidden.

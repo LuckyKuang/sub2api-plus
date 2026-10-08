@@ -409,3 +409,57 @@ output returns as a later request, it follows the same shared extraction matrix
 for both engines. Metadata that is not extractable content remains pass-through;
 known sibling inputs remain auditable. Extraction/evaluation/dependency exceptions
 retain the structured diagnostics and non-blocking behavior specified above.
+
+
+DeepSeek, Kimi and MiniMax native OAuth accounts use the existing Messages,
+Chat Completions and Responses ingress routes and canonical extraction. Their
+new management login endpoints carry authorization data, not inference content.
+Account selection, request-path credential refresh, protocol adaptation and
+provider writes remain after ingress audit. Unknown valid structures retain
+pass-through behavior for both API Key and native OAuth account types; known
+sibling content remains auditable. Domestic OAuth credentials introduce no new
+WebSocket ingress or direct WebSocket upstream capability. The account-type
+pass-through regression matrix includes all three native providers, alongside
+the existing HTTP/WS stage-order and canonical real-payload suites.
+
+The domestic identity source review also permits linked GLM OAuth accounts to
+use their already-derived plan API key on the OpenAI-compatible forwarding path.
+This changes credential retrieval only: canonical extraction and the accepted
+request's audit-before-selection boundary remain the existing CN adapter path.
+No new ingress endpoint, payload shape, audit exemption, or raw-content logging
+is introduced by protocol-specific outbound identity rendering.
+
+## StepFun transport
+
+StepFun API Key and native Step Plan OAuth use the existing audited Chat
+Completions, Responses and Messages HTTP handlers. Responses/Messages convert
+to Chat Completions only after canonical audit. Tool arguments/results,
+reasoning content, images and unknown siblings retain the existing shared
+extraction contract for both engines. Platform selection and OAuth's Bearer
+credential do not introduce a pre-audit upstream operation. Native upstream
+Responses WebSocket is not advertised for StepFun. The domestic account-type
+pass-through matrix includes StepFun alongside the existing providers.
+
+StepFun's administrator-only OAuth model preview (`cn/oauth/stepfun/models`)
+accepts an owned ready session handle and reads a model catalog without creating
+an account. It carries no inference content and preserves the existing
+administrator authentication boundary. Completion stores model restrictions;
+neither operation changes the gateway extraction or audit ordering contract.
+
+StepFun response usage accepts the official flat `usage.cached_tokens` field
+and retains it through both response bridges. Client model catalogs also expose
+synced StepFun IDs and capabilities. These response/catalog changes introduce no
+new inference input fields or audit exemptions; both account types still use the
+same canonical extraction and pre-selection audit boundary above.
+
+### Error-record attribution
+
+Trusted local 403 denials from either engine are request refusals with the
+`security_audit` usage category and no selected-account/upstream attribution.
+The exact local decision, not a matching inbound/provider string, authorizes
+this classification. Dependency failures keep their existing classification;
+extraction failures continue to pass through under the table above. HTTP wire
+bodies, WebSocket errors/closes, SLA/business-limit flags and audit ordering are
+unchanged. WebSocket attribution is per turn. See
+[error request diagnostics](ERROR_REQUEST_DIAGNOSTICS.md) for filtering and the
+one-time historical correction.

@@ -6,7 +6,8 @@
 #
 # Documentation / 文档: https://github.com/luckykuang/sub2api-plus
 # Outbound identities / 出站身份：System Settings → Outbound identity.
-# Stored in the database (default: empty profiles/default mappings), not YAML.
+# Stored in the database (empty profiles/default mappings; runtime facts materialized at startup), not YAML.
+# Kimi and GLM/ZCode host headers are edited here, not through generic header overrides.
 # 数据库存储，默认继承项目预设；详见 docs/OUTBOUND_IDENTITY.md。
 
 # =============================================================================
@@ -165,10 +166,16 @@ security:
       - "api.openai.com"
       - "api.anthropic.com"
       - "api.kimi.com"
+      - "api.kimi.ai"
+      - "api.deepseek.com"
+      - "agent.minimax.cn"
+      - "agent.minimax.io"
       - "api.moonshot.ai"
       - "api.moonshot.cn"
       - "open.bigmodel.cn"
       - "api.minimaxi.com"
+      - "api.stepfun.com"
+      - "api.stepfun.ai"
       - "api.minimax.io"
       - "opencode.ai"
       - "api.typesafe.ai"
@@ -1055,10 +1062,13 @@ oidc_connect:
 # 默认设置
 # =============================================================================
 default:
-  # Initial admin account (created on first run)
-  # 初始管理员账户（首次运行时创建）
-  admin_email: "admin@example.com"
-  admin_password: "admin123"
+  # Admin credentials are created by the web/CLI setup wizard or AUTO_SETUP.
+  # For AUTO_SETUP, configure ADMIN_EMAIL / ADMIN_PASSWORD; empty values are
+  # randomly generated on first installation. These legacy fields do not create accounts.
+  # 管理员由安装向导或 AUTO_SETUP 创建；自动安装使用上述环境变量，留空时随机生成。
+  # 以下历史字段不负责创建管理员账户。
+  admin_email: ""
+  admin_password: ""
 
   # Default settings for new users
   # 新用户默认设置

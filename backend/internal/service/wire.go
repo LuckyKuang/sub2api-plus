@@ -10,8 +10,10 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
 	"github.com/LuckyKuang/sub2api-plus/internal/payment"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/antigravity"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/cnoauth"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/logger"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/xai"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/zcode"
 	"github.com/google/wire"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -24,6 +26,27 @@ func ProvideGrokOAuthService(proxyRepo ProxyRepository, oauthClient GrokOAuthCli
 		svc = svc.WithSessionStore(xai.NewRedisSessionStore(redisClient))
 	}
 	return svc
+}
+
+// ProvideZhipuOAuthService creates the ZCode platform account-link service. The
+// session store is Redis-backed when a client is configured so a multi-instance
+// deployment can serve the follow-up poll and create calls from any replica.
+func ProvideZhipuOAuthService(proxyRepo ProxyRepository, oauthClient ZhipuOAuthClient, redisClient *redis.Client) *ZhipuOAuthService {
+	svc := NewZhipuOAuthService(oauthClient, proxyRepo)
+	// wire.go is depguard-exempt for redis; construct the Redis session store here.
+	if redisClient != nil {
+		svc = svc.WithSessionStore(zcode.NewRedisSessionStore(redisClient))
+	}
+	return svc
+}
+
+// ProvideZhipuOffPeakTicketManager creates the off-peak ticket manager and
+// registers it as the request-path ticket provider. Registration happens here so
+// the protocol builder never depends on the settings or account services.
+func ProvideZhipuOffPeakTicketManager(oauthClient ZhipuOffPeakClient) *ZhipuOffPeakTicketManager {
+	manager := NewZhipuOffPeakTicketManager(oauthClient)
+	SetZhipuOffPeakTicketProvider(manager)
+	return manager
 }
 
 // BuildInfo contains build information
@@ -823,6 +846,11 @@ func ProvideSettingService(settingRepo SettingRepository, groupRepo GroupReposit
 	}
 	antigravity.SetUserAgentVersionResolver(svc.GetAntigravityUserAgentVersion)
 	svc.installOutboundIdentityResolver()
+	// Materialize the runtime identity declarations a deployment derives from
+	// its own host (the Kimi device set) before the first request, so the
+	// advertised identity is stable across restarts and never depends on an
+	// admin page load. The forwarding path only reads these values.
+	svc.ensureRuntimeOutboundHeaders(context.Background())
 	return svc
 }
 
@@ -897,6 +925,9 @@ var ProviderSet = wire.NewSet(
 	ProvideOpenAIOAuthService,
 	ProvideGrokOAuthService,
 	wire.Bind(new(GrokOAuthTokenService), new(*GrokOAuthService)),
+	ProvideZhipuOAuthService,
+	ProvideCNOAuthService,
+	ProvideZhipuOffPeakTicketManager,
 	NewGeminiOAuthService,
 	NewGeminiQuotaService,
 	NewCompositeTokenCacheInvalidator,
@@ -1099,4 +1130,14 @@ func ProvideClaudeResetCreditService(accounts AccountRepository, tokens *ClaudeT
 	s := NewClaudeResetCreditService(accounts, tokens, proxies)
 	s.ConfigureRedemption(idem, locks)
 	return s
+}
+
+func ProvideCNOAuthService(proxyRepo ProxyRepository, accountRepo AccountRepository, admin AdminService, redisClient *redis.Client, refreshAPI *OAuthRefreshAPI, gateway *OpenAIGatewayService, tester *AccountTestService) *CNOAuthService {
+	svc := NewCNOAuthService(proxyRepo, accountRepo, admin)
+	svc.store = cnoauth.NewStore(redisClient)
+	svc.refreshAPI = refreshAPI
+	svc.modelTester = tester
+	gateway.cnOAuthService = svc
+	tester.cnOAuthService = svc
+	return svc
 }

@@ -596,7 +596,7 @@ ensure_minio_credentials() {
     require_command openssl
     root_user="$(read_env_value MINIO_ROOT_USER)"
     if [[ -z "${root_user}" ]]; then
-        root_user="sub2api-minio"
+        root_user="storage-admin"
         replace_env_value MINIO_ROOT_USER "${root_user}"
         info "Set MINIO_ROOT_USER in ${ENV_FILE}."
     fi
@@ -631,7 +631,7 @@ prepare_environment() {
     MINIO_BIND_HOST="$(read_env_value MINIO_BIND_HOST 127.0.0.1)"
     MINIO_API_PORT="$(read_env_value MINIO_API_PORT 9000)"
     MINIO_CONSOLE_PORT="$(read_env_value MINIO_CONSOLE_PORT 9001)"
-    MINIO_ROOT_USER="$(read_env_value MINIO_ROOT_USER sub2api-minio)"
+    MINIO_ROOT_USER="$(read_env_value MINIO_ROOT_USER storage-admin)"
     MINIO_ROOT_PASSWORD="$(read_env_value MINIO_ROOT_PASSWORD)"
     MINIO_BUCKET="$(read_env_value MINIO_BUCKET sub2api-images)"
     MINIO_REGION="$(read_env_value MINIO_REGION us-east-1)"

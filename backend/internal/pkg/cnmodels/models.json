@@ -53,6 +53,13 @@
     "glm-4.1v-thinking-flash",
     "autoglm-phone"
   ],
+  "stepfun": [
+    "step-5-preview",
+    "step-3.7-flash",
+    "step-3.5-flash-2603",
+    "step-3.5-flash",
+    "step-router-v1"
+  ],
   "minimax": [
     "MiniMax-M3.1-Flash-Preview",
     "MiniMax-M3",

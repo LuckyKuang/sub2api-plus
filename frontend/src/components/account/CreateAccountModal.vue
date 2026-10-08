@@ -218,6 +218,19 @@
           </button>
           <button
             type="button"
+            @click="selectCNPlatform('stepfun')"
+            :class="[
+              'flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2.5 text-sm font-medium transition-all',
+              form.platform === 'stepfun'
+                ? 'bg-white text-cyan-600 shadow-sm dark:bg-dark-600 dark:text-cyan-400'
+                : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
+            ]"
+          >
+            <PlatformIcon platform="stepfun" size="sm" />
+            StepFun
+          </button>
+          <button
+            type="button"
             @click="selectOpenCodeGoPlatform()"
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2.5 text-sm font-medium transition-all',
@@ -668,6 +681,21 @@
           </div>
         </div>
         <p class="input-hint mt-2">{{ t('admin.accounts.cnProviders.zhipuTeam.hint') }}</p>
+      </div>
+
+      <CNOAuthPanel
+        v-if="form.platform === 'deepseek' || form.platform === 'kimi' || form.platform === 'minimax' || form.platform === 'stepfun'"
+        :key="form.platform"
+        :platform="form.platform"
+        :proxy-id="form.proxy_id ?? undefined"
+        :account-input="{ name: form.name, concurrency: form.concurrency, priority: form.priority, group_ids: form.group_ids, model_mapping: buildModelMappingObject(modelRestrictionMode, allowedModels, modelMappings) ?? undefined }"
+        @ready-session="stepFunOAuthSession = form.platform === 'stepfun' ? $event : undefined"
+        @completed="handleZhipuLinkCreated"
+      />
+
+      <!-- Zhipu / GLM：通过 ZCode 平台授权绑定套餐（服务端轮询，无需回调地址） -->
+      <div v-if="form.platform === 'zhipu'" class="mt-4">
+        <ZhipuLinkPanel :proxy-id="form.proxy_id ?? undefined" @created="handleZhipuLinkCreated" />
       </div>
 
       <!-- Account Type Selection (Gemini) -->
@@ -1504,6 +1532,7 @@
                 :model-mappings="modelMappings"
                 :platform="form.platform"
                 :sync-credentials="syncPreviewCredentials"
+                :oauth-session-id="stepFunOAuthSession"
                 @upstream-synced="upstreamModelsPreviewed = true"
               />
               <p class="text-xs text-gray-500 dark:text-gray-400">
@@ -3736,6 +3765,8 @@ import {
   type OpenAIWSMode
 } from '@/utils/openaiWsMode'
 import OAuthAuthorizationFlow from './OAuthAuthorizationFlow.vue'
+import CNOAuthPanel from './CNOAuthPanel.vue'
+import ZhipuLinkPanel from './ZhipuLinkPanel.vue'
 
 // Type for exposed OAuthAuthorizationFlow component
 // Note: defineExpose automatically unwraps refs, so we use the unwrapped types
@@ -3813,6 +3844,7 @@ const apiKeyValuePlaceholder = computed(() => {
       return '<api-key>.<secret>'
     case 'deepseek':
       return 'sk-...'
+    case 'stepfun':
     case 'minimax':
     case 'opencode_go':
       return 'sk-...'
@@ -3912,6 +3944,7 @@ const accountCategory = ref<'oauth-based' | 'apikey' | 'bedrock' | 'service_acco
 const addMethod = ref<AddMethod>('oauth') // For oauth-based: 'oauth' or 'setup-token'
 const apiKeyBaseUrl = ref('https://api.anthropic.com')
 const apiKeyValue = ref('')
+const stepFunOAuthSession = ref<string>()
 
 // ── 国产供应商（Kimi / Zhipu / DeepSeek）账号类型、API 协议与端点 ──
 const accountMode = ref<CnAccountMode>('payg')
@@ -3950,6 +3983,7 @@ const adaptivePresetPlatform = computed<CnProviderPlatform | 'opencode_go'>(() =
 })
 // 当前平台可选的协议档（responses 仅 deepseek / kimi）。
 const cnProtocolOptions = computed<Array<{ value: CnApiProtocol; labelKey: string }>>(() => {
+  if (form.platform === 'stepfun') return [{ value: 'chat_completions', labelKey: 'chatCompletions' }]
   const opts: Array<{ value: CnApiProtocol; labelKey: string }> = [
     { value: 'adaptive', labelKey: 'adaptive' },
     { value: 'chat_completions', labelKey: 'chatCompletions' },
@@ -3984,6 +4018,7 @@ const cnAccentActiveClass = computed(() => {
       return 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20'
     case 'deepseek':
       return 'border-teal-500 bg-teal-50 dark:bg-teal-900/20'
+    case 'stepfun':
     case 'minimax':
       return 'border-rose-500 bg-rose-50 dark:bg-rose-900/20'
     case 'opencode_go':
@@ -4000,6 +4035,7 @@ const cnAccentIconClass = computed(() => {
       return 'bg-indigo-500 text-white'
     case 'deepseek':
       return 'bg-teal-500 text-white'
+    case 'stepfun':
     case 'minimax':
       return 'bg-rose-500 text-white'
     case 'opencode_go':
@@ -4014,7 +4050,7 @@ function selectCNPlatform(platform: CnProviderPlatform) {
   form.platform = platform
   form.type = 'apikey'
   accountCategory.value = 'apikey'
-  apiProtocol.value = 'adaptive'
+  apiProtocol.value = form.platform === 'stepfun' ? 'chat_completions' : 'adaptive'
   if (platform === 'deepseek') {
     accountMode.value = 'payg'
   }
@@ -4071,7 +4107,9 @@ watch(accountMode, (mode, previousMode) => {
     apiKeyBaseUrl.value = adaptiveBaseUrls.value.chat_completions
     return
   }
+  const stepGlobal = form.platform === 'stepfun' && apiKeyBaseUrl.value.startsWith('https://api.stepfun.ai/')
   apiKeyBaseUrl.value = defaultCNBaseUrl(form.platform, mode, apiProtocol.value)
+  if (stepGlobal) apiKeyBaseUrl.value = apiKeyBaseUrl.value.replace('api.stepfun.com', 'api.stepfun.ai')
 })
 watch(apiProtocol, (protocol) => {
   if (!isMultiProtocolPlatform.value) return
@@ -4628,6 +4666,7 @@ watch(
               : 'https://api.anthropic.com'
     }
     // Clear model-related settings
+    stepFunOAuthSession.value = undefined
     allowedModels.value = []
     upstreamModelsPreviewed.value = false
     modelMappings.value = []
@@ -5111,6 +5150,7 @@ const resetForm = () => {
   modelMappings.value = []
   openAICompactModelMappings.value = []
   modelRestrictionMode.value = 'whitelist'
+  stepFunOAuthSession.value = undefined
   allowedModels.value = [...claudeModels] // Default fill related models
 
   antigravityModelRestrictionMode.value = 'mapping'
@@ -5606,6 +5646,7 @@ const handleSubmit = async () => {
   if (isCNProviderPlatform(form.platform) || form.platform === 'opencode_go') {
     credentials.account_mode = form.platform === 'opencode_go' ? openCodeAccountMode.value : accountMode.value
     credentials.api_protocol = apiProtocol.value
+    if (form.platform === 'stepfun') credentials.region = String(credentials.base_url).startsWith('https://api.stepfun.ai/') ? 'global' : 'cn'
     if (apiProtocol.value === 'adaptive') {
       const defaults = defaultCNAdaptiveBaseUrls(
         form.platform,
@@ -6165,6 +6206,14 @@ const createOpenAIAccountFromTokenInfo = async (tokenInfo: OpenAITokenInfo) => {
   } finally {
     oauthClient.loading.value = false
   }
+}
+
+// The link panel creates the account server-side, so the modal only reports
+// success and closes, matching every other created-account path.
+const handleZhipuLinkCreated = () => {
+  appStore.showSuccess(t('admin.accounts.accountCreated'))
+  emit('created')
+  handleClose()
 }
 
 const handleOpenAIExchange = async (authCode: string) => {

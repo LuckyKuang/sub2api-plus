@@ -18,6 +18,7 @@ export const PROVIDER_KIMI: Provider = 'kimi'
 export const PROVIDER_ZHIPU: Provider = 'zhipu'
 export const PROVIDER_DEEPSEEK: Provider = 'deepseek'
 export const PROVIDER_MINIMAX: Provider = 'minimax'
+export const PROVIDER_STEPFUN: Provider = 'stepfun'
 export const PROVIDER_OPENCODE_GO: Provider = 'opencode_go'
 
 export const DEFAULT_GROK_ENDPOINT = 'https://api.x.ai'
@@ -47,6 +48,7 @@ export const PROVIDERS: readonly Provider[] = [
   PROVIDER_ZHIPU,
   PROVIDER_DEEPSEEK,
   PROVIDER_MINIMAX,
+  PROVIDER_STEPFUN,
   PROVIDER_OPENCODE_GO,
 ]
 

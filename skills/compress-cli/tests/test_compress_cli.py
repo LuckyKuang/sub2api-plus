@@ -40,6 +40,82 @@ class CompressCliTest(unittest.TestCase):
     def test_current_agents_document_passes(self) -> None:
         self.assertEqual([], self.validate_text(self.valid_document))
 
+    def test_missing_test_design_category_fails(self) -> None:
+        changed = "\n".join(
+            line
+            for line in self.valid_document.splitlines()
+            if not line.startswith("|Test Design:")
+        )
+        self.assert_error_contains(
+            self.validate_text(changed), "missing required category 'Test Design'"
+        )
+
+    def test_business_test_design_requirements_cannot_be_removed_or_weakened(self) -> None:
+        # Independent policy cases from CONTRIBUTING.md#requirement-based-test-design;
+        # do not generate cases from the validator's protected-fragment constants.
+        regressions = (
+            (
+                "Derive test scenarios and expected results independently from business requirements, acceptance criteria, and authoritative contracts",
+                "Derive test scenarios and expected results from current implementation",
+            ),
+            (
+                "Do not infer correctness from current implementation or compute expected results with the code under test",
+                "Use the code under test to calculate expected results",
+            ),
+            (
+                "Cover applicable success, failure, boundary, and required/forbidden side effects",
+                "Cover only successful helper return values",
+            ),
+            (
+                "When implementation conflicts with requirements, fix the implementation; never weaken assertions or change expectations merely to make tests pass",
+                "Change expectations or remove failing assertions to match current output",
+            ),
+            (
+                "Defect regressions must detect the original incorrect behavior",
+                "Defect regressions only need to pass with the current implementation",
+            ),
+            (
+                "Passing tests or coverage percentages alone do not establish business correctness",
+                "Passing tests or high coverage proves business correctness",
+            ),
+            (
+                "Follow CONTRIBUTING.md#requirement-based-test-design",
+                "Follow existing tests only",
+            ),
+        )
+        for original, weakened in regressions:
+            for replacement in ("", weakened):
+                with self.subTest(requirement=original, replacement=replacement):
+                    self.assertIn(original, self.valid_document)
+                    changed = self.valid_document.replace(original, replacement)
+                    self.assert_error_contains(
+                        self.validate_text(changed),
+                        "category 'Test Design' is missing protected content",
+                    )
+
+    def test_cli_rejects_missing_test_design_without_rewriting_input(self) -> None:
+        changed = "\n".join(
+            line
+            for line in self.valid_document.splitlines()
+            if not line.startswith("|Test Design:")
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "AGENTS.md"
+            path.write_text(changed, encoding="utf-8")
+            before = path.read_bytes()
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), "check", str(path)],
+                cwd=ROOT,
+                check=False,
+                text=True,
+                encoding="utf-8",
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+            )
+            self.assertEqual(1, result.returncode, result.stdout)
+            self.assertIn("missing required category 'Test Design'", result.stdout)
+            self.assertEqual(before, path.read_bytes())
+
     def test_clarified_rules_preserve_publication_and_validation_boundaries(self) -> None:
         regressions = (
             ("release tags, Releases, or publication images", "public images only"),

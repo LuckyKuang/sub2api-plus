@@ -270,6 +270,7 @@ import {
   PROVIDER_ZHIPU,
   PROVIDER_DEEPSEEK,
   PROVIDER_MINIMAX,
+  PROVIDER_STEPFUN,
   PROVIDER_OPENCODE_GO,
   API_MODE_CHAT_COMPLETIONS,
   API_MODE_RESPONSES,
@@ -478,6 +479,7 @@ const providerOptions = computed<ProviderOption[]>(() => [
   { value: PROVIDER_ZHIPU, label: t('monitorCommon.providers.zhipu') },
   { value: PROVIDER_DEEPSEEK, label: t('monitorCommon.providers.deepseek') },
   { value: PROVIDER_MINIMAX, label: t('monitorCommon.providers.minimax') },
+  { value: PROVIDER_STEPFUN, label: t('monitorCommon.providers.stepfun') },
   { value: PROVIDER_OPENCODE_GO, label: t('monitorCommon.providers.opencode_go') },
 ])
 
@@ -487,6 +489,7 @@ const PROVIDER_DEFAULT_ENDPOINTS: Partial<Record<Provider, string>> = {
   [PROVIDER_ZHIPU]: DEFAULT_ZHIPU_ENDPOINT,
   [PROVIDER_DEEPSEEK]: DEFAULT_DEEPSEEK_ENDPOINT,
   [PROVIDER_MINIMAX]: DEFAULT_MINIMAX_ENDPOINT,
+  [PROVIDER_STEPFUN]: 'https://api.stepfun.com/v1',
   [PROVIDER_OPENCODE_GO]: DEFAULT_OPENCODE_GO_ENDPOINT,
 }
 

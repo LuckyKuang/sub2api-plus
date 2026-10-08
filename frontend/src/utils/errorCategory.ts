@@ -24,6 +24,10 @@ export function mapErrorCategory(phase?: string | null, errType?: string | null)
           return 'quota'
         case 'invalid_request_error':
           return 'invalid_request'
+        case 'content_policy_violation':
+        case 'session_blocked_by_content_policy':
+        case 'prompt_guard_blocked':
+          return 'security_audit'
         case 'cyber_policy':
           return 'cyber'
       }

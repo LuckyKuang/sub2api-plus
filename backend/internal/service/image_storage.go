@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	"io"
 	"mime"
 	"net/http"
@@ -80,7 +81,7 @@ func NewImageResultUploader(storage ImageStorage, prefix string, appendDatePath 
 }
 
 func defaultImageDownloadHTTPClient() *http.Client {
-	return &http.Client{Timeout: 60 * time.Second}
+	return brandidentity.WrapClient(&http.Client{Timeout: 60 * time.Second})
 }
 
 // Rewrite 将 result（上游生图响应 JSON）里的每张图片转存到对象存储，

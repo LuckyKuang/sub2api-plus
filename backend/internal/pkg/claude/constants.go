@@ -122,7 +122,7 @@ func DefaultHeaders() map[string]string {
 		"X-Stainless-Lang":                          "js",
 		"X-Stainless-Package-Version":               "0.94.0",
 		"X-Stainless-OS":                            "Linux",
-		"X-Stainless-Arch":                          "arm64",
+		"X-Stainless-Arch":                          "x64",
 		"X-Stainless-Runtime":                       "node",
 		"X-Stainless-Runtime-Version":               "v24.3.0",
 		"X-Stainless-Retry-Count":                   "0",

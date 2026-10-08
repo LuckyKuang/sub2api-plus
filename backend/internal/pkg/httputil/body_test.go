@@ -6,8 +6,8 @@ import (
 	"bytes"
 	"compress/gzip"
 	"compress/zlib"
+	"errors"
 	"net/http"
-	"strings"
 	"testing"
 
 	"github.com/klauspost/compress/zstd"
@@ -106,8 +106,17 @@ func TestReadRequestBodyWithPrealloc_RejectsUnsupportedEncoding(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for unsupported encoding, got nil")
 	}
-	if !strings.Contains(err.Error(), "br") {
-		t.Fatalf("error should mention encoding, got %v", err)
+	// Approved read-diagnostic privacy: arbitrary encoding values must not be echoed.
+	if err.Error() != "unsupported Content-Encoding" {
+		t.Fatalf("expected fixed unsupported encoding error, got %v", err)
+	}
+	var diagnostic *RequestBodyReadError
+	if !errors.As(err, &diagnostic) {
+		t.Fatal("missing structured read diagnostic")
+	}
+	_, reason, _, _ := diagnostic.RequestBodyReadDiagnostic()
+	if reason != "unsupported_encoding" {
+		t.Fatalf("unexpected reason: %s", reason)
 	}
 }
 

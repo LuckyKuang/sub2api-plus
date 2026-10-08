@@ -121,6 +121,7 @@ type WebSearchManagerBuilder func(cfg *WebSearchEmulationConfig, proxyURLs map[i
 type SettingService struct {
 	outboundIdentityCache     atomic.Value // *cachedOutboundIdentitySettings
 	outboundIdentityMu        sync.Mutex
+	outboundRuntimeSF         singleflight.Group
 	settingRepo               SettingRepository
 	defaultSubGroupReader     DefaultSubscriptionGroupReader
 	proxyRepo                 ProxyRepository // for resolving websearch provider proxy URLs

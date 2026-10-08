@@ -830,6 +830,40 @@ type ChatUsage struct {
 	CompletionTokensDetails *ChatTokenDetails `json:"completion_tokens_details,omitempty"`
 }
 
+// UnmarshalJSON normalizes StepFun's flat cached_tokens into the canonical
+// Chat Completions detail used by both downstream protocol bridges. An explicit
+// nested count (including zero) wins; unrelated details must survive.
+func (u *ChatUsage) UnmarshalJSON(data []byte) error {
+	type chatUsageAlias ChatUsage
+	var aux struct {
+		chatUsageAlias
+		CachedTokens *int `json:"cached_tokens"`
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	*u = ChatUsage(aux.chatUsageAlias)
+	if aux.CachedTokens == nil {
+		return nil
+	}
+	var presence struct {
+		PromptTokensDetails *struct {
+			CachedTokens *int `json:"cached_tokens"`
+		} `json:"prompt_tokens_details"`
+	}
+	if err := json.Unmarshal(data, &presence); err != nil {
+		return err
+	}
+	if presence.PromptTokensDetails != nil && presence.PromptTokensDetails.CachedTokens != nil {
+		return nil
+	}
+	if u.PromptTokensDetails == nil {
+		u.PromptTokensDetails = &ChatTokenDetails{}
+	}
+	u.PromptTokensDetails.CachedTokens = max(*aux.CachedTokens, 0)
+	return nil
+}
+
 // ChatTokenDetails provides a breakdown of token usage. The same type is
 // reused for both prompt_tokens_details and completion_tokens_details;
 // unset fields are omitted so each side only emits the fields that apply.

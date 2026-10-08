@@ -52,6 +52,7 @@ var headerOverrideBlockedNames = map[string]struct{}{
 	"trailer":                               {},
 	"upgrade":                               {},
 	"authorization":                         {},
+	"x-dsh-auth-token":                      {},
 	"x-api-key":                             {},
 	"x-goog-api-key":                        {},
 	"cookie":                                {},
@@ -108,7 +109,7 @@ func (a *Account) IsHeaderOverrideEligible() bool {
 		return false
 	}
 	switch a.Platform {
-	case PlatformAnthropic, PlatformOpenAI, PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax, PlatformOpenCodeGo:
+	case PlatformAnthropic, PlatformOpenAI, PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax, PlatformStepFun, PlatformOpenCodeGo:
 		return a.Type == AccountTypeAPIKey
 	case PlatformGrok:
 		return a.Type == AccountTypeAPIKey || a.Type == AccountTypeOAuth
@@ -315,6 +316,9 @@ func normalizeHeaderOverrideEntry(name, value string) (string, string, error) {
 	if brandidentity.IsReservedHeaderName(lowerName) || brandidentity.IsLocalControlHeaderName(lowerName) {
 		return "", "", infraerrors.New(http.StatusBadRequest, "INVALID_HEADER_OVERRIDE",
 			"header name uses a reserved protocol identifier")
+	}
+	if brandidentity.ContainsBrand(value) {
+		return "", "", infraerrors.BadRequest("INVALID_HEADER_OVERRIDE", "header value must not contain the project identifier")
 	}
 	if len(value) > maxHeaderOverrideValueLength {
 		return "", "", infraerrors.Newf(http.StatusBadRequest, "INVALID_HEADER_OVERRIDE",

@@ -16,7 +16,7 @@ func TestV024DeploymentDefaults(t *testing.T) {
 	resetViperWithJWTSecret(t)
 	cfg, err := Load()
 	require.NoError(t, err)
-	for _, host := range []string{"api.minimaxi.com", "api.minimax.io"} {
+	for _, host := range []string{"api.minimaxi.com", "api.minimax.io", "api.deepseek.com", "api.kimi.ai", "agent.minimax.cn", "agent.minimax.io"} {
 		require.Contains(t, example.GetStringSlice("security.url_allowlist.upstream_hosts"), host)
 	}
 	require.Equal(t, cfg.Ops.Cleanup.SystemLogRetentionDays, example.GetInt("ops.cleanup.system_log_retention_days"))

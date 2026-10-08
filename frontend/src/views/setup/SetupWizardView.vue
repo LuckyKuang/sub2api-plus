@@ -312,28 +312,41 @@
           </div>
 
           <div>
-            <label class="input-label">{{ t('setup.admin.email') }}</label>
+            <label for="setup-admin-email" class="input-label">{{ t('setup.admin.email') }}</label>
             <input
+              id="setup-admin-email"
               v-model="formData.admin.email"
               type="email"
               class="input"
-              placeholder="admin@example.com"
+              placeholder="you@example.com"
             />
           </div>
 
           <div>
-            <label class="input-label">{{ t('setup.admin.password') }}</label>
+            <label for="setup-admin-password" class="input-label">{{ t('setup.admin.password') }}</label>
             <input
+              id="setup-admin-password"
               v-model="formData.admin.password"
               type="password"
               class="input"
               :placeholder="t('setup.admin.passwordPlaceholder')"
+              :aria-invalid="!!formData.admin.password && !adminPasswordValid"
+              :aria-describedby="formData.admin.password && !adminPasswordValid ? 'setup-password-error' : undefined"
             />
+            <p
+              v-if="formData.admin.password && !adminPasswordValid"
+              id="setup-password-error"
+              role="alert"
+              class="input-error-text"
+            >
+              {{ t('setup.admin.passwordLengthError') }}
+            </p>
           </div>
 
           <div>
-            <label class="input-label">{{ t('setup.admin.confirmPassword') }}</label>
+            <label for="setup-admin-confirm-password" class="input-label">{{ t('setup.admin.confirmPassword') }}</label>
             <input
+              id="setup-admin-confirm-password"
               v-model="confirmPassword"
               type="password"
               class="input"
@@ -567,6 +580,11 @@ const formData = reactive<InstallRequest>({
   }
 })
 
+const adminPasswordValid = computed(() => {
+  const byteLength = new TextEncoder().encode(formData.admin.password).length
+  return byteLength >= 8 && byteLength <= 72
+})
+
 const canProceed = computed(() => {
   switch (currentStep.value) {
     case 0:
@@ -575,8 +593,8 @@ const canProceed = computed(() => {
       return redisConnected.value
     case 2:
       return (
-        formData.admin.email &&
-        formData.admin.password.length >= 8 &&
+        formData.admin.email.trim() &&
+        adminPasswordValid.value &&
         formData.admin.password === confirmPassword.value
       )
     default:

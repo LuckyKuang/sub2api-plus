@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	"net/http"
 	"net/url"
 	"strings"
@@ -470,7 +471,7 @@ func buildEmailOAuthAuthorizeURL(cfg config.EmailOAuthProviderConfig, state stri
 }
 
 func exchangeEmailOAuthCode(ctx context.Context, cfg config.EmailOAuthProviderConfig, code string) (*emailOAuthTokenResponse, error) {
-	resp, err := req.C().
+	resp, err := brandidentity.WrapReqClient(req.C()).
 		R().
 		SetContext(ctx).
 		SetHeader("Accept", "application/json").
@@ -499,7 +500,7 @@ func exchangeEmailOAuthCode(ctx context.Context, cfg config.EmailOAuthProviderCo
 }
 
 func fetchEmailOAuthProfile(ctx context.Context, provider string, cfg config.EmailOAuthProviderConfig, token *emailOAuthTokenResponse) (*emailOAuthProfile, error) {
-	resp, err := req.C().
+	resp, err := brandidentity.WrapReqClient(req.C()).
 		R().
 		SetContext(ctx).
 		SetBearerAuthToken(token.AccessToken).
@@ -555,7 +556,7 @@ func parseGitHubOAuthProfile(ctx context.Context, cfg config.EmailOAuthProviderC
 }
 
 func fetchGitHubPrimaryVerifiedEmail(ctx context.Context, emailsURL string, accessToken string) (string, error) {
-	resp, err := req.C().
+	resp, err := brandidentity.WrapReqClient(req.C()).
 		R().
 		SetContext(ctx).
 		SetBearerAuthToken(accessToken).

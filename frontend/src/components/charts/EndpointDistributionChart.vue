@@ -113,15 +113,13 @@
                   ${{ formatCost(item.cost) }}
                 </td>
               </tr>
-              <tr v-if="expandedKey === item.endpoint">
-                <td colspan="5" class="p-0">
-                  <UserBreakdownSubTable
-                    :items="breakdownItems"
-                    :loading="breakdownLoading"
-                    :total-tokens="item.total_tokens"
-                  />
-                </td>
-              </tr>
+              <UserBreakdownRows
+                v-if="expandedKey === item.endpoint"
+                :items="breakdownItems"
+                :loading="breakdownLoading"
+                :show-account-cost="false"
+                :total-tokens="item.total_tokens"
+              />
             </template>
           </tbody>
         </table>
@@ -139,7 +137,7 @@ import { useI18n } from 'vue-i18n'
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js'
 import { Doughnut } from 'vue-chartjs'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
-import UserBreakdownSubTable from './UserBreakdownSubTable.vue'
+import UserBreakdownRows from './UserBreakdownRows.vue'
 import type { EndpointStat, UserBreakdownItem } from '@/types'
 import { getUserBreakdown } from '@/api/admin/dashboard'
 import { formatTokenShare } from '@/utils/tokenShare'

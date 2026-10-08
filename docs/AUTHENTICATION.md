@@ -1,5 +1,27 @@
 # Authentication and Passkeys
 
+## First Installation
+
+The web and CLI setup wizards require a login-valid email and a password of
+8–72 UTF-8 bytes (bcrypt's input limit). Multi-byte characters count by bytes,
+not character count; the web wizard checks the same limits before submission.
+The login form accepts nonempty passwords and delegates authentication to the
+server, so a valid multi-byte setup password also works at sign-in.
+
+With `AUTO_SETUP=true`, unset `ADMIN_EMAIL` and `ADMIN_PASSWORD` are generated
+independently on an empty database. The random email is a login identifier;
+retrieve generated credentials from the first-start logs and keep them private.
+Explicit credentials are validated before inserting an administrator. Invalid
+email addresses and passwords outside the byte limits stop fresh installation.
+
+If any users or an administrator already exist, initialization skips account
+creation and credential validation. Upgrades never reset existing credentials,
+create a replacement administrator, or fail because of old bootstrap values.
+`default.admin_email` / `default.admin_password` are legacy configuration fields;
+use the setup wizard or `ADMIN_EMAIL` / `ADMIN_PASSWORD` for initialization.
+
+## Passkeys
+
 Passkey sign-in is optional. It requires both a valid WebAuthn relying-party
 configuration and an administrator enabling Passkeys in System Settings. Until
 both conditions are met, Passkey endpoints return the disabled-feature error

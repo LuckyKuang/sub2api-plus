@@ -100,6 +100,7 @@ const PLATFORM_LABELS: Record<string, string> = {
   zhipu: 'Zhipu GLM',
   deepseek: 'DeepSeek',
   minimax: 'MiniMax',
+  stepfun: 'StepFun',
 }
 
 function platformLabel(platform: string): string {

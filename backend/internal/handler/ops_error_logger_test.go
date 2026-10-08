@@ -859,8 +859,13 @@ func TestApplyOpsRoutingFieldsPreservesCapacityMarkerSeparatelyFromSLAMarker(t *
 	c, _ := gin.CreateTestContext(rec)
 
 	markOpsRoutingCapacityLimited(c)
+	// Account-selection diagnostics are a complete snapshot under
+	// docs/ERROR_REQUEST_DIAGNOSTICS.md; independent identity fields cannot
+	// supply or infer a missing selection decision.
 	service.SetOpsRoutingDiagnostics(c, &service.OpsRoutingDiagnostics{
-		CandidatePool:          3,
+		SelectionDecision:      "no_available_account",
+		SelectionLayer:         "load_balance",
+		CandidatePool:          func() *int { n := 3; return &n }(),
 		FilteredCandidates:     map[string]int{"runtime_blocked": 3},
 		OutboundIdentitySource: "global",
 	})
@@ -871,7 +876,9 @@ func TestApplyOpsRoutingFieldsPreservesCapacityMarkerSeparatelyFromSLAMarker(t *
 	require.True(t, entry.IsRoutingCapacityLimited)
 	require.NotNil(t, entry.RoutingDiagnostics)
 	require.Equal(t, "no_available_account", entry.RoutingDiagnostics.SelectionDecision)
-	require.Equal(t, 3, entry.RoutingDiagnostics.CandidatePool)
+	require.Equal(t, "load_balance", entry.RoutingDiagnostics.SelectionLayer)
+	require.NotNil(t, entry.RoutingDiagnostics.CandidatePool)
+	require.Equal(t, 3, *entry.RoutingDiagnostics.CandidatePool)
 	require.Equal(t, "global", entry.RoutingDiagnostics.OutboundIdentitySource)
 }
 

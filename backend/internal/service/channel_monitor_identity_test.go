@@ -20,22 +20,39 @@ func TestChannelMonitorIdentitySnapshotAcrossPingAndModels(t *testing.T) {
 	for provider := range providerAdapters {
 		t.Run(provider, func(t *testing.T) {
 			config := emptyOutboundIdentitySettings()
-			config.Defaults[provider+":apikey"] = "grok"
-			config.Profiles["grok"] = OutboundIdentitySelection{Preset: "grok", Version: "3.9.1"}
+			preset := "grok"
+			switch provider {
+			case "deepseek", "kimi", "stepfun":
+				preset = provider
+			case "zhipu":
+				preset = "zcode"
+			case "minimax":
+				preset = "minimax_apikey"
+			default:
+				config.Defaults[provider+":apikey"] = "grok"
+			}
+			selection := func(version string) OutboundIdentitySelection {
+				if preset == "stepfun" || preset == "minimax_apikey" {
+					return OutboundIdentitySelection{Preset: preset}
+				}
+				return OutboundIdentitySelection{Preset: preset, Version: version}
+			}
+			config.Profiles[preset] = selection("3.9.1")
 			svc, ctx := outboundIdentityTestSettings(t, config)
 			foreign := builtInOutboundIdentity("claude")
 			foreign.AccountID = 88
 			ctx = outboundidentity.WithIdentity(ctx, foreign)
 			type capturedRequest struct {
-				method  string
-				headers http.Header
+				method   string
+				protocol string
+				headers  http.Header
 			}
 			captured := make(chan capturedRequest, 6)
 			updateErrors := make(chan error, 2)
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				captured <- capturedRequest{r.Method, r.Header.Clone()}
+				captured <- capturedRequest{r.Method, outboundidentity.RequestProtocol(r), r.Header.Clone()}
 				if r.Method == http.MethodHead {
-					config.Profiles["grok"] = OutboundIdentitySelection{Preset: "grok", Version: "3.9.2"}
+					config.Profiles[preset] = selection("3.9.2")
 					updateErrors <- svc.SetOutboundIdentitySettings(ctx, config)
 					return
 				}
@@ -53,16 +70,17 @@ func TestChannelMonitorIdentitySnapshotAcrossPingAndModels(t *testing.T) {
 				for _, result := range results {
 					require.Equal(t, MonitorStatusOperational, result.Status, result.Message)
 				}
-				expected, err := buildOutboundIdentity(OutboundIdentitySelection{Preset: "grok", Version: version})
+				expected, err := buildOutboundIdentity(selection(version))
 				require.NoError(t, err)
 				for range 3 {
 					request := <-captured
-					require.Equal(t, expected.UserAgent, request.headers.Get("User-Agent"))
-					require.Equal(t, version, request.headers.Get("x-grok-client-version"))
-					require.Equal(t, expected.Originator, request.headers.Get("x-grok-client-identifier"))
-					for _, name := range []string{"Originator", "Version", "X-Stainless-Package-Version", "X-App"} {
-						require.Empty(t, request.headers.Get(name), name)
+					wire := expected.ForProtocol(request.protocol)
+					require.Equal(t, wire.UserAgent, request.headers.Get("User-Agent"))
+					for name, value := range wire.Headers {
+						require.Equal(t, value, request.headers.Get(name), name)
 					}
+					require.Empty(t, request.headers.Get("Originator"))
+					require.Empty(t, request.headers.Get("Version"))
 					if request.method == http.MethodPost {
 						require.Equal(t, "preserved", request.headers.Get("X-Custom"))
 						for name, value := range providerAdapters[provider].buildHeaders("test-key") {
@@ -87,8 +105,11 @@ func TestChannelMonitorDefaultIdentityForProviders(t *testing.T) {
 	for _, test := range []struct{ provider, preset, mode string }{
 		{"openai", "codex", MonitorAPIModeChatCompletions}, {"openai", "codex", MonitorAPIModeResponses},
 		{"anthropic", "claude", ""}, {"gemini", "gemini", ""}, {"grok", "grok", ""},
-		{"kimi", "codex", ""}, {"zhipu", "codex", ""}, {"deepseek", "codex", ""}, {"minimax", "codex", ""},
-		{"opencode_go", "codex", ""},
+		// Channel-monitor egress shares the platform default preset, so the
+		// Kimi, DeepSeek and MiniMax providers send the same pinned identity as
+		// their platform accounts.
+		{"kimi", "kimi", ""}, {"zhipu", "zcode", ""}, {"deepseek", "deepseek", ""}, {"minimax", "minimax_apikey", ""},
+		{"opencode_go", "codex", ""}, {"stepfun", "stepfun", ""},
 	} {
 		t.Run(test.provider+"/"+test.mode, func(t *testing.T) {
 			captured := make(chan http.Header, 1)
@@ -102,7 +123,7 @@ func TestChannelMonitorDefaultIdentityForProviders(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, http.StatusOK, status)
 			headers := <-captured
-			expected := builtInOutboundIdentity(test.preset)
+			expected := builtInOutboundIdentity(test.preset).ForProtocol("chat_completions")
 			require.Equal(t, expected.UserAgent, headers.Get("User-Agent"))
 			for name, value := range expected.Headers {
 				if test.provider == PlatformOpenAI && (name == "Originator" || name == "Version") {

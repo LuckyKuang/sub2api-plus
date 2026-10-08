@@ -150,6 +150,7 @@ type AccountTestService struct {
 	modelMetadataRegistryMu   sync.Mutex
 	modelMetadataRegistry     map[string]modelsDevProvider
 	modelMetadataRegistryAt   time.Time
+	cnOAuthService            *CNOAuthService
 	pluginManager             *PluginManager
 	openaiGatewayService      *OpenAIGatewayService
 	agentIdentityTaskMu       sync.Mutex
@@ -473,6 +474,9 @@ func (s *AccountTestService) testOpenCodeGoResponsesConnection(c *gin.Context, a
 }
 
 func (s *AccountTestService) testCNProviderChatCompletionsConnection(c *gin.Context, account *Account, modelID string, prompt string) error {
+	if account.Platform == PlatformStepFun && strings.TrimSpace(modelID) == "" {
+		return s.sendErrorAndEnd(c, "Select a model discovered from this StepFun account")
+	}
 	testModelID := strings.TrimSpace(modelID)
 	if testModelID == "" {
 		testModelID = openai.DefaultTestModel

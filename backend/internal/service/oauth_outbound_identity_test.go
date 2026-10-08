@@ -89,7 +89,7 @@ func TestAntigravityOAuthIdentityAcrossDiscoveryAndPrivacy(t *testing.T) {
 		t.Run(entry, func(t *testing.T) {
 			settings := emptyOutboundIdentitySettings()
 			settings.Profiles["antigravity"] = OutboundIdentitySelection{Preset: "antigravity", Version: "1.20.5"}
-			settings.Defaults["antigravity:apikey"] = "claude"
+			settings.Defaults["antigravity:upstream"] = "claude"
 			svc, ctx := outboundIdentityTestSettings(t, settings)
 			ctx = WithAccountOutboundIdentity(WithOutboundIdentityScope(ctx, nil), &Account{ID: 99, Platform: PlatformOpenAI, Type: AccountTypeOAuth})
 			oauth := NewAntigravityOAuthService(nil)
@@ -100,7 +100,7 @@ func TestAntigravityOAuthIdentityAcrossDiscoveryAndPrivacy(t *testing.T) {
 				var paths []string
 				http.DefaultTransport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
 					paths = append(paths, req.URL.Path)
-					require.Equal(t, "antigravity/"+version+" windows/amd64", req.UserAgent())
+					require.Equal(t, "antigravity/"+version+" linux/amd64", req.UserAgent())
 					identity, ok := outboundidentity.FromContext(req.Context())
 					require.True(t, ok)
 					require.Zero(t, identity.AccountID)

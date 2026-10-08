@@ -10,6 +10,7 @@ import (
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/antigravity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/claude"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/cnmodels"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/ctxkey"
 	geminicli "github.com/LuckyKuang/sub2api-plus/internal/pkg/gemini"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/logger"
@@ -97,8 +98,9 @@ var channelPricingCatalogProviders = map[string][]string{
 	PlatformZhipu:       {"zhipu"},
 	PlatformDeepseek:    {"deepseek"},
 	PlatformMiniMax:     {"minimax"},
+	PlatformStepFun:     {"stepfun"},
 	PlatformOpenCodeGo: {"openai", "anthropic", "gemini", "vertex_ai-language-models",
-		"xai", "moonshot", "zhipu", "deepseek", "minimax", "opencode-go"},
+		"xai", "moonshot", "zhipu", "deepseek", "minimax", "stepfun", "opencode-go"},
 	// TypeSafe 的 System One 型号不在 Release 目录里，也不允许任何其它厂商的
 	// 目录行给它定价：参考价只认已登记的精确内置价卡（jev-latest）。空标签集
 	// 让目录精确匹配永远落空，解析必须走同型号内置兜底。
@@ -853,6 +855,9 @@ func platformSupportedModels(platform string) []string {
 		return xai.DefaultModelIDs()
 	case PlatformOpenCodeGo:
 		return DefaultOpenCodeGoModelIDs()
+	case PlatformStepFun:
+		// Keep unpriced native IDs (notably the router) visible as manual_required.
+		return append(cnmodels.DefaultModelIDs(platform), builtinFallbackFamilyModelIDs(platform)...)
 	case PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax, PlatformTypeSafe:
 		return builtinFallbackFamilyModelIDs(platform)
 	default: // PlatformAnthropic
@@ -878,13 +883,14 @@ var builtinFallbackFamilyPrefixes = map[string][]string{
 	PlatformZhipu:       {"glm-"},
 	PlatformDeepseek:    {"deepseek-"},
 	PlatformMiniMax:     {"minimax-"},
+	PlatformStepFun:     {"step-"},
 	// TypeSafe 的 System One 型号是 jev-* 家族；内置表只登记了精确型号
 	// jev-latest，未知 jev-* 仍保持 manual_required，不借用其它厂商价卡。
 	PlatformTypeSafe: {"jev-"},
 	// OpenCode 是聚合网关：同时转发上面多家上游的型号，因此并集各家前缀，
 	// 再加上自身私有系列。
 	PlatformOpenCodeGo: {"claude-", "gpt-", "gemini-", "grok-", "codex",
-		"kimi-", "k3", "glm-", "deepseek-", "minimax-",
+		"kimi-", "k3", "glm-", "deepseek-", "minimax-", "step-",
 		"longcat-", "mimo-", "muse-spark-", "qwen", "hy", "omen"},
 }
 

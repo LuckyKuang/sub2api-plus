@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	"io"
 	"net/http"
 	"net/url"
@@ -122,7 +123,7 @@ func NewUsageAlertService(
 		accountRepo:  accountRepo,
 		usageSvc:     usageSvc,
 		cfg:          cfg,
-		httpClient:   &http.Client{Timeout: usageAlertWebhookTimeout},
+		httpClient:   brandidentity.WrapClient(&http.Client{Timeout: usageAlertWebhookTimeout}),
 		parentCtx:    parentCtx,
 		parentCancel: parentCancel,
 	}
@@ -509,7 +510,7 @@ func (s *UsageAlertService) postWebhook(
 
 	client := s.httpClient
 	if client == nil {
-		client = &http.Client{Timeout: usageAlertWebhookTimeout}
+		client = brandidentity.WrapClient(&http.Client{Timeout: usageAlertWebhookTimeout})
 	}
 	resp, err := client.Do(req)
 	if err != nil {
