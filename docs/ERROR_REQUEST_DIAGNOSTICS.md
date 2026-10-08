@@ -35,6 +35,10 @@ There is no runtime interpretation of legacy rows.
 not values parsed from error strings. Wrapped errors preserve the diagnosis and
 compact/general sentinel used by admission logic.
 
+Selection producers supply their decision and observed counts as one complete
+snapshot. Transport and identity producers update only their independent fields;
+they cannot supply or infer a missing selection decision.
+
 - `candidate_pool: 0` means a measured empty pool. Missing or null means the pool
   was not observed. Negative counts are invalid and discarded. A new selection
   snapshot cannot borrow counts from an earlier result. The error detail displays
