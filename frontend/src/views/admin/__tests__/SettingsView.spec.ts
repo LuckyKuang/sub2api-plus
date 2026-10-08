@@ -8,6 +8,7 @@ import zhCommon from "@/i18n/locales/zh/common";
 import zhSettings from "@/i18n/locales/zh/admin/settings";
 import SettingsView from "../SettingsView.vue";
 import { identityPresets, type OutboundIdentityView } from "@/api/admin/outboundIdentity";
+import { identityPolicyFixture } from "@/components/account/__tests__/identityPolicyFixture";
 
 const { getOutboundIdentity, updateOutboundIdentity } = vi.hoisted(() => ({
   getOutboundIdentity: vi.fn(), updateOutboundIdentity: vi.fn(),
@@ -19,7 +20,7 @@ vi.mock("@/api/admin/outboundIdentity", async (original) => ({
 
 function outboundIdentityFixture(): OutboundIdentityView {
   const identities = identityPresets.map(preset => ({ preset, user_agent: `${preset}/3.9.0`, originator: preset, version: "3.9.0", source: "compiled_default", headers: {} }));
-  return { settings: { profiles: {}, defaults: {} }, presets: identities, effective: identities, declarations: [] };
+  return { settings: { profiles: {}, defaults: {} }, presets: identities, effective: identities, declarations: [], account_policies: identityPolicyFixture() };
 }
 
 const {
@@ -614,7 +615,7 @@ async function openIdentityTab(wrapper: ReturnType<typeof mountView>) {
 
 async function editClaudeIdentityVersion(wrapper: ReturnType<typeof mountView>, version: string) {
   const editor = wrapper.get('[data-testid="outbound-identity-settings"]');
-  await editor.findAll("section")[1].findAll("input")[0].setValue(version);
+  await editor.get('[data-identity-preset="claude"] input').setValue(version);
 }
 
 async function openUsersTab(wrapper: ReturnType<typeof mountView>) {

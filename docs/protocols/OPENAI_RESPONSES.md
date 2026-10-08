@@ -4,6 +4,13 @@ Sub2API Plus accepts OpenAI-compatible Responses requests over HTTP and
 client-facing WebSocket ingress. Account routing can use an upstream WebSocket
 or bridge the client WebSocket to an HTTP/SSE upstream.
 
+The **Use Key** dialog enables `api_key_model_discovery = true` under `[features]`
+when generating a remote Codex model catalog configuration. This applies to
+OpenAI HTTP/WebSocket, Grok, and all routed Codex groups, including StepFun and
+Composite, on Unix and Windows. File catalog mode uses `model_catalog_json`
+without the remote discovery flag. Switching catalog mode preserves the
+selected authentication mode and the group's existing API base URL.
+
 The existing DeepSeek and MiniMax native Codex model fallback lists use the
 [shared official provider catalog](../CN_PROVIDER_MODELS.md). Group allowlist
 candidates use each provider's own models; saved client aliases and account

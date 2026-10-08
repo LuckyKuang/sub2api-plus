@@ -159,6 +159,21 @@ Each provider type requires different credentials. Select the type when adding a
 
 Compatible with any payment service that implements the EasyPay protocol.
 
+Notifications accept only the standard EasyPay fields (`pid`, `trade_no`,
+`out_trade_no`, `type`, `name`, `money`, `trade_status`, `param`, `sign`,
+`sign_type`). Unknown fields, including empty ones and order-creation fields
+such as `return_url` or `notify_url`, are rejected before fulfillment. A signed
+checkout URL cannot be replayed as a payment-success notification. Providers
+that add nonstandard fields must use standard notifications; the existing
+authenticated upstream order-query reconciliation can recover genuine payments.
+
+For every payment provider, client-supplied query parameters and fragments in
+`return_url` are discarded. The canonical internal result-page path and host
+validation remain enforced. The server then adds its own `order_id`,
+`out_trade_no`, `status`, and signed `resume_token` when configured. Client query
+parameters are no longer carried through payment redirects. Existing bonus,
+commission, refund, and duplicate-fulfillment rules remain in force.
+
 | Parameter | Description | Required |
 |-----------|-------------|----------|
 | **Merchant ID (PID)** | EasyPay merchant ID | Yes |

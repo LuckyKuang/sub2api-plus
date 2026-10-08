@@ -62,6 +62,8 @@ for compose_file in \
   deploy/docker-compose.dev.yml
 do
   check_application_security_opt "$compose_file"
+  check_application_environment "$compose_file" '      - ADMIN_EMAIL=${ADMIN_EMAIL:-}'
+  check_application_environment "$compose_file" '      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}'
   check_application_environment "$compose_file" '      - SERVER_TRUSTED_PROXIES=${SERVER_TRUSTED_PROXIES:-}'
   check_application_environment "$compose_file" '      - SERVER_IP_ACCESS_EMERGENCY_ALLOWLIST=${SERVER_IP_ACCESS_EMERGENCY_ALLOWLIST:-}'
   check_application_environment "$compose_file" '      - SECURITY_TRUST_FORWARDED_IP_FOR_API_KEY_ACL=${SECURITY_TRUST_FORWARDED_IP_FOR_API_KEY_ACL:-false}'
@@ -71,5 +73,7 @@ do
     exit 1
   fi
 done
+
+bash deploy/tests/bootstrap-credentials-test.sh
 
 printf 'docker compose security test passed\n'

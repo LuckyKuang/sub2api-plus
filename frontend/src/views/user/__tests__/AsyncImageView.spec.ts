@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
+import { enableAutoUnmount, flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 
 import AsyncImageView from '../AsyncImageView.vue'
+
+enableAutoUnmount(afterEach)
 
 const {
   keysList,
@@ -115,8 +117,10 @@ function mountView() {
   })
 }
 
-function findButtonByText(text: string) {
-  return Array.from(document.body.querySelectorAll('button')).find(button => button.textContent?.trim() === text)
+async function clickButtonByText(wrapper: VueWrapper, text: string) {
+  const button = wrapper.findAll('button').find(button => button.text() === text)
+  expect(button, `Expected button: ${text}`).toBeDefined()
+  await button!.trigger('click')
 }
 
 describe('AsyncImageView task management', () => {
@@ -179,7 +183,7 @@ describe('AsyncImageView task management', () => {
     expect(listAsyncImageTasks).toHaveBeenCalledWith('sk-exhausted-key', expect.objectContaining({ offset: 0 }))
     expect(wrapper.get('[data-testid="async-image-api-key-filter"] select').text()).toContain('Exhausted image key')
 
-    findButtonByText('asyncImage.actions.create')?.click()
+    await clickButtonByText(wrapper, 'asyncImage.actions.create')
     await flushPromises()
     expect(wrapper.text()).toContain('asyncImage.create.noKeys')
   })
@@ -201,7 +205,7 @@ describe('AsyncImageView task management', () => {
     expect(listAsyncImageTasks).toHaveBeenCalledWith('sk-reassigned-key', expect.objectContaining({ offset: 0 }))
     expect(wrapper.get('[data-testid="async-image-api-key-filter"] select').text()).toContain('Reassigned key')
 
-    findButtonByText('asyncImage.actions.create')?.click()
+    await clickButtonByText(wrapper, 'asyncImage.actions.create')
     await flushPromises()
     expect(wrapper.text()).toContain('asyncImage.create.noKeys')
   })
@@ -215,7 +219,7 @@ describe('AsyncImageView task management', () => {
 
     await wrapper.get('[data-testid="delete-task-imgtask_failed"]').trigger('click')
     expect(document.body.textContent).toContain('asyncImage.delete.confirm:imgtask_failed')
-    findButtonByText('common.cancel')?.click()
+    await clickButtonByText(wrapper, 'common.cancel')
     await flushPromises()
 
     expect(deleteAsyncImageTask).not.toHaveBeenCalled()
@@ -254,7 +258,7 @@ describe('AsyncImageView task management', () => {
     await wrapper.get('[data-testid="view-task-imgtask_failed"]').trigger('click')
     expect(wrapper.text()).toContain('asyncImage.detail.taskId')
     await wrapper.get('[data-testid="delete-task-imgtask_failed"]').trigger('click')
-    findButtonByText('common.delete')?.click()
+    await clickButtonByText(wrapper, 'common.delete')
     await flushPromises()
 
     expect(deleteAsyncImageTask).toHaveBeenCalledWith('sk-selected-key', 'imgtask_failed')
@@ -275,7 +279,7 @@ describe('AsyncImageView task management', () => {
     await flushPromises()
 
     await wrapper.get('[data-testid="delete-task-imgtask_failed"]').trigger('click')
-    findButtonByText('common.delete')?.click()
+    await clickButtonByText(wrapper, 'common.delete')
     await flushPromises()
 
     expect(showError).toHaveBeenCalledWith('asyncImage.errors.deleteNotAllowed')
@@ -293,12 +297,12 @@ describe('AsyncImageView task management', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    findButtonByText('asyncImage.list.next')?.click()
+    await clickButtonByText(wrapper, 'asyncImage.list.next')
     await flushPromises()
     expect(wrapper.find('[data-testid="delete-task-imgtask_failed"]').exists()).toBe(true)
 
     await wrapper.get('[data-testid="delete-task-imgtask_failed"]').trigger('click')
-    findButtonByText('common.delete')?.click()
+    await clickButtonByText(wrapper, 'common.delete')
     await flushPromises()
 
     expect(listAsyncImageTasks).toHaveBeenCalledTimes(4)
@@ -339,7 +343,7 @@ describe('AsyncImageView task management', () => {
     await flushPromises()
 
     await wrapper.get('[data-testid="delete-task-imgtask_failed"]').trigger('click')
-    findButtonByText('common.delete')?.click()
+    await clickButtonByText(wrapper, 'common.delete')
     await flushPromises()
 
     const filter = wrapper.get('[data-testid="async-image-api-key-filter"] select')
