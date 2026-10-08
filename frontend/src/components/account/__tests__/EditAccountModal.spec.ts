@@ -327,6 +327,24 @@ function mountModal(account = buildAccount(), renderGroupSelector = false) {
 }
 
 describe('EditAccountModal', () => {
+  it.each(['oauth', 'apikey'])('edits and clears StepFun %s restrictions while preserving credentials', async type => {
+    const account = buildAccount()
+    account.platform = 'stepfun'
+    account.type = type
+    account.credentials = { api_key: 'step-key', oauth_provider: 'stepfun', oauth_region: 'global', region: 'global', account_mode: 'coding', api_protocol: 'chat_completions', base_url: 'https://api.stepfun.ai/step_plan/v1', model_mapping: { 'step-3.7-flash': 'step-3.7-flash' } }
+    updateAccountMock.mockReset().mockResolvedValue(account)
+    checkMixedChannelRiskMock.mockReset().mockResolvedValue({ has_risk: false })
+    const wrapper = mountModal(account)
+    const selector = wrapper.getComponent(ModelWhitelistSelectorStub)
+    expect(selector.props('modelValue')).toEqual(['step-3.7-flash'])
+    selector.vm.$emit('update:modelValue', ['step-other-chat'])
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    expect(updateAccountMock.mock.calls[0][1].credentials).toMatchObject({ oauth_region: 'global', model_mapping: { 'step-other-chat': 'step-other-chat' } })
+    selector.vm.$emit('update:modelValue', [])
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    expect(updateAccountMock.mock.calls[1][1].credentials.model_mapping).toBeUndefined()
+    wrapper.unmount()
+  })
   it('preserves the StepFun international endpoint on reload and when switching to Step Plan', async () => {
     const account = buildAccount()
     account.platform = 'stepfun'

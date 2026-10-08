@@ -52,6 +52,8 @@ vi.mock('@/composables/useClipboard', () => ({
 }))
 
 import ModelWhitelistSelector from '../ModelWhitelistSelector.vue'
+import { cnOAuthModels } from '@/api/admin/cnOAuth'
+vi.mock('@/api/admin/cnOAuth', () => ({ cnOAuthModels: vi.fn() }))
 
 function mountSelector(props: Record<string, unknown> = {}) {
   return mount(ModelWhitelistSelector, {
@@ -89,6 +91,73 @@ describe('ModelWhitelistSelector', () => {
     showWarning.mockReset()
     syncUpstreamModels.mockReset()
     syncUpstreamModelsPreview.mockReset()
+    vi.mocked(cnOAuthModels).mockReset()
+  })
+
+  it.each(['apikey', 'oauth'] as const)('lets StepFun %s users search, deselect and reselect discovered models', async kind => {
+    const catalog = { models: [' step-3.7-flash ', 'step-future-chat', 'step-3.7-flash'] }
+    syncUpstreamModelsPreview.mockResolvedValue(catalog)
+    vi.mocked(cnOAuthModels).mockResolvedValue(catalog)
+    const wrapper = mountSelector({ platform: 'stepfun', ...(kind === 'apikey'
+      ? { syncCredentials: { platform: 'stepfun', type: 'apikey', base_url: 'https://api.stepfun.ai/v1', api_key: 'step-key' } }
+      : { oauthSessionId: 'ready-session' }) })
+    await wrapper.get('div.cursor-pointer').trigger('click')
+    expect(wrapper.findAll('[data-testid="model-option"]')).toHaveLength(0)
+    await wrapper.findAll('button').find(b => b.text() === 'admin.accounts.syncUpstreamModels')!.trigger('click')
+    await flushPromises()
+    expect(wrapper.emitted('update:modelValue')?.[0]).toEqual([['step-3.7-flash', 'step-future-chat']])
+    expect(wrapper.findAll('[data-testid="model-option"]')).toHaveLength(2)
+    await wrapper.setProps({ modelValue: ['step-3.7-flash', 'step-future-chat'] })
+    await findModelRow(wrapper, 'step-future-chat').get('[data-testid="select-model"]').trigger('click')
+    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([['step-3.7-flash']])
+    await wrapper.setProps({ modelValue: ['step-3.7-flash'] })
+    await wrapper.get('input[placeholder="admin.accounts.searchModels"]').setValue('future')
+    expect(wrapper.findAll('[data-testid="model-option"]')).toHaveLength(1)
+    await findModelRow(wrapper, 'step-future-chat').get('[data-testid="select-model"]').trigger('click')
+    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([['step-3.7-flash', 'step-future-chat']])
+    await wrapper.setProps({ modelValue: [] })
+    await wrapper.findAll('button').find(b => b.text() === 'admin.accounts.fillRelatedModels')!.trigger('click')
+    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([['step-3.7-flash', 'step-future-chat']])
+    if (kind === 'oauth') {
+      expect(cnOAuthModels).toHaveBeenCalledWith('ready-session')
+      expect(syncUpstreamModelsPreview).not.toHaveBeenCalled()
+      expect(wrapper.emitted('upstream-synced')).toBeUndefined()
+    }
+    wrapper.unmount()
+  })
+
+  it('shows saved StepFun whitelist IDs when editing without inventing a catalog', async () => {
+    const wrapper = mountSelector({ platform: 'stepfun', accountId: 42, modelValue: ['step-private-model'] })
+    await wrapper.get('div.cursor-pointer').trigger('click')
+    expect(wrapper.findAll('[data-testid="model-option"]')).toHaveLength(1)
+    expect(findModelRow(wrapper, 'step-private-model').exists()).toBe(true)
+  })
+
+  it('discards a late OAuth catalog after cancellation and keeps the current selection', async () => {
+    let resolve!: (value: { models: string[] }) => void
+    vi.mocked(cnOAuthModels).mockImplementation(() => new Promise(done => { resolve = done }))
+    const wrapper = mountSelector({ platform: 'stepfun', oauthSessionId: 'old-session', modelValue: ['step-selected'] })
+    await wrapper.findAll('button').find(b => b.text() === 'admin.accounts.syncUpstreamModels')!.trigger('click')
+    await wrapper.setProps({ oauthSessionId: undefined })
+    resolve({ models: ['step-old-account'] })
+    await flushPromises()
+    await wrapper.get('div.cursor-pointer').trigger('click')
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    expect(wrapper.text()).not.toContain('step-old-account')
+    expect(findModelRow(wrapper, 'step-selected').exists()).toBe(true)
+    expect(showSuccess).not.toHaveBeenCalled()
+  })
+
+  it('drops discovered options when API key credentials change', async () => {
+    const credentials = { platform: 'stepfun', type: 'apikey', api_key: 'first-key' }
+    syncUpstreamModelsPreview.mockResolvedValue({ models: ['step-first-account'] })
+    const wrapper = mountSelector({ platform: 'stepfun', syncCredentials: credentials })
+    await wrapper.findAll('button').find(b => b.text() === 'admin.accounts.syncUpstreamModels')!.trigger('click')
+    await flushPromises()
+    await wrapper.get('div.cursor-pointer').trigger('click')
+    expect(findModelRow(wrapper, 'step-first-account').exists()).toBe(true)
+    await wrapper.setProps({ syncCredentials: { ...credentials, api_key: 'second-key' } })
+    expect(wrapper.findAll('[data-testid="model-option"]')).toHaveLength(0)
   })
 
   it('rejects a custom whitelist model that is already mapped to a different target', async () => {

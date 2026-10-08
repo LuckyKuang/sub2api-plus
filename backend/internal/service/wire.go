@@ -1136,6 +1136,7 @@ func ProvideCNOAuthService(proxyRepo ProxyRepository, accountRepo AccountReposit
 	svc := NewCNOAuthService(proxyRepo, accountRepo, admin)
 	svc.store = cnoauth.NewStore(redisClient)
 	svc.refreshAPI = refreshAPI
+	svc.modelTester = tester
 	gateway.cnOAuthService = svc
 	tester.cnOAuthService = svc
 	return svc

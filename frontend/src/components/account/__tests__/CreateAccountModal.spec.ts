@@ -9,6 +9,9 @@ const {
   importCodexSessionMock,
   createOpenAICodexPATMock,
   authIsSimpleMode,
+  cnOAuthRequestMock,
+  cnOAuthModelsMock,
+  previewModelsMock,
 } = vi.hoisted(() => ({
   createAccountMock: vi.fn(),
   syncUpstreamModelsMock: vi.fn(),
@@ -16,6 +19,9 @@ const {
   importCodexSessionMock: vi.fn(),
   createOpenAICodexPATMock: vi.fn(),
   authIsSimpleMode: { value: true },
+  cnOAuthRequestMock: vi.fn(),
+  cnOAuthModelsMock: vi.fn(),
+  previewModelsMock: vi.fn(),
 }))
 
 vi.mock('@/components/account/OutboundIdentityEditor.vue', () => ({ default: { template: '<div />' } }))
@@ -25,6 +31,7 @@ vi.mock('@/stores/app', () => ({
     showError: vi.fn(),
     showSuccess: vi.fn(),
     showWarning: showWarningMock,
+    showInfo: vi.fn(),
   }),
 }))
 
@@ -57,7 +64,9 @@ vi.mock('@/api/admin', () => ({
 
 vi.mock('@/api/admin/accounts', () => ({
   getAntigravityDefaultModelMapping: vi.fn().mockResolvedValue([]),
+  accountsAPI: { syncUpstreamModelsPreview: previewModelsMock },
 }))
+vi.mock('@/api/admin/cnOAuth', () => ({ cnOAuthRequest: cnOAuthRequestMock, cnOAuthModels: cnOAuthModelsMock }))
 
 vi.mock('vue-i18n', async () => {
   const actual = await vi.importActual<typeof import('vue-i18n')>('vue-i18n')
@@ -153,7 +162,7 @@ const ModelWhitelistSelectorStub = defineComponent({
   >models</button>`,
 })
 
-function mountModal(groups: any[] = []) {
+function mountModal(groups: any[] = [], realModelSelector = false) {
   return mount(CreateAccountModal, {
     props: { show: true, proxies: [], groups },
     global: {
@@ -167,7 +176,7 @@ function mountModal(groups: any[] = []) {
         ProxySelector: true,
         ProxyAdBanner: true,
         GroupSelector: GroupSelectorStub,
-        ModelWhitelistSelector: ModelWhitelistSelectorStub,
+        ModelWhitelistSelector: realModelSelector ? false : ModelWhitelistSelectorStub,
         QuotaLimitCard: true,
       },
     },
@@ -225,9 +234,57 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
       warnings: [],
     })
     createOpenAICodexPATMock.mockReset().mockResolvedValue({})
+    cnOAuthRequestMock.mockReset()
+    cnOAuthModelsMock.mockReset()
+    previewModelsMock.mockReset()
   })
 
   afterEach(() => vi.useRealTimers())
+
+  it.each(['apikey', 'oauth'] as const)('saves the actual StepFun %s checkbox selection during creation', async kind => {
+    const wrapper = mountModal([], true)
+    await selectButtonByText(wrapper, 'StepFun')
+    await wrapper.get('form#create-account-form input[type="text"]').setValue('Restricted StepFun')
+    const catalog = { models: ['step-3.7-flash', 'step-other-chat'] }
+    if (kind === 'apikey') {
+      previewModelsMock.mockResolvedValue(catalog)
+      await wrapper.get('form#create-account-form input[type="password"]').setValue('step-key')
+    } else {
+      const pending = { session_id: 'ready-step', status: 'pending', authorize_url: 'https://platform.stepfun.com/cli-login', expires_at: new Date(Date.now() + 60000).toISOString(), interval_seconds: 5 }
+      cnOAuthRequestMock.mockResolvedValueOnce(pending)
+      await selectButtonByText(wrapper, 'admin.accounts.oauth.domestic.start')
+      await flushPromises()
+      await wrapper.get('[data-testid="cn-oauth-panel"] textarea').setValue('http://127.0.0.1:53683/callback?state=s&api_key=private-key')
+      cnOAuthRequestMock.mockResolvedValueOnce({ ...pending, status: 'ready' })
+      await selectButtonByText(wrapper, 'admin.accounts.oauth.domestic.exchange')
+      await flushPromises()
+      expect(cnOAuthRequestMock).toHaveBeenLastCalledWith('stepfun', 'exchange', {
+        session_id: 'ready-step', callback: 'http://127.0.0.1:53683/callback?state=s&api_key=private-key'
+      })
+      expect(wrapper.findComponent({ name: 'CNOAuthPanel' }).emitted('ready-session')?.at(-1)).toEqual(['ready-step'])
+      expect(wrapper.findComponent({ name: 'ModelWhitelistSelector' }).props('oauthSessionId')).toBe('ready-step')
+      cnOAuthModelsMock.mockResolvedValue(catalog)
+      cnOAuthRequestMock.mockResolvedValueOnce({ ...pending, status: 'completed', account_id: 42 })
+    }
+    await selectButtonByText(wrapper, 'admin.accounts.syncUpstreamModels')
+    await flushPromises()
+    await wrapper.get('div.cursor-pointer').trigger('click')
+    const other = wrapper.findAll('[data-testid="model-option"]').find(row => row.text().includes('step-other-chat'))!
+    await other.get('[data-testid="select-model"]').trigger('click')
+    if (kind === 'apikey') {
+      await wrapper.get('form#create-account-form').trigger('submit.prevent')
+      await flushPromises()
+      expect(previewModelsMock).toHaveBeenCalledWith(expect.objectContaining({ platform: 'stepfun', api_key: 'step-key', base_url: 'https://api.stepfun.com/v1' }))
+      expect(createAccountMock.mock.calls[0][0].credentials.model_mapping).toEqual({ 'step-3.7-flash': 'step-3.7-flash' })
+    } else {
+      await selectButtonByText(wrapper, 'admin.accounts.oauth.domestic.create')
+      await flushPromises()
+      expect(cnOAuthModelsMock).toHaveBeenCalledWith('ready-step')
+      expect(cnOAuthRequestMock).toHaveBeenLastCalledWith('stepfun', 'complete', expect.objectContaining({ session_id: 'ready-step', model_mapping: { 'step-3.7-flash': 'step-3.7-flash' } }))
+      expect(createAccountMock).not.toHaveBeenCalled()
+    }
+    wrapper.unmount()
+  })
 
   it('sets month and year expiry presets without submitting the account form', async () => {
     vi.useFakeTimers({ toFake: ['Date'] })

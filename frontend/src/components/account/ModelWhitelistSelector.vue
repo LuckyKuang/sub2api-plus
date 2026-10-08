@@ -1,5 +1,6 @@
 <template>
   <div>
+    <p v-if="platform === 'stepfun'" class="input-hint mb-3">{{ t('admin.accounts.stepfunModelDiscoveryHint') }}</p>
     <!-- Multi-select Dropdown -->
     <div class="relative mb-3">
       <div
@@ -95,6 +96,7 @@
     <!-- Quick Actions -->
     <div class="mb-4 flex flex-wrap gap-2">
       <button
+        v-if="platform !== 'stepfun' || discoveredModels.length > 0"
         type="button"
         @click="fillRelated"
         class="rounded-lg border border-blue-200 px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-900/30"
@@ -145,11 +147,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { accountsAPI } from '@/api/admin/accounts'
 import type { SyncUpstreamPreviewParams } from '@/api/admin/accounts'
+import { cnOAuthModels } from '@/api/admin/cnOAuth'
 import { useClipboard } from '@/composables/useClipboard'
 import ModelIcon from '@/components/common/ModelIcon.vue'
 import Icon from '@/components/icons/Icon.vue'
@@ -163,6 +166,7 @@ const props = defineProps<{
   platform?: string
   platforms?: string[]
   accountId?: number
+  oauthSessionId?: string
   syncCredentials?: {
     platform: string
     type: string
@@ -184,6 +188,15 @@ const searchQuery = ref('')
 const customModel = ref('')
 const isComposing = ref(false)
 const isSyncingUpstream = ref(false)
+const discoveredModels = ref<string[]>([])
+let syncGeneration = 0
+onBeforeUnmount(() => { syncGeneration++ })
+watch(() => [props.accountId, props.platform, props.platforms?.join(','), props.oauthSessionId,
+  props.syncCredentials?.platform, props.syncCredentials?.type, props.syncCredentials?.base_url, props.syncCredentials?.api_key], () => {
+  syncGeneration++
+  discoveredModels.value = []
+  isSyncingUpstream.value = false
+})
 const normalizedPlatforms = computed(() => {
   const rawPlatforms =
     props.platforms && props.platforms.length > 0
@@ -215,6 +228,7 @@ const upstreamSyncPlatforms = new Set([
   'opencode_go'
 ])
 const canSyncUpstream = computed(() => {
+  if (props.platform === 'stepfun' && props.oauthSessionId) return true
   if (props.accountId) {
     if (normalizedPlatforms.value.length === 0) return true
     return normalizedPlatforms.value.some(platform => upstreamSyncPlatforms.has(platform.toLowerCase()))
@@ -226,10 +240,6 @@ const canSyncUpstream = computed(() => {
 })
 
 const availableOptions = computed(() => {
-  if (normalizedPlatforms.value.length === 0) {
-    return allModels
-  }
-
   const allowedModels = new Set<string>()
   for (const platform of normalizedPlatforms.value) {
     for (const model of getModelsByPlatform(platform)) {
@@ -237,7 +247,14 @@ const availableOptions = computed(() => {
     }
   }
 
-  return allModels.filter(model => allowedModels.has(model.value))
+  const presets = normalizedPlatforms.value.length === 0
+    ? allModels
+    : allModels.filter(model => allowedModels.has(model.value))
+  const options = new Map(presets.map(model => [model.value, model]))
+  for (const value of [...discoveredModels.value, ...props.modelValue]) {
+    if (!options.has(value)) options.set(value, { value, label: value })
+  }
+  return [...options.values()]
 })
 
 const filteredModels = computed(() => {
@@ -290,7 +307,7 @@ const handleEnter = () => {
 }
 
 const fillRelated = () => {
-  const newModels = [...props.modelValue]
+  const newModels = [...new Set([...props.modelValue, ...discoveredModels.value])]
   for (const platform of normalizedPlatforms.value) {
     for (const model of getModelsByPlatform(platform)) {
       if (!newModels.includes(model)) {
@@ -303,26 +320,31 @@ const fillRelated = () => {
 
 const syncUpstreamModels = async () => {
   if (isSyncingUpstream.value) return
-  if (!props.accountId && !props.syncCredentials) return
+  if (!canSyncUpstream.value) return
 
+  const generation = syncGeneration
   isSyncingUpstream.value = true
   try {
     let result
-    if (props.accountId) {
+    if (props.platform === 'stepfun' && props.oauthSessionId) {
+      result = { ...await cnOAuthModels(props.oauthSessionId), warnings: [] }
+    } else if (props.accountId) {
       result = await accountsAPI.syncUpstreamModels(props.accountId)
     } else if (props.syncCredentials) {
       result = await accountsAPI.syncUpstreamModelsPreview(props.syncCredentials as SyncUpstreamPreviewParams)
     } else {
       return
     }
+    if (generation !== syncGeneration) return
 
-    const upstreamModels = result.models.map(model => model.trim()).filter(Boolean)
+    const upstreamModels = [...new Set(result.models.map(model => model.trim()).filter(Boolean))]
+    discoveredModels.value = upstreamModels
     if (upstreamModels.length === 0) {
       appStore.showInfo(t('admin.accounts.syncUpstreamModelsEmpty'))
       return
     }
 
-    if (!props.accountId) {
+    if (!props.accountId && !props.oauthSessionId) {
       emit('upstream-synced')
     }
 
@@ -356,10 +378,11 @@ const syncUpstreamModels = async () => {
       appStore.showWarning(t('admin.accounts.syncUpstreamModelsMetadataPartial'))
     }
   } catch (error) {
+    if (generation !== syncGeneration) return
     const message = error instanceof Error ? error.message : t('admin.accounts.syncUpstreamModelsFailed')
     appStore.showError(t('admin.accounts.syncUpstreamModelsError', { message }))
   } finally {
-    isSyncingUpstream.value = false
+    if (generation === syncGeneration) isSyncingUpstream.value = false
   }
 }
 

@@ -15,6 +15,11 @@ export interface CNOAuthAccountInput {
   concurrency?: number
   priority?: number
   group_ids?: number[]
+  model_mapping?: Record<string, string>
+}
+export async function cnOAuthModels(sessionId: string): Promise<{ models: string[] }> {
+  const { data } = await apiClient.post<{ models: string[] }>('/admin/cn/oauth/stepfun/models', { session_id: sessionId })
+  return data
 }
 export async function cnOAuthRequest(
   platform: CNOAuthPlatform,

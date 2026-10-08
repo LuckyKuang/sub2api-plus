@@ -336,7 +336,7 @@ func TestStepFunReauthorizationPreservesRegionAndAccountMetadata(t *testing.T) {
 			require.Equal(t, "platform.stepfun.ai", auth.Host, "relink uses the stored region")
 			_, err = svc.Advance(ctx, 7, "stepfun", view.SessionID, "http://127.0.0.1:53683/callback?state="+auth.Query().Get("state")+"&access_token=new-key"+lifetime, false)
 			require.NoError(t, err)
-			_, err = svc.Complete(ctx, 7, "stepfun", view.SessionID, CNOAuthCompleteInput{})
+			_, err = svc.Complete(ctx, 7, "stepfun", view.SessionID, CNOAuthCompleteInput{ModelMapping: map[string]string{"unexpected": "unexpected"}})
 			require.NoError(t, err)
 			creds := admin.update.Credentials
 			require.Equal(t, "global", creds["oauth_region"])

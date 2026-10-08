@@ -50,6 +50,16 @@ describe('StepFun official access requirements', () => {
     expect(cnOAuthRequest).toHaveBeenLastCalledWith('stepfun', 'cancel', { session_id: 'session' })
   })
 
+  it('withdraws model-discovery access when a ready authorization expires', async () => {
+    vi.mocked(cnOAuthRequest).mockResolvedValueOnce({ ...pending(), status: 'ready' })
+    const wrapper = mount(CNOAuthPanel, { props: { platform: 'stepfun' } })
+    await wrapper.get('button').trigger('click'); await flushPromises()
+    expect(wrapper.emitted('ready-session')?.at(-1)).toEqual(['session'])
+    await vi.advanceTimersByTimeAsync(61000)
+    expect(wrapper.emitted('ready-session')?.at(-1)).toEqual([undefined])
+    wrapper.unmount()
+  })
+
   it('keeps reauthorization on the existing account region', async () => {
     const wrapper = mount(CNOAuthPanel, { props: { platform: 'stepfun', accountId: 42, initialRegion: 'global' } })
     expect(wrapper.get('select').element.disabled).toBe(true)

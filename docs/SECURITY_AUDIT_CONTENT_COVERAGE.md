@@ -439,3 +439,9 @@ extraction contract for both engines. Platform selection and OAuth's Bearer
 credential do not introduce a pre-audit upstream operation. Native upstream
 Responses WebSocket is not advertised for StepFun. The domestic account-type
 pass-through matrix includes StepFun alongside the existing providers.
+
+StepFun's administrator-only OAuth model preview (`cn/oauth/stepfun/models`)
+accepts an owned ready session handle and reads a model catalog without creating
+an account. It carries no inference content and preserves the existing
+administrator authentication boundary. Completion stores model restrictions;
+neither operation changes the gateway extraction or audit ordering contract.

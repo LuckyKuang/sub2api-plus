@@ -773,6 +773,7 @@ export default {
       syncUpstreamModelsSuccess: 'Synced {count} new model(s) from upstream ({total} upstream total)',
       syncUpstreamModelsNoChanges: 'All {count} upstream model(s) are already in the whitelist',
       syncUpstreamModelsEmpty: 'Upstream returned no models to sync',
+      stepfunModelDiscoveryHint: 'StepFun models come from your account’s live catalog. Enter an API key or complete OAuth authorization, then sync upstream models and select the models to allow. You can also add model IDs manually. An empty whitelist allows all models.',
       syncUpstreamModelsFailed: 'Failed to sync upstream models',
       syncUpstreamModelsError: 'Failed to sync upstream models: {message}',
       syncUpstreamModelsMetadataIncomplete:

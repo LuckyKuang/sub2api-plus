@@ -26,6 +26,8 @@ func TestCNOAuthHandlerRejectsInvalidAndUnauthenticatedRequests(t *testing.T) {
 		{"malformed JSON", "kimi", "start", `{`, 7, 400},
 		{"invalid region", "kimi", "start", `{"region":"other"}`, 7, 400},
 		{"missing session", "minimax", "complete", `{}`, 7, 400},
+		{"missing model session", "stepfun", "models", `{}`, 7, 400},
+		{"model mapping must contain strings", "stepfun", "complete", `{"model_mapping":{"step-3.7-flash":42}}`, 7, 400},
 		{"missing action", "deepseek", "invalid", `{}`, 7, 400},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

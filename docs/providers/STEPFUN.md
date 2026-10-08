@@ -52,6 +52,22 @@ are inferred. Configure channel pricing or use an available matching pricing
 reference before serving paid traffic. Account connection tests require an
 explicit model from that account's catalog.
 
+During account creation, enter an API key or finish the Step Plan browser
+authorization, then use **Sync upstream models** in Model restrictions. The
+returned IDs become searchable checkbox options; they remain available after
+deselection. Saved whitelist IDs also appear when editing an account. Catalog
+options are scoped to the credential source and late responses from a previous
+source are discarded. Manual model IDs and model mappings remain supported.
+An empty restriction allows all models; a nonempty whitelist/mapping restricts
+eligible request model IDs for both API Key and OAuth accounts.
+
+`POST /api/v1/admin/cn/oauth/stepfun/models` accepts only an owned, ready,
+unexpired `session_id`. It reads the authorized region's Step Plan catalog
+using the session's trusted identity, returns only model IDs, and creates no
+account. Cancelled, consumed and pending sessions cannot query it. OAuth
+completion accepts `model_mapping` for new accounts; reauthorization preserves
+the existing restriction. Credentials stay on the server throughout discovery.
+
 StepFun participates in groups, composite routing (`stepfun/…`, `step/…`,
 `step-…`), quotas, statistics and probes. No upstream balance/subscription
 usage endpoint is invented. Local usage remains available; upstream quota

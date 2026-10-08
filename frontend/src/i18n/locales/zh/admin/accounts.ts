@@ -850,6 +850,7 @@ export default {
       syncUpstreamModelsSuccess: '已从上游同步 {count} 个新模型（上游共 {total} 个）',
       syncUpstreamModelsNoChanges: '上游 {count} 个模型均已在白名单中',
       syncUpstreamModelsEmpty: '上游没有返回可同步的模型',
+      stepfunModelDiscoveryHint: 'StepFun 模型以当前账号的实时目录为准。填写 API Key 或完成 OAuth 授权后，点击“同步上游模型”，再勾选允许使用的模型；也可手动添加模型 ID。白名单为空表示不限制模型。',
       syncUpstreamModelsFailed: '同步上游模型失败',
       syncUpstreamModelsError: '同步上游模型失败：{message}',
       syncUpstreamModelsMetadataIncomplete: '模型 ID 已同步，但未能更新任何能力元数据。',

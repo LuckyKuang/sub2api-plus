@@ -46,6 +46,14 @@ func (h *CNOAuthHandler) Handle(c *gin.Context) {
 		result, err = h.service.Advance(c.Request.Context(), subject.UserID, platform, input.SessionID, input.Callback, c.Param("action") == "cancel")
 	case "complete":
 		result, err = h.service.Complete(c.Request.Context(), subject.UserID, platform, input.SessionID, input.CNOAuthCompleteInput)
+	case "models":
+		models, modelErr := h.service.PreviewModels(c.Request.Context(), subject.UserID, platform, input.SessionID)
+		if modelErr != nil {
+			response.ErrorFrom(c, modelErr)
+			return
+		}
+		response.Success(c, gin.H{"models": models})
+		return
 	default:
 		response.BadRequest(c, "unsupported authorization action")
 		return

@@ -40,7 +40,7 @@ import { useCNOAuth } from '@/composables/useCNOAuth'
 import type { CNOAuthAccountInput, CNOAuthPlatform } from '@/api/admin/cnOAuth'
 
 const props = defineProps<{ platform: CNOAuthPlatform; proxyId?: number; accountId?: number; accountInput?: CNOAuthAccountInput; initialRegion?: string }>()
-const emit = defineEmits<{ completed: [id: number] }>()
+const emit = defineEmits<{ completed: [id: number]; 'ready-session': [id: string | undefined] }>()
 const { t } = useI18n()
 const { session, busy, failed, expired, start, advance, complete, cancel } = useCNOAuth(props.platform)
 const region = ref(props.initialRegion || 'cn')
@@ -52,6 +52,9 @@ const regionOptions = computed(() => [
 ])
 watch(() => props.proxyId, cancel)
 watch([session, expired], () => { if (!session.value || expired.value || session.value.status !== 'pending') callback.value = '' })
+watch([session, expired], () => {
+  emit('ready-session', !expired.value && session.value?.status === 'ready' ? session.value.session_id : undefined)
+})
 async function startLogin() {
   callback.value = ''
   await start({ region: region.value, proxy_id: props.proxyId, account_id: props.accountId })

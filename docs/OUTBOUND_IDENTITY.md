@@ -944,6 +944,12 @@ Retries, probes and discovery retain the credential owner's snapshot; failover
 resolves the new owner. Final header privacy remains mandatory for every path.
 Settings preview exposes the shared profile and the Chat Completions wire block.
 
+Pre-account OAuth catalog discovery validates the ready session's owner,
+platform and lifetime, then uses its captured identity and Step Plan region
+through the shared model-discovery transport. It exposes only model IDs and
+does not consume the grant. `stepfun_model_restrictions_test.go` covers its
+literal discovery headers, both regions, proxy, and rejected session states.
+
 Independent StepFun tests cover exact literal wire declarations, four
 region/auth combinations, actual forwarding and probes/discovery, static-grant
 lifecycle, invalid/missing/duplicate state, single consumption, region pinning,

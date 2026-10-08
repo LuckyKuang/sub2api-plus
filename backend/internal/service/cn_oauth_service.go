@@ -23,6 +23,7 @@ type CNOAuthService struct {
 	accountRepo AccountRepository
 	refreshAPI  *OAuthRefreshAPI
 	admin       AdminService
+	modelTester *AccountTestService
 }
 
 func NewCNOAuthService(proxyRepo ProxyRepository, accountRepo AccountRepository, admin AdminService) *CNOAuthService {
@@ -157,10 +158,51 @@ func (s *CNOAuthService) Advance(ctx context.Context, owner int64, platform, id,
 }
 
 type CNOAuthCompleteInput struct {
-	Name        string  `json:"name"`
-	Concurrency int     `json:"concurrency"`
-	Priority    int     `json:"priority"`
-	GroupIDs    []int64 `json:"group_ids"`
+	Name         string            `json:"name"`
+	Concurrency  int               `json:"concurrency"`
+	Priority     int               `json:"priority"`
+	GroupIDs     []int64           `json:"group_ids"`
+	ModelMapping map[string]string `json:"model_mapping"`
+}
+
+// PreviewModels uses the server-held grant without creating an account or
+// exposing credentials. Only StepFun currently publishes this login-time catalog.
+func (s *CNOAuthService) PreviewModels(ctx context.Context, owner int64, platform, id string) ([]string, error) {
+	var account *Account
+	validate := func(_ context.Context, session *cnoauth.Session) error {
+		if owner <= 0 || platform != PlatformStepFun || session.OwnerID != owner || session.Flow.Platform != platform || session.Cancelled || session.CompletedID > 0 || session.Grant == nil {
+			return cnoauth.ErrSession
+		}
+		if session.Committing {
+			return cnoauth.ErrBusy
+		}
+		if !session.Grant.ExpiresAt.IsZero() && time.Now().After(session.Grant.ExpiresAt) {
+			return cnoauth.ErrExpired
+		}
+		credentials := cnOAuthCredentials(session.Flow, session.Grant)
+		credentials[outboundIdentityCredential] = selectionFromIdentity(session.Identity)
+		account = &Account{Platform: platform, Type: AccountTypeOAuth, Credentials: credentials, ProxyID: session.ProxyID}
+		return nil
+	}
+	if err := s.store.Update(ctx, id, validate); err != nil {
+		return nil, cnOAuthError(err)
+	}
+	if account.ProxyID != nil {
+		proxy, err := s.proxyRepo.GetByID(ctx, *account.ProxyID)
+		if err != nil {
+			return nil, cnOAuthError(err)
+		}
+		account.Proxy = proxy
+	}
+	models, err := s.modelTester.FetchUpstreamSupportedModels(ctx, account)
+	if err != nil {
+		return nil, infraerrors.New(http.StatusBadGateway, "CN_OAUTH_MODELS_FAILED", "failed to fetch authorized models; retry or enter model IDs manually")
+	}
+	// A cancelled, expired or consumed session cannot return a late result.
+	if err := s.store.Update(ctx, id, validate); err != nil {
+		return nil, cnOAuthError(err)
+	}
+	return models, nil
 }
 
 func (s *CNOAuthService) Complete(ctx context.Context, owner int64, platform, id string, input CNOAuthCompleteInput) (*CNOAuthView, error) {
@@ -224,6 +266,13 @@ func (s *CNOAuthService) Complete(ctx context.Context, owner int64, platform, id
 			account, err = s.admin.ClearAccountError(ctx, session.AccountID)
 		}
 	} else {
+		if len(input.ModelMapping) > 0 {
+			mapping := make(map[string]any, len(input.ModelMapping))
+			for from, to := range input.ModelMapping {
+				mapping[from] = to
+			}
+			credentials["model_mapping"] = mapping
+		}
 		name := strings.TrimSpace(input.Name)
 		if name == "" {
 			name = platform + " OAuth"

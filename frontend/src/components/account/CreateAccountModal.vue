@@ -688,7 +688,8 @@
         :key="form.platform"
         :platform="form.platform"
         :proxy-id="form.proxy_id ?? undefined"
-        :account-input="{ name: form.name, concurrency: form.concurrency, priority: form.priority, group_ids: form.group_ids }"
+        :account-input="{ name: form.name, concurrency: form.concurrency, priority: form.priority, group_ids: form.group_ids, model_mapping: buildModelMappingObject(modelRestrictionMode, allowedModels, modelMappings) ?? undefined }"
+        @ready-session="stepFunOAuthSession = form.platform === 'stepfun' ? $event : undefined"
         @completed="handleZhipuLinkCreated"
       />
 
@@ -1531,6 +1532,7 @@
                 :model-mappings="modelMappings"
                 :platform="form.platform"
                 :sync-credentials="syncPreviewCredentials"
+                :oauth-session-id="stepFunOAuthSession"
                 @upstream-synced="upstreamModelsPreviewed = true"
               />
               <p class="text-xs text-gray-500 dark:text-gray-400">
@@ -3942,6 +3944,7 @@ const accountCategory = ref<'oauth-based' | 'apikey' | 'bedrock' | 'service_acco
 const addMethod = ref<AddMethod>('oauth') // For oauth-based: 'oauth' or 'setup-token'
 const apiKeyBaseUrl = ref('https://api.anthropic.com')
 const apiKeyValue = ref('')
+const stepFunOAuthSession = ref<string>()
 
 // ── 国产供应商（Kimi / Zhipu / DeepSeek）账号类型、API 协议与端点 ──
 const accountMode = ref<CnAccountMode>('payg')
@@ -4663,6 +4666,7 @@ watch(
               : 'https://api.anthropic.com'
     }
     // Clear model-related settings
+    stepFunOAuthSession.value = undefined
     allowedModels.value = []
     upstreamModelsPreviewed.value = false
     modelMappings.value = []
@@ -5146,6 +5150,7 @@ const resetForm = () => {
   modelMappings.value = []
   openAICompactModelMappings.value = []
   modelRestrictionMode.value = 'whitelist'
+  stepFunOAuthSession.value = undefined
   allowedModels.value = [...claudeModels] // Default fill related models
 
   antigravityModelRestrictionMode.value = 'mapping'
