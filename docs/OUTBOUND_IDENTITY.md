@@ -110,12 +110,35 @@ combining their UA values would violate the official managed/BYOK behavior.
 | Kimi Code | Kimi / Moonshot OAuth/API-key accounts | `kimi-code-cli/<version>` UA, `X-Msh-Platform: kimi_code_cli`, `X-Msh-Version: <version>` and four device declarations (two runtime, two pinned); the official client declares no `Originator` and no standalone `Version` header |
 | GLM / ZCode | Zhipu / GLM API-key and account-link OAuth accounts | `ZCode/<version>`, paired `X-ZCode-App-Version`, product attribution, two runtime and three pinned environment declarations listed below |
 
-Native OAuth and setup-token accounts retain their native client family.
-API-key, upstream, Bedrock and service-account accounts can explicitly select
-any preset. OpenAI API-key/upstream accounts inherit existing Codex behavior
-unless an administrator explicitly selects another preset through an account
-selection or a type default. Selecting a preset changes declarations only;
-it does not make the destination accept another authentication protocol.
+Native OAuth/setup-token accounts retain their native client family. DeepSeek,
+Kimi, MiniMax, GLM and StepFun API-key accounts also retain their official family;
+MiniMax API keys use `minimax_apikey`, whereas OAuth uses `minimax`. Bedrock and
+Vertex Claude retain `claude`; Vertex Gemini retains `gemini`. Valid account
+parameters can override global declarations within that family. A custom base
+URL or proxy does not change this rule.
+
+Only these eleven keys permit another client family, through a global default
+or account selection:
+
+| Platform | Configurable account types | Automatic preset |
+| --- | --- | --- |
+| OpenAI-compatible | `apikey`, `upstream` | `codex` |
+| Anthropic | `apikey`, `upstream` | `claude` |
+| Gemini | `apikey`, `upstream` | `gemini` |
+| Grok | `apikey`, `upstream` | `grok` |
+| Antigravity | `upstream` | `antigravity` |
+| TypeSafe / Jev | `apikey` | `codex` |
+| OpenCode Go | `apikey` | `codex` |
+
+Anthropic/Gemini/Grok API-key entries also serve compatible endpoints, so they
+retain advanced overrides without guessing endpoint type from its hostname.
+System Settings presents these mappings in a collapsed advanced section.
+The API's `account_policies` declares the native preset, allowed presets and
+whether default mapping is permitted. Both editors consume this backend policy.
+Management save, preview, account creation/import/update/bulk update and runtime
+resolution enforce the same family rule. Retired mapping keys are rejected even
+when their value is the native preset. Selecting a compatible identity changes
+only declarations, never authentication, protocol or model routing.
 
 TypeSafe API-key accounts are an API-key compatible supplier with no
 provider-defined client family, version or identity header. They register the
@@ -146,11 +169,9 @@ the protocol layer. `SUB2API_DEEPSEEK_HARNESS_VERSION` may select a supported
 version (`0.2.0-rc.2` remains the accepted floor) while the product token, the
 `(+url)` comment and the identifier stay fixed. DeepSeek API-key accounts
 resolve this preset by default through `nativeOutboundPreset`, so the
-`deepseek:apikey` type default is an explicit, operator-visible equivalent
-rather than a prerequisite. Enabling it replaces Codex's
-`Originator`/`Version` declarations on those accounts; an account selection or
-type default can still opt a DeepSeek account back into Codex or any other
-compatible preset.
+`deepseek:apikey` mapping is no longer configurable. The global DeepSeek profile
+and valid same-family account overrides remain available; a foreign persisted
+candidate falls through atomically to the native profile/default.
 
 The exact compiled ZCode identity is `ZCode/3.14.3`, with identifier `ZCode`
 and client version `3.14.3`. The desktop host's declaration block comes from
@@ -191,8 +212,7 @@ in `control_headers` and serialized with login sessions. An absent telemetry
 derivation retain one identity even across Redis instances/settings changes;
 account creation pins its product and configurable runtime declarations. Deferred off-peak settlement retains the acquiring credential
 owner's identity alongside its authentication, even after settings change. Gateway transports reapply the trusted declarations at send
-time; stale SDK/inbound/generic overrides cannot rewrite them. API-key accounts
-can choose another compatible preset; native OAuth accounts retain ZCode.
+time; stale SDK/inbound/generic overrides cannot rewrite them. Both API-key and OAuth accounts retain the ZCode family.
 
 MiniMax has two distinct defaults:
 
@@ -211,8 +231,8 @@ Anthropic SDK locked at `0.91.1` in `third_party/pi-mono/packages/ai` and
 This is an explicitly pinned supported official Node host fingerprint, independent
 of the gateway's Go runtime. The API-key SDK UA/version are read-only; updating
 the SDK requires a source/wire regression review, not a product-version edit.
-`minimax:apikey` defaults to `minimax_apikey`; a valid explicit account or type
-mapping still wins. OAuth retains `minimax`.
+MiniMax API keys retain `minimax_apikey`; OAuth retains `minimax`. Neither type
+can switch families. Valid account parameter overrides retain precedence.
 
 Messages requests for both native presets carry protocol-owned
 `X-Mavis-Session-Id` (gateway-generated), `X-Mavis-Agent-Id: main` (the official
@@ -290,7 +310,7 @@ remain owned by the protocol.
 | --- | --- |
 | OAuth or API-key credential owner | Valid account candidate → global preset/type default → valid environment / compiled default |
 | Empty or invalid candidate, including invalid companion/runtime headers | Fall through atomically to the next tier |
-| API-key type mapping | May select a compatible preset; OAuth remains native |
+| Native client family | Domestic OAuth/API Key and cloud accounts retain their native family; only the eleven compatible keys above can select another family |
 | Pre-account native authorization | Global native preset → valid environment / compiled default; ignore inherited owners and API-key mappings |
 | Retry or nested same-owner request | Reuse the selected snapshot, including all runtime values |
 | Failover to another credential owner | Resolve that owner's candidate and current defaults |
@@ -392,9 +412,17 @@ forward stream. GLM off-peak task IDs use the official `offpeak-<UUID>` shape.
 For non-Codex identities, selection is:
 
 1. A valid credential-owning account `credentials.outbound_identity` candidate.
-2. The selected account-type default and its configured global preset.
+2. The configured global native preset, or a permitted compatible account-type
+   mapping and its configured global preset.
 3. The platform default preset, using an existing valid environment override
    when available, otherwise the compiled declaration.
+
+Migration 278 removes retired/unknown type-default keys and discards whole
+foreign account candidates on fixed-family accounts. Correct-family account
+candidates, global profiles/runtime declarations, compatible mappings, tokens,
+model settings and billing data remain intact. This is a forward-only cleanup,
+not a compatibility path; management writes reject the retired selections and
+runtime validation prevents stale data from selecting a foreign family.
 
 An account selection containing only `preset` inherits that preset's current
 global identity. Explicit `user_agent`/`version` fields form an account candidate;
@@ -604,7 +632,7 @@ The integration covers inference/streaming, token counting, model discovery,
 account tests, quota/usage probes, OAuth exchange and refresh, Grok Realtime
 handshakes and probes, OpenAI-compatible WebSocket handshakes, and Gemini/Vertex
 batch requests and result retrieval. Before an account exists, authorization
-requests use the global native preset. Bedrock applies the selected identity
+requests use the global native preset. Bedrock applies the native Claude identity
 before SigV4 signing and reuses the same declarations at send time.
 This includes the non-streaming Bedrock account connection test, for both IAM
 credentials and bearer API keys. IAM signatures include the selected companion
@@ -625,8 +653,9 @@ nil-account Codex cache:
 | Prompt Audit endpoint token | `openai:apikey` type default and its global/default chain; one snapshot per endpoint credential across an evaluation/job's chunks and failover returns; a `/models` probe and its inference fallback share a snapshot |
 | Content Moderation endpoint API key | `openai:apikey` type default and its global/default chain; same-key retries share a snapshot, key rotation or endpoint failover resolves the new owner; administrative key tests start independent operations |
 
-These credentials have no account-level identity field. Their type default can
-select another compatible preset. Native OpenAI API-key Codex requests preserve
+These credentials have no account-level identity field. Only permitted compatible
+API-key type defaults can select another preset; native domestic monitors use
+their own platform profile, including MiniMax's API-key SDK identity. Native OpenAI API-key Codex requests preserve
 the existing Originator/Version header omissions; other presets render their
 defined companions. Fresh monitor checks, audit evaluations/jobs, probes and
 key tests observe current settings. Supplier identity resolution does not select
@@ -916,7 +945,7 @@ does not demonstrate these requirements.
 
 ## StepFun / Step-Code
 
-StepFun OAuth (Step Plan) and API Key accounts default to the same `stepfun`
+StepFun OAuth (Step Plan) and API Key accounts are pinned to the same `stepfun`
 preset. Exact identity: `step (linux 6.8.0-31-generic; x64)`, identifier `step`,
 empty product version. Step-Code's actual OpenAI adapter imports
 `packages/providers/src/utils/pi-user-agent.ts`; the coding-agent helper that
@@ -938,8 +967,8 @@ sent. Optional high-sensitivity `x-step-*` trace fields are not generated.
 `stepfun` is explicitly versionless. Its exact UA, SDK and environment are
 read-only. Product-version updates cannot change it; SDK upgrades require new
 source and wire evidence. Other presets still require a complete version.
-Account > global type/profile > compiled default applies atomically. Native
-OAuth retains Step-Code; API Key can select another supported identity.
+Account > global native profile > compiled default applies atomically.
+Both OAuth and API Key retain Step-Code; foreign client-family selections are rejected.
 Retries, probes and discovery retain the credential owner's snapshot; failover
 resolves the new owner. Final header privacy remains mandatory for every path.
 Settings preview exposes the shared profile and the Chat Completions wire block.

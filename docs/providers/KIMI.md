@@ -31,31 +31,22 @@ surface.
 
 ## Outbound client identity
 
-Kimi and Moonshot accounts advertise the pinned Kimi Code client identity by
-default: `User-Agent: kimi-code-cli/2.1.1` plus the official companion
+Kimi and Moonshot OAuth/API-key accounts retain the Kimi Code client family.
+Account parameters may override its global profile; cross-family selections and
+the retired `kimi:apikey` mapping are rejected. The compiled identity is: `User-Agent: kimi-code-cli/2.1.1` plus the official companion
 declarations `X-Msh-Platform: kimi_code_cli`, `X-Msh-Version: 2.1.1` and the four
 device headers `X-Msh-Device-Name`, `X-Msh-Device-Model`, `X-Msh-Os-Version` and
 `X-Msh-Device-Id`. The official client declares no `Originator` and no standalone
 `Version` header, so neither is sent. `SUB2API_KIMI_CODE_VERSION` may select a
 supported version; `2.1.1` is the accepted floor.
 
-The device declarations are **runtime** values, not compile-time pins. The
-official client resolves them from the machine it runs on and persists the
-device id; this deployment resolves them once from the host it runs on, persists
-them in
-**System Settings → Outbound identity → Kimi Code → Runtime identity
-declarations**, and lets an operator override each value globally or per
-account (account overrides take priority). Opening that page or starting the
-server materializes any value this deployment has not generated yet. A fact the
-host does not expose falls back to the official `unknown` substitution, and the
-architecture token follows Node's spelling (`amd64` renders as `x64`).
-
-Because the gateway usually runs in a container, the resolved host name is the
-container hostname and the reported operating system is the container runtime's
-kernel, not the physical host's. Both are the faithful analog of the official
-`os.hostname()` / `os.release()` reads, and both are editable — set an explicit
-value when a container-runtime default (for example an opaque generated
-hostname) should not be advertised.
+The gateway uses the fixed Ubuntu 24.04 / x86_64 environment documented in
+[Outbound identity](../OUTBOUND_IDENTITY.md). Device model and OS version are
+pinned, independent of the container hostname and host kernel. Device name
+defaults to `ubuntu`; the device UUID is generated once and persisted. Only
+name and UUID accept global or account overrides through **System Settings →
+Outbound identity → Kimi Code → Runtime identity declarations**. The same-account
+snapshot keeps the device declarations stable across retries.
 
 Two consequences are deliberate:
 

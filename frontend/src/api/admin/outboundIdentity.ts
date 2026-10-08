@@ -47,7 +47,14 @@ export interface OutboundIdentitySettings {
   /** Persisted runtime declarations per preset, keyed by header name. */
   runtime?: Partial<Record<IdentityPreset, Record<string, string>>>
 }
+export interface IdentityAccountPolicy {
+  key: string
+  native_preset: IdentityPreset
+  allowed_presets: IdentityPreset[]
+  allow_default_mapping: boolean
+}
 export interface OutboundIdentityView {
+  account_policies: IdentityAccountPolicy[]
   settings: OutboundIdentitySettings
   presets: ResolvedIdentity[]
   effective: ResolvedIdentity[]

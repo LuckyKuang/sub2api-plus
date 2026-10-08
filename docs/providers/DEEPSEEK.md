@@ -53,9 +53,10 @@ User-Agent; those two declarations are now absent on this platform. The harness
 `x-deepseek-harness-user-id`, `-session-id` and `-compact` request headers keep
 their protocol-layer ownership and are never rewritten by the identity layer.
 
-Administrators can pin the equivalent `deepseek:apikey` type default in **System
-Settings → Outbound identity**, and can opt an individual account back into Codex
-or any other compatible preset through an account selection. Protocol selection
+OAuth and API-key accounts retain the DSH family. System Settings configures
+the global DeepSeek profile; valid account parameters can override that profile.
+There is no configurable `deepseek:apikey` mapping or cross-family account override.
+Protocol selection
 (`api_protocol` / adaptive routing), API-protocol conversion, model admission,
 billing and the ingress audit order are unaffected: identity chooses outbound
 declarations only. Ingress audit order and Plus session/quota accounting are

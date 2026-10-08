@@ -56,15 +56,32 @@ func TestOutboundIdentitySettingsAPI(t *testing.T) {
 		router.ServeHTTP(w, r)
 		return w
 	}
-	saved := request(http.MethodPut, "/identity", `{"profiles":{"grok":{"version":"3.9.1"}},"defaults":{"gemini:service_account":"grok"}}`)
+	saved := request(http.MethodPut, "/identity", `{"profiles":{"grok":{"version":"3.9.1"}},"defaults":{"gemini:apikey":"grok"}}`)
 	require.Equal(t, http.StatusOK, saved.Code)
 	loaded := request(http.MethodGet, "/identity", "")
 	require.Equal(t, "3.9.1", gjson.Get(loaded.Body.String(), "data.settings.profiles.grok.version").String())
-	preview := request(http.MethodPost, "/preview", `{"platform":"gemini","type":"service_account","credentials":{"access_token":"must-not-return"}}`)
+	preview := request(http.MethodPost, "/preview", `{"platform":"gemini","type":"apikey","credentials":{"access_token":"must-not-return"}}`)
 	require.Equal(t, http.StatusOK, preview.Code)
 	require.Equal(t, "grok", gjson.Get(preview.Body.String(), "data.preset").String())
 	require.Equal(t, "3.9.1", gjson.Get(preview.Body.String(), "data.version").String())
 	require.NotContains(t, preview.Body.String(), "must-not-return")
+	policies := gjson.Get(loaded.Body.String(), "data.account_policies").Array()
+	var advanced []string
+	for _, policy := range policies {
+		if policy.Get("allow_default_mapping").Bool() {
+			advanced = append(advanced, policy.Get("key").String())
+		}
+	}
+	require.ElementsMatch(t, []string{"openai:apikey", "openai:upstream", "anthropic:apikey", "anthropic:upstream", "gemini:apikey", "gemini:upstream", "grok:apikey", "grok:upstream", "antigravity:upstream", "typesafe:apikey", "opencode_go:apikey"}, advanced)
+	for _, key := range []string{"deepseek:apikey", "kimi:apikey", "minimax:apikey", "zhipu:apikey", "stepfun:apikey", "anthropic:bedrock", "anthropic:service_account", "gemini:service_account"} {
+		body, err := json.Marshal(map[string]any{"defaults": map[string]string{key: "grok"}})
+		require.NoError(t, err)
+		require.Equal(t, http.StatusBadRequest, request(http.MethodPut, "/identity", string(body)).Code, key)
+		platform, kind, _ := strings.Cut(key, ":")
+		body, err = json.Marshal(map[string]any{"platform": platform, "type": kind, "selection": map[string]string{"preset": "grok"}})
+		require.NoError(t, err)
+		require.Equal(t, http.StatusBadRequest, request(http.MethodPost, "/preview", string(body)).Code, key)
+	}
 	codexBody, err := json.Marshal(map[string]string{"platform": "openai", "type": "apikey", "user_agent": service.DefaultOpenAICodexUserAgent})
 	require.NoError(t, err)
 	codexPreview := request(http.MethodPost, "/preview", string(codexBody))
@@ -76,7 +93,7 @@ func TestOutboundIdentitySettingsAPI(t *testing.T) {
 	// MiniMax is an enumerated versionless family: the preview reports the bare
 	// product token with no client version, and both an invented version and a
 	// foreign User-Agent are rejected before saving.
-	minimaxPreview := request(http.MethodPost, "/preview", `{"platform":"minimax","type":"apikey","selection":{"preset":"minimax"}}`)
+	minimaxPreview := request(http.MethodPost, "/preview", `{"platform":"minimax","type":"oauth","selection":{"preset":"minimax"}}`)
 	require.Equal(t, http.StatusOK, minimaxPreview.Code)
 	require.Equal(t, "minimax", gjson.Get(minimaxPreview.Body.String(), "data.preset").String())
 	require.Equal(t, "MiniMaxAgent", gjson.Get(minimaxPreview.Body.String(), "data.user_agent").String())
@@ -84,17 +101,17 @@ func TestOutboundIdentitySettingsAPI(t *testing.T) {
 	require.Equal(t, "", gjson.Get(minimaxPreview.Body.String(), "data.version").String())
 	require.Equal(t, "MiniMaxAgent", gjson.Get(minimaxPreview.Body.String(), `data.headers.User-Agent`).String())
 	for _, body := range []string{
-		`{"platform":"minimax","type":"apikey","selection":{"preset":"minimax","version":"0.6.2"}}`,
-		`{"platform":"minimax","type":"apikey","selection":{"preset":"minimax","user_agent":"MiniMaxAgent/0.6.2"}}`,
+		`{"platform":"minimax","type":"oauth","selection":{"preset":"minimax","version":"0.6.2"}}`,
+		`{"platform":"minimax","type":"oauth","selection":{"preset":"minimax","user_agent":"MiniMaxAgent/0.6.2"}}`,
 	} {
 		require.Equal(t, http.StatusBadRequest, request(http.MethodPost, "/preview", body).Code, body)
 	}
-	minimaxSaved := request(http.MethodPut, "/identity", `{"profiles":{"grok":{"version":"3.9.1"},"minimax":{"preset":"minimax"}},"defaults":{"gemini:service_account":"grok","minimax:apikey":"minimax"}}`)
+	minimaxSaved := request(http.MethodPut, "/identity", `{"profiles":{"grok":{"version":"3.9.1"},"minimax":{"preset":"minimax"}},"defaults":{"gemini:apikey":"grok"}}`)
 	require.Equal(t, http.StatusOK, minimaxSaved.Code)
 	require.Equal(t, "minimax", gjson.Get(minimaxSaved.Body.String(), `data.settings.profiles.minimax.preset`).String())
 	require.Equal(t, "MiniMaxAgent", gjson.Get(minimaxSaved.Body.String(), `data.effective.#(preset=="minimax").user_agent`).String())
 	require.Equal(t, "", gjson.Get(minimaxSaved.Body.String(), `data.effective.#(preset=="minimax").version`).String())
-	require.Contains(t, minimaxSaved.Body.String(), `"minimax:apikey":"minimax"`)
+	require.NotContains(t, minimaxSaved.Body.String(), `"minimax:apikey":"minimax"`)
 	require.Equal(t, http.StatusBadRequest, request(http.MethodPut, "/identity", `{"profiles":{"minimax":{"preset":"minimax","version":"0.6.2"}}}`).Code)
 	require.Equal(t, http.StatusBadRequest, request(http.MethodPut, "/identity", `{"profiles":{"codex":{"version":"3.9.1"}}}`).Code)
 	require.Equal(t, "3.9.1", gjson.Get(repo.values[service.SettingKeyOutboundIdentity], "profiles.grok.version").String(), "rejected updates preserve the saved profile")
@@ -114,11 +131,11 @@ func TestOutboundIdentitySettingsAPI(t *testing.T) {
 	zhipuOAuthPreview := request(http.MethodPost, "/preview", `{"platform":"zhipu","type":"oauth","selection":{"preset":"codex"}}`)
 	require.Equal(t, http.StatusBadRequest, zhipuOAuthPreview.Code, "OAuth accounts must retain their native client family")
 	require.Equal(t, http.StatusBadRequest, request(http.MethodPost, "/preview", `{"platform":"zhipu","type":"apikey","selection":{"preset":"zcode","user_agent":"codex_cli_rs/0.158.0"}}`).Code)
-	zcodeSaved := request(http.MethodPut, "/identity", `{"profiles":{"grok":{"version":"3.9.1"},"zcode":{"preset":"zcode","version":"0.16.9"}},"defaults":{"gemini:service_account":"grok","zhipu:apikey":"zcode"}}`)
+	zcodeSaved := request(http.MethodPut, "/identity", `{"profiles":{"grok":{"version":"3.9.1"},"zcode":{"preset":"zcode","version":"0.16.9"}},"defaults":{"gemini:apikey":"grok"}}`)
 	require.Equal(t, http.StatusOK, zcodeSaved.Code)
 	require.Equal(t, "zcode", gjson.Get(zcodeSaved.Body.String(), `data.settings.profiles.zcode.preset`).String())
 	require.Equal(t, "ZCode/0.16.9", gjson.Get(zcodeSaved.Body.String(), `data.effective.#(preset=="zcode").user_agent`).String())
-	require.Contains(t, zcodeSaved.Body.String(), `"zhipu:apikey":"zcode"`)
+	require.NotContains(t, zcodeSaved.Body.String(), `"zhipu:apikey":"zcode"`)
 	require.Equal(t, http.StatusBadRequest, request(http.MethodPut, "/identity", `{"profiles":{"zcode":{"preset":"zcode","user_agent":"codex_cli_rs/0.158.0"}}}`).Code)
 	// Kimi Code declares one product token plus a device description set. The
 	// preview reports the complete declaration block, the settings view reports

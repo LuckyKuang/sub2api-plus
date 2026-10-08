@@ -26,7 +26,7 @@ func TestAccountTestServiceBedrockIdentityIsSigned(t *testing.T) {
 			require.Contains(t, recorder.Body.String(), `"success":true`)
 			require.Len(t, upstream.requests, 1)
 			req := upstream.requests[0]
-			expected := builtInOutboundIdentity(preset)
+			expected := builtInOutboundIdentity("claude") // foreign persisted candidates fall through before signing
 			require.Equal(t, expected.UserAgent, req.Header.Get("User-Agent"))
 			for name, value := range expected.Headers {
 				require.Equal(t, value, req.Header.Get(name), name)

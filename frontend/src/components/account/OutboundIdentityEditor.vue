@@ -1,19 +1,27 @@
 <template>
   <section v-if="visible" class="space-y-3 rounded-xl border border-gray-200 p-4 dark:border-dark-700">
     <h3 class="text-sm font-semibold">{{ t('admin.settings.outboundIdentity.title') }}</h3>
-    <select :value="modelValue?.preset || ''" :aria-label="t('admin.settings.outboundIdentity.title')" class="input" @change="selectPreset(($event.target as HTMLSelectElement).value)">
-      <option value="">{{ t('admin.settings.outboundIdentity.inherit') }}</option>
-      <option v-for="preset in availablePresets" :key="preset" :value="preset">{{ identityNames[preset] }}</option>
-    </select>
+    <p v-if="!policy && !policyError" class="text-xs text-gray-500">{{ t('common.loading') }}</p>
+    <p v-if="policyError" role="alert" class="text-xs text-red-600">{{ t('admin.settings.outboundIdentity.loadFailed') }}</p>
+    <template v-if="policy">
+    <Select v-if="policy.allow_default_mapping"
+      :model-value="modelValue?.preset || ''"
+      :searchable="false"
+      :aria-label="t('admin.settings.outboundIdentity.title')"
+      :options="[{ value: '', label: t('admin.settings.outboundIdentity.inherit') }, ...policy.allowed_presets.map(preset => ({ value: preset, label: identityNames[preset] }))]"
+      @update:model-value="selectPreset(String($event || ''))"
+    />
+    <p v-else class="text-sm" data-testid="fixed-identity-family">{{ t('admin.settings.outboundIdentity.fixedClient', { client: identityNames[policy.native_preset] }) }}</p>
+    <button v-if="modelValue" type="button" class="text-xs text-primary-600" @click="selectPreset('')">{{ t('admin.settings.outboundIdentity.inherit') }}</button>
     <template v-if="isVersionlessSelection">
       <p class="text-xs text-gray-500">{{ t('admin.settings.outboundIdentity.versionlessHint') }}</p>
     </template>
-    <p v-else-if="modelValue?.preset === 'minimax_apikey'" class="text-xs text-gray-500">{{ t('admin.settings.outboundIdentity.pinnedSdkHint') }}</p>
-    <template v-else-if="modelValue?.preset && !(platform === 'openai' && modelValue.preset === 'codex')">
-      <input :value="modelValue.version" class="input font-mono" :aria-label="t('admin.settings.outboundIdentity.version')" :placeholder="t('admin.settings.outboundIdentity.version')" @input="update('version', ($event.target as HTMLInputElement).value)" />
+    <p v-else-if="effectivePreset === 'minimax_apikey'" class="text-xs text-gray-500">{{ t('admin.settings.outboundIdentity.pinnedSdkHint') }}</p>
+    <template v-else-if="!(platform === 'openai' && effectivePreset === 'codex')">
+      <input :value="modelValue?.version" class="input font-mono" :aria-label="t('admin.settings.outboundIdentity.version')" :placeholder="t('admin.settings.outboundIdentity.version')" @input="update('version', ($event.target as HTMLInputElement).value)" />
       <details>
         <summary class="cursor-pointer text-sm">{{ t('admin.settings.outboundIdentity.advanced') }}</summary>
-        <input :value="modelValue.user_agent" class="input mt-2 font-mono text-sm" placeholder="User-Agent" @input="update('user_agent', ($event.target as HTMLInputElement).value)" />
+        <input :value="modelValue?.user_agent" class="input mt-2 font-mono text-sm" placeholder="User-Agent" @input="update('user_agent', ($event.target as HTMLInputElement).value)" />
       </details>
     </template>
     <label v-if="effectivePreset === 'deepseek'" class="block text-xs">
@@ -41,9 +49,10 @@
         />
       </label>
     </div>
+    </template>
     <p v-if="error" role="alert" class="text-xs text-red-600">{{ error }}</p>
     <div v-else-if="preview" class="space-y-1 text-xs text-gray-500">
-      <p>{{ t('admin.settings.outboundIdentity.effectiveAccount') }} · {{ t(`admin.settings.outboundIdentity.sources.${preview.source}`) }}</p>
+      <p>{{ t('admin.settings.outboundIdentity.effectiveAccount') }} · {{ identityNames[preview.preset] }} · {{ t(`admin.settings.outboundIdentity.sources.${preview.source}`) }}</p>
       <dl class="grid gap-1 sm:grid-cols-[auto_1fr]" data-testid="outbound-identity-account-headers">
         <template v-for="(value, name) in preview.headers" :key="name">
           <dt class="font-mono text-gray-500">{{ name }}</dt>
@@ -57,21 +66,25 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import Select from '@/components/common/Select.vue'
 import IdentityEnvironmentSummary from './IdentityEnvironmentSummary.vue'
 import IdentityRuntimeField from './IdentityRuntimeField.vue'
-import { hasIdentityTimezone, getOutboundIdentity, identityNames, identityPresets, versionlessIdentityPresets, previewOutboundIdentity, type IdentityDeclaration, type IdentityPreset, type IdentitySelection, type PresetDeclarations, type ResolvedIdentity } from '@/api/admin/outboundIdentity'
+import { hasIdentityTimezone, getOutboundIdentity, identityNames, versionlessIdentityPresets, previewOutboundIdentity, type IdentityAccountPolicy, type IdentityDeclaration, type IdentityPreset, type IdentitySelection, type PresetDeclarations, type ResolvedIdentity } from '@/api/admin/outboundIdentity'
 const props = defineProps<{ platform: string; accountType: string; modelValue?: IdentitySelection | null; codexUserAgent?: string }>()
 const emit = defineEmits<{ 'update:modelValue': [value: IdentitySelection | null] }>()
 const { t } = useI18n()
 const preview = ref<ResolvedIdentity>()
 const error = ref('')
 const declarations = ref<PresetDeclarations[]>([])
-const nativePresets: Record<string, IdentityPreset> = { anthropic: 'claude', gemini: 'gemini', grok: 'grok', antigravity: 'antigravity', deepseek: 'deepseek', minimax: 'minimax', kimi: 'kimi', zhipu: 'zcode', stepfun: 'stepfun' }
-const isVersionlessSelection = computed(() => !!props.modelValue?.preset && versionlessIdentityPresets.includes(props.modelValue.preset as IdentityPreset))
-const nativePreset = computed<IdentityPreset>(() => props.platform === 'minimax' && props.accountType === 'apikey' ? 'minimax_apikey' : nativePresets[props.platform] || 'codex')
-const effectivePreset = computed<IdentityPreset>(() => (props.modelValue?.preset as IdentityPreset) || preview.value?.preset || nativePreset.value)
+const policies = ref<IdentityAccountPolicy[]>([])
+const policyError = ref(false)
+const policy = computed(() => policies.value.find(item => item.key === `${props.platform}:${props.accountType}`))
+const effectivePreset = computed(() => props.modelValue?.preset || preview.value?.preset || policy.value?.native_preset || '')
+const isVersionlessSelection = computed(() => {
+  const preset = effectivePreset.value
+  return !!preset && versionlessIdentityPresets.includes(preset)
+})
 const visible = computed(() => props.platform && props.platform !== 'composite' && (props.platform !== 'openai' || ['apikey', 'upstream'].includes(props.accountType)))
-const availablePresets = computed(() => ['oauth', 'setup-token'].includes(props.accountType) ? [nativePreset.value] : identityPresets)
 // The backend declares which headers each preset renders and which of them
 // accept an account value, so this editor never hard-codes a preset's block.
 const presetDeclarations = computed(() => declarations.value.find(item => item.preset === effectivePreset.value)?.headers ?? [])
@@ -92,7 +105,7 @@ function setTimezone(value: string) {
   emit('update:modelValue', current)
 }
 function selectPreset(preset: string) { emit('update:modelValue', preset ? { preset: preset as IdentityPreset } : null) }
-function update(field: 'user_agent' | 'version', value: string) { if (props.modelValue) emit('update:modelValue', { ...props.modelValue, [field]: value }) }
+function update(field: 'user_agent' | 'version', value: string) { emit('update:modelValue', { ...(props.modelValue ?? { preset: effectivePreset.value }), [field]: value }) }
 // Setting a runtime declaration makes the preset explicit, because the value is
 // only meaningful for that preset's declaration block.
 function setHeader(name: string, value: string) {
@@ -111,7 +124,12 @@ let declarationsRequested = false
 watch(visible, async (isVisible) => {
   if (!isVisible || declarationsRequested) return
   declarationsRequested = true
-  try { declarations.value = (await getOutboundIdentity()).declarations ?? [] } catch { declarationsRequested = false }
+  try {
+    const view = await getOutboundIdentity()
+    declarations.value = view.declarations
+    policies.value = view.account_policies
+    policyError.value = false
+  } catch { declarationsRequested = false; policyError.value = true }
 }, { immediate: true })
 watch(() => [props.platform, props.accountType, props.modelValue, props.codexUserAgent] as const, () => {
   const current = ++generation
@@ -129,5 +147,5 @@ watch(() => [props.platform, props.accountType, props.modelValue, props.codexUse
   }, 250)
 }, { immediate: true, deep: true })
 onBeforeUnmount(() => { ++generation; clearTimeout(timer) })
-watch(() => [props.platform, props.accountType], () => { if (props.modelValue && !availablePresets.value.includes(props.modelValue.preset as IdentityPreset)) selectPreset('') })
+watch(() => [props.platform, props.accountType], () => { if (props.modelValue && policy.value && !policy.value.allowed_presets.includes(props.modelValue.preset as IdentityPreset)) selectPreset('') }, { flush: 'sync' })
 </script>

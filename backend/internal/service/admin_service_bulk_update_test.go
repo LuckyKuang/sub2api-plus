@@ -181,8 +181,8 @@ func TestAdminServiceBulkUpdateAccounts_NormalizesOutboundIdentityAndClearing(t 
 		t.Run(tc.name, func(t *testing.T) {
 			targets := []*Account{
 				{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeAPIKey},
-				{ID: 2, Platform: PlatformGemini, Type: AccountTypeServiceAccount},
-				{ID: 3, Platform: PlatformAnthropic, Type: AccountTypeBedrock},
+				{ID: 2, Platform: PlatformGemini, Type: AccountTypeAPIKey},
+				{ID: 3, Platform: PlatformAnthropic, Type: AccountTypeAPIKey},
 			}
 			repo := &accountRepoStubForBulkUpdate{getByIDsAccounts: targets}
 			svc := &adminServiceImpl{accountRepo: repo}
@@ -429,7 +429,7 @@ func TestAdminServiceBulkUpdateAccounts_ValidatesOutboundIdentityForEveryTarget(
 
 func TestAdminServiceBulkUpdateAccounts_NormalizesOutboundIdentityBeforeWrite(t *testing.T) {
 	repo := &accountRepoStubForBulkUpdate{getByIDsAccounts: []*Account{
-		{ID: 1, Platform: PlatformGemini, Type: AccountTypeServiceAccount},
+		{ID: 1, Platform: PlatformGemini, Type: AccountTypeAPIKey},
 		{ID: 2, Platform: PlatformAnthropic, Type: AccountTypeAPIKey},
 	}}
 	svc := &adminServiceImpl{accountRepo: repo}

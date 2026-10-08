@@ -163,3 +163,12 @@ Requirement-based tests use literal official URLs/headers and adversarial
 callbacks; transport tests exercise model forwarding, probes and discovery
 for both account types and regions. Real-provider authorization still requires
 an operator's account; mock wire tests do not assert live authorization success.
+
+## Native client selection
+
+OAuth and API-key accounts retain the official `stepfun` client family. The
+versionless product identity and inference SDK fingerprint stay fixed. Neither
+account selections nor a `stepfun:apikey` default mapping can switch to another
+client. The settings page retains the Step-Code identity preview, with compatible
+supplier mappings confined to their own advanced section. Migration 278 removes
+stale cross-family selections without changing credentials, models or pricing.

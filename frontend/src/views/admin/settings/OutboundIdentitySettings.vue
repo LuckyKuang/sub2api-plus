@@ -102,17 +102,20 @@
         </div>
         </div>
       </section>
-      <section class="card space-y-4 p-6">
-        <h3 class="font-semibold">{{ t('admin.settings.outboundIdentity.defaults') }}</h3>
+      <details class="card space-y-4 p-6" data-testid="outbound-identity-defaults">
+        <summary class="cursor-pointer font-semibold">{{ t('admin.settings.outboundIdentity.defaults') }}</summary>
         <p class="text-sm text-gray-500">{{ t('admin.settings.outboundIdentity.defaultsHint') }}</p>
-        <label v-for="mapping in mappings" :key="mapping.key" class="flex flex-wrap items-center justify-between gap-3 text-sm">
-          <span>{{ mapping.label }}</span>
-          <select v-model="defaults[mapping.key]" class="input w-48">
-            <option value="">{{ t('admin.settings.outboundIdentity.builtin') }}</option>
-            <option v-for="preset in identityPresets" :key="preset" :value="preset">{{ identityNames[preset] }}</option>
-          </select>
+        <label v-for="mapping in mappings" :key="mapping.key" class="flex flex-wrap items-center justify-between gap-3 text-sm" :data-identity-mapping="mapping.key">
+          <span>{{ mappingLabel(mapping.key) }}</span>
+          <Select
+            v-model="defaults[mapping.key]"
+            class="w-64"
+            :searchable="false"
+            :aria-label="mappingLabel(mapping.key)"
+            :options="[{ value: '', label: t('admin.settings.outboundIdentity.automatic', { client: identityNames[mapping.native_preset] }) }, ...mapping.allowed_presets.map(preset => ({ value: preset, label: identityNames[preset] }))]"
+          />
         </label>
-      </section>
+      </details>
     </template>
   </div>
 </template>
@@ -120,6 +123,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import Select from '@/components/common/Select.vue'
 import IdentityEnvironmentSummary from '@/components/account/IdentityEnvironmentSummary.vue'
 import IdentityRuntimeField from '@/components/account/IdentityRuntimeField.vue'
 import { hasIdentityTimezone, getOutboundIdentity, updateOutboundIdentity, identityNames, identityPresets, versionlessIdentityPresets, type IdentityDeclaration, type IdentityPreset, type IdentitySelection, type OutboundIdentityView } from '@/api/admin/outboundIdentity'
@@ -139,22 +143,12 @@ const profiles = reactive(Object.fromEntries(identityPresets.map(preset => [pres
 const runtime = reactive(Object.fromEntries(identityPresets.map(preset => [preset, {}])) as Record<IdentityPreset, Record<string, string>>)
 const defaults = reactive<Record<string, IdentityPreset | ''>>({})
 const savedForm = ref('')
-const mappings = [
-  { key: 'openai:apikey', label: 'OpenAI-compatible · API Key' },
-  { key: 'openai:upstream', label: 'OpenAI-compatible · Upstream' },
-  { key: 'anthropic:apikey', label: 'Anthropic · API Key' },
-  { key: 'anthropic:bedrock', label: 'Bedrock' },
-  { key: 'anthropic:service_account', label: 'Vertex · Claude' },
-  { key: 'gemini:service_account', label: 'Vertex · Gemini' },
-  { key: 'gemini:apikey', label: 'Gemini · API Key' },
-  { key: 'grok:apikey', label: 'Grok · API Key' },
-  { key: 'anthropic:upstream', label: 'Anthropic · Upstream' },
-  { key: 'gemini:upstream', label: 'Gemini · Upstream' },
-  { key: 'grok:upstream', label: 'Grok · Upstream' },
-  { key: 'antigravity:upstream', label: 'Antigravity · Upstream' },
-  { key: 'typesafe:apikey', label: 'TypeSafe / Jev · API Key' },
-  ...['kimi', 'zhipu', 'deepseek', 'minimax', 'stepfun'].map(platform => ({ key: `${platform}:apikey`, label: `${platform} · API Key` }))
-]
+const mappings = computed(() => view.value?.account_policies.filter(policy => policy.allow_default_mapping) ?? [])
+const platformNames: Record<string, string> = { openai: 'OpenAI-compatible', anthropic: 'Anthropic', gemini: 'Gemini', grok: 'Grok', antigravity: 'Antigravity', typesafe: 'TypeSafe / Jev', opencode_go: 'OpenCode Go' }
+function mappingLabel(key: string) {
+  const [platform, type] = key.split(':')
+  return `${platformNames[platform] || platform} · ${type === 'apikey' ? 'API Key' : 'Upstream'}`
+}
 const effective = (preset: IdentityPreset) => view.value?.effective.find(item => item.preset === preset)
 const wireProfiles = (preset: IdentityPreset) => view.value?.wire_profiles?.filter(item => item.preset === preset) ?? []
 const controlIdentity = (preset: IdentityPreset) => view.value?.control_plane?.find(item => item.preset === preset)
@@ -213,7 +207,7 @@ async function refresh() {
       }
       for (const key of Object.keys(defaults)) delete defaults[key]
       Object.assign(defaults, updated.settings.defaults)
-      for (const mapping of mappings) defaults[mapping.key] ||= ''
+      for (const mapping of updated.account_policies.filter(policy => policy.allow_default_mapping)) defaults[mapping.key] ||= ''
     }
     view.value = updated
     // The saved baseline is computed against the freshly loaded view, because a

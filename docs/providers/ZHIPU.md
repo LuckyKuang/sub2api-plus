@@ -147,8 +147,9 @@ settled. The acquisition budget covers lock contention and upstream calls.
 Zhipu GLM accounts advertise the pinned ZCode client identity by default, for
 both API-key and linked accounts. ZCode is the provider's own official client and
 renders its product, version companion and runtime declaration block.
-OAuth accounts are pinned to that family; an API-key account can still select
-another preset.
+Both OAuth and API-key accounts are pinned to that family. Valid account
+parameters can override the global profile; cross-family selections and the
+retired `zhipu:apikey` default mapping are rejected.
 
 The preset sends `ZCode/3.14.3` together with `X-ZCode-App-Version: 3.14.3`,
 `HTTP-Referer: https://zcode.z.ai`, `X-Title: Z Code@electron`,

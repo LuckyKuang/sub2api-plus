@@ -98,13 +98,15 @@ func TestMiniMaxTimezoneSnapshotInheritanceRetryAndFailover(t *testing.T) {
 
 func TestMiniMaxInvalidTimezoneFallsThroughAtomically(t *testing.T) {
 	config := emptyOutboundIdentitySettings()
-	config.Defaults["minimax:apikey"] = "codex"
+	config.Profiles["minimax_apikey"] = OutboundIdentitySelection{Preset: "minimax_apikey", Timezone: "Asia/Shanghai"}
 	_, ctx := outboundIdentityTestSettings(t, config)
 	account := &Account{ID: 88, Platform: PlatformMiniMax, Type: AccountTypeAPIKey, Credentials: map[string]any{outboundIdentityCredential: OutboundIdentitySelection{Preset: "minimax_apikey", Timezone: "Local"}}}
 	identity, ok := outboundidentity.FromContext(WithAccountOutboundIdentity(ctx, account))
 	require.True(t, ok)
-	require.Equal(t, "codex", identity.Preset)
-	require.Empty(t, identity.Timezone)
+	require.Equal(t, "minimax_apikey", identity.Preset)
+	require.Equal(t, "global", identity.Source)
+	require.Equal(t, "Asia/Shanghai", identity.Timezone)
+	require.Equal(t, "Anthropic/JS 0.91.1", identity.UserAgent)
 }
 
 func TestDeepSeekLanguageTimezoneSourcePriorityAndPreview(t *testing.T) {

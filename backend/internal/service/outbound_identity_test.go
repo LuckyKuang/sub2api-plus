@@ -136,9 +136,9 @@ func TestOutboundIdentitySourcePriorityAndAccountTypes(t *testing.T) {
 func TestOutboundIdentityPresetInheritanceSnapshotAndFailover(t *testing.T) {
 	config := emptyOutboundIdentitySettings()
 	config.Profiles["grok"] = OutboundIdentitySelection{Preset: "grok", Version: "3.9.1"}
-	config.Defaults["gemini:service_account"] = "claude"
+	config.Defaults["gemini:apikey"] = "claude"
 	svc, ctx := outboundIdentityTestSettings(t, config)
-	a := &Account{ID: 1, Platform: PlatformGemini, Type: AccountTypeServiceAccount, Credentials: map[string]any{outboundIdentityCredential: OutboundIdentitySelection{Preset: "grok"}}}
+	a := &Account{ID: 1, Platform: PlatformGemini, Type: AccountTypeAPIKey, Credentials: map[string]any{outboundIdentityCredential: OutboundIdentitySelection{Preset: "grok"}}}
 	snapshot := WithAccountOutboundIdentity(ctx, a)
 	i, _ := outboundidentity.FromContext(snapshot)
 	require.Equal(t, "3.9.1", i.Version)
@@ -149,7 +149,7 @@ func TestOutboundIdentityPresetInheritanceSnapshotAndFailover(t *testing.T) {
 	require.NoError(t, svc.SetOutboundIdentitySettings(ctx, config))
 	i, _ = outboundidentity.FromContext(WithAccountOutboundIdentity(snapshot, a))
 	require.Equal(t, "3.9.1", i.Version, "retries retain the selected identity")
-	b := &Account{ID: 2, Platform: PlatformGemini, Type: AccountTypeServiceAccount}
+	b := &Account{ID: 2, Platform: PlatformGemini, Type: AccountTypeAPIKey}
 	i, _ = outboundidentity.FromContext(WithAccountOutboundIdentity(snapshot, b))
 	require.Equal(t, "claude", i.Preset, "failover must resolve the new credential owner")
 	i, _ = outboundidentity.FromContext(WithAccountOutboundIdentity(ctx, a))
@@ -223,7 +223,7 @@ func TestOutboundIdentityValidationAndVersionOnlyChange(t *testing.T) {
 	}
 	credentials := map[string]any{outboundIdentityCredential: OutboundIdentitySelection{Preset: "grok"}}
 	require.Error(t, NormalizeAccountOutboundIdentity(PlatformGemini, AccountTypeOAuth, credentials))
-	require.NoError(t, NormalizeAccountOutboundIdentity(PlatformGemini, AccountTypeServiceAccount, credentials))
+	require.Error(t, NormalizeAccountOutboundIdentity(PlatformGemini, AccountTypeServiceAccount, credentials))
 	credentials[outboundIdentityCredential] = nil
 	require.NoError(t, NormalizeAccountOutboundIdentity(PlatformGemini, AccountTypeServiceAccount, credentials))
 	require.NotContains(t, credentials, outboundIdentityCredential)
@@ -237,19 +237,19 @@ func TestOutboundIdentitySettingsPersistAndDoNotExposeMutableCache(t *testing.T)
 	config.Profiles["grok"] = OutboundIdentitySelection{
 		Preset: "ignored", UserAgent: "  ", Version: " 3.9.1 ",
 	}
-	config.Defaults = map[string]string{"gemini:service_account": " grok "}
+	config.Defaults = map[string]string{"gemini:apikey": " grok "}
 	require.NoError(t, svc.SetOutboundIdentitySettings(ctx, config))
-	config.Defaults["gemini:service_account"] = "claude"
+	config.Defaults["gemini:apikey"] = "claude"
 	view := svc.GetOutboundIdentitySettings(ctx)
-	require.Equal(t, "grok", view.Defaults["gemini:service_account"])
+	require.Equal(t, "grok", view.Defaults["gemini:apikey"])
 	require.Equal(t, OutboundIdentitySelection{Preset: "grok", Version: "3.9.1"}, view.Profiles["grok"])
-	view.Defaults["gemini:service_account"] = "claude"
-	require.Equal(t, "grok", svc.GetOutboundIdentitySettings(ctx).Defaults["gemini:service_account"])
+	view.Defaults["gemini:apikey"] = "claude"
+	require.Equal(t, "grok", svc.GetOutboundIdentitySettings(ctx).Defaults["gemini:apikey"])
 	raw, err := svc.settingRepo.GetValue(ctx, SettingKeyOutboundIdentity)
 	require.NoError(t, err)
 	var persisted OutboundIdentitySettings
 	require.NoError(t, json.Unmarshal([]byte(raw), &persisted))
-	require.Equal(t, "grok", persisted.Defaults["gemini:service_account"])
+	require.Equal(t, "grok", persisted.Defaults["gemini:apikey"])
 	require.Equal(t, OutboundIdentitySelection{Preset: "grok", Version: "3.9.1"}, persisted.Profiles["grok"])
 }
 
@@ -275,7 +275,7 @@ func TestOutboundIdentityBedrockSigningRetainsSelectedDeclarations(t *testing.T)
 			body := []byte(`{"messages":[{"role":"user","content":"hello"}],"max_tokens":1}`)
 			req, err := svc.buildUpstreamRequestBedrock(ctx, body, "anthropic.claude-sonnet", "us-east-1", false, signer)
 			require.NoError(t, err)
-			require.Equal(t, builtInOutboundIdentity(preset).UserAgent, req.Header.Get("User-Agent"))
+			require.Equal(t, builtInOutboundIdentity("claude").UserAgent, req.Header.Get("User-Agent"))
 			require.Contains(t, req.Header.Get("Authorization"), "AWS4-HMAC-SHA256")
 			before := req.Header.Clone()
 			prepareAccountOutboundRequest(req, account)
@@ -351,8 +351,7 @@ func TestDeepSeekOutboundIdentityRendersOnlyUserAgent(t *testing.T) {
 }
 
 // DeepSeek platform accounts advertise the pinned harness identity by default.
-// This test is the audit record for that default, for the equivalent explicit
-// `deepseek:apikey` type default, and for the per-account opt-out.
+// This test records the native default and rejects retired mappings and foreign account candidates.
 func TestDeepSeekDefaultIdentityIsPinnedHarness(t *testing.T) {
 	require.Equal(t, "deepseek", nativeOutboundPreset(PlatformDeepseek))
 
@@ -367,23 +366,24 @@ func TestDeepSeekDefaultIdentityIsPinnedHarness(t *testing.T) {
 	require.Equal(t, deepseek.DefaultVersion, got.Version)
 	require.Equal(t, map[string]string{"User-Agent": got.UserAgent}, got.Headers)
 
-	// The explicit type default is an equivalent, operator-visible pin.
+	// Native families require no mapping; even a redundant mapping is rejected.
 	config := emptyOutboundIdentitySettings()
 	config.Defaults["deepseek:apikey"] = "deepseek"
-	_, pinnedCtx := outboundIdentityTestSettings(t, config)
+	svc, pinnedCtx := outboundIdentityTestSettings(t, emptyOutboundIdentitySettings())
+	require.Error(t, svc.SetOutboundIdentitySettings(pinnedCtx, config))
 	got, ok = outboundidentity.FromContext(WithAccountOutboundIdentity(pinnedCtx, account))
 	require.True(t, ok)
 	require.Equal(t, "deepseek", got.Preset)
 	require.Equal(t, "compiled_default", got.Source)
 
-	// An account selection can still opt back into another compatible preset.
+	// A persisted foreign candidate falls through atomically to the native family.
 	override := &Account{ID: 10, Platform: PlatformDeepseek, Type: AccountTypeAPIKey, Credentials: map[string]any{
 		outboundIdentityCredential: OutboundIdentitySelection{Preset: "codex"},
 	}}
 	got, ok = outboundidentity.FromContext(WithAccountOutboundIdentity(ctx, override))
 	require.True(t, ok)
-	require.Equal(t, "codex", got.Preset)
-	require.Equal(t, "account", got.Source)
+	require.Equal(t, "deepseek", got.Preset)
+	require.Equal(t, "compiled_default", got.Source)
 }
 
 // The MiniMax preset pins the published MiniMax Code product declaration. The
@@ -426,7 +426,8 @@ func TestMiniMaxOutboundIdentityVersionlessExemptionIsNarrow(t *testing.T) {
 	}
 
 	credentials := map[string]any{outboundIdentityCredential: OutboundIdentitySelection{Preset: "minimax"}}
-	require.NoError(t, NormalizeAccountOutboundIdentity(PlatformMiniMax, AccountTypeAPIKey, credentials))
+	require.Error(t, NormalizeAccountOutboundIdentity(PlatformMiniMax, AccountTypeAPIKey, credentials))
+	require.NoError(t, NormalizeAccountOutboundIdentity(PlatformMiniMax, AccountTypeOAuth, credentials))
 	require.Equal(t, OutboundIdentitySelection{Preset: "minimax"}, credentials[outboundIdentityCredential])
 }
 
@@ -435,7 +436,7 @@ func TestMiniMaxOutboundIdentityVersionlessExemptionIsNarrow(t *testing.T) {
 // request state such as the MiniMax session headers keeps its own ownership.
 func TestMiniMaxOutboundIdentityRendersOfficialSDKAndSessionHeaders(t *testing.T) {
 	_, ctx := outboundIdentityTestSettings(t, emptyOutboundIdentitySettings())
-	account := &Account{ID: 8, Platform: PlatformMiniMax, Type: AccountTypeAPIKey, Credentials: map[string]any{
+	account := &Account{ID: 8, Platform: PlatformMiniMax, Type: AccountTypeOAuth, Credentials: map[string]any{
 		outboundIdentityCredential: OutboundIdentitySelection{Preset: "minimax"},
 	}}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.minimaxi.com/anthropic/v1/messages", nil)
@@ -456,8 +457,7 @@ func TestMiniMaxOutboundIdentityRendersOfficialSDKAndSessionHeaders(t *testing.T
 }
 
 // MiniMax platform accounts advertise the pinned product identity by default.
-// This test is the audit record for that default, for the equivalent explicit
-// `minimax:apikey` type default, and for the per-account opt-out.
+// This test records the API-key SDK default and rejects foreign account candidates.
 func TestMiniMaxAPIKeyDefaultIdentityIsPinnedSDK(t *testing.T) {
 	require.Equal(t, "minimax", nativeOutboundPreset(PlatformMiniMax))
 
@@ -472,23 +472,24 @@ func TestMiniMaxAPIKeyDefaultIdentityIsPinnedSDK(t *testing.T) {
 	require.Equal(t, "0.91.1", got.Version)
 	require.Equal(t, minimax.APIKeyIdentity().Headers, got.Headers)
 
-	// The explicit type default is an equivalent, operator-visible pin.
+	// Native families require no mapping; even a redundant mapping is rejected.
 	config := emptyOutboundIdentitySettings()
 	config.Defaults["minimax:apikey"] = "minimax_apikey"
-	_, pinnedCtx := outboundIdentityTestSettings(t, config)
+	svc, pinnedCtx := outboundIdentityTestSettings(t, emptyOutboundIdentitySettings())
+	require.Error(t, svc.SetOutboundIdentitySettings(pinnedCtx, config))
 	got, ok = outboundidentity.FromContext(WithAccountOutboundIdentity(pinnedCtx, account))
 	require.True(t, ok)
 	require.Equal(t, "minimax_apikey", got.Preset)
 	require.Equal(t, "compiled_default", got.Source)
 
-	// An account selection can still opt back into another compatible preset.
+	// A persisted foreign candidate falls through atomically to the native family.
 	override := &Account{ID: 12, Platform: PlatformMiniMax, Type: AccountTypeAPIKey, Credentials: map[string]any{
 		outboundIdentityCredential: OutboundIdentitySelection{Preset: "codex"},
 	}}
 	got, ok = outboundidentity.FromContext(WithAccountOutboundIdentity(ctx, override))
 	require.True(t, ok)
-	require.Equal(t, "codex", got.Preset)
-	require.Equal(t, "account", got.Source)
+	require.Equal(t, "minimax_apikey", got.Preset)
+	require.Equal(t, "compiled_default", got.Source)
 }
 
 func TestBuiltInZCodeOutboundIdentityPinsProductVersion(t *testing.T) {
@@ -552,8 +553,7 @@ func TestZCodeOutboundIdentityRendersOfficialDeclarations(t *testing.T) {
 
 // Zhipu / GLM platform accounts advertise the pinned ZCode identity by default,
 // for both API-key and account-link OAuth accounts. This test is the audit record
-// for that default, for the equivalent explicit `zhipu:apikey` type default, and
-// for the per-account opt-out.
+// for the native default, rejected mappings and atomic fallback of foreign candidates.
 func TestZCodeDefaultIdentityIsPinnedProduct(t *testing.T) {
 	require.Equal(t, "zcode", nativeOutboundPreset(PlatformZhipu))
 
@@ -570,26 +570,26 @@ func TestZCodeDefaultIdentityIsPinnedProduct(t *testing.T) {
 		require.Equal(t, zcode.DefaultIdentity().Headers, got.Headers, accountType)
 	}
 
-	// The explicit type default is an equivalent, operator-visible pin.
+	// Native families require no mapping; even a redundant mapping is rejected.
 	account := &Account{ID: 15, Platform: PlatformZhipu, Type: AccountTypeAPIKey, Credentials: map[string]any{}}
 	config := emptyOutboundIdentitySettings()
 	config.Defaults["zhipu:apikey"] = "zcode"
-	_, pinnedCtx := outboundIdentityTestSettings(t, config)
+	svc, pinnedCtx := outboundIdentityTestSettings(t, emptyOutboundIdentitySettings())
+	require.Error(t, svc.SetOutboundIdentitySettings(pinnedCtx, config))
 	got, ok := outboundidentity.FromContext(WithAccountOutboundIdentity(pinnedCtx, account))
 	require.True(t, ok)
 	require.Equal(t, "zcode", got.Preset)
 	require.Equal(t, "compiled_default", got.Source)
 
-	// An API-key account selection can still opt back into another compatible
-	// preset.
+	// API-key accounts retain the native family even with a stale foreign candidate.
 	_, ctx := outboundIdentityTestSettings(t, emptyOutboundIdentitySettings())
 	override := &Account{ID: 16, Platform: PlatformZhipu, Type: AccountTypeAPIKey, Credentials: map[string]any{
 		outboundIdentityCredential: OutboundIdentitySelection{Preset: "codex"},
 	}}
 	got, ok = outboundidentity.FromContext(WithAccountOutboundIdentity(ctx, override))
 	require.True(t, ok)
-	require.Equal(t, "codex", got.Preset)
-	require.Equal(t, "account", got.Source)
+	require.Equal(t, "zcode", got.Preset)
+	require.Equal(t, "compiled_default", got.Source)
 
 	// An OAuth account is pinned to its native family and cannot opt out; the
 	// selection is rejected and the account keeps the ZCode identity.
@@ -670,22 +670,23 @@ func TestKimiDefaultIdentityIsPinnedProduct(t *testing.T) {
 	require.Equal(t, kimi.ProductToken, got.Originator)
 	require.Equal(t, kimi.DefaultVersion, got.Version)
 
-	// The explicit type default is an equivalent, operator-visible pin.
+	// Native families require no mapping; even a redundant mapping is rejected.
 	config := emptyOutboundIdentitySettings()
 	config.Defaults["kimi:apikey"] = "kimi"
-	_, pinnedCtx := outboundIdentityTestSettings(t, config)
+	svc, pinnedCtx := outboundIdentityTestSettings(t, emptyOutboundIdentitySettings())
+	require.Error(t, svc.SetOutboundIdentitySettings(pinnedCtx, config))
 	got, ok = outboundidentity.FromContext(WithAccountOutboundIdentity(pinnedCtx, account))
 	require.True(t, ok)
 	require.Equal(t, "kimi", got.Preset)
 
-	// An API-key account can still opt back into another compatible preset.
+	// A persisted foreign candidate falls through atomically to the native family.
 	override := &Account{ID: 53, Platform: PlatformKimi, Type: AccountTypeAPIKey, Credentials: map[string]any{
 		outboundIdentityCredential: OutboundIdentitySelection{Preset: "codex"},
 	}}
 	got, ok = outboundidentity.FromContext(WithAccountOutboundIdentity(ctx, override))
 	require.True(t, ok)
-	require.Equal(t, "codex", got.Preset)
-	require.Equal(t, "account", got.Source)
+	require.Equal(t, "kimi", got.Preset)
+	require.Equal(t, "compiled_default", got.Source)
 }
 
 func TestKimiVersionCandidateStaysInsideTheNamespace(t *testing.T) {

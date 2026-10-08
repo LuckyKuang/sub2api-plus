@@ -33,18 +33,18 @@ func TestStepFunIdentitySourcePriorityAndImmutableSDK(t *testing.T) {
 		require.Error(t, err, "%+v", candidate)
 	}
 	settings := emptyOutboundIdentitySettings()
-	settings.Defaults["stepfun:apikey"] = "claude"
+	settings.Profiles["stepfun"] = OutboundIdentitySelection{Preset: "stepfun"}
 	_, ctx := outboundIdentityTestSettings(t, settings)
 	a := stepFunTestAccount("apikey", "cn")
 	i, _ := outboundidentity.FromContext(WithAccountOutboundIdentity(ctx, a))
-	require.Equal(t, "claude", i.Preset)
+	require.Equal(t, "stepfun", i.Preset)
 	a.Credentials[outboundIdentityCredential] = OutboundIdentitySelection{Preset: "stepfun"}
 	i, _ = outboundidentity.FromContext(WithAccountOutboundIdentity(ctx, a))
 	require.Equal(t, "stepfun", i.Preset)
 	require.Equal(t, "account", i.Source)
 	a.Credentials[outboundIdentityCredential] = OutboundIdentitySelection{Preset: "stepfun", Version: "1.0.0"}
 	i, _ = outboundidentity.FromContext(WithAccountOutboundIdentity(ctx, a))
-	require.Equal(t, "claude", i.Preset, "invalid account candidates fall through atomically")
+	require.Equal(t, "stepfun", i.Preset, "invalid account candidates fall through atomically")
 	require.Error(t, NormalizeAccountOutboundIdentity("stepfun", "oauth", map[string]any{outboundIdentityCredential: OutboundIdentitySelection{Preset: "codex"}}))
 }
 
@@ -57,7 +57,7 @@ func TestStepFunRetrySnapshotAndFailoverResolveCredentialOwner(t *testing.T) {
 	requireStepFunWire(t, req, true)
 	updated := emptyOutboundIdentitySettings()
 	updated.Defaults["stepfun:apikey"] = "grok"
-	require.NoError(t, settings.SetOutboundIdentitySettings(ctx, updated))
+	require.Error(t, settings.SetOutboundIdentitySettings(ctx, updated))
 	retry, _ := http.NewRequestWithContext(ctx, http.MethodPost, a.GetOpenAIBaseURL()+"/chat/completions", nil)
 	prepareAccountOutboundRequest(retry, a)
 	requireStepFunWire(t, retry, true)
@@ -67,9 +67,9 @@ func TestStepFunRetrySnapshotAndFailoverResolveCredentialOwner(t *testing.T) {
 	prepareAccountOutboundRequest(failover, &next)
 	identity, ok := outboundidentity.FromContext(failover.Context())
 	require.True(t, ok)
-	require.Equal(t, "grok", identity.Preset)
-	require.Empty(t, failover.Header.Get("X-Step-Client"))
-	require.Empty(t, failover.Header.Get("X-Stainless-Package-Version"))
+	require.Equal(t, "stepfun", identity.Preset)
+	require.Equal(t, next.ID, identity.AccountID)
+	requireStepFunWire(t, failover, true)
 }
 
 func TestStepFunPlatformCapabilitiesAndCredentialValidation(t *testing.T) {

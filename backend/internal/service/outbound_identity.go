@@ -83,12 +83,13 @@ type OutboundIdentityWireView struct {
 }
 
 type OutboundIdentityView struct {
-	WireProfiles []OutboundIdentityWireView           `json:"wire_profiles"`
-	Settings     OutboundIdentitySettings             `json:"settings"`
-	Presets      []outboundidentity.Identity          `json:"presets"`
-	ControlPlane []outboundidentity.Identity          `json:"control_plane"`
-	Effective    []outboundidentity.Identity          `json:"effective"`
-	Declarations []OutboundIdentityPresetDeclarations `json:"declarations"`
+	AccountPolicies []OutboundIdentityAccountPolicy      `json:"account_policies"`
+	WireProfiles    []OutboundIdentityWireView           `json:"wire_profiles"`
+	Settings        OutboundIdentitySettings             `json:"settings"`
+	Presets         []outboundidentity.Identity          `json:"presets"`
+	ControlPlane    []outboundidentity.Identity          `json:"control_plane"`
+	Effective       []outboundidentity.Identity          `json:"effective"`
+	Declarations    []OutboundIdentityPresetDeclarations `json:"declarations"`
 }
 
 type cachedOutboundIdentitySettings struct {
@@ -132,32 +133,12 @@ func nativeOutboundPreset(platform string) string {
 	case PlatformStepFun:
 		return stepfun.Preset
 	case PlatformDeepseek:
-		// DeepSeek platform accounts advertise the pinned harness identity by
-		// default. The provider-defined client family is the published harness,
-		// not Codex; an account or type-default selection can still opt back
-		// into any compatible preset.
 		return "deepseek"
 	case PlatformMiniMax:
-		// MiniMax platform accounts advertise the pinned MiniMax Code product
-		// identity by default. The provider-defined client family is the
-		// official MiniMax client, not Codex; an account or type-default
-		// selection can still opt back into any compatible preset.
 		return "minimax"
 	case PlatformKimi:
-		// Kimi / Moonshot platform accounts advertise the pinned Kimi Code
-		// identity by default. The provider-defined client family is the
-		// provider's own official client, not Codex; an account or type-default
-		// selection can still opt back into any compatible preset. The device
-		// declarations of that family are runtime state owned by the persisted
-		// outbound identity settings.
 		return "kimi"
 	case PlatformZhipu:
-		// Zhipu / GLM platform accounts advertise the pinned ZCode identity by
-		// default, for both API-key and account-link OAuth accounts. ZCode is the
-		// provider's own official client, so it is the provider-defined client
-		// family rather than Codex; an account or type-default selection can
-		// still opt back into any compatible preset. OAuth/setup-token accounts
-		// are pinned to this family by validateAccountIdentityPreset.
 		return "zcode"
 	case PlatformTypeSafe:
 		// TypeSafe is an API-key compatible supplier with no provider-defined
@@ -171,6 +152,9 @@ func nativeOutboundPreset(platform string) string {
 }
 
 func nativeAccountOutboundPreset(platform, accountType string) string {
+	if accountType == AccountTypeBedrock {
+		return "claude"
+	}
 	if platform == PlatformMiniMax && accountType == AccountTypeAPIKey {
 		return minimax.APIKeyPreset
 	}
@@ -875,9 +859,6 @@ func resolveAccountOutboundIdentityContext(ctx context.Context, account *Account
 		return ctx
 	}
 	preset := nativeAccountOutboundPreset(account.Platform, account.Type)
-	if account.Type == AccountTypeBedrock {
-		preset = "claude"
-	}
 	cleanCtx := outboundidentity.WithIdentity(ctx, outboundidentity.Identity{})
 	var selection OutboundIdentitySelection
 	if raw, ok := account.Credentials[outboundIdentityCredential]; ok {
@@ -969,8 +950,8 @@ func validateAccountIdentityPreset(account *Account, preset string) error {
 	if builtInOutboundIdentity(preset).UserAgent == "" {
 		return fmt.Errorf("unknown identity preset")
 	}
-	if (account.Type == AccountTypeOAuth || account.Type == AccountTypeSetupToken) && preset != nativeOutboundPreset(account.Platform) {
-		return fmt.Errorf("OAuth and setup-token accounts must retain their native client family")
+	if !allowsOutboundDefaultMapping(outboundDefaultKey(account)) && preset != nativeAccountOutboundPreset(account.Platform, account.Type) {
+		return fmt.Errorf("%s accounts must retain the %s client family", outboundDefaultKey(account), nativeAccountOutboundPreset(account.Platform, account.Type))
 	}
 	return nil
 }
@@ -1082,10 +1063,7 @@ func (s *SettingService) resolveOutboundIdentityKey(ctx context.Context, key str
 	preset := key
 	if platform, accountType, ok := strings.Cut(key, ":"); ok {
 		preset = nativeAccountOutboundPreset(platform, accountType)
-		if accountType == AccountTypeBedrock {
-			preset = "claude"
-		}
-		if configured := s.GetOutboundIdentitySettings(ctx).Defaults[key]; validateAccountIdentityPreset(&Account{Platform: platform, Type: accountType}, configured) == nil {
+		if configured := s.GetOutboundIdentitySettings(ctx).Defaults[key]; allowsOutboundDefaultMapping(key) && validateAccountIdentityPreset(&Account{Platform: platform, Type: accountType}, configured) == nil {
 			preset = configured
 		}
 	}
@@ -1187,7 +1165,7 @@ func (s *SettingService) SetOutboundIdentitySettings(ctx context.Context, settin
 	for key, preset := range settings.Defaults {
 		preset = strings.TrimSpace(preset)
 		parts := strings.Split(key, ":")
-		if len(parts) != 2 || !validOutboundAccountKey(parts[0], parts[1]) || validateAccountIdentityPreset(&Account{Platform: parts[0], Type: parts[1]}, preset) != nil {
+		if len(parts) != 2 || !allowsOutboundDefaultMapping(key) || validateAccountIdentityPreset(&Account{Platform: parts[0], Type: parts[1]}, preset) != nil {
 			return infraerrors.BadRequest("OUTBOUND_IDENTITY_INVALID", "invalid account default mapping")
 		}
 		settings.Defaults[key] = preset
@@ -1248,7 +1226,7 @@ func (s *SettingService) GetOutboundIdentityView(ctx context.Context) OutboundId
 	// deployment has not generated yet, so the values shown are the values that
 	// will actually be sent and stay stable once persisted.
 	s.ensureRuntimeOutboundHeaders(ctx)
-	view := OutboundIdentityView{Settings: s.GetOutboundIdentitySettings(ctx)}
+	view := OutboundIdentityView{Settings: s.GetOutboundIdentitySettings(ctx), AccountPolicies: outboundAccountPolicies()}
 	for _, preset := range outboundPresetNames {
 		builtin := builtInOutboundIdentity(preset)
 		effective := s.resolveDefaultOutboundIdentity(ctx, preset)

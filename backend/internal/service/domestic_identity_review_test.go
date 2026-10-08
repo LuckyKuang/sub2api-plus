@@ -80,7 +80,7 @@ func TestMiniMaxIdentitySDKPinAndSessionRetryFailover(t *testing.T) {
 	_, err = buildOutboundIdentity(OutboundIdentitySelection{Preset: minimax.APIKeyPreset, UserAgent: "Anthropic/JS 0.91.1 injected", Version: "0.91.1"})
 	require.Error(t, err, "a version override must not sanitize an invalid candidate")
 	config := emptyOutboundIdentitySettings()
-	config.Defaults["minimax:apikey"] = "codex"
+	config.Profiles["minimax_apikey"] = OutboundIdentitySelection{Preset: "minimax_apikey"}
 	_, ctx := outboundIdentityTestSettings(t, config)
 	account := &Account{ID: 14, Platform: PlatformMiniMax, Type: AccountTypeAPIKey, Credentials: map[string]any{outboundIdentityCredential: OutboundIdentitySelection{Preset: minimax.APIKeyPreset}}}
 	ctx = WithOutboundIdentityScope(ctx, nil)
@@ -136,13 +136,14 @@ func TestDomesticIdentityRejectsUnofficialProductAndSDKFingerprint(t *testing.T)
 		require.Error(t, err, preset)
 	}
 	config := emptyOutboundIdentitySettings()
-	config.Defaults["minimax:apikey"] = "codex"
+	config.Profiles["minimax_apikey"] = OutboundIdentitySelection{Preset: "minimax_apikey"}
 	_, ctx := outboundIdentityTestSettings(t, config)
 	account := &Account{ID: 5, Platform: PlatformMiniMax, Type: AccountTypeAPIKey, Credentials: map[string]any{outboundIdentityCredential: OutboundIdentitySelection{Preset: "minimax_apikey", Version: "0.99.0"}}}
 	identity, ok := outboundidentity.FromContext(WithAccountOutboundIdentity(ctx, account))
 	require.True(t, ok)
-	require.Equal(t, "codex", identity.Preset, "invalid SDK candidate falls through atomically to the configured mapping")
-	require.NotContains(t, identity.Headers, "X-Stainless-Package-Version")
+	require.Equal(t, "minimax_apikey", identity.Preset, "invalid SDK candidate falls through atomically to the native global identity")
+	require.Equal(t, "global", identity.Source)
+	require.Equal(t, "0.91.1", identity.Headers["X-Stainless-Package-Version"])
 }
 
 // Independent oracle: official dsh attribution; Kimi oauth/identity.ts and

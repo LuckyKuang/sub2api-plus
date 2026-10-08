@@ -99,6 +99,15 @@ overrides from global and account identities. They now use the pinned Ubuntu
 24.04 environment. Device name/UUID, locale, timezone and unrelated configuration
 are preserved. See [outbound identity](../../docs/OUTBOUND_IDENTITY.md).
 
+## Native client family selection
+
+Migration 278 removes retired default mappings and whole foreign identity
+candidates from native provider/cloud accounts. Compatible supplier mappings,
+correct-family candidates, global profiles/runtime declarations, credentials,
+model restrictions and billing settings remain intact. The cleanup is tested
+against isolated PostgreSQL, including repeated execution and empty settings.
+See [outbound identity](../../docs/OUTBOUND_IDENTITY.md#selection-and-persistence).
+
 ## Upgrade Prerequisites
 
 Back up PostgreSQL before upgrading. Replacing the application binary alone

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import OutboundIdentitySettings from './OutboundIdentitySettings.vue'
+import { identityPolicyFixture } from '@/components/account/__tests__/identityPolicyFixture'
 import IdentityRuntimeField from '@/components/account/IdentityRuntimeField.vue'
 import { getOutboundIdentity, updateOutboundIdentity, identityPresets, versionlessIdentityPresets, type IdentityDeclaration, type OutboundIdentityView, type PresetDeclarations } from '@/api/admin/outboundIdentity'
 
@@ -70,13 +71,35 @@ const fixture = (): OutboundIdentityView => {
       })) : [])
     ]
   }))
-  return { settings: { profiles: {}, defaults: {} }, presets: identities, effective: identities, declarations }
+  return { account_policies: identityPolicyFixture(), settings: { profiles: {}, defaults: {} }, presets: identities, effective: identities, declarations }
 }
 describe('OutboundIdentitySettings', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(getOutboundIdentity).mockResolvedValue(fixture())
     vi.mocked(updateOutboundIdentity).mockResolvedValue(fixture())
+  })
+
+  it('offers exactly eleven compatible mappings in a collapsed advanced section', async () => {
+    const wrapper = mount(OutboundIdentitySettings)
+    await flushPromises()
+    const advanced = wrapper.get('[data-testid="outbound-identity-defaults"]')
+    expect(advanced.element.tagName).toBe('DETAILS')
+    expect(advanced.attributes('open')).toBeUndefined()
+    expect(advanced.findAll('[data-identity-mapping]').map(row => row.attributes('data-identity-mapping')).sort()).toEqual([
+      'openai:apikey', 'openai:upstream', 'anthropic:apikey', 'anthropic:upstream',
+      'gemini:apikey', 'gemini:upstream', 'grok:apikey', 'grok:upstream',
+      'antigravity:upstream', 'typesafe:apikey', 'opencode_go:apikey'
+    ].sort())
+    const select = advanced.get('[data-identity-mapping="opencode_go:apikey"] select')
+    expect(select.findAll('option')[0].text()).toContain('automatic')
+    await select.setValue('string:claude')
+    await wrapper.vm.save()
+    expect(vi.mocked(updateOutboundIdentity).mock.calls[0][0].defaults).toEqual({ 'opencode_go:apikey': 'claude' })
+    await select.setValue('string:')
+    await wrapper.vm.save()
+    expect(vi.mocked(updateOutboundIdentity).mock.calls[1][0].defaults).toEqual({})
+    wrapper.unmount()
   })
 
   it('separates MiniMax auth defaults and displays control and SDK wire headers', async () => {
@@ -125,8 +148,8 @@ describe('OutboundIdentitySettings', () => {
     expect(wrapper.text()).toContain('sources.compiled_default')
     const claude = wrapper.get('[data-identity-preset="claude"]')
     await claude.findAll('input')[0].setValue('2.9.1')
-    const defaults = wrapper.findAll('section').at(-1)!.findAll('select')
-    await defaults[0].setValue('grok')
+    const defaults = wrapper.get('[data-testid="outbound-identity-defaults"]').findAll('select')
+    await defaults[0].setValue('string:grok')
     await wrapper.vm.save()
     expect(updateOutboundIdentity).toHaveBeenCalledWith({ profiles: { claude: { preset: 'claude', user_agent: '', version: '2.9.1' } }, defaults: { 'openai:apikey': 'grok' }, runtime: {} })
     wrapper.unmount()
@@ -281,23 +304,19 @@ describe('OutboundIdentitySettings', () => {
     await flushPromises()
     const row = wrapper.findAll('label').find(label => label.text().includes('TypeSafe / Jev · API Key'))
     expect(row, 'the typesafe type-default row must be configurable').toBeDefined()
-    await row!.find('select').setValue('claude')
+    await row!.find('select').setValue('string:claude')
     await wrapper.vm.save()
     expect(vi.mocked(updateOutboundIdentity).mock.calls[0][0].defaults).toEqual({ 'typesafe:apikey': 'claude' })
     wrapper.unmount()
   })
 
-  it('exposes the pinned DeepSeek preset and its API-key type default mapping', async () => {
+  it('exposes the DeepSeek profile without a redundant type mapping', async () => {
     const wrapper = mount(OutboundIdentitySettings)
     await flushPromises()
     const deepseekCard = wrapper.get('[data-identity-preset="deepseek"]')
     expect(wrapper.get('[data-identity-group="deepseek"]').text()).toContain('DeepSeek')
     expect(deepseekCard.text()).toContain('deepseek/1.2.3')
-    const row = wrapper.findAll('label').find(label => label.text().includes('deepseek · API Key'))
-    expect(row, 'the deepseek type-default row must be configurable').toBeDefined()
-    await row!.find('select').setValue('deepseek')
-    await wrapper.vm.save()
-    expect(vi.mocked(updateOutboundIdentity).mock.calls[0][0].defaults).toEqual({ 'deepseek:apikey': 'deepseek' })
+    expect(wrapper.find('[data-identity-mapping="deepseek:apikey"]').exists()).toBe(false)
     wrapper.unmount()
   })
 
@@ -315,11 +334,7 @@ describe('OutboundIdentitySettings', () => {
     expect(minimaxCard.text()).toContain('versionNotDeclared')
     expect(minimaxCard.text()).toContain('versionlessHint')
     expect(minimaxCard.find('input').exists()).toBe(false)
-    const row = wrapper.findAll('label').find(label => label.text().includes('minimax · API Key'))
-    expect(row, 'the minimax type-default row must be configurable').toBeDefined()
-    await row!.find('select').setValue('minimax')
-    await wrapper.vm.save()
-    expect(vi.mocked(updateOutboundIdentity).mock.calls[0][0].defaults).toEqual({ 'minimax:apikey': 'minimax' })
+    expect(wrapper.find('[data-identity-mapping="minimax:apikey"]').exists()).toBe(false)
     wrapper.unmount()
   })
 
@@ -365,11 +380,7 @@ describe('OutboundIdentitySettings', () => {
     expect(headers.text()).not.toContain('Originator')
     expect(zcodeCard.text()).not.toContain('versionlessHint')
     expect(zcodeCard.find('input').exists()).toBe(true)
-    const row = wrapper.findAll('label').find(label => label.text().includes('zhipu · API Key'))
-    expect(row, 'the zhipu type-default row must be configurable').toBeDefined()
-    await row!.find('select').setValue('zcode')
-    await wrapper.vm.save()
-    expect(vi.mocked(updateOutboundIdentity).mock.calls[0][0].defaults).toEqual({ 'zhipu:apikey': 'zcode' })
+    expect(wrapper.find('[data-identity-mapping="zhipu:apikey"]').exists()).toBe(false)
     wrapper.unmount()
   })
 
@@ -435,15 +446,15 @@ describe('OutboundIdentitySettings', () => {
     wrapper.unmount()
   })
 
-  it('preserves valid mappings that are not shown as editable rows', async () => {
+  it('preserves advanced mappings when editing unrelated profile fields', async () => {
     const saved = fixture()
-    saved.settings.defaults = { 'anthropic:oauth': 'claude' }
+    saved.settings.defaults = { 'opencode_go:apikey': 'claude' }
     vi.mocked(getOutboundIdentity).mockResolvedValueOnce(saved)
     const wrapper = mount(OutboundIdentitySettings)
     await flushPromises()
     await wrapper.get('[data-identity-preset="claude"]').findAll('input')[0].setValue('3.9.1')
     await wrapper.vm.save()
-    expect(vi.mocked(updateOutboundIdentity).mock.calls[0][0].defaults).toEqual({ 'anthropic:oauth': 'claude' })
+    expect(vi.mocked(updateOutboundIdentity).mock.calls[0][0].defaults).toEqual({ 'opencode_go:apikey': 'claude' })
     wrapper.unmount()
   })
 })

@@ -44,8 +44,9 @@ MiniMax Code's managed-login and BYOK paths have different defaults:
 
 Both inference identities include the pinned `X-Stainless-*` SDK block described
 in [Outbound identity](../OUTBOUND_IDENTITY.md). Only managed OAuth is
-versionless. API-key accounts can explicitly choose a compatible preset; the
-native OAuth family is fixed. SDK identity is pinned independently of product
+versionless. Both account types retain their corresponding official family;
+neither can select another preset. Valid account parameters may override the
+global profile. SDK identity is pinned independently of product
 versions and cannot be changed through generic header overrides.
 
 Messages requests carry `X-Mavis-Session-Id`, `X-Mavis-Agent-Id: main` and the host

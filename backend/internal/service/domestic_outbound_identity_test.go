@@ -16,13 +16,13 @@ import (
 )
 
 func TestDomesticOutboundIdentityWireSnapshotAndFailover(t *testing.T) {
-	for _, platform := range []string{PlatformDeepseek, PlatformKimi, PlatformMiniMax, PlatformZhipu} {
+	for _, platform := range []string{PlatformDeepseek, PlatformKimi, PlatformMiniMax, PlatformZhipu, PlatformStepFun} {
 		for _, accountType := range []string{AccountTypeOAuth, AccountTypeAPIKey} {
 			t.Run(platform+"/"+accountType, func(t *testing.T) {
 				preset := nativeAccountOutboundPreset(platform, accountType)
 				config := emptyOutboundIdentitySettings()
 				selection := OutboundIdentitySelection{Preset: preset}
-				if preset != "minimax" && preset != "minimax_apikey" {
+				if preset != "minimax" && preset != "minimax_apikey" && preset != "stepfun" {
 					selection.Version = "4.1.0"
 				}
 				config.Profiles[preset] = selection
@@ -42,7 +42,7 @@ func TestDomesticOutboundIdentityWireSnapshotAndFailover(t *testing.T) {
 				defer server.Close()
 				client := &http.Client{Transport: brandidentity.WrapRoundTripper(server.Client().Transport)}
 				// A setting change between attempts must not mutate the owner snapshot.
-				if preset != "minimax" && preset != "minimax_apikey" {
+				if preset != "minimax" && preset != "minimax_apikey" && preset != "stepfun" {
 					selection.Version = "4.2.0"
 				}
 				config.Profiles[preset] = selection
@@ -81,13 +81,13 @@ func TestDomesticOutboundIdentityWireSnapshotAndFailover(t *testing.T) {
 				switched, ok := outboundidentity.FromContext(WithAccountOutboundIdentity(ctx, next))
 				require.True(t, ok)
 				require.EqualValues(t, 102, switched.AccountID)
-				if preset != "minimax" && preset != "minimax_apikey" {
+				if preset != "minimax" && preset != "minimax_apikey" && preset != "stepfun" {
 					require.Equal(t, "4.2.0", switched.Version)
 					require.Equal(t, "4.1.0", pinned.Version)
 				}
-				// Native OAuth bootstrap ignores a compatible API-key type mapping.
+				// Native family mappings are rejected, including for API-key accounts.
 				config.Defaults[platform+":apikey"] = "codex"
-				require.NoError(t, svc.SetOutboundIdentitySettings(ctx, config))
+				require.Error(t, svc.SetOutboundIdentitySettings(ctx, config))
 				bootstrap, ok := outboundidentity.FromContext(withNativeOAuthOutboundIdentity(ctx, platform))
 				require.True(t, ok)
 				require.Equal(t, nativeOutboundPreset(platform), bootstrap.Preset)
@@ -106,7 +106,7 @@ func TestDomesticIdentityInvalidHeaderCandidateFallsThroughAtomically(t *testing
 			}
 			config := emptyOutboundIdentitySettings()
 			global := OutboundIdentitySelection{Preset: preset}
-			if preset != "minimax" && preset != "minimax_apikey" {
+			if preset != "minimax" && preset != "minimax_apikey" && preset != "stepfun" {
 				global.Version = "4.1.0"
 			}
 			config.Profiles[preset] = global

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import OutboundIdentityEditor from '../OutboundIdentityEditor.vue'
+import { identityPolicyFixture } from './identityPolicyFixture'
 import IdentityRuntimeField from '../IdentityRuntimeField.vue'
 import { getOutboundIdentity, previewOutboundIdentity, type OutboundIdentityView } from '@/api/admin/outboundIdentity'
 
@@ -13,6 +14,7 @@ vi.mock('@/api/admin/outboundIdentity', async (original) => ({
 // The backend declares which headers a preset renders and which of them accept
 // an account value. Only the Kimi Code device set is configurable today.
 const declarationsView = (): OutboundIdentityView => ({
+  account_policies: identityPolicyFixture(),
   settings: { profiles: {}, defaults: {} },
   presets: [],
   effective: [],
@@ -37,7 +39,9 @@ describe('OutboundIdentityEditor', () => {
 
   it('limits native OAuth to its own client family and previews inheritance', async () => {
     const wrapper = mount(OutboundIdentityEditor, { props: { platform: 'anthropic', accountType: 'oauth', modelValue: null } })
-    expect(wrapper.findAll('option').map(option => option.attributes('value'))).toEqual(['', 'claude'])
+    await flushPromises()
+    expect(wrapper.get('[data-testid="fixed-identity-family"]').exists()).toBe(true)
+    expect(wrapper.find('select[aria-label="admin.settings.outboundIdentity.title"]').exists()).toBe(false)
     await vi.advanceTimersByTimeAsync(250)
     await flushPromises()
     expect(previewOutboundIdentity).toHaveBeenCalledWith('anthropic', 'oauth', undefined)
@@ -47,32 +51,81 @@ describe('OutboundIdentityEditor', () => {
   })
 
   it.each([
-    ['openai', 'apikey'], ['gemini', 'service_account'], ['anthropic', 'bedrock'], ['antigravity', 'upstream'], ['deepseek', 'apikey'], ['minimax', 'apikey'], ['zhipu', 'apikey'], ['kimi', 'apikey'], ['stepfun', 'apikey']
+    ['openai', 'apikey'], ['gemini', 'apikey'], ['anthropic', 'apikey'], ['grok', 'apikey'], ['antigravity', 'upstream'], ['typesafe', 'apikey'], ['opencode_go', 'apikey']
   ])('lets compatible %s/%s accounts select an existing identity', async (platform, accountType) => {
     const wrapper = mount(OutboundIdentityEditor, { props: { platform, accountType, modelValue: null } })
-    expect(wrapper.get('select').findAll('option').map(option => option.attributes('value'))).toEqual(['', 'codex', 'claude', 'gemini', 'grok', 'antigravity', 'deepseek', 'minimax', 'minimax_apikey', 'kimi', 'zcode', 'stepfun'])
-    await wrapper.get('select').setValue('grok')
+    await flushPromises()
+    expect(wrapper.get('select').findAll('option').map(option => option.attributes('value'))).toEqual(['', 'codex', 'claude', 'gemini', 'grok', 'antigravity', 'deepseek', 'minimax', 'minimax_apikey', 'kimi', 'zcode', 'stepfun'].map(value => `string:${value}`))
+    await wrapper.get('select').setValue('string:grok')
     expect(wrapper.emitted('update:modelValue')?.[0]).toEqual([{ preset: 'grok' }])
     await wrapper.setProps({ modelValue: { preset: 'grok', version: '3.9.1' } })
     await vi.advanceTimersByTimeAsync(250)
     expect(previewOutboundIdentity).toHaveBeenLastCalledWith(platform, accountType, { preset: 'grok', version: '3.9.1' })
-    await wrapper.get('select').setValue('')
+    await wrapper.get('select').setValue('string:')
     expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([null])
+    wrapper.unmount()
+  })
+
+  it.each([
+    ['deepseek', 'apikey'], ['deepseek', 'oauth'], ['kimi', 'apikey'], ['kimi', 'oauth'],
+    ['minimax', 'apikey'], ['minimax', 'oauth'], ['zhipu', 'apikey'], ['zhipu', 'oauth'],
+    ['stepfun', 'apikey'], ['stepfun', 'oauth'], ['anthropic', 'bedrock'],
+    ['anthropic', 'service_account'], ['gemini', 'service_account']
+  ])('pins the client family for %s/%s without a family dropdown', async (platform, accountType) => {
+    const wrapper = mount(OutboundIdentityEditor, { props: { platform, accountType, modelValue: null } })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="fixed-identity-family"]').exists()).toBe(true)
+    expect(wrapper.find('select[aria-label="admin.settings.outboundIdentity.title"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('allows a native account version override and can restore inheritance', async () => {
+    const wrapper = mount(OutboundIdentityEditor, { props: { platform: 'deepseek', accountType: 'apikey', modelValue: null } })
+    await flushPromises()
+    await wrapper.get('input[aria-label="admin.settings.outboundIdentity.version"]').setValue('0.3.0')
+    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([{ preset: 'deepseek', version: '0.3.0' }])
+    await wrapper.setProps({ modelValue: { preset: 'deepseek', version: '0.3.0' } })
+    await wrapper.get('button').trigger('click')
+    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([null])
+    wrapper.unmount()
+  })
+
+  it('does not expose an unrestricted selector if policy loading fails', async () => {
+    vi.mocked(getOutboundIdentity).mockRejectedValueOnce(new Error('unavailable'))
+    const wrapper = mount(OutboundIdentityEditor, { props: { platform: 'kimi', accountType: 'apikey', modelValue: null } })
+    await flushPromises()
+    expect(wrapper.find('select').exists()).toBe(false)
+    expect(wrapper.get('[role="alert"]').text()).toContain('loadFailed')
+    wrapper.unmount()
+  })
+
+  it('keeps a loaded account override while the policy request is pending', async () => {
+    let resolvePolicy!: (view: OutboundIdentityView) => void
+    vi.mocked(getOutboundIdentity).mockReturnValueOnce(new Promise(resolve => { resolvePolicy = resolve }))
+    const wrapper = mount(OutboundIdentityEditor, { props: { platform: 'deepseek', accountType: 'apikey', modelValue: null } })
+    await wrapper.setProps({ platform: 'kimi', modelValue: { preset: 'kimi', version: '2.2.0' } })
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    resolvePolicy(declarationsView())
+    await flushPromises()
+    expect(wrapper.get('input[aria-label="admin.settings.outboundIdentity.version"]').element.value).toBe('2.2.0')
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
     wrapper.unmount()
   })
 
   it('keeps the MiniMax API Key SDK version read-only and OAuth native', async () => {
     const wrapper = mount(OutboundIdentityEditor, { props: { platform: 'minimax', accountType: 'apikey', modelValue: { preset: 'minimax_apikey' } } })
+    await flushPromises()
     expect(wrapper.find('input').exists()).toBe(false)
     expect(wrapper.text()).toContain('pinnedSdkHint')
     await wrapper.setProps({ accountType: 'oauth', modelValue: { preset: 'minimax' } })
-    expect(wrapper.findAll('option').map(option => option.attributes('value'))).toEqual(['', 'minimax'])
+    expect(wrapper.find('select[aria-label="admin.settings.outboundIdentity.title"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('versionlessHint')
     wrapper.unmount()
   })
 
   it('uses the resolved type mapping when showing inherited timezone controls', async () => {
     vi.mocked(previewOutboundIdentity).mockResolvedValue({ preset: 'minimax_apikey', user_agent: 'Anthropic/JS 0.91.1', originator: 'Anthropic', version: '0.91.1', source: 'global', headers: {}, timezone: 'Asia/Shanghai' })
-    const wrapper = mount(OutboundIdentityEditor, { props: { platform: 'kimi', accountType: 'apikey', modelValue: null } })
+    const wrapper = mount(OutboundIdentityEditor, { props: { platform: 'gemini', accountType: 'apikey', modelValue: null } })
     await vi.advanceTimersByTimeAsync(250)
     await flushPromises()
     expect(wrapper.getComponent(IdentityRuntimeField).props('name')).toBe('timezone')
@@ -84,6 +137,7 @@ describe('OutboundIdentityEditor', () => {
 
   it('sets and clears an account timezone while retaining its preset', async () => {
     const wrapper = mount(OutboundIdentityEditor, { props: { platform: 'minimax', accountType: 'oauth', modelValue: null } })
+    await flushPromises()
     wrapper.getComponent(IdentityRuntimeField).vm.$emit('update:modelValue', 'Asia/Shanghai')
     expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([{ preset: 'minimax', timezone: 'Asia/Shanghai' }])
     await wrapper.setProps({ modelValue: { preset: 'minimax', timezone: 'Asia/Shanghai' } })
@@ -130,7 +184,7 @@ describe('OutboundIdentityEditor', () => {
 
   it('renders the effective request headers and hides the version control for the versionless MiniMax family', async () => {
     vi.mocked(previewOutboundIdentity).mockResolvedValue({ preset: 'minimax', user_agent: 'MiniMaxAgent', originator: 'MiniMaxAgent', version: '', source: 'account', headers: { 'User-Agent': 'MiniMaxAgent' } })
-    const wrapper = mount(OutboundIdentityEditor, { props: { platform: 'minimax', accountType: 'apikey', modelValue: { preset: 'minimax' } } })
+    const wrapper = mount(OutboundIdentityEditor, { props: { platform: 'minimax', accountType: 'oauth', modelValue: { preset: 'minimax' } } })
     await vi.advanceTimersByTimeAsync(250)
     await flushPromises()
     const headers = wrapper.get('[data-testid="outbound-identity-account-headers"]')
@@ -215,7 +269,7 @@ describe('OutboundIdentityEditor', () => {
   })
 
   it('does not offer runtime declarations when the account opts out of the native family', async () => {
-    const wrapper = mount(OutboundIdentityEditor, { props: { platform: 'kimi', accountType: 'apikey', modelValue: { preset: 'codex' } } })
+    const wrapper = mount(OutboundIdentityEditor, { props: { platform: 'gemini', accountType: 'apikey', modelValue: { preset: 'codex' } } })
     await vi.advanceTimersByTimeAsync(250)
     await flushPromises()
     expect(wrapper.find('[data-testid="outbound-identity-account-runtime-headers"]').exists()).toBe(false)
