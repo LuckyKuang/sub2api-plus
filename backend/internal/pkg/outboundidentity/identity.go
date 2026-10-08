@@ -28,8 +28,10 @@ type Identity struct {
 }
 
 // WireProfile is part of the trusted snapshot, never read from request headers.
-// A protocol changes SDK declarations, not identity source or client family.
+// Profiles own SDK declarations and enumerated official endpoint families,
+// never the credential owner or identity source.
 type WireProfile struct {
+	UserAgent       string            `json:"user_agent,omitempty"`
 	UserAgentSuffix string            `json:"user_agent_suffix,omitempty"`
 	Headers         map[string]string `json:"headers,omitempty"`
 }
@@ -54,6 +56,9 @@ func (i Identity) ForProtocol(protocol string) Identity {
 			i.Headers = map[string]string{}
 		}
 		maps.Copy(i.Headers, profile.Headers)
+		if profile.UserAgent != "" {
+			i.UserAgent = profile.UserAgent
+		}
 		if profile.UserAgentSuffix != "" {
 			i.UserAgent += " " + profile.UserAgentSuffix
 		}
@@ -70,6 +75,8 @@ func RequestProtocol(req *http.Request) string {
 	}
 	path := strings.TrimRight(req.URL.Path, "/")
 	switch {
+	case strings.Contains(path, "/images/"), strings.Contains(path, "/videos/"):
+		return "grok_media"
 	case strings.HasSuffix(path, "/messages"), strings.HasSuffix(path, "/messages/count_tokens"):
 		return "anthropic"
 	case strings.HasSuffix(path, "/chat/completions"):
@@ -199,12 +206,25 @@ func (i Identity) Apply(headers http.Header) {
 	headers.Set("User-Agent", i.UserAgent)
 }
 
+// ForRequest renders destination-owned declarations without reselecting identity.
+func (i Identity) ForRequest(req *http.Request) Identity {
+	rendered := i.ForProtocol(RequestProtocol(req))
+	if rendered.Preset == "grok" && req != nil && req.URL != nil {
+		host := strings.ToLower(req.URL.Hostname())
+		if host == "api.x.ai" || strings.HasSuffix(host, ".api.x.ai") {
+			rendered.Headers = maps.Clone(rendered.Headers)
+			delete(rendered.Headers, "x-grok-client-mode")
+		}
+	}
+	return rendered
+}
+
 func ApplyContext(req *http.Request) {
 	if req == nil {
 		return
 	}
 	if i, ok := FromContext(req.Context()); ok {
-		i.ForProtocol(RequestProtocol(req)).Apply(req.Header)
+		i.ForRequest(req).Apply(req.Header)
 	}
 }
 
@@ -213,7 +233,7 @@ func ApplyDefault(req *http.Request, preset string) {
 		return
 	}
 	if i, ok := Default(req.Context(), preset); ok {
-		i.ForProtocol(RequestProtocol(req)).Apply(req.Header)
+		i.ForRequest(req).Apply(req.Header)
 	}
 }
 

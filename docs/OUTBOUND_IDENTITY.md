@@ -324,8 +324,15 @@ account runtime values override that resolved global state. Settings header
 blocks show the actual resolved declarations for all four families. This identity
 contract does not create a new login protocol or change authentication headers.
 
-The exact compiled Grok identity is `grok-shell/1.0.45 (linux; x86_64)`, with
-identifier `grok-shell`, client version `1.0.45`, and mode `headless`.
+Grok snapshots also contain the official `grok_media` endpoint declaration,
+`xai-grok-build/<selected version>`, sharing the selected source, owner, version
+and `grok-shell` identifier. It is immutable request rendering, not a new identity
+selection. Sampler/control and Imagine declarations are independently preserved
+during version updates. See the [official endpoint contract](providers/GROK.md#endpoint-identity).
+
+The exact compiled Grok sampler identity is `grok-shell/1.0.45 (linux; x86_64)`, with
+identifier `grok-shell`, client version `1.0.45`, and CLI/control mode `headless`. Official public API
+requests omit the CLI mode declaration.
 OS and architecture use the fixed Ubuntu baseline, in the official Linux/x86_64
 spellings, independently of Go's runtime platform.
 `XAI_GROK_CLI_VERSION` may select a supported version while retaining that
@@ -383,8 +390,11 @@ existing beta behavior.
 
 ## Outbound header privacy
 
-No outgoing HTTP header name or value may contain `sub2api`, case insensitive.
-This applies to every value of a multi-value header, custom headers, Host,
+Routing Host (including HTTP/2 authority, URL host and TLS SNI) is exempt and
+may contain `sub2api`; it is never removed, substituted or rewritten. Existing
+URL/allowlist/SSRF validation remains mandatory. Every other outgoing HTTP
+header name or value must exclude `sub2api`, case insensitive.
+This applies to every value of a multi-value header, custom headers and
 trailers, HTTP/WS handshakes, redirects, probes, OAuth, SDK and auxiliary clients.
 Body text and URL paths are not rewritten; a Referer containing such a path is
 removed before the redirected request is sent.
@@ -395,15 +405,15 @@ source order; version overrides and environment versions cannot reintroduce the
 token. The compiled identities below are unchanged. Ordinary optional headers
 are filtered at the final transport boundary, after cookies and SDK defaults.
 Credentials (Authorization, proxy authorization, cookies and API keys),
-User-Agent, or the effective Host containing the token stop the request before
+or User-Agent containing the token stop the request before
 network dispatch with a static error that does not echo their values. Earlier
 header cleanup preserves credentials and UA until this check; it must never
 silently remove authentication or let an SDK substitute its own identity.
 
 Unsigned Bedrock requests are filtered before signing. An already signed request
 with prohibited declarations is rejected without modifying its signed headers;
-clean signatures are preserved byte for byte. Local control headers must also be
-removed before signing. Shared clients and independent HTTP/req clients apply the
+clean signatures are preserved byte for byte. `X-Grok-Client-Tool-Cache` has no gateway control semantics or special filter;
+explicit extras follow general policy, including signature preservation. Shared clients and independent HTTP/req clients apply the
 same check to redirected attempts; plugin forwarding checks before opening its
 forward stream. GLM off-peak task IDs use the official `offpeak-<UUID>` shape.
 
@@ -776,16 +786,13 @@ authentication hint, but may not select an identity from the destination host.
 Every final send, including redirects, adds `X-XAI-Token-Auth: xai-grok-cli`
 only for `cli-chat-proxy.grok.com`; sampling and media-mutation paths on that
 host also add `x-authenticateresponse: authenticate-response`. Both
-declarations are removed from other destinations. The narrowly matched Grok
-access-denied compatibility
-fallback retains the selected UA and companion headers when changing hosts and
-removes proxy authentication declarations. Repository tests capture both actual
-transport methods and the fallback with inherited/explicit Codex, Grok and
+declarations are removed from other destinations. CLI 403 responses are returned without an automatic cross-host public API replay. Repository tests capture both actual
+transport methods with inherited/explicit Codex, Grok and
 Claude identities. Every account-owned Grok HTTP path also receives the Grok
 transport profile at the shared final preparation boundary unless the owning
 operation explicitly selected a more specialized profile.
 
-Grok inference and media-mutation builders own the sampler declarations
+Grok inference builders own the sampler declarations
 separately from the identity triple. They issue a fresh `x-grok-req-id`, retain
 one random process-level `x-grok-agent-id`, declare the final model, attach the
 OAuth credential owner's `sub` when available, and reuse the tenant-isolated
@@ -795,9 +802,9 @@ gateway omits sampler and response-authentication declarations on model,
 billing and media-status lookups, and omits optional turn, retry, deployment,
 and tracing declarations when it does not possess the corresponding
 authoritative value. One constructed sampler request keeps its request
-association snapshot across transport retries, redirects and the compatibility
-fallback; a newly constructed logical sampler call or a resubmit renders a new
-association instead.
+association snapshot across transport retries and redirects; a newly constructed
+logical sampler call or resubmit renders a new association. Imagine start/poll
+operations carry their isolated session association without sampler fields.
 
 Grok sampler `Accept` is a request-owned operation declaration rather than an
 identity field: the JSON operation declares `application/json`, and a request
@@ -814,17 +821,15 @@ level-3 zstd only after the exact `cli-chat-proxy.grok.com` target's
 port/base path, credential owner and proxy configuration. The capability probe
 uses the same-owner snapshot, proxy, URL validation and audit ordering as the
 sampler send and never acquires sampler declarations. `Content-Encoding: zstd`
-appears only with the bytes it describes; a destination change (the `api.x.ai`
-compatibility fallback, a cross-origin redirect) rebuilds a plain body from the
+appears only with the bytes it describes; a destination change (a cross-origin redirect) rebuilds a plain body from the
 final JSON and drops the declaration. Audit, payload hashing, inflight
 estimation, cache/session keys and billing keep the uncompressed semantics.
 Generic header overrides cannot supply `Content-Encoding`.
 
 Agent-only native differences stay explicitly scoped rather than being
-approximated with surface declarations: the native media-tool user agent, the
-Rustls/HTTP2 transport parameters, doom-loop recovery headers, enterprise
+approximated with surface declarations: the native Rustls ClientHello, doom-loop recovery headers, enterprise
 deployment authorization, and turn/resubmit/tracing declarations. The gateway
-keeps the selected account snapshot and its existing transport fingerprint, and
+keeps the selected account snapshot and its Go TLS fingerprint, and
 emits no header without the matching authoritative state or recovery behavior.
 See [Grok / xAI](providers/GROK.md#agent-only-differences-and-follow-up-scope).
 

@@ -313,7 +313,7 @@ func normalizeHeaderOverrideEntry(name, value string) (string, string, error) {
 		return "", "", infraerrors.Newf(http.StatusBadRequest, "INVALID_HEADER_OVERRIDE",
 			"header %q is not allowed to be overridden", lowerName)
 	}
-	if brandidentity.IsReservedHeaderName(lowerName) || brandidentity.IsLocalControlHeaderName(lowerName) {
+	if brandidentity.IsReservedHeaderName(lowerName) {
 		return "", "", infraerrors.New(http.StatusBadRequest, "INVALID_HEADER_OVERRIDE",
 			"header name uses a reserved protocol identifier")
 	}

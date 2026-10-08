@@ -15,21 +15,23 @@ media-mutation requests also send
 `x-authenticateresponse: authenticate-response`; concrete official billing and
 model-control paths omit it. The final send boundary derives both declarations
 from the destination and request path, and removes them on other hosts,
-including redirects and the narrowly matched CLI-to-public API compatibility
-fallback. The fallback keeps the selected UA and companion identity headers.
+including redirects. CLI rejection responses do not trigger an automatic replay
+to the public API.
 Compatible accounts using a Codex or other preset retain that selection on
-both hosts.
+all supported hosts.
 
-The compiled default identity follows the frozen local grok-build source:
+The official protocol baseline is local `grok-build@2bdd1d6a` (client `1.0.45`).
+The compiled sampler identity follows that source:
 `grok-shell/1.0.45 (<os>; <arch>)`, identifier `grok-shell`, client version
-`1.0.45`, mode `headless`. `1.0.41` remains the accepted version floor, and a
+`1.0.45`, mode `headless` on CLI/control requests. Official public API
+requests omit the CLI mode declaration. `1.0.41` remains the accepted version floor, and a
 valid credential-owning account, configured global preset or environment pin
 still outranks the compiled default.
 
-Inference and media-mutation requests also carry the official request-owned
+Inference requests also carry the official request-owned
 sampler declarations: a new request ID, a process-stable random agent ID, the
-final model, and (when a stable tenant-isolated conversation exists) matching
-conversation/session IDs plus the official UUIDv5 conversation-group ID. OAuth
+final model, and (when authoritative tenant-isolated association exists)
+independent conversation/session IDs plus the official UUIDv5 root-group ID. OAuth
 requests include the credential owner's `sub` as `x-grok-user-id`. The gateway
 does not fabricate a turn index, retry count, deployment ID, or tracing lineage
 it does not own, and generic account header overrides cannot replace any of
@@ -37,7 +39,7 @@ these declarations. Model, billing, and media-status lookups omit mutation-only
 sampler and response-authentication fields.
 
 One constructed sampler request keeps its request association across transport
-retries, redirects and the `api.x.ai` compatibility fallback. A new logical
+retries and redirects. A new logical
 sampler call (including a rebuilt resubmit body) renders a fresh association, so
 the upstream sees transport replay and agent resubmit as different things.
 
@@ -80,7 +82,7 @@ a failure logs a fixed stage/code with byte counts and no request content.
 Generic account header overrides cannot supply `Content-Encoding`.
 
 A same-target retry may replay the encoded body. When the destination changes —
-the `api.x.ai` compatibility fallback or a cross-origin redirect — the gateway
+a cross-origin redirect — the gateway
 rebuilds a plain body from the final JSON, drops the declaration and keeps the
 same-owner selected identity; if the body cannot be rebuilt it keeps its
 existing transport error semantics instead of sending a wrong encoding.
@@ -95,14 +97,17 @@ Native grok-build carries agent features that the gateway intentionally does not
 imitate. They are recorded here instead of being approximated with surface
 headers or fabricated values:
 
-- Media tool user agent. The native media tool advertises
-  `xai-grok-build/<version>` while the gateway keeps the selected account
-  snapshot (for example the Grok shell family). Unifying the media-tool family
-  is separate work; a Plus media request never reselects identity.
-- Transport fingerprint. Native uses Rustls with aws-lc and its own HTTP/2 ping,
-  idle and connect timings. The gateway keeps its existing TLS/HTTP2 profile and
-  fingerprint. Moving to the Rust parameters is a separately described change
-  with its own regression evidence, not part of a version update.
+- Signed video CDN downloads. The official download client has no default
+  headers. The gateway retains its selected trusted identity for these requests
+  under the repository-wide identity contract, with no bearer credential or
+  account override sent to the signed CDN URL.
+- TLS fingerprint. The gateway uses Go TLS rather than native Rustls/aws-lc.
+  Header/protocol alignment does not make their ClientHello bytes identical.
+  Grok's Go HTTP/2 profile uses the official 15-second idle PING trigger,
+  five-second PING timeout, two idle connections per host, 90-second pool idle
+  expiry and ten-second connect timeout. Go's health PING is idle-triggered;
+  native reqwest can also send keepalive while idle. Other profiles keep their
+  existing transport behavior.
 - Doom-loop recovery. The sampler's doom-loop and exact-repetition control
   headers only make sense with the matching event interception and resampling
   policy. The gateway sends neither the headers nor fabricated values.
@@ -134,15 +139,51 @@ used only for that conversion and is not persisted in account credentials.
 General browser automation and web scraping remain outside this provider
 integration.
 
-## Request-Level Tool Cache Preference
+## Cache and tool declarations
 
-Custom clients and integrations may send
-`X-Grok-Client-Tool-Cache: prefer-cache` to enable, or
-`X-Grok-Client-Tool-Cache: off` to disable, the request-level tool-cache
-preference where the Grok route supports it. This is a Sub2API Plus gateway
-control, not an official Grok/xAI header. The gateway consumes it locally and
-does not forward it upstream. The retired branded and generic gateway header
-names are not recognized.
+Responses sends `prompt_cache_key` in the JSON body: an explicit value wins,
+otherwise the conversation ID is the official fallback. Compatibility-client
+session signals and anchored prefix derivation are gateway fallbacks only.
+The gateway namespaces cache values by tenant API key and model. Conversation,
+session and root-group associations are resolved independently and tenant-isolated.
+An auxiliary request can therefore use a new conversation ID while sharing the
+parent's session, cache key and root group; descendants sharing an explicit
+conversation-group declaration retain that grouping.
+
+Cache routing never adds `web_search` or `x_search`, changes a function tool into
+a hosted tool based on its name, or changes `tool_choice` to obtain cache hits.
+When a request explicitly includes a hosted search tool and a same-named client
+function, the hosted declaration wins, following the official Responses mapper.
+Malformed or unsupported controls still follow the existing protocol validation.
+The retired account tool-cache switch and client-fingerprint route are removed;
+migration 280 removes only its Grok account extra key, preserving other data.
+Free OAuth prompt-cache hits are upstream capability, not guaranteed by a key.
+
+`X-Grok-Client-Tool-Cache` has no built-in meaning. It is not generated or
+implicitly copied from ingress. An operator-configured extra header with that
+name uses the same validation and forwarding as other extra headers, including
+signed-request preservation and the project-token policy. Account overrides
+cannot replace identity or request-owned declarations.
+
+## Endpoint identity
+
+The selected Grok snapshot declares both official client families: sampler and
+control operations use `grok-shell/<version> (linux; x86_64)`; Imagine image/video
+operations use `xai-grok-build/<version>` with the same selected version and
+`grok-shell` client identifier. The system settings show the media declaration
+separately. Compatible accounts that explicitly select another permitted preset
+retain that preset. Inbound headers and the shared transport cannot select a family.
+Media start/poll requests carry an isolated `x-grok-session-id` when available;
+they do not acquire sampler request/model/agent fields.
+
+## Outbound privacy and local failures
+
+Routing Host/HTTP2 authority may contain `sub2api`; URL safety policy remains
+in force. Other outbound headers/trailers retain the case-insensitive project
+identifier prohibition. Sensitive or already-signed prohibited declarations
+fail locally before network dispatch. These failures are recorded as platform /
+gateway, stage `outbound_policy`, with a stable reason and no credential values;
+they do not create provider cooldowns or account failover.
 
 ## Account Types
 

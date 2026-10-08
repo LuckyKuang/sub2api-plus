@@ -161,3 +161,10 @@ Malformed, ambiguous and provider records remain unchanged. It preserves
 bodies, timestamps, business-limit flags and unknown timing and is safe to repeat.
 The runtime uses trusted decisions for new records. See
 [error diagnostics](../../docs/ERROR_REQUEST_DIAGNOSTICS.md).
+
+## Retired Grok cache control
+
+Migration 280 removes `grok_client_tool_cache_enabled` only from Grok account
+extra objects. Credentials, unrelated extras, foreign-platform rows and
+non-object historical values are preserved. The retired switch no longer grants
+hosted search tools or changes cache routing. See [Grok](../../docs/providers/GROK.md#cache-and-tool-declarations).

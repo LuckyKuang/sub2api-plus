@@ -386,7 +386,7 @@ func TestProxyOpenAIWSHTTPBridgeTurnGrokInheritsToolSearchAndPromotesFollowupDis
 	require.Len(t, upstream.bodies, 2)
 	require.Equal(t, "tool_search", gjson.GetBytes(upstream.bodies[1], "tools.0.name").String())
 	require.Equal(t, "multi_agent_v1__spawn_agent", gjson.GetBytes(upstream.bodies[1], "tools.1.name").String())
-	require.NotEqual(t, grokFreeCacheDisabledToolChoice, gjson.GetBytes(upstream.bodies[1], "tool_choice").String())
+	require.NotEqual(t, "none", gjson.GetBytes(upstream.bodies[1], "tool_choice").String())
 	require.Equal(t, "grok-ws-cache", gjson.GetBytes(upstream.bodies[1], "prompt_cache_key").String())
 	require.Equal(t, "function_call_output", gjson.GetBytes(upstream.bodies[1], "input.0.type").String())
 	require.Len(t, events, 1)
@@ -1684,7 +1684,7 @@ func TestProxyOpenAIWSHTTPBridgeTurnPromotesCodexAdditionalToolsForMixedCache(t 
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
 	c.Request = httptest.NewRequest(http.MethodGet, "/v1/responses", nil)
-	c.Request.Header.Set(grokClientToolCacheOptInHeader, "prefer-cache")
+	c.Request.Header.Set("X-Grok-Client-Tool-Cache", "prefer-cache")
 	var events [][]byte
 
 	result, err := svc.proxyOpenAIWSHTTPBridgeTurn(
@@ -1701,19 +1701,19 @@ func TestProxyOpenAIWSHTTPBridgeTurnPromotesCodexAdditionalToolsForMixedCache(t 
 	require.Len(t, events, 2)
 	require.False(t, gjson.GetBytes(upstream.lastBody, `input.#(type=="additional_tools")`).Exists())
 	tools := gjson.GetBytes(upstream.lastBody, "tools").Array()
-	require.Len(t, tools, 4)
+	require.Len(t, tools, 3, "client functions never become hosted search by name")
 	require.Equal(t, "function", tools[0].Get("type").String())
 	require.Equal(t, "lookup", tools[0].Get("name").String())
-	require.Equal(t, "web_search", tools[1].Get("type").String())
+	require.Equal(t, "function", tools[1].Get("type").String())
+	require.Equal(t, "web_search", tools[1].Get("name").String())
 	require.Equal(t, "function", tools[2].Get("type").String())
 	require.Equal(t, "apply_patch", tools[2].Get("name").String())
-	require.Equal(t, "x_search", tools[3].Get("type").String())
 	require.False(t, gjson.GetBytes(upstream.lastBody, "tool_choice").Exists())
 	require.False(t, gjson.GetBytes(upstream.lastBody, `tools.#(type=="custom")`).Exists())
 	require.False(t, gjson.GetBytes(upstream.lastBody, `tools.#(type=="namespace")`).Exists())
 	require.Equal(t, "isolated-ws-cache-id", gjson.GetBytes(upstream.lastBody, "prompt_cache_key").String())
 	require.Equal(t, "isolated-ws-cache-id", upstream.lastReq.Header.Get(grokConversationIDHeader))
-	require.Empty(t, upstream.lastReq.Header.Get(grokClientToolCacheOptInHeader))
+	require.Empty(t, upstream.lastReq.Header.Get("X-Grok-Client-Tool-Cache"))
 }
 
 func TestProxyResponsesWebSocketFromClientForGrokUsesXAIHTTPBridgeAndPreservesMappedModels(t *testing.T) {
@@ -1874,9 +1874,8 @@ func TestProxyResponsesWebSocketFromClientForGrokUsesXAIHTTPBridgeAndPreservesMa
 	require.Equal(t, "grok-4.3", gjson.GetBytes(upstream.bodies[2], "model").String())
 	require.NotEmpty(t, gjson.GetBytes(upstream.lastBody, "prompt_cache_key").String())
 	require.Equal(t, gjson.GetBytes(upstream.lastBody, "prompt_cache_key").String(), upstream.lastReq.Header.Get(grokConversationIDHeader))
-	require.Equal(t, "web_search", gjson.GetBytes(upstream.lastBody, "tools.0.type").String())
-	require.Equal(t, "x_search", gjson.GetBytes(upstream.lastBody, "tools.1.type").String())
-	require.Equal(t, "none", gjson.GetBytes(upstream.lastBody, "tool_choice").String())
+	require.False(t, gjson.GetBytes(upstream.lastBody, "tools").Exists(), "no implicit search authorization")
+	require.False(t, gjson.GetBytes(upstream.lastBody, "tool_choice").Exists())
 	firstIdentity := gjson.GetBytes(upstream.bodies[0], "prompt_cache_key").String()
 	secondIdentity := gjson.GetBytes(upstream.bodies[1], "prompt_cache_key").String()
 	thirdIdentity := gjson.GetBytes(upstream.bodies[2], "prompt_cache_key").String()

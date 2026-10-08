@@ -1374,7 +1374,7 @@ func (s *GatewayService) DoGrokNativeResponsesJSON(ctx context.Context, account 
 	upstreamReq.Header.Set("Accept", grokSamplerAcceptHeader(false))
 	upstreamReq.Header.Set("User-Agent", defaultGrokUpstreamUserAgent())
 	applyGrokCLIHeaders(upstreamReq.Header)
-	applyGrokRequestMetadata(upstreamReq.Header, body, "", account.GetCredential("sub"))
+	applyGrokRequestMetadata(upstreamReq.Header, body, grokConversationSnapshot{}, account.GetCredential("sub"))
 	account.ApplyHeaderOverrides(upstreamReq.Header)
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {

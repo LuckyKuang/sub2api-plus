@@ -2,12 +2,10 @@ package repository
 
 import (
 	"bufio"
-	"bytes"
 	"compress/flate"
 	"compress/gzip"
 	"context"
 	"crypto/tls"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -87,11 +85,9 @@ const (
 	longStreamHTTP2ReadIdleTimeout = 10 * time.Second
 	longStreamHTTP2PingTimeout     = 5 * time.Second
 
-	// Hosts select the Grok authentication hint and access-denied fallback only.
+	// Hosts select only the Grok authentication hint.
 	// Client declarations are resolved by the account's selected identity preset.
-	grokCLIProxyHost      = xai.CLIProxyHost
-	grokOfficialAPIHost   = "api.x.ai"
-	grokFallbackBodyLimit = 64 << 10
+	grokCLIProxyHost = xai.CLIProxyHost
 )
 
 const (
@@ -219,7 +215,6 @@ func (s *httpUpstreamService) Do(req *http.Request, proxyURL string, accountID i
 
 	// 执行请求
 	client := s.httpClientForUpstreamRequest(entry.client, req)
-	client = httpClientWithGrokAccessDeniedFallback(client)
 	resp, err := doUpstreamRequest(client, req)
 	if err != nil {
 		s.recordOpenAIHTTP2Failure(profile, entry.protocolMode, entry.proxyKey, err)
@@ -284,7 +279,6 @@ func (s *httpUpstreamService) DoWithTLS(req *http.Request, proxyURL string, acco
 	}
 
 	client := s.httpClientForUpstreamRequest(entry.client, req)
-	client = httpClientWithGrokAccessDeniedFallback(client)
 	resp, err := doUpstreamRequest(client, req)
 	if err != nil {
 		atomic.AddInt64(&entry.inFlight, -1)
@@ -399,172 +393,6 @@ func (s *httpUpstreamService) httpClientForUpstreamRequest(client *http.Client, 
 	return &clone
 }
 
-// grokAccessDeniedFallbackTransport preserves the subscription CLI proxy as
-// the primary OAuth route, but retries a replayable request against api.x.ai
-// when the proxy returns its compatibility-specific 403 "Access denied".
-// Trial subscriptions can hit this boundary while the same OAuth credential
-// remains valid on the official API. Other entitlement failures stay on the
-// original response so account scheduling semantics do not change.
-type grokAccessDeniedFallbackTransport struct {
-	base http.RoundTripper
-}
-
-func httpClientWithGrokAccessDeniedFallback(client *http.Client) *http.Client {
-	if client == nil {
-		return nil
-	}
-	clone := *client
-	base := clone.Transport
-	if base == nil {
-		base = http.DefaultTransport
-	}
-	clone.Transport = &grokAccessDeniedFallbackTransport{base: base}
-	return &clone
-}
-
-func (t *grokAccessDeniedFallbackTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	applyGrokCLIProxyAuthentication(req)
-	outboundidentity.ApplyContext(req)
-	if err := brandidentity.FilterOutboundRequest(req); err != nil {
-		return nil, err
-	}
-	resp, err := t.base.RoundTrip(req)
-	if err != nil || !isGrokCLIAccessDeniedFallbackCandidate(req, resp) {
-		return resp, err
-	}
-
-	body, ok := bufferSmallResponseBody(resp, grokFallbackBodyLimit)
-	if !ok || !isGrokCLICompatibilityAccessDenied(body) {
-		return resp, nil
-	}
-
-	fallbackReq, err := newGrokOfficialAPIFallbackRequest(req)
-	if err != nil {
-		return resp, nil
-	}
-	fallbackResp, fallbackErr := t.base.RoundTrip(fallbackReq)
-	if fallbackErr != nil {
-		slog.Debug("grok_cli_access_denied_api_fallback_failed", "path", req.URL.EscapedPath(), "error", fallbackErr)
-		return resp, nil
-	}
-	if fallbackResp.StatusCode < http.StatusOK || fallbackResp.StatusCode >= http.StatusMultipleChoices {
-		if fallbackResp.Body != nil {
-			_ = fallbackResp.Body.Close()
-		}
-		return resp, nil
-	}
-
-	if resp.Body != nil {
-		_ = resp.Body.Close()
-	}
-	slog.Warn("grok_cli_access_denied_api_fallback_succeeded", "method", req.Method, "path", req.URL.EscapedPath())
-	return fallbackResp, nil
-}
-
-func isGrokCLICompatibilityAccessDenied(body []byte) bool {
-	lower := bytes.ToLower(body)
-	for _, phrase := range [][]byte{
-		[]byte("subscription required"),
-		[]byte("no active subscription"),
-		[]byte("entitlement denied"),
-		[]byte("spending limit"),
-		[]byte("out of credits"),
-		[]byte("run out of credits"),
-	} {
-		if bytes.Contains(lower, phrase) {
-			return false
-		}
-	}
-	var payload struct {
-		Code    string `json:"code"`
-		Error   string `json:"error"`
-		Message string `json:"message"`
-	}
-	if err := json.Unmarshal(body, &payload); err != nil || !strings.EqualFold(strings.TrimSpace(payload.Code), "permission_denied") {
-		return false
-	}
-	const chatEndpointDeniedPrefix = "access to the chat endpoint is denied. please ensure you're using the correct credentials. if you believe this is a mistake, please"
-	detail := firstNonEmptyString(payload.Error, payload.Message)
-	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(detail)), chatEndpointDeniedPrefix)
-}
-
-func isGrokCLIAccessDeniedFallbackCandidate(req *http.Request, resp *http.Response) bool {
-	return req != nil && req.URL != nil && req.GetBody != nil && resp != nil &&
-		resp.StatusCode == http.StatusForbidden &&
-		strings.EqualFold(strings.TrimSpace(req.URL.Hostname()), grokCLIProxyHost) &&
-		isGrokCLIProxyResponseAuthenticatedRequest(req) &&
-		strings.EqualFold(strings.TrimSpace(req.Header.Get("X-XAI-Token-Auth")), "xai-grok-cli") &&
-		strings.HasPrefix(strings.ToLower(strings.TrimSpace(req.Header.Get("Authorization"))), "bearer ")
-}
-
-func newGrokOfficialAPIFallbackRequest(req *http.Request) (*http.Request, error) {
-	body, err := req.GetBody()
-	if err != nil {
-		return nil, err
-	}
-	fallbackReq := req.Clone(req.Context())
-	fallbackReq.Body = body
-	fallbackReq.URL = cloneURL(req.URL)
-	fallbackReq.URL.Scheme = "https"
-	fallbackReq.URL.Host = grokOfficialAPIHost
-	fallbackReq.Host = ""
-	fallbackReq.RequestURI = ""
-	fallbackReq.Header = req.Header.Clone()
-	for _, header := range []string{
-		"X-XAI-Token-Auth",
-		"x-authenticateresponse",
-		"X-Grok-Client-Surface",
-		"X-UserID",
-		"X-Email",
-	} {
-		fallbackReq.Header.Del(header)
-	}
-	// api.x.ai never advertised the negotiated request encoding, so a compressed
-	// body must be rebuilt from the final JSON with the declaration dropped. If
-	// the plain body is unavailable, report the error and keep the original
-	// proxy response instead of sending bytes this host cannot decode.
-	if err := service.RebuildGrokPlainRequest(fallbackReq); err != nil {
-		return nil, err
-	}
-	outboundidentity.ApplyContext(fallbackReq)
-	if err := brandidentity.FilterOutboundRequest(fallbackReq); err != nil {
-		return nil, err
-	}
-	return fallbackReq, nil
-}
-
-func cloneURL(value *url.URL) *url.URL {
-	if value == nil {
-		return nil
-	}
-	clone := *value
-	return &clone
-}
-
-func bufferSmallResponseBody(resp *http.Response, limit int64) ([]byte, bool) {
-	if resp == nil || resp.Body == nil || limit <= 0 {
-		return nil, false
-	}
-	original := resp.Body
-	body, err := io.ReadAll(io.LimitReader(original, limit+1))
-	if err != nil || int64(len(body)) > limit {
-		resp.Body = &prefixedReadCloser{
-			Reader: io.MultiReader(bytes.NewReader(body), original),
-			Closer: original,
-		}
-		return nil, false
-	}
-	_ = original.Close()
-	resp.Body = io.NopCloser(bytes.NewReader(body))
-	resp.ContentLength = int64(len(body))
-	return body, true
-}
-
-type prefixedReadCloser struct {
-	io.Reader
-	io.Closer
-}
-
 // The destination owns its authentication hints, never the client's identity.
 // Reconcile on every RoundTrip so redirects cannot carry CLI-only declarations
 // to another host. Identity resolution belongs to the account/preset layer.
@@ -603,15 +431,6 @@ func isGrokCLIProxyResponseAuthenticatedRequest(req *http.Request) bool {
 		}
 	}
 	return false
-}
-
-func firstNonEmptyString(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return value
-		}
-	}
-	return ""
 }
 
 // acquireClientWithTLS 获取或创建带 TLS 指纹的客户端
@@ -1446,6 +1265,10 @@ func newUpstreamDialer() *net.Dialer {
 //   - IdleConnTimeout: 空闲连接超时（超时后关闭）
 //   - ResponseHeaderTimeout: 等待响应头超时（不影响流式传输）
 func buildUpstreamTransport(settings poolSettings, proxyURL *url.URL, protocolMode string) (*http.Transport, error) {
+	if protocolMode == upstreamProtocolModeGrok {
+		settings.maxIdleConnsPerHost = 2
+		settings.idleConnTimeout = 90 * time.Second
+	}
 	transport := &http.Transport{
 		DialContext:           newUpstreamDialer().DialContext,
 		TLSHandshakeTimeout:   defaultUpstreamTLSHandshakeTimeout,
@@ -1456,7 +1279,7 @@ func buildUpstreamTransport(settings poolSettings, proxyURL *url.URL, protocolMo
 		ResponseHeaderTimeout: settings.responseHeaderTimeout,
 	}
 	switch protocolMode {
-	case upstreamProtocolModeLongStreamH2, upstreamProtocolModeOpenAIH2:
+	case upstreamProtocolModeLongStreamH2, upstreamProtocolModeOpenAIH2, upstreamProtocolModeGrok:
 		transport.ForceAttemptHTTP2 = true
 		// 显式配置 http2 并启用 PING 健康探测，剔除代理/NAT 静默掐断的死连接，
 		// 避免请求挂在死连接上直到 TCP 重传超时（分钟级）。
@@ -1489,6 +1312,10 @@ func enableHTTP2KeepAlive(transport *http.Transport, protocolMode string) (*http
 	if h2 != nil {
 		h2.ReadIdleTimeout = longStreamHTTP2ReadIdleTimeout
 		h2.PingTimeout = longStreamHTTP2PingTimeout
+		if protocolMode == upstreamProtocolModeGrok {
+			h2.ReadIdleTimeout = 15 * time.Second
+			h2.PingTimeout = 5 * time.Second
+		}
 		if protocolMode == upstreamProtocolModeOpenAIH2 {
 			h2.ReadIdleTimeout = openAIHTTP2ReadIdleTimeout
 			h2.PingTimeout = openAIHTTP2PingTimeout

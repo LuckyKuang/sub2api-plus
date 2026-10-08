@@ -439,9 +439,6 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 	if err != nil {
 		return nil, fmt.Errorf("prepare http bridge body: %w", err)
 	}
-	grokIntentSourceBody := append([]byte(nil), body...)
-	_, grokExplicitToolsField := openAIWSHTTPBridgeRawField(grokIntentSourceBody, "tools")
-	grokExplicitToolIntent := account.Platform == PlatformGrok && hasGrokResponsesToolIntent(grokIntentSourceBody)
 	var clientToolMapping apicompat.ResponsesClientToolMapping
 	functionToolUpstream := (account.Platform == PlatformOpenAI && account.Type == AccountTypeAPIKey) || account.Platform == PlatformGrok
 	if functionToolUpstream {
@@ -461,14 +458,6 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 		)
 		if err != nil {
 			return nil, fmt.Errorf("adapt %s client tools: %w", openAIWSHTTPBridgeToolUpstreamName(account), err)
-		}
-		if account.Platform == PlatformGrok && !grokExplicitToolsField && !grokExplicitToolIntent && len(inheritedLoweredTools) > 0 && hasGrokResponsesToolIntent(body) {
-			// This continuation omitted tools, so the pre-adapter source cannot
-			// represent the effective inherited declarations. Cache routing must
-			// see the rehydrated tool intent or it will replace client functions
-			// with the native-search tool-free route. Explicit current-turn tool
-			// intent still uses the original pre-sanitization source above.
-			grokIntentSourceBody = append(grokIntentSourceBody[:0], body...)
 		}
 		loweredTools := inheritedState.LoweredTools
 		if currentTools, present := openAIWSHTTPBridgeRawField(body, "tools"); present {
@@ -542,14 +531,9 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 		if err != nil {
 			return nil, err
 		}
-		grokMixedCacheIntentBody := append([]byte(nil), body...)
-		body, err = applyGrokResponsesCacheIdentity(body, grokIntentSourceBody, grokCacheIdentity, account.IsGrokOAuth())
+		body, err = applyGrokResponsesCacheIdentity(body, grokCacheIdentity)
 		if err != nil {
 			return nil, fmt.Errorf("apply grok prompt cache identity: %w", err)
-		}
-		body, err = applyGrokFreeRequestToolCacheRoute(c, body, grokMixedCacheIntentBody, account, grokCacheIdentity)
-		if err != nil {
-			return nil, fmt.Errorf("apply grok Free function-tool cache route: %w", err)
 		}
 	}
 	actualModel := strings.TrimSpace(gjson.GetBytes(body, "model").String())

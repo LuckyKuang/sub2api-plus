@@ -1252,7 +1252,7 @@ func (s *AccountTestService) testGrokResponsesConnection(c *gin.Context, ctx con
 		return s.sendErrorAndEnd(c, "Failed to create Grok request")
 	}
 	s.applyGrokTestRequestHeaders(req, account, authToken, grokSamplerAcceptHeader(grokBodyStreamsJSON(payloadBytes)))
-	applyGrokRequestMetadata(req.Header, payloadBytes, "", account.GetCredential("sub"))
+	applyGrokRequestMetadata(req.Header, payloadBytes, grokConversationSnapshot{}, account.GetCredential("sub"))
 
 	resp, err := s.httpUpstream.Do(prepareAccountOutboundRequest(req, account), s.grokTestProxyURL(account), account.ID, account.Concurrency)
 	if err != nil {
@@ -1324,7 +1324,7 @@ func (s *AccountTestService) testGrokImageGeneration(c *gin.Context, ctx context
 		return s.sendErrorAndEnd(c, "Failed to create Grok image request")
 	}
 	s.applyGrokTestRequestHeaders(req, account, authToken, "application/json")
-	applyGrokRequestMetadata(req.Header, payloadBytes, "", account.GetCredential("sub"))
+	applyGrokMediaSessionHeader(req.Header, c)
 	req.ContentLength = int64(len(payloadBytes))
 	req.GetBody = func() (io.ReadCloser, error) {
 		return io.NopCloser(bytes.NewReader(payloadBytes)), nil
@@ -1341,7 +1341,7 @@ func (s *AccountTestService) testGrokImageGeneration(c *gin.Context, ctx context
 				return s.sendErrorAndEnd(c, "Failed to create Grok image retry request")
 			}
 			s.applyGrokTestRequestHeaders(req, account, authToken, "application/json")
-			applyGrokRequestMetadata(req.Header, payloadBytes, "", account.GetCredential("sub"))
+			applyGrokMediaSessionHeader(req.Header, c)
 			req.ContentLength = int64(len(payloadBytes))
 		}
 		resp, doErr = s.httpUpstream.Do(prepareAccountOutboundRequest(req, account), s.grokTestProxyURL(account), account.ID, account.Concurrency)
@@ -1434,7 +1434,7 @@ func (s *AccountTestService) testGrokVideoGeneration(c *gin.Context, ctx context
 		return s.sendErrorAndEnd(c, "Failed to create Grok video request")
 	}
 	s.applyGrokTestRequestHeaders(req, account, authToken, "application/json")
-	applyGrokRequestMetadata(req.Header, payloadBytes, "", account.GetCredential("sub"))
+	applyGrokMediaSessionHeader(req.Header, c)
 
 	resp, err := s.httpUpstream.Do(prepareAccountOutboundRequest(req, account), s.grokTestProxyURL(account), account.ID, account.Concurrency)
 	if err != nil {
@@ -1605,7 +1605,7 @@ User query:
 		return s.sendErrorAndEnd(c, "Failed to create standalone web_search probe request")
 	}
 	s.applyGrokTestRequestHeaders(req, account, authToken, "application/json")
-	applyGrokRequestMetadata(req.Header, payloadBytes, "", account.GetCredential("sub"))
+	applyGrokRequestMetadata(req.Header, payloadBytes, grokConversationSnapshot{}, account.GetCredential("sub"))
 
 	resp, err := s.httpUpstream.Do(prepareAccountOutboundRequest(req, account), s.grokTestProxyURL(account), account.ID, account.Concurrency)
 	if err != nil {

@@ -19,7 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestHTTPUpstreamTrustedIdentitySurvivesGrokHostAndFallback(t *testing.T) {
+func TestHTTPUpstreamTrustedIdentityPreservedWithoutCrossHost403Replay(t *testing.T) {
 	for _, withTLS := range []bool{false, true} {
 		for _, preset := range []string{"", "codex", "grok", "claude", "deepseek", "kimi", "minimax", "zcode"} {
 			t.Run(fmt.Sprintf("tls=%t/preset=%s", withTLS, preset), func(t *testing.T) {
@@ -78,15 +78,12 @@ func TestHTTPUpstreamTrustedIdentitySurvivesGrokHostAndFallback(t *testing.T) {
 					resp, err = svc.Do(req, "", accountID, 1)
 				}
 				require.NoError(t, err)
-				require.Equal(t, http.StatusOK, resp.StatusCode)
+				require.Equal(t, http.StatusForbidden, resp.StatusCode)
 				require.NoError(t, resp.Body.Close())
-				require.Len(t, captured, 2)
+				require.Len(t, captured, 1)
 				require.Equal(t, grokCLIProxyHost, captured[0].URL.Hostname())
-				require.Equal(t, grokOfficialAPIHost, captured[1].URL.Hostname())
 				require.Equal(t, "xai-grok-cli", captured[0].Header.Get("X-XAI-Token-Auth"))
 				require.Equal(t, xai.CLIAuthenticateResponse, captured[0].Header.Get("x-authenticateresponse"))
-				require.Empty(t, captured[1].Header.Get("X-XAI-Token-Auth"))
-				require.Empty(t, captured[1].Header.Get("x-authenticateresponse"))
 				for _, sent := range captured {
 					require.Equal(t, want, identityHeadersForTransportTest(sent.Header))
 					require.Equal(t, "Bearer test-key", sent.Header.Get("Authorization"))
@@ -125,23 +122,6 @@ func TestClaudeOAuthRefreshUsesSelectedIdentity(t *testing.T) {
 	require.Equal(t, identity.UserAgent, captured.Get("User-Agent"))
 	require.Equal(t, "cli", captured.Get("X-App"))
 	require.Equal(t, "Linux", captured.Get("X-Stainless-OS"))
-}
-
-func TestGrokFallbackRetainsTrustedIdentityWithoutProxyAuthenticationHints(t *testing.T) {
-	i := outboundidentity.Identity{Preset: "grok", UserAgent: "grok-shell/3.9.1 (linux; x86_64)", Originator: "grok-shell", Version: "3.9.1", Headers: map[string]string{"x-grok-client-version": "3.9.1", "x-grok-client-identifier": "grok-shell", "x-grok-client-mode": "headless"}}
-	req, err := http.NewRequestWithContext(outboundidentity.WithIdentity(context.Background(), i), http.MethodPost, "https://cli-chat-proxy.grok.com/v1/responses", strings.NewReader(`{"input":"hello"}`))
-	require.NoError(t, err)
-	req.Header.Set("Authorization", "Bearer test-token")
-	req.Header.Set("X-XAI-Token-Auth", "xai-grok-cli")
-	i.Apply(req.Header)
-	fallback, err := newGrokOfficialAPIFallbackRequest(req)
-	require.NoError(t, err)
-	defer func() { _ = fallback.Body.Close() }()
-	require.Equal(t, "api.x.ai", fallback.URL.Host)
-	require.Equal(t, "Bearer test-token", fallback.Header.Get("Authorization"))
-	require.Empty(t, fallback.Header.Get("X-XAI-Token-Auth"))
-	require.Equal(t, i.UserAgent, fallback.Header.Get("User-Agent"))
-	require.Equal(t, i.Version, fallback.Header.Get("X-Grok-Client-Version"))
 }
 
 func TestEveryDomesticAccountTransportRemovesBrandedCustomHeaders(t *testing.T) {

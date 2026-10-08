@@ -564,26 +564,6 @@
 
       </div>
 
-      <!-- Grok OAuth client-tool prompt cache opt-in -->
-      <div
-        v-if="account.platform === 'grok' && account.type === 'oauth'"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
-      >
-        <div class="flex items-center justify-between gap-4">
-          <div class="min-w-0">
-            <label class="input-label mb-0">{{ t('admin.accounts.grokClientToolCache.title') }}</label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              {{ t('admin.accounts.grokClientToolCache.hint') }}
-            </p>
-          </div>
-          <Toggle
-            v-model="grokClientToolCacheEnabled"
-            data-testid="grok-client-tool-cache-toggle"
-            :aria-label="t('admin.accounts.grokClientToolCache.title')"
-          />
-        </div>
-      </div>
-
       <!-- Grok OAuth media generation eligibility override -->
       <div
         v-if="isGrokOAuthAccount"
@@ -3063,7 +3043,6 @@ const allowedModels = ref<string[]>([])
 const DEFAULT_POOL_MODE_RETRY_COUNT = 3
 const MAX_POOL_MODE_RETRY_COUNT = 10
 const DEFAULT_POOL_MODE_RETRY_STATUS_CODES = [401, 403, 429]
-const GROK_CLIENT_TOOL_CACHE_EXTRA_KEY = 'grok_client_tool_cache_enabled'
 const poolModeEnabled = ref(false)
 const poolModeRetryCount = ref(DEFAULT_POOL_MODE_RETRY_COUNT)
 const poolModeRetryStatusCodesInput = ref('')
@@ -3112,9 +3091,6 @@ const headerOverrideCapable = computed(
 // Grok OAuth 自定义上游地址（仅转发端点；OAuth 授权/令牌刷新不受影响）
 const grokOAuthCustomBaseUrlEnabled = ref(false)
 const grokOAuthBaseUrl = ref('')
-// Grok Free OAuth accounts use client-tool prompt caching by default. Keep an
-// explicit false in the account extra as the opt-out signal.
-const grokClientToolCacheEnabled = ref(true)
 const isGrokOAuthAccount = computed(
   () => props.account?.platform === 'grok' && props.account?.type === 'oauth'
 )
@@ -3902,14 +3878,6 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   // Load Grok OAuth custom upstream URL state（存储的官方地址视同未定制）
   grokOAuthCustomBaseUrlEnabled.value = false
   grokOAuthBaseUrl.value = ''
-  const grokClientToolCacheSetting =
-    newAccount.platform === 'grok' && newAccount.type === 'oauth'
-      ? newAccount.extra?.[GROK_CLIENT_TOOL_CACHE_EXTRA_KEY]
-      : undefined
-  grokClientToolCacheEnabled.value =
-    newAccount.platform === 'grok' &&
-    newAccount.type === 'oauth' &&
-    (grokClientToolCacheSetting === undefined || grokClientToolCacheSetting === true)
   grokMediaEligibilityMode.value = modeFromGrokMediaExtra(extra)
   grokMediaEligibilityInitialMode.value = grokMediaEligibilityMode.value
   grokMediaEligibilityState.value = null
@@ -5042,14 +5010,6 @@ const handleSubmit = async () => {
       applyHeaderOverride(newCredentials, headerOverrideEnabled.value, headerOverrideRows.value, 'edit')
 
       updatePayload.credentials = newCredentials
-
-      const newExtra: Record<string, unknown> = {
-        ...((props.account.extra as Record<string, unknown>) || {})
-      }
-      // Persist both states so a disabled account remains opted out when the
-      // backend applies the default-enabled policy to missing values.
-      newExtra[GROK_CLIENT_TOOL_CACHE_EXTRA_KEY] = grokClientToolCacheEnabled.value
-      updatePayload.extra = newExtra
     }
 
     // OpenAI: 手动覆盖订阅档位 plan_type（Plus / Pro 20x / Pro 5x / Business Standard / Business Premium / Free）。

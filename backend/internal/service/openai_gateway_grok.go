@@ -82,16 +82,9 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
 		cacheIdentityBody = body
 	}
 	cacheIdentity := resolveGrokCacheIdentity(c, cacheIdentityBody, "", upstreamModel)
-	mixedCacheIntentBody := append([]byte(nil), patchedBody...)
-	patchedBody, err = applyGrokResponsesCacheIdentity(patchedBody, body, cacheIdentity, account.IsGrokOAuth())
+	patchedBody, err = applyGrokResponsesCacheIdentity(patchedBody, cacheIdentity)
 	if err != nil {
 		return nil, fmt.Errorf("apply grok prompt cache identity: %w", err)
-	}
-	// Free OAuth + client function tools: reuse Messages mixed-tools cache route
-	// (append web_search/x_search so xAI does not force non-cacheable build-free).
-	patchedBody, err = applyGrokFreeRequestToolCacheRoute(c, patchedBody, mixedCacheIntentBody, account, cacheIdentity)
-	if err != nil {
-		return nil, fmt.Errorf("apply grok Free function-tool cache route: %w", err)
 	}
 
 	token, _, err := s.getRequestCredential(ctx, c, account)
@@ -1105,10 +1098,21 @@ func sanitizeGrokResponsesTools(body []byte) ([]byte, error) {
 	}
 
 	rawTools := tools.Array()
+	hosted := map[string]bool{}
+	for _, tool := range rawTools {
+		typ := strings.TrimSpace(tool.Get("type").String())
+		if typ == "web_search" || typ == "x_search" {
+			hosted[typ] = true
+		}
+	}
 	filteredTools := make([]json.RawMessage, 0, len(rawTools))
 	toolsChanged := false
 	for _, tool := range rawTools {
 		toolType := strings.TrimSpace(tool.Get("type").String())
+		if toolType == "function" && hosted[strings.TrimSpace(tool.Get("name").String())] {
+			toolsChanged = true
+			continue
+		}
 		if _, ok := grokResponsesSupportedToolTypes[toolType]; ok {
 			raw := json.RawMessage(tool.Raw)
 			if toolType == "function" && (!tool.Get("parameters").Exists() || tool.Get("parameters").Type == gjson.Null) {
@@ -1604,12 +1608,7 @@ func (s *OpenAIGatewayService) buildGrokResponsesRequest(ctx context.Context, c 
 	if account.IsGrokOAuth() {
 		applyGrokCLIHeaders(req.Header)
 	}
-	applyGrokRequestMetadata(req.Header, body, cacheIdentity, account.GetCredential("sub"))
-	if c != nil {
-		if v := c.GetHeader("OpenAI-Beta"); strings.TrimSpace(v) != "" {
-			req.Header.Set("OpenAI-Beta", v)
-		}
-	}
+	applyGrokRequestMetadata(req.Header, body, resolveGrokRequestConversation(c, body, cacheIdentity), account.GetCredential("sub"))
 	// 账号级请求头覆写最后应用，使配置值优先于上面的内置默认头；
 	// 打到官方 CLI 网关时身份头仍由共享传输层最终强制。
 	account.ApplyHeaderOverrides(req.Header)

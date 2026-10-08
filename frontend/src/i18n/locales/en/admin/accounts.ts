@@ -847,10 +847,6 @@ export default {
           official: 'Official API'
         }
       },
-      grokClientToolCache: {
-        title: 'Client Tool Cache (May Change Automatic Tool Selection)',
-        hint: 'For detected Grok Free OAuth accounts, this is enabled by default for client function tools such as Codex and Trae. Turn it off to opt out if the automatic tool-selection behavior is not acceptable.'
-      },
       grokMediaEligibility: {
         title: 'Media Generation Eligibility',
         hint: 'Controls whether this Grok OAuth account may be selected for image and video generation.',

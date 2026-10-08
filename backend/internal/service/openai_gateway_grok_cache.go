@@ -1,13 +1,11 @@
 package service
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"regexp"
 	"strings"
 
-	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/xai"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -16,13 +14,9 @@ import (
 )
 
 const (
-	grokConversationIDHeader         = "X-Grok-Conv-Id"
-	grokConversationGroupNamespace   = "xai:grok-build:conversation-group:"
-	claudeCodeSessionHeader          = "X-Claude-Code-Session-Id"
-	grokClientToolCacheOptInHeader   = brandidentity.GrokClientToolCacheHeader
-	grokFreeCacheNativeToolsJSON     = `[{"type":"web_search"},{"type":"x_search"}]`
-	grokFreeCacheDisabledToolChoice  = "none"
-	grokClientToolCacheOptInExtraKey = "grok_client_tool_cache_enabled"
+	grokConversationIDHeader       = "X-Grok-Conv-Id"
+	grokConversationGroupNamespace = "xai:grok-build:conversation-group:"
+	claudeCodeSessionHeader        = "X-Claude-Code-Session-Id"
 )
 
 // grokAgentID is the process-level bucketing key used by the official shell.
@@ -77,8 +71,7 @@ func resolveGrokCacheIdentity(c *gin.Context, body []byte, explicitKey, upstream
 		return ""
 	}
 	// /responses/compact rejects tool_choice and does not represent a normal
-	// conversation turn. Keep both cache identity and Free-tier routing
-	// augmentation out of this path.
+	// conversation turn. Keep cache identity out of this path.
 	if isOpenAIResponsesCompactPath(c) {
 		return ""
 	}
@@ -110,38 +103,30 @@ func resolveGrokCacheIdentity(c *gin.Context, body []byte, explicitKey, upstream
 }
 
 func explicitGrokCacheSeed(c *gin.Context, body []byte, explicitKey string) string {
-	// Claude Code session is the most stable multi-turn identity for
-	// /v1/messages → Grok bridges. Prefer it over generic session headers so
-	// prompt cache routing follows the gateway's existing cache affinity rules.
-	seed := extractClaudeCodeSessionID(c, body)
-	if seed == "" {
-		seed = explicitOpenAIHeaderSessionID(c)
+	// Official Responses: an explicit cache key outranks the conversation ID.
+	if seed := strings.TrimSpace(gjson.GetBytes(body, "prompt_cache_key").String()); seed != "" {
+		return seed
 	}
-	// Client-declared prompt_cache_key outranks X-Grok-Conv-Id. The
-	// grok-build CLI sets this field on recap-style side-calls
-	// (turn-summary/title-refresh) to the *parent* session id so the
-	// side-call shares the main turn's server-side cache prefix. Its
-	// X-Grok-Conv-Id header, in contrast, carries a fresh per-call label
-	// ("turn-summary-<uuid>"); preferring the header there fragments the
-	// cache identity per side-call and forces a full-price replay of the
-	// entire conversation (~300K+ tokens each time). The body field is the
-	// official xAI cache-routing signal — respect it when present.
-	if seed == "" && len(body) > 0 {
-		seed = strings.TrimSpace(gjson.GetBytes(body, "prompt_cache_key").String())
+	if c != nil {
+		if seed := strings.TrimSpace(c.GetHeader(grokConversationIDHeader)); seed != "" {
+			return seed
+		}
 	}
-	if seed == "" && c != nil {
-		seed = strings.TrimSpace(c.GetHeader(grokConversationIDHeader))
+	if seed := strings.TrimSpace(explicitKey); seed != "" {
+		return seed
 	}
-	if seed == "" {
-		seed = strings.TrimSpace(explicitKey)
+	if c != nil {
+		if seed := strings.TrimSpace(c.GetHeader("X-Grok-Session-Id")); seed != "" {
+			return seed
+		}
 	}
-	// previous_response_id is last-resort: multi-turn Responses without an
-	// explicit session still share one cache identity (model is already in the
-	// isolated seed). Message ids are rejected by the seed helper.
-	if seed == "" && len(body) > 0 {
-		seed = grokPreviousResponseSessionSeed(body)
+	if seed := extractClaudeCodeSessionID(c, body); seed != "" {
+		return seed
 	}
-	return seed
+	if seed := explicitOpenAIHeaderSessionID(c); seed != "" {
+		return seed
+	}
+	return grokPreviousResponseSessionSeed(body)
 }
 
 func isGrokRequestContext(c *gin.Context) bool {
@@ -161,168 +146,17 @@ func isGrokRequestContext(c *gin.Context) bool {
 	return ok && apiKey != nil && apiKey.Group != nil && apiKey.Group.Platform == PlatformGrok
 }
 
-// applyGrokResponsesCacheIdentity writes the cache routing identity into an
-// xAI Responses request. Existing client values are deliberately replaced by
-// the tenant-isolated value to prevent collisions on shared OAuth accounts.
-//
-// Free OAuth requests without native search tools are routed by xAI to the
-// non-cacheable build-free model. For otherwise tool-free requests, add the
-// native tools with tool_choice=none: this selects the cache-capable tier
-// without allowing an actual search. Explicit client function tools are handled by
-// applyGrokFreeMessagesFunctionToolCacheRoute (Messages bridge and native Responses).
-func applyGrokResponsesCacheIdentity(body, intentSourceBody []byte, identity string, injectFreeTierTools bool) ([]byte, error) {
-	identity = strings.TrimSpace(identity)
-	if identity == "" {
-		if gjson.GetBytes(body, "prompt_cache_key").Exists() {
-			return sjson.DeleteBytes(body, "prompt_cache_key")
-		}
-		return body, nil
+// applyGrokResponsesCacheIdentity changes only the Responses cache field.
+// Official responses.rs maps prompt_cache_key independently of tool declarations.
+func applyGrokResponsesCacheIdentity(body []byte, identity string) ([]byte, error) {
+	if strings.TrimSpace(identity) == "" {
+		return sjson.DeleteBytes(body, "prompt_cache_key")
 	}
-	out, err := sjson.SetBytes(body, "prompt_cache_key", identity)
-	if err != nil {
-		return nil, err
-	}
-	if !injectFreeTierTools {
-		return out, nil
-	}
-	// Inspect the pre-sanitization source. patchGrokResponsesBody may remove an
-	// unsupported client tool and its tool_choice; that must not turn an
-	// explicit client tool intent into an eligible native-tool request.
-	if hasGrokResponsesToolIntent(intentSourceBody) {
-		return out, nil
-	}
-	out, err = sjson.SetRawBytes(out, "tools", []byte(grokFreeCacheNativeToolsJSON))
-	if err != nil {
-		return nil, err
-	}
-	return sjson.SetBytes(out, "tool_choice", grokFreeCacheDisabledToolChoice)
-}
-
-func hasGrokResponsesToolIntent(body []byte) bool {
-	if gjson.GetBytes(body, "tools").Exists() || gjson.GetBytes(body, "tool_choice").Exists() {
-		return true
-	}
-	input := gjson.GetBytes(body, "input")
-	if !input.IsArray() {
-		return false
-	}
-	for _, item := range input.Array() {
-		if strings.TrimSpace(item.Get("type").String()) != "additional_tools" {
-			continue
-		}
-		tools := item.Get("tools")
-		if !tools.Exists() || !tools.IsArray() || len(tools.Array()) > 0 {
-			return true
-		}
-	}
-	return false
-}
-
-// applyGrokFreeMessagesFunctionToolCacheRoute enables xAI's cache-capable
-// mixed-tools route only for known Free accounts. Pure client tools default to
-// the cache-capable route so an intermediate sub2api does not need to preserve
-// client-specific opt-in headers. Operators can explicitly disable this per
-// account when native search tools would change the desired behavior (#4486).
-func applyGrokFreeMessagesFunctionToolCacheRoute(body, intentSourceBody []byte, account *Account, cacheIdentity string) ([]byte, error) {
-	allowPureClientTools, _ := grokClientToolCacheAccountPolicy(account)
-	return applyGrokFreeToolCacheRoute(body, intentSourceBody, account, cacheIdentity, allowPureClientTools, true)
-}
-
-// applyGrokFreeRequestToolCacheRoute also accepts a request-scoped opt-in. The
-// gateway control header is consumed locally and stripped at every outbound
-// boundary; it is not an official Grok/xAI upstream header.
-func applyGrokFreeRequestToolCacheRoute(c *gin.Context, body, intentSourceBody []byte, account *Account, cacheIdentity string) ([]byte, error) {
-	allowPureClientTools, accountPolicyExplicit := grokClientToolCacheAccountPolicy(account)
-	requestOptOut := false
-	if c != nil {
-		switch strings.ToLower(strings.TrimSpace(c.GetHeader(grokClientToolCacheOptInHeader))) {
-		case "1", "true", "yes", "on", "prefer-cache":
-			allowPureClientTools = true
-		case "0", "false", "no", "off":
-			allowPureClientTools = false
-			requestOptOut = true
-		}
-	}
-	if !allowPureClientTools && !accountPolicyExplicit && !requestOptOut && isGrokClaudeDesktopResponsesCacheRequest(c) {
-		allowPureClientTools = true
-	}
-	// A function merely named web_search/x_search is still a client function.
-	// Known Free OAuth accounts use the cache route by default; a request-scoped
-	// opt-in may override an account opt-out, while an explicit request opt-out
-	// always wins. The legacy Claude fingerprint remains only as a compatibility
-	// fallback when no account policy has been recorded (#4486).
-	return applyGrokFreeToolCacheRoute(body, intentSourceBody, account, cacheIdentity, allowPureClientTools, allowPureClientTools)
-}
-
-// grokClientToolCacheAccountPolicy is intentionally strict for configured
-// values: only a JSON boolean is accepted. A missing key defaults on solely for
-// accounts positively identified as Grok Free OAuth; paid, API-key, and unknown
-// accounts remain fail-closed.
-func grokClientToolCacheAccountPolicy(account *Account) (enabled, explicit bool) {
-	if !isKnownGrokFreeAccount(account) {
-		return false, false
-	}
-	if account.Extra == nil {
-		return true, false
-	}
-	value, exists := account.Extra[grokClientToolCacheOptInExtraKey]
-	if !exists {
-		return true, false
-	}
-	enabled, valid := value.(bool)
-	if !valid {
-		return false, true
-	}
-	return enabled, true
-}
-
-// isGrokClaudeDesktopResponsesCacheRequest recognizes the strict wire
-// fingerprint emitted when Claude Desktop's local agent is translated by
-// CC Switch into an OpenAI Responses request. Requiring every independent
-// signal prevents a generic Claude-compatible client (or the Chat bridge)
-// from silently opting into the mixed native/client tool route.
-func isGrokClaudeDesktopResponsesCacheRequest(c *gin.Context) bool {
-	if c == nil || c.Request == nil || c.Request.URL == nil || isOpenAIResponsesCompactPath(c) {
-		return false
-	}
-	path := strings.TrimRight(strings.TrimSpace(c.Request.URL.Path), "/")
-	if !strings.HasSuffix(path, "/responses") {
-		return false
-	}
-
-	if !claudeCodeUAPattern.MatchString(strings.TrimSpace(c.GetHeader("User-Agent"))) {
-		return false
-	}
-	switch strings.ToLower(strings.TrimSpace(c.GetHeader("X-App"))) {
-	case "cli", "cli-bg":
-	default:
-		return false
-	}
-	if !strings.EqualFold(strings.TrimSpace(c.GetHeader("anthropic-client-platform")), "desktop_app") {
-		return false
-	}
-	return strings.TrimSpace(c.GetHeader("X-Claude-Code-Session-Id")) != ""
-}
-
-func applyGrokFreeToolCacheRoute(body, intentSourceBody []byte, account *Account, cacheIdentity string, allowPureClientTools, allowFunctionSearch bool) ([]byte, error) {
-	if strings.TrimSpace(cacheIdentity) == "" || !isKnownGrokFreeAccount(account) {
-		return body, nil
-	}
-	intentTools := gjson.GetBytes(intentSourceBody, "tools")
-	intentToolChoice := gjson.GetBytes(intentSourceBody, "tool_choice")
-	if !isGrokFreeCacheFunctionToolIntent(intentTools, intentToolChoice) {
-		return body, nil
-	}
-	if intentToolChoice.Type == gjson.String && strings.TrimSpace(intentToolChoice.String()) == grokFreeCacheDisabledToolChoice {
-		// Adding native cache-routing tools cannot change behavior when the
-		// client has explicitly disabled all tool execution.
-		return appendGrokFreeCacheNativeToolsWithPolicy(body, true, false)
-	}
-	return appendGrokFreeCacheNativeToolsWithPolicy(body, allowPureClientTools, allowFunctionSearch)
+	return sjson.SetBytes(body, "prompt_cache_key", identity)
 }
 
 // isKnownGrokFreeAccount recognizes free-tier Grok accounts, used for
-// Free cache routing / media free_tier blocks (broader than soft-gate).
+// media free_tier blocks (broader than soft-gate).
 // Soft-gate uses isExplicitGrokFreeOAuthAccount (exact "free" only).
 func isKnownGrokFreeAccount(account *Account) bool {
 	if account == nil || !account.IsGrokOAuth() {
@@ -399,167 +233,79 @@ func isGrokUnknownSubscriptionTier(tier string) bool {
 	}
 }
 
-func isGrokFreeCacheFunctionToolIntent(tools, toolChoice gjson.Result) bool {
-	if !tools.IsArray() {
-		return false
+// grokConversationSnapshot separates official request association from cache routing.
+// side_call.rs permits a fresh conversation ID and the parent session/cache key.
+type grokConversationSnapshot struct {
+	ConversationID string
+	SessionID      string
+	RootSessionID  string
+}
+
+func resolveGrokRequestConversation(c *gin.Context, body []byte, cacheKey string) grokConversationSnapshot {
+	result := grokConversationSnapshot{ConversationID: cacheKey, SessionID: cacheKey, RootSessionID: cacheKey}
+	tenant := getAPIKeyIDFromContext(c)
+	if tenant <= 0 || isOpenAIResponsesCompactPath(c) {
+		return result
 	}
-	items := tools.Array()
-	if len(items) == 0 {
-		return false
-	}
-	for _, tool := range items {
-		if !tool.IsObject() {
-			return false
+	isolate := func(seed string) string {
+		if strings.TrimSpace(seed) == "" {
+			return ""
 		}
-		toolType := strings.TrimSpace(tool.Get("type").String())
-		if _, ok := grokResponsesSupportedToolTypes[toolType]; !ok {
-			return false
+		return generateSessionUUID(fmt.Sprintf("grok-conversation:v2:%d:%s", tenant, strings.TrimSpace(seed)))
+	}
+	session := ""
+	conv := ""
+	root := ""
+	if c != nil {
+		session = strings.TrimSpace(c.GetHeader("X-Grok-Session-Id"))
+		conv = strings.TrimSpace(c.GetHeader(grokConversationIDHeader))
+		// An official group declaration identifies a root shared by descendants.
+		root = strings.TrimSpace(c.GetHeader("X-Grok-Conv-Group-Id"))
+	}
+	if session == "" {
+		session = extractClaudeCodeSessionID(c, body)
+	}
+	if session == "" {
+		session = explicitOpenAIHeaderSessionID(c)
+	}
+	if session == "" {
+		session = conv
+	}
+	if scoped := isolate(session); scoped != "" {
+		result.SessionID = scoped
+	}
+	if scoped := isolate(conv); scoped != "" {
+		result.ConversationID = scoped
+	} else {
+		result.ConversationID = result.SessionID
+	}
+	result.RootSessionID = result.SessionID
+	if scoped := isolate(root); scoped != "" {
+		result.RootSessionID = scoped
+	}
+	return result
+}
+
+func applyGrokConversationHeaders(headers http.Header, conversation grokConversationSnapshot) {
+	for name, value := range map[string]string{
+		grokConversationIDHeader: conversation.ConversationID,
+		"X-Grok-Session-Id":      conversation.SessionID,
+	} {
+		if value == "" {
+			headers.Del(name)
+		} else {
+			headers.Set(name, value)
 		}
-		if toolType == "function" {
-			// Responses function declarations keep name at the top level. Reject
-			// Chat Completions' nested function shape and incomplete declarations.
-			if strings.TrimSpace(tool.Get("name").String()) == "" || tool.Get("function").Exists() {
-				return false
-			}
-		}
 	}
-	if !toolChoice.Exists() {
-		return true
-	}
-	if toolChoice.Type != gjson.String {
-		return false
-	}
-	switch strings.TrimSpace(toolChoice.String()) {
-	case "auto", grokFreeCacheDisabledToolChoice:
-		return true
-	default:
-		return false
+	if conversation.RootSessionID == "" {
+		headers.Del("X-Grok-Conv-Group-Id")
+	} else {
+		headers.Set("X-Grok-Conv-Group-Id", uuid.NewSHA1(uuid.NameSpaceOID, []byte(grokConversationGroupNamespace+conversation.RootSessionID)).String())
 	}
 }
 
-func appendMissingGrokFreeCacheNativeTools(body []byte) ([]byte, error) {
-	return appendGrokFreeCacheNativeTools(body, false)
-}
-
-func appendGrokFreeCacheNativeTools(body []byte, allowPureClientTools bool) ([]byte, error) {
-	return appendGrokFreeCacheNativeToolsWithPolicy(body, allowPureClientTools, true)
-}
-
-func appendGrokFreeCacheNativeToolsWithPolicy(body []byte, allowPureClientTools, allowFunctionSearch bool) ([]byte, error) {
-	tools := gjson.GetBytes(body, "tools")
-	if !tools.Exists() || !tools.IsArray() {
-		return body, nil
-	}
-
-	items := tools.Array()
-	if len(items) == 0 {
-		return body, nil
-	}
-	hasNativeSearch := false
-	for _, tool := range items {
-		switch strings.TrimSpace(tool.Get("type").String()) {
-		case "web_search", "x_search":
-			hasNativeSearch = true
-		}
-	}
-	if !allowPureClientTools && !allowFunctionSearch && !hasNativeSearch {
-		return body, nil
-	}
-	merged := make([]json.RawMessage, 0, len(items)+2)
-	present := make(map[string]bool, 2)
-	hasCompanionTool := false
-	for _, tool := range items {
-		toolType := strings.TrimSpace(tool.Get("type").String())
-		switch toolType {
-		case "function":
-			name := strings.TrimSpace(tool.Get("name").String())
-			if !tool.IsObject() || name == "" || tool.Get("function").Exists() {
-				return body, nil
-			}
-			// Grok Build may declare search as function tools. Convert to native
-			// entries so Free OAuth stays cache-capable without duplicate names.
-			if (name == "web_search" || name == "x_search") && allowFunctionSearch {
-				if present[name] {
-					continue
-				}
-				raw, err := json.Marshal(map[string]string{"type": name})
-				if err != nil {
-					return nil, err
-				}
-				merged = append(merged, raw)
-				present[name] = true
-				if allowPureClientTools {
-					hasCompanionTool = true
-				}
-				continue
-			}
-			if name == "web_search" || name == "x_search" {
-				// Keep the client function intact and avoid adding a same-named
-				// native tool unless conversion was explicitly enabled.
-				present[name] = true
-			}
-			hasCompanionTool = true
-			merged = append(merged, json.RawMessage(tool.Raw))
-		case "web_search", "x_search":
-			if present[toolType] {
-				continue
-			}
-			merged = append(merged, json.RawMessage(tool.Raw))
-			present[toolType] = true
-		default:
-			if _, ok := grokResponsesSupportedToolTypes[toolType]; !ok {
-				return body, nil
-			}
-			hasCompanionTool = true
-			merged = append(merged, json.RawMessage(tool.Raw))
-		}
-	}
-	if !hasCompanionTool {
-		return body, nil
-	}
-	// Only complement missing native search tools when the request already contains
-	// at least one search tool (native or function-form). Pure client function tools
-	// (e.g. view_image) must not trigger injection to avoid biasing model tool
-	// selection (#4486).
-	if !allowPureClientTools && !present["web_search"] && !present["x_search"] {
-		return body, nil
-	}
-	for _, toolType := range []string{"web_search", "x_search"} {
-		if present[toolType] {
-			continue
-		}
-		raw, err := json.Marshal(map[string]string{"type": toolType})
-		if err != nil {
-			return nil, err
-		}
-		merged = append(merged, raw)
-	}
-	encoded, err := json.Marshal(merged)
-	if err != nil {
-		return nil, err
-	}
-	return sjson.SetRawBytes(body, "tools", encoded)
-}
-
-// applyGrokCacheHeaders applies the documented Chat Completions conversation
-// routing header. The request is built from a fresh header map, so client
-// supplied x-grok headers cannot override this server-derived value.
-func applyGrokCacheHeaders(headers http.Header, identity string) {
-	if headers == nil {
-		return
-	}
-	identity = strings.TrimSpace(identity)
-	if identity == "" {
-		headers.Del(grokConversationIDHeader)
-		return
-	}
-	headers.Set(grokConversationIDHeader, identity)
-}
-
-// applyGrokRequestMetadata renders the request-owned subset of the official
-// sampler envelope. Values come from the final request body and the trusted,
-// tenant-isolated cache identity; callers cannot pin them through overrides.
-func applyGrokRequestMetadata(headers http.Header, body []byte, identity, userID string) {
+// applyGrokRequestMetadata renders only authoritative sampler declarations.
+func applyGrokRequestMetadata(headers http.Header, body []byte, conversation grokConversationSnapshot, userID string) {
 	if headers == nil {
 		return
 	}
@@ -575,15 +321,15 @@ func applyGrokRequestMetadata(headers http.Header, body []byte, identity, userID
 	} else {
 		headers.Del("x-grok-user-id")
 	}
-	applyGrokCacheHeaders(headers, identity)
-	identity = strings.TrimSpace(identity)
-	if identity == "" {
-		headers.Del("x-grok-session-id")
-		headers.Del("x-grok-conv-group-id")
-		return
+	applyGrokConversationHeaders(headers, conversation)
+}
+
+// Imagine start/poll clients carry session association, not sampler metadata.
+func applyGrokMediaSessionHeader(headers http.Header, c *gin.Context) {
+	conversation := resolveGrokRequestConversation(c, nil, "")
+	if conversation.SessionID != "" {
+		headers.Set("X-Grok-Session-Id", conversation.SessionID)
 	}
-	headers.Set("x-grok-session-id", identity)
-	headers.Set("x-grok-conv-group-id", uuid.NewSHA1(uuid.NameSpaceOID, []byte(grokConversationGroupNamespace+identity)).String())
 }
 
 // stripGrokChatPromptCacheKey removes the Responses-only body field after it

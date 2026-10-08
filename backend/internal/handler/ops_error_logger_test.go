@@ -4,6 +4,7 @@ package handler
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -2278,4 +2279,57 @@ func TestOpsErrorLoggerMiddleware_RecordsClientClosedWhenIgnoreContextCanceledDi
 	require.Equal(t, int64(1), OpsErrorLogQueueLength())
 	job := <-opsErrorLogQueue
 	require.Equal(t, statusClientClosedRequest, job.entry.StatusCode)
+}
+
+func TestClassifyOpsOutboundPolicyIsPlatformGatewayFailure(t *testing.T) {
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Set(service.OpsUpstreamErrorsKey, []*service.OpsUpstreamErrorEvent{{Stage: "outbound_policy", Scope: "gateway", Reason: "outbound_policy_signed_declaration"}})
+	c.Set(service.OpsUpstreamErrorMessageKey, "outbound request contains a prohibited project identifier")
+	phase, limited, owner, source := classifyOpsErrorLog(c, "upstream_error", "Upstream request failed", "", 502)
+	require.Equal(t, "internal", phase)
+	require.False(t, limited)
+	require.Equal(t, "platform", owner)
+	require.Equal(t, "gateway", source)
+}
+
+// Business contract: one local outbound refusal cannot relabel an earlier or
+// later provider failure on the same WebSocket connection, or vice versa.
+func TestOpsOutboundPolicyWebSocketAttributionIsPerTurn(t *testing.T) {
+	for _, localFirst := range []bool{true, false} {
+		t.Run(fmt.Sprintf("local_first_%t", localFirst), func(t *testing.T) {
+			setupOpsErrorLogTestQueue(t, 4)
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest(http.MethodGet, "/v1/responses", nil)
+			service.SetOpenAIClientTransport(c, service.OpenAIClientTransportWS)
+			for turn := 1; turn <= 2; turn++ {
+				service.BeginOpsStreamTurn(c, turn)
+				local := (turn == 1) == localFirst
+				event := &service.OpsUpstreamErrorEvent{Stage: "upstream", Scope: "provider", UpstreamStatusCode: 503, Message: "provider overloaded"}
+				if local {
+					event = &service.OpsUpstreamErrorEvent{Stage: "outbound_policy", Scope: "gateway", Kind: "local_policy_error", Reason: "outbound_policy_protected_header", Message: "outbound request contains a prohibited project identifier"}
+				}
+				c.Set(service.OpsUpstreamErrorsKey, []*service.OpsUpstreamErrorEvent{event})
+				c.Set(service.OpsUpstreamStatusCodeKey, event.UpstreamStatusCode)
+				c.Set(service.OpsUpstreamErrorMessageKey, event.Message)
+				service.MarkOpsStreamFailure(c, "upstream_error", "", event.Message, http.StatusBadGateway)
+			}
+			ops := service.NewOpsService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+			logOpsStreamError(c, ops, http.StatusSwitchingProtocols)
+			require.Equal(t, int64(2), OpsErrorLogQueueLength())
+			for turn := 1; turn <= 2; turn++ {
+				entry := (<-opsErrorLogQueue).entry
+				if (turn == 1) == localFirst {
+					require.Equal(t, "internal", entry.ErrorPhase)
+					require.Equal(t, "platform", entry.ErrorOwner)
+					require.Equal(t, "gateway", entry.ErrorSource)
+					require.Nil(t, entry.UpstreamStatusCode)
+				} else {
+					require.Equal(t, "upstream", entry.ErrorPhase)
+					require.Equal(t, "provider", entry.ErrorOwner)
+					require.Equal(t, "upstream_http", entry.ErrorSource)
+					require.Equal(t, 503, *entry.UpstreamStatusCode)
+				}
+			}
+		})
+	}
 }

@@ -17,18 +17,18 @@ import (
 
 func TestStripOutboundHeadersRemovesEveryBrandedNameAndValue(t *testing.T) {
 	header := http.Header{
-		"X-Sub2API-Trace":         {"internal"},
-		GrokClientToolCacheHeader: {"prefer-cache"},
-		"X-Grok-Conv-Id":          {"conversation"},
-		"User-Agent":              {"sub2api-client/1"},
-		"X-Organization":          {"Sub2API Plus"},
-		"Authorization":           {"Bearer sub2api-user-value"},
+		"X-Sub2API-Trace":          {"internal"},
+		"X-Grok-Client-Tool-Cache": {"prefer-cache"},
+		"X-Grok-Conv-Id":           {"conversation"},
+		"User-Agent":               {"sub2api-client/1"},
+		"X-Organization":           {"Sub2API Plus"},
+		"Authorization":            {"Bearer sub2api-user-value"},
 	}
 
 	StripOutboundHeaders(header)
 
 	require.Empty(t, header.Values("X-Sub2API-Trace"))
-	require.Empty(t, header.Values(GrokClientToolCacheHeader))
+	require.Equal(t, []string{"prefer-cache"}, header.Values("X-Grok-Client-Tool-Cache"))
 	require.Equal(t, []string{"conversation"}, header.Values("X-Grok-Conv-Id"))
 	require.NotEmpty(t, header.Values("User-Agent"), "preserve identity for rejection at send")
 	require.Empty(t, header.Values("X-Organization"))
@@ -91,14 +91,16 @@ func TestOutboundPrivacyPreservesCleanSignedDeclarations(t *testing.T) {
 	require.NoError(t, FilterOutboundRequest(req))
 	require.Equal(t, before, req.Header)
 	req.Host = "sub2api.example.com"
-	require.ErrorIs(t, FilterOutboundRequest(req), ErrBrandedOutboundHeader)
+	require.NoError(t, FilterOutboundRequest(req))
+	require.Equal(t, "sub2api.example.com", req.Host)
+	require.Equal(t, before, req.Header)
 }
 
 func TestForbiddenCredentialsCookiesAndSignedHeadersNeverReachServer(t *testing.T) {
 	var calls atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { calls.Add(1); w.WriteHeader(204) }))
 	defer server.Close()
-	for _, header := range []string{"Authorization", "Cookie", "X-Api-Key", "X-Dsh-Auth-Token", "User-Agent"} {
+	for _, header := range []string{"Authorization", "Proxy-Authorization", "Cookie", "X-Api-Key", "Api-Key", "X-Dsh-Auth-Token", "User-Agent"} {
 		t.Run(header, func(t *testing.T) {
 			req, err := http.NewRequest(http.MethodGet, server.URL, nil)
 			require.NoError(t, err)

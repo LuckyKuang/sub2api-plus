@@ -311,10 +311,10 @@ func TestApplyHeaderOverridesNoOpPaths(t *testing.T) {
 func TestApplyHeaderOverridesCannotAllowBrandedIdentityOnWire(t *testing.T) {
 	account := headerOverrideTestAccount(PlatformOpenAI, AccountTypeOAuth, nil)
 	header := http.Header{
-		"User-Agent":                   {"sub2api-client/1"},
-		"X-Sub2API-Trace":              {"internal"},
-		grokClientToolCacheOptInHeader: {"prefer-cache"},
-		"X-Grok-Conv-Id":               {"conversation"},
+		"User-Agent":               {"sub2api-client/1"},
+		"X-Sub2API-Trace":          {"internal"},
+		"X-Grok-Client-Tool-Cache": {"prefer-cache"},
+		"X-Grok-Conv-Id":           {"conversation"},
 	}
 
 	account.ApplyHeaderOverrides(header)
@@ -324,7 +324,7 @@ func TestApplyHeaderOverridesCannotAllowBrandedIdentityOnWire(t *testing.T) {
 	req.Header = header
 	require.ErrorIs(t, brandidentity.FilterOutboundRequest(req), brandidentity.ErrBrandedOutboundHeader, "must not strip UA then let the HTTP stack send its own identity")
 	require.Empty(t, header.Get("X-Sub2API-Trace"))
-	require.Empty(t, header.Get(grokClientToolCacheOptInHeader))
+	require.Equal(t, "prefer-cache", header.Get("X-Grok-Client-Tool-Cache"), "ordinary extra header has no local control semantics")
 	require.Equal(t, "conversation", header.Get("X-Grok-Conv-Id"))
 
 	apiKey := headerOverrideTestAccount(PlatformOpenAI, AccountTypeAPIKey, map[string]any{
@@ -435,11 +435,11 @@ func TestNormalizeHeaderOverrideCredentials(t *testing.T) {
 		require.Error(t, err)
 	})
 
-	t.Run("rejects local gateway control header", func(t *testing.T) {
+	t.Run("allows ordinary extra header without gateway control semantics", func(t *testing.T) {
 		err := NormalizeHeaderOverrideCredentials(map[string]any{
-			credKeyHeaderOverrides: map[string]any{grokClientToolCacheOptInHeader: "prefer-cache"},
+			credKeyHeaderOverrides: map[string]any{"X-Grok-Client-Tool-Cache": "prefer-cache"},
 		})
-		require.Error(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("rejects product name in ordinary value", func(t *testing.T) {

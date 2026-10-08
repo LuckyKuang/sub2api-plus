@@ -463,3 +463,16 @@ bodies, WebSocket errors/closes, SLA/business-limit flags and audit ordering are
 unchanged. WebSocket attribution is per turn. See
 [error request diagnostics](ERROR_REQUEST_DIAGNOSTICS.md) for filtering and the
 one-time historical correction.
+
+### Grok official outbound adaptation
+
+Grok cache keys and tenant-isolated request associations are applied only after
+both audit engines consume the canonical ingress extraction. Cache routing grants
+no tools: the removed Free account/client controls cannot inject hosted searches.
+Explicit hosted/function name collisions follow the official Grok mapper after
+audit; neither engine attributes tool definitions to the direct user. Host's
+outbound project-token exception affects destination policy only and never skips
+ingress audit, account ownership, billing or concurrency ordering. Existing
+Responses/Chat/Messages/WS/media pass-through and side-effect-order regressions
+remain mandatory; unknown and unextractable content keeps the established
+pass-through contract.

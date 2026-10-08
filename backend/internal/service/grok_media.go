@@ -715,12 +715,7 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 	if account.IsGrokOAuth() && isGrokCLIProxyTarget(targetURL) {
 		applyGrokCLIHeaders(upstreamReq.Header)
 	}
-	if endpoint.RequiresRequestBody() {
-		applyGrokRequestMetadata(upstreamReq.Header, body, "", account.GetCredential("sub"))
-		if model := strings.TrimSpace(upstreamModel); model != "" {
-			upstreamReq.Header.Set("x-grok-model-override", model)
-		}
-	}
+	applyGrokMediaSessionHeader(upstreamReq.Header, c)
 	if endpoint.RequiresRequestBody() {
 		contentType = strings.TrimSpace(contentType)
 		if contentType == "" {
@@ -833,6 +828,7 @@ func (s *OpenAIGatewayService) forwardGrokMediaVideoContent(
 	if account.IsGrokOAuth() && isGrokCLIProxyTarget(statusURL) {
 		applyGrokCLIHeaders(statusReq.Header)
 	}
+	applyGrokMediaSessionHeader(statusReq.Header, c)
 	account.ApplyHeaderOverrides(statusReq.Header)
 
 	proxyURL := ""

@@ -365,8 +365,8 @@ compatible presets and same-owner retry/refresh stability alongside those checks
 The five-entry forwarding matrix includes Responses, Messages, Chat Completions,
 image generation and standalone search. The Chat Completions entry retains its
 snapshot across both handler retries and automatic Responses-to-Chat fallback.
-Shared HTTP/TLS transports cannot select a Grok identity based on a base URL or
-discard the chosen identity on Grok's access-denied fallback.
+Shared HTTP/TLS transports preserve the selected identity on every destination.
+Grok CLI rejection responses are returned without an automatic public API replay.
 
 ## Managed residency
 

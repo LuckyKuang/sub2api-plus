@@ -15,6 +15,7 @@ export default {
         payment: '支付设置',
       },
       outboundIdentity: {
+      grokMedia: 'Grok 图片与视频工具',
         title: '出站客户端身份',
         description: '管理各类账号向上游声明的客户端身份。账号未单独配置时继承对应默认；身份设置不会改变账号认证方式和模型路由。',
         effectiveGlobal: '已保存的全局生效身份（账号覆盖优先）',
