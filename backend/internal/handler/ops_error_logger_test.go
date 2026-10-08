@@ -2279,3 +2279,14 @@ func TestOpsErrorLoggerMiddleware_RecordsClientClosedWhenIgnoreContextCanceledDi
 	job := <-opsErrorLogQueue
 	require.Equal(t, statusClientClosedRequest, job.entry.StatusCode)
 }
+
+func TestClassifyOpsOutboundPolicyIsPlatformGatewayFailure(t *testing.T) {
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Set(service.OpsOutboundPolicyReasonKey, "signed_declaration")
+	c.Set(service.OpsUpstreamErrorMessageKey, "outbound request contains a prohibited project identifier")
+	phase, limited, owner, source := classifyOpsErrorLog(c, "upstream_error", "Upstream request failed", "", 502)
+	require.Equal(t, "internal", phase)
+	require.False(t, limited)
+	require.Equal(t, "platform", owner)
+	require.Equal(t, "gateway", source)
+}

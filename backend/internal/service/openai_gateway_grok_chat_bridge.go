@@ -477,25 +477,6 @@ func grokChatNullOrEmptyArray(raw json.RawMessage) bool {
 	return json.Unmarshal(raw, &values) == nil && len(values) == 0
 }
 
-func grokChatResponsesCacheIntentBody(body []byte) ([]byte, error) {
-	// An empty Chat tools array is omitted by the Responses converter. In that
-	// case auto/none is also a semantic no-op and must not suppress the normal
-	// tool-free cache route. Non-empty converted tools are always kept intact.
-	if gjson.GetBytes(body, "tools").Exists() {
-		return append([]byte(nil), body...), nil
-	}
-	choice := gjson.GetBytes(body, "tool_choice")
-	if !choice.Exists() || choice.Type != gjson.String || (choice.String() != "auto" && choice.String() != "none") {
-		return append([]byte(nil), body...), nil
-	}
-	var root map[string]json.RawMessage
-	if err := json.Unmarshal(body, &root); err != nil {
-		return nil, err
-	}
-	delete(root, "tool_choice")
-	return json.Marshal(root)
-}
-
 func grokChatResponsesBridgeModel(model string) bool {
 	switch strings.ToLower(xai.StripGrokProviderPrefix(strings.TrimSpace(model))) {
 	case "grok-4.5", "grok-4.6", "grok-4.6-latest", "grok-4.7", "grok-4.7-latest":
@@ -560,24 +541,14 @@ func (s *OpenAIGatewayService) forwardGrokChatCompletionsViaResponses(
 	if err != nil {
 		return nil, fmt.Errorf("marshal grok responses bridge request: %w", err)
 	}
-	// Preserve the converted Responses intent before Grok capability
-	// sanitization. Cache routing must see the actual client function tools,
-	// not the nested Chat Completions declarations and not a tool-free copy.
-	intentBody, err := grokChatResponsesCacheIntentBody(responsesBody)
-	if err != nil {
-		return nil, fmt.Errorf("normalize grok responses bridge cache intent: %w", err)
-	}
+	// Sanitize converted tools without authorizing additional hosted tools.
 	responsesBody, err = patchGrokResponsesBody(responsesBody, upstreamModel)
 	if err != nil {
 		return nil, fmt.Errorf("patch grok responses bridge request: %w", err)
 	}
-	responsesBody, err = applyGrokResponsesCacheIdentity(responsesBody, intentBody, cacheIdentity, true)
+	responsesBody, err = applyGrokResponsesCacheIdentity(responsesBody, cacheIdentity)
 	if err != nil {
 		return nil, fmt.Errorf("apply grok responses bridge cache identity: %w", err)
-	}
-	responsesBody, err = applyGrokFreeRequestToolCacheRoute(c, responsesBody, intentBody, account, cacheIdentity)
-	if err != nil {
-		return nil, fmt.Errorf("apply grok responses bridge function-tool cache route: %w", err)
 	}
 
 	updatedBody, policyErr := s.applyOpenAIFastPolicyToBody(ctx, account, upstreamModel, responsesBody)

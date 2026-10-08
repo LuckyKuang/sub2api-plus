@@ -102,6 +102,21 @@ describe('OutboundIdentitySettings', () => {
     wrapper.unmount()
   })
 
+  it('shows the official Grok media identity alongside the sampler identity', async () => {
+    const view = fixture()
+    const grok = view.effective.find(item => item.preset === 'grok')!
+    grok.user_agent = 'grok-shell/1.0.45 (linux; x86_64)'
+    grok.headers = { 'User-Agent': grok.user_agent, 'x-grok-client-version': '1.0.45' }
+    view.wire_profiles = [{ ...grok, protocol: 'grok_media', headers: { 'User-Agent': 'xai-grok-build/1.0.45', 'x-grok-client-version': '1.0.45' } }]
+    vi.mocked(getOutboundIdentity).mockResolvedValue(view)
+    const wrapper = mount(OutboundIdentitySettings)
+    await flushPromises()
+    const group = wrapper.get('[data-identity-group="grok"]')
+    expect(group.text()).toContain('grok-shell/1.0.45 (linux; x86_64)')
+    expect(group.get('[data-testid="outbound-identity-wire-headers"]').text()).toContain('xai-grok-build/1.0.45')
+    expect(group.text()).toContain('admin.settings.outboundIdentity.grokMedia')
+  })
+
   it('separates MiniMax auth defaults and displays control and SDK wire headers', async () => {
     const view = fixture()
     const zcode = view.effective.find(item => item.preset === 'zcode')!

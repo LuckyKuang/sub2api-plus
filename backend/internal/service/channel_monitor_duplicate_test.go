@@ -244,8 +244,8 @@ func TestChannelMonitorReservedProjectHeaderCannotBeSubmitted(t *testing.T) {
 		"X-Sub2API-Monitor": "internal",
 	})
 	require.Error(t, err)
-	require.Error(t, validateExtraHeaders(map[string]string{
-		grokClientToolCacheOptInHeader: "prefer-cache",
+	require.NoError(t, validateExtraHeaders(map[string]string{
+		"X-Grok-Client-Tool-Cache": "prefer-cache",
 	}))
 
 	require.NoError(t, validateExtraHeaders(map[string]string{

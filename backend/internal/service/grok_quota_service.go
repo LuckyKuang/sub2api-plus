@@ -174,7 +174,7 @@ func (s *GrokQuotaService) probeUsage(ctx context.Context, accountID int64) (*Gr
 	if account.IsGrokOAuth() {
 		applyGrokCLIHeaders(req.Header)
 	}
-	applyGrokRequestMetadata(req.Header, body, "", account.GetCredential("sub"))
+	applyGrokRequestMetadata(req.Header, body, grokConversationSnapshot{}, account.GetCredential("sub"))
 	// 探测请求与真实转发保持同一套账号级请求头覆写，避免探测通过但转发失败。
 	account.ApplyHeaderOverrides(req.Header)
 

@@ -6,10 +6,7 @@ import (
 	"strings"
 )
 
-const (
-	brandToken                = "sub2api"
-	GrokClientToolCacheHeader = "X-Grok-Client-Tool-Cache"
-)
+const brandToken = "sub2api"
 
 // ContainsBrand reports whether s includes the project protocol token.
 func ContainsBrand(s string) bool {
@@ -21,22 +18,18 @@ func IsReservedHeaderName(name string) bool {
 	return ContainsBrand(name)
 }
 
-// IsLocalControlHeaderName reports whether name is consumed by the gateway and
-// must never be forwarded to an upstream service.
-func IsLocalControlHeaderName(name string) bool {
-	return strings.EqualFold(strings.TrimSpace(name), GrokClientToolCacheHeader)
-}
-
 // StripOutboundHeaders removes project names from every header name and value,
-// including multi-value/custom headers, plus gateway-local control headers.
+// including multi-value/custom headers, except routing Host, which is owned by the HTTP client.
 // Credentials and User-Agent are preserved for final rejection, so filtering
 // cannot silently send an unauthenticated request or substitute an SDK identity.
-func StripOutboundHeaders(h http.Header) {
+func StripOutboundHeaders(h http.Header) { stripOutboundHeaders(h, true) }
+
+func stripOutboundHeaders(h http.Header, hostException bool) {
 	for name, values := range h {
-		if protectedHeader(name) {
+		if (hostException && strings.EqualFold(name, "Host")) || protectedHeader(name) {
 			continue
 		}
-		if IsReservedHeaderName(name) || IsLocalControlHeaderName(name) {
+		if IsReservedHeaderName(name) {
 			delete(h, name)
 			continue
 		}
@@ -51,6 +44,12 @@ func StripOutboundHeaders(h http.Header) {
 
 var ErrBrandedOutboundHeader = errors.New("outbound request contains a prohibited project identifier")
 
+// Violation exposes only a stable category, never header names or values.
+type Violation struct{ Reason string }
+
+func (e *Violation) Error() string { return ErrBrandedOutboundHeader.Error() }
+func (e *Violation) Unwrap() error { return ErrBrandedOutboundHeader }
+
 func protectedHeader(name string) bool {
 	switch strings.ToLower(name) {
 	case "authorization", "proxy-authorization", "cookie", "x-api-key", "api-key", "x-dsh-auth-token", "user-agent":
@@ -59,9 +58,12 @@ func protectedHeader(name string) bool {
 	return false
 }
 
-func prohibitedHeaders(h http.Header) bool {
+func prohibitedHeaders(h http.Header, hostException bool) bool {
 	for name, values := range h {
-		if ContainsBrand(name) || IsLocalControlHeaderName(name) {
+		if hostException && strings.EqualFold(name, "Host") {
+			continue
+		}
+		if ContainsBrand(name) {
 			return true
 		}
 		for _, value := range values {
@@ -79,13 +81,6 @@ func FilterOutboundRequest(req *http.Request) error {
 	if req == nil {
 		return nil
 	}
-	host := req.Host
-	if host == "" && req.URL != nil {
-		host = req.URL.Host
-	}
-	if ContainsBrand(host) {
-		return ErrBrandedOutboundHeader
-	}
 	signed := req.URL != nil && (req.URL.Query().Get("X-Amz-SignedHeaders") != "" || req.URL.Query().Get("X-Goog-SignedHeaders") != "")
 	for name, values := range req.Header {
 		for _, value := range values {
@@ -93,22 +88,22 @@ func FilterOutboundRequest(req *http.Request) error {
 				signed = true
 			}
 			if protectedHeader(name) && ContainsBrand(value) {
-				return ErrBrandedOutboundHeader
+				return &Violation{Reason: "protected_header"}
 			}
 		}
 	}
-	if signed && (prohibitedHeaders(req.Header) || prohibitedHeaders(req.Trailer)) {
-		return ErrBrandedOutboundHeader
+	if signed && (prohibitedHeaders(req.Header, true) || prohibitedHeaders(req.Trailer, false)) {
+		return &Violation{Reason: "signed_declaration"}
 	}
 	for name, values := range req.Trailer {
 		for _, value := range values {
 			if protectedHeader(name) && ContainsBrand(value) {
-				return ErrBrandedOutboundHeader
+				return &Violation{Reason: "protected_trailer"}
 			}
 		}
 	}
 	StripOutboundHeaders(req.Header)
-	StripOutboundHeaders(req.Trailer)
+	stripOutboundHeaders(req.Trailer, false)
 	return nil
 }
 

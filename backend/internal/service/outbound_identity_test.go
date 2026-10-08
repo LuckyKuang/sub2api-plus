@@ -54,16 +54,17 @@ func TestBuiltInGrokOutboundIdentityMatchesOfficialShell(t *testing.T) {
 	t.Setenv(xai.CLIVersionEnv, "")
 
 	require.Equal(t, outboundidentity.Identity{
+		Inference:  map[string]outboundidentity.WireProfile{"grok_media": {UserAgent: "xai-grok-build/1.0.45"}},
 		Preset:     "grok",
 		Source:     "compiled_default",
-		UserAgent:  xai.CLIUserAgent(xai.CLIClientVersion),
-		Originator: xai.CLIClientIdentifier,
-		Version:    xai.CLIClientVersion,
+		UserAgent:  "grok-shell/1.0.45 (linux; x86_64)",
+		Originator: "grok-shell",
+		Version:    "1.0.45",
 		Headers: map[string]string{
-			"User-Agent":               xai.CLIUserAgent(xai.CLIClientVersion),
-			"x-grok-client-identifier": xai.CLIClientIdentifier,
-			"x-grok-client-version":    xai.CLIClientVersion,
-			"x-grok-client-mode":       xai.CLIClientMode,
+			"User-Agent":               "grok-shell/1.0.45 (linux; x86_64)",
+			"x-grok-client-identifier": "grok-shell",
+			"x-grok-client-version":    "1.0.45",
+			"x-grok-client-mode":       "headless",
 		},
 	}, builtInOutboundIdentity("grok"))
 }
@@ -77,7 +78,7 @@ func TestPrepareGrokAccountOutboundRequestUsesGrokTransportProfile(t *testing.T)
 
 	require.Same(t, req, prepared)
 	require.Equal(t, HTTPUpstreamProfileGrok, HTTPUpstreamProfileFromContext(prepared.Context()))
-	require.Equal(t, builtInOutboundIdentity("grok").UserAgent, prepared.UserAgent())
+	require.Equal(t, "xai-grok-build/1.0.45", prepared.UserAgent())
 
 	explicit := req.WithContext(WithHTTPUpstreamProfile(req.Context(), HTTPUpstreamProfileLongStream))
 	prepareAccountOutboundRequest(explicit, account)
@@ -196,7 +197,14 @@ func TestOutboundIdentityValidationAndVersionOnlyChange(t *testing.T) {
 		after, err := buildOutboundIdentity(OutboundIdentitySelection{Preset: preset, UserAgent: before.UserAgent, Version: "3.9.1"})
 		require.NoError(t, err, preset)
 		require.Equal(t, before.Originator, after.Originator)
-		require.Equal(t, before.Inference, after.Inference, "version changes preserve protocol SDK fingerprints")
+		if preset == "grok" {
+			require.Equal(t, "xai-grok-build/1.0.45", before.Inference["grok_media"].UserAgent)
+			require.Equal(t, "xai-grok-build/3.9.1", after.Inference["grok_media"].UserAgent)
+			require.Equal(t, before.Source, after.Source)
+			require.Equal(t, before.Inference["grok_media"].Headers, after.Inference["grok_media"].Headers)
+		} else {
+			require.Equal(t, before.Inference, after.Inference, "version changes preserve protocol SDK fingerprints")
+		}
 		require.Equal(t, before.ControlHeaders, after.ControlHeaders, "version changes preserve control-plane host facts")
 		require.Equal(t, strings.Replace(before.UserAgent, "/"+before.Version, "/3.9.1", 1), after.UserAgent)
 		for key, value := range before.Headers {

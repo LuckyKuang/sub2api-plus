@@ -196,6 +196,7 @@ func builtInOutboundIdentity(preset string) outboundidentity.Identity {
 		i.Headers["x-grok-client-identifier"] = i.Originator
 		i.Headers["x-grok-client-version"] = i.Version
 		i.Headers["x-grok-client-mode"] = xai.CLIClientMode
+		i.Inference = map[string]outboundidentity.WireProfile{"grok_media": {UserAgent: "xai-grok-build/" + i.Version}}
 	case "antigravity":
 		return antigravity.DefaultIdentity()
 	case "stepfun":
@@ -637,6 +638,7 @@ func buildOutboundIdentity(selection OutboundIdentitySelection) (outboundidentit
 	}
 	if i.Preset == "grok" {
 		i.Headers["x-grok-client-version"] = i.Version
+		i.Inference = map[string]outboundidentity.WireProfile{"grok_media": {UserAgent: "xai-grok-build/" + i.Version}}
 	}
 	if i.Preset == "kimi" {
 		// A User-Agent or version candidate must not desynchronize the version
@@ -1230,7 +1232,7 @@ func (s *SettingService) GetOutboundIdentityView(ctx context.Context) OutboundId
 	for _, preset := range outboundPresetNames {
 		builtin := builtInOutboundIdentity(preset)
 		effective := s.resolveDefaultOutboundIdentity(ctx, preset)
-		for _, protocol := range []string{"anthropic", "chat_completions", "responses"} {
+		for _, protocol := range []string{"anthropic", "chat_completions", "responses", "grok_media"} {
 			if _, ok := effective.Inference[protocol]; ok {
 				view.WireProfiles = append(view.WireProfiles, OutboundIdentityWireView{Protocol: protocol, Identity: effective.ForProtocol(protocol)})
 			}

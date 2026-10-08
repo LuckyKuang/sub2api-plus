@@ -227,7 +227,7 @@ func (s *OpenAIGatewayService) sendCCUpstreamRequest(
 	// 透传白名单中的客户端 header。详见 openaiCCRawAllowedHeaders 的设计说明。
 	for key, values := range c.Request.Header {
 		lowerKey := strings.ToLower(key)
-		if openaiCCRawAllowedHeaders[lowerKey] {
+		if account.Platform != PlatformGrok && openaiCCRawAllowedHeaders[lowerKey] {
 			for _, v := range values {
 				upstreamReq.Header.Add(key, v)
 			}
@@ -241,7 +241,7 @@ func (s *OpenAIGatewayService) sendCCUpstreamRequest(
 		if account.IsGrokOAuth() {
 			applyGrokCLIHeaders(upstreamReq.Header)
 		}
-		applyGrokRequestMetadata(upstreamReq.Header, body, grokCacheIdentity, account.GetCredential("sub"))
+		applyGrokRequestMetadata(upstreamReq.Header, body, resolveGrokRequestConversation(c, body, grokCacheIdentity), account.GetCredential("sub"))
 	}
 	// OpenAI identity is always the final stage. Other providers retain their
 	// existing generic override behavior.

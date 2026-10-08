@@ -48,6 +48,8 @@ func TestEnableHTTP2KeepAlive_EnablesPingHealthCheck(t *testing.T) {
 	}{
 		{upstreamProtocolModeOpenAIH2, 15 * time.Second, 15 * time.Second},
 		{upstreamProtocolModeLongStreamH2, 10 * time.Second, 5 * time.Second},
+		// grok-build shared_http.rs: 15s PING, 5s timeout.
+		{upstreamProtocolModeGrok, 15 * time.Second, 5 * time.Second},
 	} {
 		t.Run(tc.mode, func(t *testing.T) {
 			tr := &http.Transport{}
@@ -69,9 +71,9 @@ func TestBuildUpstreamTransport_LongStreamH2_EnablesPingHealthCheck(t *testing.T
 	requireHTTP2Configured(t, tr, "long_stream_h2 必须显式配置 http2 以启用 ReadIdleTimeout")
 }
 
-// 默认、Grok 和显式 H1 模式不应主动启用 HTTP/2 保活，避免影响其他平台的传输策略。
+// 默认与显式 H1 模式不应主动启用 HTTP/2 保活，避免影响其他平台的传输策略。
 func TestBuildUpstreamTransport_NonHTTP2_NotEagerlyConfigured(t *testing.T) {
-	for _, mode := range []string{upstreamProtocolModeDefault, upstreamProtocolModeGrok, upstreamProtocolModeOpenAIH1, upstreamProtocolModeOpenAIH1Fallback} {
+	for _, mode := range []string{upstreamProtocolModeDefault, upstreamProtocolModeOpenAIH1, upstreamProtocolModeOpenAIH1Fallback} {
 		t.Run(mode, func(t *testing.T) {
 			tr, err := buildUpstreamTransport(http2KeepAliveTestPoolSettings(), nil, mode)
 			require.NoError(t, err)
@@ -96,7 +98,7 @@ func TestBuildUpstreamTransport_NegotiatesExpectedProtocol(t *testing.T) {
 		{upstreamProtocolModeOpenAIH2, 2},
 		{upstreamProtocolModeLongStreamH2, 2},
 		{upstreamProtocolModeDefault, 1},
-		{upstreamProtocolModeGrok, 1},
+		{upstreamProtocolModeGrok, 2},
 		{upstreamProtocolModeOpenAIH1, 1},
 		{upstreamProtocolModeOpenAIH1Fallback, 1},
 	} {
@@ -135,4 +137,13 @@ func TestBuildUpstreamTransport_HTTP2_WithHTTPProxy_EnablesKeepAlive(t *testing.
 			require.NotNil(t, tr.Proxy, "HTTP 代理仍须通过 Transport.Proxy 生效")
 		})
 	}
+}
+
+// Official grok-build shared_http.rs fixes the Grok idle pool independently of other profiles.
+func TestBuildUpstreamTransport_GrokOfficialIdlePool(t *testing.T) {
+	tr, err := buildUpstreamTransport(http2KeepAliveTestPoolSettings(), nil, upstreamProtocolModeGrok)
+	require.NoError(t, err)
+	require.Equal(t, 2, tr.MaxIdleConnsPerHost)
+	require.Equal(t, 90*time.Second, tr.IdleConnTimeout)
+	require.True(t, tr.ForceAttemptHTTP2)
 }

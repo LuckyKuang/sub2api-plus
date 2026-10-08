@@ -919,10 +919,6 @@ export default {
           official: '官方 API'
         }
       },
-      grokClientToolCache: {
-        title: '客户端工具缓存（可能改变自动工具选择）',
-        hint: '仅对已识别为 Free 的 Grok OAuth 账号生效，默认会为 Codex、Trae 等客户端函数工具请求启用上游提示缓存；如不接受自动工具选择行为，可关闭此开关退出。'
-      },
       grokMediaEligibility: {
         title: '媒体生成资格',
         hint: '控制该 Grok OAuth 账号是否可被图片和视频生成请求选中。',

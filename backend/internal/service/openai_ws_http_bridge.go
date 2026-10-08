@@ -542,14 +542,9 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 		if err != nil {
 			return nil, err
 		}
-		grokMixedCacheIntentBody := append([]byte(nil), body...)
-		body, err = applyGrokResponsesCacheIdentity(body, grokIntentSourceBody, grokCacheIdentity, account.IsGrokOAuth())
+		body, err = applyGrokResponsesCacheIdentity(body, grokCacheIdentity)
 		if err != nil {
 			return nil, fmt.Errorf("apply grok prompt cache identity: %w", err)
-		}
-		body, err = applyGrokFreeRequestToolCacheRoute(c, body, grokMixedCacheIntentBody, account, grokCacheIdentity)
-		if err != nil {
-			return nil, fmt.Errorf("apply grok Free function-tool cache route: %w", err)
 		}
 	}
 	actualModel := strings.TrimSpace(gjson.GetBytes(body, "model").String())

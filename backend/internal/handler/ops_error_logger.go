@@ -1344,7 +1344,12 @@ func logOpsRecoveredUpstream(c *gin.Context, ops *service.OpsService, finalStatu
 	entry.IsCountTokens = isCountTokensRequest(c)
 	entry.CreatedAt = time.Now()
 	entry.ErrorMessage = "Recovered upstream error"
-	if lastStage == string(service.GatewayFailureStageAccountAuth) {
+	if lastStage == "outbound_policy" {
+		entry.ErrorPhase = "internal"
+		entry.ErrorOwner = "platform"
+		entry.ErrorSource = "gateway"
+		entry.IsBusinessLimited = false
+	} else if lastStage == string(service.GatewayFailureStageAccountAuth) {
 		entry.ErrorPhase = string(service.GatewayFailureStageAccountAuth)
 		entry.ErrorMessage = "Recovered account authentication failure"
 	} else if lastStatus > 0 {
@@ -2257,6 +2262,9 @@ func classifyOpsSeverity(errType string, status int) string {
 }
 
 func classifyOpsErrorLog(c *gin.Context, errType, message, code string, status int) (phase string, isBusinessLimited bool, errorOwner string, errorSource string) {
+	if c != nil && c.GetString(service.OpsOutboundPolicyReasonKey) != "" {
+		return "internal", false, "platform", "gateway"
+	}
 	if opsSecurityAuditDenialCode(c) != "" {
 		return "request", false, "client", "client_request"
 	}

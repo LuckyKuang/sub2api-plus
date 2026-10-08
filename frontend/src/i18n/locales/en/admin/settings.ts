@@ -15,6 +15,7 @@ export default {
         payment: 'Payment',
       },
       outboundIdentity: {
+      grokMedia: 'Grok image and video tools',
         title: 'Outbound client identity',
         description: 'Manage the client identity advertised to upstream services. Accounts inherit their defaults unless overridden. Authentication and model routing remain owned by each upstream.',
         effectiveGlobal: 'Saved global identity (account overrides take priority)',

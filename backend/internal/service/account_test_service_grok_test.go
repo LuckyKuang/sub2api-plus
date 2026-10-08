@@ -295,6 +295,11 @@ func TestAccountTestService_GrokImageModelUsesImagesGenerations(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, "https://api.x.ai/v1/images/generations", upstream.lastReq.URL.String())
+	// Official media_tool_config.rs emits the media family, not sampler metadata.
+	require.Equal(t, "xai-grok-build/1.0.45", upstream.lastReq.UserAgent())
+	for _, header := range []string{"X-Grok-Req-Id", "X-Grok-Agent-Id", "X-Grok-Model-Override", "X-Grok-User-Id", "X-Grok-Client-Mode"} {
+		require.Empty(t, upstream.lastReq.Header.Get(header), header)
+	}
 	require.Equal(t, "grok-imagine-image", gjson.GetBytes(upstream.lastBody, "model").String())
 	require.Equal(t, "a red apple", gjson.GetBytes(upstream.lastBody, "prompt").String())
 	require.Equal(t, "b64_json", gjson.GetBytes(upstream.lastBody, "response_format").String())
@@ -499,6 +504,11 @@ func TestAccountTestService_GrokExplicitImageModeDefaultsModel(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, "https://api.x.ai/v1/images/generations", upstream.lastReq.URL.String())
+	// Official media_tool_config.rs emits the media family, not sampler metadata.
+	require.Equal(t, "xai-grok-build/1.0.45", upstream.lastReq.UserAgent())
+	for _, header := range []string{"X-Grok-Req-Id", "X-Grok-Agent-Id", "X-Grok-Model-Override", "X-Grok-User-Id", "X-Grok-Client-Mode"} {
+		require.Empty(t, upstream.lastReq.Header.Get(header), header)
+	}
 	require.Equal(t, "grok-imagine-image", gjson.GetBytes(upstream.lastBody, "model").String())
 	require.Equal(t, "b64_json", gjson.GetBytes(upstream.lastBody, "response_format").String())
 	require.Contains(t, rec.Body.String(), `"type":"test_complete"`)
@@ -536,6 +546,10 @@ func TestAccountTestService_GrokVideoUpstreamErrorIsNotMaskedAsSuccess(t *testin
 
 	require.Error(t, err)
 	require.Equal(t, "https://api.x.ai/v1/videos/generations", upstream.lastReq.URL.String())
+	require.Equal(t, "xai-grok-build/1.0.45", upstream.lastReq.UserAgent())
+	for _, header := range []string{"X-Grok-Req-Id", "X-Grok-Agent-Id", "X-Grok-Model-Override", "X-Grok-User-Id", "X-Grok-Client-Mode"} {
+		require.Empty(t, upstream.lastReq.Header.Get(header), header)
+	}
 	require.Contains(t, rec.Body.String(), `"type":"error"`)
 	require.Contains(t, rec.Body.String(), "Grok videos API returned 400")
 	require.NotContains(t, rec.Body.String(), `"success":true`)

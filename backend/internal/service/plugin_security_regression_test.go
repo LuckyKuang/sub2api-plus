@@ -157,11 +157,11 @@ func TestPluginRuntimeReturnsAndAppliesNormalizedConfig(t *testing.T) {
 
 func TestHeadersToPluginStripsGatewayIdentityAndLocalControls(t *testing.T) {
 	header := http.Header{
-		"User-Agent":                   {"official-client/1"},
-		"X-Device":                     {"SuB2ApI worker"},
-		"X-Sub2API-Trace":              {"internal"},
-		grokClientToolCacheOptInHeader: {"prefer-cache"},
-		"X-Grok-Conv-Id":               {"conversation"},
+		"User-Agent":               {"official-client/1"},
+		"X-Device":                 {"SuB2ApI worker"},
+		"X-Sub2API-Trace":          {"internal"},
+		"X-Grok-Client-Tool-Cache": {"prefer-cache"},
+		"X-Grok-Conv-Id":           {"conversation"},
 	}
 
 	encoded := headersToPlugin(header)
@@ -169,7 +169,7 @@ func TestHeadersToPluginStripsGatewayIdentityAndLocalControls(t *testing.T) {
 	require.Equal(t, []string{"official-client/1"}, encoded["User-Agent"].Values)
 	require.NotContains(t, encoded, "X-Device")
 	require.NotContains(t, encoded, "X-Sub2API-Trace")
-	require.NotContains(t, encoded, grokClientToolCacheOptInHeader)
+	require.Equal(t, []string{"prefer-cache"}, encoded["X-Grok-Client-Tool-Cache"].Values)
 	require.Equal(t, []string{"conversation"}, encoded["X-Grok-Conv-Id"].Values)
 }
 

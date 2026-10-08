@@ -37,7 +37,7 @@
           </div>
         </div>
         <div v-for="wire in wireProfiles(preset)" :key="wire.protocol" class="rounded-lg bg-gray-50 p-4 text-sm dark:bg-dark-800">
-          <p class="mb-2 text-gray-500">{{ wire.protocol }} · {{ t('admin.settings.outboundIdentity.headers') }}</p>
+          <p class="mb-2 text-gray-500">{{ wire.protocol === 'grok_media' ? t('admin.settings.outboundIdentity.grokMedia') : wire.protocol }} · {{ t('admin.settings.outboundIdentity.headers') }}</p>
           <dl class="grid gap-1 sm:grid-cols-[auto_1fr]" data-testid="outbound-identity-wire-headers">
             <template v-for="(value, name) in wire.headers" :key="name">
               <dt class="font-mono text-xs text-gray-500">{{ name }}</dt>
