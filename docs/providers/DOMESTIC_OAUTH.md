@@ -20,6 +20,14 @@ account service's `user_code` polling response, whose interval is milliseconds.
 Token validation requires the MiniMax `agent.default` scope, including scope
 arrays or JWT `scope`/`scp` declarations.
 
+## Refresh deadlines
+
+OAuth refresh checks the actual context deadline before accepting provider
+credentials, even if timer contention delays cancellation notification. A late
+result cannot be persisted. Caller/cycle expiry stops refresh without adding
+account errors or cooldowns. A refresh already persisted within its attempt may
+finish bounded detached cleanup without being retried or counted as a failure.
+
 DeepSeek accepts a loopback callback, not a remote web callback. This panel uses
 `http://127.0.0.1:53682/oauth/callback`. After authorizing, copy the **complete URL**
 from the browser address bar and paste it into the panel, even if the browser

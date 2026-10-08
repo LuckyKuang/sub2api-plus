@@ -210,7 +210,7 @@ describe('AsyncImageView task management', () => {
     expect(wrapper.get('[data-testid="async-image-api-key-filter"] select').text()).toContain('Exhausted image key')
 
     await clickButtonByText(wrapper, 'asyncImage.actions.create')
-    await flushPromises()
+    await vi.waitFor(() => expect(wrapper.find('.base-dialog').exists()).toBe(true))
     expect(wrapper.text()).toContain('asyncImage.create.noKeys')
   })
 
@@ -232,7 +232,7 @@ describe('AsyncImageView task management', () => {
     expect(wrapper.get('[data-testid="async-image-api-key-filter"] select').text()).toContain('Reassigned key')
 
     await clickButtonByText(wrapper, 'asyncImage.actions.create')
-    await flushPromises()
+    await vi.waitFor(() => expect(wrapper.find('.base-dialog').exists()).toBe(true))
     expect(wrapper.text()).toContain('asyncImage.create.noKeys')
   })
 

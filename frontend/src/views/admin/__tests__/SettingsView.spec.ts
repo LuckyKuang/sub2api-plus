@@ -2051,7 +2051,9 @@ describe("admin SettingsView wechat connect controls", () => {
 
 describe("admin SettingsView platform quota matrix", () => {
   let removeStyles: () => void;
-  beforeAll(async () => { removeStyles = await installAppStyles(); });
+  // Compile the real production stylesheet without treating fixture build time
+  // as a UI response SLA; keep every computed-layout assertion unchanged.
+  beforeAll(async () => { removeStyles = await installAppStyles(); }, 30000);
   afterAll(() => removeStyles?.());
 
   beforeEach(() => {
