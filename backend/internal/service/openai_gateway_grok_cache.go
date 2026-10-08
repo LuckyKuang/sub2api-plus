@@ -340,19 +340,3 @@ func stripGrokChatPromptCacheKey(body []byte) ([]byte, error) {
 	}
 	return sjson.DeleteBytes(body, "prompt_cache_key")
 }
-
-// hasGrokResponsesToolIntent tracks explicit tools through WS tool lowering.
-func hasGrokResponsesToolIntent(body []byte) bool {
-	if gjson.GetBytes(body, "tools").Exists() || gjson.GetBytes(body, "tool_choice").Exists() {
-		return true
-	}
-	for _, item := range gjson.GetBytes(body, "input").Array() {
-		if item.Get("type").String() == "additional_tools" {
-			tools := item.Get("tools")
-			if !tools.IsArray() || len(tools.Array()) > 0 {
-				return true
-			}
-		}
-	}
-	return false
-}

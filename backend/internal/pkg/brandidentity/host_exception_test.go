@@ -4,11 +4,17 @@ package brandidentity
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/tls"
+	"crypto/x509"
+	"math/big"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -24,7 +30,7 @@ func TestRoutingHostExceptionReachesServerAndRedirect(t *testing.T) {
 		require.Empty(t, r.Header.Get("X-Private"))
 		require.Equal(t, "prefer-cache", r.Header.Get("X-Grok-Client-Tool-Cache"))
 		if r.URL.Path == "/start" {
-			http.Redirect(w, r, "http://"+authority+"/done", 302)
+			http.Redirect(w, r, "http://"+authority+"/done", http.StatusFound)
 			return
 		}
 		w.WriteHeader(204)
@@ -72,13 +78,25 @@ func TestRoutingHostExceptionPreservesHTTP2AuthorityAndSNI(t *testing.T) {
 		observed <- r
 		w.WriteHeader(http.StatusNoContent)
 	}))
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	certTemplate := &x509.Certificate{
+		SerialNumber: big.NewInt(1), DNSNames: []string{authority},
+		NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour),
+		KeyUsage:    x509.KeyUsageDigitalSignature,
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, certTemplate, certTemplate, key.Public(), key)
+	require.NoError(t, err)
+	server.TLS = &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{{Certificate: [][]byte{der}, PrivateKey: key}}}
 	server.EnableHTTP2 = true
 	server.StartTLS()
 	defer server.Close()
+	roots := x509.NewCertPool()
+	roots.AddCert(server.Certificate())
 	transport := &http.Transport{
 		ForceAttemptHTTP2: true,
-		// The test server has a self-signed certificate for a different hostname.
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		TLSClientConfig:   &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots},
 		DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
 			return (&net.Dialer{}).DialContext(ctx, network, server.Listener.Addr().String())
 		},
