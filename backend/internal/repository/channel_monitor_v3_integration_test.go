@@ -202,7 +202,7 @@ func TestChannelMonitorV3ConfigUpgradeAndAggregationLock(t *testing.T) {
 	upgraded, err := repo.GetConfig(ctx)
 	require.NoError(t, err)
 	require.Empty(t, upgraded.DisabledPlatforms)
-	require.Len(t, upgraded.EnabledPlatforms(), 11)
+	require.ElementsMatch(t, []string{"anthropic", "openai", "gemini", "antigravity", "grok", "kimi", "zhipu", "deepseek", "minimax", "stepfun", "opencode_go", "typesafe"}, upgraded.EnabledPlatforms())
 	inflight, err := integrationDB.BeginTx(ctx, nil)
 	require.NoError(t, err)
 	defer func() { _ = inflight.Rollback() }()

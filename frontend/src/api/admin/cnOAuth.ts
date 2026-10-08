@@ -1,6 +1,6 @@
 import { apiClient } from '../client'
 
-export type CNOAuthPlatform = 'deepseek' | 'kimi' | 'minimax'
+export type CNOAuthPlatform = 'deepseek' | 'kimi' | 'minimax' | 'stepfun'
 export interface CNOAuthSession {
   session_id: string
   authorize_url: string

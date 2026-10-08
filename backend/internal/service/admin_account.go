@@ -921,6 +921,9 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 // normalizeOpenAIAccountUserAgent makes account validation observe the same
 // global policy snapshot used later by outbound identity resolution.
 func (s *adminServiceImpl) normalizeOpenAIAccountUserAgent(ctx context.Context, platform, accountType string, credentials map[string]any) error {
+	if err := validateStepFunCredentials(platform, accountType, credentials); err != nil {
+		return err
+	}
 	if err := NormalizeAccountOutboundIdentity(platform, accountType, credentials); err != nil {
 		return err
 	}

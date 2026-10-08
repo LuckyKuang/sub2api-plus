@@ -878,6 +878,8 @@ func TestLoadDefaultSecurityToggles(t *testing.T) {
 		"api.kimi.com",
 		"api.kimi.ai",
 		"api.deepseek.com",
+		"api.stepfun.com",
+		"api.stepfun.ai",
 		"agent.minimax.cn",
 		"agent.minimax.io",
 		"api.moonshot.ai",

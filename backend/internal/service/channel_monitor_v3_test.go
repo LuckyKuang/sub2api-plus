@@ -51,7 +51,7 @@ func TestChannelMonitorV3ConfigAndHealth(t *testing.T) {
 
 func TestChannelMonitorV3PlatformConfig(t *testing.T) {
 	cfg := DefaultChannelMonitorV3Config()
-	require.Len(t, cfg.EnabledPlatforms(), 11)
+	require.ElementsMatch(t, []string{"anthropic", "openai", "gemini", "antigravity", "grok", "kimi", "zhipu", "deepseek", "minimax", "stepfun", "opencode_go", "typesafe"}, cfg.EnabledPlatforms())
 	for _, disabled := range [][]string{{"unknown"}, {"composite"}, {"openai", "openai"}, {"OPENAI"}} {
 		cfg.DisabledPlatforms = disabled
 		require.ErrorIs(t, cfg.Validate(), ErrChannelMonitorV3Config)

@@ -129,7 +129,7 @@ const identityGroups = identityPresets.filter(preset => preset !== 'minimax_apik
   key: preset, label: preset === 'minimax' ? 'MiniMax Code' : identityNames[preset],
   presets: preset === 'minimax' ? ['minimax', 'minimax_apikey'] as IdentityPreset[] : [preset]
 }))
-const domesticPresets: IdentityPreset[] = ['deepseek', 'kimi', 'zcode']
+const domesticPresets: IdentityPreset[] = ['deepseek', 'kimi', 'zcode', 'stepfun']
 const view = ref<OutboundIdentityView>()
 const error = ref('')
 const loading = ref(false)
@@ -153,7 +153,7 @@ const mappings = [
   { key: 'grok:upstream', label: 'Grok · Upstream' },
   { key: 'antigravity:upstream', label: 'Antigravity · Upstream' },
   { key: 'typesafe:apikey', label: 'TypeSafe / Jev · API Key' },
-  ...['kimi', 'zhipu', 'deepseek', 'minimax'].map(platform => ({ key: `${platform}:apikey`, label: `${platform} · API Key` }))
+  ...['kimi', 'zhipu', 'deepseek', 'minimax', 'stepfun'].map(platform => ({ key: `${platform}:apikey`, label: `${platform} · API Key` }))
 ]
 const effective = (preset: IdentityPreset) => view.value?.effective.find(item => item.preset === preset)
 const wireProfiles = (preset: IdentityPreset) => view.value?.wire_profiles?.filter(item => item.preset === preset) ?? []

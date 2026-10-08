@@ -18,6 +18,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/cnoauth"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/geminicli"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai_compat"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/stepfun"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/typesafe"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/xai"
 )
@@ -1385,6 +1386,9 @@ func (a *Account) IsOpenAIApiKey() bool {
 // 适用 openai、国产 OpenAI 兼容供应商（kimi/zhipu/deepseek）与 OpenCode Go；
 // grok 走 GetGrokBaseURL，此处对 grok 返回 "" 以保持原有行为。
 func (a *Account) GetOpenAIBaseURL() string {
+	if a.IsDomesticOAuth() && a.Platform == PlatformStepFun {
+		return cnoauth.ModelBase(a.Platform, a.GetCredential("oauth_region"))
+	}
 	if !a.IsOpenAI() && !a.IsCNProvider() && !a.IsOpenCodeGo() {
 		return ""
 	}
@@ -1414,6 +1418,8 @@ func (a *Account) GetOpenAIBaseURL() string {
 		return DefaultZhipuPayGBaseURL
 	case PlatformDeepseek:
 		return DefaultDeepseekBaseURL
+	case PlatformStepFun:
+		return stepfun.BaseURL(a.GetCredential("region"), a.IsCodingPlan())
 	case PlatformMiniMax:
 		return DefaultMiniMaxBaseURL
 	case PlatformOpenCodeGo:
@@ -1446,6 +1452,9 @@ func (a *Account) IsCodingPlan() bool {
 // （与既有行为完全一致）。responses 协议仅 deepseek / kimi / minimax 支持（官方原生
 // Responses 端点，适配 Codex）；zhipu 无此端点。
 func (a *Account) GetAPIProtocol() string {
+	if a != nil && a.Platform == PlatformStepFun {
+		return APIProtocolChatCompletions
+	}
 	if a.IsDomesticOAuth() {
 		return APIProtocolAnthropic
 	}
@@ -1508,6 +1517,12 @@ func (a *Account) IsAdaptiveAPIProtocol() bool {
 // adaptive 账号优先使用 api_base_urls 中的分协议地址，缺失时按平台和
 // account_mode 使用官方默认端点。base_url 继续作为 Chat Completions 地址兼容旧字段。
 func (a *Account) GetCNProtocolBaseURL(protocol string) string {
+	if a != nil && a.Platform == PlatformStepFun {
+		if protocol == APIProtocolChatCompletions {
+			return a.GetOpenAIBaseURL()
+		}
+		return ""
+	}
 	if a == nil || !a.IsMultiProtocolAPIKey() {
 		return ""
 	}
@@ -1578,6 +1593,9 @@ func (a *Account) IsAnthropicProtocol() bool {
 // 供应商 × 接入模式返回默认端点。非 Anthropic 协议账号返回空串。
 func (a *Account) GetAnthropicProtocolBaseURL() string {
 	if a.IsDomesticOAuth() {
+		if a.Platform == PlatformStepFun {
+			return ""
+		}
 		return cnoauth.ModelBase(a.Platform, a.GetCredential("oauth_region"))
 	}
 	if a == nil || (!a.IsAnthropicProtocol() && !a.IsAdaptiveAPIProtocol()) {

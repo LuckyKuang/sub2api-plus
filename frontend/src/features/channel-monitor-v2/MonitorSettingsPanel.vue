@@ -393,6 +393,7 @@ function platformLabel(value: string) {
       zhipu: 'Zhipu GLM',
       deepseek: 'DeepSeek',
       minimax: 'MiniMax',
+  stepfun: 'StepFun',
       composite: 'Composite',
     } as Record<string, string>
   )[value] || value

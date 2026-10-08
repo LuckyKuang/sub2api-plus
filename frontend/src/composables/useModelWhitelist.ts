@@ -441,6 +441,7 @@ export function getModelsByPlatform(platform: string): string[] {
     ]
     case 'typesafe': return ['jev-latest']
     case 'doubao': return doubaoModels
+    case 'stepfun': return []
     case 'minimax': return minimaxModels
     case 'baidu': return baiduModels
     case 'spark': return sparkModels

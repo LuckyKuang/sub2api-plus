@@ -23,6 +23,7 @@ var monitorProviders = map[string]struct{}{
 	MonitorProviderZhipu:       {},
 	MonitorProviderDeepseek:    {},
 	MonitorProviderMiniMax:     {},
+	MonitorProviderStepFun:     {},
 	MonitorProviderOpenCodeGo:  {},
 }
 
@@ -39,6 +40,7 @@ var probeCapableProviders = map[string]struct{}{
 	MonitorProviderZhipu:      {},
 	MonitorProviderDeepseek:   {},
 	MonitorProviderMiniMax:    {},
+	MonitorProviderStepFun:    {},
 	MonitorProviderOpenCodeGo: {},
 }
 
@@ -219,6 +221,8 @@ func normalizeMonitorPrimaryModel(provider, checkMode, model string) string {
 //   - gemini/grok/antigravity：本地统计/值通道降级，不会永久 error，放行
 func monitorAccountQuotaCapability(account *Account) error {
 	switch account.Platform {
+	case PlatformStepFun:
+		return ErrChannelMonitorAccountNotSupportable
 	case PlatformOpenCodeGo:
 		return nil
 	case PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax:

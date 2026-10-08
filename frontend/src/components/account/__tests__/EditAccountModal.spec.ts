@@ -327,6 +327,24 @@ function mountModal(account = buildAccount(), renderGroupSelector = false) {
 }
 
 describe('EditAccountModal', () => {
+  it('preserves the StepFun international endpoint on reload and when switching to Step Plan', async () => {
+    const account = buildAccount()
+    account.platform = 'stepfun'
+    account.credentials = { api_key: 'step-key', region: 'global', account_mode: 'payg', api_protocol: 'chat_completions', base_url: 'https://api.stepfun.ai/v1' }
+    updateAccountMock.mockReset().mockResolvedValue(account)
+    checkMixedChannelRiskMock.mockReset().mockResolvedValue({ has_risk: false })
+    const wrapper = mountModal(account)
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    expect(updateAccountMock.mock.calls[0][1].credentials).toMatchObject(account.credentials)
+    expect(wrapper.findAll('button').some(button => button.text().includes('admin.accounts.cnProviders.apiProtocol.adaptive'))).toBe(false)
+    await wrapper.findAll('button').find(button => button.text().includes('admin.accounts.cnProviders.accountMode.coding'))!.trigger('click')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    expect(updateAccountMock.mock.calls[1][1].credentials).toMatchObject({
+      region: 'global', account_mode: 'coding', api_protocol: 'chat_completions', base_url: 'https://api.stepfun.ai/step_plan/v1'
+    })
+    wrapper.unmount()
+  })
+
   it.each(['oauth', 'apikey'])('uses backend passthrough precedence and clears legacy fields for %s', async (type) => {
     for (const [extra, enabled] of [
       [{ openai_passthrough: false, openai_oauth_passthrough: true }, false],

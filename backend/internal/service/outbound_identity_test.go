@@ -420,9 +420,9 @@ func TestMiniMaxOutboundIdentityVersionlessExemptionIsNarrow(t *testing.T) {
 	require.Empty(t, accepted.Version)
 
 	// The exemption is registered for exactly one preset.
-	require.Equal(t, map[string]string{"minimax": minimax.ProductToken}, versionlessOutboundUserAgents)
+	require.Equal(t, map[string]string{"minimax": "MiniMaxAgent", "stepfun": "step (linux 6.8.0-31-generic; x64)"}, versionlessOutboundUserAgents)
 	for _, preset := range outboundPresetNames {
-		require.Equal(t, preset == "minimax", versionlessOutboundUserAgents[preset] != "", preset)
+		require.Equal(t, (preset == "minimax" || preset == "stepfun"), versionlessOutboundUserAgents[preset] != "", preset)
 	}
 
 	credentials := map[string]any{outboundIdentityCredential: OutboundIdentitySelection{Preset: "minimax"}}

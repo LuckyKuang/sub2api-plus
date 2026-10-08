@@ -27,6 +27,7 @@ const (
 	PlatformKimi     = "kimi"     // Kimi (月之暗面 / Moonshot)
 	PlatformZhipu    = "zhipu"    // 智谱 GLM (bigmodel)
 	PlatformDeepseek = "deepseek" // DeepSeek
+	PlatformStepFun  = "stepfun"  // StepFun / Step-Code
 	PlatformMiniMax  = "minimax"  // MiniMax (M 系列)
 	PlatformTypeSafe = "typesafe" // TypeSafe AI System One (Jev)
 	// PlatformOpenCodeGo 是 OpenCode 平台（账号类型 Zen 按量 / Go 订阅）。
@@ -38,7 +39,7 @@ const (
 // ConcretePlatforms lists credential-owning platforms, excluding composite groups.
 func ConcretePlatforms() []string {
 	return []string{PlatformAnthropic, PlatformOpenAI, PlatformGemini, PlatformAntigravity,
-		PlatformGrok, PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax,
+		PlatformGrok, PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax, PlatformStepFun,
 		PlatformOpenCodeGo, PlatformTypeSafe}
 }
 

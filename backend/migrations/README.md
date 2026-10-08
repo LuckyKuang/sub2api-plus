@@ -120,11 +120,12 @@ and checksums remain immutable.
   missing. Fresh databases keep the application default `false`. Unrelated
   runtime-log fields are preserved; malformed configuration needs repair.
   This switch does not disable required security-audit exception logs.
-- **Platforms and quotas (261, 266, 267, 273):** platform constraints retain the
+- **Platforms and quotas (261, 266, 267, 273, 277):** platform constraints retain the
   full Plus platform set, including MiniMax, OpenCode and TypeSafe. Migration
   267 removes quota rows whose daily, weekly and monthly limits are all NULL;
   those rows are unlimited. Migration 273 expands both quota and composite
-  target constraints without removing existing platforms.
+  target constraints without removing existing platforms. Migration 277 adds
+  StepFun to those constraints and the legacy probe-provider constraints.
 - **Usage and payments (269, 270, 274):** rollout budget units remain a reserved
   usage dimension; affiliate `operation_id` supports idempotent ledger writes.
   Historical payment orders receive `bonus_amount=0`. See [payment behavior](../../docs/PAYMENT.md).

@@ -22,6 +22,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/kimi"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/minimax"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/stepfun"
 	"github.com/google/uuid"
 )
 
@@ -64,7 +65,7 @@ type HTTPDoer interface {
 type Client struct{ HTTP HTTPDoer }
 
 func Supported(platform string) bool {
-	return platform == "deepseek" || platform == "kimi" || platform == "minimax"
+	return platform == "deepseek" || platform == "kimi" || platform == "minimax" || platform == "stepfun"
 }
 func NormalizeRegion(platform, region string) (string, error) {
 	if !Supported(platform) {
@@ -97,6 +98,8 @@ func origin(platform, region string) string {
 }
 func ModelBase(platform, region string) string {
 	switch platform {
+	case "stepfun":
+		return stepfun.BaseURL(region, true)
 	case "deepseek":
 		return "https://api.deepseek.com/anthropic"
 	case "kimi":
@@ -129,6 +132,8 @@ func snapshot(ctx context.Context, platform string) context.Context {
 			identity = kimi.DefaultIdentity()
 		case "minimax":
 			identity = minimax.DefaultIdentity()
+		case "stepfun":
+			identity = stepfun.DefaultIdentity()
 		}
 	}
 	if identity.Preset == "deepseek" {
@@ -208,6 +213,9 @@ func (c *Client) Start(ctx context.Context, platform, region, proxy string) (*Fl
 	}
 	ctx = snapshot(ctx, platform)
 	f := &Flow{Platform: platform, Region: region, Interval: 5, ExpiresAt: time.Now().Add(TTL)}
+	if platform == "stepfun" {
+		return startStepFun(f)
+	}
 	f.Verifier, err = randomToken()
 	if err != nil {
 		return nil, err
@@ -291,7 +299,7 @@ func (c *Client) Poll(ctx context.Context, f *Flow, proxy string) (*Grant, error
 	if time.Now().After(f.ExpiresAt) {
 		return nil, ErrExpired
 	}
-	if f.Platform == "deepseek" {
+	if f.Platform == "deepseek" || f.Platform == "stepfun" {
 		return nil, ErrPending
 	}
 	values := url.Values{"grant_type": {deviceGrant}, "device_code": {f.DeviceCode}, "client_id": {kimiClientID}}
@@ -308,6 +316,9 @@ func (c *Client) Poll(ctx context.Context, f *Flow, proxy string) (*Grant, error
 	return c.token(snapshot(ctx, f.Platform), f.Platform, f.Region, proxy, path, values, "")
 }
 func (c *Client) Exchange(ctx context.Context, f *Flow, callback, proxy string) (*Grant, error) {
+	if f.Platform == "stepfun" {
+		return exchangeStepFun(f, callback)
+	}
 	if f.Platform != "deepseek" {
 		return nil, errors.New("callback unsupported")
 	}

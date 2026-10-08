@@ -1452,6 +1452,9 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 }
 
 func shouldForwardOpenAIResponsesViaRawChatCompletions(account *Account) bool {
+	if account.IsDomesticOAuth() && account.Platform == PlatformStepFun {
+		return true
+	}
 	if account == nil || account.Type != AccountTypeAPIKey {
 		return false
 	}

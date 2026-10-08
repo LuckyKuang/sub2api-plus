@@ -28,7 +28,7 @@ export default {
         loadFailed: '无法加载出站身份设置，请稍后重试。',
         previewFailed: '身份无效或无法预览，请检查预设、UA 和版本。',
         versionNotDeclared: '官方客户端未声明版本',
-        versionlessHint: 'MiniMax OAuth 的产品 UA 不含客户端版本，推理 SDK 版本另行固定。API Key 使用独立预设；兼容 API Key 账号也可选择其他身份。',
+        versionlessHint: '该官方客户端不声明产品版本；推理 SDK 身份另行固定。',
         runtimeHeaders: '运行时身份声明',
         controlHeaders: 'OAuth／账号服务身份头',
         pinnedSdkHint: 'API Key 的 SDK 身份和版本固定为已核对的官方依赖版本。',

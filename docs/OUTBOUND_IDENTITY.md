@@ -8,9 +8,9 @@ The gateway resolves a trusted triple: User-Agent, client identifier and client
 version. A preset renders only its defined wire declarations. Gemini and
 Antigravity encode the identifier/version in User-Agent; they do not acquire
 invented OpenAI `Originator` or `Version` headers. SDK versions and protocol
-versions are distinct from the CLI version. MiniMax is an enumerated versionless
-client family: its official client publishes the bare product token with no
-version segment, so `Version` is intentionally empty for that preset only. The
+versions are distinct from the CLI version. MiniMax and Step-Code are enumerated versionless
+client families: their official inference clients publish no product version
+segment, so `Version` is intentionally empty for those presets only. The
 exception is registered per preset and never makes the client version optional
 for any other family.
 
@@ -201,8 +201,8 @@ MiniMax has two distinct defaults:
 | OAuth | `minimax` | `MiniMaxAgent` / `MiniMaxAgent` / empty |
 | API Key | `minimax_apikey` | `Anthropic/JS 0.91.1` / `Anthropic` / `0.91.1` |
 
-Only `minimax` is the enumerated versionless exception. The official managed
-resolver overrides the SDK UA; its BYOK resolver does not. The latter uses the
+`minimax` is an enumerated versionless exception (Step-Code is the other; see
+its section below). The official managed MiniMax resolver overrides the SDK UA; its BYOK resolver does not. The latter uses the
 Anthropic SDK locked at `0.91.1` in `third_party/pi-mono/packages/ai` and
 `pnpm-lock.yaml`. Both inference profiles preserve these exact declarations:
 `X-Stainless-Lang: js`, `X-Stainless-Package-Version: 0.91.1`,
@@ -295,7 +295,7 @@ remain owned by the protocol.
 | Retry or nested same-owner request | Reuse the selected snapshot, including all runtime values |
 | Failover to another credential owner | Resolve that owner's candidate and current defaults |
 
-The managed `minimax` preset remains the only versionless exception;
+The managed `minimax` and `stepfun` presets are the versionless exceptions;
 `minimax_apikey` is versioned. Settings and account header maps
 use each declaration's registered spelling, reject case-insensitive duplicates,
 and return deep copies; malformed stored header candidates cannot partially win.
@@ -913,3 +913,38 @@ migration and Channel Monitor V3 behavior is additionally exercised against
 isolated PostgreSQL/Redis; its unit tests verify pause/resume, fresh confirmation
 evidence, visibility and incident recovery. Passing a coverage percentage alone
 does not demonstrate these requirements.
+
+## StepFun / Step-Code
+
+StepFun OAuth (Step Plan) and API Key accounts default to the same `stepfun`
+preset. Exact identity: `step (linux 6.8.0-31-generic; x64)`, identifier `step`,
+empty product version. Step-Code's actual OpenAI adapter imports
+`packages/providers/src/utils/pi-user-agent.ts`; the coding-agent helper that
+accepts a version is not its inference UA. `step/environment.ts` defaults
+`STEP_CLIENT` to `stepcode`. The inference adapter pins OpenAI JS 6.40.0.
+
+Chat Completions renders `X-Step-Client: stepcode`, `X-Stainless-Lang: js`,
+`X-Stainless-Package-Version: 6.40.0`, `X-Stainless-OS: Linux`,
+`X-Stainless-Arch: x64`, `X-Stainless-Runtime: node`, and
+`X-Stainless-Runtime-Version: v22.19.0`. This supported Node host and the
+Ubuntu Noble kernel are fixed independent of the server host. Discovery uses
+fetch upstream; this gateway adds the same trusted product UA as an explicit
+identity-policy difference, without inference attribution or SDK headers.
+Browser navigation uses the browser's own headers; the server does not claim
+it can override them. There is no default token exchange/refresh request.
+No synthetic Originator, Version, device-name, locale or timezone header is
+sent. Optional high-sensitivity `x-step-*` trace fields are not generated.
+
+`stepfun` is explicitly versionless. Its exact UA, SDK and environment are
+read-only. Product-version updates cannot change it; SDK upgrades require new
+source and wire evidence. Other presets still require a complete version.
+Account > global type/profile > compiled default applies atomically. Native
+OAuth retains Step-Code; API Key can select another supported identity.
+Retries, probes and discovery retain the credential owner's snapshot; failover
+resolves the new owner. Final header privacy remains mandatory for every path.
+Settings preview exposes the shared profile and the Chat Completions wire block.
+
+Independent StepFun tests cover exact literal wire declarations, four
+region/auth combinations, actual forwarding and probes/discovery, static-grant
+lifecycle, invalid/missing/duplicate state, single consumption, region pinning,
+versionless validation and source priority. See [StepFun](providers/STEPFUN.md).

@@ -66,7 +66,7 @@ const { t } = useI18n()
 const preview = ref<ResolvedIdentity>()
 const error = ref('')
 const declarations = ref<PresetDeclarations[]>([])
-const nativePresets: Record<string, IdentityPreset> = { anthropic: 'claude', gemini: 'gemini', grok: 'grok', antigravity: 'antigravity', deepseek: 'deepseek', minimax: 'minimax', kimi: 'kimi', zhipu: 'zcode' }
+const nativePresets: Record<string, IdentityPreset> = { anthropic: 'claude', gemini: 'gemini', grok: 'grok', antigravity: 'antigravity', deepseek: 'deepseek', minimax: 'minimax', kimi: 'kimi', zhipu: 'zcode', stepfun: 'stepfun' }
 const isVersionlessSelection = computed(() => !!props.modelValue?.preset && versionlessIdentityPresets.includes(props.modelValue.preset as IdentityPreset))
 const nativePreset = computed<IdentityPreset>(() => props.platform === 'minimax' && props.accountType === 'apikey' ? 'minimax_apikey' : nativePresets[props.platform] || 'codex')
 const effectivePreset = computed<IdentityPreset>(() => (props.modelValue?.preset as IdentityPreset) || preview.value?.preset || nativePreset.value)

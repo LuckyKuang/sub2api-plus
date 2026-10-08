@@ -15,7 +15,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 )
 
-// CNOAuthService owns browser login sessions; credentials never transit the panel.
+// CNOAuthService owns browser login sessions and never echoes granted credentials.
 type CNOAuthService struct {
 	client      *cnoauth.Client
 	store       *cnoauth.Store
@@ -67,6 +67,9 @@ func (s *CNOAuthService) Start(ctx context.Context, owner int64, platform, regio
 			return nil, infraerrors.BadRequest("CN_OAUTH_ACCOUNT_INVALID", "account platform or authentication type does not match")
 		}
 		proxyID = account.ProxyID
+		if platform == PlatformStepFun {
+			region = account.GetCredential("oauth_region")
+		}
 	}
 	proxyURL := ""
 	if proxyID != nil {
@@ -208,10 +211,13 @@ func (s *CNOAuthService) Complete(ctx context.Context, owner int64, platform, id
 		}
 		credentials = MergeCredentials(existing.Credentials, credentials)
 		delete(credentials, "api_key")
-		if platform == PlatformDeepseek {
+		if platform == PlatformDeepseek || platform == PlatformStepFun {
 			delete(credentials, "refresh_token")
 			delete(credentials, "expires_at")
 			delete(credentials, "expires_in")
+			if !session.Grant.ExpiresAt.IsZero() {
+				credentials["expires_at"] = session.Grant.ExpiresAt.UTC().Format(time.RFC3339)
+			}
 		}
 		account, err = s.admin.UpdateAccount(ctx, session.AccountID, &UpdateAccountInput{Credentials: credentials})
 		if err == nil {
@@ -231,15 +237,31 @@ func (s *CNOAuthService) Complete(ctx context.Context, owner int64, platform, id
 	if err != nil {
 		return nil, cnOAuthError(err)
 	}
-	err = s.store.Update(ctx, id, func(_ context.Context, current *cnoauth.Session) error {
-		current.CompletedID = account.ID
-		current.Committing = false
-		current.Grant = nil
-		current.Flow.Verifier = ""
-		current.Flow.DeviceCode = ""
-		view = cnOAuthView(id, current)
-		return nil
-	})
+	// A concurrent status/completion request may hold the short Redis lease.
+	// Retry only the receipt, never the account write that already succeeded.
+	receiptCtx, cancelReceipt := context.WithTimeout(ctx, 2*time.Second)
+	defer cancelReceipt()
+	for {
+		err = s.store.Update(receiptCtx, id, func(_ context.Context, current *cnoauth.Session) error {
+			current.CompletedID = account.ID
+			current.Committing = false
+			current.Grant = nil
+			current.Flow.Verifier = ""
+			current.Flow.DeviceCode = ""
+			view = cnOAuthView(id, current)
+			return nil
+		})
+		if !errors.Is(err, cnoauth.ErrBusy) {
+			break
+		}
+		timer := time.NewTimer(20 * time.Millisecond)
+		select {
+		case <-receiptCtx.Done():
+			timer.Stop()
+			return nil, cnOAuthError(receiptCtx.Err())
+		case <-timer.C:
+		}
+	}
 	if err != nil {
 		return nil, cnOAuthError(err)
 	}
@@ -247,13 +269,17 @@ func (s *CNOAuthService) Complete(ctx context.Context, owner int64, platform, id
 }
 
 func cnOAuthCredentials(flow *cnoauth.Flow, grant *cnoauth.Grant) map[string]any {
-	creds := map[string]any{"oauth_provider": flow.Platform, "oauth_region": flow.Region, "access_token": grant.AccessToken, "account_mode": AccountModeCoding, "api_protocol": APIProtocolAnthropic, "base_url": cnoauth.ModelBase(flow.Platform, flow.Region), "api_base_urls": map[string]any{APIProtocolAnthropic: cnoauth.ModelBase(flow.Platform, flow.Region)}}
+	protocol := APIProtocolAnthropic
+	if flow.Platform == PlatformStepFun {
+		protocol = APIProtocolChatCompletions
+	}
+	creds := map[string]any{"oauth_provider": flow.Platform, "oauth_region": flow.Region, "access_token": grant.AccessToken, "account_mode": AccountModeCoding, "api_protocol": protocol, "base_url": cnoauth.ModelBase(flow.Platform, flow.Region), "api_base_urls": map[string]any{protocol: cnoauth.ModelBase(flow.Platform, flow.Region)}}
 	if flow.Platform == PlatformDeepseek {
 		creds["oauth_device_id"] = flow.DeviceID
 		creds["account_mode"] = AccountModePayG
 		return creds
 	}
-	if grant.RefreshToken != "" {
+	if grant.RefreshToken != "" && flow.Platform != PlatformStepFun {
 		creds["refresh_token"] = grant.RefreshToken
 	}
 	if !grant.ExpiresAt.IsZero() {
@@ -310,7 +336,7 @@ func (r *CNTokenRefresher) Refresh(ctx context.Context, a *Account) (map[string]
 // RefreshAccount shares the background coordinator and never routes native
 // credentials through the OpenAI/Claude OAuth clients.
 func (s *CNOAuthService) RefreshAccount(ctx context.Context, a *Account, force bool) (*Account, error) {
-	if !a.IsDomesticOAuth() || a.Platform == PlatformDeepseek {
+	if !a.IsDomesticOAuth() || a.Platform == PlatformDeepseek || a.Platform == PlatformStepFun {
 		return nil, infraerrors.BadRequest("CN_OAUTH_REAUTHORIZE", "this account requires browser reauthorization")
 	}
 	window := 2 * time.Minute
@@ -338,6 +364,9 @@ func (s *CNOAuthService) prepareRequest(req *http.Request, a *Account) error {
 	}
 	if _, err := cnoauth.NormalizeRegion(a.Platform, a.GetCredential("oauth_region")); err != nil {
 		return errors.New("native OAuth account region is invalid")
+	}
+	if a.Platform == PlatformStepFun {
+		return prepareStepFunOAuthRequest(req, a)
 	}
 	expected, _ := url.Parse(cnoauth.ModelBase(a.Platform, a.GetCredential("oauth_region")))
 	if req.URL.User != nil || req.URL.Fragment != "" || req.URL.Scheme != expected.Scheme || req.URL.Host != expected.Host || req.URL.Path != strings.TrimRight(expected.Path, "/")+"/v1/messages" {

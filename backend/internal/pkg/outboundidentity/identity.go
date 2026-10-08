@@ -167,7 +167,7 @@ func UserAgent(ctx context.Context, preset, fallback string) string {
 func IsIdentityHeader(name string) bool {
 	name = strings.ToLower(strings.TrimSpace(name))
 	switch name {
-	case "user-agent", "originator", "version", "x-app", "x-goog-api-client",
+	case "x-step-client", "user-agent", "originator", "version", "x-app", "x-goog-api-client",
 		"x-grok-client-version", "x-grok-client-identifier", "x-grok-client-mode",
 		"x-stainless-lang", "x-stainless-package-version", "x-stainless-os",
 		"x-stainless-arch", "x-stainless-runtime", "x-stainless-runtime-version",

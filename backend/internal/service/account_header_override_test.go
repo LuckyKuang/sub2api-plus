@@ -36,6 +36,7 @@ var managedIdentityOverrideTestNames = []string{
 	// block is a managed declaration.
 	"X-Msh-Platform", "X-Msh-Version", "X-Msh-Device-Name",
 	"X-Msh-Device-Model", "X-Msh-Os-Version", "X-Msh-Device-Id",
+	"X-Step-Client",
 	"X-ZCode-App-Version", "X-ZCode-Agent", "HTTP-Referer", "X-Title",
 	"X-Release-Channel", "X-Client-Language", "X-Client-Timezone",
 	"X-Platform", "X-Os-Category", "X-Os-Version",

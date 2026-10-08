@@ -28,7 +28,7 @@ export function useCNOAuth(platform: CNOAuthPlatform) {
     if (remaining <= 0) { expired.value = true; return }
     timer = setTimeout(() => {
       if (Date.now() >= Date.parse(current.expires_at)) { expired.value = true; return }
-      if (platform === 'deepseek' || current.status === 'ready') schedule()
+      if (platform === 'deepseek' || platform === 'stepfun' || current.status === 'ready') schedule()
       else void advance()
     }, Math.min(remaining, Math.max(1, current.interval_seconds) * 1000))
   }

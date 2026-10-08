@@ -513,6 +513,29 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
     })
   })
 
+  it('saves StepFun international Step Plan as Chat Completions after changing mode', async () => {
+    const wrapper = mountModal()
+    await selectButtonByText(wrapper, 'StepFun')
+    const presets = wrapper.findComponent({ name: 'CnBaseUrlPresets' })
+    expect(presets.exists()).toBe(true)
+    presets.vm.$emit('select', { mode: 'payg', protocol: 'chat_completions', url: 'https://api.stepfun.ai/v1' })
+    await flushPromises()
+    await selectButtonByText(wrapper, 'admin.accounts.cnProviders.accountMode.coding')
+    await wrapper.get('form#create-account-form input[type="text"]').setValue('Step Plan Intl')
+    await wrapper.get('form#create-account-form input[type="password"]').setValue('step-key')
+    await wrapper.get('form#create-account-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(createAccountMock).toHaveBeenCalledTimes(1)
+    expect(createAccountMock.mock.calls[0][0]).toMatchObject({
+      platform: 'stepfun', type: 'apikey', credentials: {
+        region: 'global', api_key: 'step-key', account_mode: 'coding',
+        api_protocol: 'chat_completions', base_url: 'https://api.stepfun.ai/step_plan/v1'
+      }
+    })
+    expect(createAccountMock.mock.calls[0][0].credentials.api_base_urls).toBeUndefined()
+    wrapper.unmount()
+  })
+
   it('submits adaptive Kimi Coding Plan Responses endpoint', async () => {
     const wrapper = mountModal()
     await selectButtonByText(wrapper, 'Kimi')

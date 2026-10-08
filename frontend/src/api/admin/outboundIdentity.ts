@@ -1,6 +1,6 @@
 import { apiClient } from '../client'
 
-export type IdentityPreset = 'codex' | 'claude' | 'gemini' | 'grok' | 'antigravity' | 'deepseek' | 'minimax' | 'minimax_apikey' | 'kimi' | 'zcode'
+export type IdentityPreset = 'codex' | 'claude' | 'gemini' | 'grok' | 'antigravity' | 'deepseek' | 'minimax' | 'minimax_apikey' | 'kimi' | 'zcode' | 'stepfun'
 export interface IdentitySelection {
   preset: IdentityPreset | ''
   user_agent?: string
@@ -55,15 +55,15 @@ export interface OutboundIdentityView {
   wire_profiles?: (ResolvedIdentity & { protocol: string })[]
   declarations: PresetDeclarations[]
 }
-export const identityPresets: IdentityPreset[] = ['codex', 'claude', 'gemini', 'grok', 'antigravity', 'deepseek', 'minimax', 'minimax_apikey', 'kimi', 'zcode']
+export const identityPresets: IdentityPreset[] = ['codex', 'claude', 'gemini', 'grok', 'antigravity', 'deepseek', 'minimax', 'minimax_apikey', 'kimi', 'zcode', 'stepfun']
 export const identityNames: Record<IdentityPreset, string> = {
-  codex: 'Codex', claude: 'Claude Code', gemini: 'Gemini CLI', grok: 'Grok', antigravity: 'Antigravity', deepseek: 'DeepSeek · DSH Desktop', minimax: 'MiniMax Code · OAuth', minimax_apikey: 'MiniMax Code · API Key', kimi: 'Kimi Code', zcode: 'GLM · ZCode'
+  codex: 'Codex', claude: 'Claude Code', gemini: 'Gemini CLI', grok: 'Grok', antigravity: 'Antigravity', deepseek: 'DeepSeek · DSH Desktop', minimax: 'MiniMax Code · OAuth', minimax_apikey: 'MiniMax Code · API Key', kimi: 'Kimi Code', zcode: 'GLM · ZCode', stepfun: 'StepFun · Step-Code'
 }
 // Mirrors the backend's enumerated versionless client families
 // (versionlessOutboundUserAgents in internal/service/outbound_identity.go). The
 // official MiniMax client publishes the bare product token with no version
 // segment, so these presets expose no client-version control and reject one.
-export const versionlessIdentityPresets: IdentityPreset[] = ['minimax']
+export const versionlessIdentityPresets: IdentityPreset[] = ['minimax', 'stepfun']
 export async function getOutboundIdentity(): Promise<OutboundIdentityView> {
   return (await apiClient.get<OutboundIdentityView>('/admin/settings/outbound-identity')).data
 }

@@ -47,10 +47,10 @@ describe('OutboundIdentityEditor', () => {
   })
 
   it.each([
-    ['openai', 'apikey'], ['gemini', 'service_account'], ['anthropic', 'bedrock'], ['antigravity', 'upstream'], ['deepseek', 'apikey'], ['minimax', 'apikey'], ['zhipu', 'apikey'], ['kimi', 'apikey']
+    ['openai', 'apikey'], ['gemini', 'service_account'], ['anthropic', 'bedrock'], ['antigravity', 'upstream'], ['deepseek', 'apikey'], ['minimax', 'apikey'], ['zhipu', 'apikey'], ['kimi', 'apikey'], ['stepfun', 'apikey']
   ])('lets compatible %s/%s accounts select an existing identity', async (platform, accountType) => {
     const wrapper = mount(OutboundIdentityEditor, { props: { platform, accountType, modelValue: null } })
-    expect(wrapper.get('select').findAll('option')).toHaveLength(11)
+    expect(wrapper.get('select').findAll('option').map(option => option.attributes('value'))).toEqual(['', 'codex', 'claude', 'gemini', 'grok', 'antigravity', 'deepseek', 'minimax', 'minimax_apikey', 'kimi', 'zcode', 'stepfun'])
     await wrapper.get('select').setValue('grok')
     expect(wrapper.emitted('update:modelValue')?.[0]).toEqual([{ preset: 'grok' }])
     await wrapper.setProps({ modelValue: { preset: 'grok', version: '3.9.1' } })

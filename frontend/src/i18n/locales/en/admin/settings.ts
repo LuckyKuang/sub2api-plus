@@ -28,7 +28,7 @@ export default {
         loadFailed: 'Unable to load outbound identity settings. Please retry.',
         previewFailed: 'Invalid identity or preview unavailable. Check the preset, UA and version.',
         versionNotDeclared: 'Not declared by the official client',
-        versionlessHint: 'MiniMax OAuth has no version in its product UA; its inference SDK is pinned separately. API Key uses a separate preset, and compatible API Key accounts may select another identity.',
+        versionlessHint: 'This official client does not declare a product version. Its inference SDK fingerprint is pinned separately.',
         runtimeHeaders: 'Runtime identity declarations',
         controlHeaders: 'OAuth / account-service identity headers',
         pinnedSdkHint: 'The API Key SDK identity and version are pinned to the reviewed official dependency.',

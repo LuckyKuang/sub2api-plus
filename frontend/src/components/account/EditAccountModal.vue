@@ -12,7 +12,7 @@
       class="space-y-5"
     >
       <CNOAuthPanel
-        v-if="account.type === 'oauth' && (account.platform === 'deepseek' || account.platform === 'kimi' || account.platform === 'minimax')"
+        v-if="account.type === 'oauth' && (account.platform === 'deepseek' || account.platform === 'kimi' || account.platform === 'minimax' || account.platform === 'stepfun')"
         :key="account.id"
         :platform="account.platform"
         :account-id="account.id"
@@ -2951,6 +2951,7 @@ const cnAccountModeOptions = computed<Array<{ value: CnAccountMode; labelKey: 'p
   }
 )
 const cnProtocolOptions = computed<Array<{ value: CnApiProtocol; labelKey: string }>>(() => {
+  if (props.account?.platform === 'stepfun') return [{ value: 'chat_completions', labelKey: 'chatCompletions' }]
   const opts: Array<{ value: CnApiProtocol; labelKey: string }> = [
     { value: 'adaptive', labelKey: 'adaptive' },
     { value: 'chat_completions', labelKey: 'chatCompletions' },
@@ -3009,7 +3010,9 @@ watch(editAccountMode, (mode, previousMode) => {
     editBaseUrl.value = editAdaptiveBaseUrls.value.chat_completions
     return
   }
+  const stepGlobal = props.account!.platform === 'stepfun' && editBaseUrl.value.startsWith('https://api.stepfun.ai/')
   editBaseUrl.value = defaultCNBaseUrl(props.account!.platform, mode, editApiProtocol.value)
+  if (stepGlobal) editBaseUrl.value = editBaseUrl.value.replace('api.stepfun.com', 'api.stepfun.ai')
 })
 watch(editOpenCodeAccountMode, (mode, previousMode) => {
   if (!isCNApiKeyAccount.value || props.account?.platform !== 'opencode_go' || syncingForm.value) return
@@ -4735,6 +4738,7 @@ const handleSubmit = async () => {
       if (isCNApiKeyAccount.value) {
         newCredentials.account_mode = currentOpenCodeOrCNMode()
         newCredentials.api_protocol = editApiProtocol.value
+        if (props.account.platform === 'stepfun') newCredentials.region = editBaseUrl.value.startsWith('https://api.stepfun.ai/') ? 'global' : 'cn'
         if (editApiProtocol.value === 'adaptive') {
           const defaults = defaultCNAdaptiveBaseUrls(adaptivePresetPlatform.value, currentOpenCodeOrCNMode())
           const protocolBaseUrls: Record<string, string> = {}

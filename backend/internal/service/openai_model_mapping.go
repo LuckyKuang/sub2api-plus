@@ -44,6 +44,7 @@ var openAIOAuthForeignModelPrefixes = []string{
 	"qwen4-",
 	"qwq-",
 	"minimax-",
+	"step-",
 	"gemini-",
 	"gemma-",
 	"grok-",

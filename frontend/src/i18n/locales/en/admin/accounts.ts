@@ -118,6 +118,7 @@ export default {
         zhipu: 'Zhipu GLM',
         deepseek: 'DeepSeek',
         minimax: 'MiniMax',
+        stepfun: 'StepFun',
         opencode_go: 'OpenCode',
         typesafe: 'TypeSafe / Jev',
       },
@@ -1081,6 +1082,8 @@ export default {
       // OAuth flow
       oauth: {
         domestic: {
+          stepfunCallbackHint: 'After sign-in, copy the entire http://127.0.0.1:53683/callback address, including state and the credential, even if the page cannot load. Paste it only into this login form.',
+          stepfunDescription: 'Step Plan browser login returns a request credential. Paste the complete loopback callback URL after login. This credential has no automatic refresh; sign in again if it expires or is revoked.',
           title: "{platform} OAuth login",
           description: "Authorize with the official client login. Login credentials stay on the server.",
           region: "Account region",

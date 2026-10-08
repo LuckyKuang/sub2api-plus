@@ -314,7 +314,7 @@ func (s blockingCompatibilityConfigStore) Decrypt(value string) (string, error) 
 
 func TestExtractionFailuresAllowAPIKeyAndOAuthDownstreamStages(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	for _, platform := range []string{service.PlatformOpenAI, service.PlatformDeepseek, service.PlatformKimi, service.PlatformMiniMax, service.PlatformZhipu} {
+	for _, platform := range []string{service.PlatformOpenAI, service.PlatformDeepseek, service.PlatformKimi, service.PlatformMiniMax, service.PlatformZhipu, service.PlatformStepFun} {
 		for _, accountType := range []string{service.AccountTypeAPIKey, service.AccountTypeOAuth} {
 			t.Run(platform+"/"+accountType, func(t *testing.T) {
 				account := &service.Account{

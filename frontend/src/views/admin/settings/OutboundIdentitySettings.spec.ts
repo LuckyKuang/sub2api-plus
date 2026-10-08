@@ -9,8 +9,8 @@ vi.mock('@/api/admin/outboundIdentity', async (original) => ({
   ...await original<typeof import('@/api/admin/outboundIdentity')>(),
   getOutboundIdentity: vi.fn(), updateOutboundIdentity: vi.fn()
 }))
-const userAgentOf = (preset: string) => preset === 'minimax' ? 'MiniMaxAgent' : preset === 'minimax_apikey' ? 'Anthropic/JS 0.91.1' : preset === 'kimi' ? 'kimi-code-cli/2.1.1' : preset === 'zcode' ? 'ZCode/3.14.3' : `${preset}/1.2.3`
-const versionOf = (preset: string) => preset === 'minimax' ? '' : preset === 'minimax_apikey' ? '0.91.1' : preset === 'kimi' ? '2.1.1' : preset === 'zcode' ? '3.14.3' : '1.2.3'
+const userAgentOf = (preset: string) => preset === 'stepfun' ? 'step (linux 6.8.0-31-generic; x64)' : preset === 'minimax' ? 'MiniMaxAgent' : preset === 'minimax_apikey' ? 'Anthropic/JS 0.91.1' : preset === 'kimi' ? 'kimi-code-cli/2.1.1' : preset === 'zcode' ? 'ZCode/3.14.3' : `${preset}/1.2.3`
+const versionOf = (preset: string) => preset === 'minimax' || preset === 'stepfun' ? '' : preset === 'minimax_apikey' ? '0.91.1' : preset === 'kimi' ? '2.1.1' : preset === 'zcode' ? '3.14.3' : '1.2.3'
 // The Kimi Code device set is the runtime tier: the official client resolves it
 // from its own host, so the settings page exposes an editable value per header
 // and the backend declares which headers those are.
@@ -132,10 +132,10 @@ describe('OutboundIdentitySettings', () => {
     wrapper.unmount()
   })
 
-  it('shows all four OAuth/API Key identities and saves only editable ZCode runtime headers', async () => {
+  it('shows all five OAuth/API Key identities and saves only editable ZCode runtime headers', async () => {
     const wrapper = mount(OutboundIdentitySettings)
     await flushPromises()
-    expect(wrapper.findAll('[data-testid="outbound-identity-auth-scope"]')).toHaveLength(3)
+    expect(wrapper.findAll('[data-testid="outbound-identity-auth-scope"]')).toHaveLength(4)
     const card = wrapper.get('[data-identity-preset="zcode"]')
     expect(wrapper.get('[data-identity-group="zcode"]').text()).toContain('GLM · ZCode')
     const headers = card.get('[data-testid="outbound-identity-headers"]')
@@ -326,8 +326,30 @@ describe('OutboundIdentitySettings', () => {
   it('mirrors the backend versionless client-family enumeration', () => {
     // Keep this list in lockstep with versionlessOutboundUserAgents in
     // backend/internal/service/outbound_identity.go.
-    expect(versionlessIdentityPresets).toEqual(['minimax'])
+    expect(versionlessIdentityPresets).toEqual(['minimax', 'stepfun'])
     for (const preset of versionlessIdentityPresets) expect(identityPresets).toContain(preset)
+  })
+
+  it('shows one Step-Code identity for both auth types without invented runtime fields', async () => {
+    const view = fixture()
+    const step = view.effective.find(item => item.preset === 'stepfun')!
+    view.wire_profiles = [{ ...step, protocol: 'chat_completions', headers: {
+      'User-Agent': 'step (linux 6.8.0-31-generic; x64)',
+      'X-Step-Client': 'stepcode', 'X-Stainless-Package-Version': '6.40.0',
+      'X-Stainless-OS': 'Linux', 'X-Stainless-Arch': 'x64'
+    } }]
+    vi.mocked(getOutboundIdentity).mockResolvedValue(view)
+    const wrapper = mount(OutboundIdentitySettings)
+    await flushPromises()
+    const group = wrapper.get('[data-identity-group="stepfun"]')
+    expect(group.findAll('[data-identity-preset]')).toHaveLength(1)
+    expect(group.text()).toContain('step (linux 6.8.0-31-generic; x64)')
+    expect(group.text()).toContain('stepcode')
+    expect(group.text()).toContain('6.40.0')
+    expect(group.text()).toContain('versionlessHint')
+    expect(group.findAll('input, select')).toHaveLength(0)
+    expect(group.text()).not.toContain('X-Msh-Device-Name')
+    wrapper.unmount()
   })
 
   it('exposes the pinned ZCode preset and its API-key type default mapping', async () => {

@@ -428,3 +428,14 @@ This changes credential retrieval only: canonical extraction and the accepted
 request's audit-before-selection boundary remain the existing CN adapter path.
 No new ingress endpoint, payload shape, audit exemption, or raw-content logging
 is introduced by protocol-specific outbound identity rendering.
+
+## StepFun transport
+
+StepFun API Key and native Step Plan OAuth use the existing audited Chat
+Completions, Responses and Messages HTTP handlers. Responses/Messages convert
+to Chat Completions only after canonical audit. Tool arguments/results,
+reasoning content, images and unknown siblings retain the existing shared
+extraction contract for both engines. Platform selection and OAuth's Bearer
+credential do not introduce a pre-audit upstream operation. Native upstream
+Responses WebSocket is not advertised for StepFun. The domestic account-type
+pass-through matrix includes StepFun alongside the existing providers.

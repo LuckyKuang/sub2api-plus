@@ -26,6 +26,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/minimax"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/stepfun"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/xai"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/zcode"
 )
@@ -96,7 +97,7 @@ type cachedOutboundIdentitySettings struct {
 }
 
 var outboundClientVersionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.]+)?$`)
-var outboundPresetNames = []string{"codex", "claude", "gemini", "grok", "antigravity", "deepseek", "minimax", "minimax_apikey", "kimi", "zcode"}
+var outboundPresetNames = []string{"codex", "claude", "gemini", "grok", "antigravity", "deepseek", "minimax", "minimax_apikey", "kimi", "zcode", "stepfun"}
 
 // versionlessOutboundUserAgents enumerates the client families whose official
 // client publishes no version segment. MiniMax renders the bare product token
@@ -107,6 +108,7 @@ var outboundPresetNames = []string{"codex", "claude", "gemini", "grok", "antigra
 // or a versionless User-Agent.
 var versionlessOutboundUserAgents = map[string]string{
 	"minimax": minimax.ProductToken,
+	"stepfun": stepfun.UserAgent,
 }
 
 func emptyOutboundIdentitySettings() OutboundIdentitySettings {
@@ -127,6 +129,8 @@ func nativeOutboundPreset(platform string) string {
 		return "grok"
 	case PlatformAntigravity:
 		return "antigravity"
+	case PlatformStepFun:
+		return stepfun.Preset
 	case PlatformDeepseek:
 		// DeepSeek platform accounts advertise the pinned harness identity by
 		// default. The provider-defined client family is the published harness,
@@ -210,6 +214,8 @@ func builtInOutboundIdentity(preset string) outboundidentity.Identity {
 		i.Headers["x-grok-client-mode"] = xai.CLIClientMode
 	case "antigravity":
 		return antigravity.DefaultIdentity()
+	case "stepfun":
+		return stepfun.DefaultIdentity()
 	case "deepseek":
 		return deepseek.DefaultIdentity()
 	case "minimax":
@@ -1226,7 +1232,7 @@ func outboundRuntimePresetKeys(runtime map[string]map[string]string) []string {
 
 func validOutboundAccountKey(platform, accountType string) bool {
 	switch platform {
-	case PlatformOpenAI, PlatformAnthropic, PlatformGemini, PlatformGrok, PlatformAntigravity, PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax, PlatformOpenCodeGo, PlatformTypeSafe:
+	case PlatformOpenAI, PlatformAnthropic, PlatformGemini, PlatformGrok, PlatformAntigravity, PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax, PlatformStepFun, PlatformOpenCodeGo, PlatformTypeSafe:
 	default:
 		return false
 	}
