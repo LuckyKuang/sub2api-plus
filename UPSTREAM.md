@@ -24,9 +24,9 @@ Completed integration narratives remain in Git history.
 ## Current Version
 
 ```text
-Git/GitHub: v0.2.13+custom.001
-Application: 0.2.13+custom.001
-GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.13-custom.001
+Git/GitHub: v0.2.14+custom.001
+Application: 0.2.14+custom.001
+GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.14-custom.001
 ```
 
 ## Release Mapping
@@ -96,6 +96,7 @@ GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.13-custom.001
 | `v0.2.11+custom.001` | `v0.2.11` | `96f4c115c9749078f90cbf210a01d39baf3f53b6` | published |
 | `v0.2.11+custom.002` | `v0.2.11` | `96f4c115c9749078f90cbf210a01d39baf3f53b6` | published |
 | `v0.2.13+custom.001` | `v0.2.13` | `3040209f205472038c1ba745a1bedd2edd9053b1` | published |
+| `v0.2.14+custom.001` | `v0.2.14` | `0363b8cdba8cec3e2ba4b2dbd49c4481143fa55d` | planned |
 
 `v0.2.4+custom.006` is marked withdrawn because official `v0.2.5` was imported before that snapshot overlay was published. Do not reuse or retag `.006`.
 
