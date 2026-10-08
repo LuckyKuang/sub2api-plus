@@ -36,7 +36,9 @@ A trusted project-identifier rejection at the final send boundary is phase
 `outbound_policy`. Its stable reason is `protected_header`, `protected_trailer`
 or `signed_declaration`; no header values or credentials are stored in the
 message. It does not trigger provider cooldown, proxy failure accounting or
-account failover. Routing Host is exempt; other header privacy remains enforced.
+account failover. WebSocket records use the saved event for each turn, so local
+and provider failures cannot relabel one another on a long-lived connection.
+Routing Host is exempt; other header privacy remains enforced.
 
 ## Account selection
 

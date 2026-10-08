@@ -205,7 +205,6 @@ func TestOutboundPolicyRejectionIsLocalAndDoesNotScheduleFailover(t *testing.T) 
 		},
 	} {
 		require.ErrorIs(t, handle(), brandidentity.ErrBrandedOutboundHeader)
-		require.Equal(t, "protected_header", c.GetString(OpsOutboundPolicyReasonKey))
 		events, exists := c.Get(OpsUpstreamErrorsKey)
 		require.True(t, exists)
 		final := events.([]*OpsUpstreamErrorEvent)

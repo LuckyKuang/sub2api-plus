@@ -1643,7 +1643,12 @@ func applyOpsStreamErrorSnapshot(entry *service.OpsInsertErrorLogInput, streamEr
 			break
 		}
 	}
-	if lastStage == string(service.GatewayFailureStageAccountAuth) {
+	if lastStage == "outbound_policy" {
+		entry.ErrorPhase = "internal"
+		entry.ErrorOwner = "platform"
+		entry.ErrorSource = "gateway"
+		entry.IsBusinessLimited = false
+	} else if lastStage == string(service.GatewayFailureStageAccountAuth) {
 		entry.ErrorPhase = string(service.GatewayFailureStageAccountAuth)
 		entry.ErrorOwner = "provider"
 		entry.ErrorSource = "gateway"
@@ -2262,8 +2267,22 @@ func classifyOpsSeverity(errType string, status int) string {
 }
 
 func classifyOpsErrorLog(c *gin.Context, errType, message, code string, status int) (phase string, isBusinessLimited bool, errorOwner string, errorSource string) {
-	if c != nil && c.GetString(service.OpsOutboundPolicyReasonKey) != "" {
-		return "internal", false, "platform", "gateway"
+	// HTTP failures use the current trusted event; WS failures use their
+	// saved per-turn events in applyOpsStreamErrorSnapshot.
+	if c != nil && c.GetInt(service.OpsStreamTurnKey) == 0 {
+		if value, ok := c.Get(service.OpsUpstreamErrorsKey); ok {
+			if events, ok := value.([]*service.OpsUpstreamErrorEvent); ok {
+				for i := len(events) - 1; i >= 0; i-- {
+					if events[i] == nil {
+						continue
+					}
+					if events[i].Stage == "outbound_policy" {
+						return "internal", false, "platform", "gateway"
+					}
+					break
+				}
+			}
+		}
 	}
 	if opsSecurityAuditDenialCode(c) != "" {
 		return "request", false, "client", "client_request"

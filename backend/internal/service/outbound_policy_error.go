@@ -7,8 +7,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-const OpsOutboundPolicyReasonKey = "ops_outbound_policy_reason"
-
 // recordOutboundPolicyError attributes a pre-dispatch policy rejection locally.
 // The reason is an enum; request headers, tokens and user fields are never logged.
 func recordOutboundPolicyError(c *gin.Context, account *Account, err error) bool {
@@ -23,7 +21,6 @@ func recordOutboundPolicyError(c *gin.Context, account *Account, err error) bool
 	if c == nil {
 		return true
 	}
-	c.Set(OpsOutboundPolicyReasonKey, reason)
 	setOpsUpstreamError(c, 0, brandidentity.ErrBrandedOutboundHeader.Error(), "")
 	event := OpsUpstreamErrorEvent{
 		Stage: "outbound_policy", Scope: "gateway", Kind: "local_policy_error",
