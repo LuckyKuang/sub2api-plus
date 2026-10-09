@@ -917,5 +917,30 @@ class FinalizationAutomationTest(unittest.TestCase):
         promote.assert_called_once_with(REPOSITORY, 17, TAG, None, 'origin')
 
 
+class ReleaseRunDiscoveryTest(unittest.TestCase):
+    def test_exact_push_api_query_works_for_container_cli_and_ignores_dispatch(self):
+        sha = 'a' * 40
+        common = dict(name='Release', head_sha=sha, head_branch=TAG,
+                      status='completed', conclusion='success')
+        payload = {'total_count': 3, 'workflow_runs': [
+            dict(common, id=100, event='workflow_dispatch'),
+            dict(common, id=40, event='push', html_url='https://example.invalid/40'),
+            dict(common, id=30, event='push')]}
+        with mock.patch.object(release_cli, 'json_capture', return_value=payload) as query:
+            result = release_cli.find_release_run(REPOSITORY, TAG, sha)
+        self.assertEqual(result.database_id, 40)
+        self.assertEqual(result.url, 'https://example.invalid/40')
+        args = query.call_args.args[0]
+        self.assertEqual(args[:2], ['gh', 'api'])
+        self.assertIn('head_sha=' + sha, args[2])
+        self.assertIn('event=push', args[2])
+        self.assertIn('custom.', args[2])
+
+    def test_incomplete_exact_sha_response_cannot_authorize_publication(self):
+        with mock.patch.object(release_cli, 'json_capture',
+                               return_value={'total_count': 101, 'workflow_runs': []}):
+            with self.assertRaisesRegex(release_cli.ReleaseCliError, 'complete exact-SHA'):
+                release_cli.find_release_run(REPOSITORY, TAG, 'a' * 40)
+
 if __name__ == "__main__":
     unittest.main()

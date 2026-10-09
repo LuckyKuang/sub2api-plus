@@ -43,9 +43,10 @@ jobs:
         env:
           TOOLING_SHA: ${{ github.workflow_sha }}
         run: |
-          mkdir -p "$RUNNER_TEMP/release-tooling/actions" "$RUNNER_TEMP/release-tooling/validation"
+          mkdir -p "$RUNNER_TEMP/release-tooling/actions" "$RUNNER_TEMP/release-tooling/validation" "$RUNNER_TEMP/release-tooling/skills"
           cp -R tools "$RUNNER_TEMP/release-tooling/"
           cp -R .github/release-tools "$RUNNER_TEMP/release-tooling/"
+          cp -R skills/release-cli "$RUNNER_TEMP/release-tooling/skills/"
           cp -R .github/actions/prepare-validation "$RUNNER_TEMP/release-tooling/actions/"
           cp -R .github/actions/release-package "$RUNNER_TEMP/release-tooling/actions/"
           cp -R .github/actions/release-source "$RUNNER_TEMP/release-tooling/actions/"

@@ -53,6 +53,8 @@ Historical-tag rehearsal requires the annotated tag, notes, planned mapping at
 that tag, main containment and successful exact-SHA CI and Security Scan.
 Provenance queries use GitHub's REST SHA filter through the container's `gh api`,
 then independently check workflow name, event, branch, SHA and success.
+Historical rehearsal also executes the published-release verifier used by
+finalization CI with the actual container GitHub CLI and read-only token.
 Real publication must run from the same eligible tag ref; a branch dispatch with
 a tag input cannot publish. Tag pushes always select real publication.
 

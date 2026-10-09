@@ -63,6 +63,11 @@ def verify(plan, strict):
         run(sys.executable, str(TOOLS / 'workflow_provenance.py'), '--repository',
             os.environ['GITHUB_REPOSITORY'], '--branch', branch, '--sha', plan['sha'])
     run(*command)
+    if plan['mode'] == 'tag-rehearsal':
+        # Exercise the exact published-release verifier used by finalization CI
+        # with the container's actual gh version before publishing a new tag.
+        run(sys.executable, str(TOOLS / 'check_published_release.py'), '--repository',
+            os.environ['GITHUB_REPOSITORY'], '--tag', plan['tag'])
 
 
 def build_binary(plan, args):

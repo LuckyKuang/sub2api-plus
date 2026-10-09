@@ -14,6 +14,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
+from urllib.parse import urlencode
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -1160,40 +1161,32 @@ def merged_pr_commit(
 
 def find_release_run(repository: str, tag: str, sha: str) -> WorkflowRun:
     for attempt in range(DISCOVERY_ATTEMPTS):
+        query = urlencode({"branch": tag, "event": "push", "head_sha": sha, "per_page": 100})
         data = json_capture(
             [
-                "gh",
-                "run",
-                "list",
-                "--repo",
-                repository,
-                "--workflow",
-                "Release",
-                "--event",
-                "push",
-                "--limit",
-                "50",
-                "--json",
-                "databaseId,headSha,headBranch,status,conclusion,url,workflowName",
+                "gh", "api", f"repos/{repository}/actions/runs?{query}",
             ],
-            description="gh run list",
+            description="exact-tag Release Actions query",
         )
-        if not isinstance(data, list):
-            raise ReleaseCliError("gh run list returned an unexpected value")
+        if not isinstance(data, dict) or not isinstance(data.get("workflow_runs"), list):
+            raise ReleaseCliError("Release Actions query returned an unexpected value")
+        if data.get("total_count", 0) > len(data["workflow_runs"]):
+            raise ReleaseCliError("Release Actions query did not return the complete exact-SHA window")
         matches = [
             run
-            for run in data
+            for run in data["workflow_runs"]
             if isinstance(run, dict)
-            and run.get("headSha") == sha
-            and run.get("headBranch") == tag
-            and run.get("workflowName") == "Release"
+            and run.get("head_sha") == sha
+            and run.get("head_branch") == tag
+            and run.get("event") == "push"
+            and run.get("name") == "Release"
         ]
         if matches:
-            selected = max(matches, key=lambda item: int(item.get("databaseId", 0)))
+            selected = max(matches, key=lambda item: int(item.get("id", 0)))
             try:
                 return WorkflowRun(
-                    database_id=int(selected["databaseId"]),
-                    url=str(selected.get("url") or ""),
+                    database_id=int(selected["id"]),
+                    url=str(selected.get("html_url") or ""),
                     status=str(selected.get("status") or "unknown"),
                     conclusion=(
                         str(selected["conclusion"])
