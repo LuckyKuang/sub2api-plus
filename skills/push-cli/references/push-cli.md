@@ -84,7 +84,9 @@ the local proof remains required. CI full suites do not produce local success.
 The backend-test lane keeps module tidiness before unit and integration tests.
 The backend-lint/policy lane starts after the backend-test lane finishes,
 preventing two large Go heaps from exhausting the 8-GiB container. It serializes
-lint and repository policy commands.
+lint and repository policy commands. Go test/lint commands and the frontend
+production build share one memory slot; cold compilation must not overlap the
+production build in the 8-GiB VM.
 The frontend lane keeps install before lint, typecheck, full Vitest, build, and
 audit. Default parallel execution limits Vitest to two workers within the
 four-CPU container; `--serial` uses four. Every command and lane reports elapsed

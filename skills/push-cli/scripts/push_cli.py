@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
+from contextlib import nullcontext
 import json
 import platform
 import re
@@ -547,6 +548,9 @@ def run_local_checks(
         # those lanes in order within the 8-GiB VM; frontend remains concurrent.
         lane_groups = (("backend-tests", "backend-lint-policy"), ("frontend",))
         stop_requested = threading.Event()
+        memory_slot = threading.Lock()
+        memory_steps = {"Backend unit tests", "Backend integration tests", "Backend lint",
+                        "Frontend production build"}
 
         def run_lane(lane_name: str) -> None:
             lane_steps = [step for step in steps if step.lane == lane_name]
@@ -557,13 +561,16 @@ def run_local_checks(
                         print(f"\n[Lane {lane_name}] stopped before {step.name}")
                     return
                 try:
-                    run_step(
-                        step.name,
-                        step.command,
-                        step.cwd,
-                        lane=lane_name,
-                        capture_output=True,
-                    )
+                    with memory_slot if step.name in memory_steps else nullcontext():
+                        if stop_requested.is_set():
+                            return
+                        run_step(
+                            step.name,
+                            step.command,
+                            step.cwd,
+                            lane=lane_name,
+                            capture_output=True,
+                        )
                 except Exception:
                     stop_requested.set()
                     raise

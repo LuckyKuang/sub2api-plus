@@ -16,7 +16,9 @@ terminate healthy long generations and streams.
 - `gateway.text_max_body_size: 33554432` limits the known pure-text
   `/embeddings` and `/alpha/search` endpoints to 32 MiB.
 - H2C defaults to 50 concurrent streams per connection, a 2 MiB connection
-  upload window, and a 512 KiB stream upload window.
+  upload window, and a 512 KiB stream upload window. H2C keeps its separate
+  `server.h2c.idle_timeout`; the supported x/net wrapper remains necessary
+  because native `http.Server.IdleTimeout` also governs HTTP/1 connections.
 - Invalid credential abuse is limited in process by trusted client IP (IPv6
   `/64`): 120 failures per 60 seconds followed by a 60-second block. This is a
   per-instance safety net; multi-instance enforcement still belongs at the

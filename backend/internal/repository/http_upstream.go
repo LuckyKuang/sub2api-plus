@@ -20,7 +20,6 @@ import (
 
 	"github.com/andybalholm/brotli"
 	"github.com/klauspost/compress/zstd"
-	"golang.org/x/net/http2"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
@@ -1283,9 +1282,7 @@ func buildUpstreamTransport(settings poolSettings, proxyURL *url.URL, protocolMo
 		transport.ForceAttemptHTTP2 = true
 		// 显式配置 http2 并启用 PING 健康探测，剔除代理/NAT 静默掐断的死连接，
 		// 避免请求挂在死连接上直到 TCP 重传超时（分钟级）。
-		if _, err := enableHTTP2KeepAlive(transport, protocolMode); err != nil {
-			return nil, err
-		}
+		enableHTTP2KeepAlive(transport, protocolMode)
 	case upstreamProtocolModeOpenAIH1:
 		transport.ForceAttemptHTTP2 = false
 		transport.TLSNextProto = make(map[string]func(string, *tls.Conn) http.RoundTripper)
@@ -1300,28 +1297,27 @@ func buildUpstreamTransport(settings poolSettings, proxyURL *url.URL, protocolMo
 	return transport, nil
 }
 
-// enableHTTP2KeepAlive 在 http.Transport 上显式配置 HTTP/2 并启用连接健康探测。
-// Go 默认惰性配置 http2 且 ReadIdleTimeout=0（不发健康 PING），无法检测被代理/NAT
-// 静默掐断的死连接。此处主动设置 ReadIdleTimeout/PingTimeout，让死连接被提前 PING
-// 出并关闭，请求得以重建连接而非挂到 TCP 重传超时。返回底层 *http2.Transport 便于测试。
-func enableHTTP2KeepAlive(transport *http.Transport, protocolMode string) (*http2.Transport, error) {
-	h2, err := http2.ConfigureTransports(transport)
-	if err != nil {
-		return nil, err
+// enableHTTP2KeepAlive configures native HTTP/2 PING health checks so dead
+// proxy/NAT connections are closed before kernel TCP retransmission times out.
+func enableHTTP2KeepAlive(transport *http.Transport, protocolMode string) *http.HTTP2Config {
+	protocols := new(http.Protocols)
+	protocols.SetHTTP1(true)
+	protocols.SetHTTP2(true)
+	transport.Protocols = protocols
+	h2 := &http.HTTP2Config{
+		SendPingTimeout: longStreamHTTP2ReadIdleTimeout,
+		PingTimeout:     longStreamHTTP2PingTimeout,
 	}
-	if h2 != nil {
-		h2.ReadIdleTimeout = longStreamHTTP2ReadIdleTimeout
-		h2.PingTimeout = longStreamHTTP2PingTimeout
-		if protocolMode == upstreamProtocolModeGrok {
-			h2.ReadIdleTimeout = 15 * time.Second
-			h2.PingTimeout = 5 * time.Second
-		}
-		if protocolMode == upstreamProtocolModeOpenAIH2 {
-			h2.ReadIdleTimeout = openAIHTTP2ReadIdleTimeout
-			h2.PingTimeout = openAIHTTP2PingTimeout
-		}
+	if protocolMode == upstreamProtocolModeGrok {
+		h2.SendPingTimeout = 15 * time.Second
+		h2.PingTimeout = 5 * time.Second
 	}
-	return h2, nil
+	if protocolMode == upstreamProtocolModeOpenAIH2 {
+		h2.SendPingTimeout = openAIHTTP2ReadIdleTimeout
+		h2.PingTimeout = openAIHTTP2PingTimeout
+	}
+	transport.HTTP2 = h2
+	return h2
 }
 
 // buildUpstreamTransportWithTLSFingerprint 构建带 TLS 指纹伪装的 Transport
