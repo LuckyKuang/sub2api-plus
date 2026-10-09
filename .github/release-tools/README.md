@@ -34,7 +34,7 @@ compile the application again. Checksums are materialized and compared with
 verified archive bytes before external writes. Pricing assets use the selected
 source's Go command, compared before external writes, and uploaded last without
 `--clobber`. Existing bytes must match; API/download errors fail closed.
-Cross-registry publication is not atomic. A partial publication needs inspection
+Publication of GHCR images and GitHub Release assets is not atomic. A partial publication needs inspection
 under [the recovery policy](../../docs/RELEASING.md), never retagging.
 
 ## Read-only rehearsals
