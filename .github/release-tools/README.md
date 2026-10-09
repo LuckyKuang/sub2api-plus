@@ -9,6 +9,12 @@ Actions execute from the immutable tooling artifact, which survives historical
 source checkout and post hooks. Buildx is staged from Docker's reported plugin
 path rather than a runner-specific home directory.
 
+Preparation resolves the application once and verifies its release provenance
+in the same job and prepared container environment. The selected strict tag
+gate or branch-metadata gate must succeed before preparation completes or
+the source plan is uploaded. Builds depend on that successful job; provenance
+failure or cancellation cannot start a build or authorize publication.
+
 The frontend builds once. Five independent runners compile Linux amd64/arm64,
 Darwin amd64/arm64 and Windows amd64 using GoReleaser OSS snapshot builds.
 Linux arm64 runners own arm64 targets. The target set and packaging flags come
@@ -71,6 +77,11 @@ The report records source/tooling SHAs, version/date, targets and OCI digests.
 Use Actions job timestamps and cache restore logs for wall time and runner-minute
 audits. Target caches include architecture and exact toolchain/lock identities.
 GitHub ref visibility applies: separate tags do not share each other's caches.
+The release frontend uses the same `frontend` dependency-cache lane as default-
+branch CI, so branch and tag runs can restore its visible cache. OS, runner
+architecture, toolchain and both dependency-lock identities must still match;
+there is no fallback across generations. Binary and publisher lanes remain
+separate. Cache reuse never replaces the frozen install or production build.
 Do not report rehearsal time as publication time or the 9-minute budget as a
 measurement. Rehearsal cannot verify upload permissions or registry reliability.
 

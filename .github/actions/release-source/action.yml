@@ -6,7 +6,7 @@ inputs:
     description: Captured application commit
   lane:
     required: true
-    description: Target-specific cache lane
+    description: Dependency cache lane; frontend shares the default-branch CI cache.
 runs:
   using: composite
   steps:
@@ -25,5 +25,5 @@ runs:
       run: python3 .release-tooling/tools/release_context.py --tooling .release-tooling --output .release-tooling/validation-inputs
     - uses: ./.release-tooling/actions/prepare-validation
       with:
-        lane: release-${{ inputs.lane }}
+        lane: ${{ inputs.lane }}
         launcher: .release-tooling/tools/ci_validation.py

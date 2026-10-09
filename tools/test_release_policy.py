@@ -595,8 +595,8 @@ class WorkflowPolicyTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("name: Build and publish", workflow)
-        self.assertIn("needs: [prepare, verify, build-binaries]", workflow)
-        self.assertIn("needs.verify.result == 'success'", workflow)
+        self.assertIn("needs: [prepare, build-binaries]", workflow)
+        self.assertIn("needs.prepare.result == 'success'", workflow)
         self.assertIn("needs.build-binaries.result == 'success'", workflow)
         self.assertIn("environment:\n      name: release", workflow)
         self.assertNotIn("required reviewers", workflow)
@@ -612,7 +612,7 @@ class WorkflowPolicyTests(unittest.TestCase):
         self.assertNotIn("uses: ./.github/workflows/backend-ci.yml", workflow)
         self.assertRegex(
             workflow,
-            r"verify:\n(?:.|\n)*?permissions:\n\s+actions: read\n\s+contents: read",
+            r"prepare:\n(?:.|\n)*?permissions:\n\s+actions: read\n\s+contents: read",
         )
 
     def test_every_required_remote_context_classifies_finalization_first(self) -> None:

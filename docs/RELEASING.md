@@ -214,12 +214,13 @@ python3 skills/release-cli/scripts/release_cli.py monitor \
   --tag vX.Y.Z+custom.NNN
 ```
 
-The Release workflow runs a focused provenance gate before publishing. It
+The Release workflow runs a focused provenance gate within preparation, sharing
+the source checkout and prepared container environment before any build. It
 requires the annotated tag to target a commit contained by `main`, validates
 the tag notes and planned mapping, and requires successful push-triggered `CI`
 and `Security Scan` runs for that exact main SHA. It does not rerun backend,
 frontend, lint, integration, deployment, or security application matrices.
-After provenance and distributed builds succeed, `Build and publish` enters
+After verified preparation and distributed builds succeed, `Build and publish` enters
 the checked `release` Environment automatically. Waiting triggers a fresh
 automatic Environment/tag-policy check: drift fails with the Actions URL;
 transient waiting under valid policy continues. Restore any drifted policy
@@ -305,9 +306,9 @@ OCI exports and no publication. Tag rehearsal retains the formal provenance
 gate; branch rehearsal cannot authorize publication. Real manual publication
 must execute from the same eligible tag workflow ref. See the maintained
 [packaging contract and commands](../.github/release-tools/README.md) for artifact,
-image, cache and report details. The Release-only 9-minute target is an unmeasured
-budget until actual same-source results are recorded; it excludes local checks,
-PR CI, main CI and finalization.
+image, cache and report details. The Release-only 9-minute target is a budget,
+not a measured or guaranteed runtime; report observed publication and rehearsal
+times separately. It excludes local checks, PR CI, main CI and finalization.
 
 ## Pricing Assets
 
