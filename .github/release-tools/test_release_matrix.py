@@ -179,8 +179,9 @@ class ReleaseMatrixTest(unittest.TestCase):
         shutil.copyfile(ROOT / 'Dockerfile.goreleaser', 'Dockerfile.goreleaser')
         Path('deploy').mkdir()
         Path('deploy/docker-entrypoint.sh').write_bytes(b'entrypoint fixture')
-        Path('backend/resources').mkdir()
-        Path('backend/resources/data').write_bytes(b'resource fixture')
+        Path('backend/resources/model-pricing').mkdir(parents=True)
+        pricing_path = Path('backend/resources/model-pricing/model_prices_and_context_window.json')
+        pricing_path.write_bytes(b'{"fixture":{"input_cost_per_token":1}}')
         release.contexts(args)
         for arch in ('amd64', 'arm64'):
             context = Path('contexts') / arch
@@ -188,7 +189,7 @@ class ReleaseMatrixTest(unittest.TestCase):
             self.assertEqual(binary.read_bytes(), b'binary fixture')
             self.assertEqual(binary.stat().st_mode & 0o777, 0o755)
             self.assertEqual((context / 'deploy/docker-entrypoint.sh').read_bytes(), b'entrypoint fixture')
-            self.assertEqual((context / 'backend/resources/data').read_bytes(), b'resource fixture')
+            self.assertEqual((context / pricing_path).read_bytes(), b'{"fixture":{"input_cost_per_token":1}}')
 
     def test_binary_metadata_rejects_wrong_target_sha_date_and_version(self):
         self.binary_check.stop()
