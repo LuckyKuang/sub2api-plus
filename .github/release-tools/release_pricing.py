@@ -57,6 +57,9 @@ def compare(repository, tag, mode, directory, *, upload=True):
     existing.mkdir(exist_ok=True)
     for name in ASSETS:
         if name in names:
+            # The publication preflight and final check share this workspace.
+            # Remove only the disposable local download, never a remote asset.
+            (existing / name).unlink(missing_ok=True)
             command(["gh", "release", "download", tag, "--repo", repository,
                      "--pattern", name, "--dir", str(existing)])
             if (existing / name).read_bytes() != (directory / name).read_bytes():

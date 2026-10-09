@@ -36,7 +36,9 @@ class PricingTests(unittest.TestCase):
     def download(self, command):
         if command[1:3] == ['release', 'download']:
             name = command[command.index('--pattern') + 1]
-            (self.directory / 'existing' / name).write_bytes(b'generated pricing')
+            target = self.directory / 'existing' / name
+            self.assertFalse(target.exists(), 'gh download refuses an existing local file')
+            target.write_bytes(b'generated pricing')
         return ''
 
     def test_read_only_modes_compare_bytes_without_uploads(self):
@@ -46,8 +48,6 @@ class PricingTests(unittest.TestCase):
                 outcomes = pricing.compare('owner/repo', TAG, mode, self.directory)
             self.assertEqual(set(outcomes.values()), {'matched'})
             self.assertFalse(any('upload' in call.args[0] for call in command.call_args_list))
-            for path in (self.directory / 'existing').iterdir():
-                path.unlink()
 
     def test_absence_is_untested_on_branch_and_failure_for_historical_tag(self):
         with patch.object(pricing, 'release_metadata', return_value=None), \
