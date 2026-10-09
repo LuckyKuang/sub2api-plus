@@ -158,6 +158,28 @@ class OciTests(unittest.TestCase):
 
 
 class WorkflowTests(unittest.TestCase):
+    def test_materialized_checksums_match_actual_bytes_and_reject_duplicates(self):
+        previous = Path.cwd()
+        with tempfile.TemporaryDirectory() as temporary:
+            try:
+                os.chdir(temporary)
+                Path('release-input').mkdir()
+                Path('dist').mkdir()
+                name = 'sub2api_9.8.7+custom.009_linux_arm64.tar.gz'
+                Path('release-input', name).write_bytes(b'archive fixture')
+                expected = hashlib.sha256(b'archive fixture').hexdigest()
+                line = expected + '  ' + name + '\n'
+                Path('dist/checksums.txt').write_text(line)
+                self.assertEqual(worker.verify_checksums(), {name: expected})
+                Path('dist/checksums.txt').write_text(line + line)
+                with self.assertRaisesRegex(ValueError, 'duplicate'):
+                    worker.verify_checksums()
+                Path('dist/checksums.txt').write_text('0' * 64 + '  ' + name + '\n')
+                with self.assertRaisesRegex(ValueError, 'do not match'):
+                    worker.verify_checksums()
+            finally:
+                os.chdir(previous)
+
     def test_only_real_publisher_has_write_permissions_and_environment(self):
         jobs = yaml.safe_load((ROOT / '.github/workflows/release.yml').read_text())['jobs']
         for name, job in jobs.items():
@@ -193,6 +215,21 @@ class WorkflowTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'incorrect verification gate'):
                 worker.verify(PLAN, True)
         run.assert_not_called()
+
+    def test_bad_materialized_checksums_stop_before_any_image_or_release_write(self):
+        plan = {**PLAN, 'mode': 'publish', 'date': '2026-10-09T01:02:03Z', 'tag': TAG}
+        with patch.object(worker.matrix, 'contexts'), patch.object(worker.matrix, 'git', return_value='notes'), \
+             patch.object(worker.pricing, 'generate'), patch.object(worker.pricing, 'compare'), \
+             patch.object(worker.matrix, 'generate_config'), \
+             patch.object(worker, 'verify_checksums', side_effect=ValueError('bad checksums')), \
+             patch.object(worker, 'run') as run, patch.dict(os.environ, {'GITHUB_REPOSITORY': 'owner/repo'}):
+            with self.assertRaisesRegex(ValueError, 'bad checksums'):
+                worker.package(plan, False)
+        self.assertEqual(run.call_count, 1)
+        args = run.call_args.args
+        self.assertEqual(args[:2], ('goreleaser', 'release'))
+        self.assertIn('--snapshot', args)
+        self.assertIn('--skip=validate,before,docker,publish,announce', args)
 
 
 if __name__ == '__main__':

@@ -25,7 +25,8 @@ files come from the same captured application source.
 
 The publisher alone has write permissions and enters the `release` Environment.
 It packages verified archives through GoReleaser `extra_files`; it does not
-compile the application again. Pricing assets are generated with the selected
+compile the application again. Checksums are materialized and compared with
+verified archive bytes before external writes. Pricing assets use the selected
 source's Go command, compared before external writes, and uploaded last without
 `--clobber`. Existing bytes must match; API/download errors fail closed.
 Cross-registry publication is not atomic. A partial publication needs inspection

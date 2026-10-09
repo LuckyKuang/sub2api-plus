@@ -74,6 +74,20 @@ def build_binary(plan, args):
                    date=plan['date'], goos=args.goos, goarch=args.goarch, output='release-leaf'))
 
 
+def verify_checksums():
+    expected = {p.name: matrix.sha256(p) for p in Path('release-input').glob('sub2api_*')}
+    actual = {}
+    for line in Path('dist/checksums.txt').read_text().splitlines():
+        digest, name = line.split(maxsplit=1)
+        name = Path(name.lstrip('*')).name
+        if name in actual:
+            raise ValueError('duplicate publisher checksum')
+        actual[name] = digest
+    if actual != expected:
+        raise ValueError('publisher checksums do not match the verified complete artifact set')
+    return expected
+
+
 def package(plan, dry_run):
     if dry_run != (plan['mode'] != 'publish'):
         raise ValueError('publication job cannot consume rehearsal evidence')
@@ -91,26 +105,21 @@ def package(plan, dry_run):
     # Compare before any writes. Publish mode uploads only after GoReleaser below.
     pricing.compare(repository, plan['tag'], plan['mode'], directory, upload=False)
     matrix.generate_config(argparse.Namespace(mode='publish', output='.release-publish.yaml'))
+    # Materialize and verify the upload checksums before registry or Release writes.
+    run('goreleaser', 'release', '--snapshot', '--clean', '--config', '.release-publish.yaml',
+        '--skip=validate,before,docker,publish,announce')
+    expected = verify_checksums()
+    exists = None if dry_run else pricing.release_metadata(repository, plan['tag'], allow_missing=True)
     run('bash', str(HERE / 'release-images.sh'))
     if dry_run:
         from release_oci import inspect_images
         oci = inspect_images(plan, Path('.release-output'), Path('.release-context'), repository)
-        flags = '--skip=validate,before,docker,publish,announce'
-        run('goreleaser', 'release', '--snapshot', '--clean', '--config', '.release-publish.yaml', flags)
     else:
         oci = None
-        exists = pricing.release_metadata(repository, plan['tag'], allow_missing=True)
         flags = '--skip=validate,before,docker,announce' if exists else '--skip=validate,before,docker'
         run('goreleaser', 'release', '--clean', '--config', '.release-publish.yaml', flags)
+        verify_checksums()
         pricing.compare(repository, plan['tag'], 'publish', directory)
-    checksums = Path('dist/checksums.txt')
-    expected = {p.name: matrix.sha256(p) for p in Path('release-input').glob('sub2api_*')}
-    actual = {}
-    for line in checksums.read_text().splitlines():
-        digest, name = line.split(maxsplit=1)
-        actual[Path(name.lstrip('*')).name] = digest
-    if actual != expected:
-        raise ValueError('publisher checksums do not match the verified complete artifact set')
     report = {**plan, 'tooling_sha': Path('.release-tooling/revision').read_text().strip(),
               'oci': oci, 'pricing': json.loads((directory / 'comparison.json').read_text()),
               'archives': expected, 'publication_permissions_tested': not dry_run}
