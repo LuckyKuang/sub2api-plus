@@ -321,10 +321,11 @@ func (s *SettingService) GetAntigravityUserAgentVersion(ctx context.Context) str
 // GetOpenAICodexOutboundProfile returns the configured global UA and the
 // explicit legacy-profile compatibility switch as one cached snapshot. The
 // switch defaults to false if the setting is unavailable or malformed.
+// Keep a missing global candidate empty: the identity resolver owns the
+// compiled fallback and must not attribute it to a configured global source.
 func (s *SettingService) GetOpenAICodexOutboundProfile(ctx context.Context) (string, bool) {
-	fallback := DefaultOpenAICodexUserAgent
 	if s == nil || s.settingRepo == nil {
-		return fallback, false
+		return "", false
 	}
 	if cached, ok := s.openAICodexUACache.Load().(*cachedOpenAICodexUserAgent); ok && cached != nil {
 		if time.Now().UnixNano() < cached.expiresAt {
@@ -346,7 +347,7 @@ func (s *SettingService) GetOpenAICodexOutboundProfile(ctx context.Context) (str
 		value, err := s.settingRepo.GetValue(dbCtx, SettingKeyOpenAICodexUserAgent)
 		if err != nil && !errors.Is(err, ErrSettingNotFound) {
 			slog.Warn("failed to get openai codex user agent setting", "error", err)
-			cached := &cachedOpenAICodexUserAgent{value: fallback, expiresAt: time.Now().Add(openAICodexUserAgentErrorTTL).UnixNano()}
+			cached := &cachedOpenAICodexUserAgent{expiresAt: time.Now().Add(openAICodexUserAgentErrorTTL).UnixNano()}
 			s.openAICodexUACache.Store(cached)
 			return cached, nil
 		}
@@ -355,9 +356,6 @@ func (s *SettingService) GetOpenAICodexOutboundProfile(ctx context.Context) (str
 			slog.Warn("failed to get codex legacy client profile compatibility setting", "error", legacyErr)
 		}
 		ua := strings.TrimSpace(value)
-		if ua == "" {
-			ua = fallback
-		}
 		cached := &cachedOpenAICodexUserAgent{
 			value:                      ua,
 			legacyCompatibilityEnabled: strings.TrimSpace(legacyValue) == "true",
@@ -366,10 +364,10 @@ func (s *SettingService) GetOpenAICodexOutboundProfile(ctx context.Context) (str
 		s.openAICodexUACache.Store(cached)
 		return cached, nil
 	})
-	if cached, ok := result.(*cachedOpenAICodexUserAgent); ok && cached != nil && cached.value != "" {
+	if cached, ok := result.(*cachedOpenAICodexUserAgent); ok && cached != nil {
 		return cached.value, cached.legacyCompatibilityEnabled
 	}
-	return fallback, false
+	return "", false
 }
 
 // GetOpenAICodexEnvironmentTimezone returns the global model-visible

@@ -19,6 +19,7 @@ belong in GitHub Release notes.
 - [MiniMax coding-plan quota origins](providers/MINIMAX.md)
 - [Zhipu / GLM ZCode account link](providers/ZHIPU.md)
 - [TypeSafe / Jev native System One](providers/TYPESAFE.md)
+- [Cline, Command Code and compatible aggregator contracts](providers/COMPATIBLE_AGGREGATORS.md)
 
 ## Protocols and Tasks
 

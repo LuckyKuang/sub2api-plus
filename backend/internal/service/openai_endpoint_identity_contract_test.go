@@ -39,8 +39,8 @@ func TestOpenAIIdentityContractEndpointMatrix(t *testing.T) {
 				continue
 			}
 			for _, passthrough := range []bool{false, true} {
-				for _, source := range []string{"account", "global", "default", "claude", "gemini", "grok", "antigravity", "deepseek", "minimax", "minimax_apikey", "kimi", "zcode"} {
-					compatible := source != "account" && source != "global" && source != "default"
+				for _, source := range []string{"account", "global", "default", "default-empty", "claude", "gemini", "grok", "antigravity", "deepseek", "minimax", "minimax_apikey", "kimi", "zcode"} {
+					compatible := source != "account" && source != "global" && source != "default" && source != "default-empty"
 					if compatible && accountType != AccountTypeAPIKey {
 						continue
 					}
@@ -72,6 +72,9 @@ func TestOpenAIIdentityContractEndpointMatrix(t *testing.T) {
 						case "default":
 							account.Credentials["user_agent"] = "invalid"
 							repo.values[SettingKeyOpenAICodexUserAgent] = "invalid"
+						case "default-empty":
+							delete(account.Credentials, "user_agent")
+							repo.values[SettingKeyOpenAICodexUserAgent] = "   "
 						default:
 							account.Credentials[outboundIdentityCredential] = map[string]any{"preset": source}
 						}

@@ -203,6 +203,7 @@ the next independently resolved request.
 | Valid | Any | `account`; retain that account's client family and fingerprint |
 | Empty or invalid | Valid | `global`; retain the configured global family and fingerprint |
 | Empty or invalid | Empty or invalid | `compiled_default` |
+| Empty or invalid | Missing, blank, or unavailable persisted setting, including a cached read | `compiled_default`; the settings reader must not synthesize a global candidate |
 | Credential shadow | Any | Resolve the credential-owning parent and apply the same matrix; a shadow does not supply a UA |
 | Legacy candidate with compatibility disabled | Any | Treat that candidate as invalid and proceed to the next source |
 | Independent monitor/audit supplier token, with no account UA candidate | Valid, otherwise empty/invalid | `global`, otherwise `compiled_default`; never inherit a forwarding account or its cached identity |

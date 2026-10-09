@@ -5,6 +5,7 @@ package service
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -19,6 +20,54 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
 )
+
+type unavailableCodexProfileRepo struct{ SettingRepository }
+
+func (*unavailableCodexProfileRepo) GetValue(context.Context, string) (string, error) {
+	return "", errors.New("settings unavailable")
+}
+
+func (*unavailableCodexProfileRepo) GetMultiple(context.Context, []string) (map[string]string, error) {
+	return nil, errors.New("settings unavailable")
+}
+
+func TestCodexConfiguredProfilePreservesFallbackSource(t *testing.T) {
+	for _, tc := range []struct {
+		name, global, source string
+		missing, unavailable bool
+	}{
+		{name: "missing", missing: true, source: "compiled_default"},
+		{name: "empty", source: "compiled_default"},
+		{name: "blank", global: "   ", source: "compiled_default"},
+		{name: "invalid", global: "untrusted/1", source: "compiled_default"},
+		{name: "read failure", unavailable: true, source: "compiled_default"},
+		{name: "explicit default fingerprint", global: "codex_cli_rs/0.158.0 (Ubuntu 24.04; x86_64) xterm-256color", source: "global"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			values := map[string]string{}
+			if !tc.missing {
+				values[SettingKeyOpenAICodexUserAgent] = tc.global
+			}
+			var repo SettingRepository = &openAIIdentitySettingRepoStub{values: values}
+			if tc.unavailable {
+				repo = &unavailableCodexProfileRepo{}
+			}
+			settings := &SettingService{settingRepo: repo}
+			// The first read and cached read must report the same real source.
+			for range 2 {
+				identity := resolveOpenAIOutboundIdentityFromSettings(context.Background(), nil, settings)
+				require.Equal(t, tc.source, identity.Source)
+				require.Equal(t, "codex_cli_rs/0.158.0 (Ubuntu 24.04; x86_64) xterm-256color", identity.UserAgent)
+				require.Equal(t, "codex_cli_rs", identity.Originator)
+				require.Equal(t, "0.158.0", identity.Version)
+			}
+			account := &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth, Credentials: map[string]any{"user_agent": testOpenAIAccountUserAgent}}
+			identity := resolveOpenAIOutboundIdentityFromSettings(context.Background(), account, settings)
+			require.Equal(t, "account", identity.Source)
+			require.Equal(t, "codex_cli_rs/0.158.0 (Ubuntu 22.4.0; x86_64) xterm-256color", identity.UserAgent)
+		})
+	}
+}
 
 func TestOpenAIIdentityContractDuplicateHeaders(t *testing.T) {
 	identity := resolveOpenAIOutboundIdentityCandidates(testOpenAIAccountUserAgent, "")
@@ -146,6 +195,7 @@ func TestOpenAIIdentityContractHTTPRetrySnapshot(t *testing.T) {
 		{"global", "", globalUA, globalUA, "codex_vscode", false},
 		{"invalid-account", "curl/8.0", globalUA, globalUA, "codex_vscode", false},
 		{"compiled-default", "invalid", "invalid", DefaultOpenAICodexUserAgent, openai.CodexDefaultOriginator, false},
+		{"empty-default", "", "", DefaultOpenAICodexUserAgent, openai.CodexDefaultOriginator, false},
 		{"legacy-disabled", legacyUA, globalUA, globalUA, "codex_vscode", false},
 		{"legacy-enabled", legacyUA, globalUA, legacyUA, "codex_exec", true},
 	}

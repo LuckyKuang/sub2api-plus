@@ -89,7 +89,7 @@ describe('OutboundIdentitySettings', () => {
     expect(advanced.findAll('[data-identity-mapping]').map(row => row.attributes('data-identity-mapping')).sort()).toEqual([
       'openai:apikey', 'openai:upstream', 'anthropic:apikey', 'anthropic:upstream',
       'gemini:apikey', 'gemini:upstream', 'grok:apikey', 'grok:upstream',
-      'antigravity:upstream', 'typesafe:apikey', 'opencode_go:apikey'
+      'antigravity:upstream', 'typesafe:apikey', 'opencode_go:apikey', 'cline:apikey', 'command_code:apikey'
     ].sort())
     const select = advanced.get('[data-identity-mapping="opencode_go:apikey"] select')
     expect(select.findAll('option')[0].text()).toContain('automatic')

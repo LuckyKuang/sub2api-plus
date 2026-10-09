@@ -1,5 +1,7 @@
 package service
 
+import "github.com/LuckyKuang/sub2api-plus/internal/domain"
+
 // OutboundIdentityAccountPolicy is shared by management, previews and sending.
 // A fixed client family still permits valid account-level declaration overrides.
 type OutboundIdentityAccountPolicy struct {
@@ -17,6 +19,7 @@ var compatibleOutboundDefaultKeys = []string{
 	"gemini:apikey", "gemini:upstream",
 	"grok:apikey", "grok:upstream",
 	"antigravity:upstream", "typesafe:apikey", "opencode_go:apikey",
+	"cline:apikey", "command_code:apikey",
 }
 
 func allowsOutboundDefaultMapping(key string) bool {
@@ -44,7 +47,7 @@ func outboundAccountPolicies() []OutboundIdentityAccountPolicy {
 	var policies []OutboundIdentityAccountPolicy
 	// Describe every account key the existing account API accepts. Only the
 	// explicit compatible keys appear in the advanced default-mapping editor.
-	for _, platform := range []string{PlatformOpenAI, PlatformAnthropic, PlatformGemini, PlatformGrok, PlatformAntigravity, PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax, PlatformStepFun, PlatformOpenCodeGo, PlatformTypeSafe} {
+	for _, platform := range domain.ConcretePlatformIDs() {
 		for _, accountType := range []string{AccountTypeOAuth, AccountTypeSetupToken, AccountTypeAPIKey, AccountTypeUpstream, AccountTypeBedrock, AccountTypeServiceAccount} {
 			policies = append(policies, outboundAccountPolicy(platform, accountType))
 		}

@@ -11,10 +11,22 @@ import (
 
 	ippkg "github.com/LuckyKuang/sub2api-plus/internal/pkg/ip"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 )
+
+func rateLimiterTestClient(t *testing.T, unavailable bool) *redis.Client {
+	t.Helper()
+	server := miniredis.RunT(t)
+	if unavailable {
+		server.SetError("ERR simulated Redis failure")
+	}
+	client := redis.NewClient(&redis.Options{Addr: server.Addr(), MaxRetries: -1})
+	t.Cleanup(func() { _ = client.Close() })
+	return client
+}
 
 func TestWindowTTLMillis(t *testing.T) {
 	require.Equal(t, int64(1), windowTTLMillis(500*time.Microsecond))
@@ -25,15 +37,7 @@ func TestWindowTTLMillis(t *testing.T) {
 func TestRateLimiterFailureModes(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	rdb := redis.NewClient(&redis.Options{
-		Addr:         "127.0.0.1:1",
-		DialTimeout:  50 * time.Millisecond,
-		ReadTimeout:  50 * time.Millisecond,
-		WriteTimeout: 50 * time.Millisecond,
-	})
-	t.Cleanup(func() {
-		_ = rdb.Close()
-	})
+	rdb := rateLimiterTestClient(t, true)
 
 	limiter := NewRateLimiter(rdb)
 
@@ -77,7 +81,7 @@ func TestRateLimiterDifferentIPsIndependent(t *testing.T) {
 		rateLimitRun = originalRun
 	})
 
-	limiter := NewRateLimiter(redis.NewClient(&redis.Options{Addr: "127.0.0.1:1"}))
+	limiter := NewRateLimiter(rateLimiterTestClient(t, false))
 
 	router := gin.New()
 	router.Use(limiter.Limit("api", 1, time.Second))
@@ -120,13 +124,9 @@ func TestRateLimiterAllow(t *testing.T) {
 		rateLimitRun = originalRun
 	})
 
-	// PTTL 走真实客户端（不可达地址）→ 失败后 RetryAfter 应回退为完整窗口
-	limiter := NewRateLimiter(redis.NewClient(&redis.Options{
-		Addr:         "127.0.0.1:1",
-		DialTimeout:  50 * time.Millisecond,
-		ReadTimeout:  50 * time.Millisecond,
-		WriteTimeout: 50 * time.Millisecond,
-	}))
+	// A real Redis error on PTTL must fall back to the full window without
+	// depending on a host port's connection/refusal timing.
+	limiter := NewRateLimiter(rateLimiterTestClient(t, true))
 
 	res, err := limiter.Allow(context.Background(), "panel:global:user:42", 1, time.Minute)
 	require.NoError(t, err)
@@ -155,7 +155,7 @@ func TestRateLimiterHonorsForwardedIPSnapshot(t *testing.T) {
 		rateLimitRun = originalRun
 	})
 
-	limiter := NewRateLimiter(redis.NewClient(&redis.Options{Addr: "127.0.0.1:1"}))
+	limiter := NewRateLimiter(rateLimiterTestClient(t, false))
 
 	router := gin.New()
 	// 模拟 SessionBindingContext：开启转发 IP 兼容模式快照
@@ -206,7 +206,7 @@ func TestRateLimiterSuccessAndLimit(t *testing.T) {
 		rateLimitRun = originalRun
 	})
 
-	limiter := NewRateLimiter(redis.NewClient(&redis.Options{Addr: "127.0.0.1:1"}))
+	limiter := NewRateLimiter(rateLimiterTestClient(t, false))
 
 	router := gin.New()
 	router.Use(limiter.Limit("test", 1, time.Second))

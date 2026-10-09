@@ -72,7 +72,7 @@ func TestOutboundIdentitySettingsAPI(t *testing.T) {
 			advanced = append(advanced, policy.Get("key").String())
 		}
 	}
-	require.ElementsMatch(t, []string{"openai:apikey", "openai:upstream", "anthropic:apikey", "anthropic:upstream", "gemini:apikey", "gemini:upstream", "grok:apikey", "grok:upstream", "antigravity:upstream", "typesafe:apikey", "opencode_go:apikey"}, advanced)
+	require.ElementsMatch(t, []string{"openai:apikey", "openai:upstream", "anthropic:apikey", "anthropic:upstream", "gemini:apikey", "gemini:upstream", "grok:apikey", "grok:upstream", "antigravity:upstream", "typesafe:apikey", "opencode_go:apikey", "cline:apikey", "command_code:apikey"}, advanced)
 	for _, key := range []string{"deepseek:apikey", "kimi:apikey", "minimax:apikey", "zhipu:apikey", "stepfun:apikey", "anthropic:bedrock", "anthropic:service_account", "gemini:service_account"} {
 		body, err := json.Marshal(map[string]any{"defaults": map[string]string{key: "grok"}})
 		require.NoError(t, err)

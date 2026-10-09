@@ -22,6 +22,18 @@ HTTP/WS handlers before their side effects.
 
 ## Boundary And Ordering
 
+Cline and Command Code API-key accounts reuse the Responses, Chat Completions
+and Messages ingress gates. Their protocol routing/catalog requests occur only
+after the original ingress body has been audited. Developer-role preservation,
+legacy function-call pairing, named tool choices, inline tool changes and
+web-search history normalization do not select alternate extraction. Both
+engines retain the canonical current-user selection rules; historical assistant,
+developer instruction and tool context do not replace the current user content.
+Unrecognized tool-change/search siblings pass through without an audit-derived
+block, and extracted sibling user text remains auditable. WS group-price refresh
+occurs after each turn's audit and keeps an immutable billing snapshot for that
+turn, including deferred usage settlement.
+
 Forwarding-account outbound identity presets are resolved after this boundary
 and account selection. UA/SDK declarations are never audit inputs or an audit bypass.
 Claude billing-header version rewriting uses the selected outbound identity;

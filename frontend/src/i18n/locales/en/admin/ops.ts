@@ -4,6 +4,8 @@ export default {
       description: 'Operational monitoring and troubleshooting',
       // Dashboard
       systemHealth: 'System Health',
+      outputTps: 'Per-request output TPS',
+      outputTpsSamples: 'Valid samples: {count}',
       overview: 'Overview',
       noSystemMetrics: 'No system metrics collected yet.',
       collectedAt: 'Collected at:',
@@ -803,6 +805,7 @@ export default {
         accountError: 'Error'
       },
       tooltips: {
+        outputTps: 'Each eligible request uses (output tokens − image output tokens − audio output tokens) ÷ total duration, including first-token wait. Mean and percentiles use unrounded request rates with equal weight. P50 is the median; P5/P10 describe slower requests. Historical and partial text records remain eligible. Live, pure media/compaction and invalid counts or duration are excluded. Samples come from retained usage logs; — means no samples or temporarily unavailable statistics.',
         totalRequests: 'Total number of requests (including both successful and failed requests) in the selected time window.',
         throughputTrend: 'Requests/QPS + Tokens/TPS in the selected window.',
         switchRateTrend: 'Trend of account switches / total requests over the last 5 hours (avg switches).',

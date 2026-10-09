@@ -64,7 +64,7 @@ async function loadBatchImageAccess(force = false): Promise<boolean> {
     .catch(() => {
       if (scope !== supportRequestGeneration()) return false
       hasAllowedBatchImageKey.value = false
-      loaded.value = true
+      loaded.value = false
       return false
     })
     .finally(() => {

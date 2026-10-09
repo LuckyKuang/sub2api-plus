@@ -51,6 +51,27 @@ export the shared unrounded numeric average, an empty unavailable rate, and the
 same reason/partial-result note as the table. Consumers identifying columns by
 header must update their mappings; stored usage and API fields are unchanged.
 
+## Operations output TPS distribution
+
+`output_tps` applies the same request-average formula and eligibility as usage
+tables: `r = (output_tokens - image_output_tokens - audio_output_tokens) * 1000 /
+duration_ms`. Each eligible request has equal weight. `avg = sum(r) / N`; it is
+not `sum(tokens) / sum(duration)`. P5, P10 and P50 are continuous percentiles of
+the unrounded rates over the complete selected window, including in preaggregated
+dashboard mode. For sorted rates, position `(N - 1) * p` is interpolated between
+adjacent samples. Rates `[1, 10, 100, 1000]` produce P5=2.35, P10=3.7, P50=55
+and avg=277.75. Empty samples give `sample_count=0` and null rates; query timeout
+leaves the entire distribution unavailable.
+
+Historical/unknown request types and incomplete records remain eligible when
+their counts and duration are usable. Image count and billing mode alone do not
+exclude a mixed response. Image/audio token counts are subtracted, and a known
+media/compaction first output (or native compaction flag) requires strict observed
+token timing to establish later non-media output. Live summaries are excluded.
+The existing traffic `tps` measures aggregate token throughput and retains its
+separate definition. Display rounding never changes aggregation; very low
+positive request rates retain significant digits in both tables and dashboard.
+
 ## Why the denominator is total duration
 
 A long wait followed by burst output can place all observed token events within
@@ -111,6 +132,7 @@ normally. Compaction bytes are never counted as text tokens.
 | Antigravity | OAuth and upstream | Claude/Gemini observers and compatibility adapters |
 | Grok | API key | Raw Chat observer or unified Responses HTTP handler |
 | Kimi, Zhipu, DeepSeek | API key, supported pay-as-you-go/coding configurations | Selected native Responses/Chat/Anthropic protocol and its adapters |
+| Cline, Command Code, OpenCode | API key, supported provider modes | Provider profile selects the native protocol; adapters preserve the same timing and non-media TPS definition |
 
 Composite groups route to an actual account and inherit that account's sampler.
 The historical Kiro constant does not define a supported additional forwarding

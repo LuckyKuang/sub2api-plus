@@ -48,3 +48,10 @@ export const firstTokenUnavailableReason = (row: FirstTokenTimingRow): string | 
   if (row.first_output_kind === 'compaction') return 'usage.timingUnavailableCompaction'
   return 'usage.timingUnavailableNoTokens'
 }
+
+// Presentation only: statistics always aggregate unrounded per-request values.
+export const formatTpsNumber = (value: number): string => {
+  if (value < 0.1) return Number(value.toPrecision(2)).toString()
+  if (value >= 100) return String(Math.round(value))
+  return (Math.round(value * 10) / 10).toFixed(1).replace(/\.0$/, '')
+}

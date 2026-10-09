@@ -530,6 +530,8 @@ async function onModelsUpdate(newModels: string[]) {
   // 仅在“新增模型”时触发参考价自动填充。
   const model = addedModels[0]?.trim()
   if (!model || !props.platform) return
+  // Appending to an existing rule must preserve explicitly empty prices.
+  if (oldModels.length > 0 && !primaryChanged) return
 
   // 已有用户填写的价格/倍率时不覆盖（界面另有显式「补齐空字段」）。换模型时价格已
   // 在上面清空，这里自然放行、为新主模型重新查价；未换模型则维持既有保护。

@@ -19,6 +19,9 @@ go.sum text eol=lf
 # 无扩展名的 Shell 测试夹具
 deploy/tests/fixtures/bin/* text eol=lf
 
+# Deployment templates are consumed by Unix shell scripts inside validation.
+deploy/.env.example text eol=lf
+
 # YAML/YML 配置文件
 *.yaml text eol=lf
 *.yml text eol=lf

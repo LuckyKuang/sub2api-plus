@@ -11,7 +11,8 @@ vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
 
 describe('channel model detail table', () => {
   let removeStyles: () => void
-  beforeAll(async () => { removeStyles = await installAppStyles() })
+  // Compile the real stylesheet within the container's bounded CPU budget.
+  beforeAll(async () => { removeStyles = await installAppStyles() }, 30_000)
   afterAll(() => removeStyles?.())
 
   it('insets model names from the border and aligns every heading with its values', async () => {

@@ -15,7 +15,8 @@ import (
 
 // ResponsesToChatCompletions converts a Responses API response into a Chat
 // Completions response. Text output items are concatenated into
-// choices[0].message.content; function_call items become tool_calls.
+// choices[0].message.content, refusal parts into choices[0].message.refusal;
+// function_call items become tool_calls.
 func ResponsesToChatCompletions(resp *ResponsesResponse, model string) *ChatCompletionsResponse {
 	id := resp.ID
 	if id == "" {
@@ -31,6 +32,7 @@ func ResponsesToChatCompletions(resp *ResponsesResponse, model string) *ChatComp
 	}
 
 	var contentText string
+	var refusalText string
 	var reasoningText string
 	var toolCalls []ChatToolCall
 
@@ -38,11 +40,11 @@ func ResponsesToChatCompletions(resp *ResponsesResponse, model string) *ChatComp
 		switch item.Type {
 		case "message":
 			for _, part := range item.Content {
-				switch part.Type {
-				case "output_text":
+				switch {
+				case part.Type == "output_text" && part.Text != "":
 					contentText += part.Text
-				case "refusal":
-					contentText += part.Refusal
+				case part.Type == "refusal" && part.Refusal != "":
+					refusalText += part.Refusal
 				}
 			}
 		case "function_call", "custom_tool_call", "tool_search_call":
@@ -65,7 +67,7 @@ func ResponsesToChatCompletions(resp *ResponsesResponse, model string) *ChatComp
 		}
 	}
 
-	msg := ChatMessage{Role: "assistant"}
+	msg := ChatMessage{Role: "assistant", Refusal: refusalText}
 	if len(toolCalls) > 0 {
 		msg.ToolCalls = toolCalls
 	}
@@ -135,6 +137,7 @@ type ResponsesEventToChatState struct {
 	TextParts              map[responsesOutputPartKey]string
 	ReasoningParts         map[responsesOutputPartKey]string
 	TextOutput             strings.Builder
+	RefusalOutput          strings.Builder
 	ReasoningOutput        strings.Builder
 	IncludeUsage           bool
 	Usage                  *ChatUsage
@@ -270,9 +273,18 @@ func resToChatHandleTextDelta(evt *ResponsesStreamEvent, state *ResponsesEventTo
 	state.SawText = true
 	key := responsesOutputPartKey{OutputIndex: evt.OutputIndex, PartIndex: evt.ContentIndex, PartType: responsesTextPartType(evt.Type)}
 	state.TextParts[key] += evt.Delta
-	_, _ = state.TextOutput.WriteString(evt.Delta)
-	content := evt.Delta
-	return []ChatCompletionsChunk{makeChatDeltaChunk(state, ChatDelta{Content: &content})}
+	return []ChatCompletionsChunk{makeChatDeltaChunk(state, resToChatTextDelta(state, key.PartType, evt.Delta))}
+}
+
+// Keep refusal separate on every delta and aggregate path, while sharing the
+// per-part deduplication and aggregate-only timing semantics.
+func resToChatTextDelta(state *ResponsesEventToChatState, kind, value string) ChatDelta {
+	if kind == "refusal" {
+		_, _ = state.RefusalOutput.WriteString(value)
+		return ChatDelta{Refusal: &value}
+	}
+	_, _ = state.TextOutput.WriteString(value)
+	return ChatDelta{Content: &value}
 }
 
 func resToChatHandleTextDone(evt *ResponsesStreamEvent, state *ResponsesEventToChatState) []ChatCompletionsChunk {
@@ -289,9 +301,8 @@ func resToChatHandleTextDone(evt *ResponsesStreamEvent, state *ResponsesEventToC
 		return nil
 	}
 	state.TextParts[key] = text
-	_, _ = state.TextOutput.WriteString(suffix)
 	state.SawText = true
-	return []ChatCompletionsChunk{makeChatAggregateDeltaChunk(state, ChatDelta{Content: &suffix})}
+	return []ChatCompletionsChunk{makeChatAggregateDeltaChunk(state, resToChatTextDelta(state, key.PartType, suffix))}
 }
 
 func resToChatHandleOutputItemAdded(evt *ResponsesStreamEvent, state *ResponsesEventToChatState) []ChatCompletionsChunk {
@@ -333,7 +344,7 @@ func resToChatSupplementOutputItem(item *ResponsesOutput, outputIndex int, state
 
 	switch item.Type {
 	case "message":
-		var text strings.Builder
+		var chunks []ChatCompletionsChunk
 		for partIndex, part := range item.Content {
 			var value string
 			switch part.Type {
@@ -346,19 +357,14 @@ func resToChatSupplementOutputItem(item *ResponsesOutput, outputIndex int, state
 			}
 			key := responsesOutputPartKey{OutputIndex: outputIndex, PartIndex: partIndex, PartType: part.Type}
 			suffix, compatible := aggregateOutputSuffix(state.TextParts[key], value)
-			if !compatible {
+			if !compatible || suffix == "" {
 				continue
 			}
 			state.TextParts[key] = value
-			_, _ = text.WriteString(suffix)
+			state.SawText = true
+			chunks = append(chunks, makeChatAggregateDeltaChunk(state, resToChatTextDelta(state, key.PartType, suffix)))
 		}
-		if text.Len() == 0 {
-			return nil
-		}
-		state.SawText = true
-		value := text.String()
-		_, _ = state.TextOutput.WriteString(value)
-		return []ChatCompletionsChunk{makeChatAggregateDeltaChunk(state, ChatDelta{Content: &value})}
+		return chunks
 	case "reasoning":
 		var reasoning strings.Builder
 		for summaryIndex, summary := range item.Summary {
@@ -407,9 +413,8 @@ func resToChatHandleContentPartAggregate(evt *ResponsesStreamEvent, state *Respo
 		return nil
 	}
 	state.TextParts[key] = text
-	_, _ = state.TextOutput.WriteString(suffix)
 	state.SawText = true
-	return []ChatCompletionsChunk{makeChatAggregateDeltaChunk(state, ChatDelta{Content: &suffix})}
+	return []ChatCompletionsChunk{makeChatAggregateDeltaChunk(state, resToChatTextDelta(state, key.PartType, suffix))}
 }
 
 func resToChatHandleFuncArgsDelta(evt *ResponsesStreamEvent, state *ResponsesEventToChatState) []ChatCompletionsChunk {
@@ -570,6 +575,7 @@ func resToChatHandleCompleted(evt *ResponsesStreamEvent, state *ResponsesEventTo
 func resToChatSupplementOutputItems(items []ResponsesOutput, firstOutputIndex int, state *ResponsesEventToChatState) []ChatCompletionsChunk {
 	var chunks []ChatCompletionsChunk
 	var text strings.Builder
+	var refusal strings.Builder
 	var reasoning strings.Builder
 
 	for i := range items {
@@ -581,7 +587,7 @@ func resToChatSupplementOutputItems(items []ResponsesOutput, firstOutputIndex in
 				case "output_text":
 					_, _ = text.WriteString(part.Text)
 				case "refusal":
-					_, _ = text.WriteString(part.Refusal)
+					_, _ = refusal.WriteString(part.Refusal)
 				}
 			}
 		case "reasoning":
@@ -614,6 +620,10 @@ func resToChatSupplementOutputItems(items []ResponsesOutput, firstOutputIndex in
 		chunks = append(chunks, ChatCompletionsChunk{})
 		copy(chunks[insertAt+1:], chunks[insertAt:])
 		chunks[insertAt] = makeChatAggregateDeltaChunk(state, ChatDelta{Content: &value})
+	}
+	if suffix, compatible := aggregateOutputSuffix(state.RefusalOutput.String(), refusal.String()); compatible && suffix != "" {
+		state.SawText = true
+		chunks = append(chunks, makeChatAggregateDeltaChunk(state, resToChatTextDelta(state, "refusal", suffix)))
 	}
 	return chunks
 }
@@ -824,6 +834,7 @@ type bufferedFuncCall struct {
 // (response.completed / response.done) carries an empty output array.
 type BufferedResponseAccumulator struct {
 	text                 strings.Builder
+	refusal              strings.Builder
 	reasoning            strings.Builder
 	funcCalls            []bufferedFuncCall
 	outputIndexToFuncIdx map[int]int
@@ -905,10 +916,18 @@ func (a *BufferedResponseAccumulator) appendTextDelta(key responsesOutputPartKey
 		return
 	}
 	a.textParts[key] += value
+	if key.PartType == "refusal" {
+		_, _ = a.refusal.WriteString(value)
+		return
+	}
 	_, _ = a.text.WriteString(value)
 }
 
 func (a *BufferedResponseAccumulator) appendTextAggregate(key responsesOutputPartKey, value string) {
+	if key.PartType == "refusal" {
+		appendBufferedAggregate(&a.refusal, a.textParts, key, value)
+		return
+	}
 	appendBufferedAggregate(&a.text, a.textParts, key, value)
 }
 
@@ -1048,7 +1067,7 @@ func responsesToolCallTypeForEvent(eventType string) string {
 
 // HasContent reports whether any content has been accumulated.
 func (a *BufferedResponseAccumulator) HasContent() bool {
-	return a.text.Len() > 0 || len(a.funcCalls) > 0 || a.reasoning.Len() > 0
+	return a.text.Len() > 0 || a.refusal.Len() > 0 || len(a.funcCalls) > 0 || a.reasoning.Len() > 0
 }
 
 // BuildOutput constructs a []ResponsesOutput from the accumulated delta
@@ -1067,14 +1086,18 @@ func (a *BufferedResponseAccumulator) BuildOutput() []ResponsesOutput {
 		})
 	}
 
-	if a.text.Len() > 0 {
+	if a.text.Len() > 0 || a.refusal.Len() > 0 {
+		var content []ResponsesContentPart
+		if a.text.Len() > 0 {
+			content = append(content, ResponsesContentPart{Type: "output_text", Text: a.text.String()})
+		}
+		if a.refusal.Len() > 0 {
+			content = append(content, ResponsesContentPart{Type: "refusal", Refusal: a.refusal.String()})
+		}
 		out = append(out, ResponsesOutput{
-			Type: "message",
-			Role: "assistant",
-			Content: []ResponsesContentPart{{
-				Type: "output_text",
-				Text: a.text.String(),
-			}},
+			Type:    "message",
+			Role:    "assistant",
+			Content: content,
 		})
 	}
 
@@ -1127,6 +1150,31 @@ func (a *BufferedResponseAccumulator) SupplementResponseOutput(resp *ResponsesRe
 					Text: a.text.String(),
 				}},
 			})
+		}
+	}
+	if a.refusal.Len() > 0 {
+		hasRefusal := false
+		messageIndex := -1
+		for i, item := range resp.Output {
+			if item.Type != "message" {
+				continue
+			}
+			if messageIndex < 0 {
+				messageIndex = i
+			}
+			for _, part := range item.Content {
+				if part.Type == "refusal" && strings.TrimSpace(part.Refusal) != "" {
+					hasRefusal = true
+				}
+			}
+		}
+		if !hasRefusal {
+			part := ResponsesContentPart{Type: "refusal", Refusal: a.refusal.String()}
+			if messageIndex < 0 {
+				resp.Output = append(resp.Output, ResponsesOutput{Type: "message", Role: "assistant", Content: []ResponsesContentPart{part}})
+			} else {
+				resp.Output[messageIndex].Content = append(resp.Output[messageIndex].Content, part)
+			}
 		}
 	}
 

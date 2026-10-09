@@ -6,11 +6,11 @@ publication status. Release naming and procedures live in
 
 ## Integrated Baseline
 
-The current tree integrates official `v0.2.14`: tag object
-`1400a7b482974d98db5b284a8b2afbe3eaf9aaef`, peeled commit
-`0363b8cdba8cec3e2ba4b2dbd49c4481143fa55d`. The merge base is the previously
-integrated official `v0.2.13` commit
-`3040209f205472038c1ba745a1bedd2edd9053b1`. Importing source does not publish a
+The current tree integrates official `v0.2.15`: tag object
+`86a80c13dcba86f52f9ca815b5a471cecc236227`, peeled commit
+`f2669c8cf62555cd92389b3f55920e9e6e7c6ff2`. The merge base is the previously
+integrated official `v0.2.14` commit
+`0363b8cdba8cec3e2ba4b2dbd49c4481143fa55d`. Importing source does not publish a
 Plus release or change its embedded version.
 
 Preserve intentional Plus behavior during every import. Current contracts live

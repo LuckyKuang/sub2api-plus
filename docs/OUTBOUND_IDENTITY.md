@@ -117,7 +117,17 @@ Vertex Claude retain `claude`; Vertex Gemini retains `gemini`. Valid account
 parameters can override global declarations within that family. A custom base
 URL or proxy does not change this rule.
 
-Only these eleven keys permit another client family, through a global default
+Cline and Command Code use the existing compatible-supplier Codex preset by
+default. Their API-key forwarding, model discovery, model protocol catalogs,
+credential probes, balances and quota batches resolve the credential-owning
+account once per operation. Background catalog refresh carries that snapshot
+after caller cancellation. Catalogs and failed-refresh backoff are isolated by
+account, URL, proxy and a hash of the captured credential, tenant and identity
+headers; rotation starts a new cache entry. Generic headers and incoming client
+declarations cannot replace the trusted identity. No new native client family or
+versionless exception is introduced.
+
+Only these thirteen keys permit another client family, through a global default
 or account selection:
 
 | Platform | Configurable account types | Automatic preset |
@@ -129,6 +139,8 @@ or account selection:
 | Antigravity | `upstream` | `antigravity` |
 | TypeSafe / Jev | `apikey` | `codex` |
 | OpenCode Go | `apikey` | `codex` |
+| Cline | `apikey` | `codex` |
+| Command Code | `apikey` | `codex` |
 
 Anthropic/Gemini/Grok API-key entries also serve compatible endpoints, so they
 retain advanced overrides without guessing endpoint type from its hostname.
@@ -310,7 +322,7 @@ remain owned by the protocol.
 | --- | --- |
 | OAuth or API-key credential owner | Valid account candidate → global preset/type default → valid environment / compiled default |
 | Empty or invalid candidate, including invalid companion/runtime headers | Fall through atomically to the next tier |
-| Native client family | Domestic OAuth/API Key and cloud accounts retain their native family; only the eleven compatible keys above can select another family |
+| Native client family | Domestic OAuth/API Key and cloud accounts retain their native family; only the thirteen compatible keys above can select another family |
 | Pre-account native authorization | Global native preset → valid environment / compiled default; ignore inherited owners and API-key mappings |
 | Retry or nested same-owner request | Reuse the selected snapshot, including all runtime values |
 | Failover to another credential owner | Resolve that owner's candidate and current defaults |
@@ -466,6 +478,10 @@ blank/null values explicitly clear it and omitted values are preserved.
 
 Codex continues to use its established source chain: valid credential-owner
 `credentials.user_agent` → valid `openai_codex_user_agent` → compiled default.
+The settings cache retains an absent global candidate as empty, including on
+read failure. The shared resolver supplies the compiled identity and reports
+`compiled_default`; only an explicitly configured valid global UA reports
+`global`, even when that configured fingerprint equals the default.
 Its existing version selection and automatic synchronization remain in place.
 The existing Codex account editor is retained. The new global `profiles` map
 cannot replace Codex configuration. See the exact default and source matrix in

@@ -30,6 +30,51 @@ func TestRequestMaxOutputTokens(t *testing.T) {
 
 type auditInflightConcurrencyCache struct{ service.ConcurrencyCache }
 
+func TestCompatibleProviderIngressAuditsBeforeSideEffects(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, platform := range []string{service.PlatformCline, service.PlatformCommandCode} {
+		for _, endpoint := range []string{"responses", "chat", "messages"} {
+			t.Run(platform+"/"+endpoint, func(t *testing.T) {
+				engine := blockingHandlerPromptEngine()
+				h := &OpenAIGatewayHandler{
+					securityAuditCoordinator: securityaudit.NewCoordinator(nil, engine),
+					gatewayService:           &service.OpenAIGatewayService{},
+					apiKeyService:            &service.APIKeyService{},
+					concurrencyHelper:        NewConcurrencyHelper(service.NewConcurrencyService(&auditInflightConcurrencyCache{}), SSEPingFormatNone, 0),
+					billingCacheService:      service.NewBillingCacheService(nil, nil, nil, nil, nil, nil, &config.Config{}, nil),
+				}
+				t.Cleanup(h.billingCacheService.Stop)
+				// The real handlers must return from audit before any unconfigured
+				// downstream dependency (selection, billing, concurrency or transport).
+				groupID := int64(7)
+				apiKey := &service.APIKey{ID: 9, UserID: 42, User: &service.User{ID: 42}, GroupID: &groupID,
+					Group: &service.Group{ID: groupID, Platform: platform}}
+				path, body := "/v1/responses", `{"model":"gpt-test","input":"audit current request","future_options":{"opaque":true}}`
+				send := h.Responses
+				switch endpoint {
+				case "chat":
+					path, body, send = "/v1/chat/completions", `{"model":"gpt-test","messages":[{"role":"developer","content":"instruction"},{"role":"user","content":"audit current request"}],"future_options":true}`, h.ChatCompletions
+				case "messages":
+					path, body, send = "/v1/messages", `{"model":"claude-test","max_tokens":128,"messages":[{"role":"user","content":[{"type":"text","text":"audit current request"},{"type":"future_part","opaque":true}]}]}`, h.Messages
+				}
+				w := httptest.NewRecorder()
+				c, _ := gin.CreateTestContext(w)
+				c.Request = httptest.NewRequest(http.MethodPost, path, bytes.NewBufferString(body))
+				c.Request.Header.Set("Content-Type", "application/json")
+				c.Set(string(middleware2.ContextKeyAPIKey), apiKey)
+				c.Set(string(middleware2.ContextKeyUser), middleware2.AuthSubject{UserID: 42, Concurrency: 1})
+				send(c)
+				require.Equal(t, http.StatusForbidden, w.Code)
+				require.Contains(t, w.Body.String(), securityaudit.ErrorCodeBlocked)
+				evaluated, _, requests := engine.snapshot()
+				require.Equal(t, 1, evaluated)
+				require.Len(t, requests, 1)
+				require.JSONEq(t, body, string(requests[0].Body), "audit must receive original ingress content")
+			})
+		}
+	}
+}
+
 func TestInflightEndpointsAuditBeforeBillingAndReservation(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	for _, endpoint := range []string{"search", "tts", "responses", "chat"} {

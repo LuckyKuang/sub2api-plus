@@ -226,8 +226,9 @@
               <span
                 v-if="row.long_context_billing_applied"
                 data-testid="long-context-billing-marker"
+                :title="t('admin.usage.longContextPricingTooltip')"
                 class="inline-flex items-center rounded px-1 py-px text-[10px] font-semibold leading-tight bg-amber-100 text-amber-700 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/20 dark:text-amber-300 dark:ring-amber-500/30"
-              >x2</span>
+              >{{ t('admin.usage.longContext') }}</span>
               <!-- Cost Detail Tooltip -->
               <div
                 class="group relative"
@@ -584,7 +585,7 @@
           </div>
           <div class="flex items-center justify-between gap-6">
             <span class="text-gray-400">{{ t('usage.rate') }}</span>
-            <span class="font-semibold text-blue-400">{{ formatMultiplier(tooltipData?.rate_multiplier || 1) }}x</span>
+            <span class="font-semibold text-blue-400">{{ formatMultiplier(tooltipData?.rate_multiplier ?? 1) }}x</span>
           </div>
           <div class="flex items-center justify-between gap-6">
             <span class="text-gray-400">{{ t('usage.original') }}</span>
@@ -680,7 +681,7 @@ import IpGeoCell from '@/components/common/IpGeoCell.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { fetchBatch, getEntry } from '@/utils/ipGeoLookup'
 import type { AdminUsageLog } from '@/types'
-import { strictFirstTokenMs, averageTps, tpsNote, firstTokenUnavailableReason } from '@/utils/usageTiming'
+import { formatTpsNumber, strictFirstTokenMs, averageTps, tpsNote, firstTokenUnavailableReason } from '@/utils/usageTiming'
 import type { Column } from '@/components/common/types'
 
 interface Props {
@@ -951,12 +952,6 @@ const latencyBarClasses = (row: AdminUsageLog): string | string[] => {
     ]
   }
   return LATENCY_BAR_CLASSES[durationSeverity(row.duration_ms)]
-}
-
-const formatTpsNumber = (value: number): string => {
-  if (value < 0.1) return Number(value.toPrecision(2)).toString()
-  if (value >= 100) return String(Math.round(value))
-  return (Math.round(value * 10) / 10).toFixed(1).replace(/\.0$/, '')
 }
 
 const formatTpsDisplay = (value: number | null): string => {
