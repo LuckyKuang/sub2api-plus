@@ -307,6 +307,26 @@ class CompressCliTest(unittest.TestCase):
         errors = self.validate_text(changed)
         self.assert_error_contains(errors, "deterministic finalization tree")
 
+    def test_release_flow_requires_guarded_cutover_complete_finalization_and_readonly_rehearsal(self) -> None:
+        # Independent requirements from the publishing and finalization contracts.
+        cases = (
+            ("Retain the local full gate until enforceable trusted CI origin and protected cutover are verified",
+             "Remove the local gate whenever a same-name CI check succeeds"),
+            ("Finalization automatically promotes its deterministic PR and completes only after exact merged-main Actions pass",
+             "Finalization completes when its PR is submitted"),
+            ("Resume already-merged finalization only after independent proof, tree, publication, and merge verification",
+             "Resume merged finalization by observing any successful main run"),
+            ("Only real publication may use write permissions and the release Environment; read-only rehearsals cannot authorize publication",
+             "Rehearsals may authorize publication"),
+            ("Read-only release rehearsals may export local OCI archives without publication credentials or external writes",
+             "Rehearsals may use registry credentials and push images"),
+        )
+        for required, replacement in cases:
+            with self.subTest(required=required):
+                self.assertIn(required, self.valid_document)
+                changed = self.valid_document.replace(required, replacement)
+                self.assert_error_contains(self.validate_text(changed), required)
+
     def test_all_validation_remains_platform_container_only(self) -> None:
         changed = self.valid_document.replace(
             "Host-side validation is forbidden",

@@ -151,6 +151,7 @@ PROTECTED_FRAGMENTS = {
         "release-finalization",
         "Verification container environment",
         "focused checks use the same container environment",
+        "Retain the local full gate until enforceable trusted CI origin and protected cutover are verified",
     ),
     "Release Promotion": (
         "skills/release-cli",
@@ -158,6 +159,8 @@ PROTECTED_FRAGMENTS = {
         "Independently regenerate release-finalization trees",
         "without admin bypass",
         "Release metadata validation must not repeat the complete local application matrix",
+        "Finalization automatically promotes its deterministic PR and completes only after exact merged-main Actions pass",
+        "Resume already-merged finalization only after independent proof, tree, publication, and merge verification",
     ),
     "Release Flow": (
         "Never push or commit release changes directly to main",
@@ -165,11 +168,13 @@ PROTECTED_FRAGMENTS = {
         "exact main push CI and Security Scan evidence",
         "reuse that exact evidence rather than rerun the application matrix",
         "separate and resumable",
+        "Only real publication may use write permissions and the release Environment; read-only rehearsals cannot authorize publication",
     ),
     "Publication Safety": (
         "release tags, Releases, or publication images",
         "without explicit publication request",
         "Local validation image builds, reuse, and scoped cleanup follow Verification",
+        "Read-only release rehearsals may export local OCI archives without publication credentials or external writes",
     ),
     "Release Consistency": (
         "For each release artifact",

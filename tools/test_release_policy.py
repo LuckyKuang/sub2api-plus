@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import json
 import re
 import subprocess
 import sys
@@ -414,8 +415,28 @@ class MigrationBaselineTests(unittest.TestCase):
 
 
 class WorkflowProvenanceTests(unittest.TestCase):
+    def test_api_query_filters_exact_sha_and_normalizes_authoritative_fields(self) -> None:
+        payload = {"total_count": 1, "workflow_runs": [{"name": "CI", "event": "push",
+            "head_branch": "main", "head_sha": OFFICIAL_COMMIT,
+            "status": "completed", "conclusion": "success"}]}
+        with mock.patch.object(subprocess, "run", return_value=subprocess.CompletedProcess(
+                [], 0, json.dumps(payload), "")) as query:
+            runs = workflow_provenance.list_branch_runs("owner/repo", "main", OFFICIAL_COMMIT)
+        args = query.call_args.args[0]
+        self.assertEqual(args[:2], ["gh", "api"])
+        self.assertIn("head_sha=" + OFFICIAL_COMMIT, args[2])
+        self.assertIn("event=push", args[2])
+        self.assertEqual(runs[0]["headSha"], OFFICIAL_COMMIT)
+        self.assertEqual(runs[0]["workflowName"], "CI")
+
+    def test_incomplete_api_window_fails_closed(self) -> None:
+        with mock.patch.object(subprocess, "run", return_value=subprocess.CompletedProcess(
+                [], 0, '{"total_count": 101, "workflow_runs": []}', "")):
+            with self.assertRaisesRegex(workflow_provenance.WorkflowProvenanceError, "complete response"):
+                workflow_provenance.list_branch_runs("owner/repo", "main", OFFICIAL_COMMIT)
+
     @staticmethod
-    def run(
+    def make_run(
         workflow: str,
         *,
         branch: str = "main",
@@ -433,7 +454,7 @@ class WorkflowProvenanceTests(unittest.TestCase):
         }
 
     def test_exact_successful_main_runs_pass(self) -> None:
-        runs = [self.run("CI"), self.run("Security Scan")]
+        runs = [self.make_run("CI"), self.make_run("Security Scan")]
         self.assertEqual(
             runs,
             workflow_provenance.require_successful_workflows(
@@ -445,8 +466,8 @@ class WorkflowProvenanceTests(unittest.TestCase):
 
     def test_wrong_branch_or_sha_does_not_satisfy_provenance(self) -> None:
         runs = [
-            self.run("CI", branch="release/candidate"),
-            self.run("Security Scan", sha="b" * 40),
+            self.make_run("CI", branch="release/candidate"),
+            self.make_run("Security Scan", sha="b" * 40),
         ]
         with self.assertRaisesRegex(
             workflow_provenance.WorkflowProvenanceError,
@@ -464,16 +485,16 @@ class WorkflowProvenanceTests(unittest.TestCase):
             "Security Scan: missing",
         ):
             workflow_provenance.require_successful_workflows(
-                [self.run("CI")],
+                [self.make_run("CI")],
                 branch="main",
                 sha=OFFICIAL_COMMIT,
             )
 
     def test_any_unsuccessful_exact_run_fails(self) -> None:
         runs = [
-            self.run("CI"),
-            self.run("CI", conclusion="failure"),
-            self.run("Security Scan"),
+            self.make_run("CI"),
+            self.make_run("CI", conclusion="failure"),
+            self.make_run("Security Scan"),
         ]
         with self.assertRaisesRegex(
             workflow_provenance.WorkflowProvenanceError,
@@ -532,7 +553,7 @@ class PublishedReleaseCheckTests(unittest.TestCase):
 class WorkflowPolicyTests(unittest.TestCase):
     def test_external_actions_are_pinned_to_commits(self) -> None:
         action_re = re.compile(r"^\s*uses:\s*([^@\s]+)@([^\s#]+)", re.MULTILINE)
-        for path in sorted(ROOT.joinpath(".github/workflows").glob("*.yml")):
+        for path in sorted(ROOT.joinpath(".github").rglob("*.yml")):
             with self.subTest(path=path.name):
                 text = path.read_text(encoding="utf-8")
                 floating = [
@@ -554,11 +575,12 @@ class WorkflowPolicyTests(unittest.TestCase):
         workflow = ROOT.joinpath(".github/workflows/release.yml").read_text(
             encoding="utf-8"
         )
-        self.assertIn("Publish pricing release assets", workflow)
-        self.assertIn("model-pricing.json", workflow)
-        self.assertIn("model-pricing-manifest.json", workflow)
-        self.assertIn("./cmd/pricing-manifest-build", workflow)
-        self.assertIn("Refusing to replace immutable pricing asset", workflow)
+        helper = ROOT.joinpath(".github/release-tools/release_pricing.py").read_text()
+        self.assertIn("Publish verified artifacts and pricing last", workflow)
+        self.assertIn("model-pricing.json", helper)
+        self.assertIn("model-pricing-manifest.json", helper)
+        self.assertIn("./cmd/pricing-manifest-build", helper)
+        self.assertIn("Refusing to replace immutable pricing asset", helper)
         self.assertIn("name: release", workflow)
         self.assertIsNone(
             re.search(r"PRICING_MANIFEST_(?:SIGNING|PUBLIC)_KEY", workflow)
@@ -566,14 +588,16 @@ class WorkflowPolicyTests(unittest.TestCase):
         self.assertIsNone(
             re.search(r"model-pricing-manifest\.json\.sig", workflow)
         )
-        self.assertNotIn("--clobber", workflow)
+        self.assertNotIn("--clobber", workflow + helper)
 
     def test_release_publish_is_automatic_only_after_verification(self) -> None:
         workflow = ROOT.joinpath(".github/workflows/release.yml").read_text(
             encoding="utf-8"
         )
         self.assertIn("name: Build and publish", workflow)
-        self.assertIn("needs: verify", workflow)
+        self.assertIn("needs: [prepare, verify, build-binaries]", workflow)
+        self.assertIn("needs.verify.result == 'success'", workflow)
+        self.assertIn("needs.build-binaries.result == 'success'", workflow)
         self.assertIn("environment:\n      name: release", workflow)
         self.assertNotIn("required reviewers", workflow)
 
@@ -582,8 +606,9 @@ class WorkflowPolicyTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("name: Verify release provenance", workflow)
-        self.assertIn("tools/workflow_provenance.py", workflow)
-        self.assertIn("git merge-base --is-ancestor", workflow)
+        helper = ROOT.joinpath(".github/release-tools/release_job.py").read_text()
+        self.assertIn("workflow_provenance.py", helper)
+        self.assertIn("'git', 'merge-base', '--is-ancestor'", helper)
         self.assertNotIn("uses: ./.github/workflows/backend-ci.yml", workflow)
         self.assertRegex(
             workflow,
@@ -627,8 +652,7 @@ class WorkflowPolicyTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("tools/check_published_release.py", workflow)
-        self.assertIn("--require-status published", workflow)
-        self.assertIn("--mapping-only", workflow)
+        self.assertIn("tools/ci_validation.py lane --lane finalization", workflow)
         self.assertIn(
             "if: steps.validation-profile.outputs.profile == 'release-finalization'",
             workflow,
@@ -679,39 +703,28 @@ class WorkflowPolicyTests(unittest.TestCase):
         )
 
     def test_goreleaser_validation_uses_embedded_release_version(self) -> None:
-        workflow = ROOT.joinpath(".github/workflows/backend-ci.yml").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("backend/cmd/server/VERSION", workflow)
-        self.assertIn(
-            "DOCKER_TAG_VERSION: ${{ steps.tool-versions.outputs.docker_tag_version }}",
-            workflow,
-        )
-        self.assertIsNone(
-            re.search(
-                r"DOCKER_TAG_VERSION:\s+v\d+\.\d+\.\d+-custom\.\d{3}",
-                workflow,
-            )
-        )
+        # The command executes inside the pinned validation image; behavior is
+        # covered by test_ci_validation.ContainerAndProfileTests.
+        workflow = ROOT.joinpath(".github/workflows/backend-ci.yml").read_text()
+        self.assertIn("tools/ci_validation.py lane --lane goreleaser-config", workflow)
+        self.assertIsNone(re.search(
+            r"DOCKER_TAG_VERSION:\\s+v\\d+\\.\\d+\\.\\d+-custom\\.\\d{3}", workflow,
+        ))
 
     def test_repository_policy_runs_all_cli_self_tests(self) -> None:
-        workflow = ROOT.joinpath(".github/workflows/backend-ci.yml").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn(
-            "python skills/compress-cli/tests/test_compress_cli.py",
-            workflow,
-        )
-        self.assertIn(
-            "python skills/push-cli/tests/test_push_cli.py",
-            workflow,
-        )
-        self.assertIn(
-            "python skills/release-cli/tests/test_release_cli.py",
-            workflow,
-        )
-        self.assertIn("python tools/check_test_build_tags.py", workflow)
-
+        import validation_checks
+        commands = {tuple(step.command) for step in validation_checks.ci_steps(
+            ROOT, "repository-policy", python="python3", base="a" * 40,
+        )}
+        for path in (
+            "skills/compress-cli/tests/test_compress_cli.py",
+            "skills/push-cli/tests/test_push_cli.py",
+            "skills/release-cli/tests/test_release_cli.py",
+            "tools/check_test_build_tags.py",
+        ):
+            self.assertIn(("python3", path), commands)
+        workflow = ROOT.joinpath(".github/workflows/backend-ci.yml").read_text()
+        self.assertIn("tools/ci_validation.py lane --lane repository-policy", workflow)
 
 class ReleaseTagTests(unittest.TestCase):
     def test_tag_creation_preserves_markdown_headings(self) -> None:

@@ -1,0 +1,54 @@
+name: Prepare validation container
+description: Restore the deterministic toolchain image and current dependency generation.
+inputs:
+  lane:
+    description: Validation cache ownership lane
+    required: true
+  launcher:
+    description: Validation launcher from the approved workflow tooling
+    required: false
+    default: tools/ci_validation.py
+outputs:
+  image:
+    description: Current deterministic validation image
+    value: ${{ steps.identity.outputs.image }}
+runs:
+  using: composite
+  steps:
+    - name: Resolve pinned validation identities
+      id: identity
+      shell: bash
+      env:
+        VALIDATION_LAUNCHER: ${{ inputs.launcher }}
+      run: python3 "$VALIDATION_LAUNCHER" identity --github-output "$GITHUB_OUTPUT"
+    - name: Restore validation image
+      id: image-cache
+      uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+      with:
+        path: ${{ runner.temp }}/sub2api-validation-image.tar
+        key: validation-image-${{ runner.os }}-${{ runner.arch }}-${{ steps.identity.outputs.image_generation }}
+    - name: Load cached toolchain image
+      if: steps.image-cache.outputs.cache-hit == 'true'
+      shell: bash
+      env:
+        IMAGE_ARCHIVE: ${{ runner.temp }}/sub2api-validation-image.tar
+      run: docker load --input "$IMAGE_ARCHIVE"
+    - name: Restore current dependency generation
+      uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+      with:
+        path: ~/.cache/sub2api-validation/${{ steps.identity.outputs.cache_generation }}
+        key: validation-deps-${{ runner.os }}-${{ runner.arch }}-${{ inputs.lane }}-${{ steps.identity.outputs.cache_generation }}-${{ github.sha }}
+        restore-keys: |
+          validation-deps-${{ runner.os }}-${{ runner.arch }}-${{ inputs.lane }}-${{ steps.identity.outputs.cache_generation }}-
+    - name: Ensure current toolchain and scoped cleanup
+      shell: bash
+      env:
+        VALIDATION_LAUNCHER: ${{ inputs.launcher }}
+      run: python3 "$VALIDATION_LAUNCHER" ensure
+    - name: Export new toolchain cache
+      if: steps.image-cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        VALIDATION_IMAGE: ${{ steps.identity.outputs.image }}
+        IMAGE_ARCHIVE: ${{ runner.temp }}/sub2api-validation-image.tar
+      run: docker save --output "$IMAGE_ARCHIVE" "$VALIDATION_IMAGE"

@@ -64,7 +64,11 @@ focused checks, not the full application matrix.
 
 ## In-Container Matrix
 
-The full matrix includes every existing command and runs three bounded lanes:
+The full matrix includes every existing command and keeps three logical lanes with two concurrent workers:
+
+Commands are maintained in `tools/validation_checks.py` and shared with CI.
+`docs/CI_VALIDATION.md` records coverage ownership and pending authority cutover;
+the local proof remains required. CI full suites do not produce local success.
 
 - Go module tidiness, unit tests, integration tests, and golangci-lint.
 - Compress CLI, push CLI, and release CLI self-tests.
@@ -72,11 +76,17 @@ The full matrix includes every existing command and runs three bounded lanes:
   audit exception policy.
 - Release policy, release metadata, README synchronization, Codex outbound
   identity, and migration checks against the validated default-branch base.
+- Shared CI-coverage regressions, release archive/OCI/pricing/workflow regressions,
+  image-script syntax and Go test build-tag regressions.
 - Installer syntax, Docker deployment security/resources, Caddy cache policy,
   and the Apple Container lifecycle fixture.
 
 The backend-test lane keeps module tidiness before unit and integration tests.
-The backend-lint/policy lane serializes lint and repository policy commands.
+The backend-lint/policy lane starts after the backend-test lane finishes,
+preventing two large Go heaps from exhausting the 8-GiB container. It serializes
+lint and repository policy commands. Go test/lint commands and the frontend
+production build share one memory slot; cold compilation must not overlap the
+production build in the 8-GiB VM.
 The frontend lane keeps install before lint, typecheck, full Vitest, build, and
 audit. Default parallel execution limits Vitest to two workers within the
 four-CPU container; `--serial` uses four. Every command and lane reports elapsed
@@ -88,7 +98,7 @@ and Linux Docker must parse `deploy/docker-compose.dev.yml` successfully.
 After each validation attempt, successful or failed, validation containers use
 `--rm`, so their writable VM/container snapshots are removed. The launcher
 retains the `sub2api-validation:<toolchain-digest>` image matching the resolved
-Go, Node, pnpm, golangci-lint, and GoReleaser pins. Dependency caches use a
+Go, Node, pnpm, golangci-lint, GoReleaser, govulncheck and PyYAML pins. Dependency caches use a
 separate generation derived from that image plus the current Go and pnpm lock
 inputs. Cleanup removes only stale Sub2API validation image and cache
 generations and does not run a global container, image, builder, volume, or

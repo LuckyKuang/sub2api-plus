@@ -56,98 +56,6 @@ changelog:
   # 禁用自动 changelog，完全使用 tag 消息
   disable: true
 
-# Native Buildx release images. The architecture-specific tags remain
-# available, while the multi-platform entries replace legacy docker manifests.
-dockers_v2:
-  # Docker Hub is intentionally skipped when the release workflow receives
-  # DOCKERHUB_USERNAME=skip.
-  - id: dockerhub-amd64
-    ids: [sub2api]
-    dockerfile: Dockerfile.goreleaser
-    images: ["{{ .Env.DOCKERHUB_USERNAME }}/sub2api-plus"]
-    tags: ["{{ .Env.DOCKER_TAG_VERSION }}-amd64"]
-    platforms: [linux/amd64]
-    disable: '{{ eq .Env.DOCKERHUB_USERNAME "skip" }}'
-    sbom: "false"
-    extra_files: [deploy/docker-entrypoint.sh, backend/resources]
-    labels:
-      org.opencontainers.image.version: "{{ .Version }}"
-      org.opencontainers.image.revision: "{{ .Commit }}"
-
-  - id: dockerhub-arm64
-    ids: [sub2api]
-    dockerfile: Dockerfile.goreleaser
-    images: ["{{ .Env.DOCKERHUB_USERNAME }}/sub2api-plus"]
-    tags: ["{{ .Env.DOCKER_TAG_VERSION }}-arm64"]
-    platforms: [linux/arm64]
-    disable: '{{ eq .Env.DOCKERHUB_USERNAME "skip" }}'
-    sbom: "false"
-    extra_files: [deploy/docker-entrypoint.sh, backend/resources]
-    labels:
-      org.opencontainers.image.version: "{{ .Version }}"
-      org.opencontainers.image.revision: "{{ .Commit }}"
-
-  - id: dockerhub-multiarch
-    ids: [sub2api]
-    dockerfile: Dockerfile.goreleaser
-    images: ["{{ .Env.DOCKERHUB_USERNAME }}/sub2api-plus"]
-    tags:
-      - "{{ .Env.DOCKER_TAG_VERSION }}"
-      - latest
-      - "{{ .Major }}.{{ .Minor }}"
-      - "{{ .Major }}"
-    platforms: [linux/amd64, linux/arm64]
-    disable: '{{ eq .Env.DOCKERHUB_USERNAME "skip" }}'
-    sbom: "false"
-    extra_files: [deploy/docker-entrypoint.sh, backend/resources]
-    labels:
-      org.opencontainers.image.version: "{{ .Version }}"
-      org.opencontainers.image.revision: "{{ .Commit }}"
-
-  # GHCR images use the repository owner normalized by the release workflow.
-  - id: ghcr-amd64
-    ids: [sub2api]
-    dockerfile: Dockerfile.goreleaser
-    images: ["ghcr.io/{{ .Env.GITHUB_REPO_OWNER_LOWER }}/sub2api-plus"]
-    tags: ["{{ .Env.DOCKER_TAG_VERSION }}-amd64"]
-    platforms: [linux/amd64]
-    sbom: "false"
-    extra_files: [deploy/docker-entrypoint.sh, backend/resources]
-    labels:
-      org.opencontainers.image.version: "{{ .Version }}"
-      org.opencontainers.image.revision: "{{ .Commit }}"
-      org.opencontainers.image.source: "https://github.com/{{ .Env.GITHUB_REPO_OWNER }}/{{ .Env.GITHUB_REPO_NAME }}"
-
-  - id: ghcr-arm64
-    ids: [sub2api]
-    dockerfile: Dockerfile.goreleaser
-    images: ["ghcr.io/{{ .Env.GITHUB_REPO_OWNER_LOWER }}/sub2api-plus"]
-    tags: ["{{ .Env.DOCKER_TAG_VERSION }}-arm64"]
-    platforms: [linux/arm64]
-    sbom: "false"
-    extra_files: [deploy/docker-entrypoint.sh, backend/resources]
-    labels:
-      org.opencontainers.image.version: "{{ .Version }}"
-      org.opencontainers.image.revision: "{{ .Commit }}"
-      org.opencontainers.image.source: "https://github.com/{{ .Env.GITHUB_REPO_OWNER }}/{{ .Env.GITHUB_REPO_NAME }}"
-
-  - id: ghcr-multiarch
-    ids: [sub2api]
-    dockerfile: Dockerfile.goreleaser
-    images: ["ghcr.io/{{ .Env.GITHUB_REPO_OWNER_LOWER }}/sub2api-plus"]
-    tags:
-      - "{{ .Env.DOCKER_TAG_VERSION }}"
-      - latest
-      - "{{ .Major }}.{{ .Minor }}"
-      - "{{ .Major }}"
-    platforms: [linux/amd64, linux/arm64]
-    sbom: "false"
-    extra_files: [deploy/docker-entrypoint.sh, backend/resources]
-    labels:
-      org.opencontainers.image.version: "{{ .Version }}"
-      org.opencontainers.image.revision: "{{ .Commit }}"
-      org.opencontainers.image.source: "https://github.com/{{ .Env.GITHUB_REPO_OWNER }}/{{ .Env.GITHUB_REPO_NAME }}"
-
 release:
   github:
     owner: "{{ .Env.GITHUB_REPO_OWNER }}"
@@ -169,11 +77,6 @@ release:
 
     **Docker:**
     ```bash
-    {{ if ne .Env.DOCKERHUB_USERNAME "skip" -}}
-    # Docker Hub
-    docker pull {{ .Env.DOCKERHUB_USERNAME }}/sub2api-plus:{{ .Env.DOCKER_TAG_VERSION }}
-
-    {{ end -}}
     # GitHub Container Registry
     docker pull ghcr.io/{{ .Env.GITHUB_REPO_OWNER_LOWER }}/sub2api-plus:{{ .Env.DOCKER_TAG_VERSION }}
     ```

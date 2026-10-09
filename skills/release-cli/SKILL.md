@@ -1,6 +1,6 @@
 ---
 name: release-cli
-description: Promote a locally validated Sub2API Plus pull request through protected GitHub auto-merge, create an immutable vX.Y.Z+custom.NNN tag at the tested main merge commit, publish and monitor the automatically gated Release workflow, verify immutable assets, and submit post-publication metadata through a follow-up PR. Use for release PR promotion, tag creation/publication, release-environment monitoring, verification, or UPSTREAM.md finalization. Require an authenticated GitHub CLI, exact submit-pr base/head proof, protected default-branch required checks, repository auto-merge, an automatic tag-only release Environment, immutable custom-tag rules, and successful Actions. Never use admin bypass, directly push main, repeat the full local application matrix, approve a deployment, or combine tag publication with monitor/verify.
+description: Promote a locally validated Sub2API Plus pull request through protected GitHub auto-merge, create an immutable vX.Y.Z+custom.NNN tag at the tested main merge commit, publish and monitor the automatically gated Release workflow, verify immutable assets, and finalize post-publication metadata through a protected follow-up PR with exact merged-main verification. Use for release PR promotion, tag creation/publication, release-environment monitoring, verification, or UPSTREAM.md finalization. Require an authenticated GitHub CLI, exact submit-pr base/head proof, protected default-branch required checks, repository auto-merge, an automatic tag-only release Environment, immutable custom-tag rules, and successful Actions. Never use admin bypass, directly push main, repeat the full local application matrix, approve a deployment, or combine tag publication with monitor/verify.
 ---
 
 # Release CLI
@@ -19,8 +19,10 @@ Run from the repository root with an explicit custom tag:
 ## Release Boundary
 
 The release candidate must first be submitted with the default `full` profile
-of `push-cli submit-pr`. `promote-pr` accepts only an explicit open, non-draft,
-same-repository PR to the GitHub default branch. Its typed PR marker and
+of `push-cli submit-pr`. Release-candidate `promote-pr` accepts an explicit open,
+non-draft, same-repository PR to the GitHub default branch. Finalization may
+also resume its already merged PR through the independently verified path below.
+For an open PR, its typed PR marker and
 profile-specific `sub2api/local-validation` status must match the current head
 and current default-branch base exactly.
 
@@ -38,6 +40,14 @@ revalidates and reuses this exact provenance instead of rerunning the complete
 application matrix.
 
 ## Tag and Publication
+
+The tag workflow captures one source SHA, shares one frontend build and compiles
+five targets independently; the publisher consumes verified archives. Only real
+publication has write permissions and enters the release Environment. Read-only
+branch/tag rehearsals export local OCI archives without registry login or
+publication. Follow [the packaging contract](../../.github/release-tools/README.md).
+CI-only submission remains inactive until the protected trusted-origin cutover
+in [CI validation](../../docs/CI_VALIDATION.md) is verified.
 
 Local metadata and deterministic tree checks use `tools/release_validation.py`
 and the container environment defined in `CONTRIBUTING.md`: Apple Containers on
@@ -62,8 +72,9 @@ verifies, uses `git push --tags`, or creates a GitHub Release manually.
 
 `monitor` resolves the canonical remote annotated tag and observes its
 tag-triggered Release workflow through automatic `Build and publish` completion.
-A waiting Environment gate is policy drift and fails closed; the CLI never
-approves it. `verify` is separate and requires that same remote tag, a
+When publication waits, the CLI rechecks the automatic Environment/tag policy.
+Policy drift fails closed; transient waiting under a valid automatic policy
+continues monitoring. The CLI never approves a deployment. `verify` is separate and requires that same remote tag, a
 successfully completed workflow, non-draft Release, and both immutable pricing
 assets.
 
@@ -80,15 +91,23 @@ complete expected tree from the recorded base and re-verifies the published
 Release and immutable assets; it never runs the full application matrix for
 this profile or commits/pushes main.
 
-Promote the resulting PR through the same `promote-pr` policy after its Actions
-pass, omitting `--notes-file`. That form requires the matching typed tag proof,
+`finalize` discovers the exact submitted PR and invokes the complete `promote-pr`
+policy automatically, omitting `--notes-file`. That form requires the matching typed tag proof,
 deterministic branch, regenerated tree, published metadata, Release workflow,
 and immutable assets. Required PR and merged-main contexts classify the same
-tree before selecting focused checks and fail closed on ambiguity.
+tree before selecting focused checks and fail closed on ambiguity. Finalization
+succeeds only after the actual merge and successful exact merged-main CI and
+Security Scan. Positively identified pending checks/merge return status 2 with
+the PR URL and retry command. Failed checks and API errors remain failures.
+An already merged finalization can resume after independent proof, merge
+parents/tree, published Release and deterministic metadata verification.
+An existing deterministic branch resumes only its exact matching PR, without
+resetting the branch or creating another commit.
 
 ## Safety
 
-- Never promote a PR whose head/base differs from its local-validation proof.
+- Open-PR promotion requires current head/base to match the validation proof;
+  merged-finalization resume requires merge parents/tree to match recorded proof.
 - Never auto-merge without repository Auto-merge and required protected rules.
 - Never use administrator bypass or treat the current account's admin role as
   permission to skip checks.

@@ -42,10 +42,13 @@ runs:
         EVENT_NAME: ${{ inputs.event }}
       run: |
         set -euo pipefail
-        python tools/release_finalization.py classify \
+        result_file=$(mktemp "$PWD/.validation-profile.XXXXXX")
+        trap 'rm -f "$result_file"' EXIT
+        python3 tools/ci_validation.py exec -- python3 tools/release_finalization.py classify \
           --base "$CANDIDATE_BASE" \
           --head "$CANDIDATE_HEAD" \
           --branch "$CANDIDATE_BRANCH" \
           --default-branch "$DEFAULT_BRANCH" \
           --event "$EVENT_NAME" \
-          --github-output "$GITHUB_OUTPUT"
+          --github-output "$result_file"
+        cat "$result_file" >> "$GITHUB_OUTPUT"

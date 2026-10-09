@@ -7,291 +7,269 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing tag to publish"
-        required: true
+        description: "Source tag or branch for rehearsal; publication requires the same tag workflow ref"
+        required: false
         type: string
+      dry_run:
+        description: "Read-only packaging rehearsal; never publish images or assets"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
 
-# GoReleaser also updates the shared latest, major, and minor GHCR tags.
-# Serialize releases so simultaneous tag pushes cannot race on those manifests.
 concurrency:
   group: release-publish
   cancel-in-progress: false
 
+env:
+  SUB2API_VALIDATION_ROOT: ${{ github.workspace }}
+  SUB2API_VALIDATION_INPUT_ROOT: ${{ github.workspace }}/.release-tooling/validation-inputs
+
 jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    outputs:
+      sha: ${{ steps.plan.outputs.sha }}
+      mode: ${{ steps.plan.outputs.mode }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - name: Stage immutable workflow tooling
+        env:
+          TOOLING_SHA: ${{ github.workflow_sha }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/release-tooling/actions" "$RUNNER_TEMP/release-tooling/validation" "$RUNNER_TEMP/release-tooling/skills"
+          cp -R tools "$RUNNER_TEMP/release-tooling/"
+          cp -R .github/release-tools "$RUNNER_TEMP/release-tooling/"
+          cp -R skills/release-cli "$RUNNER_TEMP/release-tooling/skills/"
+          cp -R .github/actions/prepare-validation "$RUNNER_TEMP/release-tooling/actions/"
+          cp -R .github/actions/release-package "$RUNNER_TEMP/release-tooling/actions/"
+          cp -R .github/actions/release-source "$RUNNER_TEMP/release-tooling/actions/"
+          cp deploy/Dockerfile.validation "$RUNNER_TEMP/release-tooling/validation/"
+          cp .tool-versions "$RUNNER_TEMP/release-tooling/validation/tool-versions"
+          printf '%s\n' "$TOOLING_SHA" > "$RUNNER_TEMP/release-tooling/revision"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        with:
+          name: release-tooling
+          path: ${{ runner.temp }}/release-tooling
+      - name: Resolve application source once
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Stage separate toolchain inputs
+        run: |
+          cp -R "$RUNNER_TEMP/release-tooling" .release-tooling
+          python3 .release-tooling/tools/release_context.py --tooling .release-tooling --output .release-tooling/validation-inputs
+      - uses: ./.release-tooling/actions/prepare-validation
+        with:
+          lane: release-prepare
+          launcher: .release-tooling/tools/ci_validation.py
+      - name: Capture source, version, date and matrix
+        id: plan
+        env:
+          SOURCE_REF: ${{ inputs.tag || github.ref }}
+          REQUEST_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        run: |
+          args=()
+          if [ "$REQUEST_DRY_RUN" = true ]; then args+=(--dry-run); fi
+          python3 .release-tooling/tools/ci_validation.py exec \
+            --env GITHUB_REF --env GITHUB_EVENT_NAME --env GITHUB_REPOSITORY_OWNER -- \
+            python3 .release-tooling/release-tools/release_matrix.py plan --ref "$SOURCE_REF" "${args[@]}"
+          cat .release-plan/outputs >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        with:
+          name: version-file
+          path: .release-plan/
+          include-hidden-files: true
+
   verify:
     name: Verify release provenance
-    runs-on: ubuntu-latest
+    needs: prepare
+    if: needs.prepare.outputs.mode != 'branch-rehearsal'
+    runs-on: ubuntu-24.04
     permissions:
       actions: read
       contents: read
     steps:
-      - name: Check out the release tag
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
+          ref: ${{ github.workflow_sha }}
           persist-credentials: false
-          ref: ${{ inputs.tag || github.ref }}
-
-      - name: Resolve and verify release provenance
-        id: provenance
-        env:
-          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-          INPUT_TAG: ${{ inputs.tag }}
-        run: |
-          set -euo pipefail
-          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
-            TAG_NAME="$INPUT_TAG"
-          else
-            TAG_NAME="${GITHUB_REF#refs/tags/}"
-          fi
-
-          if ! [[ "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+\+custom\.[0-9]{3}$ ]]; then
-            echo "Invalid release tag: $TAG_NAME" >&2
-            exit 1
-          fi
-
-          TAG_REF="refs/tags/$TAG_NAME"
-          git show-ref --verify --quiet "$TAG_REF" || {
-            echo "Tag does not exist: $TAG_NAME" >&2
-            exit 1
-          }
-          if [ "$(git cat-file -t "$TAG_REF")" != "tag" ]; then
-            echo "Release tag must be annotated: $TAG_NAME" >&2
-            exit 1
-          fi
-
-          TARGET_SHA="$(git rev-parse "$TAG_REF^{}")"
-          if [ "$TARGET_SHA" != "$(git rev-parse HEAD)" ]; then
-            echo "Checked-out commit does not match $TAG_NAME" >&2
-            exit 1
-          fi
-
-          EXPECTED_SUBJECT="Sub2API Plus $TAG_NAME"
-          TAG_SUBJECT="$(git for-each-ref --format='%(contents:subject)' "$TAG_REF")"
-          if [ "$TAG_SUBJECT" != "$EXPECTED_SUBJECT" ]; then
-            echo "Tag subject must be: $EXPECTED_SUBJECT" >&2
-            exit 1
-          fi
-
-          NOTES_FILE="$RUNNER_TEMP/release-provenance-notes.md"
-          git for-each-ref --format='%(contents)' "$TAG_REF" > "$NOTES_FILE"
-          git fetch --no-tags origin \
-            "+refs/heads/$DEFAULT_BRANCH:refs/remotes/origin/$DEFAULT_BRANCH"
-          git merge-base --is-ancestor "$TARGET_SHA" "origin/$DEFAULT_BRANCH" || {
-            echo "$TAG_NAME target is not contained by origin/$DEFAULT_BRANCH" >&2
-            exit 1
-          }
-
-          {
-            echo "tag=$TAG_NAME"
-            echo "target=$TARGET_SHA"
-            echo "notes_file=$NOTES_FILE"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Verify release metadata and notes
-        run: |
-          python tools/check_release.py \
-            --tag "${{ steps.provenance.outputs.tag }}" \
-            --notes-file "${{ steps.provenance.outputs.notes_file }}" \
-            --require-status planned
-
-      - name: Verify exact main workflow evidence
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v5
+        with:
+          name: release-tooling
+          path: .release-tooling
+      - uses: ./.release-tooling/actions/release-source
+        with:
+          sha: ${{ needs.prepare.outputs.sha }}
+          lane: verify
+      - name: Verify annotated tag, metadata and exact main Actions
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
-          python tools/workflow_provenance.py \
-            --repository "$GITHUB_REPOSITORY" \
-            --branch "${{ github.event.repository.default_branch }}" \
-            --sha "${{ steps.provenance.outputs.target }}"
+          python3 .release-tooling/tools/ci_validation.py exec \
+            --env GH_TOKEN --env GITHUB_REPOSITORY --env DEFAULT_BRANCH -- \
+            python3 .release-tooling/release-tools/release_job.py verify --strict
+
+  verify-rehearsal:
+    name: Verify branch rehearsal snapshot
+    needs: prepare
+    if: needs.prepare.outputs.mode == 'branch-rehearsal'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v5
+        with:
+          name: release-tooling
+          path: .release-tooling
+      - uses: ./.release-tooling/actions/release-source
+        with:
+          sha: ${{ needs.prepare.outputs.sha }}
+          lane: verify-rehearsal
+      - run: |
+          python3 .release-tooling/tools/ci_validation.py exec --env GITHUB_REPOSITORY -- \
+            python3 .release-tooling/release-tools/release_job.py verify
+
+  build-frontend:
+    needs: [prepare, verify, verify-rehearsal]
+    if: >-
+      always() && !cancelled() && needs.prepare.result == 'success' &&
+      ((needs.prepare.outputs.mode == 'branch-rehearsal' && needs.verify-rehearsal.result == 'success') ||
+       (needs.prepare.outputs.mode != 'branch-rehearsal' && needs.verify.result == 'success'))
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v5
+        with:
+          name: release-tooling
+          path: .release-tooling
+      - uses: ./.release-tooling/actions/release-source
+        with:
+          sha: ${{ needs.prepare.outputs.sha }}
+          lane: frontend
+      - name: Build shared frontend once
+        run: |
+          python3 .release-tooling/tools/ci_validation.py exec --env GITHUB_REPOSITORY -- \
+            python3 .release-tooling/release-tools/release_job.py frontend
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        with:
+          name: frontend-dist
+          path: backend/internal/web/dist/
+          if-no-files-found: error
+
+  build-binaries:
+    needs: [prepare, build-frontend]
+    if: always() && !cancelled() && needs.prepare.result == 'success' && needs.build-frontend.result == 'success'
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v5
+        with:
+          name: release-tooling
+          path: .release-tooling
+      - uses: ./.release-tooling/actions/release-source
+        with:
+          sha: ${{ needs.prepare.outputs.sha }}
+          lane: ${{ matrix.goos }}-${{ matrix.goarch }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v5
+        with:
+          name: frontend-dist
+          path: backend/internal/web/dist/
+      - name: Compile and verify one target
+        env:
+          TARGET_GOOS: ${{ matrix.goos }}
+          TARGET_GOARCH: ${{ matrix.goarch }}
+        run: |
+          python3 .release-tooling/tools/ci_validation.py exec --env GITHUB_REPOSITORY -- \
+            python3 .release-tooling/release-tools/release_job.py binary --goos "$TARGET_GOOS" --goarch "$TARGET_GOARCH"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        with:
+          name: release-leaf-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: release-leaf/
+          if-no-files-found: error
 
   release:
     name: Build and publish
-    needs: verify
-    runs-on: ubuntu-latest
-    # release-cli requires this environment to disable administrator bypass,
-    # have no blocking approval gate, and allow only v*+custom.* tags.
+    needs: [prepare, verify, build-binaries]
+    if: always() && !cancelled() && needs.prepare.result == 'success' && needs.prepare.outputs.mode == 'publish' && needs.verify.result == 'success' && needs.build-binaries.result == 'success'
+    runs-on: ubuntu-24.04
     environment:
       name: release
     permissions:
       contents: write
       packages: write
     steps:
-      - name: Check out the release tag
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
+          ref: ${{ github.workflow_sha }}
           persist-credentials: false
-          ref: ${{ inputs.tag || github.ref }}
-
-      - name: Resolve and verify release metadata
-        id: metadata
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          INPUT_TAG: ${{ inputs.tag }}
-        run: |
-          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
-            TAG_NAME="$INPUT_TAG"
-          else
-            TAG_NAME="${GITHUB_REF#refs/tags/}"
-          fi
-
-          if ! [[ "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+\+custom\.[0-9]{3}$ ]]; then
-            echo "Invalid release tag: $TAG_NAME" >&2
-            exit 1
-          fi
-
-          TAG_REF="refs/tags/$TAG_NAME"
-          git show-ref --verify --quiet "$TAG_REF" || {
-            echo "Tag does not exist: $TAG_NAME" >&2
-            exit 1
-          }
-          if [ "$(git cat-file -t "$TAG_REF")" != "tag" ]; then
-            echo "Release tag must be annotated: $TAG_NAME" >&2
-            exit 1
-          fi
-          if [ "$(git rev-parse "$TAG_REF^{}")" != "$(git rev-parse HEAD)" ]; then
-            echo "Checked-out commit does not match $TAG_NAME" >&2
-            exit 1
-          fi
-
-          EXPECTED_SUBJECT="Sub2API Plus $TAG_NAME"
-          TAG_SUBJECT="$(git for-each-ref --format='%(contents:subject)' "$TAG_REF")"
-          if [ "$TAG_SUBJECT" != "$EXPECTED_SUBJECT" ]; then
-            echo "Tag subject must be: $EXPECTED_SUBJECT" >&2
-            exit 1
-          fi
-
-          NOTES_FILE="$RUNNER_TEMP/release-notes.md"
-          BODY_FILE="$RUNNER_TEMP/release-notes-body.md"
-          git for-each-ref --format='%(contents)' "$TAG_REF" > "$NOTES_FILE"
-          git for-each-ref --format='%(contents:body)' "$TAG_REF" > "$BODY_FILE"
-
-          DELIMITER="TAG_MESSAGE_$(python -c 'import uuid; print(uuid.uuid4().hex)')"
-          while grep -Fqx "$DELIMITER" "$BODY_FILE"; do
-            DELIMITER="TAG_MESSAGE_$(python -c 'import uuid; print(uuid.uuid4().hex)')"
-          done
-          {
-            echo "TAG_MESSAGE<<$DELIMITER"
-            cat "$BODY_FILE"
-            echo "$DELIMITER"
-          } >> "$GITHUB_ENV"
-
-          VERSION="${TAG_NAME#v}"
-          DOCKER_TAG="${TAG_NAME/+/-}"
-          OWNER_LOWER="$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')"
-          {
-            echo "tag=$TAG_NAME"
-            echo "version=$VERSION"
-            echo "docker_tag=$DOCKER_TAG"
-            echo "notes_file=$NOTES_FILE"
-            echo "owner_lower=$OWNER_LOWER"
-            if gh release view "$TAG_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-              echo "goreleaser_args=release --clean --skip=validate,announce"
-            else
-              echo "goreleaser_args=release --clean --skip=validate"
-            fi
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Verify release metadata and notes
-        run: |
-          python tools/check_release.py \
-            --tag "${{ steps.metadata.outputs.tag }}" \
-            --notes-file "${{ steps.metadata.outputs.notes_file }}"
-
-      - name: Set up pnpm
-        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v5
         with:
-          package_json_file: frontend/package.json
-
-      - name: Set up Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+          name: release-tooling
+          path: .release-tooling
+      - uses: ./.release-tooling/actions/release-source
         with:
-          node-version: "20"
-          cache: pnpm
-          cache-dependency-path: frontend/pnpm-lock.yaml
-
-      - name: Build frontend
-        working-directory: frontend
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm run build
-
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: backend/go.mod
-          check-latest: false
-          cache-dependency-path: backend/go.sum
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+          sha: ${{ needs.prepare.outputs.sha }}
+          lane: publisher
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Resolve GoReleaser version
-        id: goreleaser-version
-        run: |
-          VERSION="$(awk '$1 == "goreleaser" { print $2 }' .tool-versions)"
-          test -n "$VERSION"
-          echo "version=v${VERSION#v}" >> "$GITHUB_OUTPUT"
-
-      - name: Publish release, artifacts, and images
-        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7
+      - name: Publish verified artifacts and pricing last
+        uses: ./.release-tooling/actions/release-package
         with:
-          version: ${{ steps.goreleaser-version.outputs.version }}
-          args: ${{ steps.metadata.outputs.goreleaser_args }}
+          dry_run: 'false'
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPO_OWNER: ${{ github.repository_owner }}
-          GITHUB_REPO_OWNER_LOWER: ${{ steps.metadata.outputs.owner_lower }}
-          GITHUB_REPO_NAME: ${{ github.event.repository.name }}
-          DOCKER_TAG_VERSION: ${{ steps.metadata.outputs.docker_tag }}
-          DOCKERHUB_USERNAME: skip
 
-      - name: Publish pricing release assets
+  rehearse:
+    name: Read-only packaging rehearsal
+    needs: [prepare, verify, verify-rehearsal, build-binaries]
+    if: >-
+      always() && !cancelled() && needs.prepare.result == 'success' &&
+      needs.prepare.outputs.mode != 'publish' && needs.build-binaries.result == 'success' &&
+      ((needs.prepare.outputs.mode == 'branch-rehearsal' && needs.verify-rehearsal.result == 'success') ||
+       (needs.prepare.outputs.mode == 'tag-rehearsal' && needs.verify.result == 'success'))
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v5
+        with:
+          name: release-tooling
+          path: .release-tooling
+      - uses: ./.release-tooling/actions/release-source
+        with:
+          sha: ${{ needs.prepare.outputs.sha }}
+          lane: rehearsal
+      - uses: ./.release-tooling/actions/release-package
+        with:
+          dry_run: 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ steps.metadata.outputs.tag }}
-        run: |
-          set -euo pipefail
-          PRICING_RELEASE_DIR="$RUNNER_TEMP/pricing-release"
-          EXISTING_ASSET_DIR="$RUNNER_TEMP/existing-pricing-assets"
-          mkdir -p "$PRICING_RELEASE_DIR" "$EXISTING_ASSET_DIR"
-          cp backend/resources/model-pricing/model_prices_and_context_window.json \
-            "$PRICING_RELEASE_DIR/model-pricing.json"
-          go -C backend run ./cmd/pricing-manifest-build \
-            --data "$PRICING_RELEASE_DIR/model-pricing.json" \
-            --repository "$GITHUB_REPOSITORY" \
-            --tag "$RELEASE_TAG" \
-            --manifest "$PRICING_RELEASE_DIR/model-pricing-manifest.json"
-
-          assets=(
-            model-pricing.json
-            model-pricing-manifest.json
-          )
-          uploads=()
-          for asset in "${assets[@]}"; do
-            if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
-              --json assets --jq '.assets[].name' | grep -Fqx "$asset"; then
-              gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
-                --pattern "$asset" --dir "$EXISTING_ASSET_DIR"
-              cmp -- "$PRICING_RELEASE_DIR/$asset" "$EXISTING_ASSET_DIR/$asset" || {
-                echo "Refusing to replace immutable pricing asset: $asset" >&2
-                exit 1
-              }
-            else
-              uploads+=("$PRICING_RELEASE_DIR/$asset#$asset")
-            fi
-          done
-          if [ "${#uploads[@]}" -gt 0 ]; then
-            gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" "${uploads[@]}"
-          fi
