@@ -887,7 +887,7 @@ def require_required_pr_checks(repository: str, number: int) -> None:
             checks = json.loads(result.stdout or "[]")
         except json.JSONDecodeError as error:
             raise ReleaseCliError("cannot read required PR checks") from error
-        no_checks = "no checks reported" in (result.stderr or "").lower()
+        no_checks = re.search(r'\bno (?:required )?checks reported\b', (result.stderr or '').lower()) is not None
         if result.returncode not in (0, 8) and not (result.returncode == 1 and no_checks):
             raise ReleaseCliError("required PR checks failed or GitHub API was unavailable")
         if not isinstance(checks, list) or any(not isinstance(check, dict) for check in checks):

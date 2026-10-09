@@ -809,6 +809,7 @@ class FinalizationAutomationTest(unittest.TestCase):
         cases = [
             (subprocess.CompletedProcess([], 8, json.dumps([{'name': 'test', 'bucket': 'pending'}]), ''), release_cli.PromotionPending),
             (subprocess.CompletedProcess([], 1, '', 'no checks reported'), release_cli.PromotionPending),
+            (subprocess.CompletedProcess([], 1, '', "no required checks reported on the 'release/finalize-test' branch"), release_cli.PromotionPending),
             (subprocess.CompletedProcess([], 1, '', 'HTTP 503'), release_cli.ReleaseCliError),
             (subprocess.CompletedProcess([], 0, json.dumps([{'name': 'test', 'bucket': 'skipping'}]), ''), release_cli.ReleaseCliError),
             (subprocess.CompletedProcess([], 0, json.dumps([{'name': 'test', 'bucket': 'cancel'}]), ''), release_cli.ReleaseCliError),
