@@ -822,7 +822,11 @@ class FinalizationAutomationTest(unittest.TestCase):
                     self.assertNotIsInstance(error.exception, release_cli.PromotionPending)
 
     def test_all_required_checks_must_be_successful(self):
-        checks = [{'name': name, 'bucket': 'pass'} for name in release_cli.REQUIRED_PR_STATUS_CONTEXTS]
+        # Required contexts from docs/RELEASING.md, independent of CLI constants.
+        names = ('sub2api/local-validation', 'deployment-config', 'test', 'frontend',
+                 'golangci-lint', 'goreleaser-config', 'repository-policy',
+                 'backend-security', 'frontend-security')
+        checks = [{'name': name, 'bucket': 'pass'} for name in names]
         with mock.patch.object(release_cli, 'run_command', return_value=subprocess.CompletedProcess([], 0, json.dumps(checks), '')):
             release_cli.require_required_pr_checks(REPOSITORY, 17)
         with mock.patch.object(release_cli, 'DISCOVERY_ATTEMPTS', 1), \

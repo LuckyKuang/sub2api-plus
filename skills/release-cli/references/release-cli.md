@@ -5,7 +5,7 @@
 | Action | Required state | Mutation | Result |
 | --- | --- | --- | --- |
 | `inspect` | Tag; optional PR | None | Reports PR, tag, workflow, and Release state. |
-| `promote-pr` | Submitted PR and notes | Protected GitHub auto-merge | PR merged and exact main SHA Actions green. |
+| `promote-pr` | Submitted candidate PR and notes, or typed finalization PR without notes | Protected GitHub auto-merge; no new merge on finalization resume | PR merged and exact main SHA Actions green. |
 | `validate` | Merged PR and notes | None | Focused metadata gate passes at merge commit. |
 | `tag` | Merged PR and notes | One local annotated tag | Tag targets tested merge commit. |
 | `publish` | Reviewed local tag | Exact remote tag push | Release workflow is triggered. |
@@ -41,8 +41,10 @@ strictness, a protected rule, or a context is missing. It invokes
 typed PR marker with 40-character base/head SHAs, a matching current PR
 base/head, and a successful profile-specific `sub2api/local-validation` status
 on the head. `full` forbids a tag; `release-finalization` requires the exact
-published tag. The PR must come from `LuckyKuang/sub2api-plus`, remain open and
-non-draft, and target the GitHub default branch.
+published tag. New promotion requires an open, non-draft PR from
+`LuckyKuang/sub2api-plus` to the GitHub default branch. An already merged
+finalization uses the independent proof/merge/tree/publication recovery path;
+its historical base need not equal the now-current default branch.
 
 After required checks complete, promotion refetches the default branch and PR.
 Any head or base change stops the merge and requires another `submit-pr`.
@@ -87,6 +89,14 @@ tree.
 
 ## Publication State Machine
 
+The workflow builds the frontend once and compiles five targets on independent
+runners, using immutable workflow helpers and one captured application SHA.
+The publisher verifies the complete archives and binary metadata before image
+publication, reuses those archives through GoReleaser and uploads pricing last.
+Only that job has write permissions and the release Environment. Read-only
+branch/tag rehearsals share packaging commands but export local OCI archives.
+See [the packaging contract](../../../.github/release-tools/README.md).
+
 Before mutation, `publish` reads the Environment, deployment-policy, and
 ruleset APIs and fails closed on drift. It then pushes only:
 
@@ -95,8 +105,10 @@ ruleset APIs and fails closed on drift. It then pushes only:
 It does not wait for Actions. The Release workflow verifies the tag first, then
 automatically starts `Build and publish`. `monitor` resolves the exact remote
 annotated tag and finds the Release push run by its target SHA, so recovery does
-not depend on a local tag. A waiting `Build and publish` job is external policy
-drift and fails with its URL; release-cli never approves or bypasses it.
+not depend on a local tag. A waiting `Build and publish` job triggers a fresh
+automatic Environment/tag-policy check. Drift fails with its URL; transient
+waiting under the verified automatic policy continues. Release-cli never
+approves or bypasses a deployment.
 The tag-triggered workflow first validates the annotated tag, release notes,
 planned mapping, `main` containment, and successful push-triggered `CI` and
 `Security Scan` runs at the exact target SHA. This focused provenance gate does

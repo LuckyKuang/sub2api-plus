@@ -19,8 +19,7 @@ Plus-specific adaptations are intentional: build metadata such as
 are disabled; only `release-images.sh` publishes images to
 `ghcr.io/<owner-lower>/sub2api-plus`. OCI tags use
 `v0.2.14-custom.002`, architecture suffixes, and numeric `latest`, `0.2`, `0`
-moving tags. DockerHub and the nonexistent upstream simple configuration are
-removed. Context binaries live at `<arch>/linux/<arch>/sub2api`, matching
+moving tags. Context binaries live at `<arch>/linux/<arch>/sub2api`, matching
 `COPY ${TARGETPLATFORM}/sub2api`, and retain executable permission. Runtime
 files come from the same captured application source.
 

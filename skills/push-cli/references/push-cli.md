@@ -76,6 +76,8 @@ the local proof remains required. CI full suites do not produce local success.
   audit exception policy.
 - Release policy, release metadata, README synchronization, Codex outbound
   identity, and migration checks against the validated default-branch base.
+- Shared CI-coverage regressions, release archive/OCI/pricing/workflow regressions,
+  image-script syntax and Go test build-tag regressions.
 - Installer syntax, Docker deployment security/resources, Caddy cache policy,
   and the Apple Container lifecycle fixture.
 
@@ -92,7 +94,7 @@ and Linux Docker must parse `deploy/docker-compose.dev.yml` successfully.
 After each validation attempt, successful or failed, validation containers use
 `--rm`, so their writable VM/container snapshots are removed. The launcher
 retains the `sub2api-validation:<toolchain-digest>` image matching the resolved
-Go, Node, pnpm, golangci-lint, GoReleaser and govulncheck pins. Dependency caches use a
+Go, Node, pnpm, golangci-lint, GoReleaser, govulncheck and PyYAML pins. Dependency caches use a
 separate generation derived from that image plus the current Go and pnpm lock
 inputs. Cleanup removes only stale Sub2API validation image and cache
 generations and does not run a global container, image, builder, volume, or

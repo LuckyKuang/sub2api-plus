@@ -37,6 +37,16 @@ uses its published tag and mapping independently of the current embedded
 version. Publication authorization covers release tags, Releases, and
 publication images. Local validation image builds, reuse, and scoped cleanup
 are governed by `Verification` and do not require a publication request.
+Read-only release rehearsals export local OCI archives without publication
+credentials or external writes. Only real publication has write permissions
+and the release Environment; rehearsal cannot authorize it. Packaging contracts
+are owned by `.github/release-tools/README.md`.
+
+The local full submission gate remains required until enforceable trusted CI
+origin and protected cutover are verified under `docs/CI_VALIDATION.md`.
+Finalization automatically promotes its deterministic PR and completes only
+after exact merged-main Actions pass. Already merged finalization requires
+independent proof, tree, publication and merge verification before resuming.
 
 ## Protected Semantics
 

@@ -218,10 +218,11 @@ requires the annotated tag to target a commit contained by `main`, validates
 the tag notes and planned mapping, and requires successful push-triggered `CI`
 and `Security Scan` runs for that exact main SHA. It does not rerun backend,
 frontend, lint, integration, deployment, or security application matrices.
-After provenance succeeds, `Build and publish` enters the checked `release`
-Environment and starts automatically. If it unexpectedly waits, `monitor`
-reports policy drift and the Actions URL; restore the Environment policy and
-rerun `monitor`. The CLI never approves or bypasses a deployment.
+After provenance and distributed builds succeed, `Build and publish` enters
+the checked `release` Environment automatically. Waiting triggers a fresh
+automatic Environment/tag-policy check: drift fails with the Actions URL;
+transient waiting under valid policy continues. Restore any drifted policy
+before retrying. The CLI never approves or bypasses a deployment.
 
 After the workflow succeeds, verify the published state:
 
@@ -282,6 +283,13 @@ published assets. Check out the recorded PR head before resuming. API errors,
 failed checks and changed proofs are failures. An existing local finalization
 branch is reused only when exactly one matching PR exists; it is never reset.
 
+The no-notes form is accepted only when the typed proof carries the matching
+tag and deterministic finalization branch. Promotion independently regenerates
+the tree and requires the Release, immutable assets, and `published` mapping.
+Every required PR and merged-main context runs the same classifier before it
+selects focused finalization validation; ambiguous or non-deterministic changes
+fail closed.
+
 ## Distributed Packaging and Read-only Rehearsal
 
 The Release workflow captures one application SHA, builds the frontend once,
@@ -299,13 +307,6 @@ must execute from the same eligible tag workflow ref. See the maintained
 image, cache and report details. The Release-only 9-minute target is an unmeasured
 budget until actual same-source results are recorded; it excludes local checks,
 PR CI, main CI and finalization.
-
-The no-notes form is accepted only when the typed proof carries the matching
-tag and deterministic finalization branch. Promotion independently regenerates
-the tree and requires the Release, immutable assets, and `published` mapping.
-Every required PR and merged-main context runs the same classifier before it
-selects focused finalization validation; ambiguous or non-deterministic changes
-fail closed.
 
 ## Pricing Assets
 

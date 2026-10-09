@@ -33,7 +33,7 @@ def configure():
                       RELEASE_DATE=plan['date'], RELEASE_TAG=plan['tag'],
                       RELEASE_MODE=plan['mode'], GORELEASER_CURRENT_TAG=plan['tag'],
                       GITHUB_REPO_OWNER=owner, GITHUB_REPO_OWNER_LOWER=owner.lower(),
-                      GITHUB_REPO_NAME=name, DOCKERHUB_USERNAME='skip',
+                      GITHUB_REPO_NAME=name,
                       DOCKER_TAG_VERSION=plan['tag'].replace('+', '-'),
                       DRY_RUN=plan['dry_run'], RUNNER_TEMP=str(Path('.release-output').resolve()))
     Path('.release-output').mkdir(exist_ok=True)

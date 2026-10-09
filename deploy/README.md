@@ -85,7 +85,7 @@ are not required.
 | `APPLE_CONTAINER.md` | Apple `container` deployment and operations guide |
 | `DEPLOYMENT_LIFECYCLE.md` | Cross-platform local deployment, recovery, and image-retention contract |
 | `.env.example` | Container environment variables template |
-| `DOCKER.md` | Docker Hub documentation |
+| `DOCKER.md` | GHCR image and Docker deployment documentation |
 | `install.sh` | One-click binary installation script |
 | `install-datamanagementd.sh` | datamanagementd 一键安装脚本 |
 | `sub2api.service` | Systemd service unit file |

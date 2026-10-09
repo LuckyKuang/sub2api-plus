@@ -120,7 +120,7 @@ class ContainerAndProfileTests(unittest.TestCase):
         self.assertEqual(run.call_args.args[0], ["goreleaser", "check"])
         env = run.call_args.kwargs["env"]
         self.assertEqual(env["DOCKER_TAG_VERSION"], "v1.2.3-custom.009")
-        self.assertEqual(env["DOCKERHUB_USERNAME"], "skip")
+        self.assertNotIn("DOCKERHUB_USERNAME", env)
 
     def test_release_specific_migration_base_remains_supported(self) -> None:
         with mock.patch.object(validation_runtime, "require_in_validation"), \

@@ -95,8 +95,8 @@ typechecking, builds, policy checks, or other validation on the host.
 After every validation attempt, successful or failed, remove the one-shot
 project validation container, temporary resources, and historical writable
 snapshots. Retain the Sub2API validation image whose deterministic identity
-matches the current resolved Go, Node, pnpm, golangci-lint, GoReleaser and
-govulncheck pins.
+matches the current resolved Go, Node, pnpm, golangci-lint, GoReleaser,
+govulncheck and PyYAML pins.
 Retain dependency caches only for the generation matching that image and the
 current Go and pnpm lock inputs. Remove stale Sub2API validation generations;
 never prune unrelated projects or global runtime, builder, image, volume, or
@@ -221,6 +221,13 @@ Focused release metadata and deterministic finalization checks use the same
 platform validation container; they never fall back to the host or repeat the
 application matrix. Git/GitHub operations and runtime management remain with
 the host launcher.
+
+Finalization automatically promotes its exact deterministic PR through protected
+auto-merge and verifies CI and Security Scan at the actual merged-main SHA.
+Pending checks/merge return status 2 and a retry command; already merged
+finalization resumes only after independent proof/tree/publication checks.
+See [the release process](docs/RELEASING.md) and
+[distributed packaging and read-only rehearsals](.github/release-tools/README.md).
 
 ## Generated Code
 

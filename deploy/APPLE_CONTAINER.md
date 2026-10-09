@@ -280,7 +280,7 @@ APPLE_CONTAINER_REDIS_IMAGE=redis:8-alpine
 APPLE_CONTAINER_MINIO_IMAGE=pgsty/minio:RELEASE.2026-06-18T00-00-00Z
 ```
 
-For local secondary development when the Apple Builder is unavailable, build a Linux/arm64 binary on the host and set `APPLE_CONTAINER_SUB2API_BINARY` to its absolute path. During each `up`, the script temporarily compresses and copies that binary into the newly created application container while retaining the configured OCI image as its runtime base. The binary must contain any required embedded frontend assets. When a local binary is configured, the script also copies the repository's `backend/resources` directory into `/app/resources`; set `APPLE_CONTAINER_SUB2API_RESOURCES_DIR` to an absolute alternative resource directory when needed. Leave both settings empty for normal published-image deployments.
+For local secondary development, supply a Linux/arm64 binary built inside an Apple build or validation container and set `APPLE_CONTAINER_SUB2API_BINARY` to its absolute exported path. Host Go/Node builds are forbidden by the repository validation rules, including when Apple Builder is unavailable. During each `up`, the script temporarily compresses and copies that binary into the newly created application container while retaining the configured OCI image as its runtime base. The binary must contain any required embedded frontend assets. When a local binary is configured, the script also copies the repository's `backend/resources` directory into `/app/resources`; set `APPLE_CONTAINER_SUB2API_RESOURCES_DIR` to an absolute alternative resource directory when needed. Leave both settings empty for normal published-image deployments.
 
 ### Custom Image Version
 

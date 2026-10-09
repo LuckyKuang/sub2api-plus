@@ -16,6 +16,10 @@ description: >-
 
 # Push CLI
 
+The required local full gate is still active. Complete CI coverage does not
+authorize removing it until the enforceable trusted-origin and protected-cutover
+requirements in [CI validation](../../docs/CI_VALIDATION.md) are satisfied.
+
 Run commands from the repository root:
 
     python3 skills/push-cli/scripts/push_cli.py push

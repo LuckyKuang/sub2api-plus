@@ -24,7 +24,7 @@ RELEASE_ENV_NAMES = (
     "RELEASE_VERSION", "RELEASE_SHA", "RELEASE_DATE", "RELEASE_TAG", "RELEASE_MODE",
     "GORELEASER_CURRENT_TAG", "GITHUB_REPOSITORY", "GITHUB_REPOSITORY_OWNER",
     "GITHUB_REPO_OWNER", "GITHUB_REPO_OWNER_LOWER", "GITHUB_REPO_NAME",
-    "DOCKER_TAG_VERSION", "DOCKERHUB_USERNAME", "TAG_MESSAGE", "RUNNER_TEMP",
+    "DOCKER_TAG_VERSION", "TAG_MESSAGE", "RUNNER_TEMP",
     "DRY_RUN", "GH_TOKEN", "GITHUB_TOKEN", "DOCKER_CONFIG",
     "GITHUB_REF", "GITHUB_EVENT_NAME", "DEFAULT_BRANCH", "BUILDX_BUILDER",
 )
@@ -124,7 +124,6 @@ def run_lane(lane: str, *, base: str, tag: str | None = None) -> None:
         env = dict(os.environ, GITHUB_REPO_OWNER="validation",
                    GITHUB_REPO_OWNER_LOWER="validation", GITHUB_REPO_NAME="sub2api-plus",
                    DOCKER_TAG_VERSION="v" + version.replace("+custom.", "-custom."),
-                   DOCKERHUB_USERNAME="skip",
                    TAG_MESSAGE="GoReleaser configuration validation only.")
         subprocess.run(["goreleaser", "check"], cwd=ROOT, env=env, check=True)
     elif lane == "frontend-security":

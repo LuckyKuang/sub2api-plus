@@ -77,11 +77,6 @@ release:
 
     **Docker:**
     ```bash
-    {{ if ne .Env.DOCKERHUB_USERNAME "skip" -}}
-    # Docker Hub
-    docker pull {{ .Env.DOCKERHUB_USERNAME }}/sub2api-plus:{{ .Env.DOCKER_TAG_VERSION }}
-
-    {{ end -}}
     # GitHub Container Registry
     docker pull ghcr.io/{{ .Env.GITHUB_REPO_OWNER_LOWER }}/sub2api-plus:{{ .Env.DOCKER_TAG_VERSION }}
     ```

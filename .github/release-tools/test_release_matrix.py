@@ -79,6 +79,10 @@ class ReleaseMatrixTest(unittest.TestCase):
         for version in ('01.2.3', '1.2.3+custom.', '1.2.3-01', '1.2', '1.2.3+bad space'):
             self.assertFalse(release.valid_version(version), version)
         self.assertIsNone(release.PLUS_TAG_RE.fullmatch('v1.2.3+custom.000'))
+        self.assertEqual(release.archive_name(VERSION, {'goos': 'linux', 'goarch': 'amd64'}),
+                         'sub2api_9.8.7+custom.009_linux_amd64.tar.gz')
+        self.assertEqual(release.archive_name(VERSION, {'goos': 'windows', 'goarch': 'amd64'}),
+                         'sub2api_9.8.7+custom.009_windows_amd64.zip')
 
     def test_leaf_and_publisher_disable_all_image_owners(self):
         for mode in ('build', 'publish'):
@@ -100,7 +104,7 @@ class ReleaseMatrixTest(unittest.TestCase):
 
     def test_pinned_goreleaser_accepts_both_generated_configs(self):
         env = dict(os.environ, GITHUB_REPO_OWNER='owner', GITHUB_REPO_NAME='repo',
-                   GITHUB_REPO_OWNER_LOWER='owner', DOCKERHUB_USERNAME='skip',
+                   GITHUB_REPO_OWNER_LOWER='owner',
                    DOCKER_TAG_VERSION='v9.8.7-custom.009', TAG_MESSAGE='Configuration test')
         for mode in ('build', 'publish'):
             release.generate_config(argparse.Namespace(mode=mode, goos='linux', goarch='arm64', output='check.yaml'))
