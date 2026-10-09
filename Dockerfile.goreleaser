@@ -1,7 +1,7 @@
 # =============================================================================
 # Sub2API Plus Dockerfile for GoReleaser
 # =============================================================================
-# This Dockerfile is used by GoReleaser to build Docker images.
+# This Dockerfile is used by the release image script.
 # It only packages the pre-built binary, no compilation needed.
 # =============================================================================
 
@@ -12,7 +12,7 @@ FROM ${POSTGRES_IMAGE} AS pg-client
 
 FROM ${ALPINE_IMAGE}
 
-# GoReleaser dockers_v2 places each pre-built binary under its Buildx target
+# Verified release contexts place each pre-built binary under its Buildx target
 # platform (for example linux/arm64/sub2api).
 ARG TARGETPLATFORM
 
@@ -47,7 +47,7 @@ RUN addgroup -g 1000 sub2api && \
 
 WORKDIR /app
 
-# Copy the matching pre-built binary and runtime fallback resources from GoReleaser
+# Copy the matching pre-built binary and same-source runtime fallback resources
 COPY ${TARGETPLATFORM}/sub2api /app/sub2api
 COPY --chown=sub2api:sub2api backend/resources /app/resources
 

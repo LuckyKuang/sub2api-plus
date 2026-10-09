@@ -95,7 +95,8 @@ typechecking, builds, policy checks, or other validation on the host.
 After every validation attempt, successful or failed, remove the one-shot
 project validation container, temporary resources, and historical writable
 snapshots. Retain the Sub2API validation image whose deterministic identity
-matches the current resolved Go, Node, pnpm, golangci-lint, and GoReleaser pins.
+matches the current resolved Go, Node, pnpm, golangci-lint, GoReleaser and
+govulncheck pins.
 Retain dependency caches only for the generation matching that image and the
 current Go and pnpm lock inputs. Remove stale Sub2API validation generations;
 never prune unrelated projects or global runtime, builder, image, volume, or
@@ -161,6 +162,12 @@ external DSN. Every `backend/**/*_test.go` file must declare one of those
 build tags (or `e2e` / `embed` / a documented exception). In-process tests that
 must remain visible to default `golangci-lint` use `unit || !integration`.
 Helpers shared by unit, integration, and default `golangci-lint` use `!e2e`.
+
+CI runs full frontend tests/build, native amd64/arm64 unit suites and
+Docker-backed integration in pinned validation containers. See the shared
+coverage inventory and pending authority cutover in
+[`docs/CI_VALIDATION.md`](docs/CI_VALIDATION.md). The required local submission
+gate remains active until that cutover is independently verified.
 
 Intermediate branch pushes use the fast path and do not run local tests.
 Remote `CI` and `Security Scan` run on pull requests and on `main` pushes, not

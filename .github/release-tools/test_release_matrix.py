@@ -1,5 +1,5 @@
+"""Release requirements: exact source, five archives, Plus names and immutable publication."""
 import argparse
-import hashlib
 import importlib.util
 import io
 import json
@@ -11,181 +11,224 @@ import tarfile
 import tempfile
 import unittest
 from unittest.mock import patch
-
+import zipfile
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
-spec = importlib.util.spec_from_file_location('release_matrix', Path(__file__).with_name('release_matrix.py'))
+HERE = Path(__file__).resolve().parent
+spec = importlib.util.spec_from_file_location('release_matrix', HERE / 'release_matrix.py')
 release = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(release)
+VERSION = '9.8.7+custom.009'
+DATE = '2026-10-09T01:02:03Z'
 
 
 class ReleaseMatrixTest(unittest.TestCase):
     def setUp(self):
         self.previous = Path.cwd()
-        self.temp = tempfile.TemporaryDirectory()
-        self.addCleanup(self.temp.cleanup)
-        os.chdir(self.temp.name)
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        os.chdir(temporary.name)
         self.addCleanup(os.chdir, self.previous)
-        for name in ('.goreleaser.yaml', '.goreleaser.simple.yaml'):
-            shutil.copyfile(ROOT / name, name)
+        shutil.copyfile(ROOT / '.goreleaser.yaml', '.goreleaser.yaml')
         Path('backend/cmd/server').mkdir(parents=True)
-        release.VERSION_FILE.write_text('9.8.7\n')
+        release.VERSION_FILE.write_text(VERSION + '\n')
+        self.git('init', '-q')
+        self.git('config', 'user.name', 'Release Test')
+        self.git('config', 'user.email', 'release@example.invalid')
+        self.git('add', '.')
+        self.git('commit', '-qm', 'fixture')
+        self.sha = self.git('rev-parse', 'HEAD')
+        self.binary_check = patch.object(release, 'verify_binary')
+        self.binary_check.start()
+        self.addCleanup(self.binary_check.stop)
 
-    def fixture_artifacts(self, simple=False):
+    def git(self, *args):
+        return subprocess.check_output(['git', *args], text=True).strip()
+
+    def fixture(self):
         directory = Path('release-input')
         directory.mkdir()
-        for target in release.targets(simple):
-            name = release.archive_name('9.8.7', target)
-            archive = directory / name
-            if target['goos'] == 'linux':
-                with tarfile.open(archive, 'w:gz') as out:
-                    info = tarfile.TarInfo('sub2api')
-                    info.size = 7
-                    info.mode = 0o755
-                    out.addfile(info, io.BytesIO(b'fixture'))
+        for target in release.targets():
+            archive = directory / release.archive_name(VERSION, target)
+            if target['goos'] == 'windows':
+                with zipfile.ZipFile(archive, 'w') as stream:
+                    stream.writestr('sub2api.exe', b'binary fixture')
             else:
-                archive.write_bytes(b'fixture archive')
-            metadata = {'version': '9.8.7', 'sha': 'a' * 40, 'target': target,
-                        'archive': name, 'sha256': release.sha256(archive)}
-            (directory / f"manifest-{target['goos']}-{target['goarch']}.json").write_text(json.dumps(metadata))
-        return argparse.Namespace(input='release-input', version='9.8.7', sha='a' * 40, simple=simple, output='contexts')
+                with tarfile.open(archive, 'w:gz') as stream:
+                    info = tarfile.TarInfo('sub2api')
+                    info.size, info.mode = 14, 0o755
+                    stream.addfile(info, io.BytesIO(b'binary fixture'))
+            manifest = dict(sha=self.sha, version=VERSION, date=DATE, target=target,
+                            archive=archive.name, sha256=release.sha256(archive))
+            (directory / f"manifest-{target['goos']}-{target['goarch']}.json").write_text(json.dumps(manifest))
+        return argparse.Namespace(input='release-input', version=VERSION, sha=self.sha, date=DATE, output='contexts')
 
-    def test_full_and_simple_matrix_match_existing_targets(self):
-        full = release.targets()
-        self.assertEqual(len(full), 5)
-        self.assertNotIn({'goos': 'windows', 'goarch': 'arm64'}, full)
-        self.assertEqual(release.targets(True), [{'goos': 'linux', 'goarch': 'amd64'}])
+    def plan(self, ref, dry_run=True, env=None):
+        with patch.dict(os.environ, {'GITHUB_REPOSITORY_OWNER': 'ExampleOwner', **(env or {})}):
+            release.plan(argparse.Namespace(ref=ref, dry_run=dry_run, output='.release-plan',
+                                            github_output='.release-plan/outputs'))
+        return dict(line.split('=', 1) for line in Path('.release-plan/outputs').read_text().splitlines())
 
-    def test_leaf_keeps_packaging_and_selects_only_one_target(self):
-        original = release.config()
-        release.generate_config(argparse.Namespace(mode='build', simple=False, goos='darwin', goarch='arm64', output='leaf.yaml'))
-        leaf = yaml.safe_load(Path('leaf.yaml').read_text())
-        self.assertEqual(leaf['builds'][0]['goos'], ['darwin'])
-        self.assertEqual(leaf['builds'][0]['goarch'], ['arm64'])
-        self.assertEqual(leaf['builds'][0]['ignore'], [])
-        self.assertEqual(leaf['archives'], original['archives'])
-        self.assertEqual(leaf['release'], original['release'])
-        self.assertFalse(leaf['dockers'])
-        self.assertIn('{{ .Env.RELEASE_DATE }}', '\n'.join(leaf['builds'][0]['ldflags']))
+    def test_five_targets_and_supported_version_syntax(self):
+        self.assertEqual(set((t['goos'], t['goarch']) for t in release.targets()),
+                         {('linux', 'amd64'), ('linux', 'arm64'), ('darwin', 'amd64'),
+                          ('darwin', 'arm64'), ('windows', 'amd64')})
+        for version in ('1.2.3', VERSION, '1.2.3-rc.1+build.7'):
+            self.assertTrue(release.valid_version(version), version)
+        for version in ('01.2.3', '1.2.3+custom.', '1.2.3-01', '1.2', '1.2.3+bad space'):
+            self.assertFalse(release.valid_version(version), version)
+        self.assertIsNone(release.PLUS_TAG_RE.fullmatch('v1.2.3+custom.000'))
 
-    def test_publication_config_has_no_compilation_or_docker_work(self):
-        for simple in (False, True):
-            with self.subTest(simple=simple):
-                original = release.config(simple)
-                release.generate_config(argparse.Namespace(mode='publish', simple=simple, output='publisher.yaml'))
-                data = yaml.safe_load(Path('publisher.yaml').read_text())
-                self.assertTrue(data['builds'][0]['skip'])
-                self.assertFalse(data['archives'])
-                self.assertFalse(data['dockers'])
-                self.assertEqual(data['release']['header'], original['release']['header'])
-                self.assertEqual(data['release']['footer'], original['release']['footer'])
-                if simple:
-                    self.assertTrue(data['checksum']['disable'])
-                    self.assertTrue(data['release']['skip_upload'])
-                else:
-                    self.assertEqual(data['checksum']['extra_files'], data['release']['extra_files'])
+    def test_leaf_and_publisher_disable_all_image_owners(self):
+        for mode in ('build', 'publish'):
+            release.generate_config(argparse.Namespace(mode=mode, goos='darwin', goarch='arm64', output='config.yaml'))
+            config = yaml.safe_load(Path('config.yaml').read_text())
+            for key in ('dockers', 'docker_manifests', 'dockers_v2'):
+                self.assertEqual(config[key], [])
+            self.assertEqual(config['release']['header'], release.config()['release']['header'])
+            if mode == 'build':
+                self.assertEqual(config['builds'][0]['goos'], ['darwin'])
+                self.assertEqual(config['builds'][0]['goarch'], ['arm64'])
+                self.assertEqual(config['archives'], release.config()['archives'])
+                self.assertIn('{{ .Env.RELEASE_DATE }}', '\n'.join(config['builds'][0]['ldflags']))
+            else:
+                self.assertEqual(config['before']['hooks'], [])
+                self.assertTrue(config['builds'][0]['skip'])
+                self.assertEqual(config['archives'], [])
+                self.assertEqual(config['checksum']['extra_files'], config['release']['extra_files'])
 
-    def test_collect_and_verify_hash_and_source_binding(self):
-        args = self.fixture_artifacts()
+    def test_pinned_goreleaser_accepts_both_generated_configs(self):
+        env = dict(os.environ, GITHUB_REPO_OWNER='owner', GITHUB_REPO_NAME='repo',
+                   GITHUB_REPO_OWNER_LOWER='owner', DOCKERHUB_USERNAME='skip',
+                   DOCKER_TAG_VERSION='v9.8.7-custom.009', TAG_MESSAGE='Configuration test')
+        for mode in ('build', 'publish'):
+            release.generate_config(argparse.Namespace(mode=mode, goos='linux', goarch='arm64', output='check.yaml'))
+            subprocess.run(['goreleaser', 'check', '--config', 'check.yaml'], env=env, check=True,
+                           stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    def test_branch_plan_records_captured_sha_version_and_real_newlines(self):
+        plan = self.plan('feature/build')
+        self.assertEqual(plan['sha'], self.sha)
+        self.assertEqual(plan['version'], VERSION)
+        self.assertEqual(plan['mode'], 'branch-rehearsal')
+        self.assertEqual(plan['owner_lower'], 'exampleowner')
+        self.assertEqual(len(json.loads(plan['matrix'])['include']), 5)
+        self.assertEqual(json.loads(Path('.release-plan/metadata.json').read_text())['sha'], self.sha)
+        self.assertEqual(Path('.release-plan/VERSION').read_text(), VERSION + '\n')
+
+    def test_publication_cannot_be_dispatched_from_branch(self):
+        tag = 'v' + VERSION
+        self.git('tag', '-a', tag, '-m', 'Sub2API Plus ' + tag)
+        with self.assertRaisesRegex(ValueError, 'eligible tag ref'):
+            self.plan(tag, False, {'GITHUB_REF': 'refs/heads/feature/build'})
+        result = self.plan(tag, False, {'GITHUB_REF': 'refs/tags/' + tag})
+        self.assertEqual(result['mode'], 'publish')
+
+    def test_tag_rehearsal_rejects_missing_tag_and_pristine_version_mismatch(self):
+        with self.assertRaisesRegex(ValueError, 'absent rehearsal tag'):
+            self.plan('refs/tags/v9.8.7+custom.008')
+        self.git('tag', 'v9.8.7+custom.008')
+        with self.assertRaisesRegex(ValueError, 'pristine VERSION'):
+            self.plan('v9.8.7+custom.008')
+        with self.assertRaisesRegex(ValueError, 'tag pushes'):
+            self.plan('feature/build', True, {'GITHUB_EVENT_NAME': 'push'})
+
+    def test_complete_set_is_bound_to_head_and_hash(self):
+        args = self.fixture()
         release.verify(args)
-        file = next(Path(args.input).glob('*.tar.gz'))
-        file.write_bytes(b'corrupted')
+        args.sha = 'a' * 40
+        with self.assertRaisesRegex(ValueError, 'checkout'):
+            release.verify(args)
+        args.sha = self.sha
+        archive = next(Path(args.input).glob('*.tar.gz'))
+        archive.write_bytes(b'corrupt')
         with self.assertRaisesRegex(ValueError, 'checksum mismatch'):
             release.verify(args)
 
-    def test_missing_extra_and_wrong_commit_artifacts_are_rejected(self):
-        args = self.fixture_artifacts(True)
-        args.sha = 'b' * 40
-        with self.assertRaises(ValueError):
+    def test_missing_extra_symlink_and_wrong_manifest_are_rejected(self):
+        args = self.fixture()
+        extra = Path(args.input) / 'unexpected'
+        extra.write_text('invalid')
+        with self.assertRaisesRegex(ValueError, 'unexpected'):
             release.verify(args)
-        args.sha = 'a' * 40
-        Path('release-input/unexpected').write_text('not an asset')
-        with self.assertRaises(ValueError):
+        extra.unlink()
+        archive = next(Path(args.input).glob('*.tar.gz'))
+        original = archive.read_bytes()
+        archive.unlink()
+        with self.assertRaisesRegex(ValueError, 'regular files'):
             release.verify(args)
-        Path('release-input/unexpected').unlink()
-        next(Path('release-input').glob('*.tar.gz')).unlink()
-        with self.assertRaises(FileNotFoundError):
+        archive.symlink_to('/dev/null')
+        with self.assertRaisesRegex(ValueError, 'regular files'):
+            release.verify(args)
+        archive.unlink()
+        archive.write_bytes(original)
+        manifest = next(Path(args.input).glob('manifest-*.json'))
+        data = json.loads(manifest.read_text())
+        data['sha'] = 'b' * 40
+        manifest.write_text(json.dumps(data))
+        with self.assertRaisesRegex(ValueError, 'checksum mismatch'):
             release.verify(args)
 
-    def test_linux_context_preserves_binary_executable_mode(self):
-        args = self.fixture_artifacts()
-        Path('Dockerfile.goreleaser').write_text('FROM scratch\nCOPY sub2api /sub2api\n')
+    def test_linux_context_uses_targetplatform_and_same_source_resources(self):
+        args = self.fixture()
+        shutil.copyfile(ROOT / 'Dockerfile.goreleaser', 'Dockerfile.goreleaser')
         Path('deploy').mkdir()
-        Path('deploy/docker-entrypoint.sh').write_text('#!/bin/sh\nexec /app/sub2api\n')
+        Path('deploy/docker-entrypoint.sh').write_bytes(b'entrypoint fixture')
         Path('backend/resources').mkdir()
-        Path('backend/resources/data').write_text('fixture')
+        Path('backend/resources/data').write_bytes(b'resource fixture')
         release.contexts(args)
         for arch in ('amd64', 'arm64'):
-            binary = Path('contexts') / arch / 'sub2api'
-            self.assertEqual(binary.read_bytes(), b'fixture')
+            context = Path('contexts') / arch
+            binary = context / 'linux' / arch / 'sub2api'
+            self.assertEqual(binary.read_bytes(), b'binary fixture')
             self.assertEqual(binary.stat().st_mode & 0o777, 0o755)
+            self.assertEqual((context / 'deploy/docker-entrypoint.sh').read_bytes(), b'entrypoint fixture')
+            self.assertEqual((context / 'backend/resources/data').read_bytes(), b'resource fixture')
 
-    def test_plan_requires_a_tag_for_publication(self):
-        args = argparse.Namespace(ref='main', dry_run=False, simple=False)
-        with patch.object(subprocess, 'check_output', return_value='a' * 40 + '\n'):
-            with self.assertRaisesRegex(ValueError, 'version tag'):
-                release.plan(args)
-        args.ref = 'v9.8.7'
-        with patch.object(subprocess, 'check_output', side_effect=['a' * 40 + '\n', 'b' * 40 + '\n']):
-            with self.assertRaisesRegex(ValueError, 'does not match'):
-                release.plan(args)
+    def test_binary_metadata_rejects_wrong_target_sha_date_and_version(self):
+        self.binary_check.stop()
+        # Independent wire fixture: metadata is the format emitted by Go, not generated by the checker.
+        metadata = '\tbuild\tGOOS=linux\n\tbuild\tGOARCH=arm64\n\tbuild\tCGO_ENABLED=0\n'
+        metadata += f'\tbuild\t-tags=embed\n\tbuild\t-ldflags="-X main.Commit={self.sha} -X main.Date={DATE} -X main.BuildType=release"\n'
+        with patch.object(release, 'binary_bytes', return_value=VERSION.encode()), \
+             patch.object(subprocess, 'check_output', return_value=metadata):
+            release.verify_binary(Path('unused'), {'goos': 'linux', 'goarch': 'arm64'}, VERSION, self.sha, DATE)
+            for target, version, sha, date in [
+                ({'goos': 'linux', 'goarch': 'amd64'}, VERSION, self.sha, DATE),
+                ({'goos': 'linux', 'goarch': 'arm64'}, VERSION, 'b' * 40, DATE),
+                ({'goos': 'linux', 'goarch': 'arm64'}, VERSION, self.sha, 'different-date'),
+                ({'goos': 'linux', 'goarch': 'arm64'}, '1.0.0+custom.001', self.sha, DATE),
+            ]:
+                with self.assertRaisesRegex(ValueError, 'build metadata'):
+                    release.verify_binary(Path('unused'), target, version, sha, date)
 
-    def test_dry_run_plan_resolves_matrix_without_a_new_tag(self):
-        with patch.dict(os.environ, {'GITHUB_OUTPUT': 'outputs', 'GITHUB_REPOSITORY_OWNER': 'ExampleOwner'}), patch.object(subprocess, 'check_output', return_value='a' * 40 + '\n'):
-            release.plan(argparse.Namespace(ref='feature/matrix', dry_run=True, simple=False))
-        output = dict(line.split('=', 1) for line in Path('outputs').read_text().splitlines())
-        self.assertEqual(output['dry_run'], 'true')
-        self.assertEqual(output['owner_lower'], 'exampleowner')
-        self.assertEqual(len(json.loads(output['matrix'])['include']), 5)
-
-    def test_docker_commands_do_not_publish_during_dry_run(self):
-        fake_bin = Path('bin')
-        fake_bin.mkdir()
-        docker = fake_bin / 'docker'
-        docker.write_text('#!/bin/sh\nprintf "%s\\n" "$*" >> "$DOCKER_LOG"\n')
-        docker.chmod(0o755)
-        env = {**os.environ, 'PATH': str(fake_bin.resolve()) + os.pathsep + os.environ['PATH'],
-               'DOCKER_LOG': str(Path('docker.log').resolve()), 'RUNNER_TEMP': self.temp.name,
-               'RELEASE_VERSION': '9.8.7', 'RELEASE_SHA': 'a' * 40, 'GITHUB_REPOSITORY': 'ExampleOwner/sub2api',
-               'DRY_RUN': 'true', 'SIMPLE_RELEASE': 'false', 'DOCKERHUB_USERNAME': 'skip'}
-        subprocess.run(['bash', str(ROOT / '.github/release-tools/release-images.sh')], env=env, check=True)
-        log = Path('docker.log').read_text()
-        self.assertEqual(log.count('buildx build'), 2)
-        self.assertIn('linux/arm64', log)
-        self.assertNotIn('--push', log)
-        self.assertNotIn('imagetools', log)
-        self.assertNotIn('skip/sub2api', log)
-        self.assertIn('ghcr.io/exampleowner/sub2api', log)
-
-
-    def test_published_full_and_simple_image_tags(self):
-        fake_bin = Path('bin')
-        fake_bin.mkdir()
-        docker = fake_bin / 'docker'
-        docker.write_text('#!/bin/sh\nprintf "%s\\n" "$*" >> "$DOCKER_LOG"\n')
-        docker.chmod(0o755)
-        for simple in (False, True):
-            with self.subTest(simple=simple):
-                log_path = Path(f'docker-{simple}.log').resolve()
-                env = {**os.environ, 'PATH': str(fake_bin.resolve()) + os.pathsep + os.environ['PATH'],
-                       'DOCKER_LOG': str(log_path), 'RUNNER_TEMP': self.temp.name,
-                       'RELEASE_VERSION': '9.8.7', 'RELEASE_SHA': 'a' * 40, 'GITHUB_REPOSITORY': 'ExampleOwner/sub2api',
-                       'DRY_RUN': 'false', 'SIMPLE_RELEASE': str(simple).lower(), 'DOCKERHUB_USERNAME': 'fixturehub'}
-                subprocess.run(['bash', str(ROOT / '.github/release-tools/release-images.sh')], env=env, check=True)
-                log = log_path.read_text()
-                self.assertIn('--push', log)
-                self.assertEqual(log.count('buildx build'), 1 if simple else 2)
-                if simple:
-                    self.assertNotIn('fixturehub', log)
-                    self.assertNotIn('imagetools', log)
-                    self.assertIn('ghcr.io/exampleowner/sub2api:latest', log)
-                else:
-                    self.assertEqual(log.count('imagetools create'), 2)
-                    self.assertIn('fixturehub/sub2api:9.8', log)
-                    self.assertIn('ghcr.io/exampleowner/sub2api:9', log)
-
-
+    def test_image_commands_preserve_plus_tags_and_never_write_in_rehearsal(self):
+        Path('bin').mkdir()
+        fake = Path('bin/docker')
+        fake.write_text('#!/bin/sh\nprintf "%s\\n" "$*" >> "$DOCKER_LOG"\n')
+        fake.chmod(0o755)
+        for dry in ('true', 'false'):
+            log = Path('docker-' + dry).resolve()
+            env = dict(os.environ, PATH=str(Path('bin').resolve()) + os.pathsep + os.environ['PATH'],
+                       DOCKER_LOG=str(log), RUNNER_TEMP=str(Path.cwd()), RELEASE_VERSION=VERSION,
+                       RELEASE_SHA=self.sha, GITHUB_REPOSITORY='ExampleOwner/sub2api-plus',
+                       DRY_RUN=dry, RELEASE_MODE='publish')
+            subprocess.run(['bash', str(HERE / 'release-images.sh')], env=env, check=True)
+            commands = log.read_text()
+            self.assertEqual(commands.count('buildx build'), 2)
+            self.assertIn('ghcr.io/exampleowner/sub2api-plus:v9.8.7-custom.009-amd64', commands)
+            self.assertIn('org.opencontainers.image.version=9.8.7+custom.009', commands)
+            self.assertNotIn('docker.io', commands)
+            if dry == 'true':
+                self.assertNotIn('--push', commands)
+                self.assertNotIn('imagetools', commands)
+                self.assertIn('type=oci,compression=gzip', commands)
+            else:
+                self.assertEqual(commands.count('imagetools create'), 1)
+                self.assertIn('sub2api-plus:9.8 ', commands)
+                self.assertIn('sub2api-plus:9 ', commands)
+                self.assertIn('sub2api-plus:latest ', commands)
 
 if __name__ == '__main__':
     unittest.main()

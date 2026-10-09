@@ -26,6 +26,7 @@ if str(TOOLS) not in sys.path:
     sys.path.insert(0, str(TOOLS))
 import validation_runtime
 import release_validation
+import validation_checks
 
 DEFAULT_REMOTE = "origin"
 EXPECTED_REPOSITORY = "LuckyKuang/sub2api-plus"
@@ -72,12 +73,7 @@ class ValidationProof:
     tag: str | None = None
 
 
-@dataclass(frozen=True)
-class ValidationStep:
-    name: str
-    command: Sequence[str]
-    cwd: Path
-    lane: str
+ValidationStep = validation_checks.ValidationStep
 
 
 def display(command: Sequence[str]) -> str:
@@ -531,169 +527,15 @@ def run_local_checks(
     serial: bool = False,
 ) -> None:
     python = sys.executable
-    backend = ROOT / "backend"
-    frontend_workers = "4" if serial else "2"
-    steps = [
-        ValidationStep(
-            "Apple Container lifecycle test",
-            ["bash", str(ROOT / "deploy/tests/apple-container-test.sh")],
-            ROOT,
-            "backend-lint-policy",
-        ),
-        ValidationStep(
-            "Go module tidiness",
-            ["go", "mod", "tidy", "-diff"],
-            backend,
-            "backend-tests",
-        ),
-        ValidationStep(
-            "Compress CLI self-tests",
-            [python, "skills/compress-cli/tests/test_compress_cli.py"],
-            ROOT,
-            "backend-lint-policy",
-        ),
-        ValidationStep(
-            "Push CLI self-tests",
-            [python, "skills/push-cli/tests/test_push_cli.py"],
-            ROOT,
-            "backend-lint-policy",
-        ),
-        ValidationStep(
-            "Release CLI self-tests",
-            [python, "skills/release-cli/tests/test_release_cli.py"],
-            ROOT,
-            "backend-lint-policy",
-        ),
-        ValidationStep(
-            "Backend unit tests",
-            ["go", "test", "-tags=unit", "./..."],
-            backend,
-            "backend-tests",
-        ),
-        ValidationStep(
-            "Backend integration tests",
-            ["go", "test", "-tags=integration", "./..."],
-            backend,
-            "backend-tests",
-        ),
-        ValidationStep(
-            "Backend lint",
-            ["golangci-lint", "run", "./..."],
-            backend,
-            "backend-lint-policy",
-        ),
-        ValidationStep(
-            "Frontend frozen install",
-            ["pnpm", "--dir", "frontend", "install", "--frozen-lockfile"],
-            ROOT,
-            "frontend",
-        ),
-        ValidationStep(
-            "Frontend lint",
-            ["pnpm", "--dir", "frontend", "run", "lint:check"],
-            ROOT,
-            "frontend",
-        ),
-        ValidationStep(
-            "Frontend typecheck",
-            ["pnpm", "--dir", "frontend", "run", "typecheck"],
-            ROOT,
-            "frontend",
-        ),
-        ValidationStep(
-            "Frontend tests",
-            [
-                "pnpm",
-                "--dir",
-                "frontend",
-                "run",
-                "test:run",
-                f"--maxWorkers={frontend_workers}",
-            ],
-            ROOT,
-            "frontend",
-        ),
-        ValidationStep(
-            "Frontend production build",
-            ["pnpm", "--dir", "frontend", "run", "build"],
-            ROOT,
-            "frontend",
-        ),
-        ValidationStep(
-            "Release policy tests",
-            [python, "tools/test_release_policy.py"],
-            ROOT,
-            "backend-lint-policy",
-        ),
-        ValidationStep(
-            "Codex outbound identity",
-            [python, "tools/check_openai_codex_identity.py"],
-            ROOT,
-            "backend-lint-policy",
-        ),
-        ValidationStep(
-            "README synchronization",
-            [python, "tools/check_readme_sync.py"],
-            ROOT,
-            "backend-lint-policy",
-        ),
-        ValidationStep(
-            "Go test build tags",
-            [python, "tools/check_test_build_tags.py"],
-            ROOT,
-            "backend-lint-policy",
-        ),
-        ValidationStep(
-            "Release metadata sources",
-            [python, "tools/check_release.py"],
-            ROOT,
-            "backend-lint-policy",
-        ),
-        ValidationStep(
-            "Linux installer syntax",
-            ["bash", "-n", "deploy/install.sh"],
-            ROOT,
-            "backend-lint-policy",
-        ),
-        ValidationStep(
-            "Apple installer syntax",
-            ["bash", "-n", "deploy/apple-container.sh"],
-            ROOT,
-            "backend-lint-policy",
-        ),
-        ValidationStep(
-            "Docker Compose security",
-            ["sh", "deploy/tests/docker-compose-security-test.sh"],
-            ROOT,
-            "backend-lint-policy",
-        ),
-        ValidationStep(
-            "Docker runtime resources",
-            ["sh", "deploy/tests/docker-runtime-resources-test.sh"],
-            ROOT,
-            "backend-lint-policy",
-        ),
-        ValidationStep(
-            "Caddy cache policy",
-            ["bash", "deploy/test-caddyfile-cache.sh"],
-            ROOT,
-            "backend-lint-policy",
-        ),
-    ]
-
+    frontend_workers = 4 if serial else 2
     migration_base = base_ref or f"{remote}/{branch}"
     base_check = run_command(
         ["git", "rev-parse", "--verify", migration_base], capture=True
     )
-    if base_check.returncode == 0:
-        steps.append(
-            ValidationStep(
-                "Migration policy",
-                [python, "tools/check_new_migrations.py", "--base", migration_base],
-                ROOT,
-                "backend-lint-policy",
-            )
-        )
+    steps = validation_checks.full_steps(
+        ROOT, python=python, frontend_workers=frontend_workers,
+        migration_base=migration_base if base_check.returncode == 0 else None,
+    )
 
     started = time.monotonic()
     if serial:

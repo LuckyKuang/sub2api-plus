@@ -731,8 +731,10 @@ class ValidationGenerationTest(unittest.TestCase):
             "lockfileVersion: '9.0'\n", encoding="utf-8"
         )
         (root / ".tool-versions").write_text(
-            "golangci-lint 2.13.1\ngoreleaser 2.17.1\n", encoding="utf-8"
+            "golangci-lint 2.13.1\ngoreleaser 2.17.1\ngovulncheck 1.6.0\n", encoding="utf-8"
         )
+        (root / ".github/release-tools").mkdir(parents=True)
+        (root / ".github/release-tools/requirements-release.txt").write_text("PyYAML==6.0.3\n")
 
     def test_image_generation_includes_resolved_node_pin(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

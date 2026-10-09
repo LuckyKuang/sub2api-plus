@@ -80,11 +80,18 @@ complete expected tree from the recorded base and re-verifies the published
 Release and immutable assets; it never runs the full application matrix for
 this profile or commits/pushes main.
 
-Promote the resulting PR through the same `promote-pr` policy after its Actions
-pass, omitting `--notes-file`. That form requires the matching typed tag proof,
+`finalize` discovers the exact submitted PR and invokes the complete `promote-pr`
+policy automatically, omitting `--notes-file`. That form requires the matching typed tag proof,
 deterministic branch, regenerated tree, published metadata, Release workflow,
 and immutable assets. Required PR and merged-main contexts classify the same
-tree before selecting focused checks and fail closed on ambiguity.
+tree before selecting focused checks and fail closed on ambiguity. Finalization
+succeeds only after the actual merge and successful exact merged-main CI and
+Security Scan. Positively identified pending checks/merge return status 2 with
+the PR URL and retry command. Failed checks and API errors remain failures.
+An already merged finalization can resume after independent proof, merge
+parents/tree, published Release and deterministic metadata verification.
+An existing deterministic branch resumes only its exact matching PR, without
+resetting the branch or creating another commit.
 
 ## Safety
 

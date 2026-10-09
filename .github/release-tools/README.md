@@ -1,30 +1,76 @@
-# Release matrix
+# Plus release packaging
 
-The release workflow builds the frontend once, then runs each configured Go target on its own Linux runner. `CGO_ENABLED=0` permits cross-compilation. The target matrix is read from `.goreleaser.yaml`, including its exclusions; simple releases select Linux amd64 only.
+The Release workflow captures one application SHA, version and build date.
+Workflow helpers and the pinned validation image definition come from the
+immutable workflow revision, separately from the selected application source.
+This allows a new workflow to rehearse historical tags without overlaying their
+source files. All builds and validation execute in the pinned Docker container.
 
-Each build uses GoReleaser OSS in snapshot mode with the selected release version and one target. Archive naming, bundled files, Go flags and release templates remain in the existing GoReleaser configurations. Every archive is accompanied by its source commit, target, version and SHA256. The publishing job verifies the complete matrix before building images or publishing. It uses GoReleaser's `extra_files` support to publish existing archives and checksums, with builds disabled. No Pro license is needed.
+The frontend builds once. Five independent runners compile Linux amd64/arm64,
+Darwin amd64/arm64 and Windows amd64 using GoReleaser OSS snapshot builds.
+Linux arm64 runners own arm64 targets. The target set and packaging flags come
+from the selected source's `.goreleaser.yaml`. Each archive has a manifest bound
+to the captured SHA, version, date, target, name and SHA256. Producers verify HEAD;
+collection also checks Go binary build metadata. The consumer requires exactly
+five archives and five manifests before any image build or publication.
 
-Go caches are isolated by target and refreshed on each source commit, with fallback to the preceding target cache. Save uses the original restore key, even if a build hook changes `go.sum`. Matrix jobs upload uniquely named artifacts. The publishing job extracts only the regular Linux binary from each verified archive and restores its executable permission before constructing Docker contexts. QEMU remains limited to runtime-image instructions. DockerHub images are omitted when its credentials are absent; GHCR is always retained. Simple mode still publishes only the amd64 GHCR image and the simple release description.
+Plus-specific adaptations are intentional: build metadata such as
+`0.2.14+custom.002` stays in archive names; all three GoReleaser image sections
+are disabled; only `release-images.sh` publishes images to
+`ghcr.io/<owner-lower>/sub2api-plus`. OCI tags use
+`v0.2.14-custom.002`, architecture suffixes, and numeric `latest`, `0.2`, `0`
+moving tags. DockerHub and the nonexistent upstream simple configuration are
+removed. Context binaries live at `<arch>/linux/<arch>/sub2api`, matching
+`COPY ${TARGETPLATFORM}/sub2api`, and retain executable permission. Runtime
+files come from the same captured application source.
 
-All build jobs use the commit resolved by `prepare`, including a manual release's selected tag. Helper scripts come from the workflow revision and are passed as a run-local artifact, so older application tags do not need to contain the new scripts. The workflow serializes release runs to prevent simultaneous updates to moving image tags.
+The publisher alone has write permissions and enters the `release` Environment.
+It packages verified archives through GoReleaser `extra_files`; it does not
+compile the application again. Pricing assets are generated with the selected
+source's Go command, compared before external writes, and uploaded last without
+`--clobber`. Existing bytes must match; API/download errors fail closed.
+Cross-registry publication is not atomic. A partial publication needs inspection
+under [the recovery policy](../../docs/RELEASING.md), never retagging.
 
-## Validate without publication
+## Read-only rehearsals
 
 From a branch containing this workflow:
 
 ```bash
-gh workflow run release.yml --ref <branch> \
-  -f tag=<branch> -f dry_run=true -f simple_release=false
+gh workflow run release.yml --ref <tooling-branch> \
+  -f tag=<application-branch> -f dry_run=true
+gh workflow run release.yml --ref <tooling-branch> \
+  -f tag=vX.Y.Z+custom.NNN -f dry_run=true
 ```
 
-A dry run builds all selected archives and both runtime images, verifies artifact provenance and produces the final checksum file. It exports images locally as OCI archives instead of pushing them. It skips registry logins, GitHub Release publication, DockerHub description updates, Telegram notifications and VERSION synchronization. Test the simple path separately with `simple_release=true`.
+Branch rehearsal checks source metadata but is not publication provenance.
+Historical-tag rehearsal requires the annotated tag, notes, planned mapping at
+that tag, main containment and successful exact-SHA CI and Security Scan.
+Real publication must run from the same eligible tag ref; a branch dispatch with
+a tag input cannot publish. Tag pushes always select real publication.
 
-Dry-run artifacts are available in the Actions run, including `release-dry-run-report`. Compare job start/end times, GoReleaser's build duration and cache restore results. Do not present an initial cold-cache run as a warmed-cache benchmark; publishing network time is not measured by dry runs.
+Rehearsals have read-only permissions, no registry login and no Environment.
+They use the same build/context/image helpers, export both OCI archives, and
+inspect blob digests, platforms, labels, binary bytes, executable entrypoint and
+fallback pricing. Pricing is generated and compared against existing assets.
+Historical tags require both assets. Absence on branch rehearsal is recorded as
+`absent-untested`, never an immutability success.
 
-Helper checks:
+The `release-packaging-evidence` run artifact retains OCI archives, checksums,
+GoReleaser artifacts/metadata, pricing outcomes and `report.json` for three days.
+The report records source/tooling SHAs, version/date, targets and OCI digests.
+Use Actions job timestamps and cache restore logs for wall time and runner-minute
+audits. Target caches include architecture and exact toolchain/lock identities.
+GitHub ref visibility applies: separate tags do not share each other's caches.
+Do not report rehearsal time as publication time or the 9-minute budget as a
+measurement. Rehearsal cannot verify upload permissions or registry reliability.
+
+Helper regressions and shell syntax are included in both maintained full local
+and CI profiles. Run focused checks through the prescribed local container:
 
 ```bash
-python -m pip install -r .github/release-tools/requirements-release.txt
-python -m unittest discover -s .github/release-tools -p 'test_release_matrix.py'
-bash -n .github/release-tools/release-images.sh
+python3 tools/ci_validation.py ensure
+python3 tools/ci_validation.py exec -- python3 -m unittest discover \
+  -s .github/release-tools -p 'test_release_*.py'
+python3 tools/ci_validation.py exec -- bash -n .github/release-tools/release-images.sh
 ```

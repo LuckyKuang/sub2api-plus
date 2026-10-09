@@ -75,7 +75,7 @@ class ReleaseCliError(RuntimeError):
 
 
 class PromotionPending(ReleaseCliError):
-    """GitHub accepted auto-merge but protected conditions remain pending."""
+    """Positively identified GitHub checks or protected merge remain pending."""
 
 
 @dataclass(frozen=True)
@@ -112,6 +112,7 @@ class PullRequest:
     head_branch: str
     head_oid: str
     head_owner: str
+    head_repository: str
     merge_state: str
     merge_commit: str | None
     auto_merge_enabled: bool
@@ -751,6 +752,7 @@ def pull_request_details(repository: str, number: int) -> PullRequest:
             head_branch=str(head["ref"]),
             head_oid=str(head["sha"]),
             head_owner=head_owner,
+            head_repository=str(head_repo.get("full_name", "")) if isinstance(head_repo, dict) else "",
             merge_state=str(data.get("mergeable_state") or "unknown").upper(),
             merge_commit=str(data["merge_commit_sha"]) if data.get("merge_commit_sha") else None,
             auto_merge_enabled=data.get("auto_merge") is not None,
@@ -802,7 +804,7 @@ def require_promotable_pr(
             f"pull request #{pr.number} targets {pr.base_branch}, expected {default_branch}"
         )
     expected_owner = repository.split("/", 1)[0]
-    if pr.head_owner.lower() != expected_owner.lower():
+    if pr.head_owner.lower() != expected_owner.lower() or pr.head_repository.lower() != repository.lower():
         raise ReleaseCliError("release pull request must come from the same repository")
     proof = parse_validation_proof(pr.body)
     if proof.head != pr.head_oid:
@@ -876,20 +878,28 @@ def finalization_tree_command(
 
 
 def require_required_pr_checks(repository: str, number: int) -> None:
-    run_step(
-        "Wait for required pull-request checks",
-        [
-            "gh",
-            "pr",
-            "checks",
-            str(number),
-            "--repo",
-            repository,
-            "--required",
-            "--watch",
-            "--fail-fast",
-        ],
-    )
+    for attempt in range(DISCOVERY_ATTEMPTS):
+        result = run_command([
+            "gh", "pr", "checks", str(number), "--repo", repository,
+            "--required", "--json", "name,bucket,state,link",
+        ], capture=True)
+        try:
+            checks = json.loads(result.stdout or "[]")
+        except json.JSONDecodeError as error:
+            raise ReleaseCliError("cannot read required PR checks") from error
+        no_checks = "no checks reported" in (result.stderr or "").lower()
+        if result.returncode not in (0, 8) and not (result.returncode == 1 and no_checks):
+            raise ReleaseCliError("required PR checks failed or GitHub API was unavailable")
+        if not isinstance(checks, list) or any(not isinstance(check, dict) for check in checks):
+            raise ReleaseCliError("invalid required PR check response")
+        if any(check.get("bucket") not in ("pass", "pending") for check in checks):
+            raise ReleaseCliError("a required PR check failed, was cancelled or skipped")
+        names = {check.get("name") for check in checks}
+        if REQUIRED_PR_STATUS_CONTEXTS <= names and all(check.get("bucket") == "pass" for check in checks):
+            return
+        if attempt + 1 < DISCOVERY_ATTEMPTS:
+            time.sleep(POLL_SECONDS)
+    raise PromotionPending(f"required checks are missing or pending for PR #{number}")
 
 
 def find_branch_runs(
@@ -930,7 +940,7 @@ def find_branch_runs(
             return matches
         if attempt + 1 < DISCOVERY_ATTEMPTS:
             time.sleep(POLL_SECONDS)
-    raise ReleaseCliError(
+    raise PromotionPending(
         f"expected main Actions {sorted(EXPECTED_MAIN_WORKFLOWS)} did not appear "
         f"for {branch} at {sha}"
     )
@@ -939,6 +949,8 @@ def find_branch_runs(
 def watch_branch_runs(repository: str, branch: str, sha: str) -> None:
     runs = find_branch_runs(repository, branch, sha)
     for run in runs:
+        if run.get("workflowName") not in EXPECTED_MAIN_WORKFLOWS:
+            continue
         run_id = str(run.get("databaseId"))
         run_step(
             f"Watch {run.get('workflowName', 'Actions')} at {sha}",
@@ -958,6 +970,8 @@ def promote_pull_request(
     default_branch = repository_default_branch(repository)
     require_protected_auto_merge(repository, default_branch)
     pr = pull_request_details(repository, number)
+    if pr.state == "MERGED" and notes_file is None:
+        return resume_merged_finalization(repository, pr, tag, remote, default_branch)
     proof = require_promotable_pr(repository, pr, default_branch)
     if current_head() != proof.head:
         raise ReleaseCliError(
@@ -1000,7 +1014,12 @@ def promote_pull_request(
             "Validate deterministic finalization tree",
             finalization_tree_command(proof, pr.head_branch),
         )
-    require_required_pr_checks(repository, number)
+    try:
+        require_required_pr_checks(repository, number)
+    except PromotionPending as error:
+        raise PromotionPending(
+            f"{error}: {pr.url}\nRetry: release-cli promote-pr --tag {tag} --pr {number}"
+        ) from error
 
     latest = pull_request_details(repository, number)
     latest_proof = require_promotable_pr(repository, latest, default_branch)
@@ -1031,6 +1050,10 @@ def promote_pull_request(
     merged: PullRequest | None = None
     for _ in range(MERGE_ATTEMPTS):
         state = pull_request_details(repository, number)
+        if state.head_oid != proof.head:
+            raise ReleaseCliError("pull-request head changed while auto-merge was pending")
+        if state.state == 'OPEN' and state.base_oid != proof.base:
+            raise ReleaseCliError("pull-request base changed while auto-merge was pending; rerun submit-pr")
         if state.state == "MERGED":
             merged = state
             break
@@ -1041,7 +1064,8 @@ def promote_pull_request(
         time.sleep(POLL_SECONDS)
     if merged is None:
         raise PromotionPending(
-            f"auto-merge is enabled but pull request #{number} is still waiting: {pr.url}"
+            f"auto-merge is enabled but pull request #{number} is still waiting: {pr.url}\n"
+            f"Retry: release-cli promote-pr --tag {tag} --pr {number}"
         )
     if not merged.merge_commit:
         raise ReleaseCliError(f"merged pull request #{number} has no merge commit")
@@ -1061,9 +1085,51 @@ def promote_pull_request(
         raise ReleaseCliError(
             f"merged commit {merge_sha} is not contained by {remote}/{default_branch}"
         )
-    watch_branch_runs(repository, default_branch, merge_sha)
+    try:
+        watch_branch_runs(repository, default_branch, merge_sha)
+    except PromotionPending as error:
+        raise PromotionPending(
+            f"{error}: {pr.url}\nRetry: release-cli promote-pr --tag {tag} --pr {number}"
+        ) from error
     print(f"Pull request #{number} promoted to {default_branch} at {merge_sha}.")
     return merge_sha
+
+
+def resume_merged_finalization(repository, pr, tag, remote, default_branch):
+    proof = parse_validation_proof(pr.body)
+    if (proof.profile != FINALIZATION_PROFILE or proof.tag != tag
+            or proof.head != pr.head_oid or pr.head_branch != finalization_branch(tag)
+            or pr.base_branch != default_branch
+            or pr.head_owner.lower() != repository.split('/')[0].lower()
+            or pr.head_repository.lower() != repository.lower()
+            or not pr.merge_commit):
+        raise ReleaseCliError("merged finalization does not match its typed tag proof")
+    if current_head() != proof.head:
+        raise ReleaseCliError(f"check out recorded finalization head {proof.head} before resuming")
+    require_local_validation_status(repository, proof.head, proof.profile)
+    fetch_default_branch(remote, default_branch)
+    parents = capture(['git', 'show', '-s', '--format=%P', pr.merge_commit]).split()
+    if parents != [proof.base, proof.head]:
+        raise ReleaseCliError("merged finalization parents differ from the recorded proof")
+    if capture(['git', 'rev-parse', pr.merge_commit + '^{tree}']) != capture(
+            ['git', 'rev-parse', proof.head + '^{tree}']):
+        raise ReleaseCliError("merged finalization tree differs from the validated head")
+    run_step('Verify finalization merge containment', [
+        'git', 'merge-base', '--is-ancestor', pr.merge_commit, f'{remote}/{default_branch}',
+    ])
+    published = require_published_remote_tag(repository, tag)
+    require_release_workflow_success(repository, tag, published.target)
+    verify_release(repository, tag)
+    run_release_check('Validate finalized release metadata', finalization_metadata_command(tag))
+    run_release_check('Validate deterministic finalization tree', finalization_tree_command(proof, pr.head_branch))
+    try:
+        watch_branch_runs(repository, default_branch, pr.merge_commit)
+    except PromotionPending as error:
+        raise PromotionPending(
+            f"{error}: {pr.url}\nRetry: release-cli promote-pr --tag {tag} --pr {pr.number}"
+        ) from error
+    print(f"Finalization PR #{pr.number} and exact merged-main Actions succeeded: {pr.merge_commit}.")
+    return pr.merge_commit
 
 
 def merged_pr_commit(
@@ -1319,9 +1385,9 @@ def finalize(repository: str, tag: str, remote: str) -> None:
         ["git", "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"]
     )
     if exists.returncode == 0:
-        raise ReleaseCliError(
-            f"local finalization branch already exists: {branch}; inspect it before retrying"
-        )
+        number = finalization_pr_number(repository, branch, default_branch)
+        promote_pull_request(repository, number, tag, None, remote)
+        return
     if exists.returncode != 1:
         raise ReleaseCliError(f"unable to inspect local branch {branch}")
     run_step(
@@ -1387,10 +1453,20 @@ def finalize(repository: str, tag: str, remote: str) -> None:
             tag,
         ],
     )
-    print(
-        f"Release finalization submitted from {branch}. Promote its PR through "
-        "release-cli after required Actions pass."
-    )
+    number = finalization_pr_number(repository, branch, default_branch)
+    promote_pull_request(repository, number, tag, None, remote)
+
+
+def finalization_pr_number(repository: str, branch: str, default_branch: str) -> int:
+    data = json_capture([
+        'gh', 'pr', 'list', '--repo', repository, '--head', branch, '--base', default_branch,
+        '--state', 'all', '--json', 'number,state,headRefOid,url',
+    ], description='finalization pull-request discovery')
+    if not isinstance(data, list) or len(data) != 1 or not isinstance(data[0], dict):
+        raise ReleaseCliError('expected exactly one deterministic finalization PR; inspect before retrying')
+    if data[0].get('headRefOid') != current_head() or data[0].get('state') not in ('OPEN', 'MERGED'):
+        raise ReleaseCliError('finalization PR does not match the checked-out branch head')
+    return int(data[0]['number'])
 
 
 def require_notes_file(args: argparse.Namespace, action: str) -> Path:

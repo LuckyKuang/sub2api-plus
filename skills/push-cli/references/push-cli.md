@@ -66,6 +66,10 @@ focused checks, not the full application matrix.
 
 The full matrix includes every existing command and runs three bounded lanes:
 
+Commands are maintained in `tools/validation_checks.py` and shared with CI.
+`docs/CI_VALIDATION.md` records coverage ownership and pending authority cutover;
+the local proof remains required. CI full suites do not produce local success.
+
 - Go module tidiness, unit tests, integration tests, and golangci-lint.
 - Compress CLI, push CLI, and release CLI self-tests.
 - Frozen pnpm install, lint, typecheck, Vitest, production build, and production
@@ -88,7 +92,7 @@ and Linux Docker must parse `deploy/docker-compose.dev.yml` successfully.
 After each validation attempt, successful or failed, validation containers use
 `--rm`, so their writable VM/container snapshots are removed. The launcher
 retains the `sub2api-validation:<toolchain-digest>` image matching the resolved
-Go, Node, pnpm, golangci-lint, and GoReleaser pins. Dependency caches use a
+Go, Node, pnpm, golangci-lint, GoReleaser and govulncheck pins. Dependency caches use a
 separate generation derived from that image plus the current Go and pnpm lock
 inputs. Cleanup removes only stale Sub2API validation image and cache
 generations and does not run a global container, image, builder, volume, or

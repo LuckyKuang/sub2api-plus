@@ -319,12 +319,18 @@ def declared_validation_pins(root: Path) -> dict[str, str]:
         raise ValidationRuntimeError(
             "frontend/package.json must declare packageManager as pnpm@VERSION"
         )
+    release_requirements = (root / ".github/release-tools/requirements-release.txt").read_text()
+    yaml_match = re.search(r"^PyYAML==([0-9]+\.[0-9]+\.[0-9]+)$", release_requirements, re.MULTILINE)
+    if not yaml_match:
+        raise ValidationRuntimeError("release requirements must pin PyYAML")
     return {
         "GO_VERSION": go_match.group(1),
         "NODE_VERSION": NODE_VERSION,
         "PNPM_VERSION": pnpm_match.group(1),
         "GOLANGCI_LINT_VERSION": declared_tool_version(root, "golangci-lint"),
         "GORELEASER_VERSION": declared_tool_version(root, "goreleaser"),
+        "GOVULNCHECK_VERSION": declared_tool_version(root, "govulncheck"),
+        "PYYAML_VERSION": yaml_match.group(1),
     }
 
 
@@ -622,13 +628,15 @@ def launch_in_validation(
     root: Path,
     capture: Capture,
     run_step: Callable[[str, Sequence[str]], None],
+    toolchain_root: Path | None = None,
 ) -> None:
     if in_validation_container():
         raise ValidationRuntimeError(
             "refusing to launch a nested validation container"
         )
-    image = validation_image_ref(root)
-    cache_generation = validation_cache_digest(root)
+    inputs = toolchain_root or root
+    image = validation_image_ref(inputs)
+    cache_generation = validation_cache_digest(inputs)
     try:
         command = validation_run_command(
             runtime,
