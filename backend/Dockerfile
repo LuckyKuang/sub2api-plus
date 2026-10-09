@@ -1,4 +1,4 @@
-FROM golang:1.27.0-alpine
+FROM golang:1.27.2-alpine
 
 ARG VERSION=0.2.14+custom.003
 
