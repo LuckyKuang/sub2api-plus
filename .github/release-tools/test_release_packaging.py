@@ -220,6 +220,8 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("needs.verify.result == 'success'", jobs['build-frontend']['if'])
         self.assertIn("needs.prepare.result == 'success'", jobs['build-frontend']['if'])
         self.assertEqual(jobs['build-binaries']['strategy']['fail-fast'], False)
+        for name in ('build-frontend', 'build-binaries', 'release', 'rehearse'):
+            self.assertIn('!cancelled()', jobs[name]['if'], 'cancelled runs must not start builds/publication')
 
     def test_failed_pricing_preflight_cannot_build_or_publish_images(self):
         plan = {**PLAN, 'mode': 'publish', 'date': '2026-10-09T01:02:03Z', 'tag': TAG}

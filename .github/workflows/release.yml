@@ -143,7 +143,7 @@ jobs:
   build-frontend:
     needs: [prepare, verify, verify-rehearsal]
     if: >-
-      always() && needs.prepare.result == 'success' &&
+      always() && !cancelled() && needs.prepare.result == 'success' &&
       ((needs.prepare.outputs.mode == 'branch-rehearsal' && needs.verify-rehearsal.result == 'success') ||
        (needs.prepare.outputs.mode != 'branch-rehearsal' && needs.verify.result == 'success'))
     runs-on: ubuntu-24.04
@@ -172,7 +172,7 @@ jobs:
 
   build-binaries:
     needs: [prepare, build-frontend]
-    if: always() && needs.prepare.result == 'success' && needs.build-frontend.result == 'success'
+    if: always() && !cancelled() && needs.prepare.result == 'success' && needs.build-frontend.result == 'success'
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -210,7 +210,7 @@ jobs:
   release:
     name: Build and publish
     needs: [prepare, verify, build-binaries]
-    if: always() && needs.prepare.result == 'success' && needs.prepare.outputs.mode == 'publish' && needs.verify.result == 'success' && needs.build-binaries.result == 'success'
+    if: always() && !cancelled() && needs.prepare.result == 'success' && needs.prepare.outputs.mode == 'publish' && needs.verify.result == 'success' && needs.build-binaries.result == 'success'
     runs-on: ubuntu-24.04
     environment:
       name: release
@@ -247,7 +247,7 @@ jobs:
     name: Read-only packaging rehearsal
     needs: [prepare, verify, verify-rehearsal, build-binaries]
     if: >-
-      always() && needs.prepare.result == 'success' &&
+      always() && !cancelled() && needs.prepare.result == 'success' &&
       needs.prepare.outputs.mode != 'publish' && needs.build-binaries.result == 'success' &&
       ((needs.prepare.outputs.mode == 'branch-rehearsal' && needs.verify-rehearsal.result == 'success') ||
        (needs.prepare.outputs.mode == 'tag-rehearsal' && needs.verify.result == 'success'))

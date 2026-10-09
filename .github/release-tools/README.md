@@ -27,6 +27,8 @@ moving tags. Context binaries live at `<arch>/linux/<arch>/sub2api`, matching
 files come from the same captured application source.
 
 The publisher alone has write permissions and enters the `release` Environment.
+Build and packaging gates handle skipped verification branches explicitly and
+reject cancelled workflows, including before publication.
 It packages verified archives through GoReleaser `extra_files`; it does not
 compile the application again. Checksums are materialized and compared with
 verified archive bytes before external writes. Pricing assets use the selected
