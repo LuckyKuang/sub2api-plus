@@ -15,10 +15,7 @@ runs:
         ref: ${{ inputs.sha }}
         fetch-depth: 0
         persist-credentials: false
-    - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v5
-      with:
-        name: release-tooling
-        path: .release-tooling
+        clean: false # Preserve the separate immutable action through historical checkout/post hooks.
     - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v5
       with:
         name: version-file

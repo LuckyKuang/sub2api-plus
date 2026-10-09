@@ -528,6 +528,8 @@ def validation_run_command(
         "--env",
         "PYTHONDONTWRITEBYTECODE=1",
         "--env",
+        "PYTHONUNBUFFERED=1",
+        "--env",
         f"HOME={CONTAINER_HOME}",
         "--env",
         f"GOPATH={CONTAINER_HOME}/go",

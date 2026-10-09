@@ -48,6 +48,7 @@ jobs:
           cp -R .github/release-tools "$RUNNER_TEMP/release-tooling/"
           cp -R .github/actions/prepare-validation "$RUNNER_TEMP/release-tooling/actions/"
           cp -R .github/actions/release-package "$RUNNER_TEMP/release-tooling/actions/"
+          cp -R .github/actions/release-source "$RUNNER_TEMP/release-tooling/actions/"
           cp deploy/Dockerfile.validation "$RUNNER_TEMP/release-tooling/validation/"
           cp .tool-versions "$RUNNER_TEMP/release-tooling/validation/tool-versions"
           printf '%s\n' "$TOOLING_SHA" > "$RUNNER_TEMP/release-tooling/revision"
@@ -100,7 +101,11 @@ jobs:
         with:
           ref: ${{ github.workflow_sha }}
           persist-credentials: false
-      - uses: ./.github/actions/release-source
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v5
+        with:
+          name: release-tooling
+          path: .release-tooling
+      - uses: ./.release-tooling/actions/release-source
         with:
           sha: ${{ needs.prepare.outputs.sha }}
           lane: verify
@@ -123,7 +128,11 @@ jobs:
         with:
           ref: ${{ github.workflow_sha }}
           persist-credentials: false
-      - uses: ./.github/actions/release-source
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v5
+        with:
+          name: release-tooling
+          path: .release-tooling
+      - uses: ./.release-tooling/actions/release-source
         with:
           sha: ${{ needs.prepare.outputs.sha }}
           lane: verify-rehearsal
@@ -143,7 +152,11 @@ jobs:
         with:
           ref: ${{ github.workflow_sha }}
           persist-credentials: false
-      - uses: ./.github/actions/release-source
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v5
+        with:
+          name: release-tooling
+          path: .release-tooling
+      - uses: ./.release-tooling/actions/release-source
         with:
           sha: ${{ needs.prepare.outputs.sha }}
           lane: frontend
@@ -169,7 +182,11 @@ jobs:
         with:
           ref: ${{ github.workflow_sha }}
           persist-credentials: false
-      - uses: ./.github/actions/release-source
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v5
+        with:
+          name: release-tooling
+          path: .release-tooling
+      - uses: ./.release-tooling/actions/release-source
         with:
           sha: ${{ needs.prepare.outputs.sha }}
           lane: ${{ matrix.goos }}-${{ matrix.goarch }}
@@ -205,7 +222,11 @@ jobs:
         with:
           ref: ${{ github.workflow_sha }}
           persist-credentials: false
-      - uses: ./.github/actions/release-source
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v5
+        with:
+          name: release-tooling
+          path: .release-tooling
+      - uses: ./.release-tooling/actions/release-source
         with:
           sha: ${{ needs.prepare.outputs.sha }}
           lane: publisher
@@ -238,7 +259,11 @@ jobs:
         with:
           ref: ${{ github.workflow_sha }}
           persist-credentials: false
-      - uses: ./.github/actions/release-source
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v5
+        with:
+          name: release-tooling
+          path: .release-tooling
+      - uses: ./.release-tooling/actions/release-source
         with:
           sha: ${{ needs.prepare.outputs.sha }}
           lane: rehearsal

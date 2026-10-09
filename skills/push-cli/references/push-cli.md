@@ -64,7 +64,7 @@ focused checks, not the full application matrix.
 
 ## In-Container Matrix
 
-The full matrix includes every existing command and runs three bounded lanes:
+The full matrix includes every existing command and keeps three logical lanes with two concurrent workers:
 
 Commands are maintained in `tools/validation_checks.py` and shared with CI.
 `docs/CI_VALIDATION.md` records coverage ownership and pending authority cutover;
@@ -82,7 +82,9 @@ the local proof remains required. CI full suites do not produce local success.
   and the Apple Container lifecycle fixture.
 
 The backend-test lane keeps module tidiness before unit and integration tests.
-The backend-lint/policy lane serializes lint and repository policy commands.
+The backend-lint/policy lane starts after the backend-test lane finishes,
+preventing two large Go heaps from exhausting the 8-GiB container. It serializes
+lint and repository policy commands.
 The frontend lane keeps install before lint, typecheck, full Vitest, build, and
 audit. Default parallel execution limits Vitest to two workers within the
 four-CPU container; `--serial` uses four. Every command and lane reports elapsed

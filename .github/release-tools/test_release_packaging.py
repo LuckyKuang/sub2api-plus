@@ -158,6 +158,29 @@ class OciTests(unittest.TestCase):
 
 
 class WorkflowTests(unittest.TestCase):
+    def test_historical_checkout_preserves_the_executing_action_and_post_hooks(self):
+        # Git checkout removes tracked actions absent from older tags. Execute
+        # the immutable artifact copy and preserve untracked tooling instead.
+        jobs = yaml.safe_load((ROOT / '.github/workflows/release.yml').read_text())['jobs']
+        for name, job in jobs.items():
+            if name == 'prepare':
+                continue
+            steps = job['steps']
+            source = next(i for i, step in enumerate(steps)
+                          if step.get('uses', '').endswith('/actions/release-source'))
+            self.assertEqual(steps[source]['uses'], './.release-tooling/actions/release-source')
+            self.assertEqual(steps[source - 1]['with']['name'], 'release-tooling')
+        action = yaml.safe_load((ROOT / '.github/actions/release-source/action.yml').read_text())
+        self.assertFalse(action['runs']['steps'][0]['with']['clean'])
+
+    def test_buildx_staging_uses_the_client_reported_plugin_location(self):
+        action = yaml.safe_load((ROOT / '.github/actions/release-package/action.yml').read_text())
+        stage = next(s['run'] for s in action['runs']['steps']
+                     if s.get('name') == 'Stage Docker client configuration')
+        self.assertIn('docker info --format', stage)
+        self.assertIn('.ClientInfo.Plugins', stage)
+        self.assertNotIn('$HOME/.docker/cli-plugins/docker-buildx', stage)
+
     def test_materialized_checksums_match_actual_bytes_and_reject_duplicates(self):
         previous = Path.cwd()
         with tempfile.TemporaryDirectory() as temporary:

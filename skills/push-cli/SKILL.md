@@ -59,7 +59,7 @@ validation container. Treat the profile and tag as implementation
 inputs; do not use them to accelerate an ordinary or release-candidate PR.
 
 `check` runs the same full local matrix without pushing or creating a PR. It
-uses bounded parallel lanes by default; `check --serial` preserves the original
+runs Go tests before Go lint, concurrently with frontend checks by default; `check --serial` preserves the original
 ordering for diagnosis and same-commit timing comparisons. Both modes run the
 same command and test set. `ensure` only prepares the platform runtime and
 validation image. `watch` observes pull-request Actions for the current branch and SHA when a

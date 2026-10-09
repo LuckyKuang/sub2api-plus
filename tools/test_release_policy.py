@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import json
 import re
 import subprocess
 import sys
@@ -414,8 +415,28 @@ class MigrationBaselineTests(unittest.TestCase):
 
 
 class WorkflowProvenanceTests(unittest.TestCase):
+    def test_api_query_filters_exact_sha_and_normalizes_authoritative_fields(self) -> None:
+        payload = {"total_count": 1, "workflow_runs": [{"name": "CI", "event": "push",
+            "head_branch": "main", "head_sha": OFFICIAL_COMMIT,
+            "status": "completed", "conclusion": "success"}]}
+        with mock.patch.object(subprocess, "run", return_value=subprocess.CompletedProcess(
+                [], 0, json.dumps(payload), "")) as query:
+            runs = workflow_provenance.list_branch_runs("owner/repo", "main", OFFICIAL_COMMIT)
+        args = query.call_args.args[0]
+        self.assertEqual(args[:2], ["gh", "api"])
+        self.assertIn("head_sha=" + OFFICIAL_COMMIT, args[2])
+        self.assertIn("event=push", args[2])
+        self.assertEqual(runs[0]["headSha"], OFFICIAL_COMMIT)
+        self.assertEqual(runs[0]["workflowName"], "CI")
+
+    def test_incomplete_api_window_fails_closed(self) -> None:
+        with mock.patch.object(subprocess, "run", return_value=subprocess.CompletedProcess(
+                [], 0, '{"total_count": 101, "workflow_runs": []}', "")):
+            with self.assertRaisesRegex(workflow_provenance.WorkflowProvenanceError, "complete response"):
+                workflow_provenance.list_branch_runs("owner/repo", "main", OFFICIAL_COMMIT)
+
     @staticmethod
-    def run(
+    def make_run(
         workflow: str,
         *,
         branch: str = "main",
@@ -433,7 +454,7 @@ class WorkflowProvenanceTests(unittest.TestCase):
         }
 
     def test_exact_successful_main_runs_pass(self) -> None:
-        runs = [self.run("CI"), self.run("Security Scan")]
+        runs = [self.make_run("CI"), self.make_run("Security Scan")]
         self.assertEqual(
             runs,
             workflow_provenance.require_successful_workflows(
@@ -445,8 +466,8 @@ class WorkflowProvenanceTests(unittest.TestCase):
 
     def test_wrong_branch_or_sha_does_not_satisfy_provenance(self) -> None:
         runs = [
-            self.run("CI", branch="release/candidate"),
-            self.run("Security Scan", sha="b" * 40),
+            self.make_run("CI", branch="release/candidate"),
+            self.make_run("Security Scan", sha="b" * 40),
         ]
         with self.assertRaisesRegex(
             workflow_provenance.WorkflowProvenanceError,
@@ -464,16 +485,16 @@ class WorkflowProvenanceTests(unittest.TestCase):
             "Security Scan: missing",
         ):
             workflow_provenance.require_successful_workflows(
-                [self.run("CI")],
+                [self.make_run("CI")],
                 branch="main",
                 sha=OFFICIAL_COMMIT,
             )
 
     def test_any_unsuccessful_exact_run_fails(self) -> None:
         runs = [
-            self.run("CI"),
-            self.run("CI", conclusion="failure"),
-            self.run("Security Scan"),
+            self.make_run("CI"),
+            self.make_run("CI", conclusion="failure"),
+            self.make_run("Security Scan"),
         ]
         with self.assertRaisesRegex(
             workflow_provenance.WorkflowProvenanceError,

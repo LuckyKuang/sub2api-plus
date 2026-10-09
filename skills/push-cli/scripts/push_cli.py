@@ -543,7 +543,9 @@ def run_local_checks(
             run_step(step.name, step.command, step.cwd)
         run_frontend_security_check()
     else:
-        lane_names = ("backend-tests", "backend-lint-policy", "frontend")
+        # Go compilation and whole-program lint each consume several GiB. Run
+        # those lanes in order within the 8-GiB VM; frontend remains concurrent.
+        lane_groups = (("backend-tests", "backend-lint-policy"), ("frontend",))
         stop_requested = threading.Event()
 
         def run_lane(lane_name: str) -> None:
@@ -578,13 +580,17 @@ def run_local_checks(
                 )
 
         failures: list[str] = []
+        def run_group(lanes: tuple[str, ...]) -> None:
+            for lane_name in lanes:
+                run_lane(lane_name)
+
         with concurrent.futures.ThreadPoolExecutor(
-            max_workers=len(lane_names),
+            max_workers=len(lane_groups),
             thread_name_prefix="validation",
         ) as executor:
             futures = {
-                executor.submit(run_lane, lane_name): lane_name
-                for lane_name in lane_names
+                executor.submit(run_group, lanes): "/".join(lanes)
+                for lanes in lane_groups
             }
             for future in concurrent.futures.as_completed(futures):
                 lane_name = futures[future]

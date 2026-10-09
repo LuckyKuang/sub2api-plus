@@ -86,7 +86,8 @@ python3 skills/push-cli/scripts/push_cli.py submit-pr
 
 `submit-pr` defaults to `profile=full`: it fetches the current `origin/main`,
 requires it in the branch, records exact base/head SHAs, runs the complete
-matrix in three bounded platform-container lanes, refetches and rechecks both
+matrix in platform-container lanes with Go tests preceding Go lint and
+frontend running concurrently, refetches and rechecks both
 SHAs, pushes the exact head, publishes the typed
 `sub2api/local-validation` status, and creates or reuses the PR. Any later head
 or base change requires another `submit-pr`. `check --serial` is available only

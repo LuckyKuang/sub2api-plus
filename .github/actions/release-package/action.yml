@@ -23,7 +23,8 @@ runs:
         mkdir -p .release-docker-config/cli-plugins
         cp -R "$HOME/.docker/." .release-docker-config/
         rm -f .release-docker-config/cli-plugins/docker-buildx
-        cp -L "$HOME/.docker/cli-plugins/docker-buildx" .release-docker-config/cli-plugins/docker-buildx
+        buildx_path=$(docker info --format '{{json .ClientInfo.Plugins}}' | python3 -c 'import json,sys; print(next(p["Path"] for p in json.load(sys.stdin) if p["Name"] == "buildx"))')
+        cp -L "$buildx_path" .release-docker-config/cli-plugins/docker-buildx
     - name: Package and verify archives, images and pricing
       shell: bash
       env:

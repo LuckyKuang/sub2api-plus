@@ -5,6 +5,9 @@ Workflow helpers and the pinned validation image definition come from the
 immutable workflow revision, separately from the selected application source.
 This allows a new workflow to rehearse historical tags without overlaying their
 source files. All builds and validation execute in the pinned Docker container.
+Actions execute from the immutable tooling artifact, which survives historical
+source checkout and post hooks. Buildx is staged from Docker's reported plugin
+path rather than a runner-specific home directory.
 
 The frontend builds once. Five independent runners compile Linux amd64/arm64,
 Darwin amd64/arm64 and Windows amd64 using GoReleaser OSS snapshot builds.
@@ -46,6 +49,8 @@ gh workflow run release.yml --ref <tooling-branch> \
 Branch rehearsal checks source metadata but is not publication provenance.
 Historical-tag rehearsal requires the annotated tag, notes, planned mapping at
 that tag, main containment and successful exact-SHA CI and Security Scan.
+Provenance queries use GitHub's REST SHA filter through the container's `gh api`,
+then independently check workflow name, event, branch, SHA and success.
 Real publication must run from the same eligible tag ref; a branch dispatch with
 a tag input cannot publish. Tag pushes always select real publication.
 

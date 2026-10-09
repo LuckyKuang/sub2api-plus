@@ -187,8 +187,8 @@ python3 skills/push-cli/scripts/push_cli.py submit-pr
 `submit-pr` defaults to the `full` profile. It requires the latest
 default-branch base and runs the complete matrix inside Apple Containers on
 macOS, Docker inside WSL2 Debian or Ubuntu on Windows, and Docker on Linux.
-Independent backend-test, backend-lint/policy, and frontend lanes run with
-bounded concurrency and report step/lane wall-clock durations; no check is
+Backend tests run before backend lint/policy while the frontend lane runs
+concurrently within the 4-CPU/8-GiB container and report step/lane wall-clock durations; no check is
 removed. Host-side execution of any validation is forbidden. For diagnosis or a
 same-commit timing baseline, pass `--serial` to `check`.
 

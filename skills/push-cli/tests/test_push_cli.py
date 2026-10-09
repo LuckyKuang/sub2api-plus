@@ -6,6 +6,7 @@ import json
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -469,6 +470,28 @@ class FrontendSecurityCheckTest(unittest.TestCase):
 
 
 class LocalChecksTest(unittest.TestCase):
+    def test_go_lint_waits_for_tests_while_frontend_can_overlap(self) -> None:
+        # The prescribed 8-GiB runtime cannot sustain two Go analysis heaps
+        # together. Keep all checks and allow the lighter frontend in parallel.
+        frontend_started = threading.Event()
+        backend_tests_done = threading.Event()
+        def step(name, *args, **kwargs):
+            if name == "Frontend frozen install":
+                frontend_started.set()
+            if name == "Backend unit tests":
+                self.assertTrue(frontend_started.wait(3), "frontend must be able to run concurrently")
+            if name == "Backend integration tests":
+                backend_tests_done.set()
+            if name == "Backend lint":
+                self.assertTrue(backend_tests_done.is_set(), "Go lint must wait for both Go suites")
+        with (
+            mock.patch.object(push_cli, "ROOT", Path("/repo")),
+            mock.patch.object(push_cli, "run_command", return_value=subprocess.CompletedProcess([], 1, "")),
+            mock.patch.object(push_cli, "run_step", side_effect=step),
+            mock.patch.object(push_cli, "run_frontend_security_check"),
+        ):
+            push_cli.run_local_checks("origin", "feature", push_cli.Runtime("docker"))
+
     def test_static_checks_still_run_for_apple_runtime(self) -> None:
         git_miss = subprocess.CompletedProcess(["git"], 1, "")
         with (
