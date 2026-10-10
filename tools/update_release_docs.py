@@ -33,7 +33,7 @@ def main() -> int:
     changed = [
         path
         for path, updated in updates.items()
-        if path.read_text(encoding="utf-8") != updated
+        if path.read_bytes() != updated.encode("utf-8")
     ]
     if args.check:
         if changed:
@@ -47,7 +47,7 @@ def main() -> int:
             return 1
     else:
         for path in changed:
-            path.write_text(updates[path], encoding="utf-8")
+            path.write_text(updates[path], encoding="utf-8", newline="\n")
 
     action = "checked" if args.check else "updated"
     print(

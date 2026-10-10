@@ -22,6 +22,7 @@ import release_preflight
 import release_validation
 import validation_runtime
 import workflow_provenance
+import update_release_docs
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -50,6 +51,50 @@ No known release blockers.
 Official release: {OFFICIAL_TAG}
 Official commit: {OFFICIAL_COMMIT}
 """
+
+
+class ReleaseDocumentNewlineTests(unittest.TestCase):
+    def test_generated_environment_uses_lf_on_windows(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            template = root / "deploy/.env.example"
+            template.parent.mkdir()
+            template.write_bytes(b"# old version\nADMIN_EMAIL=\n")
+            expected = "# new version\nADMIN_EMAIL=\nADMIN_PASSWORD=\n"
+            original_open = Path.open
+
+            def windows_open(path, mode="r", *args, **kwargs):
+                if "w" in mode and "b" not in mode and kwargs.get("newline") is None:
+                    kwargs["newline"] = "\r\n"
+                return original_open(path, mode, *args, **kwargs)
+
+            with (
+                mock.patch.object(update_release_docs, "ROOT", root),
+                mock.patch.object(sys, "argv", ["update_release_docs.py"]),
+                mock.patch.object(release_docs, "generate_release_doc_updates", return_value=(TAG, "v1.2.3+custom.008", {template: expected})),
+                mock.patch.object(Path, "open", windows_open),
+            ):
+                self.assertEqual(update_release_docs.main(), 0)
+            self.assertEqual(template.read_bytes(), expected.encode("utf-8"))
+
+    def test_current_crlf_template_is_reported_and_repaired(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            template = root / "deploy/.env.example"
+            template.parent.mkdir()
+            expected = "ADMIN_EMAIL=\nADMIN_PASSWORD=\n"
+            original = expected.replace("\n", "\r\n").encode("utf-8")
+            template.write_bytes(original)
+            with (
+                mock.patch.object(update_release_docs, "ROOT", root),
+                mock.patch.object(release_docs, "generate_release_doc_updates", return_value=(TAG, "v1.2.3+custom.008", {template: expected})),
+            ):
+                with mock.patch.object(sys, "argv", ["update_release_docs.py", "--check"]):
+                    self.assertEqual(update_release_docs.main(), 1)
+                self.assertEqual(template.read_bytes(), original)
+                with mock.patch.object(sys, "argv", ["update_release_docs.py"]):
+                    self.assertEqual(update_release_docs.main(), 0)
+                self.assertEqual(template.read_bytes(), expected.encode("utf-8"))
 
 
 class ReleaseNotesTests(unittest.TestCase):
