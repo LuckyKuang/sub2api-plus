@@ -37,6 +37,10 @@ generation additionally includes Go and pnpm lock inputs. Remote caches are
 separated by architecture and lane; fallback preserves the exact generation.
 GitHub ref visibility still applies: prefixes do not guarantee cross-tag reuse
 or warm compilation. No validation image is pushed to a registry.
+Release frontend builds share the `frontend` cache lane with default-branch CI
+under the same exact OS, architecture, toolchain and lock generation. They still
+run frozen installation and the complete production build; other release lanes
+retain their separate cache ownership.
 
 ## Containers and platform coverage
 

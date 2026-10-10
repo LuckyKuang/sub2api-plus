@@ -4,6 +4,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tarfile
@@ -158,6 +159,93 @@ class OciTests(unittest.TestCase):
 
 
 class WorkflowTests(unittest.TestCase):
+    def test_preparation_verifies_the_selected_mode_before_exposing_the_plan(self):
+        # Contract: preparation owns provenance; a failed gate cannot leave a
+        # successful preparation job or a source-plan artifact for consumers.
+        jobs = yaml.safe_load((ROOT / '.github/workflows/release.yml').read_text())['jobs']
+        steps = jobs['prepare']['steps']
+        prepared = [i for i, step in enumerate(steps)
+                    if step.get('uses', '').endswith('/actions/prepare-validation')]
+        self.assertEqual(len(prepared), 1, 'verification must reuse the prepared environment')
+        plan = next(i for i, step in enumerate(steps) if step.get('id') == 'plan')
+        strict = next(i for i, step in enumerate(steps)
+                      if 'release_job.py verify --strict' in step.get('run', ''))
+        branch = next(i for i, step in enumerate(steps)
+                      if 'release_job.py verify' in step.get('run', '') and i != strict)
+        upload = next(i for i, step in enumerate(steps)
+                      if step.get('with', {}).get('name') == 'version-file')
+        self.assertLess(prepared[0], plan)
+        self.assertLess(plan, strict)
+        self.assertLess(plan, branch)
+        self.assertLess(strict, upload)
+        self.assertLess(branch, upload)
+        self.assertEqual(steps[strict]['if'], "steps.plan.outputs.mode != 'branch-rehearsal'")
+        self.assertEqual(steps[branch]['if'], "steps.plan.outputs.mode == 'branch-rehearsal'")
+        for step in (steps[plan], steps[strict], steps[branch], steps[upload]):
+            self.assertFalse(step.get('continue-on-error', False))
+            self.assertNotIn('always()', step.get('if', ''))
+        for i in (strict, branch):
+            self.assertIn('ci_validation.py exec', steps[i]['run'])
+        self.assertEqual(jobs['prepare']['permissions'], {'actions': 'read', 'contents': 'read'})
+        self.assertEqual(jobs['build-frontend']['needs'], 'prepare')
+
+    def test_job_conditions_preserve_failure_cancellation_and_mode_boundaries(self):
+        # Independent acceptance table: no failed/skipped/neutral upstream
+        # result or cancellation can authorize a build or an external write.
+        jobs = yaml.safe_load((ROOT / '.github/workflows/release.yml').read_text())['jobs']
+
+        def allowed(name, *, mode='publish', result='success', cancelled=False, failed=None):
+            expression = jobs[name]['if'].strip().removeprefix('${{').removesuffix('}}')
+            def status(match):
+                return repr('failure' if match[1] == failed else result)
+            expression = re.sub(r'needs\.([\w-]+)\.result', status, expression)
+            expression = expression.replace('needs.prepare.outputs.mode', repr(mode))
+            expression = expression.replace('always()', 'True').replace('cancelled()', str(cancelled))
+            expression = expression.replace('&&', ' and ').replace('||', ' or ')
+            expression = re.sub(r'!(?!=)', ' not ', expression)
+            return eval(expression, {'__builtins__': {}}, {})
+
+        for name in ('build-frontend', 'build-binaries', 'release', 'rehearse'):
+            for mode in ('publish', 'tag-rehearsal', 'branch-rehearsal'):
+                with self.subTest(job=name, mode=mode):
+                    for result in ('failure', 'cancelled', 'skipped', 'neutral'):
+                        self.assertFalse(allowed(name, mode=mode, result=result))
+                    self.assertFalse(allowed(name, mode=mode, cancelled=True))
+                    self.assertFalse(allowed(name, mode=mode, failed='prepare'))
+        self.assertFalse(allowed('build-binaries', failed='build-frontend'))
+        for mode in ('publish', 'tag-rehearsal', 'branch-rehearsal'):
+            self.assertTrue(allowed('build-frontend', mode=mode))
+            self.assertTrue(allowed('build-binaries', mode=mode))
+            self.assertEqual(allowed('release', mode=mode), mode == 'publish')
+            self.assertEqual(allowed('rehearse', mode=mode), mode != 'publish')
+            for name in ('release', 'rehearse'):
+                self.assertFalse(allowed(name, mode=mode, failed='build-binaries'))
+
+    def test_release_frontend_reuses_only_the_matching_ci_cache_generation(self):
+        # Contract: default-branch frontend reuse, without architecture/lock
+        # fallback or changing the ownership of binary/publisher caches.
+        jobs = yaml.safe_load((ROOT / '.github/workflows/release.yml').read_text())['jobs']
+        ci = yaml.safe_load((ROOT / '.github/workflows/backend-ci.yml').read_text())['jobs']
+        source = next(s for s in jobs['build-frontend']['steps']
+                      if s.get('uses', '').endswith('/actions/release-source'))
+        ci_source = next(s for s in ci['frontend']['steps']
+                         if s.get('uses', '').endswith('/actions/prepare-validation'))
+        self.assertEqual(source['with']['lane'], 'frontend')
+        self.assertEqual(source['with']['lane'], ci_source['with']['lane'])
+        action = yaml.safe_load((ROOT / '.github/actions/release-source/action.yml').read_text())
+        self.assertEqual(action['runs']['steps'][-1]['with']['lane'], '${{ inputs.lane }}')
+        for name in ('build-binaries', 'release', 'rehearse'):
+            step = next(s for s in jobs[name]['steps']
+                        if s.get('uses', '').endswith('/actions/release-source'))
+            self.assertTrue(step['with']['lane'].startswith('release-'))
+        cache_action = yaml.safe_load((ROOT / '.github/actions/prepare-validation/action.yml').read_text())
+        cache = next(s for s in cache_action['runs']['steps']
+                     if s.get('name') == 'Restore current dependency generation')['with']
+        prefix = ('validation-deps-${{ runner.os }}-${{ runner.arch }}-${{ inputs.lane }}-'
+                  '${{ steps.identity.outputs.cache_generation }}-')
+        self.assertEqual(cache['key'], prefix + '${{ github.sha }}')
+        self.assertEqual(cache['restore-keys'].strip(), prefix)
+
     def test_historical_checkout_preserves_the_executing_action_and_post_hooks(self):
         # Git checkout removes tracked actions absent from older tags. Execute
         # the immutable artifact copy and preserve untracked tooling instead.
@@ -209,15 +297,14 @@ class WorkflowTests(unittest.TestCase):
             if name == 'release':
                 self.assertEqual(job['environment']['name'], 'release')
                 self.assertEqual(job['permissions'], {'contents': 'write', 'packages': 'write'})
-                self.assertIn("needs.verify.result == 'success'", job['if'])
+                self.assertIn('prepare', job['needs'])
+                self.assertIn("needs.prepare.result == 'success'", job['if'])
                 self.assertIn("needs.build-binaries.result == 'success'", job['if'])
                 self.assertIn("needs.prepare.outputs.mode == 'publish'", job['if'])
             else:
                 self.assertNotIn('environment', job)
                 self.assertNotIn('write', job.get('permissions', {}).values())
                 self.assertFalse(any('login-action' in step.get('uses', '') for step in job['steps']))
-        self.assertIn("needs.verify-rehearsal.result == 'success'", jobs['build-frontend']['if'])
-        self.assertIn("needs.verify.result == 'success'", jobs['build-frontend']['if'])
         self.assertIn("needs.prepare.result == 'success'", jobs['build-frontend']['if'])
         self.assertEqual(jobs['build-binaries']['strategy']['fail-fast'], False)
         for name in ('build-frontend', 'build-binaries', 'release', 'rehearse'):
