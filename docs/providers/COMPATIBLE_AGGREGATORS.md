@@ -50,6 +50,30 @@ subscription period and usage summary supply balance and window snapshots.
 A replenished balance clears only cooldowns attributable to recovered usage
 windows. Custom-relay keys do not access the official usage API.
 
+## Probe data integrity
+
+Balance and usage probes require a complete response within the 256 KiB body
+limit. A body read failure or oversized response is unavailable, even if its
+prefix contains valid JSON. Invalid probe data must not overwrite the relevant
+last-known snapshots or set or clear a cooldown based on invented values.
+
+Cline balances accept finite JSON numbers or numeric strings in microcredits;
+an invalid string is not a zero balance. A valid zero or negative balance remains
+an observed balance. Known ClinePass windows require a finite, non-negative
+numeric `percentUsed`; values above 100 remain valid exhausted-window readings.
+Unknown window types may coexist with recognized windows, but a nonempty list
+with no recognized windows cannot prove that a subscription is absent. Only the
+documented no-plan 404 or an empty limits list establishes that absence.
+If the subscription probe succeeds but the separate balance probe fails, only
+subscription windows may update; the credit snapshot and credit-wallet cooldown
+remain as they were.
+
+Command Code numeric strings must also be finite. `NaN`, `Inf` and overflow are
+invalid usage data and cannot establish purchased credits or clear an existing
+window cooldown. A failure of its optional subscription-period or summary query
+continues to preserve the monthly snapshot while independent valid credit and
+rolling-window results may update.
+
 ## Shared Plus contracts
 
 Both platforms use the configurable compatible-supplier identity policy in

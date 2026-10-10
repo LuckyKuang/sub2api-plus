@@ -9,6 +9,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -86,7 +87,13 @@ func (c *clineAccountClient) get(ctx context.Context, path string) (gjson.Result
 		return gjson.Result{}, fmt.Errorf("upstream request failed: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, cnQuotaMaxBodyBytes))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, cnQuotaMaxBodyBytes+1))
+	if err != nil {
+		return gjson.Result{}, fmt.Errorf("read cline account response: %w", err)
+	}
+	if len(body) > cnQuotaMaxBodyBytes {
+		return gjson.Result{}, fmt.Errorf("%w: response exceeds %d bytes", errClineInvalidResponse, cnQuotaMaxBodyBytes)
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return gjson.Result{}, &clineHTTPError{status: resp.StatusCode, body: truncate(strings.TrimSpace(string(body)), 240)}
 	}
@@ -121,7 +128,11 @@ func (c *clineAccountClient) balance(ctx context.Context) (float64, error) {
 	if !micro.Exists() || (micro.Type != gjson.Number && micro.Type != gjson.String) {
 		return 0, fmt.Errorf("%w: missing balance", errClineInvalidResponse)
 	}
-	return math.Round(micro.Float()/100) / 10000, nil
+	value, err := strconv.ParseFloat(strings.TrimSpace(micro.String()), 64)
+	if err != nil || math.IsNaN(value) || math.IsInf(value, 0) {
+		return 0, fmt.Errorf("%w: invalid balance", errClineInvalidResponse)
+	}
+	return math.Round(value/100) / 10000, nil
 }
 
 // passLimits 查询 ClinePass 三档窗口；subscribed=false 表示没有订阅。
@@ -142,14 +153,20 @@ func (c *clineAccountClient) passLimits(ctx context.Context) (tiers []CNQuotaTie
 	for _, item := range limits.Array() {
 		window, ok := windows[strings.ToLower(strings.TrimSpace(item.Get("type").String()))]
 		used := item.Get("percentUsed")
-		if !ok || used.Type != gjson.Number {
+		if !ok {
 			continue
+		}
+		if used.Type != gjson.Number || math.IsNaN(used.Float()) || math.IsInf(used.Float(), 0) || used.Float() < 0 {
+			return nil, false, fmt.Errorf("%w: invalid %s usage", errClineInvalidResponse, window)
 		}
 		tier := CNQuotaTier{Window: window, UsedPercent: used.Float()}
 		if resetAt, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(item.Get("resetsAt").String())); err == nil {
 			tier.ResetAt = resetAt.UTC().Format(time.RFC3339)
 		}
 		tiers = append(tiers, tier)
+	}
+	if len(limits.Array()) > 0 && len(tiers) == 0 {
+		return nil, false, fmt.Errorf("%w: no recognized usage windows", errClineInvalidResponse)
 	}
 	return tiers, len(tiers) > 0, nil
 }

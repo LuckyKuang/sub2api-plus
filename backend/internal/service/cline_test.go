@@ -370,6 +370,8 @@ func TestClineBalanceProbeConvertsMicrocredits(t *testing.T) {
 		{`{"balance":12340000,"userId":"u-1"}`, 12.34},
 		{`{"success":true,"data":{"balance":"500000","userId":"u-1"}}`, 0.5},
 		{`{"balance":1234567,"userId":"u-1"}`, 1.2346},
+		{`{"balance":0,"userId":"u-1"}`, 0},
+		{`{"balance":"-500000","userId":"u-1"}`, -0.5},
 	} {
 		account := clineTestAccount(40)
 		upstream := newClineAccountUpstream(commandCodeAlphaResponse{}, tc.balance)

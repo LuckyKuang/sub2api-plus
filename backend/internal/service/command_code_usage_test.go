@@ -26,8 +26,9 @@ type commandCodeAlphaUpstream struct {
 }
 
 type commandCodeAlphaResponse struct {
-	status int
-	body   string
+	status  int
+	body    string
+	readErr error
 }
 
 func (u *commandCodeAlphaUpstream) Do(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
@@ -38,9 +39,13 @@ func (u *commandCodeAlphaUpstream) Do(req *http.Request, _ string, _ int64, _ in
 	if !ok {
 		resp = commandCodeAlphaResponse{status: http.StatusNotFound, body: `{"error":"not found"}`}
 	}
+	var body io.Reader = strings.NewReader(resp.body)
+	if resp.readErr != nil {
+		body = io.MultiReader(body, &usageProbeErrorReader{err: resp.readErr})
+	}
 	return &http.Response{
 		StatusCode: resp.status,
-		Body:       io.NopCloser(strings.NewReader(resp.body)),
+		Body:       io.NopCloser(body),
 		Header:     make(http.Header),
 		Request:    req,
 	}, nil

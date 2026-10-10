@@ -83,6 +83,9 @@ func (n *commandCodeNumber) UnmarshalJSON(data []byte) error {
 		if err != nil {
 			return err
 		}
+		if math.IsNaN(v) || math.IsInf(v, 0) {
+			return errors.New("non-finite command code usage number")
+		}
 		*n = commandCodeNumber(v)
 		return nil
 	}
@@ -189,7 +192,13 @@ func (c *commandCodeUsageClient) get(ctx context.Context, path string, query url
 		return fmt.Errorf("upstream request failed: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, cnQuotaMaxBodyBytes))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, cnQuotaMaxBodyBytes+1))
+	if err != nil {
+		return fmt.Errorf("read command code usage response: %w", err)
+	}
+	if len(body) > cnQuotaMaxBodyBytes {
+		return fmt.Errorf("%w: response exceeds %d bytes", errCommandCodeInvalidResponse, cnQuotaMaxBodyBytes)
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return &commandCodeHTTPError{status: resp.StatusCode, body: truncate(strings.TrimSpace(string(body)), 240)}
 	}
