@@ -144,7 +144,7 @@ const runtime = reactive(Object.fromEntries(identityPresets.map(preset => [prese
 const defaults = reactive<Record<string, IdentityPreset | ''>>({})
 const savedForm = ref('')
 const mappings = computed(() => view.value?.account_policies.filter(policy => policy.allow_default_mapping) ?? [])
-const platformNames: Record<string, string> = { openai: 'OpenAI-compatible', anthropic: 'Anthropic', gemini: 'Gemini', grok: 'Grok', antigravity: 'Antigravity', typesafe: 'TypeSafe / Jev', opencode_go: 'OpenCode Go' }
+const platformNames: Record<string, string> = { openai: 'OpenAI-compatible', anthropic: 'Anthropic', gemini: 'Gemini', grok: 'Grok', antigravity: 'Antigravity', typesafe: 'TypeSafe / Jev', opencode_go: 'OpenCode Go', cline: 'Cline', command_code: 'Command Code' }
 function mappingLabel(key: string) {
   const [platform, type] = key.split(':')
   return `${platformNames[platform] || platform} · ${type === 'apikey' ? 'API Key' : 'Upstream'}`

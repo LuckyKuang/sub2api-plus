@@ -11,6 +11,25 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestUpstreamProtocolAdditionsKeepCanonicalCurrentUserContent(t *testing.T) {
+	for _, tc := range []struct{ name, protocol, body string }{
+		{"developer and legacy functions", service.ContentModerationProtocolOpenAIChat,
+			`{"model":"gpt-5.5","messages":[{"role":"developer","content":"application instruction"},{"role":"assistant","function_call":{"name":"lookup","arguments":"{\"q\":\"old\"}"}},{"role":"function","name":"lookup","content":"historical result"},{"role":"user","content":"audit current request"}],"functions":[{"name":"lookup","parameters":{"type":"object"}}],"function_call":{"name":"lookup"},"future_options":{"opaque":true}}`},
+		{"web search history", service.ContentModerationProtocolOpenAIResponses,
+			`{"model":"gpt-5.5","input":[{"type":"web_search_call","id":"ws_1","status":"completed","action":{"type":"search","query":"old query"}},{"type":"message","role":"user","content":[{"type":"input_text","text":"audit current request"},{"type":"future_media","opaque":true}]}],"tool_choice":"none"}`},
+		{"inline tool change", service.ContentModerationProtocolAnthropicMessages,
+			`{"model":"claude-sonnet-4-6","max_tokens":256,"tools":[{"name":"lookup","input_schema":{"type":"object"}}],"messages":[{"role":"assistant","content":[{"type":"thinking","thinking":"old reasoning","signature":""}]},{"role":"user","content":[{"type":"text","text":"audit current request"},{"type":"tool_change","tools":[{"name":"future_tool"}]}]}]}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			moderation := service.ExtractContentModerationInput(tc.protocol, []byte(tc.body))
+			require.Equal(t, "audit current request", moderation.Text)
+			prompt, err := securityaudit.ExtractPromptSnapshot(securityaudit.Request{Protocol: tc.protocol, Body: []byte(tc.body)})
+			require.NoError(t, err)
+			require.Equal(t, "audit current request", prompt.ScanText)
+		})
+	}
+}
+
 func TestSonnet55StableToolsetsRetainCanonicalAuditContent(t *testing.T) {
 	for _, toolType := range []string{"computer_toolset_20260801", "browser_toolset_20260801"} {
 		t.Run(toolType, func(t *testing.T) {

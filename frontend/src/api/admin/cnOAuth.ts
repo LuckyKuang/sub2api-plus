@@ -1,6 +1,9 @@
 import { apiClient } from '../client'
 
 export type CNOAuthPlatform = 'deepseek' | 'kimi' | 'minimax' | 'stepfun'
+export function isCNOAuthPlatform(platform: string): platform is CNOAuthPlatform {
+  return platform === 'deepseek' || platform === 'kimi' || platform === 'minimax' || platform === 'stepfun'
+}
 export interface CNOAuthSession {
   session_id: string
   authorize_url: string

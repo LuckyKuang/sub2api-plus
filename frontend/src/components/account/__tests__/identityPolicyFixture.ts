@@ -7,7 +7,7 @@ export function identityPolicyFixture(): IdentityAccountPolicy[] {
     ['anthropic:apikey', 'claude'], ['anthropic:upstream', 'claude'],
     ['gemini:apikey', 'gemini'], ['gemini:upstream', 'gemini'],
     ['grok:apikey', 'grok'], ['grok:upstream', 'grok'],
-    ['antigravity:upstream', 'antigravity'], ['typesafe:apikey', 'codex'], ['opencode_go:apikey', 'codex']
+    ['antigravity:upstream', 'antigravity'], ['typesafe:apikey', 'codex'], ['opencode_go:apikey', 'codex'], ['cline:apikey', 'codex'], ['command_code:apikey', 'codex']
   ]
   const fixed: [string, IdentityPreset][] = [
     ['deepseek:oauth', 'deepseek'], ['deepseek:apikey', 'deepseek'],

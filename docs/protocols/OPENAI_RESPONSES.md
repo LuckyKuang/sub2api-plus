@@ -28,6 +28,43 @@ including HTTP passthrough, individual WS turns, and remote compaction. Aggregat
 compact output does not create a token clock. The obsolete `openai_ttft_mode`
 admin setting has been removed; `timing_version` identifies verified usage data.
 
+## Compatibility and per-turn billing
+
+OAuth requests replaying `web_search_call` history declare a cached-only
+`web_search` tool (`external_web_access=false`) when absent. Standard Responses
+uses `tools`; Responses Lite uses an `additional_tools` input item and preserves
+a trailing `compaction_trigger`. When the caller supplied no tools, the injected
+declaration keeps tool invocation disabled with `tool_choice=none`. Existing
+explicit choices and caller tools retain their semantics. The dedicated
+`/responses/compact` endpoint is excluded. HTTP normal/passthrough and WS use
+the same normalization after ingress audit.
+
+A 400 `thinking_signature_invalid` response is eligible for the existing
+encrypted-reasoning recovery only when it identifies encrypted content that
+could not be verified and decrypted/parsed. Recovery retains the same account
+identity and existing one-retry/lineage rules; unrelated signature errors do
+not trigger this path.
+
+Chat compatibility preserves `developer` roles, named tool choices and legacy
+function-call/result pairing. Responses refusal output maps to Chat's
+`message.refusal`/`delta.refusal` field separately from ordinary content. Delta,
+done and terminal aggregates remain deduplicated. Aggregate-only output does
+not start or extend the token clock. Anthropic thinking blocks retain a
+`signature` field even when empty; an empty field does not represent a verified
+signature. Converted Chat streams retain SSE heartbeat comments without
+counting them as token output.
+
+Responses WS refreshes the same API key's group pricing on later turns through
+the existing authentication cache. A valid snapshot must retain the same key,
+group, platform and subscription type; lookup failure or an ownership/type
+change retains the connection's billing group. User/key limits and subscription
+eligibility keep the Plus per-turn checks. Each turn's profit admission and
+settlement share its frozen pricing time and billing-group snapshot. The current
+and previous turn retain separate snapshots so deferred settlement cannot use
+the next turn's price. Every refresh follows that turn's ingress audit, before
+concurrency acquisition and upstream writes. WS image-input usage is propagated
+through relay and adapter without adding it twice to total input tokens.
+
 ## GPT-6 Astra
 
 The gateway uses OpenAI's canonical `gpt-6-astra` model ID. Bare `gpt-6`

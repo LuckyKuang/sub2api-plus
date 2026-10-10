@@ -2147,7 +2147,7 @@ describe("admin SettingsView platform quota matrix", () => {
         }
       }
     } finally { wrapper.unmount(); }
-  });
+  }, 30_000); // All platform rows in eight real styled tables share container CPU with Go checks.
 
   it("调整表格后七种认证来源仍分别保存日周月限额，0 与留空保持不同语义", async () => {
     const sources = ["email", "linuxdo", "oidc", "wechat", "github", "google", "dingtalk"];

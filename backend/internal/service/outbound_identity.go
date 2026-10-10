@@ -1212,7 +1212,7 @@ func outboundRuntimePresetKeys(runtime map[string]map[string]string) []string {
 
 func validOutboundAccountKey(platform, accountType string) bool {
 	switch platform {
-	case PlatformOpenAI, PlatformAnthropic, PlatformGemini, PlatformGrok, PlatformAntigravity, PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax, PlatformStepFun, PlatformOpenCodeGo, PlatformTypeSafe:
+	case PlatformOpenAI, PlatformAnthropic, PlatformGemini, PlatformGrok, PlatformAntigravity, PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax, PlatformStepFun, PlatformOpenCodeGo, PlatformTypeSafe, PlatformCline, PlatformCommandCode:
 	default:
 		return false
 	}

@@ -16,6 +16,13 @@ The repository contains historical duplicate numeric prefixes. They remain
 unchanged because filenames and checksums are already deployed. Do not add new
 duplicates.
 
+Migration `281_drop_platform_check_constraints.sql` transfers the quota-platform
+and composite-route-platform whitelist to the shared application catalog. It
+runs after Plus migration 277, which registered StepFun in those CHECKs, so new
+installations and upgraded databases reach the same state. Application API,
+service, repository and Ent validation still reject unregistered platforms.
+Channel-monitor provider CHECKs continue to enforce implemented probe capability.
+
 ## File Naming
 
 Regular migration:

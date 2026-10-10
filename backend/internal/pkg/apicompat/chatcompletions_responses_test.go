@@ -1260,9 +1260,8 @@ func TestResponsesToChatCompletions_RefusalAndCustomTool(t *testing.T) {
 
 	chat := ResponsesToChatCompletions(resp, "gpt-5-codex")
 	require.Len(t, chat.Choices, 1)
-	var content string
-	require.NoError(t, json.Unmarshal(chat.Choices[0].Message.Content, &content))
-	assert.Equal(t, "cannot comply", content)
+	require.Empty(t, chat.Choices[0].Message.Content)
+	assert.Equal(t, "cannot comply", chat.Choices[0].Message.Refusal)
 	require.Len(t, chat.Choices[0].Message.ToolCalls, 1)
 	assert.Equal(t, "apply_patch", chat.Choices[0].Message.ToolCalls[0].Function.Name)
 	assert.Equal(t, "patch body", chat.Choices[0].Message.ToolCalls[0].Function.Arguments)
@@ -1548,21 +1547,24 @@ func TestResponsesEventToChatChunks_TerminalAggregateFallback(t *testing.T) {
 		},
 	}, state)
 
-	require.Len(t, chunks, 4)
+	require.Len(t, chunks, 5)
 	require.True(t, chunks[0].AggregateOutput)
 	require.NotNil(t, chunks[0].Choices[0].Delta.ReasoningContent)
 	assert.Equal(t, "plan", *chunks[0].Choices[0].Delta.ReasoningContent)
 	require.True(t, chunks[1].AggregateOutput)
 	require.NotNil(t, chunks[1].Choices[0].Delta.Content)
-	assert.Equal(t, "answer refused", *chunks[1].Choices[0].Delta.Content)
+	assert.Equal(t, "answer", *chunks[1].Choices[0].Delta.Content)
 	require.True(t, chunks[2].AggregateOutput)
 	require.Len(t, chunks[2].Choices[0].Delta.ToolCalls, 1)
 	assert.Equal(t, "lookup", chunks[2].Choices[0].Delta.ToolCalls[0].Function.Name)
 	assert.Equal(t, `{"q":"x"}`, chunks[2].Choices[0].Delta.ToolCalls[0].Function.Arguments)
-	require.NotNil(t, chunks[3].Choices[0].FinishReason)
-	assert.Equal(t, "tool_calls", *chunks[3].Choices[0].FinishReason)
+	require.True(t, chunks[3].AggregateOutput)
+	require.NotNil(t, chunks[3].Choices[0].Delta.Refusal)
+	assert.Equal(t, " refused", *chunks[3].Choices[0].Delta.Refusal)
+	require.NotNil(t, chunks[4].Choices[0].FinishReason)
+	assert.Equal(t, "tool_calls", *chunks[4].Choices[0].FinishReason)
 
-	for i := 0; i < 3; i++ {
+	for i := 0; i < 4; i++ {
 		observation := ObserveChatChunkOutput(&chunks[i])
 		assert.True(t, observation.MeaningfulOutput)
 		assert.False(t, observation.TokenLikeDelta)
@@ -2228,7 +2230,10 @@ func TestBufferedResponseAccumulator_PreservesMultipleTextParts(t *testing.T) {
 
 	output := acc.BuildOutput()
 	require.Len(t, output, 1)
-	assert.Equal(t, "first second third", output[0].Content[0].Text)
+	require.Len(t, output[0].Content, 2)
+	assert.Equal(t, "first third", output[0].Content[0].Text)
+	assert.Equal(t, "refusal", output[0].Content[1].Type)
+	assert.Equal(t, " second", output[0].Content[1].Refusal)
 }
 
 func TestBufferedResponseAccumulator_Mixed(t *testing.T) {

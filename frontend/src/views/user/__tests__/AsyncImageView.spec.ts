@@ -126,7 +126,8 @@ async function clickButtonByText(wrapper: VueWrapper, text: string) {
 
 describe('AsyncImageView task management', () => {
   let removeStyles: () => void
-  beforeAll(async () => { removeStyles = await installAppStyles() })
+  // Compile the real stylesheet within the container's bounded CPU budget.
+  beforeAll(async () => { removeStyles = await installAppStyles() }, 30_000)
   afterAll(() => removeStyles?.())
 
   beforeEach(() => {

@@ -7,7 +7,8 @@ import { cssPixels, installAppStyles } from '@/__tests__/appStyles'
 
 enableAutoUnmount(afterEach)
 let removeStyles: () => void
-beforeAll(async () => { removeStyles = await installAppStyles() })
+// Real Tailwind compilation can exceed the default hook budget in the validation container.
+beforeAll(async () => { removeStyles = await installAppStyles() }, 30_000)
 afterAll(() => removeStyles?.())
 const { getUserBreakdown } = vi.hoisted(() => ({ getUserBreakdown: vi.fn() }))
 vi.mock('@/api/admin/dashboard', () => ({ getUserBreakdown }))

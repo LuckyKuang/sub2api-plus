@@ -54,8 +54,8 @@ func TestNativeIdentityPolicyRejectsEveryForeignFamilyAndDefaultMapping(t *testi
 	}
 }
 
-func TestCompatibleIdentityPolicyHasExactlyElevenAdvancedMappings(t *testing.T) {
-	expected := []string{"openai:apikey", "openai:upstream", "anthropic:apikey", "anthropic:upstream", "gemini:apikey", "gemini:upstream", "grok:apikey", "grok:upstream", "antigravity:upstream", "typesafe:apikey", "opencode_go:apikey"}
+func TestCompatibleIdentityPolicyHasExactlyThirteenAdvancedMappings(t *testing.T) {
+	expected := []string{"openai:apikey", "openai:upstream", "anthropic:apikey", "anthropic:upstream", "gemini:apikey", "gemini:upstream", "grok:apikey", "grok:upstream", "antigravity:upstream", "typesafe:apikey", "opencode_go:apikey", "cline:apikey", "command_code:apikey"}
 	svc, ctx := outboundIdentityTestSettings(t, emptyOutboundIdentitySettings())
 	var actual []string
 	for _, policy := range svc.GetOutboundIdentityView(ctx).AccountPolicies {

@@ -320,8 +320,9 @@ func (p *StreamingProcessor) processThinking(text, signature string) []byte {
 	// 开始或继续 thinking 块
 	if p.blockType != BlockTypeThinking {
 		_, _ = result.Write(p.startBlock(BlockTypeThinking, map[string]any{
-			"type":     "thinking",
-			"thinking": "",
+			"type":      "thinking",
+			"thinking":  "",
+			"signature": "",
 		}))
 	}
 
@@ -499,8 +500,9 @@ func (p *StreamingProcessor) emitEmptyThinkingWithSignature(signature string) []
 	var result bytes.Buffer
 
 	_, _ = result.Write(p.startBlock(BlockTypeThinking, map[string]any{
-		"type":     "thinking",
-		"thinking": "",
+		"type":      "thinking",
+		"thinking":  "",
+		"signature": "",
 	}))
 	_, _ = result.Write(p.emitDelta("thinking_delta", map[string]any{
 		"thinking": "",
