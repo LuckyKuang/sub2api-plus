@@ -155,7 +155,9 @@ def validate_notes(
 
 
 def main() -> int:
+    global ROOT
     parser = argparse.ArgumentParser()
+    parser.add_argument("--repo-root", type=Path, default=ROOT, help=argparse.SUPPRESS)
     parser.add_argument("--tag", help="release tag; defaults to the embedded version")
     parser.add_argument(
         "--mapping-only",
@@ -175,6 +177,7 @@ def main() -> int:
     notes_group.add_argument("--notes-file", type=Path)
     notes_group.add_argument("--notes-env")
     args = parser.parse_args()
+    ROOT = args.repo_root.resolve()
 
     errors: list[str] = []
     if args.mapping_only and not args.tag:

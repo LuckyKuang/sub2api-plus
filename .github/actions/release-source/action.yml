@@ -1,0 +1,29 @@
+name: Restore captured release source
+description: Restore immutable workflow tooling and captured application inputs separately.
+inputs:
+  sha:
+    required: true
+    description: Captured application commit
+  lane:
+    required: true
+    description: Dependency cache lane; frontend shares the default-branch CI cache.
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        ref: ${{ inputs.sha }}
+        fetch-depth: 0
+        persist-credentials: false
+        clean: false # Preserve the separate immutable action through historical checkout/post hooks.
+    - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v5
+      with:
+        name: version-file
+        path: .release-plan
+    - name: Stage selected source toolchain inputs
+      shell: bash
+      run: python3 .release-tooling/tools/release_context.py --tooling .release-tooling --output .release-tooling/validation-inputs
+    - uses: ./.release-tooling/actions/prepare-validation
+      with:
+        lane: ${{ inputs.lane }}
+        launcher: .release-tooling/tools/ci_validation.py

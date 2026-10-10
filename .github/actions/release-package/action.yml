@@ -1,0 +1,57 @@
+name: Package verified release inputs
+description: Shared real-publication and read-only rehearsal packaging commands.
+inputs:
+  dry_run:
+    required: true
+    description: Export local OCI archives instead of publishing
+runs:
+  using: composite
+  steps:
+    - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v5
+      with:
+        pattern: release-leaf-*
+        path: release-input
+        merge-multiple: true
+    - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v4
+      with:
+        platforms: arm64
+    - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      id: buildx
+    - name: Stage Docker client configuration
+      shell: bash
+      run: |
+        mkdir -p .release-docker-config/cli-plugins
+        cp -R "$HOME/.docker/." .release-docker-config/
+        rm -f .release-docker-config/cli-plugins/docker-buildx
+        buildx_path=$(docker info --format '{{json .ClientInfo.Plugins}}' | python3 -c 'import json,sys; print(next(p["Path"] for p in json.load(sys.stdin) if p["Name"] == "buildx"))')
+        cp -L "$buildx_path" .release-docker-config/cli-plugins/docker-buildx
+    - name: Package and verify archives, images and pricing
+      shell: bash
+      env:
+        PACKAGE_DRY_RUN: ${{ inputs.dry_run }}
+        DOCKER_CONFIG: ${{ github.workspace }}/.release-docker-config
+        BUILDX_BUILDER: ${{ steps.buildx.outputs.name }}
+      run: |
+        args=()
+        if [ "$PACKAGE_DRY_RUN" = true ]; then args+=(--dry-run); fi
+        python3 .release-tooling/tools/ci_validation.py exec --docker \
+          --env GH_TOKEN --env GITHUB_TOKEN --env GITHUB_REPOSITORY \
+          --env DOCKER_CONFIG --env BUILDX_BUILDER -- \
+          python3 .release-tooling/release-tools/release_job.py package "${args[@]}"
+    - name: Remove temporary Docker credentials
+      if: always()
+      shell: bash
+      run: rm -rf .release-docker-config
+    - name: Retain packaging evidence
+      if: always()
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+      with:
+        name: release-packaging-evidence
+        include-hidden-files: true
+        retention-days: 3
+        path: |
+          .release-output/
+          .release-pricing/comparison.json
+          dist/checksums.txt
+          dist/artifacts.json
+          dist/metadata.json

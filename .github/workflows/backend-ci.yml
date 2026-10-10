@@ -26,302 +26,248 @@ concurrency:
 
 jobs:
   deployment-config:
-    runs-on: macos-15
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
           ref: ${{ inputs.ref || github.ref }}
-      - name: Classify validation profile
+      - uses: ./.github/actions/prepare-validation
+        with:
+          lane: deployment-config
+      - name: Classify validation profile in the validation container
         id: validation-profile
         uses: ./.github/actions/classify-release-finalization
         with:
-          base: ${{ github.event.pull_request.base.sha || github.event.before }}
+          base: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
           head: ${{ github.event.pull_request.head.sha || github.sha }}
           branch: ${{ github.head_ref || github.ref_name }}
           default-branch: ${{ github.event.repository.default_branch }}
           event: ${{ github.event_name }}
-      - name: Check deployment scripts
+      - name: Run deployment-config checks in the validation container
         if: steps.validation-profile.outputs.profile == 'full'
-        run: |
-          /bin/bash -n deploy/apple-container.sh
-          /bin/bash deploy/tests/apple-container-test.sh
-          /bin/sh deploy/tests/docker-compose-security-test.sh
-          /bin/sh deploy/tests/docker-compose-gateway-env-test.sh
-          /bin/sh deploy/tests/docker-runtime-resources-test.sh
-          /bin/sh deploy/test-caddyfile-cache.sh
+        env:
+          VALIDATION_BASE: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
+          RELEASE_TAG: ${{ inputs.release-tag }}
+        run: >-
+          python3 tools/ci_validation.py lane --lane deployment-config
+          --base "$VALIDATION_BASE"
 
   test-unit:
-    runs-on: ubuntu-latest
+    name: ${{ matrix.runner == 'ubuntu-24.04-arm' && 'test-unit-arm64' || 'test-unit' }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
           ref: ${{ inputs.ref || github.ref }}
-      - name: Classify validation profile
+      - uses: ./.github/actions/prepare-validation
+        with:
+          lane: test-unit
+      - name: Classify validation profile in the validation container
         id: validation-profile
         uses: ./.github/actions/classify-release-finalization
         with:
-          base: ${{ github.event.pull_request.base.sha || github.event.before }}
+          base: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
           head: ${{ github.event.pull_request.head.sha || github.sha }}
           branch: ${{ github.head_ref || github.ref_name }}
           default-branch: ${{ github.event.repository.default_branch }}
           event: ${{ github.event_name }}
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - name: Run test-unit checks in the validation container
         if: steps.validation-profile.outputs.profile == 'full'
-        with:
-          go-version-file: backend/go.mod
-          check-latest: false
-          cache: true
-          cache-dependency-path: backend/go.sum
-      - name: Verify Go version
-        if: steps.validation-profile.outputs.profile == 'full'
-        working-directory: backend
-        run: |
-          test "$(go env GOVERSION)" = "go$(awk '/^go / { print $2 }' go.mod)"
-      - name: Check Go module tidiness
-        if: steps.validation-profile.outputs.profile == 'full'
-        working-directory: backend
-        run: go mod tidy -diff
-      - name: Unit tests
-        if: steps.validation-profile.outputs.profile == 'full'
-        working-directory: backend
-        run: make test-unit
+        env:
+          VALIDATION_BASE: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
+          RELEASE_TAG: ${{ inputs.release-tag }}
+        run: >-
+          python3 tools/ci_validation.py lane --lane test-unit
+          --base "$VALIDATION_BASE"
 
   test-integration:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
           ref: ${{ inputs.ref || github.ref }}
-      - name: Classify validation profile
+      - uses: ./.github/actions/prepare-validation
+        with:
+          lane: test-integration
+      - name: Classify validation profile in the validation container
         id: validation-profile
         uses: ./.github/actions/classify-release-finalization
         with:
-          base: ${{ github.event.pull_request.base.sha || github.event.before }}
+          base: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
           head: ${{ github.event.pull_request.head.sha || github.sha }}
           branch: ${{ github.head_ref || github.ref_name }}
           default-branch: ${{ github.event.repository.default_branch }}
           event: ${{ github.event_name }}
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - name: Run test-integration checks in the validation container
         if: steps.validation-profile.outputs.profile == 'full'
-        with:
-          go-version-file: backend/go.mod
-          check-latest: false
-          cache: true
-          cache-dependency-path: backend/go.sum
-      - name: Verify Go version
-        if: steps.validation-profile.outputs.profile == 'full'
-        working-directory: backend
-        run: |
-          test "$(go env GOVERSION)" = "go$(awk '/^go / { print $2 }' go.mod)"
-      - name: Integration tests
-        if: steps.validation-profile.outputs.profile == 'full'
-        working-directory: backend
-        run: make test-integration
+        env:
+          VALIDATION_BASE: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
+          RELEASE_TAG: ${{ inputs.release-tag }}
+        run: >-
+          python3 tools/ci_validation.py lane --lane test-integration
+          --base "$VALIDATION_BASE"
 
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [test-unit, test-integration]
     if: always()
     steps:
-      - name: Require backend test lanes
+      - name: Require both architecture unit jobs and integration
+        env:
+          UNIT_RESULT: ${{ needs.test-unit.result }}
+          INTEGRATION_RESULT: ${{ needs.test-integration.result }}
         run: |
-          set -euo pipefail
-          test "${{ needs.test-unit.result }}" = success
-          test "${{ needs.test-integration.result }}" = success
+          test "$UNIT_RESULT" = success
+          test "$INTEGRATION_RESULT" = success
 
   frontend:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
           ref: ${{ inputs.ref || github.ref }}
-      - name: Classify validation profile
+      - uses: ./.github/actions/prepare-validation
+        with:
+          lane: frontend
+      - name: Classify validation profile in the validation container
         id: validation-profile
         uses: ./.github/actions/classify-release-finalization
         with:
-          base: ${{ github.event.pull_request.base.sha || github.event.before }}
+          base: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
           head: ${{ github.event.pull_request.head.sha || github.sha }}
           branch: ${{ github.head_ref || github.ref_name }}
           default-branch: ${{ github.event.repository.default_branch }}
           event: ${{ github.event_name }}
-      - name: Setup pnpm
+      - name: Run frontend checks in the validation container
         if: steps.validation-profile.outputs.profile == 'full'
-        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-        with:
-          package_json_file: frontend/package.json
-      - name: Setup Node.js
-        if: steps.validation-profile.outputs.profile == 'full'
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: "20"
-          cache: pnpm
-          cache-dependency-path: frontend/pnpm-lock.yaml
-      - name: Install frontend dependencies
-        if: steps.validation-profile.outputs.profile == 'full'
-        working-directory: frontend
-        run: pnpm install --frozen-lockfile
-      - name: Frontend lint, typecheck, and critical tests
-        if: steps.validation-profile.outputs.profile == 'full'
-        run: make test-frontend
+        env:
+          VALIDATION_BASE: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
+          RELEASE_TAG: ${{ inputs.release-tag }}
+        run: >-
+          python3 tools/ci_validation.py lane --lane frontend
+          --base "$VALIDATION_BASE"
 
   golangci-lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
           ref: ${{ inputs.ref || github.ref }}
-      - name: Classify validation profile
+      - uses: ./.github/actions/prepare-validation
+        with:
+          lane: golangci-lint
+      - name: Classify validation profile in the validation container
         id: validation-profile
         uses: ./.github/actions/classify-release-finalization
         with:
-          base: ${{ github.event.pull_request.base.sha || github.event.before }}
+          base: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
           head: ${{ github.event.pull_request.head.sha || github.sha }}
           branch: ${{ github.head_ref || github.ref_name }}
           default-branch: ${{ github.event.repository.default_branch }}
           event: ${{ github.event_name }}
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - name: Run golangci-lint checks in the validation container
         if: steps.validation-profile.outputs.profile == 'full'
-        with:
-          go-version-file: backend/go.mod
-          check-latest: false
-          cache: true
-          cache-dependency-path: backend/go.sum
-      - name: Resolve lint version
-        if: steps.validation-profile.outputs.profile == 'full'
-        id: tool-versions
-        run: |
-          VERSION="$(awk '$1 == "golangci-lint" { print $2 }' .tool-versions)"
-          test -n "$VERSION"
-          echo "golangci_lint=v$VERSION" >> "$GITHUB_OUTPUT"
-      - name: golangci-lint
-        if: steps.validation-profile.outputs.profile == 'full'
-        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
-        with:
-          version: ${{ steps.tool-versions.outputs.golangci_lint }}
-          args: --timeout=30m
-          working-directory: backend
-          # Cached analyzer results can survive linter upgrades and differ by
-          # ref scope, producing stale findings between push and PR runs.
-          skip-cache: true
+        env:
+          VALIDATION_BASE: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
+          RELEASE_TAG: ${{ inputs.release-tag }}
+        run: >-
+          python3 tools/ci_validation.py lane --lane golangci-lint
+          --base "$VALIDATION_BASE"
 
   goreleaser-config:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
           ref: ${{ inputs.ref || github.ref }}
-      - name: Classify validation profile
+      - uses: ./.github/actions/prepare-validation
+        with:
+          lane: goreleaser-config
+      - name: Classify validation profile in the validation container
         id: validation-profile
         uses: ./.github/actions/classify-release-finalization
         with:
-          base: ${{ github.event.pull_request.base.sha || github.event.before }}
+          base: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
           head: ${{ github.event.pull_request.head.sha || github.sha }}
           branch: ${{ github.head_ref || github.ref_name }}
           default-branch: ${{ github.event.repository.default_branch }}
           event: ${{ github.event_name }}
-      - name: Resolve GoReleaser version
+      - name: Run goreleaser-config checks in the validation container
         if: steps.validation-profile.outputs.profile == 'full'
-        id: tool-versions
-        run: |
-          VERSION="$(awk '$1 == "goreleaser" { print $2 }' .tool-versions)"
-          test -n "$VERSION"
-          echo "goreleaser=v${VERSION#v}" >> "$GITHUB_OUTPUT"
-          APP_VERSION="$(tr -d '[:space:]' < backend/cmd/server/VERSION)"
-          [[ "$APP_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+\+custom\.[0-9]{3}$ ]]
-          echo "docker_tag_version=v${APP_VERSION/+custom./-custom.}" >> "$GITHUB_OUTPUT"
-      - name: Validate GoReleaser configuration
-        if: steps.validation-profile.outputs.profile == 'full'
-        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7
-        with:
-          version: ${{ steps.tool-versions.outputs.goreleaser }}
-          args: check
         env:
-          GITHUB_REPO_OWNER: validation
-          GITHUB_REPO_OWNER_LOWER: validation
-          GITHUB_REPO_NAME: sub2api-plus
-          DOCKER_TAG_VERSION: ${{ steps.tool-versions.outputs.docker_tag_version }}
-          DOCKERHUB_USERNAME: skip
-          TAG_MESSAGE: GoReleaser configuration validation only.
+          VALIDATION_BASE: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
+          RELEASE_TAG: ${{ inputs.release-tag }}
+        run: >-
+          python3 tools/ci_validation.py lane --lane goreleaser-config
+          --base "$VALIDATION_BASE"
 
   repository-policy:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
           ref: ${{ inputs.ref || github.ref }}
-      - name: Classify validation profile
+      - uses: ./.github/actions/prepare-validation
+        with:
+          lane: repository-policy
+      - name: Classify validation profile in the validation container
         id: validation-profile
         uses: ./.github/actions/classify-release-finalization
         with:
-          base: ${{ github.event.pull_request.base.sha || github.event.before }}
+          base: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
           head: ${{ github.event.pull_request.head.sha || github.sha }}
           branch: ${{ github.head_ref || github.ref_name }}
           default-branch: ${{ github.event.repository.default_branch }}
           event: ${{ github.event_name }}
-      - name: Verify published release finalization
-        if: steps.validation-profile.outputs.profile == 'release-finalization'
+      - name: Run repository-policy checks in the validation container
+        if: steps.validation-profile.outputs.profile == 'full'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ steps.validation-profile.outputs.tag }}
+          VALIDATION_BASE: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
+          RELEASE_TAG: ${{ inputs.release-tag }}
         run: |
-          python tools/check_published_release.py \
-            --repository "$GITHUB_REPOSITORY" \
-            --tag "$RELEASE_TAG"
-          python tools/check_release.py \
-            --tag "$RELEASE_TAG" \
-            --require-status published \
-            --mapping-only
+          args=()
+          if [ -n "$RELEASE_TAG" ]; then args+=(--tag "$RELEASE_TAG"); fi
+          python3 tools/ci_validation.py lane --lane repository-policy --base "$VALIDATION_BASE" "${args[@]}"
       - name: Lint GitHub Actions workflows
         if: steps.validation-profile.outputs.profile == 'full'
         run: >-
           docker run --rm -v "$PWD:/repo:ro" -w /repo
           rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
           -color
-      - name: Test release policy
-        if: steps.validation-profile.outputs.profile == 'full'
-        run: |
-          python tools/test_release_policy.py
-          python tools/test_test_build_tags.py
-      - name: Test repository CLIs
-        if: steps.validation-profile.outputs.profile == 'full'
-        run: |
-          python skills/compress-cli/tests/test_compress_cli.py
-          python skills/push-cli/tests/test_push_cli.py
-          python skills/release-cli/tests/test_release_cli.py
-      - name: Check OpenAI Codex outbound identity
-        if: steps.validation-profile.outputs.profile == 'full'
-        run: python tools/check_openai_codex_identity.py
-      - name: Check README synchronization
-        if: steps.validation-profile.outputs.profile == 'full'
-        run: python tools/check_readme_sync.py
-      - name: Check Go test build tags
-        if: steps.validation-profile.outputs.profile == 'full'
-        run: python tools/check_test_build_tags.py
-      - name: Check release metadata sources
-        if: steps.validation-profile.outputs.profile == 'full'
-        run: python tools/check_release.py
-      - name: Check migration changes
-        if: steps.validation-profile.outputs.profile == 'full'
+      - name: Verify published release finalization
+        if: steps.validation-profile.outputs.profile == 'release-finalization'
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-          RELEASE_TAG: ${{ inputs.release-tag }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.validation-profile.outputs.tag }}
+          VALIDATION_BASE: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
         run: |
-          if [ -n "$RELEASE_TAG" ]; then
-            python tools/check_new_migrations.py --target-release "$RELEASE_TAG"
-          else
-            python tools/check_new_migrations.py --base "$BASE_SHA"
-          fi
+          python3 tools/ci_validation.py exec --env GH_TOKEN --env GITHUB_REPOSITORY -- \
+            python3 tools/check_published_release.py \
+            --repository "$GITHUB_REPOSITORY" --tag "$RELEASE_TAG"
+          python3 tools/ci_validation.py lane --lane finalization \
+            --base "$VALIDATION_BASE" --tag "$RELEASE_TAG"

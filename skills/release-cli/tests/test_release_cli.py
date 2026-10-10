@@ -138,6 +138,7 @@ def pull_request(
         head_branch="release/candidate",
         head_oid=head,
         head_owner="LuckyKuang",
+        head_repository=REPOSITORY,
         merge_state="CLEAN",
         merge_commit=merge,
         auto_merge_enabled=auto_merge,
@@ -157,7 +158,7 @@ class ValidationProofTest(unittest.TestCase):
             "head": {
                 "ref": "release/candidate",
                 "sha": HEAD,
-                "repo": {"owner": {"login": "LuckyKuang"}},
+                "repo": {"owner": {"login": "LuckyKuang"}, "full_name": REPOSITORY},
             },
             "mergeable_state": "clean",
             "merge_commit_sha": MERGE,
@@ -802,6 +803,144 @@ class FinalizationTest(unittest.TestCase):
             release_cli.FINALIZATION_ALLOWED_PATHS,
         )
 
+
+class FinalizationAutomationTest(unittest.TestCase):
+    def test_check_discovery_pending_is_distinct_from_api_and_failed_checks(self):
+        cases = [
+            (subprocess.CompletedProcess([], 8, json.dumps([{'name': 'test', 'bucket': 'pending'}]), ''), release_cli.PromotionPending),
+            (subprocess.CompletedProcess([], 1, '', 'no checks reported'), release_cli.PromotionPending),
+            (subprocess.CompletedProcess([], 1, '', "no required checks reported on the 'release/finalize-test' branch"), release_cli.PromotionPending),
+            (subprocess.CompletedProcess([], 1, '', 'HTTP 503'), release_cli.ReleaseCliError),
+            (subprocess.CompletedProcess([], 0, json.dumps([{'name': 'test', 'bucket': 'skipping'}]), ''), release_cli.ReleaseCliError),
+            (subprocess.CompletedProcess([], 0, json.dumps([{'name': 'test', 'bucket': 'cancel'}]), ''), release_cli.ReleaseCliError),
+        ]
+        for result, expected in cases:
+            with self.subTest(result=result), mock.patch.object(release_cli, 'DISCOVERY_ATTEMPTS', 1), \
+                 mock.patch.object(release_cli, 'run_command', return_value=result):
+                with self.assertRaises(expected) as error:
+                    release_cli.require_required_pr_checks(REPOSITORY, 17)
+                if expected is release_cli.ReleaseCliError:
+                    self.assertNotIsInstance(error.exception, release_cli.PromotionPending)
+
+    def test_all_required_checks_must_be_successful(self):
+        # Required contexts from docs/RELEASING.md, independent of CLI constants.
+        names = ('sub2api/local-validation', 'deployment-config', 'test', 'frontend',
+                 'golangci-lint', 'goreleaser-config', 'repository-policy',
+                 'backend-security', 'frontend-security')
+        checks = [{'name': name, 'bucket': 'pass'} for name in names]
+        with mock.patch.object(release_cli, 'run_command', return_value=subprocess.CompletedProcess([], 0, json.dumps(checks), '')):
+            release_cli.require_required_pr_checks(REPOSITORY, 17)
+        with mock.patch.object(release_cli, 'DISCOVERY_ATTEMPTS', 1), \
+             mock.patch.object(release_cli, 'run_command', return_value=subprocess.CompletedProcess([], 0, json.dumps(checks[:-1]), '')):
+            with self.assertRaises(release_cli.PromotionPending):
+                release_cli.require_required_pr_checks(REPOSITORY, 17)
+
+    def merged(self):
+        return release_cli.PullRequest(**{**pull_request(state='MERGED', merge=MERGE).__dict__,
+            'head_branch': release_cli.finalization_branch(TAG),
+            'body': marker(profile=release_cli.FINALIZATION_PROFILE, tag=TAG)})
+
+    def test_merged_resume_independently_checks_tree_publication_and_exact_main(self):
+        pr = self.merged()
+        with mock.patch.object(release_cli, 'current_head', return_value=HEAD), \
+             mock.patch.object(release_cli, 'require_local_validation_status') as status, \
+             mock.patch.object(release_cli, 'fetch_default_branch'), \
+             mock.patch.object(release_cli, 'capture', side_effect=[BASE + ' ' + HEAD, 'tree', 'tree']), \
+             mock.patch.object(release_cli, 'run_step') as steps, \
+             mock.patch.object(release_cli, 'require_published_remote_tag', return_value=mock.Mock(target='d' * 40)) as tag, \
+             mock.patch.object(release_cli, 'require_release_workflow_success') as workflow, \
+             mock.patch.object(release_cli, 'verify_release') as published, \
+             mock.patch.object(release_cli, 'run_release_check') as focused, \
+             mock.patch.object(release_cli, 'watch_branch_runs') as watch:
+            result = release_cli.resume_merged_finalization(REPOSITORY, pr, TAG, 'origin', 'main')
+        self.assertEqual(result, MERGE)
+        status.assert_called_once_with(REPOSITORY, HEAD, release_cli.FINALIZATION_PROFILE)
+        tag.assert_called_once_with(REPOSITORY, TAG)
+        workflow.assert_called_once_with(REPOSITORY, TAG, 'd' * 40)
+        published.assert_called_once_with(REPOSITORY, TAG)
+        self.assertEqual(focused.call_count, 2)
+        watch.assert_called_once_with(REPOSITORY, 'main', MERGE)
+        self.assertEqual(steps.call_count, 1)
+        self.assertNotIn('merge', steps.call_args.args[1])
+
+    def test_merged_resume_rejects_wrong_parents_or_tree_before_side_effects(self):
+        for values in ([BASE + ' ' + 'e' * 40], [BASE + ' ' + HEAD, 'tree-a', 'tree-b']):
+            with self.subTest(values=values), \
+                 mock.patch.object(release_cli, 'current_head', return_value=HEAD), \
+                 mock.patch.object(release_cli, 'require_local_validation_status'), \
+                 mock.patch.object(release_cli, 'fetch_default_branch'), \
+                 mock.patch.object(release_cli, 'capture', side_effect=values), \
+                 mock.patch.object(release_cli, 'run_step') as steps, \
+                 mock.patch.object(release_cli, 'watch_branch_runs') as watch:
+                with self.assertRaises(release_cli.ReleaseCliError):
+                    release_cli.resume_merged_finalization(REPOSITORY, self.merged(), TAG, 'origin', 'main')
+            steps.assert_not_called()
+            watch.assert_not_called()
+
+    def test_finalize_submits_then_calls_complete_promotion_flow(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'UPSTREAM.md').write_text(f'| `{TAG}` | `v1.2.3` | `{"a" * 40}` | planned |\n')
+            with mock.patch.object(release_cli, 'ROOT', root), \
+                 mock.patch.object(release_cli, 'require_published_remote_tag', return_value=mock.Mock(target=MERGE)), \
+                 mock.patch.object(release_cli, 'require_release_workflow_success'), \
+                 mock.patch.object(release_cli, 'verify_release'), \
+                 mock.patch.object(release_cli, 'require_clean_worktree'), \
+                 mock.patch.object(release_cli, 'repository_default_branch', return_value='main'), \
+                 mock.patch.object(release_cli, 'fetch_default_branch', return_value=BASE), \
+                 mock.patch.object(release_cli, 'run_command', return_value=subprocess.CompletedProcess([], 1, '')), \
+                 mock.patch.object(release_cli.release_validation, 'run', return_value=subprocess.CompletedProcess([], 0, '')), \
+                 mock.patch.object(release_cli, 'run_step') as step, \
+                 mock.patch.object(release_cli, 'capture', return_value='UPSTREAM.md'), \
+                 mock.patch.object(release_cli, 'finalization_pr_number', return_value=17), \
+                 mock.patch.object(release_cli, 'promote_pull_request') as promote:
+                release_cli.finalize(REPOSITORY, TAG, 'origin')
+        promote.assert_called_once_with(REPOSITORY, 17, TAG, None, 'origin')
+        submit = step.call_args.args[1]
+        self.assertIn('submit-pr', submit)
+        self.assertIn('release-finalization', submit)
+        self.assertNotIn('full', submit)
+
+    def test_existing_finalization_branch_resumes_without_new_commit(self):
+        with mock.patch.object(release_cli, 'require_published_remote_tag', return_value=mock.Mock(target=MERGE)), \
+             mock.patch.object(release_cli, 'require_release_workflow_success'), \
+             mock.patch.object(release_cli, 'verify_release'), \
+             mock.patch.object(release_cli, 'require_clean_worktree'), \
+             mock.patch.object(release_cli, 'repository_default_branch', return_value='main'), \
+             mock.patch.object(release_cli, 'fetch_default_branch', return_value=BASE), \
+             mock.patch.object(release_cli, 'run_command', return_value=subprocess.CompletedProcess([], 0, '')), \
+             mock.patch.object(release_cli, 'finalization_pr_number', return_value=17), \
+             mock.patch.object(release_cli, 'promote_pull_request') as promote, \
+             mock.patch.object(release_cli, 'run_step') as step:
+            release_cli.finalize(REPOSITORY, TAG, 'origin')
+        step.assert_not_called()
+        promote.assert_called_once_with(REPOSITORY, 17, TAG, None, 'origin')
+
+
+class ReleaseRunDiscoveryTest(unittest.TestCase):
+    def test_exact_push_api_query_works_for_container_cli_and_ignores_dispatch(self):
+        sha = 'a' * 40
+        common = dict(name='Release', head_sha=sha, head_branch=TAG,
+                      status='completed', conclusion='success')
+        payload = {'total_count': 3, 'workflow_runs': [
+            dict(common, id=100, event='workflow_dispatch'),
+            dict(common, id=40, event='push', html_url='https://example.invalid/40'),
+            dict(common, id=30, event='push')]}
+        with mock.patch.object(release_cli, 'json_capture', return_value=payload) as query:
+            result = release_cli.find_release_run(REPOSITORY, TAG, sha)
+        self.assertEqual(result.database_id, 40)
+        self.assertEqual(result.url, 'https://example.invalid/40')
+        args = query.call_args.args[0]
+        self.assertEqual(args[:2], ['gh', 'api'])
+        self.assertIn('head_sha=' + sha, args[2])
+        self.assertIn('event=push', args[2])
+        self.assertIn('custom.', args[2])
+
+    def test_incomplete_exact_sha_response_cannot_authorize_publication(self):
+        with mock.patch.object(release_cli, 'json_capture',
+                               return_value={'total_count': 101, 'workflow_runs': []}):
+            with self.assertRaisesRegex(release_cli.ReleaseCliError, 'complete exact-SHA'):
+                release_cli.find_release_run(REPOSITORY, TAG, 'a' * 40)
 
 if __name__ == "__main__":
     unittest.main()

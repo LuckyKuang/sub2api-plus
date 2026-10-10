@@ -152,6 +152,7 @@ docs/*
 !docs/OUTBOUND_IDENTITY.md
 !docs/README.md
 !docs/RELEASING.md
+!docs/CI_VALIDATION.md
 !docs/ANTIGRAVITY_ATTRIBUTION_429.md
 !docs/PAYMENT.md
 !docs/PAYMENT_CN.md

@@ -9,6 +9,7 @@ import re
 import subprocess
 import sys
 from collections.abc import Iterable, Sequence
+from urllib.parse import urlencode
 
 
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -70,22 +71,15 @@ def require_successful_workflows(
     return matches
 
 
-def list_branch_runs(repository: str, branch: str) -> list[object]:
+def list_branch_runs(repository: str, branch: str, sha: str) -> list[object]:
+    # REST filtering works with the distribution's gh and avoids dropping older
+    # exact-SHA evidence behind an arbitrary recent-run window.
+    query = urlencode({"branch": branch, "event": "push", "head_sha": sha, "per_page": 100})
     result = subprocess.run(
         [
             "gh",
-            "run",
-            "list",
-            "--repo",
-            repository,
-            "--branch",
-            branch,
-            "--event",
-            "push",
-            "--limit",
-            "100",
-            "--json",
-            "workflowName,event,headBranch,headSha,status,conclusion,url,databaseId",
+            "api",
+            f"repos/{repository}/actions/runs?{query}",
         ],
         check=False,
         text=True,
@@ -106,11 +100,19 @@ def list_branch_runs(repository: str, branch: str) -> list[object]:
         raise WorkflowProvenanceError(
             "GitHub Actions workflow provenance returned invalid JSON"
         ) from error
-    if not isinstance(data, list):
+    if not isinstance(data, dict) or not isinstance(data.get("workflow_runs"), list):
         raise WorkflowProvenanceError(
             "GitHub Actions workflow provenance returned an unexpected value"
         )
-    return data
+    if data.get("total_count", 0) > len(data["workflow_runs"]):
+        raise WorkflowProvenanceError("exact-SHA workflow evidence exceeds the complete response window")
+    return [
+        {"workflowName": run.get("name"), "event": run.get("event"),
+         "headBranch": run.get("head_branch"), "headSha": run.get("head_sha"),
+         "status": run.get("status"), "conclusion": run.get("conclusion"),
+         "url": run.get("html_url"), "databaseId": run.get("id")}
+        for run in data["workflow_runs"] if isinstance(run, dict)
+    ]
 
 
 def main() -> int:
@@ -129,7 +131,7 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        runs = list_branch_runs(args.repository, args.branch)
+        runs = list_branch_runs(args.repository, args.branch, args.sha)
         matches = require_successful_workflows(
             runs,
             branch=args.branch,

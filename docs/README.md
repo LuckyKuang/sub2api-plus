@@ -57,6 +57,7 @@ belong in GitHub Release notes.
 
 - [Contributing](../CONTRIBUTING.md)
 - [Release process](RELEASING.md)
+- [CI validation coverage and authority migration](CI_VALIDATION.md)
 - [Upstream mapping](../UPSTREAM.md)
 - [Database migrations and upgrade prerequisites](../backend/migrations/README.md)
 - [Plugin development](PLUGIN_DEVELOPMENT.md)

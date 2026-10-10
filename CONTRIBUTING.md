@@ -95,7 +95,8 @@ typechecking, builds, policy checks, or other validation on the host.
 After every validation attempt, successful or failed, remove the one-shot
 project validation container, temporary resources, and historical writable
 snapshots. Retain the Sub2API validation image whose deterministic identity
-matches the current resolved Go, Node, pnpm, golangci-lint, and GoReleaser pins.
+matches the current resolved Go, Node, pnpm, golangci-lint, GoReleaser,
+govulncheck and PyYAML pins.
 Retain dependency caches only for the generation matching that image and the
 current Go and pnpm lock inputs. Remove stale Sub2API validation generations;
 never prune unrelated projects or global runtime, builder, image, volume, or
@@ -162,6 +163,12 @@ build tags (or `e2e` / `embed` / a documented exception). In-process tests that
 must remain visible to default `golangci-lint` use `unit || !integration`.
 Helpers shared by unit, integration, and default `golangci-lint` use `!e2e`.
 
+CI runs full frontend tests/build, native amd64/arm64 unit suites and
+Docker-backed integration in pinned validation containers. See the shared
+coverage inventory and pending authority cutover in
+[`docs/CI_VALIDATION.md`](docs/CI_VALIDATION.md). The required local submission
+gate remains active until that cutover is independently verified.
+
 Intermediate branch pushes use the fast path and do not run local tests.
 Remote `CI` and `Security Scan` run on pull requests and on `main` pushes, not
 on every feature-branch push. `watch` follows the pull-request runs when a PR
@@ -180,9 +187,11 @@ python3 skills/push-cli/scripts/push_cli.py submit-pr
 `submit-pr` defaults to the `full` profile. It requires the latest
 default-branch base and runs the complete matrix inside Apple Containers on
 macOS, Docker inside WSL2 Debian or Ubuntu on Windows, and Docker on Linux.
-Independent backend-test, backend-lint/policy, and frontend lanes run with
-bounded concurrency and report step/lane wall-clock durations; no check is
-removed. Host-side execution of any validation is forbidden. For diagnosis or a
+Backend tests run before backend lint/policy while the frontend lane runs
+concurrently within the 4-CPU/8-GiB container and report step/lane wall-clock durations; no check is
+removed. Go test/lint and frontend production builds share one memory slot to
+avoid cold-cache memory exhaustion; other frontend checks may overlap Go work.
+Host-side execution of any validation is forbidden. For diagnosis or a
 same-commit timing baseline, pass `--serial` to `check`.
 
 Linked worktrees use the same launcher. It also mounts their shared Git
@@ -214,6 +223,13 @@ Focused release metadata and deterministic finalization checks use the same
 platform validation container; they never fall back to the host or repeat the
 application matrix. Git/GitHub operations and runtime management remain with
 the host launcher.
+
+Finalization automatically promotes its exact deterministic PR through protected
+auto-merge and verifies CI and Security Scan at the actual merged-main SHA.
+Pending checks/merge return status 2 and a retry command; already merged
+finalization resumes only after independent proof/tree/publication checks.
+See [the release process](docs/RELEASING.md) and
+[distributed packaging and read-only rehearsals](.github/release-tools/README.md).
 
 ## Generated Code
 

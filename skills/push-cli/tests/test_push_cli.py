@@ -6,6 +6,8 @@ import json
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -469,6 +471,55 @@ class FrontendSecurityCheckTest(unittest.TestCase):
 
 
 class LocalChecksTest(unittest.TestCase):
+    def test_cold_go_compilation_and_frontend_build_do_not_share_the_memory_budget(self):
+        # Observed cold compilation plus frontend production build exhausted the
+        # required 8-GiB VM. Frontend install/tests may overlap; heavy builds may not.
+        frontend_started = threading.Event()
+        go_started = threading.Event()
+        go_active = threading.Event()
+        def step(name, *args, **kwargs):
+            if name == 'Frontend frozen install':
+                frontend_started.set()
+                self.assertTrue(go_started.wait(3))
+            if name == 'Backend unit tests':
+                self.assertTrue(frontend_started.wait(3))
+                go_active.set()
+                go_started.set()
+                time.sleep(0.05)
+                go_active.clear()
+            if name == 'Frontend production build':
+                self.assertTrue(go_started.wait(3))
+                self.assertFalse(go_active.is_set(), 'frontend build must wait for Go compilation')
+        with (
+            mock.patch.object(push_cli, 'ROOT', Path('/repo')),
+            mock.patch.object(push_cli, 'run_command', return_value=subprocess.CompletedProcess([], 1, '')),
+            mock.patch.object(push_cli, 'run_step', side_effect=step),
+            mock.patch.object(push_cli, 'run_frontend_security_check'),
+        ):
+            push_cli.run_local_checks('origin', 'feature', push_cli.Runtime('docker'))
+
+    def test_go_lint_waits_for_tests_while_frontend_can_overlap(self) -> None:
+        # The prescribed 8-GiB runtime cannot sustain two Go analysis heaps
+        # together. Keep all checks and allow the lighter frontend in parallel.
+        frontend_started = threading.Event()
+        backend_tests_done = threading.Event()
+        def step(name, *args, **kwargs):
+            if name == "Frontend frozen install":
+                frontend_started.set()
+            if name == "Backend unit tests":
+                self.assertTrue(frontend_started.wait(3), "frontend must be able to run concurrently")
+            if name == "Backend integration tests":
+                backend_tests_done.set()
+            if name == "Backend lint":
+                self.assertTrue(backend_tests_done.is_set(), "Go lint must wait for both Go suites")
+        with (
+            mock.patch.object(push_cli, "ROOT", Path("/repo")),
+            mock.patch.object(push_cli, "run_command", return_value=subprocess.CompletedProcess([], 1, "")),
+            mock.patch.object(push_cli, "run_step", side_effect=step),
+            mock.patch.object(push_cli, "run_frontend_security_check"),
+        ):
+            push_cli.run_local_checks("origin", "feature", push_cli.Runtime("docker"))
+
     def test_static_checks_still_run_for_apple_runtime(self) -> None:
         git_miss = subprocess.CompletedProcess(["git"], 1, "")
         with (
@@ -731,8 +782,10 @@ class ValidationGenerationTest(unittest.TestCase):
             "lockfileVersion: '9.0'\n", encoding="utf-8"
         )
         (root / ".tool-versions").write_text(
-            "golangci-lint 2.13.1\ngoreleaser 2.17.1\n", encoding="utf-8"
+            "golangci-lint 2.13.1\ngoreleaser 2.17.1\ngovulncheck 1.6.0\n", encoding="utf-8"
         )
+        (root / ".github/release-tools").mkdir(parents=True)
+        (root / ".github/release-tools/requirements-release.txt").write_text("PyYAML==6.0.3\n")
 
     def test_image_generation_includes_resolved_node_pin(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

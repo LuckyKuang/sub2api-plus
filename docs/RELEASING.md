@@ -86,7 +86,8 @@ python3 skills/push-cli/scripts/push_cli.py submit-pr
 
 `submit-pr` defaults to `profile=full`: it fetches the current `origin/main`,
 requires it in the branch, records exact base/head SHAs, runs the complete
-matrix in three bounded platform-container lanes, refetches and rechecks both
+matrix in platform-container lanes with Go tests preceding Go lint and
+frontend running concurrently, refetches and rechecks both
 SHAs, pushes the exact head, publishes the typed
 `sub2api/local-validation` status, and creates or reuses the PR. Any later head
 or base change requires another `submit-pr`. `check --serial` is available only
@@ -132,6 +133,10 @@ Official commit: <40-character commit>
 ```
 
 ## Promote the Release PR
+
+CI coverage includes full frontend tests/build and native amd64/arm64 unit
+tests in pinned containers. This does not yet replace the required local proof;
+see [CI authority cutover prerequisites](CI_VALIDATION.md#ci-authority-cutover-prerequisites).
 
 Promotion requires the explicit PR number, intended tag, and reviewed notes:
 
@@ -209,15 +214,17 @@ python3 skills/release-cli/scripts/release_cli.py monitor \
   --tag vX.Y.Z+custom.NNN
 ```
 
-The Release workflow runs a focused provenance gate before publishing. It
+The Release workflow runs a focused provenance gate within preparation, sharing
+the source checkout and prepared container environment before any build. It
 requires the annotated tag to target a commit contained by `main`, validates
 the tag notes and planned mapping, and requires successful push-triggered `CI`
 and `Security Scan` runs for that exact main SHA. It does not rerun backend,
 frontend, lint, integration, deployment, or security application matrices.
-After provenance succeeds, `Build and publish` enters the checked `release`
-Environment and starts automatically. If it unexpectedly waits, `monitor`
-reports policy drift and the Actions URL; restore the Environment policy and
-rerun `monitor`. The CLI never approves or bypasses a deployment.
+After verified preparation and distributed builds succeed, `Build and publish` enters
+the checked `release` Environment automatically. Waiting triggers a fresh
+automatic Environment/tag-policy check: drift fails with the Actions URL;
+transient waiting under valid policy continues. Restore any drifted policy
+before retrying. The CLI never approves or bypasses a deployment.
 
 After the workflow succeeds, verify the published state:
 
@@ -256,7 +263,15 @@ Push-cli regenerates the complete expected tree from the recorded base and
 verifies the published Release and immutable assets; it does not run the full
 application container matrix.
 
-After the follow-up PR Actions pass, promote it without release notes:
+`finalize` discovers the exact submitted PR and runs the complete protected
+promotion flow without release notes. It independently regenerates the tree,
+rechecks the published Release, waits for every required PR check, requests
+native auto-merge with the exact head, and requires successful CI and Security
+Scan at the actual merged-main SHA. It reports completion only after that gate.
+It never repeats the full application matrix for finalization.
+
+Missing/queued checks or a pending merge return exit status 2 with the PR URL.
+Resume that PR without release notes:
 
 ```bash
 python3 skills/release-cli/scripts/release_cli.py promote-pr \
@@ -264,12 +279,36 @@ python3 skills/release-cli/scripts/release_cli.py promote-pr \
   --pr <finalization-pr-number>
 ```
 
+An already merged finalization resumes exact-main observation after independently
+checking its recorded proof, merge parents/tree, deterministic metadata and
+published assets. Check out the recorded PR head before resuming. API errors,
+failed checks and changed proofs are failures. An existing local finalization
+branch is reused only when exactly one matching PR exists; it is never reset.
+
 The no-notes form is accepted only when the typed proof carries the matching
 tag and deterministic finalization branch. Promotion independently regenerates
 the tree and requires the Release, immutable assets, and `published` mapping.
 Every required PR and merged-main context runs the same classifier before it
 selects focused finalization validation; ambiguous or non-deterministic changes
 fail closed.
+
+## Distributed Packaging and Read-only Rehearsal
+
+The Release workflow captures one application SHA, builds the frontend once,
+and compiles five targets on separate runners. The sole image script packages
+the verified Linux binaries; the publishing runner never recompiles the app.
+Only the real publisher has write permissions and enters the release Environment.
+Pricing comparisons run before external writes; immutable pricing uploads run
+last. Partial publication remains subject to the recovery rules below.
+
+Manual `dry_run=true` supports branch and published-tag rehearsals with local
+OCI exports and no publication. Tag rehearsal retains the formal provenance
+gate; branch rehearsal cannot authorize publication. Real manual publication
+must execute from the same eligible tag workflow ref. See the maintained
+[packaging contract and commands](../.github/release-tools/README.md) for artifact,
+image, cache and report details. The Release-only 9-minute target is a budget,
+not a measured or guaranteed runtime; report observed publication and rehearsal
+times separately. It excludes local checks, PR CI, main CI and finalization.
 
 ## Pricing Assets
 

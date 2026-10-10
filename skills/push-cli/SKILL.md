@@ -16,6 +16,10 @@ description: >-
 
 # Push CLI
 
+The required local full gate is still active. Complete CI coverage does not
+authorize removing it until the enforceable trusted-origin and protected-cutover
+requirements in [CI validation](../../docs/CI_VALIDATION.md) are satisfied.
+
 Run commands from the repository root:
 
     python3 skills/push-cli/scripts/push_cli.py push
@@ -55,7 +59,8 @@ validation container. Treat the profile and tag as implementation
 inputs; do not use them to accelerate an ordinary or release-candidate PR.
 
 `check` runs the same full local matrix without pushing or creating a PR. It
-uses bounded parallel lanes by default; `check --serial` preserves the original
+runs Go tests before Go lint, concurrently with frontend checks by default;
+Go test/lint and frontend production builds share one memory slot; `check --serial` preserves the original
 ordering for diagnosis and same-commit timing comparisons. Both modes run the
 same command and test set. `ensure` only prepares the platform runtime and
 validation image. `watch` observes pull-request Actions for the current branch and SHA when a
