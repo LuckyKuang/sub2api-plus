@@ -156,6 +156,76 @@ func (_c *RedeemCodeCreate) SetNillableGroupID(v *int64) *RedeemCodeCreate {
 	return _c
 }
 
+// SetGenerateOrder sets the "generate_order" field.
+func (_c *RedeemCodeCreate) SetGenerateOrder(v bool) *RedeemCodeCreate {
+	_c.mutation.SetGenerateOrder(v)
+	return _c
+}
+
+// SetNillableGenerateOrder sets the "generate_order" field if the given value is not nil.
+func (_c *RedeemCodeCreate) SetNillableGenerateOrder(v *bool) *RedeemCodeCreate {
+	if v != nil {
+		_c.SetGenerateOrder(*v)
+	}
+	return _c
+}
+
+// SetOrderCurrency sets the "order_currency" field.
+func (_c *RedeemCodeCreate) SetOrderCurrency(v string) *RedeemCodeCreate {
+	_c.mutation.SetOrderCurrency(v)
+	return _c
+}
+
+// SetNillableOrderCurrency sets the "order_currency" field if the given value is not nil.
+func (_c *RedeemCodeCreate) SetNillableOrderCurrency(v *string) *RedeemCodeCreate {
+	if v != nil {
+		_c.SetOrderCurrency(*v)
+	}
+	return _c
+}
+
+// SetOrderAmount sets the "order_amount" field.
+func (_c *RedeemCodeCreate) SetOrderAmount(v float64) *RedeemCodeCreate {
+	_c.mutation.SetOrderAmount(v)
+	return _c
+}
+
+// SetNillableOrderAmount sets the "order_amount" field if the given value is not nil.
+func (_c *RedeemCodeCreate) SetNillableOrderAmount(v *float64) *RedeemCodeCreate {
+	if v != nil {
+		_c.SetOrderAmount(*v)
+	}
+	return _c
+}
+
+// SetOrderPlanID sets the "order_plan_id" field.
+func (_c *RedeemCodeCreate) SetOrderPlanID(v int64) *RedeemCodeCreate {
+	_c.mutation.SetOrderPlanID(v)
+	return _c
+}
+
+// SetNillableOrderPlanID sets the "order_plan_id" field if the given value is not nil.
+func (_c *RedeemCodeCreate) SetNillableOrderPlanID(v *int64) *RedeemCodeCreate {
+	if v != nil {
+		_c.SetOrderPlanID(*v)
+	}
+	return _c
+}
+
+// SetOrderPlanName sets the "order_plan_name" field.
+func (_c *RedeemCodeCreate) SetOrderPlanName(v string) *RedeemCodeCreate {
+	_c.mutation.SetOrderPlanName(v)
+	return _c
+}
+
+// SetNillableOrderPlanName sets the "order_plan_name" field if the given value is not nil.
+func (_c *RedeemCodeCreate) SetNillableOrderPlanName(v *string) *RedeemCodeCreate {
+	if v != nil {
+		_c.SetOrderPlanName(*v)
+	}
+	return _c
+}
+
 // SetValidityDays sets the "validity_days" field.
 func (_c *RedeemCodeCreate) SetValidityDays(v int) *RedeemCodeCreate {
 	_c.mutation.SetValidityDays(v)
@@ -245,6 +315,22 @@ func (_c *RedeemCodeCreate) defaults() {
 		v := redeemcode.DefaultCreatedAt()
 		_c.mutation.SetCreatedAt(v)
 	}
+	if _, ok := _c.mutation.GenerateOrder(); !ok {
+		v := redeemcode.DefaultGenerateOrder
+		_c.mutation.SetGenerateOrder(v)
+	}
+	if _, ok := _c.mutation.OrderCurrency(); !ok {
+		v := redeemcode.DefaultOrderCurrency
+		_c.mutation.SetOrderCurrency(v)
+	}
+	if _, ok := _c.mutation.OrderAmount(); !ok {
+		v := redeemcode.DefaultOrderAmount
+		_c.mutation.SetOrderAmount(v)
+	}
+	if _, ok := _c.mutation.OrderPlanName(); !ok {
+		v := redeemcode.DefaultOrderPlanName
+		_c.mutation.SetOrderPlanName(v)
+	}
 	if _, ok := _c.mutation.ValidityDays(); !ok {
 		v := redeemcode.DefaultValidityDays
 		_c.mutation.SetValidityDays(v)
@@ -282,6 +368,28 @@ func (_c *RedeemCodeCreate) check() error {
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "RedeemCode.created_at"`)}
+	}
+	if _, ok := _c.mutation.GenerateOrder(); !ok {
+		return &ValidationError{Name: "generate_order", err: errors.New(`ent: missing required field "RedeemCode.generate_order"`)}
+	}
+	if _, ok := _c.mutation.OrderCurrency(); !ok {
+		return &ValidationError{Name: "order_currency", err: errors.New(`ent: missing required field "RedeemCode.order_currency"`)}
+	}
+	if v, ok := _c.mutation.OrderCurrency(); ok {
+		if err := redeemcode.OrderCurrencyValidator(v); err != nil {
+			return &ValidationError{Name: "order_currency", err: fmt.Errorf(`ent: validator failed for field "RedeemCode.order_currency": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.OrderAmount(); !ok {
+		return &ValidationError{Name: "order_amount", err: errors.New(`ent: missing required field "RedeemCode.order_amount"`)}
+	}
+	if _, ok := _c.mutation.OrderPlanName(); !ok {
+		return &ValidationError{Name: "order_plan_name", err: errors.New(`ent: missing required field "RedeemCode.order_plan_name"`)}
+	}
+	if v, ok := _c.mutation.OrderPlanName(); ok {
+		if err := redeemcode.OrderPlanNameValidator(v); err != nil {
+			return &ValidationError{Name: "order_plan_name", err: fmt.Errorf(`ent: validator failed for field "RedeemCode.order_plan_name": %w`, err)}
+		}
 	}
 	if _, ok := _c.mutation.ValidityDays(); !ok {
 		return &ValidationError{Name: "validity_days", err: errors.New(`ent: missing required field "RedeemCode.validity_days"`)}
@@ -344,6 +452,26 @@ func (_c *RedeemCodeCreate) createSpec() (*RedeemCode, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.ExpiresAt(); ok {
 		_spec.SetField(redeemcode.FieldExpiresAt, field.TypeTime, value)
 		_node.ExpiresAt = &value
+	}
+	if value, ok := _c.mutation.GenerateOrder(); ok {
+		_spec.SetField(redeemcode.FieldGenerateOrder, field.TypeBool, value)
+		_node.GenerateOrder = value
+	}
+	if value, ok := _c.mutation.OrderCurrency(); ok {
+		_spec.SetField(redeemcode.FieldOrderCurrency, field.TypeString, value)
+		_node.OrderCurrency = value
+	}
+	if value, ok := _c.mutation.OrderAmount(); ok {
+		_spec.SetField(redeemcode.FieldOrderAmount, field.TypeFloat64, value)
+		_node.OrderAmount = value
+	}
+	if value, ok := _c.mutation.OrderPlanID(); ok {
+		_spec.SetField(redeemcode.FieldOrderPlanID, field.TypeInt64, value)
+		_node.OrderPlanID = &value
+	}
+	if value, ok := _c.mutation.OrderPlanName(); ok {
+		_spec.SetField(redeemcode.FieldOrderPlanName, field.TypeString, value)
+		_node.OrderPlanName = value
 	}
 	if value, ok := _c.mutation.ValidityDays(); ok {
 		_spec.SetField(redeemcode.FieldValidityDays, field.TypeInt, value)
@@ -579,6 +707,84 @@ func (u *RedeemCodeUpsert) ClearGroupID() *RedeemCodeUpsert {
 	return u
 }
 
+// SetGenerateOrder sets the "generate_order" field.
+func (u *RedeemCodeUpsert) SetGenerateOrder(v bool) *RedeemCodeUpsert {
+	u.Set(redeemcode.FieldGenerateOrder, v)
+	return u
+}
+
+// UpdateGenerateOrder sets the "generate_order" field to the value that was provided on create.
+func (u *RedeemCodeUpsert) UpdateGenerateOrder() *RedeemCodeUpsert {
+	u.SetExcluded(redeemcode.FieldGenerateOrder)
+	return u
+}
+
+// SetOrderCurrency sets the "order_currency" field.
+func (u *RedeemCodeUpsert) SetOrderCurrency(v string) *RedeemCodeUpsert {
+	u.Set(redeemcode.FieldOrderCurrency, v)
+	return u
+}
+
+// UpdateOrderCurrency sets the "order_currency" field to the value that was provided on create.
+func (u *RedeemCodeUpsert) UpdateOrderCurrency() *RedeemCodeUpsert {
+	u.SetExcluded(redeemcode.FieldOrderCurrency)
+	return u
+}
+
+// SetOrderAmount sets the "order_amount" field.
+func (u *RedeemCodeUpsert) SetOrderAmount(v float64) *RedeemCodeUpsert {
+	u.Set(redeemcode.FieldOrderAmount, v)
+	return u
+}
+
+// UpdateOrderAmount sets the "order_amount" field to the value that was provided on create.
+func (u *RedeemCodeUpsert) UpdateOrderAmount() *RedeemCodeUpsert {
+	u.SetExcluded(redeemcode.FieldOrderAmount)
+	return u
+}
+
+// AddOrderAmount adds v to the "order_amount" field.
+func (u *RedeemCodeUpsert) AddOrderAmount(v float64) *RedeemCodeUpsert {
+	u.Add(redeemcode.FieldOrderAmount, v)
+	return u
+}
+
+// SetOrderPlanID sets the "order_plan_id" field.
+func (u *RedeemCodeUpsert) SetOrderPlanID(v int64) *RedeemCodeUpsert {
+	u.Set(redeemcode.FieldOrderPlanID, v)
+	return u
+}
+
+// UpdateOrderPlanID sets the "order_plan_id" field to the value that was provided on create.
+func (u *RedeemCodeUpsert) UpdateOrderPlanID() *RedeemCodeUpsert {
+	u.SetExcluded(redeemcode.FieldOrderPlanID)
+	return u
+}
+
+// AddOrderPlanID adds v to the "order_plan_id" field.
+func (u *RedeemCodeUpsert) AddOrderPlanID(v int64) *RedeemCodeUpsert {
+	u.Add(redeemcode.FieldOrderPlanID, v)
+	return u
+}
+
+// ClearOrderPlanID clears the value of the "order_plan_id" field.
+func (u *RedeemCodeUpsert) ClearOrderPlanID() *RedeemCodeUpsert {
+	u.SetNull(redeemcode.FieldOrderPlanID)
+	return u
+}
+
+// SetOrderPlanName sets the "order_plan_name" field.
+func (u *RedeemCodeUpsert) SetOrderPlanName(v string) *RedeemCodeUpsert {
+	u.Set(redeemcode.FieldOrderPlanName, v)
+	return u
+}
+
+// UpdateOrderPlanName sets the "order_plan_name" field to the value that was provided on create.
+func (u *RedeemCodeUpsert) UpdateOrderPlanName() *RedeemCodeUpsert {
+	u.SetExcluded(redeemcode.FieldOrderPlanName)
+	return u
+}
+
 // SetValidityDays sets the "validity_days" field.
 func (u *RedeemCodeUpsert) SetValidityDays(v int) *RedeemCodeUpsert {
 	u.Set(redeemcode.FieldValidityDays, v)
@@ -807,6 +1013,97 @@ func (u *RedeemCodeUpsertOne) UpdateGroupID() *RedeemCodeUpsertOne {
 func (u *RedeemCodeUpsertOne) ClearGroupID() *RedeemCodeUpsertOne {
 	return u.Update(func(s *RedeemCodeUpsert) {
 		s.ClearGroupID()
+	})
+}
+
+// SetGenerateOrder sets the "generate_order" field.
+func (u *RedeemCodeUpsertOne) SetGenerateOrder(v bool) *RedeemCodeUpsertOne {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.SetGenerateOrder(v)
+	})
+}
+
+// UpdateGenerateOrder sets the "generate_order" field to the value that was provided on create.
+func (u *RedeemCodeUpsertOne) UpdateGenerateOrder() *RedeemCodeUpsertOne {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.UpdateGenerateOrder()
+	})
+}
+
+// SetOrderCurrency sets the "order_currency" field.
+func (u *RedeemCodeUpsertOne) SetOrderCurrency(v string) *RedeemCodeUpsertOne {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.SetOrderCurrency(v)
+	})
+}
+
+// UpdateOrderCurrency sets the "order_currency" field to the value that was provided on create.
+func (u *RedeemCodeUpsertOne) UpdateOrderCurrency() *RedeemCodeUpsertOne {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.UpdateOrderCurrency()
+	})
+}
+
+// SetOrderAmount sets the "order_amount" field.
+func (u *RedeemCodeUpsertOne) SetOrderAmount(v float64) *RedeemCodeUpsertOne {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.SetOrderAmount(v)
+	})
+}
+
+// AddOrderAmount adds v to the "order_amount" field.
+func (u *RedeemCodeUpsertOne) AddOrderAmount(v float64) *RedeemCodeUpsertOne {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.AddOrderAmount(v)
+	})
+}
+
+// UpdateOrderAmount sets the "order_amount" field to the value that was provided on create.
+func (u *RedeemCodeUpsertOne) UpdateOrderAmount() *RedeemCodeUpsertOne {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.UpdateOrderAmount()
+	})
+}
+
+// SetOrderPlanID sets the "order_plan_id" field.
+func (u *RedeemCodeUpsertOne) SetOrderPlanID(v int64) *RedeemCodeUpsertOne {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.SetOrderPlanID(v)
+	})
+}
+
+// AddOrderPlanID adds v to the "order_plan_id" field.
+func (u *RedeemCodeUpsertOne) AddOrderPlanID(v int64) *RedeemCodeUpsertOne {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.AddOrderPlanID(v)
+	})
+}
+
+// UpdateOrderPlanID sets the "order_plan_id" field to the value that was provided on create.
+func (u *RedeemCodeUpsertOne) UpdateOrderPlanID() *RedeemCodeUpsertOne {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.UpdateOrderPlanID()
+	})
+}
+
+// ClearOrderPlanID clears the value of the "order_plan_id" field.
+func (u *RedeemCodeUpsertOne) ClearOrderPlanID() *RedeemCodeUpsertOne {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.ClearOrderPlanID()
+	})
+}
+
+// SetOrderPlanName sets the "order_plan_name" field.
+func (u *RedeemCodeUpsertOne) SetOrderPlanName(v string) *RedeemCodeUpsertOne {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.SetOrderPlanName(v)
+	})
+}
+
+// UpdateOrderPlanName sets the "order_plan_name" field to the value that was provided on create.
+func (u *RedeemCodeUpsertOne) UpdateOrderPlanName() *RedeemCodeUpsertOne {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.UpdateOrderPlanName()
 	})
 }
 
@@ -1207,6 +1504,97 @@ func (u *RedeemCodeUpsertBulk) UpdateGroupID() *RedeemCodeUpsertBulk {
 func (u *RedeemCodeUpsertBulk) ClearGroupID() *RedeemCodeUpsertBulk {
 	return u.Update(func(s *RedeemCodeUpsert) {
 		s.ClearGroupID()
+	})
+}
+
+// SetGenerateOrder sets the "generate_order" field.
+func (u *RedeemCodeUpsertBulk) SetGenerateOrder(v bool) *RedeemCodeUpsertBulk {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.SetGenerateOrder(v)
+	})
+}
+
+// UpdateGenerateOrder sets the "generate_order" field to the value that was provided on create.
+func (u *RedeemCodeUpsertBulk) UpdateGenerateOrder() *RedeemCodeUpsertBulk {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.UpdateGenerateOrder()
+	})
+}
+
+// SetOrderCurrency sets the "order_currency" field.
+func (u *RedeemCodeUpsertBulk) SetOrderCurrency(v string) *RedeemCodeUpsertBulk {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.SetOrderCurrency(v)
+	})
+}
+
+// UpdateOrderCurrency sets the "order_currency" field to the value that was provided on create.
+func (u *RedeemCodeUpsertBulk) UpdateOrderCurrency() *RedeemCodeUpsertBulk {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.UpdateOrderCurrency()
+	})
+}
+
+// SetOrderAmount sets the "order_amount" field.
+func (u *RedeemCodeUpsertBulk) SetOrderAmount(v float64) *RedeemCodeUpsertBulk {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.SetOrderAmount(v)
+	})
+}
+
+// AddOrderAmount adds v to the "order_amount" field.
+func (u *RedeemCodeUpsertBulk) AddOrderAmount(v float64) *RedeemCodeUpsertBulk {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.AddOrderAmount(v)
+	})
+}
+
+// UpdateOrderAmount sets the "order_amount" field to the value that was provided on create.
+func (u *RedeemCodeUpsertBulk) UpdateOrderAmount() *RedeemCodeUpsertBulk {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.UpdateOrderAmount()
+	})
+}
+
+// SetOrderPlanID sets the "order_plan_id" field.
+func (u *RedeemCodeUpsertBulk) SetOrderPlanID(v int64) *RedeemCodeUpsertBulk {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.SetOrderPlanID(v)
+	})
+}
+
+// AddOrderPlanID adds v to the "order_plan_id" field.
+func (u *RedeemCodeUpsertBulk) AddOrderPlanID(v int64) *RedeemCodeUpsertBulk {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.AddOrderPlanID(v)
+	})
+}
+
+// UpdateOrderPlanID sets the "order_plan_id" field to the value that was provided on create.
+func (u *RedeemCodeUpsertBulk) UpdateOrderPlanID() *RedeemCodeUpsertBulk {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.UpdateOrderPlanID()
+	})
+}
+
+// ClearOrderPlanID clears the value of the "order_plan_id" field.
+func (u *RedeemCodeUpsertBulk) ClearOrderPlanID() *RedeemCodeUpsertBulk {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.ClearOrderPlanID()
+	})
+}
+
+// SetOrderPlanName sets the "order_plan_name" field.
+func (u *RedeemCodeUpsertBulk) SetOrderPlanName(v string) *RedeemCodeUpsertBulk {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.SetOrderPlanName(v)
+	})
+}
+
+// UpdateOrderPlanName sets the "order_plan_name" field to the value that was provided on create.
+func (u *RedeemCodeUpsertBulk) UpdateOrderPlanName() *RedeemCodeUpsertBulk {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.UpdateOrderPlanName()
 	})
 }
 

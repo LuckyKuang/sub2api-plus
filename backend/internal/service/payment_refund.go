@@ -55,6 +55,9 @@ func (s *PaymentService) getOrderProviderInstance(ctx context.Context, o *dbent.
 // Refunds must be pinned to an explicit historical binding, so legacy
 // "best-effort" provider guessing is intentionally not allowed here.
 func (s *PaymentService) getRefundOrderProviderInstance(ctx context.Context, o *dbent.PaymentOrder) (*dbent.PaymentProviderInstance, error) {
+	if o != nil && o.OrderSource == OrderSourceRedeem {
+		return nil, ErrRedeemOrderRefundDisabled
+	}
 	if s == nil || s.entClient == nil || o == nil {
 		return nil, nil
 	}
@@ -191,6 +194,9 @@ func (s *PaymentService) validateRefundRequest(ctx context.Context, oid, uid int
 	if o.UserID != uid {
 		return nil, infraerrors.Forbidden("FORBIDDEN", "no permission")
 	}
+	if o.OrderSource == OrderSourceRedeem {
+		return nil, ErrRedeemOrderRefundDisabled
+	}
 	if o.OrderType != payment.OrderTypeBalance {
 		return nil, infraerrors.BadRequest("INVALID_ORDER_TYPE", "only balance orders can request refund")
 	}
@@ -212,6 +218,9 @@ func (s *PaymentService) PrepareRefund(ctx context.Context, oid int64, amt float
 	o, err := s.entClient.PaymentOrder.Get(ctx, oid)
 	if err != nil {
 		return nil, nil, infraerrors.NotFound("NOT_FOUND", "order not found")
+	}
+	if o.OrderSource == OrderSourceRedeem {
+		return nil, nil, ErrRedeemOrderRefundDisabled
 	}
 	ok := []string{OrderStatusCompleted, OrderStatusRefundRequested, OrderStatusRefundPending, OrderStatusRefundFailed, OrderStatusPartiallyRefunded}
 	if !psSliceContains(ok, o.Status) {
@@ -362,6 +371,13 @@ func (s *PaymentService) deductAvailableBalance(ctx context.Context, userID int6
 }
 
 func (s *PaymentService) ExecuteRefund(ctx context.Context, p *RefundPlan) (*RefundResult, error) {
+	order, lookupErr := s.entClient.PaymentOrder.Get(ctx, p.OrderID)
+	if lookupErr != nil {
+		return nil, lookupErr
+	}
+	if order.OrderSource == OrderSourceRedeem {
+		return nil, ErrRedeemOrderRefundDisabled
+	}
 	c, err := s.entClient.PaymentOrder.Update().Where(paymentorder.IDEQ(p.OrderID), paymentorder.StatusIn(OrderStatusCompleted, OrderStatusRefundRequested, OrderStatusRefundPending, OrderStatusRefundFailed, OrderStatusPartiallyRefunded)).SetStatus(OrderStatusRefunding).Save(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("lock: %w", err)
@@ -488,6 +504,9 @@ func (s *PaymentService) QueryAndFinalizeRefund(ctx context.Context, oid int64) 
 	o, err := s.entClient.PaymentOrder.Get(ctx, oid)
 	if err != nil {
 		return nil, infraerrors.NotFound("NOT_FOUND", "order not found")
+	}
+	if o.OrderSource == OrderSourceRedeem {
+		return nil, ErrRedeemOrderRefundDisabled
 	}
 	if o.Status != OrderStatusRefundPending {
 		return nil, infraerrors.BadRequest("INVALID_STATUS", "only refund pending orders can be finalized")

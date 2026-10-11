@@ -39,6 +39,16 @@ type RedeemCode struct {
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 	// GroupID holds the value of the "group_id" field.
 	GroupID *int64 `json:"group_id,omitempty"`
+	// GenerateOrder holds the value of the "generate_order" field.
+	GenerateOrder bool `json:"generate_order,omitempty"`
+	// OrderCurrency holds the value of the "order_currency" field.
+	OrderCurrency string `json:"order_currency,omitempty"`
+	// OrderAmount holds the value of the "order_amount" field.
+	OrderAmount float64 `json:"order_amount,omitempty"`
+	// OrderPlanID holds the value of the "order_plan_id" field.
+	OrderPlanID *int64 `json:"order_plan_id,omitempty"`
+	// OrderPlanName holds the value of the "order_plan_name" field.
+	OrderPlanName string `json:"order_plan_name,omitempty"`
 	// ValidityDays holds the value of the "validity_days" field.
 	ValidityDays int `json:"validity_days,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
@@ -85,11 +95,13 @@ func (*RedeemCode) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case redeemcode.FieldValue:
+		case redeemcode.FieldGenerateOrder:
+			values[i] = new(sql.NullBool)
+		case redeemcode.FieldValue, redeemcode.FieldOrderAmount:
 			values[i] = new(sql.NullFloat64)
-		case redeemcode.FieldID, redeemcode.FieldUsedBy, redeemcode.FieldGroupID, redeemcode.FieldValidityDays:
+		case redeemcode.FieldID, redeemcode.FieldUsedBy, redeemcode.FieldGroupID, redeemcode.FieldOrderPlanID, redeemcode.FieldValidityDays:
 			values[i] = new(sql.NullInt64)
-		case redeemcode.FieldCode, redeemcode.FieldType, redeemcode.FieldStatus, redeemcode.FieldNotes:
+		case redeemcode.FieldCode, redeemcode.FieldType, redeemcode.FieldStatus, redeemcode.FieldNotes, redeemcode.FieldOrderCurrency, redeemcode.FieldOrderPlanName:
 			values[i] = new(sql.NullString)
 		case redeemcode.FieldUsedAt, redeemcode.FieldCreatedAt, redeemcode.FieldExpiresAt:
 			values[i] = new(sql.NullTime)
@@ -178,6 +190,37 @@ func (_m *RedeemCode) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.GroupID = new(int64)
 				*_m.GroupID = value.Int64
+			}
+		case redeemcode.FieldGenerateOrder:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field generate_order", values[i])
+			} else if value.Valid {
+				_m.GenerateOrder = value.Bool
+			}
+		case redeemcode.FieldOrderCurrency:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field order_currency", values[i])
+			} else if value.Valid {
+				_m.OrderCurrency = value.String
+			}
+		case redeemcode.FieldOrderAmount:
+			if value, ok := values[i].(*sql.NullFloat64); !ok {
+				return fmt.Errorf("unexpected type %T for field order_amount", values[i])
+			} else if value.Valid {
+				_m.OrderAmount = value.Float64
+			}
+		case redeemcode.FieldOrderPlanID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field order_plan_id", values[i])
+			} else if value.Valid {
+				_m.OrderPlanID = new(int64)
+				*_m.OrderPlanID = value.Int64
+			}
+		case redeemcode.FieldOrderPlanName:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field order_plan_name", values[i])
+			} else if value.Valid {
+				_m.OrderPlanName = value.String
 			}
 		case redeemcode.FieldValidityDays:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -270,6 +313,23 @@ func (_m *RedeemCode) String() string {
 		builder.WriteString("group_id=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
+	builder.WriteString(", ")
+	builder.WriteString("generate_order=")
+	builder.WriteString(fmt.Sprintf("%v", _m.GenerateOrder))
+	builder.WriteString(", ")
+	builder.WriteString("order_currency=")
+	builder.WriteString(_m.OrderCurrency)
+	builder.WriteString(", ")
+	builder.WriteString("order_amount=")
+	builder.WriteString(fmt.Sprintf("%v", _m.OrderAmount))
+	builder.WriteString(", ")
+	if v := _m.OrderPlanID; v != nil {
+		builder.WriteString("order_plan_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	builder.WriteString("order_plan_name=")
+	builder.WriteString(_m.OrderPlanName)
 	builder.WriteString(", ")
 	builder.WriteString("validity_days=")
 	builder.WriteString(fmt.Sprintf("%v", _m.ValidityDays))

@@ -78,6 +78,12 @@ func (PaymentOrder) Fields() []ent.Field {
 			Nillable().
 			SchemaType(map[string]string{dialect.Postgres: "text"}),
 
+		field.String("order_source").MaxLen(20).Default("payment"),
+		field.String("currency").MaxLen(3).Default(""),
+		field.String("plan_name").MaxLen(255).Default(""),
+		// Audit reference intentionally has no FK: deleting a code must retain its order.
+		field.Int64("redeem_code_id").Optional().Nillable().Unique(),
+
 		// 订单类型 & 订阅关联
 		field.String("order_type").
 			MaxLen(20).
@@ -199,5 +205,6 @@ func (PaymentOrder) Indexes() []ent.Index {
 		index.Fields("paid_at"),
 		index.Fields("payment_type", "paid_at"),
 		index.Fields("order_type"),
+		index.Fields("order_source", "paid_at"),
 	}
 }

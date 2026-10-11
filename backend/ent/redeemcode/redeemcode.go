@@ -34,6 +34,16 @@ const (
 	FieldExpiresAt = "expires_at"
 	// FieldGroupID holds the string denoting the group_id field in the database.
 	FieldGroupID = "group_id"
+	// FieldGenerateOrder holds the string denoting the generate_order field in the database.
+	FieldGenerateOrder = "generate_order"
+	// FieldOrderCurrency holds the string denoting the order_currency field in the database.
+	FieldOrderCurrency = "order_currency"
+	// FieldOrderAmount holds the string denoting the order_amount field in the database.
+	FieldOrderAmount = "order_amount"
+	// FieldOrderPlanID holds the string denoting the order_plan_id field in the database.
+	FieldOrderPlanID = "order_plan_id"
+	// FieldOrderPlanName holds the string denoting the order_plan_name field in the database.
+	FieldOrderPlanName = "order_plan_name"
 	// FieldValidityDays holds the string denoting the validity_days field in the database.
 	FieldValidityDays = "validity_days"
 	// EdgeUser holds the string denoting the user edge name in mutations.
@@ -71,6 +81,11 @@ var Columns = []string{
 	FieldCreatedAt,
 	FieldExpiresAt,
 	FieldGroupID,
+	FieldGenerateOrder,
+	FieldOrderCurrency,
+	FieldOrderAmount,
+	FieldOrderPlanID,
+	FieldOrderPlanName,
 	FieldValidityDays,
 }
 
@@ -99,6 +114,18 @@ var (
 	StatusValidator func(string) error
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
+	// DefaultGenerateOrder holds the default value on creation for the "generate_order" field.
+	DefaultGenerateOrder bool
+	// DefaultOrderCurrency holds the default value on creation for the "order_currency" field.
+	DefaultOrderCurrency string
+	// OrderCurrencyValidator is a validator for the "order_currency" field. It is called by the builders before save.
+	OrderCurrencyValidator func(string) error
+	// DefaultOrderAmount holds the default value on creation for the "order_amount" field.
+	DefaultOrderAmount float64
+	// DefaultOrderPlanName holds the default value on creation for the "order_plan_name" field.
+	DefaultOrderPlanName string
+	// OrderPlanNameValidator is a validator for the "order_plan_name" field. It is called by the builders before save.
+	OrderPlanNameValidator func(string) error
 	// DefaultValidityDays holds the default value on creation for the "validity_days" field.
 	DefaultValidityDays int
 )
@@ -159,6 +186,31 @@ func ByExpiresAt(opts ...sql.OrderTermOption) OrderOption {
 // ByGroupID orders the results by the group_id field.
 func ByGroupID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldGroupID, opts...).ToFunc()
+}
+
+// ByGenerateOrder orders the results by the generate_order field.
+func ByGenerateOrder(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldGenerateOrder, opts...).ToFunc()
+}
+
+// ByOrderCurrency orders the results by the order_currency field.
+func ByOrderCurrency(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldOrderCurrency, opts...).ToFunc()
+}
+
+// ByOrderAmount orders the results by the order_amount field.
+func ByOrderAmount(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldOrderAmount, opts...).ToFunc()
+}
+
+// ByOrderPlanID orders the results by the order_plan_id field.
+func ByOrderPlanID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldOrderPlanID, opts...).ToFunc()
+}
+
+// ByOrderPlanName orders the results by the order_plan_name field.
+func ByOrderPlanName(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldOrderPlanName, opts...).ToFunc()
 }
 
 // ByValidityDays orders the results by the validity_days field.

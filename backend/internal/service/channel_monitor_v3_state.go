@@ -1,18 +1,17 @@
 package service
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 )
 
 func ChannelMonitorV3Scope(platform string, groupID int64, model string) string {
-	return fmt.Sprintf("%s:%d:%s", platform, groupID, model)
+	return ChannelMonitorV3SourceScope(platform, "request", groupID, 0, model)
 }
 
 // ResumeChannelMonitorV3State discards confirmation evidence across a pause.
-// Open incidents stay unresolved and wait for new observed requests.
+// Open incidents stay unresolved and wait for new request/probe observations.
 func ResumeChannelMonitorV3State(previous ChannelMonitorV3State, now time.Time) ChannelMonitorV3State {
 	next := previous
 	next.Pending, next.Streak, next.PendingSince = "", 0, time.Time{}
@@ -27,7 +26,7 @@ func ResumeChannelMonitorV3State(previous ChannelMonitorV3State, now time.Time) 
 	return next
 }
 
-// Advance requires new terminal requests, not merely a new timer tick. The same
+// Advance requires new terminal observations, not merely a new timer tick. The same
 // rolling samples cannot confirm a failure twice or manufacture recovery.
 func AdvanceChannelMonitorV3State(previous ChannelMonitorV3State, fact ChannelMonitorV3Fact, now time.Time, cfg ChannelMonitorV3Config) (ChannelMonitorV3State, *ChannelMonitorV3Incident) {
 	if !now.After(previous.LastEvaluated) {
@@ -77,7 +76,7 @@ func AdvanceChannelMonitorV3State(previous ChannelMonitorV3State, fact ChannelMo
 		return next, nil
 	}
 	if next.Streak < cfg.AbnormalWindows {
-		// A bad request during recovery immediately revokes recovery evidence.
+		// An abnormal observation during recovery revokes recovery evidence.
 		if next.Incident != nil && (next.Incident.Phase == "recovering" || next.Incident.Phase == "awaiting_data") {
 			updateV3Incident(next.Incident, "ongoing", next.Incident.Severity, now)
 			return next, next.Incident
@@ -85,7 +84,7 @@ func AdvanceChannelMonitorV3State(previous ChannelMonitorV3State, fact ChannelMo
 		return next, nil
 	}
 	if next.Incident == nil {
-		next.Incident = &ChannelMonitorV3Incident{ID: uuid.NewString(), Platform: fact.Platform, GroupID: fact.GroupID, Model: fact.Model, StartedAt: next.PendingSince}
+		next.Incident = &ChannelMonitorV3Incident{ID: uuid.NewString(), Platform: fact.Platform, SourceKind: fact.Source(), MonitorID: fact.Monitor(), GroupID: fact.GroupID, Model: fact.Model, StartedAt: next.PendingSince}
 		updateV3Incident(next.Incident, "detected", health, now)
 		return next, next.Incident
 	}

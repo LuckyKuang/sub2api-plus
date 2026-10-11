@@ -536,6 +536,11 @@ type RedeemCode struct {
 // 注意：普通用户接口不得返回 notes 等内部信息。
 type AdminRedeemCode struct {
 	RedeemCode
+	GenerateOrder bool    `json:"generate_order"`
+	OrderCurrency string  `json:"order_currency"`
+	OrderAmount   float64 `json:"order_amount"`
+	OrderPlanID   *int64  `json:"order_plan_id"`
+	OrderPlanName string  `json:"order_plan_name"`
 
 	Notes string `json:"notes"`
 }
@@ -586,6 +591,20 @@ type BatchUpdateRedeemCodeFields struct {
 
 	Type  *string  `json:"type,omitempty"`
 	Value *float64 `json:"value,omitempty"`
+}
+
+func (f *BatchUpdateRedeemCodeFields) UnmarshalJSON(data []byte) error {
+	var keys map[string]json.RawMessage
+	if err := json.Unmarshal(data, &keys); err != nil {
+		return err
+	}
+	for _, key := range []string{"generate_order", "order_currency", "order_amount", "order_plan_id", "order_plan_name", "validity_days"} {
+		if _, present := keys[key]; present {
+			return service.ErrRedeemOrderSnapshotImmutable
+		}
+	}
+	type fields BatchUpdateRedeemCodeFields
+	return json.Unmarshal(data, (*fields)(f))
 }
 
 type BatchUpdateRedeemCodesRequest struct {

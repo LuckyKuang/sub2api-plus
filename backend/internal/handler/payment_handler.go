@@ -152,6 +152,9 @@ func (h *PaymentHandler) GetCheckoutInfo(c *gin.Context) {
 		RechargeBonusTiers:            cfg.RechargeBonusTiers,
 		RechargeBonusMode:             cfg.RechargeBonusMode,
 		RechargeBonusNotice:           cfg.RechargeBonusNotice,
+		RedeemPurchaseEnabled:         cfg.Enabled && cfg.RedeemPurchaseEnabled,
+		RedeemPurchaseURL:             cfg.RedeemPurchaseURL,
+		RedeemPurchaseMode:            cfg.RedeemPurchaseMode,
 		HelpText:                      cfg.HelpText,
 		HelpImageURL:                  cfg.HelpImageURL,
 		StripePublishableKey:          cfg.StripePublishableKey,
@@ -161,6 +164,9 @@ func (h *PaymentHandler) GetCheckoutInfo(c *gin.Context) {
 }
 
 type checkoutInfoResponse struct {
+	RedeemPurchaseEnabled         bool                            `json:"redeem_purchase_enabled"`
+	RedeemPurchaseURL             string                          `json:"redeem_purchase_url"`
+	RedeemPurchaseMode            string                          `json:"redeem_purchase_mode"`
 	Methods                       map[string]service.MethodLimits `json:"methods"`
 	GlobalMin                     float64                         `json:"global_min"`
 	GlobalMax                     float64                         `json:"global_max"`
@@ -352,6 +358,7 @@ func (h *PaymentHandler) GetMyOrders(c *gin.Context) {
 		Page:        page,
 		PageSize:    pageSize,
 		Status:      c.Query("status"),
+		OrderSource: c.Query("order_source"),
 		OrderType:   c.Query("order_type"),
 		PaymentType: c.Query("payment_type"),
 	})
@@ -492,6 +499,8 @@ type PublicOrderResult struct {
 	BonusAmount         float64    `json:"bonus_amount"`
 	Currency            string     `json:"currency"`
 	PaymentType         string     `json:"payment_type"`
+	OrderSource         string     `json:"order_source"`
+	PlanName            string     `json:"plan_name"`
 	OrderType           string     `json:"order_type"`
 	Status              string     `json:"status"`
 	CreatedAt           time.Time  `json:"created_at"`
@@ -528,6 +537,8 @@ func buildPublicOrderResult(order *dbent.PaymentOrder) PublicOrderResult {
 		BonusAmount:         order.BonusAmount,
 		Currency:            service.PaymentOrderCurrency(order),
 		PaymentType:         order.PaymentType,
+		OrderSource:         order.OrderSource,
+		PlanName:            order.PlanName,
 		OrderType:           order.OrderType,
 		Status:              order.Status,
 		CreatedAt:           order.CreatedAt,
@@ -639,6 +650,8 @@ type PaymentOrderResult struct {
 	PaymentType         string     `json:"payment_type"`
 	OutTradeNo          string     `json:"out_trade_no"`
 	Status              string     `json:"status"`
+	OrderSource         string     `json:"order_source"`
+	PlanName            string     `json:"plan_name"`
 	OrderType           string     `json:"order_type"`
 	CreatedAt           time.Time  `json:"created_at"`
 	ExpiresAt           time.Time  `json:"expires_at"`
@@ -678,6 +691,8 @@ func sanitizePaymentOrderForResponse(order *dbent.PaymentOrder) *PaymentOrderRes
 		PaymentType:         order.PaymentType,
 		OutTradeNo:          order.OutTradeNo,
 		Status:              order.Status,
+		OrderSource:         order.OrderSource,
+		PlanName:            order.PlanName,
 		OrderType:           order.OrderType,
 		CreatedAt:           order.CreatedAt,
 		ExpiresAt:           order.ExpiresAt,

@@ -34,6 +34,9 @@ func NewRedeemHandler(adminService service.AdminService, redeemService *service.
 
 // GenerateRedeemCodesRequest represents generate redeem codes request
 type GenerateRedeemCodesRequest struct {
+	GenerateOrder bool       `json:"generate_order"`
+	OrderCurrency string     `json:"order_currency"`
+	OrderPlanID   *int64     `json:"order_plan_id"`
 	Count         int        `json:"count" binding:"required,min=1,max=100"`
 	Type          string     `json:"type" binding:"required,oneof=balance concurrency subscription invitation"`
 	Value         float64    `json:"value"`
@@ -46,9 +49,12 @@ type GenerateRedeemCodesRequest struct {
 // CreateAndRedeemCodeRequest represents creating a fixed code and redeeming it for a target user.
 // Type 为 omitempty 而非 required 是为了向后兼容旧版调用方（不传 type 时默认 balance）。
 type CreateAndRedeemCodeRequest struct {
+	GenerateOrder bool       `json:"generate_order"`
+	OrderCurrency string     `json:"order_currency"`
+	OrderPlanID   *int64     `json:"order_plan_id"`
 	Code          string     `json:"code" binding:"required,min=3,max=128"`
 	Type          string     `json:"type" binding:"omitempty,oneof=balance concurrency subscription invitation"` // 不传时默认 balance（向后兼容）
-	Value         float64    `json:"value" binding:"required"`
+	Value         float64    `json:"value"`
 	UserID        int64      `json:"user_id" binding:"required,gt=0"`
 	GroupID       *int64     `json:"group_id"`      // subscription 类型必填
 	ValidityDays  int        `json:"validity_days"` // subscription 类型：正数增加，负数退款扣减
@@ -144,12 +150,15 @@ func (h *RedeemHandler) Generate(c *gin.Context) {
 
 	executeAdminIdempotentJSON(c, "admin.redeem_codes.generate", req, service.DefaultWriteIdempotencyTTL(), func(ctx context.Context) (any, error) {
 		codes, execErr := h.adminService.GenerateRedeemCodes(ctx, &service.GenerateRedeemCodesInput{
-			Count:        req.Count,
-			Type:         req.Type,
-			Value:        req.Value,
-			GroupID:      req.GroupID,
-			ValidityDays: req.ValidityDays,
-			ExpiresAt:    expiresAt,
+			GenerateOrder: req.GenerateOrder,
+			OrderCurrency: req.OrderCurrency,
+			OrderPlanID:   req.OrderPlanID,
+			Count:         req.Count,
+			Type:          req.Type,
+			Value:         req.Value,
+			GroupID:       req.GroupID,
+			ValidityDays:  req.ValidityDays,
+			ExpiresAt:     expiresAt,
 		})
 		if execErr != nil {
 			return nil, execErr
@@ -182,8 +191,12 @@ func (h *RedeemHandler) CreateAndRedeem(c *gin.Context) {
 	if req.Type == "" {
 		req.Type = "balance"
 	}
+	if req.Value == 0 && (!req.GenerateOrder || req.Type != "subscription") {
+		response.BadRequest(c, "value must not be zero")
+		return
+	}
 
-	if req.Type == "subscription" {
+	if req.Type == "subscription" && !req.GenerateOrder {
 		if req.GroupID == nil {
 			response.BadRequest(c, "group_id is required for subscription type")
 			return
@@ -210,14 +223,17 @@ func (h *RedeemHandler) CreateAndRedeem(c *gin.Context) {
 		}
 
 		createErr := h.redeemService.CreateCode(ctx, &service.RedeemCode{
-			Code:         req.Code,
-			Type:         req.Type,
-			Value:        req.Value,
-			Status:       service.StatusUnused,
-			Notes:        req.Notes,
-			GroupID:      req.GroupID,
-			ValidityDays: req.ValidityDays,
-			ExpiresAt:    expiresAt,
+			GenerateOrder: req.GenerateOrder,
+			OrderCurrency: req.OrderCurrency,
+			OrderPlanID:   req.OrderPlanID,
+			Code:          req.Code,
+			Type:          req.Type,
+			Value:         req.Value,
+			Status:        service.StatusUnused,
+			Notes:         req.Notes,
+			GroupID:       req.GroupID,
+			ValidityDays:  req.ValidityDays,
+			ExpiresAt:     expiresAt,
 		})
 		if createErr != nil {
 			// Unique code race: if code now exists, use idempotent semantics by used_by.
@@ -317,6 +333,10 @@ func (h *RedeemHandler) BatchUpdate(c *gin.Context) {
 
 	var req dto.BatchUpdateRedeemCodesRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		if errors.Is(err, service.ErrRedeemOrderSnapshotImmutable) {
+			response.ErrorFrom(c, err)
+			return
+		}
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
@@ -412,7 +432,7 @@ func (h *RedeemHandler) Export(c *gin.Context) {
 	writer := csv.NewWriter(&buf)
 
 	// Write header
-	if err := writer.Write([]string{"id", "code", "type", "value", "status", "used_by", "used_by_email", "used_at", "expires_at", "created_at"}); err != nil {
+	if err := writer.Write([]string{"id", "code", "type", "value", "status", "used_by", "used_by_email", "used_at", "expires_at", "created_at", "generate_order", "order_currency", "order_amount", "order_plan_id", "order_plan_name"}); err != nil {
 		response.InternalError(c, "Failed to export redeem codes: "+err.Error())
 		return
 	}
@@ -435,6 +455,10 @@ func (h *RedeemHandler) Export(c *gin.Context) {
 		if code.ExpiresAt != nil {
 			expiresAt = code.ExpiresAt.Format("2006-01-02 15:04:05")
 		}
+		planID := ""
+		if code.OrderPlanID != nil {
+			planID = strconv.FormatInt(*code.OrderPlanID, 10)
+		}
 		if err := writer.Write([]string{
 			fmt.Sprintf("%d", code.ID),
 			code.Code,
@@ -446,6 +470,11 @@ func (h *RedeemHandler) Export(c *gin.Context) {
 			usedAt,
 			expiresAt,
 			code.CreatedAt.Format("2006-01-02 15:04:05"),
+			strconv.FormatBool(code.GenerateOrder),
+			code.OrderCurrency,
+			fmt.Sprintf("%.2f", code.OrderAmount),
+			planID,
+			code.OrderPlanName,
 		}); err != nil {
 			response.InternalError(c, "Failed to export redeem codes: "+err.Error())
 			return

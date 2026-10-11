@@ -23,6 +23,18 @@ installations and upgraded databases reach the same state. Application API,
 service, repository and Ent validation still reject unregistered platforms.
 Channel-monitor provider CHECKs continue to enforce implemented probe capability.
 
+Migration `282_redeem_order_snapshots.sql` adds opt-in redeem-code order snapshots
+and payment-order source, currency, plan-name and unique redeem-code linkage.
+Existing codes default to no order; existing orders keep the `payment` source
+and their established provider-snapshot currency resolution. Historical orders
+remain valid after a code or plan is deleted. See [payments](../../docs/PAYMENT.md).
+
+Migration `283_channel_monitor_v3_probe_sources.sql` extends V3 fact, state and
+incident keys with source and scope. Existing rows become `request` observations
+with their original group ID as scope, preserving history and incident IDs.
+Probe scopes use monitor IDs and nullable group IDs; extra probes default off.
+See [channel monitoring](../../docs/CHANNEL_MONITOR.md).
+
 ## File Naming
 
 Regular migration:

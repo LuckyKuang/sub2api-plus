@@ -54,6 +54,29 @@ func TestUpdateSettingsFullPayloadStillClearsSentEmptyFields(t *testing.T) {
 		"an explicitly sent empty value is a deliberate clear, not an omission")
 }
 
+// PAYMENT.md: invalid purchase configuration must fail before unrelated system
+// settings writes, for both the combined settings and payment-only APIs.
+func TestUpdateSettingsInvalidRedeemPurchaseDoesNotPartiallySave(t *testing.T) {
+	h, repo := newStepUpSwitchTestHandler(t, map[string]string{
+		service.SettingKeySiteName:               "Existing Gateway",
+		service.SettingPaymentRedeemPurchaseMode: "new_tab",
+	})
+	h.paymentConfigService = service.NewPaymentConfigService(nil, repo, nil)
+	before := make(map[string]string, len(repo.values))
+	for key, value := range repo.values {
+		before[key] = value
+	}
+	rec := doUpdateSettings(t, h, map[string]any{
+		"site_name":                       "Must not save",
+		"payment_redeem_purchase_enabled": true,
+		"payment_redeem_purchase_url":     "javascript:alert(1)",
+		"payment_redeem_purchase_mode":    "iframe",
+	}, nil)
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Contains(t, rec.Body.String(), "INVALID_REDEEM_PURCHASE_CONFIG")
+	require.Equal(t, before, repo.values)
+}
+
 func TestUpdateSettingsClientDisconnectBanThresholdBounds(t *testing.T) {
 	for _, threshold := range []int{1, 1000} {
 		h, repo := newStepUpSwitchTestHandler(t, map[string]string{})

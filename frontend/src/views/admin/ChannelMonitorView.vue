@@ -43,7 +43,7 @@
               :aria-selected="adminMonitorTab === 'legacy'"
               @click="adminMonitorTab = 'legacy'"
             >
-              {{ isV1Mode ? t('channelMonitorV2.admin.tabV1Active') : t('channelMonitorV2.admin.tabV1History') }}
+              {{ activeProbesEnabled ? t('channelMonitorV2.admin.tabV1Active') : t('channelMonitorV2.admin.tabV1History') }}
             </button>
           </div>
         </div>
@@ -107,6 +107,7 @@
             <MonitorActionsCell
               :row="row"
               :running="runningId === row.id"
+              :probes-enabled="activeProbesEnabled"
               :duplicating="duplicatingIds.has(row.id)"
               @run="handleRunNow"
               @duplicate="handleDuplicate"
@@ -203,11 +204,12 @@ import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 import { useChannelMonitorFormat } from '@/composables/useChannelMonitorFormat'
 import MonitorSettingsPanel from '@/features/channel-monitor-v2/MonitorSettingsPanel.vue'
 import StatusSettingsPanel from '@/features/channel-monitor-v3/StatusSettingsPanel.vue'
-import { isChannelMonitorV1Mode, getChannelMonitorMode } from '@/utils/featureFlags'
+import { isChannelMonitorV1Mode, isChannelMonitorActiveProbeEnabled, getChannelMonitorMode } from '@/utils/featureFlags'
 
 const { t } = useI18n()
 const appStore = useAppStore()
 const isV1Mode = computed(() => isChannelMonitorV1Mode())
+const activeProbesEnabled = computed(() => isChannelMonitorActiveProbeEnabled())
 const initialMode = getChannelMonitorMode()
 const adminMonitorTab = ref<'v2' | 'v3' | 'legacy'>(initialMode === 'v1' ? 'legacy' : initialMode)
 const {
@@ -330,7 +332,7 @@ async function toggleEnabled(row: ChannelMonitor) {
 }
 
 async function handleRunNow(row: ChannelMonitor) {
-  if (!isV1Mode.value) {
+  if (!activeProbesEnabled.value) {
     appStore.showError(t('admin.channelMonitor.runFailed'))
     return
   }

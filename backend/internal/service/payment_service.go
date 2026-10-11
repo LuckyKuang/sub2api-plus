@@ -114,6 +114,7 @@ type CreateOrderResponse struct {
 }
 
 type OrderListParams struct {
+	OrderSource string
 	Page        int
 	PageSize    int
 	Status      string

@@ -185,7 +185,7 @@ export function isChannelMonitorRouteEnabled(): boolean {
 
 export type ChannelMonitorMode = 'v1' | 'v2' | 'v3'
 
-/** Exclusive channel-monitor implementation. Invalid/missing → v1. V3 observes real requests. */
+/** User-visible monitor mode. Invalid/missing → v1. V3 can include active probes. */
 export function getChannelMonitorMode(): ChannelMonitorMode {
   const appStore = useAppStore()
   const mode = appStore.cachedPublicSettings?.channel_monitor_mode
@@ -194,6 +194,15 @@ export function getChannelMonitorMode(): ChannelMonitorMode {
 
 export function isChannelMonitorV1Mode(): boolean {
   return isChannelMonitorRouteEnabled() && getChannelMonitorMode() === 'v1'
+}
+
+/** Admin probe actions can also run alongside the V3 user-visible mode. */
+export function isChannelMonitorActiveProbeEnabled(): boolean {
+  const appStore = useAppStore()
+  const mode = getChannelMonitorMode()
+  return isChannelMonitorRouteEnabled() && (mode === 'v1' || (
+    mode === 'v3' && appStore.cachedPublicSettings?.channel_monitor_v1_enabled === true
+  ))
 }
 
 export function isChannelMonitorV2Mode(): boolean {

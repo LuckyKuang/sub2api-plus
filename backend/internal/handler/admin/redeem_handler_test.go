@@ -4,33 +4,37 @@ package admin
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
+	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/LuckyKuang/sub2api-plus/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// newCreateAndRedeemHandler creates a RedeemHandler with a non-nil (but minimal)
-// RedeemService so that CreateAndRedeem's nil guard passes and we can test the
-// parameter-validation layer that runs before any service call.
+type createAndRedeemValidationRepo struct{ service.RedeemCodeRepository }
+
+func (*createAndRedeemValidationRepo) GetByCode(context.Context, string) (*service.RedeemCode, error) {
+	return nil, infraerrors.ServiceUnavailable("TEST_REDEEM_LOOKUP_UNAVAILABLE", "injected redeem lookup failure")
+}
+
+// A controlled repository failure identifies requests that actually reach the
+// service boundary after validation. A panic must fail the test, never count as
+// successful validation. These tests do not claim fulfillment success.
 func newCreateAndRedeemHandler() *RedeemHandler {
 	return &RedeemHandler{
 		adminService:  newStubAdminService(),
-		redeemService: &service.RedeemService{}, // non-nil to pass nil guard
+		redeemService: service.NewRedeemService(&createAndRedeemValidationRepo{}, nil, nil, nil, nil, nil, nil, nil),
 	}
 }
 
-// postCreateAndRedeemValidation calls CreateAndRedeem and returns the response
-// status code. For cases that pass validation and proceed into the service layer,
-// a panic may occur (because RedeemService internals are nil); this is expected
-// and treated as "validation passed" (returns 0 to indicate panic).
-func postCreateAndRedeemValidation(t *testing.T, handler *RedeemHandler, body any) (code int) {
+func postCreateAndRedeemValidation(t *testing.T, handler *RedeemHandler, body any) int {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
@@ -41,19 +45,16 @@ func postCreateAndRedeemValidation(t *testing.T, handler *RedeemHandler, body an
 	c.Request, _ = http.NewRequest(http.MethodPost, "/api/v1/admin/redeem-codes/create-and-redeem", bytes.NewReader(jsonBytes))
 	c.Request.Header.Set("Content-Type", "application/json")
 
-	defer func() {
-		if r := recover(); r != nil {
-			// Panic means we passed validation and entered service layer (expected for minimal stub).
-			code = 0
-		}
-	}()
 	handler.CreateAndRedeem(c)
+	if w.Code == http.StatusServiceUnavailable {
+		require.Contains(t, w.Body.String(), "TEST_REDEEM_LOOKUP_UNAVAILABLE")
+	}
 	return w.Code
 }
 
 func TestCreateAndRedeem_TypeDefaultsToBalance(t *testing.T) {
 	// 不传 type 字段时应默认 balance，不触发 subscription 校验。
-	// 验证通过后进入 service 层会 panic（返回 0），说明默认值生效。
+	// 合法输入必须到达可识别的仓储失败边界。
 	h := newCreateAndRedeemHandler()
 	code := postCreateAndRedeemValidation(t, h, map[string]any{
 		"code":    "test-balance-default",
@@ -61,7 +62,7 @@ func TestCreateAndRedeem_TypeDefaultsToBalance(t *testing.T) {
 		"user_id": 1,
 	})
 
-	assert.NotEqual(t, http.StatusBadRequest, code,
+	assert.Equal(t, http.StatusServiceUnavailable, code,
 		"omitting type should default to balance and pass validation")
 }
 
@@ -108,7 +109,7 @@ func TestCreateAndRedeem_SubscriptionRequiresNonZeroValidityDays(t *testing.T) {
 			"validity_days": -7,
 		})
 
-		assert.NotEqual(t, http.StatusBadRequest, code,
+		assert.Equal(t, http.StatusServiceUnavailable, code,
 			"negative validity_days should pass validation for refund")
 	})
 }
@@ -125,7 +126,7 @@ func TestCreateAndRedeem_SubscriptionValidParamsPassValidation(t *testing.T) {
 		"validity_days": 31,
 	})
 
-	assert.NotEqual(t, http.StatusBadRequest, code,
+	assert.Equal(t, http.StatusServiceUnavailable, code,
 		"valid subscription params should pass validation")
 }
 
@@ -139,8 +140,27 @@ func TestCreateAndRedeem_BalanceIgnoresSubscriptionFields(t *testing.T) {
 		"user_id": 1,
 	})
 
-	assert.NotEqual(t, http.StatusBadRequest, code,
+	assert.Equal(t, http.StatusServiceUnavailable, code,
 		"balance type should not require group_id or validity_days")
+}
+
+// Subscription order price/entitlement come from the selected plan, so callers
+// must be able to omit value/group/duration (ADMIN_PAYMENT_INTEGRATION_API.md).
+func TestCreateAndRedeemSubscriptionOrderRequestDoesNotRequireValue(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"code":"sub-order-code","type":"subscription","generate_order":true,"order_plan_id":7,"user_id":123}`))
+	c.Request.Header.Set("Content-Type", "application/json")
+	var req CreateAndRedeemCodeRequest
+	require.NoError(t, c.ShouldBindJSON(&req))
+	require.True(t, req.GenerateOrder)
+	require.Equal(t, int64(7), *req.OrderPlanID)
+	require.Zero(t, req.Value)
+	require.Nil(t, req.GroupID)
+	require.Zero(t, req.ValidityDays)
+	require.Equal(t, http.StatusServiceUnavailable, postCreateAndRedeemValidation(t, newCreateAndRedeemHandler(), map[string]any{
+		"code": "sub-order-code", "type": "subscription", "generate_order": true, "order_plan_id": 7, "user_id": 123,
+	}), "omitting plan-derived fields must reach the service boundary")
 }
 
 func TestResolveRedeemCodeExpiresAt_FromDays(t *testing.T) {

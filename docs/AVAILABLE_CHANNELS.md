@@ -147,9 +147,16 @@ base prices are excluded from ranges, with an incomplete-price
 notice; explicit zero remains zero. Failed personal-rate lookup labels ranges as
 default-rate references. Minimum displayed price does not select a routing group.
 
+The catalog adapts from one to at most five columns, with 20px gaps and 20px card
+corners, including loading placeholders.
+
 Details start with a group comparison table, followed by each group's complete
-quote, including resolved service tiers and official reference prices directly
-expanded. Exclusive membership is purple, an effective personal rate green, an
+quote. Each resolved service tier (Fast/priority, Flex and Ultrafast) is independently
+collapsed by default and expands through its keyboard-focusable summary. Multiple
+tiers can stay open; reopening details or switching models resets disclosures.
+Collapsed price regions are excluded from the dialog's Tab loop; their summaries
+remain reachable, and expanded price regions rejoin that loop.
+Official reference prices remain expanded. Exclusive membership is purple, an effective personal rate green, an
 ordinary group rate blue, and an independent media rate cyan. Personal rates show
 the default group rate as secondary text, including personal zero. Media rates
 supersede personal rates; an overridden personal rate is explicitly marked. The

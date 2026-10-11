@@ -18,7 +18,7 @@
         <span v-if="row.fee_rate > 0" class="ml-1 text-xs text-gray-400" :title="t('payment.orders.fee') + ': ' + row.fee_rate + '%'">
           ({{ t('payment.orders.fee') }} {{ row.fee_rate }}%)
         </span>
-        <div v-if="row.amount !== row.pay_amount || (row.bonus_amount ?? 0) > 0" class="text-xs text-gray-500">
+        <div v-if="(row.order_source === 'redeem' && row.order_type === 'balance') || row.amount !== row.pay_amount || (row.bonus_amount ?? 0) > 0" class="text-xs text-gray-500">
           {{ t('payment.orders.creditedAmount') }}: {{ creditedAmountSymbol }}{{ row.amount.toFixed(2) }}
           <span v-if="(row.bonus_amount ?? 0) > 0" class="ml-1 text-amber-600 dark:text-amber-400">
             ({{ t('payment.orders.bonusIncluded', { amount: creditedAmountSymbol + (row.bonus_amount ?? 0).toFixed(2) }) }})
@@ -26,8 +26,10 @@
         </div>
       </div>
     </template>
+    <template #cell-order_source="{ row }"><span class="badge badge-gray">{{ t(row.order_source === 'redeem' ? 'featureExtensions.redeemOrder' : 'featureExtensions.paymentOrder') }}</span></template>
+    <template #cell-order_type="{ row }"><span>{{ t(row.order_type === 'subscription' ? 'payment.tabSubscribe' : 'payment.tabTopUp') }}</span><p v-if="row.plan_name" class="mt-1 text-xs text-gray-500">{{ row.plan_name }}</p></template>
     <template #cell-payment_type="{ value }">
-      <span class="text-sm text-gray-700 dark:text-gray-300">{{ t('payment.methods.' + value, value) }}</span>
+      <span class="text-sm text-gray-700 dark:text-gray-300">{{ value === 'redeem' ? t('featureExtensions.redeemOrder') : t('payment.methods.' + value, value) }}</span>
     </template>
     <template #cell-status="{ value }">
       <OrderStatusBadge :status="value" />
@@ -75,6 +77,8 @@ const columns = computed((): Column[] => {
     cols.push({ key: 'user_email', label: t('payment.admin.colUser') })
   }
   cols.push(
+    { key: 'order_source', label: t('featureExtensions.orderSource') },
+    { key: 'order_type', label: t('featureExtensions.orderType') },
     { key: 'pay_amount', label: t('payment.orders.payAmount') },
     { key: 'payment_type', label: t('payment.orders.paymentMethod') },
     { key: 'status', label: t('payment.orders.status') },

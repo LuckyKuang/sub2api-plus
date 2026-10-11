@@ -20,12 +20,14 @@ export interface StatusPlatform {
   ttft_p50_ms: number | null
   last_request_at: string | null
   timeline: Array<{ at: string; status: ServiceStatus }>
-  models: Array<{ group_id: number; group_name: string; model: string; status: ServiceStatus }>
+  models: Array<{ source_kind?: 'request' | 'probe'; monitor_id?: number; group_id: number | null; group_name: string; model: string; status: ServiceStatus }>
 }
 export interface StatusIncident {
   id: string
   platform: string
-  group_id: number
+  group_id: number | null
+  source_kind?: 'request' | 'probe'
+  monitor_id?: number
   group_name: string
   model: string
   severity: ServiceStatus

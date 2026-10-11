@@ -41,6 +41,9 @@ func (r *settingRepository) SetMultipleWithClientDisconnectRiskGeneration(
 	}
 	defer func() { _ = tx.Rollback() }()
 	txClient := tx.Client()
+	if err := syncV3ProbeSettings(ctx, txClient, values); err != nil {
+		return 0, err
+	}
 	if txClient.Driver().Dialect() == dialect.Postgres {
 		var rows entsql.Rows
 		if err = txClient.Driver().Query(
@@ -136,6 +139,9 @@ func (r *settingRepository) GetValue(ctx context.Context, key string) (string, e
 }
 
 func (r *settingRepository) Set(ctx context.Context, key, value string) error {
+	if touchesV3ProbeSettings(map[string]string{key: value}) {
+		return r.SetMultiple(ctx, map[string]string{key: value})
+	}
 	now := time.Now()
 	return r.client.Setting.
 		Create().
@@ -168,16 +174,32 @@ func (r *settingRepository) SetMultiple(ctx context.Context, settings map[string
 		return nil
 	}
 
+	client := r.client
+	var tx *ent.Tx
+	if touchesV3ProbeSettings(settings) {
+		var err error
+		tx, err = r.client.Tx(ctx)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = tx.Rollback() }()
+		client = tx.Client()
+		if err = syncV3ProbeSettings(ctx, client, settings); err != nil {
+			return err
+		}
+	}
 	now := time.Now()
 	builders := make([]*ent.SettingCreate, 0, len(settings))
 	for key, value := range settings {
-		builders = append(builders, r.client.Setting.Create().SetKey(key).SetValue(value).SetUpdatedAt(now))
+		builders = append(builders, client.Setting.Create().SetKey(key).SetValue(value).SetUpdatedAt(now))
 	}
-	return r.client.Setting.
-		CreateBulk(builders...).
-		OnConflictColumns(setting.FieldKey).
-		UpdateNewValues().
-		Exec(ctx)
+	if err := client.Setting.CreateBulk(builders...).OnConflictColumns(setting.FieldKey).UpdateNewValues().Exec(ctx); err != nil {
+		return err
+	}
+	if tx != nil {
+		return tx.Commit()
+	}
+	return nil
 }
 
 func (r *settingRepository) GetAll(ctx context.Context) (map[string]string, error) {

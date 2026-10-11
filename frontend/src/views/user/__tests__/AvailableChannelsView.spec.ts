@@ -139,4 +139,56 @@ describe('available channels user page', () => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await flushPromises()
     expect(document.activeElement).toBe(trigger.element)
   })
+  // Accessible disclosure contract: hidden tier content cannot enter the
+  // dialog's keyboard loop; each collapsed tier's summary remains reachable.
+  it('skips collapsed tier prices when wrapping dialog keyboard focus', async () => {
+    mocks.getCatalog.mockResolvedValue({ groups: [group(1, [offer('tiered', {
+      service_tier_pricing: [{ name: 'priority', pricing: pricing(6e-6) }, { name: 'flex', pricing: pricing(1e-6) }]
+    })])], user_rate_status: 'loaded' })
+    const w = page(); await flushPromises()
+    await w.findAll('.catalog-model-card button')[1]!.trigger('click'); await flushPromises()
+    const dialog = document.querySelector('[role="dialog"]')!
+    const close = dialog.querySelector<HTMLButtonElement>('[aria-label="Close modal"]')!
+    const flex = Array.from(dialog.querySelectorAll<HTMLElement>('summary')).find(s => s.textContent!.includes('tiers.flex'))!
+    close.focus()
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }))
+    expect(document.activeElement).toBe(flex)
+    const forward = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })
+    document.dispatchEvent(forward)
+    expect(forward.defaultPrevented).toBe(true)
+    expect(document.activeElement).toBe(close)
+    flex.click(); await flushPromises()
+    const visiblePrice = dialog.querySelectorAll<HTMLDetailsElement>('details')[1]!.querySelector<HTMLElement>('[tabindex="0"]')!
+    close.focus()
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }))
+    expect(document.activeElement).toBe(visiblePrice)
+  })
+  // Approved presentation contract: every newly opened model starts with its
+  // tiers collapsed. Exercise clicks through the page instead of assigning
+  // details.open or supplying a precomputed component state.
+  it('resets service tiers after closing details and when opening another model', async () => {
+    const tiers = [{ name: 'priority', pricing: pricing(6e-6) }, { name: 'flex', pricing: pricing(1e-6) }]
+    mocks.getCatalog.mockResolvedValue({ groups: [group(1, [
+      offer('first', { service_tier_pricing: tiers }),
+      offer('second', { service_tier_pricing: tiers })
+    ])], user_rate_status: 'loaded' })
+    const w = page(); await flushPromises()
+    const first = w.findAll('.catalog-model-card')[0]!.findAll('button')[1]!
+    const second = w.findAll('.catalog-model-card')[1]!.findAll('button')[1]!
+    await first.trigger('click'); await flushPromises()
+    const summary = document.querySelector<HTMLElement>('[role="dialog"] summary')!
+    summary.click(); await flushPromises()
+    expect(document.querySelector<HTMLDetailsElement>('details')!.open).toBe(true)
+    document.querySelector<HTMLButtonElement>('[aria-label="Close modal"]')!.click(); await flushPromises()
+    await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull())
+    await first.trigger('click'); await flushPromises()
+    expect(Array.from(document.querySelectorAll<HTMLDetailsElement>('details')).every(d => !d.open)).toBe(true)
+    document.querySelector<HTMLElement>('[role="dialog"] summary')!.click(); await flushPromises()
+    document.querySelector<HTMLButtonElement>('[aria-label="Close modal"]')!.click(); await flushPromises()
+    await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull())
+    await second.trigger('click'); await flushPromises()
+    expect(document.querySelector('[role="dialog"]')!.textContent).toContain('second')
+    expect(document.querySelectorAll('details')).toHaveLength(2)
+    expect(Array.from(document.querySelectorAll<HTMLDetailsElement>('details')).every(d => !d.open)).toBe(true)
+  })
 })

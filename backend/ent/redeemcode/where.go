@@ -105,6 +105,31 @@ func GroupID(v int64) predicate.RedeemCode {
 	return predicate.RedeemCode(sql.FieldEQ(FieldGroupID, v))
 }
 
+// GenerateOrder applies equality check predicate on the "generate_order" field. It's identical to GenerateOrderEQ.
+func GenerateOrder(v bool) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldEQ(FieldGenerateOrder, v))
+}
+
+// OrderCurrency applies equality check predicate on the "order_currency" field. It's identical to OrderCurrencyEQ.
+func OrderCurrency(v string) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldEQ(FieldOrderCurrency, v))
+}
+
+// OrderAmount applies equality check predicate on the "order_amount" field. It's identical to OrderAmountEQ.
+func OrderAmount(v float64) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldEQ(FieldOrderAmount, v))
+}
+
+// OrderPlanID applies equality check predicate on the "order_plan_id" field. It's identical to OrderPlanIDEQ.
+func OrderPlanID(v int64) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldEQ(FieldOrderPlanID, v))
+}
+
+// OrderPlanName applies equality check predicate on the "order_plan_name" field. It's identical to OrderPlanNameEQ.
+func OrderPlanName(v string) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldEQ(FieldOrderPlanName, v))
+}
+
 // ValidityDays applies equality check predicate on the "validity_days" field. It's identical to ValidityDaysEQ.
 func ValidityDays(v int) predicate.RedeemCode {
 	return predicate.RedeemCode(sql.FieldEQ(FieldValidityDays, v))
@@ -618,6 +643,236 @@ func GroupIDIsNil() predicate.RedeemCode {
 // GroupIDNotNil applies the NotNil predicate on the "group_id" field.
 func GroupIDNotNil() predicate.RedeemCode {
 	return predicate.RedeemCode(sql.FieldNotNull(FieldGroupID))
+}
+
+// GenerateOrderEQ applies the EQ predicate on the "generate_order" field.
+func GenerateOrderEQ(v bool) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldEQ(FieldGenerateOrder, v))
+}
+
+// GenerateOrderNEQ applies the NEQ predicate on the "generate_order" field.
+func GenerateOrderNEQ(v bool) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldNEQ(FieldGenerateOrder, v))
+}
+
+// OrderCurrencyEQ applies the EQ predicate on the "order_currency" field.
+func OrderCurrencyEQ(v string) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldEQ(FieldOrderCurrency, v))
+}
+
+// OrderCurrencyNEQ applies the NEQ predicate on the "order_currency" field.
+func OrderCurrencyNEQ(v string) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldNEQ(FieldOrderCurrency, v))
+}
+
+// OrderCurrencyIn applies the In predicate on the "order_currency" field.
+func OrderCurrencyIn(vs ...string) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldIn(FieldOrderCurrency, vs...))
+}
+
+// OrderCurrencyNotIn applies the NotIn predicate on the "order_currency" field.
+func OrderCurrencyNotIn(vs ...string) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldNotIn(FieldOrderCurrency, vs...))
+}
+
+// OrderCurrencyGT applies the GT predicate on the "order_currency" field.
+func OrderCurrencyGT(v string) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldGT(FieldOrderCurrency, v))
+}
+
+// OrderCurrencyGTE applies the GTE predicate on the "order_currency" field.
+func OrderCurrencyGTE(v string) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldGTE(FieldOrderCurrency, v))
+}
+
+// OrderCurrencyLT applies the LT predicate on the "order_currency" field.
+func OrderCurrencyLT(v string) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldLT(FieldOrderCurrency, v))
+}
+
+// OrderCurrencyLTE applies the LTE predicate on the "order_currency" field.
+func OrderCurrencyLTE(v string) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldLTE(FieldOrderCurrency, v))
+}
+
+// OrderCurrencyContains applies the Contains predicate on the "order_currency" field.
+func OrderCurrencyContains(v string) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldContains(FieldOrderCurrency, v))
+}
+
+// OrderCurrencyHasPrefix applies the HasPrefix predicate on the "order_currency" field.
+func OrderCurrencyHasPrefix(v string) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldHasPrefix(FieldOrderCurrency, v))
+}
+
+// OrderCurrencyHasSuffix applies the HasSuffix predicate on the "order_currency" field.
+func OrderCurrencyHasSuffix(v string) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldHasSuffix(FieldOrderCurrency, v))
+}
+
+// OrderCurrencyEqualFold applies the EqualFold predicate on the "order_currency" field.
+func OrderCurrencyEqualFold(v string) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldEqualFold(FieldOrderCurrency, v))
+}
+
+// OrderCurrencyContainsFold applies the ContainsFold predicate on the "order_currency" field.
+func OrderCurrencyContainsFold(v string) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldContainsFold(FieldOrderCurrency, v))
+}
+
+// OrderAmountEQ applies the EQ predicate on the "order_amount" field.
+func OrderAmountEQ(v float64) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldEQ(FieldOrderAmount, v))
+}
+
+// OrderAmountNEQ applies the NEQ predicate on the "order_amount" field.
+func OrderAmountNEQ(v float64) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldNEQ(FieldOrderAmount, v))
+}
+
+// OrderAmountIn applies the In predicate on the "order_amount" field.
+func OrderAmountIn(vs ...float64) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldIn(FieldOrderAmount, vs...))
+}
+
+// OrderAmountNotIn applies the NotIn predicate on the "order_amount" field.
+func OrderAmountNotIn(vs ...float64) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldNotIn(FieldOrderAmount, vs...))
+}
+
+// OrderAmountGT applies the GT predicate on the "order_amount" field.
+func OrderAmountGT(v float64) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldGT(FieldOrderAmount, v))
+}
+
+// OrderAmountGTE applies the GTE predicate on the "order_amount" field.
+func OrderAmountGTE(v float64) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldGTE(FieldOrderAmount, v))
+}
+
+// OrderAmountLT applies the LT predicate on the "order_amount" field.
+func OrderAmountLT(v float64) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldLT(FieldOrderAmount, v))
+}
+
+// OrderAmountLTE applies the LTE predicate on the "order_amount" field.
+func OrderAmountLTE(v float64) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldLTE(FieldOrderAmount, v))
+}
+
+// OrderPlanIDEQ applies the EQ predicate on the "order_plan_id" field.
+func OrderPlanIDEQ(v int64) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldEQ(FieldOrderPlanID, v))
+}
+
+// OrderPlanIDNEQ applies the NEQ predicate on the "order_plan_id" field.
+func OrderPlanIDNEQ(v int64) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldNEQ(FieldOrderPlanID, v))
+}
+
+// OrderPlanIDIn applies the In predicate on the "order_plan_id" field.
+func OrderPlanIDIn(vs ...int64) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldIn(FieldOrderPlanID, vs...))
+}
+
+// OrderPlanIDNotIn applies the NotIn predicate on the "order_plan_id" field.
+func OrderPlanIDNotIn(vs ...int64) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldNotIn(FieldOrderPlanID, vs...))
+}
+
+// OrderPlanIDGT applies the GT predicate on the "order_plan_id" field.
+func OrderPlanIDGT(v int64) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldGT(FieldOrderPlanID, v))
+}
+
+// OrderPlanIDGTE applies the GTE predicate on the "order_plan_id" field.
+func OrderPlanIDGTE(v int64) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldGTE(FieldOrderPlanID, v))
+}
+
+// OrderPlanIDLT applies the LT predicate on the "order_plan_id" field.
+func OrderPlanIDLT(v int64) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldLT(FieldOrderPlanID, v))
+}
+
+// OrderPlanIDLTE applies the LTE predicate on the "order_plan_id" field.
+func OrderPlanIDLTE(v int64) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldLTE(FieldOrderPlanID, v))
+}
+
+// OrderPlanIDIsNil applies the IsNil predicate on the "order_plan_id" field.
+func OrderPlanIDIsNil() predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldIsNull(FieldOrderPlanID))
+}
+
+// OrderPlanIDNotNil applies the NotNil predicate on the "order_plan_id" field.
+func OrderPlanIDNotNil() predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldNotNull(FieldOrderPlanID))
+}
+
+// OrderPlanNameEQ applies the EQ predicate on the "order_plan_name" field.
+func OrderPlanNameEQ(v string) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldEQ(FieldOrderPlanName, v))
+}
+
+// OrderPlanNameNEQ applies the NEQ predicate on the "order_plan_name" field.
+func OrderPlanNameNEQ(v string) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldNEQ(FieldOrderPlanName, v))
+}
+
+// OrderPlanNameIn applies the In predicate on the "order_plan_name" field.
+func OrderPlanNameIn(vs ...string) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldIn(FieldOrderPlanName, vs...))
+}
+
+// OrderPlanNameNotIn applies the NotIn predicate on the "order_plan_name" field.
+func OrderPlanNameNotIn(vs ...string) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldNotIn(FieldOrderPlanName, vs...))
+}
+
+// OrderPlanNameGT applies the GT predicate on the "order_plan_name" field.
+func OrderPlanNameGT(v string) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldGT(FieldOrderPlanName, v))
+}
+
+// OrderPlanNameGTE applies the GTE predicate on the "order_plan_name" field.
+func OrderPlanNameGTE(v string) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldGTE(FieldOrderPlanName, v))
+}
+
+// OrderPlanNameLT applies the LT predicate on the "order_plan_name" field.
+func OrderPlanNameLT(v string) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldLT(FieldOrderPlanName, v))
+}
+
+// OrderPlanNameLTE applies the LTE predicate on the "order_plan_name" field.
+func OrderPlanNameLTE(v string) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldLTE(FieldOrderPlanName, v))
+}
+
+// OrderPlanNameContains applies the Contains predicate on the "order_plan_name" field.
+func OrderPlanNameContains(v string) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldContains(FieldOrderPlanName, v))
+}
+
+// OrderPlanNameHasPrefix applies the HasPrefix predicate on the "order_plan_name" field.
+func OrderPlanNameHasPrefix(v string) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldHasPrefix(FieldOrderPlanName, v))
+}
+
+// OrderPlanNameHasSuffix applies the HasSuffix predicate on the "order_plan_name" field.
+func OrderPlanNameHasSuffix(v string) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldHasSuffix(FieldOrderPlanName, v))
+}
+
+// OrderPlanNameEqualFold applies the EqualFold predicate on the "order_plan_name" field.
+func OrderPlanNameEqualFold(v string) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldEqualFold(FieldOrderPlanName, v))
+}
+
+// OrderPlanNameContainsFold applies the ContainsFold predicate on the "order_plan_name" field.
+func OrderPlanNameContainsFold(v string) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldContainsFold(FieldOrderPlanName, v))
 }
 
 // ValidityDaysEQ applies the EQ predicate on the "validity_days" field.

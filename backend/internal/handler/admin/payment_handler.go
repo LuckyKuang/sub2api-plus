@@ -36,7 +36,7 @@ func (h *PaymentHandler) GetDashboard(c *gin.Context) {
 			days = v
 		}
 	}
-	stats, err := h.paymentService.GetDashboardStats(c.Request.Context(), days)
+	stats, err := h.paymentService.GetDashboardStats(c.Request.Context(), days, c.Query("order_source"))
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -60,6 +60,7 @@ func (h *PaymentHandler) ListOrders(c *gin.Context) {
 		Page:        page,
 		PageSize:    pageSize,
 		Status:      c.Query("status"),
+		OrderSource: c.Query("order_source"),
 		OrderType:   c.Query("order_type"),
 		PaymentType: c.Query("payment_type"),
 		Keyword:     c.Query("keyword"),
@@ -134,6 +135,8 @@ type AdminPaymentOrderResult struct {
 	PayURL              *string    `json:"pay_url,omitempty"`
 	QRCode              *string    `json:"qr_code,omitempty"`
 	QRCodeImg           *string    `json:"qr_code_img,omitempty"`
+	OrderSource         string     `json:"order_source"`
+	PlanName            string     `json:"plan_name"`
 	OrderType           string     `json:"order_type"`
 	PlanID              *int64     `json:"plan_id,omitempty"`
 	SubscriptionGroupID *int64     `json:"subscription_group_id,omitempty"`
@@ -192,6 +195,8 @@ func sanitizeAdminPaymentOrderForResponse(order *dbent.PaymentOrder) *AdminPayme
 		PayURL:              order.PayURL,
 		QRCode:              order.QrCode,
 		QRCodeImg:           order.QrCodeImg,
+		OrderSource:         order.OrderSource,
+		PlanName:            order.PlanName,
 		OrderType:           order.OrderType,
 		PlanID:              order.PlanID,
 		SubscriptionGroupID: order.SubscriptionGroupID,
@@ -502,4 +507,9 @@ func (h *PaymentHandler) UpdateConfig(c *gin.Context) {
 		return
 	}
 	response.Success(c, gin.H{"message": "updated"})
+}
+
+// SetOnConfigUpdateCallback refreshes shared CSP and public configuration caches.
+func (h *PaymentHandler) SetOnConfigUpdateCallback(callback func()) {
+	h.configService.SetOnUpdateCallback(callback)
 }

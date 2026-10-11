@@ -30,6 +30,9 @@ export interface AdminPaymentConfig {
   product_name_prefix: string
   product_name_suffix: string
   help_image_url: string
+  redeem_purchase_enabled?: boolean
+  redeem_purchase_url?: string
+  redeem_purchase_mode?: 'iframe' | 'new_tab'
   help_text: string
 }
 
@@ -50,6 +53,9 @@ export interface UpdatePaymentConfigRequest {
   product_name_prefix?: string
   product_name_suffix?: string
   help_image_url?: string
+  redeem_purchase_enabled?: boolean
+  redeem_purchase_url?: string
+  redeem_purchase_mode?: 'iframe' | 'new_tab'
   help_text?: string
 }
 
@@ -77,9 +83,9 @@ export const adminPaymentAPI = {
   // ==================== Dashboard ====================
 
   /** Get payment dashboard statistics */
-  getDashboard(days?: number) {
+  getDashboard(days?: number, orderSource?: string) {
     return apiClient.get<DashboardStats>('/admin/payment/dashboard', {
-      params: days ? { days } : undefined
+      params: { days, order_source: orderSource || undefined }
     })
   },
 
@@ -96,6 +102,7 @@ export const adminPaymentAPI = {
     start_date?: string
     end_date?: string
     order_type?: string
+    order_source?: string
   }) {
     return apiClient.get<BasePaginationResponse<PaymentOrder>>('/admin/payment/orders', { params })
   },

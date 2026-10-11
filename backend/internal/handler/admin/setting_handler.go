@@ -407,6 +407,9 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		PaymentProductNamePrefix:                               paymentCfg.ProductNamePrefix,
 		PaymentProductNameSuffix:                               paymentCfg.ProductNameSuffix,
 		PaymentHelpImageURL:                                    paymentCfg.HelpImageURL,
+		PaymentRedeemPurchaseEnabled:                           paymentCfg.RedeemPurchaseEnabled,
+		PaymentRedeemPurchaseURL:                               paymentCfg.RedeemPurchaseURL,
+		PaymentRedeemPurchaseMode:                              paymentCfg.RedeemPurchaseMode,
 		PaymentHelpText:                                        paymentCfg.HelpText,
 		PaymentCancelRateLimitEnabled:                          paymentCfg.CancelRateLimitEnabled,
 		PaymentCancelRateLimitMax:                              paymentCfg.CancelRateLimitMax,
@@ -420,6 +423,7 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		ChannelMonitorMode:                   settings.ChannelMonitorMode,
 		ChannelMonitorDefaultIntervalSeconds: settings.ChannelMonitorDefaultIntervalSeconds,
 		ChannelMonitorHideThroughput:         settings.ChannelMonitorHideThroughput,
+		ChannelMonitorV1Enabled:              settings.ChannelMonitorV1Enabled,
 		ChannelMonitorShowQuota:              settings.ChannelMonitorShowQuota,
 		ChannelMonitorHideUserRanking:        settings.ChannelMonitorHideUserRanking,
 

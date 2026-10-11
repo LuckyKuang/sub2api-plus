@@ -23,7 +23,7 @@ func NewRedeemCodeRepository(client *dbent.Client) service.RedeemCodeRepository 
 }
 
 func (r *redeemCodeRepository) Create(ctx context.Context, code *service.RedeemCode) error {
-	created, err := r.client.RedeemCode.Create().
+	created, err := clientFromContext(ctx, r.client).RedeemCode.Create().
 		SetCode(code.Code).
 		SetType(code.Type).
 		SetValue(code.Value).
@@ -34,6 +34,11 @@ func (r *redeemCodeRepository) Create(ctx context.Context, code *service.RedeemC
 		SetNillableUsedBy(code.UsedBy).
 		SetNillableUsedAt(code.UsedAt).
 		SetNillableGroupID(code.GroupID).
+		SetGenerateOrder(code.GenerateOrder).
+		SetOrderCurrency(code.OrderCurrency).
+		SetOrderAmount(code.OrderAmount).
+		SetNillableOrderPlanID(code.OrderPlanID).
+		SetOrderPlanName(code.OrderPlanName).
 		Save(ctx)
 	if err == nil {
 		code.ID = created.ID
@@ -50,7 +55,7 @@ func (r *redeemCodeRepository) CreateBatch(ctx context.Context, codes []service.
 	builders := make([]*dbent.RedeemCodeCreate, 0, len(codes))
 	for i := range codes {
 		c := &codes[i]
-		b := r.client.RedeemCode.Create().
+		b := clientFromContext(ctx, r.client).RedeemCode.Create().
 			SetCode(c.Code).
 			SetType(c.Type).
 			SetValue(c.Value).
@@ -60,11 +65,16 @@ func (r *redeemCodeRepository) CreateBatch(ctx context.Context, codes []service.
 			SetNillableExpiresAt(c.ExpiresAt).
 			SetNillableUsedBy(c.UsedBy).
 			SetNillableUsedAt(c.UsedAt).
-			SetNillableGroupID(c.GroupID)
+			SetNillableGroupID(c.GroupID).
+			SetGenerateOrder(c.GenerateOrder).
+			SetOrderCurrency(c.OrderCurrency).
+			SetOrderAmount(c.OrderAmount).
+			SetNillableOrderPlanID(c.OrderPlanID).
+			SetOrderPlanName(c.OrderPlanName)
 		builders = append(builders, b)
 	}
 
-	return r.client.RedeemCode.CreateBulk(builders...).Exec(ctx)
+	return clientFromContext(ctx, r.client).RedeemCode.CreateBulk(builders...).Exec(ctx)
 }
 
 func (r *redeemCodeRepository) GetByID(ctx context.Context, id int64) (*service.RedeemCode, error) {
@@ -281,6 +291,13 @@ func (r *redeemCodeRepository) batchUpdate(ctx context.Context, client *dbent.Cl
 	if len(existing) != len(ids) {
 		return 0, service.ErrRedeemCodeNotFound
 	}
+	if fields.GroupID.Set {
+		for _, code := range existing {
+			if code.GenerateOrder {
+				return 0, service.ErrRedeemOrderSnapshotImmutable
+			}
+		}
+	}
 	if fields.TouchesUsedSensitiveFields() {
 		for _, code := range existing {
 			if code.Status == service.StatusUsed {
@@ -413,18 +430,23 @@ func redeemCodeEntityToService(m *dbent.RedeemCode) *service.RedeemCode {
 		return nil
 	}
 	out := &service.RedeemCode{
-		ID:           m.ID,
-		Code:         m.Code,
-		Type:         m.Type,
-		Value:        m.Value,
-		Status:       m.Status,
-		UsedBy:       m.UsedBy,
-		UsedAt:       m.UsedAt,
-		Notes:        derefString(m.Notes),
-		CreatedAt:    m.CreatedAt,
-		ExpiresAt:    m.ExpiresAt,
-		GroupID:      m.GroupID,
-		ValidityDays: m.ValidityDays,
+		ID:            m.ID,
+		GenerateOrder: m.GenerateOrder,
+		OrderCurrency: m.OrderCurrency,
+		OrderAmount:   m.OrderAmount,
+		OrderPlanID:   m.OrderPlanID,
+		OrderPlanName: m.OrderPlanName,
+		Code:          m.Code,
+		Type:          m.Type,
+		Value:         m.Value,
+		Status:        m.Status,
+		UsedBy:        m.UsedBy,
+		UsedAt:        m.UsedAt,
+		Notes:         derefString(m.Notes),
+		CreatedAt:     m.CreatedAt,
+		ExpiresAt:     m.ExpiresAt,
+		GroupID:       m.GroupID,
+		ValidityDays:  m.ValidityDays,
 	}
 	if m.Edges.User != nil {
 		out.User = userEntityToService(m.Edges.User)

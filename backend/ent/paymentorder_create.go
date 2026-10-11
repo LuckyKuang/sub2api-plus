@@ -169,6 +169,62 @@ func (_c *PaymentOrderCreate) SetNillableQrCodeImg(v *string) *PaymentOrderCreat
 	return _c
 }
 
+// SetOrderSource sets the "order_source" field.
+func (_c *PaymentOrderCreate) SetOrderSource(v string) *PaymentOrderCreate {
+	_c.mutation.SetOrderSource(v)
+	return _c
+}
+
+// SetNillableOrderSource sets the "order_source" field if the given value is not nil.
+func (_c *PaymentOrderCreate) SetNillableOrderSource(v *string) *PaymentOrderCreate {
+	if v != nil {
+		_c.SetOrderSource(*v)
+	}
+	return _c
+}
+
+// SetCurrency sets the "currency" field.
+func (_c *PaymentOrderCreate) SetCurrency(v string) *PaymentOrderCreate {
+	_c.mutation.SetCurrency(v)
+	return _c
+}
+
+// SetNillableCurrency sets the "currency" field if the given value is not nil.
+func (_c *PaymentOrderCreate) SetNillableCurrency(v *string) *PaymentOrderCreate {
+	if v != nil {
+		_c.SetCurrency(*v)
+	}
+	return _c
+}
+
+// SetPlanName sets the "plan_name" field.
+func (_c *PaymentOrderCreate) SetPlanName(v string) *PaymentOrderCreate {
+	_c.mutation.SetPlanName(v)
+	return _c
+}
+
+// SetNillablePlanName sets the "plan_name" field if the given value is not nil.
+func (_c *PaymentOrderCreate) SetNillablePlanName(v *string) *PaymentOrderCreate {
+	if v != nil {
+		_c.SetPlanName(*v)
+	}
+	return _c
+}
+
+// SetRedeemCodeID sets the "redeem_code_id" field.
+func (_c *PaymentOrderCreate) SetRedeemCodeID(v int64) *PaymentOrderCreate {
+	_c.mutation.SetRedeemCodeID(v)
+	return _c
+}
+
+// SetNillableRedeemCodeID sets the "redeem_code_id" field if the given value is not nil.
+func (_c *PaymentOrderCreate) SetNillableRedeemCodeID(v *int64) *PaymentOrderCreate {
+	if v != nil {
+		_c.SetRedeemCodeID(*v)
+	}
+	return _c
+}
+
 // SetOrderType sets the "order_type" field.
 func (_c *PaymentOrderCreate) SetOrderType(v string) *PaymentOrderCreate {
 	_c.mutation.SetOrderType(v)
@@ -539,6 +595,18 @@ func (_c *PaymentOrderCreate) defaults() {
 		v := paymentorder.DefaultOutTradeNo
 		_c.mutation.SetOutTradeNo(v)
 	}
+	if _, ok := _c.mutation.OrderSource(); !ok {
+		v := paymentorder.DefaultOrderSource
+		_c.mutation.SetOrderSource(v)
+	}
+	if _, ok := _c.mutation.Currency(); !ok {
+		v := paymentorder.DefaultCurrency
+		_c.mutation.SetCurrency(v)
+	}
+	if _, ok := _c.mutation.PlanName(); !ok {
+		v := paymentorder.DefaultPlanName
+		_c.mutation.SetPlanName(v)
+	}
 	if _, ok := _c.mutation.OrderType(); !ok {
 		v := paymentorder.DefaultOrderType
 		_c.mutation.SetOrderType(v)
@@ -628,6 +696,30 @@ func (_c *PaymentOrderCreate) check() error {
 	if v, ok := _c.mutation.PaymentTradeNo(); ok {
 		if err := paymentorder.PaymentTradeNoValidator(v); err != nil {
 			return &ValidationError{Name: "payment_trade_no", err: fmt.Errorf(`ent: validator failed for field "PaymentOrder.payment_trade_no": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.OrderSource(); !ok {
+		return &ValidationError{Name: "order_source", err: errors.New(`ent: missing required field "PaymentOrder.order_source"`)}
+	}
+	if v, ok := _c.mutation.OrderSource(); ok {
+		if err := paymentorder.OrderSourceValidator(v); err != nil {
+			return &ValidationError{Name: "order_source", err: fmt.Errorf(`ent: validator failed for field "PaymentOrder.order_source": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.Currency(); !ok {
+		return &ValidationError{Name: "currency", err: errors.New(`ent: missing required field "PaymentOrder.currency"`)}
+	}
+	if v, ok := _c.mutation.Currency(); ok {
+		if err := paymentorder.CurrencyValidator(v); err != nil {
+			return &ValidationError{Name: "currency", err: fmt.Errorf(`ent: validator failed for field "PaymentOrder.currency": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.PlanName(); !ok {
+		return &ValidationError{Name: "plan_name", err: errors.New(`ent: missing required field "PaymentOrder.plan_name"`)}
+	}
+	if v, ok := _c.mutation.PlanName(); ok {
+		if err := paymentorder.PlanNameValidator(v); err != nil {
+			return &ValidationError{Name: "plan_name", err: fmt.Errorf(`ent: validator failed for field "PaymentOrder.plan_name": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.OrderType(); !ok {
@@ -777,6 +869,22 @@ func (_c *PaymentOrderCreate) createSpec() (*PaymentOrder, *sqlgraph.CreateSpec)
 	if value, ok := _c.mutation.QrCodeImg(); ok {
 		_spec.SetField(paymentorder.FieldQrCodeImg, field.TypeString, value)
 		_node.QrCodeImg = &value
+	}
+	if value, ok := _c.mutation.OrderSource(); ok {
+		_spec.SetField(paymentorder.FieldOrderSource, field.TypeString, value)
+		_node.OrderSource = value
+	}
+	if value, ok := _c.mutation.Currency(); ok {
+		_spec.SetField(paymentorder.FieldCurrency, field.TypeString, value)
+		_node.Currency = value
+	}
+	if value, ok := _c.mutation.PlanName(); ok {
+		_spec.SetField(paymentorder.FieldPlanName, field.TypeString, value)
+		_node.PlanName = value
+	}
+	if value, ok := _c.mutation.RedeemCodeID(); ok {
+		_spec.SetField(paymentorder.FieldRedeemCodeID, field.TypeInt64, value)
+		_node.RedeemCodeID = &value
 	}
 	if value, ok := _c.mutation.OrderType(); ok {
 		_spec.SetField(paymentorder.FieldOrderType, field.TypeString, value)
@@ -1172,6 +1280,66 @@ func (u *PaymentOrderUpsert) UpdateQrCodeImg() *PaymentOrderUpsert {
 // ClearQrCodeImg clears the value of the "qr_code_img" field.
 func (u *PaymentOrderUpsert) ClearQrCodeImg() *PaymentOrderUpsert {
 	u.SetNull(paymentorder.FieldQrCodeImg)
+	return u
+}
+
+// SetOrderSource sets the "order_source" field.
+func (u *PaymentOrderUpsert) SetOrderSource(v string) *PaymentOrderUpsert {
+	u.Set(paymentorder.FieldOrderSource, v)
+	return u
+}
+
+// UpdateOrderSource sets the "order_source" field to the value that was provided on create.
+func (u *PaymentOrderUpsert) UpdateOrderSource() *PaymentOrderUpsert {
+	u.SetExcluded(paymentorder.FieldOrderSource)
+	return u
+}
+
+// SetCurrency sets the "currency" field.
+func (u *PaymentOrderUpsert) SetCurrency(v string) *PaymentOrderUpsert {
+	u.Set(paymentorder.FieldCurrency, v)
+	return u
+}
+
+// UpdateCurrency sets the "currency" field to the value that was provided on create.
+func (u *PaymentOrderUpsert) UpdateCurrency() *PaymentOrderUpsert {
+	u.SetExcluded(paymentorder.FieldCurrency)
+	return u
+}
+
+// SetPlanName sets the "plan_name" field.
+func (u *PaymentOrderUpsert) SetPlanName(v string) *PaymentOrderUpsert {
+	u.Set(paymentorder.FieldPlanName, v)
+	return u
+}
+
+// UpdatePlanName sets the "plan_name" field to the value that was provided on create.
+func (u *PaymentOrderUpsert) UpdatePlanName() *PaymentOrderUpsert {
+	u.SetExcluded(paymentorder.FieldPlanName)
+	return u
+}
+
+// SetRedeemCodeID sets the "redeem_code_id" field.
+func (u *PaymentOrderUpsert) SetRedeemCodeID(v int64) *PaymentOrderUpsert {
+	u.Set(paymentorder.FieldRedeemCodeID, v)
+	return u
+}
+
+// UpdateRedeemCodeID sets the "redeem_code_id" field to the value that was provided on create.
+func (u *PaymentOrderUpsert) UpdateRedeemCodeID() *PaymentOrderUpsert {
+	u.SetExcluded(paymentorder.FieldRedeemCodeID)
+	return u
+}
+
+// AddRedeemCodeID adds v to the "redeem_code_id" field.
+func (u *PaymentOrderUpsert) AddRedeemCodeID(v int64) *PaymentOrderUpsert {
+	u.Add(paymentorder.FieldRedeemCodeID, v)
+	return u
+}
+
+// ClearRedeemCodeID clears the value of the "redeem_code_id" field.
+func (u *PaymentOrderUpsert) ClearRedeemCodeID() *PaymentOrderUpsert {
+	u.SetNull(paymentorder.FieldRedeemCodeID)
 	return u
 }
 
@@ -1891,6 +2059,76 @@ func (u *PaymentOrderUpsertOne) UpdateQrCodeImg() *PaymentOrderUpsertOne {
 func (u *PaymentOrderUpsertOne) ClearQrCodeImg() *PaymentOrderUpsertOne {
 	return u.Update(func(s *PaymentOrderUpsert) {
 		s.ClearQrCodeImg()
+	})
+}
+
+// SetOrderSource sets the "order_source" field.
+func (u *PaymentOrderUpsertOne) SetOrderSource(v string) *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.SetOrderSource(v)
+	})
+}
+
+// UpdateOrderSource sets the "order_source" field to the value that was provided on create.
+func (u *PaymentOrderUpsertOne) UpdateOrderSource() *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.UpdateOrderSource()
+	})
+}
+
+// SetCurrency sets the "currency" field.
+func (u *PaymentOrderUpsertOne) SetCurrency(v string) *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.SetCurrency(v)
+	})
+}
+
+// UpdateCurrency sets the "currency" field to the value that was provided on create.
+func (u *PaymentOrderUpsertOne) UpdateCurrency() *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.UpdateCurrency()
+	})
+}
+
+// SetPlanName sets the "plan_name" field.
+func (u *PaymentOrderUpsertOne) SetPlanName(v string) *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.SetPlanName(v)
+	})
+}
+
+// UpdatePlanName sets the "plan_name" field to the value that was provided on create.
+func (u *PaymentOrderUpsertOne) UpdatePlanName() *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.UpdatePlanName()
+	})
+}
+
+// SetRedeemCodeID sets the "redeem_code_id" field.
+func (u *PaymentOrderUpsertOne) SetRedeemCodeID(v int64) *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.SetRedeemCodeID(v)
+	})
+}
+
+// AddRedeemCodeID adds v to the "redeem_code_id" field.
+func (u *PaymentOrderUpsertOne) AddRedeemCodeID(v int64) *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.AddRedeemCodeID(v)
+	})
+}
+
+// UpdateRedeemCodeID sets the "redeem_code_id" field to the value that was provided on create.
+func (u *PaymentOrderUpsertOne) UpdateRedeemCodeID() *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.UpdateRedeemCodeID()
+	})
+}
+
+// ClearRedeemCodeID clears the value of the "redeem_code_id" field.
+func (u *PaymentOrderUpsertOne) ClearRedeemCodeID() *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.ClearRedeemCodeID()
 	})
 }
 
@@ -2844,6 +3082,76 @@ func (u *PaymentOrderUpsertBulk) UpdateQrCodeImg() *PaymentOrderUpsertBulk {
 func (u *PaymentOrderUpsertBulk) ClearQrCodeImg() *PaymentOrderUpsertBulk {
 	return u.Update(func(s *PaymentOrderUpsert) {
 		s.ClearQrCodeImg()
+	})
+}
+
+// SetOrderSource sets the "order_source" field.
+func (u *PaymentOrderUpsertBulk) SetOrderSource(v string) *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.SetOrderSource(v)
+	})
+}
+
+// UpdateOrderSource sets the "order_source" field to the value that was provided on create.
+func (u *PaymentOrderUpsertBulk) UpdateOrderSource() *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.UpdateOrderSource()
+	})
+}
+
+// SetCurrency sets the "currency" field.
+func (u *PaymentOrderUpsertBulk) SetCurrency(v string) *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.SetCurrency(v)
+	})
+}
+
+// UpdateCurrency sets the "currency" field to the value that was provided on create.
+func (u *PaymentOrderUpsertBulk) UpdateCurrency() *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.UpdateCurrency()
+	})
+}
+
+// SetPlanName sets the "plan_name" field.
+func (u *PaymentOrderUpsertBulk) SetPlanName(v string) *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.SetPlanName(v)
+	})
+}
+
+// UpdatePlanName sets the "plan_name" field to the value that was provided on create.
+func (u *PaymentOrderUpsertBulk) UpdatePlanName() *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.UpdatePlanName()
+	})
+}
+
+// SetRedeemCodeID sets the "redeem_code_id" field.
+func (u *PaymentOrderUpsertBulk) SetRedeemCodeID(v int64) *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.SetRedeemCodeID(v)
+	})
+}
+
+// AddRedeemCodeID adds v to the "redeem_code_id" field.
+func (u *PaymentOrderUpsertBulk) AddRedeemCodeID(v int64) *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.AddRedeemCodeID(v)
+	})
+}
+
+// UpdateRedeemCodeID sets the "redeem_code_id" field to the value that was provided on create.
+func (u *PaymentOrderUpsertBulk) UpdateRedeemCodeID() *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.UpdateRedeemCodeID()
+	})
+}
+
+// ClearRedeemCodeID clears the value of the "redeem_code_id" field.
+func (u *PaymentOrderUpsertBulk) ClearRedeemCodeID() *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.ClearRedeemCodeID()
 	})
 }
 

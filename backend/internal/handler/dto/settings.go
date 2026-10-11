@@ -289,14 +289,17 @@ type SystemSettings struct {
 	PaymentSubscriptionUSDToCNYRate  float64  `json:"payment_subscription_usd_to_cny_rate"`
 	PaymentRechargeFeeRate           float64  `json:"payment_recharge_fee_rate"`
 	// 充值赠送阶梯与活动文案
-	PaymentRechargeBonusTiers  []RechargeBonusTier `json:"payment_recharge_bonus_tiers"`
-	PaymentRechargeBonusMode   string              `json:"payment_recharge_bonus_mode"`
-	PaymentRechargeBonusNotice string              `json:"payment_recharge_bonus_notice"`
-	PaymentLoadBalanceStrat    string              `json:"payment_load_balance_strategy"`
-	PaymentProductNamePrefix   string              `json:"payment_product_name_prefix"`
-	PaymentProductNameSuffix   string              `json:"payment_product_name_suffix"`
-	PaymentHelpImageURL        string              `json:"payment_help_image_url"`
-	PaymentHelpText            string              `json:"payment_help_text"`
+	PaymentRechargeBonusTiers    []RechargeBonusTier `json:"payment_recharge_bonus_tiers"`
+	PaymentRechargeBonusMode     string              `json:"payment_recharge_bonus_mode"`
+	PaymentRechargeBonusNotice   string              `json:"payment_recharge_bonus_notice"`
+	PaymentLoadBalanceStrat      string              `json:"payment_load_balance_strategy"`
+	PaymentProductNamePrefix     string              `json:"payment_product_name_prefix"`
+	PaymentProductNameSuffix     string              `json:"payment_product_name_suffix"`
+	PaymentHelpImageURL          string              `json:"payment_help_image_url"`
+	PaymentRedeemPurchaseEnabled bool                `json:"payment_redeem_purchase_enabled"`
+	PaymentRedeemPurchaseURL     string              `json:"payment_redeem_purchase_url"`
+	PaymentRedeemPurchaseMode    string              `json:"payment_redeem_purchase_mode"`
+	PaymentHelpText              string              `json:"payment_help_text"`
 
 	// Cancel rate limit
 	PaymentCancelRateLimitEnabled bool   `json:"payment_cancel_rate_limit_enabled"`
@@ -323,6 +326,7 @@ type SystemSettings struct {
 	ChannelMonitorMode                   string `json:"channel_monitor_mode"`
 	ChannelMonitorDefaultIntervalSeconds int    `json:"channel_monitor_default_interval_seconds"`
 	ChannelMonitorHideThroughput         bool   `json:"channel_monitor_hide_throughput"`
+	ChannelMonitorV1Enabled              bool   `json:"channel_monitor_v1_enabled"`
 	ChannelMonitorShowQuota              bool   `json:"channel_monitor_show_quota"`
 	ChannelMonitorHideUserRanking        bool   `json:"channel_monitor_hide_user_ranking"`
 
@@ -448,6 +452,7 @@ type PublicSettings struct {
 	ChannelMonitorMode                   string `json:"channel_monitor_mode"`
 	ChannelMonitorDefaultIntervalSeconds int    `json:"channel_monitor_default_interval_seconds"`
 	ChannelMonitorHideThroughput         bool   `json:"channel_monitor_hide_throughput"`
+	ChannelMonitorV1Enabled              bool   `json:"channel_monitor_v1_enabled"`
 	ChannelMonitorShowQuota              bool   `json:"channel_monitor_show_quota"`
 	ChannelMonitorHideUserRanking        bool   `json:"channel_monitor_hide_user_ranking"`
 

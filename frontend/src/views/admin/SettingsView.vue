@@ -6891,6 +6891,10 @@
             </div>
 
             <div v-if="form.channel_monitor_enabled" class="space-y-5">
+              <div v-if="form.channel_monitor_mode === 'v3'" class="flex items-center justify-between gap-4">
+                <div><label class="input-label">{{ t('featureExtensions.probesEnabled') }}</label><p class="text-xs text-gray-500">{{ t('featureExtensions.probesHint') }}</p></div>
+                <Toggle v-model="form.channel_monitor_v1_enabled" />
+              </div>
               <div>
                 <label class="input-label">
                   {{ t('admin.settings.features.channelMonitor.mode') }}
@@ -8123,6 +8127,15 @@
                   </div>
                 </div>
               </template>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"><h2 class="text-lg font-semibold">{{ t('featureExtensions.purchaseSettings') }}</h2><p class="mt-1 text-sm text-gray-500">{{ t('featureExtensions.purchaseSettingsHint') }}</p></div>
+            <div class="space-y-4 p-6">
+              <div class="flex items-center justify-between"><label class="input-label">{{ t('featureExtensions.purchaseEnabled') }}</label><Toggle v-model="form.payment_redeem_purchase_enabled" /></div>
+              <div><label class="input-label" for="redeem-purchase-url">{{ t('featureExtensions.purchaseURL') }}</label><input id="redeem-purchase-url" v-model="form.payment_redeem_purchase_url" type="url" class="input" placeholder="https://" /></div>
+              <div><label class="input-label">{{ t('featureExtensions.purchaseMode') }}</label><Select v-model="form.payment_redeem_purchase_mode" :options="[{ value: 'new_tab', label: t('featureExtensions.newTab') }, { value: 'iframe', label: t('featureExtensions.iframe') }]" /></div>
             </div>
           </div>
 
@@ -9580,6 +9593,7 @@ type SettingsForm = Omit<
   /** Form always binds a concrete boolean (SystemSettings marks this optional). */
   channel_monitor_hide_throughput: boolean;
   channel_monitor_show_quota: boolean;
+  channel_monitor_v1_enabled: boolean;
   channel_monitor_hide_user_ranking: boolean;
   smtp_password: string;
   turnstile_secret_key: string;
@@ -9700,6 +9714,9 @@ const form = reactive<SettingsForm>({
   payment_enabled_types: [],
   payment_help_image_url: "",
   payment_help_text: "",
+  payment_redeem_purchase_enabled: false,
+  payment_redeem_purchase_url: "",
+  payment_redeem_purchase_mode: "new_tab" as "new_tab" | "iframe",
   payment_product_name_prefix: "",
   payment_product_name_suffix: "",
   payment_load_balance_strategy: "round-robin",
@@ -9922,6 +9939,7 @@ const form = reactive<SettingsForm>({
   channel_monitor_default_interval_seconds: 60,
   channel_monitor_hide_throughput: false,
   channel_monitor_show_quota: false,
+  channel_monitor_v1_enabled: false,
   channel_monitor_hide_user_ranking: false,
   // Available Channels feature switch
   available_channels_enabled: false,
@@ -11041,6 +11059,10 @@ async function loadSettings() {
     form.channel_monitor_hide_throughput = Boolean(
       settings.channel_monitor_hide_throughput
     );
+    form.payment_redeem_purchase_enabled = Boolean(settings.payment_redeem_purchase_enabled);
+    form.payment_redeem_purchase_url = settings.payment_redeem_purchase_url || "";
+    form.payment_redeem_purchase_mode = settings.payment_redeem_purchase_mode === "iframe" ? "iframe" : "new_tab";
+    form.channel_monitor_v1_enabled = Boolean(settings.channel_monitor_v1_enabled);
     form.channel_monitor_show_quota = Boolean(
       settings.channel_monitor_show_quota
     );
@@ -11687,6 +11709,9 @@ async function saveSettings() {
       payment_product_name_suffix: form.payment_product_name_suffix,
       payment_help_image_url: form.payment_help_image_url,
       payment_help_text: form.payment_help_text,
+      payment_redeem_purchase_enabled: form.payment_redeem_purchase_enabled,
+      payment_redeem_purchase_url: form.payment_redeem_purchase_url,
+      payment_redeem_purchase_mode: form.payment_redeem_purchase_mode,
       payment_cancel_rate_limit_enabled: form.payment_cancel_rate_limit_enabled,
       payment_cancel_rate_limit_max:
         Number(form.payment_cancel_rate_limit_max) || 10,
@@ -11748,6 +11773,7 @@ async function saveSettings() {
         Number(form.channel_monitor_default_interval_seconds) || 60,
       channel_monitor_hide_throughput: Boolean(form.channel_monitor_hide_throughput),
       channel_monitor_show_quota: Boolean(form.channel_monitor_show_quota),
+      channel_monitor_v1_enabled: Boolean(form.channel_monitor_v1_enabled),
       channel_monitor_hide_user_ranking: Boolean(form.channel_monitor_hide_user_ranking),
       // Available Channels feature switch
       available_channels_enabled: form.available_channels_enabled,

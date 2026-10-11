@@ -18,6 +18,12 @@ type RedeemCode struct {
 	CreatedAt time.Time
 	ExpiresAt *time.Time
 
+	GenerateOrder bool
+	OrderCurrency string
+	OrderPlanID   *int64
+	OrderAmount   float64
+	OrderPlanName string
+
 	GroupID      *int64
 	ValidityDays int
 
