@@ -1,44 +1,39 @@
-Sub2API Plus v0.2.11+custom.002
+Sub2API Plus v0.2.15+custom.002
 
 ## Highlights
 
-- Add administrator read-only user assistance: the ordinary user pages, menus, feature gates and GET handlers are reused for the selected user, every assisted read writes an `admin.support.read` audit entry, and all mutations plus image submission, redemption and authentication binding stay disabled.
-- Add the request-driven Channel Monitor V3 service status mode. It derives authorized platform and incident states from real user request outcomes in `usage_logs` and `ops_error_logs`, sends no probes, and leaves the existing V1 probe and V2 aggregation modes and their saved history untouched.
-- Add the authorized available-channel model catalog: models are aggregated per platform and model ID with effective price ranges and per-group quote details, including context, media, service-tier and dynamic pricing conditions, resolved through the same billing path that preserves explicit zero rates.
-- Change usage throughput to request-average TPS over total duration, excluding image and audio output tokens while keeping the first-token, total-duration and TPS labels and explaining unavailable or incomplete results.
-- Restore integrated searchable, checkbox and rich-option dropdown controls while keeping native selects for plain choices, and repair monitor mode switching, saved-setting synchronization and support-page key status translations.
+- Combine optional V1 active probes with V3 service status. Probe outcomes participate directly in V3 state and incident decisions while users see only the V3 monitor; the separate V1 user monitor remains available only in V1 mode. Probe requests follow the same credential-owner outbound identity contract as platform requests.
+- Show deduplicated model status within each platform, without group or monitor names in the user-facing model and incident views. Healthy traffic cannot hide a failed probe.
+- Improve the available-channel catalog with at most five cards per row, wider spacing and rounder corners. Service tiers such as Fast/priority, Flex and Ultrafast are collapsed by default and can be expanded independently.
+- Add an optional external redeem-code purchase entry in payment settings. Recharge/subscription selection pages show its card at the bottom, with a right-aligned purchase action; operators choose an embedded page or a new tab. The built-in payment switch still controls recharge/subscription navigation.
+- Let administrators opt balance and subscription redeem codes into order creation. Redemption atomically grants the benefit and creates a completed order, with separate payment/redemption source labels and filters and the existing balance/subscription order types.
 
 ## Changed
 
-- `GET /api/v1/channels/available` keeps its legacy channel array; `view=catalog` selects the new grouped catalog under the same authentication, feature gate and success envelope.
-- Channel monitor keeps V1, V2 and V3 as separate pages with independent configuration; the saved mode is reloaded on entry, on focus and on visibility change, and V1/V2 user visibility and authorization are preserved.
-- Administrator assistance reads are registered explicitly as GET routes under `/api/v1/admin/support/users/:user_id`. Assisted keys, profile, usage, subscriptions, payments, redeem history, images and monitors reuse the user handlers and DTOs.
-- The assisted `/usage/dashboard/api-keys-usage` read uses GET query parameters instead of a business POST, and continued ownership checks for the target user's keys.
-- Locale validation now also checks dynamic API enum values and interpolated UI labels for both shipped locales.
+- Balance redemption-order currencies are CNY and USD, defaulting to CNY, with no exchange-rate conversion: a face value of 100 and CNY order currency credits 100 USD and records a 100 CNY order.
+- Subscription redemption codes freeze the selected plan's price, currency, name, group and duration when generated. Later plan price changes or deletion do not rewrite those snapshots.
+- Payment and redemption orders share order management and statistics; totals remain separate per currency. Redemption orders have no provider payment, recharge promotion, fee or refund, including forced administrator refunds.
+- New-tab purchases use opener isolation. Embedded purchases use a protected, sandboxed page and the configured origin in CSP, without adding application credentials or user identifiers to the third-party URL.
 
 ## Fixed
 
-- Restore missing API key status translations and previously untranslated user-page labels.
-- Stop stale cached public settings from overwriting the just-saved monitor mode, restore the original V1/V2/V3 mode buttons, and fix key-group layout, monitor status labels and Escape handling.
-- Preserve the administrator's own JWT, refresh token and persisted login profile while assisting a user, and keep internal authentication material out of assisted responses.
+- Align the purchase button beside the purchase-card title and description, and label it "Go to purchase" / "前往购买".
+- Use the shared plan-duration formatter in subscription administration so translated day/week/month labels replace raw translation keys.
+- Invalidate subscription entitlement caches only after the redemption transaction commits; failed order or audit writes leave the code and benefits unchanged.
 
 ## Compatibility and migration
 
-Apply SQL migration `272_channel_monitor_v3.sql` before starting the new image. It only creates the `channel_monitor_v3_config`, `channel_monitor_v3_facts`, `channel_monitor_v3_states`, `channel_monitor_v3_incidents` and `channel_monitor_v3_watermark` tables plus their indexes, and is safe for an existing database; no existing table, column or row is modified. Back up persistent data before upgrading.
+Upgrade applies forward-only migrations `282_redeem_order_snapshots.sql` and `283_channel_monitor_v3_probe_sources.sql`. Existing redeem codes default to no order, existing payment orders retain their payment source and currency resolution, and existing V3 observations keep their history and incident IDs as request observations.
 
-The channel monitor feature keeps its previous default mode, so an upgrade does not change monitoring behavior by itself. Selecting V3 is an explicit operator action; V3 does not backfill history from periods when it was disabled, and incident silence never resolves an incident.
-
-Usage tables and exports still read the same stored timestamps, but the throughput column is now a request-average TPS over total duration. Numbers therefore change after the upgrade for the same historical rows; image and audio output tokens no longer count toward it. No stored usage data is rewritten.
-
-Assisted administrator reads are read-only by design: editing dialogs open for inspection with disabled submits, and no endpoint accepts an assisted write. Other gateway, user and administrator APIs, the security-audit boundary and compiled outbound identity fingerprints are unchanged.
+Extra V1 probes in V3 and the external purchase entry default to disabled. Existing monitoring mode and the built-in payment navigation gate are preserved. Only balance and subscription codes support optional order creation; internal payment-fulfillment codes remain opted out. Redemption orders are non-refundable and receive no recharge promotions.
 
 ## Known issues
 
-Channel Monitor V3 only shows terminal outcomes of real requests, so a group without recent traffic, and every model below the configured minimum sample count, remains unknown rather than healthy. Requests whose final outcome was not recorded with a shared request ID are counted per log row instead of being deduplicated.
+Third-party sites can prevent iframe embedding through their own browser security policies; the embedded purchase page provides a new-tab option.
 
-Completing an assisted read of external embedded sites does not create a user session or forward the administrator's JWT, so those sites keep their own external login state. Assisted images are downloaded with the target user's key ownership checks and are not marked as downloaded.
+V3 treats a missing probe or one older than five minutes as unknown, so longer probe intervals can leave unknown gaps. A probe targeting this application's gateway can also produce a request observation; the two sources are combined for status, without claiming deduplicated business-request counts across sources.
 
 ## Upstream baseline
 
-Official release: v0.2.11
-Official commit: 96f4c115c9749078f90cbf210a01d39baf3f53b6
+Official release: v0.2.15
+Official commit: f2669c8cf62555cd92389b3f55920e9e6e7c6ff2
