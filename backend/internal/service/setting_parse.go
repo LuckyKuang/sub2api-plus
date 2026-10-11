@@ -192,6 +192,7 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyChannelMonitorMode:                   ChannelMonitorModeV1,
 		SettingKeyChannelMonitorDefaultIntervalSeconds: "60",
 		SettingKeyChannelMonitorHideThroughput:         "true",
+		SettingKeyChannelMonitorV1Enabled:              "false",
 		SettingKeyChannelMonitorShowQuota:              "false",
 		SettingKeyChannelMonitorHideUserRanking:        "false",
 
@@ -833,6 +834,7 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	result.ChannelMonitorHideThroughput = !isFalseSettingValue(settings[SettingKeyChannelMonitorHideThroughput])
 	// 配额展示默认关闭且 fail-closed：仅字面 "true" 视为开启
 	// （与 setting_public.go 公开读取路径保持一致）。
+	result.ChannelMonitorV1Enabled = settings[SettingKeyChannelMonitorV1Enabled] == "true"
 	result.ChannelMonitorShowQuota = settings[SettingKeyChannelMonitorShowQuota] == "true"
 	result.ChannelMonitorHideUserRanking = isTrueSettingValue(settings[SettingKeyChannelMonitorHideUserRanking])
 

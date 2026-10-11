@@ -43,6 +43,9 @@ export interface PaymentConfig {
   subscription_usd_to_cny_rate: number
   enabled_payment_types: PaymentType[]
   help_image_url: string
+  redeem_purchase_enabled?: boolean
+  redeem_purchase_url?: string
+  redeem_purchase_mode?: 'iframe' | 'new_tab'
   help_text: string
   stripe_publishable_key: string
 }
@@ -83,6 +86,9 @@ export interface CheckoutInfoResponse {
   recharge_bonus_mode?: string
   /** 充值页金额区顶部的 Markdown 活动文案；空 = 不展示 */
   recharge_bonus_notice?: string
+  redeem_purchase_enabled?: boolean
+  redeem_purchase_url?: string
+  redeem_purchase_mode?: 'iframe' | 'new_tab'
   help_text: string
   help_image_url: string
   stripe_publishable_key: string
@@ -106,6 +112,8 @@ export interface PaymentOrder {
   payment_type: string
   out_trade_no: string
   status: OrderStatus
+  order_source?: 'payment' | 'redeem'
+  plan_name?: string
   order_type: OrderType
   created_at: string
   expires_at: string

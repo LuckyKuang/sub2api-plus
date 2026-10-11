@@ -123,30 +123,32 @@ func BuildChannelMonitorV3Snapshot(data *ChannelMonitorV3Data, cfg ChannelMonito
 	result := &ChannelMonitorV3Snapshot{ComputedAt: now, DataThrough: data.DataThrough, Platforms: []ChannelMonitorV3Platform{}, Incidents: []ChannelMonitorV3Incident{}, Summary: ChannelMonitorV3Summary{Status: "unknown"}}
 	result.MonitoringEnabled = len(cfg.EnabledPlatforms()) > 0
 	current, totals := map[string]ChannelMonitorV3Fact{}, map[string]ChannelMonitorV3Fact{}
+	probeEvidence := map[string]bool{}
 	models := map[string]ChannelMonitorV3Fact{}
 	catalog := map[string]bool{}
 	scopes := map[string]bool{}
 	for _, item := range data.Catalog {
 		if cfg.PlatformEnabled(item.Platform) && (filter == "" || item.Platform == filter) {
 			catalog[item.Platform] = true
-			scopes[ChannelMonitorV3Scope(item.Platform, item.GroupID, "")] = true
+			scopes[item.Scope()] = true
 		}
 	}
 	for _, fact := range data.KnownModels {
-		if scopes[ChannelMonitorV3Scope(fact.Platform, fact.GroupID, "")] {
-			models[ChannelMonitorV3Scope(fact.Platform, fact.GroupID, fact.Model)] = fact
+		if scopes[fact.Scope("")] {
+			models[fact.Scope(fact.Model)] = fact
 		}
 	}
 	for _, fact := range data.Current {
-		if !scopes[ChannelMonitorV3Scope(fact.Platform, fact.GroupID, "")] {
+		if !scopes[fact.Scope("")] {
 			continue
 		}
 		value := current[fact.Platform]
 		value.Merge(fact)
 		current[fact.Platform] = value
-		key := ChannelMonitorV3Scope(fact.Platform, fact.GroupID, fact.Model)
+		key := fact.Scope(fact.Model)
 		value = models[key]
 		value.Platform, value.GroupID, value.GroupName, value.Model = fact.Platform, fact.GroupID, fact.GroupName, fact.Model
+		value.SourceKind, value.MonitorID = fact.SourceKind, fact.MonitorID
 		value.Merge(fact)
 		models[key] = value
 	}
@@ -154,6 +156,9 @@ func BuildChannelMonitorV3Snapshot(data *ChannelMonitorV3Data, cfg ChannelMonito
 		value := totals[fact.Platform]
 		value.Merge(fact)
 		totals[fact.Platform] = value
+		if fact.Source() == "probe" && fact.Success+fact.Failures > 0 {
+			probeEvidence[fact.Platform] = true
+		}
 	}
 	stale := data.DataThrough == nil || data.DataThrough.Before(now.Add(-3*time.Minute))
 	for name := range catalog {
@@ -164,9 +169,12 @@ func BuildChannelMonitorV3Snapshot(data *ChannelMonitorV3Data, cfg ChannelMonito
 		}
 		item := ChannelMonitorV3Platform{Platform: name, Status: status, Models: []ChannelMonitorV3Model{}, Timeline: []ChannelMonitorV3Timeline{}}
 		total := totals[name]
-		if n := total.Success + total.Failures; n >= cfg.MinimumSamples {
+		n := total.Success + total.Failures
+		if n > 0 && (n >= cfg.MinimumSamples || probeEvidence[name]) {
 			rate := float64(total.Success) / float64(n)
 			item.SuccessRate = &rate
+		}
+		if n >= cfg.MinimumSamples {
 			item.TTFTP50Ms = total.P50()
 		}
 		last := total.LastRequest
@@ -197,7 +205,7 @@ func BuildChannelMonitorV3Snapshot(data *ChannelMonitorV3Data, cfg ChannelMonito
 			if state := data.States[key]; state.Incident != nil && (health == "unknown" || health == "insufficient") {
 				uncertainActive = true
 			}
-			item.Models = append(item.Models, ChannelMonitorV3Model{GroupID: model.GroupID, GroupName: model.GroupName, Model: model.Model, Status: health})
+			item.Models = append(item.Models, ChannelMonitorV3Model{SourceKind: model.Source(), MonitorID: model.Monitor(), GroupID: model.GroupID, GroupName: model.GroupName, Model: model.Model, Status: health})
 			if (item.Status == "normal" || item.Status == "degraded" || item.Status == "recovering") && (health == "outage" || health == "partial") {
 				item.Status = "partial"
 			}
@@ -208,6 +216,7 @@ func BuildChannelMonitorV3Snapshot(data *ChannelMonitorV3Data, cfg ChannelMonito
 				item.Status = "recovering"
 			}
 		}
+		item.Status = CombineChannelMonitorV3Scopes(item.Models, item.Status)
 		if uncertainActive && (item.Status == "normal" || item.Status == "recovering") {
 			item.Status = "unknown"
 		}
@@ -222,6 +231,12 @@ func BuildChannelMonitorV3Snapshot(data *ChannelMonitorV3Data, cfg ChannelMonito
 			}
 		}
 		sort.Slice(item.Models, func(i, j int) bool {
+			if item.Models[i].SourceKind != item.Models[j].SourceKind {
+				return item.Models[i].SourceKind < item.Models[j].SourceKind
+			}
+			if item.Models[i].MonitorID != nil && item.Models[j].MonitorID != nil && *item.Models[i].MonitorID != *item.Models[j].MonitorID {
+				return *item.Models[i].MonitorID < *item.Models[j].MonitorID
+			}
 			if item.Models[i].GroupID != item.Models[j].GroupID {
 				return item.Models[i].GroupID < item.Models[j].GroupID
 			}
@@ -229,18 +244,30 @@ func BuildChannelMonitorV3Snapshot(data *ChannelMonitorV3Data, cfg ChannelMonito
 		})
 		start := now.Truncate(time.Minute).Add(-window)
 		bucket := window / 48
-		history := map[int64]ChannelMonitorV3Fact{}
+		history := map[int64]map[string]ChannelMonitorV3Fact{}
 		for _, point := range data.History {
 			if point.Platform == name {
 				key := point.Bucket.Unix()
-				value := history[key]
+				if history[key] == nil {
+					history[key] = map[string]ChannelMonitorV3Fact{}
+				}
+				value := history[key][point.Scope(point.Model)]
+				value.SourceKind = point.SourceKind
 				value.Merge(point)
-				history[key] = value
+				history[key][point.Scope(point.Model)] = value
 			}
 		}
 		for i := 0; i < 48; i++ {
 			at := start.Add(time.Duration(i) * bucket)
-			item.Timeline = append(item.Timeline, ChannelMonitorV3Timeline{At: at, Status: ChannelMonitorV3Health(history[at.Unix()], cfg)})
+			histModels := []ChannelMonitorV3Model{}
+			pooled := ChannelMonitorV3Fact{}
+			for _, fact := range history[at.Unix()] {
+				histModels = append(histModels, ChannelMonitorV3Model{Status: ChannelMonitorV3Health(fact, cfg)})
+				if fact.SourceKind != "probe" {
+					pooled.Merge(fact)
+				}
+			}
+			item.Timeline = append(item.Timeline, ChannelMonitorV3Timeline{At: at, Status: CombineChannelMonitorV3Scopes(histModels, ChannelMonitorV3Health(pooled, cfg))})
 		}
 		result.Platforms = append(result.Platforms, item)
 		switch item.Status {
@@ -256,7 +283,7 @@ func BuildChannelMonitorV3Snapshot(data *ChannelMonitorV3Data, cfg ChannelMonito
 	}
 	sort.Slice(result.Platforms, func(i, j int) bool { return result.Platforms[i].Platform < result.Platforms[j].Platform })
 	for _, event := range data.Incidents {
-		if scopes[ChannelMonitorV3Scope(event.Platform, event.GroupID, "")] {
+		if scopes[event.Scope()] {
 			result.Incidents = append(result.Incidents, event)
 			if event.ResolvedAt == nil {
 				result.Summary.ActiveEvents++
@@ -280,4 +307,48 @@ func BuildChannelMonitorV3Snapshot(data *ChannelMonitorV3Data, cfg ChannelMonito
 		result.Summary.Status = "normal"
 	}
 	return result
+}
+
+// An outage requires all observed scopes to fail. Healthy traffic never masks
+// a failed probe, and a successful probe never masks failing request traffic.
+func CombineChannelMonitorV3Scopes(models []ChannelMonitorV3Model, fallback string) string {
+	known, outages, affected, degraded, recovering := 0, 0, false, false, false
+	for _, m := range models {
+		switch m.Status {
+		case "outage":
+			known++
+			outages++
+			affected = true
+		case "partial":
+			known++
+			affected = true
+		case "degraded":
+			known++
+			degraded = true
+		case "normal":
+			known++
+		case "recovering":
+			known++
+			recovering = true
+		}
+	}
+	if known == 0 {
+		return fallback
+	}
+	if outages == known {
+		return "outage"
+	}
+	if affected {
+		return "partial"
+	}
+	if fallback == "outage" || fallback == "partial" {
+		return "partial"
+	}
+	if degraded || fallback == "degraded" {
+		return "degraded"
+	}
+	if recovering {
+		return "recovering"
+	}
+	return "normal"
 }

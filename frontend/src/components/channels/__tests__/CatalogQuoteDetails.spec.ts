@@ -39,16 +39,32 @@ describe('catalog price details', () => {
     expect(w.find('table').exists()).toBe(false)
     w.unmount()
   })
-  it('shows priority, flex and official reference tables immediately without disclosures', () => {
+  it('collapses each service tier by default while keeping official prices visible', async () => {
     const w = mount(CatalogQuoteDetails, { props: {
       group: group(), offer: offer('token', {
-        service_tier_pricing: [{ name: 'priority', pricing: pricing(6e-6) }, { name: 'flex', pricing: pricing(1e-6) }],
+        service_tier_pricing: [{ name: 'priority', pricing: pricing(6e-6) }, { name: 'flex', pricing: pricing(1e-6) }, { name: 'ultrafast', pricing: pricing(9e-6) }],
         official_pricing: { input_price: 3e-6, output_price: 15e-6, cache_write_price: null, cache_read_price: null }
       }), rateUnavailable: false
     } })
-    expect(w.findAll('table')).toHaveLength(4)
-    expect(w.findAll('table').every(table => table.isVisible())).toBe(true)
-    expect(w.find('details, summary').exists()).toBe(false)
+    const disclosures = w.findAll('details')
+    expect(disclosures).toHaveLength(3)
+    expect(disclosures.every(d => !(d.element as HTMLDetailsElement).open)).toBe(true)
+    expect(w.findAll('table').filter(table => table.isVisible())).toHaveLength(2)
+    await disclosures[0].get('summary').trigger('click')
+    expect(disclosures[0].get('table').isVisible()).toBe(true)
+    expect(disclosures[0].get('table').text()).toContain('$6')
+    expect((disclosures[1].element as HTMLDetailsElement).open).toBe(false)
+    await disclosures[1].get('summary').trigger('click')
+    expect(disclosures[0].get('table').isVisible()).toBe(true)
+    expect(disclosures[1].get('table').isVisible()).toBe(true)
+    expect(disclosures[1].get('table').text()).toContain('$1')
+    expect((disclosures[2].element as HTMLDetailsElement).open).toBe(false)
+    await disclosures[2].get('summary').trigger('click')
+    expect(disclosures[2].get('table').text()).toContain('$9')
+    await disclosures[0].get('summary').trigger('click')
+    expect(disclosures[0].get('table').isVisible()).toBe(false)
+    expect(disclosures[1].get('table').isVisible()).toBe(true)
+    expect(disclosures[2].get('table').isVisible()).toBe(true)
     expect(w.text()).toContain('tiers.priority')
     expect(w.text()).toContain('tiers.flex')
     expect(w.text()).toContain('catalog.official')

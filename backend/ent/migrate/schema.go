@@ -1142,6 +1142,10 @@ var (
 		{Name: "pay_url", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
 		{Name: "qr_code", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
 		{Name: "qr_code_img", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "order_source", Type: field.TypeString, Size: 20, Default: "payment"},
+		{Name: "currency", Type: field.TypeString, Size: 3, Default: ""},
+		{Name: "plan_name", Type: field.TypeString, Size: 255, Default: ""},
+		{Name: "redeem_code_id", Type: field.TypeInt64, Unique: true, Nullable: true},
 		{Name: "order_type", Type: field.TypeString, Size: 20, Default: "balance"},
 		{Name: "plan_id", Type: field.TypeInt64, Nullable: true},
 		{Name: "subscription_group_id", Type: field.TypeInt64, Nullable: true},
@@ -1177,7 +1181,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "payment_orders_users_payment_orders",
-				Columns:    []*schema.Column{PaymentOrdersColumns[40]},
+				Columns:    []*schema.Column{PaymentOrdersColumns[44]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -1194,37 +1198,42 @@ var (
 			{
 				Name:    "paymentorder_user_id",
 				Unique:  false,
-				Columns: []*schema.Column{PaymentOrdersColumns[40]},
+				Columns: []*schema.Column{PaymentOrdersColumns[44]},
 			},
 			{
 				Name:    "paymentorder_status",
 				Unique:  false,
-				Columns: []*schema.Column{PaymentOrdersColumns[22]},
+				Columns: []*schema.Column{PaymentOrdersColumns[26]},
 			},
 			{
 				Name:    "paymentorder_expires_at",
 				Unique:  false,
-				Columns: []*schema.Column{PaymentOrdersColumns[30]},
+				Columns: []*schema.Column{PaymentOrdersColumns[34]},
 			},
 			{
 				Name:    "paymentorder_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{PaymentOrdersColumns[38]},
+				Columns: []*schema.Column{PaymentOrdersColumns[42]},
 			},
 			{
 				Name:    "paymentorder_paid_at",
 				Unique:  false,
-				Columns: []*schema.Column{PaymentOrdersColumns[31]},
+				Columns: []*schema.Column{PaymentOrdersColumns[35]},
 			},
 			{
 				Name:    "paymentorder_payment_type_paid_at",
 				Unique:  false,
-				Columns: []*schema.Column{PaymentOrdersColumns[10], PaymentOrdersColumns[31]},
+				Columns: []*schema.Column{PaymentOrdersColumns[10], PaymentOrdersColumns[35]},
 			},
 			{
 				Name:    "paymentorder_order_type",
 				Unique:  false,
-				Columns: []*schema.Column{PaymentOrdersColumns[15]},
+				Columns: []*schema.Column{PaymentOrdersColumns[19]},
+			},
+			{
+				Name:    "paymentorder_order_source_paid_at",
+				Unique:  false,
+				Columns: []*schema.Column{PaymentOrdersColumns[15], PaymentOrdersColumns[35]},
 			},
 		},
 	}
@@ -1471,6 +1480,11 @@ var (
 		{Name: "notes", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
 		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
 		{Name: "expires_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "generate_order", Type: field.TypeBool, Default: false},
+		{Name: "order_currency", Type: field.TypeString, Size: 3, Default: "CNY"},
+		{Name: "order_amount", Type: field.TypeFloat64, Default: 0, SchemaType: map[string]string{"postgres": "decimal(20,2)"}},
+		{Name: "order_plan_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "order_plan_name", Type: field.TypeString, Size: 255, Default: ""},
 		{Name: "validity_days", Type: field.TypeInt, Default: 30},
 		{Name: "group_id", Type: field.TypeInt64, Nullable: true},
 		{Name: "used_by", Type: field.TypeInt64, Nullable: true},
@@ -1483,13 +1497,13 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "redeem_codes_groups_redeem_codes",
-				Columns:    []*schema.Column{RedeemCodesColumns[10]},
+				Columns:    []*schema.Column{RedeemCodesColumns[15]},
 				RefColumns: []*schema.Column{GroupsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "redeem_codes_users_redeem_codes",
-				Columns:    []*schema.Column{RedeemCodesColumns[11]},
+				Columns:    []*schema.Column{RedeemCodesColumns[16]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -1503,12 +1517,12 @@ var (
 			{
 				Name:    "redeemcode_used_by",
 				Unique:  false,
-				Columns: []*schema.Column{RedeemCodesColumns[11]},
+				Columns: []*schema.Column{RedeemCodesColumns[16]},
 			},
 			{
 				Name:    "redeemcode_group_id",
 				Unique:  false,
-				Columns: []*schema.Column{RedeemCodesColumns[10]},
+				Columns: []*schema.Column{RedeemCodesColumns[15]},
 			},
 			{
 				Name:    "redeemcode_expires_at",

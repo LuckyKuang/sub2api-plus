@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useAppStore } from '@/stores/app'
-import { FeatureFlags, isFeatureFlagEnabled, makeSidebarFlag, resolveFeatureFlag, getChannelMonitorMode } from '@/utils/featureFlags'
+import { FeatureFlags, isFeatureFlagEnabled, makeSidebarFlag, resolveFeatureFlag, getChannelMonitorMode, isChannelMonitorActiveProbeEnabled, isChannelMonitorV1Mode } from '@/utils/featureFlags'
 import type { PublicSettings } from '@/types'
 
 vi.mock('@/api/admin/system', () => ({
@@ -71,4 +71,22 @@ describe('channel monitor modes', () => {
     expect(getChannelMonitorMode()).toBe(mode)
   })
   it('defaults to v1 when settings are absent', () => expect(getChannelMonitorMode()).toBe('v1'))
+
+  // User requirement: V3 may run V1 probes while users still only see V3.
+  it.each([
+    ['v1', true, false, true, true],
+    ['v1', false, true, false, false],
+    ['v2', true, true, false, false],
+    ['v3', true, false, false, false],
+    ['v3', true, true, true, false],
+    ['v3', false, true, false, false],
+  ])('gates probe actions independently of user visibility (%s, %s, %s)', (mode, enabled, probes, active, visibleV1) => {
+    useAppStore().cachedPublicSettings = {
+      channel_monitor_mode: mode,
+      channel_monitor_enabled: enabled,
+      channel_monitor_v1_enabled: probes,
+    } as PublicSettings
+    expect(isChannelMonitorActiveProbeEnabled()).toBe(active)
+    expect(isChannelMonitorV1Mode()).toBe(visibleV1)
+  })
 })

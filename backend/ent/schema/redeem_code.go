@@ -70,6 +70,11 @@ func (RedeemCode) Fields() []ent.Field {
 		field.Int64("group_id").
 			Optional().
 			Nillable(),
+		field.Bool("generate_order").Default(false),
+		field.String("order_currency").MaxLen(3).Default("CNY"),
+		field.Float("order_amount").SchemaType(map[string]string{dialect.Postgres: "decimal(20,2)"}).Default(0),
+		field.Int64("order_plan_id").Optional().Nillable(),
+		field.String("order_plan_name").MaxLen(255).Default(""),
 		field.Int("validity_days").
 			Default(30),
 	}

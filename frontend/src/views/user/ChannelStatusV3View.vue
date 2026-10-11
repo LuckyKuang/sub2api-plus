@@ -83,7 +83,7 @@
             </summary>
             <div class="space-y-4 border-t border-gray-100 px-5 py-4 text-xs dark:border-dark-700">
               <p class="leading-5 text-gray-600 dark:text-gray-400">{{ t(`channelMonitorV3.phaseDescription.${event.phase}`) }}</p>
-              <p class="text-gray-500 dark:text-gray-400">{{ event.group_name }} · {{ event.model }}</p>
+              <p class="text-gray-500 dark:text-gray-400">{{ t(event.source_kind === 'probe' ? 'featureExtensions.probeSource' : 'featureExtensions.requestSource') }} · {{ event.model }}</p>
               <ol class="space-y-3 border-l border-gray-200 pl-4 dark:border-dark-600">
                 <li v-for="(update, i) in event.updates" :key="i"><span class="font-medium text-gray-800 dark:text-gray-200">{{ t(`channelMonitorV3.phase.${update.phase}`) }}</span><span class="ml-3 text-gray-400">{{ time(update.at) }}</span><p class="mt-1 text-gray-500 dark:text-gray-400">{{ t(`channelMonitorV3.phaseDescription.${update.phase}`) }}</p></li>
               </ol>
@@ -101,10 +101,10 @@
         <p class="mb-5 text-sm text-gray-500 dark:text-gray-400">{{ t(`channelMonitorV3.description.${detail.status}`) }}</p>
         <h3 class="mb-3 text-sm font-medium text-gray-900 dark:text-white">{{ t('channelMonitorV3.modelStatus') }}</h3>
         <div class="overflow-x-auto"><table class="w-full text-left text-xs">
-          <thead class="text-gray-500"><tr><th class="pb-3">{{ t('channelMonitorV3.model') }}</th><th class="pb-3">{{ t('channelMonitorV3.group') }}</th><th class="pb-3">{{ t('channelMonitorV3.recentStatus') }}</th></tr></thead>
-          <tbody><tr v-for="model in detail.models" :key="`${model.group_id}:${model.model}`" class="border-t border-gray-100 text-gray-700 dark:border-dark-700 dark:text-gray-300"><td class="py-3 pr-3">{{ model.model }}</td><td class="py-3 pr-3">{{ model.group_name }}</td><td class="py-3"><span class="status-badge" :class="`status-${model.status}`">{{ statusLabel(model.status) }}</span></td></tr></tbody>
+          <thead class="text-gray-500"><tr><th class="pb-3">{{ t('channelMonitorV3.model') }}</th><th class="pb-3">{{ t('channelMonitorV3.recentStatus') }}</th></tr></thead>
+          <tbody><tr v-for="model in detailModels" :key="model.model" class="border-t border-gray-100 text-gray-700 dark:border-dark-700 dark:text-gray-300"><td class="py-3 pr-3">{{ model.model }}<span class="mt-1 flex flex-wrap gap-x-2 text-gray-400"><span v-for="source in model.sources" :key="source">{{ t(source === 'probe' ? 'featureExtensions.probeSource' : 'featureExtensions.requestSource') }}</span></span></td><td class="py-3"><span class="status-badge" :class="`status-${model.status}`">{{ statusLabel(model.status) }}</span></td></tr></tbody>
         </table></div>
-        <p v-if="!detail.models.length" class="py-6 text-sm text-gray-500">{{ t('channelMonitorV3.emptyModels') }}</p>
+        <p v-if="!detailModels.length" class="py-6 text-sm text-gray-500">{{ t('channelMonitorV3.emptyModels') }}</p>
       </template>
       <template #footer><button class="btn btn-secondary" @click="showEvents(detailPlatform)">{{ t('channelMonitorV3.viewEvents') }}</button></template>
     </BaseDialog>
@@ -114,7 +114,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { getStatusSnapshot, type ServiceStatus, type StatusRange, type StatusSnapshot } from '@/api/channelMonitorV3'
+import { getStatusSnapshot, type ServiceStatus, type StatusPlatform, type StatusRange, type StatusSnapshot } from '@/api/channelMonitorV3'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Icon from '@/components/icons/Icon.vue'
@@ -136,6 +136,38 @@ const legend: ServiceStatus[] = ['normal', 'degraded', 'partial', 'outage', 'unk
 const platforms = computed(() => (snapshot.value?.platforms || []).filter(item => !platform.value || item.platform === platform.value))
 const incidents = computed(() => (snapshot.value?.incidents || []).filter(item => !platform.value || item.platform === platform.value))
 const detail = computed(() => snapshot.value?.platforms.find(item => item.platform === detailPlatform.value))
+const detailModels = computed(() => {
+  const models = new Map<string, StatusPlatform['models']>()
+  for (const observation of detail.value?.models || []) {
+    const observations = models.get(observation.model) || []
+    observations.push(observation)
+    models.set(observation.model, observations)
+  }
+  return Array.from(models, ([model, observations]) => ({
+    model,
+    status: modelStatus(observations),
+    sources: (['request', 'probe'] as const).filter(source => observations.some(item => (item.source_kind || 'request') === source)),
+  })).sort((a, b) => a.model.localeCompare(b.model))
+})
+// Use the documented joint-observation rules for each model, without exposing
+// the internal request-group or probe-monitor scopes in the user interface.
+function modelStatus(observations: StatusPlatform['models']): ServiceStatus {
+  const statuses = observations.map(item => item.status)
+  const known = statuses.filter(status => status !== 'unknown' && status !== 'insufficient')
+  if (!known.length) return statuses.includes('unknown') ? 'unknown' : 'insufficient'
+  if (known.every(status => status === 'outage')) return 'outage'
+  if (known.some(status => status === 'outage' || status === 'partial')) return 'partial'
+  if (known.includes('degraded')) return 'degraded'
+  const awaitingObservation = observations.some(item =>
+    (item.status === 'unknown' || item.status === 'insufficient') && snapshot.value?.incidents.some(event =>
+      !event.resolved_at && event.platform === detail.value?.platform && event.model === item.model &&
+      (event.source_kind || 'request') === (item.source_kind || 'request') &&
+      (item.source_kind === 'probe' ? event.monitor_id === item.monitor_id : event.group_id === item.group_id),
+    ),
+  )
+  if (awaitingObservation) return 'unknown'
+  return known.includes('recovering') ? 'recovering' : 'normal'
+}
 const summary = computed(() => {
   const original = snapshot.value?.summary
   if (!platform.value || !original) return original!

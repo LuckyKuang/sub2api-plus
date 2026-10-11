@@ -129,6 +129,7 @@
           </template>
 
           <template #cell-value="{ value, row }">
+            <p v-if="row.generate_order" class="mb-1 text-xs text-primary-600">{{ t('featureExtensions.redeemOrder') }} · {{ row.order_amount }} {{ row.order_currency }}<span v-if="row.order_plan_name"> · {{ row.order_plan_name }}</span></p>
             <span class="text-sm font-medium text-gray-900 dark:text-white">
               <template v-if="row.type === 'balance'">${{ value.toFixed(2) }}</template>
               <template v-else-if="row.type === 'subscription'">
@@ -287,6 +288,20 @@
               <label class="input-label">{{ t('admin.redeem.codeType') }}</label>
               <Select v-model="generateForm.type" :options="typeOptions" />
             </div>
+            <div v-if="generateForm.type === 'balance' || generateForm.type === 'subscription'">
+              <label class="input-label">{{ t('featureExtensions.generateOrder') }}</label>
+              <Select v-model="generateForm.generate_order" :options="[{ value: false, label: t('featureExtensions.noOrder') }, { value: true, label: t('featureExtensions.withOrder') }]" />
+            </div>
+            <div v-if="generateForm.generate_order && generateForm.type === 'balance'">
+              <label class="input-label">{{ t('featureExtensions.orderCurrency') }}</label>
+              <Select v-model="generateForm.order_currency" :options="[{ value: 'CNY', label: 'CNY' }, { value: 'USD', label: 'USD' }]" />
+              <p class="mt-1 text-xs text-gray-500">{{ t('featureExtensions.noExchange') }}</p>
+            </div>
+            <div v-if="generateForm.generate_order && generateForm.type === 'subscription'">
+              <label class="input-label">{{ t('featureExtensions.orderPlan') }}</label>
+              <Select v-model="generateForm.order_plan_id" :options="orderPlanOptions" :searchable="false" :placeholder="t('featureExtensions.selectPlan')" />
+              <p v-if="selectedOrderPlan" class="mt-1 text-xs text-gray-500">{{ t('featureExtensions.planSnapshot', { name: selectedOrderPlan.name, price: selectedOrderPlan.price, currency: selectedOrderPlan.currency || 'CNY' }) }}</p>
+            </div>
             <!-- 余额/并发类型：显示数值输入 -->
             <div v-if="generateForm.type !== 'subscription' && generateForm.type !== 'invitation'">
               <label class="input-label">
@@ -312,7 +327,7 @@
               </p>
             </div>
             <!-- 订阅类型：显示分组选择和有效天数 -->
-            <template v-if="generateForm.type === 'subscription'">
+            <template v-if="generateForm.type === 'subscription' && !generateForm.generate_order">
               <div>
                 <label class="input-label">{{ t('admin.redeem.selectGroup') }}</label>
                 <Select
@@ -618,6 +633,8 @@ import { useClipboard } from '@/composables/useClipboard'
 import { useTableSelection } from '@/composables/useTableSelection'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 import { adminAPI } from '@/api/admin'
+import { adminPaymentAPI } from '@/api/admin/payment'
+import type { SubscriptionPlan } from '@/types/payment'
 import {
   formatDateTime,
   getBrowserTimeZone,
@@ -835,8 +852,17 @@ const redeemCodeExpiryOptions = computed<{ value: RedeemCodeExpiryOption; label:
   { value: 'custom', label: t('admin.redeem.customExpiry') }
 ])
 
+const orderPlans = ref<SubscriptionPlan[]>([])
+const orderPlanOptions = computed(() => orderPlans.value.filter(p => !p.currency || ['CNY', 'USD'].includes(p.currency.toUpperCase())).map(p => ({ value: p.id, label: `${p.name} · ${p.price} ${p.currency || 'CNY'}` })))
+const selectedOrderPlan = computed(() => orderPlans.value.find(p => p.id === Number(generateForm.order_plan_id)))
+watch(showGenerateDialog, async (show) => {
+  if (show) { try { const { data } = await adminPaymentAPI.getPlans(); orderPlans.value = data } catch { orderPlans.value = [] } }
+})
 const generateForm = reactive({
   type: 'balance' as RedeemCodeType,
+  generate_order: false,
+  order_currency: 'CNY',
+  order_plan_id: null as number | null,
   value: 10,
   count: 1,
   group_id: null as number | null,
@@ -849,6 +875,8 @@ const generateForm = reactive({
 watch(
   () => generateForm.type,
   (newType) => {
+    if (newType !== 'balance' && newType !== 'subscription') generateForm.generate_order = false
+    generateForm.order_plan_id = null
     if (newType === 'invitation') {
       generateForm.value = 0
     } else if (generateForm.value === 0) {
@@ -1027,11 +1055,12 @@ const buildBatchUpdateFields = (): BatchUpdateRedeemCodeFields | null => {
 
 const handleGenerateCodes = async () => {
   // 订阅类型必须选择分组
-  if (generateForm.type === 'subscription' && !generateForm.group_id) {
+  if (generateForm.type === 'subscription' && !generateForm.generate_order && !generateForm.group_id) {
     appStore.showError(t('admin.redeem.groupRequired'))
     return
   }
 
+  if (generateForm.generate_order && generateForm.type === 'subscription' && !generateForm.order_plan_id) { appStore.showError(t('featureExtensions.selectPlan')); return }
   const expiresInDays = getRedeemCodeExpiresInDays()
   if (expiresInDays === null) {
     appStore.showError(t('admin.redeem.expiryDaysRequired'))
@@ -1044,14 +1073,18 @@ const handleGenerateCodes = async () => {
       generateForm.count,
       generateForm.type,
       generateForm.value,
-      generateForm.type === 'subscription' ? generateForm.group_id : undefined,
-      generateForm.type === 'subscription' ? generateForm.validity_days : undefined,
-      expiresInDays
+      generateForm.type === 'subscription' && !generateForm.generate_order ? generateForm.group_id : undefined,
+      generateForm.type === 'subscription' && !generateForm.generate_order ? generateForm.validity_days : undefined,
+      expiresInDays,
+      { generate_order: generateForm.generate_order, order_currency: generateForm.order_currency, order_plan_id: generateForm.order_plan_id == null ? null : Number(generateForm.order_plan_id) }
     )
     showGenerateDialog.value = false
     generatedCodes.value = result
     showResultDialog.value = true
     // 重置表单
+    generateForm.generate_order = false
+    generateForm.order_currency = 'CNY'
+    generateForm.order_plan_id = null
     generateForm.group_id = null
     generateForm.validity_days = 30
     generateForm.expiry_option = 'never'

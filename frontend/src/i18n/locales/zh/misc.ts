@@ -333,6 +333,7 @@ export default {
     actualPay: '实付金额',
     createOrder: '确认支付',
     methods: {
+      redeem: '兑换码',
       easypay: '易支付',
       alipay: '支付宝',
       wxpay: '微信支付',

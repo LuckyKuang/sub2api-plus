@@ -44,6 +44,14 @@ const (
 	FieldQrCode = "qr_code"
 	// FieldQrCodeImg holds the string denoting the qr_code_img field in the database.
 	FieldQrCodeImg = "qr_code_img"
+	// FieldOrderSource holds the string denoting the order_source field in the database.
+	FieldOrderSource = "order_source"
+	// FieldCurrency holds the string denoting the currency field in the database.
+	FieldCurrency = "currency"
+	// FieldPlanName holds the string denoting the plan_name field in the database.
+	FieldPlanName = "plan_name"
+	// FieldRedeemCodeID holds the string denoting the redeem_code_id field in the database.
+	FieldRedeemCodeID = "redeem_code_id"
 	// FieldOrderType holds the string denoting the order_type field in the database.
 	FieldOrderType = "order_type"
 	// FieldPlanID holds the string denoting the plan_id field in the database.
@@ -125,6 +133,10 @@ var Columns = []string{
 	FieldPayURL,
 	FieldQrCode,
 	FieldQrCodeImg,
+	FieldOrderSource,
+	FieldCurrency,
+	FieldPlanName,
+	FieldRedeemCodeID,
 	FieldOrderType,
 	FieldPlanID,
 	FieldSubscriptionGroupID,
@@ -181,6 +193,18 @@ var (
 	PaymentTypeValidator func(string) error
 	// PaymentTradeNoValidator is a validator for the "payment_trade_no" field. It is called by the builders before save.
 	PaymentTradeNoValidator func(string) error
+	// DefaultOrderSource holds the default value on creation for the "order_source" field.
+	DefaultOrderSource string
+	// OrderSourceValidator is a validator for the "order_source" field. It is called by the builders before save.
+	OrderSourceValidator func(string) error
+	// DefaultCurrency holds the default value on creation for the "currency" field.
+	DefaultCurrency string
+	// CurrencyValidator is a validator for the "currency" field. It is called by the builders before save.
+	CurrencyValidator func(string) error
+	// DefaultPlanName holds the default value on creation for the "plan_name" field.
+	DefaultPlanName string
+	// PlanNameValidator is a validator for the "plan_name" field. It is called by the builders before save.
+	PlanNameValidator func(string) error
 	// DefaultOrderType holds the default value on creation for the "order_type" field.
 	DefaultOrderType string
 	// OrderTypeValidator is a validator for the "order_type" field. It is called by the builders before save.
@@ -292,6 +316,26 @@ func ByQrCode(opts ...sql.OrderTermOption) OrderOption {
 // ByQrCodeImg orders the results by the qr_code_img field.
 func ByQrCodeImg(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldQrCodeImg, opts...).ToFunc()
+}
+
+// ByOrderSource orders the results by the order_source field.
+func ByOrderSource(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldOrderSource, opts...).ToFunc()
+}
+
+// ByCurrency orders the results by the currency field.
+func ByCurrency(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCurrency, opts...).ToFunc()
+}
+
+// ByPlanName orders the results by the plan_name field.
+func ByPlanName(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPlanName, opts...).ToFunc()
+}
+
+// ByRedeemCodeID orders the results by the redeem_code_id field.
+func ByRedeemCodeID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRedeemCodeID, opts...).ToFunc()
 }
 
 // ByOrderType orders the results by the order_type field.

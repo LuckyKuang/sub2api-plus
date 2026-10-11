@@ -317,14 +317,17 @@ type UpdateSettingsRequest struct {
 	PaymentSubscriptionUSDToCNYRate  *float64 `json:"payment_subscription_usd_to_cny_rate"`
 	PaymentRechargeFeeRate           *float64 `json:"payment_recharge_fee_rate"`
 	// nil 表示不更新；空数组表示清空阶梯
-	PaymentRechargeBonusTiers  *[]dto.RechargeBonusTier `json:"payment_recharge_bonus_tiers"`
-	PaymentRechargeBonusMode   *string                  `json:"payment_recharge_bonus_mode"`
-	PaymentRechargeBonusNotice *string                  `json:"payment_recharge_bonus_notice"`
-	PaymentLoadBalanceStrat    *string                  `json:"payment_load_balance_strategy"`
-	PaymentProductNamePrefix   *string                  `json:"payment_product_name_prefix"`
-	PaymentProductNameSuffix   *string                  `json:"payment_product_name_suffix"`
-	PaymentHelpImageURL        *string                  `json:"payment_help_image_url"`
-	PaymentHelpText            *string                  `json:"payment_help_text"`
+	PaymentRechargeBonusTiers    *[]dto.RechargeBonusTier `json:"payment_recharge_bonus_tiers"`
+	PaymentRechargeBonusMode     *string                  `json:"payment_recharge_bonus_mode"`
+	PaymentRechargeBonusNotice   *string                  `json:"payment_recharge_bonus_notice"`
+	PaymentLoadBalanceStrat      *string                  `json:"payment_load_balance_strategy"`
+	PaymentProductNamePrefix     *string                  `json:"payment_product_name_prefix"`
+	PaymentProductNameSuffix     *string                  `json:"payment_product_name_suffix"`
+	PaymentHelpImageURL          *string                  `json:"payment_help_image_url"`
+	PaymentRedeemPurchaseEnabled *bool                    `json:"payment_redeem_purchase_enabled"`
+	PaymentRedeemPurchaseURL     *string                  `json:"payment_redeem_purchase_url"`
+	PaymentRedeemPurchaseMode    *string                  `json:"payment_redeem_purchase_mode"`
+	PaymentHelpText              *string                  `json:"payment_help_text"`
 
 	// Cancel rate limit
 	PaymentCancelRateLimitEnabled *bool   `json:"payment_cancel_rate_limit_enabled"`
@@ -343,6 +346,7 @@ type UpdateSettingsRequest struct {
 	ChannelMonitorMode                   *string `json:"channel_monitor_mode"`
 	ChannelMonitorDefaultIntervalSeconds *int    `json:"channel_monitor_default_interval_seconds"`
 	ChannelMonitorHideThroughput         *bool   `json:"channel_monitor_hide_throughput"`
+	ChannelMonitorV1Enabled              *bool   `json:"channel_monitor_v1_enabled"`
 	ChannelMonitorShowQuota              *bool   `json:"channel_monitor_show_quota"`
 	ChannelMonitorHideUserRanking        *bool   `json:"channel_monitor_hide_user_ranking"`
 
@@ -2046,6 +2050,12 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.ChannelMonitorHideThroughput
 		}(),
+		ChannelMonitorV1Enabled: func() bool {
+			if req.ChannelMonitorV1Enabled != nil {
+				return *req.ChannelMonitorV1Enabled
+			}
+			return previousSettings.ChannelMonitorV1Enabled
+		}(),
 		ChannelMonitorShowQuota: func() bool {
 			if req.ChannelMonitorShowQuota != nil {
 				return *req.ChannelMonitorShowQuota
@@ -2223,6 +2233,12 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		},
 		ForceEmailOnThirdPartySignup: boolValueOrDefault(req.ForceEmailOnThirdPartySignup, previousAuthSourceDefaults.ForceEmailOnThirdPartySignup),
 	}
+	if h.paymentConfigService != nil {
+		if err := h.paymentConfigService.ValidateRedeemPurchaseUpdate(c.Request.Context(), service.UpdatePaymentConfigRequest{RedeemPurchaseEnabled: req.PaymentRedeemPurchaseEnabled, RedeemPurchaseURL: req.PaymentRedeemPurchaseURL, RedeemPurchaseMode: req.PaymentRedeemPurchaseMode}); err != nil {
+			response.ErrorFrom(c, err)
+			return
+		}
+	}
 	if err := h.settingService.UpdateSettingsWithAuthSourceDefaultsOmitting(c.Request.Context(), settings, authSourceDefaults, omitted); err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -2262,6 +2278,9 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			ProductNameSuffix:             req.PaymentProductNameSuffix,
 			HelpImageURL:                  req.PaymentHelpImageURL,
 			HelpText:                      req.PaymentHelpText,
+			RedeemPurchaseEnabled:         req.PaymentRedeemPurchaseEnabled,
+			RedeemPurchaseURL:             req.PaymentRedeemPurchaseURL,
+			RedeemPurchaseMode:            req.PaymentRedeemPurchaseMode,
 			CancelRateLimitEnabled:        req.PaymentCancelRateLimitEnabled,
 			CancelRateLimitMax:            req.PaymentCancelRateLimitMax,
 			CancelRateLimitWindow:         req.PaymentCancelRateLimitWindow,
@@ -2545,6 +2564,9 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		PaymentProductNamePrefix:                               updatedPaymentCfg.ProductNamePrefix,
 		PaymentProductNameSuffix:                               updatedPaymentCfg.ProductNameSuffix,
 		PaymentHelpImageURL:                                    updatedPaymentCfg.HelpImageURL,
+		PaymentRedeemPurchaseEnabled:                           updatedPaymentCfg.RedeemPurchaseEnabled,
+		PaymentRedeemPurchaseURL:                               updatedPaymentCfg.RedeemPurchaseURL,
+		PaymentRedeemPurchaseMode:                              updatedPaymentCfg.RedeemPurchaseMode,
 		PaymentHelpText:                                        updatedPaymentCfg.HelpText,
 		PaymentCancelRateLimitEnabled:                          updatedPaymentCfg.CancelRateLimitEnabled,
 		PaymentCancelRateLimitMax:                              updatedPaymentCfg.CancelRateLimitMax,
@@ -2558,6 +2580,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		ChannelMonitorMode:                   updatedSettings.ChannelMonitorMode,
 		ChannelMonitorDefaultIntervalSeconds: updatedSettings.ChannelMonitorDefaultIntervalSeconds,
 		ChannelMonitorHideThroughput:         updatedSettings.ChannelMonitorHideThroughput,
+		ChannelMonitorV1Enabled:              updatedSettings.ChannelMonitorV1Enabled,
 		ChannelMonitorShowQuota:              updatedSettings.ChannelMonitorShowQuota,
 		ChannelMonitorHideUserRanking:        updatedSettings.ChannelMonitorHideUserRanking,
 
@@ -2614,7 +2637,7 @@ func mapDingTalkValidateError(err error) string {
 }
 
 func hasPaymentFields(req UpdateSettingsRequest) bool {
-	return req.PaymentEnabled != nil || req.PaymentMinAmount != nil ||
+	return req.PaymentRedeemPurchaseEnabled != nil || req.PaymentRedeemPurchaseURL != nil || req.PaymentRedeemPurchaseMode != nil || req.PaymentEnabled != nil || req.PaymentMinAmount != nil ||
 		req.PaymentMaxAmount != nil || req.PaymentDailyLimit != nil ||
 		req.PaymentOrderTimeoutMin != nil || req.PaymentMaxPendingOrders != nil ||
 		req.PaymentEnabledTypes != nil || req.PaymentBalanceDisabled != nil ||

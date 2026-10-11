@@ -274,6 +274,7 @@ export interface PublicSettings {
   /** When true, user monitor hides RPM/TPM so scale cannot be reverse-estimated. */
   channel_monitor_hide_throughput?: boolean
   /** When true, user monitor shows account quota/balance snapshots (default off). */
+  channel_monitor_v1_enabled?: boolean
   channel_monitor_show_quota?: boolean
   /** When true, user monitor hides the user ranking tab and /users payload. */
   channel_monitor_hide_user_ranking?: boolean
@@ -1795,6 +1796,11 @@ export interface UsageCleanupTask {
 }
 
 export interface RedeemCode {
+  generate_order?: boolean
+  order_currency?: string
+  order_amount?: number
+  order_plan_id?: number
+  order_plan_name?: string
   id: number
   code: string
   type: RedeemCodeType
@@ -1813,6 +1819,9 @@ export interface RedeemCode {
 }
 
 export interface GenerateRedeemCodesRequest {
+  generate_order?: boolean
+  order_currency?: string
+  order_plan_id?: number | null
   count: number
   type: RedeemCodeType
   value: number

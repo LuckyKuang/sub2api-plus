@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"strings"
 	"time"
@@ -25,7 +27,9 @@ type ChannelMonitorV3Config struct {
 	RecoveryWindows   int      `json:"recovery_windows"`
 	DisabledPlatforms []string `json:"disabled_platforms"`
 	// ObservationStarts is server-owned persisted metadata, never an API field.
-	ObservationStarts map[string]time.Time `json:"-"`
+	ObservationStarts     map[string]time.Time `json:"-"`
+	ProbesEnabled         bool                 `json:"-"`
+	ProbeObservationStart time.Time            `json:"-"`
 }
 
 func DefaultChannelMonitorV3Config() ChannelMonitorV3Config {
@@ -79,6 +83,9 @@ func (c ChannelMonitorV3Config) EnabledPlatforms() []string {
 
 // Facts are internal aggregates. They are never serialized in viewer responses.
 type ChannelMonitorV3Fact struct {
+	SourceKind  string
+	MonitorID   int64
+	ProbeStatus string
 	Bucket      time.Time
 	Platform    string
 	GroupID     int64
@@ -95,6 +102,7 @@ func (f *ChannelMonitorV3Fact) Merge(other ChannelMonitorV3Fact) {
 	f.Failures += other.Failures
 	if other.LastRequest.After(f.LastRequest) {
 		f.LastRequest = other.LastRequest
+		f.ProbeStatus = other.ProbeStatus
 	}
 	for i := range f.Latency {
 		f.Latency[i] += other.Latency[i]
@@ -120,6 +128,18 @@ func (f ChannelMonitorV3Fact) P50() *int64 {
 }
 
 func ChannelMonitorV3Health(f ChannelMonitorV3Fact, cfg ChannelMonitorV3Config) string {
+	if f.SourceKind == "probe" {
+		switch f.ProbeStatus {
+		case "operational":
+			return "normal"
+		case "degraded":
+			return "degraded"
+		case "failed", "error":
+			return "outage"
+		default:
+			return "unknown"
+		}
+	}
 	n := f.Success + f.Failures
 	if n == 0 {
 		return "unknown"
@@ -167,6 +187,8 @@ type ChannelMonitorV3Update struct {
 }
 
 type ChannelMonitorV3Incident struct {
+	SourceKind string                   `json:"source_kind"`
+	MonitorID  *int64                   `json:"monitor_id,omitempty"`
 	ID         string                   `json:"id"`
 	Platform   string                   `json:"platform"`
 	GroupID    int64                    `json:"group_id"`
@@ -190,9 +212,11 @@ type ChannelMonitorV3State struct {
 }
 
 type ChannelMonitorV3Catalog struct {
-	Platform  string
-	GroupID   int64
-	GroupName string
+	SourceKind string
+	MonitorID  int64
+	Platform   string
+	GroupID    int64
+	GroupName  string
 }
 type ChannelMonitorV3Data struct {
 	Config      ChannelMonitorV3Config
@@ -218,10 +242,12 @@ type ChannelMonitorV3Timeline struct {
 	Status string    `json:"status"`
 }
 type ChannelMonitorV3Model struct {
-	GroupID   int64  `json:"group_id"`
-	GroupName string `json:"group_name"`
-	Model     string `json:"model"`
-	Status    string `json:"status"`
+	SourceKind string `json:"source_kind"`
+	MonitorID  *int64 `json:"monitor_id,omitempty"`
+	GroupID    int64  `json:"group_id"`
+	GroupName  string `json:"group_name"`
+	Model      string `json:"model"`
+	Status     string `json:"status"`
 }
 type ChannelMonitorV3Platform struct {
 	Platform    string                     `json:"platform"`
@@ -247,4 +273,66 @@ type ChannelMonitorV3Snapshot struct {
 	Platforms         []ChannelMonitorV3Platform `json:"platforms"`
 	Incidents         []ChannelMonitorV3Incident `json:"incidents"`
 	Summary           ChannelMonitorV3Summary    `json:"summary"`
+}
+
+// ChannelMonitorV3SourceScope distinguishes request groups from monitor IDs.
+func ChannelMonitorV3SourceScope(platform, source string, groupID, monitorID int64, model string) string {
+	if source == "probe" {
+		return fmt.Sprintf("%s:probe:%d:%s", platform, monitorID, model)
+	}
+	return fmt.Sprintf("%s:request:%d:%s", platform, groupID, model)
+}
+func (f ChannelMonitorV3Fact) Scope(model string) string {
+	return ChannelMonitorV3SourceScope(f.Platform, f.SourceKind, f.GroupID, f.MonitorID, model)
+}
+func (c ChannelMonitorV3Catalog) Scope() string {
+	return ChannelMonitorV3SourceScope(c.Platform, c.SourceKind, c.GroupID, c.MonitorID, "")
+}
+func (i ChannelMonitorV3Incident) Scope() string {
+	var id int64
+	if i.MonitorID != nil {
+		id = *i.MonitorID
+	}
+	return ChannelMonitorV3SourceScope(i.Platform, i.SourceKind, i.GroupID, id, "")
+}
+func (f ChannelMonitorV3Fact) Source() string {
+	if f.SourceKind == "probe" {
+		return "probe"
+	}
+	return "request"
+}
+func (f ChannelMonitorV3Fact) ScopeID() int64 {
+	if f.SourceKind == "probe" {
+		return f.MonitorID
+	}
+	return f.GroupID
+}
+func (f ChannelMonitorV3Fact) Monitor() *int64 {
+	if f.SourceKind != "probe" {
+		return nil
+	}
+	id := f.MonitorID
+	return &id
+}
+func (m ChannelMonitorV3Model) MarshalJSON() ([]byte, error) {
+	type alias ChannelMonitorV3Model
+	var group *int64
+	if m.SourceKind != "probe" {
+		group = &m.GroupID
+	}
+	return json.Marshal(struct {
+		alias
+		Group *int64 `json:"group_id"`
+	}{alias(m), group})
+}
+func (i ChannelMonitorV3Incident) MarshalJSON() ([]byte, error) {
+	type alias ChannelMonitorV3Incident
+	var group *int64
+	if i.SourceKind != "probe" {
+		group = &i.GroupID
+	}
+	return json.Marshal(struct {
+		alias
+		Group *int64 `json:"group_id"`
+	}{alias(i), group})
 }

@@ -4,6 +4,8 @@
       <!-- Filters -->
       <div class="card p-4">
         <div class="flex flex-wrap items-center gap-3">
+          <Select v-model="sourceFilter" :options="sourceFilters" class="w-36" @change="handlePageChange(1)" />
+          <Select v-model="typeFilter" :options="typeFilters" class="w-36" @change="handlePageChange(1)" />
           <Select v-model="currentFilter" :options="statusFilters" class="w-36" @change="handlePageChange(1)" />
           <div class="flex flex-1 items-center justify-end gap-2">
             <button @click="fetchOrders" :disabled="loading" class="btn btn-secondary" :title="t('common.refresh')">
@@ -105,6 +107,10 @@ const actionLoading = ref(false)
 const orders = ref<PaymentOrder[]>([])
 const refundEligibleProviders = ref<Set<string>>(new Set())
 const currentFilter = ref('')
+const sourceFilter = ref('')
+const typeFilter = ref('')
+const sourceFilters = computed(() => [{ value: '', label: t('featureExtensions.allSources') }, { value: 'payment', label: t('featureExtensions.paymentOrder') }, { value: 'redeem', label: t('featureExtensions.redeemOrder') }])
+const typeFilters = computed(() => [{ value: '', label: t('common.all') }, { value: 'balance', label: t('payment.tabTopUp') }, { value: 'subscription', label: t('payment.tabSubscribe') }])
 const cancelTargetId = ref<number | null>(null)
 const refundTarget = ref<PaymentOrder | null>(null)
 const refundReason = ref('')
@@ -125,6 +131,8 @@ async function fetchOrders() {
       page: pagination.page,
       page_size: pagination.page_size,
       status: currentFilter.value || undefined,
+      order_source: sourceFilter.value || undefined,
+      order_type: typeFilter.value || undefined,
     })
     orders.value = res.data.items || []
     pagination.total = res.data.total || 0
@@ -174,6 +182,7 @@ async function confirmRefund() {
 }
 
 function canRequestRefund(order: PaymentOrder): boolean {
+  if (order.order_source === 'redeem') return false
   if (order.status !== 'COMPLETED') return false
   if (!order.provider_instance_id) return false
   return refundEligibleProviders.value.has(order.provider_instance_id)

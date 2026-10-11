@@ -39,7 +39,7 @@
       </div>
       <p v-if="!loading && !error" class="text-xs text-gray-500 dark:text-dark-400" aria-live="polite">{{ t('availableChannels.catalog.modelCount', { count: visible.length }) }}</p>
       <div v-if="loading" class="catalog-grid" aria-busy="true" :aria-label="t('common.loading')">
-        <div v-for="i in 12" :key="i" class="h-52 animate-pulse rounded-xl bg-gray-200 dark:bg-dark-800" />
+        <div v-for="i in 12" :key="i" class="h-52 animate-pulse rounded-[20px] bg-gray-200 dark:bg-dark-800" />
       </div>
       <div v-else-if="error" role="alert" class="py-12 text-center">
         <p class="text-red-600 dark:text-red-400">{{ error }}</p><button class="btn btn-secondary mt-4" @click="loadCatalog">{{ t('availableChannels.catalog.retry') }}</button>
@@ -134,12 +134,11 @@ onUnmounted(() => { ++requestId; controller?.abort() })
 
 <style scoped>
 .catalog-page { container-type: inline-size; }
-.catalog-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+.catalog-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
 .catalog-filter { @apply inline-flex items-center gap-1.5 rounded-lg border border-transparent px-3 py-1.5 text-xs text-gray-600 transition-colors hover:bg-gray-100 focus-visible:ring-2 focus-visible:ring-primary-500 dark:text-dark-300 dark:hover:bg-dark-800; }
 .catalog-filter.selected { @apply border-primary-200 bg-primary-50 text-primary-700 dark:border-primary-800 dark:bg-primary-900/30 dark:text-primary-300; }
-@container (min-width: 452px) { .catalog-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@container (min-width: 684px) { .catalog-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-@container (min-width: 916px) { .catalog-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
-@container (min-width: 1148px) { .catalog-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
-@container (min-width: 1380px) { .catalog-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+@container (min-width: 460px) { .catalog-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container (min-width: 700px) { .catalog-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@container (min-width: 940px) { .catalog-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@container (min-width: 1180px) { .catalog-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
 </style>

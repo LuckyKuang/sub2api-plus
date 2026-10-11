@@ -28,10 +28,10 @@
         <div v-if="offer.service_tier_pricing?.length" class="space-y-3">
           <h4 class="font-medium">{{ t('availableChannels.catalog.serviceTiers') }}</h4>
           <p class="text-xs text-gray-500 dark:text-dark-400">{{ t('availableChannels.catalog.serviceTierNote') }}</p>
-          <section v-for="tier in offer.service_tier_pricing" :key="tier.name" class="space-y-2">
-            <h5 class="font-medium">{{ t(`availableChannels.catalog.tiers.${tier.name}`) }}</h5>
+          <details v-for="tier in offer.service_tier_pricing" :key="tier.name" class="space-y-2 rounded-lg border border-gray-200 p-3 dark:border-dark-700">
+            <summary class="cursor-pointer font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500">{{ t(`availableChannels.catalog.tiers.${tier.name}`) }}</summary>
             <CatalogPriceTable :pricing="tier.pricing" :rate="rate" />
-          </section>
+          </details>
         </div>
         <div v-if="Object.keys(offer.pricing.reasoning_effort_multipliers || {}).length">
           <h4 class="mb-2 font-medium">{{ t('availableChannels.catalog.reasoning') }}</h4>

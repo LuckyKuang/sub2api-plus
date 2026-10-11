@@ -24,6 +24,13 @@
           @change="emitFiltersChanged"
         />
         <Select
+          v-model="filters.order_source"
+          :options="sourceFilterOptions"
+          :searchable="false"
+          class="w-36"
+          @change="emitFiltersChanged"
+        />
+        <Select
           v-model="filters.order_type"
           :options="orderTypeFilterOptions"
           class="w-36"
@@ -57,7 +64,7 @@
           <span v-if="row.fee_rate > 0" class="ml-1 text-xs text-gray-400" :title="t('payment.orders.fee') + ': ' + row.fee_rate + '%'">
             ({{ row.fee_rate }}%)
           </span>
-          <div v-if="row.amount !== row.pay_amount || (row.bonus_amount ?? 0) > 0" class="text-xs text-gray-500">
+          <div v-if="(row.order_source === 'redeem' && row.order_type === 'balance') || row.amount !== row.pay_amount || (row.bonus_amount ?? 0) > 0" class="text-xs text-gray-500">
             {{ t('payment.orders.creditedAmount') }}: {{ creditedAmountSymbol }}{{ row.amount.toFixed(2) }}
             <span v-if="(row.bonus_amount ?? 0) > 0" class="ml-1 text-amber-600 dark:text-amber-400">
               ({{ t('payment.orders.bonusIncluded', { amount: creditedAmountSymbol + (row.bonus_amount ?? 0).toFixed(2) }) }})
@@ -81,6 +88,12 @@
       <template #cell-order_type="{ value }">
         <span class="text-sm text-gray-700 dark:text-gray-300">
           {{ t('payment.admin.' + value + 'Order', value) }}
+        </span>
+      </template>
+
+      <template #cell-order_source="{ value }">
+        <span class="text-sm text-gray-700 dark:text-gray-300">
+          {{ t(value === 'redeem' ? 'featureExtensions.redeemOrder' : 'featureExtensions.paymentOrder') }}
         </span>
       </template>
 
@@ -166,11 +179,11 @@ const emit = defineEmits<{
   (e: 'refresh'): void
   (e: 'update:page', page: number): void
   (e: 'update:pageSize', size: number): void
-  (e: 'filter', filters: { keyword?: string; status?: string; payment_type?: string; order_type?: string }): void
+  (e: 'filter', filters: { keyword?: string; status?: string; payment_type?: string; order_type?: string; order_source?: string }): void
 }>()
 
 const searchQuery = ref('')
-const filters = reactive({ status: '', payment_type: '', order_type: '' })
+const filters = reactive({ status: '', payment_type: '', order_type: '', order_source: '' })
 const creditedAmountSymbol = currencySymbol('USD')
 
 function paymentAmountSymbol(order: PaymentOrder): string {
@@ -189,6 +202,7 @@ function emitFiltersChanged() {
     status: filters.status || undefined,
     payment_type: filters.payment_type || undefined,
     order_type: filters.order_type || undefined,
+    order_source: filters.order_source || undefined,
   })
 }
 
@@ -199,6 +213,7 @@ const columns = computed<Column[]>(() => [
   { key: 'payment_type', label: t('payment.orders.paymentMethod') },
   { key: 'status', label: t('payment.orders.status') },
   { key: 'order_type', label: t('payment.orders.orderType') },
+  { key: 'order_source', label: t('featureExtensions.orderSource') },
   { key: 'created_at', label: t('payment.orders.createdAt') },
   { key: 'actions', label: t('payment.orders.actions') },
 ])
@@ -231,8 +246,14 @@ const orderTypeFilterOptions = computed(() => [
   { value: 'subscription', label: t('payment.admin.subscriptionOrder') },
 ])
 
+const sourceFilterOptions = computed(() => [
+  { value: '', label: t('featureExtensions.allSources') },
+  { value: 'payment', label: t('featureExtensions.paymentOrder') },
+  { value: 'redeem', label: t('featureExtensions.redeemOrder') },
+])
+
 function canRefundRow(order: PaymentOrder): boolean {
-  return canRefund(order.status)
+  return order.order_source !== 'redeem' && canRefund(order.status)
 }
 
 function formatDateTime(dateStr: string): string {

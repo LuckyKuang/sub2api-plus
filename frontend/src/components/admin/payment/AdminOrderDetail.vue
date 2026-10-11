@@ -8,6 +8,14 @@
     <div v-if="order" class="space-y-4">
       <div class="grid grid-cols-2 gap-4">
         <div>
+          <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('featureExtensions.orderSource') }}</p>
+          <p class="text-sm text-gray-700 dark:text-gray-300">{{ t(order.order_source === 'redeem' ? 'featureExtensions.redeemOrder' : 'featureExtensions.paymentOrder') }}</p>
+        </div>
+        <div v-if="order.plan_name">
+          <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('featureExtensions.orderPlan') }}</p>
+          <p class="text-sm text-gray-700 dark:text-gray-300">{{ order.plan_name }}</p>
+        </div>
+        <div>
           <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.orderId') }}</p>
           <p class="font-mono text-sm font-medium text-gray-900 dark:text-white">#{{ order.id }}</p>
         </div>
@@ -33,7 +41,7 @@
           <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.bonusAmount') }}</p>
           <p class="text-sm font-medium text-amber-600 dark:text-amber-400">+{{ creditedAmountSymbol }}{{ (order.bonus_amount ?? 0).toFixed(2) }}</p>
         </div>
-        <div v-if="order.amount !== order.pay_amount || (order.bonus_amount ?? 0) > 0">
+        <div v-if="(order.order_source === 'redeem' && order.order_type === 'balance') || order.amount !== order.pay_amount || (order.bonus_amount ?? 0) > 0">
           <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.creditedAmount') }}</p>
           <p class="text-sm font-medium text-gray-900 dark:text-white">{{ creditedAmountSymbol }}{{ order.amount.toFixed(2) }}</p>
         </div>
@@ -160,7 +168,7 @@ const emit = defineEmits<{
 }>()
 
 function canRefund(order: PaymentOrder): boolean {
-  return canRefundStatus(order.status)
+  return order.order_source !== 'redeem' && canRefundStatus(order.status)
 }
 
 function formatDateTime(dateStr: string): string {

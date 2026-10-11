@@ -406,7 +406,7 @@ func (s *SubscriptionService) assignOrExtendSubscription(ctx context.Context, in
 }
 
 func (s *SubscriptionService) maybeInvalidateAssignmentCaches(userID, groupID int64, deferred bool) {
-	// Payment fulfillment owns an outer transaction and performs a synchronous
+	// Payment fulfillment and redemption own an outer transaction and perform a synchronous
 	// invalidation after commit. Invalidating inside that transaction can reload
 	// the pre-commit subscription into cache.
 	if deferred {

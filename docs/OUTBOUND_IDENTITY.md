@@ -687,6 +687,13 @@ defined companions. Fresh monitor checks, audit evaluations/jobs, probes and
 key tests observe current settings. Supplier identity resolution does not select
 a forwarding account or move inference ahead of the ingress audit boundary.
 
+V1 active checks use this same credential-owner snapshot whether V1 runs alone
+or is enabled as an extra source for V3 status. Scheduled and manual checks,
+origin HEAD, model POSTs and quota requests retain the established trusted
+platform identity; monitor mode, inbound headers and `extra_headers` cannot
+replace its managed declarations. Enabling the V3 probe source changes status
+aggregation and viewer visibility, without selecting another outbound identity.
+
 Model discovery includes both standard model lists and the Codex-style manifest
 requested from a compatible API-key upstream. Explicit account or type-default
 preset selections govern the manifest's final headers and `client_version`

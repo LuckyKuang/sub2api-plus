@@ -921,3 +921,35 @@ describe('PaymentView subscription feature flag', () => {
     wrapper.unmount()
   })
 })
+
+describe('PaymentView external redeem purchase', () => {
+  async function purchaseCard(overrides: Partial<CheckoutInfoResponse>) {
+    window.localStorage.clear()
+    routeState.query = {}
+    getCheckoutInfo.mockReset().mockResolvedValue(checkoutInfoFixture(overrides))
+    const wrapper = shallowMount(PaymentView, { global: { stubs: {
+      AppLayout: { template: '<div><slot /></div>' }, Teleport: true, Transition: false,
+      RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' }
+    } } })
+    await flushPromises()
+    return wrapper
+  }
+  it('shows purchase even with no built-in payment methods, using the original URL', async () => {
+    const url = 'https://shop.example/codes?product=one'
+    const wrapper = await purchaseCard({ methods: {}, redeem_purchase_enabled: true, redeem_purchase_url: url, redeem_purchase_mode: 'new_tab' })
+    const link = wrapper.get('a[target="_blank"]')
+    expect(link.attributes('href')).toBe(url)
+    expect(link.attributes('rel')).toBe('noopener noreferrer')
+    expect(wrapper.text()).toContain('featureExtensions.purchaseDescription')
+    wrapper.unmount()
+  })
+  it('uses the protected iframe route and hides the card when disabled', async () => {
+    const embedded = await purchaseCard({ redeem_purchase_enabled: true, redeem_purchase_url: 'https://shop.example/codes', redeem_purchase_mode: 'iframe' })
+    expect(embedded.find('a[href="/purchase/redeem-shop"]').exists()).toBe(true)
+    embedded.unmount()
+    const disabled = await purchaseCard({ redeem_purchase_enabled: false, redeem_purchase_url: 'https://shop.example/codes' })
+    expect(disabled.find('a[target="_blank"]').exists()).toBe(false)
+    expect(disabled.find('a[href="/purchase/redeem-shop"]').exists()).toBe(false)
+    disabled.unmount()
+  })
+})

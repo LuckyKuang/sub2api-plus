@@ -186,6 +186,7 @@ func (lb *DefaultLoadBalancer) attachDailyUsage(
 	var rows []row
 	err := lb.db.PaymentOrder.Query().
 		Where(
+			paymentorder.OrderSourceEQ("payment"),
 			paymentorder.ProviderInstanceIDIn(ids...),
 			paymentorder.StatusIn(
 				OrderStatusPending, OrderStatusPaid,
@@ -355,6 +356,7 @@ func (lb *DefaultLoadBalancer) GetInstanceDailyAmount(ctx context.Context, insta
 	}
 	err := lb.db.PaymentOrder.Query().
 		Where(
+			paymentorder.OrderSourceEQ("payment"),
 			paymentorder.ProviderInstanceID(instanceID),
 			paymentorder.StatusIn(OrderStatusCompleted, OrderStatusPaid, OrderStatusRecharging),
 			paymentorder.PaidAtGTE(todayStart),

@@ -11,22 +11,31 @@ const {
   duplicateMonitor,
   showSuccess,
   showError,
+  runNow,
+  runtime,
 } = vi.hoisted(() => ({
   listMonitors: vi.fn(),
   duplicateMonitor: vi.fn(),
   showSuccess: vi.fn(),
   showError: vi.fn(),
+  runNow: vi.fn(),
+  runtime: { mode: 'v1', active: true },
 }))
 
 
 vi.mock('@/utils/featureFlags', () => ({
-  isChannelMonitorV1Mode: () => true,
+  isChannelMonitorV1Mode: () => runtime.mode === 'v1',
+  isChannelMonitorActiveProbeEnabled: () => runtime.active,
   isChannelMonitorV2Mode: () => false,
-  getChannelMonitorMode: () => 'v1' as const,
+  getChannelMonitorMode: () => runtime.mode,
 }))
 
 vi.mock('@/features/channel-monitor-v2/MonitorSettingsPanel.vue', () => ({
   default: { name: 'MonitorSettingsPanel', template: '<div data-testid="v2-settings" />' },
+}))
+
+vi.mock('@/features/channel-monitor-v3/StatusSettingsPanel.vue', () => ({
+  default: { name: 'StatusSettingsPanel', template: '<div data-testid="v3-settings" />' },
 }))
 
 vi.mock('@/api/admin', () => ({
@@ -35,7 +44,7 @@ vi.mock('@/api/admin', () => ({
       list: listMonitors,
       duplicate: duplicateMonitor,
       update: vi.fn(),
-      runNow: vi.fn(),
+      runNow,
       del: vi.fn(),
     },
   },
@@ -128,8 +137,11 @@ function mountView() {
 
 describe('ChannelMonitorView duplicate action', () => {
   beforeEach(() => {
+    runtime.mode = 'v1'
+    runtime.active = true
     localStorage.clear()
-    for (const fn of [listMonitors, duplicateMonitor, showSuccess, showError]) fn.mockReset()
+    for (const fn of [listMonitors, duplicateMonitor, showSuccess, showError, runNow]) fn.mockReset()
+    runNow.mockResolvedValue({ results: [] })
     listMonitors.mockResolvedValue({
       items: [monitor],
       total: 1,
@@ -138,6 +150,35 @@ describe('ChannelMonitorView duplicate action', () => {
       pages: 1,
     })
     duplicateMonitor.mockResolvedValue(makeMonitor({ id: 43, name: 'primary (Copy)', enabled: false }))
+  })
+
+  it('allows manual V1 probes alongside V3 and labels the active tab', async () => {
+    runtime.mode = 'v3'
+    const wrapper = mountView()
+    await wrapper.get('[role="tablist"] button:last-child').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[role="tablist"] button:last-child').text()).toBe('channelMonitorV2.admin.tabV1Active')
+    const actions = wrapper.findComponent(MonitorActionsCell)
+    expect(actions.props('probesEnabled')).toBe(true)
+    actions.vm.$emit('run', monitor)
+    await flushPromises()
+    expect(runNow).toHaveBeenCalledWith(42)
+    expect(showError).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('disables manual V1 probes when V3 extra probes are off', async () => {
+    runtime.mode = 'v3'
+    runtime.active = false
+    const wrapper = mountView()
+    await wrapper.get('[role="tablist"] button:last-child').trigger('click')
+    await flushPromises()
+    const actions = wrapper.findComponent(MonitorActionsCell)
+    expect(actions.props('probesEnabled')).toBe(false)
+    actions.vm.$emit('run', monitor)
+    await flushPromises()
+    expect(runNow).not.toHaveBeenCalled()
+    wrapper.unmount()
   })
 
   it('duplicates the selected monitor, reports success, and refreshes the list', async () => {

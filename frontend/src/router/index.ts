@@ -320,6 +320,12 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/purchase/redeem-shop',
+    name: 'RedeemShop',
+    component: () => import('@/views/user/RedeemShopView.vue'),
+    meta: { requiresAuth: true, requiresPayment: true, titleKey: 'featureExtensions.purchaseTitle' }
+  },
+  {
     path: '/purchase',
     name: 'PurchaseSubscription',
     component: () => import('@/views/user/PaymentView.vue'),

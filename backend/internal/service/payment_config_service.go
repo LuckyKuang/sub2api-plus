@@ -15,16 +15,19 @@ import (
 )
 
 const (
-	SettingPaymentEnabled      = "payment_enabled"
-	SettingMinRechargeAmount   = "MIN_RECHARGE_AMOUNT"
-	SettingMaxRechargeAmount   = "MAX_RECHARGE_AMOUNT"
-	SettingDailyRechargeLimit  = "DAILY_RECHARGE_LIMIT"
-	SettingOrderTimeoutMinutes = "ORDER_TIMEOUT_MINUTES"
-	SettingMaxPendingOrders    = "MAX_PENDING_ORDERS"
-	SettingEnabledPaymentTypes = "ENABLED_PAYMENT_TYPES"
-	SettingLoadBalanceStrategy = "LOAD_BALANCE_STRATEGY"
-	SettingBalancePayDisabled  = "BALANCE_PAYMENT_DISABLED"
-	SettingBalanceRechargeMult = "BALANCE_RECHARGE_MULTIPLIER"
+	SettingPaymentRedeemPurchaseEnabled = "payment_redeem_purchase_enabled"
+	SettingPaymentRedeemPurchaseURL     = "payment_redeem_purchase_url"
+	SettingPaymentRedeemPurchaseMode    = "payment_redeem_purchase_mode"
+	SettingPaymentEnabled               = "payment_enabled"
+	SettingMinRechargeAmount            = "MIN_RECHARGE_AMOUNT"
+	SettingMaxRechargeAmount            = "MAX_RECHARGE_AMOUNT"
+	SettingDailyRechargeLimit           = "DAILY_RECHARGE_LIMIT"
+	SettingOrderTimeoutMinutes          = "ORDER_TIMEOUT_MINUTES"
+	SettingMaxPendingOrders             = "MAX_PENDING_ORDERS"
+	SettingEnabledPaymentTypes          = "ENABLED_PAYMENT_TYPES"
+	SettingLoadBalanceStrategy          = "LOAD_BALANCE_STRATEGY"
+	SettingBalancePayDisabled           = "BALANCE_PAYMENT_DISABLED"
+	SettingBalanceRechargeMult          = "BALANCE_RECHARGE_MULTIPLIER"
 	// SettingSubscriptionUSDToCNYRate 是订阅 CNY 换算汇率（1 USD = X CNY）。
 	// 0/未配置 = 关闭换算（订阅按 price 数值直付），显式配置后 CNY 通道订阅按 price × rate 收款。
 	SettingSubscriptionUSDToCNYRate      = "SUBSCRIPTION_USD_TO_CNY_RATE"
@@ -50,6 +53,9 @@ const (
 
 // PaymentConfig holds the payment system configuration.
 type PaymentConfig struct {
+	RedeemPurchaseEnabled     bool     `json:"redeem_purchase_enabled"`
+	RedeemPurchaseURL         string   `json:"redeem_purchase_url"`
+	RedeemPurchaseMode        string   `json:"redeem_purchase_mode"`
 	Enabled                   bool     `json:"enabled"`
 	MinAmount                 float64  `json:"min_amount"`
 	MaxAmount                 float64  `json:"max_amount"`
@@ -90,6 +96,9 @@ type PaymentConfig struct {
 
 // UpdatePaymentConfigRequest contains fields to update payment configuration.
 type UpdatePaymentConfigRequest struct {
+	RedeemPurchaseEnabled     *bool    `json:"redeem_purchase_enabled"`
+	RedeemPurchaseURL         *string  `json:"redeem_purchase_url"`
+	RedeemPurchaseMode        *string  `json:"redeem_purchase_mode"`
 	Enabled                   *bool    `json:"enabled"`
 	MinAmount                 *float64 `json:"min_amount"`
 	MaxAmount                 *float64 `json:"max_amount"`
@@ -208,6 +217,7 @@ type PaymentConfigService struct {
 	entClient     *dbent.Client
 	settingRepo   SettingRepository
 	encryptionKey []byte
+	onUpdate      func()
 }
 
 // NewPaymentConfigService creates a new PaymentConfigService.
@@ -227,6 +237,7 @@ func (s *PaymentConfigService) IsPaymentEnabled(ctx context.Context) bool {
 // GetPaymentConfig returns the full payment configuration.
 func (s *PaymentConfigService) GetPaymentConfig(ctx context.Context) (*PaymentConfig, error) {
 	keys := []string{
+		SettingPaymentRedeemPurchaseEnabled, SettingPaymentRedeemPurchaseURL, SettingPaymentRedeemPurchaseMode,
 		SettingPaymentEnabled, SettingMinRechargeAmount, SettingMaxRechargeAmount,
 		SettingDailyRechargeLimit, SettingOrderTimeoutMinutes, SettingMaxPendingOrders,
 		SettingEnabledPaymentTypes, SettingBalancePayDisabled, SettingBalanceRechargeMult, SettingSubscriptionUSDToCNYRate, SettingRechargeFeeRate, SettingLoadBalanceStrategy,
@@ -251,6 +262,9 @@ func (s *PaymentConfigService) GetPaymentConfig(ctx context.Context) (*PaymentCo
 
 func (s *PaymentConfigService) parsePaymentConfig(vals map[string]string) *PaymentConfig {
 	cfg := &PaymentConfig{
+		RedeemPurchaseEnabled:     vals[SettingPaymentRedeemPurchaseEnabled] == "true",
+		RedeemPurchaseURL:         vals[SettingPaymentRedeemPurchaseURL],
+		RedeemPurchaseMode:        vals[SettingPaymentRedeemPurchaseMode],
 		Enabled:                   vals[SettingPaymentEnabled] == "true",
 		MinAmount:                 pcParseFloat(vals[SettingMinRechargeAmount], 1),
 		MaxAmount:                 pcParseFloat(vals[SettingMaxRechargeAmount], 0),
@@ -277,6 +291,12 @@ func (s *PaymentConfigService) parsePaymentConfig(vals map[string]string) *Payme
 
 		AlipayForceQRCode:             vals[SettingAlipayForceQRCode] == "true",
 		AlipayMobilePrecreateDeepLink: vals[SettingAlipayMobilePrecreateDeepLink] == "true",
+	}
+	if cfg.RedeemPurchaseMode == "" {
+		cfg.RedeemPurchaseMode = "new_tab"
+	}
+	if ValidateRedeemPurchase(cfg.RedeemPurchaseEnabled, cfg.RedeemPurchaseURL, cfg.RedeemPurchaseMode) != nil {
+		cfg.RedeemPurchaseEnabled = false
 	}
 	cfg.RechargeBonusMode, _ = NormalizeRechargeBonusMode(pcEnvStringOverride(SettingRechargeBonusMode, vals[SettingRechargeBonusMode]))
 	cfg.AlipayMobilePrecreateDeepLink = pcEnvBoolOverride(
@@ -347,6 +367,9 @@ func (s *PaymentConfigService) getStripePublishableKey(ctx context.Context) stri
 // nil-check before serialisation — this is inherent to patch-style update patterns
 // and cannot be meaningfully decomposed without introducing unnecessary abstraction.
 func (s *PaymentConfigService) UpdatePaymentConfig(ctx context.Context, req UpdatePaymentConfigRequest) error {
+	if err := s.ValidateRedeemPurchaseUpdate(ctx, req); err != nil {
+		return err
+	}
 	if req.BalanceRechargeMultiplier != nil {
 		if math.IsNaN(*req.BalanceRechargeMultiplier) || math.IsInf(*req.BalanceRechargeMultiplier, 0) || *req.BalanceRechargeMultiplier <= 0 {
 			return infraerrors.BadRequest("INVALID_BALANCE_RECHARGE_MULTIPLIER", "balance recharge multiplier must be greater than 0")
@@ -378,6 +401,15 @@ func (s *PaymentConfigService) UpdatePaymentConfig(ctx context.Context, req Upda
 		}
 	}
 	m := make(map[string]string)
+	if req.RedeemPurchaseEnabled != nil {
+		m[SettingPaymentRedeemPurchaseEnabled] = strconv.FormatBool(*req.RedeemPurchaseEnabled)
+	}
+	if req.RedeemPurchaseURL != nil {
+		m[SettingPaymentRedeemPurchaseURL] = strings.TrimSpace(*req.RedeemPurchaseURL)
+	}
+	if req.RedeemPurchaseMode != nil {
+		m[SettingPaymentRedeemPurchaseMode] = *req.RedeemPurchaseMode
+	}
 	if req.Enabled != nil {
 		m[SettingPaymentEnabled] = formatBoolOrEmpty(req.Enabled)
 	}
@@ -468,7 +500,13 @@ func (s *PaymentConfigService) UpdatePaymentConfig(ctx context.Context, req Upda
 	if req.VisibleMethodWxpayEnabled != nil {
 		m[SettingPaymentVisibleMethodWxpayEnabled] = formatBoolOrEmpty(req.VisibleMethodWxpayEnabled)
 	}
-	return s.settingRepo.SetMultiple(ctx, m)
+	if err := s.settingRepo.SetMultiple(ctx, m); err != nil {
+		return err
+	}
+	if s.onUpdate != nil {
+		s.onUpdate()
+	}
+	return nil
 }
 
 func formatBoolOrEmpty(v *bool) string {

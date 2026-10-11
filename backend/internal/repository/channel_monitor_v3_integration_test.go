@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/LuckyKuang/sub2api-plus/ent/channelmonitorhistory"
 	"github.com/LuckyKuang/sub2api-plus/internal/domain"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/service"
@@ -172,7 +173,7 @@ func TestChannelMonitorV3DisabledTrafficLimitAndAllDisabledCleanup(t *testing.T)
 	require.Equal(t, "kimi", data.Current[0].Platform, "effective group platform wins over protocol classification")
 	cfg.DisabledPlatforms = domain.ConcretePlatforms()
 	saveV3TestConfig(t, cfg)
-	_, err = integrationDB.Exec(`INSERT INTO channel_monitor_v3_facts VALUES ($1,'openai',$2,'expired',1,0,$1,ARRAY[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0])`, now.Add(-32*24*time.Hour), group.ID)
+	_, err = integrationDB.Exec(`INSERT INTO channel_monitor_v3_facts VALUES ($1,'openai',$2,'expired',1,0,$1,ARRAY[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],'request',$2,'')`, now.Add(-32*24*time.Hour), group.ID)
 	require.NoError(t, err)
 	locked, err := integrationDB.BeginTx(ctx, nil)
 	require.NoError(t, err)
@@ -314,7 +315,7 @@ func TestChannelMonitorV3CanonicalOutcomesGlobalStatusAndIncidents(t *testing.T)
 	openai := service.BuildChannelMonitorV3Snapshot(data, cfg, now, 24*time.Hour, "openai")
 	require.Contains(t, openai.Platforms[0].Timeline, service.ChannelMonitorV3Timeline{At: now.Add(-30 * time.Minute), Status: "partial"}, "history bins must align to the snapshot window")
 	require.InDelta(t, 7.0/11, *openai.Platforms[0].SuccessRate, 0.00001, "platform history must include the other user's failed request")
-	require.Contains(t, openai.Platforms[0].Models, service.ChannelMonitorV3Model{GroupID: foreign.ID, GroupName: foreign.Name, Model: "other-user-model", Status: "outage"})
+	require.Contains(t, openai.Platforms[0].Models, service.ChannelMonitorV3Model{SourceKind: "request", GroupID: foreign.ID, GroupName: foreign.Name, Model: "other-user-model", Status: "outage"})
 	raw, err := json.Marshal(result)
 	require.NoError(t, err)
 	require.Contains(t, string(raw), "other-user-model")
@@ -412,7 +413,7 @@ func TestChannelMonitorV3IncidentHistoryKeepsAllActive(t *testing.T) {
 		event := service.ChannelMonitorV3Incident{ID: uuid.NewString(), Platform: "openai", GroupID: group.ID, Model: uuid.NewString(), Severity: "partial", Phase: "detected", StartedAt: now, UpdatedAt: now, Updates: []service.ChannelMonitorV3Update{}}
 		raw, err := json.Marshal(event)
 		require.NoError(t, err)
-		_, err = integrationDB.ExecContext(ctx, `INSERT INTO channel_monitor_v3_incidents VALUES ($1,$2,$3,$4,$5,NULL,$6)`, event.ID, event.Platform, event.GroupID, event.Model, now, string(raw))
+		_, err = integrationDB.ExecContext(ctx, `INSERT INTO channel_monitor_v3_incidents VALUES ($1,$2,$3,$4,$5,NULL,$6,'request',$3)`, event.ID, event.Platform, event.GroupID, event.Model, now, string(raw))
 		require.NoError(t, err)
 	}
 	data, err := NewChannelMonitorV3Repository(integrationDB).Read(ctx, now, 24*time.Hour, "")
@@ -429,7 +430,7 @@ func TestChannelMonitorV3IncidentHistoryKeepsAllActive(t *testing.T) {
 		event := service.ChannelMonitorV3Incident{ID: uuid.NewString(), Platform: platform, GroupID: group.ID, Model: uuid.NewString(), Severity: "partial", Phase: "resolved", StartedAt: started, UpdatedAt: now, ResolvedAt: &now, Updates: []service.ChannelMonitorV3Update{}}
 		raw, marshalErr := json.Marshal(event)
 		require.NoError(t, marshalErr)
-		_, err = integrationDB.ExecContext(ctx, `INSERT INTO channel_monitor_v3_incidents VALUES ($1,$2,$3,$4,$5,$6,$7)`, event.ID, event.Platform, event.GroupID, event.Model, started, now, string(raw))
+		_, err = integrationDB.ExecContext(ctx, `INSERT INTO channel_monitor_v3_incidents VALUES ($1,$2,$3,$4,$5,$6,$7,'request',$3)`, event.ID, event.Platform, event.GroupID, event.Model, started, now, string(raw))
 		require.NoError(t, err)
 	}
 	repo := NewChannelMonitorV3Repository(integrationDB)
@@ -443,4 +444,98 @@ func TestChannelMonitorV3IncidentHistoryKeepsAllActive(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, filtered.Incidents, 1)
 	require.Equal(t, "kimi", filtered.Incidents[0].Platform)
+}
+
+func TestChannelMonitorV3ProbeSourcesAndToggleBoundary(t *testing.T) {
+	ctx := context.Background()
+	client := testEntClient(t)
+	prefix := "v3-probe-" + uuid.NewString()
+	resetV3Observations(t)
+	cfg := service.DefaultChannelMonitorV3Config()
+	cfg.MinimumSamples = 100
+	saveV3TestConfig(t, cfg)
+	user, err := client.User.Create().SetEmail(prefix + "@example.com").SetPasswordHash("test").Save(ctx)
+	require.NoError(t, err)
+	monitor, err := client.ChannelMonitor.Create().SetName(prefix).SetProvider("openai").SetEndpoint("https://example.com").SetAPIKeyEncrypted("test").SetPrimaryModel("probe-model").SetIntervalSeconds(60).SetCreatedBy(user.ID).Save(ctx)
+	require.NoError(t, err)
+	quota, err := client.ChannelMonitor.Create().SetName(prefix + "-quota").SetProvider("openai").SetCheckMode("quota").SetEndpoint("").SetAPIKeyEncrypted("test").SetPrimaryModel("quota-model").SetIntervalSeconds(60).SetCreatedBy(user.ID).Save(ctx)
+	require.NoError(t, err)
+	settingRepo := NewSettingRepository(client)
+	keys := []string{service.SettingKeyChannelMonitorEnabled, service.SettingKeyChannelMonitorMode, service.SettingKeyChannelMonitorV1Enabled}
+	previous, err := settingRepo.GetMultiple(ctx, keys)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		for _, key := range keys {
+			if value, ok := previous[key]; ok {
+				_ = settingRepo.Set(ctx, key, value)
+			} else {
+				_ = settingRepo.Delete(ctx, key)
+			}
+		}
+		_, _ = integrationDB.Exec(`DELETE FROM channel_monitors WHERE id=ANY($1)`, pq.Array([]int64{monitor.ID, quota.ID}))
+		_, _ = integrationDB.Exec(`DELETE FROM users WHERE id=$1`, user.ID)
+	})
+	require.NoError(t, settingRepo.SetMultiple(ctx, map[string]string{keys[0]: "true", keys[1]: "v3", keys[2]: "true"}))
+	repo := NewChannelMonitorV3Repository(integrationDB)
+	active, err := repo.GetConfig(ctx)
+	require.NoError(t, err)
+	require.True(t, active.ProbesEnabled)
+	require.False(t, active.ProbeObservationStart.IsZero())
+	now := active.ProbeObservationStart.Add(time.Minute)
+	for _, item := range []struct {
+		id            int64
+		model, status string
+		at            time.Time
+	}{
+		{monitor.ID, "probe-model", "operational", active.ProbeObservationStart.Add(-time.Second)},
+		{monitor.ID, "probe-model", "failed", now.Add(-10 * time.Second)},
+		{quota.ID, "quota-model", "operational", now.Add(-10 * time.Second)},
+	} {
+		_, err = client.ChannelMonitorHistory.Create().SetMonitorID(item.id).SetModel(item.model).SetStatus(channelmonitorhistory.Status(item.status)).SetCheckedAt(item.at).SetLatencyMs(999999).Save(ctx)
+		require.NoError(t, err)
+	}
+	require.NoError(t, repo.Refresh(ctx, now))
+	data, err := repo.Read(ctx, now, 24*time.Hour, "openai")
+	require.NoError(t, err)
+	snapshot := service.BuildChannelMonitorV3Snapshot(data, data.Config, now, 24*time.Hour, "openai")
+	require.Len(t, snapshot.Platforms, 1)
+	platform := snapshot.Platforms[0]
+	require.Equal(t, "outage", platform.Status)
+	require.Nil(t, platform.TTFTP50Ms)
+	require.Len(t, platform.Models, 1)
+	require.Equal(t, "probe", platform.Models[0].SourceKind)
+	require.Equal(t, monitor.ID, *platform.Models[0].MonitorID)
+	var observations int64
+	require.NoError(t, integrationDB.QueryRow(`SELECT SUM(success_requests+failed_requests) FROM channel_monitor_v3_facts WHERE source_kind='probe'`).Scan(&observations))
+	require.Equal(t, int64(1), observations)
+	require.NoError(t, repo.Refresh(ctx, now.Add(time.Minute)))
+	var events int
+	require.NoError(t, integrationDB.QueryRow(`SELECT COUNT(*) FROM channel_monitor_v3_incidents WHERE source_kind='probe'`).Scan(&events))
+	require.Zero(t, events, "timer ticks must not manufacture a second confirmation")
+	_, err = client.ChannelMonitorHistory.Create().SetMonitorID(monitor.ID).SetModel("probe-model").SetStatus("error").SetCheckedAt(now.Add(time.Minute + 10*time.Second)).Save(ctx)
+	require.NoError(t, err)
+	require.NoError(t, repo.Refresh(ctx, now.Add(2*time.Minute)))
+	require.NoError(t, integrationDB.QueryRow(`SELECT COUNT(*) FROM channel_monitor_v3_incidents WHERE source_kind='probe'`).Scan(&events))
+	require.Equal(t, 1, events)
+	require.NoError(t, settingRepo.Set(ctx, keys[2], "false"))
+	off, err := repo.Read(ctx, now.Add(2*time.Minute), 24*time.Hour, "openai")
+	require.NoError(t, err)
+	require.Empty(t, off.Incidents)
+	require.NoError(t, settingRepo.Set(ctx, keys[2], "true"))
+	resumed, err := repo.GetConfig(ctx)
+	require.NoError(t, err)
+	require.NoError(t, repo.Refresh(ctx, now.Add(8*time.Minute)))
+	stale, err := repo.Read(ctx, now.Add(8*time.Minute), 24*time.Hour, "openai")
+	require.NoError(t, err)
+	value := service.BuildChannelMonitorV3Snapshot(stale, stale.Config, now.Add(8*time.Minute), 24*time.Hour, "openai")
+	require.Equal(t, "unknown", value.Platforms[0].Status)
+	require.Len(t, value.Incidents, 1)
+	require.Equal(t, "awaiting_data", value.Incidents[0].Phase)
+	require.False(t, resumed.ProbeObservationStart.IsZero())
+	_, err = client.ChannelMonitor.UpdateOneID(monitor.ID).SetEnabled(false).Save(ctx)
+	require.NoError(t, err)
+	hidden, err := repo.Read(ctx, now.Add(8*time.Minute), 24*time.Hour, "openai")
+	require.NoError(t, err)
+	require.Empty(t, hidden.Incidents)
+	require.Empty(t, hidden.Catalog)
 }

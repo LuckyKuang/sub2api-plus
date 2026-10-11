@@ -16,7 +16,12 @@ import (
 
 // --- Dashboard & Analytics ---
 
-func (s *PaymentService) GetDashboardStats(ctx context.Context, days int) (*DashboardStats, error) {
+func (s *PaymentService) GetDashboardStats(ctx context.Context, days int, sources ...string) (*DashboardStats, error) {
+	if len(sources) > 0 {
+		if err := validateOrderSource(sources[0]); err != nil {
+			return nil, err
+		}
+	}
 	if days <= 0 {
 		days = 30
 	}
@@ -26,7 +31,11 @@ func (s *PaymentService) GetDashboardStats(ctx context.Context, days int) (*Dash
 
 	paidStatuses := []string{OrderStatusCompleted, OrderStatusPaid, OrderStatusRecharging}
 
-	orders, err := s.entClient.PaymentOrder.Query().
+	q := s.entClient.PaymentOrder.Query()
+	if len(sources) > 0 && sources[0] != "" {
+		q = q.Where(paymentorder.OrderSourceEQ(sources[0]))
+	}
+	orders, err := q.
 		Where(
 			paymentorder.StatusIn(paidStatuses...),
 			paymentorder.PaidAtGTE(since),
@@ -39,8 +48,11 @@ func (s *PaymentService) GetDashboardStats(ctx context.Context, days int) (*Dash
 	st := &DashboardStats{}
 	computeBasicStats(st, orders, todayStart)
 
-	st.PendingOrders, err = s.entClient.PaymentOrder.Query().
-		Where(paymentorder.StatusEQ(OrderStatusPending)).
+	pending := s.entClient.PaymentOrder.Query().Where(paymentorder.StatusEQ(OrderStatusPending), paymentorder.OrderSourceEQ(OrderSourcePayment))
+	if len(sources) > 0 && sources[0] != "" {
+		pending = pending.Where(paymentorder.OrderSourceEQ(sources[0]))
+	}
+	st.PendingOrders, err = pending.
 		Count(ctx)
 	if err != nil {
 		return nil, err

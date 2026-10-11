@@ -1,5 +1,5 @@
 <template>
-  <article class="catalog-model-card flex min-w-0 flex-col rounded-xl border border-gray-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md dark:border-dark-700 dark:bg-dark-900">
+  <article class="catalog-model-card flex min-w-0 flex-col rounded-[20px] border border-gray-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md dark:border-dark-700 dark:bg-dark-900">
     <div class="flex items-center justify-between gap-2 text-xs">
       <span class="inline-flex min-w-0 items-center gap-1.5" :class="platformTextClass(model.platform)">
         <PlatformIcon :platform="model.platform" size="sm" />{{ model.platform }}

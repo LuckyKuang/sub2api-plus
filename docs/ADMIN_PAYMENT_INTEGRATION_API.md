@@ -170,6 +170,48 @@ Idempotency behavior:
 - Same `code` but different `used_by`: `409`
 - Missing `Idempotency-Key`: `400` (`IDEMPOTENCY_KEY_REQUIRED`)
 
+Optional redemption-order fields:
+
+| Field | Behavior |
+| --- | --- |
+| `generate_order` | Defaults to `false`; only `balance` and `subscription` accept `true`. |
+| `order_currency` | Balance orders: `CNY` (default) or `USD`. A value of 100 credits 100 USD and records 100 in the selected order currency; no exchange rate, fee or recharge promotion applies. |
+| `order_plan_id` | Required for subscription orders. The server freezes the existing plan's selling `price`, currency, ID/name, entitlement group and duration when creating the code. Off-sale plans are allowed. |
+
+For a subscription with `generate_order=true`, omit `value`, `group_id` and
+`validity_days`; the selected plan supplies the price and entitlement. Conflicting
+group/duration input is rejected. The code retains its frozen snapshot after a
+plan is edited or deleted; an unavailable entitlement group prevents redemption.
+For example:
+
+```json
+{
+  "code": "external-subscription-123",
+  "type": "subscription",
+  "generate_order": true,
+  "order_plan_id": 7,
+  "user_id": 123
+}
+```
+
+Redeeming an opted-in code consumes the code, grants its benefits and writes a
+`COMPLETED` order plus audit in the same transaction. A unique code reference
+prevents duplicate orders. Retries reuse the original snapshot. Orders have
+`order_source=redeem` and retain `order_type=balance|subscription`; ordinary
+payments have `order_source=payment`. Omitted fields preserve the original
+fulfillment behavior without creating an extra order. The generated-code API
+`POST /api/v1/admin/redeem-codes/generate` accepts the same optional fields, with
+`count` instead of a fixed code/user; the whole batch uses one snapshot and is
+created atomically. Admin list/detail DTOs and redeem-code CSV exports include
+the frozen order fields.
+
+User/admin order lists and the payment dashboard accept
+`order_source=payment|redeem`; omitting it includes both, and an unknown source
+returns `400` (`INVALID_ORDER_SOURCE`). List filters also retain
+`order_type=balance|subscription`. Statistics aggregate each currency separately.
+All refund entrypoints, including forced refunds, reject redemption orders with
+`REDEEM_ORDER_REFUND_DISABLED` before provider calls, deductions or status changes.
+
 curl example:
 ```bash
 curl -X POST "${BASE}/api/v1/admin/redeem-codes/create-and-redeem" \
@@ -231,6 +273,16 @@ Example:
 ```text
 https://pay.example.com/pay?user_id=123&token=<jwt>&theme=light&lang=zh&ui_mode=embedded
 ```
+
+The new third-party **redeem-code purchase** card uses independent settings:
+`payment_redeem_purchase_enabled` (default `false`),
+`payment_redeem_purchase_url` (default empty), and
+`payment_redeem_purchase_mode` (`new_tab`, default, or `iframe`). This entry uses
+the saved absolute HTTP(S) URL verbatim and never appends a token, API key, user
+ID or page URL. Its iframe page offers links back to recharge/subscription and
+redemption, plus a new-tab link. It still requires the built-in `payment_enabled`
+entry to be enabled. Buying a code on that page does not credit benefits or
+create an order; the subsequent redemption performs those actions.
 
 ### 5) Failure handling recommendations
 - Persist payment success and recharge success as separate states

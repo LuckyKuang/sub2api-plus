@@ -525,6 +525,7 @@ const (
 	// the user-facing monitor APIs and UI. Default false (hidden); parsed
 	// fail-closed (only the literal "true" enables it). Admin endpoints always
 	// keep the full snapshots regardless of this flag.
+	SettingKeyChannelMonitorV1Enabled = "channel_monitor_v1_enabled"
 	SettingKeyChannelMonitorShowQuota = "channel_monitor_show_quota"
 	// SettingKeyChannelMonitorHideUserRanking hides the user ranking tab and
 	// /users payload from non-admin channel-monitor v2 viewers.

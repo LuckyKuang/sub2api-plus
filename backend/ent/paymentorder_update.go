@@ -291,6 +291,75 @@ func (_u *PaymentOrderUpdate) ClearQrCodeImg() *PaymentOrderUpdate {
 	return _u
 }
 
+// SetOrderSource sets the "order_source" field.
+func (_u *PaymentOrderUpdate) SetOrderSource(v string) *PaymentOrderUpdate {
+	_u.mutation.SetOrderSource(v)
+	return _u
+}
+
+// SetNillableOrderSource sets the "order_source" field if the given value is not nil.
+func (_u *PaymentOrderUpdate) SetNillableOrderSource(v *string) *PaymentOrderUpdate {
+	if v != nil {
+		_u.SetOrderSource(*v)
+	}
+	return _u
+}
+
+// SetCurrency sets the "currency" field.
+func (_u *PaymentOrderUpdate) SetCurrency(v string) *PaymentOrderUpdate {
+	_u.mutation.SetCurrency(v)
+	return _u
+}
+
+// SetNillableCurrency sets the "currency" field if the given value is not nil.
+func (_u *PaymentOrderUpdate) SetNillableCurrency(v *string) *PaymentOrderUpdate {
+	if v != nil {
+		_u.SetCurrency(*v)
+	}
+	return _u
+}
+
+// SetPlanName sets the "plan_name" field.
+func (_u *PaymentOrderUpdate) SetPlanName(v string) *PaymentOrderUpdate {
+	_u.mutation.SetPlanName(v)
+	return _u
+}
+
+// SetNillablePlanName sets the "plan_name" field if the given value is not nil.
+func (_u *PaymentOrderUpdate) SetNillablePlanName(v *string) *PaymentOrderUpdate {
+	if v != nil {
+		_u.SetPlanName(*v)
+	}
+	return _u
+}
+
+// SetRedeemCodeID sets the "redeem_code_id" field.
+func (_u *PaymentOrderUpdate) SetRedeemCodeID(v int64) *PaymentOrderUpdate {
+	_u.mutation.ResetRedeemCodeID()
+	_u.mutation.SetRedeemCodeID(v)
+	return _u
+}
+
+// SetNillableRedeemCodeID sets the "redeem_code_id" field if the given value is not nil.
+func (_u *PaymentOrderUpdate) SetNillableRedeemCodeID(v *int64) *PaymentOrderUpdate {
+	if v != nil {
+		_u.SetRedeemCodeID(*v)
+	}
+	return _u
+}
+
+// AddRedeemCodeID adds value to the "redeem_code_id" field.
+func (_u *PaymentOrderUpdate) AddRedeemCodeID(v int64) *PaymentOrderUpdate {
+	_u.mutation.AddRedeemCodeID(v)
+	return _u
+}
+
+// ClearRedeemCodeID clears the value of the "redeem_code_id" field.
+func (_u *PaymentOrderUpdate) ClearRedeemCodeID() *PaymentOrderUpdate {
+	_u.mutation.ClearRedeemCodeID()
+	return _u
+}
+
 // SetOrderType sets the "order_type" field.
 func (_u *PaymentOrderUpdate) SetOrderType(v string) *PaymentOrderUpdate {
 	_u.mutation.SetOrderType(v)
@@ -819,6 +888,21 @@ func (_u *PaymentOrderUpdate) check() error {
 			return &ValidationError{Name: "payment_trade_no", err: fmt.Errorf(`ent: validator failed for field "PaymentOrder.payment_trade_no": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.OrderSource(); ok {
+		if err := paymentorder.OrderSourceValidator(v); err != nil {
+			return &ValidationError{Name: "order_source", err: fmt.Errorf(`ent: validator failed for field "PaymentOrder.order_source": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.Currency(); ok {
+		if err := paymentorder.CurrencyValidator(v); err != nil {
+			return &ValidationError{Name: "currency", err: fmt.Errorf(`ent: validator failed for field "PaymentOrder.currency": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.PlanName(); ok {
+		if err := paymentorder.PlanNameValidator(v); err != nil {
+			return &ValidationError{Name: "plan_name", err: fmt.Errorf(`ent: validator failed for field "PaymentOrder.plan_name": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.OrderType(); ok {
 		if err := paymentorder.OrderTypeValidator(v); err != nil {
 			return &ValidationError{Name: "order_type", err: fmt.Errorf(`ent: validator failed for field "PaymentOrder.order_type": %w`, err)}
@@ -937,6 +1021,24 @@ func (_u *PaymentOrderUpdate) sqlSave(ctx context.Context) (_node int, err error
 	}
 	if _u.mutation.QrCodeImgCleared() {
 		_spec.ClearField(paymentorder.FieldQrCodeImg, field.TypeString)
+	}
+	if value, ok := _u.mutation.OrderSource(); ok {
+		_spec.SetField(paymentorder.FieldOrderSource, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Currency(); ok {
+		_spec.SetField(paymentorder.FieldCurrency, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.PlanName(); ok {
+		_spec.SetField(paymentorder.FieldPlanName, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.RedeemCodeID(); ok {
+		_spec.SetField(paymentorder.FieldRedeemCodeID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedRedeemCodeID(); ok {
+		_spec.AddField(paymentorder.FieldRedeemCodeID, field.TypeInt64, value)
+	}
+	if _u.mutation.RedeemCodeIDCleared() {
+		_spec.ClearField(paymentorder.FieldRedeemCodeID, field.TypeInt64)
 	}
 	if value, ok := _u.mutation.OrderType(); ok {
 		_spec.SetField(paymentorder.FieldOrderType, field.TypeString, value)
@@ -1378,6 +1480,75 @@ func (_u *PaymentOrderUpdateOne) SetNillableQrCodeImg(v *string) *PaymentOrderUp
 // ClearQrCodeImg clears the value of the "qr_code_img" field.
 func (_u *PaymentOrderUpdateOne) ClearQrCodeImg() *PaymentOrderUpdateOne {
 	_u.mutation.ClearQrCodeImg()
+	return _u
+}
+
+// SetOrderSource sets the "order_source" field.
+func (_u *PaymentOrderUpdateOne) SetOrderSource(v string) *PaymentOrderUpdateOne {
+	_u.mutation.SetOrderSource(v)
+	return _u
+}
+
+// SetNillableOrderSource sets the "order_source" field if the given value is not nil.
+func (_u *PaymentOrderUpdateOne) SetNillableOrderSource(v *string) *PaymentOrderUpdateOne {
+	if v != nil {
+		_u.SetOrderSource(*v)
+	}
+	return _u
+}
+
+// SetCurrency sets the "currency" field.
+func (_u *PaymentOrderUpdateOne) SetCurrency(v string) *PaymentOrderUpdateOne {
+	_u.mutation.SetCurrency(v)
+	return _u
+}
+
+// SetNillableCurrency sets the "currency" field if the given value is not nil.
+func (_u *PaymentOrderUpdateOne) SetNillableCurrency(v *string) *PaymentOrderUpdateOne {
+	if v != nil {
+		_u.SetCurrency(*v)
+	}
+	return _u
+}
+
+// SetPlanName sets the "plan_name" field.
+func (_u *PaymentOrderUpdateOne) SetPlanName(v string) *PaymentOrderUpdateOne {
+	_u.mutation.SetPlanName(v)
+	return _u
+}
+
+// SetNillablePlanName sets the "plan_name" field if the given value is not nil.
+func (_u *PaymentOrderUpdateOne) SetNillablePlanName(v *string) *PaymentOrderUpdateOne {
+	if v != nil {
+		_u.SetPlanName(*v)
+	}
+	return _u
+}
+
+// SetRedeemCodeID sets the "redeem_code_id" field.
+func (_u *PaymentOrderUpdateOne) SetRedeemCodeID(v int64) *PaymentOrderUpdateOne {
+	_u.mutation.ResetRedeemCodeID()
+	_u.mutation.SetRedeemCodeID(v)
+	return _u
+}
+
+// SetNillableRedeemCodeID sets the "redeem_code_id" field if the given value is not nil.
+func (_u *PaymentOrderUpdateOne) SetNillableRedeemCodeID(v *int64) *PaymentOrderUpdateOne {
+	if v != nil {
+		_u.SetRedeemCodeID(*v)
+	}
+	return _u
+}
+
+// AddRedeemCodeID adds value to the "redeem_code_id" field.
+func (_u *PaymentOrderUpdateOne) AddRedeemCodeID(v int64) *PaymentOrderUpdateOne {
+	_u.mutation.AddRedeemCodeID(v)
+	return _u
+}
+
+// ClearRedeemCodeID clears the value of the "redeem_code_id" field.
+func (_u *PaymentOrderUpdateOne) ClearRedeemCodeID() *PaymentOrderUpdateOne {
+	_u.mutation.ClearRedeemCodeID()
 	return _u
 }
 
@@ -1922,6 +2093,21 @@ func (_u *PaymentOrderUpdateOne) check() error {
 			return &ValidationError{Name: "payment_trade_no", err: fmt.Errorf(`ent: validator failed for field "PaymentOrder.payment_trade_no": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.OrderSource(); ok {
+		if err := paymentorder.OrderSourceValidator(v); err != nil {
+			return &ValidationError{Name: "order_source", err: fmt.Errorf(`ent: validator failed for field "PaymentOrder.order_source": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.Currency(); ok {
+		if err := paymentorder.CurrencyValidator(v); err != nil {
+			return &ValidationError{Name: "currency", err: fmt.Errorf(`ent: validator failed for field "PaymentOrder.currency": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.PlanName(); ok {
+		if err := paymentorder.PlanNameValidator(v); err != nil {
+			return &ValidationError{Name: "plan_name", err: fmt.Errorf(`ent: validator failed for field "PaymentOrder.plan_name": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.OrderType(); ok {
 		if err := paymentorder.OrderTypeValidator(v); err != nil {
 			return &ValidationError{Name: "order_type", err: fmt.Errorf(`ent: validator failed for field "PaymentOrder.order_type": %w`, err)}
@@ -2057,6 +2243,24 @@ func (_u *PaymentOrderUpdateOne) sqlSave(ctx context.Context) (_node *PaymentOrd
 	}
 	if _u.mutation.QrCodeImgCleared() {
 		_spec.ClearField(paymentorder.FieldQrCodeImg, field.TypeString)
+	}
+	if value, ok := _u.mutation.OrderSource(); ok {
+		_spec.SetField(paymentorder.FieldOrderSource, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Currency(); ok {
+		_spec.SetField(paymentorder.FieldCurrency, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.PlanName(); ok {
+		_spec.SetField(paymentorder.FieldPlanName, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.RedeemCodeID(); ok {
+		_spec.SetField(paymentorder.FieldRedeemCodeID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedRedeemCodeID(); ok {
+		_spec.AddField(paymentorder.FieldRedeemCodeID, field.TypeInt64, value)
+	}
+	if _u.mutation.RedeemCodeIDCleared() {
+		_spec.ClearField(paymentorder.FieldRedeemCodeID, field.TypeInt64)
 	}
 	if value, ok := _u.mutation.OrderType(); ok {
 		_spec.SetField(paymentorder.FieldOrderType, field.TypeString, value)

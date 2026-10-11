@@ -7,6 +7,7 @@
           <div class="flex-1 sm:max-w-64">
             <input v-model="orderSearch" type="text" :placeholder="t('payment.admin.searchOrders')" class="input" @input="debounceLoadOrders" />
           </div>
+          <Select v-model="orderFilters.order_source" :options="sourceFilters" class="w-36" @change="handleOrderPageChange(1)" />
           <Select v-model="orderFilters.status" :options="statusFilterOptions" class="w-36" @change="loadOrders" />
           <Select v-model="orderFilters.payment_type" :options="paymentTypeFilterOptions" class="w-40" @change="loadOrders" />
           <Select v-model="orderFilters.order_type" :options="orderTypeFilterOptions" class="w-36" @change="loadOrders" />
@@ -34,22 +35,22 @@
               <Icon name="refresh" size="sm" />
               {{ t('payment.admin.retry') }}
             </button>
-            <template v-if="row.status === 'REFUND_REQUESTED'">
+            <template v-if="row.order_source !== 'redeem' && row.status === 'REFUND_REQUESTED'">
               <span v-if="row.refund_amount" class="rounded-full bg-purple-100 px-1.5 py-0.5 text-xs font-medium text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">{{ creditedAmountSymbol }}{{ row.refund_amount.toFixed(2) }}</span>
               <button @click="openRefundDialog(row)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-purple-600 hover:bg-purple-50 dark:text-purple-400 dark:hover:bg-purple-900/20">
                 <Icon name="check" size="sm" />
                 {{ t('payment.admin.approveRefund') }}
               </button>
             </template>
-            <button v-else-if="row.status === 'REFUND_FAILED'" @click="openRefundDialog(row)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-purple-600 hover:bg-purple-50 dark:text-purple-400 dark:hover:bg-purple-900/20">
+            <button v-else-if="row.order_source !== 'redeem' && row.status === 'REFUND_FAILED'" @click="openRefundDialog(row)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-purple-600 hover:bg-purple-50 dark:text-purple-400 dark:hover:bg-purple-900/20">
               <Icon name="refresh" size="sm" />
               {{ t('payment.admin.retryRefund') }}
             </button>
-            <button v-else-if="row.status === 'REFUND_PENDING'" :disabled="refundQueryingIds.has(row.id)" @click="handleQueryRefund(row)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-orange-600 hover:bg-orange-50 disabled:opacity-60 dark:text-orange-400 dark:hover:bg-orange-900/20">
+            <button v-else-if="row.order_source !== 'redeem' && row.status === 'REFUND_PENDING'" :disabled="refundQueryingIds.has(row.id)" @click="handleQueryRefund(row)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-orange-600 hover:bg-orange-50 disabled:opacity-60 dark:text-orange-400 dark:hover:bg-orange-900/20">
               <Icon name="refresh" size="sm" :class="refundQueryingIds.has(row.id) ? 'animate-spin' : ''" />
               {{ t('payment.admin.queryRefundStatus') }}
             </button>
-            <button v-else-if="row.status === 'COMPLETED' || row.status === 'PARTIALLY_REFUNDED'" @click="openRefundDialog(row)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20">
+            <button v-else-if="row.order_source !== 'redeem' && (row.status === 'COMPLETED' || row.status === 'PARTIALLY_REFUNDED')" @click="openRefundDialog(row)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20">
               <Icon name="dollar" size="sm" />
               {{ t('payment.admin.refund') }}
             </button>
@@ -63,10 +64,12 @@
     <BaseDialog :show="showDetailDialog" :title="t('payment.admin.orderDetail')" width="wide" @close="showDetailDialog = false">
       <div v-if="selectedOrder" class="space-y-4">
         <div class="grid grid-cols-2 gap-4">
+          <div><p class="text-xs text-gray-500">{{ t('featureExtensions.orderSource') }}</p><p>{{ t(selectedOrder.order_source === 'redeem' ? 'featureExtensions.redeemOrder' : 'featureExtensions.paymentOrder') }}</p></div>
+          <div v-if="selectedOrder.plan_name"><p class="text-xs text-gray-500">{{ t('featureExtensions.orderPlan') }}</p><p>{{ selectedOrder.plan_name }}</p></div>
           <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.orderId') }}</p><p class="font-mono text-sm font-medium text-gray-900 dark:text-white">#{{ selectedOrder.id }}</p></div>
           <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.orderNo') }}</p><p class="text-sm font-medium text-gray-900 dark:text-white">{{ selectedOrder.out_trade_no }}</p></div>
           <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.status') }}</p><OrderStatusBadge :status="selectedOrder.status" /></div>
-          <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.amount') }}</p><p class="text-sm font-medium text-gray-900 dark:text-white">{{ creditedAmountSymbol }}{{ selectedOrder.amount.toFixed(2) }}</p></div>
+          <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.amount') }}</p><p class="text-sm font-medium text-gray-900 dark:text-white">{{ selectedOrder.order_source === 'redeem' && selectedOrder.order_type === 'subscription' ? paymentAmountSymbol(selectedOrder) : creditedAmountSymbol }}{{ selectedOrder.amount.toFixed(2) }}</p></div>
           <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.payAmount') }}</p><p class="text-sm font-medium text-gray-900 dark:text-white">{{ paymentAmountSymbol(selectedOrder) }}{{ selectedOrder.pay_amount.toFixed(2) }}</p></div>
           <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.paymentMethod') }}</p><p class="text-sm text-gray-700 dark:text-gray-300">{{ t('payment.methods.' + selectedOrder.payment_type, selectedOrder.payment_type) }}</p></div>
           <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.admin.feeRate') }}</p><p class="text-sm text-gray-700 dark:text-gray-300">{{ selectedOrder.fee_rate }}%</p></div>
@@ -147,7 +150,7 @@ const appStore = useAppStore()
 const ordersLoading = ref(false)
 const orders = ref<PaymentOrder[]>([])
 const orderSearch = ref('')
-const orderFilters = reactive({ status: '', payment_type: '', order_type: '' })
+const orderFilters = reactive({ status: '', payment_type: '', order_type: '', order_source: '' })
 const orderPagination = reactive({ page: 1, page_size: 20, total: 0 })
 const selectedOrder = ref<PaymentOrder | null>(null)
 const showDetailDialog = ref(false)
@@ -176,6 +179,7 @@ async function loadOrders() {
       page: orderPagination.page, page_size: orderPagination.page_size,
       keyword: orderSearch.value || undefined, status: orderFilters.status || undefined,
       payment_type: orderFilters.payment_type || undefined, order_type: orderFilters.order_type || undefined,
+      order_source: orderFilters.order_source || undefined,
     })
     orders.value = res.data.items || []
     orderPagination.total = res.data.total || 0
@@ -187,6 +191,7 @@ async function loadOrders() {
 function handleOrderPageChange(page: number) { orderPagination.page = page; loadOrders() }
 function handleOrderPageSizeChange(size: number) { orderPagination.page_size = size; orderPagination.page = 1; loadOrders() }
 
+const sourceFilters = computed(() => [{ value: '', label: t('featureExtensions.allSources') }, { value: 'payment', label: t('featureExtensions.paymentOrder') }, { value: 'redeem', label: t('featureExtensions.redeemOrder') }])
 const statusFilterOptions = computed(() => [
   { value: '', label: t('payment.admin.allStatuses') },
   { value: 'PENDING', label: t('payment.status.pending') },

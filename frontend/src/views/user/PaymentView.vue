@@ -252,6 +252,14 @@
             <div v-if="checkout.help_text" class="markdown-body w-full overflow-x-auto break-words" v-html="renderedHelpText"></div>
           </div>
         </div>
+        <div v-if="checkout.redeem_purchase_enabled && checkout.redeem_purchase_url && paymentPhase === 'select' && !selectedPlan" class="card flex items-center justify-between gap-4 p-5">
+          <div class="min-w-0 flex-1">
+            <h2 class="text-lg font-semibold">{{ t('featureExtensions.purchaseTitle') }}</h2>
+            <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">{{ t('featureExtensions.purchaseDescription') }}</p>
+          </div>
+          <RouterLink v-if="checkout.redeem_purchase_mode === 'iframe'" to="/purchase/redeem-shop" class="btn btn-primary shrink-0 whitespace-nowrap">{{ t('featureExtensions.purchaseButton') }}</RouterLink>
+          <a v-else :href="checkout.redeem_purchase_url" target="_blank" rel="noopener noreferrer" class="btn btn-primary shrink-0 whitespace-nowrap">{{ t('featureExtensions.purchaseButton') }}</a>
+        </div>
       </template>
     </div>
     <!-- Renewal Plan Selection Modal -->
@@ -290,7 +298,7 @@ import { useI18n } from 'vue-i18n'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import '@/styles/announcement-markdown.css'
-import { useRoute, useRouter } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useUserView as useAuthStore } from '@/composables/useUserView'
 import { usePaymentStore } from '@/stores/payment'
 import { useSubscriptionStore } from '@/stores/subscriptions'

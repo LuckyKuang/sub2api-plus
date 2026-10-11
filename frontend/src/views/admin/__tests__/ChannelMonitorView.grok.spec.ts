@@ -19,6 +19,7 @@ const { listTemplates, accountsList, accountsGetById } = vi.hoisted(() => ({
 
 vi.mock('@/utils/featureFlags', () => ({
   isChannelMonitorV1Mode: () => true,
+  isChannelMonitorActiveProbeEnabled: () => true,
   isChannelMonitorV2Mode: () => false,
   getChannelMonitorMode: () => 'v1' as const,
 }))

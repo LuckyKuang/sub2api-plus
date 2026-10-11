@@ -347,3 +347,21 @@ If you previously used a legacy external payment service, you can migrate to the
 4. Decommission the legacy external payment service
 
 > **Note**: Historical order data from a legacy external payment service will not be automatically migrated. Keep that service available for a while to access historical records.
+
+## External redeem purchase and redemption orders
+
+DB settings: `payment_redeem_purchase_enabled=false`, `payment_redeem_purchase_url=''`, and `payment_redeem_purchase_mode=new_tab` (`iframe` also supported). The built-in `payment_enabled` switch continues to control recharge/subscription navigation and routes. Both selection views show the optional purchase card at the bottom, including when no payment methods are available; payment and subscription-confirmation phases hide it.
+
+If payment configuration is unavailable, the combined admin settings response keeps the purchase entry disabled, its URL empty and its mode `new_tab`.
+
+Both config APIs validate an absolute HTTP(S) URL without credentials or control characters, require a URL when enabled, and reject unknown modes before saving. New tabs use `noopener noreferrer`; protected `/purchase/redeem-shop` embeds the exact URL without attaching credentials or user identifiers and offers back, redemption and new-tab controls. CSP permits only the saved exact origin when payment, the entry and iframe mode are enabled; both save paths refresh the cache. The third-party page has no payment callback or balance/order side effects.
+
+The iframe sandbox permits scripts, forms, its own origin and payment popups, including popups that escape the sandbox; it does not permit navigation of the enclosing page. Embedding remains subject to the third party's `X-Frame-Options` and `frame-ancestors` policies; use the new-tab control when embedding is unavailable.
+
+Only balance and subscription codes can opt into orders (off by default). Balance currency is CNY/USD, default CNY: a face value of 100 with CNY order currency credits 100 USD and records 100 CNY, without FX, fees or recharge promotions. Subscription codes select an existing plan (including off-sale) and freeze its selling `price`, currency, ID/name, group and effective duration at generation (week × 7, month × 30, capped at 36500 days). Empty currency means CNY; other currencies cannot generate these redemption orders. Ordinary payment currency support is unchanged. Later plan edits/deletion do not change snapshots; unavailable entitlement groups reject redemption.
+
+Consumption, benefits, a COMPLETED order and `REDEEM_ORDER_COMPLETED` audit commit atomically. A unique redeem-code reference prevents duplicates and has no cascading deletion. Orders use `order_source=redeem`, `payment_type=redeem` and retain `order_type=balance|subscription`; historical and ordinary payments use `order_source=payment`. Timestamps are redemption time. No provider, payment URL, fee or bonus is recorded, and ordinary user DTOs never expose raw redeem codes. Internal PAY codes remain opt-out and do not duplicate fulfillment or affiliate rebates. Subscription snapshots cannot be rewritten by ordinary batch editing. Conflicting group/duration inputs are rejected at generation; admin redeem-code list/detail DTOs and CSV exports retain the frozen order fields.
+
+Admin/user order lists and the dashboard support `order_source` filters, defaulting to both sources; unknown sources return 400 (`INVALID_ORDER_SOURCE`). Currency totals remain separate: 100 CNY redemption + 50 CNY payment + 20 USD payment = 3 orders, CNY150, USD20. Redemption does not use actual-payment limits. Every refund boundary, including forced admin refunds, returns `REDEEM_ORDER_REFUND_DISABLED` before provider lookup, deductions or state changes; UI refund controls are hidden.
+
+Subscription redemption invalidates the local entitlement cache and Redis/cross-instance caches only after the outer redemption transaction commits. A failed order or audit write leaves the prior entitlement and its valid cache intact. The next eligibility lookup after successful redemption reads the committed entitlement; cache notification failures are logged without reporting an already committed redemption as failed.

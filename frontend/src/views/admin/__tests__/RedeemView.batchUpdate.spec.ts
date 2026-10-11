@@ -1,12 +1,14 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { enableAutoUnmount, flushPromises, mount, type DOMWrapper } from '@vue/test-utils'
 
 import RedeemView from '../RedeemView.vue'
 
-const { listRedeemCodes, batchUpdateRedeemCodes, getAllGroups, showSuccess, showError, showInfo } =
+const { listRedeemCodes, batchUpdateRedeemCodes, generateCodes, getPlans, getAllGroups, showSuccess, showError, showInfo } =
   vi.hoisted(() => ({
     listRedeemCodes: vi.fn(),
     batchUpdateRedeemCodes: vi.fn(),
+    generateCodes: vi.fn(),
+    getPlans: vi.fn(),
     getAllGroups: vi.fn(),
     showSuccess: vi.fn(),
     showError: vi.fn(),
@@ -17,7 +19,7 @@ vi.mock('@/api/admin', () => ({
   adminAPI: {
     redeem: {
       list: listRedeemCodes,
-      generate: vi.fn(),
+      generate: generateCodes,
       delete: vi.fn(),
       batchDelete: vi.fn(),
       batchUpdate: batchUpdateRedeemCodes,
@@ -28,6 +30,10 @@ vi.mock('@/api/admin', () => ({
     }
   }
 }))
+
+vi.mock('@/api/admin/payment', () => ({ adminPaymentAPI: { getPlans } }))
+
+enableAutoUnmount(afterEach)
 
 vi.mock('@/stores/app', () => ({
   useAppStore: () => ({
@@ -99,7 +105,22 @@ const SelectStub = {
   `
 }
 
-describe('admin RedeemView batch update', () => {
+function renderView() {
+  return mount(RedeemView, { attachTo: document.body, global: { stubs: {
+    AppLayout: { template: '<div><slot /></div>' },
+    TablePageLayout: { template: '<div><slot name="filters" /><slot name="table" /><slot name="pagination" /></div>' },
+    DataTable: DataTableStub, Pagination: true, ConfirmDialog: true,
+    GroupBadge: true, GroupOptionItem: true, Icon: true, Teleport: true,
+  } } })
+}
+
+async function choose(select: DOMWrapper<Element>, label: string) {
+  const option = select.findAll('option').find(o => o.text().includes(label))!
+  await select.setValue((option.element as HTMLOptionElement).value)
+  await flushPromises()
+}
+
+describe('admin RedeemView', () => {
   beforeEach(() => {
     localStorage.clear()
     document.body.innerHTML = ''
@@ -110,6 +131,10 @@ describe('admin RedeemView batch update', () => {
     showSuccess.mockReset()
     showError.mockReset()
     showInfo.mockReset()
+    generateCodes.mockReset()
+    getPlans.mockReset()
+    generateCodes.mockResolvedValue([])
+    getPlans.mockResolvedValue({ data: [{ id: 7, name: 'Frozen plan', price: 25, currency: 'USD', for_sale: false }] })
 
     listRedeemCodes.mockResolvedValue({
       items: [
@@ -143,6 +168,56 @@ describe('admin RedeemView batch update', () => {
     })
     batchUpdateRedeemCodes.mockResolvedValue({ updated: 1, message: 'ok' })
     getAllGroups.mockResolvedValue([])
+  })
+
+  it('defaults to no order and CNY, with an explicit balance currency choice', async () => {
+    const wrapper = renderView()
+    await flushPromises()
+    await wrapper.findAll('button').find(b => b.text() === 'admin.redeem.generateCodes')!.trigger('click')
+    await flushPromises()
+    const form = () => wrapper.get('form')
+    const orderSelect = () => form().findAll('select').find(s => s.text().includes('featureExtensions.noOrder'))!
+    expect(orderSelect().get('option:checked').text()).toBe('featureExtensions.noOrder')
+    await choose(orderSelect(), 'featureExtensions.withOrder')
+    const currency = form().findAll('select').find(s => s.text().includes('CNY'))!
+    expect(currency.get('option:checked').text()).toBe('CNY')
+    await choose(currency, 'USD')
+    await form().trigger('submit')
+    await flushPromises()
+    expect(generateCodes).toHaveBeenCalledWith(1, 'balance', 10, undefined, undefined, undefined,
+      { generate_order: true, order_currency: 'USD', order_plan_id: null })
+  })
+
+  it('generates a subscription from the selected plan without stale entitlement fields', async () => {
+    const wrapper = renderView()
+    await flushPromises()
+    await wrapper.findAll('button').find(b => b.text() === 'admin.redeem.generateCodes')!.trigger('click')
+    await flushPromises()
+    const form = () => wrapper.get('form')
+    await choose(form().findAll('select')[0], 'admin.redeem.subscription')
+    await choose(form().findAll('select').find(s => s.text().includes('featureExtensions.noOrder'))!, 'featureExtensions.withOrder')
+    await choose(form().findAll('select').find(s => s.text().includes('Frozen plan'))!, 'Frozen plan')
+    expect(form().text()).toContain('featureExtensions.planSnapshot')
+    expect(form().text()).not.toContain('admin.redeem.validityDays')
+    await form().trigger('submit')
+    await flushPromises()
+    expect(generateCodes).toHaveBeenCalledWith(1, 'subscription', 10, undefined, undefined, undefined,
+      { generate_order: true, order_currency: 'CNY', order_plan_id: 7 })
+  })
+
+  it('clears the order option when changing to an unsupported code type', async () => {
+    const wrapper = renderView()
+    await flushPromises()
+    await wrapper.findAll('button').find(b => b.text() === 'admin.redeem.generateCodes')!.trigger('click')
+    await flushPromises()
+    const form = () => wrapper.get('form')
+    await choose(form().findAll('select').find(s => s.text().includes('featureExtensions.noOrder'))!, 'featureExtensions.withOrder')
+    await choose(form().findAll('select')[0], 'admin.redeem.concurrency')
+    expect(form().text()).not.toContain('featureExtensions.generateOrder')
+    await form().trigger('submit')
+    await flushPromises()
+    expect(generateCodes).toHaveBeenCalledWith(1, 'concurrency', 10, undefined, undefined, undefined,
+      { generate_order: false, order_currency: 'CNY', order_plan_id: null })
   })
 
   it('submits only checked fields for selected redeem codes', async () => {

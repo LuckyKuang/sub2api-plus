@@ -4,6 +4,7 @@
       <!-- Header with Day Switcher -->
       <div class="flex items-center justify-end">
         <div class="flex items-center gap-2">
+          <Select v-model="sourceFilter" :options="sourceFilters" class="w-36" />
           <div class="flex rounded-lg border border-gray-200 dark:border-dark-600">
             <button
               v-for="d in DAYS_OPTIONS"
@@ -71,9 +72,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
+import Select from '@/components/common/Select.vue'
 import { adminPaymentAPI } from '@/api/admin/payment'
 import { extractI18nErrorMessage } from '@/utils/apiError'
 import type { CurrencyAmounts, DashboardStats, TopUserPaymentStats } from '@/types/payment'
@@ -88,6 +90,8 @@ const appStore = useAppStore()
 
 const DAYS_OPTIONS = [7, 30, 90] as const
 const days = ref<number>(30)
+const sourceFilter = ref('')
+const sourceFilters = computed(() => [{ value: '', label: t('featureExtensions.allSources') }, { value: 'payment', label: t('featureExtensions.paymentOrder') }, { value: 'redeem', label: t('featureExtensions.redeemOrder') }])
 const loading = ref(false)
 const stats = ref<DashboardStats | null>(null)
 
@@ -126,7 +130,7 @@ function formatMoney(currency: string, amount: number): string {
 async function loadDashboard() {
   loading.value = true
   try {
-    const res = await adminPaymentAPI.getDashboard(days.value)
+    const res = await adminPaymentAPI.getDashboard(days.value, sourceFilter.value)
     stats.value = res.data
   } catch (err: unknown) {
     appStore.showError(extractI18nErrorMessage(err, t, 'payment.errors', t('common.error')))
@@ -135,6 +139,6 @@ async function loadDashboard() {
   }
 }
 
-watch(days, () => loadDashboard())
+watch([days, sourceFilter], () => loadDashboard())
 onMounted(() => loadDashboard())
 </script>

@@ -70,12 +70,14 @@ export async function generate(
   value: number,
   groupId?: number | null,
   validityDays?: number,
-  expiresInDays?: number | null
+  expiresInDays?: number | null,
+  order?: { generate_order: boolean; order_currency: string; order_plan_id: number | null }
 ): Promise<RedeemCode[]> {
   const payload: GenerateRedeemCodesRequest = {
     count,
     type,
-    value
+    value,
+    ...order
   }
 
   // 订阅类型专用字段

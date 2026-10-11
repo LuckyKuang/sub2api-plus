@@ -81,6 +81,9 @@ func (s *PaymentService) confirmPayment(ctx context.Context, oid int64, tradeNo 
 		slog.Error("order not found", "orderID", oid)
 		return nil
 	}
+	if o.OrderSource == OrderSourceRedeem {
+		return infraerrors.BadRequest("REDEEM_ORDER_PAYMENT_DISABLED", "redeem orders cannot be fulfilled by a payment provider")
+	}
 	instanceProviderKey := ""
 	if inst, instErr := s.getOrderProviderInstance(ctx, o); instErr == nil && inst != nil {
 		instanceProviderKey = inst.ProviderKey

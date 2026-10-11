@@ -558,6 +558,10 @@ type UpdateProxyInput struct {
 }
 
 type GenerateRedeemCodesInput struct {
+	GenerateOrder bool
+	OrderCurrency string
+	OrderPlanID   *int64
+
 	Count        int
 	Type         string
 	Value        float64

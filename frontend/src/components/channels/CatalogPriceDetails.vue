@@ -27,7 +27,7 @@
           </tr></tbody>
         </table>
       </div>
-      <CatalogQuoteDetails v-for="quote in model.quotes" :key="quote.offer.offer_key" :group="quote.group" :offer="quote.offer" :rate-unavailable="rateUnavailable" />
+      <CatalogQuoteDetails v-for="quote in model.quotes" :key="`${model.name}:${quote.offer.offer_key}`" :group="quote.group" :offer="quote.offer" :rate-unavailable="rateUnavailable" />
     </div>
   </BaseDialog>
 </template>
@@ -48,7 +48,12 @@ const content = ref<HTMLElement>()
 // BaseDialog owns Escape and focus restoration. Constrain Tab/focus to this
 // dialog (including its header button) without changing other modal consumers.
 function focusables(): HTMLElement[] {
-  return Array.from(content.value?.closest('[role="dialog"]')?.querySelectorAll<HTMLElement>('button, a[href], input, select, [tabindex="0"]') || [])
+  return Array.from(content.value?.closest('[role="dialog"]')?.querySelectorAll<HTMLElement>('button, summary, a[href], input, select, [tabindex="0"]') || [])
+    .filter(element => {
+      const collapsed = element.closest('details:not([open])')
+      // A closed disclosure exposes only its own summary to keyboard focus.
+      return !collapsed || collapsed.querySelector(':scope > summary') === element
+    })
 }
 function trapTab(event: KeyboardEvent) {
   if (!props.model || event.key !== 'Tab') return

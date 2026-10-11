@@ -193,6 +193,96 @@ func (_u *RedeemCodeUpdate) ClearGroupID() *RedeemCodeUpdate {
 	return _u
 }
 
+// SetGenerateOrder sets the "generate_order" field.
+func (_u *RedeemCodeUpdate) SetGenerateOrder(v bool) *RedeemCodeUpdate {
+	_u.mutation.SetGenerateOrder(v)
+	return _u
+}
+
+// SetNillableGenerateOrder sets the "generate_order" field if the given value is not nil.
+func (_u *RedeemCodeUpdate) SetNillableGenerateOrder(v *bool) *RedeemCodeUpdate {
+	if v != nil {
+		_u.SetGenerateOrder(*v)
+	}
+	return _u
+}
+
+// SetOrderCurrency sets the "order_currency" field.
+func (_u *RedeemCodeUpdate) SetOrderCurrency(v string) *RedeemCodeUpdate {
+	_u.mutation.SetOrderCurrency(v)
+	return _u
+}
+
+// SetNillableOrderCurrency sets the "order_currency" field if the given value is not nil.
+func (_u *RedeemCodeUpdate) SetNillableOrderCurrency(v *string) *RedeemCodeUpdate {
+	if v != nil {
+		_u.SetOrderCurrency(*v)
+	}
+	return _u
+}
+
+// SetOrderAmount sets the "order_amount" field.
+func (_u *RedeemCodeUpdate) SetOrderAmount(v float64) *RedeemCodeUpdate {
+	_u.mutation.ResetOrderAmount()
+	_u.mutation.SetOrderAmount(v)
+	return _u
+}
+
+// SetNillableOrderAmount sets the "order_amount" field if the given value is not nil.
+func (_u *RedeemCodeUpdate) SetNillableOrderAmount(v *float64) *RedeemCodeUpdate {
+	if v != nil {
+		_u.SetOrderAmount(*v)
+	}
+	return _u
+}
+
+// AddOrderAmount adds value to the "order_amount" field.
+func (_u *RedeemCodeUpdate) AddOrderAmount(v float64) *RedeemCodeUpdate {
+	_u.mutation.AddOrderAmount(v)
+	return _u
+}
+
+// SetOrderPlanID sets the "order_plan_id" field.
+func (_u *RedeemCodeUpdate) SetOrderPlanID(v int64) *RedeemCodeUpdate {
+	_u.mutation.ResetOrderPlanID()
+	_u.mutation.SetOrderPlanID(v)
+	return _u
+}
+
+// SetNillableOrderPlanID sets the "order_plan_id" field if the given value is not nil.
+func (_u *RedeemCodeUpdate) SetNillableOrderPlanID(v *int64) *RedeemCodeUpdate {
+	if v != nil {
+		_u.SetOrderPlanID(*v)
+	}
+	return _u
+}
+
+// AddOrderPlanID adds value to the "order_plan_id" field.
+func (_u *RedeemCodeUpdate) AddOrderPlanID(v int64) *RedeemCodeUpdate {
+	_u.mutation.AddOrderPlanID(v)
+	return _u
+}
+
+// ClearOrderPlanID clears the value of the "order_plan_id" field.
+func (_u *RedeemCodeUpdate) ClearOrderPlanID() *RedeemCodeUpdate {
+	_u.mutation.ClearOrderPlanID()
+	return _u
+}
+
+// SetOrderPlanName sets the "order_plan_name" field.
+func (_u *RedeemCodeUpdate) SetOrderPlanName(v string) *RedeemCodeUpdate {
+	_u.mutation.SetOrderPlanName(v)
+	return _u
+}
+
+// SetNillableOrderPlanName sets the "order_plan_name" field if the given value is not nil.
+func (_u *RedeemCodeUpdate) SetNillableOrderPlanName(v *string) *RedeemCodeUpdate {
+	if v != nil {
+		_u.SetOrderPlanName(*v)
+	}
+	return _u
+}
+
 // SetValidityDays sets the "validity_days" field.
 func (_u *RedeemCodeUpdate) SetValidityDays(v int) *RedeemCodeUpdate {
 	_u.mutation.ResetValidityDays()
@@ -299,6 +389,16 @@ func (_u *RedeemCodeUpdate) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "RedeemCode.status": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.OrderCurrency(); ok {
+		if err := redeemcode.OrderCurrencyValidator(v); err != nil {
+			return &ValidationError{Name: "order_currency", err: fmt.Errorf(`ent: validator failed for field "RedeemCode.order_currency": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.OrderPlanName(); ok {
+		if err := redeemcode.OrderPlanNameValidator(v); err != nil {
+			return &ValidationError{Name: "order_plan_name", err: fmt.Errorf(`ent: validator failed for field "RedeemCode.order_plan_name": %w`, err)}
+		}
+	}
 	return nil
 }
 
@@ -346,6 +446,30 @@ func (_u *RedeemCodeUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 	}
 	if _u.mutation.ExpiresAtCleared() {
 		_spec.ClearField(redeemcode.FieldExpiresAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.GenerateOrder(); ok {
+		_spec.SetField(redeemcode.FieldGenerateOrder, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.OrderCurrency(); ok {
+		_spec.SetField(redeemcode.FieldOrderCurrency, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.OrderAmount(); ok {
+		_spec.SetField(redeemcode.FieldOrderAmount, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedOrderAmount(); ok {
+		_spec.AddField(redeemcode.FieldOrderAmount, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.OrderPlanID(); ok {
+		_spec.SetField(redeemcode.FieldOrderPlanID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedOrderPlanID(); ok {
+		_spec.AddField(redeemcode.FieldOrderPlanID, field.TypeInt64, value)
+	}
+	if _u.mutation.OrderPlanIDCleared() {
+		_spec.ClearField(redeemcode.FieldOrderPlanID, field.TypeInt64)
+	}
+	if value, ok := _u.mutation.OrderPlanName(); ok {
+		_spec.SetField(redeemcode.FieldOrderPlanName, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.ValidityDays(); ok {
 		_spec.SetField(redeemcode.FieldValidityDays, field.TypeInt, value)
@@ -594,6 +718,96 @@ func (_u *RedeemCodeUpdateOne) ClearGroupID() *RedeemCodeUpdateOne {
 	return _u
 }
 
+// SetGenerateOrder sets the "generate_order" field.
+func (_u *RedeemCodeUpdateOne) SetGenerateOrder(v bool) *RedeemCodeUpdateOne {
+	_u.mutation.SetGenerateOrder(v)
+	return _u
+}
+
+// SetNillableGenerateOrder sets the "generate_order" field if the given value is not nil.
+func (_u *RedeemCodeUpdateOne) SetNillableGenerateOrder(v *bool) *RedeemCodeUpdateOne {
+	if v != nil {
+		_u.SetGenerateOrder(*v)
+	}
+	return _u
+}
+
+// SetOrderCurrency sets the "order_currency" field.
+func (_u *RedeemCodeUpdateOne) SetOrderCurrency(v string) *RedeemCodeUpdateOne {
+	_u.mutation.SetOrderCurrency(v)
+	return _u
+}
+
+// SetNillableOrderCurrency sets the "order_currency" field if the given value is not nil.
+func (_u *RedeemCodeUpdateOne) SetNillableOrderCurrency(v *string) *RedeemCodeUpdateOne {
+	if v != nil {
+		_u.SetOrderCurrency(*v)
+	}
+	return _u
+}
+
+// SetOrderAmount sets the "order_amount" field.
+func (_u *RedeemCodeUpdateOne) SetOrderAmount(v float64) *RedeemCodeUpdateOne {
+	_u.mutation.ResetOrderAmount()
+	_u.mutation.SetOrderAmount(v)
+	return _u
+}
+
+// SetNillableOrderAmount sets the "order_amount" field if the given value is not nil.
+func (_u *RedeemCodeUpdateOne) SetNillableOrderAmount(v *float64) *RedeemCodeUpdateOne {
+	if v != nil {
+		_u.SetOrderAmount(*v)
+	}
+	return _u
+}
+
+// AddOrderAmount adds value to the "order_amount" field.
+func (_u *RedeemCodeUpdateOne) AddOrderAmount(v float64) *RedeemCodeUpdateOne {
+	_u.mutation.AddOrderAmount(v)
+	return _u
+}
+
+// SetOrderPlanID sets the "order_plan_id" field.
+func (_u *RedeemCodeUpdateOne) SetOrderPlanID(v int64) *RedeemCodeUpdateOne {
+	_u.mutation.ResetOrderPlanID()
+	_u.mutation.SetOrderPlanID(v)
+	return _u
+}
+
+// SetNillableOrderPlanID sets the "order_plan_id" field if the given value is not nil.
+func (_u *RedeemCodeUpdateOne) SetNillableOrderPlanID(v *int64) *RedeemCodeUpdateOne {
+	if v != nil {
+		_u.SetOrderPlanID(*v)
+	}
+	return _u
+}
+
+// AddOrderPlanID adds value to the "order_plan_id" field.
+func (_u *RedeemCodeUpdateOne) AddOrderPlanID(v int64) *RedeemCodeUpdateOne {
+	_u.mutation.AddOrderPlanID(v)
+	return _u
+}
+
+// ClearOrderPlanID clears the value of the "order_plan_id" field.
+func (_u *RedeemCodeUpdateOne) ClearOrderPlanID() *RedeemCodeUpdateOne {
+	_u.mutation.ClearOrderPlanID()
+	return _u
+}
+
+// SetOrderPlanName sets the "order_plan_name" field.
+func (_u *RedeemCodeUpdateOne) SetOrderPlanName(v string) *RedeemCodeUpdateOne {
+	_u.mutation.SetOrderPlanName(v)
+	return _u
+}
+
+// SetNillableOrderPlanName sets the "order_plan_name" field if the given value is not nil.
+func (_u *RedeemCodeUpdateOne) SetNillableOrderPlanName(v *string) *RedeemCodeUpdateOne {
+	if v != nil {
+		_u.SetOrderPlanName(*v)
+	}
+	return _u
+}
+
 // SetValidityDays sets the "validity_days" field.
 func (_u *RedeemCodeUpdateOne) SetValidityDays(v int) *RedeemCodeUpdateOne {
 	_u.mutation.ResetValidityDays()
@@ -713,6 +927,16 @@ func (_u *RedeemCodeUpdateOne) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "RedeemCode.status": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.OrderCurrency(); ok {
+		if err := redeemcode.OrderCurrencyValidator(v); err != nil {
+			return &ValidationError{Name: "order_currency", err: fmt.Errorf(`ent: validator failed for field "RedeemCode.order_currency": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.OrderPlanName(); ok {
+		if err := redeemcode.OrderPlanNameValidator(v); err != nil {
+			return &ValidationError{Name: "order_plan_name", err: fmt.Errorf(`ent: validator failed for field "RedeemCode.order_plan_name": %w`, err)}
+		}
+	}
 	return nil
 }
 
@@ -777,6 +1001,30 @@ func (_u *RedeemCodeUpdateOne) sqlSave(ctx context.Context) (_node *RedeemCode, 
 	}
 	if _u.mutation.ExpiresAtCleared() {
 		_spec.ClearField(redeemcode.FieldExpiresAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.GenerateOrder(); ok {
+		_spec.SetField(redeemcode.FieldGenerateOrder, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.OrderCurrency(); ok {
+		_spec.SetField(redeemcode.FieldOrderCurrency, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.OrderAmount(); ok {
+		_spec.SetField(redeemcode.FieldOrderAmount, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedOrderAmount(); ok {
+		_spec.AddField(redeemcode.FieldOrderAmount, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.OrderPlanID(); ok {
+		_spec.SetField(redeemcode.FieldOrderPlanID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedOrderPlanID(); ok {
+		_spec.AddField(redeemcode.FieldOrderPlanID, field.TypeInt64, value)
+	}
+	if _u.mutation.OrderPlanIDCleared() {
+		_spec.ClearField(redeemcode.FieldOrderPlanID, field.TypeInt64)
+	}
+	if value, ok := _u.mutation.OrderPlanName(); ok {
+		_spec.SetField(redeemcode.FieldOrderPlanName, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.ValidityDays(); ok {
 		_spec.SetField(redeemcode.FieldValidityDays, field.TypeInt, value)

@@ -184,7 +184,7 @@ func (s *PaymentService) createOrderInTx(ctx context.Context, req CreateOrderReq
 		tm = defaultOrderTimeoutMin
 	}
 	exp := time.Now().Add(time.Duration(tm) * time.Minute)
-	outTradeNo, err := s.allocateOutTradeNo(ctx, tx)
+	outTradeNo, err := allocateOutTradeNo(ctx, tx)
 	if err != nil {
 		return nil, err
 	}
@@ -226,7 +226,7 @@ func (s *PaymentService) createOrderInTx(ctx context.Context, req CreateOrderReq
 		b.SetProviderSnapshot(providerSnapshot)
 	}
 	if plan != nil {
-		b.SetPlanID(plan.ID).SetSubscriptionGroupID(plan.GroupID).SetSubscriptionDays(psComputeValidityDays(plan.ValidityDays, plan.ValidityUnit))
+		b.SetPlanName(plan.Name).SetPlanID(plan.ID).SetSubscriptionGroupID(plan.GroupID).SetSubscriptionDays(psComputeValidityDays(plan.ValidityDays, plan.ValidityUnit))
 	}
 	order, err := b.Save(ctx)
 	if err != nil {
@@ -243,7 +243,7 @@ func (s *PaymentService) createOrderInTx(ctx context.Context, req CreateOrderReq
 	return order, nil
 }
 
-func (s *PaymentService) allocateOutTradeNo(ctx context.Context, tx *dbent.Tx) (string, error) {
+func allocateOutTradeNo(ctx context.Context, tx *dbent.Tx) (string, error) {
 	const maxAttempts = 5
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		candidate := generateOutTradeNo()
@@ -262,7 +262,7 @@ func (s *PaymentService) checkPendingLimit(ctx context.Context, tx *dbent.Tx, us
 	if max <= 0 {
 		max = defaultMaxPendingOrders
 	}
-	c, err := tx.PaymentOrder.Query().Where(paymentorder.UserIDEQ(userID), paymentorder.StatusEQ(OrderStatusPending)).Count(ctx)
+	c, err := tx.PaymentOrder.Query().Where(paymentorder.OrderSourceEQ(OrderSourcePayment), paymentorder.UserIDEQ(userID), paymentorder.StatusEQ(OrderStatusPending)).Count(ctx)
 	if err != nil {
 		return fmt.Errorf("count pending orders: %w", err)
 	}
@@ -357,7 +357,7 @@ func (s *PaymentService) checkDailyLimit(ctx context.Context, tx *dbent.Tx, user
 		return nil
 	}
 	ts := psStartOfDayUTC(time.Now())
-	orders, err := tx.PaymentOrder.Query().Where(paymentorder.UserIDEQ(userID), paymentorder.StatusIn(OrderStatusPaid, OrderStatusRecharging, OrderStatusCompleted), paymentorder.PaidAtGTE(ts)).All(ctx)
+	orders, err := tx.PaymentOrder.Query().Where(paymentorder.OrderSourceEQ(OrderSourcePayment), paymentorder.UserIDEQ(userID), paymentorder.StatusIn(OrderStatusPaid, OrderStatusRecharging, OrderStatusCompleted), paymentorder.PaidAtGTE(ts)).All(ctx)
 	if err != nil {
 		return fmt.Errorf("query daily usage: %w", err)
 	}
@@ -885,9 +885,15 @@ func (s *PaymentService) GetOrderByID(ctx context.Context, orderID int64) (*dben
 }
 
 func (s *PaymentService) GetUserOrders(ctx context.Context, userID int64, p OrderListParams) ([]*dbent.PaymentOrder, int, error) {
+	if err := validateOrderSource(p.OrderSource); err != nil {
+		return nil, 0, err
+	}
 	q := s.entClient.PaymentOrder.Query().Where(paymentorder.UserIDEQ(userID))
 	if p.Status != "" {
 		q = q.Where(paymentorder.StatusEQ(p.Status))
+	}
+	if p.OrderSource != "" {
+		q = q.Where(paymentorder.OrderSourceEQ(p.OrderSource))
 	}
 	if p.OrderType != "" {
 		q = q.Where(paymentorder.OrderTypeEQ(p.OrderType))
@@ -909,12 +915,18 @@ func (s *PaymentService) GetUserOrders(ctx context.Context, userID int64, p Orde
 
 // AdminListOrders returns a paginated list of orders. If userID > 0, filters by user.
 func (s *PaymentService) AdminListOrders(ctx context.Context, userID int64, p OrderListParams) ([]*dbent.PaymentOrder, int, error) {
+	if err := validateOrderSource(p.OrderSource); err != nil {
+		return nil, 0, err
+	}
 	q := s.entClient.PaymentOrder.Query()
 	if userID > 0 {
 		q = q.Where(paymentorder.UserIDEQ(userID))
 	}
 	if p.Status != "" {
 		q = q.Where(paymentorder.StatusEQ(p.Status))
+	}
+	if p.OrderSource != "" {
+		q = q.Where(paymentorder.OrderSourceEQ(p.OrderSource))
 	}
 	if p.OrderType != "" {
 		q = q.Where(paymentorder.OrderTypeEQ(p.OrderType))
