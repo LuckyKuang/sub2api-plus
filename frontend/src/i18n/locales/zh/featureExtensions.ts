@@ -11,7 +11,7 @@ export default {
     "iframe": "站内嵌入（iframe）",
     "purchaseTitle": "兑换码购买",
     "purchaseDescription": "前往购买兑换码，购买后返回兑换页面使用",
-    "purchaseButton": "购买",
+    "purchaseButton": "前往购买",
     "backPurchase": "返回充值/订阅",
     "redeemLink": "前往兑换页面",
     "openNewTab": "新开窗口购买",

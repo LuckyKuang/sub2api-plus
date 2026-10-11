@@ -34,8 +34,8 @@
             <span v-if="row.original_price" class="ml-1 text-xs text-gray-400 line-through">{{ planCurrencySymbol(row.currency) }}{{ row.original_price.toFixed(2) }}</span>
           </div>
         </template>
-        <template #cell-validity_days="{ value, row }">
-          <span class="text-sm">{{ value }} {{ t('payment.admin.' + (row.validity_unit || 'days')) }}</span>
+        <template #cell-validity_days="{ row }">
+          <span class="text-sm">{{ planValidityLabel(row, t) }}</span>
         </template>
         <template #cell-for_sale="{ value, row }">
           <Toggle
@@ -83,6 +83,7 @@ import Icon from '@/components/icons/Icon.vue'
 import GroupBadge from '@/components/common/GroupBadge.vue'
 import PlanEditDialog from './PlanEditDialog.vue'
 import { currencySymbol } from '@/components/payment/currency'
+import { planValidityLabel } from '@/components/payment/validity'
 import { platformTextClass } from '@/utils/platformColors'
 
 const { t } = useI18n()

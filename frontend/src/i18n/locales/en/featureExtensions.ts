@@ -11,7 +11,7 @@ export default {
     "iframe": "Embedded page (iframe)",
     "purchaseTitle": "Buy redeem codes",
     "purchaseDescription": "Buy a redeem code, then return to the redemption page to use it.",
-    "purchaseButton": "Buy",
+    "purchaseButton": "Go to purchase",
     "backPurchase": "Back to recharge/subscription",
     "redeemLink": "Go to redemption",
     "openNewTab": "Open purchase in a new tab",

@@ -2,6 +2,19 @@ import type { SubscriptionPlan } from '@/types/payment'
 
 type TranslateFn = (key: string) => string
 
+/** Full duration for plan tables, using the same units as customer pricing. */
+export function planValidityLabel(
+  plan: Pick<SubscriptionPlan, 'validity_days' | 'validity_unit'>,
+  t: TranslateFn,
+): string {
+  const unit = String(plan.validity_unit || 'day').trim().toLowerCase()
+  switch (unit) {
+    case 'month': case 'months': return `${plan.validity_days}${t('payment.months')}`
+    case 'week': case 'weeks': return `${plan.validity_days}${t('payment.weeks')}`
+    default: return `${plan.validity_days}${t('payment.days')}`
+  }
+}
+
 /**
  * 用户侧套餐有效期后缀（"$9.9 / 月"、"$9.9 / 30天"）。
  *
@@ -19,14 +32,9 @@ export function planValiditySuffix(
   t: TranslateFn,
 ): string {
   const unit = String(plan.validity_unit || 'day').trim().toLowerCase()
-  const base = unit.endsWith('s') ? unit.slice(0, -1) : unit
-  const days = plan.validity_days
-  if (base === 'month') {
-    return days === 1 ? t('payment.perMonth') : `${days}${t('payment.months')}`
-  }
-  if (base === 'week') {
-    return `${days}${t('payment.weeks')}`
+  if ((unit === 'month' || unit === 'months') && plan.validity_days === 1) {
+    return t('payment.perMonth')
   }
   // 其余单位（含数据库默认的 day 与未知值）后端一律按天计费，展示保持一致。
-  return `${days}${t('payment.days')}`
+  return planValidityLabel(plan, t)
 }
