@@ -352,6 +352,8 @@ If you previously used a legacy external payment service, you can migrate to the
 
 DB settings: `payment_redeem_purchase_enabled=false`, `payment_redeem_purchase_url=''`, and `payment_redeem_purchase_mode=new_tab` (`iframe` also supported). The built-in `payment_enabled` switch continues to control recharge/subscription navigation and routes. Both selection views show the optional purchase card at the bottom, including when no payment methods are available; payment and subscription-confirmation phases hide it.
 
+If payment configuration is unavailable, the combined admin settings response keeps the purchase entry disabled, its URL empty and its mode `new_tab`.
+
 Both config APIs validate an absolute HTTP(S) URL without credentials or control characters, require a URL when enabled, and reject unknown modes before saving. New tabs use `noopener noreferrer`; protected `/purchase/redeem-shop` embeds the exact URL without attaching credentials or user identifiers and offers back, redemption and new-tab controls. CSP permits only the saved exact origin when payment, the entry and iframe mode are enabled; both save paths refresh the cache. The third-party page has no payment callback or balance/order side effects.
 
 The iframe sandbox permits scripts, forms, its own origin and payment popups, including popups that escape the sandbox; it does not permit navigation of the enclosing page. Embedding remains subject to the third party's `X-Frame-Options` and `frame-ancestors` policies; use the new-tab control when embedding is unavailable.

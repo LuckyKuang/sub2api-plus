@@ -333,6 +333,8 @@ Sub2API Plus 内置支付系统，支持用户自助充值，无需部署独立�
 
 系统设置 → 支付设置新增第三方购买卡片。DB 设置 `payment_redeem_purchase_enabled` 默认关闭，`payment_redeem_purchase_url` 默认空，`payment_redeem_purchase_mode` 默认 `new_tab`，支持 `iframe`。内置 `payment_enabled` 仍决定充值/订阅入口是否开放；额外开关开启后，两种选择页最下方显示“兑换码购买”，无可用支付渠道时仍可展示。付款或订阅确认中不展示该卡片。
 
+支付配置不可用时，系统设置接口仍返回购买入口关闭、URL 为空、跳转方式为 `new_tab`。
+
 两个配置 API 共用校验：启用必须有完整 HTTP(S) URL，拒绝账号密码、控制字符及不支持的打开方式。新窗口使用 `noopener noreferrer`；站内 iframe 页面 `/purchase/redeem-shop` 提供返回、前往兑换和新窗口打开。URL 不附加 JWT、API Key、用户 ID 或来源页地址；CSP 仅在内置支付和第三方入口都开启且使用 iframe 时允许配置 URL 的精确 origin。全部配置保存入口刷新 CSP 缓存。第三方页面不会自动充值或创建订单，也没有支付回调接入。
 
 iframe 使用 sandbox，允许脚本、表单、自身 origin 和支付弹窗（含不受 sandbox 限制的新弹窗），不允许导航外层站点页面。能否嵌入仍受第三方 `X-Frame-Options` 和 `frame-ancestors` 策略限制；无法嵌入时可使用新窗口打开按钮。

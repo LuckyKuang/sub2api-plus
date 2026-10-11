@@ -19,6 +19,7 @@ Sub2API Plus v0.2.15+custom.002
 
 - Align the purchase button beside the purchase-card title and description, and label it "Go to purchase" / "前往购买".
 - Use the shared plan-duration formatter in subscription administration so translated day/week/month labels replace raw translation keys.
+- Preserve the disabled purchase entry and default new-tab mode in admin settings when payment configuration is unavailable.
 - Invalidate subscription entitlement caches only after the redemption transaction commits; failed order or audit writes leave the code and benefits unchanged.
 
 ## Compatibility and migration
