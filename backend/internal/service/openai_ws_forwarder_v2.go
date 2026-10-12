@@ -428,6 +428,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 			UpstreamResponseModel:         responseModelObserver.Model(),
 			UpstreamResponseModelConflict: responseModelObserver.Conflict(),
 			UpstreamResponseServiceTier:   responseModelObserver.ServiceTier(),
+			ResponseServiceTier:           responseModelObserver.DeclaredServiceTier(),
 			ServiceTier:                   resolvedOpenAIUpstreamServiceTierFromObserver(responseModelObserver, extractOpenAIServiceTier(reqBody)),
 			ReasoningEffort:               extractOpenAIReasoningEffort(reqBody, mappedModel, originalModel),
 			Stream:                        reqStream,

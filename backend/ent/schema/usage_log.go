@@ -91,6 +91,10 @@ func (UsageLog) Fields() []ent.Field {
 		field.Int("audio_output_tokens").
 			Default(0),
 
+		// Admin diagnostics: NULL for historical rows, empty for observed absence.
+		field.String("requested_service_tier").MaxLen(64).Optional().Nillable(),
+		field.String("response_service_tier").MaxLen(64).Optional().Nillable(),
+
 		// codex_rollout_budget_units: 官方 Codex response.completed usage 自报的
 		// rollout 预算消耗（JSON number，可为小数）。仅记录，计费维度备用；
 		// NULL 表示上游未上报。

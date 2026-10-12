@@ -697,6 +697,7 @@ func partialStreamUsageResult(c *gin.Context, resp *http.Response, streamResult 
 		UpstreamResponseModel:         observedUpstreamResponseModel(c),
 		UpstreamResponseModelConflict: observedUpstreamResponseModelConflict(c),
 		UpstreamResponseServiceTier:   observedUpstreamResponseServiceTier(c),
+		ResponseServiceTier:           observedDeclaredServiceTier(c),
 		Stream:                        true,
 		Duration:                      time.Since(startTime),
 		FirstTokenMs:                  streamResult.firstTokenMs,

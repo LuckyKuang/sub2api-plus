@@ -98,6 +98,13 @@
           </div>
         </template>
 
+        <template #cell-service_tier="{ row }">
+          <div v-if="showServiceTier" data-testid="service-tier-cell" class="space-y-0.5 whitespace-nowrap text-xs">
+            <div class="text-gray-900 dark:text-white">{{ t('admin.usage.serviceTierRequest') }} {{ formatRequestedServiceTier(row.requested_service_tier, t) }}</div>
+            <div class="text-gray-500 dark:text-gray-400">{{ t('admin.usage.serviceTierResponse') }} {{ formatResponseServiceTier(row.response_service_tier, t) }}</div>
+          </div>
+        </template>
+
         <template #cell-reasoning_effort="{ row }">
           <div v-if="hasReasoningEffortMapping(row)" data-testid="reasoning-effort-cell" class="space-y-0.5 text-xs">
             <div class="font-medium text-gray-900 dark:text-white">
@@ -586,10 +593,6 @@
           </div>
           <!-- Rate and Summary -->
           <div class="flex items-center justify-between gap-6">
-            <span class="text-gray-400">{{ t('usage.serviceTier') }}</span>
-            <span class="font-semibold text-cyan-300">{{ getUsageServiceTierLabel(tooltipData?.service_tier, t) }}</span>
-          </div>
-          <div class="flex items-center justify-between gap-6">
             <span class="text-gray-400">{{ t('usage.rate') }}</span>
             <span class="font-semibold text-blue-400">{{ formatMultiplier(tooltipData?.rate_multiplier ?? 1) }}x</span>
           </div>
@@ -633,7 +636,7 @@ import { formatDateTime, formatReasoningEffort, reasoningEffortValuesEqual } fro
 import { formatCacheTokens, formatMultiplier } from '@/utils/formatters'
 import { formatTokenPricePerMillion } from '@/utils/usagePricing'
 import { formatTokenShare, sumTokenBuckets } from '@/utils/tokenShare'
-import { getUsageServiceTierLabel } from '@/utils/usageServiceTier'
+import { formatRequestedServiceTier, formatResponseServiceTier } from '@/utils/usageServiceTier'
 import { resolveUsageRequestType } from '@/utils/usageRequestType'
 import {
   LATENCY_BAR_CLASSES,
@@ -697,6 +700,7 @@ interface Props {
   serverSideSort?: boolean
   defaultSortKey?: string
   defaultSortOrder?: 'asc' | 'desc'
+  showServiceTier?: boolean
   showAccountBilling?: boolean
   showUpstreamEndpoint?: boolean
   /** 嵌入统一卡片内使用：去掉自身卡片外观 */
@@ -708,6 +712,7 @@ const props = withDefaults(defineProps<Props>(), {
   serverSideSort: false,
   defaultSortKey: '',
   defaultSortOrder: 'asc',
+  showServiceTier: false,
   showAccountBilling: true,
   showUpstreamEndpoint: true,
   flat: false

@@ -128,6 +128,7 @@ func TestForwardOpenAIWSV2_KeepsOutboundAndObservedServiceTiersSeparate(t *testi
 			require.NotNil(t, result.ServiceTier)
 			require.Equal(t, "priority", *result.ServiceTier)
 			require.Equal(t, "default", result.UpstreamResponseServiceTier)
+			require.Equal(t, "default", result.ResponseServiceTier)
 			require.Equal(t, "priority", captureConn.lastWrite["service_tier"],
 				"outbound WS payload still carries the requested Fast tier")
 		})

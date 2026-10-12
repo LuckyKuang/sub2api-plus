@@ -124,6 +124,7 @@
 
         <div v-show="activeTab === 'usage'" class="overflow-hidden rounded-b-2xl">
           <UsageTable
+            :show-service-tier="true"
             flat
             :data="usageLogs"
             :loading="loading"
@@ -653,6 +654,7 @@ const allColumns = computed(() => [
   { key: 'api_key', label: t('usage.apiKeyFilter'), sortable: false },
   { key: 'account', label: t('admin.usage.account'), sortable: false },
   { key: 'model', label: t('usage.model'), sortable: true },
+  { key: 'service_tier', label: t('admin.usage.serviceTier'), sortable: false },
   { key: 'reasoning_effort', label: t('usage.reasoningEffort'), sortable: false },
   { key: 'endpoint', label: t('usage.endpoint'), sortable: false },
   { key: 'group', label: t('admin.usage.group'), sortable: false },

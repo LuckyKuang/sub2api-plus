@@ -945,6 +945,7 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 		UpstreamResponseModel:         observedUpstreamResponseModel(c),
 		UpstreamResponseModelConflict: observedUpstreamResponseModelConflict(c),
 		UpstreamResponseServiceTier:   observedUpstreamResponseServiceTier(c),
+		ResponseServiceTier:           observedDeclaredServiceTier(c),
 		Stream:                        reqStream,
 		Duration:                      time.Since(startTime),
 		FirstTokenMs:                  firstTokenMs,

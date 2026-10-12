@@ -131,16 +131,19 @@ func TestRequestTypeStringPtrNil(t *testing.T) {
 	require.Nil(t, requestTypeStringPtr(nil))
 }
 
-func TestUsageLogFromService_IncludesServiceTierForUserAndAdmin(t *testing.T) {
+func TestUsageLogFromService_ServiceTiersAreAdminOnly(t *testing.T) {
 	t.Parallel()
 
 	serviceTier := "priority"
+	responseTier := "default"
 	inboundEndpoint := "/v1/chat/completions"
 	upstreamEndpoint := "/v1/responses"
 	log := &service.UsageLog{
 		RequestID:             "req_3",
 		Model:                 "gpt-5.4",
 		ServiceTier:           &serviceTier,
+		RequestedServiceTier:  &serviceTier,
+		ResponseServiceTier:   &responseTier,
 		InboundEndpoint:       &inboundEndpoint,
 		UpstreamEndpoint:      &upstreamEndpoint,
 		AccountRateMultiplier: f64Ptr(1.5),
@@ -149,8 +152,14 @@ func TestUsageLogFromService_IncludesServiceTierForUserAndAdmin(t *testing.T) {
 	userDTO := UsageLogFromService(log)
 	adminDTO := UsageLogFromServiceAdmin(log)
 
-	require.NotNil(t, userDTO.ServiceTier)
-	require.Equal(t, serviceTier, *userDTO.ServiceTier)
+	// Requirement: no service-tier information in user usage API JSON.
+	userJSON, err := json.Marshal(userDTO)
+	require.NoError(t, err)
+	require.NotContains(t, string(userJSON), "service_tier")
+	adminJSON, err := json.Marshal(adminDTO)
+	require.NoError(t, err)
+	require.Contains(t, string(adminJSON), `"requested_service_tier":"priority"`)
+	require.Contains(t, string(adminJSON), `"response_service_tier":"default"`)
 	require.NotNil(t, userDTO.InboundEndpoint)
 	require.Equal(t, inboundEndpoint, *userDTO.InboundEndpoint)
 	require.Nil(t, userDTO.UpstreamEndpoint)
@@ -368,4 +377,23 @@ func TestUsageLogFromService_PreservesHistoricalMissingImageSize(t *testing.T) {
 
 func f64Ptr(value float64) *float64 {
 	return &value
+}
+
+func TestUsageLogServiceTierJSONDistinguishesHistoryAndAbsence(t *testing.T) {
+	for _, tc := range []struct {
+		value               *string
+		requested, response string
+	}{
+		{nil, `"requested_service_tier":null`, `"response_service_tier":null`},
+		{new(string), `"requested_service_tier":""`, `"response_service_tier":""`},
+	} {
+		log := &service.UsageLog{RequestedServiceTier: tc.value, ResponseServiceTier: tc.value}
+		adminJSON, err := json.Marshal(UsageLogFromServiceAdmin(log))
+		require.NoError(t, err)
+		require.Contains(t, string(adminJSON), tc.requested)
+		require.Contains(t, string(adminJSON), tc.response)
+		userJSON, err := json.Marshal(UsageLogFromService(log))
+		require.NoError(t, err)
+		require.NotContains(t, string(userJSON), "service_tier")
+	}
 }

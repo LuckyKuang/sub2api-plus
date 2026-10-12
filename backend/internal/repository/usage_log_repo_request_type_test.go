@@ -118,6 +118,8 @@ func TestUsageLogRepositoryCreateSyncRequestTypeAndLegacyFields(t *testing.T) {
 			log.TimingVersion,
 			createdAt,
 			sqlmock.AnyArg(), // codex_rollout_budget_units
+			sqlmock.AnyArg(), // requested_service_tier
+			sqlmock.AnyArg(), // response_service_tier
 			sqlmock.AnyArg(), // first_byte_ms
 		).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "created_at"}).AddRow(int64(99), createdAt))
@@ -223,6 +225,8 @@ func TestUsageLogRepositoryCreate_PersistsServiceTier(t *testing.T) {
 			log.TimingVersion,
 			createdAt,
 			sqlmock.AnyArg(), // codex_rollout_budget_units
+			sqlmock.AnyArg(), // requested_service_tier
+			sqlmock.AnyArg(), // response_service_tier
 			sqlmock.AnyArg(), // first_byte_ms
 		).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "created_at"}).AddRow(int64(100), createdAt))
@@ -1030,6 +1034,8 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			0,     // timing_version
 			now,
 			sql.NullFloat64{}, // codex_rollout_budget_units
+			sql.NullString{},  // requested_service_tier
+			sql.NullString{},  // response_service_tier
 			sql.NullInt64{},   // first_byte_ms remains unknown in this historical fixture
 		}})
 		require.NoError(t, err)
@@ -1131,6 +1137,8 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			0,     // timing_version
 			now,
 			sql.NullFloat64{}, // codex_rollout_budget_units
+			sql.NullString{},  // requested_service_tier
+			sql.NullString{},  // response_service_tier
 			sql.NullInt64{},   // first_byte_ms remains unknown in this historical fixture
 		}})
 		require.NoError(t, err)
@@ -1203,6 +1211,8 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			0,    // timing_version
 			now,
 			sql.NullFloat64{}, // codex_rollout_budget_units
+			sql.NullString{},  // requested_service_tier
+			sql.NullString{},  // response_service_tier
 			sql.NullInt64{},   // first_byte_ms remains unknown in this historical fixture
 		}})
 		require.NoError(t, err)
@@ -1276,6 +1286,8 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			0,     // timing_version
 			now,
 			sql.NullFloat64{}, // codex_rollout_budget_units
+			sql.NullString{},  // requested_service_tier
+			sql.NullString{},  // response_service_tier
 			sql.NullInt64{},   // first_byte_ms remains unknown in this historical fixture
 		}})
 		require.NoError(t, err)

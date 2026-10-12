@@ -67,6 +67,10 @@ type UsageLog struct {
 	CacheCreation1hTokens int `json:"cache_creation_1h_tokens,omitempty"`
 	// AudioOutputTokens holds the value of the "audio_output_tokens" field.
 	AudioOutputTokens int `json:"audio_output_tokens,omitempty"`
+	// RequestedServiceTier holds the value of the "requested_service_tier" field.
+	RequestedServiceTier *string `json:"requested_service_tier,omitempty"`
+	// ResponseServiceTier holds the value of the "response_service_tier" field.
+	ResponseServiceTier *string `json:"response_service_tier,omitempty"`
 	// CodexRolloutBudgetUnits holds the value of the "codex_rollout_budget_units" field.
 	CodexRolloutBudgetUnits *float64 `json:"codex_rollout_budget_units,omitempty"`
 	// InputCost holds the value of the "input_cost" field.
@@ -228,7 +232,7 @@ func (*UsageLog) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullFloat64)
 		case usagelog.FieldID, usagelog.FieldUserID, usagelog.FieldAPIKeyID, usagelog.FieldAccountID, usagelog.FieldChannelID, usagelog.FieldGroupID, usagelog.FieldSubscriptionID, usagelog.FieldInputTokens, usagelog.FieldOutputTokens, usagelog.FieldCacheCreationTokens, usagelog.FieldCacheReadTokens, usagelog.FieldCacheCreation5mTokens, usagelog.FieldCacheCreation1hTokens, usagelog.FieldAudioOutputTokens, usagelog.FieldBillingType, usagelog.FieldDurationMs, usagelog.FieldTimingVersion, usagelog.FieldFirstByteMs, usagelog.FieldFirstTokenMs, usagelog.FieldLastTokenMs, usagelog.FieldFirstOutputMs, usagelog.FieldImageCount, usagelog.FieldVideoCount, usagelog.FieldVideoDurationSeconds:
 			values[i] = new(sql.NullInt64)
-		case usagelog.FieldRequestID, usagelog.FieldModel, usagelog.FieldRequestedModel, usagelog.FieldUpstreamModel, usagelog.FieldUpstreamResponseModel, usagelog.FieldModelMappingChain, usagelog.FieldBillingTier, usagelog.FieldBillingMode, usagelog.FieldFirstOutputKind, usagelog.FieldCompletionStatus, usagelog.FieldUsageSource, usagelog.FieldUserAgent, usagelog.FieldIPAddress, usagelog.FieldImageSize, usagelog.FieldImageInputSize, usagelog.FieldImageOutputSize, usagelog.FieldImageSizeSource, usagelog.FieldVideoResolution:
+		case usagelog.FieldRequestID, usagelog.FieldModel, usagelog.FieldRequestedModel, usagelog.FieldUpstreamModel, usagelog.FieldUpstreamResponseModel, usagelog.FieldModelMappingChain, usagelog.FieldBillingTier, usagelog.FieldBillingMode, usagelog.FieldRequestedServiceTier, usagelog.FieldResponseServiceTier, usagelog.FieldFirstOutputKind, usagelog.FieldCompletionStatus, usagelog.FieldUsageSource, usagelog.FieldUserAgent, usagelog.FieldIPAddress, usagelog.FieldImageSize, usagelog.FieldImageInputSize, usagelog.FieldImageOutputSize, usagelog.FieldImageSizeSource, usagelog.FieldVideoResolution:
 			values[i] = new(sql.NullString)
 		case usagelog.FieldCreatedAt:
 			values[i] = new(sql.NullTime)
@@ -394,6 +398,20 @@ func (_m *UsageLog) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field audio_output_tokens", values[i])
 			} else if value.Valid {
 				_m.AudioOutputTokens = int(value.Int64)
+			}
+		case usagelog.FieldRequestedServiceTier:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field requested_service_tier", values[i])
+			} else if value.Valid {
+				_m.RequestedServiceTier = new(string)
+				*_m.RequestedServiceTier = value.String
+			}
+		case usagelog.FieldResponseServiceTier:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field response_service_tier", values[i])
+			} else if value.Valid {
+				_m.ResponseServiceTier = new(string)
+				*_m.ResponseServiceTier = value.String
 			}
 		case usagelog.FieldCodexRolloutBudgetUnits:
 			if value, ok := values[i].(*sql.NullFloat64); !ok {
@@ -770,6 +788,16 @@ func (_m *UsageLog) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("audio_output_tokens=")
 	builder.WriteString(fmt.Sprintf("%v", _m.AudioOutputTokens))
+	builder.WriteString(", ")
+	if v := _m.RequestedServiceTier; v != nil {
+		builder.WriteString("requested_service_tier=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.ResponseServiceTier; v != nil {
+		builder.WriteString("response_service_tier=")
+		builder.WriteString(*v)
+	}
 	builder.WriteString(", ")
 	if v := _m.CodexRolloutBudgetUnits; v != nil {
 		builder.WriteString("codex_rollout_budget_units=")

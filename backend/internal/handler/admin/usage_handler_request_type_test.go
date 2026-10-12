@@ -20,13 +20,14 @@ type adminUsageRepoCapture struct {
 	listParams   pagination.PaginationParams
 	listFilters  usagestats.UsageLogFilters
 	statsFilters usagestats.UsageLogFilters
+	listRows     []service.UsageLog
 }
 
 func (s *adminUsageRepoCapture) ListWithFilters(ctx context.Context, params pagination.PaginationParams, filters usagestats.UsageLogFilters) ([]service.UsageLog, *pagination.PaginationResult, error) {
 	s.listParams = params
 	s.listFilters = filters
-	return []service.UsageLog{}, &pagination.PaginationResult{
-		Total:    0,
+	return s.listRows, &pagination.PaginationResult{
+		Total:    int64(len(s.listRows)),
 		Page:     params.Page,
 		PageSize: params.PageSize,
 		Pages:    0,
@@ -218,4 +219,18 @@ func TestAdminUsageStatsInvalidStream(t *testing.T) {
 	router.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestAdminUsageListIncludesServiceTierDiagnostics(t *testing.T) {
+	priority, defaultTier := "priority", "default"
+	repo := &adminUsageRepoCapture{listRows: []service.UsageLog{{
+		Model: "gpt-5.5", ServiceTier: &defaultTier,
+		RequestedServiceTier: &priority, ResponseServiceTier: &defaultTier,
+	}}}
+	router := newAdminUsageRequestTypeTestRouter(repo)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/admin/usage", nil))
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), `"requested_service_tier":"priority"`)
+	require.Contains(t, rec.Body.String(), `"response_service_tier":"default"`)
 }

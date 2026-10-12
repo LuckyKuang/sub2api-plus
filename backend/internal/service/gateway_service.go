@@ -632,6 +632,8 @@ type ForwardResult struct {
 	// UpstreamResponseServiceTier is the tier the upstream reports having used
 	// (Anthropic usage.speed: "fast" / "standard"); "" when not declared.
 	UpstreamResponseServiceTier string
+	// ResponseServiceTier preserves the upstream declaration for admin diagnostics, independently of billing.
+	ResponseServiceTier         string
 	Stream                      bool
 	Duration                    time.Duration
 	FirstByteMs                 *int

@@ -1,22 +1,16 @@
 import { describe, expect, it } from 'vitest'
-
 import en from '../locales/en'
 import zh from '../locales/zh'
 
-describe('usage service tier locale keys', () => {
-  it('contains zh labels for service tier tooltip', () => {
-    expect(zh.usage.serviceTier).toBe('服务档位')
-    expect(zh.usage.serviceTierPriority).toBe('Fast')
-    expect(zh.usage.serviceTierUltrafast).toBe('Ultrafast')
-    expect(zh.usage.serviceTierFlex).toBe('Flex')
-    expect(zh.usage.serviceTierStandard).toBe('Standard')
-  })
-
-  it('contains en labels for service tier tooltip', () => {
-    expect(en.usage.serviceTier).toBe('Service tier')
-    expect(en.usage.serviceTierPriority).toBe('Fast')
-    expect(en.usage.serviceTierUltrafast).toBe('Ultrafast')
-    expect(en.usage.serviceTierFlex).toBe('Flex')
-    expect(en.usage.serviceTierStandard).toBe('Standard')
+describe('admin service tier locale keys', () => {
+  it('provides separate request, response, historical and absent labels', () => {
+    expect(zh.admin.usage).toMatchObject({
+      serviceTier: '服务档位', serviceTierRequest: '请求', serviceTierResponse: '响应',
+      serviceTierUnrecorded: '未记录', serviceTierUnspecified: '未指定', serviceTierNotReturned: '未返回',
+    })
+    expect(en.admin.usage).toMatchObject({
+      serviceTier: 'Service tier', serviceTierRequest: 'Request', serviceTierResponse: 'Response',
+      serviceTierUnrecorded: 'Not recorded', serviceTierUnspecified: 'Unspecified', serviceTierNotReturned: 'Not returned',
+    })
   })
 })

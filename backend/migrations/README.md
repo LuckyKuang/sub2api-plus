@@ -35,6 +35,11 @@ with their original group ID as scope, preserving history and incident IDs.
 Probe scopes use monitor IDs and nullable group IDs; extra probes default off.
 See [channel monitoring](../../docs/CHANNEL_MONITOR.md).
 
+Migration `284_usage_service_tier_snapshots.sql` adds independent nullable
+outbound-request and upstream-response service-tier diagnostics. Historical
+rows stay unrecorded; billing tiers and prices are unchanged. These fields are
+administrator-only. See [Responses diagnostics](../../docs/protocols/OPENAI_RESPONSES.md#administrator-usage-service-tier-diagnostics).
+
 Migration `285_first_byte_timing.sql` adds independent nullable body-first-data
 timing to usage and V1 histories and independent successful-probe rollup sums
 and counts. Existing rows stay NULL/zero-sample; no token clock is backfilled.

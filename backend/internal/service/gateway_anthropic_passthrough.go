@@ -293,6 +293,7 @@ func (s *GatewayService) forwardAnthropicAPIKeyPassthroughWithInput(
 		UpstreamResponseModel:         observedUpstreamResponseModel(c),
 		UpstreamResponseModelConflict: observedUpstreamResponseModelConflict(c),
 		UpstreamResponseServiceTier:   observedUpstreamResponseServiceTier(c),
+		ResponseServiceTier:           observedDeclaredServiceTier(c),
 		Stream:                        input.RequestStream,
 		Duration:                      time.Since(input.StartTime),
 		FirstTokenMs:                  firstTokenMs,

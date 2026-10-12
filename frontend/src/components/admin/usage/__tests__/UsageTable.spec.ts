@@ -43,10 +43,11 @@ const messages: Record<string, string> = {
   'usage.inputTokenPrice': 'Input price',
   'usage.outputTokenPrice': 'Output price',
   'usage.perMillionTokens': '/ 1M tokens',
-  'usage.serviceTier': 'Service tier',
-  'usage.serviceTierPriority': 'Fast',
-  'usage.serviceTierFlex': 'Flex',
-  'usage.serviceTierStandard': 'Standard',
+  'admin.usage.serviceTierRequest': '请求',
+  'admin.usage.serviceTierResponse': '响应',
+  'admin.usage.serviceTierUnrecorded': '未记录',
+  'admin.usage.serviceTierUnspecified': '未指定',
+  'admin.usage.serviceTierNotReturned': '未返回',
   'usage.rate': 'Rate',
   'usage.accountMultiplier': 'Account rate',
   'usage.original': 'Original',
@@ -128,10 +129,11 @@ vi.mock('vue-i18n', async () => {
 })
 
 const DataTableStub = {
-  props: ['data'],
+  props: ['data', 'columns'],
   template: `
     <div>
       <div v-for="row in data" :key="row.request_id" :data-request-id="row.request_id">
+        <slot v-if="columns.some(col => col.key === 'service_tier')" name="cell-service_tier" :row="row" />
         <slot name="cell-model" :row="row" :value="row.model" />
         <slot name="cell-reasoning_effort" :row="row" :value="row.reasoning_effort" />
         <slot name="cell-billing_mode" :row="row" />
@@ -879,7 +881,7 @@ describe('admin UsageTable tooltip', () => {
     wrapper.unmount()
   })
 
-  it('shows service tier and billing breakdown in cost tooltip', async () => {
+  it('keeps service tiers out of the shared cost tooltip while retaining billing details', async () => {
     const row = {
       request_id: 'req-admin-1',
       actual_cost: 0.092883,
@@ -916,8 +918,8 @@ describe('admin UsageTable tooltip', () => {
     await nextTick()
 
     const text = wrapper.text()
-    expect(text).toContain('Service tier')
-    expect(text).toContain('Fast')
+    expect(text).not.toContain('Service tier')
+    expect(text).not.toContain('Fast')
     expect(text).toContain('Rate')
     expect(text).toContain('1.00x')
     expect(text).toContain('Account rate')
@@ -1514,5 +1516,60 @@ describe('admin UsageTable deleted-user badge', () => {
 
     expect(wrapper.text()).not.toContain('Deleted')
     expect(wrapper.text()).toContain('active@test.com')
+  })
+})
+
+// User requirement: tier diagnostics are an opt-in administrator column only.
+describe('service tier column', () => {
+  // Both administrator diagnostics must survive their integration: tier
+  // declarations remain independent from body-first-byte and strict token time.
+  it('shows tier snapshots and independent first-byte/token timing in the same row', async () => {
+    const wrapper = mount(UsageTable, {
+      props: {
+        data: [{ ...baseImageRow, requested_service_tier: 'priority', response_service_tier: 'default', first_byte_ms: 81, first_token_ms: 1482, last_token_ms: 1734, first_output_kind: 'text', timing_version: 1 }],
+        showServiceTier: true, columns: [{ key: 'service_tier', label: '服务档位' }, { key: 'latency', label: 'Latency' }],
+      },
+      global: { stubs: { DataTable: DataTableStub, EmptyState: true, Icon: true, Teleport: true } },
+    })
+    expect(wrapper.get('[data-testid="service-tier-cell"]').text()).toContain('请求 Fast')
+    expect(wrapper.get('[data-testid="service-tier-cell"]').text()).toContain('响应 default')
+    expect(wrapper.get('[data-testid="first-latency-value"]').text()).toBe('81ms')
+    await wrapper.get('[data-testid="latency-details-trigger"]').trigger('mouseenter')
+    const detail = wrapper.get('[data-testid="latency-details-tooltip"]')
+    expect(detail.get('[data-testid="detail-first-byte"]').text()).toBe('81ms')
+    expect(detail.text()).toContain('First Token')
+    expect(detail.text()).toContain('1.48s')
+    expect(detail.text()).toContain('1.73s')
+    wrapper.unmount()
+  })
+  it.each([
+    ['priority', 'default', '请求 Fast', '响应 default'],
+    ['fast', 'priority', '请求 Fast', '响应 priority'],
+    [null, null, '请求 未记录', '响应 未记录'],
+    ['', '', '请求 未指定', '响应 未返回'],
+  ])('renders separate lines for %s / %s', (requested, response, requestText, responseText) => {
+    const wrapper = mount(UsageTable, {
+      props: {
+        data: [{ ...baseImageRow, requested_service_tier: requested, response_service_tier: response }],
+        showServiceTier: true, columns: [{ key: 'service_tier', label: '服务档位' }],
+      },
+      global: { stubs: { DataTable: DataTableStub, EmptyState: true, Icon: true, Teleport: true } },
+    })
+    expect(wrapper.get('[data-testid="service-tier-cell"]').findAll('div').map(line => line.text())).toEqual([requestText, responseText])
+    wrapper.unmount()
+  })
+
+  it('does not expose tiers unless explicitly enabled by the admin view', async () => {
+    const wrapper = mount(UsageTable, {
+      props: {
+        data: [{ ...baseImageRow, service_tier: 'priority', requested_service_tier: 'priority', response_service_tier: 'provider-tier' }],
+        columns: [{ key: 'service_tier', label: '服务档位' }], showAccountBilling: false,
+      },
+      global: { stubs: { DataTable: DataTableStub, EmptyState: true, Icon: true, Teleport: true } },
+    })
+    await wrapper.get('[data-testid="cost-details-trigger"]').trigger('mouseenter')
+    expect(wrapper.find('[data-testid="service-tier-cell"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toMatch(/Fast|priority|provider-tier|serviceTier/)
+    wrapper.unmount()
   })
 })

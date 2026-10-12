@@ -295,6 +295,34 @@ func (_c *UsageLogCreate) SetNillableAudioOutputTokens(v *int) *UsageLogCreate {
 	return _c
 }
 
+// SetRequestedServiceTier sets the "requested_service_tier" field.
+func (_c *UsageLogCreate) SetRequestedServiceTier(v string) *UsageLogCreate {
+	_c.mutation.SetRequestedServiceTier(v)
+	return _c
+}
+
+// SetNillableRequestedServiceTier sets the "requested_service_tier" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableRequestedServiceTier(v *string) *UsageLogCreate {
+	if v != nil {
+		_c.SetRequestedServiceTier(*v)
+	}
+	return _c
+}
+
+// SetResponseServiceTier sets the "response_service_tier" field.
+func (_c *UsageLogCreate) SetResponseServiceTier(v string) *UsageLogCreate {
+	_c.mutation.SetResponseServiceTier(v)
+	return _c
+}
+
+// SetNillableResponseServiceTier sets the "response_service_tier" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableResponseServiceTier(v *string) *UsageLogCreate {
+	if v != nil {
+		_c.SetResponseServiceTier(*v)
+	}
+	return _c
+}
+
 // SetCodexRolloutBudgetUnits sets the "codex_rollout_budget_units" field.
 func (_c *UsageLogCreate) SetCodexRolloutBudgetUnits(v float64) *UsageLogCreate {
 	_c.mutation.SetCodexRolloutBudgetUnits(v)
@@ -1013,6 +1041,16 @@ func (_c *UsageLogCreate) check() error {
 	if _, ok := _c.mutation.AudioOutputTokens(); !ok {
 		return &ValidationError{Name: "audio_output_tokens", err: errors.New(`ent: missing required field "UsageLog.audio_output_tokens"`)}
 	}
+	if v, ok := _c.mutation.RequestedServiceTier(); ok {
+		if err := usagelog.RequestedServiceTierValidator(v); err != nil {
+			return &ValidationError{Name: "requested_service_tier", err: fmt.Errorf(`ent: validator failed for field "UsageLog.requested_service_tier": %w`, err)}
+		}
+	}
+	if v, ok := _c.mutation.ResponseServiceTier(); ok {
+		if err := usagelog.ResponseServiceTierValidator(v); err != nil {
+			return &ValidationError{Name: "response_service_tier", err: fmt.Errorf(`ent: validator failed for field "UsageLog.response_service_tier": %w`, err)}
+		}
+	}
 	if _, ok := _c.mutation.InputCost(); !ok {
 		return &ValidationError{Name: "input_cost", err: errors.New(`ent: missing required field "UsageLog.input_cost"`)}
 	}
@@ -1222,6 +1260,14 @@ func (_c *UsageLogCreate) createSpec() (*UsageLog, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.AudioOutputTokens(); ok {
 		_spec.SetField(usagelog.FieldAudioOutputTokens, field.TypeInt, value)
 		_node.AudioOutputTokens = value
+	}
+	if value, ok := _c.mutation.RequestedServiceTier(); ok {
+		_spec.SetField(usagelog.FieldRequestedServiceTier, field.TypeString, value)
+		_node.RequestedServiceTier = &value
+	}
+	if value, ok := _c.mutation.ResponseServiceTier(); ok {
+		_spec.SetField(usagelog.FieldResponseServiceTier, field.TypeString, value)
+		_node.ResponseServiceTier = &value
 	}
 	if value, ok := _c.mutation.CodexRolloutBudgetUnits(); ok {
 		_spec.SetField(usagelog.FieldCodexRolloutBudgetUnits, field.TypeFloat64, value)
@@ -1869,6 +1915,42 @@ func (u *UsageLogUpsert) UpdateAudioOutputTokens() *UsageLogUpsert {
 // AddAudioOutputTokens adds v to the "audio_output_tokens" field.
 func (u *UsageLogUpsert) AddAudioOutputTokens(v int) *UsageLogUpsert {
 	u.Add(usagelog.FieldAudioOutputTokens, v)
+	return u
+}
+
+// SetRequestedServiceTier sets the "requested_service_tier" field.
+func (u *UsageLogUpsert) SetRequestedServiceTier(v string) *UsageLogUpsert {
+	u.Set(usagelog.FieldRequestedServiceTier, v)
+	return u
+}
+
+// UpdateRequestedServiceTier sets the "requested_service_tier" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateRequestedServiceTier() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldRequestedServiceTier)
+	return u
+}
+
+// ClearRequestedServiceTier clears the value of the "requested_service_tier" field.
+func (u *UsageLogUpsert) ClearRequestedServiceTier() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldRequestedServiceTier)
+	return u
+}
+
+// SetResponseServiceTier sets the "response_service_tier" field.
+func (u *UsageLogUpsert) SetResponseServiceTier(v string) *UsageLogUpsert {
+	u.Set(usagelog.FieldResponseServiceTier, v)
+	return u
+}
+
+// UpdateResponseServiceTier sets the "response_service_tier" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateResponseServiceTier() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldResponseServiceTier)
+	return u
+}
+
+// ClearResponseServiceTier clears the value of the "response_service_tier" field.
+func (u *UsageLogUpsert) ClearResponseServiceTier() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldResponseServiceTier)
 	return u
 }
 
@@ -2978,6 +3060,48 @@ func (u *UsageLogUpsertOne) AddAudioOutputTokens(v int) *UsageLogUpsertOne {
 func (u *UsageLogUpsertOne) UpdateAudioOutputTokens() *UsageLogUpsertOne {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.UpdateAudioOutputTokens()
+	})
+}
+
+// SetRequestedServiceTier sets the "requested_service_tier" field.
+func (u *UsageLogUpsertOne) SetRequestedServiceTier(v string) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetRequestedServiceTier(v)
+	})
+}
+
+// UpdateRequestedServiceTier sets the "requested_service_tier" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateRequestedServiceTier() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateRequestedServiceTier()
+	})
+}
+
+// ClearRequestedServiceTier clears the value of the "requested_service_tier" field.
+func (u *UsageLogUpsertOne) ClearRequestedServiceTier() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearRequestedServiceTier()
+	})
+}
+
+// SetResponseServiceTier sets the "response_service_tier" field.
+func (u *UsageLogUpsertOne) SetResponseServiceTier(v string) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetResponseServiceTier(v)
+	})
+}
+
+// UpdateResponseServiceTier sets the "response_service_tier" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateResponseServiceTier() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateResponseServiceTier()
+	})
+}
+
+// ClearResponseServiceTier clears the value of the "response_service_tier" field.
+func (u *UsageLogUpsertOne) ClearResponseServiceTier() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearResponseServiceTier()
 	})
 }
 
@@ -4358,6 +4482,48 @@ func (u *UsageLogUpsertBulk) AddAudioOutputTokens(v int) *UsageLogUpsertBulk {
 func (u *UsageLogUpsertBulk) UpdateAudioOutputTokens() *UsageLogUpsertBulk {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.UpdateAudioOutputTokens()
+	})
+}
+
+// SetRequestedServiceTier sets the "requested_service_tier" field.
+func (u *UsageLogUpsertBulk) SetRequestedServiceTier(v string) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetRequestedServiceTier(v)
+	})
+}
+
+// UpdateRequestedServiceTier sets the "requested_service_tier" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateRequestedServiceTier() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateRequestedServiceTier()
+	})
+}
+
+// ClearRequestedServiceTier clears the value of the "requested_service_tier" field.
+func (u *UsageLogUpsertBulk) ClearRequestedServiceTier() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearRequestedServiceTier()
+	})
+}
+
+// SetResponseServiceTier sets the "response_service_tier" field.
+func (u *UsageLogUpsertBulk) SetResponseServiceTier(v string) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetResponseServiceTier(v)
+	})
+}
+
+// UpdateResponseServiceTier sets the "response_service_tier" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateResponseServiceTier() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateResponseServiceTier()
+	})
+}
+
+// ClearResponseServiceTier clears the value of the "response_service_tier" field.
+func (u *UsageLogUpsertBulk) ClearResponseServiceTier() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearResponseServiceTier()
 	})
 }
 

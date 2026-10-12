@@ -272,3 +272,41 @@ func TestObservedUpstreamResponseServiceTierFromContext(t *testing.T) {
 	observer.ObserveOpenAI([]byte(`{"type":"response.completed","response":{"id":"resp_1","model":"gpt-5.6-sol","service_tier":"default"}}`), "response.completed")
 	require.Equal(t, "default", observedUpstreamResponseServiceTier(c))
 }
+
+// Admin diagnostics must retain declarations independently from billing vocabulary
+// and model presence. Nonterminal Responses events only echo the request.
+func TestDeclaredServiceTierDiagnostics(t *testing.T) {
+	for _, tc := range []struct{ name, payload, event, want string }{
+		{"terminal without model", `{"response":{"service_tier":"default"}}`, "response.completed", "default"},
+		{"plain without model", `{"service_tier":"fast"}`, "", "fast"},
+		{"unknown provider tier", `{"model":"gpt-5.5","service_tier":"provider-tier"}`, "", "provider-tier"},
+		{"auto declaration", `{"service_tier":"auto"}`, "", "auto"},
+		{"missing", `{"model":"gpt-5.5"}`, "", ""},
+		{"non string", `{"service_tier":123}`, "", ""},
+		{"malformed", `{"service_tier":"default"`, "", ""},
+		{"request echo", `{"response":{"service_tier":"priority"}}`, "response.created", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			o := &upstreamResponseModelObserver{}
+			o.ObserveOpenAI([]byte(tc.payload), tc.event)
+			require.Equal(t, tc.want, o.DeclaredServiceTier())
+			require.Empty(t, o.ServiceTier(), "diagnostics must not expand billing observations")
+		})
+	}
+	o := &upstreamResponseModelObserver{}
+	o.ObserveOpenAI([]byte(`{"service_tier":"fast"}`), "")
+	o.ObserveOpenAI([]byte(`{"service_tier":"default"}`), "")
+	require.Empty(t, o.DeclaredServiceTier(), "conflicting chunks must not be guessed")
+	o.ObserveOpenAI([]byte(`{"response":{"service_tier":"flex"}}`), "response.completed")
+	require.Equal(t, "flex", o.DeclaredServiceTier(), "terminal declaration wins")
+	require.Equal(t, strings.Repeat("界", 64), boundedDeclaredServiceTier(strings.Repeat("界", 65)))
+}
+
+func TestDeclaredServiceTierResetsBetweenAttempts(t *testing.T) {
+	c, _ := gin.CreateTestContext(nil)
+	first := beginUpstreamResponseModelObservation(c)
+	first.ObserveOpenAI([]byte(`{"service_tier":"default"}`), "")
+	beginUpstreamResponseModelObservation(c)
+	require.Empty(t, observedDeclaredServiceTier(c))
+	require.Equal(t, "default", first.DeclaredServiceTier())
+}

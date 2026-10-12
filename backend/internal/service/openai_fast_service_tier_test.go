@@ -595,6 +595,7 @@ func TestForward_ResponsesKeepsOutboundAndObservedServiceTiersSeparate(t *testin
 	require.NotNil(t, result.ServiceTier)
 	require.Equal(t, "priority", *result.ServiceTier)
 	require.Equal(t, "default", result.UpstreamResponseServiceTier)
+	require.Equal(t, "default", result.ResponseServiceTier, "admin diagnostic must survive forwarding")
 	// 非流式响应原样透传：客户端同样看到 default。
 	require.Contains(t, rec.Body.String(), `"service_tier":"default"`)
 	require.NotContains(t, rec.Body.String(), `"service_tier":"priority"`)
@@ -642,6 +643,7 @@ func TestForwardStreaming_KeepsOutboundAndObservedServiceTiersSeparate(t *testin
 	require.NotNil(t, result.ServiceTier)
 	require.Equal(t, "priority", *result.ServiceTier)
 	require.Equal(t, "default", result.UpstreamResponseServiceTier)
+	require.Equal(t, "default", result.ResponseServiceTier, "admin diagnostic must survive forwarding")
 	// 流式原样透传：客户端在终止事件里看到 default。
 	require.Contains(t, rec.Body.String(), `"service_tier":"default"`)
 }
@@ -689,6 +691,7 @@ func TestForwardAsChatCompletions_KeepsOutboundAndObservedServiceTiersSeparate(t
 	require.NotNil(t, result.ServiceTier)
 	require.Equal(t, "priority", *result.ServiceTier)
 	require.Equal(t, "default", result.UpstreamResponseServiceTier)
+	require.Equal(t, "default", result.ResponseServiceTier, "admin diagnostic must survive forwarding")
 	// 缓冲转回 Chat Completions：客户端响应里如实回显 default。
 	require.Contains(t, rec.Body.String(), `"service_tier":"default"`)
 	require.NotContains(t, rec.Body.String(), `"service_tier":"priority"`)
