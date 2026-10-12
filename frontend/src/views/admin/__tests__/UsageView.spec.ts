@@ -54,6 +54,7 @@ const messages: Record<string, string> = {
   'admin.dashboard.hour': 'Hour',
   'admin.usage.failedToLoadUser': 'Failed to load user',
   'admin.usage.requestId': 'Request ID',
+  'admin.usage.serviceTier': 'Service tier',
   'usage.requestedModel': 'Requested model',
   'usage.sentUpstreamModel': 'Sent upstream model',
   'usage.upstreamResponseModel': 'Upstream response model',
@@ -156,7 +157,7 @@ const UsageFiltersStub = defineComponent({
   template: '<div><span data-test="user-filter-label">{{ userKeyword }}</span><slot name="after-reset" /></div>',
 })
 const UsageTableStub = {
-  props: ['columns'],
+  props: ['columns', 'showServiceTier'],
   emits: ['userClick'],
   template: '<div data-test="usage-table"><button class="user-click" @click="$emit(\'userClick\', 2)">user</button></div>',
 }
@@ -500,7 +501,7 @@ describe('admin UsageView request ID column visibility', () => {
     vi.useRealTimers()
   })
 
-  it('keeps request ID and session ID visible by default', async () => {
+  it('shows the service tier column by default and persists hiding it', async () => {
     const wrapper = mount(UsageView, {
       global: {
         stubs: {
@@ -531,11 +532,20 @@ describe('admin UsageView request ID column visibility', () => {
       expect.arrayContaining([
         expect.objectContaining({ key: 'request_id', label: 'Request ID' }),
         expect.objectContaining({ key: 'session_id', label: 'Session ID' }),
+        expect.objectContaining({ key: 'service_tier', label: 'Service tier' }),
       ]),
     )
     expect(usageTable.props('columns')).not.toEqual(
       expect.arrayContaining([expect.objectContaining({ key: 'upstream_request_id' })]),
     )
+    expect(usageTable.props('showServiceTier')).toBe(true)
+    await wrapper.get('[data-testid="usage-column-settings"]').trigger('click')
+    await wrapper.get('[data-testid="usage-column-toggle-service_tier"]').trigger('click')
+    expect(usageTable.props('columns').map((column: { key: string }) => column.key)).not.toContain('service_tier')
+    expect(localStorage.setItem).toHaveBeenCalledWith('usage-hidden-columns', expect.stringContaining('"service_tier"'))
+    await wrapper.get('[data-testid="usage-column-toggle-service_tier"]').trigger('click')
+    expect(usageTable.props('columns').map((column: { key: string }) => column.key)).toContain('service_tier')
+    wrapper.unmount()
   })
 })
 

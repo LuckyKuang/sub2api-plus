@@ -126,6 +126,7 @@ func TestUsageLogRepositoryCreate_BatchPathConcurrent(t *testing.T) {
 	apiKey := mustCreateApiKey(t, client, &service.APIKey{UserID: user.ID, Key: "sk-usage-batch-" + uuid.NewString(), Name: "k"})
 	account := mustCreateAccount(t, client, &service.Account{Name: "acc-usage-batch-" + uuid.NewString()})
 
+	priority, defaultTier := "priority", "default"
 	const total = 16
 	results := make([]bool, total)
 	errs := make([]error, total)
@@ -136,16 +137,18 @@ func TestUsageLogRepositoryCreate_BatchPathConcurrent(t *testing.T) {
 	for i := 0; i < total; i++ {
 		i := i
 		logs[i] = &service.UsageLog{
-			UserID:       user.ID,
-			APIKeyID:     apiKey.ID,
-			AccountID:    account.ID,
-			RequestID:    uuid.NewString(),
-			Model:        "claude-3",
-			InputTokens:  10 + i,
-			OutputTokens: 20 + i,
-			TotalCost:    0.5,
-			ActualCost:   0.5,
-			CreatedAt:    time.Now().UTC(),
+			UserID:               user.ID,
+			APIKeyID:             apiKey.ID,
+			AccountID:            account.ID,
+			RequestID:            uuid.NewString(),
+			Model:                "claude-3",
+			RequestedServiceTier: &priority,
+			ResponseServiceTier:  &defaultTier,
+			InputTokens:          10 + i,
+			OutputTokens:         20 + i,
+			TotalCost:            0.5,
+			ActualCost:           0.5,
+			CreatedAt:            time.Now().UTC(),
 		}
 		go func() {
 			defer wg.Done()
@@ -158,6 +161,10 @@ func TestUsageLogRepositoryCreate_BatchPathConcurrent(t *testing.T) {
 		require.NoError(t, errs[i])
 		require.True(t, results[i])
 		require.NotZero(t, logs[i].ID)
+		stored, err := repo.GetByID(ctx, logs[i].ID)
+		require.NoError(t, err)
+		require.Equal(t, &priority, stored.RequestedServiceTier)
+		require.Equal(t, &defaultTier, stored.ResponseServiceTier)
 	}
 
 	var count int
@@ -1727,4 +1734,25 @@ func (s *UsageLogRepoSuite) TestListWithFilters_CombinedFilters() {
 	s.Require().NoError(err, "ListWithFilters combined")
 	s.Require().Len(logs, 2)
 	s.Require().Equal(int64(2), page.Total)
+}
+
+// Requirement: diagnostic history (NULL), observed absence (empty), and the
+// request/response pair must survive the real PostgreSQL write/read paths.
+func (s *UsageLogRepoSuite) TestServiceTierSnapshotsRoundTrip() {
+	user := mustCreateUser(s.T(), s.client, &service.User{Email: "tiers@test.com"})
+	key := mustCreateApiKey(s.T(), s.client, &service.APIKey{UserID: user.ID, Key: "sk-tiers", Name: "tiers"})
+	account := mustCreateAccount(s.T(), s.client, &service.Account{Name: "tiers"})
+	priority, defaultTier, empty := "priority", "default", ""
+	for _, pair := range [][2]*string{{nil, nil}, {&empty, &empty}, {&priority, &defaultTier}} {
+		log := &service.UsageLog{UserID: user.ID, APIKeyID: key.ID, AccountID: account.ID,
+			RequestID: uuid.NewString(), Model: "gpt-5.5", ServiceTier: &defaultTier,
+			RequestedServiceTier: pair[0], ResponseServiceTier: pair[1]}
+		_, err := s.repo.Create(s.ctx, log)
+		s.Require().NoError(err)
+		stored, err := s.repo.GetByID(s.ctx, log.ID)
+		s.Require().NoError(err)
+		s.Equal(pair[0], stored.RequestedServiceTier)
+		s.Equal(pair[1], stored.ResponseServiceTier)
+		s.Equal(&defaultTier, stored.ServiceTier)
+	}
 }

@@ -785,6 +785,7 @@ func TestGatewayServiceRecordUsage_FastSpeedDowngradedByUpstreamResponse(t *test
 			Duration:                    time.Second,
 			ServiceTier:                 &tier,
 			UpstreamResponseServiceTier: "standard",
+			ResponseServiceTier:         "standard",
 		},
 		APIKey:  apiKey,
 		User:    &User{ID: 1},
@@ -795,6 +796,8 @@ func TestGatewayServiceRecordUsage_FastSpeedDowngradedByUpstreamResponse(t *test
 	require.NotNil(t, usageRepo.lastLog)
 	require.NotNil(t, usageRepo.lastLog.ServiceTier)
 	require.Equal(t, "standard", *usageRepo.lastLog.ServiceTier)
+	require.Equal(t, "fast", *usageRepo.lastLog.RequestedServiceTier)
+	require.Equal(t, "standard", *usageRepo.lastLog.ResponseServiceTier)
 
 	tokens := UsageTokens{InputTokens: 100, OutputTokens: 50}
 	standardCost, err := svc.billingService.CalculateCost("claude-opus-5", tokens, 1.0)

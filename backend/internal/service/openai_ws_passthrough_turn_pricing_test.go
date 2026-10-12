@@ -475,3 +475,55 @@ func TestPassthroughIngressAfterTurnSettlesWhenFirstWriteNeverReachesUpstream(t 
 	require.Equal(t, 1, gotAfter, "BeforeTurn success must still settle AfterTurn when the first write never reaches upstream")
 	require.Error(t, gotErr)
 }
+
+// Admin diagnostics must follow each actual WS turn for both credential types,
+// including clearing an earlier response declaration when the next omits it.
+func TestPassthroughIngressServiceTierDiagnosticsPerTurn(t *testing.T) {
+	for _, accountType := range []string{AccountTypeOAuth, AccountTypeAPIKey} {
+		t.Run(accountType, func(t *testing.T) {
+			gin.SetMode(gin.TestMode)
+			ctx, cancel := context.WithCancelCause(context.Background())
+			defer cancel(context.Canceled)
+			upstream := newStagedPassthroughConn()
+			cfg := passthroughLifecycleConfig()
+			cfg.Gateway.OpenAIWS.OAuthEnabled = true
+			account := passthroughLifecycleAccount()
+			account.Type = accountType
+			account.Extra["openai_oauth_responses_websockets_v2_mode"] = OpenAIWSIngressModePassthrough
+			results := make(chan *OpenAIForwardResult, 2)
+			hooks := &OpenAIWSIngressHooks{AfterTurn: func(_ int, result *OpenAIForwardResult, _ error) { results <- result }}
+			server, _ := startPassthroughHookRecordingServer(t, ctx, newPassthroughLifecycleService(cfg, upstream), account, hooks)
+			defer server.Close()
+			client := dialPassthroughLifecycleClientWithPayload(t, server, `{"type":"response.create","model":"gpt-5.1","service_tier":"fast"}`)
+			defer func() { _ = client.CloseNow() }()
+			outbound := requirePassthroughUpstreamWrite(t, upstream, time.Second)
+			require.Equal(t, "priority", gjson.GetBytes(outbound, "service_tier").String())
+			upstream.Send(`{"type":"response.completed","response":{"id":"tier_1","model":"gpt-5.1","service_tier":"default","usage":{"input_tokens":1,"output_tokens":1}}}`)
+			_, err := readPassthroughLifecycleFrame(t, client, time.Second)
+			require.NoError(t, err)
+			select {
+			case result := <-results:
+				require.Equal(t, "priority", optionalStringValue(result.ServiceTier))
+				require.Equal(t, "default", result.ResponseServiceTier)
+			case <-time.After(time.Second):
+				t.Fatal("missing first turn result")
+			}
+			writeCtx, cancelWrite := context.WithTimeout(context.Background(), time.Second)
+			err = client.Write(writeCtx, coderws.MessageText, []byte(`{"type":"response.create","model":"gpt-5.1"}`))
+			cancelWrite()
+			require.NoError(t, err)
+			outbound = requirePassthroughUpstreamWrite(t, upstream, time.Second)
+			require.False(t, gjson.GetBytes(outbound, "service_tier").Exists())
+			upstream.Send(`{"type":"response.completed","response":{"id":"tier_2","model":"gpt-5.1","usage":{"input_tokens":2,"output_tokens":2}}}`)
+			_, err = readPassthroughLifecycleFrame(t, client, time.Second)
+			require.NoError(t, err)
+			select {
+			case result := <-results:
+				require.Nil(t, result.ServiceTier)
+				require.Empty(t, result.ResponseServiceTier)
+			case <-time.After(time.Second):
+				t.Fatal("missing second turn result")
+			}
+		})
+	}
+}

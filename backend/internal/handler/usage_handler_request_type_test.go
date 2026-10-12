@@ -368,3 +368,19 @@ func TestUserUsageSnapshotRejectsInvalidIncludeFlags(t *testing.T) {
 		require.Equal(t, http.StatusBadRequest, rec.Code, query)
 	}
 }
+
+// User requirement: the usage API must never disclose service-tier diagnostics,
+// even when stored values are available for administrators.
+func TestUserUsageListOmitsServiceTierDiagnostics(t *testing.T) {
+	priority, defaultTier := "priority", "default"
+	repo := &userUsageRepoCapture{listRows: []service.UsageLog{{
+		UserID: 42, Model: "gpt-5.5", ServiceTier: &defaultTier,
+		RequestedServiceTier: &priority, ResponseServiceTier: &defaultTier,
+	}}}
+	router := newUserUsageRequestTypeTestRouter(repo)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/usage", nil))
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), `"model":"gpt-5.5"`)
+	require.NotContains(t, rec.Body.String(), "service_tier")
+}

@@ -1,42 +1,25 @@
 import { describe, expect, it } from 'vitest'
+import { formatRequestedServiceTier, formatResponseServiceTier } from '@/utils/usageServiceTier'
 
-import { formatUsageServiceTier, getUsageServiceTierLabel, normalizeUsageServiceTier } from '@/utils/usageServiceTier'
+const t = (key: string) => ({
+  'admin.usage.serviceTierUnrecorded': '未记录',
+  'admin.usage.serviceTierUnspecified': '未指定',
+  'admin.usage.serviceTierNotReturned': '未返回',
+})[key] ?? key
 
-describe('usageServiceTier utils', () => {
-  it('normalizes fast/default aliases', () => {
-    expect(normalizeUsageServiceTier('fast')).toBe('priority')
-    expect(normalizeUsageServiceTier(' default ')).toBe('standard')
-    expect(normalizeUsageServiceTier('STANDARD')).toBe('standard')
+describe('admin service tier diagnostics', () => {
+  // Requirement: request Fast and response default must remain distinct.
+  it.each(['priority', 'fast', ' PRIORITY '])('labels requested %s as Fast', tier => {
+    expect(formatRequestedServiceTier(tier, t)).toBe('Fast')
   })
-
-  it('preserves supported tiers', () => {
-    expect(normalizeUsageServiceTier('priority')).toBe('priority')
-    expect(normalizeUsageServiceTier('flex')).toBe('flex')
-    expect(normalizeUsageServiceTier('ultrafast')).toBe('ultrafast')
+  it.each(['default', 'priority', 'fast', 'auto', 'provider-tier'])('preserves response %s', tier => {
+    expect(formatResponseServiceTier(tier, t)).toBe(tier)
   })
-
-  it('formats empty values as standard', () => {
-    expect(formatUsageServiceTier()).toBe('standard')
-    expect(formatUsageServiceTier('')).toBe('standard')
-  })
-
-  it('passes through unknown non-empty tiers for display fallback', () => {
-    expect(normalizeUsageServiceTier('custom-tier')).toBe('custom-tier')
-    expect(formatUsageServiceTier('custom-tier')).toBe('custom-tier')
-  })
-
-  it('maps tiers to translated labels', () => {
-    const translate = (key: string) => ({
-      'usage.serviceTierPriority': 'Fast',
-      'usage.serviceTierUltrafast': 'Ultrafast',
-      'usage.serviceTierFlex': 'Flex',
-      'usage.serviceTierStandard': 'Standard',
-    })[key] ?? key
-
-    expect(getUsageServiceTierLabel('fast', translate)).toBe('Fast')
-    expect(getUsageServiceTierLabel('ultrafast', translate)).toBe('Ultrafast')
-    expect(getUsageServiceTierLabel('flex', translate)).toBe('Flex')
-    expect(getUsageServiceTierLabel(undefined, translate)).toBe('Standard')
-    expect(getUsageServiceTierLabel('custom-tier', translate)).toBe('custom-tier')
+  it('distinguishes historical records from newly captured absence', () => {
+    expect(formatRequestedServiceTier(null, t)).toBe('未记录')
+    expect(formatResponseServiceTier(undefined, t)).toBe('未记录')
+    expect(formatRequestedServiceTier('', t)).toBe('未指定')
+    expect(formatResponseServiceTier('', t)).toBe('未返回')
+    expect(formatRequestedServiceTier('flex', t)).toBe('flex')
   })
 })

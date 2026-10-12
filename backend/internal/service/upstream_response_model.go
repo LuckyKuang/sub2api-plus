@@ -36,9 +36,12 @@ type upstreamResponseModelObserver struct {
 	// firstTier holds the first non-terminal tier declaration; it is discarded
 	// when later non-terminal declarations disagree. terminalTier comes from a
 	// terminal event and always wins.
-	firstTier         string
-	firstTierConflict bool
-	terminalTier      string
+	firstTier            string
+	firstTierConflict    bool
+	terminalTier         string
+	firstDeclaredTier    string
+	terminalDeclaredTier string
+	declaredTierConflict bool
 }
 
 func (o *upstreamResponseModelObserver) Observe(model string, terminal bool) {
@@ -128,8 +131,11 @@ func (o *upstreamResponseModelObserver) ObserveOpenAI(payload []byte, eventType 
 	}
 	terminal := isUpstreamResponseModelTerminalEvent(eventType)
 	o.Observe(model, terminal)
-	// Every payload that declares a service tier also declares a model, so
-	// model-free delta frames skip the extra lookups entirely.
+	if terminal || strings.TrimSpace(eventType) == "" {
+		o.observeDeclaredServiceTier(firstValidTrimmedGJSONString(payload, "response.service_tier", "service_tier"), terminal)
+	}
+	// Retain the existing billing observation requirement for a model.
+	// Administrator diagnostics above also accept model-free declarations.
 	if model == "" {
 		return
 	}
@@ -146,6 +152,7 @@ func (o *upstreamResponseModelObserver) ObserveOpenAI(payload []byte, eventType 
 func (o *upstreamResponseModelObserver) ObserveAnthropic(payload []byte) {
 	model := firstValidTrimmedGJSONString(payload, "message.model", "model")
 	o.Observe(model, false)
+	o.observeDeclaredServiceTier(firstValidTrimmedGJSONString(payload, "message.usage.speed", "usage.speed"), false)
 	// usage.speed travels with the message object (message_start in streams,
 	// the top-level body otherwise), i.e. only in payloads that declare a model.
 	if model == "" {
@@ -188,6 +195,51 @@ func (o *upstreamResponseModelObserver) ServiceTier() string {
 		return ""
 	}
 	return o.firstTier
+}
+
+// Diagnostic declarations never feed billing. Retain unknown provider values,
+// bounded to 64 runes, and do not require a model in the same payload.
+func (o *upstreamResponseModelObserver) observeDeclaredServiceTier(tier string, terminal bool) {
+	if o == nil || tier == "" {
+		return
+	}
+	tier = boundedDeclaredServiceTier(tier)
+	if terminal {
+		o.terminalDeclaredTier = tier
+		return
+	}
+	if o.firstDeclaredTier == "" {
+		o.firstDeclaredTier = tier
+		return
+	}
+	if o.firstDeclaredTier != tier {
+		o.declaredTierConflict = true
+	}
+}
+
+func boundedDeclaredServiceTier(tier string) string {
+	runes := []rune(strings.TrimSpace(tier))
+	if len(runes) > 64 {
+		runes = runes[:64]
+	}
+	return string(runes)
+}
+
+func (o *upstreamResponseModelObserver) DeclaredServiceTier() string {
+	if o == nil {
+		return ""
+	}
+	if o.terminalDeclaredTier != "" {
+		return o.terminalDeclaredTier
+	}
+	if o.declaredTierConflict {
+		return ""
+	}
+	return o.firstDeclaredTier
+}
+
+func observedDeclaredServiceTier(c *gin.Context) string {
+	return upstreamResponseModelObserverFromContext(c).DeclaredServiceTier()
 }
 
 // normalizeObservedOpenAIServiceTier maps a tier reported by an OpenAI response

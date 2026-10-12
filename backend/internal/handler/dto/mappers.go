@@ -730,7 +730,6 @@ func usageLogFromServiceUser(l *service.UsageLog) UsageLog {
 		AccountID:                 l.AccountID,
 		RequestID:                 l.RequestID,
 		Model:                     requestedModel,
-		ServiceTier:               l.ServiceTier,
 		ReasoningEffort:           userFacingReasoningEffort(l),
 		InboundEndpoint:           l.InboundEndpoint,
 		GroupID:                   l.GroupID,
@@ -808,6 +807,9 @@ func UsageLogFromServiceAdmin(l *service.UsageLog) *AdminUsageLog {
 	usageLog.UpstreamEndpoint = l.UpstreamEndpoint
 	return &AdminUsageLog{
 		UsageLog:                usageLog,
+		ServiceTier:             l.ServiceTier,
+		RequestedServiceTier:    l.RequestedServiceTier,
+		ResponseServiceTier:     l.ResponseServiceTier,
 		UpstreamModel:           l.UpstreamModel,
 		UpstreamReasoningEffort: adminUpstreamReasoningEffort(l),
 		UpstreamResponseModel:   l.UpstreamResponseModel,

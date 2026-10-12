@@ -124,6 +124,8 @@ const usageLog = {
   total_cost: 0.092883,
   rate_multiplier: 1,
   service_tier: 'priority',
+  requested_service_tier: 'priority',
+  response_service_tier: 'provider-tier',
   input_cost: 0.020285,
   output_cost: 0.00303,
   cache_creation_cost: 0.000001,
@@ -164,7 +166,7 @@ function mountUsageView() {
         DateRangePicker: true,
         Icon: true,
         UsageStatsCards: chartStub,
-        UsageTable: { ...chartStub, props: ['columns'] },
+        UsageTable: { ...chartStub, props: ['columns', 'showServiceTier'] },
         UserErrorRequestsTable: chartStub,
         ModelDistributionChart: chartStub,
         GroupDistributionChart: chartStub,
@@ -226,6 +228,8 @@ describe('user UsageView', () => {
     await flushPromises()
 
     expect(wrapper.findComponent(UsageTable).props('columns').map((column: { key: string }) => column.key)).toContain('latency')
+    expect(wrapper.findComponent(UsageTable).props('columns').map((column: { key: string }) => column.key)).not.toContain('service_tier')
+    expect(wrapper.findComponent(UsageTable).props('showServiceTier')).toBeFalsy()
     expect(query).toHaveBeenCalled()
     expect(getStats).toHaveBeenCalled()
     expect(getDashboardModels).toHaveBeenCalled()

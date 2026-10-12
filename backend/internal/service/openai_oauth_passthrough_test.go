@@ -2335,6 +2335,8 @@ func TestOpenAIGatewayService_OAuthPassthrough_StreamingSetsFirstTokenMs(t *test
 	upstreamSSE := strings.Join([]string{
 		`data: {"type":"response.output_text.delta","delta":"h"}`,
 		"",
+		`data: {"type":"response.completed","response":{"model":"gpt-5.2","service_tier":"default","usage":{"input_tokens":1,"output_tokens":1}}}`,
+		"",
 		"data: [DONE]",
 		"",
 	}, "\n")
@@ -2372,6 +2374,8 @@ func TestOpenAIGatewayService_OAuthPassthrough_StreamingSetsFirstTokenMs(t *test
 	require.GreaterOrEqual(t, *result.FirstTokenMs, 0)
 	require.NotNil(t, result.ServiceTier)
 	require.Equal(t, "priority", *result.ServiceTier)
+	require.Equal(t, "default", result.ResponseServiceTier)
+	require.Equal(t, "priority", gjson.GetBytes(upstream.lastBody, "service_tier").String())
 }
 
 func TestOpenAIGatewayService_OAuthPassthrough_StreamClientDisconnectStillCollectsUsage(t *testing.T) {

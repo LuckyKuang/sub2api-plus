@@ -45857,6 +45857,8 @@ type UsageLogMutation struct {
 	addcache_creation_1h_tokens   *int
 	audio_output_tokens           *int
 	addaudio_output_tokens        *int
+	requested_service_tier        *string
+	response_service_tier         *string
 	codex_rollout_budget_units    *float64
 	addcodex_rollout_budget_units *float64
 	input_cost                    *float64
@@ -47104,6 +47106,104 @@ func (m *UsageLogMutation) AddedAudioOutputTokens() (r int, exists bool) {
 func (m *UsageLogMutation) ResetAudioOutputTokens() {
 	m.audio_output_tokens = nil
 	m.addaudio_output_tokens = nil
+}
+
+// SetRequestedServiceTier sets the "requested_service_tier" field.
+func (m *UsageLogMutation) SetRequestedServiceTier(s string) {
+	m.requested_service_tier = &s
+}
+
+// RequestedServiceTier returns the value of the "requested_service_tier" field in the mutation.
+func (m *UsageLogMutation) RequestedServiceTier() (r string, exists bool) {
+	v := m.requested_service_tier
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRequestedServiceTier returns the old "requested_service_tier" field's value of the UsageLog entity.
+// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageLogMutation) OldRequestedServiceTier(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRequestedServiceTier is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRequestedServiceTier requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRequestedServiceTier: %w", err)
+	}
+	return oldValue.RequestedServiceTier, nil
+}
+
+// ClearRequestedServiceTier clears the value of the "requested_service_tier" field.
+func (m *UsageLogMutation) ClearRequestedServiceTier() {
+	m.requested_service_tier = nil
+	m.clearedFields[usagelog.FieldRequestedServiceTier] = struct{}{}
+}
+
+// RequestedServiceTierCleared returns if the "requested_service_tier" field was cleared in this mutation.
+func (m *UsageLogMutation) RequestedServiceTierCleared() bool {
+	_, ok := m.clearedFields[usagelog.FieldRequestedServiceTier]
+	return ok
+}
+
+// ResetRequestedServiceTier resets all changes to the "requested_service_tier" field.
+func (m *UsageLogMutation) ResetRequestedServiceTier() {
+	m.requested_service_tier = nil
+	delete(m.clearedFields, usagelog.FieldRequestedServiceTier)
+}
+
+// SetResponseServiceTier sets the "response_service_tier" field.
+func (m *UsageLogMutation) SetResponseServiceTier(s string) {
+	m.response_service_tier = &s
+}
+
+// ResponseServiceTier returns the value of the "response_service_tier" field in the mutation.
+func (m *UsageLogMutation) ResponseServiceTier() (r string, exists bool) {
+	v := m.response_service_tier
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldResponseServiceTier returns the old "response_service_tier" field's value of the UsageLog entity.
+// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageLogMutation) OldResponseServiceTier(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldResponseServiceTier is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldResponseServiceTier requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldResponseServiceTier: %w", err)
+	}
+	return oldValue.ResponseServiceTier, nil
+}
+
+// ClearResponseServiceTier clears the value of the "response_service_tier" field.
+func (m *UsageLogMutation) ClearResponseServiceTier() {
+	m.response_service_tier = nil
+	m.clearedFields[usagelog.FieldResponseServiceTier] = struct{}{}
+}
+
+// ResponseServiceTierCleared returns if the "response_service_tier" field was cleared in this mutation.
+func (m *UsageLogMutation) ResponseServiceTierCleared() bool {
+	_, ok := m.clearedFields[usagelog.FieldResponseServiceTier]
+	return ok
+}
+
+// ResetResponseServiceTier resets all changes to the "response_service_tier" field.
+func (m *UsageLogMutation) ResetResponseServiceTier() {
+	m.response_service_tier = nil
+	delete(m.clearedFields, usagelog.FieldResponseServiceTier)
 }
 
 // SetCodexRolloutBudgetUnits sets the "codex_rollout_budget_units" field.
@@ -49087,7 +49187,7 @@ func (m *UsageLogMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UsageLogMutation) Fields() []string {
-	fields := make([]string, 0, 56)
+	fields := make([]string, 0, 58)
 	if m.user != nil {
 		fields = append(fields, usagelog.FieldUserID)
 	}
@@ -49153,6 +49253,12 @@ func (m *UsageLogMutation) Fields() []string {
 	}
 	if m.audio_output_tokens != nil {
 		fields = append(fields, usagelog.FieldAudioOutputTokens)
+	}
+	if m.requested_service_tier != nil {
+		fields = append(fields, usagelog.FieldRequestedServiceTier)
+	}
+	if m.response_service_tier != nil {
+		fields = append(fields, usagelog.FieldResponseServiceTier)
 	}
 	if m.codex_rollout_budget_units != nil {
 		fields = append(fields, usagelog.FieldCodexRolloutBudgetUnits)
@@ -49308,6 +49414,10 @@ func (m *UsageLogMutation) Field(name string) (ent.Value, bool) {
 		return m.CacheCreation1hTokens()
 	case usagelog.FieldAudioOutputTokens:
 		return m.AudioOutputTokens()
+	case usagelog.FieldRequestedServiceTier:
+		return m.RequestedServiceTier()
+	case usagelog.FieldResponseServiceTier:
+		return m.ResponseServiceTier()
 	case usagelog.FieldCodexRolloutBudgetUnits:
 		return m.CodexRolloutBudgetUnits()
 	case usagelog.FieldInputCost:
@@ -49429,6 +49539,10 @@ func (m *UsageLogMutation) OldField(ctx context.Context, name string) (ent.Value
 		return m.OldCacheCreation1hTokens(ctx)
 	case usagelog.FieldAudioOutputTokens:
 		return m.OldAudioOutputTokens(ctx)
+	case usagelog.FieldRequestedServiceTier:
+		return m.OldRequestedServiceTier(ctx)
+	case usagelog.FieldResponseServiceTier:
+		return m.OldResponseServiceTier(ctx)
 	case usagelog.FieldCodexRolloutBudgetUnits:
 		return m.OldCodexRolloutBudgetUnits(ctx)
 	case usagelog.FieldInputCost:
@@ -49659,6 +49773,20 @@ func (m *UsageLogMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetAudioOutputTokens(v)
+		return nil
+	case usagelog.FieldRequestedServiceTier:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRequestedServiceTier(v)
+		return nil
+	case usagelog.FieldResponseServiceTier:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetResponseServiceTier(v)
 		return nil
 	case usagelog.FieldCodexRolloutBudgetUnits:
 		v, ok := value.(float64)
@@ -50273,6 +50401,12 @@ func (m *UsageLogMutation) ClearedFields() []string {
 	if m.FieldCleared(usagelog.FieldSubscriptionID) {
 		fields = append(fields, usagelog.FieldSubscriptionID)
 	}
+	if m.FieldCleared(usagelog.FieldRequestedServiceTier) {
+		fields = append(fields, usagelog.FieldRequestedServiceTier)
+	}
+	if m.FieldCleared(usagelog.FieldResponseServiceTier) {
+		fields = append(fields, usagelog.FieldResponseServiceTier)
+	}
 	if m.FieldCleared(usagelog.FieldCodexRolloutBudgetUnits) {
 		fields = append(fields, usagelog.FieldCodexRolloutBudgetUnits)
 	}
@@ -50367,6 +50501,12 @@ func (m *UsageLogMutation) ClearField(name string) error {
 		return nil
 	case usagelog.FieldSubscriptionID:
 		m.ClearSubscriptionID()
+		return nil
+	case usagelog.FieldRequestedServiceTier:
+		m.ClearRequestedServiceTier()
+		return nil
+	case usagelog.FieldResponseServiceTier:
+		m.ClearResponseServiceTier()
 		return nil
 	case usagelog.FieldCodexRolloutBudgetUnits:
 		m.ClearCodexRolloutBudgetUnits()
@@ -50492,6 +50632,12 @@ func (m *UsageLogMutation) ResetField(name string) error {
 		return nil
 	case usagelog.FieldAudioOutputTokens:
 		m.ResetAudioOutputTokens()
+		return nil
+	case usagelog.FieldRequestedServiceTier:
+		m.ResetRequestedServiceTier()
+		return nil
+	case usagelog.FieldResponseServiceTier:
+		m.ResetResponseServiceTier()
 		return nil
 	case usagelog.FieldCodexRolloutBudgetUnits:
 		m.ResetCodexRolloutBudgetUnits()

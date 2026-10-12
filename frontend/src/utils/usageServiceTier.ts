@@ -1,26 +1,15 @@
-export function normalizeUsageServiceTier(serviceTier?: string | null): string | null {
-  const value = serviceTier?.trim().toLowerCase()
-  if (!value) return null
-  if (value === 'fast') return 'priority'
-  if (value === 'default' || value === 'standard') return 'standard'
-  if (value === 'priority' || value === 'flex' || value === 'ultrafast') return value
+type Translate = (key: string) => string
+
+// NULL/undefined means historical or unrecorded; empty means captured absence.
+export function formatRequestedServiceTier(tier: string | null | undefined, t: Translate): string {
+  if (tier == null) return t('admin.usage.serviceTierUnrecorded')
+  const value = tier.trim()
+  if (!value) return t('admin.usage.serviceTierUnspecified')
+  if (['priority', 'fast'].includes(value.toLowerCase())) return 'Fast'
   return value
 }
 
-export function formatUsageServiceTier(serviceTier?: string | null): string {
-  const normalized = normalizeUsageServiceTier(serviceTier)
-  if (!normalized) return 'standard'
-  return normalized
-}
-
-export function getUsageServiceTierLabel(
-  serviceTier: string | null | undefined,
-  translate: (key: string) => string,
-): string {
-  const tier = formatUsageServiceTier(serviceTier)
-  if (tier === 'priority') return translate('usage.serviceTierPriority')
-  if (tier === 'ultrafast') return translate('usage.serviceTierUltrafast')
-  if (tier === 'flex') return translate('usage.serviceTierFlex')
-  if (tier === 'standard') return translate('usage.serviceTierStandard')
-  return tier
+export function formatResponseServiceTier(tier: string | null | undefined, t: Translate): string {
+  if (tier == null) return t('admin.usage.serviceTierUnrecorded')
+  return tier.trim() || t('admin.usage.serviceTierNotReturned')
 }

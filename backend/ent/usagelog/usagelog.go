@@ -58,6 +58,10 @@ const (
 	FieldCacheCreation1hTokens = "cache_creation_1h_tokens"
 	// FieldAudioOutputTokens holds the string denoting the audio_output_tokens field in the database.
 	FieldAudioOutputTokens = "audio_output_tokens"
+	// FieldRequestedServiceTier holds the string denoting the requested_service_tier field in the database.
+	FieldRequestedServiceTier = "requested_service_tier"
+	// FieldResponseServiceTier holds the string denoting the response_service_tier field in the database.
+	FieldResponseServiceTier = "response_service_tier"
 	// FieldCodexRolloutBudgetUnits holds the string denoting the codex_rollout_budget_units field in the database.
 	FieldCodexRolloutBudgetUnits = "codex_rollout_budget_units"
 	// FieldInputCost holds the string denoting the input_cost field in the database.
@@ -200,6 +204,8 @@ var Columns = []string{
 	FieldCacheCreation5mTokens,
 	FieldCacheCreation1hTokens,
 	FieldAudioOutputTokens,
+	FieldRequestedServiceTier,
+	FieldResponseServiceTier,
 	FieldCodexRolloutBudgetUnits,
 	FieldInputCost,
 	FieldOutputCost,
@@ -277,6 +283,10 @@ var (
 	DefaultCacheCreation1hTokens int
 	// DefaultAudioOutputTokens holds the default value on creation for the "audio_output_tokens" field.
 	DefaultAudioOutputTokens int
+	// RequestedServiceTierValidator is a validator for the "requested_service_tier" field. It is called by the builders before save.
+	RequestedServiceTierValidator func(string) error
+	// ResponseServiceTierValidator is a validator for the "response_service_tier" field. It is called by the builders before save.
+	ResponseServiceTierValidator func(string) error
 	// DefaultInputCost holds the default value on creation for the "input_cost" field.
 	DefaultInputCost float64
 	// DefaultOutputCost holds the default value on creation for the "output_cost" field.
@@ -449,6 +459,16 @@ func ByCacheCreation1hTokens(opts ...sql.OrderTermOption) OrderOption {
 // ByAudioOutputTokens orders the results by the audio_output_tokens field.
 func ByAudioOutputTokens(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldAudioOutputTokens, opts...).ToFunc()
+}
+
+// ByRequestedServiceTier orders the results by the requested_service_tier field.
+func ByRequestedServiceTier(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRequestedServiceTier, opts...).ToFunc()
+}
+
+// ByResponseServiceTier orders the results by the response_service_tier field.
+func ByResponseServiceTier(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldResponseServiceTier, opts...).ToFunc()
 }
 
 // ByCodexRolloutBudgetUnits orders the results by the codex_rollout_budget_units field.

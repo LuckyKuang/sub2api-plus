@@ -456,6 +456,46 @@ func (_u *UsageLogUpdate) AddAudioOutputTokens(v int) *UsageLogUpdate {
 	return _u
 }
 
+// SetRequestedServiceTier sets the "requested_service_tier" field.
+func (_u *UsageLogUpdate) SetRequestedServiceTier(v string) *UsageLogUpdate {
+	_u.mutation.SetRequestedServiceTier(v)
+	return _u
+}
+
+// SetNillableRequestedServiceTier sets the "requested_service_tier" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableRequestedServiceTier(v *string) *UsageLogUpdate {
+	if v != nil {
+		_u.SetRequestedServiceTier(*v)
+	}
+	return _u
+}
+
+// ClearRequestedServiceTier clears the value of the "requested_service_tier" field.
+func (_u *UsageLogUpdate) ClearRequestedServiceTier() *UsageLogUpdate {
+	_u.mutation.ClearRequestedServiceTier()
+	return _u
+}
+
+// SetResponseServiceTier sets the "response_service_tier" field.
+func (_u *UsageLogUpdate) SetResponseServiceTier(v string) *UsageLogUpdate {
+	_u.mutation.SetResponseServiceTier(v)
+	return _u
+}
+
+// SetNillableResponseServiceTier sets the "response_service_tier" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableResponseServiceTier(v *string) *UsageLogUpdate {
+	if v != nil {
+		_u.SetResponseServiceTier(*v)
+	}
+	return _u
+}
+
+// ClearResponseServiceTier clears the value of the "response_service_tier" field.
+func (_u *UsageLogUpdate) ClearResponseServiceTier() *UsageLogUpdate {
+	_u.mutation.ClearResponseServiceTier()
+	return _u
+}
+
 // SetCodexRolloutBudgetUnits sets the "codex_rollout_budget_units" field.
 func (_u *UsageLogUpdate) SetCodexRolloutBudgetUnits(v float64) *UsageLogUpdate {
 	_u.mutation.ResetCodexRolloutBudgetUnits()
@@ -1267,6 +1307,16 @@ func (_u *UsageLogUpdate) check() error {
 			return &ValidationError{Name: "billing_mode", err: fmt.Errorf(`ent: validator failed for field "UsageLog.billing_mode": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.RequestedServiceTier(); ok {
+		if err := usagelog.RequestedServiceTierValidator(v); err != nil {
+			return &ValidationError{Name: "requested_service_tier", err: fmt.Errorf(`ent: validator failed for field "UsageLog.requested_service_tier": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.ResponseServiceTier(); ok {
+		if err := usagelog.ResponseServiceTierValidator(v); err != nil {
+			return &ValidationError{Name: "response_service_tier", err: fmt.Errorf(`ent: validator failed for field "UsageLog.response_service_tier": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.FirstOutputKind(); ok {
 		if err := usagelog.FirstOutputKindValidator(v); err != nil {
 			return &ValidationError{Name: "first_output_kind", err: fmt.Errorf(`ent: validator failed for field "UsageLog.first_output_kind": %w`, err)}
@@ -1439,6 +1489,18 @@ func (_u *UsageLogUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.AddedAudioOutputTokens(); ok {
 		_spec.AddField(usagelog.FieldAudioOutputTokens, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.RequestedServiceTier(); ok {
+		_spec.SetField(usagelog.FieldRequestedServiceTier, field.TypeString, value)
+	}
+	if _u.mutation.RequestedServiceTierCleared() {
+		_spec.ClearField(usagelog.FieldRequestedServiceTier, field.TypeString)
+	}
+	if value, ok := _u.mutation.ResponseServiceTier(); ok {
+		_spec.SetField(usagelog.FieldResponseServiceTier, field.TypeString, value)
+	}
+	if _u.mutation.ResponseServiceTierCleared() {
+		_spec.ClearField(usagelog.FieldResponseServiceTier, field.TypeString)
 	}
 	if value, ok := _u.mutation.CodexRolloutBudgetUnits(); ok {
 		_spec.SetField(usagelog.FieldCodexRolloutBudgetUnits, field.TypeFloat64, value)
@@ -2230,6 +2292,46 @@ func (_u *UsageLogUpdateOne) SetNillableAudioOutputTokens(v *int) *UsageLogUpdat
 // AddAudioOutputTokens adds value to the "audio_output_tokens" field.
 func (_u *UsageLogUpdateOne) AddAudioOutputTokens(v int) *UsageLogUpdateOne {
 	_u.mutation.AddAudioOutputTokens(v)
+	return _u
+}
+
+// SetRequestedServiceTier sets the "requested_service_tier" field.
+func (_u *UsageLogUpdateOne) SetRequestedServiceTier(v string) *UsageLogUpdateOne {
+	_u.mutation.SetRequestedServiceTier(v)
+	return _u
+}
+
+// SetNillableRequestedServiceTier sets the "requested_service_tier" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableRequestedServiceTier(v *string) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetRequestedServiceTier(*v)
+	}
+	return _u
+}
+
+// ClearRequestedServiceTier clears the value of the "requested_service_tier" field.
+func (_u *UsageLogUpdateOne) ClearRequestedServiceTier() *UsageLogUpdateOne {
+	_u.mutation.ClearRequestedServiceTier()
+	return _u
+}
+
+// SetResponseServiceTier sets the "response_service_tier" field.
+func (_u *UsageLogUpdateOne) SetResponseServiceTier(v string) *UsageLogUpdateOne {
+	_u.mutation.SetResponseServiceTier(v)
+	return _u
+}
+
+// SetNillableResponseServiceTier sets the "response_service_tier" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableResponseServiceTier(v *string) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetResponseServiceTier(*v)
+	}
+	return _u
+}
+
+// ClearResponseServiceTier clears the value of the "response_service_tier" field.
+func (_u *UsageLogUpdateOne) ClearResponseServiceTier() *UsageLogUpdateOne {
+	_u.mutation.ClearResponseServiceTier()
 	return _u
 }
 
@@ -3057,6 +3159,16 @@ func (_u *UsageLogUpdateOne) check() error {
 			return &ValidationError{Name: "billing_mode", err: fmt.Errorf(`ent: validator failed for field "UsageLog.billing_mode": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.RequestedServiceTier(); ok {
+		if err := usagelog.RequestedServiceTierValidator(v); err != nil {
+			return &ValidationError{Name: "requested_service_tier", err: fmt.Errorf(`ent: validator failed for field "UsageLog.requested_service_tier": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.ResponseServiceTier(); ok {
+		if err := usagelog.ResponseServiceTierValidator(v); err != nil {
+			return &ValidationError{Name: "response_service_tier", err: fmt.Errorf(`ent: validator failed for field "UsageLog.response_service_tier": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.FirstOutputKind(); ok {
 		if err := usagelog.FirstOutputKindValidator(v); err != nil {
 			return &ValidationError{Name: "first_output_kind", err: fmt.Errorf(`ent: validator failed for field "UsageLog.first_output_kind": %w`, err)}
@@ -3246,6 +3358,18 @@ func (_u *UsageLogUpdateOne) sqlSave(ctx context.Context) (_node *UsageLog, err 
 	}
 	if value, ok := _u.mutation.AddedAudioOutputTokens(); ok {
 		_spec.AddField(usagelog.FieldAudioOutputTokens, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.RequestedServiceTier(); ok {
+		_spec.SetField(usagelog.FieldRequestedServiceTier, field.TypeString, value)
+	}
+	if _u.mutation.RequestedServiceTierCleared() {
+		_spec.ClearField(usagelog.FieldRequestedServiceTier, field.TypeString)
+	}
+	if value, ok := _u.mutation.ResponseServiceTier(); ok {
+		_spec.SetField(usagelog.FieldResponseServiceTier, field.TypeString, value)
+	}
+	if _u.mutation.ResponseServiceTierCleared() {
+		_spec.ClearField(usagelog.FieldResponseServiceTier, field.TypeString)
 	}
 	if value, ok := _u.mutation.CodexRolloutBudgetUnits(); ok {
 		_spec.SetField(usagelog.FieldCodexRolloutBudgetUnits, field.TypeFloat64, value)
