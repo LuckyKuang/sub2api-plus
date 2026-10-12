@@ -45,6 +45,7 @@ type RelayResult struct {
 	Usage                   Usage
 	RequestID               string
 	TerminalEventType       string
+	FirstByteMs             *int
 	FirstTokenMs            *int
 	LastTokenMs             *int
 	FirstOutputMs           *int
@@ -65,6 +66,7 @@ type RelayTurnResult struct {
 	TerminalEventType     string
 	StartedAt             time.Time
 	Duration              time.Duration
+	FirstByteMs           *int
 	FirstTokenMs          *int
 	LastTokenMs           *int
 	FirstOutputMs         *int
@@ -123,6 +125,7 @@ type relayState struct {
 	lastResponseServiceTier string
 	responseConflict        bool
 	terminalEventType       string
+	firstByteMs             *int
 	firstTokenMs            *int
 	lastTokenMs             *int
 	firstOutputMs           *int
@@ -149,6 +152,7 @@ type observedUpstreamEvent struct {
 	responseConflict    bool
 	responseServiceTier string
 	duration            time.Duration
+	firstByte           *int
 	firstToken          *int
 	lastToken           *int
 	firstOutput         *int
@@ -157,6 +161,7 @@ type observedUpstreamEvent struct {
 
 type relayTurnTiming struct {
 	startAt               time.Time
+	firstByteMs           *int
 	firstTokenMs          *int
 	lastTokenMs           *int
 	firstOutputMs         *int
@@ -566,6 +571,7 @@ func runUpstreamToClient(
 	wroteDownstream := false
 	for {
 		msgType, payload, err := upstreamConn.ReadFrame(ctx)
+		frameReceivedAt := nowFn()
 		if err != nil {
 			emitTurnComplete(onTurnComplete, state, finalizePendingBareError(state, nowFn()))
 			graceful := isDisconnectError(err)
@@ -645,7 +651,7 @@ func runUpstreamToClient(
 			if shouldFinalizePendingBareError(state, payload, eventType) {
 				emitTurnComplete(onTurnComplete, state, finalizePendingBareError(state, nowFn()))
 			}
-			observedEvent = observeUpstreamMessage(state, payload, startAt, nowFn, onUsageParseFailure)
+			observedEvent = observeUpstreamMessage(state, payload, startAt, frameReceivedAt, nowFn, onUsageParseFailure)
 		case coderws.MessageBinary:
 			// Binary frames remain opaque for usage/result observation, but a JSON
 			// terminal still settles relay lifecycle. Otherwise the pending-turn
@@ -798,6 +804,7 @@ func observeUpstreamMessage(
 	state *relayState,
 	message []byte,
 	startAt time.Time,
+	frameReceivedAt time.Time,
 	nowFn func() time.Time,
 	onUsageParseFailure func(eventType string, usageRaw string),
 ) observedUpstreamEvent {
@@ -820,6 +827,12 @@ func observeUpstreamMessage(
 	now := nowFn()
 	outputObservation := apicompat.ObserveResponsesOutput(message)
 
+	if responseID != "" && state.firstByteMs == nil {
+		ms := int(frameReceivedAt.Sub(startAt).Milliseconds())
+		if ms >= 0 {
+			state.firstByteMs = &ms
+		}
+	}
 	if outputObservation.TokenLikeDelta {
 		ms := int(now.Sub(startAt).Milliseconds())
 		if ms >= 0 {
@@ -847,6 +860,12 @@ func observeUpstreamMessage(
 		turnTiming = openAIWSRelayGetOrInitTurnTiming(state, responseID, now)
 	} else {
 		turnTiming = state.activeTurn
+	}
+	if turnTiming != nil && responseID != "" && turnTiming.firstByteMs == nil {
+		ms := int(frameReceivedAt.Sub(turnTiming.startAt).Milliseconds())
+		if ms >= 0 {
+			turnTiming.firstByteMs = &ms
+		}
 	}
 	if turnTiming != nil && outputObservation.TokenLikeDelta {
 		ms := int(now.Sub(turnTiming.startAt).Milliseconds())
@@ -937,6 +956,7 @@ func finalizeObservedRelayTerminal(state *relayState, observed observedUpstreamE
 			}
 			observed.startedAt = turnTiming.startAt
 			observed.duration = duration
+			observed.firstByte = openAIWSRelayCloneIntPtr(turnTiming.firstByteMs)
 			observed.firstToken = openAIWSRelayCloneIntPtr(turnTiming.firstTokenMs)
 			observed.lastToken = openAIWSRelayCloneIntPtr(turnTiming.lastTokenMs)
 			observed.firstOutput = openAIWSRelayCloneIntPtr(turnTiming.firstOutputMs)
@@ -975,6 +995,7 @@ func emitTurnComplete(
 		TerminalEventType:     observed.eventType,
 		StartedAt:             observed.startedAt,
 		Duration:              observed.duration,
+		FirstByteMs:           openAIWSRelayCloneIntPtr(observed.firstByte),
 		FirstTokenMs:          openAIWSRelayCloneIntPtr(observed.firstToken),
 		LastTokenMs:           openAIWSRelayCloneIntPtr(observed.lastToken),
 		FirstOutputMs:         openAIWSRelayCloneIntPtr(observed.firstOutput),
@@ -1342,6 +1363,7 @@ func enrichResult(result *RelayResult, state *relayState, duration time.Duration
 	result.Usage = state.usage
 	result.RequestID = state.lastResponseID
 	result.TerminalEventType = state.terminalEventType
+	result.FirstByteMs = state.firstByteMs
 	result.FirstTokenMs = state.firstTokenMs
 	result.LastTokenMs = state.lastTokenMs
 	result.FirstOutputMs = state.firstOutputMs

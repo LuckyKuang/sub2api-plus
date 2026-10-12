@@ -7,7 +7,7 @@
           <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ t('channelMonitorV3.subtitle') }}</p>
         </div>
         <div class="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
-          <span>{{ t('channelMonitorV3.observed') }} {{ time(snapshot?.data_through) }}</span>
+          <span data-testid="current-through">{{ t('channelMonitorV3.observed') }} {{ time(snapshot?.current_through) }}</span>
           <button class="btn btn-secondary px-3 py-2" :disabled="loading" :aria-label="t('common.refresh')" @click="load">
             <Icon name="refresh" size="sm" :class="loading ? 'animate-spin' : ''" />
           </button>
@@ -47,7 +47,7 @@
 
         <section v-if="tab === 'platforms'" id="v3-platform-panel" role="tabpanel" aria-labelledby="v3-platform-tab">
           <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            <button v-for="item in platforms" :key="item.platform" class="platform-card rounded-xl border border-gray-200 bg-white p-5 text-left transition hover:border-gray-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-500 dark:border-dark-700 dark:bg-dark-800 dark:hover:border-dark-500" @click="detailPlatform = item.platform">
+            <button v-for="item in platforms" :key="item.platform" class="platform-card rounded-xl border border-gray-200 bg-white p-5 text-left transition hover:border-gray-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-500 dark:border-dark-700 dark:bg-dark-800 dark:hover:border-dark-500" @click="openDetail(item.platform)">
               <div class="flex items-center justify-between gap-3">
                 <div class="flex items-center gap-2.5">
                   <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-gray-100 text-gray-600 dark:bg-dark-700 dark:text-gray-300"><ProviderIcon :provider="item.platform" :size="20" /></span>
@@ -100,9 +100,11 @@
         <div class="mb-5 flex flex-wrap items-center gap-3 text-xs text-gray-500 dark:text-gray-400"><span class="status-badge" :class="`status-${detail.status}`">{{ statusLabel(detail.status) }}</span>{{ t('channelMonitorV3.lastRequest') }} {{ time(detail.last_request_at) }}</div>
         <p class="mb-5 text-sm text-gray-500 dark:text-gray-400">{{ t(`channelMonitorV3.description.${detail.status}`) }}</p>
         <h3 class="mb-3 text-sm font-medium text-gray-900 dark:text-white">{{ t('channelMonitorV3.modelStatus') }}</h3>
+        <p v-if="snapshot?.current_window_start && snapshot?.current_window_end" data-testid="current-window" class="mb-3 text-xs text-gray-500">{{ t('channelMonitorV3.currentWindow') }} {{ time(snapshot.current_window_start) }} – {{ time(snapshot.current_window_end) }}</p>
+        <p class="mb-3 text-xs text-gray-500">{{ t('channelMonitorV3.currentNote') }}</p>
         <div class="overflow-x-auto"><table class="w-full text-left text-xs">
-          <thead class="text-gray-500"><tr><th class="pb-3">{{ t('channelMonitorV3.model') }}</th><th class="pb-3">{{ t('channelMonitorV3.recentStatus') }}</th></tr></thead>
-          <tbody><tr v-for="model in detailModels" :key="model.model" class="border-t border-gray-100 text-gray-700 dark:border-dark-700 dark:text-gray-300"><td class="py-3 pr-3">{{ model.model }}<span class="mt-1 flex flex-wrap gap-x-2 text-gray-400"><span v-for="source in model.sources" :key="source">{{ t(source === 'probe' ? 'featureExtensions.probeSource' : 'featureExtensions.requestSource') }}</span></span></td><td class="py-3"><span class="status-badge" :class="`status-${model.status}`">{{ statusLabel(model.status) }}</span></td></tr></tbody>
+          <thead class="text-gray-500"><tr><th class="pb-3">{{ t('channelMonitorV3.model') }}</th><th class="pb-3">{{ t('channelMonitorV3.recentStatus') }}</th><th class="pb-3">{{ t('channelMonitorV3.lastRequest') }}</th><th class="pb-3">{{ t('channelMonitorV3.eventProgress') }}</th></tr></thead>
+          <tbody><tr v-for="model in detailModels" :key="model.model" class="border-t border-gray-100 text-gray-700 dark:border-dark-700 dark:text-gray-300"><td class="py-3 pr-3">{{ model.model }}<span class="mt-1 flex flex-wrap gap-x-2 text-gray-400"><span v-for="source in model.sources" :key="source">{{ t(source === 'probe' ? 'featureExtensions.probeSource' : 'featureExtensions.requestSource') }}</span></span></td><td class="py-3"><span class="status-badge" :class="`status-${model.status}`">{{ statusLabel(model.status) }}</span><span v-if="model.reason !== 'observed'" class="mt-1 block text-xs text-gray-400">{{ t(`channelMonitorV3.observation.${model.reason}`) }}</span></td><td class="py-3 text-xs">{{ time(model.lastObserved) }}</td><td class="py-3 text-xs">{{ model.phases.length ? model.phases.map(phase => t(`channelMonitorV3.phase.${phase}`)).join(' · ') : '—' }}</td></tr></tbody>
         </table></div>
         <p v-if="!detailModels.length" class="py-6 text-sm text-gray-500">{{ t('channelMonitorV3.emptyModels') }}</p>
       </template>
@@ -146,6 +148,9 @@ const detailModels = computed(() => {
   return Array.from(models, ([model, observations]) => ({
     model,
     status: modelStatus(observations),
+    lastObserved: observations.map(item => item.last_observed_at).filter((value): value is string => !!value).sort((a, b) => Date.parse(a) - Date.parse(b)).at(-1),
+    reason: observationReason(observations),
+    phases: [...new Set(observations.map(item => item.incident_phase).filter((value): value is NonNullable<typeof value> => !!value))],
     sources: (['request', 'probe'] as const).filter(source => observations.some(item => (item.source_kind || 'request') === source)),
   })).sort((a, b) => a.model.localeCompare(b.model))
 })
@@ -154,19 +159,20 @@ const detailModels = computed(() => {
 function modelStatus(observations: StatusPlatform['models']): ServiceStatus {
   const statuses = observations.map(item => item.status)
   const known = statuses.filter(status => status !== 'unknown' && status !== 'insufficient')
-  if (!known.length) return statuses.includes('unknown') ? 'unknown' : 'insufficient'
+  if (!known.length) return statuses.includes('insufficient') ? 'insufficient' : 'unknown'
   if (known.every(status => status === 'outage')) return 'outage'
   if (known.some(status => status === 'outage' || status === 'partial')) return 'partial'
   if (known.includes('degraded')) return 'degraded'
-  const awaitingObservation = observations.some(item =>
-    (item.status === 'unknown' || item.status === 'insufficient') && snapshot.value?.incidents.some(event =>
-      !event.resolved_at && event.platform === detail.value?.platform && event.model === item.model &&
-      (event.source_kind || 'request') === (item.source_kind || 'request') &&
-      (item.source_kind === 'probe' ? event.monitor_id === item.monitor_id : event.group_id === item.group_id),
-    ),
-  )
-  if (awaitingObservation) return 'unknown'
   return known.includes('recovering') ? 'recovering' : 'normal'
+}
+function observationReason(observations: StatusPlatform['models']): string {
+  if (observations.some(item => item.observation_reason === 'stale')) return 'stale'
+  if (observations.some(item => item.observation_reason === 'observed' || !['unknown', 'insufficient'].includes(item.status))) return 'observed'
+  return observations.some(item => item.status === 'insufficient') ? 'insufficient' : 'no_observations'
+}
+async function openDetail(name: string) {
+  detailPlatform.value = name
+  await load()
 }
 const summary = computed(() => {
   const original = snapshot.value?.summary
@@ -185,7 +191,7 @@ const statusLabel = (status: ServiceStatus) => t(`channelMonitorV3.status.${stat
 const percent = (value: number | null) => value == null ? '—' : `${(value * 100).toFixed(2)}%`
 const latency = (value: number | null) => value == null ? '—' : `≈ ${(value / 1000).toFixed(2)} s`
 function time(value?: string | null) {
-  return value ? new Intl.DateTimeFormat(locale.value, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(value)) : '—'
+  return value ? new Intl.DateTimeFormat(locale.value, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date(value)) : '—'
 }
 async function showEvents(filter = '') {
   if (filter) platform.value = filter
@@ -216,7 +222,7 @@ async function load() {
     if (controller === request) loading.value = false
   }
 }
-const autoRefresh = useAutoRefresh({ storageKey: 'service-status-v3-refresh', intervals: [60], defaultInterval: 60, onRefresh: load, shouldPause: () => document.hidden || loading.value })
+const autoRefresh = useAutoRefresh({ storageKey: 'service-status-v3-refresh', intervals: [15], defaultInterval: 15, onRefresh: load, shouldPause: () => document.hidden || loading.value })
 function onVisibilityChange() {
   if (!document.hidden) void load()
 }

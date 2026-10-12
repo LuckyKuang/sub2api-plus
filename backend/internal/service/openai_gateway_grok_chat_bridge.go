@@ -501,8 +501,14 @@ func (s *OpenAIGatewayService) forwardGrokChatCompletionsViaResponses(
 	body []byte,
 	promptCacheKey string,
 	defaultMappedModel string,
-) (*OpenAIForwardResult, error) {
+) (forwardResult *OpenAIForwardResult, firstByteResultErr error) {
 	startTime := time.Now()
+	ctx, byteTiming := beginFirstByteTiming(ctx, startTime)
+	defer func() {
+		if forwardResult != nil && forwardResult.FirstByteMs == nil {
+			forwardResult.FirstByteMs = byteTiming.Milliseconds()
+		}
+	}()
 
 	var chatReq apicompat.ChatCompletionsRequest
 	if err := json.Unmarshal(body, &chatReq); err != nil {

@@ -41,11 +41,17 @@ func WithForwardGeminiSession(groupID int64, sessionHash string) ForwardGeminiOp
 	}
 }
 
-func (s *AntigravityGatewayService) ForwardGemini(ctx context.Context, c *gin.Context, account *Account, originalModel string, action string, stream bool, body []byte, isStickySession bool, options ...ForwardGeminiOption) (*ForwardResult, error) {
+func (s *AntigravityGatewayService) ForwardGemini(ctx context.Context, c *gin.Context, account *Account, originalModel string, action string, stream bool, body []byte, isStickySession bool, options ...ForwardGeminiOption) (forwardResult *ForwardResult, firstByteResultErr error) {
 	ctx = WithOutboundIdentityScope(ctx, c)
 	ctx = WithAccountOutboundIdentity(ctx, account)
 	beginUpstreamResponseModelObservation(c)
 	startTime := time.Now()
+	ctx, byteTiming := beginFirstByteTiming(ctx, startTime)
+	defer func() {
+		if forwardResult != nil && forwardResult.FirstByteMs == nil {
+			forwardResult.FirstByteMs = byteTiming.Milliseconds()
+		}
+	}()
 	forwardOpts := forwardGeminiOptions{}
 	for _, apply := range options {
 		if apply != nil {

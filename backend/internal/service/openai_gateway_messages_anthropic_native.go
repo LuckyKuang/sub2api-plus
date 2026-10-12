@@ -38,8 +38,14 @@ func (s *OpenAIGatewayService) forwardAnthropicViaNativeAnthropicEndpoint(
 	account *Account,
 	body []byte,
 	defaultMappedModel string,
-) (*OpenAIForwardResult, error) {
+) (forwardResult *OpenAIForwardResult, firstByteResultErr error) {
 	startTime := time.Now()
+	ctx, byteTiming := beginFirstByteTiming(ctx, startTime)
+	defer func() {
+		if forwardResult != nil && forwardResult.FirstByteMs == nil {
+			forwardResult.FirstByteMs = byteTiming.Milliseconds()
+		}
+	}()
 
 	originalModel := strings.TrimSpace(gjson.GetBytes(body, "model").String())
 	if originalModel == "" {

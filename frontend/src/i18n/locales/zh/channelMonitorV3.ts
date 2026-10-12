@@ -23,6 +23,7 @@ export default {
     },
     successRate: '所选时段观测成功率', ttft: '首 Token · P50', history: '状态历史', now: '现在', lastRequest: '最后观测',
     recent30Days: '最近 30 天 · 已恢复事件最多 200 条', autoDetected: '自动检测', emptyPlatforms: '暂无服务平台。', emptyEvents: '当前筛选下暂无全站服务事件。', emptyModels: '暂无模型观测数据。',
+    eventProgress: '历史事件进度', currentWindow: '当前观测窗口', currentNote: '近五分钟观测独立显示；历史事件仍需新的持续观测确认恢复。数据每 15 秒刷新，快照最多缓存 10 秒。', observation: { no_observations: '近五分钟无有效观测', insufficient: '已有请求，样本不足', stale: '当前观测数据已过期', observed: '已有有效观测' },
     modelStatus: '模型状态', model: '模型', recentStatus: '近 5 分钟状态',
     note: '状态与事件汇总全站有效请求及已启用探测。历史成功率与当前状态使用不同时间范围；灰色表示无数据或请求样本不足，P50 为真实请求的近似首 Token 延迟。', loadFailed: '暂时无法获取服务状态，请稍后刷新。',
     eventTitle: { partial: '{platform} 部分服务出现异常', outage: '{platform} 渠道服务中断', degraded: '{platform} 响应时间升高', normal: '{platform} 服务事件', recovering: '{platform} 服务事件', unknown: '{platform} 服务事件', insufficient: '{platform} 服务事件' },

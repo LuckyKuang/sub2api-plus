@@ -27,7 +27,7 @@ import (
 //	      └─ retryDelay <  7s → 等待后重试 1 次
 //	          ├─ 成功 → 正常返回
 //	          └─ 失败 → 设置模型限流 + 清除粘性绑定 → 切换账号
-func (s *AntigravityGatewayService) Forward(ctx context.Context, c *gin.Context, account *Account, body []byte, isStickySession bool) (*ForwardResult, error) {
+func (s *AntigravityGatewayService) Forward(ctx context.Context, c *gin.Context, account *Account, body []byte, isStickySession bool) (forwardResult *ForwardResult, firstByteResultErr error) {
 	ctx = WithOutboundIdentityScope(ctx, c)
 	ctx = WithAccountOutboundIdentity(ctx, account)
 	beginUpstreamResponseModelObservation(c)
@@ -37,6 +37,12 @@ func (s *AntigravityGatewayService) Forward(ctx context.Context, c *gin.Context,
 	}
 
 	startTime := time.Now()
+	ctx, byteTiming := beginFirstByteTiming(ctx, startTime)
+	defer func() {
+		if forwardResult != nil && forwardResult.FirstByteMs == nil {
+			forwardResult.FirstByteMs = byteTiming.Milliseconds()
+		}
+	}()
 
 	sessionID := getSessionID(c)
 	prefix := logPrefix(sessionID, account.Name)

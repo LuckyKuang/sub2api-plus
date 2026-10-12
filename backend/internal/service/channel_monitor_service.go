@@ -682,6 +682,7 @@ func (s *ChannelMonitorService) persistCheckResults(ctx context.Context, m *Chan
 			MonitorID:     m.ID,
 			Model:         r.Model,
 			Status:        r.Status,
+			FirstByteMs:   r.FirstByteMs,
 			LatencyMs:     r.LatencyMs,
 			PingLatencyMs: r.PingLatencyMs,
 			Message:       r.Message,

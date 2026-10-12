@@ -660,6 +660,7 @@ type UsageLog struct {
 	// runtime as the native OpenAI remote compaction v2 wire.
 	NativeCompactionV2 bool    `json:"native_compaction_v2"`
 	DurationMs         *int    `json:"duration_ms"`
+	FirstByteMs        *int    `json:"first_byte_ms"`
 	FirstTokenMs       *int    `json:"first_token_ms"`
 	LastTokenMs        *int    `json:"last_token_ms"`
 	TimingVersion      int     `json:"timing_version"`

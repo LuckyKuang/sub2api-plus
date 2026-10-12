@@ -119,6 +119,12 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 	ctx = WithOutboundIdentityScope(ctx, c)
 	ctx = WithAccountOutboundIdentity(ctx, account)
 	startTime := time.Now()
+	ctx, byteTiming := beginFirstByteTiming(ctx, startTime)
+	defer func() {
+		if result != nil && result.FirstByteMs == nil {
+			result.FirstByteMs = byteTiming.Milliseconds()
+		}
+	}()
 	if parsed == nil {
 		return nil, fmt.Errorf("parse request: empty request")
 	}

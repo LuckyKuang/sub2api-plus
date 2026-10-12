@@ -491,6 +491,20 @@ func (_c *UsageLogCreate) SetNillableTimingVersion(v *int) *UsageLogCreate {
 	return _c
 }
 
+// SetFirstByteMs sets the "first_byte_ms" field.
+func (_c *UsageLogCreate) SetFirstByteMs(v int) *UsageLogCreate {
+	_c.mutation.SetFirstByteMs(v)
+	return _c
+}
+
+// SetNillableFirstByteMs sets the "first_byte_ms" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableFirstByteMs(v *int) *UsageLogCreate {
+	if v != nil {
+		_c.SetFirstByteMs(*v)
+	}
+	return _c
+}
+
 // SetFirstTokenMs sets the "first_token_ms" field.
 func (_c *UsageLogCreate) SetFirstTokenMs(v int) *UsageLogCreate {
 	_c.mutation.SetFirstTokenMs(v)
@@ -1032,6 +1046,11 @@ func (_c *UsageLogCreate) check() error {
 	if _, ok := _c.mutation.TimingVersion(); !ok {
 		return &ValidationError{Name: "timing_version", err: errors.New(`ent: missing required field "UsageLog.timing_version"`)}
 	}
+	if v, ok := _c.mutation.FirstByteMs(); ok {
+		if err := usagelog.FirstByteMsValidator(v); err != nil {
+			return &ValidationError{Name: "first_byte_ms", err: fmt.Errorf(`ent: validator failed for field "UsageLog.first_byte_ms": %w`, err)}
+		}
+	}
 	if v, ok := _c.mutation.FirstOutputKind(); ok {
 		if err := usagelog.FirstOutputKindValidator(v); err != nil {
 			return &ValidationError{Name: "first_output_kind", err: fmt.Errorf(`ent: validator failed for field "UsageLog.first_output_kind": %w`, err)}
@@ -1259,6 +1278,10 @@ func (_c *UsageLogCreate) createSpec() (*UsageLog, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.TimingVersion(); ok {
 		_spec.SetField(usagelog.FieldTimingVersion, field.TypeInt, value)
 		_node.TimingVersion = value
+	}
+	if value, ok := _c.mutation.FirstByteMs(); ok {
+		_spec.SetField(usagelog.FieldFirstByteMs, field.TypeInt, value)
+		_node.FirstByteMs = &value
 	}
 	if value, ok := _c.mutation.FirstTokenMs(); ok {
 		_spec.SetField(usagelog.FieldFirstTokenMs, field.TypeInt, value)
@@ -2104,6 +2127,30 @@ func (u *UsageLogUpsert) UpdateTimingVersion() *UsageLogUpsert {
 // AddTimingVersion adds v to the "timing_version" field.
 func (u *UsageLogUpsert) AddTimingVersion(v int) *UsageLogUpsert {
 	u.Add(usagelog.FieldTimingVersion, v)
+	return u
+}
+
+// SetFirstByteMs sets the "first_byte_ms" field.
+func (u *UsageLogUpsert) SetFirstByteMs(v int) *UsageLogUpsert {
+	u.Set(usagelog.FieldFirstByteMs, v)
+	return u
+}
+
+// UpdateFirstByteMs sets the "first_byte_ms" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateFirstByteMs() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldFirstByteMs)
+	return u
+}
+
+// AddFirstByteMs adds v to the "first_byte_ms" field.
+func (u *UsageLogUpsert) AddFirstByteMs(v int) *UsageLogUpsert {
+	u.Add(usagelog.FieldFirstByteMs, v)
+	return u
+}
+
+// ClearFirstByteMs clears the value of the "first_byte_ms" field.
+func (u *UsageLogUpsert) ClearFirstByteMs() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldFirstByteMs)
 	return u
 }
 
@@ -3232,6 +3279,34 @@ func (u *UsageLogUpsertOne) AddTimingVersion(v int) *UsageLogUpsertOne {
 func (u *UsageLogUpsertOne) UpdateTimingVersion() *UsageLogUpsertOne {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.UpdateTimingVersion()
+	})
+}
+
+// SetFirstByteMs sets the "first_byte_ms" field.
+func (u *UsageLogUpsertOne) SetFirstByteMs(v int) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetFirstByteMs(v)
+	})
+}
+
+// AddFirstByteMs adds v to the "first_byte_ms" field.
+func (u *UsageLogUpsertOne) AddFirstByteMs(v int) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddFirstByteMs(v)
+	})
+}
+
+// UpdateFirstByteMs sets the "first_byte_ms" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateFirstByteMs() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateFirstByteMs()
+	})
+}
+
+// ClearFirstByteMs clears the value of the "first_byte_ms" field.
+func (u *UsageLogUpsertOne) ClearFirstByteMs() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearFirstByteMs()
 	})
 }
 
@@ -4584,6 +4659,34 @@ func (u *UsageLogUpsertBulk) AddTimingVersion(v int) *UsageLogUpsertBulk {
 func (u *UsageLogUpsertBulk) UpdateTimingVersion() *UsageLogUpsertBulk {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.UpdateTimingVersion()
+	})
+}
+
+// SetFirstByteMs sets the "first_byte_ms" field.
+func (u *UsageLogUpsertBulk) SetFirstByteMs(v int) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetFirstByteMs(v)
+	})
+}
+
+// AddFirstByteMs adds v to the "first_byte_ms" field.
+func (u *UsageLogUpsertBulk) AddFirstByteMs(v int) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddFirstByteMs(v)
+	})
+}
+
+// UpdateFirstByteMs sets the "first_byte_ms" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateFirstByteMs() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateFirstByteMs()
+	})
+}
+
+// ClearFirstByteMs clears the value of the "first_byte_ms" field.
+func (u *UsageLogUpsertBulk) ClearFirstByteMs() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearFirstByteMs()
 	})
 }
 

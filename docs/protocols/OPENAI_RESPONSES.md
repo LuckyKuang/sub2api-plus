@@ -22,11 +22,15 @@ and `deepseek-v4-flash` retain their requested spelling in the upstream model fi
 The versioned IDs `deepseek-v4-flash-0731` and `deepseek-v4-pro-0813` follow the
 same rule and are included in both model candidates and empty-mapping admission.
 
-Usage timing follows the shared [first-token/total-duration/TPS contract](../USAGE_TIMING.md)
+Usage timing follows the shared [first-byte/first-token/total-duration/TPS contract](../USAGE_TIMING.md)
 (Average TPS uses non-media output tokens over total forwarding/turn duration),
 including HTTP passthrough, individual WS turns, and remote compaction. Aggregate
 compact output does not create a token clock. The obsolete `openai_ttft_mode`
-admin setting has been removed; `timing_version` identifies verified usage data.
+admin setting has been removed; `timing_version` identifies verified token timing.
+`first_byte_ms` independently measures the first response-body read before
+decompression or parsing, or the first attributable application frame for each
+WS turn. Headers, pings and local keepalives do not count. Missing and historical
+observations remain null; token and total duration values never fill that gap.
 
 ## Compatibility and per-turn billing
 

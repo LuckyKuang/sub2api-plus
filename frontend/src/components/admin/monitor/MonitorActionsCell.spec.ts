@@ -40,6 +40,49 @@ function makeMonitor(overrides: Partial<ChannelMonitor> = {}): ChannelMonitor {
   }
 }
 
+// docs/CHANNEL_MONITOR.md: manual probes require the runtime probe gate,
+// while a monitor's enabled flag governs scheduled checks, not manual checks.
+describe('MonitorActionsCell run action', () => {
+  it('explains a disabled probe gate and allows a click after it is enabled', async () => {
+    const row = makeMonitor()
+    const wrapper = mount(MonitorActionsCell, {
+      props: { row, running: false, probesEnabled: false, duplicating: false },
+    })
+    const button = wrapper.get('[data-testid="monitor-run"]')
+    expect(button.attributes('disabled')).toBeDefined()
+    expect(button.attributes('title')).toBe('admin.channelMonitor.probesDisabledHint')
+    expect(button.element.parentElement?.getAttribute('title')).toBe('admin.channelMonitor.probesDisabledHint')
+    await button.trigger('click')
+    expect(wrapper.emitted('run')).toBeUndefined()
+
+    await wrapper.setProps({ probesEnabled: true })
+    expect(button.attributes('disabled')).toBeUndefined()
+    expect(button.attributes('title')).toBe('admin.channelMonitor.runNow')
+    await button.trigger('click')
+    expect(wrapper.emitted('run')).toEqual([[row]])
+  })
+
+  it('shows progress and prevents another check while running', async () => {
+    const wrapper = mount(MonitorActionsCell, {
+      props: { row: makeMonitor(), running: true, probesEnabled: true, duplicating: false },
+    })
+    const button = wrapper.get('[data-testid="monitor-run"]')
+    expect(button.attributes('disabled')).toBeDefined()
+    expect(button.text()).toBe('admin.channelMonitor.running')
+    await button.trigger('click')
+    expect(wrapper.emitted('run')).toBeUndefined()
+  })
+
+  it('allows a manual check when automatic scheduling is disabled', async () => {
+    const row = makeMonitor({ enabled: false })
+    const wrapper = mount(MonitorActionsCell, {
+      props: { row, running: false, probesEnabled: true, duplicating: false },
+    })
+    await wrapper.get('[data-testid="monitor-run"]').trigger('click')
+    expect(wrapper.emitted('run')).toEqual([[row]])
+  })
+})
+
 describe('MonitorActionsCell duplicate action', () => {
   it('emits the selected monitor when duplicate is clicked', async () => {
     const row = makeMonitor()

@@ -26,6 +26,8 @@ type ChannelMonitorHistory struct {
 	Model string `json:"model,omitempty"`
 	// Status holds the value of the "status" field.
 	Status channelmonitorhistory.Status `json:"status,omitempty"`
+	// FirstByteMs holds the value of the "first_byte_ms" field.
+	FirstByteMs *int `json:"first_byte_ms,omitempty"`
 	// LatencyMs holds the value of the "latency_ms" field.
 	LatencyMs *int `json:"latency_ms,omitempty"`
 	// PingLatencyMs holds the value of the "ping_latency_ms" field.
@@ -69,7 +71,7 @@ func (*ChannelMonitorHistory) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case channelmonitorhistory.FieldQuota:
 			values[i] = new([]byte)
-		case channelmonitorhistory.FieldID, channelmonitorhistory.FieldMonitorID, channelmonitorhistory.FieldLatencyMs, channelmonitorhistory.FieldPingLatencyMs:
+		case channelmonitorhistory.FieldID, channelmonitorhistory.FieldMonitorID, channelmonitorhistory.FieldFirstByteMs, channelmonitorhistory.FieldLatencyMs, channelmonitorhistory.FieldPingLatencyMs:
 			values[i] = new(sql.NullInt64)
 		case channelmonitorhistory.FieldModel, channelmonitorhistory.FieldStatus, channelmonitorhistory.FieldMessage:
 			values[i] = new(sql.NullString)
@@ -113,6 +115,13 @@ func (_m *ChannelMonitorHistory) assignValues(columns []string, values []any) er
 				return fmt.Errorf("unexpected type %T for field status", values[i])
 			} else if value.Valid {
 				_m.Status = channelmonitorhistory.Status(value.String)
+			}
+		case channelmonitorhistory.FieldFirstByteMs:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field first_byte_ms", values[i])
+			} else if value.Valid {
+				_m.FirstByteMs = new(int)
+				*_m.FirstByteMs = int(value.Int64)
 			}
 		case channelmonitorhistory.FieldLatencyMs:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -197,6 +206,11 @@ func (_m *ChannelMonitorHistory) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("status=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Status))
+	builder.WriteString(", ")
+	if v := _m.FirstByteMs; v != nil {
+		builder.WriteString("first_byte_ms=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
 	builder.WriteString(", ")
 	if v := _m.LatencyMs; v != nil {
 		builder.WriteString("latency_ms=")

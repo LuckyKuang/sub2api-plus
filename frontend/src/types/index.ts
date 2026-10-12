@@ -1698,6 +1698,7 @@ export interface UsageLog {
   openai_ws_mode?: boolean
   native_compaction_v2: boolean
   duration_ms: number | null
+  first_byte_ms?: number | null
   first_token_ms: number | null
   last_token_ms: number | null
   timing_version?: number

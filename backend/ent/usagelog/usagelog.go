@@ -86,6 +86,8 @@ const (
 	FieldDurationMs = "duration_ms"
 	// FieldTimingVersion holds the string denoting the timing_version field in the database.
 	FieldTimingVersion = "timing_version"
+	// FieldFirstByteMs holds the string denoting the first_byte_ms field in the database.
+	FieldFirstByteMs = "first_byte_ms"
 	// FieldFirstTokenMs holds the string denoting the first_token_ms field in the database.
 	FieldFirstTokenMs = "first_token_ms"
 	// FieldLastTokenMs holds the string denoting the last_token_ms field in the database.
@@ -214,6 +216,7 @@ var Columns = []string{
 	FieldStream,
 	FieldDurationMs,
 	FieldTimingVersion,
+	FieldFirstByteMs,
 	FieldFirstTokenMs,
 	FieldLastTokenMs,
 	FieldFirstOutputMs,
@@ -299,6 +302,8 @@ var (
 	DefaultStream bool
 	// DefaultTimingVersion holds the default value on creation for the "timing_version" field.
 	DefaultTimingVersion int
+	// FirstByteMsValidator is a validator for the "first_byte_ms" field. It is called by the builders before save.
+	FirstByteMsValidator func(int) error
 	// FirstOutputKindValidator is a validator for the "first_output_kind" field. It is called by the builders before save.
 	FirstOutputKindValidator func(string) error
 	// DefaultCompletionStatus holds the default value on creation for the "completion_status" field.
@@ -519,6 +524,11 @@ func ByDurationMs(opts ...sql.OrderTermOption) OrderOption {
 // ByTimingVersion orders the results by the timing_version field.
 func ByTimingVersion(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldTimingVersion, opts...).ToFunc()
+}
+
+// ByFirstByteMs orders the results by the first_byte_ms field.
+func ByFirstByteMs(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldFirstByteMs, opts...).ToFunc()
 }
 
 // ByFirstTokenMs orders the results by the first_token_ms field.

@@ -42,6 +42,20 @@ func (_c *ChannelMonitorHistoryCreate) SetStatus(v channelmonitorhistory.Status)
 	return _c
 }
 
+// SetFirstByteMs sets the "first_byte_ms" field.
+func (_c *ChannelMonitorHistoryCreate) SetFirstByteMs(v int) *ChannelMonitorHistoryCreate {
+	_c.mutation.SetFirstByteMs(v)
+	return _c
+}
+
+// SetNillableFirstByteMs sets the "first_byte_ms" field if the given value is not nil.
+func (_c *ChannelMonitorHistoryCreate) SetNillableFirstByteMs(v *int) *ChannelMonitorHistoryCreate {
+	if v != nil {
+		_c.SetFirstByteMs(*v)
+	}
+	return _c
+}
+
 // SetLatencyMs sets the "latency_ms" field.
 func (_c *ChannelMonitorHistoryCreate) SetLatencyMs(v int) *ChannelMonitorHistoryCreate {
 	_c.mutation.SetLatencyMs(v)
@@ -175,6 +189,11 @@ func (_c *ChannelMonitorHistoryCreate) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "ChannelMonitorHistory.status": %w`, err)}
 		}
 	}
+	if v, ok := _c.mutation.FirstByteMs(); ok {
+		if err := channelmonitorhistory.FirstByteMsValidator(v); err != nil {
+			return &ValidationError{Name: "first_byte_ms", err: fmt.Errorf(`ent: validator failed for field "ChannelMonitorHistory.first_byte_ms": %w`, err)}
+		}
+	}
 	if v, ok := _c.mutation.Message(); ok {
 		if err := channelmonitorhistory.MessageValidator(v); err != nil {
 			return &ValidationError{Name: "message", err: fmt.Errorf(`ent: validator failed for field "ChannelMonitorHistory.message": %w`, err)}
@@ -220,6 +239,10 @@ func (_c *ChannelMonitorHistoryCreate) createSpec() (*ChannelMonitorHistory, *sq
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(channelmonitorhistory.FieldStatus, field.TypeEnum, value)
 		_node.Status = value
+	}
+	if value, ok := _c.mutation.FirstByteMs(); ok {
+		_spec.SetField(channelmonitorhistory.FieldFirstByteMs, field.TypeInt, value)
+		_node.FirstByteMs = &value
 	}
 	if value, ok := _c.mutation.LatencyMs(); ok {
 		_spec.SetField(channelmonitorhistory.FieldLatencyMs, field.TypeInt, value)
@@ -343,6 +366,30 @@ func (u *ChannelMonitorHistoryUpsert) SetStatus(v channelmonitorhistory.Status) 
 // UpdateStatus sets the "status" field to the value that was provided on create.
 func (u *ChannelMonitorHistoryUpsert) UpdateStatus() *ChannelMonitorHistoryUpsert {
 	u.SetExcluded(channelmonitorhistory.FieldStatus)
+	return u
+}
+
+// SetFirstByteMs sets the "first_byte_ms" field.
+func (u *ChannelMonitorHistoryUpsert) SetFirstByteMs(v int) *ChannelMonitorHistoryUpsert {
+	u.Set(channelmonitorhistory.FieldFirstByteMs, v)
+	return u
+}
+
+// UpdateFirstByteMs sets the "first_byte_ms" field to the value that was provided on create.
+func (u *ChannelMonitorHistoryUpsert) UpdateFirstByteMs() *ChannelMonitorHistoryUpsert {
+	u.SetExcluded(channelmonitorhistory.FieldFirstByteMs)
+	return u
+}
+
+// AddFirstByteMs adds v to the "first_byte_ms" field.
+func (u *ChannelMonitorHistoryUpsert) AddFirstByteMs(v int) *ChannelMonitorHistoryUpsert {
+	u.Add(channelmonitorhistory.FieldFirstByteMs, v)
+	return u
+}
+
+// ClearFirstByteMs clears the value of the "first_byte_ms" field.
+func (u *ChannelMonitorHistoryUpsert) ClearFirstByteMs() *ChannelMonitorHistoryUpsert {
+	u.SetNull(channelmonitorhistory.FieldFirstByteMs)
 	return u
 }
 
@@ -521,6 +568,34 @@ func (u *ChannelMonitorHistoryUpsertOne) SetStatus(v channelmonitorhistory.Statu
 func (u *ChannelMonitorHistoryUpsertOne) UpdateStatus() *ChannelMonitorHistoryUpsertOne {
 	return u.Update(func(s *ChannelMonitorHistoryUpsert) {
 		s.UpdateStatus()
+	})
+}
+
+// SetFirstByteMs sets the "first_byte_ms" field.
+func (u *ChannelMonitorHistoryUpsertOne) SetFirstByteMs(v int) *ChannelMonitorHistoryUpsertOne {
+	return u.Update(func(s *ChannelMonitorHistoryUpsert) {
+		s.SetFirstByteMs(v)
+	})
+}
+
+// AddFirstByteMs adds v to the "first_byte_ms" field.
+func (u *ChannelMonitorHistoryUpsertOne) AddFirstByteMs(v int) *ChannelMonitorHistoryUpsertOne {
+	return u.Update(func(s *ChannelMonitorHistoryUpsert) {
+		s.AddFirstByteMs(v)
+	})
+}
+
+// UpdateFirstByteMs sets the "first_byte_ms" field to the value that was provided on create.
+func (u *ChannelMonitorHistoryUpsertOne) UpdateFirstByteMs() *ChannelMonitorHistoryUpsertOne {
+	return u.Update(func(s *ChannelMonitorHistoryUpsert) {
+		s.UpdateFirstByteMs()
+	})
+}
+
+// ClearFirstByteMs clears the value of the "first_byte_ms" field.
+func (u *ChannelMonitorHistoryUpsertOne) ClearFirstByteMs() *ChannelMonitorHistoryUpsertOne {
+	return u.Update(func(s *ChannelMonitorHistoryUpsert) {
+		s.ClearFirstByteMs()
 	})
 }
 
@@ -879,6 +954,34 @@ func (u *ChannelMonitorHistoryUpsertBulk) SetStatus(v channelmonitorhistory.Stat
 func (u *ChannelMonitorHistoryUpsertBulk) UpdateStatus() *ChannelMonitorHistoryUpsertBulk {
 	return u.Update(func(s *ChannelMonitorHistoryUpsert) {
 		s.UpdateStatus()
+	})
+}
+
+// SetFirstByteMs sets the "first_byte_ms" field.
+func (u *ChannelMonitorHistoryUpsertBulk) SetFirstByteMs(v int) *ChannelMonitorHistoryUpsertBulk {
+	return u.Update(func(s *ChannelMonitorHistoryUpsert) {
+		s.SetFirstByteMs(v)
+	})
+}
+
+// AddFirstByteMs adds v to the "first_byte_ms" field.
+func (u *ChannelMonitorHistoryUpsertBulk) AddFirstByteMs(v int) *ChannelMonitorHistoryUpsertBulk {
+	return u.Update(func(s *ChannelMonitorHistoryUpsert) {
+		s.AddFirstByteMs(v)
+	})
+}
+
+// UpdateFirstByteMs sets the "first_byte_ms" field to the value that was provided on create.
+func (u *ChannelMonitorHistoryUpsertBulk) UpdateFirstByteMs() *ChannelMonitorHistoryUpsertBulk {
+	return u.Update(func(s *ChannelMonitorHistoryUpsert) {
+		s.UpdateFirstByteMs()
+	})
+}
+
+// ClearFirstByteMs clears the value of the "first_byte_ms" field.
+func (u *ChannelMonitorHistoryUpsertBulk) ClearFirstByteMs() *ChannelMonitorHistoryUpsertBulk {
+	return u.Update(func(s *ChannelMonitorHistoryUpsert) {
+		s.ClearFirstByteMs()
 	})
 }
 

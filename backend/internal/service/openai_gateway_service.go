@@ -358,6 +358,7 @@ type OpenAIForwardResult struct {
 	// group follow-reset as a later inference session.
 	ResponseHeadersFromHandshake bool
 	Duration                     time.Duration
+	FirstByteMs                  *int
 	FirstTokenMs                 *int
 	LastTokenMs                  *int
 	FirstOutputMs                *int

@@ -16509,6 +16509,10 @@ type ChannelMonitorDailyRollupMutation struct {
 	addfailed_count        *int
 	error_count            *int
 	adderror_count         *int
+	sum_first_byte_ms      *int64
+	addsum_first_byte_ms   *int64
+	count_first_byte       *int
+	addcount_first_byte    *int
 	sum_latency_ms         *int64
 	addsum_latency_ms      *int64
 	count_latency          *int
@@ -17068,6 +17072,118 @@ func (m *ChannelMonitorDailyRollupMutation) ResetErrorCount() {
 	m.adderror_count = nil
 }
 
+// SetSumFirstByteMs sets the "sum_first_byte_ms" field.
+func (m *ChannelMonitorDailyRollupMutation) SetSumFirstByteMs(i int64) {
+	m.sum_first_byte_ms = &i
+	m.addsum_first_byte_ms = nil
+}
+
+// SumFirstByteMs returns the value of the "sum_first_byte_ms" field in the mutation.
+func (m *ChannelMonitorDailyRollupMutation) SumFirstByteMs() (r int64, exists bool) {
+	v := m.sum_first_byte_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSumFirstByteMs returns the old "sum_first_byte_ms" field's value of the ChannelMonitorDailyRollup entity.
+// If the ChannelMonitorDailyRollup object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChannelMonitorDailyRollupMutation) OldSumFirstByteMs(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSumFirstByteMs is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSumFirstByteMs requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSumFirstByteMs: %w", err)
+	}
+	return oldValue.SumFirstByteMs, nil
+}
+
+// AddSumFirstByteMs adds i to the "sum_first_byte_ms" field.
+func (m *ChannelMonitorDailyRollupMutation) AddSumFirstByteMs(i int64) {
+	if m.addsum_first_byte_ms != nil {
+		*m.addsum_first_byte_ms += i
+	} else {
+		m.addsum_first_byte_ms = &i
+	}
+}
+
+// AddedSumFirstByteMs returns the value that was added to the "sum_first_byte_ms" field in this mutation.
+func (m *ChannelMonitorDailyRollupMutation) AddedSumFirstByteMs() (r int64, exists bool) {
+	v := m.addsum_first_byte_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetSumFirstByteMs resets all changes to the "sum_first_byte_ms" field.
+func (m *ChannelMonitorDailyRollupMutation) ResetSumFirstByteMs() {
+	m.sum_first_byte_ms = nil
+	m.addsum_first_byte_ms = nil
+}
+
+// SetCountFirstByte sets the "count_first_byte" field.
+func (m *ChannelMonitorDailyRollupMutation) SetCountFirstByte(i int) {
+	m.count_first_byte = &i
+	m.addcount_first_byte = nil
+}
+
+// CountFirstByte returns the value of the "count_first_byte" field in the mutation.
+func (m *ChannelMonitorDailyRollupMutation) CountFirstByte() (r int, exists bool) {
+	v := m.count_first_byte
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCountFirstByte returns the old "count_first_byte" field's value of the ChannelMonitorDailyRollup entity.
+// If the ChannelMonitorDailyRollup object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChannelMonitorDailyRollupMutation) OldCountFirstByte(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCountFirstByte is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCountFirstByte requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCountFirstByte: %w", err)
+	}
+	return oldValue.CountFirstByte, nil
+}
+
+// AddCountFirstByte adds i to the "count_first_byte" field.
+func (m *ChannelMonitorDailyRollupMutation) AddCountFirstByte(i int) {
+	if m.addcount_first_byte != nil {
+		*m.addcount_first_byte += i
+	} else {
+		m.addcount_first_byte = &i
+	}
+}
+
+// AddedCountFirstByte returns the value that was added to the "count_first_byte" field in this mutation.
+func (m *ChannelMonitorDailyRollupMutation) AddedCountFirstByte() (r int, exists bool) {
+	v := m.addcount_first_byte
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetCountFirstByte resets all changes to the "count_first_byte" field.
+func (m *ChannelMonitorDailyRollupMutation) ResetCountFirstByte() {
+	m.count_first_byte = nil
+	m.addcount_first_byte = nil
+}
+
 // SetSumLatencyMs sets the "sum_latency_ms" field.
 func (m *ChannelMonitorDailyRollupMutation) SetSumLatencyMs(i int64) {
 	m.sum_latency_ms = &i
@@ -17389,7 +17505,7 @@ func (m *ChannelMonitorDailyRollupMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ChannelMonitorDailyRollupMutation) Fields() []string {
-	fields := make([]string, 0, 14)
+	fields := make([]string, 0, 16)
 	if m.monitor != nil {
 		fields = append(fields, channelmonitordailyrollup.FieldMonitorID)
 	}
@@ -17416,6 +17532,12 @@ func (m *ChannelMonitorDailyRollupMutation) Fields() []string {
 	}
 	if m.error_count != nil {
 		fields = append(fields, channelmonitordailyrollup.FieldErrorCount)
+	}
+	if m.sum_first_byte_ms != nil {
+		fields = append(fields, channelmonitordailyrollup.FieldSumFirstByteMs)
+	}
+	if m.count_first_byte != nil {
+		fields = append(fields, channelmonitordailyrollup.FieldCountFirstByte)
 	}
 	if m.sum_latency_ms != nil {
 		fields = append(fields, channelmonitordailyrollup.FieldSumLatencyMs)
@@ -17458,6 +17580,10 @@ func (m *ChannelMonitorDailyRollupMutation) Field(name string) (ent.Value, bool)
 		return m.FailedCount()
 	case channelmonitordailyrollup.FieldErrorCount:
 		return m.ErrorCount()
+	case channelmonitordailyrollup.FieldSumFirstByteMs:
+		return m.SumFirstByteMs()
+	case channelmonitordailyrollup.FieldCountFirstByte:
+		return m.CountFirstByte()
 	case channelmonitordailyrollup.FieldSumLatencyMs:
 		return m.SumLatencyMs()
 	case channelmonitordailyrollup.FieldCountLatency:
@@ -17495,6 +17621,10 @@ func (m *ChannelMonitorDailyRollupMutation) OldField(ctx context.Context, name s
 		return m.OldFailedCount(ctx)
 	case channelmonitordailyrollup.FieldErrorCount:
 		return m.OldErrorCount(ctx)
+	case channelmonitordailyrollup.FieldSumFirstByteMs:
+		return m.OldSumFirstByteMs(ctx)
+	case channelmonitordailyrollup.FieldCountFirstByte:
+		return m.OldCountFirstByte(ctx)
 	case channelmonitordailyrollup.FieldSumLatencyMs:
 		return m.OldSumLatencyMs(ctx)
 	case channelmonitordailyrollup.FieldCountLatency:
@@ -17577,6 +17707,20 @@ func (m *ChannelMonitorDailyRollupMutation) SetField(name string, value ent.Valu
 		}
 		m.SetErrorCount(v)
 		return nil
+	case channelmonitordailyrollup.FieldSumFirstByteMs:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSumFirstByteMs(v)
+		return nil
+	case channelmonitordailyrollup.FieldCountFirstByte:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCountFirstByte(v)
+		return nil
 	case channelmonitordailyrollup.FieldSumLatencyMs:
 		v, ok := value.(int64)
 		if !ok {
@@ -17638,6 +17782,12 @@ func (m *ChannelMonitorDailyRollupMutation) AddedFields() []string {
 	if m.adderror_count != nil {
 		fields = append(fields, channelmonitordailyrollup.FieldErrorCount)
 	}
+	if m.addsum_first_byte_ms != nil {
+		fields = append(fields, channelmonitordailyrollup.FieldSumFirstByteMs)
+	}
+	if m.addcount_first_byte != nil {
+		fields = append(fields, channelmonitordailyrollup.FieldCountFirstByte)
+	}
 	if m.addsum_latency_ms != nil {
 		fields = append(fields, channelmonitordailyrollup.FieldSumLatencyMs)
 	}
@@ -17670,6 +17820,10 @@ func (m *ChannelMonitorDailyRollupMutation) AddedField(name string) (ent.Value, 
 		return m.AddedFailedCount()
 	case channelmonitordailyrollup.FieldErrorCount:
 		return m.AddedErrorCount()
+	case channelmonitordailyrollup.FieldSumFirstByteMs:
+		return m.AddedSumFirstByteMs()
+	case channelmonitordailyrollup.FieldCountFirstByte:
+		return m.AddedCountFirstByte()
 	case channelmonitordailyrollup.FieldSumLatencyMs:
 		return m.AddedSumLatencyMs()
 	case channelmonitordailyrollup.FieldCountLatency:
@@ -17728,6 +17882,20 @@ func (m *ChannelMonitorDailyRollupMutation) AddField(name string, value ent.Valu
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddErrorCount(v)
+		return nil
+	case channelmonitordailyrollup.FieldSumFirstByteMs:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddSumFirstByteMs(v)
+		return nil
+	case channelmonitordailyrollup.FieldCountFirstByte:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddCountFirstByte(v)
 		return nil
 	case channelmonitordailyrollup.FieldSumLatencyMs:
 		v, ok := value.(int64)
@@ -17810,6 +17978,12 @@ func (m *ChannelMonitorDailyRollupMutation) ResetField(name string) error {
 		return nil
 	case channelmonitordailyrollup.FieldErrorCount:
 		m.ResetErrorCount()
+		return nil
+	case channelmonitordailyrollup.FieldSumFirstByteMs:
+		m.ResetSumFirstByteMs()
+		return nil
+	case channelmonitordailyrollup.FieldCountFirstByte:
+		m.ResetCountFirstByte()
 		return nil
 	case channelmonitordailyrollup.FieldSumLatencyMs:
 		m.ResetSumLatencyMs()
@@ -17912,6 +18086,8 @@ type ChannelMonitorHistoryMutation struct {
 	id                 *int64
 	model              *string
 	status             *channelmonitorhistory.Status
+	first_byte_ms      *int
+	addfirst_byte_ms   *int
 	latency_ms         *int
 	addlatency_ms      *int
 	ping_latency_ms    *int
@@ -18131,6 +18307,76 @@ func (m *ChannelMonitorHistoryMutation) OldStatus(ctx context.Context) (v channe
 // ResetStatus resets all changes to the "status" field.
 func (m *ChannelMonitorHistoryMutation) ResetStatus() {
 	m.status = nil
+}
+
+// SetFirstByteMs sets the "first_byte_ms" field.
+func (m *ChannelMonitorHistoryMutation) SetFirstByteMs(i int) {
+	m.first_byte_ms = &i
+	m.addfirst_byte_ms = nil
+}
+
+// FirstByteMs returns the value of the "first_byte_ms" field in the mutation.
+func (m *ChannelMonitorHistoryMutation) FirstByteMs() (r int, exists bool) {
+	v := m.first_byte_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFirstByteMs returns the old "first_byte_ms" field's value of the ChannelMonitorHistory entity.
+// If the ChannelMonitorHistory object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChannelMonitorHistoryMutation) OldFirstByteMs(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFirstByteMs is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFirstByteMs requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFirstByteMs: %w", err)
+	}
+	return oldValue.FirstByteMs, nil
+}
+
+// AddFirstByteMs adds i to the "first_byte_ms" field.
+func (m *ChannelMonitorHistoryMutation) AddFirstByteMs(i int) {
+	if m.addfirst_byte_ms != nil {
+		*m.addfirst_byte_ms += i
+	} else {
+		m.addfirst_byte_ms = &i
+	}
+}
+
+// AddedFirstByteMs returns the value that was added to the "first_byte_ms" field in this mutation.
+func (m *ChannelMonitorHistoryMutation) AddedFirstByteMs() (r int, exists bool) {
+	v := m.addfirst_byte_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearFirstByteMs clears the value of the "first_byte_ms" field.
+func (m *ChannelMonitorHistoryMutation) ClearFirstByteMs() {
+	m.first_byte_ms = nil
+	m.addfirst_byte_ms = nil
+	m.clearedFields[channelmonitorhistory.FieldFirstByteMs] = struct{}{}
+}
+
+// FirstByteMsCleared returns if the "first_byte_ms" field was cleared in this mutation.
+func (m *ChannelMonitorHistoryMutation) FirstByteMsCleared() bool {
+	_, ok := m.clearedFields[channelmonitorhistory.FieldFirstByteMs]
+	return ok
+}
+
+// ResetFirstByteMs resets all changes to the "first_byte_ms" field.
+func (m *ChannelMonitorHistoryMutation) ResetFirstByteMs() {
+	m.first_byte_ms = nil
+	m.addfirst_byte_ms = nil
+	delete(m.clearedFields, channelmonitorhistory.FieldFirstByteMs)
 }
 
 // SetLatencyMs sets the "latency_ms" field.
@@ -18468,7 +18714,7 @@ func (m *ChannelMonitorHistoryMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ChannelMonitorHistoryMutation) Fields() []string {
-	fields := make([]string, 0, 8)
+	fields := make([]string, 0, 9)
 	if m.monitor != nil {
 		fields = append(fields, channelmonitorhistory.FieldMonitorID)
 	}
@@ -18477,6 +18723,9 @@ func (m *ChannelMonitorHistoryMutation) Fields() []string {
 	}
 	if m.status != nil {
 		fields = append(fields, channelmonitorhistory.FieldStatus)
+	}
+	if m.first_byte_ms != nil {
+		fields = append(fields, channelmonitorhistory.FieldFirstByteMs)
 	}
 	if m.latency_ms != nil {
 		fields = append(fields, channelmonitorhistory.FieldLatencyMs)
@@ -18507,6 +18756,8 @@ func (m *ChannelMonitorHistoryMutation) Field(name string) (ent.Value, bool) {
 		return m.Model()
 	case channelmonitorhistory.FieldStatus:
 		return m.Status()
+	case channelmonitorhistory.FieldFirstByteMs:
+		return m.FirstByteMs()
 	case channelmonitorhistory.FieldLatencyMs:
 		return m.LatencyMs()
 	case channelmonitorhistory.FieldPingLatencyMs:
@@ -18532,6 +18783,8 @@ func (m *ChannelMonitorHistoryMutation) OldField(ctx context.Context, name strin
 		return m.OldModel(ctx)
 	case channelmonitorhistory.FieldStatus:
 		return m.OldStatus(ctx)
+	case channelmonitorhistory.FieldFirstByteMs:
+		return m.OldFirstByteMs(ctx)
 	case channelmonitorhistory.FieldLatencyMs:
 		return m.OldLatencyMs(ctx)
 	case channelmonitorhistory.FieldPingLatencyMs:
@@ -18571,6 +18824,13 @@ func (m *ChannelMonitorHistoryMutation) SetField(name string, value ent.Value) e
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetStatus(v)
+		return nil
+	case channelmonitorhistory.FieldFirstByteMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFirstByteMs(v)
 		return nil
 	case channelmonitorhistory.FieldLatencyMs:
 		v, ok := value.(int)
@@ -18615,6 +18875,9 @@ func (m *ChannelMonitorHistoryMutation) SetField(name string, value ent.Value) e
 // this mutation.
 func (m *ChannelMonitorHistoryMutation) AddedFields() []string {
 	var fields []string
+	if m.addfirst_byte_ms != nil {
+		fields = append(fields, channelmonitorhistory.FieldFirstByteMs)
+	}
 	if m.addlatency_ms != nil {
 		fields = append(fields, channelmonitorhistory.FieldLatencyMs)
 	}
@@ -18629,6 +18892,8 @@ func (m *ChannelMonitorHistoryMutation) AddedFields() []string {
 // was not set, or was not defined in the schema.
 func (m *ChannelMonitorHistoryMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
+	case channelmonitorhistory.FieldFirstByteMs:
+		return m.AddedFirstByteMs()
 	case channelmonitorhistory.FieldLatencyMs:
 		return m.AddedLatencyMs()
 	case channelmonitorhistory.FieldPingLatencyMs:
@@ -18642,6 +18907,13 @@ func (m *ChannelMonitorHistoryMutation) AddedField(name string) (ent.Value, bool
 // type.
 func (m *ChannelMonitorHistoryMutation) AddField(name string, value ent.Value) error {
 	switch name {
+	case channelmonitorhistory.FieldFirstByteMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddFirstByteMs(v)
+		return nil
 	case channelmonitorhistory.FieldLatencyMs:
 		v, ok := value.(int)
 		if !ok {
@@ -18664,6 +18936,9 @@ func (m *ChannelMonitorHistoryMutation) AddField(name string, value ent.Value) e
 // mutation.
 func (m *ChannelMonitorHistoryMutation) ClearedFields() []string {
 	var fields []string
+	if m.FieldCleared(channelmonitorhistory.FieldFirstByteMs) {
+		fields = append(fields, channelmonitorhistory.FieldFirstByteMs)
+	}
 	if m.FieldCleared(channelmonitorhistory.FieldLatencyMs) {
 		fields = append(fields, channelmonitorhistory.FieldLatencyMs)
 	}
@@ -18690,6 +18965,9 @@ func (m *ChannelMonitorHistoryMutation) FieldCleared(name string) bool {
 // error if the field is not defined in the schema.
 func (m *ChannelMonitorHistoryMutation) ClearField(name string) error {
 	switch name {
+	case channelmonitorhistory.FieldFirstByteMs:
+		m.ClearFirstByteMs()
+		return nil
 	case channelmonitorhistory.FieldLatencyMs:
 		m.ClearLatencyMs()
 		return nil
@@ -18718,6 +18996,9 @@ func (m *ChannelMonitorHistoryMutation) ResetField(name string) error {
 		return nil
 	case channelmonitorhistory.FieldStatus:
 		m.ResetStatus()
+		return nil
+	case channelmonitorhistory.FieldFirstByteMs:
+		m.ResetFirstByteMs()
 		return nil
 	case channelmonitorhistory.FieldLatencyMs:
 		m.ResetLatencyMs()
@@ -45883,6 +46164,8 @@ type UsageLogMutation struct {
 	addduration_ms                *int
 	timing_version                *int
 	addtiming_version             *int
+	first_byte_ms                 *int
+	addfirst_byte_ms              *int
 	first_token_ms                *int
 	addfirst_token_ms             *int
 	last_token_ms                 *int
@@ -47892,6 +48175,76 @@ func (m *UsageLogMutation) ResetTimingVersion() {
 	m.addtiming_version = nil
 }
 
+// SetFirstByteMs sets the "first_byte_ms" field.
+func (m *UsageLogMutation) SetFirstByteMs(i int) {
+	m.first_byte_ms = &i
+	m.addfirst_byte_ms = nil
+}
+
+// FirstByteMs returns the value of the "first_byte_ms" field in the mutation.
+func (m *UsageLogMutation) FirstByteMs() (r int, exists bool) {
+	v := m.first_byte_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFirstByteMs returns the old "first_byte_ms" field's value of the UsageLog entity.
+// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageLogMutation) OldFirstByteMs(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFirstByteMs is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFirstByteMs requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFirstByteMs: %w", err)
+	}
+	return oldValue.FirstByteMs, nil
+}
+
+// AddFirstByteMs adds i to the "first_byte_ms" field.
+func (m *UsageLogMutation) AddFirstByteMs(i int) {
+	if m.addfirst_byte_ms != nil {
+		*m.addfirst_byte_ms += i
+	} else {
+		m.addfirst_byte_ms = &i
+	}
+}
+
+// AddedFirstByteMs returns the value that was added to the "first_byte_ms" field in this mutation.
+func (m *UsageLogMutation) AddedFirstByteMs() (r int, exists bool) {
+	v := m.addfirst_byte_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearFirstByteMs clears the value of the "first_byte_ms" field.
+func (m *UsageLogMutation) ClearFirstByteMs() {
+	m.first_byte_ms = nil
+	m.addfirst_byte_ms = nil
+	m.clearedFields[usagelog.FieldFirstByteMs] = struct{}{}
+}
+
+// FirstByteMsCleared returns if the "first_byte_ms" field was cleared in this mutation.
+func (m *UsageLogMutation) FirstByteMsCleared() bool {
+	_, ok := m.clearedFields[usagelog.FieldFirstByteMs]
+	return ok
+}
+
+// ResetFirstByteMs resets all changes to the "first_byte_ms" field.
+func (m *UsageLogMutation) ResetFirstByteMs() {
+	m.first_byte_ms = nil
+	m.addfirst_byte_ms = nil
+	delete(m.clearedFields, usagelog.FieldFirstByteMs)
+}
+
 // SetFirstTokenMs sets the "first_token_ms" field.
 func (m *UsageLogMutation) SetFirstTokenMs(i int) {
 	m.first_token_ms = &i
@@ -49087,7 +49440,7 @@ func (m *UsageLogMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UsageLogMutation) Fields() []string {
-	fields := make([]string, 0, 56)
+	fields := make([]string, 0, 57)
 	if m.user != nil {
 		fields = append(fields, usagelog.FieldUserID)
 	}
@@ -49195,6 +49548,9 @@ func (m *UsageLogMutation) Fields() []string {
 	}
 	if m.timing_version != nil {
 		fields = append(fields, usagelog.FieldTimingVersion)
+	}
+	if m.first_byte_ms != nil {
+		fields = append(fields, usagelog.FieldFirstByteMs)
 	}
 	if m.first_token_ms != nil {
 		fields = append(fields, usagelog.FieldFirstTokenMs)
@@ -49336,6 +49692,8 @@ func (m *UsageLogMutation) Field(name string) (ent.Value, bool) {
 		return m.DurationMs()
 	case usagelog.FieldTimingVersion:
 		return m.TimingVersion()
+	case usagelog.FieldFirstByteMs:
+		return m.FirstByteMs()
 	case usagelog.FieldFirstTokenMs:
 		return m.FirstTokenMs()
 	case usagelog.FieldLastTokenMs:
@@ -49457,6 +49815,8 @@ func (m *UsageLogMutation) OldField(ctx context.Context, name string) (ent.Value
 		return m.OldDurationMs(ctx)
 	case usagelog.FieldTimingVersion:
 		return m.OldTimingVersion(ctx)
+	case usagelog.FieldFirstByteMs:
+		return m.OldFirstByteMs(ctx)
 	case usagelog.FieldFirstTokenMs:
 		return m.OldFirstTokenMs(ctx)
 	case usagelog.FieldLastTokenMs:
@@ -49758,6 +50118,13 @@ func (m *UsageLogMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetTimingVersion(v)
 		return nil
+	case usagelog.FieldFirstByteMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFirstByteMs(v)
+		return nil
 	case usagelog.FieldFirstTokenMs:
 		v, ok := value.(int)
 		if !ok {
@@ -49966,6 +50333,9 @@ func (m *UsageLogMutation) AddedFields() []string {
 	if m.addtiming_version != nil {
 		fields = append(fields, usagelog.FieldTimingVersion)
 	}
+	if m.addfirst_byte_ms != nil {
+		fields = append(fields, usagelog.FieldFirstByteMs)
+	}
 	if m.addfirst_token_ms != nil {
 		fields = append(fields, usagelog.FieldFirstTokenMs)
 	}
@@ -50032,6 +50402,8 @@ func (m *UsageLogMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedDurationMs()
 	case usagelog.FieldTimingVersion:
 		return m.AddedTimingVersion()
+	case usagelog.FieldFirstByteMs:
+		return m.AddedFirstByteMs()
 	case usagelog.FieldFirstTokenMs:
 		return m.AddedFirstTokenMs()
 	case usagelog.FieldLastTokenMs:
@@ -50193,6 +50565,13 @@ func (m *UsageLogMutation) AddField(name string, value ent.Value) error {
 		}
 		m.AddTimingVersion(v)
 		return nil
+	case usagelog.FieldFirstByteMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddFirstByteMs(v)
+		return nil
 	case usagelog.FieldFirstTokenMs:
 		v, ok := value.(int)
 		if !ok {
@@ -50281,6 +50660,9 @@ func (m *UsageLogMutation) ClearedFields() []string {
 	}
 	if m.FieldCleared(usagelog.FieldDurationMs) {
 		fields = append(fields, usagelog.FieldDurationMs)
+	}
+	if m.FieldCleared(usagelog.FieldFirstByteMs) {
+		fields = append(fields, usagelog.FieldFirstByteMs)
 	}
 	if m.FieldCleared(usagelog.FieldFirstTokenMs) {
 		fields = append(fields, usagelog.FieldFirstTokenMs)
@@ -50376,6 +50758,9 @@ func (m *UsageLogMutation) ClearField(name string) error {
 		return nil
 	case usagelog.FieldDurationMs:
 		m.ClearDurationMs()
+		return nil
+	case usagelog.FieldFirstByteMs:
+		m.ClearFirstByteMs()
 		return nil
 	case usagelog.FieldFirstTokenMs:
 		m.ClearFirstTokenMs()
@@ -50534,6 +50919,9 @@ func (m *UsageLogMutation) ResetField(name string) error {
 		return nil
 	case usagelog.FieldTimingVersion:
 		m.ResetTimingVersion()
+		return nil
+	case usagelog.FieldFirstByteMs:
+		m.ResetFirstByteMs()
 		return nil
 	case usagelog.FieldFirstTokenMs:
 		m.ResetFirstTokenMs()

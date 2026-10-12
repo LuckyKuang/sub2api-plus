@@ -43,10 +43,11 @@
       </span>
     </div>
 
+    <p class="mt-3 text-xs text-gray-500 dark:text-gray-400" :title="t('usage.probeTimingHint')">{{ t('usage.latencyFirstByte') }} {{ formatLatency(item.primary_first_byte_ms) }} ms</p>
     <!-- Metrics -->
     <MonitorMetricPair
       primary-icon="bolt"
-      :primary-label="t('monitorCommon.dialogLatency')"
+      :primary-label="t('usage.latencyDuration')"
       :primary-value="formatLatency(item.primary_latency_ms)"
       primary-unit="ms"
       secondary-icon="globe"

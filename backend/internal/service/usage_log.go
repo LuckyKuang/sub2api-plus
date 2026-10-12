@@ -185,6 +185,7 @@ type UsageLog struct {
 	NativeCompactionV2 bool
 	TimingVersion      int
 	DurationMs         *int
+	FirstByteMs        *int
 	FirstTokenMs       *int
 	LastTokenMs        *int
 	FirstOutputMs      *int

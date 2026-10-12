@@ -1219,6 +1219,7 @@ func (s *GatewayService) buildRecordUsageLog(
 		BillingMode:              resolveBillingMode(result, cost),
 		Stream:                   result.Stream,
 		DurationMs:               &durationMs,
+		FirstByteMs:              result.FirstByteMs,
 		FirstTokenMs:             result.FirstTokenMs,
 		LastTokenMs:              result.LastTokenMs,
 		TimingVersion:            1,

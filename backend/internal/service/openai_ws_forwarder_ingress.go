@@ -1083,6 +1083,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		}
 		for {
 			upstreamMessage, readErr := lease.ReadMessageWithContextTimeout(ctx, s.openAIWSReadTimeout())
+			frameReceivedAt := time.Now()
 			if readErr != nil {
 				lease.MarkBroken()
 				return nil, wrapOpenAIWSIngressTurnError(
@@ -1104,7 +1105,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 
 			eventType, eventResponseID, _ := parseOpenAIWSEventEnvelope(upstreamMessage)
 			responseModelObserver.ObserveOpenAI(upstreamMessage, eventType)
-			if responseID == "" && eventResponseID != "" {
+			if responseID == "" && eventResponseID != "" && eventResponseID != turnPreviousResponseID {
 				responseID = eventResponseID
 			}
 			if eventType != "" {
@@ -1223,6 +1224,9 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 				}
 			}
 			outputObservation := apicompat.ObserveResponsesOutput(upstreamMessage)
+			if eventResponseID != "" && eventResponseID == responseID && eventResponseID != turnPreviousResponseID {
+				timing.ObserveFrame(turnStart, frameReceivedAt)
+			}
 			timing.Observe(turnStart, outputObservation)
 			isTokenEvent := outputObservation.TokenLikeDelta
 			if isTokenEvent {

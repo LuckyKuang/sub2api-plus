@@ -21,6 +21,8 @@ const (
 	FieldModel = "model"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
+	// FieldFirstByteMs holds the string denoting the first_byte_ms field in the database.
+	FieldFirstByteMs = "first_byte_ms"
 	// FieldLatencyMs holds the string denoting the latency_ms field in the database.
 	FieldLatencyMs = "latency_ms"
 	// FieldPingLatencyMs holds the string denoting the ping_latency_ms field in the database.
@@ -50,6 +52,7 @@ var Columns = []string{
 	FieldMonitorID,
 	FieldModel,
 	FieldStatus,
+	FieldFirstByteMs,
 	FieldLatencyMs,
 	FieldPingLatencyMs,
 	FieldMessage,
@@ -70,6 +73,8 @@ func ValidColumn(column string) bool {
 var (
 	// ModelValidator is a validator for the "model" field. It is called by the builders before save.
 	ModelValidator func(string) error
+	// FirstByteMsValidator is a validator for the "first_byte_ms" field. It is called by the builders before save.
+	FirstByteMsValidator func(int) error
 	// DefaultMessage holds the default value on creation for the "message" field.
 	DefaultMessage string
 	// MessageValidator is a validator for the "message" field. It is called by the builders before save.
@@ -124,6 +129,11 @@ func ByModel(opts ...sql.OrderTermOption) OrderOption {
 // ByStatus orders the results by the status field.
 func ByStatus(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldStatus, opts...).ToFunc()
+}
+
+// ByFirstByteMs orders the results by the first_byte_ms field.
+func ByFirstByteMs(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldFirstByteMs, opts...).ToFunc()
 }
 
 // ByLatencyMs orders the results by the latency_ms field.

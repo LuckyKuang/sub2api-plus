@@ -751,24 +751,36 @@ func init() {
 	channelmonitordailyrollupDescErrorCount := channelmonitordailyrollupFields[8].Descriptor()
 	// channelmonitordailyrollup.DefaultErrorCount holds the default value on creation for the error_count field.
 	channelmonitordailyrollup.DefaultErrorCount = channelmonitordailyrollupDescErrorCount.Default.(int)
+	// channelmonitordailyrollupDescSumFirstByteMs is the schema descriptor for sum_first_byte_ms field.
+	channelmonitordailyrollupDescSumFirstByteMs := channelmonitordailyrollupFields[9].Descriptor()
+	// channelmonitordailyrollup.DefaultSumFirstByteMs holds the default value on creation for the sum_first_byte_ms field.
+	channelmonitordailyrollup.DefaultSumFirstByteMs = channelmonitordailyrollupDescSumFirstByteMs.Default.(int64)
+	// channelmonitordailyrollup.SumFirstByteMsValidator is a validator for the "sum_first_byte_ms" field. It is called by the builders before save.
+	channelmonitordailyrollup.SumFirstByteMsValidator = channelmonitordailyrollupDescSumFirstByteMs.Validators[0].(func(int64) error)
+	// channelmonitordailyrollupDescCountFirstByte is the schema descriptor for count_first_byte field.
+	channelmonitordailyrollupDescCountFirstByte := channelmonitordailyrollupFields[10].Descriptor()
+	// channelmonitordailyrollup.DefaultCountFirstByte holds the default value on creation for the count_first_byte field.
+	channelmonitordailyrollup.DefaultCountFirstByte = channelmonitordailyrollupDescCountFirstByte.Default.(int)
+	// channelmonitordailyrollup.CountFirstByteValidator is a validator for the "count_first_byte" field. It is called by the builders before save.
+	channelmonitordailyrollup.CountFirstByteValidator = channelmonitordailyrollupDescCountFirstByte.Validators[0].(func(int) error)
 	// channelmonitordailyrollupDescSumLatencyMs is the schema descriptor for sum_latency_ms field.
-	channelmonitordailyrollupDescSumLatencyMs := channelmonitordailyrollupFields[9].Descriptor()
+	channelmonitordailyrollupDescSumLatencyMs := channelmonitordailyrollupFields[11].Descriptor()
 	// channelmonitordailyrollup.DefaultSumLatencyMs holds the default value on creation for the sum_latency_ms field.
 	channelmonitordailyrollup.DefaultSumLatencyMs = channelmonitordailyrollupDescSumLatencyMs.Default.(int64)
 	// channelmonitordailyrollupDescCountLatency is the schema descriptor for count_latency field.
-	channelmonitordailyrollupDescCountLatency := channelmonitordailyrollupFields[10].Descriptor()
+	channelmonitordailyrollupDescCountLatency := channelmonitordailyrollupFields[12].Descriptor()
 	// channelmonitordailyrollup.DefaultCountLatency holds the default value on creation for the count_latency field.
 	channelmonitordailyrollup.DefaultCountLatency = channelmonitordailyrollupDescCountLatency.Default.(int)
 	// channelmonitordailyrollupDescSumPingLatencyMs is the schema descriptor for sum_ping_latency_ms field.
-	channelmonitordailyrollupDescSumPingLatencyMs := channelmonitordailyrollupFields[11].Descriptor()
+	channelmonitordailyrollupDescSumPingLatencyMs := channelmonitordailyrollupFields[13].Descriptor()
 	// channelmonitordailyrollup.DefaultSumPingLatencyMs holds the default value on creation for the sum_ping_latency_ms field.
 	channelmonitordailyrollup.DefaultSumPingLatencyMs = channelmonitordailyrollupDescSumPingLatencyMs.Default.(int64)
 	// channelmonitordailyrollupDescCountPingLatency is the schema descriptor for count_ping_latency field.
-	channelmonitordailyrollupDescCountPingLatency := channelmonitordailyrollupFields[12].Descriptor()
+	channelmonitordailyrollupDescCountPingLatency := channelmonitordailyrollupFields[14].Descriptor()
 	// channelmonitordailyrollup.DefaultCountPingLatency holds the default value on creation for the count_ping_latency field.
 	channelmonitordailyrollup.DefaultCountPingLatency = channelmonitordailyrollupDescCountPingLatency.Default.(int)
 	// channelmonitordailyrollupDescComputedAt is the schema descriptor for computed_at field.
-	channelmonitordailyrollupDescComputedAt := channelmonitordailyrollupFields[13].Descriptor()
+	channelmonitordailyrollupDescComputedAt := channelmonitordailyrollupFields[15].Descriptor()
 	// channelmonitordailyrollup.DefaultComputedAt holds the default value on creation for the computed_at field.
 	channelmonitordailyrollup.DefaultComputedAt = channelmonitordailyrollupDescComputedAt.Default.(func() time.Time)
 	// channelmonitordailyrollup.UpdateDefaultComputedAt holds the default value on update for the computed_at field.
@@ -793,14 +805,18 @@ func init() {
 			return nil
 		}
 	}()
+	// channelmonitorhistoryDescFirstByteMs is the schema descriptor for first_byte_ms field.
+	channelmonitorhistoryDescFirstByteMs := channelmonitorhistoryFields[3].Descriptor()
+	// channelmonitorhistory.FirstByteMsValidator is a validator for the "first_byte_ms" field. It is called by the builders before save.
+	channelmonitorhistory.FirstByteMsValidator = channelmonitorhistoryDescFirstByteMs.Validators[0].(func(int) error)
 	// channelmonitorhistoryDescMessage is the schema descriptor for message field.
-	channelmonitorhistoryDescMessage := channelmonitorhistoryFields[5].Descriptor()
+	channelmonitorhistoryDescMessage := channelmonitorhistoryFields[6].Descriptor()
 	// channelmonitorhistory.DefaultMessage holds the default value on creation for the message field.
 	channelmonitorhistory.DefaultMessage = channelmonitorhistoryDescMessage.Default.(string)
 	// channelmonitorhistory.MessageValidator is a validator for the "message" field. It is called by the builders before save.
 	channelmonitorhistory.MessageValidator = channelmonitorhistoryDescMessage.Validators[0].(func(string) error)
 	// channelmonitorhistoryDescCheckedAt is the schema descriptor for checked_at field.
-	channelmonitorhistoryDescCheckedAt := channelmonitorhistoryFields[7].Descriptor()
+	channelmonitorhistoryDescCheckedAt := channelmonitorhistoryFields[8].Descriptor()
 	// channelmonitorhistory.DefaultCheckedAt holds the default value on creation for the checked_at field.
 	channelmonitorhistory.DefaultCheckedAt = channelmonitorhistoryDescCheckedAt.Default.(func() time.Time)
 	channelmonitorrequesttemplateMixin := schema.ChannelMonitorRequestTemplate{}.Mixin()
@@ -2182,64 +2198,68 @@ func init() {
 	usagelogDescTimingVersion := usagelogFields[35].Descriptor()
 	// usagelog.DefaultTimingVersion holds the default value on creation for the timing_version field.
 	usagelog.DefaultTimingVersion = usagelogDescTimingVersion.Default.(int)
+	// usagelogDescFirstByteMs is the schema descriptor for first_byte_ms field.
+	usagelogDescFirstByteMs := usagelogFields[36].Descriptor()
+	// usagelog.FirstByteMsValidator is a validator for the "first_byte_ms" field. It is called by the builders before save.
+	usagelog.FirstByteMsValidator = usagelogDescFirstByteMs.Validators[0].(func(int) error)
 	// usagelogDescFirstOutputKind is the schema descriptor for first_output_kind field.
-	usagelogDescFirstOutputKind := usagelogFields[39].Descriptor()
+	usagelogDescFirstOutputKind := usagelogFields[40].Descriptor()
 	// usagelog.FirstOutputKindValidator is a validator for the "first_output_kind" field. It is called by the builders before save.
 	usagelog.FirstOutputKindValidator = usagelogDescFirstOutputKind.Validators[0].(func(string) error)
 	// usagelogDescCompletionStatus is the schema descriptor for completion_status field.
-	usagelogDescCompletionStatus := usagelogFields[41].Descriptor()
+	usagelogDescCompletionStatus := usagelogFields[42].Descriptor()
 	// usagelog.DefaultCompletionStatus holds the default value on creation for the completion_status field.
 	usagelog.DefaultCompletionStatus = usagelogDescCompletionStatus.Default.(string)
 	// usagelog.CompletionStatusValidator is a validator for the "completion_status" field. It is called by the builders before save.
 	usagelog.CompletionStatusValidator = usagelogDescCompletionStatus.Validators[0].(func(string) error)
 	// usagelogDescUsageSource is the schema descriptor for usage_source field.
-	usagelogDescUsageSource := usagelogFields[42].Descriptor()
+	usagelogDescUsageSource := usagelogFields[43].Descriptor()
 	// usagelog.DefaultUsageSource holds the default value on creation for the usage_source field.
 	usagelog.DefaultUsageSource = usagelogDescUsageSource.Default.(string)
 	// usagelog.UsageSourceValidator is a validator for the "usage_source" field. It is called by the builders before save.
 	usagelog.UsageSourceValidator = usagelogDescUsageSource.Validators[0].(func(string) error)
 	// usagelogDescUserAgent is the schema descriptor for user_agent field.
-	usagelogDescUserAgent := usagelogFields[43].Descriptor()
+	usagelogDescUserAgent := usagelogFields[44].Descriptor()
 	// usagelog.UserAgentValidator is a validator for the "user_agent" field. It is called by the builders before save.
 	usagelog.UserAgentValidator = usagelogDescUserAgent.Validators[0].(func(string) error)
 	// usagelogDescIPAddress is the schema descriptor for ip_address field.
-	usagelogDescIPAddress := usagelogFields[44].Descriptor()
+	usagelogDescIPAddress := usagelogFields[45].Descriptor()
 	// usagelog.IPAddressValidator is a validator for the "ip_address" field. It is called by the builders before save.
 	usagelog.IPAddressValidator = usagelogDescIPAddress.Validators[0].(func(string) error)
 	// usagelogDescImageCount is the schema descriptor for image_count field.
-	usagelogDescImageCount := usagelogFields[45].Descriptor()
+	usagelogDescImageCount := usagelogFields[46].Descriptor()
 	// usagelog.DefaultImageCount holds the default value on creation for the image_count field.
 	usagelog.DefaultImageCount = usagelogDescImageCount.Default.(int)
 	// usagelogDescImageSize is the schema descriptor for image_size field.
-	usagelogDescImageSize := usagelogFields[46].Descriptor()
+	usagelogDescImageSize := usagelogFields[47].Descriptor()
 	// usagelog.ImageSizeValidator is a validator for the "image_size" field. It is called by the builders before save.
 	usagelog.ImageSizeValidator = usagelogDescImageSize.Validators[0].(func(string) error)
 	// usagelogDescImageInputSize is the schema descriptor for image_input_size field.
-	usagelogDescImageInputSize := usagelogFields[47].Descriptor()
+	usagelogDescImageInputSize := usagelogFields[48].Descriptor()
 	// usagelog.ImageInputSizeValidator is a validator for the "image_input_size" field. It is called by the builders before save.
 	usagelog.ImageInputSizeValidator = usagelogDescImageInputSize.Validators[0].(func(string) error)
 	// usagelogDescImageOutputSize is the schema descriptor for image_output_size field.
-	usagelogDescImageOutputSize := usagelogFields[48].Descriptor()
+	usagelogDescImageOutputSize := usagelogFields[49].Descriptor()
 	// usagelog.ImageOutputSizeValidator is a validator for the "image_output_size" field. It is called by the builders before save.
 	usagelog.ImageOutputSizeValidator = usagelogDescImageOutputSize.Validators[0].(func(string) error)
 	// usagelogDescImageSizeSource is the schema descriptor for image_size_source field.
-	usagelogDescImageSizeSource := usagelogFields[49].Descriptor()
+	usagelogDescImageSizeSource := usagelogFields[50].Descriptor()
 	// usagelog.ImageSizeSourceValidator is a validator for the "image_size_source" field. It is called by the builders before save.
 	usagelog.ImageSizeSourceValidator = usagelogDescImageSizeSource.Validators[0].(func(string) error)
 	// usagelogDescVideoCount is the schema descriptor for video_count field.
-	usagelogDescVideoCount := usagelogFields[51].Descriptor()
+	usagelogDescVideoCount := usagelogFields[52].Descriptor()
 	// usagelog.DefaultVideoCount holds the default value on creation for the video_count field.
 	usagelog.DefaultVideoCount = usagelogDescVideoCount.Default.(int)
 	// usagelogDescVideoResolution is the schema descriptor for video_resolution field.
-	usagelogDescVideoResolution := usagelogFields[52].Descriptor()
+	usagelogDescVideoResolution := usagelogFields[53].Descriptor()
 	// usagelog.VideoResolutionValidator is a validator for the "video_resolution" field. It is called by the builders before save.
 	usagelog.VideoResolutionValidator = usagelogDescVideoResolution.Validators[0].(func(string) error)
 	// usagelogDescCacheTTLOverridden is the schema descriptor for cache_ttl_overridden field.
-	usagelogDescCacheTTLOverridden := usagelogFields[54].Descriptor()
+	usagelogDescCacheTTLOverridden := usagelogFields[55].Descriptor()
 	// usagelog.DefaultCacheTTLOverridden holds the default value on creation for the cache_ttl_overridden field.
 	usagelog.DefaultCacheTTLOverridden = usagelogDescCacheTTLOverridden.Default.(bool)
 	// usagelogDescCreatedAt is the schema descriptor for created_at field.
-	usagelogDescCreatedAt := usagelogFields[55].Descriptor()
+	usagelogDescCreatedAt := usagelogFields[56].Descriptor()
 	// usagelog.DefaultCreatedAt holds the default value on creation for the created_at field.
 	usagelog.DefaultCreatedAt = usagelogDescCreatedAt.Default.(func() time.Time)
 	userMixin := schema.User{}.Mixin()

@@ -219,7 +219,7 @@
 </template>
 
 <script setup lang="ts">
-import { strictFirstTokenMs, averageTps, tpsNote } from '@/utils/usageTiming'
+import { firstByteMs, strictFirstTokenMs, averageTps, tpsNote } from '@/utils/usageTiming'
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
@@ -673,7 +673,8 @@ const exportToCSV = async () => {
       'Rate Multiplier',
       'Billed Cost',
       'Original Cost',
-		'First Token (ms)',
+		'First Byte (ms)',
+      'First Token (ms)',
       'First Output (ms)',
       'First Output Kind',
       'Duration (ms)',
@@ -696,7 +697,7 @@ const exportToCSV = async () => {
       log.rate_multiplier,
       log.actual_cost.toFixed(8),
       log.total_cost.toFixed(8),
-      strictFirstTokenMs(log) ?? '',
+      firstByteMs(log) ?? '', strictFirstTokenMs(log) ?? '',
       log.first_output_ms ?? '',
       log.first_output_kind ?? '',
       log.duration_ms ?? '',

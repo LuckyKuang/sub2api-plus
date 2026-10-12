@@ -525,6 +525,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	}
 	usageLog.OpenAIWSMode = result.OpenAIWSMode
 	usageLog.DurationMs = &durationMs
+	usageLog.FirstByteMs = result.FirstByteMs
 	usageLog.FirstTokenMs = result.FirstTokenMs
 	usageLog.LastTokenMs = result.LastTokenMs
 	usageLog.TimingVersion = 1

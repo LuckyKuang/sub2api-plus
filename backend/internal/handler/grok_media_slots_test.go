@@ -407,13 +407,16 @@ func TestGrokMediaVideoCompletionStillClaimsBillingOnce(t *testing.T) {
 	key, ok := middleware2.GetAPIKeyFromContext(c)
 	require.True(t, ok)
 	subject := middleware2.AuthSubject{UserID: 10, Concurrency: 5}
+	pollByte := 25
 	result := &service.OpenAIForwardResult{ResponseID: "task", Model: "grok-imagine-video",
-		VideoCount: 1, VideoDurationSeconds: 6}
+		VideoCount: 1, VideoDurationSeconds: 6, FirstByteMs: &pollByte}
 	for i := range 20 {
 		bill := prepareGrokVideoCompletionBilling(c.Request.Context(), h, zap.NewNop(), key, subject, "task", result)
 		if i == 0 {
 			require.NotNil(t, bill)
 			require.Equal(t, service.StableGrokVideoBillingRequestID("task"), bill.RequestID)
+			require.Nil(t, bill.FirstByteMs, "an async task settlement cannot borrow its discovery poll's clock")
+			require.Equal(t, 25, *result.FirstByteMs, "the original HTTP response retains its own timing")
 		} else {
 			require.Nil(t, bill)
 		}

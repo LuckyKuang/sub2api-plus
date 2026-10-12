@@ -1,7 +1,7 @@
 /**
  * 请求延迟健康度分档（用于用量明细"延迟"列的纵向健康扫视）。
  *
- * 首 Token（TTFT）：10s 内正常，10-30s 偏慢，30-60s 缓慢，60s 及以上严重。
+ * 首响应体字节（展示等级）：10s 内正常，10-30s 偏慢，30-60s 缓慢，60s 及以上严重。
  * 总耗时：流式请求整体时长天然更长，阈值放宽为 1min / 3min / 5min。
  */
 export type LatencySeverity = 'good' | 'warn' | 'slow' | 'critical'
@@ -30,6 +30,9 @@ const classify = (ms: number, thresholds: Thresholds): LatencySeverity => {
   if (ms >= thresholds.warn) return 'warn'
   return 'good'
 }
+
+export const firstByteSeverity = (ms: number): LatencySeverity =>
+  classify(ms, FIRST_TOKEN_THRESHOLDS_MS)
 
 export const firstTokenSeverity = (ms: number): LatencySeverity =>
   classify(ms, FIRST_TOKEN_THRESHOLDS_MS)

@@ -65,6 +65,11 @@ func Model(v string) predicate.ChannelMonitorHistory {
 	return predicate.ChannelMonitorHistory(sql.FieldEQ(FieldModel, v))
 }
 
+// FirstByteMs applies equality check predicate on the "first_byte_ms" field. It's identical to FirstByteMsEQ.
+func FirstByteMs(v int) predicate.ChannelMonitorHistory {
+	return predicate.ChannelMonitorHistory(sql.FieldEQ(FieldFirstByteMs, v))
+}
+
 // LatencyMs applies equality check predicate on the "latency_ms" field. It's identical to LatencyMsEQ.
 func LatencyMs(v int) predicate.ChannelMonitorHistory {
 	return predicate.ChannelMonitorHistory(sql.FieldEQ(FieldLatencyMs, v))
@@ -188,6 +193,56 @@ func StatusIn(vs ...Status) predicate.ChannelMonitorHistory {
 // StatusNotIn applies the NotIn predicate on the "status" field.
 func StatusNotIn(vs ...Status) predicate.ChannelMonitorHistory {
 	return predicate.ChannelMonitorHistory(sql.FieldNotIn(FieldStatus, vs...))
+}
+
+// FirstByteMsEQ applies the EQ predicate on the "first_byte_ms" field.
+func FirstByteMsEQ(v int) predicate.ChannelMonitorHistory {
+	return predicate.ChannelMonitorHistory(sql.FieldEQ(FieldFirstByteMs, v))
+}
+
+// FirstByteMsNEQ applies the NEQ predicate on the "first_byte_ms" field.
+func FirstByteMsNEQ(v int) predicate.ChannelMonitorHistory {
+	return predicate.ChannelMonitorHistory(sql.FieldNEQ(FieldFirstByteMs, v))
+}
+
+// FirstByteMsIn applies the In predicate on the "first_byte_ms" field.
+func FirstByteMsIn(vs ...int) predicate.ChannelMonitorHistory {
+	return predicate.ChannelMonitorHistory(sql.FieldIn(FieldFirstByteMs, vs...))
+}
+
+// FirstByteMsNotIn applies the NotIn predicate on the "first_byte_ms" field.
+func FirstByteMsNotIn(vs ...int) predicate.ChannelMonitorHistory {
+	return predicate.ChannelMonitorHistory(sql.FieldNotIn(FieldFirstByteMs, vs...))
+}
+
+// FirstByteMsGT applies the GT predicate on the "first_byte_ms" field.
+func FirstByteMsGT(v int) predicate.ChannelMonitorHistory {
+	return predicate.ChannelMonitorHistory(sql.FieldGT(FieldFirstByteMs, v))
+}
+
+// FirstByteMsGTE applies the GTE predicate on the "first_byte_ms" field.
+func FirstByteMsGTE(v int) predicate.ChannelMonitorHistory {
+	return predicate.ChannelMonitorHistory(sql.FieldGTE(FieldFirstByteMs, v))
+}
+
+// FirstByteMsLT applies the LT predicate on the "first_byte_ms" field.
+func FirstByteMsLT(v int) predicate.ChannelMonitorHistory {
+	return predicate.ChannelMonitorHistory(sql.FieldLT(FieldFirstByteMs, v))
+}
+
+// FirstByteMsLTE applies the LTE predicate on the "first_byte_ms" field.
+func FirstByteMsLTE(v int) predicate.ChannelMonitorHistory {
+	return predicate.ChannelMonitorHistory(sql.FieldLTE(FieldFirstByteMs, v))
+}
+
+// FirstByteMsIsNil applies the IsNil predicate on the "first_byte_ms" field.
+func FirstByteMsIsNil() predicate.ChannelMonitorHistory {
+	return predicate.ChannelMonitorHistory(sql.FieldIsNull(FieldFirstByteMs))
+}
+
+// FirstByteMsNotNil applies the NotNil predicate on the "first_byte_ms" field.
+func FirstByteMsNotNil() predicate.ChannelMonitorHistory {
+	return predicate.ChannelMonitorHistory(sql.FieldNotNull(FieldFirstByteMs))
 }
 
 // LatencyMsEQ applies the EQ predicate on the "latency_ms" field.

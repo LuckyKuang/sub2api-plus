@@ -75,12 +75,14 @@ func (s *UsageLogRepoSuite) TestStrictTimingRoundTrip() {
 	for _, version := range []int{0, 1} {
 		log := &service.UsageLog{UserID: user.ID, APIKeyID: key.ID, AccountID: account.ID,
 			RequestID: uuid.NewString(), Model: "timing-test", TimingVersion: version,
-			FirstTokenMs: &first, LastTokenMs: &last, FirstOutputKind: &textKind}
+			FirstByteMs: &first, FirstTokenMs: &first, LastTokenMs: &last, FirstOutputKind: &textKind}
 		_, err := s.repo.Create(s.ctx, log)
 		s.Require().NoError(err)
 		stored, err := s.repo.GetByID(s.ctx, log.ID)
 		s.Require().NoError(err)
 		s.Equal(version, stored.TimingVersion)
+		s.Require().NotNil(stored.FirstByteMs)
+		s.Equal(first, *stored.FirstByteMs)
 		s.Equal(first, *stored.FirstTokenMs)
 		s.Equal(last, *stored.LastTokenMs)
 	}
@@ -92,6 +94,7 @@ func (s *UsageLogRepoSuite) TestStrictTimingRoundTrip() {
 	s.Require().NoError(err)
 	s.Require().NotNil(stored.FirstOutputKind)
 	s.Equal("compaction", *stored.FirstOutputKind)
+	s.Nil(stored.FirstByteMs)
 	s.Nil(stored.FirstTokenMs)
 	s.Nil(stored.LastTokenMs)
 }

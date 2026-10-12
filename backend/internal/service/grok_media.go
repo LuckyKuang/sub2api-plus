@@ -655,6 +655,12 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 	ctx = WithAccountOutboundIdentity(ctx, account)
 	defer func() { finalizeClientDisconnectForwardResult(ctx, c, result, err) }()
 	startTime := time.Now()
+	ctx, byteTiming := beginFirstByteTiming(ctx, startTime)
+	defer func() {
+		if result != nil && result.FirstByteMs == nil {
+			result.FirstByteMs = byteTiming.Milliseconds()
+		}
+	}()
 	if account == nil {
 		return nil, fmt.Errorf("grok account is required")
 	}

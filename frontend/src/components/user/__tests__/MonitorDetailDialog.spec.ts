@@ -7,7 +7,7 @@ enableAutoUnmount(afterEach)
 const { status } = vi.hoisted(() => ({ status: vi.fn() }))
 vi.mock('@/api/channelMonitor', () => ({ status }))
 vi.mock('@/stores/app', () => ({ useAppStore: () => ({ showError: vi.fn() }) }))
-vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
+vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string, params?: { n: number }) => params ? `${key}:${params.n}` : key }) }))
 
 describe('channel model detail table', () => {
   let removeStyles: () => void
@@ -19,7 +19,8 @@ describe('channel model detail table', () => {
     status.mockResolvedValue({ models: [{
       model: 'model-long-name', latest_status: 'up', latest_latency_ms: 123,
       availability_7d: 0.99, availability_15d: 0.95, availability_30d: 0.9,
-      avg_latency_7d_ms: 150,
+      avg_latency_7d_ms: 150, latest_first_byte_ms: 17,
+      avg_first_byte_7d_ms: 40, first_byte_samples_7d: 3,
     }] })
     const wrapper = mount(MonitorDetailDialog, {
       props: { show: true, monitorId: 7, title: 'Channel details' },
@@ -30,9 +31,17 @@ describe('channel model detail table', () => {
     expect(status).toHaveBeenCalledWith(7)
     const headers = wrapper.findAll('thead th')
     const cells = wrapper.findAll('tbody tr td')
-    expect(headers).toHaveLength(7)
-    expect(cells).toHaveLength(7)
+    // The timing contract exposes independent first-body-byte and total duration columns.
+    expect(headers).toHaveLength(9)
+    expect(cells).toHaveLength(9)
     expect(cells[0].text()).toBe('model-long-name')
+    expect(headers[2].text()).toBe('usage.latestFirstByte')
+    expect(headers[3].text()).toBe('usage.latestTotalDuration')
+    expect(cells[2].text()).toBe('17')
+    expect(cells[3].text()).toBe('123')
+    expect(cells[7].text()).toContain('40')
+    expect(cells[7].text()).toContain('usage.firstByteSamples:3')
+    expect(cells[8].text()).toBe('150')
     cells.forEach((cell, index) => {
       const valueStyle = getComputedStyle(cell.element)
       const headerStyle = getComputedStyle(headers[index].element)

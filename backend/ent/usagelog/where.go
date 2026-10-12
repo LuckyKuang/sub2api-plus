@@ -235,6 +235,11 @@ func TimingVersion(v int) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldTimingVersion, v))
 }
 
+// FirstByteMs applies equality check predicate on the "first_byte_ms" field. It's identical to FirstByteMsEQ.
+func FirstByteMs(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldFirstByteMs, v))
+}
+
 // FirstTokenMs applies equality check predicate on the "first_token_ms" field. It's identical to FirstTokenMsEQ.
 func FirstTokenMs(v int) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldFirstTokenMs, v))
@@ -1908,6 +1913,56 @@ func TimingVersionLT(v int) predicate.UsageLog {
 // TimingVersionLTE applies the LTE predicate on the "timing_version" field.
 func TimingVersionLTE(v int) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldLTE(FieldTimingVersion, v))
+}
+
+// FirstByteMsEQ applies the EQ predicate on the "first_byte_ms" field.
+func FirstByteMsEQ(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldFirstByteMs, v))
+}
+
+// FirstByteMsNEQ applies the NEQ predicate on the "first_byte_ms" field.
+func FirstByteMsNEQ(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNEQ(FieldFirstByteMs, v))
+}
+
+// FirstByteMsIn applies the In predicate on the "first_byte_ms" field.
+func FirstByteMsIn(vs ...int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIn(FieldFirstByteMs, vs...))
+}
+
+// FirstByteMsNotIn applies the NotIn predicate on the "first_byte_ms" field.
+func FirstByteMsNotIn(vs ...int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotIn(FieldFirstByteMs, vs...))
+}
+
+// FirstByteMsGT applies the GT predicate on the "first_byte_ms" field.
+func FirstByteMsGT(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGT(FieldFirstByteMs, v))
+}
+
+// FirstByteMsGTE applies the GTE predicate on the "first_byte_ms" field.
+func FirstByteMsGTE(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGTE(FieldFirstByteMs, v))
+}
+
+// FirstByteMsLT applies the LT predicate on the "first_byte_ms" field.
+func FirstByteMsLT(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLT(FieldFirstByteMs, v))
+}
+
+// FirstByteMsLTE applies the LTE predicate on the "first_byte_ms" field.
+func FirstByteMsLTE(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLTE(FieldFirstByteMs, v))
+}
+
+// FirstByteMsIsNil applies the IsNil predicate on the "first_byte_ms" field.
+func FirstByteMsIsNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIsNull(FieldFirstByteMs))
+}
+
+// FirstByteMsNotNil applies the NotNil predicate on the "first_byte_ms" field.
+func FirstByteMsNotNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotNull(FieldFirstByteMs))
 }
 
 // FirstTokenMsEQ applies the EQ predicate on the "first_token_ms" field.
