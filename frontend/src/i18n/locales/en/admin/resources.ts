@@ -573,6 +573,13 @@ export default {
 
     // Usage Records
     usage: {
+      serviceTier: 'Service tier',
+      serviceTierRequest: 'Request',
+      serviceTierResponse: 'Response',
+      serviceTierUnrecorded: 'Not recorded',
+      serviceTierUnspecified: 'Unspecified',
+      serviceTierNotReturned: 'Not returned',
+
       title: 'Usage Records',
       description: 'View and manage all user usage records',
       userFilter: 'User',

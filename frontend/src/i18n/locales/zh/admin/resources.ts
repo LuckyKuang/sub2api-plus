@@ -570,6 +570,13 @@ export default {
 
     // Usage Records
     usage: {
+      serviceTier: '服务档位',
+      serviceTierRequest: '请求',
+      serviceTierResponse: '响应',
+      serviceTierUnrecorded: '未记录',
+      serviceTierUnspecified: '未指定',
+      serviceTierNotReturned: '未返回',
+
       title: '使用记录',
       description: '查看和管理所有用户的使用记录',
       userFilter: '用户',

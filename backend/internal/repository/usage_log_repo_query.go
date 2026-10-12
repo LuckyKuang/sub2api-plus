@@ -19,7 +19,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/service"
 )
 
-const usageLogSelectColumns = "id, user_id, api_key_id, account_id, request_id, model, requested_model, upstream_model, upstream_response_model, upstream_model_mismatch, group_id, subscription_id, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, cache_creation_5m_tokens, cache_creation_1h_tokens, image_output_tokens, audio_output_tokens, image_output_cost, image_input_tokens, image_input_cost, input_cost, output_cost, cache_creation_cost, cache_read_cost, total_cost, actual_cost, rate_multiplier, account_rate_multiplier, billing_type, request_type, stream, openai_ws_mode, duration_ms, first_token_ms, last_token_ms, first_output_ms, first_output_kind, is_complete, user_agent, ip_address, image_count, image_size, image_input_size, image_output_size, image_size_source, image_size_breakdown, video_count, video_resolution, video_duration_seconds, service_tier, reasoning_effort, requested_reasoning_effort, inbound_endpoint, upstream_endpoint, cache_ttl_overridden, long_context_billing_applied, channel_id, model_mapping_chain, billing_tier, billing_mode, account_stats_cost, upstream_request_id, session_id, completion_status, usage_source, native_compaction_v2, timing_version, created_at, codex_rollout_budget_units"
+const usageLogSelectColumns = "id, user_id, api_key_id, account_id, request_id, model, requested_model, upstream_model, upstream_response_model, upstream_model_mismatch, group_id, subscription_id, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, cache_creation_5m_tokens, cache_creation_1h_tokens, image_output_tokens, audio_output_tokens, image_output_cost, image_input_tokens, image_input_cost, input_cost, output_cost, cache_creation_cost, cache_read_cost, total_cost, actual_cost, rate_multiplier, account_rate_multiplier, billing_type, request_type, stream, openai_ws_mode, duration_ms, first_token_ms, last_token_ms, first_output_ms, first_output_kind, is_complete, user_agent, ip_address, image_count, image_size, image_input_size, image_output_size, image_size_source, image_size_breakdown, video_count, video_resolution, video_duration_seconds, service_tier, reasoning_effort, requested_reasoning_effort, inbound_endpoint, upstream_endpoint, cache_ttl_overridden, long_context_billing_applied, channel_id, model_mapping_chain, billing_tier, billing_mode, account_stats_cost, upstream_request_id, session_id, completion_status, usage_source, native_compaction_v2, timing_version, created_at, codex_rollout_budget_units, requested_service_tier, response_service_tier"
 
 func (r *usageLogRepository) GetByID(ctx context.Context, id int64) (log *service.UsageLog, err error) {
 	query := "SELECT " + usageLogSelectColumns + " FROM usage_logs WHERE id = $1"
@@ -501,6 +501,8 @@ func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, e
 		videoResolution           sql.NullString
 		videoDurationSeconds      sql.NullInt64
 		serviceTier               sql.NullString
+		requestedServiceTier      sql.NullString
+		responseServiceTier       sql.NullString
 		reasoningEffort           sql.NullString
 		requestedReasoningEffort  sql.NullString
 		inboundEndpoint           sql.NullString
@@ -595,6 +597,8 @@ func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, e
 		&timingVersion,
 		&createdAt,
 		&codexRolloutBudgetUnits,
+		&requestedServiceTier,
+		&responseServiceTier,
 	); err != nil {
 		return nil, err
 	}
@@ -702,6 +706,12 @@ func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, e
 	if videoDurationSeconds.Valid {
 		value := int(videoDurationSeconds.Int64)
 		log.VideoDurationSeconds = &value
+	}
+	if requestedServiceTier.Valid {
+		log.RequestedServiceTier = &requestedServiceTier.String
+	}
+	if responseServiceTier.Valid {
+		log.ResponseServiceTier = &responseServiceTier.String
 	}
 	if serviceTier.Valid {
 		log.ServiceTier = &serviceTier.String

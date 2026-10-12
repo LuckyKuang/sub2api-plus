@@ -694,3 +694,29 @@ The recovered rejection is recorded as a `retry` upstream attempt with reason
 lineage. Only the final response contributes the final usage result; no extra
 terminal event or duplicate final billing occurs. A repeated rejection is
 returned normally. See [error diagnostics](../ERROR_REQUEST_DIAGNOSTICS.md).
+
+## Administrator usage service-tier diagnostics
+
+The administrator usage table has a default-visible **Service tier** column,
+which can be hidden through column settings. It shows two lines, for example
+`Request Fast` and `Response default`, for both OAuth and API-key accounts.
+`requested_service_tier` records the final outbound tier after pass/filter/force
+policy, before billing resolution; `priority` and `fast` display as `Fast`.
+`response_service_tier` independently records the upstream declaration, preserving
+`default`, `priority`, `fast` and unknown provider values (trimmed, at most 64
+characters). HTTP bodies, SSE terminal events and individual WebSocket turns use
+these diagnostics. Responses creation/in-progress echoes are ignored; terminal
+declarations take precedence. Conflicting nonterminal Chat Completions chunks
+without a terminal declaration do not establish a response tier.
+
+Migration 284 adds nullable snapshots without backfilling: historical NULL values
+mean **Not recorded**, a newly captured empty request means **Unspecified**, and
+an empty response means **Not returned** (no unambiguous declaration). The
+existing billable `service_tier` and cost calculations remain unchanged and are
+not used to infer either diagnostic value. A `default` response alone does not
+prove that Fast was disabled, especially through Codex OAuth or compatible
+providers with their own reporting behavior.
+
+Usage tier fields are administrator-only API data. User usage responses omit
+`service_tier`, `requested_service_tier` and `response_service_tier`; user usage
+tables, column settings, cost tooltips and exports do not show service tiers.

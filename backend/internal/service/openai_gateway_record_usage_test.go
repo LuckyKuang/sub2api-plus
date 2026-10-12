@@ -4168,3 +4168,43 @@ func TestOpenAIGatewayServiceRecordUsage_ProtectedMismatchMissingFallbackRecords
 	require.Zero(t, usageRepo.lastLog.TotalCost)
 	require.Equal(t, 0, userRepo.deductCalls)
 }
+
+// Both credential types must preserve final request / raw response snapshots;
+// the pre-existing billing difference must not change either diagnostic field.
+func TestOpenAIGatewayServiceRecordUsage_ServiceTierDiagnostics(t *testing.T) {
+	for _, accountType := range []string{AccountTypeOAuth, AccountTypeAPIKey} {
+		for _, tc := range []struct{ name, requested, response, observed, billed string }{
+			{"priority/default", "priority", "default", "default", "default"},
+			{"captured absence", "", "", "", ""},
+			{"provider declaration", "priority", "Provider-Tier", "", "priority"},
+		} {
+			t.Run(accountType+"/"+tc.name, func(t *testing.T) {
+				repo := &openAIRecordUsageLogRepoStub{inserted: true}
+				svc := newOpenAIRecordUsageServiceForTest(repo, &openAIRecordUsageUserRepoStub{}, &openAIRecordUsageSubRepoStub{}, nil)
+				var requested *string
+				if tc.requested != "" {
+					value := tc.requested
+					requested = &value
+				}
+				err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
+					Result: &OpenAIForwardResult{RequestID: "diagnostic-tier", Model: "gpt-5.5", ServiceTier: requested,
+						ResponseServiceTier: tc.response, UpstreamResponseServiceTier: tc.observed,
+						Usage: OpenAIUsage{InputTokens: 10, OutputTokens: 5}, Duration: time.Second},
+					APIKey: &APIKey{ID: 101}, User: &User{ID: 201},
+					Account: &Account{ID: 301, Platform: PlatformOpenAI, Type: accountType},
+				})
+				require.NoError(t, err)
+				require.NotNil(t, repo.lastLog)
+				require.NotNil(t, repo.lastLog.RequestedServiceTier)
+				require.NotNil(t, repo.lastLog.ResponseServiceTier)
+				require.Equal(t, tc.requested, *repo.lastLog.RequestedServiceTier)
+				require.Equal(t, tc.response, *repo.lastLog.ResponseServiceTier)
+				billed := tc.billed
+				if accountType == AccountTypeOAuth {
+					billed = tc.requested
+				}
+				require.Equal(t, billed, optionalStringValue(repo.lastLog.ServiceTier))
+			})
+		}
+	}
+}
