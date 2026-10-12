@@ -4,7 +4,8 @@ package dto
 // 同时被 admin handler（List 响应）与 user handler（List 响应）复用，
 // 字段必须保持一致以保证前端拿到统一结构。
 type ChannelMonitorExtraModelStatus struct {
-	Model     string `json:"model"`
-	Status    string `json:"status"`
-	LatencyMs *int   `json:"latency_ms"`
+	Model       string `json:"model"`
+	Status      string `json:"status"`
+	FirstByteMs *int   `json:"first_byte_ms"`
+	LatencyMs   *int   `json:"latency_ms"`
 }

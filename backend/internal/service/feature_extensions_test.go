@@ -186,7 +186,7 @@ func TestPaymentRedeemPurchaseDefaultsAndExactFrameOrigin(t *testing.T) {
 func TestChannelMonitorV3SnapshotCannotHideProbeFailureWithTraffic(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Minute)
 	cfg := DefaultChannelMonitorV3Config()
-	data := &ChannelMonitorV3Data{DataThrough: &now, States: map[string]ChannelMonitorV3State{},
+	data := &ChannelMonitorV3Data{DataThrough: &now, CurrentThrough: &now, States: map[string]ChannelMonitorV3State{},
 		Catalog: []ChannelMonitorV3Catalog{{Platform: "openai", GroupID: 1}, {Platform: "openai", SourceKind: "probe", MonitorID: 1}},
 		Current: []ChannelMonitorV3Fact{
 			{Platform: "openai", GroupID: 1, Model: "model", Success: 10000, LastRequest: now.Add(-time.Second)},

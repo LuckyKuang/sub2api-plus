@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"sort"
 	"sync"
@@ -19,6 +20,13 @@ type ChannelMonitorV3Service struct {
 	mu          sync.Mutex
 	unsubscribe func()
 	kick        chan struct{}
+	cacheMu     sync.Mutex
+	cache       map[string]channelMonitorV3CacheEntry
+}
+
+type channelMonitorV3CacheEntry struct {
+	at       time.Time
+	snapshot *ChannelMonitorV3Snapshot
 }
 
 func NewChannelMonitorV3Service(repo ChannelMonitorV3Repository, settings channelMonitorRuntimeReader) *ChannelMonitorV3Service {
@@ -89,6 +97,9 @@ func (s *ChannelMonitorV3Service) UpdateConfig(ctx context.Context, cfg ChannelM
 	}
 	updated, err := s.repo.UpdateConfig(ctx, cfg)
 	if err == nil {
+		s.cacheMu.Lock()
+		s.cache = nil
+		s.cacheMu.Unlock()
 		select {
 		case s.kick <- struct{}{}:
 		default:
@@ -112,30 +123,49 @@ func ChannelMonitorV3Window(value string) (time.Duration, bool) {
 
 func (s *ChannelMonitorV3Service) Snapshot(ctx context.Context, window time.Duration, platform string) (*ChannelMonitorV3Snapshot, error) {
 	now := s.now().UTC()
+	// A short shared snapshot avoids scanning terminal rows once per viewer.
+	// Include the runtime gate in the key so switching extra probes is immediate.
+	runtime := ChannelMonitorRuntime{}
+	if s.settings != nil {
+		runtime = s.settings.GetChannelMonitorRuntime(ctx)
+	}
+	key := fmt.Sprintf("%d:%s:%v", window, platform, runtime)
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	if cached, ok := s.cache[key]; ok && now.Before(cached.at.Add(10*time.Second)) {
+		return cached.snapshot, nil
+	}
 	data, err := s.repo.Read(ctx, now, window, platform)
 	if err != nil {
 		return nil, err
 	}
-	return BuildChannelMonitorV3Snapshot(data, data.Config, now, window, platform), nil
+	snapshot := BuildChannelMonitorV3Snapshot(data, data.Config, now, window, platform)
+	if s.cache == nil || len(s.cache) >= 64 {
+		s.cache = map[string]channelMonitorV3CacheEntry{}
+	}
+	for key, cached := range s.cache {
+		if !now.Before(cached.at.Add(10 * time.Second)) {
+			delete(s.cache, key)
+		}
+	}
+	s.cache[key] = channelMonitorV3CacheEntry{at: now, snapshot: snapshot}
+	return snapshot, nil
 }
 
 func BuildChannelMonitorV3Snapshot(data *ChannelMonitorV3Data, cfg ChannelMonitorV3Config, now time.Time, window time.Duration, filter string) *ChannelMonitorV3Snapshot {
 	result := &ChannelMonitorV3Snapshot{ComputedAt: now, DataThrough: data.DataThrough, Platforms: []ChannelMonitorV3Platform{}, Incidents: []ChannelMonitorV3Incident{}, Summary: ChannelMonitorV3Summary{Status: "unknown"}}
+	result.CurrentWindowStart, result.CurrentWindowEnd, result.CurrentThrough = now.Add(-5*time.Minute), now, data.CurrentThrough
 	result.MonitoringEnabled = len(cfg.EnabledPlatforms()) > 0
 	current, totals := map[string]ChannelMonitorV3Fact{}, map[string]ChannelMonitorV3Fact{}
 	probeEvidence := map[string]bool{}
 	models := map[string]ChannelMonitorV3Fact{}
+	observedModels := map[string]bool{}
 	catalog := map[string]bool{}
 	scopes := map[string]bool{}
 	for _, item := range data.Catalog {
 		if cfg.PlatformEnabled(item.Platform) && (filter == "" || item.Platform == filter) {
 			catalog[item.Platform] = true
 			scopes[item.Scope()] = true
-		}
-	}
-	for _, fact := range data.KnownModels {
-		if scopes[fact.Scope("")] {
-			models[fact.Scope(fact.Model)] = fact
 		}
 	}
 	for _, fact := range data.Current {
@@ -146,11 +176,27 @@ func BuildChannelMonitorV3Snapshot(data *ChannelMonitorV3Data, cfg ChannelMonito
 		value.Merge(fact)
 		current[fact.Platform] = value
 		key := fact.Scope(fact.Model)
+		observedModels[key] = true
 		value = models[key]
 		value.Platform, value.GroupID, value.GroupName, value.Model = fact.Platform, fact.GroupID, fact.GroupName, fact.Model
 		value.SourceKind, value.MonitorID = fact.SourceKind, fact.MonitorID
 		value.Merge(fact)
 		models[key] = value
+	}
+	for _, fact := range data.KnownModels {
+		key := fact.Scope(fact.Model)
+		if scopes[fact.Scope("")] && !observedModels[key] {
+			// Historical identity and time are useful only when the current window
+			// has no observations. Never merge old counters or status into it.
+			identity := ChannelMonitorV3Fact{
+				Platform: fact.Platform, SourceKind: fact.SourceKind, GroupID: fact.GroupID,
+				GroupName: fact.GroupName, MonitorID: fact.MonitorID, Model: fact.Model,
+				LastRequest: fact.LastRequest,
+			}
+			if previous, exists := models[key]; !exists || identity.LastRequest.After(previous.LastRequest) {
+				models[key] = identity
+			}
+		}
 	}
 	for _, fact := range data.Totals {
 		value := totals[fact.Platform]
@@ -160,7 +206,8 @@ func BuildChannelMonitorV3Snapshot(data *ChannelMonitorV3Data, cfg ChannelMonito
 			probeEvidence[fact.Platform] = true
 		}
 	}
-	stale := data.DataThrough == nil || data.DataThrough.Before(now.Add(-3*time.Minute))
+	through := data.CurrentThrough
+	stale := through == nil || through.Before(now.Add(-30*time.Second))
 	for name := range catalog {
 		fact := current[name]
 		status := ChannelMonitorV3Health(fact, cfg)
@@ -184,7 +231,6 @@ func BuildChannelMonitorV3Snapshot(data *ChannelMonitorV3Data, cfg ChannelMonito
 		if !last.IsZero() {
 			item.LastRequest = &last
 		}
-		uncertainActive := false
 		for key, model := range models {
 			if model.Platform != name {
 				continue
@@ -193,19 +239,24 @@ func BuildChannelMonitorV3Snapshot(data *ChannelMonitorV3Data, cfg ChannelMonito
 			if stale || model.LastRequest.Before(now.Add(-5*time.Minute)) {
 				health = "unknown"
 			}
-			if state := data.States[key]; health == "normal" && state.Incident != nil {
-				// Old failures aging out of the rolling window (or changed
-				// thresholds) are not fresh evidence of recovery.
-				if state.Incident.Phase == "recovering" {
-					health = "recovering"
-				} else {
-					health = "unknown"
-				}
+			reason := "observed"
+			if stale {
+				reason = "stale"
+			} else if health == "insufficient" {
+				reason = "insufficient"
+			} else if model.Success+model.Failures == 0 || model.LastRequest.Before(now.Add(-5*time.Minute)) {
+				reason = "no_observations"
 			}
-			if state := data.States[key]; state.Incident != nil && (health == "unknown" || health == "insufficient") {
-				uncertainActive = true
+			var last *time.Time
+			if !model.LastRequest.IsZero() {
+				value := model.LastRequest
+				last = &value
 			}
-			item.Models = append(item.Models, ChannelMonitorV3Model{SourceKind: model.Source(), MonitorID: model.Monitor(), GroupID: model.GroupID, GroupName: model.GroupName, Model: model.Model, Status: health})
+			phase := ""
+			if state := data.States[key]; state.Incident != nil {
+				phase = state.Incident.Phase
+			}
+			item.Models = append(item.Models, ChannelMonitorV3Model{SourceKind: model.Source(), MonitorID: model.Monitor(), GroupID: model.GroupID, GroupName: model.GroupName, Model: model.Model, Status: health, LastObserved: last, ObservationReason: reason, IncidentPhase: phase})
 			if (item.Status == "normal" || item.Status == "degraded" || item.Status == "recovering") && (health == "outage" || health == "partial") {
 				item.Status = "partial"
 			}
@@ -217,19 +268,6 @@ func BuildChannelMonitorV3Snapshot(data *ChannelMonitorV3Data, cfg ChannelMonito
 			}
 		}
 		item.Status = CombineChannelMonitorV3Scopes(item.Models, item.Status)
-		if uncertainActive && (item.Status == "normal" || item.Status == "recovering") {
-			item.Status = "unknown"
-		}
-		// Some scopes can be healthy while the pooled rate is high. A platform
-		// outage requires every observed eligible scope to be in outage.
-		if item.Status == "outage" {
-			for _, model := range item.Models {
-				if model.Status != "outage" {
-					item.Status = "partial"
-					break
-				}
-			}
-		}
 		sort.Slice(item.Models, func(i, j int) bool {
 			if item.Models[i].SourceKind != item.Models[j].SourceKind {
 				return item.Models[i].SourceKind < item.Models[j].SourceKind

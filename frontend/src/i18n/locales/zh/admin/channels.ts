@@ -637,6 +637,8 @@ export default {
       createTitle: '新增渠道监控',
       editTitle: '编辑渠道监控',
       runNow: '立即检测',
+      running: '检测中',
+      probesDisabledHint: '当前模式未开启主动探测。请在「系统设置 → 功能开关 → 渠道监控」中开启渠道监控，并选择 V1 或在 V3 下开启额外 V1 主动探测。',
       runSuccess: '检测完成',
       runFailed: '检测失败',
       duplicate: '复制',

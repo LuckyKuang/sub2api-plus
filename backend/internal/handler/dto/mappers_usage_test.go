@@ -10,6 +10,29 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// docs/USAGE_TIMING.md: both reader APIs expose independent nullable bytes;
+// zero is observed and strict token time must never fill historical gaps.
+func TestUsageLogFromService_FirstByteIndependentForUserAndAdmin(t *testing.T) {
+	zero, observed, token := 0, 125, 2500
+	for _, firstByte := range []*int{nil, &zero, &observed} {
+		log := &service.UsageLog{FirstByteMs: firstByte, FirstTokenMs: &token, TimingVersion: 1}
+		for _, result := range []any{UsageLogFromService(log), UsageLogFromServiceAdmin(log)} {
+			raw, err := json.Marshal(result)
+			require.NoError(t, err)
+			var body map[string]any
+			require.NoError(t, json.Unmarshal(raw, &body))
+			value, present := body["first_byte_ms"]
+			require.True(t, present)
+			if firstByte == nil {
+				require.Nil(t, value)
+			} else {
+				require.Equal(t, float64(*firstByte), value)
+			}
+			require.Equal(t, float64(2500), body["first_token_ms"])
+		}
+	}
+}
+
 func TestUsageLogFromService_IncludesOpenAIWSMode(t *testing.T) {
 	t.Parallel()
 

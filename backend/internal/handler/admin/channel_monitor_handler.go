@@ -104,6 +104,7 @@ type channelMonitorResponse struct {
 	CreatedAt           string                               `json:"created_at"`
 	UpdatedAt           string                               `json:"updated_at"`
 	PrimaryStatus       string                               `json:"primary_status"`
+	PrimaryFirstByteMs  *int                                 `json:"primary_first_byte_ms"`
 	PrimaryLatencyMs    *int                                 `json:"primary_latency_ms"`
 	Availability7d      float64                              `json:"availability_7d"`
 	ExtraModelsStatus   []dto.ChannelMonitorExtraModelStatus `json:"extra_models_status"`
@@ -123,6 +124,7 @@ type channelMonitorResponse struct {
 type channelMonitorCheckResultResponse struct {
 	Model         string                       `json:"model"`
 	Status        string                       `json:"status"`
+	FirstByteMs   *int                         `json:"first_byte_ms"`
 	LatencyMs     *int                         `json:"latency_ms"`
 	PingLatencyMs *int                         `json:"ping_latency_ms"`
 	Message       string                       `json:"message"`
@@ -134,6 +136,7 @@ type channelMonitorHistoryItemResponse struct {
 	ID            int64                        `json:"id"`
 	Model         string                       `json:"model"`
 	Status        string                       `json:"status"`
+	FirstByteMs   *int                         `json:"first_byte_ms"`
 	LatencyMs     *int                         `json:"latency_ms"`
 	PingLatencyMs *int                         `json:"ping_latency_ms"`
 	Message       string                       `json:"message"`
@@ -198,6 +201,7 @@ func checkResultToResponse(r *service.CheckResult) channelMonitorCheckResultResp
 	return channelMonitorCheckResultResponse{
 		Model:         r.Model,
 		Status:        r.Status,
+		FirstByteMs:   r.FirstByteMs,
 		LatencyMs:     r.LatencyMs,
 		PingLatencyMs: r.PingLatencyMs,
 		Message:       r.Message,
@@ -211,6 +215,7 @@ func historyEntryToResponse(e *service.ChannelMonitorHistoryEntry) channelMonito
 		ID:            e.ID,
 		Model:         e.Model,
 		Status:        e.Status,
+		FirstByteMs:   e.FirstByteMs,
 		LatencyMs:     e.LatencyMs,
 		PingLatencyMs: e.PingLatencyMs,
 		Message:       e.Message,
@@ -292,15 +297,17 @@ func (h *ChannelMonitorHandler) batchSummaryFor(c *gin.Context, items []*service
 func buildListItemResponse(m *service.ChannelMonitor, summary service.MonitorStatusSummary) *channelMonitorResponse {
 	resp := channelMonitorToResponse(m)
 	resp.PrimaryStatus = summary.PrimaryStatus
+	resp.PrimaryFirstByteMs = summary.PrimaryFirstByteMs
 	resp.PrimaryLatencyMs = summary.PrimaryLatencyMs
 	resp.Availability7d = summary.Availability7d
 	resp.LatestQuota = summary.LatestQuota
 	resp.ExtraModelsStatus = make([]dto.ChannelMonitorExtraModelStatus, 0, len(summary.ExtraModels))
 	for _, e := range summary.ExtraModels {
 		resp.ExtraModelsStatus = append(resp.ExtraModelsStatus, dto.ChannelMonitorExtraModelStatus{
-			Model:     e.Model,
-			Status:    e.Status,
-			LatencyMs: e.LatencyMs,
+			Model:       e.Model,
+			Status:      e.Status,
+			FirstByteMs: e.FirstByteMs,
+			LatencyMs:   e.LatencyMs,
 		})
 	}
 	return resp

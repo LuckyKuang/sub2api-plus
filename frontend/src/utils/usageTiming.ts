@@ -12,6 +12,11 @@ export const strictFirstTokenMs = (row: FirstTokenTimingRow): number | null =>
   resolveUsageRequestType(row) !== 'live' && row.timing_version === 1 && row.first_token_ms != null && Number.isFinite(row.first_token_ms) && row.first_token_ms >= 0
     ? row.first_token_ms : null
 
+// Independent gateway body/frame observation; historical and unavailable values
+// never borrow the token timestamp. Zero is a valid measured value.
+export const firstByteMs = (row: Pick<UsageLog, 'first_byte_ms'>): number | null =>
+  row.first_byte_ms != null && Number.isFinite(row.first_byte_ms) && row.first_byte_ms >= 0 ? row.first_byte_ms : null
+
 const nonMediaOutputTokens = (row: TpsTimingRow): number =>
   row.output_tokens - (row.image_output_tokens ?? 0) - (row.audio_output_tokens ?? 0)
 

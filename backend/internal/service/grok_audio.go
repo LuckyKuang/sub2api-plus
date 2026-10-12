@@ -95,6 +95,13 @@ func (s *OpenAIGatewayService) ForwardGrokVoice(ctx context.Context, c *gin.Cont
 		proxyURL = account.Proxy.URL()
 	}
 	started := time.Now()
+	byteCtx, byteTiming := beginFirstByteTiming(req.Context(), started)
+	req = req.WithContext(byteCtx)
+	defer func() {
+		if result != nil {
+			result.FirstByteMs = byteTiming.Milliseconds()
+		}
+	}()
 	resp, err := s.httpUpstream.Do(prepareAccountOutboundRequest(req, account), proxyURL, account.ID, account.Concurrency)
 	SetOpsLatencyMs(c, OpsUpstreamLatencyMsKey, time.Since(started).Milliseconds())
 	if err != nil {

@@ -70,7 +70,7 @@ func TestChannelMonitorV3DisabledPlatformExcludedEverywhere(t *testing.T) {
 	cfg := DefaultChannelMonitorV3Config()
 	cfg.DisabledPlatforms = []string{"openai"}
 	fact := ChannelMonitorV3Fact{Platform: "openai", GroupID: 1, Model: "hidden", Failures: 10, LastRequest: now}
-	data := &ChannelMonitorV3Data{DataThrough: &now, Catalog: []ChannelMonitorV3Catalog{{Platform: "openai", GroupID: 1}, {Platform: "kimi", GroupID: 2}}, Current: []ChannelMonitorV3Fact{fact}, KnownModels: []ChannelMonitorV3Fact{fact}, History: []ChannelMonitorV3Fact{fact}, Totals: []ChannelMonitorV3Fact{fact}, Incidents: []ChannelMonitorV3Incident{{Platform: "openai", GroupID: 1, Model: "hidden"}}}
+	data := &ChannelMonitorV3Data{CurrentThrough: &now, DataThrough: &now, Catalog: []ChannelMonitorV3Catalog{{Platform: "openai", GroupID: 1}, {Platform: "kimi", GroupID: 2}}, Current: []ChannelMonitorV3Fact{fact}, KnownModels: []ChannelMonitorV3Fact{fact}, History: []ChannelMonitorV3Fact{fact}, Totals: []ChannelMonitorV3Fact{fact}, Incidents: []ChannelMonitorV3Incident{{Platform: "openai", GroupID: 1, Model: "hidden"}}}
 	result := BuildChannelMonitorV3Snapshot(data, cfg, now, 24*time.Hour, "")
 	require.True(t, result.MonitoringEnabled)
 	require.Len(t, result.Platforms, 1)
@@ -198,7 +198,7 @@ func TestChannelMonitorV3RecoveryInterruptedAndIdempotent(t *testing.T) {
 func TestChannelMonitorV3SnapshotScopeStalenessAndSeverity(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Minute)
 	cfg := DefaultChannelMonitorV3Config()
-	data := &ChannelMonitorV3Data{DataThrough: &now, Catalog: []ChannelMonitorV3Catalog{{Platform: "openai", GroupID: 1, GroupName: "Visible"}}, States: map[string]ChannelMonitorV3State{}, Current: []ChannelMonitorV3Fact{
+	data := &ChannelMonitorV3Data{CurrentThrough: &now, DataThrough: &now, Catalog: []ChannelMonitorV3Catalog{{Platform: "openai", GroupID: 1, GroupName: "Visible"}}, States: map[string]ChannelMonitorV3State{}, Current: []ChannelMonitorV3Fact{
 		{Platform: "openai", GroupID: 1, GroupName: "Visible", Model: "healthy", Success: 1000, LastRequest: now.Add(-time.Second), Latency: [16]int64{8: 1000}},
 		{Platform: "openai", GroupID: 1, GroupName: "Visible", Model: "bad", Failures: 5, LastRequest: now.Add(-time.Second)},
 		{Platform: "openai", GroupID: 999, GroupName: "Hidden", Model: "secret", Failures: 10000, LastRequest: now},
@@ -216,13 +216,13 @@ func TestChannelMonitorV3SnapshotScopeStalenessAndSeverity(t *testing.T) {
 	}
 	require.Empty(t, BuildChannelMonitorV3Snapshot(data, cfg, now, 24*time.Hour, "gemini").Platforms)
 	through := now.Add(-4 * time.Minute)
-	data.DataThrough = &through
+	data.CurrentThrough = &through
 	result = BuildChannelMonitorV3Snapshot(data, cfg, now, 24*time.Hour, "")
 	require.Equal(t, "unknown", result.Platforms[0].Status)
 	for _, model := range result.Platforms[0].Models {
 		require.Equal(t, "unknown", model.Status)
 	}
-	data.DataThrough = &now
+	data.CurrentThrough = &now
 	data.Current = nil
 	result = BuildChannelMonitorV3Snapshot(data, cfg, now, 24*time.Hour, "")
 	require.Equal(t, "unknown", result.Summary.Status)
@@ -265,26 +265,35 @@ func TestChannelMonitorV3WorkerModesAndStop(t *testing.T) {
 	}
 }
 
-func TestChannelMonitorV3IdleIncidentCannotLookRecovered(t *testing.T) {
+func TestChannelMonitorV3IdleIncidentDoesNotHideRecentObservations(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Minute)
 	key := ChannelMonitorV3Scope("openai", 1, "idle")
 	data := &ChannelMonitorV3Data{
-		DataThrough: &now,
+		CurrentThrough: &now, DataThrough: &now,
 		Catalog:     []ChannelMonitorV3Catalog{{Platform: "openai", GroupID: 1}},
 		KnownModels: []ChannelMonitorV3Fact{{Platform: "openai", GroupID: 1, Model: "idle"}},
 		Current:     []ChannelMonitorV3Fact{{Platform: "openai", GroupID: 1, Model: "active", Success: 20, LastRequest: now.Add(-time.Second)}},
 		States:      map[string]ChannelMonitorV3State{key: {Incident: &ChannelMonitorV3Incident{Phase: "awaiting_data"}}},
 	}
 	result := BuildChannelMonitorV3Snapshot(data, DefaultChannelMonitorV3Config(), now, 24*time.Hour, "")
-	require.Equal(t, "unknown", result.Platforms[0].Status)
+	require.Equal(t, "normal", result.Platforms[0].Status)
+	for _, model := range result.Platforms[0].Models {
+		if model.Model == "idle" {
+			require.Equal(t, "unknown", model.Status)
+			require.Equal(t, "awaiting_data", model.IncidentPhase)
+			require.Equal(t, "no_observations", model.ObservationReason)
+		}
+	}
+	require.NotNil(t, data.States[key].Incident)
+	require.Nil(t, data.States[key].Incident.ResolvedAt)
 }
 
 func TestChannelMonitorV3DegradedModelOutranksAnotherModelRecovery(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Minute)
 	key := ChannelMonitorV3Scope("openai", 1, "healthy")
 	data := &ChannelMonitorV3Data{
-		DataThrough: &now,
-		Catalog:     []ChannelMonitorV3Catalog{{Platform: "openai", GroupID: 1}},
+		CurrentThrough: &now, DataThrough: &now,
+		Catalog: []ChannelMonitorV3Catalog{{Platform: "openai", GroupID: 1}},
 		Current: []ChannelMonitorV3Fact{
 			{Platform: "openai", GroupID: 1, Model: "slow", Success: 5, LastRequest: now.Add(-time.Second), Latency: [16]int64{8: 5}},
 			{Platform: "openai", GroupID: 1, Model: "healthy", Success: 100, LastRequest: now.Add(-time.Second), Latency: [16]int64{0: 100}},
@@ -299,19 +308,22 @@ func TestChannelMonitorV3DegradedModelOutranksAnotherModelRecovery(t *testing.T)
 	}
 }
 
-func TestChannelMonitorV3RollingWindowCannotManufactureRecovery(t *testing.T) {
+func TestChannelMonitorV3RecentNormalDoesNotResolveHistoricalIncident(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Minute)
 	last := now.Add(-time.Minute)
 	key := ChannelMonitorV3Scope("openai", 1, "gpt")
 	for _, phase := range []string{"detected", "ongoing", "awaiting_data"} {
 		data := &ChannelMonitorV3Data{
-			DataThrough: &now,
-			Catalog:     []ChannelMonitorV3Catalog{{Platform: "openai", GroupID: 1}},
-			Current:     []ChannelMonitorV3Fact{{Platform: "openai", GroupID: 1, Model: "gpt", Success: 5, LastRequest: last}},
-			States:      map[string]ChannelMonitorV3State{key: {LastRequest: last, Incident: &ChannelMonitorV3Incident{Phase: phase}}},
+			CurrentThrough: &now, DataThrough: &now,
+			Catalog: []ChannelMonitorV3Catalog{{Platform: "openai", GroupID: 1}},
+			Current: []ChannelMonitorV3Fact{{Platform: "openai", GroupID: 1, Model: "gpt", Success: 5, LastRequest: last}},
+			States:  map[string]ChannelMonitorV3State{key: {LastRequest: last, Incident: &ChannelMonitorV3Incident{Phase: phase}}},
 		}
 		result := BuildChannelMonitorV3Snapshot(data, DefaultChannelMonitorV3Config(), now, 24*time.Hour, "")
-		require.Equal(t, "unknown", result.Platforms[0].Status, phase)
-		require.Equal(t, "unknown", result.Platforms[0].Models[0].Status, phase)
+		require.Equal(t, "normal", result.Platforms[0].Status, phase)
+		require.Equal(t, "normal", result.Platforms[0].Models[0].Status, phase)
+		require.Equal(t, phase, result.Platforms[0].Models[0].IncidentPhase)
+		require.NotNil(t, data.States[key].Incident)
+		require.Nil(t, data.States[key].Incident.ResolvedAt)
 	}
 }

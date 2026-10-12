@@ -87,6 +87,7 @@ export interface ChannelMonitor {
   /** Latest status of the primary model (empty when no history yet) */
   primary_status: MonitorStatus | ''
   /** Latest latency of the primary model in ms (null when no history yet) */
+  primary_first_byte_ms?: number | null
   primary_latency_ms: number | null
   /** Primary model 7-day availability percentage (0-100) */
   availability_7d: number
@@ -108,6 +109,7 @@ export interface ChannelMonitor {
 export interface ExtraModelStatus {
   model: string
   status: MonitorStatus | ''
+  first_byte_ms?: number | null
   latency_ms: number | null
 }
 
@@ -162,6 +164,7 @@ export type UpdateParams = Partial<CreateParams> & {
 export interface CheckResult {
   model: string
   status: MonitorStatus
+  first_byte_ms?: number | null
   latency_ms: number | null
   ping_latency_ms: number | null
   message: string
@@ -178,6 +181,7 @@ export interface HistoryItem {
   id: number
   model: string
   status: MonitorStatus
+  first_byte_ms?: number | null
   latency_ms: number | null
   ping_latency_ms: number | null
   message: string

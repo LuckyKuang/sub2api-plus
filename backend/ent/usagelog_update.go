@@ -794,6 +794,33 @@ func (_u *UsageLogUpdate) AddTimingVersion(v int) *UsageLogUpdate {
 	return _u
 }
 
+// SetFirstByteMs sets the "first_byte_ms" field.
+func (_u *UsageLogUpdate) SetFirstByteMs(v int) *UsageLogUpdate {
+	_u.mutation.ResetFirstByteMs()
+	_u.mutation.SetFirstByteMs(v)
+	return _u
+}
+
+// SetNillableFirstByteMs sets the "first_byte_ms" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableFirstByteMs(v *int) *UsageLogUpdate {
+	if v != nil {
+		_u.SetFirstByteMs(*v)
+	}
+	return _u
+}
+
+// AddFirstByteMs adds value to the "first_byte_ms" field.
+func (_u *UsageLogUpdate) AddFirstByteMs(v int) *UsageLogUpdate {
+	_u.mutation.AddFirstByteMs(v)
+	return _u
+}
+
+// ClearFirstByteMs clears the value of the "first_byte_ms" field.
+func (_u *UsageLogUpdate) ClearFirstByteMs() *UsageLogUpdate {
+	_u.mutation.ClearFirstByteMs()
+	return _u
+}
+
 // SetFirstTokenMs sets the "first_token_ms" field.
 func (_u *UsageLogUpdate) SetFirstTokenMs(v int) *UsageLogUpdate {
 	_u.mutation.ResetFirstTokenMs()
@@ -1317,6 +1344,11 @@ func (_u *UsageLogUpdate) check() error {
 			return &ValidationError{Name: "response_service_tier", err: fmt.Errorf(`ent: validator failed for field "UsageLog.response_service_tier": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.FirstByteMs(); ok {
+		if err := usagelog.FirstByteMsValidator(v); err != nil {
+			return &ValidationError{Name: "first_byte_ms", err: fmt.Errorf(`ent: validator failed for field "UsageLog.first_byte_ms": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.FirstOutputKind(); ok {
 		if err := usagelog.FirstOutputKindValidator(v); err != nil {
 			return &ValidationError{Name: "first_output_kind", err: fmt.Errorf(`ent: validator failed for field "UsageLog.first_output_kind": %w`, err)}
@@ -1588,6 +1620,15 @@ func (_u *UsageLogUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.AddedTimingVersion(); ok {
 		_spec.AddField(usagelog.FieldTimingVersion, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.FirstByteMs(); ok {
+		_spec.SetField(usagelog.FieldFirstByteMs, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedFirstByteMs(); ok {
+		_spec.AddField(usagelog.FieldFirstByteMs, field.TypeInt, value)
+	}
+	if _u.mutation.FirstByteMsCleared() {
+		_spec.ClearField(usagelog.FieldFirstByteMs, field.TypeInt)
 	}
 	if value, ok := _u.mutation.FirstTokenMs(); ok {
 		_spec.SetField(usagelog.FieldFirstTokenMs, field.TypeInt, value)
@@ -2633,6 +2674,33 @@ func (_u *UsageLogUpdateOne) AddTimingVersion(v int) *UsageLogUpdateOne {
 	return _u
 }
 
+// SetFirstByteMs sets the "first_byte_ms" field.
+func (_u *UsageLogUpdateOne) SetFirstByteMs(v int) *UsageLogUpdateOne {
+	_u.mutation.ResetFirstByteMs()
+	_u.mutation.SetFirstByteMs(v)
+	return _u
+}
+
+// SetNillableFirstByteMs sets the "first_byte_ms" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableFirstByteMs(v *int) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetFirstByteMs(*v)
+	}
+	return _u
+}
+
+// AddFirstByteMs adds value to the "first_byte_ms" field.
+func (_u *UsageLogUpdateOne) AddFirstByteMs(v int) *UsageLogUpdateOne {
+	_u.mutation.AddFirstByteMs(v)
+	return _u
+}
+
+// ClearFirstByteMs clears the value of the "first_byte_ms" field.
+func (_u *UsageLogUpdateOne) ClearFirstByteMs() *UsageLogUpdateOne {
+	_u.mutation.ClearFirstByteMs()
+	return _u
+}
+
 // SetFirstTokenMs sets the "first_token_ms" field.
 func (_u *UsageLogUpdateOne) SetFirstTokenMs(v int) *UsageLogUpdateOne {
 	_u.mutation.ResetFirstTokenMs()
@@ -3169,6 +3237,11 @@ func (_u *UsageLogUpdateOne) check() error {
 			return &ValidationError{Name: "response_service_tier", err: fmt.Errorf(`ent: validator failed for field "UsageLog.response_service_tier": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.FirstByteMs(); ok {
+		if err := usagelog.FirstByteMsValidator(v); err != nil {
+			return &ValidationError{Name: "first_byte_ms", err: fmt.Errorf(`ent: validator failed for field "UsageLog.first_byte_ms": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.FirstOutputKind(); ok {
 		if err := usagelog.FirstOutputKindValidator(v); err != nil {
 			return &ValidationError{Name: "first_output_kind", err: fmt.Errorf(`ent: validator failed for field "UsageLog.first_output_kind": %w`, err)}
@@ -3457,6 +3530,15 @@ func (_u *UsageLogUpdateOne) sqlSave(ctx context.Context) (_node *UsageLog, err 
 	}
 	if value, ok := _u.mutation.AddedTimingVersion(); ok {
 		_spec.AddField(usagelog.FieldTimingVersion, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.FirstByteMs(); ok {
+		_spec.SetField(usagelog.FieldFirstByteMs, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedFirstByteMs(); ok {
+		_spec.AddField(usagelog.FieldFirstByteMs, field.TypeInt, value)
+	}
+	if _u.mutation.FirstByteMsCleared() {
+		_spec.ClearField(usagelog.FieldFirstByteMs, field.TypeInt)
 	}
 	if value, ok := _u.mutation.FirstTokenMs(); ok {
 		_spec.SetField(usagelog.FieldFirstTokenMs, field.TypeInt, value)

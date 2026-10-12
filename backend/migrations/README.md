@@ -40,6 +40,11 @@ outbound-request and upstream-response service-tier diagnostics. Historical
 rows stay unrecorded; billing tiers and prices are unchanged. These fields are
 administrator-only. See [Responses diagnostics](../../docs/protocols/OPENAI_RESPONSES.md#administrator-usage-service-tier-diagnostics).
 
+Migration `285_first_byte_timing.sql` adds independent nullable body-first-data
+timing to usage and V1 histories and independent successful-probe rollup sums
+and counts. Existing rows stay NULL/zero-sample; no token clock is backfilled.
+See [usage timing](../../docs/USAGE_TIMING.md).
+
 ## File Naming
 
 Regular migration:

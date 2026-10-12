@@ -526,6 +526,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 	// Keep per-read timeouts unchanged for connected clients. Once a client
 	// disconnects, use the same timeout as a bounded total drain budget.
 	var pendingJSONDocuments [][]byte
+	var frameReceivedAt time.Time
 
 readLoop:
 	for {
@@ -549,6 +550,7 @@ readLoop:
 				}
 			}
 			message, readErr = lease.ReadMessageWithContextTimeout(upstreamReadCtx, currentReadTimeout)
+			frameReceivedAt = time.Now()
 			if readErr == nil {
 				if documents, repaired := splitOpenAIConcatenatedJSONDocuments(message); repaired {
 					logOpenAIWSModeInfo(
@@ -636,11 +638,14 @@ readLoop:
 		}
 		lastEventType = eventType
 
-		if responseID == "" && eventResponseID != "" {
+		if responseID == "" && eventResponseID != "" && eventResponseID != previousResponseID {
 			responseID = eventResponseID
 		}
 
 		outputObservation := apicompat.ObserveResponsesOutput(message)
+		if eventResponseID != "" && eventResponseID == responseID && eventResponseID != previousResponseID {
+			timing.ObserveFrame(startTime, frameReceivedAt)
+		}
 		timing.Observe(startTime, outputObservation)
 		isTokenEvent := outputObservation.TokenLikeDelta
 		if isTokenEvent {

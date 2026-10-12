@@ -219,15 +219,16 @@ type ChannelMonitorV3Catalog struct {
 	GroupName  string
 }
 type ChannelMonitorV3Data struct {
-	Config      ChannelMonitorV3Config
-	Catalog     []ChannelMonitorV3Catalog
-	Current     []ChannelMonitorV3Fact
-	KnownModels []ChannelMonitorV3Fact
-	History     []ChannelMonitorV3Fact
-	Totals      []ChannelMonitorV3Fact
-	States      map[string]ChannelMonitorV3State
-	Incidents   []ChannelMonitorV3Incident
-	DataThrough *time.Time
+	Config         ChannelMonitorV3Config
+	Catalog        []ChannelMonitorV3Catalog
+	Current        []ChannelMonitorV3Fact
+	KnownModels    []ChannelMonitorV3Fact
+	History        []ChannelMonitorV3Fact
+	Totals         []ChannelMonitorV3Fact
+	States         map[string]ChannelMonitorV3State
+	Incidents      []ChannelMonitorV3Incident
+	CurrentThrough *time.Time
+	DataThrough    *time.Time
 }
 
 type ChannelMonitorV3Repository interface {
@@ -242,12 +243,15 @@ type ChannelMonitorV3Timeline struct {
 	Status string    `json:"status"`
 }
 type ChannelMonitorV3Model struct {
-	SourceKind string `json:"source_kind"`
-	MonitorID  *int64 `json:"monitor_id,omitempty"`
-	GroupID    int64  `json:"group_id"`
-	GroupName  string `json:"group_name"`
-	Model      string `json:"model"`
-	Status     string `json:"status"`
+	LastObserved      *time.Time `json:"last_observed_at"`
+	ObservationReason string     `json:"observation_reason"`
+	IncidentPhase     string     `json:"incident_phase,omitempty"`
+	SourceKind        string     `json:"source_kind"`
+	MonitorID         *int64     `json:"monitor_id,omitempty"`
+	GroupID           int64      `json:"group_id"`
+	GroupName         string     `json:"group_name"`
+	Model             string     `json:"model"`
+	Status            string     `json:"status"`
 }
 type ChannelMonitorV3Platform struct {
 	Platform    string                     `json:"platform"`
@@ -267,12 +271,15 @@ type ChannelMonitorV3Summary struct {
 	ActiveEvents int    `json:"active_events"`
 }
 type ChannelMonitorV3Snapshot struct {
-	MonitoringEnabled bool                       `json:"monitoring_enabled"`
-	ComputedAt        time.Time                  `json:"computed_at"`
-	DataThrough       *time.Time                 `json:"data_through"`
-	Platforms         []ChannelMonitorV3Platform `json:"platforms"`
-	Incidents         []ChannelMonitorV3Incident `json:"incidents"`
-	Summary           ChannelMonitorV3Summary    `json:"summary"`
+	CurrentWindowStart time.Time                  `json:"current_window_start"`
+	CurrentWindowEnd   time.Time                  `json:"current_window_end"`
+	CurrentThrough     *time.Time                 `json:"current_through"`
+	MonitoringEnabled  bool                       `json:"monitoring_enabled"`
+	ComputedAt         time.Time                  `json:"computed_at"`
+	DataThrough        *time.Time                 `json:"data_through"`
+	Platforms          []ChannelMonitorV3Platform `json:"platforms"`
+	Incidents          []ChannelMonitorV3Incident `json:"incidents"`
+	Summary            ChannelMonitorV3Summary    `json:"summary"`
 }
 
 // ChannelMonitorV3SourceScope distinguishes request groups from monitor IDs.

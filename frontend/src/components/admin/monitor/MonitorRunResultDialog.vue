@@ -23,7 +23,7 @@
           >
             {{ statusLabel(r.status) }}
           </span>
-          <span class="text-xs text-gray-500 dark:text-gray-400">{{ formatLatency(r.latency_ms) }} ms</span>
+          <span class="text-xs text-gray-500 dark:text-gray-400" :title="t('usage.probeTimingHint')">{{ t('usage.latencyFirstByte') }} {{ formatLatency(r.first_byte_ms) }} ms · {{ t('usage.latencyDuration') }} {{ formatLatency(r.latency_ms) }} ms</span>
         </div>
       </div>
     </div>

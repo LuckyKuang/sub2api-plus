@@ -637,6 +637,8 @@ export default {
       createTitle: 'Create Channel Monitor',
       editTitle: 'Edit Channel Monitor',
       runNow: 'Run Now',
+      running: 'Checking',
+      probesDisabledHint: 'Active probes are disabled in the current mode. In System Settings → Feature Toggles → Channel Monitor, enable channel monitoring and select V1 or enable additional V1 probes under V3.',
       runSuccess: 'Check completed',
       runFailed: 'Check failed',
       duplicate: 'Duplicate',

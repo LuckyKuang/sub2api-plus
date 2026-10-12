@@ -636,6 +636,7 @@ type ForwardResult struct {
 	ResponseServiceTier         string
 	Stream                      bool
 	Duration                    time.Duration
+	FirstByteMs                 *int
 	FirstTokenMs                *int // 首个文本/推理/工具 token-like 增量（流式请求）
 	LastTokenMs                 *int // 最后一个文本/推理/工具 token-like 增量（流式请求）
 	FirstOutputMs               *int // 首个下游可消费输出（流式请求）

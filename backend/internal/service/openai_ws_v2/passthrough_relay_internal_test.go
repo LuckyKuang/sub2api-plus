@@ -458,7 +458,7 @@ func TestObserveUpstreamMessageBareErrorClearsTurnStateAndFinalizesUsageOnce(t *
 	observed := observeUpstreamMessage(
 		state,
 		[]byte(`{"type":"error","usage":{"input_tokens":3,"output_tokens":1},"error":{"message":"failed"}}`),
-		now.Add(-3*time.Second),
+		now.Add(-3*time.Second), now.Add(-3*time.Second),
 		func() time.Time { return now },
 		nil,
 	)
@@ -477,7 +477,7 @@ func TestObserveUpstreamMessageBareErrorClearsTurnStateAndFinalizesUsageOnce(t *
 	require.Equal(t, now.Add(-500*time.Millisecond), state.consumePendingTurnStartedAt())
 
 	// Re-observing and settling a later terminal without usage must not re-add the prior turn.
-	observeUpstreamMessage(state, []byte(`{"type":"error","error":{"message":"again"}}`), now, func() time.Time { return now }, nil)
+	observeUpstreamMessage(state, []byte(`{"type":"error","error":{"message":"again"}}`), now, now, func() time.Time { return now }, nil)
 	finalizePendingBareError(state, now)
 	require.Equal(t, Usage{InputTokens: 3, OutputTokens: 1}, state.usage)
 }
@@ -494,7 +494,7 @@ func TestObserveUpstreamMessageErrorThenFailedSettlesUsageOnce(t *testing.T) {
 	errorObserved := observeUpstreamMessage(
 		state,
 		[]byte(`{"type":"error","error":{"code":"server_is_overloaded","message":"overloaded"}}`),
-		now,
+		now, now,
 		func() time.Time { return now },
 		nil,
 	)
@@ -505,7 +505,7 @@ func TestObserveUpstreamMessageErrorThenFailedSettlesUsageOnce(t *testing.T) {
 	failedObserved := observeUpstreamMessage(
 		state,
 		[]byte(`{"type":"response.failed","response":{"id":"resp_1","usage":{"input_tokens":7,"output_tokens":2}}}`),
-		now,
+		now, now,
 		func() time.Time { return now },
 		nil,
 	)
@@ -524,7 +524,7 @@ func TestObserveUpstreamMessageBareErrorBeforeNextCompletedKeepsBothTurns(t *tes
 	bare := observeUpstreamMessage(
 		state,
 		[]byte(`{"type":"error","error":{"message":"first turn failed"}}`),
-		now,
+		now, now,
 		func() time.Time { return now },
 		nil,
 	)
@@ -536,7 +536,7 @@ func TestObserveUpstreamMessageBareErrorBeforeNextCompletedKeepsBothTurns(t *tes
 	completed := observeUpstreamMessage(
 		state,
 		[]byte(`{"type":"response.completed","response":{"id":"resp_next","usage":{"input_tokens":3,"output_tokens":2}}}`),
-		now,
+		now, now,
 		func() time.Time { return now },
 		nil,
 	)
@@ -696,7 +696,7 @@ func TestObserveUpstreamMessage_ResponseModelIsTurnLocalAndTerminalWins(t *testi
 	created := observeUpstreamMessage(
 		state,
 		[]byte(`{"type":"response.created","response":{"id":"resp_1","model":"gpt-5.5"}}`),
-		startAt,
+		startAt, startAt,
 		nowFn,
 		nil,
 	)
@@ -705,7 +705,7 @@ func TestObserveUpstreamMessage_ResponseModelIsTurnLocalAndTerminalWins(t *testi
 	completed := observeUpstreamMessage(
 		state,
 		[]byte(`{"type":"response.completed","response":{"id":"resp_1","model":"gpt-5.4","usage":{"input_tokens":1,"output_tokens":2}}}`),
-		startAt,
+		startAt, startAt,
 		nowFn,
 		nil,
 	)
@@ -721,14 +721,14 @@ func TestObserveUpstreamMessage_ResponseModelIsTurnLocalAndTerminalWins(t *testi
 	observeUpstreamMessage(
 		state,
 		[]byte(`{"type":"response.created","response":{"id":"resp_2","model":"gpt-5.3"}}`),
-		startAt,
+		startAt, startAt,
 		nowFn,
 		nil,
 	)
 	second := observeUpstreamMessage(
 		state,
 		[]byte(`{"type":"response.completed","response":{"id":"resp_2","model":"GPT-5.3","usage":{"input_tokens":3,"output_tokens":4}}}`),
-		startAt,
+		startAt, startAt,
 		nowFn,
 		nil,
 	)
@@ -751,7 +751,7 @@ func TestObserveUpstreamMessage_ResponseIDFallbackPolicy(t *testing.T) {
 	observed := observeUpstreamMessage(
 		state,
 		[]byte(`{"type":"response.output_text.delta","id":"evt_123","delta":"hi"}`),
-		startAt,
+		startAt, startAt,
 		nowFn,
 		nil,
 	)
@@ -762,7 +762,7 @@ func TestObserveUpstreamMessage_ResponseIDFallbackPolicy(t *testing.T) {
 	observed = observeUpstreamMessage(
 		state,
 		[]byte(`{"type":"response.completed","id":"resp_fallback","response":{"usage":{"input_tokens":1,"output_tokens":1}}}`),
-		startAt,
+		startAt, startAt,
 		nowFn,
 		nil,
 	)
@@ -784,7 +784,7 @@ func TestObserveUpstreamMessage_ResponseServiceTierOnlyFromTerminalEvents(t *tes
 	created := observeUpstreamMessage(
 		state,
 		[]byte(`{"type":"response.created","response":{"id":"resp_1","model":"gpt-5.6-sol","service_tier":"priority"}}`),
-		startAt,
+		startAt, startAt,
 		nowFn,
 		nil,
 	)
@@ -794,7 +794,7 @@ func TestObserveUpstreamMessage_ResponseServiceTierOnlyFromTerminalEvents(t *tes
 	completed := observeUpstreamMessage(
 		state,
 		[]byte(`{"type":"response.completed","response":{"id":"resp_1","model":"gpt-5.6-sol","service_tier":"default","usage":{"input_tokens":1,"output_tokens":2}}}`),
-		startAt,
+		startAt, startAt,
 		nowFn,
 		nil,
 	)
@@ -810,11 +810,11 @@ func TestObserveUpstreamMessage_ResponseServiceTierOnlyFromTerminalEvents(t *tes
 	require.Equal(t, "default", result.ResponseServiceTier)
 
 	// A later turn without any declaration must not inherit the previous one.
-	observeUpstreamMessage(state, []byte(`{"type":"response.created","response":{"id":"resp_2","model":"gpt-5.6-sol"}}`), startAt, nowFn, nil)
+	observeUpstreamMessage(state, []byte(`{"type":"response.created","response":{"id":"resp_2","model":"gpt-5.6-sol"}}`), startAt, startAt, nowFn, nil)
 	second := observeUpstreamMessage(
 		state,
 		[]byte(`{"type":"response.completed","response":{"id":"resp_2","model":"gpt-5.6-sol","usage":{"input_tokens":3,"output_tokens":4}}}`),
-		startAt,
+		startAt, startAt,
 		nowFn,
 		nil,
 	)

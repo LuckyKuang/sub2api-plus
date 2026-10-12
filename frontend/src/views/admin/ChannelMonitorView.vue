@@ -54,6 +54,9 @@
 
       <TablePageLayout v-else>
       <template #filters>
+        <p v-if="!activeProbesEnabled" class="mb-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-200" role="status">
+          {{ t('admin.channelMonitor.probesDisabledHint') }}
+        </p>
         <MonitorFiltersBar
           v-model:search="searchQuery"
           v-model:provider="providerFilter"
@@ -96,7 +99,10 @@
           </template>
 
           <template #cell-latency="{ row }">
-            <span class="text-sm text-gray-900 dark:text-gray-100">{{ formatLatency(row.primary_latency_ms) }}</span>
+            <div class="text-xs text-gray-900 dark:text-gray-100" :title="t('usage.probeTimingHint')">
+              <div>{{ t('usage.latencyFirstByte') }} {{ formatLatency(row.primary_first_byte_ms) }} ms</div>
+              <div>{{ t('usage.latencyDuration') }} {{ formatLatency(row.primary_latency_ms) }} ms</div>
+            </div>
           </template>
 
           <template #cell-enabled="{ row }">
@@ -333,7 +339,7 @@ async function toggleEnabled(row: ChannelMonitor) {
 
 async function handleRunNow(row: ChannelMonitor) {
   if (!activeProbesEnabled.value) {
-    appStore.showError(t('admin.channelMonitor.runFailed'))
+    appStore.showError(t('admin.channelMonitor.probesDisabledHint'))
     return
   }
   if (runningId.value != null) return

@@ -169,7 +169,13 @@ func (s *AntigravityGatewayService) forwardAntigravityCompat(
 	c *gin.Context,
 	account *Account,
 	request antigravityCompatRequest,
-) (*ForwardResult, error) {
+) (forwardResult *ForwardResult, firstByteResultErr error) {
+	ctx, byteTiming := beginFirstByteTiming(ctx, request.startTime)
+	defer func() {
+		if forwardResult != nil {
+			forwardResult.FirstByteMs = byteTiming.Milliseconds()
+		}
+	}()
 	beginUpstreamResponseModelObservation(c)
 	call, err := s.prepareAntigravityCompatCall(ctx, c, account, request)
 	if err != nil {

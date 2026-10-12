@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/firstbyte"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/proxyurl"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/proxyutil"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/servertiming"
@@ -90,9 +91,9 @@ func buildClient(opts Options) (*http.Client, error) {
 		return nil, err
 	}
 
-	var rt http.RoundTripper = transport
+	rt := firstbyte.WrapTransport(transport)
 	if opts.ValidateResolvedIP && !opts.AllowPrivateHosts {
-		rt = newValidatedTransport(transport)
+		rt = newValidatedTransport(rt)
 	}
 	rt = servertiming.WrapRoundTripper(rt)
 	rt = brandidentity.WrapRoundTripper(rt)

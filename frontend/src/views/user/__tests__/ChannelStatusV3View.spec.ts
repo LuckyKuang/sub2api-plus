@@ -37,6 +37,36 @@ async function render() {
 describe('V3 service status', () => {
   beforeEach(() => { vi.mocked(getStatusSnapshot).mockReset(); vi.mocked(getStatusSnapshot).mockResolvedValue(fixture()) })
   afterEach(() => wrapper?.unmount())
+  // Current observations and historical aggregation have independent clocks.
+  it('shows the current observation cutoff even when historical aggregation lags', async () => {
+    const value = fixture()
+    value.current_through = '2026-10-01T12:00:17Z'
+    value.data_through = '2026-10-01T11:58:00Z'
+    vi.mocked(getStatusSnapshot).mockResolvedValue(value)
+    await render()
+    const cutoff = wrapper.get('[data-testid="current-through"]').text()
+    expect(cutoff).toContain('12:00:17')
+    expect(cutoff).not.toContain('11:58:00')
+  })
+  // docs/CHANNEL_MONITOR.md: opening details refreshes current observations;
+  // window boundaries and incident progress remain independent and visible.
+  it('refreshes when opening details and shows the exact window and last observation', async () => {
+    await render()
+    const fresh = fixture()
+    fresh.current_window_start = '2026-10-01T11:55:17Z'
+    fresh.current_window_end = '2026-10-01T12:00:17Z'
+    fresh.platforms[0].models[0] = { ...fresh.platforms[0].models[0], status: 'normal', last_observed_at: '2026-10-01T12:00:10Z', observation_reason: 'observed', incident_phase: 'awaiting_data' }
+    vi.mocked(getStatusSnapshot).mockResolvedValueOnce(fresh)
+    await wrapper.find('.platform-card').trigger('click')
+    await flushPromises()
+    expect(getStatusSnapshot).toHaveBeenCalledTimes(2)
+    const detail = wrapper.get('[data-testid="detail"]')
+    expect(detail.get('[data-testid="current-window"]').text()).toContain(':17')
+    expect(detail.get('tbody .status-badge').text()).toBe('运行正常')
+    expect(detail.get('tbody tr').text()).toContain(':10')
+    expect(detail.get('tbody tr').text()).toContain('等待新观测')
+    for (const secret of ['标准分组', '样本数', 'group_id', 'monitor_id']) expect(detail.text()).not.toContain(secret)
+  })
   it('keeps the summary banner and places records only in the incident tab', async () => {
     await render()
     expect(wrapper.text()).toContain('部分服务出现异常')
@@ -60,7 +90,7 @@ describe('V3 service status', () => {
     await wrapper.find('.platform-card').trigger('click')
     const detail = wrapper.get('[data-testid="detail"]')
     expect(detail.get('h3').text()).toBe('模型状态')
-    expect(detail.findAll('th').map(cell => cell.text())).toEqual(['模型', '近 5 分钟状态'])
+    expect(detail.findAll('th').map(cell => cell.text())).toEqual(['模型', '近 5 分钟状态', '最后观测', '历史事件进度'])
     expect(detail.get('tbody tr').text()).toContain('gpt-test')
     expect(detail.get('.status-partial').text()).toBe('部分服务异常')
     expect(detail.text()).not.toContain('分组')
@@ -90,6 +120,19 @@ describe('V3 service status', () => {
     expect(events.text()).toContain('主动探测 · gpt-test')
     expect(events.text()).not.toContain('标准分组')
     expect(events.text()).not.toContain('主动检查')
+  })
+  // docs/CHANNEL_MONITOR.md: combined models retain the latest observation
+  // instant across sources, including RFC3339 timestamps with different offsets.
+  it('selects the latest observation by instant across timestamp offsets', async () => {
+    const value = fixture()
+    value.platforms[0].models[0].last_observed_at = '2026-10-01T20:00:09+08:00'
+    value.platforms[0].models.push({ source_kind: 'probe', monitor_id: 1, group_id: null, group_name: '', model: 'gpt-test', status: 'normal', last_observed_at: '2026-10-01T12:00:10Z' })
+    vi.mocked(getStatusSnapshot).mockResolvedValue(value)
+    await render()
+    await wrapper.find('.platform-card').trigger('click')
+    const observed = wrapper.get('[data-testid="detail"] tbody tr').findAll('td')[2].text()
+    expect(observed).toContain(':10')
+    expect(observed).not.toContain(':09')
   })
   it('deduplicates models across groups and monitors without merging different models', async () => {
     const value = fixture()
@@ -124,7 +167,7 @@ describe('V3 service status', () => {
     ['degraded', 'recovering', '性能下降'],
     ['recovering', 'normal', '恢复观察'],
     ['unknown', 'unknown', '暂无近期数据'],
-    ['insufficient', 'unknown', '暂无近期数据'],
+    ['insufficient', 'unknown', '样本不足'],
     ['insufficient', 'insufficient', '样本不足'],
     ['insufficient', 'normal', '运行正常'],
   ])('shows %s requests and %s probes as one model with %s', async (request, probe, expected) => {
@@ -139,15 +182,17 @@ describe('V3 service status', () => {
     expect(rows).toHaveLength(1)
     expect(rows[0].get('.status-badge').text()).toBe(expected)
   })
-  it.each<ServiceStatus>(['normal', 'recovering'])('does not claim %s when the same model has an unresolved incident without fresh evidence', async (healthyStatus) => {
+  it.each<ServiceStatus>(['normal', 'recovering'])('shows recent %s independently from a historical incident awaiting evidence', async (healthyStatus) => {
     const value = fixture()
     value.platforms[0].models[0].status = 'unknown'
     value.platforms[0].models.push({ source_kind: 'probe', monitor_id: 1, group_id: null, group_name: '探测名称', model: 'gpt-test', status: healthyStatus })
     value.incidents[0].phase = 'awaiting_data'
+    value.platforms[0].models[0].incident_phase = 'awaiting_data'
     vi.mocked(getStatusSnapshot).mockResolvedValue(value)
     await render()
     await wrapper.find('.platform-card').trigger('click')
-    expect(wrapper.get('[data-testid="detail"] tbody .status-badge').text()).toBe('暂无近期数据')
+    expect(wrapper.get('[data-testid="detail"] tbody .status-badge').text()).toBe(healthyStatus === 'normal' ? '运行正常' : '恢复观察')
+    expect(wrapper.get('[data-testid="detail"]').text()).toContain('等待新观测')
   })
   it('does not let resolved incidents or incidents on another scope change a healthy model', async () => {
     const value = fixture()

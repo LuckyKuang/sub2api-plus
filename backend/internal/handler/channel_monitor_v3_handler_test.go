@@ -33,6 +33,7 @@ func (r *v3HandlerRepo) GetConfig(context.Context) (*service.ChannelMonitorV3Con
 	return &c, nil
 }
 func (r *v3HandlerRepo) UpdateConfig(_ context.Context, c service.ChannelMonitorV3Config) (*service.ChannelMonitorV3Config, error) {
+	r.cfg = &c
 	return &c, nil
 }
 func (r *v3HandlerRepo) Refresh(context.Context, time.Time) error {
@@ -52,7 +53,7 @@ func TestChannelMonitorV3HandlerGlobalStatusForAllReaders(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	now := time.Now().UTC()
 	repo := &v3HandlerRepo{data: &service.ChannelMonitorV3Data{
-		DataThrough: &now,
+		DataThrough: &now, CurrentThrough: &now,
 		Catalog: []service.ChannelMonitorV3Catalog{
 			{Platform: "openai", GroupID: 7, GroupName: "Shared"},
 			{Platform: "anthropic", GroupID: 88, GroupName: "Exclusive"},
@@ -63,7 +64,8 @@ func TestChannelMonitorV3HandlerGlobalStatusForAllReaders(t *testing.T) {
 		},
 		Incidents: []service.ChannelMonitorV3Incident{{ID: "other-user-event", Platform: "anthropic", GroupID: 88, Model: "claude", Phase: "ongoing"}},
 	}}
-	h := NewChannelMonitorV3Handler(service.NewChannelMonitorV3Service(repo, nil))
+	svc := service.NewChannelMonitorV3Service(repo, nil)
+	h := NewChannelMonitorV3Handler(svc)
 	var baseline *service.ChannelMonitorV3Snapshot
 	for _, tc := range []struct {
 		name    string
@@ -92,7 +94,9 @@ func TestChannelMonitorV3HandlerGlobalStatusForAllReaders(t *testing.T) {
 			require.Equal(t, "other-user-event", body.Data.Incidents[0].ID)
 			require.Equal(t, 1, body.Data.Summary.ActiveEvents)
 			require.Equal(t, 7*24*time.Hour, repo.window)
+			require.Equal(t, 5*time.Minute, body.Data.CurrentWindowEnd.Sub(body.Data.CurrentWindowStart))
 			body.Data.ComputedAt = time.Time{}
+			body.Data.CurrentWindowStart, body.Data.CurrentWindowEnd = time.Time{}, time.Time{}
 			if baseline == nil {
 				baseline = body.Data
 			} else {
@@ -103,7 +107,8 @@ func TestChannelMonitorV3HandlerGlobalStatusForAllReaders(t *testing.T) {
 			}
 			cfg := service.DefaultChannelMonitorV3Config()
 			cfg.DisabledPlatforms = []string{"anthropic"}
-			repo.cfg = &cfg
+			_, err := svc.UpdateConfig(context.Background(), cfg)
+			require.NoError(t, err)
 			rec = httptest.NewRecorder()
 			router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/snapshot?platform=anthropic", nil))
 			require.Equal(t, http.StatusOK, rec.Code)
@@ -113,7 +118,8 @@ func TestChannelMonitorV3HandlerGlobalStatusForAllReaders(t *testing.T) {
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
 			require.Empty(t, body.Data.Platforms)
 			require.Zero(t, body.Data.Summary.ActiveEvents)
-			repo.cfg = nil
+			_, err = svc.UpdateConfig(context.Background(), service.DefaultChannelMonitorV3Config())
+			require.NoError(t, err)
 		})
 	}
 	require.Equal(t, 8, repo.reads)

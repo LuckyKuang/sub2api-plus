@@ -809,6 +809,7 @@ describe('admin UsageView Excel export latency fields', () => {
           request_type: 'stream',
           stream: true,
           is_complete: false,
+          first_byte_ms: 30,
           first_token_ms: 120,
           last_token_ms: 1120,
           first_output_ms: 100,
@@ -878,6 +879,7 @@ describe('admin UsageView Excel export latency fields', () => {
     const headers = aoaToSheet.mock.calls[0][0][0] as string[]
     const rows = sheetAddAoa.mock.calls[0][1] as unknown[][]
     const requestedModelIndex = headers.indexOf('Requested model')
+    const firstByteIndex = headers.indexOf('usage.latencyFirstByte')
     const firstTokenIndex = headers.indexOf('usage.latencyFirstToken')
     const firstOutputIndex = headers.indexOf('usage.latencyFirstOutput')
     const firstOutputKindIndex = headers.indexOf('usage.latencyFirstOutputKind')
@@ -898,7 +900,10 @@ describe('admin UsageView Excel export latency fields', () => {
       'gpt-text-response',
       'Yes',
     ])
-    expect(firstTokenIndex).toBeGreaterThan(-1)
+    expect(firstByteIndex).toBeGreaterThan(-1)
+    expect(firstTokenIndex).toBe(firstByteIndex + 1)
+    expect(rows[0][firstByteIndex]).toBe(30)
+    expect(rows[1][firstByteIndex]).toBe('')
     expect(firstOutputIndex).toBe(firstTokenIndex + 1)
     expect(firstOutputKindIndex).toBe(firstOutputIndex + 1)
     expect(durationIndex).toBe(firstOutputKindIndex + 1)

@@ -160,7 +160,7 @@ describe('ChannelMonitorView duplicate action', () => {
     expect(wrapper.get('[role="tablist"] button:last-child').text()).toBe('channelMonitorV2.admin.tabV1Active')
     const actions = wrapper.findComponent(MonitorActionsCell)
     expect(actions.props('probesEnabled')).toBe(true)
-    actions.vm.$emit('run', monitor)
+    await actions.get('[data-testid="monitor-run"]').trigger('click')
     await flushPromises()
     expect(runNow).toHaveBeenCalledWith(42)
     expect(showError).not.toHaveBeenCalled()
@@ -175,9 +175,14 @@ describe('ChannelMonitorView duplicate action', () => {
     await flushPromises()
     const actions = wrapper.findComponent(MonitorActionsCell)
     expect(actions.props('probesEnabled')).toBe(false)
+    expect(wrapper.get('[role="status"]').text()).toBe('admin.channelMonitor.probesDisabledHint')
+    await actions.get('[data-testid="monitor-run"]').trigger('click')
+    expect(runNow).not.toHaveBeenCalled()
+    // The handler guard must also explain a rejected action, not just say failed.
     actions.vm.$emit('run', monitor)
     await flushPromises()
     expect(runNow).not.toHaveBeenCalled()
+    expect(showError).toHaveBeenCalledWith('admin.channelMonitor.probesDisabledHint')
     wrapper.unmount()
   })
 

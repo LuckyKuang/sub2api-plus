@@ -17,11 +17,13 @@
           <tr class="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">
             <th>{{ t('channelStatus.detailColumns.model') }}</th>
             <th>{{ t('channelStatus.detailColumns.latestStatus') }}</th>
-            <th>{{ t('channelStatus.detailColumns.latestLatency') }}</th>
+            <th>{{ t('usage.latestFirstByte') }}</th>
+            <th>{{ t('usage.latestTotalDuration') }}</th>
             <th>{{ t('channelStatus.detailColumns.availability7d') }}</th>
             <th>{{ t('channelStatus.detailColumns.availability15d') }}</th>
             <th>{{ t('channelStatus.detailColumns.availability30d') }}</th>
-            <th>{{ t('channelStatus.detailColumns.avgLatency7d') }}</th>
+            <th>{{ t('usage.avgFirstByte7d') }}</th>
+            <th>{{ t('usage.avgTotalDuration7d') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -39,10 +41,12 @@
                 {{ statusLabel(m.latest_status) }}
               </span>
             </td>
+            <td>{{ formatLatency(m.latest_first_byte_ms) }}</td>
             <td>{{ formatLatency(m.latest_latency_ms) }}</td>
             <td>{{ formatPercent(m.availability_7d) }}</td>
             <td>{{ formatPercent(m.availability_15d) }}</td>
             <td>{{ formatPercent(m.availability_30d) }}</td>
+            <td :title="t('usage.probeTimingHint')">{{ formatLatency(m.avg_first_byte_7d_ms) }}<span class="block text-xs text-gray-400">{{ t('usage.firstByteSamples', { n: m.first_byte_samples_7d ?? 0 }) }}</span></td>
             <td>{{ formatLatency(m.avg_latency_7d_ms) }}</td>
           </tr>
         </tbody>

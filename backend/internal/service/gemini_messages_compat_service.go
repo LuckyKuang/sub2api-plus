@@ -635,6 +635,12 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 	beginUpstreamResponseModelObservation(c)
 	beginGeminiImageOutputObservation(c)
 	startTime := time.Now()
+	ctx, byteTiming := beginFirstByteTiming(ctx, startTime)
+	defer func() {
+		if result != nil && result.FirstByteMs == nil {
+			result.FirstByteMs = byteTiming.Milliseconds()
+		}
+	}()
 
 	var req struct {
 		Model  string `json:"model"`
@@ -1206,6 +1212,12 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 	beginUpstreamResponseModelObservation(c)
 	beginGeminiImageOutputObservation(c)
 	startTime := time.Now()
+	ctx, byteTiming := beginFirstByteTiming(ctx, startTime)
+	defer func() {
+		if result != nil && result.FirstByteMs == nil {
+			result.FirstByteMs = byteTiming.Milliseconds()
+		}
+	}()
 
 	if strings.TrimSpace(originalModel) == "" {
 		return nil, s.writeGoogleError(c, http.StatusBadRequest, "Missing model in URL")

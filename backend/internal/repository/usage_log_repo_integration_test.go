@@ -70,17 +70,23 @@ func (s *UsageLogRepoSuite) TestStrictTimingRoundTrip() {
 	user := mustCreateUser(s.T(), s.client, &service.User{Email: "strict-timing@test.com"})
 	key := mustCreateApiKey(s.T(), s.client, &service.APIKey{UserID: user.ID, Key: "sk-strict-timing", Name: "timing"})
 	account := mustCreateAccount(s.T(), s.client, &service.Account{Name: "timing"})
-	first, last := 120, 920
+	firstByte, first, last := 81, 120, 920
+	requestedTier, responseTier := "priority", "default"
 	textKind, compactKind := "text", "compaction"
 	for _, version := range []int{0, 1} {
 		log := &service.UsageLog{UserID: user.ID, APIKeyID: key.ID, AccountID: account.ID,
 			RequestID: uuid.NewString(), Model: "timing-test", TimingVersion: version,
-			FirstTokenMs: &first, LastTokenMs: &last, FirstOutputKind: &textKind}
+			FirstByteMs: &firstByte, FirstTokenMs: &first, LastTokenMs: &last, FirstOutputKind: &textKind,
+			RequestedServiceTier: &requestedTier, ResponseServiceTier: &responseTier}
 		_, err := s.repo.Create(s.ctx, log)
 		s.Require().NoError(err)
 		stored, err := s.repo.GetByID(s.ctx, log.ID)
 		s.Require().NoError(err)
 		s.Equal(version, stored.TimingVersion)
+		s.Require().NotNil(stored.FirstByteMs)
+		s.Equal(81, *stored.FirstByteMs)
+		s.Equal(&requestedTier, stored.RequestedServiceTier)
+		s.Equal(&responseTier, stored.ResponseServiceTier)
 		s.Equal(first, *stored.FirstTokenMs)
 		s.Equal(last, *stored.LastTokenMs)
 	}
@@ -92,6 +98,7 @@ func (s *UsageLogRepoSuite) TestStrictTimingRoundTrip() {
 	s.Require().NoError(err)
 	s.Require().NotNil(stored.FirstOutputKind)
 	s.Equal("compaction", *stored.FirstOutputKind)
+	s.Nil(stored.FirstByteMs)
 	s.Nil(stored.FirstTokenMs)
 	s.Nil(stored.LastTokenMs)
 }
@@ -127,6 +134,7 @@ func TestUsageLogRepositoryCreate_BatchPathConcurrent(t *testing.T) {
 	account := mustCreateAccount(t, client, &service.Account{Name: "acc-usage-batch-" + uuid.NewString()})
 
 	priority, defaultTier := "priority", "default"
+	firstByte := 81
 	const total = 16
 	results := make([]bool, total)
 	errs := make([]error, total)
@@ -144,6 +152,7 @@ func TestUsageLogRepositoryCreate_BatchPathConcurrent(t *testing.T) {
 			Model:                "claude-3",
 			RequestedServiceTier: &priority,
 			ResponseServiceTier:  &defaultTier,
+			FirstByteMs:          &firstByte,
 			InputTokens:          10 + i,
 			OutputTokens:         20 + i,
 			TotalCost:            0.5,
@@ -165,6 +174,7 @@ func TestUsageLogRepositoryCreate_BatchPathConcurrent(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, &priority, stored.RequestedServiceTier)
 		require.Equal(t, &defaultTier, stored.ResponseServiceTier)
+		require.Equal(t, &firstByte, stored.FirstByteMs)
 	}
 
 	var count int

@@ -103,6 +103,7 @@ func TestRunCheck_QuotaModeProducesSingleQuotaResult(t *testing.T) {
 	require.Equal(t, "quota", res.Model)
 	require.Equal(t, MonitorStatusOperational, res.Status)
 	require.Nil(t, res.LatencyMs)
+	require.Nil(t, res.FirstByteMs, "quota-only checks do not observe LLM response-body timing")
 	require.Nil(t, res.PingLatencyMs)
 	require.NotNil(t, res.Quota)
 	require.True(t, res.Quota.Success)

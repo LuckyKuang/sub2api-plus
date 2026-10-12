@@ -9,11 +9,47 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
+
+// docs/USAGE_TIMING.md: a WS turn counts its own first application frame,
+// including response.created, but excludes idle and previous-turn frames.
+func TestForwardOpenAIWSV2_FirstBytePrecedesTokenAndIgnoresIdleFrames(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	cfg := newOpenAIWSV2TestConfig()
+	cfg.Security.URLAllowlist.Enabled = false
+	cfg.Security.URLAllowlist.AllowInsecureHTTP = true
+	cfg.Gateway.OpenAIWS.MinIdlePerAccount = 0
+	conn := &openAIWSCaptureConn{
+		events: [][]byte{
+			[]byte(`{"type":"session.updated"}`),
+			[]byte(`{"type":"response.in_progress","response":{"id":"resp_previous"}}`),
+			[]byte(`{"type":"response.created","response":{"id":"resp_current"}}`),
+			[]byte(`{"type":"response.output_text.delta","response_id":"resp_current","delta":"hello"}`),
+			[]byte(`{"type":"response.completed","response":{"id":"resp_current","model":"gpt-5.5","status":"completed","output":[],"usage":{"input_tokens":1,"output_tokens":1}}}`),
+		},
+		readDelays: []time.Duration{0, 0, 60 * time.Millisecond, 80 * time.Millisecond, 0},
+	}
+	pool := newOpenAIWSConnPool(cfg)
+	pool.setClientDialerForTest(&openAIWSCaptureDialer{conn: conn})
+	t.Cleanup(pool.Close)
+	svc := &OpenAIGatewayService{cfg: cfg, httpUpstream: &httpUpstreamRecorder{}, cache: &stubGatewayCache{}, openaiWSResolver: NewOpenAIWSProtocolResolver(cfg), toolCorrector: NewCodexToolCorrector(), openaiWSPool: pool}
+	account := &Account{ID: 5884, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1, Credentials: map[string]any{"api_key": "test"}, Extra: map[string]any{"responses_websockets_v2_enabled": true}}
+	result, err := svc.Forward(context.Background(), c, account, []byte(`{"model":"gpt-5.5","stream":false,"input":"hello","previous_response_id":"resp_previous"}`))
+	require.NoError(t, err)
+	require.True(t, result.OpenAIWSMode)
+	require.Equal(t, "resp_current", result.ResponseID)
+	require.NotNil(t, result.FirstByteMs)
+	require.NotNil(t, result.FirstTokenMs)
+	require.GreaterOrEqual(t, *result.FirstByteMs, 40)
+	require.GreaterOrEqual(t, *result.FirstTokenMs-*result.FirstByteMs, 40)
+}
 
 // HTTP POST /v1/responses -> forwardOpenAIWSV2 keeps the canonical outbound
 // tier separate from response.completed.service_tier for usage-time billing.

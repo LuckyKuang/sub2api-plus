@@ -144,6 +144,7 @@ func (UsageLog) Fields() []ent.Field {
 			Optional().
 			Nillable(),
 		field.Int("timing_version").Default(0),
+		field.Int("first_byte_ms").NonNegative().Optional().Nillable(),
 		field.Int("first_token_ms").
 			Optional().
 			Nillable(),

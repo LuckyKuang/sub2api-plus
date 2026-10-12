@@ -120,6 +120,7 @@ func TestUsageLogRepositoryCreateSyncRequestTypeAndLegacyFields(t *testing.T) {
 			sqlmock.AnyArg(), // codex_rollout_budget_units
 			sqlmock.AnyArg(), // requested_service_tier
 			sqlmock.AnyArg(), // response_service_tier
+			sqlmock.AnyArg(), // first_byte_ms
 		).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "created_at"}).AddRow(int64(99), createdAt))
 
@@ -226,6 +227,7 @@ func TestUsageLogRepositoryCreate_PersistsServiceTier(t *testing.T) {
 			sqlmock.AnyArg(), // codex_rollout_budget_units
 			sqlmock.AnyArg(), // requested_service_tier
 			sqlmock.AnyArg(), // response_service_tier
+			sqlmock.AnyArg(), // first_byte_ms
 		).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "created_at"}).AddRow(int64(100), createdAt))
 
@@ -307,7 +309,7 @@ func TestPrepareUsageLogInsert_PersistsTPSMetadata(t *testing.T) {
 
 	require.Equal(t, 17, prepared.args[18])
 	require.Equal(t, false, prepared.args[39])
-	require.Equal(t, 1, prepared.args[len(prepared.args)-5])
+	require.Equal(t, 1, prepared.args[68])
 	require.NotNil(t, log.IsComplete)
 	require.False(t, *log.IsComplete)
 
@@ -321,7 +323,7 @@ func TestPrepareUsageLogInsert_PersistsTPSMetadata(t *testing.T) {
 	}
 	defaultPrepared := prepareUsageLogInsert(defaultLog)
 	require.Nil(t, defaultPrepared.args[39])
-	require.Equal(t, 0, defaultPrepared.args[len(defaultPrepared.args)-5])
+	require.Equal(t, 0, defaultPrepared.args[68])
 	require.Nil(t, defaultLog.IsComplete)
 }
 
@@ -341,8 +343,8 @@ func TestPrepareUsageLogInsert_PersistsNativeCompactionV2WithoutChangingRequestT
 	prepared := prepareUsageLogInsert(log)
 
 	require.Len(t, prepared.args, len(usageLogInsertArgTypes))
-	require.Equal(t, "boolean", usageLogInsertArgTypes[len(usageLogInsertArgTypes)-6])
-	require.Equal(t, true, prepared.args[len(prepared.args)-6])
+	require.Equal(t, "boolean", usageLogInsertArgTypes[67])
+	require.Equal(t, true, prepared.args[67])
 	require.Equal(t, int16(service.RequestTypeStream), prepared.args[31])
 	require.Equal(t, service.RequestTypeStream, log.RequestType)
 	require.True(t, log.Stream)
@@ -1034,6 +1036,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullFloat64{}, // codex_rollout_budget_units
 			sql.NullString{},  // requested_service_tier
 			sql.NullString{},  // response_service_tier
+			sql.NullInt64{},   // first_byte_ms remains unknown in this historical fixture
 		}})
 		require.NoError(t, err)
 		require.Equal(t, 2, log.ImageCount)
@@ -1136,6 +1139,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullFloat64{}, // codex_rollout_budget_units
 			sql.NullString{},  // requested_service_tier
 			sql.NullString{},  // response_service_tier
+			sql.NullInt64{},   // first_byte_ms remains unknown in this historical fixture
 		}})
 		require.NoError(t, err)
 		require.NotNil(t, log.ServiceTier)
@@ -1209,6 +1213,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullFloat64{}, // codex_rollout_budget_units
 			sql.NullString{},  // requested_service_tier
 			sql.NullString{},  // response_service_tier
+			sql.NullInt64{},   // first_byte_ms remains unknown in this historical fixture
 		}})
 		require.NoError(t, err)
 		require.NotNil(t, log.ServiceTier)
@@ -1283,6 +1288,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullFloat64{}, // codex_rollout_budget_units
 			sql.NullString{},  // requested_service_tier
 			sql.NullString{},  // response_service_tier
+			sql.NullInt64{},   // first_byte_ms remains unknown in this historical fixture
 		}})
 		require.NoError(t, err)
 		require.NotNil(t, log.ServiceTier)

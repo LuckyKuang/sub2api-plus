@@ -35,6 +35,7 @@ func (ChannelMonitorHistory) Fields() []ent.Field {
 			MaxLen(200),
 		field.Enum("status").
 			Values("operational", "degraded", "failed", "error"),
+		field.Int("first_byte_ms").NonNegative().Optional().Nillable(),
 		field.Int("latency_ms").
 			Optional().
 			Nillable(),

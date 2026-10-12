@@ -1,10 +1,27 @@
 # Usage timing
 
 The admin and user usage tables and exports use one timing contract: first
-token, total duration, and request-average TPS. Credential type does not select a
+byte, first token, total duration, and request-average TPS. Credential type does not select a
 different definition.
 
 ## Fields and display
+
+WebSocket relay receipt timestamps are captured immediately after the upstream frame read,
+before local transformations and quota/error callbacks. Strict token observations keep their
+existing boundary; callback delays must not inflate first-byte timing.
+
+- `first_byte_ms` measures from the existing forwarding origin to the first
+  upstream body `Read(n > 0)`, before decompression, SSE/JSON parsing and adapters.
+  Response headers, zero-byte reads and locally generated keepalives do not
+  count. Positive data returned with EOF counts. Non-streaming responses use
+  the same read boundary. This is body data latency, not browser header TTFB.
+- WebSocket uses the first application frame attributed to that turn (including
+  response.created); handshakes, ping/pong and other turns are excluded. This is
+  frame precision, not TCP byte precision. Retries replace the discarded HTTP
+  attempt observation; new account forwards and WS turns own separate timing.
+- Historical, unobservable, Live-summary and asynchronous batch-settlement rows
+  retain NULL. Zero is valid. First token/output/duration never fill missing
+  first-byte data. The additive API field is independent from timing_version.
 
 - `timing_version=1` identifies the strict sampler, including requests that
   produced no token-like output. Existing rows remain `0` (unverified); neither
@@ -38,8 +55,10 @@ different definition.
   non-positive/non-finite durations also display `-`. Absent legacy modality
   counts default to zero; other invalid data is not repaired.
 
-The main latency cell retains **首字 / 总耗时 / TPS** (First Token / Total / TPS
-in English). The rate hint explains that TPS is a request average. Hovering the
+The main latency cell retains **首字 / 总耗时 / TPS** (First Byte / Total / TPS
+in English). First-byte text and the color bar use first_byte_ms. Details always retain the
+independent First Token / Last Token labels (including missing values), even
+for ordinary text. The rate hint explains that TPS is a request average. Hovering the
 rate explains its formula and, where applicable, the unavailable
 reason or incomplete-result note. Strict first-token unavailable reasons remain
 independent: a missing historical token clock does not invalidate the average.
@@ -49,7 +68,8 @@ User CSV headers are now `Average TPS` and `Average TPS note` instead of `TPS`
 and `Unavailable reason`. Admin Excel uses their localized equivalents. Both
 export the shared unrounded numeric average, an empty unavailable rate, and the
 same reason/partial-result note as the table. Consumers identifying columns by
-header must update their mappings; stored usage and API fields are unchanged.
+header must update their mappings. Counts, token timing and TPS retain their
+existing meanings; first-byte timing adds an independent nullable API field.
 
 ## Operations output TPS distribution
 
@@ -146,6 +166,12 @@ Live duration remains session duration, and batch settlement does not invent a
 generation duration. Image/audio/video-only operations cannot yield text TPS.
 
 ## Upgrade and API changes
+
+Migration 285 adds nullable first_byte_ms to usage_logs and V1 probe histories,
+and independent probe rollup sum/count fields. No historical timing is inferred.
+Admin Excel and user CSV add an independent First Byte column and preserve the
+First Token column, strict-token eligibility and existing sorting API semantics.
+V1 keeps non-streaming probes, its total latency and HEAD Ping. See CHANNEL_MONITOR.
 
 Migration 257 adds `usage_logs.timing_version` with default 0 and extends the
 first-output kind constraint. Gateway-created records are stamped 1; externally

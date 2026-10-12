@@ -34,7 +34,7 @@
               <tr class="text-gray-400">
                 <th class="py-0.5 pr-2 font-medium">{{ t('admin.channelMonitor.columns.primaryModel') }}</th>
                 <th class="py-0.5 pr-2 font-medium">{{ t('admin.channelMonitor.columns.actions') }}</th>
-                <th class="py-0.5 font-medium">{{ t('admin.channelMonitor.columns.latency') }}</th>
+                <th class="py-0.5 font-medium">{{ t('usage.latencyFirstByte') }} / {{ t('usage.latencyDuration') }}</th>
               </tr>
             </thead>
             <tbody>
@@ -48,7 +48,7 @@
                     {{ statusLabel(m.status) }}
                   </span>
                 </td>
-                <td class="py-0.5 text-gray-100">{{ formatLatency(m.latency_ms) }}</td>
+                <td class="py-0.5 text-gray-100">{{ formatLatency(m.first_byte_ms) }} / {{ formatLatency(m.latency_ms) }}</td>
               </tr>
             </tbody>
           </table>

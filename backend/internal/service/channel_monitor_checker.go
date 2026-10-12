@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/firstbyte"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/servertiming"
 	"github.com/tidwall/gjson"
@@ -37,7 +38,7 @@ func newSSRFSafeHTTPClient(timeout time.Duration) *http.Client {
 		TLSHandshakeTimeout:   monitorTLSHandshakeTimeout,
 		ResponseHeaderTimeout: monitorResponseHeaderTimeout,
 	}
-	transport := brandidentity.WrapRoundTripper(servertiming.WrapRoundTripper(tr))
+	transport := brandidentity.WrapRoundTripper(servertiming.WrapRoundTripper(firstbyte.WrapTransport(tr)))
 	return &http.Client{Timeout: timeout, Transport: transport}
 }
 
@@ -70,6 +71,8 @@ func runCheckForModel(ctx context.Context, provider, endpoint, apiKey, model str
 	mode := bodyOverrideMode(opts)
 
 	start := time.Now()
+	ctx, byteTiming := beginFirstByteTiming(ctx, start)
+	defer func() { res.FirstByteMs = byteTiming.Milliseconds() }()
 	respText, rawBody, statusCode, err := callProvider(ctx, provider, endpoint, apiKey, model, challenge.Prompt, opts)
 	latency := time.Since(start)
 	latencyMs := int(latency / time.Millisecond)

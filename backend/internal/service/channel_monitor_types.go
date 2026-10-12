@@ -136,6 +136,7 @@ type ChannelMonitorUpdateParams struct {
 type CheckResult struct {
 	Model         string
 	Status        string // operational / degraded / failed / error
+	FirstByteMs   *int
 	LatencyMs     *int
 	PingLatencyMs *int
 	Message       string
@@ -152,6 +153,7 @@ type UserMonitorView struct {
 	GroupName            string
 	PrimaryModel         string
 	PrimaryStatus        string
+	PrimaryFirstByteMs   *int
 	PrimaryLatencyMs     *int
 	PrimaryPingLatencyMs *int    // 主模型最近一次 ping 延迟
 	Availability7d       float64 // 0-100
@@ -165,6 +167,7 @@ type UserMonitorView struct {
 // UserMonitorTimelinePoint 用户视图 timeline 单点数据（去除 message 以减小响应体）。
 type UserMonitorTimelinePoint struct {
 	Status        string    `json:"status"`
+	FirstByteMs   *int      `json:"first_byte_ms"`
 	LatencyMs     *int      `json:"latency_ms"`
 	PingLatencyMs *int      `json:"ping_latency_ms"`
 	CheckedAt     time.Time `json:"checked_at"`
@@ -172,9 +175,10 @@ type UserMonitorTimelinePoint struct {
 
 // ExtraModelStatus 附加模型最近一次状态。
 type ExtraModelStatus struct {
-	Model     string
-	Status    string
-	LatencyMs *int
+	Model       string
+	Status      string
+	FirstByteMs *int
+	LatencyMs   *int
 }
 
 // UserMonitorDetail 用户只读视图：监控详情（含全部模型 7d/15d/30d 可用率与平均延迟）。
@@ -188,13 +192,16 @@ type UserMonitorDetail struct {
 
 // ModelDetail 单个模型的可用率/延迟统计。
 type ModelDetail struct {
-	Model           string
-	LatestStatus    string
-	LatestLatencyMs *int
-	Availability7d  float64 // 0-100
-	Availability15d float64
-	Availability30d float64
-	AvgLatency7dMs  *int
+	Model              string
+	LatestStatus       string
+	LatestFirstByteMs  *int
+	LatestLatencyMs    *int
+	Availability7d     float64 // 0-100
+	Availability15d    float64
+	Availability30d    float64
+	AvgFirstByte7dMs   *int
+	FirstByteSamples7d int
+	AvgLatency7dMs     *int
 }
 
 // ChannelMonitorHistoryRow 历史记录入库行（service 层向 repository 提交的数据）。
@@ -202,6 +209,7 @@ type ChannelMonitorHistoryRow struct {
 	MonitorID     int64
 	Model         string
 	Status        string
+	FirstByteMs   *int
 	LatencyMs     *int
 	PingLatencyMs *int
 	Message       string
@@ -214,6 +222,7 @@ type ChannelMonitorHistoryEntry struct {
 	ID            int64
 	Model         string
 	Status        string
+	FirstByteMs   *int
 	LatencyMs     *int
 	PingLatencyMs *int
 	Message       string
@@ -225,6 +234,7 @@ type ChannelMonitorHistoryEntry struct {
 type ChannelMonitorLatest struct {
 	Model         string
 	Status        string
+	FirstByteMs   *int
 	LatencyMs     *int
 	PingLatencyMs *int
 	CheckedAt     time.Time
@@ -238,6 +248,8 @@ type ChannelMonitorAvailability struct {
 	TotalChecks       int
 	OperationalChecks int // operational + degraded 视为可用
 	AvailabilityPct   float64
+	AvgFirstByteMs    *int
+	FirstByteSamples  int
 	AvgLatencyMs      *int
 }
 
@@ -245,9 +257,10 @@ type ChannelMonitorAvailability struct {
 // PrimaryStatus / PrimaryLatencyMs 描述主模型最近状态；Availability7d 是主模型 7 天可用率；
 // ExtraModels 描述附加模型最近状态（用于 hover 展示）。
 type MonitorStatusSummary struct {
-	PrimaryStatus    string // 空字符串表示无历史
-	PrimaryLatencyMs *int
-	Availability7d   float64 // 0-100，无历史时为 0
-	ExtraModels      []ExtraModelStatus
-	LatestQuota      *domain.MonitorQuotaSnapshot // 主模型最近配额快照（配额模式）
+	PrimaryStatus      string // 空字符串表示无历史
+	PrimaryFirstByteMs *int
+	PrimaryLatencyMs   *int
+	Availability7d     float64 // 0-100，无历史时为 0
+	ExtraModels        []ExtraModelStatus
+	LatestQuota        *domain.MonitorQuotaSnapshot // 主模型最近配额快照（配额模式）
 }

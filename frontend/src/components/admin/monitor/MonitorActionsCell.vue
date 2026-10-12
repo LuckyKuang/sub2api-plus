@@ -1,13 +1,17 @@
 <template>
   <div class="flex items-center gap-1">
-    <button
-      @click="$emit('run', row)"
-      :disabled="running || probesEnabled === false"
-      class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-primary-600 dark:hover:bg-dark-700 dark:hover:text-primary-400"
-    >
-      <Icon name="refresh" size="sm" :class="running ? 'animate-spin' : ''" />
-      <span class="text-xs">{{ t('admin.channelMonitor.runNow') }}</span>
-    </button>
+    <span :title="runTitle" :class="running || probesEnabled === false ? 'cursor-not-allowed' : ''">
+      <button
+        data-testid="monitor-run"
+        :title="runTitle"
+        @click="$emit('run', row)"
+        :disabled="running || probesEnabled === false"
+        class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-primary-600 disabled:pointer-events-none disabled:opacity-50 dark:hover:bg-dark-700 dark:hover:text-primary-400"
+      >
+        <Icon name="refresh" size="sm" :class="running ? 'animate-spin' : ''" />
+        <span class="text-xs">{{ t(running ? 'admin.channelMonitor.running' : 'admin.channelMonitor.runNow') }}</span>
+      </button>
+    </span>
     <button
       data-testid="monitor-duplicate"
       :title="duplicateTitle"
@@ -58,6 +62,11 @@ defineEmits<{
 }>()
 
 const { t } = useI18n()
+const runTitle = computed(() => {
+  if (props.running) return t('admin.channelMonitor.running')
+  if (props.probesEnabled === false) return t('admin.channelMonitor.probesDisabledHint')
+  return t('admin.channelMonitor.runNow')
+})
 const duplicateTitle = computed(() => {
   if (props.row.api_key_decrypt_failed) return t('admin.channelMonitor.duplicateKeyUnavailable')
   if (props.duplicating) return t('admin.channelMonitor.duplicating')

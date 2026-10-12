@@ -28,6 +28,12 @@ func (s *OpenAIGatewayService) ForwardEmbeddings(
 	ctx = WithAccountOutboundIdentity(ctx, account)
 	defer func() { finalizeClientDisconnectForwardResult(ctx, c, result, err) }()
 	startTime := time.Now()
+	ctx, byteTiming := beginFirstByteTiming(ctx, startTime)
+	defer func() {
+		if result != nil && result.FirstByteMs == nil {
+			result.FirstByteMs = byteTiming.Milliseconds()
+		}
+	}()
 
 	originalModel := strings.TrimSpace(gjson.GetBytes(body, "model").String())
 	if originalModel == "" {

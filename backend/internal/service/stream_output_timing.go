@@ -34,6 +34,7 @@ func observeAnthropicSSEOutput(data []byte) apicompat.StreamOutputObservation {
 }
 
 type streamOutputTiming struct {
+	firstByteMs     *int
 	firstTokenMs    *int
 	lastTokenMs     *int
 	firstOutputMs   *int
@@ -78,6 +79,9 @@ func (t *streamOutputTiming) ApplyOpenAIResult(result *OpenAIForwardResult) {
 	if t == nil || result == nil {
 		return
 	}
+	if t.firstByteMs != nil {
+		result.FirstByteMs = t.firstByteMs
+	}
 	result.FirstTokenMs = t.firstTokenMs
 	result.LastTokenMs = t.lastTokenMs
 	result.FirstOutputMs = t.firstOutputMs
@@ -88,8 +92,23 @@ func (t *streamOutputTiming) ApplyForwardResult(result *ForwardResult) {
 	if t == nil || result == nil {
 		return
 	}
+	if t.firstByteMs != nil {
+		result.FirstByteMs = t.firstByteMs
+	}
 	result.FirstTokenMs = t.firstTokenMs
 	result.LastTokenMs = t.lastTokenMs
 	result.FirstOutputMs = t.firstOutputMs
 	result.FirstOutputKind = t.firstOutputKind
+}
+
+// ObserveFrame is used only after the frame has been attributed to this turn.
+func (t *streamOutputTiming) ObserveFrame(start, at time.Time) {
+	if t == nil || t.firstByteMs != nil {
+		return
+	}
+	ms := int(at.Sub(start).Milliseconds())
+	if ms < 0 {
+		ms = 0
+	}
+	t.firstByteMs = &ms
 }

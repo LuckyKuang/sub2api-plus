@@ -689,6 +689,9 @@ func prepareGrokVideoCompletionBilling(
 	merged.RequestID = service.StableGrokVideoBillingRequestID(firstNonEmptyString(merged.ResponseID, taskRequestID))
 	merged.ResponseID = firstNonEmptyString(merged.ResponseID, taskRequestID)
 	merged.VideoCount = 1
+	// This record settles the whole asynchronous task. The discovery poll's
+	// response-body timing does not describe the task's initial response.
+	merged.FirstByteMs = nil
 	// Pure video: do not keep legacy ImageCount (avoids image-path heuristics).
 	merged.ImageCount = 0
 	// Official default resolution is 480p when the create request omitted it.

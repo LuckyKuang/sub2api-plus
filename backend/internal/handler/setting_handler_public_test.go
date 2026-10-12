@@ -19,6 +19,59 @@ type settingHandlerPublicRepoStub struct {
 	values map[string]string
 }
 
+// docs/CHANNEL_MONITOR.md: the persisted extra-probe setting must reach the
+// public HTTP response, HTML injection and runtime unchanged. A saved true
+// must enable the admin action; absent/invalid values must never enable it.
+func TestSettingHandler_GetPublicSettings_ChannelMonitorV1Enabled(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, tc := range []struct {
+		name  string
+		value string
+		want  bool
+	}{
+		{name: "enabled", value: "true", want: true},
+		{name: "disabled", value: "false", want: false},
+		{name: "missing", want: false},
+		{name: "invalid", value: "TRUE", want: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			values := map[string]string{
+				service.SettingKeyChannelMonitorEnabled: "true",
+				service.SettingKeyChannelMonitorMode:    "v3",
+			}
+			if tc.value != "" {
+				values[service.SettingKeyChannelMonitorV1Enabled] = tc.value
+			}
+			svc := service.NewSettingService(&settingHandlerPublicRepoStub{values: values}, &config.Config{})
+			h := NewSettingHandler(svc, "test-version")
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/settings/public", nil)
+			h.GetPublicSettings(c)
+			require.Equal(t, http.StatusOK, recorder.Code)
+			var resp struct {
+				Code int `json:"code"`
+				Data struct {
+					Enabled *bool  `json:"channel_monitor_v1_enabled"`
+					Mode    string `json:"channel_monitor_mode"`
+				} `json:"data"`
+			}
+			require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+			require.Equal(t, 0, resp.Code)
+			require.Equal(t, "v3", resp.Data.Mode)
+			require.NotNil(t, resp.Data.Enabled, "public response must include the probe flag")
+			require.Equal(t, tc.want, *resp.Data.Enabled)
+
+			injected, err := svc.GetPublicSettingsForInjection(c.Request.Context())
+			require.NoError(t, err)
+			require.Equal(t, tc.want, injected.(*service.PublicSettingsInjectionPayload).ChannelMonitorV1Enabled)
+			runtime := svc.GetChannelMonitorRuntime(c.Request.Context())
+			require.Equal(t, tc.want, runtime.V1Enabled)
+			require.Equal(t, tc.want, runtime.ActiveProbesAllowed())
+		})
+	}
+}
+
 func (s *settingHandlerPublicRepoStub) Get(ctx context.Context, key string) (*service.Setting, error) {
 	panic("unexpected Get call")
 }

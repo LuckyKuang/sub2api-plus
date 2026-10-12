@@ -197,6 +197,48 @@ func (_u *ChannelMonitorDailyRollupUpdate) AddErrorCount(v int) *ChannelMonitorD
 	return _u
 }
 
+// SetSumFirstByteMs sets the "sum_first_byte_ms" field.
+func (_u *ChannelMonitorDailyRollupUpdate) SetSumFirstByteMs(v int64) *ChannelMonitorDailyRollupUpdate {
+	_u.mutation.ResetSumFirstByteMs()
+	_u.mutation.SetSumFirstByteMs(v)
+	return _u
+}
+
+// SetNillableSumFirstByteMs sets the "sum_first_byte_ms" field if the given value is not nil.
+func (_u *ChannelMonitorDailyRollupUpdate) SetNillableSumFirstByteMs(v *int64) *ChannelMonitorDailyRollupUpdate {
+	if v != nil {
+		_u.SetSumFirstByteMs(*v)
+	}
+	return _u
+}
+
+// AddSumFirstByteMs adds value to the "sum_first_byte_ms" field.
+func (_u *ChannelMonitorDailyRollupUpdate) AddSumFirstByteMs(v int64) *ChannelMonitorDailyRollupUpdate {
+	_u.mutation.AddSumFirstByteMs(v)
+	return _u
+}
+
+// SetCountFirstByte sets the "count_first_byte" field.
+func (_u *ChannelMonitorDailyRollupUpdate) SetCountFirstByte(v int) *ChannelMonitorDailyRollupUpdate {
+	_u.mutation.ResetCountFirstByte()
+	_u.mutation.SetCountFirstByte(v)
+	return _u
+}
+
+// SetNillableCountFirstByte sets the "count_first_byte" field if the given value is not nil.
+func (_u *ChannelMonitorDailyRollupUpdate) SetNillableCountFirstByte(v *int) *ChannelMonitorDailyRollupUpdate {
+	if v != nil {
+		_u.SetCountFirstByte(*v)
+	}
+	return _u
+}
+
+// AddCountFirstByte adds value to the "count_first_byte" field.
+func (_u *ChannelMonitorDailyRollupUpdate) AddCountFirstByte(v int) *ChannelMonitorDailyRollupUpdate {
+	_u.mutation.AddCountFirstByte(v)
+	return _u
+}
+
 // SetSumLatencyMs sets the "sum_latency_ms" field.
 func (_u *ChannelMonitorDailyRollupUpdate) SetSumLatencyMs(v int64) *ChannelMonitorDailyRollupUpdate {
 	_u.mutation.ResetSumLatencyMs()
@@ -346,6 +388,16 @@ func (_u *ChannelMonitorDailyRollupUpdate) check() error {
 			return &ValidationError{Name: "model", err: fmt.Errorf(`ent: validator failed for field "ChannelMonitorDailyRollup.model": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.SumFirstByteMs(); ok {
+		if err := channelmonitordailyrollup.SumFirstByteMsValidator(v); err != nil {
+			return &ValidationError{Name: "sum_first_byte_ms", err: fmt.Errorf(`ent: validator failed for field "ChannelMonitorDailyRollup.sum_first_byte_ms": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.CountFirstByte(); ok {
+		if err := channelmonitordailyrollup.CountFirstByteValidator(v); err != nil {
+			return &ValidationError{Name: "count_first_byte", err: fmt.Errorf(`ent: validator failed for field "ChannelMonitorDailyRollup.count_first_byte": %w`, err)}
+		}
+	}
 	if _u.mutation.MonitorCleared() && len(_u.mutation.MonitorIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "ChannelMonitorDailyRollup.monitor"`)
 	}
@@ -405,6 +457,18 @@ func (_u *ChannelMonitorDailyRollupUpdate) sqlSave(ctx context.Context) (_node i
 	}
 	if value, ok := _u.mutation.AddedErrorCount(); ok {
 		_spec.AddField(channelmonitordailyrollup.FieldErrorCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.SumFirstByteMs(); ok {
+		_spec.SetField(channelmonitordailyrollup.FieldSumFirstByteMs, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedSumFirstByteMs(); ok {
+		_spec.AddField(channelmonitordailyrollup.FieldSumFirstByteMs, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.CountFirstByte(); ok {
+		_spec.SetField(channelmonitordailyrollup.FieldCountFirstByte, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedCountFirstByte(); ok {
+		_spec.AddField(channelmonitordailyrollup.FieldCountFirstByte, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.SumLatencyMs(); ok {
 		_spec.SetField(channelmonitordailyrollup.FieldSumLatencyMs, field.TypeInt64, value)
@@ -650,6 +714,48 @@ func (_u *ChannelMonitorDailyRollupUpdateOne) AddErrorCount(v int) *ChannelMonit
 	return _u
 }
 
+// SetSumFirstByteMs sets the "sum_first_byte_ms" field.
+func (_u *ChannelMonitorDailyRollupUpdateOne) SetSumFirstByteMs(v int64) *ChannelMonitorDailyRollupUpdateOne {
+	_u.mutation.ResetSumFirstByteMs()
+	_u.mutation.SetSumFirstByteMs(v)
+	return _u
+}
+
+// SetNillableSumFirstByteMs sets the "sum_first_byte_ms" field if the given value is not nil.
+func (_u *ChannelMonitorDailyRollupUpdateOne) SetNillableSumFirstByteMs(v *int64) *ChannelMonitorDailyRollupUpdateOne {
+	if v != nil {
+		_u.SetSumFirstByteMs(*v)
+	}
+	return _u
+}
+
+// AddSumFirstByteMs adds value to the "sum_first_byte_ms" field.
+func (_u *ChannelMonitorDailyRollupUpdateOne) AddSumFirstByteMs(v int64) *ChannelMonitorDailyRollupUpdateOne {
+	_u.mutation.AddSumFirstByteMs(v)
+	return _u
+}
+
+// SetCountFirstByte sets the "count_first_byte" field.
+func (_u *ChannelMonitorDailyRollupUpdateOne) SetCountFirstByte(v int) *ChannelMonitorDailyRollupUpdateOne {
+	_u.mutation.ResetCountFirstByte()
+	_u.mutation.SetCountFirstByte(v)
+	return _u
+}
+
+// SetNillableCountFirstByte sets the "count_first_byte" field if the given value is not nil.
+func (_u *ChannelMonitorDailyRollupUpdateOne) SetNillableCountFirstByte(v *int) *ChannelMonitorDailyRollupUpdateOne {
+	if v != nil {
+		_u.SetCountFirstByte(*v)
+	}
+	return _u
+}
+
+// AddCountFirstByte adds value to the "count_first_byte" field.
+func (_u *ChannelMonitorDailyRollupUpdateOne) AddCountFirstByte(v int) *ChannelMonitorDailyRollupUpdateOne {
+	_u.mutation.AddCountFirstByte(v)
+	return _u
+}
+
 // SetSumLatencyMs sets the "sum_latency_ms" field.
 func (_u *ChannelMonitorDailyRollupUpdateOne) SetSumLatencyMs(v int64) *ChannelMonitorDailyRollupUpdateOne {
 	_u.mutation.ResetSumLatencyMs()
@@ -812,6 +918,16 @@ func (_u *ChannelMonitorDailyRollupUpdateOne) check() error {
 			return &ValidationError{Name: "model", err: fmt.Errorf(`ent: validator failed for field "ChannelMonitorDailyRollup.model": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.SumFirstByteMs(); ok {
+		if err := channelmonitordailyrollup.SumFirstByteMsValidator(v); err != nil {
+			return &ValidationError{Name: "sum_first_byte_ms", err: fmt.Errorf(`ent: validator failed for field "ChannelMonitorDailyRollup.sum_first_byte_ms": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.CountFirstByte(); ok {
+		if err := channelmonitordailyrollup.CountFirstByteValidator(v); err != nil {
+			return &ValidationError{Name: "count_first_byte", err: fmt.Errorf(`ent: validator failed for field "ChannelMonitorDailyRollup.count_first_byte": %w`, err)}
+		}
+	}
 	if _u.mutation.MonitorCleared() && len(_u.mutation.MonitorIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "ChannelMonitorDailyRollup.monitor"`)
 	}
@@ -888,6 +1004,18 @@ func (_u *ChannelMonitorDailyRollupUpdateOne) sqlSave(ctx context.Context) (_nod
 	}
 	if value, ok := _u.mutation.AddedErrorCount(); ok {
 		_spec.AddField(channelmonitordailyrollup.FieldErrorCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.SumFirstByteMs(); ok {
+		_spec.SetField(channelmonitordailyrollup.FieldSumFirstByteMs, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedSumFirstByteMs(); ok {
+		_spec.AddField(channelmonitordailyrollup.FieldSumFirstByteMs, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.CountFirstByte(); ok {
+		_spec.SetField(channelmonitordailyrollup.FieldCountFirstByte, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedCountFirstByte(); ok {
+		_spec.AddField(channelmonitordailyrollup.FieldCountFirstByte, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.SumLatencyMs(); ok {
 		_spec.SetField(channelmonitordailyrollup.FieldSumLatencyMs, field.TypeInt64, value)

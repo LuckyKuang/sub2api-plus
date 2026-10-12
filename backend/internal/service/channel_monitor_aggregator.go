@@ -203,6 +203,7 @@ func buildStatusSummary(
 	if primary != "" {
 		if l, ok := latestByModel[primary]; ok {
 			summary.PrimaryStatus = l.Status
+			summary.PrimaryFirstByteMs = l.FirstByteMs
 			summary.PrimaryLatencyMs = l.LatencyMs
 			// 配额快照只挂主模型行（quota 模式唯一行 / quota_probe 的主行）。
 			summary.LatestQuota = l.Quota
@@ -215,6 +216,7 @@ func buildStatusSummary(
 		entry := ExtraModelStatus{Model: model}
 		if l, ok := latestByModel[model]; ok {
 			entry.Status = l.Status
+			entry.FirstByteMs = l.FirstByteMs
 			entry.LatencyMs = l.LatencyMs
 		}
 		summary.ExtraModels = append(summary.ExtraModels, entry)
@@ -231,16 +233,17 @@ func buildUserViewFromSummary(
 	timelineEntries []*ChannelMonitorHistoryEntry,
 ) *UserMonitorView {
 	view := &UserMonitorView{
-		ID:               m.ID,
-		Name:             m.Name,
-		Provider:         m.Provider,
-		GroupName:        m.GroupName,
-		PrimaryModel:     m.PrimaryModel,
-		PrimaryStatus:    summary.PrimaryStatus,
-		PrimaryLatencyMs: summary.PrimaryLatencyMs,
-		Availability7d:   summary.Availability7d,
-		ExtraModels:      summary.ExtraModels,
-		Timeline:         buildTimelinePoints(timelineEntries),
+		ID:                 m.ID,
+		Name:               m.Name,
+		Provider:           m.Provider,
+		GroupName:          m.GroupName,
+		PrimaryModel:       m.PrimaryModel,
+		PrimaryStatus:      summary.PrimaryStatus,
+		PrimaryFirstByteMs: summary.PrimaryFirstByteMs,
+		PrimaryLatencyMs:   summary.PrimaryLatencyMs,
+		Availability7d:     summary.Availability7d,
+		ExtraModels:        summary.ExtraModels,
+		Timeline:           buildTimelinePoints(timelineEntries),
 	}
 	if primaryLatest != nil {
 		view.PrimaryPingLatencyMs = primaryLatest.PingLatencyMs
@@ -255,6 +258,7 @@ func buildTimelinePoints(entries []*ChannelMonitorHistoryEntry) []UserMonitorTim
 	for _, e := range entries {
 		out = append(out, UserMonitorTimelinePoint{
 			Status:        e.Status,
+			FirstByteMs:   e.FirstByteMs,
 			LatencyMs:     e.LatencyMs,
 			PingLatencyMs: e.PingLatencyMs,
 			CheckedAt:     e.CheckedAt,
@@ -277,10 +281,13 @@ func mergeModelDetails(
 		d := ModelDetail{Model: model}
 		if l, ok := latestByModel[model]; ok {
 			d.LatestStatus = l.Status
+			d.LatestFirstByteMs = l.FirstByteMs
 			d.LatestLatencyMs = l.LatencyMs
 		}
 		if a, ok := availMap[monitorAvailability7Days][model]; ok {
 			d.Availability7d = a.AvailabilityPct
+			d.AvgFirstByte7dMs = a.AvgFirstByteMs
+			d.FirstByteSamples7d = a.FirstByteSamples
 			d.AvgLatency7dMs = a.AvgLatencyMs
 		}
 		if a, ok := availMap[monitorAvailability15Days][model]; ok {
