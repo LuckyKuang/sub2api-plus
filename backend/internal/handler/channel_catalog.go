@@ -76,7 +76,10 @@ func (h *AvailableChannelHandler) listCatalog(c *gin.Context, userID int64) {
 		slog.WarnContext(c.Request.Context(), "catalog user rates unavailable", "endpoint", "/api/v1/channels/available", "reason", "user_rate_dependency_failed")
 	}
 	for _, group := range catalog {
-		out.Groups = append(out.Groups, toCatalogGroup(group, rates))
+		localized := toCatalogGroup(group, rates)
+		localized.Name, localized.Description = group.Group.I18n.Localize(
+			c.GetHeader("Accept-Language"), localized.Name, localized.Description)
+		out.Groups = append(out.Groups, localized)
 	}
 	response.Success(c, out)
 }

@@ -58,6 +58,41 @@ func catalogContext(query string, user bool) (*gin.Context, *httptest.ResponseRe
 	}
 	return c, w
 }
+
+func TestAvailableCatalogLocalizesWithoutChangingAuthorizedGroup(t *testing.T) {
+	access := &catalogAccessStub{groups: []service.Group{{
+		ID: 7, Name: "原名称", Description: "原描述", RateMultiplier: 1.25,
+		I18n: service.GroupI18n{"en": {Name: "Translated", Description: "Description"}},
+	}}, rates: map[int64]float64{7: 0.5}}
+	reader := &catalogReaderStub{}
+	settings := service.NewSettingService(&settingHandlerPublicRepoStub{values: map[string]string{
+		service.SettingKeyAvailableChannelsEnabled: "true",
+	}}, &config.Config{})
+	h := &AvailableChannelHandler{apiKeyService: access, plazaService: reader, settingService: settings}
+	for _, tc := range []struct{ language, name, description string }{
+		{"en-US", "Translated", "Description"}, {"zh", "原名称", "原描述"},
+	} {
+		c, w := catalogContext("?view=catalog", true)
+		c.Request.Header.Set("Accept-Language", tc.language)
+		h.List(c)
+		require.Equal(t, 200, w.Code)
+		var body struct {
+			Data channelCatalog `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+		require.Len(t, body.Data.Groups, 1)
+		g := body.Data.Groups[0]
+		require.Equal(t, int64(7), g.ID)
+		require.Equal(t, tc.name, g.Name)
+		require.Equal(t, tc.description, g.Description)
+		require.Equal(t, 1.25, g.RateMultiplier)
+		require.NotNil(t, g.UserRateMultiplier)
+		require.Equal(t, 0.5, *g.UserRateMultiplier)
+		require.NotContains(t, w.Body.String(), `"i18n"`)
+		require.Equal(t, "原名称", access.groups[0].Name)
+		require.Equal(t, "原名称", reader.received[0].Name)
+	}
+}
 func TestAvailableCatalogGateAndQueryCompatibility(t *testing.T) {
 	for _, q := range []string{"", "?view=", "?view=wrong", "?view=catalog&view=catalog", "?view=catalog"} {
 		t.Run(q, func(t *testing.T) {

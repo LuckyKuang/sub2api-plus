@@ -4,6 +4,7 @@
  */
 
 import { defineStore } from 'pinia'
+import { useLocaleRefresh } from '@/utils/localeRefresh'
 import { ref, computed, watch } from 'vue'
 import subscriptionsAPI from '@/api/subscriptions'
 import { adminSupportContext } from '@/utils/adminSupportContext'
@@ -127,6 +128,10 @@ export const useSubscriptionStore = defineStore('subscriptions', () => {
   }
 
   watch(adminSupportContext, clear, { flush: 'sync' })
+  useLocaleRefresh(() => {
+    if (loaded.value || activePromise) return fetchActiveSubscriptions(true)
+    invalidateCache()
+  })
 
   return {
     // State

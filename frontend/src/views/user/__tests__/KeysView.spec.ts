@@ -8,6 +8,7 @@ import { keysAPI } from '@/api'
 import KeysView from '../KeysView.vue'
 import en from '@/i18n/locales/en'
 import zh from '@/i18n/locales/zh'
+import { notifyLocaleChanged } from '@/utils/localeRefresh'
 
 let statusLocale: 'en' | 'zh' = 'en'
 
@@ -276,6 +277,23 @@ const getButtonByText = (wrapper: VueWrapper, text: string) => {
 }
 
 describe('user KeysView column settings', () => {
+  it('refreshes translated groups and keys while preserving an open create draft', async () => {
+    const wrapper = await mountView()
+    await getButtonByText(wrapper, 'Create API Key').trigger('click')
+    await nextTick()
+    const name = wrapper.get('input[data-tour="key-form-name"]')
+    await name.setValue('Unsubmitted key')
+    const beforeKeys = listKeys.mock.calls.length
+    const beforeGroups = getAvailableGroups.mock.calls.length
+    notifyLocaleChanged()
+    await flushPromises()
+    expect(listKeys.mock.calls.length).toBe(beforeKeys + 1)
+    expect(getAvailableGroups.mock.calls.length).toBe(beforeGroups + 1)
+    expect(wrapper.get('input[data-tour="key-form-name"]').element).toBe(name.element)
+    expect((name.element as HTMLInputElement).value).toBe('Unsubmitted key')
+    expect(keysAPI.create).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
   afterEach(() => setAdminSupportContext(null))
   beforeEach(() => {
     statusLocale = 'en'

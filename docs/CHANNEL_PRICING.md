@@ -60,6 +60,13 @@ of the operator's Fast multiplier; it does not grant upstream capability.
 
 ## 3. Status and reason codes
 
+OpenAI OAuth/setup-token requests whose final sent model is GPT-6.1 Sol do not
+apply the model-card long-context surcharge. Explicit administrator intervals
+and selling prices retain precedence. The actual credential owner determines
+eligibility, including Spark-linked accounts; aliases and response-model billing
+cannot change it. API-key GPT-6.1 Sol, Astra and other model policies keep their
+existing rules. See [Responses billing](protocols/OPENAI_RESPONSES.md#gpt-61-sol-and-gpt-6-solluna).
+
 `claude-sonnet-5` has a separate exact catalog entry and same-model built-in
 fallback. Its Standard input/output/cache-write-5m/cache-write-1h/cache-read
 prices are $2/$10/$2.50/$4/$0.20 per million tokens, from

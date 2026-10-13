@@ -64,7 +64,8 @@
               :rate-multiplier="group.rate_multiplier"
               :show-rate="false"
               :title="group.name"
-              class="max-w-full"
+              :truncate="false"
+              class="min-w-0 max-w-full"
             />
           </div>
         </div>

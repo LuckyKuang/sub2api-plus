@@ -4,6 +4,7 @@
  */
 
 import { defineStore } from 'pinia'
+import { useLocaleRefresh } from '@/utils/localeRefresh'
 import { ref } from 'vue'
 import { paymentAPI } from '@/api/payment'
 import type { PaymentConfig, PaymentOrder, SubscriptionPlan, CreateOrderRequest } from '@/types/payment'
@@ -21,6 +22,8 @@ export const usePaymentStore = defineStore('payment', () => {
   const configLoading = ref(false)
   const configLoaded = ref(false)
   let configPromise: Promise<PaymentConfig | null> | null = null
+  let plansRequest = 0
+  let plansLoading = false
 
   // ==================== Actions ====================
 
@@ -51,8 +54,11 @@ export const usePaymentStore = defineStore('payment', () => {
 
   /** Fetch available subscription plans */
   async function fetchPlans(): Promise<SubscriptionPlan[]> {
+    const request = ++plansRequest
+    plansLoading = true
     try {
       const response = await paymentAPI.getPlans()
+      if (request !== plansRequest) return plans.value
       // Backend returns features as newline-separated string; parse to array
       plans.value = (response.data || []).map((p: Omit<SubscriptionPlan, 'features'> & { features: string | string[] }) => ({
         ...p,
@@ -64,8 +70,12 @@ export const usePaymentStore = defineStore('payment', () => {
     } catch (error: unknown) {
       console.error('[payment] Failed to fetch plans:', error)
       return []
+    } finally {
+      if (request === plansRequest) plansLoading = false
     }
   }
+
+  useLocaleRefresh(() => plans.value.length || plansLoading ? fetchPlans() : undefined)
 
   /** Create a new order and set it as current */
   async function createOrder(params: CreateOrderRequest) {
