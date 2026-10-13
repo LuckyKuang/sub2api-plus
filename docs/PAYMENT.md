@@ -2,6 +2,13 @@
 
 Sub2API Plus has a built-in payment system that enables user self-service top-up without deploying a separate payment service.
 
+Checkout and subscription-plan group names follow the
+[group display translation contract](MODEL_PLAZA.md#group-display-translations).
+Changing the interface language updates those names without changing selected
+prices, currency conversion, payment methods, recovery state or unsaved input.
+Payment expiry displays use elapsed wall-clock time so background-tab throttling
+does not extend the order's remaining time.
+
 ---
 
 ## Table of Contents

@@ -15,6 +15,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useLocaleRefresh } from '@/utils/localeRefresh'
 import { useRoute } from 'vue-router'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import PlazaNavBar from '@/components/modelPlaza/PlazaNavBar.vue'
@@ -34,15 +35,23 @@ const data = ref<ModelPlazaResponse | null>(null)
 const loading = ref(true)
 const loadFailed = ref(false)
 
-onMounted(async () => {
-  // 独立形态导航条需要站点名/Logo;有 __APP_CONFIG__ 注入时同步命中缓存。
-  void appStore.fetchPublicSettings()
+let requestVersion = 0
+async function loadPlaza() {
+  const version = ++requestVersion
+  loading.value = true
+  loadFailed.value = false
   try {
-    data.value = await getModelPlaza()
+    const response = await getModelPlaza()
+    if (version === requestVersion) data.value = response
   } catch {
-    loadFailed.value = true
+    if (version === requestVersion) loadFailed.value = true
   } finally {
-    loading.value = false
+    if (version === requestVersion) loading.value = false
   }
+}
+useLocaleRefresh(loadPlaza)
+onMounted(() => {
+  void appStore.fetchPublicSettings()
+  void loadPlaza()
 })
 </script>

@@ -13,6 +13,7 @@ const mountView = () => shallowMount(ChannelStatusV1View, {
   global: { stubs: {
     AppLayout: { template: '<div><slot /></div>' },
     MonitorHero: { props: ['autoRefresh'], emits: ['refresh'], template: `<div>
+      <button class="enable" @click="autoRefresh.setEnabled(true)">Enable</button>
       <button class="interval" @click="autoRefresh.setInterval(120)">120 seconds</button>
       <button class="refresh" @click="$emit('refresh')">Refresh</button>
       <button class="disable" @click="autoRefresh.setEnabled(false)">Disable</button>
@@ -26,6 +27,8 @@ afterEach(() => { wrapper?.unmount(); vi.useRealTimers(); localStorage.clear() }
 describe('channel monitor refresh interval', () => {
   it('refreshes at the selected interval on successive automatic refreshes', async () => {
     wrapper = mountView(); await flushPromises()
+    // Plus starts disabled; the user explicitly enables periodic refresh.
+    await wrapper.get('.enable').trigger('click')
     await wrapper.get('.interval').trigger('click')
     await vi.advanceTimersByTimeAsync(119000)
     expect(list).toHaveBeenCalledTimes(1)
@@ -39,6 +42,7 @@ describe('channel monitor refresh interval', () => {
 
   it('preserves the selected interval after a manual refresh', async () => {
     wrapper = mountView(); await flushPromises()
+    await wrapper.get('.enable').trigger('click')
     await wrapper.get('.interval').trigger('click')
     await wrapper.get('.refresh').trigger('click'); await flushPromises()
     expect(list).toHaveBeenCalledTimes(2)

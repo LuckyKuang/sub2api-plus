@@ -33,6 +33,11 @@ user-directory cache and no provider discovery or refresh.
 
 ## Catalog DTO
 
+Both views localize group display text after authorization, using the
+[group translation contract](MODEL_PLAZA.md#group-display-translations). The
+catalog localizes its DTO without mutating the authorized service group or
+changing model prices, personal rates, IDs or access decisions.
+
 The `data` object contains `groups` and `user_rate_status`:
 
 - `loaded`: user-rate lookup succeeded, including no overrides.

@@ -291,6 +291,7 @@
 </template>
 
 <script setup lang="ts">
+import { useLocaleRefresh } from '@/utils/localeRefresh'
 import { adminSupportContext } from '@/utils/adminSupportContext'
 import { supportReadonly as vSupportReadonly } from '@/directives/supportReadonly'
 import { ref, computed, onMounted, watch } from 'vue'
@@ -1179,10 +1180,31 @@ async function resumeWechatPaymentFromQuery() {
   }
 }
 
+let checkoutRequest = 0
+let translatedGroupNames: Map<number, SubscriptionPlan['group_name']> | null = null
+function applyTranslatedGroupNames() {
+  if (!translatedGroupNames) return
+  for (const plan of checkout.value.plans) {
+    if (translatedGroupNames.has(plan.id)) plan.group_name = translatedGroupNames.get(plan.id)!
+  }
+  if (selectedPlan.value && translatedGroupNames.has(selectedPlan.value.id)) {
+    selectedPlan.value.group_name = translatedGroupNames.get(selectedPlan.value.id)!
+  }
+}
+useLocaleRefresh(async () => {
+  const request = ++checkoutRequest
+  const res = await paymentAPI.getCheckoutInfo()
+  if (request !== checkoutRequest) return
+  // Only refresh translated display text. Preserve selected prices, payment
+  // methods, recovery state and any recharge/confirmation draft.
+  translatedGroupNames = new Map(res.data.plans.map(plan => [plan.id, plan.group_name]))
+  applyTranslatedGroupNames()
+})
 onMounted(async () => {
   try {
     const res = await paymentAPI.getCheckoutInfo()
     checkout.value = res.data
+    applyTranslatedGroupNames()
     if (enabledMethods.value.length) {
       const order: readonly string[] = METHOD_ORDER
       const sorted = [...enabledMethods.value].sort((a, b) => {

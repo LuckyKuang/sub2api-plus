@@ -45,6 +45,13 @@ timing to usage and V1 histories and independent successful-probe rollup sums
 and counts. Existing rows stay NULL/zero-sample; no token clock is backfilled.
 See [usage timing](../../docs/USAGE_TIMING.md).
 
+Migration `286_group_i18n.sql` adds a non-null JSONB translation map to groups,
+defaulting to `{}` for existing and new groups. Original names/descriptions,
+Plus five-hour limits, reset sources and custom prices remain intact. The
+official source names this new migration `242_group_i18n.sql`; Plus already
+uses prefix 242, so only the new Plus 286 migration is imported. Existing
+filenames and checksums remain immutable.
+
 ## File Naming
 
 Regular migration:

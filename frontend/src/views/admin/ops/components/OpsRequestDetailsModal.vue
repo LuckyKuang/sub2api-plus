@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useMediaQuery } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
 import BaseDialog from '@/components/common/BaseDialog.vue'
@@ -8,6 +8,7 @@ import { useClipboard } from '@/composables/useClipboard'
 import { useAppStore } from '@/stores'
 import { opsAPI, type OpsRequestDetailsParams, type OpsRequestDetail } from '@/api/admin/ops'
 import { parseTimeRangeMinutes, formatDateTime } from '../utils/opsFormatters'
+import { getAccountNameMap } from '../utils/accountNameMap'
 
 export interface OpsRequestDetailsPreset {
   title: string
@@ -44,6 +45,10 @@ const items = ref<OpsRequestDetail[]>([])
 const total = ref(0)
 const page = ref(1)
 const pageSize = ref(10)
+const accountNameById = ref<Map<number, string>>(new Map())
+let refreshVersion = 0
+let namesController: AbortController | undefined
+onBeforeUnmount(() => { ++refreshVersion; namesController?.abort() })
 
 const close = () => emit('update:modelValue', false)
 
@@ -73,6 +78,9 @@ function buildTimeParams(): Pick<OpsRequestDetailsParams, 'start_time' | 'end_ti
 
 const fetchData = async () => {
   if (!props.modelValue) return
+  const version = ++refreshVersion
+  namesController?.abort()
+  accountNameById.value = new Map()
   loading.value = true
   try {
     const params: OpsRequestDetailsParams = {
@@ -91,21 +99,29 @@ const fetchData = async () => {
     if (typeof props.preset.max_duration_ms === 'number') params.max_duration_ms = props.preset.max_duration_ms
 
     const res = await opsAPI.listRequestDetails(params)
+    if (version !== refreshVersion) return
     items.value = res.items || []
     total.value = res.total || 0
+    void refreshAccountNames(version)
   } catch (e: any) {
+    if (version !== refreshVersion) return
     console.error('[OpsRequestDetailsModal] Failed to fetch request details', e)
     appStore.showError(e?.message || t('admin.ops.requestDetails.failedToLoad'))
     items.value = []
     total.value = 0
   } finally {
-    loading.value = false
+    if (version === refreshVersion) loading.value = false
   }
 }
 
 watch(
   () => props.modelValue,
   (open) => {
+    if (!open) {
+      ++refreshVersion
+      namesController?.abort()
+      accountNameById.value = new Map()
+    }
     if (open) {
       if (props.resumeState) return
       page.value = 1
@@ -158,6 +174,30 @@ function openErrorDetail(errorId: number | null | undefined) {
 const kindBadgeClass = (kind: string) => {
   if (kind === 'error') return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
   return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+}
+
+// Missing/deleted accounts retain their ID fallback. Each refresh reads a new
+// map and late responses from a closed/reopened dialog cannot overwrite it.
+async function refreshAccountNames(version: number) {
+  const ids = items.value
+    .map(row => row.account_id)
+    .filter((id): id is number => typeof id === 'number' && id > 0)
+  if (ids.length === 0) return
+  const controller = new AbortController()
+  namesController = controller
+  try {
+    const map = await getAccountNameMap(controller.signal)
+    if (version === refreshVersion) accountNameById.value = map
+  } catch (e) {
+    if (controller.signal.aborted || version !== refreshVersion) return
+    console.warn('[OpsRequestDetailsModal] Failed to load account names', e)
+  }
+}
+
+function accountLabel(row: OpsRequestDetail): string {
+  const id = row.account_id
+  if (typeof id !== 'number' || id <= 0) return '-'
+  return accountNameById.value.get(id) || `#${id}`
 }
 </script>
 
@@ -212,6 +252,9 @@ const kindBadgeClass = (kind: string) => {
                     <span class="ml-auto text-[11px] text-gray-500 dark:text-gray-400">{{ formatDateTime(row.created_at) }}</span>
                   </div>
                   <div class="break-all text-xs text-gray-600 dark:text-gray-300">{{ row.model || '-' }}</div>
+                  <div v-if="typeof row.account_id === 'number' && row.account_id > 0" class="break-all text-xs text-gray-500 dark:text-gray-400" :title="accountLabel(row)">
+                    {{ t('admin.ops.requestDetails.table.account') }}: {{ accountLabel(row) }}
+                  </div>
                   <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-600 dark:text-gray-300">
                     <span>{{ latencyLabel }}: {{ formatLatency(row) }}</span>
                     <span>{{ row.status_code ?? '-' }}</span>
@@ -252,6 +295,9 @@ const kindBadgeClass = (kind: string) => {
                     {{ t('admin.ops.requestDetails.table.model') }}
                   </th>
                   <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                    {{ t('admin.ops.requestDetails.table.account') }}
+                  </th>
+                  <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                     {{ latencyLabel }}
                   </th>
                   <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
@@ -280,6 +326,9 @@ const kindBadgeClass = (kind: string) => {
                   </td>
                   <td class="max-w-[240px] truncate px-4 py-3 text-xs text-gray-600 dark:text-gray-300" :title="row.model || ''">
                     {{ row.model || '-' }}
+                  </td>
+                  <td class="max-w-[180px] truncate px-4 py-3 text-xs text-gray-600 dark:text-gray-300" :title="accountLabel(row)">
+                    {{ accountLabel(row) }}
                   </td>
                   <td class="whitespace-nowrap px-4 py-3 text-xs text-gray-600 dark:text-gray-300">
                     {{ formatLatency(row) }}

@@ -57,6 +57,7 @@
 </template>
 
 <script setup lang="ts">
+import { useLocaleRefresh } from '@/utils/localeRefresh'
 import { computed, nextTick, onUnmounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
@@ -130,6 +131,7 @@ watch(() => auth.user?.id, () => {
   void loadCatalog()
 }, { immediate: true })
 onUnmounted(() => { ++requestId; controller?.abort() })
+useLocaleRefresh(loadCatalog)
 </script>
 
 <style scoped>

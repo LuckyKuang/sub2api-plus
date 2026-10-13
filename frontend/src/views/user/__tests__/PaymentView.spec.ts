@@ -5,6 +5,7 @@ import { PAYMENT_RECOVERY_STORAGE_KEY } from '@/components/payment/paymentFlow'
 import { formatPaymentAmount } from '@/components/payment/currency'
 import AmountInput from '@/components/payment/AmountInput.vue'
 import SubscriptionPlanCard from '@/components/payment/SubscriptionPlanCard.vue'
+import { notifyLocaleChanged } from '@/utils/localeRefresh'
 import en from '@/i18n/locales/en'
 import zh from '@/i18n/locales/zh'
 import type { CheckoutInfoResponse, MethodLimit, SubscriptionPlan } from '@/types/payment'
@@ -412,6 +413,48 @@ describe('PaymentView recharge rate preview', () => {
 })
 
 describe('PaymentView subscription confirmation amounts', () => {
+  // Group display translations must preserve the payment draft and its terms.
+  it('refreshes group names without changing the selected plan or creating an order', async () => {
+    const wrapper = await mountSubscriptionConfirm({ plan: { price: 9.99 } })
+    getCheckoutInfo.mockResolvedValue(checkoutInfoWithPlansFixture({
+      plan: { group_name: 'Translated group', price: 999, name: 'Changed remotely' },
+      checkout: { subscription_usd_to_cny_rate: 99 },
+    }))
+    notifyLocaleChanged()
+    await flushPromises()
+    expect(wrapper.text()).toContain('Starter')
+    expect(wrapper.text()).not.toContain('Changed remotely')
+    expect(wrapper.text()).toContain(formatPaymentAmount(9.99, 'CNY'))
+    expect(createOrder).not.toHaveBeenCalled()
+    await wrapper.findAll('button').find(button => button.text() === 'common.cancel')!.trigger('click')
+    expect(wrapper.getComponent(SubscriptionPlanCard).props('plan').group_name).toBe('Translated group')
+    expect(wrapper.getComponent(SubscriptionPlanCard).props('plan').price).toBe(9.99)
+    wrapper.unmount()
+  })
+
+  it('keeps the latest translated names when the initial checkout response arrives last', async () => {
+    routeState.path = '/purchase'
+    routeState.query = { tab: 'subscription' }
+    let resolveInitial!: (value: ReturnType<typeof checkoutInfoWithPlansFixture>) => void
+    getCheckoutInfo.mockReset()
+      .mockReturnValueOnce(new Promise(resolve => { resolveInitial = resolve }))
+      .mockResolvedValue(checkoutInfoWithPlansFixture({ plan: { group_name: 'Latest language', price: 999 } }))
+    createOrder.mockReset()
+    window.localStorage.clear()
+    const wrapper = shallowMount(PaymentView, { global: { stubs: {
+      AppLayout: { template: '<div><slot /></div>' }, Teleport: true, Transition: false,
+    } } })
+    notifyLocaleChanged()
+    await flushPromises()
+    resolveInitial(checkoutInfoWithPlansFixture({ plan: { group_name: 'Old language', price: 128 } }))
+    await flushPromises()
+    const plan = wrapper.getComponent(SubscriptionPlanCard).props('plan')
+    expect(plan.group_name).toBe('Latest language')
+    expect(plan.price).toBe(128)
+    expect(createOrder).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
   it('shows converted CNY pay amount using the subscription rate, not the balance multiplier', async () => {
     const wrapper = await mountSubscriptionConfirm({
       checkout: {

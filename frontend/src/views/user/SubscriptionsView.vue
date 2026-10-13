@@ -276,6 +276,7 @@
 </template>
 
 <script setup lang="ts">
+import { useLocaleRefresh } from '@/utils/localeRefresh'
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
@@ -319,15 +320,18 @@ function subscriptionPeakRateLabel(subscription: UserSubscription): string {
   return formatPeakRateWindow(subscription.group, serverTimezoneLabel(appStore.cachedPublicSettings?.server_utc_offset))
 }
 
+let subscriptionRequest = 0
 async function loadSubscriptions() {
+  const request = ++subscriptionRequest
   try {
     loading.value = true
-    subscriptions.value = await subscriptionsAPI.getMySubscriptions()
+    const result = await subscriptionsAPI.getMySubscriptions()
+    if (request === subscriptionRequest) subscriptions.value = result
   } catch (error) {
     console.error('Failed to load subscriptions:', error)
     appStore.showError(t('userSubscriptions.failedToLoad'))
   } finally {
-    loading.value = false
+    if (request === subscriptionRequest) loading.value = false
   }
 }
 
@@ -419,4 +423,5 @@ function formatResetTime(windowStart: string | null, windowHours: number): strin
 onMounted(() => {
   loadSubscriptions()
 })
+useLocaleRefresh(loadSubscriptions)
 </script>

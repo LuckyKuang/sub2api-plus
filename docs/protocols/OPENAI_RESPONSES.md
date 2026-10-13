@@ -122,7 +122,9 @@ identities. Registered effort suffixes and provider-qualified spellings resolve
 to the same SKU; preview names and unknown suffixes do not inherit these rules.
 Live account metadata remains authoritative. Offline Sol/Luna catalogs use the
 existing GPT-5.6 context template; GPT-6.1 Sol uses its bundled Codex metadata,
-with a 272,000 active context and 872,000 maximum configuration override.
+with a 500,000 default active context and 872,000 maximum configuration override.
+The active default applies only when upstream context metadata is missing or
+null; an explicit upstream window, including a lower one, remains authoritative.
 
 GPT-6.1 Sol defaults to `low` and accepts `max` separately from `xhigh`.
 Its catalog `ultra` level delegates with `xhigh` and is not an upstream effort.
@@ -143,6 +145,15 @@ GPT-6 Sol, and $0.10/$0.50/$0.125/$0.01 for GPT-6 Luna. Fast is 2x and Flex is
 0.5x. At more than 272,000 total input tokens, whole-request input/cache rates
 are 2x and output rates 1.5x. Explicit channel prices, including zero cache
 write, retain precedence; one SKU cannot fall back to another family's card.
+
+GPT-6.1 Sol requests using OpenAI OAuth/setup-token subscription credentials
+are exempt from the model-card long-context surcharge. The decision uses the
+actual credential owner and final sent model, not the inbound alias or a
+response/billing label. API-key requests retain their account/group context
+policy; Astra's mandatory API-key rule and other model families are unaffected.
+Explicit administrator context intervals remain billable. The exemption follows
+response-model repricing, Free Fast settlement and account-cost statistics,
+without bypassing Plus automatic-review model mismatch protection.
 
 ## Prompt Cache Identity and Usage
 

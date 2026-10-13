@@ -1,4 +1,5 @@
 import { createI18n } from 'vue-i18n'
+import { notifyLocaleChanged } from '@/utils/localeRefresh'
 
 type LocaleCode = 'en' | 'zh'
 
@@ -64,10 +65,12 @@ export async function setLocale(locale: string): Promise<void> {
     return
   }
 
+  const changed = getLocale() !== locale
   await loadLocaleMessages(locale)
   i18n.global.locale.value = locale
   localStorage.setItem(LOCALE_KEY, locale)
   document.documentElement.setAttribute('lang', locale)
+  if (changed) notifyLocaleChanged()
 
   // 同步更新浏览器页签标题，使其跟随语言切换
   const { resolveRouteDocumentTitle } = await import('@/router/title')

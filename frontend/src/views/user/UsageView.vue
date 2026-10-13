@@ -219,6 +219,7 @@
 </template>
 
 <script setup lang="ts">
+import { useLocaleRefresh } from '@/utils/localeRefresh'
 import { firstByteMs, strictFirstTokenMs, averageTps, tpsNote } from '@/utils/usageTiming'
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -841,12 +842,15 @@ const loadApiKeys = async () => {
   return keys
 }
 
+let filterRequest = 0
 const loadFilterOptions = async () => {
+  const request = ++filterRequest
   try {
     const [keys, availableGroups] = await Promise.all([
       loadApiKeys(),
       userGroupsAPI.getAvailable(),
     ])
+    if (request !== filterRequest) return
     apiKeys.value = keys
     groups.value = availableGroups
   } catch (error) {
@@ -928,4 +932,5 @@ onUnmounted(() => {
 watch(endpointDistributionSource, () => {
   // Endpoint source switching is handled by the chart component using already loaded stats.
 })
+useLocaleRefresh(() => Promise.all([loadLogs(), loadFilterOptions()]))
 </script>
