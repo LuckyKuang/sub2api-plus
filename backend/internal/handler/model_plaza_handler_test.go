@@ -269,7 +269,12 @@ func TestFilterPlazaVisibleGroups_SubscribedExclusiveGroup(t *testing.T) {
 type plazaVarySettingRepo struct{ service.SettingRepository }
 
 func (plazaVarySettingRepo) GetMultiple(context.Context, []string) (map[string]string, error) {
-	return map[string]string{service.SettingKeyModelPlazaEnabled: "true"}, nil
+	// Plus requires sign-in by default. Exercise the explicitly public mode
+	// documented in docs/MODEL_PLAZA.md without weakening that default.
+	return map[string]string{
+		service.SettingKeyModelPlazaEnabled:     "true",
+		service.SettingKeyModelPlazaRequireAuth: "false",
+	}, nil
 }
 
 type plazaVaryChannelRepo struct{ service.ChannelRepository }
