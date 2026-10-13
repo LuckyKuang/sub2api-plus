@@ -103,7 +103,7 @@ GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.15-custom.003
 | `v0.2.14+custom.004` | `v0.2.14` | `0363b8cdba8cec3e2ba4b2dbd49c4481143fa55d` | published |
 | `v0.2.15+custom.001` | `v0.2.15` | `f2669c8cf62555cd92389b3f55920e9e6e7c6ff2` | published |
 | `v0.2.15+custom.002` | `v0.2.15` | `f2669c8cf62555cd92389b3f55920e9e6e7c6ff2` | published |
-| `v0.2.15+custom.003` | `v0.2.15` | `ab80abc6d1f929a6864c8804fd077b509d21fda2` | planned |
+| `v0.2.15+custom.003` | `v0.2.15` | `ab80abc6d1f929a6864c8804fd077b509d21fda2` | published |
 
 `v0.2.15+custom.003` records the integrated official main snapshot in the
 Official Commit column. Its tagged official baseline remains
