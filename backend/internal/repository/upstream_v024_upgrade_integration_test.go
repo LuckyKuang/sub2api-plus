@@ -111,7 +111,11 @@ INSERT INTO settings (key,value) VALUES ('ops_runtime_log_config','{"level":"war
 		    'poll_scheduled', next_poll_at IS NOT NULL)::text
 		FROM openai_oauth_weekly_reset_observations WHERE account_id=1`))
 	require.Equal(t, "0", snapshot(`SELECT reset_sequence::text FROM group_quota_follow_reset_events WHERE group_id=101`))
-	require.JSONEq(t, groupsBefore, snapshot(`SELECT jsonb_agg(to_jsonb(t) - 'model_allowlist' ORDER BY id)::text FROM groups t`))
+	// Migration 286 (migrations/README.md) adds an empty translation map.
+	// Keep every pre-existing field in the preservation comparison and assert
+	// the new field's required default independently for all fixture groups.
+	require.JSONEq(t, groupsBefore, snapshot(`SELECT jsonb_agg(to_jsonb(t) - ARRAY['model_allowlist','i18n'] ORDER BY id)::text FROM groups t`))
+	require.JSONEq(t, `{"1":{},"101":{},"102":{}}`, snapshot(`SELECT jsonb_object_agg(id,i18n)::text FROM groups`))
 	require.JSONEq(t, `{"enabled":true,"models":["GPT-5.6","claude-*"]}`, snapshot(`SELECT model_allowlist::text FROM groups WHERE id=101`))
 	require.JSONEq(t, `{"enabled":false,"models":[]}`, snapshot(`SELECT model_allowlist::text FROM groups WHERE id=102`))
 	require.JSONEq(t, `{"level":"warn","retention_days":45,"persist_access_logs":true}`, snapshot(`SELECT value FROM settings WHERE key='ops_runtime_log_config'`))
