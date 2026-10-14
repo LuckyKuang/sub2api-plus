@@ -2228,6 +2228,7 @@ func TestOpenAIResponsesWebSocket_RechecksBillingBeforePassthroughFollowUpTurn(t
 		accountRepo, nil, nil, nil, nil, nil, nil, cfg, nil, nil,
 		service.NewBillingService(cfg, nil), rateLimitSvc, billingCacheSvc, nil,
 		&service.DeferredService{}, nil, nil, nil, nil, nil, nil, nil,
+		nil, // sessionRouteStore
 	)
 	concurrencyCache := &concurrencyCacheMock{
 		acquireUserSlotFn:    func(context.Context, int64, int, string) (bool, error) { return true, nil },
@@ -2483,6 +2484,7 @@ func TestOpenAIResponses_APIKeyPassthroughPool5xxRetriesThenExhaustsMaxSwitches(
 		nil,
 		nil,
 		nil,
+		nil, // sessionRouteStore
 	)
 	h := NewOpenAIGatewayHandler(
 		gatewaySvc,
@@ -2584,6 +2586,7 @@ func TestOpenAIResponses_APIKeyPassthroughPoolAuthFailureRetriesThenSwitchesToHe
 				nil,
 				nil,
 				nil,
+				nil, // sessionRouteStore
 			)
 			h := NewOpenAIGatewayHandler(
 				gatewaySvc,
@@ -2666,6 +2669,7 @@ func TestOpenAIResponses_APIKeyPassthroughSSERateLimitUsesConfiguredPoolRetry(t 
 		nil,
 		nil,
 		nil,
+		nil, // sessionRouteStore
 	)
 	h := NewOpenAIGatewayHandler(
 		gatewaySvc,
@@ -2826,6 +2830,7 @@ func TestOpenAIResponsesWebSocket_FailoverOnUpstreamUsageLimitEvent(t *testing.T
 		nil,
 		nil,
 		nil,
+		nil, // sessionRouteStore
 	)
 
 	cache := &concurrencyCacheMock{
@@ -3003,6 +3008,7 @@ func TestOpenAIResponsesWebSocket_SkipsClientProfileIneligibleAccountAndUsesElig
 		nil,
 		nil,
 		nil,
+		nil, // sessionRouteStore
 	)
 
 	cache := &concurrencyCacheMock{
@@ -3191,6 +3197,7 @@ func TestOpenAIResponsesWebSocket_FirstOutputTimeoutWithoutDownstreamReusesClien
 		accountRepo, nil, nil, nil, nil, nil, nil, cfg, nil, nil,
 		service.NewBillingService(cfg, nil), rateLimitSvc, billingCacheSvc,
 		nil, &service.DeferredService{}, nil, nil, nil, nil, nil, nil, nil,
+		nil, // sessionRouteStore
 	)
 	cache := &concurrencyCacheMock{
 		acquireUserSlotFn: func(context.Context, int64, int, string) (bool, error) { return true, nil },
@@ -3444,6 +3451,7 @@ func runOpenAIResponsesWebSocketUsageLogCase(t *testing.T, tc openAIResponsesWSU
 		nil,
 		nil,
 		nil, // userPlatformQuotaRepo
+		nil, // sessionRouteStore
 	)
 
 	cache := &concurrencyCacheMock{
