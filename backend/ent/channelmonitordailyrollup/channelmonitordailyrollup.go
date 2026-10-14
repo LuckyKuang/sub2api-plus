@@ -34,6 +34,10 @@ const (
 	FieldErrorCount = "error_count"
 	// FieldSumFirstByteMs holds the string denoting the sum_first_byte_ms field in the database.
 	FieldSumFirstByteMs = "sum_first_byte_ms"
+	// FieldSumFirstTextMs holds the string denoting the sum_first_text_ms field in the database.
+	FieldSumFirstTextMs = "sum_first_text_ms"
+	// FieldCountFirstText holds the string denoting the count_first_text field in the database.
+	FieldCountFirstText = "count_first_text"
 	// FieldCountFirstByte holds the string denoting the count_first_byte field in the database.
 	FieldCountFirstByte = "count_first_byte"
 	// FieldSumLatencyMs holds the string denoting the sum_latency_ms field in the database.
@@ -72,6 +76,8 @@ var Columns = []string{
 	FieldFailedCount,
 	FieldErrorCount,
 	FieldSumFirstByteMs,
+	FieldSumFirstTextMs,
+	FieldCountFirstText,
 	FieldCountFirstByte,
 	FieldSumLatencyMs,
 	FieldCountLatency,
@@ -109,6 +115,14 @@ var (
 	DefaultSumFirstByteMs int64
 	// SumFirstByteMsValidator is a validator for the "sum_first_byte_ms" field. It is called by the builders before save.
 	SumFirstByteMsValidator func(int64) error
+	// DefaultSumFirstTextMs holds the default value on creation for the "sum_first_text_ms" field.
+	DefaultSumFirstTextMs int64
+	// SumFirstTextMsValidator is a validator for the "sum_first_text_ms" field. It is called by the builders before save.
+	SumFirstTextMsValidator func(int64) error
+	// DefaultCountFirstText holds the default value on creation for the "count_first_text" field.
+	DefaultCountFirstText int
+	// CountFirstTextValidator is a validator for the "count_first_text" field. It is called by the builders before save.
+	CountFirstTextValidator func(int) error
 	// DefaultCountFirstByte holds the default value on creation for the "count_first_byte" field.
 	DefaultCountFirstByte int
 	// CountFirstByteValidator is a validator for the "count_first_byte" field. It is called by the builders before save.
@@ -183,6 +197,16 @@ func ByErrorCount(opts ...sql.OrderTermOption) OrderOption {
 // BySumFirstByteMs orders the results by the sum_first_byte_ms field.
 func BySumFirstByteMs(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldSumFirstByteMs, opts...).ToFunc()
+}
+
+// BySumFirstTextMs orders the results by the sum_first_text_ms field.
+func BySumFirstTextMs(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSumFirstTextMs, opts...).ToFunc()
+}
+
+// ByCountFirstText orders the results by the count_first_text field.
+func ByCountFirstText(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCountFirstText, opts...).ToFunc()
 }
 
 // ByCountFirstByte orders the results by the count_first_byte field.

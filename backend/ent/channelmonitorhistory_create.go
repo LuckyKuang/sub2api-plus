@@ -56,6 +56,34 @@ func (_c *ChannelMonitorHistoryCreate) SetNillableFirstByteMs(v *int) *ChannelMo
 	return _c
 }
 
+// SetFirstTextMs sets the "first_text_ms" field.
+func (_c *ChannelMonitorHistoryCreate) SetFirstTextMs(v int) *ChannelMonitorHistoryCreate {
+	_c.mutation.SetFirstTextMs(v)
+	return _c
+}
+
+// SetNillableFirstTextMs sets the "first_text_ms" field if the given value is not nil.
+func (_c *ChannelMonitorHistoryCreate) SetNillableFirstTextMs(v *int) *ChannelMonitorHistoryCreate {
+	if v != nil {
+		_c.SetFirstTextMs(*v)
+	}
+	return _c
+}
+
+// SetStreamProbe sets the "stream_probe" field.
+func (_c *ChannelMonitorHistoryCreate) SetStreamProbe(v bool) *ChannelMonitorHistoryCreate {
+	_c.mutation.SetStreamProbe(v)
+	return _c
+}
+
+// SetNillableStreamProbe sets the "stream_probe" field if the given value is not nil.
+func (_c *ChannelMonitorHistoryCreate) SetNillableStreamProbe(v *bool) *ChannelMonitorHistoryCreate {
+	if v != nil {
+		_c.SetStreamProbe(*v)
+	}
+	return _c
+}
+
 // SetLatencyMs sets the "latency_ms" field.
 func (_c *ChannelMonitorHistoryCreate) SetLatencyMs(v int) *ChannelMonitorHistoryCreate {
 	_c.mutation.SetLatencyMs(v)
@@ -194,6 +222,11 @@ func (_c *ChannelMonitorHistoryCreate) check() error {
 			return &ValidationError{Name: "first_byte_ms", err: fmt.Errorf(`ent: validator failed for field "ChannelMonitorHistory.first_byte_ms": %w`, err)}
 		}
 	}
+	if v, ok := _c.mutation.FirstTextMs(); ok {
+		if err := channelmonitorhistory.FirstTextMsValidator(v); err != nil {
+			return &ValidationError{Name: "first_text_ms", err: fmt.Errorf(`ent: validator failed for field "ChannelMonitorHistory.first_text_ms": %w`, err)}
+		}
+	}
 	if v, ok := _c.mutation.Message(); ok {
 		if err := channelmonitorhistory.MessageValidator(v); err != nil {
 			return &ValidationError{Name: "message", err: fmt.Errorf(`ent: validator failed for field "ChannelMonitorHistory.message": %w`, err)}
@@ -243,6 +276,14 @@ func (_c *ChannelMonitorHistoryCreate) createSpec() (*ChannelMonitorHistory, *sq
 	if value, ok := _c.mutation.FirstByteMs(); ok {
 		_spec.SetField(channelmonitorhistory.FieldFirstByteMs, field.TypeInt, value)
 		_node.FirstByteMs = &value
+	}
+	if value, ok := _c.mutation.FirstTextMs(); ok {
+		_spec.SetField(channelmonitorhistory.FieldFirstTextMs, field.TypeInt, value)
+		_node.FirstTextMs = &value
+	}
+	if value, ok := _c.mutation.StreamProbe(); ok {
+		_spec.SetField(channelmonitorhistory.FieldStreamProbe, field.TypeBool, value)
+		_node.StreamProbe = &value
 	}
 	if value, ok := _c.mutation.LatencyMs(); ok {
 		_spec.SetField(channelmonitorhistory.FieldLatencyMs, field.TypeInt, value)
@@ -390,6 +431,48 @@ func (u *ChannelMonitorHistoryUpsert) AddFirstByteMs(v int) *ChannelMonitorHisto
 // ClearFirstByteMs clears the value of the "first_byte_ms" field.
 func (u *ChannelMonitorHistoryUpsert) ClearFirstByteMs() *ChannelMonitorHistoryUpsert {
 	u.SetNull(channelmonitorhistory.FieldFirstByteMs)
+	return u
+}
+
+// SetFirstTextMs sets the "first_text_ms" field.
+func (u *ChannelMonitorHistoryUpsert) SetFirstTextMs(v int) *ChannelMonitorHistoryUpsert {
+	u.Set(channelmonitorhistory.FieldFirstTextMs, v)
+	return u
+}
+
+// UpdateFirstTextMs sets the "first_text_ms" field to the value that was provided on create.
+func (u *ChannelMonitorHistoryUpsert) UpdateFirstTextMs() *ChannelMonitorHistoryUpsert {
+	u.SetExcluded(channelmonitorhistory.FieldFirstTextMs)
+	return u
+}
+
+// AddFirstTextMs adds v to the "first_text_ms" field.
+func (u *ChannelMonitorHistoryUpsert) AddFirstTextMs(v int) *ChannelMonitorHistoryUpsert {
+	u.Add(channelmonitorhistory.FieldFirstTextMs, v)
+	return u
+}
+
+// ClearFirstTextMs clears the value of the "first_text_ms" field.
+func (u *ChannelMonitorHistoryUpsert) ClearFirstTextMs() *ChannelMonitorHistoryUpsert {
+	u.SetNull(channelmonitorhistory.FieldFirstTextMs)
+	return u
+}
+
+// SetStreamProbe sets the "stream_probe" field.
+func (u *ChannelMonitorHistoryUpsert) SetStreamProbe(v bool) *ChannelMonitorHistoryUpsert {
+	u.Set(channelmonitorhistory.FieldStreamProbe, v)
+	return u
+}
+
+// UpdateStreamProbe sets the "stream_probe" field to the value that was provided on create.
+func (u *ChannelMonitorHistoryUpsert) UpdateStreamProbe() *ChannelMonitorHistoryUpsert {
+	u.SetExcluded(channelmonitorhistory.FieldStreamProbe)
+	return u
+}
+
+// ClearStreamProbe clears the value of the "stream_probe" field.
+func (u *ChannelMonitorHistoryUpsert) ClearStreamProbe() *ChannelMonitorHistoryUpsert {
+	u.SetNull(channelmonitorhistory.FieldStreamProbe)
 	return u
 }
 
@@ -596,6 +679,55 @@ func (u *ChannelMonitorHistoryUpsertOne) UpdateFirstByteMs() *ChannelMonitorHist
 func (u *ChannelMonitorHistoryUpsertOne) ClearFirstByteMs() *ChannelMonitorHistoryUpsertOne {
 	return u.Update(func(s *ChannelMonitorHistoryUpsert) {
 		s.ClearFirstByteMs()
+	})
+}
+
+// SetFirstTextMs sets the "first_text_ms" field.
+func (u *ChannelMonitorHistoryUpsertOne) SetFirstTextMs(v int) *ChannelMonitorHistoryUpsertOne {
+	return u.Update(func(s *ChannelMonitorHistoryUpsert) {
+		s.SetFirstTextMs(v)
+	})
+}
+
+// AddFirstTextMs adds v to the "first_text_ms" field.
+func (u *ChannelMonitorHistoryUpsertOne) AddFirstTextMs(v int) *ChannelMonitorHistoryUpsertOne {
+	return u.Update(func(s *ChannelMonitorHistoryUpsert) {
+		s.AddFirstTextMs(v)
+	})
+}
+
+// UpdateFirstTextMs sets the "first_text_ms" field to the value that was provided on create.
+func (u *ChannelMonitorHistoryUpsertOne) UpdateFirstTextMs() *ChannelMonitorHistoryUpsertOne {
+	return u.Update(func(s *ChannelMonitorHistoryUpsert) {
+		s.UpdateFirstTextMs()
+	})
+}
+
+// ClearFirstTextMs clears the value of the "first_text_ms" field.
+func (u *ChannelMonitorHistoryUpsertOne) ClearFirstTextMs() *ChannelMonitorHistoryUpsertOne {
+	return u.Update(func(s *ChannelMonitorHistoryUpsert) {
+		s.ClearFirstTextMs()
+	})
+}
+
+// SetStreamProbe sets the "stream_probe" field.
+func (u *ChannelMonitorHistoryUpsertOne) SetStreamProbe(v bool) *ChannelMonitorHistoryUpsertOne {
+	return u.Update(func(s *ChannelMonitorHistoryUpsert) {
+		s.SetStreamProbe(v)
+	})
+}
+
+// UpdateStreamProbe sets the "stream_probe" field to the value that was provided on create.
+func (u *ChannelMonitorHistoryUpsertOne) UpdateStreamProbe() *ChannelMonitorHistoryUpsertOne {
+	return u.Update(func(s *ChannelMonitorHistoryUpsert) {
+		s.UpdateStreamProbe()
+	})
+}
+
+// ClearStreamProbe clears the value of the "stream_probe" field.
+func (u *ChannelMonitorHistoryUpsertOne) ClearStreamProbe() *ChannelMonitorHistoryUpsertOne {
+	return u.Update(func(s *ChannelMonitorHistoryUpsert) {
+		s.ClearStreamProbe()
 	})
 }
 
@@ -982,6 +1114,55 @@ func (u *ChannelMonitorHistoryUpsertBulk) UpdateFirstByteMs() *ChannelMonitorHis
 func (u *ChannelMonitorHistoryUpsertBulk) ClearFirstByteMs() *ChannelMonitorHistoryUpsertBulk {
 	return u.Update(func(s *ChannelMonitorHistoryUpsert) {
 		s.ClearFirstByteMs()
+	})
+}
+
+// SetFirstTextMs sets the "first_text_ms" field.
+func (u *ChannelMonitorHistoryUpsertBulk) SetFirstTextMs(v int) *ChannelMonitorHistoryUpsertBulk {
+	return u.Update(func(s *ChannelMonitorHistoryUpsert) {
+		s.SetFirstTextMs(v)
+	})
+}
+
+// AddFirstTextMs adds v to the "first_text_ms" field.
+func (u *ChannelMonitorHistoryUpsertBulk) AddFirstTextMs(v int) *ChannelMonitorHistoryUpsertBulk {
+	return u.Update(func(s *ChannelMonitorHistoryUpsert) {
+		s.AddFirstTextMs(v)
+	})
+}
+
+// UpdateFirstTextMs sets the "first_text_ms" field to the value that was provided on create.
+func (u *ChannelMonitorHistoryUpsertBulk) UpdateFirstTextMs() *ChannelMonitorHistoryUpsertBulk {
+	return u.Update(func(s *ChannelMonitorHistoryUpsert) {
+		s.UpdateFirstTextMs()
+	})
+}
+
+// ClearFirstTextMs clears the value of the "first_text_ms" field.
+func (u *ChannelMonitorHistoryUpsertBulk) ClearFirstTextMs() *ChannelMonitorHistoryUpsertBulk {
+	return u.Update(func(s *ChannelMonitorHistoryUpsert) {
+		s.ClearFirstTextMs()
+	})
+}
+
+// SetStreamProbe sets the "stream_probe" field.
+func (u *ChannelMonitorHistoryUpsertBulk) SetStreamProbe(v bool) *ChannelMonitorHistoryUpsertBulk {
+	return u.Update(func(s *ChannelMonitorHistoryUpsert) {
+		s.SetStreamProbe(v)
+	})
+}
+
+// UpdateStreamProbe sets the "stream_probe" field to the value that was provided on create.
+func (u *ChannelMonitorHistoryUpsertBulk) UpdateStreamProbe() *ChannelMonitorHistoryUpsertBulk {
+	return u.Update(func(s *ChannelMonitorHistoryUpsert) {
+		s.UpdateStreamProbe()
+	})
+}
+
+// ClearStreamProbe clears the value of the "stream_probe" field.
+func (u *ChannelMonitorHistoryUpsertBulk) ClearStreamProbe() *ChannelMonitorHistoryUpsertBulk {
+	return u.Update(func(s *ChannelMonitorHistoryUpsert) {
+		s.ClearStreamProbe()
 	})
 }
 

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"github.com/stretchr/testify/require"
@@ -119,19 +120,42 @@ func TestChannelMonitorDefaultIdentityForProviders(t *testing.T) {
 			}))
 			defer server.Close()
 			ctx := outboundidentity.WithResolver(context.Background(), func(context.Context, string) outboundidentity.Identity { return outboundidentity.Identity{} })
-			_, _, status, err := callProvider(ctx, test.provider, server.URL, "test-key", "test-model", "hello", &CheckOptions{APIMode: test.mode})
+			result, err := callProvider(ctx, test.provider, server.URL, "test-key", "test-model", "hello", &CheckOptions{APIMode: test.mode}, time.Now())
 			require.NoError(t, err)
-			require.Equal(t, http.StatusOK, status)
+			require.Equal(t, http.StatusOK, result.StatusCode)
 			headers := <-captured
 			expected := builtInOutboundIdentity(test.preset).ForProtocol("chat_completions")
 			require.Equal(t, expected.UserAgent, headers.Get("User-Agent"))
 			for name, value := range expected.Headers {
-				if test.provider == PlatformOpenAI && (name == "Originator" || name == "Version") {
-					require.Empty(t, headers.Get(name))
-				} else {
-					require.Equal(t, value, headers.Get(name), name)
-				}
+				require.Equal(t, value, headers.Get(name), name)
 			}
 		})
+	}
+}
+
+func TestChannelMonitorStreamingIdentityProtected(t *testing.T) {
+	swapMonitorHTTPClient(t)
+	for _, mode := range []string{MonitorAPIModeChatCompletions, MonitorAPIModeResponses} {
+		captured := make(chan http.Header, 1)
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			captured <- r.Header.Clone()
+			w.Header().Set("Content-Type", "text/event-stream")
+			if mode == MonitorAPIModeResponses {
+				_, _ = w.Write([]byte("data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"output_text\":\"ok\"}}\n\n"))
+			} else {
+				_, _ = w.Write([]byte("data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n"))
+			}
+		}))
+		ctx := outboundidentity.WithResolver(context.Background(), func(context.Context, string) outboundidentity.Identity { return outboundidentity.Identity{} })
+		result, err := callProvider(ctx, "openai", server.URL, "test-key", "test-model", "hi", &CheckOptions{APIMode: mode, StreamProbe: true, ExtraHeaders: map[string]string{"User-Agent": "untrusted/1.0", "Originator": "untrusted", "Version": "999", "Accept": "application/json"}}, time.Now())
+		server.Close()
+		require.NoError(t, err)
+		require.Equal(t, "ok", result.Text)
+		headers := <-captured
+		require.Equal(t, builtInOutboundIdentity("codex").UserAgent, headers.Get("User-Agent"))
+		require.Equal(t, "codex_cli_rs", headers.Get("Originator"))
+		require.Equal(t, "0.158.0", headers.Get("Version"))
+		require.Equal(t, "text/event-stream", headers.Get("Accept"))
+		require.Equal(t, "Bearer test-key", headers.Get("Authorization"))
 	}
 }

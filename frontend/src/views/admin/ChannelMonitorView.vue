@@ -99,8 +99,9 @@
           </template>
 
           <template #cell-latency="{ row }">
-            <div class="text-xs text-gray-900 dark:text-gray-100" :title="t('usage.probeTimingHint')">
-              <div>{{ t('usage.latencyFirstByte') }} {{ formatLatency(row.primary_first_byte_ms) }} ms</div>
+            <div class="text-xs text-gray-900 dark:text-gray-100" :title="t('monitorCommon.timingHint')">
+              <div>{{ t('monitorCommon.firstText') }} {{ formatLatency(row.primary_first_text_ms) }} ms</div>
+              <div>{{ t('monitorCommon.firstByte') }} {{ formatLatency(row.primary_first_byte_ms) }} ms</div>
               <div>{{ t('usage.latencyDuration') }} {{ formatLatency(row.primary_latency_ms) }} ms</div>
             </div>
           </template>

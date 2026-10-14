@@ -638,6 +638,7 @@ var (
 		{Name: "last_checked_at", Type: field.TypeTime, Nullable: true},
 		{Name: "created_by", Type: field.TypeInt64},
 		{Name: "extra_headers", Type: field.TypeJSON},
+		{Name: "stream_probe", Type: field.TypeBool, Default: false},
 		{Name: "body_override_mode", Type: field.TypeString, Size: 10, Default: "off"},
 		{Name: "body_override", Type: field.TypeJSON, Nullable: true},
 		{Name: "template_id", Type: field.TypeInt64, Nullable: true},
@@ -650,7 +651,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "channel_monitors_channel_monitor_request_templates_request_template",
-				Columns:    []*schema.Column{ChannelMonitorsColumns[21]},
+				Columns:    []*schema.Column{ChannelMonitorsColumns[22]},
 				RefColumns: []*schema.Column{ChannelMonitorRequestTemplatesColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -679,7 +680,7 @@ var (
 			{
 				Name:    "channelmonitor_template_id",
 				Unique:  false,
-				Columns: []*schema.Column{ChannelMonitorsColumns[21]},
+				Columns: []*schema.Column{ChannelMonitorsColumns[22]},
 			},
 			{
 				Name:    "channelmonitor_account_id",
@@ -700,6 +701,8 @@ var (
 		{Name: "failed_count", Type: field.TypeInt, Default: 0},
 		{Name: "error_count", Type: field.TypeInt, Default: 0},
 		{Name: "sum_first_byte_ms", Type: field.TypeInt64, Default: 0},
+		{Name: "sum_first_text_ms", Type: field.TypeInt64, Default: 0},
+		{Name: "count_first_text", Type: field.TypeInt, Default: 0},
 		{Name: "count_first_byte", Type: field.TypeInt, Default: 0},
 		{Name: "sum_latency_ms", Type: field.TypeInt64, Default: 0},
 		{Name: "count_latency", Type: field.TypeInt, Default: 0},
@@ -716,7 +719,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "channel_monitor_daily_rollups_channel_monitors_daily_rollups",
-				Columns:    []*schema.Column{ChannelMonitorDailyRollupsColumns[16]},
+				Columns:    []*schema.Column{ChannelMonitorDailyRollupsColumns[18]},
 				RefColumns: []*schema.Column{ChannelMonitorsColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
@@ -725,7 +728,7 @@ var (
 			{
 				Name:    "channelmonitordailyrollup_monitor_id_model_bucket_date",
 				Unique:  true,
-				Columns: []*schema.Column{ChannelMonitorDailyRollupsColumns[16], ChannelMonitorDailyRollupsColumns[1], ChannelMonitorDailyRollupsColumns[2]},
+				Columns: []*schema.Column{ChannelMonitorDailyRollupsColumns[18], ChannelMonitorDailyRollupsColumns[1], ChannelMonitorDailyRollupsColumns[2]},
 			},
 			{
 				Name:    "channelmonitordailyrollup_bucket_date",
@@ -740,6 +743,8 @@ var (
 		{Name: "model", Type: field.TypeString, Size: 200},
 		{Name: "status", Type: field.TypeEnum, Enums: []string{"operational", "degraded", "failed", "error"}},
 		{Name: "first_byte_ms", Type: field.TypeInt, Nullable: true},
+		{Name: "first_text_ms", Type: field.TypeInt, Nullable: true},
+		{Name: "stream_probe", Type: field.TypeBool, Nullable: true},
 		{Name: "latency_ms", Type: field.TypeInt, Nullable: true},
 		{Name: "ping_latency_ms", Type: field.TypeInt, Nullable: true},
 		{Name: "message", Type: field.TypeString, Nullable: true, Size: 500, Default: ""},
@@ -755,7 +760,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "channel_monitor_histories_channel_monitors_history",
-				Columns:    []*schema.Column{ChannelMonitorHistoriesColumns[9]},
+				Columns:    []*schema.Column{ChannelMonitorHistoriesColumns[11]},
 				RefColumns: []*schema.Column{ChannelMonitorsColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
@@ -764,12 +769,12 @@ var (
 			{
 				Name:    "channelmonitorhistory_monitor_id_model_checked_at",
 				Unique:  false,
-				Columns: []*schema.Column{ChannelMonitorHistoriesColumns[9], ChannelMonitorHistoriesColumns[1], ChannelMonitorHistoriesColumns[8]},
+				Columns: []*schema.Column{ChannelMonitorHistoriesColumns[11], ChannelMonitorHistoriesColumns[1], ChannelMonitorHistoriesColumns[10]},
 			},
 			{
 				Name:    "channelmonitorhistory_checked_at",
 				Unique:  false,
-				Columns: []*schema.Column{ChannelMonitorHistoriesColumns[8]},
+				Columns: []*schema.Column{ChannelMonitorHistoriesColumns[10]},
 			},
 		},
 	}
@@ -783,6 +788,7 @@ var (
 		{Name: "api_mode", Type: field.TypeString, Size: 32, Default: "chat_completions"},
 		{Name: "description", Type: field.TypeString, Nullable: true, Size: 500, Default: ""},
 		{Name: "extra_headers", Type: field.TypeJSON},
+		{Name: "stream_probe", Type: field.TypeBool, Default: false},
 		{Name: "body_override_mode", Type: field.TypeString, Size: 10, Default: "off"},
 		{Name: "body_override", Type: field.TypeJSON, Nullable: true},
 	}

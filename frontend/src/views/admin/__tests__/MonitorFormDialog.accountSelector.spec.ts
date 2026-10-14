@@ -170,6 +170,24 @@ describe('MonitorFormDialog linked account selector', () => {
     monitorUpdate.mockReset().mockResolvedValue({})
   })
 
+  it('loads, saves and clears streaming selection through the monitor form', async () => {
+    const wrapper = mountDialog(makeMonitor({ stream_probe: true }))
+    await flushPromises()
+    const advanced = wrapper.findComponent({ name: 'MonitorAdvancedRequestConfig' })
+    expect(advanced.props('streamProbe')).toBe(true)
+    await wrapper.get('#channel-monitor-form').trigger('submit')
+    await flushPromises()
+    expect(monitorUpdate).toHaveBeenCalledWith(42, expect.objectContaining({ stream_probe: true }))
+    advanced.vm.$emit('update:streamProbe', false)
+    await nextTick()
+    await wrapper.get('#channel-monitor-form').trigger('submit')
+    await flushPromises()
+    expect(monitorUpdate).toHaveBeenLastCalledWith(42, expect.objectContaining({ stream_probe: false }))
+    await wrapper.get('[data-testid="monitor-provider-anthropic"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.findComponent({ name: 'MonitorAdvancedRequestConfig' }).props('streamProbe')).toBe(false)
+  })
+
   it('loads the first page of provider accounts when quota mode is enabled', async () => {
     accountsList.mockResolvedValue({ items: [{ id: 1, name: 'a', platform: 'anthropic' }] })
     const wrapper = mountDialog()

@@ -106,7 +106,7 @@ const displayBars = computed<Bar[]>(() => {
     bars.push({
       colorClass,
       heightPct,
-      title: `${relative} · ${label} · ${t('usage.latencyFirstByte')} ${formatLatency(point.first_byte_ms)}ms · ${t('usage.latencyDuration')} ${latency}ms`,
+      title: `${relative} · ${label} · ${t('monitorCommon.firstText')} ${formatLatency(point.first_text_ms)}ms · ${t('monitorCommon.firstByte')} ${formatLatency(point.first_byte_ms)}ms · ${t('usage.latencyDuration')} ${latency}ms`,
     })
   }
 

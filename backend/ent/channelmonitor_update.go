@@ -318,6 +318,20 @@ func (_u *ChannelMonitorUpdate) SetExtraHeaders(v map[string]string) *ChannelMon
 	return _u
 }
 
+// SetStreamProbe sets the "stream_probe" field.
+func (_u *ChannelMonitorUpdate) SetStreamProbe(v bool) *ChannelMonitorUpdate {
+	_u.mutation.SetStreamProbe(v)
+	return _u
+}
+
+// SetNillableStreamProbe sets the "stream_probe" field if the given value is not nil.
+func (_u *ChannelMonitorUpdate) SetNillableStreamProbe(v *bool) *ChannelMonitorUpdate {
+	if v != nil {
+		_u.SetStreamProbe(*v)
+	}
+	return _u
+}
+
 // SetBodyOverrideMode sets the "body_override_mode" field.
 func (_u *ChannelMonitorUpdate) SetBodyOverrideMode(v string) *ChannelMonitorUpdate {
 	_u.mutation.SetBodyOverrideMode(v)
@@ -630,6 +644,9 @@ func (_u *ChannelMonitorUpdate) sqlSave(ctx context.Context) (_node int, err err
 	}
 	if value, ok := _u.mutation.ExtraHeaders(); ok {
 		_spec.SetField(channelmonitor.FieldExtraHeaders, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.StreamProbe(); ok {
+		_spec.SetField(channelmonitor.FieldStreamProbe, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.BodyOverrideMode(); ok {
 		_spec.SetField(channelmonitor.FieldBodyOverrideMode, field.TypeString, value)
@@ -1065,6 +1082,20 @@ func (_u *ChannelMonitorUpdateOne) SetExtraHeaders(v map[string]string) *Channel
 	return _u
 }
 
+// SetStreamProbe sets the "stream_probe" field.
+func (_u *ChannelMonitorUpdateOne) SetStreamProbe(v bool) *ChannelMonitorUpdateOne {
+	_u.mutation.SetStreamProbe(v)
+	return _u
+}
+
+// SetNillableStreamProbe sets the "stream_probe" field if the given value is not nil.
+func (_u *ChannelMonitorUpdateOne) SetNillableStreamProbe(v *bool) *ChannelMonitorUpdateOne {
+	if v != nil {
+		_u.SetStreamProbe(*v)
+	}
+	return _u
+}
+
 // SetBodyOverrideMode sets the "body_override_mode" field.
 func (_u *ChannelMonitorUpdateOne) SetBodyOverrideMode(v string) *ChannelMonitorUpdateOne {
 	_u.mutation.SetBodyOverrideMode(v)
@@ -1407,6 +1438,9 @@ func (_u *ChannelMonitorUpdateOne) sqlSave(ctx context.Context) (_node *ChannelM
 	}
 	if value, ok := _u.mutation.ExtraHeaders(); ok {
 		_spec.SetField(channelmonitor.FieldExtraHeaders, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.StreamProbe(); ok {
+		_spec.SetField(channelmonitor.FieldStreamProbe, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.BodyOverrideMode(); ok {
 		_spec.SetField(channelmonitor.FieldBodyOverrideMode, field.TypeString, value)

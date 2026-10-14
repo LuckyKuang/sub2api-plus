@@ -498,3 +498,38 @@ ingress audit, account ownership, billing or concurrency ordering. Existing
 Responses/Chat/Messages/WS/media pass-through and side-effect-order regressions
 remain mandatory; unknown and unextractable content keeps the established
 pass-through contract.
+
+
+V1 optional `stream_probe` changes only outbound probe transport and response
+parsing. The generated challenge / replace snapshot and existing probe execution
+boundary are unchanged; it introduces no public HTTP/WS ingress or audit bypass.
+Client request extraction and side-effect ordering remain identical for streaming
+and non-streaming traffic. Unknown incoming content still passes through under
+the canonical extraction contract.
+
+
+### Codex outbound transport preference
+
+`openai_codex_ws_enabled` and `openai_codex_http_ws_enabled` select outbound
+transport only. HTTP ingress completes the existing authentication/basic
+validation/security audit before account selection and the HTTP-to-WS helper.
+WS ingress retains its first-frame audit and per-frame/per-turn `BeforeRequest`
+audit before billing, concurrency and upstream writes. Disabling WS cannot
+create an unaudited bridge. A fresh HTTP bridge with an opaque continuation
+returns a reconnect/full-history error without generation; incomplete content
+extraction still passes through under the canonical extraction contract.
+Live sideband also checks the outbound permission after each client-frame audit
+and before upstream writes. Transport selection does not add extraction rules
+or change moderation policy.
+
+The Codex `1b6e0d8145` compatibility repair keeps that boundary: Responses Lite
+transport metadata, `stream_options.reasoning_summary_delivery`, Guardian role
+headers and non-root cache/session hints are protocol context, not user text or
+authorization. Both engines still extract successfully recognized user content
+from the original HTTP request or WS turn before these outbound adaptations.
+Unknown metadata/options/items remain pass-through; recognized sibling content
+remains auditable. OAuth Zstd encoding happens at the final HTTP/plugin send
+boundary, after ingress decoding and audit, with no new endpoint or ingress path.
+Models residency adds an outbound declaration only. Real-payload regressions
+cover plain/Lite HTTP and WS shapes, canonical content in both engines, and the
+existing blocked/allowed stage-order gates for both credential types.

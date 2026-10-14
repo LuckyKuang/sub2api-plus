@@ -59,6 +59,7 @@ type channelMonitorUserListItem struct {
 	PrimaryModel         string                               `json:"primary_model"`
 	PrimaryStatus        string                               `json:"primary_status"`
 	PrimaryFirstByteMs   *int                                 `json:"primary_first_byte_ms"`
+	PrimaryFirstTextMs   *int                                 `json:"primary_first_text_ms"`
 	PrimaryLatencyMs     *int                                 `json:"primary_latency_ms"`
 	PrimaryPingLatencyMs *int                                 `json:"primary_ping_latency_ms"`
 	Availability7d       float64                              `json:"availability_7d"`
@@ -72,8 +73,10 @@ type channelMonitorUserListItem struct {
 // channelMonitorUserTimelinePoint 主模型最近一次检测的 timeline 点。
 // 仅用于用户视图 list 响应，admin 视图不使用。
 type channelMonitorUserTimelinePoint struct {
+	StreamProbe   *bool  `json:"stream_probe"`
 	Status        string `json:"status"`
 	FirstByteMs   *int   `json:"first_byte_ms"`
+	FirstTextMs   *int   `json:"first_text_ms"`
 	LatencyMs     *int   `json:"latency_ms"`
 	PingLatencyMs *int   `json:"ping_latency_ms"`
 	CheckedAt     string `json:"checked_at"`
@@ -91,12 +94,15 @@ type channelMonitorUserModelStat struct {
 	Model              string  `json:"model"`
 	LatestStatus       string  `json:"latest_status"`
 	LatestFirstByteMs  *int    `json:"latest_first_byte_ms"`
+	LatestFirstTextMs  *int    `json:"latest_first_text_ms"`
 	LatestLatencyMs    *int    `json:"latest_latency_ms"`
 	Availability7d     float64 `json:"availability_7d"`
 	Availability15d    float64 `json:"availability_15d"`
 	Availability30d    float64 `json:"availability_30d"`
 	AvgFirstByte7dMs   *int    `json:"avg_first_byte_7d_ms"`
+	AvgFirstText7dMs   *int    `json:"avg_first_text_7d_ms"`
 	FirstByteSamples7d int     `json:"first_byte_samples_7d"`
+	FirstTextSamples7d int     `json:"first_text_samples_7d"`
 	AvgLatency7dMs     *int    `json:"avg_latency_7d_ms"`
 }
 
@@ -107,6 +113,7 @@ func userMonitorViewToItem(v *service.UserMonitorView, includeQuota bool) channe
 			Model:       e.Model,
 			Status:      e.Status,
 			FirstByteMs: e.FirstByteMs,
+			FirstTextMs: e.FirstTextMs,
 			LatencyMs:   e.LatencyMs,
 		})
 	}
@@ -115,6 +122,8 @@ func userMonitorViewToItem(v *service.UserMonitorView, includeQuota bool) channe
 		timeline = append(timeline, channelMonitorUserTimelinePoint{
 			Status:        p.Status,
 			FirstByteMs:   p.FirstByteMs,
+			FirstTextMs:   p.FirstTextMs,
+			StreamProbe:   p.StreamProbe,
 			LatencyMs:     p.LatencyMs,
 			PingLatencyMs: p.PingLatencyMs,
 			CheckedAt:     p.CheckedAt.UTC().Format(time.RFC3339),
@@ -128,6 +137,7 @@ func userMonitorViewToItem(v *service.UserMonitorView, includeQuota bool) channe
 		PrimaryModel:         v.PrimaryModel,
 		PrimaryStatus:        v.PrimaryStatus,
 		PrimaryFirstByteMs:   v.PrimaryFirstByteMs,
+		PrimaryFirstTextMs:   v.PrimaryFirstTextMs,
 		PrimaryLatencyMs:     v.PrimaryLatencyMs,
 		PrimaryPingLatencyMs: v.PrimaryPingLatencyMs,
 		Availability7d:       v.Availability7d,
@@ -147,12 +157,15 @@ func userMonitorDetailToResponse(d *service.UserMonitorDetail) *channelMonitorUs
 			Model:              m.Model,
 			LatestStatus:       m.LatestStatus,
 			LatestFirstByteMs:  m.LatestFirstByteMs,
+			LatestFirstTextMs:  m.LatestFirstTextMs,
 			LatestLatencyMs:    m.LatestLatencyMs,
 			Availability7d:     m.Availability7d,
 			Availability15d:    m.Availability15d,
 			Availability30d:    m.Availability30d,
 			AvgFirstByte7dMs:   m.AvgFirstByte7dMs,
+			AvgFirstText7dMs:   m.AvgFirstText7dMs,
 			FirstByteSamples7d: m.FirstByteSamples7d,
+			FirstTextSamples7d: m.FirstTextSamples7d,
 			AvgLatency7dMs:     m.AvgLatency7dMs,
 		})
 	}

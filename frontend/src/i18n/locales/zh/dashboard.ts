@@ -166,6 +166,8 @@ export default {
       noGroupDescription:
         '此 API 密钥尚未分配分组，请先在密钥列表中点击分组列进行分配，然后才能查看使用配置。',
       openai: {
+        httpTransportHint: '当前使用 HTTP 流式传输（SSE），会逐段输出。若要复用 WebSocket 连接，请选择 Codex CLI (WebSocket)，并确认管理员已为分组与账号启用支持；首字慢也可能来自排队、重试或模型推理。',
+        wsTransportHint: 'WebSocket 可复用连接，客户端连接本项目和本项目连接上游是两段独立传输。上游不支持 WS 时可能使用 HTTP/SSE 桥接；启用 WS 不保证首字一定更快。',
         description: '将以下配置文件添加到 Codex CLI 配置目录中。',
         authModeTitle: 'Codex 认证模式',
         authModeDescription: '兼容模式保留旧版 Codex 配置；API 密钥模式用于授权客户端图片执行器。',
@@ -530,6 +532,17 @@ export default {
 
   // Shared keys for channel monitor (admin + user views)
   monitorCommon: {
+    streamProbe: '流式探测',
+    streamProbeHint: '发送流式请求，记录首个非空文本片段的时间，在流正常结束后校验答案。所有请求体模式的 stream 均由此开关控制。',
+    firstText: '首字',
+    firstByte: '首字节',
+    latestFirstText: '最近首字 (ms)',
+    latestFirstByte: '最近首字节 (ms)',
+    avgFirstText7d: '7 天平均首字 (ms)',
+    avgFirstByte7d: '7 天平均首字节 (ms)',
+    textSamples: '{n} 个文本样本',
+    timingHint: '首字不包含元数据、推理和工具事件；总耗时记录到流正常结束。— 表示未观测到，历史探测不会补造首字时间。',
+
     status: {
       operational: '正常',
       degraded: '降级',

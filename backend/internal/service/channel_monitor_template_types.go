@@ -16,6 +16,7 @@ type ChannelMonitorRequestTemplate struct {
 	Description      string
 	ExtraHeaders     map[string]string
 	BodyOverrideMode string
+	StreamProbe      bool
 	BodyOverride     map[string]any
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
@@ -35,6 +36,7 @@ type ChannelMonitorRequestTemplateCreateParams struct {
 	Description      string
 	ExtraHeaders     map[string]string
 	BodyOverrideMode string
+	StreamProbe      bool
 	BodyOverride     map[string]any
 }
 
@@ -46,6 +48,7 @@ type ChannelMonitorRequestTemplateUpdateParams struct {
 	Description      *string
 	ExtraHeaders     *map[string]string
 	BodyOverrideMode *string
+	StreamProbe      *bool
 	BodyOverride     *map[string]any
 }
 

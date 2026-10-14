@@ -1,5 +1,12 @@
 <template>
   <div class="space-y-4">
+    <div v-if="supportsStreamProbe(provider)">
+      <label class="flex items-center gap-2 text-sm font-medium">
+        <input type="checkbox" :checked="streamProbe" @change="emit('update:streamProbe', ($event.target as HTMLInputElement).checked)" />
+        {{ t('monitorCommon.streamProbe') }}
+      </label>
+      <p class="mt-1 text-xs text-gray-400">{{ t('monitorCommon.streamProbeHint') }}</p>
+    </div>
     <!-- Headers key-value rows -->
     <div>
       <label class="input-label">{{ t('admin.channelMonitor.advanced.headers') }}</label>
@@ -108,6 +115,7 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { APIMode, BodyOverrideMode, Provider } from '@/api/admin/channelMonitor'
 import {
+  supportsStreamProbe,
   API_MODE_RESPONSES,
   DEFAULT_GROK_MODEL,
   PROVIDER_GROK,
@@ -115,6 +123,7 @@ import {
 } from '@/constants/channelMonitor'
 
 const props = defineProps<{
+  streamProbe?: boolean
   provider?: Provider
   apiMode?: APIMode
   extraHeaders: Record<string, string>
@@ -123,6 +132,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
+  (e: 'update:streamProbe', value: boolean): void
   (e: 'update:extraHeaders', value: Record<string, string>): void
   (e: 'update:bodyOverrideMode', value: BodyOverrideMode): void
   (e: 'update:bodyOverride', value: Record<string, unknown> | null): void
@@ -305,14 +315,14 @@ const bodyPlaceholder = computed(() => {
     if (props.bodyOverrideMode === 'merge') {
       return '{\n  "max_output_tokens": 20\n}'
     }
-    return '{\n  "model": "gpt-4o-mini",\n  "instructions": "You are a health check endpoint. Reply briefly.",\n  "input": "Reply with exactly: ok",\n  "max_output_tokens": 20,\n  "stream": false\n}'
+    return '{\n  "model": "gpt-4o-mini",\n  "instructions": "You are a health check endpoint. Reply briefly.",\n  "input": "Reply with exactly: ok",\n  "max_output_tokens": 20\n}'
   }
   if (props.provider === PROVIDER_OPENAI || props.provider === PROVIDER_GROK) {
     if (props.bodyOverrideMode === 'merge') {
       return '{\n  "max_tokens": 20\n}'
     }
     const model = props.provider === PROVIDER_GROK ? DEFAULT_GROK_MODEL : 'gpt-4o-mini'
-    return `{\n  "model": "${model}",\n  "messages": [{"role":"user","content":"Reply with exactly: ok"}],\n  "max_tokens": 20,\n  "stream": false\n}`
+    return `{\n  "model": "${model}",\n  "messages": [{"role":"user","content":"Reply with exactly: ok"}],\n  "max_tokens": 20\n}`
   }
   if (props.bodyOverrideMode === 'merge') {
     return '{\n  "system": "You are Claude Code..."\n}'

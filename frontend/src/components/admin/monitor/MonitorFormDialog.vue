@@ -192,6 +192,7 @@
             :provider="form.provider"
             :api-mode="form.api_mode"
             :extra-headers="form.extra_headers"
+            v-model:stream-probe="form.stream_probe"
             :body-override-mode="form.body_override_mode"
             :body-override="form.body_override"
             @update:extra-headers="form.extra_headers = $event"
@@ -233,6 +234,7 @@
 </template>
 
 <script setup lang="ts">
+import { supportsStreamProbe } from '@/constants/channelMonitor'
 import { ref, reactive, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
@@ -336,6 +338,7 @@ interface MonitorForm {
   // 高级设置快照
   template_id: number | null
   extra_headers: Record<string, string>
+  stream_probe: boolean
   body_override_mode: BodyOverrideMode
   body_override: Record<string, unknown> | null
 }
@@ -356,6 +359,7 @@ const form = reactive<MonitorForm>({
   enabled: true,
   template_id: null,
   extra_headers: {},
+  stream_probe: false,
   body_override_mode: 'off',
   body_override: null,
 })
@@ -417,6 +421,7 @@ const templateSelectValue = computed<string>({
       form.api_mode = normalizeAPIMode(tpl.api_mode)
       form.template_id = id
       form.extra_headers = { ...(tpl.extra_headers || {}) }
+      form.stream_probe = tpl.stream_probe ?? false
       form.body_override_mode = tpl.body_override_mode
       form.body_override = tpl.body_override ? { ...tpl.body_override } : null
       suppressFormWatchers = false
@@ -460,6 +465,7 @@ function templateOptionLabel(tpl: ChannelMonitorTemplate): string {
 function clearRequestSnapshot() {
   form.template_id = null
   form.extra_headers = {}
+  form.stream_probe = false
   form.body_override_mode = 'off'
   form.body_override = null
 }
@@ -726,6 +732,10 @@ watch(() => form.api_mode, () => {
   }
 }, { flush: 'sync' })
 
+watch(() => form.check_mode, (mode) => {
+  if (mode === CHECK_MODE_QUOTA) form.stream_probe = false
+})
+
 function resetForm() {
   suppressFormWatchers = true
   form.name = ''
@@ -745,6 +755,7 @@ function resetForm() {
   form.enabled = true
   form.template_id = null
   form.extra_headers = {}
+  form.stream_probe = false
   form.body_override_mode = 'off'
   form.body_override = null
   suppressFormWatchers = false
@@ -767,6 +778,7 @@ function loadFromMonitor(m: ChannelMonitor) {
   form.enabled = m.enabled
   form.template_id = m.template_id ?? null
   form.extra_headers = { ...(m.extra_headers || {}) }
+  form.stream_probe = m.stream_probe ?? false
   form.body_override_mode = m.body_override_mode || 'off'
   form.body_override = m.body_override ? { ...m.body_override } : null
   suppressFormWatchers = false
@@ -835,6 +847,7 @@ function buildPayload(): CreateParams {
     jitter_seconds: form.jitter_seconds || 0,
     template_id: usesProbePart.value ? form.template_id : null,
     extra_headers: form.extra_headers,
+    stream_probe: form.stream_probe && supportsStreamProbe(form.provider) && usesProbePart.value,
     body_override_mode: form.body_override_mode,
     body_override: form.body_override,
   }

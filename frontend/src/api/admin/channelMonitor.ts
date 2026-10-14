@@ -88,6 +88,7 @@ export interface ChannelMonitor {
   primary_status: MonitorStatus | ''
   /** Latest latency of the primary model in ms (null when no history yet) */
   primary_first_byte_ms?: number | null
+  primary_first_text_ms?: number | null
   primary_latency_ms: number | null
   /** Primary model 7-day availability percentage (0-100) */
   availability_7d: number
@@ -97,6 +98,7 @@ export interface ChannelMonitor {
   template_id: number | null
   extra_headers: Record<string, string>
   body_override_mode: BodyOverrideMode
+  stream_probe?: boolean
   body_override: Record<string, unknown> | null
   /** 检测模式：probe（默认）/ quota / quota_probe */
   check_mode: CheckMode
@@ -110,6 +112,7 @@ export interface ExtraModelStatus {
   model: string
   status: MonitorStatus | ''
   first_byte_ms?: number | null
+  first_text_ms?: number | null
   latency_ms: number | null
 }
 
@@ -152,6 +155,7 @@ export interface CreateParams {
   template_id?: number | null
   extra_headers?: Record<string, string>
   body_override_mode?: BodyOverrideMode
+  stream_probe?: boolean
   body_override?: Record<string, unknown> | null
 }
 
@@ -162,9 +166,11 @@ export type UpdateParams = Partial<CreateParams> & {
 }
 
 export interface CheckResult {
+  stream_probe?: boolean | null
   model: string
   status: MonitorStatus
   first_byte_ms?: number | null
+  first_text_ms?: number | null
   latency_ms: number | null
   ping_latency_ms: number | null
   message: string
@@ -178,10 +184,12 @@ export interface RunNowResponse {
 }
 
 export interface HistoryItem {
+  stream_probe?: boolean | null
   id: number
   model: string
   status: MonitorStatus
   first_byte_ms?: number | null
+  first_text_ms?: number | null
   latency_ms: number | null
   ping_latency_ms: number | null
   message: string

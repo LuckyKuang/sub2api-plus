@@ -16,6 +16,7 @@ export interface ChannelMonitorTemplate {
   description: string
   extra_headers: Record<string, string>
   body_override_mode: BodyOverrideMode
+  stream_probe?: boolean
   body_override: Record<string, unknown> | null
   created_at: string
   updated_at: string
@@ -39,6 +40,7 @@ export interface CreateParams {
   description?: string
   extra_headers?: Record<string, string>
   body_override_mode?: BodyOverrideMode
+  stream_probe?: boolean
   body_override?: Record<string, unknown> | null
 }
 
@@ -48,6 +50,7 @@ export interface UpdateParams {
   description?: string
   extra_headers?: Record<string, string>
   body_override_mode?: BodyOverrideMode
+  stream_probe?: boolean
   body_override?: Record<string, unknown> | null
 }
 

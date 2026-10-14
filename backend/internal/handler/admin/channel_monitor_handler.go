@@ -53,6 +53,7 @@ type channelMonitorCreateRequest struct {
 	TemplateID       *int64            `json:"template_id"`
 	ExtraHeaders     map[string]string `json:"extra_headers"`
 	BodyOverrideMode string            `json:"body_override_mode" binding:"omitempty,oneof=off merge replace"`
+	StreamProbe      bool              `json:"stream_probe"`
 	BodyOverride     map[string]any    `json:"body_override"`
 
 	// CheckMode: probe（默认）/ quota / quota_probe。quota 模式 endpoint/api_key
@@ -78,6 +79,7 @@ type channelMonitorUpdateRequest struct {
 	ClearTemplate    bool               `json:"clear_template"` // true 时把 template_id 置空，忽略 TemplateID
 	ExtraHeaders     *map[string]string `json:"extra_headers"`
 	BodyOverrideMode *string            `json:"body_override_mode" binding:"omitempty,oneof=off merge replace"`
+	StreamProbe      *bool              `json:"stream_probe"`
 	BodyOverride     *map[string]any    `json:"body_override"`
 
 	// CheckMode/AccountID：nil = 不更新；AccountID 指向 0 = 清空关联。
@@ -105,6 +107,7 @@ type channelMonitorResponse struct {
 	UpdatedAt           string                               `json:"updated_at"`
 	PrimaryStatus       string                               `json:"primary_status"`
 	PrimaryFirstByteMs  *int                                 `json:"primary_first_byte_ms"`
+	PrimaryFirstTextMs  *int                                 `json:"primary_first_text_ms"`
 	PrimaryLatencyMs    *int                                 `json:"primary_latency_ms"`
 	Availability7d      float64                              `json:"availability_7d"`
 	ExtraModelsStatus   []dto.ChannelMonitorExtraModelStatus `json:"extra_models_status"`
@@ -112,6 +115,7 @@ type channelMonitorResponse struct {
 	TemplateID       *int64            `json:"template_id"`
 	ExtraHeaders     map[string]string `json:"extra_headers"`
 	BodyOverrideMode string            `json:"body_override_mode"`
+	StreamProbe      bool              `json:"stream_probe"`
 	BodyOverride     map[string]any    `json:"body_override"`
 
 	// 配额模式：check_mode + 关联账号 + 主模型最近配额快照
@@ -122,9 +126,11 @@ type channelMonitorResponse struct {
 }
 
 type channelMonitorCheckResultResponse struct {
+	StreamProbe   *bool                        `json:"stream_probe"`
 	Model         string                       `json:"model"`
 	Status        string                       `json:"status"`
 	FirstByteMs   *int                         `json:"first_byte_ms"`
+	FirstTextMs   *int                         `json:"first_text_ms"`
 	LatencyMs     *int                         `json:"latency_ms"`
 	PingLatencyMs *int                         `json:"ping_latency_ms"`
 	Message       string                       `json:"message"`
@@ -133,10 +139,12 @@ type channelMonitorCheckResultResponse struct {
 }
 
 type channelMonitorHistoryItemResponse struct {
+	StreamProbe   *bool                        `json:"stream_probe"`
 	ID            int64                        `json:"id"`
 	Model         string                       `json:"model"`
 	Status        string                       `json:"status"`
 	FirstByteMs   *int                         `json:"first_byte_ms"`
+	FirstTextMs   *int                         `json:"first_text_ms"`
 	LatencyMs     *int                         `json:"latency_ms"`
 	PingLatencyMs *int                         `json:"ping_latency_ms"`
 	Message       string                       `json:"message"`
@@ -184,6 +192,7 @@ func channelMonitorToResponse(m *service.ChannelMonitor) *channelMonitorResponse
 		TemplateID:          m.TemplateID,
 		ExtraHeaders:        headers,
 		BodyOverrideMode:    m.BodyOverrideMode,
+		StreamProbe:         m.StreamProbe,
 		BodyOverride:        m.BodyOverride,
 		CheckMode:           m.CheckMode,
 		AccountID:           m.AccountID,
@@ -202,6 +211,8 @@ func checkResultToResponse(r *service.CheckResult) channelMonitorCheckResultResp
 		Model:         r.Model,
 		Status:        r.Status,
 		FirstByteMs:   r.FirstByteMs,
+		FirstTextMs:   r.FirstTextMs,
+		StreamProbe:   r.StreamProbe,
 		LatencyMs:     r.LatencyMs,
 		PingLatencyMs: r.PingLatencyMs,
 		Message:       r.Message,
@@ -216,6 +227,8 @@ func historyEntryToResponse(e *service.ChannelMonitorHistoryEntry) channelMonito
 		Model:         e.Model,
 		Status:        e.Status,
 		FirstByteMs:   e.FirstByteMs,
+		FirstTextMs:   e.FirstTextMs,
+		StreamProbe:   e.StreamProbe,
 		LatencyMs:     e.LatencyMs,
 		PingLatencyMs: e.PingLatencyMs,
 		Message:       e.Message,
@@ -298,6 +311,7 @@ func buildListItemResponse(m *service.ChannelMonitor, summary service.MonitorSta
 	resp := channelMonitorToResponse(m)
 	resp.PrimaryStatus = summary.PrimaryStatus
 	resp.PrimaryFirstByteMs = summary.PrimaryFirstByteMs
+	resp.PrimaryFirstTextMs = summary.PrimaryFirstTextMs
 	resp.PrimaryLatencyMs = summary.PrimaryLatencyMs
 	resp.Availability7d = summary.Availability7d
 	resp.LatestQuota = summary.LatestQuota
@@ -307,6 +321,7 @@ func buildListItemResponse(m *service.ChannelMonitor, summary service.MonitorSta
 			Model:       e.Model,
 			Status:      e.Status,
 			FirstByteMs: e.FirstByteMs,
+			FirstTextMs: e.FirstTextMs,
 			LatencyMs:   e.LatencyMs,
 		})
 	}
@@ -358,6 +373,7 @@ func (h *ChannelMonitorHandler) Create(c *gin.Context) {
 		TemplateID:       req.TemplateID,
 		ExtraHeaders:     req.ExtraHeaders,
 		BodyOverrideMode: req.BodyOverrideMode,
+		StreamProbe:      req.StreamProbe,
 		BodyOverride:     req.BodyOverride,
 		CheckMode:        req.CheckMode,
 		AccountID:        req.AccountID,
@@ -454,6 +470,7 @@ func (h *ChannelMonitorHandler) Update(c *gin.Context) {
 		ClearTemplate:    req.ClearTemplate,
 		ExtraHeaders:     req.ExtraHeaders,
 		BodyOverrideMode: req.BodyOverrideMode,
+		StreamProbe:      req.StreamProbe,
 		BodyOverride:     req.BodyOverride,
 		CheckMode:        req.CheckMode,
 		AccountID:        req.AccountID,

@@ -7,5 +7,6 @@ type ChannelMonitorExtraModelStatus struct {
 	Model       string `json:"model"`
 	Status      string `json:"status"`
 	FirstByteMs *int   `json:"first_byte_ms"`
+	FirstTextMs *int   `json:"first_text_ms"`
 	LatencyMs   *int   `json:"latency_ms"`
 }

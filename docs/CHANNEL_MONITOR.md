@@ -151,7 +151,7 @@ V1/V2 的用户只读接口保留原有权限。V2 的 `GET /api/v1/channel-moni
 
 使用记录的 `first_byte_ms` 是首次实际读到上游响应体数据的时间，独立于严格
 `first_token_ms`。V1 使用每个模型现有调用起点采样，独立于 HEAD Ping 和配额查询。
-默认非流式请求、SSRF 校验、供应商身份、challenge 与超时/响应上限保持原行为。
+默认仍为非流式请求；可通过下面的流式探测开关启用 SSE。SSRF 校验、供应商身份、challenge 与超时/响应上限保持原行为。
 首字节快而完整响应超过 6 秒仍判为 degraded；HTTP 错误、challenge 失败和截断不因
 首字节快而成功。失败后的实际观察可保留，空体/未观察/历史记录为 NULL，0ms 有效。
 
@@ -162,3 +162,18 @@ V1/V2 的用户只读接口保留原有权限。V2 的 `GET /api/v1/channel-moni
 分母独立返回 `first_byte_samples_7d`；无有效样本为 NULL。
 日聚合使用独立 `sum_first_byte_ms/count_first_byte`，不把历史零样本视为 0ms。
 V3 的 TTFT 始终只来自真实请求的严格首 token；不混入 V1 首字节或总耗时。
+
+
+## V1 流式探测
+
+监控和请求模板新增 `stream_probe`（默认 `false`）。`probe` 和 `quota_probe` 可对 OpenAI Chat Completions、Responses 及已有 OpenAI 兼容 Chat 供应商启用；纯配额、原生 Anthropic/Gemini 暂不支持，保存及执行前拒绝不支持的流式配置。
+
+所有 off/merge/replace 模式先构造独立请求体，再由开关写入布尔 `stream`；JSON 中的同名字段不能覆盖开关。关闭时移除 `stream_options`。流式请求使用 `Accept: text/event-stream`，沿用同一 SSRF/身份快照路径。模板应用和复制带上开关，模板仍为显式复制快照，后续修改不会自动改变监控。流式模板应用跳过纯配额监控。手动和定时执行共用检查器。
+
+`first_text_ms` 从探测调用开始，到首个非空白 assistant 文本 delta，忽略心跳、角色、元数据、推理和工具事件；`first_byte_ms` 保留首次响应体数据口径。Chat 使用 choice 0 文本，并要求正常 `finish_reason=stop` 和 `[DONE]`；Responses 按 output/content 索引拼接 `response.output_text.delta`，要求 `response.completed` 且状态为 completed。正常终态立即结束，不等 TCP 断开；正确文本后断流、failed/incomplete/error、无效事件、超限仍失败，已测时间保留。只有最终聚合文本而无 delta 时可以校验答案，但首字保持 NULL。
+
+默认/合并模式完成后校验算术答案；覆盖模式保留非空文本校验。总耗时 `latency_ms`、6 秒 degraded 阈值、45 秒超时、64 KiB 响应上限及独立 HEAD Ping/配额查询不变。失败后时间可见，但只有 operational/degraded 的非 NULL 首字参与均值。历史 `stream_probe` 是当次模式快照，旧历史为 NULL；0ms 是有效样本，不等于缺失。
+
+结果、历史、附加模型、时间线暴露 `first_text_ms`；列表为 `primary_first_text_ms`，详情为 `latest_first_text_ms`、`avg_first_text_7d_ms` 和 `first_text_samples_7d`。日聚合为独立 `sum_first_text_ms/count_first_text`。前端并列展示首字、首字节和总耗时；旧数据不从总耗时推算首字。V3 真实请求 TTFT 不混入此指标。
+
+迁移 287 仅把支持协议的既有 replace + JSON 布尔 `stream:true` 配置转为显式开关，并删除请求体同名字段；此前被忽略的 off/merge 配置不自动启用。历史测量不回填。

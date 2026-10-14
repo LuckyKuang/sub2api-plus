@@ -41,6 +41,8 @@ func (ChannelMonitorDailyRollup) Fields() []ent.Field {
 		field.Int("failed_count").Default(0),
 		field.Int("error_count").Default(0),
 		field.Int64("sum_first_byte_ms").NonNegative().Default(0),
+		field.Int64("sum_first_text_ms").NonNegative().Default(0),
+		field.Int("count_first_text").NonNegative().Default(0),
 		field.Int("count_first_byte").NonNegative().Default(0),
 		field.Int64("sum_latency_ms").Default(0),
 		field.Int("count_latency").Default(0),

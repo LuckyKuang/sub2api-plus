@@ -70,6 +70,16 @@ func FirstByteMs(v int) predicate.ChannelMonitorHistory {
 	return predicate.ChannelMonitorHistory(sql.FieldEQ(FieldFirstByteMs, v))
 }
 
+// FirstTextMs applies equality check predicate on the "first_text_ms" field. It's identical to FirstTextMsEQ.
+func FirstTextMs(v int) predicate.ChannelMonitorHistory {
+	return predicate.ChannelMonitorHistory(sql.FieldEQ(FieldFirstTextMs, v))
+}
+
+// StreamProbe applies equality check predicate on the "stream_probe" field. It's identical to StreamProbeEQ.
+func StreamProbe(v bool) predicate.ChannelMonitorHistory {
+	return predicate.ChannelMonitorHistory(sql.FieldEQ(FieldStreamProbe, v))
+}
+
 // LatencyMs applies equality check predicate on the "latency_ms" field. It's identical to LatencyMsEQ.
 func LatencyMs(v int) predicate.ChannelMonitorHistory {
 	return predicate.ChannelMonitorHistory(sql.FieldEQ(FieldLatencyMs, v))
@@ -243,6 +253,76 @@ func FirstByteMsIsNil() predicate.ChannelMonitorHistory {
 // FirstByteMsNotNil applies the NotNil predicate on the "first_byte_ms" field.
 func FirstByteMsNotNil() predicate.ChannelMonitorHistory {
 	return predicate.ChannelMonitorHistory(sql.FieldNotNull(FieldFirstByteMs))
+}
+
+// FirstTextMsEQ applies the EQ predicate on the "first_text_ms" field.
+func FirstTextMsEQ(v int) predicate.ChannelMonitorHistory {
+	return predicate.ChannelMonitorHistory(sql.FieldEQ(FieldFirstTextMs, v))
+}
+
+// FirstTextMsNEQ applies the NEQ predicate on the "first_text_ms" field.
+func FirstTextMsNEQ(v int) predicate.ChannelMonitorHistory {
+	return predicate.ChannelMonitorHistory(sql.FieldNEQ(FieldFirstTextMs, v))
+}
+
+// FirstTextMsIn applies the In predicate on the "first_text_ms" field.
+func FirstTextMsIn(vs ...int) predicate.ChannelMonitorHistory {
+	return predicate.ChannelMonitorHistory(sql.FieldIn(FieldFirstTextMs, vs...))
+}
+
+// FirstTextMsNotIn applies the NotIn predicate on the "first_text_ms" field.
+func FirstTextMsNotIn(vs ...int) predicate.ChannelMonitorHistory {
+	return predicate.ChannelMonitorHistory(sql.FieldNotIn(FieldFirstTextMs, vs...))
+}
+
+// FirstTextMsGT applies the GT predicate on the "first_text_ms" field.
+func FirstTextMsGT(v int) predicate.ChannelMonitorHistory {
+	return predicate.ChannelMonitorHistory(sql.FieldGT(FieldFirstTextMs, v))
+}
+
+// FirstTextMsGTE applies the GTE predicate on the "first_text_ms" field.
+func FirstTextMsGTE(v int) predicate.ChannelMonitorHistory {
+	return predicate.ChannelMonitorHistory(sql.FieldGTE(FieldFirstTextMs, v))
+}
+
+// FirstTextMsLT applies the LT predicate on the "first_text_ms" field.
+func FirstTextMsLT(v int) predicate.ChannelMonitorHistory {
+	return predicate.ChannelMonitorHistory(sql.FieldLT(FieldFirstTextMs, v))
+}
+
+// FirstTextMsLTE applies the LTE predicate on the "first_text_ms" field.
+func FirstTextMsLTE(v int) predicate.ChannelMonitorHistory {
+	return predicate.ChannelMonitorHistory(sql.FieldLTE(FieldFirstTextMs, v))
+}
+
+// FirstTextMsIsNil applies the IsNil predicate on the "first_text_ms" field.
+func FirstTextMsIsNil() predicate.ChannelMonitorHistory {
+	return predicate.ChannelMonitorHistory(sql.FieldIsNull(FieldFirstTextMs))
+}
+
+// FirstTextMsNotNil applies the NotNil predicate on the "first_text_ms" field.
+func FirstTextMsNotNil() predicate.ChannelMonitorHistory {
+	return predicate.ChannelMonitorHistory(sql.FieldNotNull(FieldFirstTextMs))
+}
+
+// StreamProbeEQ applies the EQ predicate on the "stream_probe" field.
+func StreamProbeEQ(v bool) predicate.ChannelMonitorHistory {
+	return predicate.ChannelMonitorHistory(sql.FieldEQ(FieldStreamProbe, v))
+}
+
+// StreamProbeNEQ applies the NEQ predicate on the "stream_probe" field.
+func StreamProbeNEQ(v bool) predicate.ChannelMonitorHistory {
+	return predicate.ChannelMonitorHistory(sql.FieldNEQ(FieldStreamProbe, v))
+}
+
+// StreamProbeIsNil applies the IsNil predicate on the "stream_probe" field.
+func StreamProbeIsNil() predicate.ChannelMonitorHistory {
+	return predicate.ChannelMonitorHistory(sql.FieldIsNull(FieldStreamProbe))
+}
+
+// StreamProbeNotNil applies the NotNil predicate on the "stream_probe" field.
+func StreamProbeNotNil() predicate.ChannelMonitorHistory {
+	return predicate.ChannelMonitorHistory(sql.FieldNotNull(FieldStreamProbe))
 }
 
 // LatencyMsEQ applies the EQ predicate on the "latency_ms" field.

@@ -166,6 +166,8 @@ export default {
       noGroupTitle: 'Please assign a group first',
       noGroupDescription: 'This API key has not been assigned to a group. Please click the group column in the key list to assign one before viewing the configuration.',
       openai: {
+        httpTransportHint: 'This uses HTTP streaming (SSE) with incremental output. To reuse a WebSocket connection, select Codex CLI (WebSocket) and confirm group/account support with your administrator. Queuing, retries and model reasoning can also delay first text.',
+        wsTransportHint: 'WebSocket can reuse connections. The client-to-gateway and gateway-to-upstream transports are independent; upstreams without WS may use an HTTP/SSE bridge. Enabling WS does not guarantee faster first text.',
         description: 'Add the following configuration files to your Codex CLI config directory.',
         authModeTitle: 'Codex authentication mode',
         authModeDescription: 'Compatibility mode keeps the existing setup for older Codex clients. API Key Mode authorizes the client-side image executor.',
@@ -525,6 +527,17 @@ export default {
 
   // Shared keys for channel monitor (admin + user views)
   monitorCommon: {
+    streamProbe: 'Streaming probe',
+    streamProbeHint: 'Send a streaming request, measure the first non-empty text delta, then validate the answer at completion. This switch controls stream in all body modes.',
+    firstText: 'First text',
+    firstByte: 'First byte',
+    latestFirstText: 'Latest first text (ms)',
+    latestFirstByte: 'Latest first byte (ms)',
+    avgFirstText7d: '7d average first text (ms)',
+    avgFirstByte7d: '7d average first byte (ms)',
+    textSamples: '{n} text samples',
+    timingHint: 'First text excludes metadata, reasoning and tool events. Total time ends at normal completion. A dash means no observation; old probes have no text timing.',
+
     status: {
       operational: 'Operational',
       degraded: 'Degraded',

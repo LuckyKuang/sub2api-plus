@@ -177,7 +177,8 @@
         :provider="form.provider"
         :api-mode="form.api_mode"
         :extra-headers="form.extra_headers"
-        :body-override-mode="form.body_override_mode"
+        v-model:stream-probe="form.stream_probe"
+            :body-override-mode="form.body_override_mode"
         :body-override="form.body_override"
         @update:extra-headers="form.extra_headers = $event"
         @update:body-override-mode="form.body_override_mode = $event"
@@ -227,6 +228,7 @@
 </template>
 
 <script setup lang="ts">
+import { supportsStreamProbe } from '@/constants/channelMonitor'
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
@@ -310,6 +312,7 @@ interface TemplateForm {
   api_mode: APIMode
   description: string
   extra_headers: Record<string, string>
+  stream_probe: boolean
   body_override_mode: BodyOverrideMode
   body_override: Record<string, unknown> | null
 }
@@ -326,6 +329,7 @@ function emptyForm(provider: Provider): TemplateForm {
     api_mode: API_MODE_CHAT_COMPLETIONS,
     description: '',
     extra_headers: {},
+    stream_probe: false,
     body_override_mode: 'off',
     body_override: null,
   }
@@ -338,6 +342,7 @@ function loadForm(tpl: ChannelMonitorTemplate) {
   form.api_mode = normalizeAPIMode(tpl.api_mode)
   form.description = tpl.description
   form.extra_headers = { ...(tpl.extra_headers || {}) }
+  form.stream_probe = tpl.stream_probe ?? false
   form.body_override_mode = tpl.body_override_mode
   form.body_override = tpl.body_override ? { ...tpl.body_override } : null
 }
@@ -402,6 +407,7 @@ async function handleSubmit() {
         api_mode: form.provider === PROVIDER_OPENAI ? form.api_mode : API_MODE_CHAT_COMPLETIONS,
         description: form.description.trim(),
         extra_headers: form.extra_headers,
+        stream_probe: form.stream_probe && supportsStreamProbe(form.provider),
         body_override_mode: form.body_override_mode,
         body_override: form.body_override,
       })
@@ -412,6 +418,7 @@ async function handleSubmit() {
         api_mode: form.provider === PROVIDER_OPENAI ? form.api_mode : API_MODE_CHAT_COMPLETIONS,
         description: form.description.trim(),
         extra_headers: form.extra_headers,
+        stream_probe: form.stream_probe && supportsStreamProbe(form.provider),
         body_override_mode: form.body_override_mode,
         body_override: form.body_override,
       })
@@ -514,6 +521,7 @@ const apiModeOptions = computed<{ value: APIMode; label: string; hint: string }[
 ])
 
 watch(() => form.provider, (provider) => {
+  if (!supportsStreamProbe(provider)) form.stream_probe = false
   if (provider !== PROVIDER_OPENAI) {
     form.api_mode = API_MODE_CHAT_COMPLETIONS
   }

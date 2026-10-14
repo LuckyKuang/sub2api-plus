@@ -114,6 +114,7 @@ func TestDuplicateChannelMonitorCopiesConfigurationAndResetsRuntimeState(t *test
 	source := &ChannelMonitor{
 		ID:               42,
 		Name:             "primary",
+		StreamProbe:      true,
 		Provider:         MonitorProviderOpenAI,
 		APIMode:          MonitorAPIModeResponses,
 		Endpoint:         "https://api.example.com",
@@ -147,6 +148,8 @@ func TestDuplicateChannelMonitorCopiesConfigurationAndResetsRuntimeState(t *test
 	require.Equal(t, "primary (Copy)", duplicate.Name)
 	require.Equal(t, source.Provider, duplicate.Provider)
 	require.Equal(t, source.APIMode, duplicate.APIMode)
+	require.True(t, duplicate.StreamProbe)
+	require.True(t, stored.StreamProbe)
 	require.Equal(t, source.Endpoint, duplicate.Endpoint)
 	require.Equal(t, "top-secret", duplicate.APIKey)
 	require.Equal(t, "NEW:top-secret", stored.APIKey)

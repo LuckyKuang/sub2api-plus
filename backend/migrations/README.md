@@ -52,6 +52,12 @@ official source names this new migration `242_group_i18n.sql`; Plus already
 uses prefix 242, so only the new Plus 286 migration is imported. Existing
 filenames and checksums remain immutable.
 
+Migration `287_channel_monitor_stream_probe.sql` adds opt-in V1 streaming probes,
+nullable first-text/mode history and independent successful-text rollup sums/counts.
+Only supported existing replace-mode boolean `stream:true` snapshots are promoted;
+merge/off snapshots stay disabled and historical timings stay unknown. See
+[channel monitoring](../../docs/CHANNEL_MONITOR.md#v1-流式探测).
+
 ## File Naming
 
 Regular migration:

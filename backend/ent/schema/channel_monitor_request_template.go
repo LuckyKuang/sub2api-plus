@@ -60,6 +60,7 @@ func (ChannelMonitorRequestTemplate) Fields() []ent.Field {
 		//             model/messages/contents 等关键字段在 checker 里走黑名单跳过）
 		//   replace - 直接用 body_override 作为完整 body；此时跳过 challenge 校验，
 		//             改为 HTTP 2xx + 响应文本非空即视为可用
+		field.Bool("stream_probe").Default(false),
 		field.String("body_override_mode").
 			Default("off").
 			MaxLen(10),

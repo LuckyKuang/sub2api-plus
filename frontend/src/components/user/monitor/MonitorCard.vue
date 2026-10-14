@@ -43,7 +43,7 @@
       </span>
     </div>
 
-    <p class="mt-3 text-xs text-gray-500 dark:text-gray-400" :title="t('usage.probeTimingHint')">{{ t('usage.latencyFirstByte') }} {{ formatLatency(item.primary_first_byte_ms) }} ms</p>
+    <p class="mt-3 text-xs text-gray-500 dark:text-gray-400" :title="t('monitorCommon.timingHint')">{{ t('monitorCommon.firstText') }} {{ formatLatency(item.primary_first_text_ms) }} ms · {{ t('monitorCommon.firstByte') }} {{ formatLatency(item.primary_first_byte_ms) }} ms</p>
     <!-- Metrics -->
     <MonitorMetricPair
       primary-icon="bolt"
