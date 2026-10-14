@@ -8579,6 +8579,33 @@
         <div v-show="activeTab === 'identity'">
           <OutboundIdentitySettings v-if="identityTabVisited" ref="outboundIdentitySettings">
             <template #codex>
+              <div class="space-y-4 rounded-lg border border-gray-200 p-4 dark:border-dark-600">
+                <div class="flex items-start justify-between gap-4">
+                  <div>
+                    <label class="text-sm font-medium text-gray-700 dark:text-gray-300" for="codex-upstream-ws">
+                      {{ t('admin.settings.gatewayForwarding.codexUpstreamWS') }}
+                    </label>
+                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      {{ t('admin.settings.gatewayForwarding.codexUpstreamWSHint') }}
+                    </p>
+                  </div>
+                  <Toggle id="codex-upstream-ws" v-model="form.openai_codex_ws_enabled" data-testid="codex-upstream-ws" />
+                </div>
+                <p v-if="form.openai_codex_ws_enabled && !form.openai_codex_ws_deployment_allowed" class="text-xs text-amber-600 dark:text-amber-400">
+                  {{ t('admin.settings.gatewayForwarding.codexUpstreamWSDeploymentBlocked') }}
+                </p>
+                <div class="flex items-start justify-between gap-4">
+                  <div>
+                    <label class="text-sm font-medium text-gray-700 dark:text-gray-300" for="codex-http-ws">
+                      {{ t('admin.settings.gatewayForwarding.codexHTTPWS') }}
+                    </label>
+                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      {{ t('admin.settings.gatewayForwarding.codexHTTPWSHint') }}
+                    </p>
+                  </div>
+                  <Toggle id="codex-http-ws" v-model="form.openai_codex_http_ws_enabled" :disabled="!form.openai_codex_ws_enabled || !form.openai_codex_ws_deployment_allowed" data-testid="codex-http-ws" />
+                </div>
+              </div>
               <!-- OpenAI Codex UA -->
               <div>
                 <label
@@ -9908,6 +9935,9 @@ const form = reactive<SettingsForm>({
   openai_codex_user_agent: "",
   openai_codex_environment_timezone: "",
   openai_codex_egress_country: "",
+  openai_codex_ws_enabled: true,
+  openai_codex_http_ws_enabled: false,
+  openai_codex_ws_deployment_allowed: true,
   codex_residency: "off",
   codex_legacy_client_profile_compatibility_enabled: false,
   openai_codex_local_group_quota_enabled: false,
@@ -11650,6 +11680,8 @@ async function saveSettings() {
         form.openai_codex_environment_timezone?.trim() || "",
       openai_codex_egress_country:
         form.openai_codex_egress_country?.trim() || "",
+      openai_codex_ws_enabled: form.openai_codex_ws_enabled,
+      openai_codex_http_ws_enabled: form.openai_codex_http_ws_enabled,
       codex_residency: form.codex_residency === "us" ? "us" : "off",
       codex_legacy_client_profile_compatibility_enabled:
         form.codex_legacy_client_profile_compatibility_enabled,

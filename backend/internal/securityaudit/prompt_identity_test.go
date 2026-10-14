@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
-	"github.com/LuckyKuang/sub2api-plus/internal/service"
 	"github.com/stretchr/testify/require"
 )
 
@@ -107,7 +106,10 @@ func TestPromptScannerCompiledIdentity(t *testing.T) {
 	_, err := NewOpenAICompatibleScanner().Scan(ctx, ActiveEndpoint{BaseURL: server.URL, Model: DefaultGuardModel, TimeoutMS: 1000}, "hello", AllScannerIDs)
 	require.NoError(t, err)
 	headers := <-captured
-	require.Equal(t, service.DefaultOpenAICodexUserAgent, headers.Get("User-Agent"))
-	require.Empty(t, headers.Get("Version"), "native OpenAI API-key omissions apply to audit suppliers too")
-	require.Empty(t, headers.Get("Originator"))
+	// Official Codex 1b6e0d8145 create_openai_provider supplies Version;
+	// default_client supplies Originator for API keys too. Independent audit
+	// credentials use the configured native Codex preset and exact pinned triple.
+	require.Equal(t, "codex_cli_rs/0.158.0 (Ubuntu 24.04; x86_64) xterm-256color", headers.Get("User-Agent"))
+	require.Equal(t, "0.158.0", headers.Get("Version"))
+	require.Equal(t, "codex_cli_rs", headers.Get("Originator"))
 }

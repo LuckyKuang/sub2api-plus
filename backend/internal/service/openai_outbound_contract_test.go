@@ -254,10 +254,10 @@ func TestOpenAIIdentityContractHTTPRetrySnapshot(t *testing.T) {
 						}
 						wantUA := candidate.originator + "/0.200.1" + suffix
 						want := http.Header{"User-Agent": {wantUA}}
-						if accountType == AccountTypeOAuth {
-							want.Set("Originator", candidate.originator)
-							want.Set("Version", "0.200.1")
-						}
+						// Official Codex 1b6e0d8145: default_headers + create_openai_provider,
+						// independently of OAuth versus API-key authentication.
+						want.Set("Originator", candidate.originator)
+						want.Set("Version", "0.200.1")
 						for _, header := range headers {
 							requireOpenAIIdentityContractHeaders(t, header, want, wantAuth)
 							if accountType == AccountTypeAPIKey {
@@ -276,9 +276,7 @@ func TestOpenAIIdentityContractHTTPRetrySnapshot(t *testing.T) {
 						require.NoError(t, err)
 						require.Len(t, headers, 3)
 						want.Set("User-Agent", strings.Replace(wantUA, "/0.200.1", "/0.200.2", 1))
-						if accountType == AccountTypeOAuth {
-							want.Set("Version", "0.200.2")
-						}
+						want.Set("Version", "0.200.2")
 						requireOpenAIIdentityContractHeaders(t, headers[2], want, wantAuth)
 					})
 				}

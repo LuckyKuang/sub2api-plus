@@ -395,7 +395,6 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 		// originator/OpenAI-Beta 返回 404（issue #3901）。
 		ensureCodexIdentityHeaders(upstreamReq.Header)
 		identity := s.applyOpenAIOutboundIdentity(ctx, account, upstreamReq.Header, true)
-		preserveOpenAIThreadOriginator(c, upstreamReq.Header)
 		clearOpenAICodexLegacySessionAliases(upstreamReq.Header, account)
 		SetOpsRoutingDiagnostics(c, &OpsRoutingDiagnostics{OutboundIdentitySource: identity.Source})
 		logger.L().Debug("openai messages: upstream identity restored",

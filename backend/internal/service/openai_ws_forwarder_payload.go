@@ -195,6 +195,8 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	// 账号级请求头覆写（仅 openai api_key 账号启用时生效；OAuth 路径 no-op）。
 	// 覆盖所有 WS 模式（ctx_pool/dedicated/passthrough）的握手头。
 	account.ApplyHeaderOverrides(headers)
+	// Transport declarations are owned by the handshake, not generic overrides.
+	headers.Set("OpenAI-Beta", betaValue)
 	// The request/body stage owns installation and thread metadata. Preserve the
 	// already isolated cache session and restore it after fingerprint mutation.
 	if cacheSessionIdentity != "" {
@@ -203,14 +205,12 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	if strings.TrimSpace(headers.Get("x-client-request-id")) == "" {
 		alignOpenAICodexThreadHeaders(headers)
 	}
-	identity := s.applyOpenAIOutboundIdentity(ctx, account, headers, account != nil && account.UsesOpenAICodexProtocol())
-	if account != nil && account.UsesOpenAICodexProtocol() {
-		preserveOpenAIThreadOriginator(c, headers)
-	}
-	clearOpenAICodexLegacySessionAliases(headers, account)
+	identity := s.applyOpenAIOutboundIdentity(ctx, account, headers, true)
 	if selected, ok := outboundidentity.FromContext(WithAccountOutboundIdentity(ctx, account)); ok {
 		selected.ForProtocol(APIProtocolResponses).Apply(headers)
 	}
+	clearOpenAICodexLegacySessionAliases(headers, account)
+	applyOpenAICodexGuardianHeader(c, account, headers, routingModel)
 	SetOpsRoutingDiagnostics(c, &OpsRoutingDiagnostics{OutboundIdentitySource: identity.Source})
 	setOpenAICodexRoutingHint(headers, account, routingModel, routingServiceTier)
 	brandidentity.StripOutboundHeaders(headers)

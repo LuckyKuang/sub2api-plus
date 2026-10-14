@@ -1266,6 +1266,17 @@ func normalizeOpenAIOAuthResponsesCompatibilityFields(reqBody map[string]any) bo
 		return false
 	}
 	changed := false
+	// Responses has its own stream_options (including Codex's
+	// reasoning_summary_delivery). Only include_usage belongs to Chat.
+	if options, ok := reqBody["stream_options"].(map[string]any); ok {
+		if _, exists := options["include_usage"]; exists {
+			delete(options, "include_usage")
+			if len(options) == 0 {
+				delete(reqBody, "stream_options")
+			}
+			changed = true
+		}
+	}
 	if prompt, exists := reqBody["prompt"]; exists {
 		if input, hasInput := reqBody["input"]; !hasInput || input == nil {
 			if prompt != nil {
@@ -1301,6 +1312,18 @@ func normalizeOpenAIOAuthResponsesCompatibilityBody(body []byte) ([]byte, bool, 
 	}
 	normalized := body
 	changed := false
+	if options := gjson.GetBytes(normalized, "stream_options"); options.IsObject() && options.Get("include_usage").Exists() {
+		path := "stream_options.include_usage"
+		if len(options.Map()) == 1 {
+			path = "stream_options"
+		}
+		next, err := sjson.DeleteBytes(normalized, path)
+		if err != nil {
+			return body, false, fmt.Errorf("normalize oauth chat stream usage option: %w", err)
+		}
+		normalized = next
+		changed = true
+	}
 	prompt := gjson.GetBytes(normalized, "prompt")
 	if prompt.Exists() {
 		input := gjson.GetBytes(normalized, "input")

@@ -941,7 +941,7 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 	}
 
 	credentialAccount.applyOpenAIHeaderOverrides(req.Header)
-	s.applyOpenAIOutboundIdentity(ctx, credentialAccount, req.Header, isOAuth)
+	s.applyOpenAIOutboundIdentity(ctx, credentialAccount, req.Header, true)
 
 	// Get proxy URL
 	proxyURL := ""
@@ -2154,7 +2154,7 @@ func (s *AccountTestService) testOpenAIChatCompletionsConnection(
 	// OpenAI 的身份头由最终收口阶段写入，通用覆写不得影响它们。
 	account.applyOpenAIHeaderOverrides(req.Header)
 	applyOpenCodeSessionHeader(c, account, apiURL, req.Header, payloadBytes)
-	s.applyOpenAIOutboundIdentity(ctx, account, req.Header, false)
+	s.applyOpenAIOutboundIdentity(ctx, account, req.Header, true)
 
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {
@@ -2291,7 +2291,7 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
 	// identity is final for the official session-id header.
 	setOpenAIUpstreamSessionIdentityForAccount(req.Header, credentialAccount, probeSessionID)
 	clearOpenAICodexLegacySessionAliases(req.Header, credentialAccount)
-	s.applyOpenAIOutboundIdentity(ctx, credentialAccount, req.Header, isOAuth)
+	s.applyOpenAIOutboundIdentity(ctx, credentialAccount, req.Header, true)
 
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {
@@ -3068,7 +3068,7 @@ func (s *AccountTestService) testOpenAIImageAPIKey(c *gin.Context, ctx context.C
 
 	// OpenAI 的身份头由最终收口阶段写入，通用覆写不得影响它们。
 	account.applyOpenAIHeaderOverrides(req.Header)
-	s.applyOpenAIOutboundIdentity(ctx, account, req.Header, false)
+	s.applyOpenAIOutboundIdentity(ctx, account, req.Header, true)
 
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {

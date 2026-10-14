@@ -35,10 +35,17 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 	attempt int,
 	lastFailureReason string,
 	agentTaskRecoveryTried *bool,
-) (*OpenAIForwardResult, error) {
+) (result *OpenAIForwardResult, returnErr error) {
 	if s == nil || account == nil {
 		return nil, wrapOpenAIWSFallback("invalid_state", errors.New("service or account is nil"))
 	}
+	requestSubmitted := false
+	defer func() {
+		var failure *openAIWSFallbackError
+		if requestSubmitted && errors.As(returnErr, &failure) {
+			failure.RequestSubmitted = true
+		}
+	}()
 	responseModelObserver := &upstreamResponseModelObserver{}
 
 	wsURL, err := s.buildOpenAIResponsesWSURL(account)
@@ -326,6 +333,9 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		}
 	}
 
+	if err := s.requireCodexUpstreamWS(ctx, account); err != nil {
+		return nil, wrapOpenAIWSFallback("outbound_ws_disabled", err)
+	}
 	if err := s.performOpenAIWSGeneratePrewarm(
 		ctx,
 		lease,
@@ -340,6 +350,10 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		return nil, err
 	}
 
+	if err := s.requireCodexUpstreamWS(ctx, account); err != nil {
+		return nil, wrapOpenAIWSFallback("outbound_ws_disabled", err)
+	}
+	requestSubmitted = true
 	if err := lease.WriteJSONWithContextTimeout(ctx, payload, s.openAIWSWriteTimeout()); err != nil {
 		lease.MarkBroken()
 		logOpenAIWSModeInfo(

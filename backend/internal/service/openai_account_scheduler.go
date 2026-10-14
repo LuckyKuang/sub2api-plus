@@ -2706,6 +2706,13 @@ func (s *OpenAIGatewayService) isOpenAIAccountTransportCompatible(account *Accou
 		return false
 	}
 	if requiredTransport == OpenAIUpstreamTransportResponsesWebsocketV2Ingress {
+		if !s.codexUpstreamWSAllowed(context.Background(), account) {
+			if s.cfg != nil && s.cfg.Gateway.OpenAIWS.ModeRouterV2Enabled {
+				return account.ResolveOpenAIResponsesWebSocketV2Mode(s.cfg.Gateway.OpenAIWS.IngressModeDefault) != OpenAIWSIngressModeOff
+			}
+			return account.IsOpenAIResponsesWebSocketV2Enabled()
+		}
+
 		if s.cfg == nil || !s.cfg.Gateway.OpenAIWS.ModeRouterV2Enabled {
 			return s.getOpenAIWSProtocolResolver().Resolve(account).Transport == OpenAIUpstreamTransportResponsesWebsocketV2
 		}

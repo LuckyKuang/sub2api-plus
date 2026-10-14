@@ -255,6 +255,9 @@ type SystemSettings struct {
 	OpenAICodexUserAgent                         string // OpenAI Codex 上游完整 User-Agent；空值由客户端版本号拼出标准 CLI UA
 	OpenAICodexEnvironmentTimezone               string // 模型可见 environment_context 的目标 IANA 时区（全局默认）；空值 = 不改写
 	OpenAICodexEgressCountry                     string // 出口国家代码（ISO 3166-1 alpha-2，全局默认）；空值 = 不声明
+	OpenAICodexWSEnabled                         bool   // Runtime Codex upstream transport policy
+	OpenAICodexHTTPWSEnabled                     bool   // Runtime Codex upstream transport policy
+	OpenAICodexWSDeploymentAllowed               bool   // Read-only deployment capability
 	OpenAICodexResidency                         string // 全局 Codex residency：off（默认，不发送）或 us
 	CodexLegacyClientProfileCompatibilityEnabled bool   // 是否临时允许封闭旧版 Codex 客户端档案（默认 false）
 	OpenAICodexLocalGroupQuotaEnabled            bool   // Codex 客户端显示本地订阅 5 小时/7 天额度（默认 false）

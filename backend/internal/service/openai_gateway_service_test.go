@@ -3370,11 +3370,11 @@ func TestOpenAIBuildUpstreamRequestOAuthResponsesPreservesCallerBeta(t *testing.
 		require.Empty(t, req.Header.Values("OpenAI-Beta"))
 	})
 
-	t.Run("api key remains caller controlled", func(t *testing.T) {
+	t.Run("api key removes legacy Responses beta", func(t *testing.T) {
 		c := makeRequest("responses=experimental, responses_multi_agent=v1")
 		req, err := svc.buildUpstreamRequest(c.Request.Context(), c, apiKey, []byte(`{"model":"gpt-5.5","input":"hello"}`), "token", true, "", false)
 		require.NoError(t, err)
-		require.Equal(t, []string{"responses=experimental, responses_multi_agent=v1"}, req.Header.Values("OpenAI-Beta"))
+		require.Equal(t, []string{"responses_multi_agent=v1"}, req.Header.Values("OpenAI-Beta"))
 	})
 
 	t.Run("compact OAuth removes legacy token and preserves independent beta", func(t *testing.T) {

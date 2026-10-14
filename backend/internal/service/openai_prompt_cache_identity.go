@@ -216,23 +216,55 @@ func setOpenAIUpstreamSessionIdentityForAccount(headers http.Header, account *Ac
 // and the legacy `session_id` alias is not part of the official wire format,
 // so both are removed for every Codex account regardless of fingerprint mode.
 func clearOpenAICodexLegacySessionAliases(headers http.Header, account *Account) {
-	if headers == nil || account == nil || !account.UsesOpenAICodexProtocol() {
+	if headers == nil || account == nil {
 		return
+	}
+	// API-key Codex uses the same official session header spelling as OAuth.
+	// Inspect only the already finalized trusted identity, never inbound headers.
+	identity, native := validOpenAIOutboundIdentityWithCompatibility(headers.Get("User-Agent"), true)
+	nativeAPIIdentity := account.IsOpenAI() && native && headers.Get("Originator") == identity.Originator
+	if !account.UsesOpenAICodexProtocol() && !nativeAPIIdentity {
+		return
+	}
+	if headers.Get(codexSessionIDHeader) == "" && headers.Get("session_id") != "" {
+		headers.Set(codexSessionIDHeader, headers.Get("session_id"))
 	}
 	headers.Del("conversation_id")
 	headers.Del("session_id")
 }
 
-// alignOpenAIUpstreamSessionIdentityFromBody makes the finalized Responses
-// prompt_cache_key authoritative after fingerprinting and account-level header
-// overrides have run. This preserves Codex's body/header cache identity even
-// when an earlier stage supplied a different session identity.
+// openAICodexNonRootSessionID preserves the official distinction between an
+// agent's session and its shared prompt cache. These are routing seeds only;
+// both still pass through the selected account's tenant namespace.
+func openAICodexNonRootSessionID(c *gin.Context) string {
+	if c == nil || c.Request == nil {
+		return ""
+	}
+	if strings.TrimSpace(c.GetHeader(openAISubagentHeader)) == "" &&
+		codexSubagentKindFromMetadata(c.GetHeader(codexTurnMetadataHeader)) == "" {
+		return ""
+	}
+	return explicitOpenAIHeaderSessionID(c)
+}
+
+// Root sessions follow the finalized prompt cache; non-root agents retain
+// their own isolated session, as in official client.rs::responses_session_id.
 func (s *OpenAIGatewayService) alignOpenAIUpstreamSessionIdentityFromBody( //nolint:unused // compact/session identity alignment helper
 	c *gin.Context,
 	account *Account,
 	headers http.Header,
 	body []byte,
 ) error {
+	if account != nil && account.IsOpenAI() && !isOpenAIResponsesCompactPath(c) {
+		if raw := openAICodexNonRootSessionID(c); raw != "" {
+			identity, err := s.resolveOpenAIPromptCacheIdentity(c, account, raw)
+			if err != nil {
+				return err
+			}
+			setOpenAIUpstreamSessionIdentityForAccount(headers, account, identity)
+			return nil
+		}
+	}
 	promptCacheKey := strings.TrimSpace(gjson.GetBytes(body, "prompt_cache_key").String())
 	if promptCacheKey == "" {
 		return nil

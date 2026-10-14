@@ -485,6 +485,9 @@ const baseSettingsResponse = {
   enable_client_dateline_normalization: true,
   antigravity_user_agent_version: "",
   openai_codex_user_agent: "",
+  openai_codex_ws_enabled: true,
+  openai_codex_http_ws_enabled: false,
+  openai_codex_ws_deployment_allowed: true,
   payment_enabled: true,
   payment_min_amount: 1,
   payment_max_amount: 10000,
@@ -765,6 +768,24 @@ describe("admin SettingsView payment visible method controls", () => {
       expect(fetchPublicSettings).toHaveBeenCalledWith(true);
       expect(clearPublicSettingsCache.mock.invocationCallOrder[0]).toBeLessThan(fetchPublicSettings.mock.invocationCallOrder[0]);
     } finally { wrapper.unmount(); }
+  });
+
+  it("saves Codex transport switches independently and disables HTTP preference while upstream WS is off", async () => {
+    const wrapper = mountView();
+    await flushPromises();
+    await openIdentityTab(wrapper);
+    const upstream = wrapper.get('[data-testid="codex-upstream-ws"]');
+    const http = wrapper.get('[data-testid="codex-http-ws"]');
+    await http.setValue(true);
+    await upstream.setValue(false);
+    expect(http.attributes("disabled")).toBeDefined();
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+    expect(updateSettings).toHaveBeenCalledWith(expect.objectContaining({
+      openai_codex_ws_enabled: false,
+      openai_codex_http_ws_enabled: true,
+    }));
+    wrapper.unmount();
   });
 
   it("loads and saves V3 monitor mode without converting it to V1 or V2", async () => {

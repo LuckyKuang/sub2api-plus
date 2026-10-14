@@ -210,10 +210,15 @@ HTTP forward, HTTP passthrough, Messages bridge, and WebSocket compatibility
 paths: `max_output_tokens`, `max_completion_tokens`, `temperature`, `top_p`,
 `frequency_penalty`, `presence_penalty`, `chat_template_kwargs`, `user`,
 `metadata`, `prompt_cache_options`, `prompt_cache_retention`,
-`safety_identifier`, `stream_options`, `truncation`, and `stop_sequences` are
+`safety_identifier`, `truncation`, and `stop_sequences` are
 removed before the upstream request. A passthrough account therefore produces
 the same body as a non-passthrough account instead of relying on a rejected-field
 retry to recover from a first-request 400.
+
+Responses `stream_options` is preserved, including official Codex
+`reasoning_summary_delivery` and unknown sibling options. Only Chat's
+`stream_options.include_usage` is removed, along with its parent when that
+object would otherwise be empty.
 
 Under the default hard-affinity mode, account priority changes do not replace a
 valid active session route. The optional sticky-weighted scheduler mode remains
@@ -508,6 +513,7 @@ outside this gateway's request path.
 The global setting `codex_residency` is `off` or `us`. `us` adds
 `x-openai-internal-codex-residency: us` to Codex-protocol Responses forwarding,
 including HTTP passthrough and the Responses WebSocket handshake, and to
+Codex models discovery for OAuth and API Key using the Codex preset,
 refresh, revoke, and chatgpt.com backend-api calls. `off` sends nothing and
 strips a client-supplied copy. Authorization-code exchange and device-code do
 not send the header. See `docs/OUTBOUND_IDENTITY.md` for the source rule.
@@ -533,7 +539,9 @@ fingerprint mutation.
 
 Fingerprint preparation runs before final request construction. Plus
 prompt-cache/session isolation is authoritative for the final `session-id`
-header on Codex-protocol outbound (the legacy `session_id` alias is removed
+header on Codex-protocol outbound. Root sessions align to the cache key;
+declared non-root agents retain a separate isolated session, matching official
+Codex's non-root exception (the legacy `session_id` alias is removed
 for every Codex account), while fingerprint convergence remains authoritative
 for installation and thread/turn metadata. `off` disables only fingerprint-owned
 header and body mutation; it does not disable Plus cache isolation, security,
@@ -735,3 +743,73 @@ providers with their own reporting behavior.
 Usage tier fields are administrator-only API data. User usage responses omit
 `service_tier`, `requested_service_tier` and `response_service_tier`; user usage
 tables, column settings, cost tooltips and exports do not show service tiers.
+
+
+## Codex transport and active probe timing
+
+The ordinary Codex configuration explicitly sets `supports_websockets = false`
+and still streams over HTTP/SSE. The WebSocket configuration explicitly enables
+it. A custom provider in official Codex defaults this setting to false; HTTP
+streaming does not buffer the whole response. Client WebSocket and upstream
+WebSocket are separate decisions; account/global routing may bridge to HTTP/SSE.
+Connection reuse can improve continuation overhead, but does not remove audit,
+scheduling, retry or model reasoning time. Compare the same model, effort, tier,
+credential owner and network exit before attributing slow first text to transport.
+
+V1 probes optionally set `stream_probe=true`, consume `response.output_text.delta`
+and require `response.completed` with completed status. `response.incomplete`,
+`response.failed`, `error` or disconnect cannot pass based on partial text.
+The standalone probe `first_text_ms` clock excludes metadata/reasoning/tool events
+and does not change real-request first-byte/token billing observations.
+
+
+## Runtime Codex upstream WebSocket controls
+
+The outbound settings page persists two independent controls in the settings
+store (no new deployment environment variable):
+
+| Admin settings field | Default | Effect |
+| --- | --- | --- |
+| `openai_codex_ws_enabled` | `true` | Permit new upstream WS work within existing deployment/account restrictions |
+| `openai_codex_http_ws_enabled` | `false` | Prefer upstream Responses WS for eligible HTTP streaming requests |
+| `openai_codex_ws_deployment_allowed` | Read-only | Whether startup flags permit Responses WS for any account type |
+
+The first switch controls **gateway-to-upstream** connections. It does not
+turn off client-facing WS ingress, HTTP streaming or HTTP/2. Startup `enabled`,
+`force_http`, account-type gates, Responses WS v2 enablement, account mode/off
+and account force-HTTP remain authoritative. Missing persisted fields preserve
+the defaults above; malformed values and database read failures disable new WS
+work. Saving updates the local settings cache immediately; other instances
+observe it within five seconds.
+
+With the preference enabled, a streaming HTTP `/responses` request can use the
+existing WS pool and stream its events back as SSE. Compact, non-streaming,
+background, opaque `previous_response_id` continuations and stream-ID requests
+remain HTTP. Passthrough on/off does not change this selection or identity
+priority. Native HTTP continuations retain their ID; the gateway must not drop it to
+make an upgrade eligible. An explicit account opt-out is never overridden.
+
+Only a handshake/dial failure before generation submission can fall back to
+HTTP. Existing `fallback_cooldown_seconds` (default 30) suppresses subsequent
+upgrade attempts for that account; zero explicitly disables cooling. A write
+attempt followed by disconnect or missing output is ambiguous and is not
+replayed through HTTP. Upstream WS support is therefore optional; enabling this
+preference does not establish a first-text latency improvement.
+
+Disabling upstream WS prevents new dials, acquisition/reuse and prewarm. Active
+turns finish; Live sideband checks each audited client data frame and blocks
+new frames when disabled. Later native Responses WS turns close with 1012 and ask the client to
+reconnect with full history. Idle pooled sockets drain on the existing
+30-second sweep (plus cross-instance settings propagation). A new admitted
+client WS may use the HTTP bridge; an opaque continuation without retained
+history, or pointing outside its last retained response, is rejected with 1012 before billing/concurrency hooks or upstream
+writes. Audit still precedes account selection and each subsequent turn's
+billing/concurrency/upstream side effects. Existing account ingress opt-outs
+remain in force.
+
+OAuth/API-key provider HTTP and WS handshakes use the same trusted identity.
+WS handshakes add `OpenAI-Beta: responses_websockets=2026-02-06`; HTTP removes
+legacy Responses and WS-only beta declarations. Native Codex uses `session-id` and drops
+`session_id`/`conversation_id` aliases after Plus session isolation. OAuth
+ChatGPT account headers remain credential-specific. See
+[Codex client profiles](CODEX_CLIENT_PROFILES.md) for auxiliary/auth omissions.

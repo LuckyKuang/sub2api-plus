@@ -125,7 +125,7 @@ func TestOpenAIOAuthHTTPBuildersSendRoutingHintFromFinalBody(t *testing.T) {
 	}
 }
 
-func TestOpenAIHTTPPassthroughStripsOnlyOAuthLegacyResponsesBeta(t *testing.T) {
+func TestOpenAIHTTPPassthroughStripsLegacyResponsesBetaForBothCredentialTypes(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	svc := &OpenAIGatewayService{cfg: &config.Config{
 		Security: config.SecurityConfig{
@@ -180,9 +180,9 @@ func TestOpenAIHTTPPassthroughStripsOnlyOAuthLegacyResponsesBeta(t *testing.T) {
 		require.Equal(t, []string{"future_feature=v1", "another_feature=v2"}, headers.Values("OpenAI-Beta"))
 	})
 
-	t.Run("api key explicit beta remains caller controlled", func(t *testing.T) {
+	t.Run("api key removes legacy beta and preserves independent tokens", func(t *testing.T) {
 		headers := build(t, apiKey, []string{"responses=experimental, future_feature=v1"}, false)
-		require.Equal(t, []string{"responses=experimental, future_feature=v1"}, headers.Values("OpenAI-Beta"))
+		require.Equal(t, []string{"future_feature=v1"}, headers.Values("OpenAI-Beta"))
 	})
 }
 

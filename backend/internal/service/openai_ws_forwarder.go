@@ -58,10 +58,11 @@ var openAIWSLogValueReplacer = strings.NewReplacer(
 
 var openAIWSIngressPreflightPingIdle = 20 * time.Second
 
-// openAIWSFallbackError 表示可安全回退到 HTTP 的 WS 错误（尚未写下游）。
+// openAIWSFallbackError retains the failure stage and whether upstream execution is ambiguous.
 type openAIWSFallbackError struct {
-	Reason string
-	Err    error
+	RequestSubmitted bool // A write was attempted; absence of output does not prove replay safety.
+	Reason           string
+	Err              error
 }
 
 func (e *openAIWSFallbackError) Error() string {
@@ -277,7 +278,7 @@ func (s *OpenAIGatewayService) getOpenAIWSConnPool() *openAIWSConnPool {
 	}
 	s.openaiWSPoolOnce.Do(func() {
 		if s.openaiWSPool == nil {
-			s.openaiWSPool = newOpenAIWSConnPool(s.cfg)
+			s.openaiWSPool = newOpenAIWSConnPoolWithPolicy(s.cfg, s.codexUpstreamWSAllowed)
 		}
 	})
 	return s.openaiWSPool

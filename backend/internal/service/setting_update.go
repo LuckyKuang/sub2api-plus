@@ -579,6 +579,8 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeyOpenAICodexUserAgent] = strings.TrimSpace(settings.OpenAICodexUserAgent)
 	updates[SettingKeyOpenAICodexEnvironmentTimezone] = strings.TrimSpace(settings.OpenAICodexEnvironmentTimezone)
 	updates[SettingKeyOpenAICodexEgressCountry] = strings.TrimSpace(settings.OpenAICodexEgressCountry)
+	updates[SettingKeyOpenAICodexWSEnabled] = strconv.FormatBool(settings.OpenAICodexWSEnabled)
+	updates[SettingKeyOpenAICodexHTTPWSEnabled] = strconv.FormatBool(settings.OpenAICodexHTTPWSEnabled)
 	updates[SettingKeyOpenAICodexResidency] = settings.OpenAICodexResidency
 	updates[SettingKeyCodexLegacyClientProfileCompatibilityEnabled] = strconv.FormatBool(settings.CodexLegacyClientProfileCompatibilityEnabled)
 	updates[SettingKeyOpenAICodexLocalGroupQuotaEnabled] = strconv.FormatBool(settings.OpenAICodexLocalGroupQuotaEnabled)
@@ -848,6 +850,7 @@ func (s *SettingService) refreshCachedSettings(settings *SystemSettings) {
 		value:     strings.TrimSpace(settings.OpenAICodexEgressCountry),
 		expiresAt: time.Now().Add(openAICodexEgressCountryCacheTTL).UnixNano(),
 	})
+	s.storeCodexTransportSettings(CodexTransportSettings{WSEnabled: settings.OpenAICodexWSEnabled, HTTPWSEnabled: settings.OpenAICodexHTTPWSEnabled})
 	s.openAICodexResidencySF.Forget("codex_residency")
 	s.openAICodexResidencyCache.Store(&cachedOpenAICodexResidency{
 		value:     settings.OpenAICodexResidency,

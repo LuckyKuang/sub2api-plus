@@ -578,6 +578,11 @@ export default {
         openaiCodexEgressCountryNone: '未设置（不声明）',
         openaiCodexEgressCountryHint:
           '全局默认的出口国家（ISO 3166-1 alpha-2，如 US）。账号级 egress_country 与代理出口国家标注优先；留空不声明。',
+        codexUpstreamWS: '启用 Codex 上游 WebSocket',
+        codexUpstreamWSHint: '控制 OAuth 和 API Key 账号连接上游时是否允许使用 WebSocket，仍遵守部署限制和账号模式。关闭后使用 HTTP 流式请求；进行中的生成可完成，已有 WS 会话下一轮需重新连接。',
+        codexUpstreamWSDeploymentBlocked: '当前部署配置禁止上游 WebSocket，开启页面开关也不会建立 WS 连接。',
+        codexHTTPWS: 'HTTP Responses 优先使用 WS',
+        codexHTTPWSHint: '默认关闭。为账号已启用 WS、携带完整输入的 HTTP 流式 Responses 请求尝试上游 WS，结果仍以 SSE 返回。续接响应 ID、后台请求和 Compact 保持 HTTP；仅在尚未提交生成时允许回退。',
         codexResidency: 'Codex 数据驻留区域',
         codexResidencyOff: '关闭（不发送）',
         codexResidencyUS: 'US',

@@ -185,7 +185,7 @@ func (s *AccountTestService) ProbeOpenAIAPIKeyResponsesSupport(ctx context.Conte
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("Accept", "application/json")
 	account.applyOpenAIHeaderOverrides(req.Header)
-	s.applyOpenAIOutboundIdentity(probeCtx, account, req.Header, false)
+	s.applyOpenAIOutboundIdentity(probeCtx, account, req.Header, true)
 
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {

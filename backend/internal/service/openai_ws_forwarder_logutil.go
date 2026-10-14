@@ -84,7 +84,7 @@ func resolveOpenAIWSSessionHeaders(c *gin.Context, promptCacheKey string) openAI
 
 	cacheKey := strings.TrimSpace(promptCacheKey)
 	if cacheKey != "" {
-		if resolution.SessionID == "" || isOpenAIAlignedPromptCacheIdentity(c, cacheKey) {
+		if resolution.SessionID == "" || (isOpenAIAlignedPromptCacheIdentity(c, cacheKey) && openAICodexNonRootSessionID(c) == "") {
 			resolution.SessionID = cacheKey
 			resolution.SessionSource = "prompt_cache_key_aligned"
 		}

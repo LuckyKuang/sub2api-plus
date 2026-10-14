@@ -853,14 +853,16 @@ func (s *OpenAIGatewayService) getCodexClientRestrictionDetector() CodexClientRe
 }
 
 func (s *OpenAIGatewayService) getOpenAIWSProtocolResolver() OpenAIWSProtocolResolver {
-	if s != nil && s.openaiWSResolver != nil {
-		return s.openaiWSResolver
-	}
 	var cfg *config.Config
+	var settings *SettingService
+	var resolver OpenAIWSProtocolResolver
 	if s != nil {
-		cfg = s.cfg
+		cfg, settings, resolver = s.cfg, s.settingService, s.openaiWSResolver
 	}
-	return NewOpenAIWSProtocolResolver(cfg)
+	if resolver == nil {
+		resolver = NewOpenAIWSProtocolResolver(cfg)
+	}
+	return runtimeCodexWSResolver{base: resolver, settings: settings}
 }
 
 func classifyOpenAIWSReconnectReason(err error) (string, bool) {

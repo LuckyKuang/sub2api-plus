@@ -91,7 +91,7 @@ func (s *OpenAIGatewayService) ForwardEmbeddings(
 		}
 	}
 	account.applyOpenAIHeaderOverrides(upstreamReq.Header)
-	s.applyOpenAIOutboundIdentity(ctx, account, upstreamReq.Header, false)
+	s.applyOpenAIOutboundIdentity(ctx, account, upstreamReq.Header, true)
 
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {

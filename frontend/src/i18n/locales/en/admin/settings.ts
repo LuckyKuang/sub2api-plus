@@ -585,6 +585,11 @@ export default {
         openaiCodexEgressCountryNone: 'Not set (no declaration)',
         openaiCodexEgressCountryHint:
           'Global default egress country (ISO 3166-1 alpha-2, e.g. US). Account-level egress_country and the egress proxy annotation take precedence; leave empty to declare nothing.',
+        codexUpstreamWS: 'Enable Codex upstream WebSocket',
+        codexUpstreamWSHint: 'Allow OAuth and API key accounts to connect upstream over WebSocket, subject to deployment restrictions and account modes. When disabled, use HTTP streaming. Active generations may finish; existing WS sessions must reconnect for the next turn.',
+        codexUpstreamWSDeploymentBlocked: 'Deployment configuration currently prohibits upstream WebSocket. Enabling this setting cannot override it.',
+        codexHTTPWS: 'Prefer WS for HTTP Responses',
+        codexHTTPWSHint: 'Off by default. Try upstream WS for HTTP streaming Responses with full input on WS-enabled accounts, returning SSE to the client. Response-ID continuations, background requests and Compact stay on HTTP. Fallback is allowed only before generation is submitted.',
         codexResidency: 'Codex residency',
         codexResidencyOff: 'Off (do not send)',
         codexResidencyUS: 'US',

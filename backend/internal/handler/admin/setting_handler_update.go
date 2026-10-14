@@ -258,6 +258,8 @@ type UpdateSettingsRequest struct {
 	OpenAICodexUserAgent                         *string `json:"openai_codex_user_agent"`
 	OpenAICodexEnvironmentTimezone               *string `json:"openai_codex_environment_timezone"`
 	OpenAICodexEgressCountry                     *string `json:"openai_codex_egress_country"`
+	OpenAICodexWSEnabled                         *bool   `json:"openai_codex_ws_enabled"`
+	OpenAICodexHTTPWSEnabled                     *bool   `json:"openai_codex_http_ws_enabled"`
 	OpenAICodexResidency                         *string `json:"codex_residency"`
 	CodexLegacyClientProfileCompatibilityEnabled *bool   `json:"codex_legacy_client_profile_compatibility_enabled"`
 	OpenAICodexLocalGroupQuotaEnabled            *bool   `json:"openai_codex_local_group_quota_enabled"`
@@ -1877,6 +1879,18 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.OpenAICodexEgressCountry
 		}(),
+		OpenAICodexWSEnabled: func() bool {
+			if req.OpenAICodexWSEnabled != nil {
+				return *req.OpenAICodexWSEnabled
+			}
+			return previousSettings.OpenAICodexWSEnabled
+		}(),
+		OpenAICodexHTTPWSEnabled: func() bool {
+			if req.OpenAICodexHTTPWSEnabled != nil {
+				return *req.OpenAICodexHTTPWSEnabled
+			}
+			return previousSettings.OpenAICodexHTTPWSEnabled
+		}(),
 		OpenAICodexResidency: func() string {
 			if req.OpenAICodexResidency != nil {
 				return *req.OpenAICodexResidency
@@ -2497,6 +2511,9 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		OpenAICodexUserAgent:                                   updatedSettings.OpenAICodexUserAgent,
 		OpenAICodexEnvironmentTimezone:                         updatedSettings.OpenAICodexEnvironmentTimezone,
 		OpenAICodexEgressCountry:                               updatedSettings.OpenAICodexEgressCountry,
+		OpenAICodexWSEnabled:                                   updatedSettings.OpenAICodexWSEnabled,
+		OpenAICodexHTTPWSEnabled:                               updatedSettings.OpenAICodexHTTPWSEnabled,
+		OpenAICodexWSDeploymentAllowed:                         updatedSettings.OpenAICodexWSDeploymentAllowed,
 		OpenAICodexResidency:                                   updatedSettings.OpenAICodexResidency,
 		CodexLegacyClientProfileCompatibilityEnabled:           updatedSettings.CodexLegacyClientProfileCompatibilityEnabled,
 		OpenAICodexLocalGroupQuotaEnabled:                      updatedSettings.OpenAICodexLocalGroupQuotaEnabled,

@@ -919,16 +919,7 @@ func WithStandaloneOutboundIdentity(ctx context.Context, platform string) contex
 	if !ok {
 		identity = (*SettingService)(nil).resolveOutboundIdentityKey(ctx, key)
 	}
-	if platform == PlatformOpenAI && identity.Preset == "codex" {
-		// Match native Platform API-key requests: the UA carries the triple,
-		// while OAuth-only Originator/Version declarations remain omitted.
-		identity.Headers = maps.Clone(identity.Headers)
-		for name := range identity.Headers {
-			if strings.EqualFold(name, "Originator") || strings.EqualFold(name, "Version") {
-				delete(identity.Headers, name)
-			}
-		}
-	}
+
 	return outboundidentity.WithIdentity(ctx, identity)
 }
 
@@ -1011,6 +1002,7 @@ func prepareAccountOutboundRequest(req *http.Request, account *Account) *http.Re
 		}
 		ApplyAccountOutboundIdentity(req.Context(), account, req)
 		prepareMiniMaxRequestState(req, account)
+		PrepareCodexRequestCompression(req, account)
 	}
 	return req
 }
@@ -1051,7 +1043,7 @@ func (s *SettingService) PreviewOutboundIdentity(ctx context.Context, account *A
 	if account.Platform == PlatformOpenAI && (selection != nil && selection.Preset == "codex" || account.Type != AccountTypeAPIKey && account.Type != AccountTypeUpstream || s.resolveOutboundIdentityKey(ctx, outboundDefaultKey(account)).Preset == "codex") {
 		i := resolveOpenAIOutboundIdentityFromSettings(ctx, account, s)
 		headers := http.Header{}
-		applyResolvedOpenAIOutboundIdentity(headers, i, account.UsesOpenAICodexProtocol())
+		applyResolvedOpenAIOutboundIdentity(headers, i, true)
 		result := outboundidentity.Identity{Preset: "codex", UserAgent: i.UserAgent, Originator: i.Originator, Version: i.Version, Source: i.Source, Headers: map[string]string{}}
 		for k := range headers {
 			result.Headers[k] = headers.Get(k)

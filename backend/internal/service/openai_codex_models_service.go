@@ -1733,12 +1733,16 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 	if !useAPIKeyUpstream {
 		headers.Set("Version", clientVersion)
 	}
-	applyResolvedOpenAIOutboundIdentity(headers, identity, !useAPIKeyUpstream)
+	applyResolvedOpenAIOutboundIdentity(headers, identity, true)
+	// An empty preset snapshot deliberately selects the native Codex resolver.
+	useCodexResidency := true
 	if useAPIKeyUpstream {
 		if selected, ok := outboundidentity.FromContext(ctx); ok {
 			selected.Apply(headers)
+			useCodexResidency = selected.Preset == "codex"
 		}
 	}
+	applyOpenAICodexResidencyFromSettings(ctx, s.settingService, headers, useCodexResidency)
 
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {

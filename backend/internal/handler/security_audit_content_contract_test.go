@@ -3,6 +3,7 @@
 package handler
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -27,6 +28,44 @@ func TestUpstreamProtocolAdditionsKeepCanonicalCurrentUserContent(t *testing.T) 
 			require.NoError(t, err)
 			require.Equal(t, "audit current request", prompt.ScanText)
 		})
+	}
+}
+
+// Official client.rs sends these options/metadata on Responses HTTP/WS. They
+// must not hide recognized user content or turn unknown siblings into blocks.
+func TestCodexProtocolOptionsPreserveCanonicalAuditContent(t *testing.T) {
+	for _, frame := range []string{"http", "websocket", "websocket_nested"} {
+		for _, input := range []struct{ body, want string }{
+			{`[{"type":"additional_tools","tools":[{"type":"namespace","name":"shell","tools":[]}]},{"type":"message","role":"user","content":[{"type":"input_text","text":"audit current request"},{"type":"future_media","opaque":true}]}]`, "audit current request"},
+			{`[{"type":"future_item","opaque":{"value":1}}]`, ""},
+		} {
+			t.Run(frame+"/"+input.want, func(t *testing.T) {
+				body := `{"model":"gpt-6.1-sol","input":` + input.body + `,"stream_options":{"reasoning_summary_delivery":"sequential_cutoff","future_option":true},"client_metadata":{"ws_request_header_x_openai_internal_codex_responses_lite":"true","x-codex-turn-metadata":"{\"subagent_kind\":\"guardian\"}"}}`
+				if frame == "websocket" {
+					body = `{"type":"response.create",` + body[1:]
+				}
+				if frame == "websocket_nested" {
+					body = `{"type":"response.create","response":` + body + `}`
+				}
+				moderation := service.ExtractContentModerationInput(service.ContentModerationProtocolOpenAIResponses, []byte(body))
+				require.Equal(t, input.want, moderation.Text)
+				request := securityaudit.Request{Protocol: service.ContentModerationProtocolOpenAIResponses, Body: []byte(body), Stage: frame}
+				prompt, err := securityaudit.ExtractPromptSnapshot(request)
+				if input.want == "" {
+					require.ErrorIs(t, err, securityaudit.ErrNoPromptText)
+					engine := securityaudit.NewPromptService(blockingCompatibilityConfigStore{cfg: securityaudit.ActiveConfig{
+						RiskControlEnabled: true, Enabled: true, BlockingEnabled: true, AllGroups: true,
+						Scanners: []string{"pii"}, Endpoints: []securityaudit.ActiveEndpoint{{ID: "guard", Enabled: true, TimeoutMS: 1000, InputLimit: 4096}},
+					}}, nil, nil, nil, securityaudit.NewAtomicMetrics())
+					decision := securityaudit.NewCoordinator(nil, engine).Check(context.Background(), request)
+					require.Equal(t, securityaudit.DecisionAllow, decision.Kind)
+					require.True(t, decision.AllowNextStage, "unknown content must pass through the audit gate")
+				} else {
+					require.NoError(t, err)
+				}
+				require.Equal(t, input.want, prompt.ScanText)
+			})
+		}
 	}
 }
 

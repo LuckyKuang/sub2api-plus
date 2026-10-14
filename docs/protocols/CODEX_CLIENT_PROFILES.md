@@ -172,8 +172,9 @@ their credential-owning parent; the shadow never creates an independent
 fingerprint identity.
 
 Fingerprint body/header staging happens before the final cache and outbound
-identity stages. The finalized Plus cache key owns the official `session-id`
-header, and every Codex-protocol outbound path drops the legacy `session_id`
+identity stages. Root sessions align the official `session-id` to the finalized
+Plus cache key; declared non-root agents retain their separate isolated session.
+Every Codex-protocol outbound path drops the legacy `session_id`
 alias; fingerprinting owns installation and thread/turn carriers. Malformed,
 null, array, or scalar embedded `x-codex-turn-metadata` values are rebuilt as
 JSON objects when that carrier is present, while valid unrelated fields are
@@ -208,10 +209,14 @@ the next independently resolved request.
 | Legacy candidate with compatibility disabled | Any | Treat that candidate as invalid and proceed to the next source |
 | Independent monitor/audit supplier token, with no account UA candidate | Valid, otherwise empty/invalid | `global`, otherwise `compiled_default`; never inherit a forwarding account or its cached identity |
 
+This source matrix applies identically to OAuth and API-key HTTP/WS provider
+requests, including retries, discovery and probes. Transport preference and
+inbound client classification never change the selected source.
+
 The independent-supplier row applies when its API-key type default selects
 Codex. OpenAI monitor checks, Prompt Audit scans/model probes and Content
-Moderation requests retain the native Platform API-key Originator/Version
-omissions below. Other selected presets follow [Outbound Identity](../OUTBOUND_IDENTITY.md).
+Moderation requests emit the same native Codex UA/Originator/Version triple
+as API-key inference. Other selected presets follow [Outbound Identity](../OUTBOUND_IDENTITY.md).
 Each independent operation resolves its own supplier snapshot; discovery and
 inference within one probe, chunks and same-credential retries reuse it.
 
@@ -256,16 +261,18 @@ controller or observer resolves a fresh scope.
 
 Final header application removes every case variant and duplicate of managed
 identity headers, including foreign SDK declarations, before rendering the
-selected identity. Native Codex OAuth/ChatGPT inference requests send Originator
-and Version with the selected UA, including the default `codex_cli_rs`
-Originator. WHAM usage/credits and backend auxiliary requests keep that UA but
+selected identity. Native Codex OAuth/ChatGPT and API-key inference/discovery requests send
+Originator and Version with the selected UA, including the default `codex_cli_rs`
+Originator. Official Codex source `1b6e0d8145` sets UA/originator in
+`login/src/auth/default_client.rs` and Version in the built-in OpenAI provider
+in `model-provider-info/src/lib.rs`, independently of authentication type. WHAM usage/credits and backend auxiliary requests keep that UA but
 omit Originator and Version, as specified below. Native Codex Platform API-key
-requests omit both Originator and Version, including `responses/compact`. Header presence is
+requests include both Originator and Version, including `responses/compact`. Header presence is
 determined by the endpoint protocol, never by an inbound or generic override
 value. Explicit compatible presets retain their own protocol header mappings.
-When proxying an official Codex client, a reviewed inbound thread originator
-(`chatgpt_cca` and `codex_work_*`) may replace only the Originator header.
-User-Agent and Version stay on the credential-owning snapshot.
+Inbound thread originators (`chatgpt_cca` and `codex_work_*`) remain valid
+classification evidence but cannot replace the selected outbound Originator.
+All three declarations stay on the credential-owning snapshot.
 The OAuth credential endpoint follows official Codex auth clients:
 authorization-code exchange uses the raw client and sends no User-Agent,
 Originator, or Version; refresh uses the default client and sends the
@@ -333,7 +340,7 @@ Official Codex never sends a `conversation_id` header, so Codex-protocol
 outbound requests never carry one. The official wire format spells the
 session header `session-id` only: every Codex-protocol outbound path drops
 the legacy `session_id` alias regardless of fingerprint mode, while non-Codex
-compatible-supplier paths (OpenAI API-key accounts) keep the Plus
+compatible-supplier paths with an explicitly non-Codex preset keep the Plus
 `session-id` + `session_id` dual spelling and inbound `session_id` remains
 accepted for sticky routing. The chatgpt.com backend-api auxiliary surface
 (accounts check, subscription enrich, settings PATCH, WHAM usage and credit
@@ -374,11 +381,58 @@ Grok CLI rejection responses are returned without an automatic public API replay
 `x-openai-internal-codex-residency` follows the official managed-residency
 header. The only source is the global setting `codex_residency` (`off` by
 default, or `us`). There is no account-level value. When the setting is `us`,
-Codex-protocol inference (HTTP and WebSocket), token refresh, token revoke,
+Codex-protocol inference (HTTP and WebSocket), Codex models discovery (OAuth and
+API Key with the Codex preset), token refresh, token revoke,
 and the chatgpt.com backend-api auxiliary surface (accounts check, WHAM usage
 and credits, and the settings call) send `us`. Authorization-code exchange and
 device-code start/poll stay on the raw client and do not send it. Inbound
 headers and generic account header overrides cannot set or clear it.
+
+Models cache keys include the final residency declaration; changing `off`/`us`
+cannot reuse a catalog fetched under the other policy. Other API-key identity
+presets do not acquire Codex residency through the models adapter.
+
+## Codex source compatibility boundaries
+
+The protocol baseline is official source `1b6e0d8145`. Identity-shape alignment
+does not mean every client feature, body, OS fingerprint or transport is identical.
+
+- HTTP-to-WS converts the Responses Lite header into the per-generation
+  `client_metadata.ws_request_header_x_openai_internal_codex_responses_lite`
+  string `"true"`, preserving other metadata. A non-object metadata shape that
+  cannot be augmented remains on HTTP. Existing native WS metadata is retained.
+- OAuth Responses retains `stream_options.reasoning_summary_delivery`, including
+  official `sequential_cutoff`. Only the incompatible Chat `include_usage` option
+  is removed (and its object when otherwise empty); unknown sibling options are
+  preserved. The gateway does not enable concurrent reasoning summaries itself.
+- Streaming API-key Responses explicitly sends `Accept: text/event-stream` in
+  normal and passthrough paths; compact remains unary `application/json`.
+- Guardian roles are bounded: `reviewer` is forwarded only to `codex-auto-review`
+  with Codex backend OAuth-like credentials; `classifier` requires the Guardian
+  subagent declaration and those credentials. API-key failover, compact, unknown
+  roles, duplicate values and unrelated reviewer models do not inherit the role.
+  These context headers neither authorize requests nor bypass either audit engine.
+- Non-root requests declared by `x-openai-subagent` or turn metadata retain their
+  explicit session separately from `prompt_cache_key`. Both seeds still use the
+  selected account's tenant/session-sharing namespace. Root requests retain cache
+  alignment. The same distinction applies to HTTP and WS handshake identity.
+- OAuth-like HTTP Responses uses Zstd level 3 at the final HTTP/plugin transport
+  boundary, after JSON adaptation. The encoded body has a replayable `GetBody`
+  and matching length/encoding declarations. This covers probes and HTTP bridges
+  that use the shared outbound preparation. API keys, WS frames, unary endpoints
+  and signed Agent Identity requests are not compressed by this policy. A
+  conflicting pre-existing Content-Encoding fails before transmission.
+
+Official source advertises `remote_compaction_v2` unconditionally. Plus retains
+its explicit compatibility policy for already supplied beta-feature declarations
+and API-key synthesis; absence is not evidence of a disabled official feature.
+
+Intentional Plus differences remain: credential-owner identity precedence,
+tenant namespaces and fingerprint settings, account-scoped WS pooling/cooldown,
+API-key catalog Lite restrictions, and configured body adapters. Ordinary
+Responses platform attestation is not implemented; Live requires a real platform
+provider. The auxiliary `/memories/trace_summarize` endpoint is not exposed.
+Neither capability is implied by matching UA/Originator/Version.
 
 ## User-Agent suffix
 
@@ -405,7 +459,7 @@ headers; the search tool's extra headers must be reviewed with those layers.
 | Account/protocol | Upstream path | Identity declarations |
 | --- | --- | --- |
 | Normal OAuth | ChatGPT `/backend-api/codex/alpha/search` | Selected UA, Originator and Version |
-| Native Codex API key | Configured base URL + `/alpha/search` | Selected UA; Originator and Version omitted under the Platform API-key contract |
+| Native Codex API key | Configured base URL + `/alpha/search` | Selected UA, Originator and Version |
 | API key with a compatible preset | Configured base URL + `/alpha/search` | Selected preset's own protocol header mapping |
 | OAuth using PAT | Existing Plus adapter to ChatGPT `/backend-api/codex/responses` with `web_search` | Selected UA, Originator and Version; Responses transport headers |
 
@@ -458,8 +512,8 @@ Public API-key model discovery and administrator discovery apply the credential
 owner’s final outbound identity. Supported OAuth shadows resolve to their parent;
 API-key discovery uses the selected account’s own credentials.
 Generic account header overrides run before this final identity step and cannot
-replace its source. With the Codex preset, API-key `/v1/models` omits OAuth-only
-Originator; Codex/OAuth manifest Version and client_version follow the selected
+replace its source. With the Codex preset, API-key `/v1/models` sends the selected UA, Originator
+and Version; Codex/OAuth manifest Version and client_version follow the selected
 identity. A compatible API-key account explicitly selecting another preset uses
 that preset's wire headers and version for the Codex-style manifest's
 client_version query. Shared raw catalog cache keys include the resolved URL,

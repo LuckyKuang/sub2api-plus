@@ -23,12 +23,14 @@ func TestChannelMonitorFirstBytePersistenceAndSuccessfulAverage(t *testing.T) {
 	t.Cleanup(func() { require.NoError(t, repo.Delete(ctx, monitor.ID)) })
 	now := time.Now().UTC()
 	zero, thousand, failedByte := 0, 1000, 2
+	text, failedText, stream := 2400, 5, true
+	textValues := []*int{nil, &zero, &text, &failedText, &failedText}
 	values := []*int{nil, &zero, &thousand, &failedByte, &failedByte}
 	statuses := []string{"operational", "operational", "degraded", "error", "failed"}
 	rows := make([]*service.ChannelMonitorHistoryRow, 0, 5)
 	for i := 0; i < 5; i++ {
 		total := (i + 1) * 1000
-		rows = append(rows, &service.ChannelMonitorHistoryRow{MonitorID: monitor.ID, Model: "model", Status: statuses[i], FirstByteMs: values[i], LatencyMs: &total, CheckedAt: now.Add(time.Duration(i-5) * time.Second)})
+		rows = append(rows, &service.ChannelMonitorHistoryRow{MonitorID: monitor.ID, Model: "model", Status: statuses[i], FirstByteMs: values[i], FirstTextMs: textValues[i], StreamProbe: &stream, LatencyMs: &total, CheckedAt: now.Add(time.Duration(i-5) * time.Second)})
 	}
 	require.NoError(t, repo.InsertHistoryBatch(ctx, rows))
 	history, err := repo.ListHistory(ctx, monitor.ID, "model", 10)
@@ -38,30 +40,47 @@ func TestChannelMonitorFirstBytePersistenceAndSuccessfulAverage(t *testing.T) {
 	require.Equal(t, 0, *history[3].FirstByteMs)
 	require.Equal(t, 1000, *history[2].FirstByteMs)
 	require.Equal(t, 2, *history[0].FirstByteMs)
+	require.Nil(t, history[4].FirstTextMs)
+	require.Equal(t, 0, *history[3].FirstTextMs)
+	require.Equal(t, 2400, *history[2].FirstTextMs)
+	require.True(t, *history[0].StreamProbe)
 	latest, err := repo.ListLatestPerModel(ctx, monitor.ID)
 	require.NoError(t, err)
 	require.Equal(t, 2, *latest[0].FirstByteMs)
+	require.Equal(t, 5, *latest[0].FirstTextMs)
+	require.True(t, *latest[0].StreamProbe)
 	batch, err := repo.ListLatestForMonitorIDs(ctx, []int64{monitor.ID})
 	require.NoError(t, err)
 	require.Equal(t, 2, *batch[monitor.ID][0].FirstByteMs)
+	require.Equal(t, 5, *batch[monitor.ID][0].FirstTextMs)
+	require.True(t, *batch[monitor.ID][0].StreamProbe)
 	timeline, err := repo.ListRecentHistoryForMonitors(ctx, []int64{monitor.ID}, map[int64]string{monitor.ID: "model"}, 10)
 	require.NoError(t, err)
 	require.Equal(t, 2, *timeline[monitor.ID][0].FirstByteMs)
+	require.Equal(t, 5, *timeline[monitor.ID][0].FirstTextMs)
+	require.True(t, *timeline[monitor.ID][0].StreamProbe)
 	availability, err := repo.ComputeAvailability(ctx, monitor.ID, 7)
 	require.NoError(t, err)
 	require.Equal(t, 500, *availability[0].AvgFirstByteMs)
 	require.Equal(t, 2, availability[0].FirstByteSamples)
+	require.Equal(t, 1200, *availability[0].AvgFirstTextMs)
+	require.Equal(t, 2, availability[0].FirstTextSamples)
 	require.Equal(t, 3000, *availability[0].AvgLatencyMs)
 	require.Equal(t, 60.0, availability[0].AvailabilityPct)
 	batchAvailability, err := repo.ComputeAvailabilityForMonitors(ctx, []int64{monitor.ID}, 7)
 	require.NoError(t, err)
 	require.Equal(t, 500, *batchAvailability[monitor.ID][0].AvgFirstByteMs)
 	require.Equal(t, 2, batchAvailability[monitor.ID][0].FirstByteSamples)
+	require.Equal(t, 1200, *batchAvailability[monitor.ID][0].AvgFirstTextMs)
+	require.Equal(t, 2, batchAvailability[monitor.ID][0].FirstTextSamples)
 	_, err = repo.UpsertDailyRollupsFor(ctx, now)
 	require.NoError(t, err)
 	var sum, count int64
 	require.NoError(t, integrationDB.QueryRowContext(ctx, `SELECT sum_first_byte_ms,count_first_byte FROM channel_monitor_daily_rollups WHERE monitor_id=$1`, monitor.ID).Scan(&sum, &count))
 	require.Equal(t, int64(1000), sum)
+	require.Equal(t, int64(2), count)
+	require.NoError(t, integrationDB.QueryRowContext(ctx, `SELECT sum_first_text_ms,count_first_text FROM channel_monitor_daily_rollups WHERE monitor_id=$1`, monitor.ID).Scan(&sum, &count))
+	require.Equal(t, int64(2400), sum)
 	require.Equal(t, int64(2), count)
 }
 

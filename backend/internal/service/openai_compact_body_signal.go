@@ -133,15 +133,13 @@ func hasOpenAICodexBetaFeaturesHeader(h http.Header) bool {
 //     v2 在列，覆盖中间网关裁剪 token 的情形（#5586）；
 //   - ChatGPT codex 上游（OAuth）的其余请求：客户端**未**声明该头时补成默认
 //     Codex 形态，消除"仅压缩回合才带该头"这种真实 Codex 不会产生的模式；
-//   - 客户端已声明该头：原样保留。非空但不含 v2 表示用户显式关闭了该特性，
-//     网关不得替其改写能力声明；
+//   - 客户端已声明该头：按 Plus 的兼容策略原样保留；官方 1b6e0d8145 已
+//     无条件 advertise v2，不能从缺少该 token 推断用户关闭了功能；
 //   - 非 OAuth 上游（API Key/第三方兼容网关）：不做会话级注入，只保留压缩回合
 //     的那一条，避免向非 Codex 后端撒 Codex 专属头。
 //
-// 已知无解的歧义：用户关掉 v2 且无其他特性时，真实 Codex 同样不发该头，与"老
-// 客户端"在线型上不可区分，此时按默认形态补注。在当前审计基线中，ChatGPT
-// Codex OAuth 兼容上游的旧 unary 路由返回 404，因而没有可回退的正确行为；这不
-// 表示公共 API-key /v1/responses/compact 端点不可用。
+// 当前官方 session/mod.rs::build_model_client_beta_features_header 总是包含
+// remote_compaction_v2。保留已有声明是网关策略，并非逐字复刻官方功能集合。
 func applyOpenAICodexBetaFeatures(c *gin.Context, account *Account, h http.Header) {
 	if h == nil {
 		return

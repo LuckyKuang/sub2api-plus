@@ -51,6 +51,10 @@
           </nav>
         </div>
 
+        <p v-if="platform === 'openai' && (activeClientTab === 'codex' || activeClientTab === 'codex-ws')" class="text-xs text-gray-500 dark:text-gray-400" data-testid="codex-transport-hint">
+          {{ t(activeClientTab === 'codex-ws' ? 'keys.useKeyModal.openai.wsTransportHint' : 'keys.useKeyModal.openai.httpTransportHint') }}
+        </p>
+
         <!-- Codex Authentication Mode -->
         <div
           v-if="showCodexAuthMode"
@@ -1040,6 +1044,7 @@ windows_wsl_setup_acknowledged = true
 name = "OpenAI"
 base_url = "${baseUrl}"
 ${codexModelCatalogMode.value === 'remote' ? `model_catalog_url = "${escapeTomlBasicString(buildCodexModelCatalogUrl(baseUrl))}"\n` : ''}wire_api = "responses"
+supports_websockets = false
 ${generateCodexProviderAuthConfig(apiKey)}
 
 [features]

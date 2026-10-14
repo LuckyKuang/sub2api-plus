@@ -300,9 +300,9 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_ReusesAndRotates
 	dialHeaders := dialer.DialHeaders()
 	require.Len(t, dialHeaders, 2)
 	require.Equal(t, firstIdentity, dialHeaders[0].Get(codexSessionIDHeader))
-	require.Equal(t, firstIdentity, dialHeaders[0].Get("session_id"))
+	require.Empty(t, dialHeaders[0].Get("session_id"))
 	require.Equal(t, secondIdentity, dialHeaders[1].Get(codexSessionIDHeader))
-	require.Equal(t, secondIdentity, dialHeaders[1].Get("session_id"))
+	require.Empty(t, dialHeaders[1].Get("session_id"))
 }
 
 func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_LeaseLossSendsRetryClose(t *testing.T) {

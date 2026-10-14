@@ -247,7 +247,7 @@ func (s *OpenAIGatewayService) sendCCUpstreamRequest(
 	// existing generic override behavior.
 	if account.Platform == PlatformOpenAI {
 		account.applyOpenAIHeaderOverrides(upstreamReq.Header)
-		identity := s.applyOpenAIOutboundIdentity(ctx, account, upstreamReq.Header, false)
+		identity := s.applyOpenAIOutboundIdentity(ctx, account, upstreamReq.Header, true)
 		SetOpsRoutingDiagnostics(c, &OpsRoutingDiagnostics{OutboundIdentitySource: identity.Source})
 	} else {
 		account.ApplyHeaderOverrides(upstreamReq.Header)

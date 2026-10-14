@@ -276,6 +276,10 @@ func (r *pluginRuntime) roundTrip(ctx context.Context, request *http.Request, pr
 	if request == nil || request.URL == nil || account == nil {
 		return nil, errors.New("插件出站请求参数不完整")
 	}
+	PrepareCodexRequestCompression(request, account)
+	if err := ApplyCodexRequestCompression(request); err != nil {
+		return nil, err
+	}
 	if err := brandidentity.FilterOutboundRequest(request); err != nil {
 		return nil, err
 	}

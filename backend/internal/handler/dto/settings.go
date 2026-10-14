@@ -216,6 +216,9 @@ type SystemSettings struct {
 	OpenAICodexUserAgent                         string `json:"openai_codex_user_agent"`
 	OpenAICodexEnvironmentTimezone               string `json:"openai_codex_environment_timezone"`
 	OpenAICodexEgressCountry                     string `json:"openai_codex_egress_country"`
+	OpenAICodexWSEnabled                         bool   `json:"openai_codex_ws_enabled"`
+	OpenAICodexHTTPWSEnabled                     bool   `json:"openai_codex_http_ws_enabled"`
+	OpenAICodexWSDeploymentAllowed               bool   `json:"openai_codex_ws_deployment_allowed"`
 	OpenAICodexResidency                         string `json:"codex_residency"`
 	CodexLegacyClientProfileCompatibilityEnabled bool   `json:"codex_legacy_client_profile_compatibility_enabled"`
 	OpenAICodexLocalGroupQuotaEnabled            bool   `json:"openai_codex_local_group_quota_enabled"`

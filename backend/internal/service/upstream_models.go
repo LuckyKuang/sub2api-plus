@@ -1034,7 +1034,7 @@ func (s *AccountTestService) buildOpenAIUpstreamModelsRequest(ctx context.Contex
 	if err != nil {
 		return nil, err
 	}
-	s.applyOpenAIOutboundIdentity(ctx, credentialAccount, req.Header, false)
+	s.applyOpenAIOutboundIdentity(ctx, credentialAccount, req.Header, true)
 	ApplyAccountOutboundIdentity(ctx, credentialAccount, req)
 	return req, nil
 }

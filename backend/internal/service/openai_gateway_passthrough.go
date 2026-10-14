@@ -343,6 +343,18 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		return nil, err
 	}
 
+	if result, handled, wsErr := s.tryCodexHTTPWebSocket(ctx, c, account, body, token, requestedModel, policyModel, gjson.GetBytes(body, "prompt_cache_key").String(), startTime); handled {
+		if result != nil {
+			result.UpstreamModel = policyModel
+			if result.ImageCount > 0 {
+				result.ImageSize = imageSizeTier
+				result.ImageInputSize = imageInputSize
+				result.BillingModel = imageBillingModel
+			}
+		}
+		return result, wsErr
+	}
+
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {
 		proxyURL = account.Proxy.URL()
@@ -788,6 +800,8 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 		// unary JSON 协议，API-key 账号同样强制 Accept，避免上游按 SSE 返回
 		// （#3777 期望行为 4）。
 		req.Header.Set("accept", "application/json")
+	} else if account.IsOpenAIApiKey() && gjson.GetBytes(body, "stream").Bool() {
+		req.Header.Set("accept", "text/event-stream")
 	}
 
 	applyCodexAccountIdentityHeaders(req.Header, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c))
@@ -812,11 +826,11 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 	// x-codex-beta-features：按真实 Codex 的会话级行为补注（在账号级覆写之后，
 	// 保证不被覆盖丢失）。
 	applyOpenAICodexBetaFeatures(c, account, req.Header)
-	identity := s.applyOpenAIOutboundIdentity(ctx, account, req.Header, account.UsesOpenAICodexProtocol())
-	if account.UsesOpenAICodexProtocol() {
-		preserveOpenAIThreadOriginator(c, req.Header)
-	}
+	identity := s.applyOpenAIOutboundIdentity(ctx, account, req.Header, true)
+	ApplyAccountOutboundHeaders(ctx, account, req.Header)
 	clearOpenAICodexLegacySessionAliases(req.Header, account)
+	stripOpenAILegacyResponsesBeta(req.Header)
+	applyOpenAICodexGuardianHeader(c, account, req.Header, gjson.GetBytes(body, "model").String())
 	SetOpsRoutingDiagnostics(c, &OpsRoutingDiagnostics{OutboundIdentitySource: identity.Source})
 	setOpenAICodexRoutingHintFromBody(req.Header, account, body)
 	logOpenAIRoutingDiagnosticsFromBody(ctx, account, "http_passthrough", req.Header, body, "not_applicable")
@@ -840,7 +854,7 @@ func stripOpenAILegacyResponsesBeta(headers http.Header) {
 			kept := parts[:0]
 			for _, part := range parts {
 				part = strings.TrimSpace(part)
-				if part == "" || strings.EqualFold(part, "responses=experimental") {
+				if part == "" || strings.EqualFold(part, "responses=experimental") || strings.HasPrefix(strings.ToLower(part), "responses_websockets=") {
 					continue
 				}
 				kept = append(kept, part)

@@ -302,7 +302,7 @@ func TestForwardAsChatCompletions_APIKeyPropagatesPromptCacheKeyInResponsesBody(
 	require.Equal(t, "https://api.openai.com/v1/responses", upstream.lastReq.URL.String())
 	require.Equal(t, "Bearer sk-compatible", upstream.lastReq.Header.Get("Authorization"))
 	require.Equal(t, expectedIdentity, upstream.lastReq.Header.Get("session-id"))
-	require.Equal(t, expectedIdentity, upstream.lastReq.Header.Get("session_id"))
+	require.Empty(t, upstream.lastReq.Header.Get("session_id"))
 }
 
 func TestForwardAsChatCompletions_APIKeyAutoInjectsStablePromptCacheKey(t *testing.T) {
@@ -403,10 +403,10 @@ func TestForwardAsChatCompletions_APIKeyAutoDerivesStableIsolatedPromptCacheKey(
 	require.NotEmpty(t, firstKey)
 	require.Equal(t, firstKey, appendedKey)
 	require.NotEqual(t, firstKey, otherTenantKey)
-	require.Equal(t, firstKey, upstream.requests[0].Header.Get("session_id"))
-	require.Equal(t, upstream.requests[0].Header.Get("session_id"), upstream.requests[1].Header.Get("session_id"))
-	require.Equal(t, otherTenantKey, upstream.requests[2].Header.Get("session_id"))
-	require.NotEqual(t, upstream.requests[1].Header.Get("session_id"), upstream.requests[2].Header.Get("session_id"))
+	require.Equal(t, firstKey, upstream.requests[0].Header.Get("session-id"))
+	require.Equal(t, upstream.requests[0].Header.Get("session-id"), upstream.requests[1].Header.Get("session-id"))
+	require.Equal(t, otherTenantKey, upstream.requests[2].Header.Get("session-id"))
+	require.NotEqual(t, upstream.requests[1].Header.Get("session-id"), upstream.requests[2].Header.Get("session-id"))
 }
 
 func TestForwardAsChatCompletions_ResponsesShapeDoesNotAutoDerivePromptCacheKey(t *testing.T) {
@@ -444,12 +444,12 @@ func TestForwardAsChatCompletions_ResponsesShapeDoesNotAutoDerivePromptCacheKey(
 	forward(secondBody, "explicit-responses-key")
 
 	require.False(t, gjson.GetBytes(upstream.bodies[0], "prompt_cache_key").Exists())
-	require.Empty(t, upstream.requests[0].Header.Get("session_id"))
+	require.Empty(t, upstream.requests[0].Header.Get("session-id"))
 	require.False(t, gjson.GetBytes(upstream.bodies[1], "prompt_cache_key").Exists())
-	require.Empty(t, upstream.requests[1].Header.Get("session_id"))
+	require.Empty(t, upstream.requests[1].Header.Get("session-id"))
 	explicitIdentity := generateSessionUUID(isolateOpenAISessionID(99, "explicit-responses-key"))
 	require.Equal(t, explicitIdentity, gjson.GetBytes(upstream.bodies[2], "prompt_cache_key").String())
-	require.Equal(t, explicitIdentity, upstream.requests[2].Header.Get("session_id"))
+	require.Equal(t, explicitIdentity, upstream.requests[2].Header.Get("session-id"))
 }
 
 func TestForwardAsChatCompletions_OAuthDoesNotInjectDefaultInstructions(t *testing.T) {

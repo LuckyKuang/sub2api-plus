@@ -455,6 +455,9 @@ func (s *OpenAIGatewayService) dialLiveSideband(ctx context.Context, record *Liv
 		return nil, err
 	}
 	target := strings.TrimRight(chatGPTLiveSidebandBaseURL, "/") + "/" + url.PathEscape(record.CallID)
+	if err := s.requireCodexUpstreamWS(ctx, account); err != nil {
+		return nil, err
+	}
 	conn, status, _, err := s.getOpenAIWSPassthroughDialer().Dial(ctx, target, headers, resolveAccountProxyURL(account))
 	if err != nil {
 		return nil, fmt.Errorf("dial live sideband (status %d): %w", status, err)
@@ -584,6 +587,10 @@ func (s *OpenAIGatewayService) ProxyLiveSidebandWithHooks(
 					reportError(auditErr)
 					return
 				}
+			}
+			if transportErr := s.requireCodexUpstreamWS(proxyCtx, nil); transportErr != nil {
+				reportError(transportErr)
+				return
 			}
 			if writeErr := upstream.WriteFrame(proxyCtx, messageType, payload); writeErr != nil {
 				reportError(writeErr)

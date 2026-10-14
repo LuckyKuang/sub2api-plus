@@ -122,14 +122,8 @@ func TestOpenAIIdentityContractEndpointMatrix(t *testing.T) {
 								version = "0.200.2"
 							}
 							want := http.Header{"User-Agent": {family + "/" + version + fingerprint}}
-							if accountType != AccountTypeAPIKey {
-								originator := family
-								if endpoint != "/v1/alpha/search" && endpoint != "/v1/images/generations" {
-									originator = "chatgpt_cca"
-								}
-								want.Set("Originator", originator)
-								want.Set("Version", version)
-							}
+							want.Set("Originator", family)
+							want.Set("Version", version)
 							if compatible {
 								want = http.Header{}
 								builtInOutboundIdentity(source).ForProtocol(outboundidentity.RequestProtocol(req)).Apply(want)
@@ -194,7 +188,7 @@ func TestOpenAIIdentityContractChatResponsesFallbackSnapshot(t *testing.T) {
 			require.Equal(t, "/v1/responses", requests[0].URL.Path)
 			require.Equal(t, "/v1/chat/completions", requests[1].URL.Path)
 			for _, req := range requests {
-				requireOpenAIIdentityContractHeaders(t, req.Header, http.Header{"User-Agent": {"codex_cli_rs/0.200.1 (Ubuntu 22.4.0; x86_64) terminal"}}, "Bearer sk-test")
+				requireOpenAIIdentityContractHeaders(t, req.Header, http.Header{"User-Agent": {"codex_cli_rs/0.200.1 (Ubuntu 22.4.0; x86_64) terminal"}, "Originator": {"codex_cli_rs"}, "Version": {"0.200.1"}}, "Bearer sk-test")
 			}
 		})
 	}

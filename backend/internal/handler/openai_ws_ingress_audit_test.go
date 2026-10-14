@@ -46,7 +46,7 @@ func TestOpenAIResponsesWebSocket_IngressLeaseFollowsPromptAudit(t *testing.T) {
 			require.NoError(t, err)
 			defer func() { _ = conn.CloseNow() }()
 			require.Zero(t, atomic.LoadInt32(&cache.acquireIngressCalled))
-			require.NoError(t, conn.Write(ctx, coderws.MessageText, []byte(`{"type":"response.create","model":"gpt-5.5","input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"audit this first"}]}],"future_option":true}`)))
+			require.NoError(t, conn.Write(ctx, coderws.MessageText, []byte(`{"type":"response.create","model":"gpt-5.5","input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"audit this first"}]}],"stream_options":{"reasoning_summary_delivery":"sequential_cutoff"},"client_metadata":{"ws_request_header_x_openai_internal_codex_responses_lite":"true"},"future_option":true}`)))
 			for {
 				_, _, err = conn.Read(ctx)
 				if err != nil {

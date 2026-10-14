@@ -257,6 +257,8 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyOpenAICodexUserAgent:                         "",
 		SettingKeyOpenAICodexEnvironmentTimezone:               DefaultOpenAICodexEnvironmentTimezone,
 		SettingKeyOpenAICodexEgressCountry:                     DefaultOpenAICodexEgressCountry,
+		SettingKeyOpenAICodexWSEnabled:                         "true",
+		SettingKeyOpenAICodexHTTPWSEnabled:                     "false",
 		SettingKeyOpenAICodexResidency:                         DefaultOpenAICodexResidency,
 		SettingKeyCodexLegacyClientProfileCompatibilityEnabled: "false",
 		SettingKeyOpenAICodexLocalGroupQuotaEnabled:            "false",
@@ -928,6 +930,9 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	result.OpenAICodexUserAgent = strings.TrimSpace(settings[SettingKeyOpenAICodexUserAgent])
 	result.OpenAICodexEnvironmentTimezone = strings.TrimSpace(settings[SettingKeyOpenAICodexEnvironmentTimezone])
 	result.OpenAICodexEgressCountry = strings.TrimSpace(settings[SettingKeyOpenAICodexEgressCountry])
+	result.OpenAICodexWSEnabled = parseCodexTransportBool(settings[SettingKeyOpenAICodexWSEnabled], true)
+	result.OpenAICodexHTTPWSEnabled = parseCodexTransportBool(settings[SettingKeyOpenAICodexHTTPWSEnabled], false)
+	result.OpenAICodexWSDeploymentAllowed = s.cfg != nil && s.cfg.Gateway.OpenAIWS.Enabled && !s.cfg.Gateway.OpenAIWS.ForceHTTP && s.cfg.Gateway.OpenAIWS.ResponsesWebsocketsV2 && (s.cfg.Gateway.OpenAIWS.OAuthEnabled || s.cfg.Gateway.OpenAIWS.APIKeyEnabled)
 	if residency, err := NormalizeOpenAICodexResidency(settings[SettingKeyOpenAICodexResidency]); err == nil {
 		result.OpenAICodexResidency = residency
 	} else {

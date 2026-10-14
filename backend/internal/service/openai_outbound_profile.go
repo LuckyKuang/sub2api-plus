@@ -8,7 +8,6 @@ import (
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
-	"github.com/gin-gonic/gin"
 )
 
 const maxOpenAIAccountUserAgentLength = 512
@@ -237,8 +236,9 @@ func openAIOutboundIdentityVersion(userAgent string) string {
 
 // applyOpenAIOutboundIdentity is the final identity stage for an OpenAI
 // request. Account Header Override and all inbound headers must run before it.
-// OAuth/ChatGPT internal requests additionally receive the originator derived
-// from the final UA. Platform API requests never receive OAuth-only identity.
+// Inference and provider discovery declare UA, Originator and Version for both
+// OAuth and API keys, matching the official built-in OpenAI provider. Auxiliary
+// ChatGPT usage endpoints deliberately request UA only.
 func (s *OpenAIGatewayService) applyOpenAIOutboundIdentity(ctx context.Context, account *Account, headers http.Header, useCodexIdentity bool) openAIOutboundIdentity {
 	identity := s.resolveOpenAIOutboundIdentity(ctx, account)
 	applyResolvedOpenAIOutboundIdentity(headers, identity, useCodexIdentity)
@@ -260,21 +260,11 @@ func applyResolvedOpenAIOutboundIdentity(headers http.Header, identity openAIOut
 		}
 	}
 	headers.Set("User-Agent", identity.UserAgent)
-	// The endpoint protocol owns header presence. Neither inbound headers nor
-	// generic overrides can opt a Platform API request into Codex declarations.
+	// The endpoint owns header presence, independently of its authentication.
+	// Auxiliary endpoints omit provider declarations; inference includes them.
 	if useCodexIdentity {
 		headers.Set("Version", identity.Version)
 		headers.Set("Originator", identity.Originator)
-	}
-}
-
-func preserveOpenAIThreadOriginator(c *gin.Context, headers http.Header) {
-	if c == nil || c.Request == nil || headers == nil {
-		return
-	}
-	inbound := strings.TrimSpace(c.GetHeader("originator"))
-	if openai.IsOfficialCodexThreadOriginator(inbound) {
-		headers.Set("Originator", inbound)
 	}
 }
 

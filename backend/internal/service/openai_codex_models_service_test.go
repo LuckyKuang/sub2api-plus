@@ -2161,10 +2161,10 @@ func TestFetchCodexModelsManifestAPIKeyCustomUpstream(t *testing.T) {
 	if gotRequest.Header.Get("Authorization") != "Bearer sk-upstream" {
 		t.Errorf("authorization header: got %q", gotRequest.Header.Get("Authorization"))
 	}
-	if gotRequest.Header.Get("Originator") != "" {
+	if gotRequest.Header.Get("Originator") != "codex-tui" {
 		t.Errorf("originator header: got %q", gotRequest.Header.Get("Originator"))
 	}
-	if gotRequest.Header.Get("Version") != "" {
+	if gotRequest.Header.Get("Version") != "0.158.0" {
 		t.Errorf("version header: got %q", gotRequest.Header.Get("Version"))
 	}
 	if gotRequest.Header.Get("User-Agent") != codexModelsCustomAccountCurrentUserAgent {

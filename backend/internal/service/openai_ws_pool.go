@@ -849,7 +849,8 @@ type openAIWSPoolMetrics struct {
 }
 
 type openAIWSConnPool struct {
-	cfg *config.Config
+	allowUpstream func(context.Context, *Account) bool
+	cfg           *config.Config
 	// 通过接口解耦底层 WS 客户端实现，默认使用 coder/websocket。
 	clientDialer openAIWSClientDialer
 
@@ -864,10 +865,15 @@ type openAIWSConnPool struct {
 }
 
 func newOpenAIWSConnPool(cfg *config.Config) *openAIWSConnPool {
+	return newOpenAIWSConnPoolWithPolicy(cfg, nil)
+}
+
+func newOpenAIWSConnPoolWithPolicy(cfg *config.Config, allowed func(context.Context, *Account) bool) *openAIWSConnPool {
 	pool := &openAIWSConnPool{
-		cfg:          cfg,
-		clientDialer: newDefaultOpenAIWSClientDialer(),
-		workerStopCh: make(chan struct{}),
+		allowUpstream: allowed,
+		cfg:           cfg,
+		clientDialer:  newDefaultOpenAIWSClientDialer(),
+		workerStopCh:  make(chan struct{}),
 	}
 	pool.startBackgroundWorkers()
 	return pool
@@ -1114,6 +1120,11 @@ func (p *openAIWSConnPool) Acquire(ctx context.Context, req openAIWSAcquireReque
 	}
 	queueWait := &openAIWSAcquireQueueWait{}
 	lease, err := p.acquire(ctx, cloneOpenAIWSAcquireRequest(req), 0, queueWait)
+	if lease != nil && !p.upstreamAllowed(ctx, req.Account) {
+		lease.MarkBroken()
+		lease.Release()
+		return nil, errCodexUpstreamWSDisabled
+	}
 	if lease != nil && queueWait.rewoken {
 		// 广播重选经 tryAcquire 拿令牌，不像排队分支那样在取得令牌后检查取消，
 		// 这里补上复查：上下文已取消就归还令牌并按取消返回。
@@ -1146,6 +1157,9 @@ func (p *openAIWSConnPool) acquire(ctx context.Context, req openAIWSAcquireReque
 	}
 
 retryAcquire:
+	if !p.upstreamAllowed(ctx, req.Account) {
+		return nil, errCodexUpstreamWSDisabled
+	}
 	accountID := req.Account.ID
 	compatibility := normalizeOpenAIWSHandshakeCompatibility(req.Headers)
 	routingAffinity := normalizeOpenAIWSRoutingAffinity(req.Headers)
@@ -1649,7 +1663,15 @@ func (p *openAIWSConnPool) cleanupAccountLocked(ap *openAIWSAccountPool, now tim
 	maxAge := p.maxConnAge()
 
 	evicted := make([]*openAIWSConn, 0)
+	disabled := ap.lastAcquire != nil && !p.upstreamAllowed(context.Background(), ap.lastAcquire.Account)
 	for id, conn := range ap.conns {
+		if disabled && conn != nil && conn.tryAcquire() {
+			delete(ap.conns, id)
+			delete(ap.pinnedConns, id)
+			evicted = append(evicted, conn)
+			continue
+		}
+
 		if conn == nil {
 			delete(ap.conns, id)
 			if len(ap.pinnedConns) > 0 {
@@ -1847,6 +1869,9 @@ func (p *openAIWSConnPool) ensureTargetIdleAsync(accountID int64) {
 	ap.mu.Lock()
 	defer ap.mu.Unlock()
 	if ap.lastAcquire == nil {
+		return
+	}
+	if !p.upstreamAllowed(context.Background(), ap.lastAcquire.Account) {
 		return
 	}
 	if ap.prewarmActive {
@@ -2120,6 +2145,9 @@ func (p *openAIWSConnPool) dialConn(ctx context.Context, req openAIWSAcquireRequ
 	if p == nil || p.clientDialer == nil {
 		return nil, errors.New("openai ws client dialer is nil")
 	}
+	if !p.upstreamAllowed(ctx, req.Account) {
+		return nil, errCodexUpstreamWSDisabled
+	}
 	headers := cloneHeader(req.Headers)
 	var err error
 	if req.HeadersFactory != nil {
@@ -2141,6 +2169,12 @@ func (p *openAIWSConnPool) dialConn(ctx context.Context, req openAIWSAcquireRequ
 			ResponseBody:    responseBody,
 			Err:             err,
 		}
+	}
+	if !p.upstreamAllowed(ctx, req.Account) {
+		if conn != nil {
+			_ = conn.Close()
+		}
+		return nil, errCodexUpstreamWSDisabled
 	}
 	if conn == nil {
 		return nil, &openAIWSDialError{
@@ -2485,4 +2519,8 @@ func closeOpenAIWSConns(conns []*openAIWSConn) {
 
 func stringsTrim(value string) string {
 	return strings.TrimSpace(value)
+}
+
+func (p *openAIWSConnPool) upstreamAllowed(ctx context.Context, account *Account) bool {
+	return p == nil || p.allowUpstream == nil || p.allowUpstream(ctx, account)
 }

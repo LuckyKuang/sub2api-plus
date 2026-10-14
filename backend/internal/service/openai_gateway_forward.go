@@ -19,6 +19,12 @@ import (
 
 // Forward forwards request to OpenAI API
 func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, account *Account, body []byte) (result *OpenAIForwardResult, err error) {
+	initialScope, _ := resolveOpenAIWSExecutionScope(c, body, getAPIKeyIDFromContext(c))
+	ctx = context.WithValue(ctx, codexHTTPWSRequestKey{}, codexHTTPWSRequest{
+		eligible:       codexHTTPWSBodyEligible(body),
+		cacheKey:       gjson.GetBytes(body, "prompt_cache_key").String(),
+		executionScope: initialScope,
+	})
 	ctx = WithOutboundIdentityScope(ctx, c)
 	ctx = WithAccountOutboundIdentity(ctx, account)
 	defer func() { finalizeClientDisconnectForwardResult(ctx, c, result, err) }()
@@ -642,10 +648,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	if clampedCap, ok := ollamaCloudResponsesMaxOutputTokensClamp(account, upstreamModel, body); ok {
 		markPatchSet("max_output_tokens", clampedCap)
 	}
-	if wsDecision.Transport != OpenAIUpstreamTransportResponsesWebsocketV2 &&
-		!account.IsOpenAIApiKey() && gjson.GetBytes(body, "previous_response_id").Exists() {
-		markPatchDelete("previous_response_id")
-	}
+	// Preserve opaque continuation IDs on HTTP; removing them loses conversation context.
 	if openAIRequestBodyMayContainEmptyBase64InputImage(body) {
 		decoded, decodeErr := ensureReqBody()
 		if decodeErr != nil {
@@ -813,6 +816,19 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		return nil, err
 	}
 	SetOpsUpstreamModel(c, upstreamModel)
+
+	if result, handled, wsErr := s.tryCodexHTTPWebSocket(ctx, c, account, body, token, originalModel, upstreamModel, clientPromptCacheKey, startTime); handled {
+		if result != nil {
+			result.UpstreamModel = upstreamModel
+			result.BillingModel = billingModel
+			if result.ImageCount > 0 {
+				result.ImageSize = imageSizeTier
+				result.ImageInputSize = imageInputSize
+				result.BillingModel = imageBillingModel
+			}
+		}
+		return result, wsErr
+	}
 
 	// 命中 WS 时仅走 WebSocket Mode；不再自动回退 HTTP。
 	// 账号刚被上游拒绝 WS 升级时处在 fallback 冷却期：官方 client.rs 把这种结果
@@ -1624,6 +1640,9 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 		// compact 上游是 unary JSON 协议：API-key 账号也显式声明 Accept，
 		// 避免 OpenAI 兼容网关按 SSE 返回（#3777 期望行为 4）。
 		req.Header.Set("accept", "application/json")
+	} else if account.IsOpenAIApiKey() && gjson.GetBytes(body, "stream").Bool() {
+		// Official Responses sets SSE Accept independently of authentication.
+		req.Header.Set("accept", "text/event-stream")
 	}
 	if !account.UsesOpenAICodexProtocol() && promptCacheKey != "" {
 		identity, err := s.resolveOpenAIUpstreamPromptCacheHeaderIdentity(c, account, promptCacheKey)
@@ -1662,11 +1681,11 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 	// x-codex-beta-features：按真实 Codex 的会话级行为补注（在账号级覆写之后，
 	// 保证不被覆盖丢失）。
 	applyOpenAICodexBetaFeatures(c, account, req.Header)
-	identity := s.applyOpenAIOutboundIdentity(ctx, account, req.Header, account.UsesOpenAICodexProtocol())
-	if account.UsesOpenAICodexProtocol() {
-		preserveOpenAIThreadOriginator(c, req.Header)
-	}
+	identity := s.applyOpenAIOutboundIdentity(ctx, account, req.Header, true)
+	ApplyAccountOutboundHeaders(ctx, account, req.Header)
 	clearOpenAICodexLegacySessionAliases(req.Header, account)
+	stripOpenAILegacyResponsesBeta(req.Header)
+	applyOpenAICodexGuardianHeader(c, account, req.Header, gjson.GetBytes(body, "model").String())
 	SetOpsRoutingDiagnostics(c, &OpsRoutingDiagnostics{OutboundIdentitySource: identity.Source})
 	setOpenAICodexRoutingHintFromBody(req.Header, account, body)
 	logOpenAIRoutingDiagnosticsFromBody(ctx, account, "http", req.Header, body, "not_applicable")

@@ -37,7 +37,7 @@ func requireOpenAIAutoCacheIdentityPreservesBody(
 	identity := strings.TrimSpace(gjson.GetBytes(upstreamBody, "prompt_cache_key").String())
 	require.NotEmpty(t, identity)
 	require.Equal(t, identity, headers.Get(codexSessionIDHeader))
-	require.Equal(t, identity, headers.Get("session_id"))
+	require.Empty(t, headers.Get("session_id"))
 
 	withoutIdentity, err := sjson.DeleteBytes(upstreamBody, "prompt_cache_key")
 	require.NoError(t, err)
@@ -88,7 +88,7 @@ func TestSetOpenAIUpstreamSessionIdentityUsesOfficialHeaderForCodexAccounts(t *t
 	headers = http.Header{}
 	setOpenAIUpstreamSessionIdentityForAccount(headers, apiKey, "id-apikey")
 	require.Equal(t, "id-apikey", headers.Get(codexSessionIDHeader))
-	require.Equal(t, "id-apikey", headers.Get("session_id"))
+	require.Equal(t, "id-apikey", headers.Get("session_id"), "non-Codex compatible suppliers keep the legacy session_id dual-write")
 }
 
 // conversation_id is never an official Codex header and the legacy session_id
@@ -382,11 +382,12 @@ func TestOpenAIResponsesCompactPromptCacheFinalization(t *testing.T) {
 			identity := gjson.GetBytes(upstream.lastBody, "prompt_cache_key").String()
 			require.NotEmpty(t, identity)
 			require.Equal(t, identity, upstream.lastReq.Header.Get(codexSessionIDHeader))
-			if tt.account.UsesOpenAICodexProtocol() {
-				require.Empty(t, upstream.lastReq.Header.Get("session_id"))
-			} else {
-				require.Equal(t, identity, upstream.lastReq.Header.Get("session_id"))
-			}
+			// Compact always normalizes to the official `session-id` spelling. Codex-protocol and
+			// native API-key accounts drop the legacy alias; non-Codex compatible suppliers keep
+			// the dual-write, which stays asserted by
+			// TestSetOpenAIUpstreamSessionIdentityUsesOfficialHeaderForCodexAccounts and the
+			// Anthropic/compat path in openai_compat_model_test.go.
+			require.Empty(t, upstream.lastReq.Header.Get("session_id"), "compact emits only the official session-id spelling")
 			expectedThreadID := "thread-compact-1"
 			if tt.account.UsesOpenAICodexProtocol() {
 				expectedThreadID = scopeCodexAccountIdentityValue(&tt.account, 77, "thread", expectedThreadID)
