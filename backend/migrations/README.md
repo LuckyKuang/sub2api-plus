@@ -58,6 +58,16 @@ Only supported existing replace-mode boolean `stream:true` snapshots are promote
 merge/off snapshots stay disabled and historical timings stay unknown. See
 [channel monitoring](../../docs/CHANNEL_MONITOR.md#v1-流式探测).
 
+Migration `288_openai_session_routes.sql` adds the authoritative logical-session
+route table `openai_session_routes`. PostgreSQL is authoritative for the
+canonical route owner; Redis only accelerates reads and carries the same
+generation. Rows store the authorization domain, an irreversible session
+digest, the owner account and the compare-and-set generation/lease state used to
+commit a migration; no prompt text, credentials, or conversation history is
+persisted. Existing sessions have no row until their next bind, and the request
+path does not consume the table yet. See
+[Responses routing](../../docs/protocols/OPENAI_RESPONSES.md).
+
 ## File Naming
 
 Regular migration:

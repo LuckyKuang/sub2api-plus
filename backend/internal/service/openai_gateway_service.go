@@ -577,6 +577,10 @@ type OpenAIGatewayService struct {
 	liveAttestation       liveattestation.Provider
 	liveAttestationCipher SecretEncryptor
 
+	// sessionRouteStore is the authoritative logical-session route store. A nil
+	// value keeps the legacy Redis-only sticky behaviour.
+	sessionRouteStore OpenAISessionRouteStore
+
 	openaiWSPoolOnce               sync.Once
 	openaiWSStateStoreOnce         sync.Once
 	openaiSchedulerOnce            sync.Once
