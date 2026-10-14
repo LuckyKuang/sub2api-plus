@@ -2,9 +2,11 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -138,4 +140,68 @@ func (s *OpenAIGatewayService) openAISessionRouteStore() OpenAISessionRouteStore
 		return nil
 	}
 	return s.sessionRouteStore
+}
+
+// openAISessionRouteDomain scopes one authoritative route to a routing group.
+// The session value passed alongside it is already tenant scoped by the
+// scheduling seed (see scopeOpenAISchedulingSeed), so the pair identifies one
+// tenant's logical session.
+func openAISessionRouteDomain(groupID int64) string {
+	return "group:" + strconv.FormatInt(groupID, 10)
+}
+
+// openAISessionRouteLeaseID returns an unguessable migration lease identifier.
+func openAISessionRouteLeaseID() string {
+	var buf [16]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		return "lease-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	}
+	return hex.EncodeToString(buf[:])
+}
+
+// upsertOpenAISessionRoute creates the first route for a logical session or
+// commits an owner change with a lease-protected CAS. The route is
+// authoritative, so a store failure must fail the bind instead of falling back
+// to a cache write that would only survive until the next TTL expiry.
+func (s *OpenAIGatewayService) upsertOpenAISessionRoute(ctx context.Context, store OpenAISessionRouteStore, groupID int64, sessionHash string, accountID int64, leaseTTL time.Duration) error {
+	if store == nil || accountID <= 0 {
+		return nil
+	}
+	domain := openAISessionRouteDomain(groupID)
+	digest := OpenAISessionRouteDigest(sessionHash)
+	if digest == "" {
+		return nil
+	}
+	current, err := store.Get(ctx, domain, digest)
+	if errors.Is(err, ErrOpenAISessionRouteNotFound) {
+		_, err = store.CreateIfAbsent(ctx, OpenAISessionRoute{
+			AuthzDomain:    domain,
+			SessionDigest:  digest,
+			OwnerAccountID: accountID,
+			Status:         OpenAISessionRouteActive,
+		})
+		return err
+	}
+	if err != nil {
+		return err
+	}
+	if current.OwnerAccountID == accountID {
+		return nil
+	}
+	// A different account is taking over. Callers only reach this point for an
+	// admitted bind, so hold a lease on the current generation and commit with
+	// CAS; a stale or concurrent attempt then fails instead of overwriting.
+	leaseID := openAISessionRouteLeaseID()
+	reason := strings.TrimSpace(current.MigrationReason)
+	if reason == "" {
+		reason = "admitted_owner_change"
+	}
+	if _, err := store.BeginMigration(ctx, domain, digest, current.Generation, accountID, leaseID, reason, leaseTTL); err != nil {
+		return err
+	}
+	if _, err := store.CommitOwner(ctx, domain, digest, leaseID, accountID); err != nil {
+		_ = store.AbandonMigration(ctx, domain, digest, leaseID)
+		return err
+	}
+	return nil
 }

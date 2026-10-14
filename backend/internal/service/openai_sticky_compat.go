@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strings"
 	"sync/atomic"
@@ -160,7 +161,28 @@ func (s *OpenAIGatewayService) openAIStickyLegacyTTL(ttl time.Duration) time.Dur
 }
 
 func (s *OpenAIGatewayService) getStickySessionAccountID(ctx context.Context, groupID *int64, sessionHash string) (int64, error) {
-	if s == nil || s.cache == nil {
+	if s == nil {
+		return 0, nil
+	}
+
+	// The authoritative store wins over the cache: a committed owner must
+	// survive TTL expiry, restart and a stale cache entry.
+	if store := s.openAISessionRouteStore(); store != nil {
+		digest := OpenAISessionRouteDigest(sessionHash)
+		if digest != "" {
+			route, routeErr := store.Get(ctx, openAISessionRouteDomain(derefGroupID(groupID)), digest)
+			switch {
+			case routeErr == nil && route.OwnerAccountID > 0:
+				return route.OwnerAccountID, nil
+			case errors.Is(routeErr, ErrOpenAISessionRouteNotFound):
+				// No authoritative route yet: fall back to the legacy cache.
+			default:
+				return 0, fmt.Errorf("%w: %v", ErrOpenAISessionRouteStoreUnavailable, routeErr)
+			}
+		}
+	}
+
+	if s.cache == nil {
 		return 0, nil
 	}
 
@@ -198,7 +220,19 @@ func (s *OpenAIGatewayService) getStickySessionAccountID(ctx context.Context, gr
 }
 
 func (s *OpenAIGatewayService) setStickySessionAccountID(ctx context.Context, groupID *int64, sessionHash string, accountID int64, ttl time.Duration) error {
-	if s == nil || s.cache == nil || accountID <= 0 {
+	if s == nil || accountID <= 0 {
+		return nil
+	}
+
+	// Keep the authoritative route in step with the cache write. A store failure
+	// fails the bind instead of leaving a binding that only lasts one TTL.
+	if store := s.openAISessionRouteStore(); store != nil {
+		if err := s.upsertOpenAISessionRoute(ctx, store, derefGroupID(groupID), sessionHash, accountID, ttl); err != nil {
+			return err
+		}
+	}
+
+	if s.cache == nil {
 		return nil
 	}
 	primaryKey := s.openAISessionCacheKey(sessionHash)

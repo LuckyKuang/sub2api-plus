@@ -234,6 +234,104 @@ func TestOpenAISessionRouteStoreAccessorIsNilSafe(t *testing.T) {
 	require.Same(t, store, svc.openAISessionRouteStore())
 }
 
+func TestOpenAISessionRouteIsAuthoritativeForStickyReads(t *testing.T) {
+	ctx := context.Background()
+	groupID := int64(7)
+	sessionHash := "tenant-scoped-session"
+	store := newFakeOpenAISessionRouteStore()
+	cacheKey := (&OpenAIGatewayService{}).openAISessionCacheKey(sessionHash)
+	cache := &schedulerTestGatewayCache{sessionBindings: map[string]int64{cacheKey: 100}}
+	svc := &OpenAIGatewayService{cache: cache, sessionRouteStore: store}
+
+	// A committed route wins over a stale cache binding.
+	_, err := store.CreateIfAbsent(ctx, OpenAISessionRoute{
+		AuthzDomain:    openAISessionRouteDomain(groupID),
+		SessionDigest:  OpenAISessionRouteDigest(sessionHash),
+		OwnerAccountID: 200,
+		Status:         OpenAISessionRouteActive,
+	})
+	require.NoError(t, err)
+	owner, err := svc.getStickySessionAccountID(ctx, &groupID, sessionHash)
+	require.NoError(t, err)
+	require.EqualValues(t, 200, owner, "the authoritative owner must survive a stale or expired cache entry")
+
+	// Without a route the legacy cache path still answers.
+	svc = &OpenAIGatewayService{cache: cache, sessionRouteStore: newFakeOpenAISessionRouteStore()}
+	owner, err = svc.getStickySessionAccountID(ctx, &groupID, sessionHash)
+	require.NoError(t, err)
+	require.EqualValues(t, 100, owner)
+
+	// An unreachable authoritative store must surface a recoverable error
+	// instead of silently falling back to the cache.
+	failing := newFakeOpenAISessionRouteStore()
+	failing.fail = ErrOpenAISessionRouteStoreUnavailable
+	svc = &OpenAIGatewayService{cache: cache, sessionRouteStore: failing}
+	_, err = svc.getStickySessionAccountID(ctx, &groupID, sessionHash)
+	require.ErrorIs(t, err, ErrOpenAISessionRouteStoreUnavailable)
+}
+
+func TestBindStickySessionCommitsOwnerChangeThroughAuthoritativeStore(t *testing.T) {
+	ctx := context.Background()
+	groupID := int64(7)
+	sessionHash := "tenant-scoped-session"
+	store := newFakeOpenAISessionRouteStore()
+	svc := &OpenAIGatewayService{sessionRouteStore: store}
+	domain := openAISessionRouteDomain(groupID)
+	digest := OpenAISessionRouteDigest(sessionHash)
+
+	require.NoError(t, svc.BindStickySession(ctx, &groupID, sessionHash, 100))
+	route, err := store.Get(ctx, domain, digest)
+	require.NoError(t, err)
+	require.EqualValues(t, 100, route.OwnerAccountID)
+	require.EqualValues(t, 1, route.Generation)
+
+	// Re-binding the same owner keeps the generation: it is not a migration.
+	require.NoError(t, svc.BindStickySession(ctx, &groupID, sessionHash, 100))
+	route, err = store.Get(ctx, domain, digest)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, route.Generation)
+
+	// An admitted owner change commits through the lease + CAS path.
+	require.NoError(t, svc.BindStickySession(ctx, &groupID, sessionHash, 101))
+	route, err = store.Get(ctx, domain, digest)
+	require.NoError(t, err)
+	require.EqualValues(t, 101, route.OwnerAccountID)
+	require.EqualValues(t, 2, route.Generation)
+	require.Equal(t, OpenAISessionRouteActive, route.Status)
+}
+
+// Re-derived A03 contract: a profit-gate veto is transient and keeps the
+// canonical owner, while an admitted owner change after the binding was released
+// (the quota-exhaustion path) commits through CAS.
+func TestProfitGateKeepsCanonicalOwnerUntilAdmittedOwnerChange(t *testing.T) {
+	ctx := context.Background()
+	groupID := int64(7)
+	sessionHash := "tenant-scoped-session"
+	store := newFakeOpenAISessionRouteStore()
+	cache := &schedulerTestGatewayCache{sessionBindings: map[string]int64{}}
+	svc := &OpenAIGatewayService{cache: cache, sessionRouteStore: store}
+	domain := openAISessionRouteDomain(groupID)
+	digest := OpenAISessionRouteDigest(sessionHash)
+
+	require.NoError(t, svc.BindStickySession(ctx, &groupID, sessionHash, 100))
+
+	gateCtx := context.WithValue(ctx, openAIProfitControlGateCtxKey{}, &openAIProfitControlGate{threshold: 1, pricingAt: time.Now()})
+	require.NoError(t, svc.BindStickySessionAfterProfitAdmission(gateCtx, &groupID, sessionHash, 101))
+	route, err := store.Get(ctx, domain, digest)
+	require.NoError(t, err)
+	require.EqualValues(t, 100, route.OwnerAccountID, "a transient profit veto must not move the canonical owner")
+	require.EqualValues(t, 1, route.Generation)
+
+	// Permanent failure: the scheduler released the cache binding, and the next
+	// admitted attempt becomes the new owner through CAS.
+	cache.sessionBindings = map[string]int64{}
+	require.NoError(t, svc.BindStickySessionAfterProfitAdmission(ctx, &groupID, sessionHash, 101))
+	route, err = store.Get(ctx, domain, digest)
+	require.NoError(t, err)
+	require.EqualValues(t, 101, route.OwnerAccountID)
+	require.EqualValues(t, 2, route.Generation)
+}
+
 func TestOpenAISessionRouteLifecycleKeepsOwnerUntilCommit(t *testing.T) {
 	ctx := context.Background()
 	store := newFakeOpenAISessionRouteStore()
