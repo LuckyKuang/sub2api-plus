@@ -400,7 +400,15 @@ func (s *defaultOpenAIAccountScheduler) Select(
 	// already migrated after an upstream failure. Consult that canonical route
 	// before the older response binding; the handler will remove the response ID
 	// when the selected account differs from its owner.
-	if !req.StickyWeighted && req.PreviousResponseCanMove {
+	//
+	// The same route also overrides weighted scoring: an authoritative owner may
+	// only be left through an explicit migration, never because another account
+	// scored better.
+	sessionRoutePreferred := false
+	if req.StickyWeighted && req.SessionHash != "" {
+		sessionRoutePreferred = s.service.openAISessionRoutePreference(ctx, req.GroupID, req.SessionHash)
+	}
+	if (!req.StickyWeighted || sessionRoutePreferred) && req.PreviousResponseCanMove {
 		sessionChecked = true
 		selection, escapedSticky, err := s.selectBySessionHash(ctx, req)
 		if err != nil {

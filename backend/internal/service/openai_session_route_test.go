@@ -418,3 +418,38 @@ func TestOpenAISessionRouteKeepsCanonicalOwnerOnlyForItsCommittedOwner(t *testin
 	svc = &OpenAIGatewayService{sessionRouteStore: failing}
 	require.True(t, svc.openAISessionRouteKeepsCanonicalOwner(ctx, &groupID, sessionHash, 100))
 }
+
+// Weighted scoring may only choose for sessions without an authoritative route.
+func TestOpenAISessionRoutePreferenceGatesScoring(t *testing.T) {
+	ctx := context.Background()
+	groupID := int64(7)
+	sessionHash := "tenant-scoped-session"
+	domain := openAISessionRouteDomain(groupID)
+	digest := OpenAISessionRouteDigest(sessionHash)
+
+	// No store and no route both leave scoring free.
+	require.False(t, (&OpenAIGatewayService{}).openAISessionRoutePreference(ctx, &groupID, sessionHash))
+	store := newFakeOpenAISessionRouteStore()
+	svc := &OpenAIGatewayService{sessionRouteStore: store}
+	require.False(t, svc.openAISessionRoutePreference(ctx, &groupID, sessionHash))
+
+	_, err := store.CreateIfAbsent(ctx, OpenAISessionRoute{
+		AuthzDomain: domain, SessionDigest: digest, OwnerAccountID: 100,
+	})
+	require.NoError(t, err)
+	require.True(t, svc.openAISessionRoutePreference(ctx, &groupID, sessionHash), "a committed route must gate weighted scoring")
+
+	// A suspended route still has an owner to consult before re-scoring.
+	require.NoError(t, store.MarkSuspended(ctx, domain, digest, 1, "no_candidate"))
+	require.True(t, svc.openAISessionRoutePreference(ctx, &groupID, sessionHash))
+
+	// A store failure must not be read as "no route": the authoritative read that
+	// follows surfaces the recoverable error instead of re-scoring.
+	failing := newFakeOpenAISessionRouteStore()
+	failing.fail = ErrOpenAISessionRouteStoreUnavailable
+	svc = &OpenAIGatewayService{sessionRouteStore: failing}
+	require.True(t, svc.openAISessionRoutePreference(ctx, &groupID, sessionHash))
+
+	// An empty session hash never claims a preference.
+	require.False(t, svc.openAISessionRoutePreference(ctx, &groupID, "  "))
+}

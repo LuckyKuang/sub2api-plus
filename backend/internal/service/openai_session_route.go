@@ -142,6 +142,24 @@ func (s *OpenAIGatewayService) openAISessionRouteStore() OpenAISessionRouteStore
 	return s.sessionRouteStore
 }
 
+// openAISessionRoutePreference reports whether this logical session already has
+// an authoritative route, so scoring must consult the canonical owner before it
+// may pick another account. A store failure also reports true: the authoritative
+// read that follows then surfaces the recoverable error instead of silently
+// re-scoring the session onto a different account.
+func (s *OpenAIGatewayService) openAISessionRoutePreference(ctx context.Context, groupID *int64, sessionHash string) bool {
+	store := s.openAISessionRouteStore()
+	if store == nil {
+		return false
+	}
+	digest := OpenAISessionRouteDigest(sessionHash)
+	if digest == "" {
+		return false
+	}
+	_, err := store.Get(ctx, openAISessionRouteDomain(derefGroupID(groupID)), digest)
+	return !errors.Is(err, ErrOpenAISessionRouteNotFound)
+}
+
 // openAISessionRouteKeepsCanonicalOwner reports whether the authoritative route
 // for this logical session already names accountID as the committed owner.
 // Transient quality signals (TTFT, error rate) must not move a committed owner:
