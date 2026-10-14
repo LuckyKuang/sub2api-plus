@@ -142,6 +142,35 @@ func (s *OpenAIGatewayService) openAISessionRouteStore() OpenAISessionRouteStore
 	return s.sessionRouteStore
 }
 
+// openAISessionRouteKeepsCanonicalOwner reports whether the authoritative route
+// for this logical session already names accountID as the committed owner.
+// Transient quality signals (TTFT, error rate) must not move a committed owner:
+// only a permanent unavailability may migrate it, and that path commits a new
+// owner explicitly.
+func (s *OpenAIGatewayService) openAISessionRouteKeepsCanonicalOwner(ctx context.Context, groupID *int64, sessionHash string, accountID int64) bool {
+	store := s.openAISessionRouteStore()
+	if store == nil || accountID <= 0 {
+		return false
+	}
+	digest := OpenAISessionRouteDigest(sessionHash)
+	if digest == "" {
+		return false
+	}
+	route, err := store.Get(ctx, openAISessionRouteDomain(derefGroupID(groupID)), digest)
+	if errors.Is(err, ErrOpenAISessionRouteNotFound) {
+		return false
+	}
+	if err != nil {
+		// A store failure must not be read as "no canonical owner": keep the
+		// established binding rather than escaping on a transient signal.
+		return true
+	}
+	if route.Status == OpenAISessionRouteSuspended {
+		return false
+	}
+	return route.OwnerAccountID == accountID
+}
+
 // openAISessionRouteDomain scopes one authoritative route to a routing group.
 // The session value passed alongside it is already tenant scoped by the
 // scheduling seed (see scopeOpenAISchedulingSeed), so the pair identifies one

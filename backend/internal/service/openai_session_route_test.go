@@ -386,3 +386,35 @@ func TestOpenAISessionRouteLifecycleKeepsOwnerUntilCommit(t *testing.T) {
 	require.EqualValues(t, 101, final.OwnerAccountID)
 	require.EqualValues(t, 2, final.Generation)
 }
+
+// A committed owner must not be escaped on a transient quality signal (TTFT or
+// error rate); only a different or suspended owner may move the session.
+func TestOpenAISessionRouteKeepsCanonicalOwnerOnlyForItsCommittedOwner(t *testing.T) {
+	ctx := context.Background()
+	groupID := int64(7)
+	sessionHash := "tenant-scoped-session"
+	domain := openAISessionRouteDomain(groupID)
+	digest := OpenAISessionRouteDigest(sessionHash)
+	store := newFakeOpenAISessionRouteStore()
+	svc := &OpenAIGatewayService{sessionRouteStore: store}
+
+	require.False(t, svc.openAISessionRouteKeepsCanonicalOwner(ctx, &groupID, sessionHash, 100), "no route yet")
+
+	_, err := store.CreateIfAbsent(ctx, OpenAISessionRoute{
+		AuthzDomain: domain, SessionDigest: digest, OwnerAccountID: 100,
+	})
+	require.NoError(t, err)
+	require.True(t, svc.openAISessionRouteKeepsCanonicalOwner(ctx, &groupID, sessionHash, 100))
+	require.False(t, svc.openAISessionRouteKeepsCanonicalOwner(ctx, &groupID, sessionHash, 101), "another account is not the committed owner")
+
+	// A suspended route must not pin the session to an unusable owner.
+	require.NoError(t, store.MarkSuspended(ctx, domain, digest, 1, "no_candidate"))
+	require.False(t, svc.openAISessionRouteKeepsCanonicalOwner(ctx, &groupID, sessionHash, 100))
+
+	// A store failure must not be read as "no canonical owner": the established
+	// binding is kept instead of escaping on a transient signal.
+	failing := newFakeOpenAISessionRouteStore()
+	failing.fail = ErrOpenAISessionRouteStoreUnavailable
+	svc = &OpenAIGatewayService{sessionRouteStore: failing}
+	require.True(t, svc.openAISessionRouteKeepsCanonicalOwner(ctx, &groupID, sessionHash, 100))
+}

@@ -587,7 +587,8 @@ func (s *defaultOpenAIAccountScheduler) selectBySessionHash(
 		return nil, false, nil
 	}
 	escapeCfg := s.service.openAIStickyEscapeConfig()
-	if reason, errorRate, ttft, shouldEscape := s.shouldEscapeStickyAccount(accountID, escapeCfg); shouldEscape && !req.DisableStickyEscape {
+	if reason, errorRate, ttft, shouldEscape := s.shouldEscapeStickyAccount(accountID, escapeCfg); shouldEscape && !req.DisableStickyEscape &&
+		!s.service.openAISessionRouteKeepsCanonicalOwner(ctx, req.GroupID, sessionHash, accountID) {
 		slog.Info("sticky_escape_triggered",
 			"account_id", accountID,
 			"reason", reason,
