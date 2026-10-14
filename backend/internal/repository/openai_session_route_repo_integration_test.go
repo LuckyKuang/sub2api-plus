@@ -5,6 +5,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -88,4 +89,82 @@ func TestOpenAISessionRouteRepositoryCASLifecycle(t *testing.T) {
 	require.Equal(t, service.OpenAISessionRouteActive, abandoned.Status)
 	require.EqualValues(t, 101, abandoned.OwnerAccountID)
 	require.EqualValues(t, 2, abandoned.Generation)
+}
+
+// Concurrent attempts must produce exactly one migration lease: the rest lose the
+// generation race and can never commit. This closes the audit's "CAS reviewed but
+// never raced" evidence gap with the real database and connection pool.
+func TestOpenAISessionRouteRepositoryConcurrentMigration(t *testing.T) {
+	ctx := context.Background()
+	domain := fmt.Sprintf("test:%s:%d", t.Name(), time.Now().UnixNano())
+	digest := service.OpenAISessionRouteDigest("logical-session")
+	repo := NewOpenAISessionRouteRepository(integrationDB, integrationRedis, time.Minute)
+	defer func() {
+		_, _ = integrationDB.ExecContext(ctx, `DELETE FROM openai_session_routes WHERE authz_domain = $1`, domain)
+	}()
+
+	created, err := repo.CreateIfAbsent(ctx, service.OpenAISessionRoute{
+		AuthzDomain: domain, SessionDigest: digest, OwnerAccountID: 100,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, created.Generation)
+
+	const attempts = 8
+	type leaseResult struct {
+		index   int
+		leaseID string
+		ok      bool
+	}
+	results := make(chan leaseResult, attempts)
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	for i := 0; i < attempts; i++ {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			leaseID := fmt.Sprintf("lease-%d", index)
+			<-start
+			_, err := repo.BeginMigration(ctx, domain, digest, 1, int64(200+index), leaseID, "quota_exhausted", time.Minute)
+			results <- leaseResult{index: index, leaseID: leaseID, ok: err == nil}
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+	close(results)
+
+	winners := 0
+	var winner leaseResult
+	for result := range results {
+		if result.ok {
+			winners++
+			winner = result
+		}
+	}
+	require.Equal(t, 1, winners, "exactly one concurrent attempt may hold the migration lease")
+
+	// The canonical owner is unchanged while the lease is held.
+	leased, err := repo.Get(ctx, domain, digest)
+	require.NoError(t, err)
+	require.EqualValues(t, 100, leased.OwnerAccountID)
+	require.Equal(t, service.OpenAISessionRouteMigrating, leased.Status)
+	require.EqualValues(t, 200+winner.index, leased.CandidateAccountID)
+
+	// Only the lease winner commits, and it bumps the generation.
+	committed, err := repo.CommitOwner(ctx, domain, digest, winner.leaseID, int64(200+winner.index))
+	require.NoError(t, err)
+	require.EqualValues(t, 200+winner.index, committed.OwnerAccountID)
+	require.EqualValues(t, 2, committed.Generation)
+
+	// Every losing attempt can never overwrite the committed owner.
+	for i := 0; i < attempts; i++ {
+		if i == winner.index {
+			continue
+		}
+		_, err := repo.CommitOwner(ctx, domain, digest, fmt.Sprintf("lease-%d", i), int64(200+i))
+		require.ErrorIs(t, err, service.ErrOpenAISessionRouteLeaseLost, "loser %d must not commit", i)
+	}
+	final, err := repo.Get(ctx, domain, digest)
+	require.NoError(t, err)
+	require.EqualValues(t, 200+winner.index, final.OwnerAccountID)
+	require.EqualValues(t, 2, final.Generation)
 }
