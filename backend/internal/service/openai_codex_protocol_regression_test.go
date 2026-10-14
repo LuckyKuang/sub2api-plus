@@ -175,8 +175,11 @@ func TestCodexNonRootSessionCacheWireIsolation(t *testing.T) {
 					account.ID = 72
 					account.Credentials["chatgpt_account_id"] = "owner-72"
 					failoverCache, failoverSession := capture(42, "child-a", "guardian")
-					require.NotEqual(t, cacheA, failoverCache)
-					require.NotEqual(t, sessionA, failoverSession)
+					// A01: failover rebuilds credentials and connections, but the
+					// logical cache and session identity belong to the tenant and the
+					// conversation, so they must survive the credential-owner change.
+					require.Equal(t, cacheA, failoverCache, "logical cache key must survive credential-owner failover")
+					require.Equal(t, sessionA, failoverSession, "logical session identity must survive credential-owner failover")
 				}
 			})
 		}

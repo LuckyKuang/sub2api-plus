@@ -48,6 +48,46 @@ func deriveOpenAISessionHashes(sessionID string) (currentHash string, legacyHash
 	return currentHash, legacyHash
 }
 
+// openAIAuthorizationDomain returns the authenticated tenant domain for routing
+// affinity. It is derived only from the authenticated API key, never from
+// client-supplied session values.
+func openAIAuthorizationDomain(c *gin.Context) string {
+	if c == nil {
+		return ""
+	}
+	apiKeyID := getAPIKeyIDFromContext(c)
+	if apiKeyID <= 0 {
+		return ""
+	}
+	if value, exists := c.Get("api_key"); exists {
+		if key, ok := value.(*APIKey); ok && key != nil && key.UserID > 0 {
+			return fmt.Sprintf("user:%d:key:%d", key.UserID, apiKeyID)
+		}
+	}
+	return fmt.Sprintf("key:%d", apiKeyID)
+}
+
+// scopeOpenAISchedulingSeed mixes the authorization domain into a sticky
+// scheduling seed so two tenants that submit the same raw session value cannot
+// share one route binding (A02). Tenant-less callers keep the previous seed.
+func scopeOpenAISchedulingSeed(c *gin.Context, seed string) string {
+	seed = strings.TrimSpace(seed)
+	if seed == "" {
+		return seed
+	}
+	domain := openAIAuthorizationDomain(c)
+	if domain == "" {
+		return seed
+	}
+	return "openai-sched-v1:" + domain + "\x00" + seed
+}
+
+// ScopeOpenAISchedulingSeed exposes the tenant scoping to callers outside this
+// package. They must scope the raw seed before hashing it, never hash twice.
+func ScopeOpenAISchedulingSeed(c *gin.Context, seed string) string {
+	return scopeOpenAISchedulingSeed(c, seed)
+}
+
 func withOpenAILegacySessionHash(ctx context.Context, legacyHash string) context.Context {
 	if ctx == nil {
 		return nil

@@ -187,6 +187,26 @@ accepted for sticky routing. A model-only request does not receive a content-der
 Chat Completions requests converted to Responses use the same behavior, while
 raw Chat Completions forwarding does not receive Responses-only cache fields.
 
+The logical cache identity is scoped to the authenticated tenant, never to the
+credential owner: one tenant and logical session keep a single
+`prompt_cache_key`/`session-id` when a scheduler failover changes the OAuth
+account, while another API key (a different authorization domain) always
+resolves to a different identity. Sticky-routing seeds derive from the same
+authorization domain (`user:{uid}:key:{id}`), so two tenants that submit an
+identical raw `session-id`/`conversation_id` never share a route binding, and
+legacy tenant-less bindings are not read as a fallback source. Credential
+identity still rotates on failover: per-credential headers such as
+`x-codex-installation-id`, `thread-id`, `x-codex-window-id` and
+`x-client-request-id` remain scoped to the selected account namespace.
+
+Native official Codex bodies carry their base prompt as a `developer`/`system`
+input item and send no top-level `instructions` field. The gateway therefore
+does not synthesize a default `instructions` value when the input already
+carries that instruction content; Chat Completions/Messages conversion still
+synthesizes instructions at its own conversion boundary, and callers that send
+no instruction content at all keep the previous default. The passthrough
+Codex-model fallback follows the same rule.
+
 Codex-protocol outbound request bodies always carry
 `include: ["reasoning.encrypted_content"]`, matching the official client's
 unconditional declaration: the gateway merges and deduplicates the item with

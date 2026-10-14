@@ -41,7 +41,6 @@ func TestCodexRequestBodyIdentityNamespaceIsStablePerOAuthAccount(t *testing.T) 
 	require.JSONEq(t, string(first), string(firstAgain))
 
 	paths := []string{
-		"prompt_cache_key",
 		"client_metadata.x-codex-installation-id",
 		"client_metadata.session_id",
 		"client_metadata.thread_id",
@@ -51,7 +50,11 @@ func TestCodexRequestBodyIdentityNamespaceIsStablePerOAuthAccount(t *testing.T) 
 		require.NotEqual(t, gjson.GetBytes(body, path).String(), gjson.GetBytes(first, path).String(), path)
 		require.NotEqual(t, gjson.GetBytes(first, path).String(), gjson.GetBytes(second, path).String(), path)
 	}
-	require.Equal(t, gjson.GetBytes(first, "prompt_cache_key").String(), gjson.GetBytes(first, "client_metadata.session_id").String())
+	// A01: the logical cache key keeps tenant isolation but is no longer scoped to
+	// the credential owner, so it must survive an account failover unchanged.
+	require.NotEqual(t, gjson.GetBytes(body, "prompt_cache_key").String(), gjson.GetBytes(first, "prompt_cache_key").String(), "client key must still be tenant scoped")
+	require.Equal(t, gjson.GetBytes(first, "prompt_cache_key").String(), gjson.GetBytes(second, "prompt_cache_key").String(), "logical cache key must survive credential-owner migration")
+	require.NotEqual(t, gjson.GetBytes(first, "prompt_cache_key").String(), gjson.GetBytes(first, "client_metadata.session_id").String(), "cache key and per-owner session identity are separate scopes")
 
 	var embeddedFirst map[string]any
 	var embeddedSecond map[string]any
@@ -113,7 +116,7 @@ func TestCodexAccountIdentitySourceResolvesShadowAndOverwritesFailoverContext(t 
 		"token", true, "client-session", true,
 	)
 	require.NoError(t, err)
-	require.Equal(t, generateSessionUUID(isolateOpenAIUpstreamSessionID(0, parent, "client-session")), req.Header.Get("session-id"))
+	require.Equal(t, generateSessionUUID(isolateOpenAISessionID(0, "client-session")), req.Header.Get("session-id"))
 	require.Empty(t, req.Header.Get("session_id"))
 
 	next := &Account{ID: 19, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Credentials: map[string]any{
@@ -153,11 +156,17 @@ func TestBuildOpenAIWSHeadersNamespacesCodexIdentityByOAuthAccount(t *testing.T)
 	first := build(account11)
 	firstAgain := build(account11)
 	second := build(account19)
-	for _, header := range []string{"session-id", "x-codex-installation-id", "thread-id", "x-codex-window-id", "x-client-request-id"} {
+	for _, header := range []string{"x-codex-installation-id", "thread-id", "x-codex-window-id", "x-client-request-id"} {
 		require.NotEmpty(t, first.Get(header), header)
 		require.Equal(t, first.Get(header), firstAgain.Get(header), header)
 		require.NotEqual(t, first.Get(header), second.Get(header), header)
 	}
+	// A01: the logical session identity belongs to the tenant and the
+	// conversation, not to the credential owner, so it stays put on failover while
+	// the per-credential identity headers above still rotate.
+	require.NotEmpty(t, first.Get("session-id"))
+	require.Equal(t, first.Get("session-id"), firstAgain.Get("session-id"))
+	require.Equal(t, first.Get("session-id"), second.Get("session-id"), "logical session identity must survive credential-owner migration")
 	require.Empty(t, first.Get("session_id"))
 	require.Empty(t, second.Get("session_id"))
 
@@ -212,7 +221,6 @@ func TestBuildUpstreamRequestNamespacesCodexIdentityByOAuthAccount(t *testing.T)
 	identityHeaders := []string{
 		"x-codex-installation-id",
 		"x-codex-window-id",
-		"session-id",
 		"session_id",
 		"conversation_id",
 		"thread-id",
@@ -230,4 +238,8 @@ func TestBuildUpstreamRequestNamespacesCodexIdentityByOAuthAccount(t *testing.T)
 		require.NotEqual(t, first.Get(header), second.Get(header), "account failover must rotate upstream identity: %s", header)
 	}
 	require.GreaterOrEqual(t, checked, 5, "test must exercise the real outbound identity surface")
+	// A01: the logical session identity is tenant-scoped, not credential-owner
+	// scoped, so it must survive the failover that rotates the headers above.
+	require.NotEmpty(t, first.Get("session-id"))
+	require.Equal(t, first.Get("session-id"), second.Get("session-id"), "logical session identity must survive credential-owner migration")
 }

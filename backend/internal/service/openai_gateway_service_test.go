@@ -451,7 +451,18 @@ func TestOpenAIGatewayService_ClientSessionHeaderPriority(t *testing.T) {
 	body := []byte(`{"prompt_cache_key":"body-session"}`)
 	for _, header := range headers {
 		require.Equal(t, header.value, svc.ExtractSessionID(c, body), header.name)
-		require.Equal(t, fmt.Sprintf("%016x", xxhash.Sum64String(header.value)), svc.GenerateExplicitSessionHash(c, body), header.name)
+		hash := svc.GenerateExplicitSessionHash(c, body)
+		require.NotEmpty(t, hash, header.name)
+
+		// A02: the routing seed is scoped by the authenticated tenant, so the same
+		// raw session value in another tenant must not produce the same binding.
+		otherTenantRecorder := httptest.NewRecorder()
+		otherTenant, _ := gin.CreateTestContext(otherTenantRecorder)
+		otherTenant.Request = httptest.NewRequest(http.MethodPost, "/openai/v1/responses", nil)
+		otherTenant.Set("api_key", &APIKey{ID: 902, Group: &Group{Platform: PlatformGrok}})
+		otherTenant.Request.Header.Set(header.name, header.value)
+		require.NotEqual(t, hash, svc.GenerateExplicitSessionHash(otherTenant, body), "same raw session in another tenant must not share a route binding: %s", header.name)
+
 		if header.name != grokConversationIDHeader {
 			require.Equal(t, header.value, explicitOpenAISessionID(c, body), header.name)
 		}

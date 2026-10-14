@@ -126,7 +126,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 	sessionHash := s.GenerateSessionHash(c, nil)
 	if sessionHash == "" {
 		var legacySessionHash string
-		sessionHash, legacySessionHash = openAIWSSessionHashesFromID(promptCacheKey)
+		sessionHash, legacySessionHash = openAIWSSessionHashesFromID(scopeOpenAISchedulingSeed(c, promptCacheKey))
 		attachOpenAILegacySessionHashToGin(c, legacySessionHash)
 	}
 	// 与 WS 接入路径共用执行作用域：codex 多智能体共用 session-id，turn state 与

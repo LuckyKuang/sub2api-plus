@@ -104,11 +104,10 @@ func (s *OpenAIGatewayService) resolveOpenAIPromptCacheIdentity(c *gin.Context, 
 	if account != nil && account.IsOpenAIOAuthSessionSharingEnabled() {
 		namespaced, err = s.resolveOpenAIUpstreamSessionID(c, account, raw)
 	} else {
-		namespaced = isolateOpenAIUpstreamSessionID(
-			getAPIKeyIDFromContext(c),
-			codexAccountIdentitySource(c, account),
-			raw,
-		)
+		// Logical cache identity is tenant-scoped, never credential-owner scoped:
+		// an A→B failover must keep the same prompt_cache_key for one logical
+		// conversation while other tenants stay isolated.
+		namespaced = isolateOpenAISessionID(getAPIKeyIDFromContext(c), raw)
 	}
 	if err != nil || namespaced == "" {
 		return "", err

@@ -1695,7 +1695,7 @@ func resolveOpenAIMessagesMetadataSession(c *gin.Context, sessionHash, promptCac
 	// session_id，否则会改变现有 Messages→Codex 缓存滚动语义。
 	if promptCacheKey == "" {
 		if claudeSessionID := service.ClaudeCodeSessionIDFromHeader(c); claudeSessionID != "" {
-			return service.DeriveSessionHashFromSeed(claudeSessionID), promptCacheKey
+			return service.DeriveSessionHashFromSeed(service.ScopeOpenAISchedulingSeed(c, claudeSessionID)), promptCacheKey
 		}
 	}
 	if sessionHash != "" {
@@ -1703,7 +1703,7 @@ func resolveOpenAIMessagesMetadataSession(c *gin.Context, sessionHash, promptCac
 	}
 	if userID := strings.TrimSpace(gjson.GetBytes(body, "metadata.user_id").String()); userID != "" {
 		seed := reqModel + "-" + userID
-		sessionHash = service.DeriveSessionHashFromSeed(seed)
+		sessionHash = service.DeriveSessionHashFromSeed(service.ScopeOpenAISchedulingSeed(c, seed))
 	}
 	return sessionHash, promptCacheKey
 }

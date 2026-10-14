@@ -74,20 +74,22 @@ func codexAccountIdentityNamespace(account *Account) string {
 	return ""
 }
 
-// isolateOpenAIUpstreamSessionID preserves the existing API-key isolation while
-// adding the selected OAuth credential namespace. A scheduler failover therefore
-// cannot send the same session/conversation identity through two upstream accounts.
-func isolateOpenAIUpstreamSessionID(apiKeyID int64, account *Account, raw string) string {
+// scopeOpenAILogicalCacheKey derives the tenant-scoped logical prompt cache key.
+// Tenant isolation stays in the API-key dimension; the credential-owner namespace
+// deliberately does NOT participate, so one logical conversation keeps the same
+// prompt_cache_key when the upstream credential owner changes (A→B failover).
+func scopeOpenAILogicalCacheKey(apiKeyID int64, kind, raw string) string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return ""
+		return raw
 	}
-	namespace := codexAccountIdentityNamespace(account)
-	if namespace == "" {
-		return isolateOpenAISessionID(apiKeyID, raw)
-	}
-	sum := sha256.Sum256([]byte(fmt.Sprintf("u%d:a%s:%s", apiKeyID, namespace, raw)))
-	return fmt.Sprintf("%x", sum[:8])
+	return deriveStableUUIDv4(fmt.Sprintf(
+		"sub2api:openai-logical-cache-key:%s:key:%d:kind:%s:value:%s",
+		codexAccountIdentityNamespaceVersion,
+		apiKeyID,
+		kind,
+		raw,
+	))
 }
 
 func scopeCodexAccountIdentityValue(account *Account, apiKeyID int64, kind, raw string) string {
@@ -183,7 +185,7 @@ func applyCodexAccountIdentityClientMetadataMap(requestBody map[string]any, acco
 		if strings.TrimSpace(originalBodySessionID) != "" && raw == originalBodySessionID {
 			kind = "session"
 		}
-		next := scopeCodexAccountIdentityValue(account, apiKeyID, kind, raw)
+		next := scopeOpenAILogicalCacheKey(apiKeyID, kind, raw)
 		if next != raw {
 			requestBody["prompt_cache_key"] = next
 			changed = true
@@ -236,7 +238,7 @@ func applyCodexAccountIdentityClientMetadataRaw(body []byte, account *Account, a
 		if strings.TrimSpace(originalBodySessionID) != "" && raw == originalBodySessionID {
 			kind = "session"
 		}
-		scoped := scopeCodexAccountIdentityValue(account, apiKeyID, kind, raw)
+		scoped := scopeOpenAILogicalCacheKey(apiKeyID, kind, raw)
 		if scoped != raw {
 			rewritten, err := sjson.SetBytes(next, "prompt_cache_key", scoped)
 			if err != nil {

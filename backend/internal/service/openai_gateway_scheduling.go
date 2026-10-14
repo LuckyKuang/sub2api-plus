@@ -154,6 +154,7 @@ func (s *OpenAIGatewayService) GenerateExplicitSessionHash(c *gin.Context, body 
 	if sessionID == "" {
 		return ""
 	}
+	sessionID = scopeOpenAISchedulingSeed(c, sessionID)
 
 	currentHash, legacyHash := deriveOpenAISessionHashes(sessionID)
 	attachOpenAILegacySessionHashToGin(c, legacyHash)
@@ -196,6 +197,10 @@ func (s *OpenAIGatewayService) GenerateSessionHash(c *gin.Context, body []byte) 
 		sessionID = grokStickyAffinitySeed(sessionID, body)
 	}
 
+	// Tenant isolation is part of the routing seed itself; adding the namespace
+	// only at the cache-key layer would still let two tenants share one binding.
+	sessionID = scopeOpenAISchedulingSeed(c, sessionID)
+
 	currentHash, legacyHash := deriveOpenAISessionHashes(sessionID)
 	attachOpenAILegacySessionHashToGin(c, legacyHash)
 	return currentHash
@@ -232,7 +237,7 @@ func (s *OpenAIGatewayService) GenerateSessionHashWithFallback(c *gin.Context, b
 		return ""
 	}
 
-	currentHash, legacyHash := deriveOpenAISessionHashes(seed)
+	currentHash, legacyHash := deriveOpenAISessionHashes(scopeOpenAISchedulingSeed(c, seed))
 	attachOpenAILegacySessionHashToGin(c, legacyHash)
 	return currentHash
 }

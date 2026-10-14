@@ -1774,6 +1774,41 @@ func normalizeOpenAIPassthroughOAuthBody(body []byte, compact bool) ([]byte, boo
 	return normalized, changed, nil
 }
 
+// openAIRequestBodyCarriesInstructionContent is the byte-level form of
+// inputItemsCarryInstructionContent for paths that must not decode the whole
+// body. Official Codex carries its base prompt as a developer input item and
+// sends no top-level instructions, so listed paths must not synthesize one.
+func openAIRequestBodyCarriesInstructionContent(body []byte) bool {
+	if len(body) == 0 {
+		return false
+	}
+	carries := false
+	gjson.GetBytes(body, "input").ForEach(func(_, item gjson.Result) bool {
+		role := strings.ToLower(strings.TrimSpace(item.Get("role").String()))
+		if role != "developer" && role != "system" {
+			return true
+		}
+		content := item.Get("content")
+		if content.Type == gjson.String && strings.TrimSpace(content.String()) != "" {
+			carries = true
+			return false
+		}
+		content.ForEach(func(_, part gjson.Result) bool {
+			if part.Type == gjson.String && strings.TrimSpace(part.String()) != "" {
+				carries = true
+				return false
+			}
+			if text := strings.TrimSpace(part.Get("text").String()); text != "" {
+				carries = true
+				return false
+			}
+			return true
+		})
+		return !carries
+	})
+	return carries
+}
+
 func detectOpenAIPassthroughInstructionsRejectReason(reqModel string, body []byte) string {
 	if !isOpenAICodexModel(reqModel) {
 		return ""
