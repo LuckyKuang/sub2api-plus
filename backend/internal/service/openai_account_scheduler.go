@@ -462,7 +462,14 @@ func (s *defaultOpenAIAccountScheduler) Select(
 			decision.SelectedAccountID = selection.Account.ID
 			decision.SelectedAccountType = selection.Account.Type
 			if req.SessionHash != "" {
-				_ = s.service.bindOpenAIStickySessionDuringSelection(ctx, req.GroupID, req.SessionHash, selection.Account.ID)
+				// The old response binding may only establish the first route or
+				// confirm the committed one. It must never migrate a session whose
+				// authoritative owner is another account: that would let a stale
+				// response ID pull the session back to the previous owner.
+				canonicalOwnerID := s.service.openAISessionRouteCanonicalOwner(ctx, req.GroupID, req.SessionHash)
+				if canonicalOwnerID == 0 || canonicalOwnerID == selection.Account.ID {
+					_ = s.service.bindOpenAIStickySessionDuringSelection(ctx, req.GroupID, req.SessionHash, selection.Account.ID)
+				}
 			}
 			return selection, decision, nil
 		}

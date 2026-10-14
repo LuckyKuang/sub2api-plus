@@ -142,6 +142,29 @@ func (s *OpenAIGatewayService) openAISessionRouteStore() OpenAISessionRouteStore
 	return s.sessionRouteStore
 }
 
+// openAISessionRouteCanonicalOwner returns the committed owner of the session's
+// authoritative route, or 0 when the session has no route yet (or the store is
+// unusable). Callers use it to decide whether a later signal may establish the
+// route or must leave an existing owner alone.
+func (s *OpenAIGatewayService) openAISessionRouteCanonicalOwner(ctx context.Context, groupID *int64, sessionHash string) int64 {
+	store := s.openAISessionRouteStore()
+	if store == nil {
+		return 0
+	}
+	digest := OpenAISessionRouteDigest(sessionHash)
+	if digest == "" {
+		return 0
+	}
+	route, err := store.Get(ctx, openAISessionRouteDomain(derefGroupID(groupID)), digest)
+	if err != nil {
+		return 0
+	}
+	if route.Status == OpenAISessionRouteSuspended {
+		return 0
+	}
+	return route.OwnerAccountID
+}
+
 // openAISessionRoutePreference reports whether this logical session already has
 // an authoritative route, so scoring must consult the canonical owner before it
 // may pick another account. A store failure also reports true: the authoritative

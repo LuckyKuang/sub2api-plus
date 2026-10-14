@@ -453,3 +453,36 @@ func TestOpenAISessionRoutePreferenceGatesScoring(t *testing.T) {
 	// An empty session hash never claims a preference.
 	require.False(t, svc.openAISessionRoutePreference(ctx, &groupID, "  "))
 }
+
+// A stale response binding may establish the first route or confirm the current
+// owner, but it must never migrate a session whose committed owner is another
+// account.
+func TestOpenAISessionRouteCanonicalOwnerGatesStaleResponseBinding(t *testing.T) {
+	ctx := context.Background()
+	groupID := int64(7)
+	sessionHash := "tenant-scoped-session"
+	domain := openAISessionRouteDomain(groupID)
+	digest := OpenAISessionRouteDigest(sessionHash)
+	store := newFakeOpenAISessionRouteStore()
+	svc := &OpenAIGatewayService{sessionRouteStore: store}
+
+	// No route yet: the caller may establish it (0 means "no committed owner").
+	require.EqualValues(t, 0, svc.openAISessionRouteCanonicalOwner(ctx, &groupID, sessionHash))
+
+	_, err := store.CreateIfAbsent(ctx, OpenAISessionRoute{
+		AuthzDomain: domain, SessionDigest: digest, OwnerAccountID: 100,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 100, svc.openAISessionRouteCanonicalOwner(ctx, &groupID, sessionHash))
+
+	// A suspended route has no usable owner, so a new binding may be established.
+	require.NoError(t, store.MarkSuspended(ctx, domain, digest, 1, "no_candidate"))
+	require.EqualValues(t, 0, svc.openAISessionRouteCanonicalOwner(ctx, &groupID, sessionHash))
+
+	// A store failure must not be read as "no committed owner": it returns 0 only
+	// because the bind that follows fails on the same store, so no owner moves.
+	failing := newFakeOpenAISessionRouteStore()
+	failing.fail = ErrOpenAISessionRouteStoreUnavailable
+	svc = &OpenAIGatewayService{sessionRouteStore: failing}
+	require.EqualValues(t, 0, svc.openAISessionRouteCanonicalOwner(ctx, &groupID, sessionHash))
+}
