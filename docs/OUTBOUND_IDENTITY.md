@@ -43,7 +43,7 @@ SDK versions do not update this baseline.
 | Claude | `X-Stainless-OS: Linux`, `X-Stainless-Arch: x64` |
 | Gemini | `GeminiCLI/0.1.5 (Linux; x64)` |
 | Grok | `grok-shell/1.0.45 (linux; x86_64)` |
-| Antigravity | `antigravity/2.9.1 linux/amd64` |
+| Antigravity | `antigravity/hub/2.23.0 linux/amd64` |
 | DeepSeek | Product UA has no OS; OAuth exchange body uses `device_model: linux-x64`, `os_version: linux 6.8.0-31-generic` |
 | Kimi | `X-Msh-Device-Name: ubuntu`, `X-Msh-Device-Model: Linux 6.8.0-31-generic x64`, `X-Msh-Os-Version: 6.8.0-31-generic`; inference SDK uses `Linux` / `x64` |
 | MiniMax OAuth / API Key | SDK uses `Linux` / `x64`; UA has no OS segment |
@@ -355,8 +355,9 @@ compiled default follows the frozen local grok-build source and does not track a
 build-time network scrape or an ambient `GROK_VERSION`.
 
 The exact compiled Antigravity identity is
-`antigravity/2.9.1 linux/amd64`, with identifier `antigravity` and client
-version `2.9.1` encoded in the UA. Only `setUserSettings` and `fetchUserInfo`
+`antigravity/hub/2.23.0 linux/amd64`, with identifier `antigravity`, client
+family `antigravity/hub`, and client version `2.23.0` encoded in the UA.
+OS and architecture remain `linux/amd64`. Only `setUserSettings` and `fetchUserInfo`
 also send `X-Goog-Api-Client: gl-node/22.21.1`. This SDK declaration belongs to
 those endpoints and remains fixed during client version updates. The base
 preset preview describes the shared UA; these endpoint declarations are added

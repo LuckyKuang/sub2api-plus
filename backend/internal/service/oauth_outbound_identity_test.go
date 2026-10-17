@@ -45,7 +45,7 @@ func TestAntigravityPrivacyIdentitySourcePriority(t *testing.T) {
 				settings.Profiles["antigravity"] = OutboundIdentitySelection{Preset: "antigravity", Version: "1.20.5"}
 				expectedSource, expectedVersion = "global", "1.20.5"
 				if source == "account" {
-					account.Credentials[outboundIdentityCredential] = OutboundIdentitySelection{Preset: "antigravity", UserAgent: "antigravity/1.20.6 linux/arm64", Version: "1.20.9"}
+					account.Credentials[outboundIdentityCredential] = OutboundIdentitySelection{Preset: "antigravity", UserAgent: "antigravity/hub/1.20.6 linux/arm64", Version: "1.20.9"}
 					expectedSource, expectedVersion = "account", "1.20.9"
 				} else if source == "invalid_account" {
 					account.Credentials[outboundIdentityCredential] = OutboundIdentitySelection{Preset: "antigravity", UserAgent: "untrusted"}
@@ -65,7 +65,7 @@ func TestAntigravityPrivacyIdentitySourcePriority(t *testing.T) {
 			require.Equal(t, expectedSource, base.Source)
 			require.Equal(t, expectedVersion, base.Version)
 			if source == "account" {
-				require.Equal(t, "antigravity/1.20.9 linux/arm64", base.UserAgent, "version-only changes preserve the system fingerprint")
+				require.Equal(t, "antigravity/hub/1.20.9 linux/arm64", base.UserAgent, "version-only changes preserve the system fingerprint")
 			}
 			for _, req := range capturePrivacyIdentity(t, ctx) {
 				require.Equal(t, base.UserAgent, req.UserAgent())
@@ -100,7 +100,7 @@ func TestAntigravityOAuthIdentityAcrossDiscoveryAndPrivacy(t *testing.T) {
 				var paths []string
 				http.DefaultTransport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
 					paths = append(paths, req.URL.Path)
-					require.Equal(t, "antigravity/"+version+" linux/amd64", req.UserAgent())
+					require.Equal(t, "antigravity/hub/"+version+" linux/amd64", req.UserAgent())
 					identity, ok := outboundidentity.FromContext(req.Context())
 					require.True(t, ok)
 					require.Zero(t, identity.AccountID)

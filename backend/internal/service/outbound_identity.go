@@ -564,7 +564,7 @@ func buildOutboundIdentity(selection OutboundIdentitySelection) (outboundidentit
 		if brandidentity.ContainsBrand(ua) {
 			return i, fmt.Errorf("User-Agent must not contain the project brand")
 		}
-		prefix := map[string]string{"claude": "claude-cli/", "gemini": "GeminiCLI/", "grok": "grok-shell/", "antigravity": "antigravity/", "deepseek": "deepseek-harness/", "kimi": "kimi-code-cli/", "zcode": "ZCode/", "minimax_apikey": "Anthropic/JS "}[selection.Preset]
+		prefix := map[string]string{"claude": "claude-cli/", "gemini": "GeminiCLI/", "grok": "grok-shell/", "antigravity": "antigravity/hub/", "deepseek": "deepseek-harness/", "kimi": "kimi-code-cli/", "zcode": "ZCode/", "minimax_apikey": "Anthropic/JS "}[selection.Preset]
 		if !strings.HasPrefix(ua, prefix) {
 			return i, fmt.Errorf("User-Agent must match the selected preset")
 		}
