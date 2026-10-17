@@ -40,6 +40,28 @@ describe('FeatureFlags.subscription', () => {
   })
 })
 
+describe('FeatureFlags.docs', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    delete (window as any).__APP_CONFIG__
+  })
+
+  it('is opt-in and hidden before settings load', () => {
+    expect(FeatureFlags.docs.key).toBe('docs_enabled')
+    expect(FeatureFlags.docs.mode).toBe('opt-in')
+    expect(isFeatureFlagEnabled(FeatureFlags.docs)).toBe(false)
+  })
+
+  it('only shows the docs entry when the backend explicitly enables it', () => {
+    const store = useAppStore()
+    store.cachedPublicSettings = { docs_enabled: false } as PublicSettings
+    expect(isFeatureFlagEnabled(FeatureFlags.docs)).toBe(false)
+
+    store.cachedPublicSettings = { docs_enabled: true } as PublicSettings
+    expect(isFeatureFlagEnabled(FeatureFlags.docs)).toBe(true)
+  })
+})
+
 describe('resolveFeatureFlag', () => {
   beforeEach(() => {
     setActivePinia(createPinia())

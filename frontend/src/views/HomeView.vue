@@ -30,8 +30,17 @@
         </div>
         <div class="flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
           <LocaleSwitcher />
+          <router-link
+            v-if="docsEnabled"
+            :to="docsTo"
+            class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:text-dark-400 dark:hover:bg-dark-800"
+            :title="t('nav.docsTutorial')"
+            :aria-label="t('nav.docsTutorial')"
+          >
+            <Icon name="book" size="md" />
+          </router-link>
           <a
-            v-if="docUrl"
+            v-else-if="docUrl"
             :href="docUrl"
             target="_blank"
             rel="noopener noreferrer"
@@ -111,8 +120,17 @@
           <LocaleSwitcher />
 
           <!-- Doc Link -->
+          <router-link
+            v-if="docsEnabled"
+            :to="docsTo"
+            class="rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:text-dark-400 dark:hover:bg-dark-800 dark:hover:text-white"
+            :title="t('nav.docsTutorial')"
+            :aria-label="t('nav.docsTutorial')"
+          >
+            <Icon name="book" size="md" />
+          </router-link>
           <a
-            v-if="docUrl"
+            v-else-if="docUrl"
             :href="docUrl"
             target="_blank"
             rel="noopener noreferrer"
@@ -451,8 +469,15 @@
           &copy; {{ currentYear }} {{ siteName }}. {{ t('home.footer.allRightsReserved') }}
         </p>
         <div class="flex items-center gap-4">
+          <router-link
+            v-if="docsEnabled"
+            :to="docsTo"
+            class="text-sm text-gray-500 transition-colors hover:text-gray-700 dark:text-dark-400 dark:hover:text-white"
+          >
+            {{ t('nav.docsTutorial') }}
+          </router-link>
           <a
-            v-if="docUrl"
+            v-else-if="docUrl"
             :href="docUrl"
             target="_blank"
             rel="noopener noreferrer"
@@ -493,6 +518,10 @@ const siteName = computed(() => appStore.cachedPublicSettings?.site_name || appS
 const siteLogo = computed(() => sanitizeUrl(appStore.cachedPublicSettings?.site_logo || appStore.siteLogo || '', { allowRelative: true, allowDataUrl: true }))
 const siteSubtitle = computed(() => appStore.cachedPublicSettings?.site_subtitle || 'AI API Gateway Platform')
 const docUrl = computed(() => sanitizeUrl(appStore.cachedPublicSettings?.doc_url || appStore.docUrl || ''))
+const docsEnabled = computed(() => isFeatureFlagEnabled(FeatureFlags.docs))
+const docsTo = computed(() =>
+  authStore.isAuthenticated ? { path: '/docs', query: { embedded: '1' } } : '/docs',
+)
 const homeContent = computed(() => appStore.cachedPublicSettings?.home_content || '')
 const hasHomeContent = computed(() => homeContent.value.trim().length > 0)
 const compactHomeEnabled = computed(() => appStore.cachedPublicSettings?.compact_home_enabled === true)

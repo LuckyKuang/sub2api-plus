@@ -62,6 +62,8 @@ function createPublicSettings(overrides: Partial<PublicSettings> = {}): PublicSe
     payment_balance_disabled: false,
     model_plaza_enabled: false,
     model_plaza_require_auth: false,
+    docs_enabled: false,
+    docs_require_auth: true,
     plugin_management_enabled: false,
     service_quota_enabled: false,
     affiliate_enabled: false,

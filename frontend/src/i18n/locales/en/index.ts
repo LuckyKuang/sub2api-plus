@@ -6,6 +6,7 @@ import channelMonitorV2 from './channelMonitorV2'
 import channelMonitorV3 from './channelMonitorV3'
 import batchImage from './batchImage'
 import asyncImage from './asyncImage'
+import docs from './docs'
 import admin from './admin'
 import misc from './misc'
 
@@ -18,6 +19,7 @@ export default {
   ...channelMonitorV3,
   ...batchImage,
   ...asyncImage,
+  ...docs,
   admin,
   ...misc,
 }

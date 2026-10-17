@@ -573,6 +573,16 @@ const (
 	// the Model Plaza page (global pricing notes, exchange rate, promotions, ...).
 	SettingKeyModelPlazaDescription = "model_plaza_description"
 
+	// SettingKeyDocsEnabled is a DB-backed soft switch for the in-app documentation
+	// center. When false the /docs route is hidden and non-admin visitors are
+	// redirected; administrators may still preview it. Defaults to false (opt-in).
+	SettingKeyDocsEnabled = "docs_enabled"
+
+	// SettingKeyDocsRequireAuth controls whether the documentation center requires a
+	// logged-in user. Missing values default to true; anonymous access requires an
+	// administrator to persist an explicit false.
+	SettingKeyDocsRequireAuth = "docs_require_auth"
+
 	// SettingKeyPluginManagementEnabled controls sidebar visibility only; it does
 	// not stop or otherwise change already loaded plugin runtimes.
 	SettingKeyPluginManagementEnabled = "plugin_management_enabled"

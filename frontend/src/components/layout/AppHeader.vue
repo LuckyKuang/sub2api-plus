@@ -26,9 +26,19 @@
         <!-- Announcement Bell -->
         <AnnouncementBell v-if="user" />
 
-        <!-- Docs Link -->
+        <!-- Docs Link: in-app docs win when enabled, external doc_url is the fallback -->
+        <router-link
+          v-if="docsEnabled"
+          :to="docsTo"
+          :title="t('nav.docsTutorial')"
+          :aria-label="t('nav.docsTutorial')"
+          class="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-dark-400 dark:hover:bg-dark-800 dark:hover:text-white"
+        >
+          <Icon name="book" size="sm" />
+          <span class="hidden sm:inline">{{ t('nav.docsTutorial') }}</span>
+        </router-link>
         <a
-          v-if="docUrl"
+          v-else-if="docUrl"
           :href="docUrl"
           target="_blank"
           rel="noopener noreferrer"
@@ -282,6 +292,10 @@ const dropdownOpen = ref(false)
 const dropdownRef = ref<HTMLElement | null>(null)
 const contactInfo = computed(() => appStore.contactInfo)
 const docUrl = computed(() => sanitizeUrl(appStore.docUrl))
+const docsEnabled = computed(() => isFeatureFlagEnabled(FeatureFlags.docs))
+const docsTo = computed(() =>
+  authStore.isAuthenticated ? { path: '/docs', query: { embedded: '1' } } : '/docs',
+)
 const modelPlazaEnabled = computed(() => isFeatureFlagEnabled(FeatureFlags.modelPlaza))
 const avatarUrl = computed(() => user.value?.avatar_url?.trim() || '')
 const availableBalance = computed(() => Number(user.value?.balance || 0))

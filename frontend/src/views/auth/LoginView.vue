@@ -196,6 +196,15 @@
       </form>
     </div>
 
+    <p v-if="docsPubliclyVisible" class="mt-6 text-center text-sm">
+      <router-link
+        to="/docs"
+        class="font-medium text-primary-600 transition-colors hover:text-primary-500 dark:text-primary-400 dark:hover:text-primary-300"
+      >
+        {{ t('docs.open') }}
+      </router-link>
+    </p>
+
     <!-- Footer -->
     <template v-if="!backendModeEnabled && publicSettingsLoaded && registrationEnabled" #footer>
       <p class="text-gray-500 dark:text-dark-400">
@@ -284,6 +293,7 @@ const linuxdoOAuthEnabled = ref<boolean>(false)
 const dingtalkOAuthEnabled = ref<boolean>(false)
 const wechatOAuthEnabled = ref<boolean>(false)
 const backendModeEnabled = ref<boolean>(false)
+const docsPubliclyVisible = ref<boolean>(false)
 const oidcOAuthEnabled = ref<boolean>(false)
 const oidcOAuthProviderName = ref<string>('OIDC')
 const githubOAuthEnabled = ref<boolean>(false)
@@ -401,6 +411,10 @@ onMounted(async () => {
     githubOAuthEnabled.value = settings.github_oauth_enabled
     googleOAuthEnabled.value = settings.google_oauth_enabled
     backendModeEnabled.value = settings.backend_mode_enabled
+    docsPubliclyVisible.value =
+      settings.backend_mode_enabled !== true &&
+      settings.docs_enabled === true &&
+      settings.docs_require_auth === false
     passwordResetEnabled.value = settings.password_reset_enabled
     passkeyEnabled.value = settings.passkey_enabled === true
     applyLoginAgreementSettings(settings)

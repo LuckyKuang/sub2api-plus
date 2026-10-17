@@ -29,6 +29,8 @@ const appStore = vi.hoisted(() => ({
     risk_control_enabled?: boolean
     global_ip_access_control_enabled?: boolean
     subscription_enabled?: boolean
+    docs_enabled?: boolean
+    docs_require_auth?: boolean
     custom_menu_items?: []
   },
   fetchPublicSettings: vi.fn(),
@@ -98,7 +100,11 @@ function createDeferred<T>() {
   return { promise, resolve }
 }
 
-function runGuard(meta: Record<string, unknown>, path: string) {
+function runGuard(
+  meta: Record<string, unknown>,
+  path: string,
+  query: Record<string, unknown> = {},
+) {
   if (!routerHarness.guard) {
     throw new Error('router guard was not registered')
   }
@@ -110,6 +116,7 @@ function runGuard(meta: Record<string, unknown>, path: string) {
       fullPath: path,
       name: 'FeatureRoute',
       params: {},
+      query,
       meta: { requiresAuth: true, ...meta },
     },
     {},
@@ -282,5 +289,89 @@ describe('subscription route guard (opt-out flag)', () => {
     await navigation
 
     expect(next).toHaveBeenCalledWith('/admin/dashboard')
+  })
+})
+
+describe('docs route guard', () => {
+  beforeEach(() => {
+    authStore.isAuthenticated = false
+    authStore.isAdmin = false
+    authStore.isSimpleMode = false
+    appStore.publicSettingsLoaded = true
+    appStore.cachedPublicSettings = { docs_enabled: true, docs_require_auth: true }
+    appStore.fetchPublicSettings.mockReset()
+  })
+
+  it('redirects anonymous visitors to login when docs require authentication', async () => {
+    const { navigation, next } = runGuard({ requiresAuth: false }, '/docs')
+    await navigation
+
+    expect(next).toHaveBeenCalledWith({ path: '/login', query: { redirect: '/docs' } })
+  })
+
+  it('allows anonymous visitors when docs are explicitly public', async () => {
+    appStore.cachedPublicSettings = { docs_enabled: true, docs_require_auth: false }
+
+    const { navigation, next } = runGuard({ requiresAuth: false }, '/docs/network')
+    await navigation
+
+    expect(next).toHaveBeenCalledOnce()
+    expect(next).toHaveBeenCalledWith()
+  })
+
+  it('sends anonymous visitors home when docs are disabled', async () => {
+    appStore.cachedPublicSettings = { docs_enabled: false, docs_require_auth: true }
+
+    const { navigation, next } = runGuard({ requiresAuth: false }, '/docs')
+    await navigation
+
+    expect(next).toHaveBeenCalledWith('/home')
+  })
+
+  it('sends signed-in users to their dashboard when docs are disabled', async () => {
+    authStore.isAuthenticated = true
+    appStore.cachedPublicSettings = { docs_enabled: false, docs_require_auth: true }
+
+    const { navigation, next } = runGuard({ requiresAuth: false }, '/docs')
+    await navigation
+
+    expect(next).toHaveBeenCalledWith('/dashboard')
+  })
+
+  it('lets an administrator preview docs while the feature is disabled', async () => {
+    authStore.isAuthenticated = true
+    authStore.isAdmin = true
+    appStore.cachedPublicSettings = { docs_enabled: false, docs_require_auth: true }
+
+    const { navigation, next } = runGuard({ requiresAuth: false }, '/docs', { preview: '1' })
+    await navigation
+
+    expect(next).toHaveBeenCalledOnce()
+    expect(next).toHaveBeenCalledWith()
+  })
+
+  it('does not treat an administrator preview request as a public docs request', async () => {
+    authStore.isAuthenticated = true
+    authStore.isAdmin = true
+    appStore.cachedPublicSettings = { docs_enabled: false, docs_require_auth: true }
+
+    const { navigation, next } = runGuard({ requiresAuth: false }, '/docs')
+    await navigation
+
+    expect(next).toHaveBeenCalledWith('/admin/dashboard')
+  })
+
+  it('loads public settings before deciding docs access', async () => {
+    appStore.publicSettingsLoaded = false
+    appStore.fetchPublicSettings.mockImplementation(async () => {
+      appStore.cachedPublicSettings = { docs_enabled: true, docs_require_auth: false }
+      appStore.publicSettingsLoaded = true
+    })
+
+    const { navigation, next } = runGuard({ requiresAuth: false }, '/docs')
+    await navigation
+
+    expect(appStore.fetchPublicSettings).toHaveBeenCalledOnce()
+    expect(next).toHaveBeenCalledWith()
   })
 })

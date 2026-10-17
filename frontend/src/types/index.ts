@@ -285,6 +285,8 @@ export interface PublicSettings {
   payment_balance_disabled: boolean
   model_plaza_enabled: boolean
   model_plaza_require_auth: boolean
+  docs_enabled: boolean
+  docs_require_auth: boolean
   plugin_management_enabled: boolean
   service_quota_enabled: boolean
   affiliate_enabled: boolean

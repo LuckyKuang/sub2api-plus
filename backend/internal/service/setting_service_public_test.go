@@ -234,6 +234,49 @@ func TestSettingService_GetPublicSettings_ModelPlazaRequiresAuthenticationUnless
 	}
 }
 
+func TestSettingService_GetPublicSettings_DocsDefaultsToDisabledAndLoginRequired(t *testing.T) {
+	svc := NewSettingService(&settingPublicRepoStub{values: map[string]string{}}, &config.Config{})
+
+	settings, err := svc.GetPublicSettings(context.Background())
+	require.NoError(t, err)
+	require.False(t, settings.DocsEnabled)
+	require.True(t, settings.DocsRequireAuth)
+}
+
+func TestSettingService_GetPublicSettings_DocsRequiresAuthenticationUnlessExplicitlyPublic(t *testing.T) {
+	tests := []struct {
+		name        string
+		values      map[string]string
+		requireAuth bool
+	}{
+		{
+			name: "missing setting defaults to authentication",
+			values: map[string]string{
+				SettingKeyDocsEnabled: "true",
+			},
+			requireAuth: true,
+		},
+		{
+			name: "explicit false enables anonymous docs",
+			values: map[string]string{
+				SettingKeyDocsEnabled:     "true",
+				SettingKeyDocsRequireAuth: "false",
+			},
+			requireAuth: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := NewSettingService(&settingPublicRepoStub{values: tt.values}, &config.Config{})
+
+			settings, err := svc.GetPublicSettings(context.Background())
+			require.NoError(t, err)
+			require.Equal(t, tt.requireAuth, settings.DocsRequireAuth)
+		})
+	}
+}
+
 func TestSettingService_GetPublicSettings_ExposesWeChatOAuthModeCapabilities(t *testing.T) {
 	svc := NewSettingService(&settingPublicRepoStub{
 		values: map[string]string{

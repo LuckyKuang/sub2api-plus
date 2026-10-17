@@ -109,6 +109,18 @@ export default {
           priceDescription: 'Pricing notes (Markdown)',
           priceDescriptionHint: 'Rendered at the top of the plaza page. Use it for billing rules, exchange rates, promotions, etc.',
         },
+        docs: {
+          title: 'Docs & Guides',
+          description: 'In-app setup guides organized by outbound client. Disabled by default.',
+          enabled: 'Enable Docs & Guides',
+          enabledHint: 'When enabled, an entry appears in the header and home page, and the page is reachable at /docs.',
+          requireAuth: 'Require sign-in to access',
+          requireAuthHint: 'When on, anonymous visitors are redirected to the login page; when off, guides are public.',
+          publicExposureWarning: 'With sign-in disabled, anonymous visitors can read every guide. Make sure the content contains no internal information.',
+          externalDocsHint: 'The docs footer shows the external documentation URL from Site Settings → Documentation URL (if set).',
+          preview: 'Preview docs',
+          bundledHint: 'Guides ship with the application and are maintained in both Chinese and English.',
+        },
         pluginManagement: {
           title: 'Plugin Management',
           description: 'Controls whether the plugin management entry appears in the admin sidebar. This switch does not control plugin runtime state.',

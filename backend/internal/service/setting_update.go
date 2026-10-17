@@ -527,6 +527,10 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeyModelPlazaDescription] = settings.ModelPlazaDescription
 	updates[SettingKeyPluginManagementEnabled] = strconv.FormatBool(settings.PluginManagementEnabled)
 
+	// In-app documentation center feature switches
+	updates[SettingKeyDocsEnabled] = strconv.FormatBool(settings.DocsEnabled)
+	updates[SettingKeyDocsRequireAuth] = strconv.FormatBool(settings.DocsRequireAuth)
+
 	// Affiliate (邀请返利) feature switch
 	updates[SettingKeyAffiliateEnabled] = strconv.FormatBool(settings.AffiliateEnabled)
 

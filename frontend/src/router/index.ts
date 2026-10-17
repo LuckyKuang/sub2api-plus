@@ -190,6 +190,16 @@ const routes: RouteRecordRaw[] = [
       titleKey: 'modelPlaza.title'
     }
   },
+  {
+    path: '/docs/:section?',
+    name: 'Docs',
+    component: () => import('@/views/DocsView.vue'),
+    meta: {
+      requiresAuth: false,
+      title: 'Docs',
+      titleKey: 'docs.title'
+    }
+  },
 
   // ==================== User Routes ====================
   {
@@ -913,6 +923,36 @@ router.beforeEach(async (to, _from, next) => {
         return
       }
       // Backend mode:登录的非管理员也不可见(匿名由下方公共拦截处理,广场不在白名单)
+      if (appStore.backendModeEnabled && authStore.isAuthenticated && !authStore.isAdmin) {
+        next('/login')
+        return
+      }
+    }
+    // Docs:公开路由同样受「启用开关 + 可选强制登录」控制；管理员可用 preview 预览未启用内容。
+    if (/^\/docs(?:\/|$)/.test(to.path)) {
+      if (!appStore.publicSettingsLoaded) {
+        try {
+          await appStore.fetchPublicSettings()
+        } catch (error) {
+          console.warn('Failed to load public settings in route guard', error)
+        }
+      }
+      const docsSettings = appStore.cachedPublicSettings
+      const isDocsPreview = to.query.preview === '1' && authStore.isAdmin
+      if (!isDocsPreview && appStore.publicSettingsLoaded && docsSettings?.docs_enabled === false) {
+        next(
+          authStore.isAuthenticated
+            ? authStore.isAdmin
+              ? '/admin/dashboard'
+              : '/dashboard'
+            : '/home'
+        )
+        return
+      }
+      if (docsSettings?.docs_require_auth !== false && !authStore.isAuthenticated) {
+        next({ path: '/login', query: { redirect: to.fullPath } })
+        return
+      }
       if (appStore.backendModeEnabled && authStore.isAuthenticated && !authStore.isAdmin) {
         next('/login')
         return

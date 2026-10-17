@@ -7083,6 +7083,66 @@
         <div class="card">
           <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+              {{ t('admin.settings.features.docs.title') }}
+            </h2>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              {{ t('admin.settings.features.docs.description') }}
+            </p>
+          </div>
+          <div class="space-y-5 p-6">
+            <div class="flex items-center justify-between">
+              <div>
+                <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {{ t('admin.settings.features.docs.enabled') }}
+                </label>
+                <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t('admin.settings.features.docs.enabledHint') }}
+                </p>
+              </div>
+              <Toggle v-model="form.docs_enabled" />
+            </div>
+
+            <div v-if="form.docs_enabled" class="flex items-center justify-between">
+              <div>
+                <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {{ t('admin.settings.features.docs.requireAuth') }}
+                </label>
+                <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t('admin.settings.features.docs.requireAuthHint') }}
+                </p>
+              </div>
+              <Toggle v-model="form.docs_require_auth" />
+            </div>
+
+            <p
+              v-if="form.docs_enabled && !form.docs_require_auth"
+              class="border-l-4 border-amber-500 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-200"
+              role="alert"
+            >
+              {{ t('admin.settings.features.docs.publicExposureWarning') }}
+            </p>
+
+            <p class="text-xs text-gray-500 dark:text-gray-400">
+              {{ t('admin.settings.features.docs.externalDocsHint') }}
+            </p>
+            <p class="text-xs text-gray-500 dark:text-gray-400">
+              {{ t('admin.settings.features.docs.bundledHint') }}
+            </p>
+
+            <router-link
+              to="/docs?preview=1"
+              target="_blank"
+              class="inline-flex items-center gap-1 text-sm font-medium text-primary-600 hover:underline dark:text-primary-400"
+            >
+              {{ t('admin.settings.features.docs.preview') }}
+              <span aria-hidden="true">→</span>
+            </router-link>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
               {{ t('admin.settings.features.siteBillingMode.title') }}
             </h2>
             <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
@@ -9949,6 +10009,9 @@ const form = reactive<SettingsForm>({
   model_plaza_enabled: false,
   model_plaza_require_auth: false,
   model_plaza_description: '',
+  // Docs feature switches
+  docs_enabled: false,
+  docs_require_auth: true,
   // Plugin management menu visibility; plugin runtime is unaffected.
   plugin_management_enabled: false,
   // Affiliate (邀请返利) feature switch
@@ -11783,6 +11846,8 @@ async function saveSettings() {
       model_plaza_enabled: form.model_plaza_enabled,
       model_plaza_require_auth: form.model_plaza_require_auth,
       model_plaza_description: form.model_plaza_description,
+      docs_enabled: form.docs_enabled,
+      docs_require_auth: form.docs_require_auth,
       plugin_management_enabled: form.plugin_management_enabled,
       // Affiliate (邀请返利) feature switch
       affiliate_enabled: form.affiliate_enabled,

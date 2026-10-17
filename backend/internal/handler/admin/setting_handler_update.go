@@ -366,6 +366,10 @@ type UpdateSettingsRequest struct {
 	ModelPlazaRequireAuth *bool   `json:"model_plaza_require_auth"`
 	ModelPlazaDescription *string `json:"model_plaza_description"`
 
+	// In-app documentation center feature switches
+	DocsEnabled     *bool `json:"docs_enabled"`
+	DocsRequireAuth *bool `json:"docs_require_auth"`
+
 	// Plugin management menu visibility switch; plugin runtime is unaffected.
 	PluginManagementEnabled *bool `json:"plugin_management_enabled"`
 
@@ -2116,6 +2120,18 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.ModelPlazaDescription
 		}(),
+		DocsEnabled: func() bool {
+			if req.DocsEnabled != nil {
+				return *req.DocsEnabled
+			}
+			return previousSettings.DocsEnabled
+		}(),
+		DocsRequireAuth: func() bool {
+			if req.DocsRequireAuth != nil {
+				return *req.DocsRequireAuth
+			}
+			return previousSettings.DocsRequireAuth
+		}(),
 		PluginManagementEnabled: func() bool {
 			if req.PluginManagementEnabled != nil {
 				return *req.PluginManagementEnabled
@@ -2595,6 +2611,8 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		ModelPlazaRequireAuth:   updatedSettings.ModelPlazaRequireAuth,
 		ModelPlazaDescription:   updatedSettings.ModelPlazaDescription,
 		PluginManagementEnabled: updatedSettings.PluginManagementEnabled,
+		DocsEnabled:             updatedSettings.DocsEnabled,
+		DocsRequireAuth:         updatedSettings.DocsRequireAuth,
 
 		AffiliateEnabled: updatedSettings.AffiliateEnabled,
 

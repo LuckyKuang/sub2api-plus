@@ -215,6 +215,10 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyModelPlazaDescription:   "",
 		SettingKeyPluginManagementEnabled: "false",
 
+		// In-app documentation center (default disabled; opt-in, sign-in required)
+		SettingKeyDocsEnabled:     "false",
+		SettingKeyDocsRequireAuth: "true",
+
 		// Affiliate (邀请返利) feature (default disabled; opt-in)
 		SettingKeyAffiliateEnabled:              "false",
 		SettingKeyAffiliateAdminRechargeEnabled: strconv.FormatBool(AdminRechargeRebateEnabledDefault),
@@ -859,6 +863,10 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	result.ModelPlazaRequireAuth = settings[SettingKeyModelPlazaRequireAuth] != "false"
 	result.ModelPlazaDescription = settings[SettingKeyModelPlazaDescription]
 	result.PluginManagementEnabled = settings[SettingKeyPluginManagementEnabled] == "true"
+
+	// In-app documentation center (default disabled; login required when enabled).
+	result.DocsEnabled = settings[SettingKeyDocsEnabled] == "true"
+	result.DocsRequireAuth = settings[SettingKeyDocsRequireAuth] != "false"
 
 	// Affiliate (邀请返利) feature (default: disabled; strict true)
 	result.AffiliateEnabled = settings[SettingKeyAffiliateEnabled] == "true"

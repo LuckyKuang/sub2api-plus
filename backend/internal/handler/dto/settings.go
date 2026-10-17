@@ -348,6 +348,10 @@ type SystemSettings struct {
 	ModelPlazaDescription   string `json:"model_plaza_description"`
 	PluginManagementEnabled bool   `json:"plugin_management_enabled"`
 
+	// In-app documentation center feature
+	DocsEnabled     bool `json:"docs_enabled"`
+	DocsRequireAuth bool `json:"docs_require_auth"`
+
 	// 风控中心功能开关
 	RiskControlEnabled                      bool `json:"risk_control_enabled"`
 	ClientDisconnectConsecutiveBanEnabled   bool `json:"client_disconnect_consecutive_ban_enabled"`
@@ -463,6 +467,9 @@ type PublicSettings struct {
 	ModelPlazaEnabled       bool `json:"model_plaza_enabled"`
 	ModelPlazaRequireAuth   bool `json:"model_plaza_require_auth"`
 	PluginManagementEnabled bool `json:"plugin_management_enabled"`
+
+	DocsEnabled     bool `json:"docs_enabled"`
+	DocsRequireAuth bool `json:"docs_require_auth"`
 
 	AffiliateEnabled bool `json:"affiliate_enabled"`
 

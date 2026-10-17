@@ -109,6 +109,18 @@ export default {
           priceDescription: '价格说明（Markdown）',
           priceDescriptionHint: '展示在模型广场页面顶部，可用于说明计费规则、汇率、优惠活动等。',
         },
+        docs: {
+          title: '文档教程',
+          description: '站内接入文档中心，按出站客户端展示配置教程。默认关闭。',
+          enabled: '启用文档教程',
+          enabledHint: '开启后顶栏和首页显示入口，页面可通过 /docs 访问。',
+          requireAuth: '要求登录后访问',
+          requireAuthHint: '开启后未登录访客跳转登录页；关闭后教程可匿名阅读。',
+          publicExposureWarning: '关闭“要求登录”后，未登录访客也能查看全部教程内容。请确认内容不含内部信息。',
+          externalDocsHint: '教程页底部会展示“站点设置 > 文档链接”中的外部文档地址（如有）。',
+          preview: '预览文档',
+          bundledHint: '教程内容随版本发布，中英文同步维护。',
+        },
         pluginManagement: {
           title: '插件管理',
           description: '控制管理员侧边栏是否显示插件管理入口。此开关不控制插件运行状态。',
