@@ -363,6 +363,15 @@ those endpoints and remains fixed during client version updates. The base
 preset preview describes the shared UA; these endpoint declarations are added
 to a copy of the trusted request snapshot, without changing the parent snapshot.
 
+Official `v0.2.17` renamed the Antigravity client family from
+`antigravity/<version>` to `antigravity/hub/<version>`; Plus keeps its pinned
+Ubuntu system fingerprint, so the compiled identity stays
+`antigravity/hub/2.23.0 linux/amd64`. Preset validation follows the new family:
+a stored custom Antigravity User-Agent that still uses the retired
+`antigravity/<version>` prefix is an invalid candidate and falls through
+atomically to the next source, and the management API rejects it until the
+operator saves an `antigravity/hub/...` value or clears the override.
+
 | Antigravity operation | Identity source priority | Privacy SDK declaration |
 | --- | --- | --- |
 | Existing credential-owning account | Valid account candidate → configured global preset → valid environment / compiled default | Fixed `gl-node/22.21.1` for the two privacy endpoints |
@@ -515,6 +524,10 @@ above, whichever happens first. After that save,
 clearing the profile restores the default without reviving the old setting. Existing environment
 defaults (`SUB2API_CLAUDE_CLI_VERSION`, `XAI_GROK_CLI_VERSION`,
 `ANTIGRAVITY_USER_AGENT_VERSION`) remain below explicit identity configuration.
+The Antigravity profile imports only the version: a custom User-Agent saved
+under the retired `antigravity/<version>` family is not migrated, so it becomes
+an invalid candidate and the resolver falls back to the next source until the
+administrator re-saves it as `antigravity/hub/<version> …` or clears it.
 
 ```json
 {
