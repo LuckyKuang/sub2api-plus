@@ -22,9 +22,9 @@ Completed integration narratives remain in Git history.
 ## Current Version
 
 ```text
-Git/GitHub: unpublished (working tree 0.2.17+custom.001)
+Git/GitHub: v0.2.17+custom.001
 Application: 0.2.17+custom.001
-GHCR: unpublished
+GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.17-custom.001
 ```
 
 ## Release Mapping
@@ -101,7 +101,7 @@ GHCR: unpublished
 | `v0.2.15+custom.001` | `v0.2.15` | `f2669c8cf62555cd92389b3f55920e9e6e7c6ff2` | published |
 | `v0.2.15+custom.002` | `v0.2.15` | `f2669c8cf62555cd92389b3f55920e9e6e7c6ff2` | published |
 | `v0.2.15+custom.003` | `v0.2.15` | `ab80abc6d1f929a6864c8804fd077b509d21fda2` | published |
-| `v0.2.17+custom.001` | `v0.2.17` | `060d0160417782cd962a0c7f460f6cd4565d4916` | unpublished |
+| `v0.2.17+custom.001` | `v0.2.17` | `060d0160417782cd962a0c7f460f6cd4565d4916` | planned |
 
 `v0.2.15+custom.003` records the integrated official main snapshot in the
 Official Commit column. Its tagged official baseline remains
@@ -109,7 +109,7 @@ Official Commit column. Its tagged official baseline remains
 
 `v0.2.17+custom.001` records official tag `v0.2.17` / peeled
 `060d0160417782cd962a0c7f460f6cd4565d4916`. Official tag VERSION is `0.2.16`;
-Plus writes `0.2.17+custom.001`. This row is unpublished until the release
+Plus writes `0.2.17+custom.001`. This row stays `planned` until the release
 workflow tags and publishes it.
 
 `v0.2.4+custom.006` is marked withdrawn because official `v0.2.5` was imported before that snapshot overlay was published. Do not reuse or retag `.006`.
