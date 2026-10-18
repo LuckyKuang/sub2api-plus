@@ -2,6 +2,11 @@
 
 Sub2API Plus can run as a native stack with Apple's `container` CLI. This workflow runs the published Sub2API Plus, PostgreSQL, Redis, and optional MinIO OCI images without Docker Desktop or a Docker-compatible daemon.
 
+macOS can alternatively use [Colima with Docker Compose](COLIMA.md). The two
+deployments use separate runtimes and storage. Before local validation ask
+which environment to use unless already explicitly specified for the current
+scope; never silently switch between them. See [CONTRIBUTING.md](../CONTRIBUTING.md).
+
 ## Support Level
 
 Apple `container` support is intended for local development and operator-managed deployments on a Mac. Docker Compose remains the recommended production deployment path.

@@ -69,6 +69,7 @@ class Runtime:
     prefix: tuple[str, ...] = ()
     compose_root: str | None = None
     compose_required: bool = True
+    docker_context: str | None = None
 
 
 def display(command: Sequence[str]) -> str:
@@ -197,28 +198,63 @@ def probe_macos_runtime(
     optional_capture: OptionalCapture,
     which: Callable[[str], str | None] = shutil.which,
 ) -> Runtime:
+    selected = os.environ.get("SUB2API_VALIDATION_MACOS_RUNTIME", "").strip()
+    if selected not in {"apple", "colima"}:
+        raise ValidationRuntimeError(
+            "macOS validation environment is unspecified or invalid. Ask the user "
+            "to choose Apple Containers or Colima, then set "
+            "SUB2API_VALIDATION_MACOS_RUNTIME=apple or colima. "
+            "Automatic selection and host fallback are forbidden"
+        )
+    if selected == "colima":
+        profile = os.environ.get("SUB2API_VALIDATION_COLIMA_PROFILE", "sub2api-validation")
+        if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,47}", profile):
+            raise ValidationRuntimeError("invalid Colima validation profile")
+        if not which("colima") or not which("docker"):
+            raise ValidationRuntimeError("selected Colima validation requires colima and docker; fallback is forbidden")
+        context = "colima" if profile == "default" else f"colima-{profile}"
+        status_ok, _ = optional_capture(["colima", "status", profile])
+        if not status_ok:
+            raise ValidationRuntimeError(
+                f"selected Colima profile {profile} is not running; start it explicitly "
+                "with Docker runtime and --activate=false. Runtime fallback is forbidden"
+            )
+        engine = ["docker", "--context", context]
+        endpoint_ok, endpoint = optional_capture(
+            [*engine, "context", "inspect", context, "--format", "{{.Endpoints.docker.Host}}"]
+        )
+        colima_home = Path(os.environ.get("COLIMA_HOME", str(home_directory() / ".colima"))).expanduser()
+        expected = f"unix://{colima_home / profile / 'docker.sock'}"
+        if not endpoint_ok or endpoint.strip() != expected:
+            raise ValidationRuntimeError("selected Docker context is not the selected local Colima socket; fallback is forbidden")
+        for command in ([*engine, "info", "--format", "{{.ServerVersion}}"], [*engine, "compose", "version"]):
+            ok, _ = optional_capture(command)
+            if not ok:
+                raise ValidationRuntimeError("selected Colima Docker/Compose is unavailable; fallback is forbidden")
+        print(f"Runtime: Colima ({profile}, context={context})")
+        return Runtime("colima-docker", docker_context=context)
     if not which("container"):
         raise ValidationRuntimeError(
             "macOS push validation requires Apple Containers. Install the "
             "container CLI and ensure `container --version` and `container ls` "
-            "succeed. Colima/Docker Desktop fallback is forbidden"
+            "succeed. Runtime fallback is forbidden"
         )
 
     version_ok, version = optional_capture(["container", "--version"])
     if not version_ok:
         detail = version[-500:] if version else "container --version failed"
         raise ValidationRuntimeError(
-            "Apple Containers is the mandatory macOS runtime, but its CLI is "
-            "not usable; Colima/Docker fallback is forbidden: "
+            "Apple Containers is the selected macOS runtime, but its CLI is "
+            "not usable; runtime fallback is forbidden: "
             f"{detail}"
         )
     list_ok, list_output = optional_capture(["container", "ls"])
     if not list_ok:
         detail = list_output[-500:] if list_output else "container ls failed"
         raise ValidationRuntimeError(
-            "Apple Containers is the mandatory macOS runtime, but its service "
+            "Apple Containers is the selected macOS runtime, but its service "
             "is not ready; start or repair Apple Containers and retry. "
-            "Colima/Docker fallback is forbidden: "
+            "Runtime fallback is forbidden: "
             f"{detail}"
         )
     version_label = version.splitlines()[0] if version else "version available"
@@ -337,7 +373,10 @@ def declared_validation_pins(root: Path) -> dict[str, str]:
 def engine_command(runtime: Runtime) -> list[str]:
     if runtime.name == "apple-containers":
         return ["container"]
-    return [*runtime.prefix, "docker"]
+    command = [*runtime.prefix, "docker"]
+    if runtime.docker_context:
+        command += ["--context", runtime.docker_context]
+    return command
 
 
 def mount_root(runtime: Runtime, root: Path) -> str:

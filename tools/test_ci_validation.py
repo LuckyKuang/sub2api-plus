@@ -47,6 +47,12 @@ class FullCoverageTests(unittest.TestCase):
         self.assertEqual(expected, set(actual))
         self.assertEqual(len(actual), len(set(actual)), "duplicate full-profile CI ownership")
 
+    def test_colima_lifecycle_and_syntax_belong_to_both_full_gates(self) -> None:
+        required = {("python3", "deploy/tests/test_colima.py"), ("bash", "-n", "deploy/colima.sh")}
+        local = {tuple(step.command) for step in validation_checks.full_steps(ROOT, python="python3")}
+        self.assertTrue(required <= local)
+        self.assertTrue(required <= set(self.commands("deployment-config")))
+
     def test_full_backend_preserves_tidy_unit_integration_and_lint(self) -> None:
         self.assertEqual(self.commands("test-unit"),
                          [("go", "mod", "tidy", "-diff"), ("go", "test", "-tags=unit", "./...")])

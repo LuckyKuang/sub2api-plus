@@ -82,7 +82,13 @@ Git transfers only `HEAD:<current-branch>`. Never use `--force`, `--all`,
 
 Only `check`, `submit-pr`, `ensure`, and `clean` access the validation runtime.
 
-- macOS: Apple Containers only; no Docker, Colima, or host-toolchain fallback.
+- macOS: explicitly selected Apple Containers or Colima. Ask which environment
+  to use before local validation unless already explicitly specified for the
+  current scope, then set `SUB2API_VALIDATION_MACOS_RUNTIME=apple|colima` as
+  documented in `CONTRIBUTING.md`. Never silently select, switch or fall back.
+  Colima uses `SUB2API_VALIDATION_COLIMA_PROFILE` (default `sub2api-validation`)
+  and an explicitly verified local Docker context; no Docker Desktop or host
+  toolchain fallback.
 - Windows: Docker inside a running WSL2 Debian or Ubuntu distribution only.
 - Linux: directly reachable Docker Engine and Compose plugin.
 

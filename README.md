@@ -136,6 +136,7 @@ before exposing the service publicly.
 | Linux installation script or binary | [Deployment guide](deploy/README.md) |
 | Docker Compose | [Docker guide](deploy/DOCKER.md) |
 | Apple container on macOS | [Apple container guide](deploy/APPLE_CONTAINER.md) |
+| Colima on macOS | [Colima guide](deploy/COLIMA.md) |
 | Edge proxy and trusted client IPs | [Edge security](deploy/EDGE_SECURITY.md) |
 | Optional datamanagementd service | [datamanagementd guide](deploy/DATAMANAGEMENTD_CN.md) |
 

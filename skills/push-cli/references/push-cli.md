@@ -34,7 +34,9 @@ The default `full` `submit-pr` performs this fail-closed sequence:
    fetching tags.
 2. Require that exact base commit to be an ancestor of HEAD.
 3. Record the 40-character base and head SHAs.
-4. Probe and launch the required platform validation container.
+4. On macOS ask which environment to use unless already explicitly specified
+   for this scope; set the runtime bindings from `CONTRIBUTING.md`. Probe and
+   launch only that selected platform validation container, without fallback.
 5. Run the complete matrix and the runtime-specific final gate.
 6. Require a clean worktree and unchanged HEAD.
 7. Refetch the default branch and require the same base SHA.
@@ -79,7 +81,7 @@ the local proof remains required. CI full suites do not produce local success.
 - Shared CI-coverage regressions, release archive/OCI/pricing/workflow regressions,
   image-script syntax and Go test build-tag regressions.
 - Installer syntax, Docker deployment security/resources, Caddy cache policy,
-  and the Apple Container lifecycle fixture.
+  and the Apple Container and Colima lifecycle fixtures.
 
 The backend-test lane keeps module tidiness before unit and integration tests.
 The backend-lint/policy lane starts after the backend-test lane finishes,
@@ -93,8 +95,9 @@ four-CPU container; `--serial` uses four. Every command and lane reports elapsed
 monotonic time. A failure stops new steps and joins already-running commands;
 neither scheduling mode can publish a partial proof.
 
-Apple Containers reports Docker Compose parsing as not applicable. WSL2 Docker
-and Linux Docker must parse `deploy/docker-compose.dev.yml` successfully.
+Apple Containers reports Docker Compose parsing as not applicable. Explicitly
+selected Colima, WSL2 Docker and Linux Docker must parse
+`deploy/docker-compose.dev.yml` successfully.
 After each validation attempt, successful or failed, validation containers use
 `--rm`, so their writable VM/container snapshots are removed. The launcher
 retains the `sub2api-validation:<toolchain-digest>` image matching the resolved

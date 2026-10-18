@@ -335,6 +335,18 @@ class CompressCliTest(unittest.TestCase):
         errors = self.validate_text(changed)
         self.assert_error_contains(errors, "Host-side validation is forbidden")
 
+    def test_macos_validation_choice_cannot_be_implicit(self) -> None:
+        for required in (
+            "All validation must run in Apple Containers or Colima on macOS",
+            "Before macOS local validation ask the user which environment to use unless already explicitly specified",
+            "preserve the selection for the authorized scope and never silently select, switch, or fall back",
+            "Follow CONTRIBUTING.md for explicit runtime selection",
+        ):
+            with self.subTest(required=required):
+                self.assertIn(required, self.valid_document)
+                errors = self.validate_text(self.valid_document.replace(required, "Select any available runtime"))
+                self.assert_error_contains(errors, required)
+
     def test_validation_ephemeral_cleanup_remains_mandatory(self) -> None:
         changed = self.valid_document.replace(
             "After every validation remove project validation containers, temporary resources, and historical writable snapshots",

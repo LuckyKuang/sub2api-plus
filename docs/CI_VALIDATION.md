@@ -15,7 +15,7 @@ application, policy and deterministic-tree checks execute inside containers.
 
 | Context / lane | Coverage | Relationship to local full |
 | --- | --- | --- |
-| `deployment-config` | Installer syntax, Apple lifecycle fixture, Docker security/gateway/resources, Caddy policy | Union of local and CI deployment checks |
+| `deployment-config` | Installer syntax, Apple and Colima lifecycle fixtures, Docker security/gateway/resources, Caddy policy | Union of local and CI deployment checks |
 | `test` | Full unit suites on Linux amd64 and arm64; Docker-backed integration on amd64 | Same Go commands, additional architecture coverage |
 | `frontend` | Frozen install, lint, typecheck, full Vitest, production build and its locale checks | Complete local frontend coverage; critical-only tests cannot substitute |
 | `golangci-lint` | Complete backend lint | Same command |
@@ -45,11 +45,19 @@ retain their separate cache ownership.
 ## Containers and platform coverage
 
 CI uses Docker on Linux and executes unit suites natively on amd64/arm64.
-Local checks continue to use Apple Containers on macOS, Docker in supported
+Local checks use explicitly selected Apple Containers or Colima on macOS, Docker in supported
 WSL2 Debian/Ubuntu, or Docker on Linux, with existing scoped cleanup.
+Before macOS local validation, ask which environment to use unless already
+explicitly specified for the authorized scope. Preserve that selection; never
+infer it from installed/running tools or silently switch after failure.
+`SUB2API_VALIDATION_MACOS_RUNTIME=apple|colima` is mandatory on macOS; an absent
+or invalid selection stops before runtime probes. Colima additionally selects
+`SUB2API_VALIDATION_COLIMA_PROFILE` (default `sub2api-validation`), verifies the
+local socket and explicitly binds all Docker operations to its context.
+See [CONTRIBUTING.md](../CONTRIBUTING.md) for maintained launcher commands.
 
-The Apple lifecycle tests use fake runtime fixtures. Running them inside Linux
-containers does not claim live Apple Containers/WSL integration. Record any
+The Apple and Colima lifecycle tests use fake runtime fixtures. Running them inside Linux
+containers does not claim live Apple Containers/Colima/WSL integration. Record any
 genuine additional platform requirements and supported-runner evidence before
 replacing the local gate.
 

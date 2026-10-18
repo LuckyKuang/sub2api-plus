@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -23,6 +24,94 @@ SPEC.loader.exec_module(push_cli)
 
 
 class ProbeRuntimeTest(unittest.TestCase):
+    def setUp(self) -> None:
+        selection = mock.patch.dict(os.environ, {"SUB2API_VALIDATION_MACOS_RUNTIME": "apple"})
+        selection.start()
+        self.addCleanup(selection.stop)
+
+    def test_macos_unspecified_environment_requires_user_choice_before_probe(self) -> None:
+        with (
+            mock.patch.dict(os.environ, {"SUB2API_VALIDATION_MACOS_RUNTIME": ""}),
+            mock.patch.object(push_cli.platform, "system", return_value="Darwin"),
+            mock.patch.object(push_cli, "optional_capture") as capture,
+            mock.patch.object(push_cli.shutil, "which") as which,
+        ):
+            with self.assertRaisesRegex(push_cli.PushCliError, "Ask the user"):
+                push_cli.probe_runtime()
+        capture.assert_not_called()
+        which.assert_not_called()
+
+    def test_explicit_colima_uses_only_selected_local_context(self) -> None:
+        expected_socket = f"unix://{push_cli.validation_runtime.home_directory()}/.colima/test-validation/docker.sock"
+        def capture(command):
+            if command == ["colima", "status", "test-validation"]:
+                return True, "Running"
+            if command[:3] == ["docker", "--context", "colima-test-validation"]:
+                if command[3:5] == ["context", "inspect"]:
+                    return True, expected_socket
+                return True, "Docker available"
+            self.fail(f"Unexpected runtime probe: {command}")
+        with (
+            mock.patch.dict(os.environ, {"SUB2API_VALIDATION_MACOS_RUNTIME": "colima", "SUB2API_VALIDATION_COLIMA_PROFILE": "test-validation", "COLIMA_HOME": str(push_cli.validation_runtime.home_directory() / ".colima")}),
+            mock.patch.object(push_cli.platform, "system", return_value="Darwin"),
+            mock.patch.object(push_cli.shutil, "which", return_value="/bin/tool"),
+            mock.patch.object(push_cli, "optional_capture", side_effect=capture),
+        ):
+            runtime = push_cli.probe_runtime()
+        self.assertEqual("colima-docker", runtime.name)
+        self.assertEqual(["docker", "--context", "colima-test-validation"], push_cli.validation_runtime.engine_command(runtime))
+
+    def test_selected_colima_stopped_never_falls_back_or_starts_it(self) -> None:
+        with (
+            mock.patch.dict(os.environ, {"SUB2API_VALIDATION_MACOS_RUNTIME": "colima"}),
+            mock.patch.object(push_cli.platform, "system", return_value="Darwin"),
+            mock.patch.object(push_cli.shutil, "which", return_value="/bin/tool"),
+            mock.patch.object(push_cli, "optional_capture", return_value=(False, "stopped")) as capture,
+        ):
+            with self.assertRaisesRegex(push_cli.PushCliError, "fallback is forbidden"):
+                push_cli.probe_runtime()
+        self.assertEqual(1, capture.call_count)
+        self.assertEqual("colima", capture.call_args.args[0][0])
+
+    def test_selected_colima_remote_context_is_rejected_before_docker_info(self) -> None:
+        with (
+            mock.patch.dict(os.environ, {"SUB2API_VALIDATION_MACOS_RUNTIME": "colima"}),
+            mock.patch.object(push_cli.platform, "system", return_value="Darwin"),
+            mock.patch.object(push_cli.shutil, "which", return_value="/bin/tool"),
+            mock.patch.object(push_cli, "optional_capture", side_effect=[(True, "running"), (True, "tcp://remote:2375")]) as capture,
+        ):
+            with self.assertRaisesRegex(push_cli.PushCliError, "local Colima socket"):
+                push_cli.probe_runtime()
+        self.assertEqual(2, capture.call_count)
+
+    def test_colima_context_is_bound_to_launch_cleanup_and_final_gate(self) -> None:
+        runtime = push_cli.Runtime("colima-docker", docker_context="colima-audit")
+        engine = ["docker", "--context", "colima-audit"]
+        with mock.patch.object(push_cli.validation_runtime, "declared_validation_pins", return_value={}):
+            build = push_cli.validation_runtime.image_build_command(runtime, push_cli.ROOT, "sub2api-validation:aaaaaaaaaaaaaaaa")
+        launch = push_cli.validation_runtime.validation_run_command(
+            runtime, ["python3", "check.py"], root=push_cli.ROOT,
+            image="sub2api-validation:aaaaaaaaaaaaaaaa", user="1000:1000", caches=[],
+            cache_generation="bbbbbbbbbbbbbbbb",
+        )
+        self.assertEqual(engine, build[:3])
+        self.assertEqual(engine, launch[:3])
+        self.assertIn("--rm", launch)
+        with mock.patch.object(push_cli, "run_step") as run:
+            push_cli.run_runtime_final_gate(runtime)
+        self.assertEqual(engine, run.call_args.args[1][:3])
+        with (
+            mock.patch.object(push_cli.validation_runtime, "home_directory", return_value=Path("/nonexistent-colima-test-home")),
+            mock.patch.object(push_cli, "capture", return_value="") as capture,
+            mock.patch.object(push_cli, "run_step") as run,
+        ):
+            push_cli.validation_runtime.cleanup_validation_runtime(
+                runtime, image="sub2api-validation:aaaaaaaaaaaaaaaa", cache_generation="bbbbbbbbbbbbbbbb",
+                capture=capture, run_step=run,
+            )
+        for call in capture.call_args_list:
+            self.assertEqual(engine, call.args[0][:3])
+
     def test_ready_apple_containers_is_self_sufficient(self) -> None:
         def optional(command: list[str], **_: object) -> tuple[bool, str]:
             if command == ["container", "--version"]:
@@ -62,7 +151,7 @@ class ProbeRuntimeTest(unittest.TestCase):
         ):
             with self.assertRaisesRegex(
                 push_cli.PushCliError,
-                "mandatory macOS runtime.*fallback is forbidden",
+                "selected macOS runtime.*fallback is forbidden",
             ):
                 push_cli.probe_runtime()
 
@@ -83,7 +172,7 @@ class ProbeRuntimeTest(unittest.TestCase):
         ):
             with self.assertRaisesRegex(
                 push_cli.PushCliError,
-                "mandatory macOS runtime.*fallback is forbidden",
+                "selected macOS runtime.*fallback is forbidden",
             ):
                 push_cli.probe_runtime()
 

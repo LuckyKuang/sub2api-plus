@@ -2,7 +2,7 @@
 name: deploy-cli
 description: >-
   Build or pull, deploy, and verify Sub2API Plus on the current machine using
-  Apple Containers on macOS, Docker inside WSL2 Debian/Ubuntu on Windows, or
+  Apple Containers or Colima on macOS, Docker inside WSL2 Debian/Ubuntu on Windows, or
   Docker on Linux. Use for requested local deployment, redeployment, runtime
   health checks, and scoped deployment-image cleanup. Repository test matrices,
   branch pushes, release publication, and admin API operations use their own
@@ -26,7 +26,11 @@ successful deployment.
 
 ## Runtime and target
 
-- macOS: Apple Containers only; read [Apple Containers](references/apple-containers.md).
+- macOS: use the explicitly selected Apple Containers or Colima runtime; read
+  [Apple Containers](references/apple-containers.md) or [Colima](references/colima.md).
+  Before local validation or deployment smoke checks, ask which environment to
+  use unless already explicitly specified for this scope. Preserve the choice;
+  never infer it from installed tools or silently fall back.
 - Windows: Docker inside a running WSL2 Debian or Ubuntu distribution only;
   read [Docker and WSL2](references/docker.md). Never use Windows-host Docker.
 - Linux: local Docker Engine and Compose v2; read [Docker and WSL2](references/docker.md).

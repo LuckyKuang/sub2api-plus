@@ -72,7 +72,7 @@ local/remote tag absence, and optionally creates the annotated tag.
 `tools/release_validation.py` routes local metadata and deterministic-tree
 checks through the existing platform validation runtime. It runs only the
 requested check, reuses an existing validation container when already inside
-one, and otherwise requires Apple Containers on macOS, Docker inside WSL2
+one, and otherwise requires explicitly selected Apple Containers or Colima on macOS, Docker inside WSL2
 Debian/Ubuntu on Windows, or Docker on Linux. Git/GitHub gates and publication
 remain host operations; a failed or unavailable container never permits a host
 metadata check. Notes outside the repository are staged as one temporary file

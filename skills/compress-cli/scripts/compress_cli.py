@@ -132,7 +132,10 @@ PROTECTED_FRAGMENTS = {
         "Follow CONTRIBUTING.md#requirement-based-test-design",
     ),
     "Verification": (
-        "All validation must run in Apple Containers on macOS",
+        "All validation must run in Apple Containers or Colima on macOS",
+        "Before macOS local validation ask the user which environment to use unless already explicitly specified",
+        "preserve the selection for the authorized scope and never silently select, switch, or fall back",
+        "Follow CONTRIBUTING.md for explicit runtime selection",
         "Docker inside WSL2 Debian/Ubuntu on Windows",
         "Docker on Linux",
         "Host-side validation is forbidden",

@@ -7,10 +7,16 @@ not automatically sweep all historical development images.
 
 ## Runtime and ownership
 
-Use Apple Containers on macOS, Docker inside a running WSL2 Debian/Ubuntu
+Use the explicitly selected Apple Containers or Colima on macOS, Docker inside a running WSL2 Debian/Ubuntu
 distribution on Windows, and local Docker Engine with Compose v2 on Linux.
 Builds and application checks run in containers; host processes orchestrate
 the runtime and may probe the published application endpoint.
+Before macOS local validation or deployment smoke checks, ask which environment
+to use unless the user already explicitly selected it for the current scope.
+Preserve the selection without automatic discovery, switching or fallback.
+Colima operations use [colima.sh](colima.sh) and its selected local Docker
+context; see [COLIMA.md](COLIMA.md). Repository-validation runtime bindings are
+owned by [CONTRIBUTING.md](../CONTRIBUTING.md).
 
 Scope operations to the selected deployment. Apple uses the owned
 `sub2api-apple` Web container; Docker uses the selected Compose project's

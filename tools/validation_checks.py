@@ -24,6 +24,14 @@ def full_steps(
     backend = root / "backend"
     steps = [
         ValidationStep(
+            "Colima lifecycle test", [python, "deploy/tests/test_colima.py"],
+            root, "backend-lint-policy",
+        ),
+        ValidationStep(
+            "Colima installer syntax", ["bash", "-n", "deploy/colima.sh"],
+            root, "backend-lint-policy",
+        ),
+        ValidationStep(
             "Apple Container lifecycle test",
             ["bash", str(root / "deploy/tests/apple-container-test.sh")],
             root,
@@ -194,6 +202,7 @@ def full_steps(
 # CI adds security/workflow/config coverage; it does not remove any local step.
 CI_STEP_NAMES = {
     "deployment-config": (
+        "Colima lifecycle test", "Colima installer syntax",
         "Apple Container lifecycle test", "Linux installer syntax",
         "Apple installer syntax", "Docker Compose security",
         "Docker Compose gateway environment", "Docker runtime resources",

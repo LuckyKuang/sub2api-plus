@@ -116,12 +116,18 @@ untracked while durable behavior is committed to its owning documentation and
 tests. Preserve secret handling, generated-code, migration, pnpm,
 default-branch, container-only validation, protected PR, immutable tag,
 publication authorization, and upstream-merge rules. Every validation command,
-including focused iteration checks, must run in Apple Containers on macOS,
+including focused iteration checks, must run in explicitly selected Apple Containers or Colima on macOS,
 Docker inside WSL2 Debian or Ubuntu on Windows, or Docker on Linux; host-side
 validation is forbidden, including focused release metadata and deterministic
 finalization checks. `Submit PR` references this same environment for both
 profiles. After every validation attempt, remove project
 validation containers, temporary resources, and historical writable snapshots.
+Before macOS local validation ask the user which environment to use unless
+already explicitly specified for the authorized scope. Preserve the selection
+and never silently select, switch or fall back. The validation launcher requires
+the explicit runtime bindings documented in `CONTRIBUTING.md`; an unspecified
+selection must stop before probing runtimes. Protect these semantics in the
+validator and its regressions alongside the container-only requirement.
 Retain only project validation images and dependency caches whose deterministic
 identities match the current pinned toolchain and dependency-lock inputs, and
 remove stale project validation generations without pruning unrelated projects

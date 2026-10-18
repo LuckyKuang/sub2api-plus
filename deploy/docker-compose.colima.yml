@@ -1,0 +1,57 @@
+# Used after docker-compose.yml by colima.sh. All storage is project-scoped.
+services:
+  sub2api:
+    image: ${COLIMA_SUB2API_IMAGE:?Use deploy/colima.sh}
+    container_name: ${COLIMA_PROJECT:-sub2api-colima}-app
+    pull_policy: never
+    labels:
+      org.sub2api.stack: colima
+  postgres:
+    container_name: ${COLIMA_PROJECT:-sub2api-colima}-postgres
+    labels:
+      org.sub2api.stack: colima
+  redis:
+    container_name: ${COLIMA_PROJECT:-sub2api-colima}-redis
+    labels:
+      org.sub2api.stack: colima
+  minio:
+    profiles: [colima-minio]
+    image: ${COLIMA_MINIO_IMAGE:-pgsty/minio:RELEASE.2026-06-18T00-00-00Z}
+    container_name: ${COLIMA_PROJECT:-sub2api-colima}-minio
+    restart: unless-stopped
+    labels:
+      org.sub2api.stack: colima
+    command: [server, /data, --console-address, ':9001']
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-storage-admin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-}
+      MINIO_REGION_NAME: ${MINIO_REGION:-us-east-1}
+    ports:
+      - '${MINIO_BIND_HOST:-127.0.0.1}:${MINIO_API_PORT:-19000}:9000'
+      - '${MINIO_BIND_HOST:-127.0.0.1}:${MINIO_CONSOLE_PORT:-19001}:9001'
+    volumes:
+      - minio_data:/data
+    networks: [sub2api-network]
+    healthcheck:
+      test: [CMD, curl, --fail, --silent, --max-time, '5', http://127.0.0.1:9000/minio/health/live]
+      interval: 2s
+      timeout: 6s
+      retries: 60
+      start_period: 5s
+volumes:
+  sub2api_data:
+    labels:
+      org.sub2api.stack: colima
+  postgres_data:
+    labels:
+      org.sub2api.stack: colima
+  redis_data:
+    labels:
+      org.sub2api.stack: colima
+  minio_data:
+    labels:
+      org.sub2api.stack: colima
+networks:
+  sub2api-network:
+    labels:
+      org.sub2api.stack: colima

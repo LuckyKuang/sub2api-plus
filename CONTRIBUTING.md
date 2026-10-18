@@ -89,9 +89,33 @@ Keep horizontal padding and arrow placement in the shared styles; individual
 pages may adjust control width and height.
 
 All validation, including focused checks while iterating, must run in the
-platform validation container: Apple Containers on macOS, Docker inside WSL2
+platform validation container: explicitly selected Apple Containers or Colima on macOS, Docker inside WSL2
 Debian or Ubuntu on Windows, and Docker on Linux. Do not run tests, lint,
 typechecking, builds, policy checks, or other validation on the host.
+Before macOS local validation, ask which environment to use unless the user
+already explicitly specified it for the current scope. Reuse that selection
+within its authorized scope; never infer it from installed/running tools or
+silently switch runtimes after failure. An unspecified environment makes the
+launcher stop before any runtime probe. Set the chosen runtime explicitly:
+
+```bash
+# Apple Containers
+SUB2API_VALIDATION_MACOS_RUNTIME=apple python3 tools/ci_validation.py ensure
+SUB2API_VALIDATION_MACOS_RUNTIME=apple python3 tools/ci_validation.py exec -- python3 deploy/tests/test_colima.py
+
+# Colima: use a dedicated Docker profile without changing the global context.
+colima start sub2api-validation --runtime docker --cpus 4 --memory 8 --activate=false
+SUB2API_VALIDATION_MACOS_RUNTIME=colima python3 tools/ci_validation.py ensure
+SUB2API_VALIDATION_MACOS_RUNTIME=colima python3 tools/ci_validation.py exec -- python3 deploy/tests/test_colima.py
+```
+
+`SUB2API_VALIDATION_COLIMA_PROFILE` selects another explicitly chosen profile
+(default `sub2api-validation`). The launcher verifies its local socket and
+passes `--context` to every Docker operation; it does not start Colima or use
+Docker Desktop. These same environment bindings apply to push-cli full checks,
+submission and focused release validation. Deployment smoke checks use the
+chosen deployment runtime and do not replace repository validation.
+
 After every validation attempt, successful or failed, remove the one-shot
 project validation container, temporary resources, and historical writable
 snapshots. Retain the Sub2API validation image whose deterministic identity
@@ -185,7 +209,7 @@ python3 skills/push-cli/scripts/push_cli.py submit-pr
 ```
 
 `submit-pr` defaults to the `full` profile. It requires the latest
-default-branch base and runs the complete matrix inside Apple Containers on
+default-branch base and runs the complete matrix inside explicitly selected Apple Containers or Colima on
 macOS, Docker inside WSL2 Debian or Ubuntu on Windows, and Docker on Linux.
 Backend tests run before backend lint/policy while the frontend lane runs
 concurrently within the 4-CPU/8-GiB container and report step/lane wall-clock durations; no check is

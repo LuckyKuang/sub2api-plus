@@ -153,6 +153,7 @@ sudo systemctl reload nginx
 | Linux 安装脚本或二进制 | [部署指南](deploy/README.md) |
 | Docker Compose | [Docker 指南](deploy/DOCKER.md) |
 | macOS Apple container | [Apple container 指南](deploy/APPLE_CONTAINER.md) |
+| macOS Colima | [Colima 指南](deploy/COLIMA.md) |
 | 边缘代理与可信客户端 IP | [边缘安全](deploy/EDGE_SECURITY.md) |
 | 可选 datamanagementd 服务 | [datamanagementd 指南](deploy/DATAMANAGEMENTD_CN.md) |
 

@@ -448,8 +448,7 @@ def run_runtime_final_gate(runtime: Runtime) -> None:
     run_step(
         "Docker Compose final gate",
         [
-            *runtime.prefix,
-            "docker",
+            *validation_runtime.engine_command(runtime),
             "compose",
             "-f",
             compose_path,

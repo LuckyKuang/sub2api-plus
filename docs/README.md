@@ -49,6 +49,7 @@ belong in GitHub Release notes.
 - [Local deployment and image lifecycle](../deploy/DEPLOYMENT_LIFECYCLE.md)
 - [Docker](../deploy/DOCKER.md)
 - [Apple container](../deploy/APPLE_CONTAINER.md)
+- [Colima](../deploy/COLIMA.md)
 - [Edge and ingress security](../deploy/EDGE_SECURITY.md)
 - [datamanagementd](../deploy/DATAMANAGEMENTD_CN.md)
 - [Client disconnect risk control](CLIENT_DISCONNECT_RISK_CONTROL.md)

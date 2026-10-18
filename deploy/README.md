@@ -72,6 +72,7 @@ are not required.
 |--------|----------|--------------|
 | **Docker Compose** | Quick setup, all-in-one | Not needed (auto-setup) |
 | **Apple container** | Native local stack on macOS 26 | Not needed (auto-setup) |
+| **Colima** | Isolated Docker Compose stack on macOS | Not needed (auto-setup) |
 | **Binary Install** | Production servers, systemd | Web-based wizard |
 
 ## Files
@@ -83,6 +84,9 @@ are not required.
 | `docker-deploy.sh` | **One-click Docker deployment script (recommended)** |
 | `apple-container.sh` | Native Apple `container` lifecycle script |
 | `APPLE_CONTAINER.md` | Apple `container` deployment and operations guide |
+| `colima.sh` / `colima.py` | Colima profile and Compose lifecycle orchestration |
+| `docker-compose.colima.yml` | Colima overrides for the maintained Compose stack |
+| `COLIMA.md` | Colima setup, deployment, persistence and recovery |
 | `DEPLOYMENT_LIFECYCLE.md` | Cross-platform local deployment, recovery, and image-retention contract |
 | `.env.example` | Container environment variables template |
 | `DOCKER.md` | GHCR image and Docker deployment documentation |
@@ -98,6 +102,9 @@ are not required.
 ---
 
 ## Apple container Deployment
+
+For a Docker-compatible macOS alternative, see [Colima deployment](COLIMA.md).
+It uses its own profile, environment file, ports and data volumes.
 
 Apple-silicon Macs running macOS 26 can run the complete Sub2API Plus, PostgreSQL, and Redis stack with Apple `container` 1.1.0 or newer:
 
