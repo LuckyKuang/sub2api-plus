@@ -2,6 +2,8 @@
 
 Codex CLI 和 Codex Desktop 使用 OpenAI Responses 协议。推荐在密钥页点击“使用密钥”选择 Codex CLI，直接复制生成好的配置；下面是通用模板。
 
+官方文档：https://developers.openai.com/codex/config-reference
+
 ## 配置文件
 
 <div class="docs-os-line" data-os="unix">macOS / Linux：<code>~/.codex/config.toml</code></div>
@@ -23,7 +25,7 @@ requires_openai_auth = false
 supports_websockets = false
 ```
 
-> `model_provider` 和 `[model_providers.*]` 的 key 必须使用 `OpenAI`，Codex 才会启用远程压缩（remote compaction）。不要改成 `sub2api` 或其他自定义名称。
+> `[model_providers.OpenAI]` 的 `name` 必须是 `OpenAI`，Codex 才会默认启用远程压缩（remote compaction）。本文把 provider key 也写成 `OpenAI` 保持一致；如果改成自定义 key，请保留 `name = "OpenAI"`，或显式设置 `capabilities.remote_compaction = "v2"`。
 
 ## 设置环境变量
 

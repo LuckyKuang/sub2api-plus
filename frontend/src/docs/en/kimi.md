@@ -1,38 +1,55 @@
 # Kimi Code
 
-Kimi Code uses the Anthropic / Claude-compatible entry point. The "Kimi Code" outbound identity is for upstream requests and does not change the address entered in the client.
+Kimi Code CLI reads `~/.kimi-code/config.toml`. It supports provider types such as `kimi`, `anthropic`, `openai`, and `openai_responses`; use `openai_responses` or `anthropic` for this deployment.
 
-## Settings
+Official docs: https://moonshotai.github.io/kimi-code/en/configuration/providers
 
-| Item | Value |
-| --- | --- |
-| Base URL | `{{baseUrl}}` |
-| API Key | Create one on the [Keys page]({{keysUrl}}) |
-| Model | `YOUR_MODEL_ID` |
-| Protocol | Anthropic / Claude-compatible (per group) |
+## Configuration file
 
-## If the client supports environment variables
+<div class="docs-os-line" data-os="unix">macOS / Linux: <code>~/.kimi-code/config.toml</code></div>
 
-```bash os=unix
-export ANTHROPIC_BASE_URL="{{baseUrl}}"
-export ANTHROPIC_AUTH_TOKEN="<YOUR_API_KEY>"
+<div class="docs-os-line" data-os="cmd">Windows CMD: <code>%USERPROFILE%\.kimi-code\config.toml</code></div>
+
+<div class="docs-os-line" data-os="powershell">Windows PowerShell: <code>%USERPROFILE%\.kimi-code\config.toml</code></div>
+
+## Responses group
+
+```toml
+default_model = "sub2api/YOUR_MODEL_ID"
+
+[providers.sub2api]
+type = "openai_responses"
+base_url = "{{openaiBaseUrl}}"
+api_key = "<YOUR_API_KEY>"
+
+[models."sub2api/YOUR_MODEL_ID"]
+provider = "sub2api"
+model = "YOUR_MODEL_ID"
+max_context_size = 200000
 ```
 
-```bat os=cmd
-set ANTHROPIC_BASE_URL={{baseUrl}}
-set ANTHROPIC_AUTH_TOKEN=<YOUR_API_KEY>
+## Claude / Anthropic group
+
+```toml
+default_model = "sub2api/YOUR_MODEL_ID"
+
+[providers.sub2api]
+type = "anthropic"
+base_url = "{{baseUrl}}"
+api_key = "<YOUR_API_KEY>"
+
+[models."sub2api/YOUR_MODEL_ID"]
+provider = "sub2api"
+model = "YOUR_MODEL_ID"
+max_context_size = 200000
 ```
 
-```powershell os=powershell
-$env:ANTHROPIC_BASE_URL="{{baseUrl}}"
-$env:ANTHROPIC_AUTH_TOKEN="<YOUR_API_KEY>"
-```
+## Verify
 
-## If the client only supports a custom provider
-
-Choose an Anthropic / Claude-compatible provider and enter the base URL, API key, and model. Do not add `X-Msh-*` device headers manually; the gateway renders them from the outbound identity settings.
+Restart `kimi`, then use `/provider` to inspect providers or `/model` to choose a model. After editing `config.toml`, use `/reload` to reload it.
 
 ## Notes
 
-- Kimi Code model IDs and membership permissions vary; use the group and Keys page as the source of truth.
-- Device declarations, language, and timezone are configured under Outbound identity → Kimi Code.
+- Kimi Code does not automatically read `KIMI_API_KEY` from the shell. Unless the provider explicitly uses `api_key_env`, put the key in `api_key`.
+- Kimi Code OAuth accounts created through `/login` do not appear in `/provider`; manage them with `/login` and `/logout`.
+- Never commit a real API key.

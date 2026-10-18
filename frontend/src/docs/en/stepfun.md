@@ -1,40 +1,61 @@
 # StepFun · Step-Code
 
-StepFun / Step-Code supports Responses and Messages clients. Client connections use a panel API key.
+Step Code adds custom providers through `~/.stepcode/models.json`. It supports `openai-completions`, `openai-responses`, `anthropic-messages`, and other protocols; use Responses or Anthropic Messages for this deployment.
 
-## Settings
+Official docs: https://platform.stepfun.com/docs/zh/step-code/configuration/models
 
-| Item | Value |
-| --- | --- |
-| OpenAI / Responses Base URL | `{{openaiBaseUrl}}` |
-| Anthropic / Messages Base URL | `{{baseUrl}}` |
-| API Key | Create one on the [Keys page]({{keysUrl}}) |
-| Model | `YOUR_MODEL_ID` |
+## Configuration file
 
-## Choose the protocol
+<div class="docs-os-line" data-os="unix">macOS / Linux: <code>~/.stepcode/models.json</code></div>
 
-- Codex, OpenCode, and other Responses clients: use `{{openaiBaseUrl}}`.
-- Claude Code and other Messages clients: use `{{baseUrl}}`.
-- Do not mix both protocols in one client configuration.
+<div class="docs-os-line" data-os="cmd">Windows CMD: <code>%USERPROFILE%\.stepcode\models.json</code></div>
 
-## Claude Code-compatible clients
+<div class="docs-os-line" data-os="powershell">Windows PowerShell: <code>%USERPROFILE%\.stepcode\models.json</code></div>
 
-```bash os=unix
-export ANTHROPIC_BASE_URL="{{baseUrl}}"
-export ANTHROPIC_AUTH_TOKEN="<YOUR_API_KEY>"
+## Responses group
+
+```json
+{
+  "providers": {
+    "sub2api": {
+      "baseUrl": "{{openaiBaseUrl}}",
+      "api": "openai-responses",
+      "apiKey": "<YOUR_API_KEY>",
+      "models": [
+        { "id": "YOUR_MODEL_ID" }
+      ]
+    }
+  }
+}
 ```
 
-```bat os=cmd
-set ANTHROPIC_BASE_URL={{baseUrl}}
-set ANTHROPIC_AUTH_TOKEN=<YOUR_API_KEY>
+## Claude / Anthropic group
+
+```json
+{
+  "providers": {
+    "sub2api": {
+      "baseUrl": "{{baseUrl}}",
+      "api": "anthropic-messages",
+      "apiKey": "<YOUR_API_KEY>",
+      "models": [
+        { "id": "YOUR_MODEL_ID" }
+      ]
+    }
+  }
+}
 ```
 
-```powershell os=powershell
-$env:ANTHROPIC_BASE_URL="{{baseUrl}}"
-$env:ANTHROPIC_AUTH_TOKEN="<YOUR_API_KEY>"
+## Verify
+
+Save the file, reopen `/model`, and choose `sub2api/YOUR_MODEL_ID`. You can also run:
+
+```bash
+step --provider sub2api --model YOUR_MODEL_ID
 ```
 
 ## Notes
 
-- Step-Code is a versionless client family; no version is required in the admin panel.
-- Model IDs come from the group and the Keys page.
+- For OpenAI-compatible endpoints, `baseUrl` must include `/v1`; `{{openaiBaseUrl}}` already does.
+- `apiKey` is stored in the local JSON file; never commit a real key.
+- Do not point `STEP_API_KEY` / `STEP_BASE_URL` at this deployment; those belong to StepFun's official Step platform.

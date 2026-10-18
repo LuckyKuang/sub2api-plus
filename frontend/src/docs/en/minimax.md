@@ -1,48 +1,50 @@
 # MiniMax Code
 
-MiniMax Code supports two backend account modes: OAuth and API Key. Client connections always use an API key created in this panel; the backend mode only affects upstream scheduling.
+The MiniMax Code CLI is `mcode`. The official way to add a custom provider is `mcode provider add`, which lets you use this deployment as an OpenAI-compatible or Anthropic-compatible endpoint.
 
-## Common settings
+Official docs: https://agent.minimax.io/docs/cli/configuration
 
-| Item | Value |
-| --- | --- |
-| Base URL | `{{baseUrl}}` |
-| API Key | Create one on the [Keys page]({{keysUrl}}) |
-| Model | `YOUR_MODEL_ID` |
-| Protocol | Anthropic / Claude-compatible (per group) |
-
-## OAuth mode
-
-Authorize MiniMax OAuth under Accounts in the admin panel. The client still uses the base URL and API key above.
-
-## API Key mode
-
-Add a MiniMax API Key account in the admin panel. Client configuration is identical to OAuth mode; only the account type differs.
-
-## Anthropic-compatible clients
-
-If the client uses Anthropic-compatible environment variables:
+## Set the API key
 
 ```bash os=unix
-export ANTHROPIC_BASE_URL="{{baseUrl}}"
-export ANTHROPIC_AUTH_TOKEN="<YOUR_API_KEY>"
+export MCODE_PROVIDER_API_KEY="<YOUR_API_KEY>"
 ```
 
 ```bat os=cmd
-set ANTHROPIC_BASE_URL={{baseUrl}}
-set ANTHROPIC_AUTH_TOKEN=<YOUR_API_KEY>
+set MCODE_PROVIDER_API_KEY=<YOUR_API_KEY>
 ```
 
 ```powershell os=powershell
-$env:ANTHROPIC_BASE_URL="{{baseUrl}}"
-$env:ANTHROPIC_AUTH_TOKEN="<YOUR_API_KEY>"
+$env:MCODE_PROVIDER_API_KEY="<YOUR_API_KEY>"
 ```
+
+## Add a provider
+
+```bash
+mcode provider add \
+  --name sub2api \
+  --base-url "{{openaiBaseUrl}}" \
+  --api-format openai-responses \
+  --model "YOUR_MODEL_ID" \
+  --api-key-env MCODE_PROVIDER_API_KEY \
+  --use
+```
+
+- `--api-format` accepts `openai-completions`, `openai-responses`, or `anthropic-messages`.
+- Use `openai-responses` for a Responses group, `openai-completions` for Chat Completions, or `anthropic-messages` for a Claude group (with `--base-url "{{baseUrl}}"`).
+- `--use` tests the first model before saving; a failed test stores nothing.
 
 ## Verify
 
-Request the model list or send a short message. A 401 usually means the client is using a MiniMax key instead of the panel key.
+```bash
+mcode provider list
+mcode provider test sub2api --model "YOUR_MODEL_ID"
+```
+
+Inside `mcode`, use `/provider` to choose the provider or `/model` to switch models.
 
 ## Notes
 
-- Do not paste the OAuth account token into the client.
-- Model IDs come from the group and the Keys page.
+- OAuth / Token Plan and custom providers are separate paths; use the API-key provider above to connect to this deployment.
+- MiniMax Code stores user data under `~/.minimax` by default, or `%USERPROFILE%\.minimax` on Windows.
+- Never commit a real API key.

@@ -2,6 +2,8 @@
 
 Codex CLI and Codex Desktop use the OpenAI Responses protocol. The recommended path is "Use key" on the Keys page: choose Codex CLI and copy the generated configuration. The template below is the generic form.
 
+Official docs: https://developers.openai.com/codex/config-reference
+
 ## Configuration file
 
 <div class="docs-os-line" data-os="unix">macOS / Linux: <code>~/.codex/config.toml</code></div>
@@ -23,7 +25,7 @@ requires_openai_auth = false
 supports_websockets = false
 ```
 
-> Keep the `model_provider` and `[model_providers.*]` key as `OpenAI`. Codex only enables remote compaction for that provider name; do not rename it to `sub2api` or another custom key.
+> The `name` under `[model_providers.OpenAI]` must be exactly `OpenAI` for Codex to enable remote compaction by default. This guide also uses `OpenAI` as the provider key for consistency; if you use a custom key, keep `name = "OpenAI"` or set `capabilities.remote_compaction = "v2"` explicitly.
 
 ## Set the environment variable
 

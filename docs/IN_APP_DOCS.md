@@ -33,6 +33,8 @@ OpenCode, Cline, Command Code, and TypeSafe / System One live in the
 "Compatible clients" appendix because they do not have a dedicated outbound
 preset; CC Switch has its own import guide under the troubleshooting group.
 
+Every client guide links its official documentation; re-check that source before changing commands or config paths.
+
 Both locales are required. `frontend/src/docs/__tests__/manifest.spec.ts`
 checks that every manifest section has exactly one Chinese and one English file,
 that every file starts with a level-one heading, and that only known runtime

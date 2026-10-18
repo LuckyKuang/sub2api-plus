@@ -2,6 +2,8 @@
 
 Claude Code uses the Anthropic Messages protocol. Set the base URL to `{{baseUrl}}` and authenticate with `ANTHROPIC_AUTH_TOKEN`.
 
+Official docs: https://code.claude.com/docs/en/env-vars
+
 ## Configuration file
 
 <div class="docs-os-line" data-os="unix">macOS / Linux: <code>~/.claude/settings.json</code></div>

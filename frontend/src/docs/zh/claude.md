@@ -2,6 +2,8 @@
 
 Claude Code 使用 Anthropic Messages 协议，Base URL 填 `{{baseUrl}}`，认证用 `ANTHROPIC_AUTH_TOKEN`。
 
+官方文档：https://code.claude.com/docs/en/env-vars
+
 ## 配置文件
 
 <div class="docs-os-line" data-os="unix">macOS / Linux：<code>~/.claude/settings.json</code></div>

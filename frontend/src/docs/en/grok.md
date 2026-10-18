@@ -1,6 +1,10 @@
 # Grok CLI
 
-Grok CLI reads its configuration file from:
+Grok Build CLI reads `~/.grok/config.toml`. The official custom-model format uses `[model.<id>]`; `api_backend = "responses"` selects the Responses protocol used by this deployment.
+
+Official docs: https://docs.x.ai/build/settings/reference
+
+## Configuration file
 
 <div class="docs-os-line" data-os="unix">macOS / Linux: <code>~/.grok/config.toml</code></div>
 
@@ -8,55 +12,46 @@ Grok CLI reads its configuration file from:
 
 <div class="docs-os-line" data-os="powershell">Windows PowerShell: <code>%USERPROFILE%\.grok\config.toml</code></div>
 
-Text models use the Responses protocol (`api_backend = "responses"`).
-
-## Environment variables
+## Set the API key
 
 ```bash os=unix
-export GROK_MODELS_BASE_URL="{{baseUrl}}"
 export XAI_API_KEY="<YOUR_API_KEY>"
 ```
 
 ```bat os=cmd
-set GROK_MODELS_BASE_URL={{baseUrl}}
 set XAI_API_KEY=<YOUR_API_KEY>
 ```
 
 ```powershell os=powershell
-$env:GROK_MODELS_BASE_URL="{{baseUrl}}"
 $env:XAI_API_KEY="<YOUR_API_KEY>"
 ```
 
-## Configuration
+## Add a custom model
 
 ```toml
-[endpoints]
-models_base_url = "{{baseUrl}}"
-models_list_url = "{{baseUrl}}/models"
-xai_api_base_url = "{{baseUrl}}"
-cli_chat_proxy_base_url = "{{baseUrl}}"
-
-[auth]
-preferred_method = "api_key"
-
-[model."YOUR_MODEL_ID"]
+[model.sub2api]
 model = "YOUR_MODEL_ID"
-name = "YOUR_MODEL_ID"
+base_url = "{{openaiBaseUrl}}"
+name = "Sub2API Plus"
 env_key = "XAI_API_KEY"
 api_backend = "responses"
-context_window = 500000
+context_window = 200000
 
 [models]
-default = "YOUR_MODEL_ID"
-web_search = "YOUR_MODEL_ID"
-image_description = "YOUR_MODEL_ID"
+default = "sub2api"
 ```
 
 ## Verify
 
-Run `grok inspect` and confirm the endpoint, authentication method, and model are recognized. Then start a new session and send a message.
+```bash
+grok inspect
+grok -p "Hello" -m sub2api
+```
+
+`grok inspect` shows the config sources, models, and MCP servers discovered in the current directory; you can also switch with `/model` in the TUI.
 
 ## Notes
 
-- Do not leave `api_backend` empty; it may fall back to Chat Completions.
-- Image and video models use Imagine IDs and media endpoints. Do not mix them into text configuration.
+- `base_url` must include `/v1`; `{{openaiBaseUrl}}` already does.
+- For an Anthropic Messages group, change `api_backend` to `messages` and `base_url` to `{{baseUrl}}`.
+- Never commit `XAI_API_KEY` to a repository or version control.

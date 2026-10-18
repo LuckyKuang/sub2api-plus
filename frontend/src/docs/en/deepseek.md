@@ -1,36 +1,59 @@
 # DeepSeek · DSH Desktop
 
-DeepSeek / DSH Desktop uses the gateway's OpenAI-compatible entry point. The "outbound identity" settings only affect gateway-to-upstream requests; they do not change the address you enter in the client.
+DSH (DeepSeek Harness) is DeepSeek's official agent harness. Its Desktop and Web UIs share model configuration. The official path is **Settings → Models → Add model provider → Custom model API**, not an `OPENAI_BASE_URL` environment variable.
 
-## Client settings
+Official docs: https://deepseek-harness.github.io/deepseek-harness/en/guide/providers
+
+## Add through the UI
+
+1. Open DSH and go to **Settings → Models**.
+2. Choose **Add model provider** and switch to **Custom model API**.
+3. Fill in:
 
 | Item | Value |
 | --- | --- |
+| Provider ID | `sub2api` (lowercase; permanent after saving) |
+| Display name | `Sub2API Plus` |
 | Base URL | `{{openaiBaseUrl}}` |
+| API protocol | `OpenAI Responses` |
 | API Key | Create one on the [Keys page]({{keysUrl}}) |
-| Model | `YOUR_MODEL_ID` |
-| Protocol | OpenAI-compatible (per group) |
+| Models | `YOUR_MODEL_ID` |
 
-## Verify
+4. Save, then select the model in the model picker.
 
-```bash os=unix
-curl {{openaiBaseUrl}}/models \
-  -H "Authorization: Bearer <YOUR_API_KEY>"
+## Protocol selection
+
+- Responses group: `Base URL = {{openaiBaseUrl}}`, protocol `OpenAI Responses`.
+- Chat Completions group: `Base URL = {{openaiBaseUrl}}`, protocol `OpenAI Chat Completions`.
+- Claude / Anthropic group: `Base URL = {{baseUrl}}`, protocol `Anthropic Messages`.
+- A provider speaks one protocol. To use both, create two IDs, such as `sub2api-responses` and `sub2api-anthropic`.
+
+## Configuration file
+
+<div class="docs-os-line" data-os="unix">macOS / Linux: <code>~/.dsh/profiles/web/cordis.patch.yml</code></div>
+
+<div class="docs-os-line" data-os="cmd">Windows CMD: <code>%USERPROFILE%\.dsh\profiles\web\cordis.patch.yml</code></div>
+
+<div class="docs-os-line" data-os="powershell">Windows PowerShell: <code>%USERPROFILE%\.dsh\profiles\web\cordis.patch.yml</code></div>
+
+Advanced configuration can edit this file directly; the adapter rereads it on the next request without a restart:
+
+```yaml
+- id: llm-pi-ai
+  config:
+    providers:
+      sub2api:
+        apiKeyEnv: SUB2API_API_KEY
+        api: openai-responses
+        baseURL: "{{openaiBaseUrl}}"
+        models:
+          - id: YOUR_MODEL_ID
 ```
 
-```bat os=cmd
-curl {{openaiBaseUrl}}/models -H "Authorization: Bearer <YOUR_API_KEY>"
-```
-
-```powershell os=powershell
-curl.exe {{openaiBaseUrl}}/models `
-  -H "Authorization: Bearer <YOUR_API_KEY>"
-```
-
-After the model list returns, create a session in the client and send a message.
+With `apiKeyEnv`, set `SUB2API_API_KEY` in the environment that launches DSH; alternatively keep using the credential saved through the UI.
 
 ## Notes
 
-- If the client asks for a full endpoint, use `{{openaiBaseUrl}}/chat/completions`.
-- The model ID must belong to the key's group.
-- Do not mix the official DeepSeek API address with this deployment's address.
+- DSH stores data under `~/.dsh` by default, or `%USERPROFILE%\.dsh` on Windows.
+- The official docs state that a Provider ID is permanent once saved; add a new provider and remove the old one to rename it.
+- Model IDs come from the group and the Keys page.

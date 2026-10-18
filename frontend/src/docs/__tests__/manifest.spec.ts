@@ -23,6 +23,10 @@ function contentKeys(content: Record<string, string>): string[] {
     .sort()
 }
 
+function hasOsVariant(content: string, os: string): boolean {
+  return content.includes(`os=${os}`) || content.includes(`class="docs-os-line" data-os="${os}"`)
+}
+
 function sectionIds(): string[] {
   return docsSections.map(section => section.id).sort()
 }
@@ -80,13 +84,37 @@ describe('docs manifest', () => {
   })
 
   it('gives every client article all three operating-system variants', () => {
-    for (const id of ['overview', 'codex', 'claude', 'gemini', 'grok', 'antigravity', 'deepseek', 'minimax', 'kimi', 'zcode', 'stepfun']) {
-      expect(zhContent[`../zh/${id}.md`]).toContain('os=unix')
-      expect(zhContent[`../zh/${id}.md`]).toContain('os=cmd')
-      expect(zhContent[`../zh/${id}.md`]).toContain('os=powershell')
-      expect(enContent[`../en/${id}.md`]).toContain('os=unix')
-      expect(enContent[`../en/${id}.md`]).toContain('os=cmd')
-      expect(enContent[`../en/${id}.md`]).toContain('os=powershell')
+    for (const id of ['overview', 'codex', 'claude', 'gemini', 'grok', 'antigravity', 'deepseek', 'minimax', 'kimi', 'stepfun']) {
+      for (const os of ['unix', 'cmd', 'powershell']) {
+        expect(hasOsVariant(zhContent[`../zh/${id}.md`], os)).toBe(true)
+        expect(hasOsVariant(enContent[`../en/${id}.md`], os)).toBe(true)
+      }
+    }
+  })
+
+  it('documents ZCode as a graphical client without shell-specific configuration', () => {
+    expect(zhContent['../zh/zcode.md']).toContain('图形客户端')
+    expect(enContent['../en/zcode.md']).toContain('graphical client')
+    expect(zhContent['../zh/zcode.md']).toContain('Model Providers')
+    expect(enContent['../en/zcode.md']).toContain('Model Providers')
+  })
+
+  it('links every client guide to its official documentation', () => {
+    const officialLinks: Record<string, string> = {
+      codex: 'developers.openai.com/codex/config-reference',
+      claude: 'code.claude.com/docs/en/env-vars',
+      gemini: 'github.com/google-gemini/gemini-cli/blob/main/docs/reference/configuration.md',
+      grok: 'docs.x.ai/build/settings/reference',
+      antigravity: 'antigravity.google/docs/cli/using',
+      deepseek: 'deepseek-harness.github.io/deepseek-harness/',
+      minimax: 'agent.minimax.io/docs/cli/configuration',
+      kimi: 'moonshotai.github.io/kimi-code/en/configuration/providers',
+      zcode: 'docs.z.ai/devpack/tool/zcode',
+      stepfun: 'platform.stepfun.com/docs/zh/step-code/configuration/models',
+    }
+    for (const [id, link] of Object.entries(officialLinks)) {
+      expect(zhContent[`../zh/${id}.md`]).toContain(link)
+      expect(enContent[`../en/${id}.md`]).toContain(link)
     }
   })
 

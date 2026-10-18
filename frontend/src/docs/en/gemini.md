@@ -2,6 +2,8 @@
 
 Gemini CLI reads the gateway address and key from environment variables.
 
+Official docs: https://github.com/google-gemini/gemini-cli/blob/main/docs/reference/configuration.md
+
 ## Configuration
 
 ```bash os=unix
@@ -21,6 +23,8 @@ $env:GOOGLE_GEMINI_BASE_URL="{{baseUrl}}"
 $env:GEMINI_API_KEY="<YOUR_API_KEY>"
 $env:GEMINI_MODEL="YOUR_MODEL_ID"
 ```
+
+> `GOOGLE_GEMINI_BASE_URL` must be HTTPS unless it points to `localhost`, `127.0.0.1`, or `[::1]`.
 
 ## Verify
 

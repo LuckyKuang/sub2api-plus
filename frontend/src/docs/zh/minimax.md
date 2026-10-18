@@ -1,48 +1,50 @@
 # MiniMax Code
 
-MiniMax Code 有两种后台账号模式：OAuth 和 API Key。客户端连接都使用控制台创建的 API Key；后台账号模式只影响上游调度。
+MiniMax Code 的 CLI 是 `mcode`。官方通过 `mcode provider add` 添加自定义供应商，适合把本站作为 OpenAI 兼容或 Anthropic 兼容端点接入。
 
-## 通用配置
+官方文档：https://agent.minimax.io/docs/cli/configuration
 
-| 项 | 值 |
-| --- | --- |
-| Base URL | `{{baseUrl}}` |
-| API Key | 在 [密钥页]({{keysUrl}}) 创建 |
-| Model | `YOUR_MODEL_ID` |
-| 协议 | Anthropic / Claude 兼容（以分组为准） |
-
-## OAuth 模式
-
-在后台“账号管理”里完成 MiniMax OAuth 授权。客户端仍然填写上面的 Base URL 和 API Key。
-
-## API Key 模式
-
-在后台添加 MiniMax API Key 账号。客户端配置与 OAuth 模式相同；区别只在后台账号类型。
-
-## Anthropic 兼容客户端
-
-如果客户端使用 Anthropic 兼容环境变量：
+## 设置 API Key
 
 ```bash os=unix
-export ANTHROPIC_BASE_URL="{{baseUrl}}"
-export ANTHROPIC_AUTH_TOKEN="<YOUR_API_KEY>"
+export MCODE_PROVIDER_API_KEY="<YOUR_API_KEY>"
 ```
 
 ```bat os=cmd
-set ANTHROPIC_BASE_URL={{baseUrl}}
-set ANTHROPIC_AUTH_TOKEN=<YOUR_API_KEY>
+set MCODE_PROVIDER_API_KEY=<YOUR_API_KEY>
 ```
 
 ```powershell os=powershell
-$env:ANTHROPIC_BASE_URL="{{baseUrl}}"
-$env:ANTHROPIC_AUTH_TOKEN="<YOUR_API_KEY>"
+$env:MCODE_PROVIDER_API_KEY="<YOUR_API_KEY>"
 ```
+
+## 添加供应商
+
+```bash
+mcode provider add \
+  --name sub2api \
+  --base-url "{{openaiBaseUrl}}" \
+  --api-format openai-responses \
+  --model "YOUR_MODEL_ID" \
+  --api-key-env MCODE_PROVIDER_API_KEY \
+  --use
+```
+
+- `--api-format` 可选 `openai-completions`、`openai-responses`、`anthropic-messages`。
+- 本站分组是 Responses 时用 `openai-responses`；普通 Chat Completions 用 `openai-completions`；Claude 分组用 `anthropic-messages`（此时 `--base-url` 用 `{{baseUrl}}`）。
+- `--use` 会先测试第一个模型再保存；测试失败不会写入配置。
 
 ## 验证
 
-先请求一次模型列表或发送一条短消息。如果返回 401，检查客户端填的是控制台 Key，而不是 MiniMax 官方 Key。
+```bash
+mcode provider list
+mcode provider test sub2api --model "YOUR_MODEL_ID"
+```
 
-## 注意
+进入 `mcode` 后用 `/provider` 选择供应商，或用 `/model` 切换模型。
 
-- 不要把 OAuth 账号的 token 直接填到客户端。
-- 模型 ID 以分组和密钥页为准。
+## 说明
+
+- OAuth / Token Plan 账号与自定义供应商是两条路径；客户端接入本站时使用上面的 API Key 供应商。
+- MiniMax Code 的用户数据目录默认是 `~/.minimax`；Windows 为 `%USERPROFILE%\.minimax`。
+- 不要把真实 API Key 写进仓库。

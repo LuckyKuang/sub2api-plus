@@ -1,40 +1,61 @@
 # StepFun · Step-Code
 
-StepFun / Step-Code 支持 Responses 和 Messages 客户端。客户端连接使用控制台 API Key。
+Step Code 通过 `~/.stepcode/models.json` 添加自定义模型供应商。官方支持 `openai-completions`、`openai-responses`、`anthropic-messages` 等协议；接入本站时使用 Responses 或 Anthropic Messages。
 
-## 配置
+官方文档：https://platform.stepfun.com/docs/zh/step-code/configuration/models
 
-| 项 | 值 |
-| --- | --- |
-| OpenAI / Responses Base URL | `{{openaiBaseUrl}}` |
-| Anthropic / Messages Base URL | `{{baseUrl}}` |
-| API Key | 在 [密钥页]({{keysUrl}}) 创建 |
-| Model | `YOUR_MODEL_ID` |
+## 配置文件
 
-## 选择协议
+<div class="docs-os-line" data-os="unix">macOS / Linux：<code>~/.stepcode/models.json</code></div>
 
-- Codex、OpenCode 等 Responses 客户端：使用 `{{openaiBaseUrl}}`。
-- Claude Code 等 Messages 客户端：使用 `{{baseUrl}}`。
-- 不要同时把两套协议混在同一个客户端配置里。
+<div class="docs-os-line" data-os="cmd">Windows CMD：<code>%USERPROFILE%\.stepcode\models.json</code></div>
 
-## Claude Code 兼容客户端
+<div class="docs-os-line" data-os="powershell">Windows PowerShell：<code>%USERPROFILE%\.stepcode\models.json</code></div>
 
-```bash os=unix
-export ANTHROPIC_BASE_URL="{{baseUrl}}"
-export ANTHROPIC_AUTH_TOKEN="<YOUR_API_KEY>"
+## Responses 分组
+
+```json
+{
+  "providers": {
+    "sub2api": {
+      "baseUrl": "{{openaiBaseUrl}}",
+      "api": "openai-responses",
+      "apiKey": "<YOUR_API_KEY>",
+      "models": [
+        { "id": "YOUR_MODEL_ID" }
+      ]
+    }
+  }
+}
 ```
 
-```bat os=cmd
-set ANTHROPIC_BASE_URL={{baseUrl}}
-set ANTHROPIC_AUTH_TOKEN=<YOUR_API_KEY>
+## Claude / Anthropic 分组
+
+```json
+{
+  "providers": {
+    "sub2api": {
+      "baseUrl": "{{baseUrl}}",
+      "api": "anthropic-messages",
+      "apiKey": "<YOUR_API_KEY>",
+      "models": [
+        { "id": "YOUR_MODEL_ID" }
+      ]
+    }
+  }
+}
 ```
 
-```powershell os=powershell
-$env:ANTHROPIC_BASE_URL="{{baseUrl}}"
-$env:ANTHROPIC_AUTH_TOKEN="<YOUR_API_KEY>"
+## 验证
+
+保存后重新打开 `/model` 加载变更，选择 `sub2api/YOUR_MODEL_ID`。命令行也可以运行：
+
+```bash
+step --provider sub2api --model YOUR_MODEL_ID
 ```
 
-## 注意
+## 说明
 
-- Step-Code 是版本号免填的客户端家族；后台不需要填写版本。
-- 模型 ID 以分组和密钥页为准。
+- `baseUrl` 对 OpenAI 兼容端点必须包含 `/v1`；`{{openaiBaseUrl}}` 已处理。
+- `apiKey` 会保存在本地 JSON 中，不要把真实 Key 提交到仓库。
+- 不要用 `STEP_API_KEY` / `STEP_BASE_URL` 指向本站；它们属于阶跃官方 Step 平台。
