@@ -13,9 +13,19 @@ Kimi Code 使用 Anthropic / Claude 兼容入口。后台的“Kimi Code”出�
 
 ## 如果客户端支持环境变量
 
-```bash
+```bash os=unix
 export ANTHROPIC_BASE_URL="{{baseUrl}}"
 export ANTHROPIC_AUTH_TOKEN="<YOUR_API_KEY>"
+```
+
+```bat os=cmd
+set ANTHROPIC_BASE_URL={{baseUrl}}
+set ANTHROPIC_AUTH_TOKEN=<YOUR_API_KEY>
+```
+
+```powershell os=powershell
+$env:ANTHROPIC_BASE_URL="{{baseUrl}}"
+$env:ANTHROPIC_AUTH_TOKEN="<YOUR_API_KEY>"
 ```
 
 ## 如果客户端只支持自定义 provider

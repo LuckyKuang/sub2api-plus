@@ -13,8 +13,17 @@ DeepSeek / DSH Desktop uses the gateway's OpenAI-compatible entry point. The "ou
 
 ## Verify
 
-```bash
+```bash os=unix
 curl {{openaiBaseUrl}}/models \
+  -H "Authorization: Bearer <YOUR_API_KEY>"
+```
+
+```bat os=cmd
+curl {{openaiBaseUrl}}/models -H "Authorization: Bearer <YOUR_API_KEY>"
+```
+
+```powershell os=powershell
+curl.exe {{openaiBaseUrl}}/models `
   -H "Authorization: Bearer <YOUR_API_KEY>"
 ```
 

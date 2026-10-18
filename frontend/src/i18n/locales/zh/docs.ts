@@ -1,6 +1,17 @@
 export default {
   docs: {
     title: '文档教程',
+    useKeyTitle: '推荐：直接使用密钥页生成配置',
+    useKeyDesc: 'API 密钥 → 使用密钥会根据当前 Key、客户端和系统生成配置，避免手写 Key、Base URL 和模型。',
+    useKeyCta: '打开 API 密钥',
+    os: {
+      title: '选择你的操作系统',
+      hint: '切换后，本页所有系统相关命令会同步显示，复制时不会混用。',
+      label: '操作系统',
+      unix: 'macOS / Linux',
+      cmd: 'Windows CMD',
+      powershell: 'Windows PowerShell',
+    },
     open: '查看文档教程',
     copy: '复制',
     copied: '已复制',

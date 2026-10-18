@@ -1,6 +1,17 @@
 export default {
   docs: {
     title: 'Docs & Guides',
+    useKeyTitle: 'Recommended: generate the config from the Keys page',
+    useKeyDesc: 'API Keys → Use key generates a config for the current key, client, and operating system, so you do not hand-write the key, base URL, and model.',
+    useKeyCta: 'Open API keys',
+    os: {
+      title: 'Choose your operating system',
+      hint: 'Switching updates every system-specific command on this page so copied commands never mix shells.',
+      label: 'Operating system',
+      unix: 'macOS / Linux',
+      cmd: 'Windows CMD',
+      powershell: 'Windows PowerShell',
+    },
     open: 'Open docs & guides',
     copy: 'Copy',
     copied: 'Copied',

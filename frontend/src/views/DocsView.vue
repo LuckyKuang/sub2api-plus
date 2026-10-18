@@ -15,6 +15,7 @@
       :error="error"
       :anonymous="isAnonymous"
       :not-found="notFound"
+      :show-use-key-hint="showUseKeyHint"
       :locale="locale"
       @retry="loadMarkdown"
     />
@@ -37,6 +38,7 @@
       :error="error"
       :anonymous="isAnonymous"
       :not-found="notFound"
+      :show-use-key-hint="showUseKeyHint"
       :locale="locale"
       @retry="loadMarkdown"
     />
@@ -85,6 +87,11 @@ const activeSection = computed(() => findDocsSection(requestedSection.value) ?? 
 const activeIndex = computed(() => docsSectionIndex(activeSection.value.id))
 const prevSection = computed(() => docsSections[activeIndex.value - 1])
 const nextSection = computed(() => docsSections[activeIndex.value + 1])
+const showUseKeyHint = computed(() =>
+  activeSection.value.group === 'clients' ||
+  activeSection.value.id === 'overview' ||
+  activeSection.value.id === 'ccswitch',
+)
 
 const isEmbedded = computed(() => route.query.embedded === '1' && authStore.isAuthenticated)
 const isAnonymous = computed(() => !authStore.isAuthenticated)

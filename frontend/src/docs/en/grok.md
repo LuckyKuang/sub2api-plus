@@ -1,12 +1,30 @@
 # Grok CLI
 
-Grok CLI reads `~/.grok/config.toml`. Text models use the Responses protocol (`api_backend = "responses"`).
+Grok CLI reads its configuration file from:
+
+<div class="docs-os-line" data-os="unix">macOS / Linux: <code>~/.grok/config.toml</code></div>
+
+<div class="docs-os-line" data-os="cmd">Windows CMD: <code>%USERPROFILE%\.grok\config.toml</code></div>
+
+<div class="docs-os-line" data-os="powershell">Windows PowerShell: <code>%USERPROFILE%\.grok\config.toml</code></div>
+
+Text models use the Responses protocol (`api_backend = "responses"`).
 
 ## Environment variables
 
-```bash
+```bash os=unix
 export GROK_MODELS_BASE_URL="{{baseUrl}}"
 export XAI_API_KEY="<YOUR_API_KEY>"
+```
+
+```bat os=cmd
+set GROK_MODELS_BASE_URL={{baseUrl}}
+set XAI_API_KEY=<YOUR_API_KEY>
+```
+
+```powershell os=powershell
+$env:GROK_MODELS_BASE_URL="{{baseUrl}}"
+$env:XAI_API_KEY="<YOUR_API_KEY>"
 ```
 
 ## Configuration

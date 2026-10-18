@@ -9,9 +9,19 @@ Antigravity uses dedicated endpoints. Choose by client protocol:
 
 ## Claude Code style
 
-```bash
+```bash os=unix
 export ANTHROPIC_BASE_URL="{{baseUrl}}/antigravity"
 export ANTHROPIC_AUTH_TOKEN="<YOUR_API_KEY>"
+```
+
+```bat os=cmd
+set ANTHROPIC_BASE_URL={{baseUrl}}/antigravity
+set ANTHROPIC_AUTH_TOKEN=<YOUR_API_KEY>
+```
+
+```powershell os=powershell
+$env:ANTHROPIC_BASE_URL="{{baseUrl}}/antigravity"
+$env:ANTHROPIC_AUTH_TOKEN="<YOUR_API_KEY>"
 ```
 
 ## Gemini style

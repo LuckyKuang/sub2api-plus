@@ -56,6 +56,54 @@
             <p class="mt-2 text-sm text-gray-500 dark:text-dark-400">{{ description }}</p>
           </header>
 
+          <div
+            v-if="showUseKeyHint && !notFound"
+            class="mb-5 flex flex-col gap-3 rounded-xl border border-primary-200 bg-primary-50/80 px-4 py-4 sm:flex-row sm:items-center sm:justify-between dark:border-primary-900/50 dark:bg-primary-950/30"
+          >
+            <div class="min-w-0">
+              <p class="text-sm font-semibold text-primary-900 dark:text-primary-100">{{ t('docs.useKeyTitle') }}</p>
+              <p class="mt-0.5 text-xs leading-5 text-primary-800/80 dark:text-primary-200/80">{{ t('docs.useKeyDesc') }}</p>
+            </div>
+            <RouterLink
+              to="/keys"
+              class="inline-flex shrink-0 items-center justify-center rounded-lg bg-primary-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-primary-700"
+            >
+              {{ t('docs.useKeyCta') }}
+              <span class="ml-1" aria-hidden="true">→</span>
+            </RouterLink>
+          </div>
+
+          <div
+            v-if="hasOsContent && !notFound"
+            class="mb-5 rounded-xl border-2 border-primary-300 bg-white p-4 shadow-sm dark:border-primary-800 dark:bg-dark-900"
+          >
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div class="min-w-0">
+                <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('docs.os.title') }}</p>
+                <p class="mt-0.5 text-xs leading-5 text-gray-500 dark:text-dark-400">{{ t('docs.os.hint') }}</p>
+              </div>
+              <div
+                class="grid shrink-0 grid-cols-1 gap-1 rounded-lg bg-gray-100 p-1 sm:grid-cols-3 dark:bg-dark-800"
+                role="group"
+                :aria-label="t('docs.os.label')"
+              >
+                <button
+                  v-for="option in osOptions"
+                  :key="option.id"
+                  type="button"
+                  class="whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
+                  :class="selectedOS === option.id
+                    ? 'bg-primary-600 text-white shadow-sm'
+                    : 'text-gray-600 hover:bg-white hover:text-gray-900 dark:text-dark-300 dark:hover:bg-dark-700 dark:hover:text-white'"
+                  :aria-pressed="selectedOS === option.id"
+                  @click="selectOS(option.id)"
+                >
+                  {{ t(option.labelKey) }}
+                </button>
+              </div>
+            </div>
+          </div>
+
           <div v-if="notFound" class="py-12 text-center">
             <p class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('docs.notFoundTitle') }}</p>
             <p class="mt-2 text-sm text-gray-500 dark:text-dark-400">{{ t('docs.notFoundDesc') }}</p>
@@ -74,7 +122,15 @@
             </button>
           </div>
 
-          <DocMarkdown v-else :source="markdown" :variables="variables" @toc="onToc" />
+          <Transition v-else name="docs-os-swap" mode="out-in">
+            <DocMarkdown
+              :key="selectedOS"
+              :source="markdown"
+              :variables="variables"
+              :selected-os="selectedOS"
+              @toc="onToc"
+            />
+          </Transition>
 
           <nav v-if="!loading && !error && !notFound" class="mt-8 flex flex-col gap-3 border-t border-gray-100 pt-5 sm:flex-row sm:justify-between dark:border-dark-700">
             <RouterLink
@@ -162,7 +218,7 @@ import {
   type DocsLocale,
   type DocsSection,
 } from '@/docs/manifest'
-import { renderContactInfo, type DocsTocItem } from '@/docs/render'
+import { hasOsCodeBlocks, renderContactInfo, type DocsOS, type DocsTocItem } from '@/docs/render'
 import DocMarkdown from './DocMarkdown.vue'
 
 const props = defineProps<{
@@ -180,6 +236,7 @@ const props = defineProps<{
   error: string
   anonymous: boolean
   notFound?: boolean
+  showUseKeyHint?: boolean
   locale: DocsLocale
 }>()
 
@@ -190,6 +247,36 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const router = useRouter()
 const groups = docsGroups
+const OS_STORAGE_KEY = 'sub2api.docs.os'
+const osOptions: { id: DocsOS; labelKey: string }[] = [
+  { id: 'unix', labelKey: 'docs.os.unix' },
+  { id: 'cmd', labelKey: 'docs.os.cmd' },
+  { id: 'powershell', labelKey: 'docs.os.powershell' },
+]
+
+function detectDocsOS(): DocsOS {
+  try {
+    const stored = window.localStorage.getItem(OS_STORAGE_KEY)
+    if (stored === 'unix' || stored === 'cmd' || stored === 'powershell') return stored
+  } catch {
+    // localStorage may be unavailable in hardened browsers.
+  }
+  return typeof navigator !== 'undefined' && /Windows/i.test(navigator.userAgent)
+    ? 'powershell'
+    : 'unix'
+}
+
+const selectedOS = ref<DocsOS>(detectDocsOS())
+const hasOsContent = computed(() => hasOsCodeBlocks(props.markdown))
+
+function selectOS(os: DocsOS) {
+  selectedOS.value = os
+  try {
+    window.localStorage.setItem(OS_STORAGE_KEY, os)
+  } catch {
+    // The selection still applies for the current page.
+  }
+}
 const toc = ref<DocsTocItem[]>([])
 const activeHeading = ref('')
 const mobileSection = ref(props.activeId)
@@ -262,3 +349,27 @@ onUnmounted(() => {
   if (scrollRaf) cancelAnimationFrame(scrollRaf)
 })
 </script>
+
+<style scoped>
+.docs-os-swap-enter-active,
+.docs-os-swap-leave-active {
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.docs-os-swap-enter-from {
+  opacity: 0;
+  transform: translateY(4px);
+}
+
+.docs-os-swap-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .docs-os-swap-enter-active,
+  .docs-os-swap-leave-active {
+    transition: none;
+  }
+}
+</style>

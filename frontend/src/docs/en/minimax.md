@@ -19,6 +19,25 @@ Authorize MiniMax OAuth under Accounts in the admin panel. The client still uses
 
 Add a MiniMax API Key account in the admin panel. Client configuration is identical to OAuth mode; only the account type differs.
 
+## Anthropic-compatible clients
+
+If the client uses Anthropic-compatible environment variables:
+
+```bash os=unix
+export ANTHROPIC_BASE_URL="{{baseUrl}}"
+export ANTHROPIC_AUTH_TOKEN="<YOUR_API_KEY>"
+```
+
+```bat os=cmd
+set ANTHROPIC_BASE_URL={{baseUrl}}
+set ANTHROPIC_AUTH_TOKEN=<YOUR_API_KEY>
+```
+
+```powershell os=powershell
+$env:ANTHROPIC_BASE_URL="{{baseUrl}}"
+$env:ANTHROPIC_AUTH_TOKEN="<YOUR_API_KEY>"
+```
+
 ## Verify
 
 Request the model list or send a short message. A 401 usually means the client is using a MiniMax key instead of the panel key.

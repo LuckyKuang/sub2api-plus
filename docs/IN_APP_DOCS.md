@@ -31,7 +31,7 @@ Guides live in `frontend/src/docs/{zh,en}/*.md` and are registered in
 families declared by the gateway. MiniMax OAuth and API Key share one article;
 OpenCode, Cline, Command Code, and TypeSafe / System One live in the
 "Compatible clients" appendix because they do not have a dedicated outbound
-preset.
+preset; CC Switch has its own import guide under the troubleshooting group.
 
 Both locales are required. `frontend/src/docs/__tests__/manifest.spec.ts`
 checks that every manifest section has exactly one Chinese and one English file,
@@ -41,6 +41,11 @@ placeholders are used.
 No screenshots are shipped. Guides use numbered steps, code blocks, tables, and
 callouts so English and Chinese can be maintained independently and light/dark
 mode needs only CSS.
+
+Code fences may carry an `os=unix`, `os=cmd`, or `os=powershell` marker. The
+renderer turns them into labelled blocks, and the page-level operating-system
+selector shows only the selected variant. Articles without OS-tagged blocks do
+not render the selector.
 
 ## Runtime variables
 
@@ -78,5 +83,7 @@ bundling it.
    title/description, and English title/description.
 2. Add `frontend/src/docs/zh/<id>.md` and `frontend/src/docs/en/<id>.md`.
 3. Use only the runtime variables above; use `YOUR_MODEL_ID` for examples.
-4. Run the docs manifest and render tests.
-5. Update this document if the access model or content contract changes.
+4. Tag system-specific fences with `os=unix`, `os=cmd`, or `os=powershell`;
+   provide all three variants for client setup commands.
+5. Run the docs manifest and render tests.
+6. Update this document if the access model or content contract changes.

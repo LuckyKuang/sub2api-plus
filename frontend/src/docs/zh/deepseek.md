@@ -13,8 +13,17 @@ DeepSeek / DSH Desktop 使用网关的 OpenAI 兼容入口。控制台里的“�
 
 ## 验证
 
-```bash
+```bash os=unix
 curl {{openaiBaseUrl}}/models \
+  -H "Authorization: Bearer <YOUR_API_KEY>"
+```
+
+```bat os=cmd
+curl {{openaiBaseUrl}}/models -H "Authorization: Bearer <YOUR_API_KEY>"
+```
+
+```powershell os=powershell
+curl.exe {{openaiBaseUrl}}/models `
   -H "Authorization: Bearer <YOUR_API_KEY>"
 ```
 

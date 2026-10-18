@@ -17,6 +17,23 @@ StepFun / Step-Code 支持 Responses 和 Messages 客户端。客户端连接使
 - Claude Code 等 Messages 客户端：使用 `{{baseUrl}}`。
 - 不要同时把两套协议混在同一个客户端配置里。
 
+## Claude Code 兼容客户端
+
+```bash os=unix
+export ANTHROPIC_BASE_URL="{{baseUrl}}"
+export ANTHROPIC_AUTH_TOKEN="<YOUR_API_KEY>"
+```
+
+```bat os=cmd
+set ANTHROPIC_BASE_URL={{baseUrl}}
+set ANTHROPIC_AUTH_TOKEN=<YOUR_API_KEY>
+```
+
+```powershell os=powershell
+$env:ANTHROPIC_BASE_URL="{{baseUrl}}"
+$env:ANTHROPIC_AUTH_TOKEN="<YOUR_API_KEY>"
+```
+
 ## 注意
 
 - Step-Code 是版本号免填的客户端家族；后台不需要填写版本。

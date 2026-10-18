@@ -9,9 +9,19 @@ Antigravity 使用独立端点。根据客户端协议选择：
 
 ## Claude Code 风格
 
-```bash
+```bash os=unix
 export ANTHROPIC_BASE_URL="{{baseUrl}}/antigravity"
 export ANTHROPIC_AUTH_TOKEN="<YOUR_API_KEY>"
+```
+
+```bat os=cmd
+set ANTHROPIC_BASE_URL={{baseUrl}}/antigravity
+set ANTHROPIC_AUTH_TOKEN=<YOUR_API_KEY>
+```
+
+```powershell os=powershell
+$env:ANTHROPIC_BASE_URL="{{baseUrl}}/antigravity"
+$env:ANTHROPIC_AUTH_TOKEN="<YOUR_API_KEY>"
 ```
 
 ## Gemini 风格

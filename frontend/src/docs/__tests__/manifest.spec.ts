@@ -63,6 +63,7 @@ describe('docs manifest', () => {
     }
     expect(ids).not.toContain('minimax_apikey')
     expect(ids).toContain('compatibility')
+    expect(ids).toContain('ccswitch')
     expect(ids).toContain('network')
   })
 
@@ -76,6 +77,26 @@ describe('docs manifest', () => {
 
   it('rejects unknown sections instead of rendering an empty page', async () => {
     await expect(loadDocsMarkdown('zh', 'missing')).rejects.toThrow('Missing docs content')
+  })
+
+  it('gives every client article all three operating-system variants', () => {
+    for (const id of ['overview', 'codex', 'claude', 'gemini', 'grok', 'antigravity', 'deepseek', 'minimax', 'kimi', 'zcode', 'stepfun']) {
+      expect(zhContent[`../zh/${id}.md`]).toContain('os=unix')
+      expect(zhContent[`../zh/${id}.md`]).toContain('os=cmd')
+      expect(zhContent[`../zh/${id}.md`]).toContain('os=powershell')
+      expect(enContent[`../en/${id}.md`]).toContain('os=unix')
+      expect(enContent[`../en/${id}.md`]).toContain('os=cmd')
+      expect(enContent[`../en/${id}.md`]).toContain('os=powershell')
+    }
+  })
+
+  it('uses the OpenAI provider name in the Codex guide for remote compaction', () => {
+    for (const content of [zhContent['../zh/codex.md'], enContent['../en/codex.md']]) {
+      expect(content).toContain('model_provider = "OpenAI"')
+      expect(content).toContain('[model_providers.OpenAI]')
+      expect(content).toContain('name = "OpenAI"')
+      expect(content).not.toContain('model_providers.sub2api')
+    }
   })
 
   it('starts every article with a level-one heading', () => {

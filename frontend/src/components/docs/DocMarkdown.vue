@@ -1,16 +1,23 @@
 <template>
-  <div ref="container" class="docs-markdown" v-html="html" @click="handleClick"></div>
+  <div
+    ref="container"
+    class="docs-markdown"
+    :data-docs-os="selectedOs"
+    v-html="html"
+    @click="handleClick"
+  ></div>
 </template>
 
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { renderDocMarkdown, type DocsTocItem } from '@/docs/render'
+import { renderDocMarkdown, type DocsOS, type DocsTocItem } from '@/docs/render'
 
 const props = defineProps<{
   source: string
   variables: Record<string, string>
+  selectedOs: DocsOS
 }>()
 
 const emit = defineEmits<{
@@ -120,6 +127,52 @@ watch(
   font-size: 0.9375rem;
   line-height: 1.75;
   overflow-wrap: anywhere;
+}
+
+
+.docs-markdown :deep(.docs-os-line) {
+  display: block;
+  margin: 0.35rem 0;
+}
+
+.docs-markdown :deep(pre[data-os]) {
+  position: relative;
+  padding-top: 2.35rem;
+}
+
+.docs-markdown :deep(pre[data-os])::before {
+  content: attr(data-os-label);
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  border-bottom: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 0.75rem 0.75rem 0 0;
+  background: rgb(255 255 255 / 7%);
+  padding: 0.45rem 5rem 0.45rem 1rem;
+  color: #d1d5db;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.docs-markdown[data-docs-os="unix"] :deep(pre[data-os="cmd"]),
+.docs-markdown[data-docs-os="unix"] :deep(pre[data-os="powershell"]),
+.docs-markdown[data-docs-os="cmd"] :deep(pre[data-os="unix"]),
+.docs-markdown[data-docs-os="cmd"] :deep(pre[data-os="powershell"]),
+.docs-markdown[data-docs-os="powershell"] :deep(pre[data-os="unix"]),
+.docs-markdown[data-docs-os="powershell"] :deep(pre[data-os="cmd"]) {
+  display: none;
+}
+
+.docs-markdown[data-docs-os="unix"] :deep(.docs-os-line[data-os="cmd"]),
+.docs-markdown[data-docs-os="unix"] :deep(.docs-os-line[data-os="powershell"]),
+.docs-markdown[data-docs-os="cmd"] :deep(.docs-os-line[data-os="unix"]),
+.docs-markdown[data-docs-os="cmd"] :deep(.docs-os-line[data-os="powershell"]),
+.docs-markdown[data-docs-os="powershell"] :deep(.docs-os-line[data-os="unix"]),
+.docs-markdown[data-docs-os="powershell"] :deep(.docs-os-line[data-os="cmd"]) {
+  display: none;
 }
 
 .docs-markdown :deep(h1) {

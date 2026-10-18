@@ -4,23 +4,19 @@ Gemini CLI 通过环境变量读取网关地址和密钥。
 
 ## 配置
 
-```bash
+```bash os=unix
 export GOOGLE_GEMINI_BASE_URL="{{baseUrl}}"
 export GEMINI_API_KEY="<YOUR_API_KEY>"
 export GEMINI_MODEL="YOUR_MODEL_ID"
 ```
 
-Windows CMD：
-
-```bat
+```bat os=cmd
 set GOOGLE_GEMINI_BASE_URL={{baseUrl}}
 set GEMINI_API_KEY=<YOUR_API_KEY>
 set GEMINI_MODEL=YOUR_MODEL_ID
 ```
 
-PowerShell：
-
-```powershell
+```powershell os=powershell
 $env:GOOGLE_GEMINI_BASE_URL="{{baseUrl}}"
 $env:GEMINI_API_KEY="<YOUR_API_KEY>"
 $env:GEMINI_MODEL="YOUR_MODEL_ID"

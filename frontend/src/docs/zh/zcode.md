@@ -13,9 +13,19 @@ GLM / ZCode 使用 Anthropic / Claude 兼容入口。不要把它和后台的“
 
 ## Claude Code 风格
 
-```bash
+```bash os=unix
 export ANTHROPIC_BASE_URL="{{baseUrl}}"
 export ANTHROPIC_AUTH_TOKEN="<YOUR_API_KEY>"
+```
+
+```bat os=cmd
+set ANTHROPIC_BASE_URL={{baseUrl}}
+set ANTHROPIC_AUTH_TOKEN=<YOUR_API_KEY>
+```
+
+```powershell os=powershell
+$env:ANTHROPIC_BASE_URL="{{baseUrl}}"
+$env:ANTHROPIC_AUTH_TOKEN="<YOUR_API_KEY>"
 ```
 
 ## 注意

@@ -140,6 +140,15 @@ export const docsSections: DocsSection[] = [
     },
   },
   {
+    id: 'ccswitch',
+    group: 'troubleshooting',
+    title: { zh: 'CC Switch', en: 'CC Switch' },
+    description: {
+      zh: '通过 CC Switch 导入或手动添加当前供应商。',
+      en: 'Import this provider through CC Switch or add it manually.',
+    },
+  },
+  {
     id: 'network',
     group: 'troubleshooting',
     title: { zh: '网络与代理', en: 'Network and proxy' },

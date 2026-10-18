@@ -6,6 +6,14 @@ marked.setOptions({
   breaks: false,
 })
 
+export type DocsOS = 'unix' | 'cmd' | 'powershell'
+
+export const DOCS_OS_LABELS: Record<DocsOS, string> = {
+  unix: 'macOS / Linux',
+  cmd: 'Windows CMD',
+  powershell: 'Windows PowerShell',
+}
+
 export interface DocsTocItem {
   id: string
   text: string
@@ -18,6 +26,8 @@ export interface RenderedDocsMarkdown {
 }
 
 const PLACEHOLDER = /\{\{\s*([a-zA-Z][a-zA-Z0-9]*)\s*\}\}/g
+const OS_CODE_FENCE = /^```([^\n]*)\n([\s\S]*?)^```[ \t]*$/gm
+const OS_FENCE_INFO = /\bos=(unix|cmd|powershell)\b/
 
 /**
  * Replace `{{variable}}` placeholders before Markdown parsing. Values come from
@@ -31,6 +41,38 @@ export function interpolateDocMarkdown(
   return source.replace(PLACEHOLDER, (match, name: string) => {
     const value = variables[name]
     return value === undefined ? match : value
+  })
+}
+
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+}
+
+/** True when the article contains at least one OS-tagged code block. */
+export function hasOsCodeBlocks(source: string): boolean {
+  return /^```[^\n]*\bos=(?:unix|cmd|powershell)\b/m.test(source) ||
+    /class="docs-os-(?:line|inline)"[^>]*data-os="(?:unix|cmd|powershell)"/.test(source)
+}
+
+/**
+ * Convert OS-tagged fenced blocks into explicit `<pre data-os>` blocks before
+ * Markdown parsing. The page-level OS switch then only shows the matching
+ * blocks, and each block carries a visible label for the selected system.
+ */
+export function extractOsCodeBlocks(source: string): string {
+  return source.replace(OS_CODE_FENCE, (match, info: string, code: string) => {
+    const osMatch = info.match(OS_FENCE_INFO)
+    if (!osMatch) return match
+    const os = osMatch[1] as DocsOS
+    const language = (info.trim().split(/\s+/)[0] || 'text')
+      .replace(/[^a-z0-9-]/gi, '')
+      .toLowerCase() || 'text'
+    const body = escapeHtml(code.replace(/\n$/, ''))
+    return `<pre class="docs-code" data-os="${os}" data-os-label="${DOCS_OS_LABELS[os]}"><code class="language-${language}">${body}</code></pre>\n`
   })
 }
 
@@ -50,9 +92,10 @@ export function renderDocMarkdown(
   variables: Record<string, string>,
 ): RenderedDocsMarkdown {
   const interpolated = interpolateDocMarkdown(source, variables)
-  const parsed = marked.parse(interpolated) as string
+  const withOsBlocks = extractOsCodeBlocks(interpolated)
+  const parsed = marked.parse(withOsBlocks) as string
   const sanitized = DOMPurify.sanitize(parsed, {
-    ADD_ATTR: ['target', 'rel'],
+    ADD_ATTR: ['target', 'rel', 'data-os', 'data-os-label'],
   })
 
   const toc: DocsTocItem[] = []

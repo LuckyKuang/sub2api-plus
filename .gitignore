@@ -128,6 +128,8 @@ tests
 !skills/release-cli/tests/
 !skills/release-cli/tests/**
 CLAUDE.md
+!frontend/src/docs/en/claude.md
+!frontend/src/docs/zh/claude.md
 .claude
 scripts
 !backend/scripts/

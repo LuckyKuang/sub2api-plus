@@ -19,6 +19,25 @@ MiniMax Code 有两种后台账号模式：OAuth 和 API Key。客户端连接�
 
 在后台添加 MiniMax API Key 账号。客户端配置与 OAuth 模式相同；区别只在后台账号类型。
 
+## Anthropic 兼容客户端
+
+如果客户端使用 Anthropic 兼容环境变量：
+
+```bash os=unix
+export ANTHROPIC_BASE_URL="{{baseUrl}}"
+export ANTHROPIC_AUTH_TOKEN="<YOUR_API_KEY>"
+```
+
+```bat os=cmd
+set ANTHROPIC_BASE_URL={{baseUrl}}
+set ANTHROPIC_AUTH_TOKEN=<YOUR_API_KEY>
+```
+
+```powershell os=powershell
+$env:ANTHROPIC_BASE_URL="{{baseUrl}}"
+$env:ANTHROPIC_AUTH_TOKEN="<YOUR_API_KEY>"
+```
+
 ## 验证
 
 先请求一次模型列表或发送一条短消息。如果返回 401，检查客户端填的是控制台 Key，而不是 MiniMax 官方 Key。

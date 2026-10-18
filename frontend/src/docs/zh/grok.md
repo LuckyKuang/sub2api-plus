@@ -1,12 +1,30 @@
 # Grok CLI
 
-Grok CLI 读取 `~/.grok/config.toml`。文本模型使用 Responses 协议（`api_backend = "responses"`）。
+Grok CLI 读取配置文件：
+
+<div class="docs-os-line" data-os="unix">macOS / Linux：<code>~/.grok/config.toml</code></div>
+
+<div class="docs-os-line" data-os="cmd">Windows CMD：<code>%USERPROFILE%\.grok\config.toml</code></div>
+
+<div class="docs-os-line" data-os="powershell">Windows PowerShell：<code>%USERPROFILE%\.grok\config.toml</code></div>
+
+文本模型使用 Responses 协议（`api_backend = "responses"`）。
 
 ## 环境变量
 
-```bash
+```bash os=unix
 export GROK_MODELS_BASE_URL="{{baseUrl}}"
 export XAI_API_KEY="<YOUR_API_KEY>"
+```
+
+```bat os=cmd
+set GROK_MODELS_BASE_URL={{baseUrl}}
+set XAI_API_KEY=<YOUR_API_KEY>
+```
+
+```powershell os=powershell
+$env:GROK_MODELS_BASE_URL="{{baseUrl}}"
+$env:XAI_API_KEY="<YOUR_API_KEY>"
 ```
 
 ## 配置

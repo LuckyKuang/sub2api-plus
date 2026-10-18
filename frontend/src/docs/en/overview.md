@@ -24,10 +24,21 @@ Model IDs come from the key's group and its channels, so they are intentionally 
 
 ## 4. Send the first request
 
-```bash
+```bash os=unix
 curl {{openaiBaseUrl}}/chat/completions \
   -H "Authorization: Bearer <YOUR_API_KEY>" \
   -H "Content-Type: application/json" \
+  -d '{"model":"YOUR_MODEL_ID","messages":[{"role":"user","content":"Hello"}]}'
+```
+
+```bat os=cmd
+curl {{openaiBaseUrl}}/chat/completions -H "Authorization: Bearer <YOUR_API_KEY>" -H "Content-Type: application/json" -d "{\"model\":\"YOUR_MODEL_ID\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello\"}]}"
+```
+
+```powershell os=powershell
+curl.exe {{openaiBaseUrl}}/chat/completions `
+  -H "Authorization: Bearer <YOUR_API_KEY>" `
+  -H "Content-Type: application/json" `
   -d '{"model":"YOUR_MODEL_ID","messages":[{"role":"user","content":"Hello"}]}'
 ```
 
