@@ -12,6 +12,7 @@ belong in GitHub Release notes.
 - [DeepSeek, Kimi, Zhipu and MiniMax official model catalog](CN_PROVIDER_MODELS.md)
 - [Claude / Anthropic reset-credit status](providers/CLAUDE.md)
 - [Grok / xAI](providers/GROK.md)
+- [Gemini / Vertex model discovery and explicit context caching](providers/GEMINI.md)
 - [Sora status and reserved configuration](providers/SORA.md)
 - [Antigravity](providers/ANTIGRAVITY.md)
 - [DeepSeek empty-mapping whitelist](providers/DEEPSEEK.md)

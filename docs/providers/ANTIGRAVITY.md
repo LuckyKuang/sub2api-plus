@@ -17,7 +17,7 @@ operation observes new settings. Account refreshes use the credential-owning
 account's configured identity. The `loadCodeAssist` request body's
 `metadata.ideVersion` matches the selected Antigravity UA version.
 
-The compiled UA is `antigravity/2.9.1 windows/amd64`. The privacy endpoints
+The compiled UA is `antigravity/hub/2.23.0 linux/amd64`. The privacy endpoints
 `/v1internal:setUserSettings` and `/v1internal:fetchUserInfo` on
 `daily-cloudcode-pa.googleapis.com` also send the trusted SDK declaration
 `X-Goog-Api-Client: gl-node/22.21.1`. It is independent of the CLI version and is

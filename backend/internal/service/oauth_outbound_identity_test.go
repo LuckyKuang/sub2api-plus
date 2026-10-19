@@ -45,7 +45,7 @@ func TestAntigravityPrivacyIdentitySourcePriority(t *testing.T) {
 				settings.Profiles["antigravity"] = OutboundIdentitySelection{Preset: "antigravity", Version: "1.20.5"}
 				expectedSource, expectedVersion = "global", "1.20.5"
 				if source == "account" {
-					account.Credentials[outboundIdentityCredential] = OutboundIdentitySelection{Preset: "antigravity", UserAgent: "antigravity/1.20.6 linux/arm64", Version: "1.20.9"}
+					account.Credentials[outboundIdentityCredential] = OutboundIdentitySelection{Preset: "antigravity", UserAgent: "antigravity/hub/1.20.6 linux/arm64", Version: "1.20.9"}
 					expectedSource, expectedVersion = "account", "1.20.9"
 				} else if source == "invalid_account" {
 					account.Credentials[outboundIdentityCredential] = OutboundIdentitySelection{Preset: "antigravity", UserAgent: "untrusted"}
@@ -65,7 +65,7 @@ func TestAntigravityPrivacyIdentitySourcePriority(t *testing.T) {
 			require.Equal(t, expectedSource, base.Source)
 			require.Equal(t, expectedVersion, base.Version)
 			if source == "account" {
-				require.Equal(t, "antigravity/1.20.9 linux/arm64", base.UserAgent, "version-only changes preserve the system fingerprint")
+				require.Equal(t, "antigravity/hub/1.20.9 linux/arm64", base.UserAgent, "version-only changes preserve the system fingerprint")
 			}
 			for _, req := range capturePrivacyIdentity(t, ctx) {
 				require.Equal(t, base.UserAgent, req.UserAgent())
@@ -84,6 +84,35 @@ func TestAntigravityPrivacyIdentitySourcePriority(t *testing.T) {
 	}
 }
 
+func TestAntigravityLegacyFamilyUserAgentFallsThrough(t *testing.T) {
+	// 官方 v0.2.17 把家族从 antigravity/<v> 改为 antigravity/hub/<v>；旧家族 UA
+	// 不再是合法预设候选，必须被拒绝并按既有规则原子回退到下一身份源。
+	_, err := buildOutboundIdentity(OutboundIdentitySelection{
+		Preset: "antigravity", UserAgent: "antigravity/2.9.1 linux/amd64",
+	})
+	require.ErrorContains(t, err, "User-Agent must match the selected preset")
+
+	// 同一版本在新家族下仍然合法，证明拒绝的是家族前缀而不是版本。
+	accepted, err := buildOutboundIdentity(OutboundIdentitySelection{
+		Preset: "antigravity", UserAgent: "antigravity/hub/2.9.1 linux/amd64",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "antigravity/hub/2.9.1 linux/amd64", accepted.UserAgent)
+	require.Equal(t, "2.9.1", accepted.Version)
+
+	settings := emptyOutboundIdentitySettings()
+	settings.Profiles["antigravity"] = OutboundIdentitySelection{Preset: "antigravity", Version: "1.20.5"}
+	_, ctx := outboundIdentityTestSettings(t, settings)
+	account := &Account{ID: 73, Platform: PlatformAntigravity, Type: AccountTypeOAuth, Credentials: map[string]any{
+		outboundIdentityCredential: OutboundIdentitySelection{Preset: "antigravity", UserAgent: "antigravity/2.9.1 linux/amd64"},
+	}}
+	base, ok := outboundidentity.FromContext(WithAccountOutboundIdentity(ctx, account))
+	require.True(t, ok)
+	require.Equal(t, "global", base.Source, "legacy family candidate must fall through atomically")
+	require.Equal(t, "antigravity/hub/1.20.5 linux/amd64", base.UserAgent)
+	require.Equal(t, "1.20.5", base.Version)
+}
+
 func TestAntigravityOAuthIdentityAcrossDiscoveryAndPrivacy(t *testing.T) {
 	for _, entry := range []string{"exchange", "validate_refresh"} {
 		t.Run(entry, func(t *testing.T) {
@@ -100,7 +129,7 @@ func TestAntigravityOAuthIdentityAcrossDiscoveryAndPrivacy(t *testing.T) {
 				var paths []string
 				http.DefaultTransport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
 					paths = append(paths, req.URL.Path)
-					require.Equal(t, "antigravity/"+version+" linux/amd64", req.UserAgent())
+					require.Equal(t, "antigravity/hub/"+version+" linux/amd64", req.UserAgent())
 					identity, ok := outboundidentity.FromContext(req.Context())
 					require.True(t, ok)
 					require.Zero(t, identity.AccountID)

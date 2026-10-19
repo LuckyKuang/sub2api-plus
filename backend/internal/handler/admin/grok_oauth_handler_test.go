@@ -23,6 +23,7 @@ import (
 
 type grokQuotaHandlerAccountRepo struct {
 	service.AccountRepository
+	mu      sync.Mutex
 	account *service.Account
 	updates map[int64]map[string]any
 }
@@ -35,6 +36,8 @@ func (r *grokQuotaHandlerAccountRepo) GetByID(_ context.Context, id int64) (*ser
 }
 
 func (r *grokQuotaHandlerAccountRepo) UpdateExtra(_ context.Context, id int64, updates map[string]any) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if r.updates == nil {
 		r.updates = make(map[int64]map[string]any)
 	}
@@ -78,6 +81,13 @@ func (u *grokQuotaHandlerUpstream) Do(req *http.Request, _ string, _ int64, _ in
 				"X-Ratelimit-Remaining-Requests": []string{"8"},
 			},
 			Body: io.NopCloser(strings.NewReader(`{"id":"resp_probe"}`)),
+		}, nil
+	}
+	if req.URL.Path == "/v1/models" {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(`{"data":[{"id":"grok-4.5"}]}`)),
 		}, nil
 	}
 	payload := `{"config":{"billingPeriodStart":"2026-07-01T00:00:00Z","billingPeriodEnd":"2026-08-01T00:00:00Z"}}`
@@ -158,7 +168,13 @@ func TestGrokOAuthHandlerQueryQuotaProbesUpstream(t *testing.T) {
 	}
 	require.True(t, responsesProbeSeen)
 	require.True(t, modelsSyncSeen)
-	require.NotNil(t, repo.updates[42])
+	// Recording the /models request precedes its asynchronous persistence. Wait
+	// for that side effect and synchronize every access to the repository fake.
+	require.Eventually(t, func() bool {
+		repo.mu.Lock()
+		defer repo.mu.Unlock()
+		return repo.updates[42]["grok_observed_models"] != nil
+	}, time.Second, 10*time.Millisecond)
 }
 
 func TestGrokOAuthHandlerResetQuotaReturnsUnsupported(t *testing.T) {

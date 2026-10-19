@@ -68,6 +68,19 @@ persisted. Existing sessions have no row until their next bind, and the request
 path does not consume the table yet. See
 [Responses routing](../../docs/protocols/OPENAI_RESPONSES.md).
 
+Migrations `287_gemini_cached_contents.sql`,
+`288_gemini_cached_contents_channel_usage.sql`, and
+`289_gemini_cached_contents_mutation_lease.sql` add Gemini explicit-cache
+tables, channel-usage snapshots, and mutation leases. Official numbered these
+243–245; Plus already uses those prefixes, so they land at 287–289. Historical
+SQL is unchanged.
+
+The main/feature merge retained the independently committed 287/288 files above.
+Their full filenames and checksums remain immutable. The channel-monitor/session
+route migrations and Gemini cache migrations have independent dependencies;
+lexicographic execution and upgrades from either branch retain all five files.
+New migrations start after 289 and must use unique increasing prefixes.
+
 ## File Naming
 
 Regular migration:

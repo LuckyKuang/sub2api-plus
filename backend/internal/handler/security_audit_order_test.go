@@ -26,6 +26,11 @@ func TestPromptAuditGatePrecedesAccountBillingAndUpstreamSideEffects(t *testing.
 		{file: "gateway_handler_chat_completions.go", function: "ChatCompletions", auditToken: "checkSecurityAudit"},
 		{file: "gateway_handler_responses.go", function: "Responses", auditToken: "checkSecurityAudit"},
 		{file: "gemini_v1beta_handler.go", function: "GeminiV1BetaModels", auditToken: "checkSecurityAudit"},
+		{file: "gemini_cached_contents_handler.go", function: "GeminiCachedContentsCreate", auditToken: "checkSecurityAudit"},
+		{file: "gemini_cached_contents_handler.go", function: "GeminiCachedContentsList", auditToken: "checkSecurityAudit"},
+		{file: "gemini_cached_contents_handler.go", function: "GeminiCachedContentsGet", auditToken: "checkSecurityAudit"},
+		{file: "gemini_cached_contents_handler.go", function: "GeminiCachedContentsPatch", auditToken: "checkSecurityAudit"},
+		{file: "gemini_cached_contents_handler.go", function: "GeminiCachedContentsDelete", auditToken: "checkSecurityAudit"},
 		{file: "openai_gateway_handler.go", function: "Responses", auditToken: "checkSecurityAudit"},
 		{file: "openai_gateway_handler.go", function: "Messages", auditToken: "checkSecurityAudit"},
 		{file: "openai_gateway_handler.go", function: "ResponsesWebSocket", auditToken: "checkSecurityAuditStage"},
@@ -47,6 +52,7 @@ func TestPromptAuditGatePrecedesAccountBillingAndUpstreamSideEffects(t *testing.
 		"StartOpenAICompactSSEKeepalive(", "ResolveChannelMappingAndRestrict(",
 		"AcquireOpenAIWSIngressLease(",
 		"reserveInflightBalance(", "reserveInflightBalanceCtx(",
+		"resolveGeminiCachedContentOrWrite(", "geminiCachedContentService.List(",
 	}
 	for _, tt := range tests {
 		t.Run(tt.file+"/"+tt.function, func(t *testing.T) {
