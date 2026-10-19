@@ -55,13 +55,13 @@ type GatewayHandler struct {
 	securityAuditCoordinator  *securityaudit.Coordinator
 	// geminiCachedContentService 管理 Gemini 显式缓存；为 nil 时相关接口不可用。
 	geminiCachedContentService *service.GeminiCachedContentService
-	concurrencyHelper         *ConcurrencyHelper
-	userMsgQueueHelper        *UserMsgQueueHelper
-	maxAccountSwitches        int
-	maxAccountSwitchesGemini  int
-	cfg                       *config.Config
-	settingService            *service.SettingService
-	clientDisconnectRisk      *service.ClientDisconnectRiskService
+	concurrencyHelper          *ConcurrencyHelper
+	userMsgQueueHelper         *UserMsgQueueHelper
+	maxAccountSwitches         int
+	maxAccountSwitchesGemini   int
+	cfg                        *config.Config
+	settingService             *service.SettingService
+	clientDisconnectRisk       *service.ClientDisconnectRiskService
 }
 
 func (h *GatewayHandler) SetClientDisconnectRiskService(risk *service.ClientDisconnectRiskService) {
