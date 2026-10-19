@@ -81,7 +81,7 @@ PROTECTED_FRAGMENTS = {
     "Codex Identity": (
         "credentials.user_agent > valid global openai_codex_user_agent > compiled default",
         "Empty/invalid candidates fall through only to the next source",
-        "Version sync may update only selected identity version declarations and must not change source, client family, Originator, OS, architecture, or terminal fingerprint",
+        "Manual version updates may update only selected identity version declarations and must not change source, client family, Originator, OS, architecture, or terminal fingerprint; automatic Codex version synchronization is prohibited",
         "Inbound headers, generic overrides, request classification, retries, probes, and upstream merges must not bypass precedence",
         "Keep User-Agent, Originator, and Version coherent",
         "source-priority matrix",

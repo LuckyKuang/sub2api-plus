@@ -664,7 +664,7 @@ func TestOpenAIGatewayService_BuildOpenAIWSHeadersDeviceModePreservesNamespacedC
 	require.Equal(t, expectedSessionIdentity, headers.Get("session-id"))
 	require.Empty(t, headers.Get("session_id"), "device mode keeps official session-id spelling only")
 	require.Equal(t, scopeCodexAccountIdentityValue(account, 0, "thread", "client-thread"), headers.Get("thread-id"))
-	require.Equal(t, scopeCodexAccountIdentityValue(account, 0, "request", "client-request"), headers.Get("x-client-request-id"))
+	require.Equal(t, headers.Get("thread-id"), headers.Get("x-client-request-id"), "official Codex uses the final thread ID as client request ID")
 }
 
 func TestLogOpenAIWSBindResponseAccountWarn(t *testing.T) {

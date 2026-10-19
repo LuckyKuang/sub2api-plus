@@ -2006,127 +2006,111 @@ func TestFetchCodexModelsManifestMissingToken(t *testing.T) {
 	}
 }
 
+// Native Codex API keys keep account > global > compiled selection even when
+// historical settings and credentials still contain a foreign client family.
 func TestFetchCodexModelsManifestAPIKeySelectedIdentity(t *testing.T) {
 	for _, source := range []string{"account", "global"} {
-		for _, preset := range []string{"claude", "gemini", "grok", "antigravity"} {
-			t.Run(source+"/"+preset, func(t *testing.T) {
-				settings := emptyOutboundIdentitySettings()
-				settings.Profiles[preset] = OutboundIdentitySelection{Preset: preset, Version: "3.9.1"}
-				settings.Defaults["openai:apikey"] = preset
-				settingService, ctx := outboundIdentityTestSettings(t, settings)
+		for _, foreign := range []string{"claude", "gemini", "grok", "minimax"} {
+			t.Run(source+"/"+foreign, func(t *testing.T) {
+				repo := &outboundIdentityTestRepo{values: map[string]string{
+					SettingKeyOutboundIdentity:         `{"defaults":{"openai:apikey":"` + foreign + `"}}`,
+					SettingKeyOpenAICodexUserAgent:     "codex_cli_rs/0.158.0 (Ubuntu 22.4.0; x86_64) xterm-256color",
+					SettingKeyOpenAICodexClientVersion: "0.200.1",
+				}}
+				settings := NewSettingService(repo, nil)
+				ctx := outboundidentity.WithResolver(context.Background(), settings.resolveOutboundIdentityKey)
 				account := newCodexModelsAPIKeyTestAccount("https://upstream.example/v1")
+				account.Credentials[outboundIdentityCredential] = OutboundIdentitySelection{Preset: foreign}
+				wantUA := "codex_cli_rs/0.200.1 (Ubuntu 22.4.0; x86_64) xterm-256color"
+				if source == "account" {
+					account.Credentials["user_agent"] = "codex_cli_rs/0.158.0 (Ubuntu 20.4.0; x86_64) xterm-256color"
+					wantUA = "codex_cli_rs/0.200.1 (Ubuntu 20.4.0; x86_64) xterm-256color"
+				}
 				account.Credentials[credKeyHeaderOverrideEnabled] = true
 				account.Credentials[credKeyHeaderOverrides] = map[string]any{"User-Agent": "caller/9.9.9", "Originator": "caller", "Version": "9.9.9", "X-Grok-Client-Version": "9.9.9"}
-				var selection *OutboundIdentitySelection
-				if source == "account" {
-					selection = &OutboundIdentitySelection{Preset: preset, Version: "3.9.2"}
-					account.Credentials[outboundIdentityCredential] = *selection
-				}
-				want, err := settingService.PreviewOutboundIdentity(ctx, account, selection)
-				require.NoError(t, err)
 				var requests []*http.Request
 				upstream := &codexModelsHTTPUpstreamStub{do: func(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
 					requests = append(requests, req)
 					return &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{"models":[{"slug":"custom-model"}]}`))}, nil
 				}}
 				svc := newCodexModelsAPIKeyTestService(upstream)
+				svc.settingService = settings
 				for range 2 {
-					_, err = svc.FetchCodexModelsManifest(ctx, account, "9.9.9", "")
+					_, err := svc.FetchCodexModelsManifest(ctx, account, "9.9.9", "")
 					require.NoError(t, err)
 				}
-				require.Len(t, requests, 1, "identical effective identities reuse the catalog cache")
+				require.Len(t, requests, 1, "same identity reuses the catalog cache")
 				req := requests[0]
-				require.Equal(t, want.UserAgent, req.Header.Get("User-Agent"))
-				require.Equal(t, want.Version, req.URL.Query().Get("client_version"))
-				for name, value := range want.Headers {
-					require.Equal(t, value, req.Header.Get(name), name)
-				}
-				require.Empty(t, req.Header.Get("Originator"))
-				require.Empty(t, req.Header.Get("Version"))
+				require.Equal(t, wantUA, req.UserAgent())
+				require.Equal(t, "0.200.1", req.URL.Query().Get("client_version"))
+				require.Equal(t, "codex_cli_rs", req.Header.Get("Originator"))
+				require.Equal(t, "0.200.1", req.Header.Get("Version"))
+				require.Empty(t, req.Header.Get("X-Grok-Client-Version"))
 				require.Equal(t, "Bearer sk-upstream", req.Header.Get("Authorization"))
-				captured, ok := outboundidentity.FromContext(req.Context())
-				require.True(t, ok, "background refresh must carry the selected snapshot")
-				require.Equal(t, want.UserAgent, captured.UserAgent)
-				if source == "account" {
-					account.Credentials[outboundIdentityCredential] = OutboundIdentitySelection{Preset: preset, Version: "3.9.3"}
-				} else {
-					settings.Profiles[preset] = OutboundIdentitySelection{Preset: preset, Version: "3.9.3"}
-					require.NoError(t, settingService.SetOutboundIdentitySettings(ctx, settings))
-				}
-				_, err = svc.FetchCodexModelsManifest(ctx, account, "9.9.9", "")
+				repo.values[SettingKeyOpenAICodexClientVersion] = "0.200.2"
+				settings.InvalidateOpenAICodexClientVersionCache()
+				_, err := svc.FetchCodexModelsManifest(ctx, account, "9.9.9", "")
 				require.NoError(t, err)
-				require.Len(t, requests, 2, "a different identity must not reuse the earlier cache entry")
-				require.Equal(t, "3.9.3", requests[1].URL.Query().Get("client_version"))
-				require.Contains(t, requests[1].Header.Get("User-Agent"), "/3.9.3")
+				require.Len(t, requests, 2, "a manual version change owns a separate catalog entry")
+				require.Equal(t, "0.200.2", requests[1].URL.Query().Get("client_version"))
+				require.Equal(t, strings.Replace(wantUA, "/0.200.1", "/0.200.2", 1), requests[1].UserAgent())
+				require.Equal(t, "0.200.2", requests[1].Header.Get("Version"))
 			})
 		}
 	}
 }
 
-// A versionless client family declares no client version, so the Codex manifest
-// must not carry an empty `client_version` declaration either: the query and the
-// headers stay coherent. The selected identity still owns the headers.
-func TestFetchCodexModelsManifestVersionlessIdentityOmitsClientVersion(t *testing.T) {
-	settings := emptyOutboundIdentitySettings()
-	settings.Profiles["minimax"] = OutboundIdentitySelection{Preset: "minimax"}
-	settings.Defaults["openai:apikey"] = "minimax"
-	settingService, ctx := outboundIdentityTestSettings(t, settings)
+// Codex is a versioned native client. A versionless foreign preset cannot
+// remove the model catalog's version declaration, including on stale data.
+func TestFetchCodexModelsManifestNativeAPIKeyRequiresClientVersion(t *testing.T) {
+	repo := &outboundIdentityTestRepo{values: map[string]string{SettingKeyOutboundIdentity: `{"defaults":{"openai:apikey":"minimax"}}`}}
+	settings := NewSettingService(repo, nil)
+	validationErr := settings.SetOutboundIdentitySettings(context.Background(), OutboundIdentitySettings{Defaults: map[string]string{"openai:apikey": "minimax"}})
+	var appErr *infraerrors.ApplicationError
+	require.ErrorAs(t, validationErr, &appErr)
+	require.Equal(t, "OUTBOUND_IDENTITY_INVALID", appErr.Reason)
 	account := newCodexModelsAPIKeyTestAccount("https://upstream.example/v1")
-	account.Credentials[credKeyHeaderOverrideEnabled] = true
-	account.Credentials[credKeyHeaderOverrides] = map[string]any{"User-Agent": "caller/9.9.9", "Originator": "caller", "Version": "9.9.9"}
-	want, err := settingService.PreviewOutboundIdentity(ctx, account, nil)
-	require.NoError(t, err)
-	require.Equal(t, "minimax", want.Preset)
-	require.Empty(t, want.Version)
-	require.Equal(t, builtInOutboundIdentity("minimax").Headers, want.Headers)
-
-	var requests []*http.Request
-	upstream := &codexModelsHTTPUpstreamStub{do: func(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
-		requests = append(requests, req)
+	account.Credentials[outboundIdentityCredential] = OutboundIdentitySelection{Preset: "minimax"}
+	var captured *http.Request
+	svc := newCodexModelsAPIKeyTestService(&codexModelsHTTPUpstreamStub{do: func(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
+		captured = req
 		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{"models":[{"slug":"custom-model"}]}`))}, nil
-	}}
-	svc := newCodexModelsAPIKeyTestService(upstream)
-	_, err = svc.FetchCodexModelsManifest(ctx, account, "9.9.9", "")
+	}})
+	svc.settingService = settings
+	ctx := outboundidentity.WithResolver(context.Background(), settings.resolveOutboundIdentityKey)
+	_, err := svc.FetchCodexModelsManifest(ctx, account, "9.9.9", "")
 	require.NoError(t, err)
-	require.Len(t, requests, 1)
-	req := requests[0]
-	require.Equal(t, "MiniMaxAgent", req.Header.Get("User-Agent"))
-	require.Empty(t, req.Header.Get("Originator"))
-	require.Empty(t, req.Header.Get("Version"))
-	require.False(t, req.URL.Query().Has("client_version"), "a versionless family must not declare an empty client version")
-	require.Equal(t, "Bearer sk-upstream", req.Header.Get("Authorization"))
+	require.Equal(t, "codex_cli_rs/0.158.0 (Ubuntu 24.04; x86_64) xterm-256color", captured.UserAgent())
+	require.Equal(t, "codex_cli_rs", captured.Header.Get("Originator"))
+	require.Equal(t, "0.158.0", captured.Header.Get("Version"))
+	require.Equal(t, "0.158.0", captured.URL.Query().Get("client_version"))
 }
 
 func TestFetchCodexModelsManifestRefreshRetainsIdentitySnapshot(t *testing.T) {
-	settings := emptyOutboundIdentitySettings()
-	settings.Profiles["grok"] = OutboundIdentitySelection{Preset: "grok", Version: "3.9.1"}
-	settings.Defaults["openai:apikey"] = "grok"
-	settingService, ctx := outboundIdentityTestSettings(t, settings)
+	repo := &outboundIdentityTestRepo{values: map[string]string{SettingKeyOpenAICodexClientVersion: "0.200.1"}}
+	settings := NewSettingService(repo, nil)
 	account := newCodexModelsAPIKeyTestAccount("https://upstream.example/v1")
-	ctx = WithAccountOutboundIdentity(ctx, account)
-	identity, ok := outboundidentity.FromContext(ctx)
-	require.True(t, ok)
-	headers := http.Header{"Authorization": {"Bearer sk-upstream"}}
-	identity.Apply(headers)
+	ctx := WithOutboundIdentityScope(context.Background(), nil)
 	var captured *http.Request
-	upstream := &codexModelsHTTPUpstreamStub{do: func(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
+	svc := newCodexModelsAPIKeyTestService(&codexModelsHTTPUpstreamStub{do: func(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
 		captured = req
 		return &http.Response{StatusCode: http.StatusNotModified, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(""))}, nil
-	}}
-	svc := newCodexModelsAPIKeyTestService(upstream)
-	request := openAIModelsRequest{url: "https://upstream.example/v1/models?client_version=3.9.1", headers: headers, credentialAccount: account, useAPIKeyUpstream: true}
+	}})
+	svc.settingService = settings
+	identity := svc.resolveOpenAIOutboundIdentity(ctx, account)
+	require.Equal(t, "0.200.1", identity.Version)
+	headers := http.Header{"Authorization": {"Bearer sk-upstream"}, "User-Agent": {"codex_cli_rs/0.200.1 (Ubuntu 24.04; x86_64) xterm-256color"}, "Originator": {"codex_cli_rs"}, "Version": {"0.200.1"}}
+	request := openAIModelsRequest{url: "https://upstream.example/v1/models?client_version=0.200.1", headers: headers, credentialAccount: account, useAPIKeyUpstream: true}
 	fetch := svc.fetchCodexModelsManifestUpstreamForRequest(ctx, request)
-	settings.Profiles["grok"] = OutboundIdentitySelection{Preset: "grok", Version: "3.9.2"}
-	require.NoError(t, settingService.SetOutboundIdentitySettings(ctx, settings))
+	repo.values[SettingKeyOpenAICodexClientVersion] = "0.200.2"
+	settings.InvalidateOpenAICodexClientVersionCache()
 	_, err := fetch(context.Background(), "catalog-etag")
 	require.NoError(t, err)
-	selected, ok := outboundidentity.FromContext(captured.Context())
-	require.True(t, ok)
-	require.Equal(t, identity.UserAgent, selected.UserAgent)
-	require.Equal(t, identity.UserAgent, captured.Header.Get("User-Agent"))
-	require.Equal(t, identity.Version, captured.Header.Get("X-Grok-Client-Version"))
-	require.Equal(t, identity.Version, captured.URL.Query().Get("client_version"))
+	require.Equal(t, "codex_cli_rs/0.200.1 (Ubuntu 24.04; x86_64) xterm-256color", captured.UserAgent())
+	require.Equal(t, "0.200.1", captured.Header.Get("Version"))
+	require.Equal(t, "0.200.1", captured.URL.Query().Get("client_version"))
 	require.Equal(t, "catalog-etag", captured.Header.Get("If-None-Match"))
+	require.Equal(t, "0.200.1", svc.resolveOpenAIOutboundIdentity(captured.Context(), account).Version)
 }
 
 func TestFetchCodexModelsManifestAPIKeyCustomUpstream(t *testing.T) {

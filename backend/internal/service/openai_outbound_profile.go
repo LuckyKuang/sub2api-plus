@@ -196,7 +196,7 @@ func resolveOpenAIOutboundIdentityWithVersion(accountUA, systemUA, configuredVer
 
 func resolveOpenAIOutboundIdentityWithVersionAndCompatibility(accountUA, systemUA, configuredVersion string, allowLegacyCompatibility bool) openAIOutboundIdentity {
 	identity := resolveOpenAIOutboundIdentityCandidatesWithCompatibility(accountUA, systemUA, allowLegacyCompatibility)
-	version, _ := resolveOpenAICodexClientVersion(configuredVersion, "")
+	version, _ := resolveOpenAICodexClientVersion(configuredVersion)
 	if userAgent := openai.SetCodexUserAgentVersion(identity.UserAgent, version); userAgent != "" {
 		identity.UserAgent = userAgent
 		identity.Version = version

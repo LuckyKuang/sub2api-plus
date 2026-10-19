@@ -14,7 +14,7 @@ type OutboundIdentityAccountPolicy struct {
 // Only compatible suppliers and relay account types may change client families.
 // Keep the persistence migration and explicit contract tests in sync with this list.
 var compatibleOutboundDefaultKeys = []string{
-	"openai:apikey", "openai:upstream",
+	"openai:upstream",
 	"anthropic:apikey", "anthropic:upstream",
 	"gemini:apikey", "gemini:upstream",
 	"grok:apikey", "grok:upstream",

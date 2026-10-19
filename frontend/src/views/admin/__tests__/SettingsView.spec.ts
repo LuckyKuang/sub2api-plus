@@ -158,6 +158,7 @@ vi.mock("@/utils/apiError", () => ({
 vi.mock("vue-i18n", async () => {
   const actual = await vi.importActual<typeof import("vue-i18n")>("vue-i18n");
   const translations: Record<string, string> = {
+    "admin.settings.gatewayForwarding.openaiCodexVersionEffective": "Currently effective: {version} ({source})",
     "admin.settings.wechatConnect.title": "微信登录",
     "admin.settings.wechatConnect.description": "用于微信开放平台或公众号/小程序的第三方登录配置。",
     "admin.settings.wechatConnect.enabledLabel": "启用微信登录",
@@ -767,6 +768,28 @@ describe("admin SettingsView payment visible method controls", () => {
       expect(clearPublicSettingsCache).toHaveBeenCalledOnce();
       expect(fetchPublicSettings).toHaveBeenCalledWith(true);
       expect(clearPublicSettingsCache.mock.invocationCallOrder[0]).toBeLessThan(fetchPublicSettings.mock.invocationCallOrder[0]);
+    } finally { wrapper.unmount(); }
+  });
+
+  it("keeps manual Codex version controls without automatic synchronization or retired submitted fields", async () => {
+    getSettings.mockResolvedValue({ ...baseSettingsResponse,
+      openai_codex_client_version: "", openai_codex_client_version_effective: "0.158.0", openai_codex_client_version_source: "compiled",
+      openai_codex_client_version_synced: "9.9.9", openai_codex_version_auto_sync_enabled: true,
+    });
+    const wrapper = mountView();
+    try {
+      await flushPromises();
+      await openIdentityTab(wrapper);
+      expect(wrapper.text()).toContain("0.158.0");
+      expect(wrapper.text()).not.toContain("9.9.9");
+      expect(wrapper.text()).not.toContain("openaiCodexVersionAutoSync");
+      expect(wrapper.text()).not.toContain("openaiCodexVersionSyncNow");
+      await wrapper.find("form").trigger("submit.prevent");
+      await flushPromises();
+      const submitted = updateSettings.mock.calls[0][0];
+      expect(submitted.openai_codex_client_version).toBe("");
+      expect(submitted).not.toHaveProperty("openai_codex_client_version_synced");
+      expect(submitted).not.toHaveProperty("openai_codex_version_auto_sync_enabled");
     } finally { wrapper.unmount(); }
   });
 

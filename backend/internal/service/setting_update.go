@@ -585,11 +585,9 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeyCodexLegacyClientProfileCompatibilityEnabled] = strconv.FormatBool(settings.CodexLegacyClientProfileCompatibilityEnabled)
 	updates[SettingKeyOpenAICodexLocalGroupQuotaEnabled] = strconv.FormatBool(settings.OpenAICodexLocalGroupQuotaEnabled)
 	updates[SettingKeyOpenAICodexClientVersion] = NormalizeCodexClientVersion(settings.OpenAICodexClientVersion)
-	updates[SettingKeyOpenAICodexVersionAutoSyncEnabled] = strconv.FormatBool(settings.OpenAICodexVersionAutoSyncEnabled)
 	updates[SettingKeyClaudeCodeClientVersion] = NormalizeClaudeCodeClientVersion(settings.ClaudeCodeClientVersion)
 	updates[SettingKeyClaudeCodeVersionAutoSyncEnabled] = strconv.FormatBool(settings.ClaudeCodeVersionAutoSyncEnabled)
 	// SettingKeyClaudeCodeClientVersionSynced 由同步任务独占写入。
-	// SettingKeyOpenAICodexClientVersionSynced、CheckedAt、SyncError 由同步任务独占写入，
 	// 此处不得覆盖，否则面板保存会把同步结果和时间清空。
 	// codex_cli_only profile policy
 	updates[SettingKeyMinCodexVersion] = strings.TrimSpace(settings.MinCodexVersion)
@@ -862,7 +860,7 @@ func (s *SettingService) refreshCachedSettings(settings *SystemSettings) {
 		hasKnownValue: true,
 		expiresAt:     time.Now().Add(openAICodexLocalGroupQuotaCacheTTL).UnixNano(),
 	})
-	// 版本号缓存只做失效，不在此重算：生效值还取决于自动同步写入的 synced 键，
+	// 版本号缓存只做失效；Claude 生效值还取决于独立同步服务写入的 synced 键，
 	// 这里没有它的最新值，重算会把同步结果覆盖成陈旧值。
 	s.InvalidateOpenAICodexClientVersionCache()
 	s.InvalidateClaudeCodeClientVersionCache()

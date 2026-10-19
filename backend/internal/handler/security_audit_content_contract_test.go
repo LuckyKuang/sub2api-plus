@@ -40,7 +40,7 @@ func TestCodexProtocolOptionsPreserveCanonicalAuditContent(t *testing.T) {
 			{`[{"type":"future_item","opaque":{"value":1}}]`, ""},
 		} {
 			t.Run(frame+"/"+input.want, func(t *testing.T) {
-				body := `{"model":"gpt-6.1-sol","input":` + input.body + `,"stream_options":{"reasoning_summary_delivery":"sequential_cutoff","future_option":true},"client_metadata":{"ws_request_header_x_openai_internal_codex_responses_lite":"true","x-codex-turn-metadata":"{\"subagent_kind\":\"guardian\"}"}}`
+				body := `{"model":"gpt-6.1-sol","input":` + input.body + `,"stream_options":{"reasoning_summary_delivery":"sequential_cutoff","future_option":true},"client_metadata":{"ws_request_header_x_openai_internal_codex_responses_lite":"true","x-codex-turn-metadata":"{\"subagent_kind\":\"guardian\",\"thread_id\":\"child-thread\",\"parent_thread_id\":\"parent-thread\"}"}}`
 				if frame == "websocket" {
 					body = `{"type":"response.create",` + body[1:]
 				}

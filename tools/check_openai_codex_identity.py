@@ -15,6 +15,10 @@ FORBIDDEN_BYPASSES = (
     "SetCodexIdentityEnforcementEnabled",
     "enforceCodexIdentityHeadersWithUA",
     "codexIdentityOverrideUA",
+    "OpenAICodexVersionSyncService",
+    "openai_codex_client_version_synced",
+    "openai_codex_client_version_sync_error",
+    "openai_codex_version_auto_sync_enabled",
 )
 PATH_GUARDS = {
     Path("backend/internal/service/account_header_override.go"): {
@@ -56,20 +60,20 @@ PATH_GUARDS = {
     Path("backend/internal/service/openai_gateway_forward.go"): {
         "required": (
             ("ctx = WithOutboundIdentityScope(ctx, c)", 1),
-            ("s.applyOpenAIOutboundIdentity(ctx, account, req.Header, account.UsesOpenAICodexProtocol())", 1),
+            ("s.applyOpenAIOutboundIdentity(ctx, account, req.Header, true)", 1),
         ),
-        "forbidden": ('req.Header.Set("User-Agent", codexCLIUserAgent)',),
+        "forbidden": ('req.Header.Set("User-Agent", codexCLIUserAgent)', "s.applyOpenAIOutboundIdentity(ctx, account, req.Header, account.UsesOpenAICodexProtocol())"),
     },
     Path("backend/internal/service/openai_gateway_passthrough.go"): {
-        "required": (("s.applyOpenAIOutboundIdentity(ctx, account, req.Header, account.UsesOpenAICodexProtocol())", 1),),
-        "forbidden": ('req.Header.Set("User-Agent", codexCLIUserAgent)',),
+        "required": (("s.applyOpenAIOutboundIdentity(ctx, account, req.Header, true)", 1),),
+        "forbidden": ('req.Header.Set("User-Agent", codexCLIUserAgent)', "s.applyOpenAIOutboundIdentity(ctx, account, req.Header, account.UsesOpenAICodexProtocol())"),
     },
     Path("backend/internal/service/openai_ws_forwarder_payload.go"): {
         "required": (
             ("ctx = WithOutboundIdentityScope(ctx, c)", 1),
-            ("s.applyOpenAIOutboundIdentity(ctx, account, headers, account != nil && account.UsesOpenAICodexProtocol())", 1),
+            ("s.applyOpenAIOutboundIdentity(ctx, account, headers, true)", 1),
         ),
-        "forbidden": ('headers.Set("User-Agent", codexCLIUserAgent)',),
+        "forbidden": ('headers.Set("User-Agent", codexCLIUserAgent)', "s.applyOpenAIOutboundIdentity(ctx, account, headers, account != nil && account.UsesOpenAICodexProtocol())"),
     },
     Path("backend/internal/service/openai_oauth_service.go"): {
         "required": (("ctx = WithOutboundIdentityScope(ctx, nil)", 2),),
@@ -101,9 +105,9 @@ PATH_GUARDS = {
         "required": (
             ("ctx = WithOutboundIdentityScope(ctx, c)", 1),
             ("ctx = WithAccountOutboundIdentity(ctx, account)", 1),
-            ("s.applyOpenAIOutboundIdentity(ctx, account, headers, account != nil && account.UsesOpenAICodexProtocol())", 1),
+            ("s.applyOpenAIOutboundIdentity(ctx, account, headers, true)", 1),
         ),
-        "forbidden": (),
+        "forbidden": ("s.applyOpenAIOutboundIdentity(ctx, account, headers, account != nil && account.UsesOpenAICodexProtocol())",),
     },
     Path("backend/internal/repository/http_upstream.go"): {
         "required": (
@@ -121,10 +125,10 @@ PATH_GUARDS = {
         "required": (
             ("ctx = WithOutboundIdentityScope(ctx, c)", 1),
             ("ctx = WithAccountOutboundIdentity(ctx, account)", 1),
-            ("s.applyOpenAIOutboundIdentity(ctx, account, req.Header, true)", 1),
-            ("s.applyOpenAIOutboundIdentity(ctx, account, req.Header, account.UsesOpenAICodexProtocol())", 1),
+            ("s.applyOpenAIOutboundIdentity(ctx, account, req.Header, true)", 2),
         ),
         "forbidden": (
+            "s.applyOpenAIOutboundIdentity(ctx, account, req.Header, account.UsesOpenAICodexProtocol())",
             "enforceCodexIdentityHeadersWithUA(req.Header",
             'openAIAlphaSearchInboundHeader(c, "User-Agent")',
             'openAIAlphaSearchInboundHeader(c, "Originator")',

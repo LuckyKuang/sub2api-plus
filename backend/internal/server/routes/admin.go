@@ -608,7 +608,6 @@ func registerSettingsRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	{
 		adminSettings.GET("", h.Admin.Setting.GetSettings)
 		adminSettings.PUT("", h.Admin.Setting.UpdateSettings)
-		adminSettings.POST("/openai-codex-version/sync", h.Admin.Setting.SyncOpenAICodexVersion)
 		adminSettings.GET("/outbound-identity", h.Admin.Setting.GetOutboundIdentity)
 		adminSettings.PUT("/outbound-identity", h.Admin.Setting.UpdateOutboundIdentity)
 		adminSettings.POST("/outbound-identity/preview", h.Admin.Setting.PreviewOutboundIdentity)

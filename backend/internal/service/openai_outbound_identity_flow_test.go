@@ -235,7 +235,8 @@ func TestOpenAIGatewayService_ResolvedIdentityPrefersAccountThenGlobalThenDefaul
 	globalUA := "codex-tui/8.8.8 (Ubuntu 22.4.0; x86_64) xterm-256color (codex-tui; 8.8.8)"
 	globalCurrentUA := "codex-tui/" + codexCLIVersion + " (Ubuntu 22.4.0; x86_64) xterm-256color (codex-tui; " + codexCLIVersion + ")"
 	settingService := &SettingService{settingRepo: &openAIIdentitySettingRepoStub{values: map[string]string{
-		SettingKeyOpenAICodexUserAgent: globalUA,
+		SettingKeyOpenAICodexUserAgent:       globalUA,
+		"openai_codex_client_version_synced": "9.9.9",
 	}}}
 	svc := &OpenAIGatewayService{settingService: settingService}
 
@@ -282,11 +283,11 @@ func TestOpenAIGatewayService_LegacyIdentityRequiresGlobalCompatibilityMode(t *t
 	require.Equal(t, openAIOutboundIdentitySourceGlobal, identity.Source)
 }
 
-func TestOpenAIGatewayService_StaleSyncedVersionDoesNotChangeSelectedSource(t *testing.T) {
+func TestOpenAIGatewayService_RetiredSyncedVersionDoesNotChangeSelectedSource(t *testing.T) {
 	globalUA := "codex-tui/8.8.8 (Ubuntu 22.4.0; x86_64) WindowsTerminal (codex-tui; 8.8.8)"
 	settingService := &SettingService{settingRepo: &openAIIdentitySettingRepoStub{values: map[string]string{
-		SettingKeyOpenAICodexUserAgent:           globalUA,
-		SettingKeyOpenAICodexClientVersionSynced: "0.146.0",
+		SettingKeyOpenAICodexUserAgent:       globalUA,
+		"openai_codex_client_version_synced": "9.9.9",
 	}}}
 	svc := &OpenAIGatewayService{settingService: settingService}
 	account := &Account{
@@ -315,7 +316,8 @@ func TestOpenAIGatewayService_StaleSyncedVersionDoesNotChangeSelectedSource(t *t
 func TestOpenAIGatewayService_ForceCodexCLILeavesOutboundIdentityPriorityIntact(t *testing.T) {
 	globalUA := "codex-tui/8.8.8 (Ubuntu 22.4.0; x86_64) xterm-256color (codex-tui; 8.8.8)"
 	settingService := &SettingService{settingRepo: &openAIIdentitySettingRepoStub{values: map[string]string{
-		SettingKeyOpenAICodexUserAgent: globalUA,
+		SettingKeyOpenAICodexUserAgent:       globalUA,
+		"openai_codex_client_version_synced": "9.9.9",
 	}}}
 	svc := &OpenAIGatewayService{
 		cfg:            &config.Config{Gateway: config.GatewayConfig{ForceCodexCLI: true}},

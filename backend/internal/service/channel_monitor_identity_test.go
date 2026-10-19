@@ -23,6 +23,8 @@ func TestChannelMonitorIdentitySnapshotAcrossPingAndModels(t *testing.T) {
 			config := emptyOutboundIdentitySettings()
 			preset := "grok"
 			switch provider {
+			case "openai":
+				preset = "codex"
 			case "deepseek", "kimi", "stepfun":
 				preset = provider
 			case "zhipu":
@@ -38,8 +40,13 @@ func TestChannelMonitorIdentitySnapshotAcrossPingAndModels(t *testing.T) {
 				}
 				return OutboundIdentitySelection{Preset: preset, Version: version}
 			}
-			config.Profiles[preset] = selection("3.9.1")
+			if preset != "codex" {
+				config.Profiles[preset] = selection("3.9.1")
+			}
 			svc, ctx := outboundIdentityTestSettings(t, config)
+			if preset == "codex" {
+				require.NoError(t, svc.settingRepo.Set(ctx, SettingKeyOpenAICodexClientVersion, "3.9.1"))
+			}
 			foreign := builtInOutboundIdentity("claude")
 			foreign.AccountID = 88
 			ctx = outboundidentity.WithIdentity(ctx, foreign)
@@ -54,7 +61,13 @@ func TestChannelMonitorIdentitySnapshotAcrossPingAndModels(t *testing.T) {
 				captured <- capturedRequest{r.Method, outboundidentity.RequestProtocol(r), r.Header.Clone()}
 				if r.Method == http.MethodHead {
 					config.Profiles[preset] = selection("3.9.2")
-					updateErrors <- svc.SetOutboundIdentitySettings(ctx, config)
+					if preset == "codex" {
+						err := svc.settingRepo.Set(ctx, SettingKeyOpenAICodexClientVersion, "3.9.2")
+						svc.InvalidateOpenAICodexClientVersionCache()
+						updateErrors <- err
+					} else {
+						updateErrors <- svc.SetOutboundIdentitySettings(ctx, config)
+					}
 					return
 				}
 				_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"ok"}}],"content":[{"type":"text","text":"ok"}],"candidates":[{"content":{"parts":[{"text":"ok"}]}}],"output_text":"ok"}`))
@@ -71,8 +84,15 @@ func TestChannelMonitorIdentitySnapshotAcrossPingAndModels(t *testing.T) {
 				for _, result := range results {
 					require.Equal(t, MonitorStatusOperational, result.Status, result.Message)
 				}
-				expected, err := buildOutboundIdentity(selection(version))
-				require.NoError(t, err)
+				var expected outboundidentity.Identity
+				if preset == "codex" {
+					expected = outboundidentity.Identity{Preset: "codex", UserAgent: "codex_cli_rs/" + version + " (Ubuntu 24.04; x86_64) xterm-256color", Originator: "codex_cli_rs", Version: version,
+						Headers: map[string]string{"Originator": "codex_cli_rs", "Version": version}}
+				} else {
+					var err error
+					expected, err = buildOutboundIdentity(selection(version))
+					require.NoError(t, err)
+				}
 				for range 3 {
 					request := <-captured
 					wire := expected.ForProtocol(request.protocol)
@@ -80,8 +100,13 @@ func TestChannelMonitorIdentitySnapshotAcrossPingAndModels(t *testing.T) {
 					for name, value := range wire.Headers {
 						require.Equal(t, value, request.headers.Get(name), name)
 					}
-					require.Empty(t, request.headers.Get("Originator"))
-					require.Empty(t, request.headers.Get("Version"))
+					if preset == "codex" {
+						require.Equal(t, "codex_cli_rs", request.headers.Get("Originator"))
+						require.Equal(t, version, request.headers.Get("Version"))
+					} else {
+						require.Empty(t, request.headers.Get("Originator"))
+						require.Empty(t, request.headers.Get("Version"))
+					}
 					if request.method == http.MethodPost {
 						require.Equal(t, "preserved", request.headers.Get("X-Custom"))
 						for name, value := range providerAdapters[provider].buildHeaders("test-key") {

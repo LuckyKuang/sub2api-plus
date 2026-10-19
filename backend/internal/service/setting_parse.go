@@ -263,10 +263,6 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyCodexLegacyClientProfileCompatibilityEnabled: "false",
 		SettingKeyOpenAICodexLocalGroupQuotaEnabled:            "false",
 		SettingKeyOpenAICodexClientVersion:                     "",
-		SettingKeyOpenAICodexClientVersionSynced:               "",
-		SettingKeyOpenAICodexClientVersionSyncedCheckedAt:      "",
-		SettingKeyOpenAICodexClientVersionSyncError:            "",
-		SettingKeyOpenAICodexVersionAutoSyncEnabled:            "true",
 		SettingPaymentVisibleMethodAlipaySource:                "",
 		SettingPaymentVisibleMethodWxpaySource:                 "",
 		SettingPaymentVisibleMethodAlipayEnabled:               "false",
@@ -941,19 +937,9 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	result.CodexLegacyClientProfileCompatibilityEnabled = settings[SettingKeyCodexLegacyClientProfileCompatibilityEnabled] == "true"
 	result.OpenAICodexLocalGroupQuotaEnabled = settings[SettingKeyOpenAICodexLocalGroupQuotaEnabled] == "true"
 	result.OpenAICodexClientVersion = NormalizeCodexClientVersion(settings[SettingKeyOpenAICodexClientVersion])
-	result.OpenAICodexClientVersionSynced = NormalizeCodexClientVersion(settings[SettingKeyOpenAICodexClientVersionSynced])
-	result.OpenAICodexClientVersionSyncedCheckedAt = strings.TrimSpace(settings[SettingKeyOpenAICodexClientVersionSyncedCheckedAt])
-	result.OpenAICodexClientVersionSyncError = strings.TrimSpace(settings[SettingKeyOpenAICodexClientVersionSyncError])
 	result.OpenAICodexClientVersionEffective, result.OpenAICodexClientVersionSource = resolveOpenAICodexClientVersion(
 		result.OpenAICodexClientVersion,
-		result.OpenAICodexClientVersionSynced,
 	)
-	// 自动同步默认开启：缺失/空值一律视为开启，与 enable_client_dateline_normalization 同一惯例。
-	if v, ok := settings[SettingKeyOpenAICodexVersionAutoSyncEnabled]; ok && v != "" {
-		result.OpenAICodexVersionAutoSyncEnabled = v == "true"
-	} else {
-		result.OpenAICodexVersionAutoSyncEnabled = true
-	}
 	result.ClaudeCodeClientVersion = NormalizeClaudeCodeClientVersion(settings[SettingKeyClaudeCodeClientVersion])
 	result.ClaudeCodeClientVersionSynced = NormalizeClaudeCodeClientVersion(settings[SettingKeyClaudeCodeClientVersionSynced])
 	if v, ok := settings[SettingKeyClaudeCodeVersionAutoSyncEnabled]; ok && v != "" {

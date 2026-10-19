@@ -9,8 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
-
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
@@ -124,10 +122,8 @@ func TestOpenAIIdentityContractEndpointMatrix(t *testing.T) {
 							want := http.Header{"User-Agent": {family + "/" + version + fingerprint}}
 							want.Set("Originator", family)
 							want.Set("Version", version)
-							if compatible {
-								want = http.Header{}
-								builtInOutboundIdentity(source).ForProtocol(outboundidentity.RequestProtocol(req)).Apply(want)
-							}
+							// Native API keys ignore stale foreign selections on every endpoint,
+							// including retries and a fresh operation after the version changes.
 							requireOpenAIIdentityContractHeaders(t, req.Header, want, wantAuth)
 							if endpoint == "/v1/alpha/search" {
 								metadata := req.Header.Get("X-Codex-Turn-Metadata")

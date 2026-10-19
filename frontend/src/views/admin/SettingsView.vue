@@ -8724,70 +8724,9 @@
                 </p>
               </div>
 
-              <!-- Codex 版本号自动同步 -->
-              <div class="flex items-start justify-between gap-4">
-                <div class="min-w-0 flex-1">
-                  <label
-                    class="text-sm font-medium text-gray-700 dark:text-gray-300"
-                  >
-                    {{
-                      t(
-                        "admin.settings.gatewayForwarding.openaiCodexVersionAutoSync",
-                      )
-                    }}
-                  </label>
-                  <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                    {{
-                      t(
-                        "admin.settings.gatewayForwarding.openaiCodexVersionAutoSyncHint",
-                      )
-                    }}
-                  </p>
-                  <p
-                    v-if="codexEffectiveVersionLabel"
-                    class="mt-1 text-xs font-medium text-gray-700 dark:text-gray-300"
-                  >
-                    {{ codexEffectiveVersionLabel }}
-                  </p>
-                  <p
-                    v-if="codexSyncedVersionLabel"
-                    class="mt-0.5 text-xs text-gray-500 dark:text-gray-400"
-                  >
-                    {{ codexSyncedVersionLabel }}
-                  </p>
-                  <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                    {{ codexCheckedAtLabel }}
-                  </p>
-                  <p
-                    v-if="form.openai_codex_client_version_sync_error"
-                    class="mt-0.5 text-xs text-red-600 dark:text-red-400"
-                  >
-                    {{
-                      t(
-                        "admin.settings.gatewayForwarding.openaiCodexVersionSyncFailed",
-                        { error: form.openai_codex_client_version_sync_error },
-                      )
-                    }}
-                  </p>
-                </div>
-                <div class="flex shrink-0 items-center gap-3">
-                  <button
-                    type="button"
-                    class="btn btn-secondary whitespace-nowrap px-3 py-1.5 text-xs"
-                    :disabled="codexVersionSyncing"
-                    @click="syncCodexVersionNow()"
-                  >
-                    {{
-                      t(
-                        codexVersionSyncing
-                          ? "admin.settings.gatewayForwarding.openaiCodexVersionSyncing"
-                          : "admin.settings.gatewayForwarding.openaiCodexVersionSyncNow",
-                      )
-                    }}
-                  </button>
-                  <Toggle v-model="form.openai_codex_version_auto_sync_enabled" />
-                </div>
-              </div>
+              <p v-if="codexEffectiveVersionLabel" class="text-xs text-gray-500 dark:text-gray-400">
+                {{ codexEffectiveVersionLabel }}
+              </p>
             </template>
           </OutboundIdentitySettings>
         </div>
@@ -9942,13 +9881,8 @@ const form = reactive<SettingsForm>({
   codex_legacy_client_profile_compatibility_enabled: false,
   openai_codex_local_group_quota_enabled: false,
   openai_codex_client_version: "",
-  // 只读展示：自动同步任务写入的官方最新稳定版，不参与提交（提交载荷按字段显式构造）
-  openai_codex_client_version_synced: "",
-  openai_codex_client_version_synced_checked_at: "",
-  openai_codex_client_version_sync_error: "",
   openai_codex_client_version_effective: "",
   openai_codex_client_version_source: "",
-  openai_codex_version_auto_sync_enabled: true,
   // codex_cli_only profile policy
   min_codex_version: "",
   max_codex_version: "",
@@ -10942,16 +10876,11 @@ function removeCodexWhitelistRow(i: number): void {
   codexWhitelistRows.value.splice(i, 1);
 }
 
-const codexVersionSyncing = ref(false);
-const lastSavedCodexAutoSyncEnabled = ref(true);
 
 const codexVersionSourceLabel = computed(() => {
   const source = form.openai_codex_client_version_source;
   if (source === "override") {
     return t("admin.settings.gatewayForwarding.openaiCodexVersionSourceOverride");
-  }
-  if (source === "synced") {
-    return t("admin.settings.gatewayForwarding.openaiCodexVersionSourceSynced");
   }
   return t("admin.settings.gatewayForwarding.openaiCodexVersionSourceCompiled");
 });
@@ -10964,85 +10893,6 @@ const codexEffectiveVersionLabel = computed(() => {
     source: codexVersionSourceLabel.value,
   });
 });
-
-const codexSyncedVersionLabel = computed(() => {
-  const synced = form.openai_codex_client_version_synced?.trim();
-  if (!synced) return "";
-  return t("admin.settings.gatewayForwarding.openaiCodexVersionSyncedValue", {
-    version: synced,
-  });
-});
-
-const codexCheckedAtLabel = computed(() => {
-  const raw = form.openai_codex_client_version_synced_checked_at?.trim();
-  if (!raw) {
-    return t("admin.settings.gatewayForwarding.openaiCodexVersionNeverChecked");
-  }
-  const parsed = new Date(raw);
-  const time = Number.isNaN(parsed.getTime()) ? raw : parsed.toLocaleString();
-  return t("admin.settings.gatewayForwarding.openaiCodexVersionCheckedAt", { time });
-});
-
-function applyCodexVersionSyncResult(result: {
-  openai_codex_client_version_synced?: string;
-  openai_codex_client_version_synced_checked_at?: string;
-  openai_codex_client_version_sync_error?: string;
-  openai_codex_client_version_effective?: string;
-  openai_codex_client_version_source?: string;
-}): void {
-  form.openai_codex_client_version_synced = result.openai_codex_client_version_synced || "";
-  form.openai_codex_client_version_synced_checked_at =
-    result.openai_codex_client_version_synced_checked_at || "";
-  form.openai_codex_client_version_sync_error =
-    result.openai_codex_client_version_sync_error || "";
-  form.openai_codex_client_version_effective =
-    result.openai_codex_client_version_effective || "";
-  form.openai_codex_client_version_source =
-    result.openai_codex_client_version_source || "";
-}
-
-async function syncCodexVersionNow(options: { silentSuccess?: boolean } = {}): Promise<boolean> {
-  if (codexVersionSyncing.value) return false;
-  codexVersionSyncing.value = true;
-  try {
-    const result = await adminAPI.settings.syncOpenAICodexVersion();
-    applyCodexVersionSyncResult(result);
-    if (result.openai_codex_client_version_sync_error) {
-      appStore.showError(
-        t("admin.settings.gatewayForwarding.openaiCodexVersionSyncFailed", {
-          error: result.openai_codex_client_version_sync_error,
-        }),
-      );
-      return false;
-    }
-    if (!options.silentSuccess) {
-      const version = result.openai_codex_client_version_synced || result.openai_codex_client_version_effective;
-      appStore.showSuccess(
-        t(
-          result.updated
-            ? "admin.settings.gatewayForwarding.openaiCodexVersionSyncSuccess"
-            : "admin.settings.gatewayForwarding.openaiCodexVersionSyncUnchanged",
-          { version },
-        ),
-      );
-    }
-    return true;
-  } catch (error) {
-    const message = extractI18nErrorMessage(
-      error,
-      t,
-      "admin.settings.errors",
-      t("admin.settings.gatewayForwarding.openaiCodexVersionSyncFailed", {
-        error: t("common.error"),
-      }),
-    );
-    form.openai_codex_client_version_sync_error = message;
-    appStore.showError(message);
-    return false;
-  } finally {
-    codexVersionSyncing.value = false;
-  }
-}
 
 async function loadSettings() {
   loading.value = true;
@@ -11228,7 +11078,6 @@ async function loadSettings() {
 
     // Load web search emulation config separately
     await loadWebSearchConfig();
-    lastSavedCodexAutoSyncEnabled.value = form.openai_codex_version_auto_sync_enabled;
   } catch (error: unknown) {
     loadFailed.value = true;
     appStore.showError(
@@ -11689,8 +11538,6 @@ async function saveSettings() {
         form.openai_codex_local_group_quota_enabled,
       openai_codex_client_version:
         form.openai_codex_client_version?.trim() || "",
-      openai_codex_version_auto_sync_enabled:
-        form.openai_codex_version_auto_sync_enabled,
       min_codex_version: form.min_codex_version?.trim() || "",
       max_codex_version: form.max_codex_version?.trim() || "",
       codex_cli_only_allow_app_server_clients:
@@ -11940,13 +11787,6 @@ async function saveSettings() {
     }
     // Save web search emulation config separately (errors handled internally)
     const wsOk = await saveWebSearchConfig();
-    const shouldSyncCodexVersion =
-      form.openai_codex_version_auto_sync_enabled &&
-      !lastSavedCodexAutoSyncEnabled.value;
-    lastSavedCodexAutoSyncEnabled.value = form.openai_codex_version_auto_sync_enabled;
-    if (shouldSyncCodexVersion) {
-      await syncCodexVersionNow({ silentSuccess: true });
-    }
     // Refresh cached settings so sidebar/header update immediately
     appStore.clearPublicSettingsCache();
     await appStore.fetchPublicSettings(true);

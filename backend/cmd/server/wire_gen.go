@@ -253,11 +253,10 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	registry := payment.ProvideRegistry()
 	defaultLoadBalancer := payment.ProvideDefaultLoadBalancer(client, encryptionKey)
 	paymentService := service.ProvidePaymentService(client, registry, defaultLoadBalancer, redeemService, subscriptionService, paymentConfigService, userRepository, groupRepository, affiliateService, notificationEmailService)
-	gitHubReleaseClient := repository.ProvideGitHubReleaseClient(configConfig)
-	openAICodexVersionSyncService := service.ProvideOpenAICodexVersionSyncService(settingRepository, settingService, gitHubReleaseClient)
-	settingHandler := handler.ProvideAdminSettingHandler(settingService, emailService, turnstileService, aliyunCaptchaService, opsService, paymentConfigService, paymentService, userAttributeService, notificationEmailService, totpService, userService, openAICodexVersionSyncService)
+	settingHandler := handler.ProvideAdminSettingHandler(settingService, emailService, turnstileService, aliyunCaptchaService, opsService, paymentConfigService, paymentService, userAttributeService, notificationEmailService, totpService, userService)
 	opsHandler := handler.ProvideOpsHandler(opsService, ipAccessControlService)
 	updateCache := repository.NewUpdateCache(redisClient)
+	gitHubReleaseClient := repository.ProvideGitHubReleaseClient(configConfig)
 	serviceBuildInfo := provideServiceBuildInfo(buildInfo)
 	updateService := service.ProvideUpdateService(updateCache, gitHubReleaseClient, serviceBuildInfo)
 	idempotencyRepository := repository.NewIdempotencyRepository(client, db)
@@ -380,7 +379,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	userPlatformQuotaUsageFlusher := service.ProvideUserPlatformQuotaUsageFlusher(configConfig, billingCache, serviceUserPlatformQuotaRepository, timingWheelService)
 	openAIGroupQuotaFollowResetRepository := repository.NewOpenAIGroupQuotaFollowResetRepository(client, db)
 	openAIGroupQuotaFollowResetService := service.ProvideOpenAIGroupQuotaFollowResetService(openAIGroupQuotaFollowResetRepository, billingCacheService)
-	v := provideCleanup(channelMonitorV3Service, client, redisClient, opsMetricsCollector, opsAggregationService, opsAlertEvaluatorService, opsCleanupService, opsScheduledReportService, opsSystemLogSink, opsService, opsIngressRejectAggregator, apiKeyService, authCacheInvalidationWorker, schedulerSnapshotService, tokenRefreshService, accountExpiryService, cnProviderBalanceCheckService, openAICodexVersionSyncService, proxyExpiryService, subscriptionExpiryService, usageCleanupService, idempotencyCleanupService, geminiCachedContentService, batchImageCleanupService, batchImageWorkerRuntime, pricingService, emailQueueService, billingCacheService, usageRecordWorkerPool, subscriptionService, oAuthService, openAIOAuthService, geminiOAuthService, antigravityOAuthService, grokOAuthService, zhipuOffPeakTicketManager, openAIGatewayService, scheduledTestRunnerService, backupService, paymentOrderExpiryService, channelMonitorRunner, channelMonitorV2Aggregator, userPlatformQuotaUsageFlusher, ollamaCloudUsageService, usageAlertService, auditLogService, openAIQuotaAutoResetService, openAIGroupQuotaFollowResetService, promptService, pluginManager)
+	v := provideCleanup(channelMonitorV3Service, client, redisClient, opsMetricsCollector, opsAggregationService, opsAlertEvaluatorService, opsCleanupService, opsScheduledReportService, opsSystemLogSink, opsService, opsIngressRejectAggregator, apiKeyService, authCacheInvalidationWorker, schedulerSnapshotService, tokenRefreshService, accountExpiryService, cnProviderBalanceCheckService, proxyExpiryService, subscriptionExpiryService, usageCleanupService, idempotencyCleanupService, geminiCachedContentService, batchImageCleanupService, batchImageWorkerRuntime, pricingService, emailQueueService, billingCacheService, usageRecordWorkerPool, subscriptionService, oAuthService, openAIOAuthService, geminiOAuthService, antigravityOAuthService, grokOAuthService, zhipuOffPeakTicketManager, openAIGatewayService, scheduledTestRunnerService, backupService, paymentOrderExpiryService, channelMonitorRunner, channelMonitorV2Aggregator, userPlatformQuotaUsageFlusher, ollamaCloudUsageService, usageAlertService, auditLogService, openAIQuotaAutoResetService, openAIGroupQuotaFollowResetService, promptService, pluginManager)
 	application := &Application{
 		Server:        httpServer,
 		PromptAudit:   promptService,
@@ -435,7 +434,6 @@ func provideCleanup(
 	tokenRefresh *service.TokenRefreshService,
 	accountExpiry *service.AccountExpiryService,
 	cnProviderBalanceCheck *service.CNProviderBalanceCheckService,
-	codexVersionSync *service.OpenAICodexVersionSyncService,
 	proxyExpiry *service.ProxyExpiryService,
 	subscriptionExpiry *service.SubscriptionExpiryService,
 	usageCleanup *service.UsageCleanupService,
@@ -629,10 +627,6 @@ func provideCleanup(
 				if cnProviderBalanceCheck != nil {
 					cnProviderBalanceCheck.Stop()
 				}
-				return nil
-			}},
-			{"OpenAICodexVersionSyncService", func() error {
-				codexVersionSync.Stop()
 				return nil
 			}},
 			{"ProxyExpiryService", func() error {

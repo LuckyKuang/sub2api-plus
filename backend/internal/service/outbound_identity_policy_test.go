@@ -17,6 +17,7 @@ import (
 
 // These are product requirements, not expectations generated from the policy.
 var fixedIdentityCases = []struct{ platform, kind, preset string }{
+	{"openai", "oauth", "codex"}, {"openai", "apikey", "codex"},
 	{"deepseek", "oauth", "deepseek"}, {"deepseek", "apikey", "deepseek"},
 	{"kimi", "oauth", "kimi"}, {"kimi", "apikey", "kimi"},
 	{"minimax", "oauth", "minimax"}, {"minimax", "apikey", "minimax_apikey"},
@@ -54,8 +55,8 @@ func TestNativeIdentityPolicyRejectsEveryForeignFamilyAndDefaultMapping(t *testi
 	}
 }
 
-func TestCompatibleIdentityPolicyHasExactlyThirteenAdvancedMappings(t *testing.T) {
-	expected := []string{"openai:apikey", "openai:upstream", "anthropic:apikey", "anthropic:upstream", "gemini:apikey", "gemini:upstream", "grok:apikey", "grok:upstream", "antigravity:upstream", "typesafe:apikey", "opencode_go:apikey", "cline:apikey", "command_code:apikey"}
+func TestCompatibleIdentityPolicyHasExactlyTwelveAdvancedMappings(t *testing.T) {
+	expected := []string{"openai:upstream", "anthropic:apikey", "anthropic:upstream", "gemini:apikey", "gemini:upstream", "grok:apikey", "grok:upstream", "antigravity:upstream", "typesafe:apikey", "opencode_go:apikey", "cline:apikey", "command_code:apikey"}
 	svc, ctx := outboundIdentityTestSettings(t, emptyOutboundIdentitySettings())
 	var actual []string
 	for _, policy := range svc.GetOutboundIdentityView(ctx).AccountPolicies {
@@ -90,7 +91,7 @@ func TestNativeIdentityStoredForeignCandidatesNeverReachWire(t *testing.T) {
 		"minimax_apikey": "Anthropic/JS 0.91.1", "zcode": "ZCode/3.14.3",
 		"stepfun": "step (linux 6.8.0-31-generic; x64)",
 	}
-	for _, tc := range fixedIdentityCases[:10] {
+	for _, tc := range fixedIdentityCases[2:12] {
 		t.Run(tc.platform+":"+tc.kind, func(t *testing.T) {
 			// Simulate a stale database before cleanup. The global and account
 			// candidates both try to select another product with extra fields.

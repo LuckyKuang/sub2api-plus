@@ -17,6 +17,22 @@ MIGRATIONS = ROOT / "backend/migrations"
 NAME_RE = re.compile(r"^(\d{3})(?:[a-z])?_[a-z0-9_]+(?:_notx)?\.sql$")
 ZERO_SHA_RE = re.compile(r"^0+$")
 
+# These independently committed feature and Gemini migrations predate the main
+# merge. Their deployed filenames cannot be renumbered.
+# Pin both path and original Git blob; no other old or duplicate prefix is exempt.
+HISTORICAL_MERGED_MIGRATIONS = {
+    "backend/migrations/287_channel_monitor_stream_probe.sql":
+        "89bda598c1d0183e1f98e7b191de7aa3123b1e7b",
+    "backend/migrations/288_openai_session_routes.sql":
+        "e0e9c2ed9a502a142bb5278fddd2c4ebfbbefc11",
+    "backend/migrations/287_gemini_cached_contents.sql":
+        "d3cbda27dfd25d1004f54982021e9152437d224c",
+    "backend/migrations/288_gemini_cached_contents_channel_usage.sql":
+        "c72f097a7303166d68cdb7b57b0d77bd7737db3e",
+    "backend/migrations/289_gemini_cached_contents_mutation_lease.sql":
+        "e0970efebf75d763271032b7157c6a2eafa2b8ad",
+}
+
 
 def git(*args: str) -> str:
     return subprocess.check_output(
@@ -165,17 +181,29 @@ def main() -> int:
         if (match := NAME_RE.fullmatch(Path(name).name))
     ]
     max_base = max(base_prefixes, default=0)
-    new_prefixes: list[int] = []
+    new_migrations: list[tuple[Path, int]] = []
+    historical_count = 0
     for path in added:
         prefix = validate_added(path, errors)
         if prefix is None:
             continue
-        new_prefixes.append(prefix)
+        relative = path.relative_to(ROOT).as_posix()
+        if expected_blob := HISTORICAL_MERGED_MIGRATIONS.get(relative):
+            actual_blob = git("hash-object", f"--path={relative}", str(path)).strip()
+            if actual_blob != expected_blob:
+                errors.append(f"{relative}: historical migration differs from pinned content")
+            else:
+                historical_count += 1
+                max_base = max(max_base, prefix)
+            continue
+        new_migrations.append((path, prefix))
+    for path, prefix in new_migrations:
         if prefix <= max_base:
             errors.append(
                 f"{path.relative_to(ROOT).as_posix()}: prefix {prefix:03d} must be "
                 f"greater than existing maximum {max_base:03d}"
             )
+    new_prefixes = [prefix for _, prefix in new_migrations]
     if len(new_prefixes) != len(set(new_prefixes)):
         errors.append("new migrations contain duplicate numeric prefixes")
 
@@ -185,7 +213,10 @@ def main() -> int:
             print(f"- {error}", file=sys.stderr)
         return 1
 
-    print(f"Migration changes are valid ({len(added)} new SQL file(s)).")
+    print(
+        f"Migration changes are valid ({len(new_prefixes)} new SQL file(s), "
+        f"{historical_count} unchanged historical file(s))."
+    )
     return 0
 
 

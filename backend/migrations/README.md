@@ -80,6 +80,12 @@ Their full filenames and checksums remain immutable. The channel-monitor/session
 route migrations and Gemini cache migrations have independent dependencies;
 lexicographic execution and upgrades from either branch retain all five files.
 New migrations start after 289 and must use unique increasing prefixes.
+The migration policy checker pins the complete filenames and original Git blobs
+of these five migrations in `tools/check_new_migrations.py`. Only those unchanged
+historical files may enter comparisons against either branch's newer baseline.
+They also reserve their numeric prefixes when comparing against an older release.
+Modified or renamed files, other old prefixes and new duplicate prefixes remain
+forbidden.
 
 ## File Naming
 
@@ -233,3 +239,12 @@ Migration 280 removes `grok_client_tool_cache_enabled` only from Grok account
 extra objects. Credentials, unrelated extras, foreign-platform rows and
 non-object historical values are preserved. The retired switch no longer grants
 hosted search tools or changes cache routing. See [Grok](../../docs/providers/GROK.md#cache-and-tool-declarations).
+
+## Codex native API-key identity and manual versions
+
+Migration `290_codex_native_identity_and_manual_versions.sql` removes the retired
+Codex synchronization settings and the `openai:apikey` default-family mapping.
+Foreign account identity candidates are discarded atomically; credential-owner
+UA, explicit version pins, valid Codex selections, upstream supplier mappings
+and every unrelated provider setting remain intact. Runtime ignores stale
+synchronization values and rejects foreign API-key families before cleanup.

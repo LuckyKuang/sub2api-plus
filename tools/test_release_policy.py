@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import os
+from contextlib import redirect_stderr, redirect_stdout
+import io
 import json
 import re
 import subprocess
@@ -457,6 +459,126 @@ class MigrationBaselineTests(unittest.TestCase):
                 tags=[TAG],
                 statuses={TAG: "planned"},
             )
+
+
+class MigrationHistoricalMergeTests(unittest.TestCase):
+    # Requirement: retain deployed SQL byte-for-byte across a divergent merge,
+    # while every genuinely new migration remains unique and increasing.
+    historical = (
+        "287_channel_monitor_stream_probe.sql",
+        "288_openai_session_routes.sql",
+    )
+    gemini_historical = (
+        "287_gemini_cached_contents.sql",
+        "288_gemini_cached_contents_channel_usage.sql",
+        "289_gemini_cached_contents_mutation_lease.sql",
+    )
+
+    def setUp(self) -> None:
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.migrations = self.root / "backend/migrations"
+        self.migrations.mkdir(parents=True)
+        self.git("init", "-q")
+        self.git("config", "user.name", "migration-policy-test")
+        self.git("config", "user.email", "migration-policy-test@example.invalid")
+        self.git("config", "core.autocrlf", "false")
+        self.write("289_existing.sql")
+        self.commit()
+        self.base = self.git("rev-parse", "HEAD").strip()
+
+    def git(self, *args: str) -> str:
+        return subprocess.check_output(["git", *args], cwd=self.root, text=True)
+
+    def write(self, name: str, content: bytes = b"SELECT 1;\n") -> None:
+        (self.migrations / name).write_bytes(content)
+
+    def commit(self) -> None:
+        self.git("add", "-A")
+        self.git("commit", "-qm", "migration policy fixture")
+
+    def check(self) -> tuple[int, str]:
+        output = io.StringIO()
+        with (
+            mock.patch.object(check_new_migrations, "ROOT", self.root),
+            mock.patch.object(check_new_migrations, "MIGRATIONS", self.migrations),
+            mock.patch.object(sys, "argv", ["check_new_migrations.py", "--base", self.base]),
+            redirect_stdout(output),
+            redirect_stderr(output),
+        ):
+            return check_new_migrations.main(), output.getvalue()
+
+    def test_exact_historical_paths_and_content_with_new_migration_pass(self) -> None:
+        for name in self.historical:
+            self.write(name, (ROOT / "backend/migrations" / name).read_bytes())
+        self.write("290_new.sql")
+        self.commit()
+        code, output = self.check()
+        self.assertEqual(code, 0, output)
+        self.assertIn("1 new SQL file(s), 2 unchanged historical file(s)", output)
+
+    def test_changed_historical_content_fails(self) -> None:
+        for name in (*self.historical, *self.gemini_historical):
+            with self.subTest(name=name):
+                self.write(name, (ROOT / "backend/migrations" / name).read_bytes() + b"-- changed\n")
+                self.commit()
+                code, output = self.check()
+                self.assertEqual(code, 1, output)
+                self.assertIn(
+                    f"backend/migrations/{name}: historical migration differs from pinned content",
+                    output,
+                )
+
+    def test_historical_prefixes_are_reserved_against_older_release_base(self) -> None:
+        (self.migrations / "289_existing.sql").rename(self.migrations / "286_existing.sql")
+        self.commit()
+        self.base = self.git("rev-parse", "HEAD").strip()
+        for name in (*self.historical, *self.gemini_historical):
+            self.write(name, (ROOT / "backend/migrations" / name).read_bytes())
+        self.write("290_new.sql")
+        self.commit()
+        code, output = self.check()
+        self.assertEqual(code, 0, output)
+        self.assertIn("1 new SQL file(s), 5 unchanged historical file(s)", output)
+        self.write("287_new.sql")
+        self.commit()
+        code, output = self.check()
+        self.assertEqual(code, 1, output)
+        self.assertIn("prefix 287 must be greater than existing maximum 289", output)
+
+    def test_renamed_historical_content_is_not_exempt(self) -> None:
+        self.write("287_renamed.sql", (ROOT / "backend/migrations" / self.historical[0]).read_bytes())
+        self.commit()
+        code, output = self.check()
+        self.assertEqual(code, 1, output)
+        self.assertIn("must be greater than existing maximum 289", output)
+
+    def test_other_old_prefix_and_new_duplicates_fail(self) -> None:
+        self.write("289_other.sql")
+        self.write("290_new.sql")
+        self.write("290_duplicate.sql")
+        self.commit()
+        code, output = self.check()
+        self.assertEqual(code, 1, output)
+        self.assertIn("prefix 289 must be greater than existing maximum 289", output)
+        self.assertIn("new migrations contain duplicate numeric prefixes", output)
+
+    def test_modification_or_deletion_of_existing_historical_file_fails(self) -> None:
+        name = self.historical[0]
+        self.write(name, (ROOT / "backend/migrations" / name).read_bytes())
+        self.commit()
+        self.base = self.git("rev-parse", "HEAD").strip()
+        self.write(name)
+        self.commit()
+        code, output = self.check()
+        self.assertEqual(code, 1, output)
+        self.assertIn("existing migrations may not be M", output)
+        (self.migrations / name).unlink()
+        self.commit()
+        code, output = self.check()
+        self.assertEqual(code, 1, output)
+        self.assertIn("existing migrations may not be D", output)
 
 
 class WorkflowProvenanceTests(unittest.TestCase):

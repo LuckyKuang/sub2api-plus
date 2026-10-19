@@ -118,11 +118,13 @@ var codexAccountIdentityFields = []struct {
 	{name: "session-id", kind: "session"},
 	{name: "thread_id", kind: "thread"},
 	{name: "thread-id", kind: "thread"},
+	{name: "parent_thread_id", kind: "thread"},
+	{name: "x-codex-parent-thread-id", kind: "thread"},
 	{name: "turn_id", kind: "turn"},
 	{name: "turn-id", kind: "turn"},
 	{name: "window_id", kind: "window"},
 	{name: "x-codex-window-id", kind: "window"},
-	{name: "x-client-request-id", kind: "request"},
+	{name: "x-client-request-id", kind: "thread"},
 }
 
 func applyCodexAccountIdentityFields(values map[string]any, account *Account, apiKeyID int64) bool {

@@ -318,6 +318,7 @@ func TestOpenAIIdentityContractHTTPPassthroughCompatiblePresets(t *testing.T) {
 		for _, preset := range []string{"claude", "gemini", "grok", "antigravity", "deepseek", "minimax", "minimax_apikey", "kimi", "zcode"} {
 			t.Run(fmt.Sprintf("%s/passthrough=%t", preset, passthrough), func(t *testing.T) {
 				account := newOpenAIRejectedFieldTestAccount()
+				account.Platform = PlatformOpenCodeGo
 				account.Extra["openai_passthrough"] = passthrough
 				account.Credentials[outboundIdentityCredential] = map[string]any{"preset": preset}
 				account.Credentials[credKeyHeaderOverrideEnabled] = true
@@ -480,12 +481,11 @@ func TestOpenAIIdentityContractPresetSelectionSurvivesMappingChanges(t *testing.
 	ctx := WithAccountOutboundIdentity(original, account)
 	_, selectedPreset := outboundidentity.FromContext(ctx)
 	require.False(t, selectedPreset, "native Codex uses its existing resolver")
-	require.NoError(t, settings.SetOutboundIdentitySettings(original, OutboundIdentitySettings{Defaults: map[string]string{"openai:apikey": "grok"}}))
+	requireApplicationErrorReason(t, settings.SetOutboundIdentitySettings(original, OutboundIdentitySettings{Defaults: map[string]string{"openai:apikey": "grok"}}), "OUTBOUND_IDENTITY_INVALID")
 	_, selectedPreset = outboundidentity.FromContext(WithAccountOutboundIdentity(ctx, account))
 	require.False(t, selectedPreset, "a retry cannot switch from Codex to another preset")
-	identity, selectedPreset := outboundidentity.FromContext(WithAccountOutboundIdentity(original, account))
-	require.True(t, selectedPreset)
-	require.Equal(t, "grok", identity.Preset)
+	_, selectedPreset = outboundidentity.FromContext(WithAccountOutboundIdentity(original, account))
+	require.False(t, selectedPreset, "a new request also retains the native Codex family")
 }
 
 type identityContractOAuthClient struct {

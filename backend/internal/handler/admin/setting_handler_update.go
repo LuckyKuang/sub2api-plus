@@ -264,7 +264,6 @@ type UpdateSettingsRequest struct {
 	CodexLegacyClientProfileCompatibilityEnabled *bool   `json:"codex_legacy_client_profile_compatibility_enabled"`
 	OpenAICodexLocalGroupQuotaEnabled            *bool   `json:"openai_codex_local_group_quota_enabled"`
 	OpenAICodexClientVersion                     *string `json:"openai_codex_client_version"`
-	OpenAICodexVersionAutoSyncEnabled            *bool   `json:"openai_codex_version_auto_sync_enabled"`
 
 	// codex_cli_only profile policy (global-only)
 	MinCodexVersion                      string  `json:"min_codex_version"`
@@ -1915,14 +1914,6 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.OpenAICodexClientVersion
 		}(),
-		// 同步值由自动同步任务独占写入，面板保存时原样带回，避免被清空。
-		OpenAICodexClientVersionSynced: previousSettings.OpenAICodexClientVersionSynced,
-		OpenAICodexVersionAutoSyncEnabled: func() bool {
-			if req.OpenAICodexVersionAutoSyncEnabled != nil {
-				return *req.OpenAICodexVersionAutoSyncEnabled
-			}
-			return previousSettings.OpenAICodexVersionAutoSyncEnabled
-		}(),
 		MinCodexVersion:       strings.TrimSpace(req.MinCodexVersion),
 		MaxCodexVersion:       strings.TrimSpace(req.MaxCodexVersion),
 		CodexCLIOnlyBlacklist: strings.TrimSpace(req.CodexCLIOnlyBlacklist),
@@ -2518,8 +2509,6 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		CodexLegacyClientProfileCompatibilityEnabled:           updatedSettings.CodexLegacyClientProfileCompatibilityEnabled,
 		OpenAICodexLocalGroupQuotaEnabled:                      updatedSettings.OpenAICodexLocalGroupQuotaEnabled,
 		OpenAICodexClientVersion:                               updatedSettings.OpenAICodexClientVersion,
-		OpenAICodexClientVersionSynced:                         updatedSettings.OpenAICodexClientVersionSynced,
-		OpenAICodexVersionAutoSyncEnabled:                      updatedSettings.OpenAICodexVersionAutoSyncEnabled,
 		MinCodexVersion:                                        updatedSettings.MinCodexVersion,
 		MaxCodexVersion:                                        updatedSettings.MaxCodexVersion,
 		CodexCLIOnlyBlacklist:                                  updatedSettings.CodexCLIOnlyBlacklist,

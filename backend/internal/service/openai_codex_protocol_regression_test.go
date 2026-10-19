@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -77,20 +78,24 @@ func captureCodexProtocolHeaders(t *testing.T, svc *OpenAIGatewayService, c *gin
 	var req *http.Request
 	var err error
 	if passthrough {
-		req, err = svc.buildUpstreamRequestOpenAIPassthrough(context.Background(), c, account, body, "fixture")
+		req, err = svc.buildUpstreamRequestOpenAIPassthrough(c.Request.Context(), c, account, body, "fixture")
 	} else {
-		req, err = svc.buildUpstreamRequest(context.Background(), c, account, body, "fixture", true, gjson.GetBytes(body, "prompt_cache_key").String(), true)
+		req, err = svc.buildUpstreamRequest(c.Request.Context(), c, account, body, "fixture", true, gjson.GetBytes(body, "prompt_cache_key").String(), true)
 	}
 	require.NoError(t, err)
 	target, err := url.Parse(server.URL)
 	require.NoError(t, err)
 	req.URL.Scheme, req.URL.Host, req.Host = target.Scheme, target.Host, target.Host
-	resp, err := http.DefaultClient.Do(prepareAccountOutboundRequest(req, account))
+	client := &http.Client{Transport: &http.Transport{}, Timeout: 5 * time.Second}
+	defer client.CloseIdleConnections()
+	resp, err := client.Do(prepareAccountOutboundRequest(req, account))
 	require.NoError(t, err)
 	_ = resp.Body.Close()
-	headers, _, err := svc.buildOpenAIWSHeaders(context.Background(), c, account, "fixture", OpenAIWSProtocolDecision{Transport: OpenAIUpstreamTransportResponsesWebsocketV2}, true, "", "", gjson.GetBytes(body, "prompt_cache_key").String(), gjson.GetBytes(body, "model").String(), "")
+	headers, _, err := svc.buildOpenAIWSHeaders(c.Request.Context(), c, account, "fixture", OpenAIWSProtocolDecision{Transport: OpenAIUpstreamTransportResponsesWebsocketV2}, true, "", c.Request.Header.Get(openAIWSTurnMetadataHeader), gjson.GetBytes(body, "prompt_cache_key").String(), gjson.GetBytes(body, "model").String(), "")
 	require.NoError(t, err)
-	conn, _, _, err := newDefaultOpenAIWSClientDialer().Dial(context.Background(), "ws"+strings.TrimPrefix(server.URL, "http"), headers, "")
+	dialCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, _, _, err := newDefaultOpenAIWSClientDialer().Dial(dialCtx, "ws"+strings.TrimPrefix(server.URL, "http"), headers, "")
 	require.NoError(t, err)
 	_ = conn.Close()
 	return []http.Header{<-captured, <-captured}
@@ -187,7 +192,8 @@ func TestCodexNonRootSessionCacheWireIsolation(t *testing.T) {
 }
 
 // Official to_api_provider inserts managed residency in its common header map,
-// including models. Native Codex presets inherit it; unrelated presets do not.
+// including models. Native API keys retain residency even with stale foreign
+// selections; ignoring that candidate also preserves the catalog cache identity.
 func TestCodexModelsResidencyWireAndCache(t *testing.T) {
 	captured := make(chan http.Header, 20)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -229,7 +235,11 @@ func TestCodexModelsResidencyWireAndCache(t *testing.T) {
 			account.Credentials[outboundIdentityCredential] = OutboundIdentitySelection{Preset: "claude"}
 			_, err := svc.FetchCodexModelsManifest(context.Background(), account, "", "")
 			require.NoError(t, err)
-			require.Empty(t, (<-captured).Get("x-openai-internal-codex-residency"))
+			select {
+			case <-captured:
+				t.Fatal("ignored foreign candidate must not split the native Codex cache identity")
+			default:
+			}
 		}
 	}
 }

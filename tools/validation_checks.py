@@ -121,6 +121,12 @@ def full_steps(
             "backend-lint-policy",
         ),
         ValidationStep(
+            "Codex identity guard tests",
+            [python, "tools/test_openai_codex_identity.py"],
+            root,
+            "backend-lint-policy",
+        ),
+        ValidationStep(
             "README synchronization",
             [python, "tools/check_readme_sync.py"],
             root,
@@ -208,7 +214,7 @@ CI_STEP_NAMES = {
     "golangci-lint": ("Backend lint",),
     "repository-policy": (
         "Compress CLI self-tests", "Push CLI self-tests", "Release CLI self-tests",
-        "Release policy tests", "Codex outbound identity", "README synchronization",
+        "Release policy tests", "Codex outbound identity", "Codex identity guard tests", "README synchronization",
         "Go test build tags", "Go test build-tag regressions",
         "CI validation regressions", "Release metadata sources", "Migration policy",
         "Release packaging tests", "Release image script syntax",

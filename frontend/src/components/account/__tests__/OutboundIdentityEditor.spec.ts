@@ -51,7 +51,7 @@ describe('OutboundIdentityEditor', () => {
   })
 
   it.each([
-    ['openai', 'apikey'], ['gemini', 'apikey'], ['anthropic', 'apikey'], ['grok', 'apikey'], ['antigravity', 'upstream'], ['typesafe', 'apikey'], ['opencode_go', 'apikey']
+    ['openai', 'upstream'], ['gemini', 'apikey'], ['anthropic', 'apikey'], ['grok', 'apikey'], ['antigravity', 'upstream'], ['typesafe', 'apikey'], ['opencode_go', 'apikey']
   ])('lets compatible %s/%s accounts select an existing identity', async (platform, accountType) => {
     const wrapper = mount(OutboundIdentityEditor, { props: { platform, accountType, modelValue: null } })
     await flushPromises()
@@ -67,7 +67,7 @@ describe('OutboundIdentityEditor', () => {
   })
 
   it.each([
-    ['deepseek', 'apikey'], ['deepseek', 'oauth'], ['kimi', 'apikey'], ['kimi', 'oauth'],
+    ['openai', 'apikey'], ['deepseek', 'apikey'], ['deepseek', 'oauth'], ['kimi', 'apikey'], ['kimi', 'oauth'],
     ['minimax', 'apikey'], ['minimax', 'oauth'], ['zhipu', 'apikey'], ['zhipu', 'oauth'],
     ['stepfun', 'apikey'], ['stepfun', 'oauth'], ['anthropic', 'bedrock'],
     ['anthropic', 'service_account'], ['gemini', 'service_account']

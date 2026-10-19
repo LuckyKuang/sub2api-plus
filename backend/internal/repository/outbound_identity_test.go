@@ -53,6 +53,11 @@ func TestHTTPUpstreamTrustedIdentityPreservedWithoutCrossHost403Replay(t *testin
 					"base_url": "https://cli-chat-proxy.grok.com/v1", "api_key": "test-key",
 				}}
 				if preset != "" {
+					if preset != "codex" {
+						// Compatible upstream accounts can select another client family;
+						// native OpenAI API keys now retain Codex on every request.
+						account.Type = service.AccountTypeUpstream
+					}
 					account.Credentials["outbound_identity"] = map[string]any{"preset": preset}
 				}
 				ctx := service.WithAccountOutboundIdentity(context.Background(), account)

@@ -202,9 +202,7 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	if cacheSessionIdentity != "" {
 		setOpenAIUpstreamSessionIdentityForAccount(headers, account, cacheSessionIdentity)
 	}
-	if strings.TrimSpace(headers.Get("x-client-request-id")) == "" {
-		alignOpenAICodexThreadHeaders(headers)
-	}
+	alignOpenAICodexThreadHeaders(headers)
 	identity := s.applyOpenAIOutboundIdentity(ctx, account, headers, true)
 	if selected, ok := outboundidentity.FromContext(WithAccountOutboundIdentity(ctx, account)); ok {
 		selected.ForProtocol(APIProtocolResponses).Apply(headers)

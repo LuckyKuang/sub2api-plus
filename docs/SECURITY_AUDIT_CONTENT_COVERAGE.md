@@ -58,8 +58,8 @@ resolver results; it does not evaluate content, select an account or perform I/O
 Reusing a scope on retry or reconnection never skips subsequent-turn audit.
 Prompt Audit inference/model probes and Content Moderation calls use their own
 configured supplier credentials and a separate trusted outbound identity under
-[Outbound Identity](OUTBOUND_IDENTITY.md). They resolve the `openai:apikey`
-type default without selecting or inheriting a forwarding account. Prompt
+[Outbound Identity](OUTBOUND_IDENTITY.md). They resolve the native Codex
+global/default identity without selecting or inheriting a forwarding account. Prompt
 chunks and same-credential retries retain a supplier snapshot; failover resolves
 the new owner. These headers do not change canonical extraction, scan payloads,
 audit decisions or exception/pass-through semantics. Forwarding still waits for
@@ -533,3 +533,14 @@ boundary, after ingress decoding and audit, with no new endpoint or ingress path
 Models residency adds an outbound declaration only. Real-payload regressions
 cover plain/Lite HTTP and WS shapes, canonical content in both engines, and the
 existing blocked/allowed stage-order gates for both credential types.
+
+## Codex outbound identity maintenance
+
+The official-source parity update at Codex `770ed6dcea40` changes outbound
+thread/request/parent identity projections and retires the administrative version
+sync endpoint. It adds no inference ingress or audited content field. Flat and
+embedded parent-thread metadata remain protocol context, never user prompt text.
+`TestCodexProtocolOptionsPreserveCanonicalAuditContent` exercises real HTTP and
+WS response.create envelopes with this metadata for both engines, preserving
+recognized sibling text and unknown-item pass-through. Existing HTTP/WS
+account-type and side-effect-order suites remain required.

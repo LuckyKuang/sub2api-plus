@@ -261,13 +261,9 @@ type SystemSettings struct {
 	OpenAICodexResidency                         string // 全局 Codex residency：off（默认，不发送）或 us
 	CodexLegacyClientProfileCompatibilityEnabled bool   // 是否临时允许封闭旧版 Codex 客户端档案（默认 false）
 	OpenAICodexLocalGroupQuotaEnabled            bool   // Codex 客户端显示本地订阅 5 小时/7 天额度（默认 false）
-	OpenAICodexClientVersion                     string // 出站声明的 Codex 客户端版本号（管理员覆写）；空值跟随自动同步值
-	OpenAICodexClientVersionSynced               string // 自动同步到的官方最新稳定版版本号（只读展示）
-	OpenAICodexClientVersionSyncedCheckedAt      string // 最近一次实际检查官方仓库的时间（RFC3339 UTC）
-	OpenAICodexClientVersionSyncError            string // 最近一次同步失败原因；成功时为空
+	OpenAICodexClientVersion                     string // 出站声明的 Codex 客户端版本号（管理员覆写）；空值使用内置发布版本
 	OpenAICodexClientVersionEffective            string // 出站实际声明的版本号
-	OpenAICodexClientVersionSource               string // override / synced / compiled
-	OpenAICodexVersionAutoSyncEnabled            bool   // 是否启用 Codex 客户端版本号自动同步（默认 true）
+	OpenAICodexClientVersionSource               string // override / compiled
 	ClaudeCodeClientVersion                      string // 出站声明的 Claude Code 客户端版本号（管理员覆写）
 	ClaudeCodeClientVersionSynced                string // 自动同步到的官方最新 Claude Code 版本号（只读）
 	ClaudeCodeVersionAutoSyncEnabled             bool   // 是否启用 Claude Code 客户端版本号自动同步（默认 true）

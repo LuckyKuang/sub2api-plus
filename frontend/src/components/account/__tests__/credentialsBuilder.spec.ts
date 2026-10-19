@@ -472,6 +472,10 @@ describe('validateHeaderOverrideRows value/entry limits', () => {
 
 describe('validateHeaderOverrideRows session isolation headers', () => {
   it('rejects per-request session headers', () => {
+    for (const name of ['session-id', 'thread-id', 'x-codex-parent-thread-id']) {
+      expect(validateHeaderOverrideRows([{ name, value: 'static-thread' }])).toBe('blockedName')
+      expect(validateHeaderOverrideRows([{ name: name.toUpperCase(), value: '' }])).toBe('blockedName')
+    }
     expect(validateHeaderOverrideRows([{ name: 'session_id', value: '' }])).toBe('blockedName')
     expect(validateHeaderOverrideRows([{ name: 'Conversation_ID', value: '' }])).toBe('blockedName')
     expect(validateHeaderOverrideRows([{ name: 'x-codex-turn-state', value: '' }])).toBe(

@@ -80,14 +80,14 @@ describe('OutboundIdentitySettings', () => {
     vi.mocked(updateOutboundIdentity).mockResolvedValue(fixture())
   })
 
-  it('offers exactly eleven compatible mappings in a collapsed advanced section', async () => {
+  it('offers exactly twelve compatible mappings in a collapsed advanced section', async () => {
     const wrapper = mount(OutboundIdentitySettings)
     await flushPromises()
     const advanced = wrapper.get('[data-testid="outbound-identity-defaults"]')
     expect(advanced.element.tagName).toBe('DETAILS')
     expect(advanced.attributes('open')).toBeUndefined()
     expect(advanced.findAll('[data-identity-mapping]').map(row => row.attributes('data-identity-mapping')).sort()).toEqual([
-      'openai:apikey', 'openai:upstream', 'anthropic:apikey', 'anthropic:upstream',
+      'openai:upstream', 'anthropic:apikey', 'anthropic:upstream',
       'gemini:apikey', 'gemini:upstream', 'grok:apikey', 'grok:upstream',
       'antigravity:upstream', 'typesafe:apikey', 'opencode_go:apikey', 'cline:apikey', 'command_code:apikey'
     ].sort())
@@ -165,12 +165,12 @@ describe('OutboundIdentitySettings', () => {
     await claude.findAll('input')[0].setValue('2.9.1')
     const advanced = wrapper.get('[data-testid="outbound-identity-defaults"]')
     await advanced.get('summary').trigger('click')
-    const apiKeyDefault = advanced.get('[data-identity-mapping="openai:apikey"] select')
+    const apiKeyDefault = advanced.get('[data-identity-mapping="openai:upstream"] select')
     await apiKeyDefault.setValue('string:grok')
     await flushPromises()
     expect((apiKeyDefault.element as HTMLSelectElement).value).toBe('string:grok')
     await wrapper.vm.save()
-    expect(updateOutboundIdentity).toHaveBeenCalledWith({ profiles: { claude: { preset: 'claude', user_agent: '', version: '2.9.1' } }, defaults: { 'openai:apikey': 'grok' }, runtime: {} })
+    expect(updateOutboundIdentity).toHaveBeenCalledWith({ profiles: { claude: { preset: 'claude', user_agent: '', version: '2.9.1' } }, defaults: { 'openai:upstream': 'grok' }, runtime: {} })
     wrapper.unmount()
   })
 

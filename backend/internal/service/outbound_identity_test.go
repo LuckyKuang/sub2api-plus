@@ -161,7 +161,7 @@ func TestOutboundIdentityPresetInheritanceSnapshotAndFailover(t *testing.T) {
 	require.False(t, ok, "legacy implicit-platform Codex callers keep their existing resolver")
 }
 
-func TestOutboundIdentityCodexUnchangedAndCompatibleOptIn(t *testing.T) {
+func TestOutboundIdentityCodexNativeAndCompatibleUpstream(t *testing.T) {
 	svc, ctx := outboundIdentityTestSettings(t, emptyOutboundIdentitySettings())
 	account := &Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Credentials: map[string]any{"user_agent": DefaultOpenAICodexUserAgent}}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://example.com/v1/responses", nil)
@@ -176,7 +176,11 @@ func TestOutboundIdentityCodexUnchangedAndCompatibleOptIn(t *testing.T) {
 	require.Equal(t, before, req.Header, "the current request keeps its selected Codex identity")
 	req, err = http.NewRequestWithContext(ctx, http.MethodPost, "https://example.com/v1/responses", nil)
 	require.NoError(t, err)
+	applyResolvedOpenAIOutboundIdentity(req.Header, resolveOpenAIOutboundIdentityFromSettings(ctx, account, svc), false)
 	prepareAccountOutboundRequest(req, account)
+	require.Equal(t, before, req.Header, "a fresh native API-key request also ignores the stored foreign preset")
+	upstream := &Account{ID: 2, Platform: PlatformOpenAI, Type: AccountTypeUpstream, Credentials: account.Credentials}
+	prepareAccountOutboundRequest(req, upstream)
 	require.Equal(t, builtInOutboundIdentity("claude").UserAgent, req.Header.Get("User-Agent"))
 	require.Empty(t, req.Header.Get("Originator"))
 	require.Equal(t, "cli", req.Header.Get("X-App"))

@@ -27,6 +27,16 @@ Superseded AI Studio-only discovery methods are removed in favor of the unified
 Gemini/Vertex flow. Plus retains its vendored SheetJS dependency rather than the
 official npm downgrade; release notes describe the actual Plus dependency state.
 
+The Codex egress review merges Plus `main` at
+`0b5acf5796b40a695f1e42ebc01aa48875283823` and compares the client contract with
+openai/codex `770ed6dcea40fedb83bb831f6d5e3760a933cc9a`. OpenAI OAuth and API-key
+accounts keep native Codex identity; compatible upstream suppliers retain their
+explicit family mapping. Codex version changes are maintained manually in code
+or by an explicit administrator pin, without remote version synchronization.
+The existing Plus identity priority, fingerprint controls and ingress audit
+boundaries remain governed by the owning contracts above. Historical migrations
+from both branches retain their complete filenames and checksums.
+
 ## Current Version
 
 ```text

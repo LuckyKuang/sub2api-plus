@@ -434,18 +434,6 @@ func ProvideAccountExpiryService(accountRepo AccountRepository) *AccountExpirySe
 	return svc
 }
 
-// ProvideOpenAICodexVersionSyncService creates and starts OpenAICodexVersionSyncService.
-// 出站 Codex 身份的版本号靠它跟随官方发布，无需为了跟版本而发新版本；面板可关闭。
-func ProvideOpenAICodexVersionSyncService(
-	settingRepo SettingRepository,
-	settingService *SettingService,
-	githubClient GitHubReleaseClient,
-) *OpenAICodexVersionSyncService {
-	svc := NewOpenAICodexVersionSyncService(settingRepo, settingService, githubClient, openAICodexVersionSyncInterval)
-	svc.Start()
-	return svc
-}
-
 // ProvideProxyExpiryService creates and starts ProxyExpiryService.
 func ProvideProxyExpiryService(proxyRepo ProxyRepository) *ProxyExpiryService {
 	svc := NewProxyExpiryService(proxyRepo, time.Minute)
@@ -993,7 +981,6 @@ var ProviderSet = wire.NewSet(
 	ProvideTokenRefreshService,
 	wire.Bind(new(GrokOAuthReconciler), new(*TokenRefreshService)),
 	ProvideAccountExpiryService,
-	ProvideOpenAICodexVersionSyncService,
 	ProvideProxyExpiryService,
 	ProvideSubscriptionExpiryService,
 	ProvideTimingWheelService,

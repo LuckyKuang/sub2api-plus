@@ -185,7 +185,7 @@ modes, including client-owned values preserved by `off` and `device`.
 Outbound User-Agent identity has one immutable source order: a valid
 credential-owner `credentials.user_agent`, then a valid global
 `openai_codex_user_agent`, then the compiled default. Originator and Version
-are derived coherently from that selected client family. Version synchronization
+are derived coherently from that selected client family. Manual version updates
 may update only its version declaration and cannot replace the selected source,
 OS, architecture, terminal fingerprint, client family, or Originator.
 The account-aware resolver is the final identity authority for Messages,
@@ -213,10 +213,11 @@ This source matrix applies identically to OAuth and API-key HTTP/WS provider
 requests, including retries, discovery and probes. Transport preference and
 inbound client classification never change the selected source.
 
-The independent-supplier row applies when its API-key type default selects
-Codex. OpenAI monitor checks, Prompt Audit scans/model probes and Content
-Moderation requests emit the same native Codex UA/Originator/Version triple
-as API-key inference. Other selected presets follow [Outbound Identity](../OUTBOUND_IDENTITY.md).
+OpenAI monitor checks, Prompt Audit scans/model probes and Content Moderation
+requests resolve the native Codex global/default identity and emit the same
+UA/Originator/Version triple as API-key inference. Monitors for other providers
+follow their native or permitted compatible API-key policy under
+[Outbound Identity](../OUTBOUND_IDENTITY.md).
 Each independent operation resolves its own supplier snapshot; discovery and
 inference within one probe, chunks and same-credential retries reuse it.
 
@@ -235,8 +236,10 @@ Version: 0.158.0
 ```
 
 The version resolver runs after source selection: a valid administrator version
-override, then an eligible synchronized stable version, then the compiled
-version. This may change only the selected version declarations. The configured
+override, then the compiled release version. Historical synchronization values
+are ignored even before cleanup migration 290; the sync service, admin endpoint
+and UI have been removed. Official release upgrades are reviewed in code, never
+read from the development Cargo placeholder `0.0.0`. This may change only the selected version declarations. The configured
 UA parser follows the client-profile policy; the outbound version field retains
 its historical normalization and minimum-version checks, including accepted
 two-part versions. Four-part versions still fall back under the existing version
@@ -438,7 +441,7 @@ Neither capability is implied by matching UA/Originator/Version.
 
 An administrator User-Agent may end with the official ` ({suffix})` group, for
 example `codex_cli_rs/0.158.0 (Ubuntu 24.04; x86_64) xterm-256color (mcp: server-a)`.
-Pairing, validation, and version synchronization accept that form and keep the
+Pairing, validation, and manual version updates accept that form and keep the
 suffix unchanged. The gateway does not generate a suffix.
 
 ## Standalone search
@@ -482,7 +485,7 @@ The Codex identity controls now live in **System Settings → Outbound identity*
 The default identity and source-priority matrix above are unchanged. Explicit
 non-Codex identity selections for compatible API-key/upstream accounts use the
 separate [outbound identity](../OUTBOUND_IDENTITY.md) preset mechanism. This does
-not change native Codex account selection, client classification or version sync.
+not change native Codex account selection, client classification or manual version updates.
 
 Do not add a profile based only on a UI/product name or a community report.
 For every registry addition or change:
@@ -514,11 +517,42 @@ API-key discovery uses the selected account’s own credentials.
 Generic account header overrides run before this final identity step and cannot
 replace its source. With the Codex preset, API-key `/v1/models` sends the selected UA, Originator
 and Version; Codex/OAuth manifest Version and client_version follow the selected
-identity. A compatible API-key account explicitly selecting another preset uses
-that preset's wire headers and version for the Codex-style manifest's
-client_version query. Shared raw catalog cache keys include the resolved URL,
+identity. An OpenAI API-key account's custom base URL retains this native Codex
+contract. Shared raw catalog cache keys include the resolved URL,
 request headers and credentials, so an identity/credential change cannot reuse
 a different identity's cached response. Detached manifest cache refreshes retain
 the identity snapshot used to build their request and cache key.
 The compiled default identity and source-priority matrix above remain the
 normative declarations for every discovery and forwarding path.
+
+### Official source parity and thread references
+
+Reviewed against openai/codex `770ed6dcea40fedb83bb831f6d5e3760a933cc9a`
+(`login/src/auth/default_client.rs`, `model-provider-info/src/lib.rs`,
+`core/src/client.rs`, `core/src/responses_metadata.rs`, and
+`codex-api/src/endpoint/responses.rs`). The exact compiled identity and
+source-priority matrix above stay unchanged. OpenAI OAuth/setup-token/API-key
+accounts retain the Codex client family. Migration 290 removes the retired
+`openai:apikey` mapping and whole foreign account candidates while preserving
+credential-owner `user_agent`, valid native selections, explicit version pins,
+and compatible supplier/upstream settings. Runtime rejects foreign selections
+independently of migration completion.
+
+The retired administrator action
+`POST /api/v1/admin/settings/openai-codex-version/sync` is no longer registered.
+Settings responses and updates no longer expose the automatic-sync toggle,
+synced version, check timestamp or synchronization error. The manual version,
+effective version and `override` / `compiled` source fields remain available.
+The local full profile and CI repository-policy lane run the identity guard and
+its regression tests. They reject OAuth-only inference finalization and any
+restoration of the retired automatic-version service or storage keys.
+
+HTTP and WS both finish thread projection after credential-owner isolation and
+fingerprint handling: `x-client-request-id` equals the final `thread-id`.
+Account isolation uses the same thread namespace for request IDs and parent
+references (`x-codex-parent-thread-id` and canonical/flat `parent_thread_id`),
+so parent references preserve their relationship to an isolated parent thread.
+Generic account overrides cannot replace the live parent-thread header.
+Existing explicit session/full convergence policies retain their thread
+convergence behavior. Protocol metadata does not change either audit engine's
+canonical user-content extraction or side-effect ordering.
