@@ -120,6 +120,7 @@ func (h *GatewayHandler) GeminiCachedContentsCreate(c *gin.Context) {
 		googleSecurityAuditError(c, decision)
 		return
 	}
+	c.Request = c.Request.WithContext(service.WithOutboundIdentityScope(c.Request.Context(), c))
 
 	channelMapping, _ := h.gatewayService.ResolveChannelMappingAndRestrict(c.Request.Context(), apiKey.GroupID, modelName)
 	reqModel := modelName
@@ -251,7 +252,7 @@ func (h *GatewayHandler) GeminiCachedContentsCreate(c *gin.Context) {
 			if errors.As(err, &malformed) {
 				reqLog.Error("gemini.cached_content.upstream_create_malformed", zap.Int64("account_id", account.ID), zap.Error(err))
 				if malformed.Name != "" {
-					h.cleanupGeminiCachedContentUpstream(reqLog, account, malformed.Name)
+					h.cleanupGeminiCachedContentUpstream(c.Request.Context(), reqLog, account, malformed.Name)
 				}
 				googleError(c, http.StatusBadGateway, "Upstream returned an invalid cached content response")
 				return
@@ -279,7 +280,7 @@ func (h *GatewayHandler) GeminiCachedContentsCreate(c *gin.Context) {
 		chargeDone, err := h.reserveGeminiCachedContentCharge(c, apiKey, subscription, amount)
 		if err != nil {
 			reqLog.Info("gemini.cached_content.storage_charge_rejected", zap.Float64("amount", amount), zap.Error(err))
-			h.cleanupGeminiCachedContentUpstream(reqLog, account, upstream.Name)
+			h.cleanupGeminiCachedContentUpstream(c.Request.Context(), reqLog, account, upstream.Name)
 			h.submitGeminiCachedContentUsage(c, apiKey, account, subscription, pricingAt,
 				service.GeminiCachedContentCreateUsageRequestID(publicID), modelName, mappedModel, int(tokens), 0, usageFields, body)
 			writeGeminiCachedContentBillingError(c, err)
@@ -307,7 +308,7 @@ func (h *GatewayHandler) GeminiCachedContentsCreate(c *gin.Context) {
 		cancelPersist()
 		if err != nil {
 			reqLog.Error("gemini.cached_content.save_failed", zap.Int64("account_id", account.ID), zap.Error(err))
-			h.cleanupGeminiCachedContentUpstream(reqLog, account, record.UpstreamName)
+			h.cleanupGeminiCachedContentUpstream(c.Request.Context(), reqLog, account, record.UpstreamName)
 			googleError(c, http.StatusInternalServerError, "Failed to persist cached content")
 			return
 		}
@@ -417,6 +418,7 @@ func (h *GatewayHandler) GeminiCachedContentsPatch(c *gin.Context) {
 		googleSecurityAuditError(c, decision)
 		return
 	}
+	c.Request = c.Request.WithContext(service.WithOutboundIdentityScope(c.Request.Context(), c))
 	record, ok := h.resolveGeminiCachedContentOrWrite(c, reqLog, apiKey, c.Param("cacheID"))
 	if !ok {
 		return
@@ -736,8 +738,8 @@ func geminiCachedContentPersistContext(c *gin.Context) (context.Context, context
 }
 
 // cleanupGeminiCachedContentUpstream 尽力删除已在上游创建、但网关不会登记的缓存，避免其持续产生存储费。
-func (h *GatewayHandler) cleanupGeminiCachedContentUpstream(reqLog *zap.Logger, account *service.Account, upstreamName string) {
-	ctx, cancel := context.WithTimeout(context.Background(), geminiCachedContentPersistTimeout)
+func (h *GatewayHandler) cleanupGeminiCachedContentUpstream(ctx context.Context, reqLog *zap.Logger, account *service.Account, upstreamName string) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), geminiCachedContentPersistTimeout)
 	defer cancel()
 	if err := h.geminiCachedContentService.DeleteUpstream(ctx, account, &service.GeminiCachedContent{UpstreamName: upstreamName}); err != nil {
 		reqLog.Error("gemini.cached_content.orphan_cleanup_failed", zap.Int64("account_id", account.ID), zap.String("upstream_name", upstreamName), zap.Error(err))

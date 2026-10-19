@@ -19,6 +19,14 @@ in [outbound identity](docs/OUTBOUND_IDENTITY.md),
 [upgrade prerequisites](backend/migrations/README.md#upgrade-prerequisites).
 Completed integration narratives remain in Git history.
 
+The v0.2.17 integration review additionally restores Plus outbound identity on
+the imported Gemini explicit-cache and native model-discovery paths, including
+Vertex pagination, token acquisition and detached cache cleanup. Source priority,
+client families and compiled fingerprints remain governed by the Plus contract.
+Superseded AI Studio-only discovery methods are removed in favor of the unified
+Gemini/Vertex flow. Plus retains its vendored SheetJS dependency rather than the
+official npm downgrade; release notes describe the actual Plus dependency state.
+
 ## Current Version
 
 ```text

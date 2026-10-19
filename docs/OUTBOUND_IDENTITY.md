@@ -678,6 +678,18 @@ This includes the non-streaming Bedrock account connection test, for both IAM
 credentials and bearer API keys. IAM signatures include the selected companion
 declarations; the send-time finalizer must not introduce a new signed header.
 
+Gemini native model list/detail (including every Vertex publisher-model page)
+and explicit-cache create/patch/delete resolve the credential owner's snapshot
+before acquiring an OAuth/service-account token and apply it at the HTTP send
+boundary. Failed-cache cleanup keeps that same snapshot when detached from a
+cancelled client. Mutation recovery resolves the bound account, and failover
+resolves the new owner; neither path inherits another account's declarations.
+The source matrix remains valid account > configured global preset/type default
+> environment/compiled default, with invalid candidates falling through atomically.
+The exact native Gemini default remains `GeminiCLI/0.1.5 (Linux; x64)`, with no
+`Originator`, `Version` or `X-Goog-Api-Client` wire headers. These paths are covered
+by `gemini_control_identity_test.go` and the cached-content handler regressions.
+
 Google One tier refresh resolves the credential-owning Gemini account before
 calling Drive `about?fields=storageQuota`. Drive sends that snapshot on every
 retry. A pre-account Google One OAuth exchange uses the global Gemini identity,

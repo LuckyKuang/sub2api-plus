@@ -20,6 +20,7 @@ import (
 
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/ctxkey"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	middleware "github.com/LuckyKuang/sub2api-plus/internal/server/middleware"
 	"github.com/LuckyKuang/sub2api-plus/internal/service"
 	"github.com/gin-gonic/gin"
@@ -198,6 +199,7 @@ type cachedBillingUpstream struct {
 	// patchTTLs 按顺序记录 PATCH 请求体中的 ttl。
 	patchTTLs  []string
 	beforePost func(n int)
+	onRequest  func(*http.Request)
 	// failures 按请求方法返回上游错误响应；transportErrors 按请求方法返回传输层错误（上游结果未知）。
 	failures        map[string]cachedBillingUpstreamFailure
 	transportErrors map[string]error
@@ -209,6 +211,9 @@ type cachedBillingUpstreamFailure struct {
 }
 
 func (u *cachedBillingUpstream) Do(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
+	if u.onRequest != nil {
+		u.onRequest(req)
+	}
 	var patch struct {
 		TTL string `json:"ttl"`
 	}
@@ -479,6 +484,42 @@ func TestGeminiCachedContentsCreate_UnusableUpstreamResponseCleansUpWithoutRetry
 	require.Equal(t, http.StatusBadGateway, rec.Code)
 	require.Equal(t, 1, env.upstream.methodCalls(http.MethodPost), "不换号重建")
 	require.Equal(t, 1, env.upstream.methodCalls(http.MethodDelete), "删除已创建的上游缓存")
+	require.Empty(t, env.repo.records)
+	require.Empty(t, env.usage.totals())
+}
+
+// Plus identity contract: orphan cleanup retains the create operation's owner
+// snapshot even after client cancellation or an intervening profile change.
+func TestGeminiCachedContentsCreate_OrphanCleanupRetainsIdentity(t *testing.T) {
+	env := newCachedBillingEnv(t, 100, 900)
+	env.upstream.createBody = `{"name":"cachedContents/orphan"}`
+	version := "3.9.1"
+	ctx := outboundidentity.WithResolver(context.Background(), func(context.Context, string) outboundidentity.Identity {
+		return outboundidentity.Identity{Preset: "gemini", UserAgent: "GeminiCLI/" + version + " (Linux; x64)",
+			Originator: "GeminiCLI", Version: version, Source: "global", Headers: map[string]string{"User-Agent": "GeminiCLI/" + version + " (Linux; x64)"}}
+	})
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var headers []http.Header
+	env.upstream.onRequest = func(req *http.Request) {
+		headers = append(headers, req.Header.Clone())
+		require.NoError(t, req.Context().Err(), "detached upstream work survives client cancellation")
+		if req.Method == http.MethodPost {
+			version = "3.9.7"
+			cancel()
+		}
+	}
+	c, rec := newGeminiCachedContentTestContext(http.MethodPost, "/v1beta/cachedContents", env.apiKey)
+	c.Request = c.Request.WithContext(context.WithValue(ctx, ctxkey.Group, env.group))
+	c.Request.Body = io.NopCloser(strings.NewReader(`{"model":"gemini-2.5-pro","contents":[{"role":"user","parts":[{"text":"hello"}]}]}`))
+	env.h.GeminiCachedContentsCreate(c)
+	require.Equal(t, http.StatusBadGateway, rec.Code)
+	require.Equal(t, []string{"POST /v1beta/cachedContents", "DELETE /v1beta/cachedContents/orphan"}, env.upstream.calls)
+	require.Len(t, headers, 2)
+	for _, header := range headers {
+		require.Equal(t, "GeminiCLI/3.9.1 (Linux; x64)", header.Get("User-Agent"))
+		require.Equal(t, "k", header.Get("x-goog-api-key"))
+	}
 	require.Empty(t, env.repo.records)
 	require.Empty(t, env.usage.totals())
 }

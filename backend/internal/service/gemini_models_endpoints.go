@@ -124,6 +124,7 @@ func (s *GeminiMessagesCompatService) ForwardListModels(ctx context.Context, acc
 	if account == nil {
 		return nil, errors.New("account is nil")
 	}
+	ctx = WithAccountOutboundIdentity(ctx, account)
 	if !account.IsVertexServiceAccount() {
 		return s.forwardGeminiModelsGET(ctx, account, "/v1beta/models")
 	}
@@ -151,6 +152,7 @@ func (s *GeminiMessagesCompatService) ForwardGetModel(ctx context.Context, accou
 	if account == nil {
 		return nil, errors.New("account is nil")
 	}
+	ctx = WithAccountOutboundIdentity(ctx, account)
 	if !account.IsVertexServiceAccount() {
 		return s.forwardGeminiModelsGET(ctx, account, "/v1beta/models/"+model)
 	}
@@ -265,7 +267,7 @@ func (s *GeminiMessagesCompatService) doGeminiModelsGET(req *http.Request, accou
 		proxyURL = account.Proxy.URL()
 	}
 
-	resp, err := s.httpUpstream.Do(req, proxyURL, account.ID, account.Concurrency)
+	resp, err := s.httpUpstream.Do(prepareAccountOutboundRequest(req, account), proxyURL, account.ID, account.Concurrency)
 	if err != nil {
 		return nil, err
 	}

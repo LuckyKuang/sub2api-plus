@@ -21,6 +21,7 @@ Sub2API Plus v0.2.17+custom.001
 - Payments: query and confirm EasyPay notifications before crediting, query Alipay refund status, treat refund query errors as pending, finalize failed pending refunds atomically, keep refund deductions while a refund is pending, validate order types, and load the Stripe client secret from the local order snapshot.
 - Fix the Zhipu GLM coding-plan 5-hour and weekly window ordering and recognize the international coding quota endpoints.
 - Classify gateway-local errors on Gemini native routes by error type in ops diagnostics.
+- Preserve Plus outbound identity on Gemini cache writes and native model discovery, including Vertex token acquisition/pagination and cache cleanup after client cancellation.
 
 ## Compatibility and migration
 
@@ -29,6 +30,8 @@ Upgrade from `v0.2.15+custom.003` applies the forward-only migrations `287_gemin
 Antigravity outbound identity adopts the official `antigravity/hub/` client family at version `2.23.0` while keeping the Plus-pinned `linux/amd64` system fingerprint. A custom Antigravity User-Agent saved in the retired `antigravity/<version>` form is now an invalid candidate: it falls back atomically to the next identity source and the management API rejects it until it is re-saved as `antigravity/hub/<version> …` or cleared. No data migration is required.
 
 New configuration: `gateway.min_output_tokens` defaults to `128` and must be at least `16`; `gemini_cached_content_max_ttl_seconds` caps explicit-cache TTL and treats a non-positive value as `86400`. Gemini cache storage prices default to the built-in official rates and may be overridden per model. The admin account filter revert keeps existing saved filter values; only the collapsing panel is removed.
+
+Plus retains its vendored SheetJS `xlsx 0.20.3` artifact and lockfile pin from the previous Plus baseline. The official `v0.2.17` revert to npm `xlsx ^0.18.5` is not imported; the previous SheetJS security exceptions remain removed.
 
 Official tag `v0.2.17` still embeds `VERSION=0.2.16` upstream (its version-sync commit landed after the tag). Plus identifies this tree as `0.2.17+custom.001`, and `v0.2.16` is included because it is an ancestor of `v0.2.17`; no separate `v0.2.16+custom` release exists.
 
@@ -39,8 +42,6 @@ A Gemini explicit cache is rejected with `POST /v1beta/cachedContents` when the 
 Antigravity `MODEL_CAPACITY_EXHAUSTED` is shared across accounts for the same model: the gateway returns the upstream 503 immediately instead of retrying the same account or switching accounts, while ordinary `RATE_LIMIT_EXCEEDED` waiting and account switching are unchanged.
 
 An account or global profile that pins a custom Antigravity User-Agent in the old `antigravity/<version>` form silently falls through to the next identity source after the upgrade until it is re-saved; only the version import from `antigravity_user_agent_version` is automatic.
-
-The official `v0.2.17` dependency state keeps `xlsx ^0.18.5` because upstream reverted its own SheetJS CDN pin; the packaged viewer therefore continues to rely on the existing security-scan exceptions until a registry-published fix is available.
 
 ## Upstream baseline
 
