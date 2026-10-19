@@ -155,12 +155,14 @@ func ProvideGatewayHandler(
 	settingService *service.SettingService,
 	clientDisconnectRisk *service.ClientDisconnectRiskService,
 	coordinator *securityaudit.Coordinator,
+	geminiCachedContentService *service.GeminiCachedContentService,
 ) *GatewayHandler {
 	h := NewGatewayHandler(gatewayService, openAIGatewayService, geminiCompatService, antigravityGatewayService,
 		userService, concurrencyService, billingCacheService, usageService, apiKeyService, usageRecordWorkerPool,
 		errorPassthroughService, contentModerationService, userMsgQueueService, cfg, settingService)
 	h.securityAuditCoordinator = coordinator
 	h.SetClientDisconnectRiskService(clientDisconnectRisk)
+	h.geminiCachedContentService = geminiCachedContentService
 	return h
 }
 

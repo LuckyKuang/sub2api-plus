@@ -172,8 +172,8 @@ func TestPlatformCoverage_Gemini(t *testing.T) {
 	require.Equal(t, ChannelPricingStatusPriced, flash.Status,
 		"a SKU stored only under vertex_ai-language-models must stay priced for the gemini platform")
 	require.Equal(t, ChannelPricingSourceReleaseCatalog, flash.Source)
-	require.InDelta(t, 1.5e-6, *flash.Pricing.InputPrice, 1e-15)
-	require.InDelta(t, 7.5e-6, *flash.Pricing.OutputPrice, 1e-15)
+	require.InDelta(t, 7.5e-7, *flash.Pricing.InputPrice, 1e-15)
+	require.InDelta(t, 3.75e-6, *flash.Pricing.OutputPrice, 1e-15)
 
 	// embedding：input 有价、output 显式 0（免费）必须编码为 0 而不是 null。
 	embedding := byModel["gemini-embedding-001"]

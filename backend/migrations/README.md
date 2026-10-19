@@ -52,6 +52,13 @@ official source names this new migration `242_group_i18n.sql`; Plus already
 uses prefix 242, so only the new Plus 286 migration is imported. Existing
 filenames and checksums remain immutable.
 
+Migrations `287_gemini_cached_contents.sql`,
+`288_gemini_cached_contents_channel_usage.sql`, and
+`289_gemini_cached_contents_mutation_lease.sql` add Gemini explicit-cache
+tables, channel-usage snapshots, and mutation leases. Official numbered these
+243–245; Plus already uses those prefixes, so they land at 287–289. Historical
+SQL is unchanged.
+
 ## File Naming
 
 Regular migration:

@@ -43,7 +43,7 @@ SDK versions do not update this baseline.
 | Claude | `X-Stainless-OS: Linux`, `X-Stainless-Arch: x64` |
 | Gemini | `GeminiCLI/0.1.5 (Linux; x64)` |
 | Grok | `grok-shell/1.0.45 (linux; x86_64)` |
-| Antigravity | `antigravity/2.9.1 linux/amd64` |
+| Antigravity | `antigravity/hub/2.23.0 linux/amd64` |
 | DeepSeek | Product UA has no OS; OAuth exchange body uses `device_model: linux-x64`, `os_version: linux 6.8.0-31-generic` |
 | Kimi | `X-Msh-Device-Name: ubuntu`, `X-Msh-Device-Model: Linux 6.8.0-31-generic x64`, `X-Msh-Os-Version: 6.8.0-31-generic`; inference SDK uses `Linux` / `x64` |
 | MiniMax OAuth / API Key | SDK uses `Linux` / `x64`; UA has no OS segment |
@@ -355,12 +355,22 @@ compiled default follows the frozen local grok-build source and does not track a
 build-time network scrape or an ambient `GROK_VERSION`.
 
 The exact compiled Antigravity identity is
-`antigravity/2.9.1 linux/amd64`, with identifier `antigravity` and client
-version `2.9.1` encoded in the UA. Only `setUserSettings` and `fetchUserInfo`
+`antigravity/hub/2.23.0 linux/amd64`, with identifier `antigravity`, client
+family `antigravity/hub`, and client version `2.23.0` encoded in the UA.
+OS and architecture remain `linux/amd64`. Only `setUserSettings` and `fetchUserInfo`
 also send `X-Goog-Api-Client: gl-node/22.21.1`. This SDK declaration belongs to
 those endpoints and remains fixed during client version updates. The base
 preset preview describes the shared UA; these endpoint declarations are added
 to a copy of the trusted request snapshot, without changing the parent snapshot.
+
+Official `v0.2.17` renamed the Antigravity client family from
+`antigravity/<version>` to `antigravity/hub/<version>`; Plus keeps its pinned
+Ubuntu system fingerprint, so the compiled identity stays
+`antigravity/hub/2.23.0 linux/amd64`. Preset validation follows the new family:
+a stored custom Antigravity User-Agent that still uses the retired
+`antigravity/<version>` prefix is an invalid candidate and falls through
+atomically to the next source, and the management API rejects it until the
+operator saves an `antigravity/hub/...` value or clears the override.
 
 | Antigravity operation | Identity source priority | Privacy SDK declaration |
 | --- | --- | --- |
@@ -514,6 +524,10 @@ above, whichever happens first. After that save,
 clearing the profile restores the default without reviving the old setting. Existing environment
 defaults (`SUB2API_CLAUDE_CLI_VERSION`, `XAI_GROK_CLI_VERSION`,
 `ANTIGRAVITY_USER_AGENT_VERSION`) remain below explicit identity configuration.
+The Antigravity profile imports only the version: a custom User-Agent saved
+under the retired `antigravity/<version>` family is not migrated, so it becomes
+an invalid candidate and the resolver falls back to the next source until the
+administrator re-saves it as `antigravity/hub/<version> …` or clears it.
 
 ```json
 {
@@ -663,6 +677,18 @@ before SigV4 signing and reuses the same declarations at send time.
 This includes the non-streaming Bedrock account connection test, for both IAM
 credentials and bearer API keys. IAM signatures include the selected companion
 declarations; the send-time finalizer must not introduce a new signed header.
+
+Gemini native model list/detail (including every Vertex publisher-model page)
+and explicit-cache create/patch/delete resolve the credential owner's snapshot
+before acquiring an OAuth/service-account token and apply it at the HTTP send
+boundary. Failed-cache cleanup keeps that same snapshot when detached from a
+cancelled client. Mutation recovery resolves the bound account, and failover
+resolves the new owner; neither path inherits another account's declarations.
+The source matrix remains valid account > configured global preset/type default
+> environment/compiled default, with invalid candidates falling through atomically.
+The exact native Gemini default remains `GeminiCLI/0.1.5 (Linux; x64)`, with no
+`Originator`, `Version` or `X-Goog-Api-Client` wire headers. These paths are covered
+by `gemini_control_identity_test.go` and the cached-content handler regressions.
 
 Google One tier refresh resolves the credential-owning Gemini account before
 calling Drive `about?fields=storageQuota`. Drive sends that snapshot on every

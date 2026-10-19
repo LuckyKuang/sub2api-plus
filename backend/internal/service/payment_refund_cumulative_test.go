@@ -183,7 +183,8 @@ func TestRefundPartialThenRestPreservesPendingDetailBasis(t *testing.T) {
 	require.Equal(t, OrderStatusRefundPending, reloaded.Status)
 	require.Equal(t, 65.0, reloaded.RefundAmount, "the pending credited amount is observable")
 
-	finalPlan := svc.refundFinalizePlan(ctx, reloaded)
+	finalPlan, err := svc.refundFinalizePlan(ctx, reloaded)
+	require.NoError(t, err)
 	require.Equal(t, 65.0, finalPlan.RefundAmount)
 	require.Equal(t, 65.0, finalPlan.CumulativeCredited)
 	require.InDelta(t, 50.0, finalPlan.GatewayAmount, 1e-9)

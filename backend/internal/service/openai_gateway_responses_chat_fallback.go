@@ -29,8 +29,8 @@ func (s *OpenAIGatewayService) forwardResponsesViaRawChatCompletions(
 	c *gin.Context,
 	account *Account,
 	body []byte,
+	startTime time.Time,
 ) (forwardResult *OpenAIForwardResult, firstByteResultErr error) {
-	startTime := time.Now()
 	ctx, byteTiming := beginFirstByteTiming(ctx, startTime)
 	defer func() {
 		if forwardResult != nil && forwardResult.FirstByteMs == nil {

@@ -1,40 +1,49 @@
-Sub2API Plus v0.2.15+custom.002
+Sub2API Plus v0.2.17+custom.001
 
 ## Highlights
 
-- Combine optional V1 active probes with V3 service status. Probe outcomes participate directly in V3 state and incident decisions while users see only the V3 monitor; the separate V1 user monitor remains available only in V1 mode. Probe requests follow the same credential-owner outbound identity contract as platform requests.
-- Show deduplicated model status within each platform, without group or monitor names in the user-facing model and incident views. Healthy traffic cannot hide a failed probe.
-- Improve the available-channel catalog with at most five cards per row, wider spacing and rounder corners. Service tiers such as Fast/priority, Flex and Ultrafast are collapsed by default and can be expanded independently.
-- Add an optional external redeem-code purchase entry in payment settings. Recharge/subscription selection pages show its card at the bottom, with a right-aligned purchase action; operators choose an embedded page or a new tab. The built-in payment switch still controls recharge/subscription navigation.
-- Let administrators opt balance and subscription redeem codes into order creation. Redemption atomically grants the benefit and creates a completed order, with separate payment/redemption source labels and filters and the existing balance/subscription order types.
+- Add Gemini explicit context caching for AI Studio, Vertex AI and self-hosted gateway upstreams: `POST/GET/PATCH/DELETE /v1beta/cachedContents` bind every cache to the owning account so a cache reference only routes to the account that created it. Storage is billed from configured or built-in per-token-per-hour prices, mutations are serialized with a lease, and failed mutations roll back.
+- Support Vertex AI accounts authenticated with an API Key (including `AQ.` AI Studio keys), let service accounts sync their upstream model catalog, and expose Gemini model list/detail for Agent Platform (Vertex) accounts.
+- Ship Gemini 4 Argon model catalogs and billing, forward thinking levels on the Gemini compatibility endpoint and stream the thinking summary back, and correct the 3.6 Flash fallback price.
+- Extend Antigravity support: Gemini 4 Argon, preserved tool-result images, native Gemini `functionCall`/`thoughtSignature`, composite `/v1beta` routing, isolated image-model rate limits, and Claude 5.5 tier IDs billed at base rates.
+- Adapt Claude Haiku 5.5 across the gateway and wire it into the Responses bridge.
+- Retire GPT-5.5 for ChatGPT upstreams, evaluated after public alias projection so aliased catalog entries cannot bypass it, and emulate `web_search` on `/v1/messages` for OpenAI API Key accounts while excluding OAuth accounts.
+- Always emit `created_at` on gateway-produced Responses objects, fixing clients such as grok-build that reject a Response without it.
+- Make the minimum output-token floor configurable through `gateway.min_output_tokens`.
 
 ## Changed
 
-- Balance redemption-order currencies are CNY and USD, defaulting to CNY, with no exchange-rate conversion: a face value of 100 and CNY order currency credits 100 USD and records a 100 CNY order.
-- Subscription redemption codes freeze the selected plan's price, currency, name, group and duration when generated. Later plan price changes or deletion do not rewrite those snapshots.
-- Payment and redemption orders share order management and statistics; totals remain separate per currency. Redemption orders have no provider payment, recharge promotion, fee or refund, including forced administrator refunds.
-- New-tab purchases use opener isolation. Embedded purchases use a protected, sandboxed page and the configured origin in CSP, without adding application credentials or user identifiers to the third-party URL.
-
-## Fixed
-
-- Align the purchase button beside the purchase-card title and description, and label it "Go to purchase" / "前往购买".
-- Use the shared plan-duration formatter in subscription administration so translated day/week/month labels replace raw translation keys.
-- Preserve the disabled purchase entry and default new-tab mode in admin settings when payment configuration is unavailable.
-- Invalidate subscription entitlement caches only after the redemption transaction commits; failed order or audit writes leave the code and benefits unchanged.
+- Isolate Codex imports by workspace so accounts that share a user identifier across workspaces are no longer merged, and surface the backend reason when upstream model sync fails.
+- Honor Anthropic protocol base URLs for accounts that do not use the official endpoint.
+- Reject composite routes whose OAuth accounts make the target platform ambiguous instead of letting an unclassified request fall into the default Anthropic pipeline.
+- Evaluate explicit model-level 401 rules at the gateway failover entry and hand the actual upstream model to error handling on count-token, Bedrock and retry-exhaustion paths.
+- Restore the inline account filters on the admin accounts page: type, privacy and group stay visible instead of collapsing behind a "More filters" panel.
+- Payments: query and confirm EasyPay notifications before crediting, query Alipay refund status, treat refund query errors as pending, finalize failed pending refunds atomically, keep refund deductions while a refund is pending, validate order types, and load the Stripe client secret from the local order snapshot.
+- Fix the Zhipu GLM coding-plan 5-hour and weekly window ordering and recognize the international coding quota endpoints.
+- Classify gateway-local errors on Gemini native routes by error type in ops diagnostics.
+- Preserve Plus outbound identity on Gemini cache writes and native model discovery, including Vertex token acquisition/pagination and cache cleanup after client cancellation.
 
 ## Compatibility and migration
 
-Upgrade applies forward-only migrations `282_redeem_order_snapshots.sql` and `283_channel_monitor_v3_probe_sources.sql`. Existing redeem codes default to no order, existing payment orders retain their payment source and currency resolution, and existing V3 observations keep their history and incident IDs as request observations.
+Upgrade from `v0.2.15+custom.003` applies the forward-only migrations `287_gemini_cached_contents.sql`, `288_gemini_cached_contents_channel_usage.sql` and `289_gemini_cached_contents_mutation_lease.sql`. Official numbers these `243`–`245`; Plus already uses those prefixes, so the same SQL lands at `287`–`289` and existing migration files and checksums stay immutable. The new tables are additive with no backfill; installations that never create an explicit cache see no data change. Plus migrations `246`–`286` are unchanged from `v0.2.15+custom.003`.
 
-Extra V1 probes in V3 and the external purchase entry default to disabled. Existing monitoring mode and the built-in payment navigation gate are preserved. Only balance and subscription codes support optional order creation; internal payment-fulfillment codes remain opted out. Redemption orders are non-refundable and receive no recharge promotions.
+Antigravity outbound identity adopts the official `antigravity/hub/` client family at version `2.23.0` while keeping the Plus-pinned `linux/amd64` system fingerprint. A custom Antigravity User-Agent saved in the retired `antigravity/<version>` form is now an invalid candidate: it falls back atomically to the next identity source and the management API rejects it until it is re-saved as `antigravity/hub/<version> …` or cleared. No data migration is required.
+
+New configuration: `gateway.min_output_tokens` defaults to `128` and must be at least `16`; `gemini_cached_content_max_ttl_seconds` caps explicit-cache TTL and treats a non-positive value as `86400`. Gemini cache storage prices default to the built-in official rates and may be overridden per model. The admin account filter revert keeps existing saved filter values; only the collapsing panel is removed.
+
+Plus retains its vendored SheetJS `xlsx 0.20.3` artifact and lockfile pin from the previous Plus baseline. The official `v0.2.17` revert to npm `xlsx ^0.18.5` is not imported; the previous SheetJS security exceptions remain removed.
+
+Official tag `v0.2.17` still embeds `VERSION=0.2.16` upstream (its version-sync commit landed after the tag). Plus identifies this tree as `0.2.17+custom.001`, and `v0.2.16` is included because it is an ancestor of `v0.2.17`; no separate `v0.2.16+custom` release exists.
 
 ## Known issues
 
-Third-party sites can prevent iframe embedding through their own browser security policies; the embedded purchase page provides a new-tab option.
+A Gemini explicit cache is rejected with `POST /v1beta/cachedContents` when the model has neither a configured `cache_storage_cost_per_token_per_hour` nor a built-in official storage price.
 
-V3 treats a missing probe or one older than five minutes as unknown, so longer probe intervals can leave unknown gaps. A probe targeting this application's gateway can also produce a request observation; the two sources are combined for status, without claiming deduplicated business-request counts across sources.
+Antigravity `MODEL_CAPACITY_EXHAUSTED` is shared across accounts for the same model: the gateway returns the upstream 503 immediately instead of retrying the same account or switching accounts, while ordinary `RATE_LIMIT_EXCEEDED` waiting and account switching are unchanged.
+
+An account or global profile that pins a custom Antigravity User-Agent in the old `antigravity/<version>` form silently falls through to the next identity source after the upgrade until it is re-saved; only the version import from `antigravity_user_agent_version` is automatic.
 
 ## Upstream baseline
 
-Official release: v0.2.15
-Official commit: f2669c8cf62555cd92389b3f55920e9e6e7c6ff2
+Official release: v0.2.17
+Official commit: 060d0160417782cd962a0c7f460f6cd4565d4916
