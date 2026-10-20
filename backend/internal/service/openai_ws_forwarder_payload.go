@@ -134,12 +134,6 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 			alignOpenAICodexThreadHeaders(headers)
 		}
 	}
-	// 真实 Codex 的 WS 握手同样携带会话级 x-codex-beta-features
-	// （client.rs build_websocket_headers 复用 build_responses_headers），
-	// 客户端未声明时补成默认形态，与 HTTP 出站保持一致。放在客户端头拷贝
-	// 之外：该头是账号/会话级属性，不依赖入站请求是否存在，也避免预热与
-	// 实际请求因头差异落进不同的连接池兼容分桶。
-	applyOpenAICodexBetaFeatures(c, account, headers)
 	// Codex credential accounts apply either API-key isolation or the explicit
 	// account sharing policy. Setup tokens use the same ChatGPT protocol surface.
 	if account != nil && account.UsesOpenAICodexProtocol() {
@@ -203,6 +197,10 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 		setOpenAIUpstreamSessionIdentityForAccount(headers, account, cacheSessionIdentity)
 	}
 	alignOpenAICodexThreadHeaders(headers)
+	// Official WS uses the same session capability header as HTTP. Complete it
+	// after generic overrides for both prewarm and turn-time handshakes, using
+	// the trusted account snapshot, even when the client declared other features.
+	applyOpenAICodexBetaFeatures(ctx, c, account, headers)
 	identity := s.applyOpenAIOutboundIdentity(ctx, account, headers, true)
 	if selected, ok := outboundidentity.FromContext(WithAccountOutboundIdentity(ctx, account)); ok {
 		selected.ForProtocol(APIProtocolResponses).Apply(headers)

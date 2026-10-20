@@ -38,6 +38,11 @@ func TestCodexProtocolOptionsPreserveCanonicalAuditContent(t *testing.T) {
 		for _, input := range []struct{ body, want string }{
 			{`[{"type":"additional_tools","tools":[{"type":"namespace","name":"shell","tools":[]}]},{"type":"message","role":"user","content":[{"type":"input_text","text":"audit current request"},{"type":"future_media","opaque":true}]}]`, "audit current request"},
 			{`[{"type":"future_item","opaque":{"value":1}}]`, ""},
+			// SECURITY_AUDIT_CONTENT_COVERAGE.md: the final input item is current.
+			// A bare trigger has no user text; preceding conversation is history.
+			{`[{"type":"message","role":"user","content":[{"type":"input_text","text":"historical user request"}]},{"type":"compaction_trigger"}]`, ""},
+			// A control item earlier in the input cannot hide the current user tail.
+			{`[{"type":"compaction_trigger"},{"type":"message","role":"user","content":[{"type":"input_text","text":"audit current request"}]}]`, "audit current request"},
 		} {
 			t.Run(frame+"/"+input.want, func(t *testing.T) {
 				body := `{"model":"gpt-6.1-sol","input":` + input.body + `,"stream_options":{"reasoning_summary_delivery":"sequential_cutoff","future_option":true},"client_metadata":{"ws_request_header_x_openai_internal_codex_responses_lite":"true","x-codex-turn-metadata":"{\"subagent_kind\":\"guardian\",\"thread_id\":\"child-thread\",\"parent_thread_id\":\"parent-thread\"}"}}`

@@ -101,6 +101,27 @@ func (r *openAIAccountTestRepo) SetError(_ context.Context, id int64, errorMsg s
 	return nil
 }
 
+func TestAccountTestService_OpenAIResponsesProbeAdvertisesSessionCapability(t *testing.T) {
+	// Official 770ed6dcea40 advertises v2 on every Responses request, including
+	// synthesized probes using either native credential type.
+	for _, kind := range []string{AccountTypeOAuth, AccountTypeAPIKey} {
+		t.Run(kind, func(t *testing.T) {
+			c, _ := newTestContext()
+			response := newJSONResponse(http.StatusOK, "data: {\"type\":\"response.completed\"}\n\n")
+			upstream := &queuedHTTPUpstream{responses: []*http.Response{response}}
+			svc := &AccountTestService{httpUpstream: upstream, cfg: codexTransportTestConfig()}
+			account := &Account{ID: 71, Platform: PlatformOpenAI, Type: kind,
+				Credentials: map[string]any{"api_key": "fixture", "access_token": "fixture"},
+				Extra:       map[string]any{openai_compat.ExtraKeyResponsesSupported: true},
+			}
+			require.NoError(t, svc.testOpenAIAccountConnection(c, account, "gpt-6.1-sol", "", ""))
+			require.Len(t, upstream.requests, 1)
+			require.True(t, strings.HasSuffix(upstream.requests[0].URL.Path, "/responses"))
+			require.Equal(t, "remote_compaction_v2", upstream.requests[0].Header.Get("x-codex-beta-features"))
+		})
+	}
+}
+
 func TestAccountTestService_OpenAISuccessPersistsSnapshotFromHeaders(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx, recorder := newTestContext()
@@ -131,6 +152,7 @@ func TestAccountTestService_OpenAISuccessPersistsSnapshotFromHeaders(t *testing.
 	require.NoError(t, err)
 	require.Len(t, upstream.requests, 1)
 	require.Equal(t, HTTPUpstreamProfileOpenAI, HTTPUpstreamProfileFromContext(upstream.requests[0].Context()))
+	require.Equal(t, "remote_compaction_v2", upstream.requests[0].Header.Get("x-codex-beta-features"))
 	require.NotEmpty(t, repo.updatedExtra)
 	require.Equal(t, 42.0, repo.updatedExtra["codex_5h_used_percent"])
 	require.Equal(t, 88.0, repo.updatedExtra["codex_7d_used_percent"])
@@ -280,6 +302,7 @@ func TestAccountTestService_DeepSeekCustomBaseURLUsesV1ResponsesPath(t *testing.
 	require.NoError(t, err)
 	require.Len(t, upstream.requests, 1)
 	require.Equal(t, "https://relay.example.com/v1/responses", upstream.requests[0].URL.String())
+	require.Empty(t, upstream.requests[0].Header.Get("x-codex-beta-features"), "a DeepSeek probe retains its native protocol declarations")
 }
 
 func TestAccountTestService_DeepSeekResponsesRoutesToOpenAIProbe(t *testing.T) {

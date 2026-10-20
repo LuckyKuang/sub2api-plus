@@ -620,6 +620,9 @@ func postMonitorRequest(ctx context.Context, fullURL string, payload []byte, hea
 		req.Header.Set("Accept", "text/event-stream")
 	}
 	outboundidentity.ApplyContext(req)
+	if strings.HasSuffix(req.URL.Path, "/responses") || strings.HasSuffix(req.URL.Path, "/responses/compact") {
+		applyOpenAICodexBetaFeatures(ctx, nil, nil, req.Header)
+	}
 
 	resp, err := monitorHTTPClient.Do(req)
 	if err != nil {

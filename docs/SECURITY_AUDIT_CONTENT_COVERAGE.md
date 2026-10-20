@@ -544,3 +544,17 @@ embedded parent-thread metadata remain protocol context, never user prompt text.
 WS response.create envelopes with this metadata for both engines, preserving
 recognized sibling text and unknown-item pass-through. Existing HTTP/WS
 account-type and side-effect-order suites remain required.
+
+Codex Responses/compact/WS outbound capability negotiation also ensures
+`x-codex-beta-features` includes `remote_compaction_v2` for native OAuth,
+setup-token and API-key credentials, as official Codex `770ed6dcea40` does.
+This header is protocol context, not audited user text or authorization. The
+capability is completed in outbound request builders after the existing ingress
+audit boundary. Both engines continue to audit the original canonical HTTP/WS
+payload; unknown content and successfully extracted siblings keep their existing
+pass-through and evaluation behavior. Capability negotiation adds no endpoint,
+body field, account-selection exception or side effect before audit.
+Real-payload regressions retain the documented current-item distinction: a
+trailing bare `compaction_trigger` contributes no user text and does not make
+preceding history current; a trigger before a new user tail cannot hide that
+current user content from either engine.

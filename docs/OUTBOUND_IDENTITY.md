@@ -595,6 +595,16 @@ thread originators and generic overrides cannot replace any of the triple. Expli
 The native Codex finalizer removes foreign SDK identity headers as well as stale
 or duplicate core declarations before rendering the selected identity.
 
+Codex Responses, compact and WS handshakes also advertise the official
+`remote_compaction_v2` capability for OAuth, setup-token and API-key credentials.
+The capability uses the same trusted account snapshot as the client identity;
+other declared feature tokens remain intact, and v2 is appended only if absent.
+Compatible suppliers using a non-Codex preset do not receive session-level
+synthesis, while an explicitly native v2 compaction request still declares its
+required capability. This does not add the header to direct search, discovery,
+OAuth credential operations or usage requests. See the
+[Codex protocol boundary](protocols/CODEX_CLIENT_PROFILES.md#codex-source-compatibility-boundaries).
+
 The request scope retains each credential owner's first selected identity, even
 when a handler re-enters forwarding for a retry. This includes the choice to use
 the native Codex resolver: changing a type default cannot switch an in-flight

@@ -189,6 +189,7 @@ func (s *AccountTestService) testCNProviderAdaptiveResponsesConnection(c *gin.Co
 	applyOpenCodeUpstreamUserAgent(account, apiURL, req.Header)
 	account.ApplyHeaderOverrides(req.Header)
 	applyOpenCodeSessionHeader(c, account, apiURL, req.Header, payloadBytes)
+	applyOpenAICodexBetaFeatures(ctx, c, account, req.Header)
 
 	resp, err := s.doCNProviderAdaptiveRequest(req, account)
 	if err != nil {

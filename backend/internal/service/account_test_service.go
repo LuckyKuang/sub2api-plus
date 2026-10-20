@@ -941,6 +941,7 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 	}
 
 	credentialAccount.applyOpenAIHeaderOverrides(req.Header)
+	applyOpenAICodexBetaFeatures(ctx, c, credentialAccount, req.Header)
 	s.applyOpenAIOutboundIdentity(ctx, credentialAccount, req.Header, true)
 
 	// Get proxy URL
@@ -3197,6 +3198,9 @@ func (s *AccountTestService) testOpenAIImageOAuth(c *gin.Context, ctx context.Co
 	}
 	setOpenAIChatGPTAccountHeaders(req.Header, credentialAccount)
 	credentialAccount.applyOpenAIHeaderOverrides(req.Header)
+	if !direct {
+		applyOpenAICodexBetaFeatures(ctx, c, credentialAccount, req.Header)
+	}
 	s.applyOpenAIOutboundIdentity(ctx, credentialAccount, req.Header, true)
 
 	proxyURL := ""

@@ -686,6 +686,8 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 	body []byte,
 	token string,
 ) (*http.Request, error) {
+	ctx = WithOutboundIdentityScope(ctx, c)
+	ctx = WithAccountOutboundIdentity(ctx, account)
 	// Codex 可见时区对齐：与 buildUpstreamRequest 同一改写语义（幂等，
 	// 失败保留原始自洽内容），覆盖普通透传与 WS→HTTP bridge。
 	body = s.rewriteOpenAICodexEnvironmentContextBytes(ctx, account, body)
@@ -827,7 +829,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 	applyOpenCodeSessionHeader(c, account, targetURL, req.Header, body)
 	// x-codex-beta-features：按真实 Codex 的会话级行为补注（在账号级覆写之后，
 	// 保证不被覆盖丢失）。
-	applyOpenAICodexBetaFeatures(c, account, req.Header)
+	applyOpenAICodexBetaFeatures(ctx, c, account, req.Header)
 	identity := s.applyOpenAIOutboundIdentity(ctx, account, req.Header, true)
 	ApplyAccountOutboundHeaders(ctx, account, req.Header)
 	clearOpenAICodexLegacySessionAliases(req.Header, account)

@@ -149,6 +149,11 @@ func TestChannelMonitorDefaultIdentityForProviders(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, http.StatusOK, result.StatusCode)
 			headers := <-captured
+			if test.mode == MonitorAPIModeResponses {
+				require.Equal(t, "remote_compaction_v2", headers.Get("x-codex-beta-features"))
+			} else {
+				require.Empty(t, headers.Get("x-codex-beta-features"), "other endpoint protocols keep their own capability policy")
+			}
 			expected := builtInOutboundIdentity(test.preset).ForProtocol("chat_completions")
 			require.Equal(t, expected.UserAgent, headers.Get("User-Agent"))
 			for name, value := range expected.Headers {
@@ -180,6 +185,11 @@ func TestChannelMonitorStreamingIdentityProtected(t *testing.T) {
 		require.Equal(t, builtInOutboundIdentity("codex").UserAgent, headers.Get("User-Agent"))
 		require.Equal(t, "codex_cli_rs", headers.Get("Originator"))
 		require.Equal(t, "0.158.0", headers.Get("Version"))
+		if mode == MonitorAPIModeResponses {
+			require.Equal(t, "remote_compaction_v2", headers.Get("x-codex-beta-features"))
+		} else {
+			require.Empty(t, headers.Get("x-codex-beta-features"))
+		}
 		require.Equal(t, "text/event-stream", headers.Get("Accept"))
 		require.Equal(t, "Bearer test-key", headers.Get("Authorization"))
 	}

@@ -426,9 +426,20 @@ does not mean every client feature, body, OS fingerprint or transport is identic
   and signed Agent Identity requests are not compressed by this policy. A
   conflicting pre-existing Content-Encoding fails before transmission.
 
-Official source advertises `remote_compaction_v2` unconditionally. Plus retains
-its explicit compatibility policy for already supplied beta-feature declarations
-and API-key synthesis; absence is not evidence of a disabled official feature.
+Official source `770ed6dcea40` advertises `remote_compaction_v2` unconditionally
+from `core/src/session/mod.rs::build_model_client_beta_features_header`,
+independently of authentication. Native Codex OAuth, setup-token and API-key
+Responses, compact and WebSocket handshakes therefore always include that token
+in `x-codex-beta-features`. Existing other feature tokens are preserved, and an
+already present v2 token is not appended again. A partial client declaration is
+not an opt-out. The trusted credential-owner identity snapshot determines this
+policy across retries and failover; a compatible supplier using another preset
+does not receive a synthesized session capability header. An explicitly native
+v2 compaction request retains its required v2 declaration for any supplier.
+The same rule covers Responses account/adaptive probes, image-tool Responses
+bridges, and JSON/SSE channel-monitor Responses probes. This policy applies to
+Responses-family builders only; direct images, standalone search, models,
+Chat Completions, token exchange/refresh and WHAM requests do not acquire it.
 
 Intentional Plus differences remain: credential-owner identity precedence,
 tenant namespaces and fingerprint settings, account-scoped WS pooling/cooldown,
