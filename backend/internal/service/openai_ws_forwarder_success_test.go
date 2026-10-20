@@ -194,7 +194,7 @@ func TestOpenAIGatewayService_Forward_WSv2_SuccessAndBindSticky(t *testing.T) {
 	mappedAccountID, getErr := store.GetResponseAccount(context.Background(), groupID, "resp_new_1")
 	require.NoError(t, getErr)
 	require.Equal(t, account.ID, mappedAccountID)
-	connID, ok := store.GetResponseConn("resp_new_1")
+	connID, ok := store.GetResponseConn(account.ID, "resp_new_1")
 	require.True(t, ok)
 	require.NotEmpty(t, connID)
 
@@ -1528,12 +1528,12 @@ func TestOpenAIGatewayService_Forward_WSv2_TurnStateAndMetadataReplayOnReconnect
 	sessionHash, _ := resolveOpenAIWSExecutionScope(c1, reqBody, getAPIKeyIDFromContext(c1))
 	require.NotEmpty(t, sessionHash)
 	store := svc.getOpenAIWSStateStore()
-	turnState, ok := store.GetSessionTurnState(0, sessionHash)
+	turnState, ok := store.GetSessionTurnState(account.ID, 0, sessionHash)
 	require.True(t, ok)
 	require.Equal(t, "turn_state_first", turnState)
 
 	// 主动淘汰连接，模拟下一次请求发生重连。
-	connID, hasConn := store.GetResponseConn(result1.RequestID)
+	connID, hasConn := store.GetResponseConn(account.ID, result1.RequestID)
 	require.True(t, hasConn)
 	svc.getOpenAIWSConnPool().evictConn(account.ID, connID)
 

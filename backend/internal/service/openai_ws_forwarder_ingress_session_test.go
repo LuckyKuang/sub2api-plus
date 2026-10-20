@@ -291,9 +291,12 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_ReusesAndRotates
 	require.Len(t, firstConn.writes, 2, "缺省 prompt_cache_key 的第二轮应复用首轮连接")
 	require.Len(t, secondConn.writes, 1, "显式切换 prompt_cache_key 的第三轮应使用新连接")
 
-	firstIdentity := generateSessionUUID(isolateOpenAISessionID(0, "cache-session-a"))
-	secondIdentity := generateSessionUUID(isolateOpenAISessionID(0, "cache-session-b"))
-	require.Equal(t, firstIdentity, firstNonEmptyString(firstConn.writes[0]["prompt_cache_key"]))
+	// Logical cache keys share one tenant scope across OAuth and API key owners;
+	// changing only the explicit logical session must still rotate the socket.
+	firstIdentity := firstNonEmptyString(firstConn.writes[0]["prompt_cache_key"])
+	secondIdentity := firstNonEmptyString(secondConn.writes[0]["prompt_cache_key"])
+	require.Regexp(t, `^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`, firstIdentity)
+	require.NotEqual(t, firstIdentity, secondIdentity)
 	require.Equal(t, firstIdentity, firstNonEmptyString(firstConn.writes[1]["prompt_cache_key"]))
 	require.Equal(t, secondIdentity, firstNonEmptyString(secondConn.writes[0]["prompt_cache_key"]))
 

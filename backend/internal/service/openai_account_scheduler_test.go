@@ -27,6 +27,13 @@ type schedulerTestOpenAIAccountRepo struct {
 	accounts []Account
 }
 
+func accountRequestCompatibleForTest(t *testing.T, scheduler *defaultOpenAIAccountScheduler, ctx context.Context, account *Account, req OpenAIAccountScheduleRequest) bool {
+	t.Helper()
+	compatible, err := scheduler.isAccountRequestCompatible(ctx, account, req)
+	require.NoError(t, err)
+	return compatible
+}
+
 func (r schedulerTestOpenAIAccountRepo) GetByID(ctx context.Context, id int64) (*Account, error) {
 	for i := range r.accounts {
 		if r.accounts[i].ID == id {
@@ -197,12 +204,13 @@ func TestOpenAIGatewayService_SelectAccountWithScheduler_OAuthSessionPolicyDenia
 		svc := newService([]Account{protectedOAuth})
 		svc.cfg.RunMode = config.RunModeSimple
 		scheduler := &defaultOpenAIAccountScheduler{service: svc}
-		compatible, reason := scheduler.isAccountRequestCompatibleReason(ctx, &protectedOAuth, OpenAIAccountScheduleRequest{
+		compatible, reason, compatibilityErr := scheduler.isAccountRequestCompatibleReason(ctx, &protectedOAuth, OpenAIAccountScheduleRequest{
 			GroupID:            &blockedGroupID,
 			Platform:           PlatformOpenAI,
 			RequestedModel:     "gpt-5.6",
 			RequiredCapability: OpenAIEndpointCapabilityChatCompletions,
 		})
+		require.NoError(t, compatibilityErr)
 		require.False(t, compatible)
 		require.Equal(t, "oauth_session_group_denied", reason)
 	})
@@ -3675,8 +3683,8 @@ func TestOpenAIAccountScheduler_SkipsAccountBlockedForRequestedModel(t *testing.
 	svc.openaiModelTransient.recordFailure(account.ID, "gpt-5.5", now.Add(time.Millisecond))
 	scheduler := &defaultOpenAIAccountScheduler{service: svc}
 
-	require.False(t, scheduler.isAccountRequestCompatible(context.Background(), account, OpenAIAccountScheduleRequest{RequestedModel: "gpt-5.5"}))
-	require.True(t, scheduler.isAccountRequestCompatible(context.Background(), account, OpenAIAccountScheduleRequest{RequestedModel: "gpt-5.6-sol"}))
+	require.False(t, accountRequestCompatibleForTest(t, scheduler, context.Background(), account, OpenAIAccountScheduleRequest{RequestedModel: "gpt-5.5"}))
+	require.True(t, accountRequestCompatibleForTest(t, scheduler, context.Background(), account, OpenAIAccountScheduleRequest{RequestedModel: "gpt-5.6-sol"}))
 }
 
 func TestReportOpenAIAccountScheduleResult_SuccessClearsModelTransientState(t *testing.T) {

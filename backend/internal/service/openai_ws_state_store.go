@@ -72,17 +72,17 @@ type OpenAIWSStateStore interface {
 	BindHTTPResponseOwner(ctx context.Context, groupID int64, responseID string, userID, apiKeyID int64, ttl time.Duration) error
 	GetHTTPResponseOwner(ctx context.Context, groupID int64, responseID string) (userID, apiKeyID int64, found bool, err error)
 
-	BindResponseConn(responseID, connID string, ttl time.Duration)
-	GetResponseConn(responseID string) (string, bool)
-	DeleteResponseConn(responseID string)
+	BindResponseConn(ownerID int64, responseID, connID string, ttl time.Duration)
+	GetResponseConn(ownerID int64, responseID string) (string, bool)
+	DeleteResponseConn(ownerID int64, responseID string)
 
-	BindSessionTurnState(groupID int64, sessionHash, turnState string, ttl time.Duration)
-	GetSessionTurnState(groupID int64, sessionHash string) (string, bool)
-	DeleteSessionTurnState(groupID int64, sessionHash string)
+	BindSessionTurnState(ownerID int64, groupID int64, sessionHash, turnState string, ttl time.Duration)
+	GetSessionTurnState(ownerID int64, groupID int64, sessionHash string) (string, bool)
+	DeleteSessionTurnState(ownerID int64, groupID int64, sessionHash string)
 
-	BindSessionConn(groupID int64, sessionHash, connID string, ttl time.Duration)
-	GetSessionConn(groupID int64, sessionHash string) (string, bool)
-	DeleteSessionConn(groupID int64, sessionHash string)
+	BindSessionConn(ownerID int64, groupID int64, sessionHash, connID string, ttl time.Duration)
+	GetSessionConn(ownerID int64, groupID int64, sessionHash string) (string, bool)
+	DeleteSessionConn(ownerID int64, groupID int64, sessionHash string)
 
 	// invalid_encrypted_content lineage：按会话记录已被上游拒绝的
 	// encrypted_content 摘要，后续 turn 进场时仅剥离命中项，避免同一失效
@@ -286,8 +286,8 @@ func (s *defaultOpenAIWSStateStore) DeleteResponseAccount(ctx context.Context, g
 	return s.cache.DeleteSessionAccountID(cacheCtx, groupID, openAIWSResponseAccountCacheKey(id))
 }
 
-func (s *defaultOpenAIWSStateStore) BindResponseConn(responseID, connID string, ttl time.Duration) {
-	id := normalizeOpenAIWSResponseID(responseID)
+func (s *defaultOpenAIWSStateStore) BindResponseConn(ownerID int64, responseID, connID string, ttl time.Duration) {
+	id := openAIWSOwnedStateKey(ownerID, normalizeOpenAIWSResponseID(responseID))
 	conn := strings.TrimSpace(connID)
 	if id == "" || conn == "" {
 		return
@@ -304,8 +304,8 @@ func (s *defaultOpenAIWSStateStore) BindResponseConn(responseID, connID string, 
 	s.responseToConnMu.Unlock()
 }
 
-func (s *defaultOpenAIWSStateStore) GetResponseConn(responseID string) (string, bool) {
-	id := normalizeOpenAIWSResponseID(responseID)
+func (s *defaultOpenAIWSStateStore) GetResponseConn(ownerID int64, responseID string) (string, bool) {
+	id := openAIWSOwnedStateKey(ownerID, normalizeOpenAIWSResponseID(responseID))
 	if id == "" {
 		return "", false
 	}
@@ -321,8 +321,8 @@ func (s *defaultOpenAIWSStateStore) GetResponseConn(responseID string) (string, 
 	return binding.connID, true
 }
 
-func (s *defaultOpenAIWSStateStore) DeleteResponseConn(responseID string) {
-	id := normalizeOpenAIWSResponseID(responseID)
+func (s *defaultOpenAIWSStateStore) DeleteResponseConn(ownerID int64, responseID string) {
+	id := openAIWSOwnedStateKey(ownerID, normalizeOpenAIWSResponseID(responseID))
 	if id == "" {
 		return
 	}
@@ -331,8 +331,8 @@ func (s *defaultOpenAIWSStateStore) DeleteResponseConn(responseID string) {
 	s.responseToConnMu.Unlock()
 }
 
-func (s *defaultOpenAIWSStateStore) BindSessionTurnState(groupID int64, sessionHash, turnState string, ttl time.Duration) {
-	key := openAIWSSessionTurnStateKey(groupID, sessionHash)
+func (s *defaultOpenAIWSStateStore) BindSessionTurnState(ownerID int64, groupID int64, sessionHash, turnState string, ttl time.Duration) {
+	key := openAIWSOwnedStateKey(ownerID, openAIWSSessionTurnStateKey(groupID, sessionHash))
 	state := strings.TrimSpace(turnState)
 	if key == "" || state == "" {
 		return
@@ -349,8 +349,8 @@ func (s *defaultOpenAIWSStateStore) BindSessionTurnState(groupID int64, sessionH
 	s.sessionToTurnStateMu.Unlock()
 }
 
-func (s *defaultOpenAIWSStateStore) GetSessionTurnState(groupID int64, sessionHash string) (string, bool) {
-	key := openAIWSSessionTurnStateKey(groupID, sessionHash)
+func (s *defaultOpenAIWSStateStore) GetSessionTurnState(ownerID int64, groupID int64, sessionHash string) (string, bool) {
+	key := openAIWSOwnedStateKey(ownerID, openAIWSSessionTurnStateKey(groupID, sessionHash))
 	if key == "" {
 		return "", false
 	}
@@ -366,8 +366,8 @@ func (s *defaultOpenAIWSStateStore) GetSessionTurnState(groupID int64, sessionHa
 	return binding.turnState, true
 }
 
-func (s *defaultOpenAIWSStateStore) DeleteSessionTurnState(groupID int64, sessionHash string) {
-	key := openAIWSSessionTurnStateKey(groupID, sessionHash)
+func (s *defaultOpenAIWSStateStore) DeleteSessionTurnState(ownerID int64, groupID int64, sessionHash string) {
+	key := openAIWSOwnedStateKey(ownerID, openAIWSSessionTurnStateKey(groupID, sessionHash))
 	if key == "" {
 		return
 	}
@@ -376,8 +376,8 @@ func (s *defaultOpenAIWSStateStore) DeleteSessionTurnState(groupID int64, sessio
 	s.sessionToTurnStateMu.Unlock()
 }
 
-func (s *defaultOpenAIWSStateStore) BindSessionConn(groupID int64, sessionHash, connID string, ttl time.Duration) {
-	key := openAIWSSessionTurnStateKey(groupID, sessionHash)
+func (s *defaultOpenAIWSStateStore) BindSessionConn(ownerID int64, groupID int64, sessionHash, connID string, ttl time.Duration) {
+	key := openAIWSOwnedStateKey(ownerID, openAIWSSessionTurnStateKey(groupID, sessionHash))
 	conn := strings.TrimSpace(connID)
 	if key == "" || conn == "" {
 		return
@@ -394,8 +394,8 @@ func (s *defaultOpenAIWSStateStore) BindSessionConn(groupID int64, sessionHash, 
 	s.sessionToConnMu.Unlock()
 }
 
-func (s *defaultOpenAIWSStateStore) GetSessionConn(groupID int64, sessionHash string) (string, bool) {
-	key := openAIWSSessionTurnStateKey(groupID, sessionHash)
+func (s *defaultOpenAIWSStateStore) GetSessionConn(ownerID int64, groupID int64, sessionHash string) (string, bool) {
+	key := openAIWSOwnedStateKey(ownerID, openAIWSSessionTurnStateKey(groupID, sessionHash))
 	if key == "" {
 		return "", false
 	}
@@ -411,8 +411,8 @@ func (s *defaultOpenAIWSStateStore) GetSessionConn(groupID int64, sessionHash st
 	return binding.connID, true
 }
 
-func (s *defaultOpenAIWSStateStore) DeleteSessionConn(groupID int64, sessionHash string) {
-	key := openAIWSSessionTurnStateKey(groupID, sessionHash)
+func (s *defaultOpenAIWSStateStore) DeleteSessionConn(ownerID int64, groupID int64, sessionHash string) {
+	key := openAIWSOwnedStateKey(ownerID, openAIWSSessionTurnStateKey(groupID, sessionHash))
 	if key == "" {
 		return
 	}
@@ -663,4 +663,12 @@ func withOpenAIWSStateStoreRedisTimeout(ctx context.Context) (context.Context, c
 		ctx = context.Background()
 	}
 	return context.WithTimeout(ctx, openAIWSStateStoreRedisTimeout)
+}
+
+// Unowned legacy state is intentionally unreachable after upgrade.
+func openAIWSOwnedStateKey(ownerID int64, value string) string {
+	if ownerID <= 0 || value == "" {
+		return ""
+	}
+	return fmt.Sprintf("owner-v1:%d:%s", ownerID, value)
 }

@@ -220,6 +220,9 @@ func (s *OpenAIGatewayService) getStickySessionAccountID(ctx context.Context, gr
 }
 
 func (s *OpenAIGatewayService) setStickySessionAccountID(ctx context.Context, groupID *int64, sessionHash string, accountID int64, ttl time.Duration) error {
+	if openAISessionRouteSelectionDeferred(ctx) {
+		return nil
+	}
 	if s == nil || accountID <= 0 {
 		return nil
 	}
@@ -227,7 +230,7 @@ func (s *OpenAIGatewayService) setStickySessionAccountID(ctx context.Context, gr
 	// Keep the authoritative route in step with the cache write. A store failure
 	// fails the bind instead of leaving a binding that only lasts one TTL.
 	if store := s.openAISessionRouteStore(); store != nil {
-		if err := s.upsertOpenAISessionRoute(ctx, store, derefGroupID(groupID), sessionHash, accountID, ttl); err != nil {
+		if err := s.upsertOpenAISessionRoute(ctx, store, derefGroupID(groupID), sessionHash, accountID); err != nil {
 			return err
 		}
 	}

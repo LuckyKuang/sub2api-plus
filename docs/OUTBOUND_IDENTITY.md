@@ -28,6 +28,19 @@ Kimi Code and ZCode persist runtime declarations.
 
 ## Default client environment and privacy
 
+Native OpenAI API-key records also own stable installation, thread, parent and
+window projections. The namespace uses the credential-owning account ID, never
+the bearer token or unverified organization/project values. Rotation preserves
+the projection; different records remain isolated, and credential shadows use
+their parent. HTTP and WS share these projections and align
+`x-client-request-id` with the final `thread-id`. This does not enable OAuth
+fingerprint convergence modes for API keys. Ordinary logical cache keys use
+the same tenant derivation across OAuth and API keys, independently of the
+credential-owner metadata. Existing API-key explicit keys may see one cache
+miss when upgrading to this shared derivation; subsequent owner changes keep
+the key stable. Explicit OAuth sharing retains its authorized scope.
+The Codex source matrix and exact compiled default below are unchanged.
+
 All built-in OS declarations describe one fixed **Ubuntu 24.04 x86_64** client,
 independent of the gateway/container host. Device name is `ubuntu`. The baseline
 is Ubuntu Noble GA `linux 6.8.0-31.31` (amd64): `os.release()` is

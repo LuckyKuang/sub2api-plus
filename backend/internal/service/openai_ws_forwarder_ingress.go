@@ -72,8 +72,19 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	firstClientMessage []byte,
 	hooks *OpenAIWSIngressHooks,
 ) (returnErr error) {
+	if err := validateOpenAISessionContinuation(ctx, firstClientMessage); err != nil {
+		return err
+	}
+	ctx, finishRoute, routeErr := beginOpenAISessionRouteForward(ctx, account, s.openAIFirstOutputTimeout("high"))
+	if routeErr != nil {
+		return routeErr
+	}
+	defer finishRoute()
+	defer func() { returnErr = openAISessionRouteForwardError(ctx, returnErr) }()
+	stageOpenAICodexTurnStateScope(c, firstClientMessage)
 	ctx = WithOutboundIdentityScope(ctx, c)
 	ctx = WithAccountOutboundIdentity(ctx, account)
+	defer bindOpenAISessionRouteRequestContext(ctx, c)()
 	if s == nil {
 		return errors.New("service is nil")
 	}
@@ -559,9 +570,33 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		}, nil
 	}
 
+	var pendingMigrationMessages [][]byte
+	var pendingMigrationBytes int64
 	writeClientMessage := func(message []byte) error {
+		if err := commitOpenAISessionTakeoverEvent(ctx, message); err != nil {
+			return err
+		}
+		if openAISessionTakeoverPending(ctx) {
+			kind := gjson.GetBytes(message, "type").String()
+			if isOpenAIWSTerminalEvent(kind) || kind == "error" {
+				return ErrOpenAISessionRouteNotAccepted
+			}
+			pendingMigrationBytes += int64(len(message))
+			if pendingMigrationBytes > openAIFirstOutputStageMaxBytes {
+				return ErrOpenAISessionRouteNotAccepted
+			}
+			pendingMigrationMessages = append(pendingMigrationMessages, append([]byte(nil), message...))
+			return nil
+		}
 		writeCtx, cancel := newOpenAIWSDownstreamWriteContext(ctx, hooks, s.openAIWSWriteTimeout())
 		defer cancel()
+		for _, pending := range pendingMigrationMessages {
+			if err := clientConn.Write(writeCtx, coderws.MessageText, restoreCodexToolNamesFromContext(c, pending)); err != nil {
+				return err
+			}
+		}
+		pendingMigrationMessages = nil
+		pendingMigrationBytes = 0
 		message = restoreCodexToolNamesFromContext(c, message)
 		return clientConn.Write(writeCtx, coderws.MessageText, message)
 	}
@@ -622,19 +657,19 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			return
 		}
 		if turnState == "" && stateStore != nil && sessionHash != "" {
-			if savedTurnState, ok := stateStore.GetSessionTurnState(groupID, sessionHash); ok {
+			if savedTurnState, ok := stateStore.GetSessionTurnState(openAICodexCredentialOwnerID(account), groupID, sessionHash); ok {
 				turnState = savedTurnState
 			}
 		}
 
 		if stateStore != nil && payload.previousResponseID != "" {
-			if connID, ok := stateStore.GetResponseConn(payload.previousResponseID); ok {
+			if connID, ok := stateStore.GetResponseConn(openAICodexCredentialOwnerID(account), payload.previousResponseID); ok {
 				preferredConnID = connID
 			}
 		}
 
 		if stateStore != nil && storeDisabled && payload.previousResponseID == "" && sessionHash != "" {
-			if connID, ok := stateStore.GetSessionConn(groupID, sessionHash); ok {
+			if connID, ok := stateStore.GetSessionConn(openAICodexCredentialOwnerID(account), groupID, sessionHash); ok {
 				preferredConnID = connID
 			}
 		}
@@ -1016,7 +1051,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		if handshakeTurnState := strings.TrimSpace(lease.HandshakeHeader(openAIWSTurnStateHeader)); handshakeTurnState != "" {
 			turnState = handshakeTurnState
 			if stateStore != nil && sessionHash != "" {
-				stateStore.BindSessionTurnState(groupID, sessionHash, handshakeTurnState, s.openAIWSSessionStickyTTL())
+				stateStore.BindSessionTurnState(openAICodexCredentialOwnerID(account), groupID, sessionHash, handshakeTurnState, s.openAIWSSessionStickyTTL())
 			}
 			updatedHeaders := cloneHeader(baseAcquireReq.Headers)
 			if updatedHeaders == nil {
@@ -1304,14 +1339,14 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 							truncateOpenAIWSLogValue(closeReason, openAIWSHeaderValueMaxLen),
 						)
 					} else {
-						return nil, wrapOpenAIWSIngressTurnError(
+						return &OpenAIForwardResult{Usage: usage, Model: originalModel, UpstreamModel: mappedModel, Duration: time.Since(turnStart)}, wrapOpenAIWSIngressTurnError(
 							"write_client",
 							fmt.Errorf("write client websocket event: %w", err),
 							wroteDownstream,
 						)
 					}
 				} else {
-					wroteDownstream = true
+					wroteDownstream = !openAISessionTakeoverPending(ctx)
 					markOpenAIWSClientVisibleFailure(c, eventType, upstreamMessage)
 				}
 			}
@@ -1373,6 +1408,9 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 					result.ImageInputSize = imageInputSize
 					result.ImageOutputSizes = imageCounter.Sizes()
 					result.BillingModel = imageBillingModel
+				}
+				if openAISessionTakeoverPending(ctx) {
+					return result, ErrOpenAISessionRouteNotAccepted
 				}
 				return result, nil
 			}
@@ -1944,7 +1982,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 				finalErr = unwrapped
 			}
 			if hooks != nil && hooks.AfterTurn != nil {
-				hooks.AfterTurn(turn, nil, finalErr)
+				hooks.AfterTurn(turn, result, finalErr)
 			}
 			sessionLease.MarkBroken()
 			return finalErr
@@ -1992,10 +2030,10 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		if responseID != "" && stateStore != nil {
 			ttl := s.openAIWSResponseStickyTTL()
 			logOpenAIWSBindResponseAccountWarn(groupID, account.ID, responseID, s.bindOpenAIResponseAccount(ctx, stateStore, groupID, account, responseID, ttl))
-			stateStore.BindResponseConn(responseID, connID, ttl)
+			stateStore.BindResponseConn(openAICodexCredentialOwnerID(account), responseID, connID, ttl)
 		}
 		if stateStore != nil && storeDisabled && sessionHash != "" {
-			stateStore.BindSessionConn(groupID, sessionHash, connID, s.openAIWSSessionStickyTTL())
+			stateStore.BindSessionConn(openAICodexCredentialOwnerID(account), groupID, sessionHash, connID, s.openAIWSSessionStickyTTL())
 		}
 		if connID != "" {
 			preferredConnID = connID
@@ -2083,7 +2121,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			)
 		}
 		if stateStore != nil && nextPayload.previousResponseID != "" {
-			if stickyConnID, ok := stateStore.GetResponseConn(nextPayload.previousResponseID); ok {
+			if stickyConnID, ok := stateStore.GetResponseConn(openAICodexCredentialOwnerID(account), nextPayload.previousResponseID); ok {
 				if sessionConnID != "" && stickyConnID != "" && stickyConnID != sessionConnID {
 					logOpenAIWSModeInfo(
 						"ingress_ws_keep_session_conn account_id=%d turn=%d conn_id=%s sticky_conn_id=%s previous_response_id=%s",

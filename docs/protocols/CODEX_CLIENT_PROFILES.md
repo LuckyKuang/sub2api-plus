@@ -133,6 +133,77 @@ with static values: they must reflect the live client turn state.
 
 ## Outbound fingerprint convergence
 
+### Session ownership and credential state
+
+Native OpenAI sessions with a stable client session signal use a durable route
+inside the authenticated API key and routing group. A healthy owner takes
+precedence over weighted scoring, price, latency and concurrency escape settings.
+Local concurrency pressure waits on that account's existing bounded wait plan;
+queue exhaustion or a temporary profit veto does not move the conversation.
+The canonical-owner path still enforces public-model channel restrictions and
+the OAuth shared-response user/group/policy authorization boundary. A denied
+continuation cannot use affinity as permission to send to another account.
+Clients without a stable session signal retain the existing content fallback;
+it cannot guarantee affinity across changing requests or WS reconnects.
+
+Recoverable failures retain the selected owner during existing bounded retry
+budgets. OAuth keeps its credential-refresh and transient-429 window. Native
+API keys use the existing same-account count for short transient 429s before
+migration, without parking that credential before its retry. A provider
+`Retry-After` beyond the existing short retry delay bound returns a retryable
+response to the client instead of scanning other owners. Explicit quota,
+administrative, authorization and model restrictions retain their own gates.
+Request/provider failures do not scan the account pool.
+
+Migration uses the generation observed at selection and a candidate lease.
+Admission and HTTP/WS handshakes leave the previous owner in place. Valid
+semantic output or a verified successful terminal commits the candidate before
+that result is delivered. Chat Completions without text require a successful
+finish and positive usage; structural chunks stay buffered until acceptance.
+Responses output arrays containing only empty message containers are structural
+too; without semantic output, a successful terminal needs positive usage.
+Failed candidates and lost leases retain the old
+owner. Once committed, recovery of the old account does not reclaim the session.
+During WS passthrough migration, classify upstream failures before testing
+candidate acceptance. A `cyber_policy` rejection retains its risk-control mark,
+usage evidence and client event, with no retryable routing error, credential
+penalty or owner commit. Ordinary credential failures retain their account
+health effects; pre-output rate limits retain bounded same-account recovery.
+An unavailable shadow credential owner can make the shadow ineligible, but a
+failed parent query cannot establish unavailability. Query failures stop
+selection, including candidate filtering, post-acquisition rechecks and wait
+fallbacks, without sending to or committing a replacement account.
+PostgreSQL is read directly for ownership: stale Redis fills cannot authorize a
+send. Route-store failures stop admission or result delivery. An ordinary sticky
+bind cannot change a committed owner.
+
+The migration lease lasts one minute and renews every twenty seconds until
+acceptance, bounded by the existing first-output timeout (one minute when no
+timeout is configured). Cancellation, expiry and failed renewal fence detached
+usage-draining requests too. Route errors return a retryable
+`session_route_unavailable` HTTP 503 or a WS reconnect result; they do not count
+as account health failures. Measured upstream usage on a rejected commit stays
+attributed to that candidate as incomplete usage, without automatically
+replaying the request. This does not promise exactly-once upstream execution.
+
+OAuth and API-key candidates retain their own endpoints, authentication and
+trusted identity snapshots. Logical cache identity is separate from upstream
+execution state. A previous response reference is private to its credential
+owner; a text delta, or matching tool IDs alone, does not prove full history.
+Cross-owner continuation requires complete replayable history. Otherwise the
+client must resend full history without the old reference or wait for its owner.
+An `item_reference` cannot supply the referenced history on a different owner.
+Responses, Chat and Messages adapters all require actual matching tool-call
+history for tool outputs before attempting cross-owner forwarding.
+WS replay history is complete only when it originates in an observed complete
+turn and all required tool dependencies remain available.
+
+Turn-state and session/response connection references are keyed by credential
+owner and execution scope. Same-owner reconnects may reuse their state;
+cross-owner sends cannot reuse it. Internal state without an owner key becomes
+unreachable on upgrade. All gateway replicas must be upgraded together before
+relying on this stricter isolation; older processes do not enforce it.
+
 Every credential-owning OpenAI OAuth account stores an explicit
 `extra.codex_fingerprint_mode`. New accounts default to `device`; missing,
 empty, null, or malformed legacy values are normalized to `device`. API-key,

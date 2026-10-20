@@ -329,6 +329,8 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
 	clientDisconnected := false
 	clientOutputStarted := false
 	pendingLines := make([]string, 0, 8)
+	var pendingRouteBytes int64
+	var routeErr error
 	refusalDetector := newOpenAIChatSilentRefusalDetector(requestBodyLen)
 	var terminal openAIRawStreamTerminalState
 
@@ -336,7 +338,14 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
 		if clientDisconnected {
 			return
 		}
-		if !clientOutputStarted && !refusalDetector.ShouldReleaseClientOutput() {
+		if !clientOutputStarted && (!refusalDetector.ShouldReleaseClientOutput() || openAISessionTakeoverPending(c.Request.Context())) {
+			if openAISessionTakeoverPending(c.Request.Context()) {
+				pendingRouteBytes += int64(len(line))
+				if pendingRouteBytes > openAIFirstOutputStageMaxBytes {
+					routeErr = ErrOpenAISessionRouteNotAccepted
+					return
+				}
+			}
 			pendingLines = append(pendingLines, line)
 			return
 		}
@@ -364,6 +373,7 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
 		}
 	}
 
+	var acceptance openAIChatTakeoverAcceptance
 	for scanner.Scan() {
 		line := scanner.Text()
 		refusalDetector.ObserveSSELine(line)
@@ -377,7 +387,14 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
 				}
 				var chunk apicompat.ChatCompletionsChunk
 				if json.Unmarshal([]byte(payload), &chunk) == nil {
-					timing.Observe(startTime, apicompat.ObserveChatChunkOutput(&chunk))
+					observation := apicompat.ObserveChatChunkOutput(&chunk)
+					timing.Observe(startTime, observation)
+					if !gjson.Get(payload, "error").Exists() && acceptance.observe(&chunk, usage) {
+						routeErr = commitOpenAISessionTakeover(c.Request.Context())
+						if routeErr != nil {
+							break
+						}
+					}
 				}
 			}
 		}
@@ -385,6 +402,9 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
 		line = stripEmptyChatToolCallIdentityFromSSELine(line)
 
 		writeLine(line)
+		if routeErr != nil {
+			break
+		}
 		if line == "" {
 			if !clientDisconnected && clientOutputStarted {
 				c.Writer.Flush()
@@ -418,6 +438,12 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
 		return result
 	}
 
+	if routeErr != nil {
+		return resultWithUsage(), routeErr
+	}
+	if openAISessionTakeoverPending(c.Request.Context()) {
+		return resultWithUsage(), ErrOpenAISessionRouteNotAccepted
+	}
 	scanErr := scanner.Err()
 	if scanErr != nil && !errors.Is(scanErr, context.Canceled) && !errors.Is(scanErr, context.DeadlineExceeded) {
 		logger.L().Warn("openai chat_completions raw: stream read error",
@@ -550,6 +576,9 @@ func (s *OpenAIGatewayService) bufferRawChatCompletions(
 		return nil, newGrokMissingUsageFailoverError(c, account, upstreamRequestID)
 	}
 	respBody = applyOllamaCloudRawChatCompletionsResponse(account, respBody)
+	if err := commitOpenAISessionTakeoverJSON(c.Request.Context(), respBody); err != nil {
+		return &OpenAIForwardResult{RequestID: requestID, Usage: usage, Model: originalModel, BillingModel: billingModel, UpstreamModel: upstreamModel, Duration: time.Since(startTime)}, err
+	}
 
 	if s.responseHeaderFilter != nil {
 		responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)

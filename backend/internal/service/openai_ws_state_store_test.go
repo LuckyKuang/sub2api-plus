@@ -53,48 +53,48 @@ func TestOpenAIWSStateStore_HTTPResponseOwnerPersistsAcrossStoreInstances(t *tes
 
 func TestOpenAIWSStateStore_ResponseConnTTL(t *testing.T) {
 	store := NewOpenAIWSStateStore(nil)
-	store.BindResponseConn("resp_conn", "conn_1", 30*time.Millisecond)
+	store.BindResponseConn(11, "resp_conn", "conn_1", 30*time.Millisecond)
 
-	connID, ok := store.GetResponseConn("resp_conn")
+	connID, ok := store.GetResponseConn(11, "resp_conn")
 	require.True(t, ok)
 	require.Equal(t, "conn_1", connID)
 
 	time.Sleep(60 * time.Millisecond)
-	_, ok = store.GetResponseConn("resp_conn")
+	_, ok = store.GetResponseConn(11, "resp_conn")
 	require.False(t, ok)
 }
 
 func TestOpenAIWSStateStore_SessionTurnStateTTL(t *testing.T) {
 	store := NewOpenAIWSStateStore(nil)
-	store.BindSessionTurnState(9, "session_hash_1", "turn_state_1", 30*time.Millisecond)
+	store.BindSessionTurnState(11, 9, "session_hash_1", "turn_state_1", 30*time.Millisecond)
 
-	state, ok := store.GetSessionTurnState(9, "session_hash_1")
+	state, ok := store.GetSessionTurnState(11, 9, "session_hash_1")
 	require.True(t, ok)
 	require.Equal(t, "turn_state_1", state)
 
 	// group 隔离
-	_, ok = store.GetSessionTurnState(10, "session_hash_1")
+	_, ok = store.GetSessionTurnState(11, 10, "session_hash_1")
 	require.False(t, ok)
 
 	time.Sleep(60 * time.Millisecond)
-	_, ok = store.GetSessionTurnState(9, "session_hash_1")
+	_, ok = store.GetSessionTurnState(11, 9, "session_hash_1")
 	require.False(t, ok)
 }
 
 func TestOpenAIWSStateStore_SessionConnTTL(t *testing.T) {
 	store := NewOpenAIWSStateStore(nil)
-	store.BindSessionConn(9, "session_hash_conn_1", "conn_1", 30*time.Millisecond)
+	store.BindSessionConn(11, 9, "session_hash_conn_1", "conn_1", 30*time.Millisecond)
 
-	connID, ok := store.GetSessionConn(9, "session_hash_conn_1")
+	connID, ok := store.GetSessionConn(11, 9, "session_hash_conn_1")
 	require.True(t, ok)
 	require.Equal(t, "conn_1", connID)
 
 	// group 隔离
-	_, ok = store.GetSessionConn(10, "session_hash_conn_1")
+	_, ok = store.GetSessionConn(11, 10, "session_hash_conn_1")
 	require.False(t, ok)
 
 	time.Sleep(60 * time.Millisecond)
-	_, ok = store.GetSessionConn(9, "session_hash_conn_1")
+	_, ok = store.GetSessionConn(11, 9, "session_hash_conn_1")
 	require.False(t, ok)
 }
 

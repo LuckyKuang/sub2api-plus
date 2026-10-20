@@ -193,6 +193,9 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 			requestPlatform,
 		)
 		if err != nil {
+			if h.handleOpenAISessionRouteError(c, err, streamStarted) {
+				return
+			}
 			if errors.Is(err, service.ErrOpenAIOAuthSessionAccessDenied) {
 				h.handleStreamingAwareError(c, http.StatusForbidden, "permission_error", "This OpenAI OAuth account is restricted to authorized API key groups.", streamStarted)
 				return
@@ -327,6 +330,10 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 			})
 		}
 		if err != nil {
+			if h.handleOpenAISessionRouteError(c, err, streamStarted) {
+				submitChatUsage(result)
+				return
+			}
 			if result != nil && result.ImageCount > 0 {
 				reqLog.Warn("openai_chat_completions.forward_partial_error_with_image_result",
 					zap.Int64("account_id", account.ID),
@@ -351,7 +358,7 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 					if failoverErr.ShouldReportAccountScheduleFailure() {
 						h.gatewayService.ReportOpenAIAccountScheduleResult(account, openAIAccountScheduleModel(c, account, reqModel, false, nil), false, nil, err)
 					}
-					if !failoverErr.ShouldRetryNextAccount() {
+					if !failoverErr.ShouldRetryNextAccount() || (account.Platform == service.PlatformOpenAI && !failoverErr.ShouldReportAccountScheduleFailure()) {
 						h.handleFailoverExhausted(c, failoverErr, streamStarted)
 						return
 					}
@@ -360,6 +367,7 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 						retryLimit := effectiveSameAccountRetryLimit(failoverErr, account)
 						if sameAccountRetryAllowed(failoverErr, sameAccountRetryCount[account.ID], retryLimit) {
 							sameAccountRetryCount[account.ID]++
+							c.Request = c.Request.WithContext(service.WithOpenAISessionRecovery(c.Request.Context(), account.ID, true))
 							retryDelay := sameAccountRetryDelayFor(failoverErr, sameAccountRetryCount[account.ID])
 							reqLog.Warn("openai_chat_completions.pool_mode_same_account_retry",
 								zap.Int64("account_id", account.ID),
@@ -377,6 +385,7 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 						}
 					}
 					h.gatewayService.RecordOpenAIAccountSwitch()
+					c.Request = c.Request.WithContext(service.WithOpenAISessionRecovery(c.Request.Context(), account.ID, false))
 					failedAccountIDs[account.ID] = struct{}{}
 					lastFailoverErr = failoverErr
 					if switchCount >= maxAccountSwitches {

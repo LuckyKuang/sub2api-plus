@@ -152,13 +152,13 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_StateBoundToExec
 	require.Len(t, scope, 16)
 	require.NotEqual(t, legacyHash, scope)
 
-	_, connBoundToLegacy := stateStore.GetSessionConn(groupID, legacyHash)
+	_, connBoundToLegacy := stateStore.GetSessionConn(account.ID, groupID, legacyHash)
 	require.False(t, connBoundToLegacy, "上游连接不得绑定到按 session-id 算出的会话哈希")
-	_, connBoundToScope := stateStore.GetSessionConn(groupID, scope)
+	_, connBoundToScope := stateStore.GetSessionConn(account.ID, groupID, scope)
 	require.True(t, connBoundToScope, "上游连接应绑定到执行作用域")
-	_, turnStateOnLegacy := stateStore.GetSessionTurnState(groupID, legacyHash)
+	_, turnStateOnLegacy := stateStore.GetSessionTurnState(account.ID, groupID, legacyHash)
 	require.False(t, turnStateOnLegacy, "turn state 不得绑定到会话哈希")
-	turnState, turnStateOnScope := stateStore.GetSessionTurnState(groupID, scope)
+	turnState, turnStateOnScope := stateStore.GetSessionTurnState(account.ID, groupID, scope)
 	require.True(t, turnStateOnScope, "turn state 应绑定到执行作用域")
 	require.Equal(t, "turn-state-from-upstream", turnState)
 }

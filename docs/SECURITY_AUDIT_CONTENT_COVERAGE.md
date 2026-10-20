@@ -22,6 +22,17 @@ HTTP/WS handlers before their side effects.
 
 ## Boundary And Ordering
 
+Codex account-affinity recovery retains the original audited current turn.
+Cross-owner tool-history validation runs after this audit boundary. Tool outputs
+and opaque item references remain historical protocol data; both engines still
+extract a recognized current user sibling and pass unknown valid structures.
+Credential-owner projection and removal of an obsolete response reference do
+not create an alternative extraction path. An opaque reference with an input
+delta is insufficient evidence for cross-account replay; only history retained
+from a complete turn may seed that replay. A new WS turn still enters both audit
+engines before selection, billing, concurrency or provider writes. Unknown valid
+structures and recognized sibling content retain the shared extraction policy.
+
 The automatic hosted `image_generation` bridge is limited to OpenAI platform
 accounts. Native Responses suppliers do not receive this OpenAI-only injected
 tool. This decision is made after ingress audit and account selection and does

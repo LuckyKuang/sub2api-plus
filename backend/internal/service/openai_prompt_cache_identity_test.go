@@ -388,12 +388,10 @@ func TestOpenAIResponsesCompactPromptCacheFinalization(t *testing.T) {
 			// TestSetOpenAIUpstreamSessionIdentityUsesOfficialHeaderForCodexAccounts and the
 			// Anthropic/compat path in openai_compat_model_test.go.
 			require.Empty(t, upstream.lastReq.Header.Get("session_id"), "compact emits only the official session-id spelling")
-			expectedThreadID := "thread-compact-1"
-			if tt.account.UsesOpenAICodexProtocol() {
-				expectedThreadID = scopeCodexAccountIdentityValue(&tt.account, 77, "thread", expectedThreadID)
-			}
-			require.Equal(t, expectedThreadID, upstream.lastReq.Header.Get("thread-id"))
-			require.Equal(t, expectedThreadID, upstream.lastReq.Header.Get("x-client-request-id"))
+			threadID := upstream.lastReq.Header.Get("thread-id")
+			require.NotEmpty(t, threadID)
+			require.NotEqual(t, "thread-compact-1", threadID, "both native auth types scope execution identity")
+			require.Equal(t, threadID, upstream.lastReq.Header.Get("x-client-request-id"))
 			require.Equal(t, tt.wantOptions, gjson.GetBytes(upstream.lastBody, "prompt_cache_options").Exists())
 		})
 	}

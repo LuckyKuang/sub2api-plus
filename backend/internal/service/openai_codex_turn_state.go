@@ -67,11 +67,36 @@ func openAICodexTurnStateSeed(c *gin.Context) string {
 	if c == nil || c.Request == nil {
 		return ""
 	}
+	scope, _ := c.Get("openai_codex_turn_state_scope")
+	if value, ok := scope.(string); ok && value != "" {
+		return "execution-v1:" + value
+	}
+	if scope := openAICodexTurnStateExecutionScope(c, nil); scope != "" {
+		return "execution-v1:" + scope
+	}
 	sessionID := extractClientSessionID(c.Request.Header)
 	if sessionID == "" {
 		return ""
 	}
 	return strconv.FormatInt(getAPIKeyIDFromContext(c), 10) + "\x00" + sessionID
+}
+
+func stageOpenAICodexTurnStateScope(c *gin.Context, body []byte) {
+	if c == nil {
+		return
+	}
+	scope := openAICodexTurnStateExecutionScope(c, body)
+	c.Set("openai_codex_turn_state_scope", scope)
+}
+
+func openAICodexTurnStateExecutionScope(c *gin.Context, body []byte) string {
+	// Legacy clients expose only a session. Keep their provenance key while
+	// distinguishing modern sibling threads and independent execution lanes.
+	if resolveOpenAIWSClientThreadID(c, body) == "" && resolveOpenAIWSExecutionLane(c, body) == "" {
+		return ""
+	}
+	scope, _ := resolveOpenAIWSExecutionScope(c, body, getAPIKeyIDFromContext(c))
+	return scope
 }
 
 // relayOpenAICodexTurnState 将上游响应中的 turn-state 显式写入下游响应头。
@@ -163,11 +188,19 @@ func (s *OpenAIGatewayService) guardOpenAICodexTurnStateEcho(c *gin.Context, acc
 	if strings.TrimSpace(h.Get(openAICodexTurnStateHeader)) == "" {
 		return
 	}
+	ownerID := openAICodexCredentialOwnerID(account)
+	// A known migration is stronger evidence than an absent/expired provenance
+	// record. Never let loss of metadata authorize the old owner's opaque state.
+	if c != nil && c.Request != nil {
+		if openAISessionTakeoverPending(c.Request.Context()) {
+			h.Del(openAICodexTurnStateHeader)
+			return
+		}
+	}
 	seed := openAICodexTurnStateSeed(c)
 	if seed == "" {
 		return
 	}
-	ownerID := openAICodexCredentialOwnerID(account)
 	if ownerID <= 0 {
 		h.Del(openAICodexTurnStateHeader)
 		return

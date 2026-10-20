@@ -263,6 +263,15 @@ func (s *OpenAIGatewayService) handleOpenAIAccountUpstreamError(ctx context.Cont
 		s.rateLimitService.HandleOpenAICodexSparkRateLimit(stateCtx, account, canonicalModel[0], statusCode, headers, responseBody) {
 		return false
 	}
+	if statusCode == http.StatusTooManyRequests && account.IsOpenAIApiKey() && openAIRouteAttempt(ctx) != nil {
+		disposition, _ := classifyOpenAIOAuth429(headers, responseBody)
+		reset := parseRetryAfterResetTime(headers, time.Now())
+		if disposition == openAIOAuth429Transient && (reset == nil || time.Until(*reset) <= openAIOAuth429MaxRetryDelay) {
+			// Keep the selected credential available for this request's bounded
+			// same-account recovery. Quota/admin/model blocks above still win.
+			return false
+		}
+	}
 	if statusCode == http.StatusTooManyRequests {
 		s.markOpenAIOAuth429RateLimited(stateCtx, account, headers, responseBody)
 	}

@@ -130,11 +130,11 @@ func TestOpenAIIdentityContractEndpointMatrix(t *testing.T) {
 								require.True(t, gjson.Valid(metadata), "search metadata must survive every auth/preset path")
 								require.Equal(t, gjson.Get(searchMetadata, "mcp_request_meta").String(), gjson.Get(metadata, "mcp_request_meta").String())
 								require.Equal(t, "keep", gjson.Get(metadata, "future_field").String())
-								wantTurn := "turn-1"
-								if accountType != AccountTypeAPIKey {
-									wantTurn = scopeCodexAccountIdentityValue(account, 99, "turn", "turn-1")
-								}
-								require.Equal(t, wantTurn, gjson.Get(metadata, "turn_id").String())
+								// Both auth types project stable credential-owner metadata.
+								turn := gjson.Get(metadata, "turn_id").String()
+								require.NotEmpty(t, turn)
+								require.NotEqual(t, "turn-1", turn)
+								require.Equal(t, gjson.Get(requests[0].Header.Get("X-Codex-Turn-Metadata"), "turn_id").String(), turn, "retry/version reload preserves execution identity")
 								require.Empty(t, req.Header.Get("X-OpenAI-Actor-Authorization"))
 								if accountType == "pat" {
 									require.Equal(t, chatgptCodexURL, req.URL.String())

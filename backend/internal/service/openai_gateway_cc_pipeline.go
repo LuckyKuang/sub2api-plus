@@ -319,6 +319,9 @@ func (s *OpenAIGatewayService) scanCCStream(
 	emit func(*apicompat.ChatCompletionsChunk),
 ) ccStreamScanState {
 	var st ccStreamScanState
+	var acceptance openAIChatTakeoverAcceptance
+	var pending []*apicompat.ChatCompletionsChunk
+	var pendingBytes int64
 
 	scanner := s.newUpstreamSSEScanner(resp.Body)
 	for scanner.Scan() {
@@ -333,6 +336,9 @@ func (s *OpenAIGatewayService) scanCCStream(
 		}
 		if payload == "[DONE]" {
 			st.SawDone = true
+			if openAISessionTakeoverPending(c.Request.Context()) {
+				st.Err = ErrOpenAISessionRouteNotAccepted
+			}
 			break
 		}
 		if gjson.Get(payload, "error").IsObject() {
@@ -357,6 +363,28 @@ func (s *OpenAIGatewayService) scanCCStream(
 			)
 			continue
 		}
+		if !st.SawError && acceptance.observe(&chunk, st.Usage) {
+			if err := commitOpenAISessionTakeover(c.Request.Context()); err != nil {
+				st.Err = err
+				break
+			}
+		}
+		// Preserve structural/finish chunks for conversion while withholding
+		// candidate output until persistent acceptance succeeds.
+		if openAISessionTakeoverPending(c.Request.Context()) {
+			pendingBytes += int64(len(payload))
+			if pendingBytes > openAIFirstOutputStageMaxBytes {
+				st.Err = ErrOpenAISessionRouteNotAccepted
+				break
+			}
+			pending = append(pending, &chunk)
+			continue
+		}
+		for _, staged := range pending {
+			emit(staged)
+		}
+		pending = nil
+		pendingBytes = 0
 		emit(&chunk)
 	}
 
@@ -368,6 +396,9 @@ func (s *OpenAIGatewayService) scanCCStream(
 			)
 		}
 		st.Err = err
+	}
+	if st.Err == nil && openAISessionTakeoverPending(c.Request.Context()) {
+		st.Err = ErrOpenAISessionRouteNotAccepted
 	}
 	return st
 }
@@ -408,6 +439,9 @@ func (s *OpenAIGatewayService) readCCUpstreamJSONResponse(
 	usage := OpenAIUsage{}
 	if parsed, ok := extractOpenAIUsageFromJSONBytes(respBody); ok {
 		usage = parsed
+	}
+	if err := commitOpenAISessionTakeoverJSON(c.Request.Context(), respBody); err != nil {
+		return nil, usage, err
 	}
 	return &ccResp, usage, nil
 }

@@ -53,7 +53,18 @@ func codexAccountIdentitySource(c *gin.Context, fallback *Account) *Account {
 // persist a fingerprint seed; remaining OAuth rows fall back to the
 // credential-owning account ID.
 func codexAccountIdentityNamespace(account *Account) string {
-	if account == nil || !account.IsOpenAIOAuthLike() {
+	if account == nil {
+		return ""
+	}
+	// Native API keys are explicit credential owners. Organization/project values
+	// are not verified identities and bearer rotation must not create a device.
+	if account.Platform == PlatformOpenAI && account.Type == AccountTypeAPIKey {
+		if ownerID := openAICodexCredentialOwnerID(account); ownerID > 0 {
+			return fmt.Sprintf("apikey-account:%d", ownerID)
+		}
+		return ""
+	}
+	if !account.IsOpenAIOAuthLike() {
 		return ""
 	}
 	if upstreamAccountID := strings.TrimSpace(account.GetChatGPTAccountID()); upstreamAccountID != "" {

@@ -60,9 +60,19 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 	body []byte,
 	promptCacheKey string,
 	defaultMappedModel string,
-) (*OpenAIForwardResult, error) {
+) (forwardResult *OpenAIForwardResult, forwardErr error) {
+	if err := validateOpenAISessionContinuation(ctx, body); err != nil {
+		return nil, err
+	}
+	ctx, finishRoute, routeErr := beginOpenAISessionRouteForward(ctx, account, s.openAIFirstOutputTimeout("high"))
+	if routeErr != nil {
+		return nil, routeErr
+	}
+	defer finishRoute()
+	defer func() { forwardErr = openAISessionRouteForwardError(ctx, forwardErr) }()
 	ctx = WithOutboundIdentityScope(ctx, c)
 	ctx = WithAccountOutboundIdentity(ctx, account)
+	defer bindOpenAISessionRouteRequestContext(ctx, c)()
 	return s.forwardAsChatCompletions(ctx, c, account, body, promptCacheKey, defaultMappedModel)
 }
 
@@ -799,6 +809,13 @@ func (s *OpenAIGatewayService) handleChatBufferedStreamingResponse(
 	// writeContentType 仅在头不存在时才设置，无法覆盖。这里显式 Set 强制改回 JSON，
 	// 否则下游"看头判流式"的中间层（如 new-api）会把本应聚合的 JSON 当成 SSE 处理。
 	c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
+	acceptedBody, marshalErr := json.Marshal(finalResponse)
+	if marshalErr != nil {
+		return nil, marshalErr
+	}
+	if err := commitOpenAISessionTakeoverJSON(c.Request.Context(), acceptedBody); err != nil {
+		return &OpenAIForwardResult{RequestID: requestID, Usage: usage, Model: originalModel, BillingModel: billingModel, UpstreamModel: upstreamModel, Duration: time.Since(startTime)}, err
+	}
 	c.JSON(http.StatusOK, chatResp)
 
 	result := &OpenAIForwardResult{
@@ -1056,6 +1073,10 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 			return true
 		}
 
+		if err := commitOpenAISessionTakeoverEvent(c.Request.Context(), []byte(payload)); err != nil {
+			streamNonFailoverErr = err
+			return true
+		}
 		chunks := apicompat.ResponsesEventToChatChunks(&event, state)
 		if !clientDisconnected {
 			for _, chunk := range chunks {
@@ -1068,7 +1089,7 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 					)
 					continue
 				}
-				if !clientOutputStarted && !refusalDetector.ShouldReleaseClientOutput() {
+				if !clientOutputStarted && (!refusalDetector.ShouldReleaseClientOutput() || openAISessionTakeoverPending(c.Request.Context())) {
 					pendingSSE = append(pendingSSE, sse)
 					continue
 				}
@@ -1113,6 +1134,9 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 		}
 		if streamNonFailoverErr != nil {
 			return resultWithUsage(), streamNonFailoverErr
+		}
+		if openAISessionTakeoverPending(c.Request.Context()) {
+			return resultWithUsage(), ErrOpenAISessionRouteNotAccepted
 		}
 		if finalChunks := apicompat.FinalizeResponsesChatStream(state); len(finalChunks) > 0 && !clientDisconnected {
 			for _, chunk := range finalChunks {

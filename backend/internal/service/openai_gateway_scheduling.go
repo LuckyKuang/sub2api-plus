@@ -305,6 +305,11 @@ func (s *OpenAIGatewayService) SelectAccountForModel(ctx context.Context, groupI
 // SelectAccountForModelWithExclusions selects an account supporting the requested model while excluding specified accounts.
 // SelectAccountForModelWithExclusions 选择支持指定模型的账号，同时排除指定的账号。
 func (s *OpenAIGatewayService) SelectAccountForModelWithExclusions(ctx context.Context, groupID *int64, sessionHash string, requestedModel string, excludedIDs map[int64]struct{}) (*Account, error) {
+	if sessionHash != "" && s.openAISessionRouteStore() != nil {
+		// This discovery-only API cannot carry an attempt to forwarding.
+		// Session callers must use the selection API and its fenced context.
+		return nil, ErrOpenAISessionRouteNotAccepted
+	}
 	return s.selectAccountForModelWithExclusions(s.withOpenAIQuotaAutoPauseContext(ctx), groupID, PlatformOpenAI, sessionHash, requestedModel, excludedIDs, false, 0, "", false)
 }
 
@@ -1024,6 +1029,11 @@ func (s *OpenAIGatewayService) selectAccountForModelWithExclusions(ctx context.C
 // 另返回账号是否来自粘性会话命中。
 func (s *OpenAIGatewayService) selectAccountForModelWithExclusionsStickyHit(ctx context.Context, groupID *int64, platform string, sessionHash string, requestedModel string, excludedIDs map[int64]struct{}, requireCompact bool, stickyAccountID int64, requiredCapability OpenAIEndpointCapability, preferLowUpstreamRate bool) (*Account, bool, error) {
 	platform = NormalizeOpenAICompatiblePlatform(platform)
+	if sessionHash != "" && platform == PlatformOpenAI {
+		if _, err := s.getStickySessionAccountID(ctx, groupID, sessionHash); errors.Is(err, ErrOpenAISessionRouteStoreUnavailable) {
+			return nil, false, err
+		}
+	}
 	if s.checkChannelPricingRestriction(ctx, groupID, requestedModel) {
 		slog.Warn("channel pricing restriction blocked request",
 			"group_id", derefGroupID(groupID),
@@ -1061,7 +1071,9 @@ func (s *OpenAIGatewayService) selectAccountForModelWithExclusionsStickyHit(ctx 
 	// 终检否决的账号不得成为新的粘性目标；无门保持既有 Plus 会话共享绑定与 TTL）
 	// Set sticky session binding (deferred until terminal admission under a profit gate)
 	if sessionHash != "" && !gatewayProfitControlGateActive(ctx) {
-		_ = s.bindOpenAIStickySessionAccount(ctx, groupID, sessionHash, hydrated, openaiStickySessionTTL)
+		if err := s.bindOpenAIStickySessionAccount(ctx, groupID, sessionHash, hydrated, openaiStickySessionTTL); err != nil {
+			return nil, false, err
+		}
 	}
 
 	return hydrated, false, nil
@@ -1259,7 +1271,13 @@ func (s *OpenAIGatewayService) SelectAccountWithLoadAwareness(ctx context.Contex
 	// 分组利润控制：legacy 公共入口同样装门，保证不经
 	// selectAccountWithScheduler 的调用方也无法绕过利润准入。
 	ctx = s.withOpenAIProfitControlGate(ctx, groupID)
-	return s.selectAccountWithLoadAwareness(ctx, groupID, PlatformOpenAI, sessionHash, requestedModel, excludedIDs, false, "", true)
+	selection, _, err := s.selectAccountWithCanonicalRoute(ctx, OpenAIAccountScheduleRequest{
+		GroupID: groupID, Platform: PlatformOpenAI, SessionHash: sessionHash, RequestedModel: requestedModel, ExcludedIDs: excludedIDs,
+	}, func(candidateCtx context.Context, candidateSession string, excluded map[int64]struct{}) (*AccountSelectionResult, OpenAIAccountScheduleDecision, error) {
+		result, selectErr := s.selectAccountWithLoadAwareness(candidateCtx, groupID, PlatformOpenAI, candidateSession, requestedModel, excluded, false, "", true)
+		return result, OpenAIAccountScheduleDecision{}, selectErr
+	})
+	return selection, err
 }
 
 func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Context, groupID *int64, platform string, sessionHash string, requestedModel string, excludedIDs map[int64]struct{}, requireCompact bool, requiredCapability OpenAIEndpointCapability, useUpstreamTokenCost bool) (*AccountSelectionResult, error) {
@@ -1532,7 +1550,12 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 					return nil, true, selectErr
 				}
 				if sessionHash != "" && !stickySpillover && !gatewayProfitControlGateActive(ctx) {
-					_ = s.bindOpenAIStickySessionAccount(ctx, groupID, sessionHash, fresh, openaiStickySessionTTL)
+					if err := s.bindOpenAIStickySessionAccount(ctx, groupID, sessionHash, fresh, openaiStickySessionTTL); err != nil {
+						if selection.ReleaseFunc != nil {
+							selection.ReleaseFunc()
+						}
+						return nil, true, err
+					}
 				}
 				return selection, true, nil
 			}
@@ -1571,7 +1594,12 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 					return nil, selectErr
 				}
 				if sessionHash != "" && !stickySpillover && !gatewayProfitControlGateActive(ctx) {
-					_ = s.bindOpenAIStickySessionAccount(ctx, groupID, sessionHash, fresh, openaiStickySessionTTL)
+					if err := s.bindOpenAIStickySessionAccount(ctx, groupID, sessionHash, fresh, openaiStickySessionTTL); err != nil {
+						if selection.ReleaseFunc != nil {
+							selection.ReleaseFunc()
+						}
+						return nil, err
+					}
 				}
 				return selection, nil
 			}
@@ -1676,36 +1704,56 @@ func (s *OpenAIGatewayService) resolveFreshSchedulableOpenAIAccount(ctx context.
 }
 
 func (s *OpenAIGatewayService) resolveFreshSchedulableOpenAIAccountBeforeProfit(ctx context.Context, account *Account, platform string, requestedModel string, requireCompact bool, requiredCapability OpenAIEndpointCapability) *Account {
+	fresh, _ := s.resolveFreshSchedulableOpenAIAccountBeforeProfitChecked(ctx, account, platform, requestedModel, requireCompact, requiredCapability)
+	return fresh
+}
+
+func (s *OpenAIGatewayService) resolveFreshSchedulableOpenAIAccountBeforeProfitChecked(ctx context.Context, account *Account, platform string, requestedModel string, requireCompact bool, requiredCapability OpenAIEndpointCapability) (*Account, error) {
 	if account == nil {
-		return nil
+		return nil, nil
 	}
 	platform = NormalizeOpenAICompatiblePlatform(platform)
 
 	fresh := account
 	if s.schedulerSnapshot != nil {
 		current, err := s.getSchedulableAccount(ctx, account.ID)
-		if err != nil || current == nil {
-			return nil
+		if err != nil && !errors.Is(err, ErrAccountNotFound) {
+			return nil, fmt.Errorf("%w: owner refresh: %w", ErrOpenAISessionRouteStoreUnavailable, err)
+		}
+		if current == nil {
+			return nil, nil
 		}
 		fresh = current
 	}
 
 	if !isOpenAICompatibleAccountEligibleForRequestBeforeProfit(ctx, fresh, platform, requestedModel, requireCompact, requiredCapability) {
-		return nil
+		return nil, nil
 	}
-	if !parentHealthyForShadow(fresh, s.parentAccountLookup(ctx)) {
-		return nil
+	var parentErr error
+	if !parentHealthyForShadow(fresh, func(id int64) *Account {
+		if s.accountRepo == nil {
+			parentErr = ErrOpenAISessionRouteStoreUnavailable
+			return nil
+		}
+		parent, err := s.accountRepo.GetByID(ctx, id)
+		parentErr = err
+		return parent
+	}) {
+		if parentErr != nil && !errors.Is(parentErr, ErrAccountNotFound) {
+			return nil, fmt.Errorf("%w: credential owner refresh: %w", ErrOpenAISessionRouteStoreUnavailable, parentErr)
+		}
+		return nil, nil
 	}
 	if s.isOpenAIAccountRequestRuntimeBlocked(fresh, requestedModel) {
-		return nil
+		return nil, nil
 	}
 	if s.isOpenAIAccountBlockedBySchedulingThreshold(ctx, fresh) {
-		return nil
+		return nil, nil
 	}
 	if s.isOpenAIProxyStreamQuarantined(ctx, fresh) {
-		return nil
+		return nil, nil
 	}
-	return fresh
+	return fresh, nil
 }
 
 // parentAccountLookup 返回供 parentHealthyForShadow 使用的母账号解析闭包:经 accountRepo
@@ -1734,55 +1782,84 @@ func (s *OpenAIGatewayService) recheckSelectedOpenAIAccountFromDB(ctx context.Co
 }
 
 func (s *OpenAIGatewayService) recheckSelectedOpenAIAccountFromDBBeforeProfit(ctx context.Context, account *Account, groupID *int64, platform string, requestedModel string, requireCompact bool, requiredCapability OpenAIEndpointCapability) *Account {
+	latest, _ := s.recheckSelectedOpenAIAccountFromDBBeforeProfitChecked(ctx, account, groupID, platform, requestedModel, requireCompact, requiredCapability)
+	return latest
+}
+
+// Checked revalidation distinguishes explicit ineligibility from repository
+// failure. A canonical owner's lookup failure never authorizes migration.
+func (s *OpenAIGatewayService) recheckSelectedOpenAIAccountFromDBBeforeProfitChecked(ctx context.Context, account *Account, groupID *int64, platform string, requestedModel string, requireCompact bool, requiredCapability OpenAIEndpointCapability) (*Account, error) {
 	if account == nil {
-		return nil
+		return nil, nil
+	}
+	var parentErr error
+	parentLookup := func(id int64) *Account {
+		if s.accountRepo == nil {
+			parentErr = ErrOpenAISessionRouteStoreUnavailable
+			return nil
+		}
+		parent, err := s.accountRepo.GetByID(ctx, id)
+		parentErr = err
+		return parent
 	}
 	platform = NormalizeOpenAICompatiblePlatform(platform)
 	if s.schedulerSnapshot == nil || s.accountRepo == nil {
 		if s.openAIGroupRequiresPrivacySet(ctx, groupID) && !account.IsPrivacySet() {
-			return nil
+			return nil, nil
 		}
 		if !isOpenAICompatibleAccountEligibleForRequestBeforeProfit(ctx, account, platform, requestedModel, requireCompact, requiredCapability) {
-			return nil
+			return nil, nil
 		}
 		if s.isOpenAIAccountBlockedBySchedulingThreshold(ctx, account) {
-			return nil
+			return nil, nil
 		}
-		if !parentHealthyForShadow(account, s.parentAccountLookup(ctx)) {
-			return nil
+		if !parentHealthyForShadow(account, parentLookup) {
+			if parentErr != nil && !errors.Is(parentErr, ErrAccountNotFound) {
+				return nil, fmt.Errorf("%w: credential owner recheck: %w", ErrOpenAISessionRouteStoreUnavailable, parentErr)
+			}
+			return nil, nil
 		}
 		if s.isOpenAIProxyStreamQuarantined(ctx, account) {
-			return nil
+			return nil, nil
 		}
-		return account
+		return account, nil
 	}
 
 	latest, err := s.accountRepo.GetByID(ctx, account.ID)
-	if err != nil || latest == nil {
-		return nil
+	if err != nil {
+		if errors.Is(err, ErrAccountNotFound) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("%w: owner recheck", ErrOpenAISessionRouteStoreUnavailable)
+	}
+	if latest == nil {
+		return nil, nil
 	}
 	if !s.openAIAccountMatchesSchedulingGroup(latest, groupID) {
-		return nil
+		return nil, nil
 	}
 	if s.openAIGroupRequiresPrivacySet(ctx, groupID) && !latest.IsPrivacySet() {
-		return nil
+		return nil, nil
 	}
 	if !isOpenAICompatibleAccountEligibleForRequestBeforeProfit(ctx, latest, platform, requestedModel, requireCompact, requiredCapability) {
-		return nil
+		return nil, nil
 	}
-	if !parentHealthyForShadow(latest, s.parentAccountLookup(ctx)) {
-		return nil
+	if !parentHealthyForShadow(latest, parentLookup) {
+		if parentErr != nil && !errors.Is(parentErr, ErrAccountNotFound) {
+			return nil, fmt.Errorf("%w: credential owner recheck: %w", ErrOpenAISessionRouteStoreUnavailable, parentErr)
+		}
+		return nil, nil
 	}
 	if s.isOpenAIAccountRequestRuntimeBlocked(latest, requestedModel) {
-		return nil
+		return nil, nil
 	}
 	if s.isOpenAIAccountBlockedBySchedulingThreshold(ctx, latest) {
-		return nil
+		return nil, nil
 	}
 	if s.isOpenAIProxyStreamQuarantined(ctx, latest) {
-		return nil
+		return nil, nil
 	}
-	return latest
+	return latest, nil
 }
 
 func (s *OpenAIGatewayService) openAIAccountMatchesSchedulingGroup(account *Account, groupID *int64) bool {

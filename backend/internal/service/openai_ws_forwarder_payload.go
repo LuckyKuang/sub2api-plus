@@ -209,6 +209,8 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	applyOpenAICodexGuardianHeader(c, account, headers, routingModel)
 	SetOpsRoutingDiagnostics(c, &OpsRoutingDiagnostics{OutboundIdentitySource: identity.Source})
 	setOpenAICodexRoutingHint(headers, account, routingModel, routingServiceTier)
+	// Apply after generic overrides, for client echoes and cache backfills alike.
+	s.guardOpenAICodexTurnStateEcho(c, account, headers)
 	brandidentity.StripOutboundHeaders(headers)
 	logOpenAIRoutingDiagnostics(
 		ctx,
@@ -779,8 +781,13 @@ func buildOpenAIWSReplayInputSequenceFromItems(
 	currentExists bool,
 	hasPreviousResponseID bool,
 ) ([]json.RawMessage, bool) {
-	if !hasPreviousResponseID || !previousFullInputExists {
+	if !hasPreviousResponseID {
 		return currentItems, currentExists
+	}
+	// Input accompanying an opaque response reference may be only a delta.
+	// Only history actually retained from a complete turn proves replayability.
+	if !previousFullInputExists {
+		return nil, false
 	}
 	previousFullInput = sanitizeOpenAIWSHistoricalReplayToolCalls(previousFullInput, currentItems)
 	if !currentExists || len(currentItems) == 0 {

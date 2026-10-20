@@ -167,7 +167,7 @@ func (s *OpenAIGatewayService) performOpenAIWSGeneratePrewarm(
 	if prewarmResponseID != "" && stateStore != nil {
 		ttl := s.openAIWSResponseStickyTTL()
 		logOpenAIWSBindResponseAccountWarn(groupID, account.ID, prewarmResponseID, s.bindOpenAIResponseAccount(ctx, stateStore, groupID, account, prewarmResponseID, ttl))
-		stateStore.BindResponseConn(prewarmResponseID, lease.ConnID(), ttl)
+		stateStore.BindResponseConn(openAICodexCredentialOwnerID(account), prewarmResponseID, lease.ConnID(), ttl)
 	}
 	logOpenAIWSModeInfo(
 		"prewarm_done account_id=%d conn_id=%s response_id=%s events=%d terminal_events=%d duration_ms=%d",
@@ -338,6 +338,10 @@ func (s *OpenAIGatewayService) handleOpenAIWSErrorEventTransientFailure(ctx cont
 func (s *OpenAIGatewayService) handleOpenAIWSFailureAccountSideEffects(ctx context.Context, account *Account, canonicalModel string, headers http.Header, payload []byte) bool {
 	message := extractOpenAISSEErrorMessage(payload)
 	status := openAIStreamFailureStatus(payload, message)
+	if status == http.StatusTooManyRequests && account != nil && account.IsOpenAIApiKey() && openAIRouteAttempt(ctx) != nil {
+		s.handleOpenAIAccountUpstreamError(ctx, account, status, openAIWSSemantic429Headers(account, canonicalModel, headers), payload, canonicalModel)
+		return true
+	}
 	switch status {
 	case http.StatusUnauthorized, http.StatusTooManyRequests, 529:
 		s.handleOpenAIStreamTerminalAccountSideEffects(nil, account, payload, message, headers, canonicalModel)

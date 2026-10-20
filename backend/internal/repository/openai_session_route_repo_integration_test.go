@@ -68,7 +68,7 @@ func TestOpenAISessionRouteRepositoryCASLifecycle(t *testing.T) {
 	_, err = repo.CommitOwner(ctx, domain, digest, "lease-a", 101)
 	require.ErrorIs(t, err, service.ErrOpenAISessionRouteLeaseLost)
 
-	// The committed owner is canonical, and the Redis cache carries it.
+	// The committed SQL owner is canonical across repeated reads.
 	reloaded, err := repo.Get(ctx, domain, digest)
 	require.NoError(t, err)
 	require.EqualValues(t, 101, reloaded.OwnerAccountID)
@@ -89,6 +89,39 @@ func TestOpenAISessionRouteRepositoryCASLifecycle(t *testing.T) {
 	require.Equal(t, service.OpenAISessionRouteActive, abandoned.Status)
 	require.EqualValues(t, 101, abandoned.OwnerAccountID)
 	require.EqualValues(t, 2, abandoned.Generation)
+}
+
+// V04/V14/V15: stale Redis fills cannot roll back SQL ownership, and renewing
+// an expired lease cannot resurrect a request that has lost acceptance rights.
+func TestOpenAISessionRouteRepositoryStaleCacheAndExpiredLease(t *testing.T) {
+	ctx := context.Background()
+	tx, err := integrationDB.BeginTx(ctx, nil)
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback() }()
+	repo := NewOpenAISessionRouteRepository(tx, integrationRedis, time.Minute)
+	domain := fmt.Sprintf("test:%s:%d", t.Name(), time.Now().UnixNano())
+	digest := service.OpenAISessionRouteDigest("session")
+	_, err = repo.CreateIfAbsent(ctx, service.OpenAISessionRoute{AuthzDomain: domain, SessionDigest: digest, OwnerAccountID: 101})
+	require.NoError(t, err)
+	_, err = repo.BeginMigration(ctx, domain, digest, 1, 102, "expired", "credential_invalid", time.Minute)
+	require.NoError(t, err)
+	_, err = tx.ExecContext(ctx, `UPDATE openai_session_routes SET lease_expires_at=NOW()-INTERVAL '1 second' WHERE authz_domain=$1`, domain)
+	require.NoError(t, err)
+	_, err = repo.BeginMigration(ctx, domain, digest, 1, 102, "expired", "credential_invalid", time.Minute)
+	require.ErrorIs(t, err, service.ErrOpenAISessionRouteLeaseLost)
+	_, err = repo.CommitOwner(ctx, domain, digest, "expired", 102)
+	require.ErrorIs(t, err, service.ErrOpenAISessionRouteLeaseLost)
+	_, err = repo.BeginMigration(ctx, domain, digest, 1, 103, "new-attempt", "credential_invalid", time.Minute)
+	require.NoError(t, err)
+	_, err = repo.CommitOwner(ctx, domain, digest, "new-attempt", 103)
+	require.NoError(t, err)
+	key := repo.cacheKey(domain, digest)
+	require.NoError(t, integrationRedis.Set(ctx, key, `{"authz_domain":"old","owner_account_id":101,"generation":1}`, time.Minute).Err())
+	defer integrationRedis.Del(ctx, key)
+	got, err := repo.Get(ctx, domain, digest)
+	require.NoError(t, err)
+	require.EqualValues(t, 103, got.OwnerAccountID)
+	require.EqualValues(t, 2, got.Generation)
 }
 
 // Concurrent attempts must produce exactly one migration lease: the rest lose the

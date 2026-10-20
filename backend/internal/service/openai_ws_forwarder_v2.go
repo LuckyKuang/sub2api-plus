@@ -136,19 +136,19 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		sessionHash = executionScope
 	}
 	if turnState == "" && stateStore != nil && sessionHash != "" {
-		if savedTurnState, ok := stateStore.GetSessionTurnState(groupID, sessionHash); ok {
+		if savedTurnState, ok := stateStore.GetSessionTurnState(openAICodexCredentialOwnerID(account), groupID, sessionHash); ok {
 			turnState = savedTurnState
 		}
 	}
 	preferredConnID := ""
 	if stateStore != nil && previousResponseID != "" {
-		if connID, ok := stateStore.GetResponseConn(previousResponseID); ok {
+		if connID, ok := stateStore.GetResponseConn(openAICodexCredentialOwnerID(account), previousResponseID); ok {
 			preferredConnID = connID
 		}
 	}
 	storeDisabled := s.isOpenAIWSStoreDisabledInRequest(reqBody, account)
 	if stateStore != nil && storeDisabled && previousResponseID == "" && sessionHash != "" {
-		if connID, ok := stateStore.GetSessionConn(groupID, sessionHash); ok {
+		if connID, ok := stateStore.GetSessionConn(openAICodexCredentialOwnerID(account), groupID, sessionHash); ok {
 			preferredConnID = connID
 		}
 	}
@@ -326,7 +326,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 	)
 	if handshakeTurnState != "" {
 		if stateStore != nil && sessionHash != "" {
-			stateStore.BindSessionTurnState(groupID, sessionHash, handshakeTurnState, s.openAIWSSessionStickyTTL())
+			stateStore.BindSessionTurnState(openAICodexCredentialOwnerID(account), groupID, sessionHash, handshakeTurnState, s.openAIWSSessionStickyTTL())
 		}
 		if c != nil {
 			c.Header(http.CanonicalHeaderKey(openAIWSTurnStateHeader), handshakeTurnState)
@@ -794,6 +794,14 @@ readLoop:
 					)
 				}
 			} else {
+				if err := commitOpenAISessionTakeoverEvent(ctx, message); err != nil {
+					lease.MarkBroken()
+					return resultWithUsage(), err
+				}
+				if isTerminalEvent && openAISessionTakeoverPending(ctx) {
+					lease.MarkBroken()
+					return resultWithUsage(), ErrOpenAISessionRouteNotAccepted
+				}
 				if outputObservation.MeaningfulOutput || isTerminalEvent {
 					responseCommitted = true
 				}
@@ -852,6 +860,10 @@ readLoop:
 		}
 
 		s.finalizeCodexClientQuotaHeaders(c.Writer.Header(), c, account)
+		if err := commitOpenAISessionTakeoverJSON(ctx, finalResponse); err != nil {
+			lease.MarkBroken()
+			return resultWithUsage(), err
+		}
 		c.Data(http.StatusOK, "application/json", finalResponse)
 	} else {
 		flushStreamWriter(true)
@@ -860,10 +872,10 @@ readLoop:
 	if responseID != "" && stateStore != nil {
 		ttl := s.openAIWSResponseStickyTTL()
 		logOpenAIWSBindResponseAccountWarn(groupID, account.ID, responseID, s.bindOpenAIResponseAccount(ctx, stateStore, groupID, account, responseID, ttl))
-		stateStore.BindResponseConn(responseID, lease.ConnID(), ttl)
+		stateStore.BindResponseConn(openAICodexCredentialOwnerID(account), responseID, lease.ConnID(), ttl)
 	}
 	if stateStore != nil && storeDisabled && sessionHash != "" {
-		stateStore.BindSessionConn(groupID, sessionHash, lease.ConnID(), s.openAIWSSessionStickyTTL())
+		stateStore.BindSessionConn(openAICodexCredentialOwnerID(account), groupID, sessionHash, lease.ConnID(), s.openAIWSSessionStickyTTL())
 	}
 	firstTokenMsValue := -1
 	if timing.firstTokenMs != nil {

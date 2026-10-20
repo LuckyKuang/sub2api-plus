@@ -161,8 +161,8 @@ func TestOpenAIWSHTTPBridgeSessionIsolationAcrossSameSessionHash(t *testing.T) {
 		return c
 	}
 	seedHash := svc.GenerateSessionHash(newContext(httptest.NewRequest(http.MethodGet, "/v1/responses", nil)), nil)
-	stateStore.BindSessionTurnState(groupID, seedHash, "sentinel-turn-state", time.Hour)
-	stateStore.BindSessionConn(groupID, seedHash, "sentinel-native-conn", time.Hour)
+	stateStore.BindSessionTurnState(account.ID, groupID, seedHash, "sentinel-turn-state", time.Hour)
+	stateStore.BindSessionConn(account.ID, groupID, seedHash, "sentinel-native-conn", time.Hour)
 
 	serverResults := make(chan error, 2)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -242,10 +242,10 @@ func TestOpenAIWSHTTPBridgeSessionIsolationAcrossSameSessionHash(t *testing.T) {
 		{input: []string{"alpha", "call_alpha", "alpha-result"}, state: "turn-alpha"},
 		{input: []string{"beta", "call_beta", "beta-result"}, state: "turn-beta"},
 	}, requests)
-	gotState, ok := stateStore.GetSessionTurnState(groupID, seedHash)
+	gotState, ok := stateStore.GetSessionTurnState(account.ID, groupID, seedHash)
 	require.True(t, ok)
 	require.Equal(t, "sentinel-turn-state", gotState)
-	gotConn, ok := stateStore.GetSessionConn(groupID, seedHash)
+	gotConn, ok := stateStore.GetSessionConn(account.ID, groupID, seedHash)
 	require.True(t, ok)
 	require.Equal(t, "sentinel-native-conn", gotConn)
 }

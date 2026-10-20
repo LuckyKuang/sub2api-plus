@@ -19,6 +19,16 @@ import (
 
 // Forward forwards request to OpenAI API
 func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, account *Account, body []byte) (result *OpenAIForwardResult, err error) {
+	if err := validateOpenAISessionContinuation(ctx, body); err != nil {
+		return nil, err
+	}
+	ctx, finishRoute, routeErr := beginOpenAISessionRouteForward(ctx, account, s.openAIFirstOutputTimeout(gjson.GetBytes(body, "reasoning.effort").String()))
+	if routeErr != nil {
+		return nil, routeErr
+	}
+	defer finishRoute()
+	defer func() { err = openAISessionRouteForwardError(ctx, err) }()
+	stageOpenAICodexTurnStateScope(c, body)
 	initialScope, _ := resolveOpenAIWSExecutionScope(c, body, getAPIKeyIDFromContext(c))
 	ctx = context.WithValue(ctx, codexHTTPWSRequestKey{}, codexHTTPWSRequest{
 		eligible:       codexHTTPWSBodyEligible(body),
@@ -27,6 +37,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	})
 	ctx = WithOutboundIdentityScope(ctx, c)
 	ctx = WithAccountOutboundIdentity(ctx, account)
+	defer bindOpenAISessionRouteRequestContext(ctx, c)()
 	defer func() { finalizeClientDisconnectForwardResult(ctx, c, result, err) }()
 	beginUpstreamResponseModelObservation(c)
 	resetOpsOpenAIStreamObservation(c)
@@ -509,6 +520,15 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		}
 	}
 
+	if account.Platform == PlatformOpenAI && account.Type == AccountTypeAPIKey && !isCompactRequest {
+		decoded, decodeErr := ensureReqBody()
+		if decodeErr != nil {
+			return nil, decodeErr
+		}
+		if applyCodexAccountIdentityClientMetadataMap(decoded, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c)) {
+			markDecodedModified()
+		}
+	}
 	if account.UsesOpenAICodexProtocol() {
 		decoded, decodeErr := ensureReqBody()
 		if decodeErr != nil {
@@ -1433,7 +1453,10 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 						continue
 					}
 				}
-				return nil, err
+				if nonStreamResult == nil || !IsOpenAISessionRouteError(err) {
+					return nil, err
+				}
+				terminalErr = err
 			}
 			usage = nonStreamResult.usage
 			responseID = strings.TrimSpace(nonStreamResult.responseID)

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strconv"
 	"strings"
 	"time"
 
@@ -22,12 +21,11 @@ type openAIRouteSQL interface {
 }
 
 // OpenAISessionRouteRepository stores authoritative logical-session routes in
-// PostgreSQL and accelerates reads through Redis. Redis is never authoritative:
-// a miss falls back to SQL, and every write invalidates the cached record.
+// PostgreSQL. Writes invalidate old Redis keys during rolling upgrades; reads
+// never trust cache entries that cannot prove the latest SQL generation.
 type OpenAISessionRouteRepository struct {
-	db       openAIRouteSQL
-	rdb      *redis.Client
-	cacheTTL time.Duration
+	db  openAIRouteSQL
+	rdb *redis.Client
 }
 
 const openAISessionRouteCachePrefix = "openai_session_route:"
@@ -35,13 +33,10 @@ const openAISessionRouteCachePrefix = "openai_session_route:"
 const openAISessionRouteColumns = `authz_domain, session_digest, owner_account_id, generation,
 	route_status, migration_reason, COALESCE(candidate_account_id, 0), lease_id, lease_expires_at`
 
-// NewOpenAISessionRouteRepository builds the store. A nil Redis client disables
-// caching and reads PostgreSQL directly.
-func NewOpenAISessionRouteRepository(db openAIRouteSQL, rdb *redis.Client, cacheTTL time.Duration) *OpenAISessionRouteRepository {
-	if cacheTTL <= 0 {
-		cacheTTL = time.Hour
-	}
-	return &OpenAISessionRouteRepository{db: db, rdb: rdb, cacheTTL: cacheTTL}
+// NewOpenAISessionRouteRepository keeps the existing wiring signature; the
+// former cache TTL is unused because authoritative reads go directly to SQL.
+func NewOpenAISessionRouteRepository(db openAIRouteSQL, rdb *redis.Client, _ time.Duration) *OpenAISessionRouteRepository {
+	return &OpenAISessionRouteRepository{db: db, rdb: rdb}
 }
 
 func (r *OpenAISessionRouteRepository) cacheKey(authzDomain, sessionDigest string) string {
@@ -82,17 +77,13 @@ func scanOpenAISessionRoute(scanner openAIRouteScanner) (service.OpenAISessionRo
 	return route, nil
 }
 
-// Get returns the authoritative route, preferring the Redis cache when present.
-// The cached record intentionally omits the migration lease: a lease is only
-// valid on the value returned by BeginMigration, never on a later read.
+// Get always reads PostgreSQL. A Redis value cannot prove that no newer SQL
+// generation exists; delayed fills and failed invalidation must not pick owners.
 func (r *OpenAISessionRouteRepository) Get(ctx context.Context, authzDomain, sessionDigest string) (service.OpenAISessionRoute, error) {
 	authzDomain = strings.TrimSpace(authzDomain)
 	sessionDigest = strings.TrimSpace(sessionDigest)
 	if authzDomain == "" || sessionDigest == "" {
 		return service.OpenAISessionRoute{}, service.ErrOpenAISessionRouteNotFound
-	}
-	if route, ok := r.getCached(ctx, authzDomain, sessionDigest); ok {
-		return route, nil
 	}
 	route, err := r.getSQL(ctx, authzDomain, sessionDigest)
 	if errors.Is(err, service.ErrOpenAISessionRouteNotFound) {
@@ -101,7 +92,6 @@ func (r *OpenAISessionRouteRepository) Get(ctx context.Context, authzDomain, ses
 	if err != nil {
 		return service.OpenAISessionRoute{}, fmt.Errorf("%w: %v", service.ErrOpenAISessionRouteStoreUnavailable, err)
 	}
-	r.setCached(ctx, route)
 	return route, nil
 }
 
@@ -170,7 +160,8 @@ func (r *OpenAISessionRouteRepository) BeginMigration(
 		 SET route_status = 'migrating', candidate_account_id = $4, lease_id = $5,
 		     lease_expires_at = NOW() + ($6 * INTERVAL '1 second'), migration_reason = $7, updated_at = NOW()
 		 WHERE authz_domain = $1 AND session_digest = $2 AND generation = $3
-		   AND (lease_id = '' OR lease_expires_at IS NULL OR lease_expires_at < NOW() OR lease_id = $5)
+		   AND (lease_id = '' OR (lease_id <> $5 AND lease_expires_at < NOW())
+		        OR (lease_id = $5 AND candidate_account_id = $4 AND lease_expires_at >= NOW()))
 		 RETURNING `+openAISessionRouteColumns,
 		authzDomain, sessionDigest, expectedGeneration, candidateAccountID, leaseID, ttlSeconds, reason))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -238,30 +229,6 @@ func (r *OpenAISessionRouteRepository) MarkSuspended(ctx context.Context, authzD
 	return nil
 }
 
-func (r *OpenAISessionRouteRepository) getCached(ctx context.Context, authzDomain, sessionDigest string) (service.OpenAISessionRoute, bool) {
-	if r.rdb == nil {
-		return service.OpenAISessionRoute{}, false
-	}
-	value, err := r.rdb.Get(ctx, r.cacheKey(authzDomain, sessionDigest)).Result()
-	if err != nil {
-		return service.OpenAISessionRoute{}, false
-	}
-	route, ok := decodeOpenAISessionRouteCache(value, authzDomain, sessionDigest)
-	if !ok {
-		// A malformed entry must never be authoritative.
-		_ = r.rdb.Del(ctx, r.cacheKey(authzDomain, sessionDigest)).Err()
-		return service.OpenAISessionRoute{}, false
-	}
-	return route, true
-}
-
-func (r *OpenAISessionRouteRepository) setCached(ctx context.Context, route service.OpenAISessionRoute) {
-	if r.rdb == nil {
-		return
-	}
-	_ = r.rdb.Set(ctx, r.cacheKey(route.AuthzDomain, route.SessionDigest), encodeOpenAISessionRouteCache(route), r.cacheTTL).Err()
-}
-
 func (r *OpenAISessionRouteRepository) invalidate(ctx context.Context, authzDomain, sessionDigest string) {
 	if r.rdb == nil {
 		return
@@ -270,44 +237,4 @@ func (r *OpenAISessionRouteRepository) invalidate(ctx context.Context, authzDoma
 		slog.Warn("openai_session_route_cache_invalidate_failed",
 			"authz_domain", authzDomain, "error", err)
 	}
-}
-
-// encodeOpenAISessionRouteCache keeps the cached generation next to the owner so
-// a stale entry is detectable and can never hide a newer committed route.
-func encodeOpenAISessionRouteCache(route service.OpenAISessionRoute) string {
-	return strings.Join([]string{
-		strconv.FormatInt(route.OwnerAccountID, 10),
-		strconv.FormatInt(route.Generation, 10),
-		string(route.Status),
-		strconv.FormatInt(route.CandidateAccountID, 10),
-		route.MigrationReason,
-	}, "|")
-}
-
-func decodeOpenAISessionRouteCache(value, authzDomain, sessionDigest string) (service.OpenAISessionRoute, bool) {
-	parts := strings.Split(value, "|")
-	if len(parts) != 5 {
-		return service.OpenAISessionRoute{}, false
-	}
-	owner, err := strconv.ParseInt(parts[0], 10, 64)
-	if err != nil || owner <= 0 {
-		return service.OpenAISessionRoute{}, false
-	}
-	generation, err := strconv.ParseInt(parts[1], 10, 64)
-	if err != nil || generation <= 0 {
-		return service.OpenAISessionRoute{}, false
-	}
-	candidate, err := strconv.ParseInt(parts[3], 10, 64)
-	if err != nil {
-		return service.OpenAISessionRoute{}, false
-	}
-	return service.OpenAISessionRoute{
-		AuthzDomain:        authzDomain,
-		SessionDigest:      sessionDigest,
-		OwnerAccountID:     owner,
-		Generation:         generation,
-		Status:             service.OpenAISessionRouteStatus(parts[2]),
-		CandidateAccountID: candidate,
-		MigrationReason:    parts[4],
-	}, true
 }

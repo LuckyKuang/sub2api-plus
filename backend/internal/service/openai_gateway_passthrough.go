@@ -201,6 +201,13 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		body = fingerprintedBody
 	}
 	if account != nil && account.IsOpenAI() {
+		if account.Type == AccountTypeAPIKey && !isOpenAIResponsesCompactPath(c) {
+			scoped, _, err := applyCodexAccountIdentityClientMetadataRaw(body, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c))
+			if err != nil {
+				return nil, err
+			}
+			body = scoped
+		}
 		responsesLite := isOpenAIResponsesLiteHeader(c.GetHeader(responsesLiteHeader)) || isOpenAIResponsesLiteWebSocketPayload(body)
 		normalizedBody, normalized, normalizeErr := normalizeOpenAIResponsesCompatibilityBodyWithOptions(body, account, openAIResponsesCompatibilityOptions{
 			Config:        s.cfg,
@@ -590,7 +597,10 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 					return nil, s.handleErrorResponsePassthrough(ctx, compactResp, c, account, body, compactBody)
 				}
 				_ = resp.Body.Close()
-				return nil, handleErr
+				if result == nil || !IsOpenAISessionRouteError(handleErr) {
+					return nil, handleErr
+				}
+				terminalErr = handleErr
 			}
 			usage = result.usage
 			responseID = strings.TrimSpace(result.responseID)
@@ -2245,6 +2255,15 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 				line = "data: " + string(sanitizedData)
 			}
 			lineStartsClientOutput = forceFlushFailedEvent || openAIStreamDataStartsClientOutput(trimmedData, eventType)
+			s.parseSSEUsageBytesWithType(dataBytes, eventType, usage)
+			if !sawFailedEvent {
+				if err := commitOpenAISessionTakeoverEvent(ctx, dataBytes); err != nil {
+					return resultWithUsage(), err
+				}
+			}
+			if openAISessionTakeoverPending(ctx) && !sawFailedEvent {
+				lineStartsClientOutput = false
+			}
 			if lineStartsClientOutput && trimmedData != "[DONE]" && !openAIStreamEventTypeIsTerminal(eventType) {
 				semanticOutputSeen = true
 			}
@@ -2302,6 +2321,9 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 		}
 	}
 	ensureResponseFailedTerminal()
+	if openAISessionTakeoverPending(ctx) && !sawFailedEvent && (sawDone || sawTerminalEvent) {
+		return resultWithUsage(), ErrOpenAISessionRouteNotAccepted
+	}
 	if err := documentScanner.Err(); err != nil {
 		if (sawDone || sawTerminalEvent) && !sawFailedEvent {
 			s.clearOpenAIProxyStreamDisconnect(account)
@@ -2438,6 +2460,9 @@ func (s *OpenAIGatewayService) handleNonStreamingResponsePassthrough(
 	if err != nil {
 		return nil, fmt.Errorf("restore OpenAI Responses client tools: %w", err)
 	}
+	if err := commitOpenAISessionTakeoverJSON(ctx, body); err != nil {
+		return &openaiNonStreamingResultPassthrough{OpenAIUsage: usage, usage: usage}, err
+	}
 	if !writeOpenAICompactSSEBridge(c, resp.StatusCode, body) {
 		c.Data(resp.StatusCode, contentType, body)
 	}
@@ -2521,6 +2546,9 @@ func (s *OpenAIGatewayService) handlePassthroughSSEToJSON(resp *http.Response, c
 		if contentType == "" {
 			contentType = "text/event-stream"
 		}
+	}
+	if err := commitOpenAISessionTakeoverJSON(c.Request.Context(), body); err != nil {
+		return &openaiNonStreamingResultPassthrough{OpenAIUsage: usage, usage: usage}, err
 	}
 	if !writeOpenAICompactSSEBridge(c, resp.StatusCode, body) {
 		c.Data(resp.StatusCode, contentType, body)

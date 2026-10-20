@@ -33,8 +33,18 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	promptCacheKey string,
 	defaultMappedModel string,
 ) (forwardResult *OpenAIForwardResult, firstByteResultErr error) {
+	if err := validateOpenAISessionContinuation(ctx, body); err != nil {
+		return nil, err
+	}
+	ctx, finishRoute, routeErr := beginOpenAISessionRouteForward(ctx, account, s.openAIFirstOutputTimeout("high"))
+	if routeErr != nil {
+		return nil, routeErr
+	}
+	defer finishRoute()
+	defer func() { firstByteResultErr = openAISessionRouteForwardError(ctx, firstByteResultErr) }()
 	ctx = WithOutboundIdentityScope(ctx, c)
 	ctx = WithAccountOutboundIdentity(ctx, account)
+	defer bindOpenAISessionRouteRequestContext(ctx, c)()
 	rememberOpenCodeInboundBody(c, body)
 	beginUpstreamResponseModelObservation(c)
 	ClearActualOpenAIUpstreamEndpoint(c)
@@ -695,6 +705,13 @@ func (s *OpenAIGatewayService) handleAnthropicBufferedStreamingResponse(
 	}
 	s.finalizeCodexClientQuotaHeaders(c.Writer.Header(), c, account)
 	c.Header("Content-Type", "application/json; charset=utf-8")
+	acceptedBody, marshalErr := json.Marshal(finalResponse)
+	if marshalErr != nil {
+		return nil, marshalErr
+	}
+	if err := commitOpenAISessionTakeoverJSON(c.Request.Context(), acceptedBody); err != nil {
+		return &OpenAIForwardResult{RequestID: requestID, Usage: usage, Model: originalModel, BillingModel: billingModel, UpstreamModel: upstreamModel, Duration: time.Since(startTime)}, err
+	}
 	c.JSON(http.StatusOK, anthropicResp)
 
 	result := &OpenAIForwardResult{
@@ -977,6 +994,7 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 	clientOutputStarted := false
 	var streamFailoverErr error
 	var streamNonFailoverErr error
+	var pendingRouteEvents []string
 	terminalEventType := ""
 	searchCount := 0
 	streamSearchSeen := make(map[string]struct{})
@@ -1133,6 +1151,10 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 		}
 
 		// Convert to Anthropic events
+		if err := commitOpenAISessionTakeoverEvent(c.Request.Context(), []byte(payload)); err != nil {
+			streamNonFailoverErr = err
+			return true
+		}
 		events := apicompat.ResponsesEventToAnthropicEvents(&event, state)
 		if !clientDisconnected {
 			for _, evt := range events {
@@ -1144,7 +1166,21 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 					)
 					continue
 				}
+				if openAISessionTakeoverPending(c.Request.Context()) {
+					pendingRouteEvents = append(pendingRouteEvents, sse)
+					continue
+				}
 				writeStreamHeaders()
+				for _, pending := range pendingRouteEvents {
+					if _, err := fmt.Fprint(c.Writer, pending); err != nil {
+						clientDisconnected = true
+						break
+					}
+				}
+				pendingRouteEvents = nil
+				if clientDisconnected {
+					break
+				}
 				if _, err := fmt.Fprint(c.Writer, sse); err != nil {
 					clientDisconnected = true
 					logger.L().Info("openai messages stream: client disconnected, continuing to drain upstream for billing",
@@ -1155,7 +1191,7 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 				clientOutputStarted = true
 			}
 		}
-		if len(events) > 0 && !clientDisconnected {
+		if len(events) > 0 && !clientDisconnected && clientOutputStarted {
 			c.Writer.Flush()
 		}
 		return isTerminalEvent
@@ -1168,6 +1204,9 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 		}
 		if streamNonFailoverErr != nil {
 			return resultWithUsage(), streamNonFailoverErr
+		}
+		if openAISessionTakeoverPending(c.Request.Context()) {
+			return resultWithUsage(), ErrOpenAISessionRouteNotAccepted
 		}
 		if finalEvents := apicompat.FinalizeResponsesAnthropicStream(state); len(finalEvents) > 0 && !clientDisconnected {
 			for _, evt := range finalEvents {

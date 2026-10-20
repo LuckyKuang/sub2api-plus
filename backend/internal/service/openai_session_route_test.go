@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -20,83 +19,6 @@ func TestOpenAISessionRouteDigestIsStableAndOpaque(t *testing.T) {
 	require.NotContains(t, first, "session-alpha", "the persisted digest must not carry the raw session value")
 	require.Equal(t, 64, len(first), "sha256 hex digest")
 	require.Empty(t, OpenAISessionRouteDigest("   "))
-}
-
-func TestDecideOpenAISessionRoute(t *testing.T) {
-	activeOwner := OpenAISessionRoute{OwnerAccountID: 100, Generation: 3, Status: OpenAISessionRouteActive}
-	suspended := OpenAISessionRoute{OwnerAccountID: 100, Generation: 3, Status: OpenAISessionRouteSuspended}
-
-	tests := []struct {
-		name             string
-		route            OpenAISessionRoute
-		candidate        int64
-		ownerAvailable   bool
-		permanentFailure bool
-		wantOwner        int64
-		wantMigrate      bool
-	}{
-		{
-			name:  "healthy canonical owner wins over a preferred candidate",
-			route: activeOwner, candidate: 101, ownerAvailable: true,
-			wantOwner: 100,
-		},
-		{
-			name:  "permanent failure migrates to the candidate",
-			route: activeOwner, candidate: 101, ownerAvailable: false, permanentFailure: true,
-			wantOwner: 100, wantMigrate: true,
-		},
-		{
-			name:  "transient unavailability keeps the canonical owner",
-			route: activeOwner, candidate: 101, ownerAvailable: false, permanentFailure: false,
-			wantOwner: 100,
-		},
-		{
-			name:  "transient unavailability never silently uses another account",
-			route: activeOwner, candidate: 0, ownerAvailable: false, permanentFailure: false,
-			wantOwner: 100,
-		},
-		{
-			name:  "permanent failure without a candidate keeps the owner and does not migrate",
-			route: activeOwner, candidate: 0, ownerAvailable: false, permanentFailure: true,
-			wantOwner: 100,
-		},
-		{
-			name:  "permanent failure with the owner as candidate is not a migration",
-			route: activeOwner, candidate: 100, ownerAvailable: false, permanentFailure: true,
-			wantOwner: 100,
-		},
-		{
-			name:  "suspended session may migrate once a candidate exists",
-			route: suspended, candidate: 101, ownerAvailable: false, permanentFailure: false,
-			wantOwner: 100, wantMigrate: true,
-		},
-		{
-			name:  "suspended session without a candidate stays put",
-			route: suspended, candidate: 0, ownerAvailable: false, permanentFailure: false,
-			wantOwner: 100,
-		},
-		{
-			name:  "missing owner adopts the candidate as the first route",
-			route: OpenAISessionRoute{}, candidate: 100, ownerAvailable: false,
-			wantOwner: 100,
-		},
-		{
-			name:  "missing owner without candidate yields no owner",
-			route: OpenAISessionRoute{}, candidate: 0, ownerAvailable: false,
-			wantOwner: 0,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := decideOpenAISessionRoute(tt.route, tt.candidate, tt.ownerAvailable, tt.permanentFailure)
-			assert.Equal(t, tt.wantOwner, got.OwnerAccountID)
-			assert.Equal(t, tt.wantMigrate, got.StartMigration)
-			if tt.wantMigrate {
-				assert.Equal(t, tt.candidate, got.Candidate)
-			}
-		})
-	}
 }
 
 // fakeOpenAISessionRouteStore implements the store contract with the same
@@ -155,7 +77,8 @@ func (f *fakeOpenAISessionRouteStore) BeginMigration(_ context.Context, domain, 
 	if route.Generation != expectedGeneration {
 		return OpenAISessionRoute{}, ErrOpenAISessionRouteLeaseLost
 	}
-	if openAISessionRouteLeaseActive(route, f.now) && route.LeaseID != leaseID {
+	if (openAISessionRouteLeaseActive(route, f.now) && (route.LeaseID != leaseID || route.CandidateAccountID != candidate)) ||
+		(route.LeaseID == leaseID && !openAISessionRouteLeaseActive(route, f.now)) {
 		return OpenAISessionRoute{}, ErrOpenAISessionRouteLeaseLost
 	}
 	route.Status = OpenAISessionRouteMigrating
@@ -270,7 +193,7 @@ func TestOpenAISessionRouteIsAuthoritativeForStickyReads(t *testing.T) {
 	require.ErrorIs(t, err, ErrOpenAISessionRouteStoreUnavailable)
 }
 
-func TestBindStickySessionCommitsOwnerChangeThroughAuthoritativeStore(t *testing.T) {
+func TestBindStickySessionCannotMigrateWithoutAcceptedAttempt(t *testing.T) {
 	ctx := context.Background()
 	groupID := int64(7)
 	sessionHash := "tenant-scoped-session"
@@ -291,18 +214,17 @@ func TestBindStickySessionCommitsOwnerChangeThroughAuthoritativeStore(t *testing
 	require.NoError(t, err)
 	require.EqualValues(t, 1, route.Generation)
 
-	// An admitted owner change commits through the lease + CAS path.
-	require.NoError(t, svc.BindStickySession(ctx, &groupID, sessionHash, 101))
+	// Selection/binding alone is not evidence of candidate acceptance.
+	require.ErrorIs(t, svc.BindStickySession(ctx, &groupID, sessionHash, 101), ErrOpenAISessionRouteLeaseLost)
 	route, err = store.Get(ctx, domain, digest)
 	require.NoError(t, err)
-	require.EqualValues(t, 101, route.OwnerAccountID)
-	require.EqualValues(t, 2, route.Generation)
+	require.EqualValues(t, 100, route.OwnerAccountID)
+	require.EqualValues(t, 1, route.Generation)
 	require.Equal(t, OpenAISessionRouteActive, route.Status)
 }
 
-// Re-derived A03 contract: a profit-gate veto is transient and keeps the
-// canonical owner, while an admitted owner change after the binding was released
-// (the quota-exhaustion path) commits through CAS.
+// A03: profit and cache changes cannot authorize a migration. Only accepted
+// attempts carrying the original generation may commit it.
 func TestProfitGateKeepsCanonicalOwnerUntilAdmittedOwnerChange(t *testing.T) {
 	ctx := context.Background()
 	groupID := int64(7)
@@ -322,14 +244,13 @@ func TestProfitGateKeepsCanonicalOwnerUntilAdmittedOwnerChange(t *testing.T) {
 	require.EqualValues(t, 100, route.OwnerAccountID, "a transient profit veto must not move the canonical owner")
 	require.EqualValues(t, 1, route.Generation)
 
-	// Permanent failure: the scheduler released the cache binding, and the next
-	// admitted attempt becomes the new owner through CAS.
+	// Deleting a cache entry cannot authorize replacing the SQL owner.
 	cache.sessionBindings = map[string]int64{}
-	require.NoError(t, svc.BindStickySessionAfterProfitAdmission(ctx, &groupID, sessionHash, 101))
+	require.ErrorIs(t, svc.BindStickySessionAfterProfitAdmission(ctx, &groupID, sessionHash, 101), ErrOpenAISessionRouteLeaseLost)
 	route, err = store.Get(ctx, domain, digest)
 	require.NoError(t, err)
-	require.EqualValues(t, 101, route.OwnerAccountID)
-	require.EqualValues(t, 2, route.Generation)
+	require.EqualValues(t, 100, route.OwnerAccountID)
+	require.EqualValues(t, 1, route.Generation)
 }
 
 func TestOpenAISessionRouteLifecycleKeepsOwnerUntilCommit(t *testing.T) {
@@ -417,41 +338,6 @@ func TestOpenAISessionRouteKeepsCanonicalOwnerOnlyForItsCommittedOwner(t *testin
 	failing.fail = ErrOpenAISessionRouteStoreUnavailable
 	svc = &OpenAIGatewayService{sessionRouteStore: failing}
 	require.True(t, svc.openAISessionRouteKeepsCanonicalOwner(ctx, &groupID, sessionHash, 100))
-}
-
-// Weighted scoring may only choose for sessions without an authoritative route.
-func TestOpenAISessionRoutePreferenceGatesScoring(t *testing.T) {
-	ctx := context.Background()
-	groupID := int64(7)
-	sessionHash := "tenant-scoped-session"
-	domain := openAISessionRouteDomain(groupID)
-	digest := OpenAISessionRouteDigest(sessionHash)
-
-	// No store and no route both leave scoring free.
-	require.False(t, (&OpenAIGatewayService{}).openAISessionRoutePreference(ctx, &groupID, sessionHash))
-	store := newFakeOpenAISessionRouteStore()
-	svc := &OpenAIGatewayService{sessionRouteStore: store}
-	require.False(t, svc.openAISessionRoutePreference(ctx, &groupID, sessionHash))
-
-	_, err := store.CreateIfAbsent(ctx, OpenAISessionRoute{
-		AuthzDomain: domain, SessionDigest: digest, OwnerAccountID: 100,
-	})
-	require.NoError(t, err)
-	require.True(t, svc.openAISessionRoutePreference(ctx, &groupID, sessionHash), "a committed route must gate weighted scoring")
-
-	// A suspended route still has an owner to consult before re-scoring.
-	require.NoError(t, store.MarkSuspended(ctx, domain, digest, 1, "no_candidate"))
-	require.True(t, svc.openAISessionRoutePreference(ctx, &groupID, sessionHash))
-
-	// A store failure must not be read as "no route": the authoritative read that
-	// follows surfaces the recoverable error instead of re-scoring.
-	failing := newFakeOpenAISessionRouteStore()
-	failing.fail = ErrOpenAISessionRouteStoreUnavailable
-	svc = &OpenAIGatewayService{sessionRouteStore: failing}
-	require.True(t, svc.openAISessionRoutePreference(ctx, &groupID, sessionHash))
-
-	// An empty session hash never claims a preference.
-	require.False(t, svc.openAISessionRoutePreference(ctx, &groupID, "  "))
 }
 
 // A stale response binding may establish the first route or confirm the current

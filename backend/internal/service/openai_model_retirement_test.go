@@ -204,20 +204,23 @@ func TestGPT55RetirementSchedulerAndDiagnosis(t *testing.T) {
 		account := oauth
 		account.Type = typ
 		scheduler := &defaultOpenAIAccountScheduler{}
-		ok, _ := scheduler.isAccountRequestCompatibleReason(ctx, &account, OpenAIAccountScheduleRequest{RequestedModel: "gpt-5.5"})
+		ok, _, err := scheduler.isAccountRequestCompatibleReason(ctx, &account, OpenAIAccountScheduleRequest{RequestedModel: "gpt-5.5"})
+		require.NoError(t, err)
 		require.Equal(t, typ == AccountTypeAPIKey, ok)
 		reason := openAICompatibleAccountEligibilityFailureReasonBeforeProfit(ctx, &account, PlatformOpenAI, "gpt-5.5", false, "")
 		require.Equal(t, typ == AccountTypeAPIKey, reason == "")
 	}
 	oauth.Credentials = map[string]any{"compact_model_mapping": map[string]any{"gpt-6.1-sol": "gpt-5.5"}}
 	scheduler := &defaultOpenAIAccountScheduler{}
-	ok, reason := scheduler.isAccountRequestCompatibleReason(ctx, &oauth, OpenAIAccountScheduleRequest{RequestedModel: "gpt-6.1-sol", RequireCompact: true})
+	ok, reason, err := scheduler.isAccountRequestCompatibleReason(ctx, &oauth, OpenAIAccountScheduleRequest{RequestedModel: "gpt-6.1-sol", RequireCompact: true})
+	require.NoError(t, err)
 	require.False(t, ok)
 	require.Equal(t, "model_not_supported", reason)
 	svc := &OpenAIGatewayService{cfg: &config.Config{Gateway: config.GatewayConfig{OpenAICompactModel: "gpt-6.1-sol"}}}
 	require.Empty(t, svc.resolveOpenAICompactFallbackModel(&oauth, "gpt-6.1-sol"), "native compact retries must not use a retired explicit target")
 	oauth.Credentials = map[string]any{"compact_model_mapping": map[string]any{"gpt-5.5": "gpt-6.1-sol"}}
-	ok, _ = scheduler.isAccountRequestCompatibleReason(ctx, &oauth, OpenAIAccountScheduleRequest{RequestedModel: "gpt-5.5", RequireCompact: true})
+	ok, _, err = scheduler.isAccountRequestCompatibleReason(ctx, &oauth, OpenAIAccountScheduleRequest{RequestedModel: "gpt-5.5", RequireCompact: true})
+	require.NoError(t, err)
 	require.True(t, ok, "an explicit compact replacement remains usable")
 	for _, accounts := range [][]Account{{oauth}, {oauth, api}} {
 		svc := &OpenAIGatewayService{accountRepo: codexModelsVisibilityAccountRepo{byGroup: map[int64][]Account{groupID: accounts}}}

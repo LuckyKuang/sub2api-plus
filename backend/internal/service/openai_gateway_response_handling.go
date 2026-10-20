@@ -423,6 +423,9 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 				"OpenAI stream ended before a terminal event",
 			)
 		}
+		if openAISessionTakeoverPending(ctx) && !sawFailedEvent {
+			return resultWithUsage(), ErrOpenAISessionRouteNotAccepted
+		}
 		flushPending("Client disconnected during final flush, returning collected usage")
 		if !sawTerminalEvent {
 			if openAIStreamClientOutputStarted(c, clientOutputStarted) && !clientDisconnected {
@@ -707,7 +710,18 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 				line = s.replaceModelInSSELine(line, mappedModel, originalModel)
 			}
 			startsClientOutput := forceFlushFailedEvent || openAIStreamDataStartsClientOutput(data, eventType)
+			s.parseSSEUsageBytesWithType(dataBytes, eventType, usage)
+			if !sawFailedEvent {
+				if err := commitOpenAISessionTakeoverEvent(ctx, dataBytes); err != nil {
+					streamEarlyErr = err
+					_ = resp.Body.Close()
+					return
+				}
+			}
 			observation := apicompat.ObserveResponsesOutput(dataBytes)
+			if openAISessionTakeoverPending(ctx) && !sawFailedEvent {
+				startsClientOutput = false
+			}
 			startsVisibleOutput := observation.MeaningfulOutput
 			if stageFirstOutput {
 				eventStartsClientOutput = eventStartsClientOutput || startsClientOutput
@@ -1738,6 +1752,9 @@ func (s *OpenAIGatewayService) handleNonStreamingResponse(ctx context.Context, r
 		}
 	}
 
+	if err := commitOpenAISessionTakeoverJSON(ctx, body); err != nil {
+		return &openaiNonStreamingResult{OpenAIUsage: usage, usage: usage}, err
+	}
 	if !writeOpenAICompactSSEBridge(c, resp.StatusCode, body) {
 		c.Data(resp.StatusCode, contentType, body)
 	}
@@ -1850,6 +1867,9 @@ func (s *OpenAIGatewayService) handleSSEToJSON(resp *http.Response, c *gin.Conte
 		if contentType == "" {
 			contentType = "text/event-stream"
 		}
+	}
+	if err := commitOpenAISessionTakeoverJSON(c.Request.Context(), body); err != nil {
+		return &openaiNonStreamingResult{OpenAIUsage: usage, usage: usage}, err
 	}
 	if !writeOpenAICompactSSEBridge(c, resp.StatusCode, body) {
 		c.Data(resp.StatusCode, contentType, body)

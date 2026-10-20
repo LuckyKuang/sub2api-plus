@@ -20,6 +20,10 @@ func TestUpstreamProtocolAdditionsKeepCanonicalCurrentUserContent(t *testing.T) 
 			`{"model":"gpt-5.5","input":[{"type":"web_search_call","id":"ws_1","status":"completed","action":{"type":"search","query":"old query"}},{"type":"message","role":"user","content":[{"type":"input_text","text":"audit current request"},{"type":"future_media","opaque":true}]}],"tool_choice":"none"}`},
 		{"inline tool change", service.ContentModerationProtocolAnthropicMessages,
 			`{"model":"claude-sonnet-4-6","max_tokens":256,"tools":[{"name":"lookup","input_schema":{"type":"object"}}],"messages":[{"role":"assistant","content":[{"type":"thinking","thinking":"old reasoning","signature":""}]},{"role":"user","content":[{"type":"text","text":"audit current request"},{"type":"tool_change","tools":[{"name":"future_tool"}]}]}]}`},
+		{"chat tool-history recovery", service.ContentModerationProtocolOpenAIChat,
+			`{"model":"gpt-5.1","messages":[{"role":"tool","tool_call_id":"call_1","content":"historical result"},{"role":"user","content":"audit current request"}],"future_options":{"opaque":true}}`},
+		{"messages tool-history recovery", service.ContentModerationProtocolAnthropicMessages,
+			`{"model":"gpt-5.1","max_tokens":256,"messages":[{"role":"user","content":[{"type":"tool_result","tool_use_id":"call_1","content":"historical result"},{"type":"text","text":"audit current request"},{"type":"future_media","opaque":true}]}]}`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			moderation := service.ExtractContentModerationInput(tc.protocol, []byte(tc.body))
@@ -43,6 +47,9 @@ func TestCodexProtocolOptionsPreserveCanonicalAuditContent(t *testing.T) {
 			{`[{"type":"message","role":"user","content":[{"type":"input_text","text":"historical user request"}]},{"type":"compaction_trigger"}]`, ""},
 			// A control item earlier in the input cannot hide the current user tail.
 			{`[{"type":"compaction_trigger"},{"type":"message","role":"user","content":[{"type":"input_text","text":"audit current request"}]}]`, "audit current request"},
+			// Routing may reject cross-owner opaque history only after audit.
+			// Tool/reference history cannot hide the recognized current sibling.
+			{`[{"type":"item_reference","id":"call_1"},{"type":"function_call_output","call_id":"call_1","output":"historical result"},{"type":"message","role":"user","content":[{"type":"input_text","text":"audit current request"},{"type":"future_media","opaque":true}]}]`, "audit current request"},
 		} {
 			t.Run(frame+"/"+input.want, func(t *testing.T) {
 				body := `{"model":"gpt-6.1-sol","input":` + input.body + `,"stream_options":{"reasoning_summary_delivery":"sequential_cutoff","future_option":true},"client_metadata":{"ws_request_header_x_openai_internal_codex_responses_lite":"true","x-codex-turn-metadata":"{\"subagent_kind\":\"guardian\",\"thread_id\":\"child-thread\",\"parent_thread_id\":\"parent-thread\"}"}}`
