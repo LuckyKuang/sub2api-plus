@@ -91,6 +91,9 @@ func TestKimiOfficialReasoningCatalog(t *testing.T) {
 		{`{"type":"only","effort":{"valid":["low","high"],"default":"high"}}`, boolPtrForAgentTest(true), []string{"low", "high"}, "high"},
 		{`{"type":"both","effort":{"valid":["low","high"],"default":"medium"}}`, boolPtrForAgentTest(true), []string{"low", "high"}, ""},
 		{`{"type":"none"}`, boolPtrForAgentTest(false), nil, ""},
+		{`{"type":"both","effort":{"valid":["low",42,"high"],"default":"high"}}`, boolPtrForAgentTest(true), []string{"low", "high"}, "high"},
+		{`{"type":"only","effort":{"valid":"high","default":"high"}}`, boolPtrForAgentTest(true), nil, ""},
+		{`{"type":"both","effort":"unrecognized"}`, boolPtrForAgentTest(true), nil, ""},
 		{`true`, boolPtrForAgentTest(true), nil, ""},
 		{`false`, boolPtrForAgentTest(false), nil, ""},
 		{`{"type":"future"}`, nil, nil, ""},
@@ -109,20 +112,73 @@ func TestKimiOfficialReasoningCatalog(t *testing.T) {
 func boolPtrForAgentTest(b bool) *bool { return &b }
 
 func TestKimiOfficialNoReasoningOverridesLegacyAndRegistry(t *testing.T) {
-	// managed-kimi-code.ts: the unified type=none is authoritative, even if
-	// legacy fields or third-party metadata still advertise thinking efforts.
-	_, catalog, err := extractUpstreamModelCatalog([]byte(`{"data":[{"id":"kimi-k3","reasoning":{"type":"none"},"supportsThinking":true,"supported_reasoning_levels":["low","high"],"default_reasoning_level":"high"}]}`), false)
-	require.NoError(t, err)
-	primary := catalog["kimi-k3"]
-	require.Equal(t, boolPtrForAgentTest(false), primary.Reasoning)
-	require.Empty(t, primary.SupportedReasoningLevels)
-	require.Empty(t, primary.DefaultReasoningLevel)
-	merged, _ := mergeUpstreamModelMetadata(primary, UpstreamModelMetadata{
-		Reasoning: boolPtrForAgentTest(true), SupportedReasoningLevels: []string{"low", "high"}, DefaultReasoningLevel: "high",
-	})
-	require.Equal(t, boolPtrForAgentTest(false), merged.Reasoning)
-	require.Empty(t, merged.SupportedReasoningLevels)
-	require.Empty(t, merged.DefaultReasoningLevel)
+	// managed-kimi-code.ts: type=none is authoritative; public catalogs retain
+	// the same invariant for false, regardless of stale effort/registry fields.
+	for _, raw := range []string{`{"type":"none"}`, `false`} {
+		t.Run(raw, func(t *testing.T) {
+			_, catalog, err := extractUpstreamModelCatalog([]byte(`{"data":[{"id":"kimi-k3","reasoning":`+raw+`,"supportsThinking":true,"supported_reasoning_levels":["low","high"],"default_reasoning_level":"high"}]}`), false)
+			require.NoError(t, err)
+			primary := catalog["kimi-k3"]
+			require.Equal(t, boolPtrForAgentTest(false), primary.Reasoning)
+			require.Empty(t, primary.SupportedReasoningLevels)
+			require.Empty(t, primary.DefaultReasoningLevel)
+			merged, _ := mergeUpstreamModelMetadata(primary, UpstreamModelMetadata{
+				Reasoning: boolPtrForAgentTest(true), SupportedReasoningLevels: []string{"low", "high"}, DefaultReasoningLevel: "high",
+			})
+			require.Equal(t, boolPtrForAgentTest(false), merged.Reasoning)
+			require.Empty(t, merged.SupportedReasoningLevels)
+			require.Empty(t, merged.DefaultReasoningLevel)
+		})
+	}
+}
+
+func TestKimiCodingMissingReasoningClearsStaleCapabilities(t *testing.T) {
+	// kimi-code 67325c1b managed-kimi-code.ts: absent/null reasoning means
+	// supportsThinkingType=no. Third-party metadata cannot revive old efforts.
+	for _, tc := range []struct {
+		name, kind, base string
+		disabled         bool
+	}{
+		{"oauth", AccountTypeOAuth, "https://api.kimi.com/coding", true},
+		{"coding-key", AccountTypeAPIKey, "https://api.kimi.com/coding", true},
+		{"payg-key", AccountTypeAPIKey, "https://api.moonshot.ai/v1", false},
+		{"compatible-key", AccountTypeAPIKey, "https://compatible.example/v1", false},
+	} {
+		for _, declaration := range []string{"", `,"reasoning":null`} {
+			t.Run(tc.name+declaration, func(t *testing.T) {
+				account := &Account{ID: 1, Platform: PlatformKimi, Type: tc.kind, Credentials: map[string]any{
+					"api_key": "manual", "base_url": tc.base, "account_mode": AccountModeCoding,
+				}}
+				if tc.kind == AccountTypeOAuth {
+					account.Credentials["oauth_provider"] = "kimi"
+					account.Credentials["oauth_region"] = "cn"
+					account.Credentials["access_token"] = "oauth-token"
+				}
+				upstream := &httpUpstreamRecorder{responses: []*http.Response{
+					{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"data":[{"id":"kimi-k3","limit":{"context":262144},"modalities":{"input":["text"]},"supported_reasoning_levels":["high"],"default_reasoning_level":"high"` + declaration + `}]}`))},
+					{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"kimi":{"api":"https://api.kimi.com/coding","models":{"kimi-k3":{"id":"kimi-k3","reasoning":true,"limit":{"context":262144},"modalities":{"input":["text"]}}}}`))},
+				}}
+				repo := &upstreamModelMetadataRepoStub{}
+				svc := &AccountTestService{httpUpstream: upstream, accountRepo: repo, cfg: &config.Config{}}
+				catalog, err := svc.SyncUpstreamModelCatalog(context.Background(), account)
+				require.NoError(t, err)
+				got := catalog.Metadata["kimi-k3"]
+				require.Equal(t, boolPtrForAgentTest(!tc.disabled), got.Reasoning)
+				var levels []string
+				def := ""
+				if !tc.disabled {
+					levels, def = []string{"high"}, "high"
+				}
+				require.Equal(t, levels, got.SupportedReasoningLevels)
+				require.Equal(t, def, got.DefaultReasoningLevel)
+				require.NotNil(t, repo.updates)
+				snapshot := account.GetUpstreamModelMetadataSnapshot()
+				require.NotNil(t, snapshot)
+				require.Equal(t, boolPtrForAgentTest(!tc.disabled), snapshot.Models["kimi-k3"].Reasoning)
+				require.Equal(t, levels, snapshot.Models["kimi-k3"].SupportedReasoningLevels)
+			})
+		}
+	}
 }
 
 func TestDeepSeekHarnessCatalogVersionAndMessagesGates(t *testing.T) {

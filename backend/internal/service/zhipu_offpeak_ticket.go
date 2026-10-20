@@ -322,11 +322,16 @@ func (m *ZhipuOffPeakTicketManager) withProjectAuth(ctx context.Context, holder 
 			return err
 		}
 		holder.auth.PlanKey = value.APIKey
+		holder.auth.TeamOrg, holder.auth.TeamProj, err = zhipuProjectTokenTeamScope(holder.account, value)
+		if err != nil {
+			return err
+		}
 		err = send(holder.auth)
 		var rejection *zcode.OffPeakError
 		if err == nil || !errors.As(err, &rejection) || rejection.HTTPStatus != http.StatusUnauthorized {
 			return err
 		}
+		m.projectTokens.rejectProjectToken(ctx, holder.account, value.APIKey)
 		rejected = value.APIKey
 		if attempt == 1 {
 			return err
@@ -536,6 +541,12 @@ func (m *ZhipuOffPeakTicketManager) TicketForRequest(ctx context.Context, accoun
 	if planKey == "" {
 		planKey = strings.TrimSpace(account.GetCredential("api_key"))
 	}
+	auth := zcode.OffPeakAuth{
+		JWT:      jwt,
+		PlanKey:  planKey,
+		TeamOrg:  strings.TrimSpace(account.GetCredential("zhipu_organization")),
+		TeamProj: strings.TrimSpace(account.GetCredential("zhipu_project")),
+	}
 	if usesZhipuProjectToken(account) {
 		if m.projectTokens == nil {
 			return "", errors.New("project_token_service_unavailable")
@@ -544,13 +555,11 @@ func (m *ZhipuOffPeakTicketManager) TicketForRequest(ctx context.Context, accoun
 		if err != nil {
 			return "", err
 		}
-		planKey = value.APIKey
-	}
-	auth := zcode.OffPeakAuth{
-		JWT:      jwt,
-		PlanKey:  planKey,
-		TeamOrg:  strings.TrimSpace(account.GetCredential("zhipu_organization")),
-		TeamProj: strings.TrimSpace(account.GetCredential("zhipu_project")),
+		auth.PlanKey = value.APIKey
+		auth.TeamOrg, auth.TeamProj, err = zhipuProjectTokenTeamScope(account, value)
+		if err != nil {
+			return "", err
+		}
 	}
 	ticket, err := m.Acquire(ctx, account, auth, account.proxyURLOrEmpty())
 	if err != nil {

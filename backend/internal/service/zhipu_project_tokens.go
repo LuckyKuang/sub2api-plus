@@ -27,6 +27,41 @@ type zhipuProjectTokenEntry struct {
 	pending   singleflight.Group
 }
 
+func (e *zhipuProjectTokenEntry) reject(token string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if token != "" && e.value != nil && e.value.APIKey == token {
+		e.value = nil
+		e.refreshAt = time.Time{}
+	}
+}
+
+func zhipuProjectTokenScope(ctx context.Context, account *Account) (context.Context, string) {
+	ctx = WithAccountOutboundIdentity(ctx, account)
+	identity, _ := outboundidentity.FromContext(ctx)
+	fingerprint, _ := json.Marshal(identity)
+	return ctx, zhipuProjectTokenGeneration(account) + string(fingerprint)
+}
+
+// Rejection never issues a replacement itself, and cannot evict a newer PAT
+// or another login/identity generation when a response arrives late.
+func (s *ZhipuOAuthService) rejectProjectToken(ctx context.Context, account *Account, token string) {
+	if s == nil || token == "" {
+		return
+	}
+	_, generation := zhipuProjectTokenScope(ctx, account)
+	owner := outboundIdentityOwnerKey(account)
+	s.projectTokenMu.Lock()
+	entry := s.projectTokens[owner]
+	if s.projectTokenGenerations[owner] != generation {
+		entry = nil
+	}
+	s.projectTokenMu.Unlock()
+	if entry != nil {
+		entry.reject(token)
+	}
+}
+
 func usesZhipuProjectToken(a *Account) bool {
 	if a == nil || a.Platform != PlatformZhipu || a.Type != AccountTypeOAuth {
 		return false
@@ -75,6 +110,17 @@ func zhipuTeamProject(a *Account) bool {
 	return org && project
 }
 
+func zhipuProjectTokenTeamScope(account *Account, value *zcode.CodingPlanCredential) (string, string, error) {
+	if !zhipuTeamProject(account) {
+		return "", "", nil
+	}
+	org, project := strings.TrimSpace(value.OrganizationID), strings.TrimSpace(value.ProjectID)
+	if org == "" || project == "" {
+		return "", "", errors.New("project_token_team_scope_missing")
+	}
+	return org, project, nil
+}
+
 func (s *ZhipuOAuthService) projectToken(ctx context.Context, account *Account, rejected string) (*zcode.CodingPlanCredential, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -82,10 +128,7 @@ func (s *ZhipuOAuthService) projectToken(ctx context.Context, account *Account, 
 	if s == nil || s.client == nil {
 		return nil, errors.New("project_token_service_unavailable")
 	}
-	selectedCtx := WithAccountOutboundIdentity(ctx, account)
-	identity, _ := outboundidentity.FromContext(selectedCtx)
-	fingerprint, _ := json.Marshal(identity)
-	generation := zhipuProjectTokenGeneration(account) + string(fingerprint)
+	selectedCtx, generation := zhipuProjectTokenScope(ctx, account)
 	owner := outboundIdentityOwnerKey(account)
 	s.projectTokenMu.Lock()
 	if s.projectTokens == nil {
@@ -99,12 +142,7 @@ func (s *ZhipuOAuthService) projectToken(ctx context.Context, account *Account, 
 		s.projectTokenGenerations[owner] = generation
 	}
 	s.projectTokenMu.Unlock()
-	entry.mu.Lock()
-	if rejected != "" && entry.value != nil && entry.value.APIKey == rejected {
-		entry.value = nil
-		entry.refreshAt = time.Time{}
-	}
-	entry.mu.Unlock()
+	entry.reject(rejected)
 	// Detach the shared issuance from any one subscriber, but keep the selected
 	// credential owner's identity snapshot and a bounded operation deadline.
 	ch := entry.pending.DoChan("issue", func() (result any, issueErr error) {
@@ -176,11 +214,17 @@ func (s *ZhipuOAuthService) projectToken(ctx context.Context, account *Account, 
 			var status *zcode.BusinessHTTPError
 			var network net.Error
 			transient := (errors.As(err, &status) && (status.Status == 429 || (status.Status >= 500 && status.Status < 600))) || errors.As(err, &network)
-			if transient && old != nil && time.Now().Before(old.ExpiresAt) {
+			if transient {
 				entry.mu.Lock()
-				entry.refreshAt = minTime(time.Now().Add(5*time.Second), old.ExpiresAt)
+				// A concurrent model 401 may have rejected the old token while
+				// issuance was pending. Only the current cache is a fallback.
+				current := entry.value
+				if current != nil && time.Now().Before(current.ExpiresAt) {
+					entry.refreshAt = minTime(time.Now().Add(5*time.Second), current.ExpiresAt)
+					entry.mu.Unlock()
+					return current, nil
+				}
 				entry.mu.Unlock()
-				return old, nil
 			}
 			return nil, errors.New("project_token_resolution_failed")
 		}
@@ -245,19 +289,54 @@ func zhipuProjectTokenTargetAllowed(req *http.Request, a *Account) bool {
 	return false
 }
 
-func (s *CNOAuthService) prepareZhipuLinkedRequest(req *http.Request, a *Account, rejected string) error {
+// Linked personal/team discovery is a gateway extension under the same fixed
+// estate as inference. Never attach the business login to the model endpoint;
+// the final sending wrapper supplies the current owner-scoped PAT.
+func (s *AccountTestService) buildZhipuLinkedModelsRequest(ctx context.Context, account *Account) (*http.Request, error) {
+	provider := zcode.NormalizeProvider(account.GetCredential("oauth_provider"))
+	if provider == "" {
+		return nil, newUpstreamModelSyncConfigError("Linked ZCode provider is invalid", nil)
+	}
+	target := buildOpenAIModelsURL(zhipuCodingBaseURL(provider))
+	if _, err := s.validateUpstreamBaseURL(target); err != nil {
+		return nil, newUpstreamModelSyncConfigError("Linked ZCode model destination is not allowed", err)
+	}
+	ctx = WithHTTPUpstreamRedirectsDisabled(WithAccountOutboundIdentity(ctx, account))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+	account.applyOpenAIHeaderOverrides(req.Header)
+	return req, nil
+}
+
+func (s *CNOAuthService) prepareZhipuLinkedRequest(req *http.Request, a *Account) error {
 	if !usesZhipuProjectToken(a) {
 		return nil
 	}
 	if !zhipuProjectTokenTargetAllowed(req, a) {
 		return errors.New("project_token_destination_rejected")
 	}
+	*req = *req.WithContext(WithHTTPUpstreamRedirectsDisabled(req.Context()))
 	if s == nil || s.zhipu == nil {
 		return errors.New("project_token_service_unavailable")
 	}
-	value, err := s.zhipu.projectToken(req.Context(), a, rejected)
+	value, err := s.zhipu.projectToken(req.Context(), a, "")
 	if err != nil {
 		return err
+	}
+	org, project, err := zhipuProjectTokenTeamScope(a, value)
+	if err != nil {
+		return err
+	}
+	// Scope is a declaration of this PAT's owner, not a generic header
+	// override (linked OAuth accounts deliberately cannot use those overrides).
+	deleteHeaderAllForms(req.Header, "bigmodel-organization")
+	deleteHeaderAllForms(req.Header, "bigmodel-project")
+	if org != "" {
+		req.Header.Set("bigmodel-organization", org)
+		req.Header.Set("bigmodel-project", project)
 	}
 	deleteHeaderAllForms(req.Header, "x-api-key")
 	deleteHeaderAllForms(req.Header, "X-Coding-Plan-Api-Key")
@@ -284,14 +363,21 @@ func (s *CNOAuthService) roundTripZhipuLinked(req *http.Request, a *Account, sen
 	if !usesZhipuProjectToken(a) {
 		return send(req)
 	}
-	if err := s.prepareZhipuLinkedRequest(req, a, ""); err != nil {
+	if err := s.prepareZhipuLinkedRequest(req, a); err != nil {
 		return nil, err
 	}
-	rejected := strings.TrimPrefix(req.Header.Get("Authorization"), "Bearer ")
-	if a.GetCredential("plan_kind") == ZhipuPlanOffPeak {
-		rejected = req.Header.Get("X-Coding-Plan-Api-Key")
+	sendAttempt := func(attempt *http.Request) (*http.Response, error) {
+		token := strings.TrimPrefix(attempt.Header.Get("Authorization"), "Bearer ")
+		if a.GetCredential("plan_kind") == ZhipuPlanOffPeak {
+			token = attempt.Header.Get("X-Coding-Plan-Api-Key")
+		}
+		resp, err := send(attempt)
+		if resp != nil && resp.StatusCode == http.StatusUnauthorized {
+			s.zhipu.rejectProjectToken(attempt.Context(), a, token)
+		}
+		return resp, err
 	}
-	resp, err := send(req)
+	resp, err := sendAttempt(req)
 	if err != nil || resp == nil || resp.StatusCode != http.StatusUnauthorized || (req.Body != nil && req.Body != http.NoBody && req.GetBody == nil) {
 		return resp, err
 	}
@@ -302,7 +388,7 @@ func (s *CNOAuthService) roundTripZhipuLinked(req *http.Request, a *Account, sen
 			return resp, nil
 		}
 	}
-	if err = s.prepareZhipuLinkedRequest(retry, a, rejected); err != nil {
+	if err = s.prepareZhipuLinkedRequest(retry, a); err != nil {
 		if retry.Body != nil {
 			_ = retry.Body.Close()
 		}
@@ -314,5 +400,5 @@ func (s *CNOAuthService) roundTripZhipuLinked(req *http.Request, a *Account, sen
 	if resp.Body != nil {
 		_ = resp.Body.Close()
 	}
-	return send(retry)
+	return sendAttempt(retry)
 }

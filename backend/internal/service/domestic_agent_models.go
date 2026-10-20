@@ -23,11 +23,8 @@ func parseUpstreamReasoning(raw json.RawMessage) (*bool, []string, string) {
 		return &boolean, nil, ""
 	}
 	var value struct {
-		Type   string `json:"type"`
-		Effort struct {
-			Valid   []string `json:"valid"`
-			Default string   `json:"default"`
-		} `json:"effort"`
+		Type   string          `json:"type"`
+		Effort json.RawMessage `json:"effort"`
 	}
 	if json.Unmarshal(raw, &value) != nil {
 		return nil, nil, ""
@@ -43,12 +40,60 @@ func parseUpstreamReasoning(raw json.RawMessage) (*bool, []string, string) {
 	if !boolean {
 		return &boolean, nil, ""
 	}
-	levels := normalizeReasoningLevels(value.Effort.Valid)
-	defaultLevel := normalizeReasoningLevel(value.Effort.Default)
+	// Kimi parses optional effort fields independently: an unusable effort
+	// declaration must not discard the model's recognized reasoning type.
+	var effort struct {
+		Valid   json.RawMessage `json:"valid"`
+		Default json.RawMessage `json:"default"`
+	}
+	if json.Unmarshal(value.Effort, &effort) != nil {
+		return &boolean, nil, ""
+	}
+	var entries []json.RawMessage
+	_ = json.Unmarshal(effort.Valid, &entries)
+	var levels []string
+	for _, entry := range entries {
+		var level string
+		if json.Unmarshal(entry, &level) == nil {
+			levels = append(levels, level)
+		}
+	}
+	levels = normalizeReasoningLevels(levels)
+	var defaultLevel string
+	_ = json.Unmarshal(effort.Default, &defaultLevel)
+	defaultLevel = normalizeReasoningLevel(defaultLevel)
 	if !slices.Contains(levels, defaultLevel) {
 		defaultLevel = ""
 	}
 	return &boolean, levels, defaultLevel
+}
+
+// Kimi Coding's managed-kimi-code.ts treats absent/null reasoning as disabled.
+// Apply that default only to its native Coding catalog; missing declarations on
+// generic public/PAYG catalogs remain available for registry enrichment.
+func applyKimiCodingReasoningDefaults(body []byte, metadata map[string]UpstreamModelMetadata) {
+	entries, err := extractUpstreamModelRawEntries(body)
+	if err != nil {
+		return
+	}
+	for _, raw := range entries {
+		var row struct {
+			ID        string          `json:"id"`
+			Reasoning json.RawMessage `json:"reasoning"`
+		}
+		if json.Unmarshal(raw, &row) != nil {
+			continue
+		}
+		id := strings.TrimSpace(row.ID)
+		if id == "" || (len(row.Reasoning) != 0 && strings.TrimSpace(string(row.Reasoning)) != "null") {
+			continue
+		}
+		entry := metadata[id]
+		disabled := false
+		entry.ID, entry.Reasoning = id, &disabled
+		entry.SupportedReasoningLevels, entry.DefaultReasoningLevel = nil, ""
+		metadata[id] = entry
+	}
 }
 
 func (s *AccountTestService) buildDomesticOAuthModelsRequest(ctx context.Context, account *Account) (*http.Request, error) {

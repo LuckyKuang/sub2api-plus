@@ -239,6 +239,15 @@ account creation pins its product and configurable runtime declarations. Deferre
 owner's identity alongside its authentication, even after settings change. Gateway transports reapply the trusted declarations at send
 time; stale SDK/inbound/generic overrides cannot rewrite them. Both API-key and OAuth accounts retain the ZCode family.
 
+Linked personal/team model discovery uses the fixed estate's coding `/models`
+endpoint and the final owner-scoped PAT resolver. Linked inference, probes and
+discovery disable redirects before credentials are attached. Every explicit 401
+invalidates only its attempted PAT, including final/unreplayable attempts; a
+transient concurrent refresh cannot return material invalidated by that 401.
+Linked team model and ticket requests derive organization/project declarations
+from that PAT's resolved scope; personal plans omit team headers. Generic header
+override eligibility cannot remove or replace these protocol-owned declarations.
+
 MiniMax has two distinct defaults:
 
 | Account type | Preset | UA / identifier / version |
@@ -1020,6 +1029,9 @@ are insufficient for the final outbound privacy boundary.
 | OAuth/account-service versus inference declarations; locale, timezone, DST and kernel build/release | `pkg/cnoauth/client_test.go`, `pkg/deepseek/identity_test.go`, `pkg/zcode/identity_test.go`, settings UI tests |
 | Cancellation/expiry and delayed responses, single consumption across replicas, unavailable/changed proxies | `useCNOAuth.spec.ts`, `useZhipuOAuth.spec.ts`, both login panel suites, `pkg/zcode/session_replica_test.go`, `service/zhipu_oauth_service_test.go`, admin handler tests |
 | Off-peak official task IDs, repeat retirement, original owner identity/auth, concurrent settlement, expired admission, rejection before forward/probe and bounded waits | `service/zhipu_offpeak_ticket_test.go` |
+| ZCode linked discovery reaches final PAT auth on both estates; every model/ticket 401 invalidates its PAT; concurrent transient refresh cannot resurrect rejected material | `service/zhipu_project_tokens_test.go` |
+| Linked ZCode forwarding/probes set redirect prohibition; both HTTP transport methods prevent redirected credential dispatch | `service/zhipu_project_tokens_test.go`, `repository/http_upstream_test.go` |
+| Kimi reasoning survives optional effort errors; Coding absent/null/disabled reasoning clears stale efforts without changing public/PAYG metadata defaults | `service/official_agent_update_test.go` |
 
 All paths above run without live provider credentials. Database-dependent
 migration and Channel Monitor V3 behavior is additionally exercised against

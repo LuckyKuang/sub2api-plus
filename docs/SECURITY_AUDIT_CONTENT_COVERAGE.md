@@ -581,3 +581,8 @@ canonical content extraction. Both engines still audit recognized sibling user
 text and pass through unknown structures. See `official_agent_update_test.go`,
 `openai_chat_roles_test.go`, `security_audit_content_contract_test.go` and the
 existing account-type/order/WS audit suites.
+Linked ZCode personal/team model discovery remains an authenticated
+administrative catalog operation with no user prompt payload. PAT rejection,
+team-scope rendering and redirect prohibition run at the final outbound boundary;
+they add no inference ingress, canonical content field, account-type audit
+exception or side effect before the existing audit decision.

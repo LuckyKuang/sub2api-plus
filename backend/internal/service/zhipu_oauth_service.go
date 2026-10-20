@@ -442,9 +442,9 @@ func (s *ZhipuOAuthService) BuildAccountMaterial(ctx context.Context, input Zhip
 			APIProtocolAnthropic:       zhipuAnthropicBaseURL(provider),
 		}
 		if planKind == ZhipuPlanTeamCodingPlan {
-			// Team-plan traffic authenticates with the project key but is scoped by
-			// the organization/project headers, which is exactly what the account
-			// header-override map owns.
+			// Retain the public team scope in the linked material. Final linked
+			// requests render the resolved PAT's scope independently of generic
+			// header overrides, which are unavailable to these OAuth accounts.
 			credentials[credKeyHeaderOverrides] = mergeTeamScopeOverrides(input.HeaderOverrides, credential)
 			credentials[credKeyHeaderOverrideEnabled] = true
 		}

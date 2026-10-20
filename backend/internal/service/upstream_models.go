@@ -238,6 +238,9 @@ func (s *AccountTestService) SyncUpstreamModelCatalog(ctx context.Context, accou
 			catalog.Metadata = directMetadata
 		}
 	}
+	if account.Platform == PlatformKimi && (account.IsDomesticOAuth() || isKimiCodingBaseURL(account.GetOpenAIFormatBaseURL())) {
+		applyKimiCodingReasoningDefaults(body, catalog.Metadata)
+	}
 
 	if account.Platform == PlatformDeepseek && account.Type == AccountTypeOAuth {
 		_, metadata, _ := extractDeepSeekHarnessCatalog(body, "")
@@ -945,6 +948,8 @@ func (s *AccountTestService) buildUpstreamModelsRequest(ctx context.Context, acc
 		return s.buildAntigravityAPIKeyModelsRequest(ctx, account)
 	case account.IsDomesticOAuth() && (account.Platform == PlatformDeepseek || account.Platform == PlatformKimi):
 		return s.buildDomesticOAuthModelsRequest(ctx, account)
+	case usesZhipuProjectToken(account) && account.GetCredential("plan_kind") != ZhipuPlanOffPeak:
+		return s.buildZhipuLinkedModelsRequest(ctx, account)
 	case account.IsGrok():
 		return s.buildGrokUpstreamModelsRequest(ctx, account)
 	case account.IsOpenAI() || account.IsMultiProtocolAPIKey():
@@ -1592,6 +1597,10 @@ func upstreamMetadataFromCapabilityEntry(modelID string, entry upstreamModelCapa
 		} else {
 			levels = []string{level}
 		}
+	}
+	if reasoning != nil && !*reasoning {
+		levels = nil
+		entry.DefaultReasoningLevel = ""
 	}
 	if reasoning == nil && len(levels) > 0 {
 		inferred := len(levels) != 1 || levels[0] != "none"

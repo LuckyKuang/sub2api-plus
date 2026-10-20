@@ -87,15 +87,27 @@ A PAT is cached only in memory by credential owner, login generation, scope,
 proxy and selected identity. Expiry is the earlier of the two official lifetime
 fields; refresh starts two minutes plus up to one minute jitter early. Concurrent
 callers share issuance; cancelling one waiter does not cancel the shared call.
-Only an explicit model 401 rejects that attempt's PAT and replays a replayable
-request once. A late rejection cannot invalidate a newer PAT. Transient refresh
+Each explicit model 401 rejects that attempt's PAT, including a final retry or
+a request whose body cannot be replayed. A replayable request retries once;
+rejection alone never issues an extra token. A late rejection cannot invalidate
+a newer PAT. Transient refresh
 failures can retain an unexpired PAT for a five-second retry; disabled, malformed,
-auth-rejected or expired material never falls back to a long key. Inference,
+auth-rejected or expired material never falls back to a long key. A 401 received
+during refresh removes that token from the transient-failure fallback too. Inference,
 probes, model discovery and off-peak admission use the original owner.
 Ticket status and detached idle settlement resolve PATs again from that owner,
 with the same one-time explicit-401 retry; PAT rotation alone does not acquire
 another ticket. Final model authentication removes every case variant of the
 old auth/plan-key headers and installs the owner's PAT and, for off-peak, JWT.
+Team organization/project headers are installed from the resolved PAT scope at
+that same boundary, independently of generic header overrides. Personal plans
+omit those headers, even though their PAT location also contains organization
+and project IDs; off-peak ticket calls follow the same rule.
+Linked inference, probes and discovery disable HTTP redirects, keeping all
+credentials on the validated destination, including off-peak plan-key headers.
+Personal/team coding-plan model discovery uses the owning estate's fixed coding
+`/models` endpoint and resolves its PAT at send time. Start-plan and off-peak
+accounts do not expose this coding-plan discovery endpoint.
 
 Z.ai exchanges its original OAuth token through `POST /api/auth/z/login` for
 business auth before issuance. BigModel uses its original login directly.
@@ -121,7 +133,7 @@ issued by the platform, and the official client's queue is unbounded.
 | Availability | `GET /api/v1/off-peak/ticket/availability` | Take-number quota snapshot; gates new work only |
 | Take | `POST /api/v1/off-peak/ticket` | Returns `ticket_id`, `state`, queue `position`, `next_poll_after` |
 | Status | `POST /api/v1/off-peak/ticket/status` | Batch, up to 100 tickets |
-| Settle | `POST /api/v1/off-peak/ticket/{id}/settle` | Idempotent; 4xx is treated as an acknowledgement |
+| Settle | `POST /api/v1/off-peak/ticket/{id}/settle` | Idempotent; explicit 401 refreshes PAT once, other errors remain retryable by idle cleanup |
 
 States are `queued`, `ready`, `active`, `expired`, `settled` and `not_found`.
 A model request is admitted only while the ticket is `ready` or `active`; a
@@ -200,8 +212,9 @@ forwarding use the derived plan credential.
 - **No refresh.** ZCode ships no refresh-token exchange, so an expired link must
   be re-authorized. Plus stores the refresh token when the platform supplies one
   but never rotates it, and registers no token refresher for these accounts.
-- **Resolution is per request.** A coding-plan key is derived at link time. If the
-  provider rotates the project key, re-link the account.
+- **Project locations can be recovered.** An explicit project-token 404 triggers
+  bounded key-location rediscovery. Permission, disabled-token and transport
+  failures cannot trigger key creation or fall back to a copied key.
 - **Team plans need their scope.** A team subscription can own several projects,
   so the organization and project must be supplied when linking.
 

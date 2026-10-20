@@ -66,19 +66,32 @@ func TestHTTPUpstreamDoCanDisableRedirectsPerRequest(t *testing.T) {
 	t.Cleanup(redirector.Close)
 
 	upstream := NewHTTPUpstream(nil)
-	req, err := http.NewRequestWithContext(
-		service.WithHTTPUpstreamRedirectsDisabled(t.Context()),
-		http.MethodGet,
-		redirector.URL,
-		nil,
-	)
-	require.NoError(t, err)
-
-	resp, err := upstream.Do(req, "", 1, 1)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusFound, resp.StatusCode)
-	require.NoError(t, resp.Body.Close())
-	require.Zero(t, redirectedCalls.Load())
+	for _, tlsFallback := range []bool{false, true} {
+		t.Run(fmt.Sprintf("tls=%t", tlsFallback), func(t *testing.T) {
+			req, err := http.NewRequestWithContext(
+				service.WithHTTPUpstreamRedirectsDisabled(t.Context()),
+				http.MethodGet,
+				redirector.URL,
+				nil,
+			)
+			require.NoError(t, err)
+			// ZCode model/probe/discovery wrappers set this marker before PAT
+			// attachment. Off-peak's plan key is not an HTTP sensitive header,
+			// so Go's default cross-host Authorization stripping is insufficient.
+			req.Header.Set("Authorization", "Bearer plan-jwt")
+			req.Header.Set("X-Coding-Plan-Api-Key", "pat")
+			var resp *http.Response
+			if tlsFallback {
+				resp, err = upstream.DoWithTLS(req, "", 1, 1, nil)
+			} else {
+				resp, err = upstream.Do(req, "", 1, 1)
+			}
+			require.NoError(t, err)
+			require.Equal(t, http.StatusFound, resp.StatusCode)
+			require.NoError(t, resp.Body.Close())
+			require.Zero(t, redirectedCalls.Load(), "no redirected request may receive the model credentials")
+		})
+	}
 }
 
 func TestHTTPUpstreamDoWithTLSPlainHTTPUsesConfiguredHTTPProxy(t *testing.T) {

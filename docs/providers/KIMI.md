@@ -93,4 +93,9 @@ Model discovery follows the [reviewed Kimi Code source](../OFFICIAL_AGENT_BASELI
 OAuth calls the regional `/coding/v1/models` with its account Bearer token and
 trusted device snapshot. Catalog reasoning accepts `type: only|both|none` and
 `effort.valid/default`; defaults outside the advertised efforts are discarded.
-Existing public/PAYG boolean reasoning catalogs remain readable.
+Optional malformed effort fields do not discard a recognized reasoning type;
+unknown values inside an effort array are ignored. On Coding endpoints, absent
+or null reasoning means thinking is disabled, so stale effort declarations and
+registry metadata cannot re-enable it. Explicit `none`/`false` likewise clears
+efforts and their default. Existing public/PAYG boolean reasoning catalogs remain
+readable; missing reasoning on those endpoints remains unspecified.
